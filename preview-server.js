@@ -16,6 +16,25 @@ const types = {
 
 http.createServer((req, res) => {
   let urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
+  if (urlPath === "/__version") {
+    const watchedFiles = ["index.html", "preview-server.js"].map(file => path.join(root, file));
+    const version = watchedFiles
+      .map(file => {
+        try {
+          return fs.statSync(file).mtimeMs;
+        } catch {
+          return 0;
+        }
+      })
+      .join(":");
+    res.writeHead(200, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store"
+    });
+    res.end(version);
+    return;
+  }
+
   if (urlPath === "/" || urlPath === "") urlPath = "/index.html";
 
   const filePath = path.resolve(root, `.${urlPath.replace(/\\/g, "/")}`);
