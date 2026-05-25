@@ -56,3 +56,28 @@
 
 8. `docs/MAINTENANCE.md`
 9. `docs/KNOWN_ISSUES.md`
+## 固定快捷指令
+
+使用者之後如果只輸入以下短句，請直接照對應流程執行，不需要再反覆確認。
+
+### 保養
+
+代表「幫我整理與優化這個專案，讓後續開發更順」。
+
+執行重點：
+- 檢查目前檔案結構與主要文件是否一致。
+- 更新 `docs/CURRENT_STATUS.md`、`docs/NEXT_ACTIONS.md`、`docs/SYSTEM_RULES.md`、`docs/DECISION_LOG.md`、`docs/KNOWN_ISSUES.md` 中需要同步的內容。
+- 檢查 `index.html`、`css/app.css`、`js/app.js` 是否有明顯重複、壞掉流程、命名混亂或已完成但未記錄的規則。
+- 執行可行的語法檢查與瀏覽器基本檢查。
+- 回報「目前狀態、已整理內容、下一步建議」。
+
+### 上傳
+
+代表「把目前最新版本同步到 GitHub 展示版」。
+
+執行重點：
+- 先檢查不要上傳真實會員資料、Excel、CSV、`PRIVATE_DO_NOT_UPLOAD_*`、log 或其他私密資料。
+- 執行可行的語法檢查與基本畫面檢查。
+- 將最新變更提交並推送到 GitHub。若命令列工具不可用，改用 GitHub Desktop 流程引導使用者完成 Commit / Push。
+- 上傳後提醒使用者等待 GitHub Pages 部署，展示網址為：
+  `https://tyehyu.github.io/yugym-booking-system-app/`

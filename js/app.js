@@ -605,6 +605,7 @@ const SUPABASE_URL = "";
     const todayCalendarBtn = document.querySelector("#todayCalendarBtn");
     const prevWeekBtn = document.querySelector("#prevWeekBtn");
     const nextWeekBtn = document.querySelector("#nextWeekBtn");
+    const refreshCalendarBtn = document.querySelector("#refreshCalendarBtn");
     const calendarViewButtons = document.querySelectorAll("[data-calendar-view]");
     const coachName = document.querySelector("#coachName");
     const formMessage = document.querySelector("#formMessage");
@@ -5816,14 +5817,18 @@ const SUPABASE_URL = "";
       const visibleDays = visibleCalendarDays();
       updateCalendarHeader(visibleDays);
       const mobileCalendar = isMobileCalendarLayout();
+      const compactDesktopCalendar = !mobileCalendar && window.innerWidth <= 1600;
       const timeColumnWidth = mobileCalendar ? "58px" : "72px";
       const dayColumnMin = mobileCalendar
         ? (calendarViewMode === "three" ? "96px" : "260px")
-        : (calendarViewMode === "week" ? "145px" : "210px");
+        : (calendarViewMode === "week" ? (compactDesktopCalendar ? "180px" : "145px") : "210px");
       calendar.style.gridTemplateColumns = `${timeColumnWidth} repeat(${visibleDays.length}, minmax(${dayColumnMin}, 1fr))`;
+      const desktopMinWidth = calendarViewMode === "week"
+        ? `${Number.parseInt(timeColumnWidth, 10) + (visibleDays.length * Number.parseInt(dayColumnMin, 10))}px`
+        : calendarViewMode === "three" ? "720px" : "360px";
       calendar.style.minWidth = mobileCalendar
         ? "100%"
-        : calendarViewMode === "week" ? "1050px" : calendarViewMode === "three" ? "720px" : "360px";
+        : desktopMinWidth;
       calendar.innerHTML = "";
       const corner = document.createElement("div");
       corner.className = "corner";
@@ -6736,6 +6741,28 @@ const SUPABASE_URL = "";
       document.querySelector("#todayFull").textContent = fullSlots;
     }
 
+    async function refreshCalendarContent() {
+      if (!refreshCalendarBtn) return;
+      refreshCalendarBtn.classList.add("refreshing");
+      refreshCalendarBtn.disabled = true;
+      try {
+        await loadAppData();
+        renderCalendarCourseFilters();
+        renderCalendar();
+        renderActivityLog();
+        renderOperationsSummary();
+        updateMetrics();
+        updatePreview();
+        showToast("行事曆內容已更新", "success", "更新完成");
+      } catch (error) {
+        console.warn("Calendar refresh failed", error);
+        showToast("更新行事曆時發生問題，請稍後再試。", "error", "更新失敗");
+      } finally {
+        refreshCalendarBtn.classList.remove("refreshing");
+        refreshCalendarBtn.disabled = false;
+      }
+    }
+
     bookingForm.addEventListener("submit", async event => {
       event.preventDefault();
       if (bookingFormStep === "basic") {
@@ -7046,6 +7073,7 @@ const SUPABASE_URL = "";
       renderCalendar();
       updatePreview();
     });
+    refreshCalendarBtn?.addEventListener("click", refreshCalendarContent);
     calendarViewButtons.forEach(button => {
       button.addEventListener("click", async () => {
         if (isMobileCalendarLayout() && button.dataset.calendarView === "week") return;
