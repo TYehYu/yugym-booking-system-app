@@ -74,3 +74,11 @@
 - 改會員票券：優先看 ticket bucket、recharge、booking progress 相關區塊。
 - 改課程管理：優先看 course item 與 ticket item 相關區塊。
 - 改教練或營運摘要：優先看 staff、salary rules、operations summary 相關區塊。
+## 2026/05/25 新增串接文件
+
+- `docs/FRONTEND_INTEGRATION.md`
+  - 管理端、會員端、教練端共用資料的串接規格。
+  - 包含給太太的交接訊息、資料模型、權限原則、第一版開發順序。
+- `supabase-frontend-schema.sql`
+  - 正式多端同步用的 Supabase 資料表草案。
+  - 目前是草案，不會取代現有展示版 `app_state` 同步方式。

@@ -81,3 +81,14 @@
 - 將最新變更提交並推送到 GitHub。若命令列工具不可用，改用 GitHub Desktop 流程引導使用者完成 Commit / Push。
 - 上傳後提醒使用者等待 GitHub Pages 部署，展示網址為：
   `https://tyehyu.github.io/yugym-booking-system-app/`
+
+### 串接
+
+代表「開始執行管理端、會員端、教練端與 Supabase 的正式串接」。
+
+執行重點：
+- 先閱讀 `docs/FRONTEND_INTEGRATION.md`、`supabase-frontend-schema.sql`、`SUPABASE_SETUP.md`。
+- 確認目前展示版是否仍使用 `app_state`，再決定要先過渡同步還是直接拆正式資料表。
+- 優先處理共用資料：會員、員工/教練、課程、票券、預約、簽到、儲值、訓練紀錄。
+- 串接時要保護會員資料：會員端只能看自己的資料，教練端只能看自己的課表與必要會員資訊。
+- 若尚未取得 Supabase Project URL、anon public key、登入方式或權限設定，先列出需要使用者協助的項目。

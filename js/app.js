@@ -601,7 +601,7 @@ const SUPABASE_URL = "";
     const memberGrid = document.querySelector("#memberGrid");
     const calendarDateRange = document.querySelector("#calendarDateRange");
     const calendarViewHint = document.querySelector("#calendarViewHint");
-    const calendarLegend = document.querySelector("#calendarLegend") || document.querySelector(".legend.calendar-panel");
+    const calendarLegend = document.querySelector("#calendarLegend");
     const todayCalendarBtn = document.querySelector("#todayCalendarBtn");
     const prevWeekBtn = document.querySelector("#prevWeekBtn");
     const nextWeekBtn = document.querySelector("#nextWeekBtn");
@@ -610,6 +610,7 @@ const SUPABASE_URL = "";
     const coachName = document.querySelector("#coachName");
     const formMessage = document.querySelector("#formMessage");
     const calendarTypeFilters = document.querySelector("#calendarTypeFilters");
+    const calendarCoachFilter = document.querySelector("#calendarCoachFilter");
     const repeatCard = document.querySelector("#repeatCard");
     const repeatBooking = document.querySelector("#repeatBooking");
     const weeklyFrequency = document.querySelector("#weeklyFrequency");
@@ -663,7 +664,11 @@ const SUPABASE_URL = "";
     const staffRoleFilter = document.querySelector("#staffRoleFilter");
     const staffSelect = document.querySelector("#staffSelect");
     const staffList = document.querySelector("#staffList");
-    const staffPanel = document.querySelector("#staffPanel");
+    const staffDetailModal = document.querySelector("#staffDetailModal");
+    const closeStaffDetailModal = document.querySelector("#closeStaffDetailModal");
+    const staffDetailTitle = document.querySelector("#staffDetailTitle");
+    const staffDetailSubtitle = document.querySelector("#staffDetailSubtitle");
+    const staffDetailModalBody = document.querySelector("#staffDetailModalBody");
     const staffMetricClasses = document.querySelector("#staffMetricClasses");
     const staffMetricGroupPeople = document.querySelector("#staffMetricGroupPeople");
     const staffMetricClockDays = document.querySelector("#staffMetricClockDays");
@@ -681,6 +686,8 @@ const SUPABASE_URL = "";
     const courseOverview = document.querySelector("#courseOverview");
     const courseItemList = document.querySelector("#courseItemList");
     const ticketItemList = document.querySelector("#ticketItemList");
+    const courseBranchCourses = document.querySelector("#courseBranchCourses");
+    const courseBranchTickets = document.querySelector("#courseBranchTickets");
     const toggleAddCourseForm = document.querySelector("#toggleAddCourseForm");
     const toggleAddTicketForm = document.querySelector("#toggleAddTicketForm");
     const courseAddBlock = document.querySelector("#courseAddBlock");
@@ -721,11 +728,13 @@ const SUPABASE_URL = "";
     let memberLevelFilterValue = "all";
     let memberTicketFilterValue = "all";
     let memberStatusFilterValue = "all";
+    let memberCardTicketFilter = "all";
     let calendarWeekOffset = 0;
     let calendarStartOffset = 0;
     let bookingWeekOffset = 0;
     let bookingFormStep = "basic";
     let activeCourseEditor = null;
+    let courseManagementBranch = "courses";
     let calendarViewMode = window.matchMedia("(max-width: 780px)").matches ? "day" : "week";
     let staffMemberId = staffMembers[0]?.id || "";
     let activeBookingId = "";
@@ -750,6 +759,7 @@ const SUPABASE_URL = "";
 
     function initOptions() {
       renderCalendarCourseFilters();
+      renderCalendarCoachFilter();
       renderBookingDayOptions(0);
       renderTimePartOptions();
       setBookingTime("09:00");
@@ -978,6 +988,7 @@ const SUPABASE_URL = "";
 
     function memberCompletedCourseEvent(event, memberId) {
       if (!event || event.status === "cancelled" || event.kind === "self") return false;
+      if (!["coaching", "friendly"].includes(event.kind)) return false;
       if (!(event.memberIds || []).includes(memberId)) return false;
       if ((event.checkIns || []).includes(memberId)) return true;
       return Boolean(event.checkedIn) && (event.memberIds || []).length === 1;
@@ -1562,12 +1573,20 @@ const SUPABASE_URL = "";
           `).join("")
         : `<button class="suggestion-item" type="button" disabled>找不到會員</button>`;
       container.classList.remove("hidden");
+      const selectSuggestionMember = (event, button) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const member = members.find(item => item.id === button.dataset.memberId);
+        if (member) onSelect(member);
+        container.classList.add("hidden");
+      };
       container.querySelectorAll("[data-member-id]").forEach(button => {
         button.addEventListener("mousedown", event => {
           event.preventDefault();
-          const member = members.find(item => item.id === button.dataset.memberId);
-          if (member) onSelect(member);
-          container.classList.add("hidden");
+          event.stopPropagation();
+        });
+        button.addEventListener("click", event => {
+          selectSuggestionMember(event, button);
         });
       });
     }
@@ -1971,6 +1990,7 @@ const SUPABASE_URL = "";
       closeRechargeModalDialog();
       if (courseItemModal.classList.contains("open")) closeCourseItemEditor();
       if (memberDetailModal.classList.contains("open")) closeMemberDetailModal();
+      closeStaffDetailDialog();
       if (confirmModal.classList.contains("open")) closeConfirmModal(false);
       addMemberBox.classList.remove("active");
       staffAddBox.classList.remove("active");
@@ -2093,21 +2113,40 @@ const SUPABASE_URL = "";
 
     function renderStaffList() {
       const staff = getFilteredStaff();
-      staffList.innerHTML = staff.map(item => {
+      const rows = staff.map(item => {
         const stats = getStaffStats(item);
         return `
-          <button class="staff-row ${item.id === staffMemberId ? "selected" : ""}" type="button" data-staff-id="${item.id}">
-            <strong class="staff-name">${item.displayName}</strong>
-            <span>${item.role}${item.level ? item.level : ""}｜本月 ${stats.classCount} 堂</span>
-            <span>值班時數：${item.dutyHours || 0} 小時</span>
-          </button>
+          <tr class="${item.id === staffMemberId ? "selected" : ""}" data-staff-id="${item.id}">
+            <td><strong>${item.displayName}</strong><span>${item.phone || "未填電話"}</span></td>
+            <td>${item.role}${item.level ? item.level : ""}</td>
+            <td>${stats.classCount} 堂</td>
+            <td>${item.dutyHours || 0} 小時</td>
+            <td><button class="admin-action-btn" type="button">查看</button></td>
+          </tr>
         `;
-      }).join("") || `<div class="staff-row"><strong>沒有符合的人員</strong><span>請調整類型篩選。</span></div>`;
+      }).join("") || `<tr><td colspan="5">沒有符合的人員，請調整類型篩選。</td></tr>`;
+      staffList.innerHTML = `
+        <div class="member-table-wrap admin-table-wrap">
+          <table class="member-table admin-table">
+            <thead>
+              <tr>
+                <th>姓名 / 電話</th>
+                <th>職務</th>
+                <th>本月堂數</th>
+                <th>值班時數</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
 
       staffList.querySelectorAll("[data-staff-id]").forEach(button => {
         button.addEventListener("click", async () => {
           staffMemberId = button.dataset.staffId;
           renderStaffManagement();
+          openStaffDetailModal();
         });
       });
     }
@@ -2142,23 +2181,25 @@ const SUPABASE_URL = "";
       return { rule, basePay, hourlyPay, classBonusTotal, revenueShare, total };
     }
 
-    function renderStaffPanel() {
+    function renderStaffMetrics() {
       const staff = getSelectedStaff();
       if (!staff) {
         staffMetricClasses.textContent = "0";
         staffMetricGroupPeople.textContent = "0";
         staffMetricClockDays.textContent = "-";
         staffMetricAlerts.textContent = "0";
-        staffPanel.innerHTML = `<div class="staff-row"><strong>尚無人員</strong><span>請先新增教練。</span></div>`;
         return;
       }
       const stats = getStaffStats(staff);
-      const pay = staffCompensation(staff);
       staffMetricClasses.textContent = stats.classCount;
       staffMetricGroupPeople.textContent = stats.groupPeople;
       staffMetricClockDays.textContent = staff.dutyHours || (staff.clockRequired ? stats.clockDays : "-");
       staffMetricAlerts.textContent = stats.alertCount;
+    }
 
+    function staffDetailMarkup(staff) {
+      const stats = getStaffStats(staff);
+      const pay = staffCompensation(staff);
       const classRows = stats.classEvents.length
         ? stats.classEvents.map(event => {
             const day = days.find(item => item.key === event.day);
@@ -2171,7 +2212,7 @@ const SUPABASE_URL = "";
         ? staff.clockRecords.map(record => `<li>${record}</li>`).join("")
         : `<li>${staff.role}目前不需每日打卡。</li>`;
 
-      staffPanel.innerHTML = `
+      return `
         <div class="staff-detail-top">
           <div>
             <h3>${staff.displayName}</h3>
@@ -2242,31 +2283,52 @@ const SUPABASE_URL = "";
           </ul>
         </div>
       `;
-      document.querySelector("#saveStaffInfoBtn")?.addEventListener("click", async () => {
+    }
+
+    function bindStaffDetailEditor(container, staff) {
+      container.querySelector("#saveStaffInfoBtn")?.addEventListener("click", async () => {
         if (!(await confirmChange(`確認要儲存 ${staff.displayName || staff.name} 的資料修改嗎？`))) return;
-        const name = document.querySelector("#staffEditName")?.value.trim() || staff.name;
+        const name = container.querySelector("#staffEditName")?.value.trim() || staff.name;
         staff.name = name.replace(/^Coach\s+/i, "");
-        staff.phone = document.querySelector("#staffEditPhone")?.value.trim() || "未填";
-        staff.role = document.querySelector("#staffEditRole")?.value || staff.role;
+        staff.phone = container.querySelector("#staffEditPhone")?.value.trim() || "未填";
+        staff.role = container.querySelector("#staffEditRole")?.value || staff.role;
         staff.displayName = staff.name;
-        staff.status = document.querySelector("#staffEditStatus")?.value.trim() || "在職";
-        staff.startDate = document.querySelector("#staffEditStartDate")?.value.trim() || staff.startDate;
-        staff.dutyHours = Number(document.querySelector("#staffEditDutyHours")?.value) || 0;
-        staff.schedule = (document.querySelector("#staffEditSchedule")?.value || "").split(/[、,，]/).map(item => item.trim()).filter(Boolean);
-        staff.alerts = (document.querySelector("#staffEditAlerts")?.value || "").split(/[、,，]/).map(item => item.trim()).filter(Boolean);
+        staff.status = container.querySelector("#staffEditStatus")?.value.trim() || "在職";
+        staff.startDate = container.querySelector("#staffEditStartDate")?.value.trim() || staff.startDate;
+        staff.dutyHours = Number(container.querySelector("#staffEditDutyHours")?.value) || 0;
+        staff.schedule = (container.querySelector("#staffEditSchedule")?.value || "").split(/[、,，]/).map(item => item.trim()).filter(Boolean);
+        staff.alerts = (container.querySelector("#staffEditAlerts")?.value || "").split(/[、,，]/).map(item => item.trim()).filter(Boolean);
         normalizeStaff(staff);
         renderCoachOptions();
+        renderCalendarCoachFilter();
         saveAppData();
         renderStaffManagement();
         renderOperationsSummary();
+        openStaffDetailModal();
       });
     }
 
+    function openStaffDetailModal() {
+      const staff = getSelectedStaff();
+      if (!staff || !staffDetailModal || !staffDetailModalBody) return;
+      staffDetailTitle.textContent = staff.displayName || "教練資料";
+      staffDetailSubtitle.textContent = `${staff.phone || "未填電話"}｜${staff.role}${staff.level ? staff.level : ""}`;
+      staffDetailModalBody.innerHTML = staffDetailMarkup(staff);
+      bindStaffDetailEditor(staffDetailModalBody, staff);
+      staffDetailModal.classList.add("show");
+      staffDetailModal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeStaffDetailDialog() {
+      staffDetailModal?.classList.remove("show");
+      staffDetailModal?.setAttribute("aria-hidden", "true");
+    }
+
     function renderStaffManagement() {
-      if (!staffSelect || !staffList || !staffPanel) return;
+      if (!staffSelect || !staffList) return;
       renderStaffSelect();
       renderStaffList();
-      renderStaffPanel();
+      renderStaffMetrics();
     }
 
     function courseKindLabel(kind) {
@@ -2396,6 +2458,32 @@ const SUPABASE_URL = "";
           <span class="legend-item"><span class="swatch ${item.swatch}"></span>${item.label}</span>
         `).join("");
       }
+    }
+
+    function renderCalendarCoachFilter() {
+      if (!calendarCoachFilter) return;
+      const selected = calendarCoachFilter.dataset.selected || calendarCoachFilter.querySelector(".active")?.dataset.coachFilter || "all";
+      const coaches = teachingStaffMembers().map(staff => staff.displayName).filter(Boolean);
+      calendarCoachFilter.innerHTML = [
+        `<span>教練</span>`,
+        `<button class="coach-filter-button ${selected === "all" ? "active" : ""}" type="button" data-coach-filter="all">全部教練</button>`,
+        ...coaches.map(name => `
+          <button class="coach-filter-button ${selected === name ? "active" : ""}" type="button" data-coach-filter="${escapeHtml(name)}">${escapeHtml(name)}</button>
+        `)
+      ].join("");
+      calendarCoachFilter.dataset.selected = selected === "all" || coaches.includes(selected) ? selected : "all";
+      calendarCoachFilter.querySelectorAll(".coach-filter-button").forEach(button => {
+        button.classList.toggle("active", button.dataset.coachFilter === calendarCoachFilter.dataset.selected);
+      });
+    }
+
+    function activeCalendarCoachName() {
+      return calendarCoachFilter?.dataset.selected || "all";
+    }
+
+    function calendarCoachMatches(event, coach) {
+      if (!coach || coach === "all") return true;
+      return normalizeCoachName(bookingCoachName(event)) === normalizeCoachName(coach);
     }
 
     function requestedCourseCatalog() {
@@ -2577,6 +2665,16 @@ const SUPABASE_URL = "";
       closeCourseItemEditor();
     }
 
+    function setCourseManagementBranch(branch = "courses") {
+      courseManagementBranch = branch === "tickets" ? "tickets" : "courses";
+      const coursesVisible = !document.querySelector("#coursesView")?.classList.contains("hidden");
+      document.querySelectorAll("[data-course-nav-branch]").forEach(button => {
+        button.classList.toggle("active", coursesVisible && (button.dataset.courseNavRoot === "true" || button.dataset.courseNavBranch === courseManagementBranch));
+      });
+      courseBranchCourses?.classList.toggle("hidden", courseManagementBranch !== "courses");
+      courseBranchTickets?.classList.toggle("hidden", courseManagementBranch !== "tickets");
+    }
+
     function renderCourseManagement() {
       if (!courseItemList || !ticketItemList) return;
       courseItems.forEach(normalizeCourseItem);
@@ -2595,61 +2693,63 @@ const SUPABASE_URL = "";
           <div class="course-overview-card"><span>可販售票券</span><strong>${courseStats.tickets}</strong></div>
         `;
       }
-      courseItemList.innerHTML = courseItems.map(item => {
+      const courseRows = courseItems.map(item => {
         const calendarKind = courseItemCalendarKind(normalizeCourseItem(item));
         const ticketKind = coursePillClass(item.ticketType || defaultCourseTicketType(item.kind));
         return `
-        <div class="course-card" tabindex="0" role="button" data-open-course="${item.id}" aria-label="調整課程 ${escapeHtml(item.name)}">
-          <div class="course-card-head">
-            <div class="course-card-title">${escapeHtml(item.name)}</div>
-            <div class="course-card-subtitle">點擊可修改課程內容</div>
-          </div>
-          <div class="course-pill-row">
-            <span class="course-pill ${calendarKind}">${paletteLabel(calendarKind)}</span>
-          </div>
-          <div class="course-summary-item">
-            <span>適用票券</span>
-            <strong><span class="course-pill ${ticketKind}">${courseKindLabel(item.ticketType || defaultCourseTicketType(item.kind))}</span></strong>
-          </div>
-          <div class="course-summary-item">
-            <span>適用時段</span>
-            <strong>${courseTimeRuleLabel(item.timeRule || "all")}</strong>
-          </div>
-          <div class="course-card-footer">
-            <span class="course-card-open">編輯</span>
-          </div>
+          <tr tabindex="0" data-open-course="${item.id}" aria-label="調整課程 ${escapeHtml(item.name)}">
+            <td><strong>${escapeHtml(item.name)}</strong><span>點擊可修改課程內容</span></td>
+            <td><span class="course-pill ${calendarKind}">${paletteLabel(calendarKind)}</span></td>
+            <td><span class="course-pill ${ticketKind}">${courseKindLabel(item.ticketType || defaultCourseTicketType(item.kind))}</span></td>
+            <td>${courseTimeRuleLabel(item.timeRule || "all")}</td>
+            <td><button class="admin-action-btn" type="button">編輯</button></td>
+          </tr>
+      `;
+      }).join("") || `<tr><td colspan="5">尚無課程，可以從左側新增。</td></tr>`;
+      courseItemList.innerHTML = `
+        <div class="member-table-wrap admin-table-wrap">
+          <table class="member-table admin-table course-admin-table">
+            <thead>
+              <tr>
+                <th>課程名稱</th>
+                <th>行事曆顏色</th>
+                <th>適用票券</th>
+                <th>適用時段</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>${courseRows}</tbody>
+          </table>
         </div>
       `;
-      }).join("") || `<div class="manager-row"><div><strong>尚無課程</strong><span>可以從下方新增。</span></div></div>`;
-      ticketItemList.innerHTML = ticketItems.map(item => {
+      const ticketRows = ticketItems.map(item => {
         const ticketKind = ticketItemPaletteKind(item);
         return `
-        <div class="manager-row ticket-card" tabindex="0" role="button" data-open-ticket="${item.id}" aria-label="調整票券 ${escapeHtml(item.name)}">
-          <div class="ticket-card-head">
-            <div class="ticket-card-title">
-              <strong>${escapeHtml(item.name)}</strong>
-              <span>點擊可修改票券內容</span>
-            </div>
-          </div>
-          <div class="course-pill-row">
-            <span class="course-pill ${ticketKind}">${paletteLabel(ticketKind)}</span>
-          </div>
-          <div class="ticket-card-meta">
-            <div class="course-summary-item">
-              <span>票券類型</span>
-              <strong><span class="course-pill ${coursePillClass(item.type || "course")}">${courseKindLabel(item.type || "course")}</span></strong>
-            </div>
-            <div class="course-summary-item">
-              <span>固定堂數</span>
-              <strong>${Math.max(1, Number(item.count) || 1)} 堂</strong>
-            </div>
-          </div>
-          <div class="course-card-footer">
-            <span class="course-card-open">編輯</span>
-          </div>
+          <tr tabindex="0" data-open-ticket="${item.id}" aria-label="調整票券 ${escapeHtml(item.name)}">
+            <td><strong>${escapeHtml(item.name)}</strong><span>點擊可修改票券內容</span></td>
+            <td><span class="course-pill ${coursePillClass(item.type || "course")}">${courseKindLabel(item.type || "course")}</span></td>
+            <td>${Math.max(1, Number(item.count) || 1)} 堂</td>
+            <td><span class="course-pill ${ticketKind}">${paletteLabel(ticketKind)}</span></td>
+            <td><button class="admin-action-btn" type="button">編輯</button></td>
+          </tr>
+      `;
+      }).join("") || `<tr><td colspan="5">尚無票券，可以從左側新增。</td></tr>`;
+      ticketItemList.innerHTML = `
+        <div class="member-table-wrap admin-table-wrap">
+          <table class="member-table admin-table course-admin-table">
+            <thead>
+              <tr>
+                <th>票券名稱</th>
+                <th>票券類型</th>
+                <th>固定堂數</th>
+                <th>顏色標籤</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>${ticketRows}</tbody>
+          </table>
         </div>
       `;
-      }).join("") || `<div class="manager-row"><div><strong>尚無票券</strong><span>可以從上方新增。</span></div></div>`;
       courseItemList.querySelectorAll("[data-open-course]").forEach(card => {
         card.addEventListener("click", () => openCourseItemEditor("course", card.dataset.openCourse));
         card.addEventListener("keydown", event => {
@@ -2668,6 +2768,7 @@ const SUPABASE_URL = "";
           }
         });
       });
+      setCourseManagementBranch(courseManagementBranch);
     }
 
     function recordAmount(record) {
@@ -3021,7 +3122,7 @@ const SUPABASE_URL = "";
     }
 
     function renderMemberDirectory() {
-      if (memberSummaryMetrics) memberSummaryMetrics.innerHTML = "";
+      renderMemberSummaryMetrics();
       memberProfile.innerHTML = "";
       if (!memberTestGrid) return;
       const list = sortedMembers();
@@ -3037,11 +3138,12 @@ const SUPABASE_URL = "";
           <td>${normalizeIdentity(member.identity)}</td>
           <td><span class="ticket-tags">${memberTicketTags(member)}</span></td>
           <td>${memberActivityLabel(member.id)}</td>
+          <td><button class="admin-action-btn" type="button">查看</button></td>
         </tr>
-      `).join("") || `<tr><td colspan="6">找不到符合的會員</td></tr>`;
+      `).join("") || `<tr><td colspan="7">找不到符合的會員</td></tr>`;
       memberTestGrid.innerHTML = `
-        <div class="member-table-wrap">
-          <table class="member-table">
+        <div class="member-table-wrap admin-table-wrap">
+          <table class="member-table admin-table">
             <thead>
               <tr>
                 <th>註冊日期</th>
@@ -3050,6 +3152,7 @@ const SUPABASE_URL = "";
                 <th>等級</th>
                 <th>票券</th>
                 <th>活躍度</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -3284,6 +3387,7 @@ const SUPABASE_URL = "";
                 <span>總數</span>
               </div>
             </div>
+            ${renderTicketFilterTabs()}
             <div class="ticket-usage-list">${ticketRows}</div>
           </div>
         </div>
@@ -3294,6 +3398,7 @@ const SUPABASE_URL = "";
       memberDetailMonthCalendar.innerHTML = "";
       bindRechargeLaunchControls();
       bindMemberInlineEdit(member, () => openMemberCardById(member.id));
+      bindMemberCardTicketFilter(() => openMemberCardById(member.id));
       bindTicketEditControls(member, () => openMemberCardById(member.id));
       memberDetailModal.classList.add("open");
       memberDetailModal.setAttribute("aria-hidden", "false");
@@ -3513,6 +3618,7 @@ const SUPABASE_URL = "";
                 <span>總票券</span>
               </div>
             </div>
+            ${renderTicketFilterTabs()}
             <div class="ticket-usage-list">${renderMemberTicketUsage(member)}</div>
           </div>
         </div>
@@ -3524,6 +3630,7 @@ const SUPABASE_URL = "";
       `;
       bindRechargeLaunchControls();
       bindMemberInlineEdit(member, () => renderMemberProfile());
+      bindMemberCardTicketFilter(() => renderMemberProfile());
       bindTicketEditControls(member, () => renderMemberProfile());
       memberMonthCalendar.innerHTML = "";
       memberHistoryPanel.innerHTML = "";
@@ -4048,8 +4155,7 @@ const SUPABASE_URL = "";
       };
     }
 
-    function openRechargeDialog(shortcut = "", paymentShortcut = null) {
-      const member = getProfileMember();
+    function openRechargeDialogForMember(member, shortcut = "", paymentShortcut = null) {
       if (!member) return;
       rechargeModalTitle.textContent = shortcut === "group" ? "儲值團課票券" : "儲值續約票券";
       rechargeModalSubtitle.textContent = `${member.name}｜${displayPhone(member.phone)}`;
@@ -4057,6 +4163,50 @@ const SUPABASE_URL = "";
       rechargeModal.classList.add("open");
       rechargeModal.setAttribute("aria-hidden", "false");
       bindRechargeControls(shortcut, paymentShortcut);
+    }
+
+    function openRechargeDialog(shortcut = "", paymentShortcut = null) {
+      const member = getProfileMember();
+      if (!member) {
+        openRechargeMemberPickerDialog();
+        return;
+      }
+      openRechargeDialogForMember(member, shortcut, paymentShortcut);
+    }
+
+    function openRechargeMemberPickerDialog() {
+      rechargeModalTitle.textContent = "選擇會員儲值票券";
+      rechargeModalSubtitle.textContent = "先輸入會員姓名，再進入儲值流程。";
+      rechargeModalContent.innerHTML = `
+        <div class="recharge-box modal-recharge-box">
+          <div class="field">
+            <label for="topRechargeMemberSearch">會員姓名</label>
+            <div class="search-field">
+              <input id="topRechargeMemberSearch" placeholder="輸入姓名搜尋會員" autocomplete="off">
+              <div class="suggestions hidden" id="topRechargeMemberSuggestions"></div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="secondary-btn" type="button" id="cancelTopRechargePicker">取消</button>
+          </div>
+        </div>
+      `;
+      rechargeModal.classList.add("open");
+      rechargeModal.setAttribute("aria-hidden", "false");
+      const input = document.querySelector("#topRechargeMemberSearch");
+      const suggestions = document.querySelector("#topRechargeMemberSuggestions");
+      const openSelectedMemberRecharge = member => {
+        profileMemberId = member.id;
+        memberProfileSelect.value = bookingMemberOptionLabel(member);
+        renderMemberProfile();
+        openRechargeDialogForMember(member, "");
+      };
+      input?.addEventListener("input", () => {
+        renderMemberSuggestionList(input, suggestions, openSelectedMemberRecharge, () => true);
+      });
+      input?.addEventListener("focus", () => suggestions?.classList.add("hidden"));
+      document.querySelector("#cancelTopRechargePicker")?.addEventListener("click", closeRechargeModalDialog);
+      setTimeout(() => input?.focus(), 0);
     }
 
     function bindRechargeLaunchControls() {
@@ -4505,12 +4655,13 @@ const SUPABASE_URL = "";
     }
 
     function eventHasInstallment(event) {
-      if (event.paymentStatus === "installment" || event.installment === true) return true;
       if (!event.memberIds || event.memberIds.length === 0) return false;
       if (event.kind === "trial") return false;
       return event.memberIds.some(id => {
         const member = members.find(item => item.id === id);
-        return member ? paymentShortcutMatchesEvent(getActivePaymentShortcut(member), event) : false;
+        return member
+          ? paymentShortcutMatchesEvent(getActivePaymentShortcut(member), event) && isFinalBookingProgress(member, event)
+          : false;
       });
     }
 
@@ -4623,6 +4774,8 @@ const SUPABASE_URL = "";
             if (!member) return "";
             const checked = booking.checkIns?.includes(id);
             const needsRenew = isFinalBookingProgress(member, booking);
+            const checkInState = checkInAvailability(booking);
+            const checkInDisabled = checked || booking.status === "cancelled" || !checkInState.ok;
             return `
               <li class="attendance-row">
                 <span>
@@ -4632,7 +4785,7 @@ const SUPABASE_URL = "";
                   </span>
                   <span>${formatMemberBookingProgress(member, booking).replace("｜續約", "")}</span>
                 </span>
-                <button class="secondary-btn" type="button" data-group-checkin="${booking.id}" data-member-id="${member.id}" ${checked || isFutureBooking(booking) ? "disabled" : ""}>${checked ? "已簽到" : isPastBooking(booking) ? "補簽" : "簽到"}</button>
+                <button class="secondary-btn" type="button" data-group-checkin="${booking.id}" data-member-id="${member.id}" title="${escapeHtml(checkInState.message || "")}" ${checkInDisabled ? "disabled" : ""}>${checked ? "已簽到" : isPastBooking(booking) ? "補簽" : "簽到"}</button>
               </li>
             `;
           }).filter(Boolean).join("")
@@ -4815,6 +4968,30 @@ const SUPABASE_URL = "";
 
     function isFutureBooking(booking) {
       return getBookingDayNumber(booking) > currentCalendarDayNumber();
+    }
+
+    function formatMinutesAsTime(minutes) {
+      const safeMinutes = Math.max(0, Math.min(23 * 60 + 59, Number(minutes) || 0));
+      return `${String(Math.floor(safeMinutes / 60)).padStart(2, "0")}:${String(safeMinutes % 60).padStart(2, "0")}`;
+    }
+
+    function checkInAvailability(booking) {
+      if (!booking || booking.status === "cancelled") {
+        return { ok: false, message: "這筆預約已取消，不能簽到。" };
+      }
+      if (isFutureBooking(booking)) {
+        return { ok: false, message: "未來日期的課程還不能簽到；過期課程可補簽。" };
+      }
+      if (isTodayBooking(booking)) {
+        const earliest = timeToMinutes(booking.time) - 60;
+        if (getTodayMinutes() < earliest) {
+          return {
+            ok: false,
+            message: `${booking.time} 的課最早 ${formatMinutesAsTime(earliest)} 才能簽到。`
+          };
+        }
+      }
+      return { ok: true, message: "" };
     }
 
     function bookingMemberNames(booking) {
@@ -5171,6 +5348,13 @@ const SUPABASE_URL = "";
       addActivity("新增", `${bookingMemberNames(booking)} 建立固定預約 ${createdBookings.length} 堂`);
       detailRepeatSummary.textContent = `已建立 ${createdBookings.length} 堂固定預約。`;
       detailRepeatSummary.style.color = "";
+      await confirmChange([
+        "固定預約已建立",
+        `會員：${bookingMemberNames(booking)}`,
+        `新增堂數：${createdBookings.length} 堂`,
+        "確認後會關閉固定預約視窗。"
+      ].join("\n"));
+      closeBookingDetail();
     }
 
     function bookingMemberLinkMarkup(booking) {
@@ -5223,7 +5407,9 @@ const SUPABASE_URL = "";
       addGroupMemberBtn.disabled = expired || booking.status === "cancelled" || booking.kind !== "group";
       bookingCheckInBtn.style.display = booking.kind === "group" ? "none" : "";
       bookingCheckInBtn.textContent = eventIsCheckedIn(booking) ? "已簽到" : expired ? "補簽" : "簽到";
-      bookingCheckInBtn.disabled = isFutureBooking(booking) || booking.status === "cancelled" || eventIsCheckedIn(booking);
+      const checkInState = checkInAvailability(booking);
+      bookingCheckInBtn.disabled = !checkInState.ok || booking.status === "cancelled" || eventIsCheckedIn(booking);
+      bookingCheckInBtn.title = checkInState.message || "";
       cancelBookingBtn.textContent = expired ? "刪除預約" : "取消預約";
       cancelBookingBtn.disabled = booking.status === "cancelled";
       bookingModal.classList.add("open");
@@ -5409,9 +5595,11 @@ const SUPABASE_URL = "";
         formMessage.textContent = "這堂課已經簽到過，不能重複簽到或重複儲值自主訓練。";
         return;
       }
-      if (isFutureBooking(booking)) {
+      const availability = checkInAvailability(booking);
+      if (!availability.ok) {
         formMessage.className = "message error";
-        formMessage.textContent = "未來日期的課程還不能簽到；過期課程可補簽。";
+        formMessage.textContent = availability.message;
+        showToast(availability.message, "error", "尚未開放簽到");
         return;
       }
       const today = todayDateSlash();
@@ -5811,11 +5999,21 @@ const SUPABASE_URL = "";
       return sorted.sort((a, b) => a.index - b.index);
     }
 
+    function updateStickyCalendarOffset() {
+      const topbar = document.querySelector(".topbar.calendar-panel:not(.hidden)");
+      const offset = topbar && !isMobileCalendarLayout()
+        ? Math.max(0, Math.round(topbar.getBoundingClientRect().height))
+        : 0;
+      document.documentElement.style.setProperty("--calendar-sticky-top", `${offset}px`);
+    }
+
     function renderCalendar() {
       enforceResponsiveCalendarMode();
       const activeTypes = new Set([...calendarTypeFilters.querySelectorAll("input:checked")].map(input => input.value));
+      const activeCoach = activeCalendarCoachName();
       const visibleDays = visibleCalendarDays();
       updateCalendarHeader(visibleDays);
+      updateStickyCalendarOffset();
       const mobileCalendar = isMobileCalendarLayout();
       const compactDesktopCalendar = !mobileCalendar && window.innerWidth <= 1600;
       const timeColumnWidth = mobileCalendar ? "58px" : "72px";
@@ -5893,6 +6091,7 @@ const SUPABASE_URL = "";
           event.day === day.key &&
           (event.weekOffset || 0) === dayWeekOffset &&
           activeTypes.has(event.kind) &&
+          calendarCoachMatches(event, activeCoach) &&
           times.includes(event.time)
         );
         const arrangedEvents = arrangeBookingLanes(dayEvents);
@@ -5916,8 +6115,9 @@ const SUPABASE_URL = "";
           layer.dataset.day = day.key;
           layer.dataset.time = event.time;
           layer.dataset.weekOffset = String(dayWeekOffset);
+          const hasStatusBadge = eventHasInstallment(event) || eventNeedsRenew(event);
           layer.innerHTML = `
-            <div class="event ${event.kind} ${expired ? "expired" : ""} ${bookingMemberId ? eventHasMember(event, bookingMemberId) ? "selected-member" : "dimmed" : ""}" data-booking-id="${event.id}" data-expired="${expired ? "true" : "false"}" data-day="${day.key}" data-time="${event.time}" data-week-offset="${dayWeekOffset}" data-tooltip-enabled="${laneCount > 1 ? "true" : "false"}" data-tooltip-kind="${event.kind}" data-tooltip-tag="${escapeHtml(lines.tag)}" data-tooltip-member="${escapeHtml(lines.member)}" data-tooltip-coach="${escapeHtml(lines.coach)}" draggable="${expired ? "false" : "true"}">
+            <div class="event ${event.kind} ${hasStatusBadge ? "has-status-badge" : ""} ${expired ? "expired" : ""} ${bookingMemberId ? eventHasMember(event, bookingMemberId) ? "selected-member" : "dimmed" : ""}" data-booking-id="${event.id}" data-expired="${expired ? "true" : "false"}" data-day="${day.key}" data-time="${event.time}" data-week-offset="${dayWeekOffset}" data-tooltip-enabled="${laneCount > 1 ? "true" : "false"}" data-tooltip-kind="${event.kind}" data-tooltip-tag="${escapeHtml(lines.tag)}" data-tooltip-member="${escapeHtml(lines.member)}" data-tooltip-coach="${escapeHtml(lines.coach)}" draggable="${expired ? "false" : "true"}">
               <div class="event-tags">${calendarEventTags(event)}</div>
               ${calendarRenewTag(event)}
               ${calendarCheckInStamp(event)}
@@ -5935,10 +6135,12 @@ const SUPABASE_URL = "";
       };
 
       let draggedCardPointerOffset = { x: 0, y: 0 };
+      let pointerDragState = null;
+      let suppressNextBookingClickId = "";
 
-      const slotFromCardCorner = dragEvent => {
-        const cornerX = dragEvent.clientX - draggedCardPointerOffset.x + 2;
-        const cornerY = dragEvent.clientY - draggedCardPointerOffset.y + 2;
+      const slotFromCardCorner = (clientX, clientY, offset = draggedCardPointerOffset) => {
+        const cornerX = clientX - offset.x + 2;
+        const cornerY = clientY - offset.y + 2;
         if (!Number.isFinite(cornerX) || !Number.isFinite(cornerY) || cornerX < 0 || cornerY < 0) return null;
         return [...calendar.querySelectorAll(".slot")].find(slot => {
           const rect = slot.getBoundingClientRect();
@@ -5946,8 +6148,8 @@ const SUPABASE_URL = "";
         }) || null;
       };
 
-      const markDragTargetFromCardCorner = dragEvent => {
-        const targetSlot = slotFromCardCorner(dragEvent);
+      const markDragTargetFromCardCorner = (clientX, clientY, offset = draggedCardPointerOffset) => {
+        const targetSlot = slotFromCardCorner(clientX, clientY, offset);
         clearDragTargets();
         if (targetSlot && targetSlot.dataset.past !== "true") targetSlot.classList.add("drag-target");
         return targetSlot;
@@ -5958,8 +6160,12 @@ const SUPABASE_URL = "";
         event.stopPropagation();
         calendar.classList.remove("dragging-booking");
         clearDragTargets();
-        const targetSlot = slotFromCardCorner(event);
-        if (!targetSlot || targetSlot.dataset.past === "true") return;
+        const targetSlot = slotFromCardCorner(event.clientX, event.clientY);
+        if (!targetSlot) return;
+        if (targetSlot.dataset.past === "true") {
+          showToast("此時段已超過可預約時間。", "error", "不可預約");
+          return;
+        }
         const bookingId = event.dataTransfer.getData("text/plain");
         if (bookingId) {
           moveBookingToSlot(
@@ -5970,6 +6176,47 @@ const SUPABASE_URL = "";
           );
         }
       };
+
+      const finishPointerDrag = async pointerEvent => {
+        if (!pointerDragState) return;
+        const state = pointerDragState;
+        pointerDragState = null;
+        window.removeEventListener("pointermove", trackPointerDrag);
+        window.removeEventListener("pointerup", finishPointerDrag);
+        calendar.classList.remove("dragging-booking");
+        state.eventEl.classList.remove("dragging");
+        clearDragTargets();
+        if (!state.dragging) return;
+        pointerEvent.preventDefault();
+        pointerEvent.stopPropagation();
+        suppressNextBookingClickId = state.bookingId;
+        setTimeout(() => {
+          if (suppressNextBookingClickId === state.bookingId) suppressNextBookingClickId = "";
+        }, 0);
+        const targetSlot = slotFromCardCorner(pointerEvent.clientX, pointerEvent.clientY, state.offset);
+        if (!targetSlot) return;
+        if (targetSlot.dataset.past === "true") {
+          showToast("此時段已超過可預約時間。", "error", "不可預約");
+          return;
+        }
+        await moveBookingToSlot(
+          state.bookingId,
+          targetSlot.dataset.day,
+          targetSlot.dataset.time,
+          Number(targetSlot.dataset.weekOffset) || 0
+        );
+      };
+
+      function trackPointerDrag(pointerEvent) {
+        if (!pointerDragState) return;
+        const moved = Math.abs(pointerEvent.clientX - pointerDragState.startX) + Math.abs(pointerEvent.clientY - pointerDragState.startY);
+        if (moved < 8) return;
+        pointerDragState.dragging = true;
+        pointerEvent.preventDefault();
+        calendar.classList.add("dragging-booking");
+        pointerDragState.eventEl.classList.add("dragging");
+        markDragTargetFromCardCorner(pointerEvent.clientX, pointerEvent.clientY, pointerDragState.offset);
+      }
 
       calendar.querySelectorAll("[data-booking-id]").forEach(eventEl => {
         eventEl.addEventListener("mouseenter", pointerEvent => {
@@ -6000,7 +6247,7 @@ const SUPABASE_URL = "";
           if (eventEl.dataset.expired === "true") return;
           dragEvent.preventDefault();
           dragEvent.stopPropagation();
-          markDragTargetFromCardCorner(dragEvent);
+          markDragTargetFromCardCorner(dragEvent.clientX, dragEvent.clientY);
         });
         eventEl.addEventListener("drop", dropBookingOnTarget);
         eventEl.addEventListener("dragend", () => {
@@ -6008,9 +6255,30 @@ const SUPABASE_URL = "";
           eventEl.classList.remove("dragging");
           clearDragTargets();
         });
+        eventEl.addEventListener("pointerdown", pointerEvent => {
+          if (pointerEvent.button !== 0 || eventEl.dataset.expired === "true") return;
+          const rect = eventEl.getBoundingClientRect();
+          pointerDragState = {
+            bookingId: eventEl.dataset.bookingId,
+            eventEl,
+            startX: pointerEvent.clientX,
+            startY: pointerEvent.clientY,
+            offset: {
+              x: Math.max(0, pointerEvent.clientX - rect.left),
+              y: Math.max(0, pointerEvent.clientY - rect.top)
+            },
+            dragging: false
+          };
+          window.addEventListener("pointermove", trackPointerDrag);
+          window.addEventListener("pointerup", finishPointerDrag);
+        });
         eventEl.addEventListener("click", clickEvent => {
           hideCursorCardTooltip();
           clickEvent.stopPropagation();
+          if (suppressNextBookingClickId === eventEl.dataset.bookingId) {
+            suppressNextBookingClickId = "";
+            return;
+          }
           openBookingDetail(eventEl.dataset.bookingId);
         });
       });
@@ -6018,7 +6286,7 @@ const SUPABASE_URL = "";
       calendar.querySelectorAll(".calendar-event-layer").forEach(layer => {
         layer.addEventListener("dragover", dragEvent => {
           dragEvent.preventDefault();
-          markDragTargetFromCardCorner(dragEvent);
+          markDragTargetFromCardCorner(dragEvent.clientX, dragEvent.clientY);
         });
         layer.addEventListener("drop", dropBookingOnTarget);
         layer.addEventListener("click", event => {
@@ -6047,7 +6315,7 @@ const SUPABASE_URL = "";
         slot.addEventListener("dragover", event => {
           if (slot.dataset.past === "true") return;
           event.preventDefault();
-          markDragTargetFromCardCorner(event);
+          markDragTargetFromCardCorner(event.clientX, event.clientY);
         });
         slot.addEventListener("dragleave", () => {
           slot.classList.remove("drag-target");
@@ -6056,8 +6324,12 @@ const SUPABASE_URL = "";
           event.preventDefault();
           calendar.classList.remove("dragging-booking");
           clearDragTargets();
-          const targetSlot = slotFromCardCorner(event);
-          if (!targetSlot || targetSlot.dataset.past === "true") return;
+          const targetSlot = slotFromCardCorner(event.clientX, event.clientY);
+          if (!targetSlot) return;
+          if (targetSlot.dataset.past === "true") {
+            showToast("此時段已超過可預約時間。", "error", "不可預約");
+            return;
+          }
           const bookingId = event.dataTransfer.getData("text/plain");
           if (bookingId) moveBookingToSlot(bookingId, targetSlot.dataset.day, targetSlot.dataset.time, Number(targetSlot.dataset.weekOffset) || 0);
         });
@@ -6098,12 +6370,23 @@ const SUPABASE_URL = "";
       const remaining = bucket.remaining || 0;
       const total = bucket.total || 0;
       const expiry = bucket.expiry ? `<small class="ticket-usage-expiry">到期 ${escapeHtml(bucket.expiry)}</small>` : "";
+      const latestAdjustment = (bucket.adjustmentHistory || [])[0];
+      const adjustmentText = latestAdjustment
+        ? [latestAdjustment.reason || "手動調整", latestAdjustment.note || latestAdjustment.description || ""].filter(Boolean).join("｜")
+        : "";
+      const rowClasses = [
+        bucket.needsRenew ? "renew-needed" : "",
+        bucket.invalid ? "ticket-invalid" : "",
+        latestAdjustment ? "ticket-adjusted" : ""
+      ].filter(Boolean).join(" ");
       return `
-        <div class="ticket-usage-row ${bucket.needsRenew ? "renew-needed" : ""}" data-ticket-bucket-id="${bucket.id || ""}">
+        <div class="ticket-usage-row ${rowClasses}" data-ticket-bucket-id="${bucket.id || ""}">
           <button class="ticket-edit-btn" type="button" data-edit-ticket-bucket="${bucket.id || ""}" aria-label="調整${escapeHtml(label)}票券" title="調整票券">⚙</button>
           <span class="ticket-usage-label-wrap">
             <span class="ticket-usage-label ${extraClass}">${escapeHtml(label)}</span>
+            ${latestAdjustment ? `<small class="ticket-adjusted-badge">異動</small>` : ""}
             ${expiry}
+            ${adjustmentText ? `<small class="ticket-usage-note">${escapeHtml(adjustmentText)}</small>` : ""}
           </span>
           <span class="ticket-usage-value">${used}</span>
           <span class="ticket-usage-value">${remaining}</span>
@@ -6117,6 +6400,34 @@ const SUPABASE_URL = "";
       if (bucket.expiry) return bucket.expiry;
       const key = bucket.type === "selfTraining" ? "selfTraining" : bucket.type;
       return member.ticketExpiry?.[key] || "";
+    }
+
+    function normalizedDateValue(dateText = "") {
+      const normalized = String(dateText || "").trim().replaceAll("/", "-");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return "";
+      return normalized;
+    }
+
+    function isTicketBucketInvalid(member, bucket) {
+      const remaining = Number(bucket?.remaining) || 0;
+      const expiry = normalizedDateValue(ticketBucketExpiryForMember(member, bucket));
+      const expired = expiry ? expiry < dateInputValue(todayDateSlash()) : false;
+      return remaining <= 0 || expired;
+    }
+
+    function renderTicketFilterTabs() {
+      const items = [
+        ["all", "全部票券"],
+        ["valid", "有效票券"],
+        ["invalid", "無效票券"]
+      ];
+      return `
+        <div class="ticket-filter-tabs" data-ticket-filter-tabs>
+          ${items.map(([value, label]) => `
+            <button type="button" class="${memberCardTicketFilter === value ? "active" : ""}" data-member-card-ticket-filter="${value}">${label}</button>
+          `).join("")}
+        </div>
+      `;
     }
 
     function renewalTicketRowsForMember(member, existingLabels = new Set()) {
@@ -6145,17 +6456,25 @@ const SUPABASE_URL = "";
       const shownLabels = new Set();
       syncWalletFromBuckets(member);
       (member.ticketBuckets || []).forEach(bucket => {
-        if ((bucket.remaining || 0) <= 0) return;
+        const invalid = isTicketBucketInvalid(member, bucket);
+        if (memberCardTicketFilter === "valid" && invalid) return;
+        if (memberCardTicketFilter === "invalid" && !invalid) return;
         const label = displayTicketLabel(bucket.label || ticketTypeShortLabel(bucket.type));
         shownLabels.add(label);
         const extraClass = ticketBucketPaletteClass(bucket);
         rows.push(ticketUsageRow({
           ...bucket,
+          invalid,
           expiry: ticketBucketExpiryForMember(member, bucket)
         }, extraClass));
       });
-      rows.push(...renewalTicketRowsForMember(member, shownLabels));
-      return rows.length ? rows.join("") : `<div class="ticket-usage-empty">目前沒有可用票券</div>`;
+      if (memberCardTicketFilter !== "invalid") rows.push(...renewalTicketRowsForMember(member, shownLabels));
+      const emptyText = memberCardTicketFilter === "valid"
+        ? "目前沒有有效票券"
+        : memberCardTicketFilter === "invalid"
+          ? "目前沒有無效票券"
+          : "目前沒有票券";
+      return rows.length ? rows.join("") : `<div class="ticket-usage-empty">${emptyText}</div>`;
     }
 
     function ticketBucketLabelOptions() {
@@ -6228,6 +6547,18 @@ const SUPABASE_URL = "";
           <label>退款金額
             <input data-ticket-edit-refund type="number" min="0" step="1" value="${defaultRefundAmount}">
           </label>
+          <label>異動原因
+            <select data-ticket-edit-reason>
+              <option value="系統調整">系統調整</option>
+              <option value="延長效期">延長效期</option>
+              <option value="補發票券">補發票券</option>
+              <option value="扣除錯誤修正">扣除錯誤修正</option>
+              <option value="手動新增">手動新增</option>
+            </select>
+          </label>
+          <label>異動說明
+            <input data-ticket-edit-note type="text" placeholder="例如：櫃台修正、客服確認">
+          </label>
         </div>
         <div class="ticket-adjust-preview">
           <strong>本次退堂價值：<span data-ticket-refund-value>${money(defaultRefundAmount)}</span></strong>
@@ -6255,6 +6586,8 @@ const SUPABASE_URL = "";
         const refundSessions = Math.min(remainingSessions, Math.max(0, Number(row.querySelector("[data-ticket-refund-sessions]")?.value) || 0));
         const refundValue = Math.round(refundSessions * unitValue);
         const refundAmount = Math.max(0, Number(row.querySelector("[data-ticket-edit-refund]")?.value) || 0);
+        const adjustmentReason = row.querySelector("[data-ticket-edit-reason]")?.value || "系統調整";
+        const adjustmentNote = String(row.querySelector("[data-ticket-edit-note]")?.value || "").trim();
         if (refundAmount > refundValue) {
           formMessage.className = "message error";
           formMessage.textContent = "退款金額不能大於本次退堂價值。";
@@ -6272,7 +6605,8 @@ const SUPABASE_URL = "";
           `票券：${displayTicketLabel(bucket.label || "票券")}`,
           `退堂：${refundSessions} 堂`,
           `退款：${money(refundAmount)}`,
-          `轉入會員儲值金：${money(retainedCredit)}`
+          `轉入會員儲值金：${money(retainedCredit)}`,
+          `原因：${adjustmentReason}${adjustmentNote ? `｜${adjustmentNote}` : ""}`
         ].join("\n")))) return;
         const previousSnapshot = {
           label: bucket.label,
@@ -6298,7 +6632,9 @@ const SUPABASE_URL = "";
           refundSessions,
           refundValue,
           refundAmount,
-          retainedCredit
+          retainedCredit,
+          reason: adjustmentReason,
+          note: adjustmentNote
         });
         if (retainedCredit > 0) {
           member.storeCredit = Math.max(0, Number(member.storeCredit) || 0) + retainedCredit;
@@ -6311,7 +6647,9 @@ const SUPABASE_URL = "";
             refundSessions,
             refundValue,
             refundAmount,
-            retainedCredit
+            retainedCredit,
+            reason: adjustmentReason,
+            note: adjustmentNote
           });
         }
         syncWalletFromBuckets(member);
@@ -6330,6 +6668,16 @@ const SUPABASE_URL = "";
           const bucket = (member.ticketBuckets || []).find(item => item.id === button.dataset.editTicketBucket);
           if (!bucket) return;
           renderTicketBucketEditor(member, bucket, rerender);
+        });
+      });
+    }
+
+    function bindMemberCardTicketFilter(rerender) {
+      memberDetailProfile.querySelectorAll("[data-member-card-ticket-filter]").forEach(button => {
+        button.addEventListener("click", event => {
+          event.stopPropagation();
+          memberCardTicketFilter = button.dataset.memberCardTicketFilter || "all";
+          rerender();
         });
       });
     }
@@ -6409,11 +6757,16 @@ const SUPABASE_URL = "";
     function followingSeriesBookings(booking) {
       if (!booking.seriesId) return [];
       const baseValue = bookingDateTimeValue(booking);
+      const hasExplicitSlot = Boolean(booking.seriesSlotNumber);
       return bookings
         .filter(item =>
           item.seriesId === booking.seriesId &&
           item.status !== "cancelled" &&
-          (item.seriesSlotNumber || 1) === (booking.seriesSlotNumber || 1) &&
+          (
+            hasExplicitSlot
+              ? (item.seriesSlotNumber ? item.seriesSlotNumber === booking.seriesSlotNumber : item.day === booking.day)
+              : item.day === booking.day
+          ) &&
           bookingDateTimeValue(item) >= baseValue
         )
         .sort((a, b) => bookingDateTimeValue(a) - bookingDateTimeValue(b));
@@ -6439,11 +6792,30 @@ const SUPABASE_URL = "";
       return { ok: true, message: "" };
     }
 
+    async function chooseSeriesMoveScope(booking) {
+      const originalAcceptText = acceptConfirmBtn.textContent;
+      const originalCancelText = cancelConfirmBtn.textContent;
+      acceptConfirmBtn.textContent = "一併變更";
+      cancelConfirmBtn.textContent = "單堂變更";
+      try {
+        return await confirmChange([
+          "這是固定預約",
+          `目前移動：${bookingMemberNames(booking)} ${formatBookingDate(booking)} ${booking.time}`,
+          "",
+          "單堂變更：只移動這一堂。",
+          "一併變更：只移動同一個固定日後續課程；若一週兩天固定課，不會連另一個固定日一起移動。"
+        ].join("\n"));
+      } finally {
+        acceptConfirmBtn.textContent = originalAcceptText;
+        cancelConfirmBtn.textContent = originalCancelText;
+      }
+    }
+
     async function moveBookingToSlot(bookingId, dayKey, time, weekOffset = calendarWeekOffset) {
       const booking = bookings.find(item => item.id === bookingId);
       if (!booking) return;
       const followSeries = booking.seriesId
-        ? await confirmChange("這是固定預約，要連同這筆後面的固定時段一起變更嗎？按取消則只移動這一筆。")
+        ? await chooseSeriesMoveScope(booking)
         : false;
       const targets = followSeries ? buildSeriesMoveTargets(booking, dayKey, time, weekOffset) : [{ booking, day: dayKey, time, weekOffset }];
       const validation = followSeries ? validateSeriesMoveTargets(targets) : validateBookingMove(booking, dayKey, time, weekOffset);
@@ -6963,15 +7335,14 @@ const SUPABASE_URL = "";
       addMemberBox.classList.remove("active");
     });
     openMemberRechargeTop?.addEventListener("click", async () => {
-      const member = getProfileMember() || members[0];
-      if (!member) return;
-      profileMemberId = member.id;
-      openRechargeDialog("");
+      openRechargeMemberPickerDialog();
     });
     toggleAddCourseForm?.addEventListener("click", async () => {
+      setCourseManagementBranch("courses");
       openNewCourseItemEditor("newCourse");
     });
     toggleAddTicketForm?.addEventListener("click", async () => {
+      setCourseManagementBranch("tickets");
       openNewCourseItemEditor("newTicket");
     });
     createMemberBtn.addEventListener("click", async () => {
@@ -7036,12 +7407,19 @@ const SUPABASE_URL = "";
     });
     document.querySelectorAll("[data-view-target]").forEach(button => {
       button.addEventListener("click", async () => {
+        const courseSubgroup = document.querySelector(".nav-subgroup");
+        if (button.dataset.courseNavRoot === "true") {
+          courseSubgroup?.classList.toggle("collapsed");
+        } else if (button.dataset.courseNavBranch) {
+          courseSubgroup?.classList.remove("collapsed");
+        }
         document.querySelectorAll(".nav button").forEach(navButton => navButton.classList.remove("active"));
-        button.classList.add("active");
+        if (!button.dataset.courseNavBranch) button.classList.add("active");
         document.querySelectorAll(".view-section").forEach(section => section.classList.add("hidden"));
         document.querySelectorAll(".calendar-panel").forEach(section => section.classList.add("hidden"));
         const target = document.querySelector(`#${button.dataset.viewTarget}`);
         if (target) target.classList.remove("hidden");
+        if (button.dataset.courseNavBranch) setCourseManagementBranch(button.dataset.courseNavBranch);
         const isCalendar = button.dataset.viewTarget === "calendarView";
         document.querySelectorAll(".calendar-panel").forEach(section => section.classList.toggle("hidden", !isCalendar));
         appRoot.classList.toggle("member-mode", !isCalendar);
@@ -7087,10 +7465,20 @@ const SUPABASE_URL = "";
     calendarTypeFilters?.addEventListener("change", event => {
       if (event.target?.matches("input[type='checkbox']")) renderCalendar();
     });
+    calendarCoachFilter?.addEventListener("click", event => {
+      const button = event.target?.closest("[data-coach-filter]");
+      if (!button) return;
+      calendarCoachFilter.dataset.selected = button.dataset.coachFilter || "all";
+      calendarCoachFilter.querySelectorAll("[data-coach-filter]").forEach(item => {
+        item.classList.toggle("active", item === button);
+      });
+      renderCalendar();
+    });
     window.addEventListener("resize", () => {
       const beforeMode = calendarViewMode;
       enforceResponsiveCalendarMode();
       if (beforeMode !== calendarViewMode) renderCalendar();
+      updateStickyCalendarOffset();
     });
     memberSortMode.addEventListener("change", renderMemberProfile);
     memberSortButtons.querySelectorAll("[data-member-sort]").forEach(button => {
@@ -7160,6 +7548,7 @@ const SUPABASE_URL = "";
       newStaffDutyHours.value = "0";
       staffAddBox.classList.remove("active");
       renderCoachOptions();
+      renderCalendarCoachFilter();
       saveAppData();
       renderStaffManagement();
       renderOperationsSummary();
@@ -7171,6 +7560,7 @@ const SUPABASE_URL = "";
       staffMembers.splice(index, 1);
       staffMemberId = staffMembers[0]?.id || "";
       renderCoachOptions();
+      renderCalendarCoachFilter();
       saveAppData();
       renderStaffManagement();
       renderOperationsSummary();
@@ -7212,6 +7602,10 @@ const SUPABASE_URL = "";
     memberDetailModal.addEventListener("click", async event => {
       if (event.target === memberDetailModal) closeMemberDetailModal();
     });
+    closeStaffDetailModal?.addEventListener("click", closeStaffDetailDialog);
+    staffDetailModal?.addEventListener("click", async event => {
+      if (event.target === staffDetailModal) closeStaffDetailDialog();
+    });
     closeRechargeModal.addEventListener("click", closeRechargeModalDialog);
     rechargeModal.addEventListener("click", async event => {
       if (event.target === rechargeModal) closeRechargeModalDialog();
@@ -7245,8 +7639,9 @@ const SUPABASE_URL = "";
       const testBookingsAdded = ensureMay25TestBookings();
       const may28TestFixed = ensureSplitMay28FriendlyTestBooking();
       const coachNamesUpdated = remapBookingCoachNames();
+      const memberLevelsUpdated = members.reduce((changed, member) => updateMemberLevelFromCompletedCourses(member) || changed, false);
       dataReadyToSave = true;
-      if (courseCatalogUpdated || friendlySelfTicketAdded || staffRosterUpdated || testBookingsAdded || may28TestFixed || coachNamesUpdated || bookingNormalizationChanged) saveAppData();
+      if (courseCatalogUpdated || friendlySelfTicketAdded || staffRosterUpdated || testBookingsAdded || may28TestFixed || coachNamesUpdated || memberLevelsUpdated || bookingNormalizationChanged) saveAppData();
       bookingNormalizationChanged = false;
       initOptions();
       resetCalendarToToday();
