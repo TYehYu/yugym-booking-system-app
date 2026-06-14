@@ -239,6 +239,7 @@ tr:hover td{background:var(--card2);}
     <div class="login-tag">預約管理系統 · MVP 1.0</div>
     <div class="role-tabs">
       <div class="role-tab active" data-role="admin" onclick="selRole('admin')">管理員</div>
+      <div class="role-tab" data-role="front_desk" onclick="selRole('front_desk')">櫃台</div>
       <div class="role-tab" data-role="coach" onclick="selRole('coach')">教練</div>
       <div class="role-tab" data-role="member" onclick="selRole('member')">會員</div>
     </div>
@@ -349,7 +350,8 @@ function selRole(r){
 }
 function updateLoginHint(){
   const h=document.getElementById('login-hint');
-  h.innerHTML='<b>雲端版</b>　請以 Supabase 帳號登入（'+(loginRole==='member'?'會員手機號碼':'員工帳號')+'）';
+  const map={member:'會員手機號碼',front_desk:'櫃台設備帳號',coach:'教練帳號',admin:'管理員帳號'};
+  h.innerHTML='<b>雲端版</b>　請以 Supabase 帳號登入（'+(map[loginRole]||'員工帳號')+'）';
 }
 async function doLogin(){
   const acct=document.getElementById('login-acct').value.trim();
@@ -1579,7 +1581,8 @@ function readPayRoleFields(prefix){
 function openStaffModal(){
   showModal(`<div class="modal-title">邀請員工</div>
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;">指定角色與員工類型，其餘個人資料由員工自行填寫。<br>薪資依員工類型與薪資制度自動計算（薪資制度設定為下一階段功能）。</div>
-    <div class="form-row"><label>角色</label><select id="st-role"><option value="coach">教練</option><option value="front_desk">櫃檯</option><option value="admin">管理員</option></select></div>
+    <div class="form-row"><label>角色</label><select id="st-role"><option value="coach">教練</option><option value="front_desk">櫃檯（設備帳號）</option></select>
+      <div style="font-size:11px;color:var(--t3);margin-top:5px;">管理員僅一位（老闆），不可由此新增。</div></div>
     ${payRoleFields('st',{employment_type:'full_time'},false)}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitStaffInvite()">產生邀請連結</button></div>`);
 }
@@ -1615,8 +1618,9 @@ async function openStaffEdit(id){
     <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${c.phone||''}　${c.email||''}</div>
     <div class="form-row"><label>角色</label><select id="se-role">
       <option value="coach" ${c.role==='coach'?'selected':''}>教練</option>
-      <option value="front_desk" ${c.role==='front_desk'?'selected':''}>櫃檯</option>
-      <option value="admin" ${c.role==='admin'?'selected':''}>管理員</option></select></div>
+      <option value="front_desk" ${c.role==='front_desk'?'selected':''}>櫃檯（設備帳號）</option>
+      ${c.role==='admin'?'<option value="admin" selected>管理員</option>':''}</select>
+      ${c.role!=='admin'?'<div style="font-size:11px;color:var(--t3);margin-top:5px;">管理員僅一位，不可由此指派。</div>':''}</div>
     ${payRoleFields('se',c,false)}
     <div class="form-row"><label>在職狀態</label><select id="se-status">
       <option value="active" ${c.status==='active'?'selected':''}>在職</option>
@@ -2093,6 +2097,20 @@ async function showInvitePage(token){
       <div style="text-align:center;color:var(--ok);font-size:14px;padding:20px 0;">此邀請已完成填寫，請聯繫管理員啟用帳號。</div></div>`;
     return;
   }
+  // 櫃台＝設備帳號：只需帳號（代號）與密碼，不填個人資料
+  if(inv.role==='front_desk'){
+    host.innerHTML=`<div class="login-card" style="max-width:420px;">
+      <div class="login-logo"><div class="mark">YUGYM</div><div class="sub">櫃 台 設 備 帳 號</div></div>
+      <div class="login-tag">設定此櫃台帳號的登入代號與密碼</div>
+      <div class="login-err" id="inv-err"></div>
+      <div class="form-row"><label>帳號名稱（例：櫃台01）*</label><input id="fd-name" placeholder="櫃台01"></div>
+      <div class="form-row"><label>登入帳號 *（用於登入，例如 desk01）</label><input id="fd-phone" placeholder="desk01"></div>
+      <div class="form-row"><label>設定密碼 *（至少 6 個字元）</label><input type="password" id="fd-pw" placeholder="至少 6 個字元"></div>
+      <button class="btn-primary" onclick="submitDeskInvite('${token}')">建立櫃台帳號</button>
+      <div class="login-hint">櫃台為公用設備帳號，不需個人資料，不計薪資、不打卡。建立後待管理員啟用即可在店內電腦登入。</div>
+    </div>`;
+    return;
+  }
   host.innerHTML=`<div class="login-card" style="max-width:460px;max-height:92vh;overflow-y:auto;">
     <div class="login-logo"><div class="mark">YUGYM</div><div class="sub">員 工 資 料 填 寫</div></div>
     <div class="login-tag">職位：${ROLE_LABEL[inv.role]}　·　請完整填寫以下資料</div>
@@ -2156,6 +2174,35 @@ async function submitInvite(token){
       <div style="font-size:40px;margin-bottom:12px;">✓</div>
       <div style="font-size:15px;font-weight:500;margin-bottom:8px;">資料已送出</div>
       <div style="font-size:12.5px;color:var(--t2);line-height:1.8;">您的帳號已建立。<br>待管理員啟用後，即可用手機號碼登入。</div>
+    </div></div>`;
+}
+/* 櫃台設備帳號：只建帳號+密碼，不存個人資料 */
+async function submitDeskInvite(token){
+  const v=id=>document.getElementById(id).value.trim();
+  const err=document.getElementById('inv-err');
+  const name=v('fd-name'), acct=v('fd-phone'), pw=document.getElementById('fd-pw').value;
+  if(!name||!acct||!pw){err.textContent='請填寫帳號名稱、登入帳號與密碼';err.style.display='block';return;}
+  if(pw.length<6){err.textContent='密碼至少需要 6 個字元';err.style.display='block';return;}
+  const coaches=await dbGetAll('coaches');
+  if(coaches.some(c=>c.phone===acct&&c.invite_token!==token)){err.textContent='此登入帳號已被使用';err.style.display='block';return;}
+  const inv=coaches.find(c=>c.invite_token===token);
+  if(!inv){err.textContent='邀請連結無效或已使用';err.style.display='block';return;}
+  const r=await cloudCreateAuth('staff',acct,pw); // staff 假 email：acct@staff.yugym.local
+  if(r.error){err.textContent='建立帳號失敗：'+r.error;err.style.display='block';return;}
+  // 設備帳號：只記必要欄位，個人資料留空
+  Object.assign(inv,{name,phone:acct,auth_id:r.uid,invite_status:'completed',status:'inactive'});
+  try{
+    await dbPut('coaches',inv);
+  }catch(e){
+    err.textContent='櫃台帳號寫入失敗：'+(e.message||e);err.style.display='block';return;
+  }
+  try{await sb.auth.signOut();}catch(_){}
+  const host=document.getElementById('invite-screen');
+  host.innerHTML=`<div class="login-card"><div class="login-logo"><div class="mark">YUGYM</div></div>
+    <div style="text-align:center;padding:24px 0;">
+      <div style="font-size:40px;margin-bottom:12px;">✓</div>
+      <div style="font-size:15px;font-weight:500;margin-bottom:8px;">櫃台帳號已建立</div>
+      <div style="font-size:12.5px;color:var(--t2);line-height:1.8;">待管理員啟用後，即可在店內電腦以帳號 <b>${acct}</b> 登入。</div>
     </div></div>`;
 }
 
