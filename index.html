@@ -1295,7 +1295,14 @@ async function submitRegister(){
 }
 
 /* ════════ 管理員:員工管理（邀請制 + 營運薪資制度） ════════ */
-const PAY_LABEL={fulltime:'正職',parttime:'兼職',partner:'合作',workstudy:'工讀'};
+const PAY_LABEL={full_time:'正職',part_time:'兼職',partner:'合作',workstudy:'工讀',
+  fulltime:'正職',parttime:'兼職'}; // 後兩個相容舊資料
+// 把任何寫法正規化成資料庫 enum 值（full_time / part_time / partner / workstudy）
+function normEmp(v){
+  if(v==='fulltime') return 'full_time';
+  if(v==='parttime') return 'part_time';
+  return v||'full_time';
+}
 const STAFF_STATUS={active:'在職',unpaid_leave:'留職停薪',resigned:'離職'};
 const STAFF_STATUS_TAG={active:'tag-ok',unpaid_leave:'tag-warn',resigned:'tag-danger'};
 PAGES.staff=async function(){
@@ -1338,15 +1345,15 @@ function payRoleFields(prefix,c,showRate){
   return `<div class="${showRate?'form-2col':''}">
       <div class="form-row"><label>薪資制度</label>
         <select id="${prefix}-pay" onchange="toggleMgr('${prefix}')">
-          <option value="fulltime" ${(c.employment_type||c.pay_type)==='fulltime'?'selected':''}>正職</option>
-          <option value="parttime" ${(c.employment_type||c.pay_type)==='parttime'?'selected':''}>兼職</option>
-          <option value="partner" ${(c.employment_type||c.pay_type)==='partner'?'selected':''}>合作</option>
-          <option value="workstudy" ${(c.employment_type||c.pay_type)==='workstudy'?'selected':''}>工讀</option>
+          <option value="full_time" ${normEmp(c.employment_type||c.pay_type)==='full_time'?'selected':''}>正職</option>
+          <option value="part_time" ${normEmp(c.employment_type||c.pay_type)==='part_time'?'selected':''}>兼職</option>
+          <option value="partner" ${normEmp(c.employment_type||c.pay_type)==='partner'?'selected':''}>合作</option>
+          <option value="workstudy" ${normEmp(c.employment_type||c.pay_type)==='workstudy'?'selected':''}>工讀</option>
         </select></div>
       ${rateField}
     </div>
     <div class="form-row"><label>到職日</label><input type="date" id="${prefix}-hire" value="${c.hire_date||''}"></div>
-    <div id="${prefix}-mgr-wrap" style="display:${((c.employment_type||c.pay_type)||'fulltime')==='fulltime'?'block':'none'};border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-bottom:14px;">
+    <div id="${prefix}-mgr-wrap" style="display:${normEmp(c.employment_type||c.pay_type)==='full_time'?'block':'none'};border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-bottom:14px;">
       <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">管理職（限正職）</div>
       <div class="form-2col">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="${prefix}-ismgr" ${c.is_manager?'checked':''} onchange="document.getElementById('${prefix}-mgrbonus-row').style.display=this.checked?'block':'none'">店長</label>
@@ -1357,16 +1364,17 @@ function payRoleFields(prefix,c,showRate){
     </div>`;
 }
 function toggleMgr(prefix){
-  const ft=document.getElementById(prefix+'-pay').value==='fulltime';
+  const ft=normEmp(document.getElementById(prefix+'-pay').value)==='full_time';
   document.getElementById(prefix+'-mgr-wrap').style.display=ft?'block':'none';
 }
 function readPayRoleFields(prefix){
-  const ft=document.getElementById(prefix+'-pay').value==='fulltime';
+  const empType=normEmp(document.getElementById(prefix+'-pay').value);
+  const ft=empType==='full_time';
   const isMgr=ft&&document.getElementById(prefix+'-ismgr').checked;
   const isSup=ft&&document.getElementById(prefix+'-issup').checked;
   const rateEl=document.getElementById(prefix+'-rate'); // 邀請階段無此欄
   const out={
-    employment_type:document.getElementById(prefix+'-pay').value,
+    employment_type:empType,    // 正規化為資料庫 enum 值
     hire_date:document.getElementById(prefix+'-hire').value||null,
     is_manager:isMgr, is_supervisor:isSup,
     manager_bonus:isMgr?Number(document.getElementById(prefix+'-mgrbonus').value)||0:0,
@@ -1379,7 +1387,7 @@ function openStaffModal(){
   showModal(`<div class="modal-title">邀請員工</div>
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;">指定角色與薪資制度，其餘個人資料由員工自行填寫。<br>單堂費率於員工建立後，由管理員在員工資料頁設定。</div>
     <div class="form-row"><label>角色</label><select id="st-role"><option value="coach">教練</option><option value="front_desk">櫃檯</option><option value="admin">管理員</option></select></div>
-    ${payRoleFields('st',{employment_type:'fulltime'},false)}
+    ${payRoleFields('st',{employment_type:'full_time'},false)}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitStaffInvite()">產生邀請連結</button></div>`);
 }
 async function submitStaffInvite(){
@@ -1863,11 +1871,4 @@ function showModal(html){
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
   bg.innerHTML=`<div class="modal">${html}</div>`;
   let downOnBg=false;
-  bg.addEventListener('mousedown',e=>{downOnBg=(e.target===bg);});
-  bg.addEventListener('mouseup',e=>{if(downOnBg&&e.target===bg)closeModal();downOnBg=false;});
-  document.body.appendChild(bg);
-}
-function closeModal(){const m=document.getElementById('modal-bg');if(m)m.remove();}
-</script>
-</body>
-</html>
+  bg.add
