@@ -433,11 +433,14 @@ window.PAGES={};
 (async function(){
   if(!CLOUD){ showConfigNeeded(); return; }   // 未設定金鑰 → 顯示設定提示，不啟動
   await openDB();
-  // 邀請連結:#invite=token（員工）
-  const m=location.hash.match(/invite=([a-z0-9]+)/i);
-  if(m){ showInvitePage(m[1]); return; }
-  // 會員自助註冊:#register（公開申辦）
-  if(/register/i.test(location.hash)){ showRegisterPage(); return; }
+  // ── 路由優先順序：member-signup → invite → 其他（登入）──
+  const hash=location.hash||'';
+  // 1) 會員申辦頁（公開）
+  if(/member-signup/i.test(hash)){ showRegisterPage(); return; }
+  // 2) 員工邀請頁（公開，需 token）
+  const inv=hash.match(/invite=([a-zA-Z0-9]+)/);
+  if(inv){ showInvitePage(inv[1]); return; }
+  // 3) 其他 → 登入流程
   selRole('admin');
   // 還原 Supabase 登入狀態
   const{data}=await sb.auth.getSession();
@@ -476,9 +479,12 @@ function showConfigNeeded(){
   </div>`;
 }
 window.addEventListener('hashchange',()=>{
-  const m=location.hash.match(/invite=([a-z0-9]+)/i);
-  if(m){showInvitePage(m[1]);return;}
-  if(/register/i.test(location.hash))showRegisterPage();
+  const hash=location.hash||'';
+  if(/member-signup/i.test(hash)){ showRegisterPage(); return; }
+  const inv=hash.match(/invite=([a-zA-Z0-9]+)/);
+  if(inv){ showInvitePage(inv[1]); return; }
+  // hash 被清空（例如註冊完按返回登入）→ 重新載入回登入流程
+  if(!hash){ location.reload(); }
 });
 </script>
 <script>
@@ -1220,7 +1226,7 @@ async function saveTags(member_id){
 /* ── 會員申辦連結 / QR Code（取代後台直接建立） ── */
 function memberRegisterLink(){
   const base=location.href.split('#')[0];
-  return base+'#register';
+  return base+'#member-signup';
 }
 function openMemberRegisterLink(){
   const link=memberRegisterLink();
@@ -1239,7 +1245,7 @@ function openMemberRegisterLink(){
   else if(box){ box.innerHTML='<span style="font-size:11px;color:var(--t3);">（離線無法產生 QR，請使用連結）</span>'; }
 }
 
-/* ── 會員自助註冊頁（公開，#register） ── */
+/* ── 會員自助註冊頁（公開，#member-signup） ── */
 function showRegisterPage(){
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app-screen').classList.add('hidden');
@@ -1271,6 +1277,8 @@ async function submitRegister(){
   if(pw.length<6){err.textContent='密碼至少需要 6 個字元';err.style.display='block';return;}
   const members=await dbGetAll('members');
   if(members.some(m=>m.phone===phone)){err.textContent='此手機已註冊，請直接登入';err.style.display='block';return;}
+  // 註：members 表是否有 role 欄視你的 schema 而定；預設不寫入以免 schema 無此欄而失敗。
+  // 若你的 members 表有 role 欄並要求標記，可在此加上 role:'member'。
   const m={id:uid('m'),name,phone,email:v('reg-email')||null,birthday:v('reg-bday')||null,
     tier:'newbie',tags:['newbie'],is_pt:false,default_coach_id:null,source:'walkin',status:'active'};
   const r=await cloudCreateAuth('member',phone,pw);
@@ -1317,15 +1325,19 @@ PAGES.staff=async function(){
   </div>
   <div class="card"><div class="card-title">邀請流程</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.9;">
-    1. 點「邀請員工」→ 指定角色、薪資制度、費率（正職可設店長/主管與管理獎金）→ 產生邀請連結。<br>
-    2. 複製連結傳給員工。員工開啟後填寫個人資料、緊急聯絡人等。<br>
-    3. 送出後回此列表，點「編輯」可啟用、調整管理職與狀態。
+    1. 點「邀請員工」→ 指定角色、薪資制度（正職可設店長/主管與管理獎金）→ 產生邀請連結。<br>
+    2. 複製連結傳給員工。員工開啟後填寫個人資料、緊急聯絡人與密碼。<br>
+    3. 送出後回此列表，點「編輯」可設定單堂費率、啟用帳號與調整管理職。
     </div>
   </div>`;
 };
-function payRoleFields(prefix,c){
+function payRoleFields(prefix,c,showRate){
   c=c||{};
-  return `<div class="form-2col">
+  if(showRate===undefined) showRate=true;
+  const rateField = showRate
+    ? `<div class="form-row"><label>單堂費率（元）</label><input type="number" id="${prefix}-rate" value="${c.pay_rate||0}"></div>`
+    : '';
+  return `<div class="${showRate?'form-2col':''}">
       <div class="form-row"><label>薪資制度</label>
         <select id="${prefix}-pay" onchange="toggleMgr('${prefix}')">
           <option value="fulltime" ${c.pay_type==='fulltime'?'selected':''}>正職</option>
@@ -1333,7 +1345,7 @@ function payRoleFields(prefix,c){
           <option value="partner" ${c.pay_type==='partner'?'selected':''}>合作</option>
           <option value="workstudy" ${c.pay_type==='workstudy'?'selected':''}>工讀</option>
         </select></div>
-      <div class="form-row"><label>單堂費率（元）</label><input type="number" id="${prefix}-rate" value="${c.pay_rate||600}"></div>
+      ${rateField}
     </div>
     <div class="form-row"><label>到職日</label><input type="date" id="${prefix}-hire" value="${c.hire_date||''}"></div>
     <div id="${prefix}-mgr-wrap" style="display:${(c.pay_type||'fulltime')==='fulltime'?'block':'none'};border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-bottom:14px;">
@@ -1354,25 +1366,28 @@ function readPayRoleFields(prefix){
   const ft=document.getElementById(prefix+'-pay').value==='fulltime';
   const isMgr=ft&&document.getElementById(prefix+'-ismgr').checked;
   const isSup=ft&&document.getElementById(prefix+'-issup').checked;
-  return {
+  const rateEl=document.getElementById(prefix+'-rate'); // 邀請階段無此欄
+  const out={
     pay_type:document.getElementById(prefix+'-pay').value,
-    pay_rate:Number(document.getElementById(prefix+'-rate').value)||0,
     hire_date:document.getElementById(prefix+'-hire').value||null,
     is_manager:isMgr, is_supervisor:isSup,
     mgr_bonus:isMgr?Number(document.getElementById(prefix+'-mgrbonus').value)||0:0,
     sup_bonus:isSup?Number(document.getElementById(prefix+'-supbonus').value)||0:0,
   };
+  if(rateEl) out.pay_rate=Number(rateEl.value)||0; // 有費率欄才寫入
+  return out;
 }
 function openStaffModal(){
   showModal(`<div class="modal-title">邀請員工</div>
-    <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;">指定角色與薪資設定，其餘個人資料由員工自行填寫。</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;">指定角色與薪資制度，其餘個人資料由員工自行填寫。<br>單堂費率於員工建立完成後，由管理員在員工資料頁設定。</div>
     <div class="form-row"><label>角色</label><select id="st-role"><option value="coach">教練</option><option value="front_desk">櫃檯</option><option value="admin">管理員</option></select></div>
-    ${payRoleFields('st',{pay_type:'fulltime',pay_rate:600})}
+    ${payRoleFields('st',{pay_type:'fulltime'},false)}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitStaffInvite()">產生邀請連結</button></div>`);
 }
 async function submitStaffInvite(){
   const token=uid('inv').replace('inv-','');
-  const pay=readPayRoleFields('st');
+  const pay=readPayRoleFields('st');           // 邀請階段不含 pay_rate
+  if(pay.pay_rate===undefined) pay.pay_rate=0;  // 費率預設 0，待管理員之後設定
   const c=Object.assign({id:uid('c'),name:'',phone:'',pw:'',role:document.getElementById('st-role').value,
     status:'inactive',invite_status:'pending',invite_token:token,created_at:new Date().toISOString()},pay);
   await dbPut('coaches',c);
@@ -1808,7 +1823,8 @@ async function submitInvite(token){
     name:v('inv-name'),nickname:v('inv-nick'),phone,email:v('inv-email'),birthday:v('inv-bday'),
     address:v('inv-addr'),emergency_name:v('inv-econtact'),emergency_phone:v('inv-ephone'),
     id_number:v('inv-idno'),bank_account:v('inv-bank'),
-    invite_status:'completed' // 待管理員啟用
+    invite_status:'completed', // 已填寫
+    status:'inactive'          // 待管理員啟用
   };
   const r=await cloudCreateAuth('staff',phone,v('inv-pw'));
   if(r.error){err.textContent='建立帳號失敗：'+r.error;err.style.display='block';return;}
