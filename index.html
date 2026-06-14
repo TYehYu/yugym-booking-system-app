@@ -433,16 +433,13 @@ window.PAGES={};
 (async function(){
   if(!CLOUD){ showConfigNeeded(); return; }   // 未設定金鑰 → 顯示設定提示，不啟動
   await openDB();
-  // ── 路由優先順序：member-signup → invite → 其他（登入）──
+  // ── 路由優先順序：member-signup → invite=token → 登入 ──
   const hash=location.hash||'';
-  // 1) 會員申辦頁（公開）
-  if(/member-signup/i.test(hash)){ showRegisterPage(); return; }
-  // 2) 員工邀請頁（公開，需 token）
+  if(/member-signup/i.test(hash)){ showRegisterPage(); return; }       // 1) 會員申辦（公開）
   const inv=hash.match(/invite=([a-zA-Z0-9]+)/);
-  if(inv){ showInvitePage(inv[1]); return; }
+  if(inv){ showInvitePage(inv[1]); return; }                            // 2) 員工邀請（公開）
   // 3) 其他 → 登入流程
   selRole('admin');
-  // 還原 Supabase 登入狀態
   const{data}=await sb.auth.getSession();
   if(data&&data.session){
     const uid=data.session.user.id;
@@ -483,8 +480,7 @@ window.addEventListener('hashchange',()=>{
   if(/member-signup/i.test(hash)){ showRegisterPage(); return; }
   const inv=hash.match(/invite=([a-zA-Z0-9]+)/);
   if(inv){ showInvitePage(inv[1]); return; }
-  // hash 被清空（例如註冊完按返回登入）→ 重新載入回登入流程
-  if(!hash){ location.reload(); }
+  if(!hash){ location.reload(); }   // hash 清空 → 回登入
 });
 </script>
 <script>
@@ -1277,22 +1273,24 @@ async function submitRegister(){
   if(pw.length<6){err.textContent='密碼至少需要 6 個字元';err.style.display='block';return;}
   const members=await dbGetAll('members');
   if(members.some(m=>m.phone===phone)){err.textContent='此手機已註冊，請直接登入';err.style.display='block';return;}
-  // 註：members 表是否有 role 欄視你的 schema 而定；預設不寫入以免 schema 無此欄而失敗。
-  // 若你的 members 表有 role 欄並要求標記，可在此加上 role:'member'。
-  const m={id:uid('m'),name,phone,email:v('reg-email')||null,birthday:v('reg-bday')||null,
-    tier:'newbie',tags:['newbie'],is_pt:false,default_coach_id:null,source:'walkin',status:'active'};
+  // 只寫入規格指定且 members 表確定存在的欄位，避免欄位不符導致整筆失敗
+  const m={id:uid('m'),name,phone,email:v('reg-email')||null,birthday:v('reg-bday')||null,status:'active'};
   const r=await cloudCreateAuth('member',phone,pw);
   if(r.error){err.textContent='註冊失敗：'+r.error;err.style.display='block';return;}
   m.auth_id=r.uid;
-  await dbPut('members',m);
+  try{
+    await dbPut('members',m);
+  }catch(e){
+    err.textContent='會員資料寫入失敗：'+(e.message||e);err.style.display='block';return;
+  }
   try{await sb.auth.signOut();}catch(_){} // 註冊後登出，回登入頁
   const host=document.getElementById('invite-screen');
   host.innerHTML=`<div class="login-card"><div class="login-logo"><div class="mark">YUGYM</div></div>
     <div style="text-align:center;padding:24px 0;">
       <div style="font-size:40px;margin-bottom:12px;">✓</div>
-      <div style="font-size:15px;font-weight:500;margin-bottom:8px;">註冊完成</div>
-      <div style="font-size:12.5px;color:var(--t2);line-height:1.8;">您已成為 YUGYM 會員。<br>請用手機號碼 ${phone} 登入。</div>
-      <button class="btn-primary" style="margin-top:18px;" onclick="location.hash='';location.reload();">前往登入</button>
+      <div style="font-size:15px;font-weight:500;margin-bottom:8px;">會員帳號已建立</div>
+      <div style="font-size:12.5px;color:var(--t2);line-height:1.8;">請返回登入頁，用手機號碼 ${phone} 登入。</div>
+      <button class="btn-primary" style="margin-top:18px;" onclick="location.hash='';location.reload();">返回登入頁</button>
     </div></div>`;
 }
 
@@ -1313,7 +1311,7 @@ PAGES.staff=async function(){
       <td>${c.name||'<span style="color:var(--t3);">（待填寫）</span>'}</td>
       <td>${c.phone||'—'}</td>
       <td><span class="tag ${roleTag[c.role]}">${ROLE_LABEL[c.role]}</span></td>
-      <td>${PAY_LABEL[c.pay_type]||'—'}</td>
+      <td>${PAY_LABEL[c.employment_type||c.pay_type]||'—'}</td>
       <td>${mgrTags}</td>
       <td>${c.pay_rate?'$'+c.pay_rate:'—'}</td>
       <td>${pending?'<span class="tag tag-warn">待員工填寫</span>':`<span class="tag ${STAFF_STATUS_TAG[c.status]||'tag-danger'}">${STAFF_STATUS[c.status]||(c.status==='inactive'?'待啟用':c.status)}</span>`}</td>
@@ -1325,9 +1323,9 @@ PAGES.staff=async function(){
   </div>
   <div class="card"><div class="card-title">邀請流程</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.9;">
-    1. 點「邀請員工」→ 指定角色、薪資制度（正職可設店長/主管與管理獎金）→ 產生邀請連結。<br>
-    2. 複製連結傳給員工。員工開啟後填寫個人資料、緊急聯絡人與密碼。<br>
-    3. 送出後回此列表，點「編輯」可設定單堂費率、啟用帳號與調整管理職。
+    1. 點「邀請員工」→ 指定角色、薪資制度、費率（正職可設店長/主管與管理獎金）→ 產生邀請連結。<br>
+    2. 複製連結傳給員工。員工開啟後填寫個人資料、緊急聯絡人等。<br>
+    3. 送出後回此列表，點「編輯」可啟用、調整管理職與狀態。
     </div>
   </div>`;
 };
@@ -1340,22 +1338,22 @@ function payRoleFields(prefix,c,showRate){
   return `<div class="${showRate?'form-2col':''}">
       <div class="form-row"><label>薪資制度</label>
         <select id="${prefix}-pay" onchange="toggleMgr('${prefix}')">
-          <option value="fulltime" ${c.pay_type==='fulltime'?'selected':''}>正職</option>
-          <option value="parttime" ${c.pay_type==='parttime'?'selected':''}>兼職</option>
-          <option value="partner" ${c.pay_type==='partner'?'selected':''}>合作</option>
-          <option value="workstudy" ${c.pay_type==='workstudy'?'selected':''}>工讀</option>
+          <option value="fulltime" ${(c.employment_type||c.pay_type)==='fulltime'?'selected':''}>正職</option>
+          <option value="parttime" ${(c.employment_type||c.pay_type)==='parttime'?'selected':''}>兼職</option>
+          <option value="partner" ${(c.employment_type||c.pay_type)==='partner'?'selected':''}>合作</option>
+          <option value="workstudy" ${(c.employment_type||c.pay_type)==='workstudy'?'selected':''}>工讀</option>
         </select></div>
       ${rateField}
     </div>
     <div class="form-row"><label>到職日</label><input type="date" id="${prefix}-hire" value="${c.hire_date||''}"></div>
-    <div id="${prefix}-mgr-wrap" style="display:${(c.pay_type||'fulltime')==='fulltime'?'block':'none'};border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-bottom:14px;">
+    <div id="${prefix}-mgr-wrap" style="display:${((c.employment_type||c.pay_type)||'fulltime')==='fulltime'?'block':'none'};border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-bottom:14px;">
       <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">管理職（限正職）</div>
       <div class="form-2col">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="${prefix}-ismgr" ${c.is_manager?'checked':''} onchange="document.getElementById('${prefix}-mgrbonus-row').style.display=this.checked?'block':'none'">店長</label>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="${prefix}-issup" ${c.is_supervisor?'checked':''} onchange="document.getElementById('${prefix}-supbonus-row').style.display=this.checked?'block':'none'">主管</label>
       </div>
-      <div class="form-row" id="${prefix}-mgrbonus-row" style="display:${c.is_manager?'block':'none'};margin-top:10px;margin-bottom:8px;"><label>店長管理獎金（元）</label><input type="number" id="${prefix}-mgrbonus" value="${c.mgr_bonus||0}" placeholder="例：2000 / 4000 / 6000"></div>
-      <div class="form-row" id="${prefix}-supbonus-row" style="display:${c.is_supervisor?'block':'none'};margin-bottom:0;"><label>主管管理獎金（元）</label><input type="number" id="${prefix}-supbonus" value="${c.sup_bonus||0}" placeholder="例：4000"></div>
+      <div class="form-row" id="${prefix}-mgrbonus-row" style="display:${c.is_manager?'block':'none'};margin-top:10px;margin-bottom:8px;"><label>店長管理獎金（元）</label><input type="number" id="${prefix}-mgrbonus" value="${c.manager_bonus||0}" placeholder="例：2000 / 4000 / 6000"></div>
+      <div class="form-row" id="${prefix}-supbonus-row" style="display:${c.is_supervisor?'block':'none'};margin-bottom:0;"><label>主管管理獎金（元）</label><input type="number" id="${prefix}-supbonus" value="${c.supervisor_bonus||0}" placeholder="例：4000"></div>
     </div>`;
 }
 function toggleMgr(prefix){
@@ -1368,29 +1366,42 @@ function readPayRoleFields(prefix){
   const isSup=ft&&document.getElementById(prefix+'-issup').checked;
   const rateEl=document.getElementById(prefix+'-rate'); // 邀請階段無此欄
   const out={
-    pay_type:document.getElementById(prefix+'-pay').value,
+    employment_type:document.getElementById(prefix+'-pay').value,
     hire_date:document.getElementById(prefix+'-hire').value||null,
     is_manager:isMgr, is_supervisor:isSup,
-    mgr_bonus:isMgr?Number(document.getElementById(prefix+'-mgrbonus').value)||0:0,
-    sup_bonus:isSup?Number(document.getElementById(prefix+'-supbonus').value)||0:0,
+    manager_bonus:isMgr?Number(document.getElementById(prefix+'-mgrbonus').value)||0:0,
+    supervisor_bonus:isSup?Number(document.getElementById(prefix+'-supbonus').value)||0:0,
   };
-  if(rateEl) out.pay_rate=Number(rateEl.value)||0; // 有費率欄才寫入
+  if(rateEl) out.pay_rate=Number(rateEl.value)||0;
   return out;
 }
 function openStaffModal(){
   showModal(`<div class="modal-title">邀請員工</div>
-    <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;">指定角色與薪資制度，其餘個人資料由員工自行填寫。<br>單堂費率於員工建立完成後，由管理員在員工資料頁設定。</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;">指定角色與薪資制度，其餘個人資料由員工自行填寫。<br>單堂費率於員工建立後，由管理員在員工資料頁設定。</div>
     <div class="form-row"><label>角色</label><select id="st-role"><option value="coach">教練</option><option value="front_desk">櫃檯</option><option value="admin">管理員</option></select></div>
-    ${payRoleFields('st',{pay_type:'fulltime'},false)}
+    ${payRoleFields('st',{employment_type:'fulltime'},false)}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitStaffInvite()">產生邀請連結</button></div>`);
 }
 async function submitStaffInvite(){
   const token=uid('inv').replace('inv-','');
-  const pay=readPayRoleFields('st');           // 邀請階段不含 pay_rate
-  if(pay.pay_rate===undefined) pay.pay_rate=0;  // 費率預設 0，待管理員之後設定
-  const c=Object.assign({id:uid('c'),name:'',phone:'',pw:'',role:document.getElementById('st-role').value,
-    status:'inactive',invite_status:'pending',invite_token:token,created_at:new Date().toISOString()},pay);
-  await dbPut('coaches',c);
+  const pay=readPayRoleFields('st');                 // 邀請階段不含 pay_rate
+  if(pay.pay_rate===undefined) pay.pay_rate=null;    // 費率待管理員之後設定
+  // 注意：不寫入 pw（employees 表無此欄；密碼由 Supabase Auth 管理）
+  const c=Object.assign({
+    id:uid('c'),
+    name:'', phone:'',
+    role:document.getElementById('st-role').value,
+    status:'inactive',
+    invite_status:'pending',
+    invite_token:token,
+    created_at:new Date().toISOString()
+  },pay);
+  try{
+    await dbPut('coaches',c);   // coaches 會映射到 employees 表
+  }catch(e){
+    showToast('建立邀請失敗：'+(e.message||e));
+    return;
+  }
   const link=inviteLink(token);
   showModal(`<div class="modal-title">邀請連結已產生</div>
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:10px;">複製以下連結傳給員工，員工開啟後自行填寫資料：</div>
@@ -1706,11 +1717,11 @@ PAGES.coach_salary=async function(){
   const ptDone=myDone.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
   const groupDone=myDone.filter(b=>b.category==='小班肌力').length;
   const rate=me.pay_rate||0;
-  const payTypeLabel=PAY_LABEL[me.pay_type]||'—';
+  const payTypeLabel=PAY_LABEL[me.employment_type||me.pay_type]||'—';
   const sessionPay=myDone.length*rate; // 課堂費(依完成堂數)
-  const bonus=(me.is_manager?(me.mgr_bonus||0):0)+(me.is_supervisor?(me.sup_bonus||0):0);
+  const bonus=(me.is_manager?(me.manager_bonus||0):0)+(me.is_supervisor?(me.supervisor_bonus||0):0);
   const estimate=sessionPay+bonus;
-  const mgrLine=[me.is_manager?`店長獎金 $${(me.mgr_bonus||0).toLocaleString()}`:'',me.is_supervisor?`主管獎金 $${(me.sup_bonus||0).toLocaleString()}`:''].filter(Boolean).join('　·　');
+  const mgrLine=[me.is_manager?`店長獎金 $${(me.manager_bonus||0).toLocaleString()}`:'',me.is_supervisor?`主管獎金 $${(me.supervisor_bonus||0).toLocaleString()}`:''].filter(Boolean).join('　·　');
   C.innerHTML=head('SALARY','薪資查詢',`${month.replace('-',' 年 ')} 月 · 薪資制度：${payTypeLabel}${mgrLine?'　·　'+mgrLine:''}`)+
   `<div class="stat-grid">
     <div class="stat-card"><div class="sc-label">本月完成課堂</div><div><span class="sc-num">${myDone.length}</span><span class="sc-unit">堂</span></div></div>
@@ -1819,6 +1830,7 @@ async function submitInvite(token){
   const coaches=await dbGetAll('coaches');
   if(coaches.some(c=>c.phone===phone&&c.invite_token!==token)){err.textContent='此手機已被使用';err.style.display='block';return;}
   const inv=coaches.find(c=>c.invite_token===token);
+  if(!inv){err.textContent='邀請連結無效或已使用';err.style.display='block';return;}
   const profile={
     name:v('inv-name'),nickname:v('inv-nick'),phone,email:v('inv-email'),birthday:v('inv-bday'),
     address:v('inv-addr'),emergency_name:v('inv-econtact'),emergency_phone:v('inv-ephone'),
@@ -1830,7 +1842,11 @@ async function submitInvite(token){
   if(r.error){err.textContent='建立帳號失敗：'+r.error;err.style.display='block';return;}
   profile.auth_id=r.uid;
   Object.assign(inv,profile);
-  await dbPut('coaches',inv);
+  try{
+    await dbPut('coaches',inv);
+  }catch(e){
+    err.textContent='員工資料寫入失敗：'+(e.message||e);err.style.display='block';return;
+  }
   try{await sb.auth.signOut();}catch(_){} // 員工填完登出，待管理員啟用
   const host=document.getElementById('invite-screen');
   host.innerHTML=`<div class="login-card"><div class="login-logo"><div class="mark">YUGYM</div></div>
