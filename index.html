@@ -423,33 +423,47 @@ let CUR_PAGE=null;
 function navTo(key){
   CUR_PAGE=key;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.key===key));
-  PAGES[key]();
+  if(typeof PAGES[key]!=='function'){
+    console.error('找不到頁面函式:',key);
+    C.innerHTML='<div class="empty"><div class="em-t">頁面載入失敗，請重新整理</div></div>';
+    return;
+  }
+  Promise.resolve(PAGES[key]()).catch(e=>{
+    console.error('頁面執行錯誤 '+key+':',e);
+    C.innerHTML='<div class="empty"><div class="em-t">資料載入錯誤</div><div style="font-size:11px;margin-top:6px;color:var(--danger);">'+(e&&e.message?e.message:e)+'</div></div>';
+  });
 }
 
 /* PAGES 物件在第二段 script 定義 */
 window.PAGES={};
 
-/* ── 啟動（純雲端） ── */
-(async function(){
-  if(!CLOUD){ showConfigNeeded(); return; }   // 未設定金鑰 → 顯示設定提示，不啟動
-  await openDB();
-  // ── 路由優先順序：member-signup → invite=token → 登入 ──
-  const hash=location.hash||'';
-  if(/member-signup/i.test(hash)){ showRegisterPage(); return; }       // 1) 會員申辦（公開）
-  const inv=hash.match(/invite=([a-zA-Z0-9]+)/);
-  if(inv){ showInvitePage(inv[1]); return; }                            // 2) 員工邀請（公開）
-  // 3) 其他 → 登入流程
-  selRole('admin');
-  const{data}=await sb.auth.getSession();
-  if(data&&data.session){
-    const uid=data.session.user.id;
-    let c=(await sb.from('employees').select('*').eq('auth_id',uid).maybeSingle()).data;
-    if(c){ SESSION={role:c.role,id:c.id,name:c.name}; enterApp(); return; }
-    let mm=(await sb.from('members').select('*').eq('auth_id',uid).maybeSingle()).data;
-    if(mm){ SESSION={role:'member',id:mm.id,name:mm.name}; enterApp(); return; }
-  }
-  // 未登入，停在登入頁
-})();
+/* ── 啟動（純雲端） ──
+   重要：用 window load 包起來，確保第二段 <script> 的 PAGES 定義
+   已全部執行完，才呼叫 enterApp/navTo，避免 PAGES[key] is not a function。 */
+function bootYugym(){
+  (async function(){
+    if(!CLOUD){ showConfigNeeded(); return; }   // 未設定金鑰 → 顯示設定提示，不啟動
+    await openDB();
+    // ── 路由優先順序：member-signup → invite=token → 登入 ──
+    const hash=location.hash||'';
+    if(/member-signup/i.test(hash)){ showRegisterPage(); return; }       // 1) 會員申辦（公開）
+    const inv=hash.match(/invite=([a-zA-Z0-9]+)/);
+    if(inv){ showInvitePage(inv[1]); return; }                            // 2) 員工邀請（公開）
+    // 3) 其他 → 登入流程
+    selRole('admin');
+    const{data}=await sb.auth.getSession();
+    if(data&&data.session){
+      const uid=data.session.user.id;
+      let c=(await sb.from('employees').select('*').eq('auth_id',uid).maybeSingle()).data;
+      if(c){ SESSION={role:c.role,id:c.id,name:c.name}; enterApp(); return; }
+      let mm=(await sb.from('members').select('*').eq('auth_id',uid).maybeSingle()).data;
+      if(mm){ SESSION={role:'member',id:mm.id,name:mm.name}; enterApp(); return; }
+    }
+    // 未登入，停在登入頁
+  })();
+}
+if(document.readyState==='complete'){ bootYugym(); }
+else{ window.addEventListener('load', bootYugym); }
 function showConfigNeeded(){
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app-screen')?.classList.add('hidden');
@@ -1871,4 +1885,11 @@ function showModal(html){
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
   bg.innerHTML=`<div class="modal">${html}</div>`;
   let downOnBg=false;
-  bg.add
+  bg.addEventListener('mousedown',e=>{downOnBg=(e.target===bg);});
+  bg.addEventListener('mouseup',e=>{if(downOnBg&&e.target===bg)closeModal();downOnBg=false;});
+  document.body.appendChild(bg);
+}
+function closeModal(){const m=document.getElementById('modal-bg');if(m)m.remove();}
+</script>
+</body>
+</html>
