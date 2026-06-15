@@ -375,6 +375,11 @@ async function dbPut(store,obj){
 async function dbDel(store,id){
   const{error}=await sb.from(tbl(store)).delete().eq('id',id); if(error)throw error;
 }
+// 用 invite_token 查單筆待填寫（pending）員工邀請；配合 token RLS policy，匿名也能讀到
+async function dbGetByToken(token){
+  const{data,error}=await sb.from('employees').select('*').eq('invite_token',token).maybeSingle();
+  if(error)throw error; return data||null;
+}
 async function dbClear(store){ /* 雲端不提供前端清庫 */ }
 
 /* 雲端：建立 Auth 使用者並回傳 uid。
@@ -2209,8 +2214,7 @@ async function markAllRead(){
 
 /* ════════ 員工邀請填寫頁 ════════ */
 async function showInvitePage(token){
-  const coaches=await dbGetAll('coaches');
-  const inv=coaches.find(c=>c.invite_token===token);
+  const inv=await dbGetByToken(token);
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app-screen').classList.add('hidden');
   let host=document.getElementById('invite-screen');
@@ -2278,10 +2282,9 @@ async function submitInvite(token){
   if(!invBday){err.textContent='請選擇完整生日（年/月/日）';err.style.display='block';return;}
   if(v('inv-pw').length<6){err.textContent='密碼至少需要 6 個字元';err.style.display='block';return;}
   const phone=v('inv-phone');
-  const coaches=await dbGetAll('coaches');
-  if(coaches.some(c=>c.phone===phone&&c.invite_token!==token)){err.textContent='此手機已被使用';err.style.display='block';return;}
-  const inv=coaches.find(c=>c.invite_token===token);
-  if(!inv){err.textContent='邀請連結無效或已使用';err.style.display='block';return;}
+  // 用 token 直接查那一筆 pending 邀請（配合 token RLS policy，不需撈全表）
+  const inv=await dbGetByToken(token);
+  if(!inv || inv.invite_status!=='pending'){err.textContent='邀請連結無效或已使用';err.style.display='block';return;}
   const profile={
     name:v('inv-name'),nickname:v('inv-nick'),phone,email:v('inv-email'),birthday:invBday,
     address:v('inv-addr'),emergency_name:v('inv-econtact'),emergency_phone:v('inv-ephone'),
@@ -2289,8 +2292,13 @@ async function submitInvite(token){
     invite_status:'completed', // 已填寫
     status:'inactive'          // 待管理員啟用
   };
+  // 先建立 Auth（重複手機由 Auth 攔截，回 User already registered）
   const r=await cloudCreateAuth('staff',phone,v('inv-pw'));
-  if(r.error){err.textContent='建立帳號失敗：'+r.error;err.style.display='block';return;}
+  if(r.error){
+    const dup=/already|exists|registered/i.test(r.error);
+    err.textContent=dup?'此手機已被使用，請改用其他號碼或聯繫管理員':('建立帳號失敗：'+r.error);
+    err.style.display='block';return;
+  }
   profile.auth_id=r.uid;
   Object.assign(inv,profile);
   try{
@@ -2314,12 +2322,15 @@ async function submitDeskInvite(token){
   const name=v('fd-name'), acct=v('fd-phone'), pw=document.getElementById('fd-pw').value;
   if(!name||!acct||!pw){err.textContent='請填寫帳號名稱、登入帳號與密碼';err.style.display='block';return;}
   if(pw.length<6){err.textContent='密碼至少需要 6 個字元';err.style.display='block';return;}
-  const coaches=await dbGetAll('coaches');
-  if(coaches.some(c=>c.phone===acct&&c.invite_token!==token)){err.textContent='此登入帳號已被使用';err.style.display='block';return;}
-  const inv=coaches.find(c=>c.invite_token===token);
-  if(!inv){err.textContent='邀請連結無效或已使用';err.style.display='block';return;}
+  // 用 token 查那一筆 pending 邀請
+  const inv=await dbGetByToken(token);
+  if(!inv || inv.invite_status!=='pending'){err.textContent='邀請連結無效或已使用';err.style.display='block';return;}
   const r=await cloudCreateAuth('staff',acct,pw); // staff 假 email：acct@staff.yugym.local
-  if(r.error){err.textContent='建立帳號失敗：'+r.error;err.style.display='block';return;}
+  if(r.error){
+    const dup=/already|exists|registered/i.test(r.error);
+    err.textContent=dup?'此登入帳號已被使用，請改用其他代號':('建立帳號失敗：'+r.error);
+    err.style.display='block';return;
+  }
   // 設備帳號：只記必要欄位，個人資料留空
   Object.assign(inv,{name,phone:acct,auth_id:r.uid,invite_status:'completed',status:'inactive'});
   try{
