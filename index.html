@@ -1594,12 +1594,16 @@ async function submitRegister(){
   if(btn){btn.disabled=true;btn.textContent='處理中…請稍候';}
   err.style.display='none';
   try{
-    const members=await dbGetAll('members');
-    if(members.some(m=>m.phone===phone)){showErr('此手機已註冊，請直接登入');return;}
+    // 先建立 Auth 帳號：Supabase Auth 會自動攔截重複手機（同一假 email 回 User already registered），
+    // 不需要匿名讀取整張 members（RLS 開啟後匿名讀取會被擋）。
     const m={id:uid('m'),name,phone,email:v('reg-email')||null,birthday:readBirthday('reg'),status:'active'};
     const r=await cloudCreateAuth('member',phone,pw);
-    if(r.error){showErr('註冊失敗：'+r.error);return;}
+    if(r.error){
+      const dup=/already|exists|registered/i.test(r.error);
+      showErr(dup?'此手機已註冊，請直接登入':('註冊失敗：'+r.error));return;
+    }
     m.auth_id=r.uid;
+    // 此時已是登入狀態（auth.uid()=新帳號），寫入自己的 members 符合 RLS
     await dbPut('members',m);
     try{await sb.auth.signOut();}catch(_){}
   }catch(e){
