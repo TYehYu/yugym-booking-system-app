@@ -554,6 +554,8 @@ const NAV={
     {key:'mem_notifications',label:'通知中心'},
   ],
 };
+// 可被排課的教練：role 是 coach，或 admin(老闆兼教練，一人一帳號)
+function isCoachable(c){ return c && (c.role==='coach' || c.role==='admin'); }
 function buildNav(){
   const nav=document.getElementById('sidenav');
   nav.innerHTML=NAV[SESSION.role].map(n=>
@@ -742,7 +744,7 @@ async function refundTicket(ticket_id,booking_id,operator){
 PAGES.dashboard=async function(){
   const[members,coaches,tickets,bookings]=await Promise.all([dbGetAll('members'),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('bookings')]);
   const activeMembers=members.filter(m=>m.status==='active').length;
-  const activeCoaches=coaches.filter(c=>c.role==='coach'&&c.status==='active').length;
+  const activeCoaches=coaches.filter(c=>isCoachable(c)&&c.status==='active').length;
   const usableTickets=tickets.filter(t=>t.status==='usable').length;
   const todayBk=bookings.filter(b=>b.date===ymd(TODAY)&&b.status!=='cancelled').length;
   const upcoming=bookings.filter(b=>b.status!=='cancelled'&&b.date>=ymd(TODAY)).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time)).slice(0,6);
@@ -799,7 +801,7 @@ async function renderCalendar(opts){
   const title=`${calWeekStart.getFullYear()} 年 ${calWeekStart.getMonth()+1} 月 ${calWeekStart.getDate()} 日 起`;
   let filterHtml='';
   if(opts.coachFilter){
-    const cOpts=coaches.filter(c=>c.role==='coach').map(c=>`<option value="${c.id}" ${filterCoach===c.id?'selected':''}>${c.name}</option>`).join('');
+    const cOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${filterCoach===c.id?'selected':''}>${c.name}</option>`).join('');
     filterHtml=`<div class="filter-row"><span style="font-size:12px;color:var(--t2);">篩選教練</span>
       <select onchange="window._calFilter=this.value;navTo(CUR_PAGE)"><option value="all">全部教練</option>${cOpts}</select>
       <button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 新增預約</button></div>`;
@@ -1157,7 +1159,7 @@ async function openBookingModal(){
   const[members,coaches,types]=await Promise.all([dbGetAll('members'),dbGetAll('coaches'),dbGetAll('ticket_types')]);
   const isCoach=SESSION.role==='coach';
   _bkMembers=members.filter(m=>m.status==='active');
-  const coachOpts=coaches.filter(c=>c.role==='coach').map(c=>`<option value="${c.id}" ${isCoach&&c.id===SESSION.id?'selected':''}>${c.name}</option>`).join('');
+  const coachOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${isCoach&&c.id===SESSION.id?'selected':''}>${c.name}</option>`).join('');
   const typeOpts=types.map(t=>`<option value="${t.id}">${t.name}（${t.category}）</option>`).join('');
   const pf=_prefill||{date:ymd(TODAY),time:'10:00'};
   showModal(`<div class="modal-title">新增預約</div>
@@ -1514,7 +1516,7 @@ function mDetTab(e,pane){
 }
 async function openMemberEdit(member_id){
   const[m,coaches]=await Promise.all([dbGet('members',member_id),dbGetAll('coaches')]);
-  const coachOpts=coaches.filter(c=>c.role==='coach').map(c=>`<option value="${c.id}" ${m.default_coach_id===c.id?'selected':''}>${c.name}</option>`).join('');
+  const coachOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${m.default_coach_id===c.id?'selected':''}>${c.name}</option>`).join('');
   showModal(`<div class="modal-title">編輯資料 · ${m.name}</div>
     <div class="form-2col">
       <div class="form-row"><label>姓名</label><input id="me-name" value="${m.name||''}"></div>
