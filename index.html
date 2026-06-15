@@ -183,10 +183,11 @@ tr:hover td{background:var(--card2);}
   width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.25);z-index:4;}
 .desktop-wide .cal-ev .ev-check{width:21px;height:21px;line-height:21px;font-size:11px;}
 /* hover 詳細資訊卡 */
-.cal-ev .ev-tip{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);
-  min-width:180px;max-width:240px;background:#fff;color:var(--text);border-radius:10px;padding:10px 12px;
-  box-shadow:0 10px 30px rgba(0,0,0,0.22);border:1px solid var(--bd);z-index:300;
+.cal-ev .ev-tip{position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);
+  min-width:190px;max-width:250px;background:#fff;color:var(--text);border-radius:10px;padding:10px 12px;
+  box-shadow:0 10px 30px rgba(0,0,0,0.25);border:1px solid var(--bd);z-index:500;
   opacity:0;visibility:hidden;transition:opacity .12s;pointer-events:none;white-space:normal;}
+.cal-ev:hover{overflow:visible;z-index:400;}
 .cal-ev:hover .ev-tip{opacity:1;visibility:visible;}
 .cal-ev.dragging .ev-tip{display:none;}
 .ev-tip .ev-tip-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:14px;margin-bottom:5px;}
@@ -1536,6 +1537,30 @@ function openMemberRegisterLink(){
 }
 
 /* ── 會員自助註冊頁（公開，#member-signup） ── */
+/* 生日年/月/日下拉（比手機原生日期選擇器好操作，尤其選早年份）
+   prefix 用於 id，例如 'reg' → reg-by / reg-bm / reg-bd */
+function birthdaySelects(prefix){
+  const thisYear=new Date().getFullYear();
+  let years='<option value="">年</option>';
+  for(let y=thisYear;y>=1940;y--) years+=`<option value="${y}">${y}</option>`;
+  let months='<option value="">月</option>';
+  for(let m=1;m<=12;m++) months+=`<option value="${m}">${m}</option>`;
+  let days='<option value="">日</option>';
+  for(let d=1;d<=31;d++) days+=`<option value="${d}">${d}</option>`;
+  return `<div style="display:flex;gap:8px;">
+    <select id="${prefix}-by" style="flex:1.3;">${years}</select>
+    <select id="${prefix}-bm" style="flex:1;">${months}</select>
+    <select id="${prefix}-bd" style="flex:1;">${days}</select>
+  </div>`;
+}
+// 從年月日下拉組出 YYYY-MM-DD；任一未選回 null
+function readBirthday(prefix){
+  const y=document.getElementById(prefix+'-by').value;
+  const m=document.getElementById(prefix+'-bm').value;
+  const d=document.getElementById(prefix+'-bd').value;
+  if(!y||!m||!d) return null;
+  return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+}
 function showRegisterPage(){
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app-screen').classList.add('hidden');
@@ -1550,10 +1575,8 @@ function showRegisterPage(){
       <div class="form-row"><label>姓名 *</label><input id="reg-name"></div>
       <div class="form-row"><label>手機（登入帳號）*</label><input id="reg-phone" placeholder="0912xxxxxx"></div>
     </div>
-    <div class="form-2col">
-      <div class="form-row"><label>Email</label><input id="reg-email"></div>
-      <div class="form-row"><label>生日</label><input type="date" id="reg-bday"></div>
-    </div>
+    <div class="form-row"><label>Email</label><input id="reg-email"></div>
+    <div class="form-row"><label>生日</label>${birthdaySelects('reg')}</div>
     <div class="form-row"><label>設定密碼 *（至少 6 個字元）</label><input type="password" id="reg-pw" placeholder="至少 6 個字元"></div>
     <button class="btn-primary" id="reg-submit" onclick="submitRegister()">完成註冊</button>
     <div class="login-hint">註冊後即可用手機號碼登入，查看您的票券與預約。</div>
@@ -1573,7 +1596,7 @@ async function submitRegister(){
   try{
     const members=await dbGetAll('members');
     if(members.some(m=>m.phone===phone)){showErr('此手機已註冊，請直接登入');return;}
-    const m={id:uid('m'),name,phone,email:v('reg-email')||null,birthday:v('reg-bday')||null,status:'active'};
+    const m={id:uid('m'),name,phone,email:v('reg-email')||null,birthday:readBirthday('reg'),status:'active'};
     const r=await cloudCreateAuth('member',phone,pw);
     if(r.error){showErr('註冊失敗：'+r.error);return;}
     m.auth_id=r.uid;
@@ -2226,7 +2249,7 @@ async function showInvitePage(token){
       <div class="form-row"><label>Email *</label><input id="inv-email"></div>
     </div>
     <div class="form-2col">
-      <div class="form-row"><label>生日 *</label><input type="date" id="inv-bday"></div>
+      <div class="form-row"><label>生日 *</label>${birthdaySelects('inv')}</div>
       <div class="form-row"><label>設定密碼 *（至少 6 個字元）</label><input type="password" id="inv-pw" placeholder="至少 6 個字元"></div>
     </div>
     <div class="form-row"><label>地址（選填）</label><input id="inv-addr"></div>
@@ -2245,8 +2268,10 @@ async function showInvitePage(token){
 async function submitInvite(token){
   const v=id=>document.getElementById(id).value.trim();
   const err=document.getElementById('inv-err');
-  const req={name:'姓名',nick:'暱稱',phone:'手機',email:'Email',bday:'生日',pw:'密碼',econtact:'緊急聯絡人',ephone:'緊急聯絡電話'};
+  const req={name:'姓名',nick:'暱稱',phone:'手機',email:'Email',pw:'密碼',econtact:'緊急聯絡人',ephone:'緊急聯絡電話'};
   for(const k in req){if(!v('inv-'+k)){err.textContent=`請填寫${req[k]}`;err.style.display='block';return;}}
+  const invBday=readBirthday('inv');
+  if(!invBday){err.textContent='請選擇完整生日（年/月/日）';err.style.display='block';return;}
   if(v('inv-pw').length<6){err.textContent='密碼至少需要 6 個字元';err.style.display='block';return;}
   const phone=v('inv-phone');
   const coaches=await dbGetAll('coaches');
@@ -2254,7 +2279,7 @@ async function submitInvite(token){
   const inv=coaches.find(c=>c.invite_token===token);
   if(!inv){err.textContent='邀請連結無效或已使用';err.style.display='block';return;}
   const profile={
-    name:v('inv-name'),nickname:v('inv-nick'),phone,email:v('inv-email'),birthday:v('inv-bday'),
+    name:v('inv-name'),nickname:v('inv-nick'),phone,email:v('inv-email'),birthday:invBday,
     address:v('inv-addr'),emergency_name:v('inv-econtact'),emergency_phone:v('inv-ephone'),
     id_number:v('inv-idno'),bank_account:v('inv-bank'),
     invite_status:'completed', // 已填寫
