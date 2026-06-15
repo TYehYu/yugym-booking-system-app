@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 禁止瀏覽器快取（特別是 LINE 內建瀏覽器），確保每次都載入最新版 -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>YUGYM 有肌訓練 · 預約管理系統 MVP 1.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1577,9 +1581,10 @@ async function saveTags(member_id){
   else navTo('members');
 }
 /* ── 會員申辦連結 / QR Code（取代後台直接建立） ── */
+function appVersionTag(){ const d=new Date(); return ''+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }
 function memberRegisterLink(){
-  const base=location.href.split('#')[0];
-  return base+'#member-signup';
+  const base=location.href.split('#')[0].split('?')[0];
+  return base+'?v='+appVersionTag()+'#member-signup';
 }
 function openMemberRegisterLink(){
   const link=memberRegisterLink();
@@ -1719,7 +1724,7 @@ PAGES.staff=async function(){
       <td>${mgrTags}</td>
       <td>${pending?'<span class="tag tag-warn">待員工填寫</span>':`<span class="tag ${STAFF_STATUS_TAG[c.status]||'tag-danger'}">${STAFF_STATUS[c.status]||(c.status==='inactive'?'停用':c.status)}</span>`}</td>
       <td>${pending
-        ?`<button class="btn btn-gold btn-sm" onclick="copyInvite('${c.invite_token}')">複製連結</button>`
+        ?`<button class="btn btn-gold btn-sm" onclick="copyInvite('${c.invite_token}')">複製連結</button> <button class="btn btn-danger btn-sm" onclick="deleteStaffInvite('${c.id}')">刪除</button>`
         :`<button class="btn btn-ghost btn-sm" onclick="openStaffEdit('${c.id}')">編輯</button>`}</td>
     </tr>`;}).join('')}
     </tbody></table>
@@ -1848,11 +1853,24 @@ async function saveStaffEdit(id){
   closeModal();showToast('員工資料已更新');navTo('staff');
 }
 function inviteLink(token){
-  // 同檔以 hash 開啟邀請頁
-  const base=location.href.split('#')[0];
-  return base+'#invite='+token;
+  // 同檔以 hash 開啟邀請頁；加版本參數破快取（特別是 LINE 內建瀏覽器）
+  const base=location.href.split('#')[0].split('?')[0];
+  return base+'?v='+appVersionTag()+'#invite='+token;
 }
 function copyInvite(token){copyText(inviteLink(token));}
+/* 刪除待填寫的員工邀請（僅 pending 記錄；不影響已建立的員工） */
+async function deleteStaffInvite(id){
+  const c=await dbGet('coaches',id);
+  if(!c){showToast('找不到此邀請');return;}
+  if(c.invite_status!=='pending'){showToast('此記錄已填寫，請改用編輯');return;}
+  if(!confirm('確定刪除這筆待填寫的邀請？此動作無法復原。')) return;
+  try{
+    await dbDel('coaches',id);
+  }catch(e){
+    showToast('刪除失敗：'+(e.message||e));return;
+  }
+  showToast('邀請已刪除');navTo('staff');
+}
 function copyText(txt){
   if(navigator.clipboard&&navigator.clipboard.writeText){
     navigator.clipboard.writeText(txt).then(()=>showToast('已複製連結')).catch(()=>fallbackCopy(txt));
