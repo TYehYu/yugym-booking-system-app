@@ -40,6 +40,9 @@ input,select,textarea{font-family:inherit;font-size:14px;}
 .login-logo .sub{font-family:var(--serif);font-size:13px;color:var(--gold-d);letter-spacing:0.3em;margin-top:6px;}
 .login-tag{text-align:center;font-size:12px;color:var(--t3);margin-bottom:26px;letter-spacing:0.05em;}
 .role-tabs{display:flex;gap:6px;background:var(--card2);padding:5px;border-radius:12px;margin-bottom:22px;}
+.login-switch{text-align:center;margin-top:18px;padding-top:16px;border-top:1px solid var(--bd);}
+.login-switch span{font-size:12.5px;color:var(--t2);cursor:pointer;transition:.15s;}
+.login-switch span:hover{color:var(--green);}
 .role-tab{flex:1;padding:9px 0;text-align:center;font-size:13px;border-radius:8px;color:var(--t2);transition:.18s;font-weight:500;}
 .role-tab.active{background:var(--green);color:#fff;box-shadow:0 2px 8px rgba(0,61,50,0.25);}
 .field{margin-bottom:14px;}
@@ -306,24 +309,45 @@ tr:hover td{background:var(--card2);}
       <div class="mark">YUGYM</div>
       <div class="sub">有 肌 訓 練</div>
     </div>
-    <div class="login-tag">預約管理系統 · MVP 1.0</div>
-    <div class="role-tabs">
-      <div class="role-tab active" data-role="admin" onclick="selRole('admin')">管理員</div>
-      <div class="role-tab" data-role="front_desk" onclick="selRole('front_desk')">櫃台</div>
-      <div class="role-tab" data-role="coach" onclick="selRole('coach')">教練</div>
-      <div class="role-tab" data-role="member" onclick="selRole('member')">會員</div>
+
+    <!-- 會員入口（預設顯示） -->
+    <div id="login-member-view">
+      <div class="login-tag">會員登入</div>
+      <div class="login-err" id="login-err"></div>
+      <div class="field">
+        <label>手機號碼</label>
+        <input type="text" id="login-acct" placeholder="例：0912000001" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>密碼</label>
+        <input type="password" id="login-pw" placeholder="輸入密碼" autocomplete="off">
+      </div>
+      <button class="btn-primary" onclick="doLogin()">登入</button>
+      <button class="btn-ghost" style="width:100%;margin-top:10px;" onclick="location.hash='member-signup'">還不是會員？立即申辦</button>
+      <div class="login-switch"><span onclick="location.hash='staff';switchLoginMode('staff')">員工 / 管理後台登入 →</span></div>
     </div>
-    <div class="login-err" id="login-err"></div>
-    <div class="field">
-      <label id="lbl-acct">帳號</label>
-      <input type="text" id="login-acct" placeholder="輸入帳號" autocomplete="off">
+
+    <!-- 員工入口（點擊才顯示） -->
+    <div id="login-staff-view" class="hidden">
+      <div class="login-tag">員工 / 管理後台</div>
+      <div class="role-tabs">
+        <div class="role-tab active" data-role="admin" onclick="selRole('admin')">管理員</div>
+        <div class="role-tab" data-role="front_desk" onclick="selRole('front_desk')">櫃台</div>
+        <div class="role-tab" data-role="coach" onclick="selRole('coach')">教練</div>
+      </div>
+      <div class="login-err" id="login-err-staff"></div>
+      <div class="field">
+        <label id="lbl-acct">帳號</label>
+        <input type="text" id="login-acct-staff" placeholder="輸入帳號" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>密碼</label>
+        <input type="password" id="login-pw-staff" placeholder="輸入密碼" autocomplete="off">
+      </div>
+      <button class="btn-primary" onclick="doLoginStaff()">登入</button>
+      <div class="login-hint" id="login-hint"></div>
+      <div class="login-switch"><span onclick="history.replaceState(null,'',location.pathname);switchLoginMode('member')">← 返回會員登入</span></div>
     </div>
-    <div class="field">
-      <label>密碼</label>
-      <input type="password" id="login-pw" placeholder="輸入密碼" autocomplete="off">
-    </div>
-    <button class="btn-primary" onclick="doLogin()">登入</button>
-    <div class="login-hint" id="login-hint"></div>
   </div>
 </div>
 
@@ -382,12 +406,34 @@ async function dbGetByToken(token){
 }
 async function dbClear(store){ /* 雲端不提供前端清庫 */ }
 
-/* 雲端：建立 Auth 使用者並回傳 uid。
-   註：MVP 階段用 signUp；signUp 會把當前 session 切成新帳號，
-   故建檔後需請操作者重新登入（正式版改用 service_role / Edge Function）。
+/* 建立 Auth 使用者並回傳 uid。
+   viaServer=true：呼叫 Edge Function（service_role 於伺服器端建立），不會切換目前登入身分
+     → 用於管理員在後台建立 員工/櫃台 帳號（保住管理員 session）
+   viaServer=false：用 signUp（會把當前 session 切成新帳號）
+     → 用於會員自助註冊（訪客本來就沒有要保的身分）
    回傳 {uid} 或 {error}。 */
-async function cloudCreateAuth(role,acct,pw){
+async function cloudCreateAuth(role,acct,pw,viaServer){
   const email=toEmail(role,acct);
+  if(viaServer){
+    try{
+      const base=window.YUGYM_CONFIG.url.replace(/\/$/,'');
+      const res=await fetch(base+'/functions/v1/create-staff-account',{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'Authorization':'Bearer '+window.YUGYM_CONFIG.anonKey,
+          'apikey':window.YUGYM_CONFIG.anonKey
+        },
+        body:JSON.stringify({email,password:pw})
+      });
+      const out=await res.json();
+      if(!res.ok||out.error) return {error:out.error||('伺服器回應 '+res.status)};
+      return {uid:out.uid||null, switched:false}; // 未切換登入身分
+    }catch(e){
+      return {error:'無法連線建立帳號服務：'+(e.message||e)};
+    }
+  }
+  // 會員自助註冊：維持 signUp
   const{data,error}=await sb.auth.signUp({email,password:pw});
   if(error) return {error:error.message};
   return {uid:data.user?.id||null, switched:true};
@@ -415,40 +461,53 @@ function toEmail(role,acct){ return acct + (role==='member'?'@member.yugym.local
 /* ── 登入 ── */
 let loginRole='admin';
 const ROLE_LABEL={admin:'管理員',coach:'教練',member:'會員',front_desk:'櫃檯'};
+function switchLoginMode(mode){
+  document.getElementById('login-member-view').classList.toggle('hidden', mode!=='member');
+  document.getElementById('login-staff-view').classList.toggle('hidden', mode!=='staff');
+  // 清空錯誤
+  const e1=document.getElementById('login-err'); if(e1)e1.style.display='none';
+  const e2=document.getElementById('login-err-staff'); if(e2)e2.style.display='none';
+  if(mode==='staff'){ selRole('admin'); }
+}
 function selRole(r){
   loginRole=r;
   document.querySelectorAll('.role-tab').forEach(t=>t.classList.toggle('active',t.dataset.role===r));
-  document.getElementById('lbl-acct').textContent=(r==='member')?'手機號碼':'帳號';
-  document.getElementById('login-acct').placeholder=(r==='member')?'例：0912000001':'輸入帳號';
+  document.getElementById('lbl-acct').textContent=(r==='front_desk')?'登入帳號':'帳號';
+  document.getElementById('login-acct-staff').placeholder='輸入帳號';
   updateLoginHint();
-  document.getElementById('login-err').style.display='none';
+  document.getElementById('login-err-staff').style.display='none';
 }
 function updateLoginHint(){
   const h=document.getElementById('login-hint');
-  const map={member:'會員手機號碼',front_desk:'櫃台設備帳號',coach:'教練帳號',admin:'管理員帳號'};
-  h.innerHTML='<b>雲端版</b>　請以 Supabase 帳號登入（'+(map[loginRole]||'員工帳號')+'）';
+  const map={front_desk:'櫃台設備帳號',coach:'教練帳號',admin:'管理員帳號'};
+  h.innerHTML='請以員工帳號登入（'+(map[loginRole]||'員工帳號')+'）';
 }
+// 會員登入
 async function doLogin(){
   const acct=document.getElementById('login-acct').value.trim();
   const pw=document.getElementById('login-pw').value;
   const err=document.getElementById('login-err');
+  if(!acct||!pw){err.textContent='請輸入手機號碼與密碼';err.style.display='block';return;}
+  const{data,error}=await sb.auth.signInWithPassword({email:toEmail('member',acct),password:pw});
+  if(error){err.textContent='手機號碼或密碼錯誤';err.style.display='block';return;}
+  const m=(await sb.from('members').select('*').eq('auth_id',data.user.id).maybeSingle()).data;
+  if(!m){err.textContent='查無會員資料';err.style.display='block';return;}
+  SESSION={role:'member',id:m.id,name:m.name};
+  enterApp();
+}
+// 員工 / 管理後台登入
+async function doLoginStaff(){
+  const acct=document.getElementById('login-acct-staff').value.trim();
+  const pw=document.getElementById('login-pw-staff').value;
+  const err=document.getElementById('login-err-staff');
   if(!acct||!pw){err.textContent='請輸入帳號與密碼';err.style.display='block';return;}
-
-  // === Supabase Auth ===
-  const{data,error}=await sb.auth.signInWithPassword({email:toEmail(loginRole,acct),password:pw});
+  const{data,error}=await sb.auth.signInWithPassword({email:toEmail('staff',acct),password:pw});
   if(error){err.textContent='帳號或密碼錯誤';err.style.display='block';return;}
-  const uid=data.user.id;
-  if(loginRole==='member'){
-    const m=(await sb.from('members').select('*').eq('auth_id',uid).maybeSingle()).data;
-    if(!m){err.textContent='查無會員資料';err.style.display='block';return;}
-    SESSION={role:'member',id:m.id,name:m.name};
-  }else{
-    const c=(await sb.from('employees').select('*').eq('auth_id',uid).maybeSingle()).data;
-    if(!c){err.textContent='查無員工資料';err.style.display='block';return;}
-    if(c.status!=='active'){err.textContent='帳號尚未啟用，請聯繫管理員';err.style.display='block';return;}
-    // 員工實際角色以資料庫為準（admin / coach / front_desk）；登入頁的「管理員/教練」分頁僅為輸入分流
-    SESSION={role:c.role,id:c.id,name:c.name};
-  }
+  const c=(await sb.from('employees').select('*').eq('auth_id',data.user.id).maybeSingle()).data;
+  if(!c){err.textContent='查無員工資料';err.style.display='block';return;}
+  if(c.status!=='active'){err.textContent='帳號尚未啟用，請聯繫管理員';err.style.display='block';return;}
+  // 員工實際角色以資料庫為準（admin / coach / front_desk）
+  SESSION={role:c.role,id:c.id,name:c.name};
   enterApp();
 }
 async function doLogout(){ try{await sb.auth.signOut();}catch(_){} SESSION=null;location.reload(); }
@@ -534,8 +593,8 @@ function bootYugym(){
     if(/member-signup/i.test(hash)){ showRegisterPage(); return; }       // 1) 會員申辦（公開）
     const inv=hash.match(/invite=([a-zA-Z0-9]+)/);
     if(inv){ showInvitePage(inv[1]); return; }                            // 2) 員工邀請（公開）
-    // 3) 其他 → 登入流程
-    selRole('admin');
+    // 3) 其他 → 登入流程（#staff 直達員工入口，否則預設會員入口）
+    switchLoginMode(/staff/i.test(hash) ? 'staff' : 'member');
     const{data}=await sb.auth.getSession();
     if(data&&data.session){
       const uid=data.session.user.id;
@@ -1727,7 +1786,7 @@ async function submitStaffInvite(){
   // 注意：不寫入 pw（employees 表無此欄；密碼由 Supabase Auth 管理）
   const c=Object.assign({
     id:uid('c'),
-    name:'', phone:'',
+    name:null, phone:null,   // 用 null 而非空字串：null 不受 unique 限制（多筆 pending 不會互撞）
     role:document.getElementById('st-role').value,
     status:'inactive',
     invite_status:'pending',
@@ -2292,8 +2351,8 @@ async function submitInvite(token){
     invite_status:'completed', // 已填寫
     status:'inactive'          // 待管理員啟用
   };
-  // 先建立 Auth（重複手機由 Auth 攔截，回 User already registered）
-  const r=await cloudCreateAuth('staff',phone,v('inv-pw'));
+  // 透過 Edge Function 建帳號（伺服器端，不切換目前登入身分）
+  const r=await cloudCreateAuth('staff',phone,v('inv-pw'),true);
   if(r.error){
     const dup=/already|exists|registered/i.test(r.error);
     err.textContent=dup?'此手機已被使用，請改用其他號碼或聯繫管理員':('建立帳號失敗：'+r.error);
@@ -2306,7 +2365,7 @@ async function submitInvite(token){
   }catch(e){
     err.textContent='員工資料寫入失敗：'+(e.message||e);err.style.display='block';return;
   }
-  try{await sb.auth.signOut();}catch(_){} // 員工填完登出，待管理員啟用
+  // Edge Function 建帳號不會切換登入身分，故不需登出
   const host=document.getElementById('invite-screen');
   host.innerHTML=`<div class="login-card"><div class="login-logo"><div class="mark">YUGYM</div></div>
     <div style="text-align:center;padding:24px 0;">
@@ -2325,7 +2384,7 @@ async function submitDeskInvite(token){
   // 用 token 查那一筆 pending 邀請
   const inv=await dbGetByToken(token);
   if(!inv || inv.invite_status!=='pending'){err.textContent='邀請連結無效或已使用';err.style.display='block';return;}
-  const r=await cloudCreateAuth('staff',acct,pw); // staff 假 email：acct@staff.yugym.local
+  const r=await cloudCreateAuth('staff',acct,pw,true); // Edge Function 建帳號，不切換登入身分
   if(r.error){
     const dup=/already|exists|registered/i.test(r.error);
     err.textContent=dup?'此登入帳號已被使用，請改用其他代號':('建立帳號失敗：'+r.error);
@@ -2338,7 +2397,7 @@ async function submitDeskInvite(token){
   }catch(e){
     err.textContent='櫃台帳號寫入失敗：'+(e.message||e);err.style.display='block';return;
   }
-  try{await sb.auth.signOut();}catch(_){}
+  // Edge Function 建帳號不會切換登入身分，故不需登出
   const host=document.getElementById('invite-screen');
   host.innerHTML=`<div class="login-card"><div class="login-logo"><div class="mark">YUGYM</div></div>
     <div style="text-align:center;padding:24px 0;">
