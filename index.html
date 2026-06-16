@@ -7,6 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23003d32'/%3E%3Ctext x='50' y='68' font-family='Georgia,serif' font-size='52' font-weight='600' fill='%23ffffff' text-anchor='middle'%3EY%3C/text%3E%3C/svg%3E">
 <title>YUGYM 有肌訓練 · 預約管理系統 MVP 1.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -176,11 +177,15 @@ tr:hover td{background:var(--card2);}
 .cal-timecol .tc-row.half{color:transparent;}
 .cal-timecol .tc-row span{position:relative;top:-6px;}
 .cal-daycol{flex:1;min-width:96px;border-left:1px solid var(--bd2);position:relative;}
-.cal-daycol-head{height:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-bottom:1px solid var(--bd);position:sticky;top:0;background:var(--card);z-index:2;}
-.cal-daycol-head .cd-wd{font-size:10px;color:var(--t2);}
-.cal-daycol-head .cd-date{font-family:var(--num);font-size:15px;font-weight:600;line-height:1;}
+.cal-daycol-head{height:auto;min-height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border-bottom:1px solid var(--bd);position:sticky;top:0;background:var(--card);z-index:2;padding:6px 0;}
+.cal-daycol-head .cd-wd{font-size:12px;color:var(--t2);font-weight:500;}
+.cal-daycol-head .cd-date{font-family:var(--sans);font-size:17px;font-weight:700;line-height:1.1;}
+.cal-daycol-head .cd-today{font-size:9px;color:#fff;background:var(--gold);padding:0 6px;border-radius:8px;font-weight:600;margin-top:1px;}
 .cal-daycol-head.today{background:#f3efe2;}
 .cal-daycol-head.today .cd-date{color:var(--gold-d);}
+.cal-daycol-head.today .cd-wd{color:var(--gold-d);}
+.desktop-wide .cal-daycol-head .cd-date{font-size:20px;}
+.desktop-wide .cal-daycol-head .cd-wd{font-size:13px;}
 .cal-track{position:relative;}
 .cal-half{height:22px;border-bottom:1px dashed var(--bd2);cursor:pointer;}
 .cal-half.hourline{border-bottom:1px solid var(--bd2);}
@@ -300,8 +305,6 @@ tr:hover td{background:var(--card2);}
 .desktop-wide .cal-timecol .tc-row{font-size:13px;}
 .desktop-wide .cal-ev .ev-t{font-size:14px;}
 .desktop-wide .cal-ev .ev-m{font-size:12px;}
-.desktop-wide .cal-daycol-head .cd-date{font-size:18px;}
-.desktop-wide .cal-daycol-head .cd-wd{font-size:12px;}
 
 @media(max-width:820px){
   .layout{flex-direction:column;}
@@ -878,7 +881,11 @@ async function renderCalendar(opts){
       </div>`;
     });
     daysHtml+=`<div class="cal-daycol" data-date="${ds}">
-      <div class="cal-daycol-head ${isToday?'today':''}"><div class="cd-wd">週${WD[d.getDay()]}</div><div class="cd-date">${d.getDate()}</div></div>
+      <div class="cal-daycol-head ${isToday?'today':''}">
+        <div class="cd-wd">週${WD[d.getDay()]}</div>
+        <div class="cd-date">${d.getMonth()+1}/${d.getDate()}</div>
+        ${isToday?'<div class="cd-today">今天</div>':''}
+      </div>
       <div class="cal-track" style="height:${trackH}px;" data-date="${ds}">${halves}${evHtml}</div>
     </div>`;
   });
@@ -921,13 +928,29 @@ function assignLanes(evs){
   });
   return res;
 }
-function calStep(n){calWeekStart=addDays(calWeekStart,n);navTo(CUR_PAGE);}
+function calStep(n){calWeekStart=addDays(calWeekStart,n);window._calStepping=true;navTo(CUR_PAGE);}
 
 /* ── 拖曳 / 拉伸互動（電腦，支援跨日跟隨） ── */
 function initCalDrag(){
   if(isMobileView())return; // 手機改點選
   const wrap=document.querySelector('.cal-body');
   if(!wrap)return;
+  // Tooltip 邊界自適應：滑入卡片時，依空間決定 tooltip 往左/置中/往右展開，避免超出畫面
+  wrap.addEventListener('mouseenter',(e)=>{
+    const ev=e.target.closest&&e.target.closest('.cal-ev'); if(!ev)return;
+    const tip=ev.querySelector('.ev-tip'); if(!tip)return;
+    // 先重置
+    tip.style.left='50%'; tip.style.right='auto'; tip.style.transform='translateX(-50%)';
+    requestAnimationFrame(()=>{
+      const r=tip.getBoundingClientRect();
+      const vw=window.innerWidth, margin=8;
+      if(r.left<margin){ // 超出左邊 → 靠卡片左緣往右展開
+        tip.style.left='0'; tip.style.right='auto'; tip.style.transform='translateX(0)';
+      }else if(r.right>vw-margin){ // 超出右邊 → 靠卡片右緣往左展開
+        tip.style.left='auto'; tip.style.right='0'; tip.style.transform='translateX(0)';
+      }
+    });
+  },true);
   let mode=null, bid=null, evEl=null, startY=0, startX=0, origH=0, origDur=60;
   let origDate=null, origTime=null, grabOffsetY=0, grabOffsetX=0;
   let preview=null, label=null;
@@ -1086,8 +1109,8 @@ async function validateBooking(bk,date,time,duration){
     if(tt && tt.time_restricted){
       const dow=parseYmd(date).getDay(); // 0=日,6=六
       const isWeekday = dow>=1 && dow<=5;
-      const inHours = ns>=600 && ne<=1080; // 10:00=600, 18:00=1080（結束需 ≤18:00）
-      if(!isWeekday || !inHours) return '此票券僅限平日 10:00–18:00 使用';
+      const before18 = ns < 1080; // 開始時間早於 18:00（不限下限，不受場館營業時間影響）
+      if(!isWeekday || !before18) return '此票券僅限平日 18:00 前使用';
     }
   }
 
@@ -1149,6 +1172,8 @@ function confirmCalMove(b,od,ot,odur, nd,nt,ndur, onYes){
 
 PAGES.calendar=async function(){
   window._calMode='admin';
+  if(!window._calStepping) initCalWeek(); // 開啟時自動定位今天；切換週時不重置
+  window._calStepping=false;
   C.innerHTML=head('SCHEDULE','預約行事曆','30 分鐘為單位 · 可拖曳調整 · 點空格新增')+(await renderCalendar({coachFilter:true,onSlot:'quickBookAt',editable:true}));
   initCalDrag();
 };
@@ -1157,34 +1182,88 @@ PAGES.calendar=async function(){
 let _prefill=null;
 function quickBookAt(date,time){_prefill={date,time};openBookingModal();}
 
-/* ── 預約 Modal(管理員/教練建立) ── */
+/* ══════ 預約精靈（兩頁式） ══════
+   第1頁：課程類型 / 教練 / 日期 / 時間（從行事曆點選會自動帶入日期時間）
+   第2頁：會員 / 票券 / 連續預約
+   全部不預設值；連續預約預設「否」。 */
 let _bkMembers=[];
+let _bkWizard={};   // 暫存第1頁選擇
 async function openBookingModal(){
-  const[members,coaches,types]=await Promise.all([dbGetAll('members'),dbGetAll('coaches'),dbGetAll('ticket_types')]);
+  const[coaches,types]=await Promise.all([dbGetAll('coaches'),dbGetAll('ticket_types')]);
   const isCoach=SESSION.role==='coach';
-  _bkMembers=members.filter(m=>m.status==='active');
+  const activeTypes=types.filter(t=>t.active!==false);
+  const typeOpts=activeTypes.map(t=>`<option value="${t.id}">${t.name}（${t.category}）</option>`).join('');
   const coachOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${isCoach&&c.id===SESSION.id?'selected':''}>${c.name}</option>`).join('');
-  const typeOpts=types.map(t=>`<option value="${t.id}">${t.name}（${t.category}）</option>`).join('');
-  const pf=_prefill||{date:ymd(TODAY),time:'10:00'};
-  showModal(`<div class="modal-title">新增預約</div>
+  const pf=_prefill||{};   // 只有從行事曆點選才有 date/time
+  _bkWizard={fromSlot:!!_prefill};
+  _prefill=null;
+  showModal(`<div class="modal-title">新增預約 · 步驟 1 / 2</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:14px;">選擇課程類型、教練與時段。</div>
+    <div class="form-row"><label>課程類型</label>
+      <select id="bk-type" onchange="onBkTypeChange()"><option value="">請選擇課程類型…</option>${typeOpts}</select></div>
+    <div class="form-row" id="bk-coach-row" style="display:none;"><label>授課教練</label>
+      <select id="bk-coach"><option value="">請選擇教練…</option>${coachOpts}</select></div>
+    <div class="form-2col">
+      <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}"></div>
+      <div class="form-row"><label>時間（30 分起跳）</label><input type="time" id="bk-time" value="${pf.time||''}" step="1800"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`);
+}
+async function onBkTypeChange(){
+  const types=await dbGetAll('ticket_types');
+  const tid=document.getElementById('bk-type').value;
+  const t=types.find(x=>x.id===tid);
+  document.getElementById('bk-coach-row').style.display=(t&&t.requires_coach)?'block':'none';
+}
+// 第1頁 → 第2頁
+async function bkStep2(){
+  const type_id=document.getElementById('bk-type').value;
+  if(!type_id){showToast('請選擇課程類型');return;}
+  const types=await dbGetAll('ticket_types');
+  const t=types.find(x=>x.id===type_id);
+  const coach_id=t.requires_coach?document.getElementById('bk-coach').value:null;
+  if(t.requires_coach && !coach_id){showToast('請選擇授課教練');return;}
+  const date=document.getElementById('bk-date').value;
+  const time=document.getElementById('bk-time').value.slice(0,5);
+  if(!date||!time){showToast('請填日期與時間');return;}
+  Object.assign(_bkWizard,{type_id,t,coach_id,date,time});
+  // 載入會員清單
+  const members=await dbGetAll('members');
+  _bkMembers=members.filter(m=>m.status==='active');
+  const wd=['一','二','三','四','五','六','日'];
+  showModal(`<div class="modal-title">新增預約 · 步驟 2 / 2</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${t.name}　${date} ${time}${coach_id?'　·　'+(await coachName(coach_id)):''}</div>
     <div class="form-row"><label>會員（可搜尋姓名 / 手機 / 標籤）</label>
       <input id="bk-mem-search" placeholder="輸入關鍵字過濾…" oninput="filterBkMembers()" style="width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:9px;background:var(--card2);margin-bottom:6px;">
-      <select id="bk-member" size="5" style="height:auto;">${bkMemberOpts(_bkMembers)}</select></div>
-    <div class="form-row"><label>票券類型</label><select id="bk-type" onchange="onBkTypeChange()">${typeOpts}</select></div>
-    <div class="form-row" id="bk-coach-row"><label>授課教練</label><select id="bk-coach">${coachOpts}</select></div>
-    <div class="form-2col">
-      <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date}"></div>
-      <div class="form-row"><label>時間（30 分起跳）</label><input type="time" id="bk-time" value="${pf.time}" step="1800"></div>
+      <select id="bk-member" size="5" style="height:auto;" onchange="refreshBkTicket()"><option value="">請選擇會員…</option>${bkMemberOpts(_bkMembers)}</select></div>
+    <div class="form-row" style="margin-bottom:10px;"><div id="bk-ticket-info" style="font-size:12px;color:var(--t2);padding:10px 12px;background:var(--card2);border-radius:9px;">選擇會員後，將自動帶入最早到期票券。</div></div>
+    <label class="switch-row" style="margin-bottom:6px;"><span class="switch"><input type="checkbox" id="bk-recurring" onchange="toggleRecurring()"><span class="switch-slider"></span></span><span class="switch-label">連續預約（依星期重複建立多筆）</span></label>
+    <div id="bk-recurring-box" style="display:none;border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--card2);">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">勾選要重複的星期（以所選日期為起點）：</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        ${wd.map((w,i)=>`<label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" class="rec-dow" value="${i===6?0:i+1}">週${w}</label>`).join('')}
+      </div>
+      <div class="form-2col">
+        <div class="form-row"><label>最多建立次數</label><input type="number" id="rec-max" value="8" min="1" max="52"></div>
+        <div class="form-row"><label>結束日期（含）</label><input type="date" id="rec-until" value=""></div>
+      </div>
+      <div style="font-size:11px;color:var(--t3);">系統會在「起始日 ~ 結束日」間，逐週於勾選的星期建立預約，直到達到次數上限、結束日、或票券用完為止。衝突的時段自動跳過。</div>
     </div>
-    <div class="form-row" style="margin-bottom:0;"><div id="bk-ticket-info" style="font-size:12px;color:var(--t2);padding:10px 12px;background:var(--card2);border-radius:9px;">選擇會員與類型後，將自動帶入最早到期票券。</div></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitBooking()">確認預約</button></div>`);
-  _prefill=null;
-  onBkTypeChange();
-  document.getElementById('bk-member').addEventListener('change',refreshBkTicket);
-  document.getElementById('bk-type').addEventListener('change',refreshBkTicket);
-  // 預設選第一個
-  const sel=document.getElementById('bk-member');if(sel.options.length)sel.selectedIndex=0;
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button><button class="btn btn-green" onclick="submitBooking()">確認預約</button></div>`);
   refreshBkTicket();
+}
+// 上一步：回第1頁並保留選擇
+async function openBookingModalBack(){
+  _prefill={date:_bkWizard.date,time:_bkWizard.time};
+  await openBookingModal();
+  // 還原第1頁選擇
+  const ty=document.getElementById('bk-type'); if(ty){ty.value=_bkWizard.type_id;await onBkTypeChange();}
+  const co=document.getElementById('bk-coach'); if(co&&_bkWizard.coach_id)co.value=_bkWizard.coach_id;
+}
+async function coachName(id){const c=await dbGet('coaches',id);return c?c.name:'';}
+function toggleRecurring(){
+  const on=document.getElementById('bk-recurring').checked;
+  document.getElementById('bk-recurring-box').style.display=on?'block':'none';
 }
 function bkMemberOpts(list){
   return list.map(m=>{const tags=(m.tags||[]).map(t=>(TAG_DEFS[t]||{}).label||t).join('/');return `<option value="${m.id}">${m.name}（${m.phone}）${tags?' · '+tags:''}</option>`;}).join('');
@@ -1197,52 +1276,98 @@ function filterBkMembers(){
     return (m.name||'').toLowerCase().includes(q)||(m.phone||'').includes(q)||tagLabels.toLowerCase().includes(q);
   });
   const sel=document.getElementById('bk-member');
-  sel.innerHTML=bkMemberOpts(filtered);
-  if(sel.options.length)sel.selectedIndex=0;
-  refreshBkTicket();
-}
-async function onBkTypeChange(){
-  const types=await dbGetAll('ticket_types');
-  const tid=document.getElementById('bk-type').value;
-  const t=types.find(x=>x.id===tid);
-  document.getElementById('bk-coach-row').style.display=t.requires_coach?'block':'none';
+  sel.innerHTML='<option value="">請選擇會員…</option>'+bkMemberOpts(filtered);
   refreshBkTicket();
 }
 async function refreshBkTicket(){
   const mid=document.getElementById('bk-member').value;
-  const tid=document.getElementById('bk-type').value;
+  const tid=_bkWizard.type_id;
   const info=document.getElementById('bk-ticket-info');
+  if(!info)return;
+  if(!mid){info.innerHTML='選擇會員後，將自動帶入最早到期票券。';return;}
   const tk=await findUsableTicket(mid,tid);
   if(!tk){info.innerHTML='<span style="color:var(--danger);">⚠ 此會員沒有可用的該類票券，無法預約。</span>';}
-  else{info.innerHTML=`將扣抵票券 <b>${tk.id}</b>　剩餘 ${tk.sessions_remaining} 堂　效期至 ${tk.expire_date}`;}
+  else{info.innerHTML=`將扣抵票券　剩餘 <b>${tk.sessions_remaining}</b> 堂　效期至 ${tk.expire_date}`;}
 }
 async function submitBooking(){
   const member_id=document.getElementById('bk-member').value;
-  const type_id=document.getElementById('bk-type').value;
-  const types=await dbGetAll('ticket_types');
-  const t=types.find(x=>x.id===type_id);
-  const coach_id=t.requires_coach?document.getElementById('bk-coach').value:null;
-  const date=document.getElementById('bk-date').value;
-  const time=document.getElementById('bk-time').value.slice(0,5);
-  if(!date||!time){showToast('請填日期與時間');return;}
-  const tk=await findUsableTicket(member_id,type_id);
-  if(!tk){showToast('此會員沒有可用票券，無法預約');return;}
-  // 取得 format(1v1/1v2)供顏色辨識
-  let fmt=tk.format||null;
-  if(!fmt&&tk.source_plan_id){const pl=await dbGet('course_plans',tk.source_plan_id);fmt=pl?pl.format:null;}
-  // 完整驗證：教練衝堂 / 會員重複 / 團課教室 / 場地容量（時間重疊判斷）
-  const vbk={id:null,member_id,coach_id,category:t.category,ticket_type_id:type_id};
-  const err=await validateBooking(vbk,date,time,60);
-  if(err){showToast(err);return;}
+  if(!member_id){showToast('請選擇會員');return;}
+  const{type_id,t,coach_id,date,time}=_bkWizard;
+  const recurring=document.getElementById('bk-recurring')?.checked;
+  // 取一張可用票券確認 format
+  const firstTk=await findUsableTicket(member_id,type_id);
+  if(!firstTk){showToast('此會員沒有可用票券，無法預約');return;}
+  let fmt=firstTk.format||null;
+  if(!fmt&&firstTk.source_plan_id){const pl=await dbGet('course_plans',firstTk.source_plan_id);fmt=pl?pl.format:null;}
 
-  const bk={id:uid('BK'),member_id,coach_id,ticket_id:tk.id,ticket_type_id:type_id,category:t.category,format:fmt,
-    date,start_time:time,duration:60,status:'booked',created_by:SESSION.id,created_at:new Date().toISOString()};
-  await dbPut('bookings',bk);
-  await deductTicket(tk,bk.id,SESSION.id);
-  await pushNotification(member_id,'booking','預約成立',`您的${t.category}已預約：${date} ${time}，已扣抵 1 堂票券。`);
-  closeModal();
-  showToast('預約成功，已扣抵 1 堂票券');
-  navTo(CUR_PAGE);
+  // 產生要建立的日期清單
+  let dates=[date];
+  if(recurring){
+    const dows=[...document.querySelectorAll('.rec-dow:checked')].map(c=>Number(c.value));
+    if(dows.length===0){showToast('請勾選至少一個星期');return;}
+    const maxN=Number(document.getElementById('rec-max').value)||8;
+    const until=document.getElementById('rec-until').value||null;
+    dates=buildRecurringDates(date,dows,maxN,until);
+  }
+
+  // 逐筆建立：各自找票、驗證；衝突跳過、票不夠停止。記錄每筆結果供摘要顯示
+  let created=0, skipped=0, noTicket=0;
+  const results=[]; // {date, ok, reason}
+  for(const d of dates){
+    const tk=await findUsableTicket(member_id,type_id);
+    if(!tk){noTicket++; results.push({date:d,ok:false,reason:'票券不足'}); continue;}
+    const vbk={id:null,member_id,coach_id,category:t.category,ticket_type_id:type_id};
+    const err=await validateBooking(vbk,d,time,60);
+    if(err){skipped++; results.push({date:d,ok:false,reason:err}); continue;}
+    const bk={id:uid('BK'),member_id,coach_id,ticket_id:tk.id,ticket_type_id:type_id,category:t.category,format:fmt,
+      date:d,start_time:time,duration:60,status:'booked',recurring:recurring||false,
+      created_by:SESSION.id,created_at:new Date().toISOString()};
+    await dbPut('bookings',bk);
+    await deductTicket(tk,bk.id,SESSION.id);
+    created++;
+    results.push({date:d,ok:true});
+  }
+  if(created>0) await pushNotification(member_id,'booking','預約成立',`已為您建立 ${created} 筆${t.category}預約。`);
+
+  // 單筆預約：直接吐司；連續預約或有跳過：跳結果摘要視窗
+  if(!recurring && results.length===1){
+    closeModal();
+    if(results[0].ok){ showToast('預約成功，已扣抵 1 堂票券'); }
+    else { showToast(results[0].reason); }
+    navTo(CUR_PAGE);
+    return;
+  }
+  // 結果摘要視窗
+  const wd=['日','一','二','三','四','五','六'];
+  const rows=results.map(r=>{
+    const dt=parseYmd(r.date);
+    const label=`${dt.getMonth()+1}/${dt.getDate()}（${wd[dt.getDay()]}）${time}`;
+    return r.ok
+      ? `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bd);"><span>${label}</span><span style="color:var(--ok);font-weight:500;">✓ 已建立</span></div>`
+      : `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bd);"><span>${label}</span><span style="color:var(--danger);font-size:12px;">✕ ${r.reason}</span></div>`;
+  }).join('');
+  const summary=`成功 ${created} 筆${skipped?`，跳過 ${skipped} 筆衝突`:''}${noTicket?`，${noTicket} 筆票券不足`:''}`;
+  showModal(`<div class="modal-title">連續預約結果</div>
+    <div style="font-size:13px;color:var(--text);margin-bottom:12px;font-weight:500;">${summary}</div>
+    <div style="max-height:300px;overflow-y:auto;font-size:13px;">${rows}</div>
+    <div class="modal-foot"><button class="btn btn-green" onclick="closeModal();navTo(CUR_PAGE)">完成</button></div>`);
+}
+// 依起始日、星期清單、次數上限、結束日，產生日期陣列
+function buildRecurringDates(startDate,dows,maxN,until){
+  const out=[];
+  const start=parseYmd(startDate);
+  const untilD=until?parseYmd(until):null;
+  let cur=new Date(start);
+  let guard=0;
+  while(out.length<maxN && guard<400){
+    guard++;
+    if(untilD && cur>untilD) break;
+    if(dows.includes(cur.getDay())){
+      out.push(ymd(cur));
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+  return out;
 }
 
 /* ── 預約明細 / 取消 ── */
@@ -1705,8 +1830,8 @@ function normEmp(v){
   if(v==='parttime') return 'part_time';
   return v||'full_time';
 }
-const STAFF_STATUS={active:'在職',unpaid_leave:'留職停薪',resigned:'離職'};
-const STAFF_STATUS_TAG={active:'tag-ok',unpaid_leave:'tag-warn',resigned:'tag-danger'};
+const STAFF_STATUS={active:'在職',unpaid_leave:'留職停薪',inactive:'已停用',resigned:'已停用'};
+const STAFF_STATUS_TAG={active:'tag-ok',unpaid_leave:'tag-warn',inactive:'tag-danger',resigned:'tag-danger'};
 PAGES.staff=async function(){
   const coaches=await dbGetAll('coaches');
   const roleTag={admin:'tag-admin',coach:'tag-coach',front_desk:'tag-front'};
@@ -1722,10 +1847,13 @@ PAGES.staff=async function(){
       <td><span class="tag ${roleTag[c.role]}">${ROLE_LABEL[c.role]}</span></td>
       <td>${PAY_LABEL[c.employment_type||c.pay_type]||'—'}</td>
       <td>${mgrTags}</td>
-      <td>${pending?'<span class="tag tag-warn">待員工填寫</span>':`<span class="tag ${STAFF_STATUS_TAG[c.status]||'tag-danger'}">${STAFF_STATUS[c.status]||(c.status==='inactive'?'停用':c.status)}</span>`}</td>
-      <td>${pending
+      <td>${pending?'<span class="tag tag-warn">待員工填寫</span>':`<span class="tag ${STAFF_STATUS_TAG[c.status]||'tag-danger'}">${STAFF_STATUS[c.status]||'已停用'}</span>`}</td>
+      <td style="white-space:nowrap;">${pending
         ?`<button class="btn btn-gold btn-sm" onclick="copyInvite('${c.invite_token}')">複製連結</button> <button class="btn btn-danger btn-sm" onclick="deleteStaffInvite('${c.id}')">刪除</button>`
-        :`<button class="btn btn-ghost btn-sm" onclick="openStaffEdit('${c.id}')">編輯</button>`}</td>
+        :`<button class="btn btn-ghost btn-sm" onclick="openStaffEdit('${c.id}')">編輯</button>`
+          +`${c.status!=='unpaid_leave'?` <button class="btn btn-ghost btn-sm" onclick="setStaffStatus('${c.id}','unpaid_leave')">留職</button>`:` <button class="btn btn-ghost btn-sm" onclick="setStaffStatus('${c.id}','active')">復職</button>`}`
+          +`${c.status!=='inactive'?` <button class="btn btn-danger btn-sm" onclick="setStaffStatus('${c.id}','inactive')">停用</button>`:` <button class="btn btn-green btn-sm" onclick="setStaffStatus('${c.id}','active')">啟用</button>`}`
+        }</td>
     </tr>`;}).join('')}
     </tbody></table>
   </div>
@@ -1831,24 +1959,19 @@ async function openStaffEdit(id){
       ${c.role!=='admin'?'<div style="font-size:11px;color:var(--t3);margin-top:5px;">管理員僅一位，不可由此指派。</div>':''}</div>
     ${payRoleFields('se',c,false)}
     <div class="form-row"><label>在職狀態</label>
-      <label class="switch-row">
-        <span class="switch">
-          <input type="checkbox" id="se-status" ${c.status==='active'?'checked':''}>
-          <span class="switch-slider"></span>
-        </span>
-        <span class="switch-label" id="se-status-label">${c.status==='active'?'在職':'停用'}</span>
-      </label>
+      <select id="se-status">
+        <option value="active" ${c.status==='active'?'selected':''}>在職</option>
+        <option value="unpaid_leave" ${c.status==='unpaid_leave'?'selected':''}>留職停薪</option>
+        <option value="inactive" ${(c.status==='inactive'||c.status==='resigned')?'selected':''}>已停用</option>
+      </select>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveStaffEdit('${id}')">儲存</button></div>`);
-  // 開關文字即時切換
-  const cb=document.getElementById('se-status');
-  if(cb) cb.addEventListener('change',()=>{document.getElementById('se-status-label').textContent=cb.checked?'在職':'停用';});
 }
 async function saveStaffEdit(id){
   const c=await dbGet('coaches',id);
   c.role=document.getElementById('se-role').value;
   Object.assign(c,readPayRoleFields('se'));
-  c.status=document.getElementById('se-status').checked?'active':'inactive';
+  c.status=document.getElementById('se-status').value;
   await dbPut('coaches',c);
   closeModal();showToast('員工資料已更新');navTo('staff');
 }
@@ -1858,6 +1981,15 @@ function inviteLink(token){
   return base+'?v='+appVersionTag()+'#invite='+token;
 }
 function copyInvite(token){copyText(inviteLink(token));}
+/* 快捷切換員工狀態（在職 active / 留職停薪 unpaid_leave / 已停用 inactive） */
+async function setStaffStatus(id,status){
+  const c=await dbGet('coaches',id);
+  if(!c){showToast('找不到員工');return;}
+  const label={active:'在職',unpaid_leave:'留職停薪',inactive:'已停用'}[status]||status;
+  c.status=status;
+  try{ await dbPut('coaches',c); }catch(e){ showToast('更新失敗：'+(e.message||e)); return; }
+  showToast('已設為「'+label+'」');navTo('staff');
+}
 /* 刪除待填寫的員工邀請（僅 pending 記錄；不影響已建立的員工） */
 async function deleteStaffInvite(id){
   const c=await dbGet('coaches',id);
@@ -2144,6 +2276,8 @@ async function markComplete(id){
 
 /* ════════ 教練端:預約行事曆 ════════ */
 PAGES.coach_calendar=async function(){
+  if(!window._calStepping) initCalWeek();
+  window._calStepping=false;
   C.innerHTML=head('SCHEDULE','預約行事曆','你的個人課表 · 可拖曳調整 · 點空格建立私教課')+
   `<div class="filter-row"><button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立私教預約</button></div>`+
   (await renderCalendar({me:SESSION.id,onSlot:'quickBookAt',editable:true}));
