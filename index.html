@@ -147,7 +147,7 @@ tr:hover td{background:var(--card2);}
 .modal-foot{display:flex;gap:10px;margin-top:22px;}
 .modal-tabs{display:flex;gap:4px;background:var(--card2);padding:4px;border-radius:10px;margin-bottom:16px;overflow-x:auto;}
 .modal-tab{flex:1;white-space:nowrap;padding:8px 10px;text-align:center;font-size:12.5px;border-radius:7px;color:var(--t2);font-weight:500;transition:.15s;}
-.modal-tab.active{background:var(--green);color:#fff;}
+.modal-tab.active{background:#fff;color:var(--green);font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,0.08);}
 .mtab-pane{display:none;}
 .mtab-pane.active{display:block;}
 .mdetail-field{font-size:13px;}
@@ -459,7 +459,7 @@ async function cloudCreateAuth(role,acct,pw,viaServer){
 }
 
 /* ── 日期工具 ── */
-const TODAY=new Date('2026-06-14T00:00:00');
+const TODAY=(function(){const n=new Date();return new Date(n.getFullYear(),n.getMonth(),n.getDate());})(); // 真實今天的本地零點
 function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function parseYmd(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);}
 function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
@@ -597,7 +597,7 @@ function bootYugym(){
     const hash=location.hash||'';
     if(/member-signup/i.test(hash)){ showRegisterPage(); return; }       // 1) 會員申辦（公開）
     const inv=hash.match(/invite=([a-zA-Z0-9]+)/);
-    if(inv){ showInvitePage(inv[1]); return; }                            // 2) 員工邀請（公開）
+    if(inv){ try{ await showInvitePage(inv[1]); }catch(e){ showInviteError('載入邀請失敗：'+(e.message||e)); } return; }  // 2) 員工邀請（公開）
     // 3) 其他 → 登入流程（#staff 直達員工入口，否則預設會員入口）
     switchLoginMode(/staff/i.test(hash) ? 'staff' : 'member');
     const{data}=await sb.auth.getSession();
@@ -892,12 +892,13 @@ async function renderCalendar(opts){
 
   const hint=opts.editable?`<div class="cal-hint">💡 ${isMobileView()?'點課卡可改時間':'拖曳課卡移動／跨日，拉下緣調整長度'}；空格點擊新增預約。</div>`:'';
 
+  setTimeout(loadWeather,50); // 非同步載入天氣，不阻塞行事曆渲染
   return filterHtml+`<div class="cal-wrap">
     <div class="cal-head"><div class="cal-nav">
       <div class="cal-arrow" onclick="calStep(-7)">‹</div>
       <div class="cal-title">${title}</div>
       <div class="cal-arrow" onclick="calStep(7)">›</div>
-    </div><button class="btn btn-ghost btn-sm" onclick="initCalWeek();navTo(CUR_PAGE)">回本週</button></div>
+    </div><div style="display:flex;align-items:center;gap:12px;"><span id="cal-weather" style="font-size:13px;color:var(--t2);display:flex;align-items:center;gap:5px;"></span><button class="btn btn-ghost btn-sm" onclick="initCalWeek();navTo(CUR_PAGE)">回本週</button></div></div>
     <div class="cal-body">${timecol}${daysHtml}</div>
   </div>
   ${hint}
@@ -929,6 +930,24 @@ function assignLanes(evs){
   return res;
 }
 function calStep(n){calWeekStart=addDays(calWeekStart,n);window._calStepping=true;navTo(CUR_PAGE);}
+// 載入今日天氣（Open-Meteo 免費 API，固定台北）
+let _weatherCache=null;
+async function loadWeather(){
+  const el=document.getElementById('cal-weather'); if(!el)return;
+  const wmo={0:['☀️','晴'],1:['🌤️','晴時多雲'],2:['⛅','多雲'],3:['☁️','陰'],45:['🌫️','霧'],48:['🌫️','霧'],
+    51:['🌦️','毛毛雨'],53:['🌦️','毛毛雨'],55:['🌦️','毛毛雨'],61:['🌧️','小雨'],63:['🌧️','雨'],65:['🌧️','大雨'],
+    71:['🌨️','小雪'],80:['🌦️','陣雨'],81:['🌦️','陣雨'],82:['⛈️','強陣雨'],95:['⛈️','雷雨'],96:['⛈️','雷雨'],99:['⛈️','雷雨']};
+  if(_weatherCache){ el.innerHTML=_weatherCache; return; }
+  try{
+    const r=await fetch('https://api.open-meteo.com/v1/forecast?latitude=25.03&longitude=121.57&current=temperature_2m,weather_code&timezone=Asia%2FTaipei');
+    const d=await r.json();
+    const t=Math.round(d.current.temperature_2m);
+    const code=d.current.weather_code;
+    const w=wmo[code]||['🌡️',''];
+    _weatherCache=`${w[0]} 台北 ${t}°C ${w[1]}`;
+    el.innerHTML=_weatherCache;
+  }catch(e){ el.innerHTML=''; } // 失敗就不顯示，不影響行事曆
+}
 
 /* ── 拖曳 / 拉伸互動（電腦，支援跨日跟隨） ── */
 function initCalDrag(){
@@ -2039,7 +2058,7 @@ PAGES.plans=async function(){
     <table><thead><tr><th>方案名稱</th><th>票券類型</th><th>單堂價</th><th>堂數</th><th>贈送</th><th>效期</th><th>狀態</th><th></th></tr></thead><tbody>
     ${plans.map(p=>{const t=typeMap[p.ticket_type_id];return `<tr style="${p.active?'':'opacity:.5;'}">
       <td>${p.name}</td><td><span class="tag tag-${t?t.color:'pt'}">${t?t.name:'—'}${p.format?'·'+p.format:''}</span></td>
-      <td class="num">$${p.unit_price}</td><td class="num">${p.sessions_base}</td><td class="num">${p.sessions_bonus?'+'+p.sessions_bonus:'—'}</td>
+      <td class="num" style="font-size:17px;font-weight:700;color:var(--green);">$${(p.unit_price||0).toLocaleString()}</td><td class="num">${p.sessions_base}</td><td class="num">${p.sessions_bonus?'+'+p.sessions_bonus:'—'}</td>
       <td>${p.valid_days} 天</td><td><span class="tag ${p.active?'tag-ok':'tag-danger'}">${p.active?'上架':'下架'}</span></td>
       <td style="white-space:nowrap;">
         <button class="btn btn-ghost btn-sm" onclick="openPlanModal('${p.id}')">編輯</button>
@@ -2100,7 +2119,7 @@ async function openTypeModal(id){
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">
         <label style="display:flex;align-items:center;gap:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="tt-bookable" ${t.member_bookable?'checked':''}><span>會員可自行預約</span></label>
         <label style="display:flex;align-items:center;gap:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="tt-coach" ${t.requires_coach?'checked':''}><span>需要指定教練</span></label>
-        <label style="display:flex;align-items:center;gap:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="tt-time" ${t.time_restricted?'checked':''}><span>限制時段（平日 10–18）</span></label>
+        <label style="display:flex;align-items:center;gap:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="tt-time" ${t.time_restricted?'checked':''}><span>限制時段（平日 18:00 前）</span></label>
       </div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitType('${editing?id:''}')">${editing?'儲存變更':'建立票券種類'}</button></div>`);
@@ -2441,6 +2460,16 @@ async function markAllRead(){
 }
 
 /* ════════ 員工邀請填寫頁 ════════ */
+// 邀請載入失敗時顯示明確訊息（不 fallback 到登入畫面）
+function showInviteError(msg){
+  document.getElementById('login-screen')?.classList.add('hidden');
+  document.getElementById('app-screen')?.classList.add('hidden');
+  let host=document.getElementById('invite-screen');
+  if(!host){host=document.createElement('div');host.id='invite-screen';document.body.appendChild(host);}
+  host.style.cssText='min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(160deg,#003d32,#0a5044);';
+  host.innerHTML=`<div class="login-card"><div class="login-logo"><div class="mark">YUGYM</div></div>
+    <div style="text-align:center;color:var(--danger);font-size:14px;padding:20px 0;line-height:1.7;">${msg}<br><span style="color:var(--t2);font-size:12px;">請聯繫管理員確認邀請連結，或重新產生一次。</span></div></div>`;
+}
 async function showInvitePage(token){
   const inv=await dbGetByToken(token);
   document.getElementById('login-screen').classList.add('hidden');
