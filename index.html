@@ -188,15 +188,15 @@ tr:hover td{background:var(--card2);}
 .cal-arrow:hover{background:var(--green);color:#fff;}
 .cal-title{font-family:var(--serif);font-size:15px;font-weight:600;min-width:160px;text-align:center;}
 .cal-body{display:flex;overflow-x:auto;}
-.cal-timecol{flex-shrink:0;width:52px;padding-top:52px;}
+.cal-timecol{flex-shrink:0;width:52px;padding-top:58px;}
 .cal-timecol .tc-row{height:22px;font-size:11.5px;color:var(--t2);text-align:right;padding-right:8px;font-family:var(--sans);font-weight:500;position:relative;}
 .cal-timecol .tc-row.half{color:transparent;}
 .cal-timecol .tc-row span{position:relative;top:-6px;}
 .cal-daycol{flex:1;min-width:96px;border-left:1px solid var(--bd2);position:relative;}
-.cal-daycol-head{height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border-bottom:1px solid var(--bd);position:sticky;top:0;background:var(--card);z-index:2;}
+.cal-daycol-head{height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-bottom:1px solid var(--bd);position:sticky;top:0;background:var(--card);z-index:2;padding:5px 0;}
 .cal-daycol-head .cd-wd{font-size:12px;color:var(--t2);font-weight:500;}
 .cal-daycol-head .cd-date{font-family:var(--sans);font-size:17px;font-weight:700;line-height:1.1;}
-.cal-daycol-head .cd-today{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);font-size:8.5px;color:#fff;background:var(--gold);padding:0 6px;border-radius:8px;font-weight:600;line-height:1.5;}
+.cal-daycol-head .cd-today{font-size:8.5px;color:#fff;background:var(--gold);padding:0 6px;border-radius:8px;font-weight:600;line-height:1.6;}
 .cal-daycol-head.today{background:#f3efe2;}
 .cal-daycol-head.today .cd-date{color:var(--gold-d);}
 .cal-daycol-head.today .cd-wd{color:var(--gold-d);}
@@ -875,6 +875,9 @@ function typeOfCat(cat){return {'私人教練':'pt','小班肌力':'group','自�
 
 /* ════════ 共用:行事曆（30 分鐘格、可拖曳/拉伸/跨日） ════════ */
 let calWeekStart=null;
+let _calDays=null; // null=自動(依寬度) ; 7/3/1=手動覆蓋
+function autoCalDays(){ const w=window.innerWidth; return w>=1100?7:(w>=680?3:1); }
+function effCalDays(){ return _calDays||autoCalDays(); }
 const CAL_START_H=8, CAL_END_H=22, SLOT_MIN=30, SLOT_PX=22; // 每 30 分 = 22px
 function initCalWeek(){const d=new Date(TODAY);const dow=d.getDay();calWeekStart=addDays(d,-((dow+6)%7));} // 週一起
 function timeToMin(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
@@ -891,7 +894,8 @@ async function renderCalendar(opts){
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const ticketMap=Object.fromEntries(allTickets.map(t=>[t.id,t]));
-  const days=[];for(let i=0;i<7;i++)days.push(addDays(calWeekStart,i));
+  const nDays=effCalDays();
+  const days=[];for(let i=0;i<nDays;i++)days.push(addDays(calWeekStart,i));
   let filterCoach=window._calFilter||'all';
 
   const visible=bookings.filter(b=>{
@@ -900,7 +904,6 @@ async function renderCalendar(opts){
     return true;
   });
 
-  const title=`${calWeekStart.getFullYear()} 年 ${calWeekStart.getMonth()+1} 月 ${calWeekStart.getDate()} 日 起`;
   let filterHtml='';
   if(opts.coachFilter){
     const cOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${filterCoach===c.id?'selected':''}>${c.name}</option>`).join('');
@@ -987,12 +990,26 @@ async function renderCalendar(opts){
 
   const hint=opts.editable?`<div class="cal-hint">💡 ${isMobileView()?'點課卡可改時間':'拖曳課卡移動／跨日，拉下緣調整長度'}；空格點擊新增預約。</div>`:'';
 
+  const title=(nDays===1)
+    ? `${calWeekStart.getFullYear()} 年 ${calWeekStart.getMonth()+1} 月 ${calWeekStart.getDate()} 日`
+    : `${calWeekStart.getFullYear()} 年 ${calWeekStart.getMonth()+1} 月 ${calWeekStart.getDate()} 日 起`;
   return filterHtml+`<div class="cal-wrap">
-    <div class="cal-head"><div class="cal-nav">
-      <div class="cal-arrow" onclick="calStep(-7)">‹</div>
-      <div class="cal-title">${title}</div>
-      <div class="cal-arrow" onclick="calStep(7)">›</div>
-    </div><button class="btn btn-ghost btn-sm" onclick="initCalWeek();navTo(CUR_PAGE)">回本週</button></div>
+    <div class="cal-head">
+      <div class="cal-nav">
+        <div class="cal-arrow" onclick="calStep(-${nDays})">‹</div>
+        <div class="cal-title" onclick="openCalJump()" style="cursor:pointer;" title="點擊選擇日期">${title} ▾</div>
+        <div class="cal-arrow" onclick="calStep(${nDays})">›</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="seg" style="font-size:12px;">
+          <button class="seg-btn ${_calDays===7?'active':''}" onclick="setCalDays(7)">7日</button>
+          <button class="seg-btn ${_calDays===3?'active':''}" onclick="setCalDays(3)">3日</button>
+          <button class="seg-btn ${_calDays===1?'active':''}" onclick="setCalDays(1)">1日</button>
+          <button class="seg-btn ${_calDays===null?'active':''}" onclick="setCalDays(null)">自動</button>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="initCalWeek();navTo(CUR_PAGE)">回今天</button>
+      </div>
+    </div>
     <div class="cal-body">${timecol}${daysHtml}</div>
   </div>
   ${hint}
@@ -1024,6 +1041,33 @@ function assignLanes(evs){
   return res;
 }
 function calStep(n){calWeekStart=addDays(calWeekStart,n);window._calStepping=true;navTo(CUR_PAGE);}
+// 手動切換顯示天數(null=自動)
+function setCalDays(n){
+  _calDays=n;
+  // 1日/3日時，起點對齊今天(若今天在合理範圍);7日對齊週一
+  if(n===7){ initCalWeek(); }
+  else if(n===1||n===3){ const d=new Date(TODAY); calWeekStart=new Date(d.getFullYear(),d.getMonth(),d.getDate()); }
+  window._calStepping=true; navTo(CUR_PAGE);
+}
+// 點標題跳出月曆快選日期
+function openCalJump(){
+  const base=calWeekStart||TODAY;
+  const val=ymd(base);
+  showModal(`<div class="modal-title">跳至日期</div>
+    <div class="form-row"><label>選擇日期</label><input type="date" id="cal-jump-date" value="${val}"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="doCalJump()">前往</button></div>`);
+}
+function doCalJump(){
+  const v=document.getElementById('cal-jump-date').value;
+  if(!v){closeModal();return;}
+  const d=parseYmd(v);
+  const nDays=effCalDays();
+  // 7日模式跳到該日期所在週的週一；其他模式直接以該日為起點
+  if(nDays===7){ const dow=d.getDay(); calWeekStart=addDays(d,-((dow+6)%7)); }
+  else{ calWeekStart=d; }
+  window._calStepping=true;
+  closeModal(); navTo(CUR_PAGE);
+}
 // 頂部時鐘
 let _clockTimer=null;
 function startClock(){
