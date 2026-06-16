@@ -147,6 +147,9 @@ tr:hover td{background:var(--card2);}
 .dash-col .stat-card .sc-num{font-size:28px;}
 .dash-col .card{margin:0;}
 @media(max-width:900px){.dash-grid{grid-template-columns:1fr;}}
+.seg{display:inline-flex;background:var(--card2);border-radius:9px;padding:3px;gap:2px;}
+.seg-btn{padding:6px 16px;font-size:13px;border-radius:7px;color:var(--t2);font-weight:500;transition:.15s;cursor:pointer;}
+.seg-btn.active{background:var(--green);color:#fff;}
 .stat-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px;}
 .stat-card .sc-label{font-size:11.5px;color:var(--t2);letter-spacing:0.05em;margin-bottom:8px;}
 .stat-card .sc-num{font-family:var(--num);font-size:34px;font-weight:600;color:var(--green);line-height:1;}
@@ -785,33 +788,87 @@ async function refundTicket(ticket_id,booking_id,operator){
   await logTicket(ticket_id,'refund',1,booking_id,operator,'取消退課');
 }
 
-/* ════════ 管理員:儀表板 ════════ */
+/* ════════ 管理員:儀表板（營運報表） ════════ */
+let _dashRange='month'; // 'month' | 'today'
 PAGES.dashboard=async function(){
-  const[members,coaches,tickets,bookings]=await Promise.all([dbGetAll('members'),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('bookings')]);
-  const activeMembers=members.filter(m=>m.status==='active').length;
-  const activeCoaches=coaches.filter(c=>isCoachable(c)&&c.status==='active').length;
-  const usableTickets=tickets.filter(t=>t.status==='usable').length;
-  const todayBk=bookings.filter(b=>b.date===ymd(TODAY)&&b.status!=='cancelled').length;
-  const upcoming=bookings.filter(b=>b.status!=='cancelled'&&b.date>=ymd(TODAY)).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time)).slice(0,6);
+  const[members,coaches,tickets,bookings,plans,types]=await Promise.all([
+    dbGetAll('members'),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('bookings'),dbGetAll('course_plans'),dbGetAll('ticket_types')]);
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,c.name]));
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const planMap=Object.fromEntries(plans.map(p=>[p.id,p]));
+  const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
 
-  C.innerHTML=head('OVERVIEW','儀表板','營運概況一覽')+
-  `<div class="stat-grid">
-    <div class="stat-card"><div class="sc-label">有效會員</div><div><span class="sc-num">${activeMembers}</span><span class="sc-unit">人</span></div></div>
-    <div class="stat-card"><div class="sc-label">在職教練</div><div><span class="sc-num">${activeCoaches}</span><span class="sc-unit">人</span></div></div>
-    <div class="stat-card"><div class="sc-label">今日預約</div><div><span class="sc-num">${todayBk}</span><span class="sc-unit">堂</span></div></div>
-    <div class="stat-card"><div class="sc-label">流通中票券</div><div><span class="sc-num">${usableTickets}</span><span class="sc-unit">張</span></div></div>
+  // 區間判斷
+  const today=ymd(TODAY);
+  const ym=today.slice(0,7); // YYYY-MM
+  const inRange=(dateStr)=> _dashRange==='today' ? dateStr===today : (dateStr||'').slice(0,7)===ym;
+  const rangeLabel=_dashRange==='today'?`今日（${today}）`:`本月（${ym}）`;
+
+  // ── 營收：發票券金額（purchase_date 在區間內）──
+  const revTickets=tickets.filter(t=>t.source==='purchase'&&inRange(t.purchase_date));
+  const revenue=revTickets.reduce((s,t)=>s+(t.amount_paid||0),0);
+
+  // ── 已使用課堂費用：本期銷課（已完成/已簽到的預約）× 該票券單堂價 ──
+  const usedBk=bookings.filter(b=>inRange(b.date)&&(b.status==='completed'||b.status==='checked_in'));
+  let usedFee=0;
+  for(const b of usedBk){
+    const tk=tickets.find(t=>t.id===b.ticket_id);
+    usedFee+=(tk&&tk.unit_price)?tk.unit_price:0;
+  }
+
+  // ── 課堂數 ──
+  const rangeBk=bookings.filter(b=>inRange(b.date)&&b.status!=='cancelled');
+  const classCount=rangeBk.length;
+  const doneCount=rangeBk.filter(b=>b.status==='completed'||b.status==='checked_in').length;
+
+  // ── 各教練課堂數 ──
+  const byCoach={};
+  rangeBk.forEach(b=>{const k=b.coach_id||'_none';byCoach[k]=(byCoach[k]||0)+1;});
+  const coachRows=Object.entries(byCoach).sort((a,b)=>b[1]-a[1])
+    .map(([cid,n])=>({name:cid==='_none'?'（無教練）':(coachMap[cid]||'—'),n}));
+
+  // ── 課程使用率：哪個課程賣最多 + 用最多 ──
+  // 賣最多：依方案統計發出張數與金額；用最多：該方案票券的已銷堂數
+  const byPlan={};
+  tickets.filter(t=>inRange(t.purchase_date)).forEach(t=>{
+    const name=t.plan_name||'—';
+    byPlan[name]=byPlan[name]||{sold:0,amount:0,used:0};
+    byPlan[name].sold+=1;
+    byPlan[name].amount+=(t.amount_paid||0);
+    byPlan[name].used+=((t.sessions_total||0)-(t.sessions_remaining||0));
+  });
+  const planRows=Object.entries(byPlan).sort((a,b)=>b[1].amount-a[1].amount)
+    .map(([name,d])=>({name,...d}));
+
+  const fmtNT=(n)=>'$'+(n||0).toLocaleString();
+
+  C.innerHTML=head('OVERVIEW','儀表板','營運報表')+
+  `<div class="filter-row" style="margin-bottom:18px;">
+    <div class="seg">
+      <button class="seg-btn ${_dashRange==='month'?'active':''}" onclick="_dashRange='month';navTo('dashboard')">本月</button>
+      <button class="seg-btn ${_dashRange==='today'?'active':''}" onclick="_dashRange='today';navTo('dashboard')">今日</button>
+    </div>
+    <span style="font-size:12.5px;color:var(--t2);">${rangeLabel}</span>
   </div>
-  <div class="card"><div class="card-title">即將到來的預約</div>
-    ${upcoming.length===0?'<div class="empty"><div class="em-t">目前沒有預約</div></div>':
-    upcoming.map(b=>{const d=parseYmd(b.date);return `<div class="list-item">
-      <div class="li-date"><div class="lid-d">${d.getDate()}</div><div class="lid-m">${d.getMonth()+1}月</div></div>
-      <div class="li-sep"></div>
-      <div class="li-body"><div class="li-title">${memMap[b.member_id]||'—'} <span class="tag tag-${colorClass(typeOfCat(b.category))}">${b.category}</span></div>
-      <div class="li-meta">${b.coach_id?coachMap[b.coach_id]:'—'} · ${b.duration}分鐘</div></div>
-      <div class="li-time"><div class="lit-t">${b.start_time}</div><div class="lit-w">週${WD[d.getDay()]}</div></div>
-    </div>`;}).join('')}
+  <div class="stat-grid">
+    <div class="stat-card"><div class="sc-label">營收（發票券）</div><div><span class="sc-num" style="font-size:28px;">${fmtNT(revenue)}</span></div></div>
+    <div class="stat-card"><div class="sc-label">已使用課堂費用（銷課）</div><div><span class="sc-num" style="font-size:28px;color:var(--gold-d);">${fmtNT(usedFee)}</span></div></div>
+    <div class="stat-card"><div class="sc-label">課堂數</div><div><span class="sc-num">${classCount}</span><span class="sc-unit">堂</span><span style="font-size:12px;color:var(--t2);margin-left:8px;">完成 ${doneCount}</span></div></div>
+    <div class="stat-card"><div class="sc-label">${_dashRange==='today'?'今日':'本月'}發券數</div><div><span class="sc-num">${revTickets.length}</span><span class="sc-unit">張</span></div></div>
+  </div>
+  <div class="dash-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="card"><div class="card-title">各教練課堂數</div>
+      ${coachRows.length===0?'<div class="empty"><div class="em-t">本期無課堂</div></div>':
+      `<table><thead><tr><th>教練</th><th>課堂數</th><th>佔比</th></tr></thead><tbody>
+      ${coachRows.map(r=>`<tr><td>${r.name}</td><td class="num" style="font-weight:600;">${r.n}</td><td><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;height:6px;background:var(--card2);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${classCount?Math.round(r.n/classCount*100):0}%;background:var(--green);"></div></div><span style="font-size:11px;color:var(--t2);">${classCount?Math.round(r.n/classCount*100):0}%</span></div></td></tr>`).join('')}
+      </tbody></table>`}
+    </div>
+    <div class="card"><div class="card-title">課程使用率（賣最多 / 用最多）</div>
+      ${planRows.length===0?'<div class="empty"><div class="em-t">本期無售出課程</div></div>':
+      `<table><thead><tr><th>課程方案</th><th>售出</th><th>金額</th><th>已銷堂</th></tr></thead><tbody>
+      ${planRows.map(r=>`<tr><td style="font-weight:500;">${r.name}</td><td class="num">${r.sold}</td><td class="num">${fmtNT(r.amount)}</td><td class="num">${r.used}</td></tr>`).join('')}
+      </tbody></table>`}
+    </div>
   </div>`;
 };
 function typeOfCat(cat){return {'私人教練':'pt','小班肌力':'group','自主訓練':'self_training','體驗':'trial'}[cat]||'pt';}
@@ -2327,7 +2384,10 @@ async function submitGrant(){
   const plan_id=document.getElementById('gt-plan').value;
   const plan=await dbGet('course_plans',plan_id);
   const total=plan.sessions_base+plan.sessions_bonus;
+  const unitPrice=plan.unit_price||0;
+  const amountPaid=unitPrice*plan.sessions_base; // 營收=單堂價×購買堂數(贈送堂不計價)
   const t={id:uid('TK'),member_id,ticket_type_id:plan.ticket_type_id,source_plan_id:plan_id,plan_name:plan.name,format:plan.format||null,source:'purchase',
+    unit_price:unitPrice, amount_paid:amountPaid,
     purchase_date:ymd(TODAY),start_date:ymd(TODAY),expire_date:ymd(addDays(TODAY,plan.valid_days)),
     sessions_total:total,sessions_remaining:total,status:'usable',
     payment_status:document.getElementById('gt-pay').value,invoice_status:'none',created_at:new Date().toISOString()};
