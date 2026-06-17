@@ -67,7 +67,7 @@ input,select,textarea{font-family:inherit;font-size:14px;}
 .role-tab.active{background:var(--green);color:#fff;box-shadow:0 2px 8px rgba(0,61,50,0.25);}
 .field{margin-bottom:14px;}
 .field label{display:block;font-size:11.5px;color:var(--t2);margin-bottom:6px;letter-spacing:0.04em;font-weight:500;}
-.field input{width:100%;padding:12px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--card2);transition:.18s;}
+.field input{width:100%;padding:12px 14px;border:1px solid var(--bd);border-radius:10px;background:#fff;transition:.18s;}
 .field input:focus{outline:none;border-color:var(--gold);background:#fff;}
 .btn-primary{width:100%;padding:13px;background:var(--green);color:#fff;border-radius:10px;font-size:14.5px;font-weight:500;
   letter-spacing:0.05em;transition:.18s;margin-top:6px;}
@@ -114,7 +114,7 @@ input,select,textarea{font-family:inherit;font-size:14px;}
 .btn{padding:9px 16px;border-radius:9px;font-size:13px;font-weight:500;transition:.15s;letter-spacing:0.03em;}
 .btn-green{background:var(--green);color:#fff;}.btn-green:hover{background:var(--green-l);}
 .btn-gold{background:var(--gold);color:#fff;}.btn-gold:hover{background:var(--gold-d);}
-.btn-ghost{background:var(--card2);color:var(--t2);border:1px solid var(--bd);}.btn-ghost:hover{color:var(--text);}
+.btn-ghost{background:#fff;color:var(--t2);border:1px solid var(--bd);}.btn-ghost:hover{color:var(--text);border-color:var(--green);}
 .btn-danger{background:#fbeaea;color:var(--danger);}.btn-danger:hover{background:#f5dada;}
 .btn-sm{padding:6px 12px;font-size:12px;border-radius:8px;}
 
@@ -364,6 +364,7 @@ tr:hover td{background:var(--card2);}
         <div class="signup-cta-hint">還不是會員？</div>
         <button class="btn-signup" onclick="location.hash='member-signup'">立即申辦會員</button>
       </div>
+      <div class="login-switch"><span onclick="location.hash='staff';switchLoginMode('staff')">員工 / 管理後台登入 →</span></div>
     </div>
 
     <!-- 員工入口（點擊才顯示） -->
@@ -1230,9 +1231,8 @@ function initCalDrag(){
     // 還原卡片的 fixed 樣式（不論點擊或拖曳，先還原視覺）
     if(ev){ ev.classList.remove('dragging'); ev.style.position=''; ev.style.width=''; ev.style.left=''; ev.style.top=''; ev.style.right=''; ev.style.height=''; }
     if(!moved){
-      // 沒有拖動 → 當作點擊，直接開預約明細
+      // 沒有拖動 → 視為點擊，交由卡片的 onclick(onEvClick) 開明細，這裡不重複開
       window._justDragged=false;
-      openBookingDetail(_bid);
       return;
     }
     // 確實拖曳過，攔截瀏覽器隨後補發的 click
@@ -1409,7 +1409,7 @@ async function bkStep2(){
   showModal(`<div class="modal-title">新增預約 · 步驟 2 / 2</div>
     <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${t.name}　${date} ${time}${coach_id?'　·　'+(await coachName(coach_id)):''}</div>
     <div class="form-row"><label>會員（可搜尋姓名 / 手機 / 標籤）</label>
-      <input id="bk-mem-search" placeholder="輸入關鍵字過濾…" oninput="filterBkMembers()" style="width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:9px;background:var(--card2);margin-bottom:6px;">
+      <input id="bk-mem-search" placeholder="輸入關鍵字過濾…" oninput="filterBkMembers()" style="width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:9px;background:#fff;margin-bottom:6px;">
       <select id="bk-member" size="5" style="height:auto;" onchange="refreshBkTicket()"><option value="">請選擇會員…</option>${bkMemberOpts(_bkMembers)}</select></div>
     <div class="form-row" style="margin-bottom:10px;"><div id="bk-ticket-info" style="font-size:12px;color:var(--t2);padding:10px 12px;background:var(--card2);border-radius:9px;">選擇會員後，將自動帶入最早到期票券。</div></div>
     <label class="switch-row" style="margin-bottom:6px;"><span class="switch"><input type="checkbox" id="bk-recurring" onchange="toggleRecurring()"><span class="switch-slider"></span></span><span class="switch-label">連續預約（依星期重複建立多筆）</span></label>
@@ -1887,8 +1887,8 @@ async function saveTags(member_id){
   m.tags=[...document.querySelectorAll('.tag-chk:checked')].map(c=>c.value);
   await dbPut('members',m);
   closeModal();showToast('標籤已更新');
-  if(_detailMemberId===member_id)openMemberDetail(member_id);
-  else navTo('members');
+  navTo(CUR_PAGE); // 重繪列表確保即時更新
+  if(_detailMemberId===member_id)setTimeout(()=>openMemberDetail(member_id),50);
 }
 // 調整會員等級（新朋友/會員/主顧客/VIP，手動）
 async function openTierModal(member_id){
@@ -1911,8 +1911,8 @@ async function saveTier(member_id){
   if(sel)m.tier=sel.value;
   await dbPut('members',m);
   closeModal();showToast('等級已更新');
-  if(_detailMemberId===member_id)openMemberDetail(member_id);
-  else navTo('members');
+  navTo(CUR_PAGE); // 重繪列表確保即時更新
+  if(_detailMemberId===member_id)setTimeout(()=>openMemberDetail(member_id),50);
 }
 /* ── 會員申辦連結 / QR Code（取代後台直接建立） ── */
 function appVersionTag(){ const d=new Date(); return ''+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }
@@ -2004,19 +2004,46 @@ async function submitRegister(){
   // 鎖定按鈕，給使用者「處理中」回饋（避免在 LINE 等內建瀏覽器看似沒反應而重複點）
   if(btn){btn.disabled=true;btn.textContent='處理中…請稍候';}
   err.style.display='none';
+  const showLoginHint=(msg)=>{
+    err.innerHTML=msg+' <button class="btn btn-green btn-sm" style="margin-left:8px;" onclick="backToLogin&&backToLogin()">前往登入</button>';
+    err.style.display='block';err.scrollIntoView({block:'center'});
+    if(btn){btn.disabled=false;btn.textContent='完成註冊';}
+  };
   try{
-    // 先建立 Auth 帳號：Supabase Auth 會自動攔截重複手機（同一假 email 回 User already registered），
-    // 不需要匿名讀取整張 members（RLS 開啟後匿名讀取會被擋）。
-    const m={id:uid('m'),name,phone,email:v('reg-email')||null,birthday:readBirthday('reg'),status:'active'};
+    const m={id:uid('m'),name,phone,email:v('reg-email')||null,birthday:readBirthday('reg'),status:'active',tier:'newbie'};
     const r=await cloudCreateAuth('member',phone,pw);
     if(r.error){
       const dup=/already|exists|registered/i.test(r.error);
-      showErr(dup?'此手機已註冊，請直接登入':('註冊失敗：'+r.error));return;
+      if(dup){
+        // 此手機在 Auth 已存在 → 嘗試用這次輸入的密碼登入，修復可能的「半殘帳號」
+        const email=toEmail('member',phone);
+        const{data:loginData,error:loginErr}=await sb.auth.signInWithPassword({email,password:pw});
+        if(loginErr){
+          // 密碼不符 → 友善提示，引導登入
+          showLoginHint('此手機已註冊過，請用原本的密碼登入；若忘記密碼請聯繫櫃台協助。');
+          return;
+        }
+        // 登入成功 → 檢查 members 是否已有資料
+        const existing=(await sb.from('members').select('*').eq('auth_id',loginData.user.id).maybeSingle()).data;
+        if(existing){
+          // 已是完整會員
+          try{await sb.auth.signOut();}catch(_){}
+          showLoginHint('此手機已是會員，請直接登入。');
+          return;
+        }
+        // 半殘帳號（有 Auth 無資料）→ 補寫 members 完成修復
+        m.auth_id=loginData.user.id;
+        await dbPut('members',m);
+        try{await sb.auth.signOut();}catch(_){}
+        // 繼續往下顯示成功畫面
+      }else{
+        showErr('註冊失敗：'+r.error);return;
+      }
+    }else{
+      m.auth_id=r.uid;
+      await dbPut('members',m);
+      try{await sb.auth.signOut();}catch(_){}
     }
-    m.auth_id=r.uid;
-    // 此時已是登入狀態（auth.uid()=新帳號），寫入自己的 members 符合 RLS
-    await dbPut('members',m);
-    try{await sb.auth.signOut();}catch(_){}
   }catch(e){
     showErr('註冊失敗：'+(e.message||e));return;
   }
@@ -2031,12 +2058,14 @@ async function submitRegister(){
 }
 
 /* ════════ 管理員:員工管理（邀請制 + 營運薪資制度） ════════ */
-const PAY_LABEL={full_time:'正職',part_time:'兼職',partner:'合作',workstudy:'工讀',
-  fulltime:'正職',parttime:'兼職'}; // 後兩個相容舊資料
-// 把任何寫法正規化成資料庫 enum 值（full_time / part_time / partner / workstudy）
+const PAY_LABEL={full_time:'正職',part_time:'兼職',contractor:'合作',intern:'工讀',
+  fulltime:'正職',parttime:'兼職',partner:'合作',workstudy:'工讀'}; // 後四個相容舊寫法
+// 把任何寫法正規化成資料庫 enum 值（full_time / part_time / contractor / intern）
 function normEmp(v){
   if(v==='fulltime') return 'full_time';
   if(v==='parttime') return 'part_time';
+  if(v==='partner') return 'contractor';   // 合作
+  if(v==='workstudy') return 'intern';      // 工讀
   return v||'full_time';
 }
 const STAFF_STATUS={active:'在職',unpaid_leave:'留職停薪',inactive:'已停用',resigned:'已停用'};
@@ -2085,8 +2114,8 @@ function payRoleFields(prefix,c,showRate){
         <select id="${prefix}-pay" onchange="toggleMgr('${prefix}')">
           <option value="full_time" ${normEmp(c.employment_type||c.pay_type)==='full_time'?'selected':''}>正職</option>
           <option value="part_time" ${normEmp(c.employment_type||c.pay_type)==='part_time'?'selected':''}>兼職</option>
-          <option value="partner" ${normEmp(c.employment_type||c.pay_type)==='partner'?'selected':''}>合作</option>
-          <option value="workstudy" ${normEmp(c.employment_type||c.pay_type)==='workstudy'?'selected':''}>工讀</option>
+          <option value="contractor" ${normEmp(c.employment_type||c.pay_type)==='contractor'?'selected':''}>合作</option>
+          <option value="intern" ${normEmp(c.employment_type||c.pay_type)==='intern'?'selected':''}>工讀</option>
         </select></div>
       ${rateField}
     </div>
@@ -2151,11 +2180,13 @@ async function submitStaffInvite(){
     showToast('建立邀請失敗：'+(e.message||e));
     return;
   }
+  closeModal();        // 先關掉「新增員工」表單視窗
+  navTo('staff');      // 立即重繪員工列表，確保新邀請即時出現
   const link=inviteLink(token);
   showModal(`<div class="modal-title">邀請連結已產生</div>
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:10px;">複製以下連結傳給員工，員工開啟後自行填寫資料：</div>
     <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:12px;font-size:12px;word-break:break-all;color:var(--text);">${link}</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();navTo('staff')">關閉</button><button class="btn btn-green" onclick="copyText('${link}')">複製連結</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button><button class="btn btn-green" onclick="copyText('${link}')">複製連結</button></div>`);
 }
 async function openStaffEdit(id){
   const c=await dbGet('coaches',id);
