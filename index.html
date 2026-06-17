@@ -210,6 +210,7 @@ tr:hover td{background:var(--card2);}
   overflow:hidden;cursor:grab;box-shadow:0 1px 3px rgba(0,0,0,0.08);z-index:3;user-select:none;}
 .cal-ev:hover{overflow:visible;z-index:250;}
 .cal-ev:active{cursor:grabbing;}
+.cal-ev:not(.readonly){touch-action:none;}
 .cal-ev .ev-time{font-family:var(--num);font-size:15px;font-weight:700;line-height:1.2;}
 .cal-ev .ev-t{font-family:var(--sans);font-size:12.5px;font-weight:600;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .cal-ev .ev-m{font-family:var(--sans);font-size:11px;opacity:.7;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -1052,7 +1053,7 @@ async function renderCalendar(opts){
     </div>`;
   });
 
-  const hint=opts.editable?`<div class="cal-hint">💡 ${isMobileView()?'點課卡可看明細／改時間':'拖曳課卡可移動／跨日；點課卡開明細可改時長'}；空格點擊新增預約。</div>`:'';
+  const hint=opts.editable?`<div class="cal-hint">💡 ${window.innerWidth<=600?'點課卡可看明細／改時間':'拖曳課卡可移動／跨日；點課卡開明細可改時長'}；空格點擊新增預約。</div>`:'';
 
   const title=(nDays===1)
     ? `${calWeekStart.getFullYear()} 年 ${calWeekStart.getMonth()+1} 月 ${calWeekStart.getDate()} 日`
@@ -1168,7 +1169,7 @@ async function loadWeather(){
 
 /* ── 拖曳 / 拉伸互動（電腦，支援跨日跟隨） ── */
 function initCalDrag(){
-  if(isMobileView())return; // 手機改點選
+  if(window.innerWidth<=600)return; // 真手機（窄螢幕）改點選；平板/iPad/桌機可拖曳
   const wrap=document.querySelector('.cal-body');
   if(!wrap)return;
   // Tooltip 邊界自適應：滑入卡片時，依空間決定 tooltip 往左/置中/往右展開，避免超出畫面
@@ -1217,7 +1218,7 @@ function initCalDrag(){
     return {col, track, date:col.dataset.date, time:minToTime(min), topPx:slot*SLOT_PX};
   }
 
-  wrap.addEventListener('mousedown',e=>{
+  wrap.addEventListener('pointerdown',e=>{
     const ev=e.target.closest('.cal-ev');
     if(!ev||ev.classList.contains('readonly'))return;
     bid=ev.dataset.bid; evEl=ev;
@@ -1230,11 +1231,13 @@ function initCalDrag(){
     startY=e.clientY; startX=e.clientX;
     mode='move';
     window._dragStarted=false; // 尚未真正開始拖曳（避免純點擊就移動卡片）
+    try{ wrap.setPointerCapture(e.pointerId); }catch(_){}
     e.preventDefault();
   });
 
-  window.addEventListener('mousemove',e=>{
+  window.addEventListener('pointermove',e=>{
     if(!mode)return;
+    e.preventDefault(); // 觸控時避免頁面跟著捲動
     // move：首次移動超過 5px 才真正開始拖曳（純點擊不會移動卡片）
     if(!window._dragStarted){
       if(Math.abs(e.clientX-startX)<=5 && Math.abs(e.clientY-startY)<=5) return;
@@ -1274,7 +1277,7 @@ function initCalDrag(){
     }else{dropDate=null;dropTime=null;}
   });
 
-  window.addEventListener('mouseup',async e=>{
+  window.addEventListener('pointerup',async e=>{
     if(!mode)return;
     const m=mode; mode=null;
     const ev=evEl; evEl=null;
