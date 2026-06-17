@@ -214,9 +214,11 @@ tr:hover td{background:var(--card2);}
 .cal-ev .ev-t{font-family:var(--sans);font-size:12.5px;font-weight:600;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .cal-ev .ev-m{font-family:var(--sans);font-size:11px;opacity:.7;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 /* 同時段 3 張以上：直式窄卡，只顯示姓名（直書） */
-.cal-ev.ev-dense{padding:6px 2px;display:flex;align-items:center;justify-content:center;}
-.cal-ev.ev-dense .ev-dense-name{writing-mode:vertical-rl;text-orientation:upright;font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:0.08em;white-space:nowrap;overflow:hidden;max-height:100%;}
+.cal-ev.ev-dense{padding:4px 2px;display:flex;align-items:center;justify-content:center;}
+.cal-ev.ev-dense .ev-dense-name{writing-mode:vertical-rl;text-orientation:upright;font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;max-height:100%;text-align:center;}
 .desktop-wide .cal-ev.ev-dense .ev-dense-name{font-size:13px;}
+.cal-ev.ev-dense .ev-dense-name .dn-cnt{writing-mode:horizontal-tb;display:inline-flex;align-items:center;justify-content:center;margin-top:3px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:rgba(0,0,0,0.12);font-size:10px;font-weight:700;line-height:1;}
 .cal-ev .ev-remain{font-family:var(--num);font-size:11px;font-weight:600;background:rgba(255,255,255,0.22);padding:0 5px;border-radius:5px;line-height:1.5;}
 .desktop-wide .cal-ev .ev-remain{font-size:12px;}
 /* hover 詳細資訊卡 */
@@ -400,6 +402,7 @@ tr:hover td{background:var(--card2);}
         <span id="tb-clock" class="tb-clock"></span>
         <span id="tb-weather" class="tb-weather"></span>
         <span class="tb-user" id="tb-user">—</span>
+        <button class="tb-logout" onclick="openChangePassword()">修改密碼</button>
         <button class="tb-logout" onclick="doLogout()">登出</button>
       </div>
     </div>
@@ -536,6 +539,25 @@ async function doLoginStaff(){
   enterApp();
 }
 async function doLogout(){ try{await sb.auth.signOut();}catch(_){} SESSION=null;location.reload(); }
+// 修改自己的密碼（登入後）
+function openChangePassword(){
+  showModal(`<div class="modal-title">修改密碼</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">變更目前登入帳號的密碼。修改後請記住新密碼。</div>
+    <div class="form-row"><label>新密碼（至少 6 個字元）</label><input type="password" id="cp-pw1" placeholder="輸入新密碼"></div>
+    <div class="form-row"><label>再次輸入新密碼</label><input type="password" id="cp-pw2" placeholder="再次輸入確認"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitChangePassword()">確認修改</button></div>`);
+}
+async function submitChangePassword(){
+  const p1=document.getElementById('cp-pw1').value;
+  const p2=document.getElementById('cp-pw2').value;
+  if(!p1||p1.length<6){showToast('密碼至少 6 個字元');return;}
+  if(p1!==p2){showToast('兩次輸入的密碼不一致');return;}
+  try{
+    const{error}=await sb.auth.updateUser({password:p1});
+    if(error){showToast('修改失敗：'+error.message);return;}
+    closeModal();showToast('密碼已更新');
+  }catch(e){showToast('修改失敗：'+(e.message||e));}
+}
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);}
 
@@ -972,7 +994,20 @@ async function renderCalendar(opts){
       }else{
         memName=memMap[b.member_id]||'—';
       }
-      const dense = lane.total>=3; // 同時段 3 張以上 → 直式窄卡，只顯示姓名
+      // 同時段 3 張以上 → 考慮改直式；但若每張卡夠寬（視窗大），仍維持橫式完整資訊
+      const colW = (window.innerWidth - 80) / Math.max(nDays,1); // 每日欄約略寬度
+      const cardW = colW / lane.total; // 同時段均分後每張卡寬度
+      const dense = lane.total>=3 && cardW < 96; // 每張 < 96px 才縮成直式
+      // 直式窄卡的精簡名稱：體驗=純客戶名、團課=第一人（人數）、一般=會員名
+      let denseName;
+      if(b.category==='體驗'){
+        denseName = b.trial_name || '體驗';
+      }else if(b.category==='小班肌力'){
+        const ns=gIds.map(id=>memMap[id]).filter(Boolean);
+        denseName = ns.length===0 ? '團課' : ns.length===1 ? ns[0] : `${ns[0]}<span class="dn-cnt">${ns.length}</span>`;
+      }else{
+        denseName = memMap[b.member_id]||'—';
+      }
       // hover 詳細資訊卡（滑過仍可看到完整狀態）
       const tip = `<div class="ev-tip">
         <div class="ev-tip-h"><b>${memName}</b><span>${b.start_time}–${minToTime(timeToMin(b.start_time)+(b.duration||60))}</span></div>
@@ -985,7 +1020,7 @@ async function renderCalendar(opts){
         style="top:${top}px;height:${Math.max(h-2,64)}px;left:calc(${lane.idx*wpct}% + 3px);width:calc(${wpct}% - 6px);"
         ${editable?`onclick="onEvClick(event,'${b.id}')"`:`onclick="openBookingDetail('${b.id}')"`}>
         ${dense
-          ? `<div class="ev-dense-name">${memName}</div>`
+          ? `<div class="ev-dense-name">${denseName}</div>`
           : `<div class="ev-time">${b.start_time}</div><div class="ev-t">${memName}</div><div class="ev-m">${subCoachName?subCoachName+'（代）':(coachName||typeName)}</div>`}
         ${tip}
       </div>`;
@@ -2339,6 +2374,7 @@ PAGES.staff=async function(){
       <td style="white-space:nowrap;">${pending
         ?`<button class="btn btn-gold btn-sm" onclick="copyInvite('${c.invite_token}')">複製連結</button> <button class="btn btn-danger btn-sm" onclick="deleteStaffInvite('${c.id}')">刪除</button>`
         :`<button class="btn btn-ghost btn-sm" onclick="openStaffEdit('${c.id}')">編輯</button>`
+          +` <button class="btn btn-ghost btn-sm" onclick="openResetStaffPw('${c.id}')">重設密碼</button>`
           +`${c.status!=='unpaid_leave'?` <button class="btn btn-ghost btn-sm" onclick="setStaffStatus('${c.id}','unpaid_leave')">留職</button>`:` <button class="btn btn-ghost btn-sm" onclick="setStaffStatus('${c.id}','active')">復職</button>`}`
           +`${c.status!=='inactive'?` <button class="btn btn-danger btn-sm" onclick="setStaffStatus('${c.id}','inactive')">停用</button>`:` <button class="btn btn-green btn-sm" onclick="setStaffStatus('${c.id}','active')">啟用</button>`}`
         }</td>
@@ -2353,6 +2389,36 @@ PAGES.staff=async function(){
     </div>
   </div>`;
 };
+// 管理員：重設員工密碼（透過 Edge Function 以 admin 權限更新）
+function openResetStaffPw(id){
+  dbGet('coaches',id).then(c=>{
+    if(!c){showToast('找不到員工');return;}
+    showModal(`<div class="modal-title">重設密碼</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">為 <b>${c.name||'此員工'}</b>（${c.phone||'—'}）設定一組新密碼。設定後請告知該員工，並建議他登入後自行修改。</div>
+      <div class="form-row"><label>新密碼（至少 6 個字元）</label><input type="password" id="rsp-pw" placeholder="輸入新密碼"></div>
+      <input type="hidden" id="rsp-id" value="${c.id}">
+      <input type="hidden" id="rsp-phone" value="${c.phone||''}">
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitResetStaffPw()">確認重設</button></div>`);
+  });
+}
+async function submitResetStaffPw(){
+  const pw=document.getElementById('rsp-pw').value;
+  const phone=document.getElementById('rsp-phone').value;
+  if(!pw||pw.length<6){showToast('密碼至少 6 個字元');return;}
+  if(!phone){showToast('此員工沒有帳號（手機），無法重設');return;}
+  const email=toEmail('staff',phone);
+  try{
+    const base=window.YUGYM_CONFIG.url.replace(/\/$/,'');
+    const res=await fetch(base+'/functions/v1/smooth-api',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+window.YUGYM_CONFIG.anonKey,'apikey':window.YUGYM_CONFIG.anonKey},
+      body:JSON.stringify({email,password:pw})
+    });
+    const out=await res.json();
+    if(!res.ok||out.error){showToast('重設失敗：'+(out.error||('伺服器回應 '+res.status)));return;}
+    closeModal();showToast('已重設密碼，請告知該員工');
+  }catch(e){showToast('無法連線重設服務：'+(e.message||e));}
+}
 function payRoleFields(prefix,c,showRate){
   c=c||{};
   if(showRate===undefined) showRate=true;
