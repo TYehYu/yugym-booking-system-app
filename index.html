@@ -927,7 +927,8 @@ async function renderCalendar(opts){
   let filterCoach=window._calFilter||'all';
 
   const visible=bookings.filter(b=>{
-    if(opts.me && b.coach_id!==opts.me) return false;
+    // allMode（全部預約總覽）：不依登入教練過濾，顯示全館佔用狀況
+    if(opts.me && !opts.allMode && (b.substitute_coach_id||b.coach_id)!==opts.me) return false;
     if(opts.coachFilter && filterCoach!=='all' && b.coach_id!==filterCoach) return false;
     return true;
   });
@@ -974,7 +975,7 @@ async function renderCalendar(opts){
       const h=((b.duration||60)/SLOT_MIN)*SLOT_PX;
       const lane=lanes[b.id]||{idx:0,total:1};
       const wpct=100/lane.total;
-      const editable=opts.editable && b.status!=='cancelled' && b.status!=='completed' && (!opts.me || b.coach_id===opts.me);
+      const editable=opts.editable && !opts.allMode && b.status!=='cancelled' && b.status!=='completed' && (!opts.me || b.coach_id===opts.me);
       const cls=evColorClass(b,typeMap);
       const tk=b.ticket_id?ticketMap[b.ticket_id]:null;
       const remain = tk ? `${tk.sessions_remaining}/${tk.sessions_total}` : '';
@@ -982,9 +983,16 @@ async function renderCalendar(opts){
       const subCoachName=b.substitute_coach_id?coachMap[b.substitute_coach_id]:'';
       const typeName=bookingTypeName(b,typeMap);
       // 顯示名稱：團體課=多會員、體驗課=客戶名、一般=單一會員
+      // 教練端（opts.me）：自己的課顯示會員名；別人的課顯示課程種類（隱私）
       let memName;
       const gIds=mids(b);
-      if(b.category==='體驗'){
+      const acting=b.substitute_coach_id||b.coach_id;
+      const isMine = opts.me && acting===opts.me;
+      // allMode（全部預約）：所有卡片都不顯示會員名；否則教練端非自己的課隱藏會員名
+      const hideMember = opts.allMode || (opts.me && !isMine);
+      if(hideMember){
+        memName = b.category || typeName;
+      }else if(b.category==='體驗'){
         memName=(b.trial_name?b.trial_name+'（體驗）':'體驗客戶');
       }else if(b.category==='小班肌力'){
         const names=gIds.map(id=>memMap[id]).filter(Boolean);
@@ -998,9 +1006,11 @@ async function renderCalendar(opts){
       const colW = (window.innerWidth - 80) / Math.max(nDays,1); // 每日欄約略寬度
       const cardW = colW / lane.total; // 同時段均分後每張卡寬度
       const dense = lane.total>=3 && cardW < 96; // 每張 < 96px 才縮成直式
-      // 直式窄卡的精簡名稱：體驗=純客戶名、團課=第一人（人數）、一般=會員名
+      // 直式窄卡的精簡名稱：教練端非自己的課顯示種類；體驗=純客戶名、團課=第一人（人數）、一般=會員名
       let denseName;
-      if(b.category==='體驗'){
+      if(hideMember){
+        denseName = b.category || typeName;
+      }else if(b.category==='體驗'){
         denseName = b.trial_name || '體驗';
       }else if(b.category==='小班肌力'){
         const ns=gIds.map(id=>memMap[id]).filter(Boolean);
@@ -1009,7 +1019,11 @@ async function renderCalendar(opts){
         denseName = memMap[b.member_id]||'—';
       }
       // hover 詳細資訊卡（滑過仍可看到完整狀態）
-      const tip = `<div class="ev-tip">
+      const tip = hideMember ? `<div class="ev-tip">
+        <div class="ev-tip-h"><b>${typeName}</b><span>${b.start_time}–${minToTime(timeToMin(b.start_time)+(b.duration||60))}</span></div>
+        ${coachName?`<div class="ev-tip-r">教練：${coachName}${subCoachName?`　→ 代課：${subCoachName}`:''}</div>`:''}
+        <div class="ev-tip-s">${statusLabel(b.status)}</div>
+      </div>` : `<div class="ev-tip">
         <div class="ev-tip-h"><b>${memName}</b><span>${b.start_time}–${minToTime(timeToMin(b.start_time)+(b.duration||60))}</span></div>
         <div class="ev-tip-r">${typeName}${b.format?' · '+b.format:''}</div>
         ${coachName?`<div class="ev-tip-r">教練：${coachName}${subCoachName?`　→ 代課：${subCoachName}`:''}</div>`:''}
@@ -1018,7 +1032,7 @@ async function renderCalendar(opts){
       </div>`;
       evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${dense?'ev-dense':''}" data-bid="${b.id}" data-time="${b.start_time}"
         style="top:${top}px;height:${Math.max(h-2,64)}px;left:calc(${lane.idx*wpct}% + 3px);width:calc(${wpct}% - 6px);"
-        ${editable?`onclick="onEvClick(event,'${b.id}')"`:`onclick="openBookingDetail('${b.id}')"`}>
+        ${editable?`onclick="onEvClick(event,'${b.id}')"`:(opts.allMode?'':`onclick="openBookingDetail('${b.id}')"`)}>
         ${dense
           ? `<div class="ev-dense-name">${denseName}</div>`
           : `<div class="ev-time">${b.start_time}</div><div class="ev-t">${memName}</div><div class="ev-m">${subCoachName?subCoachName+'（代）':(coachName||typeName)}</div>`}
@@ -2848,10 +2862,20 @@ async function markComplete(id){
 PAGES.coach_calendar=async function(){
   if(!window._calStepping) initCalWeek();
   window._calStepping=false;
-  C.innerHTML=head('SCHEDULE','預約行事曆','你的個人課表 · 可拖曳調整 · 點空格建立私教課')+
-  `<div class="filter-row"><button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立私教預約</button></div>`+
-  (await renderCalendar({me:SESSION.id,onSlot:'quickBookAt',editable:true}));
-  initCalDrag();
+  const allView=!!window._coachCalAll;
+  const toggle=`<div class="filter-row" style="justify-content:space-between;">
+    <div class="seg" style="font-size:12px;">
+      <button class="seg-btn ${!allView?'active':''}" onclick="window._coachCalAll=false;navTo('coach_calendar')">我的課表</button>
+      <button class="seg-btn ${allView?'active':''}" onclick="window._coachCalAll=true;navTo('coach_calendar')">全部預約</button>
+    </div>
+    ${allView?'<span style="font-size:11.5px;color:var(--t3);">全館佔用總覽 · 僅顯示教練與課程類型</span>':'<button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立私教預約</button>'}
+  </div>`;
+  const sub=allView?'全館佔用狀況 · 不顯示會員姓名':'你的個人課表 · 可拖曳調整 · 點空格建立私教課';
+  C.innerHTML=head('SCHEDULE','預約行事曆',sub)+toggle+
+  (allView
+    ? (await renderCalendar({allMode:true,editable:false}))
+    : (await renderCalendar({me:SESSION.id,onSlot:'quickBookAt',editable:true})));
+  if(!allView) initCalDrag();
 };
 
 /* ════════ 會員端:我的預約 ════════ */
