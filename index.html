@@ -638,8 +638,62 @@ async function doLoginStaff(){
   const c=(await sb.from('employees').select('*').eq('auth_id',data.user.id).maybeSingle()).data;
   if(!c){err.textContent='查無員工資料';err.style.display='block';return;}
   if(c.status!=='active'){err.textContent='帳號尚未啟用，請聯繫管理員';err.style.display='block';return;}
+  // 首次登入：須改密碼+完善資料
+  if(c.must_setup){
+    SESSION={role:c.role,id:c.id,name:c.name};
+    showStaffSetup(c);
+    return;
+  }
   // 員工實際角色以資料庫為準（admin / coach / front_desk）
   SESSION={role:c.role,id:c.id,name:c.name};
+  enterApp();
+}
+// 首次登入強制設定：改密碼 + 完善資料
+function showStaffSetup(c){
+  document.getElementById('login-screen')?.classList.add('hidden');
+  document.getElementById('app-screen')?.classList.add('hidden');
+  let host=document.getElementById('invite-screen');
+  if(!host){host=document.createElement('div');host.id='invite-screen';document.body.appendChild(host);}
+  host.style.cssText='min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(160deg,#003d32,#0a5044);';
+  host.innerHTML=`<div class="login-card" style="max-width:460px;">
+    <div class="login-logo"><div class="mark">YUGYM</div><div class="sub">首 次 登 入 設 定</div></div>
+    <div class="login-tag">歡迎，${c.name||''}！請設定新密碼並完善你的資料。</div>
+    <div class="login-err" id="su-err"></div>
+    <div class="form-row"><label>新密碼 *（至少 6 個字元）</label><input type="password" id="su-pw1" placeholder="輸入新密碼"></div>
+    <div class="form-row"><label>再次輸入新密碼 *</label><input type="password" id="su-pw2" placeholder="再次確認"></div>
+    <div class="form-2col">
+      <div class="form-row"><label>教練名 *</label><input id="su-nick" value="${(c.name_en||'').replace(/"/g,'&quot;')}" placeholder="顯示給會員看的名字"></div>
+      <div class="form-row"><label>Email *</label><input id="su-email" value="${(c.email||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="form-row"><label>生日 *</label>${birthdaySelects('su')}</div>
+    <button class="btn-primary" onclick="submitStaffSetup('${c.id}')">完成設定並進入系統</button>
+    <div class="login-hint">完成後即可開始使用。日後可在「修改密碼」再次變更密碼。</div>
+  </div>`;
+}
+async function submitStaffSetup(id){
+  const v=x=>document.getElementById(x).value.trim();
+  const err=document.getElementById('su-err');
+  const p1=document.getElementById('su-pw1').value, p2=document.getElementById('su-pw2').value;
+  if(!p1||p1.length<6){err.textContent='密碼至少 6 個字元';err.style.display='block';return;}
+  if(p1!==p2){err.textContent='兩次輸入的密碼不一致';err.style.display='block';return;}
+  if(p1===STAFF_DEFAULT_PW){err.textContent='請勿沿用預設密碼，請設定新的密碼';err.style.display='block';return;}
+  if(!v('su-nick')){err.textContent='請填寫教練名';err.style.display='block';return;}
+  if(!v('su-email')){err.textContent='請填寫 Email';err.style.display='block';return;}
+  const bday=readBirthday('su');
+  if(!bday){err.textContent='請選擇完整生日';err.style.display='block';return;}
+  // 1) 更新密碼（目前已登入該帳號）
+  try{
+    const{error}=await sb.auth.updateUser({password:p1});
+    if(error){err.textContent='密碼更新失敗：'+error.message;err.style.display='block';return;}
+  }catch(e){err.textContent='密碼更新失敗：'+(e.message||e);err.style.display='block';return;}
+  // 2) 更新員工資料、解除 must_setup
+  const c=await dbGet('coaches',id);
+  c.name_en=v('su-nick'); c.email=v('su-email'); c.birthday=bday; c.must_setup=false;
+  try{ await dbPut('coaches',c); }
+  catch(e){ err.textContent='資料儲存失敗：'+(e.message||e);err.style.display='block';return; }
+  // 進入系統
+  SESSION={role:c.role,id:c.id,name:c.name};
+  const host=document.getElementById('invite-screen'); if(host) host.remove();
   enterApp();
 }
 async function doLogout(){ try{await sb.auth.signOut();}catch(_){} SESSION=null;location.reload(); }
@@ -1537,7 +1591,17 @@ PAGES.calendar=async function(){
   window._calMode='admin';
   if(!calWeekStart) initCalWeek(); // 僅首次開啟定位今天；之後重繪保留當前週（避免更新後跳回本週）
   window._calStepping=false;
-  C.innerHTML=head('SCHEDULE','預約行事曆','30 分鐘為單位 · 可拖曳調整 · 點空格新增')+(await renderCalendar({coachFilter:true,onSlot:'quickBookAt',editable:true}));
+  const mineOnly=!!window._calMineOnly;
+  const myId=SESSION.id;
+  const toggle=`<div class="seg" style="margin-bottom:14px;">
+    <button class="seg-btn ${!mineOnly?'active':''}" onclick="window._calMineOnly=false;navTo('calendar')">全店預約</button>
+    <button class="seg-btn ${mineOnly?'active':''}" onclick="window._calMineOnly=true;navTo('calendar')">只看我的課</button>
+  </div>`;
+  const subtitle=mineOnly?'只顯示我（教練身分）的課 · 可排自己的課':'30 分鐘為單位 · 可拖曳調整 · 點空格新增';
+  const calOpts=mineOnly
+    ? {onSlot:'quickBookAt',editable:true,me:myId}      // 只看我的課：過濾我當教練的、可編輯
+    : {coachFilter:true,onSlot:'quickBookAt',editable:true};
+  C.innerHTML=head('SCHEDULE','預約行事曆',subtitle)+toggle+(await renderCalendar(calOpts));
   initCalDrag();
 };
 
@@ -2712,7 +2776,7 @@ PAGES.staff=async function(){
       <td><span class="tag ${roleTag[c.role]}">${ROLE_LABEL[c.role]}</span></td>
       <td>${PAY_LABEL[c.employment_type||c.pay_type]||'—'}</td>
       <td>${mgrTags}</td>
-      <td>${pending?'<span class="tag tag-warn">待員工填寫</span>':`<span class="tag ${STAFF_STATUS_TAG[c.status]||'tag-danger'}">${STAFF_STATUS[c.status]||'已停用'}</span>`}</td>
+      <td>${pending?'<span class="tag tag-warn">待員工填寫</span>':(c.must_setup?'<span class="tag tag-warn">待首次設定</span>':`<span class="tag ${STAFF_STATUS_TAG[c.status]||'tag-danger'}">${STAFF_STATUS[c.status]||'已停用'}</span>`)}</td>
       <td style="white-space:nowrap;">${pending
         ?`<button class="btn btn-gold btn-sm" onclick="copyInvite('${c.invite_token}')">複製連結</button> <button class="btn btn-danger btn-sm" onclick="deleteStaffInvite('${c.id}')">刪除</button>`
         :`<button class="btn btn-ghost btn-sm" onclick="openStaffEdit('${c.id}')">編輯</button>`
@@ -2726,8 +2790,8 @@ PAGES.staff=async function(){
   </div>
   <div class="card"><div class="card-title">邀請流程</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.9;">
-    1. 點「邀請員工」→ 指定角色、薪資制度、費率（正職可設店長/主管與管理獎金）→ 產生邀請連結。<br>
-    2. 複製連結傳給員工。員工開啟後填寫個人資料、緊急聯絡人等。<br>
+    1. 點「邀請員工」→ 填姓名與電話、指定角色與薪資制度 → 產生填寫連結。<br>
+    2. 複製連結傳給員工。員工開啟後設定密碼、補填教練名/Email/生日等（電話已帶入、不可更改）。<br>
     3. 送出後回此列表，點「編輯」可啟用、調整管理職與狀態。
     </div>
   </div>`;
@@ -2810,24 +2874,71 @@ function readPayRoleFields(prefix){
   return out;
 }
 function openStaffModal(){
-  showModal(`<div class="modal-title">邀請員工</div>
-    <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;">指定角色與員工類型，其餘個人資料由員工自行填寫。<br>薪資依員工類型與薪資制度自動計算（薪資制度設定為下一階段功能）。</div>
-    <div class="form-row"><label>姓名（選填）</label><input id="st-name" placeholder="例：余東翰（方便你辨識此邀請給誰）"></div>
+  showModal(`<div class="modal-title">建立員工帳號</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;">填員工<b>姓名與電話</b>即可建立帳號。系統會以預設密碼 <b>88888888</b> 建立，員工首次登入時須改密碼並完善資料。<br>薪資依員工類型與制度計算（薪資制度為下一階段功能）。</div>
+    <div class="form-2col">
+      <div class="form-row"><label>姓名 *</label><input id="st-name" placeholder="例：余東翰"></div>
+      <div class="form-row"><label>電話（登入帳號）*</label><input id="st-phone" placeholder="0912xxxxxx"></div>
+    </div>
     <div class="form-row"><label>角色</label><select id="st-role"><option value="coach">教練</option><option value="front_desk">櫃檯（設備帳號）</option></select>
       <div style="font-size:11px;color:var(--t3);margin-top:5px;">管理員僅一位（老闆），不可由此新增。</div></div>
     ${payRoleFields('st',{employment_type:'full_time'},false)}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitStaffInvite()">產生邀請連結</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitStaffInvite()">建立帳號</button></div>`);
 }
+const STAFF_DEFAULT_PW='88888888';
 async function submitStaffInvite(){
+  const preName=(document.getElementById('st-name').value||'').trim();
+  const prePhone=(document.getElementById('st-phone').value||'').trim();
+  if(!preName){showToast('請填寫姓名');return;}
+  if(!prePhone){showToast('請填寫電話');return;}
+  // 防重複：同電話是否已存在員工
+  const exist=(await dbGetAll('coaches')).find(c=>c.phone===prePhone);
+  if(exist){showToast('此電話已存在員工資料');return;}
+  const pay=readPayRoleFields('st');
+  if(pay.pay_rate===undefined) pay.pay_rate=null;
+  // 透過 Edge Function 以預設密碼建立 Auth 帳號（伺服器端，不影響目前管理員登入）
+  const r=await cloudCreateAuth('staff',prePhone,STAFF_DEFAULT_PW,true);
+  if(r.error){
+    const dup=/already|exists|registered/i.test(r.error);
+    showToast(dup?'此電話已被使用（Auth 已存在）':('建立帳號失敗：'+r.error));
+    return;
+  }
+  const c=Object.assign({
+    id:uid('c'),
+    name:preName, phone:prePhone,
+    role:document.getElementById('st-role').value,
+    auth_id:r.uid,
+    status:'active',          // 可登入
+    must_setup:true,          // 首次登入須改密碼+完善資料
+    invite_status:'completed',
+    created_at:new Date().toISOString()
+  },pay);
+  try{
+    await dbPut('coaches',c);   // coaches 映射到 employees 表
+  }catch(e){
+    showToast('建立員工失敗：'+(e.message||e));
+    return;
+  }
+  closeModal();
+  navTo('staff');
+  showModal(`<div class="modal-title">員工帳號已建立</div>
+    <div style="font-size:13px;color:var(--t2);line-height:1.9;">請把以下登入資訊交給員工：</div>
+    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:14px;margin:12px 0;font-size:14px;line-height:2;">
+      帳號（電話）：<b>${prePhone}</b><br>
+      預設密碼：<b>${STAFF_DEFAULT_PW}</b>
+    </div>
+    <div style="font-size:12px;color:var(--t3);line-height:1.7;">員工首次登入後，系統會要求修改密碼並完善資料。</div>
+    <div class="modal-foot"><button class="btn btn-green" onclick="closeModal()">完成</button></div>`);
+}
+async function submitStaffInvite_OLD(){
   const token=uid('inv').replace('inv-','');
   const pay=readPayRoleFields('st');                 // 邀請階段不含 pay_rate
   if(pay.pay_rate===undefined) pay.pay_rate=null;    // 費率待管理員之後設定
-  const preName=(document.getElementById('st-name').value||'').trim()||null; // 可選的預填姓名
-  // 注意：不寫入 pw（employees 表無此欄；密碼由 Supabase Auth 管理）
+  const preName=null;
   const c=Object.assign({
     id:uid('c'),
-    name:preName, phone:null,   // 姓名可預填；phone 用 null（不受 unique 限制）
-    role:document.getElementById('st-role').value,
+    name:preName, phone:null,
+    role:'coach',
     status:'inactive',
     invite_status:'pending',
     invite_token:token,
@@ -3509,7 +3620,7 @@ async function showInvitePage(token){
       <div class="form-row"><label>教練名 *</label><input id="inv-nick" placeholder="顯示給會員看的名字，例：Randy"></div>
     </div>
     <div class="form-2col">
-      <div class="form-row"><label>手機（登入帳號）*</label><input id="inv-phone" placeholder="0912xxxxxx"></div>
+      <div class="form-row"><label>手機（登入帳號）*</label><input id="inv-phone" placeholder="0912xxxxxx" value="${(inv.phone||'').replace(/"/g,'&quot;')}" ${inv.phone?'readonly style="background:var(--card2);color:var(--t2);"':''}></div>
       <div class="form-row"><label>Email *</label><input id="inv-email"></div>
     </div>
     <div class="form-2col">
