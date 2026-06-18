@@ -610,6 +610,7 @@ const NAV={
 };
 // 可被排課的教練：role 是 coach，或 admin(老闆兼教練，一人一帳號)
 function isCoachable(c){ return c && (c.role==='coach' || c.role==='admin'); }
+function coachDisp(c){ return c ? (c.name_en||c.name||'') : ''; } // 對外顯示名（教練名），未填則用本名
 function buildNav(){
   const nav=document.getElementById('sidenav');
   nav.innerHTML=NAV[SESSION.role].map(n=>
@@ -822,7 +823,7 @@ let _dashRange='month'; // 'month' | 'today'
 PAGES.dashboard=async function(){
   const[members,coaches,tickets,bookings,plans,types]=await Promise.all([
     dbGetAll('members'),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('bookings'),dbGetAll('course_plans'),dbGetAll('ticket_types')]);
-  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,c.name]));
+  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const planMap=Object.fromEntries(plans.map(p=>[p.id,p]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
@@ -924,7 +925,7 @@ async function renderCalendar(opts){
   _calOpts=opts;
   if(!calWeekStart)initCalWeek();
   const[bookings,coaches,members,types,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('members'),dbGetAll('ticket_types'),dbGetAll('member_tickets')]);
-  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,c.name]));
+  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const ticketMap=Object.fromEntries(allTickets.map(t=>[t.id,t]));
@@ -941,7 +942,7 @@ async function renderCalendar(opts){
 
   let filterHtml='';
   if(opts.coachFilter){
-    const cOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${filterCoach===c.id?'selected':''}>${c.name}</option>`).join('');
+    const cOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${filterCoach===c.id?'selected':''}>${coachDisp(c)}</option>`).join('');
     filterHtml=`<div class="filter-row"><span style="font-size:12px;color:var(--t2);">篩選教練</span>
       <select onchange="window._calFilter=this.value;navTo(CUR_PAGE)"><option value="all">全部教練</option>${cOpts}</select>
       <button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 新增預約</button></div>`;
@@ -1291,14 +1292,17 @@ function initCalDrag(){
     const moved = window._dragStarted===true;
     window._dragStarted=false;
     clearVis();
+    try{ wrap.releasePointerCapture(e.pointerId); }catch(_){}
     if(!moved){
-      // 沒有拖動 → 視為點擊。卡片完全沒被改過樣式，不需還原。
-      // 交由卡片 onclick(onEvClick) 開明細，這裡不重複開。
+      // 沒有拖動 → 視為點擊。因 pointer capture 會吞掉瀏覽器 click，這裡手動開明細。
       window._justDragged=false;
+      window._justTapped=true; setTimeout(()=>{window._justTapped=false;},400);
+      if(_bid) openBookingDetail(_bid);
       return;
     }
     // 確實拖曳過 → 立即重繪行事曆，讓卡片回到正確位置（避免清空 inline 定位後掉到容器底部）
     window._justDragged=true; setTimeout(()=>{window._justDragged=false;},300);
+    window._calStepping=true; // 拖曳更新後保留當前檢視週，不要跳回本週
     const b=await dbGet('bookings',_bid);
     if(!b){navTo(CUR_PAGE);return;}
 
@@ -1405,7 +1409,7 @@ function confirmCalMove(b,od,ot,odur, nd,nt,ndur, onYes){
 
 PAGES.calendar=async function(){
   window._calMode='admin';
-  if(!window._calStepping) initCalWeek(); // 開啟時自動定位今天；切換週時不重置
+  if(!calWeekStart) initCalWeek(); // 僅首次開啟定位今天；之後重繪保留當前週（避免更新後跳回本週）
   window._calStepping=false;
   C.innerHTML=head('SCHEDULE','預約行事曆','30 分鐘為單位 · 可拖曳調整 · 點空格新增')+(await renderCalendar({coachFilter:true,onSlot:'quickBookAt',editable:true}));
   initCalDrag();
@@ -1426,7 +1430,7 @@ async function openBookingModal(){
   const isCoach=SESSION.role==='coach';
   const activeTypes=types.filter(t=>t.active!==false);
   const typeOpts=activeTypes.map(t=>`<option value="${t.id}">${t.name}（${t.category}）</option>`).join('');
-  const coachOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${isCoach&&c.id===SESSION.id?'selected':''}>${c.name}</option>`).join('');
+  const coachOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${isCoach&&c.id===SESSION.id?'selected':''}>${coachDisp(c)}</option>`).join('');
   const pf=_prefill||{};   // 只有從行事曆點選才有 date/time
   _bkWizard={fromSlot:!!_prefill};
   _prefill=null;
@@ -1538,7 +1542,7 @@ async function bkStep2(){
         ${wd.map((w,i)=>`<label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" class="rec-dow" value="${i===6?0:i+1}">週${w}</label>`).join('')}
       </div>
       <div class="form-2col">
-        <div class="form-row"><label>最多建立次數</label><input type="number" id="rec-max" value="8" min="1" max="52"></div>
+        <div class="form-row"><label>最多建立次數</label><input type="number" id="rec-max" value="8" min="1" max="52" oninput="this.dataset.touched='1'"></div>
         <div class="form-row"><label>結束日期（含）</label><input type="date" id="rec-until" value=""></div>
       </div>
       <div style="font-size:11px;color:var(--t3);">系統會在「起始日 ~ 結束日」間，逐週於勾選的星期建立預約，直到達到次數上限、結束日、或票券用完為止。衝突的時段自動跳過。</div>
@@ -1554,10 +1558,20 @@ async function openBookingModalBack(){
   const ty=document.getElementById('bk-type'); if(ty){ty.value=_bkWizard.type_id;await onBkTypeChange();}
   const co=document.getElementById('bk-coach'); if(co&&_bkWizard.coach_id)co.value=_bkWizard.coach_id;
 }
-async function coachName(id){const c=await dbGet('coaches',id);return c?c.name:'';}
+async function coachName(id){const c=await dbGet('coaches',id);return c?coachDisp(c):'';}
 function toggleRecurring(){
   const on=document.getElementById('bk-recurring').checked;
   document.getElementById('bk-recurring-box').style.display=on?'block':'none';
+  if(on){
+    // 預設勾選「所選日期」當天的星期
+    const dstr=_bkWizard&&_bkWizard.date;
+    if(dstr){
+      const dow=new Date(dstr+'T00:00:00').getDay(); // 0=日…6=六
+      document.querySelectorAll('.rec-dow').forEach(cb=>{
+        if(Number(cb.value)===dow && !cb.dataset.touched) cb.checked=true;
+      });
+    }
+  }
 }
 function bkMemberOpts(list){
   const cid=window._bkCoachId;
@@ -1608,6 +1622,14 @@ async function refreshBkTicket(){
     const opts=list.map(tk=>`<option value="${tk.id}">${tk.plan_name||'票券'}　剩 ${tk.sessions_remaining} 堂　效期至 ${tk.expire_date}</option>`).join('');
     info.innerHTML=`<div style="margin-bottom:6px;color:var(--text);">此會員有多張可用票券，請選擇要扣抵的票券：</div>
       <select id="bk-ticket-sel" style="width:100%;padding:9px 12px;border:1px solid var(--bd);border-radius:9px;background:#fff;">${opts}</select>`;
+  }
+  // 連續預約「最多建立次數」預設帶入該會員剩餘總堂數（使用者未手動改過才覆蓋）
+  const recMax=document.getElementById('rec-max');
+  if(recMax && mid){
+    const remain=(window._bkTicketSum||{})[mid];
+    if(remain>0 && !recMax.dataset.touched){
+      recMax.value=Math.min(remain,52);
+    }
   }
 }
 async function submitBooking(){
@@ -1755,6 +1777,8 @@ function buildRecurringDates(startDate,dows,maxN,until){
 function onEvClick(e,id){
   // 拖曳結束後瀏覽器可能補一個 click，用旗標避免拖完又開明細
   if(window._justDragged){window._justDragged=false;return;}
+  // pointerup 已手動開過明細（capture 點擊），忽略隨後補發的 click 避免雙開
+  if(window._justTapped){return;}
   openBookingDetail(id);
 }
 async function openBookingDetail(id){
@@ -1814,7 +1838,7 @@ async function openBookingDetail(id){
         <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30</option><option value="60" ${b.duration===60?'selected':''}>60</option><option value="90" ${b.duration===90?'selected':''}>90</option><option value="120" ${b.duration===120?'selected':''}>120</option></select></div>
       <div class="form-row" style="margin-bottom:0;margin-top:8px;"><label>指定代課教練（薪資將歸代課教練）</label>
         <select id="ed-subcoach"><option value="">無（由原教練 ${coach?coach.name:'—'} 授課）</option>
-        ${coachableList.filter(c=>c.id!==b.coach_id).map(c=>`<option value="${c.id}" ${b.substitute_coach_id===c.id?'selected':''}>${c.name}</option>`).join('')}</select></div>
+        ${coachableList.filter(c=>c.id!==b.coach_id).map(c=>`<option value="${c.id}" ${b.substitute_coach_id===c.id?'selected':''}>${coachDisp(c)}</option>`).join('')}</select></div>
     </div>`:`<div style="margin-top:10px;font-size:13px;"><span style="color:var(--t2);">時間</span>　${b.date}（週${WD[d.getDay()]}）${b.start_time}　${b.duration}分鐘</div>`}
     ${b.category==='私人教練'&&within24&&canCancel?'<div style="margin-top:12px;padding:10px;background:#f7efe0;border-radius:8px;font-size:12px;color:var(--warn);">⚠ 私教課開課 24 小時內，原則扣課不退（此 demo 仍允許退，正式版改審核制）。</div>':''}
     <div class="modal-foot">
@@ -2017,7 +2041,7 @@ async function cancelBooking(id){
 let _memSearch='';
 PAGES.members=async function(){
   const[members,coaches]=await Promise.all([dbGetAll('members'),dbGetAll('coaches')]);
-  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,c.name]));
+  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const q=_memSearch.trim().toLowerCase();
   const filtered=members.filter(m=>{
     if(!q)return true;
@@ -2066,7 +2090,7 @@ async function openMemberDetail(member_id){
   _detailMemberId=member_id;
   const[m,coaches,tickets,bookings,types]=await Promise.all([
     dbGet('members',member_id),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('bookings'),dbGetAll('ticket_types')]);
-  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,c.name]));
+  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const myTickets=tickets.filter(t=>t.member_id===member_id).sort((a,b)=>b.created_at.localeCompare(a.created_at));
   const myBookings=bookings.filter(b=>b.member_id===member_id).sort((a,b)=>(b.date+b.start_time).localeCompare(a.date+a.start_time));
@@ -2136,7 +2160,7 @@ function mDetTab(e,pane){
 }
 async function openMemberEdit(member_id){
   const[m,coaches]=await Promise.all([dbGet('members',member_id),dbGetAll('coaches')]);
-  const coachOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${m.default_coach_id===c.id?'selected':''}>${c.name}</option>`).join('');
+  const coachOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${m.default_coach_id===c.id?'selected':''}>${coachDisp(c)}</option>`).join('');
   showModal(`<div class="modal-title">編輯資料 · ${m.name}</div>
     <div class="form-2col">
       <div class="form-row"><label>姓名</label><input id="me-name" value="${m.name||''}"></div>
@@ -2385,12 +2409,13 @@ PAGES.staff=async function(){
   const roleTag={admin:'tag-admin',coach:'tag-coach',front_desk:'tag-front'};
   C.innerHTML=head('STAFF','員工管理','邀請員工自行填寫 · 員工類型：正職 / 兼職 / 合作（＋店長 / 主管）· 薪資依制度自動計算')+
   `<div class="card"><div class="card-title">員工列表 <button class="btn btn-green btn-sm" onclick="openStaffModal()">＋ 邀請員工</button></div>
-    <table><thead><tr><th>姓名</th><th>帳號</th><th>角色</th><th>員工類型</th><th>管理職</th><th>狀態</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>姓名</th><th>教練名</th><th>帳號</th><th>角色</th><th>員工類型</th><th>管理職</th><th>狀態</th><th></th></tr></thead><tbody>
     ${coaches.map(c=>{
       const pending=c.invite_status==='pending';
       const mgrTags=[c.is_manager?'<span class="tag tag-admin">店長</span>':'',c.is_supervisor?'<span class="tag tag-coach">主管</span>':''].filter(Boolean).join(' ')||'—';
       return `<tr>
       <td>${c.name||'<span style="color:var(--t3);">（待填寫）</span>'}</td>
+      <td>${c.name_en||'<span style="color:var(--t3);">—</span>'}</td>
       <td>${c.phone||'—'}</td>
       <td><span class="tag ${roleTag[c.role]}">${ROLE_LABEL[c.role]}</span></td>
       <td>${PAY_LABEL[c.employment_type||c.pay_type]||'—'}</td>
@@ -2533,6 +2558,7 @@ async function openStaffEdit(id){
   const c=await dbGet('coaches',id);
   showModal(`<div class="modal-title">編輯員工 · ${c.name||'（待填寫）'}</div>
     <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${c.phone||''}　${c.email||''}</div>
+    <div class="form-row"><label>顯示名稱（教練名）</label><input id="se-namedisp" value="${c.name_en||''}" placeholder="行事曆／預約表顯示用，可填英文或暱稱；留空則用本名「${c.name||''}」"></div>
     <div class="form-row"><label>角色</label><select id="se-role">
       <option value="coach" ${c.role==='coach'?'selected':''}>教練</option>
       <option value="front_desk" ${c.role==='front_desk'?'selected':''}>櫃檯（設備帳號）</option>
@@ -2551,6 +2577,7 @@ async function openStaffEdit(id){
 async function saveStaffEdit(id){
   const c=await dbGet('coaches',id);
   c.role=document.getElementById('se-role').value;
+  c.name_en=(document.getElementById('se-namedisp').value||'').trim()||null;
   Object.assign(c,readPayRoleFields('se'));
   c.status=document.getElementById('se-status').value;
   await dbPut('coaches',c);
@@ -2871,7 +2898,7 @@ async function markComplete(id){
 
 /* ════════ 教練端:預約行事曆 ════════ */
 PAGES.coach_calendar=async function(){
-  if(!window._calStepping) initCalWeek();
+  if(!calWeekStart) initCalWeek(); // 僅首次開啟定位今天；之後重繪保留當前週
   window._calStepping=false;
   const allView=!!window._coachCalAll;
   const toggle=`<div class="filter-row" style="justify-content:space-between;">
@@ -2892,7 +2919,7 @@ PAGES.coach_calendar=async function(){
 /* ════════ 會員端:我的預約 ════════ */
 PAGES.mem_bookings=async function(){
   const[bookings,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches')]);
-  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,c.name]));
+  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const mine=bookings.filter(b=>b.member_id===SESSION.id&&b.status!=='cancelled')
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   const upcoming=mine.filter(b=>b.date>=ymd(TODAY));
@@ -2935,7 +2962,7 @@ PAGES.mem_tickets=async function(){
 PAGES.admin_today=async function(){
   const[bookings,members,coaches,tickets,types]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
-  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,c.name]));
+  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const today=ymd(TODAY);
   const todayBk=bookings.filter(b=>b.date===today&&b.status!=='cancelled').sort((a,b)=>a.start_time.localeCompare(b.start_time));
