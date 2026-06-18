@@ -3429,7 +3429,34 @@ function showInviteError(msg){
   host.innerHTML=`<div class="login-card"><div class="login-logo"><div class="mark">YUGYM</div></div>
     <div style="text-align:center;color:var(--danger);font-size:14px;padding:20px 0;line-height:1.7;">${msg}<br><span style="color:var(--t2);font-size:12px;">請聯繫管理員確認邀請連結，或重新產生一次。</span></div></div>`;
 }
+// 偵測 LINE / IG / FB 等 App 內建瀏覽器（會擋建帳號所需的儲存與請求）
+function isInAppBrowser(){
+  const ua=(navigator.userAgent||navigator.vendor||'').toLowerCase();
+  return /line\/|fban|fbav|fb_iab|instagram|micromessenger|messenger/.test(ua);
+}
 async function showInvitePage(token){
+  // 若在 App 內建瀏覽器開啟 → 不顯示表單，引導改用 Safari/Chrome（避免建帳號失敗、殘留帳號）
+  if(isInAppBrowser()){
+    let h=document.getElementById('invite-screen');
+    if(!h){h=document.createElement('div');h.id='invite-screen';document.body.appendChild(h);}
+    document.getElementById('login-screen')?.classList.add('hidden');
+    document.getElementById('app-screen')?.classList.add('hidden');
+    h.style.cssText='min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(160deg,#003d32,#0a5044);';
+    const url=location.href.split('#')[0];
+    const lineUrl=url+(url.includes('?')?'&':'?')+'openExternalBrowser=1'+location.hash;
+    h.innerHTML=`<div class="login-card" style="max-width:420px;">
+      <div class="login-logo"><div class="mark">YUGYM</div><div class="sub">員 工 資 料 填 寫</div></div>
+      <div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.8;margin:8px 0 18px;">
+        ⚠ 偵測到你目前是用 <b>LINE / 社群 App 內建瀏覽器</b> 開啟。<br>
+        為確保帳號順利建立，請改用 <b>Safari 或 Chrome</b> 開啟此頁。
+      </div>
+      <a class="btn-primary" style="display:block;text-align:center;text-decoration:none;" href="${lineUrl}">用外部瀏覽器開啟</a>
+      <div class="login-hint" style="margin-top:14px;line-height:1.8;">
+        若按鈕無效，請點右${/iphone|ipad|ios/.test((navigator.userAgent||'').toLowerCase())?'上':'下'}角的「⋯」選單 →<br>選「用預設瀏覽器開啟 / 在 Safari 開啟 / 在 Chrome 開啟」。
+      </div>
+    </div>`;
+    return;
+  }
   const inv=await dbGetByToken(token);
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app-screen').classList.add('hidden');
@@ -3513,7 +3540,41 @@ async function submitInvite(token){
   const r=await cloudCreateAuth('staff',phone,v('inv-pw'),true);
   if(r.error){
     const dup=/already|exists|registered/i.test(r.error);
-    err.textContent=dup?'此手機已被使用，請改用其他號碼或聯繫管理員':('建立帳號失敗：'+r.error);
+    if(dup){
+      // 此手機在 Auth 已存在（多半是先前在 LINE 內建瀏覽器申辦留下的半殘帳號）
+      // → 用這次輸入的密碼嘗試登入修復
+      const email=toEmail('staff',phone);
+      const{data:loginData,error:loginErr}=await sb.auth.signInWithPassword({email,password:v('inv-pw')});
+      if(loginErr){
+        err.textContent='此手機先前已申辦過。請用「當時設定的密碼」重試一次；若忘記密碼請聯繫管理員協助。';
+        err.style.display='block';return;
+      }
+      const uid=loginData.user.id;
+      // 檢查 employees 是否已有完整資料
+      const existing=(await sb.from('employees').select('*').eq('auth_id',uid).maybeSingle()).data;
+      if(existing){
+        try{await sb.auth.signOut();}catch(_){}
+        err.textContent='此帳號已申辦完成，請直接以手機與密碼登入。';
+        err.style.display='block';return;
+      }
+      // 半殘帳號（有 Auth、無 employees 資料）→ 用這次填的資料補寫、綁定原帳號
+      profile.auth_id=uid;
+      Object.assign(inv,profile);
+      try{ await dbPut('coaches',inv); }
+      catch(e){ err.textContent='員工資料寫入失敗：'+(e.message||e);err.style.display='block';
+        try{await sb.auth.signOut();}catch(_){ } return; }
+      try{await sb.auth.signOut();}catch(_){}
+      // 往下顯示成功畫面
+      const host0=document.getElementById('invite-screen');
+      host0.innerHTML=`<div class="login-card"><div class="login-logo"><div class="mark">YUGYM</div></div>
+        <div style="text-align:center;padding:24px 0;">
+          <div style="font-size:40px;margin-bottom:12px;">✓</div>
+          <div style="font-size:15px;font-weight:500;margin-bottom:8px;">資料已送出</div>
+          <div style="font-size:13px;color:var(--t2);line-height:1.7;">先前未完成的申辦已為您接續完成。<br>待管理員啟用後即可登入。</div>
+        </div></div>`;
+      return;
+    }
+    err.textContent='建立帳號失敗：'+r.error;
     err.style.display='block';return;
   }
   profile.auth_id=r.uid;
