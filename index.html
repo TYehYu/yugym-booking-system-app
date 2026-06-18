@@ -3549,8 +3549,8 @@ async function submitInvite(token){
     invite_status:'completed', // 已填寫
     status:'inactive'          // 待管理員啟用
   };
-  // 透過 Edge Function 建帳號（伺服器端，不切換目前登入身分）
-  const r=await cloudCreateAuth('staff',phone,v('inv-pw'),true);
+  // 改用前端 signUp 建帳號（與會員相同）：建完會帶 authenticated session，寫入 employees 才能通過 RLS
+  const r=await cloudCreateAuth('staff',phone,v('inv-pw'));
   if(r.error){
     const dup=/already|exists|registered/i.test(r.error);
     if(dup){
@@ -3595,9 +3595,11 @@ async function submitInvite(token){
   try{
     await dbPut('coaches',inv);
   }catch(e){
-    err.textContent='員工資料寫入失敗：'+(e.message||e);err.style.display='block';return;
+    err.textContent='員工資料寫入失敗：'+(e.message||e);err.style.display='block';
+    try{await sb.auth.signOut();}catch(_){ } return;
   }
-  // Edge Function 建帳號不會切換登入身分，故不需登出
+  // 前端 signUp 建帳號會帶登入 session，寫入後登出，避免申辦者停在登入狀態
+  try{await sb.auth.signOut();}catch(_){}
   const host=document.getElementById('invite-screen');
   host.innerHTML=`<div class="login-card"><div class="login-logo"><div class="mark">YUGYM</div></div>
     <div style="text-align:center;padding:24px 0;">
