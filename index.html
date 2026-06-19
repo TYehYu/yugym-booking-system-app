@@ -226,6 +226,40 @@ tr:hover td{background:var(--card2);}
 .modal:has(.md-head-card) .md-body-card{flex:1;overflow-y:auto;}
 .modal:has(.md-head-card) .modal-foot{margin-top:14px;flex:0 0 auto;}
 /* 會員預約紀錄：週曆 */
+/* 教練端：月曆 + 當日清單 */
+.cm-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+.cm-wh{text-align:center;font-size:11px;font-weight:600;color:var(--t2);padding:4px 0;}
+.cm-cell{min-height:52px;border:1px solid var(--bd);border-radius:8px;padding:3px;display:flex;flex-direction:column;gap:2px;cursor:pointer;background:var(--card);transition:.12s;overflow:hidden;}
+.cm-cell:hover{background:var(--card2);}
+.cm-cell.cm-empty{border:none;background:transparent;cursor:default;}
+.cm-cell.cm-today .cm-d{background:#d6ece3;color:#1a5e47;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-weight:700;}
+.cm-cell.cm-sel{border-color:var(--green);box-shadow:0 0 0 2px var(--green) inset;}
+.cm-d{font-size:12px;font-weight:600;color:var(--t2);line-height:1.4;}
+.cm-tags{display:flex;flex-wrap:wrap;gap:2px;}
+.cm-tag{font-size:9px;line-height:1.5;padding:0 3px;border-radius:4px;font-weight:600;}
+.cm-tag.cm-pt{background:#d6ece3;color:#1a5e47;}
+.cm-tag.cm-friendly{background:#dbe8f8;color:#1d4778;}
+.cm-tag.cm-group{background:#f8e6cf;color:#8a4f17;}
+.cm-tag.cm-self{background:#e8e4dc;color:#5d584f;}
+.cm-tag.cm-trial{background:#ece0f3;color:#613178;}
+.cdl-card{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:11px;margin-bottom:8px;cursor:pointer;border:1px solid var(--bd);background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,0.05);transition:.12s;border-left-width:4px;}
+.cdl-card:hover{box-shadow:0 4px 12px rgba(0,0,0,0.1);transform:translateY(-1px);}
+.cdl-card.cdl-pt{border-left-color:#1a5e47;}
+.cdl-card.cdl-friendly{border-left-color:#1d4778;}
+.cdl-card.cdl-group{border-left-color:#8a4f17;}
+.cdl-card.cdl-self{border-left-color:#5d584f;}
+.cdl-card.cdl-trial{border-left-color:#613178;}
+.cdl-time{font-family:var(--num);font-size:18px;font-weight:800;flex:0 0 auto;min-width:52px;}
+.cdl-main{flex:1;min-width:0;}
+.cdl-who{font-size:15px;font-weight:700;}
+.cdl-meta{font-size:12px;color:var(--t2);margin-top:2px;}
+.cdl-st{flex:0 0 auto;}
+@media(max-width:600px){
+  .cm-cell{min-height:46px;}
+  .cm-d{font-size:11px;}
+  .cdl-time{font-size:16px;min-width:46px;}
+  .cdl-who{font-size:14px;}
+}
 /* 會員預約紀錄：月曆 */
 .mm-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
 .mm-wh{text-align:center;font-size:11px;font-weight:600;color:var(--t2);padding:4px 0;}
@@ -747,6 +781,7 @@ const NAV={
     {key:'members',label:'會員管理'},
     {key:'staff',label:'員工管理'},
     {key:'plans',label:'課程方案'},
+    {key:'purchase_review',label:'購買申請'},
     {key:'tickets',label:'會員票券'},
   ],
   coach:[
@@ -758,6 +793,7 @@ const NAV={
     {key:'admin_today',label:'今日事項'},
     {key:'calendar',label:'預約行事曆'},
     {key:'members',label:'會員管理'},
+    {key:'purchase_review',label:'購買申請'},
     {key:'tickets',label:'會員票券'},
   ],
   member:[
@@ -1589,17 +1625,46 @@ function confirmCalMove(b,od,ot,odur, nd,nt,ndur, onYes){
 
 PAGES.calendar=async function(){
   window._calMode='admin';
-  if(!calWeekStart) initCalWeek(); // 僅首次開啟定位今天；之後重繪保留當前週（避免更新後跳回本週）
   window._calStepping=false;
-  const mineOnly=!!window._calMineOnly;
   const myId=SESSION.id;
+  const mineOnly=!!window._calMineOnly;
+  const isMobile=window.innerWidth<=600;
+
+  // 手機：改用月曆 + 當日清單（與教練端相同的好讀版型）
+  if(isMobile){
+    if(!window._coachSelDate) window._coachSelDate=ymd(TODAY);
+    if(!window._coachMonth){const t=parseYmd(window._coachSelDate)||new Date(TODAY);window._coachMonth={y:t.getFullYear(),m:t.getMonth()};}
+    const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
+    const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+    const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
+    const visible=bookings.filter(b=>{
+      if(b.status==='cancelled') return false;
+      if(mineOnly && b.coach_id!==myId && b.substitute_coach_id!==myId) return false;
+      return true;
+    });
+    window._coachCalData={visible,memMap,coachMap,typeMap:{},allView:!mineOnly,myId};
+    const toggle=`<div class="filter-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div class="seg" style="font-size:12px;">
+        <button class="seg-btn ${!mineOnly?'active':''}" onclick="window._calMineOnly=false;navTo('calendar')">全店預約</button>
+        <button class="seg-btn ${mineOnly?'active':''}" onclick="window._calMineOnly=true;navTo('calendar')">只看我的課</button>
+      </div>
+      <button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立預約</button>
+    </div>`;
+    C.innerHTML=head('SCHEDULE','預約行事曆','點日期看當日課程 · 排課請用電腦版時間軸')+toggle
+      +`<div id="coach-month"></div><div id="coach-daylist"></div>`;
+    renderCoachMonth(); renderCoachDayList();
+    return;
+  }
+
+  // 桌機：維持時間軸（可拖曳排課）
+  if(!calWeekStart) initCalWeek();
   const toggle=`<div class="seg" style="margin-bottom:14px;">
     <button class="seg-btn ${!mineOnly?'active':''}" onclick="window._calMineOnly=false;navTo('calendar')">全店預約</button>
     <button class="seg-btn ${mineOnly?'active':''}" onclick="window._calMineOnly=true;navTo('calendar')">只看我的課</button>
   </div>`;
   const subtitle=mineOnly?'只顯示我（教練身分）的課 · 可排自己的課':'30 分鐘為單位 · 可拖曳調整 · 點空格新增';
   const calOpts=mineOnly
-    ? {onSlot:'quickBookAt',editable:true,me:myId}      // 只看我的課：過濾我當教練的、可編輯
+    ? {onSlot:'quickBookAt',editable:true,me:myId}
     : {coachFilter:true,onSlot:'quickBookAt',editable:true};
   C.innerHTML=head('SCHEDULE','預約行事曆',subtitle)+toggle+(await renderCalendar(calOpts));
   initCalDrag();
@@ -2039,6 +2104,7 @@ async function openBookingDetail(id){
     ${b.category==='私人教練'&&within24&&canCancel?'<div style="margin-top:12px;padding:10px;background:#f7efe0;border-radius:8px;font-size:12px;color:var(--warn);">⚠ 私教課開課 24 小時內，原則扣課不退（此 demo 仍允許退，正式版改審核制）。</div>':''}
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      ${b.member_id?`<button class="btn btn-ghost" onclick="showToast('訓練紀錄功能開發中')">訓練紀錄</button>`:''}
       ${editable?`<button class="btn btn-ghost" onclick="saveBookingTime('${b.id}')">儲存變更</button>`:''}
       ${canCancel?`<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`:''}
     </div>`);
@@ -3057,12 +3123,16 @@ PAGES.plans=async function(){
     </tbody></table>
     <div style="font-size:11px;color:var(--t3);margin-top:8px;">停用後不可建立新方案/新票券；既有票券與歷史不受影響。刪除前若已有方案使用該種類，請先停用。</div>
   </div>
-  <div class="card"><div class="card-title">課程方案（CoursePlan） <button class="btn btn-green btn-sm" onclick="openPlanModal()">＋ 新增方案</button></div>
-    <table><thead><tr><th>方案名稱</th><th>票券類型</th><th>單堂價</th><th>堂數</th><th>贈送</th><th>效期</th><th>狀態</th><th></th></tr></thead><tbody>
-    ${plans.map(p=>{const t=typeMap[p.ticket_type_id];return `<tr style="${p.active?'':'opacity:.5;'}">
+  <div class="card"><div class="card-title">票券模板（CoursePlan） <button class="btn btn-green btn-sm" onclick="openPlanModal()">＋ 新增模板</button></div>
+    <table><thead><tr><th>模板名稱</th><th>票券類型</th><th>方案類型</th><th>售價</th><th>堂數</th><th>效期</th><th>分期</th><th>開放申請</th><th>狀態</th><th></th></tr></thead><tbody>
+    ${plans.map(p=>{const t=typeMap[p.ticket_type_id];const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客'};return `<tr style="${p.active?'':'opacity:.5;'}">
       <td>${p.name}</td><td><span class="tag tag-${t?t.color:'pt'}">${t?t.name:'—'}${p.format?'·'+p.format:''}</span></td>
-      <td class="num" style="font-size:17px;font-weight:700;color:var(--green);">$${(p.unit_price||0).toLocaleString()}</td><td class="num">${p.sessions_base}</td><td class="num">${p.sessions_bonus?'+'+p.sessions_bonus:'—'}</td>
-      <td>${p.valid_days} 天</td><td><span class="tag ${p.active?'tag-ok':'tag-danger'}">${p.active?'上架':'下架'}</span></td>
+      <td style="font-size:12px;">${PT[p.plan_type]||'一般'}</td>
+      <td class="num" style="font-size:17px;font-weight:700;color:var(--green);">$${(p.unit_price||0).toLocaleString()}</td><td class="num">${p.sessions_base}${p.sessions_bonus?' +'+p.sessions_bonus:''}</td>
+      <td>${p.valid_days} 天</td>
+      <td>${p.installment?'<span class="tag tag-ok" style="font-size:10px;">可分期</span>':'—'}</td>
+      <td>${p.member_applyable?'<span class="tag tag-ok" style="font-size:10px;">開放</span>':'—'}</td>
+      <td><span class="tag ${p.active?'tag-ok':'tag-danger'}">${p.active?'上架':'下架'}</span></td>
       <td style="white-space:nowrap;">
         <button class="btn btn-ghost btn-sm" onclick="openPlanModal('${p.id}')">編輯</button>
         <button class="btn btn-ghost btn-sm" onclick="togglePlan('${p.id}')">${p.active?'下架':'上架'}</button>
@@ -3154,38 +3224,59 @@ async function submitType(id){
 async function openPlanModal(id){
   const editing=!!id;
   const types=await dbGetAll('ticket_types');
-  const p = editing ? (await dbGet('course_plans',id)) : {ticket_type_id:'',format:'',unit_price:1600,sessions_base:12,sessions_bonus:0,valid_days:365};
-  // 只列啟用中的票券種類；編輯時若原綁定種類已停用，仍保留該選項以免遺失
+  const p = editing ? (await dbGet('course_plans',id)) : {ticket_type_id:'',format:'',unit_price:1600,sessions_base:12,sessions_bonus:0,valid_days:365,plan_type:'general',installment:false,member_applyable:false};
   const selectable=types.filter(t=>t.active!==false || t.id===p.ticket_type_id);
-  const typeOpts=selectable.map(t=>`<option value="${t.id}" ${p.ticket_type_id===t.id?'selected':''}>${t.name}（${t.category}）${t.active===false?'（已停用）':''}</option>`).join('');
+  const typeOpts=selectable.map(t=>`<option value="${t.id}" data-cat="${t.category}" ${p.ticket_type_id===t.id?'selected':''}>${t.name}（${t.category}）${t.active===false?'（已停用）':''}</option>`).join('');
   const fmtOpt=(v,l)=>`<option value="${v}" ${(p.format||'')===v?'selected':''}>${l}</option>`;
-  showModal(`<div class="modal-title">${editing?'編輯':'新增'}課程方案</div>
-    <div class="form-row"><label>方案名稱</label><input id="pl-name" value="${(p.name||'').replace(/"/g,'&quot;')}" placeholder="教練課一般 1V1"></div>
+  showModal(`<div class="modal-title">${editing?'編輯':'新增'}票券模板</div>
+    <div class="form-row"><label>票券名稱</label><input id="pl-name" value="${(p.name||'').replace(/"/g,'&quot;')}" placeholder="教練課一般 1V1"></div>
     <div class="form-2col">
-      <div class="form-row"><label>票券類型</label><select id="pl-type">${typeOpts}</select></div>
-      <div class="form-row"><label>形式</label><select id="pl-format">${fmtOpt('','無')}${fmtOpt('1v1','1v1')}${fmtOpt('1v2','1v2')}</select></div>
+      <div class="form-row"><label>票券類型</label><select id="pl-type" onchange="plRefreshPlanType()">${typeOpts}</select></div>
+      <div class="form-row"><label>授課類型</label><select id="pl-format">${fmtOpt('','無')}${fmtOpt('1v1','1V1')}${fmtOpt('1v2','1V2')}</select></div>
     </div>
+    <div class="form-row"><label>方案類型</label><select id="pl-plantype"></select></div>
     <div class="form-2col">
-      <div class="form-row"><label>單堂價</label><input type="number" id="pl-price" value="${p.unit_price||0}"></div>
-      <div class="form-row"><label>基本堂數</label><input type="number" id="pl-base" value="${p.sessions_base||0}"></div>
+      <div class="form-row"><label>售價</label><input type="number" id="pl-price" value="${p.unit_price||0}"></div>
+      <div class="form-row"><label>堂數</label><input type="number" id="pl-base" value="${p.sessions_base||0}"></div>
     </div>
     <div class="form-2col">
       <div class="form-row"><label>贈送堂數</label><input type="number" id="pl-bonus" value="${p.sessions_bonus||0}"></div>
-      <div class="form-row"><label>效期（天）</label><input type="number" id="pl-valid" value="${p.valid_days||365}"></div>
+      <div class="form-row"><label>使用期限（天）</label><input type="number" id="pl-valid" value="${p.valid_days||365}"></div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitPlan('${editing?id:''}')">${editing?'儲存變更':'建立方案'}</button></div>`);
+    <div class="form-2col">
+      <div class="form-row"><label>是否可分期</label><select id="pl-install"><option value="0" ${!p.installment?'selected':''}>否</option><option value="1" ${p.installment?'selected':''}>是</option></select></div>
+      <div class="form-row"><label>開放會員端申請購買</label><select id="pl-apply"><option value="0" ${!p.member_applyable?'selected':''}>否</option><option value="1" ${p.member_applyable?'selected':''}>是</option></select></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitPlan('${editing?id:''}')">${editing?'儲存變更':'建立模板'}</button></div>`);
+  window._plEditPlanType=p.plan_type||'general';
+  plRefreshPlanType();
+}
+// 依所選票券種類的 category 連動「方案類型」選項
+function plRefreshPlanType(){
+  const sel=document.getElementById('pl-type');
+  const cat=sel?.selectedOptions[0]?.dataset.cat||'';
+  const isGroup=(cat==='小班肌力');
+  const opts = isGroup
+    ? [['general','一般方案'],['promo','優惠方案']]
+    : [['general','一般方案'],['promo','優惠方案'],['friendly','友善方案'],['friendly_promo','友善優惠方案'],['loyal','主顧客方案']];
+  const cur=window._plEditPlanType||'general';
+  const box=document.getElementById('pl-plantype');
+  if(box) box.innerHTML=opts.map(([v,l])=>`<option value="${v}" ${cur===v?'selected':''}>${l}</option>`).join('');
 }
 async function submitPlan(id){
   const name=document.getElementById('pl-name').value.trim();
-  if(!name){showToast('請填方案名稱');return;}
+  if(!name){showToast('請填票券名稱');return;}
   const editing=!!id;
   const base = editing ? (await dbGet('course_plans',id)) : {id:uid('plan'),active:true};
   const p=Object.assign(base,{name,ticket_type_id:document.getElementById('pl-type').value,
     format:document.getElementById('pl-format').value||null,unit_price:Number(document.getElementById('pl-price').value)||0,
     sessions_base:Number(document.getElementById('pl-base').value)||0,sessions_bonus:Number(document.getElementById('pl-bonus').value)||0,
-    valid_days:Number(document.getElementById('pl-valid').value)||365});
+    valid_days:Number(document.getElementById('pl-valid').value)||365,
+    plan_type:document.getElementById('pl-plantype').value||'general',
+    installment:document.getElementById('pl-install').value==='1',
+    member_applyable:document.getElementById('pl-apply').value==='1'});
   try{ await dbPut('course_plans',p); }catch(e){ showToast((editing?'更新':'建立')+'失敗：'+(e.message||e)); return; }
-  closeModal();showToast(editing?'方案已更新':'方案已建立');navTo('plans');
+  closeModal();showToast(editing?'模板已更新':'模板已建立');navTo('plans');
 }
 
 /* ════════ 管理員:會員票券 ════════ */
@@ -3215,12 +3306,21 @@ async function openGrantModal(){
   const[members,plans,types]=await Promise.all([dbGetAll('members'),dbGetAll('course_plans'),dbGetAll('ticket_types')]);
   const pre=_grantPreMember;
   const memOpts=members.filter(m=>m.status==='active').map(m=>`<option value="${m.id}" ${pre===m.id?'selected':''}>${m.name}（${m.phone}）</option>`).join('');
-  const planOpts=plans.filter(p=>p.active).map(p=>{const tot=p.sessions_base+p.sessions_bonus;return `<option value="${p.id}" data-amt="${p.unit_price*p.sessions_base}" data-sess="${tot}" data-valid="${p.valid_days}">${p.name}</option>`;}).join('');
+  const planOpts=plans.filter(p=>p.active).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
   showModal(`<div class="modal-title">發放票券</div>
     <div class="form-row"><label>會員</label><select id="gt-member">${memOpts}</select></div>
-    <div class="form-row"><label>選擇課程方案</label><select id="gt-plan" onchange="refreshGrantInfo()">${planOpts}</select></div>
+    <div class="form-row"><label>選擇票券模板</label><select id="gt-plan" onchange="refreshGrantInfo()">${planOpts}</select></div>
     <div class="form-row"><div id="gt-info" style="font-size:12.5px;color:var(--t2);padding:12px;background:var(--card2);border-radius:9px;line-height:1.9;"></div></div>
-    <div class="form-row"><label>付款狀態</label><select id="gt-pay"><option value="paid">已付款</option><option value="unpaid">未付款</option></select></div>
+    <div style="margin:14px 0 8px;font-size:12.5px;color:var(--t3);letter-spacing:0.04em;">購買資訊</div>
+    <div class="form-2col">
+      <div class="form-row"><label>成交金額</label><input type="number" id="gt-amount" placeholder="實際成交金額"></div>
+      <div class="form-row"><label>付款方式</label><select id="gt-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期期數</label><input type="number" id="gt-install" value="1" min="1"></div>
+      <div class="form-row"><label>付款狀態</label><select id="gt-pay"><option value="paid">已付款</option><option value="unpaid">未付款</option></select></div>
+    </div>
+    <div class="form-row"><label>備註</label><input id="gt-note" placeholder="選填"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitGrant()">確認發放</button></div>`);
   _grantPreMember=null;
   refreshGrantInfo();
@@ -3229,12 +3329,20 @@ async function refreshGrantInfo(){
   const sel=document.getElementById('gt-plan');
   const plan=await dbGet('course_plans',sel.value);
   const total=plan.sessions_base+plan.sessions_bonus;
-  const amount=plan.unit_price*plan.sessions_base;
+  const listPrice=(plan.unit_price||0)*plan.sessions_base; // 模板定價
   const expire=ymd(addDays(TODAY,plan.valid_days));
+  const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客'};
   document.getElementById('gt-info').innerHTML=
-    `<div>金額　<b class="num" style="font-size:15px;">$${amount.toLocaleString()}</b>${plan.unit_price?` （單堂 $${plan.unit_price} × ${plan.sessions_base}）`:''}</div>
+    `<div>方案類型　<b>${PT[plan.plan_type]||'一般'}</b>${plan.format?'　·　'+plan.format.toUpperCase():''}</div>
+     <div>定價　<b class="num" style="font-size:15px;">$${listPrice.toLocaleString()}</b>${plan.unit_price?` （單堂 $${plan.unit_price} × ${plan.sessions_base}）`:''}</div>
      <div>堂數　<b>${total}</b> 堂${plan.sessions_bonus?`（含贈送 ${plan.sessions_bonus}）`:''}</div>
-     <div>期限　${plan.valid_days} 天，到期日 <b>${expire}</b></div>`;
+     <div>期限　${plan.valid_days} 天，到期日 <b>${expire}</b></div>
+     <div>分期　${plan.installment?'<b style="color:var(--green);">可分期</b>':'不可分期'}</div>`;
+  // 成交金額預設帶入定價
+  const amtEl=document.getElementById('gt-amount'); if(amtEl && !amtEl.dataset.touched) amtEl.value=listPrice;
+  if(amtEl) amtEl.oninput=()=>{amtEl.dataset.touched='1';};
+  // 分期欄位依模板是否可分期顯示
+  const iw=document.getElementById('gt-install-wrap'); if(iw) iw.style.display=plan.installment?'':'none';
 }
 async function submitGrant(){
   const member_id=document.getElementById('gt-member').value;
@@ -3242,14 +3350,24 @@ async function submitGrant(){
   const plan=await dbGet('course_plans',plan_id);
   const total=plan.sessions_base+plan.sessions_bonus;
   const unitPrice=plan.unit_price||0;
-  const amountPaid=unitPrice*plan.sessions_base; // 營收=單堂價×購買堂數(贈送堂不計價)
+  const listPrice=unitPrice*plan.sessions_base;
+  const dealAmount=Number(document.getElementById('gt-amount').value)||listPrice; // 實際成交金額
+  const method=document.getElementById('gt-method').value;
+  const installCount=plan.installment?(Number(document.getElementById('gt-install').value)||1):1;
+  const note=document.getElementById('gt-note').value.trim()||null;
   const t={id:uid('TK'),member_id,ticket_type_id:plan.ticket_type_id,source_plan_id:plan_id,plan_name:plan.name,format:plan.format||null,source:'purchase',
-    unit_price:unitPrice, amount_paid:amountPaid,
+    unit_price:unitPrice, amount_paid:dealAmount,   // 營收採實際成交金額
     purchase_date:ymd(TODAY),start_date:ymd(TODAY),expire_date:ymd(addDays(TODAY,plan.valid_days)),
     sessions_total:total,sessions_remaining:total,status:'usable',
     payment_status:document.getElementById('gt-pay').value,invoice_status:'none',created_at:new Date().toISOString()};
   await dbPut('member_tickets',t);
   await logTicket(t.id,'grant',total,null,SESSION.id,'發放（'+plan.name+'）');
+  // 建立購買紀錄
+  try{
+    await dbPut('purchases',{id:uid('PUR'),member_id,plan_id,ticket_id:t.id,plan_name:plan.name,
+      list_price:listPrice,deal_amount:dealAmount,payment_method:method,installment_count:installCount,
+      note,operator:SESSION.id,source:'backoffice',created_at:new Date().toISOString()});
+  }catch(e){ /* 購買紀錄失敗不阻斷發票券，僅記錄 */ console.error('purchase log fail',e); }
   // 新朋友購買「私人教練」課程 → 自動升級為「會員」
   try{
     const ty=await dbGet('ticket_types',plan.ticket_type_id);
@@ -3312,23 +3430,135 @@ async function markComplete(id){
 
 /* ════════ 教練端:預約行事曆 ════════ */
 PAGES.coach_calendar=async function(){
-  if(!calWeekStart) initCalWeek(); // 僅首次開啟定位今天；之後重繪保留當前週
   window._calStepping=false;
+  const myId=SESSION.id;
   const allView=!!window._coachCalAll;
-  const toggle=`<div class="filter-row" style="justify-content:space-between;">
+  // 預設選今天、預設當月
+  if(!window._coachSelDate) window._coachSelDate=ymd(TODAY);
+  if(!window._coachMonth){const t=parseYmd(window._coachSelDate)||new Date(TODAY);window._coachMonth={y:t.getFullYear(),m:t.getMonth()};}
+
+  const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
+  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
+  const typeMap={}; // evColorClass 需要；用空物件走 category fallback
+  // 我的課（主責或代課）或全部
+  const visible=bookings.filter(b=>{
+    if(b.status==='cancelled') return false;
+    if(!allView && (b.coach_id!==myId && b.substitute_coach_id!==myId)) return false;
+    return true;
+  });
+
+  window._coachCalData={visible,memMap,coachMap,typeMap,allView,myId};
+
+  const toggle=`<div class="filter-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
     <div class="seg" style="font-size:12px;">
       <button class="seg-btn ${!allView?'active':''}" onclick="window._coachCalAll=false;navTo('coach_calendar')">我的課表</button>
       <button class="seg-btn ${allView?'active':''}" onclick="window._coachCalAll=true;navTo('coach_calendar')">全部預約</button>
     </div>
-    ${allView?'<span style="font-size:11.5px;color:var(--t3);">全館佔用總覽 · 僅顯示教練與課程類型</span>':'<button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立私教預約</button>'}
+    <button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立預約</button>
   </div>`;
-  const sub=allView?'全館佔用狀況 · 不顯示會員姓名':'你的個人課表 · 可拖曳調整 · 點空格建立私教課';
-  C.innerHTML=head('SCHEDULE','預約行事曆',sub)+toggle+
-  (allView
-    ? (await renderCalendar({allMode:true,me:SESSION.id,editable:false}))
-    : (await renderCalendar({me:SESSION.id,onSlot:'quickBookAt',editable:true})));
-  if(!allView) initCalDrag();
+
+  C.innerHTML=head('SCHEDULE','預約行事曆',allView?'全館課程分布 · 點日期看當日課程':'你的課程分布 · 點日期看當日課程')
+    +toggle
+    +`<div id="coach-month"></div><div id="coach-daylist"></div>`;
+  renderCoachMonth();
+  renderCoachDayList();
 };
+
+// 類別縮寫
+function catAbbr(cc){return {pt:'教',friendly:'友',group:'團',self:'自',trial:'體'}[cc]||'教';}
+
+function coachMonthStep(n){
+  let {y,m}=window._coachMonth; m+=n;
+  if(m<0){m=11;y--;} if(m>11){m=0;y++;}
+  window._coachMonth={y,m}; renderCoachMonth();
+}
+function coachMonthToday(){
+  const t=new Date(TODAY);
+  window._coachMonth={y:t.getFullYear(),m:t.getMonth()};
+  window._coachSelDate=ymd(TODAY);
+  renderCoachMonth(); renderCoachDayList();
+}
+function coachSelectDate(ds){
+  window._coachSelDate=ds;
+  renderCoachMonth();      // 重繪以更新選取外框
+  renderCoachDayList();
+}
+function renderCoachMonth(){
+  const box=document.getElementById('coach-month'); if(!box||!window._coachCalData)return;
+  const {visible,typeMap}=window._coachCalData;
+  const {y,m}=window._coachMonth;
+  const todayStr=ymd(TODAY), selStr=window._coachSelDate;
+  const wlabel=['一','二','三','四','五','六','日'];
+  const first=new Date(y,m,1);
+  const startOffset=(first.getDay()+6)%7;
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const totalCells=Math.ceil((startOffset+daysInMonth)/7)*7;
+  // 預先彙整每天各類別數量
+  const byDay={};
+  visible.forEach(b=>{
+    const cc=colorClass(typeOfCat(b.category));
+    (byDay[b.date]=byDay[b.date]||{}); byDay[b.date][cc]=(byDay[b.date][cc]||0)+1;
+  });
+  const heads=wlabel.map(w=>`<div class="cm-wh">${w}</div>`).join('');
+  let cells='';
+  for(let i=0;i<totalCells;i++){
+    const dayNum=i-startOffset+1;
+    if(dayNum<1||dayNum>daysInMonth){cells+=`<div class="cm-cell cm-empty"></div>`;continue;}
+    const d=new Date(y,m,dayNum); const ds=ymd(d);
+    const isToday=ds===todayStr, isSel=ds===selStr;
+    const counts=byDay[ds]||{};
+    // 縮寫標籤（最多顯示 2 種，避免擁擠）
+    const order=['pt','friendly','group','self','trial'];
+    const tags=order.filter(cc=>counts[cc]).slice(0,2)
+      .map(cc=>`<span class="cm-tag cm-${cc}">${catAbbr(cc)}${counts[cc]}</span>`).join('');
+    cells+=`<div class="cm-cell${isToday?' cm-today':''}${isSel?' cm-sel':''}" onclick="coachSelectDate('${ds}')">
+      <div class="cm-d">${dayNum}</div>
+      <div class="cm-tags">${tags}</div>
+    </div>`;
+  }
+  box.innerHTML=`<div class="card" style="padding:14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <button class="btn btn-ghost btn-sm" onclick="coachMonthStep(-1)">‹</button>
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:15px;font-weight:600;">${y} 年 ${m+1} 月</span><button class="btn btn-ghost btn-sm" onclick="coachMonthToday()">今天</button></div>
+      <button class="btn btn-ghost btn-sm" onclick="coachMonthStep(1)">›</button>
+    </div>
+    <div class="cm-grid">${heads}${cells}</div>
+  </div>`;
+}
+function renderCoachDayList(){
+  const box=document.getElementById('coach-daylist'); if(!box||!window._coachCalData)return;
+  const {visible,memMap,coachMap,allView}=window._coachCalData;
+  const ds=window._coachSelDate;
+  const d=parseYmd(ds);
+  const wd=['日','一','二','三','四','五','六'][d.getDay()];
+  const list=visible.filter(b=>b.date===ds).sort((a,b)=>a.start_time.localeCompare(b.start_time));
+  const cards=list.length===0
+    ? '<div class="empty" style="padding:30px 0;"><div class="em-t">這天沒有課程</div></div>'
+    : list.map(b=>{
+        const cc=colorClass(typeOfCat(b.category));
+        const acting=b.substitute_coach_id?coachMap[b.substitute_coach_id]+'（代）':(coachMap[b.coach_id]||'—');
+        const who = b.category==='小班肌力' ? '團體課' : (b.category==='體驗'?(b.trial_name||'體驗客戶'):(memMap[b.member_id]||'—'));
+        const stTag = b.status==='cancelled'?'<span class="tag tag-danger">已取消</span>'
+                    : (b.status==='completed'||b.status==='checked_in')?'<span class="tag tag-ok">已簽到</span>'
+                    : (b.date<ymd(TODAY)?'<span class="tag tag-warn">未簽到</span>':'<span class="tag tag-warn">已預約</span>');
+        return `<div class="cdl-card cdl-${cc}" onclick="openBookingDetail('${b.id}')">
+          <div class="cdl-time">${b.start_time}</div>
+          <div class="cdl-main">
+            <div class="cdl-who">${who}${allView?'':''}</div>
+            <div class="cdl-meta"><span class="tag tag-${cc}" style="font-size:10px;">${b.category}</span> ${acting}</div>
+          </div>
+          <div class="cdl-st">${stTag}</div>
+        </div>`;
+      }).join('');
+  box.innerHTML=`<div class="card">
+    <div class="card-title" style="display:flex;align-items:baseline;gap:10px;">
+      <span>${ds.replace(/-/g,'/')}（${wd}）</span>
+      <span style="font-size:12px;color:var(--t3);font-weight:400;">共 ${list.length} 筆課程</span>
+    </div>
+    ${cards}
+  </div>`;
+}
 
 /* ════════ 會員端:我的預約 ════════ */
 PAGES.mem_bookings=async function(){
@@ -3352,10 +3582,15 @@ PAGES.mem_bookings=async function(){
 
 /* ════════ 會員端:我的票券 ════════ */
 PAGES.mem_tickets=async function(){
-  const[tickets,types]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
+  const[tickets,types,plans,apps]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types'),dbGetAll('course_plans'),dbGetAll('purchase_applications')]);
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const mine=tickets.filter(t=>t.member_id===SESSION.id);
   const usable=mine.filter(t=>t.status==='usable');
+  const myApps=apps.filter(a=>a.member_id===SESSION.id).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
+  const openPlans=plans.filter(p=>p.active && p.member_applyable);
+  const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客'};
+  const APPST={pending:['審核中','tag-warn'],approved:['已通過','tag-ok'],rejected:['已拒絕','tag-danger']};
+  window._planCache=Object.fromEntries(plans.map(p=>[p.id,p]));
   C.innerHTML=head('TICKETS','我的票券',`目前持有 ${usable.length} 張可用票券`)+
   `<div class="card"><div class="card-title">可用票券</div>
   ${usable.length===0?'<div class="empty"><div class="em-t">沒有可用票券</div></div>':
@@ -3365,12 +3600,221 @@ PAGES.mem_tickets=async function(){
     <div class="tc-meta">剩餘 <span class="tc-remain">${t.sessions_remaining}</span> / ${t.sessions_total} 堂　·　效期至 ${t.expire_date}${days<=7?` <span class="tag tag-danger">${days} 天後到期</span>`:''}<br>來源：${srcLabel(t.source)}</div></div>
   </div>`;}).join('')}
   </div>
+  ${openPlans.length>0?`<div class="card"><div class="card-title">申請購買方案</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;">選擇方案、簽署合約後送出申請；經櫃檯／管理員審核通過後，票券才會發放至你的帳戶。</div>
+    ${openPlans.map(p=>{const ty=typeMap[p.ticket_type_id];const tot=p.sessions_base+p.sessions_bonus;const price=(p.unit_price||0)*p.sessions_base;return `<div class="ticket-card" style="cursor:default;">
+      <div class="tc-stub s-${ty?ty.color:'pt'}"><div class="num" style="font-size:18px;font-weight:600;">${tot}</div><div class="tcs-label">堂</div></div>
+      <div class="tc-body"><div class="tc-id">${p.name}${p.format?' · '+p.format.toUpperCase():''}</div>
+      <div class="tc-meta">${PT[p.plan_type]||'一般'}方案　·　<b style="color:var(--green);">$${price.toLocaleString()}</b>　·　效期 ${p.valid_days} 天${p.installment?'　·　可分期':''}</div></div>
+      <button class="btn btn-green btn-sm" style="align-self:center;margin-right:12px;" onclick="openApplyPlan('${p.id}')">申請購買</button>
+    </div>`;}).join('')}
+  </div>`:''}
+  ${myApps.length>0?`<div class="card"><div class="card-title">我的申請</div>
+    ${myApps.map(a=>{const st=APPST[a.status]||['—','tag-warn'];return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bd);">
+      <div><div style="font-weight:500;">${a.plan_name}</div><div style="font-size:11.5px;color:var(--t3);">$${(a.list_price||0).toLocaleString()}　·　${(a.created_at||'').slice(0,10)}</div>
+      ${a.status==='rejected'&&a.reject_reason?`<div style="font-size:11.5px;color:var(--danger);margin-top:2px;">拒絕原因：${a.reject_reason}</div>`:''}</div>
+      <span class="tag ${st[1]}">${st[0]}</span>
+    </div>`;}).join('')}
+  </div>`:''}
   ${mine.filter(t=>t.status!=='usable').length>0?`<div class="card"><div class="card-title">已用畢 / 過期</div>
   ${mine.filter(t=>t.status!=='usable').map(t=>{const ty=typeMap[t.ticket_type_id];return `<div class="ticket-card" style="opacity:.55;">
     <div class="tc-stub s-${ty?ty.color:'pt'}"><div class="num" style="font-size:20px;">${t.sessions_remaining}</div><div class="tcs-label">${ty?ty.name:'—'}</div></div>
     <div class="tc-body"><div class="tc-id">${t.plan_name||(ty?ty.name:'—')}</div><div class="tc-meta">${t.status==='used_up'?'已用畢':'已過期'}　·　效期至 ${t.expire_date}</div></div>
   </div>`;}).join('')}</div>`:''}`;
 };
+
+// 會員服務條款（正式版）
+const CONTRACT_VERSION='2026-v1';
+const CONTRACT_TEXT=`YUGYM 有肌訓練｜會員服務條款
+
+一、服務內容
+本館提供：一對一私人教練課程、一對二私人教練課程、團體訓練課程、自主訓練使用權益，及其他本館公告之運動服務。會員購買之票券僅代表課程使用權，不代表永久會籍或其他財產權利。
+
+二、會員資料
+會員應提供真實且完整資料（姓名、生日、聯絡電話、電子郵件（選填）、緊急聯絡人）。如資料有異動，應主動更新。
+
+三、健康聲明
+會員確認已了解自身健康狀況、無醫師禁止運動之情形。如有懷孕、重大疾病、手術、骨折、心血管疾病或其他特殊狀況，應主動告知教練。若因未據實告知健康狀況而導致受傷或其他損害，由會員自行負責。
+
+四、票券使用規範
+（自由預約票券）依購買方案發放堂數，使用期限 12 個月，期限內可自由預約，逾期未使用視同放棄。
+（固定預約方案）依約定固定時段上課，固定時段由本館保留；會員取消、暫停或中止方案後，原時段可能釋出，釋出後本館不保證可恢復原時段。
+（團體課程）依公告時間進行，未到課視同已使用，符合規定之請假可獲補課券。
+
+五、預約與取消規範
+課程開始前 24 小時以上：可於系統提出取消申請，審核通過後不扣課。
+課程開始前 24 小時內：原則視同已使用課程，本館得依實際情況補發補課券。
+遲到：課程仍依原訂時間結束，不另行延長。
+未到課：未通知且未出席者，視同已使用課程。
+
+六、補課券規範
+補課券不得折現、不得轉讓、不得兌換其他商品或服務，應於有效期限內使用，逾期自動失效。
+
+七、自主訓練權益
+符合活動資格者可獲得自主訓練使用權。自主訓練僅限本人使用、不得轉讓，應遵守場館規範；違反安全規定或影響場館秩序者，本館得暫停或取消使用資格。
+
+八、退款辦法
+（七日內退款）購買後七日內且尚未使用任何課程者，可申請全額退款。
+（自由預約票券退款）退款金額 = 已付款金額 − 已使用課程價值；已使用課程價值：1對1 以單堂原價 1,700 元計算、1對2 以單堂原價 2,000 元計算，剩餘金額全額退還。
+（固定預約方案退款）退款金額 = 已付款金額 − 已使用課程價值 − 固定時段保留費（原方案總價 10%）；已使用課程價值計算同上。
+
+九、票券轉讓
+（自由預約票券）可申請轉讓一次，受讓人須完成會員資料建立。
+（固定預約方案）不得轉讓。
+
+十、個人資料使用
+會員同意本館於必要範圍內蒐集、處理及利用個人資料（課程安排、預約管理、會員服務、付款紀錄、發票開立、通知聯繫、客服處理、場館營運管理）。本館將依個人資料保護法及相關法令妥善保管會員資料。
+
+十一、安全與責任
+會員應遵守教練指導、場館使用規範與器材安全規定。因故意或重大過失造成設備損壞者，應負賠償責任。
+
+十二、條款修訂
+本館得因營運需求調整服務內容及相關規範並公告於系統。已購買之課程權益不得因條款修訂而受到不利影響。
+
+十三、同意條款
+會員於系統勾選同意後，即視為已閱讀、理解並同意本條款全部內容。`;
+
+let _applyPlanId=null, _sigPad=null;
+async function openApplyPlan(plan_id){
+  const p=await dbGet('course_plans',plan_id);
+  const ty=await dbGet('ticket_types',p.ticket_type_id);
+  const tot=p.sessions_base+p.sessions_bonus;
+  const price=(p.unit_price||0)*p.sessions_base;
+  const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客'};
+  _applyPlanId=plan_id;
+  showModal(`<div class="modal-title">申請購買 · ${p.name}</div>
+    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:12px;font-size:13px;line-height:1.9;margin-bottom:14px;">
+      <div>方案類型　<b>${PT[p.plan_type]||'一般'}</b>${p.format?'　·　'+p.format.toUpperCase():''}</div>
+      <div>價格　<b style="color:var(--green);font-size:15px;">$${price.toLocaleString()}</b></div>
+      <div>堂數　<b>${tot}</b> 堂${p.sessions_bonus?`（含贈送 ${p.sessions_bonus}）`:''}</div>
+      <div>使用期限　${p.valid_days} 天</div>
+      ${p.installment?'<div>付款　<b style="color:var(--green);">可分期</b></div>':''}
+    </div>
+    <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">會員契約</div>
+    <div style="max-height:160px;overflow-y:auto;background:#fff;border:1px solid var(--bd);border-radius:9px;padding:12px;font-size:12px;line-height:1.85;color:var(--t2);white-space:pre-wrap;margin-bottom:12px;">${CONTRACT_TEXT}</div>
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-bottom:8px;cursor:pointer;line-height:1.5;"><input type="checkbox" id="ap-agree" style="margin-top:3px;"> 我已閱讀並同意《YUGYM 會員服務條款》</label>
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-bottom:12px;cursor:pointer;line-height:1.5;"><input type="checkbox" id="ap-health" style="margin-top:3px;"> 我已確認自身健康狀況適合參與運動訓練，並願意遵守教練指導與場館規範</label>
+    <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">親筆簽名</div>
+    <div style="border:1px dashed var(--bd);border-radius:9px;background:#fff;">
+      <canvas id="ap-sig" style="width:100%;height:160px;display:block;touch-action:none;"></canvas>
+    </div>
+    <div style="text-align:right;margin:6px 0 14px;"><button class="btn btn-ghost btn-sm" onclick="clearSig()">清除簽名</button></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitApply()">送出申請</button></div>`);
+  setTimeout(initSigPad,50);
+}
+function initSigPad(){
+  const canvas=document.getElementById('ap-sig'); if(!canvas)return;
+  const rect=canvas.getBoundingClientRect();
+  canvas.width=rect.width*2; canvas.height=rect.height*2;
+  const ctx=canvas.getContext('2d'); ctx.scale(2,2); ctx.lineWidth=2; ctx.lineCap='round'; ctx.strokeStyle='#003d32';
+  let drawing=false, has=false;
+  const pos=e=>{const r=canvas.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};};
+  const start=e=>{drawing=true;has=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);e.preventDefault();};
+  const move=e=>{if(!drawing)return;const p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();e.preventDefault();};
+  const end=()=>{drawing=false;};
+  canvas.addEventListener('pointerdown',start); canvas.addEventListener('pointermove',move);
+  canvas.addEventListener('pointerup',end); canvas.addEventListener('pointerleave',end);
+  _sigPad={canvas,ctx,hasInk:()=>has,clear:()=>{ctx.clearRect(0,0,canvas.width,canvas.height);has=false;}};
+}
+function clearSig(){ if(_sigPad)_sigPad.clear(); }
+async function submitApply(){
+  if(!document.getElementById('ap-agree').checked){showToast('請先閱讀並勾選同意服務條款');return;}
+  if(!document.getElementById('ap-health').checked){showToast('請勾選健康聲明確認');return;}
+  if(!_sigPad||!_sigPad.hasInk()){showToast('請完成親筆簽名');return;}
+  const p=await dbGet('course_plans',_applyPlanId);
+  const price=(p.unit_price||0)*p.sessions_base;
+  const sig=_sigPad.canvas.toDataURL('image/png');
+  // 取得簽約 IP（外部服務，失敗則留空不阻斷）
+  let ip=null;
+  try{ const r=await fetch('https://api.ipify.org?format=json'); const j=await r.json(); ip=j.ip||null; }catch(_){}
+  const app={id:uid('PA'),member_id:SESSION.id,plan_id:_applyPlanId,plan_name:p.name,
+    list_price:price,signature:sig,contract_version:CONTRACT_VERSION,agreed_health:true,ip,
+    status:'pending',created_at:new Date().toISOString()};
+  try{ await dbPut('purchase_applications',app); }
+  catch(e){ showToast('送出失敗：'+(e.message||e)); return; }
+  closeModal();showToast('申請已送出，待審核');navTo('mem_tickets');
+}
+
+/* ════════ 後台:購買申請審核 ════════ */
+PAGES.purchase_review=async function(){
+  const[apps,members,plans,types]=await Promise.all([dbGetAll('purchase_applications'),dbGetAll('members'),dbGetAll('course_plans'),dbGetAll('ticket_types')]);
+  const memMap=Object.fromEntries(members.map(m=>[m.id,m]));
+  const planMap=Object.fromEntries(plans.map(p=>[p.id,p]));
+  const pending=apps.filter(a=>a.status==='pending').sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
+  const done=apps.filter(a=>a.status!=='pending').sort((a,b)=>(b.reviewed_at||b.created_at||'').localeCompare(a.reviewed_at||a.created_at||'')).slice(0,30);
+  const APPST={approved:['已通過','tag-ok'],rejected:['已拒絕','tag-danger']};
+  const row=a=>{const m=memMap[a.member_id];return `<div style="border:1px solid var(--bd);border-radius:11px;padding:14px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:600;font-size:15px;">${m?m.name:'（會員不存在）'} <span style="font-size:12px;color:var(--t3);">${m?m.phone:''}</span></div>
+        <div style="font-size:13px;color:var(--t2);margin-top:3px;">${a.plan_name}　·　<b style="color:var(--green);">$${(a.list_price||0).toLocaleString()}</b></div>
+        <div style="font-size:11.5px;color:var(--t3);margin-top:3px;">申請時間：${(a.created_at||'').replace('T',' ').slice(0,16)}${a.ip?`　·　IP：${a.ip}`:''}　·　條款 ${a.contract_version||'—'}${a.agreed_health?'　·　已簽健康聲明':''}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        ${a.signature?`<img src="${a.signature}" alt="簽名" style="width:120px;height:56px;object-fit:contain;border:1px solid var(--bd);border-radius:6px;background:#fff;cursor:pointer;" onclick="viewSig('${a.id}')">`:'<span style="font-size:11px;color:var(--t3);">無簽名</span>'}
+      </div>
+    </div>
+    ${a.status==='pending'?`<div style="display:flex;gap:8px;margin-top:12px;">
+      <button class="btn btn-green btn-sm" onclick="approveApp('${a.id}')">通過並發放票券</button>
+      <button class="btn btn-danger btn-sm" onclick="rejectApp('${a.id}')">拒絕</button>
+      <button class="btn btn-ghost btn-sm" onclick="viewContract('${a.id}')">查看合約</button>
+    </div>`:`<div style="margin-top:10px;"><span class="tag ${(APPST[a.status]||['','tag-warn'])[1]}">${(APPST[a.status]||['—'])[0]}</span>${a.status==='rejected'&&a.reject_reason?`<span style="font-size:12px;color:var(--danger);margin-left:8px;">原因：${a.reject_reason}</span>`:''}</div>`}
+  </div>`;};
+  window._appCache=Object.fromEntries(apps.map(a=>[a.id,a]));
+  C.innerHTML=head('REVIEW','購買申請','審核會員的購買申請 · 通過後自動發放票券')+
+  `<div class="card"><div class="card-title">待審核（${pending.length}）</div>
+    ${pending.length===0?'<div class="empty"><div class="em-t">目前沒有待審核的申請</div></div>':pending.map(row).join('')}
+  </div>
+  ${done.length>0?`<div class="card"><div class="card-title">已處理</div>${done.map(row).join('')}</div>`:''}`;
+};
+function viewSig(id){const a=window._appCache[id];if(!a||!a.signature)return;
+  showModal(`<div class="modal-title">簽名檔</div><img src="${a.signature}" style="width:100%;border:1px solid var(--bd);border-radius:9px;background:#fff;"><div class="modal-foot"><button class="btn btn-ghost" onclick="navTo('purchase_review')">關閉</button></div>`);
+}
+function viewContract(id){const a=window._appCache[id];
+  showModal(`<div class="modal-title">會員契約（${a?a.contract_version||'':''}）</div>
+    <div style="max-height:50vh;overflow-y:auto;font-size:12.5px;line-height:1.9;white-space:pre-wrap;color:var(--t2);">${CONTRACT_TEXT}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="navTo('purchase_review')">關閉</button></div>`);
+}
+async function approveApp(id){
+  const a=await dbGet('purchase_applications',id);
+  if(!a||a.status!=='pending'){showToast('此申請已處理');return;}
+  const plan=await dbGet('course_plans',a.plan_id);
+  if(!plan){showToast('找不到對應方案，無法發放');return;}
+  const total=plan.sessions_base+plan.sessions_bonus;
+  const unitPrice=plan.unit_price||0;
+  const dealAmount=a.list_price||(unitPrice*plan.sessions_base);
+  // 發票券
+  const t={id:uid('TK'),member_id:a.member_id,ticket_type_id:plan.ticket_type_id,source_plan_id:plan.id,plan_name:plan.name,format:plan.format||null,source:'purchase',
+    unit_price:unitPrice,amount_paid:dealAmount,
+    purchase_date:ymd(TODAY),start_date:ymd(TODAY),expire_date:ymd(addDays(TODAY,plan.valid_days)),
+    sessions_total:total,sessions_remaining:total,status:'usable',payment_status:'paid',invoice_status:'none',created_at:new Date().toISOString()};
+  await dbPut('member_tickets',t);
+  await logTicket(t.id,'grant',total,null,SESSION.id,'會員申請通過發放（'+plan.name+'）');
+  // 購買紀錄
+  try{ await dbPut('purchases',{id:uid('PUR'),member_id:a.member_id,plan_id:plan.id,ticket_id:t.id,plan_name:plan.name,
+    list_price:unitPrice*plan.sessions_base,deal_amount:dealAmount,payment_method:null,installment_count:1,note:'會員線上申請',operator:SESSION.id,source:'member_application',created_at:new Date().toISOString()}); }catch(_){}
+  // 新朋友購私教 → 升級會員
+  try{ const ty=await dbGet('ticket_types',plan.ticket_type_id);
+    if(ty&&ty.category==='私人教練'){const mem=await dbGet('members',a.member_id);if(mem&&(mem.tier==='newbie'||!mem.tier)){mem.tier='regular';await dbPut('members',mem);}} }catch(_){}
+  // 更新申請狀態
+  a.status='approved'; a.reviewed_by=SESSION.id; a.reviewed_at=new Date().toISOString();
+  await dbPut('purchase_applications',a);
+  showToast('已通過並發放票券');navTo('purchase_review');
+}
+function rejectApp(id){
+  showModal(`<div class="modal-title">拒絕申請</div>
+    <div class="form-row"><label>拒絕原因</label><input id="rj-reason" placeholder="請填寫原因，會顯示給會員"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="navTo('purchase_review')">取消</button><button class="btn btn-danger" onclick="confirmReject('${id}')">確認拒絕</button></div>`);
+}
+async function confirmReject(id){
+  const reason=document.getElementById('rj-reason').value.trim();
+  if(!reason){showToast('請填寫拒絕原因');return;}
+  const a=await dbGet('purchase_applications',id);
+  if(!a||a.status!=='pending'){showToast('此申請已處理');return;}
+  a.status='rejected'; a.reject_reason=reason; a.reviewed_by=SESSION.id; a.reviewed_at=new Date().toISOString();
+  await dbPut('purchase_applications',a);
+  showToast('已拒絕申請');navTo('purchase_review');
+}
 
 /* ════════ 管理員:今日事項 ════════ */
 PAGES.admin_today=async function(){
