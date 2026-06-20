@@ -760,8 +760,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.2024';
-const APP_VERSION_LABEL='26620.2024';
+const APP_VERSION='26620.2030';
+const APP_VERSION_LABEL='26620.2030';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1954,11 +1954,8 @@ PAGES.calendar=async function(){
   window._calStepping=false;
   const myId=SESSION.id;
   const isMobile=window.innerWidth<=600;
-  // 手機版預設「只看我的課」（管理員身分仍可切「全店」）；只在尚未手動切換過時套用預設
-  if(isMobile && window._calMineOnly===undefined) window._calMineOnly=true;
-  const mineOnly=!!window._calMineOnly;
 
-  // 手機：改用月曆 + 當日清單（與教練端相同的好讀版型）
+  // 手機：管理員的教練身分簡化版（月曆 + 當日排課，只看自己的課，無全店切換／週檢視）
   if(isMobile){
     if(!window._coachSelDate) window._coachSelDate=ymd(TODAY);
     if(!window._coachMonth){const t=parseYmd(window._coachSelDate)||new Date(TODAY);window._coachMonth={y:t.getFullYear(),m:t.getMonth()};}
@@ -1967,22 +1964,18 @@ PAGES.calendar=async function(){
     const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
     const visible=bookings.filter(b=>{
       if(b.status==='cancelled') return false;
-      if(mineOnly && b.coach_id!==myId && b.substitute_coach_id!==myId) return false;
-      return true;
+      return b.coach_id===myId || b.substitute_coach_id===myId; // 只看我的課
     });
-    window._coachCalData={visible,memMap,coachMap,typeMap:{},allView:!mineOnly,myId};
-    const toggle=`<div class="filter-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-      <div class="seg" style="font-size:12px;">
-        <button class="seg-btn ${!mineOnly?'active':''}" onclick="window._calMineOnly=false;navTo('calendar')">全店預約</button>
-        <button class="seg-btn ${mineOnly?'active':''}" onclick="window._calMineOnly=true;navTo('calendar')">只看我的課</button>
-      </div>
+    window._coachCalData={visible,memMap,coachMap,typeMap:{},allView:false,myId};
+    const toggle=`<div class="filter-row" style="justify-content:flex-end;align-items:center;margin-bottom:14px;">
       <button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立預約</button>
     </div>`;
-    C.innerHTML=head('SCHEDULE','預約行事曆','點日期看當日課程 · 排課請用電腦版時間軸')+toggle
-      +`<div id="coach-month"></div><div id="coach-week"></div><div id="coach-daylist"></div>`;
-    renderCoachMonth(); renderCoachWeek(); renderCoachDayList();
+    C.innerHTML=head('SCHEDULE','我的預約','你的課程分布 · 點日期看當日排課')+toggle
+      +`<div id="coach-month"></div><div id="coach-daylist"></div>`;
+    renderCoachMonth(); renderCoachDayList();
     return;
   }
+  const mineOnly=!!window._calMineOnly;
 
   // 桌機：維持時間軸（可拖曳排課）
   if(!calWeekStart) initCalWeek();
@@ -4774,12 +4767,11 @@ function coachMonthToday(){
   const t=new Date(TODAY);
   window._coachMonth={y:t.getFullYear(),m:t.getMonth()};
   window._coachSelDate=ymd(TODAY);
-  renderCoachMonth(); renderCoachWeek(); renderCoachDayList();
+  renderCoachMonth(); renderCoachDayList();
 }
 function coachSelectDate(ds){
   window._coachSelDate=ds;
   renderCoachMonth();      // 重繪以更新選取外框
-  renderCoachWeek();       // 展開該日所在週
   renderCoachDayList();
 }
 function renderCoachMonth(){
