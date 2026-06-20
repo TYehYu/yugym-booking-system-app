@@ -337,6 +337,25 @@ tr:hover td{background:var(--card2);}
 .cm-d{font-size:12px;font-weight:600;color:var(--t2);line-height:1.4;}
 .cm-tags{display:flex;flex-wrap:wrap;gap:2px;}
 .cm-tag{font-size:9px;line-height:1.5;padding:0 3px;border-radius:4px;font-weight:600;}
+/* 本週檢視 */
+.wk-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.wk-col{border:1px solid var(--bd);border-radius:8px;padding:4px 3px;min-height:96px;display:flex;flex-direction:column;gap:3px;cursor:pointer;background:var(--card);transition:.12s;}
+.wk-col.wk-sel{border:2px solid var(--green);box-shadow:0 0 0 1px var(--green);}
+.wk-head{text-align:center;line-height:1.2;padding-bottom:3px;border-bottom:1px solid var(--bd2);}
+.wk-head .wk-w{font-size:9px;color:var(--t3);display:block;}
+.wk-head .wk-d{font-size:13px;font-weight:700;color:var(--t2);}
+.wk-head.wk-today .wk-d{color:var(--green);}
+.wk-chips{display:flex;flex-direction:column;gap:2px;flex:1;}
+.wk-chip{font-size:8.5px;line-height:1.35;padding:1px 3px;border-radius:3px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.wk-pt{background:#e3efe9;color:#1f6f54;}
+.wk-friendly{background:#e8eef7;color:#23508a;}
+.wk-group{background:#f6ead8;color:#9a5a1e;}
+.wk-self{background:#eceae4;color:#6a655c;}
+.wk-trial{background:#efe6f3;color:#6e3a86;}
+.wk-more{font-size:8.5px;color:var(--t3);text-align:center;font-weight:600;}
+.wk-empty{font-size:9px;color:var(--bd);text-align:center;}
+.wk-add{font-size:11px;color:var(--green);background:var(--card2);border:none;border-radius:4px;padding:2px 0;cursor:pointer;width:100%;}
+.wk-add:hover{background:#e3efe9;}
 .cm-tag.cm-pt{background:#d6ece3;color:#1a5e47;}
 .cm-tag.cm-friendly{background:#dbe8f8;color:#1d4778;}
 .cm-tag.cm-group{background:#f8e6cf;color:#8a4f17;}
@@ -678,8 +697,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.1827';
-const APP_VERSION_LABEL='26620.1827';
+const APP_VERSION='26620.1901';
+const APP_VERSION_LABEL='26620.1901';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1173,20 +1192,19 @@ PAGES.dashboard=async function(){
   const coachRows=Object.entries(byCoach).sort((a,b)=>b[1]-a[1])
     .map(([cid,n])=>({name:cid==='_none'?'（無教練）':(coachMap[cid]||'—'),n}));
 
-  // ── 課程使用率：哪個課程賣最多 + 用最多 ──
-  // 賣最多：依方案統計發出張數與金額；用最多：該方案票券的已銷堂數
+  // ── 課程營收：本期銷課（已完成/簽到的課）依方案分組，算銷課堂數與銷課金額 ──
   const byPlan={};
-  tickets.filter(t=>inRange(t.purchase_date)).forEach(t=>{
-    const name=t.plan_name||'—';
-    byPlan[name]=byPlan[name]||{sold:0,amount:0,used:0,total:0};
-    byPlan[name].sold+=1;
-    byPlan[name].amount+=(t.amount_paid||0);
-    byPlan[name].used+=((t.sessions_total||0)-(t.sessions_remaining||0));
-    byPlan[name].total+=(t.sessions_total||0); // 已售出總堂數（使用率分母）
+  usedBk.forEach(b=>{
+    const tk=tickets.find(t=>t.id===b.ticket_id);
+    const name=(tk&&tk.plan_name)||b.category||'—';
+    const fee=(tk&&tk.unit_price)?tk.unit_price:0;
+    byPlan[name]=byPlan[name]||{amount:0,used:0};
+    byPlan[name].used+=1;          // 銷課堂數
+    byPlan[name].amount+=fee;      // 銷課金額（單堂價加總）
   });
   const planRows=Object.entries(byPlan)
-    .map(([name,d])=>({name,...d,pct:d.total>0?d.used/d.total:0}))
-    .sort((a,b)=>b.pct-a.pct||b.used-a.used); // 依使用率由高到低（同則比銷堂數）
+    .map(([name,d])=>({name,...d}))
+    .sort((a,b)=>b.amount-a.amount||b.used-a.used); // 依銷課金額由高到低
 
   const fmtNT=(n)=>'$'+(n||0).toLocaleString();
 
@@ -1268,13 +1286,13 @@ PAGES.dashboard=async function(){
         <div style="height:5px;background:var(--card2);border-radius:3px;overflow:hidden;margin-top:5px;"><div style="height:100%;width:${pct}%;background:var(--green);"></div></div>
       </div>`;}).join('')}
     </div>
-    <div class="card"><div class="card-title">課程使用率（當月使用最多）</div>
-      ${planRows.length===0?'<div class="empty"><div class="em-t">本期無售出課程</div></div>':
-      planRows.map(r=>{const pct=r.total>0?Math.round(r.used/r.total*100):0;return `<div style="padding:9px 0;border-bottom:1px solid var(--bd2);">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:3px;"><span style="font-weight:500;">${r.name}</span><span style="font-size:13px;color:var(--t2);white-space:nowrap;">使用率 ${pct}%</span></div>
-        <div style="font-size:12px;color:var(--t3);margin-bottom:5px;">售出 ${r.sold}｜${fmtNT(r.amount)}｜銷堂 ${r.used}</div>
+    <div class="card"><div class="card-title">課程營收（當月最賺）</div>
+      ${planRows.length===0?'<div class="empty"><div class="em-t">本期無銷課</div></div>':
+      (()=>{const maxAmt=Math.max(...planRows.map(r=>r.amount),1);return planRows.map(r=>{const pct=Math.round(r.amount/maxAmt*100);return `<div style="padding:9px 0;border-bottom:1px solid var(--bd2);">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:3px;"><span style="font-weight:500;">${r.name}</span><span style="font-size:13px;color:var(--green);font-weight:600;white-space:nowrap;">${fmtNT(r.amount)}</span></div>
+        <div style="font-size:12px;color:var(--t3);margin-bottom:5px;">課堂 ${r.used}｜金額 ${fmtNT(r.amount)}</div>
         <div style="height:5px;background:var(--card2);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:var(--green);"></div></div>
-      </div>`;}).join('')}
+      </div>`;}).join('');})()}
     </div>
   </div>
   </div>`;
@@ -1883,8 +1901,8 @@ PAGES.calendar=async function(){
       <button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立預約</button>
     </div>`;
     C.innerHTML=head('SCHEDULE','預約行事曆','點日期看當日課程 · 排課請用電腦版時間軸')+toggle
-      +`<div id="coach-month"></div><div id="coach-daylist"></div>`;
-    renderCoachMonth(); renderCoachDayList();
+      +`<div id="coach-month"></div><div id="coach-week"></div><div id="coach-daylist"></div>`;
+    renderCoachMonth(); renderCoachWeek(); renderCoachDayList();
     return;
   }
 
@@ -4590,8 +4608,9 @@ PAGES.coach_calendar=async function(){
 
   C.innerHTML=head('SCHEDULE','預約行事曆',allView?'全館課程分布 · 點日期看當日課程':'你的課程分布 · 點日期看當日課程')
     +toggle
-    +`<div id="coach-month"></div><div id="coach-daylist"></div>`;
+    +`<div id="coach-month"></div><div id="coach-week"></div><div id="coach-daylist"></div>`;
   renderCoachMonth();
+  renderCoachWeek();
   renderCoachDayList();
 };
 
@@ -4607,11 +4626,12 @@ function coachMonthToday(){
   const t=new Date(TODAY);
   window._coachMonth={y:t.getFullYear(),m:t.getMonth()};
   window._coachSelDate=ymd(TODAY);
-  renderCoachMonth(); renderCoachDayList();
+  renderCoachMonth(); renderCoachWeek(); renderCoachDayList();
 }
 function coachSelectDate(ds){
   window._coachSelDate=ds;
   renderCoachMonth();      // 重繪以更新選取外框
+  renderCoachWeek();       // 展開該日所在週
   renderCoachDayList();
 }
 function renderCoachMonth(){
@@ -4656,6 +4676,44 @@ function renderCoachMonth(){
     <div class="cm-grid">${heads}${cells}</div>
   </div>`;
 }
+// ── 本週檢視：選定日期所在週（週一～週日），每天一欄顯示姓名小卡 ──
+function renderCoachWeek(){
+  const box=document.getElementById('coach-week'); if(!box||!window._coachCalData)return;
+  const {visible,memMap}=window._coachCalData;
+  const sel=window._coachSelDate;
+  const selD=parseYmd(sel);
+  // 該週週一
+  const dow=(selD.getDay()+6)%7;
+  const monday=addDays(selD,-dow);
+  const sunday=addDays(monday,6);
+  const wlabel=['一','二','三','四','五','六','日'];
+  const fmtMD=d=>`${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  const todayStr=ymd(TODAY);
+  let cols='';
+  for(let i=0;i<7;i++){
+    const d=addDays(monday,i); const ds=ymd(d);
+    const isSel=ds===sel, isToday=ds===todayStr;
+    const dayBk=visible.filter(b=>b.date===ds).sort((a,b)=>a.start_time.localeCompare(b.start_time));
+    const chips=dayBk.slice(0,3).map(b=>{
+      const cc=colorClass(typeOfCat(b.category));
+      const who=b.category==='小班肌力'?'團課':(b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—'));
+      return `<div class="wk-chip wk-${cc}">${b.start_time} ${who}</div>`;
+    }).join('');
+    const more=dayBk.length>3?`<div class="wk-more">+${dayBk.length-3}</div>`:'';
+    cols+=`<div class="wk-col${isSel?' wk-sel':''}" onclick="coachSelectDate('${ds}')">
+      <div class="wk-head${isToday?' wk-today':''}"><span class="wk-w">${wlabel[i]}</span><span class="wk-d">${d.getDate()}</span></div>
+      <div class="wk-chips">${chips||'<div class="wk-empty">·</div>'}${more}</div>
+      <button class="wk-add" onclick="event.stopPropagation();quickBookOn('${ds}')">＋</button>
+    </div>`;
+  }
+  box.innerHTML=`<div class="card" style="padding:12px;">
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:10px;font-weight:600;">${monday.getFullYear()}/${fmtMD(monday)} ～ ${fmtMD(sunday)} 這週</div>
+    <div class="wk-grid">${cols}</div>
+  </div>`;
+}
+// 本週檢視「+」：帶入該日期新增預約
+function quickBookOn(ds){ _prefill={date:ds,time:''}; openBookingModal(); }
+
 function renderCoachDayList(){
   const box=document.getElementById('coach-daylist'); if(!box||!window._coachCalData)return;
   const {visible,memMap,coachMap,allView}=window._coachCalData;
@@ -4663,6 +4721,8 @@ function renderCoachDayList(){
   const d=parseYmd(ds);
   const wd=['日','一','二','三','四','五','六'][d.getDay()];
   const list=visible.filter(b=>b.date===ds).sort((a,b)=>a.start_time.localeCompare(b.start_time));
+  const ptN=list.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+  const grpN=list.filter(b=>b.category==='小班肌力').length;
   const cards=list.length===0
     ? '<div class="empty" style="padding:30px 0;"><div class="em-t">這天沒有課程</div></div>'
     : list.map(b=>{
@@ -4675,16 +4735,16 @@ function renderCoachDayList(){
         return `<div class="cdl-card cdl-${cc}" onclick="openBookingDetail('${b.id}')">
           <div class="cdl-time">${b.start_time}</div>
           <div class="cdl-main">
-            <div class="cdl-who">${who}${allView?'':''}</div>
+            <div class="cdl-who">${who}</div>
             <div class="cdl-meta"><span class="tag tag-${cc}" style="font-size:10px;">${b.category}</span> ${acting}</div>
           </div>
           <div class="cdl-st">${stTag}</div>
         </div>`;
       }).join('');
   box.innerHTML=`<div class="card">
-    <div class="card-title" style="display:flex;align-items:baseline;gap:10px;">
-      <span>${ds.replace(/-/g,'/')}（${wd}）</span>
-      <span style="font-size:12px;color:var(--t3);font-weight:400;">共 ${list.length} 筆課程</span>
+    <div class="card-title" style="display:block;">
+      <div>${ds.replace(/-/g,'/')}（${wd}）</div>
+      <div style="font-size:12px;color:var(--t3);font-weight:400;margin-top:3px;">教練課 ${ptN} 堂・團體課 ${grpN} 堂　·　共 ${list.length} 筆課程</div>
     </div>
     ${cards}
   </div>`;
