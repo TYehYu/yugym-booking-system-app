@@ -760,8 +760,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.2017';
-const APP_VERSION_LABEL='26620.2017';
+const APP_VERSION='26620.2024';
+const APP_VERSION_LABEL='26620.2024';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -4736,37 +4736,29 @@ async function saveFixPunchOut(recId){
 PAGES.coach_calendar=async function(){
   window._calStepping=false;
   const myId=SESSION.id;
-  const allView=!!window._coachCalAll;
-  // 預設選今天、預設當月
+  // 教練端「我的預約」：固定只顯示自己（主責或代課）的課，不提供全店切換
   if(!window._coachSelDate) window._coachSelDate=ymd(TODAY);
   if(!window._coachMonth){const t=parseYmd(window._coachSelDate)||new Date(TODAY);window._coachMonth={y:t.getFullYear(),m:t.getMonth()};}
 
   const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
-  const typeMap={}; // evColorClass 需要；用空物件走 category fallback
-  // 我的課（主責或代課）或全部
+  const typeMap={};
   const visible=bookings.filter(b=>{
     if(b.status==='cancelled') return false;
-    if(!allView && (b.coach_id!==myId && b.substitute_coach_id!==myId)) return false;
-    return true;
+    return b.coach_id===myId || b.substitute_coach_id===myId; // 只看我的課
   });
 
-  window._coachCalData={visible,memMap,coachMap,typeMap,allView,myId};
+  window._coachCalData={visible,memMap,coachMap,typeMap,allView:false,myId};
 
-  const toggle=`<div class="filter-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-    <div class="seg" style="font-size:12px;">
-      <button class="seg-btn ${!allView?'active':''}" onclick="window._coachCalAll=false;navTo('coach_calendar')">我的課表</button>
-      <button class="seg-btn ${allView?'active':''}" onclick="window._coachCalAll=true;navTo('coach_calendar')">全部預約</button>
-    </div>
+  const toggle=`<div class="filter-row" style="justify-content:flex-end;align-items:center;margin-bottom:14px;">
     <button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立預約</button>
   </div>`;
 
-  C.innerHTML=head('SCHEDULE','預約行事曆',allView?'全館課程分布 · 點日期看當日課程':'你的課程分布 · 點日期看當日課程')
+  C.innerHTML=head('SCHEDULE','我的預約','你的課程分布 · 點日期看當日排課')
     +toggle
-    +`<div id="coach-month"></div><div id="coach-week"></div><div id="coach-daylist"></div>`;
+    +`<div id="coach-month"></div><div id="coach-daylist"></div>`;
   renderCoachMonth();
-  renderCoachWeek();
   renderCoachDayList();
 };
 
