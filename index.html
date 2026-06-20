@@ -573,8 +573,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.1109';
-const APP_VERSION_LABEL='26620.1109';
+const APP_VERSION='26620.1154';
+const APP_VERSION_LABEL='26620.1154';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -793,6 +793,7 @@ const NAV={
     {key:'calendar',label:'預約行事曆'},
     {key:'members',label:'會員管理'},
     {key:'staff',label:'員工管理'},
+    {key:'hr',label:'人資管理'},
     {key:'plans',label:'課程方案'},
     {key:'purchase_review',label:'購買申請'},
     {key:'tickets',label:'會員票券'},
@@ -2917,29 +2918,59 @@ const STAFF_STATUS_TAG={active:'tag-ok',unpaid_leave:'tag-warn',inactive:'tag-da
 PAGES.staff=async function(){
   const coaches=await dbGetAll('coaches');
   const roleTag={admin:'tag-admin',coach:'tag-coach',front_desk:'tag-front'};
-  C.innerHTML=head('STAFF','員工管理','邀請員工自行填寫 · 員工類型：正職 / 兼職 / 合作（＋店長 / 主管）· 薪資依制度自動計算')+
-  `<div class="card"><div class="card-title">員工列表 <button class="btn btn-green btn-sm" onclick="openStaffModal()">＋ 邀請員工</button></div>
-    <table><thead><tr><th>姓名</th><th>教練名</th><th>帳號</th><th>角色</th><th>員工類型</th><th>管理職</th><th>狀態</th><th></th></tr></thead><tbody>
-    ${coaches.map(c=>{
-      const pending=c.invite_status==='pending';
-      const mgrTags=[c.is_manager?'<span class="tag tag-admin">店長</span>':'',c.is_supervisor?'<span class="tag tag-coach">主管</span>':''].filter(Boolean).join(' ')||'—';
-      return `<tr>
+  const staffRoleLabel={admin:'管理員',coach:'一般員工',front_desk:'設備帳號'};
+  // 分區：真人員工（管理員/教練） vs 後台專用帳號（設備帳號 front_desk）
+  const isDevice=c=>c.role==='front_desk';
+  const roleOrder={admin:0,coach:1,front_desk:2};
+  const statusOrder=c=>{
+    if(c.invite_status==='pending') return 2;      // 待填寫排最後
+    if(c.status==='inactive'||c.status==='resigned') return 1; // 停用排後
+    return 0;                                       // 在職排前
+  };
+  const sortFn=(a,b)=> statusOrder(a)-statusOrder(b)
+    || (roleOrder[a.role]??9)-(roleOrder[b.role]??9)
+    || (a.name||a.phone||'').localeCompare(b.name||b.phone||'','zh-Hant');
+  const staffList=coaches.filter(c=>!isDevice(c)).sort(sortFn);
+  const deviceList=coaches.filter(isDevice).sort(sortFn);
+
+  const rowOf=c=>{
+    const pending=c.invite_status==='pending';
+    const mgrTags=[c.is_manager?'<span class="tag tag-admin">店長</span>':'',c.is_supervisor?'<span class="tag tag-coach">主管</span>':''].filter(Boolean).join(' ')||'—';
+    return `<tr>
       <td>${c.name||'<span style="color:var(--t3);">（待填寫）</span>'}</td>
       <td>${c.name_en||'<span style="color:var(--t3);">—</span>'}</td>
       <td>${c.phone||'—'}</td>
-      <td><span class="tag ${roleTag[c.role]}">${ROLE_LABEL[c.role]}</span></td>
+      <td><span class="tag ${roleTag[c.role]}">${staffRoleLabel[c.role]||ROLE_LABEL[c.role]}</span></td>
       <td>${PAY_LABEL[c.employment_type||c.pay_type]||'—'}</td>
       <td>${mgrTags}</td>
       <td>${pending?'<span class="tag tag-warn">待員工填寫</span>':(c.must_setup?'<span class="tag tag-warn">待首次設定</span>':`<span class="tag ${STAFF_STATUS_TAG[c.status]||'tag-danger'}">${STAFF_STATUS[c.status]||'已停用'}</span>`)}</td>
       <td style="white-space:nowrap;">${pending
         ?`<button class="btn btn-gold btn-sm" onclick="copyInvite('${c.invite_token}')">複製連結</button> <button class="btn btn-danger btn-sm" onclick="deleteStaffInvite('${c.id}')">刪除</button>`
-        :`<button class="btn btn-ghost btn-sm" onclick="openStaffEdit('${c.id}')">編輯</button>`
-          +` <button class="btn btn-ghost btn-sm" onclick="openResetStaffPw('${c.id}')">重設密碼</button>`
-          +`${c.status!=='inactive'?` <button class="btn btn-ghost btn-sm" onclick="setStaffStatus('${c.id}','inactive')">停用</button>`:` <button class="btn btn-green btn-sm" onclick="setStaffStatus('${c.id}','active')">啟用</button>`}`
+        : c.role==='front_desk'
+          ? `<button class="btn btn-ghost btn-sm" onclick="openResetStaffPw('${c.id}')">重設密碼</button>`
+            +`${c.status!=='inactive'?` <button class="btn btn-ghost btn-sm" onclick="setStaffStatus('${c.id}','inactive')">停用</button>`:` <button class="btn btn-green btn-sm" onclick="setStaffStatus('${c.id}','active')">啟用</button>`}`
+          : `<button class="btn btn-ghost btn-sm" onclick="openStaffEdit('${c.id}')">編輯</button>`
+            +` <button class="btn btn-ghost btn-sm" onclick="openResetStaffPw('${c.id}')">重設密碼</button>`
+            +`${c.status!=='inactive'?` <button class="btn btn-ghost btn-sm" onclick="setStaffStatus('${c.id}','inactive')">停用</button>`:` <button class="btn btn-green btn-sm" onclick="setStaffStatus('${c.id}','active')">啟用</button>`}`
         }</td>
-    </tr>`;}).join('')}
+    </tr>`;
+  };
+  const tableHead=`<thead><tr><th>姓名</th><th>教練名</th><th>帳號</th><th>角色</th><th>員工類型</th><th>管理職</th><th>狀態</th><th></th></tr></thead>`;
+
+  C.innerHTML=head('STAFF','員工管理','邀請員工自行填寫 · 員工類型：正職 / 兼職 / 工讀 / 合作 · 職務：行政櫃檯 / 教練')+
+  `<div class="card"><div class="card-title">員工 <button class="btn btn-green btn-sm" onclick="openStaffModal()">＋ 邀請員工</button></div>
+    <table>${tableHead}<tbody>
+    ${staffList.length===0?'<tr><td colspan="8" style="text-align:center;color:var(--t3);padding:18px;">尚無員工</td></tr>':staffList.map(rowOf).join('')}
     </tbody></table>
   </div>
+  ${deviceList.length>0?`<div class="card">
+    <div class="card-title">後台專用帳號 <button class="btn btn-green btn-sm" onclick="openDeviceModal()">＋ 新增設備帳號</button></div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.7;">場館平板／櫃檯設備使用的後台帳號，非人事員工。用於現場操作（簽到、預約查詢等）。</div>
+    <table>${tableHead}<tbody>${deviceList.map(rowOf).join('')}</tbody></table>
+  </div>`:`<div class="card">
+    <div class="card-title">後台專用帳號 <button class="btn btn-green btn-sm" onclick="openDeviceModal()">＋ 新增設備帳號</button></div>
+    <div style="font-size:12px;color:var(--t3);line-height:1.7;">場館平板／櫃檯設備使用的後台帳號，非人事員工。目前尚無設備帳號。</div>
+  </div>`}
   <div class="card"><div class="card-title">邀請流程</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.9;">
     1. 點「邀請員工」→ 填姓名與電話、指定角色與薪資制度 → 產生填寫連結。<br>
@@ -2948,7 +2979,204 @@ PAGES.staff=async function(){
     </div>
   </div>`;
 };
-// 管理員：重設員工密碼（透過 Edge Function 以 admin 權限更新）
+
+/* ╔══════════════════════════════════════════════╗
+   ║  人資管理模組（HR）— 第一批：員工資料             ║
+   ║  資料結構＋畫面；薪資計算後續再串。               ║
+   ╚══════════════════════════════════════════════╝ */
+// 員工類型 → 適用規則對照（顯示用；驅動表單顯示哪些區塊）
+const EMP_RULES={
+  full_time:{ label:'正職教練',
+    pay:['底薪制','教練課抽成','團課抽成','達標獎金','店長／主管津貼（如適用）'],
+    insurance:['勞保','健保','勞退提撥'], insured:true,
+    schedule:['配合公司排班','配合值班制度'],
+    leave:'依勞基法計算，系統依到職日自動計算年資', leaveApplicable:true,
+    flags:{course_share:true,group_share:true,duty_pay:true,manager_allow:true,owner_allow:true} },
+  part_time:{ label:'兼職教練',
+    pay:['單堂抽成','團課抽成','值班時薪'],
+    insurance:['依實際投保狀況設定'], insured:true,
+    schedule:['依可上班時段安排','配合值班制度'],
+    leave:'依部分工時比例計算', leaveApplicable:true,
+    flags:{course_share:true,group_share:true,duty_pay:true,manager_allow:false,owner_allow:false} },
+  intern:{ label:'工讀生',
+    pay:['時薪制'],
+    insurance:['依法規辦理'], insured:true,
+    schedule:['依班表安排'],
+    leave:'依部分工時比例計算', leaveApplicable:true,
+    flags:{course_share:false,group_share:false,duty_pay:true,manager_allow:false,owner_allow:false} },
+  contractor:{ label:'合作教練',
+    pay:['課程抽成制','無底薪'],
+    insurance:['不由公司投保'], insured:false,
+    schedule:['自主安排授課時間'],
+    leave:'不適用', leaveApplicable:false,
+    flags:{course_share:true,group_share:true,duty_pay:false,manager_allow:false,owner_allow:false} },
+};
+const HR_TABS=[
+  {key:'staff_data',label:'員工資料'},
+  {key:'insurance',label:'勞健保管理'},
+  {key:'schedule',label:'排班設定'},
+  {key:'leave',label:'特休管理'},
+];
+let _hrTab='staff_data';
+function hrTabBar(){
+  return `<div class="seg" style="margin-bottom:16px;flex-wrap:wrap;">${HR_TABS.map(t=>
+    `<button class="seg-btn ${_hrTab===t.key?'active':''}" onclick="setHrTab('${t.key}')">${t.label}</button>`).join('')}</div>`;
+}
+function setHrTab(k){ _hrTab=k; navTo('hr'); }
+// 依到職日計算年資（年）
+function calcSeniority(hireDate){
+  if(!hireDate) return null;
+  const h=parseYmd(hireDate); if(!h||isNaN(h)) return null;
+  const now=new Date(TODAY);
+  let years=now.getFullYear()-h.getFullYear();
+  const m=now.getMonth()-h.getMonth();
+  if(m<0||(m===0&&now.getDate()<h.getDate())) years--;
+  const days=Math.floor((now-h)/86400000);
+  return {years:Math.max(0,years), days:Math.max(0,days)};
+}
+PAGES.hr=async function(){
+  const tab=HR_TABS.find(t=>t.key===_hrTab)||HR_TABS[0];
+  C.innerHTML=head('HR','人資管理',tab.label)+hrTabBar()+`<div id="hr-body"></div>`;
+  if(_hrTab==='staff_data') await renderHrStaffData();
+  else renderHrPlaceholder(tab.label);
+};
+function renderHrPlaceholder(label){
+  document.getElementById('hr-body').innerHTML=`<div class="card">
+    <div class="card-title">${label}</div>
+    <div class="empty" style="padding:30px 8px;"><div class="em-t">此區塊將於下一批建置</div>
+    <div style="font-size:12px;color:var(--t3);margin-top:8px;line-height:1.8;">本批先完成「員工資料」的完整欄位與表單。<br>${label}的欄位結構已規劃，將於下一批接續建立。</div></div>
+  </div>`;
+}
+async function renderHrStaffData(){
+  const coaches=(await dbGetAll('coaches')).filter(c=>c.role!=='front_desk' && c.invite_status!=='pending');
+  const order={full_time:0,part_time:1,intern:2,contractor:3};
+  coaches.sort((a,b)=>(order[normEmp(a.employment_type||a.pay_type)]??9)-(order[normEmp(b.employment_type||b.pay_type)]??9)
+    ||(a.emp_no||'').localeCompare(b.emp_no||''));
+  const body=document.getElementById('hr-body');
+  body.innerHTML=`<div class="card">
+    <div class="card-title">員工資料</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.7;">完整人事資料（基本資料、職務、薪資制度）。點「詳細資料」可檢視與編輯完整欄位。</div>
+    <table><thead><tr><th>員工編號</th><th>姓名</th><th>類型</th><th>職務</th><th>到職日</th><th>年資</th><th>狀態</th><th></th></tr></thead><tbody>
+    ${coaches.length===0?'<tr><td colspan="8" style="text-align:center;color:var(--t3);padding:18px;">尚無員工</td></tr>':
+    coaches.map(c=>{
+      const et=normEmp(c.employment_type||c.pay_type);
+      const sen=calcSeniority(c.hire_date);
+      const duty=[c.is_manager?'店長':'',c.is_supervisor?'主管':''].filter(Boolean).join('・')||'—';
+      return `<tr>
+        <td>${c.emp_no||'<span style="color:var(--t3);">未編</span>'}</td>
+        <td>${c.name||'—'}</td>
+        <td>${EMP_RULES[et]?EMP_RULES[et].label:(PAY_LABEL[et]||'—')}</td>
+        <td>${duty}</td>
+        <td>${c.hire_date||'—'}</td>
+        <td>${sen?`${sen.years} 年`:'—'}</td>
+        <td><span class="tag ${STAFF_STATUS_TAG[c.status]||'tag-danger'}">${STAFF_STATUS[c.status]||'—'}</span></td>
+        <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="openHrEdit('${c.id}')">詳細資料</button></td>
+      </tr>`;}).join('')}
+    </tbody></table>
+  </div>`;
+}
+// 完整人事資料表單（檢視＋編輯）
+async function openHrEdit(id){
+  const c=await dbGet('coaches',id);
+  if(!c){showToast('找不到員工');return;}
+  const et=normEmp(c.employment_type||c.pay_type);
+  const rule=EMP_RULES[et]||EMP_RULES.full_time;
+  const v=(x)=>c[x]||'';
+  const opt=(val,cur,txt)=>`<option value="${val}" ${cur===val?'selected':''}>${txt}</option>`;
+  showModal(`<div class="modal-title">員工詳細資料 · ${c.name||''}</div>
+    <div style="max-height:64vh;overflow-y:auto;padding-right:4px;">
+
+    <div style="font-size:12.5px;font-weight:700;color:var(--green);margin:4px 0 10px;">基本資料</div>
+    <div class="form-2col">
+      <div class="form-row"><label>員工編號</label><input id="hr-emp_no" value="${v('emp_no')}" placeholder="例：YG001"></div>
+      <div class="form-row"><label>姓名</label><input id="hr-name" value="${v('name')}"></div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>性別</label><select id="hr-gender">${opt('',v('gender'),'—')}${opt('male',v('gender'),'男')}${opt('female',v('gender'),'女')}${opt('other',v('gender'),'其他')}</select></div>
+      <div class="form-row"><label>出生日期</label><input type="date" id="hr-birth" value="${v('birth_date')}"></div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>身分證字號</label><input id="hr-id_no" value="${v('id_no')}" placeholder="A123456789"></div>
+      <div class="form-row"><label>聯絡電話</label><input id="hr-phone2" value="${v('phone')}" placeholder="登入帳號電話"></div>
+    </div>
+    <div class="form-row"><label>Email</label><input id="hr-email" value="${v('email')}"></div>
+    <div class="form-row"><label>戶籍地址</label><input id="hr-addr_reg" value="${v('address_registered')}"></div>
+    <div class="form-row"><label>通訊地址</label><input id="hr-addr_mail" value="${v('address_mailing')}"></div>
+    <div class="form-2col">
+      <div class="form-row"><label>緊急聯絡人</label><input id="hr-ec_name" value="${v('emergency_name')}"></div>
+      <div class="form-row"><label>緊急聯絡人電話</label><input id="hr-ec_phone" value="${v('emergency_phone')}"></div>
+    </div>
+    <div class="form-row"><label>銀行帳戶</label><input id="hr-bank" value="${v('bank_account')}" placeholder="銀行代號＋帳號"></div>
+
+    <div style="font-size:12.5px;font-weight:700;color:var(--green);margin:16px 0 10px;">任職資料</div>
+    <div class="form-2col">
+      <div class="form-row"><label>人員類型</label><select id="hr-emptype" onchange="hrTypeHint()">
+        ${opt('full_time',et,'正職教練')}${opt('part_time',et,'兼職教練')}${opt('intern',et,'工讀生')}${opt('contractor',et,'合作教練')}</select></div>
+      <div class="form-row"><label>在職狀態</label><select id="hr-status">
+        ${opt('active',v('status'),'在職')}${opt('unpaid_leave',v('status'),'留職停薪')}${opt('inactive',v('status'),'離職')}</select></div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>到職日</label><input type="date" id="hr-hire" value="${v('hire_date')}"></div>
+      <div class="form-row"><label>轉正日（選填）</label><input type="date" id="hr-perm" value="${v('permanent_date')}"></div>
+    </div>
+    <div class="form-row"><label>職務標記</label>
+      <div style="display:flex;gap:18px;padding:6px 0;">
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input type="checkbox" id="hr-ismgr" ${c.is_manager?'checked':''}>店長</label>
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input type="checkbox" id="hr-issup" ${c.is_supervisor?'checked':''}>主管</label>
+      </div>
+    </div>
+
+    <div style="font-size:12.5px;font-weight:700;color:var(--green);margin:16px 0 10px;">薪資制度（顯示用 · 計算功能後續串接）</div>
+    <div id="hr-paybox" style="background:var(--card2);border:1px solid var(--bd);border-radius:10px;padding:12px;font-size:12.5px;line-height:1.9;color:var(--t2);">
+      ${hrPayBox(et)}
+    </div>
+
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveHrEdit('${id}')">儲存</button></div>`);
+}
+// 薪資制度顯示盒（依類型）
+function hrPayBox(et){
+  const r=EMP_RULES[et]||EMP_RULES.full_time;
+  const yn=b=>b?'<span style="color:var(--green);font-weight:600;">適用</span>':'<span style="color:var(--t3);">不適用</span>';
+  return `<div><b>制度類型：</b>${r.label}</div>
+    <div><b>薪資條件：</b>${r.pay.join('、')}</div>
+    <div style="margin-top:6px;"><b>適用項目：</b></div>
+    <div>· 課程抽成 ${yn(r.flags.course_share)}　· 團課抽成 ${yn(r.flags.group_share)}</div>
+    <div>· 值班薪資 ${yn(r.flags.duty_pay)}　· 主管津貼 ${yn(r.flags.manager_allow)}　· 店長津貼 ${yn(r.flags.owner_allow)}</div>
+    <div style="margin-top:6px;"><b>勞健保：</b>${r.insurance.join('、')}</div>
+    <div><b>排班：</b>${r.schedule.join('、')}</div>
+    <div><b>特休：</b>${r.leave}</div>`;
+}
+function hrTypeHint(){
+  const et=document.getElementById('hr-emptype').value;
+  const box=document.getElementById('hr-paybox'); if(box) box.innerHTML=hrPayBox(et);
+}
+async function saveHrEdit(id){
+ try{
+  const c=await dbGet('coaches',id);
+  const g=x=>{const el=document.getElementById(x);return el?el.value:undefined;};
+  c.emp_no=g('hr-emp_no')||null;
+  c.name=g('hr-name')||c.name;
+  c.gender=g('hr-gender')||null;
+  c.birth_date=g('hr-birth')||null;
+  c.id_no=g('hr-id_no')||null;
+  c.email=g('hr-email')||null;
+  c.address_registered=g('hr-addr_reg')||null;
+  c.address_mailing=g('hr-addr_mail')||null;
+  c.emergency_name=g('hr-ec_name')||null;
+  c.emergency_phone=g('hr-ec_phone')||null;
+  c.bank_account=g('hr-bank')||null;
+  c.employment_type=normEmp(g('hr-emptype'));
+  c.status=g('hr-status')||c.status;
+  c.hire_date=g('hr-hire')||null;
+  c.permanent_date=g('hr-perm')||null;
+  c.is_manager=document.getElementById('hr-ismgr').checked;
+  c.is_supervisor=document.getElementById('hr-issup').checked;
+  await dbPut('coaches',c);
+  closeModal(); showToast('員工資料已儲存'); navTo('hr');
+ }catch(e){ console.error('saveHrEdit 失敗:',e); showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+}
+
 function openResetStaffPw(id){
   dbGet('coaches',id).then(c=>{
     if(!c){showToast('找不到員工');return;}
@@ -3033,8 +3261,8 @@ function openStaffModal(){
       <div class="form-row"><label>姓名 *</label><input id="st-name" placeholder="例：余東翰"></div>
       <div class="form-row"><label>電話（登入帳號）*</label><input id="st-phone" placeholder="0912xxxxxx"></div>
     </div>
-    <div class="form-row"><label>角色</label><select id="st-role"><option value="coach">教練</option><option value="front_desk">櫃檯（設備帳號）</option></select>
-      <div style="font-size:11px;color:var(--t3);margin-top:5px;">管理員僅一位（老闆），不可由此新增。</div></div>
+    <div class="form-row"><label>角色</label><select id="st-role"><option value="coach">一般員工</option><option value="admin">管理員</option></select>
+      <div style="font-size:11px;color:var(--t3);margin-top:5px;">一般員工：教練／行政等現場員工。管理員：可進入後台管理（系統僅保留一位，設此將轉移原管理員）。設備帳號請至下方「後台專用帳號」區新增。</div></div>
     ${payRoleFields('st',{employment_type:'full_time'},false)}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitStaffInvite()">建立帳號</button></div>`);
 }
@@ -3056,10 +3284,16 @@ async function submitStaffInvite(){
     showToast(dup?'此電話已被使用（Auth 已存在）':('建立帳號失敗：'+r.error));
     return;
   }
+  const chosenRole=document.getElementById('st-role').value;
+  // 若新員工設為管理員：先把既有 admin 降為一般員工（系統僅一位管理員）
+  if(chosenRole==='admin'){
+    const others=(await dbGetAll('coaches')).filter(x=>x.role==='admin');
+    for(const o of others){ o.role='coach'; try{ await dbPut('coaches',o); }catch(_){} }
+  }
   const c=Object.assign({
     id:uid('c'),
     name:preName, phone:prePhone,
-    role:document.getElementById('st-role').value,
+    role:chosenRole,
     auth_id:r.uid,
     status:'active',          // 可登入
     must_setup:true,          // 首次登入須改密碼+完善資料
@@ -3083,6 +3317,46 @@ async function submitStaffInvite(){
     <div style="font-size:12px;color:var(--t3);line-height:1.7;">員工首次登入後，系統會要求修改密碼並完善資料。</div>
     <div class="modal-foot"><button class="btn btn-green" onclick="closeModal()">完成</button></div>`);
 }
+
+/* ── 後台專用（設備）帳號：獨立建立，只需帳號／密碼／名稱，無人事欄位 ── */
+function openDeviceModal(){
+  showModal(`<div class="modal-title">新增設備帳號</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;line-height:1.7;">供場館平板／櫃檯設備登入後台使用，非人事員工。建議用易記帳號（例：yugym1、front1）。</div>
+    <div class="form-row"><label>登入帳號 *</label><input id="dv-acct" placeholder="例：yugym1（英數字）" autocapitalize="off"></div>
+    <div class="form-row"><label>顯示名稱 *</label><input id="dv-name" placeholder="例：櫃檯平板 1"></div>
+    <div class="form-row"><label>密碼 *</label><input type="text" id="dv-pw" placeholder="至少 6 個字元"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitDevice()">建立設備帳號</button></div>`);
+}
+async function submitDevice(){
+ try{
+  const acct=(document.getElementById('dv-acct').value||'').trim().toLowerCase();
+  const name=(document.getElementById('dv-name').value||'').trim();
+  const pw=(document.getElementById('dv-pw').value||'').trim();
+  if(!acct||!/^[a-z0-9_]+$/.test(acct)){ showToast('登入帳號限英數字與底線'); return; }
+  if(!name){ showToast('請填顯示名稱'); return; }
+  if(pw.length<6){ showToast('密碼至少 6 個字元'); return; }
+  const exist=(await dbGetAll('coaches')).find(c=>c.phone===acct);
+  if(exist){ showToast('此帳號已存在'); return; }
+  const r=await cloudCreateAuth('staff',acct,pw,true);
+  if(r.error){
+    const dup=/already|exists|registered/i.test(r.error);
+    showToast(dup?'此帳號已被使用（Auth 已存在）':('建立失敗：'+r.error));
+    return;
+  }
+  const c={ id:uid('c'), name, phone:acct, role:'front_desk', auth_id:r.uid,
+    status:'active', must_setup:false, invite_status:'completed',
+    is_device:true, created_at:new Date().toISOString() };
+  await dbPut('coaches',c);
+  closeModal(); navTo('staff');
+  showModal(`<div class="modal-title">設備帳號已建立</div>
+    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:14px;margin:12px 0;font-size:14px;line-height:2;">
+      登入帳號：<b>${acct}</b><br>密碼：<b>${pw}</b>
+    </div>
+    <div style="font-size:12px;color:var(--t3);line-height:1.7;">請在場館設備上以此帳號登入。設備帳號不需首次改密碼。</div>
+    <div class="modal-foot"><button class="btn btn-green" onclick="closeModal()">完成</button></div>`);
+ }catch(e){ console.error('submitDevice 失敗:',e); showToast('建立失敗：'+(e&&e.message?e.message:e)); }
+}
+
 async function submitStaffInvite_OLD(){
   const token=uid('inv').replace('inv-','');
   const pay=readPayRoleFields('st');                 // 邀請階段不含 pay_rate
@@ -3117,10 +3391,9 @@ async function openStaffEdit(id){
     <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${c.phone||''}　${c.email||''}</div>
     <div class="form-row"><label>顯示名稱（教練名）</label><input id="se-namedisp" value="${c.name_en||''}" placeholder="行事曆／預約表顯示用，可填英文或暱稱；留空則用本名「${c.name||''}」"></div>
     <div class="form-row"><label>角色</label><select id="se-role">
-      <option value="coach" ${c.role==='coach'?'selected':''}>教練</option>
-      <option value="front_desk" ${c.role==='front_desk'?'selected':''}>櫃檯（設備帳號）</option>
-      ${c.role==='admin'?'<option value="admin" selected>管理員</option>':''}</select>
-      ${c.role!=='admin'?'<div style="font-size:11px;color:var(--t3);margin-top:5px;">管理員僅一位，不可由此指派。</div>':''}</div>
+      <option value="coach" ${c.role==='coach'?'selected':''}>一般員工</option>
+      <option value="admin" ${c.role==='admin'?'selected':''}>管理員</option></select>
+      <div style="font-size:11px;color:var(--t3);margin-top:5px;">系統僅保留一位管理員：將他人設為管理員時，原管理員會自動轉為一般員工。</div></div>
     ${payRoleFields('se',c,false)}
     <div class="form-row"><label>在職狀態</label>
       <select id="se-status">
@@ -3132,13 +3405,30 @@ async function openStaffEdit(id){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveStaffEdit('${id}')">儲存</button></div>`);
 }
 async function saveStaffEdit(id){
+ try{
   const c=await dbGet('coaches',id);
-  c.role=document.getElementById('se-role').value;
+  const newRole=document.getElementById('se-role').value;
+  // 管理員轉移：若把此人設為 admin，將其他既有 admin 自動降為教練（系統僅一位管理員）
+  if(newRole==='admin' && c.role!=='admin'){
+    const all=await dbGetAll('coaches');
+    const others=all.filter(x=>x.role==='admin' && x.id!==id);
+    if(others.length){
+      const names=others.map(x=>x.name||x.phone||x.id).join('、');
+      if(!confirm(`確定將管理員權限轉移給「${c.name||c.phone}」？\n原管理員（${names}）將自動轉為一般員工。`)) return;
+      for(const o of others){ o.role='coach'; await dbPut('coaches',o); }
+    }
+  }
+  c.role=newRole;
   c.name_en=(document.getElementById('se-namedisp').value||'').trim()||null;
   Object.assign(c,readPayRoleFields('se'));
   c.status=document.getElementById('se-status').value;
   await dbPut('coaches',c);
-  closeModal();showToast('員工資料已更新');navTo('staff');
+  closeModal();
+  showToast(newRole==='admin'?'已設為管理員':'員工資料已更新');
+  // 若把自己降級，登入身分也要同步（避免停留在 admin 視圖）
+  if(id===SESSION.id && newRole!=='admin' && SESSION.role==='admin'){ SESSION.role=newRole; }
+  navTo('staff');
+ }catch(e){ console.error('saveStaffEdit 失敗:',e); showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
 }
 function inviteLink(token){
   // 同檔以 hash 開啟邀請頁；加版本參數破快取（特別是 LINE 內建瀏覽器）
@@ -3150,6 +3440,15 @@ function copyInvite(token){copyText(inviteLink(token));}
 async function setStaffStatus(id,status){
   const c=await dbGet('coaches',id);
   if(!c){showToast('找不到員工');return;}
+  // 安全防呆：不可停用「唯一的在職管理員」，否則將無人能進入後台
+  if(status==='inactive' && c.role==='admin'){
+    const all=await dbGetAll('coaches');
+    const otherActiveAdmins=all.filter(x=>x.role==='admin' && x.id!==id && x.status==='active');
+    if(otherActiveAdmins.length===0){
+      showToast('這是唯一的在職管理員，請先將其他員工設為管理員，再停用此帳號');
+      return;
+    }
+  }
   const label={active:'在職',unpaid_leave:'留職停薪',inactive:'已停用'}[status]||status;
   c.status=status;
   try{ await dbPut('coaches',c); }catch(e){ showToast('更新失敗：'+(e.message||e)); return; }
@@ -3495,12 +3794,20 @@ async function viewLogs(ticket_id){
 
 /* ════════ 教練端:今日課程 ════════ */
 PAGES.coach_today=async function(){
-  const[bookings,members]=await Promise.all([dbGetAll('bookings'),dbGetAll('members')]);
+  const[bookings,members,allStaff]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const today=ymd(TODAY);
+  // 緊急修復：偵測系統是否完全沒有管理員，若無則顯示「設我為管理員」橫幅
+  const noAdmin = !allStaff.some(s=>s.role==='admin');
+  const fixBanner = noAdmin ? `<div class="card" style="border:2px solid var(--gold);background:#fbf6ea;">
+    <div style="font-weight:600;color:var(--green);margin-bottom:6px;">⚠ 系統目前沒有管理員</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">偵測到目前沒有任何管理員帳號。你可以將目前登入的帳號（${SESSION.name||SESSION.id}）設為管理員，以恢復後台管理權限。</div>
+    <button class="btn btn-green btn-sm" onclick="emergencySelfAdmin()">將我設為管理員</button>
+  </div>` : '';
   const mine=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===today&&b.status!=='cancelled')
     .sort((a,b)=>a.start_time.localeCompare(b.start_time));
   C.innerHTML=head('TODAY','今日課程',`${today}（週${WD[TODAY.getDay()]}）`)+
+  fixBanner+
   `<div class="stat-grid">
     <div class="stat-card"><div class="sc-label">今日課堂</div><div><span class="sc-num">${mine.length}</span><span class="sc-unit">堂</span></div></div>
     <div class="stat-card"><div class="sc-label">已完成</div><div><span class="sc-num">${mine.filter(b=>b.status==='completed').length}</span><span class="sc-unit">堂</span></div></div>
@@ -3516,6 +3823,22 @@ PAGES.coach_today=async function(){
   </div>`).join('')}
   </div>`;
 };
+// 緊急修復：把目前登入帳號設為管理員（僅在系統無任何管理員時生效）
+async function emergencySelfAdmin(){
+ try{
+  const all=await dbGetAll('coaches');
+  if(all.some(s=>s.role==='admin')){ showToast('系統已有管理員，無需修復'); navTo('coach_today'); return; }
+  const me=await dbGet('coaches',SESSION.id);
+  if(!me){ showToast('找不到目前帳號資料'); return; }
+  me.role='admin';
+  if(me.status!=='active') me.status='active'; // 確保在職，否則無法登入後台
+  await dbPut('coaches',me);
+  SESSION.role='admin'; // 當前登入身分即時升級
+  showToast('已將你設為管理員，正在進入管理後台…');
+  buildNav();
+  navTo('dashboard');
+ }catch(e){ console.error('emergencySelfAdmin 失敗:',e); showToast('設定失敗：'+(e&&e.message?e.message:e)); }
+}
 async function markComplete(id){
   const b=await dbGet('bookings',id);b.status='completed';await dbPut('bookings',b);
   showToast('已標記完成');navTo(CUR_PAGE);
