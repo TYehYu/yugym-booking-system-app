@@ -369,6 +369,24 @@ tr:hover td{background:var(--card2);}
 .dc-row{display:flex;gap:10px;font-size:13px;}
 .dc-k{color:var(--t3);width:36px;flex-shrink:0;}
 .dc-v{color:var(--text);font-weight:500;}
+/* 時段排課網格 */
+.slot-row{display:flex;align-items:stretch;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd2);}
+.slot-time{font-family:var(--num);font-size:15px;font-weight:700;color:var(--text);width:46px;flex-shrink:0;padding-top:6px;}
+.slot-seats{display:flex;gap:6px;flex:1;flex-wrap:wrap;}
+.slot-seat{flex:1;min-width:64px;min-height:42px;border-radius:8px;border:1px solid var(--bd);font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;padding:4px 6px;transition:.12s;background:var(--card);}
+.seat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.seat-chk{color:var(--ok);}
+.seat-pt{background:#e3efe9;color:#1f6f54;border-color:#cfe4d8;}
+.seat-friendly{background:#e8eef7;color:#23508a;border-color:#d4e0ef;}
+.seat-trial{background:#efe6f3;color:#6e3a86;border-color:#e0d2e8;}
+.seat-self{background:#eceae4;color:#6a655c;border-color:#ddd9d0;}
+.seat-done{opacity:.6;}
+.seat-empty{background:var(--card2);color:var(--t3);border-style:dashed;font-size:16px;}
+.seat-empty:hover{background:#e3efe9;color:var(--green);border-color:var(--green);}
+.seat-group{flex:0 0 100%;background:#f6ead8;color:#9a5a1e;border-color:#ecd9be;margin-top:2px;}
+.seat-group-empty{flex:0 0 100%;background:var(--card2);color:#9a5a1e;border-style:dashed;margin-top:2px;}
+.seat-group-empty:hover{background:#f6ead8;}
+.slot-seat:disabled,.slot-seat.seat-disabled{opacity:.4;cursor:not-allowed;background:var(--card2);}
 .cm-tag.cm-pt{background:#d6ece3;color:#1a5e47;}
 .cm-tag.cm-friendly{background:#dbe8f8;color:#1d4778;}
 .cm-tag.cm-group{background:#f8e6cf;color:#8a4f17;}
@@ -710,8 +728,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.1910';
-const APP_VERSION_LABEL='26620.1910';
+const APP_VERSION='26620.1941';
+const APP_VERSION_LABEL='26620.1941';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -4729,42 +4747,62 @@ function quickBookOn(ds){ _prefill={date:ds,time:''}; openBookingModal(); }
 
 function renderCoachDayList(){
   const box=document.getElementById('coach-daylist'); if(!box||!window._coachCalData)return;
-  const {visible,memMap,coachMap,allView}=window._coachCalData;
+  const {visible,memMap,coachMap}=window._coachCalData;
   const ds=window._coachSelDate;
   const d=parseYmd(ds);
   const wd=['日','一','二','三','四','五','六'][d.getDay()];
-  const list=visible.filter(b=>b.date===ds).sort((a,b)=>a.start_time.localeCompare(b.start_time));
+  const list=visible.filter(b=>b.date===ds);
   const ptN=list.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
   const grpN=list.filter(b=>b.category==='小班肌力').length;
-  const cards=list.length===0
-    ? '<div class="empty" style="padding:30px 0;"><div class="em-t">這天沒有課程</div></div>'
-    : list.map(b=>{
-        const cc=colorClass(typeOfCat(b.category));
-        const acting=b.substitute_coach_id?coachMap[b.substitute_coach_id]+'（代）':(coachMap[b.coach_id]||'—');
-        const who = b.category==='小班肌力' ? '團體課' : (b.category==='體驗'?(b.trial_name||'體驗客戶'):(memMap[b.member_id]||'—'));
-        const typeName = b.category + (b.format?'（'+b.format.toUpperCase()+'）':'');
-        const ticketName = b.category==='小班肌力'?'團體課券':(b.category==='體驗'?'體驗':'教練課券');
-        const isGroup = b.category==='小班肌力';
-        const stLabel = b.status==='cancelled'?['已取消','tag-danger']
-                    : (b.status==='completed'||b.status==='checked_in')?['已簽到','tag-ok']
-                    : (b.date<ymd(TODAY)?['未簽到','tag-warn']:['已確認','tag-warn']);
-        return `<div class="dc-card" onclick="openBookingDetail('${b.id}')">
-          <div class="dc-head"><span class="dc-dot dc-${cc}"></span><span class="dc-time">${b.start_time}</span>
-            <span class="dc-type">${typeName}</span><span class="dc-arrow">›</span></div>
-          <div class="dc-body">
-            <div class="dc-row"><span class="dc-k">會員</span><span class="dc-v">${who}</span></div>
-            ${isGroup?'':`<div class="dc-row"><span class="dc-k">教練</span><span class="dc-v">${acting}</span></div>`}
-            <div class="dc-row"><span class="dc-k">票券</span><span class="dc-v">${ticketName}</span></div>
-            <div class="dc-row"><span class="dc-k">狀態</span><span class="dc-v"><span class="tag ${stLabel[1]}">${stLabel[0]}</span></span></div>
-          </div>
+  const PT_SLOTS=3; // 同時段教練位數量（沿用場地容量規則）
+
+  // 依開始時間分組成時段（只列有課的時段）
+  const slots={};
+  list.forEach(b=>{ (slots[b.start_time]=slots[b.start_time]||[]).push(b); });
+  const times=Object.keys(slots).sort();
+
+  // 單一教練位卡
+  const seatCell=(b)=>{
+    if(!b) return null;
+    const cc=colorClass(typeOfCat(b.category));
+    const who=b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—');
+    const done=(b.status==='completed'||b.status==='checked_in');
+    return `<button class="slot-seat seat-${cc}${done?' seat-done':''}" onclick="openBookingDetail('${b.id}')">
+      <span class="seat-name">${who}</span>${done?'<span class="seat-chk">✓</span>':''}</button>`;
+  };
+  const emptySeat=(time)=>`<button class="slot-seat seat-empty" onclick="quickBookAt('${ds}','${time}')">＋</button>`;
+
+  const rows = times.length===0
+    ? '<div class="empty" style="padding:24px 0;"><div class="em-t">這天沒有課程</div><div style="font-size:12px;color:var(--t3);margin-top:8px;">點下方「新增預約」排課</div></div>'
+    : times.map(time=>{
+        const items=slots[time];
+        const ptItems=items.filter(b=>CAP_CATS.includes(b.category));   // 佔教練位
+        const grpItem=items.find(b=>b.category==='小班肌力');
+        // 教練位：已約的排前面，補空位到 3
+        const seats=[];
+        for(let i=0;i<PT_SLOTS;i++){ seats.push(ptItems[i]?seatCell(ptItems[i]):emptySeat(time)); }
+        const ptFull=ptItems.length>=PT_SLOTS;
+        // 團體課位
+        let grpCell;
+        if(grpItem){
+          const done=(grpItem.status==='completed'||grpItem.status==='checked_in');
+          grpCell=`<button class="slot-seat seat-group${done?' seat-done':''}" onclick="openBookingDetail('${grpItem.id}')"><span class="seat-name">小班肌力</span></button>`;
+        }else{
+          grpCell=`<button class="slot-seat seat-group-empty" onclick="quickBookAt('${ds}','${time}')">團＋</button>`;
+        }
+        return `<div class="slot-row">
+          <div class="slot-time">${time}</div>
+          <div class="slot-seats">${seats.join('')}${grpCell}</div>
         </div>`;
       }).join('');
+
   box.innerHTML=`<div class="card">
     <div class="card-title" style="display:block;">
       <div>${ds.replace(/-/g,'/')}（${wd}）</div>
       <div style="font-size:12px;color:var(--t3);font-weight:400;margin-top:3px;">教練課 ${ptN} 堂・團體課 ${grpN} 堂　·　共 ${list.length} 筆課程</div>
     </div>
-    ${cards}
+    ${rows}
+    <button class="btn btn-green btn-sm" style="width:100%;margin-top:12px;" onclick="quickBookOn('${ds}')">＋ 新增預約（其他時間）</button>
   </div>`;
 }
 
