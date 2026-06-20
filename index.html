@@ -797,8 +797,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.2129';
-const APP_VERSION_LABEL='26620.2129';
+const APP_VERSION='26620.2153';
+const APP_VERSION_LABEL='26620.2153';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -2057,7 +2057,9 @@ let _bkWizard={};   // 暫存第1頁選擇
 async function openBookingModal(){
   const[coaches,types]=await Promise.all([dbGetAll('coaches'),dbGetAll('ticket_types')]);
   const isCoach=SESSION.role==='coach';
-  const activeTypes=types.filter(t=>t.active!==false);
+  const isMobileBk=window.innerWidth<=600;
+  // 手機版（教練端／管理員教練視角）不可新增團體課；團體課僅後台（桌機）建立
+  const activeTypes=types.filter(t=>t.active!==false && !(isMobileBk && t.category==='小班肌力'));
   const typeOpts=activeTypes.map(t=>`<option value="${t.id}">${t.name}（${t.category}）</option>`).join('');
   const pf=_prefill||{};   // 只有從行事曆點選才有 date/time
   _bkWizard={fromSlot:!!_prefill};
@@ -4979,12 +4981,11 @@ function renderCoachDayList(){
       <div class="sm-st">${stLabel}</div>
     </button>`;
   };
-  // 別人的課：灰階佔位，顯示姓名（受隱私遮蔽），不可新增；點擊看簡短資訊
-  const otherSeat=(b)=>{
-    const realName=b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—');
-    const who=bkDisplayName(b,realName); // 教練身分時會遮蔽成課程類型
-    return `<button class="slot-seat seat-other bk-masked" onclick="openBookingDetail('${b.id}')">
-      <span class="seat-name">${who}</span></button>`;
+  // 別人的課：灰階「類型標籤」佔位，不顯示會員名，不可點擊新增
+  const otherTag=(b)=>{
+    const typeM={'私人教練':'教練課','自主訓練':'自主訓練','體驗':'體驗','小班肌力':'團體課'}[b.category]||'其他';
+    const cc=colorClass(typeOfCat(b.category));
+    return `<span class="slot-seat seat-other bk-masked" style="cursor:default;">${typeM}</span>`;
   };
   const emptySeat=(time)=>`<button class="slot-seat seat-empty" onclick="quickBookAt('${ds}','${time}')">＋</button>`;
 
@@ -4994,26 +4995,32 @@ function renderCoachDayList(){
         const items=slots[time];
         const ptItems=items.filter(b=>CAP_CATS.includes(b.category));   // 佔教練位（全店）
         const grpItem=items.find(b=>b.category==='小班肌力');
-        // 教練位：先放已約的（我的完整卡、別人的灰階），不足 3 補空位
+        const myPt=ptItems.find(isMine);          // 我在此時段的教練課（私教/自主/體驗）
+        const myGrp=grpItem && isMine(grpItem) ? grpItem : null; // 我的團體課
+
+        // ── 規則A：此時段有「我的課」→ 整列只顯示我的完整卡，不顯示別人/＋/團＋ ──
+        if(myPt || myGrp){
+          const mine = myPt || myGrp;
+          return `<div class="slot-row">
+            <div class="slot-time">${time}</div>
+            <div class="slot-seats">${mineSeat(mine)}</div>
+          </div>`;
+        }
+
+        // ── 規則B：此時段沒有我的課，但場地被別人佔用 → 類型標籤佔位 + 剩餘空位＋ ──
         const seats=[];
         for(let i=0;i<PT_SLOTS;i++){
           const b=ptItems[i];
-          if(!b) seats.push(emptySeat(time));
-          else seats.push(isMine(b)?mineSeat(b):otherSeat(b));
+          if(!b) seats.push(emptySeat(time));   // 真正空位才可新增
+          else seats.push(otherTag(b));          // 別人的課：類型標籤佔位，不可新增
         }
-        // 團體課位
-        let grpCell;
+        // ── 規則C：教練端不顯示團＋（團體課只能後台建）。別人的團體課用類型標籤佔位 ──
+        let grpCell='';
         if(grpItem){
-          const done=(grpItem.status==='completed'||grpItem.status==='checked_in');
-          const n=(mids(grpItem)||[]).length;
-          if(isMine(grpItem)){
-            grpCell=`<button class="slot-seat seat-group${done?' seat-done':''}" onclick="openBookingDetail('${grpItem.id}')"><span class="seat-name">小班肌力${n>0?' '+n+'人':''}</span></button>`;
-          }else{
-            grpCell=`<button class="slot-seat seat-group bk-masked" onclick="openBookingDetail('${grpItem.id}')"><span class="seat-name">小班肌力${n>0?' '+n+'人':''}</span></button>`;
-          }
-        }else{
-          grpCell=`<button class="slot-seat seat-group-empty" onclick="quickBookAt('${ds}','${time}')">團＋</button>`;
+          // 一定是別人的團體課（我的已在規則A處理）→ 灰階類型標籤佔位
+          grpCell=`<span class="slot-seat seat-group bk-masked" style="cursor:default;">團體課</span>`;
         }
+        // 無團體課時：不顯示團＋（教練端不可建團體課）
         return `<div class="slot-row">
           <div class="slot-time">${time}</div>
           <div class="slot-seats">${seats.join('')}${grpCell}</div>
