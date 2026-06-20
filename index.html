@@ -167,6 +167,18 @@ input,select,textarea{font-family:inherit;font-size:14px;}
 /* 卡片/表格/按鈕 */
 .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:20px;margin-bottom:18px;}
 .show-mobile-inline{display:none;}
+/* 手機/桌機專屬顯示切換 */
+.mobile-only{display:none;}
+.desktop-only{display:block;}
+@media(max-width:600px){
+  .mobile-only{display:block;}
+  .desktop-only{display:none;}
+}
+/* 儀表板本月總覽列 */
+.ov-row{display:flex;justify-content:space-between;align-items:baseline;padding:12px 0;border-bottom:1px solid var(--bd2);}
+.ov-row:last-child{border-bottom:none;}
+.ov-label{font-size:13px;color:var(--t2);}
+.ov-val{font-size:21px;font-weight:700;font-family:var(--num);line-height:1;}
 .card-title{font-family:var(--serif);font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;}
 .btn{padding:9px 16px;border-radius:9px;font-size:13px;font-weight:500;transition:.15s;letter-spacing:0.03em;}
 .btn-green{background:var(--green);color:#fff;}.btn-green:hover{background:var(--green-l);}
@@ -657,8 +669,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.1756';
-const APP_VERSION_LABEL='26620.1756';
+const APP_VERSION='26620.1806';
+const APP_VERSION_LABEL='26620.1806';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1157,15 +1169,37 @@ PAGES.dashboard=async function(){
   const byPlan={};
   tickets.filter(t=>inRange(t.purchase_date)).forEach(t=>{
     const name=t.plan_name||'—';
-    byPlan[name]=byPlan[name]||{sold:0,amount:0,used:0};
+    byPlan[name]=byPlan[name]||{sold:0,amount:0,used:0,total:0};
     byPlan[name].sold+=1;
     byPlan[name].amount+=(t.amount_paid||0);
     byPlan[name].used+=((t.sessions_total||0)-(t.sessions_remaining||0));
+    byPlan[name].total+=(t.sessions_total||0); // 已售出總堂數（使用率分母）
   });
   const planRows=Object.entries(byPlan).sort((a,b)=>b[1].amount-a[1].amount)
     .map(([name,d])=>({name,...d}));
 
   const fmtNT=(n)=>'$'+(n||0).toLocaleString();
+
+  // ── 員工表現（手機版營運速覽）──
+  // 載入本月出勤工時
+  let attAll=[];
+  try{ attAll=await dbGetAll('attendance'); }catch(_){}
+  const perfRows=coaches.filter(c=>c.role!=='front_desk'&&isCoachable(c)).map(c=>{
+    const myBk=rangeBk.filter(b=>(b.substitute_coach_id||b.coach_id)===c.id);
+    const ptCount=myBk.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+    const groupCount=myBk.filter(b=>b.category==='小班肌力').length;
+    // 業績營收：該教練負責、已銷課的單堂金額加總
+    let rev=0;
+    myBk.filter(b=>b.status==='completed'||b.status==='checked_in').forEach(b=>{
+      const tk=tickets.find(t=>t.id===b.ticket_id);
+      rev+=(tk&&tk.unit_price)?tk.unit_price:0;
+    });
+    // 本月上班時數（需打卡者才有）
+    const hours=attAll.filter(a=>a.emp_id===c.id&&(a.date||'').slice(0,7)===ym)
+      .reduce((s,r)=>s+(calcWorkHours(r)||0),0);
+    return {name:coachDisp(c),rev,ptCount,groupCount,hours,need_punch:!!c.need_punch};
+  }).filter(r=>r.rev>0||r.ptCount>0||r.groupCount>0||r.hours>0)
+    .sort((a,b)=>b.rev-a.rev||b.ptCount-a.ptCount);
 
   C.innerHTML=head('OVERVIEW','儀表板','營運報表')+
   `<div class="filter-row" style="margin-bottom:18px;">
@@ -1175,11 +1209,44 @@ PAGES.dashboard=async function(){
     </div>
     <span style="font-size:12.5px;color:var(--t2);">${rangeLabel}</span>
   </div>
+
+  <!-- ═══ 手機版：營運速覽 ═══ -->
+  <div class="mobile-only">
+    <div class="card" style="padding:4px 14px;">
+      <div style="font-size:11.5px;color:var(--t3);letter-spacing:0.08em;padding:12px 0 4px;font-weight:600;">本月總覽</div>
+      <div class="ov-row"><span class="ov-label">本月營收</span><span class="ov-val">${fmtNT(revenue)}</span></div>
+      <div class="ov-row"><span class="ov-label">本月課堂數</span><span class="ov-val">${classCount} 堂</span></div>
+      <div class="ov-row"><span class="ov-label">本月銷課金額</span><span class="ov-val" style="color:var(--gold-d);">${fmtNT(usedFee)}</span></div>
+      <div class="ov-row"><span class="ov-label">本月銷課堂數</span><span class="ov-val">${doneCount} 堂</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title">員工表現</div>
+      ${perfRows.length===0?'<div class="empty"><div class="em-t">本期無資料</div></div>':
+      perfRows.map(r=>`<div style="padding:11px 0;border-bottom:1px solid var(--bd2);">
+        <div style="font-weight:600;font-size:15px;margin-bottom:5px;">${r.name}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--t2);">
+          <span>營收 <b style="color:var(--green);">${fmtNT(r.rev)}</b></span>
+          <span>教練課 ${r.ptCount}堂</span>
+          <span>團體課 ${r.groupCount}堂</span>
+          <span>工時 ${r.need_punch?r.hours.toFixed(1)+'hr':'—'}</span>
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>
+
+  <!-- ═══ 桌機版：分析報表 ═══ -->
+  <div class="desktop-only">
   <div class="stat-grid dash-summary">
     <div class="stat-card"><div class="sc-label">營收（發票券）</div><div><span class="sc-num" style="font-size:28px;">${fmtNT(revenue)}</span></div></div>
     <div class="stat-card"><div class="sc-label">已使用課堂費用（銷課）</div><div><span class="sc-num" style="font-size:28px;color:var(--gold-d);">${fmtNT(usedFee)}</span></div></div>
     <div class="stat-card"><div class="sc-label">課堂數</div><div><span class="sc-num">${classCount}</span><span class="sc-unit">堂</span><span style="font-size:12px;color:var(--t2);margin-left:8px;">完成 ${doneCount}</span></div></div>
     <div class="stat-card"><div class="sc-label">${_dashRange==='today'?'今日':'本月'}發券數</div><div><span class="sc-num">${revTickets.length}</span><span class="sc-unit">張</span></div></div>
+  </div>
+  <div class="card"><div class="card-title">員工表現</div>
+    ${perfRows.length===0?'<div class="empty"><div class="em-t">本期無資料</div></div>':
+    `<table><thead><tr><th>姓名</th><th>營收</th><th>教練課</th><th>團體課</th><th>上班時數</th></tr></thead><tbody>
+    ${perfRows.map(r=>`<tr><td style="font-weight:500;">${r.name}</td><td class="num" style="color:var(--green);font-weight:600;">${fmtNT(r.rev)}</td><td class="num">${r.ptCount} 堂</td><td class="num">${r.groupCount} 堂</td><td class="num">${r.need_punch?r.hours.toFixed(1)+' hr':'—'}</td></tr>`).join('')}
+    </tbody></table>`}
   </div>
   <div class="dash-grid dash-2col">
     <div class="card"><div class="card-title">各教練課堂數</div>
@@ -1191,11 +1258,13 @@ PAGES.dashboard=async function(){
     </div>
     <div class="card"><div class="card-title">課程使用率（賣最多 / 用最多）</div>
       ${planRows.length===0?'<div class="empty"><div class="em-t">本期無售出課程</div></div>':
-      planRows.map(r=>`<div style="padding:9px 0;border-bottom:1px solid var(--bd2);">
-        <div style="font-weight:500;margin-bottom:3px;">${r.name}</div>
-        <div style="font-size:12.5px;color:var(--t2);">售出 ${r.sold}｜${fmtNT(r.amount)}｜銷堂 ${r.used}</div>
-      </div>`).join('')}
+      planRows.map(r=>{const pct=r.total>0?Math.round(r.used/r.total*100):0;return `<div style="padding:9px 0;border-bottom:1px solid var(--bd2);">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:3px;"><span style="font-weight:500;">${r.name}</span><span style="font-size:13px;color:var(--t2);white-space:nowrap;">使用率 ${pct}%</span></div>
+        <div style="font-size:12px;color:var(--t3);margin-bottom:5px;">售出 ${r.sold}｜${fmtNT(r.amount)}｜銷堂 ${r.used}</div>
+        <div style="height:5px;background:var(--card2);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:var(--green);"></div></div>
+      </div>`;}).join('')}
     </div>
+  </div>
   </div>`;
 };
 function typeOfCat(cat){return {'私人教練':'pt','小班肌力':'group','自主訓練':'self_training','體驗':'trial'}[cat]||'pt';}
