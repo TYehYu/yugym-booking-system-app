@@ -515,6 +515,10 @@ tr:hover td{background:var(--card2);}
 .form-row input:focus{outline:none;border-color:var(--gold);background:#fff;}
 .form-row select:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0.15);background:#fff;}
 .form-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+/* 極窄螢幕（≤430px）：兩欄表單改單欄，避免框線重疊 */
+@media(max-width:430px){
+  .form-2col{grid-template-columns:1fr;gap:0;}
+}
 
 /* Toast */
 #toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--text);color:#fff;
@@ -785,8 +789,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.2045';
-const APP_VERSION_LABEL='26620.2045';
+const APP_VERSION='26620.2054';
+const APP_VERSION_LABEL='26620.2054';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -2045,12 +2049,26 @@ async function openBookingModal(){
   const isCoach=SESSION.role==='coach';
   const activeTypes=types.filter(t=>t.active!==false);
   const typeOpts=activeTypes.map(t=>`<option value="${t.id}">${t.name}（${t.category}）</option>`).join('');
-  const coachOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${isCoach&&c.id===SESSION.id?'selected':''}>${coachDisp(c)}</option>`).join('');
   const pf=_prefill||{};   // 只有從行事曆點選才有 date/time
   _bkWizard={fromSlot:!!_prefill};
   _prefill=null;
   // 教練端：授課教練固定為自己（隱藏選擇）；管理員/櫃台才顯示教練下拉
   window._bkSelfCoach = isCoach ? SESSION.id : null;
+  // 管理員/櫃台從「某教練視角」建立預約時的預設教練（可修改）：
+  //  - 手機版行事曆只看自己 → 預設自己
+  //  - 桌機「只看我的課」模式 → 預設自己
+  //  - 全店模式 → 不預設
+  let prefillCoach = window._bkPrefillCoach || null;
+  if(!isCoach && !prefillCoach){
+    const isMobile=window.innerWidth<=600;
+    if(isMobile) prefillCoach = SESSION.id;              // 手機行事曆=只看自己
+    else if(window._calMineOnly) prefillCoach = SESSION.id; // 桌機只看我的課
+  }
+  window._bkPrefillCoach=null; // 用完即清
+  const coachOpts=coaches.filter(isCoachable).map(c=>{
+    const sel = (isCoach&&c.id===SESSION.id) || (prefillCoach&&c.id===prefillCoach);
+    return `<option value="${c.id}" ${sel?'selected':''}>${coachDisp(c)}</option>`;
+  }).join('');
   // 30 分鐘時段選項（08:00～22:00）
   const timeOpts=bkTimeOptions(pf.time);
   showModal(`<div class="modal-title">新增預約 · 步驟 1 / 2</div>
@@ -2061,10 +2079,8 @@ async function openBookingModal(){
       ? `<input type="hidden" id="bk-coach" value="${SESSION.id}">`
       : `<div class="form-row" id="bk-coach-row" style="display:none;"><label>授課教練</label>
           <select id="bk-coach"><option value="">請選擇教練…</option>${coachOpts}</select></div>`}
-    <div class="form-2col">
-      <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}"></div>
-      <div class="form-row"><label>時間</label><select id="bk-time">${timeOpts}</select></div>
-    </div>
+    <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}"></div>
+    <div class="form-row"><label>時間</label><select id="bk-time">${timeOpts}</select></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`);
 }
 // 產生 30 分鐘間隔時段選項（08:00～22:00）
