@@ -789,8 +789,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.2105';
-const APP_VERSION_LABEL='26620.2105';
+const APP_VERSION='26620.2119';
+const APP_VERSION_LABEL='26620.2119';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -2599,14 +2599,25 @@ async function grantCheckinReward(b){
   if(b.makeup && norm(b.date) !== ymd(TODAY)) return false;
   // 判斷發哪種點數
   //  以 category 為主要依據（穩定值），ticket_type_id 為輔（相容舊寫死值）。
-  //  注意：ticket_type_id 多為自動產生的 ID（如 tt-xxxx），不可依賴它等於 'pt'。
-  let rewardType=null;
+  let isFriendly=false, doGrant=false;
   const cat=b.category||'';
-  const isFriendly = b.ticket_type_id==='pt_friendly' || cat.indexOf('友善')>=0;
-  const isCoachClass = cat==='私人教練' || cat==='體驗' || b.ticket_type_id==='pt' || b.ticket_type_id==='trial';
-  if(isFriendly && isCoachClass) rewardType='self_friendly';
-  else if(isCoachClass) rewardType='self_training';
-  if(!rewardType) return false;                 // 團課/自主訓練本身不發點
+  const friendly = b.ticket_type_id==='pt_friendly' || cat.indexOf('友善')>=0;
+  const coachClass = cat==='私人教練' || cat==='體驗' || b.ticket_type_id==='pt' || b.ticket_type_id==='trial';
+  if(coachClass){ doGrant=true; isFriendly=friendly; }
+  if(!doGrant) return false;                 // 團課/自主訓練本身不發點
+
+  // 動態查「自主訓練」票券種類的實際 ID（與會員預約自主訓練時用的同一個種類，避免 ID 對不上）
+  //  規則：category==='自主訓練'；友善 → name 含「友善」；一般 → name 不含「友善」。
+  let rewardTypeId=null;
+  try{
+    const allTypes=await dbGetAll('ticket_types');
+    const selfTypes=allTypes.filter(t=>t.category==='自主訓練');
+    const friendlyType=selfTypes.find(t=>(t.name||'').indexOf('友善')>=0);
+    const normalType=selfTypes.find(t=>(t.name||'').indexOf('友善')<0);
+    rewardTypeId = isFriendly ? (friendlyType&&friendlyType.id) : (normalType&&normalType.id);
+    // 後備：若找不到對應種類，退回舊的固定 ID（self_friendly / self_training）
+    if(!rewardTypeId) rewardTypeId = isFriendly ? 'self_friendly' : 'self_training';
+  }catch(_){ rewardTypeId = isFriendly ? 'self_friendly' : 'self_training'; }
 
   const POINTS=2, VALID_DAYS=7;
   const today=ymd(TODAY);
@@ -2614,9 +2625,9 @@ async function grantCheckinReward(b){
   const tk={
     id:uid('TK'),
     member_id:b.member_id,
-    ticket_type_id:rewardType,
+    ticket_type_id:rewardTypeId,
     source_plan_id:null,
-    plan_name: rewardType==='self_friendly'?'友善自主訓練點數':'自主訓練點數',
+    plan_name: isFriendly?'友善自主訓練點數':'自主訓練點數',
     format:null,
     source:'checkin_grant',
     purchase_date:today, start_date:today, expire_date:expire,
@@ -2628,12 +2639,16 @@ async function grantCheckinReward(b){
     await dbPut('member_tickets',tk);
     await logTicket(tk.id,'grant',POINTS,b.id,SESSION.id,'簽到發放（'+tk.plan_name+'）');
     // 在 booking 上標記，避免重複發
-    b.reward_issued=true; b.reward_issued_at=new Date().toISOString(); b.reward_type=rewardType;
+    b.reward_issued=true; b.reward_issued_at=new Date().toISOString(); b.reward_type=rewardTypeId;
     await dbPut('bookings',b);
     return true;
   }catch(e){
-    // 點數欄位/種類若不存在，不阻斷簽到，只提示
-    showToast('簽到完成，但點數發放失敗：'+(e.message||e));
+    // 發放失敗：完整記錄錯誤並以明顯方式提示（不阻斷簽到本身）
+    const msg=(e&&e.message)?e.message:String(e);
+    console.error('自主訓練點數發放失敗:',e,'tk=',tk);
+    window._lastRewardError=msg;
+    // 用 alert 確保不被其他 toast 蓋掉，讓使用者看得到原因
+    setTimeout(()=>{ try{ alert('自主訓練點數發放失敗：\n'+msg+'\n\n（簽到已完成，但點數沒發出去。請把這段訊息回報給開發者。）'); }catch(_){} },300);
     return false;
   }
 }
