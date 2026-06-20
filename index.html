@@ -606,7 +606,7 @@ async function cloudCreateAuth(role,acct,pw,viaServer){
           'Authorization':'Bearer '+window.YUGYM_CONFIG.anonKey,
           'apikey':window.YUGYM_CONFIG.anonKey
         },
-        body:JSON.stringify({email,password:pw})
+        body:JSON.stringify({action:'create',email,password:pw})
       });
       const out=await res.json();
       if(!res.ok||out.error) return {error:out.error||('伺服器回應 '+res.status)};
@@ -787,7 +787,7 @@ const NAV={
   coach:[
     {key:'coach_today',label:'今日課程'},
     {key:'coach_calendar',label:'預約行事曆'},
-    {key:'coach_salary',label:'薪資查詢'},
+    // MVP 凍結：薪資查詢（coach_salary）入口暫時隱藏，頁面程式碼保留
   ],
   front_desk:[
     {key:'admin_today',label:'今日事項'},
@@ -799,7 +799,7 @@ const NAV={
   member:[
     {key:'mem_bookings',label:'我的預約'},
     {key:'mem_tickets',label:'我的票券'},
-    {key:'mem_notifications',label:'通知中心'},
+    // MVP 凍結：通知中心（mem_notifications）入口暫時隱藏，頁面程式碼保留
   ],
 };
 // 可被排課的教練：role 是 coach，或 admin(老闆兼教練，一人一帳號)
@@ -2046,7 +2046,9 @@ async function openBookingDetail(id){
   const tk=b.ticket_id?await dbGet('member_tickets',b.ticket_id):null;
   const d=parseYmd(b.date);
   const canCancel=b.status==='booked'||b.status==='checked_in';
-  const editable=b.status!=='cancelled'&&b.status!=='completed'&&b.date>=ymd(TODAY);
+  // 教練只能改自己負責（主責或代課）的課；管理員 / 櫃台全權
+  const ownByCoach = SESSION.role!=='coach' || b.coach_id===SESSION.id || b.substitute_coach_id===SESSION.id;
+  const editable=ownByCoach && b.status!=='cancelled'&&b.status!=='completed'&&b.date>=ymd(TODAY);
   const slotDt=new Date(b.date+'T'+b.start_time+':00');
   const within24=(slotDt-TODAY)/3600000 < 24 && (slotDt-TODAY)>=0;
   const tkLine = tk ? `<div><span style="color:var(--t2);">票券</span>　${tk.plan_name||'票券'}　<b class="num">${tk.sessions_remaining}/${tk.sessions_total}</b>${tk.sessions_remaining<=2?' <span class="tag tag-warn">建議續約</span>':''}　<span style="color:var(--t3);font-size:11px;">效期至 ${tk.expire_date}</span></div>` : '';
@@ -2106,7 +2108,7 @@ async function openBookingDetail(id){
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
       ${b.member_id?`<button class="btn btn-ghost" onclick="showToast('訓練紀錄功能開發中')">訓練紀錄</button>`:''}
       ${editable?`<button class="btn btn-ghost" onclick="saveBookingTime('${b.id}')">儲存變更</button>`:''}
-      ${canCancel?`<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`:''}
+      ${canCancel&&ownByCoach?`<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`:''}
     </div>`);
 }
 
@@ -2301,10 +2303,42 @@ async function cancelBooking(id){
   if(!b)return;
   b.status='cancelled';
   await dbPut('bookings',b);
-  await refundTicket(b.ticket_id,b.id,SESSION.id);
-  await pushNotification(b.member_id,'cancel','預約已取消',`您的${b.category}（${b.date} ${b.start_time}）已取消，票券已退回 1 堂。`);
+
+  let refundedCount=0; // 實際退回的票券堂數，用於 toast / 通知文案
+
+  if(b.category==='小班肌力'){
+    // 團體課：依 ticket_logs 找出這堂課實際扣過哪些會員票券，逐一退回（沒扣票的人不退）
+    const logs=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='deduct');
+    const refunded=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='refund');
+    // 已退過的票券數（避免重複退）：每張票券退回次數不得超過扣抵次數
+    const refundCntByTk={};
+    refunded.forEach(l=>{refundCntByTk[l.ticket_id]=(refundCntByTk[l.ticket_id]||0)+1;});
+    for(const log of logs){
+      if((refundCntByTk[log.ticket_id]||0)>0){ refundCntByTk[log.ticket_id]--; continue; } // 這筆扣抵已被退過
+      await refundTicket(log.ticket_id,b.id,SESSION.id);
+      refundedCount++;
+    }
+  }else if(b.ticket_id){
+    // 一般私教 / 自主訓練：有 ticket_id 才退回 1 堂
+    await refundTicket(b.ticket_id,b.id,SESSION.id);
+    refundedCount=1;
+  }
+  // 體驗課（ticket_id 為 null）：不退票
+
+  // 通知文案依課程類型 / 是否退票調整
+  let body;
+  if(b.category==='體驗'){
+    body=`您的體驗課（${b.date} ${b.start_time}）已取消。`;
+  }else if(b.category==='小班肌力'){
+    body=`您的小班肌力課（${b.date} ${b.start_time}）已取消${refundedCount>0?`，已退回 ${refundedCount} 堂團體課票券`:''}。`;
+  }else{
+    body=`您的${b.category}（${b.date} ${b.start_time}）已取消${refundedCount>0?'，票券已退回 1 堂':''}。`;
+  }
+  // 體驗課無綁定會員（member_id 為 null）時不推播
+  if(b.member_id) await pushNotification(b.member_id,'cancel','預約已取消',body);
+
   closeModal();
-  showToast('已取消預約，票券已退回 1 堂');
+  showToast(refundedCount>0?`已取消預約，退回 ${refundedCount} 堂票券`:'已取消預約');
   navTo(CUR_PAGE);
 }
 
@@ -2880,10 +2914,11 @@ async function submitResetStaffPw(){
   const email=toEmail('staff',phone);
   try{
     const base=window.YUGYM_CONFIG.url.replace(/\/$/,'');
-    const res=await fetch(base+'/functions/v1/smooth-api',{
+    // 統一改打 create-staff-account：以 action 區分「建立」與「重設密碼」，後端只需維護一支 Edge Function
+    const res=await fetch(base+'/functions/v1/create-staff-account',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+window.YUGYM_CONFIG.anonKey,'apikey':window.YUGYM_CONFIG.anonKey},
-      body:JSON.stringify({email,password:pw})
+      body:JSON.stringify({action:'reset_password',email,password:pw})
     });
     const out=await res.json();
     if(!res.ok||out.error){showToast('重設失敗：'+(out.error||('伺服器回應 '+res.status)));return;}
@@ -3150,8 +3185,10 @@ async function toggleType(id){
   showToast(t.active===false?'已停用':'已啟用');navTo('plans');
 }
 async function deleteType(id){
-  const plans=await dbGetAll('course_plans');
-  if(plans.some(p=>p.ticket_type_id===id)){ showToast('已有課程方案使用此種類，請先停用或刪除該方案'); return; }
+  // 有歷史資料（課程方案、或已發放的會員票券）→ 只允許停用，不允許刪除
+  const[plans,tickets]=await Promise.all([dbGetAll('course_plans'),dbGetAll('member_tickets')]);
+  if(plans.some(p=>p.ticket_type_id===id)){ showToast('已有課程方案使用此種類，請先處理該方案；建議改用「停用」保留歷史'); return; }
+  if(tickets.some(t=>t.ticket_type_id===id)){ showToast('已有會員票券屬於此種類，僅能「停用」以保留歷史，不可刪除'); return; }
   if(!confirm('確定刪除此票券種類？此動作無法復原。')) return;
   try{ await dbDel('ticket_types',id); }catch(e){ showToast('刪除失敗：'+(e.message||e)); return; }
   showToast('票券種類已刪除');navTo('plans');
@@ -3164,8 +3201,10 @@ async function togglePlan(id){
   showToast(p.active?'已上架':'已下架');navTo('plans');
 }
 async function deletePlan(id){
-  const tks=await dbGetAll('member_tickets');
-  if(tks.some(t=>t.source_plan_id===id)){ showToast('已有會員票券來自此方案，建議改用「下架」保留歷史'); return; }
+  // 有歷史資料（已發放的會員票券、或會員購買申請）→ 只允許下架，不允許刪除
+  const[tks,apps]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('purchase_applications')]);
+  if(tks.some(t=>t.source_plan_id===id)){ showToast('已有會員票券來自此方案，僅能「下架」以保留歷史，不可刪除'); return; }
+  if(apps.some(a=>a.plan_id===id)){ showToast('已有會員購買申請使用此方案，僅能「下架」以保留歷史，不可刪除'); return; }
   if(!confirm('確定刪除此課程方案？此動作無法復原。')) return;
   try{ await dbDel('course_plans',id); }catch(e){ showToast('刪除失敗：'+(e.message||e)); return; }
   showToast('課程方案已刪除');navTo('plans');
@@ -3568,17 +3607,103 @@ PAGES.mem_bookings=async function(){
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   const upcoming=mine.filter(b=>b.date>=ymd(TODAY));
   C.innerHTML=head('BOOKINGS','我的預約','查看你即將到來的課程')+
-  `<div class="card"><div class="card-title">即將到來</div>
-  ${upcoming.length===0?'<div class="empty"><div class="em-t">目前沒有預約</div><div style="font-size:11px;margin-top:6px;">私教課由教練為你安排</div></div>':
-  upcoming.map(b=>{const d=parseYmd(b.date);return `<div class="list-item">
+  `<div class="card"><div class="card-title">即將到來 <button class="btn btn-green btn-sm" onclick="openSelfBookModal()">＋ 預約自主訓練</button></div>
+  ${upcoming.length===0?'<div class="empty"><div class="em-t">目前沒有預約</div><div style="font-size:11px;margin-top:6px;">私教課由教練為你安排；自主訓練可自行預約</div></div>':
+  upcoming.map(b=>{const d=parseYmd(b.date);const isSelf=b.category==='自主訓練';return `<div class="list-item">
     <div class="li-date"><div class="lid-d">${d.getDate()}</div><div class="lid-m">${d.getMonth()+1}月</div></div>
     <div class="li-sep"></div>
     <div class="li-body"><div class="li-title"><span class="tag tag-${colorClass(typeOfCat(b.category))}">${b.category}</span></div>
     <div class="li-meta">${b.coach_id?coachMap[b.coach_id]:'自主訓練'} · ${b.duration}分鐘 · ${statusLabel(b.status)}</div></div>
-    <div class="li-time"><div class="lit-t">${b.start_time}</div><div class="lit-w">週${WD[d.getDay()]}</div></div>
+    <div class="li-time"><div class="lit-t">${b.start_time}</div><div class="lit-w">週${WD[d.getDay()]}</div>${isSelf?`<button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="memCancelSelf('${b.id}')">取消</button>`:''}</div>
   </div>`;}).join('')}
   </div>`;
 };
+
+/* ── 會員自助預約自主訓練（只允許 自主訓練 / 友善自主訓練；只用自己的票券）── */
+async function openSelfBookModal(){
+  // 會員持有的「自主訓練 / 友善自主訓練」可用票券彙整（不過期、有剩餘）
+  const tickets=await dbGetAll('member_tickets');
+  const mineUsable=tickets.filter(t=>t.member_id===SESSION.id
+    && (t.ticket_type_id==='self_training'||t.ticket_type_id==='self_friendly')
+    && t.status==='usable' && t.sessions_remaining>0
+    && (!t.expire_date||t.expire_date>=ymd(TODAY)));
+  const sumByType=t=>mineUsable.filter(x=>x.ticket_type_id===t).reduce((s,x)=>s+x.sessions_remaining,0);
+  const selfSum=sumByType('self_training'), friendlySum=sumByType('self_friendly');
+  if(selfSum+friendlySum===0){
+    showModal(`<div class="modal-title">預約自主訓練</div>
+      <div class="empty" style="padding:24px 8px;"><div class="em-t">你目前沒有可用的自主訓練點數</div>
+      <div style="font-size:11.5px;margin-top:6px;color:var(--t2);">完成教練課簽到後會獲得自主訓練點數（效期 7 天）</div></div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+    return;
+  }
+  // 類型選項：只列有票的
+  const typeOpts=[
+    selfSum>0?`<option value="self_training">自主訓練（剩 ${selfSum} 點）</option>`:'',
+    friendlySum>0?`<option value="self_friendly">友善自主訓練（剩 ${friendlySum} 點，限平日 18:00 前）</option>`:''
+  ].filter(Boolean).join('');
+  showModal(`<div class="modal-title">預約自主訓練</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:14px;">將自動扣抵 1 點（使用最快到期的票券）。</div>
+    <div class="form-row"><label>類型</label><select id="sb-type" onchange="selfBookHint()">${typeOpts}</select></div>
+    <div class="form-2col">
+      <div class="form-row"><label>日期</label><input type="date" id="sb-date" min="${ymd(TODAY)}" value="${ymd(TODAY)}"></div>
+      <div class="form-row"><label>時間（30 分起跳）</label><input type="time" id="sb-time" step="1800"></div>
+    </div>
+    <div id="sb-hint" style="font-size:11.5px;color:var(--t2);padding:9px 12px;background:var(--card2);border-radius:9px;margin-bottom:6px;"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitSelfBook()">確認預約</button></div>`);
+  selfBookHint();
+}
+function selfBookHint(){
+  const t=document.getElementById('sb-type')?.value;
+  const el=document.getElementById('sb-hint'); if(!el)return;
+  el.textContent = t==='self_friendly'
+    ? '友善自主訓練僅限平日（一～五）18:00 前的時段。'
+    : '自主訓練可於任何營業時段預約。';
+}
+async function submitSelfBook(){
+ try{
+  const type_id=document.getElementById('sb-type').value;
+  // 防呆：只允許這兩種，杜絕任何方式選到教練課
+  if(type_id!=='self_training'&&type_id!=='self_friendly'){showToast('僅能預約自主訓練');return;}
+  const date=document.getElementById('sb-date').value;
+  const time=(document.getElementById('sb-time').value||'').slice(0,5);
+  if(!date||!time){showToast('請選擇日期與時間');return;}
+  // 取最快到期的可用票券（已內建排序＋過期過濾）
+  const tk=await findUsableTicket(SESSION.id,type_id,date);
+  if(!tk){showToast('沒有可用的自主訓練票券（或已過期）');return;}
+  // 驗證：過去日期 / 友善限時段 / 場地 3 組 / 會員自己時段重複（共用後台同一支驗證層）
+  const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:type_id};
+  const verr=await validateBooking(vbk,date,time,60);
+  if(verr){showToast(verr);return;}
+  const bk={id:uid('BK'),member_id:SESSION.id,coach_id:null,ticket_id:tk.id,ticket_type_id:type_id,
+    category:'自主訓練',format:null,date,start_time:time,duration:60,status:'booked',
+    recurring:false,created_by:SESSION.id,created_at:new Date().toISOString()};
+  await dbPut('bookings',bk);
+  await deductTicket(tk,bk.id,SESSION.id);
+  closeModal();
+  showToast('預約成功，已扣 1 點');
+  navTo('mem_bookings');
+ }catch(e){ console.error('submitSelfBook 錯誤:',e); showToast('預約失敗：'+(e&&e.message?e.message:e)); }
+}
+// 會員自行取消自主訓練（退回 1 點）
+async function memCancelSelf(id){
+  const b=await dbGet('bookings',id);
+  if(!b||b.member_id!==SESSION.id){showToast('找不到預約');return;}
+  if(b.category!=='自主訓練'){showToast('僅能取消自主訓練預約');return;}
+  showModal(`<div class="modal-title">取消自主訓練</div>
+    <div style="font-size:13.5px;padding:6px 0 4px;">確定取消 ${b.date} ${b.start_time} 的自主訓練嗎？</div>
+    <div style="font-size:12px;color:var(--t2);margin-top:6px;">取消後將退回 1 點自主訓練票券。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-danger" onclick="doMemCancelSelf('${id}')">確定取消</button></div>`);
+}
+async function doMemCancelSelf(id){
+  const b=await dbGet('bookings',id);
+  if(!b||b.member_id!==SESSION.id||b.category!=='自主訓練'){showToast('無法取消');return;}
+  b.status='cancelled';
+  await dbPut('bookings',b);
+  if(b.ticket_id) await refundTicket(b.ticket_id,b.id,SESSION.id);
+  closeModal();
+  showToast('已取消，退回 1 點');
+  navTo('mem_bookings');
+}
 
 /* ════════ 會員端:我的票券 ════════ */
 PAGES.mem_tickets=async function(){
@@ -3589,7 +3714,7 @@ PAGES.mem_tickets=async function(){
   const myApps=apps.filter(a=>a.member_id===SESSION.id).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
   const openPlans=plans.filter(p=>p.active && p.member_applyable);
   const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客'};
-  const APPST={pending:['審核中','tag-warn'],approved:['已通過','tag-ok'],rejected:['已拒絕','tag-danger']};
+  const APPST={pending:['審核中','tag-warn'],invoicing:['待開立發票','tag-warn'],completed:['已完成','tag-ok'],cancelled:['已取消','tag-danger'],approved:['已完成','tag-ok'],rejected:['已取消','tag-danger']};
   window._planCache=Object.fromEntries(plans.map(p=>[p.id,p]));
   C.innerHTML=head('TICKETS','我的票券',`目前持有 ${usable.length} 張可用票券`)+
   `<div class="card"><div class="card-title">可用票券</div>
@@ -3735,36 +3860,65 @@ async function submitApply(){
   closeModal();showToast('申請已送出，待審核');navTo('mem_tickets');
 }
 
-/* ════════ 後台:購買申請審核 ════════ */
+/* ════════ 後台:購買申請審核（發票分流） ════════
+   狀態流轉：
+   pending（待審核）
+     ├─免發票  → completed（已完成）          ＋ 立即發票券（invoice_status=none）
+     ├─雲端發票→ invoicing（待開立發票）      → 填發票號 → completed ＋發票券
+     ├─紙本發票→ invoicing（待開立發票）      → 填發票號 → completed ＋發票券
+     └─取消    → cancelled（已取消）          不發票券
+   發放核心統一走 _issueTicketsFromApp()，沿用既有「發票券／算到期日／購買紀錄／異動紀錄／升級會員／通知」邏輯。 */
+const APP_INVOICE_LABEL={none:'免發票',cloud:'雲端發票',paper:'紙本發票'};
 PAGES.purchase_review=async function(){
   const[apps,members,plans,types]=await Promise.all([dbGetAll('purchase_applications'),dbGetAll('members'),dbGetAll('course_plans'),dbGetAll('ticket_types')]);
   const memMap=Object.fromEntries(members.map(m=>[m.id,m]));
   const planMap=Object.fromEntries(plans.map(p=>[p.id,p]));
   const pending=apps.filter(a=>a.status==='pending').sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
-  const done=apps.filter(a=>a.status!=='pending').sort((a,b)=>(b.reviewed_at||b.created_at||'').localeCompare(a.reviewed_at||a.created_at||'')).slice(0,30);
-  const APPST={approved:['已通過','tag-ok'],rejected:['已拒絕','tag-danger']};
+  const invoicing=apps.filter(a=>a.status==='invoicing').sort((a,b)=>(a.reviewed_at||a.created_at||'').localeCompare(b.reviewed_at||b.created_at||''));
+  const done=apps.filter(a=>a.status==='completed'||a.status==='cancelled').sort((a,b)=>(b.reviewed_at||b.created_at||'').localeCompare(a.reviewed_at||a.created_at||'')).slice(0,30);
+  const APPST={completed:['已完成','tag-ok'],cancelled:['已取消','tag-danger'],invoicing:['待開立發票','tag-warn'],
+    approved:['已通過','tag-ok'],rejected:['已拒絕','tag-danger']}; // 後兩者相容舊資料
+  const payMethodLabel=m=>({cash:'現金',transfer:'匯款'}[m]||m||'—');
+  const metaLine=a=>{
+    const bits=[];
+    bits.push(`申請 ${(a.created_at||'').replace('T',' ').slice(0,16)}`);
+    if(a.payment_method) bits.push('付款：'+payMethodLabel(a.payment_method));
+    if(a.installment_count>1) bits.push(`分期 ${a.installment_count} 期`);
+    if(a.transfer_last5) bits.push('匯款後五碼 '+a.transfer_last5);
+    if(a.invoice_type) bits.push('發票：'+(APP_INVOICE_LABEL[a.invoice_type]||a.invoice_type));
+    if(a.invoice_number) bits.push('發票號 '+a.invoice_number);
+    if(a.ip) bits.push('IP '+a.ip);
+    return bits.join('　·　');
+  };
   const row=a=>{const m=memMap[a.member_id];return `<div style="border:1px solid var(--bd);border-radius:11px;padding:14px;margin-bottom:10px;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
       <div>
         <div style="font-weight:600;font-size:15px;">${m?m.name:'（會員不存在）'} <span style="font-size:12px;color:var(--t3);">${m?m.phone:''}</span></div>
         <div style="font-size:13px;color:var(--t2);margin-top:3px;">${a.plan_name}　·　<b style="color:var(--green);">$${(a.list_price||0).toLocaleString()}</b></div>
-        <div style="font-size:11.5px;color:var(--t3);margin-top:3px;">申請時間：${(a.created_at||'').replace('T',' ').slice(0,16)}${a.ip?`　·　IP：${a.ip}`:''}　·　條款 ${a.contract_version||'—'}${a.agreed_health?'　·　已簽健康聲明':''}</div>
+        <div style="font-size:11.5px;color:var(--t3);margin-top:3px;">${metaLine(a)}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         ${a.signature?`<img src="${a.signature}" alt="簽名" style="width:120px;height:56px;object-fit:contain;border:1px solid var(--bd);border-radius:6px;background:#fff;cursor:pointer;" onclick="viewSig('${a.id}')">`:'<span style="font-size:11px;color:var(--t3);">無簽名</span>'}
       </div>
     </div>
-    ${a.status==='pending'?`<div style="display:flex;gap:8px;margin-top:12px;">
-      <button class="btn btn-green btn-sm" onclick="approveApp('${a.id}')">通過並發放票券</button>
-      <button class="btn btn-danger btn-sm" onclick="rejectApp('${a.id}')">拒絕</button>
+    ${a.status==='pending'?`<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+      <button class="btn btn-green btn-sm" onclick="appInvoice('${a.id}','none')">免發票（直接發券）</button>
+      <button class="btn btn-gold btn-sm" onclick="appInvoice('${a.id}','cloud')">雲端發票</button>
+      <button class="btn btn-gold btn-sm" onclick="appInvoice('${a.id}','paper')">紙本發票</button>
+      <button class="btn btn-danger btn-sm" onclick="appCancel('${a.id}')">取消</button>
       <button class="btn btn-ghost btn-sm" onclick="viewContract('${a.id}')">查看合約</button>
+    </div>`:a.status==='invoicing'?`<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center;">
+      <span class="tag tag-warn">待開立發票（${APP_INVOICE_LABEL[a.invoice_type]||''}）</span>
+      <button class="btn btn-green btn-sm" onclick="appCompleteInvoice('${a.id}')">完成開立並發券</button>
+      <button class="btn btn-danger btn-sm" onclick="appCancel('${a.id}')">取消</button>
     </div>`:`<div style="margin-top:10px;"><span class="tag ${(APPST[a.status]||['','tag-warn'])[1]}">${(APPST[a.status]||['—'])[0]}</span>${a.status==='rejected'&&a.reject_reason?`<span style="font-size:12px;color:var(--danger);margin-left:8px;">原因：${a.reject_reason}</span>`:''}</div>`}
   </div>`;};
   window._appCache=Object.fromEntries(apps.map(a=>[a.id,a]));
-  C.innerHTML=head('REVIEW','購買申請','審核會員的購買申請 · 通過後自動發放票券')+
+  C.innerHTML=head('REVIEW','購買申請','審核會員購買申請 · 選擇發票方式後自動發放票券')+
   `<div class="card"><div class="card-title">待審核（${pending.length}）</div>
     ${pending.length===0?'<div class="empty"><div class="em-t">目前沒有待審核的申請</div></div>':pending.map(row).join('')}
   </div>
+  ${invoicing.length>0?`<div class="card"><div class="card-title">待開立發票（${invoicing.length}）</div>${invoicing.map(row).join('')}</div>`:''}
   ${done.length>0?`<div class="card"><div class="card-title">已處理</div>${done.map(row).join('')}</div>`:''}`;
 };
 function viewSig(id){const a=window._appCache[id];if(!a||!a.signature)return;
@@ -3775,45 +3929,94 @@ function viewContract(id){const a=window._appCache[id];
     <div style="max-height:50vh;overflow-y:auto;font-size:12.5px;line-height:1.9;white-space:pre-wrap;color:var(--t2);">${CONTRACT_TEXT}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="navTo('purchase_review')">關閉</button></div>`);
 }
-async function approveApp(id){
-  const a=await dbGet('purchase_applications',id);
-  if(!a||a.status!=='pending'){showToast('此申請已處理');return;}
+
+/* ── 發放核心（共用）：建票券→算到期日→購買紀錄→異動紀錄→升級會員→通知 ──
+   invoiceStatus：'none' | 'issued'（已開立）；invoiceNumber：發票號（可空）
+   回傳建立的 ticket，失敗丟例外。 */
+async function _issueTicketsFromApp(a, invoiceStatus, invoiceNumber){
   const plan=await dbGet('course_plans',a.plan_id);
-  if(!plan){showToast('找不到對應方案，無法發放');return;}
+  if(!plan) throw new Error('找不到對應方案，無法發放');
   const total=plan.sessions_base+plan.sessions_bonus;
   const unitPrice=plan.unit_price||0;
   const dealAmount=a.list_price||(unitPrice*plan.sessions_base);
-  // 發票券
   const t={id:uid('TK'),member_id:a.member_id,ticket_type_id:plan.ticket_type_id,source_plan_id:plan.id,plan_name:plan.name,format:plan.format||null,source:'purchase',
     unit_price:unitPrice,amount_paid:dealAmount,
     purchase_date:ymd(TODAY),start_date:ymd(TODAY),expire_date:ymd(addDays(TODAY,plan.valid_days)),
-    sessions_total:total,sessions_remaining:total,status:'usable',payment_status:'paid',invoice_status:'none',created_at:new Date().toISOString()};
+    sessions_total:total,sessions_remaining:total,status:'usable',
+    payment_status:'paid',invoice_status:invoiceStatus||'none',invoice_number:invoiceNumber||null,
+    created_at:new Date().toISOString()};
   await dbPut('member_tickets',t);
-  await logTicket(t.id,'grant',total,null,SESSION.id,'會員申請通過發放（'+plan.name+'）');
+  await logTicket(t.id,'grant',total,null,SESSION.id,'購買申請通過發放（'+plan.name+'）');
   // 購買紀錄
   try{ await dbPut('purchases',{id:uid('PUR'),member_id:a.member_id,plan_id:plan.id,ticket_id:t.id,plan_name:plan.name,
-    list_price:unitPrice*plan.sessions_base,deal_amount:dealAmount,payment_method:null,installment_count:1,note:'會員線上申請',operator:SESSION.id,source:'member_application',created_at:new Date().toISOString()}); }catch(_){}
+    list_price:unitPrice*plan.sessions_base,deal_amount:dealAmount,
+    payment_method:a.payment_method||null,installment_count:a.installment_count||1,
+    invoice_type:a.invoice_type||null,invoice_number:invoiceNumber||null,
+    note:'購買申請',operator:SESSION.id,source:'purchase_application',created_at:new Date().toISOString()}); }catch(_){}
   // 新朋友購私教 → 升級會員
   try{ const ty=await dbGet('ticket_types',plan.ticket_type_id);
     if(ty&&ty.category==='私人教練'){const mem=await dbGet('members',a.member_id);if(mem&&(mem.tier==='newbie'||!mem.tier)){mem.tier='regular';await dbPut('members',mem);}} }catch(_){}
-  // 更新申請狀態
-  a.status='approved'; a.reviewed_by=SESSION.id; a.reviewed_at=new Date().toISOString();
-  await dbPut('purchase_applications',a);
-  showToast('已通過並發放票券');navTo('purchase_review');
+  // 通知會員
+  try{ await pushNotification(a.member_id,'payment','票券已啟用','您的票券已完成購買並啟用。'); }catch(_){}
+  return t;
 }
-function rejectApp(id){
-  showModal(`<div class="modal-title">拒絕申請</div>
-    <div class="form-row"><label>拒絕原因</label><input id="rj-reason" placeholder="請填寫原因，會顯示給會員"></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="navTo('purchase_review')">取消</button><button class="btn btn-danger" onclick="confirmReject('${id}')">確認拒絕</button></div>`);
-}
-async function confirmReject(id){
-  const reason=document.getElementById('rj-reason').value.trim();
-  if(!reason){showToast('請填寫拒絕原因');return;}
+
+// 免發票 → 直接發券、申請完成；雲端/紙本 → 進入待開立發票
+async function appInvoice(id, invoiceType){
   const a=await dbGet('purchase_applications',id);
   if(!a||a.status!=='pending'){showToast('此申請已處理');return;}
-  a.status='rejected'; a.reject_reason=reason; a.reviewed_by=SESSION.id; a.reviewed_at=new Date().toISOString();
+  if(invoiceType==='none'){
+    try{ await _issueTicketsFromApp(a,'none',null); }
+    catch(e){ showToast('發放失敗：'+(e.message||e)); return; }
+    a.status='completed'; a.invoice_type='none'; a.invoice_status='none';
+    a.reviewed_by=SESSION.id; a.reviewed_at=new Date().toISOString();
+    await dbPut('purchase_applications',a);
+    showToast('已完成並發放票券（免發票）'); navTo('purchase_review');
+  }else{
+    // 雲端 / 紙本：先進待開立，不發券
+    a.status='invoicing'; a.invoice_type=invoiceType;
+    a.invoice_status=invoiceType==='cloud'?'cloud_pending':'paper_pending';
+    a.reviewed_by=SESSION.id; a.reviewed_at=new Date().toISOString();
+    await dbPut('purchase_applications',a);
+    showToast(invoiceType==='cloud'?'已轉雲端發票待開立':'已轉紙本發票待開立'); navTo('purchase_review');
+  }
+}
+// 完成開立發票 → 填發票號（雲端未來可由 API 自動帶入）→ 發券、申請完成
+function appCompleteInvoice(id){
+  const a=window._appCache?window._appCache[id]:null;
+  const isCloud=a&&a.invoice_type==='cloud';
+  showModal(`<div class="modal-title">完成開立發票</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${isCloud?'雲端發票（未來可串接電子發票 API 自動回填號碼）':'紙本發票'}。填入發票號碼後將正式發放票券。</div>
+    <div class="form-row"><label>發票號碼（可留空）</label><input id="iv-no" placeholder="例：AB-12345678"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="navTo('purchase_review')">取消</button><button class="btn btn-green" onclick="confirmCompleteInvoice('${id}')">完成並發券</button></div>`);
+}
+async function confirmCompleteInvoice(id){
+  const a=await dbGet('purchase_applications',id);
+  if(!a||a.status!=='invoicing'){showToast('此申請狀態已變更');return;}
+  const no=(document.getElementById('iv-no').value||'').trim()||null;
+  try{ await _issueTicketsFromApp(a,'issued',no); }
+  catch(e){ showToast('發放失敗：'+(e.message||e)); return; }
+  a.status='completed'; a.invoice_status='issued'; a.invoice_number=no;
+  a.reviewed_at=new Date().toISOString();
   await dbPut('purchase_applications',a);
-  showToast('已拒絕申請');navTo('purchase_review');
+  showToast('發票已開立，票券已發放'); navTo('purchase_review');
+}
+// 取消申請（pending 或 invoicing 皆可）→ 不發券
+function appCancel(id){
+  showModal(`<div class="modal-title">取消購買申請</div>
+    <div style="font-size:13.5px;padding:6px 0 4px;">確定取消這筆購買申請嗎？</div>
+    <div style="font-size:12px;color:var(--t2);margin-top:6px;">取消後狀態改為「已取消」，不會發放票券。</div>
+    <div class="form-row" style="margin-top:10px;"><label>取消原因（選填，會顯示給會員）</label><input id="ac-reason" placeholder="選填"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="navTo('purchase_review')">返回</button><button class="btn btn-danger" onclick="confirmAppCancel('${id}')">確定取消</button></div>`);
+}
+async function confirmAppCancel(id){
+  const a=await dbGet('purchase_applications',id);
+  if(!a||(a.status!=='pending'&&a.status!=='invoicing')){showToast('此申請已處理');return;}
+  const reason=(document.getElementById('ac-reason').value||'').trim()||null;
+  a.status='cancelled'; a.reject_reason=reason; a.reviewed_by=SESSION.id; a.reviewed_at=new Date().toISOString();
+  await dbPut('purchase_applications',a);
+  try{ if(reason) await pushNotification(a.member_id,'payment','購買申請已取消','您的購買申請已取消。原因：'+reason); }catch(_){}
+  showToast('已取消申請'); navTo('purchase_review');
 }
 
 /* ════════ 管理員:今日事項 ════════ */
