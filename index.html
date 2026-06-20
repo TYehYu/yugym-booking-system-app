@@ -398,6 +398,14 @@ tr:hover td{background:var(--card2);}
 .slot-seats{display:flex;gap:6px;flex:1;flex-wrap:wrap;}
 .slot-seat{flex:1;min-width:64px;min-height:42px;border-radius:8px;border:1px solid var(--bd);font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;padding:4px 6px;transition:.12s;background:var(--card);}
 .seat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* 我的課：完整資訊卡（多行，左對齊）*/
+.slot-seat.slot-mine{flex-direction:column;align-items:flex-start;justify-content:center;gap:1px;min-height:60px;padding:7px 9px;text-align:left;}
+.slot-mine .sm-name{font-size:13.5px;font-weight:700;}
+.slot-mine .sm-type{font-size:11px;opacity:.85;}
+.slot-mine .sm-tk{font-size:10.5px;opacity:.75;}
+.slot-mine .sm-st{font-size:10px;opacity:.7;margin-top:1px;}
+/* 別人的課：灰階佔位（不可新增，但可點看簡短資訊）*/
+.slot-seat.seat-other{background:var(--card2);color:var(--t2);border-color:var(--bd);}
 .seat-chk{color:var(--ok);}
 .seat-pt{background:#e3efe9;color:#1f6f54;border-color:#cfe4d8;}
 .seat-friendly{background:#e8eef7;color:#23508a;border-color:#d4e0ef;}
@@ -789,8 +797,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.2119';
-const APP_VERSION_LABEL='26620.2119';
+const APP_VERSION='26620.2129';
+const APP_VERSION_LABEL='26620.2129';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1997,13 +2005,15 @@ PAGES.calendar=async function(){
     if(!window._coachSelDate) window._coachSelDate=ymd(TODAY);
     if(!window._coachMonth){const t=parseYmd(window._coachSelDate)||new Date(TODAY);window._coachMonth={y:t.getFullYear(),m:t.getMonth()};}
     const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
+    try{ window._allTkCache=await dbGetAll('member_tickets'); }catch(_){ window._allTkCache=[]; }
     const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
     const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
     const visible=bookings.filter(b=>{
       if(b.status==='cancelled') return false;
-      return b.coach_id===myId || b.substitute_coach_id===myId; // 只看我的課
+      return b.coach_id===myId || b.substitute_coach_id===myId; // 月曆只看我的課
     });
-    window._coachCalData={visible,memMap,coachMap,typeMap:{},allView:false,myId};
+    const allView2=bookings.filter(b=>b.status!=='cancelled'); // 排課表用全店
+    window._coachCalData={visible,memMap,coachMap,typeMap:{},allView:false,myId,allBk:allView2};
     const toggle=`<div class="filter-row" style="justify-content:flex-end;align-items:center;margin-bottom:14px;">
       <button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立預約</button>
     </div>`;
@@ -4803,15 +4813,18 @@ PAGES.coach_calendar=async function(){
   if(!window._coachMonth){const t=parseYmd(window._coachSelDate)||new Date(TODAY);window._coachMonth={y:t.getFullYear(),m:t.getMonth()};}
 
   const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
+  try{ window._allTkCache=await dbGetAll('member_tickets'); }catch(_){ window._allTkCache=[]; }
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const typeMap={};
   const visible=bookings.filter(b=>{
     if(b.status==='cancelled') return false;
-    return b.coach_id===myId || b.substitute_coach_id===myId; // 只看我的課
+    return b.coach_id===myId || b.substitute_coach_id===myId; // 月曆/週量只看我的課
   });
+  // 全店當日預約（未取消）：供「當日排課表」依場地容量判斷座位（含別人的課）
+  const allView2=bookings.filter(b=>b.status!=='cancelled');
 
-  window._coachCalData={visible,memMap,coachMap,typeMap,allView:false,myId};
+  window._coachCalData={visible,memMap,coachMap,typeMap,allView:false,myId,allBk:allView2};
 
   const toggle=`<div class="filter-row" style="justify-content:flex-end;align-items:center;margin-bottom:14px;">
     <button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立預約</button>
@@ -4926,29 +4939,52 @@ function quickBookOn(ds){ _prefill={date:ds,time:''}; openBookingModal(); }
 
 function renderCoachDayList(){
   const box=document.getElementById('coach-daylist'); if(!box||!window._coachCalData)return;
-  const {visible,memMap,coachMap}=window._coachCalData;
+  const {memMap,coachMap,myId,allBk}=window._coachCalData;
   const ds=window._coachSelDate;
   const d=parseYmd(ds);
   const wd=['日','一','二','三','四','五','六'][d.getDay()];
-  const list=visible.filter(b=>b.date===ds);
-  const ptN=list.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
-  const grpN=list.filter(b=>b.category==='小班肌力').length;
-  const PT_SLOTS=3; // 同時段教練位數量（沿用場地容量規則）
+  // 當日排課表：用全店預約（依場地容量判斷座位），非只看自己
+  const source = allBk || window._coachCalData.visible || [];
+  const list=source.filter(b=>b.date===ds);
+  const myList=list.filter(b=>b.coach_id===myId||b.substitute_coach_id===myId);
+  const ptN=myList.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+  const grpN=myList.filter(b=>b.category==='小班肌力').length;
+  const PT_SLOTS=3; // 同時段教練位數量（場地容量）
 
-  // 依開始時間分組成時段（只列有課的時段）
+  const isMine=(b)=> b.coach_id===myId||b.substitute_coach_id===myId;
+
+  // 依開始時間分組成時段（只列有課的時段，含全店）
   const slots={};
   list.forEach(b=>{ (slots[b.start_time]=slots[b.start_time]||[]).push(b); });
   const times=Object.keys(slots).sort();
 
-  // 單一教練位卡
-  const seatCell=(b)=>{
-    if(!b) return null;
+  // 票券資訊（我的課才顯示）
+  const tkInfo=(b)=>{
+    if(!b.ticket_id) return '';
+    const tk=(window._allTkCache||[]).find(t=>t.id===b.ticket_id);
+    return tk?`${tk.plan_name||'票券'} ${tk.sessions_remaining}/${tk.sessions_total}`:'';
+  };
+
+  // 我的課：完整卡（會員/類型/票券/狀態），可點操作
+  const mineSeat=(b)=>{
     const cc=colorClass(typeOfCat(b.category));
+    const who=b.category==='體驗'?(b.trial_name||'體驗客戶'):(memMap[b.member_id]||'—');
+    const typeName=b.category+(b.format?'（'+b.format.toUpperCase()+'）':'');
+    const stLabel=(b.status==='completed'||b.status==='checked_in')?'已簽到':(b.date<ymd(TODAY)?'未簽到':'已確認');
+    const tk=tkInfo(b);
+    return `<button class="slot-seat seat-${cc} slot-mine" onclick="openBookingDetail('${b.id}')">
+      <div class="sm-name">${who}</div>
+      <div class="sm-type">${typeName}</div>
+      ${tk?`<div class="sm-tk">${tk}</div>`:''}
+      <div class="sm-st">${stLabel}</div>
+    </button>`;
+  };
+  // 別人的課：灰階佔位，顯示姓名（受隱私遮蔽），不可新增；點擊看簡短資訊
+  const otherSeat=(b)=>{
     const realName=b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—');
-    const who=bkDisplayName(b,realName);
-    const done=(b.status==='completed'||b.status==='checked_in');
-    return `<button class="slot-seat seat-${cc}${done?' seat-done':''}${bkIsMasked(b)?' bk-masked':''}" onclick="openBookingDetail('${b.id}')">
-      <span class="seat-name">${who}</span>${done?'<span class="seat-chk">✓</span>':''}</button>`;
+    const who=bkDisplayName(b,realName); // 教練身分時會遮蔽成課程類型
+    return `<button class="slot-seat seat-other bk-masked" onclick="openBookingDetail('${b.id}')">
+      <span class="seat-name">${who}</span></button>`;
   };
   const emptySeat=(time)=>`<button class="slot-seat seat-empty" onclick="quickBookAt('${ds}','${time}')">＋</button>`;
 
@@ -4956,18 +4992,25 @@ function renderCoachDayList(){
     ? '<div class="empty" style="padding:24px 0;"><div class="em-t">這天沒有課程</div><div style="font-size:12px;color:var(--t3);margin-top:8px;">點下方「新增預約」排課</div></div>'
     : times.map(time=>{
         const items=slots[time];
-        const ptItems=items.filter(b=>CAP_CATS.includes(b.category));   // 佔教練位
+        const ptItems=items.filter(b=>CAP_CATS.includes(b.category));   // 佔教練位（全店）
         const grpItem=items.find(b=>b.category==='小班肌力');
-        // 教練位：已約的排前面，補空位到 3
+        // 教練位：先放已約的（我的完整卡、別人的灰階），不足 3 補空位
         const seats=[];
-        for(let i=0;i<PT_SLOTS;i++){ seats.push(ptItems[i]?seatCell(ptItems[i]):emptySeat(time)); }
-        const ptFull=ptItems.length>=PT_SLOTS;
+        for(let i=0;i<PT_SLOTS;i++){
+          const b=ptItems[i];
+          if(!b) seats.push(emptySeat(time));
+          else seats.push(isMine(b)?mineSeat(b):otherSeat(b));
+        }
         // 團體課位
         let grpCell;
         if(grpItem){
           const done=(grpItem.status==='completed'||grpItem.status==='checked_in');
           const n=(mids(grpItem)||[]).length;
-          grpCell=`<button class="slot-seat seat-group${done?' seat-done':''}" onclick="openBookingDetail('${grpItem.id}')"><span class="seat-name">小班肌力${n>0?' '+n+'人':''}</span></button>`;
+          if(isMine(grpItem)){
+            grpCell=`<button class="slot-seat seat-group${done?' seat-done':''}" onclick="openBookingDetail('${grpItem.id}')"><span class="seat-name">小班肌力${n>0?' '+n+'人':''}</span></button>`;
+          }else{
+            grpCell=`<button class="slot-seat seat-group bk-masked" onclick="openBookingDetail('${grpItem.id}')"><span class="seat-name">小班肌力${n>0?' '+n+'人':''}</span></button>`;
+          }
         }else{
           grpCell=`<button class="slot-seat seat-group-empty" onclick="quickBookAt('${ds}','${time}')">團＋</button>`;
         }
@@ -4980,7 +5023,7 @@ function renderCoachDayList(){
   box.innerHTML=`<div class="card">
     <div class="card-title" style="display:block;">
       <div>${ds.replace(/-/g,'/')}（${wd}）</div>
-      <div style="font-size:12px;color:var(--t3);font-weight:400;margin-top:3px;">教練課 ${ptN} 堂・團體課 ${grpN} 堂　·　共 ${list.length} 筆課程</div>
+      <div style="font-size:12px;color:var(--t3);font-weight:400;margin-top:3px;">我的課：教練課 ${ptN} 堂・團體課 ${grpN} 堂　·　當日全店 ${list.length} 筆</div>
     </div>
     ${rows}
     <button class="btn btn-green btn-sm" style="width:100%;margin-top:12px;" onclick="quickBookOn('${ds}')">＋ 新增預約（其他時間）</button>
