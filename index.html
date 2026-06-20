@@ -472,6 +472,8 @@ tr:hover td{background:var(--card2);}
 .ms-sub{font-size:12.5px;color:var(--t3);font-family:var(--num);}
 .ms-rem{font-size:12.5px;color:var(--green);font-weight:600;margin-top:2px;}
 .ms-empty{text-align:center;color:var(--t3);padding:30px 0;font-size:13px;}
+/* 行事曆隱私遮蔽：別人的課灰階呈現 */
+.bk-masked{filter:grayscale(1);opacity:0.62;}
 /* 手機版 modal：限制寬度、可垂直捲動、底部按鈕固定、input 不溢出 */
 @media(max-width:600px){
   .modal{max-width:calc(100vw - 24px);width:calc(100vw - 24px);max-height:88vh;padding:18px;box-sizing:border-box;display:flex;flex-direction:column;}
@@ -758,8 +760,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.2007';
-const APP_VERSION_LABEL='26620.2007';
+const APP_VERSION='26620.2015';
+const APP_VERSION_LABEL='26620.2015';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1359,6 +1361,22 @@ PAGES.dashboard=async function(){
   </div>`;
 };
 function typeOfCat(cat){return {'私人教練':'pt','小班肌力':'group','自主訓練':'self_training','體驗':'trial'}[cat]||'pt';}
+/* ── 行事曆隱私：教練身分看「別人的課」時，隱藏會員姓名（改顯示課程類型）、灰階呈現 ──
+   只對 role==='coach' 生效；管理員 / 後台帳號正常看全部。
+   「自己的課」＝ 授課教練（含代課）是登入者本人。 */
+function bkIsMasked(b){
+  if(!SESSION || SESSION.role!=='coach') return false; // 非教練不遮蔽
+  if(b.category==='小班肌力') return false;             // 團體課本就不顯示會員名
+  const acting = b.substitute_coach_id || b.coach_id;
+  return acting !== SESSION.id;                          // 不是我帶的 → 遮蔽
+}
+// 取得行事曆上應顯示的名稱（遮蔽時回課程類型，如「教練課」「自主訓練」）
+function bkDisplayName(b, realName){
+  if(bkIsMasked(b)){
+    return {'私人教練':'教練課','自主訓練':'自主訓練','體驗':'體驗','小班肌力':'團體課'}[b.category] || '課程';
+  }
+  return realName;
+}
 
 /* ════════ 共用:行事曆（30 分鐘格、可拖曳/拉伸/跨日） ════════ */
 let calWeekStart=null;
@@ -1454,11 +1472,10 @@ async function renderCalendar(opts){
       const acting=b.substitute_coach_id||b.coach_id;
       const isMine = opts.me && acting===opts.me;
       // 教練端（含全部預約模式）：自己的課顯示會員名；別的教練的課隱藏會員名
-      const hideMember = opts.me && !isMine;
+      const hideMember = (opts.me && !isMine) || bkIsMasked(b);
       if(hideMember){
-        // 別的教練的課：主體顯示「上課教練名」，類型放副標
-        const actingName = subCoachName || coachName;
-        memName = actingName || typeName;
+        // 別的教練的課：隱藏會員名，顯示課程類型（如「教練課」「自主訓練」）
+        memName = {'私人教練':'教練課','自主訓練':'自主訓練','體驗':'體驗','小班肌力':'團體課'}[b.category] || typeName;
       }else if(b.category==='體驗'){
         memName=(b.trial_name?b.trial_name+'（體驗）':'體驗客戶');
       }else if(b.category==='小班肌力'){
@@ -1500,7 +1517,7 @@ async function renderCalendar(opts){
         <div class="ev-tip-s">${statusLabel(b.status)}</div>
       </div>`;
       const tipUp = timeToMin(b.start_time) >= (CAL_END_H-3)*60; // 接近底部 → 提示往上展開避免被切
-      evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${dense?'ev-dense':''} ${tipUp?'tip-up':''}" data-bid="${b.id}" data-time="${b.start_time}"
+      evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${dense?'ev-dense':''} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''}" data-bid="${b.id}" data-time="${b.start_time}"
         style="top:${top}px;height:${Math.max(h-2,64)}px;left:calc(${lane.idx*wpct}% + 3px);width:calc(${wpct}% - 6px);"
         ${editable?`onclick="onEvClick(event,'${b.id}')"`:(opts.allMode?'':`onclick="openBookingDetail('${b.id}')"`)}>
         ${dense
@@ -2419,6 +2436,22 @@ function onEvClick(e,id){
 }
 async function openBookingDetail(id){
   const b=await dbGet('bookings',id);
+  // 隱私：教練點開別人的課 → 只顯示時段/類型/狀態，不洩漏會員資料、不可操作
+  if(bkIsMasked(b)){
+    const dM=parseYmd(b.date);
+    const wdM=['日','一','二','三','四','五','六'][dM.getDay()];
+    const typeM={'私人教練':'教練課','自主訓練':'自主訓練','體驗':'體驗','小班肌力':'團體課'}[b.category]||'課程';
+    showModal(`<div class="modal-title">時段資訊</div>
+      <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:2;">
+        <div><span style="color:var(--t2);">日期</span>　${b.date.replace(/-/g,'/')}（${wdM}）</div>
+        <div><span style="color:var(--t2);">時間</span>　${b.start_time}</div>
+        <div><span style="color:var(--t2);">類型</span>　<span class="tag tag-${colorClass(typeOfCat(b.category))}">${typeM}</span></div>
+        <div><span style="color:var(--t2);">狀態</span>　${statusLabel(b.status)}</div>
+      </div>
+      <div style="font-size:11.5px;color:var(--t3);margin-top:12px;text-align:center;">此為其他教練的課程，僅顯示時段佔用資訊。</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+    return;
+  }
   const[members,coaches]=await Promise.all([dbGetAll('members'),dbGetAll('coaches')]);
   const mem=members.find(m=>m.id===b.member_id);
   const coach=coaches.find(c=>c.id===b.coach_id);
@@ -4821,8 +4854,9 @@ function renderCoachWeek(){
     const dayBk=visible.filter(b=>b.date===ds).sort((a,b)=>a.start_time.localeCompare(b.start_time));
     const chips=dayBk.slice(0,3).map(b=>{
       const cc=colorClass(typeOfCat(b.category));
-      const who=b.category==='小班肌力'?'團課':(b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—'));
-      return `<div class="wk-chip wk-${cc}">${b.start_time} ${who}</div>`;
+      const realName=b.category==='小班肌力'?'團課':(b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—'));
+      const who=bkDisplayName(b,realName);
+      return `<div class="wk-chip wk-${cc}${bkIsMasked(b)?' bk-masked':''}">${b.start_time} ${who}</div>`;
     }).join('');
     const more=dayBk.length>3?`<div class="wk-more">+${dayBk.length-3}</div>`:'';
     cols+=`<div class="wk-col${isSel?' wk-sel':''}" onclick="coachSelectDate('${ds}')">
@@ -4859,9 +4893,10 @@ function renderCoachDayList(){
   const seatCell=(b)=>{
     if(!b) return null;
     const cc=colorClass(typeOfCat(b.category));
-    const who=b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—');
+    const realName=b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—');
+    const who=bkDisplayName(b,realName);
     const done=(b.status==='completed'||b.status==='checked_in');
-    return `<button class="slot-seat seat-${cc}${done?' seat-done':''}" onclick="openBookingDetail('${b.id}')">
+    return `<button class="slot-seat seat-${cc}${done?' seat-done':''}${bkIsMasked(b)?' bk-masked':''}" onclick="openBookingDetail('${b.id}')">
       <span class="seat-name">${who}</span>${done?'<span class="seat-chk">✓</span>':''}</button>`;
   };
   const emptySeat=(time)=>`<button class="slot-seat seat-empty" onclick="quickBookAt('${ds}','${time}')">＋</button>`;
