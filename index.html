@@ -41,6 +41,29 @@
 body{font-family:var(--sans);background:var(--bg);color:var(--text);font-weight:400;line-height:1.6;font-size:14px;overflow-x:hidden;max-width:100vw;}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
 input,select,textarea{font-family:inherit;font-size:14px;}
+/* ── 全站下拉選單統一樣式（移除 iOS/Safari 原生藍色，套 YUGYM 深綠米白風格）── */
+select{
+  -webkit-appearance:none;-moz-appearance:none;appearance:none;
+  background-color:#fff;
+  color:var(--green);
+  border:1px solid var(--bd);
+  border-radius:9px;
+  padding:9px 34px 9px 12px;
+  font-family:inherit;
+  cursor:pointer;
+  /* 自訂深綠箭頭 */
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23003d32' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5L6 6.5L11 1.5'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 12px center;
+}
+select:hover{border-color:var(--green);}
+select:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0.15);}
+select:disabled{background-color:var(--card2);color:var(--t3);cursor:not-allowed;opacity:1;
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%239E9B94' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5L6 6.5L11 1.5'/%3E%3C/svg%3E");}
+/* 多選 select（如團體課選會員）不套自訂箭頭 */
+select[multiple]{background-image:none;padding-right:12px;}
+/* select 內選項在 iOS 仍由系統繪製，但文字色盡量統一 */
+select option{color:var(--text);}
 .num{font-family:var(--num);letter-spacing:0.02em;font-variant-numeric:tabular-nums;font-feature-settings:'tnum';}
 .hidden{display:none!important;}
 
@@ -487,8 +510,10 @@ tr:hover td{background:var(--card2);}
 .form-row{margin-bottom:14px;}
 .form-row label{display:block;font-size:11.5px;color:var(--t2);margin-bottom:6px;font-weight:500;letter-spacing:0.03em;}
 .form-row input,.form-row select{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:9px;background:#fff;}
+.form-row select{padding-right:34px;}
 .form-row input[type=checkbox]{width:18px;height:18px;flex:none;padding:0;margin:0;cursor:pointer;}
-.form-row input:focus,.form-row select:focus{outline:none;border-color:var(--gold);background:#fff;}
+.form-row input:focus{outline:none;border-color:var(--gold);background:#fff;}
+.form-row select:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0.15);background:#fff;}
 .form-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 
 /* Toast */
@@ -579,7 +604,7 @@ tr:hover td{background:var(--card2);}
 .cal-hint{font-size:11px;color:var(--t3);padding:2px 4px 0;}
 
 .filter-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
-.filter-row select{padding:8px 12px;border:1px solid var(--bd);border-radius:9px;background:#fff;font-size:13px;}
+.filter-row select{padding:8px 32px 8px 12px;border:1px solid var(--bd);border-radius:9px;background-color:#fff;font-size:13px;}
 
 .list-item{display:flex;align-items:center;gap:14px;padding:14px;border:1px solid var(--bd);border-radius:12px;margin-bottom:10px;background:var(--card);}
 /* 今日課程表：左側課程顏色條 */
@@ -760,8 +785,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.2032';
-const APP_VERSION_LABEL='26620.2032';
+const APP_VERSION='26620.2045';
+const APP_VERSION_LABEL='26620.2045';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -976,7 +1001,7 @@ function enterApp(){
    ╚══════════════════════════════════════════════╝ */
 const NAV={
   admin:[
-    {key:'dashboard',label:'儀表板'},
+    {key:'dashboard',label:'營運報表'},
     {key:'calendar',label:'預約行事曆'},
     {key:'attendance',label:'出勤打卡'},
     {key:'members',label:'會員管理'},
@@ -1003,9 +1028,17 @@ const NAV={
 // 可被排課的教練：role 是 coach，或 admin(老闆兼教練，一人一帳號)
 function isCoachable(c){ return c && (c.role==='coach' || c.role==='admin'); }
 function coachDisp(c){ return c ? (c.name_en||c.name||'') : ''; } // 對外顯示名（教練名），未填則用本名
+// 手機版管理員的精簡選單白名單（快速操作為主）
+const MOBILE_ADMIN_NAV=['dashboard','calendar','staff','ticketing'];
 function buildNav(){
   const nav=document.getElementById('sidenav');
-  nav.innerHTML=NAV[SESSION.role].map(n=>
+  let items=NAV[SESSION.role];
+  const isMobile=window.innerWidth<=600;
+  // 管理員手機版：只保留 營運報表 / 預約行事曆 / 員工管理 / 票券管理
+  if(isMobile && SESSION.role==='admin'){
+    items=items.filter(n=>MOBILE_ADMIN_NAV.includes(n.key));
+  }
+  nav.innerHTML=items.map(n=>
     `<div class="nav-item" data-key="${n.key}" onclick="navTo('${n.key}')">${n.label}</div>`).join('');
 }
 let CUR_PAGE=null;
@@ -1290,7 +1323,7 @@ PAGES.dashboard=async function(){
   }).filter(r=>r.rev>0||r.ptCount>0||r.groupCount>0||r.hours>0)
     .sort((a,b)=>b.ptCount-a.ptCount||b.rev-a.rev); // 預設依教練課堂數由高到低
 
-  C.innerHTML=head('OVERVIEW','儀表板','營運報表')+
+  C.innerHTML=head('OVERVIEW','營運報表','')+
   `<div class="filter-row" style="margin-bottom:18px;">
     <div class="seg">
       <button class="seg-btn ${_dashRange==='month'?'active':''}" onclick="_dashRange='month';navTo('dashboard')">本月</button>
@@ -2265,7 +2298,7 @@ async function refreshBkTicket(){
     // 多張可用票券 → 讓使用者手動選
     const opts=list.map(tk=>`<option value="${tk.id}">${tk.plan_name||'票券'}　剩 ${tk.sessions_remaining} 堂　效期至 ${tk.expire_date}</option>`).join('');
     info.innerHTML=`<div style="margin-bottom:6px;color:var(--text);">此會員有多張可用票券，請選擇要扣抵的票券：</div>
-      <select id="bk-ticket-sel" style="width:100%;padding:9px 12px;border:1px solid var(--bd);border-radius:9px;background:#fff;">${opts}</select>`;
+      <select id="bk-ticket-sel" style="width:100%;padding:9px 12px;border:1px solid var(--bd);border-radius:9px;background-color:#fff;padding-right:32px;">${opts}</select>`;
   }
   // 連續預約「最多建立次數」預設帶入該會員剩餘總堂數（使用者未手動改過才覆蓋）
   const recMax=document.getElementById('rec-max');
@@ -2815,7 +2848,7 @@ PAGES.members=async function(){
     <div class="card-title">會員列表（${filtered.length}） <span style="display:inline-flex;gap:8px;"><button class="btn btn-green btn-sm" onclick="openBackofficeMember()">＋ 後台辦理會員</button><button class="btn btn-ghost btn-sm" onclick="openMemberRegisterLink()">會員申辦連結 / QR Code</button></span></div>
     <div class="filter-row">
       <input id="mem-search" placeholder="搜尋姓名 / 手機 / 標籤…" value="${_memSearch}" oninput="_memSearch=this.value;_memPage=1;clearTimeout(window._mst);window._mst=setTimeout(()=>navTo('members'),250)"
-        style="flex:1;min-width:200px;padding:9px 14px;border:1px solid var(--bd);border-radius:9px;background:#fff;">
+        style="flex:1;min-width:200px;padding:9px 14px;border:1px solid var(--bd);border-radius:9px;background-color:#fff;padding-right:32px;">
       ${_memSearch?`<button class="btn btn-ghost btn-sm" onclick="_memSearch='';_memPage=1;navTo('members')">清除</button>`:''}
     </div>
     <table class="mem-table rwd-card"><thead><tr>
@@ -2831,7 +2864,7 @@ PAGES.members=async function(){
       <td data-label="姓名" style="font-weight:500;">${m.name}</td><td data-label="手機">${m.phone}</td><td data-label="等級">${tierTag(m.tier)}</td>
       <td data-label="標籤" onclick="_detailMemberId=null;openTagModal('${m.id}')" class="mem-tagcell" title="點此修改標籤"><div class="mem-tagbox">${renderTags(m.tags)||'<span style=\"color:var(--t3);font-size:12px;\">＋ 標籤</span>'}</div></td>
       <td data-label="指定教練" onclick="event.stopPropagation()">
-        <select onchange="setMemberCoach('${m.id}',this.value)" style="padding:5px 8px;border:1px solid var(--bd);border-radius:7px;background:#fff;font-size:12.5px;max-width:130px;">
+        <select onchange="setMemberCoach('${m.id}',this.value)" style="padding:5px 8px;border:1px solid var(--bd);border-radius:7px;background-color:#fff;font-size:12.5px;max-width:130px;padding-right:30px;">
           <option value="">— 無 —</option>
           ${coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${m.default_coach_id===c.id?'selected':''}>${coachDisp(c)}</option>`).join('')}
         </select>
@@ -4622,7 +4655,7 @@ function renderAttToday(needPunch,all){
   const punchedIn=needPunch.filter(c=>recMap[c.id]&&recMap[c.id].clock_in).length;
   document.getElementById('att-body').innerHTML=`<div class="card">
     <div class="card-title">今日出勤
-      <input type="date" value="${date}" onchange="_attDate=this.value;navTo('attendance')" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff;font-size:13px;">
+      <input type="date" value="${date}" onchange="_attDate=this.value;navTo('attendance')" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background-color:#fff;font-size:13px;padding-right:30px;">
     </div>
     <div class="stat-grid dash-summary"><div class="stat-card"><div class="sc-label">應出勤</div><div><span class="sc-num">${needPunch.length}</span><span class="sc-unit">人</span></div></div>
       <div class="stat-card"><div class="sc-label">已上班打卡</div><div><span class="sc-num" style="color:var(--green);">${punchedIn}</span><span class="sc-unit">人</span></div></div></div>
@@ -4643,7 +4676,7 @@ function renderAttRecords(needPunch,all){
   const opts=needPunch.map(c=>`<option value="${c.id}" ${empId===c.id?'selected':''}>${c.name}</option>`).join('');
   document.getElementById('att-body').innerHTML=`<div class="card">
     <div class="card-title">出勤紀錄
-      <select onchange="_attEmp=this.value;navTo('attendance')" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff;font-size:13px;">${opts}</select>
+      <select onchange="_attEmp=this.value;navTo('attendance')" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background-color:#fff;font-size:13px;padding-right:30px;">${opts}</select>
     </div>
     ${recs.length===0?'<div class="empty"><div class="em-t">此員工尚無打卡紀錄</div></div>':
     `<table class="rwd-card"><thead><tr><th>日期</th><th>上班</th><th>下班</th><th>工時</th></tr></thead><tbody>
@@ -4667,7 +4700,7 @@ function renderAttHours(needPunch,all){
   }).sort((a,b)=>b.hours-a.hours);
   document.getElementById('att-body').innerHTML=`<div class="card">
     <div class="card-title">工時統計（${ym}）
-      <input type="month" value="${ym}" onchange="_attDate=this.value+'-01';navTo('attendance')" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff;font-size:13px;">
+      <input type="month" value="${ym}" onchange="_attDate=this.value+'-01';navTo('attendance')" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background-color:#fff;font-size:13px;padding-right:30px;">
     </div>
     <table class="rwd-card"><thead><tr><th>姓名</th><th>出勤天數</th><th>累計工時</th></tr></thead><tbody>
     ${stat.map(s=>`<tr>
@@ -4897,7 +4930,8 @@ function renderCoachDayList(){
         let grpCell;
         if(grpItem){
           const done=(grpItem.status==='completed'||grpItem.status==='checked_in');
-          grpCell=`<button class="slot-seat seat-group${done?' seat-done':''}" onclick="openBookingDetail('${grpItem.id}')"><span class="seat-name">小班肌力</span></button>`;
+          const n=(mids(grpItem)||[]).length;
+          grpCell=`<button class="slot-seat seat-group${done?' seat-done':''}" onclick="openBookingDetail('${grpItem.id}')"><span class="seat-name">小班肌力${n>0?' '+n+'人':''}</span></button>`;
         }else{
           grpCell=`<button class="slot-seat seat-group-empty" onclick="quickBookAt('${ds}','${time}')">團＋</button>`;
         }
@@ -5170,7 +5204,7 @@ async function openApplyPlan(plan_id){
     <!-- 電子簽名（勾選同意後開啟）-->
     <div id="ap-sig-area" style="display:none;">
       <div style="font-size:12.5px;font-weight:700;color:var(--green);margin-bottom:6px;">電子簽名</div>
-      <div style="border:1px dashed var(--bd);border-radius:9px;background:#fff;">
+      <div style="border:1px dashed var(--bd);border-radius:9px;background-color:#fff;padding-right:32px;">
         <canvas id="ap-sig" style="width:100%;height:160px;display:block;touch-action:none;"></canvas>
       </div>
       <div style="text-align:right;margin:6px 0 4px;"><button class="btn btn-ghost btn-sm" onclick="clearSig()">清除簽名</button></div>
@@ -5301,7 +5335,7 @@ PAGES.purchase_review=async function(){
   ${done.length>0?`<div class="card"><div class="card-title">已處理</div>${done.map(row).join('')}</div>`:''}`;
 };
 function viewSig(id){const a=window._appCache[id];if(!a||!a.signature)return;
-  showModal(`<div class="modal-title">簽名檔</div><img src="${a.signature}" style="width:100%;border:1px solid var(--bd);border-radius:9px;background:#fff;"><div class="modal-foot"><button class="btn btn-ghost" onclick="setTkTab('purchase_review')">關閉</button></div>`);
+  showModal(`<div class="modal-title">簽名檔</div><img src="${a.signature}" style="width:100%;border:1px solid var(--bd);border-radius:9px;background-color:#fff;padding-right:32px;"><div class="modal-foot"><button class="btn btn-ghost" onclick="setTkTab('purchase_review')">關閉</button></div>`);
 }
 function viewContract(id){const a=window._appCache[id];
   showModal(`<div class="modal-title">會員契約（${a?a.contract_version||'':''}）</div>
