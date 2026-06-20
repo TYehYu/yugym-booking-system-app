@@ -573,8 +573,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.1058';
-const APP_VERSION_LABEL='26620.1058';
+const APP_VERSION='26620.1109';
+const APP_VERSION_LABEL='26620.1109';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1534,6 +1534,10 @@ function initCalDrag(){
     }
     // 確實拖曳過 → 立即重繪行事曆，讓卡片回到正確位置（避免清空 inline 定位後掉到容器底部）
     window._justDragged=true; setTimeout(()=>{window._justDragged=false;},300);
+    // 一次性吞掉瀏覽器在 pointerup 後補發的 click（iPad 上延遲可能超過旗標時效，直接攔截最穩）
+    const swallow=(ev)=>{ ev.stopPropagation(); ev.preventDefault(); };
+    window.addEventListener('click',swallow,{capture:true,once:true});
+    setTimeout(()=>window.removeEventListener('click',swallow,{capture:true}),500);
     window._calStepping=true; // 拖曳更新後保留當前檢視週，不要跳回本週
     const b=await dbGet('bookings',_bid);
     if(!b){navTo(CUR_PAGE);return;}
@@ -1547,6 +1551,33 @@ function initCalDrag(){
       showToast('已更新預約'); navTo(CUR_PAGE);
     }else navTo(CUR_PAGE);
   });
+
+}
+function initCalSwipe(wrap){
+  if(!wrap) return;
+  let sx=0, sy=0, st=0, tracking=false, onCard=false;
+  wrap.addEventListener('touchstart',(e)=>{
+    if(e.touches.length!==1){ tracking=false; return; }
+    const t=e.touches[0];
+    sx=t.clientX; sy=t.clientY; st=Date.now();
+    onCard = !!(e.target.closest && e.target.closest('.cal-ev')); // 起點在課卡 → 交給拖曳邏輯，不換頁
+    tracking=true;
+  },{passive:true});
+  wrap.addEventListener('touchend',(e)=>{
+    if(!tracking||onCard){ tracking=false; return; }
+    tracking=false;
+    if(window._dragStarted){ return; } // 正在拖卡，忽略
+    const t=e.changedTouches[0];
+    const dx=t.clientX-sx, dy=t.clientY-sy, dt=Date.now()-st;
+    const TH=60; // 觸發門檻（px）
+    // 必須是「夠長的橫向滑動」且「橫向明顯大於縱向」且「不是太慢的拖移」
+    if(Math.abs(dx)<TH) return;
+    if(Math.abs(dx)<Math.abs(dy)*1.5) return;
+    if(dt>600) return;
+    const step=_calDays||(window.innerWidth<=600?1:(window.innerWidth<=1024?3:7));
+    if(dx<0) calStep(step);   // 左滑 → 下一段（往未來）
+    else calStep(-step);      // 右滑 → 上一段（往過去）
+  },{passive:true});
 }
 /* ════════ 驗證層（Validation Layer） ════════
    規則：
@@ -1685,11 +1716,17 @@ PAGES.calendar=async function(){
     : {coachFilter:true,onSlot:'quickBookAt',editable:true};
   C.innerHTML=head('SCHEDULE','預約行事曆',subtitle)+toggle+(await renderCalendar(calOpts));
   initCalDrag();
+  initCalSwipe(document.querySelector('.cal-body')); // 左右滑換週（含手機）
 };
 
 /* 點空格快速帶入新增 */
 let _prefill=null;
-function quickBookAt(date,time){_prefill={date,time};openBookingModal();}
+function quickBookAt(date,time){
+  // 防誤觸：剛拖曳放開 / 剛點過課卡（pointer capture 後補發的 click）不應觸發「新增預約」
+  if(window._justDragged){window._justDragged=false;return;}
+  if(window._justTapped){return;}
+  _prefill={date,time};openBookingModal();
+}
 
 /* ══════ 預約精靈（兩頁式） ══════
    第1頁：課程類型 / 教練 / 日期 / 時間（從行事曆點選會自動帶入日期時間）
