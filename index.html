@@ -612,8 +612,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.1659';
-const APP_VERSION_LABEL='26620.1659';
+const APP_VERSION='26620.1714';
+const APP_VERSION_LABEL='26620.1714';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -833,9 +833,7 @@ const NAV={
     {key:'attendance',label:'出勤打卡'},
     {key:'members',label:'會員管理'},
     {key:'staff',label:'員工管理'},
-    {key:'plans',label:'課程方案'},
-    {key:'purchase_review',label:'購買申請'},
-    {key:'tickets',label:'會員票券'},
+    {key:'ticketing',label:'票券管理'},
   ],
   coach:[
     {key:'coach_today',label:'今日課程'},
@@ -847,8 +845,7 @@ const NAV={
     {key:'admin_today',label:'今日事項'},
     {key:'calendar',label:'預約行事曆'},
     {key:'members',label:'會員管理'},
-    {key:'purchase_review',label:'購買申請'},
-    {key:'tickets',label:'會員票券'},
+    {key:'ticketing',label:'票券管理'},
   ],
   member:[
     {key:'mem_bookings',label:'我的預約'},
@@ -3797,14 +3794,35 @@ function fallbackCopy(txt){
 }
 
 /* ════════ 管理員:課程方案 ════════ */
+/* ╔══════════════════════════════════════════════╗
+   ║  票券管理（整合：方案設定／購買申請／會員票券）   ║
+   ╚══════════════════════════════════════════════╝ */
+const TK_TABS=[
+  {key:'plans',label:'方案設定'},
+  {key:'purchase_review',label:'購買申請'},
+  {key:'tickets',label:'會員票券'},
+];
+let _tkTab='plans';
+function setTkTab(k){ _tkTab=k; navTo('ticketing'); }
+PAGES.ticketing=async function(){
+  const tab=TK_TABS.find(t=>t.key===_tkTab)||TK_TABS[0];
+  const tabBar=`<div class="seg" style="margin-bottom:16px;flex-wrap:nowrap;overflow-x:auto;">${TK_TABS.map(t=>
+    `<button class="seg-btn ${_tkTab===t.key?'active':''}" onclick="setTkTab('${t.key}')" style="flex-shrink:0;">${t.label}</button>`).join('')}</div>`;
+  C.innerHTML=head('TICKETS','票券管理','方案設定 · 購買申請 · 會員票券')+tabBar+`<div id="tk-body"></div>`;
+  // 呼叫對應子頁渲染（子頁已改為寫入 #tk-body）
+  if(_tkTab==='plans') await PAGES.plans();
+  else if(_tkTab==='purchase_review') await PAGES.purchase_review();
+  else if(_tkTab==='tickets') await PAGES.tickets();
+};
+
 PAGES.plans=async function(){
   const[plans,types]=await Promise.all([dbGetAll('course_plans'),dbGetAll('ticket_types')]);
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   // 票券種類的啟用狀態：active 欄位若不存在，視為啟用（相容舊資料）
   const ttActive=t=>t.active!==false;
-  C.innerHTML=head('PLANS','課程方案管理','TicketType → CoursePlan 設定')+
+  (document.getElementById('tk-body')||{innerHTML:''}).innerHTML=
   `<div class="card"><div class="card-title">票券種類（TicketType） <button class="btn btn-green btn-sm" onclick="openTypeModal()">＋ 新增票券種類</button></div>
-    <table><thead><tr><th>名稱</th><th>類別</th><th>變體</th><th>會員可自約</th><th>需指定教練</th><th>限時段</th><th>狀態</th><th></th></tr></thead><tbody>
+    <table class="rwd-card"><thead><tr><th>名稱</th><th>類別</th><th>變體</th><th>會員可自約</th><th>需指定教練</th><th>限時段</th><th>狀態</th><th></th></tr></thead><tbody>
     ${types.map(t=>`<tr style="${ttActive(t)?'':'opacity:.5;'}">
       <td><span class="tag tag-${t.color}">${t.name}</span></td><td>${t.category}</td><td>${t.variant||'—'}</td>
       <td>${t.member_bookable?'是':'—'}</td><td>${t.requires_coach?'是':'—'}</td><td>${t.time_restricted?'平日10-18':'—'}</td>
@@ -3818,7 +3836,7 @@ PAGES.plans=async function(){
     <div style="font-size:11px;color:var(--t3);margin-top:8px;">停用後不可建立新方案/新票券；既有票券與歷史不受影響。刪除前若已有方案使用該種類，請先停用。</div>
   </div>
   <div class="card"><div class="card-title">票券模板（CoursePlan） <button class="btn btn-green btn-sm" onclick="openPlanModal()">＋ 新增模板</button></div>
-    <table><thead><tr><th>模板名稱</th><th>票券類型</th><th>方案類型</th><th>售價</th><th>堂數</th><th>效期</th><th>分期</th><th>開放申請</th><th>狀態</th><th></th></tr></thead><tbody>
+    <table class="rwd-card"><thead><tr><th>模板名稱</th><th>票券類型</th><th>方案類型</th><th>售價</th><th>堂數</th><th>效期</th><th>分期</th><th>開放申請</th><th>狀態</th><th></th></tr></thead><tbody>
     ${plans.map(p=>{const t=typeMap[p.ticket_type_id];const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客'};return `<tr style="${p.active?'':'opacity:.5;'}">
       <td>${p.name}</td><td><span class="tag tag-${t?t.color:'pt'}">${t?t.name:'—'}${p.format?'·'+p.format:''}</span></td>
       <td style="font-size:12px;">${PT[p.plan_type]||'一般'}</td>
@@ -3841,7 +3859,7 @@ async function toggleType(id){
   const t=await dbGet('ticket_types',id);
   t.active=(t.active===false); // 反轉；舊資料無此欄視為啟用→變停用
   try{ await dbPut('ticket_types',t); }catch(e){ showToast('更新失敗：'+(e.message||e)); return; }
-  showToast(t.active===false?'已停用':'已啟用');navTo('plans');
+  showToast(t.active===false?'已停用':'已啟用');setTkTab('plans');
 }
 async function deleteType(id){
   // 有歷史資料（課程方案、或已發放的會員票券）→ 只允許停用，不允許刪除
@@ -3850,14 +3868,14 @@ async function deleteType(id){
   if(tickets.some(t=>t.ticket_type_id===id)){ showToast('已有會員票券屬於此種類，僅能「停用」以保留歷史，不可刪除'); return; }
   if(!confirm('確定刪除此票券種類？此動作無法復原。')) return;
   try{ await dbDel('ticket_types',id); }catch(e){ showToast('刪除失敗：'+(e.message||e)); return; }
-  showToast('票券種類已刪除');navTo('plans');
+  showToast('票券種類已刪除');setTkTab('plans');
 }
 /* ── 課程方案：停用 / 啟用 / 刪除 ── */
 async function togglePlan(id){
   const p=await dbGet('course_plans',id);
   p.active=!p.active;
   try{ await dbPut('course_plans',p); }catch(e){ showToast('更新失敗：'+(e.message||e)); return; }
-  showToast(p.active?'已上架':'已下架');navTo('plans');
+  showToast(p.active?'已上架':'已下架');setTkTab('plans');
 }
 async function deletePlan(id){
   // 有歷史資料（已發放的會員票券、或會員購買申請）→ 只允許下架，不允許刪除
@@ -3866,7 +3884,7 @@ async function deletePlan(id){
   if(apps.some(a=>a.plan_id===id)){ showToast('已有會員購買申請使用此方案，僅能「下架」以保留歷史，不可刪除'); return; }
   if(!confirm('確定刪除此課程方案？此動作無法復原。')) return;
   try{ await dbDel('course_plans',id); }catch(e){ showToast('刪除失敗：'+(e.message||e)); return; }
-  showToast('課程方案已刪除');navTo('plans');
+  showToast('課程方案已刪除');setTkTab('plans');
 }
 /* ── 新增 / 編輯票券種類（寫入 ticket_types） ── */
 async function openTypeModal(id){
@@ -3917,7 +3935,7 @@ async function submitType(id){
   }
   closeModal();
   showToast(editing?'票券種類已更新':'票券種類已新增');
-  navTo('plans');
+  setTkTab('plans');
 }
 async function openPlanModal(id){
   const editing=!!id;
@@ -3974,7 +3992,7 @@ async function submitPlan(id){
     installment:document.getElementById('pl-install').value==='1',
     member_applyable:document.getElementById('pl-apply').value==='1'});
   try{ await dbPut('course_plans',p); }catch(e){ showToast((editing?'更新':'建立')+'失敗：'+(e.message||e)); return; }
-  closeModal();showToast(editing?'模板已更新':'模板已建立');navTo('plans');
+  closeModal();showToast(editing?'模板已更新':'模板已建立');setTkTab('plans');
 }
 
 /* ════════ 管理員:會員票券 ════════ */
@@ -3984,7 +4002,7 @@ PAGES.tickets=async function(){
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const stLabel={usable:'可用',used_up:'用畢',expired:'過期',refunded:'已退'};
   const stTag={usable:'tag-ok',used_up:'tag-warn',expired:'tag-danger',refunded:'tag-danger'};
-  C.innerHTML=head('TICKETS','會員票券管理','以方案名稱辨識，系統 ID 收於詳細資訊')+
+  (document.getElementById('tk-body')||{innerHTML:''}).innerHTML=
   `<div class="card"><div class="card-title">票券列表 <button class="btn btn-green btn-sm" onclick="openGrantModal()">＋ 發放票券</button></div>
     <table class="rwd-card"><thead><tr><th>方案 / 類型</th><th>會員</th><th>剩餘 / 總</th><th>到期日</th><th>來源</th><th>狀態</th><th></th></tr></thead><tbody>
     ${tickets.sort((a,b)=>b.created_at.localeCompare(a.created_at)).map(t=>{const ty=typeMap[t.ticket_type_id];return `<tr>
@@ -4727,7 +4745,7 @@ PAGES.purchase_review=async function(){
     </div>`:`<div style="margin-top:10px;"><span class="tag ${(APPST[a.status]||['','tag-warn'])[1]}">${(APPST[a.status]||['—'])[0]}</span>${a.status==='rejected'&&a.reject_reason?`<span style="font-size:12px;color:var(--danger);margin-left:8px;">原因：${a.reject_reason}</span>`:''}</div>`}
   </div>`;};
   window._appCache=Object.fromEntries(apps.map(a=>[a.id,a]));
-  C.innerHTML=head('REVIEW','購買申請','審核會員購買申請 · 選擇發票方式後自動發放票券')+
+  (document.getElementById('tk-body')||{innerHTML:''}).innerHTML=
   `<div class="card"><div class="card-title">待審核（${pending.length}）</div>
     ${pending.length===0?'<div class="empty"><div class="em-t">目前沒有待審核的申請</div></div>':pending.map(row).join('')}
   </div>
@@ -4735,12 +4753,12 @@ PAGES.purchase_review=async function(){
   ${done.length>0?`<div class="card"><div class="card-title">已處理</div>${done.map(row).join('')}</div>`:''}`;
 };
 function viewSig(id){const a=window._appCache[id];if(!a||!a.signature)return;
-  showModal(`<div class="modal-title">簽名檔</div><img src="${a.signature}" style="width:100%;border:1px solid var(--bd);border-radius:9px;background:#fff;"><div class="modal-foot"><button class="btn btn-ghost" onclick="navTo('purchase_review')">關閉</button></div>`);
+  showModal(`<div class="modal-title">簽名檔</div><img src="${a.signature}" style="width:100%;border:1px solid var(--bd);border-radius:9px;background:#fff;"><div class="modal-foot"><button class="btn btn-ghost" onclick="setTkTab('purchase_review')">關閉</button></div>`);
 }
 function viewContract(id){const a=window._appCache[id];
   showModal(`<div class="modal-title">會員契約（${a?a.contract_version||'':''}）</div>
     <div style="max-height:50vh;overflow-y:auto;font-size:12.5px;line-height:1.9;white-space:pre-wrap;color:var(--t2);">${CONTRACT_TEXT}</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="navTo('purchase_review')">關閉</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="setTkTab('purchase_review')">關閉</button></div>`);
 }
 
 /* ── 發放核心（共用）：建票券→算到期日→購買紀錄→異動紀錄→升級會員→通知 ──
@@ -4784,14 +4802,14 @@ async function appInvoice(id, invoiceType){
     a.status='completed'; a.invoice_type='none'; a.invoice_status='none';
     a.reviewed_by=SESSION.id; a.reviewed_at=new Date().toISOString();
     await dbPut('purchase_applications',a);
-    showToast('已完成並發放票券（免發票）'); navTo('purchase_review');
+    showToast('已完成並發放票券（免發票）'); setTkTab('purchase_review');
   }else{
     // 雲端 / 紙本：先進待開立，不發券
     a.status='invoicing'; a.invoice_type=invoiceType;
     a.invoice_status=invoiceType==='cloud'?'cloud_pending':'paper_pending';
     a.reviewed_by=SESSION.id; a.reviewed_at=new Date().toISOString();
     await dbPut('purchase_applications',a);
-    showToast(invoiceType==='cloud'?'已轉雲端發票待開立':'已轉紙本發票待開立'); navTo('purchase_review');
+    showToast(invoiceType==='cloud'?'已轉雲端發票待開立':'已轉紙本發票待開立'); setTkTab('purchase_review');
   }
 }
 // 完成開立發票 → 填發票號（雲端未來可由 API 自動帶入）→ 發券、申請完成
@@ -4801,7 +4819,7 @@ function appCompleteInvoice(id){
   showModal(`<div class="modal-title">完成開立發票</div>
     <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${isCloud?'雲端發票（未來可串接電子發票 API 自動回填號碼）':'紙本發票'}。填入發票號碼後將正式發放票券。</div>
     <div class="form-row"><label>發票號碼（可留空）</label><input id="iv-no" placeholder="例：AB-12345678"></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="navTo('purchase_review')">取消</button><button class="btn btn-green" onclick="confirmCompleteInvoice('${id}')">完成並發券</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="setTkTab('purchase_review')">取消</button><button class="btn btn-green" onclick="confirmCompleteInvoice('${id}')">完成並發券</button></div>`);
 }
 async function confirmCompleteInvoice(id){
   const a=await dbGet('purchase_applications',id);
@@ -4812,7 +4830,7 @@ async function confirmCompleteInvoice(id){
   a.status='completed'; a.invoice_status='issued'; a.invoice_number=no;
   a.reviewed_at=new Date().toISOString();
   await dbPut('purchase_applications',a);
-  showToast('發票已開立，票券已發放'); navTo('purchase_review');
+  showToast('發票已開立，票券已發放'); setTkTab('purchase_review');
 }
 // 取消申請（pending 或 invoicing 皆可）→ 不發券
 function appCancel(id){
@@ -4820,7 +4838,7 @@ function appCancel(id){
     <div style="font-size:13.5px;padding:6px 0 4px;">確定取消這筆購買申請嗎？</div>
     <div style="font-size:12px;color:var(--t2);margin-top:6px;">取消後狀態改為「已取消」，不會發放票券。</div>
     <div class="form-row" style="margin-top:10px;"><label>取消原因（選填，會顯示給會員）</label><input id="ac-reason" placeholder="選填"></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="navTo('purchase_review')">返回</button><button class="btn btn-danger" onclick="confirmAppCancel('${id}')">確定取消</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="setTkTab('purchase_review')">返回</button><button class="btn btn-danger" onclick="confirmAppCancel('${id}')">確定取消</button></div>`);
 }
 async function confirmAppCancel(id){
   const a=await dbGet('purchase_applications',id);
@@ -4829,7 +4847,7 @@ async function confirmAppCancel(id){
   a.status='cancelled'; a.reject_reason=reason; a.reviewed_by=SESSION.id; a.reviewed_at=new Date().toISOString();
   await dbPut('purchase_applications',a);
   try{ if(reason) await pushNotification(a.member_id,'payment','購買申請已取消','您的購買申請已取消。原因：'+reason); }catch(_){}
-  showToast('已取消申請'); navTo('purchase_review');
+  showToast('已取消申請'); setTkTab('purchase_review');
 }
 
 /* ════════ 管理員:今日事項 ════════ */
