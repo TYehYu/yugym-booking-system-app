@@ -98,11 +98,25 @@ input,select,textarea{font-family:inherit;font-size:14px;}
 .topbar .tb-ver{font-family:var(--num);font-size:10.5px;color:var(--gold);opacity:0.72;letter-spacing:0.08em;margin-top:3px;}
 .topbar .tb-role{font-size:11px;background:rgba(255,255,255,0.16);padding:3px 10px;border-radius:20px;letter-spacing:0.05em;}
 .topbar .tb-right{display:flex;align-items:center;gap:14px;font-size:13px;}
-.tb-clock{font-family:var(--display);font-size:22px;font-weight:600;opacity:1;letter-spacing:0.02em;color:#fff;}
+.tb-clock{font-family:var(--num);font-size:18px;font-weight:500;opacity:1;letter-spacing:0.02em;color:#fff;font-variant-numeric:tabular-nums;}
 .tb-weather{font-size:18px;opacity:.95;display:flex;align-items:center;gap:4px;}
 .tb-user{opacity:.9;}
 .tb-logout{font-size:12px;background:rgba(255,255,255,0.14);padding:6px 12px;border-radius:8px;transition:.18s;}
 .tb-logout:hover{background:rgba(255,255,255,0.24);}
+/* 帳號下拉選單 */
+.tb-account{position:relative;}
+.tb-acct-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:#fff;background:rgba(255,255,255,0.14);padding:6px 12px;border-radius:8px;transition:.18s;cursor:pointer;border:none;font-family:inherit;}
+.tb-acct-btn:hover{background:rgba(255,255,255,0.24);}
+.tb-caret{font-size:10px;opacity:.8;transition:transform .18s;}
+.tb-account:hover .tb-caret,.tb-account.open .tb-caret{transform:rotate(180deg);}
+.tb-acct-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:172px;background:#fff;border:1px solid var(--bd);border-radius:11px;
+  box-shadow:0 8px 28px rgba(20,18,14,0.18);padding:6px;z-index:80;opacity:0;visibility:hidden;transform:translateY(-6px);transition:.16s;}
+/* 桌機：滑入展開；任一裝置：.open class 展開（給點擊/iPad 用） */
+.tb-account:hover .tb-acct-menu,.tb-account.open .tb-acct-menu{opacity:1;visibility:visible;transform:translateY(0);}
+.tb-acct-item{display:block;width:100%;text-align:left;font-size:13.5px;color:var(--text);background:none;border:none;padding:10px 12px;border-radius:8px;cursor:pointer;font-family:inherit;transition:.12s;}
+.tb-acct-item:hover{background:var(--card2);}
+.tb-acct-logout{color:var(--danger);}
+.tb-acct-sep{height:1px;background:var(--bd);margin:5px 6px;}
 @media(max-width:600px){
   .topbar{padding:0 12px;height:54px;gap:8px;}
   .topbar .tb-left{gap:8px;min-width:0;}
@@ -110,13 +124,12 @@ input,select,textarea{font-family:inherit;font-size:14px;}
   .topbar .tb-mark span:last-child{font-size:11px !important;letter-spacing:0.08em !important;}
   .topbar .tb-ver{font-size:9.5px;margin-top:2px;}
   .topbar .tb-right{gap:10px;font-size:12px;}
-  /* 手機隱藏次要資訊，頂部只留 logo + 姓名 + 登出 */
+  /* 手機隱藏次要資訊，頂部只留 logo + 帳號選單 */
   .topbar .tb-role,
   .tb-clock,
   .tb-weather{display:none;}
   .tb-user{display:inline;opacity:.95;font-size:13px;}
-  .topbar .tb-changepw{display:none;} /* 修改密碼手機省略 */
-  .tb-logout{font-size:11px;padding:5px 10px;}
+  .tb-acct-btn{font-size:12px;padding:5px 10px;}
 }
 
 .layout{flex:1;display:flex;flex-direction:column;width:100%;}
@@ -547,9 +560,17 @@ tr:hover td{background:var(--card2);}
       <div class="tb-right">
         <span id="tb-clock" class="tb-clock"></span>
         <span id="tb-weather" class="tb-weather"></span>
-        <span class="tb-user" id="tb-user">—</span>
-        <button class="tb-logout tb-changepw" onclick="openChangePassword()">修改密碼</button>
-        <button class="tb-logout" onclick="doLogout()">登出</button>
+        <div class="tb-account" id="tb-account">
+          <button class="tb-acct-btn" onclick="toggleAcctMenu(event)">
+            <span class="tb-user" id="tb-user">—</span>
+            <span class="tb-caret">▾</span>
+          </button>
+          <div class="tb-acct-menu" id="tb-acct-menu">
+            <button class="tb-acct-item" onclick="openChangePassword()">修改密碼</button>
+            <div class="tb-acct-sep"></div>
+            <button class="tb-acct-item tb-acct-logout" onclick="doLogout()">登出</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="sidenav" id="sidenav"></div>
@@ -573,8 +594,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.1154';
-const APP_VERSION_LABEL='26620.1154';
+const APP_VERSION='26620.1233';
+const APP_VERSION_LABEL='26620.1233';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -791,9 +812,9 @@ const NAV={
     {key:'dashboard',label:'儀表板'},
     {key:'admin_today',label:'今日事項'},
     {key:'calendar',label:'預約行事曆'},
+    {key:'attendance',label:'出勤打卡'},
     {key:'members',label:'會員管理'},
     {key:'staff',label:'員工管理'},
-    {key:'hr',label:'人資管理'},
     {key:'plans',label:'課程方案'},
     {key:'purchase_review',label:'購買申請'},
     {key:'tickets',label:'會員票券'},
@@ -801,6 +822,7 @@ const NAV={
   coach:[
     {key:'coach_today',label:'今日課程'},
     {key:'coach_calendar',label:'預約行事曆'},
+    {key:'attendance',label:'出勤打卡'},
     // MVP 凍結：薪資查詢（coach_salary）入口暫時隱藏，頁面程式碼保留
   ],
   front_desk:[
@@ -1374,6 +1396,23 @@ function doCalJump(){
 }
 // 頂部時鐘
 let _clockTimer=null;
+// 帳號下拉選單：iPad/手機點擊切換；點選單外則關閉
+function toggleAcctMenu(e){
+  e.stopPropagation();
+  const m=document.getElementById('tb-account');
+  if(!m)return;
+  m.classList.toggle('open');
+}
+document.addEventListener('click',(e)=>{
+  const acc=document.getElementById('tb-account');
+  if(acc&&acc.classList.contains('open')&&!acc.contains(e.target)){ acc.classList.remove('open'); }
+});
+// 編輯自己的個人/員工資料（沿用員工詳細資料表單）
+function openMyProfile(){
+  const acc=document.getElementById('tb-account'); if(acc)acc.classList.remove('open');
+  if(!SESSION||!SESSION.id){ showToast('無法取得目前帳號'); return; }
+  openHrEdit(SESSION.id);
+}
 function startClock(){
   const el=document.getElementById('tb-clock'); if(!el)return;
   const tick=()=>{
@@ -2400,9 +2439,28 @@ async function cancelBooking(id){
 /* ════════ 管理員:會員管理（主入口） ════════ */
 let _memSearch='';
 let _memSort='reg', _memSortDir=-1; // 預設：註冊日由新到舊
+let _memPage=1; const MEM_PER_PAGE=20;
 function memSortBy(key){
   if(_memSort===key){ _memSortDir=-_memSortDir; } else { _memSort=key; _memSortDir=1; }
-  navTo('members');
+  _memPage=1; navTo('members');
+}
+function memGoPage(p){ _memPage=p; navTo('members'); }
+// 產生頁碼按鈕（頁數多時以省略號精簡，永遠顯示首尾與當前頁附近）
+function memPageNumbers(cur,total){
+  const pages=[];
+  const add=p=>pages.push(p);
+  if(total<=7){ for(let i=1;i<=total;i++)add(i); }
+  else{
+    add(1);
+    if(cur>3) pages.push('...');
+    for(let i=Math.max(2,cur-1);i<=Math.min(total-1,cur+1);i++)add(i);
+    if(cur<total-2) pages.push('...');
+    add(total);
+  }
+  return pages.map(p=>p==='...'
+    ? `<span style="padding:0 4px;color:var(--t3);">…</span>`
+    : `<button class="btn btn-sm ${p===cur?'btn-green':'btn-ghost'}" onclick="memGoPage(${p})" style="min-width:34px;">${p}</button>`
+  ).join('');
 }
 PAGES.members=async function(){
   const[members,coaches,allBk]=await Promise.all([dbGetAll('members'),dbGetAll('coaches'),dbGetAll('bookings')]);
@@ -2435,13 +2493,19 @@ PAGES.members=async function(){
     const tagLabels=(m.tags||[]).map(t=>(TAG_DEFS[t]||{}).label||t).join(' ');
     return (m.name||'').toLowerCase().includes(q)||(m.phone||'').includes(q)||tagLabels.toLowerCase().includes(q);
   });
+  // 分頁：每頁 MEM_PER_PAGE 人
+  const totalPages=Math.max(1,Math.ceil(filtered.length/MEM_PER_PAGE));
+  if(_memPage>totalPages) _memPage=totalPages;
+  if(_memPage<1) _memPage=1;
+  const pageStart=(_memPage-1)*MEM_PER_PAGE;
+  const pageRows=filtered.slice(pageStart,pageStart+MEM_PER_PAGE);
   C.innerHTML=head('MEMBERS','會員管理','點標題可排序 · 標籤／指定教練可直接修改 · 點「詳細」查看完整資料')+
   `<div class="card">
     <div class="card-title">會員列表（${filtered.length}） <span style="display:inline-flex;gap:8px;"><button class="btn btn-green btn-sm" onclick="openBackofficeMember()">＋ 後台辦理會員</button><button class="btn btn-ghost btn-sm" onclick="openMemberRegisterLink()">會員申辦連結 / QR Code</button></span></div>
     <div class="filter-row">
-      <input id="mem-search" placeholder="搜尋姓名 / 手機 / 標籤…" value="${_memSearch}" oninput="_memSearch=this.value;clearTimeout(window._mst);window._mst=setTimeout(()=>navTo('members'),250)"
+      <input id="mem-search" placeholder="搜尋姓名 / 手機 / 標籤…" value="${_memSearch}" oninput="_memSearch=this.value;_memPage=1;clearTimeout(window._mst);window._mst=setTimeout(()=>navTo('members'),250)"
         style="flex:1;min-width:200px;padding:9px 14px;border:1px solid var(--bd);border-radius:9px;background:#fff;">
-      ${_memSearch?`<button class="btn btn-ghost btn-sm" onclick="_memSearch='';navTo('members')">清除</button>`:''}
+      ${_memSearch?`<button class="btn btn-ghost btn-sm" onclick="_memSearch='';_memPage=1;navTo('members')">清除</button>`:''}
     </div>
     <table class="mem-table"><thead><tr>
       <th style="cursor:pointer;user-select:none;" onclick="memSortBy('name')">姓名${_memSort==='name'?(_memSortDir>0?' ▲':' ▼'):''}</th>
@@ -2452,7 +2516,7 @@ PAGES.members=async function(){
       <th style="cursor:pointer;user-select:none;" onclick="memSortBy('reg')">註冊日${_memSort==='reg'?(_memSortDir>0?' ▲':' ▼'):''}</th>
       <th></th></tr></thead><tbody>
     ${filtered.length===0?'<tr><td colspan="8"><div class="empty"><div class="em-t">找不到符合的會員</div></div></td></tr>':
-    filtered.map(m=>`<tr>
+    pageRows.map(m=>`<tr>
       <td style="font-weight:500;">${m.name}</td><td>${m.phone}</td><td>${tierTag(m.tier)}</td>
       <td onclick="_detailMemberId=null;openTagModal('${m.id}')" class="mem-tagcell" title="點此修改標籤"><div class="mem-tagbox">${renderTags(m.tags)||'<span style=\"color:var(--t3);font-size:12px;\">＋ 標籤</span>'}</div></td>
       <td onclick="event.stopPropagation()">
@@ -2466,6 +2530,12 @@ PAGES.members=async function(){
       <td><button class="btn btn-ghost btn-sm" onclick="openMemberDetail('${m.id}')">詳細 ›</button></td>
     </tr>`).join('')}
     </tbody></table>
+    ${totalPages>1?`<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" ${_memPage<=1?'disabled style=\"opacity:.4;\"':''} onclick="memGoPage(${_memPage-1})">‹ 上一頁</button>
+      ${memPageNumbers(_memPage,totalPages)}
+      <button class="btn btn-ghost btn-sm" ${_memPage>=totalPages?'disabled style=\"opacity:.4;\"':''} onclick="memGoPage(${_memPage+1})">下一頁 ›</button>
+    </div>
+    <div style="text-align:center;font-size:11.5px;color:var(--t3);margin-top:6px;">第 ${_memPage} / ${totalPages} 頁　·　顯示第 ${pageStart+1}–${Math.min(pageStart+MEM_PER_PAGE,filtered.length)} 筆，共 ${filtered.length} 人</div>`:''}
   </div>
   <div class="card"><div class="card-title">等級與標籤說明</div>
     <div style="font-size:12px;color:var(--green);font-weight:600;margin-bottom:6px;">會員等級（一人一個）</div>
@@ -2915,17 +2985,34 @@ function normEmp(v){
 }
 const STAFF_STATUS={active:'在職',unpaid_leave:'留職停薪',inactive:'已停用',resigned:'已停用'};
 const STAFF_STATUS_TAG={active:'tag-ok',unpaid_leave:'tag-warn',inactive:'tag-danger',resigned:'tag-danger'};
+const STAFF_TABS=[
+  {key:'list',label:'員工'},
+  {key:'insurance',label:'勞健保管理'},
+  {key:'schedule',label:'排班設定'},
+  {key:'leave',label:'特休管理'},
+];
+let _staffTab='list';
+function setStaffTab(k){ _staffTab=k; navTo('staff'); }
 PAGES.staff=async function(){
+  const tab=STAFF_TABS.find(t=>t.key===_staffTab)||STAFF_TABS[0];
+  const tabBar=`<div class="seg" style="margin-bottom:16px;flex-wrap:wrap;">${STAFF_TABS.map(t=>
+    `<button class="seg-btn ${_staffTab===t.key?'active':''}" onclick="setStaffTab('${t.key}')">${t.label}</button>`).join('')}</div>`;
+  C.innerHTML=head('STAFF','員工管理','員工資料 · 薪資制度 · 勞健保 · 排班 · 特休')+tabBar+`<div id="staff-body"></div>`;
+  if(_staffTab==='list') await renderStaffList();
+  else if(_staffTab==='insurance') await renderStaffInsurance();
+  else if(_staffTab==='schedule') await renderStaffSchedule();
+  else if(_staffTab==='leave') await renderStaffLeave();
+};
+async function renderStaffList(){
   const coaches=await dbGetAll('coaches');
   const roleTag={admin:'tag-admin',coach:'tag-coach',front_desk:'tag-front'};
   const staffRoleLabel={admin:'管理員',coach:'一般員工',front_desk:'設備帳號'};
-  // 分區：真人員工（管理員/教練） vs 後台專用帳號（設備帳號 front_desk）
   const isDevice=c=>c.role==='front_desk';
   const roleOrder={admin:0,coach:1,front_desk:2};
   const statusOrder=c=>{
-    if(c.invite_status==='pending') return 2;      // 待填寫排最後
-    if(c.status==='inactive'||c.status==='resigned') return 1; // 停用排後
-    return 0;                                       // 在職排前
+    if(c.invite_status==='pending') return 2;
+    if(c.status==='inactive'||c.status==='resigned') return 1;
+    return 0;
   };
   const sortFn=(a,b)=> statusOrder(a)-statusOrder(b)
     || (roleOrder[a.role]??9)-(roleOrder[b.role]??9)
@@ -2949,16 +3036,17 @@ PAGES.staff=async function(){
         : c.role==='front_desk'
           ? `<button class="btn btn-ghost btn-sm" onclick="openResetStaffPw('${c.id}')">重設密碼</button>`
             +`${c.status!=='inactive'?` <button class="btn btn-ghost btn-sm" onclick="setStaffStatus('${c.id}','inactive')">停用</button>`:` <button class="btn btn-green btn-sm" onclick="setStaffStatus('${c.id}','active')">啟用</button>`}`
-          : `<button class="btn btn-ghost btn-sm" onclick="openStaffEdit('${c.id}')">編輯</button>`
+          : `<button class="btn btn-ghost btn-sm" onclick="openHrEdit('${c.id}')">詳細資料</button>`
             +` <button class="btn btn-ghost btn-sm" onclick="openResetStaffPw('${c.id}')">重設密碼</button>`
-            +`${c.status!=='inactive'?` <button class="btn btn-ghost btn-sm" onclick="setStaffStatus('${c.id}','inactive')">停用</button>`:` <button class="btn btn-green btn-sm" onclick="setStaffStatus('${c.id}','active')">啟用</button>`}`
+            +`${c.status!=='inactive'?` <button class="btn btn-ghost btn-sm" onclick="setStaffStatus('${c.id}','inactive')">停用</button>`:` <button class="btn btn-green btn-sm" onclick="setStaffStatus('${c.id}','active')">啟用</button> <button class="btn btn-danger btn-sm" onclick="deleteStaff('${c.id}')">刪除</button>`}`
         }</td>
     </tr>`;
   };
   const tableHead=`<thead><tr><th>姓名</th><th>教練名</th><th>帳號</th><th>角色</th><th>員工類型</th><th>管理職</th><th>狀態</th><th></th></tr></thead>`;
 
-  C.innerHTML=head('STAFF','員工管理','邀請員工自行填寫 · 員工類型：正職 / 兼職 / 工讀 / 合作 · 職務：行政櫃檯 / 教練')+
+  document.getElementById('staff-body').innerHTML=
   `<div class="card"><div class="card-title">員工 <button class="btn btn-green btn-sm" onclick="openStaffModal()">＋ 邀請員工</button></div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.7;">員工類型：正職 / 兼職 / 工讀 / 合作。點「詳細資料」可檢視與編輯完整人事資料（基本資料、職務、薪資制度）。</div>
     <table>${tableHead}<tbody>
     ${staffList.length===0?'<tr><td colspan="8" style="text-align:center;color:var(--t3);padding:18px;">尚無員工</td></tr>':staffList.map(rowOf).join('')}
     </tbody></table>
@@ -2970,15 +3058,215 @@ PAGES.staff=async function(){
   </div>`:`<div class="card">
     <div class="card-title">後台專用帳號 <button class="btn btn-green btn-sm" onclick="openDeviceModal()">＋ 新增設備帳號</button></div>
     <div style="font-size:12px;color:var(--t3);line-height:1.7;">場館平板／櫃檯設備使用的後台帳號，非人事員工。目前尚無設備帳號。</div>
-  </div>`}
-  <div class="card"><div class="card-title">邀請流程</div>
-    <div style="font-size:12.5px;color:var(--t2);line-height:1.9;">
-    1. 點「邀請員工」→ 填姓名與電話、指定角色與薪資制度 → 產生填寫連結。<br>
-    2. 複製連結傳給員工。員工開啟後設定密碼、補填教練名/Email/生日等（電話已帶入、不可更改）。<br>
-    3. 送出後回此列表，點「編輯」可啟用、調整管理職與狀態。
-    </div>
+  </div>`}`;
+}
+
+// 共用：人事員工清單（排除設備帳號與待填寫），依類型排序
+async function _hrStaffList(){
+  const order={full_time:0,part_time:1,intern:2,contractor:3};
+  return (await dbGetAll('coaches'))
+    .filter(c=>c.role!=='front_desk' && c.invite_status!=='pending')
+    .sort((a,b)=>(order[normEmp(a.employment_type||a.pay_type)]??9)-(order[normEmp(b.employment_type||b.pay_type)]??9)
+      ||(a.name||'').localeCompare(b.name||'','zh-Hant'));
+}
+const INS_STATUS_OPTS=[['','—'],['enrolled','投保中'],['not_enrolled','未投保'],['withdrawn','已退保']];
+function insStatusLabel(v){ return (INS_STATUS_OPTS.find(o=>o[0]===v)||['','—'])[1]; }
+
+/* ── 勞健保管理 ── */
+async function renderStaffInsurance(){
+  const list=await _hrStaffList();
+  document.getElementById('staff-body').innerHTML=`<div class="card">
+    <div class="card-title">勞健保管理</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.7;">投保狀態、投保單位與級距、加退保日期，供未來申報與查詢。合作教練多為「不由公司投保」。</div>
+    <table><thead><tr><th>姓名</th><th>類型</th><th>勞保</th><th>健保</th><th>勞退</th><th>投保級距</th><th></th></tr></thead><tbody>
+    ${list.length===0?'<tr><td colspan="7" style="text-align:center;color:var(--t3);padding:18px;">尚無員工</td></tr>':
+    list.map(c=>{const et=normEmp(c.employment_type||c.pay_type);return `<tr>
+      <td>${c.name||'—'}</td>
+      <td>${EMP_RULES[et]?EMP_RULES[et].label:'—'}</td>
+      <td>${insStatusLabel(c.labor_insurance_status)}</td>
+      <td>${insStatusLabel(c.health_insurance_status)}</td>
+      <td>${insStatusLabel(c.pension_status)}</td>
+      <td>${c.insured_grade?'$'+Number(c.insured_grade).toLocaleString():'—'}</td>
+      <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="openInsuranceEdit('${c.id}')">編輯</button></td>
+    </tr>`;}).join('')}
+    </tbody></table>
   </div>`;
-};
+}
+async function openInsuranceEdit(id){
+  const c=await dbGet('coaches',id); if(!c){showToast('找不到員工');return;}
+  const et=normEmp(c.employment_type||c.pay_type);
+  const rule=EMP_RULES[et]||EMP_RULES.full_time;
+  const sel=(cur)=>INS_STATUS_OPTS.map(o=>`<option value="${o[0]}" ${cur===o[0]?'selected':''}>${o[1]}</option>`).join('');
+  showModal(`<div class="modal-title">勞健保 · ${c.name||''}</div>
+    <div style="font-size:12px;color:var(--t2);background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:10px;margin-bottom:14px;line-height:1.7;">類型：<b>${rule.label}</b>　·　制度：${rule.insurance.join('、')}</div>
+    <div class="form-2col">
+      <div class="form-row"><label>勞保狀態</label><select id="ins-labor">${sel(c.labor_insurance_status)}</select></div>
+      <div class="form-row"><label>健保狀態</label><select id="ins-health">${sel(c.health_insurance_status)}</select></div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>勞退狀態</label><select id="ins-pension">${sel(c.pension_status)}</select></div>
+      <div class="form-row"><label>投保級距（金額）</label><input type="number" id="ins-grade" value="${c.insured_grade||''}" placeholder="例：30300"></div>
+    </div>
+    <div class="form-row"><label>投保單位</label><input id="ins-unit" value="${c.insured_unit||''}" placeholder="公司投保單位名稱"></div>
+    <div class="form-2col">
+      <div class="form-row"><label>加保日期</label><input type="date" id="ins-enroll" value="${c.insured_enroll_date||''}"></div>
+      <div class="form-row"><label>退保日期</label><input type="date" id="ins-withdraw" value="${c.insured_withdraw_date||''}"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveInsurance('${id}')">儲存</button></div>`);
+}
+async function saveInsurance(id){
+ try{
+  const c=await dbGet('coaches',id); const g=x=>document.getElementById(x).value;
+  c.labor_insurance_status=g('ins-labor')||null;
+  c.health_insurance_status=g('ins-health')||null;
+  c.pension_status=g('ins-pension')||null;
+  c.insured_grade=g('ins-grade')?Number(g('ins-grade')):null;
+  c.insured_unit=g('ins-unit')||null;
+  c.insured_enroll_date=g('ins-enroll')||null;
+  c.insured_withdraw_date=g('ins-withdraw')||null;
+  await dbPut('coaches',c); closeModal(); showToast('勞健保資料已儲存'); navTo('staff');
+ }catch(e){ console.error('saveInsurance 失敗:',e); showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+}
+
+/* ── 排班設定 ── */
+const WD_FULL=['日','一','二','三','四','五','六'];
+async function renderStaffSchedule(){
+  const list=await _hrStaffList();
+  document.getElementById('staff-body').innerHTML=`<div class="card">
+    <div class="card-title">排班設定</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.7;">固定休假、可排班時段、每週天數、值班與代課設定，供未來排班系統讀取。合作教練多為自主安排。</div>
+    <table><thead><tr><th>姓名</th><th>類型</th><th>固定休</th><th>每週天數</th><th>值班</th><th>代課</th><th>打卡</th><th></th></tr></thead><tbody>
+    ${list.length===0?'<tr><td colspan="8" style="text-align:center;color:var(--t3);padding:18px;">尚無員工</td></tr>':
+    list.map(c=>{const et=normEmp(c.employment_type||c.pay_type);
+      const offs=(c.fixed_off_days||'').split(',').filter(x=>x!=='').map(d=>'週'+WD_FULL[Number(d)]).join('、')||'—';
+      return `<tr>
+      <td>${c.name||'—'}</td>
+      <td>${EMP_RULES[et]?EMP_RULES[et].label:'—'}</td>
+      <td>${offs}</td>
+      <td>${c.weekly_work_days!=null&&c.weekly_work_days!==''?c.weekly_work_days+' 天':'—'}</td>
+      <td>${c.need_duty?'<span class="tag tag-ok">需值班</span>':'—'}</td>
+      <td>${c.can_substitute?'<span class="tag tag-ok">可代課</span>':'—'}</td>
+      <td>${c.need_punch?'<span class="tag tag-admin">需打卡</span>':'—'}</td>
+      <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="openScheduleEdit('${c.id}')">編輯</button></td>
+    </tr>`;}).join('')}
+    </tbody></table>
+  </div>`;
+}
+async function openScheduleEdit(id){
+  const c=await dbGet('coaches',id); if(!c){showToast('找不到員工');return;}
+  const et=normEmp(c.employment_type||c.pay_type);
+  const rule=EMP_RULES[et]||EMP_RULES.full_time;
+  const offs=(c.fixed_off_days||'').split(',').filter(x=>x!=='');
+  const dayChecks=WD_FULL.map((w,i)=>`<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;margin-right:12px;"><input type="checkbox" class="sch-off" value="${i}" ${offs.includes(String(i))?'checked':''}>週${w}</label>`).join('');
+  showModal(`<div class="modal-title">排班設定 · ${c.name||''}</div>
+    <div style="font-size:12px;color:var(--t2);background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:10px;margin-bottom:14px;line-height:1.7;">類型：<b>${rule.label}</b>　·　制度：${rule.schedule.join('、')}</div>
+    <div class="form-row"><label>固定休假日</label><div style="padding:6px 0;display:flex;flex-wrap:wrap;">${dayChecks}</div></div>
+    <div class="form-row"><label>可排班時段</label><input id="sch-slots" value="${c.available_slots||''}" placeholder="例：平日 10:00–22:00、週末 09:00–18:00"></div>
+    <div class="form-row"><label>每週可上班天數</label><input type="number" id="sch-days" value="${c.weekly_work_days??''}" min="0" max="7" placeholder="0–7"></div>
+    <div class="form-row"><label>值班與代課</label>
+      <div style="display:flex;gap:18px;padding:6px 0;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input type="checkbox" id="sch-duty" ${c.need_duty?'checked':''}>需要值班</label>
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input type="checkbox" id="sch-sub" ${c.can_substitute?'checked':''}>可代課</label>
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input type="checkbox" id="sch-punch" ${c.need_punch?'checked':''}>需要打卡（出勤）</label>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveSchedule('${id}')">儲存</button></div>`);
+}
+async function saveSchedule(id){
+ try{
+  const c=await dbGet('coaches',id);
+  const offs=[...document.querySelectorAll('.sch-off:checked')].map(el=>el.value).join(',');
+  c.fixed_off_days=offs||null;
+  c.available_slots=document.getElementById('sch-slots').value||null;
+  const d=document.getElementById('sch-days').value;
+  c.weekly_work_days=d!==''?Number(d):null;
+  c.need_duty=document.getElementById('sch-duty').checked;
+  c.can_substitute=document.getElementById('sch-sub').checked;
+  c.need_punch=document.getElementById('sch-punch').checked;
+  await dbPut('coaches',c); closeModal(); showToast('排班設定已儲存'); navTo('staff');
+ }catch(e){ console.error('saveSchedule 失敗:',e); showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+}
+
+/* ── 特休管理 ── */
+// 依勞基法計算「應給特休天數」(以年資對應)；未滿半年 0
+function statutoryAnnualLeave(hireDate){
+  const sen=calcSeniority(hireDate); if(!sen) return null;
+  const days=sen.days;
+  if(days<182) return 0;            // 未滿 6 個月
+  if(days<365) return 3;            // 滿 6 個月～未滿 1 年
+  const y=sen.years;
+  if(y<2) return 7;                 // 滿 1 年
+  if(y<3) return 10;                // 滿 2 年
+  if(y<5) return 14;                // 滿 3～5 年
+  if(y<10) return 15;              // 滿 5～10 年
+  return Math.min(30, 15+(y-9));   // 滿 10 年起每年+1，上限 30
+}
+async function renderStaffLeave(){
+  const list=await _hrStaffList();
+  document.getElementById('staff-body').innerHTML=`<div class="card">
+    <div class="card-title">特休管理</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.7;">系統依到職日自動計算年資與「依勞基法應給特休」。可手動覆寫應給天數（如部分工時比例、公司另有制度），並記錄已使用天數。合作教練不適用特休。</div>
+    <table><thead><tr><th>姓名</th><th>類型</th><th>到職日</th><th>年資</th><th>應給</th><th>已用</th><th>剩餘</th><th></th></tr></thead><tbody>
+    ${list.length===0?'<tr><td colspan="8" style="text-align:center;color:var(--t3);padding:18px;">尚無員工</td></tr>':
+    list.map(c=>{const et=normEmp(c.employment_type||c.pay_type);
+      const rule=EMP_RULES[et]||{};
+      const sen=calcSeniority(c.hire_date);
+      if(rule.leaveApplicable===false){
+        return `<tr><td>${c.name||'—'}</td><td>${EMP_RULES[et]?EMP_RULES[et].label:'—'}</td>
+          <td>${c.hire_date||'—'}</td><td>${sen?sen.years+' 年':'—'}</td>
+          <td colspan="3" style="color:var(--t3);">不適用特休</td><td></td></tr>`;
+      }
+      const stat=statutoryAnnualLeave(c.hire_date);
+      const total=(c.annual_leave_total!=null&&c.annual_leave_total!=='')?Number(c.annual_leave_total):stat;
+      const used=Number(c.annual_leave_used||0);
+      const remain=(total!=null)?(total-used):null;
+      return `<tr>
+      <td>${c.name||'—'}</td>
+      <td>${EMP_RULES[et]?EMP_RULES[et].label:'—'}</td>
+      <td>${c.hire_date||'—'}</td>
+      <td>${sen?sen.years+' 年':'—'}</td>
+      <td>${total!=null?total+' 天':'—'}${(c.annual_leave_total!=null&&c.annual_leave_total!=='')?'<span style="font-size:10px;color:var(--gold);">（自訂）</span>':''}</td>
+      <td>${used} 天</td>
+      <td><b>${remain!=null?remain+' 天':'—'}</b></td>
+      <td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="openLeaveEdit('${c.id}')">編輯</button></td>
+    </tr>`;}).join('')}
+    </tbody></table>
+  </div>`;
+}
+async function openLeaveEdit(id){
+  const c=await dbGet('coaches',id); if(!c){showToast('找不到員工');return;}
+  const et=normEmp(c.employment_type||c.pay_type);
+  const rule=EMP_RULES[et]||EMP_RULES.full_time;
+  const sen=calcSeniority(c.hire_date);
+  if(rule.leaveApplicable===false){
+    showModal(`<div class="modal-title">特休 · ${c.name||''}</div>
+      <div class="empty" style="padding:24px 8px;"><div class="em-t">${rule.label}不適用特休</div>
+      <div style="font-size:12px;color:var(--t3);margin-top:8px;">合作教練為課程抽成制、自主安排授課，依規定不適用特別休假。</div></div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+    return;
+  }
+  const stat=statutoryAnnualLeave(c.hire_date);
+  showModal(`<div class="modal-title">特休 · ${c.name||''}</div>
+    <div style="font-size:12px;color:var(--t2);background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:10px;margin-bottom:14px;line-height:1.8;">
+      類型：<b>${rule.label}</b>　·　計算方式：${rule.leave}<br>
+      到職日：${c.hire_date||'—'}　·　年資：${sen?sen.years+' 年 '+(sen.days%365)+' 天':'—'}<br>
+      依勞基法應給：<b style="color:var(--green);">${stat!=null?stat+' 天':'—'}</b>
+    </div>
+    <div class="form-row"><label>本年度應給特休（天）</label><input type="number" id="lv-total" value="${c.annual_leave_total??''}" placeholder="留空＝採用勞基法 ${stat??0} 天；可改為部分工時比例" step="0.5"></div>
+    <div class="form-row"><label>已使用特休（天）</label><input type="number" id="lv-used" value="${c.annual_leave_used||0}" step="0.5" min="0"></div>
+    <div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:4px;">＊ 兼職／工讀依部分工時比例，請在「應給特休」直接填入換算後天數。剩餘＝應給－已用，自動計算。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveLeave('${id}')">儲存</button></div>`);
+}
+async function saveLeave(id){
+ try{
+  const c=await dbGet('coaches',id);
+  const t=document.getElementById('lv-total').value;
+  const u=document.getElementById('lv-used').value;
+  c.annual_leave_total=t!==''?Number(t):null;
+  c.annual_leave_used=u!==''?Number(u):0;
+  await dbPut('coaches',c); closeModal(); showToast('特休資料已儲存'); navTo('staff');
+ }catch(e){ console.error('saveLeave 失敗:',e); showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+}
 
 /* ╔══════════════════════════════════════════════╗
    ║  人資管理模組（HR）— 第一批：員工資料             ║
@@ -3842,6 +4130,136 @@ async function emergencySelfAdmin(){
 async function markComplete(id){
   const b=await dbGet('bookings',id);b.status='completed';await dbPut('bookings',b);
   showToast('已標記完成');navTo(CUR_PAGE);
+}
+
+/* ╔══════════════════════════════════════════════╗
+   ║  出勤打卡（attendance）                          ║
+   ║  上下班打卡、記錄工時。need_punch=true 的員工適用。 ║
+   ╚══════════════════════════════════════════════╝ */
+// 工時（小時，1 位小數）
+function calcWorkHours(rec){
+  if(!rec||!rec.clock_in||!rec.clock_out) return null;
+  const [ih,im]=rec.clock_in.split(':').map(Number);
+  const [oh,om]=rec.clock_out.split(':').map(Number);
+  let mins=(oh*60+om)-(ih*60+im);
+  if(mins<0) mins+=24*60; // 跨午夜
+  return Math.round(mins/6)/10; // 0.1 小時
+}
+function nowHM(){ const n=new Date(); return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0'); }
+// 取某員工某日的打卡紀錄
+async function getAttendance(empId,date){
+  const all=await dbGetAll('attendance');
+  return all.find(a=>a.emp_id===empId && a.date===date)||null;
+}
+PAGES.attendance=async function(){
+  const isAdmin=SESSION.role==='admin'||SESSION.role==='front_desk';
+  if(isAdmin) await renderAttendanceAdmin();
+  else await renderAttendanceSelf();
+};
+// ── 員工本人打卡 ──
+async function renderAttendanceSelf(){
+  const me=await dbGet('coaches',SESSION.id);
+  const today=ymd(TODAY);
+  const all=await dbGetAll('attendance');
+  const mine=all.filter(a=>a.emp_id===SESSION.id).sort((a,b)=>b.date.localeCompare(a.date));
+  const todayRec=mine.find(a=>a.date===today);
+  // 本月統計
+  const ym=today.slice(0,7);
+  const monthRecs=mine.filter(a=>a.date.startsWith(ym));
+  const monthHours=monthRecs.reduce((s,r)=>s+(calcWorkHours(r)||0),0);
+  const monthDays=monthRecs.filter(r=>r.clock_in).length;
+
+  const punchCard = (me&&me.need_punch===false)
+    ? `<div class="card"><div class="empty" style="padding:24px 8px;"><div class="em-t">你不需要打卡</div>
+        <div style="font-size:12px;color:var(--t3);margin-top:6px;">如需開啟，請洽管理員於排班設定中設定。</div></div></div>`
+    : `<div class="card">
+        <div class="card-title">今日打卡 · ${today}（週${WD[TODAY.getDay()]}）</div>
+        <div style="display:flex;gap:14px;align-items:stretch;flex-wrap:wrap;">
+          <div style="flex:1;min-width:140px;text-align:center;background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:18px;">
+            <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">上班</div>
+            <div style="font-size:26px;font-weight:700;font-family:var(--num);color:${todayRec&&todayRec.clock_in?'var(--green)':'var(--t3)'};">${todayRec&&todayRec.clock_in?todayRec.clock_in:'—:—'}</div>
+            ${todayRec&&todayRec.clock_in?'':`<button class="btn btn-green btn-sm" style="margin-top:12px;" onclick="punchIn()">上班打卡</button>`}
+          </div>
+          <div style="flex:1;min-width:140px;text-align:center;background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:18px;">
+            <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">下班</div>
+            <div style="font-size:26px;font-weight:700;font-family:var(--num);color:${todayRec&&todayRec.clock_out?'var(--green)':'var(--t3)'};">${todayRec&&todayRec.clock_out?todayRec.clock_out:'—:—'}</div>
+            ${todayRec&&todayRec.clock_in&&!todayRec.clock_out?`<button class="btn btn-green btn-sm" style="margin-top:12px;" onclick="punchOut()">下班打卡</button>`:''}
+            ${todayRec&&todayRec.clock_out?`<div style="font-size:11px;color:var(--t3);margin-top:10px;">今日工時 ${calcWorkHours(todayRec)} 小時</div>`:''}
+          </div>
+        </div>
+        ${todayRec&&todayRec.clock_in&&!todayRec.clock_out?'<div style="font-size:11.5px;color:var(--t3);margin-top:12px;text-align:center;">已上班打卡，記得下班時打卡。</div>':''}
+      </div>`;
+
+  C.innerHTML=head('PUNCH','出勤打卡','上下班打卡 · 記錄工時')+punchCard+
+  `<div class="stat-grid">
+    <div class="stat-card"><div class="sc-label">本月出勤</div><div><span class="sc-num">${monthDays}</span><span class="sc-unit">天</span></div></div>
+    <div class="stat-card"><div class="sc-label">本月工時</div><div><span class="sc-num">${monthHours.toFixed(1)}</span><span class="sc-unit">小時</span></div></div>
+  </div>
+  <div class="card"><div class="card-title">出勤紀錄（近 30 筆）</div>
+    ${mine.length===0?'<div class="empty"><div class="em-t">尚無打卡紀錄</div></div>':
+    `<table><thead><tr><th>日期</th><th>上班</th><th>下班</th><th>工時</th></tr></thead><tbody>
+    ${mine.slice(0,30).map(r=>{const d=parseYmd(r.date);const wh=calcWorkHours(r);return `<tr>
+      <td>${r.date}（${WD[d.getDay()]}）</td>
+      <td>${r.clock_in||'—'}</td>
+      <td>${r.clock_out||'<span style="color:var(--warn);">未打</span>'}</td>
+      <td>${wh!=null?wh+' 小時':'—'}</td>
+    </tr>`;}).join('')}
+    </tbody></table>`}
+  </div>`;
+}
+async function punchIn(){
+ try{
+  const today=ymd(TODAY);
+  let rec=await getAttendance(SESSION.id,today);
+  if(rec&&rec.clock_in){ showToast('今日已上班打卡'); return; }
+  if(!rec) rec={id:uid('AT'),emp_id:SESSION.id,emp_name:SESSION.name||'',date:today,created_at:new Date().toISOString()};
+  rec.clock_in=nowHM();
+  await dbPut('attendance',rec);
+  showToast('上班打卡成功 '+rec.clock_in); navTo('attendance');
+ }catch(e){ console.error('punchIn 失敗:',e); showToast('打卡失敗：'+(e&&e.message?e.message:e)); }
+}
+async function punchOut(){
+ try{
+  const today=ymd(TODAY);
+  let rec=await getAttendance(SESSION.id,today);
+  if(!rec||!rec.clock_in){ showToast('尚未上班打卡'); return; }
+  if(rec.clock_out){ showToast('今日已下班打卡'); return; }
+  rec.clock_out=nowHM();
+  rec.work_hours=calcWorkHours(rec);
+  await dbPut('attendance',rec);
+  showToast('下班打卡成功 '+rec.clock_out+'，工時 '+rec.work_hours+' 小時'); navTo('attendance');
+ }catch(e){ console.error('punchOut 失敗:',e); showToast('打卡失敗：'+(e&&e.message?e.message:e)); }
+}
+// ── 管理員全覽 ──
+let _attDate=null;
+async function renderAttendanceAdmin(){
+  const date=_attDate||ymd(TODAY);
+  const[coaches,all]=await Promise.all([dbGetAll('coaches'),dbGetAll('attendance')]);
+  const needPunch=coaches.filter(c=>c.role!=='front_desk'&&c.need_punch&&c.status==='active');
+  const dayRecs=all.filter(a=>a.date===date);
+  const recMap=Object.fromEntries(dayRecs.map(r=>[r.emp_id,r]));
+  // 本月工時統計（每位需打卡員工）
+  const ym=date.slice(0,7);
+  const monthMap={};
+  all.filter(a=>a.date.startsWith(ym)).forEach(r=>{
+    monthMap[r.emp_id]=(monthMap[r.emp_id]||0)+(calcWorkHours(r)||0);
+  });
+  C.innerHTML=head('PUNCH','出勤打卡','全體出勤狀況 · 工時統計')+
+  `<div class="card">
+    <div class="card-title">每日出勤
+      <input type="date" value="${date}" onchange="_attDate=this.value;navTo('attendance')" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff;font-size:13px;">
+    </div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.7;">僅顯示「需要打卡」的在職員工（可於員工管理→排班設定開啟）。${needPunch.length===0?'目前沒有設定需打卡的員工。':''}</div>
+    ${needPunch.length===0?'':`<table><thead><tr><th>姓名</th><th>上班</th><th>下班</th><th>當日工時</th><th>本月累計</th></tr></thead><tbody>
+    ${needPunch.map(c=>{const r=recMap[c.id];const wh=r?calcWorkHours(r):null;return `<tr>
+      <td>${c.name||'—'}</td>
+      <td>${r&&r.clock_in?r.clock_in:'<span style="color:var(--t3);">未打</span>'}</td>
+      <td>${r&&r.clock_out?r.clock_out:(r&&r.clock_in?'<span style="color:var(--warn);">未打</span>':'—')}</td>
+      <td>${wh!=null?wh+' 小時':'—'}</td>
+      <td>${(monthMap[c.id]||0).toFixed(1)} 小時</td>
+    </tr>`;}).join('')}
+    </tbody></table>`}
+  </div>`;
 }
 
 /* ════════ 教練端:預約行事曆 ════════ */
