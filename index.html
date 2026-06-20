@@ -179,6 +179,15 @@ input,select,textarea{font-family:inherit;font-size:14px;}
 .ov-row:last-child{border-bottom:none;}
 .ov-label{font-size:13px;color:var(--t2);}
 .ov-val{font-size:21px;font-weight:700;font-family:var(--num);line-height:1;}
+/* 手機員工表現：5 欄對齊（姓名｜營收｜教練課｜團體課｜工時）*/
+.perf-m-head,.perf-m-row{display:grid;grid-template-columns:1.4fr 1.3fr 0.8fr 0.8fr 0.8fr;gap:4px;align-items:baseline;}
+.perf-m-head{padding:4px 0 8px;border-bottom:1.5px solid var(--bd);}
+.perf-m-head span{font-size:10.5px;color:var(--t3);font-weight:600;text-align:right;}
+.perf-m-head span:first-child{text-align:left;}
+.perf-m-row{padding:10px 0;border-bottom:1px solid var(--bd2);font-size:12.5px;}
+.perf-m-row:last-child{border-bottom:none;}
+.perf-m-row span{text-align:right;font-family:var(--num);}
+.perf-m-row .perf-m-name{text-align:left;font-weight:600;font-size:13.5px;font-family:var(--sans);}
 .card-title{font-family:var(--serif);font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;}
 .btn{padding:9px 16px;border-radius:9px;font-size:13px;font-weight:500;transition:.15s;letter-spacing:0.03em;}
 .btn-green{background:var(--green);color:#fff;}.btn-green:hover{background:var(--green-l);}
@@ -669,8 +678,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.1806';
-const APP_VERSION_LABEL='26620.1806';
+const APP_VERSION='26620.1827';
+const APP_VERSION_LABEL='26620.1827';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1175,8 +1184,9 @@ PAGES.dashboard=async function(){
     byPlan[name].used+=((t.sessions_total||0)-(t.sessions_remaining||0));
     byPlan[name].total+=(t.sessions_total||0); // 已售出總堂數（使用率分母）
   });
-  const planRows=Object.entries(byPlan).sort((a,b)=>b[1].amount-a[1].amount)
-    .map(([name,d])=>({name,...d}));
+  const planRows=Object.entries(byPlan)
+    .map(([name,d])=>({name,...d,pct:d.total>0?d.used/d.total:0}))
+    .sort((a,b)=>b.pct-a.pct||b.used-a.used); // 依使用率由高到低（同則比銷堂數）
 
   const fmtNT=(n)=>'$'+(n||0).toLocaleString();
 
@@ -1199,7 +1209,7 @@ PAGES.dashboard=async function(){
       .reduce((s,r)=>s+(calcWorkHours(r)||0),0);
     return {name:coachDisp(c),rev,ptCount,groupCount,hours,need_punch:!!c.need_punch};
   }).filter(r=>r.rev>0||r.ptCount>0||r.groupCount>0||r.hours>0)
-    .sort((a,b)=>b.rev-a.rev||b.ptCount-a.ptCount);
+    .sort((a,b)=>b.ptCount-a.ptCount||b.rev-a.rev); // 預設依教練課堂數由高到低
 
   C.innerHTML=head('OVERVIEW','儀表板','營運報表')+
   `<div class="filter-row" style="margin-bottom:18px;">
@@ -1222,25 +1232,27 @@ PAGES.dashboard=async function(){
     <div class="card">
       <div class="card-title">員工表現</div>
       ${perfRows.length===0?'<div class="empty"><div class="em-t">本期無資料</div></div>':
-      perfRows.map(r=>`<div style="padding:11px 0;border-bottom:1px solid var(--bd2);">
-        <div style="font-weight:600;font-size:15px;margin-bottom:5px;">${r.name}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--t2);">
-          <span>營收 <b style="color:var(--green);">${fmtNT(r.rev)}</b></span>
-          <span>教練課 ${r.ptCount}堂</span>
-          <span>團體課 ${r.groupCount}堂</span>
-          <span>工時 ${r.need_punch?r.hours.toFixed(1)+'hr':'—'}</span>
+      `<div class="perf-m">
+        <div class="perf-m-head">
+          <span>姓名</span><span>營收</span><span>教練課</span><span>團體課</span><span>工時</span>
         </div>
-      </div>`).join('')}
+        ${perfRows.map(r=>`<div class="perf-m-row">
+          <span class="perf-m-name">${r.name}</span>
+          <span style="color:var(--green);font-weight:600;">${fmtNT(r.rev)}</span>
+          <span>${r.ptCount}</span>
+          <span>${r.groupCount}</span>
+          <span>${r.need_punch?r.hours.toFixed(1):'—'}</span>
+        </div>`).join('')}
+      </div>`}
     </div>
   </div>
 
   <!-- ═══ 桌機版：分析報表 ═══ -->
   <div class="desktop-only">
   <div class="stat-grid dash-summary">
-    <div class="stat-card"><div class="sc-label">營收（發票券）</div><div><span class="sc-num" style="font-size:28px;">${fmtNT(revenue)}</span></div></div>
-    <div class="stat-card"><div class="sc-label">已使用課堂費用（銷課）</div><div><span class="sc-num" style="font-size:28px;color:var(--gold-d);">${fmtNT(usedFee)}</span></div></div>
-    <div class="stat-card"><div class="sc-label">課堂數</div><div><span class="sc-num">${classCount}</span><span class="sc-unit">堂</span><span style="font-size:12px;color:var(--t2);margin-left:8px;">完成 ${doneCount}</span></div></div>
-    <div class="stat-card"><div class="sc-label">${_dashRange==='today'?'今日':'本月'}發券數</div><div><span class="sc-num">${revTickets.length}</span><span class="sc-unit">張</span></div></div>
+    <div class="stat-card"><div class="sc-label">營收</div><div><span class="sc-num" style="font-size:28px;">${fmtNT(revenue)}</span></div></div>
+    <div class="stat-card"><div class="sc-label">銷課數</div><div><span class="sc-num">${doneCount}</span><span class="sc-unit">堂</span></div></div>
+    <div class="stat-card"><div class="sc-label">銷課金額</div><div><span class="sc-num" style="font-size:28px;color:var(--gold-d);">${fmtNT(usedFee)}</span></div></div>
   </div>
   <div class="card"><div class="card-title">員工表現</div>
     ${perfRows.length===0?'<div class="empty"><div class="em-t">本期無資料</div></div>':
@@ -1256,7 +1268,7 @@ PAGES.dashboard=async function(){
         <div style="height:5px;background:var(--card2);border-radius:3px;overflow:hidden;margin-top:5px;"><div style="height:100%;width:${pct}%;background:var(--green);"></div></div>
       </div>`;}).join('')}
     </div>
-    <div class="card"><div class="card-title">課程使用率（賣最多 / 用最多）</div>
+    <div class="card"><div class="card-title">課程使用率（當月使用最多）</div>
       ${planRows.length===0?'<div class="empty"><div class="em-t">本期無售出課程</div></div>':
       planRows.map(r=>{const pct=r.total>0?Math.round(r.used/r.total*100):0;return `<div style="padding:9px 0;border-bottom:1px solid var(--bd2);">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:3px;"><span style="font-weight:500;">${r.name}</span><span style="font-size:13px;color:var(--t2);white-space:nowrap;">使用率 ${pct}%</span></div>
@@ -4828,83 +4840,124 @@ PAGES.mem_tickets=async function(){
 };
 
 // 會員服務條款（正式版）
-const CONTRACT_VERSION='2026-v1';
-const CONTRACT_TEXT=`YUGYM 有肌訓練｜會員服務條款
+const CONTRACT_VERSION='2026-v2';
+const CONTRACT_TEXT=`YUGYM 有肌訓練｜會員服務合約（系統版）
 
-一、服務內容
-本館提供：一對一私人教練課程、一對二私人教練課程、團體訓練課程、自主訓練使用權益，及其他本館公告之運動服務。會員購買之票券僅代表課程使用權，不代表永久會籍或其他財產權利。
+一、課程使用規則
+〔自由預約方案〕
+・課程有效期限 12 個月。
+・會員可自行安排上課時間。
+・於有效期限內完成使用即可。
+〔固定預約方案〕
+・依雙方約定時段固定上課。
+・每期依購買方案提供服務。
+・最多可暫停 2 週保留原時段；超過保留期限，原時段得重新安排。
 
-二、會員資料
-會員應提供真實且完整資料（姓名、生日、聯絡電話、電子郵件（選填）、緊急聯絡人）。如資料有異動，應主動更新。
+二、預約與取消規則
+・所有課程需事先完成預約。
+〔開課前 24 小時以上取消〕不扣課，系統直接取消預約。
+〔開課前 24 小時內取消〕原則扣除該次課程；特殊情況由公司評估補發補課券。
 
-三、健康聲明
-會員確認已了解自身健康狀況、無醫師禁止運動之情形。如有懷孕、重大疾病、手術、骨折、心血管疾病或其他特殊狀況，應主動告知教練。若因未據實告知健康狀況而導致受傷或其他損害，由會員自行負責。
+三、補課券規則（固定預約會員）
+・每期最多請假 1 次，請假後發放補課券。
+・補課券需於 14 天內使用完畢。
+・不得折現、不得轉讓、不得累積、不得延長。
 
-四、票券使用規範
-（自由預約票券）依購買方案發放堂數，使用期限 12 個月，期限內可自由預約，逾期未使用視同放棄。
-（固定預約方案）依約定固定時段上課，固定時段由本館保留；會員取消、暫停或中止方案後，原時段可能釋出，釋出後本館不保證可恢復原時段。
-（團體課程）依公告時間進行，未到課視同已使用，符合規定之請假可獲補課券。
+四、自主訓練權益
+・會員每完成一次教練課簽到，發放 2 次自主訓練資格。
+・每次自主訓練 1 小時。
+・需於 7 天內使用完畢，逾期自動失效。
 
-五、預約與取消規範
-課程開始前 24 小時以上：可於系統提出取消申請，審核通過後不扣課。
-課程開始前 24 小時內：原則視同已使用課程，本館得依實際情況補發補課券。
-遲到：課程仍依原訂時間結束，不另行延長。
-未到課：未通知且未出席者，視同已使用課程。
+五、轉讓規則
+〔自由預約方案〕可辦理一次轉讓，不收取手續費；轉讓完成後原會員權益終止。
+〔固定預約方案〕不得轉讓。
 
-六、補課券規範
-補課券不得折現、不得轉讓、不得兌換其他商品或服務，應於有效期限內使用，逾期自動失效。
+六、退費規則
+〔七日冷靜期〕簽約後 7 日內、尚未使用任何課程者，可解除契約並全額退費。
+〔自由預約方案退費〕退款金額 ＝ 已繳金額 − 已使用金額；已使用金額 ＝ 已使用堂數 × 單堂原價（1V1：1,700 元／1V2：2,000 元）。
+〔固定預約方案退費〕退款金額 ＝ 已繳金額 − 已使用課程金額 − 固定時段保留費（原方案總價 10%）。
 
-七、自主訓練權益
-符合活動資格者可獲得自主訓練使用權。自主訓練僅限本人使用、不得轉讓，應遵守場館規範；違反安全規定或影響場館秩序者，本館得暫停或取消使用資格。
+七、健康聲明
+・會員確認身體狀況適合參與運動訓練。
+・如有疾病、受傷、懷孕或特殊狀況，應主動告知教練。
+・本公司不提供醫療診斷與醫療建議。
 
-八、退款辦法
-（七日內退款）購買後七日內且尚未使用任何課程者，可申請全額退款。
-（自由預約票券退款）退款金額 = 已付款金額 − 已使用課程價值；已使用課程價值：1對1 以單堂原價 1,700 元計算、1對2 以單堂原價 2,000 元計算，剩餘金額全額退還。
-（固定預約方案退款）退款金額 = 已付款金額 − 已使用課程價值 − 固定時段保留費（原方案總價 10%）；已使用課程價值計算同上。
+八、個人資料使用
+會員同意本公司於下列必要範圍內蒐集、處理及使用個人資料：課程服務、預約管理、票券管理、簽到紀錄、付款管理、會員通知、客戶服務。本公司將依個人資料保護法妥善保護會員資料。
 
-九、票券轉讓
-（自由預約票券）可申請轉讓一次，受讓人須完成會員資料建立。
-（固定預約方案）不得轉讓。
+九、同意條款
+會員於系統勾選同意並完成電子簽署後，即視為已閱讀、理解並同意本合約全部內容。`;
 
-十、個人資料使用
-會員同意本館於必要範圍內蒐集、處理及利用個人資料（課程安排、預約管理、會員服務、付款紀錄、發票開立、通知聯繫、客服處理、場館營運管理）。本館將依個人資料保護法及相關法令妥善保管會員資料。
-
-十一、安全與責任
-會員應遵守教練指導、場館使用規範與器材安全規定。因故意或重大過失造成設備損壞者，應負賠償責任。
-
-十二、條款修訂
-本館得因營運需求調整服務內容及相關規範並公告於系統。已購買之課程權益不得因條款修訂而受到不利影響。
-
-十三、同意條款
-會員於系統勾選同意後，即視為已閱讀、理解並同意本條款全部內容。`;
+// 退費單堂原價（系統版合約引用）
+const PRICE_1V1=1700, PRICE_1V2=2000;
 
 let _applyPlanId=null, _sigPad=null;
 async function openApplyPlan(plan_id){
   const p=await dbGet('course_plans',plan_id);
   const ty=await dbGet('ticket_types',p.ticket_type_id);
+  const me=await dbGet('members',SESSION.id)||{};
   const tot=p.sessions_base+p.sessions_bonus;
   const price=(p.unit_price||0)*p.sessions_base;
   const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客'};
+  const today=ymd(TODAY);
+  const expire=ymd(addDays(TODAY,p.valid_days));
   _applyPlanId=plan_id;
-  showModal(`<div class="modal-title">申請購買 · ${p.name}</div>
-    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:12px;font-size:13px;line-height:1.9;margin-bottom:14px;">
-      <div>方案類型　<b>${PT[p.plan_type]||'一般'}</b>${p.format?'　·　'+p.format.toUpperCase():''}</div>
-      <div>價格　<b style="color:var(--green);font-size:15px;">$${price.toLocaleString()}</b></div>
-      <div>堂數　<b>${tot}</b> 堂${p.sessions_bonus?`（含贈送 ${p.sessions_bonus}）`:''}</div>
-      <div>使用期限　${p.valid_days} 天</div>
-      ${p.installment?'<div>付款　<b style="color:var(--green);">可分期</b></div>':''}
+  const v=(x)=>me[x]||'';
+  showModal(`<div class="modal-title">電子合約簽署 · ${p.name}</div>
+
+    <!-- 二、購買內容（系統自動帶入）-->
+    <div style="font-size:12.5px;font-weight:700;color:var(--green);margin:2px 0 8px;">購買內容（系統自動帶入）</div>
+    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:10px;padding:12px;font-size:13px;line-height:1.95;margin-bottom:16px;">
+      <div>方案名稱　<b>${p.name}</b></div>
+      <div>課程類型　${ty?ty.name:'—'}${p.format?'・'+p.format.toUpperCase():''}（${PT[p.plan_type]||'一般'}）</div>
+      <div>購買日期　${today}</div>
+      <div>總堂數　<b>${tot}</b> 堂${p.sessions_bonus?`（含贈送 ${p.sessions_bonus} 堂）`:''}</div>
+      <div>購買金額　<b style="color:var(--green);font-size:15px;">$${price.toLocaleString()}</b></div>
+      <div>是否分期　${p.installment?'可分期':'一次付清'}</div>
+      <div>有效期限　${today} ～ ${expire}（${p.valid_days} 天）</div>
     </div>
-    <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">會員契約</div>
-    <div style="max-height:160px;overflow-y:auto;background:#fff;border:1px solid var(--bd);border-radius:9px;padding:12px;font-size:12px;line-height:1.85;color:var(--t2);white-space:pre-wrap;margin-bottom:12px;">${CONTRACT_TEXT}</div>
-    <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-bottom:8px;cursor:pointer;line-height:1.5;"><input type="checkbox" id="ap-agree" style="margin-top:3px;"> 我已閱讀並同意《YUGYM 會員服務條款》</label>
-    <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-bottom:12px;cursor:pointer;line-height:1.5;"><input type="checkbox" id="ap-health" style="margin-top:3px;"> 我已確認自身健康狀況適合參與運動訓練，並願意遵守教練指導與場館規範</label>
-    <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">親筆簽名</div>
-    <div style="border:1px dashed var(--bd);border-radius:9px;background:#fff;">
-      <canvas id="ap-sig" style="width:100%;height:160px;display:block;touch-action:none;"></canvas>
+
+    <!-- 一、會員基本資料（會員填寫）-->
+    <div style="font-size:12.5px;font-weight:700;color:var(--green);margin:2px 0 8px;">會員基本資料</div>
+    <div class="form-2col">
+      <div class="form-row"><label>姓名 *</label><input id="ap-name" value="${v('name')}"></div>
+      <div class="form-row"><label>出生日期 *</label><input type="date" id="ap-birth" value="${v('birth_date')}"></div>
     </div>
-    <div style="text-align:right;margin:6px 0 14px;"><button class="btn btn-ghost btn-sm" onclick="clearSig()">清除簽名</button></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitApply()">送出申請</button></div>`);
-  setTimeout(initSigPad,50);
+    <div class="form-2col">
+      <div class="form-row"><label>手機號碼 *</label><input id="ap-phone" value="${v('phone')||SESSION.phone||''}"></div>
+      <div class="form-row"><label>Email（選填）</label><input id="ap-email" value="${v('email')}"></div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>緊急聯絡人 *</label><input id="ap-ec" value="${v('emergency_name')}"></div>
+      <div class="form-row"><label>緊急聯絡人電話 *</label><input id="ap-ecphone" value="${v('emergency_phone')}"></div>
+    </div>
+
+    <!-- 合約全文 -->
+    <div style="font-size:12.5px;font-weight:700;color:var(--green);margin:14px 0 8px;">會員服務合約（${CONTRACT_VERSION}）</div>
+    <div style="max-height:200px;overflow-y:auto;background:#fff;border:1px solid var(--bd);border-radius:9px;padding:13px;font-size:12px;line-height:1.9;color:var(--t2);white-space:pre-wrap;margin-bottom:14px;">${CONTRACT_TEXT}</div>
+
+    <!-- 健康聲明 + 同意 -->
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-bottom:8px;cursor:pointer;line-height:1.5;"><input type="checkbox" id="ap-health" style="margin-top:3px;"> 我確認身體狀況適合運動訓練，如有疾病／受傷／懷孕等特殊狀況將主動告知教練</label>
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-bottom:14px;cursor:pointer;line-height:1.5;font-weight:600;"><input type="checkbox" id="ap-agree" onchange="toggleSigArea()" style="margin-top:3px;"> 我已閱讀並同意上述合約內容</label>
+
+    <!-- 電子簽名（勾選同意後開啟）-->
+    <div id="ap-sig-area" style="display:none;">
+      <div style="font-size:12.5px;font-weight:700;color:var(--green);margin-bottom:6px;">電子簽名</div>
+      <div style="border:1px dashed var(--bd);border-radius:9px;background:#fff;">
+        <canvas id="ap-sig" style="width:100%;height:160px;display:block;touch-action:none;"></canvas>
+      </div>
+      <div style="text-align:right;margin:6px 0 4px;"><button class="btn btn-ghost btn-sm" onclick="clearSig()">清除簽名</button></div>
+    </div>
+
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitApply()">完成簽署並送出</button></div>`);
+}
+// 勾選同意 → 開啟簽名區並初始化簽名板
+function toggleSigArea(){
+  const on=document.getElementById('ap-agree').checked;
+  const area=document.getElementById('ap-sig-area');
+  if(!area)return;
+  area.style.display=on?'block':'none';
+  if(on) setTimeout(initSigPad,50);
 }
 function initSigPad(){
   const canvas=document.getElementById('ap-sig'); if(!canvas)return;
@@ -4922,21 +4975,41 @@ function initSigPad(){
 }
 function clearSig(){ if(_sigPad)_sigPad.clear(); }
 async function submitApply(){
-  if(!document.getElementById('ap-agree').checked){showToast('請先閱讀並勾選同意服務條款');return;}
+  if(!document.getElementById('ap-agree').checked){showToast('請先閱讀並勾選同意合約內容');return;}
   if(!document.getElementById('ap-health').checked){showToast('請勾選健康聲明確認');return;}
-  if(!_sigPad||!_sigPad.hasInk()){showToast('請完成親筆簽名');return;}
+  const g=x=>(document.getElementById(x).value||'').trim();
+  const name=g('ap-name'), birth=g('ap-birth'), phone=g('ap-phone'), email=g('ap-email'), ec=g('ap-ec'), ecphone=g('ap-ecphone');
+  if(!name||!birth||!phone||!ec||!ecphone){ showToast('請完整填寫會員基本資料（Email 選填）'); return; }
+  if(!_sigPad||!_sigPad.hasInk()){showToast('請完成電子簽名');return;}
   const p=await dbGet('course_plans',_applyPlanId);
+  const ty=await dbGet('ticket_types',p.ticket_type_id);
+  const tot=p.sessions_base+p.sessions_bonus;
   const price=(p.unit_price||0)*p.sessions_base;
   const sig=_sigPad.canvas.toDataURL('image/png');
-  // 取得簽約 IP（外部服務，失敗則留空不阻斷）
   let ip=null;
   try{ const r=await fetch('https://api.ipify.org?format=json'); const j=await r.json(); ip=j.ip||null; }catch(_){}
+  const signedAt=new Date().toISOString();
+  // 回寫會員基本資料（簽約時填的視為最新）
+  try{
+    const me=await dbGet('members',SESSION.id);
+    if(me){ me.name=name; me.birth_date=birth; me.email=email||me.email; me.emergency_name=ec; me.emergency_phone=ecphone; await dbPut('members',me); }
+  }catch(_){}
+  // 合約快照（存當下購買內容與會員資料，供後台永久查閱、第二批產 PDF）
+  const snapshot={
+    member:{name,birth_date:birth,phone,email,emergency_name:ec,emergency_phone:ecphone},
+    purchase:{plan_name:p.name,course_type:(ty?ty.name:'')+(p.format?'・'+p.format.toUpperCase():''),
+      purchase_date:ymd(TODAY),sessions_total:tot,sessions_bonus:p.sessions_bonus||0,
+      amount:price,installment:!!p.installment,valid_days:p.valid_days,
+      expire_date:ymd(addDays(TODAY,p.valid_days))},
+    contract_version:CONTRACT_VERSION, signed_at:signedAt, ip
+  };
   const app={id:uid('PA'),member_id:SESSION.id,plan_id:_applyPlanId,plan_name:p.name,
     list_price:price,signature:sig,contract_version:CONTRACT_VERSION,agreed_health:true,ip,
+    signed_at:signedAt, contract_snapshot:JSON.stringify(snapshot),
     status:'pending',created_at:new Date().toISOString()};
   try{ await dbPut('purchase_applications',app); }
   catch(e){ showToast('送出失敗：'+(e.message||e)); return; }
-  closeModal();showToast('申請已送出，待審核');navTo('mem_tickets');
+  closeModal();showToast('合約已簽署，申請已送出待審核');navTo('mem_tickets');
 }
 
 /* ════════ 後台:購買申請審核（發票分流） ════════
