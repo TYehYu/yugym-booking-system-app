@@ -452,6 +452,36 @@ tr:hover td{background:var(--card2);}
 .mdetail-field{font-size:14.5px;font-weight:600;color:var(--text);background:#fff;border:1px solid var(--bd);border-radius:10px;padding:9px 12px;}
 .mdetail-field .mdf-l{color:var(--green);font-size:11px;margin-bottom:3px;font-weight:600;letter-spacing:0.04em;opacity:.75;}
 .modal-foot .btn{flex:1;text-align:center;}
+/* 會員選擇按鈕 */
+.bk-mem-pick{width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--bd);border-radius:9px;background:#fff;font-size:14px;font-family:inherit;cursor:pointer;text-align:left;}
+.bk-mem-pick:hover{border-color:var(--green);}
+/* 會員選擇 bottom sheet */
+#bk-mem-sheet{position:fixed;inset:0;z-index:9999;}
+.ms-backdrop{position:absolute;inset:0;background:rgba(0,0,0,0.4);}
+.ms-panel{position:absolute;left:0;right:0;bottom:0;max-height:82vh;background:var(--card);border-radius:18px 18px 0 0;display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,0.25);}
+@media(min-width:601px){.ms-panel{left:50%;right:auto;bottom:auto;top:50%;transform:translate(-50%,-50%);width:440px;max-width:calc(100vw - 32px);border-radius:16px;max-height:80vh;}}
+.ms-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 10px;}
+.ms-title{font-size:16px;font-weight:600;}
+.ms-close{background:none;border:none;font-size:18px;color:var(--t3);cursor:pointer;padding:4px;}
+.ms-search{margin:0 18px 12px;padding:11px 13px;border:1px solid var(--bd);border-radius:10px;background:var(--card2);font-size:15px;font-family:inherit;}
+.ms-list{overflow-y:auto;padding:0 12px 16px;-webkit-overflow-scrolling:touch;}
+.ms-item{width:100%;display:block;text-align:left;background:none;border:none;border-bottom:1px solid var(--bd2);padding:12px 8px;cursor:pointer;font-family:inherit;}
+.ms-item:hover{background:var(--card2);}
+.ms-name{font-size:15px;font-weight:600;color:var(--text);margin-bottom:2px;}
+.ms-star{color:#1f6f54;}
+.ms-sub{font-size:12.5px;color:var(--t3);font-family:var(--num);}
+.ms-rem{font-size:12.5px;color:var(--green);font-weight:600;margin-top:2px;}
+.ms-empty{text-align:center;color:var(--t3);padding:30px 0;font-size:13px;}
+/* 手機版 modal：限制寬度、可垂直捲動、底部按鈕固定、input 不溢出 */
+@media(max-width:600px){
+  .modal{max-width:calc(100vw - 24px);width:calc(100vw - 24px);max-height:88vh;padding:18px;box-sizing:border-box;display:flex;flex-direction:column;}
+  .modal-title{flex:0 0 auto;}
+  .modal .form-row,.modal .form-2col{flex:0 0 auto;}
+  .modal input,.modal select,.modal textarea{max-width:100%;box-sizing:border-box;}
+  .modal .form-2col{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  /* 底部按鈕固定：中間內容捲動 */
+  .modal-foot{position:sticky;bottom:0;background:var(--card2);margin:14px -18px -18px;padding:14px 18px;border-top:1px solid var(--bd);flex:0 0 auto;}
+}
 .form-row{margin-bottom:14px;}
 .form-row label{display:block;font-size:11.5px;color:var(--t2);margin-bottom:6px;font-weight:500;letter-spacing:0.03em;}
 .form-row input,.form-row select{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:9px;background:#fff;}
@@ -728,8 +758,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.1941';
-const APP_VERSION_LABEL='26620.1941';
+const APP_VERSION='26620.1959';
+const APP_VERSION_LABEL='26620.1959';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1976,24 +2006,43 @@ async function openBookingModal(){
   const pf=_prefill||{};   // 只有從行事曆點選才有 date/time
   _bkWizard={fromSlot:!!_prefill};
   _prefill=null;
+  // 教練端：授課教練固定為自己（隱藏選擇）；管理員/櫃台才顯示教練下拉
+  window._bkSelfCoach = isCoach ? SESSION.id : null;
+  // 30 分鐘時段選項（08:00～22:00）
+  const timeOpts=bkTimeOptions(pf.time);
   showModal(`<div class="modal-title">新增預約 · 步驟 1 / 2</div>
-    <div style="font-size:12px;color:var(--t2);margin-bottom:14px;">選擇課程類型、教練與時段。</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:14px;">選擇課程類型${isCoach?'與時段':'、教練與時段'}。</div>
     <div class="form-row"><label>課程類型</label>
       <select id="bk-type" onchange="onBkTypeChange()"><option value="">請選擇課程類型…</option>${typeOpts}</select></div>
-    <div class="form-row" id="bk-coach-row" style="display:none;"><label>授課教練</label>
-      <select id="bk-coach"><option value="">請選擇教練…</option>${coachOpts}</select></div>
+    ${isCoach
+      ? `<input type="hidden" id="bk-coach" value="${SESSION.id}">`
+      : `<div class="form-row" id="bk-coach-row" style="display:none;"><label>授課教練</label>
+          <select id="bk-coach"><option value="">請選擇教練…</option>${coachOpts}</select></div>`}
     <div class="form-2col">
       <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}"></div>
-      <div class="form-row"><label>時間（30 分起跳）</label><input type="time" id="bk-time" value="${pf.time||''}" step="1800"></div>
+      <div class="form-row"><label>時間</label><select id="bk-time">${timeOpts}</select></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`);
+}
+// 產生 30 分鐘間隔時段選項（08:00～22:00）
+function bkTimeOptions(selected){
+  let html='<option value="">請選擇時間…</option>';
+  for(let h=8;h<=22;h++){
+    for(let mm of ['00','30']){
+      if(h===22&&mm==='30')break;
+      const t=String(h).padStart(2,'0')+':'+mm;
+      html+=`<option value="${t}" ${selected===t?'selected':''}>${t}</option>`;
+    }
+  }
+  return html;
 }
 async function onBkTypeChange(){
   const types=await dbGetAll('ticket_types');
   const tid=document.getElementById('bk-type').value;
   const t=types.find(x=>x.id===tid);
-  const needCoach = t && (t.requires_coach || t.category==='體驗' || t.category==='小班肌力'); // 體驗/團體課強制要教練
-  document.getElementById('bk-coach-row').style.display=needCoach?'block':'none';
+  const needCoach = t && (t.requires_coach || t.category==='體驗' || t.category==='小班肌力');
+  const row=document.getElementById('bk-coach-row');
+  if(row) row.style.display=needCoach?'block':'none'; // 教練端無此 row（已固定自己）
 }
 // 第1頁 → 第2頁
 async function bkStep2(){
@@ -2002,11 +2051,13 @@ async function bkStep2(){
   const types=await dbGetAll('ticket_types');
   const t=types.find(x=>x.id===type_id);
   const needCoach = t.requires_coach || t.category==='體驗' || t.category==='小班肌力'; // 體驗/團體課強制要教練
-  const coach_id=needCoach?document.getElementById('bk-coach').value:null;
+  const coachEl=document.getElementById('bk-coach');
+  // 教練端：永遠用自己；管理員/櫃台：需要教練的類型才取下拉值
+  const coach_id = window._bkSelfCoach ? window._bkSelfCoach : (needCoach ? (coachEl?coachEl.value:'') : null);
   if(needCoach && !coach_id){showToast(t.category==='體驗'?'體驗課請指定接洽教練':t.category==='小班肌力'?'團體課請指定授課教練':'請選擇授課教練');return;}
   const date=document.getElementById('bk-date').value;
   const time=document.getElementById('bk-time').value.slice(0,5);
-  if(!date||!time){showToast('請填日期與時間');return;}
+  if(!date||!time){showToast('請選擇日期與時間');return;}
   Object.assign(_bkWizard,{type_id,t,coach_id,date,time});
   // 載入會員清單；若步驟一有選教練，該教練的會員排前面
   const members=await dbGetAll('members');
@@ -2073,9 +2124,12 @@ async function bkStep2(){
   showModal(`<div class="modal-title">新增預約 · 步驟 2 / 2</div>
     <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${t.name}　${date} ${time}${coach_id?'　·　'+(await coachName(coach_id)):''}</div>
     <div class="form-row"><label>會員（僅顯示有可用票券者）</label>
-      <input id="bk-mem-search" placeholder="輸入關鍵字過濾…" oninput="filterBkMembers()" style="width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:9px;background:#fff;margin-bottom:6px;">
-      <select id="bk-member" size="5" style="height:auto;" onchange="refreshBkTicket()"><option value="">${withTicket.length?'請選擇會員…':'目前沒有持此類票券的會員'}</option>${genOpts()}</select>
-      ${coach_id?'<div style="font-size:11px;color:#1f6f3f;margin-top:5px;">★ 標示為該教練的會員（已排在前面）</div>':''}</div>
+      <input type="hidden" id="bk-member" value="">
+      <button type="button" class="bk-mem-pick" id="bk-mem-pick" onclick="openMemberSheet()">
+        <span id="bk-mem-pick-label" style="color:var(--t3);">${withTicket.length?'點此選擇會員…':'目前沒有持此類票券的會員'}</span>
+        <span style="color:var(--t3);">▾</span>
+      </button>
+      ${coach_id?'<div style="font-size:11px;color:#1f6f3f;margin-top:5px;">★ 標示為該教練的指定會員</div>':''}</div>
     <div class="form-row" style="margin-bottom:10px;"><div id="bk-ticket-info" style="font-size:12px;color:var(--t2);padding:10px 12px;background:var(--card2);border-radius:9px;">選擇會員後，將自動帶入可用票券。</div></div>
     <label class="switch-row" style="margin-bottom:6px;"><span class="switch"><input type="checkbox" id="bk-recurring" onchange="toggleRecurring()"><span class="switch-slider"></span></span><span class="switch-label">連續預約（依星期重複建立多筆）</span></label>
     <div id="bk-recurring-box" style="display:none;border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--card2);">
@@ -2125,23 +2179,61 @@ function bkMemberOpts(list){
     return `<option value="${m.id}"${style}>${mark}${m.name}（${m.phone}）${tags?' · '+tags:''}</option>`;
   }).join('');
 }
-function filterBkMembers(){
-  const q=document.getElementById('bk-mem-search').value.trim().toLowerCase();
-  const filtered=_bkMembers.filter(m=>{
-    if(!q)return true;
-    const tagLabels=(m.tags||[]).map(t=>(TAG_DEFS[t]||{}).label||t).join(' ');
-    return (m.name||'').toLowerCase().includes(q)||(m.phone||'').includes(q)||tagLabels.toLowerCase().includes(q);
-  });
+// ── 會員選擇 bottom sheet（可搜尋、每位一列：★姓名/手機/剩餘堂數）──
+function openMemberSheet(){
+  const sheet=document.getElementById('bk-mem-sheet');
+  if(sheet){ sheet.remove(); }
+  const host=document.createElement('div');
+  host.id='bk-mem-sheet';
+  host.innerHTML=`<div class="ms-backdrop" onclick="closeMemberSheet()"></div>
+    <div class="ms-panel">
+      <div class="ms-head">
+        <div class="ms-title">選擇會員</div>
+        <button class="ms-close" onclick="closeMemberSheet()">✕</button>
+      </div>
+      <input id="ms-search" class="ms-search" placeholder="搜尋姓名或手機…" oninput="renderMemberSheet()" autocomplete="off">
+      <div id="ms-list" class="ms-list"></div>
+    </div>`;
+  document.body.appendChild(host);
+  renderMemberSheet();
+  setTimeout(()=>{const s=document.getElementById('ms-search');if(s)s.focus();},80);
+}
+function closeMemberSheet(){ const s=document.getElementById('bk-mem-sheet'); if(s)s.remove(); }
+function renderMemberSheet(){
+  const box=document.getElementById('ms-list'); if(!box)return;
+  const q=(document.getElementById('ms-search').value||'').trim().toLowerCase();
   const cid=window._bkCoachId, sums=window._bkTicketSum||{};
-  const opts=filtered.map(m=>{
-    const mine=cid && m.default_coach_id===cid;
+  let list=(window._bkMembers||[]).filter(m=>{
+    if(!q)return true;
+    return (m.name||'').toLowerCase().includes(q)||(m.phone||'').includes(q);
+  });
+  // 指定會員排前面
+  list=list.slice().sort((a,b)=>{
+    const am=cid&&a.default_coach_id===cid?0:1, bm=cid&&b.default_coach_id===cid?0:1;
+    if(am!==bm)return am-bm; return (a.name||'').localeCompare(b.name||'');
+  });
+  if(list.length===0){ box.innerHTML='<div class="ms-empty">找不到符合的會員</div>'; return; }
+  box.innerHTML=list.map(m=>{
+    const mine=cid&&m.default_coach_id===cid;
     const sum=sums[m.id];
-    const tail = sum!=null ? `· 剩 ${sum} 堂` : '';
-    return `<option value="${m.id}">${mine?'★ ':''}${m.name}（${m.phone}）${tail}</option>`;
+    return `<button class="ms-item" onclick="pickMember('${m.id}')">
+      <div class="ms-name">${mine?'<span class="ms-star">★</span> ':''}${m.name||'—'}</div>
+      <div class="ms-sub">${m.phone||''}</div>
+      <div class="ms-rem">剩餘 ${sum!=null?sum:0} 堂</div>
+    </button>`;
   }).join('');
-  const sel=document.getElementById('bk-member');
-  sel.innerHTML='<option value="">請選擇會員…</option>'+opts;
+}
+function pickMember(mid){
+  const m=(window._bkMembers||[]).find(x=>x.id===mid);
+  document.getElementById('bk-member').value=mid;
+  const label=document.getElementById('bk-mem-pick-label');
+  if(label&&m){ const sum=(window._bkTicketSum||{})[mid]; label.innerHTML=`${m.name}（${m.phone}）· 剩 ${sum!=null?sum:0} 堂`; label.style.color='var(--text)'; }
+  closeMemberSheet();
   refreshBkTicket();
+}
+function filterBkMembers(){
+  // 舊版相容（桌機若仍用搜尋框時不報錯）
+  const el=document.getElementById('bk-mem-search'); if(!el)return;
 }
 async function refreshBkTicket(){
   const mid=document.getElementById('bk-member').value;
