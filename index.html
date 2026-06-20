@@ -107,6 +107,18 @@ input,select,textarea{font-family:inherit;font-size:14px;}
 .tb-account{position:relative;}
 .tb-acct-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:#fff;background:rgba(255,255,255,0.14);padding:6px 12px;border-radius:8px;transition:.18s;cursor:pointer;border:none;font-family:inherit;}
 .tb-acct-btn:hover{background:rgba(255,255,255,0.24);}
+/* Header 打卡元件 */
+.tb-punch{display:flex;align-items:center;gap:10px;}
+.tb-punch-status{display:flex;align-items:center;gap:7px;font-size:12.5px;color:#fff;}
+.tb-punch-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.tb-punch-dot.on{background:#5fd08a;box-shadow:0 0 0 3px rgba(95,208,138,0.25);}
+.tb-punch-dot.off{background:rgba(255,255,255,0.45);}
+.tb-punch-time{font-family:var(--num);font-weight:600;letter-spacing:0.02em;}
+.tb-punch-btn{font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;transition:.16s;white-space:nowrap;}
+.tb-punch-btn.in{background:#5fd08a;color:#0a3a2a;}
+.tb-punch-btn.in:hover{background:#74d99a;}
+.tb-punch-btn.out{background:rgba(255,255,255,0.92);color:var(--green);}
+.tb-punch-btn.out:hover{background:#fff;}
 .tb-caret{font-size:10px;opacity:.8;transition:transform .18s;}
 .tb-account:hover .tb-caret,.tb-account.open .tb-caret{transform:rotate(180deg);}
 .tb-acct-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:172px;background:#fff;border:1px solid var(--bd);border-radius:11px;
@@ -130,6 +142,10 @@ input,select,textarea{font-family:inherit;font-size:14px;}
   .tb-weather{display:none;}
   .tb-user{display:inline;opacity:.95;font-size:13px;}
   .tb-acct-btn{font-size:12px;padding:5px 10px;}
+  /* 手機 Header：打卡按鈕優先顯示，狀態文字精簡 */
+  .tb-punch{gap:7px;}
+  .tb-punch-btn{font-size:12px;padding:6px 11px;}
+  .tb-punch-status{font-size:11.5px;}
 }
 
 .layout{flex:1;display:flex;flex-direction:column;width:100%;}
@@ -606,6 +622,7 @@ tr:hover td{background:var(--card2);}
       <div class="tb-right">
         <span id="tb-clock" class="tb-clock"></span>
         <span id="tb-weather" class="tb-weather"></span>
+        <div class="tb-punch" id="tb-punch"></div>
         <div class="tb-account" id="tb-account">
           <button class="tb-acct-btn" onclick="toggleAcctMenu(event)">
             <span class="tb-user" id="tb-user">—</span>
@@ -640,8 +657,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26620.1739';
-const APP_VERSION_LABEL='26620.1739';
+const APP_VERSION='26620.1756';
+const APP_VERSION_LABEL='26620.1756';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -845,6 +862,7 @@ function enterApp(){
   document.getElementById('tb-user').textContent=SESSION.name;
   startClock();
   loadWeather();
+  refreshHeaderPunch();
   buildNav();
   const first=NAV[SESSION.role][0];
   navTo(first.key);
@@ -4242,21 +4260,19 @@ async function renderAttendanceSelf(){
     ? `<div class="card"><div class="empty" style="padding:24px 8px;"><div class="em-t">你不需要打卡</div>
         <div style="font-size:12px;color:var(--t3);margin-top:6px;">如需開啟，請洽管理員於排班設定中設定。</div></div></div>`
     : `<div class="card">
-        <div class="card-title">今日打卡 · ${today}（週${WD[TODAY.getDay()]}）</div>
+        <div class="card-title">今日 · ${today}（週${WD[TODAY.getDay()]}）</div>
         <div style="display:flex;gap:14px;align-items:stretch;flex-wrap:wrap;">
-          <div style="flex:1;min-width:140px;text-align:center;background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:18px;">
+          <div style="flex:1;min-width:130px;text-align:center;background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:16px;">
             <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">上班</div>
-            <div style="font-size:26px;font-weight:700;font-family:var(--num);color:${todayRec&&todayRec.clock_in?'var(--green)':'var(--t3)'};">${todayRec&&todayRec.clock_in?todayRec.clock_in:'—:—'}</div>
-            ${todayRec&&todayRec.clock_in?'':`<button class="btn btn-green btn-sm" style="margin-top:12px;" onclick="punchIn()">上班打卡</button>`}
+            <div style="font-size:24px;font-weight:700;font-family:var(--num);color:${todayRec&&todayRec.clock_in?'var(--green)':'var(--t3)'};">${todayRec&&todayRec.clock_in?todayRec.clock_in:'—:—'}</div>
           </div>
-          <div style="flex:1;min-width:140px;text-align:center;background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:18px;">
+          <div style="flex:1;min-width:130px;text-align:center;background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:16px;">
             <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">下班</div>
-            <div style="font-size:26px;font-weight:700;font-family:var(--num);color:${todayRec&&todayRec.clock_out?'var(--green)':'var(--t3)'};">${todayRec&&todayRec.clock_out?todayRec.clock_out:'—:—'}</div>
-            ${todayRec&&todayRec.clock_in&&!todayRec.clock_out?`<button class="btn btn-green btn-sm" style="margin-top:12px;" onclick="punchOut()">下班打卡</button>`:''}
-            ${todayRec&&todayRec.clock_out?`<div style="font-size:11px;color:var(--t3);margin-top:10px;">今日工時 ${calcWorkHours(todayRec)} 小時</div>`:''}
+            <div style="font-size:24px;font-weight:700;font-family:var(--num);color:${todayRec&&todayRec.clock_out?'var(--green)':'var(--t3)'};">${todayRec&&todayRec.clock_out?todayRec.clock_out:'—:—'}</div>
+            ${todayRec&&todayRec.clock_out?`<div style="font-size:11px;color:var(--t3);margin-top:8px;">工時 ${calcWorkHours(todayRec)} 小時</div>`:''}
           </div>
         </div>
-        ${todayRec&&todayRec.clock_in&&!todayRec.clock_out?'<div style="font-size:11.5px;color:var(--t3);margin-top:12px;text-align:center;">已上班打卡，記得下班時打卡。</div>':''}
+        <div style="font-size:11.5px;color:var(--t3);margin-top:12px;text-align:center;">👉 打卡請點右上角姓名旁的打卡按鈕</div>
       </div>`;
 
   C.innerHTML=head('PUNCH','出勤打卡','上下班打卡 · 記錄工時')+punchCard+
@@ -4284,7 +4300,9 @@ async function punchIn(){
   if(!rec) rec={id:uid('AT'),emp_id:SESSION.id,emp_name:SESSION.name||'',date:today,created_at:new Date().toISOString()};
   rec.clock_in=nowHM();
   await dbPut('attendance',rec);
-  showToast('上班打卡成功 '+rec.clock_in); navTo('attendance');
+  showToast('上班打卡成功 '+rec.clock_in);
+  await refreshHeaderPunch();
+  if(CUR_PAGE==='attendance') navTo('attendance');
  }catch(e){ console.error('punchIn 失敗:',e); showToast('打卡失敗：'+(e&&e.message?e.message:e)); }
 }
 async function punchOut(){
@@ -4296,39 +4314,167 @@ async function punchOut(){
   rec.clock_out=nowHM();
   rec.work_hours=calcWorkHours(rec);
   await dbPut('attendance',rec);
-  showToast('下班打卡成功 '+rec.clock_out+'，工時 '+rec.work_hours+' 小時'); navTo('attendance');
+  showToast('下班打卡成功 '+rec.clock_out+'，工時 '+rec.work_hours+' 小時');
+  await refreshHeaderPunch();
+  if(CUR_PAGE==='attendance') navTo('attendance');
  }catch(e){ console.error('punchOut 失敗:',e); showToast('打卡失敗：'+(e&&e.message?e.message:e)); }
 }
-// ── 管理員全覽 ──
+// Header 打卡元件：依登入者 need_punch 與今日打卡狀態渲染
+async function refreshHeaderPunch(){
+  const el=document.getElementById('tb-punch'); if(!el)return;
+  // 只有「需打卡」的員工顯示；管理員/不需打卡者不顯示
+  if(!SESSION||!SESSION.id){ el.innerHTML=''; return; }
+  let me=null;
+  try{ me=await dbGet('coaches',SESSION.id); }catch(_){}
+  if(!me||!me.need_punch){ el.innerHTML=''; return; }
+  let rec=null;
+  try{ rec=await getAttendance(SESSION.id,ymd(TODAY)); }catch(_){}
+  if(!rec||!rec.clock_in){
+    el.innerHTML=`<button class="tb-punch-btn in" onclick="punchIn()">上班打卡</button>`;
+  }else if(!rec.clock_out){
+    el.innerHTML=`<span class="tb-punch-status"><span class="tb-punch-dot on"></span>上班中 <span class="tb-punch-time">${rec.clock_in}</span></span>
+      <button class="tb-punch-btn out" onclick="punchOut()">下班打卡</button>`;
+  }else{
+    const wh=calcWorkHours(rec);
+    el.innerHTML=`<span class="tb-punch-status"><span class="tb-punch-dot off"></span>已下班 <span class="tb-punch-time">${wh}hr</span></span>`;
+  }
+}
+// ── 管理員：出勤管理頁（四區塊分頁）──
 let _attDate=null;
+let _attTab='today';
+let _attEmp='';
+const ATT_TABS=[
+  {key:'today',label:'今日出勤'},
+  {key:'records',label:'出勤紀錄'},
+  {key:'hours',label:'工時統計'},
+  {key:'abnormal',label:'異常打卡'},
+];
+function setAttTab(k){ _attTab=k; navTo('attendance'); }
 async function renderAttendanceAdmin(){
-  const date=_attDate||ymd(TODAY);
+  const tab=ATT_TABS.find(t=>t.key===_attTab)||ATT_TABS[0];
+  const tabBar=`<div class="seg" style="margin-bottom:16px;flex-wrap:nowrap;overflow-x:auto;">${ATT_TABS.map(t=>
+    `<button class="seg-btn ${_attTab===t.key?'active':''}" onclick="setAttTab('${t.key}')" style="flex-shrink:0;">${t.label}</button>`).join('')}</div>`;
+  C.innerHTML=head('PUNCH','出勤管理','今日出勤 · 紀錄 · 工時統計 · 異常')+tabBar+`<div id="att-body"></div>`;
   const[coaches,all]=await Promise.all([dbGetAll('coaches'),dbGetAll('attendance')]);
   const needPunch=coaches.filter(c=>c.role!=='front_desk'&&c.need_punch&&c.status==='active');
-  const dayRecs=all.filter(a=>a.date===date);
-  const recMap=Object.fromEntries(dayRecs.map(r=>[r.emp_id,r]));
-  // 本月工時統計（每位需打卡員工）
-  const ym=date.slice(0,7);
-  const monthMap={};
-  all.filter(a=>a.date.startsWith(ym)).forEach(r=>{
-    monthMap[r.emp_id]=(monthMap[r.emp_id]||0)+(calcWorkHours(r)||0);
-  });
-  C.innerHTML=head('PUNCH','出勤打卡','全體出勤狀況 · 工時統計')+
-  `<div class="card">
-    <div class="card-title">每日出勤
+  const body=document.getElementById('att-body');
+  if(needPunch.length===0){
+    body.innerHTML='<div class="card"><div class="empty" style="padding:30px 8px;"><div class="em-t">尚無「需要打卡」的員工</div><div style="font-size:12px;color:var(--t3);margin-top:8px;">請至 員工管理 → 排班設定，為需打卡的員工開啟。</div></div></div>';
+    return;
+  }
+  if(_attTab==='today') renderAttToday(needPunch,all);
+  else if(_attTab==='records') renderAttRecords(needPunch,all);
+  else if(_attTab==='hours') renderAttHours(needPunch,all);
+  else if(_attTab==='abnormal') renderAttAbnormal(needPunch,all);
+}
+// ① 今日出勤總覽
+function renderAttToday(needPunch,all){
+  const date=_attDate||ymd(TODAY);
+  const recMap=Object.fromEntries(all.filter(a=>a.date===date).map(r=>[r.emp_id,r]));
+  const punchedIn=needPunch.filter(c=>recMap[c.id]&&recMap[c.id].clock_in).length;
+  document.getElementById('att-body').innerHTML=`<div class="card">
+    <div class="card-title">今日出勤
       <input type="date" value="${date}" onchange="_attDate=this.value;navTo('attendance')" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff;font-size:13px;">
     </div>
-    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.7;">僅顯示「需要打卡」的在職員工（可於員工管理→排班設定開啟）。${needPunch.length===0?'目前沒有設定需打卡的員工。':''}</div>
-    ${needPunch.length===0?'':`<table><thead><tr><th>姓名</th><th>上班</th><th>下班</th><th>當日工時</th><th>本月累計</th></tr></thead><tbody>
+    <div class="stat-grid dash-summary"><div class="stat-card"><div class="sc-label">應出勤</div><div><span class="sc-num">${needPunch.length}</span><span class="sc-unit">人</span></div></div>
+      <div class="stat-card"><div class="sc-label">已上班打卡</div><div><span class="sc-num" style="color:var(--green);">${punchedIn}</span><span class="sc-unit">人</span></div></div></div>
+    <table class="rwd-card"><thead><tr><th>姓名</th><th>上班</th><th>下班</th><th>當日工時</th></tr></thead><tbody>
     ${needPunch.map(c=>{const r=recMap[c.id];const wh=r?calcWorkHours(r):null;return `<tr>
-      <td>${c.name||'—'}</td>
-      <td>${r&&r.clock_in?r.clock_in:'<span style="color:var(--t3);">未打</span>'}</td>
-      <td>${r&&r.clock_out?r.clock_out:(r&&r.clock_in?'<span style="color:var(--warn);">未打</span>':'—')}</td>
-      <td>${wh!=null?wh+' 小時':'—'}</td>
-      <td>${(monthMap[c.id]||0).toFixed(1)} 小時</td>
+      <td data-label="姓名">${c.name||'—'}</td>
+      <td data-label="上班">${r&&r.clock_in?r.clock_in:'<span style="color:var(--t3);">未打</span>'}</td>
+      <td data-label="下班">${r&&r.clock_out?r.clock_out:(r&&r.clock_in?'<span style="color:var(--warn);">上班中</span>':'—')}</td>
+      <td data-label="當日工時">${wh!=null?wh+' 小時':'—'}</td>
+    </tr>`;}).join('')}
+    </tbody></table>
+  </div>`;
+}
+// ② 員工出勤紀錄（選員工查歷史）
+function renderAttRecords(needPunch,all){
+  const empId=_attEmp||needPunch[0].id;
+  const recs=all.filter(a=>a.emp_id===empId).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,60);
+  const opts=needPunch.map(c=>`<option value="${c.id}" ${empId===c.id?'selected':''}>${c.name}</option>`).join('');
+  document.getElementById('att-body').innerHTML=`<div class="card">
+    <div class="card-title">出勤紀錄
+      <select onchange="_attEmp=this.value;navTo('attendance')" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff;font-size:13px;">${opts}</select>
+    </div>
+    ${recs.length===0?'<div class="empty"><div class="em-t">此員工尚無打卡紀錄</div></div>':
+    `<table class="rwd-card"><thead><tr><th>日期</th><th>上班</th><th>下班</th><th>工時</th></tr></thead><tbody>
+    ${recs.map(r=>{const d=parseYmd(r.date);const wh=calcWorkHours(r);return `<tr>
+      <td data-label="日期">${r.date}（${WD[d.getDay()]}）</td>
+      <td data-label="上班">${r.clock_in||'—'}</td>
+      <td data-label="下班">${r.clock_out||'<span style="color:var(--warn);">未打</span>'}</td>
+      <td data-label="工時">${wh!=null?wh+' 小時':'—'}</td>
     </tr>`;}).join('')}
     </tbody></table>`}
   </div>`;
+}
+// ③ 工時統計（本月各員工累計）
+function renderAttHours(needPunch,all){
+  const ym=(_attDate||ymd(TODAY)).slice(0,7);
+  const stat=needPunch.map(c=>{
+    const recs=all.filter(a=>a.emp_id===c.id&&a.date.startsWith(ym));
+    const hours=recs.reduce((s,r)=>s+(calcWorkHours(r)||0),0);
+    const days=recs.filter(r=>r.clock_in).length;
+    return {name:c.name||'—',hours,days};
+  }).sort((a,b)=>b.hours-a.hours);
+  document.getElementById('att-body').innerHTML=`<div class="card">
+    <div class="card-title">工時統計（${ym}）
+      <input type="month" value="${ym}" onchange="_attDate=this.value+'-01';navTo('attendance')" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff;font-size:13px;">
+    </div>
+    <table class="rwd-card"><thead><tr><th>姓名</th><th>出勤天數</th><th>累計工時</th></tr></thead><tbody>
+    ${stat.map(s=>`<tr>
+      <td data-label="姓名">${s.name}</td>
+      <td data-label="出勤天數">${s.days} 天</td>
+      <td data-label="累計工時"><b>${s.hours.toFixed(1)} 小時</b></td>
+    </tr>`).join('')}
+    </tbody></table>
+  </div>`;
+}
+// ④ 異常打卡管理（只上班沒下班、或應到未打）
+function renderAttAbnormal(needPunch,all){
+  const today=ymd(TODAY);
+  // 異常：過去日期有上班無下班（忘記打下班），近 30 天內
+  const abnormal=[];
+  all.forEach(r=>{
+    if(r.clock_in && !r.clock_out && r.date<today){
+      const c=needPunch.find(x=>x.id===r.emp_id);
+      abnormal.push({name:(c?c.name:r.emp_name)||'—',date:r.date,clock_in:r.clock_in,id:r.id});
+    }
+  });
+  abnormal.sort((a,b)=>b.date.localeCompare(a.date));
+  document.getElementById('att-body').innerHTML=`<div class="card">
+    <div class="card-title">異常打卡</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.7;">列出「有上班、忘記打下班」的紀錄（過往日期）。可補登下班時間以修正工時。</div>
+    ${abnormal.length===0?'<div class="empty"><div class="em-t">沒有異常打卡 👍</div></div>':
+    `<table class="rwd-card"><thead><tr><th>姓名</th><th>日期</th><th>上班</th><th>下班</th><th></th></tr></thead><tbody>
+    ${abnormal.map(a=>`<tr>
+      <td data-label="姓名">${a.name}</td>
+      <td data-label="日期">${a.date}</td>
+      <td data-label="上班">${a.clock_in}</td>
+      <td data-label="下班"><span style="color:var(--danger);">缺漏</span></td>
+      <td class="rwd-actions" data-label=""><button class="btn btn-ghost btn-sm" onclick="fixPunchOut('${a.id}')">補登下班</button></td>
+    </tr>`).join('')}
+    </tbody></table>`}
+  </div>`;
+}
+async function fixPunchOut(recId){
+  showModal(`<div class="modal-title">補登下班時間</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">為缺漏的紀錄補登下班時間，系統將重新計算工時。</div>
+    <div class="form-row"><label>下班時間</label><input type="time" id="fix-time" step="60"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveFixPunchOut('${recId}')">儲存</button></div>`);
+}
+async function saveFixPunchOut(recId){
+ try{
+  const t=document.getElementById('fix-time').value;
+  if(!t){ showToast('請選擇時間'); return; }
+  const rec=await dbGet('attendance',recId);
+  if(!rec){ showToast('找不到紀錄'); return; }
+  rec.clock_out=t;
+  rec.work_hours=calcWorkHours(rec);
+  rec.fixed=true; // 標記為補登
+  await dbPut('attendance',rec);
+  closeModal(); showToast('已補登，工時 '+rec.work_hours+' 小時'); navTo('attendance');
+ }catch(e){ console.error('saveFixPunchOut 失敗:',e); showToast('補登失敗：'+(e&&e.message?e.message:e)); }
 }
 
 /* ════════ 教練端:預約行事曆 ════════ */
