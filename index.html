@@ -1137,8 +1137,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26621.2358';
-const APP_VERSION_LABEL='26621.2358';
+const APP_VERSION='26622.0007';
+const APP_VERSION_LABEL='26622.0007';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -5937,11 +5937,12 @@ async function openQuickBookCoach(){
     typeId=ptType?ptType.id:null;
   }catch(_){}
   window._qbForm={memberId:null,memberName:null,typeId,date:ymd(TODAY),time:'18:00',recurring:false,dows:[],until:''};
-  // 預載會員（有教練課票券者優先，但允許全部）
+  // 預載會員 + 票券 + 票券種類（供教練課判斷）
   try{
-    const[members,tickets]=await Promise.all([dbGetAll('members'),dbGetAll('member_tickets')]);
+    const[members,tickets,types]=await Promise.all([dbGetAll('members'),dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
     window._qbMembers=members.filter(m=>m.status!=='inactive');
     window._qbTickets=tickets;
+    window._ttCache=types;
   }catch(_){ window._qbMembers=[]; window._qbTickets=[]; }
   renderQuickBookForm();
 }
@@ -6005,12 +6006,29 @@ async function qbToggleRecurring(v){
   }
   renderQuickBookForm();
 }
-// 計算會員某種票券的剩餘總堂數
+// 私人教練類的所有 ticket_type_id（含友善教練課）+ 字串相容
+function ptTicketTypeIds(){
+  const ids=new Set(['pt','pt_friendly']);
+  (window._ttCache||[]).forEach(t=>{ if(t.category==='私人教練') ids.add(t.id); });
+  (window._qbTickets||window._allTkCache||[]).forEach(t=>{
+    // 票券方案名含「教練」也視為教練課票（相容舊資料）
+    if((t.plan_name||'').indexOf('教練')>=0 && (t.plan_name||'').indexOf('自主')<0) ids.add(t.ticket_type_id);
+  });
+  return ids;
+}
+function isPtTicket(t){
+  // 1) ticket_type_id 屬於私人教練類
+  if(ptTicketTypeIds().has(t.ticket_type_id)) return true;
+  // 2) 退而求其次：方案名含「教練」
+  if((t.plan_name||'').indexOf('教練')>=0 && (t.plan_name||'').indexOf('自主')<0) return true;
+  return false;
+}
+// 計算會員教練課可用剩餘總堂數（不再死綁單一 typeId）
 async function qbCountTickets(memberId,typeId){
   if(!memberId) return 0;
   try{
     const tickets=window._qbTickets||await dbGetAll('member_tickets');
-    return tickets.filter(t=>t.member_id===memberId && t.ticket_type_id===typeId && t.status==='usable')
+    return tickets.filter(t=>t.member_id===memberId && isPtTicket(t) && t.status==='usable')
       .reduce((s,t)=>s+(t.sessions_remaining||0),0);
   }catch(_){ return 0; }
 }
@@ -6032,9 +6050,9 @@ function qbCloseMemberPick(){ const s=document.getElementById('qb-mem-pick'); if
 function qbRenderMemberPick(){
   const box=document.getElementById('qb-mem-list'); if(!box)return;
   const q=(document.getElementById('qb-mem-q').value||'').trim().toLowerCase();
-  const tickets=window._qbTickets||[]; const typeId=window._qbForm.typeId;
-  // 計算每位會員教練課剩餘
-  const remOf=(mid)=>tickets.filter(t=>t.member_id===mid && t.ticket_type_id===typeId && t.status==='usable')
+  const tickets=window._qbTickets||[];
+  // 計算每位會員教練課剩餘（含友善教練課，不死綁單一 typeId）
+  const remOf=(mid)=>tickets.filter(t=>t.member_id===mid && isPtTicket(t) && t.status==='usable')
     .reduce((s,t)=>s+(t.sessions_remaining||0),0);
   let list=(window._qbMembers||[]).filter(m=>!q||(m.name||'').toLowerCase().includes(q)||(m.phone||'').includes(q));
   list.sort((a,b)=>remOf(b.id)-remOf(a.id)||(a.name||'').localeCompare(b.name||''));
@@ -6065,11 +6083,12 @@ async function qbSubmitForm(){
   if(!f.date||!f.time){ showToast('請選日期與時間'); return; }
   if(f.recurring && f.dows.length===0){ showToast('請選重複星期'); return; }
   qbShowProgress(0,0); // 立即回饋
-  // 自動找該會員的教練課可用票券
+  // 自動找該會員的教練課可用票券（含友善教練課）
   let tk=null;
   try{
     const tickets=await dbGetAll('member_tickets');
-    const cands=tickets.filter(t=>t.member_id===f.memberId && t.ticket_type_id===f.typeId
+    window._qbTickets=tickets;
+    const cands=tickets.filter(t=>t.member_id===f.memberId && isPtTicket(t)
       && t.status==='usable' && t.sessions_remaining>0 && (!t.expire_date||t.expire_date>=f.date))
       .sort((a,b)=>(a.expire_date||'9999').localeCompare(b.expire_date||'9999'));
     tk=cands[0];
@@ -6096,13 +6115,13 @@ async function qbSubmitForm(){
     let tkNow=null;
     try{
       const tickets=await dbGetAll('member_tickets');
-      tkNow=tickets.filter(t=>t.member_id===f.memberId && t.ticket_type_id===f.typeId
+      tkNow=tickets.filter(t=>t.member_id===f.memberId && isPtTicket(t)
         && t.status==='usable' && t.sessions_remaining>0 && (!t.expire_date||t.expire_date>=ds))
         .sort((a,b)=>(a.expire_date||'9999').localeCompare(b.expire_date||'9999'))[0];
     }catch(_){}
     if(!tkNow){ noTk++; continue; }
     const bk={id:uid('BK'),member_id:f.memberId,coach_id:myId,substitute_coach_id:null,
-      ticket_id:tkNow.id,ticket_type_id:f.typeId,category:'私人教練',format:'1v1',
+      ticket_id:tkNow.id,ticket_type_id:tkNow.ticket_type_id||f.typeId,category:'私人教練',format:'1v1',
       date:ds,start_time:f.time,duration:60,status:'booked',recurring:f.recurring,
       created_by:myId,created_at:new Date().toISOString()};
     const verr=await validateBooking(bk,ds,f.time,60);
