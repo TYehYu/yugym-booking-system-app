@@ -526,6 +526,9 @@ tr:hover td{background:var(--card2);}
 .qb-slot{background:#e3efe9;color:#1f6f54;border:1px solid #cfe4d8;border-radius:9px;padding:11px 0;cursor:pointer;font-family:var(--num);font-size:14px;font-weight:600;}
 .qb-slot:active{background:var(--green);color:#fff;}
 .qb-empty,.qb-loading{grid-column:1/-1;text-align:center;color:var(--t3);font-size:13px;padding:24px 0;}
+.qb-slot.qb-more{background:var(--card2);color:var(--t2);border:1px dashed var(--bd);font-size:12.5px;}
+.qb-other{grid-column:1/-1;}
+.qb-hhmm{padding:9px 10px;border:1px solid var(--bd);border-radius:9px;background-color:#fff;font-size:15px;font-family:var(--num);min-width:64px;}
 /* 行事曆隱私遮蔽：別人的課灰階呈現 */
 .bk-masked{filter:grayscale(1);opacity:0.62;}
 /* 手機版 modal：限制寬度、可垂直捲動、底部按鈕固定、input 不溢出 */
@@ -820,8 +823,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26621.1021';
-const APP_VERSION_LABEL='26621.1021';
+const APP_VERSION='26621.1108';
+const APP_VERSION_LABEL='26621.1108';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -2037,10 +2040,7 @@ PAGES.calendar=async function(){
     });
     const allView2=bookings.filter(b=>b.status!=='cancelled'); // 排課表用全店
     window._coachCalData={visible,memMap,coachMap,typeMap:{},allView:false,myId,allBk:allView2};
-    const toggle=`<div class="filter-row" style="justify-content:flex-end;align-items:center;margin-bottom:14px;">
-      <button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立預約</button>
-    </div>`;
-    C.innerHTML=head('SCHEDULE','我的預約','你的課程分布 · 點日期看當日排課')+toggle
+    C.innerHTML=head('SCHEDULE','我的預約','你的課程分布 · 點日期看當日排課')
       +`<div id="coach-month"></div><div id="coach-daylist"></div>`
       +`<button class="qb-fab" onclick="openQuickBookCoach()">⚡ 快速預約</button>`;
     renderCoachMonth(); renderCoachDayList();
@@ -4852,12 +4852,7 @@ PAGES.coach_calendar=async function(){
 
   window._coachCalData={visible,memMap,coachMap,typeMap,allView:false,myId,allBk:allView2};
 
-  const toggle=`<div class="filter-row" style="justify-content:flex-end;align-items:center;margin-bottom:14px;">
-    <button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 建立預約</button>
-  </div>`;
-
   C.innerHTML=head('SCHEDULE','我的預約','你的課程分布 · 點日期看當日排課')
-    +toggle
     +`<div id="coach-month"></div><div id="coach-daylist"></div>`
     +`<button class="qb-fab" onclick="openQuickBookCoach()">⚡ 快速預約</button>`;
   renderCoachMonth();
@@ -5053,12 +5048,14 @@ function renderCoachDayList(){
       }).join('');
 
   box.innerHTML=`<div class="card">
-    <div class="card-title" style="display:block;">
-      <div>${ds.replace(/-/g,'/')}（${wd}）</div>
-      <div style="font-size:12px;color:var(--t3);font-weight:400;margin-top:3px;">我的課：教練課 ${ptN} 堂・團體課 ${grpN} 堂　·　當日全店 ${list.length} 筆</div>
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <div>${ds.replace(/-/g,'/')}（${wd}）</div>
+        <div style="font-size:12px;color:var(--t3);font-weight:400;margin-top:3px;">我的課：教練課 ${ptN} 堂・團體課 ${grpN} 堂　·　當日全店 ${list.length} 筆</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="flex:none;" onclick="quickBookOn('${ds}')">＋ 預約</button>
     </div>
     ${rows}
-    <button class="btn btn-green btn-sm" style="width:100%;margin-top:12px;" onclick="quickBookOn('${ds}')">＋ 新增預約（其他時間）</button>
   </div>`;
 }
 
@@ -5256,23 +5253,75 @@ async function qbLoadSlots(){
   let slots=[];
   try{ slots=await qbScanSlots(st.date,st.period,vbk); }catch(e){ box.innerHTML='<div class="qb-empty">時段載入失敗</div>'; return; }
   if(slots.length===0){ box.innerHTML='<div class="qb-empty">今日暫無可預約時段</div>'; return; }
-  box.innerHTML=slots.map(t=>`<button class="qb-slot" onclick="qbPickSlot('${t}')">${t}</button>`).join('');
+  // 只顯示「整點」代表時段，減少畫面資訊量；半點與加開時段走「其他時段」
+  const reps=slots.filter(t=>t.endsWith(':00'));
+  const show=reps.length>0?reps:slots.slice(0,6);
+  box.innerHTML=show.map(t=>`<button class="qb-slot" onclick="qbPickSlot('${t}')">${t}</button>`).join('')
+    +`<button class="qb-slot qb-more" onclick="qbOtherTime()">＋其他時段</button>`;
+}
+// 其他時段：手動輸入時間（限 00 / 30 分）
+function qbOtherTime(){
+  const box=document.getElementById('qb-slots'); if(!box)return;
+  box.innerHTML=`<div class="qb-other">
+    <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">輸入時間（限每半小時，例如 09:00、09:30、14:30）</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select id="qb-hh" class="qb-hhmm">${qbHourOpts()}</select>
+      <span style="font-weight:700;">:</span>
+      <select id="qb-mm" class="qb-hhmm"><option value="00">00</option><option value="30">30</option></select>
+      <button class="btn btn-green btn-sm" style="margin-left:auto;" onclick="qbOtherGo()">下一步 →</button>
+    </div>
+    <div id="qb-other-err" style="font-size:11.5px;color:var(--danger);margin-top:8px;min-height:14px;"></div>
+    <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px;" onclick="qbLoadSlots()">← 返回時段</button>
+  </div>`;
+}
+function qbHourOpts(){
+  let h='';
+  for(let i=8;i<=22;i++){ const hh=String(i).padStart(2,'0'); h+=`<option value="${hh}">${hh}</option>`; }
+  return h;
+}
+async function qbOtherGo(){
+  const hh=document.getElementById('qb-hh').value, mm=document.getElementById('qb-mm').value;
+  const time=hh+':'+mm;
+  const err=document.getElementById('qb-other-err');
+  const st=window._qbState;
+  const vbk = st.mode==='coach'
+    ? {id:null,member_id:null,coach_id:st.coachId,substitute_coach_id:null,category:'私人教練',ticket_type_id:st.typeId}
+    : {id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:st.typeId};
+  const verr=await validateBooking(vbk,st.date,time,60);
+  if(verr){ if(err)err.textContent=verr; return; }
+  qbPickSlot(time);
 }
 function qbPickSlot(time){
   const st=window._qbState;
   const ds=st.date;
   closeQuickBook();
   if(st.mode==='coach'){
-    window._bkPrefillCoach=st.coachId;
-    _prefill={date:ds,time:time};
-    openBookingModal();
-    setTimeout(()=>{
-      const sel=document.getElementById('bk-type');
-      if(sel&&st.typeId){ sel.value=st.typeId; if(typeof onBkTypeChange==='function') onBkTypeChange(); }
-    },150);
+    // 已選好 日期/時間/教練課/登入教練 → 直接進步驟2（選會員/票券）
+    qbDirectToStep2(ds,time,st.coachId,st.typeId);
   }else{
     openSelfBookConfirm(ds,time);
   }
+}
+// 直接進入「新增預約·步驟2」：預先備好 step1 的值（不顯示 step1）
+async function qbDirectToStep2(date,time,coachId,typeId){
+  // 準備 _bkWizard 與隱藏欄位，讓 bkStep2 能讀到
+  _bkWizard={fromSlot:true,date,time};
+  window._bkSelfCoach = (SESSION.role==='coach') ? SESSION.id : null;
+  window._bkPrefillCoach = coachId;
+  // 建立一組隱藏的 step1 欄位供 bkStep2 讀取（bkStep2 從 DOM 取值）
+  let holder=document.getElementById('qb-step1-holder');
+  if(holder) holder.remove();
+  holder=document.createElement('div');
+  holder.id='qb-step1-holder';
+  holder.style.display='none';
+  holder.innerHTML=`<select id="bk-type"><option value="${typeId}" selected>x</option></select>
+    <input id="bk-coach" value="${coachId||''}">
+    <input id="bk-date" value="${date}">
+    <input id="bk-time" value="${time}">`;
+  document.body.appendChild(holder);
+  await bkStep2();
+  // bkStep2 已 showModal（步驟2），清掉暫存 holder
+  const h=document.getElementById('qb-step1-holder'); if(h) h.remove();
 }
 async function openSelfBookConfirm(date,time){
   const tickets=await dbGetAll('member_tickets');
