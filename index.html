@@ -502,6 +502,7 @@ tr:hover td{background:var(--card2);}
 .tkr-mid{flex:1;padding:11px 14px;display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;}
 .tkr-name{font-size:16px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .tkr-type{font-size:12.5px;color:var(--t2);}
+.tkr-venue{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:700;color:#9a5a1e;background:#f6ead8;padding:1px 7px;border-radius:9px;}
 .tkr-masked{font-size:13px;font-weight:600;color:var(--t3);}
 .tkr-right{flex:0 0 60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:16px 5px 6px;}
 .tkr-rem{font-family:var(--num);font-size:15px;font-weight:700;color:var(--tkr-accent,#1f6f54);}
@@ -1137,8 +1138,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26622.0920';
-const APP_VERSION_LABEL='26622.0920';
+const APP_VERSION='26622.1100';
+const APP_VERSION_LABEL='26622.1100';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1343,6 +1344,9 @@ function enterApp(){
   startClock();
   loadWeather();
   refreshHeaderPunch();
+  // 載入場地設定（若雲端有 venues 表）→ 供 validateBooking 容量檢查
+  dbGetAll('venues').then(v=>{ if(v&&v.length) window.VENUES=v; }).catch(()=>{});
+  loadSalaryTemplates();
   buildNav();
   const isMobile=window.innerWidth<=600;
   let firstItems;
@@ -1602,13 +1606,57 @@ async function pushNotification(recipient_id,type,title,body,recipient_type='mem
 }
 
 /* ── 票券核心:扣抵 / 退回 ── */
+// 取得一張票券所屬的「課程類別」(category)：優先查 ticket_types，再用名稱/字串相容
+function ticketCategoryOf(t){
+  if(!t) return null;
+  const tt=(window._ttCache||[]).find(x=>x.id===t.ticket_type_id);
+  if(tt && tt.category) return tt.category;
+  // 字串相容（舊資料 ticket_type_id 直接是語意字串）
+  const id=t.ticket_type_id||'';
+  if(id==='pt'||id==='pt_friendly') return '私人教練';
+  if(id==='group') return '小班肌力';
+  if(id==='self_training'||id==='self_friendly') return '自主訓練';
+  if(id==='trial') return '體驗';
+  // 用方案名相容
+  const nm=(t.plan_name||'')+(tt?tt.name:'');
+  if(nm.indexOf('團體')>=0||nm.indexOf('小班')>=0) return '小班肌力';
+  if(nm.indexOf('自主')>=0) return '自主訓練';
+  if(nm.indexOf('體驗')>=0) return '體驗';
+  if(nm.indexOf('教練')>=0) return '私人教練';
+  return null;
+}
+// 判斷一張票券是否可用於某「課程類別」（同類別即可，不死綁 ticket_type_id）
+function ticketMatchesCategory(t, category){
+  if(!t||!category) return false;
+  const cat=ticketCategoryOf(t);
+  if(cat===category) return true;
+  // 教練課與體驗在票券上常通用？預設不通用，嚴格比對類別
+  return false;
+}
+// 把一個 ticket_type_id 解析成它代表的課程類別（給呼叫端用 id 時轉換）
+function categoryOfTypeId(type_id){
+  const tt=(window._ttCache||[]).find(x=>x.id===type_id);
+  if(tt && tt.category) return tt.category;
+  if(type_id==='pt'||type_id==='pt_friendly') return '私人教練';
+  if(type_id==='group') return '小班肌力';
+  if(type_id==='self_training'||type_id==='self_friendly') return '自主訓練';
+  if(type_id==='trial') return '體驗';
+  return null;
+}
 // 找會員某類型最早到期的可用票券
 // 列出會員在某類型、某預約日仍有效（未過期、有剩餘堂數）的所有票券
 async function listUsableTickets(member_id,type_id,bookDate){
   const all=await dbGetAll('member_tickets');
-  return all.filter(t=>t.member_id===member_id && t.ticket_type_id===type_id
-      && t.status==='usable' && t.sessions_remaining>0
-      && (!bookDate || !t.expire_date || t.expire_date>=bookDate)) // 過期日早於預約日 → 排除
+  if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
+  const wantCat=categoryOfTypeId(type_id); // 目標課程類別
+  const groupMode = wantCat==='小班肌力';   // 團課：不同方案票券互通（同為團課即可用）
+  return all.filter(t=>{
+      if(t.member_id!==member_id) return false;
+      if(t.status!=='usable' || !(t.sessions_remaining>0)) return false;
+      if(bookDate && t.expire_date && t.expire_date<bookDate) return false; // 已過期
+      if(groupMode) return ticketCategoryOf(t)==='小班肌力'; // 團課：同類別即可（不分方案）
+      return t.ticket_type_id===type_id;                     // 其他類別：維持原本嚴格比對（保留友善/方案區分）
+    })
     .sort((a,b)=>(a.expire_date||'').localeCompare(b.expire_date||''));
 }
 async function findUsableTicket(member_id,type_id,bookDate){
@@ -1633,6 +1681,34 @@ async function refundTicket(ticket_id,booking_id,operator){
   if(t.status==='used_up'&&t.sessions_remaining>0) t.status='usable';
   await dbPut('member_tickets',t);
   await logTicket(ticket_id,'refund',1,booking_id,operator,'取消退課');
+}
+// 一鍵補發補課券：綁原課同類型，1 堂，效期 14 天，source='makeup'
+async function grantMakeupTicket(booking){
+  if(!booking||!booking.member_id){ showToast('此預約無綁定會員，無法補發'); return; }
+  // 找原課同類型的票券種類 id（優先用原 booking 的 ticket_type_id，否則依 category 找）
+  let type_id=booking.ticket_type_id||null, planName='補課券';
+  try{
+    if(!window._ttCache) window._ttCache=await dbGetAll('ticket_types');
+    if(type_id){
+      const tt=window._ttCache.find(t=>t.id===type_id);
+      if(tt) planName=`${tt.name}・補課券`;
+    }else{
+      const tt=window._ttCache.find(t=>t.category===booking.category);
+      if(tt){ type_id=tt.id; planName=`${tt.name}・補課券`; }
+    }
+  }catch(_){}
+  const today=ymd(TODAY);
+  const expire=ymd(addDays(TODAY,14)); // 效期 14 天
+  const tk={ id:uid('TK'), member_id:booking.member_id, ticket_type_id:type_id,
+    source_plan_id:null, plan_name:planName, format:booking.format||null,
+    source:'makeup', purchase_date:today, start_date:today, expire_date:expire,
+    sessions_total:1, sessions_remaining:1, status:'usable',
+    payment_status:'paid', invoice_status:'none',
+    makeup_for_booking:booking.id||null, created_at:new Date().toISOString() };
+  await dbPut('member_tickets',tk);
+  await logTicket(tk.id,'grant',1,booking.id||null,SESSION.id,'補發補課券');
+  if(booking.id){ try{ const b=await dbGet('bookings',booking.id); if(b){ b.makeup_granted=true; await dbPut('bookings',b); } }catch(_){} }
+  return tk;
 }
 
 /* ════════ 管理員:儀表板（營運報表） ════════ */
@@ -2288,7 +2364,95 @@ function initCalSwipe(wrap){
    booking 參數需含：id(可空,新增時)、coach_id、member_id、category、date、start_time、duration
    回傳：錯誤訊息字串（不可建立）或 null（通過）。
 */
-const CAP_CATS=['私人教練','自主訓練','體驗']; // 計入訓練場地容量
+const CAP_CATS=['私人教練','自主訓練','體驗']; // 沿用：哪些類別需要場地
+// ── 場地設定（可在系統設定調整數量）──
+// 每個場地有 N 個單位（multi=3、treadmill=2、group=1）。
+window.VENUES = window.VENUES || [
+  { id:'multi',     name:'多功能訓練區', capacity:3, active:true },
+  { id:'treadmill', name:'跑步機',       capacity:2, active:true },
+  { id:'group',     name:'團課教室',     capacity:1, active:true },
+];
+function getVenues(){ return (window.VENUES||[]).filter(v=>v.active!==false); }
+function venueCap(id){ const v=getVenues().find(x=>x.id===id); return v?(v.capacity||0):0; }
+
+// 課程類型 → 可使用場地的「優先序」（先排滿前面的，剩餘溢出到後面）
+//   教練課/友善教練課：多功能 → 團課教室
+//   體驗課：同教練課
+//   團體課：只能團課教室
+//   自主訓練/友善自主訓練：多功能 → 跑步機 → 團課教室
+function venuePriorityFor(category){
+  if(category==='小班肌力') return ['group'];
+  if(category==='自主訓練') return ['multi','treadmill','group'];
+  // 私人教練（含友善）、體驗
+  return ['multi','group'];
+}
+// 產生所有場地單位 id：multi_1..3 / treadmill_1..2 / group_1
+function venueUnits(){
+  const units=[];
+  getVenues().forEach(v=>{ for(let i=1;i<=(v.capacity||0);i++) units.push(`${v.id}_${i}`); });
+  return units;
+}
+// venue_unit（如 multi_1 / group_1 / treadmill_2）→ 場地名稱
+function venueName(unit){
+  if(!unit) return '';
+  const vid=String(unit).split('_')[0];
+  const v=(window.VENUES||[]).find(x=>x.id===vid);
+  return v?v.name:vid;
+}
+// 是否為「非預設場地」（值得特別提示）：
+//   教練課/體驗 預設在多功能訓練區 → 排到團課教室要提示
+//   自主訓練 預設多功能 → 排到跑步機/團課教室要提示
+//   團體課 本來就在團課教室 → 不提示
+function venueIsNotable(category, unit){
+  if(!unit) return false;
+  const vid=String(unit).split('_')[0];
+  if(category==='小班肌力') return false;            // 團課在團課教室是常態
+  if(category==='自主訓練') return vid!=='multi';     // 自主訓練排到跑步機/團課教室才提示
+  return vid!=='multi';                               // 教練課/體驗排到團課教室才提示
+}
+// 計算某時段「已被佔用」的場地單位集合
+function occupiedUnits(sameDay, ns, ne){
+  const occ=new Set();
+  sameDay.forEach(x=>{
+    if(!overlaps(ns,ne, timeToMin(x.start_time), timeToMin(x.start_time)+(x.duration||60))) return;
+    if(x.venue_unit){ occ.add(x.venue_unit); }
+  });
+  return occ;
+}
+// 為一筆預約分配場地單位：依課程類型優先序，找第一個該時段未被佔的單位。
+//   回傳 { unit } 或 { error }
+function allocateVenue(category, sameDay, ns, ne, selfId){
+  // 排除自己（改期時）
+  const others=sameDay.filter(x=> x.id!==selfId);
+  const occ=occupiedUnits(others, ns, ne);
+  // 還要相容「舊資料沒有 venue_unit」：用數量回推佔用——把沒標單位的同類場地預約，依場地池順序填佔
+  //   （保險：避免舊資料未分配單位導致超賣）
+  const legacy=others.filter(x=> overlaps(ns,ne, timeToMin(x.start_time), timeToMin(x.start_time)+(x.duration||60)) && !x.venue_unit);
+  // 依課程類型把 legacy 也納入對應場地池佔用估算
+  const fillLegacy=(poolPrefix, count)=>{
+    for(let i=1;i<=venueCap(poolPrefix) && count>0;i++){
+      const u=`${poolPrefix}_${i}`; if(!occ.has(u)){ occ.add(u); count--; }
+    }
+    return count;
+  };
+  if(legacy.length){
+    // 粗略：團課佔 group，教練/體驗佔 multi 優先、自主佔 multi/treadmill
+    let g=legacy.filter(x=>x.category==='小班肌力').length;
+    let m=legacy.filter(x=>x.category==='私人教練'||x.category==='體驗').length;
+    let s=legacy.filter(x=>x.category==='自主訓練').length;
+    g=fillLegacy('group',g);
+    m=fillLegacy('multi',m); if(m>0) fillLegacy('group',m);
+    s=fillLegacy('multi',s); s=(s>0?fillLegacy('treadmill',s):0); if(s>0) fillLegacy('group',s);
+  }
+  const pri=venuePriorityFor(category);
+  for(const vid of pri){
+    for(let i=1;i<=venueCap(vid);i++){
+      const u=`${vid}_${i}`;
+      if(!occ.has(u)) return { unit:u };
+    }
+  }
+  return { error:'該時段沒有可用場地（已額滿）' };
+}
 function overlaps(s1,e1,s2,e2){ return s1<e2 && e1>s2; }
 async function validateBooking(bk,date,time,duration){
   const dur=duration||bk.duration||60;
@@ -2332,19 +2496,11 @@ async function validateBooking(bk,date,time,duration){
     if(dup) return '會員於該時段已有預約';
   }
 
-  // 3) 團課教室（小班肌力同時段只能一堂）
-  if(bk.category==='小班肌力'){
-    const g=sameDay.find(x=> x.category==='小班肌力' &&
-      overlaps(ns,ne, timeToMin(x.start_time), timeToMin(x.start_time)+(x.duration||60)) );
-    if(g) return '團課教室該時段已被使用';
-  }
-
-  // 4) 訓練場地容量（私教/體驗/自主訓練 最多 3 組；小班不計入）
-  if(CAP_CATS.includes(bk.category)){
-    const cnt=sameDay.filter(x=> CAP_CATS.includes(x.category) &&
-      overlaps(ns,ne, timeToMin(x.start_time), timeToMin(x.start_time)+(x.duration||60)) ).length;
-    if(cnt>=3) return '該時段訓練場地已滿（最多 3 組）';
-  }
+  // 3) 場地分配（依課程類型可用場地優先序，找該時段未被佔的單位）
+  //    團課→團課教室；教練/體驗→多功能→團課教室；自主→多功能→跑步機→團課教室
+  const alloc = allocateVenue(bk.category, sameDay, ns, ne, bk.id);
+  if(alloc.error) return alloc.error;
+  bk.venue_unit = alloc.unit; // 寫回，呼叫端存 booking 時帶上
 
   return null; // 通過
 }
@@ -2503,6 +2659,7 @@ async function bkStep2(){
   const type_id=document.getElementById('bk-type').value;
   if(!type_id){showToast('請選擇課程類型');return;}
   const types=await dbGetAll('ticket_types');
+  window._ttCache=types;
   const t=types.find(x=>x.id===type_id);
   const needCoach = t.requires_coach || t.category==='體驗' || t.category==='小班肌力'; // 體驗/團體課強制要教練
   const coachEl=document.getElementById('bk-coach');
@@ -2546,7 +2703,7 @@ async function bkStep2(){
     // 預先查每位會員的團體課票（顯示剩餘張數，方便櫃台判斷誰要扣票）
     const allTk=await dbGetAll('member_tickets');
     const grpOpts=_bkMembers.map(m=>{
-      const tks=allTk.filter(tt=>tt.member_id===m.id && tt.ticket_type_id===type_id && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=date));
+      const tks=allTk.filter(tt=>tt.member_id===m.id && ticketMatchesCategory(tt,categoryOfTypeId(type_id)) && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=date));
       const sum=tks.reduce((s,tt)=>s+tt.sessions_remaining,0);
       const tag = sum>0 ? `團體課票 剩 ${sum} 堂` : '無票（教練負責）';
       return `<option value="${m.id}">${m.name}（${m.phone}）· ${tag}</option>`;
@@ -2736,7 +2893,7 @@ async function submitBooking(){
     if(verr){showToast(verr);return;}
     const bk={id:uid('BK'),member_id:null,member_ids:[],trial_name:tname,trial_phone:tphone||null,
       coach_id,ticket_id:null,ticket_type_id:type_id,category:t.category,format:t.format||null,
-      date,start_time:time,duration:60,status:'booked',recurring:false,
+      date,start_time:time,duration:60,status:'booked',recurring:false,venue_unit:vbk.venue_unit||null,
       created_by:SESSION.id,created_at:new Date().toISOString()};
     await dbPut('bookings',bk);
     closeModal();showToast('體驗課已建立');navTo(CUR_PAGE);
@@ -2753,7 +2910,7 @@ async function submitBooking(){
     if(verr){showToast(verr);return;}
     const bk={id:uid('BK'),member_id:null,member_ids:ids,trial_name:null,trial_phone:null,
       coach_id,ticket_id:null,ticket_type_id:type_id,category:t.category,format:t.format||null,
-      date,start_time:time,duration:60,status:'booked',recurring:false,
+      date,start_time:time,duration:60,status:'booked',recurring:false,venue_unit:vbk.venue_unit||null,
       created_by:SESSION.id,created_at:new Date().toISOString()};
     await dbPut('bookings',bk);
     // 為有團體課票的會員各扣 1 堂（沒票的略過，由教練負責）
@@ -2781,39 +2938,30 @@ async function submitBooking(){
   let fmt=firstTk.format||null;
   if(!fmt&&firstTk.source_plan_id){const pl=await dbGet('course_plans',firstTk.source_plan_id);fmt=pl?pl.format:null;}
 
-  // 產生要建立的日期清單
-  let dates=[date];
-  if(recurring){
-    const dows=[...document.querySelectorAll('.rec-dow:checked')].map(c=>Number(c.value));
-    if(dows.length===0){showToast('請勾選至少一個星期');return;}
-    const maxN=Number(document.getElementById('rec-max').value)||8;
-    const until=document.getElementById('rec-until').value||null;
-    dates=buildRecurringDates(date,dows,maxN,until);
+  // 連續預約星期檢查（次數與日期由 runRecurringBooking 處理）
+  const recurring2=recurring;
+  if(recurring2){
+    const dowsChk=[...document.querySelectorAll('.rec-dow:checked')].map(c=>Number(c.value));
+    if(dowsChk.length===0){showToast('請勾選至少一個星期');return;}
   }
 
-  // 逐筆建立：優先用選定票券，用完或該日已過期則找其他可用票；衝突跳過、票不夠停止
-  let created=0, skipped=0, noTicket=0;
-  const results=[]; // {date, ok, reason}
-  for(const d of dates){
-    // 優先用選定票券（若仍可用且該日未過期）
-    let tk=null;
+  // 找票券：優先用選定票券（若仍可用且該日未過期），否則找同類別可用票
+  const bkFindTk=async(mid,d)=>{
     if(selTicketId){
       const sel=await dbGet('member_tickets',selTicketId);
-      if(sel && sel.status==='usable' && sel.sessions_remaining>0 && (!sel.expire_date||sel.expire_date>=d)) tk=sel;
+      if(sel && sel.member_id===mid && sel.status==='usable' && sel.sessions_remaining>0 && (!sel.expire_date||sel.expire_date>=d)) return sel;
     }
-    if(!tk) tk=await findUsableTicket(member_id,type_id,d);
-    if(!tk){noTicket++; results.push({date:d,ok:false,reason:'票券不足或已過期'}); continue;}
-    const vbk={id:null,member_id,coach_id,category:t.category,ticket_type_id:type_id};
-    const err=await validateBooking(vbk,d,time,60);
-    if(err){skipped++; results.push({date:d,ok:false,reason:err}); continue;}
-    const bk={id:uid('BK'),member_id,coach_id,ticket_id:tk.id,ticket_type_id:type_id,category:t.category,format:fmt,
-      date:d,start_time:time,duration:60,status:'booked',recurring:recurring||false,
-      created_by:SESSION.id,created_at:new Date().toISOString()};
-    await dbPut('bookings',bk);
-    await deductTicket(tk,bk.id,SESSION.id);
-    created++;
-    results.push({date:d,ok:true});
-  }
+    return await findUsableTicket(mid,type_id,d);
+  };
+  const r=await runRecurringBooking({
+    member_id, coach_id, substitute_coach_id:null,
+    category:t.category, type_id, format:fmt,
+    startDate:date, time, duration:60,
+    dows: recurring ? [...document.querySelectorAll('.rec-dow:checked')].map(c=>Number(c.value)) : [],
+    count: recurring ? (Number(document.getElementById('rec-max').value)||8) : 1,
+    findTicketFn: bkFindTk,
+  });
+  const created=r.ok, skipped=r.skipped, noTicket=r.noTicket, results=r.results;
   if(created>0) await pushNotification(member_id,'booking','預約成立',`已為您建立 ${created} 筆${t.category}預約。`);
 
   // 單筆預約：直接吐司；連續預約或有跳過：跳結果摘要視窗
@@ -2826,14 +2974,14 @@ async function submitBooking(){
   }
   // 結果摘要視窗
   const wd=['日','一','二','三','四','五','六'];
-  const rows=results.map(r=>{
-    const dt=parseYmd(r.date);
+  const rows=results.map(rr=>{
+    const dt=parseYmd(rr.date);
     const label=`${dt.getMonth()+1}/${dt.getDate()}（${wd[dt.getDay()]}）${time}`;
-    return r.ok
+    return rr.ok
       ? `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bd);"><span>${label}</span><span style="color:var(--ok);font-weight:500;">✓ 已建立</span></div>`
-      : `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bd);"><span>${label}</span><span style="color:var(--danger);font-size:12px;">✕ ${r.reason}</span></div>`;
+      : `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bd);"><span>${label}</span><span style="color:var(--danger);font-size:12px;">✕ ${rr.reason}</span></div>`;
   }).join('');
-  const summary=`成功 ${created} 筆${skipped?`，跳過 ${skipped} 筆衝突`:''}${noTicket?`，${noTicket} 筆票券不足`:''}`;
+  const summary=`成功 ${created} 筆${skipped?`，跳過 ${skipped} 筆衝突/已滿`:''}${noTicket?`，${noTicket} 筆票券不足`:''}${r.capped?`（次數受票券剩餘 ${r.remainTotal} 堂限制）`:''}`;
   showModal(`<div class="modal-title">連續預約結果</div>
     <div style="font-size:13px;color:var(--text);margin-bottom:12px;font-weight:500;">${summary}</div>
     <div style="max-height:300px;overflow-y:auto;font-size:13px;">${rows}</div>
@@ -2859,6 +3007,90 @@ function buildRecurringDates(startDate,dows,maxN,until){
     cur.setDate(cur.getDate()+1);
   }
   return out;
+}
+
+/* ════════════════════════════════════════════════════════
+   共用連續預約引擎（後台與教練端共用，規則一致）
+   opts = {
+     member_id, coach_id, substitute_coach_id,
+     category, type_id, format,
+     startDate, time, duration=60,
+     dows:[],            // 重複星期（0=日..6=六）；空陣列＝單筆（只建 startDate）
+     count,              // 要求建立次數（會被票券剩餘上限夾住）
+     horizonDays=370,    // 往後最多展開幾天
+     onProgress(cur,total)  // 進度回呼（可選）
+   }
+   回傳 { ok, skipped, noTicket, total, results:[{date, ok, reason}], capped }
+   規則：
+     1. 次數上限 = min(要求次數, 票券剩餘堂數)
+     2. 逐筆即時找該會員可用票券（連續扣，逐次重算剩餘）
+     3. 衝堂/場地滿 → 該筆跳過並記原因
+     4. 票券不足 → 該筆記「票券不足」
+   ════════════════════════════════════════════════════════ */
+async function runRecurringBooking(opts){
+  const o=opts||{};
+  const dur=o.duration||60;
+  const operator=(window.SESSION&&SESSION.id)||o.coach_id||null;
+  // 找票券函式：預設用 listUsableTickets(依類別)；呼叫端可傳 findTicketFn(memberId, dateStr) 覆寫
+  const findTk = o.findTicketFn || (async(mid,ds)=>{ const c=await listUsableTickets(mid,o.type_id,ds); return c[0]||null; });
+  const countRemain = o.countRemainFn || (async(mid)=>{ const c=await listUsableTickets(mid,o.type_id,o.startDate); return c.reduce((s,t)=>s+(t.sessions_remaining||0),0); });
+  // 1) 票券剩餘上限
+  let remainTotal=0;
+  try{ remainTotal=await countRemain(o.member_id); }catch(_){}
+  const noDeduct = (o.category==='體驗');
+  // 2) 產生日期清單
+  let dates;
+  if(o.dows && o.dows.length){
+    const reqCount=Math.max(1, o.count||1);
+    const cap = noDeduct ? reqCount : Math.min(reqCount, remainTotal||0);
+    const far=ymd(addDays(parseYmd(o.startDate), o.horizonDays||370));
+    dates=buildRecurringDates(o.startDate, o.dows, cap, far);
+  }else{
+    dates=[o.startDate];
+  }
+  const total=dates.length;
+  const capped = (o.dows&&o.dows.length) ? (!noDeduct && (o.count||1) > (remainTotal||0)) : false;
+
+  let ok=0, skipped=0, noTicket=0;
+  const results=[];
+  let done=0;
+  for(const ds of dates){
+    done++;
+    if(typeof o.onProgress==='function'){ try{ o.onProgress(done,total); }catch(_){} await new Promise(r=>setTimeout(r,0)); }
+    let tk=null;
+    if(!noDeduct){
+      try{ tk=await findTk(o.member_id, ds); }catch(_){}
+      if(!tk){ noTicket++; results.push({date:ds,ok:false,reason:'票券不足或已過期'}); continue; }
+    }
+    const bk={id:uid('BK'), member_id:o.member_id||null, coach_id:o.coach_id||null,
+      substitute_coach_id:o.substitute_coach_id||null,
+      ticket_id:tk?tk.id:null, ticket_type_id:(tk&&tk.ticket_type_id)||o.type_id||null,
+      category:o.category, format:o.format||null,
+      date:ds, start_time:o.time, duration:dur, status:'booked',
+      recurring:(o.dows&&o.dows.length>0)||false, created_by:operator, created_at:new Date().toISOString()};
+    const verr=await validateBooking(bk, ds, o.time, dur);
+    if(verr){ skipped++; results.push({date:ds,ok:false,reason:verr}); continue; }
+    try{
+      await dbPut('bookings', bk);
+      if(tk) await deductTicket(tk, bk.id, operator);
+      ok++; results.push({date:ds,ok:true});
+    }catch(e){ skipped++; results.push({date:ds,ok:false,reason:'寫入失敗'}); }
+  }
+  return { ok, skipped, noTicket, total, results, capped, remainTotal };
+}
+// 把連續預約結果組成回報訊息
+function recurringResultMsg(r){
+  let msg=`已建立 ${r.ok} 筆`;
+  const fails=r.skipped+r.noTicket;
+  if(fails>0){
+    msg+=`，${fails} 筆未建立`;
+    const reasons={};
+    r.results.filter(x=>!x.ok).forEach(x=>{ reasons[x.reason]=(reasons[x.reason]||0)+1; });
+    const detail=Object.entries(reasons).map(([k,v])=>`${k}×${v}`).join('、');
+    if(detail) msg+=`（${detail}）`;
+  }
+  if(r.capped) msg+=`；次數已受票券剩餘 ${r.remainTotal} 堂限制`;
+  return msg;
 }
 
 /* ── 預約明細 / 取消 ── */
@@ -2957,6 +3189,7 @@ async function openBookingDetail(id){
     <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
       ${memberLine}
       <div><span style="color:var(--t2);">類型</span>　<span class="tag tag-${colorClass(typeOfCat(b.category))}">${b.category}${b.format?'·'+b.format:''}</span></div>
+      ${b.venue_unit?`<div><span style="color:var(--t2);">場地</span>　${venueName(b.venue_unit)}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;">非主場地</span>':''}</div>`:''}
       <div><span style="color:var(--t2);">教練</span>　${coach?coach.name:'—'}${subCoach?` <span class="tag" style="background:#f5ede0;color:#8A5E28;">代課：${subCoach.name}</span>`:''}</div>
       ${tkLine}
     </div>
@@ -2972,13 +3205,56 @@ async function openBookingDetail(id){
         <select id="ed-subcoach"><option value="">無（由原教練 ${coach?coach.name:'—'} 授課）</option>
         ${coachableList.filter(c=>c.id!==b.coach_id).map(c=>`<option value="${c.id}" ${b.substitute_coach_id===c.id?'selected':''}>${coachDisp(c)}</option>`).join('')}</select></div>
     </div>`:`<div style="margin-top:10px;font-size:13px;"><span style="color:var(--t2);">時間</span>　${b.date}（週${WD[d.getDay()]}）${b.start_time}　${b.duration}分鐘</div>`}
-    ${b.category==='私人教練'&&within24&&canCancel?'<div style="margin-top:12px;padding:10px;background:#f7efe0;border-radius:8px;font-size:12px;color:var(--warn);">⚠ 私教課開課 24 小時內，原則扣課不退（此 demo 仍允許退，正式版改審核制）。</div>':''}
+    ${b.status==='cancelled'&&b.refund_waived?`<div style="margin-top:12px;padding:10px;background:#f7efe0;border-radius:8px;font-size:12px;color:#8a5e28;">此預約於開課 24 小時內取消，未退回票券。${b.makeup_granted?'（已補發補課券）':''}</div>`:''}
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
       ${b.member_id?`<button class="btn btn-ghost" onclick="openTrainingLog('${b.id}')">訓練紀錄</button>`:''}
       ${editable?`<button class="btn btn-ghost" onclick="saveBookingTime('${b.id}')">儲存變更</button>`:''}
+      ${(SESSION.role==='admin'||SESSION.role==='front_desk')&&b.status==='cancelled'&&b.member_id&&b.category!=='體驗'&&!b.makeup_granted?`<button class="btn btn-gold" onclick="confirmMakeup('${b.id}')">補發補課券</button>`:''}
       ${canCancel&&ownByCoach?`<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`:''}
     </div>`);
+}
+// 確認補發補課券
+async function confirmMakeup(id){
+  const b=await dbGet('bookings',id); if(!b)return;
+  showModal(`<div class="modal-title">補發補課券</div>
+    <div style="font-size:13px;color:var(--text);padding:4px 0;">將為此會員補發 1 張補課券：</div>
+    <div style="font-size:12.5px;color:var(--t2);margin:8px 0 14px;line-height:1.8;background:var(--card2);padding:10px 12px;border-radius:9px;">
+      課程類型：${b.category}（同類型可用）<br>堂數：1 堂<br>效期：自今日起 14 天</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-gold" onclick="doGrantMakeup('${id}')">確認補發</button></div>`);
+}
+async function doGrantMakeup(id){
+  try{
+    const b=await dbGet('bookings',id);
+    const tk=await grantMakeupTicket(b);
+    closeModal();
+    showToast(tk?'已補發補課券（效期 14 天）':'補發失敗');
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('補發失敗：'+(e&&e.message?e.message:e)); }
+}
+// 會員資料頁：補發補課券（不綁特定預約，由管理員選課程類型）
+async function openMakeupForMember(member_id){
+  if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
+  const cats=[...new Set((window._ttCache||[]).map(t=>t.category).filter(Boolean))];
+  const opts=cats.map(c=>`<option value="${c}">${c}</option>`).join('')||'<option value="私人教練">私人教練</option>';
+  showModal(`<div class="modal-title">補發補課券</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">補課券 1 堂、效期自今日起 14 天，綁定所選課程類型（同類型可用）。</div>
+    <div class="form-row"><label>課程類型</label><select id="mk-cat">${opts}</select></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openMemberDetail('${member_id}')">返回</button><button class="btn btn-gold" onclick="doGrantMakeupForMember('${member_id}')">確認補發</button></div>`);
+}
+async function doGrantMakeupForMember(member_id){
+  try{
+    const cat=document.getElementById('mk-cat').value;
+    // 找該類型的票券種類 id
+    let type_id=null;
+    const tt=(window._ttCache||[]).find(t=>t.category===cat);
+    if(tt) type_id=tt.id;
+    const pseudo={ member_id, category:cat, ticket_type_id:type_id, format:null, id:null };
+    const tk=await grantMakeupTicket(pseudo);
+    closeModal();
+    showToast(tk?'已補發補課券（效期 14 天）':'補發失敗');
+    openMemberDetail(member_id);
+  }catch(e){ showToast('補發失敗：'+(e&&e.message?e.message:e)); }
 }
 
 /* ── 簽到：改狀態 checked_in、記簽到時間、發點數（票券已於預約時扣，不重扣） ── */
@@ -3094,11 +3370,36 @@ async function submitMakeup(id){
 }
 
 /* ── 取消（確認視窗 → 改 cancelled，不刪資料，退回票券） ── */
-function confirmCancelBooking(id){
+async function confirmCancelBooking(id){
+  const b=await dbGet('bookings',id);
+  if(!b){showToast('找不到預約');return;}
+  const hrs=hoursUntilStart(b);
+  const within24 = hrs < 24;
+  const isAdmin = SESSION.role==='admin' || SESSION.role==='front_desk';
+  const isTrial = b.category==='體驗';
+
+  if(isAdmin && !isTrial){
+    // 管理員：可選擇是否退回票券
+    const note = within24
+      ? '此預約在開課 24 小時內。一般會員自行取消不退票，管理員可決定是否退回。'
+      : '此預約在開課 24 小時前，預設退回票券。';
+    showModal(`<div class="modal-title">取消預約</div>
+      <div style="font-size:13px;color:var(--text);padding:4px 0;">${b.date} ${b.start_time}　${b.category}</div>
+      <div style="font-size:12px;color:var(--t2);margin:8px 0 14px;line-height:1.6;">${note}</div>
+      <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
+        <button class="btn btn-ghost" onclick="closeModal()">返回</button>
+        <button class="btn btn-ghost" onclick="cancelBooking('${id}','none')">取消・不退票</button>
+        <button class="btn btn-danger" onclick="cancelBooking('${id}','force')">取消・退回票券</button>
+      </div>`);
+    return;
+  }
+  // 教練 / 會員：依 24h 自動判斷
+  const refundText = isTrial ? '體驗課不涉及票券。'
+    : (within24 ? '因開課 24 小時內取消，<b>本次扣課不退票</b>。' : '開課 24 小時前取消，票券將退回。');
   showModal(`<div class="modal-title">取消預約</div>
-    <div style="font-size:13.5px;color:var(--text);padding:6px 0 4px;">確定要取消此預約嗎？</div>
-    <div style="font-size:12px;color:var(--t2);margin-top:6px;">取消後狀態改為「已取消」，預約紀錄保留，已扣的票券將退回 1 堂。</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-danger" onclick="cancelBooking('${id}')">確定取消</button></div>`);
+    <div style="font-size:13.5px;color:var(--text);padding:6px 0 4px;">確定要取消 ${b.date} ${b.start_time} 的${b.category}嗎？</div>
+    <div style="font-size:12px;color:var(--t2);margin-top:6px;line-height:1.6;">${refundText}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-danger" onclick="cancelBooking('${id}','auto')">確定取消</button></div>`);
 }
 async function saveBookingTime(id){
   const b=await dbGet('bookings',id);
@@ -3114,6 +3415,7 @@ async function saveBookingTime(id){
   const verr=await validateBooking(vbk,nd,nt,ndur);
   if(verr){showToast(verr);return;}
   b.date=nd;b.start_time=nt;b.duration=ndur;b.substitute_coach_id=nsub;
+  if(vbk.venue_unit) b.venue_unit=vbk.venue_unit; // 重新分配的場地單位
   await dbPut('bookings',b);
   closeModal();showToast('已更新預約');navTo(CUR_PAGE);
 }
@@ -3122,9 +3424,10 @@ async function openGroupMembers(id){
   const b=await dbGet('bookings',id);
   const members=(await dbGetAll('members')).filter(m=>m.status==='active');
   const allTk=await dbGetAll('member_tickets');
+  if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
   const cur=mids(b);
   const opts=members.map(m=>{
-    const tks=allTk.filter(tt=>tt.member_id===m.id && tt.ticket_type_id===b.ticket_type_id && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=b.date));
+    const tks=allTk.filter(tt=>tt.member_id===m.id && ticketMatchesCategory(tt,'小班肌力') && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=b.date));
     const sum=tks.reduce((s,tt)=>s+tt.sessions_remaining,0);
     const tag = sum>0 ? `團體課票 剩 ${sum} 堂` : '無票（教練負責）';
     return `<option value="${m.id}" ${cur.includes(m.id)?'selected':''}>${m.name}（${m.phone}）· ${tag}</option>`;
@@ -3187,47 +3490,66 @@ async function toggleGroupAttend(bid,mid){
   await dbPut('bookings',b);
   openBookingDetail(bid);
 }
-async function cancelBooking(id){
+// 距開課剩餘小時數（<0 表示已過開課時間）
+function hoursUntilStart(b){
+  try{ const dt=new Date(b.date+'T'+(b.start_time||'00:00')+':00'); return (dt.getTime()-Date.now())/3600000; }
+  catch(_){ return 999; }
+}
+// refundMode：'auto'(依24h自動)、'force'(強制退)、'none'(強制不退)
+async function cancelBooking(id, refundMode){
   const b=await dbGet('bookings',id);
   if(!b)return;
   b.status='cancelled';
+  b.cancelled_at=new Date().toISOString();
   await dbPut('bookings',b);
 
-  let refundedCount=0; // 實際退回的票券堂數，用於 toast / 通知文案
+  // 決定是否退票
+  const hrs=hoursUntilStart(b);
+  const within24 = hrs < 24;        // 24 小時內取消
+  let doRefund;
+  if(refundMode==='force') doRefund=true;
+  else if(refundMode==='none') doRefund=false;
+  else doRefund = !within24;        // auto：24 小時前才退
+  b.refund_waived = !doRefund;      // 記錄是否扣課不退（供補課券判斷）
+  await dbPut('bookings',b);
 
-  if(b.category==='小班肌力'){
-    // 團體課：依 ticket_logs 找出這堂課實際扣過哪些會員票券，逐一退回（沒扣票的人不退）
-    const logs=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='deduct');
-    const refunded=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='refund');
-    // 已退過的票券數（避免重複退）：每張票券退回次數不得超過扣抵次數
-    const refundCntByTk={};
-    refunded.forEach(l=>{refundCntByTk[l.ticket_id]=(refundCntByTk[l.ticket_id]||0)+1;});
-    for(const log of logs){
-      if((refundCntByTk[log.ticket_id]||0)>0){ refundCntByTk[log.ticket_id]--; continue; } // 這筆扣抵已被退過
-      await refundTicket(log.ticket_id,b.id,SESSION.id);
-      refundedCount++;
+  let refundedCount=0;
+  if(doRefund){
+    if(b.category==='小班肌力'){
+      const logs=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='deduct');
+      const refunded=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='refund');
+      const refundCntByTk={};
+      refunded.forEach(l=>{refundCntByTk[l.ticket_id]=(refundCntByTk[l.ticket_id]||0)+1;});
+      for(const log of logs){
+        if((refundCntByTk[log.ticket_id]||0)>0){ refundCntByTk[log.ticket_id]--; continue; }
+        await refundTicket(log.ticket_id,b.id,SESSION.id);
+        refundedCount++;
+      }
+    }else if(b.ticket_id){
+      await refundTicket(b.ticket_id,b.id,SESSION.id);
+      refundedCount=1;
     }
-  }else if(b.ticket_id){
-    // 一般私教 / 自主訓練：有 ticket_id 才退回 1 堂
-    await refundTicket(b.ticket_id,b.id,SESSION.id);
-    refundedCount=1;
   }
-  // 體驗課（ticket_id 為 null）：不退票
+  // 體驗課（ticket_id 為 null）：本就不退
 
-  // 通知文案依課程類型 / 是否退票調整
+  // 通知文案
   let body;
+  const when=`（${b.date} ${b.start_time}）`;
   if(b.category==='體驗'){
-    body=`您的體驗課（${b.date} ${b.start_time}）已取消。`;
+    body=`您的體驗課${when}已取消。`;
+  }else if(!doRefund && within24){
+    body=`您的${b.category}${when}已取消。因開課 24 小時內取消，本次恕不退回票券。`;
   }else if(b.category==='小班肌力'){
-    body=`您的小班肌力課（${b.date} ${b.start_time}）已取消${refundedCount>0?`，已退回 ${refundedCount} 堂團體課票券`:''}。`;
+    body=`您的小班肌力課${when}已取消${refundedCount>0?`，已退回 ${refundedCount} 堂團體課票券`:''}。`;
   }else{
-    body=`您的${b.category}（${b.date} ${b.start_time}）已取消${refundedCount>0?'，票券已退回 1 堂':''}。`;
+    body=`您的${b.category}${when}已取消${refundedCount>0?'，票券已退回 1 堂':'，本次未退回票券'}。`;
   }
-  // 體驗課無綁定會員（member_id 為 null）時不推播
   if(b.member_id) await pushNotification(b.member_id,'cancel','預約已取消',body);
 
   closeModal();
-  showToast(refundedCount>0?`已取消預約，退回 ${refundedCount} 堂票券`:'已取消預約');
+  if(refundedCount>0) showToast(`已取消預約，退回 ${refundedCount} 堂票券`);
+  else if(within24 && refundMode!=='none' && refundMode!=='force') showToast('已取消預約（24 小時內，扣課不退）');
+  else showToast('已取消預約');
   navTo(CUR_PAGE);
 }
 
@@ -3409,7 +3731,7 @@ async function openMemberDetail(member_id){
     </div>
 
     <div class="mtab-pane" data-pane="tickets">
-      <div style="margin-bottom:12px;"><button class="btn btn-green btn-sm" onclick="openGrantModalFor('${member_id}')">＋ 發放票券</button></div>
+      <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-green btn-sm" onclick="openGrantModalFor('${member_id}')">＋ 發放票券</button><button class="btn btn-gold btn-sm" onclick="openMakeupForMember('${member_id}')">補發補課券</button></div>
       ${myTickets.length===0?'<div class="empty"><div class="em-t">尚無票券</div></div>':
       `<table><thead><tr><th>方案</th><th>剩餘 / 總數</th><th>到期日</th><th>狀態</th><th></th></tr></thead><tbody>
       ${myTickets.map(t=>{const ty=typeMap[t.ticket_type_id];return `<tr>
@@ -3779,9 +4101,35 @@ function normEmp(v){
   return v||'full_time';
 }
 const STAFF_STATUS={active:'在職',unpaid_leave:'留職停薪',inactive:'已停用',resigned:'已停用'};
+// ── 薪資制度模板（依員工類型）──
+// 預設值；登入後從 Supabase salary_templates 載入覆蓋。
+window.SALARY_TPL = window.SALARY_TPL || {
+  full_time:{ pt_rate:0, group_rate:0, duty_hourly:0 },
+  part_time:{ pt_rate:0, group_rate:0, duty_hourly:0 },
+  intern:{    pt_rate:0, group_rate:0, duty_hourly:0 },
+  contractor:{pt_rate:0, group_rate:0, duty_hourly:0 },
+};
+async function loadSalaryTemplates(){
+  try{
+    const rows=await dbGetAll('salary_templates');
+    if(rows&&rows.length){
+      rows.forEach(r=>{ window.SALARY_TPL[r.id]={pt_rate:r.pt_rate||0,group_rate:r.group_rate||0,duty_hourly:r.duty_hourly||0}; });
+    }
+  }catch(_){}
+}
+// 取得某員工實際適用的費率：開自訂用員工自己的，否則用該類型模板
+function effRates(emp){
+  if(emp && emp.custom_salary){
+    return { pt_rate:emp.pt_rate||0, group_rate:emp.group_rate||0, duty_hourly:emp.duty_hourly||0, source:'自訂' };
+  }
+  const et=normEmp(emp&&(emp.employment_type||emp.pay_type));
+  const tpl=(window.SALARY_TPL||{})[et]||{pt_rate:0,group_rate:0,duty_hourly:0};
+  return { pt_rate:tpl.pt_rate||0, group_rate:tpl.group_rate||0, duty_hourly:tpl.duty_hourly||0, source:(PAY_LABEL[et]||'')+'模板' };
+}
 const STAFF_STATUS_TAG={active:'tag-ok',unpaid_leave:'tag-warn',inactive:'tag-danger',resigned:'tag-danger'};
 const STAFF_TABS=[
   {key:'list',label:'員工'},
+  {key:'salary',label:'薪資制度'},
   {key:'insurance',label:'勞健保管理'},
   {key:'schedule',label:'排班設定'},
   {key:'leave',label:'特休管理'},
@@ -3794,10 +4142,64 @@ PAGES.staff=async function(){
     `<button class="seg-btn ${_staffTab===t.key?'active':''}" onclick="setStaffTab('${t.key}')">${t.label}</button>`).join('')}</div>`;
   C.innerHTML=head('STAFF','員工管理','員工資料 · 薪資制度 · 勞健保 · 排班 · 特休')+tabBar+`<div id="staff-body"></div>`;
   if(_staffTab==='list') await renderStaffList();
+  else if(_staffTab==='salary') await renderSalaryTemplates();
   else if(_staffTab==='insurance') await renderStaffInsurance();
   else if(_staffTab==='schedule') await renderStaffSchedule();
   else if(_staffTab==='leave') await renderStaffLeave();
 };
+// ── 薪資制度模板（依員工類型，統一管理）──
+async function renderSalaryTemplates(){
+  await loadSalaryTemplates();
+  const coaches=await dbGetAll('coaches').catch(()=>[]);
+  const tpl=window.SALARY_TPL||{};
+  const types=[['full_time','正職'],['part_time','兼職'],['intern','工讀'],['contractor','合作']];
+  // 各類型套用人數（未開自訂者）
+  const cntByType={}; coaches.filter(c=>c.role!=='front_desk'&&c.status==='active'&&!c.custom_salary)
+    .forEach(c=>{const et=normEmp(c.employment_type||c.pay_type);cntByType[et]=(cntByType[et]||0)+1;});
+  const customCnt=coaches.filter(c=>c.role!=='front_desk'&&c.status==='active'&&c.custom_salary).length;
+  const cards=types.map(([k,label])=>{
+    const t=tpl[k]||{pt_rate:0,group_rate:0,duty_hourly:0};
+    return `<div class="card" style="margin-bottom:14px;">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>${label}薪資制度 <span style="font-size:11.5px;color:var(--t3);font-weight:400;">套用 ${cntByType[k]||0} 人</span></span>
+        <button class="btn btn-ghost btn-sm" onclick="openSalaryTplEdit('${k}')">編輯</button>
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:120px;background:var(--card2);border-radius:10px;padding:13px;text-align:center;"><div style="font-size:11px;color:var(--t2);margin-bottom:5px;">教練課費率</div><div class="num" style="font-size:22px;color:var(--green);">$${(t.pt_rate||0).toLocaleString()}</div><div style="font-size:10px;color:var(--t3);">每堂</div></div>
+        <div style="flex:1;min-width:120px;background:var(--card2);border-radius:10px;padding:13px;text-align:center;"><div style="font-size:11px;color:var(--t2);margin-bottom:5px;">團課費率</div><div class="num" style="font-size:22px;color:var(--brown);">$${(t.group_rate||0).toLocaleString()}</div><div style="font-size:10px;color:var(--t3);">每堂</div></div>
+        <div style="flex:1;min-width:120px;background:var(--card2);border-radius:10px;padding:13px;text-align:center;"><div style="font-size:11px;color:var(--t2);margin-bottom:5px;">值班時薪</div><div class="num" style="font-size:22px;color:var(--blue);">$${(t.duty_hourly||0).toLocaleString()}</div><div style="font-size:10px;color:var(--t3);">每小時</div></div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('staff-body').innerHTML=
+    `<div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;line-height:1.7;background:var(--card2);padding:12px 14px;border-radius:10px;">
+       薪資制度依員工類型統一管理。修改某類型的費率，會立即套用到所有「該類型且未開自訂薪資」的員工。
+       目前有 <b>${customCnt}</b> 位員工開啟了個別自訂薪資（不受模板影響）。
+     </div>${cards}`;
+}
+function openSalaryTplEdit(typeKey){
+  const label={full_time:'正職',part_time:'兼職',intern:'工讀',contractor:'合作'}[typeKey]||typeKey;
+  const t=(window.SALARY_TPL||{})[typeKey]||{pt_rate:0,group_rate:0,duty_hourly:0};
+  showModal(`<div class="modal-title">${label}薪資制度</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:14px;">套用到所有「${label}且未開自訂薪資」的員工。</div>
+    <div class="form-2col">
+      <div class="form-row"><label>教練課費率（每堂）</label><input type="number" id="stpl-pt" value="${t.pt_rate||0}"></div>
+      <div class="form-row"><label>團課費率（每堂）</label><input type="number" id="stpl-grp" value="${t.group_rate||0}"></div>
+    </div>
+    <div class="form-row"><label>值班時薪（每小時）</label><input type="number" id="stpl-duty" value="${t.duty_hourly||0}"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveSalaryTpl('${typeKey}')">儲存</button></div>`);
+}
+async function saveSalaryTpl(typeKey){
+  try{
+    const rec={ id:typeKey,
+      pt_rate:Number(document.getElementById('stpl-pt').value)||0,
+      group_rate:Number(document.getElementById('stpl-grp').value)||0,
+      duty_hourly:Number(document.getElementById('stpl-duty').value)||0 };
+    await dbPut('salary_templates',rec);
+    window.SALARY_TPL[typeKey]={pt_rate:rec.pt_rate,group_rate:rec.group_rate,duty_hourly:rec.duty_hourly};
+    closeModal(); showToast('薪資制度已更新'); navTo('staff');
+  }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+}
 async function renderStaffList(){
   const coaches=await dbGetAll('coaches');
   const roleTag={admin:'tag-admin',coach:'tag-coach',front_desk:'tag-front'};
@@ -4293,16 +4695,20 @@ async function submitResetStaffPw(){
 function payRoleFields(prefix,c,showRate){
   c=c||{};
   if(showRate===undefined) showRate=true;
+  const custom = !!c.custom_salary;
   const rateField = showRate
-    ? `<div style="border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-bottom:14px;">
-        <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">費率設定（每堂／每小時，元）</div>
-        <div class="form-2col">
-          <div class="form-row"><label>教練課費率</label><input type="number" id="${prefix}-ptrate" value="${c.pt_rate??c.pay_rate??0}" placeholder="每堂"></div>
-          <div class="form-row"><label>團課費率</label><input type="number" id="${prefix}-grouprate" value="${c.group_rate??0}" placeholder="每堂"></div>
+    ? `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:10px;"><input type="checkbox" id="${prefix}-countsalary" ${c.count_salary!==false?'checked':''}>計入薪資（取消＝此員工不計薪）</label>
+      <div style="border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="${prefix}-custom" ${custom?'checked':''} onchange="document.getElementById('${prefix}-rate-wrap').style.display=this.checked?'block':'none'">自訂薪資（覆蓋此員工類型的薪資制度模板）</label>
+        <div style="font-size:11px;color:var(--t3);margin-top:6px;">不勾選＝依「員工類型」自動套用對應薪資制度模板（在 員工管理 → 薪資制度 設定）。</div>
+        <div id="${prefix}-rate-wrap" style="display:${custom?'block':'none'};margin-top:12px;">
+          <div class="form-2col">
+            <div class="form-row"><label>教練課費率</label><input type="number" id="${prefix}-ptrate" value="${c.pt_rate??0}" placeholder="每堂"></div>
+            <div class="form-row"><label>團課費率</label><input type="number" id="${prefix}-grouprate" value="${c.group_rate??0}" placeholder="每堂"></div>
+          </div>
+          <div class="form-row" style="margin-bottom:0;"><label>值班時薪</label><input type="number" id="${prefix}-dutyrate" value="${c.duty_hourly??0}" placeholder="每小時"></div>
         </div>
-        <div class="form-row" style="margin-bottom:0;"><label>值班時薪</label><input type="number" id="${prefix}-dutyrate" value="${c.duty_hourly??0}" placeholder="每小時"></div>
-      </div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:14px;"><input type="checkbox" id="${prefix}-countsalary" ${c.count_salary!==false?'checked':''}>計入薪資（取消＝此員工不計薪）</label>`
+      </div>`
     : '';
   return `<div class="form-2col">
       <div class="form-row"><label>員工類型</label>
@@ -4314,6 +4720,7 @@ function payRoleFields(prefix,c,showRate){
         </select></div>
       <div class="form-row"><label>到職日</label><input type="date" id="${prefix}-hire" value="${c.hire_date||''}"></div>
     </div>
+    <div class="form-row"><label>轉正日</label><input type="date" id="${prefix}-promote" value="${c.promote_date||''}"></div>
     ${rateField}
     <div id="${prefix}-mgr-wrap" style="display:${normEmp(c.employment_type||c.pay_type)==='full_time'?'block':'none'};border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-bottom:14px;">
       <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">管理職（限正職）</div>
@@ -4334,7 +4741,7 @@ function readPayRoleFields(prefix){
   const ft=empType==='full_time';
   const isMgr=ft&&document.getElementById(prefix+'-ismgr').checked;
   const isSup=ft&&document.getElementById(prefix+'-issup').checked;
-  const ptEl=document.getElementById(prefix+'-ptrate'); // 邀請階段無此欄
+  const customEl=document.getElementById(prefix+'-custom'); // 自訂薪資開關（邀請階段無）
   const out={
     employment_type:empType,
     hire_date:document.getElementById(prefix+'-hire').value||null,
@@ -4342,12 +4749,19 @@ function readPayRoleFields(prefix){
     manager_bonus:isMgr?Number(document.getElementById(prefix+'-mgrbonus').value)||0:0,
     supervisor_bonus:isSup?Number(document.getElementById(prefix+'-supbonus').value)||0:0,
   };
-  if(ptEl){
-    out.pt_rate=Number(ptEl.value)||0;
-    out.group_rate=Number(document.getElementById(prefix+'-grouprate').value)||0;
-    out.duty_hourly=Number(document.getElementById(prefix+'-dutyrate').value)||0;
+  const promoteEl=document.getElementById(prefix+'-promote');
+  if(promoteEl) out.promote_date=promoteEl.value||null;
+  if(customEl){
+    const custom=customEl.checked;
+    out.custom_salary=custom;
     out.count_salary=document.getElementById(prefix+'-countsalary').checked;
-    out.pay_rate=out.pt_rate; // 相容舊欄位：pay_rate 對齊教練課費率
+    if(custom){
+      out.pt_rate=Number(document.getElementById(prefix+'-ptrate').value)||0;
+      out.group_rate=Number(document.getElementById(prefix+'-grouprate').value)||0;
+      out.duty_hourly=Number(document.getElementById(prefix+'-dutyrate').value)||0;
+      out.pay_rate=out.pt_rate;
+    }
+    // 不開自訂時不寫費率欄位，沿用模板（不覆蓋既有值）
   }
   return out;
 }
@@ -4491,7 +4905,7 @@ async function openStaffEdit(id){
       <option value="coach" ${c.role==='coach'?'selected':''}>一般員工</option>
       <option value="admin" ${c.role==='admin'?'selected':''}>管理員</option></select>
       <div style="font-size:11px;color:var(--t3);margin-top:5px;">系統僅保留一位管理員：將他人設為管理員時，原管理員會自動轉為一般員工。</div></div>
-    ${payRoleFields('se',c,false)}
+    ${payRoleFields('se',c,true)}
     <div class="form-row"><label>在職狀態</label>
       <select id="se-status">
         <option value="active" ${c.status==='active'?'selected':''}>在職</option>
@@ -5576,7 +5990,12 @@ function renderCoachDayList(){
   const myList=list.filter(b=>b.coach_id===myId||b.substitute_coach_id===myId);
   const ptN=myList.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
   const grpN=myList.filter(b=>b.category==='小班肌力').length;
-  const PT_SLOTS=3; // 同時段教練位數量（場地容量）
+  // 教練課場地容量（多功能訓練區：教練課+體驗）→ 取代寫死 3
+  const PT_VENUE_CATS=new Set();
+  let PT_SLOTS=3;
+  { const v=getVenues().filter(v=>v.categories.includes('私人教練'));
+    if(v.length){ PT_SLOTS=v.reduce((s,x)=>s+(x.capacity||0),0); v.forEach(x=>x.categories.forEach(c=>PT_VENUE_CATS.add(c))); }
+    else { ['私人教練','體驗'].forEach(c=>PT_VENUE_CATS.add(c)); } }
   const isMine=(b)=> b.coach_id===myId||b.substitute_coach_id===myId;
 
   // 依開始時間分組
@@ -5585,8 +6004,8 @@ function renderCoachDayList(){
 
   const endOf=(b)=>{ const [h,m]=b.start_time.split(':').map(Number); const tot=h*60+m+(b.duration||60); return minToTime(tot); };
 
-  // ── 底層時間格線：09:00–22:00，每 30 分一格 ──
-  const START=9*60, END=22*60, SLOT=30, ROWH=58;
+  // ── 底層時間格線：08:00–22:00，每 30 分一格 ──
+  const START=8*60, END=22*60, SLOT=30, ROWH=58;
   window._tlxParams={START,END,SLOT,ROWH,ds};
   const axisH=((END-START)/SLOT)*ROWH;
   const yOf=(m)=>(m-START)/SLOT*ROWH;
@@ -5603,9 +6022,9 @@ function renderCoachDayList(){
   list.forEach(b=>{ if(!isMine(b))return; const [h,m]=b.start_time.split(':').map(Number); const s=h*60+m,e=s+(b.duration||60); myRanges.push([s,e]); for(let t=s;t<e;t+=SLOT)myBusy.add(t); });
   const overlapsMine=(s,e)=>myRanges.some(([rs,re])=>s<re && e>rs);
 
-  // 各時段容量
+  // 各時段教練課場地佔用（只算多功能訓練區服務的類型）
   const slotUsed={};
-  list.forEach(b=>{ if(CAP_CATS.includes(b.category)) slotUsed[b.start_time]=(slotUsed[b.start_time]||0)+1; });
+  list.forEach(b=>{ if(PT_VENUE_CATS.has(b.category)) slotUsed[b.start_time]=(slotUsed[b.start_time]||0)+1; });
 
   // ＋欄（右側固定，未滿且我無課才顯示）
   let addLayer='';
@@ -5675,7 +6094,8 @@ function renderCoachDayList(){
         const who=b.category==='小班肌力'?'團體課':(b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—'));
         const fmt=b.format?b.format.toUpperCase():'';
         const typeM={'私人教練':'教練課','自主訓練':'自主訓練','體驗':'體驗','小班肌力':'團體課'}[b.category]||'課程';
-        midLines+=`<div class="tkr-name">${who}${fmt?`<span class="tlx-fmt">${fmt}</span>`:''}</div><div class="tkr-type">${typeM}${fmt?' '+fmt:''}</div>`;
+        const venTag = venueIsNotable(b.category,b.venue_unit) ? `<span class="tkr-venue">📍${venueName(b.venue_unit)}</span>` : '';
+        midLines+=`<div class="tkr-name">${who}${fmt?`<span class="tlx-fmt">${fmt}</span>`:''}</div><div class="tkr-type">${typeM}${fmt?' '+fmt:''}${venTag}</div>`;
       });
       if(first.ticket_id){ const tk=(window._allTkCache||[]).find(t=>t.id===first.ticket_id); if(tk) tkRem=`${tk.sessions_remaining}/${tk.sessions_total}`; }
     }else{
@@ -5782,9 +6202,11 @@ async function tlxApplyMove(id,ds,newTime,dur){
     const b=await dbGet('bookings',id);
     if(!b){showToast('找不到課程');renderCoachDayList();return;}
     // 驗證新時段（排除自己）
-    const verr=await validateBooking({...b,id:b.id},ds,newTime,dur);
+    const vbk={...b,id:b.id};
+    const verr=await validateBooking(vbk,ds,newTime,dur);
     if(verr){ showToast('無法移動：'+verr); renderCoachDayList(); return; }
     b.start_time=newTime;
+    if(vbk.venue_unit) b.venue_unit=vbk.venue_unit;
     await dbPut('bookings',b);
     // 更新快取
     if(window._coachCalData){
@@ -5874,7 +6296,7 @@ async function submitSelfBook(){
   if(verr){showToast(verr);return;}
   const bk={id:uid('BK'),member_id:SESSION.id,coach_id:null,ticket_id:tk.id,ticket_type_id:type_id,
     category:'自主訓練',format:null,date,start_time:time,duration:60,status:'booked',
-    recurring:false,created_by:SESSION.id,created_at:new Date().toISOString()};
+    recurring:false,venue_unit:vbk.venue_unit||null,created_by:SESSION.id,created_at:new Date().toISOString()};
   await dbPut('bookings',bk);
   await deductTicket(tk,bk.id,SESSION.id);
   closeModal();
@@ -5887,19 +6309,26 @@ async function memCancelSelf(id){
   const b=await dbGet('bookings',id);
   if(!b||b.member_id!==SESSION.id){showToast('找不到預約');return;}
   if(b.category!=='自主訓練'){showToast('僅能取消自主訓練預約');return;}
+  const within24 = hoursUntilStart(b) < 24;
+  const note = within24
+    ? '因開課 24 小時內取消，<b>本次恕不退回點數</b>。'
+    : '開課 24 小時前取消，將退回 1 點自主訓練票券。';
   showModal(`<div class="modal-title">取消自主訓練</div>
     <div style="font-size:13.5px;padding:6px 0 4px;">確定取消 ${b.date} ${b.start_time} 的自主訓練嗎？</div>
-    <div style="font-size:12px;color:var(--t2);margin-top:6px;">取消後將退回 1 點自主訓練票券。</div>
+    <div style="font-size:12px;color:var(--t2);margin-top:6px;line-height:1.6;">${note}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-danger" onclick="doMemCancelSelf('${id}')">確定取消</button></div>`);
 }
 async function doMemCancelSelf(id){
   const b=await dbGet('bookings',id);
   if(!b||b.member_id!==SESSION.id||b.category!=='自主訓練'){showToast('無法取消');return;}
+  const within24 = hoursUntilStart(b) < 24;
   b.status='cancelled';
+  b.cancelled_at=new Date().toISOString();
+  b.refund_waived=within24;
   await dbPut('bookings',b);
-  if(b.ticket_id) await refundTicket(b.ticket_id,b.id,SESSION.id);
+  if(!within24 && b.ticket_id){ await refundTicket(b.ticket_id,b.id,SESSION.id); }
   closeModal();
-  showToast('已取消，退回 1 點');
+  showToast(within24?'已取消（24 小時內，恕不退點）':'已取消，退回 1 點');
   navTo('mem_bookings');
 }
 
@@ -6084,57 +6513,34 @@ async function qbSubmitForm(){
   if(!f.date||!f.time){ showToast('請選日期與時間'); return; }
   if(f.recurring && f.dows.length===0){ showToast('請選重複星期'); return; }
   qbShowProgress(0,0); // 立即回饋
-  // 自動找該會員的教練課可用票券（含友善教練課）
-  let tk=null;
-  try{
+  // 教練課找票（含友善教練課）：用 isPtTicket
+  const ptFindTk=async(mid,ds)=>{
+    const tickets=await dbGetAll('member_tickets'); // 每次重抓，連續扣才正確
+    return tickets.filter(t=>t.member_id===mid && isPtTicket(t) && t.status==='usable'
+      && t.sessions_remaining>0 && (!t.expire_date||t.expire_date>=ds))
+      .sort((a,b)=>(a.expire_date||'9999').localeCompare(b.expire_date||'9999'))[0]||null;
+  };
+  const ptCountRemain=async(mid)=>{
     const tickets=await dbGetAll('member_tickets');
-    window._qbTickets=tickets;
-    const cands=tickets.filter(t=>t.member_id===f.memberId && isPtTicket(t)
-      && t.status==='usable' && t.sessions_remaining>0 && (!t.expire_date||t.expire_date>=f.date))
-      .sort((a,b)=>(a.expire_date||'9999').localeCompare(b.expire_date||'9999'));
-    tk=cands[0];
-  }catch(_){}
-  if(!tk){ qbHideProgress(); showToast('該會員沒有可用的教練課票券'); return; }
+    return tickets.filter(t=>t.member_id===mid && isPtTicket(t) && t.status==='usable')
+      .reduce((s,t)=>s+(t.sessions_remaining||0),0);
+  };
+  // 先確認至少有一張可用票券
+  const firstTk=await ptFindTk(f.memberId, f.date);
+  if(!firstTk){ qbHideProgress(); showToast('該會員沒有可用的教練課票券'); return; }
 
-  // 連續預約 → 多日期（依次數）；否則單日
-  let dates=[f.date];
-  if(f.recurring){
-    const n=Math.max(1, Math.min(f.count||1, f.maxCount||1));
-    const far=ymd(addDays(parseYmd(f.date),370));
-    dates=buildRecurringDates(f.date,f.dows,n,far);
-  }
-  const myId=SESSION.id;
-  let ok=0, skip=0, noTk=0;
-  // 處理中遮罩
-  qbShowProgress(0, dates.length);
-  let done=0;
-  for(const ds of dates){
-    done++;
-    qbShowProgress(done, dates.length);
-    await new Promise(r=>setTimeout(r,0)); // 讓畫面更新
-    // 每筆都重抓票券剩餘（連續預約會逐次扣）
-    let tkNow=null;
-    try{
-      const tickets=await dbGetAll('member_tickets');
-      tkNow=tickets.filter(t=>t.member_id===f.memberId && isPtTicket(t)
-        && t.status==='usable' && t.sessions_remaining>0 && (!t.expire_date||t.expire_date>=ds))
-        .sort((a,b)=>(a.expire_date||'9999').localeCompare(b.expire_date||'9999'))[0];
-    }catch(_){}
-    if(!tkNow){ noTk++; continue; }
-    const bk={id:uid('BK'),member_id:f.memberId,coach_id:myId,substitute_coach_id:null,
-      ticket_id:tkNow.id,ticket_type_id:tkNow.ticket_type_id||f.typeId,category:'私人教練',format:'1v1',
-      date:ds,start_time:f.time,duration:60,status:'booked',recurring:f.recurring,
-      created_by:myId,created_at:new Date().toISOString()};
-    const verr=await validateBooking(bk,ds,f.time,60);
-    if(verr){ skip++; continue; }
-    try{ await dbPut('bookings',bk); await deductTicket(tkNow,bk.id,myId); ok++; }catch(_){ skip++; }
-  }
+  const r=await runRecurringBooking({
+    member_id:f.memberId, coach_id:SESSION.id, substitute_coach_id:null,
+    category:'私人教練', type_id:f.typeId, format:'1v1',
+    startDate:f.date, time:f.time, duration:60,
+    dows: f.recurring ? f.dows : [],
+    count: f.recurring ? (f.count||1) : 1,
+    findTicketFn: ptFindTk, countRemainFn: ptCountRemain,
+    onProgress:(cur,total)=>qbShowProgress(cur,total),
+  });
   qbHideProgress();
   closeQuickBook();
-  let msg=`已建立 ${ok} 筆預約`;
-  if(skip)msg+=`，${skip} 筆因衝突/已滿跳過`;
-  if(noTk)msg+=`，${noTk} 筆因票券不足跳過`;
-  showToast(msg);
+  showToast(recurringResultMsg(r));
   navTo(CUR_PAGE);
 }
 // 處理中遮罩
@@ -6202,7 +6608,7 @@ async function qbSubmitMember(){
   if(verr){ showToast(verr); return; }
   const bk={id:uid('BK'),member_id:SESSION.id,coach_id:null,ticket_id:tk.id,ticket_type_id:type_id,
     category:'自主訓練',format:null,date:f.date,start_time:f.time,duration:60,status:'booked',
-    recurring:false,created_by:SESSION.id,created_at:new Date().toISOString()};
+    recurring:false,venue_unit:vbk.venue_unit||null,created_by:SESSION.id,created_at:new Date().toISOString()};
   try{
     await dbPut('bookings',bk); await deductTicket(tk,bk.id,SESSION.id);
     closeQuickBook(); showToast('預約成功，已扣 1 點'); navTo('mem_bookings');
@@ -6278,7 +6684,7 @@ async function submitQuickSelfBook(){
   if(verr){showToast(verr);return;}
   const bk={id:uid('BK'),member_id:SESSION.id,coach_id:null,ticket_id:tk.id,ticket_type_id:c.type_id,
     category:'自主訓練',format:null,date:c.date,start_time:c.time,duration:60,status:'booked',
-    recurring:false,created_by:SESSION.id,created_at:new Date().toISOString()};
+    recurring:false,venue_unit:vbk.venue_unit||null,created_by:SESSION.id,created_at:new Date().toISOString()};
   await dbPut('bookings',bk);
   await deductTicket(tk,bk.id,SESSION.id);
   closeModal();
@@ -7255,15 +7661,45 @@ async function confirmPay(ticket_id){
 
 /* ════════ 教練:薪資查詢 ════════ */
 PAGES.settings=async function(){
-  C.innerHTML=head('SETTINGS','系統設定','系統參數與設定（建置中）')+
-  `<div class="card" style="padding:40px 20px;text-align:center;">
-    <div style="font-size:40px;margin-bottom:12px;">⚙️</div>
-    <div style="font-size:15px;font-weight:600;color:var(--text);">系統設定頁面建置中</div>
-    <div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:1.7;">
-      未來將在此設定：營業時間、課程種類與顏色、場地容量、票券方案、合約條款等系統參數。
+  try{ const saved=await dbGetAll('venues'); if(saved&&saved.length){ window.VENUES=saved; } }catch(_){}
+  const venues=window.VENUES||[];
+  const useMap={
+    'multi':'教練課、體驗課、自主訓練',
+    'treadmill':'自主訓練',
+    'group':'團體課（也可被教練課／自主訓練使用）',
+  };
+  const rows=venues.map(v=>`<tr>
+    <td data-label="場地">${v.name}</td>
+    <td data-label="數量" class="num">${v.capacity}</td>
+    <td data-label="可使用課程" style="font-size:12px;color:var(--t2);">${useMap[v.id]||'—'}</td>
+    <td data-label="狀態"><span class="tag ${v.active!==false?'tag-ok':'tag-danger'}">${v.active!==false?'啟用':'停用'}</span></td>
+    <td class="rwd-actions" data-label=""><button class="btn btn-ghost btn-sm" onclick="openVenueEdit('${v.id}')">編輯</button></td>
+  </tr>`).join('');
+  C.innerHTML=head('SETTINGS','系統設定 · 場地管理','設定各場地數量；預約時依課程類型與場地佔用狀況分配')+
+  `<div class="card"><div class="card-title">場地列表</div>
+    <table class="rwd-card"><thead><tr><th>場地</th><th>數量</th><th>可使用課程</th><th>狀態</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <div style="font-size:11.5px;color:var(--t2);margin-top:12px;line-height:1.8;">
+      分配規則：每筆預約佔用一個場地單位。教練課／體驗課優先用多功能訓練區，滿了用團課教室；團體課只用團課教室；自主訓練依序找多功能訓練區→跑步機→團課教室的空位。場地被任何課程佔用時，其他課程就不能再用同一單位（共用場地、互相佔位）。
     </div>
   </div>`;
 };
+async function openVenueEdit(id){
+  const v=(window.VENUES||[]).find(x=>x.id===id); if(!v)return;
+  showModal(`<div class="modal-title">編輯場地：${v.name}</div>
+    <div class="form-row"><label>場地名稱</label><input id="ve-name" value="${v.name}"></div>
+    <div class="form-row"><label>數量（同時段最多可容納幾組）</label><input type="number" id="ve-cap" value="${v.capacity}" min="0"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:10px 0;"><input type="checkbox" id="ve-active" ${v.active!==false?'checked':''}>啟用此場地</label>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveVenueEdit('${id}')">儲存</button></div>`);
+}
+async function saveVenueEdit(id){
+  const v=(window.VENUES||[]).find(x=>x.id===id); if(!v)return;
+  v.name=document.getElementById('ve-name').value.trim()||v.name;
+  v.capacity=Math.max(0,Number(document.getElementById('ve-cap').value)||0);
+  v.active=document.getElementById('ve-active').checked;
+  try{ await dbPut('venues',v); }catch(e){ /* 雲端無 venues 表時僅記憶體生效 */ }
+  closeModal(); showToast('已儲存場地設定'); navTo('settings');
+}
 PAGES.admin_notifications=async function(){
   // 管理員通知：待審核發票、退票申請、今日異常等（先彙整現有資料）
   let items=[];
@@ -7288,6 +7724,7 @@ PAGES.admin_notifications=async function(){
   C.innerHTML=head('NOTIFY','通知','待處理事項')+list;
 };
 PAGES.coach_salary=async function(){
+  await loadSalaryTemplates();
   const[bookings,coaches,members,attendance]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('members'),dbGetAll('attendance').catch(()=>[])]);
   const me=coaches.find(c=>c.id===SESSION.id);
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
@@ -7296,9 +7733,8 @@ PAGES.coach_salary=async function(){
   const myAll=bookings.filter(b=>b.coach_id===SESSION.id&&b.status!=='cancelled'&&b.date.slice(0,7)===month);
   const ptDone=myDone.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
   const groupDone=myDone.filter(b=>b.category==='小班肌力').length;
-  const ptRate=me.pt_rate??me.pay_rate??0;
-  const groupRate=me.group_rate??0;
-  const dutyHourly=me.duty_hourly??0;
+  const er=effRates(me);
+  const ptRate=er.pt_rate, groupRate=er.group_rate, dutyHourly=er.duty_hourly;
   const myAtt=(attendance||[]).filter(a=>a.emp_id===SESSION.id&&(a.date||'').slice(0,7)===month);
   const dutyHours=myAtt.reduce((s,a)=>s+(Number(a.work_hours)||0),0);
   const payTypeLabel=PAY_LABEL[me.employment_type||me.pay_type]||'—';
