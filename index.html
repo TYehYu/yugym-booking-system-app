@@ -1185,8 +1185,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26622.2321';
-const APP_VERSION_LABEL='26622.2321';
+const APP_VERSION='26622.1023';
+const APP_VERSION_LABEL='26622.1023';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1408,7 +1408,8 @@ function enterApp(){
    ╚══════════════════════════════════════════════╝ */
 const NAV={
   admin:[
-    {key:'dashboard',label:'營運報表'},
+    {key:'ops_center',label:'營運中心'},
+    {key:'dashboard',label:'營運分析'},
     {key:'calendar',label:'預約行事曆'},
     {key:'members',label:'會員管理'},
     {key:'staff',label:'員工管理'},
@@ -1435,11 +1436,12 @@ const NAV={
 function isCoachable(c){ return c && (c.role==='coach' || c.role==='admin'); }
 function coachDisp(c){ return c ? (c.name_en||c.name||'') : ''; } // 對外顯示名（教練名），未填則用本名
 // ── 角色 × 裝置 導覽白名單 ──
-// 管理員｜手機版：營運報表 / 我的預約 / 出勤紀錄 / 通知（不放完整後台）
+// 管理員｜手機版：快速查看、快速審核、快速處理（不放完整後台）
 const MOBILE_ADMIN_NAV=[
-  {key:'dashboard',label:'營運報表'},
+  {key:'ops_center',label:'營運中心'},
   {key:'coach_calendar',label:'我的預約'},
-  {key:'attendance',label:'出勤紀錄'},
+  {key:'members',label:'會員'},
+  {key:'ticketing',label:'票券審核'},
   {key:'admin_notifications',label:'通知'},
 ];
 // 教練｜手機版：我的預約 / 薪資紀錄
@@ -1480,6 +1482,7 @@ function setNavBadge(key,count){
 let CUR_PAGE=null;
 function navTo(key){
   CUR_PAGE=key;
+  if(typeof closeModal==='function') closeModal(); // 切頁時關掉任何殘留的彈窗，避免 modal 蓋住新頁
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.key===key));
   if(typeof PAGES[key]!=='function'){
     console.error('找不到頁面函式:',key);
@@ -1775,7 +1778,129 @@ async function grantMakeupTicket(booking){
   return tk;
 }
 
-/* ════════ 管理員:儀表板（營運報表） ════════ */
+/* ════════ 營運中心（取代每日前台表，可切換日期）════════ */
+let _opsDate=null;
+function opsShiftDay(delta){
+  const d=_opsDate?new Date(_opsDate+'T00:00'):new Date(TODAY);
+  d.setDate(d.getDate()+delta); _opsDate=ymd(d); navTo('ops_center');
+}
+function opsSetDate(ds){ _opsDate=ds||ymd(TODAY); navTo('ops_center'); }
+PAGES.ops_center=async function(){
+  const date=_opsDate||ymd(TODAY);
+  _opsDate=date;
+  const isToday=date===ymd(TODAY);
+  const[bookings,members,coaches,purchases,apps,punchReqs,attendance,types]=await Promise.all([
+    dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches'),
+    dbGetAll('purchases').catch(()=>[]),dbGetAll('purchase_applications').catch(()=>[]),
+    dbGetAll('punch_requests').catch(()=>[]),dbGetAll('attendance').catch(()=>[]),dbGetAll('ticket_types')
+  ]);
+  const memMap=Object.fromEntries(members.map(m=>[m.id,m]));
+  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
+
+  const dayBk=bookings.filter(b=>b.date===date && b.status!=='cancelled');
+  const ptCount=dayBk.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+  const groupCount=dayBk.filter(b=>b.category==='小班肌力').length;
+  const selfCount=dayBk.filter(b=>b.category==='自主訓練').length;
+  const dayBkSorted=dayBk.slice().sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
+
+  const dayAtt=attendance.filter(a=>a.date===date && a.clock_in);
+
+  const dayPur=purchases.filter(p=>(p.created_at||'').slice(0,10)===date);
+  const dayRevenue=dayPur.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
+  const PM={cash:'現金',transfer:'匯款',card:'刷卡'};
+
+  const dayTrials=dayBk.filter(b=>b.category==='體驗').sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
+
+  const pendingApps=apps.filter(a=>a.status==='pending');
+  const invoicingApps=apps.filter(a=>a.status==='invoicing');
+  const pendingPunch=punchReqs.filter(r=>r.status==='pending');
+
+  const card=(title,body,accent)=>`<div class="card" style="margin-bottom:14px;">
+    <div class="card-title" style="${accent?`color:${accent};`:''}">${title}</div>${body}</div>`;
+
+  const dObj=new Date(date+'T00:00');
+  const WD=['日','一','二','三','四','五','六'];
+  const dateLabel=`${date.slice(5).replace('-','/')}（${WD[dObj.getDay()]}）${isToday?'　今天':''}`;
+
+  C.innerHTML=head('OPS','營運中心','每日營運總覽 · 預約 / 值班 / 收款 / 體驗 / 待辦')+
+  `<div class="card" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="opsShiftDay(-1)">‹ 前一天</button>
+      <div style="font-size:17px;font-weight:700;color:var(--green);min-width:130px;text-align:center;">${dateLabel}</div>
+      <button class="btn btn-ghost btn-sm" onclick="opsShiftDay(1)">後一天 ›</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <input type="date" value="${date}" onchange="opsSetDate(this.value)" style="padding:7px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff;">
+      ${!isToday?`<button class="btn btn-green btn-sm" onclick="opsSetDate('${ymd(TODAY)}')">回今天</button>`:''}
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;align-items:start;">
+
+    ${card('今日預約',
+      `<div style="display:flex;gap:10px;margin-bottom:12px;">
+        <div style="flex:1;background:var(--card2);border-radius:10px;padding:12px;text-align:center;"><div class="num" style="font-size:26px;color:var(--green);">${ptCount}</div><div style="font-size:11px;color:var(--t2);">教練課</div></div>
+        <div style="flex:1;background:var(--card2);border-radius:10px;padding:12px;text-align:center;"><div class="num" style="font-size:26px;color:var(--brown);">${groupCount}</div><div style="font-size:11px;color:var(--t2);">團課</div></div>
+        <div style="flex:1;background:var(--card2);border-radius:10px;padding:12px;text-align:center;"><div class="num" style="font-size:26px;color:var(--blue);">${selfCount}</div><div style="font-size:11px;color:var(--t2);">自主</div></div>
+      </div>
+      ${dayBkSorted.length===0?'<div style="font-size:12px;color:var(--t3);text-align:center;padding:8px;">本日無預約</div>':
+       `<div style="max-height:280px;overflow-y:auto;">${dayBkSorted.map(b=>{
+         const mname=b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—'):(b.category==='自主訓練'?'自主':'—');
+         return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--bd);font-size:12.5px;">
+           <span style="font-weight:600;min-width:42px;">${b.start_time}</span>
+           <span class="tag tag-${colorClass(typeOfCat(b.category))}" style="font-size:10px;">${b.category}</span>
+           <span style="flex:1;">${mname}</span>
+           <span style="color:var(--t3);">${b.coach_id?coachMap[b.coach_id]:''}</span>
+         </div>`;}).join('')}</div>`}`)}
+
+    ${card('今日值班',
+      dayAtt.length===0?'<div style="font-size:12px;color:var(--t3);text-align:center;padding:8px;">本日無人打卡</div>':
+      `<div>${dayAtt.map(a=>{
+        const nm=coachMap[a.emp_id]||(memMap[a.emp_id]?memMap[a.emp_id].name:a.emp_id);
+        const status=a.clock_out?`<span class="tag tag-ok" style="font-size:10px;">已下班</span>`:`<span class="tag tag-warn" style="font-size:10px;">上班中</span>`;
+        return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd);font-size:12.5px;">
+          <span style="flex:1;font-weight:500;">${nm}</span>
+          <span style="color:var(--t2);">${a.clock_in||'—'}${a.clock_out?' - '+a.clock_out:''}</span>
+          ${status}
+        </div>`;}).join('')}</div>`)}
+
+    ${card(`今日收款　<span style="font-size:13px;color:var(--green);">$${dayRevenue.toLocaleString()}</span>`,
+      dayPur.length===0?'<div style="font-size:12px;color:var(--t3);text-align:center;padding:8px;">本日無收款</div>':
+      `<div>${dayPur.map(p=>{
+        const nm=memMap[p.member_id]?memMap[p.member_id].name:'—';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd);font-size:12.5px;">
+          <span style="flex:1;">${nm}<span style="color:var(--t3);font-size:11px;"> · ${p.plan_name||''}</span></span>
+          <span style="color:var(--t3);">${PM[p.payment_method]||p.payment_method||''}</span>
+          <span style="font-weight:700;color:var(--green);">$${(Number(p.deal_amount)||0).toLocaleString()}</span>
+        </div>`;}).join('')}</div>`)}
+
+    ${card('體驗名單',
+      dayTrials.length===0?'<div style="font-size:12px;color:var(--t3);text-align:center;padding:8px;">本日無體驗預約</div>':
+      `<div>${dayTrials.map(b=>{
+        const nm=b.member_id&&memMap[b.member_id]?memMap[b.member_id].name:(b.guest_name||'訪客');
+        return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd);font-size:12.5px;">
+          <span style="font-weight:600;min-width:42px;">${b.start_time}</span>
+          <span style="flex:1;">${nm}</span>
+          <span style="color:var(--t3);">${b.coach_id?coachMap[b.coach_id]:'未指派'}</span>
+        </div>`;}).join('')}</div>`)}
+
+  </div>
+
+  ${card('待辦事項',
+    `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+      <div onclick="navTo('ticketing')" style="cursor:pointer;background:${pendingApps.length?'#fbe9e7':'var(--card2)'};border-radius:10px;padding:14px;text-align:center;">
+        <div class="num" style="font-size:24px;color:${pendingApps.length?'#c0392b':'var(--t3)'};">${pendingApps.length}</div><div style="font-size:11.5px;color:var(--t2);">購票待審核</div></div>
+      <div onclick="navTo('ticketing')" style="cursor:pointer;background:${invoicingApps.length?'#faf0dc':'var(--card2)'};border-radius:10px;padding:14px;text-align:center;">
+        <div class="num" style="font-size:24px;color:${invoicingApps.length?'#a86b1a':'var(--t3)'};">${invoicingApps.length}</div><div style="font-size:11.5px;color:var(--t2);">待開立發票</div></div>
+      <div onclick="navTo('attendance')" style="cursor:pointer;background:${pendingPunch.length?'#faf0dc':'var(--card2)'};border-radius:10px;padding:14px;text-align:center;">
+        <div class="num" style="font-size:24px;color:${pendingPunch.length?'#a86b1a':'var(--t3)'};">${pendingPunch.length}</div><div style="font-size:11.5px;color:var(--t2);">補打卡申請</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-top:10px;">點擊區塊可前往對應處理頁面。</div>`,
+    'var(--green)')}
+  `;
+};
+
+/* ════════ 管理員:營運分析（統計報表） ════════ */
 let _dashRange='month'; // 'month' | 'today'
 PAGES.dashboard=async function(){
   const[members,coaches,tickets,bookings,plans,types]=await Promise.all([
@@ -1851,7 +1976,7 @@ PAGES.dashboard=async function(){
   }).filter(r=>r.rev>0||r.ptCount>0||r.groupCount>0||r.hours>0)
     .sort((a,b)=>b.ptCount-a.ptCount||b.rev-a.rev); // 預設依教練課堂數由高到低
 
-  C.innerHTML=head('OVERVIEW','營運報表','')+
+  C.innerHTML=head('ANALYTICS','營運分析','統計報表 · 營收 / 教練 / 團課 / KPI')+
   `<div class="filter-row" style="margin-bottom:18px;">
     <div class="seg">
       <button class="seg-btn ${_dashRange==='month'?'active':''}" onclick="_dashRange='month';navTo('dashboard')">本月</button>
@@ -3633,7 +3758,9 @@ async function cancelBooking(id, refundMode){
 
 /* ════════ 管理員:會員管理（主入口） ════════ */
 let _memSearch='';
-let _memSort='reg', _memSortDir=-1; // 預設：註冊日由新到舊
+let _memSort='last', _memSortDir=-1; // 預設：最近上課日由新到舊
+let _memTkFilter=''; // 票券篩選：'' / 'pt1' / 'pt2' / 'expired'
+function memTkFilter(v){ _memTkFilter=(_memTkFilter===v?'':v); _memPage=1; navTo('members'); }
 let _memPage=1; const MEM_PER_PAGE=20;
 function memSortBy(key){
   if(_memSort===key){ _memSortDir=-_memSortDir; } else { _memSort=key; _memSortDir=1; }
@@ -3658,10 +3785,31 @@ function memPageNumbers(cur,total){
   ).join('');
 }
 PAGES.members=async function(){
-  const[members,coaches,allBk]=await Promise.all([dbGetAll('members'),dbGetAll('coaches'),dbGetAll('bookings')]);
+  const[members,coaches,allBk,allTk,types]=await Promise.all([dbGetAll('members'),dbGetAll('coaches'),dbGetAll('bookings'),dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
-  // 每位會員最近上課日（已發生且未取消的預約中最大日期）
+  const typeCatMap=Object.fromEntries(types.map(t=>[t.id,t.category]));
   const today=ymd(TODAY);
+  // 每位會員的票券彙整：教練課剩餘 / 團課剩餘 / 補課券 / 是否有有效票
+  const tkSummary={};
+  allTk.forEach(t=>{
+    if(!t.member_id)return;
+    const s=tkSummary[t.member_id]||(tkSummary[t.member_id]={pt:0,group:0,makeup:0,anyUsable:false});
+    const usable = t.status==='usable' && t.sessions_remaining>0 && (!t.expire_date||t.expire_date>=today);
+    if(!usable)return;
+    s.anyUsable=true;
+    if(t.source==='makeup'){ s.makeup+=t.sessions_remaining; return; }
+    const cat=typeCatMap[t.ticket_type_id]||'';
+    if(cat==='小班肌力') s.group+=t.sessions_remaining;
+    else if(cat==='私人教練'||cat==='體驗') s.pt+=t.sessions_remaining;
+    else s.pt+=t.sessions_remaining; // 其他歸教練課類
+  });
+  // 票券狀態等級：red 無有效票 / yellow 剩1-2堂(教練課) / green 充足
+  const tkLevel=mid=>{
+    const s=tkSummary[mid];
+    if(!s||!s.anyUsable) return 'red';
+    if(s.pt>0 && s.pt<=2) return 'yellow';
+    return 'green';
+  };
   const lastClassMap={};
   allBk.forEach(b=>{
     if(b.status==='cancelled')return;
@@ -3684,6 +3832,13 @@ PAGES.members=async function(){
   const coachSelOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}">${coachDisp(c)}</option>`).join('');
   const q=_memSearch.trim().toLowerCase();
   const filtered=members.filter(m=>{
+    // 票券篩選
+    if(_memTkFilter){
+      const s=tkSummary[m.id]||{pt:0,group:0,makeup:0,anyUsable:false};
+      if(_memTkFilter==='pt1' && !(s.anyUsable&&s.pt===1)) return false;
+      if(_memTkFilter==='pt2' && !(s.anyUsable&&s.pt>0&&s.pt<=2)) return false;
+      if(_memTkFilter==='expired' && s.anyUsable) return false;
+    }
     if(!q)return true;
     const tagLabels=(m.tags||[]).map(t=>(TAG_DEFS[t]||{}).label||t).join(' ');
     return (m.name||'').toLowerCase().includes(q)||(m.phone||'').includes(q)||tagLabels.toLowerCase().includes(q);
@@ -3702,28 +3857,45 @@ PAGES.members=async function(){
         style="flex:1;min-width:200px;padding:9px 14px;border:1px solid var(--bd);border-radius:9px;background-color:#fff;padding-right:32px;">
       ${_memSearch?`<button class="btn btn-ghost btn-sm" onclick="_memSearch='';_memPage=1;navTo('members')">清除</button>`:''}
     </div>
+    <div class="filter-row" style="margin-top:8px;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--t3);align-self:center;">續約追蹤：</span>
+      <button class="btn btn-sm ${_memTkFilter==='pt1'?'btn-green':'btn-ghost'}" onclick="memTkFilter('pt1')">教練課剩 1 堂</button>
+      <button class="btn btn-sm ${_memTkFilter==='pt2'?'btn-green':'btn-ghost'}" onclick="memTkFilter('pt2')">剩 1–2 堂</button>
+      <button class="btn btn-sm ${_memTkFilter==='expired'?'btn-green':'btn-ghost'}" onclick="memTkFilter('expired')">無有效票券</button>
+      ${_memTkFilter?`<button class="btn btn-ghost btn-sm" onclick="memTkFilter('${_memTkFilter}')">清除篩選</button>`:''}
+    </div>
     <table class="mem-table rwd-card"><thead><tr>
       <th style="cursor:pointer;user-select:none;" onclick="memSortBy('name')">姓名${_memSort==='name'?(_memSortDir>0?' ▲':' ▼'):''}</th>
       <th>手機（帳號）</th>
-      <th style="cursor:pointer;user-select:none;" onclick="memSortBy('tier')">等級${_memSort==='tier'?(_memSortDir>0?' ▲':' ▼'):''}</th>
-      <th>標籤</th><th>指定教練</th>
+      <th>指定教練</th>
+      <th>票券狀態</th>
+      <th>標籤</th>
       <th style="cursor:pointer;user-select:none;" onclick="memSortBy('last')">最近上課日${_memSort==='last'?(_memSortDir>0?' ▲':' ▼'):''}</th>
-      <th style="cursor:pointer;user-select:none;" onclick="memSortBy('reg')">註冊日${_memSort==='reg'?(_memSortDir>0?' ▲':' ▼'):''}</th>
       <th></th></tr></thead><tbody>
-    ${filtered.length===0?'<tr><td colspan="8"><div class="empty"><div class="em-t">找不到符合的會員</div></div></td></tr>':
-    pageRows.map(m=>`<tr>
-      <td data-label="姓名" style="font-weight:500;">${m.name}</td><td data-label="手機">${m.phone}</td><td data-label="等級">${tierTag(m.tier)}</td>
-      <td data-label="標籤" onclick="_detailMemberId=null;openTagModal('${m.id}')" class="mem-tagcell" title="點此修改標籤"><div class="mem-tagbox">${renderTags(m.tags)||'<span style=\"color:var(--t3);font-size:12px;\">＋ 標籤</span>'}</div></td>
+    ${filtered.length===0?'<tr><td colspan="7"><div class="empty"><div class="em-t">找不到符合的會員</div></div></td></tr>':
+    pageRows.map(m=>{
+      const s=tkSummary[m.id]||{pt:0,group:0,makeup:0,anyUsable:false};
+      const lv=tkLevel(m.id);
+      const lvColor={green:'#1f6f54',yellow:'#a86b1a',red:'#c0392b'}[lv];
+      const lvBg={green:'#e3efe9',yellow:'#faf0dc',red:'#fbe9e7'}[lv];
+      const tkParts=[];
+      if(s.pt>0)tkParts.push(`教練課 ${s.pt}`);
+      if(s.group>0)tkParts.push(`團課 ${s.group}`);
+      if(s.makeup>0)tkParts.push(`補課券 ${s.makeup}`);
+      const tkText = s.anyUsable ? (tkParts.join('　')||'有效') : '無有效票券';
+      return `<tr>
+      <td data-label="姓名" style="font-weight:500;">${m.name}</td><td data-label="手機">${m.phone}</td>
       <td data-label="指定教練" onclick="event.stopPropagation()">
         <select onchange="setMemberCoach('${m.id}',this.value)" style="padding:5px 8px;border:1px solid var(--bd);border-radius:7px;background-color:#fff;font-size:12.5px;max-width:130px;padding-right:30px;">
           <option value="">— 無 —</option>
           ${coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${m.default_coach_id===c.id?'selected':''}>${coachDisp(c)}</option>`).join('')}
         </select>
       </td>
+      <td data-label="票券狀態"><span style="display:inline-block;padding:3px 10px;border-radius:9px;font-size:12px;font-weight:600;color:${lvColor};background:${lvBg};white-space:nowrap;">${tkText}</span></td>
+      <td data-label="標籤" onclick="_detailMemberId=null;openTagModal('${m.id}')" class="mem-tagcell" title="點此修改標籤"><div class="mem-tagbox">${renderTags(m.tags)||'<span style=\"color:var(--t3);font-size:12px;\">＋ 標籤</span>'}</div></td>
       <td data-label="最近上課">${lastClassMap[m.id]||'<span style="color:var(--t3);">尚無</span>'}</td>
-      <td data-label="註冊日">${m.created_at?String(m.created_at).slice(0,10):'<span style="color:var(--t3);">—</span>'}</td>
       <td class="rwd-actions" data-label=""><button class="btn btn-ghost btn-sm" onclick="openMemberDetail('${m.id}')">詳細 ›</button></td>
-    </tr>`).join('')}
+    </tr>`;}).join('')}
     </tbody></table>
     ${totalPages>1?`<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;flex-wrap:wrap;">
       <button class="btn btn-ghost btn-sm" ${_memPage<=1?'disabled style=\"opacity:.4;\"':''} onclick="memGoPage(${_memPage-1})">‹ 上一頁</button>
@@ -3775,6 +3947,7 @@ async function openMemberDetail(member_id){
   const lastClass=myBookings.filter(b=>b.status==='completed'||b.date<ymd(TODAY)).map(b=>b.date).sort().pop();
 
   const f=(l,v)=>`<div class="mdetail-field"><div class="mdf-l">${l}</div>${v||'—'}</div>`;
+  const isCoach = SESSION.role==='coach'; // 教練：精簡檢視，隱藏付款/發票/金額/等級調整等
 
   showModal(`<div class="md-head-card">
     <div class="modal-title">${m.name} <span style="font-size:12px;color:var(--t3);font-weight:400;">${m.phone}</span></div>
@@ -3783,7 +3956,7 @@ async function openMemberDetail(member_id){
       <div class="modal-tab" onclick="mDetTab(event,'tickets')">票券</div>
       <div class="modal-tab" onclick="mDetTab(event,'bookings')">預約紀錄</div>
       <div class="modal-tab" onclick="mDetTab(event,'train')">訓練紀錄</div>
-      <div class="modal-tab" onclick="mDetTab(event,'pay')">付款紀錄</div>
+      ${isCoach?'':'<div class="modal-tab" onclick="mDetTab(event,\'pay\')">付款紀錄</div>'}
     </div>
     </div>
     <div class="md-body-card">
@@ -3793,31 +3966,37 @@ async function openMemberDetail(member_id){
         <div style="flex:1;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
             <span class="mdf-l" style="color:var(--green);font-size:11px;font-weight:600;letter-spacing:0.04em;opacity:.75;">標籤</span>
-            <button class="btn btn-ghost btn-sm" style="padding:2px 11px;font-size:14px;line-height:1;font-weight:700;" onclick="openTagModal('${member_id}')">＋</button>
+            ${isCoach?'':`<button class="btn btn-ghost btn-sm" style="padding:2px 11px;font-size:14px;line-height:1;font-weight:700;" onclick="openTagModal('${member_id}')">＋</button>`}
           </div>
           <div>${renderTags(m.tags)||'<span style="color:var(--t3);font-size:12px;">尚無標籤</span>'}</div>
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="openMemberEdit('${member_id}')">編輯資料</button>
+        ${isCoach?'':`<button class="btn btn-ghost btn-sm" onclick="openMemberEdit('${member_id}')">編輯資料</button>`}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         ${f('姓名',m.name)}${f('電話',m.phone)}
-        ${f('Email',m.email)}${f('主教練',m.default_coach_id?coachMap[m.default_coach_id]:'—')}
-        <div class="mdetail-field"><div class="mdf-l" style="display:flex;align-items:center;gap:8px;">會員等級<button class="btn btn-ghost btn-sm" style="padding:1px 9px;font-size:10.5px;" onclick="openTierModal('${member_id}')">調整</button></div>${tierTag(m.tier)}</div>${f('生日',m.birthday)}
-        ${f('體驗日期',m.trial_date)}${f('最後上課日',lastClass||'—')}
+        ${f('主教練',m.default_coach_id?coachMap[m.default_coach_id]:'—')}${f('最後上課日',lastClass||'—')}
+        ${isCoach?'':`${f('Email',m.email)}<div class="mdetail-field"><div class="mdf-l" style="display:flex;align-items:center;gap:8px;">會員等級<button class="btn btn-ghost btn-sm" style="padding:1px 9px;font-size:10.5px;" onclick="openTierModal('${member_id}')">調整</button></div>${tierTag(m.tier)}</div>${f('生日',m.birthday)}${f('體驗日期',m.trial_date)}`}
       </div>
       <div style="margin-top:10px;">${f('備註',m.note)}</div>
     </div>
 
     <div class="mtab-pane" data-pane="tickets">
-      <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-green btn-sm" onclick="openGrantModalFor('${member_id}')">＋ 發放票券</button><button class="btn btn-gold btn-sm" onclick="openMakeupForMember('${member_id}')">補發補課券</button></div>
+      ${isCoach?'':`<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-green btn-sm" onclick="openGrantModalFor('${member_id}')">＋ 發放票券</button><button class="btn btn-gold btn-sm" onclick="openMakeupForMember('${member_id}')">補發補課券</button></div>`}
       ${myTickets.length===0?'<div class="empty"><div class="em-t">尚無票券</div></div>':
-      `<table><thead><tr><th>方案</th><th>剩餘 / 總數</th><th>到期日</th><th>狀態</th><th></th></tr></thead><tbody>
-      ${myTickets.map(t=>{const ty=typeMap[t.ticket_type_id];return `<tr>
-        <td><div style="font-weight:500;">${t.plan_name||(ty?ty.name:'—')}</div><span class="tag tag-${ty?ty.color:'pt'}">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span></td>
-        <td style="white-space:nowrap;"><span style="font-size:26px;font-weight:800;color:var(--green);line-height:1;font-feature-settings:'tnum';">${t.sessions_remaining}</span><span style="font-size:15px;color:var(--t3);font-weight:600;"> / ${t.sessions_total}</span></td><td>${t.expire_date}</td>
-        <td><span class="tag ${stTag[t.status]}">${stLabel[t.status]}</span></td>
-        <td><button class="btn btn-ghost btn-sm" onclick="viewLogs('${t.id}')">使用紀錄</button></td></tr>`;}).join('')}
-      </tbody></table>`}
+      ( isCoach
+        ? `<table><thead><tr><th>票券名稱</th><th>剩餘堂數</th><th>到期日</th></tr></thead><tbody>
+        ${myTickets.filter(t=>t.status==='usable').map(t=>{const ty=typeMap[t.ticket_type_id];return `<tr>
+          <td><div style="font-weight:500;">${t.plan_name||(ty?ty.name:'—')}</div></td>
+          <td style="white-space:nowrap;"><span style="font-size:22px;font-weight:800;color:var(--green);">${t.sessions_remaining}</span><span style="font-size:14px;color:var(--t3);"> 堂</span></td>
+          <td>${t.expire_date}</td></tr>`;}).join('')||'<tr><td colspan="3" style="color:var(--t3);padding:10px;">目前沒有有效票券</td></tr>'}
+        </tbody></table>`
+        : `<table><thead><tr><th>方案</th><th>剩餘 / 總數</th><th>到期日</th><th>狀態</th><th></th></tr></thead><tbody>
+        ${myTickets.map(t=>{const ty=typeMap[t.ticket_type_id];return `<tr>
+          <td><div style="font-weight:500;">${t.plan_name||(ty?ty.name:'—')}</div><span class="tag tag-${ty?ty.color:'pt'}">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span></td>
+          <td style="white-space:nowrap;"><span style="font-size:26px;font-weight:800;color:var(--green);line-height:1;font-feature-settings:'tnum';">${t.sessions_remaining}</span><span style="font-size:15px;color:var(--t3);font-weight:600;"> / ${t.sessions_total}</span></td><td>${t.expire_date}</td>
+          <td><span class="tag ${stTag[t.status]}">${stLabel[t.status]}</span></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="viewLogs('${t.id}')">使用紀錄</button></td></tr>`;}).join('')}
+        </tbody></table>` )}
     </div>
 
     <div class="mtab-pane" data-pane="bookings">
@@ -7990,12 +8169,12 @@ PAGES.purchase_review=async function(){
   ${done.length>0?`<div class="card"><div class="card-title">已處理</div>${done.map(row).join('')}</div>`:''}`;
 };
 function viewSig(id){const a=window._appCache[id];if(!a||!a.signature)return;
-  showModal(`<div class="modal-title">簽名檔</div><img src="${a.signature}" style="width:100%;border:1px solid var(--bd);border-radius:9px;background-color:#fff;padding-right:32px;"><div class="modal-foot"><button class="btn btn-ghost" onclick="setTkTab('purchase_review')">關閉</button></div>`);
+  showModal(`<div class="modal-title">簽名檔</div><img src="${a.signature}" style="width:100%;border:1px solid var(--bd);border-radius:9px;background-color:#fff;padding-right:32px;"><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
 function viewContract(id){const a=window._appCache[id];
   showModal(`<div class="modal-title">會員契約（${a?a.contract_version||'':''}）</div>
     <div style="max-height:54vh;overflow-y:auto;-webkit-overflow-scrolling:touch;font-size:13.5px;line-height:2;white-space:pre-wrap;color:var(--text);background:#fff;border:1px solid var(--bd);border-radius:9px;padding:16px;">${CONTRACT_TEXT}</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="openContractReader()">🔍 放大閱讀</button><button class="btn btn-green" onclick="setTkTab('purchase_review')">關閉</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openContractReader()">🔍 放大閱讀</button><button class="btn btn-green" onclick="closeModal()">關閉</button></div>`);
 }
 
 /* ── 發放核心（共用）：建票券→算到期日→購買紀錄→異動紀錄→升級會員→通知 ──
@@ -8056,7 +8235,7 @@ function appCompleteInvoice(id){
   showModal(`<div class="modal-title">完成開立發票</div>
     <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${isCloud?'雲端發票（未來可串接電子發票 API 自動回填號碼）':'紙本發票'}。填入發票號碼後將正式發放票券。</div>
     <div class="form-row"><label>發票號碼（可留空）</label><input id="iv-no" placeholder="例：AB-12345678"></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="setTkTab('purchase_review')">取消</button><button class="btn btn-green" onclick="confirmCompleteInvoice('${id}')">完成並發券</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="confirmCompleteInvoice('${id}')">完成並發券</button></div>`);
 }
 async function confirmCompleteInvoice(id){
   const a=await dbGet('purchase_applications',id);
@@ -8075,7 +8254,7 @@ function appCancel(id){
     <div style="font-size:13.5px;padding:6px 0 4px;">確定取消這筆購買申請嗎？</div>
     <div style="font-size:12px;color:var(--t2);margin-top:6px;">取消後狀態改為「已取消」，不會發放票券。</div>
     <div class="form-row" style="margin-top:10px;"><label>取消原因（選填，會顯示給會員）</label><input id="ac-reason" placeholder="選填"></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="setTkTab('purchase_review')">返回</button><button class="btn btn-danger" onclick="confirmAppCancel('${id}')">確定取消</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-danger" onclick="confirmAppCancel('${id}')">確定取消</button></div>`);
 }
 async function confirmAppCancel(id){
   const a=await dbGet('purchase_applications',id);
