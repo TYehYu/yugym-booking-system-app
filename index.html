@@ -1226,8 +1226,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26624.1127';
-const APP_VERSION_LABEL='26624.1127';
+const APP_VERSION='26624.1141';
+const APP_VERSION_LABEL='26624.1141';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1441,8 +1441,8 @@ function enterApp(){
   if(SESSION.role==='admin') firstItems = isMobile?MOBILE_ADMIN_NAV:NAV.admin;
   else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:NAV.coach;
   else firstItems = NAV[SESSION.role]||[];
-  // LINE 選單「掃描」可帶 ?scan=1 或 #scan：登入後直接進掃描打卡頁
-  const wantScan = /[?&]scan=1/.test(location.search) || location.hash==='#scan';
+  // LINE 選單「掃描」可帶 scan=1（不論在 search 或 hash 內）：登入後直接進掃描打卡頁
+  const wantScan = /scan=1/.test(location.search) || /scan=1/.test(location.hash) || location.hash.indexOf('scan')>=0;
   if(wantScan && (SESSION.role==='coach'||SESSION.role==='admin'||SESSION.role==='front_desk')){
     navTo('scan_checkin'); return;
   }
@@ -5974,6 +5974,10 @@ PAGES.scan_checkin=async function(){
         <div class="scan-frame"><video id="scan-video" playsinline muted></video><div class="scan-reticle"></div></div>
         <div id="scan-hint" style="font-size:13px;color:var(--t2);margin-top:14px;">正在開啟相機…</div>
         <button class="btn btn-ghost" style="margin-top:14px;" onclick="stopScan();navTo(CUR_PAGE==='scan_checkin'?'coach_calendar':CUR_PAGE)">取消</button>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd);">
+          <div style="font-size:11.5px;color:var(--t3);margin-bottom:8px;">相機無法使用？</div>
+          <button class="btn btn-green" style="width:100%;padding:13px;" onclick="stopScan();doScanPunch()">直接打卡（不掃描）</button>
+        </div>
       </div>
     </div>
   </div>`;
@@ -5983,32 +5987,64 @@ async function startScan(){
   const video=document.getElementById('scan-video');
   const hint=document.getElementById('scan-hint');
   if(!video) return;
-  // 需要 BarcodeDetector 或退而用 jsQR（此處用原生優先）
-  if(!('BarcodeDetector' in window)){
-    hint.innerHTML='此瀏覽器不支援自動掃描。<br>請改用相機 App 掃描，或手動打卡。';
-    return;
-  }
   try{
     _scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    video.srcObject=_scanStream; await video.play();
+    video.srcObject=_scanStream; video.setAttribute('playsinline','true'); await video.play();
     hint.textContent='將店內 QR Code 對準框內';
+  }catch(e){
+    hint.innerHTML='無法開啟相機，請允許相機權限後重試。<br><span style="font-size:11px;">'+(e&&e.name?e.name:'')+'</span>';
+    return;
+  }
+  // 優先用原生 BarcodeDetector（Android Chrome），否則載入 jsQR（iPhone/Safari）
+  if('BarcodeDetector' in window){
     const detector=new BarcodeDetector({formats:['qr_code']});
     const tick=async()=>{
-      if(!_scanStream){ return; }
+      if(!_scanStream)return;
       try{
         const codes=await detector.detect(video);
-        if(codes&&codes.length){
-          const val=codes[0].rawValue||'';
-          if(val===STAFF_QR_CODE && !_scanBusy){ _scanBusy=true; stopScan(); await doScanPunch(); return; }
-          else if(val && val!==STAFF_QR_CODE){ hint.textContent='QR Code 不正確，請掃描店內打卡碼'; }
-        }
+        if(codes&&codes.length){ handleScanValue(codes[0].rawValue||'',hint); if(_scanBusy)return; }
       }catch(_){}
       _scanRAF=requestAnimationFrame(tick);
     };
     _scanRAF=requestAnimationFrame(tick);
-  }catch(e){
-    hint.innerHTML='無法開啟相機，請允許相機權限後重試。<br><span style="font-size:11px;">'+(e&&e.name?e.name:'')+'</span>';
+  }else{
+    // 載入 jsQR
+    await ensureJsQR(hint);
+    if(!window.jsQR){ return; }
+    const canvas=document.createElement('canvas');
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    const tick=()=>{
+      if(!_scanStream)return;
+      if(video.readyState===video.HAVE_ENOUGH_DATA){
+        canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+        ctx.drawImage(video,0,0,canvas.width,canvas.height);
+        try{
+          const img=ctx.getImageData(0,0,canvas.width,canvas.height);
+          const code=window.jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
+          if(code&&code.data){ handleScanValue(code.data,hint); if(_scanBusy)return; }
+        }catch(_){}
+      }
+      _scanRAF=requestAnimationFrame(tick);
+    };
+    _scanRAF=requestAnimationFrame(tick);
   }
+}
+// 載入 jsQR 函式庫（從 CDN，使用者手機端載入）
+function ensureJsQR(hint){
+  return new Promise(resolve=>{
+    if(window.jsQR){ resolve(); return; }
+    if(hint) hint.textContent='載入掃描元件中…';
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+    s.onload=()=>{ if(hint)hint.textContent='將店內 QR Code 對準框內'; resolve(); };
+    s.onerror=()=>{ if(hint)hint.innerHTML='掃描元件載入失敗，請確認網路連線後重試。'; resolve(); };
+    document.head.appendChild(s);
+  });
+}
+// 處理掃到的內容
+function handleScanValue(val,hint){
+  if(val===STAFF_QR_CODE && !_scanBusy){ _scanBusy=true; stopScan(); doScanPunch(); }
+  else if(val && val!==STAFF_QR_CODE){ if(hint)hint.textContent='QR Code 不正確，請掃描店內打卡碼'; }
 }
 function stopScan(){
   if(_scanRAF){ cancelAnimationFrame(_scanRAF); _scanRAF=null; }
