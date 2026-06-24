@@ -189,6 +189,7 @@ select option{color:var(--text);}
 .page-head .ph-ey{font-family:var(--serif);font-size:12px;color:var(--gold-d);letter-spacing:0.2em;margin-bottom:4px;}
 .page-head h1{font-family:var(--serif);font-size:25px;font-weight:600;letter-spacing:0.02em;}
 .page-head .ph-sub{font-size:12.5px;color:var(--t2);margin-top:4px;}
+.page-head .ph-greet{font-size:14px;color:var(--t2);margin-top:8px;line-height:1.7;letter-spacing:0.02em;}
 
 /* 卡片/表格/按鈕 */
 .card{background:var(--card);border:1px solid var(--bd2);border-radius:16px;padding:24px;margin-bottom:22px;}
@@ -1258,8 +1259,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26624.1218';
-const APP_VERSION_LABEL='26624.1218';
+const APP_VERSION='26624.1225';
+const APP_VERSION_LABEL='26624.1225';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1680,6 +1681,78 @@ function renderTags(tags){
 
 const C=document.getElementById('content');
 function head(ey,title,sub){return `<div class="page-head"><div class="ph-ey">${ey}</div><h1>${title}</h1>${sub?`<div class="ph-sub">${sub}</div>`:''}</div>`;}
+
+// ════════ 問候語小管家（生日 > 節日 > 天氣 > 時段）════════
+// 台灣固定節日（國曆）。農曆節日另以近年對照處理常見幾個。
+const FESTIVALS_SOLAR={
+  '01-01':'新年快樂🎉　新的一年，繼續慢慢練成想要的自己。',
+  '02-14':'情人節快樂💝　今天也要好好愛自己。',
+  '03-08':'婦女節快樂🌷',
+  '04-04':'兒童節快樂🎈　保持那份愛玩的心。',
+  '05-01':'勞動節辛苦了👏　今天也謝謝你的付出。',
+  '10-10':'國慶連假🎏',
+  '12-24':'聖誕快樂🎄　願你溫暖過節。',
+  '12-25':'聖誕快樂🎄　願你溫暖過節。',
+  '12-31':'今年最後一天🌙　謝謝你這一年的努力。',
+};
+// 近年農曆重要節日對照（2026 為主，逐年可補）
+const FESTIVALS_LUNAR={
+  '2026-02-17':'除夕團圓🧧　新年快樂！',
+  '2026-02-18':'大年初一🧧　新春平安、身體健康。',
+  '2026-06-19':'端午安康🐉　記得吃粽子。',
+  '2026-09-25':'中秋佳節🌕　月圓人團圓。',
+};
+function greetingFor(role, name){
+  const now=new Date();
+  const hh=now.getHours();
+  const mmdd=`${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const ymdStr=ymd(now);
+  const nm=name?name:'';
+  const isMember=role==='member';
+
+  // 1) 生日（最優先）
+  try{
+    const me = role==='member' ? (window._meMember||null) : (window._meStaff||null);
+    const bday = me&&me.birthday ? String(me.birthday).slice(5) : null; // MM-DD
+    if(bday && bday===mmdd){
+      return `🎂　生日快樂，${nm}！今天是屬於你的日子，YUGYM 陪你一起慶祝。`;
+    }
+  }catch(_){}
+
+  // 2) 節日
+  if(FESTIVALS_LUNAR[ymdStr]) return `${nm?nm+'，':''}${FESTIVALS_LUNAR[ymdStr]}`;
+  if(FESTIVALS_SOLAR[mmdd]) return `${nm?nm+'，':''}${FESTIVALS_SOLAR[mmdd]}`;
+
+  // 3) 天氣
+  const w=window._weatherNow;
+  if(w){
+    const c=w.code, t=w.temp;
+    if([61,63,65,80,81,82,51,53,55].includes(c)) return `${w.icon}　今天有雨，出門記得帶把傘，${nm?nm+'，':''}路上小心。`;
+    if([95,96,99].includes(c)) return `${w.icon}　外面在打雷下雨，注意安全，${nm?nm+'，':''}慢慢來不急。`;
+    if(t>=32) return `${w.icon}　今天好熱（${t}°C），記得多補水，${nm?nm+'，':''}別中暑了。`;
+    if(t<=14) return `🧥　今天有點冷（${t}°C），多加件外套，${nm?nm+'，':''}注意保暖。`;
+  }
+
+  // 4) 時段（依角色語氣）
+  let timeWord = hh<5?'夜深了':hh<11?'早安':hh<14?'午安':hh<18?'午後好':hh<22?'晚安':'夜深了';
+  if(isMember){
+    const lines = hh<11?`${timeWord}，${nm}。新的一天，讓身體慢慢醒過來。`
+      : hh<18?`${timeWord}，${nm}。今天有空來練一下嗎？`
+      : `${timeWord}，${nm}。今天也辛苦了，記得好好休息。`;
+    return `☀️　${lines}`;
+  }else{
+    const lines = hh<11?`${timeWord}，${nm}。今天也請多多指教。`
+      : hh<18?`${timeWord}，${nm}。陪會員一起加油，記得喝水。`
+      : hh<22?`${timeWord}，${nm}。今天辛苦了，謝謝你的付出。`
+      : `${timeWord}，${nm}。早點休息，明天見。`;
+    return `☀️　${lines}`;
+  }
+}
+// 帶問候語的頁首（取代 sub 那行）
+function headGreet(ey,title,role,name){
+  const g=greetingFor(role,name);
+  return `<div class="page-head"><div class="ph-ey">${ey}</div><h1>${title}</h1><div class="ph-greet">${g}</div></div>`;
+}
 function colorClass(type_id){return {pt:'pt',pt_friendly:'friendly',group:'group',self_training:'self',self_friendly:'self',trial:'trial'}[type_id]||'pt';}
 // 依 booking 判斷正確的色類（會分辨友善課/友善自主訓練）
 function bkCC(b){
@@ -2439,6 +2512,7 @@ async function loadWeather(){
     const t=Math.round(d.current.temperature_2m);
     const code=d.current.weather_code;
     const w=wmo[code]||['🌡️',''];
+    window._weatherNow={code,temp:t,icon:w[0],label:w[1]}; // 供問候語使用
     _weatherCache=`${w[0]} ${t}°C`;
     el.innerHTML=_weatherCache;
   }catch(e){ el.innerHTML=''; } // 失敗就不顯示
@@ -6368,6 +6442,7 @@ PAGES.coach_calendar=async function(){
   window._calStepping=false;
   window._coachReadonly=true; // 教練端行事曆：純檢視，不開放排課/改期
   const myId=SESSION.id;
+  try{ window._meStaff=await dbGet('coaches',myId); }catch(_){}
   const isMobile=window.innerWidth<=600;
   // 教練端「我的預約」：固定只顯示自己（主責或代課）的課，不提供全店切換
   if(!window._coachSelDate) window._coachSelDate=ymd(TODAY);
@@ -6394,7 +6469,7 @@ PAGES.coach_calendar=async function(){
   //    新增預約時教練欄位自動帶自己（openBookingModal 內 isMobile/_calMineOnly 之外，另由 _bkPrefillCoach 控制）。
   if(!isMobile){
     _empCalMonth=null; _empCalSel=null;
-    C.innerHTML=head('SCHEDULE','我的班表','月曆檢視 · 點日期看當天課 · 僅供檢視')
+    C.innerHTML=headGreet('SCHEDULE','我的班表','coach',SESSION.name)
       +`<div id="coach-punch"></div>`
       +`<div id="coach-cal"></div>`;
     renderPunchPanel();
@@ -6405,7 +6480,7 @@ PAGES.coach_calendar=async function(){
   // ── 手機版：月曆檢視（純檢視，點日期看當天課）──
   window._coachReadonly=true;
   _empCalMonth=null; _empCalSel=null;
-  C.innerHTML=head('SCHEDULE','我的班表','月曆檢視 · 點日期看當天課 · 僅供檢視')
+  C.innerHTML=headGreet('SCHEDULE','我的班表','coach',SESSION.name)
     +`<div id="coach-punch"></div>`
     +`<div id="coach-cal"></div>`;
   renderPunchPanel();
@@ -7164,11 +7239,12 @@ async function tlxApplyMove(id,ds,newTime,dur){
 /* ════════ 會員端:我的預約 ════════ */
 PAGES.mem_bookings=async function(){
   const[bookings,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches')]);
+  try{ window._meMember=await dbGet('members',SESSION.id); }catch(_){}
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const mine=bookings.filter(b=>b.member_id===SESSION.id&&b.status!=='cancelled')
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   const upcoming=mine.filter(b=>b.date>=ymd(TODAY));
-  C.innerHTML=head('BOOKINGS','我的預約','查看你即將到來的課程')+
+  C.innerHTML=headGreet('BOOKINGS','我的預約','member',SESSION.name)+
   `<div class="card"><div class="card-title">即將到來 <button class="btn btn-green btn-sm" onclick="openSelfBookModal()">＋ 預約自主訓練</button></div>
   ${upcoming.length===0?'<div class="empty"><div class="em-t">目前沒有預約</div><div style="font-size:11px;margin-top:6px;">私教課由教練為你安排；自主訓練可自行預約</div></div>':
   upcoming.map(b=>{const d=parseYmd(b.date);const isSelf=b.category==='自主訓練';
