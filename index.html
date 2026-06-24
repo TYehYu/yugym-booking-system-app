@@ -185,11 +185,18 @@ select option{color:var(--text);}
 .nav-item .ni-ic{width:18px;height:18px;flex-shrink:0;}
 .content{flex:1;padding:28px 40px;min-width:0;max-width:1480px;width:100%;margin:0 auto;}
 
-.page-head{margin-bottom:24px;}
-.page-head .ph-ey{font-family:var(--serif);font-size:12px;color:var(--gold-d);letter-spacing:0.2em;margin-bottom:4px;}
-.page-head h1{font-family:var(--serif);font-size:25px;font-weight:600;letter-spacing:0.02em;}
-.page-head .ph-sub{font-size:12.5px;color:var(--t2);margin-top:4px;}
+.page-head{margin-bottom:30px;}
+.page-head .ph-ey{font-family:var(--serif);font-size:11.5px;color:var(--gold-d);letter-spacing:0.34em;margin-bottom:9px;font-weight:500;}
+.page-head h1{font-family:var(--serif);font-size:26px;font-weight:600;letter-spacing:0.08em;line-height:1.4;}
+.page-head .ph-sub{font-size:12.5px;color:var(--t3);margin-top:8px;letter-spacing:0.06em;}
 .page-head .ph-greet{font-size:14px;color:var(--t2);margin-top:8px;line-height:1.7;letter-spacing:0.02em;}
+/* 常駐問候條 */
+.greet-bar{background:var(--card2);border-bottom:1px solid var(--bd);}
+.gb-inner{max-width:1100px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.gb-text{font-size:13.5px;color:var(--t2);line-height:1.6;letter-spacing:0.02em;}
+.gb-luck{flex-shrink:0;width:38px;height:38px;border-radius:50%;border:1px solid var(--bd);background:var(--card);font-size:18px;cursor:pointer;transition:.15s;display:flex;align-items:center;justify-content:center;}
+.gb-luck:hover{background:var(--sage-bg);transform:scale(1.05);}
+@media(max-width:600px){.gb-inner{padding:9px 16px;}.gb-text{font-size:12.5px;}}
 
 /* 卡片/表格/按鈕 */
 .card{background:var(--card);border:1px solid var(--bd2);border-radius:16px;padding:24px;margin-bottom:22px;}
@@ -1148,7 +1155,7 @@ tr:hover td{background:var(--card2);}
   .layout{flex-direction:column;}
   .sidenav{width:100%;max-width:100vw;display:flex;overflow-x:auto;border-right:none;border-bottom:1px solid var(--bd);padding:10px;gap:6px;-webkit-overflow-scrolling:touch;}
   .nav-item{flex-shrink:0;margin-bottom:0;white-space:nowrap;}
-  .content{padding:20px 16px;}
+  .content{padding:28px 18px;}
   .cal-wrap{overflow-x:auto;}
   .cal-grid{min-width:640px;}
   .form-2col{grid-template-columns:1fr;}
@@ -1239,6 +1246,7 @@ tr:hover td{background:var(--card2);}
       </div>
     </div>
     <div class="sidenav" id="sidenav"></div>
+    <div id="greet-bar" class="greet-bar" style="display:none;"></div>
   </div>
   <div class="layout">
     <div class="content" id="content"></div>
@@ -1259,8 +1267,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26624.1225';
-const APP_VERSION_LABEL='26624.1225';
+const APP_VERSION='26624.1235';
+const APP_VERSION_LABEL='26624.1235';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1456,6 +1464,12 @@ function enterApp(){
   document.getElementById('login-screen').classList.add('hidden');
   const app=document.getElementById('app-screen');
   app.classList.remove('hidden');
+  // 預載自己的資料（供問候條生日判斷）
+  (async()=>{ try{
+    if(SESSION.role==='member') window._meMember=await dbGet('members',SESSION.id);
+    else window._meStaff=await dbGet('coaches',SESSION.id);
+    renderGreetBar();
+  }catch(_){} })();
   // 管理員 / 櫃台 → 桌機放大版面（會員/教練用手機，維持原樣）
   app.classList.toggle('desktop-wide', SESSION.role==='admin'||SESSION.role==='front_desk');
   app.classList.toggle('role-member', SESSION.role==='member'); // 會員端：手機頂部顯示姓名取代天氣
@@ -1569,6 +1583,7 @@ function navTo(key){
     C.innerHTML='<div class="empty"><div class="em-t">資料載入錯誤</div><div style="font-size:11px;margin-top:6px;color:var(--danger);">'+(e&&e.message?e.message:e)+'</div></div>';
   });
   if(typeof refreshNavBadges==='function') refreshNavBadges();
+  if(typeof renderGreetBar==='function') renderGreetBar();
 }
 
 /* PAGES 物件在第二段 script 定義 */
@@ -1752,6 +1767,49 @@ function greetingFor(role, name){
 function headGreet(ey,title,role,name){
   const g=greetingFor(role,name);
   return `<div class="page-head"><div class="ph-ey">${ey}</div><h1>${title}</h1><div class="ph-greet">${g}</div></div>`;
+}
+
+// ════════ 常駐問候條 + 今日運勢小抽籤 ════════
+// YUGYM 風運勢（每人每天固定一支）
+const FORTUNES=[
+  {lv:'大吉',c:'#B48A56',t:'今天身體會給你好回應，把握狀態好好練。',adv:'宜：挑戰新重量'},
+  {lv:'吉',  c:'#3f7a66',t:'穩穩的一天，照著節奏走就很好。',adv:'宜：維持基本動作'},
+  {lv:'中吉',c:'#3f7a66',t:'慢慢來，今天適合把細節做好。',adv:'宜：專注呼吸與姿勢'},
+  {lv:'小吉',c:'#5a6b4d',t:'有點疲倦也沒關係，動一動就會好。',adv:'宜：輕鬆伸展'},
+  {lv:'平',  c:'#8a8276',t:'平凡也是一種剛好，今天好好照顧自己。',adv:'宜：多喝水、早點睡'},
+  {lv:'吉',  c:'#3f7a66',t:'把昨天的疲憊還給地板，今天重新開始。',adv:'宜：核心訓練'},
+  {lv:'大吉',c:'#B48A56',t:'你比想像中更強，今天會證明給自己看。',adv:'宜：突破自我'},
+  {lv:'中吉',c:'#3f7a66',t:'進步藏在重複裡，今天也是好的一天。',adv:'宜：堅持到底'},
+];
+// 以「使用者ID＋日期」決定當天固定抽到哪一支（不可重抽）
+function todaysFortune(){
+  const seed=(SESSION&&SESSION.id?SESSION.id:'x')+ymd(TODAY);
+  let h=0; for(let i=0;i<seed.length;i++){ h=(h*31+seed.charCodeAt(i))>>>0; }
+  return FORTUNES[h%FORTUNES.length];
+}
+function renderGreetBar(){
+  const bar=document.getElementById('greet-bar'); if(!bar)return;
+  if(!SESSION){ bar.style.display='none'; return; }
+  const role=SESSION.role==='member'?'member':'staff';
+  const g=greetingFor(role, SESSION.name);
+  bar.style.display='';
+  bar.innerHTML=`<div class="gb-inner">
+    <span class="gb-text">${g}</span>
+    <button class="gb-luck" onclick="openFortune()" title="今日運勢">🎴</button>
+  </div>`;
+}
+function openFortune(){
+  const f=todaysFortune();
+  const wd=['日','一','二','三','四','五','六'][new Date(TODAY).getDay()];
+  showModal(`<div style="text-align:center;padding:8px 4px;">
+    <div style="font-size:11px;letter-spacing:0.3em;color:var(--gold-d);margin-bottom:6px;">YUGYM 今日運勢</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:18px;">${ymd(TODAY).replace(/-/g,'/')}（${wd}）</div>
+    <div style="font-family:var(--serif);font-size:46px;font-weight:700;color:${f.c};line-height:1;margin-bottom:16px;">${f.lv}</div>
+    <div style="font-size:15px;color:var(--text);line-height:1.9;margin-bottom:14px;">${f.t}</div>
+    <div style="display:inline-block;font-size:13px;color:${f.c};background:var(--card2);border:1px solid var(--bd);border-radius:20px;padding:6px 16px;">${f.adv}</div>
+    <div style="font-size:11px;color:var(--t3);margin-top:20px;">每天一支，明天再來看看 🌙</div>
+    <div class="modal-foot" style="justify-content:center;"><button class="btn btn-green" onclick="closeModal()">收下今天的籤</button></div>
+  </div>`);
 }
 function colorClass(type_id){return {pt:'pt',pt_friendly:'friendly',group:'group',self_training:'self',self_friendly:'self',trial:'trial'}[type_id]||'pt';}
 // 依 booking 判斷正確的色類（會分辨友善課/友善自主訓練）
@@ -6469,7 +6527,7 @@ PAGES.coach_calendar=async function(){
   //    新增預約時教練欄位自動帶自己（openBookingModal 內 isMobile/_calMineOnly 之外，另由 _bkPrefillCoach 控制）。
   if(!isMobile){
     _empCalMonth=null; _empCalSel=null;
-    C.innerHTML=headGreet('SCHEDULE','我的班表','coach',SESSION.name)
+    C.innerHTML=head('SCHEDULE','我的班表','月曆檢視 · 點日期看當天課')
       +`<div id="coach-punch"></div>`
       +`<div id="coach-cal"></div>`;
     renderPunchPanel();
@@ -6480,7 +6538,7 @@ PAGES.coach_calendar=async function(){
   // ── 手機版：月曆檢視（純檢視，點日期看當天課）──
   window._coachReadonly=true;
   _empCalMonth=null; _empCalSel=null;
-  C.innerHTML=headGreet('SCHEDULE','我的班表','coach',SESSION.name)
+  C.innerHTML=head('SCHEDULE','我的班表','月曆檢視 · 點日期看當天課')
     +`<div id="coach-punch"></div>`
     +`<div id="coach-cal"></div>`;
   renderPunchPanel();
@@ -7244,7 +7302,7 @@ PAGES.mem_bookings=async function(){
   const mine=bookings.filter(b=>b.member_id===SESSION.id&&b.status!=='cancelled')
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   const upcoming=mine.filter(b=>b.date>=ymd(TODAY));
-  C.innerHTML=headGreet('BOOKINGS','我的預約','member',SESSION.name)+
+  C.innerHTML=head('BOOKINGS','我的預約','查看你即將到來的課程')+
   `<div class="card"><div class="card-title">即將到來 <button class="btn btn-green btn-sm" onclick="openSelfBookModal()">＋ 預約自主訓練</button></div>
   ${upcoming.length===0?'<div class="empty"><div class="em-t">目前沒有預約</div><div style="font-size:11px;margin-top:6px;">私教課由教練為你安排；自主訓練可自行預約</div></div>':
   upcoming.map(b=>{const d=parseYmd(b.date);const isSelf=b.category==='自主訓練';
