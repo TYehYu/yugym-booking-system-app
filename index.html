@@ -397,6 +397,10 @@ tr:hover td{background:var(--card2);}
 .dk-btn:disabled{cursor:default;}
 .dk-foot{font-size:12.5px;color:var(--t2);margin-top:12px;}
 .dk-undo{background:none;border:none;font-size:12px;color:var(--danger);text-decoration:underline;cursor:pointer;font-family:inherit;padding:0;margin-left:4px;}
+/* QR 掃描框 */
+.scan-frame{position:relative;width:100%;max-width:320px;aspect-ratio:1;margin:0 auto;border-radius:18px;overflow:hidden;background:#111;}
+.scan-frame video{width:100%;height:100%;object-fit:cover;}
+.scan-reticle{position:absolute;inset:18%;border:3px solid rgba(255,255,255,0.9);border-radius:14px;box-shadow:0 0 0 100vmax rgba(0,0,0,0.35);}
 /* 週時間軸（一頁七天） */
 .wkx-wrap{display:flex;gap:0;}
 .wkx-axis{flex:0 0 36px;}
@@ -1222,8 +1226,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26623.1158';
-const APP_VERSION_LABEL='26623.1158';
+const APP_VERSION='26624.1127';
+const APP_VERSION_LABEL='26624.1127';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1437,6 +1441,11 @@ function enterApp(){
   if(SESSION.role==='admin') firstItems = isMobile?MOBILE_ADMIN_NAV:NAV.admin;
   else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:NAV.coach;
   else firstItems = NAV[SESSION.role]||[];
+  // LINE 選單「掃描」可帶 ?scan=1 或 #scan：登入後直接進掃描打卡頁
+  const wantScan = /[?&]scan=1/.test(location.search) || location.hash==='#scan';
+  if(wantScan && (SESSION.role==='coach'||SESSION.role==='admin'||SESSION.role==='front_desk')){
+    navTo('scan_checkin'); return;
+  }
   if(firstItems[0]) navTo(firstItems[0].key);
 }
 
@@ -1521,6 +1530,7 @@ function navTo(key){
   CUR_PAGE=key;
   if(typeof closeModal==='function') closeModal(); // 切頁時關掉任何殘留的彈窗，避免 modal 蓋住新頁
   if(typeof clearPunchClock==='function') clearPunchClock(); // 停掉打卡時鐘計時器
+  if(typeof stopScan==='function' && key!=='scan_checkin') stopScan(); // 離開掃描頁時關相機
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.key===key));
   if(typeof PAGES[key]!=='function'){
     console.error('找不到頁面函式:',key);
@@ -5950,6 +5960,103 @@ async function punchOut(){
   if(CUR_PAGE==='attendance') navTo('attendance');
  }catch(e){ console.error('punchOut 失敗:',e); showToast('打卡失敗：'+(e&&e.message?e.message:e)); }
 }
+// ════════ QR Code 掃描打卡（MVP）════════
+const STAFF_QR_CODE='YUGYM-STAFF-CHECKIN'; // 店內固定 QR 內容
+let _scanStream=null, _scanRAF=null, _scanBusy=false;
+// 掃描頁面
+PAGES.scan_checkin=async function(){
+  // 必須是需打卡員工
+  let me=null; try{ me=await dbGet('coaches',SESSION.id); }catch(_){}
+  C.innerHTML=`<div style="max-width:480px;margin:0 auto;">
+    ${head('CHECK IN','掃描打卡','對準店內 QR Code 即可完成上下班打卡')}
+    <div class="card" style="text-align:center;">
+      <div id="scan-stage">
+        <div class="scan-frame"><video id="scan-video" playsinline muted></video><div class="scan-reticle"></div></div>
+        <div id="scan-hint" style="font-size:13px;color:var(--t2);margin-top:14px;">正在開啟相機…</div>
+        <button class="btn btn-ghost" style="margin-top:14px;" onclick="stopScan();navTo(CUR_PAGE==='scan_checkin'?'coach_calendar':CUR_PAGE)">取消</button>
+      </div>
+    </div>
+  </div>`;
+  startScan();
+};
+async function startScan(){
+  const video=document.getElementById('scan-video');
+  const hint=document.getElementById('scan-hint');
+  if(!video) return;
+  // 需要 BarcodeDetector 或退而用 jsQR（此處用原生優先）
+  if(!('BarcodeDetector' in window)){
+    hint.innerHTML='此瀏覽器不支援自動掃描。<br>請改用相機 App 掃描，或手動打卡。';
+    return;
+  }
+  try{
+    _scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject=_scanStream; await video.play();
+    hint.textContent='將店內 QR Code 對準框內';
+    const detector=new BarcodeDetector({formats:['qr_code']});
+    const tick=async()=>{
+      if(!_scanStream){ return; }
+      try{
+        const codes=await detector.detect(video);
+        if(codes&&codes.length){
+          const val=codes[0].rawValue||'';
+          if(val===STAFF_QR_CODE && !_scanBusy){ _scanBusy=true; stopScan(); await doScanPunch(); return; }
+          else if(val && val!==STAFF_QR_CODE){ hint.textContent='QR Code 不正確，請掃描店內打卡碼'; }
+        }
+      }catch(_){}
+      _scanRAF=requestAnimationFrame(tick);
+    };
+    _scanRAF=requestAnimationFrame(tick);
+  }catch(e){
+    hint.innerHTML='無法開啟相機，請允許相機權限後重試。<br><span style="font-size:11px;">'+(e&&e.name?e.name:'')+'</span>';
+  }
+}
+function stopScan(){
+  if(_scanRAF){ cancelAnimationFrame(_scanRAF); _scanRAF=null; }
+  if(_scanStream){ _scanStream.getTracks().forEach(t=>t.stop()); _scanStream=null; }
+}
+// 掃到正確 QR → 判斷上班/下班 → 寫 attendance → 顯示成功
+async function doScanPunch(){
+  const today=ymd(TODAY);
+  let rec=await getAttendance(SESSION.id,today);
+  let mode, timeStr, workStr='';
+  if(!rec||!rec.clock_in){
+    // 上班
+    if(!rec) rec={id:uid('AT'),emp_id:SESSION.id,emp_name:SESSION.name||'',date:today,created_at:new Date().toISOString()};
+    rec.clock_in=nowHM();
+    await dbPut('attendance',rec);
+    mode='in'; timeStr=rec.clock_in;
+  }else if(!rec.clock_out){
+    // 下班
+    rec.clock_out=nowHM();
+    rec.work_hours=calcWorkHours(rec);
+    await dbPut('attendance',rec);
+    mode='out'; timeStr=rec.clock_out; workStr=rec.work_hours;
+  }else{
+    // 今日已完成
+    mode='done'; timeStr=rec.clock_out; workStr=rec.work_hours;
+  }
+  await refreshHeaderPunch();
+  showScanResult(mode,timeStr,workStr,rec);
+  _scanBusy=false;
+}
+function showScanResult(mode,timeStr,workStr,rec){
+  const dateFull=`${ymd(TODAY).replace(/-/g,'/')} ${timeStr}`;
+  let title,sub,icon,color;
+  if(mode==='in'){ title='上班打卡成功'; sub=`上班時間：${dateFull}`; icon='🟢'; color='var(--ok)'; }
+  else if(mode==='out'){ title='下班打卡成功'; sub=`下班時間：${dateFull}<br>今日工時：${workStr} 小時`; icon='✅'; color='var(--green)'; }
+  else { title='今日已完成打卡'; sub=`上班 ${rec.clock_in}　·　下班 ${rec.clock_out}<br>今日工時：${rec.work_hours} 小時`; icon='☑️'; color='var(--t2)'; }
+  const stage=document.getElementById('scan-stage');
+  if(stage){
+    stage.innerHTML=`<div style="padding:20px 8px;">
+      <div style="font-size:48px;margin-bottom:12px;">${icon}</div>
+      <div style="font-size:20px;font-weight:700;color:${color};margin-bottom:10px;">${title}</div>
+      <div style="font-size:14px;color:var(--t2);line-height:1.9;">${sub}</div>
+      <button class="btn btn-green" style="margin-top:22px;width:100%;padding:14px;" onclick="navTo('coach_calendar')">完成</button>
+    </div>`;
+  } else {
+    showToast(title);
+  }
+}
 // Header 打卡元件：依登入者 need_punch 與今日打卡狀態渲染
 async function refreshHeaderPunch(){
   const el=document.getElementById('tb-punch'); if(!el)return;
@@ -6246,7 +6353,10 @@ async function renderPunchPanel(){
     <div class="dk-clock" id="dk-clock">${nowStr}<span class="dk-sec" id="dk-sec">:${String(now.getSeconds()).padStart(2,'0')}</span></div>
     <div class="dk-actions">${inBtn}${outBtn}</div>
     ${footHtml}
-    <div style="text-align:center;margin-top:10px;"><button class="pp-fix" onclick="openPunchRequest()">忘記打卡？申請補打卡</button></div>
+    <div style="text-align:center;margin-top:14px;display:flex;flex-direction:column;gap:8px;">
+      <button class="btn btn-green" style="padding:12px;" onclick="navTo('scan_checkin')">📷 掃碼打卡</button>
+      <button class="pp-fix" onclick="openPunchRequest()">忘記打卡？申請補打卡</button>
+    </div>
   </div>`;
   startPunchClock();
 }
