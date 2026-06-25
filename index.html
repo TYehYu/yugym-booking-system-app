@@ -444,6 +444,10 @@ tr:hover td{background:var(--card2);}
 .wr-duty{background:var(--sage-bg);color:#4a5a3e;}
 .wr-sub{background:#eaf0f5;color:#3a5a78;}
 .wr-punch{background:#f3ece0;color:#8a6a3a;}
+/* 薪資彙總展開明細 */
+.pr-detail{display:none;}
+.pr-detail.pr-open{display:table-row;}
+@media(max-width:600px){.pr-detail.pr-open{display:block;}}
 /* 員工端月曆 */
 .mc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
 .mc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
@@ -1296,8 +1300,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26625.1241';
-const APP_VERSION_LABEL='26625.1241';
+const APP_VERSION='26625.1320';
+const APP_VERSION_LABEL='26625.1320';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -4734,9 +4738,76 @@ function effRates(emp){
   if(tpl.pt_mode==='tier' && Array.isArray(tpl.pt_tiers) && tpl.pt_tiers[0]) pt=tpl.pt_tiers[0].rate||0; // 暫以第一階代表
   return { pt_rate:pt, group_rate:tpl.group_per_head||0, duty_hourly:tpl.duty_hourly||0, source:(PAY_LABEL[et]||'')+'模板' };
 }
+// ════════ 完整薪資計算（依模板：底薪＋教練課階梯／固定＋達標獎金＋團課人頭＋值班費）════════
+// 參數：emp 員工、ptDone 教練課完成堂數、groupHeads 團課總人頭、dutyHours 值班工時
+// 回傳各項金額與合計，供薪資頁顯示
+function calcSalary(emp, ptDone, groupHeads, dutyHours){
+  // 自訂薪資：用個人費率（簡化：固定費率）
+  if(emp && emp.custom_salary){
+    const ptPay=ptDone*(emp.pt_rate||0);
+    const groupPay=groupHeads*(emp.group_rate||0);
+    const dutyPay=Math.round(dutyHours*(emp.duty_hourly||0));
+    return { base:0, ptPay, ptDetail:`${ptDone} 堂 × $${emp.pt_rate||0}`, ptIncome:ptPay, ptIsFloor:false, ptIncomeDetail:`${ptDone} 堂 × $${emp.pt_rate||0}`,
+      bonus:0, bonusDetail:'—', groupPay, groupDetail:`${groupHeads} 人 × $${emp.group_rate||0}`,
+      dutyPay, dutyDetail:`${dutyHours.toFixed(1)} hr × $${emp.duty_hourly||0}`,
+      total: ptPay+groupPay+dutyPay };
+  }
+  const et=normEmp(emp&&(emp.employment_type||emp.pay_type));
+  const tpl=(window.SALARY_TPL||{})[et]||{};
+  const base=tpl.base_salary||0;
+
+  // ① 教練課費（固定 or 階梯）
+  let ptPay=0, ptDetail='';
+  if(tpl.pt_mode==='tier' && Array.isArray(tpl.pt_tiers) && tpl.pt_tiers.length){
+    // 階梯：逐堂落在哪一階就用哪一階費率
+    const tiers=tpl.pt_tiers.slice().sort((a,b)=>(a.min||0)-(b.min||0));
+    let remain=ptDone; const parts=[];
+    for(const t of tiers){
+      const lo=t.min||0, hi=(t.max==null?Infinity:t.max);
+      // 這一階涵蓋第 lo+1 ~ hi+1 堂（min/max 以「已完成堂數」為界）
+      const cntInTier=Math.max(0, Math.min(ptDone, hi+1) - lo);
+      if(cntInTier>0){ ptPay+=cntInTier*(t.rate||0); parts.push(`${cntInTier}堂×$${t.rate||0}`); }
+    }
+    ptDetail = ptDone>0 ? parts.join(' + ') : '0 堂';
+  }else{
+    const rate=tpl.pt_rate||0;
+    ptPay=ptDone*rate; ptDetail=`${ptDone} 堂 × $${rate}`;
+  }
+
+  // ② 達標獎金（疊加：每個達到門檻的都給）
+  let bonus=0; const bonusParts=[];
+  (tpl.pt_bonus||[]).forEach(b=>{
+    if(b.amount>0 && ptDone>=(b.threshold||0)){ bonus+=b.amount; bonusParts.push(`滿${b.threshold}堂+$${b.amount}`); }
+  });
+  const bonusDetail = bonus>0 ? bonusParts.join('、') : '—';
+
+  // ③ 團課費（人頭制）
+  const ghead=tpl.group_per_head||0;
+  const groupPay=groupHeads*ghead;
+  const groupDetail=`${groupHeads} 人次 × $${ghead}`;
+
+  // ④ 值班費（工時 × 時薪）
+  const dhr=tpl.duty_hourly||0;
+  const dutyPay=Math.round(dutyHours*dhr);
+  const dutyDetail=`${dutyHours.toFixed(1)} hr × $${dhr}`;
+
+  // 保障底薪：教練課費與底薪取高者（其餘項目另外加）
+  // 課收入 = max(教練課費, 底薪)；若領底薪，標示「保障底薪」
+  const ptIncome = Math.max(ptPay, base);
+  const ptIsFloor = base>0 && base>ptPay; // 是否觸發保障底薪
+  const ptIncomeDetail = base>0
+    ? (ptIsFloor ? `保障底薪 $${base.toLocaleString()}（課費 $${ptPay.toLocaleString()} 未達底薪）`
+                 : `教練課費 $${ptPay.toLocaleString()}（高於底薪 $${base.toLocaleString()}）`)
+    : ptDetail;
+
+  return { base, ptPay, ptDetail, ptIncome, ptIsFloor, ptIncomeDetail,
+    bonus, bonusDetail, groupPay, groupDetail, dutyPay, dutyDetail,
+    total: ptIncome + bonus + groupPay + dutyPay };
+}
 const STAFF_STATUS_TAG={active:'tag-ok',unpaid_leave:'tag-warn',inactive:'tag-danger',resigned:'tag-danger'};
 const STAFF_TABS=[
   {key:'list',label:'員工'},
+  {key:'payroll',label:'薪資彙總'},
   {key:'salary',label:'薪資模板'},
   {key:'insurance',label:'勞健保模板'},
   {key:'leave',label:'特休規則'},
@@ -4750,11 +4821,82 @@ PAGES.staff=async function(){
     `<button class="seg-btn ${_staffTab===t.key?'active':''}" onclick="setStaffTab('${t.key}')">${t.label}</button>`).join('')}</div>`;
   C.innerHTML=head('STAFF','員工管理','員工資料卡 · 公司制度模板（薪資 / 勞健保 / 特休）')+tabBar+`<div id="staff-body"></div>`;
   if(_staffTab==='list') await renderStaffList();
+  else if(_staffTab==='payroll') await renderPayrollSummary();
   else if(_staffTab==='salary') await renderSalaryTemplates();
   else if(_staffTab==='insurance') await renderStaffInsurance();
   else if(_staffTab==='schedule') await renderStaffSchedule();
   else if(_staffTab==='leave') await renderStaffLeave();
 };
+// ── 薪資彙總（管理員月結：所有教練一次看）──
+let _payrollMonth=null;
+function payrollShiftMonth(d){ let[y,m]=(_payrollMonth||ymd(TODAY).slice(0,7)).split('-').map(Number); m+=d; if(m<1){m=12;y--;} if(m>12){m=1;y++;} _payrollMonth=`${y}-${String(m).padStart(2,'0')}`; navTo('staff'); }
+function payrollThisMonth(){ _payrollMonth=ymd(TODAY).slice(0,7); navTo('staff'); }
+async function renderPayrollSummary(){
+  await loadSalaryTemplates();
+  const[bookings,coaches,attendance]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('attendance').catch(()=>[])]);
+  if(!_payrollMonth) _payrollMonth=ymd(TODAY).slice(0,7);
+  const month=_payrollMonth;
+  const[my,mm]=month.split('-');
+  const isCur=month===ymd(TODAY).slice(0,7);
+  // 只列「計薪的員工」：非設備帳號、在職
+  const staff=coaches.filter(c=>c.role!=='front_desk' && c.status!=='inactive' && c.invite_status!=='pending');
+
+  const rows=staff.map(emp=>{
+    const countSalary=emp.count_salary!==false;
+    const myDone=bookings.filter(b=>b.coach_id===emp.id&&b.status==='completed'&&(b.date||'').slice(0,7)===month);
+    const ptDone=myDone.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+    const groupList=myDone.filter(b=>b.category==='小班肌力');
+    const groupHeads=groupList.reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
+    const dutyHours=(attendance||[]).filter(a=>a.emp_id===emp.id&&(a.date||'').slice(0,7)===month).reduce((s,a)=>s+(Number(a.work_hours)||0),0);
+    const sal=calcSalary(emp, ptDone, groupHeads, dutyHours);
+    const mgrBonus=(emp.is_manager?(emp.manager_bonus||0):0)+(emp.is_supervisor?(emp.supervisor_bonus||0):0);
+    const total=countSalary?(sal.total+mgrBonus):0;
+    return {emp,countSalary,ptDone,groupHeads,dutyHours,sal,mgrBonus,total};
+  });
+  const grandTotal=rows.reduce((s,r)=>s+r.total,0);
+
+  document.getElementById('staff-body').innerHTML=`
+  <div class="card ops-datebar" style="margin-bottom:14px;">
+    <button class="btn btn-ghost btn-sm" onclick="payrollShiftMonth(-1)">‹ 上個月</button>
+    <div class="ops-date-mid"><div class="ops-date-main">${my} 年 ${mm} 月 薪資彙總</div>
+      ${isCur?`<div class="ops-date-today">本月</div>`:`<button class="ops-date-back" onclick="payrollThisMonth()">回本月</button>`}</div>
+    <button class="btn btn-ghost btn-sm" onclick="payrollShiftMonth(1)">下個月 ›</button>
+  </div>
+  <div class="card">
+    <div class="card-title">月結明細 <span style="font-size:12px;color:var(--t3);font-weight:400;">共 ${rows.length} 位</span></div>
+    <div style="font-size:11.5px;color:var(--t3);margin-bottom:12px;line-height:1.7;">教練課收入＝課費與底薪取高者（保障底薪）。點員工列可展開計算明細。</div>
+    <table class="rwd-card"><thead><tr><th>員工</th><th>類型</th><th>教練課</th><th>達標獎金</th><th>團課</th><th>值班費</th><th>合計</th></tr></thead><tbody>
+    ${rows.map((r,i)=>{
+      const e=r.emp, s=r.sal;
+      return `<tr style="cursor:pointer;" onclick="document.getElementById('pr-d-${i}').classList.toggle('pr-open')">
+        <td data-label="員工" style="font-weight:500;">${e.name||'—'}${r.countSalary?'':' <span class="tag tag-warn" style="font-size:10px;">不計薪</span>'}</td>
+        <td data-label="類型">${PAY_LABEL[e.employment_type||e.pay_type]||'—'}</td>
+        <td data-label="教練課" class="num">$${s.ptIncome.toLocaleString()}${s.ptIsFloor?'<span style="font-size:10px;color:var(--gold-d);"> 底</span>':''}</td>
+        <td data-label="達標獎金" class="num">${s.bonus>0?'$'+s.bonus.toLocaleString():'—'}</td>
+        <td data-label="團課" class="num">${s.groupPay>0?'$'+s.groupPay.toLocaleString():'—'}</td>
+        <td data-label="值班費" class="num">${s.dutyPay>0?'$'+s.dutyPay.toLocaleString():'—'}</td>
+        <td data-label="合計" class="num" style="font-weight:700;color:var(--gold-d);">$${r.total.toLocaleString()}</td>
+      </tr>
+      <tr id="pr-d-${i}" class="pr-detail"><td colspan="7" style="padding:0;">
+        <div class="pr-detail-inner" style="background:var(--card2);padding:14px 18px;font-size:12.5px;line-height:2;color:var(--t2);">
+          <b style="color:var(--text);">${e.name} · ${month} 計算明細</b><br>
+          教練課：完成 ${r.ptDone} 堂 → 課費 $${s.ptPay.toLocaleString()}（${s.ptDetail}）${s.base>0?`，底薪 $${s.base.toLocaleString()} → 取高者 <b>$${s.ptIncome.toLocaleString()}</b>${s.ptIsFloor?'（保障底薪）':''}`:''}<br>
+          ${s.bonus>0?`達標獎金：$${s.bonus.toLocaleString()}（${s.bonusDetail}）<br>`:''}
+          團課：${r.groupHeads} 人次 → $${s.groupPay.toLocaleString()}<br>
+          值班費：${r.dutyHours.toFixed(1)} 小時 → $${s.dutyPay.toLocaleString()}<br>
+          ${r.mgrBonus>0?`管理獎金：$${r.mgrBonus.toLocaleString()}<br>`:''}
+          <b style="color:var(--gold-d);">合計：$${r.total.toLocaleString()}</b>${r.countSalary?'':'（此員工設為不計薪）'}
+        </div>
+      </td></tr>`;
+    }).join('')}
+    </tbody></table>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:14px;border-top:2px solid var(--bd);">
+      <span style="font-size:14px;font-weight:600;color:var(--text);">本月薪資總額</span>
+      <span style="font-family:var(--display);font-size:28px;font-weight:700;color:var(--green);">$${grandTotal.toLocaleString()}</span>
+    </div>
+  </div>
+  <div style="font-size:11.5px;color:var(--t3);padding:0 4px;line-height:1.7;">＊ 此為依薪資模板的試算金額，供月結參考。實際發放請以公司最終結算為準。完成課程、打卡工時會即時反映。</div>`;
+}
 // ── 薪資制度模板（依員工類型，各類型結構不同）──
 async function renderSalaryTemplates(){
   await loadSalaryTemplates();
@@ -9212,17 +9354,18 @@ PAGES.coach_salary=async function(){
   const myDone=bookings.filter(b=>b.coach_id===SESSION.id&&b.status==='completed'&&b.date.slice(0,7)===month);
   const myAll=bookings.filter(b=>b.coach_id===SESSION.id&&b.status!=='cancelled'&&b.date.slice(0,7)===month);
   const ptDone=myDone.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
-  const groupDone=myDone.filter(b=>b.category==='小班肌力').length;
-  const er=effRates(me);
-  const ptRate=er.pt_rate, groupRate=er.group_rate, dutyHourly=er.duty_hourly;
+  const groupDoneList=myDone.filter(b=>b.category==='小班肌力');
+  const groupDone=groupDoneList.length;
+  // 團課總人頭：每堂實際參加人數加總（member_ids 長度；至少算 1）
+  const groupHeads=groupDoneList.reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
   const myAtt=(attendance||[]).filter(a=>a.emp_id===SESSION.id&&(a.date||'').slice(0,7)===month);
   const dutyHours=myAtt.reduce((s,a)=>s+(Number(a.work_hours)||0),0);
   const payTypeLabel=PAY_LABEL[me.employment_type||me.pay_type]||'—';
-  const ptPay=ptDone*ptRate, groupPay=groupDone*groupRate, dutyPay=Math.round(dutyHours*dutyHourly);
-  const bonus=(me.is_manager?(me.manager_bonus||0):0)+(me.is_supervisor?(me.supervisor_bonus||0):0);
+  // 完整薪資計算（底薪＋階梯課時費＋達標獎金＋團課人頭＋值班費）
+  const sal=calcSalary(me, ptDone, groupHeads, dutyHours);
+  const mgrBonus=(me.is_manager?(me.manager_bonus||0):0)+(me.is_supervisor?(me.supervisor_bonus||0):0);
   const countSalary=me.count_salary!==false;
-  const estimate=countSalary?(ptPay+groupPay+dutyPay+bonus):0;
-  const rate=ptRate; // 明細用：私教/體驗用教練課費率，團課另計
+  const estimate=countSalary?(sal.total+mgrBonus):0;
   const mgrLine=[me.is_manager?`店長獎金 $${(me.manager_bonus||0).toLocaleString()}`:'',me.is_supervisor?`主管獎金 $${(me.supervisor_bonus||0).toLocaleString()}`:''].filter(Boolean).join('　·　');
   const[my,mm]=month.split('-');
   const isCurMonth = month===ymd(TODAY).slice(0,7);
@@ -9238,10 +9381,12 @@ PAGES.coach_salary=async function(){
   </div>
   ${!hasData?`<div class="card" style="text-align:center;padding:30px 16px;color:var(--t3);"><div style="font-size:14px;">這個月尚無薪資資料</div><div style="font-size:12px;margin-top:6px;">完成課程或值班後，資料會顯示在這裡</div></div>`:''}
   <div class="stat-grid salary-grid"${!hasData?' style="display:none;"':''}>
-    <div class="stat-card"><div class="sc-label">教練課（完成×費率）</div><div><span class="sc-num">${ptPay.toLocaleString()}</span><span class="sc-unit">元</span></div><div style="font-size:11px;color:var(--t3);margin-top:3px;">${ptDone} 堂 × $${ptRate}</div></div>
-    <div class="stat-card"><div class="sc-label">團課（完成×費率）</div><div><span class="sc-num">${groupPay.toLocaleString()}</span><span class="sc-unit">元</span></div><div style="font-size:11px;color:var(--t3);margin-top:3px;">${groupDone} 堂 × $${groupRate}</div></div>
-    <div class="stat-card"><div class="sc-label">值班費（工時×時薪）</div><div><span class="sc-num">${dutyPay.toLocaleString()}</span><span class="sc-unit">元</span></div><div style="font-size:11px;color:var(--t3);margin-top:3px;">${dutyHours.toFixed(1)} hr × $${dutyHourly}</div></div>
-    ${bonus?`<div class="stat-card"><div class="sc-label">管理獎金</div><div><span class="sc-num">${bonus.toLocaleString()}</span><span class="sc-unit">元</span></div></div>`:''}
+    <div class="stat-card"><div class="sc-label">${sal.ptIsFloor?'教練課收入（保障底薪）':'教練課收入'}</div><div><span class="sc-num">${sal.ptIncome.toLocaleString()}</span><span class="sc-unit">元</span></div><div style="font-size:11px;color:var(--t3);margin-top:3px;">${sal.ptIncomeDetail}</div></div>
+    ${sal.base>0?`<div class="stat-card" style="opacity:.75;"><div class="sc-label">— 教練課費明細</div><div><span class="sc-num" style="font-size:22px;">${sal.ptPay.toLocaleString()}</span><span class="sc-unit">元</span></div><div style="font-size:11px;color:var(--t3);margin-top:3px;">${sal.ptDetail}</div></div>`:''}
+    ${sal.bonus>0?`<div class="stat-card"><div class="sc-label">達標獎金</div><div><span class="sc-num">${sal.bonus.toLocaleString()}</span><span class="sc-unit">元</span></div><div style="font-size:11px;color:var(--t3);margin-top:3px;">${sal.bonusDetail}</div></div>`:''}
+    <div class="stat-card"><div class="sc-label">團課費</div><div><span class="sc-num">${sal.groupPay.toLocaleString()}</span><span class="sc-unit">元</span></div><div style="font-size:11px;color:var(--t3);margin-top:3px;">${sal.groupDetail}</div></div>
+    <div class="stat-card"><div class="sc-label">值班費</div><div><span class="sc-num">${sal.dutyPay.toLocaleString()}</span><span class="sc-unit">元</span></div><div style="font-size:11px;color:var(--t3);margin-top:3px;">${sal.dutyDetail}</div></div>
+    ${mgrBonus?`<div class="stat-card"><div class="sc-label">管理獎金</div><div><span class="sc-num">${mgrBonus.toLocaleString()}</span><span class="sc-unit">元</span></div></div>`:''}
     <div class="stat-card"><div class="sc-label">預估合計</div><div><span class="sc-num" style="color:var(--gold-d)">${estimate.toLocaleString()}</span><span class="sc-unit">元</span></div></div>
   </div>
   <div class="card"><div class="card-title">本月課堂明細</div>
@@ -9250,17 +9395,18 @@ PAGES.coach_salary=async function(){
       <div style="flex:1;background:var(--card2);border-radius:10px;padding:14px;text-align:center;"><div class="num" style="font-size:26px;color:var(--brown);">${groupDone}</div><div style="font-size:11px;color:var(--t2);margin-top:4px;">小班完成</div></div>
     </div>
     ${myAll.length===0?'<div class="empty"><div class="em-t">本月尚無排課</div></div>':
+    (()=>{ const er=effRates(me); return
     `<table><thead><tr><th>日期</th><th>時間</th><th>會員</th><th>類型</th><th>狀態</th><th>計薪</th></tr></thead><tbody>
     ${myAll.sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time)).map(b=>{
       const counted=b.status==='completed';
-      const r=(b.category==='小班肌力')?groupRate:ptRate;
+      const r=(b.category==='小班肌力')?er.group_rate:er.pt_rate;
       return `<tr><td>${b.date.slice(5)}</td><td>${b.start_time}</td><td>${memMap[b.member_id]||'—'}</td>
       <td><span class="tag tag-${colorClass(typeOfCat(b.category))}">${b.category}</span></td>
       <td><span class="tag ${counted?'tag-ok':'tag-warn'}">${statusLabel(b.status)}</span></td>
       <td class="num">${counted?'$'+r:'—'}</td></tr>`;}).join('')}
-    </tbody></table>`}
+    </tbody></table>`; })()}
   </div>
-  <div style="font-size:11.5px;color:var(--t3);padding:0 4px;line-height:1.7;">＊ 預估 = 完成課堂 × 費率 ＋ 管理獎金。正式版將依薪資制度（正職／兼職／合作／工讀）套用不同計算規則與月結，資料表已預留對應欄位。</div>`;
+  <div style="font-size:11.5px;color:var(--t3);padding:0 4px;line-height:1.7;">＊ 教練課收入＝教練課費與底薪取高者（保障底薪）。合計＝教練課收入 ＋ 達標獎金 ＋ 團課人頭 ＋ 值班費（打卡工時×時薪）＋ 管理獎金。依各員工類型套用對應薪資模板。實際發放金額以公司結算為準。</div>`;
 };
 
 /* ════════ 會員:通知中心 ════════ */
