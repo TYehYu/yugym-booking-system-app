@@ -1326,8 +1326,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26625.1648';
-const APP_VERSION_LABEL='26625.1648';
+const APP_VERSION='26625.1722';
+const APP_VERSION_LABEL='26625.1722';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -3736,6 +3736,8 @@ async function openBookingDetail(id){
   // 教練只能改自己負責（主責或代課）的課；管理員 / 櫃台全權
   const ownByCoach = SESSION.role!=='coach' || b.coach_id===SESSION.id || b.substitute_coach_id===SESSION.id;
   const editable=!window._coachReadonly && ownByCoach && b.status!=='cancelled'&&b.status!=='completed'&&b.date>=ymd(TODAY);
+  // 簽到僅後台（管理員/櫃台）可代為操作；教練端不能幫簽（會員自行掃碼簽到）
+  const staffCanCheckin = SESSION.role==='admin' || SESSION.role==='front_desk';
   const slotDt=new Date(b.date+'T'+b.start_time+':00');
   const within24=(slotDt-TODAY)/3600000 < 24 && (slotDt-TODAY)>=0;
   const tkLine = tk ? `<div><span style="color:var(--t2);">票券</span>　${tk.plan_name||'票券'}　<b class="num">${tk.sessions_remaining}/${tk.sessions_total}</b>${tk.sessions_remaining<=2?' <span class="tag tag-warn">建議續約</span>':''}　<span style="color:var(--t3);font-size:11px;">效期至 ${tk.expire_date}</span></div>` : '';
@@ -3752,7 +3754,7 @@ async function openBookingDetail(id){
       const badge = inHere
         ? '<span class="tag tag-ok" style="font-size:11px;">已簽到</span>'
         : '<span class="tag tag-warn" style="font-size:11px;">未簽到</span>';
-      const btn = editable
+      const btn = (editable && staffCanCheckin)
         ? `<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="toggleGroupAttend('${b.id}','${mid}')">${inHere?'取消簽到':'簽到'}</button>`
         : '';
       return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--bd);">
@@ -3766,7 +3768,7 @@ async function openBookingDetail(id){
   }
   showModal(`<div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <span>預約明細</span>
-      ${b.status==='booked'&&!isGroupD
+      ${b.status==='booked'&&!isGroupD&&staffCanCheckin
         ? ((function(){const nd=(parseYmd(b.date)?ymd(parseYmd(b.date)):b.date);return nd<ymd(TODAY);})()
             ? `<button class="btn btn-gold btn-sm" onclick="openMakeupModal('${b.id}')">補簽</button>`
             : `<button class="btn btn-green btn-sm" onclick="checkInBooking('${b.id}')">簽到</button>`)
@@ -3843,24 +3845,27 @@ async function doGrantMakeupForMember(member_id){
 }
 
 /* ── 簽到：改狀態 checked_in、記簽到時間、發點數（票券已於預約時扣，不重扣） ── */
-async function checkInBooking(id){
+async function checkInBooking(id, opts){
+  opts=opts||{};
   const b=await dbGet('bookings',id);
-  if(!b){showToast('找不到預約');return;}
-  if(b.status==='checked_in'){showToast('此預約已簽到');return;}
+  if(!b){showToast('找不到預約');return false;}
+  if(b.status==='checked_in'){showToast('此預約已簽到');return false;}
   // 簽到開放時間：課程開始前 30 分鐘起。太早不可簽（維持時段公平、避免提前領點數）
   const slotDt=new Date(b.date+'T'+b.start_time+':00');
   const openDt=new Date(slotDt.getTime()-30*60000);
   if(new Date()<openDt){
     showToast('尚未開放簽到（課程開始前 30 分鐘起）');
-    return;
+    return false;
   }
   b.status='checked_in';
   b.checked_in_at=new Date().toISOString();
   await dbPut('bookings',b);
   const granted=await grantCheckinReward(b);     // 回傳是否發點
+  if(opts.silent) return true;                   // 掃碼簽到：畫面由呼叫端自行處理
   closeModal();
   showToast('已簽到'+(granted?'，已發放自主訓練點數 2 點':''));
   navTo(CUR_PAGE);
+  return true;
 }
 
 /* ── 會員端簽到（沿用 checkInBooking 的規則與發點，確保只簽自己的課）── */
@@ -3869,6 +3874,95 @@ async function memCheckin(id){
   if(!b){showToast('找不到預約');return;}
   if(b.member_id!==SESSION.id){showToast('只能為自己的預約簽到');return;}
   await checkInBooking(id); // 內含時間檢查、發點、navTo 重繪
+}
+
+/* ════════ 會員掃碼簽到（掃店內 YUGYM-MEMBER-CHECKIN）════════
+   流程：掃到正確碼 → 找本人「30 分鐘窗內、未簽到」的課 → 一堂直接簽、多堂列出選 */
+PAGES.member_scan_checkin=async function(){
+  _scanMode='member'; _scanBusy=false;
+  C.innerHTML=`<div style="max-width:480px;margin:0 auto;">
+    ${head('CHECK IN','掃碼簽到','對準店內會員簽到碼即可完成上課簽到')}
+    <div class="card" style="text-align:center;">
+      <div id="scan-stage">
+        <div class="scan-frame"><video id="scan-video" playsinline muted></video><div class="scan-reticle"></div></div>
+        <div id="scan-hint" style="font-size:13px;color:var(--t2);margin-top:14px;">正在開啟相機…</div>
+        <button class="btn btn-ghost" style="margin-top:14px;" onclick="stopScan();navTo('mem_bookings')">取消</button>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd);">
+          <div style="font-size:11.5px;color:var(--t3);line-height:1.7;">簽到需掃描店內會員簽到碼，<br>且於課程開始前 30 分鐘起才能簽到。</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  startScan();
+};
+// 掃到正確會員碼後：找出可簽到的課並處理
+async function doMemberScanCheckin(){
+  const today=ymd(TODAY);
+  const now=new Date();
+  let bookings=[];
+  try{ bookings=await dbGetAll('bookings'); }catch(_){}
+  // 本人、今日、狀態可簽（booked/scheduled）、已到 30 分鐘窗的課
+  const candidates=(bookings||[]).filter(b=>{
+    if(b.member_id!==SESSION.id) return false;
+    if(b.date!==today) return false;
+    if(b.status!=='booked'&&b.status!=='scheduled') return false;
+    const slotDt=new Date(b.date+'T'+b.start_time+':00');
+    const openDt=new Date(slotDt.getTime()-30*60000);
+    return now>=openDt;
+  }).sort((a,b)=>a.start_time.localeCompare(b.start_time));
+
+  if(!candidates.length){
+    // 進一步分辨原因：今天有課但還沒到簽到時間 vs 完全沒課
+    const todayMine=(bookings||[]).filter(b=>b.member_id===SESSION.id&&b.date===today&&(b.status==='booked'||b.status==='scheduled'));
+    const msg = todayMine.length
+      ? '尚未開放簽到（課程開始前 30 分鐘起）'
+      : '目前沒有可簽到的課程';
+    showMemberScanResult(false,msg);
+    return;
+  }
+  if(candidates.length===1){
+    const ok=await checkInBooking(candidates[0].id,{silent:true});  // 內含時間檢查、發點
+    showMemberScanResult(!!ok, ok?'簽到成功':'簽到失敗，請稍後再試', ok?candidates[0]:null);
+    return;
+  }
+  // 多堂 → 列出讓會員選
+  showMemberPickClass(candidates);
+}
+function showMemberPickClass(list){
+  const rows=list.map(b=>{
+    const cat=b.category||'課程';
+    return `<button class="btn btn-ghost" style="width:100%;text-align:left;padding:13px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;"
+      onclick="memberPickCheckin('${b.id}')">
+      <span><b>${b.start_time}</b>　${cat}</span><span style="color:var(--t3);">簽到 ›</span></button>`;
+  }).join('');
+  const stage=document.getElementById('scan-stage');
+  const html=`<div style="padding:8px 4px;">
+    <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px;">你今天有多堂課</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:16px;">請選擇要簽到的課程</div>
+    ${rows}
+    <button class="btn btn-ghost" style="width:100%;margin-top:6px;" onclick="navTo('mem_bookings')">取消</button>
+  </div>`;
+  if(stage) stage.innerHTML=html; else showToast('你今天有多堂課，請至我的預約簽到');
+}
+async function memberPickCheckin(id){
+  const b=await dbGet('bookings',id);
+  const ok=await checkInBooking(id,{silent:true});
+  showMemberScanResult(!!ok, ok?'簽到成功':'簽到失敗，請稍後再試', ok?b:null);
+}
+function showMemberScanResult(ok,msg,b){
+  const stage=document.getElementById('scan-stage');
+  const icon=ok?'🟢':'🔸';
+  const color=ok?'var(--ok)':'var(--gold-d)';
+  const detail = (ok&&b)
+    ? `<div style="font-size:14px;color:var(--t2);line-height:1.9;">${b.start_time}　${b.category||'課程'}</div>`
+    : '';
+  const html=`<div style="padding:26px 8px;text-align:center;">
+      <div style="font-size:46px;margin-bottom:12px;">${icon}</div>
+      <div style="font-size:19px;font-weight:700;color:${color};margin-bottom:8px;">${msg}</div>
+      ${detail}
+      <button class="btn btn-green" style="width:100%;padding:14px;margin-top:22px;" onclick="navTo('mem_bookings')">完成</button>
+    </div>`;
+  if(stage) stage.innerHTML=html; else showToast(msg);
 }
 /* ── 簽到自動發點數 ──
    教練課/體驗課 → 自主訓練點數 +2；友善教練課 → 友善自主訓練點數 +2
@@ -6701,10 +6795,13 @@ async function punchOut(){
  }catch(e){ console.error('punchOut 失敗:',e); showToast('打卡失敗：'+(e&&e.message?e.message:e)); }
 }
 // ════════ QR Code 掃描打卡（MVP）════════
-const STAFF_QR_CODE='YUGYM-STAFF-CHECKIN'; // 店內固定 QR 內容
+const STAFF_QR_CODE='YUGYM-STAFF-CHECKIN';   // 店內員工打卡碼
+const MEMBER_QR_CODE='YUGYM-MEMBER-CHECKIN'; // 店內會員上課簽到碼（與員工碼分開）
+let _scanMode='staff'; // 'staff'=員工打卡 / 'member'=會員上課簽到
 let _scanStream=null, _scanRAF=null, _scanBusy=false;
 // 掃描頁面
 PAGES.scan_checkin=async function(){
+  _scanMode='staff'; _scanBusy=false;
   // 必須是需打卡員工
   let me=null; try{ me=await dbGet('coaches',SESSION.id); }catch(_){}
   C.innerHTML=`<div style="max-width:480px;margin:0 auto;">
@@ -6780,10 +6877,17 @@ function ensureJsQR(hint){
     document.head.appendChild(s);
   });
 }
-// 處理掃到的內容
+// 處理掃到的內容（依 _scanMode 分派）
 function handleScanValue(val,hint){
-  if(val===STAFF_QR_CODE && !_scanBusy){ _scanBusy=true; stopScan(); doScanPunch(); }
-  else if(val && val!==STAFF_QR_CODE){ if(hint)hint.textContent='QR Code 不正確，請掃描店內打卡碼'; }
+  if(_scanBusy) return;
+  if(_scanMode==='member'){
+    if(val===MEMBER_QR_CODE){ _scanBusy=true; stopScan(); doMemberScanCheckin(); }
+    else if(val){ if(hint)hint.textContent='QR Code 不正確，請掃描店內會員簽到碼'; }
+    return;
+  }
+  // 預設：員工打卡
+  if(val===STAFF_QR_CODE){ _scanBusy=true; stopScan(); doScanPunch(); }
+  else if(val){ if(hint)hint.textContent='QR Code 不正確，請掃描店內打卡碼'; }
 }
 function stopScan(){
   if(_scanRAF){ cancelAnimationFrame(_scanRAF); _scanRAF=null; }
@@ -7882,7 +7986,7 @@ PAGES.mem_bookings=async function(){
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   const upcoming=mine.filter(b=>b.date>=ymd(TODAY));
   C.innerHTML=head('BOOKINGS','我的預約','查看你即將到來的課程')+
-  `<div class="card"><div class="card-title">即將到來 <button class="btn btn-green btn-sm" onclick="openSelfBookModal()">＋ 預約自主訓練</button></div>
+  `<div class="card"><div class="card-title">即將到來 <span style="margin-left:auto;display:inline-flex;gap:6px;"><button class="btn btn-ghost btn-sm" onclick="navTo('member_scan_checkin')">📷 掃碼簽到</button><button class="btn btn-green btn-sm" onclick="openSelfBookModal()">＋ 預約自主訓練</button></span></div>
   ${upcoming.length===0?'<div class="empty"><div class="em-t">目前沒有預約</div><div style="font-size:11px;margin-top:6px;">私教課由教練為你安排；自主訓練可自行預約</div></div>':
   upcoming.map(b=>{const d=parseYmd(b.date);const isSelf=b.category==='自主訓練';
     // 簽到按鈕：狀態 booked、課程開始前 30 分鐘起、尚未開始過久（當天）才可簽
