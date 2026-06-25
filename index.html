@@ -830,17 +830,6 @@ tr:hover td{background:var(--card2);}
   padding:13px 26px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;
   box-shadow:0 3px 12px rgba(0,61,50,0.22);}
 .qb-fab:active{transform:scale(0.99);}
-/* 會員掃碼簽到：明顯的置中大圓鈕 */
-.mem-scan-wrap{display:flex;flex-direction:column;align-items:center;margin:6px 0 22px;}
-.mem-scan-btn{width:128px;height:128px;border-radius:50%;border:none;cursor:pointer;
-  background:var(--green);color:#fff;font-family:inherit;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
-  box-shadow:0 6px 20px rgba(0,61,50,0.28);transition:transform .15s,box-shadow .15s;}
-.mem-scan-btn:hover{box-shadow:0 8px 26px rgba(0,61,50,0.34);}
-.mem-scan-btn:active{transform:scale(0.96);}
-.mem-scan-btn .msb-ic{font-size:38px;line-height:1;}
-.mem-scan-btn .msb-tx{font-size:15px;font-weight:700;letter-spacing:0.04em;}
-.mem-scan-hint{font-size:12px;color:var(--t3);margin-top:10px;}
 /* 快速預約 sheet（從底部滑出；底部已無浮動鈕，不被遮擋） */
 .qb-panel{padding-bottom:0;}
 @media(min-width:601px){.qb-panel{top:50%;}}
@@ -1337,8 +1326,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26625.1735';
-const APP_VERSION_LABEL='26625.1735';
+const APP_VERSION='26625.1748';
+const APP_VERSION_LABEL='26625.1748';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1714,6 +1703,7 @@ function navTo(key){
   CUR_PAGE=key;
   if(typeof closeModal==='function') closeModal(); // 切頁時關掉任何殘留的彈窗，避免 modal 蓋住新頁
   if(typeof clearPunchClock==='function') clearPunchClock(); // 停掉打卡時鐘計時器
+  if(typeof clearMemClock==='function') clearMemClock(); // 停掉會員首頁時鐘
   if(typeof stopScan==='function' && key!=='scan_checkin') stopScan(); // 離開掃描頁時關相機
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.key===key));
   if(typeof PAGES[key]!=='function'){
@@ -7988,47 +7978,123 @@ async function tlxApplyMove(id,ds,newTime,dur){
   }catch(e){ showToast('調整失敗：'+(e&&e.message?e.message:e)); renderCoachDayList(); }
 }
 
-/* ════════ 會員端:我的預約 ════════ */
+/* ════════ 會員端:我的預約（仿打卡面板：日期+時鐘+左右圓鈕+月曆）════════ */
+let _memCalMonth=null;  // {y,m}
+let _memCalSel=null;    // 選中日期 ymd
 PAGES.mem_bookings=async function(){
   const[bookings,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches')]);
   try{ window._meMember=await dbGet('members',SESSION.id); }catch(_){}
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const mine=bookings.filter(b=>b.member_id===SESSION.id&&b.status!=='cancelled')
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
-  const upcoming=mine.filter(b=>b.date>=ymd(TODAY));
-  C.innerHTML=head('BOOKINGS','我的預約','查看你即將到來的課程')+
-  `<div class="mem-scan-wrap">
-    <button class="mem-scan-btn" onclick="navTo('member_scan_checkin')">
-      <span class="msb-ic">📷</span><span class="msb-tx">掃碼簽到</span>
-    </button>
-    <div class="mem-scan-hint">上課前掃描店內 QR Code 完成簽到</div>
+  window._memCalData={mine,coachMap};
+  _memCalMonth=null; _memCalSel=null;
+  const now=new Date();
+  const nowStr=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const WDx=['日','一','二','三','四','五','六'];
+  const dateStr=`${now.getMonth()+1} 月 ${now.getDate()} 日　星期${WDx[now.getDay()]}`;
+  C.innerHTML=head('SCHEDULE','我的預約','點圓鈕簽到或預約 · 點日期看當天課')+
+  `<div class="dk-card">
+    <div class="dk-date">${dateStr}</div>
+    <div class="dk-clock" id="mem-clock">${nowStr}<span class="dk-sec" id="mem-sec">:${String(now.getSeconds()).padStart(2,'0')}</span></div>
+    <div class="dk-actions">
+      <button class="dk-btn dk-in" onclick="navTo('member_scan_checkin')"><span class="dk-btn-l">掃碼<br>簽到<br><span class="dk-btn-scan">📷</span></span></button>
+      <button class="dk-btn dk-out" onclick="openSelfBookModal()"><span class="dk-btn-l">預約<br>自主訓練</span></button>
+    </div>
   </div>
-  <div class="card"><div class="card-title">即將到來 <button class="btn btn-green btn-sm" style="margin-left:auto;" onclick="openSelfBookModal()">＋ 預約自主訓練</button></div>
-  ${upcoming.length===0?'<div class="empty"><div class="em-t">目前沒有預約</div><div style="font-size:11px;margin-top:6px;">私教課由教練為你安排；自主訓練可自行預約</div></div>':
-  upcoming.map(b=>{const d=parseYmd(b.date);const isSelf=b.category==='自主訓練';
-    // 簽到按鈕：狀態 booked、課程開始前 30 分鐘起、尚未開始過久（當天）才可簽
-    let actionBtn='';
-    if(b.status==='checked_in'){
-      actionBtn=`<span class="tag tag-ok" style="font-size:11px;margin-top:6px;">已簽到</span>`;
-    }else if(b.status==='booked'||b.status==='scheduled'){
-      const slotDt=new Date(b.date+'T'+b.start_time+':00');
-      const openDt=new Date(slotDt.getTime()-30*60000);
-      const canCheckin = new Date()>=openDt && b.date===ymd(TODAY);
-      if(canCheckin){
-        actionBtn=`<button class="btn btn-green btn-sm" style="margin-top:6px;" onclick="memCheckin('${b.id}')">簽到</button>`;
-      }else if(isSelf){
-        actionBtn=`<button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="memCancelSelf('${b.id}')">取消</button>`;
-      }
-    }
-    return `<div class="list-item">
-    <div class="li-date"><div class="lid-d">${d.getDate()}</div><div class="lid-m">${d.getMonth()+1}月</div></div>
-    <div class="li-sep"></div>
-    <div class="li-body"><div class="li-title"><span class="tag tag-${colorClass(typeOfCat(b.category))}">${b.category}</span></div>
-    <div class="li-meta">${b.coach_id?coachMap[b.coach_id]:'自主訓練'} · ${b.duration}分鐘 · ${statusLabel(b.status)}</div></div>
-    <div class="li-time"><div class="lit-t">${b.start_time}</div><div class="lit-w">週${WD[d.getDay()]}</div>${actionBtn}</div>
-  </div>`;}).join('')}
-  </div>`;
+  <div class="card"><div class="card-title">我的課表</div><div id="mem-cal"></div></div>`;
+  startMemClock();
+  renderMemMonthView();
 };
+// 會員首頁時鐘
+let _memClockTimer=null;
+function startMemClock(){
+  clearMemClock();
+  _memClockTimer=setInterval(()=>{
+    const el=document.getElementById('mem-clock'); if(!el){ clearMemClock(); return; }
+    const n=new Date();
+    const hm=`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
+    el.childNodes[0].nodeValue=hm;
+    const sec=document.getElementById('mem-sec'); if(sec) sec.textContent=':'+String(n.getSeconds()).padStart(2,'0');
+  },1000);
+}
+function clearMemClock(){ if(_memClockTimer){ clearInterval(_memClockTimer); _memClockTimer=null; } }
+// 會員月曆檢視（整月格子 + 點日期看當天課）
+function renderMemMonthView(){
+  const box=document.getElementById('mem-cal'); if(!box||!window._memCalData)return;
+  const {mine}=window._memCalData;
+  const today=new Date(TODAY);
+  if(!_memCalMonth) _memCalMonth={y:today.getFullYear(),m:today.getMonth()};
+  if(!_memCalSel) _memCalSel=ymd(today);
+  const {y,m}=_memCalMonth;
+  const first=new Date(y,m,1);
+  const startDow=first.getDay();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const todayStr=ymd(today);
+  const WDH=['日','一','二','三','四','五','六'];
+  const cntByDate={};
+  mine.forEach(b=>{ if(!b.date)return; cntByDate[b.date]=(cntByDate[b.date]||0)+1; });
+  let cells='';
+  for(let i=0;i<startDow;i++) cells+=`<div class="mc-cell mc-empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const cnt=cntByDate[ds]||0;
+    const isToday=ds===todayStr, isSel=ds===_memCalSel;
+    cells+=`<div class="mc-cell${isSel?' mc-sel':''}${isToday?' mc-today':''}" onclick="memCalPick('${ds}')">
+      <span class="mc-d">${d}</span>${cnt>0?`<span class="mc-dot">${cnt}</span>`:''}</div>`;
+  }
+  const sel=parseYmd(_memCalSel);
+  const selBk=mine.filter(b=>b.date===_memCalSel).sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
+  const selLabel=`${_memCalSel.slice(5).replace('-','/')}（${WDH[sel.getDay()]}）`;
+  let listHtml;
+  if(selBk.length===0){
+    listHtml=`<div style="text-align:center;color:var(--t3);font-size:13px;padding:24px 0;">這天沒有課</div>`;
+  }else{
+    listHtml=selBk.map(b=>{
+      const d=parseYmd(b.date);
+      const isSelf=b.category==='自主訓練';
+      const dur=b.duration||60;
+      const end=minToTime(timeToMin(b.start_time)+dur);
+      const who=b.coach_id?(window._memCalData.coachMap[b.coach_id]||'教練'):'自主訓練';
+      // 簽到/取消按鈕
+      let actionBtn='';
+      if(b.status==='checked_in'){
+        actionBtn=`<span class="tag tag-ok" style="font-size:11px;">已簽到</span>`;
+      }else if(b.status==='booked'||b.status==='scheduled'){
+        const slotDt=new Date(b.date+'T'+b.start_time+':00');
+        const openDt=new Date(slotDt.getTime()-30*60000);
+        const canCheckin=new Date()>=openDt && b.date===ymd(TODAY);
+        if(canCheckin) actionBtn=`<button class="btn btn-green btn-sm" onclick="memCheckin('${b.id}')">簽到</button>`;
+        else if(isSelf) actionBtn=`<button class="btn btn-ghost btn-sm" onclick="memCancelSelf('${b.id}')">取消</button>`;
+      }
+      const barCls=isSelf?'mc-bar-self':(b.category==='小班肌力'?'mc-bar-group':(b.category==='體驗'?'mc-bar-trial':'mc-bar-pt'));
+      return `<div class="mc-ev">
+        <div class="mc-ev-time"><span class="mc-ev-t1">${b.start_time}</span><span class="mc-ev-t2">${end}</span></div>
+        <div class="mc-ev-bar ${barCls}"></div>
+        <div class="mc-ev-body"><div class="mc-ev-name">${b.category}</div>
+          <div class="mc-ev-cat">${who} · ${dur}分鐘 · ${statusLabel(b.status)}</div></div>
+        <div style="display:flex;align-items:center;">${actionBtn}</div>
+      </div>`;
+    }).join('');
+  }
+  box.innerHTML=`
+    <div class="mc-head">
+      <button class="btn btn-ghost btn-sm" onclick="memCalShiftMonth(-1)">‹</button>
+      <div style="font-weight:600;color:var(--green);">${y} 年 ${m+1} 月</div>
+      <button class="btn btn-ghost btn-sm" onclick="memCalShiftMonth(1)">›</button>
+    </div>
+    <div class="mc-wd mc-grid">${WDH.map((w,i)=>`<div class="mc-wdh${i===0||i===6?' mc-wk':''}">${w}</div>`).join('')}</div>
+    <div class="mc-grid">${cells}</div>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd);">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;">${selLabel}</div>
+      ${listHtml}
+    </div>`;
+}
+function memCalPick(ds){ _memCalSel=ds; renderMemMonthView(); }
+function memCalShiftMonth(delta){
+  let {y,m}=_memCalMonth; m+=delta; if(m<0){m=11;y--;} if(m>11){m=0;y++;}
+  _memCalMonth={y,m}; renderMemMonthView();
+}
 
 /* ── 會員自助預約自主訓練（訂位式：選日期→看可預約時段→點時段送出）── */
 async function openSelfBookModal(){
