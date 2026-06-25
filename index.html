@@ -432,6 +432,11 @@ tr:hover td{background:var(--card2);}
 .dk-out-done{background:#eef0f4;color:#7a7e88;}
 .dk-out-d{background:#f0efe9;color:#b8b4aa;}
 .dk-btn:disabled{cursor:default;}
+/* 會員首頁圓鈕：掃碼=深綠、預約自主訓練=金色 */
+.mem-dk-scan{background:var(--green);color:#fff;}
+.mem-dk-scan .dk-btn-l{color:#fff;}
+.mem-dk-book{background:var(--gold);color:#fff;}
+.mem-dk-book .dk-btn-l{color:#fff;}
 .dk-foot{font-size:12.5px;color:var(--t2);margin-top:12px;}
 .dk-undo{background:none;border:none;font-size:12px;color:var(--danger);text-decoration:underline;cursor:pointer;font-family:inherit;padding:0;margin-left:4px;}
 /* QR 掃描框 */
@@ -1326,8 +1331,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26625.1756';
-const APP_VERSION_LABEL='26625.1756';
+const APP_VERSION='26625.1832';
+const APP_VERSION_LABEL='26625.1832';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1563,6 +1568,7 @@ function enterApp(){
   let firstItems;
   if(SESSION.role==='admin') firstItems = isMobile?MOBILE_ADMIN_NAV:NAV.admin;
   else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:NAV.coach;
+  else if(SESSION.role==='front_desk') firstItems = isMobile?MOBILE_FRONTDESK_NAV:NAV.front_desk;
   else firstItems = NAV[SESSION.role]||[];
   if(firstItems[0]) navTo(firstItems[0].key);
   renderPreviewBar();
@@ -1591,6 +1597,7 @@ function switchPreviewRole(role){
   let firstItems;
   if(SESSION.role==='admin') firstItems = isMobile?MOBILE_ADMIN_NAV:NAV.admin;
   else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:NAV.coach;
+  else if(SESSION.role==='front_desk') firstItems = isMobile?MOBILE_FRONTDESK_NAV:NAV.front_desk;
   else firstItems = NAV[SESSION.role]||[];
   if(firstItems[0]) navTo(firstItems[0].key);
   renderPreviewBar();
@@ -1628,6 +1635,7 @@ const NAV={
     {key:'calendar',label:'預約行事曆'},
     {key:'members',label:'會員管理'},
     {key:'staff',label:'員工管理'},
+    {key:'attendance',label:'出勤管理'},
     {key:'ticketing',label:'票券管理'},
     {key:'exercise_db',label:'動作資料庫'},
     {key:'settings',label:'系統設定'},
@@ -1663,6 +1671,12 @@ const MOBILE_COACH_NAV=[
   {key:'coach_calendar',label:'我的預約'},
   {key:'coach_salary',label:'薪資紀錄'},
 ];
+// 櫃台｜手機版：精簡（行事曆只看月曆、會員只搜尋、票券只看方案；櫃台主力為平板/桌機）
+const MOBILE_FRONTDESK_NAV=[
+  {key:'fd_calendar',label:'行事曆'},
+  {key:'member_search',label:'會員'},
+  {key:'fd_plans',label:'票券方案'},
+];
 function buildNav(){
   const nav=document.getElementById('sidenav');
   const isMobile=window.innerWidth<=600;
@@ -1671,6 +1685,8 @@ function buildNav(){
     items = isMobile ? MOBILE_ADMIN_NAV : NAV.admin;
   }else if(SESSION.role==='coach'){
     items = isMobile ? MOBILE_COACH_NAV : NAV.coach;
+  }else if(SESSION.role==='front_desk'){
+    items = isMobile ? MOBILE_FRONTDESK_NAV : NAV.front_desk;
   }else{
     items = NAV[SESSION.role] || [];
   }
@@ -6298,6 +6314,103 @@ function fallbackCopy(txt){
   ta.remove();
 }
 
+/* ════════ 櫃台手機專用頁（精簡、唯讀）════════ */
+// 行事曆：唯讀全店月曆，點日期看當天課（不可新增/排課）
+let _fdCalMonth=null, _fdCalSel=null;
+PAGES.fd_calendar=async function(){
+  const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
+  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
+  const all=bookings.filter(b=>b.status!=='cancelled');
+  window._fdCalData={all,memMap,coachMap};
+  _fdCalMonth=null; _fdCalSel=null;
+  C.innerHTML=head('SCHEDULE','行事曆','點日期看當天預約（唯讀）')+`<div class="card"><div id="fd-cal"></div></div>`;
+  renderFdMonthView();
+};
+function renderFdMonthView(){
+  const box=document.getElementById('fd-cal'); if(!box||!window._fdCalData)return;
+  const {all,memMap,coachMap}=window._fdCalData;
+  const today=new Date(TODAY);
+  if(!_fdCalMonth) _fdCalMonth={y:today.getFullYear(),m:today.getMonth()};
+  if(!_fdCalSel) _fdCalSel=ymd(today);
+  const {y,m}=_fdCalMonth;
+  const startDow=new Date(y,m,1).getDay();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const todayStr=ymd(today);
+  const WDH=['日','一','二','三','四','五','六'];
+  const cntByDate={};
+  all.forEach(b=>{ if(!b.date)return; cntByDate[b.date]=(cntByDate[b.date]||0)+1; });
+  let cells='';
+  for(let i=0;i<startDow;i++) cells+=`<div class="mc-cell mc-empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const cnt=cntByDate[ds]||0;
+    const isToday=ds===todayStr, isSel=ds===_fdCalSel;
+    cells+=`<div class="mc-cell${isSel?' mc-sel':''}${isToday?' mc-today':''}" onclick="fdCalPick('${ds}')">
+      <span class="mc-d">${d}</span>${cnt>0?`<span class="mc-dot">${cnt}</span>`:''}</div>`;
+  }
+  const sel=parseYmd(_fdCalSel);
+  const selBk=all.filter(b=>b.date===_fdCalSel).sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
+  const selLabel=`${_fdCalSel.slice(5).replace('-','/')}（${WDH[sel.getDay()]}）`;
+  let listHtml;
+  if(selBk.length===0){
+    listHtml=`<div style="text-align:center;color:var(--t3);font-size:13px;padding:24px 0;">這天沒有預約</div>`;
+  }else{
+    listHtml=selBk.map(b=>{
+      const isSelf=b.category==='自主訓練';
+      const dur=b.duration||60;
+      const end=minToTime(timeToMin(b.start_time)+dur);
+      const who=b.category==='小班肌力'?'團體課':(b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—'));
+      const coachNm=b.coach_id?(coachMap[b.coach_id]||'教練'):'—';
+      const barCls=isSelf?'mc-bar-self':(b.category==='小班肌力'?'mc-bar-group':(b.category==='體驗'?'mc-bar-trial':'mc-bar-pt'));
+      return `<div class="mc-ev">
+        <div class="mc-ev-time"><span class="mc-ev-t1">${b.start_time}</span><span class="mc-ev-t2">${end}</span></div>
+        <div class="mc-ev-bar ${barCls}"></div>
+        <div class="mc-ev-body"><div class="mc-ev-name">${who}</div>
+          <div class="mc-ev-cat">${b.category} · ${coachNm} · ${statusLabel(b.status)}</div></div>
+      </div>`;
+    }).join('');
+  }
+  box.innerHTML=`
+    <div class="mc-head">
+      <button class="btn btn-ghost btn-sm" onclick="fdCalShiftMonth(-1)">‹</button>
+      <div style="font-weight:600;color:var(--green);">${y} 年 ${m+1} 月</div>
+      <button class="btn btn-ghost btn-sm" onclick="fdCalShiftMonth(1)">›</button>
+    </div>
+    <div class="mc-wd mc-grid">${WDH.map((w,i)=>`<div class="mc-wdh${i===0||i===6?' mc-wk':''}">${w}</div>`).join('')}</div>
+    <div class="mc-grid">${cells}</div>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd);">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;">${selLabel}</div>
+      ${listHtml}
+    </div>`;
+}
+function fdCalPick(ds){ _fdCalSel=ds; renderFdMonthView(); }
+function fdCalShiftMonth(delta){ let {y,m}=_fdCalMonth; m+=delta; if(m<0){m=11;y--;} if(m>11){m=0;y++;} _fdCalMonth={y,m}; renderFdMonthView(); }
+
+// 票券方案：唯讀檢視（只看上架方案，不可編輯/新增）
+PAGES.fd_plans=async function(){
+  const[plans,types]=await Promise.all([dbGetAll('course_plans'),dbGetAll('ticket_types')]);
+  const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
+  const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客'};
+  const active=plans.filter(p=>p.active);
+  const rows=active.length?active.map(p=>{
+    const t=typeMap[p.ticket_type_id];
+    return `<div class="card" style="padding:14px 16px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span style="font-size:16px;font-weight:700;color:var(--text);">${p.name}</span>
+        <span class="tag tag-${t?t.color:'pt'}">${t?t.name:'—'}${p.format?'·'+p.format:''}</span>
+      </div>
+      <div style="font-size:13.5px;color:var(--t2);line-height:1.9;">
+        <div>售價　<b style="color:var(--green);">$${(p.unit_price||0).toLocaleString()}</b></div>
+        <div>堂數　${p.sessions_base}${p.sessions_bonus?' +'+p.sessions_bonus+'（贈）':''} 堂</div>
+        <div>效期　${p.valid_days} 天${p.installment?'　·　可分期':''}</div>
+        <div>類型　${PT[p.plan_type]||'一般'}</div>
+      </div>
+    </div>`;
+  }).join(''):`<div class="card" style="padding:30px 20px;text-align:center;color:var(--t2);">目前沒有上架的票券方案</div>`;
+  C.innerHTML=head('TICKETS','票券方案','目前上架方案一覽（唯讀）')+rows;
+};
+
 /* ════════ 管理員:課程方案 ════════ */
 /* ╔══════════════════════════════════════════════╗
    ║  票券管理（整合：方案設定／購買申請／會員票券）   ║
@@ -7991,8 +8104,8 @@ PAGES.mem_bookings=async function(){
     <div class="dk-date">${dateStr}</div>
     <div class="dk-clock" id="mem-clock">${nowStr}<span class="dk-sec" id="mem-sec">:${String(now.getSeconds()).padStart(2,'0')}</span></div>
     <div class="dk-actions">
-      <button class="dk-btn dk-in" onclick="navTo('member_scan_checkin')"><span class="dk-btn-l">掃碼<br>簽到<br><span class="dk-btn-scan">📷</span></span></button>
-      <button class="dk-btn dk-out" onclick="openSelfBookModal()"><span class="dk-btn-l">預約<br>自主訓練</span></button>
+      <button class="dk-btn mem-dk-scan" onclick="navTo('member_scan_checkin')"><span class="dk-btn-l">掃碼<br>簽到<br><span class="dk-btn-scan">📷</span></span></button>
+      <button class="dk-btn mem-dk-book" onclick="openSelfBookModal()"><span class="dk-btn-l">預約<br>自主訓練</span></button>
     </div>
   </div>
   <div class="card"><div class="card-title">我的課表</div><div id="mem-cal"></div></div>`;
@@ -9828,6 +9941,12 @@ PAGES.coach_salary=async function(){
   await loadSalaryTemplates();
   const[bookings,coaches,members,shifts]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('members'),dbGetAll('shifts').catch(()=>[])]);
   const me=coaches.find(c=>c.id===SESSION.id);
+  if(!me){
+    C.innerHTML=head('SALARY','薪資紀錄','')+`<div class="card"><div class="empty" style="padding:36px 16px;text-align:center;">
+      <div class="em-t">尚未建立員工資料</div>
+      <div style="font-size:12.5px;color:var(--t2);margin-top:8px;">請聯絡管理員。</div></div></div>`;
+    return;
+  }
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   if(!window._salaryMonth) window._salaryMonth=ymd(TODAY).slice(0,7);
   const month=window._salaryMonth; // 可切換月份 2026-06
