@@ -448,6 +448,15 @@ tr:hover td{background:var(--card2);}
 .pr-detail{display:none;}
 .pr-detail.pr-open{display:table-row;}
 @media(max-width:600px){.pr-detail.pr-open{display:block;}}
+/* 角色預覽提示條（固定底部） */
+.preview-bar{position:fixed;bottom:0;left:0;right:0;z-index:9000;background:var(--gold);color:#fff;
+  padding:9px 16px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:10px;
+  box-shadow:0 -2px 12px rgba(0,0,0,0.12);letter-spacing:0.03em;}
+.preview-bar b{font-weight:700;}
+.pvb-dot{width:8px;height:8px;border-radius:50%;background:#fff;animation:pvb-blink 1.4s infinite;}
+@keyframes pvb-blink{0%,100%{opacity:1;}50%{opacity:0.3;}}
+.pvb-exit{background:rgba(255,255,255,0.22);border:none;color:#fff;font-size:12px;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit;margin-left:6px;}
+.pvb-exit:hover{background:rgba(255,255,255,0.35);}
 /* 員工端月曆 */
 .mc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
 .mc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
@@ -1271,6 +1280,7 @@ tr:hover td{background:var(--card2);}
             <span class="tb-caret">▾</span>
           </button>
           <div class="tb-acct-menu" id="tb-acct-menu">
+            <button class="tb-acct-item" id="acct-preview" onclick="openPreviewSwitch()" style="display:none;">🎭 角色預覽</button>
             <button class="tb-acct-item" onclick="openChangePassword()">修改密碼</button>
             <div class="tb-acct-sep"></div>
             <button class="tb-acct-item tb-acct-logout" onclick="doLogout()">登出</button>
@@ -1300,8 +1310,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26625.1320';
-const APP_VERSION_LABEL='26625.1320';
+const APP_VERSION='26625.1439';
+const APP_VERSION_LABEL='26625.1439';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1478,7 +1488,7 @@ async function submitStaffSetup(id){
   const host=document.getElementById('invite-screen'); if(host) host.remove();
   enterApp();
 }
-async function doLogout(){ try{await sb.auth.signOut();}catch(_){} SESSION=null;location.reload(); }
+async function doLogout(){ try{await sb.auth.signOut();}catch(_){} sessionStorage.removeItem('previewRole'); SESSION=null;location.reload(); }
 // 修改自己的密碼（登入後）
 function openChangePassword(){
   showModal(`<div class="modal-title">修改密碼</div>
@@ -1506,6 +1516,13 @@ function enterApp(){
   document.getElementById('login-screen').classList.add('hidden');
   const app=document.getElementById('app-screen');
   app.classList.remove('hidden');
+  // 記住真實角色（供角色預覽用）
+  if(!SESSION._realRole) SESSION._realRole=SESSION.role;
+  // 還原上次的預覽視角（只有真實 admin 可用；重整後保留）
+  if(SESSION._realRole==='admin'){
+    const pv=sessionStorage.getItem('previewRole');
+    if(pv && pv!=='admin') SESSION.role=pv;
+  }
   // 預載自己的資料（供問候條生日判斷）
   (async()=>{ try{
     if(SESSION.role==='member') window._meMember=await dbGet('members',SESSION.id);
@@ -1518,6 +1535,7 @@ function enterApp(){
   document.getElementById('tb-role').textContent=ROLE_LABEL[SESSION.role];
   const tv=document.getElementById('tb-ver'); if(tv) tv.textContent=APP_VERSION;
   document.getElementById('tb-user').textContent=SESSION.name;
+  const pvBtn=document.getElementById('acct-preview'); if(pvBtn) pvBtn.style.display = isRealAdmin()?'':'none';
   startClock();
   loadWeather();
   refreshHeaderPunch();
@@ -1531,6 +1549,57 @@ function enterApp(){
   else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:NAV.coach;
   else firstItems = NAV[SESSION.role]||[];
   if(firstItems[0]) navTo(firstItems[0].key);
+  renderPreviewBar();
+}
+
+// ════════ 角色預覽（僅真實 admin 可用，不改資料庫真實角色）════════
+const PREVIEW_ROLES=[
+  {key:'admin',label:'管理員'},
+  {key:'coach',label:'教練'},
+  {key:'member',label:'會員'},
+  {key:'front_desk',label:'櫃台'},
+];
+function isRealAdmin(){ return SESSION && SESSION._realRole==='admin'; }
+function switchPreviewRole(role){
+  if(!isRealAdmin()) return; // 只有真實管理員可切
+  SESSION.role=role;
+  if(role==='admin') sessionStorage.removeItem('previewRole');
+  else sessionStorage.setItem('previewRole',role);
+  closeModal();
+  const app=document.getElementById('app-screen');
+  app.classList.toggle('desktop-wide', SESSION.role==='admin'||SESSION.role==='front_desk');
+  app.classList.toggle('role-member', SESSION.role==='member');
+  document.getElementById('tb-role').textContent=ROLE_LABEL[SESSION.role];
+  buildNav();
+  const isMobile=window.innerWidth<=600;
+  let firstItems;
+  if(SESSION.role==='admin') firstItems = isMobile?MOBILE_ADMIN_NAV:NAV.admin;
+  else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:NAV.coach;
+  else firstItems = NAV[SESSION.role]||[];
+  if(firstItems[0]) navTo(firstItems[0].key);
+  renderPreviewBar();
+  refreshHeaderPunch();
+}
+function openPreviewSwitch(){
+  if(!isRealAdmin()) return;
+  const cur=SESSION.role;
+  const opts=PREVIEW_ROLES.map(r=>`<button class="btn ${r.key===cur?'btn-green':'btn-ghost'}" style="width:100%;padding:13px;margin-bottom:8px;text-align:left;" onclick="switchPreviewRole('${r.key}')">${r.key===cur?'● ':''}${r.label}視角${r.key==='admin'?'（真實身份）':''}</button>`).join('');
+  showModal(`<div class="modal-title">角色預覽切換</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:14px;">以管理員帳號預覽不同角色的畫面與流程。<br><span style="color:var(--gold-d);">僅切換前端顯示，不會改變真實權限或資料。</span></div>
+    ${opts}
+    <div style="font-size:11px;color:var(--t3);margin-top:8px;line-height:1.7;">＊ 預覽會員/教練視角時，部分「我的資料」會以管理員帳號的資料顯示（因身份未真的切換），主要用於測試版面與流程。</div>`);
+}
+function renderPreviewBar(){
+  let bar=document.getElementById('preview-bar');
+  if(!isRealAdmin()){ if(bar) bar.remove(); return; }
+  const previewing = SESSION.role!=='admin';
+  if(!bar){ bar=document.createElement('div'); bar.id='preview-bar'; document.body.appendChild(bar); }
+  if(!previewing){ bar.style.display='none'; return; }
+  const label=(PREVIEW_ROLES.find(r=>r.key===SESSION.role)||{}).label||SESSION.role;
+  bar.style.display='';
+  bar.className='preview-bar';
+  bar.innerHTML=`<span class="pvb-dot"></span>預覽模式：<b>${label}視角</b>
+    <button class="pvb-exit" onclick="switchPreviewRole('admin')">結束預覽，回管理員</button>`;
 }
 
 /* ╔══════════════════════════════════════════════╗
