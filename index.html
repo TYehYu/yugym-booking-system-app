@@ -1296,8 +1296,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26624.2327';
-const APP_VERSION_LABEL='26624.2327';
+const APP_VERSION='26625.1241';
+const APP_VERSION_LABEL='26625.1241';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -2369,10 +2369,26 @@ function isMobileView(){return window.innerWidth<=820;}
 
 let _calOpts=null;
 async function renderCalendar(opts){
-  // opts: {coachFilter(bool), onSlot(fnName), me(coach_id), editable(bool) }
+  // opts: {coachFilter(bool), onSlot(fnName), me(coach_id), editable(bool), _data(預先抓好的資料，避免重複) }
   _calOpts=opts;
   if(!calWeekStart)initCalWeek();
-  const[bookings,coaches,members,types,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('members'),dbGetAll('ticket_types'),dbGetAll('member_tickets')]);
+  // 若呼叫端已抓好資料（_data），直接沿用避免重複向雲端要同一批表；否則自行抓取
+  let bookings,coaches,members,types,allTickets;
+  if(opts&&opts._data){
+    ({bookings,coaches,members,types,allTickets}=opts._data);
+  }else{
+    // 效能優化：coaches / members / ticket_types 很少變動 → 首次抓取後快取（60 秒內），切週時沿用，
+    // 只有 bookings / member_tickets 每次重抓（會新增/異動）。大幅減少切週的等待時間。
+    const cacheFresh = window._calStaticCache && (Date.now()-window._calStaticCache._t < 60000);
+    const useCache = window._calStepping && cacheFresh;
+    if(useCache){
+      ({coaches,members,types}=window._calStaticCache);
+      [bookings,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('member_tickets')]);
+    }else{
+      [bookings,coaches,members,types,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('members'),dbGetAll('ticket_types'),dbGetAll('member_tickets')]);
+      window._calStaticCache={coaches,members,types,_t:Date.now()};
+    }
+  }
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
@@ -4523,7 +4539,7 @@ function showRegisterPage(){
     <div class="login-err" id="reg-err"></div>
     <div class="form-2col">
       <div class="form-row"><label>姓名 *</label><input id="reg-name"></div>
-      <div class="form-row"><label>手機（登入帳號）*</label><input id="reg-phone" placeholder="0912xxxxxx"></div>
+      <div class="form-row"><label>手機（登入帳號）*</label><input id="reg-phone" placeholder="0912345678" inputmode="numeric" maxlength="10" oninput="checkPhone()"><div id="phone-hint" style="font-size:12px;margin-top:5px;min-height:15px;"></div></div>
     </div>
     <div class="form-row"><label>Email</label><input id="reg-email"></div>
     <div class="form-row"><label>生日</label>${birthdaySelects('reg')}</div>
@@ -4544,6 +4560,20 @@ function togglePw(inputId, btn){
   const el=document.getElementById(inputId); if(!el)return;
   if(el.type==='password'){ el.type='text'; btn.textContent='🙈'; }
   else { el.type='password'; btn.textContent='👁'; }
+}
+// 即時驗證手機格式（台灣手機：09 開頭、10 碼數字），並只允許輸入數字
+function checkPhone(){
+  const el=document.getElementById('reg-phone'); const box=document.getElementById('phone-hint');
+  if(!el)return;
+  // 過濾非數字
+  const cleaned=el.value.replace(/\D/g,'').slice(0,10);
+  if(cleaned!==el.value) el.value=cleaned;
+  if(!box)return;
+  const p=el.value;
+  if(!p){ box.textContent=''; return; }
+  if(/^09\d{8}$/.test(p)){ box.textContent='✓ 手機格式正確'; box.style.color='var(--ok)'; }
+  else if(p.length<10){ box.textContent=`還差 ${10-p.length} 碼（需 09 開頭共 10 碼）`; box.style.color='var(--t3)'; }
+  else { box.textContent='✕ 請輸入 09 開頭的台灣手機號碼'; box.style.color='var(--danger)'; }
 }
 // 即時驗證兩次密碼是否一致
 function checkPwMatch(){
@@ -4570,6 +4600,7 @@ async function submitRegister(){
   const name=v('reg-name'), phone=v('reg-phone'), pw=document.getElementById('reg-pw').value;
   const pw2=document.getElementById('reg-pw2')?document.getElementById('reg-pw2').value:'';
   if(!name||!phone||!pw){showErr('請填寫姓名、手機與密碼');return;}
+  if(!/^09\d{8}$/.test(phone)){showErr('手機號碼格式不正確，請輸入 09 開頭的 10 位數字（例：0912345678）');return;}
   if(pw.length<8){showErr('密碼至少需要 8 個字元');return;}
   if(pw!==pw2){showErr('兩次輸入的密碼不一致');return;}
   // 鎖定按鈕，給使用者「處理中」回饋（避免在 LINE 等內建瀏覽器看似沒反應而重複點）
@@ -4706,10 +4737,10 @@ function effRates(emp){
 const STAFF_STATUS_TAG={active:'tag-ok',unpaid_leave:'tag-warn',inactive:'tag-danger',resigned:'tag-danger'};
 const STAFF_TABS=[
   {key:'list',label:'員工'},
-  {key:'salary',label:'薪資制度'},
-  {key:'insurance',label:'勞健保管理'},
+  {key:'salary',label:'薪資模板'},
+  {key:'insurance',label:'勞健保模板'},
+  {key:'leave',label:'特休規則'},
   {key:'schedule',label:'工作規則'},
-  {key:'leave',label:'特休管理'},
 ];
 let _staffTab='list';
 function setStaffTab(k){ _staffTab=k; navTo('staff'); }
@@ -4717,7 +4748,7 @@ PAGES.staff=async function(){
   const tab=STAFF_TABS.find(t=>t.key===_staffTab)||STAFF_TABS[0];
   const tabBar=`<div class="seg" style="margin-bottom:16px;flex-wrap:wrap;">${STAFF_TABS.map(t=>
     `<button class="seg-btn ${_staffTab===t.key?'active':''}" onclick="setStaffTab('${t.key}')">${t.label}</button>`).join('')}</div>`;
-  C.innerHTML=head('STAFF','員工管理','員工資料 · 薪資制度 · 勞健保 · 排班 · 特休')+tabBar+`<div id="staff-body"></div>`;
+  C.innerHTML=head('STAFF','員工管理','員工資料卡 · 公司制度模板（薪資 / 勞健保 / 特休）')+tabBar+`<div id="staff-body"></div>`;
   if(_staffTab==='list') await renderStaffList();
   else if(_staffTab==='salary') await renderSalaryTemplates();
   else if(_staffTab==='insurance') await renderStaffInsurance();
@@ -4871,15 +4902,22 @@ async function renderStaffList(){
 
   const rowOf=c=>{
     const pending=c.invite_status==='pending';
-    const mgrTags=[c.is_manager?'<span class="tag tag-admin">店長</span>':'',c.is_supervisor?'<span class="tag tag-coach">主管</span>':''].filter(Boolean).join(' ')||'—';
+    // 固定休
+    const offs=(c.fixed_off_days||'').split(',').filter(x=>x!=='').map(d=>'週'+WD_FULL[Number(d)]).join('、')||'<span style="color:var(--t3);">—</span>';
+    // 工作規則整合標籤（值班/代課/打卡）
+    const wr=[];
+    if(c.need_duty) wr.push('<span class="wr-tag wr-duty">🏢值班</span>');
+    if(c.can_substitute) wr.push('<span class="wr-tag wr-sub">🔄代課</span>');
+    if(c.need_punch) wr.push('<span class="wr-tag wr-punch">🕒打卡</span>');
+    const wrHtml = c.role==='front_desk' ? '<span style="color:var(--t3);font-size:12px;">—</span>'
+      : (wr.length?`<div class="wr-tags">${wr.join('')}</div>`:'<span style="color:var(--t3);font-size:12px;">無</span>');
+    const nameCell=`${c.name||'<span style="color:var(--t3);">（待填寫）</span>'}${c.name_en?`<span style="color:var(--t3);font-size:11.5px;"> · ${c.name_en}</span>`:''}${c.is_manager?' <span class="tag tag-admin" style="font-size:10px;">店長</span>':''}${c.role==='admin'?' <span class="tag tag-admin" style="font-size:10px;">管理員</span>':''}`;
     return `<tr>
-      <td data-label="姓名">${c.name||'<span style="color:var(--t3);">（待填寫）</span>'}</td>
-      <td data-label="教練名">${c.name_en||'<span style="color:var(--t3);">—</span>'}</td>
-      <td data-label="帳號">${c.phone||'—'}</td>
-      <td data-label="角色"><span class="tag ${roleTag[c.role]}">${staffRoleLabel[c.role]||ROLE_LABEL[c.role]}</span></td>
-      <td data-label="員工類型">${PAY_LABEL[c.employment_type||c.pay_type]||'—'}</td>
-      <td data-label="管理職">${mgrTags}</td>
+      <td data-label="姓名" style="font-weight:500;">${nameCell}</td>
+      <td data-label="員工類型">${c.role==='front_desk'?'設備帳號':(PAY_LABEL[c.employment_type||c.pay_type]||'—')}</td>
       <td data-label="狀態">${pending?'<span class="tag tag-warn">待員工填寫</span>':(c.must_setup?'<span class="tag tag-warn">待首次設定</span>':`<span class="tag ${STAFF_STATUS_TAG[c.status]||'tag-danger'}">${STAFF_STATUS[c.status]||'已停用'}</span>`)}</td>
+      <td data-label="固定休">${c.role==='front_desk'?'<span style="color:var(--t3);">—</span>':offs}</td>
+      <td data-label="工作規則">${wrHtml}</td>
       <td class="rwd-actions" data-label="操作" style="white-space:nowrap;">${pending
         ?`<button class="btn btn-gold btn-sm" onclick="copyInvite('${c.invite_token}')">複製連結</button> <button class="btn btn-danger btn-sm" onclick="deleteStaffInvite('${c.id}')">刪除</button>`
         : c.role==='front_desk'
@@ -4891,13 +4929,13 @@ async function renderStaffList(){
         }</td>
     </tr>`;
   };
-  const tableHead=`<thead><tr><th>姓名</th><th>教練名</th><th>帳號</th><th>角色</th><th>員工類型</th><th>管理職</th><th>狀態</th><th></th></tr></thead>`;
+  const tableHead=`<thead><tr><th>姓名</th><th>員工類型</th><th>狀態</th><th>固定休</th><th>工作規則</th><th>操作</th></tr></thead>`;
 
   document.getElementById('staff-body').innerHTML=
   `<div class="card"><div class="card-title">員工 <button class="btn btn-green btn-sm" onclick="openStaffModal()">＋ 邀請員工</button></div>
     <div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.7;">員工類型：正職 / 兼職 / 工讀 / 合作。點「詳細資料」可檢視與編輯完整人事資料（基本資料、職務、薪資制度）。</div>
     <table class="rwd-card">${tableHead}<tbody>
-    ${staffList.length===0?'<tr><td colspan="8" style="text-align:center;color:var(--t3);padding:18px;">尚無員工</td></tr>':staffList.map(rowOf).join('')}
+    ${staffList.length===0?'<tr><td colspan="6" style="text-align:center;color:var(--t3);padding:18px;">尚無員工</td></tr>':staffList.map(rowOf).join('')}
     </tbody></table>
   </div>
   ${deviceList.length>0?`<div class="card">
@@ -6632,12 +6670,16 @@ PAGES.coach_calendar=async function(){
   //    opts.me=myId → renderCalendar 內部只顯示我的課，別人的課遮蔽為「已預約」、不可點、不顯示姓名；
   //    新增預約時教練欄位自動帶自己（openBookingModal 內 isMobile/_calMineOnly 之外，另由 _bkPrefillCoach 控制）。
   if(!isMobile){
-    _empCalMonth=null; _empCalSel=null;
-    C.innerHTML=head('SCHEDULE','我的班表','月曆檢視 · 點日期看當天課')
+    // 電腦版：週曆，可排課/改期/拖曳（訓練紀錄不放，點課卡進課程明細）
+    window._coachReadonly=false;
+    window._calMineOnly=true;            // 新增預約預設帶自己
+    if(!calWeekStart) initCalWeek();
+    C.innerHTML=head('SCHEDULE','我的班表','週時間軸 · 點空格排課 · 拖曳改期 · 點課卡看明細')
       +`<div id="coach-punch"></div>`
-      +`<div id="coach-cal"></div>`;
+      +(await renderCalendar({onSlot:'quickBookAt',editable:true,me:myId,maskOthers:true}));
     renderPunchPanel();
-    renderCoachMonthView();
+    initCalDrag();
+    initCalSwipe(document.querySelector('.cal-body'));
     return;
   }
 
@@ -9153,12 +9195,20 @@ PAGES.admin_notifications=async function(){
     : `<div class="card" style="padding:40px 20px;text-align:center;"><div style="font-size:36px;margin-bottom:10px;">🔔</div><div style="font-size:14px;color:var(--t2);">目前沒有待處理的通知</div></div>`;
   C.innerHTML=head('NOTIFY','通知','待處理事項')+list;
 };
+function salaryShiftMonth(delta){
+  let [y,m]=(window._salaryMonth||ymd(TODAY).slice(0,7)).split('-').map(Number);
+  m+=delta; if(m<1){m=12;y--;} if(m>12){m=1;y++;}
+  window._salaryMonth=`${y}-${String(m).padStart(2,'0')}`;
+  navTo('coach_salary');
+}
+function salaryThisMonth(){ window._salaryMonth=ymd(TODAY).slice(0,7); navTo('coach_salary'); }
 PAGES.coach_salary=async function(){
   await loadSalaryTemplates();
   const[bookings,coaches,members,attendance]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('members'),dbGetAll('attendance').catch(()=>[])]);
   const me=coaches.find(c=>c.id===SESSION.id);
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
-  const month=ymd(TODAY).slice(0,7); // 2026-06
+  if(!window._salaryMonth) window._salaryMonth=ymd(TODAY).slice(0,7);
+  const month=window._salaryMonth; // 可切換月份 2026-06
   const myDone=bookings.filter(b=>b.coach_id===SESSION.id&&b.status==='completed'&&b.date.slice(0,7)===month);
   const myAll=bookings.filter(b=>b.coach_id===SESSION.id&&b.status!=='cancelled'&&b.date.slice(0,7)===month);
   const ptDone=myDone.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
@@ -9174,8 +9224,20 @@ PAGES.coach_salary=async function(){
   const estimate=countSalary?(ptPay+groupPay+dutyPay+bonus):0;
   const rate=ptRate; // 明細用：私教/體驗用教練課費率，團課另計
   const mgrLine=[me.is_manager?`店長獎金 $${(me.manager_bonus||0).toLocaleString()}`:'',me.is_supervisor?`主管獎金 $${(me.supervisor_bonus||0).toLocaleString()}`:''].filter(Boolean).join('　·　');
-  C.innerHTML=head('SALARY','薪資紀錄',`${month.replace('-',' 年 ')} 月 · ${payTypeLabel}${mgrLine?'　·　'+mgrLine:''}${countSalary?'':'　·　不計薪'}`)+
-  `<div class="stat-grid salary-grid">
+  const[my,mm]=month.split('-');
+  const isCurMonth = month===ymd(TODAY).slice(0,7);
+  const hasData = (ptDone+groupDone)>0 || dutyHours>0;
+  C.innerHTML=head('SALARY','薪資紀錄',`${payTypeLabel}${mgrLine?'　·　'+mgrLine:''}${countSalary?'':'　·　不計薪'}`)+
+  `<div class="card ops-datebar" style="margin-bottom:14px;">
+    <button class="btn btn-ghost btn-sm" onclick="salaryShiftMonth(-1)">‹ 上個月</button>
+    <div class="ops-date-mid">
+      <div class="ops-date-main">${my} 年 ${mm} 月</div>
+      ${isCurMonth?`<div class="ops-date-today">本月</div>`:`<button class="ops-date-back" onclick="salaryThisMonth()">回本月</button>`}
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="salaryShiftMonth(1)">下個月 ›</button>
+  </div>
+  ${!hasData?`<div class="card" style="text-align:center;padding:30px 16px;color:var(--t3);"><div style="font-size:14px;">這個月尚無薪資資料</div><div style="font-size:12px;margin-top:6px;">完成課程或值班後，資料會顯示在這裡</div></div>`:''}
+  <div class="stat-grid salary-grid"${!hasData?' style="display:none;"':''}>
     <div class="stat-card"><div class="sc-label">教練課（完成×費率）</div><div><span class="sc-num">${ptPay.toLocaleString()}</span><span class="sc-unit">元</span></div><div style="font-size:11px;color:var(--t3);margin-top:3px;">${ptDone} 堂 × $${ptRate}</div></div>
     <div class="stat-card"><div class="sc-label">團課（完成×費率）</div><div><span class="sc-num">${groupPay.toLocaleString()}</span><span class="sc-unit">元</span></div><div style="font-size:11px;color:var(--t3);margin-top:3px;">${groupDone} 堂 × $${groupRate}</div></div>
     <div class="stat-card"><div class="sc-label">值班費（工時×時薪）</div><div><span class="sc-num">${dutyPay.toLocaleString()}</span><span class="sc-unit">元</span></div><div style="font-size:11px;color:var(--t3);margin-top:3px;">${dutyHours.toFixed(1)} hr × $${dutyHourly}</div></div>
