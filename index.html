@@ -1310,8 +1310,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26625.1439';
-const APP_VERSION_LABEL='26625.1439';
+const APP_VERSION='26625.1444';
+const APP_VERSION_LABEL='26625.1444';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1628,6 +1628,7 @@ const NAV={
   member:[
     {key:'mem_bookings',label:'我的預約'},
     {key:'mem_tickets',label:'我的票券'},
+    {key:'mem_purchase',label:'購買票券'},
   ],
 };
 // 可被排課的教練：role 是 coach，或 admin(老闆兼教練，一人一帳號)
@@ -8849,45 +8850,52 @@ async function delExercise(id){
 
 
 PAGES.mem_tickets=async function(){
-  const[tickets,types,plans,apps]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types'),dbGetAll('course_plans'),dbGetAll('purchase_applications')]);
+  const[tickets,types]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const mine=tickets.filter(t=>t.member_id===SESSION.id);
   const usable=mine.filter(t=>t.status==='usable');
-  const myApps=apps.filter(a=>a.member_id===SESSION.id).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
-  const openPlans=plans.filter(p=>p.active && p.member_applyable);
-  const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客'};
-  const APPST={pending:['審核中','tag-warn'],invoicing:['待開立發票','tag-warn'],completed:['已完成','tag-ok'],cancelled:['已取消','tag-danger'],approved:['已完成','tag-ok'],rejected:['已取消','tag-danger']};
-  window._planCache=Object.fromEntries(plans.map(p=>[p.id,p]));
   C.innerHTML=head('TICKETS','我的票券',`目前持有 ${usable.length} 張可用票券`)+
   `<div class="card"><div class="card-title">可用票券</div>
-  ${usable.length===0?'<div class="empty"><div class="em-t">沒有可用票券</div></div>':
+  ${usable.length===0?'<div class="empty"><div class="em-t">目前沒有可用票券</div><div style="font-size:12px;color:var(--t3);margin-top:6px;">可到「購買票券」選購方案</div></div>':
   usable.sort((a,b)=>a.expire_date.localeCompare(b.expire_date)).map(t=>{const ty=typeMap[t.ticket_type_id];const days=diffDays(t.expire_date,ymd(TODAY));return `<div class="ticket-card">
     <div class="tc-stub s-${ty?ty.color:'pt'}"><div class="num" style="font-size:20px;font-weight:600;">${t.sessions_remaining}</div><div class="tcs-label">${ty?ty.name:'—'}</div></div>
     <div class="tc-body"><div class="tc-id">${t.plan_name||(ty?ty.name:'—')}${t.format?' · '+t.format:''}</div>
     <div class="tc-meta">剩餘 <span class="tc-remain">${t.sessions_remaining}</span> / ${t.sessions_total} 堂　·　效期至 ${t.expire_date}${days<=7?` <span class="tag tag-danger">${days} 天後到期</span>`:''}<br>來源：${srcLabel(t.source)}</div></div>
   </div>`;}).join('')}
   </div>
-  ${openPlans.length>0?`<div class="card"><div class="card-title">申請購買方案</div>
-    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;">選擇方案、簽署合約後送出申請；經櫃檯／管理員審核通過後，票券才會發放至你的帳戶。</div>
+  ${mine.filter(t=>t.status!=='usable').length>0?`<div class="card"><div class="card-title">已用畢 / 過期</div>
+  ${mine.filter(t=>t.status!=='usable').map(t=>{const ty=typeMap[t.ticket_type_id];return `<div class="ticket-card" style="opacity:.55;">
+    <div class="tc-stub s-${ty?ty.color:'pt'}"><div class="num" style="font-size:20px;">${t.sessions_remaining}</div><div class="tcs-label">${ty?ty.name:'—'}</div></div>
+    <div class="tc-body"><div class="tc-id">${t.plan_name||(ty?ty.name:'—')}</div><div class="tc-meta">${t.status==='used_up'?'已用畢':'已過期'}　·　效期至 ${t.expire_date}</div></div>
+  </div>`;}).join('')}</div>`:''}`;
+};
+
+// 購買票券（會員選方案、簽合約、送申請）
+PAGES.mem_purchase=async function(){
+  const[types,plans,apps]=await Promise.all([dbGetAll('ticket_types'),dbGetAll('course_plans'),dbGetAll('purchase_applications')]);
+  const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
+  const myApps=apps.filter(a=>a.member_id===SESSION.id).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
+  const openPlans=plans.filter(p=>p.active && p.member_applyable);
+  const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客'};
+  const APPST={pending:['審核中','tag-warn'],invoicing:['待開立發票','tag-warn'],completed:['已完成','tag-ok'],cancelled:['已取消','tag-danger'],approved:['已完成','tag-ok'],rejected:['已取消','tag-danger']};
+  window._planCache=Object.fromEntries(plans.map(p=>[p.id,p]));
+  C.innerHTML=head('PURCHASE','購買票券','選擇方案 · 簽署合約 · 送出申請')+
+  `${openPlans.length>0?`<div class="card"><div class="card-title">可購買方案</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:12px;line-height:1.7;">選擇方案、簽署合約後送出申請；經櫃檯／管理員審核通過後，票券才會發放至你的帳戶。</div>
     ${openPlans.map(p=>{const ty=typeMap[p.ticket_type_id];const tot=p.sessions_base+p.sessions_bonus;const price=(p.unit_price||0)*p.sessions_base;return `<div class="ticket-card" style="cursor:default;">
       <div class="tc-stub s-${ty?ty.color:'pt'}"><div class="num" style="font-size:18px;font-weight:600;">${tot}</div><div class="tcs-label">堂</div></div>
       <div class="tc-body"><div class="tc-id">${p.name}${p.format?' · '+p.format.toUpperCase():''}</div>
       <div class="tc-meta">${PT[p.plan_type]||'一般'}方案　·　<b style="color:var(--green);">$${price.toLocaleString()}</b>　·　效期 ${p.valid_days} 天${p.installment?'　·　可分期':''}</div></div>
       <button class="btn btn-green btn-sm" style="align-self:center;margin-right:12px;" onclick="openApplyPlan('${p.id}')">申請購買</button>
     </div>`;}).join('')}
-  </div>`:''}
-  ${myApps.length>0?`<div class="card"><div class="card-title">我的申請</div>
+  </div>`:'<div class="card"><div class="empty"><div class="em-t">目前沒有開放申購的方案</div><div style="font-size:12px;color:var(--t3);margin-top:6px;">如需購買，請洽櫃檯</div></div></div>'}
+  ${myApps.length>0?`<div class="card"><div class="card-title">我的申請紀錄</div>
     ${myApps.map(a=>{const st=APPST[a.status]||['—','tag-warn'];return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bd);">
       <div><div style="font-weight:500;">${a.plan_name}</div><div style="font-size:11.5px;color:var(--t3);">$${(a.list_price||0).toLocaleString()}　·　${(a.created_at||'').slice(0,10)}</div>
       ${a.status==='rejected'&&a.reject_reason?`<div style="font-size:11.5px;color:var(--danger);margin-top:2px;">拒絕原因：${a.reject_reason}</div>`:''}</div>
       <span class="tag ${st[1]}">${st[0]}</span>
     </div>`;}).join('')}
-  </div>`:''}
-  ${mine.filter(t=>t.status!=='usable').length>0?`<div class="card"><div class="card-title">已用畢 / 過期</div>
-  ${mine.filter(t=>t.status!=='usable').map(t=>{const ty=typeMap[t.ticket_type_id];return `<div class="ticket-card" style="opacity:.55;">
-    <div class="tc-stub s-${ty?ty.color:'pt'}"><div class="num" style="font-size:20px;">${t.sessions_remaining}</div><div class="tcs-label">${ty?ty.name:'—'}</div></div>
-    <div class="tc-body"><div class="tc-id">${t.plan_name||(ty?ty.name:'—')}</div><div class="tc-meta">${t.status==='used_up'?'已用畢':'已過期'}　·　效期至 ${t.expire_date}</div></div>
-  </div>`;}).join('')}</div>`:''}`;
+  </div>`:''}`;
 };
 
 // 會員服務條款（正式版）
