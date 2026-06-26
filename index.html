@@ -237,7 +237,59 @@ select option{color:var(--text);}
 .gb-act-book{background:var(--gold);color:#fff;}
 .gb-act-out{background:var(--card);color:var(--green);border:1.5px solid var(--green);box-shadow:none;}
 .gb-act-done{background:var(--sage-bg);color:var(--green);cursor:default;box-shadow:none;}
+.gb-act-luck{background:var(--card);color:var(--text);border:1px solid var(--bd);box-shadow:none;}
+.gb-act-luck:hover{background:var(--sage-bg);}
 .gb-punch-done{font-size:12px;color:var(--t3);white-space:nowrap;}
+/* 今日運勢：扭蛋機抽籤動畫 */
+.gacha-wrap{text-align:center;padding:8px 4px;}
+.gacha-stage{display:flex;justify-content:center;align-items:center;height:190px;}
+.gacha-svg{overflow:visible;}
+/* 轉盤：先左右晃，再快速旋轉後緩停 */
+.gacha-drum{transform-origin:100px 96px;animation:gachaSpin 1.5s cubic-bezier(.2,.7,.3,1) forwards;}
+@keyframes gachaSpin{
+  0%{transform:rotate(0deg);}
+  12%{transform:rotate(-14deg);}
+  24%{transform:rotate(12deg);}
+  100%{transform:rotate(900deg);}
+}
+/* 整台機身：抽動時輕微搖晃 */
+.gacha-drum-wrap{transform-origin:100px 96px;animation:gachaShake 0.5s ease-in-out 2;}
+@keyframes gachaShake{
+  0%,100%{transform:translateX(0) rotate(0);}
+  25%{transform:translateX(-2px) rotate(-1deg);}
+  75%{transform:translateX(2px) rotate(1deg);}
+}
+/* 搖動線條：跟著機身節奏擺動、淡出 */
+.gacha-lines{animation:gachaLines 0.5s ease-in-out 3;}
+.gacha-lines-r{animation-direction:reverse;}
+@keyframes gachaLines{
+  0%,100%{opacity:0.55;transform:translateX(0);}
+  50%{opacity:0.85;transform:translateX(-3px);}
+}
+/* 星芒：閃爍 */
+.gacha-spark .spk{transform-origin:center;animation:gachaSpark 1.1s ease-in-out infinite;}
+.gacha-spark .spk1{animation-delay:0s;}
+.gacha-spark .spk2{animation-delay:0.35s;}
+.gacha-spark .spk3{animation-delay:0.6s;}
+.gacha-spark .spk4{animation-delay:0.85s;}
+@keyframes gachaSpark{
+  0%,100%{opacity:0.25;transform:scale(0.7);}
+  50%{opacity:1;transform:scale(1.15);}
+}
+/* 球：旋轉接近結束時，從機身滾落到托盤、彈一下 */
+.gacha-ball{animation:gachaBall 0.7s ease-out 1.25s forwards;}
+@keyframes gachaBall{
+  0%{opacity:0;transform:translateY(-60px) scale(0.6);}
+  20%{opacity:1;transform:translateY(-60px) scale(1);}
+  70%{opacity:1;transform:translateY(4px) scale(1);}
+  85%{transform:translateY(0) scale(1.1,0.9);}
+  100%{opacity:1;transform:translateY(4px) scale(1);}
+}
+.gacha-hint{font-size:12px;color:var(--t3);margin-top:6px;animation:gachaHintFade 1.9s ease;}
+@keyframes gachaHintFade{0%,70%{opacity:1;}100%{opacity:0.4;}}
+/* 結果揭曉：淡入上浮 */
+.fortune-reveal{animation:fortuneReveal 0.5s ease-out;}
+@keyframes fortuneReveal{0%{opacity:0;transform:translateY(8px);}100%{opacity:1;transform:translateY(0);}}
 @media(max-width:600px){.gb-act{width:54px;height:54px;}.gb-act .gb-act-ic{font-size:17px;}.gb-act .gb-act-t{font-size:10.5px;}.gb-actions{gap:7px;}}
 @media(max-width:600px){.gb-inner{padding:12px 16px;}.gb-name{font-size:23px;}.gb-msg{font-size:12.5px;}}
 
@@ -1404,8 +1456,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26625.2040';
-const APP_VERSION_LABEL='26625.2040';
+const APP_VERSION='26626.1030';
+const APP_VERSION_LABEL='26626.1030';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -2018,7 +2070,7 @@ function renderGreetBar(){
   // 角色對應的常駐圓鈕
   let actions='';
   if(SESSION.role==='member'){
-    actions=`<button class="gb-act gb-act-scan" onclick="navTo('member_scan_checkin')" title="掃碼簽到"><span class="gb-act-ic">📷</span><span class="gb-act-t">簽到</span></button>
+    actions=`<button class="gb-act gb-act-scan" onclick="openMemberScanModal()" title="掃碼簽到"><span class="gb-act-ic">📷</span><span class="gb-act-t">簽到</span></button>
       <button class="gb-act gb-act-book" onclick="openSelfBookModal()" title="預約自主訓練"><span class="gb-act-ic">＋</span><span class="gb-act-t">預約</span></button>`;
   }
   bar.innerHTML=`<div class="gb-inner">
@@ -2030,7 +2082,7 @@ function renderGreetBar(){
     <div class="gb-actions">
       <span id="gb-punch" class="gb-punch-slot"></span>
       ${actions}
-      <button class="gb-luck" onclick="openFortune()" title="今日運勢">🎴</button>
+      <button class="gb-act gb-act-luck" onclick="openFortune()" title="今日運勢"><span class="gb-act-ic">🎴</span><span class="gb-act-t">運勢</span></button>
     </div>
   </div>`;
   if(typeof refreshHeaderPunch==='function') refreshHeaderPunch();
@@ -2082,7 +2134,65 @@ function greetingMsg(role, name){
 function openFortune(){
   const f=todaysFortune();
   const wd=['日','一','二','三','四','五','六'][new Date(TODAY).getDay()];
-  showModal(`<div style="text-align:center;padding:8px 4px;">
+  // 第一階段：扭蛋機抽籤動畫
+  showModal(`<div class="gacha-wrap">
+    <div style="font-size:11px;letter-spacing:0.3em;color:var(--gold-d);margin-bottom:4px;">YUGYM 今日運勢</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:20px;">${ymd(TODAY).replace(/-/g,'/')}（${wd}）</div>
+    <div class="gacha-stage">
+      <svg viewBox="0 0 200 210" width="190" height="200" class="gacha-svg">
+        <!-- 地面陰影 -->
+        <ellipse cx="100" cy="196" rx="62" ry="7" fill="var(--gold)" opacity="0.12"/>
+        <!-- 機身底座 + 銘牌 -->
+        <rect x="44" y="168" width="112" height="22" rx="6" fill="var(--gold)" opacity="0.88"/>
+        <path d="M68 168 L58 196 M132 168 L142 196" stroke="var(--gold)" stroke-width="10" stroke-linecap="round" opacity="0.88"/>
+        <rect x="66" y="172" width="68" height="14" rx="3" fill="#FBF7EF" stroke="var(--gold)" stroke-width="1.2"/>
+        <text x="100" y="182" text-anchor="middle" font-size="9" letter-spacing="1.5" font-weight="700" fill="var(--gold-d)" font-family="var(--serif)">· YUGYM ·</text>
+        <!-- 出球口托盤 -->
+        <rect x="80" y="160" width="40" height="9" rx="2" fill="#fff" stroke="var(--gold)" stroke-width="1.4"/>
+        <!-- 左右搖動線條（動態感）-->
+        <g class="gacha-lines gacha-lines-l" stroke="var(--gold)" stroke-width="2.4" stroke-linecap="round" opacity="0.55" fill="none">
+          <path d="M34 70 q-9 8 -8 18"/>
+          <path d="M30 92 q-10 4 -11 14"/>
+        </g>
+        <g class="gacha-lines gacha-lines-r" stroke="var(--gold)" stroke-width="2.4" stroke-linecap="round" opacity="0.55" fill="none">
+          <path d="M166 70 q9 8 8 18"/>
+          <path d="M170 92 q10 4 11 14"/>
+        </g>
+        <!-- 星芒（閃爍）-->
+        <g class="gacha-spark" fill="var(--gold)">
+          <path class="spk spk1" d="M44 132 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 z"/>
+          <path class="spk spk2" d="M158 56 l1.6 5 l5 1.6 l-5 1.6 l-1.6 5 l-1.6 -5 l-5 -1.6 l5 -1.6 z" fill="#C98E6B"/>
+          <circle class="spk spk3" cx="40" cy="150" r="2.6" fill="var(--sage)"/>
+          <circle class="spk spk4" cx="162" cy="140" r="2.4" fill="var(--green)" opacity="0.5"/>
+        </g>
+        <!-- 轉盤 -->
+        <g class="gacha-drum-wrap">
+          <circle cx="100" cy="96" r="56" fill="var(--gold)" opacity="0.16"/>
+          <circle cx="100" cy="96" r="56" fill="none" stroke="var(--gold)" stroke-width="3.5"/>
+          <g class="gacha-drum">
+            <circle cx="100" cy="96" r="45" fill="var(--gold)" opacity="0.28"/>
+            <line x1="100" y1="51" x2="100" y2="141" stroke="var(--gold)" stroke-width="2.5" opacity="0.55"/>
+            <line x1="55" y1="96" x2="145" y2="96" stroke="var(--gold)" stroke-width="2.5" opacity="0.55"/>
+            <line x1="68" y1="64" x2="132" y2="128" stroke="var(--gold)" stroke-width="2.5" opacity="0.55"/>
+            <line x1="132" y1="64" x2="68" y2="128" stroke="var(--gold)" stroke-width="2.5" opacity="0.55"/>
+            <circle cx="100" cy="74" r="6.5" fill="${f.c}" opacity="0.75"/>
+            <circle cx="120" cy="104" r="6.5" fill="var(--green)" opacity="0.5"/>
+            <circle cx="80" cy="112" r="6.5" fill="var(--sage)" opacity="0.75"/>
+          </g>
+          <circle cx="100" cy="96" r="7.5" fill="var(--gold)"/>
+          <circle cx="100" cy="96" r="3" fill="#FBF7EF"/>
+        </g>
+        <!-- 滾出的球 -->
+        <circle class="gacha-ball" cx="100" cy="160" r="9" fill="${f.c}" opacity="0"/>
+      </svg>
+    </div>
+    <div class="gacha-hint">輕輕轉一下，看看今天的籤…</div>
+  </div>`);
+  // 第二階段：動畫結束後揭曉結果
+  setTimeout(()=>{ showFortuneResult(f,wd); },1900);
+}
+function showFortuneResult(f,wd){
+  showModal(`<div class="fortune-reveal" style="text-align:center;padding:8px 4px;">
     <div style="font-size:11px;letter-spacing:0.3em;color:var(--gold-d);margin-bottom:6px;">YUGYM 今日運勢</div>
     <div style="font-size:12px;color:var(--t3);margin-bottom:18px;">${ymd(TODAY).replace(/-/g,'/')}（${wd}）</div>
     <div style="font-family:var(--serif);font-size:46px;font-weight:700;color:${f.c};line-height:1;margin-bottom:16px;">${f.lv}</div>
@@ -3972,8 +4082,25 @@ async function memCheckin(id){
 
 /* ════════ 會員掃碼簽到（掃店內 YUGYM-MEMBER-CHECKIN）════════
    流程：掃到正確碼 → 找本人「30 分鐘窗內、未簽到」的課 → 一堂直接簽、多堂列出選 */
+// Modal 版：跳視窗掃碼，不切換目前閱讀的頁面
+function openMemberScanModal(){
+  _scanMode='member'; _scanBusy=false; window._scanInModal=true;
+  showModal(`<div style="text-align:center;padding:4px 2px;">
+    <div style="font-size:11px;letter-spacing:0.3em;color:var(--gold-d);margin-bottom:4px;">CHECK IN</div>
+    <div style="font-family:var(--serif);font-size:20px;font-weight:600;margin-bottom:16px;">掃碼簽到</div>
+    <div id="scan-stage">
+      <div class="scan-frame"><video id="scan-video" playsinline muted></video><div class="scan-reticle"></div></div>
+      <div id="scan-hint" style="font-size:13px;color:var(--t2);margin-top:14px;">正在開啟相機…</div>
+      <button class="btn btn-ghost" style="margin-top:14px;" onclick="stopScan();closeModal();">取消</button>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd);">
+        <div style="font-size:11.5px;color:var(--t3);line-height:1.7;">對準店內會員簽到碼，<br>課程開始前 30 分鐘起可簽到。</div>
+      </div>
+    </div>
+  </div>`);
+  startScan();
+}
 PAGES.member_scan_checkin=async function(){
-  _scanMode='member'; _scanBusy=false;
+  _scanMode='member'; _scanBusy=false; window._scanInModal=false;
   C.innerHTML=`<div style="max-width:480px;margin:0 auto;">
     ${head('CHECK IN','掃碼簽到','對準店內會員簽到碼即可完成上課簽到')}
     <div class="card" style="text-align:center;">
@@ -4034,7 +4161,7 @@ function showMemberPickClass(list){
     <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px;">你今天有多堂課</div>
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:16px;">請選擇要簽到的課程</div>
     ${rows}
-    <button class="btn btn-ghost" style="width:100%;margin-top:6px;" onclick="navTo('mem_bookings')">取消</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:6px;" onclick="if(window._scanInModal){stopScan();closeModal();}else{navTo('mem_bookings');}">取消</button>
   </div>`;
   if(stage) stage.innerHTML=html; else showToast('你今天有多堂課，請至我的預約簽到');
 }
@@ -4050,11 +4177,14 @@ function showMemberScanResult(ok,msg,b){
   const detail = (ok&&b)
     ? `<div style="font-size:14px;color:var(--t2);line-height:1.9;">${b.start_time}　${b.category||'課程'}</div>`
     : '';
+  const doneAction = window._scanInModal
+    ? `closeModal();if(CUR_PAGE==='mem_bookings')navTo('mem_bookings');`
+    : `navTo('mem_bookings');`;
   const html=`<div style="padding:26px 8px;text-align:center;">
       <div style="font-size:46px;margin-bottom:12px;">${icon}</div>
       <div style="font-size:19px;font-weight:700;color:${color};margin-bottom:8px;">${msg}</div>
       ${detail}
-      <button class="btn btn-green" style="width:100%;padding:14px;margin-top:22px;" onclick="navTo('mem_bookings')">完成</button>
+      <button class="btn btn-green" style="width:100%;padding:14px;margin-top:22px;" onclick="${doneAction}">完成</button>
     </div>`;
   if(stage) stage.innerHTML=html; else showToast(msg);
 }
@@ -6990,9 +7120,26 @@ const STAFF_QR_CODE='YUGYM-STAFF-CHECKIN';   // 店內員工打卡碼
 const MEMBER_QR_CODE='YUGYM-MEMBER-CHECKIN'; // 店內會員上課簽到碼（與員工碼分開）
 let _scanMode='staff'; // 'staff'=員工打卡 / 'member'=會員上課簽到
 let _scanStream=null, _scanRAF=null, _scanBusy=false;
+// 員工掃碼打卡 Modal 版（跳視窗，不切頁）
+function openStaffScanModal(){
+  _scanMode='staff'; _scanBusy=false; window._scanInModal=true;
+  showModal(`<div style="text-align:center;padding:4px 2px;">
+    <div style="font-size:11px;letter-spacing:0.3em;color:var(--gold-d);margin-bottom:4px;">CHECK IN</div>
+    <div style="font-family:var(--serif);font-size:20px;font-weight:600;margin-bottom:16px;">掃描打卡</div>
+    <div id="scan-stage">
+      <div class="scan-frame"><video id="scan-video" playsinline muted></video><div class="scan-reticle"></div></div>
+      <div id="scan-hint" style="font-size:13px;color:var(--t2);margin-top:14px;">正在開啟相機…</div>
+      <button class="btn btn-ghost" style="margin-top:14px;" onclick="stopScan();closeModal();">取消</button>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd);">
+        <div style="font-size:11.5px;color:var(--t3);line-height:1.7;">對準店內 QR Code 完成上下班打卡。<br>若相機無法使用，請用「申請補打卡」。</div>
+      </div>
+    </div>
+  </div>`);
+  startScan();
+}
 // 掃描頁面
 PAGES.scan_checkin=async function(){
-  _scanMode='staff'; _scanBusy=false;
+  _scanMode='staff'; _scanBusy=false; window._scanInModal=false;
   // 必須是需打卡員工
   let me=null; try{ me=await dbGet('coaches',SESSION.id); }catch(_){}
   C.innerHTML=`<div style="max-width:480px;margin:0 auto;">
@@ -7120,7 +7267,7 @@ function showScanConfirmOut(rec, wh){
       <div style="font-size:14px;color:var(--t2);line-height:1.9;">上班時間：${rec.clock_in}　·　目前工時約 ${wh} 小時</div>
       <div style="font-size:13px;color:var(--t3);margin-top:14px;">要現在「下班打卡」嗎？</div>
       <div style="display:flex;gap:10px;margin-top:20px;">
-        <button class="btn btn-ghost" style="flex:1;padding:14px;" onclick="navTo('coach_calendar')">還沒，返回</button>
+        <button class="btn btn-ghost" style="flex:1;padding:14px;" onclick="if(window._scanInModal){stopScan();closeModal();}else{navTo('coach_calendar');}">還沒，返回</button>
         <button class="btn btn-green" style="flex:1;padding:14px;" onclick="confirmScanOut('${rec.id}')">確定下班</button>
       </div>
     </div>`;
@@ -7144,11 +7291,12 @@ function showScanResult(mode,timeStr,workStr,rec){
   else { title='今日已完成打卡'; sub=`上班 ${rec.clock_in}　·　下班 ${rec.clock_out}<br>今日工時：${rec.work_hours} 小時`; icon='☑️'; color='var(--t2)'; }
   const stage=document.getElementById('scan-stage');
   if(stage){
+    const doneAction = window._scanInModal ? 'closeModal();' : `navTo('coach_calendar');`;
     stage.innerHTML=`<div style="padding:20px 8px;">
       <div style="font-size:48px;margin-bottom:12px;">${icon}</div>
       <div style="font-size:20px;font-weight:700;color:${color};margin-bottom:10px;">${title}</div>
       <div style="font-size:14px;color:var(--t2);line-height:1.9;">${sub}</div>
-      <button class="btn btn-green" style="margin-top:22px;width:100%;padding:14px;" onclick="navTo('coach_calendar')">完成</button>
+      <button class="btn btn-green" style="margin-top:22px;width:100%;padding:14px;" onclick="${doneAction}">完成</button>
     </div>`;
   } else {
     showToast(title);
@@ -7166,7 +7314,7 @@ async function refreshHeaderPunch(){
   let rec=null;
   try{ rec=await getAttendance(SESSION.id,ymd(TODAY)); }catch(_){}
   if(!rec||!rec.clock_in){
-    el.innerHTML=`<button class="gb-act gb-act-scan" onclick="navTo('scan_checkin')" title="掃碼上班"><span class="gb-act-ic">📷</span><span class="gb-act-t">上班</span></button>`;
+    el.innerHTML=`<button class="gb-act gb-act-scan" onclick="openStaffScanModal()" title="掃碼上班"><span class="gb-act-ic">📷</span><span class="gb-act-t">上班</span></button>`;
   }else if(!rec.clock_out){
     el.innerHTML=`<button class="gb-act gb-act-out" onclick="punchOut()" title="下班打卡"><span class="gb-act-ic">●</span><span class="gb-act-t">下班</span></button>`;
   }else{
@@ -10439,7 +10587,7 @@ function showModal(html){
     document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.getElementById('modal-bg'))closeModal(); });
   }
 }
-function closeModal(){const m=document.getElementById('modal-bg');if(m)m.remove();}
+function closeModal(){const m=document.getElementById('modal-bg');if(m)m.remove(); if(window._scanInModal){ if(typeof stopScan==='function')stopScan(); window._scanInModal=false; }}
 // 註冊 PWA service worker（讓網站可加入主畫面、離線可開）
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
