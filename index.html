@@ -1344,19 +1344,30 @@ tr:hover td{background:var(--card2);}
   .desktop-wide .nav-item{font-size:14px;padding:11px 14px;}
 }
 /* ── 排班表 shifts ── */
-.sh-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:0.5px solid var(--bd);border-radius:10px;}
-.sh-table{border-collapse:collapse;font-size:12px;min-width:max-content;}
-.sh-table th,.sh-table td{border:0.5px solid var(--bd);text-align:center;}
+.sh-scroll{overflow:auto;-webkit-overflow-scrolling:touch;border:0.5px solid var(--bd);border-radius:10px;max-height:68vh;}
+.sh-table{border-collapse:separate;border-spacing:0;font-size:12px;min-width:max-content;}
+.sh-table th,.sh-table td{border-right:0.5px solid var(--bd);border-bottom:0.5px solid var(--bd);text-align:center;}
+/* 頂列固定：日期表頭捲動時黏在上方 */
+.sh-table thead th{position:sticky;top:0;z-index:4;}
 .sh-table .sh-dayhead{padding:4px 6px;font-weight:500;color:var(--t2);background:var(--card2);white-space:nowrap;line-height:1.2;}
 .sh-table .sh-dayhead span{font-size:10px;color:var(--t3);}
-.sh-table .sh-dayhead.sh-wk{color:var(--gold-d);}
+.sh-table .sh-dayhead.sh-wk{color:var(--gold-d);background:#EFE7D6;}
 .sh-table .sh-name{position:sticky;left:0;z-index:2;background:var(--card);min-width:96px;max-width:96px;padding:6px 8px;text-align:left;}
-.sh-table thead .sh-name{z-index:3;background:var(--card2);}
+.sh-table thead .sh-name,.sh-table .sh-corner{position:sticky;left:0;top:0;z-index:5;background:var(--card2);}
 .sh-table .sh-corner{vertical-align:middle;}
-.sh-table .sh-cell{min-width:46px;height:42px;cursor:pointer;padding:2px;vertical-align:middle;transition:background .12s;}
+.sh-table .sh-cell{min-width:52px;height:50px;cursor:pointer;padding:2px;vertical-align:middle;transition:background .12s;}
 .sh-table .sh-cell:hover{background:var(--card2);}
 .sh-table .sh-cell.has{background:#EEF3E9;}
-.sh-table .sh-chip{display:block;font-size:10px;line-height:1.4;color:var(--green);font-weight:500;white-space:nowrap;}
+.sh-table .sh-chip{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;}
+.sh-code{display:inline-flex;align-items:center;justify-content:center;background:var(--green);color:#fff;border-radius:6px;min-width:26px;height:24px;padding:0 6px;font-size:15px;font-weight:800;letter-spacing:0.02em;}
+.sh-chip-time .sh-t1,.sh-chip-time .sh-t2{font-size:12px;font-weight:700;color:var(--green);font-family:var(--num);}
+.sh-chip-time .sh-t2{color:var(--t2);font-weight:600;}
+.sh-leave{display:inline-block;margin-top:2px;font-size:9.5px;font-weight:700;color:#c0392b;background:#fbeae8;border-radius:4px;padding:0 4px;}
+.sh-table .sh-cell.has-leave{background:#fcf2f0;}
+/* 週末欄：柔和米色底，區分平日 */
+.sh-table .sh-cell-wk{background:#F1EBDD;}
+.sh-table .sh-cell-wk.has{background:#E7EEDF;}
+.sh-table .sh-cell-wk:hover{background:#E9E2D2;}
 .sh-table .sh-plus{color:var(--t3);opacity:0;font-size:14px;}
 .sh-table .sh-cell:hover .sh-plus{opacity:1;}
 </style>
@@ -1435,6 +1446,7 @@ tr:hover td{background:var(--card2);}
           </button>
           <div class="tb-acct-menu" id="tb-acct-menu">
             <button class="tb-acct-item" id="acct-preview" onclick="openPreviewSwitch()" style="display:none;">🎭 角色預覽</button>
+            <button class="tb-acct-item" id="acct-profile" onclick="openCoachProfile()" style="display:none;">個人資料</button>
             <button class="tb-acct-item" id="acct-punchfix" onclick="openPunchRequest()" style="display:none;">申請補打卡<span class="acct-dot" id="acct-punchfix-dot" style="display:none;"></span></button>
             <button class="tb-acct-item" onclick="openChangePassword()">修改密碼</button>
             <div class="tb-acct-sep"></div>
@@ -1465,8 +1477,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26626.1105';
-const APP_VERSION_LABEL='26626.1105';
+const APP_VERSION='26626.1645';
+const APP_VERSION_LABEL='26626.1645';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1691,6 +1703,8 @@ function enterApp(){
   const tv=document.getElementById('tb-ver'); if(tv) tv.textContent=APP_VERSION;
   document.getElementById('tb-user').textContent=SESSION.name;
   const pvBtn=document.getElementById('acct-preview'); if(pvBtn) pvBtn.style.display = isRealAdmin()?'':'none';
+  // 個人資料入口：員工（教練/管理員/櫃台）顯示，會員不顯示
+  const profBtn=document.getElementById('acct-profile'); if(profBtn) profBtn.style.display = (SESSION.role==='member')?'none':'';
   // 補打卡選單項：需打卡員工才顯示（會員/不需打卡者隱藏）
   (async()=>{
     const item=document.getElementById('acct-punchfix'); if(!item)return;
@@ -2404,10 +2418,11 @@ PAGES.ops_center=async function(){
   const date=_opsDate||ymd(TODAY);
   _opsDate=date;
   const isToday=date===ymd(TODAY);
-  const[bookings,members,coaches,purchases,apps,punchReqs,attendance,types]=await Promise.all([
+  const[bookings,members,coaches,purchases,apps,punchReqs,attendance,types,shifts]=await Promise.all([
     dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches'),
     dbGetAll('purchases').catch(()=>[]),dbGetAll('purchase_applications').catch(()=>[]),
-    dbGetAll('punch_requests').catch(()=>[]),dbGetAll('attendance').catch(()=>[]),dbGetAll('ticket_types')
+    dbGetAll('punch_requests').catch(()=>[]),dbGetAll('attendance').catch(()=>[]),dbGetAll('ticket_types'),
+    dbGetAll('shifts').catch(()=>[])
   ]);
   const memMap=Object.fromEntries(members.map(m=>[m.id,m]));
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
@@ -2419,6 +2434,9 @@ PAGES.ops_center=async function(){
   const dayBkSorted=dayBk.slice().sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
 
   const dayAtt=attendance.filter(a=>a.date===date && a.clock_in);
+  // 當天應出勤＝當天有排班(shifts)的人員
+  const dayShifts=(shifts||[]).filter(s=>s.date===date).sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
+  const attByEmp=Object.fromEntries(dayAtt.map(a=>[a.emp_id,a]));
 
   const dayPur=purchases.filter(p=>(p.created_at||'').slice(0,10)===date);
   const dayRevenue=dayPur.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
@@ -2467,13 +2485,15 @@ PAGES.ops_center=async function(){
          </div>`;}).join('')}</div>`}`)}
 
     ${card('今日值班',
-      dayAtt.length===0?'<div style="font-size:12px;color:var(--t3);text-align:center;padding:8px;">本日無人打卡</div>':
-      `<div>${dayAtt.map(a=>{
-        const nm=coachMap[a.emp_id]||(memMap[a.emp_id]?memMap[a.emp_id].name:a.emp_id);
-        const status=a.clock_out?`<span class="tag tag-ok" style="font-size:10px;">已下班</span>`:`<span class="tag tag-warn" style="font-size:10px;">上班中</span>`;
+      dayShifts.length===0?'<div style="font-size:12px;color:var(--t3);text-align:center;padding:8px;">本日無人排班</div>':
+      `<div>${dayShifts.map(s=>{
+        const nm=coachMap[s.emp_id]||(memMap[s.emp_id]?memMap[s.emp_id].name:s.emp_id);
+        const att=attByEmp[s.emp_id];
+        const code=s.code||shiftCode(s.start_time,s.end_time);
+        const status=att?(att.clock_out?`<span class="tag tag-ok" style="font-size:10px;">已下班</span>`:`<span class="tag tag-warn" style="font-size:10px;">上班中</span>`):`<span class="tag" style="font-size:10px;color:var(--t3);background:var(--card2);">未打卡</span>`;
         return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd);font-size:12.5px;">
           <span style="flex:1;font-weight:500;">${nm}</span>
-          <span style="color:var(--t2);">${a.clock_in||'—'}${a.clock_out?' - '+a.clock_out:''}</span>
+          <span style="color:var(--t2);">${code?'<b style="color:var(--green);">'+code+'</b> ':''}${s.start_time}–${s.end_time}</span>
           ${status}
         </div>`;}).join('')}</div>`)}
 
@@ -5015,6 +5035,41 @@ function openMemberRegisterLink(){
 /* ── 會員自助註冊頁（公開，#member-signup） ── */
 /* 生日年/月/日下拉（比手機原生日期選擇器好操作，尤其選早年份）
    prefix 用於 id，例如 'reg' → reg-by / reg-bm / reg-bd */
+// ── 教練端：修改個人資料（僅聯絡資訊，薪資/權限由管理員管理）──
+async function openCoachProfile(){
+  let c=null; try{ c=await dbGet('coaches',SESSION.id); }catch(_){}
+  if(!c){ showToast('找不到個人資料'); return; }
+  const esc=s=>(s||'').replace(/"/g,'&quot;');
+  showModal(`<div class="modal-title">個人資料</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:14px;line-height:1.7;">可修改聯絡資訊。薪資、職稱、權限等請洽管理員。</div>
+    <div class="form-row"><label>教練名（對外顯示）</label><input id="cp-nick" value="${esc(c.name_en)}" placeholder="顯示給會員看的名字"></div>
+    <div class="form-row"><label>Email</label><input id="cp-email" type="email" value="${esc(c.email)}" placeholder="example@mail.com"></div>
+    <div class="form-row"><label>電話（登入帳號 · 不可修改）</label><input value="${esc(c.phone)}" disabled style="background:var(--card2);color:var(--t2);"></div>
+    <div class="form-row"><label>生日</label>${birthdaySelects('cp')}</div>
+    <input type="hidden" id="cp-id" value="${c.id}">
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="saveCoachProfile()">儲存</button>
+    </div>`);
+  // 預選現有生日
+  if(c.birthday){
+    const[by,bm,bd]=String(c.birthday).split('-').map(Number);
+    const sy=document.getElementById('cp-by'), sm=document.getElementById('cp-bm'), sd=document.getElementById('cp-bd');
+    if(sy)sy.value=by; if(sm)sm.value=bm; if(sd)sd.value=bd;
+  }
+}
+async function saveCoachProfile(){
+  const id=document.getElementById('cp-id').value;
+  const c=await dbGet('coaches',id);
+  if(!c){ showToast('找不到資料'); return; }
+  const v=x=>{const el=document.getElementById(x);return el?el.value.trim():'';};
+  c.name_en=v('cp-nick');
+  c.email=v('cp-email');
+  const bday=readBirthday('cp'); if(bday) c.birthday=bday;
+  try{ await dbPut('coaches',c); showToast('已更新個人資料'); closeModal();
+    document.getElementById('tb-user').textContent=c.name||SESSION.name; // 顯示名沿用本名
+  }catch(e){ showToast('儲存失敗：'+(e.message||e)); }
+}
 function birthdaySelects(prefix){
   const thisYear=new Date().getFullYear();
   let years='<option value="">年</option>';
@@ -5202,6 +5257,7 @@ const STAFF_STATUS={active:'在職',unpaid_leave:'留職停薪',inactive:'已停
 const SALARY_TPL_DEFAULT = {
   full_time:{
     base_salary:29500,
+    salary_type:'monthly_guarantee',
     pt_mode:'tier',
     pt_rate:0,
     pt_tiers:[
@@ -5215,7 +5271,7 @@ const SALARY_TPL_DEFAULT = {
     duty_hourly:0,
   },
   part_time:{ base_salary:0, pt_mode:'flat', pt_rate:600, pt_tiers:[], pt_bonus:[], group_per_head:200, duty_hourly:200 },
-  contractor:{ base_salary:0, pt_mode:'flat', pt_rate:600, pt_tiers:[], pt_bonus:[], group_per_head:200, duty_hourly:0 },
+  contractor:{ base_salary:0, pt_mode:'flat', pt_rate:600, pt_tiers:[], pt_bonus:[], group_per_head:200, duty_hourly:200 },
   intern:{ base_salary:0, pt_mode:'flat', pt_rate:0, pt_tiers:[], pt_bonus:[], group_per_head:0, duty_hourly:0 },
 };
 window.SALARY_TPL = window.SALARY_TPL || JSON.parse(JSON.stringify(SALARY_TPL_DEFAULT));
@@ -5247,15 +5303,61 @@ function effRates(emp){
 // ════════ 完整薪資計算（依模板：底薪＋教練課階梯／固定＋達標獎金＋團課人頭＋值班費）════════
 // 參數：emp 員工、ptDone 教練課完成堂數、groupHeads 團課總人頭、dutyHours 值班工時
 // 回傳各項金額與合計，供薪資頁顯示
-function calcSalary(emp, ptDone, groupHeads, dutyHours){
+// ── 請假彙總：算某員工某月各假別時數 ──
+function leaveSummary(shifts, empId, month){
+  const list=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month);
+  let 特休=0, 病假=0, 事假=0, scheduled=0;
+  list.forEach(s=>{
+    scheduled+=(Number(s.hours)||0);
+    const lh=Number(s.leave_hours)||0;
+    if(s.leave_type==='特休') 特休+=lh;
+    else if(s.leave_type==='病假') 病假+=lh;
+    else if(s.leave_type==='事假') 事假+=lh;
+  });
+  const leaveTotal=特休+病假+事假;
+  return { scheduled, 特休, 病假, 事假, leaveTotal, actual:Math.max(scheduled-leaveTotal,0) };
+}
+// ── 值班時段內上課重疊時數：每天分別算該員工教練課與排班的重疊，加總（小時）──
+// 規則：兼職/工讀/合作教練在值班時段內上教練課，該重疊時段以課程抽成為主，不重複計值班費
+function dutyClassOverlapHours(shifts, bookings, empId, month){
+  const myShifts=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month);
+  if(!myShifts.length) return 0;
+  // 該員工當月已完成的教練課（私人教練/體驗，這類才有授課時段）
+  const myClasses=(bookings||[]).filter(b=>b.coach_id===empId && b.status==='completed'
+    && (b.category==='私人教練'||b.category==='體驗') && (b.date||'').slice(0,7)===month);
+  if(!myClasses.length) return 0;
+  let overlapMin=0;
+  // 依日期分組比對
+  const shiftsByDate={}; myShifts.forEach(s=>{ (shiftsByDate[s.date]=shiftsByDate[s.date]||[]).push(s); });
+  myClasses.forEach(b=>{
+    const daySh=shiftsByDate[b.date]; if(!daySh) return;
+    const cs=timeToMin(b.start_time), ce=cs+(Number(b.duration)||60);
+    daySh.forEach(s=>{
+      const ss=timeToMin(s.start_time), se=timeToMin(s.end_time);
+      const ov=Math.min(ce,se)-Math.max(cs,ss); // 重疊分鐘
+      if(ov>0) overlapMin+=ov;
+    });
+  });
+  return overlapMin/60;
+}
+function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap){
   // 自訂薪資：用個人費率（簡化：固定費率）
   if(emp && emp.custom_salary){
     const ptPay=ptDone*(emp.pt_rate||0);
     const groupPay=groupHeads*(emp.group_rate||0);
-    const dutyPay=Math.round(dutyHours*(emp.duty_hourly||0));
-    return { base:0, ptPay, ptDetail:`${ptDone} 堂 × $${emp.pt_rate||0}`, ptIncome:ptPay, ptIsFloor:false, ptIncomeDetail:`${ptDone} 堂 × $${emp.pt_rate||0}`,
+    const etC=normEmp(emp&&(emp.employment_type||emp.pay_type));
+    let dhrC=Number(emp.duty_hourly)||0;
+    if(etC==='contractor' && dutyHours>0 && dhrC<200) dhrC=200; // 合作教練值班保底 200
+    const dutyGross=Math.round(dutyHours*dhrC);
+    const Lc=leave||{特休:0,病假:0,事假:0};
+    const dutyLeaveDeduct=Math.round((Lc.事假||0)*dhrC + (Lc.病假||0)*dhrC*0.5);
+    const coC=Number(classOverlap)||0;
+    const dutyClassDeduct=Math.round(coC*dhrC);
+    const dutyPay=Math.max(dutyGross-dutyLeaveDeduct-dutyClassDeduct,0);
+    return { base:0, adjBase:0, baseLeaveDeduct:0, ptPay, ptDetail:`${ptDone} 堂 × $${emp.pt_rate||0}`, ptIncome:ptPay, ptIsFloor:false, ptIncomeDetail:`${ptDone} 堂 × $${emp.pt_rate||0}`,
       bonus:0, bonusDetail:'—', groupPay, groupDetail:`${groupHeads} 人 × $${emp.group_rate||0}`,
-      dutyPay, dutyDetail:`${dutyHours.toFixed(1)} hr × $${emp.duty_hourly||0}`,
+      dutyGross, dutyLeaveDeduct, dutyClassDeduct, classOverlap:coC, dutyPay, dutyDetail:`${dutyHours.toFixed(1)} hr × $${dhrC}`,
+      leave:Lc,
       total: ptPay+groupPay+dutyPay };
   }
   const et=normEmp(emp&&(emp.employment_type||emp.pay_type));
@@ -5292,22 +5394,37 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours){
   const groupPay=groupHeads*ghead;
   const groupDetail=`${groupHeads} 人次 × $${ghead}`;
 
-  // ④ 值班費（工時 × 時薪）
-  const dhr=tpl.duty_hourly||0;
-  const dutyPay=Math.round(dutyHours*dhr);
+  // ④ 值班費（工時 × 時薪）：員工個人值班時薪優先，否則用類型模板
+  let dhr=(emp&&Number(emp.duty_hourly)>0)?Number(emp.duty_hourly):(tpl.duty_hourly||0);
+  // 合作教練若有排班值班，時薪至少 200（保底，不受雲端模板殘留 0 影響）
+  if(et==='contractor' && dutyHours>0 && dhr<200) dhr=200;
+  const dutyGross=Math.round(dutyHours*dhr); // 原應值班費（依排班時數）
+  const L=leave||{特休:0,病假:0,事假:0};
+  // 值班費請假扣除：事假全扣、病假半扣、特休不扣（皆 × 時薪）
+  const dutyLeaveDeduct=Math.round((L.事假||0)*dhr + (L.病假||0)*dhr*0.5);
+  // 值班時段內上課：重疊時數以課程抽成為主，不重複計值班費 → 扣除
+  const co=Number(classOverlap)||0;
+  const dutyClassDeduct=Math.round(co*dhr);
+  const dutyPay=Math.max(dutyGross-dutyLeaveDeduct-dutyClassDeduct,0);
   const dutyDetail=`${dutyHours.toFixed(1)} hr × $${dhr}`;
 
-  // 保障底薪：教練課費與底薪取高者（其餘項目另外加）
-  // 課收入 = max(教練課費, 底薪)；若領底薪，標示「保障底薪」
-  const ptIncome = Math.max(ptPay, base);
-  const ptIsFloor = base>0 && base>ptPay; // 是否觸發保障底薪
+  // 正職保障底薪的請假扣除：月薪÷30÷8×時數，事假全扣、病假半扣、特休不扣
+  const dayRate = base>0 ? base/30/8 : 0;
+  const baseLeaveDeduct = Math.round((L.事假||0)*dayRate + (L.病假||0)*dayRate*0.5);
+  const adjBase = Math.max(base-baseLeaveDeduct,0); // 調整後保障薪資
+
+  // 保障底薪：教練課費與「調整後底薪」取高者（其餘項目另外加）
+  const ptIncome = Math.max(ptPay, adjBase);
+  const ptIsFloor = adjBase>0 && adjBase>ptPay; // 是否觸發保障底薪
   const ptIncomeDetail = base>0
-    ? (ptIsFloor ? `保障底薪 $${base.toLocaleString()}（課費 $${ptPay.toLocaleString()} 未達底薪）`
-                 : `教練課費 $${ptPay.toLocaleString()}（高於底薪 $${base.toLocaleString()}）`)
+    ? (ptIsFloor ? `保障底薪 $${adjBase.toLocaleString()}${baseLeaveDeduct>0?`（底薪 $${base.toLocaleString()} − 請假 $${baseLeaveDeduct.toLocaleString()}）`:''}（課費 $${ptPay.toLocaleString()} 未達底薪）`
+                 : `教練課費 $${ptPay.toLocaleString()}（高於調整後底薪 $${adjBase.toLocaleString()}）`)
     : ptDetail;
 
-  return { base, ptPay, ptDetail, ptIncome, ptIsFloor, ptIncomeDetail,
-    bonus, bonusDetail, groupPay, groupDetail, dutyPay, dutyDetail,
+  return { base, adjBase, baseLeaveDeduct, ptPay, ptDetail, ptIncome, ptIsFloor, ptIncomeDetail,
+    bonus, bonusDetail, groupPay, groupDetail,
+    dutyGross, dutyLeaveDeduct, dutyClassDeduct, classOverlap:co, dutyPay, dutyDetail,
+    leave:L,
     total: ptIncome + bonus + groupPay + dutyPay };
 }
 const STAFF_STATUS_TAG={active:'tag-ok',unpaid_leave:'tag-warn',inactive:'tag-danger',resigned:'tag-danger'};
@@ -5347,9 +5464,89 @@ function shiftHours(start,end){
   if(mins<0) mins+=24*60;            // 跨午夜
   return Math.round(mins/30)/2;      // 0.5 小時為單位
 }
-const SHIFT_QUICK=[ ['10:00','16:00'], ['14:00','22:00'], ['16:00','22:00'], ['09:00','13:00'] ]; // 常用時段快速鈕
+const SHIFT_QUICK=[ ['A','10:00','16:00'], ['C','16:00','22:00'], ['A1','09:00','15:00'], ['C1','15:00','21:00'], ['全','10:00','22:00'] ]; // 常用時段（代號·起·迄）
+// 依起迄時間反推班別代號（給舊資料或手動輸入用）
+function shiftCode(start,end){
+  const m=SHIFT_QUICK.find(([c,s,e])=>s===start&&e===end);
+  return m?m[0]:'';
+}
 let _shiftMonth=null;
 function shiftMonthMove(d){ let[y,m]=(_shiftMonth||ymd(TODAY).slice(0,7)).split('-').map(Number); m+=d; if(m<1){m=12;y--;} if(m>12){m=1;y++;} _shiftMonth=`${y}-${String(m).padStart(2,'0')}`; navTo('staff'); }
+function shiftThisMonthAlt(){ _shiftMonth=ymd(TODAY).slice(0,7); navTo('staff'); }
+// ── 週期排班（每週固定模式：週日~週六各排什麼班）──
+const WEEKLY_OPTS=[['off','休'],['A','A'],['C','C'],['A1','A1'],['C1','C1'],['全','全']];
+// 班別代號 → 起迄時間（與 SHIFT_QUICK 一致）
+function codeToTime(code){ const m=SHIFT_QUICK.find(([c])=>c===code); return m?[m[1],m[2]]:null; }
+function openWeeklyShift(empId){
+  const c=(window._shiftsStaffCache||[]).find(x=>x.id===empId);
+  const name=c?(c.name||'員工'):'員工';
+  // 解析已存模式：weekly_shift = "週日,週一,...,週六" 七碼（off/A/C/A1/C1/全）
+  const cur=(c&&c.weekly_shift?String(c.weekly_shift).split(','):[]);
+  const WD=['日','一','二','三','四','五','六'];
+  const rows=WD.map((w,i)=>{
+    const val=cur[i]||'off';
+    const opts=WEEKLY_OPTS.map(([v,l])=>`<option value="${v}"${v===val?' selected':''}>${l}</option>`).join('');
+    return `<div style="display:flex;align-items:center;gap:12px;padding:6px 0;">
+      <span style="width:54px;font-size:13px;color:${i===0||i===6?'var(--gold-d)':'var(--text)'};">週${w}</span>
+      <select id="wk-${i}" style="flex:1;">${opts}</select></div>`;
+  }).join('');
+  showModal(`<div class="modal-title">週期排班 · ${name}</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:14px;line-height:1.7;">設定每週固定班別後，可「套用到本月」自動排入當月（已有排班的日子會跳過，不覆蓋）。</div>
+    ${rows}
+    <input type="hidden" id="wk-empid" value="${empId}">
+    <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-ghost" onclick="saveWeeklyPattern()">只儲存模式</button>
+      <button class="btn btn-green" onclick="applyWeeklyToMonth()">套用到本月</button>
+    </div>`);
+}
+function readWeeklyPattern(){
+  const arr=[];
+  for(let i=0;i<7;i++){ const el=document.getElementById('wk-'+i); arr.push(el?el.value:'off'); }
+  return arr;
+}
+async function saveWeeklyPattern(){
+  const empId=document.getElementById('wk-empid').value;
+  const pattern=readWeeklyPattern().join(',');
+  try{
+    const c=await dbGet('coaches',empId);
+    c.weekly_shift=pattern;
+    await dbPut('coaches',c);
+    showToast('已儲存週期模式');
+    return true;
+  }catch(e){
+    showToast('模式儲存失敗（可能是 coaches 表尚未加 weekly_shift 欄位）');
+    return false;
+  }
+}
+async function applyWeeklyToMonth(){
+  const empId=document.getElementById('wk-empid').value;
+  const pattern=readWeeklyPattern();
+  // 先嘗試記住模式（失敗不影響套用）
+  try{ const c=await dbGet('coaches',empId); c.weekly_shift=pattern.join(','); await dbPut('coaches',c); }catch(_){}
+  const month=_shiftMonth||ymd(TODAY).slice(0,7);
+  const[my,mm]=month.split('-').map(Number);
+  const daysInMonth=new Date(my,mm,0).getDate();
+  const existing=(window._shiftsCache||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month);
+  const hasDay=new Set(existing.map(s=>s.date));
+  let added=0, skipped=0;
+  for(let d=1;d<=daysInMonth;d++){
+    const dateObj=new Date(my,mm-1,d);
+    const dow=dateObj.getDay(); // 0=日
+    const code=pattern[dow];
+    if(!code||code==='off') continue;
+    const dateStr=`${my}-${String(mm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    if(hasDay.has(dateStr)){ skipped++; continue; } // 已有排班→跳過
+    const t=codeToTime(code); if(!t) continue;
+    const hours=shiftHours(t[0],t[1]);
+    const obj={ id:uid('shift'), emp_id:empId, date:dateStr, start_time:t[0], end_time:t[1], hours,
+      note:'', created_by:(SESSION&&SESSION.id)||'', created_at:new Date().toISOString() };
+    try{ await dbPut('shifts',obj); added++; }catch(_){}
+  }
+  showToast(`已套用：新增 ${added} 天${skipped?`，跳過 ${skipped} 天（已有排班）`:''}`);
+  closeModal();
+  navTo('staff');
+}
 function shiftThisMonth(){ _shiftMonth=ymd(TODAY).slice(0,7); navTo('staff'); }
 
 async function renderShiftsTab(){
@@ -5359,8 +5556,9 @@ async function renderShiftsTab(){
   if(!_shiftMonth) _shiftMonth=ymd(TODAY).slice(0,7);
   const month=_shiftMonth, [my,mm]=month.split('-');
   const isCur=month===ymd(TODAY).slice(0,7);
-  // 只列計值班費的員工：兼職／工讀、在職、非設備帳號
-  const staff=coaches.filter(c=>isDutyType(c) && c.role!=='front_desk' && c.status!=='inactive' && c.invite_status!=='pending');
+  // 排班名單：有「值班」標籤（need_duty）的在職員工
+  const staff=coaches.filter(c=>c.need_duty && c.role!=='front_desk' && c.status!=='inactive' && c.invite_status!=='pending');
+  window._shiftsStaffCache=staff;
   // 當月每一天
   const daysInMonth=new Date(Number(my),Number(mm),0).getDate();
   const monthShifts=shifts.filter(s=>(s.date||'').slice(0,7)===month);
@@ -5371,7 +5569,7 @@ async function renderShiftsTab(){
       <button class="btn btn-ghost btn-sm" onclick="shiftMonthMove(-1)">‹ 上個月</button>
       <div class="ops-date-mid"><div class="ops-date-main">${my} 年 ${mm} 月 排班表</div></div>
       <button class="btn btn-ghost btn-sm" onclick="shiftMonthMove(1)">下個月 ›</button></div>
-      <div class="card" style="text-align:center;color:var(--t2);padding:40px 20px;">目前沒有兼職／工讀員工可排班。<br><span style="font-size:12px;color:var(--t3);">（排班僅適用計值班費的兼職、工讀員工）</span></div>`;
+      <div class="card" style="text-align:center;color:var(--t2);padding:40px 20px;">目前沒有設定「值班」標籤的員工。<br><span style="font-size:12px;color:var(--t3);">（在員工管理為員工開啟「🏢值班」標籤後即可排班）</span></div>`;
     return;
   }
   // 每位員工當月總時數
@@ -5389,9 +5587,17 @@ async function renderShiftsTab(){
   const rowsHtml=staff.map(e=>{
     const cells=Array.from({length:daysInMonth},(_,i)=>{
       const dateStr=`${my}-${mm}-${String(i+1).padStart(2,'0')}`;
+      const dow=new Date(Number(my),Number(mm)-1,i+1).getDay();
+      const isWk=dow===0||dow===6;
       const list=monthShifts.filter(s=>s.emp_id===e.id&&s.date===dateStr);
-      const inner=list.map(s=>`<span class="sh-chip">${s.start_time}–${s.end_time}</span>`).join('');
-      return `<td class="sh-cell${list.length?' has':''}" onclick="openShiftEdit('${e.id}','${dateStr}')">${inner||'<span class="sh-plus">＋</span>'}</td>`;
+      const inner=list.map(s=>{
+        const code=s.code||shiftCode(s.start_time,s.end_time);
+        const leaveTag=s.leave_type?`<span class="sh-leave">${s.leave_type[0]}${s.leave_hours||''}</span>`:'';
+        const main=code?`<span class="sh-chip sh-chip-code"><b class="sh-code">${code}</b></span>`:`<span class="sh-chip sh-chip-time"><span class="sh-t1">${s.start_time}</span><span class="sh-t2">${s.end_time}</span></span>`;
+        return main+leaveTag;
+      }).join('');
+      const hasLeave=list.some(s=>s.leave_type);
+      return `<td class="sh-cell${list.length?' has':''}${hasLeave?' has-leave':''}${isWk?' sh-cell-wk':''}" onclick="openShiftEdit('${e.id}','${dateStr}')">${inner||'<span class="sh-plus">＋</span>'}</td>`;
     }).join('');
     const tplDuty=(window.SALARY_TPL||{})[normEmp(e.employment_type||e.pay_type)]||{};
     const rate=(e.custom_salary?(e.duty_hourly||0):(tplDuty.duty_hourly||0));
@@ -5399,6 +5605,7 @@ async function renderShiftsTab(){
       <td class="sh-name"><div style="font-weight:500;">${e.name||'—'}</div>
         <div style="font-size:10.5px;color:var(--t3);">${PAY_LABEL[e.employment_type||e.pay_type]||''} · $${rate}/hr</div>
         <div style="font-size:11px;color:var(--gold-d);font-weight:600;margin-top:2px;">${empTotal[e.id].toFixed(1)} hr</div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:4px;font-size:10.5px;padding:2px 8px;" onclick="event.stopPropagation();openWeeklyShift('${e.id}')">週期排班</button>
       </td>${cells}</tr>`;
   }).join('');
 
@@ -5410,7 +5617,7 @@ async function renderShiftsTab(){
     <button class="btn btn-ghost btn-sm" onclick="shiftMonthMove(1)">下個月 ›</button>
   </div>
   <div class="card">
-    <div class="card-title">月排班 <span style="font-size:12px;color:var(--t3);font-weight:400;">兼職／工讀 共 ${staff.length} 位</span></div>
+    <div class="card-title">月排班 <span style="font-size:12px;color:var(--t3);font-weight:400;">值班員工 共 ${staff.length} 位</span></div>
     <div style="font-size:11.5px;color:var(--t3);margin-bottom:10px;line-height:1.7;">點任一格填寫該日起迄時間。值班費以「排班總時數 × 值班時薪」計（半小時為單位）。</div>
     <div class="sh-scroll"><table class="sh-table"><thead><tr><th class="sh-name sh-corner">員工＼日</th>${dayHeaders}</tr></thead>
     <tbody>${rowsHtml}</tbody></table></div>
@@ -5418,20 +5625,44 @@ async function renderShiftsTab(){
 }
 
 // 開啟某員工某天的排班編輯
+function shiftTimeOptions(sel){
+  let o='<option value="">--:--</option>';
+  for(let h=0;h<24;h++){
+    for(const m of ['00','30']){
+      const v=`${String(h).padStart(2,'0')}:${m}`;
+      o+=`<option value="${v}"${v===sel?' selected':''}>${v}</option>`;
+    }
+  }
+  return o;
+}
 function openShiftEdit(empId,dateStr){
   const shifts=window._shiftsCache||[];
   const list=shifts.filter(s=>s.emp_id===empId&&s.date===dateStr);
   const cur=list[0]||null; // 一天一班為主（如需多班可擴充）
-  const quick=SHIFT_QUICK.map(([s,e])=>`<button type="button" class="btn btn-ghost btn-sm" style="margin:2px;" onclick="document.getElementById('sh-start').value='${s}';document.getElementById('sh-end').value='${e}';shiftCalcPreview();">${s}–${e}</button>`).join('');
+  const quick=SHIFT_QUICK.map(([c,s,e])=>`<button type="button" class="btn btn-ghost btn-sm" style="margin:2px;" onclick="document.getElementById('sh-start').value='${s}';document.getElementById('sh-end').value='${e}';document.getElementById('sh-code').value='${c}';shiftCalcPreview();"><b style="color:var(--green);">${c}</b>　${s}–${e}</button>`).join('');
   showModal(`<div class="modal-title">排班 · ${dateStr}</div>
     <div style="display:flex;gap:10px;margin-bottom:10px;">
-      <div class="form-row" style="flex:1;margin-bottom:0;"><label>起時間</label><input type="time" id="sh-start" step="1800" value="${cur?cur.start_time:''}" onchange="shiftCalcPreview()"></div>
-      <div class="form-row" style="flex:1;margin-bottom:0;"><label>迄時間</label><input type="time" id="sh-end" step="1800" value="${cur?cur.end_time:''}" onchange="shiftCalcPreview()"></div>
+      <div class="form-row" style="flex:1;margin-bottom:0;"><label>起時間</label><select id="sh-start" onchange="shiftCalcPreview()">${shiftTimeOptions(cur?cur.start_time:'')}</select></div>
+      <div class="form-row" style="flex:1;margin-bottom:0;"><label>迄時間</label><select id="sh-end" onchange="shiftCalcPreview()">${shiftTimeOptions(cur?cur.end_time:'')}</select></div>
     </div>
     <div style="margin-bottom:8px;">常用時段：${quick}</div>
     <div class="form-row"><label>備註（可留空）</label><input type="text" id="sh-note" value="${cur?(cur.note||''):''}" placeholder="例：代班、活動"></div>
+    ${cur?`<div style="border-top:1px solid var(--bd);padding-top:12px;margin-bottom:10px;">
+      <div style="font-size:12.5px;color:var(--t2);margin-bottom:8px;">請假登記（排班後若請假，於此註明）</div>
+      <div style="display:flex;gap:10px;">
+        <div class="form-row" style="flex:1.3;margin-bottom:0;"><label>假別</label>
+          <select id="sh-leave" onchange="shiftCalcPreview()">
+            <option value="">無</option>
+            <option value="特休"${cur.leave_type==='特休'?' selected':''}>特休（不扣薪）</option>
+            <option value="病假"${cur.leave_type==='病假'?' selected':''}>病假（半薪）</option>
+            <option value="事假"${cur.leave_type==='事假'?' selected':''}>事假（不給薪）</option>
+          </select></div>
+        <div class="form-row" style="flex:1;margin-bottom:0;"><label>請假時數</label>
+          <input type="number" id="sh-leave-hours" min="0" step="0.5" value="${cur.leave_hours||''}" placeholder="小時" onchange="shiftCalcPreview()"></div>
+      </div>
+    </div>`:''}
     <div id="sh-preview" style="font-size:13px;color:var(--gold-d);font-weight:600;margin-bottom:10px;">${cur?('時數：'+(Number(cur.hours)||0).toFixed(1)+' hr'):''}</div>
-    <input type="hidden" id="sh-empid" value="${empId}"><input type="hidden" id="sh-date" value="${dateStr}"><input type="hidden" id="sh-id" value="${cur?cur.id:''}">
+    <input type="hidden" id="sh-empid" value="${empId}"><input type="hidden" id="sh-date" value="${dateStr}"><input type="hidden" id="sh-id" value="${cur?cur.id:''}"><input type="hidden" id="sh-code" value="${cur?(cur.code||shiftCode(cur.start_time,cur.end_time)):''}">
     <div class="modal-foot">
       ${cur?`<button class="btn btn-ghost" style="color:#c0392b;" onclick="deleteShift('${cur.id}')">刪除</button>`:''}
       <button class="btn btn-ghost" onclick="closeModal()">取消</button>
@@ -5450,11 +5681,17 @@ async function saveShift(){
   const start=document.getElementById('sh-start').value;
   const end=document.getElementById('sh-end').value;
   const note=document.getElementById('sh-note').value.trim();
+  const leaveEl=document.getElementById('sh-leave');
+  const leaveHrEl=document.getElementById('sh-leave-hours');
+  const leave_type=leaveEl?leaveEl.value:'';
+  const leave_hours=leaveHrEl?(Number(leaveHrEl.value)||0):0;
   const id=document.getElementById('sh-id').value;
   if(!start||!end){ showToast('請填起迄時間'); return; }
   const hours=shiftHours(start,end);
   if(hours<=0){ showToast('時數需大於 0'); return; }
+  if(leave_type&&leave_hours>hours){ showToast('請假時數不可超過排班時數'); return; }
   const obj={ id:id||uid('shift'), emp_id:empId, date, start_time:start, end_time:end, hours, note,
+    leave_type:leave_type||null, leave_hours:leave_hours||0,
     created_by:(SESSION&&SESSION.id)||'', created_at:new Date().toISOString() };
   try{ await dbPut('shifts',obj); showToast('已儲存排班'); closeModal(); navTo('staff'); }
   catch(err){ showToast('儲存失敗：'+(err.message||err)); }
@@ -5485,14 +5722,14 @@ async function renderPayrollSummary(){
     const ptDone=myDone.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
     const groupList=myDone.filter(b=>b.category==='小班肌力');
     const groupHeads=groupList.reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
-    // 值班費：改以「排班表時數」為準（非打卡）；僅兼職／工讀列入，其餘類型 0
-    const dutyHours=isDutyType(emp)
-      ? (shifts||[]).filter(s=>s.emp_id===emp.id&&(s.date||'').slice(0,7)===month).reduce((s2,s)=>s2+(Number(s.hours)||0),0)
-      : 0;
-    const sal=calcSalary(emp, ptDone, groupHeads, dutyHours);
+    // 值班費：以「排班表時數」為準（非打卡）；有「值班」標籤(need_duty)者列入，依各自值班時薪
+    const leave=leaveSummary(shifts, emp.id, month);
+    const dutyHours=emp.need_duty ? leave.scheduled : 0;
+    const classOverlap=emp.need_duty ? dutyClassOverlapHours(shifts, bookings, emp.id, month) : 0;
+    const sal=calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap);
     const mgrBonus=(emp.is_manager?(emp.manager_bonus||0):0)+(emp.is_supervisor?(emp.supervisor_bonus||0):0);
     const total=countSalary?(sal.total+mgrBonus):0;
-    return {emp,countSalary,ptDone,groupHeads,dutyHours,sal,mgrBonus,total};
+    return {emp,countSalary,ptDone,groupHeads,dutyHours,leave,sal,mgrBonus,total};
   });
   const grandTotal=rows.reduce((s,r)=>s+r.total,0);
 
@@ -5519,14 +5756,42 @@ async function renderPayrollSummary(){
         <td data-label="合計" class="num" style="font-weight:700;color:var(--gold-d);">$${r.total.toLocaleString()}</td>
       </tr>
       <tr id="pr-d-${i}" class="pr-detail"><td colspan="7" style="padding:0;">
-        <div class="pr-detail-inner" style="background:var(--card2);padding:14px 18px;font-size:12.5px;line-height:2;color:var(--t2);">
-          <b style="color:var(--text);">${e.name} · ${month} 計算明細</b><br>
-          教練課：完成 ${r.ptDone} 堂 → 課費 $${s.ptPay.toLocaleString()}（${s.ptDetail}）${s.base>0?`，底薪 $${s.base.toLocaleString()} → 取高者 <b>$${s.ptIncome.toLocaleString()}</b>${s.ptIsFloor?'（保障底薪）':''}`:''}<br>
-          ${s.bonus>0?`達標獎金：$${s.bonus.toLocaleString()}（${s.bonusDetail}）<br>`:''}
-          團課：${r.groupHeads} 人次 → $${s.groupPay.toLocaleString()}<br>
-          值班費：${r.dutyHours.toFixed(1)} 小時（排班）→ $${s.dutyPay.toLocaleString()}<br>
-          ${r.mgrBonus>0?`管理獎金：$${r.mgrBonus.toLocaleString()}<br>`:''}
-          <b style="color:var(--gold-d);">合計：$${r.total.toLocaleString()}</b>${r.countSalary?'':'（此員工設為不計薪）'}
+        <div class="pr-detail-inner" style="background:var(--card2);padding:16px 18px;">
+          <div style="font-weight:700;color:var(--text);margin-bottom:10px;">${e.name} · ${month} 計算明細</div>
+          <div style="max-width:420px;">
+          ${(()=>{
+            const rowL=(label,val,sub)=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bd);font-size:13px;"><span style="color:var(--t2);">${label}${sub?`<span style="color:var(--t3);font-size:11.5px;"> ${sub}</span>`:''}</span><span style="font-weight:600;color:var(--text);">${val}</span></div>`;
+            const rowDeduct=(label,val)=>`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">${label}</span><span style="color:#c0392b;font-weight:600;">−$${val.toLocaleString()}</span></div>`;
+            let h='';
+            // 正職：底薪 + 請假扣 → 取高
+            if(s.base>0){
+              h+=rowL('底薪',`$${s.base.toLocaleString()}`);
+              if(r.leave.事假>0) h+=rowDeduct(`事假 ${r.leave.事假} 小時`, Math.round(r.leave.事假*(s.base/30/8)));
+              if(r.leave.病假>0) h+=rowDeduct(`病假 ${r.leave.病假} 小時（半薪）`, Math.round(r.leave.病假*(s.base/30/8)*0.5));
+              if(r.leave.特休>0) h+=`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">特休 ${r.leave.特休} 小時</span><span style="color:var(--t3);">不扣薪</span></div>`;
+              if(s.baseLeaveDeduct>0) h+=rowL('調整後底薪',`$${s.adjBase.toLocaleString()}`);
+              h+=rowL('教練課費',`$${s.ptPay.toLocaleString()}`, `${r.ptDone} 堂`);
+              h+=rowL('教練課收入',`<b>$${s.ptIncome.toLocaleString()}</b>`, s.ptIsFloor?'取底薪':'取課費');
+            } else {
+              // 兼職/合作/工讀：教練課費（如有）
+              if(r.ptDone>0||s.ptPay>0) h+=rowL('教練課費',`$${s.ptPay.toLocaleString()}`, `${r.ptDone} 堂`);
+            }
+            if(s.bonus>0) h+=rowL('達標獎金',`$${s.bonus.toLocaleString()}`);
+            if(s.groupPay>0) h+=rowL('團課人頭',`$${s.groupPay.toLocaleString()}`, `${r.groupHeads} 人次`);
+            // 值班費（僅實領 > 0 才顯示；正職值班費 0 不干擾）
+            if(r.dutyHours>0 && s.dutyPay>0){
+              h+=rowL('值班費',`$${s.dutyGross.toLocaleString()}`, `${r.leave.scheduled.toFixed(1)} 小時`);
+              if(r.leave.事假>0 && s.dutyGross>0) h+=rowDeduct(`事假 ${r.leave.事假} 小時`, Math.round(r.leave.事假*(s.dutyGross/r.leave.scheduled)));
+              if(r.leave.病假>0 && s.dutyGross>0) h+=rowDeduct(`病假 ${r.leave.病假} 小時（半薪）`, Math.round(r.leave.病假*(s.dutyGross/r.leave.scheduled)*0.5));
+              if(s.dutyClassDeduct>0) h+=rowDeduct(`值班時段上課 ${s.classOverlap.toFixed(1)} 小時（課程抽成為主）`, s.dutyClassDeduct);
+              if(s.dutyLeaveDeduct>0||s.dutyClassDeduct>0) h+=rowL('實領值班費',`<b>$${s.dutyPay.toLocaleString()}</b>`);
+            }
+            if(r.mgrBonus>0) h+=rowL('管理獎金',`$${r.mgrBonus.toLocaleString()}`);
+            return h;
+          })()}
+          <div style="display:flex;justify-content:space-between;padding:10px 0 0;font-size:14px;"><span style="font-weight:700;color:var(--gold-d);">合計</span><span style="font-weight:700;color:var(--gold-d);">$${r.total.toLocaleString()}</span></div>
+          ${r.countSalary?'':'<div style="font-size:11.5px;color:var(--t3);margin-top:6px;">此員工設為不計薪</div>'}
+          </div>
         </div>
       </td></tr>`;
     }).join('')}
@@ -7358,14 +7623,14 @@ async function renderAttendanceAdmin(){
   const tabBar=`<div class="seg" style="margin-bottom:16px;flex-wrap:nowrap;overflow-x:auto;">${ATT_TABS.map(t=>
     `<button class="seg-btn ${_attTab===t.key?'active':''}" onclick="setAttTab('${t.key}')" style="flex-shrink:0;">${t.label}</button>`).join('')}</div>`;
   C.innerHTML=head('PUNCH','出勤管理','今日出勤 · 紀錄 · 工時統計 · 異常')+tabBar+`<div id="att-body"></div>`;
-  const[coaches,all]=await Promise.all([dbGetAll('coaches'),dbGetAll('attendance')]);
+  const[coaches,all,shifts]=await Promise.all([dbGetAll('coaches'),dbGetAll('attendance'),dbGetAll('shifts').catch(()=>[])]);
   const needPunch=coaches.filter(c=>c.role!=='front_desk'&&c.need_punch&&c.status==='active');
   const body=document.getElementById('att-body');
   if(needPunch.length===0){
     body.innerHTML='<div class="card"><div class="empty" style="padding:30px 8px;"><div class="em-t">尚無「需要打卡」的員工</div><div style="font-size:12px;color:var(--t3);margin-top:8px;">請至 員工管理 → 排班設定，為需打卡的員工開啟。</div></div></div>';
     return;
   }
-  if(_attTab==='today') renderAttToday(needPunch,all);
+  if(_attTab==='today') renderAttToday(needPunch,all,coaches,shifts);
   else if(_attTab==='records') renderAttRecords(needPunch,all);
   else if(_attTab==='hours') renderAttHours(needPunch,all);
   else if(_attTab==='abnormal') renderAttAbnormal(needPunch,all);
@@ -7423,24 +7688,39 @@ async function rejectPunchReq(id){
   navTo('attendance');
  }catch(e){ showToast('操作失敗：'+(e&&e.message?e.message:e)); }
 }
-// ① 今日出勤總覽
-function renderAttToday(needPunch,all){
+// ① 今日出勤總覽（應出勤＝當天有排班的人員）
+function renderAttToday(needPunch,all,coaches,shifts){
   const date=_attDate||ymd(TODAY);
   const recMap=Object.fromEntries(all.filter(a=>a.date===date).map(r=>[r.emp_id,r]));
-  const punchedIn=needPunch.filter(c=>recMap[c.id]&&recMap[c.id].clock_in).length;
+  const coachMap=Object.fromEntries((coaches||[]).map(c=>[c.id,c]));
+  // 當天有排班的人員（一人可能多段，依姓名彙整時段）
+  const dayShifts=(shifts||[]).filter(s=>s.date===date).sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
+  const byEmp={};
+  dayShifts.forEach(s=>{ (byEmp[s.emp_id]=byEmp[s.emp_id]||[]).push(s); });
+  const dutyEmpIds=Object.keys(byEmp);
+  const punchedIn=dutyEmpIds.filter(id=>recMap[id]&&recMap[id].clock_in).length;
+  const rowsHtml = dutyEmpIds.length===0
+    ? `<tr><td colspan="5" style="text-align:center;color:var(--t3);padding:20px;">本日無人排班</td></tr>`
+    : dutyEmpIds.map(id=>{
+        const c=coachMap[id]; const nm=c?(c.name||'—'):id;
+        const segs=byEmp[id].map(s=>{const code=s.code||shiftCode(s.start_time,s.end_time);return `${code?code+' ':''}${s.start_time}–${s.end_time}`;}).join('、');
+        const r=recMap[id]; const wh=r?calcWorkHours(r):null;
+        return `<tr>
+          <td data-label="姓名">${nm}</td>
+          <td data-label="排班">${segs}</td>
+          <td data-label="上班">${r&&r.clock_in?r.clock_in:'<span style="color:var(--t3);">未打</span>'}</td>
+          <td data-label="下班">${r&&r.clock_out?r.clock_out:(r&&r.clock_in?'<span style="color:var(--warn);">上班中</span>':'—')}</td>
+          <td data-label="當日工時">${wh!=null?wh+' 小時':'—'}</td>
+        </tr>`;
+      }).join('');
   document.getElementById('att-body').innerHTML=`<div class="card">
     <div class="card-title">今日出勤
       <input type="date" value="${date}" onchange="_attDate=this.value;navTo('attendance')" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background-color:#fff;font-size:13px;padding-right:30px;">
     </div>
-    <div class="stat-grid dash-summary"><div class="stat-card"><div class="sc-label">應出勤</div><div><span class="sc-num">${needPunch.length}</span><span class="sc-unit">人</span></div></div>
+    <div class="stat-grid dash-summary"><div class="stat-card"><div class="sc-label">應出勤（排班）</div><div><span class="sc-num">${dutyEmpIds.length}</span><span class="sc-unit">人</span></div></div>
       <div class="stat-card"><div class="sc-label">已上班打卡</div><div><span class="sc-num" style="color:var(--green);">${punchedIn}</span><span class="sc-unit">人</span></div></div></div>
-    <table class="rwd-card"><thead><tr><th>姓名</th><th>上班</th><th>下班</th><th>當日工時</th></tr></thead><tbody>
-    ${needPunch.map(c=>{const r=recMap[c.id];const wh=r?calcWorkHours(r):null;return `<tr>
-      <td data-label="姓名">${c.name||'—'}</td>
-      <td data-label="上班">${r&&r.clock_in?r.clock_in:'<span style="color:var(--t3);">未打</span>'}</td>
-      <td data-label="下班">${r&&r.clock_out?r.clock_out:(r&&r.clock_in?'<span style="color:var(--warn);">上班中</span>':'—')}</td>
-      <td data-label="當日工時">${wh!=null?wh+' 小時':'—'}</td>
-    </tr>`;}).join('')}
+    <table class="rwd-card"><thead><tr><th>姓名</th><th>排班</th><th>上班</th><th>下班</th><th>當日工時</th></tr></thead><tbody>
+    ${rowsHtml}
     </tbody></table>
   </div>`;
 }
@@ -10312,14 +10592,14 @@ PAGES.coach_salary=async function(){
   const groupDone=groupDoneList.length;
   // 團課總人頭：每堂實際參加人數加總（member_ids 長度；至少算 1）
   const groupHeads=groupDoneList.reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
-  // 值班費：改以「排班表時數」為準（非打卡）；僅兼職／工讀列入
+  // 值班費：以「排班表時數」為準（非打卡）；有「值班」標籤(need_duty)者列入
   const myShifts=(shifts||[]).filter(s=>s.emp_id===SESSION.id&&(s.date||'').slice(0,7)===month).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
-  const dutyHours=isDutyType(me)
-    ? myShifts.reduce((a,s)=>a+(Number(s.hours)||0),0)
-    : 0;
+  const myLeave=leaveSummary(shifts, SESSION.id, month);
+  const dutyHours=me.need_duty ? myLeave.scheduled : 0;
+  const myClassOverlap=me.need_duty ? dutyClassOverlapHours(shifts, bookings, SESSION.id, month) : 0;
   const payTypeLabel=PAY_LABEL[me.employment_type||me.pay_type]||'—';
-  // 完整薪資計算（底薪＋階梯課時費＋達標獎金＋團課人頭＋值班費）
-  const sal=calcSalary(me, ptDone, groupHeads, dutyHours);
+  // 完整薪資計算（底薪＋階梯課時費＋達標獎金＋團課人頭＋值班費，含請假扣除）
+  const sal=calcSalary(me, ptDone, groupHeads, dutyHours, myLeave, myClassOverlap);
   const mgrBonus=(me.is_manager?(me.manager_bonus||0):0)+(me.is_supervisor?(me.supervisor_bonus||0):0);
   const countSalary=me.count_salary!==false;
   const estimate=countSalary?(sal.total+mgrBonus):0;
