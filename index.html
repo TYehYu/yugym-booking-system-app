@@ -129,7 +129,9 @@ select option{color:var(--text);}
 .tb-logout:hover{background:var(--sage-bg);}
 /* 帳號下拉選單 */
 .tb-account{position:relative;}
-.tb-acct-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);background:var(--card2);border:1px solid var(--bd);padding:6px 12px;border-radius:8px;transition:.18s;cursor:pointer;font-family:inherit;}
+.tb-acct-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);background:var(--card2);border:1px solid var(--bd);padding:6px 12px;border-radius:8px;transition:.18s;cursor:pointer;font-family:inherit;position:relative;}
+.tb-acct-alertdot{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--danger);border:1.5px solid var(--card2);}
+.acct-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--danger);margin-left:6px;vertical-align:middle;}
 .tb-acct-btn:hover{background:var(--sage-bg);}
 /* Header 打卡元件 */
 .tb-punch{display:flex;align-items:center;gap:10px;}
@@ -539,11 +541,16 @@ tr:hover td{background:var(--card2);}
 .mc-cell.mc-empty{cursor:default;}
 .mc-cell:not(.mc-empty):hover{background:var(--sage-bg);}
 .mc-d{font-size:14px;color:var(--text);font-family:var(--num);line-height:1;}
-.mc-cell.mc-today .mc-d{font-weight:700;color:var(--green);}
-.mc-cell.mc-sel{background:var(--green);}
-.mc-cell.mc-sel .mc-d{color:#fff;font-weight:700;}
-.mc-dot{min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--sage);color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1;}
+/* 已選日期：淺綠底、深綠字 */
+.mc-cell.mc-sel{background:var(--sage-bg);}
+.mc-cell.mc-sel .mc-d{color:var(--green);font-weight:700;}
 .mc-cell.mc-sel .mc-dot{background:var(--gold);}
+/* 今日：深綠底、白字（優先級最高，蓋過選中）*/
+.mc-cell.mc-today{background:var(--green);}
+.mc-cell.mc-today .mc-d{font-weight:700;color:#fff;}
+.mc-cell.mc-today .mc-dot{background:var(--gold);color:#fff;}
+.mc-cell.mc-today:hover{background:var(--green);}
+.mc-dot{min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--sage);color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1;}
 .mc-ev{display:flex;align-items:stretch;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd2);cursor:pointer;}
 .mc-ev:last-child{border-bottom:none;}
 .mc-ev-time{flex:0 0 46px;display:flex;flex-direction:column;justify-content:center;text-align:center;}
@@ -1424,9 +1431,11 @@ tr:hover td{background:var(--card2);}
           <button class="tb-acct-btn" onclick="toggleAcctMenu(event)">
             <span class="tb-user" id="tb-user">—</span>
             <span class="tb-caret">▾</span>
+            <span class="tb-acct-alertdot" id="tb-acct-alertdot" style="display:none;"></span>
           </button>
           <div class="tb-acct-menu" id="tb-acct-menu">
             <button class="tb-acct-item" id="acct-preview" onclick="openPreviewSwitch()" style="display:none;">🎭 角色預覽</button>
+            <button class="tb-acct-item" id="acct-punchfix" onclick="openPunchRequest()" style="display:none;">申請補打卡<span class="acct-dot" id="acct-punchfix-dot" style="display:none;"></span></button>
             <button class="tb-acct-item" onclick="openChangePassword()">修改密碼</button>
             <div class="tb-acct-sep"></div>
             <button class="tb-acct-item tb-acct-logout" onclick="doLogout()">登出</button>
@@ -1456,8 +1465,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26626.1030';
-const APP_VERSION_LABEL='26626.1030';
+const APP_VERSION='26626.1105';
+const APP_VERSION_LABEL='26626.1105';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -1682,6 +1691,16 @@ function enterApp(){
   const tv=document.getElementById('tb-ver'); if(tv) tv.textContent=APP_VERSION;
   document.getElementById('tb-user').textContent=SESSION.name;
   const pvBtn=document.getElementById('acct-preview'); if(pvBtn) pvBtn.style.display = isRealAdmin()?'':'none';
+  // 補打卡選單項：需打卡員工才顯示（會員/不需打卡者隱藏）
+  (async()=>{
+    const item=document.getElementById('acct-punchfix'); if(!item)return;
+    if(SESSION.role==='member'){ item.style.display='none'; return; }
+    let me=null; try{ me=await dbGet('coaches',SESSION.id); }catch(_){}
+    const needPunch=me&&me.need_punch;
+    item.style.display=needPunch?'':'none';
+    if(needPunch && typeof updatePunchAlertDot==='function') updatePunchAlertDot();
+    else{ const d=document.getElementById('tb-acct-alertdot'); if(d)d.style.display='none'; }
+  })();
   startClock();
   loadWeather();
   refreshHeaderPunch();
@@ -6560,7 +6579,7 @@ function renderFdMonthView(){
     const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const cnt=cntByDate[ds]||0;
     const isToday=ds===todayStr, isSel=ds===_fdCalSel;
-    cells+=`<div class="mc-cell${isSel?' mc-sel':''}${isToday?' mc-today':''}" onclick="fdCalPick('${ds}')">
+    cells+=`<div class="mc-cell${isToday?' mc-today':(isSel?' mc-sel':'')}" onclick="fdCalPick('${ds}')">
       <span class="mc-d">${d}</span>${cnt>0?`<span class="mc-dot">${cnt}</span>`:''}</div>`;
   }
   const sel=parseYmd(_fdCalSel);
@@ -7568,12 +7587,29 @@ PAGES.coach_calendar=async function(){
 };
 // 打卡面板（教練「我的預約」上方）：大時鐘 + 日期 + 上下班大按鈕
 async function renderPunchPanel(){
-  const box=document.getElementById('coach-punch'); if(!box)return;
+  const box=document.getElementById('coach-punch'); if(box) box.innerHTML=''; // 中間不再顯示補打卡連結
   let me=null; try{ me=await dbGet('coaches',SESSION.id); }catch(_){}
-  if(!me||!me.need_punch){ box.innerHTML=''; return; } // 不需打卡者不顯示
-  // 時鐘卡與上下班圓鈕已移至常駐問候條；此處僅保留補打卡入口
-  box.innerHTML=`<div style="text-align:center;margin-bottom:14px;"><button class="pp-fix" onclick="openPunchRequest()">忘記打卡？申請補打卡</button></div>`;
+  const needPunch = me&&me.need_punch;
+  // 補打卡入口收進右上角帳號選單：只對需打卡員工顯示
+  const item=document.getElementById('acct-punchfix');
+  if(item) item.style.display = needPunch?'':'none';
+  if(needPunch) updatePunchAlertDot();
   if(typeof refreshHeaderPunch==='function') refreshHeaderPunch();
+}
+// 異常/缺卡紅點：今天若已上班未下班過久、或有缺卡，顯示提醒
+async function updatePunchAlertDot(){
+  const dot=document.getElementById('acct-punchfix-dot');
+  const acctDot=document.getElementById('tb-acct-alertdot');
+  let alert=false;
+  try{
+    const rec=await getAttendance(SESSION.id,ymd(TODAY));
+    const now=new Date();
+    // 異常情境：有上班但未下班、且已超過當日 22:00（疑似忘打下班卡）
+    if(rec&&rec.clock_in&&!rec.clock_out && now.getHours()>=22) alert=true;
+    // 缺卡：今天有排班但完全沒打卡（需 shifts 判斷；保守起見僅當有上班未下班時提醒）
+  }catch(_){}
+  if(dot) dot.style.display = alert?'inline-block':'none';
+  if(acctDot) acctDot.style.display = alert?'block':'none';
 }
 function startPunchClock(){}
 function clearPunchClock(){}
@@ -7821,7 +7857,7 @@ function renderCoachMonthView(){
     const cnt=cntByDate[ds]||0;
     const isToday=ds===todayStr;
     const isSel=ds===_empCalSel;
-    cells+=`<div class="mc-cell${isSel?' mc-sel':''}${isToday?' mc-today':''}" onclick="empCalPick('${ds}')">
+    cells+=`<div class="mc-cell${isToday?' mc-today':(isSel?' mc-sel':'')}" onclick="empCalPick('${ds}')">
       <span class="mc-d">${d}</span>
       ${cnt>0?`<span class="mc-dot">${cnt}</span>`:''}
     </div>`;
@@ -8321,7 +8357,7 @@ function renderMemMonthView(){
     const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const cnt=cntByDate[ds]||0;
     const isToday=ds===todayStr, isSel=ds===_memCalSel;
-    cells+=`<div class="mc-cell${isSel?' mc-sel':''}${isToday?' mc-today':''}" onclick="memCalPick('${ds}')">
+    cells+=`<div class="mc-cell${isToday?' mc-today':(isSel?' mc-sel':'')}" onclick="memCalPick('${ds}')">
       <span class="mc-d">${d}</span>${cnt>0?`<span class="mc-dot">${cnt}</span>`:''}</div>`;
   }
   const sel=parseYmd(_memCalSel);
