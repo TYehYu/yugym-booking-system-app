@@ -373,11 +373,11 @@ tr:hover td{background:var(--card2);}
 .mem-tagbox{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:6px 8px;border:1px dashed transparent;border-radius:9px;transition:.15s;min-height:20px;}
 .mem-tagcell:hover .mem-tagbox{border-color:var(--bd);background:#fff;}
 .tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;letter-spacing:0.03em;}
-.tag-pt{background:#e8eef7;color:var(--blue);}
-.tag-friendly{background:#f7e9e9;color:var(--red);}
-.tag-group{background:#f5ede0;color:var(--brown);}
-.tag-self{background:#e3efe9;color:var(--green);}
-.tag-trial{background:#efeae0;color:var(--gold-d);}
+.tag-pt{background:#e3efe9;color:#1f6f54;}
+.tag-friendly{background:#e8eef7;color:#23508a;}
+.tag-group{background:#f5ede0;color:#9a5a1e;}
+.tag-self{background:#ededea;color:#6a655c;}
+.tag-trial{background:#efe8f2;color:#6e3a86;}
 .tag-ok{background:#e3efe3;color:var(--ok);}
 .tag-warn{background:#f7efe0;color:var(--warn);}
 .tag-danger{background:#fbeaea;color:var(--danger);}
@@ -824,11 +824,11 @@ tr:hover td{background:var(--card2);}
 .cm-tag.cm-trial{background:#ece0f3;color:#613178;}
 .cdl-card{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:11px;margin-bottom:8px;cursor:pointer;border:1px solid var(--bd);background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,0.05);transition:.12s;border-left-width:4px;}
 .cdl-card:hover{box-shadow:0 4px 12px rgba(0,0,0,0.1);transform:translateY(-1px);}
-.cdl-card.cdl-pt{border-left-color:#1a5e47;}
-.cdl-card.cdl-friendly{border-left-color:#1d4778;}
-.cdl-card.cdl-group{border-left-color:#8a4f17;}
-.cdl-card.cdl-self{border-left-color:#5d584f;}
-.cdl-card.cdl-trial{border-left-color:#613178;}
+.cdl-card.cdl-pt{border-left-color:#1f6f54;}
+.cdl-card.cdl-friendly{border-left-color:#23508a;}
+.cdl-card.cdl-group{border-left-color:#9a5a1e;}
+.cdl-card.cdl-self{border-left-color:#6a655c;}
+.cdl-card.cdl-trial{border-left-color:#6e3a86;}
 .cdl-time{font-family:var(--num);font-size:18px;font-weight:800;flex:0 0 auto;min-width:52px;}
 .cdl-main{flex:1;min-width:0;}
 .cdl-who{font-size:15px;font-weight:700;}
@@ -1514,8 +1514,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26626.2130';
-const APP_VERSION_LABEL='26626.2130';
+const APP_VERSION='26626.2215';
+const APP_VERSION_LABEL='26626.2215';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -2278,10 +2278,19 @@ function bkCC(b){
   // 1) ticket_type_id 直接含 friendly
   if(b.ticket_type_id==='pt_friendly') return 'friendly';
   if(b.ticket_type_id==='self_friendly') return 'self';
-  // 2) 查票券種類快取名稱是否含「友善」
+  // 2) 查票券種類：優先看 color 欄位（最可靠），其次名稱含「友善」
   const tt=(window._ttCache||[]).find(t=>t.id===b.ticket_type_id);
-  if(tt && (tt.name||'').indexOf('友善')>=0){
-    return b.category==='自主訓練'?'self':'friendly';
+  if(tt){
+    if(tt.color){
+      if(tt.color==='friendly') return b.category==='自主訓練'?'self':'friendly';
+      if(tt.color==='group') return 'group';
+      if(tt.color==='self') return 'self';
+      if(tt.color==='trial') return 'trial';
+      if(tt.color==='pt') return 'pt';
+    }
+    if((tt.name||'').indexOf('友善')>=0){
+      return b.category==='自主訓練'?'self':'friendly';
+    }
   }
   // 3) 查 member_tickets 的 plan_name
   const mt=(window._allTkCache||[]).find(t=>t.id===b.ticket_id);
@@ -2295,6 +2304,14 @@ function bkCC(b){
 const TYPE_NAME_FALLBACK={pt:'教練課',pt_friendly:'友善教練課',group:'團課',self_training:'自主訓練',self_friendly:'友善自主訓練',trial:'體驗課'};
 function bookingTypeName(b,typeMap){
   if(typeMap && b.ticket_type_id && typeMap[b.ticket_type_id]) return typeMap[b.ticket_type_id].name;
+  // 查 _ttCache（會員端等沒傳 typeMap 時）
+  const tt=(window._ttCache||[]).find(t=>t.id===b.ticket_type_id);
+  if(tt && tt.name) return tt.name;
+  // 由扣抵的會員票券名稱推斷（友善方案的票券 plan_name 含「友善」）
+  const mt=(window._allTkCache||[]).find(t=>t.id===b.ticket_id);
+  if(mt && mt.plan_name){
+    if(mt.plan_name.indexOf('友善')>=0 && (b.category==='私人教練'||!b.category)) return '友善教練課';
+  }
   if(b.ticket_type_id && TYPE_NAME_FALLBACK[b.ticket_type_id]) return TYPE_NAME_FALLBACK[b.ticket_type_id];
   // 最後才退回 category（舊資料相容）
   return {'私人教練':'教練課','小班肌力':'團課','自主訓練':'自主訓練','體驗':'體驗課'}[b.category]||b.category||'課程';
@@ -4288,17 +4305,23 @@ async function grantCheckinReward(b){
   //  以 category 為主要依據（穩定值），ticket_type_id 為輔（相容舊寫死值）。
   let isFriendly=false, doGrant=false;
   const cat=b.category||'';
-  // 反查該預約的票券種類名稱（友善方案 category 可能仍是「私人教練」，需靠種類名稱判斷友善）
-  let ttName='';
+  // 反查該預約的票券種類（友善方案 category 可能仍是「私人教練」，需靠種類 color/名稱或扣抵票券名稱判斷友善）
+  let ttName='', ttColor='';
   try{
     if(b.ticket_type_id){
       if(!window._ttCache) window._ttCache=await dbGetAll('ticket_types');
       const tt=(window._ttCache||[]).find(t=>t.id===b.ticket_type_id);
-      if(tt) ttName=tt.name||'';
+      if(tt){ ttName=tt.name||''; ttColor=tt.color||''; }
     }
   }catch(_){}
-  const friendly = b.ticket_type_id==='pt_friendly' || cat.indexOf('友善')>=0 || ttName.indexOf('友善')>=0;
-  const coachClass = cat==='私人教練' || cat==='體驗' || b.ticket_type_id==='pt' || b.ticket_type_id==='trial' || b.ticket_type_id==='pt_friendly' || ttName.indexOf('教練課')>=0 || ttName.indexOf('體驗')>=0;
+  // 扣抵的會員票券名稱（最準：友善方案票券 plan_name 含「友善」）
+  let tkPlanName='';
+  try{
+    if(b.ticket_id){ const mt=await dbGet('member_tickets',b.ticket_id); if(mt) tkPlanName=mt.plan_name||''; }
+  }catch(_){}
+  const friendly = b.ticket_type_id==='pt_friendly' || ttColor==='friendly'
+    || cat.indexOf('友善')>=0 || ttName.indexOf('友善')>=0 || tkPlanName.indexOf('友善')>=0;
+  const coachClass = cat==='私人教練' || cat==='體驗' || b.ticket_type_id==='pt' || b.ticket_type_id==='trial' || b.ticket_type_id==='pt_friendly' || ttName.indexOf('教練課')>=0 || ttName.indexOf('體驗')>=0 || tkPlanName.indexOf('教練課')>=0 || ttColor==='friendly' || ttColor==='pt';
   if(coachClass){ doGrant=true; isFriendly=friendly; }
   if(!doGrant) return false;                 // 團課/自主訓練本身不發點
 
@@ -8767,8 +8790,9 @@ async function tlxApplyMove(id,ds,newTime,dur){
 let _memCalMonth=null;  // {y,m}
 let _memCalSel=null;    // 選中日期 ymd
 PAGES.mem_bookings=async function(){
-  const[bookings,coaches,ttypes]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('ticket_types').catch(()=>[])]);
+  const[bookings,coaches,ttypes,mtickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('ticket_types').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[])]);
   window._ttCache=ttypes;
+  window._allTkCache=mtickets;
   window._memTypeMap=Object.fromEntries((ttypes||[]).map(t=>[t.id,t]));
   try{ window._meMember=await dbGet('members',SESSION.id); }catch(_){}
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
@@ -10088,7 +10112,9 @@ function renderMemTickets(){
     const copy=ticketCopy(t);
     const open=!!_mcOpen[t.id];
     const name=t.plan_name||(ty?ty.name:'票券');
-    const fmt=t.format?` · ${t.format.toUpperCase()}`:'';
+    // 若名稱已含 1V1/1V2 等授課型別，不重複附加
+    const fmtU=t.format?t.format.toUpperCase():'';
+    const fmt=(fmtU && name.toUpperCase().indexOf(fmtU)<0)?` · ${fmtU}`:'';
     // 展開內容：使用紀錄
     const myLogs=(logs||[]).filter(l=>l.ticket_id===t.id).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
     const actLabel={grant:'發放',deduct:'扣課',refund:'退課',adjust:'調整',expire:'過期',checkin_grant:'簽到送'};
