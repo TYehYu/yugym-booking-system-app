@@ -913,6 +913,10 @@ tr:hover td{background:var(--card2);}
 .ms-sub{font-size:12.5px;color:var(--t3);font-family:var(--num);}
 .ms-rem{font-size:12.5px;color:var(--green);font-weight:600;margin-top:2px;}
 .ms-empty{text-align:center;color:var(--t3);padding:30px 0;font-size:13px;}
+.grp-item{border-bottom:1px solid var(--bd2);border-radius:8px;}
+.grp-item.grp-on{background:#eaf3ee;}
+.grp-check{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:1.5px solid var(--bd);border-radius:5px;font-size:12px;color:#1f6f54;font-weight:700;flex:0 0 auto;}
+.grp-on .grp-check{background:#1f6f54;border-color:#1f6f54;color:#fff;}
 /* 快速預約浮動按鈕 */
 .qb-fab{display:block;width:100%;margin:0 0 14px;
   background:var(--green);color:#fff;border:none;border-radius:12px;
@@ -1514,8 +1518,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26626.2215';
-const APP_VERSION_LABEL='26626.2215';
+const APP_VERSION='26626.2022';
+const APP_VERSION_LABEL='26626.2022';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -2794,6 +2798,9 @@ async function renderCalendar(opts){
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const ticketMap=Object.fromEntries(allTickets.map(t=>[t.id,t]));
+  // 同步全域快取，讓 bkCC / bookingTypeName 的舊資料友善回退（種類名稱、票券 plan_name）可靠
+  window._ttCache=types;
+  window._allTkCache=allTickets;
   const nDays=effCalDays();
   const days=[];for(let i=0;i<nDays;i++)days.push(addDays(calWeekStart,i));
   let filterCoach=window._calFilter||'all';
@@ -3599,19 +3606,22 @@ async function bkStep2(){
   if(isGroup){
     // 預先查每位會員的團體課票（顯示剩餘張數，方便櫃台判斷誰要扣票）
     const allTk=await dbGetAll('member_tickets');
-    const grpOpts=_bkMembers.map(m=>{
+    window._grpData=_bkMembers.map(m=>{
       const tks=allTk.filter(tt=>tt.member_id===m.id && ticketMatchesCategory(tt,categoryOfTypeId(type_id)) && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=date));
       const sum=tks.reduce((s,tt)=>s+tt.sessions_remaining,0);
-      const tag = sum>0 ? `團體課票 剩 ${sum} 堂` : '無票（教練負責）';
-      return `<option value="${m.id}">${m.name}（${m.phone}）· ${tag}</option>`;
-    }).join('');
+      return {id:m.id, name:m.name||'—', sum, mine:!!(coach_id&&m.default_coach_id===coach_id)};
+    });
+    window._grpSel=[];
     showModal(`<div class="modal-title">新增團體課 · 步驟 2 / 2</div>
       <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${t.name}　${date} ${time}${coach_id?'　·　'+(await coachName(coach_id)):''}</div>
       <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;background:var(--card2);padding:10px 12px;border-radius:9px;">團體課最多 5 人，名單可現在選或之後在明細再加。有團體課票券的會員會扣 1 堂，沒票的由教練負責。</div>
-      <div class="form-row"><label>加入會員（可複選，最多 5 人）</label>
-        <select id="bk-member" multiple size="7" style="height:auto;">${grpOpts}</select>
-        <div style="font-size:11px;color:var(--t2);margin-top:5px;">按住 Ctrl／⌘ 可複選；也可先不選，之後在明細加入。</div></div>
+      <div class="form-row"><label>加入會員（點選即可複選，最多 5 人）</label>
+        <input type="hidden" id="bk-member" value="">
+        <input id="grp-search" class="ms-search" style="margin:0 0 8px;width:100%;box-sizing:border-box;" placeholder="搜尋姓名…" oninput="renderGrpPick()" autocomplete="off">
+        <div id="grp-count" style="font-size:12px;color:var(--t2);margin-bottom:6px;">已選 0 / 5 人</div>
+        <div id="grp-list" class="ms-list" style="max-height:280px;border:1px solid var(--bd);border-radius:10px;padding:6px;"></div></div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button><button class="btn btn-green" onclick="submitBooking()">確認預約</button></div>`);
+    renderGrpPick();
     return;
   }
 
@@ -3726,7 +3736,6 @@ function renderMemberSheet(){
     const sum=sums[m.id];
     return `<button class="ms-item" onclick="pickMember('${m.id}')">
       <div class="ms-name">${mine?'<span class="ms-star">★</span> ':''}${m.name||'—'}</div>
-      <div class="ms-sub">${m.phone||''}</div>
       <div class="ms-rem">剩餘 ${sum!=null?sum:0} 堂</div>
     </button>`;
   }).join('');
@@ -3735,9 +3744,37 @@ function pickMember(mid){
   const m=(window._bkMembers||[]).find(x=>x.id===mid);
   document.getElementById('bk-member').value=mid;
   const label=document.getElementById('bk-mem-pick-label');
-  if(label&&m){ const sum=(window._bkTicketSum||{})[mid]; label.innerHTML=`${m.name}（${m.phone}）· 剩 ${sum!=null?sum:0} 堂`; label.style.color='var(--text)'; }
+  if(label&&m){ const sum=(window._bkTicketSum||{})[mid]; label.innerHTML=`${m.name} · 剩 ${sum!=null?sum:0} 堂`; label.style.color='var(--text)'; }
   closeMemberSheet();
   refreshBkTicket();
+}
+// 團體課選會員：搜尋 + 點選即複選（不需按 Ctrl/⌘，不顯示電話）
+function renderGrpPick(){
+  const box=document.getElementById('grp-list'); if(!box)return;
+  const q=(document.getElementById('grp-search')?.value||'').trim().toLowerCase();
+  const sel=window._grpSel||(window._grpSel=[]);
+  let list=(window._grpData||[]).filter(m=> !q || (m.name||'').toLowerCase().includes(q));
+  list=list.slice().sort((a,b)=>{ if(a.mine!==b.mine)return a.mine?-1:1; return (a.name||'').localeCompare(b.name||''); });
+  if(list.length===0){ box.innerHTML='<div class="ms-empty">找不到符合的會員</div>'; }
+  else box.innerHTML=list.map(m=>{
+    const on=sel.includes(m.id);
+    const tag=m.sum>0?`團體課票 剩 ${m.sum} 堂`:'無票（教練負責）';
+    return `<button type="button" class="ms-item grp-item${on?' grp-on':''}" onclick="toggleGrpMember('${m.id}')">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="grp-check">${on?'✓':''}</span>
+        <span class="ms-name" style="margin:0;">${m.mine?'<span class="ms-star">★</span> ':''}${m.name}</span>
+      </div>
+      <div class="ms-rem" style="margin-left:26px;color:${m.sum>0?'var(--green)':'var(--t3)'};">${tag}</div>
+    </button>`;
+  }).join('');
+  const c=document.getElementById('grp-count'); if(c)c.textContent=`已選 ${sel.length} / 5 人`;
+}
+function toggleGrpMember(id){
+  const sel=window._grpSel||(window._grpSel=[]);
+  const i=sel.indexOf(id);
+  if(i>=0){ sel.splice(i,1); }
+  else{ if(sel.length>=5){ showToast('團體課最多 5 人'); return; } sel.push(id); }
+  renderGrpPick();
 }
 function filterBkMembers(){
   // 舊版相容（桌機若仍用搜尋框時不報錯）
@@ -3799,8 +3836,7 @@ async function submitBooking(){
 
   // ── 團體課：建立一張多會員預約（上限 5；有票者扣票，無票由教練負責）──
   if(isGroup){
-    const sel=document.getElementById('bk-member');
-    const ids=[...sel.selectedOptions].map(o=>o.value).filter(Boolean);
+    const ids=(window._grpSel||[]).filter(Boolean);
     if(ids.length>5){showToast('團體課最多 5 人');return;}
     const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id};
     const verr=await validateBooking(vbk,date,time,60);
@@ -4454,22 +4490,24 @@ async function openGroupMembers(id){
   const allTk=await dbGetAll('member_tickets');
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
   const cur=mids(b);
-  const opts=members.map(m=>{
+  window._grpData=members.map(m=>{
     const tks=allTk.filter(tt=>tt.member_id===m.id && ticketMatchesCategory(tt,'小班肌力') && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=b.date));
     const sum=tks.reduce((s,tt)=>s+tt.sessions_remaining,0);
-    const tag = sum>0 ? `團體課票 剩 ${sum} 堂` : '無票（教練負責）';
-    return `<option value="${m.id}" ${cur.includes(m.id)?'selected':''}>${m.name}（${m.phone}）· ${tag}</option>`;
-  }).join('');
+    return {id:m.id, name:m.name||'—', sum, mine:false};
+  });
+  window._grpSel=cur.slice();
   showModal(`<div class="modal-title">團體課名單</div>
     <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">最多 5 人。有團體課票券的會員會在加入時扣 1 堂、移除時退回；沒票的由教練負責（不扣）。</div>
-    <div class="form-row"><label>選擇會員（按住 Ctrl／⌘ 複選）</label>
-      <select id="grp-members" multiple size="8" style="height:auto;">${opts}</select></div>
+    <div class="form-row"><label>選擇會員（點選即可複選，最多 5 人）</label>
+      <input id="grp-search" class="ms-search" style="margin:0 0 8px;width:100%;box-sizing:border-box;" placeholder="搜尋姓名…" oninput="renderGrpPick()" autocomplete="off">
+      <div id="grp-count" style="font-size:12px;color:var(--t2);margin-bottom:6px;">已選 0 / 5 人</div>
+      <div id="grp-list" class="ms-list" style="max-height:300px;border:1px solid var(--bd);border-radius:10px;padding:6px;"></div></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button><button class="btn btn-green" onclick="saveGroupMembers('${id}')">儲存名單</button></div>`);
+  renderGrpPick();
 }
 async function saveGroupMembers(id){
   const b=await dbGet('bookings',id);
-  const sel=document.getElementById('grp-members');
-  const next=[...sel.selectedOptions].map(o=>o.value);
+  const next=(window._grpSel||[]).slice();
   if(next.length>5){showToast('團體課最多 5 人');return;}
   const prev=mids(b);
   const added=next.filter(x=>!prev.includes(x));
@@ -4843,6 +4881,9 @@ async function openMemberDetail(member_id){
     dbGet('members',member_id),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('bookings'),dbGetAll('ticket_types')]);
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
+  // 供 bkCC 的友善判斷（第2依據種類名稱/色、第3依據票券 plan_name）可靠運作，避免沿用前頁殘留的空快取
+  window._ttCache=types;
+  window._allTkCache=tickets;
   const myTickets=tickets.filter(t=>t.member_id===member_id).sort((a,b)=>b.created_at.localeCompare(a.created_at));
   const myBookings=bookings.filter(b=>b.member_id===member_id).sort((a,b)=>(b.date+b.start_time).localeCompare(a.date+a.start_time));
   const stLabel={usable:'可用',used_up:'用畢',expired:'過期',refunded:'已退'};
