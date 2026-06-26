@@ -963,6 +963,8 @@ tr:hover td{background:var(--card2);}
 .mck-dot.booked{background:var(--mck-accent);color:#fff;letter-spacing:-0.02em;}
 /* 已上完：反白消去（淡底、淡勾） */
 .mck-dot.done{background:transparent;border:1.5px dashed var(--mck-soft);color:var(--t3);font-size:13px;}
+/* 未排（仍可預約）：實心色、無日期 */
+.mck-dot.remain{background:var(--mck-accent);}
 /* 未排：空心 */
 .mck-dot.open{background:transparent;border:1.5px solid var(--mck-soft);}
 .mck-figures{display:flex;width:100%;align-items:flex-end;justify-content:space-between;gap:12px;}
@@ -1522,8 +1524,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26626.2152';
-const APP_VERSION_LABEL='26626.2152';
+const APP_VERSION='26626.2210';
+const APP_VERSION_LABEL='26626.2210';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10156,11 +10158,11 @@ function ticketBar(remain,total,bks){
       s+=`<span class="mck-dot done" title="已完成 ${done[di].date||''}">✓</span>`; di++;
     }else if(bi<booked.length){ // 已預約未上 → 標日期
       const b=booked[bi]; s+=`<span class="mck-dot booked" title="已預約 ${b.date||''} ${b.start_time||''}">${md(b)}</span>`; bi++;
-    }else{ // 未排
-      s+='<span class="mck-dot open"></span>';
+    }else{ // 未排（仍可預約）→ 實心色，不標日期
+      s+='<span class="mck-dot remain"></span>';
     }
   }
-  return s||'<span class="mck-dot open"></span>';
+  return s||'<span class="mck-dot remain"></span>';
 }
 let _mcOpen={}; // 展開狀態
 function toggleMcCard(id){ _mcOpen[id]=!_mcOpen[id]; renderMemTickets(); }
@@ -10187,9 +10189,12 @@ function renderMemTickets(){
   if(!_memTkData) return;
   const {mine,typeMap,logs,usedMap,bkByTicket}=_memTkData;
   const today=ymd(TODAY);
-  const usable=mine.filter(t=>t.status==='usable'&&t.sessions_remaining>0)
+  // 「有效」判斷改用未使用堂數（已預約未簽到仍算未使用），而非 sessions_remaining。
+  //  狀態須 usable、未過期、且仍有未使用堂數 → 歸「持有中」；否則歸「已完成 / 已到期」。
+  const isLive=t=>t.status==='usable' && ticketUnused(t,usedMap)>0 && (!t.expire_date||t.expire_date>=today);
+  const usable=mine.filter(isLive)
     .sort((a,b)=>(a.expire_date||'').localeCompare(b.expire_date||''));
-  const inactive=mine.filter(t=>!(t.status==='usable'&&t.sessions_remaining>0))
+  const inactive=mine.filter(t=>!isLive(t))
     .sort((a,b)=>(b.expire_date||'').localeCompare(a.expire_date||''));
 
   const card=(t,dim)=>{
@@ -10224,7 +10229,7 @@ function renderMemTickets(){
       <div class="mck-head" onclick="toggleMcCard('${t.id}')">
         <div class="mck-top">
           <div class="mck-name">${name}${fmt}</div>
-          ${dim?`<span class="mck-badge">${t.status==='expired'?'已到期':'已使用完'}</span>`
+          ${dim?`<span class="mck-badge">${(t.status==='expired'||(t.expire_date&&t.expire_date<today))?'已到期':'已使用完'}</span>`
                 :(soon?`<span class="mck-badge mck-badge-warn">${days} 天後到期</span>`:'')}
         </div>
         ${dim?'':`<div class="mck-copy"><div class="mck-copy1">${copy.line1}</div><div class="mck-copy2">${copy.line2}</div></div>`}
