@@ -957,10 +957,14 @@ tr:hover td{background:var(--card2);}
 .mck-copy{margin-bottom:16px;}
 .mck-copy1{font-size:15px;font-weight:600;color:var(--mck-accent);line-height:1.5;}
 .mck-copy2{font-size:12.5px;color:var(--t2);line-height:1.7;margin-top:3px;}
-.mck-bar{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px;}
-.mck-pip{width:16px;height:9px;border-radius:3px;flex-shrink:0;}
-.mck-pip.on{background:var(--mck-accent);}
-.mck-pip.off{background:var(--mck-soft);border:1px solid rgba(0,0,0,0.05);}
+.mck-bar{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;}
+.mck-dot{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:var(--num);line-height:1;box-sizing:border-box;}
+/* 已預約未上：實心強調色＋日期 */
+.mck-dot.booked{background:var(--mck-accent);color:#fff;letter-spacing:-0.02em;}
+/* 已上完：反白消去（淡底、淡勾） */
+.mck-dot.done{background:transparent;border:1.5px dashed var(--mck-soft);color:var(--t3);font-size:13px;}
+/* 未排：空心 */
+.mck-dot.open{background:transparent;border:1.5px solid var(--mck-soft);}
 .mck-figures{display:flex;width:100%;align-items:flex-end;justify-content:space-between;gap:12px;}
 .mck-num{display:flex;align-items:baseline;gap:6px;flex-shrink:0;}
 .mck-num-big{font-family:var(--num);font-size:40px;font-weight:800;color:var(--mck-accent);line-height:0.9;}
@@ -1518,8 +1522,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26626.2022';
-const APP_VERSION_LABEL='26626.2022';
+const APP_VERSION='26626.2152';
+const APP_VERSION_LABEL='26626.2152';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -2418,6 +2422,24 @@ async function findUsableTicket(member_id,type_id,bookDate){
 }
 async function logTicket(ticket_id,action,delta,booking_id,operator,note){
   await dbPut('ticket_logs',{id:uid('LG'),ticket_id,action,delta,booking_id,operator,note,created_at:new Date().toISOString()});
+}
+// 計算各票券「已使用（已簽到/已完成）」堂數 → { ticket_id: count }
+//  用途：會員詳細／會員端票券顯示「未使用堂數 = 總堂數 − 已使用」，
+//  讓「已預約但尚未上課」仍計為未使用，避免會員誤以為堂數已用完。
+function usedSessionsMap(bookings){
+  const map={};
+  (bookings||[]).forEach(b=>{
+    if(!b||!b.ticket_id) return;
+    if(b.status==='checked_in'||b.status==='completed'){
+      map[b.ticket_id]=(map[b.ticket_id]||0)+1;
+    }
+  });
+  return map;
+}
+// 單張票券未使用堂數 = 總堂數 − 已簽到/完成；下限 0
+function ticketUnused(t,usedMap){
+  const used=(usedMap&&usedMap[t.id])||0;
+  return Math.max(0,(t.sessions_total||0)-used);
 }
 // 扣一堂
 async function deductTicket(ticket,booking_id,operator){
@@ -4886,6 +4908,8 @@ async function openMemberDetail(member_id){
   window._allTkCache=tickets;
   const myTickets=tickets.filter(t=>t.member_id===member_id).sort((a,b)=>b.created_at.localeCompare(a.created_at));
   const myBookings=bookings.filter(b=>b.member_id===member_id).sort((a,b)=>(b.date+b.start_time).localeCompare(a.date+a.start_time));
+  // 票券顯示「未使用堂數 = 總數 − 已簽到/完成」（已預約未上仍算未使用）
+  const usedMap=usedSessionsMap(myBookings);
   const stLabel={usable:'可用',used_up:'用畢',expired:'過期',refunded:'已退'};
   const stTag={usable:'tag-ok',used_up:'tag-warn',expired:'tag-danger',refunded:'tag-danger'};
   // 自動推算最後上課日（已完成或已過的預約最新一筆）
@@ -4928,16 +4952,16 @@ async function openMemberDetail(member_id){
       ${isCoach?'':`<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-green btn-sm" onclick="openGrantModalFor('${member_id}')">＋ 發放票券</button><button class="btn btn-gold btn-sm" onclick="openMakeupForMember('${member_id}')">補發補課券</button></div>`}
       ${myTickets.length===0?'<div class="empty"><div class="em-t">尚無票券</div></div>':
       ( isCoach
-        ? `<table><thead><tr><th>票券名稱</th><th>剩餘堂數</th><th>到期日</th></tr></thead><tbody>
+        ? `<table><thead><tr><th>票券名稱</th><th>未使用堂數</th><th>到期日</th></tr></thead><tbody>
         ${myTickets.filter(t=>t.status==='usable').map(t=>{const ty=typeMap[t.ticket_type_id];return `<tr>
           <td><div style="font-weight:500;">${t.plan_name||(ty?ty.name:'—')}</div></td>
-          <td style="white-space:nowrap;"><span style="font-size:22px;font-weight:800;color:var(--green);">${t.sessions_remaining}</span><span style="font-size:14px;color:var(--t3);"> 堂</span></td>
+          <td style="white-space:nowrap;"><span style="font-size:22px;font-weight:800;color:var(--green);">${ticketUnused(t,usedMap)}</span><span style="font-size:14px;color:var(--t3);"> 堂</span></td>
           <td>${t.expire_date}</td></tr>`;}).join('')||'<tr><td colspan="3" style="color:var(--t3);padding:10px;">目前沒有有效票券</td></tr>'}
         </tbody></table>`
-        : `<table><thead><tr><th>方案</th><th>剩餘 / 總數</th><th>到期日</th><th>狀態</th><th></th></tr></thead><tbody>
+        : `<table><thead><tr><th>方案</th><th>未使用 / 總數</th><th>到期日</th><th>狀態</th><th></th></tr></thead><tbody>
         ${myTickets.map(t=>{const ty=typeMap[t.ticket_type_id];return `<tr>
           <td><div style="font-weight:500;">${t.plan_name||(ty?ty.name:'—')}</div><span class="tag tag-${ty?ty.color:'pt'}">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span></td>
-          <td style="white-space:nowrap;"><span style="font-size:26px;font-weight:800;color:var(--green);line-height:1;font-feature-settings:'tnum';">${t.sessions_remaining}</span><span style="font-size:15px;color:var(--t3);font-weight:600;"> / ${t.sessions_total}</span></td><td>${t.expire_date}</td>
+          <td style="white-space:nowrap;"><span style="font-size:26px;font-weight:800;color:var(--green);line-height:1;font-feature-settings:'tnum';">${ticketUnused(t,usedMap)}</span><span style="font-size:15px;color:var(--t3);font-weight:600;"> / ${t.sessions_total}</span></td><td>${t.expire_date}</td>
           <td><span class="tag ${stTag[t.status]}">${stLabel[t.status]}</span></td>
           <td><button class="btn btn-ghost btn-sm" onclick="viewLogs('${t.id}')">使用紀錄</button></td></tr>`;}).join('')}
         </tbody></table>` )}
@@ -10117,27 +10141,51 @@ function ticketCopy(t){
   // 還有很多堂
   return { tone:'plenty', line1:`你的練習，還剩 ${remain} 堂。`, line2:'慢慢來，保持自己的節奏，我們一起慢慢練。' };
 }
-// 進度條（■剩餘 / □已用）
-function ticketBar(remain,total){
-  const t=Math.max(total,0), r=Math.max(Math.min(remain,t),0);
-  let s='';
-  for(let i=0;i<t;i++) s+=`<span class="mck-pip ${i<r?'on':'off'}"></span>`;
-  return s||'<span class="mck-pip off"></span>';
+// 圓圈進度條：每堂一個圓
+//  已上完(已簽到/完成)=反白消去(done)；已預約未上=圓圈內標 月/日(booked)；其餘未排=空心(open)
+//  bks：該票券扣抵的預約清單(已依日期排序、不含取消)
+function ticketBar(remain,total,bks){
+  const t=Math.max(total,0);
+  bks=bks||[];
+  const done=bks.filter(b=>b.status==='checked_in'||b.status==='completed');
+  const booked=bks.filter(b=>b.status==='booked'||b.status==='scheduled');
+  const md=b=>{ const d=parseYmd(b.date); return d?(d.getMonth()+1)+'/'+d.getDate():''; };
+  let s='', di=0, bi=0;
+  for(let i=0;i<t;i++){
+    if(di<done.length){ // 已上完 → 反白
+      s+=`<span class="mck-dot done" title="已完成 ${done[di].date||''}">✓</span>`; di++;
+    }else if(bi<booked.length){ // 已預約未上 → 標日期
+      const b=booked[bi]; s+=`<span class="mck-dot booked" title="已預約 ${b.date||''} ${b.start_time||''}">${md(b)}</span>`; bi++;
+    }else{ // 未排
+      s+='<span class="mck-dot open"></span>';
+    }
+  }
+  return s||'<span class="mck-dot open"></span>';
 }
 let _mcOpen={}; // 展開狀態
 function toggleMcCard(id){ _mcOpen[id]=!_mcOpen[id]; renderMemTickets(); }
 let _memTkData=null;
 PAGES.mem_tickets=async function(){
-  const[tickets,types,logs]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types'),dbGetAll('ticket_logs').catch(()=>[])]);
+  const[tickets,types,logs,bookings]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types'),dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('bookings').catch(()=>[])]);
   window._ttCache=types;
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const mine=tickets.filter(t=>t.member_id===SESSION.id);
-  _memTkData={mine,typeMap,logs};
+  const myBk=(bookings||[]).filter(b=>b.member_id===SESSION.id);
+  // 未使用堂數 = 總數 − 已簽到/完成（已預約未上仍算未使用，避免會員誤會堂數用完）
+  const usedMap=usedSessionsMap(myBk);
+  // 每張票券扣抵的預約清單（給圓圈進度條：已上=反白、已預約=標日期），依日期時間排序
+  const bkByTicket={};
+  myBk.forEach(b=>{
+    if(!b.ticket_id || b.status==='cancelled') return;
+    (bkByTicket[b.ticket_id]=bkByTicket[b.ticket_id]||[]).push(b);
+  });
+  Object.values(bkByTicket).forEach(arr=>arr.sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||''))));
+  _memTkData={mine,typeMap,logs,usedMap,bkByTicket};
   renderMemTickets();
 };
 function renderMemTickets(){
   if(!_memTkData) return;
-  const {mine,typeMap,logs}=_memTkData;
+  const {mine,typeMap,logs,usedMap,bkByTicket}=_memTkData;
   const today=ymd(TODAY);
   const usable=mine.filter(t=>t.status==='usable'&&t.sessions_remaining>0)
     .sort((a,b)=>(a.expire_date||'').localeCompare(b.expire_date||''));
@@ -10148,6 +10196,7 @@ function renderMemTickets(){
     const ty=typeMap[t.ticket_type_id];
     const color=ty?ty.color:'pt';
     const remain=t.sessions_remaining||0, total=t.sessions_total||0;
+    const unused=ticketUnused(t,usedMap); // 顯示用：未使用 = 總數 − 已簽到/完成
     const days=t.expire_date?diffDays(t.expire_date,today):null;
     const soon=!dim&&days!=null&&days<=7&&days>=0;
     const copy=ticketCopy(t);
@@ -10179,9 +10228,9 @@ function renderMemTickets(){
                 :(soon?`<span class="mck-badge mck-badge-warn">${days} 天後到期</span>`:'')}
         </div>
         ${dim?'':`<div class="mck-copy"><div class="mck-copy1">${copy.line1}</div><div class="mck-copy2">${copy.line2}</div></div>`}
-        <div class="mck-bar">${ticketBar(remain,total)}</div>
+        <div class="mck-bar">${ticketBar(unused,total,bkByTicket[t.id])}</div>
         <div class="mck-figures">
-          <div class="mck-num"><span class="mck-num-big">${remain}</span><span class="mck-num-tot">/ ${total} 堂</span></div>
+          <div class="mck-num"><span class="mck-num-big">${unused}</span><span class="mck-num-tot">/ ${total} 堂</span></div>
           <div class="mck-exp">${dim?'':'到期'} ${t.expire_date||'—'}</div>
         </div>
         <div class="mck-toggle">${open?'收合 ▲':'查看紀錄 ▾'}</div>
@@ -10190,9 +10239,9 @@ function renderMemTickets(){
     </div>`;
   };
 
-  // 續課提示：總有效堂數 <=2，或最快到期 <=7 天時，柔和提醒（移自首頁）
+  // 續課提示：總未使用堂數 <=2，或最快到期 <=7 天時，柔和提醒（移自首頁）
   let totalRemain=0, soonest=null;
-  usable.forEach(t=>{ totalRemain+=(t.sessions_remaining||0); if(t.expire_date&&(!soonest||t.expire_date<soonest)) soonest=t.expire_date; });
+  usable.forEach(t=>{ totalRemain+=ticketUnused(t,usedMap); if(t.expire_date&&(!soonest||t.expire_date<soonest)) soonest=t.expire_date; });
   const expDays=soonest?diffDays(soonest,today):null;
   const needRenew = usable.length>0 && (totalRemain<=2 || (expDays!=null&&expDays<=7));
   const renewHint = needRenew
