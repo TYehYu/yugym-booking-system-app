@@ -567,7 +567,7 @@ tr:hover td{background:var(--card2);}
 .mc-ev-t1{font-size:13px;font-weight:700;font-family:var(--num);color:var(--text);}
 .mc-ev-t2{font-size:11px;color:var(--t3);font-family:var(--num);}
 .mc-ev-bar{flex:0 0 3px;border-radius:3px;background:var(--sage);}
-.mc-bar-pt{background:#3f7a66;}.mc-bar-group{background:var(--gold);}.mc-bar-self{background:var(--blue);}.mc-bar-trial{background:var(--brown);}
+.mc-bar-pt{background:#1f6f54;}.mc-bar-friendly{background:#23508a;}.mc-bar-group{background:#9a5a1e;}.mc-bar-self{background:#6a655c;}.mc-bar-trial{background:#6e3a86;}
 .mc-ev-body{flex:1;display:flex;flex-direction:column;justify-content:center;}
 .mc-ev-name{font-size:15px;font-weight:600;color:var(--text);}
 .mc-ev-cat{font-size:12px;color:var(--t2);margin-top:2px;}
@@ -1514,8 +1514,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26626.2008';
-const APP_VERSION_LABEL='26626.2008';
+const APP_VERSION='26626.2130';
+const APP_VERSION_LABEL='26626.2130';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -2430,7 +2430,11 @@ async function grantMakeupTicket(booking){
     }
   }catch(_){}
   const today=ymd(TODAY);
-  const expire=ymd(addDays(TODAY,14)); // 效期 14 天
+  // 自主訓練類補課券效期 7 天，其他 14 天
+  const catName=booking.category||'';
+  const isSelf=catName.includes('自主')||(planName&&planName.includes('自主'));
+  const makeupDays=isSelf?7:14;
+  const expire=ymd(addDays(TODAY,makeupDays));
   const tk={ id:uid('TK'), member_id:booking.member_id, ticket_type_id:type_id,
     source_plan_id:null, plan_name:planName, format:booking.format||null,
     source:'makeup', purchase_date:today, start_date:today, expire_date:expire,
@@ -4101,24 +4105,31 @@ async function doGrantMakeup(id){
 // 會員資料頁：補發補課券（不綁特定預約，由管理員選課程類型）
 async function openMakeupForMember(member_id){
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
-  const cats=[...new Set((window._ttCache||[]).map(t=>t.category).filter(Boolean))];
-  const opts=cats.map(c=>`<option value="${c}">${c}</option>`).join('')||'<option value="私人教練">私人教練</option>';
+  // 列出各票券種類（友善教練課、友善自主訓練等都獨立顯示），value=種類 id
+  const types=(window._ttCache||[]).filter(t=>t.name);
+  const opts=types.length
+    ? types.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')
+    : '<option value="">私人教練</option>';
   showModal(`<div class="modal-title">補發補課券</div>
-    <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">補課券 1 堂、效期自今日起 14 天，綁定所選課程類型（同類型可用）。</div>
-    <div class="form-row"><label>課程類型</label><select id="mk-cat">${opts}</select></div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">補課券 1 堂，綁定所選課程類型（同類型可用）。效期：自主訓練 7 天、其他 14 天。</div>
+    <div class="form-row"><label>課程類型</label><select id="mk-cat" onchange="document.getElementById('mk-days').textContent=this.options[this.selectedIndex].text.includes('自主')?'7':'14';">${opts}</select></div>
+    <div style="font-size:12px;color:var(--gold-d);margin-bottom:12px;">此補課券效期 <b id="mk-days">14</b> 天</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openMemberDetail('${member_id}')">返回</button><button class="btn btn-gold" onclick="doGrantMakeupForMember('${member_id}')">確認補發</button></div>`);
+  // 初始化效期顯示（依預設選中的種類名稱）
+  const _mc=document.getElementById('mk-cat'), _md=document.getElementById('mk-days');
+  if(_mc&&_md&&_mc.options.length) _md.textContent=_mc.options[_mc.selectedIndex].text.includes('自主')?'7':'14';
 }
 async function doGrantMakeupForMember(member_id){
   try{
-    const cat=document.getElementById('mk-cat').value;
-    // 找該類型的票券種類 id
-    let type_id=null;
-    const tt=(window._ttCache||[]).find(t=>t.category===cat);
-    if(tt) type_id=tt.id;
-    const pseudo={ member_id, category:cat, ticket_type_id:type_id, format:null, id:null };
+    const type_id=document.getElementById('mk-cat').value;
+    const tt=(window._ttCache||[]).find(t=>t.id===type_id);
+    const cat=tt?(tt.category||''):'';
+    const ttName=tt?(tt.name||''):'';
+    const pseudo={ member_id, category:cat, ticket_type_id:type_id||null, format:null, id:null };
     const tk=await grantMakeupTicket(pseudo);
     closeModal();
-    showToast(tk?'已補發補課券（效期 14 天）':'補發失敗');
+    const days=(ttName.includes('自主')||cat.includes('自主'))?7:14;
+    showToast(tk?`已補發補課券（效期 ${days} 天）`:'補發失敗');
     openMemberDetail(member_id);
   }catch(e){ showToast('補發失敗：'+(e&&e.message?e.message:e)); }
 }
@@ -4277,8 +4288,17 @@ async function grantCheckinReward(b){
   //  以 category 為主要依據（穩定值），ticket_type_id 為輔（相容舊寫死值）。
   let isFriendly=false, doGrant=false;
   const cat=b.category||'';
-  const friendly = b.ticket_type_id==='pt_friendly' || cat.indexOf('友善')>=0;
-  const coachClass = cat==='私人教練' || cat==='體驗' || b.ticket_type_id==='pt' || b.ticket_type_id==='trial';
+  // 反查該預約的票券種類名稱（友善方案 category 可能仍是「私人教練」，需靠種類名稱判斷友善）
+  let ttName='';
+  try{
+    if(b.ticket_type_id){
+      if(!window._ttCache) window._ttCache=await dbGetAll('ticket_types');
+      const tt=(window._ttCache||[]).find(t=>t.id===b.ticket_type_id);
+      if(tt) ttName=tt.name||'';
+    }
+  }catch(_){}
+  const friendly = b.ticket_type_id==='pt_friendly' || cat.indexOf('友善')>=0 || ttName.indexOf('友善')>=0;
+  const coachClass = cat==='私人教練' || cat==='體驗' || b.ticket_type_id==='pt' || b.ticket_type_id==='trial' || b.ticket_type_id==='pt_friendly' || ttName.indexOf('教練課')>=0 || ttName.indexOf('體驗')>=0;
   if(coachClass){ doGrant=true; isFriendly=friendly; }
   if(!doGrant) return false;                 // 團課/自主訓練本身不發點
 
@@ -4813,15 +4833,15 @@ async function openMemberDetail(member_id){
   showModal(`<div class="md-head-card">
     <div class="modal-title">${m.name} <span style="font-size:12px;color:var(--t3);font-weight:400;">${m.phone}</span></div>
     <div class="modal-tabs">
-      <div class="modal-tab active" onclick="mDetTab(event,'basic')">基本資料</div>
-      <div class="modal-tab" onclick="mDetTab(event,'tickets')">票券</div>
+      <div class="modal-tab active" onclick="mDetTab(event,'tickets')">票券</div>
       <div class="modal-tab" onclick="mDetTab(event,'bookings')">預約紀錄</div>
       ${isCoach?'':'<div class="modal-tab" onclick="mDetTab(event,\'pay\')">付款紀錄</div>'}
+      <div class="modal-tab" onclick="mDetTab(event,'basic')">基本資料</div>
     </div>
     </div>
     <div class="md-body-card">
 
-    <div class="mtab-pane active" data-pane="basic">
+    <div class="mtab-pane" data-pane="basic">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px;">
         <div style="flex:1;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
@@ -4840,7 +4860,7 @@ async function openMemberDetail(member_id){
       <div style="margin-top:10px;">${f('備註',m.note)}</div>
     </div>
 
-    <div class="mtab-pane" data-pane="tickets">
+    <div class="mtab-pane active" data-pane="tickets">
       ${isCoach?'':`<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-green btn-sm" onclick="openGrantModalFor('${member_id}')">＋ 發放票券</button><button class="btn btn-gold btn-sm" onclick="openMakeupForMember('${member_id}')">補發補課券</button></div>`}
       ${myTickets.length===0?'<div class="empty"><div class="em-t">尚無票券</div></div>':
       ( isCoach
@@ -7300,7 +7320,7 @@ async function openGrantModal(){
       <div class="form-row"><label>付款狀態</label><select id="gt-pay"><option value="paid">已付款</option><option value="unpaid">未付款</option></select></div>
     </div>
     <div class="form-row"><label>備註</label><input id="gt-note" placeholder="選填"></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitGrant()">確認發放</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-green" onclick="submitGrant()">確認發放</button></div>`);
   _grantPreMember=null;
   refreshGrantPlans(); // 依預設選到的會員載入可用方案
 }
@@ -8747,7 +8767,9 @@ async function tlxApplyMove(id,ds,newTime,dur){
 let _memCalMonth=null;  // {y,m}
 let _memCalSel=null;    // 選中日期 ymd
 PAGES.mem_bookings=async function(){
-  const[bookings,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches')]);
+  const[bookings,coaches,ttypes]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('ticket_types').catch(()=>[])]);
+  window._ttCache=ttypes;
+  window._memTypeMap=Object.fromEntries((ttypes||[]).map(t=>[t.id,t]));
   try{ window._meMember=await dbGet('members',SESSION.id); }catch(_){}
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const mine=bookings.filter(b=>b.member_id===SESSION.id&&b.status!=='cancelled')
@@ -8819,11 +8841,13 @@ function renderMemMonthView(){
         if(canCheckin) actionBtn=`<button class="btn btn-green btn-sm" onclick="memCheckin('${b.id}')">簽到</button>`;
         else if(isSelf) actionBtn=`<button class="btn btn-ghost btn-sm" onclick="memCancelSelf('${b.id}')">取消</button>`;
       }
-      const barCls=isSelf?'mc-bar-self':(b.category==='小班肌力'?'mc-bar-group':(b.category==='體驗'?'mc-bar-trial':'mc-bar-pt'));
+      const cc=bkCC(b); // pt/friendly/self/group/trial
+      const barCls='mc-bar-'+cc;
+      const evName=bookingTypeName(b, window._memTypeMap);
       return `<div class="mc-ev">
         <div class="mc-ev-time"><span class="mc-ev-t1">${b.start_time}</span><span class="mc-ev-t2">${end}</span></div>
         <div class="mc-ev-bar ${barCls}"></div>
-        <div class="mc-ev-body"><div class="mc-ev-name">${b.category}</div>
+        <div class="mc-ev-body"><div class="mc-ev-name">${evName}</div>
           <div class="mc-ev-cat">${who} · ${dur}分鐘 · ${statusLabel(b.status)}</div></div>
         <div style="display:flex;align-items:center;">${actionBtn}</div>
       </div>`;
