@@ -1990,8 +1990,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26701.1043';
-const APP_VERSION_LABEL='26701.1043';
+const APP_VERSION='26701.1157';
+const APP_VERSION_LABEL='26701.1157';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8023,6 +8023,34 @@ function statutoryAnnualLeave(hireDate){
   if(y<10) return 15;              // 滿 5～10 年
   return Math.min(30, 15+(y-9));   // 滿 10 年起每年+1，上限 30
 }
+// 判斷員工在某結算年度是否「該年度離職」（有離職日且落在該年）
+function resignedInYear(emp, year){
+  const rd=emp&&emp.resign_date; if(!rd) return null;
+  const y=String(rd).slice(0,4);
+  if(String(y)!==String(year)) return null;
+  return rd; // 回傳離職日字串
+}
+// 結算用「本年新增特休」：一般取員工帳戶的 al_earned_hours；
+// 若該年度離職，改用「全年應給 × 當年在職比例」折算（在職起點 max(1/1,到職日)、終點 min(12/31,離職日)）
+function earnedLeaveForYear(emp, year){
+  const stored=Number(emp&&emp.al_earned_hours)||0;
+  const rd=resignedInYear(emp, year);
+  if(!rd) return { hours: stored, prorated:false };
+  // 全年應給（小時）：依到職日對應年資的法定天數
+  const statDays=statutoryAnnualLeave(emp.hire_date);
+  const fullHours=(statDays!=null)?statDays*LEAVE_HOURS_PER_DAY:stored;
+  // 當年在職區間
+  const yStart=new Date(year,0,1), yEnd=new Date(year,11,31);
+  const hire=emp.hire_date?parseYmd(emp.hire_date):yStart;
+  const resign=parseYmd(rd);
+  const s=(hire>yStart)?hire:yStart;
+  const e=(resign<yEnd)?resign:yEnd;
+  const inService=Math.max(0, Math.round((e-s)/86400000)+1); // 含頭尾
+  const daysInYear=Math.round((yEnd-yStart)/86400000)+1;      // 365 或 366
+  const ratio=Math.min(1, inService/daysInYear);
+  const prorated=Math.round(fullHours*ratio*2)/2; // 取到 0.5 小時
+  return { hours: prorated, prorated:true, ratio, inService, daysInYear, fullHours, resignDate:rd };
+}
 async function renderStaffLeave(){
   const list=await _hrStaffList();
   let shifts=[]; try{ shifts=await dbGetAll('shifts'); }catch(_){}
@@ -8061,11 +8089,175 @@ async function renderStaffLeave(){
   </div>`;
 }
 function leaveYearStep(d){ window._leaveYear=(window._leaveYear||TODAY.getFullYear())+d; renderStaffLeave(); }
+// ── 正職工時基準（我們自訂：一週 5 天、每天 6 小時；改這兩個常數即可）──
+const FT_HOURS_PER_DAY=6;
+const FT_DAYS_PER_WEEK=5;
+// 月工時 = 每週時數 × (52 週 ÷ 12 個月) ≈ 130 小時（週30h → 130h）
+const FT_MONTHLY_HOURS=Math.round(FT_HOURS_PER_DAY*FT_DAYS_PER_WEEK*52/12);
+// ── 折薪估算時薪：正職用 底薪÷月工時（與給假的全年值班時數基準一致），其餘用 duty_hourly（值班時薪）──
+function leaveCashoutHourly(emp){
+  const et=normEmp(emp&&(emp.employment_type||emp.pay_type));
+  if(et==='full_time'){
+    const tpl=(window.SALARY_TPL||{})[et]||{};
+    const base=(emp&&Number(emp.base_salary)>0)?Number(emp.base_salary):(Number(tpl.base_salary)||0);
+    return base>0 ? Math.round(base/FT_MONTHLY_HOURS) : 0; // 底薪 ÷ 月工時(≈130)
+  }
+  const r=effRates(emp);
+  let h=Number(r.duty_hourly)||0;
+  if(et==='contractor' && h<200) h=200;
+  return h;
+}
 async function openLeaveSettlement(){
-  showModal(`<div class="modal-title">特休年度結算</div>
-    <div class="empty" style="padding:24px 8px;"><div class="em-t">即將推出</div>
-    <div style="font-size:12px;color:var(--t3);margin-top:8px;line-height:1.7;">年度結算（折薪／結轉選擇、自動更新、結算紀錄）正在開發中。</div></div>
+  const curYear=(window._leaveYear||TODAY.getFullYear());
+  const list=await _hrStaffList();
+  let shifts=[]; try{ shifts=await dbGetAll('shifts'); }catch(_){}
+  let settled=[]; try{ settled=await dbGetAll('leave_settlements'); }catch(_){}
+  const settledMap={}; (settled||[]).forEach(s=>{ if(String(s.year)===String(curYear)) settledMap[s.emp_id]=s; });
+  const applic=list.filter(c=>{const et=normEmp(c.employment_type||c.pay_type);const rule=EMP_RULES[et]||{};return rule.leaveApplicable!==false;});
+  const rows=applic.map(c=>{
+    const a=annualLeaveAccount(c, shifts, curYear);
+    const done=settledMap[c.id];
+    const status = done
+      ? `<span style="color:var(--t3);font-size:11.5px;">已結算<br>結轉 ${Number(done.carry_forward_hours)||0}h · 折薪 ${Number(done.cashout_hours)||0}h</span>`
+      : `<button class="btn btn-green btn-sm" onclick="openLeaveSettleOne('${c.id}',${curYear})">結算</button>`;
+    return `<tr>
+      <td data-label="姓名">${c.name||'—'}</td>
+      <td data-label="去年結轉剩餘">${a.carryRemain} h</td>
+      <td data-label="本年新增剩餘">${a.earnedRemain} h</td>
+      <td data-label="剩餘合計"><b>${a.remain} h</b></td>
+      <td class="rwd-actions" data-label="" style="white-space:nowrap;text-align:right;">${status}</td>
+    </tr>`;
+  }).join('');
+  showModal(`<div class="modal-title">特休年度結算　<span style="font-size:13px;color:var(--t3);">${curYear} 年度</span></div>
+    <div style="font-size:12px;color:var(--t2);background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px;margin-bottom:12px;line-height:1.85;">
+      逐一員工結算。<b>去年結轉剩餘一律折薪歸零</b>（依規定不可再遞延）；<b>本年新增剩餘</b>可選折薪或結轉至 ${curYear+1} 年。<br>
+      <span style="color:var(--t3);">折薪金額為系統估算（時薪 × 折薪時數），實際發放以貴司規定為準。</span>
+    </div>
+    ${applic.length===0?'<div class="empty" style="padding:22px 8px;"><div class="em-t">本年度無適用特休的員工</div></div>':
+    `<div style="max-height:52vh;overflow:auto;-webkit-overflow-scrolling:touch;">
+      <table class="rwd-card"><thead><tr><th>姓名</th><th>去年結轉剩餘</th><th>本年新增剩餘</th><th>剩餘合計</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+// 個別員工結算視窗
+async function openLeaveSettleOne(id, year){
+  const c=await dbGet('coaches',id); if(!c){showToast('找不到員工');return;}
+  let shifts=[]; try{ shifts=await dbGetAll('shifts'); }catch(_){}
+  const hourly=leaveCashoutHourly(c);
+  // 離職判定：該年度離職者本年新增按在職比例折算，且一律折薪、不可結轉
+  const earnedInfo=earnedLeaveForYear(c, year);
+  const isResigned=earnedInfo.prorated;
+  // 用折算後 earned 覆蓋員工副本再算帳戶（FIFO 扣抵邏輯不變）
+  const cAcc=Object.assign({}, c, { al_earned_hours: earnedInfo.hours });
+  const a=annualLeaveAccount(cAcc, shifts, year);
+  const carryRemain=a.carryRemain;   // 去年結轉剩餘（一律折薪歸零）
+  const earnedRemain=a.earnedRemain; // 本年新增剩餘
+  window._settleCtx={ id, year, carryRemain, earnedRemain, hourly, isResigned };
+  const carryCash=Math.round(carryRemain*hourly);
+  const resignNote=isResigned?`<div style="background:#fbe9e7;border:1px solid #e0b4a8;border-radius:9px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.75;color:#b03a2e;">
+      <b>${earnedInfo.resignDate} 離職</b>　本年新增特休已按在職比例折算：<br>
+      全年應給 ${earnedInfo.fullHours}h × 在職 ${earnedInfo.inService}/${earnedInfo.daysInYear} 天（${Math.round(earnedInfo.ratio*100)}%）= <b>${earnedInfo.hours}h</b><br>
+      <span style="color:#8a5a2a;">離職結算：剩餘一律折薪，不可結轉。</span>
+    </div>`:'';
+  showModal(`<div class="modal-title">年度結算 · ${c.name||''}　<span style="font-size:13px;color:var(--t3);">${year} 年度</span></div>
+    ${resignNote}
+    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:12px 14px;margin-bottom:12px;font-size:13px;line-height:2;">
+      <div style="display:flex;justify-content:space-between;"><span>去年結轉剩餘</span><span><b>${carryRemain}</b> 小時</span></div>
+      <div style="display:flex;justify-content:space-between;"><span>本年新增剩餘</span><span><b>${earnedRemain}</b> 小時</span></div>
+      <div style="border-top:1px dashed var(--bd);margin:6px 0;"></div>
+      <div style="display:flex;justify-content:space-between;color:var(--t3);font-size:11.5px;"><span>折薪估算時薪</span><span>$${hourly.toLocaleString()} / 小時</span></div>
+    </div>
+    <div style="background:#fff7f2;border:1px solid #e8c9b5;border-radius:9px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;line-height:1.8;">
+      <b style="color:#a85a2a;">去年結轉剩餘 ${carryRemain} 小時 → 折薪歸零</b><br>
+      折薪估算：${carryRemain} h × $${hourly.toLocaleString()} = <b>$${carryCash.toLocaleString()}</b>
+    </div>
+    <div class="form-row" style="margin-bottom:6px;"><label style="font-weight:600;">本年新增剩餘 ${earnedRemain} 小時，如何處理？</label></div>
+    ${earnedRemain<=0
+    ?`<div style="font-size:12.5px;color:var(--t3);padding:4px 0 10px;">本年新增已用罄，無剩餘需處理。</div>`
+    :(isResigned
+    ?`<div style="background:#fff7f2;border:1px solid #e8c9b5;border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.8;">
+      <b style="color:#a85a2a;">離職一律折薪</b>：${earnedRemain} h × $${hourly.toLocaleString()} = <b>$${Math.round(earnedRemain*hourly).toLocaleString()}</b>
+    </div>`
+    :`
+    <label class="settle-opt" style="display:flex;gap:9px;align-items:flex-start;border:1px solid var(--bd);border-radius:9px;padding:10px 12px;margin-bottom:8px;cursor:pointer;">
+      <input type="radio" name="earnedDisp" value="carry" onchange="settlePreview()" style="margin-top:3px;">
+      <span style="font-size:13px;line-height:1.7;"><b>結轉至 ${year+1} 年</b><br><span style="color:var(--t3);font-size:11.5px;">寫入明年「去年結轉」＝ ${earnedRemain} 小時</span></span>
+    </label>
+    <label class="settle-opt" style="display:flex;gap:9px;align-items:flex-start;border:1px solid var(--bd);border-radius:9px;padding:10px 12px;margin-bottom:10px;cursor:pointer;">
+      <input type="radio" name="earnedDisp" value="cash" onchange="settlePreview()" style="margin-top:3px;">
+      <span style="font-size:13px;line-height:1.7;"><b>折薪</b><br><span style="color:var(--t3);font-size:11.5px;">估算 ${earnedRemain} h × $${hourly.toLocaleString()} = $${Math.round(earnedRemain*hourly).toLocaleString()}</span></span>
+    </label>`)}
+    <div id="settle-preview" style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:11px 13px;margin-bottom:12px;font-size:13px;line-height:1.9;display:none;"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="openLeaveSettlement()">‹ 返回</button>
+      <button class="btn btn-green" id="settle-confirm" onclick="confirmLeaveSettle()" ${(earnedRemain>0&&!isResigned)?'disabled style="opacity:.5;"':''}>確認結算</button>
+    </div>`);
+  if(earnedRemain<=0 || isResigned) settlePreview();
+}
+function settlePreview(){
+  const ctx=window._settleCtx||{}; const {carryRemain,earnedRemain,hourly,isResigned}=ctx;
+  let disp='none';
+  if(earnedRemain>0){
+    if(isResigned){ disp='cash'; }        // 離職：本年新增剩餘一律折薪
+    else{
+      const r=document.querySelector('input[name="earnedDisp"]:checked');
+      if(!r){ document.getElementById('settle-preview').style.display='none'; const b=document.getElementById('settle-confirm'); if(b){b.disabled=true;b.style.opacity='.5';} return; }
+      disp=r.value;
+    }
+  }
+  else disp='none_needed';
+  const carryCash=Math.round(carryRemain*hourly);
+  const earnedCarry = disp==='carry' ? earnedRemain : 0;
+  const earnedCash  = disp==='cash'  ? Math.round(earnedRemain*hourly) : 0;
+  const totalCash = carryCash + earnedCash;
+  window._settleCtx.disp=disp; window._settleCtx.earnedCarry=earnedCarry;
+  window._settleCtx.cashoutHours=carryRemain+(disp==='cash'?earnedRemain:0);
+  window._settleCtx.totalCash=totalCash;
+  const el=document.getElementById('settle-preview');
+  el.style.display='block';
+  el.innerHTML=`<div style="font-weight:600;margin-bottom:4px;">結算結果</div>
+    <div style="display:flex;justify-content:space-between;"><span>結轉至明年</span><span><b>${earnedCarry}</b> 小時</span></div>
+    <div style="display:flex;justify-content:space-between;color:#a85a2a;"><span>折薪合計（估算）</span><span><b>$${totalCash.toLocaleString()}</b>（${window._settleCtx.cashoutHours} h）</span></div>`;
+  const b=document.getElementById('settle-confirm'); if(b){b.disabled=false;b.style.opacity='1';}
+}
+async function confirmLeaveSettle(){
+  const ctx=window._settleCtx; if(!ctx){showToast('狀態遺失，請重開');return;}
+  if(ctx.earnedRemain>0 && !ctx.isResigned && !ctx.disp){ showToast('請先選擇本年新增剩餘的處理方式'); return; }
+  try{
+    const c=await dbGet('coaches',ctx.id); if(!c){showToast('找不到員工');return;}
+    const nextYear=ctx.year+1;
+    const earnedCarry=Number(ctx.earnedCarry)||0;
+    const cashoutHours=Number(ctx.cashoutHours)||0;
+    const totalCash=Number(ctx.totalCash)||0;
+    // 1) 寫結算紀錄
+    const rec={
+      id: uid('lvst'),
+      emp_id: ctx.id,
+      year: ctx.year,
+      carry_in_remain: ctx.carryRemain,      // 去年結轉剩餘（折薪歸零）
+      earned_remain: ctx.earnedRemain,       // 本年新增剩餘
+      earned_disposition: ctx.disp||'none',  // carry | cash | none_needed
+      carry_forward_hours: earnedCarry,      // 結轉到明年的時數
+      cashout_hours: cashoutHours,           // 折薪時數
+      cashout_hourly: ctx.hourly,            // 折薪估算時薪
+      cashout_amount: totalCash,             // 折薪估算金額
+      settled_at: new Date().toISOString(),
+      settled_by: (SESSION&&SESSION.name)||''
+    };
+    await dbPut('leave_settlements', rec);
+    // 2) 更新員工帳戶：明年結轉＝earnedCarry；本年帳戶歸零（避免重複結算）
+    c.al_carry_hours = earnedCarry;   // 下一年度的「去年結轉」
+    // 本年新增依明年到職日重算由 openLeaveEdit 帶入，這裡先清為 0 待重設
+    c.al_earned_hours = 0;
+    c.al_settled_year = ctx.year;     // 標記已結算到哪一年
+    await dbPut('coaches', c);
+    closeModal();
+    showToast(`${c.name||''} ${ctx.year} 年度結算完成（結轉 ${earnedCarry}h／折薪 ${cashoutHours}h）`);
+    // 跳到明年檢視
+    window._leaveYear=nextYear; 
+    setTimeout(()=>openLeaveSettlement(),150);
+  }catch(e){ console.error('confirmLeaveSettle 失敗:',e); showToast('結算失敗：'+(e&&e.message?e.message:e)); }
 }
 async function openLeaveEdit(id){
   const c=await dbGet('coaches',id); if(!c){showToast('找不到員工');return;}
@@ -8257,6 +8449,9 @@ async function openHrEdit(id){
       <div class="form-row"><label>到職日</label><input type="date" id="hr-hire" value="${v('hire_date')}"></div>
       <div class="form-row"><label>轉正日（選填）</label><input type="date" id="hr-perm" value="${v('permanent_date')}"></div>
     </div>
+    <div class="form-2col">
+      <div class="form-row"><label>離職日（選填）</label><input type="date" id="hr-resign" value="${v('resign_date')}"></div>
+    </div>
     <div class="form-row"><label>職務標記</label>
       <div style="display:flex;gap:18px;padding:6px 0;">
         <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;"><input type="checkbox" id="hr-ismgr" ${c.is_manager?'checked':''}>店長</label>
@@ -8360,6 +8555,7 @@ async function saveHrEdit(id){
   c.status=g('hr-status')||c.status;
   c.hire_date=g('hr-hire')||null;
   c.permanent_date=g('hr-perm')||null;
+  c.resign_date=g('hr-resign')||null;
   c.is_manager=document.getElementById('hr-ismgr').checked;
   c.is_supervisor=document.getElementById('hr-issup').checked;
   // 需打卡
