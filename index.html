@@ -1990,8 +1990,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26701.1157';
-const APP_VERSION_LABEL='26701.1157';
+const APP_VERSION='26701.1547';
+const APP_VERSION_LABEL='26701.1547';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -2190,6 +2190,26 @@ async function submitChangePassword(){
 }
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);}
+// 跨平台觸覺回饋：Android 用 navigator.vibrate；iOS(16.4+) 用切換隱藏 switch 觸發系統 haptic
+let _hapticSwitch=null;
+function hapticFeedback(ms){
+  ms=ms||10;
+  if(navigator.vibrate){ try{ if(navigator.vibrate(ms)) return; }catch(_){} }
+  // iOS 後備：切換一個隱藏的 <input switch>（需在使用者手勢事件中呼叫才有效）
+  try{
+    if(!_hapticSwitch){
+      const lbl=document.createElement('label');
+      lbl.setAttribute('aria-hidden','true');
+      lbl.style.cssText='position:fixed;left:-9999px;top:-9999px;width:0;height:0;overflow:hidden;pointer-events:none;';
+      const inp=document.createElement('input');
+      inp.type='checkbox'; inp.setAttribute('switch',''); // iOS 專屬 switch 外觀，切換時有 haptic
+      lbl.appendChild(inp); document.body.appendChild(lbl);
+      _hapticSwitch=inp;
+    }
+    _hapticSwitch.checked=!_hapticSwitch.checked;
+    _hapticSwitch.dispatchEvent(new Event('change',{bubbles:false}));
+  }catch(_){}
+}
 
 /* ── 進入 App ── */
 function enterApp(){
@@ -3226,7 +3246,7 @@ PAGES.ops_center=async function(){
   </div>
 
   <div class="ops-mobile-card card">
-    <div class="card-title">本月月曆 <span style="font-size:12px;color:var(--t3);font-weight:400;">點日期看名單</span></div>
+    <div class="card-title">本月月曆 <span style="font-size:12px;color:var(--t3);font-weight:400;">點日期看名單</span><span style="font-size:11.5px;color:#c88b4a;font-weight:400;margin-left:8px;">⚠ 值班異常，點該日看原因</span></div>
     ${(window._ucalRole='admin', unifiedCalendar({role:'admin', month:date.slice(0,7), bookings, shifts, attendance, myId:SESSION.id}))}
   </div>
   `;
@@ -4343,10 +4363,11 @@ function initWtlCardPress(){
     const positionGhost=(x,y)=>{ if(ghost){ ghost.style.left=(x-offX)+'px'; ghost.style.top=(y-offY)+'px'; } };
     const beginDrag=(x,y)=>{
       dragging=true; lastMin=null;
-      if(navigator.vibrate) navigator.vibrate(20);
+      hapticFeedback(20);
       card.classList.add('wtl-card-dragging');
       const r=card.getBoundingClientRect();
-      offX=x-r.left; offY=y-r.top; // 抓取點相對卡片左上，讓卡片以手指原位置跟隨
+      // 以卡片左上角為基準，落在手指斜上方（不被手指遮住）：左上角在手指左上方約 14px
+      offX=14; offY=14;
       ghost=card.cloneNode(true);
       ghost.classList.add('wtl-card-ghost');
       ghost.classList.remove('wtl-card-dragging');
@@ -4370,7 +4391,7 @@ function initWtlCardPress(){
       // 跨越 30 分鐘時段 → 震動回饋
       if(slot){
         const mm=parseInt(slot.getAttribute('data-min'),10);
-        if(!isNaN(mm) && mm!==lastMin){ lastMin=mm; if(navigator.vibrate) navigator.vibrate(8); }
+        if(!isNaN(mm) && mm!==lastMin){ lastMin=mm; hapticFeedback(8); }
       }
     };
     const finishDrag=(x,y)=>{
@@ -4458,7 +4479,7 @@ async function wtlDropAt(bid, ds, mm){
     const verr=await validateBooking(b,ds,ntime,b.duration);
     if(verr){ showToast(verr); return; }
     b.date=ds; b.start_time=ntime; await dbPut('bookings',b);
-    if(navigator.vibrate) navigator.vibrate(10);
+    hapticFeedback(10);
     showToast('已移動預約至 '+ds+' '+ntime);
     renderWeekTimeline();
   }catch(e){ console.error('wtlDropAt 失敗:',e); showToast('移動失敗：'+(e&&e.message?e.message:e)); }
@@ -4514,6 +4535,23 @@ async function renderWeekTimeline(){
   };
   const isMineBk=(b)=> (b.coach_id===myId||b.substitute_coach_id===myId);
   const isGroupBk=(b)=> b.category==='小班肌力';
+  // 團課卡內容：時間 / 教練 / 人數（依卡高分級顯示）
+  const groupHeads=(b)=> (Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids.length:0;
+  const wtlGroupInner=(b,height)=>{
+    const cid=b.substitute_coach_id||b.coach_id;
+    const coach=coachAbbr(coachObj[cid]);
+    const heads=groupHeads(b);
+    const headStr=heads>0?`${heads}人`:'—';
+    if(height>=58){
+      // 高卡：三行 時間／教練／人數
+      return `<div class="wtl-c-time">${b.start_time}</div><div class="wtl-c-name">${coach}</div><div class="wtl-c-sub">${headStr}</div>`;
+    }else if(height>=30){
+      // 中卡：教練 · N人
+      return `<div class="wtl-c-name">${coach}</div><div class="wtl-c-sub">${headStr}</div>`;
+    }
+    // 矮卡：團N
+    return `<div class="wtl-c-name">${heads>0?`團${heads}`:'團課'}</div>`;
+  };
   // 分欄佈局：每張卡的寬度依「自己所在的重疊簇」決定（非全天最大），避免單獨的課被壓窄
   const wtlLayout=(list)=>{
     const evs=list.map(b=>{ const s=timeToMin(b.start_time); return {b,s,e:s+(b.duration||60),col:0}; })
@@ -4589,7 +4627,7 @@ async function renderWeekTimeline(){
         const top=wtlYOf(s); const height=Math.max((e-s)/WTL_SLOT*WTL_ROWH-1, 14);
         const wPct=100/cols; const leftPct=col*wPct;
         layerGroup+=`<div class="wtl-card wtl-group wtl-group2 wtl-noclick${groupDim?' wtl-group-dim':''}" style="top:${top}px;height:${height}px;left:calc(${leftPct}% + 1px);width:calc(${wPct}% - 2px);">
-          ${height>=44?`<div class="wtl-c-time">${b.start_time}</div>`:''}<div class="wtl-c-name">團課</div>${height>=30?`<div class="wtl-c-sub">${coachAbbr(coachObj[b.coach_id])}</div>`:''}
+          ${wtlGroupInner(b,height)}
         </div>`;
       });
     }
@@ -4603,7 +4641,7 @@ async function renderWeekTimeline(){
         const cc=bkCC(b);
         const wPct=100/cols; const leftPct=col*wPct;
         layerOther+=`<div class="wtl-card wtl-other${otherDim?' wtl-other-dim':''}${canClickOthers?'':' wtl-noclick'} wtl-${cc}" style="top:${top}px;height:${height}px;left:calc(${leftPct}% + 1px);width:calc(${wPct}% - 2px);"${canClickOthers?` onclick="event.stopPropagation();wtlCardClick('${b.id}')"`:''}>
-          ${height>=44?`<div class="wtl-c-time">${b.start_time}</div>`:''}<div class="wtl-c-name">${cardLabel(b)}</div>
+          ${isGroupBk(b)?wtlGroupInner(b,height):`${height>=44?`<div class="wtl-c-time">${b.start_time}</div>`:''}<div class="wtl-c-name">${cardLabel(b)}</div>`}
         </div>`;
       });
     }
@@ -4617,7 +4655,7 @@ async function renderWeekTimeline(){
         const done=(b.status==='completed'||b.status==='checked_in');
         const wPct=100/cols; const leftPct=col*wPct;
         layerMine+=`<div class="wtl-card wtl-mine wtl-${cc}${done?' wtl-done':''}" data-bid="${b.id}" style="top:${top}px;height:${height}px;left:calc(${leftPct}% + 1px);width:calc(${wPct}% - 2px);" onclick="event.stopPropagation();wtlCardClick('${b.id}')">
-          ${height>=44?`<div class="wtl-c-time">${b.start_time}</div>`:''}<div class="wtl-c-name">${myCardLabel(b)}</div>${(height>=58 && b.coach_id)?`<div class="wtl-c-sub">${coachAbbr(coachObj[b.coach_id])}</div>`:''}
+          ${isGroupBk(b)?wtlGroupInner(b,height):`${height>=44?`<div class="wtl-c-time">${b.start_time}</div>`:''}<div class="wtl-c-name">${myCardLabel(b)}</div>${(height>=58 && b.coach_id)?`<div class="wtl-c-sub">${coachAbbr(coachObj[b.coach_id])}</div>`:''}`}
         </div>`;
       });
     }
@@ -7071,6 +7109,55 @@ async function saveShiftQuick(items){
   await dbPut('salary_templates',{id:'_shift_quick', config:{ items }});
   SHIFT_QUICK=items.map(it=>[it.code,it.start,it.end]);
 }
+// 常用時段編輯器：可增／刪／改（代號、起、迄）。returnEmp/returnDate 用於存後返回排班視窗
+function _sqRowHtml(code,start,end){
+  const to=(sel)=>{ let o='<option value="">--:--</option>'; for(let h=0;h<24;h++)for(const m of ['00','30']){const v=`${String(h).padStart(2,'0')}:${m}`;o+=`<option value="${v}"${v===sel?' selected':''}>${v}</option>`;} return o; };
+  return `<div class="sq-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+    <input type="text" class="sq-code" value="${code||''}" placeholder="代號" maxlength="4" style="width:64px;text-align:center;">
+    <select class="sq-start" style="flex:1;">${to(start)}</select>
+    <span style="color:var(--t3);">–</span>
+    <select class="sq-end" style="flex:1;">${to(end)}</select>
+    <button type="button" class="btn btn-ghost btn-sm" style="color:#c0392b;padding:5px 9px;" onclick="this.closest('.sq-row').remove()">✕</button>
+  </div>`;
+}
+function openShiftQuickEditor(returnEmp,returnDate){
+  window._sqReturn=(returnEmp&&returnDate)?{emp:returnEmp,date:returnDate}:null;
+  const rows=SHIFT_QUICK.map(([c,s,e])=>_sqRowHtml(c,s,e)).join('');
+  showModal(`<div class="modal-title">編輯常用時段</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:12px;line-height:1.7;">設定排班時的快捷按鈕。代號為短標籤（例：早、晚、全），起迄時間以半小時為單位。</div>
+    <div id="sq-list">${rows}</div>
+    <button type="button" class="btn btn-ghost btn-sm" style="width:100%;margin:4px 0 12px;" onclick="document.getElementById('sq-list').insertAdjacentHTML('beforeend', _sqRowHtml('','',''))">＋ 新增一組</button>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeShiftQuickEditor()">取消</button>
+      <button class="btn btn-green" onclick="saveShiftQuickEditor()">儲存</button>
+    </div>`);
+}
+function closeShiftQuickEditor(){
+  const r=window._sqReturn; window._sqReturn=null;
+  if(r) openShiftEdit(r.emp, r.date); else closeModal();
+}
+async function saveShiftQuickEditor(){
+  const rows=[...document.querySelectorAll('#sq-list .sq-row')];
+  const items=[];
+  for(const row of rows){
+    const code=(row.querySelector('.sq-code').value||'').trim();
+    const start=row.querySelector('.sq-start').value;
+    const end=row.querySelector('.sq-end').value;
+    if(!code&&!start&&!end) continue; // 整列空 → 略過
+    if(!code){ showToast('每組都要填代號'); return; }
+    if(!start||!end){ showToast(`「${code}」請填起迄時間`); return; }
+    if(timeToMin(end)<=timeToMin(start)){ showToast(`「${code}」迄時間要晚於起時間`); return; }
+    items.push({code,start,end});
+  }
+  if(items.length===0){ showToast('至少要保留一組常用時段'); return; }
+  const codes=items.map(i=>i.code);
+  if(new Set(codes).size!==codes.length){ showToast('代號不可重複'); return; }
+  try{
+    await saveShiftQuick(items);
+    showToast('常用時段已更新');
+    closeShiftQuickEditor();
+  }catch(e){ console.error('saveShiftQuickEditor 失敗:',e); showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+}
 // 依起迄時間反推班別代號（給舊資料或手動輸入用）
 function shiftCode(start,end){
   const m=SHIFT_QUICK.find(([c,s,e])=>s===start&&e===end);
@@ -7079,12 +7166,11 @@ function shiftCode(start,end){
 // 營業時間（依星期；0=日）：週一~五 10-22、週六 9-21、週日 9-15
 const BUSINESS_HOURS={ 0:['09:00','15:00'], 1:['10:00','22:00'], 2:['10:00','22:00'], 3:['10:00','22:00'], 4:['10:00','22:00'], 5:['10:00','22:00'], 6:['09:00','21:00'] };
 // 檢查某天排班是否覆蓋全營業時段，回傳沒人的時段陣列 [[startMin,endMin],...]
+// 註：有登記請假(leave_type)的班次，整段視為「沒人」（與出勤月曆判定一致）
 function findShiftGaps(dayShifts, dow){
   const bh=BUSINESS_HOURS[dow]; if(!bh) return [];
   const open=timeToMin(bh[0]), close=timeToMin(bh[1]);
-  // 把當天有效排班（扣掉請假？此處只看有無人在場，請假仍算缺人 → 排班時段內請假視為缺）
-  // 簡化：以排班的起迄時段為「有人」區間（請假整天才算沒人，部分請假先不細分）
-  const covered=dayShifts.filter(s=>s.start_time&&s.end_time)
+  const covered=dayShifts.filter(s=>s.start_time&&s.end_time&&!s.leave_type)
     .map(s=>[timeToMin(s.start_time),timeToMin(s.end_time)])
     .sort((a,b)=>a[0]-b[0]);
   const gaps=[]; let cursor=open;
@@ -7112,6 +7198,15 @@ function monthShiftGaps(shifts, month){
   return result;
 }
 let _shiftMonth=null;
+// 某班次是否「已開始」（用來判斷未打卡是否算異常）：
+//   過去日期 → 一定已開始；今天 → 需 start_time 已過現在時刻；未來 → 尚未開始
+function shiftStarted(ds, startTime, today){
+  if(ds<today) return true;
+  if(ds>today) return false;
+  if(!startTime) return true; // 今天但沒起始時間，保守視為已開始
+  const nowMin=TODAY.getHours()*60+TODAY.getMinutes();
+  return timeToMin(startTime)<=nowMin;
+}
 function shiftMonthMove(d){ let[y,m]=(_shiftMonth||ymd(TODAY).slice(0,7)).split('-').map(Number); m+=d; if(m<1){m=12;y--;} if(m>12){m=1;y++;} _shiftMonth=`${y}-${String(m).padStart(2,'0')}`; navTo('attendance'); }
 function shiftThisMonthAlt(){ _shiftMonth=ymd(TODAY).slice(0,7); navTo('attendance'); }
 // ── 週期排班（每週固定模式：週日~週六各排什麼班）──
@@ -7308,7 +7403,11 @@ function openShiftEdit(empId,dateStr){
       <div class="form-row" style="flex:1;margin-bottom:0;"><label>起時間</label><select id="sh-start" onchange="shiftCalcPreview()">${shiftTimeOptions(cur?cur.start_time:'')}</select></div>
       <div class="form-row" style="flex:1;margin-bottom:0;"><label>迄時間</label><select id="sh-end" onchange="shiftCalcPreview()">${shiftTimeOptions(cur?cur.end_time:'')}</select></div>
     </div>
-    <div style="margin-bottom:8px;">常用時段：${quick}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <span style="font-size:12.5px;color:var(--t2);">常用時段</span>
+      <button type="button" class="btn btn-ghost btn-sm" style="padding:3px 10px;font-size:11.5px;" onclick="openShiftQuickEditor('${empId}','${dateStr}')">編輯</button>
+    </div>
+    <div style="margin-bottom:8px;">${quick}</div>
     <div class="form-row"><label>備註（可留空）</label><input type="text" id="sh-note" value="${cur?(cur.note||''):''}" placeholder="例：代班、活動"></div>
     ${cur?`<div style="border-top:1px solid var(--bd);padding-top:12px;margin-bottom:10px;">
       <div style="font-size:12.5px;color:var(--t2);margin-bottom:8px;">請假登記（排班後若請假，於此註明）</div>
@@ -7367,46 +7466,87 @@ async function deleteShift(id){
   try{ await dbDel('shifts',id); showToast('已刪除'); closeModal(); navTo('attendance'); }
   catch(err){ showToast('刪除失敗：'+(err.message||err)); }
 }
-// 把 modal 當前填的時段，套用到本月所有「同星期」的日子（已有排班跳過），並記入週期模式
+// 把 modal 當前填的時段，套用到本月所有「同星期」的日子，並記入週期模式
+// 一併把當天這格存成新時段；同星期已有排班的日子，依 overwrite 決定覆蓋或跳過
 async function applyThisToWeekly(empId, dateStr){
   const start=document.getElementById('sh-start').value;
   const end=document.getElementById('sh-end').value;
   if(!start||!end){ showToast('請先選好起迄時間'); return; }
   const hours=shiftHours(start,end);
   if(hours<=0){ showToast('時數需大於 0'); return; }
-  const targetDow=parseYmd(dateStr).getDay(); // 0=日
-  const wdName='日一二三四五六'[targetDow];
-  const code=shiftCode(start,end); // 若是常用時段會有代號
+  const note=(document.getElementById('sh-note')||{}).value||'';
+  const curId=(document.getElementById('sh-id')||{}).value||'';
+  const targetDow=parseYmd(dateStr).getDay();
   const month=(_shiftMonth||ymd(TODAY).slice(0,7));
   const[my,mm]=month.split('-').map(Number);
   const daysInMonth=new Date(my,mm,0).getDate();
-  // 重新抓最新排班（避免連點時用到舊快取造成重複）
+  // 先存當天這格（有 id 更新、無 id 新建）
+  const todayObj={ id:curId||uid('shift'), emp_id:empId, date:dateStr, start_time:start, end_time:end, hours, note:note.trim(),
+    leave_type:null, leave_hours:0, created_by:(SESSION&&SESSION.id)||'', created_at:new Date().toISOString() };
+  try{ await dbPut('shifts',todayObj); }catch(_){}
+  // 抓最新排班，找出同星期「其他日子」的衝突（已有班）
   let allShifts=[]; try{ allShifts=await dbGetAll('shifts'); }catch(_){ allShifts=window._shiftsCache||[]; }
   const monthEmp=allShifts.filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month);
-  // 每天現有排班 map（同一天可能多筆）
   const byDate={}; monthEmp.forEach(s=>{ (byDate[s.date]=byDate[s.date]||[]).push(s); });
-  let added=0, skipped=0;
+  const targetDates=[];
   for(let d=1;d<=daysInMonth;d++){
-    const dObj=new Date(my,mm-1,d);
-    if(dObj.getDay()!==targetDow) continue;
     const ds=`${my}-${String(mm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const dayList=byDate[ds]||[];
-    // 已有任何排班 → 跳過（避免重複排、也不覆蓋手動排的班）
-    if(dayList.length){ skipped++; continue; }
-    const obj={ id:uid('shift'), emp_id:empId, date:ds, start_time:start, end_time:end, hours,
-      note:'', leave_type:null, leave_hours:0, created_by:(SESSION&&SESSION.id)||'', created_at:new Date().toISOString() };
-    try{ await dbPut('shifts',obj); added++; byDate[ds]=[obj]; }catch(_){}
+    if(new Date(my,mm-1,d).getDay()!==targetDow) continue;
+    if(ds===dateStr) continue; // 當天已存
+    targetDates.push(ds);
   }
-  // 記入週期模式（下個月也能用）：更新該員工 weekly_shift 的對應星期
+  const conflicts=targetDates.filter(ds=>(byDate[ds]||[]).length>0);
+  window._applyWeeklyCtx={ empId, dateStr, start, end, hours, note, targetDow, month, byDate, targetDates, conflicts };
+  if(conflicts.length===0){
+    await _doApplyWeekly(false); // 全空白，直接套
+  }else{
+    // 有衝突 → 問使用者
+    const wdName='日一二三四五六'[targetDow];
+    showModal(`<div class="modal-title">設為每週${wdName}固定</div>
+      <div style="font-size:13px;color:var(--t2);line-height:1.8;margin-bottom:14px;">
+        本月共有 <b>${targetDates.length}</b> 個週${wdName}，其中 <b style="color:#c0392b;">${conflicts.length} 天已有排班</b>。<br>
+        已排班的日子要怎麼處理？
+      </div>
+      <div class="modal-foot" style="flex-direction:column;gap:8px;">
+        <button class="btn btn-green" style="width:100%;" onclick="_doApplyWeekly(true)">全部覆蓋成 ${start}–${end}</button>
+        <button class="btn btn-ghost" style="width:100%;" onclick="_doApplyWeekly(false)">只補空白日（保留現有班）</button>
+        <button class="btn btn-ghost" style="width:100%;color:var(--t3);" onclick="closeModal();navTo('attendance');">取消</button>
+      </div>`);
+  }
+}
+async function _doApplyWeekly(overwrite){
+  const ctx=window._applyWeeklyCtx; if(!ctx){ closeModal(); return; }
+  const{ empId, dateStr, start, end, hours, note, targetDow, byDate, targetDates }=ctx;
+  const code=shiftCode(start,end);
+  let added=0, updated=0, skipped=0;
+  for(const ds of targetDates){
+    const dayList=byDate[ds]||[];
+    if(dayList.length){
+      if(!overwrite){ skipped++; continue; }
+      // 覆蓋：更新該日第一筆（沿用 id），其餘同日多筆刪除
+      const first=dayList[0];
+      const obj={ ...first, emp_id:empId, date:ds, start_time:start, end_time:end, hours, note:note.trim(), leave_type:null, leave_hours:0 };
+      try{ await dbPut('shifts',obj); updated++; }catch(_){}
+      for(let i=1;i<dayList.length;i++){ try{ await dbDel('shifts',dayList[i].id); }catch(_){} }
+    }else{
+      const obj={ id:uid('shift'), emp_id:empId, date:ds, start_time:start, end_time:end, hours, note:note.trim(),
+        leave_type:null, leave_hours:0, created_by:(SESSION&&SESSION.id)||'', created_at:new Date().toISOString() };
+      try{ await dbPut('shifts',obj); added++; }catch(_){}
+    }
+  }
+  // 記入週期模式（下個月也能用）
   try{
     const c=await dbGet('coaches',empId);
     let pat=(c.weekly_shift?String(c.weekly_shift).split(','):['off','off','off','off','off','off','off']);
     while(pat.length<7) pat.push('off');
-    pat[targetDow]= code || 'off'; // 非常用時段沒代號，週期模式無法記時間，僅常用時段可記
+    pat[targetDow]= code || 'off';
     c.weekly_shift=pat.join(',');
     await dbPut('coaches',c);
   }catch(_){}
-  showToast(`已設為每週${wdName}：新增 ${added} 天${skipped?`，跳過 ${skipped} 天（已排班）`:''}`);
+  const wdName='日一二三四五六'[targetDow];
+  const parts=[]; if(added)parts.push(`新增 ${added} 天`); if(updated)parts.push(`覆蓋 ${updated} 天`); if(skipped)parts.push(`跳過 ${skipped} 天`);
+  showToast(`已設為每週${wdName}：當天已存${parts.length?'，'+parts.join('、'):''}`);
+  window._applyWeeklyCtx=null;
   closeModal();
   navTo('attendance');
 }
@@ -9602,6 +9742,40 @@ function opsDashCalendar(month, bookings){
 //   點日期 → 呼叫 onDayFn(ds)，於 #ucal-day 展開
 const SHIFT_LABEL={ 'A':'早班','A1':'早班','C':'晚班','C1':'晚班','全':'全班' };
 function shiftLabelOf(code){ if(!code) return '排班'; if(SHIFT_QUICK.find(([c])=>c===code)) return code; return SHIFT_LABEL[code]||code; }
+// 分鐘 → HH:MM
+function minToTimeStr(m){ const h=Math.floor(m/60), mi=m%60; return String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0'); }
+// 產出某天「值班異常」說明 HTML（無異常回空字串）
+//   ① 營業時間內有缺人時段（列出各段起迄）
+//   ② 有人排班但未打卡（過去/今天才算；列出姓名），coachMap: id→名字
+function dutyAbnormalHtml(ds, dow, shifts, attendance, coachMap, today){
+  const dayShifts=(shifts||[]).filter(s=>s.date===ds&&!s.leave_type);
+  const gaps=findShiftGaps(dayShifts, dow);
+  let noPunchNames=[];
+  if(ds<=today){
+    dayShifts.forEach(s=>{
+      if(!shiftStarted(ds, s.start_time, today)) return; // 班次還沒開始，不算未打卡
+      const att=(attendance||[]).find(a=>a.emp_id===s.emp_id&&a.date===ds);
+      if(!att||!att.clock_in){ const nm=(coachMap&&coachMap[s.emp_id])||'（未知員工）'; if(!noPunchNames.includes(nm)) noPunchNames.push(nm); }
+    });
+  }
+  if(gaps.length===0 && noPunchNames.length===0) return '';
+  const bh=BUSINESS_HOURS[dow];
+  const bhStr=bh?`${bh[0]}–${bh[1]}`:'—';
+  let rows='';
+  if(gaps.length>0){
+    const segs=gaps.map(([s,e])=>`<b>${minToTimeStr(s)}–${minToTimeStr(e)}</b>`).join('、');
+    rows+=`<div style="display:flex;gap:7px;align-items:flex-start;margin-top:4px;">
+      <span style="color:#c0392b;flex-shrink:0;">●</span>
+      <span>營業時間內有缺人時段：${segs}<br><span style="color:var(--t3);font-size:11px;">（本日營業 ${bhStr}）</span></span></div>`;
+  }
+  if(noPunchNames.length>0){
+    rows+=`<div style="display:flex;gap:7px;align-items:flex-start;margin-top:4px;">
+      <span style="color:#c0392b;flex-shrink:0;">●</span>
+      <span>有排班但尚未打卡：<b>${noPunchNames.join('、')}</b></span></div>`;
+  }
+  return `<div style="background:#fdf3ec;border:1px solid #e8c9b5;border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.7;color:#8a5230;">
+    <div style="font-weight:700;color:#c0392b;margin-bottom:2px;">⚠ 值班異常</div>${rows}</div>`;
+}
 function unifiedCalendar(opts){
   const {role,month,bookings,shifts,attendance,myId,onDayFn}=opts;
   const [my,mm]=month.split('-');
@@ -9647,6 +9821,7 @@ function unifiedCalendar(opts){
       // 過去與今天才檢查未打卡（未來不算異常）
       if(ds<=today){
         const noPunch=dayShifts.some(s=>{
+          if(!shiftStarted(ds, s.start_time, today)) return false; // 班次還沒開始，不算未打卡
           const att=(attendance||[]).find(a=>a.emp_id===s.emp_id&&a.date===ds);
           return !att||!att.clock_in;
         });
@@ -9657,7 +9832,7 @@ function unifiedCalendar(opts){
         const gaps=findShiftGaps(dayShifts,dow);
         if(gaps.length>0) abnormal=true;
       }
-      if(abnormal) topRight=`<span class="ucal-tr ucal-tr-warn">⚠</span>`;
+      if(abnormal) topRight=`<span class="ucal-tr ucal-tr-warn" title="值班異常，點格子看原因">⚠</span>`;
     }
     // role==='member' → 右上留白
     // ── 左下/右下：簡化為單一狀態（只回答「今天是否還有未完成」）──
@@ -9688,7 +9863,7 @@ async function ucalClickDay(ds){
   document.querySelectorAll('.ucal-cell').forEach(c=>c.classList.remove('ucal-sel'));
   if(cell)cell.classList.add('ucal-sel');
   const role=window._ucalRole||'admin', myId=SESSION.id;
-  const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
+  const[bookings,members,coaches,shifts,attendance]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches'),dbGetAll('shifts').catch(()=>[]),dbGetAll('attendance').catch(()=>[])]);
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const isMine=(b)=> role==='admin' ? true
@@ -9698,8 +9873,11 @@ async function ucalClickDay(ds){
   const [y,m,d]=ds.split('-');
   const doneN=list.filter(b=>b.status==='completed'||b.status==='checked_in').length;
   const pendN=list.length-doneN;
+  const dow=new Date(Number(y),Number(m)-1,Number(d)).getDay();
+  const abnHtml=(role==='admin')?dutyAbnormalHtml(ds,dow,shifts,attendance,coachMap,ymd(TODAY)):'';
   box.innerHTML=`<div class="cdash-daybox">
     <div class="cdash-daytitle">${Number(m)}/${Number(d)}（週${WD[new Date(Number(y),Number(m)-1,Number(d)).getDay()]}）　·　<span style="color:#3f9d6a;">已簽到 ${doneN}</span>　<span style="color:#e08a2b;">已預約 ${pendN}</span></div>
+    ${abnHtml}
     ${list.length===0?'<div style="font-size:12.5px;color:var(--t3);padding:8px 0;">這天沒有課</div>':
       list.map(b=>{
         const mname=b.member_id?(memMap[b.member_id]||'—'):(b.category==='自主訓練'?'自主':'—');
