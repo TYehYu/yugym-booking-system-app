@@ -1627,7 +1627,18 @@ body.previewing .role-coach .content{padding-bottom:140px;}
 .dtl-foot{display:flex;gap:10px;padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));background:var(--card);border-top:1px solid var(--bd);flex-shrink:0;}
 .dtl-foot .btn{flex:1;padding:13px;font-size:15px;}
 /* ── 會員 / 員工清單手機版：直向堆疊卡片 ── */
-.mem-feed{display:flex;flex-direction:column;gap:10px;}
+.mem-feed{display:flex;flex-direction:column;gap:8px;}
+/* 手機一筆一列：橫排精簡列，選到時整列浮起 */
+.mem-line{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  background:#fff;border:1px solid var(--bd);border-radius:12px;padding:13px 16px;cursor:pointer;
+  box-shadow:0 1px 3px rgba(0,0,0,0.05);
+  transition:transform .25s cubic-bezier(.22,.61,.36,1), box-shadow .25s ease, border-color .25s ease;}
+.mem-line:active{transform:scale(0.99);background:var(--card2);}
+.mem-line.mem-fc-focus{transform:translateY(-2px) scale(1.012);box-shadow:0 9px 24px rgba(120,90,40,0.16);border-color:#d8c9a8;}
+.mem-line-main{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;}
+.mem-line-name{font-size:16px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mem-line-sub{font-size:12px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mem-line-tk{font-size:12px;font-weight:600;padding:4px 11px;border-radius:9px;white-space:nowrap;flex-shrink:0;}
 .mem-fcard{background:#fff;border:1px solid var(--bd);border-radius:14px;padding:15px 16px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.05);transition:transform .25s cubic-bezier(.22,.61,.36,1), box-shadow .25s ease, border-color .25s ease;}
 .mem-fcard:active{transform:scale(0.99);background:var(--card2);}
 /* 滑動時停在畫面中央的卡片浮起高亮 */
@@ -1687,9 +1698,7 @@ body.previewing .role-coach .content{padding-bottom:140px;}
 .wtl-card-moving{outline:2px solid var(--green);outline-offset:1px;opacity:.55;box-shadow:0 4px 12px rgba(0,61,50,0.3);}
 /* 拖曳：來源卡淡化、跟手分身、目標時段高亮 */
 .wtl-card-dragging{opacity:.32;}
-.wtl-card-ghost{position:fixed;top:0;left:0;z-index:9999;pointer-events:none;margin:0;
-  box-shadow:0 12px 30px rgba(0,0,0,0.32);opacity:.96;
-  transition:none;border-radius:6px;will-change:transform;}
+.wtl-card-ghost{will-change:left,top;}
 body.wtl-dragging-active{cursor:grabbing;-webkit-user-select:none;user-select:none;}
 body.wtl-dragging-active *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;}
 .wtl-slot.wtl-drag-over{background:rgba(0,61,50,0.22)!important;box-shadow:inset 0 0 0 2px var(--green);border-radius:4px;}
@@ -1981,8 +1990,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26630.1729';
-const APP_VERSION_LABEL='26630.1729';
+const APP_VERSION='26701.1043';
+const APP_VERSION_LABEL='26701.1043';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -4317,96 +4326,88 @@ function wtlCardClick(id){
   if(window._wtlMoving){ wtlCancelMove(); return; }
   openCourseCard(id);
 }
-// 長按課卡 → 進入移動模式
+// 長按課卡 → 跟手拖曳
 let _wtlPressTimer=null;
 function initWtlCardPress(){
   const host=document.getElementById('wtl-page')||document;
-  const body=document.getElementById('wtl-body');
   host.querySelectorAll('.wtl-card[data-bid]').forEach(card=>{
     const bid=card.getAttribute('data-bid');
-    let pressTimer=null, dragging=false, ghost=null, startX=0, startY=0, hlSlot=null;
+    let pressTimer=null, dragging=false, ghost=null, startX=0, startY=0, hlSlot=null, lastMin=null, offX=0, offY=0;
     const clearHL=()=>{ if(hlSlot){ hlSlot.classList.remove('wtl-drag-over'); hlSlot=null; } };
     const slotAt=(x,y)=>{
-      // 暫時讓 ghost 不擋點擊
+      const prev=ghost?ghost.style.display:''; if(ghost) ghost.style.display='none';
       const el=document.elementFromPoint(x,y);
+      if(ghost) ghost.style.display=prev;
       return el&&el.closest?el.closest('.wtl-slot'):null;
     };
+    const positionGhost=(x,y)=>{ if(ghost){ ghost.style.left=(x-offX)+'px'; ghost.style.top=(y-offY)+'px'; } };
     const beginDrag=(x,y)=>{
-      dragging=true;
-      if(navigator.vibrate) navigator.vibrate(18);
+      dragging=true; lastMin=null;
+      if(navigator.vibrate) navigator.vibrate(20);
       card.classList.add('wtl-card-dragging');
-      // 建立跟手分身
+      const r=card.getBoundingClientRect();
+      offX=x-r.left; offY=y-r.top; // 抓取點相對卡片左上，讓卡片以手指原位置跟隨
       ghost=card.cloneNode(true);
       ghost.classList.add('wtl-card-ghost');
       ghost.classList.remove('wtl-card-dragging');
-      const r=card.getBoundingClientRect();
-      ghost._gw=r.width; ghost._gh=r.height;
-      // 清掉 clone 帶來的格內定位，改用 fixed + transform 跟手
-      ghost.style.top='0'; ghost.style.left='0'; ghost.style.right='auto';
-      ghost.style.width=r.width+'px'; ghost.style.height=r.height+'px';
-      ghost.style.transform=`translate(${x-r.width/2}px, ${y-r.height/2}px)`;
+      ghost.style.cssText='position:fixed!important;margin:0!important;z-index:99999;pointer-events:none;'
+        +`width:${r.width}px;height:${r.height}px;left:${r.left}px;top:${r.top}px;`
+        +'box-shadow:0 14px 34px rgba(0,0,0,0.34);opacity:.96;border-radius:6px;transition:none;';
       document.body.appendChild(ghost);
       document.body.classList.add('wtl-dragging-active');
+      // 綁 document 級監聽，確保手指移出卡片也追得到
+      document.addEventListener('touchmove',docTouchMove,{passive:false});
+      document.addEventListener('touchend',docTouchEnd);
+      document.addEventListener('touchcancel',docTouchEnd);
+      document.addEventListener('mousemove',docMouseMove);
+      document.addEventListener('mouseup',docMouseUp);
     };
     const moveDrag=(x,y)=>{
       if(!ghost) return;
-      const w=ghost._gw||ghost.offsetWidth, h=ghost._gh||ghost.offsetHeight;
-      ghost.style.transform=`translate(${x-w/2}px, ${y-h/2}px)`;
-      ghost.style.display='none';
+      positionGhost(x,y);
       const slot=slotAt(x,y);
-      ghost.style.display='';
       if(slot!==hlSlot){ clearHL(); if(slot){ slot.classList.add('wtl-drag-over'); hlSlot=slot; } }
+      // 跨越 30 分鐘時段 → 震動回饋
+      if(slot){
+        const mm=parseInt(slot.getAttribute('data-min'),10);
+        if(!isNaN(mm) && mm!==lastMin){ lastMin=mm; if(navigator.vibrate) navigator.vibrate(8); }
+      }
     };
-    const endDrag=(x,y)=>{
+    const finishDrag=(x,y)=>{
       let slot=null;
-      if(ghost){ ghost.style.display='none'; slot=slotAt(x,y); ghost.remove(); ghost=null; }
+      if(ghost){ slot=slotAt(x,y); ghost.remove(); ghost=null; }
       document.body.classList.remove('wtl-dragging-active');
       card.classList.remove('wtl-card-dragging');
       clearHL();
       const wasDragging=dragging; dragging=false;
+      document.removeEventListener('touchmove',docTouchMove,{passive:false});
+      document.removeEventListener('touchend',docTouchEnd);
+      document.removeEventListener('touchcancel',docTouchEnd);
+      document.removeEventListener('mousemove',docMouseMove);
+      document.removeEventListener('mouseup',docMouseUp);
       if(wasDragging && slot){
         const ds=slot.getAttribute('data-date'); const mm=parseInt(slot.getAttribute('data-min'),10);
         if(ds!=null && !isNaN(mm)) wtlDropAt(bid, ds, mm);
       }
     };
-    // touch
-    const tStart=(e)=>{
-      const t=e.touches[0]; if(!t) return;
-      startX=t.clientX; startY=t.clientY;
-      pressTimer=setTimeout(()=>{ beginDrag(startX,startY); }, 260);
-    };
-    const tMove=(e)=>{
-      const t=e.touches[0]; if(!t) return;
-      if(!dragging){
-        // 還沒進入拖曳：若手指移動太多視為捲動，取消長按
-        if(Math.abs(t.clientX-startX)>10 || Math.abs(t.clientY-startY)>10){ if(pressTimer){clearTimeout(pressTimer);pressTimer=null;} }
-        return;
-      }
-      e.preventDefault(); // 拖曳中阻止捲動
-      moveDrag(t.clientX,t.clientY);
-    };
-    const tEnd=(e)=>{
-      if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; }
-      const t=(e.changedTouches&&e.changedTouches[0]); 
-      if(dragging && t) endDrag(t.clientX,t.clientY);
-      else { dragging=false; }
-    };
+    // document 級處理器
+    const docTouchMove=(e)=>{ if(!dragging)return; e.preventDefault(); const t=e.touches[0]; if(t) moveDrag(t.clientX,t.clientY); };
+    const docTouchEnd=(e)=>{ const t=(e.changedTouches&&e.changedTouches[0]); if(dragging&&t) finishDrag(t.clientX,t.clientY); };
+    const docMouseMove=(e)=>{ if(dragging){ e.preventDefault(); moveDrag(e.clientX,e.clientY); } };
+    const docMouseUp=(e)=>{ if(dragging) finishDrag(e.clientX,e.clientY); };
+    // 卡片上的觸發
+    const tStart=(e)=>{ const t=e.touches[0]; if(!t)return; startX=t.clientX; startY=t.clientY;
+      pressTimer=setTimeout(()=>{ beginDrag(startX,startY); }, 240); };
+    const tMoveEarly=(e)=>{ if(dragging)return; const t=e.touches[0]; if(!t)return;
+      if(Math.abs(t.clientX-startX)>10||Math.abs(t.clientY-startY)>10){ if(pressTimer){clearTimeout(pressTimer);pressTimer=null;} } };
+    const tEndEarly=()=>{ if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; } };
     card.addEventListener('touchstart',tStart,{passive:true});
-    card.addEventListener('touchmove',tMove,{passive:false});
-    card.addEventListener('touchend',tEnd);
-    card.addEventListener('touchcancel',tEnd);
-    // mouse（桌機）
-    const mMove=(e)=>{ if(dragging){ e.preventDefault(); moveDrag(e.clientX,e.clientY); } };
-    const mUp=(e)=>{
-      if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; }
-      document.removeEventListener('mousemove',mMove); document.removeEventListener('mouseup',mUp);
-      if(dragging) endDrag(e.clientX,e.clientY);
-    };
-    card.addEventListener('mousedown',(e)=>{
-      startX=e.clientX; startY=e.clientY;
-      pressTimer=setTimeout(()=>{ beginDrag(e.clientX,e.clientY); document.addEventListener('mousemove',mMove); document.addEventListener('mouseup',mUp); }, 260);
-      const earlyUp=()=>{ if(pressTimer){clearTimeout(pressTimer);pressTimer=null;} card.removeEventListener('mouseup',earlyUp); };
-      card.addEventListener('mouseup',earlyUp);
+    card.addEventListener('touchmove',tMoveEarly,{passive:true});
+    card.addEventListener('touchend',tEndEarly);
+    card.addEventListener('mousedown',(e)=>{ startX=e.clientX; startY=e.clientY;
+      pressTimer=setTimeout(()=>{ beginDrag(e.clientX,e.clientY); }, 240);
+      const up=()=>{ if(pressTimer){clearTimeout(pressTimer);pressTimer=null;} card.removeEventListener('mouseup',up); };
+      card.addEventListener('mouseup',up);
     });
   });
 }
@@ -4416,6 +4417,7 @@ function initWtlSlotHighlight(){
   let cur=null;
   const clear=()=>{ if(cur){ cur.classList.remove('wtl-slot-hl'); cur=null; } };
   const hlAt=(x,y)=>{
+    if(document.body.classList.contains('wtl-dragging-active')){ clear(); return; } // 拖曳中不干擾
     const el=document.elementFromPoint(x,y);
     const slot=el&&el.closest&&el.closest('.wtl-slot');
     if(slot!==cur){ clear(); if(slot){ slot.classList.add('wtl-slot-hl'); cur=slot; } }
@@ -6048,12 +6050,10 @@ PAGES.members=async function(){
       const tkText = s.anyUsable ? (tkParts.join('・')||'有效') : '無有效票券';
       const coachNm = m.default_coach_id?(coachMap[m.default_coach_id]||'—'):'未指定';
       const last = lastClassMap[m.id]||'尚無紀錄';
-      return `<div class="mem-fcard" onclick="openMemberDetail('${m.id}')">
-        <div class="mem-fc-top"><span class="mem-fc-name">${m.name||'—'}</span>
-          <span class="mem-fc-tk" style="color:${lvColor};background:${lvBg};">${tkText}</span></div>
-        <div class="mem-fc-row"><span class="mem-fc-lb">最近預約</span><span class="mem-fc-val">${last}</span></div>
-        <div class="mem-fc-row"><span class="mem-fc-lb">負責教練</span><span class="mem-fc-val">${coachNm}</span></div>
-        <div class="mem-fc-row"><span class="mem-fc-lb">手機</span><span class="mem-fc-val">${m.phone||'—'}</span></div>
+      return `<div class="mem-line" onclick="openMemberDetail('${m.id}')">
+        <div class="mem-line-main"><span class="mem-line-name">${m.name||'—'}</span>
+          <span class="mem-line-sub">${last==='尚無紀錄'?'尚無上課':'最近 '+last}</span></div>
+        <span class="mem-line-tk" style="color:${lvColor};background:${lvBg};">${tkText}</span>
       </div>`;}).join('')}</div>`)
     :
     `<div class="mem-barlist">
@@ -6119,7 +6119,7 @@ PAGES.members=async function(){
 function initFeedFocus(){
   if(window.innerWidth>600) return;
   const update=()=>{
-    const cards=document.querySelectorAll('.mem-feed .mem-fcard');
+    const cards=document.querySelectorAll('.mem-feed .mem-line');
     if(!cards.length) return;
     const midY=window.innerHeight*0.42; // 視窗中央偏上一點當聚焦線
     let best=null, bestDist=Infinity;
@@ -7847,12 +7847,13 @@ async function renderStaffList(){
       const pending=c.invite_status==='pending';
       const nm=c.name||'（待填寫）';
       const sealTags = seals.map(s=>`<span class="staff-duty-tag" style="background:${s.color};">${s.label}</span>`).join('');
-      return `<div class="mem-fcard" onclick="${pending?`copyInvite('${c.invite_token}')`:`openHrEdit('${c.id}')`}">
-        <div class="mem-fc-top"><span class="mem-fc-name">${nm}</span>
-          <span class="mem-fc-tk" style="color:var(--t2);background:var(--card2);">${empType}</span></div>
-        ${sealTags?`<div class="mem-fc-row"><span class="mem-fc-lb">職務</span><span class="staff-duty-tags">${sealTags}</span></div>`:''}
-        <div class="mem-fc-row"><span class="mem-fc-lb">狀態</span><span class="mem-fc-val">${pending?'待員工填寫':'在職'}</span></div>
-        <div class="mem-fc-hint2">${pending?'點此複製邀請連結':'點此查看 / 編輯詳細資料'}</div>
+      const stTxt=pending?'待填寫':(c.status==='inactive'||c.status==='resigned'?'已停用':'在職');
+      const stColor=pending?'#a86b1a':((c.status==='inactive'||c.status==='resigned')?'#c0392b':'#1f6f54');
+      const stBg=pending?'#faf0dc':((c.status==='inactive'||c.status==='resigned')?'#fbe9e7':'#e3efe9');
+      return `<div class="mem-line" onclick="${pending?`copyInvite('${c.invite_token}')`:`openHrEdit('${c.id}')`}">
+        <div class="mem-line-main"><span class="mem-line-name">${nm}</span>
+          <span class="mem-line-sub">${empType}</span></div>
+        <span class="mem-line-tk" style="color:${stColor};background:${stBg};">${stTxt}</span>
       </div>`;}).join('')}</div>`)
     :
     `<div class="mem-barlist">${barHead}
