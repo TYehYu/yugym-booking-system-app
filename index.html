@@ -1990,8 +1990,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26701.1547';
-const APP_VERSION_LABEL='26701.1547';
+const APP_VERSION='26701.1602';
+const APP_VERSION_LABEL='26701.1602';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12646,16 +12646,34 @@ PAGES.mem_tickets=async function(){
   window._ttCache=types;
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const mine=tickets.filter(t=>t.member_id===SESSION.id);
-  const myBk=(bookings||[]).filter(b=>b.member_id===SESSION.id);
+  const myBk=(bookings||[]).filter(b=>b.member_id===SESSION.id || (Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id)));
   // 未使用堂數 = 總數 − 已簽到/完成（已預約未上仍算未使用，避免會員誤會堂數用完）
   const usedMap=usedSessionsMap(myBk);
   // 每張票券扣抵的預約清單（給圓圈進度條：已上=反白、已預約=標日期），依日期時間排序
+  //  一般課：booking.ticket_id 直接對應；
+  //  團課：booking.ticket_id 為 null，改由 ticket_logs 的 deduct 紀錄反查（ticket_id ↔ booking_id）
+  const bkById=Object.fromEntries(myBk.map(b=>[b.id,b]));
   const bkByTicket={};
+  const pushUniq=(tid,b)=>{ const arr=(bkByTicket[tid]=bkByTicket[tid]||[]); if(!arr.some(x=>x.id===b.id)) arr.push(b); };
+  // ① 直接關聯
   myBk.forEach(b=>{
     if(!b.ticket_id || b.status==='cancelled') return;
-    (bkByTicket[b.ticket_id]=bkByTicket[b.ticket_id]||[]).push(b);
+    pushUniq(b.ticket_id, b);
+  });
+  // ② 由扣票紀錄反查（涵蓋團課等 booking.ticket_id 為 null 的情況）
+  (logs||[]).forEach(lg=>{
+    if(lg.action!=='deduct' || !lg.ticket_id || !lg.booking_id) return;
+    const b=bkById[lg.booking_id];
+    if(!b || b.status==='cancelled') return;
+    // 只補進屬於本會員的票券
+    const tk=mine.find(t=>t.id===lg.ticket_id); if(!tk) return;
+    pushUniq(lg.ticket_id, b);
   });
   Object.values(bkByTicket).forEach(arr=>arr.sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||''))));
+  // 依 bkByTicket 重算已使用堂數（涵蓋團課：ticket_id=null 但由 log 反查到的預約）
+  Object.keys(bkByTicket).forEach(tid=>{
+    usedMap[tid]=bkByTicket[tid].filter(b=>b.status==='checked_in'||b.status==='completed').length;
+  });
   _memTkData={mine,typeMap,logs,usedMap,bkByTicket};
   renderMemTickets();
 };
