@@ -1697,11 +1697,20 @@ body.previewing .role-coach .content{padding-bottom:140px;}
 /* 課卡移動模式 */
 .wtl-card-moving{outline:2px solid var(--green);outline-offset:1px;opacity:.55;box-shadow:0 4px 12px rgba(0,61,50,0.3);}
 /* 拖曳：來源卡淡化、跟手分身、目標時段高亮 */
-.wtl-card-dragging{opacity:.32;}
-.wtl-card-ghost{will-change:left,top;}
+.wtl-card-dragging{opacity:.28;}
+.wtl-card-ghost{will-change:left,top,transform;animation:wtlGhostPop .16s cubic-bezier(.34,1.56,.64,1);}
+@keyframes wtlGhostPop{ from{transform:scale(1);} to{transform:scale(1.12);} }
+/* 拖曳中的卡片：放大、加重陰影、外框醒目（取代 iOS 無法震動的觸覺回饋） */
+.wtl-card-ghost{transform:scale(1.12);outline:2.5px solid var(--green);outline-offset:1px;box-shadow:0 18px 40px rgba(0,0,0,0.4)!important;}
+/* 跨新時段瞬間的脈衝（用 class 觸發，動畫結束移除）：明顯彈跳＋外框閃亮 */
+.wtl-card-ghost.wtl-ghost-pulse{animation:wtlGhostPulse .22s ease-out;}
+@keyframes wtlGhostPulse{ 0%{transform:scale(1.12);outline-color:var(--green);} 40%{transform:scale(1.22);outline-color:var(--gold);} 100%{transform:scale(1.12);outline-color:var(--green);} }
 body.wtl-dragging-active{cursor:grabbing;-webkit-user-select:none;user-select:none;}
 body.wtl-dragging-active *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;}
-.wtl-slot.wtl-drag-over{background:rgba(0,61,50,0.22)!important;box-shadow:inset 0 0 0 2px var(--green);border-radius:4px;}
+.wtl-slot.wtl-drag-over{background:rgba(0,61,50,0.32)!important;box-shadow:inset 0 0 0 3px var(--green);border-radius:4px;animation:wtlSlotPulse .9s ease-in-out infinite;}
+@keyframes wtlSlotPulse{ 0%,100%{background:rgba(0,61,50,0.18)!important;} 50%{background:rgba(0,61,50,0.38)!important;} }
+/* 拖曳時跟手的時間標籤（顯示將移動到的時間，取代觸覺回饋的明確提示） */
+.wtl-ghost-time{position:fixed;z-index:100000;pointer-events:none;background:var(--green);color:#fff;font-size:15px;font-weight:700;padding:4px 11px;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,0.35);white-space:nowrap;transform:translate(-50%,0);letter-spacing:0.02em;}
 .wtl-move-mode .wtl-slot{cursor:pointer;}
 .wtl-move-mode .wtl-slot:active{background:rgba(0,61,50,0.18);}
 .wtl-move-bar{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(72px + env(safe-area-inset-bottom,0px));z-index:60;
@@ -1889,6 +1898,10 @@ body.wtl-dragging-active *{-webkit-user-select:none!important;user-select:none!i
     <div id="login-member-view">
       <div class="login-tag">會員登入</div>
       <div class="login-err" id="login-err"></div>
+      <div style="background:#f2f6f0;border:1px solid #d4e0cc;border-radius:10px;padding:11px 13px;margin-bottom:16px;font-size:12.5px;line-height:1.75;color:#3a5a3a;">
+        <b style="color:#003d32;">原有會員請直接登入</b><br>
+        帳號為您的手機號碼，預設密碼 <b>88888888</b>，首次登入後請設定新密碼。
+      </div>
       <div class="field">
         <label>手機號碼</label>
         <input type="text" id="login-acct" placeholder="例：0912000001" autocomplete="off" onkeydown="if(event.key==='Enter')doLogin()">
@@ -1899,10 +1912,6 @@ body.wtl-dragging-active *{-webkit-user-select:none!important;user-select:none!i
         <div style="text-align:right;margin-top:6px;"><span onclick="openForgotPw()" style="font-size:12px;color:var(--t3);cursor:pointer;text-decoration:underline;">忘記密碼？</span></div>
       </div>
       <button class="btn-primary" onclick="doLogin()">登入</button>
-      <div class="signup-cta">
-        <div class="signup-cta-hint">還不是會員？</div>
-        <button class="btn-signup" onclick="location.hash='member-signup'">立即申辦會員</button>
-      </div>
       <div class="login-switch"><span onclick="location.hash='staff';switchLoginMode('staff')">員工 / 管理後台登入 →</span></div>
     </div>
 
@@ -1990,8 +1999,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26701.1602';
-const APP_VERSION_LABEL='26701.1602';
+const APP_VERSION='26702.1232';
+const APP_VERSION_LABEL='26702.1232';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -2093,11 +2102,78 @@ async function doLogin(){
   const err=document.getElementById('login-err');
   if(!acct||!pw){err.textContent='請輸入手機號碼與密碼';err.style.display='block';return;}
   const{data,error}=await sb.auth.signInWithPassword({email:toEmail('member',acct),password:pw});
-  if(error){err.textContent='手機號碼或密碼錯誤';err.style.display='block';return;}
+  if(error){
+    // 登入失敗 → 可能是「已匯入但尚未建帳」的舊客戶首次登入
+    //   條件：members 有此電話、must_setup、尚無 auth_id、且輸入的是預設密碼
+    if(pw===STAFF_DEFAULT_PW){
+      const pend=(await sb.from('members').select('*').eq('phone',acct).maybeSingle()).data;
+      if(pend && pend.must_setup && !pend.auth_id){
+        const r=await cloudCreateAuth('member',acct,STAFF_DEFAULT_PW,false); // signUp 建帳（會登入該新帳號）
+        if(r.error){ err.textContent='帳號建立失敗：'+r.error; err.style.display='block'; return; }
+        try{ await sb.from('members').update({auth_id:r.uid}).eq('id',pend.id); }catch(_){}
+        SESSION={role:'member',id:pend.id,name:pend.name};
+        showMemberSetup(Object.assign({},pend,{auth_id:r.uid}));
+        return;
+      }
+    }
+    err.textContent='手機號碼或密碼錯誤';err.style.display='block';return;
+  }
   const m=(await sb.from('members').select('*').eq('auth_id',data.user.id).maybeSingle()).data;
   if(!m){err.textContent='查無會員資料';err.style.display='block';return;}
+  if(m.must_setup){
+    SESSION={role:'member',id:m.id,name:m.name};
+    showMemberSetup(m);
+    return;
+  }
   SESSION={role:'member',id:m.id,name:m.name};
   enterApp();
+}
+// 會員首次登入設定：改密碼 + 完善基本資料（仿員工版）
+function showMemberSetup(m){
+  document.getElementById('login-screen')?.classList.add('hidden');
+  document.getElementById('app-screen')?.classList.add('hidden');
+  let host=document.getElementById('invite-screen');
+  if(!host){host=document.createElement('div');host.id='invite-screen';document.body.appendChild(host);}
+  host.style.cssText='min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(160deg,#003d32,#0a5044);';
+  host.innerHTML=`<div class="login-card" style="max-width:460px;">
+    <div class="login-logo"><div class="mark">YUGYM</div><div class="sub">首 次 登 入 設 定</div></div>
+    <div class="login-tag">歡迎回來，${m.name||''}！請設定新密碼並確認你的資料。</div>
+    <div class="login-err" id="ms-err"></div>
+    <div class="form-row"><label>新密碼 *（至少 6 個字元）</label><input type="password" id="ms-pw1" placeholder="輸入新密碼"></div>
+    <div class="form-row"><label>再次輸入新密碼 *</label><input type="password" id="ms-pw2" placeholder="再次確認"></div>
+    <div class="form-2col">
+      <div class="form-row"><label>姓名 *</label><input id="ms-name" value="${(m.name||'').replace(/"/g,'&quot;')}" placeholder="你的姓名"></div>
+      <div class="form-row"><label>手機 *</label><input id="ms-phone" value="${(m.phone||'').replace(/"/g,'&quot;')}" placeholder="聯絡手機"></div>
+    </div>
+    <div class="form-row"><label>Email（選填）</label><input id="ms-email" value="${(m.email||'').replace(/"/g,'&quot;')}" placeholder="電子郵件"></div>
+    <div class="form-row"><label>生日 *</label>${birthdaySelects('ms')}</div>
+    <button class="btn-primary" onclick="submitMemberSetup('${m.id}')">完成設定並進入系統</button>
+    <div class="login-hint">完成後即可開始使用。日後可在「修改密碼」再次變更密碼。</div>
+  </div>`;
+}
+async function submitMemberSetup(id){
+  const v=x=>document.getElementById(x).value.trim();
+  const err=document.getElementById('ms-err');
+  const p1=document.getElementById('ms-pw1').value, p2=document.getElementById('ms-pw2').value;
+  if(!p1||p1.length<6){err.textContent='密碼至少 6 個字元';err.style.display='block';return;}
+  if(p1!==p2){err.textContent='兩次輸入的密碼不一致';err.style.display='block';return;}
+  if(p1===STAFF_DEFAULT_PW){err.textContent='請勿沿用預設密碼，請設定新的密碼';err.style.display='block';return;}
+  if(!v('ms-name')){err.textContent='請填寫姓名';err.style.display='block';return;}
+  if(!v('ms-phone')){err.textContent='請填寫手機';err.style.display='block';return;}
+  const bday=readBirthday('ms');
+  if(!bday){err.textContent='請選擇完整生日';err.style.display='block';return;}
+  try{
+    const{error}=await sb.auth.updateUser({password:p1});
+    if(error){err.textContent='密碼更新失敗：'+error.message;err.style.display='block';return;}
+  }catch(e){err.textContent='密碼更新失敗：'+(e.message||e);err.style.display='block';return;}
+  try{
+    const upd={name:v('ms-name'),phone:v('ms-phone'),email:v('ms-email')||null,birthday:bday,must_setup:false};
+    const{error}=await sb.from('members').update(upd).eq('id',id);
+    if(error){err.textContent='資料儲存失敗：'+error.message;err.style.display='block';return;}
+    SESSION={role:'member',id,name:upd.name};
+    document.getElementById('invite-screen')?.remove();
+    enterApp();
+  }catch(e){err.textContent='資料儲存失敗：'+(e.message||e);err.style.display='block';return;}
 }
 // 員工 / 管理後台登入
 async function doLoginStaff(){
@@ -2190,25 +2266,10 @@ async function submitChangePassword(){
 }
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);}
-// 跨平台觸覺回饋：Android 用 navigator.vibrate；iOS(16.4+) 用切換隱藏 switch 觸發系統 haptic
-let _hapticSwitch=null;
+// 觸覺回饋：Android 用 navigator.vibrate（iOS Safari 不支援，網頁無法可靠觸發，改以視覺回饋補償）
 function hapticFeedback(ms){
   ms=ms||10;
-  if(navigator.vibrate){ try{ if(navigator.vibrate(ms)) return; }catch(_){} }
-  // iOS 後備：切換一個隱藏的 <input switch>（需在使用者手勢事件中呼叫才有效）
-  try{
-    if(!_hapticSwitch){
-      const lbl=document.createElement('label');
-      lbl.setAttribute('aria-hidden','true');
-      lbl.style.cssText='position:fixed;left:-9999px;top:-9999px;width:0;height:0;overflow:hidden;pointer-events:none;';
-      const inp=document.createElement('input');
-      inp.type='checkbox'; inp.setAttribute('switch',''); // iOS 專屬 switch 外觀，切換時有 haptic
-      lbl.appendChild(inp); document.body.appendChild(lbl);
-      _hapticSwitch=inp;
-    }
-    _hapticSwitch.checked=!_hapticSwitch.checked;
-    _hapticSwitch.dispatchEvent(new Event('change',{bubbles:false}));
-  }catch(_){}
+  if(navigator.vibrate){ try{ navigator.vibrate(ms); }catch(_){} }
 }
 
 /* ── 進入 App ── */
@@ -3029,9 +3090,17 @@ function usedSessionsMap(bookings){
   return map;
 }
 // 單張票券未使用堂數 = 總堂數 − 已簽到/完成；下限 0
-function ticketUnused(t,usedMap){
+//  防呆：以「真實剩餘(sessions_remaining) + 已預約未上」為上限，
+//  避免預約資料缺漏（如預約被刪、只剩扣課紀錄）時，未使用堂數被高估。
+//  bookedCount：該票券「已預約但尚未上課」的堂數（可選；未傳則不套用上限）。
+function ticketUnused(t,usedMap,bookedCount){
   const used=(usedMap&&usedMap[t.id])||0;
-  return Math.max(0,(t.sessions_total||0)-used);
+  let unused=Math.max(0,(t.sessions_total||0)-used);
+  if(bookedCount!=null){
+    const cap=Math.max(0,(t.sessions_remaining||0))+Math.max(0,bookedCount);
+    unused=Math.min(unused, cap);
+  }
+  return unused;
 }
 // 扣一堂
 async function deductTicket(ticket,booking_id,operator){
@@ -3341,8 +3410,8 @@ PAGES.dashboard=async function(){
       const tk=tickets.find(t=>t.id===b.ticket_id);
       rev+=(tk&&tk.unit_price)?tk.unit_price:0;
     });
-    // 本月上班時數（需打卡者才有）
-    const hours=attAll.filter(a=>a.emp_id===c.id&&(a.date||'').slice(0,7)===ym)
+    // 上班時數（依上方「今日／本月」範圍；需打卡者才有出勤紀錄）
+    const hours=attAll.filter(a=>a.emp_id===c.id&&inRange(a.date))
       .reduce((s,r)=>s+(calcWorkHours(r)||0),0);
     return {name:coachDisp(c),rev,ptCount,groupCount,hours,need_punch:!!c.need_punch};
   }).filter(r=>r.rev>0||r.ptCount>0||r.groupCount>0||r.hours>0)
@@ -3575,8 +3644,10 @@ async function renderCalendar(opts){
       }else if(b.category==='體驗'){
         denseName = b.trial_name || '體驗';
       }else if(b.category==='小班肌力'){
-        const ns=gIds.map(id=>memMap[id]).filter(Boolean);
-        denseName = ns.length===0 ? '團課' : ns.length===1 ? ns[0] : `${ns[0]}<span class="dn-cnt">${ns.length}</span>`;
+        // 團課窄卡：教練名 + 人數角標（不顯示會員名，避免擺不下）
+        const gHeads=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids.length:(b.member_id?1:0);
+        const gCoach=subCoachName||coachName||'團課';
+        denseName = gHeads>0 ? `${gCoach}<span class="dn-cnt">${gHeads}</span>` : gCoach;
       }else{
         denseName = memMap[b.member_id]||'—';
       }
@@ -3598,7 +3669,11 @@ async function renderCalendar(opts){
         ${editable?`onclick="onEvClick(event,'${b.id}')"`:(opts.allMode||bkIsMasked(b)?'':`onclick="openBookingDetail('${b.id}')"`)}>
         ${dense
           ? `<div class="ev-dense-name">${denseName}</div>`
-          : `<div class="ev-time">${b.start_time}</div><div class="ev-t">${memName}</div><div class="ev-m">${hideMember?typeName:(subCoachName?subCoachName+'（代）':(coachName||typeName))}</div>`}
+          : ( b.category==='小班肌力'
+              ? (()=>{ const gHeads=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids.length:(b.member_id?1:0);
+                       const gCoach=subCoachName?subCoachName+'（代）':(coachName||'團課');
+                       return `<div class="ev-time">${b.start_time}</div><div class="ev-t">${gCoach}</div><div class="ev-m">${gHeads>0?gHeads+' 人':'團課'}</div>`; })()
+              : `<div class="ev-time">${b.start_time}</div><div class="ev-t">${memName}</div><div class="ev-m">${hideMember?typeName:(subCoachName?subCoachName+'（代）':(coachName||typeName))}</div>` )}
         ${tip}
       </div>`;
     });
@@ -4352,7 +4427,7 @@ function initWtlCardPress(){
   const host=document.getElementById('wtl-page')||document;
   host.querySelectorAll('.wtl-card[data-bid]').forEach(card=>{
     const bid=card.getAttribute('data-bid');
-    let pressTimer=null, dragging=false, ghost=null, startX=0, startY=0, hlSlot=null, lastMin=null, offX=0, offY=0;
+    let pressTimer=null, dragging=false, ghost=null, startX=0, startY=0, hlSlot=null, lastMin=null, offX=0, offY=0, timeTag=null;
     const clearHL=()=>{ if(hlSlot){ hlSlot.classList.remove('wtl-drag-over'); hlSlot=null; } };
     const slotAt=(x,y)=>{
       const prev=ghost?ghost.style.display:''; if(ghost) ghost.style.display='none';
@@ -4375,6 +4450,10 @@ function initWtlCardPress(){
         +`width:${r.width}px;height:${r.height}px;left:${r.left}px;top:${r.top}px;`
         +'box-shadow:0 14px 34px rgba(0,0,0,0.34);opacity:.96;border-radius:6px;transition:none;';
       document.body.appendChild(ghost);
+      timeTag=document.createElement('div');
+      timeTag.className='wtl-ghost-time';
+      timeTag.style.display='none';
+      document.body.appendChild(timeTag);
       document.body.classList.add('wtl-dragging-active');
       // 綁 document 級監聽，確保手指移出卡片也追得到
       document.addEventListener('touchmove',docTouchMove,{passive:false});
@@ -4388,15 +4467,39 @@ function initWtlCardPress(){
       positionGhost(x,y);
       const slot=slotAt(x,y);
       if(slot!==hlSlot){ clearHL(); if(slot){ slot.classList.add('wtl-drag-over'); hlSlot=slot; } }
-      // 跨越 30 分鐘時段 → 震動回饋
+      // 跟手時間標籤：顯示將移動到的日期時間
+      if(timeTag){
+        if(slot){
+          const mm=parseInt(slot.getAttribute('data-min'),10);
+          const ds=slot.getAttribute('data-date')||'';
+          const dObj=ds?parseYmd(ds):null;
+          const dLabel=dObj?`${dObj.getMonth()+1}/${dObj.getDate()} `:'';
+          timeTag.textContent=`${dLabel}${minToTime(mm)}`;
+          timeTag.style.display='block';
+          timeTag.style.left=x+'px';
+          timeTag.style.top=(y-46)+'px';
+        }else{
+          timeTag.style.display='none';
+        }
+      }
+      // 跨越 30 分鐘時段 → 視覺脈衝回饋（iOS 無法可靠震動，改用視覺）＋ Android 震動
       if(slot){
         const mm=parseInt(slot.getAttribute('data-min'),10);
-        if(!isNaN(mm) && mm!==lastMin){ lastMin=mm; hapticFeedback(8); }
+        if(!isNaN(mm) && mm!==lastMin){
+          lastMin=mm;
+          hapticFeedback(8);
+          if(ghost){
+            ghost.classList.remove('wtl-ghost-pulse');
+            void ghost.offsetWidth; // 強制 reflow 讓動畫可重播
+            ghost.classList.add('wtl-ghost-pulse');
+          }
+        }
       }
     };
     const finishDrag=(x,y)=>{
       let slot=null;
       if(ghost){ slot=slotAt(x,y); ghost.remove(); ghost=null; }
+      if(timeTag){ timeTag.remove(); timeTag=null; }
       document.body.classList.remove('wtl-dragging-active');
       card.classList.remove('wtl-card-dragging');
       clearHL();
@@ -4534,12 +4637,16 @@ async function renderWeekTimeline(){
     return b.trial_name||'—';
   };
   const isMineBk=(b)=> (b.coach_id===myId||b.substitute_coach_id===myId);
-  const isGroupBk=(b)=> b.category==='小班肌力';
+  const isGroupBk=(b)=> b.category==='小班肌力' || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
   // 團課卡內容：時間 / 教練 / 人數（依卡高分級顯示）
-  const groupHeads=(b)=> (Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids.length:0;
+  const groupHeads=(b)=>{
+    if(Array.isArray(b.member_ids)&&b.member_ids.length) return b.member_ids.length;
+    if(b.member_id) return 1; // 誤存單一 member_id 也算 1 人
+    return 0;
+  };
   const wtlGroupInner=(b,height)=>{
     const cid=b.substitute_coach_id||b.coach_id;
-    const coach=coachAbbr(coachObj[cid]);
+    const coach=coachAbbr(coachObj[cid])||'團課';
     const heads=groupHeads(b);
     const headStr=heads>0?`${heads}人`:'—';
     if(height>=58){
@@ -6240,7 +6347,7 @@ async function openMemberDetail(member_id){
     </div>
 
     <div class="mtab-pane active" data-pane="tickets">
-      ${isCoach?'':`<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-green btn-sm" onclick="openGrantModalFor('${member_id}')">＋ 發放票券</button><button class="btn btn-gold btn-sm" onclick="openMakeupForMember('${member_id}')">補發補課券</button></div>`}
+      ${isCoach?'':`<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-green btn-sm" onclick="openGrantModalFor('${member_id}')">＋ 發放票券</button></div>`}
       ${myTickets.length===0?'<div class="empty"><div class="em-t">尚無票券</div></div>':
       ( isCoach
         ? `<table><thead><tr><th>票券名稱</th><th>未使用堂數</th><th>到期日</th></tr></thead><tbody>
@@ -6250,7 +6357,7 @@ async function openMemberDetail(member_id){
           <td>${t.expire_date}</td></tr>`;}).join('')||'<tr><td colspan="3" style="color:var(--t3);padding:10px;">目前沒有有效票券</td></tr>'}
         </tbody></table>`
         : `<table><thead><tr><th>方案</th><th>未使用 / 總數</th><th>到期日</th><th>狀態</th><th></th></tr></thead><tbody>
-        ${myTickets.map(t=>{const ty=typeMap[t.ticket_type_id];return `<tr>
+        ${myTickets.map(t=>{const ty=typeMap[t.ticket_type_id];const isDim=(t.status!=='usable')||(t.expire_date&&t.expire_date<ymd(TODAY));return `<tr${isDim?' style="opacity:.5;"':''}>
           <td><div style="font-weight:500;">${t.plan_name||(ty?ty.name:'—')}</div><span class="tag tag-${ty?ty.color:'pt'}">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span></td>
           <td style="white-space:nowrap;"><span style="font-size:26px;font-weight:800;color:var(--green);line-height:1;font-feature-settings:'tnum';">${ticketUnused(t,usedMap)}</span><span style="font-size:15px;color:var(--t3);font-weight:600;"> / ${t.sessions_total}</span></td><td>${t.expire_date}</td>
           <td><span class="tag ${stTag[t.status]}">${stLabel[t.status]}</span></td>
@@ -6612,6 +6719,16 @@ async function submitRegister(){
     if(btn){btn.disabled=false;btn.textContent='完成註冊';}
   };
   try{
+    // 防呆：此手機是否已是會員（含尚未建 Auth 帳號的匯入舊會員）→ 引導改用登入
+    const existMem=(await sb.from('members').select('id,name,must_setup,auth_id').eq('phone',phone).maybeSingle()).data;
+    if(existMem){
+      if(existMem.must_setup && !existMem.auth_id){
+        showLoginHint('此手機已是本館會員，無需重新申辦。請改用「登入」，預設密碼 88888888，首次登入後設定新密碼。');
+      }else{
+        showLoginHint('此手機已是會員，請直接登入。');
+      }
+      return;
+    }
     const m={id:uid('m'),name,phone,email:v('reg-email')||null,birthday:readBirthday('reg'),status:'active',tier:'newbie',created_at:new Date().toISOString()};
     const r=await cloudCreateAuth('member',phone,pw);
     if(r.error){
@@ -12674,16 +12791,21 @@ PAGES.mem_tickets=async function(){
   Object.keys(bkByTicket).forEach(tid=>{
     usedMap[tid]=bkByTicket[tid].filter(b=>b.status==='checked_in'||b.status==='completed').length;
   });
-  _memTkData={mine,typeMap,logs,usedMap,bkByTicket};
+  // 每張票券「已預約但尚未上課」堂數（給 ticketUnused 的上限鉗制用）
+  const bookedMap={};
+  Object.keys(bkByTicket).forEach(tid=>{
+    bookedMap[tid]=bkByTicket[tid].filter(b=>b.status==='booked'||b.status==='scheduled').length;
+  });
+  _memTkData={mine,typeMap,logs,usedMap,bkByTicket,bookedMap};
   renderMemTickets();
 };
 function renderMemTickets(){
   if(!_memTkData) return;
-  const {mine,typeMap,logs,usedMap,bkByTicket}=_memTkData;
+  const {mine,typeMap,logs,usedMap,bkByTicket,bookedMap}=_memTkData;
   const today=ymd(TODAY);
   // 「有效」判斷改用未使用堂數（已預約未簽到仍算未使用），而非 sessions_remaining。
   //  狀態須 usable、未過期、且仍有未使用堂數 → 歸「持有中」；否則歸「已完成 / 已到期」。
-  const isLive=t=>t.status==='usable' && ticketUnused(t,usedMap)>0 && (!t.expire_date||t.expire_date>=today);
+  const isLive=t=>t.status==='usable' && ticketUnused(t,usedMap,((bookedMap||{})[t.id]||0))>0 && (!t.expire_date||t.expire_date>=today);
   const usable=mine.filter(isLive)
     .sort((a,b)=>(a.expire_date||'').localeCompare(b.expire_date||''));
   const inactive=mine.filter(t=>!isLive(t))
@@ -12693,7 +12815,7 @@ function renderMemTickets(){
     const ty=typeMap[t.ticket_type_id];
     const color=ty?ty.color:'pt';
     const remain=t.sessions_remaining||0, total=t.sessions_total||0;
-    const unused=ticketUnused(t,usedMap); // 顯示用：未使用 = 總數 − 已簽到/完成
+    const unused=ticketUnused(t,usedMap,((bookedMap||{})[t.id]||0)); // 顯示用：未使用（以真實剩餘+已預約為上限）
     const days=t.expire_date?diffDays(t.expire_date,today):null;
     const soon=!dim&&days!=null&&days<=7&&days>=0;
     const copy=ticketCopy(t);
