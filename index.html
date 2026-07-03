@@ -1063,6 +1063,9 @@ tr:hover td{background:var(--card2);}
 /* 未排：空心 */
 .mck-dot.open{background:transparent;border:1.5px solid var(--mck-soft);}
 .mck-dot.locked{background:#f0ece3;border:1.5px dashed #cfc7b8;font-size:12px;filter:grayscale(0.3);opacity:0.75;}
+/* 未開通但已預約：顯示日期，帶鎖定調性 */
+.mck-dot.locked-booked{background:#e6ddc9;border:1.5px dashed #b9a982;color:#8a6a30;font-size:10px;letter-spacing:-0.02em;position:relative;}
+.mck-dot.locked-booked::after{content:'🔒';position:absolute;top:-6px;right:-4px;font-size:9px;filter:none;}
 .mck-install{font-size:11.5px;color:var(--mck-accent,#9a6a1e);background:rgba(154,106,30,0.08);border-radius:8px;padding:6px 10px;margin-top:8px;line-height:1.6;}
 .mck-figures{display:flex;width:100%;align-items:flex-end;justify-content:space-between;gap:12px;}
 .mck-num{display:flex;align-items:baseline;gap:6px;flex-shrink:0;}
@@ -1330,6 +1333,9 @@ tr:hover td{background:var(--card2);}
   overflow:hidden;cursor:grab;box-shadow:0 1px 3px rgba(0,0,0,0.08);z-index:3;user-select:none;
   display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
 .cal-ev:hover{overflow:visible;z-index:250;}
+/* 已簽到打勾角標（右上角）*/
+.ev-checked{position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:50%;background:#1f7a4d;color:#fff;display:flex;align-items:center;justify-content:center;z-index:3;box-shadow:0 1px 3px rgba(0,0,0,0.2);}
+.ev-checked svg{width:10px;height:10px;}
 .cal-ev:active{cursor:grabbing;}
 .cal-ev:not(.readonly){touch-action:none;}
 .cal-ev .ev-time{font-family:var(--num);font-size:17px;font-weight:800;line-height:1.15;letter-spacing:0.02em;}
@@ -2217,8 +2223,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='26703.1535';
-const APP_VERSION_LABEL='26703.1535';
+const APP_VERSION='26703.1930';
+const APP_VERSION_LABEL='26703.1930';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -4275,9 +4281,12 @@ async function renderCalendar(opts){
         <div class="ev-tip-s">${statusLabel(b.status)}</div>
       </div>`;
       const tipUp = timeToMin(b.start_time) >= (CAL_END_H-3)*60; // 接近底部 → 提示往上展開避免被切
+      const _isCheckedIn = b.status==='checked_in'||b.status==='completed'
+        || (b.category==='小班肌力' && b.attendance && Object.values(b.attendance).some(s=>s==='checked_in'));
       evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${dense?'ev-dense':''} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''}" data-bid="${b.id}" data-time="${b.start_time}"
         style="top:${top}px;height:${Math.max(h-2,64)}px;left:calc(${lane.idx*wpct}% + 3px);width:calc(${wpct}% - 6px);"
         ${editable?`onclick="onEvClick(event,'${b.id}')"`:(opts.allMode||bkIsMasked(b)?'':`onclick="openBookingDetail('${b.id}')"`)}>
+        ${_isCheckedIn?'<span class="ev-checked" title="已簽到"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>':''}
         ${dense
           ? `<div class="ev-dense-name">${denseName}</div>`
           : ( b.category==='小班肌力'
@@ -6148,7 +6157,9 @@ async function openBookingDetail(id){
         ? ((function(){const nd=(parseYmd(b.date)?ymd(parseYmd(b.date)):b.date);return nd<ymd(TODAY);})()
             ? `<button class="btn btn-gold btn-sm" onclick="openMakeupModal('${b.id}')">補簽</button>`
             : `<button class="btn btn-green btn-sm" onclick="checkInBooking('${b.id}')">簽到</button>`)
-        : `<span class="tag ${b.status==='cancelled'?'tag-danger':(b.status==='completed'||b.status==='checked_in')?'tag-ok':'tag-warn'}" style="font-size:12px;">${statusLabel(b.status)}</span>`}
+        : (b.status==='checked_in'&&!isGroupD&&staffCanCheckin
+            ? `<span style="display:flex;align-items:center;gap:8px;"><span class="tag tag-ok" style="font-size:12px;">已簽到</span><button class="btn btn-ghost btn-sm" onclick="undoCheckin('${b.id}')">取消簽到</button></span>`
+            : `<span class="tag ${b.status==='cancelled'?'tag-danger':(b.status==='completed'||b.status==='checked_in')?'tag-ok':'tag-warn'}" style="font-size:12px;">${statusLabel(b.status)}</span>`)}
     </div>
     <div class="bkd-marker" style="display:none;"></div>
     <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
@@ -6231,8 +6242,21 @@ async function doGrantMakeupForMember(member_id){
 }
 
 /* ── 簽到：改狀態 checked_in、記簽到時間、發點數（票券已於預約時扣，不重扣） ── */
-async function checkInBooking(id, opts){
-  opts=opts||{};
+// 取消簽到（個人課）：改回未簽到，並收回這堂發放的自主訓練券
+async function undoCheckin(id){
+  const b=await dbGet('bookings',id);
+  if(!b){ showToast('找不到預約'); return; }
+  if(b.status!=='checked_in'){ showToast('此預約非已簽到狀態'); return; }
+  const ok=confirm('確定要取消這筆簽到嗎？\n\n將改回「未簽到」，並收回這堂發放的自主訓練券（若券已使用則保留）。');
+  if(!ok) return;
+  b.status='booked';
+  b.checked_in_at=null;
+  await dbPut('bookings',b);
+  await revokeCheckinReward(b);   // 收回券（內含沒用刪除/用過保留提示，並清 reward_issued）
+  closeModal();
+  navTo(CUR_PAGE);
+}
+async function checkInBooking(id, opts){  opts=opts||{};
   const b=await dbGet('bookings',id);
   if(!b){showToast('找不到預約');return false;}
   if(b.status==='checked_in'){showToast('此預約已簽到');return false;}
@@ -6374,8 +6398,42 @@ function showMemberScanResult(ok,msg,b){
    教練課/體驗課 → 自主訓練點數 +2；友善教練課 → 友善自主訓練點數 +2
    點數以 member_tickets 儲存（ticket_type_id: self_training / self_friendly, source: checkin_grant）
    有效期 7 天。防呆：booking.reward_issued 為 true 則不再發。 */
-async function grantCheckinReward(b){
-  if(b.reward_issued) return true;             // 已發過視為已發
+// 取消簽到 → 收回這堂課發放的自主訓練券
+//  規則：券沒用過 → 整張刪除；用過了 → 保留（不收）並提示
+async function revokeCheckinReward(b){
+  if(!b) return;
+  try{
+    const all=await dbGetAll('member_tickets');
+    // 找這堂 booking 發的簽到券（優先用 source_booking_id；退回舊資料則用會員+來源+到期日近似比對）
+    let tks=(all||[]).filter(t=>t.source==='checkin_grant' && t.source_booking_id===b.id);
+    if(!tks.length){
+      // 舊券沒有 source_booking_id：以會員 + checkin_grant + 尚未使用，挑最接近的一張（保守：只挑全新未用的）
+      tks=(all||[]).filter(t=>t.source==='checkin_grant' && t.member_id===b.member_id
+        && (t.sessions_remaining===t.sessions_total));
+      // 舊券無法精準對應時，只收回一張全新未用的，避免誤收
+      if(tks.length>1) tks=[tks.sort((a,c)=>(c.created_at||'').localeCompare(a.created_at||''))[0]];
+    }
+    let removed=0, kept=0;
+    for(const t of tks){
+      const used = (t.sessions_total||0) - (t.sessions_remaining||0);
+      if(used<=0){
+        // 沒用過 → 整張刪除
+        await dbDel('member_tickets', t.id);
+        try{ await logTicket(t.id,'revoke',0,b.id,SESSION.id,'取消簽到，收回未使用的自主訓練券'); }catch(_){}
+        removed++;
+      }else{
+        // 用過了 → 保留不收
+        kept++;
+      }
+    }
+    if(kept>0) showToast('已取消簽到；此堂發放的自主訓練券已使用，未自動收回，請手動確認');
+    else if(removed>0) showToast('已取消簽到，並收回未使用的自主訓練券');
+    // 清掉 booking 的已發旗標與來源標記，讓之後重新簽到能再次發券
+    b.reward_issued=false;
+    await dbPut('bookings',b);
+  }catch(e){ console.error('revokeCheckinReward fail',e); }
+}
+async function grantCheckinReward(b){  if(b.reward_issued) return true;             // 已發過視為已發
   // 補簽限制：僅「課程當天」補簽可發點；隔天以後補登不發（維持時段公平）
   // 用正規化日期字串比較，避免補零差異造成誤判
   const norm=s=>{const d=parseYmd(s);return d?ymd(d):s;};
@@ -6404,6 +6462,17 @@ async function grantCheckinReward(b){
   if(coachClass){ doGrant=true; isFriendly=friendly; }
   if(!doGrant) return false;                 // 團課/自主訓練本身不發點
 
+  // 資料庫層級防重複：若這堂 booking 已經發過自主訓練券，就不再發（比記憶體旗標可靠，防連點/競態/取消再簽）
+  try{
+    const existing=await dbGetAll('member_tickets');
+    const already=(existing||[]).some(t=>t.source==='checkin_grant' && t.source_booking_id===b.id);
+    if(already){
+      // 補記旗標，讓後續判斷一致
+      if(!b.reward_issued){ b.reward_issued=true; try{ await dbPut('bookings',b); }catch(_){} }
+      return true;
+    }
+  }catch(_){}
+
   // 動態查「自主訓練」票券種類的實際 ID（與會員預約自主訓練時用的同一個種類，避免 ID 對不上）
   //  規則：category==='自主訓練'；友善 → name 含「友善」；一般 → name 不含「友善」。
   let rewardTypeId=null;
@@ -6428,6 +6497,7 @@ async function grantCheckinReward(b){
     plan_name: isFriendly?'友善自主訓練點數':'自主訓練點數',
     format:null,
     source:'checkin_grant',
+    source_booking_id:b.id,   // 來源簽到預約（防重複發放）
     purchase_date:today, start_date:today, expire_date:expire,
     sessions_total:POINTS, sessions_remaining:POINTS,
     status:'usable', payment_status:'paid', invoice_status:'none',
@@ -6591,7 +6661,8 @@ function attObj(b){
 async function toggleGroupAttend(bid,mid){
   const b=await dbGet('bookings',bid);
   const att=attObj(b);
-  att[mid] = att[mid]==='checked_in' ? 'booked' : 'checked_in';
+  const wasIn = att[mid]==='checked_in';
+  att[mid] = wasIn ? 'booked' : 'checked_in';
   b.attendance=att;
   // 整體狀態：有任一人簽到就算 checked_in，否則 booked（保留原本整體狀態邏輯供今日事項統計）
   const anyIn=Object.values(att).some(s=>s==='checked_in');
@@ -7018,8 +7089,11 @@ async function openMemberDetail(member_id){
           <td>${t.expire_date}</td></tr>`;}).join('')||'<tr><td colspan="3" style="color:var(--t3);padding:10px;">目前沒有有效票券</td></tr>'}
         </tbody></table>`
         : `<table><thead><tr><th>方案</th><th>未使用 / 總數</th><th>到期日</th><th>狀態</th><th></th></tr></thead><tbody>
-        ${myTickets.map(t=>{const ty=typeMap[t.ticket_type_id];const isDim=(t.status!=='usable')||(t.expire_date&&t.expire_date<ymd(TODAY));return `<tr${isDim?' style="opacity:.5;"':''}>
-          <td><div style="font-weight:500;">${t.plan_name||(ty?ty.name:'—')}</div><span class="tag tag-${ty?ty.color:'pt'}">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span></td>
+        ${myTickets.map(t=>{const ty=typeMap[t.ticket_type_id];const isDim=(t.status!=='usable')||(t.expire_date&&t.expire_date<ymd(TODAY));
+          const inst=t.installment&&typeof t.installment==='object'?t.installment:null;
+          const instTag=inst?`<span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;margin-left:4px;">🔒 分期 ${t.unlocked_sessions||inst.current||0}/${t.sessions_total} 開通</span>`:'';
+          return `<tr${isDim?' style="opacity:.5;"':''}>
+          <td><div style="font-weight:500;">${t.plan_name||(ty?ty.name:'—')}</div><span class="tag tag-${ty?ty.color:'pt'}">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span>${instTag}</td>
           <td style="white-space:nowrap;"><span style="font-size:26px;font-weight:800;color:var(--green);line-height:1;font-feature-settings:'tnum';">${ticketUnused(t,usedMap)}</span><span style="font-size:15px;color:var(--t3);font-weight:600;"> / ${t.sessions_total}</span></td><td>${t.expire_date}</td>
           <td><span class="tag ${stTag[t.status]}">${stLabel[t.status]}</span></td>
           <td><button class="btn btn-ghost btn-sm" onclick="viewLogs('${t.id}')">使用紀錄</button></td></tr>`;}).join('')}
@@ -13573,8 +13647,8 @@ function ticketCopy(t){
 function ticketBar(remain,total,bks,tk){
   const t=Math.max(total,0);
   bks=bks||[];
-  const done=bks.filter(b=>b.status==='checked_in'||b.status==='completed');
-  const booked=bks.filter(b=>b.status==='booked'||b.status==='scheduled');
+  const done=bks.filter(b=>b.status==='checked_in'||b.status==='completed').sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
+  const booked=bks.filter(b=>b.status==='booked'||b.status==='scheduled').sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
   const md=b=>{ const d=parseYmd(b.date); return d?(d.getMonth()+1)+'/'+d.getDate():''; };
   // 分期票：只有前 unlocked 堂已開通，其餘顯示鎖定
   const isInstall = tk && tk.installment && tk.unlocked_sessions!=null && tk.unlocked_sessions<t;
@@ -13582,7 +13656,13 @@ function ticketBar(remain,total,bks,tk){
   let s='', di=0, bi=0;
   for(let i=0;i<t;i++){
     if(i>=unlocked){ // 未開通（分期尚未繳款解鎖）
-      s+='<span class="mck-dot locked" title="尚未開通（需繳下一期）">🔒</span>';
+      // 但若這堂已被預約，仍要讓會員看到預約日期（鎖定樣式 + 日期）
+      if(bi<booked.length){
+        const b=booked[bi]; bi++;
+        s+=`<span class="mck-dot locked-booked" title="已預約 ${b.date||''} ${b.start_time||''}（此堂需繳下一期後開通）">${md(b)}</span>`;
+      }else{
+        s+='<span class="mck-dot locked" title="尚未開通（需繳下一期）">🔒</span>';
+      }
     }else if(di<done.length){ // 已上完 → 反白
       s+=`<span class="mck-dot done" title="已完成 ${done[di].date||''}">✓</span>`; di++;
     }else if(bi<booked.length){ // 已預約未上 → 標日期
