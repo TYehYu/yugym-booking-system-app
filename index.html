@@ -4296,6 +4296,7 @@ if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONF
 // 可於瀏覽器 Console 暫時開啟測試：window.FEATURE_FLAGS.createBookingRpc = true
 window.FEATURE_FLAGS = Object.assign({
   createBookingRpc: false,   // 建立預約改走資料庫 RPC fn_create_booking（單人：私教/友善/自主）
+  cancelBookingRpc: false,   // 取消改走 fn_cancel_booking（僅單人、有 ticket_id、自動政策；其餘走舊邏輯）
 }, window.FEATURE_FLAGS||{});
 
 function openDB(){ return Promise.resolve(); }  // 純雲端不需本機 DB
@@ -11466,6 +11467,34 @@ function hoursUntilStart(b){
 async function cancelBooking(id, refundMode){
   const b=await dbGet('bookings',id);
   if(!b)return;
+
+  // ── Sprint 3：混合取消分流 ──
+  // 僅「單人課 + 有 ticket_id（新制）+ 自動政策」走 RPC；團課、legacy 無票、強制退/不退一律走下方舊邏輯。
+  // RPC 成功即 return；任何未成功（連線錯誤或 ok:false）→ 回退舊邏輯（RPC 為單一交易，失敗不留痕，回退安全）。
+  const cancelRpcEligible = window.FEATURE_FLAGS && FEATURE_FLAGS.cancelBookingRpc && CLOUD
+      && b.ticket_id && b.category!=='小班肌力'
+      && refundMode!=='force' && refundMode!=='none';
+  if(cancelRpcEligible){
+    let res;
+    try{ res=await sb.rpc('fn_cancel_booking',{p_booking_id:id,p_reason:null}); }
+    catch(e){ res={error:e}; }
+    if(res && !res.error && res.data && res.data.ok){
+      const refunded = res.data.cancellation_result==='refunded';
+      try{
+        const when=`（${b.date} ${b.start_time}）`;
+        const body = refunded
+          ? `您的${b.category}${when}已取消，票券已退回 1 堂。`
+          : `您的${b.category}${when}已取消。因開課 24 小時內取消，本次恕不退回票券。`;
+        if(b.member_id) await pushNotification(b.member_id,'cancel','預約已取消',body);
+      }catch(_){}
+      closeModal();
+      showToast(refunded?'已取消預約，退回 1 堂票券':'已取消預約（24 小時內，扣課不退）');
+      navTo(CUR_PAGE);
+      return;
+    }
+    console.error('RPC 取消未成功，回退前端舊邏輯：', res && (res.error || res.data));
+  }
+
   b.status='cancelled';
   b.cancelled_at=new Date().toISOString();
   await dbPut('bookings',b);
