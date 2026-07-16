@@ -8,7 +8,7 @@
   - 前段：CSS（`<style>` 至約 4157 行）
   - 第一段 `<script>`（約 4278–5493 行）：資料層、登入/Session、權限、路由骨架
   - 第二段 `<script>`（5494 行起）：所有頁面 `PAGES.*`（約 40 頁）與業務邏輯
-- `config.js` — Supabase URL + anon key（不進版控；沒有它會無法連線）
+- `config.js` — Supabase URL + anon key（進版控，Pages 部署需要它；anon key 是公開金鑰，由 RLS 保護）
 - `YUGYM-MVP2-Supabase遷移.md` — 建表 SQL、RLS 策略、遷移設計文件
 
 ## 每次改版必做
@@ -37,6 +37,14 @@
 - 員工：`{帳號}@staff.yugym.local`
 
 登入後組出 `SESSION = { role, id, name }`；角色為 `admin / front_desk / coach / member`。員工邀請流程用 `employees.invite_token`（匿名可憑 token 讀單筆）。
+
+## 部署（正式環境）
+
+- GitHub 倉庫：`TYehYu/yugym-booking-system-app`（公開），主分支 `master`
+- 正式網址：https://tyehyu.github.io/yugym-booking-system-app/ （GitHub Pages，從 master 根目錄出）
+- **推上 master = 直接上線**（櫃台/教練/會員實際在用），約 1–2 分鐘生效。推送前務必確認改動已驗證。
+- 舊的手動上傳時代備份在 `backup-260716-manual-era` 分支。
+- 倉庫裡的 `js/ css/ docs/` 等資料夾是舊版遺留檔案，現行系統只用 `index.html + config.js`。
 
 ## 開發與測試
 
