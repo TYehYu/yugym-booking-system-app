@@ -4292,6 +4292,12 @@ const APP_VERSION_LABEL='v260716.1213';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
+// ── Sprint 3 功能旗標（預設全關；逐一驗證通過才個別開啟，方便隨時回退）──
+// 可於瀏覽器 Console 暫時開啟測試：window.FEATURE_FLAGS.createBookingRpc = true
+window.FEATURE_FLAGS = Object.assign({
+  createBookingRpc: false,   // 建立預約改走資料庫 RPC fn_create_booking（單人：私教/友善/自主）
+}, window.FEATURE_FLAGS||{});
+
 function openDB(){ return Promise.resolve(); }  // 純雲端不需本機 DB
 
 // ── 統一資料存取（全走 Supabase；介面與舊版相同，呼叫端不用改）──
@@ -6417,6 +6423,44 @@ async function refundTicket(ticket_id,booking_id,operator){
   if(t.status==='used_up'&&t.sessions_remaining>0) t.status='usable';
   await dbPut('member_tickets',t);
   await logTicket(ticket_id,'refund',1,booking_id,operator,'取消退課');
+}
+// ── Sprint 3：建立預約 RPC 相關輔助（旗標關閉時完全不會被呼叫）──
+// 由票種反推 benefit_type（後端 RPC 靠此決定扣哪種票）；查不到回 null
+function benefitTypeOfTypeId(type_id){
+  const tt=(window._ttCache||[]).find(x=>x.id===type_id);
+  return (tt&&tt.benefit_type)||null;
+}
+// 一般路徑（私教/友善/自主）預設用一般區；團課/跑步機為獨立流程，暫不在本旗標範圍
+function spaceForBooking(category){
+  return { space:'general', resource:'general_area' };
+}
+// RPC 錯誤碼 → 中文提示
+function rpcBookingErrMsg(code){
+  const M={
+    'BOOKING.TIME_CONFLICT':'教練該時段已有課',
+    'BOOKING.SPACE_FULL':'一般區該時段已滿（上限 3）',
+    'BOOKING.RESOURCE_BUSY':'該場地／資源該時段已被預約',
+    'BOOKING.RESOURCE_MAINTENANCE':'該資源維修中，暫不可預約',
+    'TICKET.EMPTY':'會員無可用票券',
+    'TICKET.EXPIRED':'會員票券已過期',
+    'POINT.EMPTY':'會員自主訓練點數不足',
+  };
+  return M[code]||('建立失敗：'+(code||'未知錯誤'));
+}
+// 呼叫 fn_create_booking；回傳 {ok:true} 或 {ok:false, reason}
+async function createBookingViaRpc(o, tk, ds){
+  const bt=benefitTypeOfTypeId((tk&&tk.ticket_type_id)||o.type_id);
+  if(!bt) return { ok:false, reason:'無法判斷票券類型（benefit_type）' };  // 保險：回報而非誤扣
+  const sp=spaceForBooking(o.category);
+  const { data, error } = await sb.rpc('fn_create_booking', {
+    p_member_id:o.member_id, p_coach_id:o.coach_id||null,
+    p_category:o.category, p_benefit_type:bt,
+    p_date:ds, p_start_time:o.time, p_duration:o.duration||60,
+    p_space_id:sp.space, p_resource_id:sp.resource, p_note:null
+  });
+  if(error) return { ok:false, reason:'連線失敗：'+(error.message||error) };
+  if(data && data.ok) return { ok:true, booking_id:data.booking_id };
+  return { ok:false, reason:rpcBookingErrMsg(data && data.error_code) };
 }
 // 一鍵補發補課券：綁原課同類型，1 堂，效期 14 天，source='makeup'
 async function grantMakeupTicket(booking){
@@ -10682,9 +10726,17 @@ async function runRecurringBooking(opts){
     const verr=await validateBooking(bk, ds, o.time, dur);
     if(verr){ skipped++; results.push({date:ds,ok:false,reason:verr}); continue; }
     try{
-      await dbPut('bookings', bk);
-      if(tk) await deductTicket(tk, bk.id, operator);
-      ok++; results.push({date:ds,ok:true});
+      if(window.FEATURE_FLAGS&&FEATURE_FLAGS.createBookingRpc&&CLOUD&&!noDeduct&&tk){
+        // ── Sprint 3：改由後端 RPC 單一交易建立＋扣票（旗標開啟時）──
+        const rr=await createBookingViaRpc(o, tk, ds);
+        if(rr.ok){ ok++; results.push({date:ds,ok:true}); }
+        else { skipped++; results.push({date:ds,ok:false,reason:rr.reason}); }
+      } else {
+        // ── 原路徑（旗標關閉，維持與過往完全一致）──
+        await dbPut('bookings', bk);
+        if(tk) await deductTicket(tk, bk.id, operator);
+        ok++; results.push({date:ds,ok:true});
+      }
     }catch(e){ skipped++; results.push({date:ds,ok:false,reason:'寫入失敗'}); }
   }
   return { ok, skipped, noTicket, total, results, capped, remainTotal };
