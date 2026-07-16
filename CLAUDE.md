@@ -44,7 +44,8 @@
 - 正式網址：https://tyehyu.github.io/yugym-booking-system-app/ （GitHub Pages，從 master 根目錄出）
 - **推上 master = 直接上線**（櫃台/教練/會員實際在用），約 1–2 分鐘生效。推送前務必確認改動已驗證。
 - 舊的手動上傳時代備份在 `backup-260716-manual-era` 分支。
-- 倉庫裡的 `js/ css/ docs/` 等資料夾是舊版遺留檔案，現行系統只用 `index.html + config.js`。
+- 現行系統的執行檔只有 `index.html + config.js`，另加 PWA 三件組（`manifest.json` / `sw.js` / `icon-192.png` / `icon-512.png`，`index.html` 有掛載與註冊，勿刪）。
+- `docs/` 是**現行**文件（設計、安全模型、測試結果、migration），非遺留檔案。舊版（Codex 時代）的 `js/`、`css/`、`assets/` 與 5 月份文件已於 2026-07-16 清除，需要時可從 git 歷史取回。
 
 ## 開發與測試
 

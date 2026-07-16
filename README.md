@@ -1,61 +1,33 @@
 # 有肌訓練預約管理系統
 
-這是一個給健身房後台使用的預約與會員管理原型，重點是讓老闆、店長或櫃台可以快速查看預約、管理會員票券、安排教練課與團體課。
+健身房預約與營運管理系統（MVP 2.0），供管理員、櫃台、教練、會員四種角色使用，共用同一份 Supabase 雲端資料。
 
-## 目前狀態
+正式網址：https://tyehyu.github.io/yugym-booking-system-app/
 
-- 可在本機瀏覽器操作。
-- 目前預設使用展示資料，不會連到真實會員資料庫。
-- 資料主要存在瀏覽器本機，若要多台電腦共用資料，需要接上 Supabase 或其他後端資料庫。
-- 會員真實資料不要上傳到 GitHub 或公開雲端資料夾。
+## 功能範圍
 
-## 如何開啟
+預約行事曆、會員與票券管理、教練課與團體課、簽到與出席、員工排班與出勤、營運分析與財務摘要。
 
-最簡單方式：
+## 技術架構
 
-1. 點兩下 `開啟預約系統.bat`。
-2. 等黑色視窗出現啟動訊息。
-3. 開啟 `http://127.0.0.1:8765/index.html`。
-4. 使用期間請保留黑色視窗；關掉視窗後，本機網址會停止服務。
-
-如果只是看靜態頁，也可以直接打開 `index.html`，但建議用本機網址測試，畫面與功能比較穩定。
+單一 `index.html`（約 22,000 行），無建置流程、無框架，純 HTML/CSS/JS；資料層走 Supabase（含 RLS 與資料庫 RPC）。部署由 GitHub Pages 從 `master` 根目錄直出。
 
 ## 主要檔案
 
-- `index.html`：頁面結構。
-- `css/app.css`：畫面樣式。
-- `js/app.js`：預約、會員、課程、教練與資料邏輯。
-- `assets/`：Logo 與圖片素材。
-- `docs/`：系統規則、專案結構、跨電腦開發說明。
-- `supabase-schema.sql`：Supabase 資料表建立語法。
-- `SUPABASE_SETUP.md`：Supabase 設定說明。
+- `index.html` — 整個應用程式
+- `config.js` — Supabase 連線設定（anon key 為公開金鑰，由 RLS 保護）
+- `manifest.json`、`sw.js`、`icon-*.png` — PWA（可加到手機桌面）
+- `開啟預約系統.bat` — 本機預覽（啟動 `preview-server.ps1`，埠 8765）
+- `docs/` — 設計、安全模型、測試結果與 migration
+- `YUGYM-MVP2-Supabase遷移.md` — 建表 SQL 與遷移設計
 
-## 接續開發先看
+## 接手開發先看
 
-如果隔天、換電腦、或換人接手，請先看：
+1. `CLAUDE.md` — 開發慣例與資料層規則
+2. `docs/HANDOFF.md` — 目前狀態、待辦、回退方法
+3. `docs/SECURITY_MODEL.md` — 角色與 RLS 設計
 
-- `docs/CURRENT_STATUS.md`
-- `docs/NEXT_ACTIONS.md`
-- `docs/SYSTEM_RULES.md`
-- `docs/PROJECT_STRUCTURE.md`
-- `docs/MAINTENANCE.md`
+## 注意事項
 
-## GitHub 與跨電腦工作
-
-程式碼可以放在 GitHub，這樣家裡與公司都可以接續更新同一個專案。
-
-注意：GitHub 同步的是「程式碼」，不是每台瀏覽器裡的本機操作資料。正式要讓家裡、公司、員工端共用同一份會員與預約資料，需要接 Supabase。
-
-詳細流程請看：
-
-- `docs/WORK_FROM_COMPANY.md`
-- `SUPABASE_SETUP.md`
-
-## 隱私提醒
-
-這個專案可能會處理真實會員姓名、電話、生日、付款與預約紀錄。正式使用前，請先完成：
-
-- 移除測試用或真實匯入的 Excel 檔。
-- 確認 `.gitignore` 有排除會員清單、CSV、Excel。
-- 資料庫開啟權限控管。
-- 員工帳號與操作權限分級。
+- **推上 `master` = 直接上線**，櫃台與教練實際在用，推送前務必確認改動已驗證。
+- 本專案處理真實會員個資，勿將會員清單、CSV、Excel 進版控，亦勿把真實個資搬到測試環境或本機。

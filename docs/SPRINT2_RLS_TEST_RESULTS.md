@@ -9,7 +9,8 @@
 
 RLS 收斂後，四角色隔離全部正確。**「未登入即讀全部個資」的漏洞已封閉。** 可作為正式套用的依據（正式套用仍需先做前端各頁回歸，見 §4）。
 
-四個測試帳號（皆密碼 yugym-test-123）：admin / fd / coach@staff.yugym.local、0900000001@member.yugym.local（綁 m_reg）。
+四個測試帳號：admin / fd / coach@staff.yugym.local、0900000001@member.yugym.local（綁 m_reg）。
+**密碼另行私下保管，不寫入本 repo（repo 為公開）。**
 
 ---
 

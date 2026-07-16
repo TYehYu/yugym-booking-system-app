@@ -2314,6 +2314,7 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 #toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
 
 /* 行事曆 — 30分鐘格時間軸 */
+/* 高度由 fitCalWrapHeight() 於渲染後量測實際位置後覆寫；此處僅為 JS 執行前的後備值。 */
 .cal-wrap{background:transparent;border:none;border-radius:14px;overflow:visible;display:flex;flex-direction:column;max-height:calc(100vh - 88px);height:calc(100vh - 88px);}
 .cal-head{display:flex;align-items:center;justify-content:space-between;padding:4px 2px 12px;border-bottom:none;gap:16px;flex-wrap:nowrap;flex-shrink:0;background:transparent;}
 .cal-head-left{display:flex;align-items:center;gap:16px;flex:0 0 auto;}
@@ -4287,8 +4288,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260716.1830';
-const APP_VERSION_LABEL='v260716.1830';
+const APP_VERSION='260716.2130';
+const APP_VERSION_LABEL='v260716.2130';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -5257,9 +5258,11 @@ function openMoreMenu(){
 async function refreshMoreNotifDot(){
   try{
     if(!SESSION) return;
+    // recipient_type 列舉只有 member|coach，admin/front_desk 不是合法值，查了會回 400。
+    // 目前 pushNotification 一律發給 member，故其他角色直接視為無通知。
+    const rtype=SESSION.role==='member'?'member':(SESSION.role==='coach'?'coach':null);
     const rid=SESSION.role==='member'?SESSION.member_id:SESSION.id;
-    const rtype=SESSION.role==='member'?'member':(SESSION.role==='coach'?'coach':'admin');
-    const ns=(await sb.from('notifications').select('id,read').eq('recipient_id',rid).eq('recipient_type',rtype).eq('read',false)).data||[];
+    const ns=rtype?((await sb.from('notifications').select('id,read').eq('recipient_id',rid).eq('recipient_type',rtype).eq('read',false)).data||[]):[];
     const dot=document.getElementById('more-notif-dot');
     if(dot) dot.style.display=ns.length>0?'inline-block':'none';
     // 帳戶抽屜內的通知紅點 + 帳戶按鈕總紅點
@@ -5364,6 +5367,11 @@ function groupOfPage(pageKey){
 const SCOPE_PAGES=['attendance','coach_shifts','coach_salary','calendar','m_tickets','m_bookings','m_training','m_payments'];
 function navTo(key, gkey){
   if(key==='more_menu'){ openMoreMenu(); return; }
+  // 重繪目前頁（簽到、取消、行事曆篩選等 30 處都用 navTo(CUR_PAGE)）時保留捲動位置。
+  // C.innerHTML 置換會讓頁面高度瞬間歸零，瀏覽器把捲動夾回頂端 —— 連續簽到會一直跳回上方。
+  // 真正切換頁面時不還原，維持從頂端開始閱讀。
+  const _keepScroll = (CUR_PAGE===key);
+  const _scrollY = _keepScroll ? (window.scrollY || document.documentElement.scrollTop || 0) : 0;
   // 切到不支援上下文的頁面 → 清除，避免殘留篩選
   if(SCOPE.id && !SCOPE._entering && SCOPE_PAGES.indexOf(key)<0) scopeClear();
   SCOPE._entering=false;
@@ -5397,6 +5405,7 @@ function navTo(key, gkey){
   if(isNav2){ CUR_SUBPAGE=key; CUR_GROUP=gkey; }
   Promise.resolve(PAGES[key]()).then(()=>{
     if(isNav2) wrapNav2(gkey, key); // 頁面渲染到 C 後，包進左側次選單版面
+    if(_keepScroll && _scrollY) window.scrollTo({top:_scrollY}); // 內容就位後才還原，否則會被夾回頂端
   }).catch(e=>{
     console.error('頁面執行錯誤 '+key+':',e);
     C.innerHTML='<div class="empty"><div class="em-t">資料載入錯誤</div><div style="font-size:11px;margin-top:6px;color:var(--danger);">'+(e&&e.message?e.message:e)+'</div></div>';
@@ -9035,6 +9044,22 @@ function confirmCalMove(b,od,ot,odur, nd,nt,ndur, onYes){
     </div>`);
 }
 
+/* 行事曆填滿視窗剩餘高度。
+   CSS 原本寫死 height:calc(100vh - 88px)，該數字是依手機版（topbar 54~64px + padding）
+   推算的；桌機 mc-mode 為側邊欄版面、topbar 高度為 0，仍扣 88px 就會在下方留下空白，
+   少顯示約一小時的課。且 .content 的 padding 在 mc-mode / desktop-wide / 行事曆頁專屬
+   三條規則間互相覆蓋（10/12/14px 不等），寫死數字無法同時滿足所有情況。
+   改為量測 .cal-wrap 實際的視窗上緣距離再回推高度，各版面皆自動正確。 */
+function fitCalWrapHeight(){
+  const w=document.querySelector('.cal-wrap'); if(!w) return;
+  const top=w.getBoundingClientRect().top; // 視窗相對位置，正是我們要扣掉的頭部高度
+  const gap=14; // 底部留白
+  const h=Math.max(360, Math.round(window.innerHeight - top - gap)); // 下限 360px，避免極端視窗下算出過小值
+  w.style.height=h+'px';
+  w.style.maxHeight=h+'px';
+}
+window.addEventListener('resize',()=>{ if(document.querySelector('.cal-wrap')) fitCalWrapHeight(); });
+
 PAGES.calendar=async function(){
   window._calMode='admin';
   window._calStepping=false;
@@ -9069,6 +9094,7 @@ PAGES.calendar=async function(){
   initCalDrag();
   initCalSwipe(document.querySelector('.cal-body')); // 左右滑換週（含手機）
   initCalHoverPreview(); // Phase 3：日檢視 Hover 新增預覽卡
+  fitCalWrapHeight(); // 填滿視窗剩餘高度（須在內容進 DOM 後量測）
   // 還原捲動位置（拖曳移動/操作後不跳回 08:00）
   if(window._calScrollTop!=null){
     const _sb=document.querySelector('.cal-body');

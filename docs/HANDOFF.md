@@ -21,7 +21,14 @@ Sprint 2（RLS 安全收斂）+ Sprint 3（預約/取消/簽到改走資料庫 R
 - ✅ Sprint 1 盤點、2.5 票券對應：見 `docs/SPRINT1_SYSTEM_AUDIT.md`、`docs/SPRINT2_5_BENEFIT_MAPPING_AUDIT.md`
 - ✅ Sprint 2 RLS 收斂：設計 `docs/SPRINT2_RLS_DESIGN.md`、`docs/SECURITY_MODEL.md`；測試 `docs/SPRINT2_RLS_TEST_RESULTS.md`；已套正式（`docs/migrations/20260716_03_rls_hardening.sql`）。未登入讀 members/tickets 已為 0。
 - ✅ Sprint 3 RPC 切換：計畫 `docs/SPRINT3_RPC_MIGRATION_PLAN.md`；測試 `docs/SPRINT3_RPC_TEST_RESULTS.md`；前端狀態 `docs/SPRINT3_FRONTEND_STATUS.md`；正式已套 `docs/migrations/20260716_01_*.sql`、`_02_*.sql`。
-- ✅ Baseline schema（補回 migration 歷史）：`docs/migrations/0000_*.sql`、`0001_*.sql`。
+- ✅ Baseline schema（補回 migration 歷史）：`docs/migrations/0000_*.sql`、`0001_*.sql`
+- ✅ **RPC 授權收斂（2026-07-16 深夜，已套正式）**：`docs/migrations/20260716_04_rpc_authz_hardening.sql`
+  - 背景：`fn_*` / `benefit_*` 皆為 SECURITY DEFINER（設計上繞過 RLS），但 EXECUTE 沿用 PostgreSQL 預設值（授予 PUBLIC），且身分檢查不一致（僅 `fn_checkin_booking` 有做）。Sprint 2 的 RLS 只約束直接讀寫資料表，不涵蓋此路徑。
+  - 修法：內部函式（`benefit_consume/benefit_refund/handle_checkin_reward/space_check/rls_auto_enable`）收回外部 EXECUTE；`fn_create_booking`/`fn_cancel_booking` 補身分檢查（比照 `fn_checkin_booking`）；三支前端 RPC 收回 anon、僅 authenticated 可呼叫。詳見 migration 檔內說明與檢查清單。
+  - 已驗證：測試庫未登入呼叫全擋（42501）、員工建立/簽到/取消三流程正常（扣退票正確）、會員無法越權操作他人資料（AUTH.FORBIDDEN）；正式庫已確認並比對授權矩陣。
+  - 查核：正式庫 `ticket_logs` 全數為正常人員操作，無異常紀錄。
+- ✅ **教練無法下班打卡修復（已套正式）**：`docs/migrations/20260716_05_fix_attendance_self_write.sql`
+  - Sprint 2 RLS 收斂將 `attendance` 的 `att_self` 寫成僅 `for select`，教練對自己的出勤只能讀不能寫，`punchOut()` 的 upsert 被擋。同份 migration 的 `punch_requests` 用相同條件卻給 `for all`，判定為漏寫。已比照改為 `for all`，範圍仍限縮 `emp_id = current_employee_id()`。。
 
 ## 4. 待辦（接手後要做的）
 
