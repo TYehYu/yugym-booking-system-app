@@ -4297,6 +4297,7 @@ if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONF
 window.FEATURE_FLAGS = Object.assign({
   createBookingRpc: false,   // 建立預約改走資料庫 RPC fn_create_booking（單人：私教/友善/自主）
   cancelBookingRpc: false,   // 取消改走 fn_cancel_booking（僅單人、有 ticket_id、自動政策；其餘走舊邏輯）
+  checkinBookingRpc: false,  // 簽到改走 fn_checkin_booking（後端發點；保留前端 30 分鐘時間限制）
 }, window.FEATURE_FLAGS||{});
 
 function openDB(){ return Promise.resolve(); }  // 純雲端不需本機 DB
@@ -11046,6 +11047,26 @@ async function checkInBooking(id, opts){  opts=opts||{};
     showToast('尚未開放簽到（課程開始前 30 分鐘起）');
     return false;
   }
+  // ── Sprint 3：簽到改走 RPC（旗標開啟時；發點由後端 handle_checkin_reward 統一處理）──
+  // 已通過上方「開課前 30 分鐘」時間限制。RPC 成功即 return；未成功回退舊邏輯（RPC 單一交易，回退安全）。
+  if(window.FEATURE_FLAGS && FEATURE_FLAGS.checkinBookingRpc && CLOUD){
+    const src = (window.SESSION && SESSION.role==='member') ? 'member_app'
+              : (window.SESSION && SESSION.role==='coach') ? 'coach' : 'front_desk';
+    let res;
+    try{ res=await sb.rpc('fn_checkin_booking',{p_booking_id:id,p_checkin_source:src}); }
+    catch(e){ res={error:e}; }
+    if(res && !res.error && res.data && res.data.ok){
+      const granted = res.data.reward_status==='issued';
+      try{ await markTicketUsedIfDone(b.ticket_id); }catch(_){}  // used_up 標記維持前端（RPC 不處理）
+      if(opts.silent) return true;
+      closeModal();
+      showToast('已簽到'+(granted?'，已發放自主訓練點數 2 點':''));
+      navTo(CUR_PAGE);
+      return true;
+    }
+    console.error('RPC 簽到未成功，回退前端舊邏輯：', res && (res.error || res.data));
+  }
+
   b.status='checked_in';
   b.checked_in_at=new Date().toISOString();
   await dbPut('bookings',b);
