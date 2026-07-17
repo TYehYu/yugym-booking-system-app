@@ -4533,8 +4533,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260717.1303';
-const APP_VERSION_LABEL='v260717.1303';
+const APP_VERSION='260717.1406';
+const APP_VERSION_LABEL='v260717.1406';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10562,11 +10562,26 @@ function bkTimeOptions(selected){
   }
   return html;
 }
+/* 這個課程類型是否必須指定授課教練。
+   以 category 為準，而非只看票種上的 requires_coach 旗標 —— 該旗標是可在後台設定的，
+   設錯就會產生語意上不可能的預約：
+     正式庫的「VIP 教練課」與「限定教練課」category 皆為「私人教練」，但 requires_coach
+     都是 false。實測可重現：從「新增預約」選這類課，教練欄根本不會出現，送出後建立一堂
+     coach_id 為 null 的私人教練課 —— 票照扣 1 堂，但它不會出現在任何教練的今日任務裡，
+     也沒有人能替它簽到。「限定教練課」目前仍有 10 堂可用，是活的風險。
+     （正式庫現存 1,291 筆私人教練預約皆有教練，因櫃台習慣從行事曆點格子建立；但首頁
+       「新增預約」這條路徑沒有這層保護。）
+   一對一教練課、運動按摩、體驗、團體課都必須有人；只有「自主訓練」是會員自己練，不需要。
+   requires_coach 保留為「額外要求」——其他類別若設了 true 仍會要求教練。 */
+const BK_COACH_REQUIRED_CATS=['私人教練','體驗','小班肌力','運動按摩'];
+function bkNeedCoach(t){
+  return !!t && (BK_COACH_REQUIRED_CATS.includes(t.category) || !!t.requires_coach);
+}
 async function onBkTypeChange(){
   const types=await dbGetAll('ticket_types');
   const tid=document.getElementById('bk-type').value;
   const t=types.find(x=>x.id===tid);
-  const needCoach = t && (t.requires_coach || t.category==='體驗' || t.category==='小班肌力');
+  const needCoach = bkNeedCoach(t);
   const row=document.getElementById('bk-coach-row');
   if(row){ row.style.display=needCoach?'block':'none'; if(needCoach) renderBkCoachCards(); } // 教練端無此 row（已固定自己）
 }
@@ -10577,7 +10592,7 @@ async function bkStep2(){
   const types=await dbGetAll('ticket_types');
   window._ttCache=types;
   const t=types.find(x=>x.id===type_id);
-  const needCoach = t.requires_coach || t.category==='體驗' || t.category==='小班肌力'; // 體驗/團體課強制要教練
+  const needCoach = bkNeedCoach(t);   // 與 onBkTypeChange() 共用同一判斷，避免兩處各寫一份而漂移
   const coachEl=document.getElementById('bk-coach');
   // 教練端：永遠用自己；管理員/櫃台：需要教練的類型才取下拉值
   const coach_id = window._bkSelfCoach ? window._bkSelfCoach : (needCoach ? (coachEl?coachEl.value:'') : null);
