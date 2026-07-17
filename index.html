@@ -3349,6 +3349,18 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   .mc-dash-side{--slime-min:100%;}
 }
 
+/* 票券列表的搜尋 / 篩選列 */
+.tk-filter{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
+.tk-search{flex:1;min-width:220px;padding:8px 12px;border:1px solid var(--border-light);border-radius:10px;font-size:13px;font-family:inherit;background:var(--surface-3);color:var(--text-primary);}
+.tk-search:focus{outline:none;border-color:var(--brand);background:var(--surface-2);}
+.tk-st{padding:8px 10px;border:1px solid var(--border-light);border-radius:10px;font-size:13px;font-family:inherit;background:var(--surface-3);color:var(--text-primary);cursor:pointer;}
+.tk-count{font-size:12px;color:var(--text-muted);white-space:nowrap;}
+.tk-more{display:flex;justify-content:center;padding-top:12px;}
+/* 發放票券的會員搜尋框（在 #gt-member 之上） */
+.gt-search{width:100%;padding:8px 12px;margin-bottom:6px;border:1px solid var(--border-light);border-radius:10px;font-size:13px;font-family:inherit;background:var(--surface-3);color:var(--text-primary);}
+.gt-search:focus{outline:none;border-color:var(--brand);background:var(--surface-2);}
+.gt-hint{font-size:11.5px;color:var(--text-muted);margin-top:4px;min-height:14px;}
+
 /* ── 收回 .desktop-wide .card 搶走的控制權 ──
    2711 行的 .desktop-wide .card{padding:26px 28px;margin-bottom:22px} 特異度 (0,2,0)，
    會蓋掉本區各卡自己宣告的 padding 與 .mc-card{margin:0}（皆為 (0,1,0)）。實測後果：
@@ -4521,8 +4533,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260717.1033';
-const APP_VERSION_LABEL='v260717.1033';
+const APP_VERSION='260717.1303';
+const APP_VERSION_LABEL='v260717.1303';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7516,7 +7528,7 @@ PAGES.g_dashboard=async function(){
     <div class="mc-quick-tools mc-quick-tools-4">
       <button class="mc-qtool" onclick="openBookingModal()">${OPS_TODO_IC.calendar}<span>新增預約</span></button>
       <button class="mc-qtool" onclick="openBackofficeMember()">${ICONS.people}<span>新增會員</span></button>
-      <button class="mc-qtool" onclick="navTo('ticketing','g_finance')">${OPS_TODO_IC.ticket}<span>售票 / 儲值</span></button>
+      <button class="mc-qtool" onclick="goIssueTicket()">${OPS_TODO_IC.ticket}<span>售票 / 儲值</span></button>
       <button class="mc-qtool" onclick="navTo('scan_checkin','g_booking')">${OPS_TODO_IC.check}<span>簽到管理</span></button>
     </div>
   </div>`;
@@ -16352,6 +16364,14 @@ function setTkTab(k){
   if(k==='plans' && window._plansHost==='settings'){ navTo('settings_ticket','g_settings'); return; }
   _tkTab=k; navTo('ticketing');
 }
+/* 首頁快速操作「售票 / 儲值」的進入點。
+   直接落在「會員票券」分頁 —— 發放票券的入口（＋ 發放票券）在那裡。
+   原本走 navTo('ticketing','g_finance')，會停在預設的 _tkTab='purchase_review'（購買申請），
+   那是審核佇列、櫃台要幫客人儲值時它通常是空的（實測顯示「目前沒有待審核的申請」），
+   還得自己再點一次分頁才找得到入口。
+   寫成具名函式而非在 onclick 裡直接改 _tkTab：後者依賴 inline handler 的作用域鏈能碰到
+   top-level let，過於隱晦且容易在改版時失效。 */
+function goIssueTicket(){ _tkTab='tickets'; navTo('ticketing','g_finance'); }
 PAGES.ticketing=async function(){
   window._plansHost=null;
   const tab=TK_TABS.find(t=>t.key===_tkTab)||TK_TABS[0];
@@ -16768,16 +16788,55 @@ PAGES.m_payments=async function(){
 };
 
 
+/* 票券列表的搜尋條件（跨重繪保留，故放在模組層而非函式內）*/
+let _tkQuery='', _tkStatus='usable';
+const TK_PAGE=100;   // 單次顯示上限
+let _tkShown=TK_PAGE;
+function tkSearch(v){ _tkQuery=v; _tkShown=TK_PAGE; PAGES.tickets(); }
+function tkStatusFilter(v){ _tkStatus=v; _tkShown=TK_PAGE; PAGES.tickets(); }
+function tkShowMore(){ _tkShown+=TK_PAGE; PAGES.tickets(); }
+
 PAGES.tickets=async function(){
   const[tickets,members,types,plans]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('members'),dbGetAll('ticket_types'),dbGetAll('course_plans')]);
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memPhone=Object.fromEntries(members.map(m=>[m.id,normPhone(m.phone)]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const stLabel={usable:'可用',used_up:'用畢',expired:'過期',refunded:'已退'};
   const stTag={usable:'tag-ok',used_up:'tag-warn',expired:'tag-danger',refunded:'tag-danger'};
+
+  /* 搜尋 / 篩選 / 限筆 —— 正式庫有 2,229 筆票券，原本一次全部渲染成 <tr>，既慢又沒有任何
+     方法找到特定會員的票（無搜尋框）。櫃台每天要用它查客人剩幾堂，這是必要的。
+     預設只看「可用」：用畢／過期／已退是歷史資料，日常操作不需要看到（正式庫 2,229 筆中
+     光是已用畢的舊匯入票券就佔了大多數）。
+     搜尋同時比對會員姓名與手機 —— 櫃台手上通常只有其中一個。手機比對前先 normPhone，
+     使用者輸入 0912-345-678 也要找得到。 */
+  const q=_tkQuery.trim();
+  const qPhone=normPhone(q);
+  let list=tickets.filter(t=>{
+    if(_tkStatus!=='all' && t.status!==_tkStatus) return false;
+    if(!q) return true;
+    const nm=memMap[t.member_id]||'';
+    const ph=memPhone[t.member_id]||'';
+    return nm.includes(q) || (qPhone && ph.includes(qPhone)) || (t.plan_name||'').includes(q);
+  });
+  const total=list.length;
+  list=list.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  const shown=list.slice(0,_tkShown);
+
+  const stOpt=(v,label)=>`<option value="${v}" ${_tkStatus===v?'selected':''}>${label}</option>`;
   (document.getElementById('tk-body')||{innerHTML:''}).innerHTML=
   `<div class="card"><div class="card-title">票券列表 <button class="btn btn-green btn-sm" onclick="openGrantModal()">＋ 發放票券</button></div>
+    <div class="tk-filter">
+      <input id="tk-q" class="tk-search" placeholder="搜尋會員姓名 / 手機 / 方案名稱" value="${_tkQuery.replace(/"/g,'&quot;')}"
+             oninput="clearTimeout(window._tkT);window._tkT=setTimeout(()=>tkSearch(this.value),250)">
+      <select class="tk-st" onchange="tkStatusFilter(this.value)">
+        ${stOpt('usable','可用')}${stOpt('used_up','用畢')}${stOpt('expired','過期')}${stOpt('refunded','已退')}${stOpt('all','全部狀態')}
+      </select>
+      <span class="tk-count">${total} 筆${total>shown.length?`（顯示前 ${shown.length}）`:''}</span>
+    </div>
+    ${total===0?'<div class="empty"><div class="em-t">找不到符合的票券</div></div>':`
     <table class="rwd-card"><thead><tr><th>方案 / 類型</th><th>會員</th><th>剩餘 / 總</th><th>到期日</th><th>來源</th><th>狀態</th><th></th></tr></thead><tbody>
-    ${tickets.sort((a,b)=>b.created_at.localeCompare(a.created_at)).map(t=>{const ty=typeMap[t.ticket_type_id];return `<tr>
+    ${shown.map(t=>{const ty=typeMap[t.ticket_type_id];return `<tr>
       <td data-label="方案" class="cell-stack"><div style="font-weight:600;">${t.plan_name||(ty?ty.name:'—')}</div><div><span class="tag tag-${ty?ty.color:'pt'}">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span></div></td>
       <td data-label="會員">${memMap[t.member_id]||'—'}</td>
       <td data-label="剩餘 / 總" class="num">${t.sessions_remaining} / ${t.sessions_total}</td>
@@ -16790,19 +16849,51 @@ PAGES.tickets=async function(){
       <td class="rwd-actions" data-label=""><button class="btn btn-ghost btn-sm" onclick="viewLogs('${t.id}')">詳細</button></td>
     </tr>`;}).join('')}
     </tbody></table>
+    ${total>shown.length?`<div class="tk-more"><button class="btn btn-ghost btn-sm" onclick="tkShowMore()">顯示更多（還有 ${total-shown.length} 筆）</button></div>`:''}`}
   </div>`;
 };
 function srcLabel(s){return {purchase:'購買',checkin_grant:'簽到送',makeup:'補課',manual:'手動'}[s]||s;}
+/* 發放票券的會員搜尋：即時過濾 #gt-member 的選項。
+   只動選項、不動 select 本身 —— 下游都靠 gt-member.value 取 member id。
+   過濾後若原選取者已不在清單中，select.value 會自動落到第一個選項，故要重新整理方案清單，
+   否則畫面上的會員與下方方案／價格會對不起來。 */
+function filterGrantMembers(q){
+  const sel=document.getElementById('gt-member');
+  const hint=document.getElementById('gt-member-hint');
+  if(!sel) return;
+  const prev=sel.value;
+  const all=(window._grantMembers||[]).filter(m=>m.status==='active');
+  const qq=(q||'').trim();
+  const qp=normPhone(qq);
+  const list=qq ? all.filter(m=>(m.name||'').includes(qq) || (qp && normPhone(m.phone).includes(qp))) : all;
+  sel.innerHTML = list.length
+    ? list.map(m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`).join('')
+    : '<option value="">找不到符合的會員</option>';
+  if(list.some(m=>m.id===prev)) sel.value=prev;   // 原選取者仍在清單中就保留，避免手一滑就換人
+  if(hint) hint.textContent = qq ? `符合 ${list.length} 位` : '';
+  if(sel.value!==prev) refreshGrantPlans();
+}
 let _grantPreMember=null;
 async function openGrantModal(){
   const[members,plans,types]=await Promise.all([dbGetAll('members'),dbGetAll('course_plans'),dbGetAll('ticket_types')]);
   window._grantMembers=members; window._grantPlans=plans; window._grantTypes=types;
   const pre=_grantPreMember;
-  const memOpts=members.filter(m=>m.status==='active').map(m=>`<option value="${m.id}" ${pre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
+  const actives=members.filter(m=>m.status==='active');
+  const memOpts=actives.map(m=>`<option value="${m.id}" ${pre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
   showModal(`<div class="modal-title">發放票券</div>
     <!-- 步驟1：選會員 + 模板 -->
     <div class="gt-step" data-gtstep="1">
-      <div class="form-row"><label>會員</label><select id="gt-member" onchange="refreshGrantPlans()">${memOpts}</select></div>
+      <!-- 會員搜尋：正式庫有 432 位會員，原本是一個 432 個選項的 <select>，櫃台要在裡面
+           捲找客人。<select> 本身無法搜尋，故上方加搜尋框即時過濾其選項 —— 保留 select
+           是因為下游（refreshGrantPlans / submitGrant）都讀 gt-member.value 取 member id，
+           改成別的元件風險大。搜尋同時比對姓名與手機，手機比對前 normPhone，客人報
+           0912-345-678 或 0912345678 都找得到。 -->
+      <div class="form-row"><label>會員</label>
+        <input id="gt-member-q" class="gt-search" placeholder="輸入姓名或手機搜尋（共 ${actives.length} 位）"
+               oninput="filterGrantMembers(this.value)" autocomplete="off">
+        <select id="gt-member" onchange="refreshGrantPlans()">${memOpts}</select>
+        <div id="gt-member-hint" class="gt-hint"></div>
+      </div>
       <div class="form-row"><label>選擇票券模板</label>
         <div id="gt-picker" class="gt-picker"></div>
         <select id="gt-plan" onchange="refreshGrantInfo()" style="display:none;"></select>
