@@ -4521,8 +4521,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260717.1002';
-const APP_VERSION_LABEL='v260717.1002';
+const APP_VERSION='260717.1011';
+const APP_VERSION_LABEL='v260717.1011';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -4540,7 +4540,45 @@ function openDB(){ return Promise.resolve(); }  // 純雲端不需本機 DB
 // 分頁抓取：Supabase/PostgREST 單次 select 預設上限 1000 筆，
 // 大表（member_tickets 2000+、bookings 1700+）若不分頁會被截斷，導致排序在後的資料整批讀不到
 // （症狀：某些會員票券顯示 0 堂、行事曆缺課、統計算少）。用 .range() 迴圈抓到底。
-async function dbGetAll(store){
+/* ══════════════════════════════════════════════════════
+   dbGetAll 短期快取（TTL）
+
+   問題（實測，測試庫僅 107 筆資料）：每次切頁都會重複撈同一張表。
+   refreshNavBadges() 先 await dbGetAll('purchase_applications')，接著 getAdminNotifItems()
+   又撈一次 purchase_applications 與一次 bookings，而頁面本身也撈了一次 bookings：
+     會員頁  8 次 dbGetAll，bookings ×2、purchase_applications ×2 → 487ms
+             （前 6 個並行只花 250ms，後 2 個「串行排隊」硬加 237ms）
+     行事曆  8 次 → 973ms
+   重複的第二次是在第一次結束「之後」才發出的，故 in-flight 去重無效，必須是 TTL 快取。
+   正式庫 1,449 筆預約、PostgREST 單次上限 1000 筆 ⇒ 單次 dbGetAll('bookings') 要兩趟
+   round trip，撈兩次就是四趟 —— 這是使用者回報「行事曆操作會 LAG」的主因。
+
+   TTL 取 8 秒：足以涵蓋「一次切頁內的重複」與「連續切頁／切週」，又短到多人同時操作時
+   不會看到明顯過期的資料（櫃台與教練會同時改同一批預約）。
+
+   ⚠️ 快取正確性靠「所有寫入都要失效」。寫入路徑共四類，皆已接上 dbCacheClear()：
+     ① dbPut / dbDel（本層，清該表）
+     ② fn_create_booking / fn_cancel_booking / fn_checkin_booking 三條 RPC
+        —— 它們在 DB 端會動 bookings / member_tickets / ticket_logs / notifications
+        多張表，故清「全部」而非單表。新增 RPC 時務必比照辦理。
+     ③ sb.from('members').update(...) 兩處直接寫入（清 members）
+   自己的操作永遠看得到最新結果（寫入即失效）；8 秒只影響「別人剛改、我這邊還沒重整」
+   的視窗 —— 那本來就需要重整才看得到，不是新的問題。
+
+   回傳淺拷貝（.slice()）：快取內存的是同一個陣列，若某呼叫端對它 .sort()／.push()／
+   .splice() 會污染其他呼叫端（原本每次都是全新陣列，不存在此問題）。淺拷貝擋掉陣列
+   層級的改動；元素物件仍為共用參照，既有程式碼對取回的資料皆為唯讀使用。
+
+   需要強制重抓時：dbGetAll(store, {fresh:true})。
+   ══════════════════════════════════════════════════════ */
+const _dbCache=new Map();      // 實體表名 → {t, data}
+const _dbInflight=new Map();   // 實體表名 → Promise（同時發出的請求共用一次往返）
+const DB_CACHE_TTL=8000;
+function dbCacheClear(store){
+  if(store===undefined){ _dbCache.clear(); return; }
+  _dbCache.delete(tbl(store));
+}
+async function _dbGetAllFresh(store){
   const PAGE=1000;
   let out=[], from=0;
   for(;;){
@@ -4553,14 +4591,37 @@ async function dbGetAll(store){
   }
   return out;
 }
+async function dbGetAll(store,opts){
+  const key=tbl(store);
+  if(opts&&opts.fresh){
+    dbCacheClear(store);
+  }else{
+    const hit=_dbCache.get(key);
+    if(hit && Date.now()-hit.t < DB_CACHE_TTL) return hit.data.slice();
+    const inflight=_dbInflight.get(key);
+    if(inflight) return (await inflight).slice();
+  }
+  const p=_dbGetAllFresh(store);
+  _dbInflight.set(key,p);
+  try{
+    const data=await p;
+    _dbCache.set(key,{t:Date.now(),data});
+    return data.slice();
+  }finally{
+    _dbInflight.delete(key);
+  }
+}
 async function dbGet(store,id){
   const{data,error}=await sb.from(tbl(store)).select('*').eq('id',id).maybeSingle(); if(error)throw error; return data||null;
 }
 async function dbPut(store,obj){
-  const{data,error}=await sb.from(tbl(store)).upsert(obj).select().maybeSingle(); if(error)throw error; return data||obj;
+  const{data,error}=await sb.from(tbl(store)).upsert(obj).select().maybeSingle(); if(error)throw error;
+  dbCacheClear(store);   // 寫入即失效：自己的操作必須立刻看得到
+  return data||obj;
 }
 async function dbDel(store,id){
   const{error}=await sb.from(tbl(store)).delete().eq('id',id); if(error)throw error;
+  dbCacheClear(store);
 }
 // 用 invite_token 查單筆待填寫（pending）員工邀請；配合 token RLS policy，匿名也能讀到
 async function dbGetByToken(token){
@@ -4744,7 +4805,7 @@ async function doLogin(){
       if(pend && pend.must_setup && !pend.auth_id){
         const r=await cloudCreateAuth('member',acct,STAFF_DEFAULT_PW,false); // signUp 建帳（會登入該新帳號）
         if(r.error){ err.textContent='帳號建立失敗：'+r.error; err.style.display='block'; return; }
-        try{ await sb.from('members').update({auth_id:r.uid}).eq('id',pend.id); }catch(_){}
+        try{ await sb.from('members').update({auth_id:r.uid}).eq('id',pend.id); dbCacheClear('members'); }catch(_){}
         SESSION={role:'member',id:pend.id,name:pend.name,gender:pend.gender||null};
         showMemberSetup(Object.assign({},pend,{auth_id:r.uid}));
         return;
@@ -4804,6 +4865,7 @@ async function submitMemberSetup(id){
     const upd={name:v('ms-name'),phone:v('ms-phone'),email:v('ms-email')||null,birthday:bday,must_setup:false};
     const{error}=await sb.from('members').update(upd).eq('id',id);
     if(error){err.textContent='資料儲存失敗：'+error.message;err.style.display='block';return;}
+    dbCacheClear('members');   // 直接寫入、不經 dbPut → 自行失效
     SESSION={role:'member',id,name:upd.name,gender:upd.gender||null};
     document.getElementById('invite-screen')?.remove();
     enterApp();
@@ -6710,6 +6772,9 @@ async function createBookingViaRpc(o, tk, ds){
     p_date:ds, p_start_time:o.time, p_duration:o.duration||60,
     p_space_id:sp.space, p_resource_id:sp.resource, p_note:null
   });
+  // RPC 在 DB 端會動 bookings / member_tickets / ticket_logs / notifications 多張表，
+  // 且不經過 dbPut → 必須自行清快取，否則行事曆會顯示不到剛建立的課。清全部而非單表。
+  dbCacheClear();
   if(error) return { ok:false, reason:'連線失敗：'+(error.message||error) };
   if(data && data.ok) return { ok:true, booking_id:data.booking_id };
   return { ok:false, reason:rpcBookingErrMsg(data && data.error_code) };
@@ -11231,6 +11296,7 @@ async function checkInBooking(id, opts){  opts=opts||{};
     let res;
     try{ res=await sb.rpc('fn_checkin_booking',{p_booking_id:id,p_checkin_source:src}); }
     catch(e){ res={error:e}; }
+    dbCacheClear();  // RPC 動了 bookings / member_tickets / ticket_logs（發點），不經 dbPut
     if(res && !res.error && res.data && res.data.ok){
       const granted = res.data.reward_status==='issued';
       try{ await markTicketUsedIfDone(b.ticket_id); }catch(_){}  // used_up 標記維持前端（RPC 不處理）
@@ -11675,6 +11741,7 @@ async function cancelBooking(id, refundMode){
     let res;
     try{ res=await sb.rpc('fn_cancel_booking',{p_booking_id:id,p_reason:null}); }
     catch(e){ res={error:e}; }
+    dbCacheClear();  // RPC 動了 bookings / member_tickets / ticket_logs（退票），不經 dbPut
     if(res && !res.error && res.data && res.data.ok){
       const refunded = res.data.cancellation_result==='refunded';
       try{
