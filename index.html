@@ -3330,6 +3330,25 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .mc-dash-main,.mc-dash-side{--slime-gap:10px;}
 .mc-dash-main .mc-timeline-wrap{flex:1;min-height:0;}
 
+/* ── 換行後右欄撐滿整列 ──
+   右欄為 slime-card--fixed（grow/shrink 0），並排時固定 340px —— 但換行後它自己獨佔
+   一列時仍是 340px，會孤零零掛在左邊、右側留下大片空白（實測容器 900px 時右側空 560px），
+   而上方的卡片都是滿版，看起來像壞掉。
+   解法：容器窄到會換行時，把右欄的 --slime-min 改為 100%（basis 100% ⇒ 撐滿該列；
+   grow/shrink 維持 0 亦無妨，因 basis 已等於整列寬）。
+   用 @container 而非 @media：門檻要跟 --slime-min 的總和對齊，那是「容器」的寬度，
+   不是視窗的 —— 側邊欄展開與收合會讓同一個視窗寬對應到差 167px 的容器寬。這正是
+   Slime 改用 Layout Engine 的理由，斷點自然也該看容器。
+   .mc-dash-wrap 純粹是為了建立 container context（容器無法查詢自己），故不放在 .content
+   上 —— container-type 會連帶 contain:layout style inline-size，不宜套在共用的版面容器。
+   ⚠️ 989 = 640（左欄 --slime-min）+ 10（gap）+ 340（右欄 --slime-min）− 1，三者必須一起改。 */
+.mc-dash-wrap{container-type:inline-size;}
+.mc-dash-side{--slime-min:340px;}   /* 宣告於 CSS 而非行內：行內 style 的優先序高於
+                                       @container 規則，寫在行內就無法被下方覆蓋 */
+@container (max-width:989px){
+  .mc-dash-side{--slime-min:100%;}
+}
+
 /* ── 收回 .desktop-wide .card 搶走的控制權 ──
    2711 行的 .desktop-wide .card{padding:26px 28px;margin-bottom:22px} 特異度 (0,2,0)，
    會蓋掉本區各卡自己宣告的 padding 與 .mc-card{margin:0}（皆為 (0,1,0)）。實測後果：
@@ -4502,8 +4521,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260717.0945';
-const APP_VERSION_LABEL='v260717.0945';
+const APP_VERSION='260717.0958';
+const APP_VERSION_LABEL='v260717.0958';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7400,14 +7419,16 @@ PAGES.g_dashboard=async function(){
      右欄整個掉到下方比擠成兩條窄欄好讀。640+10+340=990 即換行門檻。 */
   C.innerHTML=`
     ${heroRow}
-    <div class="mc-dash slime-flow">
-      <div class="mc-dash-main slime-card slime-stack" style="--slime-min:640px;">
-        ${statusCard}
-        <div class="mc-timeline-wrap">${timelineCell.replace('<div class="dash-sec-label">今日課程時間軸</div>','')}</div>
-      </div>
-      <div class="mc-dash-side slime-card slime-card--fixed slime-stack" style="--slime-min:340px;">
-        ${todoCard}
-        ${quickCard}
+    <div class="mc-dash-wrap">
+      <div class="mc-dash slime-flow">
+        <div class="mc-dash-main slime-card slime-stack" style="--slime-min:640px;">
+          ${statusCard}
+          <div class="mc-timeline-wrap">${timelineCell.replace('<div class="dash-sec-label">今日課程時間軸</div>','')}</div>
+        </div>
+        <div class="mc-dash-side slime-card slime-card--fixed slime-stack">
+          ${todoCard}
+          ${quickCard}
+        </div>
       </div>
     </div>
   `;
