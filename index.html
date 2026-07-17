@@ -4521,8 +4521,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260717.0958';
-const APP_VERSION_LABEL='v260717.0958';
+const APP_VERSION='260717.1002';
+const APP_VERSION_LABEL='v260717.1002';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7193,8 +7193,10 @@ PAGES.g_dashboard=async function(){
 
   // ══ Decision Center 版面（依最終標註稿）══
   // 需要的計算（沿用既有資料，不新增結構）
-  const _wfCoachMap = Object.fromEntries(coaches.map(c=>[c.id, coachDisp(c)]));
-  const reminderSection = isTodayView ? dashReminderSection({ members, mtickets, bookings, types, date }) : '';
+  /* 已移除兩個死變數：
+     _wfCoachMap —— 唯一用途是餵給 dashWorkforceCompact()，該卡於 Dashboard V2 移除後失去出口。
+     reminderSection —— 呼叫 dashReminderSection() 算出結果卻從未被任何 innerHTML 使用（既有死碼，
+       它是「提醒事項」的更舊版本，純文字列、無 icon）。兩個被呼叫的函式亦一併刪除。 */
   const _pendingApps=(apps||[]).filter(a=>a.status==='pending');
   const _invoicingApps=(apps||[]).filter(a=>a.status==='invoicing');
   const _pendingPunch=(punchReqs||[]).filter(r=>r.status==='pending');
@@ -7206,20 +7208,9 @@ PAGES.g_dashboard=async function(){
   const groupCount0=dayBk.filter(b=>bkCC(b)==='group').length;
   const massageCount0=dayBk.filter(b=>bkCC(b)==='massage').length; // 運動按摩獨立計數，不併入教練課
 
-  // ── Phase 2 ── 今日課堂類型分布（圓餅用）：私人教練 / 友善教練課 / 團體課 / 體驗課 / 運動按摩
-  const _ptOnly=dayBk.filter(b=>bkCC(b)==='pt').length;
-  const _frOnly=dayBk.filter(b=>bkCC(b)==='friendly').length;
-  const _grpOnly=dayBk.filter(b=>bkCC(b)==='group').length;
-  const _trialOnly=dayBk.filter(b=>bkCC(b)==='trial').length;
-  const _massageOnly=dayBk.filter(b=>bkCC(b)==='massage').length;
-  const _distItems=[
-    {k:'pt',       label:'私人教練課', n:_ptOnly,     color:'#3D7039'},
-    {k:'friendly', label:'友善教練課', n:_frOnly,     color:'#23508a'},
-    {k:'group',    label:'團體課',     n:_grpOnly,    color:'#9a5a1e'},
-    {k:'trial',    label:'體驗課',     n:_trialOnly,  color:'#6e3a86'},
-    {k:'massage',  label:'運動按摩',   n:_massageOnly,color:'#2f8f83'},
-  ].filter(x=>x.n>0);
-  const _distTotal=_distItems.reduce((s,x)=>s+x.n,0);
+  /* 今日課堂類型分布（_ptOnly/_frOnly/_grpOnly/_trialOnly/_massageOnly → _distItems →
+     _distTotal）已隨圓餅圖於 Dashboard V2 一併移除：整條鏈的唯一出口就是那張卡。
+     bkCC() 本身別處仍在用，保留。 */
 
   // ── Phase 2 ── 教室使用率（今日）：簡化成三個語意教室，首頁只看忙不忙，不列細部場地
   //  A 教室＝私人教練/體驗主場（multi）；B 教室＝自主訓練/次要（treadmill）；團課教室＝group
@@ -7260,21 +7251,15 @@ PAGES.g_dashboard=async function(){
     return `${d.getFullYear()} / ${String(d.getMonth()+1).padStart(2,'0')} / ${String(d.getDate()).padStart(2,'0')}（週${wd}）`; })();
   const _statusText = _todoUrgent ? `${_todoUrgent} 件事情需立即處理` : (_todoTotal ? `${_todoTotal} 件事情待處理` : '今日營運正常');
   const _statusTone = _todoUrgent ? 'mc-hero-danger' : (_todoTotal ? 'mc-hero-warn' : 'mc-hero-ok');
-  // ② 值班教練數（今日有排班、非請假）
+  // ② 值班教練數（今日有排班、非請假）—— 供狀態卡的「值班教練 N 位」KPI 使用
+  // （_dutyCoachNames / _dutySub 兩個衍生值已隨今日值班卡於 Dashboard V2 一併移除：
+  //   名單只有那張卡在用，改版後名單改於值班表頁查看。）
   const _dutyCoachList = dayShifts.filter(s=>s.start_time&&s.end_time&&!s.leave_type);
-  const _dutyCoachNames = _dutyCoachList.map(s=>{ const c=coaches.find(x=>x.id===s.emp_id); return c?coachDisp(c):''; }).filter(Boolean);
   const _dutyCount = _dutyCoachList.length;
-  const _dutySub = _dutyCoachNames.length ? _dutyCoachNames.slice(0,2).join('、')+(_dutyCoachNames.length>2?` 等 ${_dutyCoachNames.length} 位`:'') : '無排班';
 
-  // ── Phase 2 微調 ── Hero 區整合快速操作工具列（第一屏即可操作）
-  const heroTools=`<div class="mc-hero-toolbar">
-    <button class="mc-htool" onclick="openBookingModal()">${OPS_TODO_IC.calendar}<span>新增預約</span></button>
-    <button class="mc-htool" onclick="openBackofficeMember()">${ICONS.people}<span>新增會員</span></button>
-    <button class="mc-htool" onclick="navTo('ticketing','g_finance')">${OPS_TODO_IC.money}<span>收款</span></button>
-    <button class="mc-htool" onclick="navTo('scan_checkin','g_booking')">${OPS_TODO_IC.ticket}<span>掃碼簽到</span></button>
-    <button class="mc-htool" onclick="navTo('ticketing','g_finance')">${OPS_TODO_IC.ticket}<span>票券銷售</span></button>
-    <button class="mc-htool" onclick="navTo('calendar','g_booking')">${OPS_TODO_IC.calendar}<span>課程查詢</span></button>
-  </div>`;
+  /* 原 heroTools（.mc-hero-toolbar 六顆按鈕）已移除：定義後從未被任何模板引用，是死碼
+     （Hero 內實際渲染的是另一組 .mc-hero-tools 三顆按鈕，已於 Dashboard V2 改為右欄的
+     快速操作卡）。 */
   // ── Hero 營運摘要（一行淺灰文字，開店節奏感） ──
   const _amCount = dayBk.filter(b=>timeToMin(b.start_time||'0:0') < 12*60).length;
   const _pmCount = classCount - _amCount;
@@ -7311,7 +7296,8 @@ PAGES.g_dashboard=async function(){
      營收（$）依改版決定移除。 */
 
   /* 未打卡：今日有排班、班別已開始、卻沒有上班打卡的教練。
-     算法沿用既有的 dashWorkforceCompact() 之 notPunched（該函式本身為死碼，未進 innerHTML）。
+     算法承自已刪除的 dashWorkforceCompact() 之 notPunched（該函式唯一的呼叫者是首頁「今日
+     人力」卡，隨 Dashboard V2 一併移除，故算法內聯至此）。
      注意：原「今日工作中心」把 _pendingPunch（punch_requests 待審的補卡申請）標為「未打卡」，
      是標籤錯誤 —— 兩者是不同的事：一個是「今天沒打卡」（現在就該追），一個是「事後申請補登、
      等管理員審」。本次改版取前者，因為那才是櫃台當下能處理的。 */
@@ -7489,43 +7475,9 @@ function toggleMtcCard(cid){
 
 
 /* ══ Today Workforce 精簡卡（Decision Center · 狀態摘要 + 未打卡名單）══ */
-function dashWorkforceCompact(opts){
-  const { date, effNow, dayShifts, attMap, coachMap } = opts;
-  const dow = (parseYmd(date)||TODAY).getDay();
-  const working = dayShifts.filter(s=>s.start_time&&s.end_time&&!s.leave_type);
-  const onLeave = dayShifts.filter(s=>s.leave_type);
-  const nm = id => coachMap[id] || id || '—';
-  const arrived=[], notPunched=[];
-  working.forEach(s=>{
-    const att=attMap[s.emp_id];
-    if(att&&att.clock_in) arrived.push(s);
-    else if(timeToMin(s.start_time)<=effNow) notPunched.push(s);
-  });
-  const gaps=(typeof findShiftGaps==='function')?findShiftGaps(dayShifts,dow):[];
-  let dotColor,headText,listRows='';
-  if(gaps.length){
-    dotColor='var(--danger)';
-    headText=`${gaps.map(g=>minToTime(g[0])+'–'+minToTime(g[1])).join('、')} 無人值班`;
-    listRows=onLeave.map(s=>`<div class="mc-wf-row"><span class="mc-wf-dot" style="background:var(--danger)"></span><b>${nm(s.emp_id)}</b><span class="mc-wf-tag mc-wf-leave">${s.leave_type}</span></div>`).join('');
-  }else if(notPunched.length){
-    dotColor='var(--warning)';
-    headText=`${notPunched.length} 人未打卡`;
-    listRows=notPunched.slice(0,3).map(s=>`<div class="mc-wf-row"><span class="mc-wf-dot" style="background:var(--warning)"></span><b>${nm(s.emp_id)}</b><span class="mc-wf-time">${s.start_time}</span></div>`).join('');
-  }else if(working.length){
-    dotColor='var(--success)';
-    headText=`人力正常 · ${working.length} 人值班`;
-    listRows=`<div class="mc-wf-normal">今日應到 ${working.length} 人，皆已到班${onLeave.length?`，${onLeave.length} 人請假`:''}</div>`;
-  }else{
-    dotColor='var(--text-muted)';
-    headText='今日無人排班';
-  }
-  return `<div class="card mc-card mc-wf-card">
-    <div class="mc-card-h"><span class="mc-card-ic">${NAV2_ICONS.g_staff}</span>今日人力</div>
-    <div class="mc-wf-head"><span class="mc-wf-hdot" style="background:${dotColor}"></span>${headText}</div>
-    <div class="mc-wf-list">${listRows}</div>
-    <button class="mc-wf-all" onclick="navTo('attendance','g_staff')">查看名單 ›</button>
-  </div>`;
-}
+/* dashWorkforceCompact() 已刪除：唯一呼叫者是首頁的「今日人力」卡，該卡於 Dashboard V2
+   移除後本函式失去出口。其 notPunched 的算法（班已開始且無 clock_in）已內聯到狀態卡的
+   「未打卡」KPI —— 那個 KPI 取代了原本標錯成「未打卡」的補卡申請數。 */
 
 /* ══ Today Workforce（今日人力）· Sprint 04 ══
    Mission：3 秒知道「今天人力是否正常」。發現 → 導向，不解決。
@@ -7613,57 +7565,8 @@ function dashWorkforceSection(opts){
       ${listBlock}
     </div>`;
 }
-function dashReminderSection(opts){
-  const { members, mtickets, bookings, types, date } = opts;
-  const memMap=Object.fromEntries((members||[]).map(m=>[m.id,m]));
-  // 共用票券類型 maps（與分析頁 anaIsCoachTicket 同一套定義）
-  const catMap={},colMap={},nmMap={};
-  (types||[]).forEach(t=>{ catMap[t.id]=t.category||''; colMap[t.id]=t.color||''; nmMap[t.id]=t.name||''; });
-
-  // (a) 7 日內到期票券（有效、有到期日、今天起 7 日內）
-  const today=parseYmd(date)||TODAY;
-  const in7=new Date(today); in7.setDate(today.getDate()+7);
-  const expiring=(mtickets||[]).filter(t=>{
-    if(t.status && t.status!=='usable' && t.status!=='active') return false;
-    if((Number(t.sessions_remaining)||0)<=0) return false;
-    if(!t.expire_date) return false;
-    const ed=parseYmd(String(t.expire_date).slice(0,10)); if(!ed) return false;
-    return ed>=today && ed<=in7;
-  });
-
-  // (b) 待續約會員（與會員頁定義完全一致：everPt 且教練類剩餘合計 ≤2）
-  const tkSum={};
-  (mtickets||[]).forEach(t=>{
-    const s=tkSum[t.member_id]||(tkSum[t.member_id]={pt:0,friendly:0,everPt:false});
-    if(anaIsCoachTicket(t,catMap,colMap,nmMap)){
-      s.everPt=true;
-      const rem=Number(t.sessions_remaining)||0;
-      const isFriendly=(colMap[t.ticket_type_id]==='friendly')||((t.plan_name||'').indexOf('友善')>=0);
-      if(isFriendly) s.friendly+=rem; else s.pt+=rem;
-    }
-  });
-  const needRenew=(members||[]).filter(m=>{ const t=tkSum[m.id]; if(!t||!t.everPt)return false; return ((t.pt||0)+(t.friendly||0))<=2; });
-
-  // (c) 今日體驗課
-  const trials=(bookings||[]).filter(b=>b.date===date && b.category==='體驗' && b.status!=='cancelled');
-
-  const items=[];
-  if(expiring.length) items.push({label:'7 日內到期票券', val:`${expiring.length} 張`, go:"navTo('ticketing','g_finance')"});
-  if(needRenew.length) items.push({label:'待續約會員',     val:`${needRenew.length} 位`, go:"navTo('members','g_member')"});
-  if(trials.length)   items.push({label:'今日體驗課',     val:`${trials.length} 堂`, go:"navTo('calendar','g_booking')"});
-
-  if(!items.length){
-    return `<div class="dash-sec-label">提醒事項</div>
-      <div class="card"><div style="font-size:13px;color:var(--text-muted);padding:4px 0;">今天沒有需要特別注意的提醒。</div></div>`;
-  }
-  const rows=items.map(it=>`<div onclick="${it.go}" style="display:flex;align-items:center;gap:var(--space-3);padding:11px 0;border-bottom:1px solid var(--border-light);cursor:pointer;font-size:13.5px;">
-      <span style="flex:1;color:var(--text-primary);">${it.label}</span>
-      <span style="color:var(--text-secondary);font-weight:600;">${it.val}</span>
-      <span style="color:var(--text-muted);">›</span>
-    </div>`).join('');
-  return `<div class="dash-sec-label">提醒事項</div>
-    <div class="card"><div style="margin:-4px 0;">${rows}</div></div>`;
-}
+/* dashReminderSection() 已刪除：其結果 reminderSection 算出後從未被任何 innerHTML 使用，
+   是「提醒事項」的更舊版本（純文字列、無 icon、inline style）。現由 todoCard 承接。 */
 
 function dashQuickActions(){
   // ⑥ 快速操作：4 個高頻入口，2×2，全用既有 .btn + 既有跳轉/彈窗，不新增流程
