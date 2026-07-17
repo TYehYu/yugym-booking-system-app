@@ -4521,8 +4521,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260717.1022';
-const APP_VERSION_LABEL='v260717.1022';
+const APP_VERSION='260717.1027';
+const APP_VERSION_LABEL='v260717.1027';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -4912,6 +4912,9 @@ async function submitMemberSetup(id){
   if(p1===STAFF_DEFAULT_PW){err.textContent='請勿沿用預設密碼，請設定新的密碼';err.style.display='block';return;}
   if(!v('ms-name')){err.textContent='請填寫姓名';err.style.display='block';return;}
   if(!v('ms-phone')){err.textContent='請填寫手機';err.style.display='block';return;}
+  // 與後台建立會員同一套規則：先正規化再驗格式。手機是登入識別，格式錯會讓帳號失聯。
+  const msPhone=normPhone(v('ms-phone'));
+  if(!/^09\d{8}$/.test(msPhone)){err.textContent='手機號碼格式不正確，請填 09 開頭的 10 位數字';err.style.display='block';return;}
   const bday=readBirthday('ms');
   if(!bday){err.textContent='請選擇完整生日';err.style.display='block';return;}
   try{
@@ -4919,7 +4922,7 @@ async function submitMemberSetup(id){
     if(error){err.textContent='密碼更新失敗：'+error.message;err.style.display='block';return;}
   }catch(e){err.textContent='密碼更新失敗：'+(e.message||e);err.style.display='block';return;}
   try{
-    const upd={name:v('ms-name'),phone:v('ms-phone'),email:v('ms-email')||null,birthday:bday,must_setup:false};
+    const upd={name:v('ms-name'),phone:msPhone,email:v('ms-email')||null,birthday:bday,must_setup:false};
     const{error}=await sb.from('members').update(upd).eq('id',id);
     if(error){err.textContent='資料儲存失敗：'+error.message;err.style.display='block';return;}
     dbCacheClear('members');   // 直接寫入、不經 dbPut → 自行失效
@@ -12598,11 +12601,20 @@ async function submitBackofficeMember(){
   const v=id=>(document.getElementById(id).value||'').trim();
   const err=document.getElementById('bo-err');
   const showErr=msg=>{err.textContent=msg;err.style.display='block';};
-  const name=v('bo-name'), phone=v('bo-phone');
+  const name=v('bo-name');
+  /* 手機一律先 normPhone() 再使用。原本直接拿使用者輸入的原字串做重複檢查與儲存，有兩個後果：
+     ① 沒有任何格式驗證 —— 實測填 'abc'、'零九一二'、'091' 全都建立成功。手機是會員的登入
+        帳號（toEmail() 組成 {手機}@member.yugym.local），格式錯的會員永遠登不進去。
+     ② 撞號 —— 重複檢查用 .eq('phone', 原字串)，但 toEmail() 登入時會做 normPhone。故
+        「0912345678」與「0912-345-678」重複檢查測不到、兩筆都建得起來，登入時卻正規化成
+        同一個帳號。存進去前就正規化，這兩個問題一起消失。
+     驗證用 ^09\d{8}$：已比對正式庫 432 位會員全數符合此格式、無一例外，故不會擋到既有資料。*/
+  const phone=normPhone(v('bo-phone'));
   if(!name||!phone){showErr('請填寫姓名與手機');return;}
+  if(!/^09\d{8}$/.test(phone)){showErr('手機號碼格式不正確，請填 09 開頭的 10 位數字（會員日後用它登入）');return;}
   const btn=document.getElementById('bo-submit'); if(btn){btn.disabled=true;btn.textContent='建立中…';}
   try{
-    // 同手機是否已存在會員 → 避免重複建立
+    // 同手機是否已存在會員 → 避免重複建立（比對正規化後的號碼，與登入時的組法一致）
     const dup=(await sb.from('members').select('id,name').eq('phone',phone).maybeSingle()).data;
     if(dup){ showErr('此手機已有會員資料（'+(dup.name||'')+'），請改用搜尋找到該會員。'); if(btn){btn.disabled=false;btn.textContent='建立會員';} return; }
     const m={id:uid('m'),name,phone,email:v('bo-email')||null,birthday:readBirthday('bo'),
