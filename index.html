@@ -4521,8 +4521,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260717.1011';
-const APP_VERSION_LABEL='v260717.1011';
+const APP_VERSION='260717.1022';
+const APP_VERSION_LABEL='v260717.1022';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -4583,7 +4583,7 @@ async function _dbGetAllFresh(store){
   let out=[], from=0;
   for(;;){
     const{data,error}=await sb.from(tbl(store)).select('*').range(from, from+PAGE-1);
-    if(error)throw error;
+    if(error) throw dbFriendlyError(error, store, '讀取');
     const batch=data||[];
     out=out.concat(batch);
     if(batch.length<PAGE) break; // 最後一頁（不足 PAGE 筆）→ 抓完
@@ -4611,16 +4611,73 @@ async function dbGetAll(store,opts){
     _dbInflight.delete(key);
   }
 }
+/* ══════════════════════════════════════════════════════
+   資料層錯誤翻譯：把資料庫原始訊息換成使用者看得懂、且知道下一步該做什麼的話。
+
+   起因：2026-07-16 有位教練回報「我有打卡」，但 attendance.clock_out 是 null。查證後
+   他的帳號、權限、歷史紀錄都正常（成功打過 30 次），問題出在他當時撞到 RLS 錯誤，而
+   punchOut() 的 catch 是 showToast('打卡失敗：'+e.message) —— 他實際看到的是：
+     「打卡失敗：new row violates row-level security policy (USING expression)
+       for table "attendance"」
+   這對員工毫無意義，也沒有任何行動指引，合理的反應就是「當機了吧」然後關掉走人。
+   全檔有 80 處把原始 error.message 直接顯示給使用者。
+
+   作法：在資料層就把錯誤翻好再往上拋 —— 那 80 個呼叫點拿到的 e.message 已經是人話，
+   一處都不用改（逐一改 80 處既不實際、也一定會漏掉新加的）。
+   原始訊息保留在 err.rawMessage / err.cause 並印到 console，除錯資訊不會消失。
+   ══════════════════════════════════════════════════════ */
+/* 資料表 → 使用者看得懂的名稱。訊息裡出現「（attendance）」對教練跟出現原始 SQL 錯誤
+   沒兩樣，都是天書。查不到對照時寧可不顯示表名（回傳空字串），也不要露出英文表名。 */
+const DB_LABEL={
+  attendance:'出勤紀錄', shifts:'排班', punch_requests:'補打卡申請',
+  bookings:'預約', members:'會員', employees:'員工', coaches:'員工',
+  member_tickets:'票券', ticket_types:'票種', ticket_logs:'票券異動紀錄',
+  course_plans:'課程方案', purchases:'交易紀錄', purchase_applications:'購買申請',
+  notifications:'通知',
+};
+function dbFriendlyError(e, store, op){
+  const raw = String((e && (e.message || e.msg)) || e || '');
+  const code = (e && e.code) || '';
+  const label = DB_LABEL[store] || DB_LABEL[tbl(store)] || '';
+  const where = label ? `（${label}）` : '';
+  let msg;
+  if(/row-level security|violates row-level/i.test(raw) || code==='42501'){
+    // 權限被 RLS 擋下。這是設定問題，不是使用者做錯事 —— 別讓他以為是自己的操作有問題。
+    msg = `權限不足，系統無法${op||'寫入'}這筆資料${where}。這通常是設定問題，請聯絡管理員協助`;
+  }else if(code==='23505' || /duplicate key|already exists/i.test(raw)){
+    msg = '這筆資料已經存在，請勿重複建立';
+  }else if(code==='23503' || /foreign key/i.test(raw)){
+    msg = '關聯的資料不存在或已被刪除，請重新整理後再試';
+  }else if(code==='23514' || /check constraint/i.test(raw)){
+    msg = '資料內容不符合規則，請檢查輸入的欄位';
+  }else if(/JWT|not authenticated|invalid.*token|session.*expire/i.test(raw) || code==='PGRST301'){
+    msg = '登入已逾期，請重新登入後再試';
+  }else if(/Failed to fetch|NetworkError|network|ERR_INTERNET|ERR_NETWORK|timeout/i.test(raw)){
+    msg = '連線失敗，請確認網路後再試一次';
+  }else{
+    msg = `操作未完成，請再試一次；若持續發生請聯絡管理員${where}`;
+  }
+  const err = new Error(msg);
+  err.rawMessage = raw;      // 原始訊息保留，供除錯
+  err.code = code;
+  err.cause = e;
+  console.error(`[db] ${op||'操作'}失敗${where}：`, raw, e);   // 原始錯誤仍完整進 console
+  return err;
+}
 async function dbGet(store,id){
-  const{data,error}=await sb.from(tbl(store)).select('*').eq('id',id).maybeSingle(); if(error)throw error; return data||null;
+  const{data,error}=await sb.from(tbl(store)).select('*').eq('id',id).maybeSingle();
+  if(error) throw dbFriendlyError(error, store, '讀取');
+  return data||null;
 }
 async function dbPut(store,obj){
-  const{data,error}=await sb.from(tbl(store)).upsert(obj).select().maybeSingle(); if(error)throw error;
+  const{data,error}=await sb.from(tbl(store)).upsert(obj).select().maybeSingle();
+  if(error) throw dbFriendlyError(error, store, '儲存');
   dbCacheClear(store);   // 寫入即失效：自己的操作必須立刻看得到
   return data||obj;
 }
 async function dbDel(store,id){
-  const{error}=await sb.from(tbl(store)).delete().eq('id',id); if(error)throw error;
+  const{error}=await sb.from(tbl(store)).delete().eq('id',id);
+  if(error) throw dbFriendlyError(error, store, '刪除');
   dbCacheClear(store);
 }
 // 用 invite_token 查單筆待填寫（pending）員工邀請；配合 token RLS policy，匿名也能讀到
@@ -4980,7 +5037,19 @@ async function submitChangePassword(){
   }catch(e){showToast('修改失敗：'+(e.message||e));}
 }
 
-function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);}
+/* showToast(訊息, 顯示毫秒)
+   ms 省略時維持原本的 2400ms，既有的 200+ 個呼叫點行為不變。
+   加這個參數是因為錯誤訊息要能被讀完 —— 2.4 秒讀不完一句「失敗原因＋下一步該做什麼」，
+   訊息寫得再人話，來不及讀就等於沒寫。錯誤類的呼叫請傳 5000~6000。
+   連續呼叫時清掉前一個計時器，否則前一則的計時器會提早關掉後一則。 */
+let _toastTimer=null;
+function showToast(msg,ms){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  if(_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>{ t.classList.remove('show'); _toastTimer=null; }, ms||2400);
+}
 // 觸覺回饋：Android 用 navigator.vibrate（iOS Safari 不支援，網頁無法可靠觸發，改以視覺回饋補償）
 function hapticFeedback(ms){
   ms=ms||10;
@@ -17857,7 +17926,13 @@ async function punchOut(){
   showToast('下班打卡成功 '+rec.clock_out+'，工時 '+rec.work_hours+' 小時');
   await refreshHeaderPunch();
   if(CUR_PAGE==='attendance') navTo('attendance');
- }catch(e){ console.error('punchOut 失敗:',e); showToast('打卡失敗：'+(e&&e.message?e.message:e)); }
+ }catch(e){
+  /* 打卡失敗必須給出路。教練當下就要下班離開，只丟一句「失敗」等於叫他自己想辦法 ——
+     2026-07-16 就是這樣漏掉一筆工時：教練撞到 RLS 錯誤、看到一長串英文，以為是當機就
+     走了，事後還以為自己打過卡。訊息本身已由 dbFriendlyError() 翻成人話，這裡再補上
+     唯一能自救的動作。 */
+  showToast('打卡失敗：'+(e&&e.message?e.message:e)+'。請改用「申請補打卡」，工時才不會漏記', 6000);
+ }
 }
 // ════════ QR Code 掃描打卡（MVP）════════
 const STAFF_QR_CODE='YUGYM-STAFF-CHECKIN';   // 店內員工打卡碼
