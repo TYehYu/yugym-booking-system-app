@@ -4529,8 +4529,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260718.0909';
-const APP_VERSION_LABEL='v260718.0909';
+const APP_VERSION='260718.0924';
+const APP_VERSION_LABEL='v260718.0924';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16351,9 +16351,11 @@ PAGES.plans=async function(targetId){
     </tbody></table>
     <div style="font-size:11px;color:var(--t3);margin-top:8px;">停用後不可建立新方案/新票券；既有票券與歷史不受影響。刪除前若已有方案使用該種類，請先停用。</div>
   </div>
-  <div class="card"><div class="card-title">票券模板（CoursePlan） <button class="btn btn-green btn-sm" onclick="openPlanModal()">＋ 新增模板</button></div>
+  <div class="card"><div class="card-title">票券模板（CoursePlan）
+    <button class="btn btn-green btn-sm" onclick="openPlanModal()">＋ 新增模板</button>
+    ${(()=>{const n=plans.filter(p=>p.archived).length;return n?`<button class="btn btn-ghost btn-sm" onclick="togglePlansArchived()">${window._plansShowArchived?'隱藏已封存':'顯示已封存'}（${n}）</button>`:'';})()}</div>
     <table class="rwd-card"><thead><tr><th>模板名稱</th><th>方案類型</th><th>售價</th><th>堂數</th><th>效期</th><th>分期</th><th>開放申請</th><th>狀態</th><th></th></tr></thead><tbody>
-    ${plans.map(p=>{const t=typeMap[p.ticket_type_id];const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客'};return `<tr style="${p.active?'':'opacity:.5;'}">
+    ${plans.filter(p=>window._plansShowArchived||!p.archived).map(p=>{const t=typeMap[p.ticket_type_id];const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客'};const st=p.archived?'archived':(p.active?'active':'disabled');return `<tr style="${p.archived?'opacity:.45;':(p.active?'':'opacity:.6;')}">
       <td data-label="方案" class="cell-stack"><div style="font-weight:600;">${p.name}</div><div><span class="tag tag-${t?t.color:'pt'}">${t?t.name:'—'}${p.format?'·'+p.format:''}</span></div></td>
       <td data-label="方案類型" class="hide-mobile" style="font-size:13px;">${PT[p.plan_type]||'一般'}</td>
       <td data-label="售價" class="num" style="font-weight:700;color:var(--green);">$${(p.unit_price||0).toLocaleString()}</td>
@@ -16361,15 +16363,17 @@ PAGES.plans=async function(targetId){
       <td data-label="效期" class="hide-mobile">${p.valid_days} 天</td>
       <td data-label="分期" class="hide-mobile">${p.installment?'<span class="tag tag-ok" style="font-size:10px;">可分期</span>':'—'}</td>
       <td data-label="開放申請" class="hide-mobile">${p.member_applyable?'<span class="tag tag-ok" style="font-size:10px;">開放</span>':'—'}</td>
-      <td data-label="狀態"><span class="tag ${p.active?'tag-ok':'tag-danger'}">${p.active?'上架':'下架'}</span></td>
+      <td data-label="狀態"><span class="tag ${st==='active'?'tag-ok':(st==='disabled'?'tag-danger':'')}" ${st==='archived'?'style="background:#e6e4e0;color:#8a8578;"':''}>${st==='active'?'上架':(st==='disabled'?'停用':'封存')}</span></td>
       <td class="rwd-actions" data-label="" style="white-space:nowrap;">
         <button class="btn btn-ghost btn-sm" onclick="openPlanModal('${p.id}')">編輯</button>
         <button class="btn btn-ghost btn-sm hide-mobile" onclick="clonePlan('${p.id}')">複製</button>
-        <button class="btn btn-ghost btn-sm hide-mobile" onclick="togglePlan('${p.id}')">${p.active?'下架':'上架'}</button>
+        ${p.archived
+          ? `<button class="btn btn-ghost btn-sm hide-mobile" onclick="unarchivePlan('${p.id}')">還原</button>`
+          : `<button class="btn btn-ghost btn-sm hide-mobile" onclick="togglePlan('${p.id}')">${p.active?'停用':'上架'}</button><button class="btn btn-ghost btn-sm hide-mobile" onclick="archivePlan('${p.id}')">封存</button>`}
         <button class="btn btn-danger btn-sm hide-mobile" onclick="deletePlan('${p.id}')">刪除</button>
       </td></tr>`;}).join('')}
     </tbody></table>
-    <div style="font-size:11px;color:var(--t3);margin-top:8px;">下架後不可發放新票券；已發放的會員票券仍可正常使用。</div>
+    <div style="font-size:11px;color:var(--t3);margin-top:8px;">停用＝暫時不可發放（可再上架）；封存＝永久退役、從清單隱藏但保留歷史（可還原）。兩者皆不影響會員已購票券。</div>
   </div>`;
 };
 /* ── 票券種類：停用 / 啟用 / 刪除 ── */
@@ -16393,8 +16397,23 @@ async function togglePlan(id){
   const p=await dbGet('course_plans',id);
   p.active=!p.active;
   try{ await dbPut('course_plans',p); }catch(e){ showToast('更新失敗：'+(e.message||e)); return; }
-  showToast(p.active?'已上架':'已下架');setTkTab('plans');
+  showToast(p.active?'已上架':'已停用');setTkTab('plans');
 }
+/* 封存：永久退役方案（規格 V4 §5、§6）。設 active=false + archived=true —— 所有售票/發放/申請路徑
+   皆依 active 過濾，故自動排除；管理清單預設隱藏（可「顯示已封存」）。會員已購票券為快照、不受影響。 */
+async function archivePlan(id){
+  const p=await dbGet('course_plans',id);
+  p.active=false; p.archived=true;
+  try{ await dbPut('course_plans',p); }catch(e){ showToast('封存失敗：'+(e.message||e)); return; }
+  showToast('已封存（於「顯示已封存」可還原）');setTkTab('plans');
+}
+async function unarchivePlan(id){
+  const p=await dbGet('course_plans',id);
+  p.archived=false;                    // 還原為「停用」（active 維持 false），需要時再手動上架
+  try{ await dbPut('course_plans',p); }catch(e){ showToast('還原失敗：'+(e.message||e)); return; }
+  showToast('已還原為「停用」，可再上架');setTkTab('plans');
+}
+function togglePlansArchived(){ window._plansShowArchived=!window._plansShowArchived; setTkTab('plans'); }
 async function deletePlan(id){
   // 有歷史資料（已發放的會員票券、或會員購買申請）→ 只允許下架，不允許刪除
   const[tks,apps]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('purchase_applications')]);
@@ -16413,6 +16432,7 @@ async function clonePlan(id){
   delete copy.id;                        // 去掉主鍵 → 送出時建立新方案
   copy.name=(src.name||'')+'（複製）';
   copy.active=true;                      // 複製出來預設上架，售價可先改再啟用
+  copy.archived=false;                   // 即使複製封存方案，也產生全新可用方案
   window._plClonePrefill=copy;
   openPlanModal();                       // 新模式開啟，但用 _plClonePrefill 預填
 }
@@ -16515,7 +16535,7 @@ async function submitPlan(id){
   const name=document.getElementById('pl-name').value.trim();
   if(!name){showToast('請填票券名稱');return;}
   const editing=!!id;
-  const base = editing ? (await dbGet('course_plans',id)) : {id:uid('plan'),active:true};
+  const base = editing ? (await dbGet('course_plans',id)) : {id:uid('plan'),active:true,archived:false};
   const p=Object.assign(base,{name,ticket_type_id:document.getElementById('pl-type').value,
     format:document.getElementById('pl-format').value||null,unit_price:Number(document.getElementById('pl-price').value)||0,
     sessions_base:Number(document.getElementById('pl-base').value)||0,sessions_bonus:Number(document.getElementById('pl-bonus').value)||0,
