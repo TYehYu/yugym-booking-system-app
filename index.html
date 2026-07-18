@@ -2759,6 +2759,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* Phase 3b：卡內編輯表單 */
 .cal-ev.cal-ev-std.cal-ev-editing{min-width:236px;}
 .cal-ev.cal-ev-std .evx-edit{position:relative;z-index:1;display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px;background:var(--card2,#FAF7F0);border-top:1px solid rgba(0,0,0,0.06);}
+.cal-ev.cal-ev-std .evx-edit-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:800;color:#4a443c;}
+.cal-ev.cal-ev-std .evx-close{border:none;background:transparent;font-size:13px;font-weight:800;color:#8a8378;cursor:pointer;padding:2px 6px;border-radius:6px;line-height:1;}
+.cal-ev.cal-ev-std .evx-close:hover{background:rgba(0,0,0,.07);color:#4a443c;}
 .cal-ev.cal-ev-std .evx-edit label{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;font-weight:700;color:#555;}
 .cal-ev.cal-ev-std .evx-edit input,.cal-ev.cal-ev-std .evx-edit select{font-family:inherit;font-size:11px;padding:4px 8px;border:1px solid rgba(0,0,0,0.12);border-radius:8px;background:#fff;color:#222;max-width:140px;box-shadow:inset 0 1px 2px rgba(60,50,38,.07);}
 .cal-ev.cal-ev-std .evx-edit .evc-actions{padding:4px 0 0;border-top:none;background:transparent;}
@@ -4686,8 +4689,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260719.0100';
-const APP_VERSION_LABEL='v260719.0100';
+const APP_VERSION='260719.0130';
+const APP_VERSION_LABEL='v260719.0130';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9202,6 +9205,9 @@ function initCalDrag(){
     // pointerdown 啟動拖曳 → pointer capture 吞掉按鈕 click、pointerup 又被當成點卡收合，
     // 造成「四個按鈕點了都沒反應」（正式站實際回報）。名單、代課面板(.evc-roster)一併納入。
     if(e.target.closest('.evc-actions, .evx-edit, .evc-orbit, .evc-roster')) return;
+    // 展開中／編輯中的卡整張不啟動拖曳：點卡本體交給 click（onEvClick → 收合），
+    // 否則 pointer capture 吞掉 click，「再點一下卡片關閉」會失靈（0100 編輯關不掉的成因之一）
+    if(ev.classList.contains('cal-ev-expanded') || ev.classList.contains('cal-ev-active')) return;
     bid=ev.dataset.bid; evEl=ev;
     const rect=ev.getBoundingClientRect();
     origH=rect.height; origDur=Math.round(parseFloat(ev.style.height)/SLOT_PX)*SLOT_MIN||60;
@@ -11496,19 +11502,32 @@ function _bkOutsideClose(e){
   collapseBkCard();
 }
 function collapseBkCard(){
-  const el = window._expandedBkEl;
-  if(el){
+  // 自癒：參照遺失（歷史上發生過：儲存失敗後參照被提前清空）也要能收 ——
+  // 掃 DOM 上所有展開/編輯/orbit 狀態的卡一併清理，確保永遠關得掉。
+  const els = new Set();
+  if(window._expandedBkEl) els.add(window._expandedBkEl);
+  document.querySelectorAll('.cal-ev-expanded, .cal-ev-active, .cal-ev-editing').forEach(e=>els.add(e));
+  els.forEach(el=>{
     el.classList.remove('cal-ev-expanded'); el.classList.remove('cal-ev-editing'); el.classList.remove('cal-ev-active');
     el.style.marginLeft=''; el.style.marginTop='';
     const a=el.querySelector('.evc-actions'); if(a) a.remove();
     const ed=el.querySelector('.evx-edit'); if(ed) ed.remove();
     const o=el.querySelector('.evc-orbit'); if(o) o.remove();
     const r=el.querySelector('.evc-roster'); if(r) r.remove();
-  }
+  });
   window._expandedBkEl = null;
   document.removeEventListener('click', _bkOutsideClose, true);
   // 名單簽到有異動 → 收合時統一重繪行事曆（切換過程不重繪，維持名單面板不被打斷）
   if(window._rosterDirty){ window._rosterDirty=false; navTo(CUR_PAGE); }
+}
+// Esc 鍵收合（bound once）：展開／周邊按鈕／編輯表單通吃 —— 編輯期間點外收合是停用的
+// （避免原生日期選單誤觸），Esc 提供桌機永遠可用的逃生口
+if(!window._bkEscBound){
+  window._bkEscBound = true;
+  document.addEventListener('keydown', e=>{
+    if(e.key!=='Escape') return;
+    if(window._expandedBkEl || document.querySelector('.cal-ev-expanded, .cal-ev-active')) collapseBkCard();
+  });
 }
 /* 邊緣感知：卡片放大/展開後若超出視窗右緣/下緣，用負 margin 推回可視範圍（往左／往上展開）。
    採「靠右錨定」——右緣不超過視窗即可，位移量取剛好；hover 與點擊展開共用。 */
@@ -11591,6 +11610,7 @@ async function bkInlineEdit(id){
   const subOpts = `<option value="">${coach?coach.name:'—'}（主責）</option>`
     + coachableList.filter(c=>c.id!==b.coach_id).map(c=>`<option value="${c.id}" ${b.substitute_coach_id===c.id?'selected':''}>改由 ${coachDisp(c)} 代課</option>`).join('');
   const form = `<div class="evx-edit">
+    <div class="evx-edit-head"><span>編輯預約</span><button class="evx-close" title="關閉（Esc）" onclick="event.stopPropagation();collapseBkCard()">✕</button></div>
     <label>日期<input type="date" id="ed-date" value="${b.date}"></label>
     <label>時間<input type="time" id="ed-time" value="${b.start_time}" step="1800"></label>
     <label>時長<select id="ed-dur">${durOpts}</select></label>
@@ -11606,11 +11626,14 @@ async function bkInlineEdit(id){
   card.insertAdjacentHTML('beforeend', form);
   _bkEdgeNudge(card);   // 表單較高／較寬 → 重新推回可視範圍
 }
-// 儲存：重用 saveBookingTime（讀 ed-* 欄位、驗證、dbPut、navTo 重繪）
-function bkInlineEditSave(id){
-  window._expandedBkEl = null;                 // 即將整頁重繪，先解除展開參照
+// 儲存：重用 saveBookingTime（讀 ed-* 欄位、驗證、dbPut、navTo 重繪）。
+// ⚠️ 必須先等結果再清參照（2026-07-19 正式站回報）：原本先清 _expandedBkEl 再存檔，
+// 驗證失敗（如「同時段該教練已有預約」）時表單還開著但參照已沒了 → 取消/點卡/點外全失效、卡死。
+async function bkInlineEditSave(id){
+  const ok = await saveBookingTime(id);
+  if(ok===false) return;                       // 驗證失敗：保留表單與參照，讓使用者修正或按取消
+  window._expandedBkEl = null;                 // 成功已整頁重繪，解除展開參照
   document.removeEventListener('click', _bkOutsideClose, true);
-  saveBookingTime(id);
 }
 // 課卡點擊分流：教練 → 訓練課表；管理員/櫃台 → 預約明細
 async function openCourseCard(id){
@@ -12238,9 +12261,10 @@ async function confirmCancelBooking(id){
     <div style="font-size:12px;color:var(--t2);margin-top:6px;line-height:1.6;">${refundText}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-danger" onclick="cancelBooking('${id}','auto')">確定取消</button></div>`);
 }
+// 回傳 true=已儲存（或無變更、視同完成）／false=驗證失敗（呼叫端應保留編輯狀態讓使用者修正）
 async function saveBookingTime(id){
   const b=await dbGet('bookings',id);
-  if(b.date<ymd(TODAY)){showToast('已過期的預約無法修改');return;} // 原課已過期 → 不可改動
+  if(b.date<ymd(TODAY)){showToast('已過期的預約無法修改');return false;} // 原課已過期 → 不可改動
   const nd=document.getElementById('ed-date').value;
   const nt=document.getElementById('ed-time').value.slice(0,5);
   const ndur=Number(document.getElementById('ed-dur').value);
@@ -12254,15 +12278,16 @@ async function saveBookingTime(id){
     if(newVid && newVid!==curVid) nVenue=`${newVid}_1`;
   }
   const noChange = nd===b.date&&nt===b.start_time&&ndur===b.duration&&nsub===(b.substitute_coach_id||null)&&nVenue===b.venue_unit;
-  if(noChange){closeModal();return;}
+  if(noChange){closeModal();return true;}
   // 用更新後的內容驗證：時間衝突、代課教練該時段衝堂、場地容量、過去時間等
   const vbk={...b, substitute_coach_id:nsub, venue_unit:nVenue};
   const verr=await validateBooking(vbk,nd,nt,ndur);
-  if(verr){showToast(verr);return;}
+  if(verr){showToast(verr);return false;}   // 驗證失敗：讓呼叫端保留編輯狀態
   b.date=nd;b.start_time=nt;b.duration=ndur;b.substitute_coach_id=nsub;
   b.venue_unit = vbk.venue_unit || nVenue; // validateBooking 重新分配後的場地單位
   await dbPut('bookings',b);
   closeModal();showToast('已更新預約');navTo(CUR_PAGE);
+  return true;
 }
 // 團體課：管理名單（加 / 移除會員，上限 5）
 async function openGroupMembers(id){
