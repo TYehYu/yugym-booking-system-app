@@ -4529,8 +4529,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260718.0904';
-const APP_VERSION_LABEL='v260718.0904';
+const APP_VERSION='260718.0909';
+const APP_VERSION_LABEL='v260718.0909';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16364,6 +16364,7 @@ PAGES.plans=async function(targetId){
       <td data-label="狀態"><span class="tag ${p.active?'tag-ok':'tag-danger'}">${p.active?'上架':'下架'}</span></td>
       <td class="rwd-actions" data-label="" style="white-space:nowrap;">
         <button class="btn btn-ghost btn-sm" onclick="openPlanModal('${p.id}')">編輯</button>
+        <button class="btn btn-ghost btn-sm hide-mobile" onclick="clonePlan('${p.id}')">複製</button>
         <button class="btn btn-ghost btn-sm hide-mobile" onclick="togglePlan('${p.id}')">${p.active?'下架':'上架'}</button>
         <button class="btn btn-danger btn-sm hide-mobile" onclick="deletePlan('${p.id}')">刪除</button>
       </td></tr>`;}).join('')}
@@ -16402,6 +16403,18 @@ async function deletePlan(id){
   if(!confirm('確定刪除此課程方案？此動作無法復原。')) return;
   try{ await dbDel('course_plans',id); }catch(e){ showToast('刪除失敗：'+(e.message||e)); return; }
   showToast('課程方案已刪除');setTkTab('plans');
+}
+/* ── 複製方案：以現有方案為範本開「新增」modal（規格 V4 §7：活動方案以新增完成，不改程式） ──
+   會員已購票券是快照、不受影響；複製只產生一筆全新 course_plans，售出前可自由改價格/堂數/期限。 */
+async function clonePlan(id){
+  const src=await dbGet('course_plans',id);
+  if(!src){ showToast('找不到方案'); return; }
+  const copy=Object.assign({},src);
+  delete copy.id;                        // 去掉主鍵 → 送出時建立新方案
+  copy.name=(src.name||'')+'（複製）';
+  copy.active=true;                      // 複製出來預設上架，售價可先改再啟用
+  window._plClonePrefill=copy;
+  openPlanModal();                       // 新模式開啟，但用 _plClonePrefill 預填
 }
 /* ── 新增 / 編輯票券種類（寫入 ticket_types） ── */
 async function openTypeModal(id){
@@ -16457,11 +16470,13 @@ async function submitType(id){
 async function openPlanModal(id){
   const editing=!!id;
   const types=await dbGetAll('ticket_types');
-  const p = editing ? (await dbGet('course_plans',id)) : {ticket_type_id:'',format:'',unit_price:1600,sessions_base:12,sessions_bonus:0,valid_days:365,plan_type:'general',installment:false,member_applyable:false};
+  const clone=(!editing && window._plClonePrefill) ? window._plClonePrefill : null; // 由 clonePlan() 設定
+  window._plClonePrefill=null;                                                       // 用完即清
+  const p = editing ? (await dbGet('course_plans',id)) : (clone || {ticket_type_id:'',format:'',unit_price:1600,sessions_base:12,sessions_bonus:0,valid_days:365,plan_type:'general',installment:false,member_applyable:false});
   const selectable=types.filter(t=>t.active!==false || t.id===p.ticket_type_id);
   const typeOpts=selectable.map(t=>`<option value="${t.id}" data-cat="${t.category}" ${p.ticket_type_id===t.id?'selected':''}>${t.name}（${t.category}）${t.active===false?'（已停用）':''}</option>`).join('');
   const fmtOpt=(v,l)=>`<option value="${v}" ${(p.format||'')===v?'selected':''}>${l}</option>`;
-  showModal(`<div class="modal-title">${editing?'編輯':'新增'}票券模板</div>
+  showModal(`<div class="modal-title">${editing?'編輯':(clone?'複製':'新增')}票券模板</div>
     <div class="form-row"><label>票券名稱</label><input id="pl-name" value="${(p.name||'').replace(/"/g,'&quot;')}" placeholder="教練課一般 1V1"></div>
     <div class="form-2col">
       <div class="form-row"><label>票券類型</label><select id="pl-type" onchange="plRefreshPlanType()">${typeOpts}</select></div>
