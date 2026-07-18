@@ -2605,6 +2605,22 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-ev.cal-ev-day.cal-ev-checked .evd-time{color:rgba(255,255,255,0.92);}
 .cal-ev.cal-ev-day.cal-ev-checked .evd-name{color:#fff;}
 .cal-ev.cal-ev-day.cal-ev-checked .evd-sub{color:rgba(255,255,255,0.85);}
+/* ══ Inline Expand Card · Phase 1 標準卡（覆蓋上面所有 .cal-ev-day/7d/3d 內距與內容樣式）══
+   結構：上 20% 課程色帶（.evc-course，用 --course-accent）＋下 80% 教練色底（.evc-body，行內 background）。
+   內容僅 時間(.evc-time) + 會員姓名(.evc-name)。簽到用右上角 .evc-check 勾章。 */
+.cal-ev.cal-ev-std{padding:0 !important;overflow:hidden;display:flex;flex-direction:column;align-items:stretch;gap:0 !important;background:#fff !important;border:1px solid rgba(0,0,0,0.06) !important;box-shadow:0 1px 2px rgba(0,0,0,0.08);}
+.cal-ev.cal-ev-std .evc-course{flex:0 0 20%;min-height:3px;width:100%;background:var(--course-accent,#1F6F54);}
+.cal-ev.cal-ev-std.ev-massage .evc-course{background:#2f8f83;}
+.cal-ev.cal-ev-std .evc-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:1px;padding:1px 6px;overflow:hidden;}
+.cal-ev.cal-ev-std .evc-time{font-family:var(--num);font-size:10px;font-weight:700;line-height:1.05;opacity:.8;letter-spacing:.01em;}
+.cal-ev.cal-ev-std .evc-name{font-size:11.5px;font-weight:700;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.cal-ev.cal-ev-std .evc-check{position:absolute;top:2px;right:3px;width:13px;height:13px;border-radius:50%;background:rgba(0,0,0,.32);color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2;}
+/* 簽到：標準卡不整卡填色（保留教練色底），只留右上角勾章；覆蓋舊 .cal-ev-checked 填色 */
+.cal-ev.cal-ev-std.cal-ev-checked{background:#fff !important;}
+/* 7 日窄卡：字級再收一點 */
+.cal-ev.cal-ev-std.cal-ev-7d .evc-time{font-size:9.5px;}
+.cal-ev.cal-ev-std.cal-ev-7d .evc-name{font-size:11px;}
+.cal-ev.cal-ev-std.ev-w-tiny .evc-name{font-size:10.5px;}
 /* 已簽到卡的教練膠囊：改半透明白底、白字，維持可讀 */
 .cal-ev.cal-ev-day.cal-ev-checked .ev-coach-tag{background:rgba(255,255,255,0.25) !important;color:#fff !important;}
 /* Phase 3 的「跟隨滑鼠 [+] 預覽卡」已移除（全域 _chpDate/_chpTime 有競態，偶爾點擊帶不到日期）。
@@ -4529,8 +4545,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260718.0924';
-const APP_VERSION_LABEL='v260718.0924';
+const APP_VERSION='260718.0942';
+const APP_VERSION_LABEL='v260718.0942';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8510,30 +8526,24 @@ async function renderCalendar(opts){
                  const sub = _showCoach ? `<div class="ev-m">${gHeadsN>0?gHeadsN+' 人 ':''}${gCoachNm?_coachTag(gCoachNm,!!subCoachName):''}</div>` : (gHeadsN>0?`<div class="ev-m">${gHeadsN} 人</div>`:'');
                  return `<div class="ev-hd"><span class="ev-time">${b.start_time}</span><span class="ev-t">${bookingTypeName(b,typeMap)}</span></div>${sub}`; })()
         : `<div class="ev-hd"><span class="ev-time">${b.start_time}</span><span class="ev-t">${memName}</span></div>${_showCoach?`<div class="ev-m">${_coachTag(subCoachName||coachName,!!subCoachName)}</div>`:(hideMember?`<div class="ev-m">${typeName}</div>`:'')}`;
-      // ── Phase 2 日檢視新版卡：三行（時間/會員/教練Tag）+ 左色條；團課簡化（時間/團體課/N人）──
-      const _dl = isDayView ? (lanes[b.id]||{zone:'normal'}) : null;
-      const _isSpecial = _dl && _dl.zone==='special';
-      const _colorbar = `<span class="ev-lbar"></span>`; // 左色條，顏色由 cls(ev-pt/friendly...) 控制
-      let _bodyHtmlDay='';
-      if(b.category==='小班肌力'){
-        // 團課：時間 / 團體課 / N人（三檢視一致，詳細靠 tooltip）
-        _bodyHtmlDay = `<div class="evd-time">${b.start_time}</div><div class="evd-name">團體課</div><div class="evd-sub">${gHeadsN>0?gHeadsN+' 人':'—'}</div>`;
-      }else{
-        // 一般課三檢視統一：①時間 ②會員名(最大) ③教練膠囊Tag。不顯示課程名（靠左色條+背景色辨識）
-        const _coachNm = subCoachName||coachName||'';
-        const _coachTagDay = (_showCoach && _coachNm) ? `<div class="evd-coach">${_coachTag(_coachNm,!!subCoachName)}</div>` : '';
-        const _nameLine = hideMember ? `<div class="evd-name">${typeName}</div>` : `<div class="evd-name">${memName}</div>`;
-        _bodyHtmlDay = `<div class="evd-time">${b.start_time}</div>${_nameLine}${_coachTagDay}`;
-      }
-      // 新卡套用範圍：所有檢視（日/3日/7日）共用 course token 柔背景 + 左色條
-      const _useNewCard = true;
-      const _bodyOut = _useNewCard ? (_colorbar+_bodyHtmlDay) : _bodyHtml;
-      // 課程色 class：共用今日教練任務的 course-* token
+      // ── Inline Expand Card · Phase 1 標準卡 ──
+      // 規範：預設卡片僅顯示「時間 + 會員姓名」；課程與教練改用顏色 —— 上 20% 課程色帶、下 80% 教練色底。
+      // 所有卡片規格統一（移除特殊卡差異樣式）；完整資訊靠 hover tooltip（Phase 2 將改 fish-eye）。
+      const _isSpecial = false;                            // 已標準化：不再套用特殊卡樣式
+      const _stdName = hideMember ? typeName : memName;    // 團課的 memName 已是「N 人／名單」摘要
+      const _cc = coachTagColor(_coachId);                 // 教練色（下 80%）；無教練→中性灰
+      // 淡色教練（fg 為深色）把色帶往其色相加深一點，讓教練更好辨識；深色教練（fg=白）維持原飽和 bg。
+      const _fgWhite = /^#f{3}$|^#f{6}$/i.test((_cc.fg||'').trim());
+      const _coachBg = _fgWhite ? _cc.bg : `color-mix(in srgb, ${_cc.bg} 78%, ${_cc.fg})`;
+      const _bodyOut = `<span class="evc-course"></span><div class="evc-body" style="background:${_coachBg};color:${_cc.fg};"><span class="evc-time">${b.start_time}</span><span class="evc-name">${_stdName}</span></div>`;
+      // 課程色 class：共用 course-* token（提供 --course-accent 給上 20% 色帶）
       const _courseCls = (({'ev-pt':'course-pt','ev-friendly':'course-friendly','ev-group':'course-group','ev-self':'course-self','ev-trial':'course-trial','ev-massage':'course-friendly'})[cls]||'course-pt');
       const _densityCls = (nDays===7||nDays===5)?'cal-ev-7d':(nDays===3?'cal-ev-3d':'cal-ev-1d-card');
       // 已簽到（完成/補簽）→ 填滿課程色實色卡；7日拿掉勾勾符號（改用顏色深淺表示，畫面更乾淨）
       const _checkedCls = (_isCheckedIn||_isMakeup) && b.status!=='cancelled' && !hideMember ? 'cal-ev-checked' : '';
-      const _stampOut = ''; // 三檢視都不顯示勾勾章，簽到狀態改用整卡填色表示（cal-ev-checked）
+      // 簽到/補簽 → 右上角小勾章（標準卡用整卡填色不易辨識，改用角標）
+      const _stampOut = ((_isCheckedIn||_isMakeup) && b.status!=='cancelled' && !hideMember)
+        ? `<span class="evc-check" title="${(_isMakeup&&!_isCheckedIn)?'補簽':'已完成'}">✓</span>` : '';
       // Focus Mode：過去的課（日期已過、或今天但已結束）自動淡化，焦點集中到現在與未來
       const _cardDate = ds;
       const _todayYmd = ymd(TODAY);
@@ -8545,7 +8555,7 @@ async function renderCalendar(opts){
         if(_endM <= _nowM) _isPastCard = true;   // 已結束的課
       }
       const _pastCls = _isPastCard ? 'cal-ev-past' : '';
-      evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${wCls} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''} cal-ev-day ${_densityCls} ${_isSpecial?'cal-ev-special':''} ${_courseCls} ${_checkedCls} ${_pastCls}" data-bid="${b.id}" data-time="${b.start_time}"
+      evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${wCls} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''} cal-ev-day cal-ev-std ${_densityCls} ${_isSpecial?'cal-ev-special':''} ${_courseCls} ${_checkedCls} ${_pastCls}" data-bid="${b.id}" data-time="${b.start_time}"
         style="${useFixedLane?dayLaneStyle:`top:${top}px;height:${Math.max(h-2,(nDays===7||nDays===5)?40:64)}px;left:calc(${lane.idx*wpct}% + 3px);width:calc(${wpct}% - 6px);`}"
         ${editable?`onclick="onEvClick(event,'${b.id}')"`:(opts.allMode||bkIsMasked(b)?'':`onclick="openBookingDetail('${b.id}')"`)}>
         ${_renewAlert?'<span class="ev-payalert" title="這是本張票券最後幾堂，記得提醒會員續約">🔁</span>':(_payAlert?'<span class="ev-payalert" title="此堂為本期最後一堂，下次上課前需先繳費開通">💰</span>':'')}
