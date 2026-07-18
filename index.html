@@ -4676,8 +4676,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260718.2345';
-const APP_VERSION_LABEL='v260718.2345';
+const APP_VERSION='260718.2355';
+const APP_VERSION_LABEL='v260718.2355';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6077,11 +6077,13 @@ function computeMemberTiers(bookings){
   });
   const nowYm=ymd(TODAY).slice(0,7);
   const res={};
+  // 制度起點條款（2026-07-18 使用者指示）：起點當下所有既有會員一律「主顧客」，
+  // 之後由降級規則自然運作（未達標者連 2 個完整月後降級）。起點前的歷史不追溯。
+  const TIER_EPOCH_YM='2026-07';
   Object.entries(counts).forEach(([mid,byYm])=>{
-    const yms=Object.keys(byYm).sort();
-    let cur=yms[0], state='regular', ok=0, low=0;
-    while(cur && cur<nowYm){               // 只走到上個月（當月未結束）
-      const n=byYm[cur]||0;                // 中間的空月＝0 堂，計入降級判定
+    let cur=TIER_EPOCH_YM, state='loyal', ok=0, low=0;
+    while(cur<nowYm){                      // 只走到上個月（當月未結束）
+      const n=byYm[cur]||0;                // 空月＝0 堂，計入降級判定
       ok  = n>=4 ? ok+1  : 0;
       low = n<4  ? low+1 : 0;
       if(state==='regular' && ok>=3) state='loyal';
@@ -6090,6 +6092,11 @@ function computeMemberTiers(bookings){
     }
     res[mid]=state;
   });
+  // 完全沒有簽到紀錄的會員：以「每月 0 堂」走同一條規則（起點滿 2 個完整月即降級），
+  // 結果掛在 __default 供 effTier 當預設值 —— 起點初期人人主顧客，之後自然收斂。
+  let zs='loyal', zlow=0, zc=TIER_EPOCH_YM;
+  while(zc<nowYm){ zlow++; if(zs==='loyal'&&zlow>=2){ zs='regular'; } zc=_nextYm(zc); }
+  res.__default=zs;
   return res;
 }
 function _nextYm(ym){ let[y,m]=ym.split('-').map(Number); m++; if(m>12){m=1;y++;} return y+'-'+String(m).padStart(2,'0'); }
@@ -6098,7 +6105,7 @@ function effTier(m){
   if(!m) return 'regular';
   if(m.level==='vip') return 'vip';
   const c=window._memberTierCache;
-  if(c && c.__ready) return c[m.id]||'regular';
+  if(c && c.__ready) return c[m.id]||c.__default||'regular';   // 無簽到史者吃起點條款預設值
   return m.level||'regular';
 }
 // 各頁載入時呼叫：抓 bookings（有 8 秒 TTL 快取）建等級快取
