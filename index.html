@@ -2646,6 +2646,12 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-ev.cal-ev-std .evx-btn.evx-primary{background:var(--green);color:#fff;border-color:var(--green);}
 .cal-ev.cal-ev-std .evx-btn.evx-danger{background:#fff;color:#b0413e;border-color:#e0b3b1;}
 .cal-ev.cal-ev-std .evx-confirm{font-size:11px;font-weight:700;color:#b0413e;align-self:center;}
+/* Phase 3b：卡內編輯表單 */
+.cal-ev.cal-ev-std.cal-ev-editing{min-width:236px;}
+.cal-ev.cal-ev-std .evx-edit{display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px;background:#fff;border-top:1px solid rgba(0,0,0,0.08);}
+.cal-ev.cal-ev-std .evx-edit label{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;font-weight:700;color:#555;}
+.cal-ev.cal-ev-std .evx-edit input,.cal-ev.cal-ev-std .evx-edit select{font-family:inherit;font-size:11px;padding:3px 6px;border:1px solid rgba(0,0,0,0.22);border-radius:6px;background:#fff;color:#222;max-width:140px;}
+.cal-ev.cal-ev-std .evx-edit .evc-actions{padding:4px 0 0;border-top:none;background:transparent;}
 /* 已簽到卡的教練膠囊：改半透明白底、白字，維持可讀 */
 .cal-ev.cal-ev-day.cal-ev-checked .ev-coach-tag{background:rgba(255,255,255,0.25) !important;color:#fff !important;}
 /* Phase 3 的「跟隨滑鼠 [+] 預覽卡」已移除（全域 _chpDate/_chpTime 有競態，偶爾點擊帶不到日期）。
@@ -4570,8 +4576,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260718.1026';
-const APP_VERSION_LABEL='v260718.1026';
+const APP_VERSION='260718.1042';
+const APP_VERSION_LABEL='v260718.1042';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9000,8 +9006,8 @@ function initCalDrag(){
   wrap.addEventListener('pointerdown',e=>{
     const ev=e.target.closest('.cal-ev');
     if(!ev||ev.classList.contains('readonly'))return;
-    // 展開卡（Phase 3a）的動作按鈕：不啟動拖曳/tap，讓按鈕自身 onclick 生效（簽到/取消/編輯）
-    if(e.target.closest('.evc-actions')) return;
+    // 展開卡（Phase 3a/3b）的動作按鈕與編輯欄位：不啟動拖曳/tap，讓按鈕/輸入自身事件生效
+    if(e.target.closest('.evc-actions, .evx-edit')) return;
     bid=ev.dataset.bid; evEl=ev;
     const rect=ev.getBoundingClientRect();
     origH=rect.height; origDur=Math.round(parseFloat(ev.style.height)/SLOT_PX)*SLOT_MIN||60;
@@ -11114,7 +11120,8 @@ async function expandBkCard(el, id){
       ? `<button class="evx-btn" onclick="event.stopPropagation();collapseBkCard();undoCheckin('${id}')">取消簽到</button>`
       : `<button class="evx-btn evx-primary" onclick="event.stopPropagation();collapseBkCard();checkInBooking('${id}')">簽到</button>`;
   }
-  acts += `<button class="evx-btn" onclick="event.stopPropagation();collapseBkCard();openBookingDetail('${id}')">編輯</button>`;
+  if(!closed && b.date>=ymd(TODAY)) acts += `<button class="evx-btn" onclick="event.stopPropagation();bkInlineEdit('${id}')">編輯</button>`;
+  else acts += `<button class="evx-btn" onclick="event.stopPropagation();collapseBkCard();openBookingDetail('${id}')">明細</button>`;
   if(canCancel){
     acts += `<button class="evx-btn evx-danger" onclick="event.stopPropagation();bkInlineCancelConfirm(this,'${id}')">取消預約</button>`;
   }
@@ -11136,7 +11143,12 @@ function _bkOutsideClose(e){
 }
 function collapseBkCard(){
   const el = window._expandedBkEl;
-  if(el){ el.classList.remove('cal-ev-expanded'); el.style.marginLeft=''; el.style.marginTop=''; const a=el.querySelector('.evc-actions'); if(a) a.remove(); }
+  if(el){
+    el.classList.remove('cal-ev-expanded'); el.classList.remove('cal-ev-editing');
+    el.style.marginLeft=''; el.style.marginTop='';
+    const a=el.querySelector('.evc-actions'); if(a) a.remove();
+    const ed=el.querySelector('.evx-edit'); if(ed) ed.remove();
+  }
   window._expandedBkEl = null;
   document.removeEventListener('click', _bkOutsideClose, true);
 }
@@ -11174,6 +11186,44 @@ if(!window._bkFishEdgeBound){
     c._fishNudged = false;
     c.style.marginLeft=''; c.style.marginTop='';
   });
+}
+/* ── Inline Expand Card · Phase 3b：展開卡內直接編輯（日期/時間/時長/教室/代課教練）──
+   欄位沿用編輯 Modal 的 ed-* id，儲存直接重用 saveBookingTime（含衝突/場地/過期驗證 + 重繪）。
+   編輯期間關閉「點外收合」（避免原生日期選單彈窗點擊誤觸收合），由儲存/取消退出。 */
+async function bkInlineEdit(id){
+  const card = window._expandedBkEl; if(!card) return;
+  const b = await dbGet('bookings', id);
+  if(!b || b.date < ymd(TODAY)){ showToast('已過期的預約無法修改'); return; }
+  document.removeEventListener('click', _bkOutsideClose, true); // 編輯期間不因點外而收合
+  const coaches = await dbGetAll('coaches');
+  const coachableList = coaches.filter(c=>isCoachable(c) && c.invite_status!=='pending');
+  const coach = coaches.find(c=>c.id===b.coach_id);
+  const isPersonalPT = b.category!=='小班肌力' && b.category!=='體驗';
+  const durOpts = [30,60,90,120].map(m=>`<option value="${m}" ${b.duration===m?'selected':''}>${m} 分</option>`).join('');
+  const venOpts = getVenues().map(v=>`<option value="${v.id}" ${String(b.venue_unit||'').split('_')[0]===v.id?'selected':''}>${v.name}</option>`).join('');
+  const subOpts = `<option value="">${coach?coach.name:'—'}（主責）</option>`
+    + coachableList.filter(c=>c.id!==b.coach_id).map(c=>`<option value="${c.id}" ${b.substitute_coach_id===c.id?'selected':''}>改由 ${coachDisp(c)} 代課</option>`).join('');
+  const form = `<div class="evx-edit">
+    <label>日期<input type="date" id="ed-date" value="${b.date}"></label>
+    <label>時間<input type="time" id="ed-time" value="${b.start_time}" step="1800"></label>
+    <label>時長<select id="ed-dur">${durOpts}</select></label>
+    ${isPersonalPT?`<label>教室<select id="ed-venue">${venOpts}</select></label>`:''}
+    <label>教練<select id="ed-subcoach">${subOpts}</select></label>
+    <div class="evc-actions">
+      <button class="evx-btn evx-primary" onclick="event.stopPropagation();bkInlineEditSave('${id}')">儲存</button>
+      <button class="evx-btn" onclick="event.stopPropagation();collapseBkCard()">取消</button>
+    </div>
+  </div>`;
+  const acts = card.querySelector('.evc-actions'); if(acts) acts.remove();
+  card.classList.add('cal-ev-editing');
+  card.insertAdjacentHTML('beforeend', form);
+  _bkEdgeNudge(card);   // 表單較高／較寬 → 重新推回可視範圍
+}
+// 儲存：重用 saveBookingTime（讀 ed-* 欄位、驗證、dbPut、navTo 重繪）
+function bkInlineEditSave(id){
+  window._expandedBkEl = null;                 // 即將整頁重繪，先解除展開參照
+  document.removeEventListener('click', _bkOutsideClose, true);
+  saveBookingTime(id);
 }
 // 課卡點擊分流：教練 → 訓練課表；管理員/櫃台 → 預約明細
 async function openCourseCard(id){
