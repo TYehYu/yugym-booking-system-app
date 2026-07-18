@@ -2623,7 +2623,7 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-ev.cal-ev-std.ev-w-tiny .evc-name{font-size:10.5px;}
 /* ══ Inline Expand Card · Phase 2 Fish-eye：hover 放大卡片、原地展開完整明細（不擠壓鄰卡）══ */
 .cal-ev.cal-ev-std .evc-more{display:none;}
-.cal-ev.cal-ev-std{transition:box-shadow .18s ease, min-width .18s ease;}
+.cal-ev.cal-ev-std{transition:box-shadow .18s ease;}
 .cal-ev.cal-ev-std:hover{z-index:600;min-width:174px;height:auto !important;min-height:64px;box-shadow:0 10px 30px rgba(0,0,0,0.30);overflow:visible;}
 .cal-ev.cal-ev-std:hover .evc-course{flex:0 0 7px;min-height:7px;}
 .cal-ev.cal-ev-std:hover .evc-body{justify-content:flex-start;padding:5px 9px 8px;}
@@ -2633,6 +2633,19 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-ev.cal-ev-std:hover .evc-more-st{opacity:.75;}
 /* Fish-eye 取代舊浮動 tooltip：標準卡不再顯示 .ev-tip */
 .cal-ev.cal-ev-std .ev-tip{display:none !important;}
+/* ══ Inline Expand Card · Phase 3a：點擊原地展開（持續展開，含動作列）══ */
+.cal-ev.cal-ev-std.cal-ev-expanded{z-index:660;min-width:196px;height:auto !important;min-height:64px;box-shadow:0 12px 34px rgba(0,0,0,0.34);overflow:visible;}
+.cal-ev.cal-ev-std.cal-ev-expanded .evc-course{flex:0 0 7px;min-height:7px;}
+.cal-ev.cal-ev-std.cal-ev-expanded .evc-body{justify-content:flex-start;padding:5px 9px 8px;}
+.cal-ev.cal-ev-std.cal-ev-expanded .evc-time{font-size:12px;opacity:1;}
+.cal-ev.cal-ev-std.cal-ev-expanded .evc-name{font-size:14px;white-space:normal;line-height:1.25;}
+.cal-ev.cal-ev-std.cal-ev-expanded .evc-more{display:block;margin-top:5px;padding-top:5px;border-top:1px solid rgba(0,0,0,0.14);font-size:11px;font-weight:600;line-height:1.65;}
+.cal-ev.cal-ev-std .evc-actions{display:flex;flex-wrap:wrap;gap:6px;padding:7px 9px 9px;background:#fff;border-top:1px solid rgba(0,0,0,0.08);}
+.cal-ev.cal-ev-std .evx-btn{font-size:11px;font-weight:700;padding:3px 10px;border-radius:7px;border:1px solid rgba(0,0,0,0.18);background:#fff;color:#333;cursor:pointer;line-height:1.6;}
+.cal-ev.cal-ev-std .evx-btn:hover{filter:brightness(0.95);}
+.cal-ev.cal-ev-std .evx-btn.evx-primary{background:var(--green);color:#fff;border-color:var(--green);}
+.cal-ev.cal-ev-std .evx-btn.evx-danger{background:#fff;color:#b0413e;border-color:#e0b3b1;}
+.cal-ev.cal-ev-std .evx-confirm{font-size:11px;font-weight:700;color:#b0413e;align-self:center;}
 /* 已簽到卡的教練膠囊：改半透明白底、白字，維持可讀 */
 .cal-ev.cal-ev-day.cal-ev-checked .ev-coach-tag{background:rgba(255,255,255,0.25) !important;color:#fff !important;}
 /* Phase 3 的「跟隨滑鼠 [+] 預覽卡」已移除（全域 _chpDate/_chpTime 有競態，偶爾點擊帶不到日期）。
@@ -4557,8 +4570,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260718.0953';
-const APP_VERSION_LABEL='v260718.0953';
+const APP_VERSION='260718.1026';
+const APP_VERSION_LABEL='v260718.1026';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8987,6 +9000,8 @@ function initCalDrag(){
   wrap.addEventListener('pointerdown',e=>{
     const ev=e.target.closest('.cal-ev');
     if(!ev||ev.classList.contains('readonly'))return;
+    // 展開卡（Phase 3a）的動作按鈕：不啟動拖曳/tap，讓按鈕自身 onclick 生效（簽到/取消/編輯）
+    if(e.target.closest('.evc-actions')) return;
     bid=ev.dataset.bid; evEl=ev;
     const rect=ev.getBoundingClientRect();
     origH=rect.height; origDur=Math.round(parseFloat(ev.style.height)/SLOT_PX)*SLOT_MIN||60;
@@ -9054,10 +9069,18 @@ function initCalDrag(){
     clearVis();
     try{ wrap.releasePointerCapture(e.pointerId); }catch(_){}
     if(!moved){
-      // 沒有拖動 → 視為點擊。因 pointer capture 會吞掉瀏覽器 click，這裡手動開明細。
+      // 沒有拖動 → 視為點擊。因 pointer capture 會吞掉瀏覽器 click，這裡手動處理。
       window._justDragged=false;
       window._justTapped=true; setTimeout(()=>{window._justTapped=false;},400);
-      if(_bid) openBookingDetail(_bid);
+      if(_bid){
+        // Inline Expand Card · Phase 3a：標準卡 + 非遮蔽 → 原地展開；否則沿用舊 Modal
+        const _card = ev && ev.closest ? ev.closest('.cal-ev') : ev;
+        if(_card && _card.classList && _card.classList.contains('cal-ev-std') && !_card.classList.contains('bk-masked')){
+          if(_card.classList.contains('cal-ev-expanded')) collapseBkCard(); else expandBkCard(_card, _bid);
+        } else {
+          openBookingDetail(_bid);
+        }
+      }
       return;
     }
     // 確實拖曳過 → 立即重繪行事曆，讓卡片回到正確位置（避免清空 inline 定位後掉到容器底部）
@@ -11063,7 +11086,94 @@ function onEvClick(e,id){
   if(window._justDragged){window._justDragged=false;return;}
   // pointerup 已手動開過明細（capture 點擊），忽略隨後補發的 click 避免雙開
   if(window._justTapped){return;}
+  // Inline Expand Card · Phase 3a：標準卡 + 非遮蔽 → 原地展開（查看+簽到+取消）；否則沿用舊 Modal
+  const el = e && e.currentTarget;
+  if(el && el.classList && el.classList.contains('cal-ev-std') && !el.classList.contains('bk-masked')){
+    if(el.classList.contains('cal-ev-expanded')){ collapseBkCard(); return; }
+    if(e.stopPropagation) e.stopPropagation();
+    expandBkCard(el, id);
+    return;
+  }
   openBookingDetail(id);
+}
+/* ── Inline Expand Card · Phase 3a：點卡原地展開（查看 + 簽到 + 取消，卡內確認）──
+   明細沿用卡片既有的 .evc-more（Phase 2）；此處只注入動作列 .evc-actions。
+   簽到/取消/取消簽到重用既有 checkInBooking / cancelBooking / undoCheckin（它們會自行重繪行事曆）。
+   「編輯」暫時仍開舊 Modal openBookingDetail 當回退（Phase 3b 再改為原地編輯）。 */
+async function expandBkCard(el, id){
+  collapseBkCard();
+  const b = await dbGet('bookings', id);
+  if(!b){ openBookingDetail(id); return; }
+  const checked = b.status==='checked_in' || b.status==='completed';
+  const canCancel = b.status==='booked' || b.status==='checked_in';
+  const staff = SESSION.role==='admin' || SESSION.role==='front_desk';
+  const closed = b.status==='cancelled' || b.status==='completed';
+  let acts='';
+  if(staff && !closed){
+    acts += checked
+      ? `<button class="evx-btn" onclick="event.stopPropagation();collapseBkCard();undoCheckin('${id}')">取消簽到</button>`
+      : `<button class="evx-btn evx-primary" onclick="event.stopPropagation();collapseBkCard();checkInBooking('${id}')">簽到</button>`;
+  }
+  acts += `<button class="evx-btn" onclick="event.stopPropagation();collapseBkCard();openBookingDetail('${id}')">編輯</button>`;
+  if(canCancel){
+    acts += `<button class="evx-btn evx-danger" onclick="event.stopPropagation();bkInlineCancelConfirm(this,'${id}')">取消預約</button>`;
+  }
+  el.style.marginLeft=''; el.style.marginTop='';   // 先清除舊位移再量測
+  el.classList.add('cal-ev-expanded');
+  el.insertAdjacentHTML('beforeend', `<div class="evc-actions">${acts}</div>`);
+  // 邊緣感知：展開後若超出視窗右緣/下緣，用負 margin 把卡片推回可視範圍（等同往左／往上展開）
+  const r = el.getBoundingClientRect();
+  const overR = r.right - (window.innerWidth - 12);
+  if(overR > 0) el.style.marginLeft = (-Math.ceil(overR)) + 'px';
+  const overB = r.bottom - (window.innerHeight - 12);
+  if(overB > 0) el.style.marginTop = (-Math.ceil(overB)) + 'px';
+  window._expandedBkEl = el;
+  setTimeout(()=>document.addEventListener('click', _bkOutsideClose, true), 0);
+}
+function _bkOutsideClose(e){
+  const el = window._expandedBkEl;
+  if(el && !el.contains(e.target)) collapseBkCard();
+}
+function collapseBkCard(){
+  const el = window._expandedBkEl;
+  if(el){ el.classList.remove('cal-ev-expanded'); el.style.marginLeft=''; el.style.marginTop=''; const a=el.querySelector('.evc-actions'); if(a) a.remove(); }
+  window._expandedBkEl = null;
+  document.removeEventListener('click', _bkOutsideClose, true);
+}
+// 取消預約：卡內兩段式確認（不用 Modal）；確定後走 cancelBooking auto 退票判斷
+function bkInlineCancelConfirm(btn, id){
+  const box = btn.parentElement; if(!box) return;
+  box.innerHTML = `<span class="evx-confirm">確定取消此預約？</span>`
+    + `<button class="evx-btn evx-danger" onclick="event.stopPropagation();collapseBkCard();cancelBooking('${id}','auto')">確定取消</button>`
+    + `<button class="evx-btn" onclick="event.stopPropagation();collapseBkCard()">返回</button>`;
+}
+/* 邊緣感知：卡片放大/展開後若超出視窗右緣/下緣，用負 margin 推回可視範圍（往左／往上展開）。
+   採「靠右錨定」——右緣不超過視窗即可，位移量取剛好；hover 與點擊展開共用。 */
+function _bkEdgeNudge(el){
+  if(!el) return;
+  el.style.marginLeft=''; el.style.marginTop='';
+  const r = el.getBoundingClientRect();
+  const overR = r.right - (window.innerWidth - 12);
+  if(overR > 0) el.style.marginLeft = (-Math.ceil(overR)) + 'px';
+  const overB = r.bottom - (window.innerHeight - 12);
+  if(overB > 0) el.style.marginTop = (-Math.ceil(overB)) + 'px';
+}
+// Hover Fish-eye 邊緣感知（bound once）：hover 靠邊卡片自動推回畫面；離開清除。展開卡自行處理不重複。
+if(!window._bkFishEdgeBound){
+  window._bkFishEdgeBound = true;
+  document.addEventListener('mouseover', e=>{
+    const c = e.target && e.target.closest && e.target.closest('.cal-ev-std');
+    if(!c || c.classList.contains('cal-ev-expanded') || c._fishNudged) return;
+    c._fishNudged = true;
+    _bkEdgeNudge(c);
+  });
+  document.addEventListener('mouseout', e=>{
+    const c = e.target && e.target.closest && e.target.closest('.cal-ev-std');
+    if(!c || c.classList.contains('cal-ev-expanded')) return;
+    if(e.relatedTarget && c.contains(e.relatedTarget)) return; // 移到卡內子元素不算離開
+    c._fishNudged = false;
+    c.style.marginLeft=''; c.style.marginTop='';
+  });
 }
 // 課卡點擊分流：教練 → 訓練課表；管理員/櫃台 → 預約明細
 async function openCourseCard(id){
