@@ -4021,8 +4021,20 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 今日教練任務：圓形課卡（票券風格）*/
 .task-dots{display:flex;flex-wrap:wrap;gap:14px 12px;padding:2px 0;}
 .task-dot-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;cursor:pointer;font-family:inherit;padding:0;width:56px;}
-.task-dot{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,61,50,0.08);}
+.task-dot{position:relative;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,61,50,0.08);}
 .task-dot .td-time{font-family:var(--num);font-size:13px;font-weight:800;line-height:1;}
+/* 會員自簽（2026-07-20）：可簽到＝金環；已簽到＝右上勾章 */
+.task-dot.task-dot-ck{box-shadow:0 0 0 3px var(--gold,#E9CB9C),0 1px 3px rgba(0,61,50,0.08);}
+.task-dot .td-done{position:absolute;top:-3px;right:-3px;width:17px;height:17px;border-radius:50%;background:#fff;border:1.5px solid var(--ok,#2e7d5b);color:var(--ok,#2e7d5b);font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;line-height:1;}
+/* 下班打卡確認視窗（2026-07-20）：圖示統計列＋時間不足警示 */
+.po-box{background:var(--card2);border-radius:12px;padding:11px 14px;display:flex;flex-direction:column;gap:9px;margin:6px 0 10px;}
+.po-row{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--text);}
+.po-row .po-ic{width:20px;text-align:center;flex-shrink:0;}
+.po-row .po-l{color:var(--t2);width:64px;flex-shrink:0;}
+.po-row b{font-size:15.5px;}
+.po-warn{background:#fdf2e3;border:1px solid #e8cfa3;color:#8a5220;border-radius:12px;padding:10px 14px;font-size:13.5px;line-height:1.8;}
+.po-warn b{font-size:15px;}
+.po-ok{background:#eef5ef;border:1px solid #cfe3d4;color:#2e6b4f;border-radius:12px;padding:10px 14px;font-size:13.5px;}
 .task-dot-name{font-size:11.5px;color:var(--t2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:56px;}
 /* 值班進度條 */
 .duty-prog{margin-top:14px;padding-top:13px;border-top:1px solid var(--bd);}
@@ -5010,8 +5022,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260720.1200';
-const APP_VERSION_LABEL='v260720.1200';
+const APP_VERSION='260720.1215';
+const APP_VERSION_LABEL='v260720.1215';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12098,11 +12110,21 @@ async function openBookingDetail(id){
   const canCancel=b.status==='booked'||b.status==='checked_in';
   // 教練只能改自己負責（主責或代課）的課；管理員 / 櫃台全權
   const ownByCoach = SESSION.role!=='coach' || b.coach_id===SESSION.id || b.substitute_coach_id===SESSION.id;
-  const editable=!window._coachReadonly && ownByCoach && b.status!=='cancelled'&&b.status!=='completed'&&b.date>=ymd(TODAY);
-  // 簽到僅後台（管理員/櫃台）可代為操作；教練端不能幫簽（會員自行掃碼簽到）
+  const isMemberView = SESSION.role==='member';   // 會員視角：唯讀明細＋自簽，不出現員工編輯欄位
+  const editable=!window._coachReadonly && !isMemberView && ownByCoach && b.status!=='cancelled'&&b.status!=='completed'&&b.date>=ymd(TODAY);
+  // 簽到僅後台（管理員/櫃台）可代為操作；教練端不能幫簽（會員自行簽到）
   const staffCanCheckin = SESSION.role==='admin' || SESSION.role==='front_desk';
   const slotDt=new Date(b.date+'T'+b.start_time+':00');
   const within24=(slotDt-TODAY)/3600000 < 24 && (slotDt-TODAY)>=0;
+  /* 會員自簽（2026-07-20 使用者定案：簽到放任務課卡、開課前 30 分鐘開放）：
+     自己的課＋當日＋status=booked。這裡只決定按鈕顯示；checkInBooking 內有同一道
+     30 分鐘閘、RPC 端（fn_checkin_booking, member_app）驗證本人，三層一致。 */
+  let memberCkBtn='';
+  if(isMemberView && b.member_id===SESSION.id && b.status==='booked' && b.date===ymd(TODAY)){
+    memberCkBtn = (new Date()>=new Date(slotDt.getTime()-30*60000))
+      ? `<button class="btn btn-green btn-sm" onclick="checkInBooking('${b.id}')">簽到</button>`
+      : `<span class="tag" style="font-size:11px;">開課前 30 分鐘開放簽到</span>`;
+  }
   // 分期繳費 / 續約提醒：判斷這筆是否為臨界堂
   let _payAlertLine='';
   if(tk){
@@ -12176,7 +12198,7 @@ async function openBookingDetail(id){
       ${editable?`<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="openGroupMembers('${b.id}')">管理名單</button>`:''}</div>
       <div style="background:var(--card2);border-radius:9px;padding:4px 10px;">${rows}</div></div>`;
   }else{
-    memberLine=`<div><span style="color:var(--t2);">會員</span>　${mem?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`:'—'}</div>`;
+    memberLine=`<div><span style="color:var(--t2);">會員</span>　${mem?(isMemberView?`<span style="font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'—'}</div>`;
   }
   showModal(`<div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <span>預約明細</span>
@@ -12184,6 +12206,7 @@ async function openBookingDetail(id){
         ? ((function(){const nd=(parseYmd(b.date)?ymd(parseYmd(b.date)):b.date);return nd<ymd(TODAY);})()
             ? `<button class="btn btn-gold btn-sm" onclick="openMakeupModal('${b.id}')">補簽</button>`
             : `<button class="btn btn-green btn-sm" onclick="checkInBooking('${b.id}')">簽到</button>`)
+        : memberCkBtn ? memberCkBtn
         : (b.status==='checked_in'&&!isGroupD&&staffCanCheckin
             ? `<span style="display:flex;align-items:center;gap:8px;"><span class="tag tag-ok" style="font-size:12px;">已簽到</span><button class="btn btn-ghost btn-sm" onclick="undoCheckin('${b.id}')">取消簽到</button></span>`
             : `<span class="tag ${b.status==='cancelled'?'tag-danger':(b.status==='completed'||b.status==='checked_in')?'tag-ok':'tag-warn'}" style="font-size:12px;">${statusLabel(b.status)}</span>`)}
@@ -12192,7 +12215,7 @@ async function openBookingDetail(id){
     ${isPersonalPT?`
     <div style="display:flex;flex-direction:column;gap:11px;font-size:13px;padding-bottom:2px;">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        ${mem?`<button class="btn btn-ghost btn-sm" style="padding:4px 13px;font-size:14px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`:'<span>—</span>'}
+        ${mem?(isMemberView?`<span style="font-size:14px;font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:4px 13px;font-size:14px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'<span>—</span>'}
         ${editable
           ? `<span class="bkd-timeedit">
                <input type="date" id="ed-date" value="${b.date}">
@@ -19795,11 +19818,29 @@ function clearPunchClock(){}
 // 下班前確認，避免誤觸
 async function confirmPunchOut(){
   let rec=null; try{ rec=await getAttendance(SESSION.id,ymd(TODAY)); }catch(_){}
-  const wh = rec&&rec.clock_in ? calcWorkHours({...rec,clock_out:nowHM()}) : 0;
+  const wh = (rec&&rec.clock_in ? calcWorkHours({...rec,clock_out:nowHM()}) : 0)||0;
+  /* 下班確認升級（2026-07-20 使用者指示）：統計今日值班時間；若比排班早走，
+     顯示「時間不足」警示（差多少、排到幾點），由教練確認是否提早下班。圖示輔助、內容從簡。 */
+  let sched=0, schedEnd='';
+  try{
+    const _sh=(await dbGetAll('shifts').catch(()=>[]))
+      .filter(s=>s.emp_id===SESSION.id&&s.date===ymd(TODAY)&&!s.leave_type&&s.start_time&&s.end_time);
+    _sh.forEach(s=>{ sched+=shiftHours(s.start_time,s.end_time); if(!schedEnd||s.end_time>schedEnd) schedEnd=s.end_time; });
+  }catch(_){}
+  const early = sched>0 && wh<sched;
+  const lack = early ? Math.max(0.5,Math.round((sched-wh)*2)/2) : 0;   // 同值班計法：0.5h 級距
   showModal(`<div class="modal-title">下班打卡</div>
-    <div style="font-size:14px;color:var(--text);padding:6px 0 4px;line-height:1.8;">確定要下班打卡嗎？<br>上班 ${rec?rec.clock_in:'—'}　·　目前工時約 <b>${wh}</b> 小時</div>
-    <div style="font-size:12px;color:var(--t2);margin-top:6px;">下班後若按錯，仍可在打卡卡片點「取消下班」修正。</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">再想想</button><button class="btn btn-green" onclick="doPunchOutConfirmed()">確定下班</button></div>`);
+    <div class="po-box">
+      <div class="po-row"><span class="po-ic">🕘</span><span class="po-l">上班</span><b class="num">${rec&&rec.clock_in?rec.clock_in:'—'}</b></div>
+      <div class="po-row"><span class="po-ic">🕔</span><span class="po-l">現在</span><b class="num">${nowHM()}</b></div>
+      <div class="po-row"><span class="po-ic">⏱️</span><span class="po-l">今日值班</span><b class="num">${wh}</b> 小時${sched?`<span style="color:var(--t3);font-size:12px;">　排班 ${sched} 小時</span>`:''}</div>
+    </div>
+    ${early
+      ? `<div class="po-warn">⚠️ <b>時間不足</b>　排班到 <b class="num">${schedEnd}</b>，還差 <b class="num">${lack}</b> 小時<br>確定要提早下班嗎？</div>`
+      : `<div class="po-ok">✅ ${sched?'已完成今日排班時數':'今日無排班，依實際打卡計'}</div>`}
+    <div style="font-size:12px;color:var(--t2);margin-top:8px;">按錯沒關係，下班後可在打卡卡片點「取消下班」修正。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">再想想</button>
+      <button class="btn ${early?'btn-danger':'btn-green'}" onclick="doPunchOutConfirmed()">${early?'確定提早下班':'確定下班'}</button></div>`);
 }
 async function doPunchOutConfirmed(){ closeModal(); await punchOut(); renderPunchPanel(); }
 // 取消下班（限本人當天，誤觸補救）：清掉 clock_out 回到上班中
@@ -20510,8 +20551,10 @@ PAGES.mem_bookings=async function(){
      原 SCHEDULE 大標與今日甘特圖退場（renderMemTodayGantt 暫留未刪）；我的課表月曆保留。 */
   const _mToday=ymd(TODAY);
   const _nowMin3=(new Date()).getHours()*60+(new Date()).getMinutes();
-  const _upcoming=mine.filter(b=>b.status==='booked' &&
-    (b.date>_mToday || (b.date===_mToday && timeToMin(b.start_time||'0:0')+(Number(b.duration)||60)>_nowMin3)));
+  const _notPast=b=>(b.date>_mToday || (b.date===_mToday && timeToMin(b.start_time||'0:0')+(Number(b.duration)||60)>_nowMin3));
+  const _upcoming=mine.filter(b=>b.status==='booked' && _notPast(b));
+  /* 任務卡另含「今日已簽到」的課（課程結束前）：自簽完卡片不消失、改顯示勾章（2026-07-20） */
+  const _dotList=mine.filter(b=>(b.status==='booked'||(b.status==='checked_in'&&b.date===_mToday)) && _notPast(b));
   const _schedN=_upcoming.length;
   const _tkMine=(mtickets||[]).filter(t=>t.member_id===SESSION.id
     && (!t.status||t.status==='usable') && (Number(t.sessions_remaining)||0)>0
@@ -20523,15 +20566,18 @@ PAGES.mem_bookings=async function(){
     <div class="dcard cds-card"><span class="mc-k2-ic">${OPS_TODO_IC.ticket}</span><div class="cds-num">${_unschedN}<span class="mc-k2-u">堂</span></div><div class="mc-k2-l">未安排課程</div><div class="mc-kpi-rev-sub">可預約堂數</div></div>
   </div>`;
   const _colMap3={pt:'#1f6f54',friendly:'#23508a',group:'#9a5a1e',self:'#6a655c',trial:'#6e3a86'};
-  const _taskDots=_upcoming.slice(0,12).map(b=>{
+  const _taskDots=_dotList.slice(0,12).map(b=>{
     const col=_colMap3[bkCC(b)]||'#1f6f54';
     const isT=b.date===_mToday;
     const st=isT?`background:${col};border:2px solid ${col};color:#fff;`
                :`background:#fff;border:2px solid ${col};color:${col};`;
     const _p=b.date.split('-');
+    const done=b.status==='checked_in';
+    // 開課前 30 分鐘～開課後（未簽到）＝可簽到：金環＋金字提示（點卡開明細簽到）
+    const ckOpen=!done && isT && (Date.now() >= new Date(b.date+'T'+b.start_time+':00').getTime()-30*60000);
     return `<button class="task-dot-wrap" onclick="openBookingDetail('${b.id}')">
-      <span class="task-dot" style="${st}"><span class="td-time">${b.start_time}</span></span>
-      <span class="task-dot-name">${Number(_p[1])}/${Number(_p[2])}</span>
+      <span class="task-dot${ckOpen?' task-dot-ck':''}" style="${st}"><span class="td-time">${b.start_time}</span>${done?'<span class="td-done">✓</span>':''}</span>
+      <span class="task-dot-name"${ckOpen?' style="color:var(--gold-d);font-weight:800;"':''}>${done?'已簽到':(ckOpen?'可簽到':`${Number(_p[1])}/${Number(_p[2])}`)}</span>
     </button>`;
   }).join('');
   const taskCard=`<div class="dcard"><div class="dcard-title">已安排任務</div>
