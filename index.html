@@ -4045,6 +4045,8 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .hr-emp-no{font-family:var(--num);font-size:11px;color:var(--t3);font-weight:500;}
 .hr-emp-sub{font-size:12px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .hr-emp-arrow{color:var(--t3);font-size:17px;flex-shrink:0;}
+/* 全域線條小圖示（LNI）：行內對齊、跟隨文字色 */
+.lni{width:15px;height:15px;display:inline-block;vertical-align:-3px;flex-shrink:0;}
 .task-dot-name{font-size:11.5px;color:var(--t2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:56px;}
 /* 值班進度條 */
 .duty-prog{margin-top:14px;padding-top:13px;border-top:1px solid var(--bd);}
@@ -5032,8 +5034,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260720.1250';
-const APP_VERSION_LABEL='v260720.1250';
+const APP_VERSION='260720.1305';
+const APP_VERSION_LABEL='v260720.1305';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11113,9 +11115,20 @@ function renderBkTypeCards(){
   const box=document.getElementById('bk-type-cards'); if(!box)return;
   const types=window._bkTypes||[];
   const cur=document.getElementById('bk-type').value;
-  box.innerHTML=types.map(t=>`<button type="button" class="bk-card${cur===t.id?' on':''}" onclick="pickBkType('${t.id}')">
-    <span class="bk-card-name">${t.name}</span><span class="bk-card-sub">${t.category}</span>
-  </button>`).join('');
+  /* 2026-07-20 簡化＋圖示原則：卡上加課種形狀 glyph（行事曆同語彙、課程色）；
+     副標與名稱重複（運動按摩/運動按摩、自主訓練/自主訓練）就不顯示 */
+  const _SH={pt:'■',friendly:'●',group:'◆',self:'⬢',trial:'▲',massage:'■'};
+  const _AC={pt:'var(--course-pt-accent,#1f6f54)',friendly:'var(--course-friendly-accent,#23508a)',group:'var(--course-group-accent,#9a5a1e)',self:'var(--course-self-accent,#6a655c)',trial:'var(--course-trial-accent,#6e3a86)',massage:'var(--course-pt-accent,#1f6f54)'};
+  // color 欄位可能為空（測試庫即如此）→ 從類別推導；私人教練且名稱含「友善」歸友善課
+  const _ccOf=t=>{
+    let c=t.color||({'私人教練':'pt','小班肌力':'group','自主訓練':'self','體驗':'trial','運動按摩':'massage'})[t.category]||'';
+    if(c==='pt'&&/友善/.test(t.name||'')) c='friendly';
+    return c;
+  };
+  box.innerHTML=types.map(t=>{const cc=_ccOf(t);
+    return `<button type="button" class="bk-card${cur===t.id?' on':''}" onclick="pickBkType('${t.id}')">
+    <span class="bk-card-name"><span style="color:${_AC[cc]||'inherit'};font-size:10.5px;vertical-align:1px;">${_SH[cc]||''}</span> ${t.name}</span>${t.category&&t.category!==t.name?`<span class="bk-card-sub">${t.category}</span>`:''}
+  </button>`;}).join('');
 }
 function pickBkType(tid){
   document.getElementById('bk-type').value=tid;
@@ -15812,6 +15825,22 @@ async function saveLeave(id){
    ║  人資管理模組（HR）— 第一批：員工資料             ║
    ║  資料結構＋畫面；薪資計算後續再串。               ║
    ╚══════════════════════════════════════════════╝ */
+/* ── 全域線條小圖示（2026-07-20 使用者指示：圖示一律簡單線條 stroke SVG，不用 emoji）──
+   內文/chip/統計列共用；尺寸由 .lni 控制（15px、行內對齊）。新增圖示請沿用同一組 stroke 參數。 */
+const LNI_C='fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
+const LNI={
+  clock:`<svg class="lni" viewBox="0 0 24 24" ${LNI_C}><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>`,
+  calendar:`<svg class="lni" viewBox="0 0 24 24" ${LNI_C}><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>`,
+  briefcase:`<svg class="lni" viewBox="0 0 24 24" ${LNI_C}><rect x="3" y="7.5" width="18" height="12.5" rx="2.5"/><path d="M9 7.5V6a2 2 0 012-2h2a2 2 0 012 2v1.5M3 13h18"/></svg>`,
+  book:`<svg class="lni" viewBox="0 0 24 24" ${LNI_C}><path d="M4 5.5A2.5 2.5 0 016.5 3H20v18H6.5A2.5 2.5 0 014 18.5z"/><path d="M4 18.5A2.5 2.5 0 016.5 16H20"/></svg>`,
+  link:`<svg class="lni" viewBox="0 0 24 24" ${LNI_C}><path d="M10 13a5 5 0 007.1 0l2.1-2.1a5 5 0 00-7.1-7.1L11 5"/><path d="M14 11a5 5 0 00-7.1 0l-2.1 2.1a5 5 0 007.1 7.1L13 19"/></svg>`,
+  user:`<svg class="lni" viewBox="0 0 24 24" ${LNI_C}><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"/></svg>`,
+  phone:`<svg class="lni" viewBox="0 0 24 24" ${LNI_C}><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>`,
+  timer:`<svg class="lni" viewBox="0 0 24 24" ${LNI_C}><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M10 2.5h4"/></svg>`,
+  login:`<svg class="lni" viewBox="0 0 24 24" ${LNI_C}><path d="M14 3.5h4a2 2 0 012 2v13a2 2 0 01-2 2h-4M3.5 12h11M11 8.5L14.5 12 11 15.5"/></svg>`,
+  warn:`<svg class="lni" viewBox="0 0 24 24" ${LNI_C}><path d="M12 4L2.5 20h19z"/><path d="M12 10v4M12 17.2v.3"/></svg>`,
+  check:`<svg class="lni" viewBox="0 0 24 24" ${LNI_C}><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>`,
+};
 // 員工類型 → 適用規則對照（顯示用；驅動表單顯示哪些區塊）
 const EMP_RULES={
   full_time:{ label:'正職教練',
@@ -15886,14 +15915,14 @@ async function renderHrStaffData(){
   /* 清單簡化（2026-07-20 使用者指示「全系統內容簡化＋圖示輔助」）：
      原 8 欄表格（手機拆成一人 7 行、大量「—」）→ 一人一列圖示卡：
      頭像＋姓名(#編號)＋職務章、副行＝類型圖示＋到職年資（空欄位直接不顯示）、狀態、點列開詳情。 */
-  const ET_IC={full_time:'💼',part_time:'⏱️',intern:'🎓',contractor:'🤝'};
+  const ET_IC={full_time:LNI.briefcase,part_time:LNI.clock,intern:LNI.book,contractor:LNI.link};
   const rows=coaches.map(c=>{
     const et=normEmp(c.employment_type||c.pay_type);
     const sen=calcSeniority(c.hire_date);
     const duty=[c.is_manager?'店長':'',c.is_supervisor?'主管':''].filter(Boolean);
     const sub=[
-      `${ET_IC[et]||'👤'} ${EMP_RULES[et]?EMP_RULES[et].label:(PAY_LABEL[et]||'未設類型')}`,
-      c.hire_date?`📅 ${String(c.hire_date).replace(/-/g,'/')} 到職${sen&&sen.years>0?`・${sen.years} 年`:''}`:''
+      `${ET_IC[et]||LNI.user} ${EMP_RULES[et]?EMP_RULES[et].label:(PAY_LABEL[et]||'未設類型')}`,
+      c.hire_date?`${LNI.calendar} ${String(c.hire_date).replace(/-/g,'/')} 到職${sen&&sen.years>0?`・${sen.years} 年`:''}`:''
     ].filter(Boolean).join('　');
     return `<button class="hr-emp" onclick="openHrEdit('${c.id}')">
       <span class="hr-emp-av">${(c.name||'?').slice(0,1)}</span>
@@ -17384,9 +17413,9 @@ PAGES.plans=async function(targetId){
            （大量「—」）併成一欄，只顯示為真的屬性 chip -->
       <td data-label="屬性" class="hide-mobile">${[
         t.variant?`<span class="tag" style="background:var(--card2);color:var(--t2);font-size:11px;">${t.variant}</span>`:'',
-        t.member_bookable?'<span class="tag" style="background:#eef5ef;color:#2e6b4f;font-size:11px;">📱 會員可自約</span>':'',
-        t.requires_coach?'<span class="tag" style="background:#eef2f8;color:#23508a;font-size:11px;">👤 需指定教練</span>':'',
-        t.time_restricted?'<span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:11px;">🕙 平日 10–18</span>':''
+        t.member_bookable?`<span class="tag" style="background:#eef5ef;color:#2e6b4f;font-size:11px;">${LNI.phone} 會員可自約</span>`:'',
+        t.requires_coach?`<span class="tag" style="background:#eef2f8;color:#23508a;font-size:11px;">${LNI.user} 需指定教練</span>`:'',
+        t.time_restricted?`<span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:11px;">${LNI.clock} 平日 10–18</span>`:''
       ].filter(Boolean).join(' ')||'<span style="color:var(--t3);font-size:12px;">—</span>'}</td>
       <td data-label="狀態"><span class="tag ${ttActive(t)?'tag-ok':'tag-danger'}">${ttActive(t)?'啟用':'停用'}</span></td>
       <td class="rwd-actions" data-label="" style="white-space:nowrap;">
@@ -19834,13 +19863,13 @@ async function confirmPunchOut(){
   const lack = early ? Math.max(0.5,Math.round((sched-wh)*2)/2) : 0;   // 同值班計法：0.5h 級距
   showModal(`<div class="modal-title">下班打卡</div>
     <div class="po-box">
-      <div class="po-row"><span class="po-ic">🕘</span><span class="po-l">上班</span><b class="num">${rec&&rec.clock_in?rec.clock_in:'—'}</b></div>
-      <div class="po-row"><span class="po-ic">🕔</span><span class="po-l">現在</span><b class="num">${nowHM()}</b></div>
-      <div class="po-row"><span class="po-ic">⏱️</span><span class="po-l">今日值班</span><b class="num">${wh}</b> 小時${sched?`<span style="color:var(--t3);font-size:12px;">　排班 ${sched} 小時</span>`:''}</div>
+      <div class="po-row"><span class="po-ic">${LNI.login}</span><span class="po-l">上班</span><b class="num">${rec&&rec.clock_in?rec.clock_in:'—'}</b></div>
+      <div class="po-row"><span class="po-ic">${LNI.clock}</span><span class="po-l">現在</span><b class="num">${nowHM()}</b></div>
+      <div class="po-row"><span class="po-ic">${LNI.timer}</span><span class="po-l">今日值班</span><b class="num">${wh}</b> 小時${sched?`<span style="color:var(--t3);font-size:12px;">　排班 ${sched} 小時</span>`:''}</div>
     </div>
     ${early
-      ? `<div class="po-warn">⚠️ <b>時間不足</b>　排班到 <b class="num">${schedEnd}</b>，還差 <b class="num">${lack}</b> 小時<br>確定要提早下班嗎？</div>`
-      : `<div class="po-ok">✅ ${sched?'已完成今日排班時數':'今日無排班，依實際打卡計'}</div>`}
+      ? `<div class="po-warn">${LNI.warn} <b>時間不足</b>　排班到 <b class="num">${schedEnd}</b>，還差 <b class="num">${lack}</b> 小時<br>確定要提早下班嗎？</div>`
+      : `<div class="po-ok">${LNI.check} ${sched?'已完成今日排班時數':'今日無排班，依實際打卡計'}</div>`}
     <div style="font-size:12px;color:var(--t2);margin-top:8px;">按錯沒關係，下班後可在打卡卡片點「取消下班」修正。</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">再想想</button>
       <button class="btn ${early?'btn-danger':'btn-green'}" onclick="doPunchOutConfirmed()">${early?'確定提早下班':'確定下班'}</button></div>`);
@@ -23249,7 +23278,7 @@ PAGES.settings=async function(){
     else _bhGroups.push({from:d,to:d,s:bh[0],e:bh[1]});
   });
   const bhRows=_bhGroups.map(g=>`<div style="display:flex;align-items:center;gap:10px;font-size:13.5px;padding:7px 0;">
-    <span>🕘</span><span style="width:110px;color:var(--t2);">週${dowName[g.from]}${g.from!==g.to?`－週${dowName[g.to]}`:''}</span>
+    <span style="color:var(--t3);display:flex;">${LNI.clock}</span><span style="width:110px;color:var(--t2);">週${dowName[g.from]}${g.from!==g.to?`－週${dowName[g.to]}`:''}</span>
     <b class="num">${g.s} – ${g.e}</b></div>`).join('');
 
   // 課程類型顏色（唯讀色卡）
