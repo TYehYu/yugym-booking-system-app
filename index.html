@@ -348,12 +348,17 @@ select option{color:var(--text);}
 .bk-tk-card.on .bk-tk-fmt{background:rgba(255,255,255,0.28);}
 .bk-tk-meta{font-size:12px;color:var(--t2);}
 .bk-tk-card.on .bk-tk-meta{color:rgba(255,255,255,0.85);}
-.bk-card{text-align:left;padding:11px 13px;border:1.5px solid var(--bd);background:var(--card);border-radius:11px;cursor:pointer;transition:.15s;font-family:inherit;display:flex;flex-direction:column;gap:3px;}
+.bk-card{text-align:left;padding:11px 13px;border:1.5px solid var(--bd);background:var(--card);border-radius:11px;cursor:pointer;transition:border-color .12s,background-color .12s,box-shadow .12s;font-family:inherit;display:flex;flex-direction:column;gap:3px;}
 .bk-card:hover{border-color:var(--green-l);}
 .bk-card.on{border-color:var(--green);background:var(--green);box-shadow:0 3px 12px rgba(0,61,50,0.2);}
 .bk-card-name{font-size:14px;font-weight:600;color:var(--text);}
 .bk-card.on .bk-card-name{color:#fff;}
 .bk-card-sub{font-size:11px;color:var(--t3);}
+/* 步驟 2 摘要卡（2026-07-20）：步驟 1 選擇的白底提示卡 */
+.bk-sum{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#fff;border:1px solid var(--bd);border-radius:12px;padding:12px 14px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,61,50,.06);font-size:13.5px;}
+.bk-sum-type{font-weight:800;font-size:14.5px;}
+.bk-sum-i{display:flex;align-items:center;gap:5px;color:var(--t2);font-weight:600;}
+.bk-sum-i .lni{color:var(--t3);}
 .bk-card.on .bk-card-sub{color:rgba(255,255,255,0.8);}
 .gt-group-lbl{font-size:12px;color:var(--gold);font-weight:600;letter-spacing:0.06em;margin-bottom:8px;}
 /* 發放票券：1V1/1V2 篩選列 */
@@ -1307,7 +1312,9 @@ tr:hover td{background:var(--card2);}
 .stat-card .sc-unit{font-size:13px;color:var(--t3);margin-left:4px;}
 
 /* Modal */
-.modal-bg{position:fixed;inset:0;background:rgba(20,18,14,0.5);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;backdrop-filter:blur(2px);}
+/* 2026-07-20 使用者回報 hover 慢半拍：移除全螢幕 backdrop-filter（每次重繪都壓在模糊層上），
+   改加深遮罩補足對比。 */
+.modal-bg{position:fixed;inset:0;background:rgba(20,18,14,0.55);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
 .modal{background:var(--surface-3);border-radius:var(--radius-2xl);padding:26px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-xl);}
 .modal-title{font-family:var(--serif);font-size:18px;font-weight:600;margin-bottom:18px;}
 .modal-foot{display:flex;gap:10px;margin-top:22px;}
@@ -5038,8 +5045,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260720.1330';
-const APP_VERSION_LABEL='v260720.1330';
+const APP_VERSION='260720.1345';
+const APP_VERSION_LABEL='v260720.1345';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11088,6 +11095,12 @@ async function openBookingModal(){
     if(isMobileBk && t.category==='自主訓練') return false;          // 手機：自主訓練由會員自約
     return true;
   });
+  // 排序（2026-07-20 使用者指定）：第一列 教練課/友善教練課/團體課、第二列 運動按摩/體驗課/自主訓練
+  const _BK_ORDER=['教練課','友善教練課','團體課','運動按摩','體驗課','自主訓練'];
+  activeTypes.sort((a,b)=>{
+    const ia=_BK_ORDER.indexOf(a.name), ib=_BK_ORDER.indexOf(b.name);
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  });
   const typeOpts=activeTypes.map(t=>`<option value="${t.id}">${t.name}（${t.category}）</option>`).join('');
   const pf=_prefill||{};   // 只有從行事曆點選才有 date/time
   _bkWizard={fromSlot:!!_prefill};
@@ -11111,43 +11124,58 @@ async function openBookingModal(){
   }).join('');
   // 30 分鐘時段選項（08:00～22:00）
   const timeOpts=bkTimeOptions(pf.time);
+  /* 2026-07-20 使用者指示：日期/時間放最上方（並排）、課程排序固定、教練名單直接顯示 */
   showModal(`<div class="modal-title">新增預約 · 步驟 1 / 2</div>
-    <div style="font-size:12px;color:var(--t2);margin-bottom:14px;">選擇課程類型${isCoach?'與時段':'、教練與時段'}。</div>
+    <div class="form-2col">
+      <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}"></div>
+      <div class="form-row"><label>時間</label><select id="bk-time">${timeOpts}</select></div>
+    </div>
     <div class="form-row"><label>課程類型</label>
       <div id="bk-type-cards" class="bk-cards"></div>
       <input type="hidden" id="bk-type" value="" onchange="onBkTypeChange()"></div>
     ${isCoach
       ? `<input type="hidden" id="bk-coach" value="${SESSION.id}">`
-      : `<div class="form-row" id="bk-coach-row" style="display:none;"><label>授課教練</label>
+      : `<div class="form-row" id="bk-coach-row"><label>授課教練</label>
           <div id="bk-coach-cards" class="bk-cards"></div>
           <input type="hidden" id="bk-coach" value=""></div>`}
-    <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}"></div>
-    <div class="form-row"><label>時間</label><select id="bk-time">${timeOpts}</select></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="cancelBookingModal()">取消</button><button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`);
   // 渲染卡片
   window._bkTypes=activeTypes;
   window._bkCoaches=coaches.filter(isCoachable);
   window._bkPrefillCoachId=prefillCoach||null;
   renderBkTypeCards();
+  if(!isCoach) renderBkCoachCards();   // 教練名單一開就顯示（2026-07-20 使用者指示）
+}
+/* 課種形狀/色（行事曆同語彙）：color 欄位可能為空（測試庫即如此）→ 從類別推導；
+   私人教練且名稱含「友善」歸友善課。renderBkTypeCards 與步驟 2 摘要卡共用。 */
+const BK_SHAPE={pt:'■',friendly:'●',group:'◆',self:'⬢',trial:'▲',massage:'■'};
+const BK_ACCENT={pt:'var(--course-pt-accent,#1f6f54)',friendly:'var(--course-friendly-accent,#23508a)',group:'var(--course-group-accent,#9a5a1e)',self:'var(--course-self-accent,#6a655c)',trial:'var(--course-trial-accent,#6e3a86)',massage:'var(--course-pt-accent,#1f6f54)'};
+function bkCcOfType(t){
+  let c=(t&&t.color)||({'私人教練':'pt','小班肌力':'group','自主訓練':'self','體驗':'trial','運動按摩':'massage'})[t&&t.category]||'';
+  if(c==='pt'&&/友善/.test((t&&t.name)||'')) c='friendly';
+  return c;
+}
+/* 步驟 2 白底摘要卡（2026-07-20 使用者指示：步驟 1 的選擇明顯提示在視窗上方） */
+function bkSummaryCard(t,date,time,coachNm){
+  const cc=bkCcOfType(t);
+  const d=parseYmd(date);
+  const wd=d?['日','一','二','三','四','五','六'][d.getDay()]:'';
+  return `<div class="bk-sum">
+    <span class="bk-sum-type" style="color:${BK_ACCENT[cc]||'var(--green)'};">${BK_SHAPE[cc]||''} ${t.name}</span>
+    <span class="bk-sum-i">${LNI.calendar} ${String(date).replace(/-/g,'/')}${wd?`（${wd}）`:''}</span>
+    <span class="bk-sum-i">${LNI.clock} ${time}</span>
+    ${coachNm?`<span class="bk-sum-i">${LNI.user} ${coachNm}</span>`:''}
+  </div>`;
 }
 // 課程類型卡片
 function renderBkTypeCards(){
   const box=document.getElementById('bk-type-cards'); if(!box)return;
   const types=window._bkTypes||[];
   const cur=document.getElementById('bk-type').value;
-  /* 2026-07-20 簡化＋圖示原則：卡上加課種形狀 glyph（行事曆同語彙、課程色）；
-     副標與名稱重複（運動按摩/運動按摩、自主訓練/自主訓練）就不顯示 */
-  const _SH={pt:'■',friendly:'●',group:'◆',self:'⬢',trial:'▲',massage:'■'};
-  const _AC={pt:'var(--course-pt-accent,#1f6f54)',friendly:'var(--course-friendly-accent,#23508a)',group:'var(--course-group-accent,#9a5a1e)',self:'var(--course-self-accent,#6a655c)',trial:'var(--course-trial-accent,#6e3a86)',massage:'var(--course-pt-accent,#1f6f54)'};
-  // color 欄位可能為空（測試庫即如此）→ 從類別推導；私人教練且名稱含「友善」歸友善課
-  const _ccOf=t=>{
-    let c=t.color||({'私人教練':'pt','小班肌力':'group','自主訓練':'self','體驗':'trial','運動按摩':'massage'})[t.category]||'';
-    if(c==='pt'&&/友善/.test(t.name||'')) c='friendly';
-    return c;
-  };
-  box.innerHTML=types.map(t=>{const cc=_ccOf(t);
+  /* 2026-07-20 簡化＋圖示原則：卡上加課種形狀 glyph；副標與名稱重複就不顯示 */
+  box.innerHTML=types.map(t=>{const cc=bkCcOfType(t);
     return `<button type="button" class="bk-card${cur===t.id?' on':''}" onclick="pickBkType('${t.id}')">
-    <span class="bk-card-name"><span style="color:${_AC[cc]||'inherit'};font-size:10.5px;vertical-align:1px;">${_SH[cc]||''}</span> ${t.name}</span>${t.category&&t.category!==t.name?`<span class="bk-card-sub">${t.category}</span>`:''}
+    <span class="bk-card-name"><span style="color:${BK_ACCENT[cc]||'inherit'};font-size:10.5px;vertical-align:1px;">${BK_SHAPE[cc]||''}</span> ${t.name}</span>${t.category&&t.category!==t.name?`<span class="bk-card-sub">${t.category}</span>`:''}
   </button>`;}).join('');
 }
 function pickBkType(tid){
@@ -11241,7 +11269,7 @@ async function bkStep2(){
   // ── 體驗課：填臨時客戶姓名+電話（不綁會員、不扣票）──
   if(isTrial){
     showModal(`<div class="modal-title">新增體驗課 · 步驟 2 / 2</div>
-      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${t.name}　${date} ${time}${coach_id?'　·　'+(await coachName(coach_id)):''}</div>
+      ${bkSummaryCard(t,date,time,coach_id?await coachName(coach_id):'')}
       <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">體驗課由教練接洽安排，客戶可尚未註冊；不扣會員票券。</div>
       <div class="form-row"><label>客戶姓名（必填）</label><input id="bk-trial-name" placeholder="輸入體驗客戶姓名"></div>
       <div class="form-row"><label>客戶電話（選填）</label><input id="bk-trial-phone" placeholder="方便日後轉為正式會員聯繫"></div>
@@ -11260,7 +11288,7 @@ async function bkStep2(){
     });
     window._grpSel=[];
     showModal(`<div class="modal-title">新增團體課 · 步驟 2 / 2</div>
-      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${t.name}　${date} ${time}${coach_id?'　·　'+(await coachName(coach_id)):''}</div>
+      ${bkSummaryCard(t,date,time,coach_id?await coachName(coach_id):'')}
       <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;background:var(--card2);padding:10px 12px;border-radius:9px;">團體課最多 5 人，名單可現在選或之後在明細再加。有團體課票券的會員會扣 1 堂，沒票的由教練負責。</div>
       <div class="form-row"><label>加入會員（點選即可複選，最多 5 人）</label>
         <input type="hidden" id="bk-member" value="">
@@ -11287,7 +11315,7 @@ async function bkStep2(){
     return `<option value="${m.id}">${mine?'★ ':''}${m.name}（${fmtPhone(m.phone)}）· 剩 ${sum} 堂</option>`;
   }).join('');
   showModal(`<div class="modal-title">新增預約 · 步驟 2 / 2</div>
-    <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">${t.name}　${date} ${time}${coach_id?'　·　'+(await coachName(coach_id)):''}</div>
+    ${bkSummaryCard(t,date,time,coach_id?await coachName(coach_id):'')}
     <div class="form-row"><label>會員（僅顯示有可用票券者）</label>
       <input type="hidden" id="bk-member" value="">
       <button type="button" class="bk-mem-pick" id="bk-mem-pick" onclick="openMemberSheet()">
