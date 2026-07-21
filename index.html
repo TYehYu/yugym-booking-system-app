@@ -4686,6 +4686,12 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .cal-side .mc-cell{cursor:pointer;}
 .cal-side .mc-cell.mc-today .mc-d{background:#F4F1E8;color:var(--green);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;}
 .cal-side .mc-cell.mc-sel .mc-d{border:1.4px solid rgba(244,241,232,.85);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;}
+/* 票券分區（2026-07-21 商業規則）：已過期小節標題＋歷史收合區 */
+.md-tk-subhead{font-size:11.5px;font-weight:800;color:#a8433f;letter-spacing:.05em;margin:16px 2px 8px;}
+.md-tk-hist{margin-top:16px;}
+.md-tk-hist summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--t3);padding:6px 2px;user-select:none;}
+.md-tk-hist summary:hover{color:var(--t2);}
+.md-tk-hist[open] summary{margin-bottom:8px;}
 /* 健身知識卡（2026-07-21 使用者指示，仿參考圖左上大圖卡）：漸層滿版＋大線條插圖＋底部文字疊層 */
 .know-card{position:relative;min-height:190px;padding:16px 18px;overflow:hidden;cursor:pointer;border:none;
   display:flex;flex-direction:column;justify-content:flex-end;transition:transform .15s var(--ease-out),box-shadow .15s;}
@@ -5155,8 +5161,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260721.1104';
-const APP_VERSION_LABEL='v260721.1104';
+const APP_VERSION='260721.1112';
+const APP_VERSION_LABEL='v260721.1112';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13574,7 +13580,7 @@ async function openMemberDetail(member_id){
   const isCoach = SESSION.role==='coach'; // 教練：精簡檢視，隱藏付款/發票/金額/等級調整等
 
   // 票券卡片渲染（圓圈進度）
-  const renderTkCard=(t)=>{
+  const renderTkCard=(t,extraBtn)=>{
     const ty=typeMap[t.ticket_type_id];
     const total=t.sessions_total||0;
     const dates=(usedDates[t.id]||[]).slice();
@@ -13600,14 +13606,39 @@ async function openMemberDetail(member_id){
       </div>
       <div class="tkc-grid">${circles}</div>
       <div class="md-tk-foot">
-        <span class="md-tk-meta">到期 ${t.expire_date||'—'}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span></span>
+        <span class="md-tk-meta">到期 ${t.expire_date?fmtExpire(t.expire_date):'永久有效'}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span></span>
         ${(inst && (t.unlocked_sessions||0)<total && (SESSION.role==='admin'||SESSION.role==='front_desk'))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
+        ${extraBtn||''}
       </div>
     </div>`;
   };
   const courseTk=myTickets.filter(t=>tkCategoryOf(t)==='course');
   const selfTk=myTickets.filter(t=>tkCategoryOf(t)==='self');
-  const tkListHtml=(arr)=>arr.length===0?'<div class="empty" style="padding:20px;"><div class="em-t" style="font-size:13px;">此分類尚無票券</div></div>':`<div class="md-tklist">${arr.map(renderTkCard).join('')}</div>`;
+  /* 票券分區（2026-07-21 商業規則，模型A轉譯）：
+     可用＝未過期且（剩餘>0 或仍有未來預約佔用）；
+     已過期＝到期日已過且剩餘>0 → 列表下方、可「重新啟用」（管理員/櫃台）；
+     歷史＝剩餘 0 且無未來預約（或 used_up/refunded）→ 收合區，完整保留。 */
+  const _todayYmd2=ymd(TODAY);
+  const _hasFutureBk=t=>myBookings.some(b=>b.ticket_id===t.id&&b.date>=_todayYmd2&&(b.status==='booked'||b.status==='checked_in'));
+  const _isExpiredTk=t=>t.status!=='refunded'&&t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2&&(Number(t.sessions_remaining)||0)>0;
+  const _isHistoryTk=t=>!_isExpiredTk(t)&&(t.status==='used_up'||t.status==='refunded'||(((Number(t.sessions_remaining)||0)<=0)&&!_hasFutureBk(t))||(t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2));
+  const _canReact=(SESSION.role==='admin'||SESSION.role==='front_desk');
+  const tkListHtml=(arr)=>{
+    const expired=arr.filter(_isExpiredTk);
+    const history=arr.filter(_isHistoryTk);
+    const active=arr.filter(t=>!_isExpiredTk(t)&&!_isHistoryTk(t));
+    let html= active.length?`<div class="md-tklist">${active.map(t=>renderTkCard(t)).join('')}</div>`
+      :((expired.length||history.length)?'':'<div class="empty" style="padding:20px;"><div class="em-t" style="font-size:13px;">此分類尚無票券</div></div>');
+    if(expired.length){
+      html+=`<div class="md-tk-subhead">已過期（可重新啟用）</div><div class="md-tklist">${
+        expired.map(t=>renderTkCard(t,_canReact?`<button class="btn btn-gold btn-sm" onclick="openReactivateTicket('${t.id}')">重新啟用</button>`:'')).join('')}</div>`;
+    }
+    if(history.length){
+      html+=`<details class="md-tk-hist"><summary>歷史紀錄（${history.length}）</summary><div class="md-tklist">${
+        history.map(t=>renderTkCard(t)).join('')}</div></details>`;
+    }
+    return html;
+  };
 
   showModal(`<div class="md-body-card md-detail-single">
 
@@ -18692,6 +18723,52 @@ async function confirmInstallNext(ticket_id){
   closeModal();
   showToast(`已收款並開通第 ${cur+1} 期（${seg} 堂）`);
   openMemberDetail(t.member_id);
+}
+/* ── 過期票券重新啟用（2026-07-21 商業規則 A2：預設 1 堂／效期 1 週／收費 $100，皆可調）──
+   帳面：total=已用+新堂數、remaining=新堂數、status=usable、到期日重設；
+   寫 ticket_logs（grant）＋ purchases（source:reactivate）。僅管理員/櫃台。 */
+async function openReactivateTicket(tid){
+  if(!(SESSION.role==='admin'||SESSION.role==='front_desk')){ showToast('只有管理員或櫃台可重新啟用'); return; }
+  const t=await dbGet('member_tickets',tid); if(!t){ showToast('找不到票券'); return; }
+  const d7=new Date(TODAY); d7.setDate(d7.getDate()+7);
+  showModal(`<div class="modal-title">重新啟用票券</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;">${t.plan_name||'票券'}　·　原到期日 ${t.expire_date||'—'}　·　帳面剩餘 ${t.sessions_remaining||0} 堂</div>
+    <div class="form-2col">
+      <div class="form-row"><label>啟用堂數</label><input type="number" id="ra-n" value="1" min="1"></div>
+      <div class="form-row"><label>新到期日</label><input type="date" id="ra-exp" value="${ymd(d7)}"></div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>收費金額</label><input type="number" id="ra-fee" value="100" min="0"></div>
+      <div class="form-row"><label>付款方式</label><select id="ra-method"><option value="cash">現金</option><option value="transfer">匯款</option><option value="card">刷卡</option></select></div>
+    </div>
+    <div style="font-size:11.5px;color:var(--t3);line-height:1.7;">預設 1 堂・效期 1 週・$100。確認後票券恢復可用並記入收款與票券帳本。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openMemberDetail('${t.member_id}')">取消</button>
+      <button class="btn btn-green" onclick="doReactivateTicket('${tid}')">確認啟用並收款</button></div>`);
+}
+async function doReactivateTicket(tid){
+ try{
+  const t=await dbGet('member_tickets',tid); if(!t)return;
+  const n=Math.max(1,Number(document.getElementById('ra-n').value)||1);
+  const exp=document.getElementById('ra-exp').value||'';
+  const fee=Math.max(0,Number(document.getElementById('ra-fee').value)||0);
+  const method=document.getElementById('ra-method').value||'cash';
+  if(!exp){ showToast('請選擇新到期日'); return; }
+  const used=Math.max(0,(Number(t.sessions_total)||0)-(Number(t.sessions_remaining)||0));
+  t.sessions_total=used+n;
+  t.sessions_remaining=n;
+  t.status='usable';
+  t.expire_date=exp;
+  await dbPut('member_tickets',t);
+  try{ await logTicket(t.id,'grant',n,null,SESSION.id,`過期重新啟用（${n} 堂，效期至 ${exp}，收費 $${fee}）`); }catch(_){}
+  if(fee>0){
+    try{ await dbPut('purchases',{id:uid('PUR'),member_id:t.member_id,plan_id:t.source_plan_id||null,ticket_id:t.id,
+      plan_name:(t.plan_name||'票券')+'（重新啟用）',list_price:null,deal_amount:fee,payment_method:method,
+      installment_count:1,note:`過期票券重新啟用 ${n} 堂`,operator:SESSION.id,source:'reactivate',
+      created_at:new Date().toISOString()}); }catch(e){ console.error('reactivate purchase log fail',e); showToast('收款紀錄寫入失敗：'+(e.message||e)); }
+  }
+  showToast(`票券已重新啟用（${n} 堂，效期至 ${exp}）`);
+  openMemberDetail(t.member_id);
+ }catch(e){ showToast('重新啟用失敗：'+(e&&e.message?e.message:e)); }
 }
 async function viewLogs(ticket_id){
   const t=await dbGet('member_tickets',ticket_id);
