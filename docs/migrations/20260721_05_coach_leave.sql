@@ -1,0 +1,13 @@
+-- ============================================================
+-- 20260721_05：教練請假（商業規則二）
+-- ------------------------------------------------------------
+-- bookings.status enum booking_status 補 'coach_leave'。
+-- 流程（前端 bkCoachLeave）：退票（refund 帳本）＋ booking 保留 status=coach_leave；
+-- 會員到場簽到走既有 fn_checkin_booking（該函式只擋 cancelled——coach_leave 可簽到、
+-- 發點照 handle_checkin_reward 規則（2 點、課程日+6 到期）、不會重複扣票）。未到場即不發。
+-- 測試庫已於 2026-07-21 端到端驗證（退票 2→3、簽到發 2 點效期正確、票不變）。
+--
+-- 套用狀態：測試庫已套用。⚠️ 正式庫先套本檔再使用「教練請假」功能。
+-- 回退：enum 值無法移除（Postgres 限制），不使用即無影響。
+-- ============================================================
+alter type booking_status add value if not exists 'coach_leave';

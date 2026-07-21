@@ -5196,8 +5196,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260721.1135';
-const APP_VERSION_LABEL='v260721.1135';
+const APP_VERSION='260721.1140';
+const APP_VERSION_LABEL='v260721.1140';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8471,7 +8471,7 @@ PAGES.g_dashboard=async function(){
      └────────────────┴──────────┴───────────────────────┘
      手機版維持：月曆 Hero → KPI＋值班 → 任務 →（右欄）本月成績 → 待辦 → 知識卡 */
   C.innerHTML=`
-    ${isMobileLayout()?adminCalCard:heroRow}
+    ${isMobileLayout()?adminCalCard:''}<!-- 2026-07-21 使用者指示：桌機置中日期列移除（左下行事曆已有今日提示） -->
     <div class="mc-dash-wrap hero-sheet">
       ${isMobileLayout()?`
       <div class="mc-dash slime-flow">
@@ -12264,11 +12264,33 @@ async function bkOrbitSub(id){
   // 2026-07-20 使用者指示：代課名單往代課按鈕（卡片左上）「上方」展開，不吊在卡片下方
   const html = `<div class="evc-roster evr-up" onclick="event.stopPropagation()">`
     + `<div class="evr-title">代課教練（點選改派）</div>`
+    /* 教練請假（2026-07-21 商業規則二）：退票＋保留 booking(status=coach_leave)；
+       會員到場簽到照發自主訓練點（走既有簽到 RPC），未到不發。 */
+    + (b.status!=='coach_leave'
+        ? `<button class="evr-row" style="color:#a8433f;" onclick="event.stopPropagation();bkCoachLeave('${id}')">教練請假（退票・保留課卡）</button>`
+        : `<button class="evr-row on" disabled>已標記教練請假</button>`)
     + (b.substitute_coach_id?`<button class="evr-row" onclick="event.stopPropagation();bkOrbitSubSet('${id}','')">清除代課（回主責）</button>`:'')
     + list.map(c=>`<button class="evr-row ${b.substitute_coach_id===c.id?'on':''}" onclick="event.stopPropagation();bkOrbitSubSet('${id}','${c.id}')">${coachDisp(c)}${b.substitute_coach_id===c.id?'<span class="evr-tick">✓ 代課中</span>':''}</button>`).join('')
     + `</div>`;
   const old = el.querySelector('.evc-roster'); if(old) old.remove();
   (orb||el).insertAdjacentHTML('beforeend', html);
+}
+/* 教練請假（2026-07-21 商業規則二）：①有扣票→退回 1 堂（refund 帳本）；
+   ②booking 保留、status=coach_leave；③會員屆時到場可照常簽到（fn_checkin_booking 不擋
+   coach_leave、發點照規則、不再扣票）；未到場即不發。 */
+async function bkCoachLeave(id){
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+  if(b.status==='cancelled'||b.status==='checked_in'||b.status==='completed'){ showToast('此狀態不可標記請假'); return; }
+  try{
+    if(b.ticket_id){ await refundTicket(b.ticket_id,b.id,SESSION.id); }
+    b.status='coach_leave';
+    await dbPut('bookings',b);
+    try{ if(b.member_id) await pushNotification(b.member_id,'cancel','教練請假通知',
+      `您的${b.category||'課程'}（${b.date} ${b.start_time}）因教練請假，票券已退回；若您仍到場自主訓練並簽到，將照常發放自主訓練點數。`); }catch(_){}
+    collapseBkCard();
+    showToast('已標記教練請假：票券已退回、課卡保留');
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('標記請假失敗：'+(e&&e.message?e.message:e)); }
 }
 // 改派代課：先做輕量衝突檢查（該教練同時段已有課 → 擋下），再寫入並重繪
 async function bkOrbitSubSet(id, cid){
@@ -13192,7 +13214,7 @@ async function saveGroupMembers(id){
   showToast('名單已更新');
   openBookingDetail(id);
 }
-function statusLabel(s){return {scheduled:'已預約',booked:'已預約',checked_in:'已簽到',completed:'已完成',cancelled:'已取消',no_show:'未到'}[s]||s;}
+function statusLabel(s){return {scheduled:'已預約',booked:'已預約',checked_in:'已簽到',completed:'已完成',cancelled:'已取消',no_show:'未到',coach_leave:'教練請假'}[s]||s;}
 // 安全取得團體課會員 id 陣列（相容資料庫回傳陣列或 JSON 字串）
 function mids(b){
   const v=b&&b.member_ids;
@@ -17044,24 +17066,95 @@ function ppRecordHtml(){
     : '';
   const lpSub = lp ? (lp.clock_out ? `工時 ${calcWorkHours(lp)||0} 小時` : '尚未下班打卡') : '尚無打卡紀錄';
 
+  /* 2026-07-21 使用者指示（B1）：員工工作紀錄卡也全部「視窗顯示」——
+     本月課堂/本月值班/特休/打卡紀錄改輕量視窗；薪資視窗含摘要＋完整薪資頁入口。 */
   return `<div class="pp-card">
     <div class="pp-card-t">工作紀錄</div>
-    <div class="pp-card-tip">此處僅顯示本月摘要，點「查看全部」進入完整功能頁。</div>
     <div class="pp-dash">
       ${ppDashCard('calendar','本月課堂',
         `${c.mClassDone}<small>/ ${c.mClassSched} 堂</small>`,
-        '已完成 / 排定', `ppScopeGo('calendar','g_booking')`)}
+        '已完成 / 排定', `ppOpenEmpClasses('${id}')`)}
       ${ppDashCard('clock','本月值班',
         `${(c.mDutyDone||0).toFixed(1)}<small>/ ${(c.mDutySched||0).toFixed(1)} 小時</small>`,
-        '已完成 / 排定', `ppScopeGo('coach_shifts','g_supervisor')`)}
-      ${ppDashCard('money','本月薪資','', '課堂 · 值班 · 獎金明細', `ppScopeGo('coach_salary','g_staff')`)}
+        '已完成 / 排定', `ppOpenEmpShifts('${id}')`)}
+      ${ppDashCard('money','本月薪資','', '課堂 · 值班 · 獎金明細', `ppOpenEmpSalary('${id}')`)}
       ${ppDashCard('leaf','特休',
         `${al}<small>小時可用</small>`,
-        `今年已使用 ${ppAlUsed()} 小時`, `ppScopeGo('coach_shifts','g_supervisor')`)}
-      ${ppDashCard('clock','最近打卡', lpVal, lpSub, `ppScopeGo('attendance','g_staff')`)}
+        `今年已使用 ${ppAlUsed()} 小時`, `ppOpenEmpLeave('${id}')`)}
+      ${ppDashCard('clock','最近打卡', lpVal, lpSub, `ppOpenEmpPunch('${id}')`)}
       ${ppDashCard('card','薪資規則','', '值班模式 · 級距 · 獎金 · 津貼', `openHrSalary('${id}')`)}
     </div>
   </div>`;
+}
+/* ── 員工紀錄輕量視窗（2026-07-21 B1）── */
+async function ppOpenEmpClasses(id){
+  const month=ymd(TODAY).slice(0,7);
+  const [bookings,members]=await Promise.all([dbGetAll('bookings'),dbGetAll('members')]);
+  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const mine=bookings.filter(b=>(b.coach_id===id||b.substitute_coach_id===id)
+    &&(b.date||'').slice(0,7)===month&&b.status!=='cancelled')
+    .sort((a,b)=>(b.date+b.start_time).localeCompare(a.date+a.start_time));
+  const stName=s=>({booked:'已預約',checked_in:'已簽到',completed:'已完成',no_show:'未到'})[s]||s;
+  const rows=mine.map(b=>{
+    const nm=b.member_id?(memMap[b.member_id]||'—'):(Array.isArray(b.member_ids)&&b.member_ids.length?`${b.member_ids.length} 人`:b.trial_name||'—');
+    return `<tr><td>${(b.date||'').slice(5).replace('-','/')}</td><td>${b.start_time||''}</td>
+      <td>${bookingTypeName(b)}</td><td>${nm}</td><td>${stName(b.status)}${b.substitute_coach_id===id?'（代）':''}</td></tr>`;
+  }).join('');
+  showModal(`<div class="modal-title">本月課堂${PP.rec?` · ${PP.rec.name}`:''}</div>
+    <div style="max-height:60vh;overflow-y:auto;">${mine.length
+      ?`<table class="mtk-table"><thead><tr><th>日期</th><th>時間</th><th>課程</th><th>對象</th><th>狀態</th></tr></thead><tbody>${rows}</tbody></table>`
+      :'<div class="empty" style="padding:26px;"><div class="em-t">本月尚無課堂</div></div>'}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+async function ppOpenEmpShifts(id){
+  const month=ymd(TODAY).slice(0,7);
+  const shifts=(await dbGetAll('shifts').catch(()=>[])).filter(s=>s.emp_id===id&&(s.date||'').slice(0,7)===month)
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const hrs=shifts.filter(s=>!s.leave_type).reduce((a,s)=>a+(Number(s.hours)||0),0);
+  const rows=shifts.map(s=>`<tr><td>${(s.date||'').slice(5).replace('-','/')}</td>
+    <td>${s.leave_type?('請'+s.leave_type):((s.start_time||'')+'–'+(s.end_time||''))}</td>
+    <td style="text-align:right;">${s.leave_type?'—':((Number(s.hours)||0)+' h')}</td></tr>`).join('');
+  showModal(`<div class="modal-title">本月值班${PP.rec?` · ${PP.rec.name}`:''}</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:10px;">本月排定合計 <b style="color:var(--green);">${Math.floor(hrs*2)/2}</b> 小時</div>
+    <div style="max-height:56vh;overflow-y:auto;">${shifts.length
+      ?`<table class="mtk-table"><thead><tr><th>日期</th><th>班別</th><th style="text-align:right;">時數</th></tr></thead><tbody>${rows}</tbody></table>`
+      :'<div class="empty" style="padding:26px;"><div class="em-t">本月尚無排班</div></div>'}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+async function ppOpenEmpSalary(id){
+  const c=PP.ctx||{};
+  showModal(`<div class="modal-title">本月薪資摘要${PP.rec?` · ${PP.rec.name}`:''}</div>
+    <div style="background:var(--card2);border-radius:12px;padding:14px 16px;font-size:13.5px;line-height:2;">
+      <div><span style="color:var(--t2);">本月課堂</span>　${c.mClassDone||0} / ${c.mClassSched||0} 堂（已完成/排定）</div>
+      <div><span style="color:var(--t2);">本月值班</span>　${(c.mDutyDone||0).toFixed(1)} / ${(c.mDutySched||0).toFixed(1)} 小時</div>
+    </div>
+    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;line-height:1.7;">薪資明細（課費級距、獎金、津貼、勞健保）依月結計算，完整明細請開薪資頁。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      <button class="btn btn-green" onclick="closeModal();ppScopeGo('coach_salary','g_admin')">開啟完整薪資頁</button></div>`);
+}
+async function ppOpenEmpLeave(id){
+  const r=PP.rec||{};
+  const avail=ppAlAvailable(r), used=ppAlUsed();
+  showModal(`<div class="modal-title">特休${r.name?` · ${r.name}`:''}</div>
+    <div style="background:var(--card2);border-radius:12px;padding:14px 16px;font-size:13.5px;line-height:2;">
+      <div><span style="color:var(--t2);">去年結轉</span>　${Number(r.al_carry_hours)||0} 小時</div>
+      <div><span style="color:var(--t2);">今年新增</span>　${Number(r.al_earned_hours)||0} 小時</div>
+      <div><span style="color:var(--t2);">已使用</span>　${used} 小時（由排班表特休時數自動累計）</div>
+      <div style="font-size:15px;"><span style="color:var(--t2);">目前可用</span>　<b style="color:var(--green);">${avail}</b> 小時</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+async function ppOpenEmpPunch(id){
+  const att=(await dbGetAll('attendance').catch(()=>[])).filter(a=>a.emp_id===id)
+    .sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,30);
+  const rows=att.map(a=>`<tr><td>${a.date||''}</td><td>${a.clock_in||'—'}</td>
+    <td>${a.clock_out||'<span style="color:var(--warn,#a8642a);">未打</span>'}</td>
+    <td style="text-align:right;">${calcWorkHours(a)!=null?calcWorkHours(a)+' h':'—'}</td></tr>`).join('');
+  showModal(`<div class="modal-title">打卡紀錄${PP.rec?` · ${PP.rec.name}`:''}<span style="font-size:11.5px;color:var(--t3);font-weight:400;">　近 30 筆</span></div>
+    <div style="max-height:60vh;overflow-y:auto;">${att.length
+      ?`<table class="mtk-table"><thead><tr><th>日期</th><th>上班</th><th>下班</th><th style="text-align:right;">工時</th></tr></thead><tbody>${rows}</tbody></table>`
+      :'<div class="empty" style="padding:26px;"><div class="em-t">尚無打卡紀錄</div></div>'}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
 // Dashboard 摘要卡：圖示 + 數字 + 說明 + 查看全部
 function ppDashCard(icon, title, value, sub, go){
