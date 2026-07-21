@@ -4686,6 +4686,13 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .cal-side .mc-cell{cursor:pointer;}
 .cal-side .mc-cell.mc-today .mc-d{background:#F4F1E8;color:var(--green);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;}
 .cal-side .mc-cell.mc-sel .mc-d{border:1.4px solid rgba(244,241,232,.85);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;}
+/* 2×2 版面（2026-07-21）：KPI 移入右欄——窄欄改直向堆疊、KPI 兩欄一排 */
+.mc-kpiduty-side{flex-direction:column;align-items:stretch;}
+.mc-kpiduty-side .mc-kpi-grid{grid-template-columns:1fr 1fr;}
+.mc-kpiduty-side .mc-kpi-rev{grid-column:1 / -1;}
+/* 左欄大版月曆：格高收斂、選取日改半透明反白（蓋掉基底的白卡色塊） */
+.mc-dash-main .cal-side .mc-cell{padding:6px 0;min-height:0;}
+.cal-side .mc-cell.mc-sel{background:rgba(255,255,255,.14);border-radius:14px;}
 .mc-dash .mc-todo-card .mc-card-h{color:#F4F1E8;}
 .mc-dash .mc-todo-card .mc-td{border-radius:12px;padding:11px 8px;}
 .mc-dash .mc-todo-card .mc-td+.mc-td{border-top:1px solid rgba(255,255,255,.09);}
@@ -5121,8 +5128,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260721.1026';
-const APP_VERSION_LABEL='v260721.1026';
+const APP_VERSION='260721.1032';
+const APP_VERSION_LABEL='v260721.1032';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8370,16 +8377,20 @@ PAGES.g_dashboard=async function(){
     ${isMobileLayout()?adminCalCard:heroRow}
     <div class="mc-dash-wrap hero-sheet">
       <div class="mc-dash slime-flow">
+        <!-- 桌機版面（2026-07-21 使用者定版，2×2）：
+             ┌ 行事曆                    ┬ KPI        ┐
+             └ 今日教練中心（值班上·任務下）┴ 待辦＋快捷 ┘
+             手機版維持：KPI＋值班 → 任務 →（右欄）本月成績 → 待辦 -->
         <div class="mc-dash-main slime-card slime-stack" style="--slime-min:640px;">
-          <div class="mc-kpiduty">${kpiCards}${dutyRingCard}</div>
+          ${isMobileLayout()
+            ? `<div class="mc-kpiduty">${kpiCards}${dutyRingCard}</div>`
+            : (deskCalCard+dutyRingCard)}
           <div class="mc-timeline-wrap">${timelineCell.replace('<div class="dash-sec-label">今日課程時間軸</div>','')}</div>
-          ${isMobileLayout()?'':todoCard}
         </div>
         <div class="mc-dash-side slime-card slime-card--fixed slime-stack">
-          <!-- 手機版（2026-07-21）：今日待辦事項移到最後；快速操作→本月成績（7/20）。
-               桌機（2026-07-21 使用者指示「右邊好重」重排）：右欄只留 綠月曆→快速操作，
-               深紅待辦卡移到左欄教練任務之下——左下紅、右上綠，視覺重量對開 -->
-          ${isMobileLayout()?(monthCard+todoCard):(deskCalCard+quickCard)}
+          ${isMobileLayout()
+            ? (monthCard+todoCard)
+            : (`<div class="mc-kpiduty mc-kpiduty-side">${kpiCards}</div>`+todoCard+quickCard)}
         </div>
       </div>
     </div>
@@ -16747,13 +16758,14 @@ function ppRecordHtml(){
       <div class="pp-card-t">工作紀錄</div>
       <div class="pp-card-tip">此處僅顯示摘要，點「查看全部」進入完整功能頁。</div>
       <div class="pp-dash">
+        <!-- 2026-07-21 使用者指示：名片內的紀錄入口一律「視窗顯示」，不再跳整頁 -->
         ${ppDashCard('ticket','票券',
-          (c.tkLeft!=null?`${c.tkLeft}<small>堂可用</small>`:''), '持有票券與剩餘堂數', `ppScopeGo('m_tickets','g_member')`)}
+          (c.tkLeft!=null?`${c.tkLeft}<small>堂可用</small>`:''), '持有票券與剩餘堂數', `ppOpenTickets('${id}')`)}
         ${ppDashCard('calendar','預約紀錄',
-          (c.bkCount!=null?`${c.bkCount}<small>筆</small>`:''), '歷史與未來預約', `ppScopeGo('m_bookings','g_member')`)}
-        ${ppDashCard('dumbbell','訓練紀錄','', '課堂訓練紀錄', `ppScopeGo('m_training','g_member')`)}
+          (c.bkCount!=null?`${c.bkCount}<small>筆</small>`:''), '歷史與未來預約', `ppOpenRecords('${id}')`)}
+        ${ppDashCard('dumbbell','訓練紀錄','', '課堂訓練紀錄', `ppOpenTraining('${id}')`)}
         ${ppDashCard('money','交易',
-          (c.pcCount!=null?`${c.pcCount}<small>筆</small>`:''), '付款／退款／發票', `ppScopeGo('m_payments','g_member')`)}
+          (c.pcCount!=null?`${c.pcCount}<small>筆</small>`:''), '付款／退款／發票', `ppOpenRecords('${id}')`)}
       </div>
     </div>`;
   }
@@ -16812,6 +16824,34 @@ function ppOpenTickets(id){ openMemberDetail(id); }
 async function ppOpenRecords(id){
   await openMemberDetail(id);   // 會填好 window._memRecordsData
   openMemberRecords(id);
+}
+// 訓練紀錄視窗（2026-07-21 使用者指示：名片內入口一律視窗顯示）——與 m_training 頁同資料同分組
+async function ppOpenTraining(id){
+  let logs=[];
+  try{ logs=(await dbGetAll('training_logs')).filter(l=>l.member_id===id); }catch(_){}
+  logs.sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
+  const byBk={};
+  logs.forEach(l=>{ (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
+  const sessions=Object.entries(byBk).map(([bid,ls])=>({bid,ls,t:ls[0].created_at||''})).sort((a,b)=>b.t.localeCompare(a.t));
+  const setLine=(l)=>{
+    if(l.sets_detail){ try{ const arr=JSON.parse(l.sets_detail); if(arr&&arr.length) return arr.map(s=>`${s.reps||'-'}${s.weight?'×'+s.weight+'kg':''}`).join('、'); }catch(_){} }
+    return `${l.reps??'-'} 次${l.sets?(' × '+l.sets+' 組'):''}`;
+  };
+  const body = sessions.length===0
+    ? '<div class="empty" style="padding:26px;"><div class="em-t">尚無訓練紀錄</div><div class="em-s">教練在課堂中記錄後，會顯示在這裡。</div></div>'
+    : sessions.slice(0,30).map(sess=>{
+        const dt=(sess.t||'').slice(0,10).replace(/-/g,'/');
+        return `<div style="padding:12px 0;border-bottom:1px solid var(--bd);">
+          <div style="font-weight:700;font-size:14px;margin-bottom:6px;">${dt}　<span style="font-size:12px;color:var(--t3);font-weight:400;">${sess.ls.length} 個動作</span></div>
+          ${sess.ls.map(l=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:13px;">
+            <span>${l.exercise_name||'—'}${(l.tool||l.posture)?`<span style="color:var(--t3);font-size:11.5px;">　${[l.posture,l.tool].filter(Boolean).join(' / ')}</span>`:''}</span>
+            <span style="color:var(--t2);font-family:var(--font-en);white-space:nowrap;">${setLine(l)}</span>
+          </div>`).join('')}
+        </div>`;
+      }).join('');
+  showModal(`<div class="modal-title">訓練紀錄${PP.rec&&PP.rec.name?` · ${PP.rec.name}`:''}</div>
+    <div style="max-height:60vh;overflow-y:auto;">${body}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
 
 // ══════ 主體渲染 ══════
