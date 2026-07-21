@@ -2686,13 +2686,18 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* .cal-ev-special 已移除（2026-07-18 Calm Play：特殊卡規則廢除，4 等寬 Lane 大小統一） */
 /* ══ 會員票券逐堂 Token（Calm Play）══ */
 .mck-dots2{display:flex;flex-wrap:wrap;gap:5px;}
-.mtk{width:34px;height:30px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;line-height:1;background:var(--tk-acc,#1F6F54);color:#fff;letter-spacing:0;}
+.mtk{position:relative;width:34px;height:30px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;line-height:1;background:var(--tk-acc,#1F6F54);color:#fff;letter-spacing:0;}
 .mtk-sq{border-radius:8px;}
 .mtk-ci{border-radius:50%;}
 .mtk-tr{clip-path:polygon(50% 0,100% 100%,0 100%);align-items:flex-end;padding-bottom:3px;}
 .mtk-di{clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);}
 .mtk-hx{clip-path:polygon(9% 0,91% 0,100% 32%,100% 68%,91% 100%,9% 100%,0 68%,0 32%);}
-.mtk-used{background:color-mix(in srgb, var(--tk-acc,#1F6F54) 16%, #fff);color:var(--tk-acc,#1F6F54);}
+/* 2026-07-21 使用者指示：已使用＝實心＋日期（沿用基底實心）；未使用＝空心；已預約未上＝空心＋日期 */
+.mtk-used{}
+.mtk-free,.mtk-booked{color:transparent;}
+.mtk-free::before,.mtk-booked::before{content:'';position:absolute;inset:3px;background:var(--card,#fff);border-radius:inherit;clip-path:inherit;}
+.mtk-booked::after{content:attr(data-d);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--tk-acc,#1F6F54);font-size:9px;font-weight:800;}
+.mtk-tr.mtk-booked::after{align-items:flex-end;padding-bottom:3px;}
 .mtk-lock{background:#ece9e2;color:#a39b8f;font-size:11px;}
 /* ══ 首頁「今日教練」卡（Dashboard V2.1）══ */
 /* 「今日教練」卡（mc-coach-card / mc-tc-*）已於 2026-07-19 隨卡片移除（與教練任務時間軸重複）。 */
@@ -5347,8 +5352,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260721.1728';
-const APP_VERSION_LABEL='v260721.1728';
+const APP_VERSION='260722.0012';
+const APP_VERSION_LABEL='v260722.0012';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23140,16 +23145,23 @@ function ticketTokens(t,bks,typeMap,usedCount){
   const isInstall=t.installment&&t.unlocked_sessions!=null&&t.unlocked_sessions<total;
   const unlocked=isInstall?t.unlocked_sessions:total;
   const used=Math.min(Math.max(Number(usedCount)||0,0),total);
-  let s='',di=0;
+  /* 2026-07-21 使用者指示：未使用＝空心、已預約未上＝空心＋日期、已使用＝實心＋日期 */
+  const booked=(bks||[]).filter(b=>b.status==='booked')
+    .sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
+  let s='',di=0,bi=0;
   for(let i=0;i<total;i++){
     if(i>=unlocked){ s+=`<span class="mtk mtk-${v.shape} mtk-lock" title="尚未開通（需繳下一期）">🔒</span>`; }
     else if(i<used){
       const b=di<done.length?done[di++]:null;
       s+=`<span class="mtk mtk-${v.shape} mtk-used" style="--tk-acc:${v.accent};" title="已完成${b&&b.date?' '+b.date:''}">${b?md(b):'✓'}</span>`;
     }
-    else s+=`<span class="mtk mtk-${v.shape}" style="--tk-acc:${v.accent};" title="未使用"></span>`;
+    else if(bi<booked.length){
+      const b=booked[bi++];
+      s+=`<span class="mtk mtk-${v.shape} mtk-booked" style="--tk-acc:${v.accent};" data-d="${md(b)}" title="已預約 ${b.date||''} ${b.start_time||''}"></span>`;
+    }
+    else s+=`<span class="mtk mtk-${v.shape} mtk-free" style="--tk-acc:${v.accent};" title="未使用"></span>`;
   }
-  return s||`<span class="mtk mtk-${v.shape}" style="--tk-acc:${v.accent};"></span>`;
+  return s||`<span class="mtk mtk-${v.shape} mtk-free" style="--tk-acc:${v.accent};"></span>`;
 }
 function ticketDots(used,total,tk){
   const t=Math.max(Number(total)||0,0);
