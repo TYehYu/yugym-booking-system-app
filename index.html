@@ -4421,7 +4421,11 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
    月份導覽列一併收起，把空間讓給時間軸；往上捲展開（JS 見 renderCoachAgenda）。 */
 .cag-wrap.cag-min .cag-mcal .mc-week:not(.mc-week-cur){display:none;}
 .cag-wrap.cag-min .cag-mcal-nav{display:none;}
-.cag-wrap.cag-min .cag-mcal{padding-top:8px;padding-bottom:8px;}
+.cag-wrap.cag-min .cag-mcal{padding-top:8px;padding-bottom:2px;}
+/* 收合時顯示 ⌄ 展開列（平時隱藏）；防跳動邏輯見 renderCoachAgenda 的 scroll 綁定 */
+.cag-expand-row{display:none;text-align:center;color:rgba(244,241,232,.55);font-size:14px;line-height:1;
+  padding:2px 0 4px;cursor:pointer;}
+.cag-wrap.cag-min .cag-expand-row{display:block;}
 /* 背景層：整點格線 + 置中時間刻度（當背景，不佔欄寬） */
 .cag-gbg{position:absolute;left:10px;right:10px;top:0;bottom:0;pointer-events:none;z-index:0;}
 .cag-gline{position:absolute;left:0;right:0;border-top:1px solid var(--bd);}
@@ -5257,8 +5261,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260721.1240';
-const APP_VERSION_LABEL='v260721.1240';
+const APP_VERSION='260721.1620';
+const APP_VERSION_LABEL='v260721.1620';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10799,6 +10803,11 @@ function cagToggleLayer(which){
 function cagThisWeek(){ window._cagSelDate=ymd(TODAY); window._cagMonth={y:TODAY.getFullYear(),m:TODAY.getMonth()}; renderCoachAgenda(); }
 // 月曆切月（2026-07-21 單日三欄改版：上方月曆取代週導覽）
 function cagMcalShift(n){ let y=window._cagMonth.y, m=window._cagMonth.m+n; if(m<0){m=11;y--;} if(m>11){m=0;y++;} window._cagMonth={y,m}; renderCoachAgenda(); }
+// 收合月曆手動展開（⌄ 鈕／頂端上拉共用）：只切 class 不重繪；記錄切換時刻抑制夾擠事件
+function cagExpandCal(){
+  window._cagMin=false; window._cagTogTs=Date.now();
+  const w=document.getElementById('cag-wrap'); if(w)w.classList.remove('cag-min');
+}
 function cagWeekStep(n){
   const d=parseYmd(window._cagSelDate); d.setDate(d.getDate()+n*7);
   window._cagSelDate=ymd(d);
@@ -10868,6 +10877,7 @@ async function renderCoachAgenda(){
     </div>
     <div class="mc-grid mc-wd">${_W2.map((w,i)=>`<div class="mc-wdh${i===0||i===6?' mc-wk':''}">${w}</div>`).join('')}</div>
     ${_mcWeeks}
+    <div class="cag-expand-row" onclick="cagExpandCal()">⌄</div>
   </div>`;
   const weekRow='';   // 週日期導覽退場（由月曆承接）
 
@@ -10977,7 +10987,10 @@ async function renderCoachAgenda(){
     const y=yOf(focusMin)-60; if(y>0){ window._cagSkipScroll=true; body.scrollTop=y; }
   }
   /* 月曆自動收合（2026-07-21 使用者回報：手機行事曆的月曆不會自動縮小）——
-     時間軸往下捲＝月曆收合成「選取日那一週」一列；往上捲＝展開。±30px 遲滯防抖；
+     時間軸往下捲＝月曆收合成「選取日那一週」一列；展開＝捲到最頂再上拉、或點收合列的 ⌄ 鈕。
+     防跳動（使用者回報「一直跳來跳去」）：收合瞬間月曆變矮 → #cag-body 變高 → 瀏覽器把
+     scrollTop 往回夾，該夾擠事件被誤判成「往上捲」又觸發展開 → 收合↔展開循環。
+     對策＝①切換後 400ms 內忽略捲動事件（_cagTogTs）；②展開僅限「已在頂端(≤10px)」的上拉。
      初始定位的程式捲動不觸發（_cagSkipScroll）；收合狀態跨重繪保留（_cagMin）。 */
   if(body && !body._cagColBound){
     body._cagColBound=true;
@@ -10985,11 +10998,15 @@ async function renderCoachAgenda(){
     body.addEventListener('scroll',()=>{
       if(window._cagSkipScroll){ window._cagSkipScroll=false; _prev=body.scrollTop; return; }
       const st=body.scrollTop, d=st-_prev; _prev=st;
+      if(Date.now()-(window._cagTogTs||0)<400){ _acc=0; return; }   // 切換剛發生：夾擠/慣性事件一律忽略
       if((d>0&&_acc<0)||(d<0&&_acc>0)) _acc=0;
       _acc+=d;
-      const wrap=document.getElementById('cag-wrap');
-      if(_acc>30 && !window._cagMin){ window._cagMin=true; if(wrap)wrap.classList.add('cag-min'); _acc=0; }
-      else if(_acc<-30 && window._cagMin){ window._cagMin=false; if(wrap)wrap.classList.remove('cag-min'); _acc=0; }
+      if(_acc>30 && !window._cagMin){
+        window._cagMin=true; window._cagTogTs=Date.now(); _acc=0;
+        const wrap=document.getElementById('cag-wrap'); if(wrap)wrap.classList.add('cag-min');
+      }else if(_acc<-30 && window._cagMin && st<=10){                // 展開限「頂端上拉」，中途上捲不觸發
+        _acc=0; cagExpandCal();
+      }
     },{passive:true});
   }
   // 滑鼠移到欄位 → 顯示吸附半小時的預覽外框
