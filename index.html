@@ -5196,8 +5196,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260721.1132';
-const APP_VERSION_LABEL='v260721.1132';
+const APP_VERSION='260721.1135';
+const APP_VERSION_LABEL='v260721.1135';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -5364,6 +5364,18 @@ async function dbPut(store,obj){
   if(error) throw dbFriendlyError(error, store, '儲存');
   dbCacheClear(store);   // 寫入即失效：自己的操作必須立刻看得到
   return data||obj;
+}
+/* 收款紀錄防護寫入（2026-07-21）：正式庫若尚未套 20260721_04（purchases.invoice_type 欄），
+   帶欄寫入會整筆失敗 → 自動退回「不帶 invoice_type」重寫一次，收款紀錄不因欄位缺席而漏記。 */
+async function dbPutPurchaseSafe(obj){
+  try{ return await dbPut('purchases',obj); }
+  catch(e){
+    if(obj && 'invoice_type' in obj){
+      const o2=Object.assign({},obj); delete o2.invoice_type;
+      return await dbPut('purchases',o2);
+    }
+    throw e;
+  }
 }
 async function dbDel(store,id){
   const{error}=await sb.from(tbl(store)).delete().eq('id',id);
@@ -11498,7 +11510,7 @@ async function submitFacilityBooking(){
     created_by:SESSION.id,created_at:new Date().toISOString()};
   await dbPut('bookings',bk);
   if(fee>0){
-    try{ await dbPut('purchases',{id:uid('PUR'),member_id:null,plan_id:null,ticket_id:null,
+    try{ await dbPutPurchaseSafe({id:uid('PUR'),member_id:null,plan_id:null,ticket_id:null,
       plan_name:`場地租借（${name}）`,list_price:fee,deal_amount:fee,payment_method:method,
       invoice_type:inv,installment_count:1,note:`場租 ${date} ${time}`,operator:SESSION.id,
       source:'facility_rental',created_at:new Date().toISOString()}); }
@@ -18786,7 +18798,7 @@ async function submitGrant(){
   await logTicket(t.id,'grant',total,null,SESSION.id,'發放（'+plan.name+'）'+(isInstall?`，分${installCount}期・首期開通${unlocked}堂`:''));
   // 建立購買紀錄（分期只記第1期實收金額；未收期款不列入營收）
   try{
-    await dbPut('purchases',{id:uid('PUR'),member_id,plan_id,ticket_id:t.id,plan_name:plan.name,
+    await dbPutPurchaseSafe({id:uid('PUR'),member_id,plan_id,ticket_id:t.id,plan_name:plan.name,
       list_price:listPrice,deal_amount:(isInstall?firstAmount:dealAmount),payment_method:method,installment_count:installCount,
       invoice_type:(document.getElementById('gt-invoice')?.value)||'none',
       note:note+(isInstall?`（分期第1期／總額 $${(dealAmount||0).toLocaleString()}）`:''),operator:SESSION.id,source:'backoffice',created_at:new Date().toISOString()});
