@@ -4728,7 +4728,9 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 @media(max-width:600px){
   /* 負 margin 對齊 .content 實際 padding（手機為 28px/18px，2919 行媒體規則後蓋 597 行的 14px）
      —— 2026-07-20 使用者回報上方白條的根因 */
-  .cal-hero{position:sticky;top:54px;z-index:20;background:var(--green);border:none;
+  /* 2026-07-21 使用者指示：月曆改「上層」（z 高於 .hero-sheet 的 30）——
+     展開時壓過下方主要資料；收合時當週列釘在標題下、內容自其下方捲過。 */
+  .cal-hero{position:sticky;top:54px;z-index:40;background:var(--green);border:none;
     margin:-28px -18px 0;padding:2px 18px 30px;border-radius:0 0 22px 22px;
     box-shadow:0 8px 20px rgba(0,20,16,.22);transition:padding .18s var(--ease-out);}
   .cal-hero .mc-wdh{color:rgba(244,241,232,.5);}
@@ -4742,11 +4744,9 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   .cal-hero .cal-hero-nav .btn{background:rgba(255,255,255,.12);border-color:transparent;color:#F4F1E8;}
   .cal-hero.cal-hero-min .mc-week:not(.mc-week-cur){display:none;}
   .cal-hero.cal-hero-min .cal-hero-nav{display:none;}
-  /* 收合後也維持背景層（2026-07-20 使用者指示：內容片永遠在前）——不抬 z */
   .cal-hero.cal-hero-min{padding-bottom:8px;}
-  /* 前後景（2026-07-20 使用者指示，參考 Daily Task Schedule App）：月曆之後的內容包進
-     .hero-sheet 前景片 —— 圓上角＋上緣陰影、負 margin 疊在月曆底緣之上（月曆退為背景層）。
-     收合後（cal-hero-min）當週列 z 抬回最上層，變成釘在頂欄下的迷你表頭。 */
+  /* .hero-sheet 前景片：圓上角＋上緣陰影、負 margin 疊在月曆底緣。
+     2026-07-21 起月曆 z(40) 高於本片(30)——展開的月曆壓過內容（原 7/20「內容片永遠在前」反轉）。 */
   .hero-sheet{position:relative;z-index:30;background:linear-gradient(180deg,#F7F5EC 0%,#EFF1E5 100%);
     border-radius:26px 26px 0 0;margin:-20px -18px 0;padding:20px 18px 8px;
     box-shadow:0 -14px 28px rgba(0,20,16,.16);}
@@ -5076,8 +5076,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260721.0923';
-const APP_VERSION_LABEL='v260721.0923';
+const APP_VERSION='260721.0937';
+const APP_VERSION_LABEL='v260721.0937';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8240,6 +8240,22 @@ PAGES.g_dashboard=async function(){
     ? _demoteNames.slice(0,6).join('、')+(_demoteNames.length>6?` 等 ${_demoteNames.length} 人`:'')
     : '本月尚無即將降級的會員';
   _todoItems.push(_todoRow(OPS_TODO_IC.ticket,'本月即將降級名單',_l2,_demoteNames.length,'gold',"navTo('members','g_member')"));
+  /* 今日未打卡名單（2026-07-21 使用者指示）：含上班未打卡＋下班未打卡。
+     對象＝當日有排班（非請假）且需打卡（need_punch）的在職員工：
+     班已開始仍無 clock_in＝上班未打卡；有 clock_in 無 clock_out 且班已結束＝下班未打卡。
+     用 effNow（過去日全段已過、未來日不判定），檢視過去日期也能看出漏打卡。 */
+  const _noPunch=[];
+  coaches.filter(c=>c.need_punch && c.status!=='inactive' && c.status!=='resigned').forEach(c=>{
+    const sh=(shifts||[]).find(s=>s.date===date && s.emp_id===c.id);
+    if(!sh || sh.leave_type || !sh.start_time || !sh.end_time) return;
+    const att=attMap[c.id];
+    if(effNow>=timeToMin(sh.start_time) && (!att||!att.clock_in)) _noPunch.push(`${coachDisp(c)}（上班）`);
+    else if(att && att.clock_in && !att.clock_out && effNow>=timeToMin(sh.end_time)) _noPunch.push(`${coachDisp(c)}（下班）`);
+  });
+  const _l3=_noPunch.length
+    ? _noPunch.slice(0,6).join('、')+(_noPunch.length>6?` 等 ${_noPunch.length} 人`:'')
+    : '今日打卡皆正常';
+  _todoItems.push(_todoRow(OPS_TODO_IC.check,'今日未打卡名單',_l3,_noPunch.length,'gold',"navTo('attendance','g_admin')"));
   const todoCard=`<div class="card mc-card mc-todo-card">
     <div class="mc-card-h">今日待辦事項</div>
     ${_todoItems.length?`<div class="mc-td-list">${_todoItems.join('')}</div>`
@@ -8296,8 +8312,8 @@ PAGES.g_dashboard=async function(){
           <div class="mc-timeline-wrap">${timelineCell.replace('<div class="dash-sec-label">今日課程時間軸</div>','')}</div>
         </div>
         <div class="mc-dash-side slime-card slime-card--fixed slime-stack">
-          ${todoCard}
-          ${isMobileLayout()?monthCard:quickCard}  <!-- 2026-07-20 使用者指示：手機版快速操作 → 本月成績 -->
+          <!-- 手機版（2026-07-21 使用者指示）：今日待辦事項移到最後；快速操作→本月成績（7/20）。桌機維持 待辦→快速操作 -->
+          ${isMobileLayout()?(monthCard+todoCard):(todoCard+quickCard)}
         </div>
       </div>
     </div>
