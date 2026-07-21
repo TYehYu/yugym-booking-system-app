@@ -4422,6 +4422,15 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cag-wrap.cag-min .cag-mcal .mc-week:not(.mc-week-cur){display:none;}
 .cag-wrap.cag-min .cag-mcal-nav{display:none;}
 .cag-wrap.cag-min .cag-mcal{padding-top:8px;padding-bottom:2px;}
+/* 訂位式時段面板（點日期展開，像訂餐廳；共用：會員自主訓練預約沿用）——
+   在品牌綠月曆內展開：白色時段 chip、右欄下移半格交錯；面板自身可捲，不擠掉時間軸 */
+.cag-slots{display:flex;gap:10px;padding:10px 14px 12px;max-height:38vh;overflow-y:auto;overscroll-behavior:contain;}
+.cag-slots-col{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0;}
+.cag-slots-col.cag-slots-half{margin-top:23px;}
+.cag-slot{border:none;border-radius:10px;padding:9px 0;font-size:13.5px;font-weight:600;font-family:var(--num),inherit;
+  text-align:center;background:rgba(255,255,255,.92);color:var(--green);cursor:pointer;}
+.cag-slot:active{transform:scale(.96);}
+.cag-slot-off{background:rgba(255,255,255,.10);color:rgba(244,241,232,.35);cursor:default;}
 /* 收合時顯示 ⌄ 展開列（平時隱藏）；防跳動邏輯見 renderCoachAgenda 的 scroll 綁定 */
 .cag-expand-row{display:none;text-align:center;color:rgba(244,241,232,.55);font-size:14px;line-height:1;
   padding:2px 0 4px;cursor:pointer;}
@@ -4906,7 +4915,10 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   .cal-hero .cal-hero-nav .btn{background:rgba(255,255,255,.12);border-color:transparent;color:#F4F1E8;}
   .cal-hero.cal-hero-min .mc-week:not(.mc-week-cur){display:none;}
   .cal-hero.cal-hero-min .cal-hero-nav{display:none;}
-  .cal-hero.cal-hero-min{padding-bottom:8px;}
+  .cal-hero.cal-hero-min{padding-bottom:4px;}
+  /* ⌄ 展開鈕（2026-07-21 使用者定案：全手機行事曆統一「點 ⌄ 才展開」）——收合時才顯示 */
+  .cal-hero-expand{display:none;text-align:center;color:rgba(244,241,232,.6);font-size:14px;line-height:1;padding:2px 0 4px;cursor:pointer;}
+  .cal-hero.cal-hero-min .cal-hero-expand{display:block;}
   /* .hero-sheet 前景片：圓上角＋上緣陰影、負 margin 疊在月曆底緣。
      2026-07-21 起月曆 z(40) 高於本片(30)——展開的月曆壓過內容（原 7/20「內容片永遠在前」反轉）。 */
   .hero-sheet{position:relative;z-index:30;background:linear-gradient(180deg,#F7F5EC 0%,#EFF1E5 100%);
@@ -5261,8 +5273,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260721.1620';
-const APP_VERSION_LABEL='v260721.1620';
+const APP_VERSION='260721.1745';
+const APP_VERSION_LABEL='v260721.1745';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -5435,8 +5447,10 @@ async function dbPut(store,obj){
 async function dbPutPurchaseSafe(obj){
   try{ return await dbPut('purchases',obj); }
   catch(e){
-    if(obj && 'invoice_type' in obj){
-      const o2=Object.assign({},obj); delete o2.invoice_type;
+    // 選配欄位（正式庫可能尚未套 migration）：拔掉後重寫一次，收款紀錄不因此漏記
+    const opt=['invoice_type','coach_id'].filter(k=>obj && k in obj);
+    if(opt.length){
+      const o2=Object.assign({},obj); opt.forEach(k=>delete o2[k]);
       return await dbPut('purchases',o2);
     }
     throw e;
@@ -8309,7 +8323,7 @@ PAGES.g_dashboard=async function(){
       </div>
       <div class="mc-grid mc-wd">${_W2.map((w,i)=>`<div class="mc-wdh${i===0||i===6?' mc-wk':''}">${w}</div>`).join('')}</div>
       ${_weeks}`;
-    adminCalCard=`<div class="cal-hero" id="cal-hero">${_calGuts}</div>`;
+    adminCalCard=`<div class="cal-hero" id="cal-hero">${_calGuts}<div class="cal-hero-expand" onclick="calHeroExpand()">⌄</div></div>`;
     deskCalCard=`<div class="card mc-card cal-side">${_calGuts}</div>`;
   }
 
@@ -8357,7 +8371,7 @@ PAGES.g_dashboard=async function(){
   const _fm=n=>n.toLocaleString('en-US');
   /* 2026-07-21 A3：場租/重啟收款併入今日營收；營收拆「有無發票」——
      票券看 invoice_status（cloud/paper=有）、purchases 看 invoice_type（null/none=無，含舊資料）。 */
-  const _dayPur=(purchases||[]).filter(p=>puLocalDate(p)===date&&(p.source==='reactivate'||p.source==='facility_rental'));
+  const _dayPur=(purchases||[]).filter(p=>puLocalDate(p)===date&&(p.source==='reactivate'||p.source==='facility_rental'||p.source==='merchandise'));
   const _dayPurSum=_dayPur.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
   const _revTotal=_revTotal0+_dayPurSum;
   const _revInv=_dayTk.filter(t=>t.invoice_status==='cloud'||t.invoice_status==='paper')
@@ -8516,7 +8530,7 @@ PAGES.g_dashboard=async function(){
   const quickCard=`<div class="mc-quick3">
     <button class="card mc-card mc-q3" onclick="openBookingModal()">${OPS_TODO_IC.calendar}<span>新增預約</span></button>
     <button class="card mc-card mc-q3" onclick="openBackofficeMember()">${ICONS.people}<span>新增會員</span></button>
-    <button class="card mc-card mc-q3" onclick="goIssueTicket()">${OPS_TODO_IC.ticket}<span>售票 / 儲值</span></button>
+    <button class="card mc-card mc-q3" onclick="openSalesModal()">${OPS_TODO_IC.ticket}<span>銷售 / 儲值</span></button>
   </div>`;
   /* 今日值班卡已於 Dashboard V2 移除：降級為狀態卡的「值班教練 N 位」，點擊進值班表。
      名單本身（誰、幾點到幾點）在值班表頁看得到，首頁每天重複列出屬冗餘。 */
@@ -10793,7 +10807,35 @@ function cagPickMonth(mo){
   else { window._cagSelDate=ymd(new Date(window._cagMonth.y,mo,1)); }
   renderCoachAgenda();
 }
-function cagSelectDate(ds){ window._cagSelDate=ds; renderCoachAgenda(); }
+/* 點日期＝選日＋展開訂位時段面板；再點同一天＝收合面板（2026-07-21 使用者指示） */
+function cagSelectDate(ds){
+  window._cagSlotOpen = (window._cagSelDate===ds) ? !window._cagSlotOpen : true;
+  window._cagSelDate=ds; renderCoachAgenda();
+}
+/* ══ 訂位式時段面板（共用元件，2026-07-21）══
+   左欄＝整點鈕、右欄＝半點鈕（下移半格交錯顯示）；可約＝亮起可點、不可約（已過/衝堂/滿）＝淡化。
+   之後會員端「預約自主訓練」沿用：傳入自己的 isFree 規則與 pickFn。 */
+function slotPanelHTML(o){
+  const startH=(o.startH!=null?o.startH:8), endH=(o.endH!=null?o.endH:22), dur=(o.duration!=null?o.duration:60);
+  const isPast=(mm)=> o.date<o.todayStr || (o.date===o.todayStr && mm<=o.nowMin);
+  const btn=(mm)=>{
+    const t=String(Math.floor(mm/60)).padStart(2,'0')+':'+(mm%60?'30':'00');
+    const ok=!isPast(mm) && o.isFree(mm,mm+dur);
+    return ok?`<button type="button" class="cag-slot" onclick="${o.pickFn}('${t}')">${t}</button>`
+             :`<div class="cag-slot cag-slot-off">${t}</div>`;
+  };
+  let colL='',colR='';
+  for(let h=startH;h<=endH;h++){ colL+=btn(h*60); if(h<endH) colR+=btn(h*60+30); }
+  return `<div class="cag-slots">
+    <div class="cag-slots-col">${colL}</div>
+    <div class="cag-slots-col cag-slots-half">${colR}</div>
+  </div>`;
+}
+// 點時段 → 帶日期/時間開新增預約（手機流程預設教練=自己）
+function cagSlotBook(t){
+  _prefill={date:window._cagSelDate,time:t};
+  openBookingModal();
+}
 function cagToggleLayer(which){
   if(which==='mine') window._cagLayerMine=!window._cagLayerMine;
   else if(which==='others') window._cagLayerOthers=!window._cagLayerOthers;
@@ -10867,6 +10909,22 @@ async function renderCoachAgenda(){
   let _mcWeeks='';
   for(let i=0;i<_mcArr.length;i+=7)
     _mcWeeks+=`<div class="mc-grid mc-week${Math.floor(i/7)===_curWk?' mc-week-cur':''}">${_mcArr.slice(i,i+7).join('')}</div>`;
+  /* 訂位式時段面板（2026-07-21 使用者指示：點日期 → 從月曆展開整點/半點時段鈕，像訂餐廳；
+     可約才亮起）。共用元件 slotPanelHTML —— 之後會員端「預約自主訓練」沿用同一元件。
+     可約規則：未過期時段＋自己無衝堂＋場地容量（私人教練/自主/體驗同時段 <3 組）。 */
+  let slotPanel='';
+  if(window._cagSlotOpen){
+    const _nowMin2=nowMinOfDay();
+    const dayAll2=allBk.filter(b=>b.date===selDate);
+    const myDay2=dayAll2.filter(isMineBk);
+    const capDay2=dayAll2.filter(b=>CAP_CATS.includes(b.category));
+    const _ov=(list,s,e)=>list.filter(b=>{const bs=timeToMin(b.start_time),be=bs+(b.duration||60);return s<be&&e>bs;});
+    slotPanel=slotPanelHTML({
+      date:selDate, todayStr, nowMin:_nowMin2,
+      isFree:(s,e)=> !_ov(myDay2,s,e).length && _ov(capDay2,s,e).length<3,
+      pickFn:'cagSlotBook'
+    });
+  }
   const _W2=['日','一','二','三','四','五','六'];
   const monthRow=`<div class="cag-mcal">
     <div class="cag-mcal-nav">
@@ -10877,6 +10935,7 @@ async function renderCoachAgenda(){
     </div>
     <div class="mc-grid mc-wd">${_W2.map((w,i)=>`<div class="mc-wdh${i===0||i===6?' mc-wk':''}">${w}</div>`).join('')}</div>
     ${_mcWeeks}
+    ${slotPanel}
     <div class="cag-expand-row" onclick="cagExpandCal()">⌄</div>
   </div>`;
   const weekRow='';   // 週日期導覽退場（由月曆承接）
@@ -11004,9 +11063,8 @@ async function renderCoachAgenda(){
       if(_acc>30 && !window._cagMin){
         window._cagMin=true; window._cagTogTs=Date.now(); _acc=0;
         const wrap=document.getElementById('cag-wrap'); if(wrap)wrap.classList.add('cag-min');
-      }else if(_acc<-30 && window._cagMin && st<=10){                // 展開限「頂端上拉」，中途上捲不觸發
-        _acc=0; cagExpandCal();
       }
+      /* 展開只走 ⌄ 鈕（2026-07-21 使用者定案：捲動不再觸發展開，避免捲過頭月曆跳出來） */
     },{passive:true});
   }
   // 滑鼠移到欄位 → 顯示吸附半小時的預覽外框
@@ -11612,14 +11670,18 @@ function bkNeedCoach(t){
 /* ── 場地租借（2026-07-21 商業規則三）：$200/次、不扣票、不發點、不列教練堂數、列場租收入。
    用途＝員工帶長輩使用場地：booking.category='場租'、trial_name=使用人、coach_id=經手員工（佔用其時段）。 */
 const BK_FACILITY_TYPE={id:'__facility',name:'場地租借',category:'場租',color:'self'};
-async function bkStep2Facility(){
-  const date=document.getElementById('bk-date').value;
-  const time=document.getElementById('bk-time').value.slice(0,5);
+async function bkStep2Facility(pDate,pTime){
+  /* 2026-07-21 銷售彈窗入口：直接帶日期/時間參數（無預約視窗步驟 1 的欄位可讀） */
+  const date=pDate||document.getElementById('bk-date').value;
+  const time=(pTime||document.getElementById('bk-time').value).slice(0,5);
   if(!date||!time){showToast('請選擇日期與時間');return;}
   Object.assign(_bkWizard,{type_id:'__facility',t:BK_FACILITY_TYPE,coach_id:null,date,time});
-  const emps=(window._bkCoaches||[]);
+  if(!pDate) window._facilityFromSales=false;   // 從預約視窗來的，返回鍵回步驟 1
+  const _backFn=window._facilityFromSales?'openSalesModal()':'openBookingModalBack()';
+  let emps=(window._bkCoaches||[]);
+  if(!emps.length){ try{ emps=(await dbGetAll('coaches')).filter(c=>c.status!=='inactive'); }catch(_){ } }
   const opts=emps.map(c=>`<option value="${c.id}" ${c.id===SESSION.id?'selected':''}>${coachDisp(c)}</option>`).join('');
-  showModal(`<div class="modal-title">場地租借 · 步驟 2 / 2</div>
+  showModal(`<div class="modal-title">場地租借${window._facilityFromSales?`（${String(date).replace(/-/g,'/')} ${time}）`:' · 步驟 2 / 2'}</div>
     ${bkSummaryCard(BK_FACILITY_TYPE,date,time,'')}
     <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">場地租借不扣票券、不發點數、不列入教練堂數；收費併入今日營收（場租）。</div>
     <div class="form-row"><label>使用人姓名（必填）</label><input id="fr-name" placeholder="例：王媽媽"></div>
@@ -11629,7 +11691,7 @@ async function bkStep2Facility(){
       <div class="form-row"><label>付款方式</label><select id="fr-method"><option value="cash">現金</option><option value="transfer">匯款</option><option value="card">刷卡</option></select></div>
     </div>
     <div class="form-row"><label>發票</label><select id="fr-invoice"><option value="none">免發票</option><option value="cloud">雲端發票</option><option value="paper">紙本發票</option></select></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button><button class="btn btn-green" onclick="submitFacilityBooking()">確認租借並收款</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="${_backFn}">← ${window._facilityFromSales?'返回':'上一步'}</button><button class="btn btn-green" onclick="submitFacilityBooking()">確認租借並收款</button></div>`);
 }
 async function submitFacilityBooking(){
  try{
@@ -18217,6 +18279,103 @@ function setTkTab(k){
    寫成具名函式而非在 onclick 裡直接改 _tkTab：後者依賴 inline handler 的作用域鏈能碰到
    top-level let，過於隱晦且容易在改版時失效。 */
 function goIssueTicket(){ _tkTab='tickets'; navTo('ticketing','g_finance'); }
+/* ══ 銷售/儲值 彈窗（2026-07-21 使用者指示）══
+   首頁快速操作入口改彈窗：教練課/團體課（售課＝簽約）、場租、蛋白粉/筋膜球（商品零售）。
+   教練課/團體課先選「業績歸屬」教練 → 記入 purchases.coach_id
+   （migration 20260721_06；正式庫未套欄位時 dbPutPurchaseSafe 自動退回不帶）。 */
+function openSalesModal(){
+  window._grantSales=null;
+  const card=(glyph,color,label,sub,fn)=>`<button type="button" class="bk-card" onclick="${fn}">
+    <span class="bk-card-name">${glyph?`<span style="color:${color};font-size:10.5px;vertical-align:1px;">${glyph}</span> `:''}${label}</span>
+    ${sub?`<span class="bk-card-sub">${sub}</span>`:''}</button>`;
+  showModal(`<div class="modal-title">銷售 / 儲值</div>
+    <div class="form-row"><label>課程銷售（簽約）</label><div class="bk-cards">
+      ${card('■','var(--course-pt-accent,#1f6f54)','教練課','會員 → 簽約 → 業績歸屬',"salesCourse('pt')")}
+      ${card('◆','var(--course-group-accent,#9a5a1e)','團體課','會員 → 售課 → 業績歸屬',"salesCourse('group')")}
+    </div></div>
+    <div class="form-row"><label>其他收費</label><div class="bk-cards">
+      ${card('⬢','#6a655c','場地租借','$200 / 次',"salesFacility()")}
+      ${card('','','蛋白粉','$50',"openMerchSale('蛋白粉',50)")}
+      ${card('','','筋膜球','$200',"openMerchSale('筋膜球',200)")}
+    </div></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+/* 銷售順序（2026-07-21 使用者指示）：第一頁產品 → 第二頁會員（非課程在此結帳）→
+   第三頁才選業績歸屬教練（僅教練課/團體課需要）。 */
+function salesCourse(kind){
+  window._grantSales={cat:kind==='pt'?'私人教練':'小班肌力', coach_id:null};
+  openGrantModal();
+}
+// 簽約最後一步：點業績歸屬教練＝完成收款（防連點）
+async function salesAttribSubmit(cid){
+  if(window._salesSubmitting) return;
+  window._salesSubmitting=true;
+  try{
+    if(window._grantSalesActive) window._grantSalesActive.coach_id=cid;
+    await submitGrant();
+  }finally{ window._salesSubmitting=false; }
+}
+// 場租：重用預約的場地租借表單，日期=今天、時間=下一個半點（08:00–22:00 內）
+function salesFacility(){
+  window._facilityFromSales=true;
+  const now=new Date();
+  let slot=Math.ceil((now.getHours()*60+now.getMinutes())/30)*30;
+  slot=Math.max(8*60,Math.min(22*60,slot));
+  const time=String(Math.floor(slot/60)).padStart(2,'0')+':'+(slot%60?'30':'00');
+  Object.assign(_bkWizard,{fromSlot:false});
+  bkStep2Facility(ymd(TODAY),time);
+}
+// 商品零售（蛋白粉/筋膜球）：第二頁＝會員（可散客）＋結帳 → purchases(source:merchandise)，併入今日營收
+async function openMerchSale(name,defPrice){
+  const members=(await dbGetAll('members')).filter(m=>m.status==='active');
+  window._msMembers=members;
+  showModal(`<div class="modal-title">銷售 · ${name}</div>
+    <div class="form-row"><label>會員（選填，可散客）</label>
+      <input id="ms-mq" class="gt-search" placeholder="輸入姓名或手機搜尋，留空＝散客" oninput="msFilterMembers(this.value)" autocomplete="off">
+      <select id="ms-member"><option value="">散客（不指定）</option>${members.map(m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>數量</label><input type="number" id="ms-qty" value="1" min="1" oninput="msCalc()"></div>
+      <div class="form-row"><label>單價</label><input type="number" id="ms-price" value="${defPrice}" min="0" oninput="msCalc()"></div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>付款方式</label><select id="ms-method"><option value="cash">現金</option><option value="transfer">匯款</option><option value="card">刷卡</option></select></div>
+      <div class="form-row"><label>發票</label><select id="ms-invoice"><option value="none">免發票</option><option value="cloud">雲端發票</option><option value="paper">紙本發票</option></select></div>
+    </div>
+    <div class="form-row"><label>備註</label><input id="ms-note" placeholder="選填"></div>
+    <div id="ms-total" style="font-size:15px;font-weight:700;color:var(--green);padding:4px 2px 10px;">合計 $${(defPrice||0).toLocaleString()}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openSalesModal()">← 返回</button><button class="btn btn-green" onclick="submitMerchSale('${name}')">確認收款</button></div>`);
+}
+function msFilterMembers(q){
+  const sel=document.getElementById('ms-member'); if(!sel) return;
+  const prev=sel.value, qq=(q||'').trim(), qp=normPhone(qq);
+  const list=qq?(window._msMembers||[]).filter(m=>(m.name||'').includes(qq)||(qp&&normPhone(m.phone).includes(qp))):(window._msMembers||[]);
+  sel.innerHTML='<option value="">散客（不指定）</option>'+list.map(m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
+  if(list.some(m=>m.id===prev)) sel.value=prev;
+  else if(qq&&list.length===1) sel.value=list[0].id;   // 搜尋唯一命中直接帶入
+}
+function msCalc(){
+  const q=Math.max(1,Number(document.getElementById('ms-qty').value)||1);
+  const p=Math.max(0,Number(document.getElementById('ms-price').value)||0);
+  const el=document.getElementById('ms-total'); if(el) el.textContent='合計 $'+(q*p).toLocaleString();
+}
+async function submitMerchSale(name){
+  const qty=Math.max(1,Number(document.getElementById('ms-qty').value)||1);
+  const price=Math.max(0,Number(document.getElementById('ms-price').value)||0);
+  const amt=qty*price;
+  const method=document.getElementById('ms-method').value||'cash';
+  const inv=document.getElementById('ms-invoice').value||'none';
+  const note=(document.getElementById('ms-note').value||'').trim()||null;
+  const memberId=(document.getElementById('ms-member')?.value)||null;
+  try{
+    await dbPutPurchaseSafe({id:uid('PUR'),member_id:memberId,plan_id:null,ticket_id:null,
+      plan_name:`${name}×${qty}`,list_price:amt,deal_amount:amt,payment_method:method,
+      invoice_type:inv,installment_count:1,note,operator:SESSION.id,
+      source:'merchandise',created_at:new Date().toISOString()});
+    closeModal(); showToast(`已收款 $${amt.toLocaleString()}（${name}×${qty}）`);
+    navTo(CUR_PAGE);   // 刷新今日營收 KPI
+  }catch(e){ showToast('收款紀錄寫入失敗：'+(e&&e.message?e.message:e)); }
+}
 PAGES.ticketing=async function(){
   window._plansHost=null;
   const tab=TK_TABS.find(t=>t.key===_tkTab)||TK_TABS[0];
@@ -18761,10 +18920,13 @@ let _grantPreMember=null;
 async function openGrantModal(){
   const[members,plans,types]=await Promise.all([dbGetAll('members'),dbGetAll('course_plans'),dbGetAll('ticket_types')]);
   window._grantMembers=members; window._grantPlans=plans; window._grantTypes=types;
+  /* 銷售彈窗入口（2026-07-21）：課種過濾＋最後一步選業績歸屬；一次性消耗，其他入口不受影響 */
+  const sales=window._grantSales||null; window._grantSales=null; window._grantSalesActive=sales;
+  if(sales){ try{ window._grantCoaches=(await dbGetAll('coaches')).filter(isTeachable); }catch(_){ window._grantCoaches=[]; } }
   const pre=_grantPreMember;
   const actives=members.filter(m=>m.status==='active');
   const memOpts=actives.map(m=>`<option value="${m.id}" ${pre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
-  showModal(`<div class="modal-title">發放票券</div>
+  showModal(`<div class="modal-title">${sales?(sales.cat==='小班肌力'?'團體課簽約':'教練課簽約'):'發放票券'}</div>
     <!-- 步驟1：選會員 + 模板 -->
     <div class="gt-step" data-gtstep="1">
       <!-- 會員搜尋：正式庫有 432 位會員，原本是一個 432 個選項的 <select>，櫃台要在裡面
@@ -18799,8 +18961,14 @@ async function openGrantModal(){
       <div class="form-row"><label>發票</label><select id="gt-invoice"><option value="none">免發票</option><option value="cloud">雲端發票</option><option value="paper">紙本發票</option></select></div>
       <div id="gt-install-preview" style="display:none;font-size:12px;color:var(--t2);padding:11px 13px;background:#f2f6f0;border:1px solid #d4e0cc;border-radius:9px;line-height:1.8;margin-bottom:4px;"></div>
       <div class="form-row"><label>備註</label><input id="gt-note" placeholder="選填"></div>
-      <div class="modal-foot"><button class="btn btn-ghost" onclick="grantGoStep(1)">上一步</button><button class="btn btn-green" onclick="submitGrant()">確認發放</button></div>
-    </div>`);
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="grantGoStep(1)">上一步</button><button class="btn btn-green" onclick="${sales?'grantGoStep(3)':'submitGrant()'}">${sales?'下一步：業績歸屬 →':'確認發放'}</button></div>
+    </div>
+    ${sales?`<!-- 步驟3（僅銷售彈窗入口）：業績歸屬教練，點卡即完成簽約收款；預設會員主責教練 -->
+    <div class="gt-step" data-gtstep="3" style="display:none;">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px;">最後一步：點選業績歸屬教練即完成收款。</div>
+      <div class="form-row"><label>業績歸屬教練</label><div class="bk-cards" id="gt-attrib"></div></div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="grantGoStep(2)">上一步</button></div>
+    </div>`:''}`);
   _grantPreMember=null;
   refreshGrantPlans(); // 依預設選到的會員載入可用方案
 }
@@ -18808,6 +18976,23 @@ async function openGrantModal(){
 function grantGoStep(n){
   document.querySelectorAll('.gt-step').forEach(s=>s.style.display=(Number(s.dataset.gtstep)===n)?'':'none');
   if(n===2) refreshGrantInfo(); // 進購買資訊時刷新方案資訊與預設金額
+  if(n===3) renderGrantAttrib(); // 銷售入口：業績歸屬教練卡（預設會員主責教練）
+}
+/* 步驟3 業績歸屬卡（2026-07-21 使用者指示）：預設＝步驟1 所選會員的主責教練
+   （排最前＋主責標記＋預選樣式）；點任一卡即送出。 */
+function renderGrantAttrib(){
+  const box=document.getElementById('gt-attrib'); if(!box) return;
+  let coaches=(window._grantCoaches||[]).slice();
+  const mid=document.getElementById('gt-member')?.value;
+  const m=(window._grantMembers||[]).find(x=>x.id===mid);
+  const defId=m&&m.default_coach_id;
+  if(defId) coaches.sort((a,b)=>(a.id===defId?0:1)-(b.id===defId?0:1));
+  box.innerHTML=coaches.map(c=>{
+    const isDef=c.id===defId;
+    return `<button type="button" class="bk-card${isDef?' on':''}" onclick="salesAttribSubmit('${c.id}')">
+      <span class="bk-card-name">${isDef?'★ ':''}${coachDisp(c)}</span>${isDef?'<span class="bk-card-sub">主責教練</span>':''}
+    </button>`;
+  }).join('')||'<span style="color:var(--t3);font-size:13px;">沒有可選教練</span>';
 }
 // 會員是否可使用主顧客方案：主顧客(loyal)或 VIP 才可（等級走自動制 effTier）
 function memberCanUseLoyal(m){
@@ -18819,7 +19004,13 @@ function refreshGrantPlans(){
   const mid=document.getElementById('gt-member').value;
   const m=members.find(x=>x.id===mid);
   const allowLoyal=memberCanUseLoyal(m);
-  const usable=plans.filter(p=>p.active && (p.plan_type!=='loyal' || allowLoyal));
+  let usable=plans.filter(p=>p.active && (p.plan_type!=='loyal' || allowLoyal));
+  // 銷售彈窗入口：只列所選課種的方案（教練課=私人教練／團體課=小班肌力）
+  const salesCat=window._grantSalesActive&&window._grantSalesActive.cat;
+  if(salesCat){
+    const catMap=Object.fromEntries((window._grantTypes||[]).map(t=>[t.id,t.category]));
+    usable=usable.filter(p=>catMap[p.ticket_type_id]===salesCat);
+  }
   window._grantUsable=usable;
   window._grantSel={planId:undefined};
   renderGrantPicker();
@@ -19032,6 +19223,7 @@ async function submitGrant(){
     await dbPutPurchaseSafe({id:uid('PUR'),member_id,plan_id,ticket_id:t.id,plan_name:plan.name,
       list_price:listPrice,deal_amount:(isInstall?firstAmount:dealAmount),payment_method:method,installment_count:installCount,
       invoice_type:(document.getElementById('gt-invoice')?.value)||'none',
+      coach_id:(window._grantSalesActive&&window._grantSalesActive.coach_id)||null,   // 業績歸屬（2026-07-21 銷售彈窗）
       note:note+(isInstall?`（分期第1期／總額 $${(dealAmount||0).toLocaleString()}）`:''),operator:SESSION.id,source:'backoffice',created_at:new Date().toISOString()});
   }catch(e){ /* 購買紀錄失敗不阻斷發票券，僅記錄 */ console.error('purchase log fail',e); showToast('付款紀錄寫入失敗：'+(e.message||e)); }
   // 新朋友購買「私人教練」課程 → 自動升級為「會員」
@@ -19546,6 +19738,7 @@ PAGES.coach_today=async function(){
     </div>
     <div class="mc-grid mc-wd">${_WDH2.map((w,i)=>`<div class="mc-wdh${i===0||i===6?' mc-wk':''}">${w}</div>`).join('')}</div>
     ${_cwWeeks}
+    <div class="cal-hero-expand" onclick="calHeroExpand()">⌄</div>
   </div>`;
   // 有值班 → 三環並列（教練課/團體課/值班時數）；無值班維持兩環放大版
   // 2026-07-20 使用者指示：月曆統一移到首頁第一列（見下方組裝）、本月成績最下
@@ -19646,24 +19839,10 @@ if(!window._calHeroBound){
     /* 展開不由捲動位置觸發（2026-07-20 使用者指示）：捲回頂端時月曆保持收合，
        讓下方內容（含 KPI）可完整檢視；已在頂端後「再往上/下拉一次」才展開（見下方手勢）。 */
   },{passive:true});
-  /* 展開手勢（2026-07-21 使用者回報收緊）：捲到最頂時要先完整看下方內容，
-     「同一個滑動手勢」帶到頂端後繼續拉不可直接展開 —— 必須是新的一次手勢：
-     觸控＝touchstart 當下就已在頂端才算數；滾輪＝距最後一次捲動 >250ms（動能結束）才算數。 */
-  const _calHeroExpand=()=>{ const h=document.getElementById('cal-hero'); if(h) h.classList.remove('cal-hero-min'); };
-  window.addEventListener('wheel',e=>{
-    if(e.deltaY<0 && (window.scrollY||document.documentElement.scrollTop||0)<=0
-       && Date.now()-(window._chScrollTs||0)>250) _calHeroExpand();
-  },{passive:true});
-  let _chTouchY=null, _chTouchAtTop=false;
-  window.addEventListener('touchstart',e=>{
-    _chTouchY=e.touches[0].clientY;
-    _chTouchAtTop=(window.scrollY||document.documentElement.scrollTop||0)<=0;
-  },{passive:true});
-  window.addEventListener('touchmove',e=>{
-    if(_chTouchY==null || !_chTouchAtTop) return;
-    if((window.scrollY||document.documentElement.scrollTop||0)<=0 && e.touches[0].clientY-_chTouchY>18) _calHeroExpand();
-  },{passive:true});
+  /* 展開＝點月曆收合列的 ⌄ 鈕（2026-07-21 使用者定案：全手機行事曆統一）——
+     原「頂端上拉展開」手勢移除：捲過頭時月曆不再自己跳出來。 */
 }
+function calHeroExpand(){ const h=document.getElementById('cal-hero'); if(h) h.classList.remove('cal-hero-min'); }
 // 管理員首頁月曆點日期（2026-07-20）：切換 _dashViewDate，下方「今日」各卡改顯示該日
 function dashPickDate(ds){
   _dashViewDate = (ds===ymd(TODAY)) ? null : ds;
@@ -21508,7 +21687,7 @@ PAGES.mem_bookings=async function(){
     ${_taskDots?`<div class="task-dots">${_taskDots}</div>`:'<div class="nxt-empty">目前沒有已安排的課程 🌿</div>'}
   </div>`;
   /* 2026-07-20 使用者指示定版：月曆 Hero 第一列 → 兩卡 KPI → 已安排任務 */
-  C.innerHTML=`<div class="cal-hero" id="cal-hero"><div id="mem-cal"></div></div>`+`<div class="hero-sheet">`+kpiRow+taskCard+`</div>`;
+  C.innerHTML=`<div class="cal-hero" id="cal-hero"><div id="mem-cal"></div><div class="cal-hero-expand" onclick="calHeroExpand()">⌄</div></div>`+`<div class="hero-sheet">`+kpiRow+taskCard+`</div>`;
   renderMemMonthView();
 };
 // 會員：今日預約甘特圖（有預約才顯示；08:00–22:00 橫向時間軸）
