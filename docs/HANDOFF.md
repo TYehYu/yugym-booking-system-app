@@ -615,6 +615,30 @@ insert/邀請政策＋training_logs 收斂）＋`20260721_02`（employees_insert
    7日檢視 34→48（60 分課卡＝96px≈首頁卡 98px）、3日 30→44、單日 44→48；
    位置/拖曳/現在線全走 SLOT_PX 與 --slot-px 同步縮放，無需變形。文字隨 cq 自動放大。
 
+## 1.4o A5 匯入 Phase A 完成（2026-07-21 傍晚，正式庫）
+
+**決策（使用者拍板）**：①只補正式庫沒有的（日期+時間+會員+課種去重＋import_ref 冪等）；
+②票券餘額以最新匯出為準（Phase B 待做，先出差異清單）；③缺檔會員補建。
+
+**已執行（正式庫）**：
+- `20260721_07`（bookings.import_ref＋部分唯一索引）——測試庫 MCP 套用、正式庫使用者執行。
+- 補建會員 7 位（IMPM-*：吳詩梅/李寶蓮/洪振哲/林子強/朱/黃加文Jarvan/邱奕綺Joan）。
+- 匯入預約（created_by='import-20260721'）：**新增 304 筆**——
+  自主訓練 292（含 no_show 1）／私人教練 11／小班肌力 1。
+  其餘 ~430 筆因與既有資料重疊被去重跳過（6/21~7/12 與先前 5-6 月匯入批、7/13 後與系統
+  原生預約、團課 47 堂原本就有排課）——**主要補進來的就是舊系統的自主訓練史**（先前全缺）。
+- 員工自練 30 筆／候補名單 5／「不用計算」1 依規則略過。
+- 機制：測試庫先驗證（插入/冪等重跑=0/團課 jsonb 名單），正式庫執行中 FK 擋下
+  `pt_friendly` 佔位 id → 改用正式庫友善教練課真 id `tt-mqdt4ijw29ga`（友善課的行事曆
+  顏色靠它判定）。回退：`delete from bookings where created_by='import-20260721';
+  delete from members where id like 'IMPM-%';`
+- 工具鏈（本會話 scratchpad）：parse_import.js（xlsx 塊狀報表→CSV/JSON）＋
+  gen_import_sql.js（去重 SQL 產生器，含教練花名對照）。清整資料在本機
+  `Documents\yugym-import-20260721\`（含個資勿進 repo）。
+- 團課「同人×N 名額」目前折疊為 1（jsonb_agg 對 member 去重）——人次統計略少計，待議。
+
+**Phase B 待做**：儲值票券 2,360 筆 → 與正式庫 member_tickets 差異清單 → 使用者過目後校正。
+
 ## 1.5 昨天（2026-07-17）做了什麼
 
 **首頁改版 Dashboard V2**（依使用者「首頁資訊更新」設計稿）：Hero 只留問候＋時鐘、狀態卡帶 4 個 KPI、
