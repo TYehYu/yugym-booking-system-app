@@ -1863,6 +1863,10 @@ tr:hover td{background:var(--card2);}
 .grp-item.grp-on{background:#eaf3ee;}
 .grp-check{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:1.5px solid var(--bd);border-radius:5px;font-size:12px;color:#1f6f54;font-weight:700;flex:0 0 auto;}
 .grp-on .grp-check{background:#1f6f54;border-color:#1f6f54;color:#fff;}
+/* 同名重複報名（2026-07-21）：×N 名額數＋「＋/−」增減鈕（span 模擬按鈕，避免 button 巢套） */
+.grp-mult{font-size:11.5px;font-weight:800;color:#1f6f54;background:#dcebe3;padding:1px 7px;border-radius:999px;flex:0 0 auto;}
+.grp-step{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border:1px solid var(--bd);border-radius:6px;background:#fff;color:#1f6f54;font-size:14px;font-weight:700;line-height:1;cursor:pointer;flex:0 0 auto;user-select:none;}
+.grp-step:hover{background:#eaf3ee;border-color:#1f6f54;}
 /* 快速預約浮動按鈕 */
 .qb-fab{display:block;width:100%;margin:0 0 14px;
   background:var(--green);color:#fff;border:none;border-radius:12px;
@@ -4847,6 +4851,11 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .tcard-body:has(.cal-ev-active){overflow-x:visible;}
 /* 團課「新增」鈕長在卡片上方，會被 .tl-panel 的 overflow:hidden 裁掉（2026-07-20 使用者回報）*/
 .tl-panel:has(.cal-ev-active){overflow:visible;}
+/* 每列 .tcard-row 是 position:relative;z-index:1 的疊層上下文 —— 展開卡的 z-index:60 只在
+   自己那列有效，下一列（DOM 在後、同 z）會蓋住往下長的快捷鈕與團課名單（2026-07-21 使用者回報）
+   → 含展開卡的整列抬升；hover 放大同理小幅抬升。 */
+.tcard-row:has(.cal-ev-active){z-index:7;}
+.tcard-row:has(.tcard:hover){z-index:2;}
 /* hover 微放大被容器裁切（2026-07-20 使用者回報）：清單各邊內縮 6px 留放大空間、
    負 margin 抵銷佔位 —— 不改 overflow（避免捲軸出現/消失的跳動），放大完整顯示。 */
 .tcard-list{padding:6px;margin:-6px;}
@@ -5070,8 +5079,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260720.1435';
-const APP_VERSION_LABEL='v260720.1435';
+const APP_VERSION='260721.0918';
+const APP_VERSION_LABEL='v260721.0918';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -5872,6 +5881,10 @@ const NAV={
 };
 // 可被排課的教練：role 是 coach，或 admin(老闆兼教練，一人一帳號)
 function isCoachable(c){ return c && (c.role==='coach' || c.role==='admin'); }
+// 可開課（2026-07-21 使用者指示）：員工設定可關閉「開放開課」（employees.can_teach，預設 true）。
+// 關閉者不出現在行事曆教練篩選、預約表教練名單、代課名單（減少誤觸）；
+// 報表/歷史資料（員工表現、教練分析）仍用 isCoachable，不受影響。
+function isTeachable(c){ return isCoachable(c) && c.can_teach!==false; }
 function coachDisp(c){ return c ? (c.name_en||c.name||'') : ''; } // 對外顯示名（教練名），未填則用本名
 /* 教練代表色（行事曆 Token 底色 / 名字色籤用）：依 emp_id 固定配色，未列出者用雜湊備援。
    ══ Calm Play V3（2026-07-18）：全部改為低彩度淡色系 ══
@@ -8977,10 +8990,10 @@ const CALENDAR_COURSE_FILTERS = [
 // Calm Play：課程 → 形狀（唯一來源；Token 輪廓 tok-*、glyph shp-* 都由此對映）
 // 運動按摩與一般教練課共用 ■（使用者決定，2026-07-18）：按摩量少、輪廓辨識交給教練色即可
 const COURSE_SHAPE = {'ev-pt':'sq','ev-friendly':'ci','ev-trial':'tr','ev-group':'di','ev-self':'hx','ev-massage':'sq'};
-// 教練 Filter Chips：由 employees 動態產生（isCoachable=在職教練），不寫死名稱。
+// 教練 Filter Chips：由 employees 動態產生（isTeachable=在職且開放開課），不寫死名稱。
 // Calm Play：chip 直接穿教練代表色（與行事曆 Token 同色）；選中反轉為 fg 深色底＋白字。
 function calCoachChips(coaches, filterCoach){
-  const list = (coaches||[]).filter(isCoachable);
+  const list = (coaches||[]).filter(isTeachable);
   let html = `<button class="cal-chip ${!filterCoach||filterCoach==='all'?'on':''}" onclick="calSetCoach('all')">全部</button>`;
   html += list.map(c=>{
     const cc = coachTagColor(c.id);
@@ -9101,7 +9114,7 @@ async function renderCalendar(opts){
 
   let filterHtml='';
   if(opts.coachFilter){
-    const cOpts=coaches.filter(isCoachable).map(c=>`<option value="${c.id}" ${filterCoach===c.id?'selected':''}>${coachDisp(c)}</option>`).join('');
+    const cOpts=coaches.filter(isTeachable).map(c=>`<option value="${c.id}" ${filterCoach===c.id?'selected':''}>${coachDisp(c)}</option>`).join('');
     filterHtml=`<div class="filter-row"><span style="font-size:12px;color:var(--t2);">篩選教練</span>
       <select onchange="window._calFilter=this.value;navTo(CUR_PAGE)"><option value="all">全部教練</option>${cOpts}</select>
       <button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 新增預約</button></div>`;
@@ -11145,7 +11158,7 @@ async function openBookingModal(){
     else if(window._calMineOnly) prefillCoach = SESSION.id; // 桌機只看我的課
   }
   window._bkPrefillCoach=null; // 用完即清
-  const coachOpts=coaches.filter(isCoachable).map(c=>{
+  const coachOpts=coaches.filter(isTeachable).map(c=>{
     const sel = (isCoach&&c.id===SESSION.id) || (prefillCoach&&c.id===prefillCoach);
     return `<option value="${c.id}" ${sel?'selected':''}>${coachDisp(c)}</option>`;
   }).join('');
@@ -11168,7 +11181,7 @@ async function openBookingModal(){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="cancelBookingModal()">取消</button><button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`);
   // 渲染卡片
   window._bkTypes=activeTypes;
-  window._bkCoaches=coaches.filter(isCoachable);
+  window._bkCoaches=coaches.filter(isTeachable);
   /* 手機版（2026-07-20 使用者指示）：教練名單只留「登入者本人」——手機行事曆＝自己的
      課表，幫其他教練排課請用桌機。登入者非教練（純櫃台帳號）時仍顯示全部。 */
   if(isMobileBk && !isCoach){
@@ -11322,7 +11335,7 @@ async function bkStep2(){
     window._grpSel=[];
     showModal(`<div class="modal-title">新增團體課 · 步驟 2 / 2</div>
       ${bkSummaryCard(t,date,time,coach_id?await coachName(coach_id):'')}
-      <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;background:var(--card2);padding:10px 12px;border-radius:9px;">團體課最多 5 人，名單可現在選或之後在明細再加。有團體課票券的會員會扣 1 堂，沒票的由教練負責。</div>
+      <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;background:var(--card2);padding:10px 12px;border-radius:9px;">團體課最多 5 人，名單可現在選或之後在明細再加。有團體課票券的會員會扣 1 堂，沒票的由教練負責。帶親友同行可按已選會員的「＋」重複報名，每個名額各算 1 人、各扣 1 堂。</div>
       <div class="form-row"><label>加入會員（點選即可複選，最多 5 人）</label>
         <input type="hidden" id="bk-member" value="">
         <input id="grp-search" class="ms-search" style="margin:0 0 8px;width:100%;box-sizing:border-box;" placeholder="搜尋姓名…" oninput="renderGrpPick()" autocomplete="off">
@@ -11457,6 +11470,8 @@ function pickMember(mid){
   refreshBkTicket();
 }
 // 團體課選會員：搜尋 + 點選即複選（不需按 Ctrl/⌘，不顯示電話）
+// 2026-07-21 使用者指示：同一姓名可重複報名（帶長輩/親友同行）——已選列以「＋/−」增減同名名額，
+// _grpSel 為可重複的 id 陣列（multiset），每個名額各算 1 人、各扣 1 堂。
 function renderGrpPick(){
   const box=document.getElementById('grp-list'); if(!box)return;
   const q=(document.getElementById('grp-search')?.value||'').trim().toLowerCase();
@@ -11465,23 +11480,39 @@ function renderGrpPick(){
   list=list.slice().sort((a,b)=>{ if(a.mine!==b.mine)return a.mine?-1:1; return (a.name||'').localeCompare(b.name||''); });
   if(list.length===0){ box.innerHTML='<div class="ms-empty">找不到符合的會員</div>'; }
   else box.innerHTML=list.map(m=>{
-    const on=sel.includes(m.id);
+    const n=sel.filter(x=>x===m.id).length;
+    const on=n>0;
     const tag=m.sum>0?`團體課票 剩 ${m.sum} 堂`:'無票（教練負責）';
     return `<button type="button" class="ms-item grp-item${on?' grp-on':''}" onclick="toggleGrpMember('${m.id}')">
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="grp-check">${on?'✓':''}</span>
         <span class="ms-name" style="margin:0;">${m.mine?'<span class="ms-star">★</span> ':''}${m.name}</span>
+        ${n>1?`<span class="grp-mult">×${n}</span>`:''}
+        ${on?`<span class="grp-step" onclick="event.stopPropagation();grpAddOne('${m.id}')" title="同名再加一位（親友同行）">＋</span>`:''}
+        ${n>1?`<span class="grp-step" onclick="event.stopPropagation();grpRemoveOne('${m.id}')" title="減少一位">−</span>`:''}
       </div>
       <div class="ms-rem" style="margin-left:26px;color:${m.sum>0?'var(--green)':'var(--t3)'};">${tag}</div>
     </button>`;
   }).join('');
   const c=document.getElementById('grp-count'); if(c)c.textContent=`已選 ${sel.length} / 5 人`;
 }
+// 點列切換：未選→選 1 位；已選→整組移除（含同名加開的名額）
 function toggleGrpMember(id){
   const sel=window._grpSel||(window._grpSel=[]);
-  const i=sel.indexOf(id);
-  if(i>=0){ sel.splice(i,1); }
+  if(sel.includes(id)){ window._grpSel=sel.filter(x=>x!==id); }
   else{ if(sel.length>=5){ showToast('團體課最多 5 人'); return; } sel.push(id); }
+  renderGrpPick();
+}
+// 同名名額 +1 / −1（帶長輩同行）
+function grpAddOne(id){
+  const sel=window._grpSel||(window._grpSel=[]);
+  if(sel.length>=5){ showToast('團體課最多 5 人'); return; }
+  sel.push(id); renderGrpPick();
+}
+function grpRemoveOne(id){
+  const sel=window._grpSel||(window._grpSel=[]);
+  const i=sel.lastIndexOf(id);
+  if(i>=0) sel.splice(i,1);
   renderGrpPick();
 }
 function filterBkMembers(){
@@ -11905,7 +11936,9 @@ async function bkOrbitRoster(id){
   let rows=[];
   if(mids(b).length){                       // 新結構：attendance 物件逐人
     const att=attObj(b);
-    rows = mids(b).map(mid=>({key:'att|'+b.id+'|'+mid, name:nameOf(mid), on:att[mid]==='checked_in'}));
+    // 同名重複報名（2026-07-21）：同一會員佔多個名額時合併成一列（點名以「姓名」為單位，×N 標示名額數）
+    const _rc={}; mids(b).forEach(mid=>{_rc[mid]=(_rc[mid]||0)+1;});
+    rows = Object.keys(_rc).map(mid=>({key:'att|'+b.id+'|'+mid, name:nameOf(mid)+(_rc[mid]>1?`（×${_rc[mid]}）`:''), on:att[mid]==='checked_in'}));
   }else{                                    // 舊結構：同教練同時段的多筆單人團課
     const all=await dbGetAll('bookings');
     const set=all.filter(x=>x.category==='小班肌力' && (x.coach_id||'')===(b.coach_id||'') && x.date===b.date && x.start_time===b.start_time && x.status!=='cancelled');
@@ -11946,7 +11979,7 @@ async function bkOrbitSub(id){
   const b = await dbGet('bookings', id);
   if(!b){ showToast('找不到預約'); return; }
   const coaches = await dbGetAll('coaches');
-  const list = coaches.filter(c=>isCoachable(c) && c.invite_status!=='pending' && c.id!==b.coach_id);
+  const list = coaches.filter(c=>isTeachable(c) && c.invite_status!=='pending' && c.id!==b.coach_id);
   const orb = el.querySelector('.evc-orbit');
   // 2026-07-20 使用者指示：代課名單往代課按鈕（卡片左上）「上方」展開，不吊在卡片下方
   const html = `<div class="evc-roster evr-up" onclick="event.stopPropagation()">`
@@ -12127,7 +12160,7 @@ async function bkInlineEdit(id){
   if(!b || b.date < ymd(TODAY)){ showToast('已過期的預約無法修改'); return; }
   document.removeEventListener('click', _bkOutsideClose, true); // 編輯期間不因點外而收合
   const coaches = await dbGetAll('coaches');
-  const coachableList = coaches.filter(c=>isCoachable(c) && c.invite_status!=='pending');
+  const coachableList = coaches.filter(c=>(isTeachable(c)||c.id===b.coach_id||c.id===b.substitute_coach_id) && c.invite_status!=='pending');
   const coach = coaches.find(c=>c.id===b.coach_id);
   const isPersonalPT = b.category!=='小班肌力' && b.category!=='體驗';
   const durOpts = [30,60,90,120].map(m=>`<option value="${m}" ${b.duration===m?'selected':''}>${m} 分</option>`).join('');
@@ -12208,7 +12241,7 @@ async function openBookingDetail(id){
   const mem=members.find(m=>m.id===b.member_id);
   const coach=coaches.find(c=>c.id===b.coach_id);
   const subCoach=b.substitute_coach_id?coaches.find(c=>c.id===b.substitute_coach_id):null;
-  const coachableList=coaches.filter(c=>isCoachable(c)&&c.invite_status!=='pending');
+  const coachableList=coaches.filter(c=>(isTeachable(c)||c.id===b.coach_id||c.id===b.substitute_coach_id)&&c.invite_status!=='pending');
   const tk=b.ticket_id?await dbGet('member_tickets',b.ticket_id):null;
   const d=parseYmd(b.date);
   const canCancel=b.status==='booked'||b.status==='checked_in';
@@ -12839,7 +12872,7 @@ async function openGroupMembers(id){
   });
   window._grpSel=cur.slice();
   showModal(`<div class="modal-title">團體課名單</div>
-    <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">最多 5 人。有團體課票券的會員會在加入時扣 1 堂、移除時退回；沒票的由教練負責（不扣）。</div>
+    <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">最多 5 人。有團體課票券的會員會在加入時扣 1 堂、移除時退回；沒票的由教練負責（不扣）。帶親友同行可按已選會員的「＋」重複報名，每個名額各算 1 人、各扣 1 堂。</div>
     <div class="form-row"><label>選擇會員（點選即可複選，最多 5 人）</label>
       <input id="grp-search" class="ms-search" style="margin:0 0 8px;width:100%;box-sizing:border-box;" placeholder="搜尋姓名…" oninput="renderGrpPick()" autocomplete="off">
       <div id="grp-count" style="font-size:12px;color:var(--t2);margin-bottom:6px;">已選 0 / 5 人</div>
@@ -12852,8 +12885,16 @@ async function saveGroupMembers(id){
   const next=(window._grpSel||[]).slice();
   if(next.length>5){showToast('團體課最多 5 人');return;}
   const prev=mids(b);
-  const added=next.filter(x=>!prev.includes(x));
-  const removed=prev.filter(x=>!next.includes(x));
+  // 同名可重複報名（2026-07-21）：以「名額數量差」計算加入/移除（multiset diff），
+  // 同一會員佔 2 個名額＝扣 2 堂；移除一個名額＝退 1 堂。
+  const _cnt=a=>a.reduce((o,x)=>{o[x]=(o[x]||0)+1;return o;},{});
+  const pc=_cnt(prev), nc=_cnt(next);
+  const added=[], removed=[];
+  for(const k of new Set([...prev,...next])){
+    const d=(nc[k]||0)-(pc[k]||0);
+    for(let i=0;i<d;i++) added.push(k);
+    for(let i=0;i<-d;i++) removed.push(k);
+  }
   // 新加入的有票就扣、移除的退回（依該 booking 的票券類型）
   for(const mid of added){
     const tk=await findUsableTicket(mid,b.ticket_type_id,b.date);
@@ -16305,7 +16346,8 @@ const PP_SCHEMA = {
         opts:[['admin','管理員'],['front_desk','櫃台'],['coach','教練']],
         view:r=>({admin:'管理員',front_desk:'櫃台',coach:'教練'})[r.role]||'' },
       { id:'job_title', label:'職稱', type:'select',
-        opts:[['老闆','老闆'],['店長','店長'],['主管','主管'],['行政','行政'],['教練','教練'],['工讀','工讀']] },
+        /* 2026-07-21：補空白選項——原本沒有時，職稱為空的員工一進編輯就 fallback 顯示「老闆」，儲存即誤寫入 */
+        opts:[['','—'],['老闆','老闆'],['店長','店長'],['主管','主管'],['行政','行政'],['教練','教練'],['工讀','工讀']] },
       { id:'status', label:'在職狀態', type:'select',
         opts:[['active','在職'],['leave','留職停薪'],['inactive','離職']],
         view:r=>({active:'在職',leave:'留職停薪',inactive:'離職'})[r.status]||'' },
@@ -16313,6 +16355,8 @@ const PP_SCHEMA = {
       { id:'permanent_date', label:'轉正日', type:'date', hint:'選填', addLabel:'新增轉正日' },
       { id:'resign_date',    label:'離職日', type:'date', hint:'選填', addLabel:'新增離職日' },
       { id:'need_punch',     label:'需要打卡', type:'checkbox', view:r=>r.need_punch?'是':'否' },
+      { id:'can_teach',      label:'開放開課', type:'checkbox',
+        hint:'關閉＝不出現在行事曆教練篩選、預約與代課的教練名單（既有預約不受影響）' },
     ]},
     { title:'排班規則', tip:'排班系統會直接讀取這裡的設定。', fields:[
       { id:'can_substitute', label:'可代課', type:'checkbox', view:r=>r.can_substitute?'是':'否' },
