@@ -534,8 +534,14 @@ purchases.invoice_type、場租/請假 enum。
    捲過頭月曆不再自己跳出來。
 4. 測試庫補種：course_plans `PL-SEED21-PT/GP`（原本 0 筆方案）、purchases.coach_id 欄位。
 
-**⚠️ 正式庫待跑 SQL**：`docs/migrations/20260721_06_purchases_coach_attribution.sql`
-（purchases 加 coach_id；未跑前簽約照常、僅業績歸屬不落庫）。
+**✅ 正式庫已於 2026-07-21 傍晚由使用者執行並驗證**：`20260719_03`（關閉 employees 公開
+insert/邀請政策＋training_logs 收斂）＋`20260721_02`（employees_insert_admin）＋
+`20260721_06`（purchases.coach_id）。政策清單與欄位皆已查核。**正式庫已無待跑 migration。**
+
+**時程備忘（2026-07-21 使用者告知）**：會員約 **8 月**才開始接觸系統；期間會定期提供舊系統
+匯出檔（同 7/21 兩份 xlsx 格式）→ 匯入設計為**可重複執行的冪等管線**（舊預約編號去重、
+票券餘額以最新匯出為準），8 月上線前做最後一次切換匯入。清整資料與報告在本機
+`Documents\yugym-import-20260721\`（含個資，勿進公開 repo）。
 
 ## 1.4j 晚間批次（2026-07-21 18:00~18:45，已上線至 260721.1830）
 
