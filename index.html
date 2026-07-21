@@ -4701,12 +4701,21 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .know-t{font-size:15.5px;font-weight:800;margin-bottom:5px;}
 .know-s{font-size:12.5px;line-height:1.75;opacity:.9;}
 .know-hint{position:absolute;right:14px;bottom:10px;font-size:10.5px;font-weight:700;opacity:.5;}
-/* 版面 v2（2026-07-21 使用者定版）：行事曆縮小＋KPI 三列去背並排其右 */
-.mc-caltop{display:flex;gap:16px;align-items:stretch;}
-.mc-caltop .cal-side{flex:1 1 auto;min-width:0;}
-.mc-kpi-plain{flex:0 0 215px;display:flex;flex-direction:column;justify-content:center;}
-.mc-kpi-plain .mc-kpi-grid{display:flex;flex-direction:column;gap:2px;}
-.mc-kpi-plain .mc-kpi-grid .card{background:none;border:none;box-shadow:none;padding:10px 12px;margin:0;}
+/* 版面 v3（2026-07-21 使用者定版）：上帶＝問候大字＋知識卡｜KPI 大數字條；
+   下帶三欄＝快捷+待辦｜行事曆｜教練中心（值班上·任務下） */
+.mc-top3{display:flex;gap:22px;margin-bottom:14px;align-items:stretch;}
+.mc-top3-left{flex:0 0 380px;min-width:0;display:flex;flex-direction:column;gap:10px;}
+.mc-greet-big{font-size:30px;font-weight:800;color:var(--text-primary);letter-spacing:-.01em;padding:2px 4px;}
+.mc-kpistrip{flex:1;display:flex;align-items:center;justify-content:space-evenly;gap:18px;min-width:0;}
+.kpi-it{display:flex;flex-direction:column;align-items:center;gap:9px;}
+.kpi-n{font-size:44px;font-weight:800;font-family:var(--font-en),var(--num);color:var(--text-primary);line-height:1;letter-spacing:-.02em;}
+.kpi-n small{font-size:16px;font-weight:600;color:var(--t3);margin-left:3px;}
+.kpi-l{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--t2);font-weight:600;}
+.kpi-l svg{width:17px;height:17px;color:var(--t3);}
+.mc-bot3{display:flex;gap:14px;align-items:flex-start;}
+.mc-b3-left{flex:0 0 300px;min-width:0;display:flex;flex-direction:column;}
+.mc-b3-cal{flex:1;min-width:0;}
+.mc-b3-coach{flex:1.35;min-width:0;display:flex;flex-direction:column;}
 /* 左欄大版月曆：基底 .mc-cell 是 aspect-ratio:1（正方形），寬欄下 147px 寬=147px 高、
    整月 859px 把教練中心擠出畫面（2026-07-21 使用者回報）→ 改固定格高 54px，整月約 350px */
 .mc-dash-main .cal-side .mc-cell{aspect-ratio:auto;height:54px;min-height:0;padding:4px 0;}
@@ -5146,8 +5155,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260721.1051';
-const APP_VERSION_LABEL='v260721.1051';
+const APP_VERSION='260721.1057';
+const APP_VERSION_LABEL='v260721.1057';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8248,6 +8257,15 @@ PAGES.g_dashboard=async function(){
     ${_revCard}
   </div>`;
   /* 「今日總課堂」拆為「教練課／團體課」（2026-07-18 使用者指定）。 */
+  /* 桌機 KPI 條（2026-07-21 使用者定版 v3，仿參考圖）：圖示＋文字＋大數字、去卡片背景 */
+  const kpiStrip=`<div class="mc-kpistrip">
+    ${[[ICONS.cal,'教練課',`${_ptN}<small>堂</small>`],
+       [OPS_TODO_IC.calendar,'團體課',`${_grpN}<small>堂</small>`],
+       [OPS_TODO_IC.money,'今日營收',`$${_fm(_revTotal)}`]]
+      .map(([ic,l,n])=>`<div class="kpi-it"><div class="kpi-n">${n}</div><div class="kpi-l">${ic}${l}</div></div>`).join('')}
+  </div>`;
+  const _ghr=new Date().getHours();
+  const _greetBig=`${_ghr<11?'早安':_ghr<18?'午安':'晚安'}，${SESSION.name||''}`;
 
   /* ── 今日值班卡（2026-07-19 使用者指示）：已上班打卡人員的圈型值班進度 ──
      對象＝當日 attendance 有 clock_in 的所有員工（含櫃台），依上班時間排序。 */
@@ -8391,27 +8409,39 @@ PAGES.g_dashboard=async function(){
      左欄（彈性）：狀態卡＋KPI → 今日課程時間軸
      右欄（固定 340px）：今日待辦事項 → 快速操作
      兩欄由 .slime-flow 依「容器」寬度決定何時換行（非視窗寬）。 */
+  /* 桌機版面（2026-07-21 使用者定版 v3）：
+     ┌ 問候大字＋知識卡 ┬ KPI 大數字條（圖示＋文字＋大數字） ┐
+     ├ 快捷            ┼──────────┬───────────────────────┤
+     │ 待辦事項        │ 行事曆    │ 今日教練中心（值班上·任務下）│
+     └────────────────┴──────────┴───────────────────────┘
+     手機版維持：月曆 Hero → KPI＋值班 → 任務 →（右欄）本月成績 → 待辦 → 知識卡 */
   C.innerHTML=`
     ${isMobileLayout()?adminCalCard:heroRow}
     <div class="mc-dash-wrap hero-sheet">
+      ${isMobileLayout()?`
       <div class="mc-dash slime-flow">
-        <!-- 桌機版面（2026-07-21 使用者定版 v2）：
-             ┌ 行事曆(縮小)｜KPI 三列去背 ┬ 快速操作 ┐
-             ├──────────────────────────┤ 今日值班 │
-             └ 今日教練任務              ┴ 待辦事項 ┘
-             手機版維持：KPI＋值班 → 任務 →（右欄）本月成績 → 待辦 -->
         <div class="mc-dash-main slime-card slime-stack" style="--slime-min:640px;">
-          ${isMobileLayout()
-            ? `<div class="mc-kpiduty">${kpiCards}${dutyRingCard}</div>`
-            : `<div class="mc-caltop">${deskCalCard}<div class="mc-kpi-plain">${kpiCards}</div></div>`}
+          <div class="mc-kpiduty">${kpiCards}${dutyRingCard}</div>
           <div class="mc-timeline-wrap">${timelineCell.replace('<div class="dash-sec-label">今日課程時間軸</div>','')}</div>
         </div>
         <div class="mc-dash-side slime-card slime-card--fixed slime-stack">
-          ${isMobileLayout()
-            ? (monthCard+todoCard+knowCardHTML())
-            : (quickCard+dutyRingCard+todoCard+knowCardHTML())}
+          ${monthCard+todoCard+knowCardHTML()}
         </div>
+      </div>`:`
+      <div class="mc-dash"><!-- 深紅待辦/綠月曆等覆蓋選擇器以 .mc-dash 為祖先，v3 結構需保留 -->
+      <div class="mc-top3">
+        <div class="mc-top3-left">
+          <div class="mc-greet-big">${_greetBig}</div>
+          ${knowCardHTML()}
+        </div>
+        ${kpiStrip}
       </div>
+      <div class="mc-bot3">
+        <div class="mc-b3-left">${quickCard}${todoCard}</div>
+        <div class="mc-b3-cal">${deskCalCard}</div>
+        <div class="mc-b3-coach">${dutyRingCard}<div class="mc-timeline-wrap">${timelineCell.replace('<div class="dash-sec-label">今日課程時間軸</div>','')}</div></div>
+      </div>
+      </div>`}
     </div>
   `;
   // 現在線每分鐘自動更新（只在檢視今天時）
