@@ -5223,8 +5223,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260721.1147';
-const APP_VERSION_LABEL='v260721.1147';
+const APP_VERSION='260721.1150';
+const APP_VERSION_LABEL='v260721.1150';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12326,9 +12326,11 @@ async function bkCoachLeave(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   if(b.status==='cancelled'||b.status==='checked_in'||b.status==='completed'){ showToast('此狀態不可標記請假'); return; }
   try{
-    if(b.ticket_id){ await refundTicket(b.ticket_id,b.id,SESSION.id); }
+    /* 順序（2026-07-21）：先寫狀態、成功才退票——正式庫若尚未套 20260721_05（enum 缺
+       coach_leave），狀態寫入會先失敗、乾淨中止，不會發生「票退了狀態沒改」的不一致。 */
     b.status='coach_leave';
     await dbPut('bookings',b);
+    if(b.ticket_id){ await refundTicket(b.ticket_id,b.id,SESSION.id); }
     try{ if(b.member_id) await pushNotification(b.member_id,'cancel','教練請假通知',
       `您的${b.category||'課程'}（${b.date} ${b.start_time}）因教練請假，票券已退回；若您仍到場自主訓練並簽到，將照常發放自主訓練點數。`); }catch(_){}
     collapseBkCard();
