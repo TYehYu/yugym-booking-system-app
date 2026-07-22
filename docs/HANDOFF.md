@@ -774,6 +774,35 @@ insert/邀請政策＋training_logs 收斂）＋`20260721_02`（employees_insert
    （全站吃 coachDisp 的地方一次生效：行事曆 chips/課卡 tag/值班環/名單等）；
    員工清單旁的小字英文名同步。中文名不受影響；表單輸入欄保留原始大小寫。
 
+## 1.4t 上午收尾（2026-07-22 10:25~10:50，已上線至 260722.1036；使用者 11:00 出門前定版）
+
+1. **課卡字體定版**（使用者選定：**思源黑體＋110%**）：寫死進 CSS（.evc-time/name/coach 的
+   clamp 各 ×1.1、.evc-txt font-family:'Noto Sans TC'），**字體試調工具整組拆除**。
+2. **✅ 待辦 2 完成：折抵券消費機制**（收款折 $300）：
+   - 售票/簽約視窗（發放票券＝銷售彈窗共用）步驟 2 新增「折抵券」列——會員持有對應
+     折抵券（教練課方案→tt-discount-pt300、運動按摩→tt-discount-ms300）才顯示；
+     輸入使用張數即時試算「折抵 $N → 實收 $M」。**分期不併用**（選分期即隱藏）。
+   - 送出：新票 amount_paid 與 purchases.deal_amount＝**折抵後實收**（今日營收 KPI 自動正確）、
+     備註加「（折抵券×N −$…）」；折抵券最快到期優先扣點、逐張記 ticket_logs deduct、
+     歸零改 status **used_up**（⚠️ enum 是 used_up 不是 used——本次踩到，dbFriendlyError
+     會吞細節，查 enum 要用 `enum_range(null::ticket_status)`）。
+   - e2e（測試庫）：$15,000 用 2 張 → 實收 $14,400、券 0 點 used_up、deduct×2、備註正確；
+     測試資料已清。附帶修：purchases.note 原本 null+'' 會寫成 "null" 字串 → (note||'')。
+3. **票券逐堂圖示樣式試選**（使用者問「有樣式讓我選嗎」，**暫時工具**）：會員「我的票券」頁
+   標題下拉——A 現行（白底空心）／B 淡底（課色 14% 淡底）／C 未用灰（未用灰框）／
+   D 細框（內縮 2px）。localStorage（yg_tkstyle）記住。**待使用者選定後寫死並拆工具**
+   （搜 tks-pick / tkStyleSet）。
+4. **手機行事曆（教練/管理員共用 renderCoachAgenda）兩調整**（使用者指示）：
+   - **非自己的課卡關閉互動**：原本點到會冒泡觸發欄位空格新增 → 補 stopPropagation 擋掉
+     （管理員不受影響、仍可點所有卡）。
+   - **背景一體化**：整點槽/過期遮罩/現在線改畫在整寬底層一次（.cag-fullbg），
+     分欄只承載課卡——「背景跟著分欄變多欄格」的視覺移除。
+5. **新待辦（使用者回報，未處理）**：桌機預約行事曆**左右換頁卡頓**——候選方向：
+   翻頁動畫（_calPendingSlide）與整頁重繪成本、dbGetAll 快取命中率、renderCalendar
+   DOM 量。下次會話優先。
+6. 折抵券票種 tt-discount-pt300/ms300 測試庫已種（與正式庫同 id）。抽獎種子
+   BK-LOTSEED-*（m_reg/m_a 各 2 筆已簽到）留給使用者試抽，清除 SQL 見 1.4s。
+
 ## 1.5 昨天（2026-07-17）做了什麼
 
 **首頁改版 Dashboard V2**（依使用者「首頁資訊更新」設計稿）：Hero 只留問候＋時鐘、狀態卡帶 4 個 KPI、
