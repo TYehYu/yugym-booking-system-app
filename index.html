@@ -5247,6 +5247,15 @@ body.mc-mode .cal-body{background:rgba(255,255,255,.8);}
 .mc-cell.mc-msb-sel{background:var(--gold);}
 .mc-cell.mc-msb-sel .mc-d{color:#3d2f10;font-weight:800;}
 .mc-cell.mc-msb-sel .mc-dot{background:rgba(61,47,16,.35);color:#fff;}
+/* ── 今日營收收款名單卡（2026-07-22）：桌機右欄「今日值班」下方 ── */
+.mc-revlist{display:flex;flex-direction:column;gap:4px;}
+.mc-rev-row{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:10px;background:var(--card2);}
+.mc-rev-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+.mc-rev-nm{font-size:12.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mc-rev-it{font-size:10.5px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mc-rev-amt{font-family:var(--num),inherit;font-size:13px;font-weight:800;color:var(--green);white-space:nowrap;}
+.mc-rev-inv{font-size:9px;font-weight:700;color:#2e6b4f;background:#e3efe7;border-radius:999px;padding:2px 6px;flex-shrink:0;}
+.mc-revlist-sum{font-family:var(--num),inherit;font-weight:800;color:var(--green);font-size:14px;}
 </style>
 </head>
 <body>
@@ -5380,8 +5389,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260722.0941';
-const APP_VERSION_LABEL='v260722.0941';
+const APP_VERSION='260722.0953';
+const APP_VERSION_LABEL='v260722.0953';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8486,7 +8495,7 @@ PAGES.g_dashboard=async function(){
   const _dayPur=(purchases||[]).filter(p=>puLocalDate(p)===date&&(p.source==='reactivate'||p.source==='facility_rental'||p.source==='merchandise'));
   const _dayPurSum=_dayPur.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
   const _revTotal=_revTotal0+_dayPurSum;
-  const _revInv=_dayTk.filter(t=>t.invoice_status==='cloud'||t.invoice_status==='paper')
+  const _revInv=_dayTk.filter(t=>t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued')
       .reduce((s,t)=>s+(Number(t.amount_paid)||0),0)
     + _dayPur.filter(p=>p.invoice_type==='cloud'||p.invoice_type==='paper')
       .reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
@@ -8543,6 +8552,28 @@ PAGES.g_dashboard=async function(){
   const dutyRingCard=`<div class="card mc-card mc-dutyring-card">
     <div class="mc-card-h">今日值班</div>
     <div class="dr-row">${_punchedRings||'<div class="mc-duty-empty">今日尚無上班打卡</div>'}</div>
+  </div>`;
+
+  /* ── 今日營收收款名單卡（2026-07-22 使用者指示：桌機右欄「今日值班」下方）──
+     與今日營收 KPI 同源：_dayTk（今日售票）＋ _dayPur（場租/重啟/商品）。 */
+  const _revRows=[
+    ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—',
+      it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
+      amt:Number(t.amount_paid)||0,
+      inv:(t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued')})),
+    ..._dayPur.map(p=>({nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客',
+      it:p.plan_name||({reactivate:'票券重啟',facility_rental:'場地租借',merchandise:'商品'}[p.source]||'收款'),
+      amt:Number(p.deal_amount)||0,
+      inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')})),
+  ];
+  const revListCard=`<div class="card mc-card mc-revlist-card">
+    <div class="mc-card-h" style="display:flex;justify-content:space-between;align-items:baseline;">今日營收<span class="mc-revlist-sum">$${_fm(_revTotal)}</span></div>
+    ${_revRows.length?`<div class="mc-revlist">${_revRows.map(r=>`
+      <div class="mc-rev-row">
+        <div class="mc-rev-b"><span class="mc-rev-nm">${r.nm}</span><span class="mc-rev-it">${r.it}</span></div>
+        ${r.inv?'<span class="mc-rev-inv">發票</span>':''}
+        <span class="mc-rev-amt">$${_fm(r.amt)}</span>
+      </div>`).join('')}</div>`:'<div class="mc-duty-empty">今日尚無收款</div>'}
   </div>`;
 
   /* ── 今日待辦事項（右欄上）──
@@ -8708,6 +8739,7 @@ PAGES.g_dashboard=async function(){
         <div class="mc-g5-right"><!-- 2026-07-21 使用者指示：快捷移到值班上方；待辦底部對齊教練任務底部 -->
           ${quickCard}
           <div class="mc-dutyplain">${dutyRingCard}</div>
+          ${revListCard}<!-- 2026-07-22 使用者指示：值班下方今日收款名單 -->
           <div class="mc-b4-todo">${todoCard}</div>
         </div>
       </div>
@@ -19383,7 +19415,16 @@ async function submitGrant(){
     payment_status:document.getElementById('gt-pay').value,
     invoice_status:(document.getElementById('gt-invoice')?.value)||'none',   // 2026-07-21 A3：營收分有無發票
     created_at:new Date().toISOString()};
-  await dbPut('member_tickets',t);
+  /* 防護寫入（2026-07-22）：invoice_status 欄是 enum，資料庫未套 20260722_01 前沒有
+     cloud/paper 值 → 整筆售票會失敗。失敗時退回既有值 'issued'（仍算有發票）重寫，
+     售票不因發票欄丟單；發票種類細節仍記在 purchases.invoice_type（text 欄不受限）。 */
+  try{ await dbPut('member_tickets',t); }
+  catch(e){
+    if(t.invoice_status==='cloud'||t.invoice_status==='paper'){
+      t.invoice_status='issued';
+      await dbPut('member_tickets',t);
+    }else{ throw e; }
+  }
   await logTicket(t.id,'grant',total,null,SESSION.id,'發放（'+plan.name+'）'+(isInstall?`，分${installCount}期・首期開通${unlocked}堂`:''));
   // 建立購買紀錄（分期只記第1期實收金額；未收期款不列入營收）
   try{

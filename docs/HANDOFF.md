@@ -723,6 +723,23 @@ insert/邀請政策＋training_logs 收斂）＋`20260721_02`（employees_insert
 
 **剩餘待辦**：1.4p 待辦 2（折抵券收款折 $300 消費機制＋月度抽獎發券流程）→ 下一個工程。
 
+## 1.4r 上午續（2026-07-22 09:50~10:00，已上線至 260722.0953）
+
+1. **桌機首頁右欄新增「今日營收」收款名單卡**（使用者指示，值班下方）：與 KPI 同源
+   （_dayTk 售票＋_dayPur 場租/重啟/商品）——每列 姓名/散客＋項目＋金額，有發票掛綠 chip；
+   標頭右側總額。已以測試種子（教練課 $15,000 雲端發票＋散客蛋白粉 $100）截圖驗證後清除。
+2. **🔴 順手抓到既有 live bug（260721.1104 起）：帶發票的售票整筆失敗**——
+   7/21 A3 售票表單把發票欄（none/cloud/paper）直接寫 `member_tickets.invoice_status`，
+   但該欄是 baseline enum(`none,issued`) → 選雲端/紙本發票的售票 enum violation 整筆失敗
+   （只有免發票能成立）；KPI「有發票」比對 cloud/paper 也永遠是 0。三段修法：
+   - `docs/migrations/20260722_01_invoice_status_add_cloud_paper.sql`（enum 補 cloud/paper）
+     ——**測試庫已套（MCP）、⚠️ 正式庫待使用者 SQL Editor 執行**（兩行 alter type）。
+   - 前端售票加防護寫入：enum 未套時自動退回 `issued` 重寫（售票不丟單，發票細節仍在
+     purchases.invoice_type text 欄）。
+   - KPI／收款名單「有發票」判定補 `issued`（購買申請開立流程的既有值）。
+   - 影響評估：正式庫 7/21 起售票皆 invoice_status=none（帶發票的會直接失敗被使用者重試
+     成免發票或放棄），無錯誤資料需修正；套 enum 後新售票即正常。
+
 ## 1.5 昨天（2026-07-17）做了什麼
 
 **首頁改版 Dashboard V2**（依使用者「首頁資訊更新」設計稿）：Hero 只留問候＋時鐘、狀態卡帶 4 個 KPI、
