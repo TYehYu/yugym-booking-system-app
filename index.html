@@ -5475,8 +5475,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260723.1203';
-const APP_VERSION_LABEL='v260723.1203';
+const APP_VERSION='260723.1215';
+const APP_VERSION_LABEL='v260723.1215';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6251,6 +6251,7 @@ const ADMIN_NAV2=[
     {label:'特休',     page:'staff', tab:'leave'},
     {label:'工作規則', page:'staff', tab:'schedule'},
     {label:'課程方案', page:'settings_ticket'},
+    {label:'合約範本', page:'settings_contract'},
     {label:'動作資料庫', page:'exercise_db'},
     {label:'權限設定', page:'settings_staff'},
     {label:'系統設定', page:'settings'},
@@ -8325,6 +8326,7 @@ PAGES.g_dashboard=async function(){
     const _et=normEmp(c&&(c.employment_type||c.pay_type));
     const _rank = c.role==='admin' ? 0 : (RANK_ORDER[_et]!==undefined ? RANK_ORDER[_et] : 5);
     return { order:ORDER[stKey], isLive:!!inClass, isSelf:(c.id===SESSION.id), rank:_rank, hireDate:(c.hire_date||'9999-12-31'),
+      total:total,   // 當日課堂數（2026-07-23 使用者指示：桌機/手機統一以此由多到少排序）
       cardHtml: (function(){
         // ── 卡片視覺與行事曆定版統一（2026-07-19 使用者指示）──
         // 方形＋1px 細黑框、課程色淡底（--course-*-soft）＋accent 字、第三行教練縮寫 tag（教練色）。
@@ -8398,8 +8400,10 @@ PAGES.g_dashboard=async function(){
       })()
     };
   }).filter(Boolean);
-  // 排序：進行中(現在上課)置頂 → 本人 → 職等 → 到職日
-  rows.sort((a,b)=> (b.isLive-a.isLive) || (b.isSelf-a.isSelf) || (a.rank-b.rank) || ((a.hireDate>b.hireDate)?1:(a.hireDate<b.hireDate?-1:0)) );
+  /* 排序（2026-07-23 使用者指示，桌機／手機統一）：**當日課堂數多的排最前**，依序往下；
+     同堂數再看 進行中 → 本人 → 職等 → 到職日。原本的「進行中/本人置頂」退居次要條件。 */
+  const _taskSort=(a,b)=> (b.total-a.total) || (b.isLive-a.isLive) || (b.isSelf-a.isSelf) || (a.rank-b.rank) || ((a.hireDate>b.hireDate)?1:(a.hireDate<b.hireDate?-1:0));
+  rows.sort(_taskSort);
 
   const legend=`<div class="tl-legend">
     <span class="tl-lg"><i class="tl-lg-dot" style="background:#1f6f54;"></i>教練課</span>
@@ -8437,8 +8441,9 @@ PAGES.g_dashboard=async function(){
       <div class="mtc-wrap tl-mobile-only">
         <!-- 課程色圖例已移除（2026-07-20 使用者指示：手機版不用提示每個課程的顏色） -->
         <div class="mtc-wrap-top"><div class="tl-title"><span class="tl-title-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/><path d="M9 11l3 3 3-3"/></svg></span>今日教練任務</div></div>
-        ${/* 手機排序（2026-07-20 使用者指示）：自己永遠第一列，其後沿用 進行中→職等→到職日 */''}
-        ${rows.slice().sort((a,b)=>(b.isSelf-a.isSelf)||(b.isLive-a.isLive)||(a.rank-b.rank)||((a.hireDate>b.hireDate)?1:(a.hireDate<b.hireDate?-1:0))).map(r=>r.mobileHtml).join('')}
+        ${/* 2026-07-23 使用者指示：手機與桌機**統一順序**——課堂最多的排第一，依序往下
+             （原「自己永遠第一列」退場，改為同堂數時的次要條件） */''}
+        ${rows.slice().sort(_taskSort).map(r=>r.mobileHtml).join('')}
       </div>`
     : `<div class="empty" style="padding:40px;text-align:center;color:var(--t3);">今日沒有課程或值班安排</div>`;
 
@@ -18838,13 +18843,10 @@ function salesCourse(kind){
   openGrantModal();
 }
 // 簽約最後一步：點業績歸屬教練＝完成收款（防連點）
+/* 2026-07-23：點業績歸屬教練後不再直接送出，改進入「簽約」步驟（ctSubmit 才真正發票券） */
 async function salesAttribSubmit(cid){
-  if(window._salesSubmitting) return;
-  window._salesSubmitting=true;
-  try{
-    if(window._grantSalesActive) window._grantSalesActive.coach_id=cid;
-    await submitGrant();
-  }finally{ window._salesSubmitting=false; }
+  if(window._grantSalesActive) window._grantSalesActive.coach_id=cid;
+  grantGoStep(4);
 }
 // 場租：重用預約的場地租借表單，日期=今天、時間=下一個半點（08:00–22:00 內）
 function salesFacility(){
@@ -19453,6 +19455,89 @@ function filterGrantMembers(q){
   if(sel.value!==prev) refreshGrantPlans();
 }
 let _grantPreMember=null;
+/* ════════ 簽約（2026-07-23 使用者定案）════════
+   ① 電子＝**現場平板手寫簽名**（櫃台畫面上讓會員簽，canvas → base64 PNG）；紙本＝只記錄。
+   ② 條款＝系統內建範本（contract_templates.CT-DEFAULT，管理員可在系統設定編輯），
+      簽約時以 {{變數}} 帶入；簽完把「當下全文」存進 contracts.body_snapshot，
+      日後範本被改也不影響已簽的約。
+   ③ 會員端唯讀查看（我的票券頁 →「我的合約」）。
+   流程位置：銷售彈窗 課程 →（會員＋方案）→ 收款 → 業績歸屬 → **簽約** → 發票券。
+   簽約排在收款之後，是因為合約要載明「實收金額／付款方式」（折抵券、分期都在收款步驟才確定）。 */
+const CONTRACT_VARS=['會員姓名','會員電話','簽約日期','方案名稱','堂數','效期','金額','付款方式'];
+async function loadContractTpl(){
+  if(window._ctTpl!==undefined) return window._ctTpl;
+  try{ window._ctTpl=await dbGet('contract_templates','CT-DEFAULT'); }catch(_){ window._ctTpl=null; }
+  return window._ctTpl;
+}
+function fillContract(body,ctx){
+  let s=String(body||'');
+  Object.keys(ctx||{}).forEach(k=>{ s=s.split('{{'+k+'}}').join(ctx[k]==null?'':String(ctx[k])); });
+  return s;
+}
+// 簽名板：pointer events（平板手寫／滑鼠皆可）；_signInk 記錄是否真的簽了
+function signPadInit(){
+  const cv=document.getElementById('ct-sign'); if(!cv) return;
+  const ratio=window.devicePixelRatio||1;
+  const w=cv.clientWidth||300, h=cv.clientHeight||150;
+  cv.width=w*ratio; cv.height=h*ratio;
+  const ctx=cv.getContext('2d');
+  ctx.scale(ratio,ratio);
+  ctx.lineWidth=2.4; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#1a1a1a';
+  window._signInk=false;
+  let drawing=false;
+  const pos=e=>{ const r=cv.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; };
+  cv.addEventListener('pointerdown',e=>{ drawing=true; try{cv.setPointerCapture(e.pointerId);}catch(_){}
+    const[x,y]=pos(e); ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+0.1,y); ctx.stroke(); window._signInk=true; e.preventDefault(); });
+  cv.addEventListener('pointermove',e=>{ if(!drawing)return; const[x,y]=pos(e); ctx.lineTo(x,y); ctx.stroke(); e.preventDefault(); });
+  const end=()=>{ drawing=false; };
+  cv.addEventListener('pointerup',end); cv.addEventListener('pointercancel',end); cv.addEventListener('pointerleave',end);
+}
+function signPadClear(){
+  const cv=document.getElementById('ct-sign'); if(!cv) return;
+  cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
+  window._signInk=false;
+}
+function ctSetType(v){
+  window._ctSignType=v;
+  document.querySelectorAll('.ct-tbtn').forEach(b=>b.classList.toggle('on',b.dataset.t===v));
+  const s=document.getElementById('ct-sign-box'); if(s) s.style.display=(v==='electronic')?'':'none';
+  const p=document.getElementById('ct-paper-box'); if(p) p.style.display=(v==='paper')?'':'none';
+}
+// 步驟 4：組合合約全文（帶入本次購買的實際數字）並初始化簽名板
+async function renderContractStep(){
+  const tpl=await loadContractTpl();
+  const mid=(document.getElementById('gt-member')||{}).value;
+  const m=(window._grantMembers||[]).find(x=>x.id===mid)||{};
+  const plan=(window._grantUsable||[]).find(p=>p.id===(document.getElementById('gt-plan')||{}).value)||{};
+  const total=(Number(plan.sessions_base)||0)+(Number(plan.sessions_bonus)||0);
+  const deal=Number((document.getElementById('gt-amount')||{}).value)||0;
+  const isInstall=!!plan.installment && (Number((document.getElementById('gt-install')||{}).value)||1)>1;
+  const voucherN=isInstall?0:Math.max(0,Math.min(Math.floor(Number((document.getElementById('gt-voucher')||{}).value)||0), Number(window._gtVoucherMax)||0));
+  const paid=Math.max(0,deal-voucherN*300);
+  const payLabel={cash:'現金',transfer:'匯款',card:'刷卡'}[(document.getElementById('gt-method')||{}).value]||'—';
+  const expire=plan.valid_days?`${plan.valid_days} 天（至 ${ymd(addDays(TODAY,plan.valid_days))}）`:'—';
+  window._ctCtx={
+    會員姓名:m.name||'—', 會員電話:m.phone?fmtPhone(m.phone):'—', 簽約日期:ymd(TODAY),
+    方案名稱:plan.name||'—', 堂數:total, 效期:expire,
+    金額:paid.toLocaleString()+(voucherN?`（折抵券×${voucherN}，原價 $${deal.toLocaleString()}）`:''),
+    付款方式:payLabel+(isInstall?`（分${(Number((document.getElementById('gt-install')||{}).value)||1)}期）`:''),
+  };
+  window._ctBody=fillContract(tpl?tpl.body:'（尚未設定合約範本 —— 請管理員至「系統設定 → 合約範本」建立）', window._ctCtx);
+  const box=document.getElementById('ct-body'); if(box) box.textContent=window._ctBody;
+  ctSetType(window._ctSignType||'electronic');
+  setTimeout(signPadInit,60);   // 等 display 生效後量寬度
+}
+// 簽約完成 → 送出（發票券＋收款＋合約）
+async function ctSubmit(){
+  const type=window._ctSignType||'electronic';
+  if(type==='electronic' && !window._signInk){ showToast('請讓會員在簽名區簽名，或改選紙本簽約'); return; }
+  if(window._salesSubmitting) return;
+  window._salesSubmitting=true;
+  try{
+    window._ctSignature=(type==='electronic')?(document.getElementById('ct-sign')||{toDataURL:()=>null}).toDataURL('image/png'):null;
+    await submitGrant();
+  }finally{ window._salesSubmitting=false; }
+}
 async function openGrantModal(){
   const[members,plans,types]=await Promise.all([dbGetAll('members'),dbGetAll('course_plans'),dbGetAll('ticket_types')]);
   window._grantMembers=members; window._grantPlans=plans; window._grantTypes=types;
@@ -19503,11 +19588,31 @@ async function openGrantModal(){
       <div class="form-row"><label>備註</label><input id="gt-note" placeholder="選填"></div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="grantGoStep(1)">上一步</button><button class="btn btn-green" onclick="${sales?'grantGoStep(3)':'submitGrant()'}">${sales?'下一步：業績歸屬 →':'確認發放'}</button></div>
     </div>
-    ${sales?`<!-- 步驟3（僅銷售彈窗入口）：業績歸屬教練，點卡即完成簽約收款；預設會員主責教練 -->
+    ${sales?`<!-- 步驟3（僅銷售彈窗入口）：業績歸屬教練，點卡後進簽約；預設會員主責教練 -->
     <div class="gt-step" data-gtstep="3" style="display:none;">
-      <div style="font-size:12px;color:var(--t2);margin-bottom:10px;">最後一步：點選業績歸屬教練即完成收款。</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px;">點選業績歸屬教練，接著進行簽約。</div>
       <div class="form-row"><label>業績歸屬教練</label><div class="bk-cards" id="gt-attrib"></div></div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="grantGoStep(2)">上一步</button></div>
+    </div>
+    <!-- 步驟4（2026-07-23）：簽約 —— 電子＝現場平板手寫簽名／紙本＝只記錄 -->
+    <div class="gt-step" data-gtstep="4" style="display:none;">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">請會員確認合約內容後簽名，簽完即發放票券。</div>
+      <div class="ct-body" id="ct-body">載入合約內容…</div>
+      <div class="ct-types">
+        <button type="button" class="ct-tbtn on" data-t="electronic" onclick="ctSetType('electronic')">電子簽約</button>
+        <button type="button" class="ct-tbtn" data-t="paper" onclick="ctSetType('paper')">紙本簽約</button>
+      </div>
+      <div id="ct-sign-box">
+        <div class="ct-sign-wrap"><canvas class="ct-sign" id="ct-sign"></canvas></div>
+        <div class="ct-sign-bar"><span>請會員在上方框內簽名</span><button type="button" class="ct-sign-clear" onclick="signPadClear()">清除重簽</button></div>
+      </div>
+      <div id="ct-paper-box" class="ct-paper-hint" style="display:none;">
+        紙本簽約：請列印或使用紙本合約讓會員簽署後留存；系統只記錄「已用紙本簽約」與合約內容，會員端可查看條款但不會有簽名影像。
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="grantGoStep(3)">上一步</button>
+        <button class="btn btn-green" onclick="ctSubmit()">完成簽約並發放票券</button>
+      </div>
     </div>`:''}`);
   _grantPreMember=null;
   refreshGrantPlans(); // 依預設選到的會員載入可用方案
@@ -19517,6 +19622,7 @@ function grantGoStep(n){
   document.querySelectorAll('.gt-step').forEach(s=>s.style.display=(Number(s.dataset.gtstep)===n)?'':'none');
   if(n===2) refreshGrantInfo(); // 進購買資訊時刷新方案資訊與預設金額
   if(n===3) renderGrantAttrib(); // 銷售入口：業績歸屬教練卡（預設會員主責教練）
+  if(n===4) renderContractStep(); // 簽約：帶入本次金額組合約全文＋簽名板
 }
 /* 步驟3 業績歸屬卡（2026-07-21 使用者指示）：預設＝步驟1 所選會員的主責教練
    （排最前＋主責標記＋預選樣式）；點任一卡即送出。 */
@@ -19842,6 +19948,20 @@ async function submitGrant(){
       note:(note||'')+(isInstall?`（分期第1期／總額 $${(dealAmount||0).toLocaleString()}）`:'')+(voucherN?`（折抵券×${voucherN} −$${voucherAmt.toLocaleString()}）`:''),
       operator:SESSION.id,source:'backoffice',created_at:new Date().toISOString()});
   }catch(e){ /* 購買紀錄失敗不阻斷發票券，僅記錄 */ console.error('purchase log fail',e); showToast('付款紀錄寫入失敗：'+(e.message||e)); }
+  /* ── 簽約紀錄（2026-07-23）：只有銷售流程（走過步驟4）才寫；後台「發放票券」不簽約。
+     寫入失敗不阻斷發票券（票券／收款都已成立），但要出聲，讓櫃台知道要補簽。 ── */
+  if(window._grantSalesActive && window._ctBody){
+    try{
+      const mem=await dbGet('members',member_id).catch(()=>null);
+      await dbPut('contracts',{id:uid('CT'),member_id,member_name:(mem&&mem.name)||null,
+        plan_name:plan.name,sessions:total,amount:(isInstall?firstAmount:paidAmount),
+        expire_date:t.expire_date,sign_type:(window._ctSignType||'paper'),
+        signature:(window._ctSignature||null),body_snapshot:window._ctBody,
+        ticket_id:t.id,staff_id:SESSION.id,signed_at:new Date().toISOString(),
+        created_at:new Date().toISOString()});
+    }catch(e){ console.error('contract write fail',e); showToast('合約紀錄寫入失敗（票券已發放，請補簽）：'+dbFriendlyError(e)); }
+  }
+  window._ctBody=null; window._ctSignature=null;   // 一次性，避免下一筆沿用
   // 新朋友購買「私人教練」課程 → 自動升級為「會員」
   closeModal();showToast('票券已發放：'+plan.name+(voucherN?`（折抵券×${voucherN}，實收 $${paidAmount.toLocaleString()}）`:''));
   if(_grantFromDetail){_grantFromDetail=false;openMemberDetail(member_id);}
@@ -23873,7 +23993,8 @@ let _mcOpen={}; // 展開狀態
 function toggleMcCard(id){ _mcOpen[id]=!_mcOpen[id]; renderMemTickets(); }
 let _memTkData=null;
 PAGES.mem_tickets=async function(){
-  const[tickets,types,logs,bookings]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types'),dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('bookings').catch(()=>[])]);
+  const[tickets,types,logs,bookings,contracts]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types'),dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('bookings').catch(()=>[]),dbGetAll('contracts').catch(()=>[])]);
+  window._memContracts=(contracts||[]).filter(c=>c.member_id===SESSION.id);   // 我的合約（RLS 已限本人，這裡再過濾一次）
   window._ttCache=types;
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const mine=tickets.filter(t=>t.member_id===SESSION.id);
@@ -24003,12 +24124,35 @@ function renderMemTickets(){
      ${isMobileLayout()?'':`<button class="btn btn-green btn-sm" style="flex-shrink:0;" onclick="navTo('mem_purchase')">＋ 購買票券</button>`}
    </div>`+
   selfPtEntryHTML()+
+  memContractEntryHTML()+
   renewHint+
   `${usable.length===0&&inactive.length===0
     ? '<div class="card"><div class="empty" style="padding:40px 16px;"><div class="em-t">還沒有票券</div><div style="font-size:12.5px;color:var(--t2);margin-top:8px;">到「購買票券」開始你的第一段練習。</div></div></div>'
     : ''}
   ${usable.map(t=>card(t,false)).join('')}
   ${inactive.length>0?`<div class="mck-section-label">已完成 / 已到期</div>${inactive.map(t=>card(t,true)).join('')}`:''}`;
+}
+
+/* ══ 我的合約（2026-07-23）：會員端唯讀查看已簽的合約（電子簽約含簽名影像）══
+   資料由 PAGES.mem_tickets 併同載入（RLS：contracts_member_read 只讓會員看自己的）。 */
+function memContractEntryHTML(){
+  const n=(window._memContracts||[]).length;
+  if(!n) return '';
+  return `<button class="mtk-self-btn" onclick="openMemContracts()">
+    <span class="mtk-self-ic" style="background:color-mix(in srgb,var(--green) 10%,#fff);color:var(--green);">${LNI.book}</span>
+    <span class="mtk-self-tx"><span class="mtk-self-t">我的合約</span><span class="mtk-self-s">購買課程時簽署的合約，可隨時查閱</span></span>
+    <span class="mtk-self-n" style="color:var(--green);"><b>${n}</b>份</span><span class="mtk-self-ar">›</span>
+  </button>`;
+}
+function openMemContracts(){
+  const list=(window._memContracts||[]).slice().sort((a,b)=>(b.signed_at||'').localeCompare(a.signed_at||''));
+  showModal(`<div class="modal-title">我的合約</div>
+    ${list.length?list.map(c=>`<div class="ct-row" onclick="openContractView('${c.id}')">
+      <div class="ct-row-b"><div class="ct-row-t">${c.plan_name||'課程合約'}</div>
+        <span class="ct-row-s">簽約日 ${(c.signed_at||'').slice(0,10)}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</span></div>
+      <span class="ct-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}">${c.sign_type==='electronic'?'電子':'紙本'}</span>
+    </div>`).join(''):'<div class="empty" style="padding:22px;"><div class="em-t">尚無合約紀錄</div></div>'}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
 
 /* ══ 自主訓練點數（2026-07-23 使用者指示：與課程票券分開存放）══
@@ -25277,6 +25421,74 @@ PAGES.settings_ticket=async function(){
   window._plansHost='settings';
   try{ await PAGES.plans('settings-plans-body'); }catch(e){ const b=document.getElementById('settings-plans-body'); if(b) b.innerHTML='<div class="card"><div style="color:#c0392b;">票券方案載入失敗：'+(e.message||e)+'</div></div>'; }
 };
+/* ── 系統設定：合約範本（2026-07-23 使用者定案：系統內建範本、後台可編輯）──
+   簽約時 {{變數}} 會被本次購買的實際內容取代；已簽的約存的是當下全文，改範本不影響舊約。 */
+PAGES.settings_contract=async function(){
+  if(SESSION.role!=='admin'){ C.innerHTML=head('SETTINGS','合約範本','')+'<div class="card"><div class="empty" style="padding:30px;"><div class="em-t">只有管理員可以編輯合約範本</div></div></div>'; return; }
+  window._ctTpl=undefined;                       // 強制重讀（可能剛被別台改過）
+  const tpl=await loadContractTpl();
+  const recent=(await dbGetAll('contracts').catch(()=>[])).sort((a,b)=>(b.signed_at||'').localeCompare(a.signed_at||'')).slice(0,10);
+  C.innerHTML=head('SETTINGS','合約範本','購買課程時要簽的合約條款（簽約流程會自動帶入會員與方案資料）')+
+  `<div class="card">
+    <div class="card-title">合約內容</div>
+    <div style="font-size:12px;color:var(--t3);line-height:1.9;margin-bottom:8px;">
+      點下方標籤可插入變數；簽約時會換成該筆購買的實際內容。
+    </div>
+    <div style="margin-bottom:10px;">${CONTRACT_VARS.map(v=>`<span class="ct-var" onclick="ctInsertVar('${v}')">{{${v}}}</span>`).join('')}</div>
+    <textarea class="ct-tpl-area" id="ct-tpl-body" placeholder="輸入合約條款…">${tpl?tpl.body:''}</textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:10px;">
+      <span style="font-size:11.5px;color:var(--t3);">${tpl&&tpl.updated_at?`最後更新 ${new Date(tpl.updated_at).toLocaleString('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}`:'尚未建立'}</span>
+      <span><button class="btn btn-ghost btn-sm" onclick="ctPreviewTpl()">預覽</button>
+      <button class="btn btn-green btn-sm" onclick="saveContractTpl()">儲存範本</button></span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">最近簽約紀錄</div>
+    ${recent.length?recent.map(c=>`<div class="ct-row" onclick="openContractView('${c.id}')">
+      <div class="ct-row-b"><div class="ct-row-t">${c.member_name||'—'}　<span style="font-weight:400;color:var(--t2);">${c.plan_name||''}</span></div>
+        <span class="ct-row-s">${(c.signed_at||'').slice(0,10)}　·　$${(Number(c.amount)||0).toLocaleString()}　·　${c.sessions||0} 堂</span></div>
+      <span class="ct-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}">${c.sign_type==='electronic'?'電子':'紙本'}</span>
+    </div>`).join('')
+    :'<div class="empty" style="padding:22px;"><div class="em-t">尚無簽約紀錄</div></div>'}
+  </div>`;
+};
+function ctInsertVar(v){
+  const ta=document.getElementById('ct-tpl-body'); if(!ta) return;
+  const s=ta.selectionStart||0, e=ta.selectionEnd||0, tag='{{'+v+'}}';
+  ta.value=ta.value.slice(0,s)+tag+ta.value.slice(e);
+  ta.focus(); ta.selectionStart=ta.selectionEnd=s+tag.length;
+}
+function ctPreviewTpl(){
+  const body=(document.getElementById('ct-tpl-body')||{}).value||'';
+  const demo={會員姓名:'王小明',會員電話:'0912-345-678',簽約日期:ymd(TODAY),方案名稱:'教練課 10 堂',
+    堂數:10,效期:'365 天（至 '+ymd(addDays(TODAY,365))+'）',金額:'15,000',付款方式:'現金'};
+  showModal(`<div class="modal-title">預覽（範例資料）</div>
+    <div class="ct-body" style="max-height:56vh;">${fillContract(body,demo).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+async function saveContractTpl(){
+  const body=(document.getElementById('ct-tpl-body')||{}).value||'';
+  if(!body.trim()){ showToast('合約內容不可空白'); return; }
+  try{
+    await dbPut('contract_templates',{id:'CT-DEFAULT',name:'課程購買合約',body,active:true,
+      updated_at:new Date().toISOString(),updated_by:SESSION.id});
+    window._ctTpl=undefined;
+    showToast('合約範本已儲存');
+  }catch(e){ showToast('儲存失敗：'+dbFriendlyError(e)); }
+}
+// 合約檢視（管理端與會員端共用；會員端唯讀，看得到條款與簽名）
+async function openContractView(id){
+  const c=await dbGet('contracts',id).catch(()=>null);
+  if(!c){ showToast('找不到這份合約'); return; }
+  showModal(`<div class="modal-title">${c.plan_name||'合約'}</div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.9;margin-bottom:8px;">
+      ${c.member_name||''}　·　簽約日 ${(c.signed_at||'').slice(0,10)}　·　${c.sign_type==='electronic'?'電子簽約':'紙本簽約'}
+    </div>
+    <div class="ct-body">${String(c.body_snapshot||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+    ${c.signature?`<div style="margin-top:10px;"><div style="font-size:11.5px;color:var(--t3);margin-bottom:4px;">會員簽名</div>
+      <img class="ct-sig-img" src="${c.signature}" alt="簽名"></div>`:''}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
 function openShiftQuickEdit(){
   window._sqDraft=SHIFT_QUICK.map(([code,start,end])=>({code,start,end}));
   renderShiftQuickModal();
