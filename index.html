@@ -5354,6 +5354,30 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 .lot-prize:hover{border-color:var(--green);background:#f4f9f6;}
 .lot-prize .lni{width:20px;height:20px;color:var(--green);}
 .lot-prize .lot-glyph{font-size:17px;line-height:1;}
+/* ── 會員申辦待審：右下滑出鈕與審核清單（2026-07-23）── */
+.mc-req-fab{position:fixed;right:24px;bottom:24px;z-index:97;display:flex;align-items:center;gap:9px;
+  background:#7A2E28;color:#F4F1E8;border:none;border-radius:999px;padding:12px 18px;cursor:pointer;
+  font-family:inherit;font-size:13px;box-shadow:0 8px 24px rgba(87,29,24,.35);
+  animation:lotIn .5s var(--soft-ease) backwards;}
+.mc-req-fab:active{transform:scale(.97);}
+.mc-req-fab .lni{width:17px;height:17px;color:var(--gold);}
+.mc-req-fab b{color:var(--gold);font-family:var(--num),inherit;}
+.mc-lotto-fab.mc-fab-up{bottom:82px;}
+.mrq-reqs{display:flex;flex-direction:column;gap:10px;max-height:56vh;overflow-y:auto;}
+.mrq-req{border:1px solid var(--bd);border-radius:12px;padding:12px 14px;background:var(--card2);}
+.mrq-req-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px;}
+.mrq-kind{font-size:10.5px;font-weight:700;border-radius:999px;padding:3px 9px;}
+.mrq-kind.k-link{background:#E4EAD9;color:#1f6f54;}
+.mrq-kind.k-new{background:#F1E4D2;color:#8A5E28;}
+.mrq-req-id{font-size:10.5px;color:var(--t3);letter-spacing:.03em;}
+.mrq-req-t{font-size:10.5px;color:var(--t3);margin-left:auto;}
+.mrq-req-n{font-size:15px;font-weight:700;color:var(--text);}
+.mrq-req-n span{font-size:12.5px;font-weight:500;color:var(--t2);}
+.mrq-req-s{font-size:11.5px;color:var(--t3);margin-top:3px;}
+.mrq-cmp{font-size:11.5px;color:var(--t2);margin-top:7px;line-height:1.6;}
+.mrq-cmp.ok{color:#2e6b4f;}
+.mrq-cmp.warn{color:#9a3b2f;font-weight:600;}
+.mrq-req-act{display:flex;justify-content:flex-end;gap:8px;margin-top:10px;}
 /* ── 會員申辦 QR 海報（2026-07-23）：彈窗內預覽，與下載的 PNG 同版式 ── */
 .mrq-poster{background:var(--card2);border:1px solid var(--bd);border-radius:16px;overflow:hidden;text-align:center;}
 .mrq-brand{background:var(--green);color:#F4F1E8;padding:16px 0 12px;font-size:26px;font-weight:800;letter-spacing:.06em;line-height:1.1;}
@@ -5514,8 +5538,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260723.2007';
-const APP_VERSION_LABEL='v260723.2007';
+const APP_VERSION='260723.2031';
+const APP_VERSION_LABEL='v260723.2031';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -5728,19 +5752,29 @@ async function dbClear(store){ /* 雲端不提供前端清庫 */ }
    viaServer=false：用 signUp（會把當前 session 切成新帳號）
      → 用於會員自助註冊（訪客本來就沒有要保的身分）
    回傳 {uid} 或 {error}。 */
+/* 建立 Auth 帳號（2026-07-23 改版）
+   ─ 員工：管理員在後台建立 → 走 Edge Function（service_role），且必須帶**管理員自己的 JWT**
+     （加固版 v4 起 anon key 不再被接受；舊版任何人都能呼叫、還會覆寫既有帳號密碼）。
+   ─ 會員：自助申辦也改走 Edge Function 的 member_signup —— 前端 signUp 建不了帳號
+     （Supabase 對 @member.yugym.local 這類收不到信的網域回 "Email address is invalid"）。
+     建完沒有 session，呼叫端要自行 signInWithPassword 取得登入狀態。 */
 async function cloudCreateAuth(role,acct,pw,viaServer){
   const email=toEmail(role,acct);
-  if(viaServer){
+  if(viaServer || role==='member'){
     try{
       const base=window.YUGYM_CONFIG.url.replace(/\/$/,'');
+      let jwt=window.YUGYM_CONFIG.anonKey;
+      if(role!=='member'){
+        try{ const s=await sb.auth.getSession(); if(s&&s.data&&s.data.session) jwt=s.data.session.access_token; }catch(_){}
+      }
       const res=await fetch(base+'/functions/v1/create-staff-account',{
         method:'POST',
         headers:{
           'Content-Type':'application/json',
-          'Authorization':'Bearer '+window.YUGYM_CONFIG.anonKey,
+          'Authorization':'Bearer '+jwt,
           'apikey':window.YUGYM_CONFIG.anonKey
         },
-        body:JSON.stringify({action:'create',email,password:pw})
+        body:JSON.stringify({action:(role==='member'?'member_signup':'create'),email,password:pw})
       });
       const out=await res.json();
       if(!res.ok||out.error) return {error:out.error||('伺服器回應 '+res.status)};
@@ -5913,7 +5947,18 @@ async function doLogin(){
     err.textContent='手機號碼或密碼錯誤';err.style.display='block';return;
   }
   const m=(await sb.from('members').select('*').eq('auth_id',data.user.id).maybeSingle()).data;
-  if(!m){err.textContent='查無會員資料';err.style.display='block';return;}
+  if(!m){
+    /* 有 Auth 帳號但沒有會員資料 ＝ 申辦已送出、櫃台還沒確認（2026-07-23 新流程）。
+       自己的申請可依 RLS（member_link_request_self_read）讀到，給出明確下一步；
+       同時登出，避免留著看不到任何資料的半殘登入狀態。 */
+    let pend=null;
+    try{ pend=(await sb.from('member_link_requests').select('id,status').eq('auth_id',data.user.id).maybeSingle()).data; }catch(_){}
+    try{ await sb.auth.signOut(); }catch(_){}
+    if(pend && pend.status==='pending') err.innerHTML='您的申辦已送出（編號 '+pend.id+'），<b>請至櫃台完成確認</b>後即可登入。';
+    else if(pend && pend.status==='rejected') err.textContent='您的申辦尚未通過，請洽櫃台協助。';
+    else err.textContent='查無會員資料，請洽櫃台協助。';
+    err.style.display='block';return;
+  }
   if(m.must_setup){
     SESSION={role:'member',id:m.id,name:m.name,gender:m.gender||null};
     showMemberSetup(m);
@@ -8147,10 +8192,11 @@ PAGES.g_dashboard=async function(){
   const _dashTabs=[
     {t:'bookings'},{t:'members'},{t:'coaches'},
     {t:'purchases',soft:1},{t:'shifts',soft:1},{t:'ticket_types',soft:1},{t:'attendance',soft:1},
-    {t:'purchase_applications',soft:1},{t:'punch_requests',soft:1},{t:'member_tickets',soft:1}
+    {t:'purchase_applications',soft:1},{t:'punch_requests',soft:1},{t:'member_tickets',soft:1},
+    {t:'member_link_requests',soft:1}   // 會員申辦待審（正式庫尚未套表時 soft 失敗＝空陣列）
   ];
   let _dashUsedStale=false;
-  const[bookings,members,coaches,purchases,shifts,types,attendance,apps,punchReqs,mtickets]=
+  const[bookings,members,coaches,purchases,shifts,types,attendance,apps,punchReqs,mtickets,memberReqs]=
     await Promise.all(_dashTabs.map(({t,soft})=>{
       const pk=dbPeek(t);
       if(pk){ if(pk.stale) _dashUsedStale=true; return pk.data; }
@@ -8755,8 +8801,13 @@ PAGES.g_dashboard=async function(){
   /* 現場抽獎名單滑出鈕（2026-07-22 使用者指示）：桌機首頁右下角、有可抽名額才出現。
      資格算當下月份（非檢視日期）——登記永遠對本月。 */
   const _lotEls=lottoStats(bookings||[],purchases||[],ymd(TODAY).slice(0,7));
+  /* 會員申辦待審滑出鈕（2026-07-23 使用者指示：新會員與舊會員綁定統一在櫃台右下角提示）。
+     兩顆都在時，抽獎鈕往上疊一層（mc-fab-up）。 */
+  const _pendReq=(memberReqs||[]).filter(r=>r.status==='pending');
+  const reqFab=(!isMobileLayout()&&_pendReq.length)
+    ?`<button class="mc-req-fab" onclick="openMemberReqModal()">${LNI.user||LNI.book}<span><b>${_pendReq.length}</b> 筆會員申辦待確認</span></button>`:'';
   const lottoFab=(!isMobileLayout()&&_lotEls.length)
-    ?`<button class="mc-lotto-fab" onclick="openLottoModal()">${LNI.gift}<span><b>${_lotEls.length}</b> 位會員可抽獎</span></button>`:'';
+    ?`<button class="mc-lotto-fab${reqFab?' mc-fab-up':''}" onclick="openLottoModal()">${LNI.gift}<span><b>${_lotEls.length}</b> 位會員可抽獎</span></button>`:'';
 
   /* 2026-07-23 使用者指示：標題與總額都不顯示（上方 KPI 已有今日營收）—— 只留收款名單 */
   const revListCard=`<div class="card mc-card mc-revlist-card">
@@ -8972,7 +9023,7 @@ PAGES.g_dashboard=async function(){
       </div>
       </div>`}
     </div>
-    ${lottoFab}
+    ${lottoFab}${reqFab}
   `;
   // 現在線每分鐘自動更新（只在檢視今天時）
   startDashNowTimer(isTodayView, AXIS_START, AXIS_END);
@@ -8997,6 +9048,67 @@ function openTodoList(kind){
     ${L.note?`<div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:12px;">${L.note}</div>`:''}
     ${rows?`<div class="tdl-list">${rows}</div>`:`<div class="empty"><div class="em-t">${L.empty||'沒有資料'}</div></div>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+/* ══ 會員申辦審核（2026-07-23 使用者定案）══
+   會員掃 QR 填完資料 → 進 member_link_requests 佇列 → 櫃台在首頁右下角滑出訊息看到 →
+   點開逐筆核對 → 核准（link=綁定既有會員／new=建立新會員）或退回。
+   實際寫入一律走 fn_review_member_link_request RPC（前端不直接改 members.auth_id）。 */
+async function openMemberReqModal(){
+  const[reqs,members]=await Promise.all([
+    dbGetAll('member_link_requests').catch(()=>[]), dbGetAll('members').catch(()=>[])]);
+  const memMap=Object.fromEntries((members||[]).map(m=>[m.id,m]));
+  const pend=(reqs||[]).filter(r=>r.status==='pending')
+    .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  const esc=s=>String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+  const rows=pend.map(r=>{
+    const isLink=r.kind==='link';
+    const mm=isLink?memMap[r.matched_member_id]:null;
+    const nameOk=mm && String(mm.name||'').trim()===String(r.claimed_name||'').trim();
+    const when=r.created_at?new Date(r.created_at).toLocaleString('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+    const cmp = isLink
+      ? (mm
+        ? `<div class="mrq-cmp ${nameOk?'ok':'warn'}">${nameOk
+            ? `✓ 與既有會員「${esc(mm.name)}」姓名相符`
+            : `⚠️ 既有會員姓名為「${esc(mm.name)}」，與申請人填的不同 —— 請當面確認再核准`}</div>`
+        : `<div class="mrq-cmp warn">⚠️ 找不到對應會員資料（可能已被刪除）</div>`)
+      : `<div class="mrq-cmp">系統查無此手機 → 核准後建立新會員資料</div>`;
+    return `<div class="mrq-req">
+      <div class="mrq-req-h">
+        <span class="mrq-kind ${isLink?'k-link':'k-new'}">${isLink?'綁定既有會員':'新會員建檔'}</span>
+        <span class="mrq-req-id">${esc(r.id)}</span>
+        <span class="mrq-req-t">${when}</span>
+      </div>
+      <div class="mrq-req-n">${esc(r.claimed_name)}　<span>${fmtPhone(r.claimed_phone)}</span></div>
+      ${(r.claimed_email||r.claimed_birthday)?`<div class="mrq-req-s">${esc(r.claimed_email||'')}${r.claimed_birthday?'　生日 '+esc(r.claimed_birthday):''}</div>`:''}
+      ${cmp}
+      <div class="mrq-req-act">
+        <button class="btn btn-ghost btn-sm" onclick="memberReqReview('${r.id}',false)">退回</button>
+        <button class="btn btn-green btn-sm" onclick="memberReqReview('${r.id}',true)">核准</button>
+      </div>
+    </div>`;
+  }).join('');
+  showModal(`<div class="modal-title">會員申辦審核　<span style="font-size:12.5px;color:var(--t3);font-weight:500;">${pend.length} 筆待處理</span></div>
+    <div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:12px;">
+      請當面核對本人身分（姓名與手機）後再核准。核准後：綁定＝接上原有票券與預約；建檔＝建立新會員資料。</div>
+    ${pend.length?`<div class="mrq-reqs">${rows}</div>`:'<div class="empty"><div class="em-t">目前沒有待處理的申請</div></div>'}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+async function memberReqReview(id, approve){
+  if(!approve && !confirm('確定退回這筆申辦嗎？申請人需重新送件。')) return;
+  try{
+    const{data,error}=await sb.rpc('fn_review_member_link_request',{p_request_id:id,p_approve:!!approve,p_note:null});
+    if(error) throw error;
+    if(!data || data.ok!==true){
+      const msg={'AUTH.FORBIDDEN':'權限不足（需櫃台或管理員）',
+        'REQUEST.NOT_FOUND':'找不到這筆申請','REQUEST.ALREADY_REVIEWED':'這筆申請已被處理過',
+        'MEMBER.ALREADY_LINKED':'該會員已綁定其他帳號，請洽管理員'}[data&&data.error_code]||('處理失敗：'+((data&&data.error_code)||'未知錯誤'));
+      showToast(msg); return;
+    }
+    dbCacheClear(['member_link_requests','members']);
+    showToast(approve?(data.kind==='link'?'已核准並綁定既有會員':'已核准並建立新會員'):'已退回');
+    await openMemberReqModal();
+    if(CUR_PAGE==='g_dashboard') setTimeout(()=>{ if(!document.getElementById('modal-bg')) navTo(CUR_PAGE); },0);
+  }catch(e){ showToast('處理失敗：'+(e.message||e)); }
 }
 /* 首頁資料簽章（2026-07-23）：只取畫面上會變的東西 —— 當日預約（狀態/時間/教練/點名）、
    當日打卡、當日售票、待審件數，加上各表總筆數與本月簽到數（抽獎名單用）。
@@ -15274,8 +15386,42 @@ async function submitRegister(){
     err.style.display='block';err.scrollIntoView({block:'center'});
     if(btn){btn.disabled=false;btn.textContent='完成註冊';}
   };
+  /* ══ 2026-07-23 改安全版：手機比對與建檔全部搬到 DB 端 RPC ══
+     舊流程在這裡匿名讀 members 比對手機、再直接 insert —— 7/19 RLS 收斂後匿名讀一律 0 筆，
+     等於防呆失效、且靠的是「任何人都能 insert members」的舊政策（已隨本次 migration 移除）。
+     新流程：建 Auth 帳號 → fn_complete_member_registration → 一律進櫃台審核佇列。 */
   try{
-    // 防呆：此手機是否已是會員（含尚未建 Auth 帳號的匯入舊會員）→ 引導改用登入
+    const email=toEmail('member',phone);
+    // 建帳號走 Edge Function 的 member_signup（帳號已存在會回 ACCOUNT_EXISTS，不會動到密碼）
+    const r=await cloudCreateAuth('member',phone,pw);
+    if(r.error && !/ACCOUNT_EXISTS/i.test(r.error)){ showErr('註冊失敗：'+r.error); return; }
+    // 不論剛建立或本來就有，都用這次輸入的密碼登入取得 session（RPC 需要 auth.uid()）
+    const{error:le}=await sb.auth.signInWithPassword({email,password:pw});
+    if(le){ showLoginHint('此手機已註冊過，請用原本的密碼登入；忘記密碼請洽櫃台協助。'); return; }
+    const{data:rpc,error:rerr}=await sb.rpc('fn_complete_member_registration',{
+      p_name:name, p_phone:phone, p_email:v('reg-email')||null, p_birthday:readBirthday('reg')
+    });
+    if(rerr){ try{await sb.auth.signOut();}catch(_){}; showErr('送出失敗：'+(rerr.message||rerr)); return; }
+    if(!rpc || rpc.ok!==true){
+      const code=(rpc&&rpc.error_code)||'';
+      try{await sb.auth.signOut();}catch(_){}
+      if(code==='PHONE.ALREADY_LINKED'){
+        showLoginHint('此手機已有會員帳號，請直接登入；若不是您本人使用，請洽櫃台協助。'); return;
+      }
+      showErr(({'NAME.REQUIRED':'請填寫姓名',
+                'PHONE.INVALID':'手機號碼格式不正確',
+                'AUTH.REQUIRED':'登入狀態未建立，請重新操作一次',
+                'REGISTRATION.CONFLICT':'資料衝突，請洽櫃台協助'}[code])||('送出失敗：'+(code||'未知錯誤')));
+      return;
+    }
+    try{ await sb.auth.signOut(); }catch(_){}   // 核准前先登出：此時登入也看不到任何資料
+    showRegisterDone(phone, rpc.result==='already_linked' ? 'linked' : (rpc.kind||'link'), rpc.request_id||'');
+    return;
+  }catch(e){
+    showErr('註冊失敗：'+(e.message||e)); return;
+  }
+  /* ── 以下為 2026-07-23 前的舊流程，保留供緊急回退（目前不會執行）── */
+  try{
     const existMem=(await sb.from('members').select('id,name,must_setup,auth_id').eq('phone',phone).maybeSingle()).data;
     if(existMem){
       if(existMem.must_setup && !existMem.auth_id){
@@ -15344,6 +15490,29 @@ async function submitRegister(){
       <div style="font-size:40px;margin-bottom:12px;">✓</div>
       <div style="font-size:15px;font-weight:500;margin-bottom:8px;">會員帳號已建立</div>
       <div style="font-size:12.5px;color:var(--t2);line-height:1.8;">請返回登入頁，用手機號碼 ${phone} 登入。</div>
+      <button class="btn-primary" style="margin-top:18px;" onclick="location.hash='';location.reload();">返回登入頁</button>
+    </div></div>`;
+}
+/* 申辦送出後的結果畫面（2026-07-23）：三種情形文案不同 ——
+   linked＝這個帳號本來就已綁好會員；link＝手機命中既有會員，等櫃台確認後接上舊資料；
+   new＝查無此手機，等櫃台確認後建檔。申請編號給櫃台核對用。 */
+function showRegisterDone(phone, mode, reqId){
+  const host=document.getElementById('invite-screen'); if(!host) return;
+  const box=(t,s)=>`<div style="font-size:15px;font-weight:600;margin-bottom:10px;">${t}</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.9;">${s}</div>`;
+  const body = mode==='linked'
+    ? box('您的帳號已可使用','請返回登入頁，用手機號碼 '+phone+' 登入。')
+    : mode==='link'
+      ? box('申辦已送出，請至櫃台確認',
+          '系統查到這支手機是本館既有會員。<br>為保護您的權益，請<b>至櫃台完成身分確認</b>，<br>確認後即可看到您原有的票券與預約紀錄。')
+      : box('申辦已送出，請至櫃台完成報到',
+          '請<b>至櫃台完成報到</b>，由櫃台人員確認後<br>您的會員資料即建立完成，之後就能用手機號碼登入。');
+  host.innerHTML=`<div class="login-card"><div class="login-logo"><div class="mark">YUGYM</div><div class="sub">會 員 申 辦</div></div>
+    <div style="text-align:center;padding:18px 0 6px;">
+      <div style="font-size:40px;margin-bottom:12px;">${mode==='linked'?'✓':'📋'}</div>
+      ${body}
+      ${reqId?`<div style="margin-top:16px;font-size:12px;color:var(--t3);">申請編號　<b style="color:var(--text);letter-spacing:.04em;">${reqId}</b></div>`:''}
+      <div style="margin-top:6px;font-size:11.5px;color:var(--t3);">手機　${phone}</div>
       <button class="btn-primary" style="margin-top:18px;" onclick="location.hash='';location.reload();">返回登入頁</button>
     </div></div>`;
 }
