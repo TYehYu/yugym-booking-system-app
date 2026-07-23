@@ -1399,10 +1399,11 @@ tr:hover td{background:var(--card2);}
 .tkf-pane{display:none;}
 .tkf-pane.active{display:block;}
 /* 圓圈進度：每堂一個圈 */
-.tkc-grid{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 12px;}
-.tkc-dot{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:var(--num);flex:none;box-sizing:border-box;}
-.tkc-used{background:var(--green);color:#fff;border:1px solid var(--green);}
-.tkc-empty{background:#fff;border:1.5px dashed #cfc8bb;color:transparent;}
+/* 發放票券／購買申請的「堂數預覽空圈」——2026-07-23 尺寸與樣式對齊 .mtk 圓點（全系統統一） */
+.tkc-grid{display:flex;flex-wrap:wrap;gap:5px;margin:10px 0 12px;}
+.tkc-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:800;font-family:var(--num);flex:none;box-sizing:border-box;}
+.tkc-used{background:var(--green);color:#fff;}
+.tkc-empty{background:#fff;border:2px solid #d8d2c6;color:transparent;}
 .tkc-locked{background:#f0ece3;border:1.5px dashed #cfc7b8;color:#a99;font-size:13px;opacity:0.8;}
 /* 會員明細：加寬、固定高度，內容區內部捲動，切換分頁不忽大忽小 */
 .modal:has(.md-head-card){max-width:720px;height:82vh;display:flex;flex-direction:column;}
@@ -5449,8 +5450,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260723.1136';
-const APP_VERSION_LABEL='v260723.1136';
+const APP_VERSION='260723.1150';
+const APP_VERSION_LABEL='v260723.1150';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14289,10 +14290,12 @@ PAGES.members=async function(){
   const tkCell=(m)=>{
     const t=tkSummary[m.id]||{pt:0,friendly:0,group:0,makeup:0,anyUsable:false,everPt:false};
     if(!t.anyUsable) return '<span class="tk-chip" style="background:#fbe9e7;color:#c0392b;">無有效票券</span>';
-    const parts=[];   /* 課種形狀 glyph（■教練 ●友善 ◆團體）＝全系統共通語言（2026-07-21 清單簡化） */
-    if(t.pt>0)       parts.push(`<span class="tk-chip" style="background:#1f6f54;">■ 教練 ${t.pt}</span>`);
-    if(t.friendly>0) parts.push(`<span class="tk-chip" style="background:#23508a;">● 友善 ${t.friendly}</span>`);
-    if(t.group>0)    parts.push(`<span class="tk-chip" style="background:#9a5a1e;">◆ 團課 ${t.group}</span>`);
+    /* 2026-07-23 使用者指示：票券顯示統一走「課種色」語言 —— 形狀 glyph（■●◆）自票券
+       相關 chip 退場，課種改由 chip 底色表達（行事曆篩選 chips／月曆課種點仍保留形狀）。 */
+    const parts=[];
+    if(t.pt>0)       parts.push(`<span class="tk-chip" style="background:#1f6f54;">教練 ${t.pt}</span>`);
+    if(t.friendly>0) parts.push(`<span class="tk-chip" style="background:#23508a;">友善 ${t.friendly}</span>`);
+    if(t.group>0)    parts.push(`<span class="tk-chip" style="background:#9a5a1e;">團課 ${t.group}</span>`);
     if(t.makeup>0)   parts.push(`<span class="tk-chip" style="background:#eceae4;color:#9a7344;">補課 ${t.makeup}</span>`);
     return parts.length?`<div class="tk-chips">${parts.join('')}</div>`
       : '<span style="color:var(--t3);font-size:12px;">有效</span>';
@@ -14410,6 +14413,11 @@ async function openMemberDetail(member_id){
   // 票券顯示「未使用堂數 = 總數 − 已簽到/完成」（已預約未上仍算未使用）
   const usedMap=usedSessionsMap(myBookings);
   const usedDates=usedDatesMap(myBookings);
+  /* 每張票券扣抵的預約（給逐堂圓點標日期）：ticket_id 直連；團課 ticket_id 為 null 者
+     此視窗未載入 ticket_logs，故只少了日期標示，實心格數仍以 usedDates 為準 */
+  const bkByTk={};
+  (myBookings||[]).forEach(b=>{ if(b.ticket_id&&b.status!=='cancelled'){ (bkByTk[b.ticket_id]=bkByTk[b.ticket_id]||[]).push(b); } });
+  Object.values(bkByTk).forEach(arr=>arr.sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||''))));
   // 票券分類：課程票券（教練/友善/團課）vs 自主訓練
   const tkCategoryOf=(t)=>{
     const ty=typeMap[t.ticket_type_id];
@@ -14434,17 +14442,9 @@ async function openMemberDetail(member_id){
     const dates=(usedDates[t.id]||[]).slice();
     const usedCount=dates.length;
     const isDim=(t.status!=='usable')||(t.expire_date&&t.expire_date<ymd(TODAY));
-    // 圓圈：total 個，前 usedCount 個實心+日期，其餘空心
-    let circles='';
-    for(let i=0;i<total;i++){
-      if(i<usedCount){
-        const d=dates[i]?parseYmd(dates[i]):null;
-        const lbl=d?`${d.getMonth()+1}/${d.getDate()}`:'✓';
-        circles+=`<div class="tkc-dot tkc-used" title="${dates[i]||''}">${lbl}</div>`;
-      }else{
-        circles+=`<div class="tkc-dot tkc-empty"></div>`;
-      }
-    }
+    /* 2026-07-23 使用者指示：票券逐堂顯示全系統統一 —— 改用 ticketTokens
+       （課種色圓點：實心＋上課日期／空心＋預約日期／空心未使用），取代原本的灰色 tkc-dot。 */
+    const circles=ticketTokens(t,(bkByTk[t.id]||[]),typeMap,usedCount);
     const inst=t.installment&&typeof t.installment==='object'?t.installment:null;
     const instTag=inst?`<span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;margin-left:6px;">🔒 分期 ${t.unlocked_sessions||inst.current||0}/${total}</span>`:'';
     return `<div class="md-tk-item"${isDim?' style="opacity:.55;"':''}>
@@ -14452,7 +14452,7 @@ async function openMemberDetail(member_id){
         <div class="md-tk-name">${t.plan_name||(ty?ty.name:'—')}<span class="tag tag-${ty?ty.color:'pt'}" style="margin-left:8px;">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span>${instTag}</div>
         <div class="md-tk-count"><b style="color:var(--green);">${total-usedCount}</b><span style="color:var(--t3);font-weight:600;font-size:13px;"> / ${total}</span></div>
       </div>
-      <div class="tkc-grid">${circles}</div>
+      <div class="mck-dots2" style="margin:10px 0 12px;">${circles}</div>
       <div class="md-tk-foot">
         <span class="md-tk-meta">到期 ${t.expire_date?fmtExpire(t.expire_date):'永久有效'}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span></span>
         ${(inst && (t.unlocked_sessions||0)<total && (SESSION.role==='admin'||SESSION.role==='front_desk'))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
@@ -19147,6 +19147,8 @@ PAGES.m_tickets=async function(){
   myBk.forEach(b=>{ if(b.ticket_id && b.status!=='cancelled'){ (bkByTicket[b.ticket_id]=bkByTicket[b.ticket_id]||[]).push(b); } });
   (logs||[]).forEach(lg=>{ if(lg.action==='deduct' && lg.ticket_id && lg.booking_id){ const b=myBk.find(x=>x.id===lg.booking_id); if(b && b.status!=='cancelled'){ const arr=(bkByTicket[lg.ticket_id]=bkByTicket[lg.ticket_id]||[]); if(!arr.some(x=>x.id===b.id)) arr.push(b); } } });
   Object.values(bkByTicket).forEach(arr=>arr.sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||''))));
+  // 依 bkByTicket 重算已簽到堂數（涵蓋團課：booking.ticket_id 為 null、靠 ticket_logs 反查者）
+  Object.keys(bkByTicket).forEach(tid=>{ usedMap[tid]=bkByTicket[tid].filter(b=>b.status==='checked_in'||b.status==='completed').length; });
 
   const stLabel={usable:'可用',used_up:'用畢',expired:'過期',refunded:'已退'};
   const stTag={usable:'tag-ok',used_up:'tag-warn',expired:'tag-danger',refunded:'tag-danger'};
@@ -19201,7 +19203,10 @@ PAGES.m_tickets=async function(){
             </div>
             ${stateBadge}
           </div>
-          <div class="mck-dots2">${ticketDots(used,total,t)}</div>
+          <!-- 2026-07-23：逐堂顯示全系統統一為課種色圓點（實心＋日期／空心＋預約日期／空心）
+               實心格數＝已簽到/完成（與會員端同口徑），已預約未上算未使用但標預約日期 -->
+          <div class="mck-dots2">${ticketTokens(t,bkByTicket[t.id]||[],typeMap,
+            Math.max(0,total-ticketUnused(t,usedMap,(bkByTicket[t.id]||[]).filter(b=>b.status==='booked'||b.status==='scheduled').length)))}</div>
           <div class="mwtk-foot">
             <div class="mck-prog"><b>${used}</b><span class="mck-prog-tot">/ ${total} 堂</span>${rem>0&&rk===0?`<span style="font-size:11.5px;color:var(--t3);margin-left:8px;">剩 ${rem} 堂</span>`:''}</div>
             <button class="btn btn-ghost btn-sm" onclick="viewLogs('${t.id}')">使用紀錄</button>
@@ -19919,8 +19924,20 @@ async function viewLogs(ticket_id){
   const ty=await dbGet('ticket_types',t.ticket_type_id);
   const logs=(await dbGetAll('ticket_logs')).filter(l=>l.ticket_id===ticket_id).sort((a,b)=>a.created_at.localeCompare(b.created_at));
   const actLabel={grant:'發放',deduct:'扣課',refund:'退課',adjust:'調整',expire:'過期'};
+  /* 2026-07-23 使用者指示：票券逐堂顯示全系統統一為課種色圓點 —— 詳細視窗也補上
+     （由扣課帳本反查每堂對應的預約，取得上課／預約日期） */
+  let tokens='';
+  try{
+    const typeMap=Object.fromEntries((await dbGetAll('ticket_types')).map(x=>[x.id,x]));
+    // 與會員端同口徑：ticket_id 直連 ＋ 扣課帳本反查（涵蓋 booking.ticket_id 為 null 的團課）
+    const bkIds=logs.filter(l=>l.action==='deduct'&&l.booking_id).map(l=>l.booking_id);
+    const bks=(await dbGetAll('bookings')).filter(b=>b.status!=='cancelled'&&(b.ticket_id===ticket_id||bkIds.includes(b.id)));
+    const doneN=bks.filter(b=>b.status==='checked_in'||b.status==='completed').length;
+    tokens=`<div class="mck-dots2" style="margin:2px 0 12px;">${ticketTokens(t,bks,typeMap,doneN)}</div>`;
+  }catch(_){}
   showModal(`<div class="modal-title">${t.plan_name||(ty?ty.name:'票券')}</div>
     <div style="font-size:13px;color:var(--t2);margin-bottom:6px;">剩餘 ${t.sessions_remaining} / ${t.sessions_total} 堂　·　到期 ${fmtExpire(t.expire_date)}</div>
+    ${tokens}
     <div style="font-size:10.5px;color:var(--t3);margin-bottom:14px;">系統 ID：${ticket_id}</div>
     <div style="font-size:12px;font-weight:500;margin-bottom:8px;">使用紀錄</div>
     ${logs.length===0?'<div class="empty"><div class="em-t">無異動</div></div>':
