@@ -1028,6 +1028,48 @@ insert/邀請政策＋training_logs 收斂）＋`20260721_02`（employees_insert
   `.mc-lotto-fab`）列出綁定／新建申請 → 核准／退回。決策：比對＝手機＋姓名、
   兩條路徑（命中→櫃台驗證／新客→續填資料）皆進同一個櫃台佇列。
 
+## 1.4z 夜間批次（2026-07-23 20:00~21:00）：會員 QR 自助申辦 ＋ 🔴 Edge Function 授權加固
+
+### （a）會員申辦 QR（260723.2008）
+會員頁面「申辦 QR」→ 彈窗顯示品牌海報（綠頁首＋QR＋三步驟）＋**下載 PNG**
+（`memberQRPosterCanvas()` 用 canvas 重畫 800×1120，另產 920px 高解析 QR 再縮放，可列印）。
+
+### （b）🔴 Edge Function 授權加固（正式庫已修補完成）
+開發途中檢視正式庫 Edge Function 原始碼，發現**授權缺口**（可用公開 anon key 取得
+service_role 等級效果）。已於當晚重新部署修補，並以公開 anon key 對正式站實測封閉。
+**細節（攻擊面、影響評估、後續建議）記在本機 `PRIVATE_DO_NOT_UPLOAD_security-incident-20260716.md`
+的「事件二」，不寫進公開 repo。** 加固後原始碼在 `docs/edge-functions/create-staff-account.ts`。
+- `create-staff-account` v4：`create`／`reset_password` 需**管理員本人 JWT**；
+  新增 `member_signup`（僅接受 `09xxxxxxxx@member.yugym.local`、帳號已存在回 409 且不改密碼）。
+- `smooth-api`（舊的 reset-staff-password）**停用**，一律回 410。
+- 前端 `cloudCreateAuth` 建員工帳號改帶管理員 access_token（原本帶 anon key）。
+- **待辦：輪替 anon key**（舊 key 長期在公開 repo，輪替後要同步更新 `config.js`）。
+
+### （c）會員自助申辦（安全版，測試庫 e2e 通過）
+- **踩到的平台限制**：前端 `sb.auth.signUp` 建不了會員帳號 —— Supabase 對
+  `@member.yugym.local` 這類收不到信的網域回 `Email address is invalid`（`.app`/`.tw` 也一樣），
+  連帶 rate limit。**會員帳號一律只能由 service_role 建**（Edge Function `member_signup`），
+  建完前端再 `signInWithPassword` 取得 session。
+  → 這也代表 doLogin 裡「舊會員用預設密碼 88888888 首登自動建帳」那條路早已失效（同樣走 signUp）。
+- **流程**：掃 QR → 填姓名/手機/Email/生日＋設密碼 → 建帳號 → 登入 →
+  `fn_complete_member_registration` → **一律進櫃台審核佇列**（手機命中既有會員=`link`、
+  查無=`new`）→ 前端顯示「已送出，請至櫃台確認」＋申請編號 → 自動登出。
+- **櫃台端**：桌機首頁右下角滑出「N 筆會員申辦待確認」（`.mc-req-fab`，深紅；與抽獎膠囊並存時
+  抽獎往上疊 `.mc-fab-up`）→ 彈窗逐筆核對（綁定/建檔徽章、申請人填的姓名手機、
+  **與既有會員姓名相符與否的紅字提示**）→ 核准／退回走 `fn_review_member_link_request`。
+- **核准前**：會員登得進 Auth 但沒有 members 資料 → 登入頁顯示「申辦已送出（編號 …），
+  請至櫃台完成確認」並自動登出。
+- **e2e（測試庫）**：①會員D 0900001004 → link 申請 → 核准 → `members.auth_id` 綁上（票券預約保留）；
+  ②新手機 0912000778 → new 申請 → 核准 → 新會員建檔。測試資料（含 auth.users）已全數清除。
+- migration `20260723_02_member_signup_queue.sql`：佇列加 `kind`、移除 members 匿名 insert 政策、
+  補回櫃台 insert。**測試庫已套（MCP），⚠️ 正式庫待跑**——跑之前不要對外發 QR。
+
+**正式庫上線前檢查清單（會員自助申辦）**：
+1. 跑 `20260723_02`（含移除 `public_self_signup_members`；同一支已補 `members_insert_staff`，不會重演 7/21 事故）。
+2. 輪替 anon key（選擇性但建議）。
+3. 用真會員帳號跑一次完整流程（含核准後看得到自己的票券/預約）——這也順便補上長期待辦
+   「真會員 RLS 寫入路徑實測」。
+
 ## 1.5 昨天（2026-07-17）做了什麼
 
 **首頁改版 Dashboard V2**（依使用者「首頁資訊更新」設計稿）：Hero 只留問候＋時鐘、狀態卡帶 4 個 KPI、
