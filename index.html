@@ -5044,9 +5044,12 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 /* 手機版今日教練任務：每教練一列（教練名＋堂數｜圓形課卡，無互動；2026-07-20 使用者指示） */
 .mtc-row2{display:flex;align-items:flex-start;gap:8px;padding:10px 2px;border-bottom:1px solid var(--border-light);}
 .mtc-row2:last-child{border-bottom:none;}
-/* 名字固定欄（2026-07-20 使用者指示：各列對齊；寬度由 88 收窄到 74 縮短與課卡距離） */
-.mtc-r2-name{flex:0 0 74px;font-size:13.5px;font-weight:700;color:var(--text);padding-top:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.mtc-r2-cnt{font-size:11px;color:var(--t3);font-weight:600;}
+/* 名字固定欄（2026-07-20 使用者指示：各列對齊；寬度由 88 收窄到 74 縮短與課卡距離）
+   2026-07-23 使用者回報：教練英文名全大寫後把「（N）」擠成 (…) → 改 flex 兩段：
+   名字（.mtc-r2-nm）自己截斷、堂數（.mtc-r2-cnt）永遠完整顯示。 */
+.mtc-r2-name{flex:0 0 auto;min-width:74px;max-width:118px;font-size:13.5px;font-weight:700;color:var(--text);padding-top:13px;display:flex;align-items:baseline;overflow:hidden;}
+.mtc-r2-nm{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mtc-r2-cnt{flex:0 0 auto;font-size:11px;color:var(--t3);font-weight:600;}
 /* 每位教練自己的橫向捲動列（2026-07-20 使用者指示：課多時左右滑看後面的課） */
 .mtc-r2-cards{flex:1;display:flex;flex-wrap:nowrap;gap:8px;min-width:0;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:thin;}
 .mtc-r2-cards::-webkit-scrollbar{height:4px;}
@@ -5429,8 +5432,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260723.0910';
-const APP_VERSION_LABEL='v260723.0910';
+const APP_VERSION='260723.0936';
+const APP_VERSION_LABEL='v260723.0936';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8318,7 +8321,7 @@ PAGES.g_dashboard=async function(){
           </span>`;
         }).join('');
         return `<div class="mtc-row2">
-          <span class="mtc-r2-name">${coachDisp(c)}<span class="mtc-r2-cnt">（${total}）</span></span>
+          <span class="mtc-r2-name"><span class="mtc-r2-nm">${coachDisp(c)}</span><span class="mtc-r2-cnt">（${total}）</span></span>
           <div class="mtc-r2-cards">${dots||'<span class="mtc-mini-empty">🌙 今日無課</span>'}</div>
         </div>`;
       })()
@@ -9640,11 +9643,18 @@ async function renderCalendar(opts){
   let bookings,coaches,members,types,allTickets;
   if(opts&&opts._data){
     ({bookings,coaches,members,types,allTickets}=opts._data);
+  }else if((opts&&opts.stepping||window._calStepping) && window._calDataCache && (Date.now()-window._calDataCache._t<120000)){
+    /* 左右換頁卡頓對策（2026-07-23 使用者回報）：翻頁＝純瀏覽，不該等網路。
+       翻頁時直接用上一次渲染的整組資料**立即**畫出（0 網路等待），同時在背景
+       重抓 bookings/member_tickets 校驗——內容有異動才悄悄重繪一次（_calRevalidate）。
+       本機的簽到/取消/新增走非翻頁路徑（_calStepping=false），一律現抓現繪不受影響。 */
+    ({bookings,coaches,members,types,allTickets}=window._calDataCache);
+    _calRevalidate();
   }else{
     // 效能優化：coaches / members / ticket_types 很少變動 → 首次抓取後快取（60 秒內），切週時沿用，
     // 只有 bookings / member_tickets 每次重抓（會新增/異動）。大幅減少切週的等待時間。
     const cacheFresh = window._calStaticCache && (Date.now()-window._calStaticCache._t < 60000);
-    const useCache = window._calStepping && cacheFresh;
+    const useCache = (opts&&opts.stepping||window._calStepping) && cacheFresh;
     if(useCache){
       ({coaches,members,types}=window._calStaticCache);
       [bookings,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('member_tickets')]);
@@ -9652,6 +9662,8 @@ async function renderCalendar(opts){
       [bookings,coaches,members,types,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('members'),dbGetAll('ticket_types'),dbGetAll('member_tickets')]);
       window._calStaticCache={coaches,members,types,_t:Date.now()};
     }
+    // 翻頁快取：每次「現抓」都更新整組（本機寫入後的重繪也走這裡，快取必為最新）
+    window._calDataCache={bookings,coaches,members,types,allTickets,_t:Date.now()};
   }
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const coachObjMap=Object.fromEntries(coaches.map(c=>[c.id,c]));   // 卡片第三行教練縮寫 tag 用（coachAbbr 需完整物件）
@@ -9784,7 +9796,7 @@ async function renderCalendar(opts){
       if(useFixedLane){
         const dl=lanes[b.id]||{zone:'normal',laneIdx:0,subRow:null,conflict:false};
         const fixedH=(60/SLOT_MIN)*SLOT_PX; // 固定 60 分鐘高度
-        const UNIT = 4;
+        const UNIT = Math.max(4, dl.unit||1);   // 動態欄數（2026-07-23）：依重疊群組，5+ 堂那群自動增欄不重疊
         const gap = nDays===1 ? 8 : (nDays===3 ? 6 : 4);
         const edge = nDays===1 ? 4 : 2;
         const laneWpct=100/UNIT;
@@ -10015,28 +10027,31 @@ function CAL_isTreadmillCat(b){ return b.category==='自主訓練'; }
 function CAL_isNormalCat(b){ return !CAL_isGroupCat(b) && !CAL_isTreadmillCat(b); } // 私人教練/友善/體驗
 function CAL_overlap(aS,aE,bS,bE){ return aS < bE && aE > bS; } // 區間重疊公式
 function assignLanesDay(evs){
-  // ══ Calm Play（2026-07-18）：4 個等寬 Lane，特殊區規則移除 ══
+  // ══ Calm Play（2026-07-18）：等寬 Lane，特殊區規則移除 ══
   // 舊制「3 一般 Lane + 特殊區（團課/跑步機/溢位，0.4~0.6 寬、可上下分格）」廢除；
-  // 所有課程一視同仁：依重疊找第一個空 Lane，同一時段最多 4 張卡平均並排、大小統一。
-  // 第 5 堂（超出 4 Lane）疊在最後一個 Lane 並以紅框提示衝突 —— 防呆保留，實務上同時段
-  // 最多 3 教練 + 1 團課，不會發生。
+  // 所有課程一視同仁：依重疊找第一個空 Lane，同時段卡片平均並排、大小統一。
+  // 2026-07-23 使用者回報「超過 4 張會重疊」：4 Lane 上限＋紅框防呆退場，改**動態欄數**——
+  // Lane 依需求增生（同手機版貪婪分欄）。欄數以「重疊群組」為單位（連鎖重疊的一串課），
+  // 各群組記在 res[id].unit：只有 5+ 堂同時段的那一群變窄（1/5、1/6…），
+  // 其他時段維持現行 1/4 寬；課卡文字有 container query 自動縮放。
   const res={};
   const withSpan=[...evs].map(b=>{
     const s=timeToMin(b.start_time), e=s+60; // 一律視為固定 60 分鐘占用
     return {b, s, e};
   }).sort((x,y)=> x.s - y.s || String(x.b.id).localeCompare(String(y.b.id)));
 
-  const N_LANES=4;
-  const lanes=Array.from({length:N_LANES},()=>[]);
+  let cluster=[], clusterEnd=-1, lanes=[];
+  const flush=()=>{ const n=lanes.length||1; cluster.forEach(id=>res[id].unit=n); cluster=[]; lanes=[]; };
   withSpan.forEach(({b,s,e})=>{
-    let placed=-1;
-    for(let i=0;i<N_LANES;i++){
-      const hit=lanes[i].some(iv=>CAL_overlap(s,e,iv.s,iv.e));
-      if(!hit){ placed=i; break; }
-    }
-    if(placed>=0){ lanes[placed].push({s,e}); res[b.id]={zone:'normal',laneIdx:placed,subRow:null,conflict:false}; }
-    else { res[b.id]={zone:'normal',laneIdx:N_LANES-1,subRow:null,conflict:true}; } // 第 5 堂：疊末 Lane + 紅框
+    if(cluster.length && s>=clusterEnd) flush();   // 與前一群完全斷開 → 結算前群
+    clusterEnd = cluster.length ? Math.max(clusterEnd,e) : e;
+    let placed=lanes.findIndex(l=>!l.some(iv=>CAL_overlap(s,e,iv.s,iv.e)));
+    if(placed<0){ placed=lanes.length; lanes.push([]); }
+    lanes[placed].push({s,e});
+    res[b.id]={zone:'normal',laneIdx:placed,subRow:null,conflict:false};
+    cluster.push(b.id);
   });
+  flush();
   return res;
 }
 // 手動切換顯示天數(null=自動)
@@ -10055,6 +10070,52 @@ function calStep(n){
   if(!calWeekStart) initCalWeek();
   calWeekStart = addDays(calWeekStart, n);
   window._calStepping=true; window._calPendingSlide=n>0?1:-1; navTo(CUR_PAGE);
+}
+/* ── 翻頁背景校驗（2026-07-23，換頁卡頓對策）──
+   翻頁用快取即時渲染後，背景重抓 bookings/member_tickets 比對簽章；
+   有異動（別台裝置簽到/新增等）才重繪一次。本機寫入不經此路（見 renderCalendar 註解）。 */
+function _calSigBk(arr){
+  let h=0;
+  for(const b of arr){
+    const s=b.id+'|'+(b.status||'')+'|'+(b.date||'')+'|'+(b.start_time||'')+'|'+(b.duration||'')
+      +'|'+(b.coach_id||'')+'|'+(b.substitute_coach_id||'')+'|'+(b.member_ids?b.member_ids.length:0)
+      +'|'+(b.attendance?JSON.stringify(b.attendance):'');
+    let x=0; for(let i=0;i<s.length;i++) x=(x*31+s.charCodeAt(i))|0;
+    h=(h^x)|0;
+  }
+  return arr.length+':'+h;
+}
+function _calSigTk(arr){
+  let h=0;
+  for(const t of arr){
+    const s=t.id+'|'+(t.status||'')+'|'+(t.sessions_remaining!=null?t.sessions_remaining:'')
+      +'|'+(t.unlocked_sessions!=null?t.unlocked_sessions:'')+'|'+(t.expire_date||'');
+    let x=0; for(let i=0;i<s.length;i++) x=(x*31+s.charCodeAt(i))|0;
+    h=(h^x)|0;
+  }
+  return arr.length+':'+h;
+}
+async function _calRevalidate(){
+  if(window._calRevalidating) return;
+  window._calRevalidating=true;
+  try{
+    const cached=window._calDataCache; if(!cached) return;
+    const sigB=_calSigBk(cached.bookings), sigT=_calSigTk(cached.allTickets);
+    const [bks,tks]=await Promise.all([dbGetAll('bookings'),dbGetAll('member_tickets')]);
+    const changed = _calSigBk(bks)!==sigB || _calSigTk(tks)!==sigT;
+    window._calDataCache={...cached, bookings:bks, allTickets:tks, _t:Date.now()};
+    /* 有異動才重繪；使用者互動中（展開快捷鈕/拖曳/彈窗開著）不打斷——
+       資料已更新進快取，下一次翻頁或操作自然帶到。 */
+    if(changed && (CUR_PAGE==='calendar'||CUR_PAGE==='coach_calendar')
+       && document.querySelector('.cal-body')
+       && !window._expandedBkEl
+       && !document.querySelector('.cal-ev.dragging')
+       && !document.getElementById('modal-bg')){
+      window._calStepping=true;   // 重繪吃剛更新的快取（無網路等待、無翻頁動畫）
+      navTo(CUR_PAGE);
+    }
+  }catch(_){}
+  finally{ window._calRevalidating=false; }
 }
 // 點標題跳出月曆快選日期
 function openCalJump(){
@@ -10647,7 +10708,10 @@ window.addEventListener('resize',()=>{ if(document.querySelector('.cal-wrap')) f
 
 PAGES.calendar=async function(){
   window._calMode='admin';
-  window._calStepping=false;
+  /* 🐛 既有 bug（2026-07-23 追查換頁卡頓時發現）：原本這裡直接 window._calStepping=false，
+     但 renderCalendar 在本函式**之後**才讀這個旗標 → 7/17 的「切週沿用靜態快取」從未生效，
+     每次翻頁都重抓全部 5 張表。改為「先取值再清旗標」，以 opts.stepping 傳給 renderCalendar。 */
+  const _stepping=!!window._calStepping; window._calStepping=false;
   window._coachReadonly=false; // 管理員行事曆：可排課/改期
   const myId=SESSION.id;
   const isMobile=isMobileLayout();
@@ -10672,7 +10736,7 @@ PAGES.calendar=async function(){
   const scoped = scopeActive('employee');
   if(scoped) window._calFilter = SCOPE.id;
   const subtitle='30 分鐘為單位 · 可拖曳調整 · 點空格新增';
-  const calOpts={coachFilter:true,onSlot:'quickBookAt',editable:true};
+  const calOpts={coachFilter:true,onSlot:'quickBookAt',editable:true,stepping:_stepping};
   const bc = scoped ? scopeBreadcrumb('員工管理','教學') : '';
   const sb = scoped ? lpScopeBar('教學排程') : '';
   const hd = scoped
@@ -21278,7 +21342,7 @@ async function saveFixPunchOut(recId){
 
 /* ════════ 教練端:預約行事曆 ════════ */
 PAGES.coach_calendar=async function(){
-  window._calStepping=false;
+  const _stepping=!!window._calStepping; window._calStepping=false;   // 同 PAGES.calendar：先取值再清（2026-07-23）
   window._coachReadonly=true; // 教練端行事曆：純檢視，不開放排課/改期
   const myId=SESSION.id;
   try{ window._meStaff=await dbGet('coaches',myId); }catch(_){}
@@ -21313,7 +21377,7 @@ PAGES.coach_calendar=async function(){
     if(!calWeekStart) initCalWeek();
     C.innerHTML=head('SCHEDULE','預約','週時間軸 · 點空格排課 · 拖曳改期 · 點課卡看明細')
       +`<div id="coach-punch"></div>`
-      +(await renderCalendar({onSlot:'quickBookAt',editable:true,me:myId,maskOthers:true}));
+      +(await renderCalendar({onSlot:'quickBookAt',editable:true,me:myId,maskOthers:true,stepping:_stepping}));
     renderPunchPanel();
     initCalDrag();
     initCalSwipe(document.querySelector('.cal-body'));
