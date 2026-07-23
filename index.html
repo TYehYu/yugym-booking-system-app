@@ -5354,6 +5354,14 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 .lot-prize:hover{border-color:var(--green);background:#f4f9f6;}
 .lot-prize .lni{width:20px;height:20px;color:var(--green);}
 .lot-prize .lot-glyph{font-size:17px;line-height:1;}
+/* ── 會員申辦 QR 海報（2026-07-23）：彈窗內預覽，與下載的 PNG 同版式 ── */
+.mrq-poster{background:var(--card2);border:1px solid var(--bd);border-radius:16px;overflow:hidden;text-align:center;}
+.mrq-brand{background:var(--green);color:#F4F1E8;padding:16px 0 12px;font-size:26px;font-weight:800;letter-spacing:.06em;line-height:1.1;}
+.mrq-brand span{display:block;font-size:11px;font-weight:500;color:var(--gold);letter-spacing:.24em;margin-top:5px;}
+.mrq-title{background:var(--green);color:#F4F1E8;font-size:19px;font-weight:700;padding:0 0 16px;}
+.mrq-qr{display:flex;justify-content:center;padding:18px 0 10px;}
+.mrq-qr canvas,.mrq-qr img{background:#fff;padding:10px;border-radius:12px;}
+.mrq-steps{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;padding:4px 12px 16px;font-size:12px;color:var(--t2);font-weight:600;}
 /* ══ 品牌綠月曆：今日／選取日改 Apple 風（2026-07-23 使用者指示）══
    今日＝紅色實心圓（原米白圓）；選取日＝日期下方紅線（原白色細圈）。
    三個品牌綠月曆共用：桌機首頁綠卡 .cal-side、手機首頁 Hero .cal-hero、手機預約行事曆 .cag-mcal。
@@ -5506,8 +5514,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260723.1959';
-const APP_VERSION_LABEL='v260723.1959';
+const APP_VERSION='260723.2007';
+const APP_VERSION_LABEL='v260723.2007';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14489,7 +14497,7 @@ PAGES.members=async function(){
   const canManage = SESSION.role==='admin'||SESSION.role==='front_desk';
   const actionsHtml =
     (canManage?`<button class="btn btn-ghost btn-sm" onclick="navTo('purchase_review','g_member')">購買審核</button>`:'')
-    + `<button class="btn btn-ghost btn-sm" onclick="openMemberRegisterLink()">申辦連結</button>`
+    + `<button class="btn btn-ghost btn-sm" onclick="openMemberRegisterLink()">申辦 QR</button>`
     + (canManage?`<button class="btn btn-green btn-sm" onclick="openBackofficeMember()">${LP_ICON.plus}　新增會員</button>`:'');
   const toolbar={
     search:{ value:_memSearch, placeholder:'搜尋姓名或電話', oninput:'memSetSearch(this.value)' },
@@ -15017,21 +15025,79 @@ async function submitBackofficeMember(){
   }catch(e){ showErr('建立失敗：'+(e.message||e)); if(btn){btn.disabled=false;btn.textContent='建立會員';} }
 }
 
+/* ── 會員申辦 QR（2026-07-23 使用者指示：會員頁面顯示＋可下載）──
+   畫面上先看到成品（可直接給人掃），需要貼在櫃台或印出時按「下載圖片」存 PNG。
+   下載圖是用 canvas 重畫的直式海報（非螢幕截圖），故解析度足夠列印。 */
 function openMemberRegisterLink(){
   const link=memberRegisterLink();
-  showModal(`<div class="modal-title">會員申辦連結 / QR Code</div>
-    <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;line-height:1.8;">
-      會員不再由後台直接建立。請將以下連結或 QR Code 提供給新會員，由本人自行填寫資料並設定密碼完成註冊。</div>
-    <div id="member-qr" style="display:flex;justify-content:center;margin:6px 0 16px;"></div>
-    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:12px;font-size:12px;word-break:break-all;color:var(--text);">${link}</div>
+  showModal(`<div class="modal-title">會員申辦 QR Code</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:14px;line-height:1.8;">
+      貼在櫃台或直接傳給新會員。掃描後由本人填姓名與手機，送出後在櫃台確認即完成。</div>
+    <div class="mrq-poster">
+      <div class="mrq-brand">YUGYM<span>有 肌 訓 練</span></div>
+      <div class="mrq-title">加入會員</div>
+      <div class="mrq-qr" id="member-qr"></div>
+      <div class="mrq-steps"><span>① 掃描 QR</span><span>② 填姓名・手機</span><span>③ 櫃台確認</span></div>
+    </div>
+    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px;font-size:11.5px;word-break:break-all;color:var(--t2);margin-top:12px;">${link}</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
-      <button class="btn btn-green" onclick="copyText('${link}')">複製連結</button>
+      <button class="btn btn-ghost" onclick="copyText('${link}')">複製連結</button>
+      <button class="btn btn-green" onclick="downloadMemberQR()">下載圖片</button>
     </div>`);
-  // 產生 QR
   const box=document.getElementById('member-qr');
-  if(box && window.QRCode){ try{ new QRCode(box,{text:link,width:168,height:168,colorDark:'#003d32',colorLight:'#ffffff'}); }catch(e){ box.innerHTML='<span style="font-size:11px;color:var(--t3);">QR 產生失敗，請使用連結</span>'; } }
+  if(box && window.QRCode){ try{ new QRCode(box,{text:link,width:200,height:200,colorDark:'#003d32',colorLight:'#ffffff'}); }catch(e){ box.innerHTML='<span style="font-size:11px;color:var(--t3);">QR 產生失敗，請使用連結</span>'; } }
   else if(box){ box.innerHTML='<span style="font-size:11px;color:var(--t3);">（離線無法產生 QR，請使用連結）</span>'; }
+}
+/* 下載用海報：800×1120 canvas 重畫（品牌綠頁首＋白底 QR 卡＋三步驟＋網址）。
+   QR 來源取彈窗裡 qrcodejs 產生的 canvas（同源、未污染，可直接 toDataURL）。 */
+function memberQRPosterCanvas(){
+  // 先另外產一張高解析 QR（彈窗裡那張只有 200px，放大到 460 會糊）；產不出來才退回用彈窗那張
+  let src=null, tmp=null;
+  if(window.QRCode){
+    try{
+      tmp=document.createElement('div');
+      tmp.style.cssText='position:fixed;left:-9999px;top:0;';
+      document.body.appendChild(tmp);
+      new QRCode(tmp,{text:memberRegisterLink(),width:920,height:920,colorDark:'#003d32',colorLight:'#ffffff'});
+      src=tmp.querySelector('canvas');
+    }catch(_){ }
+  }
+  if(!src) src=document.querySelector('#member-qr canvas')||document.querySelector('#member-qr img');
+  if(!src){ if(tmp) tmp.remove(); return null; }
+  const _cleanup=()=>{ if(tmp) tmp.remove(); };
+  setTimeout(_cleanup,0);
+  const W=800,H=1120,c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d');
+  const FF='"Noto Sans TC","Microsoft JhengHei",sans-serif';
+  const rr=(px,py,w,h,r)=>{x.beginPath();x.moveTo(px+r,py);x.arcTo(px+w,py,px+w,py+h,r);x.arcTo(px+w,py+h,px,py+h,r);
+    x.arcTo(px,py+h,px,py,r);x.arcTo(px,py,px+w,py,r);x.closePath();};
+  x.fillStyle='#F4F1E8';x.fillRect(0,0,W,H);
+  x.fillStyle='#003D32';x.fillRect(0,0,W,330);
+  x.textAlign='center';x.fillStyle='#F4F1E8';
+  x.font='800 68px '+FF;x.fillText('YUGYM',W/2,150);
+  x.font='500 26px '+FF;x.fillStyle='#C9A227';x.fillText('有 肌 訓 練',W/2,196);
+  x.font='700 44px '+FF;x.fillStyle='#F4F1E8';x.fillText('加入會員',W/2,272);
+  const QS=460,QX=(W-QS)/2,QY=400;
+  x.fillStyle='#fff';rr(QX-30,QY-30,QS+60,QS+60,26);x.fill();
+  x.imageSmoothingEnabled=false;               // QR 是像素圖，縮放要保持硬邊
+  x.drawImage(src,QX,QY,QS,QS);
+  x.imageSmoothingEnabled=true;
+  x.fillStyle='#2E3A32';x.font='600 27px '+FF;
+  const steps=['① 掃描上方 QR Code','② 填寫姓名與手機號碼','③ 至櫃台確認即完成'];
+  steps.forEach((s,i)=>x.fillText(s,W/2,970+i*44));
+  x.fillStyle='#7A7A6E';x.font='400 19px '+FF;
+  x.fillText(memberRegisterLink(),W/2,1090);
+  return c;
+}
+function downloadMemberQR(){
+  const c=memberQRPosterCanvas();
+  if(!c){ showToast('QR 尚未產生，請確認網路後重開'); return; }
+  const a=document.createElement('a');
+  a.download='YUGYM-會員申辦QR.png';
+  a.href=c.toDataURL('image/png');
+  document.body.appendChild(a);a.click();a.remove();
+  showToast('已下載申辦 QR 圖片');
 }
 
 /* ── 會員自助註冊頁（公開，#member-signup） ── */
