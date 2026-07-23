@@ -827,6 +827,32 @@ insert/邀請政策＋training_logs 收斂）＋`20260721_02`（employees_insert
      `BK-ORBIT23-*` 已清。
    - 註：本機 Python 不可用（exit 49），預覽伺服器改 scratchpad `serve8765.js`（Node）。
 
+## 1.4v 上午續（2026-07-23 09:20~09:40，已上線至 260723.0936，commit e838aec）
+
+1. **✅ 桌機行事曆左右換頁卡頓修復**（1.4t #5 優先待辦）：
+   - 量測結論：JS＋DOM 端即使正式庫規模也僅 ~11ms，卡頓全在**每次翻頁等雲端重抓**
+     （bookings＋member_tickets，8 秒 TTL 一過就要 ~5 個分頁請求）。
+   - 🐛 **既有 bug**：`PAGES.calendar`／`coach_calendar` 開頭就把 `_calStepping` 清 false，
+     `renderCalendar` 之後才讀 → **7/17 加的「切週沿用靜態快取」從未生效**。
+     改「先取值再清」，以 `opts.stepping` 傳入 renderCalendar。
+   - **翻頁改 stale-while-revalidate**：翻頁直接用上一次整組資料（`_calDataCache`，
+     120s 內）**立即渲染**——實測 TTL 過期後翻頁 170ms→**1ms**；同時背景重抓
+     bookings/member_tickets 比對簽章（`_calSigBk/_calSigTk`，含 attendance/代課/時長），
+     有異動才悄悄重繪一次（展開快捷鈕/拖曳中/彈窗開啟時不打斷，資料先進快取）。
+     本機簽到/取消/新增走非翻頁路徑（現抓現繪＋更新快取），不受影響。
+     e2e 驗證：外部（sb 直插模擬別台裝置）新增預約，翻頁後 ~250ms 自動補上畫面。
+2. **桌機行事曆動態欄數**（使用者回報「超過 4 張卡片後面幾張會重疊」）：
+   `assignLanesDay` 的 4 Lane 上限＋第 5 堂紅框防呆退場，改依**重疊群組**貪婪增欄
+   （同手機版邏輯）——5+ 堂同時段那一群均分變窄（1/5、1/6…，cq 字級自動縮放），
+   **其他時段維持 1/4 寬**（群組欄數記在 `res[id].unit`，渲染 `max(4,unit)`）。
+   實測 6 堂同時段（含團課）零重疊、15:00 單堂仍 1/4 寬。
+3. **手機版今日教練任務名字欄**（使用者回報：教練名全大寫後課堂數被擠成「(…)」）：
+   `.mtc-r2-name` 拆 flex 兩段（`.mtc-r2-nm` 名字可截斷＋`.mtc-r2-cnt` 堂數恆顯），
+   欄寬 74→**74~118px 彈性**（短名維持 74 對齊、長名放寬、超長才截斷名字）。
+   以 RANDY／SHANNON／CHRISTOPHER 三種長度在 390px iframe 驗證。
+   註：`flex-basis:74px` 會被巢狀 flex 的 min-content 撐開（實測 124px），
+   固定欄寬需在容器同時設 `overflow:hidden`＋`max-width`。
+
 ## 1.5 昨天（2026-07-17）做了什麼
 
 **首頁改版 Dashboard V2**（依使用者「首頁資訊更新」設計稿）：Hero 只留問候＋時鐘、狀態卡帶 4 個 KPI、
