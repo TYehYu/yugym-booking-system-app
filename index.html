@@ -5474,8 +5474,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260723.1232';
-const APP_VERSION_LABEL='v260723.1232';
+const APP_VERSION='260723.1908';
+const APP_VERSION_LABEL='v260723.1908';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -5558,6 +5558,19 @@ async function _dbGetAllFresh(store){
     from+=WAVE*PAGE;
   }
   return out;
+}
+/* ── SWR 取用：偷看快取，不發請求（2026-07-23 使用者回報「桌機導覽列切回首頁會 LAG」）──
+   首頁一次要 10 張表，切回來幾乎必然超過 8 秒 TTL → 10 張表全部重抓（大表各 2~3 頁）
+   ＝1~2 秒空白。改成行事曆翻頁同款做法：先用上次的資料立刻畫，背景重抓、有異動才悄悄重繪。
+   回傳 null＝沒有可用快取（呼叫端照常 await dbGetAll）；
+   stale=true 代表已過 TTL（畫得出來但該背景重抓）。maxAge 預設 120 秒。 */
+function dbPeek(store,maxAge){
+  const key=tbl(store);
+  const hit=_dbCache.get(key);
+  if(!hit) return null;
+  const age=Date.now()-hit.t;
+  if(age >= (maxAge||120000)) return null;
+  return { data:hit.data.slice(), stale: age >= (DB_CACHE_TTL_BY[key]||DB_CACHE_TTL) };
 }
 async function dbGetAll(store,opts){
   const key=tbl(store);
@@ -6317,7 +6330,7 @@ const COACH_TAG_COLORS={
 };
 const _COACH_TAG_PALETTE=[{bg:'#D9E4EC',fg:'#3F5F75'},{bg:'#DDE7D4',fg:'#4E6A44'},{bg:'#EDE0D2',fg:'#7A5B42'},{bg:'#E3DBEE',fg:'#5D4C79'},{bg:'#EFDCE0',fg:'#8A505C'},{bg:'#D8E6E4',fg:'#3F6A66'}];
 function coachTagColor(id){
-  if(!id) return {bg:'#EAE6DE',fg:'#9a7344'};
+  if(!id) return {bg:'#EAE6DE',fg:'#6a655c'};   // 無教練＝中性灰（7/23 誤改成品牌金，殘留還原）
   if(COACH_TAG_COLORS[id]) return COACH_TAG_COLORS[id];
   let h=0; for(let i=0;i<id.length;i++) h=(h*31+id.charCodeAt(i))>>>0;
   return _COACH_TAG_PALETTE[h%_COACH_TAG_PALETTE.length];
@@ -8088,12 +8101,22 @@ PAGES.g_dashboard=async function(){
   const nowMin=isTodayView ? (_now.getHours()*60+_now.getMinutes()) : -1;  // 非今天不顯示「現在」線/進行中
   // 值班完成判定用的有效基準時間：今天=現在時刻；過去日期整段已過(全完成)；未來日期尚未到
   const effNow = isTodayView ? nowMin : (date<today ? 99999 : -1);
-  const[bookings,members,coaches,purchases,shifts,types,attendance,apps,punchReqs,mtickets]=await Promise.all([
-    dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches'),
-    dbGetAll('purchases').catch(()=>[]),dbGetAll('shifts').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[]),
-    dbGetAll('attendance').catch(()=>[]),
-    dbGetAll('purchase_applications').catch(()=>[]),dbGetAll('punch_requests').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[])
-  ]);
+  /* 資料取用改 stale-while-revalidate（2026-07-23 使用者回報「切回首頁會 LAG」）：
+     有 2 分鐘內的快取就直接畫（0 個往返），畫完再背景重抓、比對簽章有變才重繪一次。
+     快取全新（8 秒 TTL 內）或根本沒有時，行為與原本完全相同。 */
+  const _dashTabs=[
+    {t:'bookings'},{t:'members'},{t:'coaches'},
+    {t:'purchases',soft:1},{t:'shifts',soft:1},{t:'ticket_types',soft:1},{t:'attendance',soft:1},
+    {t:'purchase_applications',soft:1},{t:'punch_requests',soft:1},{t:'member_tickets',soft:1}
+  ];
+  let _dashUsedStale=false;
+  const[bookings,members,coaches,purchases,shifts,types,attendance,apps,punchReqs,mtickets]=
+    await Promise.all(_dashTabs.map(({t,soft})=>{
+      const pk=dbPeek(t);
+      if(pk){ if(pk.stale) _dashUsedStale=true; return pk.data; }
+      const p=dbGetAll(t);
+      return soft ? p.catch(()=>[]) : p;
+    }));
   const attMap={}; (attendance||[]).forEach(a=>{ if(a.date===date) attMap[a.emp_id||a.coach_id]=a; });
   const isDone=b=>b.status==='checked_in'||b.status==='completed';
   const isCancelled=b=>b.status==='cancelled';
@@ -8855,8 +8878,10 @@ PAGES.g_dashboard=async function(){
            v5（2026-07-21 使用者定版）：三欄——
            左：知識卡 ↓ 快速操作；中：KPI ↓ 今日教練任務 ↓ 行事曆；右：今日值班（去背圓環·班別色）↓ 待辦 -->
       <div class="mc-grid5"><!-- v5.1（2026-07-21 使用者指示）：月曆左下、快捷右下 -->
-        <div class="mc-g5-left"><!-- 2026-07-23 使用者指示：月曆上移、知識卡下移（原知識卡在上） -->
+        <div class="mc-g5-left"><!-- 2026-07-23 使用者指示：月曆上移、知識卡下移（原知識卡在上）；
+             同日再指示：今日值班移到左欄行事曆下方（原在右欄快捷之下） -->
           <div class="mc-b4-cal">${deskCalCard}</div>
+          <div class="mc-dutyplain">${dutyRingCard}</div>
           ${knowCardHTML()}
         </div>
         <div class="mc-g5-mid">
@@ -8867,8 +8892,7 @@ PAGES.g_dashboard=async function(){
         </div>
         <div class="mc-g5-right"><!-- 2026-07-21 使用者指示：快捷移到值班上方；待辦底部對齊教練任務底部 -->
           ${quickCard}
-          <div class="mc-dutyplain">${dutyRingCard}</div>
-          ${revListCard}<!-- 2026-07-22 使用者指示：值班下方今日收款名單 -->
+          ${revListCard}<!-- 2026-07-22 使用者指示：今日收款名單（原在值班下方，值班已移左欄） -->
           <div class="mc-b4-todo">${todoCard}</div>
         </div>
       </div>
@@ -8880,7 +8904,46 @@ PAGES.g_dashboard=async function(){
   startDashNowTimer(isTodayView, AXIS_START, AXIS_END);
   /* Hero 時鐘計時器已移除（2026-07-20）：大時鐘移到頂部導覽列（#mc-topclock），
      由全域 _clockTimer（startClock 的每秒 tick）順帶更新，本頁不再自管計時器。 */
+  // ── SWR 收尾（2026-07-23）：這次若用了過期快取 → 背景重抓，有異動才悄悄重繪一次
+  window._dashSig=dashDataSig(date,bookings,attendance,purchases,mtickets,apps,punchReqs);
+  if(_dashUsedStale) dashRevalidate(_dashTabs.map(x=>x.t));
 };
+/* 首頁資料簽章（2026-07-23）：只取畫面上會變的東西 —— 當日預約（狀態/時間/教練/點名）、
+   當日打卡、當日售票、待審件數，加上各表總筆數與本月簽到數（抽獎名單用）。
+   簽章相同就不重繪，免得背景重抓打斷使用者操作。 */
+function dashDataSig(date,bookings,attendance,purchases,mtickets,apps,punchReqs){
+  const ym=(date||'').slice(0,7);
+  const j=a=>a.sort().join('|');
+  const bkDay=j((bookings||[]).filter(b=>b.date===date).map(b=>
+    [b.id,b.status,b.start_time,b.duration,b.coach_id||'',b.substitute_coach_id||'',
+     b.attendance?JSON.stringify(b.attendance):'',Array.isArray(b.member_ids)?b.member_ids.length:''].join('~')));
+  const attDay=j((attendance||[]).filter(a=>a.date===date).map(a=>
+    [a.emp_id||a.coach_id||'',a.clock_in||'',a.clock_out||''].join('~')));
+  const tkDay=j((mtickets||[]).filter(t=>t.purchase_date===date).map(t=>
+    [t.id,t.amount_paid||0,t.status||''].join('~')));
+  const mChk=(bookings||[]).filter(b=>(b.date||'').slice(0,7)===ym&&(b.status==='checked_in'||b.status==='completed')).length;
+  return [(bookings||[]).length,(purchases||[]).length,(mtickets||[]).length,
+    (apps||[]).length,(punchReqs||[]).length,mChk,bkDay,attDay,tkDay].join('#');
+}
+/* 首頁背景重抓（SWR 的 revalidate 段）：把表抓成最新，簽章有變、且使用者還在首頁、
+   沒開彈窗、沒展開課卡快捷鈕時，才悄悄重繪一次（navTo 會保留捲動位置）。 */
+async function dashRevalidate(tabs){
+  if(window._dashRevalidating) return;
+  window._dashRevalidating=true;
+  const key=CUR_PAGE, viewDate=_dashViewDate||ymd(TODAY);
+  try{
+    await Promise.all((tabs||[]).map(t=>dbGetAll(t,{fresh:true}).catch(()=>null)));
+    if(CUR_PAGE!==key) return;                            // 已切到別頁
+    if(document.getElementById('modal-bg')) return;       // 彈窗開著不打斷
+    if(document.querySelector('.cal-ev-active')) return;  // 課卡快捷鈕/團課名單展開中
+    const[bk,att,pu,mt,ap,pr]=await Promise.all(
+      ['bookings','attendance','purchases','member_tickets','purchase_applications','punch_requests']
+      .map(t=>dbGetAll(t).catch(()=>[])));
+    if(dashDataSig(viewDate,bk,att,pu,mt,ap,pr)===window._dashSig) return;   // 沒變 → 不重繪
+    navTo(CUR_PAGE);
+  }catch(_){ }
+  finally{ window._dashRevalidating=false; }
+}
 // 甘特圖「現在」紅線定時更新（不重繪整頁，只改位置與標籤）
 let _dashNowTimer=null;
 function stopDashNowTimer(){ if(_dashNowTimer){ clearInterval(_dashNowTimer); _dashNowTimer=null; } }
@@ -9971,10 +10034,13 @@ async function renderCalendar(opts){
         : `<div class="evc-more"><div class="evc-more-l">${b.start_time}–${_endT}</div><div class="evc-more-l">${typeName}${b.format?' · '+b.format:''}</div>${(coachName||subCoachName)?`<div class="evc-more-l">教練：${subCoachName||coachName}${subCoachName?'（代）':''}</div>`:''}${tk?`<div class="evc-more-l">${tk.plan_name||'票券'}　剩 ${remain}${tk.expire_date?`　效期至 ${fmtExpire(tk.expire_date)}`:''}</div>`:''}<div class="evc-more-l evc-more-st">${statusLabel(b.status)}</div></div>`;
       // 教練縮寫 tag（第三行）：代課教練優先；遮蔽卡不顯示
       const _coachObj = _coachId ? (coachObjMap[_coachId]||null) : null;
+      // 自主訓練用教室/跑步機時，第三列改標場地（無教練故原本是空的；2026-07-23 使用者指示）
+      const _selfVenue = selfVenueLabel(b);
       const _abbrOut = _grpCard
         ? `<span class="evc-coach" style="background:${_cc.bg};color:${_cc.fg};">${gHeadsN} 人</span>`
         : ((!hideMember && _coachObj)
-        ? `<span class="evc-coach" style="background:${_cc.bg};color:${_cc.fg};">${coachAbbr(_coachObj)}${b.substitute_coach_id?'（代）':''}</span>` : '');
+        ? `<span class="evc-coach" style="background:${_cc.bg};color:${_cc.fg};">${coachAbbr(_coachObj)}${b.substitute_coach_id?'（代）':''}</span>`
+        : (_selfVenue ? `<span class="evc-coach" style="background:${_cc.bg};color:${_cc.fg};">${_selfVenue}</span>` : ''));
       const _bodyOut = `<div class="evc-body"></div><div class="evc-txt"><span class="evc-time">${b.start_time}</span><span class="evc-name">${_stdName}</span>${_abbrOut}${_moreHtml}</div>`;
       // 課程色 class：共用 course-* token（--course-accent 仍供簽到填色等既有樣式使用）
       const _courseCls = (({'ev-pt':'course-pt','ev-friendly':'course-friendly','ev-group':'course-group','ev-self':'course-self','ev-trial':'course-trial','ev-massage':'course-friendly'})[cls]||'course-pt');
@@ -10097,6 +10163,26 @@ function assignLanes(evs){
 // 三個 Lane 都被占用的重疊課、團課、跑步機/自主訓練 → 特殊區。
 // 特殊區：團課 與 跑步機/自主 若區間重疊 → 上下分格（上團下跑）；否則單一項目完整顯示。
 // 回傳 { [id]: { zone:'normal'|'special', laneIdx, subRow(0上/1下/null), conflict } }
+// ── 自主訓練場地標示（2026-07-23 使用者指示）──
+// 「使用教室或跑步機的自主訓練」要在課卡第三列顯示場地；預設的多功能訓練區不標示。
+// 兩個資料來源：
+//  ① 新系統：venue_unit（treadmill_* → 跑步機、group_* → 教室、multi_* → 預設不標）
+//  ② 舊系統匯入：note 帶「舊系統匯入｜教室:跑步機2」「…｜教室:教室(代課)」等；
+//     A/B/C/D自主訓練＝多功能訓練區的位置代號，屬預設不標。
+//     未來匯出檔若把「教室/跑步機」放在教練名稱欄，只要落進 note 一樣吃得到。
+function selfVenueLabel(b){
+  if(!b || b.category!=='自主訓練') return '';
+  const u=String(b.venue_unit||'');
+  if(u.startsWith('treadmill')) return '跑步機';
+  if(u.startsWith('group')) return '教室';
+  if(u.startsWith('multi')) return '';
+  const nt=String(b.note||'');
+  const m=nt.match(/教室[:：]\s*([^\s|｜]+)/);   // 匯入格式優先取「教室:」後面那段
+  const raw=m?m[1]:nt;
+  if(/跑步機/.test(raw)) return '跑步機';
+  if(/^教室|[^A-Za-z]教室/.test(raw)||raw==='教室') return '教室';
+  return '';
+}
 function CAL_isGroupCat(b){ return b.category==='小班肌力'; }
 function CAL_isTreadmillCat(b){ return b.category==='自主訓練'; }
 function CAL_isNormalCat(b){ return !CAL_isGroupCat(b) && !CAL_isTreadmillCat(b); } // 私人教練/友善/體驗
@@ -10109,24 +10195,36 @@ function assignLanesDay(evs){
   // Lane 依需求增生（同手機版貪婪分欄）。欄數以「重疊群組」為單位（連鎖重疊的一串課），
   // 各群組記在 res[id].unit：只有 5+ 堂同時段的那一群變窄（1/5、1/6…），
   // 其他時段維持現行 1/4 寬；課卡文字有 container query 自動縮放。
+  // 2026-07-23 使用者指示：**該時段只要有團體課，團課固定排第一張**（Lane 0）——
+  // 改成「先切重疊群組，群組內團課優先佔 Lane」兩段式（原本是單趟貪婪，誰先開始誰先佔）。
   const res={};
   const withSpan=[...evs].map(b=>{
     const s=timeToMin(b.start_time), e=s+60; // 一律視為固定 60 分鐘占用
     return {b, s, e};
   }).sort((x,y)=> x.s - y.s || String(x.b.id).localeCompare(String(y.b.id)));
 
-  let cluster=[], clusterEnd=-1, lanes=[];
-  const flush=()=>{ const n=lanes.length||1; cluster.forEach(id=>res[id].unit=n); cluster=[]; lanes=[]; };
-  withSpan.forEach(({b,s,e})=>{
-    if(cluster.length && s>=clusterEnd) flush();   // 與前一群完全斷開 → 結算前群
-    clusterEnd = cluster.length ? Math.max(clusterEnd,e) : e;
-    let placed=lanes.findIndex(l=>!l.some(iv=>CAL_overlap(s,e,iv.s,iv.e)));
-    if(placed<0){ placed=lanes.length; lanes.push([]); }
-    lanes[placed].push({s,e});
-    res[b.id]={zone:'normal',laneIdx:placed,subRow:null,conflict:false};
-    cluster.push(b.id);
+  // ① 切出「連鎖重疊群組」（與前一群完全斷開就換一群）——欄數以群組為單位
+  const clusters=[]; let cur=[], curEnd=-1;
+  withSpan.forEach(it=>{
+    if(cur.length && it.s>=curEnd){ clusters.push(cur); cur=[]; curEnd=-1; }
+    curEnd = cur.length ? Math.max(curEnd,it.e) : it.e;
+    cur.push(it);
   });
-  flush();
+  if(cur.length) clusters.push(cur);
+
+  // ② 群組內分 Lane：團課先挑（時間序），其餘再依時間序補位
+  clusters.forEach(cl=>{
+    const order=[...cl.filter(it=>CAL_isGroupCat(it.b)), ...cl.filter(it=>!CAL_isGroupCat(it.b))];
+    const lanes=[];
+    order.forEach(({b,s,e})=>{
+      let placed=lanes.findIndex(l=>!l.some(iv=>CAL_overlap(s,e,iv.s,iv.e)));
+      if(placed<0){ placed=lanes.length; lanes.push([]); }
+      lanes[placed].push({s,e});
+      res[b.id]={zone:'normal',laneIdx:placed,subRow:null,conflict:false};
+    });
+    const n=lanes.length||1;
+    cl.forEach(({b})=>{ res[b.id].unit=n; });
+  });
   return res;
 }
 // 手動切換顯示天數(null=自動)
