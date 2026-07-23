@@ -5309,6 +5309,19 @@ body.mc-mode .cal-body{background:rgba(255,255,255,.8);}
 .mc-cell.mc-msb-sel{background:var(--gold);}
 .mc-cell.mc-msb-sel .mc-d{color:#3d2f10;font-weight:800;}
 .mc-cell.mc-msb-sel .mc-dot{background:rgba(61,47,16,.35);color:#fff;}
+/* ── 待辦名單視窗（2026-07-23）：一列一人的圖示卡（沿用全系統「簡化＋圖示」原則）── */
+.tdl-list{display:flex;flex-direction:column;gap:6px;max-height:52vh;overflow-y:auto;margin-bottom:4px;}
+.tdl-row{display:flex;align-items:center;gap:11px;width:100%;text-align:left;padding:10px 12px;
+  background:var(--card2);border:1px solid var(--bd);border-radius:11px;font-family:inherit;}
+button.tdl-row{cursor:pointer;transition:background .12s,border-color .12s;}
+button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
+.tdl-static{cursor:default;}
+.tdl-ava{flex:0 0 32px;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:var(--sage-bg,#E4EAD9);color:var(--green);font-size:14px;font-weight:700;}
+.tdl-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.tdl-n{font-size:14px;font-weight:600;color:var(--text);}
+.tdl-s{font-size:11.5px;color:var(--t3);line-height:1.5;}
+.tdl-ar{flex:0 0 auto;color:var(--t3);font-size:16px;}
 /* ── 今日營收收款名單卡（2026-07-22）：桌機右欄「今日值班」下方 ── */
 .mc-revlist{display:flex;flex-direction:column;gap:4px;}
 .mc-rev-row{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:10px;background:var(--card2);}
@@ -5341,6 +5354,25 @@ body.mc-mode .cal-body{background:rgba(255,255,255,.8);}
 .lot-prize:hover{border-color:var(--green);background:#f4f9f6;}
 .lot-prize .lni{width:20px;height:20px;color:var(--green);}
 .lot-prize .lot-glyph{font-size:17px;line-height:1;}
+/* ══ 品牌綠月曆：今日／選取日改 Apple 風（2026-07-23 使用者指示）══
+   今日＝紅色實心圓（原米白圓）；選取日＝日期下方紅線（原白色細圈）。
+   三個品牌綠月曆共用：桌機首頁綠卡 .cal-side、手機首頁 Hero .cal-hero、手機預約行事曆 .cag-mcal。
+   置於樣式表最末 —— 靠原始碼順序蓋掉前面（含 @media 內）的同權重規則。
+   ⚠️ 註解裡千萬不要寫出 style 結束標籤字樣：HTML 解析器會就地結束 style 元素，
+      後面的規則全部失效（本次踩到，查了半天）。 */
+.cal-side .mc-cell.mc-today .mc-d,
+.cal-hero .mc-cell.mc-today .mc-d,
+.cag-mcal .mc-cell.mc-today .mc-d{
+  background:#FF3B30;color:#fff;border-radius:50%;width:22px;height:22px;
+  display:inline-flex;align-items:center;justify-content:center;font-weight:700;border-bottom:0;}
+.cal-side .mc-cell.mc-sel,
+.cal-hero .mc-cell.mc-sel,
+.cag-mcal .mc-cell.mc-sel{background:transparent;}
+.cal-side .mc-cell.mc-sel .mc-d,
+.cal-hero .mc-cell.mc-sel .mc-d,
+.cag-mcal .mc-cell.mc-sel .mc-d{
+  border:0;border-radius:0;width:auto;height:auto;padding:0 2px 2px;
+  border-bottom:2px solid #FF3B30;background:transparent;color:#fff;font-weight:700;}
 </style>
 </head>
 <body>
@@ -5474,8 +5506,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260723.1908';
-const APP_VERSION_LABEL='v260723.1908';
+const APP_VERSION='260723.1957';
+const APP_VERSION_LABEL='v260723.1957';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8783,33 +8815,67 @@ PAGES.g_dashboard=async function(){
      「本月即將降級名單」（tierDemotionWatchIds；7 月為起點月必空、8 月起生效）。
      無資料也顯示列（副標空狀態文字）。原五項待辦（待簽到/待付款/快到期票券/體驗課/待續約）
      退場；上方 _pendingCheckin 等計算暫留未刪。 */
+  /* 2026-07-23 使用者指示：三列都改「點開跳視窗確認名單」——
+     會員名單（簽約／即將降級）點列進會員資料；未打卡名單只顯示不互動。
+     名單資料掛 window._todoLists 供 openTodoList() 取用。 */
   const _todoItems=[];
-  const _signNames=[...new Set(_dayTk.map(t=>(memMap[t.member_id]&&memMap[t.member_id].name)||null).filter(Boolean))];
+  const _signBy={};
+  _dayTk.forEach(t=>{
+    const m=memMap[t.member_id]; if(!m) return;
+    const e=(_signBy[t.member_id]=_signBy[t.member_id]||{id:t.member_id,name:m.name,plans:[],amt:0});
+    e.plans.push(t.plan_name||'票券'); e.amt+=(Number(t.amount_paid)||0);
+  });
+  const _signList=Object.values(_signBy).map(e=>({id:e.id,name:e.name,
+    sub:[...new Set(e.plans)].join('、')+(e.amt?`　$${e.amt.toLocaleString()}`:'')}));
+  const _signNames=_signList.map(x=>x.name);
   const _l=_signNames.length
     ? _signNames.slice(0,6).join('、')+(_signNames.length>6?` 等 ${_signNames.length} 人`:'')
     : '今日尚無簽約';
-  _todoItems.push(_todoRow(OPS_TODO_IC.money,'今日簽約名單',_l,_signNames.length,'ok',"navTo('ticketing','g_finance')"));
-  const _demoteNames=tierDemotionWatchIds(bookings||[]).map(id=>(memMap[id]&&memMap[id].name)||null).filter(Boolean);
+  _todoItems.push(_todoRow(OPS_TODO_IC.money,'今日簽約名單',_l,_signNames.length,'ok',"openTodoList('sign')"));
+  // 即將降級：附上本月至今的教練課簽到堂數，櫃台一眼知道還差幾堂
+  const _thisYm=date.slice(0,7);
+  const _ptCntThisMonth={};
+  (bookings||[]).forEach(b=>{
+    if(b.category!=='私人教練') return;
+    if(!(b.status==='checked_in'||b.status==='completed')) return;
+    if((b.date||'').slice(0,7)!==_thisYm || !b.member_id) return;
+    _ptCntThisMonth[b.member_id]=(_ptCntThisMonth[b.member_id]||0)+1;
+  });
+  const _demoteList=tierDemotionWatchIds(bookings||[])
+    .filter(id=>memMap[id])
+    .map(id=>{ const n=_ptCntThisMonth[id]||0;
+      return {id,name:memMap[id].name,sub:`本月至今 ${n} 堂・還差 ${Math.max(0,4-n)} 堂即可保住主顧客`}; });
+  const _demoteNames=_demoteList.map(x=>x.name);
   const _l2=_demoteNames.length
     ? _demoteNames.slice(0,6).join('、')+(_demoteNames.length>6?` 等 ${_demoteNames.length} 人`:'')
     : '本月尚無即將降級的會員';
-  _todoItems.push(_todoRow(OPS_TODO_IC.ticket,'本月即將降級名單',_l2,_demoteNames.length,'gold',"navTo('members','g_member')"));
+  _todoItems.push(_todoRow(OPS_TODO_IC.ticket,'本月即將降級名單',_l2,_demoteNames.length,'gold',"openTodoList('demote')"));
   /* 今日未打卡名單（2026-07-21 使用者指示）：含上班未打卡＋下班未打卡。
      對象＝當日有排班（非請假）且需打卡（need_punch）的在職員工：
      班已開始仍無 clock_in＝上班未打卡；有 clock_in 無 clock_out 且班已結束＝下班未打卡。
      用 effNow（過去日全段已過、未來日不判定），檢視過去日期也能看出漏打卡。 */
-  const _noPunch=[];
+  const _noPunchList=[];
   coaches.filter(c=>c.need_punch && c.status!=='inactive' && c.status!=='resigned').forEach(c=>{
     const sh=(shifts||[]).find(s=>s.date===date && s.emp_id===c.id);
     if(!sh || sh.leave_type || !sh.start_time || !sh.end_time) return;
     const att=attMap[c.id];
-    if(effNow>=timeToMin(sh.start_time) && (!att||!att.clock_in)) _noPunch.push(`${coachDisp(c)}（上班）`);
-    else if(att && att.clock_in && !att.clock_out && effNow>=timeToMin(sh.end_time)) _noPunch.push(`${coachDisp(c)}（下班）`);
+    // 未打卡名單只顯示、不互動（2026-07-23 使用者指示）→ 不帶 id
+    if(effNow>=timeToMin(sh.start_time) && (!att||!att.clock_in))
+      _noPunchList.push({name:coachDisp(c),sub:`上班未打卡・班表 ${sh.start_time}–${sh.end_time}`,tag:'上班'});
+    else if(att && att.clock_in && !att.clock_out && effNow>=timeToMin(sh.end_time))
+      _noPunchList.push({name:coachDisp(c),sub:`下班未打卡・上班 ${att.clock_in}　班表至 ${sh.end_time}`,tag:'下班'});
   });
+  const _noPunch=_noPunchList.map(x=>`${x.name}（${x.tag}）`);
   const _l3=_noPunch.length
     ? _noPunch.slice(0,6).join('、')+(_noPunch.length>6?` 等 ${_noPunch.length} 人`:'')
     : '今日打卡皆正常';
-  _todoItems.push(_todoRow(OPS_TODO_IC.check,'今日未打卡名單',_l3,_noPunch.length,'gold',"navTo('attendance','g_admin')"));
+  _todoItems.push(_todoRow(OPS_TODO_IC.check,'今日未打卡名單',_l3,_noPunch.length,'gold',"openTodoList('nopunch')"));
+  window._todoLists={
+    sign:{title:'今日簽約名單',items:_signList,empty:'今日尚無簽約',note:'點會員可進入會員資料'},
+    demote:{title:'本月即將降級名單',items:_demoteList,empty:'本月尚無即將降級的會員',
+      note:'主顧客且上個完整月未達 4 堂教練課；本月結束仍未達，下月 1 日降級。點會員可進入會員資料'},
+    nopunch:{title:'今日未打卡名單',items:_noPunchList,empty:'今日打卡皆正常',note:''}
+  };
   const todoCard=`<div class="card mc-card mc-todo-card">
     <div class="mc-card-h mc-hide-h">今日待辦事項</div>
     ${_todoItems.length?`<div class="mc-td-list">${_todoItems.join('')}</div>`
@@ -8908,6 +8974,22 @@ PAGES.g_dashboard=async function(){
   window._dashSig=dashDataSig(date,bookings,attendance,purchases,mtickets,apps,punchReqs);
   if(_dashUsedStale) dashRevalidate(_dashTabs.map(x=>x.t));
 };
+/* 待辦三列的名單視窗（2026-07-23 使用者指示）：點列先跳視窗確認名單 ——
+   會員名單（今日簽約／本月即將降級）點一位就進該會員資料；未打卡名單只顯示、不可點。
+   資料由 g_dashboard 準備在 window._todoLists。 */
+function openTodoList(kind){
+  const L=(window._todoLists||{})[kind];
+  if(!L) return;
+  const ava=n=>`<span class="tdl-ava">${(n||'—').trim().slice(0,1)}</span>`;
+  const body=(it)=>`${ava(it.name)}<span class="tdl-tx"><span class="tdl-n">${it.name||'—'}</span>${it.sub?`<span class="tdl-s">${it.sub}</span>`:''}</span>`;
+  const rows=(L.items||[]).map(it=> it.id
+    ? `<button class="tdl-row" onclick="openMemberDetail('${it.id}')">${body(it)}<span class="tdl-ar">›</span></button>`
+    : `<div class="tdl-row tdl-static">${body(it)}</div>`).join('');
+  showModal(`<div class="modal-title">${L.title}　<span style="font-size:12.5px;color:var(--t3);font-weight:500;">${(L.items||[]).length} 位</span></div>
+    ${L.note?`<div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:12px;">${L.note}</div>`:''}
+    ${rows?`<div class="tdl-list">${rows}</div>`:`<div class="empty"><div class="em-t">${L.empty||'沒有資料'}</div></div>`}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
 /* 首頁資料簽章（2026-07-23）：只取畫面上會變的東西 —— 當日預約（狀態/時間/教練/點名）、
    當日打卡、當日售票、待審件數，加上各表總筆數與本月簽到數（抽獎名單用）。
    簽章相同就不重繪，免得背景重抓打斷使用者操作。 */
@@ -8978,6 +9060,12 @@ function startDashNowTimer(isToday, axisStart, axisEnd){
    團課/自主訓練/體驗/按摩皆不計 —— 2026-07-23 使用者指示，原團課逐人計名的規則移除）。
    登記＝purchases(source:'lottery', $0，今日營收 KPI 不計)；票券類獎品同步發
    member_tickets(source:'lottery')。獎品票券預設無到期日（與匯入舊折抵券決策一致）。 */
+/* 抽獎獎品票券的權益註記（2026-07-23 使用者定案）：**永久期限、不得轉讓或退費**。
+   期限本來就以 expire_date=null 發放（顯示「永久有效」）；此處只負責把規則寫在畫面上，
+   會員端票券卡與後台票券詳細共用。 */
+function lottoRuleNote(t){
+  return (t && t.source==='lottery') ? '　抽獎獎品：永久有效，不得轉讓或退費。' : '';
+}
 const LOTTO_PRIZES=[
   {key:'pt',    label:'教練課',         kind:'session', cat:'私人教練', glyph:'■', gcol:'var(--course-pt-accent,#1f6f54)'},
   {key:'ms',    label:'運動按摩',       kind:'session', cat:'運動按摩', glyph:'■', gcol:'#2f8f83'},
@@ -20186,7 +20274,7 @@ async function viewLogs(ticket_id){
     tokens=`<div class="mck-dots2" style="margin:2px 0 12px;">${ticketTokens(t,bks,typeMap,doneN)}</div>`;
   }catch(_){}
   showModal(`<div class="modal-title">${t.plan_name||(ty?ty.name:'票券')}</div>
-    <div style="font-size:13px;color:var(--t2);margin-bottom:6px;">剩餘 ${t.sessions_remaining} / ${t.sessions_total} 堂　·　到期 ${fmtExpire(t.expire_date)}</div>
+    <div style="font-size:13px;color:var(--t2);margin-bottom:6px;">剩餘 ${t.sessions_remaining} / ${t.sessions_total} 堂　·　到期 ${fmtExpire(t.expire_date)}${lottoRuleNote(t)}</div>
     ${tokens}
     <div style="font-size:10.5px;color:var(--t3);margin-bottom:14px;">系統 ID：${ticket_id}</div>
     <div style="font-size:12px;font-weight:500;margin-bottom:8px;">使用紀錄</div>
@@ -24182,7 +24270,7 @@ function renderMemTickets(){
         myLogs.map(l=>`<div class="mck-d-log"><span class="mck-d-act">${actLabel[l.action]||l.action}</span>
           <span class="mck-d-delta" style="color:${l.delta>0?'var(--ok)':'var(--danger)'};">${l.delta>0?'+':''}${l.delta}</span>
           <span class="mck-d-time">${l.created_at?new Date(l.created_at).toLocaleDateString('zh-TW',{month:'2-digit',day:'2-digit'}):''}</span></div>`).join('')}
-      <div class="mck-d-rule">使用規則：每堂課預約即扣 1 堂，取消（開課 24 小時前）會退回；到期後未使用堂數失效。</div>
+      <div class="mck-d-rule">使用規則：每堂課預約即扣 1 堂，取消（開課 24 小時前）會退回；到期後未使用堂數失效。${lottoRuleNote(t)}</div>
     </div>`:'';
 
     return `<div class="mck-card mck-${color}${dim?' mck-dim':''}">
@@ -24197,7 +24285,7 @@ function renderMemTickets(){
         ${(t.installment && t.unlocked_sessions!=null && t.unlocked_sessions<total)?`<div class="mck-install">分期方案・目前開通 <b>${t.unlocked_sessions}</b> / ${total} 堂　·　🔒 部分堂數需繳下一期後開通</div>`:''}
         <div class="mck-figures">
           <div class="mck-num"><span class="mck-num-big">${unused}</span><span class="mck-num-tot">/ ${total} 堂</span></div>
-          <div class="mck-exp">${dim?'':'到期'} ${t.expire_date||'—'}</div>
+          <div class="mck-exp">${t.expire_date?`${dim?'':'到期'} ${t.expire_date}`:'永久有效'}</div>
         </div>
       </div>
     </div>`;
