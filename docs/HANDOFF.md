@@ -1,8 +1,9 @@
 # YUGYM 交接說明（跨機器接續）
 
 > 更新：2026-07-18 深夜（收工）。此檔隨 repo `git clone` 帶走，讓另一台電腦（或新的 Claude Code 對話）快速接手。
-> **repo 為公開**，本檔不放任何密碼、不放漏洞細節。測試帳密與資安鑑識紀錄見專案根目錄
-> `PRIVATE_DO_NOT_UPLOAD_security-incident-20260716.md`（受 `.gitignore` 保護，不進版控，只在本機）。
+> **repo 為公開**，本檔不放任何密碼、不放漏洞細節。測試帳密與資安鑑識紀錄放在私有 repo
+> `TYehYu/yugym-private-ops`（本機另有一份 `PRIVATE_DO_NOT_UPLOAD_security-incident-20260716.md`，
+> 受 `.gitignore` 保護，不進版控）。換機器建置與風控檢查清單見 `docs/MAC_SETUP.md`。
 
 ---
 
@@ -1255,7 +1256,9 @@ Slime 10.3 收尾（Hero／工作中心／提醒改用 .slime-flow）。
 3. 設定 git 身分：`git config --global user.name "..."`、`git config --global user.email "..."`
 4. 若要用 gh CLI：`gh auth login`（帳號 TYehYu）。**注意**：Windows 上中文路徑會被編碼弄壞，腳本請放純英文路徑；輸入 `!` 指令前先按 Shift 切英文輸入法，否則會打成全形 `！` 而無反應。
 5. 開新的 Claude Code 對話時，請它先讀 `CLAUDE.md` 與本 `docs/HANDOFF.md`。
-6. **資安鑑識紀錄與測試帳密不在 repo 內** —— 在原機器的 `PRIVATE_DO_NOT_UPLOAD_security-incident-20260716.md`，換機器需另行複製（勿透過公開管道傳送）。
+6. **資安鑑識紀錄與測試帳密不在本 repo 內** —— 改由私有 repo `TYehYu/yugym-private-ops` 承載，
+   `git clone https://github.com/TYehYu/yugym-private-ops.git` 即可取得（該 repo 必須永遠保持 private）。
+   完整步驟與風控檢查清單見 `docs/MAC_SETUP.md`。
 7. 本機預覽：點兩下 `開啟預約系統.bat`（埠 8765），或 `python -m http.server`。
    **`config.js` 決定連哪個庫，本機那份目前指向測試庫**（見 §2）。
 
@@ -1266,9 +1269,12 @@ Slime 10.3 收尾（Hero／工作中心／提醒改用 .slime-flow）。
 一開機就直接連正式庫，改資料＝改真的營運資料。** 上手順序：
 
 ```bash
+# 兩個 repo 都 clone，放在同層（private repo 不要變成主 repo 的子目錄）
 git clone https://github.com/TYehYu/yugym-booking-system-app.git
+git clone https://github.com/TYehYu/yugym-private-ops.git
 cd yugym-booking-system-app
-# ① 先把 config.js 改成測試庫（url/anonKey 見 PRIVATE 檔或 Supabase 後台 → yugym-sprint3-test）
+# ① 先把 config.js 改成測試庫
+cp ../yugym-private-ops/config.test.js ./config.js
 # ② 立刻上保護，避免誤推
 git update-index --skip-worktree config.js
 git status            # config.js 應該不出現在變更清單
@@ -1281,7 +1287,8 @@ git status            # config.js 應該不出現在變更清單
 - 三角色手機版預覽頁（`/__preview`）是**會話用的 scratchpad 腳本，不在 repo**，
   新機器要請 Claude 重建（規格見 §1.4f 工具註記、1.4q ⑤：切角色要用 `w.eval`，
   且要等 SESSION 與 app-screen 就緒才切）。
-- PRIVATE 檔（測試帳密＋資安紀錄）用 AirDrop／USB 帶過去，**不要走公開管道**。
+- PRIVATE 檔（測試帳密＋資安紀錄）已移到私有 repo `TYehYu/yugym-private-ops`，clone 即可，
+  不必再用 AirDrop／USB。**該 repo 必須永遠保持 private，內容含可直接複製的攻擊步驟。**
 - 換行：repo 內是 CRLF/LF 混雜，Mac 的 git 預設 `autocrlf=input` 即可，不必特別設定；
   若 diff 出現整檔變更，先確認不是換行造成的。
 - 中文路徑在 Mac 沒有 Windows 那個編碼問題，但仍建議把腳本放純英文路徑。
