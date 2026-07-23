@@ -6,6 +6,26 @@
 
 ---
 
+## 0. 收工狀態（2026-07-23 21:15，最新）
+
+**線上版本 `260723.2031`**（commit `969072c`；工作區乾淨、無未推 commit）。
+今天分五批上線：行事曆／首頁效能與版面 → 待辦名單視窗與品牌紅月曆 → 會員申辦 QR →
+**Edge Function 資安加固** → 會員自助申辦（安全版）。**正式庫已無待跑 migration。**
+
+**今天最重要的兩件事**
+1. 🔴 **修掉帳號接管漏洞**：兩支 Edge Function 可用公開 anon key 重設任何帳號密碼（含管理員）。
+   已重新部署加固版並以公開 key 實測封閉。細節見本機 PRIVATE 檔「事件二」。
+2. ✅ **會員自助申辦全鏈路完成**：QR（可下載海報）→ 註冊頁走 RPC → 櫃台右下角滑出審核 →
+   核准後綁定既有會員或建檔。測試庫 e2e 通過，正式庫 DB 已就位。
+
+**下次開工的前三件**（詳見 §4 與 §1.4z）
+1. **用真會員手機跑一次完整申辦流程**（申辦→核准→登入看票券）＝ 8 月上線前最後一個未知數。
+2. **輪替 anon key**（使用者在 Supabase 後台操作，之後同步更新 `config.js`）。
+3. 員工 QR 自助建帳（設計已定：專屬詳情頁個人 QR、掃描後先填姓名＋電話比對）。
+
+⚠️ **使用者之後改在 Mac 開發** —— 換機器第一件事看 §7b（`config.js` 預設指向正式庫，
+必須先改測試庫並重新 `skip-worktree`）。
+
 ## 1. 現在的狀態（一句話）
 
 Sprint 2/3 已上線穩定運作；7/17 完成首頁改版（Dashboard V2）；7/18 白天修行事曆競態、票券 V4 落差 1/2、
@@ -1238,6 +1258,37 @@ Slime 10.3 收尾（Hero／工作中心／提醒改用 .slime-flow）。
 6. **資安鑑識紀錄與測試帳密不在 repo 內** —— 在原機器的 `PRIVATE_DO_NOT_UPLOAD_security-incident-20260716.md`，換機器需另行複製（勿透過公開管道傳送）。
 7. 本機預覽：點兩下 `開啟預約系統.bat`（埠 8765），或 `python -m http.server`。
    **`config.js` 決定連哪個庫，本機那份目前指向測試庫**（見 §2）。
+
+### 7b. 搬到 Mac 開發（2026-07-23 使用者告知之後要在 Mac 上做）
+
+**🔴 第一件事：`config.js`。** repo 裡那份指向**正式庫**（Pages 部署要用），Windows 這台是靠
+`git update-index --skip-worktree config.js` 才敢改成測試庫。**全新 clone 沒有這個設定 ——
+一開機就直接連正式庫，改資料＝改真的營運資料。** 上手順序：
+
+```bash
+git clone https://github.com/TYehYu/yugym-booking-system-app.git
+cd yugym-booking-system-app
+# ① 先把 config.js 改成測試庫（url/anonKey 見 PRIVATE 檔或 Supabase 後台 → yugym-sprint3-test）
+# ② 立刻上保護，避免誤推
+git update-index --skip-worktree config.js
+git status            # config.js 應該不出現在變更清單
+```
+要改回正式庫或需要更新這個檔時：`git update-index --no-skip-worktree config.js`。
+
+**其餘差異（相對 Windows 這台）**
+- 本機預覽：`python3 -m http.server 8000` 可用（Windows 這台的 python 壞掉、exit 49，才改用
+  Node 版 serve 腳本）。開 `http://localhost:8000`，`config.js` 要在同層。
+- 三角色手機版預覽頁（`/__preview`）是**會話用的 scratchpad 腳本，不在 repo**，
+  新機器要請 Claude 重建（規格見 §1.4f 工具註記、1.4q ⑤：切角色要用 `w.eval`，
+  且要等 SESSION 與 app-screen 就緒才切）。
+- PRIVATE 檔（測試帳密＋資安紀錄）用 AirDrop／USB 帶過去，**不要走公開管道**。
+- 換行：repo 內是 CRLF/LF 混雜，Mac 的 git 預設 `autocrlf=input` 即可，不必特別設定；
+  若 diff 出現整檔變更，先確認不是換行造成的。
+- 中文路徑在 Mac 沒有 Windows 那個編碼問題，但仍建議把腳本放純英文路徑。
+- Chrome 擴充（Claude in Chrome）在 Mac 一樣可用，實測流程照舊。
+
+**新對話開場建議**：請 Claude 先讀 `CLAUDE.md` 與 `docs/HANDOFF.md`，並確認
+`config.js` 指向測試庫、`git status` 乾淨後再動手。
 
 ## 8. 重要慣例（同 CLAUDE.md）
 
