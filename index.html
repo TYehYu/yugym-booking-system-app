@@ -5432,8 +5432,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260723.0936';
-const APP_VERSION_LABEL='v260723.0936';
+const APP_VERSION='260723.0952';
+const APP_VERSION_LABEL='v260723.0952';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11292,20 +11292,12 @@ async function renderCoachAgenda(){
 
   const todayStr=ymd(TODAY);
   const selDate=window._cagSelDate;
-  /* 每日計數：教練＝自己的堂數；管理員＝全店堂數（2026-07-21 改版） */
-  const cntSrc = SESSION.role==='admin' ? allBk : mine;
+  /* 每日計數（2026-07-23 使用者指示）：一律「本人」當日課堂數——教練＝自己的課；
+     管理員在預約行事曆也只看自己的（全店總數看首頁月曆）。 */
+  const cntSrc = mine;
   const cntByDate={}; cntSrc.forEach(b=>{ cntByDate[b.date]=(cntByDate[b.date]||0)+1; });
-  /* 月曆課數改課種形狀點（2026-07-21 使用者指示）：■一般教練=綠方、●友善=藍圓、◆團課=橘菱，
-     課越多點越大（5+count px，上限 11）。其他課種（自主/體驗）不列。 */
-  const typByDate={};
-  cntSrc.forEach(b=>{ if(!b.date)return; const cc=bkCC(b);
-    const k=cc==='friendly'?'fr':(cc==='group'?'gp':((cc==='pt'||cc==='massage')?'pt':null));
-    if(!k)return; (typByDate[b.date]=typByDate[b.date]||{pt:0,fr:0,gp:0})[k]++; });
-  const _dayMarks=(ds)=>{
-    const tp=typByDate[ds];
-    const mk=(cnt,cls)=>{ if(!cnt)return ''; const s=Math.min(11,5+cnt); return `<i class="dm ${cls}" style="width:${s}px;height:${s}px;"></i>`; };
-    return `<span class="cag-daymarks">${tp?mk(tp.pt,'dm-pt')+mk(tp.fr,'dm-fr')+mk(tp.gp,'dm-gp'):''}</span>`;
-  };
+  /* 月曆日期下方＝課堂數數字（2026-07-23 使用者指示：形狀點退場、改回數字）——
+     教練＝該教練當日總課堂（cntSrc=mine）、管理員＝全店（cntSrc=allBk）。 */
 
   /* ── 上方：首頁同款品牌綠「月曆」（2026-07-21 使用者定版）——
      點日期切換下方日曆、‹›切月；週曆導覽（週切換＋週日期列）退場。 ── */
@@ -11325,7 +11317,7 @@ async function renderCoachAgenda(){
     const n=cntByDate[ds]||0;
     if(ds===selDate||(selDate.slice(0,7)!==`${_my}-${String(_mm+1).padStart(2,'0')}`&&ds===todayStr)) _curWk=Math.floor(_mcArr.length/7);
     _mcArr.push(`<div class="mc-cell${ds===todayStr?' mc-today':''}${ds===selDate&&ds!==todayStr?' mc-sel':''}" onclick="cagSelectDate('${ds}')">
-      <span class="mc-d">${d2}</span>${_dayMarks(ds)}</div>`);
+      <span class="mc-d">${d2}</span><span class="mc-dot${n>0?'':' mc-dot-empty'}">${n>0?n:'0'}</span></div>`);
   }
   _cagAdj.tail.forEach(d=>_mcArr.push(mcAdjCell(d,null,`cagAdjPick('${_nmY}-${String(_nmM).padStart(2,'0')}-${String(d).padStart(2,'0')}')`)));
   let _mcWeeks='';
@@ -11378,11 +11370,22 @@ async function renderCoachAgenda(){
     const showTime=height>=30;
     const zcls = layer==='mine'?'lyr-mine':layer==='other'?'lyr-other':'lyr-group';
     const canClick = layer==='mine' || isAdmin;
-    /* 隱私（2026-07-21 使用者指示）：行事曆一律不顯示會員姓名——以課種名稱顯示
-       （教練課/自主訓練/體驗課…），團課顯示人數；會員資訊點卡開明細再看。 */
-    const CAT_LB={'私人教練':'教練課','自主訓練':'自主訓練','小班肌力':'團體課','體驗':'體驗課','運動按摩':'按摩','場租':'場租'};
-    let disp=CAT_LB[b.category]||'課程';
-    if(layer==='group'||b.category==='小班肌力'){ const n=(Array.isArray(b.member_ids)?b.member_ids.length:0); disp=n>0?`團 ${n}`:'團體課'; }
+    /* 卡片內容（2026-07-23 使用者指示，取代 07-21「一律課種名稱」）：
+       自己的課＝完整資訊（會員名／團 N，可互動）；
+       別的教練的課＝顯示教練名稱、不可互動（教練端；管理員仍可點所有卡）。 */
+    let disp;
+    if(layer==='mine'){
+      if(b.category==='小班肌力'||(Array.isArray(b.member_ids)&&b.member_ids.length)){
+        const n=(Array.isArray(b.member_ids)?b.member_ids.length:0); disp=n>0?`團 ${n}`:'團體課';
+      }else if(b.category==='體驗'){ disp=b.trial_name?b.trial_name+'（體驗）':'體驗課'; }
+      else if(b.member_id){ disp=memMap[b.member_id]||'—'; }
+      else disp={'自主訓練':'自主訓練','場租':'場租'}[b.category]||'課程';
+    }else{
+      const _cid=b.substitute_coach_id||b.coach_id;
+      const _co=_cid?coachObj[_cid]:null;
+      disp=_co?coachDisp(_co):({'自主訓練':'自主','場租':'場租'}[b.category]||'—');
+      if((layer==='group'||b.category==='小班肌力')&&_co) disp=coachDisp(_co);   // 團課也標授課教練
+    }
     // 已簽到：用課程色填滿（白字）；未簽到：白底、左側課程色條
     const fillStyle = done ? `background:${c};border-left-color:${c};` : `border-left-color:${c};`;
     return `<div class="cag-wc ${zcls}${done?' done':''}${dim?' dim':''}" ${layer==='mine'?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${fillStyle}"${canClick?` onclick="wtlCardClick('${b.id}')"`:` onclick="event.stopPropagation()"`}>
@@ -11440,10 +11443,17 @@ async function renderCoachAgenda(){
     const _ov=(list,s,e)=>list.filter(b=>{const bs=timeToMin(b.start_time),be=bs+(b.duration||60);return s<be&&e>bs;});
     const _isPast=(mm)=> selDate<todayStr || (selDate===todayStr && mm<=nowMin);
     let btns='';
-    for(let mm=AG_START; mm<=22*60; mm+=30){
+    /* 2026-07-23 使用者回報兩修：
+       ① 上限 21:00（60 分課結束不超過 22:00 營業時間；原本列到 22:00）。
+       ② 容量改看「瞬時併行數」——原本算整個 60 分窗口的重疊筆數，19:00×2＋20:00×2
+         會被誤算成 4 而擋掉 19:30；實際每個瞬間最多 2 組。逐半小時取峰值。
+         （團課/場租本就不佔容量——CAP_CATS 只含 私人教練/自主/體驗。） */
+    for(let mm=AG_START; mm<=21*60; mm+=30){
       if(_isPast(mm)) continue;
       if(_ov(myDay2,mm,mm+60).length) continue;
-      if(_ov(capDay2,mm,mm+60).length>=3) continue;
+      let _peak=0;
+      for(let q=mm;q<mm+60;q+=30) _peak=Math.max(_peak,_ov(capDay2,q,q+30).length);
+      if(_peak>=3) continue;
       const t=String(Math.floor(mm/60)).padStart(2,'0')+':'+(mm%60?'30':'00');
       btns+=`<button type="button" class="cag-addbtn" style="top:${yOf(mm)+3}px;${mm%60===0?'left:5%;':'left:51%;'}" onclick="event.stopPropagation();cagSlotBook('${t}')">＋ ${t}</button>`;
     }
@@ -17004,7 +17014,15 @@ function knowCardHTML(){
 function knowNext(){
   window._knowIdx=((window._knowIdx||0)+1)%KNOW_CARDS.length;
   const el=document.getElementById('know-card');
-  if(el) el.outerHTML=knowCardHTML();
+  if(!el) return;
+  /* 手機版知識卡在頁面最下方：新內容較短 → 卡片變矮 → 可捲動範圍縮小 → scrollTop 被
+     瀏覽器夾回 → 畫面往上跳（2026-07-23 使用者回報）。對策：換卡高度只增不減（鎖上
+     一張的高度當 min-height，重新導頁自然歸零）＋換卡後還原捲動位置。 */
+  const h=el.offsetHeight, y=window.scrollY;
+  el.outerHTML=knowCardHTML();
+  const el2=document.getElementById('know-card');
+  if(el2 && el2.offsetHeight<h) el2.style.minHeight=h+'px';
+  window.scrollTo(0,y);
 }
 // 員工類型 → 適用規則對照（顯示用；驅動表單顯示哪些區塊）
 const EMP_RULES={
