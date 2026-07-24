@@ -24,6 +24,7 @@
 <!-- ★ MVP 2.0 雲端版（強制 Supabase；未設定金鑰將顯示設定提示、不啟動） -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>window.YUGYM_CONFIG=window.YUGYM_CONFIG||null;</script>
 <!-- 設定方式：建立同層 config.js（內容：window.YUGYM_CONFIG={url:'...',anonKey:'...'}）後，取消下一行註解 -->
 <script src="./config.js"></script>
@@ -5436,6 +5437,16 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
         <div style="text-align:right;margin-top:6px;"><span onclick="openForgotPw()" style="font-size:12px;color:var(--t3);cursor:pointer;text-decoration:underline;">忘記密碼？</span></div>
       </div>
       <button class="btn-primary" onclick="doLogin()">登入</button>
+      <div id="line-login-block" style="display:none;">
+        <div style="display:flex;align-items:center;gap:10px;margin:16px 0 12px;color:var(--t3);font-size:12px;">
+          <span style="flex:1;height:1px;background:var(--bd);"></span>或<span style="flex:1;height:1px;background:var(--bd);"></span>
+        </div>
+        <button id="line-login-btn" onclick="lineLoginStart()" style="width:100%;padding:12px;border:none;border-radius:10px;background:#06C755;color:#fff;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M12 2C6.48 2 2 5.7 2 10.26c0 4.08 3.55 7.5 8.35 8.15.32.07.77.21.88.49.1.25.07.64.03.9l-.14.85c-.04.25-.2.99.87.54s5.76-3.39 7.86-5.8C21.4 13.7 22 12.05 22 10.26 22 5.7 17.52 2 12 2Z"/></svg>
+          用 LINE 登入
+        </button>
+        <div style="font-size:11px;color:var(--t3);text-align:center;margin-top:8px;line-height:1.6;">第一次用 LINE 登入會引導完成會員申辦</div>
+      </div>
       <div class="login-switch"><span onclick="location.hash='staff';switchLoginMode('staff')">員工 / 管理後台登入 →</span></div>
     </div>
 
@@ -5538,8 +5549,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260723.2031';
-const APP_VERSION_LABEL='v260723.2031';
+const APP_VERSION='260724.2308';
+const APP_VERSION_LABEL='v260724.2308';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -5904,7 +5915,13 @@ function fmtPhone(p){ return normPhone(p)||'—'; }
    原本各處直接把 expire_date 內插進模板，畫面會出現「效期至 null」（93% 的票券都中）。
    語意已由營運確認，故直接標示「永久有效」而非模糊的「—」—— 櫃台看到才知道這張票不會
    過期，是正常狀態，不是資料缺漏。 */
-function fmtExpire(d){ return d || '永久有效'; }
+/* 傳入票券物件（第 2 參數）時可分辨「尚未開通」與「永久有效」——
+   兩者 expire_date 都是 null，但意義完全相反：
+   未開通＝還沒約第一堂、效期還沒起算；永久有效＝舊方案本來就不設效期。 */
+function fmtExpire(d,t){
+  if(!d && t && t.valid_days && !t.activated_at) return `未開通（首堂課後 ${t.valid_days} 天）`;
+  return d || '永久有效';
+}
 
 /* ── 登入 ── */
 const ROLE_LABEL={admin:'管理員',coach:'教練',member:'會員',front_desk:'櫃檯'};
@@ -5913,6 +5930,93 @@ function switchLoginMode(mode){
   document.getElementById('login-staff-view').classList.toggle('hidden', mode!=='staff');
   const e1=document.getElementById('login-err'); if(e1)e1.style.display='none';
   const e2=document.getElementById('login-err-staff'); if(e2)e2.style.display='none';
+  // LINE 入口：僅在會員模式且已設定 LIFF 時顯示（feature flag，spec §23：未設定則隱藏）
+  const lb=document.getElementById('line-login-block');
+  if(lb) lb.style.display=(mode==='member' && (window.YUGYM_CONFIG||{}).lineLiffId)?'block':'none';
+}
+
+/* ── LINE 會員入口（2026-07-24）──────────────────────────────
+   官方帳號/LIFF → liff 取 ID token → line-member-auth Edge Function 驗證 →
+   回 OTP 換 Supabase session → 已綁定會員進 app；未綁定引導填姓名+手機走既有審核佇列。
+   Channel Secret 不參與（驗證只用 Channel ID）。設定缺失時整條靜默不啟用。 */
+let _liffReady=false;
+async function ensureLiff(){
+  const cfg=window.YUGYM_CONFIG||{};
+  if(!cfg.lineLiffId) throw new Error('LINE 尚未設定');
+  if(typeof liff==='undefined') throw new Error('LIFF SDK 未載入');
+  if(!_liffReady){ await liff.init({liffId:cfg.lineLiffId}); _liffReady=true; }
+}
+async function lineLoginStart(){
+  const btn=document.getElementById('line-login-btn');
+  const err=document.getElementById('login-err');
+  const showErr=m=>{ if(err){err.textContent=m;err.style.display='block';} };
+  try{
+    if(btn){btn.disabled=true;btn.style.opacity='.6';}
+    await ensureLiff();
+    if(!liff.isLoggedIn()){
+      try{ sessionStorage.setItem('_lineLoginPending','1'); }catch(_){}
+      liff.login({redirectUri:location.href.split('#')[0]}); // 導向 LINE，回來後由 init 續跑
+      return;
+    }
+    await lineExchange();
+  }catch(e){ showErr('LINE 登入失敗：'+(e.message||e)); if(btn){btn.disabled=false;btn.style.opacity='1';} }
+}
+// 取 LINE ID token → 換 Supabase session → 進 app 或引導申辦
+async function lineExchange(){
+  const cfg=window.YUGYM_CONFIG||{};
+  const err=document.getElementById('login-err');
+  const showErr=m=>{ if(err){err.textContent=m;err.style.display='block';} };
+  const idToken=liff.getIDToken();
+  if(!idToken){ showErr('取不到 LINE 身分，請重試'); return; }
+  const r=await fetch(cfg.url+'/functions/v1/line-member-auth',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.anonKey,'apikey':cfg.anonKey},
+    body:JSON.stringify({id_token:idToken})
+  });
+  const d=await r.json().catch(()=>({}));
+  if(!d.ok){ showErr('LINE 驗證失敗：'+(d.error||r.status)); return; }
+  const{error:oe}=await sb.auth.verifyOtp({email:d.email,token:d.otp,type:'email'});
+  if(oe){ showErr('登入建立失敗：'+(oe.message||oe)); return; }
+  if(d.linked){
+    const uid=(await sb.auth.getSession()).data.session.user.id;
+    const mm=(await sb.from('members').select('*').eq('auth_id',uid).maybeSingle()).data;
+    if(!mm){ showErr('會員資料讀取失敗，請洽櫃台'); return; }
+    SESSION={role:'member',id:mm.id,name:mm.name,gender:mm.gender||null};
+    if(mm.must_setup){ showMemberSetup(mm); return; }
+    enterApp(); return;
+  }
+  showLineRegisterPage(d.line_name||''); // 未綁定 → 引導申辦（session 已建立）
+}
+function showLineRegisterPage(prefillName){
+  const nm=(prefillName||'').replace(/"/g,'&quot;');
+  showModal(`<div class="modal-title">完成會員申辦</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.7;margin-bottom:14px;">已用 LINE 驗證身分，請填基本資料。送出後至櫃台確認即完成；<b>原有會員填相同手機</b>即可接回既有票券與預約。</div>
+    <div class="form-row"><label>姓名 *</label><input id="lr-name" value="${nm}"></div>
+    <div class="form-row"><label>手機 *（作為識別）</label><input id="lr-phone" placeholder="0912xxxxxx" inputmode="numeric" maxlength="10"></div>
+    <div class="form-row"><label>Email（選填）</label><input id="lr-email"></div>
+    <div id="lr-err" style="display:none;color:var(--danger);font-size:12.5px;margin:8px 0;"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="lineAbort()">取消</button><button class="btn btn-green" id="lr-submit" onclick="submitLineRegister()">送出申辦</button></div>`);
+}
+async function lineAbort(){ try{await sb.auth.signOut();}catch(_){}; closeModal(); location.reload(); }
+async function submitLineRegister(){
+  const v=id=>(document.getElementById(id).value||'').trim();
+  const err=document.getElementById('lr-err'); const showErr=m=>{err.textContent=m;err.style.display='block';};
+  const name=v('lr-name'), phone=normPhone(v('lr-phone'));
+  if(!name||!phone){ showErr('請填姓名與手機'); return; }
+  if(!/^09\d{8}$/.test(phone)){ showErr('手機格式不正確（09 開頭 10 碼）'); return; }
+  const btn=document.getElementById('lr-submit'); if(btn){btn.disabled=true;btn.textContent='送出中…';}
+  try{
+    const{data:rpc,error}=await sb.rpc('fn_complete_member_registration',{p_name:name,p_phone:phone,p_email:v('lr-email')||null,p_birthday:null});
+    if(error) throw error;
+    if(!rpc||rpc.ok!==true){
+      const code=(rpc&&rpc.error_code)||'';
+      const msg=code==='PHONE.ALREADY_LINKED'?'此手機已綁定其他帳號，請洽櫃台':('送出失敗：'+(code||'未知錯誤'));
+      showErr(msg); if(btn){btn.disabled=false;btn.textContent='送出申辦';} return;
+    }
+    if(rpc.result==='already_linked'){ closeModal(); location.reload(); return; }
+    closeModal();
+    showModal(`<div class="modal-title">申辦已送出</div><div style="font-size:13px;color:var(--t2);line-height:1.8;">編號 <b>${rpc.request_id||''}</b>。<br>請至櫃台完成確認後即可使用。</div><div class="modal-foot"><button class="btn btn-green" onclick="lineAbort()">好</button></div>`);
+  }catch(e){ showErr('送出失敗：'+(e.message||e)); if(btn){btn.disabled=false;btn.textContent='送出申辦';} }
 }
 // 會員登入
 // 忘記密碼（第一版：引導聯繫，後續可串 Supabase 重設信）
@@ -6956,6 +7060,15 @@ function bootYugym(){
       let mm=(await sb.from('members').select('*').eq('auth_id',uid).maybeSingle()).data;
       if(mm){ SESSION={role:'member',id:mm.id,name:mm.name}; enterApp(); return; }
     }
+    // LINE 登入導向返回後自動續跑（liff.login 會離開頁面再導回）
+    try{
+      const cfg=window.YUGYM_CONFIG||{};
+      if(cfg.lineLiffId && typeof liff!=='undefined' && sessionStorage.getItem('_lineLoginPending')==='1'){
+        sessionStorage.removeItem('_lineLoginPending');
+        await ensureLiff();
+        if(liff.isLoggedIn()){ await lineExchange(); return; }
+      }
+    }catch(_){ }
     // 未登入，停在登入頁
   })();
 }
@@ -8071,13 +8184,28 @@ async function markTicketUsedIfDone(ticket_id){
   }catch(_){}
 }
 // 扣一堂
+/* 票券開通（2026-07-24 規則）：效期自「第一堂預約」起算，不是購買日。
+   判準用 valid_days 有值 + activated_at 為空 —— 不能用 expire_date is null，
+   因為那個值在既有資料代表「永久有效」（正式庫 2,129 張舊票靠它）。
+   既有票券 valid_days 為 null，完全不受影響。 */
+async function activateTicketIfNeeded(ticket,booking_id){
+  if(!ticket || !ticket.valid_days || ticket.activated_at) return null;
+  let d=null;
+  if(booking_id){ try{ const b=await dbGet('bookings',booking_id); if(b&&b.date) d=parseYmd(b.date); }catch(_){} }
+  if(!d) d=TODAY;                       // 查不到預約日就退回今天，不讓開通失敗
+  ticket.start_date=ymd(d);
+  ticket.expire_date=ymd(addDays(d,ticket.valid_days));
+  ticket.activated_at=new Date().toISOString();
+  return ticket.expire_date;
+}
 async function deductTicket(ticket,booking_id,operator){
   ticket.sessions_remaining-=1;
   // 注意：預約扣課只代表「已被預約」，不代表「已上完」。
   //  不在此設 used_up（否則約滿但還沒上的票會被誤判用畢、反灰）。
   //  真正的「用畢」由簽到完成後（markTicketUsedIfDone）或前端依已簽到數判斷。
+  const newExpire=await activateTicketIfNeeded(ticket,booking_id);   // 首堂預約 → 開通並起算效期
   await dbPut('member_tickets',ticket);
-  await logTicket(ticket.id,'deduct',-1,booking_id,operator,'預約扣課');
+  await logTicket(ticket.id,'deduct',-1,booking_id,operator,'預約扣課'+(newExpire?`（首堂開通，效期至 ${newExpire}）`:''));
 }
 // 退一堂
 async function refundTicket(ticket_id,booking_id,operator){
@@ -8085,8 +8213,24 @@ async function refundTicket(ticket_id,booking_id,operator){
   if(!t)return;
   t.sessions_remaining+=1;
   if(t.status==='used_up'&&t.sessions_remaining>0) t.status='usable';
+  /* 效期退回未開通（2026-07-24 使用者定案）：這張票若已無任何有效預約，
+     把開通標記清掉、效期歸零，等下次預約再重新起算 —— 避免「約了又取消」
+     白白燒掉效期。只對有 valid_days 的新制票生效，舊票不動。 */
+  let reverted=false;
+  if(t.valid_days && t.activated_at && CLOUD && sb){
+    /* 這裡只需回答「還有沒有其他有效預約」。原本用 dbGetAll('bookings') 會把整張大表
+       拉下來（每取消一筆就拉一次，正式庫預約量大時明顯卡頓），改成帶條件、limit(1)
+       的單筆查詢。查詢失敗時不動開通狀態 —— 寧可保守不退，也不要誤清效期。 */
+    try{
+      const q=await sb.from('bookings').select('id')
+        .eq('ticket_id',ticket_id).neq('status','cancelled').neq('id',booking_id||'').limit(1);
+      if(q && !q.error && (q.data||[]).length===0){
+        t.activated_at=null; t.start_date=null; t.expire_date=null; reverted=true;
+      }
+    }catch(_){}
+  }
   await dbPut('member_tickets',t);
-  await logTicket(ticket_id,'refund',1,booking_id,operator,'取消退課');
+  await logTicket(ticket_id,'refund',1,booking_id,operator,'取消退課'+(reverted?'（已無有效預約，效期退回未開通）':''));
 }
 // ── Sprint 3：建立預約 RPC 相關輔助（旗標關閉時完全不會被呼叫）──
 // 由票種反推 benefit_type（後端 RPC 靠此決定扣哪種票）；查不到回 null
@@ -10200,7 +10344,7 @@ async function renderCalendar(opts){
         <div class="ev-tip-h"><b>${memName}</b><span>${b.start_time}–${minToTime(timeToMin(b.start_time)+(b.duration||60))}</span></div>
         <div class="ev-tip-r">${typeName}${b.format?' · '+b.format:''}</div>
         ${coachName?`<div class="ev-tip-r">教練：${coachName}${subCoachName?`　→ 代課：${subCoachName}`:''}</div>`:''}
-        ${tk?`<div class="ev-tip-tk">${tk.plan_name||'票券'}　剩 ${remain}　<span style="opacity:.7;">效期至 ${fmtExpire(tk.expire_date)}</span>${(window._renewLastBk&&window._renewLastBk[b.id])?`<br><span style="color:#a8642a;font-weight:600;">🔁 本張票最後一堂・記得提醒續約</span>`:((window._installLastBk&&window._installLastBk[b.id])?`<br><span style="color:#a8642a;font-weight:600;">💰 本期最後一堂・下次上課前需繳費</span>`:'')}</div>`:''}
+        ${tk?`<div class="ev-tip-tk">${tk.plan_name||'票券'}　剩 ${remain}　<span style="opacity:.7;">效期至 ${fmtExpire(tk.expire_date,tk)}</span>${(window._renewLastBk&&window._renewLastBk[b.id])?`<br><span style="color:#a8642a;font-weight:600;">🔁 本張票最後一堂・記得提醒續約</span>`:((window._installLastBk&&window._installLastBk[b.id])?`<br><span style="color:#a8642a;font-weight:600;">💰 本期最後一堂・下次上課前需繳費</span>`:'')}</div>`:''}
         <div class="ev-tip-s">${statusLabel(b.status)}</div>
       </div>`;
       const tipUp = timeToMin(b.start_time) >= (CAL_END_H-3)*60; // 接近底部 → 提示往上展開避免被切
@@ -10239,7 +10383,7 @@ async function renderCalendar(opts){
       const _endT = minToTime(timeToMin(b.start_time)+(b.duration||60));
       const _moreHtml = hideMember
         ? `<div class="evc-more"><div class="evc-more-l">${b.start_time}–${_endT}</div><div class="evc-more-l">${typeName}</div><div class="evc-more-l evc-more-st">${statusLabel(b.status)}</div></div>`
-        : `<div class="evc-more"><div class="evc-more-l">${b.start_time}–${_endT}</div><div class="evc-more-l">${typeName}${b.format?' · '+b.format:''}</div>${(coachName||subCoachName)?`<div class="evc-more-l">教練：${subCoachName||coachName}${subCoachName?'（代）':''}</div>`:''}${tk?`<div class="evc-more-l">${tk.plan_name||'票券'}　剩 ${remain}${tk.expire_date?`　效期至 ${fmtExpire(tk.expire_date)}`:''}</div>`:''}<div class="evc-more-l evc-more-st">${statusLabel(b.status)}</div></div>`;
+        : `<div class="evc-more"><div class="evc-more-l">${b.start_time}–${_endT}</div><div class="evc-more-l">${typeName}${b.format?' · '+b.format:''}</div>${(coachName||subCoachName)?`<div class="evc-more-l">教練：${subCoachName||coachName}${subCoachName?'（代）':''}</div>`:''}${tk?`<div class="evc-more-l">${tk.plan_name||'票券'}　剩 ${remain}${tk.expire_date?`　效期至 ${fmtExpire(tk.expire_date,tk)}`:''}</div>`:''}<div class="evc-more-l evc-more-st">${statusLabel(b.status)}</div></div>`;
       // 教練縮寫 tag（第三行）：代課教練優先；遮蔽卡不顯示
       const _coachObj = _coachId ? (coachObjMap[_coachId]||null) : null;
       // 自主訓練用教室/跑步機時，第三列改標場地（無教練故原本是空的；2026-07-23 使用者指示）
@@ -12798,14 +12942,14 @@ async function refreshBkTicket(){
   const fmtLabel=(tk)=> tk.format?`　<b style="color:var(--gold);">${tk.format.toUpperCase()}</b>`:'';
   if(list.length===1){
     const tk=list[0];
-    info.innerHTML=`將扣抵票券　${tk.plan_name||''}${fmtLabel(tk)}　剩餘 <b>${tk.sessions_remaining}</b> 堂　效期至 ${fmtExpire(tk.expire_date)}
+    info.innerHTML=`將扣抵票券　${tk.plan_name||''}${fmtLabel(tk)}　剩餘 <b>${tk.sessions_remaining}</b> 堂　效期至 ${fmtExpire(tk.expire_date,tk)}
       <input type="hidden" id="bk-ticket-sel" value="${tk.id}">`;
   }else{
     // 多張可用票券 → 卡片式選擇（清楚區分 1V1／1V2、剩餘堂數、效期）
     if(!window._bkTkSel || !list.some(x=>x.id===window._bkTkSel)) window._bkTkSel=list[0].id;
     const cards=list.map(tk=>`<button type="button" class="bk-tk-card${window._bkTkSel===tk.id?' on':''}" onclick="pickBkTicket('${tk.id}')">
         <div class="bk-tk-top"><span class="bk-tk-name">${tk.plan_name||'票券'}</span>${tk.format?`<span class="bk-tk-fmt">${tk.format.toUpperCase()}</span>`:''}</div>
-        <div class="bk-tk-meta">剩 <b>${tk.sessions_remaining}</b> 堂　·　效期至 ${fmtExpire(tk.expire_date)}</div>
+        <div class="bk-tk-meta">剩 <b>${tk.sessions_remaining}</b> 堂　·　效期至 ${fmtExpire(tk.expire_date,tk)}</div>
       </button>`).join('');
     info.innerHTML=`<div style="margin-bottom:8px;color:var(--text);">此會員有多張可用票券，請選擇要扣抵：</div>
       <div class="bk-tk-cards">${cards}</div>
@@ -13584,6 +13728,13 @@ async function openBookingDetail(id){
   const editable=!window._coachReadonly && !isMemberView && ownByCoach && b.status!=='cancelled'&&b.status!=='completed'&&b.date>=ymd(TODAY);
   // 簽到僅後台（管理員/櫃台）可代為操作；教練端不能幫簽（會員自行簽到）
   const staffCanCheckin = SESSION.role==='admin' || SESSION.role==='front_desk';
+  /* 團課補簽（2026-07-24 修正）：過期團課原本完全無法補簽。成因是兩條路都斷了——
+     ① 名單裡的逐人簽到鈕綁在 editable 上，而 editable 對 b.date<today 一律 false；
+     ② 標題列那條「過期→補簽」路徑以 !isGroupD 明確排除團課（團課要逐人簽，非整筆簽）。
+     此處只放開「簽到」這一項，不放寬 editable —— 管理名單／改時間對過期課仍鎖住。
+     toggleGroupAttend 本來就沒呼叫 grantCheckinReward，故「補簽不發點」自動成立。 */
+  const groupCkOK = staffCanCheckin && !isMemberView && !window._coachReadonly && b.status!=='cancelled';
+  const isPastD = (parseYmd(b.date)?ymd(parseYmd(b.date)):b.date) < ymd(TODAY);
   const slotDt=new Date(b.date+'T'+b.start_time+':00');
   const within24=(slotDt-TODAY)/3600000 < 24 && (slotDt-TODAY)>=0;
   /* 會員自簽（2026-07-20 使用者定案：簽到放任務課卡、開課前 30 分鐘開放）：
@@ -13615,7 +13766,7 @@ async function openBookingDetail(id){
       _payAlertLine=`<div style="background:#fbf0e2;border:1px solid #e8d3b3;border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13px;color:#8a5e28;font-weight:600;">💰 本期最後一堂　·　下次上課前需向會員收取下一期費用並開通</div>`;
     }
   }
-  const tkLine = tk ? `<div><span style="color:var(--t2);">票券</span>　${tk.plan_name||'票券'}　<b class="num">${tk.sessions_remaining}/${tk.sessions_total}</b>${tk.sessions_remaining<=2?' <span class="tag tag-warn">建議續約</span>':''}${(tk.installment&&typeof tk.installment==='object')?` <span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;">分期・開通 ${tk.unlocked_sessions||tk.installment.current||0}/${tk.sessions_total}</span>`:''}　<span style="color:var(--t3);font-size:11px;">效期至 ${fmtExpire(tk.expire_date)}</span></div>`+_payAlertLine : '';
+  const tkLine = tk ? `<div><span style="color:var(--t2);">票券</span>　${tk.plan_name||'票券'}　<b class="num">${tk.sessions_remaining}/${tk.sessions_total}</b>${tk.sessions_remaining<=2?' <span class="tag tag-warn">建議續約</span>':''}${(tk.installment&&typeof tk.installment==='object')?` <span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;">分期・開通 ${tk.unlocked_sessions||tk.installment.current||0}/${tk.sessions_total}</span>`:''}　<span style="color:var(--t3);font-size:11px;">效期至 ${fmtExpire(tk.expire_date,tk)}</span></div>`+_payAlertLine : '';
   // 個人教練課：票券圓圈進度卡（高亮本堂是第幾堂）
   let tkCircleHtml='';
   const isPersonalPT = tk && b.category!=='小班肌力' && b.category!=='體驗';
@@ -13642,7 +13793,7 @@ async function openBookingDetail(id){
         <span class="bkd-tkcard-prog">本堂 ${curLabel}${tk.sessions_remaining<=2?'　<span class="tag tag-warn" style="font-size:10px;">建議續約</span>':''}</span>
       </div>
       <div class="bkd-dots">${dots}</div>
-      <div style="font-size:11px;color:var(--t3);margin-top:8px;">效期至 ${fmtExpire(tk.expire_date)}${isInstall2?`　·　分期開通 ${unlocked2}/${total}`:''}</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:8px;">效期至 ${fmtExpire(tk.expire_date,tk)}${isInstall2?`　·　分期開通 ${unlocked2}/${total}`:''}</div>
     </div>`+_payAlertLine;
   }
   const memMapD=Object.fromEntries(members.map(m=>[m.id,m.name]));
@@ -13658,14 +13809,15 @@ async function openBookingDetail(id){
       const badge = inHere
         ? '<span class="tag tag-ok" style="font-size:11px;">已簽到</span>'
         : '<span class="tag tag-warn" style="font-size:11px;">未簽到</span>';
-      const btn = (editable && staffCanCheckin)
-        ? `<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="toggleGroupAttend('${b.id}','${mid}')">${inHere?'取消簽到':'簽到'}</button>`
+      const btn = groupCkOK
+        ? `<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="toggleGroupAttend('${b.id}','${mid}')">${inHere?'取消簽到':(isPastD?'補簽':'簽到')}</button>`
         : '';
       return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--bd);">
         <span style="min-width:72px;">${memMapD[mid]||'？'}</span>${badge}${btn}</div>`;
     }).join('') : '<div style="color:var(--t3);font-size:12px;padding:4px 0;">尚未排名單</div>';
     memberLine=`<div><div style="display:flex;align-items:center;margin-bottom:4px;"><span style="color:var(--t2);">名單</span>　<span style="color:var(--t3);font-size:11px;">（${gIdsD.length}/5）</span>
       ${editable?`<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="openGroupMembers('${b.id}')">管理名單</button>`:''}</div>
+      ${(isPastD&&groupCkOK)?`<div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:8px;padding:7px 10px;font-size:11.5px;line-height:1.6;margin-bottom:6px;">⚠ 此課已過期，逐人簽到為<b>逾期補登</b>；名單與時間已鎖定不可更動。</div>`:''}
       <div style="background:var(--card2);border-radius:9px;padding:4px 10px;">${rows}</div></div>`;
   }else{
     memberLine=`<div><span style="color:var(--t2);">會員</span>　${mem?(isMemberView?`<span style="font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'—'}</div>`;
@@ -14797,7 +14949,7 @@ async function openMemberDetail(member_id){
       </div>
       <div class="mck-dots2" style="margin:10px 0 12px;">${circles}</div>
       <div class="md-tk-foot">
-        <span class="md-tk-meta">到期 ${t.expire_date?fmtExpire(t.expire_date):'永久有效'}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span></span>
+        <span class="md-tk-meta">到期 ${fmtExpire(t.expire_date,t)}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span></span>
         ${(inst && (t.unlocked_sessions||0)<total && (SESSION.role==='admin'||SESSION.role==='front_desk'))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
         ${extraBtn||''}
       </div>
@@ -19828,7 +19980,7 @@ PAGES.tickets=async function(){
 
   const stOpt=(v,label)=>`<option value="${v}" ${_tkStatus===v?'selected':''}>${label}</option>`;
   (document.getElementById('tk-body')||{innerHTML:''}).innerHTML=
-  `<div class="card"><div class="card-title">票券列表 <button class="btn btn-green btn-sm" onclick="openGrantModal()">＋ 發放票券</button></div>
+  `<div class="card"><div class="card-title">票券列表 <button class="btn btn-green btn-sm" onclick="openGrantModal()">＋ 發放票券</button>${(SESSION.role==='admin'||SESSION.role==='front_desk')?`<button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="openLegacyImport()" title="自訂票券／舊系統轉入（可套用方案再微調，並指定目前期數與剩餘堂數）">自訂／轉入</button>`:''}</div>
     <div class="tk-filter">
       <input id="tk-q" class="tk-search" placeholder="搜尋會員姓名 / 手機 / 方案名稱" value="${_tkQuery.replace(/"/g,'&quot;')}"
              oninput="clearTimeout(window._tkT);window._tkT=setTimeout(()=>tkSearch(this.value),250)">
@@ -19843,8 +19995,10 @@ PAGES.tickets=async function(){
       <td data-label="方案" class="cell-stack"><div style="font-weight:600;">${t.plan_name||(ty?ty.name:'—')}</div><div><span class="tag tag-${ty?ty.color:'pt'}">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span></div></td>
       <td data-label="會員">${memMap[t.member_id]||'—'}</td>
       <td data-label="剩餘 / 總" class="num">${t.sessions_remaining} / ${t.sessions_total}</td>
-      <!-- expire_date 為 null = 永久有效（舊方案的賣法）。見 fmtExpire()。 -->
-      <td data-label="到期日">${fmtExpire(t.expire_date)}</td>
+      <!-- expire_date 為 null 有兩種意義，由 fmtExpire(d,t) 分辨：
+           有 valid_days 且未 activated_at ＝ 尚未開通（等第一堂預約才起算）；
+           否則 ＝ 永久有效（舊方案的賣法）。 -->
+      <td data-label="到期日">${fmtExpire(t.expire_date,t)}</td>
       <td data-label="來源" style="font-size:11px;color:var(--t2);">${srcLabel(t.source)}</td>
       <td data-label="狀態"><span class="tag ${stTag[t.status]}">${stLabel[t.status]}</span></td>
       <td class="rwd-actions" data-label=""><button class="btn btn-ghost btn-sm" onclick="viewLogs('${t.id}')">詳細</button></td>
@@ -19958,6 +20112,203 @@ async function ctSubmit(){
     await submitGrant();
   }finally{ window._salesSubmitting=false; }
 }
+/* ══ 舊系統票券轉入（2026-07-24）══════════════════════════════════
+   為什麼要獨立於「發放票券」：
+   ① 發放票券必須套 course_plans（堂數/單價/效期全繼承方案），舊系統的方案對不上；
+   ② submitGrant 把分期起始狀態寫死（current:1、只有第1期已繳、剩餘=總堂數），
+      無法表達「舊系統已繳到第2期、已經上過幾堂」。
+   ③ 發放流程含業績歸屬與電子簽約 —— 轉入的舊票不該算新業績、也不需重簽約。
+   故另開一條只給管理員的「原樣轉入」路徑，直接寫 member_tickets。
+   營收處理：source 沿用 'purchase' 但購買日填「舊系統的原始日期」——
+   ① 今日營收 KPI 只算 purchase_date===今天，故不會灌爆當日業績；
+   ② 續約判定會找該會員先前的 source==='purchase' 票，沿用才不會把之後的購買誤判為新約。 */
+async function openLegacyImport(preMember){
+  if(SESSION.role!=='admin'&&SESSION.role!=='front_desk'){ showToast('僅管理員／櫃台可使用'); return; }
+  const[members,types,plans]=await Promise.all([dbGetAll('members'),dbGetAll('ticket_types'),dbGetAll('course_plans')]);
+  window._liMembers=members; window._liPlans=plans;
+  const actives=members.filter(m=>m.status==='active');
+  const memOpts=actives.map(m=>`<option value="${m.id}" ${preMember===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
+  const ttOpts=(types||[]).filter(t=>t.active!==false)
+    .map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  const planOpts=(plans||[]).filter(p=>p.active!==false&&!p.archived)
+    .map(p=>`<option value="${p.id}">${p.name}（${(p.sessions_base||0)+(p.sessions_bonus||0)}堂・$${(p.unit_price||0)*(p.sessions_base||0)}）</option>`).join('');
+  const today=ymd(TODAY);
+  showModal(`<div class="modal-title">自訂票券／舊系統轉入</div>
+    <div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:9px;padding:10px 12px;font-size:12px;line-height:1.7;margin-bottom:14px;">
+      可先<b>套用現有方案</b>快速帶入，再依實際情況調整<b>剩餘堂數</b>與<b>目前第幾期</b>。<br>
+      轉舊票時，購買日請填<b>舊系統的原始日期</b> —— 這樣不會被算進「今日營收」。
+    </div>
+    <div class="form-row"><label>套用方案（選填，帶入後仍可修改）</label>
+      <select id="li-plan" onchange="liApplyPlan()">
+        <option value="">— 不套用，全部自己填 —</option>${planOpts}
+      </select>
+    </div>
+    <div class="form-row"><label>會員 *</label>
+      <input id="li-q" class="gt-search" placeholder="輸入姓名或手機搜尋（共 ${actives.length} 位）" oninput="filterLegacyMembers(this.value)" autocomplete="off">
+      <select id="li-member">${memOpts}</select>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>票種 *（決定可約課程）</label><select id="li-type">${ttOpts}</select></div>
+      <div class="form-row"><label>方案名稱 *</label><input id="li-name" placeholder="例：舊系統－教練課 12 堂"></div>
+    </div>
+    <div style="margin:12px 0 6px;font-size:12.5px;color:var(--t3);letter-spacing:.04em;">堂數</div>
+    <div class="form-2col">
+      <div class="form-row"><label>總堂數 *</label><input type="number" id="li-total" min="1" value="12" oninput="liSync()"></div>
+      <div class="form-row"><label>剩餘堂數 *（舊系統還沒上的）</label><input type="number" id="li-remain" min="0" value="12"></div>
+    </div>
+    <div style="margin:12px 0 6px;font-size:12.5px;color:var(--t3);letter-spacing:.04em;">金額與效期</div>
+    <div class="form-2col">
+      <div class="form-row"><label>總金額 *</label><input type="number" id="li-amount" min="0" value="0" oninput="liSync()"></div>
+      <div class="form-row"><label>付款狀態</label><select id="li-pay"><option value="paid">已付款</option><option value="unpaid">未付款</option></select></div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>購買日 *（舊系統原始日期）</label><input type="date" id="li-pdate" value="${today}"></div>
+      <div class="form-row"><label>開通日 *（第一堂課）</label><input type="date" id="li-start" value="${today}" onchange="liRecalcExpire()"></div>
+    </div>
+    <div class="form-row"><label>到期日 *（自開通日起算）</label><input type="date" id="li-expire" value="${ymd(addDays(TODAY,365))}">
+      <div class="gt-hint" id="li-expire-hint"></div></div>
+    <div style="margin:12px 0 6px;font-size:12.5px;color:var(--t3);letter-spacing:.04em;">分期</div>
+    <div class="form-2col">
+      <div class="form-row"><label>共分幾期</label><input type="number" id="li-count" min="1" max="12" value="1" oninput="liSync()"></div>
+      <div class="form-row"><label>目前第幾期</label><input type="number" id="li-current" min="1" value="1" oninput="liSync()"></div>
+    </div>
+    <div id="li-periods" style="display:none;"></div>
+    <div class="form-row"><label>已開通堂數</label><input type="number" id="li-unlocked" min="0" value="12">
+      <div class="gt-hint" id="li-unlocked-hint"></div></div>
+    <div class="form-row"><label>備註</label><input id="li-note" placeholder="選填，例：舊系統單號"></div>
+    <div id="li-err" style="display:none;color:var(--danger);font-size:12.5px;margin:8px 0;"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" id="li-submit" onclick="submitLegacyImport()">確認轉入</button></div>`);
+  liSync();
+}
+/* 套用方案：把方案的堂數／金額／效期／票種帶進表單，帶完仍可逐欄修改。
+   效期以「購買日 + valid_days」推算 —— 轉舊票時購買日是舊系統的日期，
+   直接用今天推會把效期算得太長，故以購買日為基準。 */
+function liApplyPlan(){
+  const id=(document.getElementById('li-plan')||{}).value;
+  if(!id) return;
+  const p=(window._liPlans||[]).find(x=>x.id===id); if(!p) return;
+  const set=(el,v)=>{ const e=document.getElementById(el); if(e) e.value=v; };
+  const total=(p.sessions_base||0)+(p.sessions_bonus||0);
+  set('li-name',p.name||'');
+  if(p.ticket_type_id) set('li-type',p.ticket_type_id);
+  set('li-total',total);
+  set('li-remain',total);                       // 預設全新未使用，櫃台再改成實際剩餘
+  set('li-amount',(p.unit_price||0)*(p.sessions_base||0));
+  if(!p.installment) set('li-count',1);          // 非分期方案就歸 1；分期方案保留櫃台已填的期數
+  liRecalcExpire();
+  const u=document.getElementById('li-unlocked'); if(u) delete u.dataset.touched;  // 重新接受自動建議
+  liSync();
+}
+/* 效期一律「自開通日（第一堂課）起算」，不是購買日 —— 與票券規格 V4 §3 一致
+   （簽到獎勵券的 grantCheckinReward 也是這樣算）。改開通日或換方案都會重算。 */
+function liRecalcExpire(){
+  const id=(document.getElementById('li-plan')||{}).value;
+  const p=(window._liPlans||[]).find(x=>x.id===id);
+  const sd=(document.getElementById('li-start')||{}).value;
+  const hint=document.getElementById('li-expire-hint');
+  if(!p||!p.valid_days||!sd){ if(hint) hint.textContent=''; return; }
+  const d=parseYmd(sd); if(!d) return;
+  const exp=ymd(addDays(d,p.valid_days));
+  const e=document.getElementById('li-expire'); if(e) e.value=exp;
+  if(hint) hint.textContent=`已依方案效期 ${p.valid_days} 天，自開通日 ${sd} 起算。`;
+}
+function filterLegacyMembers(q){
+  const sel=document.getElementById('li-member'); if(!sel)return;
+  const kw=(q||'').trim().toLowerCase(), kwP=normPhone(q||'');
+  const list=(window._liMembers||[]).filter(m=>m.status==='active').filter(m=>{
+    if(!kw) return true;
+    return String(m.name||'').toLowerCase().includes(kw) || (kwP && String(normPhone(m.phone)||'').includes(kwP));
+  });
+  sel.innerHTML=list.map(m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`).join('')
+    || '<option value="">查無符合的會員</option>';
+}
+// 分期期數／已繳勾選／已開通堂數的連動試算
+function liSync(){
+  const n=v=>Number((document.getElementById(v)||{}).value)||0;
+  const total=n('li-total'), amount=n('li-amount');
+  let count=Math.max(1,n('li-count')), current=Math.max(1,n('li-current'));
+  if(current>count){ current=count; const el=document.getElementById('li-current'); if(el) el.value=count; }
+  const box=document.getElementById('li-periods'); if(!box) return;
+  if(count<=1){ box.style.display='none'; box.innerHTML=''; }
+  else{
+    const segs=splitSessions(total,count), amts=splitAmount(amount,count);
+    box.style.display='';
+    box.innerHTML=`<div style="background:var(--card2);border-radius:9px;padding:10px 12px;margin-bottom:10px;">
+      <div style="font-size:11.5px;color:var(--t3);margin-bottom:7px;">勾選<b>已繳費</b>的期數（預設：第 ${current} 期之前都已繳）</div>
+      ${segs.map((s,i)=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px;">
+        <input type="checkbox" class="li-paid" data-i="${i}" ${i<current?'checked':''}>
+        <span>第 ${i+1} 期</span>
+        <span style="color:var(--t3);">${s} 堂 ・ $${amts[i]}</span></label>`).join('')}
+    </div>`;
+  }
+  // 已開通堂數建議值＝目前期數（含）之前的堂數總和；不分期＝全部
+  const segs2=count>1?splitSessions(total,count):[total];
+  const suggest=segs2.slice(0,count>1?current:1).reduce((a,b)=>a+b,0);
+  const hint=document.getElementById('li-unlocked-hint');
+  if(hint) hint.textContent=`建議值 ${suggest} 堂（第 ${count>1?current:1} 期為止）。可自行調整。`;
+  const uEl=document.getElementById('li-unlocked');
+  if(uEl && !uEl.dataset.touched) uEl.value=suggest;
+  if(uEl && !uEl._bound){ uEl._bound=1; uEl.addEventListener('input',()=>{uEl.dataset.touched='1';}); }
+}
+async function submitLegacyImport(){
+  const g=id=>document.getElementById(id);
+  const n=id=>Number((g(id)||{}).value)||0;
+  const err=g('li-err'); const showErr=m=>{err.textContent=m;err.style.display='block';};
+  const member_id=(g('li-member')||{}).value;
+  const ticket_type_id=(g('li-type')||{}).value;
+  const plan_name=((g('li-name')||{}).value||'').trim();
+  const total=n('li-total'), remain=n('li-remain'), unlocked=n('li-unlocked'), amount=n('li-amount');
+  const count=Math.max(1,n('li-count')), current=Math.max(1,n('li-current'));
+  const pdate=(g('li-pdate')||{}).value, sdate=(g('li-start')||{}).value, expire=(g('li-expire')||{}).value;
+  if(!member_id){ showErr('請選擇會員'); return; }
+  if(!ticket_type_id){ showErr('請選擇票種'); return; }
+  if(!plan_name){ showErr('請填方案名稱'); return; }
+  if(total<1){ showErr('總堂數至少 1 堂'); return; }
+  if(remain<0||remain>total){ showErr('剩餘堂數必須介於 0 與總堂數之間'); return; }
+  if(unlocked<0||unlocked>total){ showErr('已開通堂數必須介於 0 與總堂數之間'); return; }
+  if(current>count){ showErr('目前期數不能大於總期數'); return; }
+  if(!pdate||!sdate||!expire){ showErr('請填購買日、開通日與到期日'); return; }
+  if(expire<sdate){ showErr('到期日不能早於開通日（效期自開通日起算）'); return; }
+  const isInstall=count>1;
+  let installment=null, amountPaid=0;
+  if(isInstall){
+    const segs=splitSessions(total,count), amts=splitAmount(amount,count);
+    const paid=Array.from(document.querySelectorAll('.li-paid')).map(c=>c.checked);
+    installment={count,segments:segs,amounts:amts,paid,current};
+    amountPaid=amts.reduce((s,a,i)=>s+(paid[i]?a:0),0);
+  }else{
+    amountPaid=((g('li-pay')||{}).value==='paid')?amount:0;
+  }
+  const btn=g('li-submit'); if(btn){btn.disabled=true;btn.textContent='轉入中…';}
+  const t={id:uid('TK'),member_id,ticket_type_id,source_plan_id:null,plan_name,format:null,
+    source:'purchase',                              // 沿用 purchase：保住「續約」判定（見上方註解）
+    unit_price:total>0?Math.round(amount/total):0, amount_paid:amountPaid,
+    purchase_date:pdate,start_date:sdate,expire_date:expire,   // 開通日＝第一堂課；效期自它起算
+    // 轉入的票開通日與到期日都是人工指定的既成事實 → 直接標記為已開通，
+    // 不走「首堂預約才起算」那條（valid_days 留空，避免被當成未開通票）。
+    valid_days:null, activated_at:new Date().toISOString(),
+    sessions_total:total,sessions_remaining:remain,
+    unlocked_sessions:unlocked, installment:installment,
+    status:'usable', payment_status:(g('li-pay')||{}).value,
+    invoice_status:'none',                          // 舊系統已開過發票，這裡不再記
+    created_at:new Date().toISOString()};
+  try{
+    await dbPut('member_tickets',t);
+    const note='舊系統轉入（'+plan_name+'）'
+      +(isInstall?`，共${count}期・目前第${current}期`:'')
+      +`，總${total}堂・剩餘${remain}堂・開通${unlocked}堂`
+      +(((g('li-note')||{}).value||'').trim()?'；'+g('li-note').value.trim():'');
+    await logTicket(t.id,'grant',remain,null,SESSION.id,note);
+    dbCacheClear(['member_tickets','ticket_logs']);
+    closeModal();
+    showToast('已轉入票券：'+plan_name);
+    navTo(CUR_PAGE);
+  }catch(e){
+    showErr('轉入失敗：'+(e.message||e));
+    if(btn){btn.disabled=false;btn.textContent='確認轉入';}
+  }
+}
+
 async function openGrantModal(){
   const[members,plans,types]=await Promise.all([dbGetAll('members'),dbGetAll('course_plans'),dbGetAll('ticket_types')]);
   window._grantMembers=members; window._grantPlans=plans; window._grantTypes=types;
@@ -20323,7 +20674,11 @@ async function submitGrant(){
   const paidAmount=Math.max(0,dealAmount-voucherAmt);   // 非分期實收
   const t={id:uid('TK'),member_id,ticket_type_id:plan.ticket_type_id,source_plan_id:plan_id,plan_name:plan.name,format:plan.format||null,source:'purchase',
     unit_price:unitPrice, amount_paid:(isInstall?firstAmount:paidAmount),   // 營收：分期只記第1期實收；折抵後記實收
-    purchase_date:ymd(TODAY),start_date:ymd(TODAY),expire_date:ymd(addDays(TODAY,plan.valid_days)),
+    /* 效期自「第一堂預約」起算（2026-07-24 使用者定案）：售票當下不寫 expire_date，
+       改把方案效期天數記在 valid_days，等 deductTicket 首次扣課時才算到期日。
+       start_date / expire_date / activated_at 皆留空＝尚未開通。 */
+    purchase_date:ymd(TODAY),start_date:null,expire_date:null,
+    valid_days:plan.valid_days||null,
     sessions_total:total,sessions_remaining:total,
     unlocked_sessions:unlocked, installment:installment,   // 分期分段解鎖
     status:'usable',
@@ -20509,7 +20864,7 @@ async function viewLogs(ticket_id){
     tokens=`<div class="mck-dots2" style="margin:2px 0 12px;">${ticketTokens(t,bks,typeMap,doneN)}</div>`;
   }catch(_){}
   showModal(`<div class="modal-title">${t.plan_name||(ty?ty.name:'票券')}</div>
-    <div style="font-size:13px;color:var(--t2);margin-bottom:6px;">剩餘 ${t.sessions_remaining} / ${t.sessions_total} 堂　·　到期 ${fmtExpire(t.expire_date)}${lottoRuleNote(t)}</div>
+    <div style="font-size:13px;color:var(--t2);margin-bottom:6px;">剩餘 ${t.sessions_remaining} / ${t.sessions_total} 堂　·　到期 ${fmtExpire(t.expire_date,t)}${lottoRuleNote(t)}</div>
     ${tokens}
     <div style="font-size:10.5px;color:var(--t3);margin-bottom:14px;">系統 ID：${ticket_id}</div>
     <div style="font-size:12px;font-weight:500;margin-bottom:8px;">使用紀錄</div>
@@ -25567,7 +25922,11 @@ async function _issueTicketsFromApp(a, invoiceStatus, invoiceNumber){
   const dealAmount=a.list_price||(unitPrice*plan.sessions_base);
   const t={id:uid('TK'),member_id:a.member_id,ticket_type_id:plan.ticket_type_id,source_plan_id:plan.id,plan_name:plan.name,format:plan.format||null,source:'purchase',
     unit_price:unitPrice,amount_paid:dealAmount,
-    purchase_date:ymd(TODAY),start_date:ymd(TODAY),expire_date:ymd(addDays(TODAY,plan.valid_days)),
+    /* 效期自「第一堂預約」起算（2026-07-24 使用者定案）：售票當下不寫 expire_date，
+       改把方案效期天數記在 valid_days，等 deductTicket 首次扣課時才算到期日。
+       start_date / expire_date / activated_at 皆留空＝尚未開通。 */
+    purchase_date:ymd(TODAY),start_date:null,expire_date:null,
+    valid_days:plan.valid_days||null,
     sessions_total:total,sessions_remaining:total,status:'usable',
     payment_status:'paid',invoice_status:invoiceStatus||'none',invoice_number:invoiceNumber||null,
     created_at:new Date().toISOString()};
