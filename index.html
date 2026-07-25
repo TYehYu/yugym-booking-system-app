@@ -2868,7 +2868,11 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard-co{font-size:9.5px;font-weight:500;line-height:1;padding:2px 7px;border-radius:999px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
 .tcard-chk{position:absolute;top:2px;right:3px;width:17px;height:17px;border-radius:50%;background:rgba(255,255,255,.9);border:1.2px solid var(--green,#1f6f54);color:var(--green,#1f6f54);font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1;transform:rotate(10deg);}
 /* 抽獎禮物圖示（線條）：未抽＝金色（提醒櫃台）、已抽＝灰色（打開的禮物盒） */
-.tcard-gift{display:flex;align-items:center;justify-content:center;margin:1px 0;}
+.tcard-gift{display:flex;align-items:center;justify-content:center;gap:0;margin:1px 0;position:relative;}
+.tcard-gift-n{font-size:11px;font-weight:800;color:#9a7d1c;line-height:1;margin-left:1px;}
+/* 多個禮物：縮小一點避免爆版、稍微重疊更緊湊可愛 */
+.tcard-gift-multi svg{width:17px;height:17px;margin-left:-3px;}
+.tcard-gift-multi svg:first-child{margin-left:0;}
 .tcard-gift svg{width:20px;height:20px;}
 .tcard-gift-need{color:#C9A227;}
 .tcard-gift-need svg{animation:giftPulse 1.6s ease-in-out infinite;}
@@ -5612,8 +5616,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260725.1612';
-const APP_VERSION_LABEL='v260725.1612';
+const APP_VERSION='260725.1654';
+const APP_VERSION_LABEL='v260725.1654';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9481,8 +9485,12 @@ function lottoMapAll(bookings,purchases,ym){
 // 線條禮物圖示（未抽=禮物盒；已抽=打開的禮物盒）。回傳空字串＝不顯示。
 function lottoGiftIcon(st){
   if(!st) return '';
-  if(st.left>0){ // 需抽獎
-    return `<span class="tcard-gift tcard-gift-need" title="可抽獎 ${st.left} 次"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="9" width="17" height="12" rx="1.2"/><path d="M3 9h18"/><path d="M12 9v12"/><path d="M12 9S10.6 4.5 8 4.5C6.6 4.5 6 5.6 6 6.7 6 8.2 7.4 9 9 9h3z"/><path d="M12 9s1.4-4.5 4-4.5c1.4 0 2 1.1 2 2.2C18 8.2 16.6 9 15 9h-3z"/></svg></span>`;
+  if(st.left>0){ // 需抽獎：依可抽次數顯示多個禮物（3 個以內全畫，超過才用數字避免爆版）
+    const one=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="9" width="17" height="12" rx="1.2"/><path d="M3 9h18"/><path d="M12 9v12"/><path d="M12 9S10.6 4.5 8 4.5C6.6 4.5 6 5.6 6 6.7 6 8.2 7.4 9 9 9h3z"/><path d="M12 9s1.4-4.5 4-4.5c1.4 0 2 1.1 2 2.2C18 8.2 16.6 9 15 9h-3z"/></svg>`;
+    const n=Math.min(st.left,3);
+    let inner=one.repeat(n);
+    if(st.left>3) inner+=`<span class="tcard-gift-n">×${st.left}</span>`;
+    return `<span class="tcard-gift tcard-gift-need${st.left>=2?' tcard-gift-multi':''}" title="可抽獎 ${st.left} 次">${inner}</span>`;
   }
   if(st.used>0){ // 已抽完（打開的禮物盒）
     return `<span class="tcard-gift tcard-gift-done" title="本月已抽完"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11v10h14V11"/><path d="M12 11v10"/><path d="M3.5 7.5l3.5-3 5 3.5"/><path d="M20.5 7.5l-3.5-3-5 3.5"/><path d="M3.5 7.5L12 11l8.5-3.5"/></svg></span>`;
@@ -10755,6 +10763,15 @@ function initCalCursorTip(){
   window.addEventListener('scroll',hide,true);
 }
 try{ initCalCursorTip(); }catch(_){}
+/* IME 組字保護（2026-07-25 使用者回報：Mac 注音打「豬」還沒選成「朱」，搜尋就觸發、
+   下方列表更新導致無法正確輸入）。全域攔截：組字中的 input 事件一律擋掉（不觸發 oninput
+   過濾），選字完成（compositionend）才補發一次 input 讓過濾以最終文字執行。
+   數字/英數輸入不會觸發 composition，故不受影響。 */
+(function imeInputGuard(){
+  document.addEventListener('compositionstart', e=>{ const t=e.target; if(t&&t.tagName==='INPUT') t._imeComposing=true; }, true);
+  document.addEventListener('compositionend', e=>{ const t=e.target; if(t&&t.tagName==='INPUT'){ t._imeComposing=false; try{ t.dispatchEvent(new Event('input',{bubbles:true})); }catch(_){} } }, true);
+  document.addEventListener('input', e=>{ if(e.target && e.target._imeComposing) e.stopImmediatePropagation(); }, true);
+})();
 function CAL_isTreadmillCat(b){ return b.category==='自主訓練'; }
 function CAL_isNormalCat(b){ return !CAL_isGroupCat(b) && !CAL_isTreadmillCat(b); } // 私人教練/友善/體驗
 function CAL_overlap(aS,aE,bS,bE){ return aS < bE && aE > bS; } // 區間重疊公式
@@ -14422,10 +14439,8 @@ async function revokeCheckinReward(b){
   }catch(e){ console.error('revokeCheckinReward fail',e); }
 }
 async function grantCheckinReward(b){  if(b.reward_issued) return true;             // 已發過視為已發
-  // 補簽限制：僅「課程當天」補簽可發點；隔天以後補登不發（維持時段公平）
-  // 用正規化日期字串比較，避免補零差異造成誤判
-  const norm=s=>{const d=parseYmd(s);return d?ymd(d):s;};
-  if(b.makeup && norm(b.date) !== ymd(TODAY)) return false;
+  // 2026-07-25 使用者定案：補簽也發自主訓練點數（原本「僅當天補簽才發」的限制取消）。
+  // 逾期補登的點數改自「今天」起算 7 天（見下方 rewardStart），避免用過去課程日算出已過期的點。
   // 判斷發哪種點數
   //  以 category 為主要依據（穩定值），ticket_type_id 為輔（相容舊寫死值）。
   let isFriendly=false, doGrant=false;
@@ -14480,7 +14495,9 @@ async function grantCheckinReward(b){  if(b.reward_issued) return true;         
   // 目前補簽限當天（見上方 11509），故 courseDate 幾乎等於 today；此處預先對齊規格，
   // 將來若開放隔日補簽，效期自動正確。
   const courseDate=parseYmd(b.date)||TODAY;
-  const expire=ymd(addDays(courseDate,VALID_DAYS)); // 課程日 +7
+  // 效期一律以「課程當天」起算（2026-07-25 使用者定案，補簽亦同）。
+  const rewardStart = courseDate;
+  const expire=ymd(addDays(rewardStart,VALID_DAYS)); // 課程日 +7
   const tk={
     id:uid('TK'),
     member_id:b.member_id,
@@ -14490,7 +14507,7 @@ async function grantCheckinReward(b){  if(b.reward_issued) return true;         
     format:null,
     source:'checkin_grant',
     source_booking_id:b.id,   // 來源簽到預約（防重複發放）
-    purchase_date:today, start_date:ymd(courseDate), expire_date:expire,
+    purchase_date:today, start_date:ymd(rewardStart), expire_date:expire,
     sessions_total:POINTS, sessions_remaining:POINTS,
     status:'usable', payment_status:'paid', invoice_status:'none',
     created_at:new Date().toISOString()
@@ -14522,7 +14539,7 @@ async function openMakeupModal(id){
     <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:13.5px;">
       課程時間　<b>${b.date}（週${WD[parseYmd(b.date).getDay()]}）${b.start_time}</b>
     </div>
-    <div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:9px;padding:11px 13px;font-size:13px;line-height:1.6;">⚠ 補簽為逾期補登，<b>不會發放自主訓練點數</b>（自主訓練點數僅限課程當天簽到發放）。</div>
+    <div style="background:#eef6ee;border:1px solid #cfe3cf;color:#2f6b39;border-radius:9px;padding:11px 13px;font-size:13px;line-height:1.6;">補簽會<b>發放自主訓練點數</b>（教練課／友善／體驗；效期自<b>課程當天</b>起算 7 天）。團課／自主訓練本身不發點。</div>
     <div class="modal-foot" style="margin-top:16px;"><button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button><button class="btn btn-green" onclick="submitMakeup('${id}')">確認補簽</button></div>`);
 }
 async function submitMakeup(id){
@@ -14532,9 +14549,9 @@ async function submitMakeup(id){
   b.checked_in_at=new Date().toISOString();
   b.makeup=true; b.makeup_date=b.date; b.makeup_time=b.start_time;
   await dbPut('bookings',b);
-  await grantCheckinReward(b);  // 補簽為過去課，依規則不發點
+  const _rw=await grantCheckinReward(b);  // 補簽也發自主訓練點數（效期自課程當天起算）
   closeModal();
-  showToast('補簽完成（逾期補登，未發點數）');
+  showToast(_rw?'補簽完成，已發放自主訓練點數':'補簽完成');
   navTo(CUR_PAGE);
 }
 
