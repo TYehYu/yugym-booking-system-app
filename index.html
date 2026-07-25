@@ -5561,8 +5561,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260725.0923';
-const APP_VERSION_LABEL='v260725.0923';
+const APP_VERSION='260725.1011';
+const APP_VERSION_LABEL='v260725.1011';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6222,24 +6222,42 @@ async function submitStaffSetup(id){
 }
 async function doLogout(){ try{await sb.auth.signOut();}catch(_){} sessionStorage.removeItem('previewRole'); SESSION=null;location.reload(); }
 // 修改自己的密碼（登入後）
-// 通知設定（先放 LINE 自動通知開關占位，之後接後端）
-function openNotifSettings(){
+// 通知設定：LINE 開課前一天推播開關（2026-07-25 接後端 members.line_notify，opt-out）
+async function openNotifSettings(){
   closeAcctMenu();
-  const on = !!(window._notifPrefs && window._notifPrefs.line);
+  // 讀目前設定（預設開）；讀失敗就當作開，不擋使用者
+  let on = true;
+  try{
+    if(SESSION && SESSION.id){
+      const m=(await sb.from('members').select('line_notify').eq('id',SESSION.id).maybeSingle()).data;
+      if(m && m.line_notify===false) on=false;
+    }
+  }catch(_){}
   showModal(`<div class="modal-title">通知設定</div>
-    <div style="font-size:12.5px;color:var(--t2);margin-bottom:16px;line-height:1.7;">設定要不要透過 LINE 接收系統自動通知。</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:16px;line-height:1.7;">設定要不要透過 LINE 接收上課提醒。</div>
     <div class="notif-set-row">
-      <div class="notif-set-txt"><div class="notif-set-t">LINE 自動通知</div><div class="notif-set-s">預約提醒、課程異動、票券到期等，透過 LINE 通知你。</div></div>
+      <div class="notif-set-txt"><div class="notif-set-t">LINE 上課提醒</div><div class="notif-set-s">開課前一天，透過 LINE 官方帳號提醒你隔天的課。</div></div>
       <button class="nsw${on?' on':''}" id="ns-line" onclick="this.classList.toggle('on')" role="switch" aria-checked="${on}"><span class="nsw-dot"></span></button>
     </div>
-    <div style="font-size:11.5px;color:var(--t3);margin-top:14px;line-height:1.7;">＊ LINE 通知功能即將開放，敬請期待。</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveNotifSettings()">儲存</button></div>`);
+    <div style="font-size:11.5px;color:var(--t3);margin-top:14px;line-height:1.7;">＊ 需先加入本館 LINE 官方帳號好友才收得到。關閉後就不會再收到上課提醒。</div>
+    <div id="ns-err" style="display:none;color:var(--danger);font-size:12px;margin-top:10px;"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" id="ns-save" onclick="saveNotifSettings()">儲存</button></div>`);
 }
-function saveNotifSettings(){
+async function saveNotifSettings(){
   const el=document.getElementById('ns-line');
-  window._notifPrefs = { line: !!(el&&el.classList.contains('on')) };
-  showToast('已儲存通知設定');
-  closeModal();
+  const on = !!(el&&el.classList.contains('on'));
+  const btn=document.getElementById('ns-save'); if(btn){btn.disabled=true;btn.textContent='儲存中…';}
+  try{
+    const{data,error}=await sb.rpc('fn_set_line_notify',{p_on:on});
+    if(error) throw error;
+    if(!data || data.ok!==true){ throw new Error((data&&data.error_code)||'儲存失敗'); }
+    showToast('已儲存通知設定');
+    closeModal();
+  }catch(e){
+    const err=document.getElementById('ns-err');
+    if(err){ err.textContent='儲存失敗：'+(e.message||e); err.style.display='block'; }
+    if(btn){btn.disabled=false;btn.textContent='儲存';}
+  }
 }
 function openChangePassword(){
   showModal(`<div class="modal-title">修改密碼</div>
