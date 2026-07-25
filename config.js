@@ -1,12 +1,10 @@
-// ── YUGYM 雲端設定範本 ──
-// 1. 把這個檔案改名為 config.js，與 yugym-mvp-supabase.html 放同一層
-// 2. 填入你的 Supabase 專案 URL 與 anon public key
-// 3. 在 yugym-mvp-supabase.html 的 <head> 取消這行註解：
-//      <!-- <script src="./config.js"></script> -->
-// 設定後即進入「雲端模式」（多人共用同一份資料）；
-// 不設定（或刪掉 config.js）則維持「本機 demo 模式」（IndexedDB，單機）。
-
+// ── YUGYM 雲端設定（正式庫）──
+// 此檔會由 GitHub Pages 部署到正式站，指向正式庫 rlpiomzplckzqnqrvrwc。
+// 本機開發請改指測試庫並 git update-index --skip-worktree config.js（見 docs/MAC_SETUP.md）。
 window.YUGYM_CONFIG = {
   url:     'https://rlpiomzplckzqnqrvrwc.supabase.co',
-  anonKey: 'sb_publishable_HXJH0NSDKBYaiFamrN_mpw_U6gH_MdX'
+  anonKey: 'sb_publishable_HXJH0NSDKBYaiFamrN_mpw_U6gH_MdX',
+  // LINE 會員入口（Channel ID / LIFF ID 皆為公開值；Channel Secret 不放前端）
+  lineLiffId:         '2010821438-e2Kcw1Ca',
+  lineLoginChannelId: '2010821438'
 };
