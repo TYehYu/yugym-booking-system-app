@@ -2875,13 +2875,19 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard-ctask .tct-chk{width:12px;height:12px;}
 /* 抽獎禮物圖示（線條）：未抽＝金色（提醒櫃台）、已抽＝灰色（打開的禮物盒） */
 .tcard-gift{display:flex;align-items:center;justify-content:center;gap:0;margin:1px 0;position:relative;}
+.tcard-gift .lg-g{display:inline-flex;}
 .tcard-gift-n{font-size:11px;font-weight:800;color:#9a7d1c;line-height:1;margin-left:1px;}
-/* 多個禮物：縮小一點避免爆版、稍微重疊更緊湊可愛 */
-.tcard-gift-multi svg{width:17px;height:17px;margin-left:-3px;}
-.tcard-gift-multi svg:first-child{margin-left:0;}
+/* 多個禮物：縮小一點避免爆版、稍微重疊更緊湊可愛（重疊改掛在 .lg-g 外層，避免每個 svg 都是 first-child） */
+.tcard-gift-multi svg{width:17px;height:17px;}
+.tcard-gift-multi .lg-g{margin-left:-3px;}
+.tcard-gift-multi .lg-g:first-child{margin-left:0;}
 .tcard-gift svg{width:20px;height:20px;}
+/* 每個禮物各自著色：未抽＝金（跳動提醒）、已抽＝灰 */
+.tcard-gift .lg-need{color:#C9A227;}
+.tcard-gift .lg-need svg{animation:giftPulse 1.6s ease-in-out infinite;}
+.tcard-gift .lg-done{color:#A59E90;}
+/* 舊的整體著色保留為備援（無 .lg-g 子項時） */
 .tcard-gift-need{color:#C9A227;}
-.tcard-gift-need svg{animation:giftPulse 1.6s ease-in-out infinite;}
 .tcard-gift-done{color:#A59E90;}
 @keyframes giftPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.12);}}
 /* ══ 卡片左色條白底改版（2026-07-25 使用者指示・第一版待調）══
@@ -5647,8 +5653,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260725.2055';
-const APP_VERSION_LABEL='v260725.2055';
+const APP_VERSION='260725.2109';
+const APP_VERSION_LABEL='v260725.2109';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9549,19 +9555,26 @@ function lottoMapAll(bookings,purchases,ym){
   return map;
 }
 // 線條禮物圖示（未抽=禮物盒；已抽=打開的禮物盒）。回傳空字串＝不顯示。
+/* 禮物圖示（2026-07-25 使用者指示）：依「本月可抽次數 earned」顯示 earned 個禮物——
+   已抽(used)畫「打開的禮物盒」(灰)、未抽(left)畫「未拆禮物盒」(金)。
+   例：earned=2,used=1 → 1 開+1 關；都抽 → 2 開；都沒抽 → 2 關。>3 個用數字避免爆版。 */
 function lottoGiftIcon(st){
   if(!st) return '';
-  if(st.left>0){ // 需抽獎：依可抽次數顯示多個禮物（3 個以內全畫，超過才用數字避免爆版）
-    const one=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="9" width="17" height="12" rx="1.2"/><path d="M3 9h18"/><path d="M12 9v12"/><path d="M12 9S10.6 4.5 8 4.5C6.6 4.5 6 5.6 6 6.7 6 8.2 7.4 9 9 9h3z"/><path d="M12 9s1.4-4.5 4-4.5c1.4 0 2 1.1 2 2.2C18 8.2 16.6 9 15 9h-3z"/></svg>`;
-    const n=Math.min(st.left,3);
-    let inner=one.repeat(n);
-    if(st.left>3) inner+=`<span class="tcard-gift-n">×${st.left}</span>`;
-    return `<span class="tcard-gift tcard-gift-need${st.left>=2?' tcard-gift-multi':''}" title="可抽獎 ${st.left} 次">${inner}</span>`;
+  const earned=(st.earned!=null)?st.earned:((st.used||0)+(st.left||0));
+  if(earned<=0) return '';
+  const used=Math.max(0,st.used||0), left=Math.max(0,(st.left!=null)?st.left:earned-used);
+  const closedSvg=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="9" width="17" height="12" rx="1.2"/><path d="M3 9h18"/><path d="M12 9v12"/><path d="M12 9S10.6 4.5 8 4.5C6.6 4.5 6 5.6 6 6.7 6 8.2 7.4 9 9 9h3z"/><path d="M12 9s1.4-4.5 4-4.5c1.4 0 2 1.1 2 2.2C18 8.2 16.6 9 15 9h-3z"/></svg>`;
+  const openedSvg=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11v10h14V11"/><path d="M12 11v10"/><path d="M3.5 7.5l3.5-3 5 3.5"/><path d="M20.5 7.5l-3.5-3-5 3.5"/><path d="M3.5 7.5L12 11l8.5-3.5"/></svg>`;
+  const g=(cls,svg)=>`<span class="lg-g ${cls}">${svg}</span>`;
+  let inner;
+  if(earned<=3){
+    inner = g('lg-done',openedSvg).repeat(used) + g('lg-need',closedSvg).repeat(left);
+  }else{
+    inner = (used>0?g('lg-done',openedSvg)+`<span class="tcard-gift-n">×${used}</span>`:'')
+          + (left>0?g('lg-need',closedSvg)+`<span class="tcard-gift-n">×${left}</span>`:'');
   }
-  if(st.used>0){ // 已抽完（打開的禮物盒）
-    return `<span class="tcard-gift tcard-gift-done" title="本月已抽完"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11v10h14V11"/><path d="M12 11v10"/><path d="M3.5 7.5l3.5-3 5 3.5"/><path d="M20.5 7.5l-3.5-3-5 3.5"/><path d="M3.5 7.5L12 11l8.5-3.5"/></svg></span>`;
-  }
-  return '';
+  const cls=(left>0?'tcard-gift-need':'tcard-gift-done')+(earned>=2?' tcard-gift-multi':'');
+  return `<span class="tcard-gift ${cls}" title="本月可抽 ${earned} 次（已抽 ${used}、待抽 ${left}）">${inner}</span>`;
 }
 function lottoStats(bookings,purchases,ym){
   const cnt={};
