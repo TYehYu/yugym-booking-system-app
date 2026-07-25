@@ -5561,8 +5561,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260725.1030';
-const APP_VERSION_LABEL='v260725.1030';
+const APP_VERSION='260725.1043';
+const APP_VERSION_LABEL='v260725.1043';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6017,12 +6017,19 @@ async function lineExchange(){
   showLineRegisterPage(d.line_name||''); // 未綁定 → 引導申辦（session 已建立）
 }
 function showLineRegisterPage(prefillName){
-  const nm=(prefillName||'').replace(/"/g,'&quot;');
+  // 刻意不預填 LINE 暱稱到姓名欄（會讓人直接送出暱稱）；改用姓/名兩格引導填本名，
+  // LINE 暱稱只放一行灰字供對照。本名的最終把關仍是櫃台核准時當面核對。
+  const nm=(prefillName||'').replace(/</g,'&lt;');
   showModal(`<div class="modal-title">完成會員申辦</div>
-    <div style="font-size:12.5px;color:var(--t2);line-height:1.7;margin-bottom:14px;">已用 LINE 驗證身分，請填基本資料。送出後至櫃台確認即完成；<b>原有會員填相同手機</b>即可接回既有票券與預約。</div>
-    <div class="form-row"><label>姓名 *</label><input id="lr-name" value="${nm}"></div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.7;margin-bottom:14px;">已用 LINE 驗證身分，請填<b>真實姓名</b>與手機。送出後至櫃台確認即完成；<b>原有會員填相同手機</b>即可接回既有票券與預約。</div>
+    ${nm?`<div style="font-size:11.5px;color:var(--t3);margin-bottom:10px;">您的 LINE 名稱：${nm}（僅供對照，請於下方填寫本名）</div>`:''}
+    <div class="form-2col">
+      <div class="form-row"><label>姓 *</label><input id="lr-surname" placeholder="例：王" maxlength="10"></div>
+      <div class="form-row"><label>名 *</label><input id="lr-given" placeholder="例：小明" maxlength="20"></div>
+    </div>
     <div class="form-row"><label>手機 *（作為識別）</label><input id="lr-phone" placeholder="0912xxxxxx" inputmode="numeric" maxlength="10"></div>
     <div class="form-row"><label>Email（選填）</label><input id="lr-email"></div>
+    <div style="font-size:11px;color:var(--t3);line-height:1.6;margin-bottom:6px;">＊ 請填與身分證相符的本名，方便櫃台核對；外文姓名可全填於「名」。</div>
     <div id="lr-err" style="display:none;color:var(--danger);font-size:12.5px;margin:8px 0;"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="lineAbort()">取消</button><button class="btn btn-green" id="lr-submit" onclick="submitLineRegister()">送出申辦</button></div>`);
 }
@@ -6030,8 +6037,11 @@ async function lineAbort(){ try{await sb.auth.signOut();}catch(_){}; closeModal(
 async function submitLineRegister(){
   const v=id=>(document.getElementById(id).value||'').trim();
   const err=document.getElementById('lr-err'); const showErr=m=>{err.textContent=m;err.style.display='block';};
-  const name=v('lr-name'), phone=normPhone(v('lr-phone'));
-  if(!name||!phone){ showErr('請填姓名與手機'); return; }
+  const surname=v('lr-surname'), given=v('lr-given');
+  const name=(surname+given).replace(/\s+/g,''); // 姓+名 合成單一 name（中文不空格）
+  const phone=normPhone(v('lr-phone'));
+  if(!surname||!given){ showErr('請填寫姓與名（本名）'); return; }
+  if(!phone){ showErr('請填手機'); return; }
   if(!/^09\d{8}$/.test(phone)){ showErr('手機格式不正確（09 開頭 10 碼）'); return; }
   const btn=document.getElementById('lr-submit'); if(btn){btn.disabled=true;btn.textContent='送出中…';}
   try{
@@ -15555,9 +15565,11 @@ function showRegisterPage(){
     <div class="login-tag">歡迎加入 · 請填寫以下資料完成註冊</div>
     <div class="login-err" id="reg-err"></div>
     <div class="form-2col">
-      <div class="form-row"><label>姓名 *</label><input id="reg-name"></div>
-      <div class="form-row"><label>手機（登入帳號）*</label><input id="reg-phone" placeholder="0912345678" inputmode="numeric" maxlength="10" oninput="checkPhone()"><div id="phone-hint" style="font-size:12px;margin-top:5px;min-height:15px;"></div></div>
+      <div class="form-row"><label>姓 *</label><input id="reg-surname" placeholder="例：王" maxlength="10"></div>
+      <div class="form-row"><label>名 *</label><input id="reg-given" placeholder="例：小明" maxlength="20"></div>
     </div>
+    <div style="font-size:11px;color:var(--t3);line-height:1.6;margin:-4px 0 10px;">＊ 請填與身分證相符的本名，方便櫃台核對；外文姓名可全填於「名」。</div>
+    <div class="form-row"><label>手機（登入帳號）*</label><input id="reg-phone" placeholder="0912345678" inputmode="numeric" maxlength="10" oninput="checkPhone()"><div id="phone-hint" style="font-size:12px;margin-top:5px;min-height:15px;"></div></div>
     <div class="form-row"><label>Email</label><input id="reg-email"></div>
     <div class="form-row"><label>生日</label>${birthdaySelects('reg')}</div>
     <div class="form-row"><label>設定密碼 *（至少 8 個字元）</label>
@@ -15614,9 +15626,11 @@ async function submitRegister(){
   const err=document.getElementById('reg-err');
   const btn=document.getElementById('reg-submit');
   const showErr=(msg)=>{err.textContent=msg;err.style.display='block';err.scrollIntoView({block:'center'});if(btn){btn.disabled=false;btn.textContent='完成註冊';}};
-  const name=v('reg-name'), phone=v('reg-phone'), pw=document.getElementById('reg-pw').value;
+  const name=((v('reg-surname')+v('reg-given'))||'').replace(/\s+/g,''); // 姓+名 合成單一 name
+  const phone=v('reg-phone'), pw=document.getElementById('reg-pw').value;
   const pw2=document.getElementById('reg-pw2')?document.getElementById('reg-pw2').value:'';
-  if(!name||!phone||!pw){showErr('請填寫姓名、手機與密碼');return;}
+  if(!v('reg-surname')||!v('reg-given')){showErr('請填寫姓與名（本名）');return;}
+  if(!phone||!pw){showErr('請填寫手機與密碼');return;}
   if(!/^09\d{8}$/.test(phone)){showErr('手機號碼格式不正確，請輸入 09 開頭的 10 位數字（例：0912345678）');return;}
   if(pw.length<8){showErr('密碼至少需要 8 個字元');return;}
   if(pw!==pw2){showErr('兩次輸入的密碼不一致');return;}
