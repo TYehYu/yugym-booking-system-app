@@ -5561,8 +5561,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260725.1011';
-const APP_VERSION_LABEL='v260725.1011';
+const APP_VERSION='260725.1030';
+const APP_VERSION_LABEL='v260725.1030';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12803,9 +12803,9 @@ async function bkStep2(){
   if(isTrial){
     showModal(`<div class="modal-title">新增體驗課 · 步驟 2 / 2</div>
       ${bkSummaryCard(t,date,time,coach_id?await coachName(coach_id):'')}
-      <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">體驗課會直接建立<b>正式會員檔案</b>（2026-07-21 規則）；同手機已有會員則自動綁定，不重複建立。不扣票券。</div>
+      <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;"><b>留手機</b>→建立正式會員檔案（同手機已有會員則自動綁定）；<b>沒留手機</b>→只記本次體驗，之後可再補建。不扣票券。</div>
       <div class="form-row"><label>客戶姓名（必填）</label><input id="bk-trial-name" placeholder="輸入體驗客戶姓名"></div>
-      <div class="form-row"><label>客戶手機（必填，將作為會員帳號）</label><input id="bk-trial-phone" placeholder="09 開頭 10 碼"></div>
+      <div class="form-row"><label>客戶手機（選填，填了才建立會員帳號）</label><input id="bk-trial-phone" placeholder="09 開頭 10 碼，可留空"></div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button><button class="btn btn-green" onclick="submitBooking()">確認預約</button></div>`);
     return;
   }
@@ -13077,33 +13077,36 @@ async function submitBooking(){
   const isGroup = t.category==='小班肌力';
   const isTrial = t.category==='體驗';
 
-  // ── 體驗課（2026-07-21 商業規則四）：不再用臨時占位——先建「正式會員」再建 Trial Booking。
-  //    同手機已有會員→直接綁定既有會員；電話因此改為必填（會員帳號＝手機號）。
+  // ── 體驗課：留手機→建/綁正式會員；沒留手機→只記體驗（member_id=null，2026-07-25 放寬）。
+  //    2026-07-21 曾把手機設必填（會員帳號＝手機），但有些客人不留電話，故改選填：
+  //    有填才走建會員流程；沒填則沿用舊的「臨時體驗」模式（僅 trial_name，不建會員、不能綁）。
   if(isTrial){
     const tname=(document.getElementById('bk-trial-name').value||'').trim();
-    const tphone=normPhone((document.getElementById('bk-trial-phone').value||'').trim());
+    const tphoneRaw=(document.getElementById('bk-trial-phone').value||'').trim();
+    const tphone=normPhone(tphoneRaw);
     if(!tname){showToast('請填寫客戶姓名');return;}
-    if(!/^09\d{8}$/.test(tphone)){showToast('請填寫 09 開頭的 10 位手機號碼（將建立正式會員檔案）');return;}
-    let mem=null;
-    try{ mem=(await sb.from('members').select('id,name').eq('phone',tphone).maybeSingle()).data; }catch(_){}
-    let memIsNew=false;
-    if(!mem){
-      mem={id:uid('m'),name:tname,phone:tphone,status:'active',level:'regular',must_setup:true,
-        default_coach_id:coach_id||null,created_at:new Date().toISOString()};
-      try{ await dbPut('members',mem); memIsNew=true; }
-      catch(e){ showToast('建立會員失敗：'+(e&&e.message?e.message:e)); return; }
+    if(tphoneRaw && !/^09\d{8}$/.test(tphone)){showToast('手機格式不正確：請填 09 開頭的 10 位數字，或留空');return;}
+    let mem=null, memIsNew=false;
+    if(tphone){
+      try{ mem=(await sb.from('members').select('id,name').eq('phone',tphone).maybeSingle()).data; }catch(_){}
+      if(!mem){
+        mem={id:uid('m'),name:tname,phone:tphone,status:'active',level:'regular',must_setup:true,
+          default_coach_id:coach_id||null,created_at:new Date().toISOString()};
+        try{ await dbPut('members',mem); memIsNew=true; }
+        catch(e){ showToast('建立會員失敗：'+(e&&e.message?e.message:e)); return; }
+      }
     }
     const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id};
     const verr=await validateBooking(vbk,date,time,60);
     if(verr){showToast(verr);return;}
     if(!(await confirmVenueOverflow(vbk))) return; // 場地溢出→教練取消
-    const bk={id:uid('BK'),member_id:mem.id,member_ids:[],trial_name:tname,trial_phone:tphone,
+    const bk={id:uid('BK'),member_id:mem?mem.id:null,member_ids:[],trial_name:tname,trial_phone:tphone||null,
       coach_id,ticket_id:null,ticket_type_id:type_id,category:t.category,format:t.format||null,
       date,start_time:time,duration:60,status:'booked',recurring:false,venue_unit:vbk.venue_unit||null,
       created_by:SESSION.id,created_at:new Date().toISOString()};
     await dbPut('bookings',bk);
     closeModal();
-    showToast(memIsNew?`體驗課已建立，並已建立正式會員「${tname}」`:`體驗課已建立（綁定既有會員 ${mem.name||tname}）`);
+    showToast(mem?(memIsNew?`體驗課已建立，並已建立正式會員「${tname}」`:`體驗課已建立（綁定既有會員 ${mem.name||tname}）`):`體驗課已建立（${tname}，未留手機）`);
     bkAfterSubmit();
     return;
   }
