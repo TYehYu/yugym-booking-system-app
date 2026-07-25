@@ -5560,8 +5560,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260724.2347';
-const APP_VERSION_LABEL='v260724.2347';
+const APP_VERSION='260725.0822';
+const APP_VERSION_LABEL='v260725.0822';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9893,6 +9893,34 @@ PAGES.dashboard=async function(){
   const classCount=rangeBk.length;
   const doneCount=rangeBk.filter(b=>b.status==='completed'||b.status==='checked_in').length;
 
+  /* ── 本月利潤與課堂拆分（2026-07-24 使用者定案）──────────────────
+     利潤 ＝ 銷課金額 − 教練應發薪資。刻意不含房租水電等固定成本，
+     只回答「課堂這門生意本身賺不賺」。
+     · 收入用「銷課金額」（已上完的課 × 該票單堂價），與薪資同一個基礎
+       （都是「實際上了幾堂」），相減才有意義；用售票營收會對不起來。
+     · 薪資用薪資彙總頁的應發總額，走 computeMonthlyPayroll 同一套計算。
+     · 自主訓練排除：無教練、不產生教練薪資成本，計入會虛增利潤。
+     · 堂數顯示：教練課只算「私人教練」（不含體驗）、團體課為「小班肌力」。 */
+  const NON_COACHED=['自主訓練','場租'];
+  const doneBkCoached=rangeBk.filter(b=>(b.status==='completed'||b.status==='checked_in')&&!NON_COACHED.includes(b.category));
+  let coachedFee=0;
+  for(const b of doneBkCoached){
+    const tk=tickets.find(t=>t.id===b.ticket_id);
+    coachedFee+=(tk&&tk.unit_price)?tk.unit_price:0;
+  }
+  const ptClassCount=rangeBk.filter(b=>b.category==='私人教練').length;
+  const groupClassCount=rangeBk.filter(b=>b.category==='小班肌力').length;
+  /* 薪資是「整月」概念，切到「今日」時無法對應 → 只在本月模式算利潤。
+     薪資計算另外要抓 shifts/attendance/薪資模板，故只在需要時才跑。 */
+  let salaryTotal=null, profit=null;
+  if(_dashRange==='month'){
+    try{
+      const pr=await computeMonthlyPayroll(ym);
+      salaryTotal=pr.grandTotal;
+      profit=coachedFee-salaryTotal;
+    }catch(_){ salaryTotal=null; profit=null; }
+  }
+
   // ── 各教練課堂數 ──
   const byCoach={};
   rangeBk.forEach(b=>{const k=b.substitute_coach_id||b.coach_id||'_none';byCoach[k]=(byCoach[k]||0)+1;}); // 有代課算代課教練
@@ -9948,11 +9976,20 @@ PAGES.dashboard=async function(){
   <!-- ═══ 手機版：營運速覽 ═══ -->
   <div class="mobile-only">
     <div class="card" style="padding:4px 14px;">
-      <div style="font-size:11.5px;color:var(--t3);letter-spacing:0.08em;padding:12px 0 4px;font-weight:600;">本月總覽</div>
-      <div class="ov-row"><span class="ov-label">本月營收</span><span class="ov-val">${fmtNT(revenue)}</span></div>
-      <div class="ov-row"><span class="ov-label">本月課堂數</span><span class="ov-val">${classCount} 堂</span></div>
-      <div class="ov-row"><span class="ov-label">本月銷課金額</span><span class="ov-val" style="color:var(--gold-d);">${fmtNT(usedFee)}</span></div>
-      <div class="ov-row"><span class="ov-label">本月銷課堂數</span><span class="ov-val">${doneCount} 堂</span></div>
+      <div style="font-size:11.5px;color:var(--t3);letter-spacing:0.08em;padding:12px 0 4px;font-weight:600;">${_dashRange==='month'?'本月':'今日'}總覽</div>
+      ${profit!=null?`
+      <div class="ov-row" style="align-items:flex-start;">
+        <span class="ov-label">本月利潤
+          <span style="display:block;font-size:10.5px;color:var(--t3);font-weight:400;line-height:1.5;margin-top:2px;">銷課金額 − 教練應發薪資<br>不含房租水電；不計自主訓練</span>
+        </span>
+        <span class="ov-val" style="color:${profit>=0?'var(--green)':'#c0392b'};font-weight:800;">${fmtNT(profit)}</span>
+      </div>
+      <div class="ov-row"><span class="ov-label" style="padding-left:10px;color:var(--t3);">├ 銷課金額（不含自主）</span><span class="ov-val" style="color:var(--gold-d);">${fmtNT(coachedFee)}</span></div>
+      <div class="ov-row"><span class="ov-label" style="padding-left:10px;color:var(--t3);">└ 教練應發薪資</span><span class="ov-val" style="color:#c0392b;">−${fmtNT(salaryTotal)}</span></div>`:''}
+      <div class="ov-row"><span class="ov-label">${_dashRange==='month'?'本月':'今日'}教練課</span><span class="ov-val">${ptClassCount} 堂</span></div>
+      <div class="ov-row"><span class="ov-label">${_dashRange==='month'?'本月':'今日'}團體課</span><span class="ov-val">${groupClassCount} 堂</span></div>
+      <div class="ov-row"><span class="ov-label">${_dashRange==='month'?'本月':'今日'}營收</span><span class="ov-val">${fmtNT(revenue)}</span></div>
+      <div class="ov-row"><span class="ov-label">${_dashRange==='month'?'本月':'今日'}銷課堂數</span><span class="ov-val">${doneCount} 堂</span></div>
     </div>
     <div class="card">
       <div class="card-title">員工表現</div>
@@ -16610,13 +16647,12 @@ async function _doApplyWeekly(overwrite){
 let _payrollMonth=null;
 function payrollShiftMonth(d){ let[y,m]=(_payrollMonth||ymd(TODAY).slice(0,7)).split('-').map(Number); m+=d; if(m<1){m=12;y--;} if(m>12){m=1;y++;} _payrollMonth=`${y}-${String(m).padStart(2,'0')}`; navTo('staff'); }
 function payrollThisMonth(){ _payrollMonth=ymd(TODAY).slice(0,7); navTo('staff'); }
-async function renderPayrollSummary(){
+/* 月薪資計算（2026-07-24 抽出為共用函式）：
+   營運分析的「本月利潤」需要教練薪資總額，必須與薪資彙總頁用同一套邏輯，
+   否則兩頁數字對不起來。此處只算數字、不碰畫面；renderPayrollSummary 負責呈現。 */
+async function computeMonthlyPayroll(month){
   await loadSalaryTemplates();
   const[bookings,coaches,shifts,attendance]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('shifts').catch(()=>[]),dbGetAll('attendance').catch(()=>[])]);
-  if(!_payrollMonth) _payrollMonth=ymd(TODAY).slice(0,7);
-  const month=_payrollMonth;
-  const[my,mm]=month.split('-');
-  const isCur=month===ymd(TODAY).slice(0,7);
   // 只列「計薪的員工」：非設備帳號、在職
   const staff=coaches.filter(c=>c.role!=='front_desk' && c.status!=='inactive' && c.invite_status!=='pending');
 
@@ -16661,6 +16697,14 @@ async function renderPayrollSummary(){
   const grandTotal=rows.reduce((s,r)=>s+(r.countSalary?r.sal.grossPay:0),0);
   const grandNet=rows.reduce((s,r)=>s+(r.countSalary?r.sal.netPay:0),0);
   const grandCoCost=rows.reduce((s,r)=>s+(r.countSalary?r.sal.insCoCost:0),0);
+  return {rows,staff,grandTotal,grandNet,grandCoCost,month};
+}
+async function renderPayrollSummary(){
+  if(!_payrollMonth) _payrollMonth=ymd(TODAY).slice(0,7);
+  const month=_payrollMonth;
+  const[my,mm]=month.split('-');
+  const isCur=month===ymd(TODAY).slice(0,7);
+  const{rows,staff,grandTotal,grandNet,grandCoCost}=await computeMonthlyPayroll(month);
 
   document.getElementById('staff-body').innerHTML=`
   <div class="card ops-datebar" style="margin-bottom:14px;">
