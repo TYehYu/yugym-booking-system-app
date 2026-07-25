@@ -5616,8 +5616,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260725.1654';
-const APP_VERSION_LABEL='v260725.1654';
+const APP_VERSION='260725.1655';
+const APP_VERSION_LABEL='v260725.1655';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19683,6 +19683,8 @@ function openSalesModal(){
     <div class="form-row"><label>課程銷售（簽約）</label><div class="bk-cards">
       ${card('■','var(--course-pt-accent,#1f6f54)','教練課','會員 → 簽約 → 業績歸屬',"salesCourse('pt')")}
       ${card('◆','var(--course-group-accent,#9a5a1e)','團體課','會員 → 售課 → 業績歸屬',"salesCourse('group')")}
+      ${card('◈','#2f8f83','運動按摩','會員 → 售課 → 業績歸屬',"salesCourse('massage')")}
+      ${card('✎','#6a655c','自訂','自填堂數／價格 → 業績歸屬',"salesCustom()")}
     </div></div>
     <div class="form-row"><label>其他收費</label><div class="bk-cards">
       ${card('⬢','#6a655c','場地租借','$200 / 次',"salesFacility()")}
@@ -19694,14 +19696,29 @@ function openSalesModal(){
 /* 銷售順序（2026-07-21 使用者指示）：第一頁產品 → 第二頁會員（非課程在此結帳）→
    第三頁才選業績歸屬教練（僅教練課/團體課需要）。 */
 function salesCourse(kind){
-  window._grantSales={cat:kind==='pt'?'私人教練':'小班肌力', coach_id:null};
+  const cat={pt:'私人教練',group:'小班肌力',massage:'運動按摩'}[kind]||'私人教練';
+  window._grantSales={cat, coach_id:null};
+  openGrantModal();
+}
+/* 自訂銷售（2026-07-25 使用者指示）：賣非現成方案的課，自填票種/堂數/價格/效期，
+   一樣走業績歸屬＋簽約。以 custom 旗標讓 openGrantModal 步驟1 顯示自訂欄位、
+   submitGrant 依自訂值建票。 */
+function salesCustom(){
+  window._grantSales={cat:null, coach_id:null, custom:true};
   openGrantModal();
 }
 // 簽約最後一步：點業績歸屬教練＝完成收款（防連點）
 /* 2026-07-23：點業績歸屬教練後不再直接送出，改進入「簽約」步驟（ctSubmit 才真正發票券） */
 async function salesAttribSubmit(cid){
+  if(window._grantSubmitting) return;   // 防連點
   if(window._grantSalesActive) window._grantSalesActive.coach_id=cid;
-  grantGoStep(4);
+  const s=window._grantSalesActive;
+  // 只有教練課（私人教練，含友善方案）需要簽約；團體課／運動按摩／自訂 → 選完業績歸屬直接發放
+  const needContract = !!(s && s.cat==='私人教練' && !s.custom);
+  if(needContract){ grantGoStep(4); return; }
+  window._grantSubmitting=true;
+  try{ await submitGrant(); }
+  finally{ window._grantSubmitting=false; }
 }
 // 場租：重用預約的場地租借表單，日期=今天、時間=下一個半點（08:00–22:00 內）
 function salesFacility(){
@@ -20601,7 +20618,8 @@ async function openGrantModal(){
   const pre=_grantPreMember;
   const actives=members.filter(m=>m.status==='active');
   const memOpts=actives.map(m=>`<option value="${m.id}" ${pre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
-  showModal(`<div class="modal-title">${sales?(sales.cat==='小班肌力'?'團體課簽約':'教練課簽約'):'發放票券'}</div>
+  const _ttOpts=(types||[]).filter(t=>t.active!==false).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  showModal(`<div class="modal-title">${sales?(sales.custom?'自訂銷售':({'小班肌力':'團體課簽約','運動按摩':'運動按摩銷售','私人教練':'教練課簽約'}[sales.cat]||'課程銷售')):'發放票券'}</div>
     <!-- 步驟1：選會員 + 模板 -->
     <div class="gt-step" data-gtstep="1">
       <!-- 會員搜尋：正式庫有 432 位會員，原本是一個 432 個選項的 <select>，櫃台要在裡面
@@ -20615,10 +20633,23 @@ async function openGrantModal(){
         <select id="gt-member" onchange="refreshGrantPlans()">${memOpts}</select>
         <div id="gt-member-hint" class="gt-hint"></div>
       </div>
-      <div class="form-row"><label>選擇票券模板</label>
+      <div class="form-row" id="gt-picker-row" ${sales&&sales.custom?'style="display:none;"':''}><label>選擇票券模板</label>
         <div id="gt-picker" class="gt-picker"></div>
         <select id="gt-plan" onchange="refreshGrantInfo()" style="display:none;"></select>
       </div>
+      ${sales&&sales.custom?`
+      <div id="gt-custom">
+        <div style="background:var(--card2);border-radius:9px;padding:10px 12px;font-size:11.5px;color:var(--t2);line-height:1.7;margin-bottom:12px;">自訂銷售：自填票種、堂數、價格、效期，之後一樣選業績歸屬與簽約。</div>
+        <div class="form-2col">
+          <div class="form-row"><label>票種 *（決定可約課程）</label><select id="gt-c-type" onchange="grantCustomValidate()">${_ttOpts}</select></div>
+          <div class="form-row"><label>方案名稱 *</label><input id="gt-c-name" placeholder="例：客製 10 堂" oninput="grantCustomValidate()"></div>
+        </div>
+        <div class="form-2col">
+          <div class="form-row"><label>堂數 *</label><input type="number" id="gt-c-sessions" min="1" value="10" oninput="grantCustomValidate()"></div>
+          <div class="form-row"><label>單價 *</label><input type="number" id="gt-c-price" min="0" value="0" oninput="grantCustomValidate()"></div>
+        </div>
+        <div class="form-row"><label>效期天數 *</label><input type="number" id="gt-c-valid" min="1" value="365"></div>
+      </div>`:''}
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" id="gt-next" onclick="grantGoStep(2)" disabled style="opacity:.4;">下一步</button></div>
     </div>
     <!-- 步驟2：購買資訊 -->
@@ -20644,7 +20675,7 @@ async function openGrantModal(){
     </div>
     ${sales?`<!-- 步驟3（僅銷售彈窗入口）：業績歸屬教練，點卡後進簽約；預設會員主責教練 -->
     <div class="gt-step" data-gtstep="3" style="display:none;">
-      <div style="font-size:12px;color:var(--t2);margin-bottom:10px;">點選業績歸屬教練，接著進行簽約。</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px;">${(sales&&sales.cat==='私人教練'&&!sales.custom)?'點選業績歸屬教練，接著進行簽約。':'點選業績歸屬教練即完成銷售發放（本類別免簽約）。'}</div>
       <div class="form-row"><label>業績歸屬教練</label><div class="bk-cards" id="gt-attrib"></div></div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="grantGoStep(2)">上一步</button></div>
     </div>
@@ -20699,7 +20730,27 @@ function memberCanUseLoyal(m){
   const lv=effTier(m); return lv==='loyal'||lv==='vip';
 }
 // 依目前選到的會員，刷新可選方案（主顧客方案僅主顧客/VIP 可見）→ 渲染禮包卡片牆
+/* 自訂銷售（2026-07-25）：由步驟1自填欄位組出合成方案（不進 course_plans）；
+   submitGrant / refreshGrantInfo 在 custom 模式改用此物件。 */
+function _grantCustomPlan(){
+  const v=id=>document.getElementById(id);
+  if(!v('gt-c-name')) return null;
+  const sessions=Math.max(1,Number(v('gt-c-sessions').value)||0);
+  return { id:'__custom__', name:(v('gt-c-name').value||'').trim(), ticket_type_id:(v('gt-c-type').value||null),
+    format:null, unit_price:Math.max(0,Number(v('gt-c-price').value)||0),
+    sessions_base:sessions, sessions_bonus:0, valid_days:Math.max(1,Number(v('gt-c-valid').value)||365),
+    plan_type:'general', installment:false, __custom:true };
+}
+// 自訂欄位齊全才允許「下一步」
+function grantCustomValidate(){
+  const p=_grantCustomPlan();
+  const ok=!!(p && p.name && p.ticket_type_id && p.sessions_base>0);
+  const btn=document.getElementById('gt-next');
+  if(btn){ btn.disabled=!ok; btn.style.opacity=ok?'1':'.4'; }
+}
 function refreshGrantPlans(){
+  // 自訂銷售：不走方案篩選，改由自訂欄位驗證控制「下一步」
+  if(window._grantSalesActive && window._grantSalesActive.custom){ grantCustomValidate(); return; }
   const members=window._grantMembers||[]; const plans=window._grantPlans||[];
   const mid=document.getElementById('gt-member').value;
   const m=members.find(x=>x.id===mid);
@@ -20811,10 +20862,15 @@ function setGrantPlan(planId){
   refreshGrantInfo();
 }
 async function refreshGrantInfo(){
+  const _custom = window._grantSalesActive && window._grantSalesActive.custom;
   const sel=document.getElementById('gt-plan');
-  if(!sel||!sel.value){ const gi=document.getElementById('gt-info'); if(gi)gi.innerHTML='<span style="color:var(--t3);">請依上方步驟選擇授課類型與方案。</span>'; return; }
-  const plan=await dbGet('course_plans',sel.value);
-  if(!plan)return;
+  let plan;
+  if(_custom){ plan=_grantCustomPlan(); if(!plan){ const gi=document.getElementById('gt-info'); if(gi)gi.innerHTML='<span style="color:var(--t3);">請完整填寫自訂內容。</span>'; return; } }
+  else {
+    if(!sel||!sel.value){ const gi=document.getElementById('gt-info'); if(gi)gi.innerHTML='<span style="color:var(--t3);">請依上方步驟選擇授課類型與方案。</span>'; return; }
+    plan=await dbGet('course_plans',sel.value);
+    if(!plan)return;
+  }
   window._grantPlanCache=plan;
   const total=plan.sessions_base+plan.sessions_bonus;
   const listPrice=(plan.unit_price||0)*plan.sessions_base; // 模板定價
@@ -20922,9 +20978,11 @@ function refreshInstallPreview(){
 }
 async function submitGrant(){
   const member_id=document.getElementById('gt-member').value;
-  const plan_id=document.getElementById('gt-plan').value;
-  if(!plan_id){ showToast('此會員沒有可發放的方案'); return; }
-  const plan=await dbGet('course_plans',plan_id);
+  const _custom = window._grantSalesActive && window._grantSalesActive.custom;
+  const plan_id = _custom ? null : document.getElementById('gt-plan').value;
+  if(!_custom && !plan_id){ showToast('此會員沒有可發放的方案'); return; }
+  const plan = _custom ? _grantCustomPlan() : await dbGet('course_plans',plan_id);
+  if(!plan){ showToast(_custom?'請完整填寫自訂內容':'找不到方案'); return; }
   // 防呆：主顧客方案只能發給主顧客/VIP
   if(plan && plan.plan_type==='loyal'){
     const mem0=await dbGet('members',member_id);
