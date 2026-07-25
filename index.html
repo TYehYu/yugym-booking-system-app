@@ -2803,8 +2803,8 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-ev.cal-ev-std .evc-name{font-size:13px;font-weight:800;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
 /* 第三行：教練縮寫 tag（教練色小膠囊，如 RA） */
 .cal-ev.cal-ev-std .evc-coach{font-size:8.5px;font-weight:500;line-height:1;padding:2px 6px;border-radius:999px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
-/* 簽到章（2026-07-21 使用者指示）：✓ 角標改「簽」字小圓章（品牌綠、微旋轉） */
-.cal-ev.cal-ev-std .evc-check{position:absolute;top:2px;right:3px;width:17px;height:17px;border-radius:50%;background:rgba(255,255,255,.9);border:1.2px solid var(--green,#1f6f54);color:var(--green,#1f6f54);font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2;transform:rotate(10deg);}
+/* 簽到章（2026-07-25 使用者指示）：放大移到卡片右下角，只露四分之一圓角落（品牌綠、白字） */
+.cal-ev.cal-ev-std .evc-check{position:absolute;top:auto;left:auto;bottom:0;right:0;width:30px;height:30px;border-radius:100% 0 10px 0;background:var(--green,#1f6f54);border:none;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:flex-end;justify-content:flex-end;padding:0 4px 3px 0;line-height:1;z-index:3;transform:none;}
 /* 簽到：標準卡不整卡填色（保留教練色底），只留右上角勾章；覆蓋舊 .cal-ev-checked 填色 */
 .cal-ev.cal-ev-std.cal-ev-checked{background:transparent !important;}
 /* 7 日窄卡：字級再收一點；極窄卡省略教練 tag */
@@ -2866,7 +2866,7 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard-std .tcard-time{font-size:11.5px;font-weight:500;opacity:.8;}
 .tcard-std .tcard-mem{font-size:14.5px;font-weight:800;}
 .tcard-co{font-size:9.5px;font-weight:500;line-height:1;padding:2px 7px;border-radius:999px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
-.tcard-chk{position:absolute;top:2px;right:3px;width:17px;height:17px;border-radius:50%;background:rgba(255,255,255,.9);border:1.2px solid var(--green,#1f6f54);color:var(--green,#1f6f54);font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1;transform:rotate(10deg);}
+.tcard-chk{position:absolute;top:auto;left:auto;bottom:0;right:0;width:30px;height:30px;border-radius:100% 0 10px 0;background:var(--green,#1f6f54);border:none;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:flex-end;justify-content:flex-end;padding:0 4px 3px 0;line-height:1;transform:none;}
 /* 抽獎禮物圖示（線條）：未抽＝金色（提醒櫃台）、已抽＝灰色（打開的禮物盒） */
 .tcard-gift{display:flex;align-items:center;justify-content:center;gap:0;margin:1px 0;position:relative;}
 .tcard-gift-n{font-size:11px;font-weight:800;color:#9a7d1c;line-height:1;margin-left:1px;}
@@ -5616,8 +5616,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260725.1655';
-const APP_VERSION_LABEL='v260725.1655';
+const APP_VERSION='260725.1852';
+const APP_VERSION_LABEL='v260725.1852';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10020,11 +10020,14 @@ PAGES.dashboard=async function(){
   const revenue=revTickets.reduce((s,t)=>s+(t.amount_paid||0),0);
 
   // ── 已使用課堂費用：本期銷課（已完成/已簽到的預約）× 該票券單堂價 ──
+  // 2026-07-25：無綁票券（舊系統匯入課，ticket_id 為 null）改用 booking.session_fee
+  //（來源＝舊系統「費用換算現金」），否則銷課金額幾乎全 0。優先用票券單價、退而用 session_fee。
+  const _bkFee=(b,tk)=> (tk&&tk.unit_price)?Number(tk.unit_price):(Number(b.session_fee)||0);
   const usedBk=bookings.filter(b=>inRange(b.date)&&(b.status==='completed'||b.status==='checked_in'));
   let usedFee=0;
   for(const b of usedBk){
     const tk=tickets.find(t=>t.id===b.ticket_id);
-    usedFee+=(tk&&tk.unit_price)?tk.unit_price:0;
+    usedFee+=_bkFee(b,tk);
   }
 
   // ── 課堂數 ──
@@ -10045,7 +10048,7 @@ PAGES.dashboard=async function(){
   let coachedFee=0;
   for(const b of doneBkCoached){
     const tk=tickets.find(t=>t.id===b.ticket_id);
-    coachedFee+=(tk&&tk.unit_price)?tk.unit_price:0;
+    coachedFee+=_bkFee(b,tk);
   }
   const ptClassCount=rangeBk.filter(b=>b.category==='私人教練').length;
   const groupClassCount=rangeBk.filter(b=>b.category==='小班肌力').length;
@@ -10071,7 +10074,7 @@ PAGES.dashboard=async function(){
   usedBk.forEach(b=>{
     const tk=tickets.find(t=>t.id===b.ticket_id);
     const name=(tk&&tk.plan_name)||b.category||'—';
-    const fee=(tk&&tk.unit_price)?tk.unit_price:0;
+    const fee=_bkFee(b,tk);
     byPlan[name]=byPlan[name]||{amount:0,used:0};
     byPlan[name].used+=1;          // 銷課堂數
     byPlan[name].amount+=fee;      // 銷課金額（單堂價加總）
@@ -13825,7 +13828,15 @@ function collapseBkCard(){
   window._expandedBkEl = null;
   document.removeEventListener('click', _bkOutsideClose, true);
   // 名單簽到有異動 → 收合時統一重繪行事曆（切換過程不重繪，維持名單面板不被打斷）
-  if(window._rosterDirty){ window._rosterDirty=false; navTo(CUR_PAGE); }
+  // 2026-07-25：強制新鮮重繪——不吃翻頁快照 _calDataCache（不受 dbPut 清快取影響），
+  // 否則群課逐人簽到後可能畫到簽到前的舊卡（沒簽到印章），要等背景校驗才補、時序不穩。
+  // 與個人課簽到（checkInBooking → dbCacheClear + navTo）同等級的即時性。
+  if(window._rosterDirty){
+    window._rosterDirty=false;
+    window._calStepping=false; window._calDataCache=null;   // 逼 renderCalendar 現抓現繪
+    try{ dbCacheClear(['bookings']); }catch(_){}
+    navTo(CUR_PAGE);
+  }
 }
 // Esc 鍵收合（bound once）：展開／周邊按鈕／編輯表單通吃 —— 編輯期間點外收合是停用的
 // （避免原生日期選單誤觸），Esc 提供桌機永遠可用的逃生口
@@ -20619,7 +20630,10 @@ async function openGrantModal(){
   const actives=members.filter(m=>m.status==='active');
   const memOpts=actives.map(m=>`<option value="${m.id}" ${pre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
   const _ttOpts=(types||[]).filter(t=>t.active!==false).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
-  showModal(`<div class="modal-title">${sales?(sales.custom?'自訂銷售':({'小班肌力':'團體課簽約','運動按摩':'運動按摩銷售','私人教練':'教練課簽約'}[sales.cat]||'課程銷售')):'發放票券'}</div>
+  showModal(`<!-- 誘餌欄位：吸走 Chrome 密碼管理員的「儲存／更新密碼」判定，避免自訂銷售打字後跳提示（2026-07-25） -->
+    <input type="text" autocomplete="username" tabindex="-1" aria-hidden="true" style="position:absolute;opacity:0;height:0;width:0;border:0;padding:0;pointer-events:none;">
+    <input type="password" autocomplete="new-password" tabindex="-1" aria-hidden="true" style="position:absolute;opacity:0;height:0;width:0;border:0;padding:0;pointer-events:none;">
+    <div class="modal-title">${sales?(sales.custom?'自訂銷售':({'小班肌力':'團體課簽約','運動按摩':'運動按摩銷售','私人教練':'教練課簽約'}[sales.cat]||'課程銷售')):'發放票券'}</div>
     <!-- 步驟1：選會員 + 模板 -->
     <div class="gt-step" data-gtstep="1">
       <!-- 會員搜尋：正式庫有 432 位會員，原本是一個 432 個選項的 <select>，櫃台要在裡面
@@ -20642,7 +20656,7 @@ async function openGrantModal(){
         <div style="background:var(--card2);border-radius:9px;padding:10px 12px;font-size:11.5px;color:var(--t2);line-height:1.7;margin-bottom:12px;">自訂銷售：自填票種、堂數、價格、效期，之後一樣選業績歸屬與簽約。</div>
         <div class="form-2col">
           <div class="form-row"><label>票種 *（決定可約課程）</label><select id="gt-c-type" onchange="grantCustomValidate()">${_ttOpts}</select></div>
-          <div class="form-row"><label>方案名稱 *</label><input id="gt-c-name" placeholder="例：客製 10 堂" oninput="grantCustomValidate()"></div>
+          <div class="form-row"><label>方案名稱 *</label><input id="gt-c-name" placeholder="例：客製 10 堂" autocomplete="off" oninput="grantCustomValidate()"></div>
         </div>
         <div class="form-2col">
           <div class="form-row"><label>堂數 *</label><input type="number" id="gt-c-sessions" min="1" value="10" oninput="grantCustomValidate()"></div>
