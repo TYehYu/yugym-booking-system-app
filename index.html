@@ -1409,6 +1409,8 @@ tr:hover td{background:var(--card2);}
 .tkc-locked{background:#f0ece3;border:1.5px dashed #cfc7b8;color:#a99;font-size:13px;opacity:0.8;}
 /* 會員明細：加寬、固定高度，內容區內部捲動，切換分頁不忽大忽小 */
 .modal:has(.md-head-card){max-width:720px;height:82vh;display:flex;flex-direction:column;}
+/* 唯讀當月排班表彈窗：寬版（容納整月表格，內部 sh-scroll 再水平捲）2026-07-25 */
+.modal:has(.msched){max-width:min(96vw,1120px);}
 /* 會員詳細單頁：整體限高，基本資料+會員屬性固定，只有票券列表捲動 */
 .modal:has(.md-detail-single){max-width:720px;height:82vh;display:flex;flex-direction:column;}
 .md-detail-single{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
@@ -5653,8 +5655,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260725.2110';
-const APP_VERSION_LABEL='v260725.2110';
+const APP_VERSION='260725.2114';
+const APP_VERSION_LABEL='v260725.2114';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10754,7 +10756,7 @@ async function renderCalendar(opts){
         <button class="btn btn-ghost btn-sm cal-today-btn" onclick="calToToday();navTo(CUR_PAGE)">今天</button>
       </div>
       <div class="cal-head-right">
-        ${opts.coachFilter?`<button class="btn btn-ghost btn-sm" onclick="navTo('coach_shifts','g_supervisor')" title="查看當月排班／值班人員">當月班表</button>`:''}
+        ${opts.coachFilter?`<button class="btn btn-ghost btn-sm" onclick="openMonthScheduleModal()" title="查看當月排班／值班人員（唯讀）">當月排班</button>`:''}
         ${opts.coachFilter?`<button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 新增預約</button>`:''}
       </div>
     </div>
@@ -16711,6 +16713,48 @@ async function applyWeeklyToMonth(){
 }
 function shiftThisMonth(){ _shiftMonth=ymd(TODAY).slice(0,7); navTo('attendance'); }
 
+/* 唯讀當月排班表彈窗（2026-07-25 使用者指示）：行事曆上方「當月排班」→ 跳視窗顯示班表，
+   不可編輯，所以櫃台帳號也能看。重用 sh-* 表格樣式，無 ＋/編輯 入口、不 navTo。 */
+async function openMonthScheduleModal(mon){
+  const [coaches,shifts]=await Promise.all([dbGetAll('coaches'),dbGetAll('shifts').catch(()=>[])]);
+  const month=mon||ymd(TODAY).slice(0,7);
+  const [my,mm]=month.split('-');
+  const _mv=(mo,d)=>{ let[y,m]=mo.split('-').map(Number); m+=d; if(m<1){m=12;y--;} if(m>12){m=1;y++;} return `${y}-${String(m).padStart(2,'0')}`; };
+  const daysInMonth=new Date(Number(my),Number(mm),0).getDate();
+  const monthShifts=shifts.filter(s=>(s.date||'').slice(0,7)===month);
+  const staff=coaches.filter(c=>c.need_duty && c.status!=='inactive' && c.invite_status!=='pending');
+  const empTotal={}; staff.forEach(e=>{ empTotal[e.id]=monthShifts.filter(s=>s.emp_id===e.id).reduce((a,s)=>a+(Number(s.hours)||0),0); });
+  const dayHeaders=Array.from({length:daysInMonth},(_,i)=>{
+    const d=new Date(Number(my),Number(mm)-1,i+1); const dow='日一二三四五六'[d.getDay()]; const wk=d.getDay()===0||d.getDay()===6;
+    return `<th class="sh-dayhead${wk?' sh-wk':''}">${i+1}<br><span>${dow}</span></th>`;
+  }).join('');
+  const rowsHtml=staff.map(e=>{
+    const cells=Array.from({length:daysInMonth},(_,i)=>{
+      const dateStr=`${my}-${mm}-${String(i+1).padStart(2,'0')}`;
+      const dow=new Date(Number(my),Number(mm)-1,i+1).getDay(); const isWk=dow===0||dow===6;
+      const list=monthShifts.filter(s=>s.emp_id===e.id&&s.date===dateStr);
+      const inner=list.map(s=>{ const code=s.code||shiftCode(s.start_time,s.end_time);
+        const leaveTag=s.leave_type?`<span class="sh-leave">${s.leave_type[0]}${s.leave_hours||''}</span>`:'';
+        const main=code?`<span class="sh-chip sh-chip-code"><b class="sh-code">${code}</b></span>`:`<span class="sh-chip sh-chip-time"><span class="sh-t1">${s.start_time}</span><span class="sh-t2">${s.end_time}</span></span>`;
+        return main+leaveTag; }).join('');
+      const hasLeave=list.some(s=>s.leave_type);
+      return `<td class="sh-cell${list.length?' has':''}${hasLeave?' has-leave':''}${isWk?' sh-cell-wk':''} sh-cell-ro">${inner}</td>`;
+    }).join('');
+    return `<tr><td class="sh-name"><div class="shn-row1"><span class="shn-name">${e.name||'—'}</span><span class="shn-hr">${empTotal[e.id].toFixed(1)}h</span></div></td>${cells}</tr>`;
+  }).join('');
+  const isCur=month===ymd(TODAY).slice(0,7);
+  const table = staff.length
+    ? `<div class="sh-scroll" style="max-height:58vh;"><table class="sh-table"><thead><tr><th class="sh-name sh-corner">員工</th>${dayHeaders}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`
+    : `<div class="empty" style="padding:30px;"><div class="em-t">本月沒有排班</div></div>`;
+  showModal(`<div class="msched"><div class="modal-title">${my} 年 ${Number(mm)} 月 排班表 <span class="tag tag-warn" style="font-size:10px;">唯讀</span></div>
+    <div style="display:flex;justify-content:center;gap:8px;margin-bottom:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="openMonthScheduleModal('${_mv(month,-1)}')">‹ 上個月</button>
+      ${isCur?'':`<button class="btn btn-ghost btn-sm" onclick="openMonthScheduleModal('${ymd(TODAY).slice(0,7)}')">回本月</button>`}
+      <button class="btn btn-ghost btn-sm" onclick="openMonthScheduleModal('${_mv(month,1)}')">下個月 ›</button>
+    </div>
+    ${table}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div></div>`);
+}
 async function renderShiftsTab(){
   await loadSalaryTemplates();
   await checkCanEditShifts();
