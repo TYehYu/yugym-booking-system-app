@@ -5655,8 +5655,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260725.2114';
-const APP_VERSION_LABEL='v260725.2114';
+const APP_VERSION='260725.2128';
+const APP_VERSION_LABEL='v260725.2128';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8383,6 +8383,70 @@ async function refundTicket(ticket_id,booking_id,operator){
   }
   await dbPut('member_tickets',t);
   await logTicket(ticket_id,'refund',1,booking_id,operator,'取消退課'+(reverted?'（已無有效預約，效期退回未開通）':''));
+}
+/* ══ 匯入預約的退堂 fallback（2026-07-25 使用者指示）══════════════════════
+   舊系統匯入的預約 ticket_id 為 null（歷史上課沒有逐筆對應到票券），取消時 refundTicket
+   無票可退 → 靜默少一堂。7/25 手動回補的 47 筆就是這樣累積出來的，不補機制會一直復發。
+   作法：沒有 ticket_id 時，用預約上的 ticket_type_id 回頭找該會員的同型票券退 1 堂。
+   ⚠️ 這裡只負責「該退卻找不到票」的情況，不改任何退不退的政策 —— 24 小時規則、
+   force/none 仍由呼叫端決定，本函式只在呼叫端已判定要退時才會被呼叫。 */
+function findRefundTargetTicket(all,member_id,type_id,category,format){
+  const groupMode = category==='小班肌力' || categoryOfTypeId(type_id)==='小班肌力';
+  const cand=(all||[]).filter(t=>{
+    if(t.member_id!==member_id) return false;
+    if(groupMode) return ticketCategoryOf(t)==='小班肌力';  // 團課：不同方案票券互通（同 listUsableTickets）
+    if(type_id) return bkTicketTypeOk(t,type_id);           // 嚴格比對票種＋教練課兼容 VIP/限定舊票
+    return ticketMatchesCategory(t,category);               // 沒帶票種時退而求其次：同類別
+  });
+  /* 挑票順序（2026-07-25 以 7/25 手動回補的 47 筆當對照組驗過）：
+     ① 同 format 優先 —— 會員常同時持有 1V1 與 1V2 的同票種票券，退錯等於換了價值；
+     ② 還有剩餘堂數的票優先 —— 與扣課的挑票邏輯對稱，堂數退回會員正在用的那張，
+        而非某張早就用完的舊票（正式庫 2,424 張票裡有 1,754 張剩餘為 0）；
+     ③ 較早到期者優先；④ 最後用 id 讓結果穩定可重現。 */
+  const fmtOk=t=>!!format && t.format===format;
+  cand.sort((a,b)=>{
+    const af=fmtOk(a)?0:1, bf=fmtOk(b)?0:1;
+    if(af!==bf) return af-bf;
+    const ar=(a.sessions_remaining>0)?0:1, br=(b.sessions_remaining>0)?0:1;
+    if(ar!==br) return ar-br;
+    const ae=(a.expire_date||'9999-12-31'), be=(b.expire_date||'9999-12-31');
+    if(ae!==be) return ae.localeCompare(be);
+    return String(a.id).localeCompare(String(b.id));
+  });
+  return cand[0]||null;
+}
+/* 對一筆沒有 ticket_id 的預約補退票；回傳實際退掉的堂數（0 = 找不到對應票券，維持不退）。 */
+async function refundLegacyBooking(b,operator){
+  if(!b || b.ticket_id) return 0;            // 有票就該走 refundTicket，不歸這裡管
+  if(b.category==='體驗') return 0;          // 體驗課本來就不扣票
+  // 要退給誰：團課可能多人掛在 member_ids，其餘就是 member_id 本人
+  const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)
+    ? b.member_ids.slice() : (b.member_id?[b.member_id]:[]);
+  if(!ids.length) return 0;
+  const all=await dbGetAll('member_tickets');
+  if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
+  /* 防重複退：這筆預約已經退過的會員不再退第二次 —— 涵蓋 7/25 用批次 SQL 補的
+     `LG-CXR-` 那 47 筆，以及任何重複觸發。查詢失敗時整筆放棄：寧可少退（事後補得回來）
+     也不要重複退（帳面多出來的堂數很難查）。 */
+  const done=new Set();
+  if(CLOUD && sb){
+    try{
+      const q=await sb.from('ticket_logs').select('ticket_id')
+        .eq('booking_id',b.id).eq('action','refund');
+      if(!q || q.error) return 0;
+      (q.data||[]).forEach(r=>{ const t=all.find(x=>x.id===r.ticket_id); if(t) done.add(t.member_id); });
+    }catch(_){ return 0; }
+  }
+  let n=0;
+  for(const mid of ids){
+    if(done.has(mid)) continue;
+    const tk=findRefundTargetTicket(all,mid,b.ticket_type_id,b.category,b.format);
+    if(!tk) continue;
+    done.add(mid);
+    await refundTicket(tk.id,b.id,operator);
+    n++;
+  }
+  return n;
 }
 // ── Sprint 3：建立預約 RPC 相關輔助（旗標關閉時完全不會被呼叫）──
 // 由票種反推 benefit_type（後端 RPC 靠此決定扣哪種票）；查不到回 null
@@ -13835,11 +13899,14 @@ async function bkCoachLeave(id){
        coach_leave），狀態寫入會先失敗、乾淨中止，不會發生「票退了狀態沒改」的不一致。 */
     b.status='coach_leave';
     await dbPut('bookings',b);
-    if(b.ticket_id){ await refundTicket(b.ticket_id,b.id,SESSION.id); }
+    let leaveRefunded=false;
+    if(b.ticket_id){ await refundTicket(b.ticket_id,b.id,SESSION.id); leaveRefunded=true; }
+    // 匯入的舊預約沒有 ticket_id，用票種回頭找票退；找不到就據實不宣稱已退
+    else{ leaveRefunded = (await refundLegacyBooking(b,SESSION.id))>0; }
     try{ if(b.member_id) await pushNotification(b.member_id,'cancel','教練請假通知',
-      `您的${b.category||'課程'}（${b.date} ${b.start_time}）因教練請假，票券已退回；若您仍到場自主訓練並簽到，將照常發放自主訓練點數。`); }catch(_){}
+      `您的${b.category||'課程'}（${b.date} ${b.start_time}）因教練請假${leaveRefunded?'，票券已退回':''}；若您仍到場自主訓練並簽到，將照常發放自主訓練點數。`); }catch(_){}
     collapseBkCard();
-    showToast('已標記教練請假：票券已退回、課卡保留');
+    showToast(leaveRefunded?'已標記教練請假：票券已退回、課卡保留':'已標記教練請假：課卡保留（未退票券，請確認堂數）');
     navTo(CUR_PAGE);
   }catch(e){ showToast('標記請假失敗：'+(e&&e.message?e.message:e)); }
 }
@@ -14861,7 +14928,7 @@ async function cancelBooking(id, refundMode){
   b.refund_waived = !doRefund;      // 記錄是否扣課不退（供補課券判斷）
   await dbPut('bookings',b);
 
-  let refundedCount=0;
+  let refundedCount=0, refundMissed=false;
   if(doRefund){
     if(b.category==='小班肌力'){
       const logs=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='deduct');
@@ -14877,8 +14944,14 @@ async function cancelBooking(id, refundMode){
       await refundTicket(b.ticket_id,b.id,SESSION.id);
       refundedCount=1;
     }
+    /* 匯入的舊預約沒有 ticket_id（團課則連 deduct 帳本都沒有）→ 用票種回頭找票退。
+       體驗課與找不到對應票券的情況會回 0，維持原本「不退」的行為。 */
+    if(refundedCount===0){
+      refundedCount=await refundLegacyBooking(b,SESSION.id);
+      // 該退卻連一張同型票券都找不到 → 明確告訴櫃台，別再變成一筆靜默的「取消未退堂」
+      refundMissed = refundedCount===0 && b.category!=='體驗' && !!(b.member_id||(b.member_ids||[]).length);
+    }
   }
-  // 體驗課（ticket_id 為 null）：本就不退
 
   // 通知文案
   let body;
@@ -14896,6 +14969,7 @@ async function cancelBooking(id, refundMode){
 
   closeModal();
   if(refundedCount>0) showToast(`已取消預約，退回 ${refundedCount} 堂票券`);
+  else if(refundMissed) showToast('已取消預約，但找不到可退的票券 —— 請到會員票券手動確認堂數');
   else if(within24 && refundMode!=='none' && refundMode!=='force') showToast('已取消預約（24 小時內，扣課不退）');
   else showToast('已取消預約');
   navTo(CUR_PAGE);
@@ -18799,7 +18873,7 @@ function ppRecordHtml(){
   if(PP.kind==='member'){
     // Member Workspace：與 Employee 相同，改成 Dashboard 摘要卡 → ppScopeGo 進管理員視角頁
     return `<div class="pp-card">
-      <div class="pp-card-t">工作紀錄</div>
+      <div class="pp-card-t">活動紀錄</div>
       <div class="pp-card-tip">此處僅顯示摘要，點「查看全部」進入完整功能頁。</div>
       <div class="pp-dash">
         <!-- 2026-07-21 使用者指示：名片內的紀錄入口一律「視窗顯示」，不再跳整頁 -->
@@ -18982,7 +19056,7 @@ function ppRenderBody(){
   const host=document.getElementById('pp-host');
   if(!host) return;
   const isM=PP.kind==='member';
-  // 會員（2026-07-25 使用者指示）：拿掉分頁；檢視時 body 只顯示「工作紀錄」，編輯時顯示可編欄位
+  // 會員（2026-07-25 使用者指示）：拿掉分頁；檢視時 body 只顯示「活動紀錄」，編輯時顯示可編欄位
   const tabs = isM ? '' : ppTabsHtml();
   const body = (isM && !PP.editing) ? ppRecordHtml() : ppBodyHtml();
   host.innerHTML = ppHeaderHtml() + tabs + `<div id="pp-body">${body}</div>`
