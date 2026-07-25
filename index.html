@@ -5182,6 +5182,15 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .dr-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
 .dr-center b{font-family:var(--num);font-size:14.5px;font-weight:800;color:#173B2F;}
 .dr-center span{font-size:9px;color:var(--t3);margin-left:1px;}
+/* ── 水杯式值班進度圓（2026-07-25 使用者指示）：從底部注水、值班中跑步小人、完成顯示時數 ── */
+.dr-cup .dr-wrap svg{transform:none;}                 /* 水杯不旋轉（覆蓋 .dr-wrap svg 的 -90deg） */
+.dr-cup-track{fill:rgba(0,61,50,.05);stroke:rgba(0,61,50,.14);stroke-width:2;}
+.dr-cup-rim{fill:none;stroke-width:2.5;}
+.dr-water{transform-box:fill-box;transform-origin:center bottom;animation:drRise .9s var(--ease-out,ease-out) both;opacity:.82;}
+@keyframes drRise{from{transform:scaleY(0);}to{transform:scaleY(1);}}
+.dr-center-run .dr-runner{width:24px;height:24px;fill:#2E2A24;filter:drop-shadow(0 0 1.4px rgba(255,255,255,.95));animation:drBob 1s ease-in-out infinite;}
+@keyframes drBob{0%,100%{transform:translateY(0);}50%{transform:translateY(-2.5px);}}
+.dr-center-done b{text-shadow:0 0 3px rgba(255,255,255,.9),0 0 3px rgba(255,255,255,.9);}
 .dr-name{font-size:12.5px;font-weight:600;color:var(--text);max-width:96px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .dr-time{font-size:10.5px;color:var(--t3);font-family:var(--num);white-space:nowrap;}
 .mc-dutyring-card .mc-duty-empty{padding:10px 4px;font-size:12.5px;color:var(--t3);}
@@ -5616,8 +5625,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260725.1852';
-const APP_VERSION_LABEL='v260725.1852';
+const APP_VERSION='260725.1953';
+const APP_VERSION_LABEL='v260725.1953';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9136,19 +9145,52 @@ PAGES.g_dashboard=async function(){
      會員名單（簽約／即將降級）點列進會員資料；未打卡名單只顯示不互動。
      名單資料掛 window._todoLists 供 openTodoList() 取用。 */
   const _todoItems=[];
+  /* 今日待簽約名單（2026-07-25 使用者指示，取代「今日簽約名單」）：
+     今天有 教練課/友善(私人教練) 或 團體課(小班肌力) 的預約，且該堂是「最後一堂」——
+     ① 分期票開通段最後一堂（需繳下期）② 整張票快用完的最後一堂（需續課）。與行事曆 💰/🔁 同源。 */
+  const _typeMapD=Object.fromEntries((types||[]).map(t=>[t.id,t]));
+  const _lastBk={};   // bookingId -> 'install' | 'renew'
+  try{
+    (mtickets||[]).forEach(tk=>{
+      const bks=(bookings||[]).filter(b=>b.ticket_id===tk.id && b.status!=='cancelled')
+        .sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
+      if(!bks.length) return;
+      // ① 分期開通段最後一堂
+      if(tk.installment && typeof tk.installment==='object'){
+        const unlocked = tk.unlocked_sessions!=null ? tk.unlocked_sessions : tk.sessions_total;
+        if(unlocked>0 && unlocked<tk.sessions_total){ const lb=bks[unlocked-1]; if(lb&&!_lastBk[lb.id]) _lastBk[lb.id]='install'; }
+      }
+      // ② 續課最後一堂（票快用完 ≤2；自主/體驗不提醒；分期尚未到最後一段屬「繳費」非「續課」）
+      if(!tk.status || tk.status==='usable'){
+        const _tt=_typeMapD[tk.ticket_type_id]; const _c=_tt?_tt.color:'';
+        const _selfTrial=_c==='self'||_c==='trial'||(tk.plan_name&&(tk.plan_name.indexOf('自主訓練')>=0||tk.plan_name.indexOf('體驗')>=0));
+        const remain = tk.sessions_remaining!=null ? tk.sessions_remaining : (tk.sessions_total||0);
+        let skip=_selfTrial||remain>2;
+        if(!skip && tk.installment && typeof tk.installment==='object'){
+          const unlocked = tk.unlocked_sessions!=null ? tk.unlocked_sessions : tk.sessions_total;
+          if(unlocked<tk.sessions_total) skip=true;
+        }
+        if(!skip){ const lb=bks[bks.length-1]; if(lb) _lastBk[lb.id]='renew'; }
+      }
+    });
+  }catch(_){}
   const _signBy={};
-  _dayTk.forEach(t=>{
-    const m=memMap[t.member_id]; if(!m) return;
-    const e=(_signBy[t.member_id]=_signBy[t.member_id]||{id:t.member_id,name:m.name,plans:[],amt:0});
-    e.plans.push(t.plan_name||'票券'); e.amt+=(Number(t.amount_paid)||0);
+  (bookings||[]).forEach(b=>{
+    if((b.date||'').slice(0,10)!==date) return;
+    if(b.status==='cancelled') return;
+    if(b.category!=='私人教練' && b.category!=='小班肌力') return;
+    const kind=_lastBk[b.id]; if(!kind) return;
+    const mids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
+    mids.forEach(mid=>{ const m=memMap[mid]; if(!m) return;
+      const e=(_signBy[mid]=_signBy[mid]||{id:mid,name:m.name,tags:new Set()});
+      e.tags.add(kind==='install'?'分期繳費':'續課'); });
   });
-  const _signList=Object.values(_signBy).map(e=>({id:e.id,name:e.name,
-    sub:[...new Set(e.plans)].join('、')+(e.amt?`　$${e.amt.toLocaleString()}`:'')}));
+  const _signList=Object.values(_signBy).map(e=>({id:e.id,name:e.name,sub:[...e.tags].join('・')}));
   const _signNames=_signList.map(x=>x.name);
   const _l=_signNames.length
     ? _signNames.slice(0,6).join('、')+(_signNames.length>6?` 等 ${_signNames.length} 人`:'')
-    : '今日尚無簽約';
-  _todoItems.push(_todoRow(OPS_TODO_IC.money,'今日簽約名單',_l,_signNames.length,'ok',"openTodoList('sign')"));
+    : '今日無待簽約';
+  _todoItems.push(_todoRow(OPS_TODO_IC.money,'今日待簽約名單',_l,_signNames.length,'ok',"openTodoList('sign')"));
   // 即將降級：附上本月至今的教練課簽到堂數，櫃台一眼知道還差幾堂
   const _thisYm=date.slice(0,7);
   const _ptCntThisMonth={};
@@ -9188,7 +9230,7 @@ PAGES.g_dashboard=async function(){
     : '今日打卡皆正常';
   _todoItems.push(_todoRow(OPS_TODO_IC.check,'今日未打卡名單',_l3,_noPunch.length,'gold',"openTodoList('nopunch')"));
   window._todoLists={
-    sign:{title:'今日簽約名單',items:_signList,empty:'今日尚無簽約',note:'點會員可進入會員資料'},
+    sign:{title:'今日待簽約名單',items:_signList,empty:'今日無待簽約',note:'今天是最後一堂（分期繳費或續課）；點會員可進入會員資料'},
     demote:{title:'本月即將降級名單',items:_demoteList,empty:'本月尚無即將降級的會員',
       note:'主顧客且上個完整月未達 4 堂教練課；本月結束仍未達，下月 1 日降級。點會員可進入會員資料'},
     nopunch:{title:'今日未打卡名單',items:_noPunchList,empty:'今日打卡皆正常',note:''}
@@ -9626,15 +9668,25 @@ function dutyRingHTML(name, att, shift, nowMinV, isToday){
   const off=(circ*(1-pct/100)).toFixed(1);
   const done=(outMin!=null);
   const ringC=dutyShiftColor(shift);
-  /* 秒針掃描動畫（2026-07-21 使用者指示）：值班中（未下班）圓環上有一顆小點沿環走，
-     60 秒一圈；已下班定格不動。不掛 prefers-reduced-motion（使用者明確要動畫）。 */
-  /* 2026-07-21 使用者指示：小點改黑色＋白描邊、置於 svg 最後（最上層）——
-     與圓環同色時走到同色區段會看不見。 */
-  const sweep = done ? '' : `<g class="dr-sweep"><circle cx="32" cy="6" r="2.6" fill="#33302A" stroke="#fff" stroke-width="1.2"/></g>`;
-  return `<div class="duty-ring${done?' dr-done':''}" title="${name}｜${att.clock_in}–${att.clock_out||'值班中'}｜${hrs}h／目標 ${(targetMin/60).toFixed(1)}h">
+  /* 水杯式進度圓（2026-07-25 使用者指示）：圓內從底部注水到滿（水位＝值班進度）；
+     值班中中央顯示跑步小人，已下班（完成）中央顯示值班時數。圓內 y 由 6(頂)到 58(底)。 */
+  const waterH=(52*pct/100);
+  const waterTop=(58-waterH).toFixed(1);
+  const uid='dcup'+(window._dutyCupN=(window._dutyCupN||0)+1);
+  // Material「directions_run」跑步小人；深色＋白光暈，注水前後都看得見
+  const runner='<svg class="dr-runner" viewBox="0 0 24 24"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></svg>';
+  const center = done
+    ? `<div class="dr-center dr-center-done"><b>${dispH}</b><span>h</span></div>`
+    : `<div class="dr-center dr-center-run">${runner}</div>`;
+  return `<div class="duty-ring dr-cup${done?' dr-done':''}" title="${name}｜${att.clock_in}–${att.clock_out||'值班中'}｜${hrs}h／目標 ${(targetMin/60).toFixed(1)}h">
     <div class="dr-wrap">
-      <svg viewBox="0 0 64 64"><circle class="dr-track" cx="32" cy="32" r="26"/><circle class="dr-bar" cx="32" cy="32" r="26" style="stroke:${ringC};" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off}"/>${sweep}</svg>
-      <div class="dr-center"><b>${dispH}</b><span>h</span></div>
+      <svg viewBox="0 0 64 64">
+        <defs><clipPath id="${uid}"><circle cx="32" cy="32" r="26"/></clipPath></defs>
+        <circle class="dr-cup-track" cx="32" cy="32" r="26"/>
+        <g clip-path="url(#${uid})"><rect class="dr-water" x="6" y="${waterTop}" width="52" height="${waterH.toFixed(1)}" style="fill:${ringC};"/></g>
+        <circle class="dr-cup-rim" cx="32" cy="32" r="26" style="stroke:${ringC};"/>
+      </svg>
+      ${center}
     </div>
     <div class="dr-name">${name}</div>
     <div class="dr-time">${att.clock_in} – ${att.clock_out||'值班中'}</div>
@@ -9742,7 +9794,6 @@ function dashQuickActions(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);">
         <button class="btn btn-green" onclick="openBookingModal()">＋ 新增預約</button>
         <button class="btn btn-ghost" onclick="openBackofficeMember()">＋ 新增會員</button>
-        <button class="btn btn-ghost" onclick="navTo('ticketing','g_finance')">票券・收款</button>
         <button class="btn btn-ghost" onclick="navTo('scan_checkin','g_booking')">掃碼簽到</button>
       </div>
     </div>`;
@@ -10608,9 +10659,10 @@ async function renderCalendar(opts){
       const _tipEsc = s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
       let _tipMem;
       if(b.category==='小班肌力' && Array.isArray(b.member_ids) && b.member_ids.length){
-        _tipMem = b.member_ids.map(mid=>(memMap[mid]&&memMap[mid].name)||'—').join('\n');
+        // memMap[id] 本身即姓名字串（見上方 memMap 定義），不可再取 .name（會變 —）
+        _tipMem = b.member_ids.map(mid=>memMap[mid]||'—').join('\n');
       }else if(b.trial_name){ _tipMem = b.trial_name+'（體驗）'; }
-      else { _tipMem = hideMember ? typeName : (((b.member_id&&memMap[b.member_id]&&memMap[b.member_id].name))||memName||'—'); }
+      else { _tipMem = hideMember ? typeName : ((b.member_id&&memMap[b.member_id])||memName||'—'); }
       const _tipCoach = (subCoachName||coachName) ? `教練：${subCoachName||coachName}${subCoachName?'（代）':''}` : '';
       const _tipStr = _tipEsc([`${b.start_time}–${_endT}`, _tipMem, _tipCoach].filter(Boolean).join('\n'));
       evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${wCls} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''} cal-ev-day cal-ev-std ${_densityCls} ${_courseCls} ${_checkedCls} ${_pastCls}" data-bid="${b.id}" data-time="${b.start_time}" data-tip="${_tipStr}"
@@ -13579,30 +13631,35 @@ function evoBtn(pos, extra, onclick, icon, label){
    偏移一律相對**卡片中心**的固定距離（不隨卡片大小改變），位置寫 --fan-x/y
    （錨點仍是卡片右緣中心，故 x 一律先加 -(w/2) 折回卡中心），滑出動畫沿用 evoFanOut。
    原「右側放不下整組翻左」邏輯移除——群集以卡片為中心，超界由 _bkOrbitNudge 推回。 */
+/* 卡片上方弧形排列（2026-07-25 使用者指示，取代置中群集）：
+   按鈕沿卡片「頂緣」以卡片中心為圓心排成一道弧，繞在卡片上方；
+   「簽到」(evo-r2) 置於弧的正中央、其餘往兩側平均分。動畫起點＝卡片中心（自卡片冒出繞上去）。 */
 function evoFanLayout(orbEl){
   if(!orbEl) return;
-  const bs=[...orbEl.children].filter(x=>x.classList&&x.classList.contains('evo-btn'));
-  if(!bs.length) return;
+  const bs0=[...orbEl.children].filter(x=>x.classList&&x.classList.contains('evo-btn'));
+  if(!bs0.length) return;
   const card=orbEl.parentElement;
-  let w=120;
-  try{ w=card.getBoundingClientRect().width; }catch(_){}
-  const cx=-(w/2);          // 卡片水平中心（相對右緣錨點）
-  const RX=68, DX=36, RY=66; // 中排左右距、上/下排斜角水平距、排距
-  const slot=(b)=>{
-    const c=b.classList;
-    if(c.contains('evo-t1')) return {x:cx-DX, y:-RY};                 // 上左（代課）
-    if(c.contains('evo-r1')||c.contains('evo-l1')) return {x:cx+DX, y:-RY}; // 上右（取消／兩段式返回位）
-    if(c.contains('evo-b1')) return {x:cx-RX, y:0};                   // 中左（編輯/明細）
-    if(c.contains('evo-b2')) return {x:cx+RX, y:0};                   // 中右（團課新增）
-    return {x:cx, y:0};   // evo-r2＝中央（簽到/取消簽到；兩段式確認同位）
-  };
+  let w=120,h=58;
+  try{ const r=card.getBoundingClientRect(); w=r.width||120; h=r.height||58; }catch(_){}
+  const cx=-(w/2);                        // 卡片水平中心（相對右緣錨點）
+  // 簽到(evo-r2)置中，其餘往兩側分
+  const primary=bs0.filter(b=>b.classList.contains('evo-r2'));
+  const rest=bs0.filter(b=>!b.classList.contains('evo-r2'));
+  const half=Math.floor(rest.length/2);
+  const bs=[...rest.slice(0,half),...primary,...rest.slice(half)];
+  const n=bs.length;
+  const R=Math.max(50, h/2+34);           // 弧半徑（以卡片中心為圓心，確保按鈕在頂緣之外）
+  const spanDeg=Math.min(104, 32*(n-1));  // 總張角依按鈕數調整
   bs.forEach((b,i)=>{
-    const p=slot(b);
+    const t = n===1 ? 0 : (i/(n-1))*2-1;              // -1..1（左→右）
+    const ang = t*(spanDeg/2)*Math.PI/180;            // 以正上方為 0
+    const x = cx + R*Math.sin(ang);
+    const y = -R*Math.cos(ang);                        // 弧在卡片上方（y 負＝往上）
     b.style.left='';
-    b.style.setProperty('--fan-x',p.x.toFixed(1)+'px');
-    b.style.setProperty('--fan-y',p.y.toFixed(1)+'px');
-    b.style.setProperty('--fan-x0',cx.toFixed(1)+'px');   // 動畫起點＝卡片中心（自中央冒出）
-    b.style.setProperty('--fan-d',(i*40)+'ms');
+    b.style.setProperty('--fan-x',x.toFixed(1)+'px');
+    b.style.setProperty('--fan-y',y.toFixed(1)+'px');
+    b.style.setProperty('--fan-x0',cx.toFixed(1)+'px');   // 動畫起點＝卡片中心
+    b.style.setProperty('--fan-d',(Math.abs(t)*80+30).toFixed(0)+'ms');
   });
 }
 // 取消：按鈕收合、原地換兩段式確認（維持不開 Modal）
