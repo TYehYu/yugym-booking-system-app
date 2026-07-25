@@ -3399,8 +3399,7 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard-mem{font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
 .tcard-live{filter:drop-shadow(0 0 6px rgba(31,111,84,.55)) drop-shadow(0 1px 2px rgba(60,50,38,.15));}
 .tcard-done{opacity:1;}   /* 2026-07-21 使用者指示：簽到完不淡化課卡（「簽」章已足以辨識） */
-/* 2026-07-25：取消課卡不整卡淡化（否則「刪」角標也看不清）——改只淡化內容、刪角標維持鮮明 */
-.tcard-cancel .tcard-body,.tcard-cancel .tcard-txt{opacity:0.4;}
+/* 2026-07-25 使用者指示：取消課卡不淡化（只靠右下角紅「刪」＋刪除線標示） */
 .tcard-cancel .tcard-txt{text-decoration:line-through;}
 .tcard-empty{display:flex;align-items:center;color:var(--text-muted);font-size:12.5px;padding:8px 4px;}
 /* ── 教練任務：所有教練共用時間軸網格 ── */
@@ -5438,6 +5437,14 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 .lot-nm{font-size:13px;font-weight:700;color:var(--text);}
 .lot-sub{flex:1;font-size:11px;color:var(--t2);}
 .lot-n{font-size:12px;font-weight:800;color:var(--gold-d);white-space:nowrap;}
+/* 現場抽獎名單改「按鈕卡」（2026-07-25 使用者指示：不喜歡列表） */
+.lot-btns{max-height:260px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;padding:2px;}
+.lot-btn{display:flex;flex-direction:column;align-items:center;gap:3px;padding:12px 8px 10px;border-radius:12px;background:var(--card2);border:1.5px solid var(--bd);cursor:pointer;font:inherit;transition:.14s;}
+.lot-btn:hover{border-color:var(--green);box-shadow:0 3px 10px rgba(0,61,50,.1);transform:translateY(-1px);}
+.lot-btn.sel{border-color:var(--green);background:#eaf3ee;box-shadow:0 3px 12px rgba(31,111,84,.18);}
+.lot-btn-nm{font-size:14px;font-weight:800;color:var(--text);}
+.lot-btn-n{font-size:12.5px;font-weight:800;color:var(--gold-d);}
+.lot-btn-sub{font-size:10.5px;color:var(--t3);}
 .lot-sec{font-size:12px;font-weight:700;color:var(--text);margin:12px 0 6px;}
 .lot-prizes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .lot-prize{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border:1px solid var(--bd);
@@ -5640,8 +5647,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260725.2049';
-const APP_VERSION_LABEL='v260725.2049';
+const APP_VERSION='260725.2055';
+const APP_VERSION_LABEL='v260725.2055';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6568,9 +6575,8 @@ const ADMIN_NAV2=[
     {label:'會員列表', page:'members', fd:true},
     {label:'購買審核', page:'purchase_review', fd:true, hideInSubnav:true},
   ]},
-  {key:'g_finance', icon:'💰', label:'票券・收款', fd:true, sub:[
-    {label:'票券・收款', page:'ticketing', fd:true},
-  ]},
+  /* 票券・收款（g_finance）已於 2026-07-25 使用者指示自導覽列移除；ticketing 頁仍由
+     goIssueTicket() 等程式入口到達，不影響賣票/收款功能本身。 */
   /* ── 導覽分流（2026-07-19 使用者指示）──
      管理員專屬內容統一收進「管理員」群組（櫃台完全看不到）；
      主管排班獨立「主管」群組（sup:true → 僅 is_supervisor 顯示，與管理員身分疊加）。
@@ -6757,7 +6763,7 @@ function buildNav2(){
   renderLeftSidebar(groups);
 }
 // Mission Control 左側固定側欄（桌機管理員）
-const MC_LABELS={g_dashboard:'首頁總覽',g_booking:'預約管理',g_member:'會員管理',g_finance:'票券・收款',g_admin:'管理員',g_supervisor:'主管'};
+const MC_LABELS={g_dashboard:'首頁總覽',g_booking:'預約管理',g_member:'會員管理',g_admin:'管理員',g_supervisor:'主管'};
 // 側欄收合狀態：首頁預設收合(72px)最大化內容；其它頁記住上次狀態
 function _sidebarSaved(){ try{ return localStorage.getItem('mc_sidebar'); }catch(e){ return null; } }
 function _sidebarSave(v){ try{ localStorage.setItem('mc_sidebar', v); }catch(e){} }
@@ -8732,7 +8738,7 @@ PAGES.g_dashboard=async function(){
                    : (Array.isArray(b.member_ids)&&b.member_ids.length?`${b.member_ids.length} 人`:'—');
           const canceled=isCancelled(b);
           const mn=timeToMin(b.start_time||'0:0');
-          const live = nowMin>=mn && nowMin<mn+(Number(b.duration)||60) && !isDone(b);
+          const live = !canceled && nowMin>=mn && nowMin<mn+(Number(b.duration)||60) && !isDone(b);
           const done = isDone(b);
           const coTag=`<span class="tcard-co" style="background:${_cc2.bg};color:${_cc2.fg};">${coachAbbr(c)}${b.substitute_coach_id===c.id?'（代）':''}</span>`;
           return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${nm}${live?'（進行中）':''}${canceled?'（已取消）':''}">
@@ -9584,17 +9590,17 @@ async function openLottoModal(selId){
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
     return;
   }
-  const rows=list.sort((a,b)=>b.left-a.left).map(x=>`<div class="lot-row${selId===x.id?' sel':''}" onclick="openLottoModal('${x.id}')">
-    <span class="lot-nm">${(mMap[x.id]&&mMap[x.id].name)||'—'}</span>
-    <span class="lot-sub">本月教練課簽到 ${x.att} 堂</span>
-    <span class="lot-n">可抽 ${x.left} 次</span></div>`).join('');
+  const rows=list.sort((a,b)=>b.left-a.left).map(x=>`<button class="lot-btn${selId===x.id?' sel':''}" onclick="openLottoModal('${x.id}')">
+    <span class="lot-btn-nm">${(mMap[x.id]&&mMap[x.id].name)||'—'}</span>
+    <span class="lot-btn-n">可抽 ${x.left} 次</span>
+    <span class="lot-btn-sub">簽到 ${x.att} 堂</span></button>`).join('');
   const prizeGrid=selId?`<div class="lot-sec">客人抽中哪一項？</div><div class="lot-prizes">${LOTTO_PRIZES.map(p=>
     `<button class="lot-prize" onclick="lottoAward('${selId}','${p.key}')">${
       p.kind==='goods'?LNI[p.icon]:(p.kind==='voucher'?LNI.coin:`<span class="lot-glyph" style="color:${p.gcol};">${p.glyph}</span>`)
     }<span>${p.label}</span></button>`).join('')}</div>`:'';
   showModal(`<div class="modal-title">現場抽獎登記</div>
     <div class="lot-hint">當月<b>教練課（含友善）</b>簽到滿 4 堂可抽 1 次（可累計、次月歸零；團課/自主訓練不計）。請客人抽<b>實體籤筒</b>後在此登記中獎項目——折抵券與課程獎品會自動發進會員票券。</div>
-    <div class="lot-list">${rows}</div>
+    <div class="lot-btns">${rows}</div>
     ${prizeGrid}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
