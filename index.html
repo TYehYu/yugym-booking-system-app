@@ -5714,8 +5714,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.0014';
-const APP_VERSION_LABEL='v260727.0014';
+const APP_VERSION='260727.0020';
+const APP_VERSION_LABEL='v260727.0020';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10529,7 +10529,25 @@ PAGES.dashboard=async function(){
   const ptDoneBk=usedBk.filter(b=>b.category==='私人教練');
   const grpDoneBk=usedBk.filter(b=>b.category==='小班肌力');
   const ptFee=ptDoneBk.reduce((s,b)=>s+_feeOf(b),0);
-  const grpFee=grpDoneBk.reduce((s,b)=>s+_feeOf(b),0);
+  /* 團課銷課＝逐人頭計（2026-07-27 修正）：合併匯入的團課 session_fee 只剩一個人的費用、
+     多數團課也沒綁票券 → 每堂只算到 $0–400 嚴重低估。改為每個人頭用該會員團課票的
+     單價（總額/總堂平均），沒有就用全店團課平均單價。 */
+  const _grpBucket={a:0,n:0}, _grpMem={};
+  tickets.forEach(t=>{ const tt=typeMap[t.ticket_type_id]||{};
+    if(!(tt.category==='團體課'||(t.plan_name||'').includes('團'))) return;
+    const a=Number(t.amount_paid)||0, n=Number(t.sessions_total)||0;
+    if(a>0&&n>0){ _grpBucket.a+=a; _grpBucket.n+=n;
+      (_grpMem[t.member_id]=_grpMem[t.member_id]||{a:0,n:0}); _grpMem[t.member_id].a+=a; _grpMem[t.member_id].n+=n; } });
+  const _grpAvg=_grpBucket.n>0?_grpBucket.a/_grpBucket.n:0;
+  const _grpUnit=mid=>{ const k=_grpMem[mid]; return (k&&k.n>0)?k.a/k.n:_grpAvg; };
+  const _grpFeeOf=b=>{
+    const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
+    if(!ids.length) return _feeOf(b);
+    return ids.reduce((a,mid)=>a+_grpUnit(mid),0);
+  };
+  const grpFee=grpDoneBk.reduce((s,b)=>s+_grpFeeOf(b),0);
+  // 利潤基礎同步採用團課逐人頭銷課（原 coachedFee 的團課部分同樣被低估）
+  coachedFee = doneBkCoached.filter(b=>b.category!=='小班肌力').reduce((s,b)=>s+_feeOf(b),0) + grpFee;
   /* 薪資是「整月」概念，切到「今日」時無法對應 → 只在本月模式算利潤。
      薪資計算另外要抓 shifts/attendance/薪資模板，故只在需要時才跑。 */
   let salaryTotal=null, profit=null;
@@ -10631,8 +10649,8 @@ PAGES.dashboard=async function(){
       </div>
       <div class="ov-row"><span class="ov-label" style="padding-left:10px;color:var(--t3);">├ 銷課金額（不含自主）</span><span class="ov-val" style="color:var(--gold-d);">${fmtNT(coachedFee)}</span></div>
       <div class="ov-row"><span class="ov-label" style="padding-left:10px;color:var(--t3);">└ 教練應發薪資</span><span class="ov-val" style="color:#c0392b;">−${fmtNT(salaryTotal)}</span></div>`:''}
-      <div class="ov-row"><span class="ov-label">${_dashRange==='month'?'本月':'今日'}教練課（已上/排定）</span><span class="ov-val">${ptDoneBk.length}/${ptClassCount} 堂 ／ <b style="color:var(--gold-d);">${fmtNT(ptFee)}</b></span></div>
-      <div class="ov-row"><span class="ov-label">${_dashRange==='month'?'本月':'今日'}團體課（已上/排定）</span><span class="ov-val">${grpDoneBk.length}/${groupClassCount} 堂 ／ <b style="color:var(--gold-d);">${fmtNT(grpFee)}</b></span></div>
+      <div class="ov-row"><span class="ov-label">教練課<span style="display:block;font-size:10.5px;color:var(--t3);font-weight:400;margin-top:2px;">已上/排定 ・ 銷課金額</span></span><span class="ov-val" style="white-space:nowrap;font-size:15.5px;">${ptDoneBk.length}/${ptClassCount} 堂　<b style="color:var(--gold-d);">${fmtNT(Math.round(ptFee))}</b></span></div>
+      <div class="ov-row"><span class="ov-label">團體課<span style="display:block;font-size:10.5px;color:var(--t3);font-weight:400;margin-top:2px;">已上/排定 ・ 銷課金額</span></span><span class="ov-val" style="white-space:nowrap;font-size:15.5px;">${grpDoneBk.length}/${groupClassCount} 堂　<b style="color:var(--gold-d);">${fmtNT(Math.round(grpFee))}</b></span></div>
       <div class="ov-row"><span class="ov-label">${_dashRange==='month'?'本月':'今日'}營收</span><span class="ov-val">${fmtNT(revenue)}</span></div>
       <div class="ov-row"><span class="ov-label">${_dashRange==='month'?'本月':'今日'}銷課堂數</span><span class="ov-val">${doneCount} 堂</span></div>
     </div>
