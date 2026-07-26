@@ -5652,8 +5652,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.0934';
-const APP_VERSION_LABEL='v260726.0934';
+const APP_VERSION='260726.0956';
+const APP_VERSION_LABEL='v260726.0956';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8487,9 +8487,18 @@ async function createBookingViaRpc(o, tk, ds){
   if(data && data.ok) return { ok:true, booking_id:data.booking_id };
   return { ok:false, reason:rpcBookingErrMsg(data && data.error_code) };
 }
-// 一鍵補發補課券：綁原課同類型，1 堂，效期 14 天，source='makeup'
-async function grantMakeupTicket(booking){
-  if(!booking||!booking.member_id){ showToast('此預約無綁定會員，無法補發'); return; }
+/* 一鍵補發補課券：綁原課同類型，1 堂，效期 14 天，source='makeup'
+   memberIdOverride（2026-07-26）：團課的 booking.member_id 為 null、學員在 member_ids，
+   故請假補發時由呼叫端指定是哪一位。 */
+async function grantMakeupTicket(booking, memberIdOverride){
+  const _mid = memberIdOverride || (booking&&booking.member_id);
+  if(!booking||!_mid){ showToast('此預約無綁定會員，無法補發'); return; }
+  // 防重複：同一堂課、同一位會員只發一張
+  try{
+    const _ex=(await dbGetAll('member_tickets')||[]).find(t=>t.source==='makeup'
+      && t.makeup_for_booking===booking.id && t.member_id===_mid);
+    if(_ex) return _ex;
+  }catch(_){}
   // 找原課同類型的票券種類 id（優先用原 booking 的 ticket_type_id，否則依 category 找）
   let type_id=booking.ticket_type_id||null, planName='補課券';
   try{
@@ -8508,7 +8517,7 @@ async function grantMakeupTicket(booking){
   const isSelf=catName.includes('自主')||(planName&&planName.includes('自主'));
   const makeupDays=isSelf?7:14;
   const expire=ymd(addDays(TODAY,makeupDays));
-  const tk={ id:uid('TK'), member_id:booking.member_id, ticket_type_id:type_id,
+  const tk={ id:uid('TK'), member_id:_mid, ticket_type_id:type_id,
     source_plan_id:null, plan_name:planName, format:booking.format||null,
     source:'makeup', purchase_date:today, start_date:today, expire_date:expire,
     sessions_total:1, sessions_remaining:1, status:'usable',
@@ -8516,8 +8525,54 @@ async function grantMakeupTicket(booking){
     makeup_for_booking:booking.id||null, created_at:new Date().toISOString() };
   await dbPut('member_tickets',tk);
   await logTicket(tk.id,'grant',1,booking.id||null,SESSION.id,'補發補課券');
-  if(booking.id){ try{ const b=await dbGet('bookings',booking.id); if(b){ b.makeup_granted=true; await dbPut('bookings',b); } }catch(_){} }
+  /* makeup_granted 是整筆 booking 的旗標。團課一堂多人、只有部分人請假，
+     設了會讓整堂看起來都發過券，故指定會員時不設。 */
+  if(booking.id && !memberIdOverride){ try{ const b=await dbGet('bookings',booking.id); if(b){ b.makeup_granted=true; await dbPut('bookings',b); } }catch(_){} }
   return tk;
+}
+/* 收回請假補課券（取消請假時）：只收「這堂課、這位會員、完全沒用過」的那張，
+   用過了就保留不動 —— 與 revokeCheckinReward 同一套保守原則。 */
+async function revokeMakeupTicket(booking,memberId){
+  if(!booking||!memberId) return 0;
+  let n=0;
+  try{
+    const all=await dbGetAll('member_tickets')||[];
+    const tks=all.filter(t=>t.source==='makeup' && t.makeup_for_booking===booking.id && t.member_id===memberId);
+    for(const t of tks){
+      if((t.sessions_total||0)-(t.sessions_remaining||0)>0) continue;   // 已用過→保留
+      await dbDel('member_tickets',t.id);
+      try{ await logTicket(t.id,'revoke',0,booking.id,SESSION.id,'取消請假，收回未使用的補課券'); }catch(_){}
+      n++;
+    }
+  }catch(_){}
+  return n;
+}
+/* 團課請假（2026-07-26 使用者說明的制度）：四週優惠方案有補課機制 —— 當天請假，
+   該堂票券「照扣不退」，另發一張 14 天補課券。
+   ⚠️ 這裡刻意不動票券餘額：團課的扣課發生在「管理名單」加入名額時（見 openGroupMembers），
+   請假只是不退回，所以再扣一次會變成扣兩堂。與「移除名單」的差別就在退不退。 */
+async function groupToggleLeave(bid,mid){
+  const b=await dbGet('bookings',bid);
+  if(!b){ showToast('找不到預約'); return; }
+  if(b.status==='cancelled'){ showToast('已取消的課不可標記請假'); return; }
+  const att=attObj(b);
+  const wasLeave = att[mid]==='leave';
+  try{
+    if(wasLeave){
+      att[mid]='booked';
+      const n=await revokeMakeupTicket(b,mid);
+      showToast(n?'已取消請假，並收回未使用的補課券':'已取消請假（補課券已使用，保留不收回）');
+    }else{
+      att[mid]='leave';
+      const tk=await grantMakeupTicket(b,mid);
+      showToast(tk?'已標記請假：本堂照扣，已發 14 天補課券':'已標記請假（補課券發放失敗，請手動處理）');
+    }
+    b.attendance=att;
+    const anyIn=Object.values(att).some(s=>s==='checked_in');
+    if(b.status!=='completed') b.status = anyIn?'checked_in':'booked';
+    await dbPut('bookings',b);
+  }catch(e){ showToast('操作失敗：'+((e&&e.message)||e)); return; }
+  openBookingDetail(bid);
 }
 
 /* ════════ 營運中心（取代每日前台表，可切換日期）════════ */
@@ -14302,12 +14357,20 @@ async function openBookingDetail(id){
     }catch(_){}
     const rows = _uniqIds.length ? _uniqIds.map(mid=>{
       const inHere = att[mid]==='checked_in';
+      const onLeaveM = att[mid]==='leave';   // 請假：本堂照扣、另發補課券（見 groupToggleLeave）
       const badge = inHere
         ? '<span class="tag tag-ok" style="font-size:11px;">已簽到</span>'
-        : '<span class="tag tag-warn" style="font-size:11px;">未簽到</span>';
-      const btn = groupCkOK
-        ? `<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="toggleGroupAttend('${b.id}','${mid}')">${inHere?'取消簽到':(isPastD?'補簽':'簽到')}</button>`
-        : '';
+        : onLeaveM
+          ? '<span class="tag" style="font-size:11px;background:#f7efe0;color:#8a5e28;">請假</span>'
+          : '<span class="tag tag-warn" style="font-size:11px;">未簽到</span>';
+      let btn='';
+      if(groupCkOK){
+        btn = onLeaveM
+          ? `<span style="margin-left:auto;"><button class="btn btn-ghost btn-sm" onclick="groupToggleLeave('${b.id}','${mid}')">取消請假</button></span>`
+          : `<span style="margin-left:auto;display:flex;gap:6px;">`
+            + (inHere?'':`<button class="btn btn-ghost btn-sm" onclick="groupToggleLeave('${b.id}','${mid}')">請假</button>`)
+            + `<button class="btn btn-ghost btn-sm" onclick="toggleGroupAttend('${b.id}','${mid}')">${inHere?'取消簽到':(isPastD?'補簽':'簽到')}</button></span>`;
+      }
       const seatTag = _seat[mid]>1 ? ` <span class="tag" style="font-size:10px;">×${_seat[mid]}</span>` : '';
       const st=_gTk[mid];
       /* 圓點本身就說明了狀態（實心＝已上・空心＝未使用・整排實心＝已用畢），
