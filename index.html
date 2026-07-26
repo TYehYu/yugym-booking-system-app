@@ -5411,6 +5411,14 @@ body.mc-mode .cal-body{background:rgba(255,255,255,.8);}
 @keyframes msbUp{from{transform:translateY(30%);opacity:0;}to{transform:none;opacity:1;}}
 @media (min-width:601px) and (orientation:landscape),(min-width:1025px){
   #msb-sheet .msb-panel{left:auto;right:24px;width:440px;}}
+/* 可預約日期按鈕列（2026-07-26）：橫向捲動、選中白底綠字 */
+.msb-dates{display:flex;gap:7px;padding:4px 16px 6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.msb-dates::-webkit-scrollbar{display:none;}
+.msb-date{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:1px;border:none;border-radius:12px;
+  padding:7px 13px;cursor:pointer;font-family:inherit;background:rgba(255,255,255,.14);color:rgba(244,241,232,.85);}
+.msb-date span{font-size:10.5px;opacity:.8;}
+.msb-date b{font-size:14px;font-weight:800;}
+.msb-date.on{background:#F4F1E8;color:var(--green);}
 .msb-types{display:flex;gap:8px;padding:2px 16px 4px;}
 .msb-types button{flex:1;border:none;border-radius:999px;padding:8px 0;font-size:12.5px;font-weight:700;cursor:pointer;
   background:rgba(255,255,255,.14);color:rgba(244,241,232,.75);font-family:inherit;}
@@ -5672,8 +5680,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1931';
-const APP_VERSION_LABEL='v260726.1931';
+const APP_VERSION='260726.2046';
+const APP_VERSION_LABEL='v260726.2046';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24697,8 +24705,10 @@ async function msbStart(){
   window._msb={on:true,groups,hasPoints:usable.length>0,
     type:groups.self.length>0?'self':'friendly',date:ymd(TODAY),free:null};
   const fab=document.getElementById('msb-fab'); if(fab){ fab.classList.add('on'); fab.textContent='✕'; }
-  window._heroMin=false;   // 展開月曆看得到效期框（跨重繪保留展開）
-  const h=document.getElementById('cal-hero'); if(h) h.classList.remove('cal-hero-min');
+  /* 2026-07-26 使用者指示：按［＋］後上方行事曆主動縮小（可預約日期改在下方視窗用按鈕呈現，
+     不再需要靠月曆金框挑日；月曆收合後仍可手動展開，金框照畫）。 */
+  window._heroMin=true;
+  const h=document.getElementById('cal-hero'); if(h) h.classList.add('cal-hero-min');
   if(window._msb.hasPoints){ try{ renderMemMonthView(); }catch(_){} }
   msbRenderSheet();
 }
@@ -24730,11 +24740,22 @@ function msbRenderSheet(){
         <button class="${s.type==='friendly'?'on':''}" onclick="msbSetType('friendly')">友善（${sum(s.groups.friendly)} 點）</button>
       </div>`
     :`<div class="msb-sub">${s.type==='friendly'?`友善自主訓練點數 ${sum(s.groups.friendly)} 點（限平日 18:00 前）`:`自主訓練點數 ${sum(s.groups.self)} 點`}</div>`;
+  /* 可預約日期按鈕列（2026-07-26 使用者指示）：往後掃 14 天、效期內的日子做成按鈕，
+     不用回月曆挑日（月曆此時已收合）。 */
+  let _dateBtns='';
+  for(let i=0;i<14;i++){
+    const dd=new Date(TODAY); dd.setDate(dd.getDate()+i);
+    const ds=ymd(dd);
+    if(!msbDateOk(ds)) continue;
+    const lab=i===0?'今天':(i===1?'明天':'週'+WD[dd.getDay()]);
+    _dateBtns+=`<button class="msb-date${s.date===ds?' on':''}" onclick="msbPickDate('${ds}')"><span>${lab}</span><b>${dd.getMonth()+1}/${dd.getDate()}</b></button>`;
+  }
   const d=parseYmd(s.date);
   host.innerHTML=`<div class="msb-panel">
     <div class="cag-slotsheet-head"><span>預約自主訓練</span><button class="cag-slotsheet-x" onclick="msbExit()">✕</button></div>
     ${typeRow}
-    <div class="msb-sub">${s.date.slice(5).replace('-','/')}（週${WD[d.getDay()]}）｜點上方月曆金框日期可換日</div>
+    ${_dateBtns?`<div class="msb-dates">${_dateBtns}</div>`:''}
+    <div class="msb-sub">${s.date.slice(5).replace('-','/')}（週${WD[d.getDay()]}）</div>
     <div id="msb-slots"><div class="msb-empty" style="padding:18px;">載入時段中…</div></div>
     <div class="msb-hint">點選時段即可預約（60 分鐘）；系統自動使用最快到期的點數，確認後扣 1 點。</div>
   </div>`;
