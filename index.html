@@ -5652,8 +5652,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.0855';
-const APP_VERSION_LABEL='v260726.0855';
+const APP_VERSION='260726.0901';
+const APP_VERSION_LABEL='v260726.0901';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14262,15 +14262,39 @@ async function openBookingDetail(id){
     const _gTk={};
     try{
       if(!window._ttCache) window._ttCache=await dbGetAll('ticket_types');
+      const _typeMapG=Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t]));
       const _allTk=await dbGetAll('member_tickets');
+      const _allBk=await dbGetAll('bookings').catch(()=>[]);
+      // 每位會員的團課出席／預約紀錄（團課學員放在 member_ids，故用 includes 撈）
+      const _hist={};
+      _allBk.forEach(x=>{
+        if(x.category!=='小班肌力' || x.status==='cancelled') return;
+        const ids=mids(x); const one=ids.length?ids:(x.member_id?[x.member_id]:[]);
+        [...new Set(one)].forEach(mid=>{ (_hist[mid]=_hist[mid]||[]).push(x); });
+      });
+      Object.values(_hist).forEach(a=>a.sort((p,q)=>((p.date||'')+(p.start_time||'')).localeCompare((q.date||'')+(q.start_time||''))));
       _uniqIds.forEach(mid=>{
         // 團課票券不分方案，同類別即可用（與 listUsableTickets 的 groupMode 一致）
-        const own=_allTk.filter(t=>t.member_id===mid && ticketCategoryOf(t)==='小班肌力'
-          && (t.sessions_remaining||0)>0 && (!t.expire_date || t.expire_date>=b.date));
+        const own=_allTk.filter(t=>t.member_id===mid && ticketCategoryOf(t)==='小班肌力');
+        const live=own.filter(t=>(t.sessions_remaining||0)>0 && (!t.expire_date || t.expire_date>=b.date))
+          .sort((p,q)=>String(p.start_date||p.purchase_date||'').localeCompare(String(q.start_date||q.purchase_date||'')));
+        /* 顯示「目前在用的那張」：有餘額的取最早開始那張（與扣課的先進先出一致）；
+           全部用完則取最近一張，圓點會是整排實心＝已用畢，一眼看得出要續約。
+           會員常持有十幾張已用完的舊票（李曉娟 19 張），全列出來反而看不懂。 */
+        const cur=live[0] || own.slice().sort((p,q)=>String(q.start_date||q.purchase_date||'').localeCompare(String(p.start_date||p.purchase_date||'')))[0] || null;
+        if(!cur){ _gTk[mid]=null; return; }
+        const total=cur.sessions_total||0;
+        const used=Math.max(0, total-(cur.sessions_remaining||0));
+        /* ⚠️ 團課預約的 ticket_id 為 null，無法逐堂對應到票券，日期只能用推的：
+           取這位會員「最近 used 堂」的出席紀錄當作這張票扣掉的堂數，未來已預約的課
+           填進剩餘圓點。所以日期是合理推估、不是帳本事實。 */
+        const h=_hist[mid]||[];
+        const doneAll=h.filter(x=>x.status==='checked_in'||x.status==='completed');
+        const bks=[...doneAll.slice(-used), ...h.filter(x=>x.status==='booked')];
         _gTk[mid]={
-          left: own.reduce((s,t)=>s+(t.sessions_remaining||0),0),
-          exp : own.map(t=>t.expire_date).filter(Boolean).sort()[0]||null,
-          makeup: own.some(t=>t.source==='makeup')
+          left: live.reduce((s,t)=>s+(t.sessions_remaining||0),0),
+          tokens: ticketTokens(cur,bks,_typeMapG,Math.min(used,total),b.id),
+          makeup: live.some(t=>t.source==='makeup')
         };
       });
     }catch(_){}
@@ -14284,15 +14308,12 @@ async function openBookingDetail(id){
         : '';
       const seatTag = _seat[mid]>1 ? ` <span class="tag" style="font-size:10px;">×${_seat[mid]}</span>` : '';
       const st=_gTk[mid];
-      let tkInfo='';
-      if(st){
-        const warn = st.left<=2;
-        const tkTag = st.left<=0 ? '　<span class="tag tag-danger" style="font-size:10px;">需購票</span>'
-                    : warn ? '　<span class="tag tag-warn" style="font-size:10px;">建議續約</span>' : '';
-        tkInfo=`<div style="font-size:11.5px;color:var(--t3);padding-left:2px;">團體課餘 <b class="num" style="color:${warn?'#8a5e28':'var(--t2)'};">${st.left}</b> 堂`
-          +`${st.exp?`　效期至 ${st.exp.replace(/-/g,'/')}`:''}`
-          +`${st.makeup?'　<span class="tag" style="font-size:10px;background:#eef6ee;color:#2f6b39;">含補課券</span>':''}${tkTag}</div>`;
-      }
+      /* 圓點本身就說明了狀態（實心＝已上・空心＝未使用・整排實心＝已用畢），
+         所以不再加「建議續約／需購票」字樣（2026-07-26 使用者指示）。 */
+      const tkInfo = st
+        ? `<div class="mck-dots2" style="margin:6px 0 2px;">${st.tokens}`
+          +`${st.makeup?'<span class="tag" style="font-size:10px;background:#eef6ee;color:#2f6b39;align-self:center;">含補課券</span>':''}</div>`
+        : '';
       return `<div style="padding:6px 0;border-bottom:1px solid var(--bd);">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="min-width:72px;">${memMapD[mid]||'？'}${seatTag}</span>${badge}${btn}
