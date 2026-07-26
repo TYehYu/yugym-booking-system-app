@@ -5703,8 +5703,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.2201';
-const APP_VERSION_LABEL='v260726.2201';
+const APP_VERSION='260726.2226';
+const APP_VERSION_LABEL='v260726.2226';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -5770,8 +5770,11 @@ const DB_CACHE_TTL=20000;   // 2026-07-26：8s→20s（讀取畫面出現太頻�
 })();
 const DB_CACHE_TTL_BY={ticket_types:60000,course_plans:60000,exercises:300000};
 function dbCacheClear(store){
-  if(store===undefined){ _dbCache.clear(); return; }
-  (Array.isArray(store)?store:[store]).forEach(s=>_dbCache.delete(tbl(s)));
+  if(store===undefined){ _dbCache.clear(); try{ occCacheClear(); }catch(_){} return; }
+  const list=Array.isArray(store)?store:[store];
+  list.forEach(s=>_dbCache.delete(tbl(s)));
+  // 會員端場地佔用快取跟著 bookings 一起失效（fetchDayOccupancy，定義在場地區塊）
+  if(list.some(s=>tbl(s)==='bookings')){ try{ occCacheClear(); }catch(_){} }
 }
 async function _dbGetAllFresh(store){
   /* 分頁改「波次並行」（2026-07-20 LAG 對策）：原逐頁序抓，大表（tickets 2,229＝3 頁）
@@ -11842,6 +11845,19 @@ function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){
   return { error:'該時段沒有可用場地（已額滿）', hardFull:true };
 }
 function overlaps(s1,e1,s2,e2){ return s1<e2 && e1>s2; }
+/* 會員端當日佔用快取：msbLoadSlots 一次掃 24 個時段都呼叫 validateBooking，
+   只需打一次 RPC。TTL 與 DB_CACHE_TTL 同步；預約成功後呼叫 occCacheClear()。 */
+let _occCache={};
+function occCacheClear(){ _occCache={}; }
+async function fetchDayOccupancy(date){
+  const c=_occCache[date];
+  if(c && Date.now()-c.t<DB_CACHE_TTL) return c.rows;
+  const {data,error}=await sb.rpc('fn_booking_occupancy',{p_date:date});
+  if(error){ console.error('fn_booking_occupancy:',error); throw new Error('讀取時段資料失敗，請稍後再試'); }
+  const rows=data||[];
+  _occCache[date]={t:Date.now(),rows};
+  return rows;
+}
 async function validateBooking(bk,date,time,duration){
   const dur=duration||bk.duration||60;
   const ns=timeToMin(time), ne=ns+dur;
@@ -11861,7 +11877,10 @@ async function validateBooking(bk,date,time,duration){
     }
   }
 
-  const all=await dbGetAll('bookings');
+  /* 會員端 RLS 只讀得到自己的預約 → dbGetAll 等於空行事曆，場地/衝堂會全數誤判可約
+     （2026-07-26 會員端 7/27 10:00 超賣的真正原因）。改走匿名佔用 RPC（security definer，
+     只回時間/課種/場地/教練檔期；member_id 只有自己那筆帶回）。員工端維持原路徑。 */
+  const all = (SESSION&&SESSION.role==='member') ? await fetchDayOccupancy(date) : await dbGetAll('bookings');
   // 同一天、未取消、排除自己
   const sameDay=all.filter(x=> x.id!==bk.id && x.status!=='cancelled' && x.date===date );
 
@@ -24887,6 +24906,7 @@ async function msbConfirm(time){
     recurring:false,venue_unit:vbk.venue_unit||null,created_by:SESSION.id,created_at:new Date().toISOString()};
   await dbPut('bookings',bk);
   await deductTicket(tk,bk.id,SESSION.id);
+  occCacheClear();   // 佔用快取失效，下次掃時段看得到剛成立的預約
   closeModal();
   showToast('預約成功，已扣 1 點');
   msbExit(true);

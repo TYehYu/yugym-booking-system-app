@@ -27,4 +27,10 @@ const D=[...A,mk('e','自主訓練','10:00'),mk('f','自主訓練','10:00'),mk('
 ok('尖峰六位全滿 → 額滿', !!lib.allocateVenue('自主訓練',D,600,660,null).error);
 const E=[mk('a','私人教練','10:00'),{...mk('e2','私人教練','10:00'),venue_unit:'multi_2'}];
 ok('真實 venue_unit 與估算並用不重複', lib.allocateVenue('私人教練',E,600,660,null).unit==='multi_3');
+/* 2026-07-26 會員端超賣真因：RLS 只讓會員讀自己的預約 → dbGetAll 是空行事曆。
+   validateBooking 會員角色必須改走匿名佔用 RPC（fn_booking_occupancy）。 */
+const vb=h.slice(h.indexOf('async function validateBooking'),h.indexOf('return null; // 通過'));
+ok("★ 會員角色走 fetchDayOccupancy（RLS 看不到別人的預約）", vb.includes("SESSION.role==='member'")&&vb.includes('fetchDayOccupancy'));
+ok('fetchDayOccupancy 呼叫 fn_booking_occupancy RPC', h.includes("sb.rpc('fn_booking_occupancy'"));
+ok('寫入 bookings 會清佔用快取', /if\(list\.some\(s=>tbl\(s\)==='bookings'\)\)\{ try\{ occCacheClear\(\); \}/.test(h));
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail?1:0);
