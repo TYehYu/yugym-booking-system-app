@@ -4648,8 +4648,15 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cag-gline-now .dot{position:absolute;left:2px;top:-4px;width:7px;height:7px;border-radius:50%;background:#d9342b;}
 /* 七欄（透明底、用 gap 分隔對齊上方框） */
 .cag-wk-col{flex:1 1 0;min-width:0;position:relative;z-index:1;border-radius:10px;}
-/* 2026-07-23 使用者指示：手機預約行事曆「自己的課卡」放大＝同時段其他卡的兩倍寬 */
-.cag-wk-col.cag-col-mine{flex:2 1 0;}
+/* 2026-07-26 使用者指示（取代 07-23 兩倍寬）：最左固定兩欄給自己的課，各欄等寬 */
+.cag-wk-col.cag-col-mine{flex:1 1 0;}
+/* 手機行事曆課卡改桌機版標準卡（cal-ev-std）：欄內絕對定位、字級沿用 container query */
+.cag-wk-col .cal-ev.cag-std{left:1px;right:1px;z-index:2;}
+.cag-wk-col .cal-ev.cag-std.dim{opacity:.4;}
+/* 時段場地餘裕標籤（最左欄背景）：教練課排不進多功能→「教室」；連教室都滿→「額滿」 */
+.cag-vlab{position:absolute;left:2px;right:2px;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:800;letter-spacing:.14em;color:rgba(154,90,30,.48);pointer-events:none;z-index:1;}
+.cag-vlab.full{color:rgba(192,65,58,.5);}
 .cag-wk-col.col-today{background:rgba(180,138,86,0.06);}
 .cag-wk-col.col-sel{background:rgba(0,61,50,0.05);}
 /* 過期時段遮罩：淡化已過去的時間（在卡片之下、不擋點擊）*/
@@ -5703,8 +5710,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.2241';
-const APP_VERSION_LABEL='v260726.2241';
+const APP_VERSION='260726.2254';
+const APP_VERSION_LABEL='v260726.2254';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12623,14 +12630,12 @@ async function renderCoachAgenda(){
   const renderCard=(b,layer,dim)=>{
     const s=timeToMin(b.start_time); const dur=b.duration||60;
     const top=yOf(s); const height=Math.max(dur/60*HOUR_H-2, 16);
-    const {c}=cagCardType(b);
-    const done=(b.status==='completed'||b.status==='checked_in');
+    const done=(b.status==='completed'||b.status==='checked_in')
+      || (b.category==='小班肌力' && b.attendance && Object.values(b.attendance).some(st=>st==='checked_in'));
     const showTime=height>=30;
-    const zcls = layer==='mine'?'lyr-mine':layer==='other'?'lyr-other':'lyr-group';
     const canClick = layer==='mine' || isAdmin;
-    /* 卡片內容（2026-07-23 使用者指示，取代 07-21「一律課種名稱」）：
-       自己的課＝完整資訊（會員名／團 N，可互動）；
-       別的教練的課＝顯示教練名稱、不可互動（教練端；管理員仍可點所有卡）。 */
+    /* 名稱行沿用原邏輯（2026-07-23）：自己的課＝會員名／團 N（可互動）；
+       別的教練的課＝教練名、不可互動（管理員仍可點所有卡）。 */
     let disp;
     if(layer==='mine'){
       if(b.category==='小班肌力'||(Array.isArray(b.member_ids)&&b.member_ids.length)){
@@ -12639,16 +12644,26 @@ async function renderCoachAgenda(){
       else if(b.member_id){ disp=memMap[b.member_id]||'—'; }
       else disp={'自主訓練':'自主訓練','場租':'場租'}[b.category]||'課程';
     }else{
-      const _cid=b.substitute_coach_id||b.coach_id;
-      const _co=_cid?coachObj[_cid]:null;
-      disp=_co?coachDisp(_co):({'自主訓練':'自主','場租':'場租'}[b.category]||'—');
-      if((layer==='group'||b.category==='小班肌力')&&_co) disp=coachDisp(_co);   // 團課也標授課教練
+      const _cid0=b.substitute_coach_id||b.coach_id;
+      const _co0=_cid0?coachObj[_cid0]:null;
+      disp=_co0?coachDisp(_co0):({'自主訓練':'自主','場租':'場租'}[b.category]||'—');
+      if((layer==='group'||b.category==='小班肌力')&&_co0) disp=coachDisp(_co0);   // 團課也標授課教練
     }
-    // 已簽到：用課程色填滿（白字）；未簽到：白底、左側課程色條
-    const fillStyle = done ? `background:${c};border-left-color:${c};` : `border-left-color:${c};`;
-    return `<div class="cag-wc ${zcls}${done?' done':''}${dim?' dim':''}" ${layer==='mine'?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${fillStyle}"${canClick?` onclick="wtlCardClick('${b.id}')"`:` onclick="event.stopPropagation()"`}>
-      ${showTime?`<div class="wc-t">${b.start_time}</div>`:''}
-      <div class="wc-n">${disp}</div>
+    /* 卡片視覺改桌機版標準卡（2026-07-26 使用者指示）：cal-ev-std 淡彩置中設計
+       （時間／名稱／第三行教練縮寫 tag；簽到＝右下「簽」章，底色維持課程淡彩）。 */
+    const _cc=bkCC(b);
+    const courseCls = _cc==='massage' ? 'ev-massage' : ('course-'+_cc);
+    const _cid=b.substitute_coach_id||b.coach_id;
+    const _co=_cid?coachObj[_cid]:null;
+    const _ccol=coachTagColor(_cid);
+    const _venue=selfVenueLabel(b);
+    const tag = (layer==='mine' && _co)
+      ? `<span class="evc-coach" style="background:${_ccol.bg};color:${_ccol.fg};">${coachAbbr(_co)}${b.substitute_coach_id?'（代）':''}</span>`
+      : (_venue?`<span class="evc-coach" style="background:${_ccol.bg};color:${_ccol.fg};">${_venue}</span>`:'');
+    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}" ${layer==='mine'?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;"${canClick?` onclick="wtlCardClick('${b.id}')"`:` onclick="event.stopPropagation()"`}>
+      ${done?'<span class="evc-check" title="已完成">簽</span>':''}
+      <div class="evc-body"></div>
+      <div class="evc-txt">${showTime?`<span class="evc-time">${b.start_time}</span>`:''}<span class="evc-name">${disp}</span>${tag}</div>
     </div>`;
   };
 
@@ -12676,26 +12691,44 @@ async function renderCoachAgenda(){
       if(ph>0) pastMask=`<div class="cag-past" style="top:0;height:${ph}px;"></div>`;
     }
     const nowLine=(ds===todayStr && showNow)?`<div class="cag-gline-now" style="top:${yOf(nowMin)}px;"><span class="dot"></span></div>`:'';
-    /* 2026-07-23 使用者指示：**自己的課卡放大**（同時段其他課卡的兩倍寬）——
-       分欄改為「自己的課先排、且自成一欄」，自己的欄 flex:2、其他欄 flex:1。
-       同一欄內仍是貪婪排（不重疊就共用一欄）；自己的課彼此重疊時才長第二個 mine 欄。 */
-    const laneEnd=[], laneHtml=[], laneMine=[];
+    /* 2026-07-26 使用者指示（取代 07-23「自己的課放大兩倍寬」）：
+       **最左固定保留兩欄給教練本人的課卡**，右側空間留給其他課卡。
+       自己的課先在左二欄貪婪排（重疊才用到第二欄）；極少見的第三張同時重疊時
+       臨時在 mine 區尾端增生一欄。其他課在右側依重疊貪婪分欄。 */
+    const laneEnd=[0,0], laneHtml=['',''], laneMine=[true,true];
     const putLane=(list,mine)=>{
       list.forEach(b=>{
         const s=timeToMin(b.start_time), e=s+(b.duration||60);
         let ln=-1;
         for(let i=0;i<laneEnd.length;i++){ if(laneMine[i]===mine && s>=laneEnd[i]){ ln=i; break; } }
-        if(ln<0){ ln=laneEnd.length; laneEnd.push(0); laneHtml.push(''); laneMine.push(mine); }
+        if(ln<0){
+          ln = mine ? laneMine.lastIndexOf(true)+1 : laneEnd.length;   // mine 溢位欄插在 mine 區尾端
+          laneEnd.splice(ln,0,0); laneHtml.splice(ln,0,''); laneMine.splice(ln,0,mine);
+        }
         laneEnd[ln]=e;
         laneHtml[ln]+=renderCard(b, mine?'mine':(isGroupBk(b)?'group':'other'), false);
       });
     };
     putLane(dayBkAll.filter(isMineBk), true);
     putLane(dayBkAll.filter(b=>!isMineBk(b)), false);
-    if(!laneHtml.length){ laneHtml.push(''); laneMine.push(false); }   // 空日也要有一欄可點（點空格新增）
+    // 右側至少留一欄給其他課卡（也是點空格新增的落點），避免 mine 兩欄撐滿整寬
+    if(!laneMine.includes(false)){ laneEnd.push(0); laneHtml.push(''); laneMine.push(false); }
+    /* 場地餘裕標籤（2026-07-26 使用者指示）：逐 30 分鐘算「現在新排一堂教練課會落在哪」——
+       多功能已滿只剩教室→「教室」、連教室都滿→「額滿」，寫在最左欄的時段背景上。
+       用全日未取消預約算（場地容量是全店共用，跟圖層開關無關）；過去時段不標。 */
+    let vlabs='';
+    try{
+      const _vAll=allBk.filter(b=>b.date===ds && b.status!=='cancelled');
+      for(let mm=AG_START; mm<=21*60; mm+=30){
+        if(ds<todayStr || (ds===todayStr && mm<nowMin)) continue;
+        const a=allocateVenue('私人教練', _vAll, mm, mm+60, null);
+        const lab = a.error ? '額滿' : (a.toVid==='group' ? '教室' : '');
+        if(lab) vlabs+=`<div class="cag-vlab${lab==='額滿'?' full':''}" style="top:${yOf(mm)+1}px;height:${HOUR_H/2-2}px;">${lab}</div>`;
+      }
+    }catch(_){}
     /* 背景一體化（2026-07-22 使用者指示：移除「背景跟著分欄」的多欄格）——
        整點槽/過期遮罩/現在線改畫在整寬底層一次，分欄只承載課卡。 */
-    const laneCol=(inner,i)=>`<div class="cag-wk-col${laneMine[i]?' cag-col-mine':''}" data-date="${ds}" style="height:${gridH}px;" onclick="cagColClick('${ds}',event)">${inner}</div>`;
+    const laneCol=(inner,i)=>`<div class="cag-wk-col${laneMine[i]?' cag-col-mine':''}" data-date="${ds}" style="height:${gridH}px;" onclick="cagColClick('${ds}',event)">${i===0?vlabs:''}${inner}</div>`;
     colsHtml=`<div class="cag-fullbg${isToday?' col-today':''}" style="height:${gridH}px;">${hourSlots}${pastMask}${nowLine}</div>`
       +laneHtml.map(laneCol).join('');
   }
@@ -12757,7 +12790,7 @@ async function renderCoachAgenda(){
   host.querySelectorAll('.cag-wk-col').forEach(col=>{
     let ghost=null;
     col.addEventListener('mousemove',(e)=>{
-      if(e.target.closest && e.target.closest('.cag-wc')){ if(ghost){ghost.remove();ghost=null;} return; }
+      if(e.target.closest && e.target.closest('.cag-wc, .cag-std')){ if(ghost){ghost.remove();ghost=null;} return; }
       const rect=col.getBoundingClientRect();
       const yy=e.clientY-rect.top;
       let slot=Math.floor(yy/SLOT_H);           // 第幾個半小時格
@@ -12775,7 +12808,7 @@ async function renderCoachAgenda(){
   // 長按卡片 → 拖曳改期
   const SLOT_H2 = HOUR_H/2;
   const grid=host.querySelector('.cag-weekgrid');
-  host.querySelectorAll('.cag-wc[data-bid]').forEach(card=>{
+  host.querySelectorAll('.cag-wc[data-bid], .cag-std[data-bid]').forEach(card=>{
     const bid=card.getAttribute('data-bid');
     let timer=null, dragging=false, gh=null, tag=null;
     const startPress=(cx,cy)=>{
@@ -12830,7 +12863,7 @@ async function renderCoachAgenda(){
 }
 // 點某天欄位空白處 → 以吸附的半小時時段新增預約（同時選取該日）
 function cagColClick(ds,ev){
-  if(ev&&ev.target&&ev.target.closest&&ev.target.closest('.cag-wc')) return;
+  if(ev&&ev.target&&ev.target.closest&&ev.target.closest('.cag-wc, .cag-std')) return;
   window._cagSelDate=ds;
   // 依點擊位置換算吸附時間
   const col=ev&&ev.currentTarget;
