@@ -2522,6 +2522,15 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-arrow{width:34px;height:34px;border-radius:9px;background:var(--card);border:1.5px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:var(--green);transition:.15s;cursor:pointer;flex-shrink:0;}
 /* Filter Chips（Notion/Apple Mail 風 Tag）：更薄、選中用 dot */
 .cal-chips-bar{display:flex;flex-direction:column;gap:5px;padding:0 2px 8px;flex-shrink:0;}
+/* 第二列動作列（2026-07-26 使用者指示）：課程 chips 左、日期導覽＋今天＋新增預約 靠右放大一號 */
+.cal-bar2{flex-direction:row;align-items:center;gap:14px;flex-wrap:wrap;padding:2px 2px 10px;}
+.cal-bar2 .cal-chip-row{flex:1 1 auto;min-width:0;}
+.cal-bar2 .cal-nav{flex:0 0 auto;display:flex;align-items:center;gap:12px;}
+.cal-bar2 .cal-title{font-size:16.5px !important;}
+.cal-bar2 .cal-arrow{width:30px;height:30px;font-size:17px;}
+.cal-bar2 .cal-today-btn{font-size:13px;padding:7px 16px;}
+.cal-bar2 .cal-head-right{flex:0 0 auto;}
+.cal-bar2 .btn-green{font-size:13.5px;padding:9px 18px;}
 .cal-chip-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
 .cal-chip{font-size:11.5px;font-weight:500;padding:2px 10px;border-radius:13px;background:transparent;color:var(--t2);border:1px solid var(--bd);cursor:pointer;transition:.15s;white-space:nowrap;line-height:1.55;display:inline-flex;align-items:center;gap:4px;}
 .cal-chip:hover{background:var(--card2);}
@@ -5663,8 +5672,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1904';
-const APP_VERSION_LABEL='v260726.1904';
+const APP_VERSION='260726.1911';
+const APP_VERSION_LABEL='v260726.1911';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11041,24 +11050,28 @@ async function renderCalendar(opts){
   /* 工具列重排（2026-07-20 使用者指示）：移除「週曆/日曆」切換（日曆模式很少用；
      程式與手機窄幅自動單日模式保留）；「今天」併入中間日期導覽；「新增預約」移最右；
      教練 chips 上移到第一列左側 —— 上方由三列縮為兩列。 */
+  /* 標題區兩列（2026-07-26 使用者指示）：
+     第一列＝教練 chips 整排（無 coachFilter 時放日期導覽維持單列）；
+     第二列＝課程 chips（左）＋日期導覽＋今天＋新增預約（右，放大一號）。 */
+  const _calNavHtml=`<div class="cal-nav">
+        <div class="cal-arrow" onclick="${nDays===1?`calStep(-1)`:`calStepWeek(-1)`}" title="前一週">‹</div>
+        <div class="cal-title" onclick="openCalJump()" style="cursor:pointer;" title="點擊選擇日期">${title} ▾</div>
+        <div class="cal-arrow" onclick="${nDays===1?`calStep(1)`:`calStepWeek(1)`}" title="下一週">›</div>
+        <button class="btn btn-ghost cal-today-btn" onclick="calToToday();navTo(CUR_PAGE)">今天</button>
+      </div>`;
   return `<div class="cal-wrap">
     <div class="cal-head">
       <div class="cal-head-left">
         ${opts.coachFilter?`<div class="cal-chip-row">${calCoachChips(coaches,filterCoach)}</div>`:''}
       </div>
-      <div class="cal-nav">
-        <div class="cal-arrow" onclick="${nDays===1?`calStep(-1)`:`calStepWeek(-1)`}" title="前一週">‹</div>
-        <div class="cal-title" onclick="openCalJump()" style="cursor:pointer;" title="點擊選擇日期">${title} ▾</div>
-        <div class="cal-arrow" onclick="${nDays===1?`calStep(1)`:`calStepWeek(1)`}" title="下一週">›</div>
-        <button class="btn btn-ghost btn-sm cal-today-btn" onclick="calToToday();navTo(CUR_PAGE)">今天</button>
-      </div>
-      <div class="cal-head-right">
-        ${/* 2026-07-26 使用者指示：「當月排班」改放首頁左欄月曆上方，這裡不再重複 */''}
-        ${opts.coachFilter?`<button class="btn btn-green btn-sm" onclick="openBookingModal()">＋ 新增預約</button>`:''}
-      </div>
+      ${opts.coachFilter?'':_calNavHtml}
     </div>
-    ${opts.coachFilter?`<div class="cal-chips-bar">
+    ${opts.coachFilter?`<div class="cal-chips-bar cal-bar2">
       <div class="cal-chip-row">${calCourseChips()}</div>
+      ${_calNavHtml}
+      <div class="cal-head-right">
+        <button class="btn btn-green" onclick="openBookingModal()">＋ 新增預約</button>
+      </div>
     </div>`:''}
     <div class="cal-body-wrap">
       <div class="cal-body${(nDays===7||nDays===5)?' cal-7d':''}${nDays===3?' cal-3d':''}${nDays===1?' cal-1d':''}${(function(){const d=window._calPendingSlide;window._calPendingSlide=null;return d?(d>0?' cal-slide-l':' cal-slide-r'):'';})()}" style="--slot-px:${SLOT_PX}px;">${timecol}${daysHtml}</div>
