@@ -5652,8 +5652,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1056';
-const APP_VERSION_LABEL='v260726.1056';
+const APP_VERSION='260726.1157';
+const APP_VERSION_LABEL='v260726.1157';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14289,32 +14289,66 @@ async function openBookingDetail(id){
     }
   }
   const tkLine = tk ? `<div><span style="color:var(--t2);">票券</span>　${tk.plan_name||'票券'}　<b class="num">${tk.sessions_remaining}/${tk.sessions_total}</b>${tk.sessions_remaining<=2?' <span class="tag tag-warn">建議續約</span>':''}${(tk.installment&&typeof tk.installment==='object')?` <span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;">分期・開通 ${tk.unlocked_sessions||tk.installment.current||0}/${tk.sessions_total}</span>`:''}　<span style="color:var(--t3);font-size:11px;">效期至 ${fmtExpire(tk.expire_date,tk)}</span></div>`+_payAlertLine : '';
-  // 個人教練課：票券圓圈進度卡（高亮本堂是第幾堂）
+  /* 個人課：票券圓圈進度卡（高亮本堂是第幾堂）
+     2026-07-26：舊系統匯入的預約 ticket_id 為 null（1,393 筆私人教練只有 11 筆有綁），
+     原本整張卡都出不來。改成沒綁票券時沿用團課那套推估：找該會員目前在用的同型票券，
+     逐堂日期取他最近 N 堂的上課紀錄。⚠️ 推估而非帳本事實，真正要精確得先把預約綁上 ticket_id。 */
   let tkCircleHtml='';
-  const isPersonalPT = tk && b.category!=='小班肌力' && b.category!=='體驗';
+  let _tkCard=tk, _tkInferred=false;
+  if(!tk && b.member_id && b.category!=='小班肌力' && b.category!=='體驗'){
+    try{
+      if(!window._ttCache) window._ttCache=await dbGetAll('ticket_types');
+      const _allTkD=await dbGetAll('member_tickets');
+      _tkCard=findRefundTargetTicket(_allTkD,b.member_id,b.ticket_type_id,b.category,b.format);
+      _tkInferred=!!_tkCard;
+    }catch(_){}
+  }
+  const isPersonalPT = _tkCard && b.category!=='小班肌力' && b.category!=='體驗';
   if(isPersonalPT){
-    const total=tk.sessions_total||0;
+    const tkC=_tkCard;
+    const total=tkC.sessions_total||0;
     const allBk2=await dbGetAll('bookings').catch(()=>[]);
-    const tkBks2=allBk2.filter(x=>x.ticket_id===tk.id && x.status!=='cancelled')
-      .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
+    let tkBks2;
+    if(!_tkInferred){
+      tkBks2=allBk2.filter(x=>x.ticket_id===tkC.id && x.status!=='cancelled')
+        .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
+    }else{
+      /* 推估軌跡：同會員、同類別、同票種、同 format 的未取消預約。
+         已用堂數取自票券本身，日期取「最近 N 堂」的出席紀錄，未來已預約的填進剩餘圓點。 */
+      const hist=allBk2.filter(x=>x.member_id===b.member_id && x.status!=='cancelled'
+          && x.category===b.category
+          && (!b.ticket_type_id || x.ticket_type_id===b.ticket_type_id)
+          && (!b.format || !x.format || x.format===b.format))
+        .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
+      const usedN=Math.min(Math.max(0,total-(tkC.sessions_remaining||0)),total);
+      const doneAll=hist.filter(x=>x.status==='checked_in'||x.status==='completed');
+      tkBks2=[...(usedN>0?doneAll.slice(-usedN):[]), ...hist.filter(x=>x.status==='booked')];
+      // 本堂若不在推估區間內（例如更早以前的課），補進來才標得到金框
+      if(!tkBks2.some(x=>x.id===b.id)){
+        const self=hist.find(x=>x.id===b.id);
+        if(self) tkBks2=[...tkBks2,self].sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
+      }
+    }
     const curIdx=tkBks2.findIndex(x=>x.id===b.id); // 本堂在此票券所有預約中的序（0-based）
-    const doneCount=tkBks2.filter(x=>x.status==='completed'||x.status==='checked_in').length;
-    const isInstall2 = tk.installment && typeof tk.installment==='object';
-    const unlocked2 = isInstall2 ? (tk.unlocked_sessions!=null?tk.unlocked_sessions:total) : total;
+    const doneCount=_tkInferred
+      ? Math.min(Math.max(0,total-(tkC.sessions_remaining||0)),total)
+      : tkBks2.filter(x=>x.status==='completed'||x.status==='checked_in').length;
+    const isInstall2 = tkC.installment && typeof tkC.installment==='object';
+    const unlocked2 = isInstall2 ? (tkC.unlocked_sessions!=null?tkC.unlocked_sessions:total) : total;
     /* 2026-07-26 使用者指示：圓圈由「第幾堂」改成顯示使用日期，與會員票券內容同一套邏輯。
        改用全系統統一的 ticketTokens（實心＋上課日期／空心＋預約日期／空心未使用／🔒未開通），
        並傳入本堂 booking id 讓它多加一圈金框 —— 預約明細比會員視角多的就是這個「本堂」定位。 */
     if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
     const _typeMapD=Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t]));
-    const dots=ticketTokens(tk,tkBks2,_typeMapD,doneCount,b.id);
+    const dots=ticketTokens(tkC,tkBks2,_typeMapD,doneCount,b.id);
     const curLabel = curIdx>=0 ? `第 <b>${curIdx+1}</b> / ${total} 堂` : `${total} 堂`;
     tkCircleHtml=`<div class="bkd-tkcard">
       <div class="bkd-tkcard-head">
-        <span class="bkd-tkcard-name">${tk.plan_name||'票券'}</span>
-        <span class="bkd-tkcard-prog">本堂 ${curLabel}${tk.sessions_remaining<=2?'　<span class="tag tag-warn" style="font-size:10px;">建議續約</span>':''}</span>
+        <span class="bkd-tkcard-name">${tkC.plan_name||'票券'}</span>
+        <span class="bkd-tkcard-prog">本堂 ${curLabel}${tkC.sessions_remaining<=2?'　<span class="tag tag-warn" style="font-size:10px;">建議續約</span>':''}</span>
       </div>
       <div class="mck-dots2" style="margin:10px 0 2px;">${dots}</div>
-      <div style="font-size:11px;color:var(--t3);margin-top:8px;">效期至 ${fmtExpire(tk.expire_date,tk)}${isInstall2?`　·　分期開通 ${unlocked2}/${total}`:''}</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:8px;">效期至 ${fmtExpire(tkC.expire_date,tkC)}${isInstall2?`　·　分期開通 ${unlocked2}/${total}`:''}</div>
     </div>`+_payAlertLine;
   }
   const memMapD=Object.fromEntries(members.map(m=>[m.id,m.name]));
@@ -15530,7 +15564,11 @@ async function openMemberDetail(member_id){
     const ty=typeMap[t.ticket_type_id];
     const total=t.sessions_total||0;
     const dates=(usedDates[t.id]||[]).slice();
-    const usedCount=dates.length;
+    /* 2026-07-26：已用堂數原本只數「綁到這張票的預約」，但舊系統匯入的票券一筆預約都沒綁
+       （全庫 2,400 多張票只有 11 筆預約有 ticket_id），導致早就用完的歷史票券整排空心、
+       未使用堂數也算成滿的。改取「帳面已用（總堂−剩餘）」與「有紀錄的預約數」較大者：
+       匯入票以餘額為準（用完就整排實心），新系統的票兩者本來就一致。 */
+    const usedCount=Math.min(total, Math.max(dates.length, total-(t.sessions_remaining??total)));
     const isDim=(t.status!=='usable')||(t.expire_date&&t.expire_date<ymd(TODAY));
     /* 2026-07-23 使用者指示：票券逐堂顯示全系統統一 —— 改用 ticketTokens
        （課種色圓點：實心＋上課日期／空心＋預約日期／空心未使用），取代原本的灰色 tkc-dot。 */
@@ -15540,7 +15578,8 @@ async function openMemberDetail(member_id){
     return `<div class="md-tk-item"${isDim?' style="opacity:.55;"':''}>
       <div class="md-tk-top">
         <div class="md-tk-name">${t.plan_name||(ty?ty.name:'—')}<span class="tag tag-${ty?ty.color:'pt'}" style="margin-left:8px;">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span>${instTag}</div>
-        <div class="md-tk-count"><b style="color:var(--green);">${total-usedCount}</b><span style="color:var(--t3);font-weight:600;font-size:13px;"> / ${total}</span></div>
+        <!-- 2026-07-26 使用者指示：右上角改顯示「已用/總數」（原本是剩餘/總數） -->
+        <div class="md-tk-count"><b style="color:var(--green);">${usedCount}</b><span style="color:var(--t3);font-weight:600;font-size:13px;"> / ${total}</span></div>
       </div>
       <div class="mck-dots2" style="margin:10px 0 12px;">${circles}</div>
       <div class="md-tk-foot">
