@@ -1336,7 +1336,7 @@ tr:hover td{background:var(--card2);}
 /* z 300（2026-07-21）：需高於名片彈窗 pp-sheet-desk(200) 與 mc-mode 頂列(120~131)，
    讓區塊編輯彈窗能疊在名片上；仍低於 9000 系（帳戶選單/會員選單等） */
 .modal-bg{position:fixed;inset:0;background:rgba(20,18,14,0.55);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;}
-.modal{background:var(--surface-3);border-radius:var(--radius-2xl);padding:26px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-xl);}
+.modal{background:var(--surface-3);border-radius:var(--radius-2xl);padding:26px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-xl);-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
 .modal-title{font-family:var(--serif);font-size:18px;font-weight:600;margin-bottom:18px;}
 .modal-foot{display:flex;gap:10px;margin-top:22px;}
 .modal-tabs{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:var(--radius-md);margin-bottom:16px;overflow-x:auto;}
@@ -5714,8 +5714,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.2356';
-const APP_VERSION_LABEL='v260726.2356';
+const APP_VERSION='260727.0004';
+const APP_VERSION_LABEL='v260727.0004';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12869,6 +12869,9 @@ async function renderCoachAgenda(){
     card.addEventListener('touchstart',(e)=>{ const t=e.touches[0]; startPress(t.clientX,t.clientY); },{passive:true});
     card.addEventListener('touchmove',(e)=>{ if(dragging)e.preventDefault(); const t=e.touches[0]; moveTo(t.clientX,t.clientY); },{passive:false});
     card.addEventListener('touchend',endPress);
+    // 觸控被系統手勢/來電打斷時 touchend 不會來——不收尾的話 dragging 卡 true，
+    // 之後從這張卡起手的捲動全被 preventDefault 吃掉（畫面像鎖死）。2026-07-27 修正。
+    card.addEventListener('touchcancel',endPress);
     card.addEventListener('mousedown',(e)=>{ startPress(e.clientX,e.clientY);
       const mm=(ev)=>moveTo(ev.clientX,ev.clientY);
       const mu=()=>{ endPress(); document.removeEventListener('mousemove',mm); document.removeEventListener('mouseup',mu); };
@@ -28343,13 +28346,28 @@ function showModal(html){
   bg.addEventListener('wheel',e=>{ if(e.target===bg) e.preventDefault(); },{passive:false});
   bg.addEventListener('touchmove',e=>{ if(e.target===bg) e.preventDefault(); },{passive:false});
   document.body.appendChild(bg);
+  /* 鎖住底層捲動（2026-07-27 卡死修正）：iOS 對 body overflow:hidden 會把捲動位置歸零
+     （畫面跳回最上方 logo 列），且偶發還原失敗整頁鎖死。改 position:fixed 保存/還原捲動。
+     只在尚未鎖定時保存（巢狀開窗不覆蓋原位置）。 */
+  if(document.body.style.position!=='fixed'){
+    window._mScrollY=window.scrollY||document.documentElement.scrollTop||0;
+    document.body.style.top=(-window._mScrollY)+'px';
+    document.body.style.left='0'; document.body.style.right='0';
+    document.body.style.position='fixed';
+  }
   document.body.style.overflow='hidden'; // 鎖住底層捲動
   if(!window._escBound){
     window._escBound=true;
     document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.getElementById('modal-bg'))closeModal(); });
   }
 }
-function closeModal(){const m=document.getElementById('modal-bg');if(m)m.remove(); document.body.style.overflow=''; if(window._scanInModal){ if(typeof stopScan==='function')stopScan(); window._scanInModal=false; } if(window._reqReviewed){ window._reqReviewed=false; if(CUR_PAGE==='g_dashboard'&&typeof navTo==='function') navTo(CUR_PAGE); }}
+function closeModal(){const m=document.getElementById('modal-bg');if(m)m.remove(); document.body.style.overflow='';
+  // 還原捲動鎖（與 showModal 的 position:fixed 保存式鎖成對）
+  if(document.body.style.position==='fixed'){
+    document.body.style.position=''; document.body.style.top=''; document.body.style.left=''; document.body.style.right='';
+    if(window._mScrollY!=null){ window.scrollTo(0,window._mScrollY); window._mScrollY=null; }
+  }
+  if(window._scanInModal){ if(typeof stopScan==='function')stopScan(); window._scanInModal=false; } if(window._reqReviewed){ window._reqReviewed=false; if(CUR_PAGE==='g_dashboard'&&typeof navTo==='function') navTo(CUR_PAGE); }}
 /* 重型明細視窗掛上載入過場（2026-07-26）：這三支開啟前要整表抓資料，
    慢的時候看起來像當機。函式宣告會提升，這裡重新指派即可讓所有 onclick 走包裝版。 */
 if(typeof _pglWrap==='function'){
