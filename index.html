@@ -5652,8 +5652,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.0956';
-const APP_VERSION_LABEL='v260726.0956';
+const APP_VERSION='260726.1011';
+const APP_VERSION_LABEL='v260726.1011';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10230,9 +10230,19 @@ PAGES.dashboard=async function(){
   const revenue=revTickets.reduce((s,t)=>s+(t.amount_paid||0),0);
 
   // ── 已使用課堂費用：本期銷課（已完成/已簽到的預約）× 該票券單堂價 ──
-  // 2026-07-25：無綁票券（舊系統匯入課，ticket_id 為 null）改用 booking.session_fee
-  //（來源＝舊系統「費用換算現金」），否則銷課金額幾乎全 0。優先用票券單價、退而用 session_fee。
-  const _bkFee=(b,tk)=> (tk&&tk.unit_price)?Number(tk.unit_price):(Number(b.session_fee)||0);
+  /* 2026-07-25：無綁票券（舊系統匯入課，ticket_id 為 null）改用 booking.session_fee
+     （來源＝舊系統「費用換算現金」），否則銷課金額幾乎全 0。
+     2026-07-26 優先序反轉為 session_fee → 票券單價，兩個原因：
+     ① PostgREST 回傳的 numeric 是字串，unit_price 為 "0" 時字串是 truthy，
+        原式會把該堂算成 0 元（已知 BK-mrkddrfuu72i、BK-19f7b0bf06256d3 兩筆受害）。
+     ② 價格回填後仍有 300+ 張教練課票券 unit_price=0，那些課的正確金額在 session_fee
+        —— 拆帳版是逐堂認列，比「總價÷總堂數」的票券均價更準。
+     session_fee 只有匯入資料才有值（程式從不寫入），新系統的預約為 null 會自然落到票券單價。
+     這也讓之後把預約綁上 ticket_id 時營收不會跟著跳動。 */
+  const _bkFee=(b,tk)=>{
+    if(b && b.session_fee!=null && b.session_fee!==''){ const f=Number(b.session_fee); if(!isNaN(f)) return f; }
+    const u=Number(tk&&tk.unit_price); return isNaN(u)?0:u;
+  };
   const usedBk=bookings.filter(b=>inRange(b.date)&&(b.status==='completed'||b.status==='checked_in'));
   let usedFee=0;
   for(const b of usedBk){
