@@ -5655,8 +5655,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1314';
-const APP_VERSION_LABEL='v260726.1314';
+const APP_VERSION='260726.1325';
+const APP_VERSION_LABEL='v260726.1325';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7814,7 +7814,7 @@ function buildMemberButler(){
   // 資料來源（mem_bookings 已快取）
   const mine = (window._memCalData&&window._memCalData.mine) || [];
   const coachMap = (window._memCalData&&window._memCalData.coachMap) || {};
-  const tks = (window._allTkCache||[]).filter(t=>t.member_id===SESSION.id);
+  const tks = (window._allTkCache||[]).filter(t=>tkUsableBy(t,SESSION.id));   // 含共享票（2026-07-26）
 
   // 已上課堂數（checked_in/completed）
   const doneList = mine.filter(b=>b.status==='checked_in'||b.status==='completed');
@@ -8260,6 +8260,30 @@ function categoryOfTypeId(type_id){
   if(type_id==='trial') return '體驗';
   return null;
 }
+/* ══ 票券共享（2026-07-26 使用者指示）══════════════════════════════════════
+   舊系統有「共享方案」：一張票由持有人購買、指定其他會員共用同一個堂數池
+   （例：許朱同買的限定教練課1V2 10 堂，實際 20 堂全由共享者陳蘭馨使用）。
+   正式庫用 member_tickets.shared_with（member_id 的 jsonb 陣列）表示：
+   ・持有人＝member_id —— 營收、購買紀錄仍歸他，不會因共享而重複計算
+   ・可用者＝持有人＋共享者 —— 任一人預約都從同一個 sessions_remaining 扣，一堂扣 1
+   下面兩支是全系統唯一的判定入口，挑票／退票／顯示一律走它們。 */
+function tkSharedIds(t){
+  const v=t&&t.shared_with;
+  if(!v) return [];
+  if(Array.isArray(v)) return v.filter(Boolean).map(String);
+  if(typeof v==='string'){ try{ const a=JSON.parse(v); return Array.isArray(a)?a.filter(Boolean).map(String):[]; }catch(_){ return []; } }
+  return [];
+}
+// 這張票的所有可用者（持有人排在第一個）
+function tkParticipants(t){
+  const own=t&&t.member_id?[String(t.member_id)]:[];
+  return own.concat(tkSharedIds(t).filter(x=>x!==own[0]));
+}
+// member_id 能不能用這張票？（持有人或共享者）
+function tkUsableBy(t,member_id){
+  if(!t||!member_id) return false;
+  return String(t.member_id)===String(member_id) || tkSharedIds(t).indexOf(String(member_id))>=0;
+}
 // 找會員某類型最早到期的可用票券
 // 列出會員在某類型、某預約日仍有效（未過期、有剩餘堂數）的所有票券
 async function listUsableTickets(member_id,type_id,bookDate){
@@ -8268,7 +8292,7 @@ async function listUsableTickets(member_id,type_id,bookDate){
   const wantCat=categoryOfTypeId(type_id); // 目標課程類別
   const groupMode = wantCat==='小班肌力';   // 團課：不同方案票券互通（同為團課即可用）
   return all.filter(t=>{
-      if(t.member_id!==member_id) return false;
+      if(!tkUsableBy(t,member_id)) return false;   // 持有人或共享者皆可用
       if(t.status!=='usable' || !(t.sessions_remaining>0)) return false;
       if(bookDate && t.expire_date && t.expire_date<bookDate) return false; // 已過期
       if(groupMode) return ticketCategoryOf(t)==='小班肌力'; // 團課：同類別即可（不分方案）
@@ -8393,7 +8417,7 @@ async function refundTicket(ticket_id,booking_id,operator){
 function findRefundTargetTicket(all,member_id,type_id,category,format){
   const groupMode = category==='小班肌力' || categoryOfTypeId(type_id)==='小班肌力';
   const cand=(all||[]).filter(t=>{
-    if(t.member_id!==member_id) return false;
+    if(!tkUsableBy(t,member_id)) return false;   // 共享票：持有人或共享者都能退回這張
     if(groupMode) return ticketCategoryOf(t)==='小班肌力';  // 團課：不同方案票券互通（同 listUsableTickets）
     if(type_id) return bkTicketTypeOk(t,type_id);           // 嚴格比對票種＋教練課兼容 VIP/限定舊票
     return ticketMatchesCategory(t,category);               // 沒帶票種時退而求其次：同類別
@@ -15601,21 +15625,46 @@ async function openMemberDetail(member_id){
   // 供 bkCC 的友善判斷（第2依據種類名稱/色、第3依據票券 plan_name）可靠運作，避免沿用前頁殘留的空快取
   window._ttCache=types;
   window._allTkCache=tickets;
-  const myTickets=tickets.filter(t=>t.member_id===member_id).sort((a,b)=>b.created_at.localeCompare(a.created_at));
+  /* 共享票（2026-07-26）：持有人與共享者都要看得到這張卡。 */
+  const myTickets=tickets.filter(t=>tkUsableBy(t,member_id)).sort((a,b)=>b.created_at.localeCompare(a.created_at));
   const myBookings=bookings.filter(b=>b.member_id===member_id).sort((a,b)=>(b.date+b.start_time).localeCompare(a.date+a.start_time));
+  /* 共享票的堂數是共用的，已用堂數必須算上「其他共享者」的課，只看本人會少算。
+     但不能把對方的課全部拉進來 —— 只拉「有共享票的那些票種＋format」，
+     否則對方自己的同類票券預約會被誤算進這位會員的先進先出池。
+     沒有共享票時 sharedBookings 就等於 myBookings，一般會員完全不受影響。 */
+  const _shrKeys=new Set(), _shrPeers=new Set();
+  myTickets.forEach(t=>{
+    if(!tkSharedIds(t).length) return;
+    const ty=types.find(x=>x.id===t.ticket_type_id);
+    _shrKeys.add([(ty?ty.name:''), t.format||''].join('|'));
+    tkParticipants(t).forEach(x=>{ if(String(x)!==String(member_id)) _shrPeers.add(String(x)); });
+  });
+  const sharedBookings=(_shrKeys.size&&_shrPeers.size)
+    ? myBookings.concat(bookings.filter(b=>{
+        if(!_shrPeers.has(String(b.member_id))) return false;
+        const ty=types.find(x=>x.id===b.ticket_type_id);
+        return _shrKeys.has([(ty?ty.name:''), b.format||''].join('|'));
+      })).sort((a,b)=>(b.date+b.start_time).localeCompare(a.date+a.start_time))
+    : myBookings;
+  /* 共享票要在卡片上標出「跟誰共用」，只有存在共享票時才多撈一次 members */
+  const peerName={};
+  if(_shrPeers.size){
+    try{ (await dbGetAll('members')).forEach(x=>{ peerName[x.id]=x.name; }); }catch(_){}
+  }
   // 票券顯示「未使用堂數 = 總數 − 已簽到/完成」（已預約未上仍算未使用）
-  const usedMap=usedSessionsMap(myBookings);
-  const usedDates=usedDatesMap(myBookings);
+  //  共享票的堂數共用，故一律以 sharedBookings 為準（無共享票時它就等於 myBookings）
+  const usedMap=usedSessionsMap(sharedBookings);
+  const usedDates=usedDatesMap(sharedBookings);
   /* 每張票券扣抵的預約（給逐堂圓點標日期）：ticket_id 直連；團課 ticket_id 為 null 者
      此視窗未載入 ticket_logs，故只少了日期標示，實心格數仍以 usedDates 為準 */
   const bkByTk={};
-  (myBookings||[]).forEach(b=>{ if(b.ticket_id&&b.status!=='cancelled'){ (bkByTk[b.ticket_id]=bkByTk[b.ticket_id]||[]).push(b); } });
+  (sharedBookings||[]).forEach(b=>{ if(b.ticket_id&&b.status!=='cancelled'){ (bkByTk[b.ticket_id]=bkByTk[b.ticket_id]||[]).push(b); } });
   Object.values(bkByTk).forEach(arr=>arr.sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||''))));
   /* 匯入票券沒有 ticket_id 直連（全庫 2,400 多張票只有 11 筆預約有綁），逐堂圓點會完全沒有日期，
      而且「已用堂數」只能拿 總堂−剩餘 來推 —— 但舊系統的「未核銷額度」把已預約也算掉了，
      於是未來的預約會被畫成已上課的實心勾（朱庭箴 8/02、8/09 的課被畫成 ✓）。
      這裡改用先進先出推算（allocBookingsToTickets，與預約明細共用同一支，兩邊才會一致）。 */
-  const inferByTk=allocBookingsToTickets(myTickets,myBookings,typeMap).inferred;
+  const inferByTk=allocBookingsToTickets(myTickets,sharedBookings,typeMap).inferred;
   // 票券分類：課程票券（教練/友善/團課）vs 自主訓練
   const tkCategoryOf=(t)=>{
     const ty=typeMap[t.ticket_type_id];
@@ -15659,9 +15708,19 @@ async function openMemberDetail(member_id){
     const circles=ticketTokens(t,(bkByTk[t.id]||inf),typeMap,usedCount);
     const inst=t.installment&&typeof t.installment==='object'?t.installment:null;
     const instTag=inst?`<span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;margin-left:6px;">🔒 分期 ${t.unlocked_sessions||inst.current||0}/${total}</span>`:'';
+    /* 共享票（2026-07-26）：標出跟誰共用；持有人非本人時額外註明「◎ 持有人」，
+       因為堂數是從持有人買的那張票扣的，櫃台要看得出來。 */
+    const _parts=tkParticipants(t);
+    const _others=_parts.filter(x=>String(x)!==String(member_id));
+    const _isOwner=String(t.member_id)===String(member_id);
+    const shareTag=_others.length
+      ? `<span class="tag" style="background:#eaf3ef;color:#2f6b4f;font-size:10px;margin-left:6px;" title="共用同一個堂數池，任一人上課都從這張票扣">共享・${_others.map(x=>(peerName[x]||'—')+(!_isOwner&&String(x)===String(t.member_id)?'（持有人）':'')).join('、')}</span>`
+      : '';
+    // 自主訓練點數與折抵券不提供共享
+    const canShare=(SESSION.role==='admin'||SESSION.role==='front_desk')&&tkCategoryOf(t)==='course';
     return `<div class="md-tk-item"${isDim?' style="opacity:.55;"':''}>
       <div class="md-tk-top">
-        <div class="md-tk-name">${t.plan_name||(ty?ty.name:'—')}<span class="tag tag-${ty?ty.color:'pt'}" style="margin-left:8px;">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span>${instTag}</div>
+        <div class="md-tk-name">${t.plan_name||(ty?ty.name:'—')}<span class="tag tag-${ty?ty.color:'pt'}" style="margin-left:8px;">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span>${instTag}${shareTag}</div>
         <!-- 2026-07-26 使用者指示：右上角改顯示「已用/總數」（原本是剩餘/總數） -->
         <div class="md-tk-count"><b style="color:var(--green);">${usedCount}</b><span style="color:var(--t3);font-weight:600;font-size:13px;"> / ${total}</span></div>
       </div>
@@ -15669,6 +15728,7 @@ async function openMemberDetail(member_id){
       <div class="md-tk-foot">
         <span class="md-tk-meta">到期 ${fmtExpire(t.expire_date,t)}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span></span>
         ${(inst && (t.unlocked_sessions||0)<total && (SESSION.role==='admin'||SESSION.role==='front_desk'))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
+        ${canShare?`<button class="btn btn-ghost btn-sm" onclick="openTicketShare('${t.id}','${member_id}')">${_others.length?'共享設定':'設為共享'}</button>`:''}
         ${extraBtn||''}
       </div>
     </div>`;
@@ -20565,7 +20625,7 @@ PAGES.m_tickets=async function(){
     dbGetAll('member_tickets'),dbGetAll('ticket_types'),dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('bookings').catch(()=>[])]);
   window._ttCache=types; window._allTkCache=tickets;
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
-  const mine=tickets.filter(t=>t.member_id===mid).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
+  const mine=tickets.filter(t=>tkUsableBy(t,mid)).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));   // 含共享票（2026-07-26）
   const myBk=(bookings||[]).filter(b=>b.member_id===mid || (Array.isArray(b.member_ids)&&b.member_ids.includes(mid)));
   const usedMap=usedSessionsMap(myBk);
   // 每張票券扣抵的預約（給圓圈進度）
@@ -21606,6 +21666,85 @@ async function submitGrant(){
   else navTo(CUR_PAGE);
 }
 // ── 分期：開通下一期（收款即解鎖）──
+/* ══ 票券共享設定（2026-07-26 使用者指示）════════════════════════════════
+   舊系統的「共享方案」：一張票由持有人購買，指定其他會員共用同一個堂數池。
+   持有人不變（營收仍歸他），只在 shared_with 加會員 id；任一人預約都扣同一張票。 */
+async function openTicketShare(ticket_id,back_member_id){
+  if(!(SESSION.role==='admin'||SESSION.role==='front_desk')){ showToast('只有管理員或櫃台可設定共享'); return; }
+  const t=await dbGet('member_tickets',ticket_id); if(!t){ showToast('找不到票券'); return; }
+  const members=await dbGetAll('members');
+  const nameOf=id=>{ const x=members.find(y=>y.id===id); return x?x.name:'—'; };
+  window._tkShareState={ticket_id, back:back_member_id||t.member_id, ids:tkSharedIds(t).slice()};
+  renderTicketShareModal(members,nameOf,t);
+}
+function renderTicketShareModal(members,nameOf,t){
+  const st=window._tkShareState;
+  const rows=st.ids.length
+    ? st.ids.map(id=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd);font-size:13px;">
+        <span>${nameOf(id)} <span style="color:var(--t3);font-size:11px;">${fmtPhone((members.find(y=>y.id===id)||{}).phone)}</span></span>
+        <button class="btn btn-ghost btn-sm" onclick="tkShareRemove('${id}')">移除</button></div>`).join('')
+    : '<div style="padding:10px 0;color:var(--t3);font-size:12.5px;">尚未設定共享對象</div>';
+  showModal(`<div class="modal-title">票券共享設定</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:4px;">${t.plan_name||'票券'}　·　${t.sessions_remaining||0}/${t.sessions_total||0} 堂</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:14px;">持有人：<b>${nameOf(t.member_id)}</b>（營收與購買紀錄仍歸持有人，不會重複計算）</div>
+    <div class="form-row"><label>加入共享對象</label>
+      <input id="tksh-q" placeholder="輸入姓名或手機搜尋" oninput="tkShareSearch()" autocomplete="off">
+      <div id="tksh-res" style="max-height:150px;overflow:auto;margin-top:6px;"></div>
+    </div>
+    <div style="font-size:12px;color:var(--t2);font-weight:600;margin:12px 0 2px;">目前共享者（${st.ids.length}）</div>
+    ${rows}
+    <div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-top:12px;">共享者與持有人共用同一個堂數池，任一人上課都從這張票扣 1 堂。自主訓練點數與折抵券不提供共享。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openMemberDetail('${st.back}')">取消</button>
+      <button class="btn btn-green" onclick="doSaveTicketShare()">儲存</button></div>`);
+  window._tkShareMembers=members;
+}
+function tkShareSearch(){
+  const q=(document.getElementById('tksh-q')||{}).value||'';
+  const box=document.getElementById('tksh-res'); if(!box) return;
+  const st=window._tkShareState, ms=window._tkShareMembers||[];
+  const key=q.trim().toLowerCase();
+  if(!key){ box.innerHTML=''; return; }
+  const hit=ms.filter(m=>{
+    if(st.ids.indexOf(m.id)>=0) return false;
+    return (m.name||'').toLowerCase().indexOf(key)>=0 || String(m.phone||'').indexOf(key)>=0;
+  }).slice(0,8);
+  box.innerHTML=hit.length?hit.map(m=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--bd);font-size:13px;">
+      <span>${m.name} <span style="color:var(--t3);font-size:11px;">${fmtPhone(m.phone)}</span></span>
+      <button class="btn btn-ghost btn-sm" onclick="tkShareAdd('${m.id}')">加入</button></div>`).join('')
+    :'<div style="padding:8px 0;color:var(--t3);font-size:12px;">查無會員</div>';
+}
+function tkShareAdd(id){
+  const st=window._tkShareState; if(!st) return;
+  if(st.ids.indexOf(id)<0) st.ids.push(id);
+  _tkShareRedraw();
+}
+function tkShareRemove(id){
+  const st=window._tkShareState; if(!st) return;
+  st.ids=st.ids.filter(x=>x!==id);
+  _tkShareRedraw();
+}
+async function _tkShareRedraw(){
+  const st=window._tkShareState;
+  const t=await dbGet('member_tickets',st.ticket_id);
+  const members=window._tkShareMembers||await dbGetAll('members');
+  renderTicketShareModal(members,id=>{ const x=members.find(y=>y.id===id); return x?x.name:'—'; },t);
+}
+async function doSaveTicketShare(){
+ try{
+  const st=window._tkShareState; if(!st) return;
+  const t=await dbGet('member_tickets',st.ticket_id); if(!t) return;
+  const before=tkSharedIds(t);
+  const ids=st.ids.filter(x=>String(x)!==String(t.member_id));   // 持有人不重複列入
+  t.shared_with = ids.length?ids:null;
+  await dbPut('member_tickets',t);
+  const members=window._tkShareMembers||[];
+  const nm=id=>{ const x=members.find(y=>y.id===id); return x?x.name:id; };
+  await logTicket(t.id,'adjust',0,null,SESSION.name,
+    `共享設定：${before.length?before.map(nm).join('、'):'（無）'} → ${ids.length?ids.map(nm).join('、'):'（無）'}`);
+  showToast(ids.length?`已設定共享（${ids.length} 人）`:'已取消共享');
+  openMemberDetail(st.back);
+ }catch(e){ console.error('共享設定失敗:',e); showToast('儲存失敗：'+(e&&e.message||e)); }
+}
 async function openInstallNext(ticket_id){
   if(!(SESSION.role==='admin'||SESSION.role==='front_desk')){ showToast('只有管理員或櫃台可開通分期'); return; }
   const t=await dbGet('member_tickets',ticket_id);
@@ -24039,7 +24178,7 @@ PAGES.mem_bookings=async function(){
   /* 任務卡另含「今日已簽到」的課（課程結束前）：自簽完卡片不消失、改顯示勾章（2026-07-20） */
   const _dotList=mine.filter(b=>(b.status==='booked'||(b.status==='checked_in'&&b.date===_mToday)) && _notPast(b));
   const _schedN=_upcoming.length;
-  const _tkMine=(mtickets||[]).filter(t=>t.member_id===SESSION.id
+  const _tkMine=(mtickets||[]).filter(t=>tkUsableBy(t,SESSION.id)   // 含共享票（2026-07-26）
     && (!t.status||t.status==='usable') && (Number(t.sessions_remaining)||0)>0
     && (!t.expire_date || String(t.expire_date).slice(0,10)>=_mToday));
   const _remainN=_tkMine.reduce((s,t)=>s+(Number(t.sessions_remaining)||0),0);
@@ -25643,7 +25782,7 @@ PAGES.mem_tickets=async function(){
   window._memContracts=(contracts||[]).filter(c=>c.member_id===SESSION.id);   // 我的合約（RLS 已限本人，這裡再過濾一次）
   window._ttCache=types;
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
-  const mine=tickets.filter(t=>t.member_id===SESSION.id);
+  const mine=tickets.filter(t=>tkUsableBy(t,SESSION.id));   // 含共享給我的票（2026-07-26）
   const myBk=(bookings||[]).filter(b=>b.member_id===SESSION.id || (Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id)));
   // 未使用堂數 = 總數 − 已簽到/完成（已預約未上仍算未使用，避免會員誤會堂數用完）
   const usedMap=usedSessionsMap(myBk);
