@@ -1981,12 +1981,7 @@ tr:hover td{background:var(--card2);}
 .bkd-tkcard-name{font-size:13.5px;font-weight:700;color:var(--text);}
 .bkd-tkcard-prog{font-size:12px;color:var(--t2);font-family:var(--num);}
 .bkd-tkcard-prog b{color:var(--green);font-size:15px;}
-.bkd-dots{display:flex;flex-wrap:wrap;gap:6px;}
-.bkd-dot{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:var(--num);box-sizing:border-box;}
-.bkd-dot.d-done{background:var(--green);color:#fff;}
-.bkd-dot.d-remain{background:#fff;border:1.5px dashed #cfc8bb;color:var(--t3);}
-.bkd-dot.d-cur{background:#fff;border:2.5px solid var(--gold);color:var(--gold-d);box-shadow:0 0 0 3px rgba(180,138,86,0.18);}
-.bkd-dot.d-locked{background:#f0ece3;border:1.5px dashed #cfc7b8;color:#a99;font-size:12px;opacity:.75;}
+/* .bkd-dot* 已於 2026-07-26 移除：預約明細的逐堂圓圈改用全系統統一的 ticketTokens／.mtk */
 /* 明細第一列：緊湊日期時間時長輸入 */
 .bkd-timeedit{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;}
 .bkd-timeedit input,.bkd-timeedit select{font-family:var(--num);font-size:13px;padding:5px 8px;border:1px solid var(--bd);border-radius:8px;background:#fff;color:var(--text);}
@@ -2702,6 +2697,8 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 空心環的邊色＝課種色（52% 混，實測下團課橘/按摩青/體驗紫皆可辨） */
 .mtk-free,.mtk-booked{background:#fff;border:2px solid color-mix(in srgb,var(--tk-acc,#1F6F54) 52%,#d8d2c6);box-shadow:none;color:var(--tk-acc,#1F6F54);}
 .mtk-lock{background:#f0ece3;border:1.5px dashed #cfc7b8;box-shadow:none;color:#a39b8f;font-size:11px;}
+/* 本堂（僅預約明細會傳 curId）：外加金環，不動原本的填色/描邊，實心空心兩態都適用 */
+.mtk.mtk-cur{border-color:var(--gold,#b48a56);box-shadow:0 0 0 3px rgba(180,138,86,.28);}
 /* ── 自主訓練點數獨立入口（2026-07-23 使用者指示）──
    效期短（7 天）、由會員自行預約，數量又多；混在票券清單裡會把介面塞爆，故收成一顆按鈕。 */
 .mtk-self-btn{width:100%;display:flex;align-items:center;gap:12px;background:var(--card,#fff);border:1px solid var(--bd);border-radius:16px;padding:13px 15px;margin:0 0 12px;cursor:pointer;text-align:left;font-family:inherit;box-shadow:0 1px 2px rgba(0,0,0,.03);transition:border-color .16s,box-shadow .16s;}
@@ -5655,8 +5652,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260725.2128';
-const APP_VERSION_LABEL='v260725.2128';
+const APP_VERSION='260726.0855';
+const APP_VERSION_LABEL='v260726.0855';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14230,20 +14227,19 @@ async function openBookingDetail(id){
     const doneCount=tkBks2.filter(x=>x.status==='completed'||x.status==='checked_in').length;
     const isInstall2 = tk.installment && typeof tk.installment==='object';
     const unlocked2 = isInstall2 ? (tk.unlocked_sessions!=null?tk.unlocked_sessions:total) : total;
-    let dots='';
-    for(let i=0;i<total;i++){
-      if(i===curIdx){ dots+=`<span class="bkd-dot d-cur">${i+1}</span>`; }
-      else if(i>=unlocked2){ dots+=`<span class="bkd-dot d-locked">🔒</span>`; }
-      else if(i<doneCount){ dots+=`<span class="bkd-dot d-done">${i+1}</span>`; }
-      else{ dots+=`<span class="bkd-dot d-remain">${i+1}</span>`; }
-    }
+    /* 2026-07-26 使用者指示：圓圈由「第幾堂」改成顯示使用日期，與會員票券內容同一套邏輯。
+       改用全系統統一的 ticketTokens（實心＋上課日期／空心＋預約日期／空心未使用／🔒未開通），
+       並傳入本堂 booking id 讓它多加一圈金框 —— 預約明細比會員視角多的就是這個「本堂」定位。 */
+    if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
+    const _typeMapD=Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t]));
+    const dots=ticketTokens(tk,tkBks2,_typeMapD,doneCount,b.id);
     const curLabel = curIdx>=0 ? `第 <b>${curIdx+1}</b> / ${total} 堂` : `${total} 堂`;
     tkCircleHtml=`<div class="bkd-tkcard">
       <div class="bkd-tkcard-head">
         <span class="bkd-tkcard-name">${tk.plan_name||'票券'}</span>
         <span class="bkd-tkcard-prog">本堂 ${curLabel}${tk.sessions_remaining<=2?'　<span class="tag tag-warn" style="font-size:10px;">建議續約</span>':''}</span>
       </div>
-      <div class="bkd-dots">${dots}</div>
+      <div class="mck-dots2" style="margin:10px 0 2px;">${dots}</div>
       <div style="font-size:11px;color:var(--t3);margin-top:8px;">效期至 ${fmtExpire(tk.expire_date,tk)}${isInstall2?`　·　分期開通 ${unlocked2}/${total}`:''}</div>
     </div>`+_payAlertLine;
   }
@@ -14255,7 +14251,30 @@ async function openBookingDetail(id){
     memberLine=`<div><span style="color:var(--t2);">體驗客戶</span>　${b.trial_name||'—'}${b.trial_phone?`　<span style="color:var(--t3);font-size:12px;">${b.trial_phone}</span>`:''}</div>`;
   }else if(isGroupD){
     const att=attObj(b);
-    const rows = gIdsD.length ? gIdsD.map(mid=>{
+    /* 團課名單顯示票券狀態（2026-07-26 使用者要求）：單人課的明細早就有票券卡，
+       但團課才是最常需要提醒續約的（四週限制方案），所以名單每人加一行自己的
+       團體課餘額：≤2 堂標「建議續約」、0 堂標「需購票」。
+       同一帳號訂多個位子時 member_ids 會重複同一個 id（正確慣例，見 7/24 那堂），
+       這裡合併成一列並標 ×N —— 否則同一個人會列出多行、票券資訊重複，
+       而且逐人簽到本來就以 member 為鍵，多行的按鈕其實是同一個開關。 */
+    const _seat={}; gIdsD.forEach(x=>{ _seat[x]=(_seat[x]||0)+1; });
+    const _uniqIds=[...new Set(gIdsD)];
+    const _gTk={};
+    try{
+      if(!window._ttCache) window._ttCache=await dbGetAll('ticket_types');
+      const _allTk=await dbGetAll('member_tickets');
+      _uniqIds.forEach(mid=>{
+        // 團課票券不分方案，同類別即可用（與 listUsableTickets 的 groupMode 一致）
+        const own=_allTk.filter(t=>t.member_id===mid && ticketCategoryOf(t)==='小班肌力'
+          && (t.sessions_remaining||0)>0 && (!t.expire_date || t.expire_date>=b.date));
+        _gTk[mid]={
+          left: own.reduce((s,t)=>s+(t.sessions_remaining||0),0),
+          exp : own.map(t=>t.expire_date).filter(Boolean).sort()[0]||null,
+          makeup: own.some(t=>t.source==='makeup')
+        };
+      });
+    }catch(_){}
+    const rows = _uniqIds.length ? _uniqIds.map(mid=>{
       const inHere = att[mid]==='checked_in';
       const badge = inHere
         ? '<span class="tag tag-ok" style="font-size:11px;">已簽到</span>'
@@ -14263,8 +14282,21 @@ async function openBookingDetail(id){
       const btn = groupCkOK
         ? `<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="toggleGroupAttend('${b.id}','${mid}')">${inHere?'取消簽到':(isPastD?'補簽':'簽到')}</button>`
         : '';
-      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--bd);">
-        <span style="min-width:72px;">${memMapD[mid]||'？'}</span>${badge}${btn}</div>`;
+      const seatTag = _seat[mid]>1 ? ` <span class="tag" style="font-size:10px;">×${_seat[mid]}</span>` : '';
+      const st=_gTk[mid];
+      let tkInfo='';
+      if(st){
+        const warn = st.left<=2;
+        const tkTag = st.left<=0 ? '　<span class="tag tag-danger" style="font-size:10px;">需購票</span>'
+                    : warn ? '　<span class="tag tag-warn" style="font-size:10px;">建議續約</span>' : '';
+        tkInfo=`<div style="font-size:11.5px;color:var(--t3);padding-left:2px;">團體課餘 <b class="num" style="color:${warn?'#8a5e28':'var(--t2)'};">${st.left}</b> 堂`
+          +`${st.exp?`　效期至 ${st.exp.replace(/-/g,'/')}`:''}`
+          +`${st.makeup?'　<span class="tag" style="font-size:10px;background:#eef6ee;color:#2f6b39;">含補課券</span>':''}${tkTag}</div>`;
+      }
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--bd);">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="min-width:72px;">${memMapD[mid]||'？'}${seatTag}</span>${badge}${btn}
+        </div>${tkInfo}</div>`;
     }).join('') : '<div style="color:var(--t3);font-size:12px;padding:4px 0;">尚未排名單</div>';
     memberLine=`<div><div style="display:flex;align-items:center;margin-bottom:4px;"><span style="color:var(--t2);">名單</span>　<span style="color:var(--t3);font-size:11px;">（${gIdsD.length}/5）</span>
       ${editable?`<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="openGroupMembers('${b.id}')">管理名單</button>`:''}</div>
@@ -25298,7 +25330,9 @@ function isSelfPtTicket(t,typeMap){
 }
 // usedCount＝顯示用已使用堂數（total−unused）；有預約紀錄的寫日期，超出的（匯入票等無紀錄）顯示無日期的已用格
 /* 2026-07-23 定案：樣式試選工具（tks-pick / tkStyleSet）已拆除，統一圓形＋課種顏色。 */
-function ticketTokens(t,bks,typeMap,usedCount){
+/* curId（選填，2026-07-26）：把某一筆預約標成「本堂」（金框）。預約明細用得到——
+   它比會員票券視角多的就是「這堂是第幾堂」的定位；其他呼叫端不傳就完全不受影響。 */
+function ticketTokens(t,bks,typeMap,usedCount,curId){
   const total=Math.max(Number(t.sessions_total)||0,0);
   const v=tkVisual(t,typeMap);
   const done=(bks||[]).filter(b=>b.status==='checked_in'||b.status==='completed')
@@ -25316,11 +25350,13 @@ function ticketTokens(t,bks,typeMap,usedCount){
     if(i>=unlocked){ s+=`<span class="mtk mtk-lock" title="尚未開通（需繳下一期）">🔒</span>`; }
     else if(i<used){
       const b=di<done.length?done[di++]:null;
-      s+=`<span class="mtk mtk-used" style="--tk-acc:${v.accent};" title="已完成${b&&b.date?' '+b.date:''}">${b?md(b):'✓'}</span>`;
+      const cur=(curId&&b&&b.id===curId)?' mtk-cur':'';
+      s+=`<span class="mtk mtk-used${cur}" style="--tk-acc:${v.accent};" title="已完成${b&&b.date?' '+b.date:''}${cur?'（本堂）':''}">${b?md(b):'✓'}</span>`;
     }
     else if(bi<booked.length){
       const b=booked[bi++];
-      s+=`<span class="mtk mtk-booked" style="--tk-acc:${v.accent};" title="已預約 ${b.date||''} ${b.start_time||''}">${md(b)}</span>`;
+      const cur=(curId&&b.id===curId)?' mtk-cur':'';
+      s+=`<span class="mtk mtk-booked${cur}" style="--tk-acc:${v.accent};" title="已預約 ${b.date||''} ${b.start_time||''}${cur?'（本堂）':''}">${md(b)}</span>`;
     }
     else s+=`<span class="mtk mtk-free" style="--tk-acc:${v.accent};" title="未使用"></span>`;
   }
