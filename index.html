@@ -5714,8 +5714,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.0004';
-const APP_VERSION_LABEL='v260727.0004';
+const APP_VERSION='260727.0009';
+const APP_VERSION_LABEL='v260727.0009';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26843,18 +26843,73 @@ async function anaToday(){
   body.innerHTML = stats + breakdown;
 }
 
-// ── 本月營運：課程量、營收、新會員 ──
+// ── 本月營運（2026-07-27 使用者指示改版）：利潤＝銷課總金額−教練總薪資、
+//    教練課/團課 堂數與銷課金額、本月營收 ──
 async function anaMonth(){
   const body=document.getElementById('ana-body'); if(!body) return;
   const month=(window._anaMonth||ymd(TODAY).slice(0,7));
-  const [bookings,purchases,members]=await Promise.all([
-    dbGetAll('bookings').catch(()=>[]),dbGetAll('purchases').catch(()=>[]),dbGetAll('members').catch(()=>[])]);
+  if(typeof loadSalaryTemplates==='function'){ try{ await loadSalaryTemplates(); }catch(_){} }
+  const [bookings,purchases,members,coaches,shifts,attendance,mtks,types]=await Promise.all([
+    dbGetAll('bookings').catch(()=>[]),dbGetAll('purchases').catch(()=>[]),dbGetAll('members').catch(()=>[]),
+    dbGetAll('coaches').catch(()=>[]),dbGetAll('shifts').catch(()=>[]),dbGetAll('attendance').catch(()=>[]),
+    dbGetAll('member_tickets').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[])]);
   const monthBk=bookings.filter(b=>(b.date||'').slice(0,7)===month && b.status!=='cancelled');
-  const done=monthBk.filter(b=>b.status==='completed'||b.status==='checked_in').length;
-  const revenue=(purchases||[]).filter(p=>(p.created_at||'').slice(0,7)===month).reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
+  const done=monthBk.filter(b=>b.status==='completed'||b.status==='checked_in');
+  /* 本月營收＝當月售出票券金額＋場租/重啟/商品收款（與首頁 KPI 同口徑；
+     purchases 的售票列不重複計，避免與 member_tickets 雙算） */
+  const tkRev=(mtks||[]).filter(t=>(t.purchase_date||'').slice(0,7)===month).reduce((s,t)=>s+(Number(t.amount_paid)||0),0);
+  const purRev=(purchases||[]).filter(p=>((p.created_at||'').slice(0,7)===month)&&(p.source==='reactivate'||p.source==='facility_rental'||p.source==='merchandise'))
+    .reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
+  const revenue=tkRev+purRev;
   const newMembers=members.filter(m=>String(m.created_at||'').slice(0,7)===month).length;
-  const pt=monthBk.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
-  const grp=monthBk.filter(b=>b.category==='小班肌力').length;
+  /* ── 銷課金額：已上課堂 × 該堂使用票券的單價 ──
+     單價取得順序：綁定票券 unit_price → 票券 總額/總堂 → 該會員同類票平均 → 全店同類平均。
+     自主訓練點數（$0 贈點）與體驗課不列入銷課。 */
+  const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
+  const tkById=Object.fromEntries((mtks||[]).map(t=>[t.id,t]));
+  const tkClass=t=>{ const tt=typeMap[t.ticket_type_id]||{}; const c=tt.category||'';
+    if(c==='自主訓練') return 'self'; if(c==='團體課'||(t.plan_name||'').includes('團')) return 'grp'; return 'pt'; };
+  const unitOf=t=>{ if(!t) return 0; const u=Number(t.unit_price)||0; if(u>0) return u;
+    const a=Number(t.amount_paid)||0, n=Number(t.sessions_total)||0; return (a>0&&n>0)?a/n:0; };
+  const bucket={pt:{a:0,n:0},grp:{a:0,n:0}}; const memUnit={};
+  (mtks||[]).forEach(t=>{ const cl=tkClass(t); if(cl==='self') return;
+    const a=Number(t.amount_paid)||0, n=Number(t.sessions_total)||0;
+    if(a>0&&n>0){ bucket[cl].a+=a; bucket[cl].n+=n;
+      const k=t.member_id+'|'+cl; (memUnit[k]=memUnit[k]||{a:0,n:0}); memUnit[k].a+=a; memUnit[k].n+=n; } });
+  const avgUnit=cl=>bucket[cl].n>0?bucket[cl].a/bucket[cl].n:0;
+  const memAvg=(mid,cl)=>{ const k=memUnit[mid+'|'+cl]; return (k&&k.n>0)?k.a/k.n:avgUnit(cl); };
+  const ptDoneList=done.filter(b=>b.category==='私人教練');
+  const ptValue=ptDoneList.reduce((s,b)=>{ const u=unitOf(tkById[b.ticket_id]); return s+(u>0?u:memAvg(b.member_id,'pt')); },0);
+  const grpDoneList=done.filter(b=>b.category==='小班肌力');
+  let grpHeads=0;
+  const grpValue=grpDoneList.reduce((s,b)=>{
+    const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
+    grpHeads+=ids.length;
+    return s+ids.reduce((a,mid)=>a+memAvg(mid,'grp'),0); },0);
+  const salesValue=ptValue+grpValue;
+  /* ── 教練總薪資：與薪資頁同一套 calcSalary（課時費＋團課費＋值班費＋續約/店長/主管獎金）── */
+  const renewMap={};
+  (mtks||[]).forEach(t=>{ if(t.is_renewal){ const who=t.renewed_by||t.sold_by||t.coach_id;
+    const when=(t.purchase_date||t.created_at||'').slice(0,7);
+    if(who&&when===month) renewMap[who]=(renewMap[who]||0)+1; } });
+  let totalSalary=0;
+  try{
+    coaches.filter(isCoachable).forEach(c=>{
+      if(c.count_salary===false) return;
+      const myDone=done.filter(b=>b.coach_id===c.id);
+      const ptD=myDone.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+      const gHeads=myDone.filter(b=>b.category==='小班肌力').reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
+      const dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month),0):0;
+      const lv=leaveSummary(shifts,c.id,month);
+      const leaderHeads=c.is_manager
+        ? coaches.filter(o=>o.id!==c.id&&o.role!=='admin'&&o.role!=='front_desk'&&o.status!=='inactive')
+            .map(o=>bookings.filter(b=>b.coach_id===o.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month&&(b.category==='私人教練'||b.category==='體驗')).length)
+        : [];
+      const sal=calcSalary(c, ptD, gHeads, dutyH, lv, 0, {renewCount:renewMap[c.id]||0, leaderHeads});
+      totalSalary+=(sal&&sal.grossPay)||0;
+    });
+  }catch(e){ console.error('教練薪資合計失敗:',e); }
+  const profit=Math.round(salesValue-totalSalary);
 
   const [my,mm]=month.split('-');
   const dateBar=`<div class="card ops-datebar" style="margin-bottom:14px;">
@@ -26862,17 +26917,24 @@ async function anaMonth(){
     <div class="ops-date-mid"><div class="ops-date-main">${my} 年 ${mm} 月</div></div>
     <button class="btn btn-ghost btn-sm" onclick="anaMonthMove(1)">下個月 ›</button></div>`;
   const stats=lpStats([
+    {label:'本月利潤（銷課−教練薪資）', value:anaMoney(profit), unit:'', tone:profit>=0?'ok':'bad'},
     {label:'本月營收', value:anaMoney(revenue), unit:'', tone:'ok'},
-    {label:'本月課程', value:done, unit:'堂'},
-    {label:'本月新會員', value:newMembers, unit:'位', tone:'ok'},
+    {label:'銷課總金額', value:anaMoney(Math.round(salesValue)), unit:''},
   ]);
+  const rowStyle='display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--bd);';
   const breakdown=`<div class="card" style="padding:14px 16px;">
-    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">本月課程組成（含未上）</div>
-    <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px;">
-      <span>教練課 <b style="font-family:var(--font-en);">${pt}</b> 堂</span>
-      <span>團體課 <b style="font-family:var(--font-en);">${grp}</b> 堂</span>
-      <span>總計 <b style="font-family:var(--font-en);">${monthBk.length}</b> 堂</span>
-    </div>
+    <div style="font-size:13px;font-weight:700;margin-bottom:6px;">本月銷課與人事</div>
+    <div style="${rowStyle}"><span>教練課（已上）</span><span><b style="font-family:var(--font-en);">${ptDoneList.length}</b> 堂 ／ <b style="font-family:var(--font-en);">${anaMoney(Math.round(ptValue))}</b></span></div>
+    <div style="${rowStyle}"><span>團體課（已上）</span><span><b style="font-family:var(--font-en);">${grpDoneList.length}</b> 堂 ${grpHeads}人次 ／ <b style="font-family:var(--font-en);">${anaMoney(Math.round(grpValue))}</b></span></div>
+    <div style="${rowStyle}border-bottom:none;"><span>教練總薪資（估）</span><span><b style="font-family:var(--font-en);color:#b5372e;">−${anaMoney(Math.round(totalSalary))}</b></span></div>
+  </div>
+  <div class="card" style="padding:12px 16px;margin-top:10px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;">
+    <span>本月課程（已上） <b style="font-family:var(--font-en);">${done.length}</b> 堂</span>
+    <span>新會員 <b style="font-family:var(--font-en);">${newMembers}</b> 位</span>
+  </div>
+  <div style="font-size:11.5px;color:var(--t3);margin-top:8px;padding:0 4px;line-height:1.7;">
+    銷課金額＝已上課堂 × 該會員票券單價（未綁票券的舊資料以同類平均單價估算）；自主訓練贈點與體驗課不計。
+    教練總薪資與薪資頁同一套算法（課時＋團課＋值班＋獎金，含當月即時累計），不含櫃台人事與其他營運成本。
   </div>`;
   body.innerHTML = dateBar + stats + breakdown;
 }
@@ -26888,50 +26950,85 @@ function anaMonthMove(delta){
 async function anaCoach(){
   const body=document.getElementById('ana-body'); if(!body) return;
   const month=(window._anaMonth||ymd(TODAY).slice(0,7));
-  const [bookings,coaches]=await Promise.all([dbGetAll('bookings').catch(()=>[]),dbGetAll('coaches').catch(()=>[])]);
+  /* 2026-07-27 使用者指示：欄位改 教練｜續約數｜教練課 n/n｜團體課 n/n｜值班時數
+     （n/n＝已上/當月排定；值班時數與薪資頁同算法：打卡封頂−上課重疊） */
+  const [bookings,coaches,shifts,attendance,mtks,types,purchases]=await Promise.all([
+    dbGetAll('bookings').catch(()=>[]),dbGetAll('coaches').catch(()=>[]),
+    dbGetAll('shifts').catch(()=>[]),dbGetAll('attendance').catch(()=>[]),
+    dbGetAll('member_tickets').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[]),
+    dbGetAll('purchases').catch(()=>[])]);
   if(typeof loadSalaryTemplates==='function'){ try{ await loadSalaryTemplates(); }catch(_){} }
   const monthBk=bookings.filter(b=>(b.date||'').slice(0,7)===month && b.status!=='cancelled');
+  /* 續約數（2026-07-27 分析口徑；member_tickets 無 is_renewal 欄）：
+     本月售出的教練課類票券、且該會員之前已買過同類票 → 視為續約。
+     歸屬教練＝① 收款紀錄（purchases）的 coach_id ② 購買前 90 天內帶該會員最多教練課的教練。 */
+  const _tMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
+  const _isPtTk=t=>{ const c=(_tMap[t.ticket_type_id]||{}).category||'';
+    return c!=='自主訓練' && c!=='團體課' && !(t.plan_name||'').includes('團'); };
+  const _purByTk={}; (purchases||[]).forEach(p=>{ if(p.ticket_id&&p.coach_id) _purByTk[p.ticket_id]=p.coach_id; });
+  const renewMap={};
+  (mtks||[]).forEach(t=>{
+    if((t.purchase_date||'').slice(0,7)!==month || !(Number(t.amount_paid)>0) || !_isPtTk(t)) return;
+    const earlier=(mtks||[]).some(o=>o.member_id===t.member_id&&o.id!==t.id&&_isPtTk(o)&&(o.purchase_date||'')<(t.purchase_date||''));
+    if(!earlier) return;
+    let who=_purByTk[t.id]||null;
+    if(!who){
+      const upTo=t.purchase_date||'';
+      const from=ymd(addDays(parseYmd(upTo),-90));
+      const cnt={};
+      bookings.forEach(b=>{ if(b.member_id===t.member_id&&b.status!=='cancelled'&&b.coach_id
+        &&b.date>=from&&b.date<=upTo&&(b.category==='私人教練'||b.category==='體驗')) cnt[b.coach_id]=(cnt[b.coach_id]||0)+1; });
+      who=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).map(e=>e[0])[0]||null;
+    }
+    if(who) renewMap[who]=(renewMap[who]||0)+1;
+  });
   const coachList=coaches.filter(isCoachable);
   const rowsData=coachList.map(c=>{
     const mine=monthBk.filter(b=>b.coach_id===c.id);
     const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in');
+    const ptAll=mine.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
     const ptDone=done.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+    const grpAll=mine.filter(b=>b.category==='小班肌力').length;
     const grpDone=done.filter(b=>b.category==='小班肌力');
-    const grpClasses=grpDone.length;
     const grpHeads=grpDone.reduce((a,b)=>a+((Array.isArray(b.member_ids)?b.member_ids.length:0)||0),0);
-    const er=(typeof effRates==='function')?effRates(c):{pt_rate:0,group_rate:0};
-    const estValue=ptDone*(er.pt_rate||0)+grpHeads*(er.group_rate||0);
-    return { name:coachDisp(c), ptDone, grpClasses, grpHeads, estValue, total:mine.length };
-  }).filter(r=>r.total>0 || r.ptDone>0 || r.grpClasses>0)
-    .sort((a,b)=>b.estValue-a.estValue);
+    let dutyH=0;
+    try{ dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month),0):0; }catch(_){}
+    return { name:coachDisp(c), renew:renewMap[c.id]||0, ptDone, ptAll, grpDone:grpDone.length, grpAll, grpHeads, dutyH, total:mine.length };
+  }).filter(r=>r.total>0 || r.dutyH>0 || r.renew>0)
+    .sort((a,b)=>(b.ptDone+b.grpDone)-(a.ptDone+a.grpDone));
 
   const totalPt=rowsData.reduce((s,r)=>s+r.ptDone,0);
   const totalHeads=rowsData.reduce((s,r)=>s+r.grpHeads,0);
+  const totalRenew=rowsData.reduce((s,r)=>s+r.renew,0);
   const [my,mm]=month.split('-');
   const dateBar=`<div class="card ops-datebar" style="margin-bottom:14px;">
     <button class="btn btn-ghost btn-sm" onclick="anaMonthMove(-1)">‹ 上個月</button>
     <div class="ops-date-mid"><div class="ops-date-main">${my} 年 ${mm} 月</div></div>
     <button class="btn btn-ghost btn-sm" onclick="anaMonthMove(1)">下個月 ›</button></div>`;
   const stats=lpStats([
-    {label:'教練課總堂', value:totalPt, unit:'堂'},
+    {label:'教練課總堂（已上）', value:totalPt, unit:'堂'},
     {label:'團課總人次', value:totalHeads, unit:'人次'},
+    {label:'續約', value:totalRenew, unit:'張', tone:'ok'},
   ]);
   const cols=[
-    {label:'教練', width:'1.2fr'},
-    {label:'教練課', width:'0.8fr', align:'right'},
-    {label:'團課堂/人次', width:'1fr', align:'right'},
-    {label:'預估產值', width:'1fr', align:'right'},
+    {label:'教練', width:'1.1fr'},
+    {label:'續約', width:'0.6fr', align:'right'},
+    {label:'教練課', width:'0.9fr', align:'right'},
+    {label:'團體課', width:'0.9fr', align:'right'},
+    {label:'值班', width:'0.8fr', align:'right'},
   ];
+  const _fr=n=>Math.round(n*10)/10;
   const rows=rowsData.map(r=>({ cells:[
     r.name,
-    `${r.ptDone} 堂`,
-    `${r.grpClasses} 堂 / ${r.grpHeads} 人`,
-    `<b style="font-family:var(--font-en);color:var(--green);">${anaMoney(r.estValue)}</b>`,
+    r.renew?`<b style="font-family:var(--font-en);color:var(--green);">${r.renew}</b> 張`:'—',
+    `<b style="font-family:var(--font-en);">${r.ptDone}</b>/${r.ptAll} 堂`,
+    `<b style="font-family:var(--font-en);">${r.grpDone}</b>/${r.grpAll} 堂`,
+    r.dutyH?`<b style="font-family:var(--font-en);">${_fr(r.dutyH)}</b> 時`:'—',
   ]}));
   const table = rowsData.length===0
     ? lpEmpty('本月還沒有教練課堂資料','','')
     : lpTable(cols, rows, null);
-  const note=`<div style="font-size:11.5px;color:var(--t3);margin-top:8px;padding:0 4px;">預估產值＝教練課堂數 × 課費率 ＋ 團課人次 × 團課費率（以薪資設定估算，非實際薪資）。</div>`;
+  const note=`<div style="font-size:11.5px;color:var(--t3);margin-top:8px;padding:0 4px;line-height:1.7;">n/n＝已上堂數/當月排定堂數；值班時數＝打卡時數（排班封頂）扣除值班中上課的重疊，與薪資頁同口徑。續約＝本月售出且該會員先前買過同類教練課票，歸屬收款教練（無收款紀錄則以近 90 天主帶教練推定）。</div>`;
   body.innerHTML = dateBar + stats + table + note;
 }
 
