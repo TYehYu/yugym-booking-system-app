@@ -5653,8 +5653,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1519';
-const APP_VERSION_LABEL='v260726.1519';
+const APP_VERSION='260726.1551';
+const APP_VERSION_LABEL='v260726.1551';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15726,13 +15726,19 @@ async function openMemberDetail(member_id){
        （全庫 2,400 多張票只有 11 筆預約有 ticket_id），導致早就用完的歷史票券整排空心、
        未使用堂數也算成滿的。改取「帳面已用（總堂−剩餘）」與「有紀錄的預約數」較大者：
        匯入票以餘額為準（用完就整排實心），新系統的票兩者本來就一致。 */
-    /* 已用堂數：有綁預約就用實際筆數；沒綁（匯入票）改用推算出來的那批預約，
-       只算「已簽到／已完成」，未來的預約留給空心＋日期，不會被畫成已上課。
-       兩者都沒有時（推算不到）才退回用餘額推，至少讓用完的歷史票券顯示實心。 */
+    /* 已用堂數＝三個訊號取最大（2026-07-26 使用者回報：陳蘭馨友善卡 1/24 應為 5/24）：
+       ① 直連預約的已上課數 —— 新系統的票最準，但「匯入票＋之後才綁到一筆」的混合票
+          只看它會嚴重少算（她 1/23 買的票只有 7/14 一筆有綁，歷史 4 堂全在舊系統）；
+       ② 先進先出推算的已上課數 —— 沒綁預約的匯入票靠這個；
+       ③ 帳面已用（總−剩餘−直連仍預約中的扣課）—— 歷史在舊系統、prod 沒有逐筆課的票靠這個。
+          「直連仍預約中」要扣掉：新系統預約當下就扣課，還沒上的課不算已用。 */
     const inf=inferByTk[t.id]||[];
-    const usedCount = dates.length ? Math.min(total,dates.length)
-      : inf.length ? Math.min(total, inf.filter(x=>x.status==='checked_in'||x.status==='completed').length)
-      : Math.min(total, Math.max(0, total-(t.sessions_remaining??total)));
+    const _bookedBound=((bkByTk[t.id]||[]).filter(x=>x.status==='booked')).length;
+    const _faceUsed=Math.max(0,(total-(t.sessions_remaining??total))-_bookedBound);
+    const usedCount = Math.min(total, Math.max(
+      dates.length,
+      inf.filter(x=>x.status==='checked_in'||x.status==='completed').length,
+      _faceUsed));
     const isDim=(t.status!=='usable')||(t.expire_date&&t.expire_date<ymd(TODAY));
     /* 2026-07-23 使用者指示：票券逐堂顯示全系統統一 —— 改用 ticketTokens
        （課種色圓點：實心＋上課日期／空心＋預約日期／空心未使用），取代原本的灰色 tkc-dot。 */
