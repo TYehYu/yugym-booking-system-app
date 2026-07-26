@@ -5710,8 +5710,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.2254';
-const APP_VERSION_LABEL='v260726.2254';
+const APP_VERSION='260726.2303';
+const APP_VERSION_LABEL='v260726.2303';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24725,11 +24725,8 @@ async function sbConfirm(time){
   const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:type_id};
   const verr=await validateBooking(vbk,s.date,time,60);
   if(verr){showToast(verr);return;}
-  const bk={id:uid('BK'),member_id:SESSION.id,coach_id:null,ticket_id:tk.id,ticket_type_id:type_id,
-    category:'自主訓練',format:null,date:s.date,start_time:time,duration:60,status:'booked',
-    recurring:false,venue_unit:vbk.venue_unit||null,created_by:SESSION.id,created_at:new Date().toISOString()};
-  await dbPut('bookings',bk);
-  await deductTicket(tk,bk.id,SESSION.id);
+  const r=await memberSelfBookRpc(tk,s.date,time,vbk.venue_unit||null);   // 會員無表寫入權，走 RPC
+  if(!r.ok){ showToast(r.reason); return; }
   closeModal(); closeQuickBook();
   showToast('預約成功，已扣 1 點');
   navTo('mem_bookings');
@@ -24752,14 +24749,13 @@ async function memCancelSelf(id){
 async function doMemCancelSelf(id){
   const b=await dbGet('bookings',id);
   if(!b||b.member_id!==SESSION.id||b.category!=='自主訓練'){showToast('無法取消');return;}
-  const within24 = hoursUntilStart(b) < 24;
-  b.status='cancelled';
-  b.cancelled_at=new Date().toISOString();
-  b.refund_waived=within24;
-  await dbPut('bookings',b);
-  if(!within24 && b.ticket_id){ await refundTicket(b.ticket_id,b.id,SESSION.id); }
+  /* 會員無表寫入權（2026-07-26 資安總檢）：改走 fn_cancel_booking RPC——
+     本人驗證與 24 小時退點界線都在 DB 端判定（台北時區）。 */
+  const {data,error}=await sb.rpc('fn_cancel_booking',{p_booking_id:id,p_reason:null});
+  dbCacheClear(['bookings','member_tickets','ticket_logs']);
+  if(error||!data||!data.ok){ showToast('取消失敗'+(data&&data.error_code?'：'+data.error_code:'')); return; }
   closeModal();
-  showToast(within24?'已取消（24 小時內，恕不退點）':'已取消，退回 1 點');
+  showToast(data.cancellation_result==='refunded'?'已取消，退回 1 點':'已取消（24 小時內，恕不退點）');
   navTo('mem_bookings');
 }
 
@@ -24936,6 +24932,23 @@ function msbChooseVenue(vid){
   s.pickVenue=vid;
   document.querySelectorAll('#msb-vbtns .msb-vbtn').forEach(b=>b.classList.toggle('on',b.dataset.vid===vid));
 }
+/* 會員自主訓練預約一律走 RPC（2026-07-26 資安總檢）：RLS 沒有（也不該有）會員的
+   資料表寫入權——直接 dbPut 會被擋。fn_member_self_book 在 DB 端以 security definer
+   一次完成：本人驗證、票券歸屬/效期/類別、限時票平日18前、重複預約、場地單位占用、
+   扣點＋ticket_logs。取消同理走 fn_cancel_booking（本人驗證＋24hr 退點在 DB 端）。 */
+const SELF_BOOK_ERR={
+  'AUTH.FORBIDDEN':'僅限本人操作','BOOKING.PAST_DATE':'不可預約已過去的日期',
+  'POINT.EMPTY':'沒有可用的自主訓練點數','TICKET.WRONG_TYPE':'此票券不能預約自主訓練',
+  'TICKET.TIME_RESTRICTED':'此票券僅限平日 18:00 前使用','BOOKING.DUP':'您於該時段已有預約',
+  'BOOKING.RESOURCE_BUSY':'該場地剛被約走了，請重新選擇'};
+async function memberSelfBookRpc(tk,date,time,venueUnit){
+  const {data,error}=await sb.rpc('fn_member_self_book',{p_date:date,p_start_time:time,p_ticket_id:tk.id,p_venue_unit:venueUnit||null});
+  dbCacheClear(['bookings','member_tickets','ticket_logs']);   // RPC 不經 dbPut，自行清快取（含佔用快取）
+  if(error) return {ok:false,reason:'連線失敗：'+(error.message||error)};
+  if(data&&data.ok) return {ok:true,booking_id:data.booking_id};
+  const code=data&&data.error_code;
+  return {ok:false,reason:SELF_BOOK_ERR[code]||('預約失敗：'+(code||'未知錯誤'))};
+}
 async function msbConfirm(time){
  try{
   const s=window._msb; if(!s){ showToast('資料遺失，請重試'); return; }
@@ -24945,12 +24958,8 @@ async function msbConfirm(time){
     venue_pref:s.pickVenue||null};
   const verr=await validateBooking(vbk,s.date,time,60);
   if(verr){ showToast(verr); return; }
-  const bk={id:uid('BK'),member_id:SESSION.id,coach_id:null,ticket_id:tk.id,ticket_type_id:tk.ticket_type_id,
-    category:'自主訓練',format:null,date:s.date,start_time:time,duration:60,status:'booked',
-    recurring:false,venue_unit:vbk.venue_unit||null,created_by:SESSION.id,created_at:new Date().toISOString()};
-  await dbPut('bookings',bk);
-  await deductTicket(tk,bk.id,SESSION.id);
-  occCacheClear();   // 佔用快取失效，下次掃時段看得到剛成立的預約
+  const r=await memberSelfBookRpc(tk,s.date,time,vbk.venue_unit||null);
+  if(!r.ok){ showToast(r.reason); return; }
   closeModal();
   showToast('預約成功，已扣 1 點');
   msbExit(true);
@@ -25281,11 +25290,9 @@ async function qbSubmitMember(){
   const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:type_id};
   const verr=await validateBooking(vbk,f.date,f.time,60);
   if(verr){ showToast(verr); return; }
-  const bk={id:uid('BK'),member_id:SESSION.id,coach_id:null,ticket_id:tk.id,ticket_type_id:type_id,
-    category:'自主訓練',format:null,date:f.date,start_time:f.time,duration:60,status:'booked',
-    recurring:false,venue_unit:vbk.venue_unit||null,created_by:SESSION.id,created_at:new Date().toISOString()};
   try{
-    await dbPut('bookings',bk); await deductTicket(tk,bk.id,SESSION.id);
+    const r=await memberSelfBookRpc(tk,f.date,f.time,vbk.venue_unit||null);   // 會員無表寫入權，走 RPC
+    if(!r.ok){ showToast(r.reason); return; }
     closeQuickBook(); showToast('預約成功，已扣 1 點'); navTo('mem_bookings');
   }catch(e){ showToast('預約失敗：'+(e&&e.message?e.message:e)); }
 }
@@ -25357,11 +25364,8 @@ async function submitQuickSelfBook(){
   const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:c.type_id};
   const verr=await validateBooking(vbk,c.date,c.time,60);
   if(verr){showToast(verr);return;}
-  const bk={id:uid('BK'),member_id:SESSION.id,coach_id:null,ticket_id:tk.id,ticket_type_id:c.type_id,
-    category:'自主訓練',format:null,date:c.date,start_time:c.time,duration:60,status:'booked',
-    recurring:false,venue_unit:vbk.venue_unit||null,created_by:SESSION.id,created_at:new Date().toISOString()};
-  await dbPut('bookings',bk);
-  await deductTicket(tk,bk.id,SESSION.id);
+  const r=await memberSelfBookRpc(tk,c.date,c.time,vbk.venue_unit||null);   // 會員無表寫入權，走 RPC
+  if(!r.ok){ showToast(r.reason); return; }
   closeModal();
   showToast('預約成功，已扣 1 點');
   navTo('mem_bookings');

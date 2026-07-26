@@ -33,4 +33,9 @@ const vb=h.slice(h.indexOf('async function validateBooking'),h.indexOf('return n
 ok("★ 會員角色走 fetchDayOccupancy（RLS 看不到別人的預約）", vb.includes("SESSION.role==='member'")&&vb.includes('fetchDayOccupancy'));
 ok('fetchDayOccupancy 呼叫 fn_booking_occupancy RPC', h.includes("sb.rpc('fn_booking_occupancy'"));
 ok('寫入 bookings 會清佔用快取', /if\(list\.some\(s=>tbl\(s\)==='bookings'\)\)\{ try\{ occCacheClear\(\); \}/.test(h));
+/* 2026-07-26 資安總檢：會員對資料表無寫入權——所有會員寫入動作必須走 security definer RPC，
+   不得殘留 dbPut('bookings')＋deductTicket 的直接寫入版本。 */
+ok('★ 會員預約走 fn_member_self_book RPC', (h.match(/memberSelfBookRpc\(/g)||[]).length>=5 && h.includes("sb.rpc('fn_member_self_book'"));
+ok('★ 會員取消走 fn_cancel_booking RPC', /doMemCancelSelf[\s\S]{0,800}?fn_cancel_booking/.test(h));
+ok('會員端不再殘留直接扣票寫入', !h.includes('deductTicket(tk,bk.id,SESSION.id);\n  closeModal();'));
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail?1:0);
