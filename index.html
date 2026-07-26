@@ -4961,14 +4961,12 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .mc-dutyplain .mc-dutyring-card{background:none;border:none;box-shadow:none;padding:4px 6px 12px;margin:0 0 4px;}
 /* 2026-07-22 使用者指示：標頭大小與右欄其他卡統一（原 16px 特例退場） */
 .mc-dutyplain .mc-card-h{font-weight:700;color:var(--text);margin-bottom:12px;}
-.mc-dutyplain .dr-row{flex-direction:row;flex-wrap:wrap;align-items:flex-start;gap:14px 8px;}
-.mc-dutyplain .duty-ring{width:88px;min-width:88px;flex:0 0 88px;}
-.mc-dutyplain .dr-wrap,.mc-dutyplain .dr-wrap svg{width:80px;height:80px;}
-.mc-dutyplain .dr-track,.mc-dutyplain .dr-bar{stroke-width:9;}
+/* 2026-07-26 使用者指示：桌機值班環改用手機版樣式 —— 環維持基準 64px（不放大）、
+   計時器小小的在中間、整排置中。原 88/80px 放大與 22px 大字特例退場。 */
+.mc-dutyplain .dr-row{flex-direction:row;flex-wrap:wrap;align-items:flex-start;justify-content:center;gap:14px 12px;}
 .mc-dutyplain .dr-center{z-index:3;}
-.mc-dutyplain .dr-center b{font-size:22px;text-shadow:0 0 4px rgba(244,241,232,.85);}
-.mc-dutyplain .dr-center span{font-size:11px;}
-.mc-dutyplain .dr-name{max-width:88px;text-align:center;}
+.mc-dutyplain .dr-center b{text-shadow:0 0 4px rgba(244,241,232,.85);}
+.mc-dutyplain .dr-name{text-align:center;}
 .mc-dutyplain .dr-time{text-align:center;}
 /* v4 遺留（quick 直排在 top4 用）——v5 快捷回左欄卡片形式 */
 .mc-top4{display:flex;gap:16px;margin-bottom:14px;align-items:stretch;}
@@ -5655,8 +5653,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1325';
-const APP_VERSION_LABEL='v260726.1325';
+const APP_VERSION='260726.1347';
+const APP_VERSION_LABEL='v260726.1347';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14417,6 +14415,20 @@ async function openBookingDetail(id){
         startI=Math.max(0,attended.length-usedN);
       }else{
         startI=Math.max(0, Math.min(si-(total-1), Math.max(0,seq.length-total)));
+      }
+      /* 2026-07-26 使用者回報（陳蘭馨 8/3）：本堂之後若還有已預約的課，且「視窗內已上課數」
+         比票面已用（總−剩餘）多，代表視窗頭端多抓了別張票的舊課 —— 往後滑動，把仍屬
+         這張票的未來預約納進來（7/27 是第 9 堂、8/3 才是第 10）。
+         票面全新（剩餘＝總堂）時不滑：匯入票餘額不可信，且楊文華案例證明那種情況
+         本堂之後的課屬於下一張票。 */
+      const _rem=Number(tkC.sessions_remaining);
+      if(si>=0 && !isNaN(_rem) && _rem<total){
+        const _usedFace=total-_rem;
+        const _attIn=seq.slice(startI,startI+total).filter(x=>x.status==='checked_in'||x.status==='completed').length;
+        const _after=seq.length-1-si;                              // 本堂之後的預約數
+        const _maxSlide=Math.max(0, seq.length-total-startI);      // 不能滑出序列尾端
+        const _slide=Math.min(_after, Math.max(0,_attIn-_usedFace), _maxSlide);
+        if(_slide>0) startI+=_slide;
       }
       const win=seq.slice(startI, startI+total);
       tkBks2=win;
