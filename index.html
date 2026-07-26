@@ -5714,8 +5714,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.0020';
-const APP_VERSION_LABEL='v260727.0020';
+const APP_VERSION='260727.0026';
+const APP_VERSION_LABEL='v260727.0026';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10587,15 +10587,13 @@ PAGES.dashboard=async function(){
   try{ attAll=await dbGetAll('attendance'); }catch(_){}
   try{ shiftsAll=await dbGetAll('shifts'); }catch(_){}
   try{ purAll=await dbGetAll('purchases'); }catch(_){}
-  /* 續約數（2026-07-27 使用者指示；資料庫無 is_renewal 欄）：期間售出的教練課類票券、
-     且該會員先前買過同類票＝續約。歸屬＝① purchases 收款教練 ② 購買前 90 天主帶教練。 */
-  const _isPtTk2=t=>{ const c=(typeMap[t.ticket_type_id]||{}).category||'';
-    return c!=='自主訓練' && c!=='團體課' && !(t.plan_name||'').includes('團'); };
+  /* 續約數（2026-07-27 改標記制）：只數賣票時標了「續約」的票（sale_kind='renewal'）。
+     先前用「會員曾買過同類票」推測會嚴重高估（7 月推出 38 張、實際 9 張——加購/補儲全被誤算）。
+     歸屬＝① purchases 收款教練 ② 購買前 90 天主帶教練。 */
   const _purByTk2={}; (purAll||[]).forEach(p=>{ if(p.ticket_id&&p.coach_id) _purByTk2[p.ticket_id]=p.coach_id; });
   const renewMap={};
   tickets.forEach(t=>{
-    if(!inRange(t.purchase_date||'') || !(Number(t.amount_paid)>0) || !_isPtTk2(t)) return;
-    if(!tickets.some(o=>o.member_id===t.member_id&&o.id!==t.id&&_isPtTk2(o)&&(o.purchase_date||'')<(t.purchase_date||''))) return;
+    if(!inRange(t.purchase_date||'') || t.sale_kind!=='renewal') return;
     let who=_purByTk2[t.id]||null;
     if(!who){
       const upTo=t.purchase_date||'', from=ymd(addDays(parseYmd(upTo),-90));
@@ -10649,8 +10647,8 @@ PAGES.dashboard=async function(){
       </div>
       <div class="ov-row"><span class="ov-label" style="padding-left:10px;color:var(--t3);">├ 銷課金額（不含自主）</span><span class="ov-val" style="color:var(--gold-d);">${fmtNT(coachedFee)}</span></div>
       <div class="ov-row"><span class="ov-label" style="padding-left:10px;color:var(--t3);">└ 教練應發薪資</span><span class="ov-val" style="color:#c0392b;">−${fmtNT(salaryTotal)}</span></div>`:''}
-      <div class="ov-row"><span class="ov-label">教練課<span style="display:block;font-size:10.5px;color:var(--t3);font-weight:400;margin-top:2px;">已上/排定 ・ 銷課金額</span></span><span class="ov-val" style="white-space:nowrap;font-size:15.5px;">${ptDoneBk.length}/${ptClassCount} 堂　<b style="color:var(--gold-d);">${fmtNT(Math.round(ptFee))}</b></span></div>
-      <div class="ov-row"><span class="ov-label">團體課<span style="display:block;font-size:10.5px;color:var(--t3);font-weight:400;margin-top:2px;">已上/排定 ・ 銷課金額</span></span><span class="ov-val" style="white-space:nowrap;font-size:15.5px;">${grpDoneBk.length}/${groupClassCount} 堂　<b style="color:var(--gold-d);">${fmtNT(Math.round(grpFee))}</b></span></div>
+      <div class="ov-row"><span class="ov-label">教練課<span style="display:block;font-size:10.5px;color:var(--t3);font-weight:400;margin-top:2px;">已上/排定 ・ 銷課金額</span></span><span class="ov-val" style="text-align:right;">${ptDoneBk.length}/${ptClassCount} 堂<span style="display:block;font-size:14.5px;color:var(--gold-d);font-weight:700;margin-top:2px;">${fmtNT(Math.round(ptFee))}</span></span></div>
+      <div class="ov-row"><span class="ov-label">團體課<span style="display:block;font-size:10.5px;color:var(--t3);font-weight:400;margin-top:2px;">已上/排定 ・ 銷課金額</span></span><span class="ov-val" style="text-align:right;">${grpDoneBk.length}/${groupClassCount} 堂<span style="display:block;font-size:14.5px;color:var(--gold-d);font-weight:700;margin-top:2px;">${fmtNT(Math.round(grpFee))}</span></span></div>
       <div class="ov-row"><span class="ov-label">${_dashRange==='month'?'本月':'今日'}營收</span><span class="ov-val">${fmtNT(revenue)}</span></div>
       <div class="ov-row"><span class="ov-label">${_dashRange==='month'?'本月':'今日'}銷課堂數</span><span class="ov-val">${doneCount} 堂</span></div>
     </div>
@@ -10669,7 +10667,7 @@ PAGES.dashboard=async function(){
           <span>${r.need_duty||r.hours>0?r.hours.toFixed(1):'—'}</span>
         </div>`).join('')}
       </div>
-      <div style="font-size:10.5px;color:var(--t3);padding:8px 2px 2px;line-height:1.6;">教練課／團體課＝已上/排定；值班＝打卡時數（排班封頂、扣上課重疊，與薪資頁同口徑）；續約＝期間售出且會員先前買過同類教練課票。</div>`}
+      <div style="font-size:10.5px;color:var(--t3);padding:8px 2px 2px;line-height:1.6;">教練課／團體課＝已上/排定；值班＝打卡時數（排班封頂、扣上課重疊，與薪資頁同口徑）；續約＝賣票流程標記的續約單（7/27 起）。</div>`}
     </div>
   </div>
 
@@ -21606,7 +21604,11 @@ async function openGrantModal(){
         <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher()"><option value="1">不分期（一次付清）</option><option value="3">分 3 期（分段開通）</option></select></div>
         <div class="form-row"><label>付款狀態</label><select id="gt-pay"><option value="paid">已付款</option><option value="unpaid">未付款</option></select></div>
       </div>
-      <div class="form-row"><label>發票</label><select id="gt-invoice"><option value="none">免發票</option><option value="cloud">雲端發票</option><option value="paper">紙本發票</option></select></div>
+      <div class="form-2col">
+        <div class="form-row"><label>發票</label><select id="gt-invoice"><option value="none">免發票</option><option value="cloud">雲端發票</option><option value="paper">紙本發票</option></select></div>
+        <!-- 約別（2026-07-27 使用者指示：續約靠人工標記，報表/薪資才數得準；會員有舊教練課票時自動預選續約 -->
+        <div class="form-row"><label>約別</label><select id="gt-salekind" onchange="this.dataset.touched=1"><option value="new">新約</option><option value="renewal">續約</option></select></div>
+      </div>
       <!-- 折抵券（2026-07-22 待辦2）：會員持有對應折抵券時才顯示；分期不併用 -->
       <div class="form-row" id="gt-voucher-wrap" style="display:none;"><label>折抵券</label>
         <div id="gt-voucher-box" style="font-size:12.5px;color:var(--t2);"></div>
@@ -21648,6 +21650,18 @@ async function openGrantModal(){
 function grantGoStep(n){
   document.querySelectorAll('.gt-step').forEach(s=>s.style.display=(Number(s.dataset.gtstep)===n)?'':'none');
   if(n===2) refreshGrantInfo(); // 進購買資訊時刷新方案資訊與預設金額
+  // 約別預設（2026-07-27）：會員名下已有教練課類票 → 預選「續約」；櫃台改過就不再動
+  if(n===2)(async()=>{ try{
+    const mid=(document.getElementById('gt-member')||{}).value;
+    const sel=document.getElementById('gt-salekind');
+    if(!mid||!sel||sel.dataset.touched) return;
+    const [mts,tts]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
+    const tm=Object.fromEntries((tts||[]).map(t=>[t.id,t]));
+    const hasPt=(mts||[]).some(t=>{ if(t.member_id!==mid) return false;
+      const c=(tm[t.ticket_type_id]||{}).category||'';
+      return c!=='自主訓練'&&c!=='團體課'&&!(t.plan_name||'').includes('團'); });
+    sel.value=hasPt?'renewal':'new';
+  }catch(_){} })();
   if(n===3) renderGrantAttrib(); // 銷售入口：業績歸屬教練卡（預設會員主責教練）
   if(n===4) renderContractStep(); // 簽約：帶入本次金額組合約全文＋簽名板
 }
@@ -21964,6 +21978,7 @@ async function submitGrant(){
     valid_days:plan.valid_days||null,
     sessions_total:total,sessions_remaining:total,
     unlocked_sessions:unlocked, installment:installment,   // 分期分段解鎖
+    sale_kind:(document.getElementById('gt-salekind')||{}).value||null,   // 新約/續約（2026-07-27）
     status:'usable',
     payment_status:document.getElementById('gt-pay').value,
     invoice_status:(document.getElementById('gt-invoice')?.value)||'none',   // 2026-07-21 A3：營收分有無發票
@@ -27009,18 +27024,13 @@ async function anaCoach(){
     dbGetAll('purchases').catch(()=>[])]);
   if(typeof loadSalaryTemplates==='function'){ try{ await loadSalaryTemplates(); }catch(_){} }
   const monthBk=bookings.filter(b=>(b.date||'').slice(0,7)===month && b.status!=='cancelled');
-  /* 續約數（2026-07-27 分析口徑；member_tickets 無 is_renewal 欄）：
-     本月售出的教練課類票券、且該會員之前已買過同類票 → 視為續約。
+  /* 續約數（2026-07-27 改標記制）：只數賣票時標「續約」的票（sale_kind='renewal'）。
+     推測法（會員曾買過同類票）會嚴重高估——7 月推出 38 張、實際 9 張，加購/補儲全被誤算。
      歸屬教練＝① 收款紀錄（purchases）的 coach_id ② 購買前 90 天內帶該會員最多教練課的教練。 */
-  const _tMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
-  const _isPtTk=t=>{ const c=(_tMap[t.ticket_type_id]||{}).category||'';
-    return c!=='自主訓練' && c!=='團體課' && !(t.plan_name||'').includes('團'); };
   const _purByTk={}; (purchases||[]).forEach(p=>{ if(p.ticket_id&&p.coach_id) _purByTk[p.ticket_id]=p.coach_id; });
   const renewMap={};
   (mtks||[]).forEach(t=>{
-    if((t.purchase_date||'').slice(0,7)!==month || !(Number(t.amount_paid)>0) || !_isPtTk(t)) return;
-    const earlier=(mtks||[]).some(o=>o.member_id===t.member_id&&o.id!==t.id&&_isPtTk(o)&&(o.purchase_date||'')<(t.purchase_date||''));
-    if(!earlier) return;
+    if((t.purchase_date||'').slice(0,7)!==month || t.sale_kind!=='renewal') return;
     let who=_purByTk[t.id]||null;
     if(!who){
       const upTo=t.purchase_date||'';
@@ -27078,7 +27088,7 @@ async function anaCoach(){
   const table = rowsData.length===0
     ? lpEmpty('本月還沒有教練課堂資料','','')
     : lpTable(cols, rows, null);
-  const note=`<div style="font-size:11.5px;color:var(--t3);margin-top:8px;padding:0 4px;line-height:1.7;">n/n＝已上堂數/當月排定堂數；值班時數＝打卡時數（排班封頂）扣除值班中上課的重疊，與薪資頁同口徑。續約＝本月售出且該會員先前買過同類教練課票，歸屬收款教練（無收款紀錄則以近 90 天主帶教練推定）。</div>`;
+  const note=`<div style="font-size:11.5px;color:var(--t3);margin-top:8px;padding:0 4px;line-height:1.7;">n/n＝已上堂數/當月排定堂數；值班時數＝打卡時數（排班封頂）扣除值班中上課的重疊，與薪資頁同口徑。續約＝賣票流程標記的續約單（7/27 起），歸屬收款教練（無收款紀錄則以近 90 天主帶教練推定）。</div>`;
   body.innerHTML = dateBar + stats + table + note;
 }
 
