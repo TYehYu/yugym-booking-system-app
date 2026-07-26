@@ -5661,8 +5661,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1832';
-const APP_VERSION_LABEL='v260726.1832';
+const APP_VERSION='260726.1841';
+const APP_VERSION_LABEL='v260726.1841';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14492,9 +14492,16 @@ async function openBookingDetail(id){
       tkBks2=allBk2.filter(x=>x.ticket_id===tkC.id && x.status!=='cancelled')
         .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
     }else if(_inferBks){
-      // 先進先出已分配好本堂屬於哪張票，直接用該票的那幾堂
+      /* 先進先出已分配好本堂屬於哪張票，直接用該票的那幾堂。
+         已用堂數不能只數清單裡的出席筆數（2026-07-26 李唯案例：票帳面已用 3，
+         但其中 2 堂是舊系統歷史、prod 沒逐筆，清單只有 1 筆 → 誤標「第 2/4 堂」）。
+         與會員卡同一套：有餘額資訊時取 max(清單出席, 帳面已用−直連預約中)。 */
       tkBks2=_inferBks;
-      _inferDone=tkBks2.filter(x=>x.status==='checked_in'||x.status==='completed').length;
+      const _attN=tkBks2.filter(x=>x.status==='checked_in'||x.status==='completed').length;
+      const _bbN=tkBks2.filter(x=>x.status==='booked'&&x.ticket_id).length;
+      const _remI=Number(tkC.sessions_remaining);
+      const _faceI=isNaN(_remI)?0:Math.max(0,(total-_remI)-_bbN);
+      _inferDone=Math.min(total,Math.max(_attN,_faceI));
     }else{
       /* 退路：先進先出分配不到票時，改用「以本堂為中心取 total 堂」的舊推估。
          推估軌跡：同會員、同類別、同票種、同 format 的未取消預約。
@@ -14539,10 +14546,17 @@ async function openBookingDetail(id){
       tkBks2=win;
       _inferDone=win.filter(x=>x.status==='checked_in'||x.status==='completed').length;
     }
-    const curIdx=tkBks2.findIndex(x=>x.id===b.id); // 本堂在此票券所有預約中的序（0-based）
     // 推估時已用堂數＝實際挑進來的出席筆數（不是票券餘額，理由見上）
     const doneCount=_tkInferred ? _inferDone
       : tkBks2.filter(x=>x.status==='completed'||x.status==='checked_in').length;
+    /* 本堂序改成與 ticketTokens 的圓點位置一致（2026-07-26 李唯案例）：
+       實心區＝出席（依日期排），空心預約接在第 doneCount 顆之後 ——
+       清單順序（日期混排）不再直接當序號，否則歷史缺筆時會少算。 */
+    const _byDT2=(a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||''));
+    const _doneL=tkBks2.filter(x=>x.status==='completed'||x.status==='checked_in').sort(_byDT2);
+    const _bkdL=tkBks2.filter(x=>x.status==='booked').sort(_byDT2);
+    let curIdx=_doneL.findIndex(x=>x.id===b.id);
+    if(curIdx<0){ const _bi=_bkdL.findIndex(x=>x.id===b.id); curIdx=_bi>=0?doneCount+_bi:-1; }
     const isInstall2 = tkC.installment && typeof tkC.installment==='object';
     const unlocked2 = isInstall2 ? (tkC.unlocked_sessions!=null?tkC.unlocked_sessions:total) : total;
     /* 2026-07-26 使用者指示：圓圈由「第幾堂」改成顯示使用日期，與會員票券內容同一套邏輯。
