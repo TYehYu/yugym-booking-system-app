@@ -5440,6 +5440,7 @@ body.mc-mode .cal-body{background:rgba(255,255,255,.8);}
 .msb-vbtn{border:1px solid var(--bd);border-radius:999px;padding:5px 13px;font-size:12px;font-weight:700;cursor:pointer;
   background:#fff;color:var(--t2);font-family:inherit;}
 .msb-vbtn.on{background:var(--green);border-color:var(--green);color:#fff;}
+.msb-vbtn.off{opacity:.35;cursor:not-allowed;background:var(--card2);}
 .cag-slot-tag{font-size:10px;opacity:.8;margin-left:5px;font-weight:600;}
 .msb-types{display:flex;gap:8px;padding:2px 16px 4px;}
 .msb-types button{flex:1;border:none;border-radius:999px;padding:8px 0;font-size:12.5px;font-weight:700;cursor:pointer;
@@ -5702,8 +5703,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.2150';
-const APP_VERSION_LABEL='v260726.2150';
+const APP_VERSION='260726.2201';
+const APP_VERSION_LABEL='v260726.2201';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11803,43 +11804,41 @@ function occupiedUnits(sameDay, ns, ne){
 // 為一筆預約分配場地單位：依課程類型優先序，找第一個該時段未被佔的單位。
 //   回傳 { unit } 或 { error }
 function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){
-  // 排除自己（改期時）
+  /* v3（2026-07-26 使用者校正）：占用改「逐 30 分鐘時點」計算。
+     v2 把整個時窗內所有重疊課視為同時佔位 —— 9:30 與 10:30 的教練課其實是
+     先後使用同一位，卻被算成兩位，害 10:00 的自主被推去跑步機（應為教室）。
+     區間排程定理：同質單位池可容納新區間 ⇔ 時窗內每個時點的併發數 < 容量。 */
   const others=sameDay.filter(x=> x.id!==selfId);
-  const occReal=occupiedUnits(others, ns, ne); // 只含有明確 venue_unit 的真實占用
-  const occ=new Set(occReal);
-  // 相容「舊資料沒有 venue_unit」：用數量回推佔用（保險，避免超賣）
-  const legacy=others.filter(x=> overlaps(ns,ne, timeToMin(x.start_time), timeToMin(x.start_time)+(x.duration||60)) && !x.venue_unit);
-  const fillLegacy=(poolPrefix, count)=>{
-    for(let i=1;i<=venueCap(poolPrefix) && count>0;i++){
-      const u=`${poolPrefix}_${i}`; if(!occ.has(u)){ occ.add(u); count--; }
-    }
-    return count;
+  const loadAt=(inst)=>{                     // 該時點各場地池的占用數
+    const use={}; getVenues().forEach(v=>{ use[v.id]=0; });
+    const seen={};
+    const cur=others.filter(x=>{ const s0=timeToMin(x.start_time), e0=s0+(x.duration||60); return s0<=inst && inst<e0; });
+    // ① 有明確 venue_unit 的真實占用（同單位不重複計）
+    cur.forEach(x=>{ if(x.venue_unit && !seen[x.venue_unit]){ seen[x.venue_unit]=1;
+      const vid=String(x.venue_unit).split('_')[0]; if(use[vid]!=null) use[vid]++; } });
+    // ② 舊資料沒 venue_unit → 按課種優先序回推佔位（多功能→教室→跑步機）
+    const fill=(vid,n)=>{ if(use[vid]==null) return n; const take=Math.min(Math.max(0,venueCap(vid)-use[vid]),n); use[vid]+=take; return n-take; };
+    let g=cur.filter(x=>!x.venue_unit&&x.category==='小班肌力').length;
+    let m=cur.filter(x=>!x.venue_unit&&(x.category==='私人教練'||x.category==='體驗')).length;
+    let sf=cur.filter(x=>!x.venue_unit&&x.category==='自主訓練').length;
+    g=fill('group',g);
+    m=fill('multi',m); if(m>0) fill('group',m);
+    sf=fill('multi',sf); sf=fill('group',sf); if(sf>0) fill('treadmill',sf);
+    return use;
   };
-  if(legacy.length){
-    let g=legacy.filter(x=>x.category==='小班肌力').length;
-    let m=legacy.filter(x=>x.category==='私人教練'||x.category==='體驗').length;
-    let s=legacy.filter(x=>x.category==='自主訓練').length;
-    g=fillLegacy('group',g);
-    m=fillLegacy('multi',m); if(m>0) fillLegacy('group',m);
-    s=fillLegacy('multi',s); s=(s>0?fillLegacy('group',s):0); if(s>0) fillLegacy('treadmill',s);   // 對齊新優先序：多功能→教室→跑步機
-  }
-  /* 指定場地（2026-07-26 使用者指示：會員可自選教室/跑步機，即使多功能還有位） */
   const pri=forceVid?[forceVid]:venuePriorityFor(category);
   const primaryVid=pri[0]; // 首選場地
-  /* 挑位改用「真實 venue_unit ＋ 舊資料估算」的合併占用（2026-07-26 使用者回報：
-     匯入課全都沒有 venue_unit，只看真實占用會把已滿的多功能再分出去、場地超賣。
-     estimate 已按各課種優先序回推佔位，跟著它挑就不會重複。 */
-  for(let pIdx=0;pIdx<pri.length;pIdx++){
-    const vid=pri[pIdx];
-    for(let i=1;i<=venueCap(vid);i++){
-      const u=`${vid}_${i}`;
-      if(!occ.has(u)){
-        const overflow = (vid!==primaryVid);
-        return { unit:u, overflow, fromVid:primaryVid, toVid:vid };
-      }
+  for(const vid of pri){
+    let okAll=true, peak=0;
+    for(let inst=ns; inst<ne; inst+=30){
+      const u=loadAt(inst)[vid];
+      if(u==null || u>=venueCap(vid)){ okAll=false; break; }
+      if(u>peak) peak=u;
+    }
+    if(okAll){
+      return { unit:`${vid}_${Math.min(venueCap(vid),peak+1)}`, overflow: vid!==primaryVid, fromVid:primaryVid, toVid:vid };
     }
   }
-  // 真實占用已滿 → 明確額滿，硬擋
   return { error:'該時段沒有可用場地（已額滿）', hardFull:true };
 }
 function overlaps(s1,e1,s2,e2){ return s1<e2 && e1>s2; }
@@ -24843,17 +24842,21 @@ async function msbPickSlot(t){
   /* 場地選擇（2026-07-26 使用者指示）：確認視窗內選場地，預設＝自動分配到的；
      逐一驗證該時段各場地是否還有位，沒位的不顯示。 */
   const VOPT=[['multi','多功能'],['group','教室'],['treadmill','跑步機']];
-  const avail=[];
+  const opts=[];
   for(const [vid,label] of VOPT){
     const probe={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id,venue_pref:vid};
     const err=await validateBooking(probe,s.date,t,60);
-    if(!err) avail.push([vid,label]);
+    opts.push([vid,label,!err]);
   }
+  const avail=opts.filter(o=>o[2]);
   if(!avail.length){ showToast('這個時段剛被約走了，請選其他時段'); msbLoadSlots(); return; }
   const mm=timeToMin(t);
   const autoVid=(s.vids&&s.vids[mm])||avail[0][0];
   s.pickVenue=avail.some(v=>v[0]===autoVid)?autoVid:avail[0][0];
-  const vbtns=avail.map(([vid,label])=>`<button class="msb-vbtn${s.pickVenue===vid?' on':''}" data-vid="${vid}" onclick="msbChooseVenue('${vid}')">${label}</button>`).join('');
+  /* 三個場地都顯示：沒位的變暗不可按（2026-07-26 使用者指示） */
+  const vbtns=opts.map(([vid,label,ok])=> ok
+    ? `<button class="msb-vbtn${s.pickVenue===vid?' on':''}" data-vid="${vid}" onclick="msbChooseVenue('${vid}')">${label}</button>`
+    : `<button class="msb-vbtn off" disabled title="此時段已滿">${label}</button>`).join('');
   showModal(`<div class="modal-title">確認預約</div>
     <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:2;">
       <div><span style="color:var(--t2);">類型</span>　${s.type==='friendly'?'友善自主訓練':'自主訓練'}</div>
