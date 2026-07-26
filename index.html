@@ -5652,8 +5652,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.0901';
-const APP_VERSION_LABEL='v260726.0901';
+const APP_VERSION='260726.0934';
+const APP_VERSION_LABEL='v260726.0934';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14270,7 +14270,8 @@ async function openBookingDetail(id){
       _allBk.forEach(x=>{
         if(x.category!=='小班肌力' || x.status==='cancelled') return;
         const ids=mids(x); const one=ids.length?ids:(x.member_id?[x.member_id]:[]);
-        [...new Set(one)].forEach(mid=>{ (_hist[mid]=_hist[mid]||[]).push(x); });
+        // 一個位子一筆（不可去重）：同一帳號訂 N 個位子就是扣 N 堂，圓點要出現 N 次同日期
+        one.forEach(mid=>{ (_hist[mid]=_hist[mid]||[]).push(x); });
       });
       Object.values(_hist).forEach(a=>a.sort((p,q)=>((p.date||'')+(p.start_time||'')).localeCompare((q.date||'')+(q.start_time||''))));
       _uniqIds.forEach(mid=>{
@@ -14290,7 +14291,8 @@ async function openBookingDetail(id){
            填進剩餘圓點。所以日期是合理推估、不是帳本事實。 */
         const h=_hist[mid]||[];
         const doneAll=h.filter(x=>x.status==='checked_in'||x.status==='completed');
-        const bks=[...doneAll.slice(-used), ...h.filter(x=>x.status==='booked')];
+        // used=0 時 slice(-0) 會回傳整個陣列，必須擋掉
+        const bks=[...(used>0?doneAll.slice(-used):[]), ...h.filter(x=>x.status==='booked')];
         _gTk[mid]={
           left: live.reduce((s,t)=>s+(t.sessions_remaining||0),0),
           tokens: ticketTokens(cur,bks,_typeMapG,Math.min(used,total),b.id),
