@@ -2720,6 +2720,10 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .mtk.mtk-cur{border-color:var(--gold,#b48a56);box-shadow:0 0 0 3px rgba(180,138,86,.28);}
 /* ── 自主訓練點數獨立入口（2026-07-23 使用者指示）──
    效期短（7 天）、由會員自行預約，數量又多；混在票券清單裡會把介面塞爆，故收成一顆按鈕。 */
+/* 自主訓練＋折抵券併成一列（2026-07-26 使用者指示） */
+.mtk-entry-row{display:flex;gap:10px;}
+.mtk-entry-row .mtk-self-btn{flex:1;min-width:0;width:auto;}
+.mtk-entry-row .mtk-self-btn .mtk-self-s{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mtk-self-btn{width:100%;display:flex;align-items:center;gap:12px;background:var(--card,#fff);border:1px solid var(--bd);border-radius:16px;padding:13px 15px;margin:0 0 12px;cursor:pointer;text-align:left;font-family:inherit;box-shadow:0 1px 2px rgba(0,0,0,.03);transition:border-color .16s,box-shadow .16s;}
 .mtk-self-btn:hover{border-color:var(--course-self-accent);box-shadow:0 2px 8px rgba(0,0,0,.06);}
 .mtk-self-ic{width:36px;height:36px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--course-self-accent) 14%,#fff);color:var(--course-self-accent);}
@@ -5685,8 +5689,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.2112';
-const APP_VERSION_LABEL='v260726.2112';
+const APP_VERSION='260726.2123';
+const APP_VERSION_LABEL='v260726.2123';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26058,7 +26062,16 @@ function renderMemTickets(){
     const unused=ticketUnused(t,usedMap,((bookedMap||{})[t.id]||0)); // 顯示用：未使用（以真實剩餘+已預約為上限）
     const days=t.expire_date?diffDays(t.expire_date,today):null;
     const soon=!dim&&days!=null&&days<=7&&days>=0;
-    const copy=ticketCopy(t);
+    /* 圓點與數字同源（2026-07-26 使用者回報：1 顆實心卻寫 3/4）：
+       數字改「已用/總數」，與圓點實心數一致；已用＝明細版三訊號。 */
+    const _bksC=(tkAlloc&&tkAlloc.byTicket&&tkAlloc.byTicket[t.id])||(bkByTicket||{})[t.id]||[];
+    const _isAttC=x=>x.status==='checked_in'||x.status==='completed';
+    const _datesN=(((bkByTicket||{})[t.id])||[]).filter(_isAttC).length;
+    const _infAtt=((tkAlloc&&tkAlloc.inferred&&tkAlloc.inferred[t.id])||[]).filter(_isAttC).length;
+    const _bbC=(((bkByTicket||{})[t.id])||[]).filter(x=>x.status==='booked').length;
+    const _remC=t.sessions_remaining;
+    const _faceC=_remC==null?0:Math.max(0,(total-_remC)-_bbC);
+    const usedCnt=Math.min(total,_remC==null?Math.max(_datesN,_infAtt):Math.max(_datesN,_faceC));
     const open=!!_mcOpen[t.id];
     const name=t.plan_name||(ty?ty.name:'票券');
     // 若名稱已含 1V1/1V2 等授課型別，不重複附加
@@ -26086,21 +26099,11 @@ function renderMemTickets(){
           ${dim?`<span class="mck-badge">${(t.status==='expired'||(t.expire_date&&t.expire_date<today))?'已到期':'已使用完'}</span>`
                 :(soon?`<span class="mck-badge mck-badge-warn">${days} 天後到期</span>`:'')}
         </div>
-        ${dim?'':`<div class="mck-copy"><div class="mck-copy1">${copy.line1}</div><div class="mck-copy2">${copy.line2}</div></div>`}
-        <div class="mck-dots2">${(()=>{
-          const bks=(tkAlloc&&tkAlloc.byTicket&&tkAlloc.byTicket[t.id])||(bkByTicket||{})[t.id]||[];
-          const isAtt=x=>x.status==='checked_in'||x.status==='completed';
-          const datesN=(((bkByTicket||{})[t.id])||[]).filter(isAtt).length;
-          const infAtt=((tkAlloc&&tkAlloc.inferred&&tkAlloc.inferred[t.id])||[]).filter(isAtt).length;
-          const bb=(((bkByTicket||{})[t.id])||[]).filter(x=>x.status==='booked').length;
-          const rem=t.sessions_remaining;
-          const face=rem==null?0:Math.max(0,(total-rem)-bb);
-          const usedCnt=Math.min(total, rem==null?Math.max(datesN,infAtt):Math.max(datesN,face));
-          return ticketTokens(t,bks,typeMap,usedCnt);
-        })()}</div>
+        ${/* 小管家文案列已移除（2026-07-26 使用者指示） */''}
+        <div class="mck-dots2">${ticketTokens(t,_bksC,typeMap,usedCnt)}</div>
         ${(t.installment && t.unlocked_sessions!=null && t.unlocked_sessions<total)?`<div class="mck-install">分期方案・目前開通 <b>${t.unlocked_sessions}</b> / ${total} 堂　·　🔒 部分堂數需繳下一期後開通</div>`:''}
         <div class="mck-figures">
-          <div class="mck-num"><span class="mck-num-big">${unused}</span><span class="mck-num-tot">/ ${total} 堂</span></div>
+          <div class="mck-num"><span class="mck-num-big">${usedCnt}</span><span class="mck-num-tot">/ ${total} 堂</span></div>
           <div class="mck-exp">${t.expire_date?`${dim?'':'到期'} ${t.expire_date}`:'永久有效'}</div>
         </div>
       </div>
@@ -26115,8 +26118,7 @@ function renderMemTickets(){
      <div><div class="ph-ey">TICKETS</div><h1>我的票券</h1><div class="ph-sub">目前持有 ${usable.length} 張有效票券</div></div>
      ${isMobileLayout()?'':`<button class="btn btn-green btn-sm" style="flex-shrink:0;" onclick="navTo('mem_purchase')">＋ 購買票券</button>`}
    </div>`+
-  selfPtEntryHTML()+
-  voucherEntryHTML()+
+  `<div class="mtk-entry-row">${selfPtEntryHTML()}${voucherEntryHTML()}</div>`+
   memContractEntryHTML()+
   renewHint+
   `${usable.length===0&&inactive.length===0
