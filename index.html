@@ -5703,8 +5703,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.2236';
-const APP_VERSION_LABEL='v260726.2236';
+const APP_VERSION='260726.2241';
+const APP_VERSION_LABEL='v260726.2241';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11849,16 +11849,21 @@ function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){
 function overlaps(s1,e1,s2,e2){ return s1<e2 && e1>s2; }
 /* 會員端當日佔用快取：msbLoadSlots 一次掃 24 個時段都呼叫 validateBooking，
    只需打一次 RPC。TTL 與 DB_CACHE_TTL 同步；預約成功後呼叫 occCacheClear()。 */
-let _occCache={};
-function occCacheClear(){ _occCache={}; }
+let _occCache={}, _occInflight={}, _occGen=0;
+function occCacheClear(){ _occCache={}; _occGen++; }
 async function fetchDayOccupancy(date){
   const c=_occCache[date];
   if(c && Date.now()-c.t<DB_CACHE_TTL) return c.rows;
-  const {data,error}=await sb.rpc('fn_booking_occupancy',{p_date:date});
-  if(error){ console.error('fn_booking_occupancy:',error); throw new Error('讀取時段資料失敗，請稍後再試'); }
-  const rows=data||[];
-  _occCache[date]={t:Date.now(),rows};
-  return rows;
+  if(_occInflight[date]) return _occInflight[date];   // 並行探測共用同一支請求
+  const gen=_occGen;
+  _occInflight[date]=(async()=>{ try{
+    const {data,error}=await sb.rpc('fn_booking_occupancy',{p_date:date});
+    if(error){ console.error('fn_booking_occupancy:',error); throw new Error('讀取時段資料失敗，請稍後再試'); }
+    const rows=data||[];
+    if(gen===_occGen) _occCache[date]={t:Date.now(),rows};   // 期間有寫入就不回填舊資料
+    return rows;
+  } finally { delete _occInflight[date]; } })();
+  return _occInflight[date];
 }
 async function validateBooking(bk,date,time,duration){
   const dur=duration||bk.duration||60;
@@ -11870,7 +11875,8 @@ async function validateBooking(bk,date,time,duration){
 
   // 0b) 限時段檢查：該票券種類 time_restricted=true → 僅平日 18:00 前
   if(bk.ticket_type_id){
-    const tt=await dbGet('ticket_types',bk.ticket_type_id);
+    /* dbGet 無快取，會員端掃 24 個時段會打 24 次網路 → 改走表級快取（20s TTL） */
+    const tt=(((await dbGetAll('ticket_types').catch(()=>[]))||[]).find(x=>x.id===bk.ticket_type_id));
     if(tt && tt.time_restricted){
       const dow=parseYmd(date).getDay(); // 0=日,6=六
       const isWeekday = dow>=1 && dow<=5;
@@ -24840,12 +24846,16 @@ async function msbLoadSlots(){
   const seq=++_msbLoadSeq;
   const tk=msbPickTicket();
   if(!tk){ box.innerHTML='<div class="msb-empty">這天點數已過效期，請選金框內的日期</div>'; return; }
-  const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id};
   const free=new Set(); const vids={};
-  for(let m=540;m<1260;m+=30){
+  /* 並行探測（2026-07-26 提速）：24 個時段同時驗證。佔用資料與票種都走共用快取，
+     實際只有 1 支 RPC＋1 支表查詢。每個時段用獨立物件（validateBooking 會寫回 venue_unit）。 */
+  const probes=[]; for(let m=540;m<1260;m+=30) probes.push(m);
+  const results=await Promise.all(probes.map(async m=>{
+    const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id};
     const err=await validateBooking(vbk,s.date,minToTime(m),60);
-    if(!err){ free.add(m); vids[m]=String(vbk.venue_unit||'').split('_')[0]; }
-  }
+    return [m,err,vbk.venue_unit];
+  }));
+  results.forEach(([m,err,vu])=>{ if(!err){ free.add(m); vids[m]=String(vu||'').split('_')[0]; } });
   if(seq!==_msbLoadSeq||!window._msb) return;   // 換日/換類型的過期回應丟棄
   s.free=free; s.vids=vids;
   if(free.size===0){ box.innerHTML='<div class="msb-empty">這天沒有可預約的時段<br><span class="em-s">換一天試試</span></div>'; return; }
@@ -24863,12 +24873,11 @@ async function msbPickSlot(t){
   /* 場地選擇（2026-07-26 使用者指示）：確認視窗內選場地，預設＝自動分配到的；
      逐一驗證該時段各場地是否還有位，沒位的不顯示。 */
   const VOPT=[['multi','多功能'],['group','教室'],['treadmill','跑步機']];
-  const opts=[];
-  for(const [vid,label] of VOPT){
+  const opts=await Promise.all(VOPT.map(async([vid,label])=>{
     const probe={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id,venue_pref:vid};
     const err=await validateBooking(probe,s.date,t,60);
-    opts.push([vid,label,!err]);
-  }
+    return [vid,label,!err];
+  }));
   const avail=opts.filter(o=>o[2]);
   if(!avail.length){ showToast('這個時段剛被約走了，請選其他時段'); msbLoadSlots(); return; }
   const mm=timeToMin(t);
