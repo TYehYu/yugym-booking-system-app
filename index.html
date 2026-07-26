@@ -5653,8 +5653,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1612';
-const APP_VERSION_LABEL='v260726.1612';
+const APP_VERSION='260726.1815';
+const APP_VERSION_LABEL='v260726.1815';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8490,6 +8490,25 @@ function allocBookingsToTickets(tickets,bookings,typeMap){
   Object.keys(grpBk).forEach(k=>{
     const tks=sortTk(grpTk[k]||[]);
     const bks=grpBk[k].slice().sort(byDT);
+    fillAttended(tks,bks.filter(isAtt));
+    fillBooked(tks,bks.filter(b=>!isAtt(b)));
+  });
+  /* ── 第 1.5 輪：教練課系相容（2026-07-26 陳蘭馨案例）──
+     預約的票種是「教練課」、票卻是「限定教練課／VIP 教練課」（挑票時本就相容，
+     見 bkTicketTypeOk），嚴格票種名配對搭不上 → 她 7/27×2、8/3 的預約掛不到
+     陳添泉的限定票。把三個教練課系票種視為同一類，對第一輪剩下的預約再配一次；
+     友善教練課不在此列（獨立票種）。 */
+  const klass=n=>(n==='教練課'||n==='VIP 教練課'||n==='限定教練課')?'教練課系':n;
+  const grpTk2={}, grpBk2={};
+  (tickets||[]).forEach(t=>{ const k=[klass(tyName(t.ticket_type_id)), t.format||''].join('|');
+    (grpTk2[k]=grpTk2[k]||[]).push(t); });
+  (bookings||[]).forEach(b=>{ if(b.status==='cancelled'||b.ticket_id||!b.ticket_type_id) return;
+    if(byBooking[b.id]) return;                       // 第一輪已配到的不重配
+    const k=[klass(tyName(b.ticket_type_id)), b.format||''].join('|');
+    (grpBk2[k]=grpBk2[k]||[]).push(b); });
+  Object.keys(grpBk2).forEach(k=>{
+    const tks=sortTk(grpTk2[k]||[]);
+    const bks=grpBk2[k].slice().sort(byDT);
     fillAttended(tks,bks.filter(isAtt));
     fillBooked(tks,bks.filter(b=>!isAtt(b)));
   });
