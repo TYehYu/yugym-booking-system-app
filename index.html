@@ -5652,8 +5652,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1226';
-const APP_VERSION_LABEL='v260726.1226';
+const APP_VERSION='260726.1242';
+const APP_VERSION_LABEL='v260726.1242';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15554,6 +15554,26 @@ async function openMemberDetail(member_id){
   const bkByTk={};
   (myBookings||[]).forEach(b=>{ if(b.ticket_id&&b.status!=='cancelled'){ (bkByTk[b.ticket_id]=bkByTk[b.ticket_id]||[]).push(b); } });
   Object.values(bkByTk).forEach(arr=>arr.sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||''))));
+  /* 匯入票券沒有 ticket_id 直連（全庫 2,400 多張票只有 11 筆預約有綁），逐堂圓點會完全沒有日期，
+     而且「已用堂數」只能拿 總堂−剩餘 來推 —— 但舊系統的「未核銷額度」把已預約也算掉了，
+     於是未來的預約會被畫成已上課的實心勾（朱庭箴 8/02、8/09 的課被畫成 ✓）。
+     這裡改用先進先出推算：同票種＋同 format 的票券依啟用日排序，會員的預約依日期排序，
+     一張票吃掉 sessions_total 筆，藉此還原「哪幾堂屬於哪張票」。純顯示用，不寫回資料庫。 */
+  const inferByTk={};
+  (function(){
+    const key=t=>[typeMap[t.ticket_type_id]?typeMap[t.ticket_type_id].name:'', t.format||''].join('|');
+    const bkKey=b=>{ const ty=typeMap[b.ticket_type_id]; return [ty?ty.name:'', b.format||''].join('|'); };
+    const grpTk={}, grpBk={};
+    myTickets.forEach(t=>{ if(bkByTk[t.id]) return; (grpTk[key(t)]=grpTk[key(t)]||[]).push(t); });
+    (myBookings||[]).forEach(b=>{ if(b.status==='cancelled'||b.ticket_id) return;
+      (grpBk[bkKey(b)]=grpBk[bkKey(b)]||[]).push(b); });
+    Object.keys(grpTk).forEach(k=>{
+      const tks=grpTk[k].slice().sort((a,b)=>String(a.start_date||a.purchase_date||'').localeCompare(String(b.start_date||b.purchase_date||'')));
+      const bks=(grpBk[k]||[]).slice().sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
+      let i=0;
+      tks.forEach(t=>{ const n=Math.max(0,t.sessions_total||0); inferByTk[t.id]=bks.slice(i,i+n); i+=n; });
+    });
+  })();
   // 票券分類：課程票券（教練/友善/團課）vs 自主訓練
   const tkCategoryOf=(t)=>{
     const ty=typeMap[t.ticket_type_id];
@@ -15580,11 +15600,18 @@ async function openMemberDetail(member_id){
        （全庫 2,400 多張票只有 11 筆預約有 ticket_id），導致早就用完的歷史票券整排空心、
        未使用堂數也算成滿的。改取「帳面已用（總堂−剩餘）」與「有紀錄的預約數」較大者：
        匯入票以餘額為準（用完就整排實心），新系統的票兩者本來就一致。 */
-    const usedCount=Math.min(total, Math.max(dates.length, total-(t.sessions_remaining??total)));
+    /* 已用堂數：有綁預約就用實際筆數；沒綁（匯入票）改用推算出來的那批預約，
+       只算「已簽到／已完成」，未來的預約留給空心＋日期，不會被畫成已上課。
+       兩者都沒有時（推算不到）才退回用餘額推，至少讓用完的歷史票券顯示實心。 */
+    const inf=inferByTk[t.id]||[];
+    const usedCount = dates.length ? Math.min(total,dates.length)
+      : inf.length ? Math.min(total, inf.filter(x=>x.status==='checked_in'||x.status==='completed').length)
+      : Math.min(total, Math.max(0, total-(t.sessions_remaining??total)));
     const isDim=(t.status!=='usable')||(t.expire_date&&t.expire_date<ymd(TODAY));
     /* 2026-07-23 使用者指示：票券逐堂顯示全系統統一 —— 改用 ticketTokens
        （課種色圓點：實心＋上課日期／空心＋預約日期／空心未使用），取代原本的灰色 tkc-dot。 */
-    const circles=ticketTokens(t,(bkByTk[t.id]||[]),typeMap,usedCount);
+    // 有綁預約用真的，沒綁就用先進先出推算出來的那批（見上方 inferByTk）
+    const circles=ticketTokens(t,(bkByTk[t.id]||inf),typeMap,usedCount);
     const inst=t.installment&&typeof t.installment==='object'?t.installment:null;
     const instTag=inst?`<span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;margin-left:6px;">🔒 分期 ${t.unlocked_sessions||inst.current||0}/${total}</span>`:'';
     return `<div class="md-tk-item"${isDim?' style="opacity:.55;"':''}>
