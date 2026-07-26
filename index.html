@@ -6458,6 +6458,31 @@ function hapticFeedback(ms){
 }
 
 /* ── 進入 App ── */
+/* ══ LINE 圖文選單深連結（2026-07-26 使用者指示）══
+   LIFF 網址帶 ?go=scan（掃碼簽到）／?go=book（預約自主訓練）。
+   LIFF 兩段導轉時參數會先包在 liff.state 裡，兩種形式都解。
+   用法：https://liff.line.me/2010821438-e2Kcw1Ca?go=scan */
+window._deepGo=(function(){
+  try{
+    const sp=new URLSearchParams(location.search);
+    let go=sp.get('go');
+    if(!go && sp.get('liff.state')){
+      const st=new URLSearchParams(String(sp.get('liff.state')).replace(/^\?/,''));
+      go=st.get('go');
+    }
+    if(go) history.replaceState(null,'',location.pathname);   // 清掉參數，重整不重複觸發
+    return go||null;
+  }catch(_){ return null; }
+})();
+function applyDeepLink(){
+  const go=window._deepGo; if(!go) return false;
+  window._deepGo=null;
+  if(SESSION && SESSION.role==='member'){
+    if(go==='scan'){ navTo('member_scan_checkin'); return true; }
+    if(go==='book'){ navTo('mem_bookings'); setTimeout(()=>{ try{ msbStart(); }catch(_){} },400); return true; }
+  }
+  return false;
+}
 function enterApp(){
   document.getElementById('login-screen').classList.add('hidden');
   const app=document.getElementById('app-screen');
@@ -6512,7 +6537,7 @@ function enterApp(){
     else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:NAV.coach;
     else if(SESSION.role==='front_desk') firstItems = isMobile?MOBILE_FRONTDESK_NAV:NAV.front_desk;
     else firstItems = NAV[SESSION.role]||[];
-    if(firstItems[0]) navTo(firstItems[0].key);
+    if(!applyDeepLink() && firstItems[0]) navTo(firstItems[0].key);
   }
   renderPreviewBar();
 }
@@ -6547,7 +6572,7 @@ function switchPreviewRole(role){
     else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:NAV.coach;
     else if(SESSION.role==='front_desk') firstItems = isMobile?MOBILE_FRONTDESK_NAV:NAV.front_desk;
     else firstItems = NAV[SESSION.role]||[];
-    if(firstItems[0]) navTo(firstItems[0].key);
+    if(!applyDeepLink() && firstItems[0]) navTo(firstItems[0].key);
   }
   renderPreviewBar();
   refreshHeaderPunch();
