@@ -5652,8 +5652,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1157';
-const APP_VERSION_LABEL='v260726.1157';
+const APP_VERSION='260726.1226';
+const APP_VERSION_LABEL='v260726.1226';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14308,30 +14308,42 @@ async function openBookingDetail(id){
     const tkC=_tkCard;
     const total=tkC.sessions_total||0;
     const allBk2=await dbGetAll('bookings').catch(()=>[]);
-    let tkBks2;
+    let tkBks2, _inferDone=0;
     if(!_tkInferred){
       tkBks2=allBk2.filter(x=>x.ticket_id===tkC.id && x.status!=='cancelled')
         .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
     }else{
       /* 推估軌跡：同會員、同類別、同票種、同 format 的未取消預約。
-         已用堂數取自票券本身，日期取「最近 N 堂」的出席紀錄，未來已預約的填進剩餘圓點。 */
+         ⚠️ 不能只用票券餘額推已用堂數 —— 匯入票券的餘額多半沒反映歷史扣課
+         （全庫 2,272 筆已上課未扣票），會挑到「剩 4/4 的全新票」而整排空心，
+         本堂明明已簽到卻連日期都出不來。
+         改成以本堂為基準：本堂已上課就取「到本堂為止」的最後 total 堂，本堂必定在內；
+         本堂還沒上（未來的課）才退回用餘額推估，並讓已預約的課填後面的圓點。 */
       const hist=allBk2.filter(x=>x.member_id===b.member_id && x.status!=='cancelled'
           && x.category===b.category
           && (!b.ticket_type_id || x.ticket_type_id===b.ticket_type_id)
           && (!b.format || !x.format || x.format===b.format))
         .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
-      const usedN=Math.min(Math.max(0,total-(tkC.sessions_remaining||0)),total);
-      const doneAll=hist.filter(x=>x.status==='checked_in'||x.status==='completed');
-      tkBks2=[...(usedN>0?doneAll.slice(-usedN):[]), ...hist.filter(x=>x.status==='booked')];
-      // 本堂若不在推估區間內（例如更早以前的課），補進來才標得到金框
-      if(!tkBks2.some(x=>x.id===b.id)){
-        const self=hist.find(x=>x.id===b.id);
-        if(self) tkBks2=[...tkBks2,self].sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
+      const attended=hist.filter(x=>x.status==='checked_in'||x.status==='completed');
+      const bookedL=hist.filter(x=>x.status==='booked');
+      /* 以本堂為中心取一個剛好 total 長的視窗：本堂必定落在圓點內，
+         「本堂第 N / total 堂」也不會溢出（曾出現過「第 13 / 12 堂」且本堂沒有圓點）。 */
+      const seq=[...attended,...bookedL];
+      const si=seq.findIndex(x=>x.id===b.id);
+      let startI;
+      if(si<0){
+        const usedN=Math.min(Math.max(0,total-(tkC.sessions_remaining||0)),total);
+        startI=Math.max(0,attended.length-usedN);
+      }else{
+        startI=Math.max(0, Math.min(si-(total-1), Math.max(0,seq.length-total)));
       }
+      const win=seq.slice(startI, startI+total);
+      tkBks2=win;
+      _inferDone=win.filter(x=>x.status==='checked_in'||x.status==='completed').length;
     }
     const curIdx=tkBks2.findIndex(x=>x.id===b.id); // 本堂在此票券所有預約中的序（0-based）
-    const doneCount=_tkInferred
-      ? Math.min(Math.max(0,total-(tkC.sessions_remaining||0)),total)
+    // 推估時已用堂數＝實際挑進來的出席筆數（不是票券餘額，理由見上）
+    const doneCount=_tkInferred ? _inferDone
       : tkBks2.filter(x=>x.status==='completed'||x.status==='checked_in').length;
     const isInstall2 = tkC.installment && typeof tkC.installment==='object';
     const unlocked2 = isInstall2 ? (tkC.unlocked_sessions!=null?tkC.unlocked_sessions:total) : total;
