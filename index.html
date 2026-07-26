@@ -5683,8 +5683,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.2103';
-const APP_VERSION_LABEL='v260726.2103';
+const APP_VERSION='260726.2107';
+const APP_VERSION_LABEL='v260726.2107';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26014,12 +26014,15 @@ PAGES.mem_tickets=async function(){
   Object.keys(bkByTicket).forEach(tid=>{
     bookedMap[tid]=bkByTicket[tid].filter(b=>b.status==='booked'||b.status==='scheduled').length;
   });
-  _memTkData={mine,typeMap,logs,usedMap,bkByTicket,bookedMap};
+  /* 圓形卡改用與「課卡點開（預約明細）」同一套（2026-07-26 使用者指示）：
+     merged 圓點＝直連＋先進先出分配（有日期）；已用堂數＝三訊號（直連已上／推算已上／帳面）。 */
+  const tkAlloc=allocBookingsToTickets(mine,myBk,typeMap);
+  _memTkData={mine,typeMap,logs,usedMap,bkByTicket,bookedMap,tkAlloc};
   renderMemTickets();
 };
 function renderMemTickets(){
   if(!_memTkData) return;
-  const {mine,typeMap,logs,usedMap,bkByTicket,bookedMap}=_memTkData;
+  const {mine,typeMap,logs,usedMap,bkByTicket,bookedMap,tkAlloc}=_memTkData;
   const today=ymd(TODAY);
   // 「有效」判斷：只看「已簽到/完成」堂數 —— 只要還有沒上完的堂（已簽到 < 總堂數），票券就算持有中。
   //  已預約但還沒上（沒簽到）不算用掉，避免「約了課就被歸到已完成」而反灰跑到下方。
@@ -26079,7 +26082,17 @@ function renderMemTickets(){
                 :(soon?`<span class="mck-badge mck-badge-warn">${days} 天後到期</span>`:'')}
         </div>
         ${dim?'':`<div class="mck-copy"><div class="mck-copy1">${copy.line1}</div><div class="mck-copy2">${copy.line2}</div></div>`}
-        <div class="mck-dots2">${ticketTokens(t,(bkByTicket||{})[t.id]||[],typeMap,Math.max(0,total-unused))}</div>
+        <div class="mck-dots2">${(()=>{
+          const bks=(tkAlloc&&tkAlloc.byTicket&&tkAlloc.byTicket[t.id])||(bkByTicket||{})[t.id]||[];
+          const isAtt=x=>x.status==='checked_in'||x.status==='completed';
+          const datesN=(((bkByTicket||{})[t.id])||[]).filter(isAtt).length;
+          const infAtt=((tkAlloc&&tkAlloc.inferred&&tkAlloc.inferred[t.id])||[]).filter(isAtt).length;
+          const bb=(((bkByTicket||{})[t.id])||[]).filter(x=>x.status==='booked').length;
+          const rem=t.sessions_remaining;
+          const face=rem==null?0:Math.max(0,(total-rem)-bb);
+          const usedCnt=Math.min(total, rem==null?Math.max(datesN,infAtt):Math.max(datesN,face));
+          return ticketTokens(t,bks,typeMap,usedCnt);
+        })()}</div>
         ${(t.installment && t.unlocked_sessions!=null && t.unlocked_sessions<total)?`<div class="mck-install">分期方案・目前開通 <b>${t.unlocked_sessions}</b> / ${total} 堂　·　🔒 部分堂數需繳下一期後開通</div>`:''}
         <div class="mck-figures">
           <div class="mck-num"><span class="mck-num-big">${unused}</span><span class="mck-num-tot">/ ${total} 堂</span></div>
@@ -26089,17 +26102,8 @@ function renderMemTickets(){
     </div>`;
   };
 
-  // 續課提示：總未使用堂數 <=2，或最快到期 <=7 天時，柔和提醒（移自首頁）
-  let totalRemain=0, soonest=null;
-  usable.forEach(t=>{ totalRemain+=ticketUnused(t,usedMap); if(t.expire_date&&(!soonest||t.expire_date<soonest)) soonest=t.expire_date; });
-  const expDays=soonest?diffDays(soonest,today):null;
-  const needRenew = usable.length>0 && (totalRemain<=2 || (expDays!=null&&expDays<=7));
-  const renewHint = needRenew
-    ? `<button class="mck-renew" onclick="navTo('mem_purchase')">
-        <span class="mck-renew-t">${totalRemain<=2?'剩餘堂數不多了':'票券即將到期'}</span>
-        <span class="mck-renew-s">${totalRemain<=2?'準備好，我們陪你走下一段練習。':'有需要時，我們都在。'}　前往續課 ›</span>
-      </button>`
-    : '';
+  // 續課提醒卡已移除（2026-07-26 使用者指示：我的票券不放小管家式提示）
+  const renewHint='';
 
   C.innerHTML=
   `<div class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end;">
