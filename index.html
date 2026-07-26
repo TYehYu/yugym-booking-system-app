@@ -5652,8 +5652,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1242';
-const APP_VERSION_LABEL='v260726.1242';
+const APP_VERSION='260726.1253';
+const APP_VERSION_LABEL='v260726.1253';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15639,9 +15639,12 @@ async function openMemberDetail(member_id){
   const _isExpiredTk=t=>t.status!=='refunded'&&t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2&&(Number(t.sessions_remaining)||0)>0;
   const _isHistoryTk=t=>!_isExpiredTk(t)&&(t.status==='used_up'||t.status==='refunded'||(((Number(t.sessions_remaining)||0)<=0)&&!_hasFutureBk(t))||(t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2));
   const _canReact=(SESSION.role==='admin'||SESSION.role==='front_desk');
-  const tkListHtml=(arr)=>{
-    const expired=arr.filter(_isExpiredTk);
-    const history=arr.filter(_isHistoryTk);
+  /* allowReact：只有課程票券（教練課／友善教練課／團體課）能重新啟用。
+     自主訓練點數是簽到贈送、效期 7 天的短效點數，過期即作廢，不提供重新啟用
+     （2026-07-26 使用者定案）—— 故直接歸入「歷史紀錄」，不另立過期區塊。 */
+  const tkListHtml=(arr,allowReact)=>{
+    const expired=allowReact?arr.filter(_isExpiredTk):[];
+    const history=arr.filter(t=>_isHistoryTk(t)||(!allowReact&&_isExpiredTk(t)));
     const active=arr.filter(t=>!_isExpiredTk(t)&&!_isHistoryTk(t));
     let html= active.length?`<div class="md-tklist">${active.map(t=>renderTkCard(t)).join('')}</div>`
       :((expired.length||history.length)?'':'<div class="empty" style="padding:20px;"><div class="em-t" style="font-size:13px;">此分類尚無票券</div></div>');
@@ -15693,8 +15696,8 @@ async function openMemberDetail(member_id){
         <button class="tkf-btn active" data-tkf="course" onclick="memDetailTkFilter(event,'course')">課程票券</button>
         <button class="tkf-btn" data-tkf="self" onclick="memDetailTkFilter(event,'self')">自主訓練</button>
       </div>
-      <div class="tkf-pane active" data-tkfpane="course">${tkListHtml(courseTk)}</div>
-      <div class="tkf-pane" data-tkfpane="self">${tkListHtml(selfTk)}</div>
+      <div class="tkf-pane active" data-tkfpane="course">${tkListHtml(courseTk,true)}</div>
+      <div class="tkf-pane" data-tkfpane="self">${tkListHtml(selfTk,false)}</div>
       ${isCoach?'':`<button class="md-grant-fab" onclick="openGrantModalFor('${member_id}')" title="發放票券"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>`}
     </div>
 
@@ -21618,6 +21621,10 @@ async function confirmInstallNext(ticket_id){
 async function openReactivateTicket(tid){
   if(!(SESSION.role==='admin'||SESSION.role==='front_desk')){ showToast('只有管理員或櫃台可重新啟用'); return; }
   const t=await dbGet('member_tickets',tid); if(!t){ showToast('找不到票券'); return; }
+  /* 自主訓練點數（含友善自主）過期即作廢，不提供重新啟用（2026-07-26 使用者定案）。
+     入口已在會員票券區隱藏，這裡再擋一次避免舊連結／誤呼叫。 */
+  const _ttAll=await dbGetAll('ticket_types'); const _tmR={}; (_ttAll||[]).forEach(x=>{_tmR[x.id]=x;});
+  if(isSelfPtTicket(t,_tmR)){ showToast('自主訓練點數不提供重新啟用'); return; }
   const d7=new Date(TODAY); d7.setDate(d7.getDate()+7);
   showModal(`<div class="modal-title">重新啟用票券</div>
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;">${t.plan_name||'票券'}　·　原到期日 ${t.expire_date||'—'}　·　帳面剩餘 ${t.sessions_remaining||0} 堂</div>
