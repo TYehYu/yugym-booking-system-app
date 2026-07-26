@@ -5653,8 +5653,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1511';
-const APP_VERSION_LABEL='v260726.1511';
+const APP_VERSION='260726.1519';
+const APP_VERSION_LABEL='v260726.1519';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9833,6 +9833,7 @@ async function lottoAwardDo(mid,key){
   }
   await dbPut('purchases',{id:uid('LOT'),member_id:mid,plan_name:'抽獎：'+p.label,deal_amount:0,
     payment_method:null,source:'lottery',operator:SESSION.id,note:'現場籤筒抽獎登記',created_at:new Date().toISOString()});
+  window._lottoMapCache=null;   // 抽完立即失效課卡抽獎鈕的資格快取（60 秒 TTL 不夠即時）
   showToast('已登記'+(p.kind==='goods'?'（贈品現場交付）':'，獎品已發進會員票券'));
   openLottoModal();
  }catch(e){ console.error('lottoAwardDo 錯誤:',e); showToast('登記失敗：'+(e&&e.message?e.message:e)); }
@@ -13833,20 +13834,38 @@ async function expandBkCard(el, id){
         : evoBtn('evo-r2','evo-primary',`collapseBkCard();checkInBooking('${id}')`,'check','簽到');
     }
   }
-  // 抽獎（2026-07-25 使用者指示）：非團課、且該會員本月尚有可抽次數 → 加「抽獎」鈕（中右空格位）
-  if(staff && !isGroup && b.member_id){
-    try{
-      const [_bkAll,_puAll]=await Promise.all([dbGetAll('bookings'),dbGetAll('purchases').catch(()=>[])]);
-      const _st=(typeof lottoMapAll==='function')?lottoMapAll(_bkAll,_puAll,ymd(TODAY).slice(0,7))[b.member_id]:null;
-      if(_st && _st.left>0) btns += evoBtn('evo-b2','evo-gift',`collapseBkCard();openLottoModal('${b.member_id}')`,'gift','抽獎');
-    }catch(_){}
-  }
   el.style.marginLeft=''; el.style.marginTop='';   // 先清除舊位移再量測
   el.classList.add('cal-ev-active');
   el.insertAdjacentHTML('beforeend', `<div class="evc-orbit">${btns}</div>`);
   evoFanLayout(el.querySelector('.evc-orbit'));   // 2026-07-23 使用者指示：簽到置中、其他按鈕圍繞群集
   _bkOrbitNudge(el);   // 按鈕可能超出行事曆邊界 → 量卡片+按鈕聯集後推回
   window._expandedBkEl = el;
+  /* 抽獎鈕（2026-07-25 功能）改為背景補入（2026-07-26 使用者回報卡頓）：
+     原本為了判斷資格，展開前 await 整表 bookings＋purchases（數千筆），
+     按鈕群整組延遲一拍才跳出來。改成：按鈕立即渲染，資格檢查在背景跑
+     （60 秒快取，同一分鐘內重複點卡不再重抓），查到有資格才把禮物鈕
+     補進既有按鈕群並重排。 */
+  if(staff && !isGroup && b.member_id){
+    (async()=>{
+      try{
+        const _ym=ymd(TODAY).slice(0,7);
+        let _c=window._lottoMapCache;
+        if(!_c || _c.ym!==_ym || (Date.now()-_c.ts)>60000){
+          const [_bkAll,_puAll]=await Promise.all([dbGetAll('bookings'),dbGetAll('purchases').catch(()=>[])]);
+          _c={ym:_ym, ts:Date.now(), map:(typeof lottoMapAll==='function')?lottoMapAll(_bkAll,_puAll,_ym):{}};
+          window._lottoMapCache=_c;
+        }
+        const _st=_c.map[b.member_id];
+        const orbit=el.querySelector('.evc-orbit');
+        // 卡片可能已被收合或切到別張 → 不補
+        if(!_st || _st.left<=0 || !orbit || window._expandedBkEl!==el) return;
+        if(orbit.querySelector('.evo-gift')) return;
+        orbit.insertAdjacentHTML('beforeend', evoBtn('evo-b2','evo-gift',`collapseBkCard();openLottoModal('${b.member_id}')`,'gift','抽獎'));
+        evoFanLayout(orbit);
+        _bkOrbitNudge(el);
+      }catch(_){}
+    })();
+  }
   setTimeout(()=>document.addEventListener('click', _bkOutsideClose, true), 0);
 }
 /* 圓形快捷鈕產生器（2026-07-20 使用者指示改圓形）：圓 icon＋下方小字標籤 */
