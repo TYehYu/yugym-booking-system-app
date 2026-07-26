@@ -5685,8 +5685,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.2108';
-const APP_VERSION_LABEL='v260726.2108';
+const APP_VERSION='260726.2112';
+const APP_VERSION_LABEL='v260726.2112';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26032,7 +26032,10 @@ function renderMemTickets(){
   const isLive=t=>t.status==='usable' && doneOf(t)<(t.sessions_total||0) && (!t.expire_date||t.expire_date>=today);
   /* 2026-07-23 使用者指示：自主訓練點數效期短（7 天）、數量多且由會員自行預約，
      不與課程票券混列 —— 抽到頁面上方獨立入口（openSelfPtsModal）。 */
-  const courseTks=mine.filter(t=>!isSelfPtTicket(t,typeMap));
+  /* 折抵券獨立顯示（2026-07-26 使用者指示）：下方清單只留一般課程票券 */
+  const isVoucherTk=t=>{ const ty=typeMap[t.ticket_type_id]; const nm=ty?ty.name:'';
+    return String(t.ticket_type_id||'').indexOf('tt-discount-')===0||nm.indexOf('折抵')>=0; };
+  const courseTks=mine.filter(t=>!isSelfPtTicket(t,typeMap)&&!isVoucherTk(t));
   const usable=courseTks.filter(isLive)
     .sort((a,b)=>(a.expire_date||'9999-99-99').localeCompare(b.expire_date||'9999-99-99'));   // 快到期在最上；永久有效（無到期日）排最後
   const inactive=courseTks.filter(t=>!isLive(t))
@@ -26113,6 +26116,7 @@ function renderMemTickets(){
      ${isMobileLayout()?'':`<button class="btn btn-green btn-sm" style="flex-shrink:0;" onclick="navTo('mem_purchase')">＋ 購買票券</button>`}
    </div>`+
   selfPtEntryHTML()+
+  voucherEntryHTML()+
   memContractEntryHTML()+
   renewHint+
   `${usable.length===0&&inactive.length===0
@@ -26166,6 +26170,40 @@ function selfPtExpText(d,md){
   if(d<=0) return '今天到期';
   if(d===1) return `明天到期（${md}）`;
   return `最近到期 ${md}（剩 ${d} 天）`;
+}
+/* 折抵券獨立入口（2026-07-26 使用者指示）：抽獎獲得、無期限，不與課程票券混列 */
+function memVoucherTks(){
+  if(!_memTkData) return [];
+  const {mine,typeMap}=_memTkData;
+  return (mine||[]).filter(t=>{
+    const ty=typeMap[t.ticket_type_id]; const nm=ty?ty.name:'';
+    return String(t.ticket_type_id||'').indexOf('tt-discount-')===0||nm.indexOf('折抵')>=0;
+  });
+}
+function voucherEntryHTML(){
+  const vs=memVoucherTks();
+  if(!vs.length) return '';
+  const live=vs.filter(t=>(!t.status||t.status==='usable')&&(Number(t.sessions_remaining)||0)>0);
+  const n=live.length;
+  return `<button class="mtk-self-btn${n>0?'':' is-empty'}" onclick="openMemVouchersModal()">
+    <span class="mtk-self-ic">${LNI.gift}</span>
+    <span class="mtk-self-tx"><span class="mtk-self-t">折抵券</span><span class="mtk-self-s">${n>0?'抽獎獲得・無使用期限':'目前沒有可用折抵券'}</span></span>
+    <span class="mtk-self-n"><b>${n}</b>張</span><span class="mtk-self-ar">›</span>
+  </button>`;
+}
+function openMemVouchersModal(){
+  const vs=memVoucherTks();
+  const live=vs.filter(t=>(!t.status||t.status==='usable')&&(Number(t.sessions_remaining)||0)>0);
+  const used=vs.filter(t=>!live.includes(t));
+  const row=(t,dim)=>`<div class="spt-row${dim?' spt-dim':''}">
+      <span class="spt-nm">${t.plan_name||'折抵券'}<span class="spt-ex">${dim?'已使用':'無使用期限・結帳時由櫃台折抵'}</span></span>
+      <span class="spt-n"><b>${dim?0:(t.sessions_remaining||1)}</b> 張</span>
+    </div>`;
+  showModal(`<div class="modal-title">折抵券</div>
+    ${live.length?live.map(t=>row(t,false)).join(''):'<div class="empty" style="padding:22px 8px;"><div class="em-t">目前沒有可用折抵券</div><div style="font-size:12px;color:var(--t2);margin-top:6px;">參加店內抽獎有機會獲得。</div></div>'}
+    ${used.length?`<div class="mck-section-label" style="margin-top:10px;">已使用</div>${used.map(t=>row(t,true)).join('')}`:''}
+    <div style="font-size:11.5px;color:var(--t3);margin-top:12px;line-height:1.7;">折抵券於現場消費時出示，由櫃台協助折抵，不需預約。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
 function selfPtEntryHTML(){
   const s=selfPtLive();
