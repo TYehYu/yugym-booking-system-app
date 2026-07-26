@@ -5652,8 +5652,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1011';
-const APP_VERSION_LABEL='v260726.1011';
+const APP_VERSION='260726.1056';
+const APP_VERSION_LABEL='v260726.1056';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10226,8 +10226,17 @@ PAGES.dashboard=async function(){
   const rangeLabel=_dashRange==='today'?`今日（${today}）`:`本月（${ym}）`;
 
   // ── 營收：發票券金額（purchase_date 在區間內）──
-  const revTickets=tickets.filter(t=>t.source==='purchase'&&inRange(t.purchase_date));
-  const revenue=revTickets.reduce((s,t)=>s+(t.amount_paid||0),0);
+  /* 儲值營收（2026-07-26 使用者定案：用「已付金額」、排除員工、認列在購買當日）
+     兩個修正：
+     ① 日期改 purchase_date ?? start_date —— 匯入的票券原本 purchase_date 幾乎全空
+        （2,426 張只有 125 張有），source='purchase' 且有購買日的更只有 4 張，
+        導致營收只算得到 $19,600。start_date 對匯入票券＝舊系統的「起始時間」，可當後備。
+     ② amount_paid 是 numeric，PostgREST 回傳字串，原式 s+(t.amount_paid||0) 會變成
+        字串相接（0+"5000"="05000"）而不是加總，必須 Number() 轉。 */
+  const _tkPaid=t=>{ const v=Number(t&&t.amount_paid); return isNaN(v)?0:v; };
+  const _tkBuyDate=t=>(t&&(t.purchase_date||t.start_date))||null;
+  const revTickets=tickets.filter(t=>t.source==='purchase'&&inRange(_tkBuyDate(t)));
+  const revenue=revTickets.reduce((s,t)=>s+_tkPaid(t),0);
 
   // ── 已使用課堂費用：本期銷課（已完成/已簽到的預約）× 該票券單堂價 ──
   /* 2026-07-25：無綁票券（舊系統匯入課，ticket_id 為 null）改用 booking.session_fee
