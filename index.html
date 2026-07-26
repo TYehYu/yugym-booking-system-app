@@ -5653,8 +5653,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1551';
-const APP_VERSION_LABEL='v260726.1551';
+const APP_VERSION='260726.1603';
+const APP_VERSION_LABEL='v260726.1603';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8451,24 +8451,62 @@ function allocBookingsToTickets(tickets,bookings,typeMap){
   const bound={};
   (bookings||[]).forEach(b=>{ if(b.ticket_id&&b.status!=='cancelled'){
     (bound[b.ticket_id]=bound[b.ticket_id]||[]).push(b); byBooking[b.id]=b.ticket_id; } });
-  Object.keys(bound).forEach(k=>{ bound[k].sort(byDT); byTicket[k]=bound[k]; });
-  const tyName=id=>{ const ty=typeMap?typeMap[id]:null; return ty?ty.name:''; };
+  Object.keys(bound).forEach(k=>{ bound[k].sort(byDT); });
+  const tyOf=id=>(typeMap&&typeMap[id])||null;
+  const tyName=id=>{ const ty=tyOf(id); return ty?ty.name:''; };
+  const tyCat=id=>{ const ty=tyOf(id); return ty?String(ty.category||''):''; };
   const key=x=>[tyName(x.ticket_type_id), x.format||''].join('|');
-  const grpTk={}, grpBk={};
-  (tickets||[]).forEach(t=>{ if(bound[t.id]) return; (grpTk[key(t)]=grpTk[key(t)]||[]).push(t); });
-  (bookings||[]).forEach(b=>{ if(b.status==='cancelled'||b.ticket_id) return;
-    (grpBk[key(b)]=grpBk[key(b)]||[]).push(b); });
-  Object.keys(grpTk).forEach(k=>{
-    const tks=grpTk[k].slice().sort((a,c)=>String(a.start_date||a.purchase_date||'')
+  /* v2（2026-07-26 徐子芸案例）：
+     ・容量感知 —— 已有直連預約的票不再整張跳過，剩餘容量（總−直連數）仍可吸收未綁的課；
+     ・未來預約找「還有剩餘堂數」的票 —— 舊系統把未來的課記在有餘額的那張（7/29 記在 7/01
+       那張剩 1 堂的票），照時間序填容量會塞錯張；沒有餘額資訊時退回容量制（相容合成測資）；
+     ・沒有票種的預約（匯入常見）用「課程類別 ↔ 票種類別」寬鬆配對，跟在同類別精準配對之後。 */
+  const cap={}, usedCap={}, bkAssigned={};
+  (tickets||[]).forEach(t=>{ cap[t.id]=Math.max(0,(t.sessions_total||0)-((bound[t.id]||[]).length)); usedCap[t.id]=0; bkAssigned[t.id]=0; });
+  const alloc=(t,b)=>{ (inferred[t.id]=inferred[t.id]||[]).push(b); byBooking[b.id]=t.id; };
+  const sortTk=arr=>arr.slice().sort((a,c)=>String(a.start_date||a.purchase_date||'')
       .localeCompare(String(c.start_date||c.purchase_date||'')));
-    const bks=(grpBk[k]||[]).slice().sort(byDT);
-    let i=0;
-    tks.forEach(t=>{
-      const n=Math.max(0,t.sessions_total||0);
-      const seg=bks.slice(i,i+n); i+=n;
-      byTicket[t.id]=seg; inferred[t.id]=seg;
-      seg.forEach(b=>{ byBooking[b.id]=t.id; });
-    });
+  const fillAttended=(tks,bks)=>{ let i=0;
+    for(const b of bks){
+      while(i<tks.length && usedCap[tks[i].id]>=cap[tks[i].id]) i++;
+      if(i>=tks.length) break;
+      usedCap[tks[i].id]++; alloc(tks[i],b);
+    } };
+  const fillBooked=(tks,bks)=>{ for(const b of bks){
+      // 優先：帳面還有剩餘的票（rem − 已分配的未來課 > 0）；退路：容量制
+      let t=tks.find(x=>x.sessions_remaining!=null && (x.sessions_remaining-bkAssigned[x.id])>0 && usedCap[x.id]<cap[x.id]);
+      if(!t) t=tks.find(x=>usedCap[x.id]<cap[x.id]);
+      if(!t) continue;
+      usedCap[t.id]++; bkAssigned[t.id]++; alloc(t,b);
+    } };
+  const isAtt=b=>b.status==='checked_in'||b.status==='completed';
+  // ── 第一輪：有票種的預約，票種名＋format 精準配對 ──
+  const grpTk={}, grpBk={};
+  (tickets||[]).forEach(t=>{ (grpTk[key(t)]=grpTk[key(t)]||[]).push(t); });
+  const wild=[];
+  (bookings||[]).forEach(b=>{ if(b.status==='cancelled'||b.ticket_id) return;
+    if(!b.ticket_type_id){ wild.push(b); return; }
+    (grpBk[key(b)]=grpBk[key(b)]||[]).push(b); });
+  Object.keys(grpBk).forEach(k=>{
+    const tks=sortTk(grpTk[k]||[]);
+    const bks=grpBk[k].slice().sort(byDT);
+    fillAttended(tks,bks.filter(isAtt));
+    fillBooked(tks,bks.filter(b=>!isAtt(b)));
+  });
+  // ── 第二輪：沒票種的預約，以課程類別寬鬆配對（booking.category ↔ ticket_types.category）──
+  const wildG={};
+  wild.forEach(b=>{ (wildG[String(b.category||'')]=wildG[String(b.category||'')]||[]).push(b); });
+  Object.keys(wildG).forEach(cat=>{
+    const tks=sortTk((tickets||[]).filter(t=>tyCat(t.ticket_type_id)===cat));
+    const bks=wildG[cat].slice().sort(byDT);
+    fillAttended(tks,bks.filter(isAtt));
+    fillBooked(tks,bks.filter(b=>!isAtt(b)));
+  });
+  // ── 合併輸出：byTicket＝直連＋分配（依時間排序）──
+  (tickets||[]).forEach(t=>{
+    const merged=((bound[t.id]||[]).concat(inferred[t.id]||[])).sort(byDT);
+    if(merged.length) byTicket[t.id]=merged;
+    if(inferred[t.id]) inferred[t.id].sort(byDT);
   });
   return {byTicket,byBooking,inferred};
 }
@@ -15696,7 +15734,8 @@ async function openMemberDetail(member_id){
      而且「已用堂數」只能拿 總堂−剩餘 來推 —— 但舊系統的「未核銷額度」把已預約也算掉了，
      於是未來的預約會被畫成已上課的實心勾（朱庭箴 8/02、8/09 的課被畫成 ✓）。
      這裡改用先進先出推算（allocBookingsToTickets，與預約明細共用同一支，兩邊才會一致）。 */
-  const inferByTk=allocBookingsToTickets(myTickets,sharedBookings,typeMap).inferred;
+  const _tkAlloc=allocBookingsToTickets(myTickets,sharedBookings,typeMap);
+  const inferByTk=_tkAlloc.inferred;
   // 票券分類：課程票券（教練/友善/團課）vs 自主訓練
   const tkCategoryOf=(t)=>{
     const ty=typeMap[t.ticket_type_id];
@@ -15743,7 +15782,9 @@ async function openMemberDetail(member_id){
     /* 2026-07-23 使用者指示：票券逐堂顯示全系統統一 —— 改用 ticketTokens
        （課種色圓點：實心＋上課日期／空心＋預約日期／空心未使用），取代原本的灰色 tkc-dot。 */
     // 有綁預約用真的，沒綁就用先進先出推算出來的那批（見上方 inferByTk）
-    const circles=ticketTokens(t,(bkByTk[t.id]||inf),typeMap,usedCount);
+    /* 圓點改吃合併結果（直連＋分配，2026-07-26 徐子芸案例）：混合票的未來預約（如 7/29）
+       原本因票已有直連而被跳過，卡上看不到；byTicket 已把兩者合併排序。 */
+    const circles=ticketTokens(t,(_tkAlloc.byTicket[t.id]||bkByTk[t.id]||inf),typeMap,usedCount);
     const inst=t.installment&&typeof t.installment==='object'?t.installment:null;
     const instTag=inst?`<span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;margin-left:6px;">🔒 分期 ${t.unlocked_sessions||inst.current||0}/${total}</span>`:'';
     /* 共享票（2026-07-26）：標出跟誰共用；持有人非本人時額外註明「◎ 持有人」，
