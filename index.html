@@ -5652,8 +5652,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.1253';
-const APP_VERSION_LABEL='v260726.1253';
+const APP_VERSION='260726.1304';
+const APP_VERSION_LABEL='v260726.1304';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8413,6 +8413,40 @@ function findRefundTargetTicket(all,member_id,type_id,category,format){
   return cand[0]||null;
 }
 /* 對一筆沒有 ticket_id 的預約補退票；回傳實際退掉的堂數（0 = 找不到對應票券，維持不退）。 */
+/* 先進先出把「沒綁票券的預約」分配到票券 —— 純顯示用推估，不寫回資料庫。
+   舊系統匯入的預約 ticket_id 幾乎都是 null（全庫 2,400 多張票只有 11 筆預約有綁），
+   所以「這堂算哪張票的第幾堂」只能推。作法：同票種＋同 format 的票券依啟用日排序，
+   該會員的未取消預約依上課時間排序，一張票依序吃掉 sessions_total 筆。
+   ⚠️ 會員票券卡與預約明細一律共用這支，否則兩邊會各算各的而對不起來
+   （朱庭箴案例：兩張 1V1 各 4 堂、6 筆課，明細誤判 7/26 是「第 4/4 堂」，實為第 2 張票的第 2 堂）。
+   回傳 byTicket（每張票的預約，含直連的）／byBooking（每筆預約屬於哪張票）／inferred（僅推估出來的）。 */
+function allocBookingsToTickets(tickets,bookings,typeMap){
+  const byDT=(a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||''));
+  const byTicket={}, byBooking={}, inferred={};
+  const bound={};
+  (bookings||[]).forEach(b=>{ if(b.ticket_id&&b.status!=='cancelled'){
+    (bound[b.ticket_id]=bound[b.ticket_id]||[]).push(b); byBooking[b.id]=b.ticket_id; } });
+  Object.keys(bound).forEach(k=>{ bound[k].sort(byDT); byTicket[k]=bound[k]; });
+  const tyName=id=>{ const ty=typeMap?typeMap[id]:null; return ty?ty.name:''; };
+  const key=x=>[tyName(x.ticket_type_id), x.format||''].join('|');
+  const grpTk={}, grpBk={};
+  (tickets||[]).forEach(t=>{ if(bound[t.id]) return; (grpTk[key(t)]=grpTk[key(t)]||[]).push(t); });
+  (bookings||[]).forEach(b=>{ if(b.status==='cancelled'||b.ticket_id) return;
+    (grpBk[key(b)]=grpBk[key(b)]||[]).push(b); });
+  Object.keys(grpTk).forEach(k=>{
+    const tks=grpTk[k].slice().sort((a,c)=>String(a.start_date||a.purchase_date||'')
+      .localeCompare(String(c.start_date||c.purchase_date||'')));
+    const bks=(grpBk[k]||[]).slice().sort(byDT);
+    let i=0;
+    tks.forEach(t=>{
+      const n=Math.max(0,t.sessions_total||0);
+      const seg=bks.slice(i,i+n); i+=n;
+      byTicket[t.id]=seg; inferred[t.id]=seg;
+      seg.forEach(b=>{ byBooking[b.id]=t.id; });
+    });
+  });
+  return {byTicket,byBooking,inferred};
+}
 async function refundLegacyBooking(b,operator){
   if(!b || b.ticket_id) return 0;            // 有票就該走 refundTicket，不歸這裡管
   if(b.category==='體驗') return 0;          // 體驗課本來就不扣票
@@ -14294,12 +14328,22 @@ async function openBookingDetail(id){
      原本整張卡都出不來。改成沒綁票券時沿用團課那套推估：找該會員目前在用的同型票券，
      逐堂日期取他最近 N 堂的上課紀錄。⚠️ 推估而非帳本事實，真正要精確得先把預約綁上 ticket_id。 */
   let tkCircleHtml='';
-  let _tkCard=tk, _tkInferred=false;
+  let _tkCard=tk, _tkInferred=false, _inferBks=null;
   if(!tk && b.member_id && b.category!=='小班肌力' && b.category!=='體驗'){
     try{
       if(!window._ttCache) window._ttCache=await dbGetAll('ticket_types');
+      const _tmB={}; (window._ttCache||[]).forEach(x=>{ _tmB[x.id]=x; });
       const _allTkD=await dbGetAll('member_tickets');
-      _tkCard=findRefundTargetTicket(_allTkD,b.member_id,b.ticket_type_id,b.category,b.format);
+      const _allBkD=await dbGetAll('bookings').catch(()=>[]);
+      const _myT=(_allTkD||[]).filter(t=>t.member_id===b.member_id);
+      const _myB=(_allBkD||[]).filter(x=>x.member_id===b.member_id);
+      /* 用與會員票券卡同一支先進先出分配，直接問「本堂屬於哪張票」，
+         這樣「本堂第 N / total 堂」與會員票券卡的圓點必然一致。 */
+      const _al=allocBookingsToTickets(_myT,_myB,_tmB);
+      const _tid=_al.byBooking[b.id];
+      if(_tid){ _tkCard=_myT.find(t=>t.id===_tid)||null; _inferBks=_al.byTicket[_tid]||null; }
+      // 分配不到（票券張數不足以涵蓋所有堂數等）才退回舊的挑票法
+      if(!_tkCard) _tkCard=findRefundTargetTicket(_allTkD,b.member_id,b.ticket_type_id,b.category,b.format);
       _tkInferred=!!_tkCard;
     }catch(_){}
   }
@@ -14312,8 +14356,13 @@ async function openBookingDetail(id){
     if(!_tkInferred){
       tkBks2=allBk2.filter(x=>x.ticket_id===tkC.id && x.status!=='cancelled')
         .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
+    }else if(_inferBks){
+      // 先進先出已分配好本堂屬於哪張票，直接用該票的那幾堂
+      tkBks2=_inferBks;
+      _inferDone=tkBks2.filter(x=>x.status==='checked_in'||x.status==='completed').length;
     }else{
-      /* 推估軌跡：同會員、同類別、同票種、同 format 的未取消預約。
+      /* 退路：先進先出分配不到票時，改用「以本堂為中心取 total 堂」的舊推估。
+         推估軌跡：同會員、同類別、同票種、同 format 的未取消預約。
          ⚠️ 不能只用票券餘額推已用堂數 —— 匯入票券的餘額多半沒反映歷史扣課
          （全庫 2,272 筆已上課未扣票），會挑到「剩 4/4 的全新票」而整排空心，
          本堂明明已簽到卻連日期都出不來。
@@ -15557,29 +15606,17 @@ async function openMemberDetail(member_id){
   /* 匯入票券沒有 ticket_id 直連（全庫 2,400 多張票只有 11 筆預約有綁），逐堂圓點會完全沒有日期，
      而且「已用堂數」只能拿 總堂−剩餘 來推 —— 但舊系統的「未核銷額度」把已預約也算掉了，
      於是未來的預約會被畫成已上課的實心勾（朱庭箴 8/02、8/09 的課被畫成 ✓）。
-     這裡改用先進先出推算：同票種＋同 format 的票券依啟用日排序，會員的預約依日期排序，
-     一張票吃掉 sessions_total 筆，藉此還原「哪幾堂屬於哪張票」。純顯示用，不寫回資料庫。 */
-  const inferByTk={};
-  (function(){
-    const key=t=>[typeMap[t.ticket_type_id]?typeMap[t.ticket_type_id].name:'', t.format||''].join('|');
-    const bkKey=b=>{ const ty=typeMap[b.ticket_type_id]; return [ty?ty.name:'', b.format||''].join('|'); };
-    const grpTk={}, grpBk={};
-    myTickets.forEach(t=>{ if(bkByTk[t.id]) return; (grpTk[key(t)]=grpTk[key(t)]||[]).push(t); });
-    (myBookings||[]).forEach(b=>{ if(b.status==='cancelled'||b.ticket_id) return;
-      (grpBk[bkKey(b)]=grpBk[bkKey(b)]||[]).push(b); });
-    Object.keys(grpTk).forEach(k=>{
-      const tks=grpTk[k].slice().sort((a,b)=>String(a.start_date||a.purchase_date||'').localeCompare(String(b.start_date||b.purchase_date||'')));
-      const bks=(grpBk[k]||[]).slice().sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
-      let i=0;
-      tks.forEach(t=>{ const n=Math.max(0,t.sessions_total||0); inferByTk[t.id]=bks.slice(i,i+n); i+=n; });
-    });
-  })();
+     這裡改用先進先出推算（allocBookingsToTickets，與預約明細共用同一支，兩邊才會一致）。 */
+  const inferByTk=allocBookingsToTickets(myTickets,myBookings,typeMap).inferred;
   // 票券分類：課程票券（教練/友善/團課）vs 自主訓練
   const tkCategoryOf=(t)=>{
     const ty=typeMap[t.ticket_type_id];
     const cat=ty?ty.category:'';
     const col=ty?ty.color:'';
     const nm=ty?ty.name:'';
+    /* 折抵券（抽獎獲得、無期限使用）另開一區，不與課程票券混列（2026-07-26 使用者指示）。
+       現有票種：tt-discount-pt300 教練課折抵300、tt-discount-ms300 運動按摩折抵300。 */
+    if(String(t.ticket_type_id||'').indexOf('tt-discount-')===0||nm.indexOf('折抵')>=0) return 'voucher';
     if(cat==='自主訓練'||col==='self'||(nm.indexOf('自主')>=0)) return 'self';
     return 'course'; // 其餘（教練/友善/團課/體驗）歸課程票券
   };
@@ -15630,6 +15667,7 @@ async function openMemberDetail(member_id){
   };
   const courseTk=myTickets.filter(t=>tkCategoryOf(t)==='course');
   const selfTk=myTickets.filter(t=>tkCategoryOf(t)==='self');
+  const voucherTk=myTickets.filter(t=>tkCategoryOf(t)==='voucher');
   /* 票券分區（2026-07-21 商業規則，模型A轉譯）：
      可用＝未過期且（剩餘>0 或仍有未來預約佔用）；
      已過期＝到期日已過且剩餘>0 → 列表下方、可「重新啟用」（管理員/櫃台）；
@@ -15695,9 +15733,12 @@ async function openMemberDetail(member_id){
       <div class="tkfilter">
         <button class="tkf-btn active" data-tkf="course" onclick="memDetailTkFilter(event,'course')">課程票券</button>
         <button class="tkf-btn" data-tkf="self" onclick="memDetailTkFilter(event,'self')">自主訓練</button>
+        <button class="tkf-btn" data-tkf="voucher" onclick="memDetailTkFilter(event,'voucher')">折抵券${voucherTk.length?`　${voucherTk.length}`:''}</button>
       </div>
       <div class="tkf-pane active" data-tkfpane="course">${tkListHtml(courseTk,true)}</div>
       <div class="tkf-pane" data-tkfpane="self">${tkListHtml(selfTk,false)}</div>
+      <!-- 折抵券無期限使用，不會過期，故不提供重新啟用 -->
+      <div class="tkf-pane" data-tkfpane="voucher">${tkListHtml(voucherTk,false)}</div>
       ${isCoach?'':`<button class="md-grant-fab" onclick="openGrantModalFor('${member_id}')" title="發放票券"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>`}
     </div>
 
