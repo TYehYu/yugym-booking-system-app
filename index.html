@@ -5436,10 +5436,10 @@ body.mc-mode .cal-body{background:rgba(255,255,255,.8);}
 .msb-date span{font-size:10.5px;opacity:.8;}
 .msb-date b{font-size:14px;font-weight:800;}
 .msb-date.on{background:#F4F1E8;color:var(--green);}
-.msb-venues{display:flex;gap:7px;padding:2px 16px 2px;}
-.msb-venues button{flex:0 0 auto;border:none;border-radius:999px;padding:6px 14px;font-size:11.5px;font-weight:700;cursor:pointer;
-  background:rgba(255,255,255,.12);color:rgba(244,241,232,.7);font-family:inherit;}
-.msb-venues button.on{background:#F4F1E8;color:var(--green);}
+/* 確認視窗內的場地選擇鈕（2026-07-26 使用者指示） */
+.msb-vbtn{border:1px solid var(--bd);border-radius:999px;padding:5px 13px;font-size:12px;font-weight:700;cursor:pointer;
+  background:#fff;color:var(--t2);font-family:inherit;}
+.msb-vbtn.on{background:var(--green);border-color:var(--green);color:#fff;}
 .cag-slot-tag{font-size:10px;opacity:.8;margin-left:5px;font-weight:600;}
 .msb-types{display:flex;gap:8px;padding:2px 16px 4px;}
 .msb-types button{flex:1;border:none;border-radius:999px;padding:8px 0;font-size:12.5px;font-weight:700;cursor:pointer;
@@ -5702,8 +5702,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260726.2135';
-const APP_VERSION_LABEL='v260726.2135';
+const APP_VERSION='260726.2138';
+const APP_VERSION_LABEL='v260726.2138';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24744,7 +24744,7 @@ function msbExit(skipRender){
   if(!skipRender){ try{ renderMemMonthView(); }catch(_){} }
 }
 function msbSetType(t){ const s=window._msb; if(!s)return; s.type=t; s.free=null; try{ renderMemMonthView(); }catch(_){} msbRenderSheet(); }
-function msbSetVenue(v){ const s=window._msb; if(!s)return; s.venue=v; s.free=null; msbRenderSheet(); }
+
 function msbPickDate(ds){ const s=window._msb; if(!s)return; s.date=ds; try{ renderMemMonthView(); }catch(_){} msbRenderSheet(); }
 function msbRenderSheet(){
   const s=window._msb; if(!s) return;
@@ -24780,11 +24780,6 @@ function msbRenderSheet(){
     <div class="cag-slotsheet-head"><span>預約自主訓練</span><button class="cag-slotsheet-x" onclick="msbExit()">✕</button></div>
     ${_dateBtns?`<div class="msb-dates">${_dateBtns}</div>`:''}
     ${typeRow}
-    <div class="msb-venues">
-      <button class="${(!s.venue||s.venue==='auto')?'on':''}" onclick="msbSetVenue('auto')">自動安排</button>
-      <button class="${s.venue==='group'?'on':''}" onclick="msbSetVenue('group')">教室</button>
-      <button class="${s.venue==='treadmill'?'on':''}" onclick="msbSetVenue('treadmill')">跑步機</button>
-    </div>
     <div class="msb-sub">${s.date.slice(5).replace('-','/')}（週${WD[d.getDay()]}）</div>
     <div id="msb-slots"><div class="msb-empty" style="padding:18px;">載入時段中…</div></div>
     <div class="msb-hint">點選時段即可預約（60 分鐘）；系統自動使用最快到期的點數，確認後扣 1 點。</div>
@@ -24798,8 +24793,7 @@ async function msbLoadSlots(){
   const seq=++_msbLoadSeq;
   const tk=msbPickTicket();
   if(!tk){ box.innerHTML='<div class="msb-empty">這天點數已過效期，請選金框內的日期</div>'; return; }
-  const _vpref=(s.venue&&s.venue!=='auto')?s.venue:null;
-  const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id,venue_pref:_vpref};
+  const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id};
   const free=new Set(); const vids={};
   for(let m=540;m<1260;m+=30){
     const err=await validateBooking(vbk,s.date,minToTime(m),60);
@@ -24811,23 +24805,43 @@ async function msbLoadSlots(){
   const now=new Date();
   box.innerHTML=slotPanelHTML({date:s.date,todayStr:ymd(TODAY),nowMin:now.getHours()*60+now.getMinutes(),
     startH:9,endH:21,duration:60,isFree:(a,b)=>free.has(a),pickFn:'msbPickSlot',
-    /* 自動安排時，被分到非多功能的場地要標出來（教室／跑步機）；指定場地時不重複標 */
-    tagFn:(_vpref)?null:(mm)=>({group:'教室',treadmill:'跑步機'}[vids[mm]]||'')});
+    /* 第一順位（多功能）沒位時，該時段標出實際會用的場地（教室／跑步機） */
+    tagFn:(mm)=>({group:'教室',treadmill:'跑步機'}[vids[mm]]||'')});
 }
-function msbPickSlot(t){
+async function msbPickSlot(t){
   const s=window._msb; if(!s) return;
   const tk=msbPickTicket();
   if(!tk){ showToast('這天沒有可用的點數'); return; }
   const d=parseYmd(s.date);
+  /* 場地選擇（2026-07-26 使用者指示）：確認視窗內選場地，預設＝自動分配到的；
+     逐一驗證該時段各場地是否還有位，沒位的不顯示。 */
+  const VOPT=[['multi','多功能'],['group','教室'],['treadmill','跑步機']];
+  const avail=[];
+  for(const [vid,label] of VOPT){
+    const probe={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id,venue_pref:vid};
+    const err=await validateBooking(probe,s.date,t,60);
+    if(!err) avail.push([vid,label]);
+  }
+  if(!avail.length){ showToast('這個時段剛被約走了，請選其他時段'); msbLoadSlots(); return; }
+  const mm=timeToMin(t);
+  const autoVid=(s.vids&&s.vids[mm])||avail[0][0];
+  s.pickVenue=avail.some(v=>v[0]===autoVid)?autoVid:avail[0][0];
+  const vbtns=avail.map(([vid,label])=>`<button class="msb-vbtn${s.pickVenue===vid?' on':''}" data-vid="${vid}" onclick="msbChooseVenue('${vid}')">${label}</button>`).join('');
   showModal(`<div class="modal-title">確認預約</div>
     <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:2;">
       <div><span style="color:var(--t2);">類型</span>　${s.type==='friendly'?'友善自主訓練':'自主訓練'}</div>
       <div><span style="color:var(--t2);">日期</span>　${s.date.replace(/-/g,'/')}（週${WD[d.getDay()]}）</div>
       <div><span style="color:var(--t2);">時間</span>　${t}（60 分鐘）</div>
+      <div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--t2);">場地</span><span id="msb-vbtns" style="display:flex;gap:7px;">${vbtns}</span></div>
       <div><span style="color:var(--t2);">使用票券</span>　${tk.plan_name||'自主訓練點數'}（剩 ${tk.sessions_remaining} 點）</div>
     </div>
     <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">確認後將扣 1 點。</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-green" onclick="msbConfirm('${t}')">確認預約</button></div>`);
+}
+function msbChooseVenue(vid){
+  const s=window._msb; if(!s) return;
+  s.pickVenue=vid;
+  document.querySelectorAll('#msb-vbtns .msb-vbtn').forEach(b=>b.classList.toggle('on',b.dataset.vid===vid));
 }
 async function msbConfirm(time){
  try{
@@ -24835,7 +24849,7 @@ async function msbConfirm(time){
   const tk=msbPickTicket();
   if(!tk){ showToast('沒有可用的自主訓練點數'); return; }
   const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id,
-    venue_pref:(s.venue&&s.venue!=='auto')?s.venue:null};
+    venue_pref:s.pickVenue||null};
   const verr=await validateBooking(vbk,s.date,time,60);
   if(verr){ showToast(verr); return; }
   const bk={id:uid('BK'),member_id:SESSION.id,coach_id:null,ticket_id:tk.id,ticket_type_id:tk.ticket_type_id,
