@@ -5776,8 +5776,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1537';
-const APP_VERSION_LABEL='v260727.1537';
+const APP_VERSION='260727.1539';
+const APP_VERSION_LABEL='v260727.1539';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19832,7 +19832,10 @@ function ppHeaderHtml(){
   // 一律顯示版（2026-07-25 使用者指示：會員頂部欄位不管有沒有填都要顯示）——空值顯示佔位、可點擊補
   const mvA=(l,v,fid,ph)=>`<div class="pp-meta-i${fid?' pp-f-click':''}"${fid?` onclick="ppInlineEdit(event,'${fid}')"`:''}><span class="pp-meta-l">${l}</span><span class="pp-meta-v">${v||`<span style="color:var(--t3);">${ph||'未設定'}</span>`}</span></div>`;   /* 2026-07-27 使用者指示：點了直接原地編輯，不開視窗 */
   // 會員（2026-07-25 使用者指示）：頂部只放 電話／主教練／生日(選填)／LINE 開關
-  const bdayItem = `<div class="pp-meta-i pp-f-click" onclick="ppInlineEdit(event,'birthday')"><span class="pp-meta-l">生日</span><span class="pp-meta-v">${r.birthday||'<span style="color:var(--t3);">選填</span>'}</span></div>`;
+  /* 權限（2026-07-27 使用者定案）：姓名/電話＝帳號設定不可改；主教練/生日＝櫃台端處理；
+     會員端只能改 緊急聯絡人 與 LINE 通知開關 */
+  const _canBase = SESSION.role==='admin'||SESSION.role==='front_desk';
+  const bdayItem = `<div class="pp-meta-i${_canBase?' pp-f-click':''}"${_canBase?` onclick="ppInlineEdit(event,'birthday')"`:''}><span class="pp-meta-l">生日</span><span class="pp-meta-v">${r.birthday||'<span style="color:var(--t3);">'+(_canBase?'選填':'未填')+'</span>'}</span></div>`;
   const lineItem = (()=>{
     if(!r.line_user_id) return `<div class="pp-meta-i"><span class="pp-meta-l">LINE</span><span class="pp-meta-v" style="color:var(--t3);">未綁定</span></div>`;
     const on = r.line_notify!==false;
@@ -19849,7 +19852,7 @@ function ppHeaderHtml(){
   const ecItem = isM ? (()=>{ const v=[r.emergency_name,r.emergency_relation?`（${r.emergency_relation}）`:'',r.emergency_phone?`　${fmtPhone(r.emergency_phone)}`:''].join('');
     return `<div class="pp-meta-i pp-f-click" onclick="ppEmergencyEdit(event)"><span class="pp-meta-l">緊急聯絡人</span><span class="pp-meta-v">${v||'<span style="color:var(--t3);">＋ 設定</span>'}</span></div>`; })() : '';
   const meta = isM
-    ? mvA('電話',fmtPhone(r.phone),'phone','未填') + mvA('主教練', PP.ctx.coachMap?(PP.ctx.coachMap[r.default_coach_id]||''):'','default_coach_id','＋ 指定')
+    ? mvA('電話',fmtPhone(r.phone),'','未填') + mvA('主教練', PP.ctx.coachMap?(PP.ctx.coachMap[r.default_coach_id]||''):'',_canBase?'default_coach_id':'',_canBase?'＋ 指定':'未指定')
       + bdayItem + ecItem + lineItem
     : mv('電話',fmtPhone(r.phone),'phone') + mv('對外名稱', r.name_en?r.name_en.toUpperCase():'','name_en')
       + mv('職稱', r.job_title,'job_title') + mv('到職日', r.hire_date,'hire_date')
@@ -19912,7 +19915,9 @@ function ppFieldView(f){
 function ppInlineEdit(ev,fid){
   try{ ev.stopPropagation(); }catch(_){}
   if(PP.kind!=='member' || PP.editing){ return ppEditFocus(fid); }
-  if(fid==='phone'){ showToast('電話＝登入帳號，如需變更請洽管理員'); return; }
+  if(fid==='phone'||fid==='name'){ showToast('姓名與電話為帳號設定，不可修改'); return; }
+  // 主教練/生日：櫃台端處理（會員端唯讀）
+  if((fid==='default_coach_id'||fid==='birthday') && !(SESSION.role==='admin'||SESSION.role==='front_desk')){ return; }
   const item=ev.currentTarget;
   if(!item || item.querySelector('input,select')) return;   // 已在編輯中
   const v=item.querySelector('.pp-meta-v'); if(!v) return;
