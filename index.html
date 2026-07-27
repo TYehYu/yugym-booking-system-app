@@ -5776,8 +5776,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.2156';
-const APP_VERSION_LABEL='v260727.2156';
+const APP_VERSION='260727.2157';
+const APP_VERSION_LABEL='v260727.2157';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8667,13 +8667,21 @@ function allocBookingsToTickets(tickets,bookings,typeMap){
   const alloc=(t,b)=>{ (inferred[t.id]=inferred[t.id]||[]).push(b); byBooking[b.id]=t.id; };
   const sortTk=arr=>arr.slice().sort((a,c)=>String(a.start_date||a.purchase_date||'')
       .localeCompare(String(c.start_date||c.purchase_date||'')));
-  /* 起始日守門（2026-07-27 李昭賜案例）：上課日早於票券起始/購買日的課，不得回填到該票
+  /* 起始日守門（2026-07-27 李昭賜案例①）：上課日早於票券起始/購買日的課，不得回填到該票
      （5/23 的舊自主課被塞進 7/27 才發的贈點票）。無日期資訊的票維持原 FIFO。 */
   const okStart=(t,b)=>{ const sd=String(t.start_date||t.purchase_date||'').slice(0,10);
     return !sd || (b.date||'')>=sd; };
+  /* 效期窗優先（2026-07-27 李昭賜案例②）：課的日期落在某張票的「起始～到期」明確效期窗內
+     → 優先分給那張（他 5/4 起的課屬於限定方案 5/4–7/19，不該被無效期的舊 12 堂票搶走）。 */
+  const inWindow=(t,b)=>{
+    const sd=String(t.start_date||t.purchase_date||'').slice(0,10);
+    const ed=String(t.expire_date||'').slice(0,10);
+    return !!sd && !!ed && (b.date||'')>=sd && (b.date||'')<=ed;
+  };
   const fillAttended=(tks,bks)=>{
     for(const b of bks){
-      const t=tks.find(x=>usedCap[x.id]<cap[x.id] && okStart(x,b));
+      let t=tks.find(x=>usedCap[x.id]<cap[x.id] && inWindow(x,b));         // 第一順位：效期窗涵蓋
+      if(!t) t=tks.find(x=>usedCap[x.id]<cap[x.id] && okStart(x,b));      // 第二順位：FIFO（含無效期票）
       if(!t) continue;
       usedCap[t.id]++; alloc(t,b);
     } };
@@ -8681,8 +8689,10 @@ function allocBookingsToTickets(tickets,bookings,typeMap){
       // 效期守門（2026-07-27 楊文華案例）：未來預約只能分給「效期涵蓋預約日」的票——
       // 否則會被排序在前、還有餘額的過期票吸走（他 7/27 的課被塞給 7/8 過期票）。
       const okDate=x=>(!x.expire_date || String(x.expire_date).slice(0,10)>=(b.date||'')) && okStart(x,b);
-      // 優先：帳面還有剩餘的票（rem − 已分配的未來課 > 0）；退路：容量制
-      let t=tks.find(x=>okDate(x) && x.sessions_remaining!=null && (x.sessions_remaining-bkAssigned[x.id])>0 && usedCap[x.id]<cap[x.id]);
+      // 優先序：①效期窗涵蓋＋有剩餘 ②有剩餘 ③效期窗涵蓋 ④容量制
+      let t=tks.find(x=>okDate(x) && inWindow(x,b) && x.sessions_remaining!=null && (x.sessions_remaining-bkAssigned[x.id])>0 && usedCap[x.id]<cap[x.id]);
+      if(!t) t=tks.find(x=>okDate(x) && x.sessions_remaining!=null && (x.sessions_remaining-bkAssigned[x.id])>0 && usedCap[x.id]<cap[x.id]);
+      if(!t) t=tks.find(x=>okDate(x) && inWindow(x,b) && usedCap[x.id]<cap[x.id]);
       if(!t) t=tks.find(x=>okDate(x) && usedCap[x.id]<cap[x.id]);
       if(!t) continue;
       usedCap[t.id]++; bkAssigned[t.id]++; alloc(t,b);

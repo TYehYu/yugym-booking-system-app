@@ -182,5 +182,16 @@ const a9=alloc(
 ok('★ 5/23 舊課不回填到 7/27 贈點票', !(a9.byTicket['GRANT727']||[]).some(b=>b.id==='old523'));
 ok('8/1 未來預約仍掛在贈點票', (a9.byTicket['GRANT727']||[]).some(b=>b.id==='nb1'));
 
+/* ── 案例 10：李昭賜②——效期窗優先：5/4 的課屬於限定方案（5/4–7/19），
+   不該被無效期的舊 12 堂票（2024-11 起、還有容量）搶走 ── */
+console.log('李昭賜（效期窗優先）');
+const tmX={'tt-pt':{id:'tt-pt',name:'教練課'}};
+const aX=alloc(
+  [{id:'OLD12',ticket_type_id:'tt-pt',format:'1V2',sessions_total:12,sessions_remaining:0,start_date:'2024-11-22'},
+   {id:'LTD10',ticket_type_ID:undefined,ticket_type_id:'tt-pt',format:'1V2',sessions_total:10,sessions_remaining:0,start_date:'2026-05-04',expire_date:'2026-07-19'}],
+  [{id:'m54',date:'2026-05-04',start_time:'10:00',ticket_type_id:'tt-pt',format:'1V2',status:'completed',ticket_id:null}],
+  tmX);
+ok('★ 5/4 的課分給效期窗涵蓋的限定票（不是舊 12 堂）', aX.byBooking['m54']==='LTD10', aX.byBooking['m54']);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
