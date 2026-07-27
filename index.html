@@ -5739,8 +5739,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1123';
-const APP_VERSION_LABEL='v260727.1123';
+const APP_VERSION='260727.1125';
+const APP_VERSION_LABEL='v260727.1125';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6856,10 +6856,10 @@ function buildNav(){
     // 我的出勤（唯讀班表）：所有教練
     if(!items.find(n=>n.key==='coach_attendance'))
       items.splice(1,0,{key:'coach_attendance',label:'我的出勤'});
-    // 排班表（可編輯）：店長（is_manager）與主管（is_supervisor）——2026-07-27 權限分層
-    if((SESSION.is_supervisor||SESSION.is_manager) && !items.find(n=>n.key==='coach_shifts'))
+    // 排班表/值班時段（可編輯）：僅店長（is_manager）——主管旗標只影響津貼（2026-07-27）
+    if(SESSION.is_manager && !items.find(n=>n.key==='coach_shifts'))
       items.push({key:'coach_shifts',label:'排班表'});
-    if((SESSION.is_supervisor||SESSION.is_manager) && !items.find(n=>n.key==='coach_duty_week'))
+    if(SESSION.is_manager && !items.find(n=>n.key==='coach_duty_week'))
       items.push({key:'coach_duty_week',label:'教練值班時段'});
   }else if(SESSION.role==='front_desk'){
     items = isMobile ? MOBILE_FRONTDESK_NAV : NAV.front_desk;
@@ -6877,7 +6877,7 @@ let CUR_GROUP=null;
 function visibleGroups(){
   const isFd=SESSION.role==='front_desk';
   return ADMIN_NAV2
-    .filter(g=>!g.sup || !!SESSION.is_supervisor || !!SESSION.is_manager || SESSION.role==='admin')   // 排班群組：店長/主管/管理員（2026-07-27 權限分層）
+    .filter(g=>!g.sup || !!SESSION.is_manager || SESSION.role==='admin')   // 店長群組：僅店長/管理員（2026-07-27 使用者指示：主管旗標只影響津貼）
     .filter(g=>!isFd||g.fd).map(g=>{
     if(!isFd) return g;
     return Object.assign({},g,{sub:g.sub.filter(s=>s.fd)}); // 櫃台只看 fd 的次功能
@@ -17405,7 +17405,7 @@ const STAFF_STATUS_TAG={active:'tag-ok',unpaid_leave:'tag-warn',inactive:'tag-da
 let _canEditShifts=false;
 async function checkCanEditShifts(){
   if(SESSION.role==='admin'){ _canEditShifts=true; return true; }
-  try{ const me=await dbGet('coaches',SESSION.id); _canEditShifts=!!(me&&(me.is_manager||me.is_supervisor)); }
+  try{ const me=await dbGet('coaches',SESSION.id); _canEditShifts=!!(me&&me.is_manager);   // 主管旗標只影響津貼（2026-07-27） }
   catch(_){ _canEditShifts=false; }
   return _canEditShifts;
 }
@@ -20240,7 +20240,7 @@ function hrSalaryBodyHtml(c,et){
     <div class="hr-tip" style="margin-bottom:8px;">與系統角色、職稱無關，獨立開關。</div>
     <div style="display:flex;gap:18px;padding:2px 0 8px;">
       <label class="hr-check" style="margin:0;"><input type="checkbox" id="hr-ismgr" ${c.is_manager?'checked':''}>店長（排班權限＋津貼）</label>
-      <label class="hr-check" style="margin:0;"><input type="checkbox" id="hr-issup" ${c.is_supervisor?'checked':''}>主管（排班權限＋津貼）</label>
+      <label class="hr-check" style="margin:0;"><input type="checkbox" id="hr-issup" ${c.is_supervisor?'checked':''}>主管津貼</label>
     </div>
     <div class="form-2col">
       <div class="form-row" style="margin-bottom:0;"><label>店長津貼金額</label><input type="number" id="hr-mgrbonus" value="${c.manager_bonus||0}"></div>
@@ -28488,7 +28488,7 @@ PAGES.coach_duty_week=async function(){
   if(!_dwStart){ const d=new Date(TODAY); _dwStart=addDays(d,-((d.getDay()+6)%7)); }
   const [coaches,slots]=await Promise.all([dbGetAll('coaches'),dbGetAll('duty_slots').catch(()=>[])]);
   const cMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)||c.name]));
-  const canEdit = SESSION.role==='admin'||SESSION.role==='front_desk'||SESSION.is_manager||SESSION.is_supervisor;
+  const canEdit = SESSION.role==='admin'||SESSION.role==='front_desk'||SESSION.is_manager;   // 主管旗標只影響津貼
   const SEGS=[['am','早'],['pm','午'],['eve','晚']];
   const days=[...Array(7)].map((_,i)=>addDays(_dwStart,i));
   const byKey={}; (slots||[]).forEach(s=>{ byKey[(s.date||'')+'|'+s.segment]=s; });
