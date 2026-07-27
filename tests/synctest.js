@@ -172,5 +172,15 @@ const a8=alloc(
 ok('★ 7/27 自主訓練掛 7/22 新票（跳過過期的 7/8 票）', a8.byBooking['sb1']==='NEW722', a8.byBooking['sb1']);
 ok('過期票沒有吸到未來預約', !(a8.inferred['OLD78']||[]).length);
 
+/* ── 案例 9：李昭賜（2026-07-27）——已上課不得回填到「上課日早於票券起始日」的票 ── */
+console.log('李昭賜（起始日守門）');
+const a9=alloc(
+  [{id:'GRANT727',ticket_type_id:'tt-self',sessions_total:2,sessions_remaining:2,start_date:'2026-07-27',expire_date:'2026-08-02'}],
+  [{id:'old523',date:'2026-05-23',start_time:'10:00',category:'自主訓練',status:'completed',ticket_id:null},
+   {id:'nb1',date:'2026-08-01',start_time:'11:00',category:'自主訓練',status:'booked',ticket_id:null}],
+  {'tt-self':{id:'tt-self',name:'自主訓練點數',category:'自主訓練'}});
+ok('★ 5/23 舊課不回填到 7/27 贈點票', !(a9.byTicket['GRANT727']||[]).some(b=>b.id==='old523'));
+ok('8/1 未來預約仍掛在贈點票', (a9.byTicket['GRANT727']||[]).some(b=>b.id==='nb1'));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
