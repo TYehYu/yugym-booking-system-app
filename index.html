@@ -5739,8 +5739,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1137';
-const APP_VERSION_LABEL='v260727.1137';
+const APP_VERSION='260727.1139';
+const APP_VERSION_LABEL='v260727.1139';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28483,57 +28483,50 @@ function salaryShowDay(ds, bookings, shifts, memMap, dayResult){
    讓排課時一眼知道每個時段有哪些教練可安排。
    資料表 duty_slots（一格一列，id=DS-<日期>-<時段>）；
    讀＝全體員工、寫＝管理員/櫃台/店長/主管（RLS ds_manager）。 */
-let _dwStart=null;   // 檢視週的週一
 PAGES.coach_duty_week=async function(){
-  if(!_dwStart){ const d=new Date(TODAY); _dwStart=addDays(d,-((d.getDay()+6)%7)); }
+  /* 2026-07-27 使用者指示（二修）：不綁月份/日期——純「一週模板」，
+     只要清楚一週裡每個時段有哪些教練可安排，方便店長分配資源。
+     資料改用 weekday（1=週一..7=週日）當鍵，id=DS-W<wd>-<seg>。 */
   const [coaches,slots]=await Promise.all([dbGetAll('coaches'),dbGetAll('duty_slots').catch(()=>[])]);
   const cMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)||c.name]));
-  const canEdit = SESSION.role==='admin'||SESSION.role==='front_desk'||SESSION.is_manager;   // 主管旗標只影響津貼
+  const canEdit = SESSION.role==='admin'||SESSION.role==='front_desk'||SESSION.is_manager;
   const SEGS=[['am','早'],['pm','午'],['eve','晚']];
-  const days=[...Array(7)].map((_,i)=>addDays(_dwStart,i));
-  const byKey={}; (slots||[]).forEach(s=>{ byKey[(s.date||'')+'|'+s.segment]=s; });
-  const cell=(ds,seg)=>{
-    const s=byKey[ds+'|'+seg];
+  const WDS=[[1,'一'],[2,'二'],[3,'三'],[4,'四'],[5,'五'],[6,'六'],[7,'日']];
+  const byKey={}; (slots||[]).forEach(s=>{ if(s.weekday) byKey[s.weekday+'|'+s.segment]=s; });
+  const todayWd=((new Date(TODAY)).getDay()+6)%7+1;   // 1=週一..7=週日
+  const cell=(wd,seg)=>{
+    const s=byKey[wd+'|'+seg];
     const ids=(s&&Array.isArray(s.coach_ids))?s.coach_ids:[];
     const chips=ids.map(id=>`<span class="dw-chip">${cMap[id]||'—'}</span>`).join('');
-    return `<div class="dw-cell${canEdit?' dw-edit':''}" ${canEdit?`onclick="dwEditCell('${ds}','${seg}')"`:''}>${chips||'<span class="dw-none">—</span>'}</div>`;
+    return `<div class="dw-cell${canEdit?' dw-edit':''}" ${canEdit?`onclick="dwEditCell(${wd},'${seg}')"`:''}>${chips||'<span class="dw-none">—</span>'}</div>`;
   };
-  const header=days.map(d=>{ const ds=ymd(d);
-    return `<div class="dw-h${ds===ymd(TODAY)?' today':''}">週${WD[d.getDay()]}<br><span>${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join('');
-  const rows=SEGS.map(([k,label])=>`<div class="dw-seg">${label}</div>`+days.map(d=>cell(ymd(d),k)).join('')).join('');
-  C.innerHTML=head('DUTY','教練值班時段', canEdit?'點格子勾選該時段可排課的教練':'各時段可排課教練')+
-  `<div class="card ops-datebar" style="margin-bottom:14px;">
-    <button class="btn btn-ghost btn-sm" onclick="dwWeek(-7)">‹ 上週</button>
-    <div class="ops-date-mid"><div class="ops-date-main">${_dwStart.getFullYear()}/${String(_dwStart.getMonth()+1).padStart(2,'0')}/${String(_dwStart.getDate()).padStart(2,'0')} 起</div>
-      <button class="ops-date-back" onclick="dwThisWeek()">回本週</button></div>
-    <button class="btn btn-ghost btn-sm" onclick="dwWeek(7)">下週 ›</button>
-  </div>
-  <div class="card" style="padding:14px;overflow-x:auto;">
+  const header=WDS.map(([wd,label])=>`<div class="dw-h${wd===todayWd?' today':''}">週${label}</div>`).join('');
+  const rows=SEGS.map(([k,label])=>`<div class="dw-seg">${label}</div>`+WDS.map(([wd])=>cell(wd,k)).join('')).join('');
+  C.innerHTML=head('DUTY','教練值班時段', canEdit?'一週固定模板：點格子勾選該時段可排課的教練':'一週各時段可排課教練')+
+  `<div class="card" style="padding:14px;overflow-x:auto;">
     <div class="dw-grid"><div></div>${header}${rows}</div>
   </div>`;
 };
-function dwWeek(n){ _dwStart=addDays(_dwStart,n); navTo('coach_duty_week', CUR_GROUP); }
-function dwThisWeek(){ const d=new Date(TODAY); _dwStart=addDays(d,-((d.getDay()+6)%7)); navTo('coach_duty_week', CUR_GROUP); }
-async function dwEditCell(ds,seg){
+async function dwEditCell(wd,seg){
   const [coaches,slots]=await Promise.all([dbGetAll('coaches'),dbGetAll('duty_slots').catch(()=>[])]);
   const list=coaches.filter(c=>isCoachable(c)&&c.status!=='inactive'&&c.invite_status!=='pending');
-  const cur=(slots||[]).find(s=>s.date===ds&&s.segment===seg);
+  const cur=(slots||[]).find(s=>s.weekday===wd&&s.segment===seg);
   const ids=(cur&&Array.isArray(cur.coach_ids))?cur.coach_ids:[];
   const segName={am:'早',pm:'午',eve:'晚'}[seg];
-  const d=parseYmd(ds);
-  showModal(`<div class="modal-title">${ds.slice(5).replace('-','/')}（週${WD[d.getDay()]}）・${segName}班教練</div>
+  const wdName=['','一','二','三','四','五','六','日'][wd];
+  showModal(`<div class="modal-title">週${wdName}・${segName}班教練</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 0 6px;">
       ${list.map(c=>`<label class="dw-pick"><input type="checkbox" value="${c.id}" ${ids.includes(c.id)?'checked':''}><span>${coachDisp(c)||c.name}</span></label>`).join('')}
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">取消</button>
-      <button class="btn btn-green" onclick="dwSaveCell('${ds}','${seg}')">儲存</button>
+      <button class="btn btn-green" onclick="dwSaveCell(${wd},'${seg}')">儲存</button>
     </div>`);
 }
-async function dwSaveCell(ds,seg){
+async function dwSaveCell(wd,seg){
   const ids=[...document.querySelectorAll('.dw-pick input:checked')].map(x=>x.value);
   try{
-    await dbPut('duty_slots',{id:`DS-${ds}-${seg}`,date:ds,segment:seg,coach_ids:ids,
+    await dbPut('duty_slots',{id:`DS-W${wd}-${seg}`,weekday:wd,date:null,segment:seg,coach_ids:ids,
       updated_by:SESSION.id,updated_at:new Date().toISOString()});
     closeModal(); showToast('已儲存'); navTo('coach_duty_week', CUR_GROUP);
   }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
