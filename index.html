@@ -5739,8 +5739,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1119';
-const APP_VERSION_LABEL='v260727.1119';
+const APP_VERSION='260727.1121';
+const APP_VERSION_LABEL='v260727.1121';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11224,7 +11224,8 @@ async function renderCalendar(opts){
     ${opts.coachFilter?`<div class="cal-chips-bar cal-bar2">
       <div class="cal-chip-row">${calCourseChips()}</div>
       ${_calNavHtml}
-      <div class="cal-head-right">
+      <div class="cal-head-right" style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" onclick="openGroupScheduleModal()">團課課表</button>
         <button class="btn btn-green" onclick="openBookingModal()">＋ 新增預約</button>
       </div>
     </div>`:''}
@@ -11234,6 +11235,126 @@ async function renderCalendar(opts){
       <button class="cal-hdr-arrow cal-hdr-right ${_calViewOffset>=2?'disabled':''}" onclick="calSlideView(1)" title="後 5 天">›</button>`:''}
     </div>
   </div>`;
+}
+/* ════════ 團課課表（2026-07-27 使用者指示）════════
+   行事曆上方按鈕 → 當週團課週曆彈窗；可下載成 IG 限時動態尺寸（1080×1920）圖片。
+   課卡顯示：時間・人數 n/n・教練・標籤〔招生中／即將滿班／滿班〕。 */
+let _gsStart=null;
+function gsTagOf(heads,max){
+  if(heads>=max)   return {t:'滿班',    c:'#b5372e', bg:'#fbe4e2'};
+  if(heads>=max-1) return {t:'即將滿班', c:'#b9770e', bg:'#fdf3e0'};
+  return {t:'招生中', c:'#1f6f54', bg:'#e7f0ea'};
+}
+async function openGroupScheduleModal(){
+  if(!_gsStart){ const d=new Date(TODAY); _gsStart=addDays(d,-((d.getDay()+6)%7)); }
+  const [bookings,coaches,types]=await Promise.all([
+    dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('ticket_types').catch(()=>[])]);
+  const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
+  const cMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)||c.name||'']));
+  const from=ymd(_gsStart), to=ymd(addDays(_gsStart,6));
+  const list=bookings.filter(b=>b.category==='小班肌力'&&b.status!=='cancelled'&&b.date>=from&&b.date<=to)
+    .sort((a,b)=>((a.date+a.start_time).localeCompare(b.date+b.start_time)));
+  // 組資料：依日分組
+  const byDay={};
+  list.forEach(b=>{
+    const heads=Array.isArray(b.member_ids)?b.member_ids.length:0;
+    const max=Math.max(1,Number(b.max_heads)||5);
+    (byDay[b.date]=byDay[b.date]||[]).push({
+      time:b.start_time, name:(typeof bookingTypeName==='function'?bookingTypeName(b,typeMap):'團體課'),
+      coach:cMap[b.substitute_coach_id||b.coach_id]||'', heads, max, tag:gsTagOf(heads,max)});
+  });
+  window._gsData={byDay, from, to};
+  const days=[...Array(7)].map((_,i)=>addDays(_gsStart,i));
+  const secs=days.map(d=>{
+    const ds=ymd(d), rows=byDay[ds]||[];
+    if(!rows.length) return '';
+    return `<div style="margin-bottom:12px;">
+      <div style="font-size:12.5px;font-weight:800;color:var(--gold-d);letter-spacing:.08em;margin-bottom:6px;">週${WD[d.getDay()]}　${d.getMonth()+1}/${d.getDate()}</div>
+      ${rows.map(r=>`<div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:9px 12px;margin-bottom:6px;">
+        <b style="font-family:var(--num);color:var(--green);font-size:15px;">${r.time}</b>
+        <span style="flex:1;font-size:13.5px;font-weight:700;">${r.name}${r.coach?`<span style="font-weight:500;color:var(--t2);font-size:12px;">　${r.coach}</span>`:''}</span>
+        <span style="font-family:var(--num);font-size:12.5px;color:var(--t2);">${r.heads}/${r.max}</span>
+        <span style="font-size:11px;font-weight:800;color:${r.tag.c};background:${r.tag.bg};border-radius:999px;padding:3px 9px;white-space:nowrap;">${r.tag.t}</span>
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+  showModal(`<div class="modal-title">團課課表</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <button class="btn btn-ghost btn-sm" onclick="gsWeek(-7)">‹ 上週</button>
+      <div style="flex:1;text-align:center;font-family:var(--num);font-size:14px;font-weight:700;">${from.slice(5).replace('-','/')} – ${to.slice(5).replace('-','/')}</div>
+      <button class="btn btn-ghost btn-sm" onclick="gsWeek(7)">下週 ›</button>
+    </div>
+    ${secs||'<div style="text-align:center;color:var(--t3);padding:28px 0;font-size:13px;">本週沒有團體課</div>'}
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      <button class="btn btn-green" onclick="gsDownload()" ${secs?'':'disabled style="opacity:.5;"'}>下載圖片（IG 限動）</button>
+    </div>`);
+}
+function gsWeek(n){ _gsStart=addDays(_gsStart,n); openGroupScheduleModal(); }
+function gsDownload(){
+  const D=window._gsData; if(!D) return;
+  const W=1080,H=1920, cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  const x=cv.getContext('2d');
+  const days=Object.keys(D.byDay).sort();
+  // 內容高度估算 → 超出可用高度時等比縮小
+  const HEAD=340, FOOT=140, PADX=72;
+  let need=0; days.forEach(ds=>{ need+=84+(D.byDay[ds].length*128)+24; });
+  const s=Math.min(1, (H-HEAD-FOOT-40)/Math.max(need,1));
+  const F=n=>Math.round(n*s);   // 字級/尺寸縮放
+  // 背景
+  x.fillStyle='#F4F0E8'; x.fillRect(0,0,W,H);
+  // 頁首
+  x.fillStyle='#003d32'; x.fillRect(0,0,W,HEAD-60);
+  x.fillStyle='#fff'; x.textAlign='center';
+  x.font='700 92px "Noto Sans TC",sans-serif'; x.fillText('YUGYM',W/2,128);
+  x.font='500 40px "Noto Sans TC",sans-serif'; x.fillStyle='#d9c9a3'; x.fillText('有 肌 訓 練 ・ 本 週 團 課 課 表',W/2,196);
+  x.font='600 36px "Noto Sans TC",sans-serif'; x.fillStyle='#fff';
+  x.fillText(`${D.from.replace(/-/g,'/')} – ${D.to.replace(/-/g,'/')}`,W/2,252);
+  let y=HEAD;
+  const WDD=['日','一','二','三','四','五','六'];
+  days.forEach(ds=>{
+    const d=parseYmd(ds);
+    x.textAlign='left';
+    x.fillStyle='#8a6a3a'; x.font=`800 ${F(40)}px "Noto Sans TC",sans-serif`;
+    x.fillText(`週${WDD[d.getDay()]}　${d.getMonth()+1}/${d.getDate()}`, PADX, y+F(48));
+    y+=F(84);
+    D.byDay[ds].forEach(r=>{
+      const ch=F(108);
+      // 卡片
+      x.fillStyle='#fff'; x.strokeStyle='#e3ddd0'; x.lineWidth=2;
+      if(x.roundRect){ x.beginPath(); x.roundRect(PADX,y,W-PADX*2,ch,F(18)); x.fill(); x.stroke(); }
+      else { x.fillRect(PADX,y,W-PADX*2,ch); x.strokeRect(PADX,y,W-PADX*2,ch); }
+      const cy=y+ch/2;
+      x.textBaseline='middle';
+      x.fillStyle='#1f6f54'; x.font=`800 ${F(44)}px "Noto Sans TC",sans-serif`;
+      x.fillText(r.time, PADX+F(28), cy);
+      x.fillStyle='#2b2620'; x.font=`700 ${F(38)}px "Noto Sans TC",sans-serif`;
+      x.fillText(r.name+(r.coach?`・${r.coach}`:''), PADX+F(190), cy);
+      // 右側：人數＋標籤
+      x.textAlign='right';
+      x.fillStyle='#6a655c'; x.font=`700 ${F(34)}px "Noto Sans TC",sans-serif`;
+      x.fillText(`${r.heads}/${r.max}`, W-PADX-F(240), cy);
+      const tw=F(180), th=F(56);
+      x.fillStyle=r.tag.bg;
+      if(x.roundRect){ x.beginPath(); x.roundRect(W-PADX-F(28)-tw, cy-th/2, tw, th, th/2); x.fill(); }
+      else x.fillRect(W-PADX-F(28)-tw, cy-th/2, tw, th);
+      x.fillStyle=r.tag.c; x.font=`800 ${F(30)}px "Noto Sans TC",sans-serif`; x.textAlign='center';
+      x.fillText(r.tag.t, W-PADX-F(28)-tw/2, cy+F(2));
+      x.textAlign='left'; x.textBaseline='alphabetic';
+      y+=ch+F(20);
+    });
+    y+=F(24);
+  });
+  // 頁尾
+  x.textAlign='center'; x.fillStyle='#6a655c'; x.font='500 32px "Noto Sans TC",sans-serif';
+  x.fillText('名額有限，預約請洽 LINE 官方帳號', W/2, H-84);
+  cv.toBlob(bl=>{
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(bl);
+    a.download=`YUGYM團課課表-${D.from}.png`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  },'image/png');
 }
 // 每分鐘更新行事曆「現在時間」紅線位置（不重繪整頁）
 function updateNowLine(){
