@@ -5723,8 +5723,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1100';
-const APP_VERSION_LABEL='v260727.1100';
+const APP_VERSION='260727.1103';
+const APP_VERSION_LABEL='v260727.1103';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16882,7 +16882,7 @@ const SALARY_TPL_DEFAULT = {
 const SALARY_GLOBAL_DEFAULT = {
   renew_bonus: 1000,            // 每張續約獎金
   supervisor_bonus: 4000,       // 主管固定津貼
-  // 店長階梯津貼：依「所管理的每位教練」當月教練課堂數給津貼，可累加（不含老闆與店長本人）
+  // 店長階梯津貼：依「每位教練（含店長本人，不含老闆/admin）」當月教練課堂數給津貼，可累加
   leader_tiers: [
     { min:80,  max:99,   amount:4000 },
     { min:100, max:null, amount:6000 },
@@ -17200,7 +17200,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const isSup=!!(emp&&emp.is_supervisor);
   const supPay=isSup?(Number(G.supervisor_bonus)||0):0;
   // ⑦ 店長階梯津貼：傳入所管理教練的堂數陣列 extras.leaderHeads=[105,85,102...]
-  //    每位教練的堂數落在哪一階就加該階金額，可累加（名單已排除老闆與店長本人，由呼叫端負責）
+  //    每位教練的堂數落在哪一階就加該階金額，可累加（名單排除老闆/admin，店長本人列入——2026-07-27 使用者指示）
   const isLeader=!!(emp&&emp.is_manager);
   let leaderPay=0; const leaderParts=[];
   if(isLeader && Array.isArray(extras.leaderHeads)){
@@ -17855,7 +17855,7 @@ async function computeMonthlyPayroll(month){
     const classOverlap=0; // 重疊已從值班時數扣除，不再於 calcSalary 重複扣
     // 店長津貼名單：所有教練（排除老闆 role==='admin' 與店長本人）的當月堂數
     const leaderHeads = emp.is_manager
-      ? staff.filter(o=>o.id!==emp.id && o.role!=='admin').map(o=>ptDoneById[o.id]||0)
+      ? staff.filter(o=>o.role!=='admin').map(o=>ptDoneById[o.id]||0)   // 2026-07-27 使用者指示：店長本人也列入計算
       : [];
     const extras={ renewCount:renewById[emp.id]||0, leaderHeads };
     const sal=calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, extras);
@@ -27012,7 +27012,7 @@ async function anaMonth(){
       const dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month),0):0;
       const lv=leaveSummary(shifts,c.id,month);
       const leaderHeads=c.is_manager
-        ? coaches.filter(o=>o.id!==c.id&&o.role!=='admin'&&o.role!=='front_desk'&&o.status!=='inactive')
+        ? coaches.filter(o=>o.role!=='admin'&&o.role!=='front_desk'&&o.status!=='inactive')   /* 店長本人也列入（2026-07-27） */
             .map(o=>bookings.filter(b=>b.coach_id===o.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month&&(b.category==='私人教練'||b.category==='體驗')).length)
         : [];
       const sal=calcSalary(c, ptD, gHeads, dutyH, lv, 0, {renewCount:renewMap[c.id]||0, leaderHeads});
@@ -28067,7 +28067,7 @@ async function renderSalaryContent(TARGET, withHead){
   const payTypeLabel=PAY_LABEL[me.employment_type||me.pay_type]||'—';
   // v2.0：店長津貼需全體教練當月堂數；續約張數由 member_tickets 統計
   const leaderHeads = me.is_manager
-    ? coaches.filter(o=>o.id!==me.id && o.role!=='admin' && o.role!=='front_desk' && o.status!=='inactive')
+    ? coaches.filter(o=>o.role!=='admin' && o.role!=='front_desk' && o.status!=='inactive')   /* 店長本人也列入（2026-07-27） */
         .map(o=>bookings.filter(b=>b.coach_id===o.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month&&(b.category==='私人教練'||b.category==='體驗')).length)
     : [];
   let renewCount=0;
