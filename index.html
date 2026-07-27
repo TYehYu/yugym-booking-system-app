@@ -5758,8 +5758,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1212';
-const APP_VERSION_LABEL='v260727.1212';
+const APP_VERSION='260727.1219';
+const APP_VERSION_LABEL='v260727.1219';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11313,62 +11313,92 @@ async function openGroupScheduleModal(){
 }
 function gsWeek(n){ _gsStart=addDays(_gsStart,n); openGroupScheduleModal(); }
 function gsDownload(){
+  /* 2026-07-27 使用者提供模板：磚紅底＋長尾夾白紙＋7 欄週表。
+     標籤規則（依模板）：無人＝歡迎報名（橘）、有人未滿＝即將滿班（橘）、滿＝滿班（灰字無底）。 */
   const D=window._gsData; if(!D) return;
   const W=1080,H=1920, cv=document.createElement('canvas'); cv.width=W; cv.height=H;
   const x=cv.getContext('2d');
-  const days=Object.keys(D.byDay).sort();
-  // 內容高度估算 → 超出可用高度時等比縮小
-  const HEAD=340, FOOT=140, PADX=72;
-  let need=0; days.forEach(ds=>{ need+=84+(D.byDay[ds].length*128)+24; });
-  const s=Math.min(1, (H-HEAD-FOOT-40)/Math.max(need,1));
-  const F=n=>Math.round(n*s);   // 字級/尺寸縮放
-  // 背景
-  x.fillStyle='#F4F0E8'; x.fillRect(0,0,W,H);
-  // 頁首
-  x.fillStyle='#003d32'; x.fillRect(0,0,W,HEAD-60);
-  x.fillStyle='#fff'; x.textAlign='center';
-  x.font='700 92px "Noto Sans TC",sans-serif'; x.fillText('YUGYM',W/2,128);
-  x.font='500 40px "Noto Sans TC",sans-serif'; x.fillStyle='#d9c9a3'; x.fillText('有 肌 訓 練 ・ 本 週 團 課 課 表',W/2,196);
-  x.font='600 36px "Noto Sans TC",sans-serif'; x.fillStyle='#fff';
-  x.fillText(`${D.from.replace(/-/g,'/')} – ${D.to.replace(/-/g,'/')}`,W/2,252);
-  let y=HEAD;
-  const WDD=['日','一','二','三','四','五','六'];
-  days.forEach(ds=>{
-    const d=parseYmd(ds);
-    x.textAlign='left';
-    x.fillStyle='#8a6a3a'; x.font=`800 ${F(40)}px "Noto Sans TC",sans-serif`;
-    x.fillText(`週${WDD[d.getDay()]}　${d.getMonth()+1}/${d.getDate()}`, PADX, y+F(48));
-    y+=F(84);
-    D.byDay[ds].forEach(r=>{
-      const ch=F(108);
-      // 卡片
-      x.fillStyle='#fff'; x.strokeStyle='#e3ddd0'; x.lineWidth=2;
-      if(x.roundRect){ x.beginPath(); x.roundRect(PADX,y,W-PADX*2,ch,F(18)); x.fill(); x.stroke(); }
-      else { x.fillRect(PADX,y,W-PADX*2,ch); x.strokeRect(PADX,y,W-PADX*2,ch); }
-      const cy=y+ch/2;
-      x.textBaseline='middle';
-      x.fillStyle='#1f6f54'; x.font=`800 ${F(44)}px "Noto Sans TC",sans-serif`;
-      x.fillText(r.time, PADX+F(28), cy);
-      x.fillStyle='#2b2620'; x.font=`700 ${F(38)}px "Noto Sans TC",sans-serif`;
-      x.fillText(r.name+(r.coach?`・${r.coach}`:''), PADX+F(190), cy);
-      // 右側：人數＋標籤
-      x.textAlign='right';
-      x.fillStyle='#6a655c'; x.font=`700 ${F(34)}px "Noto Sans TC",sans-serif`;
-      x.fillText(`${r.heads}/${r.max}`, W-PADX-F(240), cy);
-      const tw=F(180), th=F(56);
-      x.fillStyle=r.tag.bg;
-      if(x.roundRect){ x.beginPath(); x.roundRect(W-PADX-F(28)-tw, cy-th/2, tw, th, th/2); x.fill(); }
-      else x.fillRect(W-PADX-F(28)-tw, cy-th/2, tw, th);
-      x.fillStyle=r.tag.c; x.font=`800 ${F(30)}px "Noto Sans TC",sans-serif`; x.textAlign='center';
-      x.fillText(r.tag.t, W-PADX-F(28)-tw/2, cy+F(2));
-      x.textAlign='left'; x.textBaseline='alphabetic';
-      y+=ch+F(20);
-    });
-    y+=F(24);
+  const FONT='"Noto Sans TC","PingFang TC",sans-serif';
+  // 背景：磚紅
+  x.fillStyle='#b3452c'; x.fillRect(0,0,W,H);
+  // 標題：MM/DD - MM/DD 課表
+  const _md=s=>s.slice(5).replace('-','/');
+  x.fillStyle='#fff'; x.textAlign='center'; x.textBaseline='alphabetic';
+  x.font=`700 92px ${FONT}`;
+  x.fillText(`${_md(D.from)} - ${_md(D.to)} 課表`, W/2, 235);
+  x.strokeStyle='#fff'; x.lineWidth=3;
+  x.beginPath(); x.moveTo(120,278); x.lineTo(960,278); x.stroke();
+  // 副標：小班肌力
+  x.font=`500 62px ${FONT}`; x.fillText('小班肌力', W/2, 430);
+  // 紙張（含陰影）
+  const PX=62, PW=W-PX*2, PY=490, PH=1160;
+  x.fillStyle='rgba(60,20,10,.25)'; x.fillRect(PX+10,PY+12,PW,PH);
+  x.fillStyle='#f5f3ee'; x.fillRect(PX,PY,PW,PH);
+  // 紙頭橫線
+  x.strokeStyle='#d9d6cf'; x.lineWidth=2;
+  [518,540,562].forEach(ly=>{ x.beginPath(); x.moveTo(PX,ly); x.lineTo(PX+PW,ly); x.stroke(); });
+  // 長尾夾（黑本體＋銀線圈）
+  x.fillStyle='#161616';
+  x.beginPath();
+  x.moveTo(150,470); x.lineTo(340,470); x.lineTo(325,560); x.lineTo(165,560); x.closePath(); x.fill();
+  x.strokeStyle='#c9c9c9'; x.lineWidth=10; x.lineCap='round';
+  x.beginPath(); x.moveTo(195,468); x.lineTo(225,382); x.stroke();
+  x.beginPath(); x.moveTo(295,468); x.lineTo(265,382); x.stroke();
+  x.beginPath(); x.arc(245,372,26,Math.PI*0.15,Math.PI*0.85,true); x.stroke();
+  // 表頭（一～日）
+  const days=[...Array(7)].map((_,i)=>{ const d=addDays(parseYmd(D.from),i); return ymd(d); });
+  const colW=PW/7, thY=590, thH=86;
+  x.fillStyle='#a9b1c7'; x.fillRect(PX,thY,PW,thH);
+  x.fillStyle='#4c5568'; x.font=`400 46px ${FONT}`; x.textAlign='center'; x.textBaseline='middle';
+  const WDN=['一','二','三','四','五','六','日'];
+  WDN.forEach((wd,i)=>x.fillText(wd, PX+colW*i+colW/2, thY+thH/2+2));
+  // 格線區
+  const gy=thY+thH, gh=PY+PH-gy-26;
+  const maxN=Math.max(1,...days.map(ds=>(D.byDay[ds]||[]).length));
+  const rows=Math.min(Math.max(maxN,2),4);
+  const rowH=gh/rows;
+  days.forEach((ds,ci)=>{
+    const list=(D.byDay[ds]||[]).slice(0,rows);
+    for(let r=0;r<rows;r++){
+      const cx0=PX+colW*ci, cy0=gy+rowH*r;
+      const it=list[r];
+      if(!it){ x.fillStyle='#d8d5cf'; x.fillRect(cx0+1,cy0+1,colW-2,rowH-2); continue; }
+      const cx=cx0+colW/2;
+      x.fillStyle='#1c1a17'; x.font=`600 42px ${FONT}`;
+      x.fillText(it.time, cx, cy0+rowH*0.24);
+      x.font=`500 38px ${FONT}`;
+      const nm=(it.coach||it.name||'').slice(0,6);
+      x.fillText(nm, cx, cy0+rowH*0.52);
+      const tag = it.heads>=it.max ? {t:'滿班',chip:false}
+        : it.heads>0 ? {t:'即將滿班',chip:true} : {t:'歡迎報名',chip:true};
+      const ty=cy0+rowH*0.8;
+      if(tag.chip){
+        x.font=`700 30px ${FONT}`;
+        const tw=x.measureText(tag.t).width+34, th2=52;
+        x.fillStyle='#f08a3c';
+        if(x.roundRect){ x.beginPath(); x.roundRect(cx-tw/2,ty-th2/2,tw,th2,10); x.fill(); }
+        else x.fillRect(cx-tw/2,ty-th2/2,tw,th2);
+        x.fillStyle='#4a1607';
+        x.fillText(tag.t, cx, ty+2);
+      }else{
+        x.fillStyle='#3c3934'; x.font=`500 32px ${FONT}`;
+        x.fillText(tag.t, cx, ty+2);
+      }
+    }
+    // 欄分隔線
+    if(ci>0){ x.strokeStyle='#c9c5bd'; x.lineWidth=2;
+      x.beginPath(); x.moveTo(PX+colW*ci,thY); x.lineTo(PX+colW*ci,gy+gh); x.stroke(); }
   });
-  // 頁尾
-  x.textAlign='center'; x.fillStyle='#6a655c'; x.font='500 32px "Noto Sans TC",sans-serif';
-  x.fillText('名額有限，預約請洽 LINE 官方帳號', W/2, H-84);
+  // 列分隔線
+  for(let r=1;r<rows;r++){ x.strokeStyle='#c9c5bd'; x.lineWidth=2;
+    x.beginPath(); x.moveTo(PX,gy+rowH*r); x.lineTo(PX+PW,gy+rowH*r); x.stroke(); }
+  // 頁尾 @YUGYM
+  x.fillStyle='#fff'; x.font=`600 46px ${FONT}`;
+  const ft='@ Y U G Y M';
+  x.fillText(ft, W/2, 1815);
+  x.strokeStyle='#fff'; x.lineWidth=3;
+  x.beginPath(); x.moveTo(W/2-160,1845); x.lineTo(W/2+160,1845); x.stroke();
+  x.textBaseline='alphabetic';
   cv.toBlob(bl=>{
     const a=document.createElement('a');
     a.href=URL.createObjectURL(bl);
