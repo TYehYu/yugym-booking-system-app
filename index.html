@@ -5776,8 +5776,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.2152';
-const APP_VERSION_LABEL='v260727.2152';
+const APP_VERSION='260727.2156';
+const APP_VERSION_LABEL='v260727.2156';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -25565,6 +25565,7 @@ function msbGroupTks(){
 function msbDateOk(ds){
   const s=window._msb; if(!s) return false;
   if(ds<ymd(TODAY)) return false;
+  if(s.resched) return true;   // 改期：點數已扣，不看票券效期
   if(s.type==='friendly'){
     const dow=parseYmd(ds).getDay();
     if(dow===0||dow===6) return false;
@@ -25582,7 +25583,7 @@ async function memSelfBookToggle(){
   if(window._msb){ msbExit(); return; }
   await msbStart();
 }
-async function msbStart(){
+async function msbStart(reschedId){
   if(!SESSION||SESSION.role!=='member'){ showToast('僅會員可使用'); return; }
   if(CUR_PAGE!=='mem_bookings') navTo('mem_bookings');   // 頁面載完會自帶 msb 狀態重繪月曆
   let mine=[],types=[];
@@ -25594,8 +25595,26 @@ async function msbStart(){
     && (!t.expire_date||String(t.expire_date).slice(0,10)>=ymd(TODAY)));
   const groups={self:[],friendly:[]};
   usable.forEach(t=>{ (msbIsFriendly(t,typeMap)?groups.friendly:groups.self).push(t); });
-  window._msb={on:true,groups,hasPoints:usable.length>0,
-    type:groups.self.length>0?'self':'friendly',date:ymd(TODAY),free:null};
+  /* 改期模式（2026-07-27 客戶回饋）：從已預約的時段進來 → 挑新時段，不扣不退（開課 24 小時前限定） */
+  let resched=null;
+  if(reschedId&&typeof reschedId==='string'){
+    try{
+      const b=await dbGet('bookings',reschedId);
+      if(b&&b.member_id===SESSION.id&&b.category==='自主訓練'&&b.status==='booked')
+        resched={id:b.id,ttid:b.ticket_type_id||null,origDate:b.date,origTime:b.start_time};
+    }catch(_){}
+  }
+  // 未來已預約的自主訓練（點數用完時提供 改期/取消 入口——「有更好的時間釋出可以調整」）
+  let futureSelf=[];
+  try{
+    const bks=await dbGetAll('bookings');
+    const now=Date.now();
+    futureSelf=(bks||[]).filter(x=>x.member_id===SESSION.id&&x.category==='自主訓練'&&x.status==='booked'
+      && new Date(x.date+'T'+x.start_time+':00').getTime()>now)
+      .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
+  }catch(_){}
+  window._msb={on:true,groups,hasPoints:usable.length>0,resched,futureSelf,
+    type:groups.self.length>0?'self':'friendly',date:resched?resched.origDate:ymd(TODAY),free:null};
   const fab=document.getElementById('msb-fab'); if(fab){ fab.classList.add('on'); fab.textContent='✕'; }
   /* 2026-07-26 使用者指示：按［＋］後上方行事曆主動縮小（可預約日期改在下方視窗用按鈕呈現，
      不再需要靠月曆金框挑日；月曆收合後仍可手動展開，金框照畫）。 */
@@ -25618,10 +25637,18 @@ function msbRenderSheet(){
   const s=window._msb; if(!s) return;
   let host=document.getElementById('msb-sheet');
   if(!host){ host=document.createElement('div'); host.id='msb-sheet'; document.body.appendChild(host); }
-  if(!s.hasPoints){
+  if(!s.hasPoints && !s.resched){
+    const fb=(s.futureSelf||[]).map(b=>`<div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-top:8px;">
+      <span style="font-size:13.5px;"><b style="font-family:var(--num);">${b.date.slice(5).replace('-','/')}</b>　${b.start_time}</span>
+      <span style="display:flex;gap:6px;">
+        <button class="btn btn-ghost btn-sm" onclick="msbStart('${b.id}')">改期</button>
+        <button class="btn btn-ghost btn-sm" style="color:#b5372e;" onclick="memCancelSelf('${b.id}')">取消</button>
+      </span></div>`).join('');
     host.innerHTML=`<div class="msb-panel">
       <div class="cag-slotsheet-head"><span>預約自主訓練</span><button class="cag-slotsheet-x" onclick="msbExit()">✕</button></div>
-      <div class="msb-empty">尚未有自主訓練點數<br><span class="em-s">完成教練課簽到後會獲得點數（效期 7 天），之後就能在這裡預約自主訓練。</span></div>
+      ${fb?`<div class="msb-empty" style="padding-bottom:6px;">點數已用於下列預約<br><span class="em-s">開課 24 小時前可改期（不另扣點）或取消（退回點數）。</span></div>
+        <div style="padding:0 14px 14px;">${fb}</div>`
+      :`<div class="msb-empty">尚未有自主訓練點數<br><span class="em-s">完成教練課簽到後會獲得點數（效期 7 天），之後就能在這裡預約自主訓練。</span></div>`}
     </div>`;
     return;
   }
@@ -25645,12 +25672,13 @@ function msbRenderSheet(){
   }
   const d=parseYmd(s.date);
   host.innerHTML=`<div class="msb-panel">
-    <div class="cag-slotsheet-head"><span>預約自主訓練</span><button class="cag-slotsheet-x" onclick="msbExit()">✕</button></div>
+    <div class="cag-slotsheet-head"><span>${s.resched?'改期自主訓練':'預約自主訓練'}</span><button class="cag-slotsheet-x" onclick="msbExit()">✕</button></div>
+    ${s.resched?`<div class="msb-sub" style="background:var(--card2);border-radius:9px;padding:8px 12px;margin:0 14px;">原時段：<b style="font-family:var(--num);">${s.resched.origDate.slice(5).replace('-','/')}　${s.resched.origTime}</b>　→ 請選新的時段</div>`:''}
     ${_dateBtns?`<div class="msb-dates">${_dateBtns}</div>`:''}
-    ${typeRow}
+    ${s.resched?'':typeRow}
     <div class="msb-sub">${s.date.slice(5).replace('-','/')}（週${WD[d.getDay()]}）</div>
     <div id="msb-slots"><div class="msb-empty" style="padding:18px;">載入時段中…</div></div>
-    <div class="msb-hint">點選時段即可預約（60 分鐘）；系統自動使用最快到期的點數，確認後扣 1 點。</div>
+    <div class="msb-hint">${s.resched?'改期不另扣點；開課 24 小時前可改。':'點選時段即可預約（60 分鐘）；系統自動使用最快到期的點數，確認後扣 1 點。'}</div>
   </div>`;
   msbLoadSlots();
 }
@@ -25659,14 +25687,15 @@ async function msbLoadSlots(){
   const s=window._msb; if(!s||!s.hasPoints) return;
   const box=document.getElementById('msb-slots'); if(!box) return;
   const seq=++_msbLoadSeq;
-  const tk=msbPickTicket();
-  if(!tk){ box.innerHTML='<div class="msb-empty">這天點數已過效期，請選金框內的日期</div>'; return; }
+  const tk=s.resched?null:msbPickTicket();
+  if(!s.resched && !tk){ box.innerHTML='<div class="msb-empty">這天點數已過效期，請選金框內的日期</div>'; return; }
   const free=new Set(); const vids={};
   /* 並行探測（2026-07-26 提速）：24 個時段同時驗證。佔用資料與票種都走共用快取，
      實際只有 1 支 RPC＋1 支表查詢。每個時段用獨立物件（validateBooking 會寫回 venue_unit）。 */
   const probes=[]; for(let m=540;m<1260;m+=30) probes.push(m);
   const results=await Promise.all(probes.map(async m=>{
-    const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id};
+    const vbk={id:s.resched?s.resched.id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',
+      ticket_type_id:s.resched?s.resched.ttid:tk.ticket_type_id};
     const err=await validateBooking(vbk,s.date,minToTime(m),60);
     return [m,err,vbk.venue_unit];
   }));
@@ -25682,14 +25711,15 @@ async function msbLoadSlots(){
 }
 async function msbPickSlot(t){
   const s=window._msb; if(!s) return;
-  const tk=msbPickTicket();
-  if(!tk){ showToast('這天沒有可用的點數'); return; }
+  const tk=s.resched?null:msbPickTicket();
+  if(!s.resched && !tk){ showToast('這天沒有可用的點數'); return; }
   const d=parseYmd(s.date);
   /* 場地選擇（2026-07-26 使用者指示）：確認視窗內選場地，預設＝自動分配到的；
      逐一驗證該時段各場地是否還有位，沒位的不顯示。 */
   const VOPT=[['multi','多功能'],['group','教室'],['treadmill','跑步機']];
   const opts=await Promise.all(VOPT.map(async([vid,label])=>{
-    const probe={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id,venue_pref:vid};
+    const probe={id:s.resched?s.resched.id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',
+      ticket_type_id:s.resched?s.resched.ttid:tk.ticket_type_id,venue_pref:vid};
     const err=await validateBooking(probe,s.date,t,60);
     return [vid,label,!err];
   }));
@@ -25702,16 +25732,16 @@ async function msbPickSlot(t){
   const vbtns=opts.map(([vid,label,ok])=> ok
     ? `<button class="msb-vbtn${s.pickVenue===vid?' on':''}" data-vid="${vid}" onclick="msbChooseVenue('${vid}')">${label}</button>`
     : `<button class="msb-vbtn off" disabled title="此時段已滿">${label}</button>`).join('');
-  showModal(`<div class="modal-title">確認預約</div>
+  showModal(`<div class="modal-title">${s.resched?'確認改期':'確認預約'}</div>
     <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:2;">
-      <div><span style="color:var(--t2);">類型</span>　${s.type==='friendly'?'友善自主訓練':'自主訓練'}</div>
-      <div><span style="color:var(--t2);">日期</span>　${s.date.replace(/-/g,'/')}（週${WD[d.getDay()]}）</div>
-      <div><span style="color:var(--t2);">時間</span>　${t}（60 分鐘）</div>
+      ${s.resched?`<div><span style="color:var(--t2);">原時段</span>　${s.resched.origDate.replace(/-/g,'/')}　${s.resched.origTime}</div>`:`<div><span style="color:var(--t2);">類型</span>　${s.type==='friendly'?'友善自主訓練':'自主訓練'}</div>`}
+      <div><span style="color:var(--t2);">${s.resched?'新時段':'日期'}</span>　${s.date.replace(/-/g,'/')}（週${WD[d.getDay()]}）${s.resched?'　'+t:''}</div>
+      ${s.resched?'':`<div><span style="color:var(--t2);">時間</span>　${t}（60 分鐘）</div>`}
       <div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--t2);">場地</span><span id="msb-vbtns" style="display:flex;gap:7px;">${vbtns}</span></div>
-      <div><span style="color:var(--t2);">使用票券</span>　${tk.plan_name||'自主訓練點數'}（剩 ${tk.sessions_remaining} 點）</div>
+      ${s.resched?'':`<div><span style="color:var(--t2);">使用票券</span>　${tk.plan_name||'自主訓練點數'}（剩 ${tk.sessions_remaining} 點）</div>`}
     </div>
-    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">確認後將扣 1 點。</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-green" onclick="msbConfirm('${t}')">確認預約</button></div>`);
+    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">${s.resched?'改期不另扣點。':'確認後將扣 1 點。'}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-green" onclick="msbConfirm('${t}')">${s.resched?'確認改期':'確認預約'}</button></div>`);
 }
 function msbChooseVenue(vid){
   const s=window._msb; if(!s) return;
@@ -25738,6 +25768,26 @@ async function memberSelfBookRpc(tk,date,time,venueUnit){
 async function msbConfirm(time){
  try{
   const s=window._msb; if(!s){ showToast('資料遺失，請重試'); return; }
+  if(s.resched){
+    // 改期：不扣不退，DB 端驗本人/24hr/效期/衝突（fn_member_self_reschedule）
+    const vbk={id:s.resched.id,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:s.resched.ttid,
+      venue_pref:s.pickVenue||null};
+    const verr=await validateBooking(vbk,s.date,time,60);
+    if(verr){ showToast(verr); return; }
+    const {data,error}=await sb.rpc('fn_member_self_reschedule',{p_booking_id:s.resched.id,p_date:s.date,p_start_time:time,p_venue_unit:vbk.venue_unit||null});
+    dbCacheClear(['bookings']);
+    if(error){ showToast('連線失敗：'+(error.message||error)); return; }
+    if(!data||!data.ok){
+      const M={'BOOKING.TOO_LATE':'開課前 24 小時內無法改期','BOOKING.DUP':'您於該時段已有預約',
+        'BOOKING.RESOURCE_BUSY':'該場地剛被約走了','TICKET.EXPIRED_FOR_DATE':'點數效期不含這一天','BOOKING.PAST_DATE':'不可改到過去的日期'};
+      showToast(M[data&&data.error_code]||('改期失敗：'+((data&&data.error_code)||'未知錯誤'))); return;
+    }
+    closeModal();
+    showToast('已改期');
+    msbExit(true);
+    navTo('mem_bookings');
+    return;
+  }
   const tk=msbPickTicket();
   if(!tk){ showToast('沒有可用的自主訓練點數'); return; }
   const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id,
