@@ -5767,8 +5767,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1235';
-const APP_VERSION_LABEL='v260727.1235';
+const APP_VERSION='260727.1239';
+const APP_VERSION_LABEL='v260727.1239';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11330,7 +11330,7 @@ function gsRenderCanvas(){
   // 副標：小班肌力
   x.font=`500 62px ${FONT}`; x.fillText('小班肌力', W/2, 430);
   // 紙張（含陰影）
-  const PX=62, PW=W-PX*2, PY=490, PH=1160;
+  const PX=40, PW=W-PX*2, PY=490, PH=1160;   // 邊距縮小讓欄位更寬（2026-07-27） 
   x.fillStyle='rgba(60,20,10,.25)'; x.fillRect(PX+10,PY+12,PW,PH);
   x.fillStyle='#f5f3ee'; x.fillRect(PX,PY,PW,PH);
   // 紙頭橫線
@@ -11351,29 +11351,46 @@ function gsRenderCanvas(){
   x.fillStyle='#4c5568'; x.font=`400 46px ${FONT}`; x.textAlign='center'; x.textBaseline='middle';
   const WDN=['一','二','三','四','五','六','日'];
   WDN.forEach((wd,i)=>x.fillText(wd, PX+colW*i+colW/2, thY+thH/2+2));
-  // 格線區
+  // 格線區（2026-07-27 二修：白天課(<15:00)從上排、晚上課(≥15:00)貼底往上排——
+  //   重現使用者模板的直覺排法：單獨的晚課（週三 19:00）會落在最下列；格子加大、標籤自動縮字不重疊）
   const gy=thY+thH, gh=PY+PH-gy-26;
-  const maxN=Math.max(1,...days.map(ds=>(D.byDay[ds]||[]).length));
-  const rows=Math.min(Math.max(maxN,2),4);
+  const layout={};
+  let rows=2;
+  days.forEach(ds=>{
+    const list=(D.byDay[ds]||[]).slice().sort((a,b)=>a.time.localeCompare(b.time));
+    const tops=list.filter(r=>Number(r.time.slice(0,2))<15);
+    const bots=list.filter(r=>Number(r.time.slice(0,2))>=15);
+    layout[ds]={tops,bots};
+    rows=Math.max(rows, tops.length+bots.length);
+  });
+  rows=Math.min(Math.max(rows,3),4);
   const rowH=gh/rows;
   days.forEach((ds,ci)=>{
-    const list=(D.byDay[ds]||[]).slice(0,rows);
+    const {tops,bots}=layout[ds];
+    const slots=new Array(rows).fill(null);
+    if(tops.length+bots.length>rows){
+      tops.concat(bots).slice(0,rows).forEach((it,i)=>slots[i]=it);   // 溢位保底：照時間序填
+    }else{
+      tops.forEach((it,i)=>slots[i]=it);
+      bots.forEach((it,i)=>slots[rows-bots.length+i]=it);
+    }
     for(let r=0;r<rows;r++){
       const cx0=PX+colW*ci, cy0=gy+rowH*r;
-      const it=list[r];
+      const it=slots[r];
       if(!it){ x.fillStyle='#d8d5cf'; x.fillRect(cx0+1,cy0+1,colW-2,rowH-2); continue; }
       const cx=cx0+colW/2;
-      x.fillStyle='#1c1a17'; x.font=`600 42px ${FONT}`;
-      x.fillText(it.time, cx, cy0+rowH*0.24);
-      x.font=`500 38px ${FONT}`;
+      x.fillStyle='#1c1a17'; x.font=`600 46px ${FONT}`;
+      x.fillText(it.time, cx, cy0+rowH*0.23);
+      x.font=`500 40px ${FONT}`;
       const nm=(it.coach||it.name||'').slice(0,6);
       x.fillText(nm, cx, cy0+rowH*0.52);
       const tag = it.heads>=it.max ? {t:'滿班',chip:false}
         : it.heads>0 ? {t:'即將滿班',chip:true} : {t:'歡迎報名',chip:true};
       const ty=cy0+rowH*0.8;
       if(tag.chip){
-        x.font=`700 30px ${FONT}`;
-        const tw=x.measureText(tag.t).width+34, th2=52;
+        let f=30, tw;
+        do{ x.font=`700 ${f}px ${FONT}`; tw=x.measureText(tag.t).width+30; if(tw<=colW-12) break; f-=2; }while(f>=20);
+        const th2=f+24;
         x.fillStyle='#f08a3c';
         if(x.roundRect){ x.beginPath(); x.roundRect(cx-tw/2,ty-th2/2,tw,th2,10); x.fill(); }
         else x.fillRect(cx-tw/2,ty-th2/2,tw,th2);
