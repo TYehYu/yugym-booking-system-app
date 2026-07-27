@@ -5767,8 +5767,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1234';
-const APP_VERSION_LABEL='v260727.1234';
+const APP_VERSION='260727.1235';
+const APP_VERSION_LABEL='v260727.1235';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17623,8 +17623,10 @@ function shiftStarted(ds, startTime, today){
   const _n=new Date(); const nowMin=_n.getHours()*60+_n.getMinutes();
   return timeToMin(startTime)<=nowMin;
 }
-function shiftMonthMove(d){ let[y,m]=(_shiftMonth||ymd(TODAY).slice(0,7)).split('-').map(Number); m+=d; if(m<1){m=12;y--;} if(m>12){m=1;y++;} _shiftMonth=`${y}-${String(m).padStart(2,'0')}`; navTo('attendance'); }
-function shiftThisMonthAlt(){ _shiftMonth=ymd(TODAY).slice(0,7); navTo('attendance'); }
+/* 換月留在當前頁（2026-07-27 修：店長從「店長→排班表」翻月被硬導回出勤管理/管理員頁） */
+function _shiftBackPage(){ return CUR_PAGE==='coach_shifts' ? 'coach_shifts' : 'attendance'; }
+function shiftMonthMove(d){ let[y,m]=(_shiftMonth||ymd(TODAY).slice(0,7)).split('-').map(Number); m+=d; if(m<1){m=12;y--;} if(m>12){m=1;y++;} _shiftMonth=`${y}-${String(m).padStart(2,'0')}`; navTo(_shiftBackPage()); }
+function shiftThisMonthAlt(){ _shiftMonth=ymd(TODAY).slice(0,7); navTo(_shiftBackPage()); }
 // ── 週期排班（每週固定模式：週日~週六各排什麼班）──
 // 週期排班的班別選項（動態：休 + 目前所有常用時段）
 function weeklyOpts(){ return [['off','休'], ...SHIFT_QUICK.map(([c])=>[c,c])]; }
@@ -17698,9 +17700,9 @@ async function applyWeeklyToMonth(){
   }
   showToast(`已套用：新增 ${added} 天${skipped?`，跳過 ${skipped} 天（已有排班）`:''}`);
   closeModal();
-  navTo('attendance');
+  navTo(_shiftBackPage());
 }
-function shiftThisMonth(){ _shiftMonth=ymd(TODAY).slice(0,7); navTo('attendance'); }
+function shiftThisMonth(){ _shiftMonth=ymd(TODAY).slice(0,7); navTo(_shiftBackPage()); }
 
 /* 唯讀當月排班表彈窗（2026-07-25 使用者指示）：行事曆上方「當月排班」→ 跳視窗顯示班表，
    不可編輯，所以櫃台帳號也能看。重用 sh-* 表格樣式，無 ＋/編輯 入口、不 navTo。 */
@@ -17928,12 +17930,12 @@ async function saveShift(){
   const obj={ id:id||uid('shift'), emp_id:empId, date, start_time:start, end_time:end, hours, note,
     leave_type:leave_type||null, leave_hours:leave_hours||0,
     created_by:(SESSION&&SESSION.id)||'', created_at:new Date().toISOString() };
-  try{ await dbPut('shifts',obj); showToast('已儲存排班'); closeModal(); navTo('attendance'); }
+  try{ await dbPut('shifts',obj); showToast('已儲存排班'); closeModal(); navTo(_shiftBackPage()); }
   catch(err){ showToast('儲存失敗：'+(err.message||err)); }
 }
 async function deleteShift(id){
   if(!confirm('確定刪除這筆排班？')) return;
-  try{ await dbDel('shifts',id); showToast('已刪除'); closeModal(); navTo('attendance'); }
+  try{ await dbDel('shifts',id); showToast('已刪除'); closeModal(); navTo(_shiftBackPage()); }
   catch(err){ showToast('刪除失敗：'+(err.message||err)); }
 }
 // 把 modal 當前填的時段，套用到本月所有「同星期」的日子，並記入週期模式
@@ -17980,7 +17982,7 @@ async function applyThisToWeekly(empId, dateStr){
       <div class="modal-foot" style="flex-direction:column;gap:8px;">
         <button class="btn btn-green" style="width:100%;" onclick="_doApplyWeekly(true)">全部覆蓋成 ${start}–${end}</button>
         <button class="btn btn-ghost" style="width:100%;" onclick="_doApplyWeekly(false)">只補空白日（保留現有班）</button>
-        <button class="btn btn-ghost" style="width:100%;color:var(--t3);" onclick="closeModal();navTo('attendance');">取消</button>
+        <button class="btn btn-ghost" style="width:100%;color:var(--t3);" onclick="closeModal();navTo(_shiftBackPage());">取消</button>
       </div>`);
   }
 }
@@ -18018,7 +18020,7 @@ async function _doApplyWeekly(overwrite){
   showToast(`已設為每週${wdName}：當天已存${parts.length?'，'+parts.join('、'):''}`);
   window._applyWeeklyCtx=null;
   closeModal();
-  navTo('attendance');
+  navTo(_shiftBackPage());
 }
 
 // ── 薪資彙總（管理員月結：所有教練一次看）──
