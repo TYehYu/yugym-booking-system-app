@@ -47,14 +47,14 @@ ok('空 member_id 不誤判', tkUsableBy(T,null)===false);
 console.log('真實案例：許朱同 → 陳蘭馨（限定教練課1V2 10 堂）');
 const TT={'tt-pt':{id:'tt-pt',name:'教練課',category:'私人教練'}};
 const SHARED={id:'TK-XU',member_id:'XU',shared_with:['LAN'],ticket_type_id:'tt-pt',format:'1V2',
-  sessions_total:10,sessions_remaining:4,status:'usable',expire_date:'2026-07-26',start_date:'2026-05-18'};
-const all=[SHARED];
+  sessions_total:10,sessions_remaining:4,status:'usable',expire_date:'2026-08-03',start_date:'2026-05-18'};
+const all=[SHARED];  // 2026-07-27 效期改 8/3：分配器新增「未來預約只分給效期涵蓋的票」守門（楊文華案例），過期票吃未來課的舊測資不再成立
 const usableFor=(mid)=>mkUsable(all,mid,'tt-pt','2026-07-01','私人教練',false,
   ()=>'私人教練',(t,id)=>t.ticket_type_id===id,tkUsableBy);
 ok('陳蘭馨預約時挑得到這張共享票', usableFor('LAN').length===1);
 ok('許朱同本人也挑得到',            usableFor('XU').length===1);
 ok('無關會員挑不到',                usableFor('OTHER').length===0);
-ok('過期後誰都挑不到', mkUsable(all,'LAN','tt-pt','2026-07-27','私人教練',false,
+ok('過期後誰都挑不到', mkUsable(all,'LAN','tt-pt','2026-08-04','私人教練',false,
     ()=>'私人教練',(t,id)=>t.ticket_type_id===id,tkUsableBy).length===0);
 ok('堂數用完挑不到', mkUsable([Object.assign({},SHARED,{sessions_remaining:0})],'LAN','tt-pt','2026-07-01',
     '私人教練',false,()=>'私人教練',(t,id)=>t.ticket_type_id===id,tkUsableBy).length===0);

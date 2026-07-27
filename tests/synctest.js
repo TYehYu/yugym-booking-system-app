@@ -159,5 +159,18 @@ ok('友善票種不混入教練課系', alloc(
   [{id:'p1',date:'2026-07-27',start_time:'09:30',ticket_type_id:'tt-pt',format:'1V2',status:'booked'}],
   typeMap3).byBooking['p1']===undefined);
 
+/* ── 案例 8：楊文華（2026-07-27 真實案例）——未來預約不得分給過期票 ──
+   7/8 贈點（過期 7/14、剩 1）＋ 7/22 贈點（效期至 7/28、剩 2），
+   7/27 的自主訓練（無票種）必須掛在 7/22 那張，不能被排序在前、還有餘額的過期票吸走。 */
+console.log('楊文華（未來預約跳過過期票）');
+const typeMap8={'tt-self':{id:'tt-self',name:'自主訓練點數',category:'自主訓練'}};
+const a8=alloc(
+  [{id:'OLD78',ticket_type_id:'tt-self',sessions_total:2,sessions_remaining:1,start_date:'2026-07-08',expire_date:'2026-07-14'},
+   {id:'NEW722',ticket_type_id:'tt-self',sessions_total:2,sessions_remaining:2,start_date:'2026-07-22',expire_date:'2026-07-28'}],
+  [{id:'sb1',date:'2026-07-27',start_time:'10:00',category:'自主訓練',status:'booked',ticket_id:null}],
+  typeMap8);
+ok('★ 7/27 自主訓練掛 7/22 新票（跳過過期的 7/8 票）', a8.byBooking['sb1']==='NEW722', a8.byBooking['sb1']);
+ok('過期票沒有吸到未來預約', !(a8.inferred['OLD78']||[]).length);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

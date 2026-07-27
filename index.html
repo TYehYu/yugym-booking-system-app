@@ -5717,8 +5717,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.0921';
-const APP_VERSION_LABEL='v260727.0921';
+const APP_VERSION='260727.0932';
+const APP_VERSION_LABEL='v260727.0932';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8595,9 +8595,12 @@ function allocBookingsToTickets(tickets,bookings,typeMap){
       usedCap[tks[i].id]++; alloc(tks[i],b);
     } };
   const fillBooked=(tks,bks)=>{ for(const b of bks){
+      // 效期守門（2026-07-27 楊文華案例）：未來預約只能分給「效期涵蓋預約日」的票——
+      // 否則會被排序在前、還有餘額的過期票吸走（他 7/27 的課被塞給 7/8 過期票）。
+      const okDate=x=>!x.expire_date || String(x.expire_date).slice(0,10)>=(b.date||'');
       // 優先：帳面還有剩餘的票（rem − 已分配的未來課 > 0）；退路：容量制
-      let t=tks.find(x=>x.sessions_remaining!=null && (x.sessions_remaining-bkAssigned[x.id])>0 && usedCap[x.id]<cap[x.id]);
-      if(!t) t=tks.find(x=>usedCap[x.id]<cap[x.id]);
+      let t=tks.find(x=>okDate(x) && x.sessions_remaining!=null && (x.sessions_remaining-bkAssigned[x.id])>0 && usedCap[x.id]<cap[x.id]);
+      if(!t) t=tks.find(x=>okDate(x) && usedCap[x.id]<cap[x.id]);
       if(!t) continue;
       usedCap[t.id]++; bkAssigned[t.id]++; alloc(t,b);
     } };
