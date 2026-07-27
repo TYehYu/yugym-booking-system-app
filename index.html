@@ -5774,8 +5774,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1520';
-const APP_VERSION_LABEL='v260727.1520';
+const APP_VERSION='260727.1523';
+const APP_VERSION_LABEL='v260727.1523';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19831,9 +19831,9 @@ function ppHeaderHtml(){
   /* 2026-07-21 介面簡化：表頭空欄位不顯示（—退場），補資料改由對應區塊「＋ 補充」 */
   const mv=(l,v,fid)=>v?`<div class="pp-meta-i${fid?' pp-f-click':''}"${fid?` onclick="ppEditFocus('${fid}')"`:''}><span class="pp-meta-l">${l}</span><span class="pp-meta-v">${v}</span></div>`:'';
   // 一律顯示版（2026-07-25 使用者指示：會員頂部欄位不管有沒有填都要顯示）——空值顯示佔位、可點擊補
-  const mvA=(l,v,fid,ph)=>`<div class="pp-meta-i${fid?' pp-f-click':''}"${fid?` onclick="ppEditFocus('${fid}')"`:''}><span class="pp-meta-l">${l}</span><span class="pp-meta-v">${v||`<span style="color:var(--t3);">${ph||'未設定'}</span>`}</span></div>`;
+  const mvA=(l,v,fid,ph)=>`<div class="pp-meta-i${fid?' pp-f-click':''}"${fid?` onclick="ppInlineEdit(event,'${fid}')"`:''}><span class="pp-meta-l">${l}</span><span class="pp-meta-v">${v||`<span style="color:var(--t3);">${ph||'未設定'}</span>`}</span></div>`;   /* 2026-07-27 使用者指示：點了直接原地編輯，不開視窗 */
   // 會員（2026-07-25 使用者指示）：頂部只放 電話／主教練／生日(選填)／LINE 開關
-  const bdayItem = `<div class="pp-meta-i pp-f-click" onclick="ppEditFocus('birthday')"><span class="pp-meta-l">生日</span><span class="pp-meta-v">${r.birthday||'<span style="color:var(--t3);">選填</span>'}</span></div>`;
+  const bdayItem = `<div class="pp-meta-i pp-f-click" onclick="ppInlineEdit(event,'birthday')"><span class="pp-meta-l">生日</span><span class="pp-meta-v">${r.birthday||'<span style="color:var(--t3);">選填</span>'}</span></div>`;
   const lineItem = (()=>{
     if(!r.line_user_id) return `<div class="pp-meta-i"><span class="pp-meta-l">LINE</span><span class="pp-meta-v" style="color:var(--t3);">未綁定</span></div>`;
     const on = r.line_notify!==false;
@@ -19903,6 +19903,46 @@ function ppFieldView(f){
 }
 // 點欄位直接編輯（2026-07-21 使用者指示：改「彈跳視窗」編輯該欄位所屬區塊，不再整頁切編輯；
 // 右上「編輯」按鈕保留整頁編輯供大量欄位情境）
+/* 會員表頭原地編輯（2026-07-27 使用者指示）：點欄位直接換成輸入元件、改完即存，
+   不再開區塊視窗。支援 生日(date)/主教練(select)/Email/LINE ID(text)；電話＝登入帳號唯讀。 */
+function ppInlineEdit(ev,fid){
+  try{ ev.stopPropagation(); }catch(_){}
+  if(PP.kind!=='member' || PP.editing){ return ppEditFocus(fid); }
+  if(fid==='phone'){ showToast('電話＝登入帳號，如需變更請洽管理員'); return; }
+  const item=ev.currentTarget;
+  if(!item || item.querySelector('input,select')) return;   // 已在編輯中
+  const v=item.querySelector('.pp-meta-v'); if(!v) return;
+  const r=PP.rec||{};
+  let el;
+  if(fid==='birthday'){ el=document.createElement('input'); el.type='date'; el.value=r.birthday||''; }
+  else if(fid==='default_coach_id'){
+    el=document.createElement('select');
+    el.innerHTML=(PP.ctx.coachOpts||[['','—']]).map(o=>`<option value="${o[0]}"${(r.default_coach_id||'')===o[0]?' selected':''}>${o[1]||'—'}</option>`).join('');
+  }
+  else if(fid==='email'){ el=document.createElement('input'); el.type='email'; el.value=r.email||''; el.placeholder='name@example.com'; }
+  else if(fid==='line_id'){ el=document.createElement('input'); el.type='text'; el.value=r.line_id||''; }
+  else return ppEditFocus(fid);   // 其他欄位維持原編輯路徑
+  el.style.cssText='font-size:13px;padding:5px 9px;max-width:180px;';
+  let saved=false;
+  const save=async()=>{
+    if(saved) return; saved=true;
+    const nv=el.value||null;
+    if((r[fid]||null)===nv){ ppRenderBody(); return; }   // 沒改 → 還原
+    try{
+      const rec=await dbGet('members',PP.id);
+      rec[fid]=nv;
+      await dbPut('members',rec);
+      PP.rec=rec;
+      showToast('已更新');
+    }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+    ppRenderBody();
+  };
+  el.addEventListener('change',save);
+  el.addEventListener('blur',save);
+  el.addEventListener('keydown',e=>{ if(e.key==='Enter') save(); if(e.key==='Escape'){ saved=true; ppRenderBody(); } });
+  v.replaceWith(el);
+  el.focus();
+}
 function ppEditFocus(fid){
   if(PP.editing){   // 已在整頁編輯模式：維持原聚焦行為
     setTimeout(()=>{
