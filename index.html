@@ -5776,8 +5776,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1535';
-const APP_VERSION_LABEL='v260727.1535';
+const APP_VERSION='260727.1537';
+const APP_VERSION_LABEL='v260727.1537';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19846,9 +19846,11 @@ function ppHeaderHtml(){
     if(r.need_duty)t.push('值班'); if(r.can_substitute)t.push('代課'); if(r.need_punch)t.push('打卡');
     return t.length?`<div class="pp-meta-i"><span class="pp-meta-l">身份</span><span class="pp-meta-v">${t.map(x=>`<span class="tag tag-ok" style="margin-right:4px;font-size:10.5px;">${x}</span>`).join('')}</span></div>`:'';
   })() : '';
+  const ecItem = isM ? (()=>{ const v=[r.emergency_name,r.emergency_relation?`（${r.emergency_relation}）`:'',r.emergency_phone?`　${fmtPhone(r.emergency_phone)}`:''].join('');
+    return `<div class="pp-meta-i pp-f-click" onclick="ppEmergencyEdit(event)"><span class="pp-meta-l">緊急聯絡人</span><span class="pp-meta-v">${v||'<span style="color:var(--t3);">＋ 設定</span>'}</span></div>`; })() : '';
   const meta = isM
     ? mvA('電話',fmtPhone(r.phone),'phone','未填') + mvA('主教練', PP.ctx.coachMap?(PP.ctx.coachMap[r.default_coach_id]||''):'','default_coach_id','＋ 指定')
-      + bdayItem + lineItem
+      + bdayItem + ecItem + lineItem
     : mv('電話',fmtPhone(r.phone),'phone') + mv('對外名稱', r.name_en?r.name_en.toUpperCase():'','name_en')
       + mv('職稱', r.job_title,'job_title') + mv('到職日', r.hire_date,'hire_date')
       + mv('Email', r.email,'email') + empChips;
@@ -19941,6 +19943,32 @@ function ppInlineEdit(ev,fid){
   el.addEventListener('keydown',e=>{ if(e.key==='Enter') save(); if(e.key==='Escape'){ saved=true; ppRenderBody(); } });
   v.replaceWith(el);
   el.focus();
+}
+/* 緊急聯絡人編輯小視窗（2026-07-27 使用者指示：會員端可自行更新；員工幫改亦同路徑） */
+function ppEmergencyEdit(ev){
+  try{ ev.stopPropagation(); }catch(_){}
+  const r=PP.rec||{};
+  showModal(`<div class="modal-title">緊急聯絡人</div>
+    <div class="form-row"><label>姓名</label><input id="ec-name" value="${(r.emergency_name||'').replace(/"/g,'&quot;')}" placeholder="例：王媽媽"></div>
+    <div class="form-2col">
+      <div class="form-row"><label>關係</label><input id="ec-rel" value="${(r.emergency_relation||'').replace(/"/g,'&quot;')}" placeholder="例：配偶"></div>
+      <div class="form-row"><label>電話</label><input id="ec-phone" type="tel" value="${(r.emergency_phone||'').replace(/"/g,'&quot;')}" placeholder="0912345678"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="ppEmergencySave()">儲存</button>
+    </div>`);
+}
+async function ppEmergencySave(){
+  try{
+    const rec=await dbGet('members',PP.id);
+    rec.emergency_name=(document.getElementById('ec-name').value||'').trim()||null;
+    rec.emergency_relation=(document.getElementById('ec-rel').value||'').trim()||null;
+    rec.emergency_phone=(document.getElementById('ec-phone').value||'').trim()||null;
+    await dbPut('members',rec);
+    PP.rec=rec; showToast('已更新');
+  }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+  closeModal(); ppRenderBody();
 }
 /* 主教練挑選小視窗（2026-07-27 使用者指示：按鈕名單） */
 function ppPickCoach(){
