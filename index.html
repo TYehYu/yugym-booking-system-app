@@ -5774,8 +5774,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1527';
-const APP_VERSION_LABEL='v260727.1527';
+const APP_VERSION='260727.1533';
+const APP_VERSION_LABEL='v260727.1533';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19912,10 +19912,7 @@ function ppInlineEdit(ev,fid){
   const r=PP.rec||{};
   let el;
   if(fid==='birthday'){ el=document.createElement('input'); el.type='date'; el.value=r.birthday||''; }
-  else if(fid==='default_coach_id'){
-    el=document.createElement('select');
-    el.innerHTML=(PP.ctx.coachOpts||[['','—']]).map(o=>`<option value="${o[0]}"${(r.default_coach_id||'')===o[0]?' selected':''}>${o[1]||'—'}</option>`).join('');
-  }
+  else if(fid==='default_coach_id'){ ppPickCoach(); return; }   // 2026-07-27 使用者指示：跳小視窗按鈕名單
   else if(fid==='email'){ el=document.createElement('input'); el.type='email'; el.value=r.email||''; el.placeholder='name@example.com'; }
   else if(fid==='line_id'){ el=document.createElement('input'); el.type='text'; el.value=r.line_id||''; }
   else return ppEditFocus(fid);   // 其他欄位維持原編輯路徑
@@ -19939,6 +19936,26 @@ function ppInlineEdit(ev,fid){
   el.addEventListener('keydown',e=>{ if(e.key==='Enter') save(); if(e.key==='Escape'){ saved=true; ppRenderBody(); } });
   v.replaceWith(el);
   el.focus();
+}
+/* 主教練挑選小視窗（2026-07-27 使用者指示：按鈕名單） */
+function ppPickCoach(){
+  const r=PP.rec||{};
+  const opts=(PP.ctx.coachOpts||[]).filter(o=>o[0]!=='');
+  showModal(`<div class="modal-title">指定主教練</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 0 6px;">
+      <button class="dw-pick" style="${!r.default_coach_id?'background:var(--green);color:#fff;border-color:var(--green);':''}" onclick="ppSetCoach('')">不指定</button>
+      ${opts.map(o=>`<button class="dw-pick" style="${r.default_coach_id===o[0]?'background:var(--green);color:#fff;border-color:var(--green);':''}" onclick="ppSetCoach('${o[0]}')">${o[1]}</button>`).join('')}
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
+}
+async function ppSetCoach(cid){
+  try{
+    const rec=await dbGet('members',PP.id);
+    rec.default_coach_id=cid||null;
+    await dbPut('members',rec);
+    PP.rec=rec; showToast('已更新');
+  }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+  closeModal(); ppRenderBody();
 }
 function ppEditFocus(fid){
   if(PP.editing){   // 已在整頁編輯模式：維持原聚焦行為
@@ -20062,22 +20079,51 @@ function ppRecCard(icon, title, sub, num, onclick){
     ${num?`<span class="pp-rec-n">${num}</span>`:`<span class="pp-rec-arrow">${PP_ICON.arrow}</span>`}
   </button>`;
 }
+function ppShowRecord(kind){ PP.recView=kind; ppRenderBody(); }
+function ppRecordBack(){ PP.recView=null; ppRenderBody(); }
 function ppRecordHtml(){
   const id=PP.id, c=PP.ctx;
   if(PP.kind==='member'){
     // Member Workspace：與 Employee 相同，改成 Dashboard 摘要卡 → ppScopeGo 進管理員視角頁
+    /* 行內展開（2026-07-27 使用者指示）：點卡片直接在本區展開內容＋左上返回，不另開視窗 */
+    if(PP.recView){
+      const back=`<div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" onclick="ppRecordBack()">‹ 返回</button></div>`;
+      const _st={usable:'可用',used_up:'已用畢',expired:'已過期',refunded:'已退費'};
+      if(PP.recView==='tickets'){
+        const rows=(c.myTk||[]).slice().sort((a,b)=>String(b.purchase_date||'').localeCompare(String(a.purchase_date||'')))
+          .map(t=>`<tr><td>${t.plan_name||'票券'}</td><td style="text-align:right;font-family:var(--num);"><b>${t.sessions_remaining??'—'}</b>/${t.sessions_total??'—'}</td><td>${fmtExpire(t.expire_date,t)}</td><td>${_st[t.status]||t.status||'—'}</td></tr>`).join('');
+        return `<div class="pp-card">${back}<div class="pp-card-t">票券（${(c.myTk||[]).length}）</div>
+          ${rows?`<table class="mtk-table"><thead><tr><th>方案</th><th style="text-align:right;">剩餘/總堂</th><th>效期</th><th>狀態</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="pp-card-tip">尚無票券</div>'}</div>`;
+      }
+      if(PP.recView==='bookings'){
+        const stName=s=>({booked:'已預約',checked_in:'已簽到',completed:'已完成',cancelled:'已取消',no_show:'未到'})[s]||s;
+        const rows=(c.myBk||[]).slice().sort((a,b)=>((b.date||'')+(b.start_time||'')).localeCompare((a.date||'')+(a.start_time||'')))
+          .slice(0,80).map(b=>`<tr><td style="white-space:nowrap;">${(b.date||'').slice(5).replace('-','/')}</td><td>${b.start_time||''}</td><td>${b.category||''}</td><td>${c.coachMap[b.substitute_coach_id||b.coach_id]||'—'}</td><td>${stName(b.status)}</td></tr>`).join('');
+        return `<div class="pp-card">${back}<div class="pp-card-t">預約紀錄（${c.bkCount||0}）</div>
+          ${rows?`<table class="mtk-table"><thead><tr><th>日期</th><th>時間</th><th>課程</th><th>教練</th><th>狀態</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="pp-card-tip">尚無預約</div>'}
+          ${(c.bkCount||0)>80?'<div class="pp-card-tip" style="margin-top:8px;">僅顯示最近 80 筆</div>':''}</div>`;
+      }
+      if(PP.recView==='pay'){
+        const rows=(c.myPc||[]).slice().sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))
+          .map(p=>{ const payLabel={cash:'現金',transfer:'匯款',card:'刷卡'}[p.payment_method]||p.payment_method||'—';
+            const dt=(p.created_at)?new Date(new Date(p.created_at).getTime()+8*3600000).toISOString().slice(0,10):'—';
+            return `<tr><td style="white-space:nowrap;">${dt}</td><td>${p.plan_name||'—'}</td><td style="text-align:right;font-weight:700;color:var(--green);">$${(Number(p.deal_amount)||0).toLocaleString()}</td><td>${payLabel}</td></tr>`; }).join('');
+        return `<div class="pp-card">${back}<div class="pp-card-t">交易紀錄（${c.pcCount||0}）</div>
+          ${rows?`<table class="mtk-table"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right;">金額</th><th>方式</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="pp-card-tip">尚無交易</div>'}</div>`;
+      }
+      return `<div class="pp-card">${back}<div class="pp-card-t">訓練紀錄</div><div class="pp-card-tip">功能開發中，敬請期待。</div></div>`;
+    }
     return `<div class="pp-card">
       <div class="pp-card-t">活動紀錄</div>
-      <div class="pp-card-tip">此處僅顯示摘要，點「查看全部」進入完整功能頁。</div>
+      <div class="pp-card-tip">點卡片直接在此展開內容。</div>
       <div class="pp-dash">
-        <!-- 2026-07-21 使用者指示：名片內的紀錄入口一律「視窗顯示」，不再跳整頁 -->
         ${ppDashCard('ticket','票券',
-          (c.tkLeft!=null?`${c.tkLeft}<small>堂可用</small>`:''), '持有票券與剩餘堂數', `ppOpenTickets('${id}')`)}
+          (c.tkLeft!=null?`${c.tkLeft}<small>堂可用</small>`:''), '持有票券與剩餘堂數', `ppShowRecord('tickets')`)}
         ${ppDashCard('calendar','預約紀錄',
-          (c.bkCount!=null?`${c.bkCount}<small>筆</small>`:''), '歷史與未來預約', `ppOpenRecords('${id}')`)}
-        ${ppDashCard('dumbbell','訓練紀錄','', '課堂訓練紀錄', `ppOpenTraining('${id}')`)}
+          (c.bkCount!=null?`${c.bkCount}<small>筆</small>`:''), '歷史與未來預約', `ppShowRecord('bookings')`)}
+        ${ppDashCard('dumbbell','訓練紀錄','', '課堂訓練紀錄', `ppShowRecord('training')`)}
         ${ppDashCard('money','交易',
-          (c.pcCount!=null?`${c.pcCount}<small>筆</small>`:''), '付款／退款／發票', `ppOpenRecords('${id}')`)}
+          (c.pcCount!=null?`${c.pcCount}<small>筆</small>`:''), '付款／退款／發票', `ppShowRecord('pay')`)}
       </div>
     </div>`;
   }
@@ -20364,7 +20410,7 @@ async function openPersonProfile(kind, id, backPage){
   const table = kind==='member' ? 'members' : 'coaches';
   const rec = await dbGet(table, id);
   if(!rec){ showToast('找不到資料'); return; }
-  Object.assign(PP,{kind, id, rec, draft:null, tab:'basic', editing:false, ctx:{},
+  Object.assign(PP,{kind, id, rec, draft:null, tab:'basic', editing:false, ctx:{}, recView:null,
     back:backPage||CUR_PAGE, backGroup:(typeof CUR_GROUP!=='undefined'?CUR_GROUP:null)});
   await ppLoadCtx();
   if(isMobileLayout()) ppOpenSheet(); else ppOpenPage();
@@ -20389,6 +20435,8 @@ async function ppLoadCtx(){
       .reduce((s,t)=>s+Math.max(0,(Number(t.sessions_remaining)||0)),0);
     c.bkCount=myBk.length;
     c.pcCount=(purchases||[]).filter(p=>p.member_id===PP.id).length;
+    // 行內展開用明細（2026-07-27：活動紀錄不再開新視窗）
+    c.myTk=myTk; c.myBk=myBk; c.myPc=(purchases||[]).filter(p=>p.member_id===PP.id);
     c.tierOpts=[['','—']].concat(Object.entries(TIER_DEFS).map(([k,d])=>[k,d.label]));
   }else{
     c.bankOpts=HR_BANKS.slice();
