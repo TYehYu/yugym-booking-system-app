@@ -5774,8 +5774,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1450';
-const APP_VERSION_LABEL='v260727.1450';
+const APP_VERSION='260727.1512';
+const APP_VERSION_LABEL='v260727.1512';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6197,12 +6197,25 @@ async function ensureLiff(){
   if(typeof liff==='undefined') throw new Error('LIFF SDK 未載入');
   if(!_liffReady){ await liff.init({liffId:cfg.lineLiffId}); _liffReady=true; }
 }
+/* LINE 登入按鈕忙碌狀態（2026-07-27 使用者指示：顯示處理中，以免像當機） */
+function setLineBtnBusy(on){
+  const btn=document.getElementById('line-login-btn');
+  if(!btn) return;
+  if(on){
+    if(!btn.dataset.orig) btn.dataset.orig=btn.innerHTML;
+    btn.disabled=true; btn.style.opacity='.75';
+    btn.innerHTML='<span style="width:17px;height:17px;border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;animation:pglSpin .8s linear infinite;"></span> 處理中，請稍候…';
+  }else{
+    btn.disabled=false; btn.style.opacity='1';
+    if(btn.dataset.orig) btn.innerHTML=btn.dataset.orig;
+  }
+}
 async function lineLoginStart(){
   const btn=document.getElementById('line-login-btn');
   const err=document.getElementById('login-err');
   const showErr=m=>{ if(err){err.textContent=m;err.style.display='block';} };
   try{
-    if(btn){btn.disabled=true;btn.style.opacity='.6';}
+    setLineBtnBusy(true);
     await ensureLiff();
     if(!liff.isLoggedIn()){
       try{ sessionStorage.setItem('_lineLoginPending','1'); }catch(_){}
@@ -6210,13 +6223,14 @@ async function lineLoginStart(){
       return;
     }
     await lineExchange();
-  }catch(e){ showErr('LINE 登入失敗：'+(e.message||e)); if(btn){btn.disabled=false;btn.style.opacity='1';} }
+  }catch(e){ showErr('LINE 登入失敗：'+(e.message||e)); setLineBtnBusy(false); }
 }
 // 取 LINE ID token → 換 Supabase session → 進 app 或引導申辦
 async function lineExchange(){
   const cfg=window.YUGYM_CONFIG||{};
   const err=document.getElementById('login-err');
-  const showErr=m=>{ if(err){err.textContent=m;err.style.display='block';} };
+  const showErr=m=>{ if(err){err.textContent=m;err.style.display='block';} setLineBtnBusy(false); };
+  setLineBtnBusy(true);   // 交換過程 1–3 秒，顯示處理中避免像當機（2026-07-27）
   const idToken=liff.getIDToken();
   if(!idToken){ showErr('取不到 LINE 身分，請重試'); return; }
   const r=await fetch(cfg.url+'/functions/v1/line-member-auth',{
