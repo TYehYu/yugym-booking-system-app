@@ -5774,8 +5774,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1429';
-const APP_VERSION_LABEL='v260727.1429';
+const APP_VERSION='260727.1433';
+const APP_VERSION_LABEL='v260727.1433';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9788,8 +9788,17 @@ PAGES.g_dashboard=async function(){
   /* Hero 時鐘計時器已移除（2026-07-20）：大時鐘移到頂部導覽列（#mc-topclock），
      由全域 _clockTimer（startClock 的每秒 tick）順帶更新，本頁不再自管計時器。 */
   // ── SWR 收尾（2026-07-23）：這次若用了過期快取 → 背景重抓，有異動才悄悄重繪一次
-  window._dashSig=dashDataSig(date,bookings,attendance,purchases,mtickets,apps,punchReqs);
+  window._dashSig=dashDataSig(date,bookings,attendance,purchases,mtickets,apps,punchReqs,memberReqs);
   if(_dashUsedStale) dashRevalidate(_dashTabs.map(x=>x.t));
+  /* 首頁定時輪詢（2026-07-27 使用者回報：會員 LINE 申辦後首頁沒即時跳審核通知）——
+     每 30 秒背景重抓一次，簽章有變才悄悄重繪；離開首頁自動停。 */
+  if(!window._dashPollTimer){
+    const _pollKey=CUR_PAGE;
+    window._dashPollTimer=setInterval(()=>{
+      if(CUR_PAGE!==_pollKey){ clearInterval(window._dashPollTimer); window._dashPollTimer=null; return; }
+      dashRevalidate(_dashTabs.map(x=>x.t));
+    },30000);
+  }
 };
 /* 待辦三列的名單視窗（2026-07-23 使用者指示）：點列先跳視窗確認名單 ——
    會員名單（今日簽約／本月即將降級）點一位就進該會員資料；未打卡名單只顯示、不可點。
@@ -9874,7 +9883,7 @@ async function memberReqReview(id, approve){
 /* 首頁資料簽章（2026-07-23）：只取畫面上會變的東西 —— 當日預約（狀態/時間/教練/點名）、
    當日打卡、當日售票、待審件數，加上各表總筆數與本月簽到數（抽獎名單用）。
    簽章相同就不重繪，免得背景重抓打斷使用者操作。 */
-function dashDataSig(date,bookings,attendance,purchases,mtickets,apps,punchReqs){
+function dashDataSig(date,bookings,attendance,purchases,mtickets,apps,punchReqs,memberReqs){
   const ym=(date||'').slice(0,7);
   const j=a=>a.sort().join('|');
   const bkDay=j((bookings||[]).filter(b=>b.date===date).map(b=>
@@ -9885,8 +9894,9 @@ function dashDataSig(date,bookings,attendance,purchases,mtickets,apps,punchReqs)
   const tkDay=j((mtickets||[]).filter(t=>t.purchase_date===date).map(t=>
     [t.id,t.amount_paid||0,t.status||''].join('~')));
   const mChk=(bookings||[]).filter(b=>(b.date||'').slice(0,7)===ym&&(b.status==='checked_in'||b.status==='completed')).length;
+  const reqPend=j((memberReqs||[]).filter(r=>r.status==='pending').map(r=>r.id));   // 綁定申請（2026-07-27：新申請要即時跳審核通知）
   return [(bookings||[]).length,(purchases||[]).length,(mtickets||[]).length,
-    (apps||[]).length,(punchReqs||[]).length,mChk,bkDay,attDay,tkDay].join('#');
+    (apps||[]).length,(punchReqs||[]).length,mChk,bkDay,attDay,tkDay,reqPend].join('#');
 }
 /* 首頁背景重抓（SWR 的 revalidate 段）：把表抓成最新，簽章有變、且使用者還在首頁、
    沒開彈窗、沒展開課卡快捷鈕時，才悄悄重繪一次（navTo 會保留捲動位置）。 */
@@ -9899,10 +9909,10 @@ async function dashRevalidate(tabs){
     if(CUR_PAGE!==key) return;                            // 已切到別頁
     if(document.getElementById('modal-bg')) return;       // 彈窗開著不打斷
     if(document.querySelector('.cal-ev-active')) return;  // 課卡快捷鈕/團課名單展開中
-    const[bk,att,pu,mt,ap,pr]=await Promise.all(
-      ['bookings','attendance','purchases','member_tickets','purchase_applications','punch_requests']
+    const[bk,att,pu,mt,ap,pr,mlr]=await Promise.all(
+      ['bookings','attendance','purchases','member_tickets','purchase_applications','punch_requests','member_link_requests']
       .map(t=>dbGetAll(t).catch(()=>[])));
-    if(dashDataSig(viewDate,bk,att,pu,mt,ap,pr)===window._dashSig) return;   // 沒變 → 不重繪
+    if(dashDataSig(viewDate,bk,att,pu,mt,ap,pr,mlr)===window._dashSig) return;   // 沒變 → 不重繪
     navTo(CUR_PAGE);
   }catch(_){ }
   finally{ window._dashRevalidating=false; }
@@ -15693,9 +15703,22 @@ async function saveBookingTime(id){
   const vbk={...b, substitute_coach_id:nsub, venue_unit:nVenue};
   const verr=await validateBooking(vbk,nd,nt,ndur);
   if(verr){showToast(verr);return false;}   // 驗證失敗：讓呼叫端保留編輯狀態
+  const _oldDur=Number(b.duration)||60;
   b.date=nd;b.start_time=nt;b.duration=ndur;b.substitute_coach_id=nsub;
   b.venue_unit = vbk.venue_unit || nVenue; // validateBooking 重新分配後的場地單位
   await dbPut('bookings',b);
+  /* 自主訓練時長增減＝點數增減（2026-07-27 使用者定案：120 分＝2 點）。
+     只處理有綁票券的預約（新系統路徑）；匯入未綁票的請至會員票券手動調整。 */
+  if(b.category==='自主訓練' && b.ticket_id){
+    const diff=Math.max(1,Math.round((Number(ndur)||60)/60)) - Math.max(1,Math.round(_oldDur/60));
+    if(diff!==0){
+      try{
+        if(diff>0){ for(let k=0;k<diff;k++){ const tk=await dbGet('member_tickets',b.ticket_id); if(tk) await deductTicket(tk,b.id,SESSION.id); } }
+        else { for(let k=0;k<-diff;k++) await refundTicket(b.ticket_id,b.id,SESSION.id); }
+        showToast(diff>0?`時長增加，已加扣 ${diff} 點`:`時長縮短，已退回 ${-diff} 點`);
+      }catch(e){ console.error('時長點數調整失敗:',e); showToast('點數調整失敗，請至會員票券手動處理'); }
+    }
+  }
   closeModal();showToast('已更新預約');navTo(CUR_PAGE);
   return true;
 }
