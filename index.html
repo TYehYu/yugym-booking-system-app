@@ -5776,8 +5776,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1543';
-const APP_VERSION_LABEL='v260727.1543';
+const APP_VERSION='260727.1544';
+const APP_VERSION_LABEL='v260727.1544';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20117,7 +20117,7 @@ function ppRecCard(icon, title, sub, num, onclick){
     ${num?`<span class="pp-rec-n">${num}</span>`:`<span class="pp-rec-arrow">${PP_ICON.arrow}</span>`}
   </button>`;
 }
-function ppShowRecord(kind){ PP.recView=kind; ppRenderBody(); }
+function ppShowRecord(kind){ PP.recView=kind; if(kind==='bookings'){ const td=new Date(TODAY); window._memMonth={y:td.getFullYear(),m:td.getMonth()}; } ppRenderBody(); }
 function ppTkTab(k){ PP.tkTab=k; ppRenderBody(); }
 function ppRecordBack(){ PP.recView=null; ppRenderBody(); }
 function ppRecordHtml(){
@@ -20165,12 +20165,13 @@ function ppRecordHtml(){
           ${list.length?list.map(cardOf).join(''):'<div class="pp-card-tip">此分類尚無票券</div>'}</div>`;
       }
       if(PP.recView==='bookings'){
-        const stName=s=>({booked:'已預約',checked_in:'已簽到',completed:'已完成',cancelled:'已取消',no_show:'未到'})[s]||s;
-        const rows=(c.myBk||[]).slice().sort((a,b)=>((b.date||'')+(b.start_time||'')).localeCompare((a.date||'')+(a.start_time||'')))
-          .slice(0,80).map(b=>`<tr><td style="white-space:nowrap;">${(b.date||'').slice(5).replace('-','/')}</td><td>${b.start_time||''}</td><td>${b.category||''}</td><td>${c.coachMap[b.substitute_coach_id||b.coach_id]||'—'}</td><td>${stName(b.status)}</td></tr>`).join('');
+        /* 2026-07-27 使用者指示：預約紀錄改月曆呈現（教練課/團體課/自主訓練依課程色標示），
+           重用既有 renderMemberWeek 月曆（可翻月、今天高亮）。 */
+        window._memWeekData={member_id:PP.id, bookings:(c.myBk||[]).filter(b=>b.status!=='cancelled'), coachMap:c.coachMap||{}};
+        if(!window._memMonth){ const td=new Date(TODAY); window._memMonth={y:td.getFullYear(),m:td.getMonth()}; }
+        setTimeout(()=>{ try{ renderMemberWeek(); }catch(_){} },0);
         return `<div class="pp-card">${back}<div class="pp-card-t">預約紀錄（${c.bkCount||0}）</div>
-          ${rows?`<table class="mtk-table"><thead><tr><th>日期</th><th>時間</th><th>課程</th><th>教練</th><th>狀態</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="pp-card-tip">尚無預約</div>'}
-          ${(c.bkCount||0)>80?'<div class="pp-card-tip" style="margin-top:8px;">僅顯示最近 80 筆</div>':''}</div>`;
+          <div id="mem-week-cal"></div></div>`;
       }
       if(PP.recView==='pay'){
         const rows=(c.myPc||[]).slice().sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))
