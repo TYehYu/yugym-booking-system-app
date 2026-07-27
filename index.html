@@ -5774,8 +5774,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1433';
-const APP_VERSION_LABEL='v260727.1433';
+const APP_VERSION='260727.1436';
+const APP_VERSION_LABEL='v260727.1436';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11634,6 +11634,20 @@ function _calSigTk(arr){
   }
   return arr.length+':'+h;
 }
+/* 行事曆 30 秒輪詢（2026-07-27 使用者回報：A 電腦簽到、B 電腦課卡沒跟著更新）——
+   強制重抓 bookings/member_tickets 後走既有 _calRevalidate 簽章比對，有變才悄悄重繪；
+   離開行事曆自動停。 */
+function startCalPoll(){
+  if(window._calPollTimer) return;
+  const _k=CUR_PAGE;
+  window._calPollTimer=setInterval(async()=>{
+    if(CUR_PAGE!==_k){ clearInterval(window._calPollTimer); window._calPollTimer=null; return; }
+    try{
+      await Promise.all(['bookings','member_tickets'].map(t=>dbGetAll(t,{fresh:true}).catch(()=>null)));
+      _calRevalidate();
+    }catch(_){}
+  },30000);
+}
 async function _calRevalidate(){
   if(window._calRevalidating) return;
   window._calRevalidating=true;
@@ -12279,6 +12293,7 @@ window.addEventListener('resize',()=>{ if(document.querySelector('.cal-wrap')) f
 
 PAGES.calendar=async function(){
   window._calMode='admin';
+  startCalPoll();   // 跨裝置即時性：30 秒背景校驗（2026-07-27）
   /* 🐛 既有 bug（2026-07-23 追查換頁卡頓時發現）：原本這裡直接 window._calStepping=false，
      但 renderCalendar 在本函式**之後**才讀這個旗標 → 7/17 的「切週沿用靜態快取」從未生效，
      每次翻頁都重抓全部 5 張表。改為「先取值再清旗標」，以 opts.stepping 傳給 renderCalendar。 */
