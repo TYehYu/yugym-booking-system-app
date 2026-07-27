@@ -5029,6 +5029,20 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   gap:8px;padding:14px 4px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;color:var(--text);}
 .mc-quick3 .mc-q3 svg{width:20px;height:20px;color:var(--green);}
 .mc-quick3 .mc-q3:hover{background:#ECF1E3;}
+/* ── 教練值班時段週曆（2026-07-27）：7 天 × 早/午/晚，格子放教練 chips ── */
+.dw-grid{display:grid;grid-template-columns:44px repeat(7,minmax(96px,1fr));gap:6px;min-width:760px;}
+.dw-h{text-align:center;font-size:12.5px;font-weight:700;color:var(--t2);padding:6px 0;line-height:1.5;}
+.dw-h span{font-family:var(--num);font-size:11.5px;color:var(--t3);font-weight:600;}
+.dw-h.today{color:var(--green);}
+.dw-seg{display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--gold-d);}
+.dw-cell{min-height:64px;background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:6px;display:flex;flex-wrap:wrap;gap:4px;align-content:flex-start;}
+.dw-cell.dw-edit{cursor:pointer;transition:border-color .13s;}
+.dw-cell.dw-edit:hover{border-color:var(--green);}
+.dw-chip{background:#fff;border:1px solid var(--bd);border-radius:999px;padding:2px 8px;font-size:11.5px;font-weight:700;color:var(--green);white-space:nowrap;}
+.dw-none{color:var(--t3);font-size:12px;margin:auto;}
+.dw-pick{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--bd);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;user-select:none;}
+.dw-pick:has(input:checked){background:var(--green);color:#fff;border-color:var(--green);}
+.dw-pick input{accent-color:var(--gold);}
 .mc-g5-left .cal-side{padding:12px 12px 10px;}
 /* 首頁左欄月曆上方的「當月排班」鈕（2026-07-26 使用者指示） */
 .mc-cal-topbtn{display:flex;justify-content:flex-end;margin-bottom:8px;}
@@ -5725,8 +5739,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1109';
-const APP_VERSION_LABEL='v260727.1109';
+const APP_VERSION='260727.1114';
+const APP_VERSION_LABEL='v260727.1114';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6716,6 +6730,7 @@ const ADMIN_NAV2=[
   ]},
   {key:'g_supervisor', icon:'🗓️', label:'店長', sup:true, sub:[
     {label:'排班表', page:'coach_shifts'},
+    {label:'教練值班時段', page:'coach_duty_week'},
   ]},
 ];
 // 舊群組 key → 新群組（navTo/外部呼叫點相容用；勿刪，全檔多處仍傳舊 key）
@@ -6844,6 +6859,8 @@ function buildNav(){
     // 排班表（可編輯）：店長（is_manager）與主管（is_supervisor）——2026-07-27 權限分層
     if((SESSION.is_supervisor||SESSION.is_manager) && !items.find(n=>n.key==='coach_shifts'))
       items.push({key:'coach_shifts',label:'排班表'});
+    if((SESSION.is_supervisor||SESSION.is_manager) && !items.find(n=>n.key==='coach_duty_week'))
+      items.push({key:'coach_duty_week',label:'教練值班時段'});
   }else if(SESSION.role==='front_desk'){
     items = isMobile ? MOBILE_FRONTDESK_NAV : NAV.front_desk;
   }else{
@@ -28304,6 +28321,67 @@ function salaryShowDay(ds, bookings, shifts, memMap, dayResult){
       </div>`).join('')}
     ${duty>0?`<div class="cdash-dayitem"><span class="cdash-dt">值班</span><span class="cdash-dn">${duty%1===0?duty:duty.toFixed(1)} 小時</span></div>`:''}
   </div>`;
+}
+
+/* ════════ 教練值班時段（2026-07-27 使用者指示）════════
+   週曆 7 天 × 早/午/晚三段，店長點格子勾選該時段可排課的教練——
+   讓排課時一眼知道每個時段有哪些教練可安排。
+   資料表 duty_slots（一格一列，id=DS-<日期>-<時段>）；
+   讀＝全體員工、寫＝管理員/櫃台/店長/主管（RLS ds_manager）。 */
+let _dwStart=null;   // 檢視週的週一
+PAGES.coach_duty_week=async function(){
+  if(!_dwStart){ const d=new Date(TODAY); _dwStart=addDays(d,-((d.getDay()+6)%7)); }
+  const [coaches,slots]=await Promise.all([dbGetAll('coaches'),dbGetAll('duty_slots').catch(()=>[])]);
+  const cMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)||c.name]));
+  const canEdit = SESSION.role==='admin'||SESSION.role==='front_desk'||SESSION.is_manager||SESSION.is_supervisor;
+  const SEGS=[['am','早'],['pm','午'],['eve','晚']];
+  const days=[...Array(7)].map((_,i)=>addDays(_dwStart,i));
+  const byKey={}; (slots||[]).forEach(s=>{ byKey[(s.date||'')+'|'+s.segment]=s; });
+  const cell=(ds,seg)=>{
+    const s=byKey[ds+'|'+seg];
+    const ids=(s&&Array.isArray(s.coach_ids))?s.coach_ids:[];
+    const chips=ids.map(id=>`<span class="dw-chip">${cMap[id]||'—'}</span>`).join('');
+    return `<div class="dw-cell${canEdit?' dw-edit':''}" ${canEdit?`onclick="dwEditCell('${ds}','${seg}')"`:''}>${chips||'<span class="dw-none">—</span>'}</div>`;
+  };
+  const header=days.map(d=>{ const ds=ymd(d);
+    return `<div class="dw-h${ds===ymd(TODAY)?' today':''}">週${WD[d.getDay()]}<br><span>${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join('');
+  const rows=SEGS.map(([k,label])=>`<div class="dw-seg">${label}</div>`+days.map(d=>cell(ymd(d),k)).join('')).join('');
+  C.innerHTML=head('DUTY','教練值班時段', canEdit?'點格子勾選該時段可排課的教練':'各時段可排課教練')+
+  `<div class="card ops-datebar" style="margin-bottom:14px;">
+    <button class="btn btn-ghost btn-sm" onclick="dwWeek(-7)">‹ 上週</button>
+    <div class="ops-date-mid"><div class="ops-date-main">${_dwStart.getFullYear()}/${String(_dwStart.getMonth()+1).padStart(2,'0')}/${String(_dwStart.getDate()).padStart(2,'0')} 起</div>
+      <button class="ops-date-back" onclick="dwThisWeek()">回本週</button></div>
+    <button class="btn btn-ghost btn-sm" onclick="dwWeek(7)">下週 ›</button>
+  </div>
+  <div class="card" style="padding:14px;overflow-x:auto;">
+    <div class="dw-grid"><div></div>${header}${rows}</div>
+  </div>`;
+};
+function dwWeek(n){ _dwStart=addDays(_dwStart,n); navTo('coach_duty_week', CUR_GROUP); }
+function dwThisWeek(){ const d=new Date(TODAY); _dwStart=addDays(d,-((d.getDay()+6)%7)); navTo('coach_duty_week', CUR_GROUP); }
+async function dwEditCell(ds,seg){
+  const [coaches,slots]=await Promise.all([dbGetAll('coaches'),dbGetAll('duty_slots').catch(()=>[])]);
+  const list=coaches.filter(c=>isCoachable(c)&&c.status!=='inactive'&&c.invite_status!=='pending');
+  const cur=(slots||[]).find(s=>s.date===ds&&s.segment===seg);
+  const ids=(cur&&Array.isArray(cur.coach_ids))?cur.coach_ids:[];
+  const segName={am:'早',pm:'午',eve:'晚'}[seg];
+  const d=parseYmd(ds);
+  showModal(`<div class="modal-title">${ds.slice(5).replace('-','/')}（週${WD[d.getDay()]}）・${segName}班教練</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 0 6px;">
+      ${list.map(c=>`<label class="dw-pick"><input type="checkbox" value="${c.id}" ${ids.includes(c.id)?'checked':''}><span>${coachDisp(c)||c.name}</span></label>`).join('')}
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="dwSaveCell('${ds}','${seg}')">儲存</button>
+    </div>`);
+}
+async function dwSaveCell(ds,seg){
+  const ids=[...document.querySelectorAll('.dw-pick input:checked')].map(x=>x.value);
+  try{
+    await dbPut('duty_slots',{id:`DS-${ds}-${seg}`,date:ds,segment:seg,coach_ids:ids,
+      updated_by:SESSION.id,updated_at:new Date().toISOString()});
+    closeModal(); showToast('已儲存'); navTo('coach_duty_week', CUR_GROUP);
+  }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
 }
 
 /* ════════ 會員:通知中心 ════════ */
