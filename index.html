@@ -5774,8 +5774,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1438';
-const APP_VERSION_LABEL='v260727.1438';
+const APP_VERSION='260727.1440';
+const APP_VERSION_LABEL='v260727.1440';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9488,6 +9488,7 @@ PAGES.g_dashboard=async function(){
      右＝KPI 大數字（圖示＋文字＋大數字、去背）；營收帶發票拆分副標 */
   const _g5=greetingMsg('staff', SESSION.name);
   const kpiStrip=`<div class="mc-kpistrip">
+    <button class="lp-iconbtn" title="更新畫面" style="flex:none;align-self:flex-start;" onclick="dashManualRefresh()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 10.5 4.5"/><path d="M20 4v7h-7"/></svg></button>
     <div class="kpi-greet"><div class="kg-t">${_g5.lead}${_g5.name?('，'+_g5.name):''}</div>${_g5.msg?`<div class="kg-s">${_g5.msg}</div>`:''}</div>
     ${[[ICONS.cal,'教練課',`${_ptN}<small>堂</small>`,''],
        [OPS_TODO_IC.calendar,'團體課',`${_grpN}<small>堂</small>`,''],
@@ -9794,9 +9795,9 @@ PAGES.g_dashboard=async function(){
      每 30 秒背景重抓一次，簽章有變才悄悄重繪；離開首頁自動停。 */
   if(!window._dashPollTimer){
     const _pollKey=CUR_PAGE;
-    window._dashPollTimer=setInterval(()=>{
+    window._dashPollTimer=setInterval(async()=>{
       if(CUR_PAGE!==_pollKey){ clearInterval(window._dashPollTimer); window._dashPollTimer=null; return; }
-      dashRevalidate(_dashTabs.map(x=>x.t));
+      if(await remoteSigChanged()) dashRevalidate(_dashTabs.map(x=>x.t));   // 簽章變了才重抓（省流量）
     },30000);
   }
 };
@@ -9897,6 +9898,25 @@ function dashDataSig(date,bookings,attendance,purchases,mtickets,apps,punchReqs,
   const reqPend=j((memberReqs||[]).filter(r=>r.status==='pending').map(r=>r.id));   // 綁定申請（2026-07-27：新申請要即時跳審核通知）
   return [(bookings||[]).length,(purchases||[]).length,(mtickets||[]).length,
     (apps||[]).length,(punchReqs||[]).length,mChk,bkDay,attDay,tkDay,reqPend].join('#');
+}
+/* 首頁手動更新（2026-07-27 使用者指示）：立即清快取重抓整頁 */
+async function dashManualRefresh(){
+  window._remoteSig=null;
+  dbCacheClear();
+  showToast('已更新');
+  navTo(CUR_PAGE);
+}
+/* 遠端變更簽章（2026-07-27 流量優化）：輪詢只打一支回傳幾十 bytes 的 RPC，
+   簽章變了才做完整重抓——閒置時幾乎不耗流量（原本每 30 秒抓整張預約+票券表）。 */
+async function remoteSigChanged(){
+  try{
+    const {data,error}=await sb.rpc('fn_change_sig');
+    if(error||!data) return false;
+    if(window._remoteSig==null){ window._remoteSig=data; return false; }   // 首次只記錄
+    if(window._remoteSig===data) return false;
+    window._remoteSig=data;
+    return true;
+  }catch(_){ return false; }
 }
 /* 首頁背景重抓（SWR 的 revalidate 段）：把表抓成最新，簽章有變、且使用者還在首頁、
    沒開彈窗、沒展開課卡快捷鈕時，才悄悄重繪一次（navTo 會保留捲動位置）。 */
@@ -10716,7 +10736,7 @@ PAGES.dashboard=async function(){
   <!-- ═══ 手機版：營運速覽 ═══ -->
   <div class="mobile-only">
     <div class="card" style="padding:4px 14px;">
-      <div style="font-size:11.5px;color:var(--t3);letter-spacing:0.08em;padding:12px 0 4px;font-weight:600;">${_dashRange==='month'?'本月':'今日'}總覽</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0 4px;"><span style="font-size:11.5px;color:var(--t3);letter-spacing:0.08em;font-weight:600;">${_dashRange==='month'?'本月':'今日'}總覽</span><button class="lp-iconbtn" title="更新畫面" onclick="dashManualRefresh()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 10.5 4.5"/><path d="M20 4v7h-7"/></svg></button></div>
       ${profit!=null?`
       <div class="ov-row" style="align-items:flex-start;">
         <span class="ov-label">本月利潤
@@ -11643,6 +11663,7 @@ function startCalPoll(){
   window._calPollTimer=setInterval(async()=>{
     if(CUR_PAGE!==_k){ clearInterval(window._calPollTimer); window._calPollTimer=null; return; }
     try{
+      if(!(await remoteSigChanged())) return;   // 簽章變了才重抓（省流量）
       await Promise.all(['bookings','member_tickets'].map(t=>dbGetAll(t,{fresh:true}).catch(()=>null)));
       _calRevalidate();
     }catch(_){}
