@@ -5776,8 +5776,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1539';
-const APP_VERSION_LABEL='v260727.1539';
+const APP_VERSION='260727.1543';
+const APP_VERSION_LABEL='v260727.1543';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20118,6 +20118,7 @@ function ppRecCard(icon, title, sub, num, onclick){
   </button>`;
 }
 function ppShowRecord(kind){ PP.recView=kind; ppRenderBody(); }
+function ppTkTab(k){ PP.tkTab=k; ppRenderBody(); }
 function ppRecordBack(){ PP.recView=null; ppRenderBody(); }
 function ppRecordHtml(){
   const id=PP.id, c=PP.ctx;
@@ -20128,10 +20129,40 @@ function ppRecordHtml(){
       const back=`<div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" onclick="ppRecordBack()">‹ 返回</button></div>`;
       const _st={usable:'可用',used_up:'已用畢',expired:'已過期',refunded:'已退費'};
       if(PP.recView==='tickets'){
-        const rows=(c.myTk||[]).slice().sort((a,b)=>String(b.purchase_date||'').localeCompare(String(a.purchase_date||'')))
-          .map(t=>`<tr><td>${t.plan_name||'票券'}</td><td style="text-align:right;font-family:var(--num);"><b>${t.sessions_remaining??'—'}</b>/${t.sessions_total??'—'}</td><td>${fmtExpire(t.expire_date,t)}</td><td>${_st[t.status]||t.status||'—'}</td></tr>`).join('');
-        return `<div class="pp-card">${back}<div class="pp-card-t">票券（${(c.myTk||[]).length}）</div>
-          ${rows?`<table class="mtk-table"><thead><tr><th>方案</th><th style="text-align:right;">剩餘/總堂</th><th>效期</th><th>狀態</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="pp-card-tip">尚無票券</div>'}</div>`;
+        /* 2026-07-27 使用者指示：跟會員端一樣的圓形卡＋上方 教練課/團體課/自主訓練/折抵券 分頁 */
+        const typeMap=c.typeMap||{};
+        const cls=t=>{ const tt=typeMap[t.ticket_type_id]||{};
+          if(/折抵/.test(t.plan_name||'')||/折抵/.test(tt.name||'')) return 'voucher';
+          if((tt.category||'')==='自主訓練') return 'self';
+          if((tt.category||'')==='團體課'||/團/.test(t.plan_name||'')) return 'group';
+          return 'pt'; };
+        const tab=PP.tkTab||'pt';
+        const alloc=allocBookingsToTickets(c.myTk||[], (c.myBk||[]).filter(b=>b.status!=='cancelled'), typeMap);
+        const list=(c.myTk||[]).filter(t=>cls(t)===tab)
+          .sort((a,b)=>String(b.purchase_date||'').localeCompare(String(a.purchase_date||'')));
+        const cardOf=t=>{
+          const bks=(alloc.byTicket[t.id]||[]);
+          const att=bks.filter(b=>b.status==='checked_in'||b.status==='completed');
+          const direct=bks.filter(b=>b.ticket_id===t.id);
+          const dAtt=direct.filter(b=>b.status==='checked_in'||b.status==='completed').length;
+          const dBooked=direct.filter(b=>b.status==='booked').length;
+          const total=Number(t.sessions_total)||0, rem=t.sessions_remaining;
+          let used;
+          if(rem==null) used=Math.max(dAtt, att.length);
+          else { const face=Math.max(0, total-(Number(rem)||0)-dBooked); used=Math.max(dAtt, face); }
+          used=Math.min(used,total);
+          const stTag={used_up:'已用畢',expired:'已過期',refunded:'已退費'}[t.status]||'';
+          return `<div class="bkd-tkcard" style="margin-bottom:10px;">
+            <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${t.plan_name||'票券'}</span>
+              <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
+            <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null)}</div>
+            <div style="font-size:11px;color:var(--t3);margin-top:8px;">效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}</div>
+          </div>`; };
+        const tabs=[['pt','教練課'],['group','團體課'],['self','自主訓練'],['voucher','折抵券']]
+          .map(([k,l])=>`<button class="tkf-btn${tab===k?' active':''}" onclick="ppTkTab('${k}')">${l}</button>`).join('');
+        return `<div class="pp-card">${back}<div class="pp-card-t">票券</div>
+          <div class="tkfilter" style="margin:8px 0 12px;">${tabs}</div>
+          ${list.length?list.map(cardOf).join(''):'<div class="pp-card-tip">此分類尚無票券</div>'}</div>`;
       }
       if(PP.recView==='bookings'){
         const stName=s=>({booked:'已預約',checked_in:'已簽到',completed:'已完成',cancelled:'已取消',no_show:'未到'})[s]||s;
@@ -20457,8 +20488,10 @@ async function openPersonProfile(kind, id, backPage){
 async function ppLoadCtx(){
   const c=PP.ctx;
   if(PP.kind==='member'){
-    const [coaches,tickets,bookings,purchases]=await Promise.all([
-      dbGetAll('coaches'), dbGetAll('member_tickets'), dbGetAll('bookings'), dbGetAll('purchases').catch(()=>[])]);
+    const [coaches,tickets,bookings,purchases,ttypes]=await Promise.all([
+      dbGetAll('coaches'), dbGetAll('member_tickets'), dbGetAll('bookings'), dbGetAll('purchases').catch(()=>[]),
+      dbGetAll('ticket_types').catch(()=>[])]);
+    c.typeMap=Object.fromEntries((ttypes||[]).map(t=>[t.id,t]));
     c.coachMap=Object.fromEntries(coaches.map(x=>[x.id,coachDisp(x)]));
     c.coachOpts=[['','—']].concat(coaches.filter(isCoachable).map(x=>[x.id,coachDisp(x)]));
     /* 2026-07-21：名片等級章改用 effTier（自動制）——bookings 本來就載了，順手建快取，
