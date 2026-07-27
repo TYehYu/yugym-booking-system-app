@@ -5774,8 +5774,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1441';
-const APP_VERSION_LABEL='v260727.1441';
+const APP_VERSION='260727.1450';
+const APP_VERSION_LABEL='v260727.1450';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11135,6 +11135,8 @@ async function renderCalendar(opts){
         memName = names.length===0 ? '團體課（未排名單）'
           : names.length<=2 ? names.join('、')
           : `${names[0]} 等 ${names.length} 人`;
+      }else if(b.pending_contract && !b.member_id){
+        memName=(b.trial_name||'客戶')+'（待簽約）';   // 待簽約卡位（2026-07-27）
       }else{
         memName=memMap[b.member_id]||'—';
       }
@@ -13898,6 +13900,10 @@ async function bkStep2(){
       </button>
       ${coach_id?'<div style="font-size:11px;color:#1f6f3f;margin-top:5px;">★ 標示為該教練的指定會員</div>':''}</div>
     <div class="form-row" style="margin-bottom:10px;"><div id="bk-ticket-info" style="font-size:12px;color:var(--t2);padding:10px 12px;background:var(--card2);border-radius:9px;">選擇會員後，將自動帶入可用票券。</div></div>
+    <div class="form-row" style="margin-bottom:10px;">
+      <button type="button" class="btn btn-ghost" style="width:100%;" onclick="openPendingHold()">🕒 待簽約卡位（客人尚未購票）</button>
+      <div style="font-size:11px;color:var(--t3);margin-top:5px;">先佔住時段與場地；客人簽約付款後，在課卡明細按「轉正式預約」。</div>
+    </div>
     <label class="switch-row" style="margin-bottom:6px;"><span class="switch"><input type="checkbox" id="bk-recurring" onchange="toggleRecurring()"><span class="switch-slider"></span></span><span class="switch-label">連續預約（依星期重複建立多筆）</span></label>
     <div id="bk-recurring-box" style="display:none;border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--card2);">
       <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">勾選要重複的星期（以所選日期為起點）：</div>
@@ -14113,6 +14119,74 @@ function confirmVenueOverflow(vbk){
     window._venueOvYes=()=>{ resolve(true); };
     window._venueOvNo=()=>{ resolve(false); };
   });
+}
+/* ── 待簽約卡位（2026-07-27 使用者指示）──
+   客人尚未購票：以姓名先佔住時段與場地（pending_contract=true、member_id null）；
+   簽約付款後在課卡明細「轉正式預約」→ 綁會員與票券、扣 1 堂。 */
+function openPendingHold(){
+  const w=_bkWizard||{};
+  if(!w.t){ showToast('請先完成步驟 1'); return; }
+  showModal(`<div class="modal-title">待簽約卡位</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">
+      ${w.date}　${w.time}　${w.t.name||w.t.category}<br>先佔住時段與場地；簽約付款後轉正式預約。</div>
+    <div class="form-row"><label>客戶姓名 *</label><input id="ph-name" placeholder="輸入姓名" autocomplete="off"></div>
+    <div class="form-row"><label>手機（選填）</label><input id="ph-phone" placeholder="0912345678" autocomplete="off"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="submitPendingHold()">建立卡位</button>
+    </div>`);
+}
+async function submitPendingHold(){
+ try{
+  const{type_id,t,coach_id,date,time}=_bkWizard||{};
+  const name=(document.getElementById('ph-name').value||'').trim();
+  if(!name){ showToast('請填寫客戶姓名'); return; }
+  const phone=(document.getElementById('ph-phone').value||'').trim()||null;
+  const vbk={id:null,coach_id,category:t.category,ticket_type_id:null};   // 無票 → 不做限時票檢查
+  const verr=await validateBooking(vbk,date,time,60);
+  if(verr){ showToast(verr); return; }
+  const bk={id:uid('BK'),member_id:null,trial_name:name,trial_phone:phone,
+    coach_id,ticket_id:null,ticket_type_id:type_id,category:t.category,format:t.format||null,
+    date,start_time:time,duration:60,status:'booked',recurring:false,
+    pending_contract:true, venue_unit:vbk.venue_unit||null,
+    created_by:SESSION.id,created_at:new Date().toISOString()};
+  await dbPut('bookings',bk);
+  closeModal(); showToast('已卡位（待簽約）');
+  navTo(CUR_PAGE);
+ }catch(e){ showToast('卡位失敗：'+(e&&e.message?e.message:e)); }
+}
+async function openConvertPending(id){
+  const b=await dbGet('bookings',id);
+  if(!b||!b.pending_contract){ showToast('這筆不是待簽約卡位'); return; }
+  const members=(await dbGetAll('members')).filter(m=>m.status==='active');
+  window._cpMembers=members; window._cpBid=id;
+  showModal(`<div class="modal-title">轉正式預約 · ${b.trial_name||''}</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:10px;">請先完成「銷售」（建會員＋賣票），再回這裡選擇會員；轉換後會從其可用票券扣 1 堂。</div>
+    <div class="form-row"><label>選擇會員</label>
+      <input id="cp-q" class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:8px;" placeholder="搜尋姓名或手機…" oninput="cpRenderList()" autocomplete="off">
+      <div id="cp-list" class="ms-list" style="max-height:280px;border:1px solid var(--bd);border-radius:10px;padding:6px;"></div></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button></div>`);
+  cpRenderList();
+}
+function cpRenderList(){
+  const q=((document.getElementById('cp-q')||{}).value||'').trim().toLowerCase();
+  const host=document.getElementById('cp-list'); if(!host) return;
+  const list=(window._cpMembers||[]).filter(m=>!q||(m.name||'').toLowerCase().includes(q)||(m.phone||'').includes(q)).slice(0,30);
+  host.innerHTML=list.map(m=>`<button class="btn btn-ghost" style="width:100%;text-align:left;margin-bottom:6px;" onclick="doConvertPending('${m.id}')">${m.name}　<span style="color:var(--t3);font-size:12px;">${fmtPhone(m.phone)}</span></button>`).join('')||'<div style="padding:14px;color:var(--t3);font-size:13px;">找不到會員</div>';
+}
+async function doConvertPending(memberId){
+ try{
+  const id=window._cpBid; const b=await dbGet('bookings',id);
+  if(!b||!b.pending_contract){ showToast('這筆不是待簽約卡位'); return; }
+  const tk=await findUsableTicket(memberId,b.ticket_type_id,b.date);
+  if(!tk){ showToast('該會員沒有此課程的可用票券，請先完成銷售'); return; }
+  b.member_id=memberId; b.ticket_id=tk.id; b.pending_contract=false;
+  b.trial_name=null; b.trial_phone=null;
+  await dbPut('bookings',b);
+  await deductTicket(tk,b.id,SESSION.id);
+  closeModal(); showToast('已轉正式預約並扣 1 堂');
+  navTo(CUR_PAGE);
+ }catch(e){ showToast('轉換失敗：'+(e&&e.message?e.message:e)); }
 }
 async function submitBooking(){
  try{
@@ -15182,7 +15256,9 @@ async function openBookingDetail(id){
     // 場租的使用人存 trial_name（不綁會員；2026-07-26 使用者回報「魚大東」沒顯示）
     memberLine=`<div><span style="color:var(--t2);">使用人</span>　${b.trial_name||'—'}</div>`;
   }else{
-    memberLine=`<div><span style="color:var(--t2);">會員</span>　${mem?(isMemberView?`<span style="font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'—'}</div>`;
+    memberLine = (b.pending_contract&&!b.member_id)
+      ? `<div><span style="color:var(--t2);">客戶</span>　${b.trial_name||'—'}　<span class="tag tag-warn" style="font-size:10.5px;">待簽約</span>${b.trial_phone?`　<span style="color:var(--t3);font-size:12px;">${b.trial_phone}</span>`:''}</div>`
+      : `<div><span style="color:var(--t2);">會員</span>　${mem?(isMemberView?`<span style="font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'—'}</div>`;
   }
   showModal(`<div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <span>預約明細</span>
@@ -15254,6 +15330,7 @@ async function openBookingDetail(id){
       ${editable?`<button class="btn btn-ghost" onclick="saveBookingTime('${b.id}')">儲存變更</button>`:''}
       ${/* 補課券只屬於團課的四週方案（2026-07-26 使用者指示：教練課沒有補課機制，取消的教練課不出現此鈕） */''}
       ${(SESSION.role==='admin'||SESSION.role==='front_desk')&&b.status==='cancelled'&&b.member_id&&b.category==='小班肌力'&&!b.makeup_granted?`<button class="btn btn-gold" onclick="confirmMakeup('${b.id}')">補發補課券</button>`:''}
+      ${(b.pending_contract&&!b.member_id&&b.status==='booked'&&(SESSION.role==='admin'||SESSION.role==='front_desk'))?`<button class="btn btn-green" onclick="openConvertPending('${b.id}')">已簽約，轉正式預約</button>`:''}
       ${canCancel&&ownByCoach?`<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`:''}
     </div>`);
 }
