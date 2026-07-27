@@ -30,9 +30,11 @@ const typeMap={
 // renderTkCard 用最小替身：把 id 與 extraBtn 吐出來，方便斷言
 const renderTkCard=(t,extraBtn)=>`<card id="${t.id}">${extraBtn||''}</card>`;
 
-const build=new Function('ymd','TODAY','SESSION','myBookings','typeMap','renderTkCard',
+const build=new Function('ymd','TODAY','SESSION','myBookings','typeMap','renderTkCard','isDeskLike',
   `${catSrc}\n${bukSrc}\nreturn {tkCategoryOf,tkListHtml,_isExpiredTk,_isHistoryTk};`);
-const {tkCategoryOf,tkListHtml,_isExpiredTk}=build(ymd,TODAY,SESSION,myBookings,typeMap,renderTkCard);
+// isDeskLike 替身：與 index.html 相同語意（admin/front_desk/店長）
+const mkDeskLike=s=>()=>!!(s&&(s.role==='admin'||s.role==='front_desk'||(s.role==='coach'&&s.is_manager)));
+const {tkCategoryOf,tkListHtml,_isExpiredTk}=build(ymd,TODAY,SESSION,myBookings,typeMap,renderTkCard,mkDeskLike(SESSION));
 
 // ── 正式庫真實資料（朱庭箴 MEM-69D90A949008 的三張自主訓練點數）──
 const SELF=[
@@ -87,7 +89,7 @@ ok('用畢票沒有重新啟用按鈕',            courseHtml.indexOf("openReact
 ok('用畢票在歷史紀錄',                  courseHtml.indexOf('C-usedup')>courseHtml.indexOf('歷史紀錄'));
 
 console.log('權限');
-const S2=build(ymd,TODAY,{role:'coach'},myBookings,typeMap,renderTkCard);
+const S2=build(ymd,TODAY,{role:'coach'},myBookings,typeMap,renderTkCard,mkDeskLike({role:'coach'}));
 // 註：標題「已過期（可重新啟用）」本身含「重新啟用」四字，故以 onclick 判定按鈕是否存在
 ok('教練看不到重新啟用按鈕', S2.tkListHtml(COURSE,true).indexOf('openReactivateTicket')<0);
 ok('教練仍看得到過期區塊',   S2.tkListHtml(COURSE,true).indexOf('已過期（可重新啟用）')>=0);

@@ -5776,8 +5776,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.2157';
-const APP_VERSION_LABEL='v260727.2157';
+const APP_VERSION='260727.2211';
+const APP_VERSION_LABEL='v260727.2211';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6575,6 +6575,9 @@ function applyDeepLink(){
   }
   return false;
 }
+/* 店長＝櫃台級權限（2026-07-27 使用者定案：桌機同櫃台介面＋店長導覽列）。
+   前端所有「後台人員」判斷統一走這裡；資料庫層 is_staff_desk() 已同步納入店長。 */
+function isDeskLike(){ return !!(window.SESSION && (isDeskLike()||(SESSION.role==='coach'&&SESSION.is_manager))); }
 function enterApp(){
   document.getElementById('login-screen').classList.add('hidden');
   const app=document.getElementById('app-screen');
@@ -6593,14 +6596,14 @@ function enterApp(){
     renderGreetBar();
   }catch(_){} })();
   // 管理員 / 櫃台 → 桌機放大版面（會員/教練用手機，維持原樣）
-  app.classList.toggle('desktop-wide', (SESSION.role==='admin'||SESSION.role==='front_desk') && !isMobileLayout());
+  app.classList.toggle('desktop-wide', (isDeskLike()) && !isMobileLayout());
   app.classList.toggle('role-member', SESSION.role==='member'); app.classList.toggle('role-coach', SESSION.role==='coach'); app.classList.toggle('role-admin', SESSION.role==='admin'); // 會員端：手機頂部顯示姓名取代天氣
   document.getElementById('tb-role').textContent=ROLE_LABEL[SESSION.role];
   const tv=document.getElementById('tb-ver'); if(tv) tv.textContent=APP_VERSION;
   setAcctHead(SESSION.name, ROLE_LABEL[SESSION.role], SESSION.gender);
   const pvBtn=document.getElementById('acct-preview'); if(pvBtn) pvBtn.style.display = isRealAdmin()?'':'none';
   // 個人資料入口：員工（教練/管理員/櫃台）顯示，會員不顯示
-  const profBtn=document.getElementById('acct-profile'); if(profBtn) profBtn.style.display = (SESSION.role==='member'||SESSION.role==='coach'||SESSION.role==='admin'||SESSION.role==='front_desk')?'':'none';
+  const profBtn=document.getElementById('acct-profile'); if(profBtn) profBtn.style.display = (SESSION.role==='member'||SESSION.role==='coach'||isDeskLike())?'':'none';
   // 補打卡選單項：需打卡員工才顯示（會員/不需打卡者隱藏）
   (async()=>{
     const item=document.getElementById('acct-punchfix'); if(!item)return;
@@ -6620,13 +6623,13 @@ function enterApp(){
   buildNav();
   const isMobile=isMobileLayout();
   // 桌機｜管理員/櫃台 → 兩層導覽：開啟第一個主選單
-  if(!isMobile && (SESSION.role==='admin'||SESSION.role==='front_desk')){
+  if(!isMobile && (isDeskLike())){
     const groups=visibleGroups();
     if(groups[0]) selectGroup(groups[0].key);
   }else{
     let firstItems;
     if(SESSION.role==='admin') firstItems = isMobile?MOBILE_ADMIN_NAV:NAV.admin;
-    else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:NAV.coach;
+    else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:(SESSION.is_manager?NAV.front_desk:NAV.coach);   /* 店長桌機同櫃台落點 */
     else if(SESSION.role==='front_desk') firstItems = isMobile?MOBILE_FRONTDESK_NAV:NAV.front_desk;
     else firstItems = NAV[SESSION.role]||[];
     if(!applyDeepLink() && firstItems[0]) navTo(firstItems[0].key);
@@ -6649,19 +6652,19 @@ function switchPreviewRole(role){
   else sessionStorage.setItem('previewRole',role);
   closeModal();
   const app=document.getElementById('app-screen');
-  app.classList.toggle('desktop-wide', (SESSION.role==='admin'||SESSION.role==='front_desk') && !isMobileLayout());
+  app.classList.toggle('desktop-wide', (isDeskLike()) && !isMobileLayout());
   app.classList.toggle('role-member', SESSION.role==='member'); app.classList.toggle('role-coach', SESSION.role==='coach'); app.classList.toggle('role-admin', SESSION.role==='admin');
   document.getElementById('tb-role').textContent=ROLE_LABEL[SESSION.role];
   buildNav();
   if(typeof renderLeftSidebar==='function') renderLeftSidebar(); // 角色切換後重建 Sidebar 帳號卡（身分/選單掛載跟著更新）
   const isMobile=isMobileLayout();
-  if(!isMobile && (SESSION.role==='admin'||SESSION.role==='front_desk')){
+  if(!isMobile && (isDeskLike())){
     const groups=visibleGroups();
     if(groups[0]) selectGroup(groups[0].key);
   }else{
     let firstItems;
     if(SESSION.role==='admin') firstItems = isMobile?MOBILE_ADMIN_NAV:NAV.admin;
-    else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:NAV.coach;
+    else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:(SESSION.is_manager?NAV.front_desk:NAV.coach);   /* 店長桌機同櫃台落點 */
     else if(SESSION.role==='front_desk') firstItems = isMobile?MOBILE_FRONTDESK_NAV:NAV.front_desk;
     else firstItems = NAV[SESSION.role]||[];
     if(!applyDeepLink() && firstItems[0]) navTo(firstItems[0].key);
@@ -6896,7 +6899,7 @@ function buildNav(){
   const nav=document.getElementById('sidenav');
   const isMobile=isMobileLayout();
   // 桌機｜管理員/櫃台 → 新版兩層導覽（上方主選單 + 頁內左側次選單）
-  if(!isMobile && (SESSION.role==='admin'||SESSION.role==='front_desk')){
+  if(!isMobile && (isDeskLike())){
     buildNav2();
     return;
   }
@@ -6928,11 +6931,13 @@ let CUR_GROUP=null;
 // 取得目前角色可見的主選單（櫃台只看 fd:true 的）
 function visibleGroups(){
   const isFd=SESSION.role==='front_desk';
+  const isMgr=SESSION.role==='coach'&&!!SESSION.is_manager;   // 店長教練：桌機同櫃台＋店長列（2026-07-27）
+  const limited=isFd||isMgr;
   return ADMIN_NAV2
-    .filter(g=>!g.sup || !!SESSION.is_manager || SESSION.role==='admin')   // 店長群組：僅店長/管理員（2026-07-27 使用者指示：主管旗標只影響津貼）
-    .filter(g=>!isFd||g.fd).map(g=>{
-    if(!isFd) return g;
-    return Object.assign({},g,{sub:g.sub.filter(s=>s.fd)}); // 櫃台只看 fd 的次功能
+    .filter(g=>!g.sup || !!SESSION.is_manager || SESSION.role==='admin')   // 店長群組：僅店長/管理員
+    .filter(g=>!limited||g.fd||g.sup).map(g=>{
+    if(!limited||g.sup) return g;
+    return Object.assign({},g,{sub:g.sub.filter(s=>s.fd)}); // 櫃台/店長只看 fd 的次功能
   }).filter(g=>g.sub.length);
 }
 // 渲染上方主選單
@@ -7242,7 +7247,7 @@ function syncBottomNavActive(key){
 // - 票券審核（ticketing）：待審核購買申請數（桌機版仍有此分頁）
 async function refreshNavBadges(){
   try{
-    if(!(SESSION&&(SESSION.role==='admin'||SESSION.role==='front_desk'))) return;
+    if(!(SESSION&&(isDeskLike()))) return;
     const apps=await dbGetAll('purchase_applications').catch(()=>[]);
     const pendingCount=(apps||[]).filter(a=>a.status==='pending').length;
     setNavBadge('ticketing', pendingCount);
@@ -7325,7 +7330,7 @@ function navTo(key, gkey){
   if(typeof clearMemClock==='function') clearMemClock(); // 停掉會員首頁時鐘
   if(typeof stopDashNowTimer==='function') stopDashNowTimer(); // 停掉儀表板現在線定時器
   if(typeof stopScan==='function' && key!=='scan_checkin') stopScan(); // 離開掃描頁時關相機
-  const _isNav2 = !( isMobileLayout() ) && (SESSION.role==='admin'||SESSION.role==='front_desk') && gkey;
+  const _isNav2 = !( isMobileLayout() ) && (isDeskLike()) && gkey;
   if(_isNav2){
     document.querySelectorAll('.nav2-main').forEach(el=>el.classList.toggle('active',el.dataset.group===gkey));
   }else{
@@ -13589,7 +13594,7 @@ function handleLayoutModeChange(){
   const app=document.getElementById('app-screen');
   if(app && SESSION){
     // 重新套用寬版 class（admin/front_desk 且非手機版才用桌機寬版）
-    const wide = (SESSION.role==='admin'||SESSION.role==='front_desk') && !nowMobile;
+    const wide = (isDeskLike()) && !nowMobile;
     app.classList.toggle('desktop-wide', wide);
   }
   // 重建導覽列（手機簡易導覽 ⇄ 桌機主導覽 nav2），避免旋轉後導覽不一致
@@ -13631,7 +13636,7 @@ let _bkMembers=[];
 let _bkWizard={};   // 暫存第1頁選擇
 async function openBookingModal(){
   const[coaches,types]=await Promise.all([dbGetAll('coaches'),dbGetAll('ticket_types')]);
-  const isCoach=SESSION.role==='coach';
+  const isCoach=SESSION.role==='coach' && !SESSION.is_manager;   // 店長比照櫃台（2026-07-27）
   const isMobileBk=isMobileLayout();
   // 課程類型過濾：
   //  - 教練端：只能建「私人教練」「體驗」類（教練課/友善教練課/體驗課）；不可建自主訓練、團體課
@@ -15368,8 +15373,8 @@ async function openBookingDetail(id){
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
       ${editable?`<button class="btn btn-ghost" onclick="saveBookingTime('${b.id}')">儲存變更</button>`:''}
       ${/* 補課券只屬於團課的四週方案（2026-07-26 使用者指示：教練課沒有補課機制，取消的教練課不出現此鈕） */''}
-      ${(SESSION.role==='admin'||SESSION.role==='front_desk')&&b.status==='cancelled'&&b.member_id&&b.category==='小班肌力'&&!b.makeup_granted?`<button class="btn btn-gold" onclick="confirmMakeup('${b.id}')">補發補課券</button>`:''}
-      ${(b.pending_contract&&!b.member_id&&b.status==='booked'&&(SESSION.role==='admin'||SESSION.role==='front_desk'))?`<button class="btn btn-green" onclick="openConvertPending('${b.id}')">已簽約，轉正式預約</button>`:''}
+      ${(isDeskLike())&&b.status==='cancelled'&&b.member_id&&b.category==='小班肌力'&&!b.makeup_granted?`<button class="btn btn-gold" onclick="confirmMakeup('${b.id}')">補發補課券</button>`:''}
+      ${(b.pending_contract&&!b.member_id&&b.status==='booked'&&(isDeskLike()))?`<button class="btn btn-green" onclick="openConvertPending('${b.id}')">已簽約，轉正式預約</button>`:''}
       ${canCancel&&ownByCoach?`<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`:''}
     </div>`);
 }
@@ -16299,7 +16304,7 @@ PAGES.members=async function(){
   const tierOpts=[['','全部等級']].concat(Object.entries(TIER_DEFS).map(([k,d])=>[k,d.label]));
   const tkOpts=[['','全部票券'],['pt2','教練課剩 1-2 堂'],['pt1','教練課剩 1 堂'],['expired','無有效票券']];
   const sortOpts=[['reg','依註冊日'],['name','依姓名'],['tier','依等級'],['last','依最近上課']];
-  const canManage = SESSION.role==='admin'||SESSION.role==='front_desk';
+  const canManage = isDeskLike();
   const actionsHtml =
     (canManage?`<button class="btn btn-ghost btn-sm" onclick="navTo('purchase_review','g_member')">購買審核</button>`:'')
     + `<button class="btn btn-ghost btn-sm" onclick="openMemberRegisterLink()">申辦 QR</button>`
@@ -16548,7 +16553,7 @@ async function openMemberDetail(member_id){
       ? `<span class="tag" style="background:#eaf3ef;color:#2f6b4f;font-size:10px;margin-left:6px;" title="共用同一個堂數池，任一人上課都從這張票扣">共享・${_others.map(x=>(peerName[x]||'—')+(!_isOwner&&String(x)===String(t.member_id)?'（持有人）':'')).join('、')}</span>`
       : '';
     // 自主訓練點數與折抵券不提供共享
-    const canShare=(SESSION.role==='admin'||SESSION.role==='front_desk')&&tkCategoryOf(t)==='course';
+    const canShare=(isDeskLike())&&tkCategoryOf(t)==='course';
     return `<div class="md-tk-item"${isDim?' style="opacity:.55;"':''}>
       <div class="md-tk-top">
         <div class="md-tk-name">${t.plan_name||(ty?ty.name:'—')}<span class="tag tag-${ty?ty.color:'pt'}" style="margin-left:8px;">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span>${instTag}${shareTag}</div>
@@ -16558,7 +16563,7 @@ async function openMemberDetail(member_id){
       <div class="mck-dots2" style="margin:10px 0 12px;">${circles}</div>
       <div class="md-tk-foot">
         <span class="md-tk-meta">到期 ${fmtExpire(t.expire_date,t)}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span></span>
-        ${(inst && (t.unlocked_sessions||0)<total && (SESSION.role==='admin'||SESSION.role==='front_desk'))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
+        ${(inst && (t.unlocked_sessions||0)<total && (isDeskLike()))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
         ${canShare?`<button class="btn btn-ghost btn-sm" onclick="openTicketShare('${t.id}','${member_id}')">${_others.length?'共享設定':'設為共享'}</button>`:''}
         ${extraBtn||''}
       </div>
@@ -16575,7 +16580,7 @@ async function openMemberDetail(member_id){
   const _hasFutureBk=t=>myBookings.some(b=>b.ticket_id===t.id&&b.date>=_todayYmd2&&(b.status==='booked'||b.status==='checked_in'));
   const _isExpiredTk=t=>t.status!=='refunded'&&t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2&&(Number(t.sessions_remaining)||0)>0;
   const _isHistoryTk=t=>!_isExpiredTk(t)&&(t.status==='used_up'||t.status==='refunded'||(((Number(t.sessions_remaining)||0)<=0)&&!_hasFutureBk(t))||(t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2));
-  const _canReact=(SESSION.role==='admin'||SESSION.role==='front_desk');
+  const _canReact=(isDeskLike());
   /* allowReact：只有課程票券（教練課／友善教練課／團體課）能重新啟用。
      自主訓練點數是簽到贈送、效期 7 天的短效點數，過期即作廢，不提供重新啟用
      （2026-07-26 使用者定案）—— 故直接歸入「歷史紀錄」，不另立過期區塊。 */
@@ -19900,7 +19905,7 @@ function ppHeaderHtml(){
   // 會員（2026-07-25 使用者指示）：頂部只放 電話／主教練／生日(選填)／LINE 開關
   /* 權限（2026-07-27 使用者定案）：姓名/電話＝帳號設定不可改；主教練/生日＝櫃台端處理；
      會員端只能改 緊急聯絡人 與 LINE 通知開關 */
-  const _canBase = SESSION.role==='admin'||SESSION.role==='front_desk';
+  const _canBase = isDeskLike();
   const bdayItem = `<div class="pp-meta-i${_canBase?' pp-f-click':''}"${_canBase?` onclick="ppInlineEdit(event,'birthday')"`:''}><span class="pp-meta-l">生日</span><span class="pp-meta-v">${r.birthday||'<span style="color:var(--t3);">'+(_canBase?'選填':'未填')+'</span>'}</span></div>`;
   const lineItem = (()=>{
     if(!r.line_user_id) return `<div class="pp-meta-i"><span class="pp-meta-l">LINE</span><span class="pp-meta-v" style="color:var(--t3);">未綁定</span></div>`;
@@ -19984,7 +19989,7 @@ function ppInlineEdit(ev,fid){
   if(PP.kind!=='member' || PP.editing){ return ppEditFocus(fid); }
   if(fid==='phone'||fid==='name'){ showToast('姓名與電話為帳號設定，不可修改'); return; }
   // 主教練/生日：櫃台端處理（會員端唯讀）
-  if((fid==='default_coach_id'||fid==='birthday'||fid==='gender') && !(SESSION.role==='admin'||SESSION.role==='front_desk')){ return; }
+  if((fid==='default_coach_id'||fid==='birthday'||fid==='gender') && !(isDeskLike())){ return; }
   const item=ev.currentTarget;
   if(!item || item.querySelector('input,select')) return;   // 已在編輯中
   const v=item.querySelector('.pp-meta-v'); if(!v) return;
@@ -21925,7 +21930,7 @@ PAGES.tickets=async function(){
 
   const stOpt=(v,label)=>`<option value="${v}" ${_tkStatus===v?'selected':''}>${label}</option>`;
   (document.getElementById('tk-body')||{innerHTML:''}).innerHTML=
-  `<div class="card"><div class="card-title">票券列表 <button class="btn btn-green btn-sm" onclick="openGrantModal()">＋ 發放票券</button>${(SESSION.role==='admin'||SESSION.role==='front_desk')?`<button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="openLegacyImport()" title="自訂票券／舊系統轉入（可套用方案再微調，並指定目前期數與剩餘堂數）">自訂／轉入</button>`:''}</div>
+  `<div class="card"><div class="card-title">票券列表 <button class="btn btn-green btn-sm" onclick="openGrantModal()">＋ 發放票券</button>${(isDeskLike())?`<button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="openLegacyImport()" title="自訂票券／舊系統轉入（可套用方案再微調，並指定目前期數與剩餘堂數）">自訂／轉入</button>`:''}</div>
     <div class="tk-filter">
       <input id="tk-q" class="tk-search" placeholder="搜尋會員姓名 / 手機 / 方案名稱" value="${_tkQuery.replace(/"/g,'&quot;')}"
              oninput="clearTimeout(window._tkT);window._tkT=setTimeout(()=>tkSearch(this.value),250)">
@@ -22753,7 +22758,7 @@ async function submitGrant(){
    舊系統的「共享方案」：一張票由持有人購買，指定其他會員共用同一個堂數池。
    持有人不變（營收仍歸他），只在 shared_with 加會員 id；任一人預約都扣同一張票。 */
 async function openTicketShare(ticket_id,back_member_id){
-  if(!(SESSION.role==='admin'||SESSION.role==='front_desk')){ showToast('只有管理員或櫃台可設定共享'); return; }
+  if(!(isDeskLike())){ showToast('只有管理員或櫃台可設定共享'); return; }
   const t=await dbGet('member_tickets',ticket_id); if(!t){ showToast('找不到票券'); return; }
   const members=await dbGetAll('members');
   const nameOf=id=>{ const x=members.find(y=>y.id===id); return x?x.name:'—'; };
@@ -22829,7 +22834,7 @@ async function doSaveTicketShare(){
  }catch(e){ console.error('共享設定失敗:',e); showToast('儲存失敗：'+(e&&e.message||e)); }
 }
 async function openInstallNext(ticket_id){
-  if(!(SESSION.role==='admin'||SESSION.role==='front_desk')){ showToast('只有管理員或櫃台可開通分期'); return; }
+  if(!(isDeskLike())){ showToast('只有管理員或櫃台可開通分期'); return; }
   const t=await dbGet('member_tickets',ticket_id);
   if(!t||!t.installment||typeof t.installment!=='object'){ showToast('此票券非分期'); return; }
   const inst=t.installment;
@@ -22890,7 +22895,7 @@ async function confirmInstallNext(ticket_id){
    帳面：total=已用+新堂數、remaining=新堂數、status=usable、到期日重設；
    寫 ticket_logs（grant）＋ purchases（source:reactivate）。僅管理員/櫃台。 */
 async function openReactivateTicket(tid){
-  if(!(SESSION.role==='admin'||SESSION.role==='front_desk')){ showToast('只有管理員或櫃台可重新啟用'); return; }
+  if(!(isDeskLike())){ showToast('只有管理員或櫃台可重新啟用'); return; }
   const t=await dbGet('member_tickets',tid); if(!t){ showToast('找不到票券'); return; }
   /* 自主訓練點數（含友善自主）過期即作廢，不提供重新啟用（2026-07-26 使用者定案）。
      入口已在會員票券區隱藏，這裡再擋一次避免舊連結／誤呼叫。 */
@@ -23812,7 +23817,7 @@ async function getAttendance(empId,date){
   return all.find(a=>a.emp_id===empId && a.date===date)||null;
 }
 PAGES.attendance=async function(){
-  const isAdmin=SESSION.role==='admin'||SESSION.role==='front_desk';
+  const isAdmin=isDeskLike();
   if(isAdmin) await renderAttendanceAdmin();
   else await renderAttendanceSelf();
 };
@@ -25534,9 +25539,10 @@ async function memCancelSelf(id){
   if(!b||b.member_id!==SESSION.id){showToast('找不到預約');return;}
   if(b.category!=='自主訓練'){showToast('僅能取消自主訓練預約');return;}
   const within24 = hoursUntilStart(b) < 24;
-  const note = within24
+  const justBooked = b.created_at && (Date.now()-new Date(b.created_at).getTime())<=60*60000;   // 反悔期：預約後 1 小時內
+  const note = (within24 && !justBooked)
     ? '因開課 24 小時內取消，<b>本次恕不退回點數</b>。'
-    : '開課 24 小時前取消，將退回 1 點自主訓練票券。';
+    : '取消後將退回 1 點自主訓練票券。';
   showModal(`<div class="modal-title">取消自主訓練</div>
     <div style="font-size:13.5px;padding:6px 0 4px;">確定取消 ${b.date} ${b.start_time} 的自主訓練嗎？</div>
     <div style="font-size:12px;color:var(--t2);margin-top:6px;line-height:1.6;">${note}</div>
@@ -29087,7 +29093,7 @@ PAGES.coach_duty_week=async function(){
      資料改用 weekday（1=週一..7=週日）當鍵，id=DS-W<wd>-<seg>。 */
   const [coaches,slots]=await Promise.all([dbGetAll('coaches'),dbGetAll('duty_slots').catch(()=>[])]);
   const cMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)||c.name]));
-  const canEdit = SESSION.role==='admin'||SESSION.role==='front_desk'||SESSION.is_manager;
+  const canEdit = isDeskLike()||SESSION.is_manager;
   const SEGS=[['am','早'],['pm','午'],['eve','晚']];
   const WDS=[[1,'一'],[2,'二'],[3,'三'],[4,'四'],[5,'五'],[6,'六'],[7,'日']];
   const byKey={}; (slots||[]).forEach(s=>{ if(s.weekday) byKey[s.weekday+'|'+s.segment]=s; });
