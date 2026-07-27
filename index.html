@@ -5717,8 +5717,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.0932';
-const APP_VERSION_LABEL='v260727.0932';
+const APP_VERSION='260727.0936';
+const APP_VERSION_LABEL='v260727.0936';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11768,9 +11768,17 @@ function initCalDrag(){
     if(nd!==b.date||ntime!==b.start_time){
       const verr=await validateBooking(b,nd,ntime,b.duration);
       if(verr){ showToast(verr); navTo(CUR_PAGE); return; } // 有錯誤 → 提示並復原
-      b.date=nd; b.start_time=ntime; await dbPut('bookings',b);
-      const _sb=document.querySelector('.cal-body'); if(_sb) window._calScrollTop=_sb.scrollTop; // 保留捲動位置
-      showToast('已更新預約'); navTo(CUR_PAGE);
+      /* 2026-07-27 使用者指示：拖曳移動先跳確認視窗（原時間 → 新時間），確認才寫入。
+         先重繪讓卡片飛回原位（modal 掛在 body 上不受重繪影響）；取消＝維持原狀。 */
+      confirmCalMove(b, b.date, b.start_time, b.duration||60, nd, ntime, b.duration||60, async()=>{
+        try{
+          b.date=nd; b.start_time=ntime; await dbPut('bookings',b);
+          const _sb=document.querySelector('.cal-body'); if(_sb) window._calScrollTop=_sb.scrollTop; // 保留捲動位置
+          showToast('已更新預約');
+        }catch(err){ showToast('移動失敗：'+(err&&err.message?err.message:err)); }
+        window._calStepping=true; navTo(CUR_PAGE);
+      });
+      navTo(CUR_PAGE);
     }else navTo(CUR_PAGE);
   });
 
