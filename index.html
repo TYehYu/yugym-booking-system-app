@@ -5776,8 +5776,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1547';
-const APP_VERSION_LABEL='v260727.1547';
+const APP_VERSION='260727.1810';
+const APP_VERSION_LABEL='v260727.1810';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17923,6 +17923,47 @@ async function applyWeeklyToMonth(){
   navTo(_shiftBackPage());
 }
 function shiftThisMonth(){ _shiftMonth=ymd(TODAY).slice(0,7); navTo(_shiftBackPage()); }
+/* 複製上月班表（2026-07-27 使用者指示）：依「星期」複製每人上月最常見的班別到本月，
+   已排班的日子跳過不覆蓋；請假紀錄不複製。 */
+async function copyPrevMonthShifts(){
+  if(!_canEditShifts){ showToast('無排班編輯權限'); return; }
+  const month=_shiftMonth||ymd(TODAY).slice(0,7);
+  let [py,pm]=month.split('-').map(Number); pm-=1; if(pm<1){pm=12;py--;}
+  const prev=`${py}-${String(pm).padStart(2,'0')}`;
+  const shifts=await dbGetAll('shifts');
+  const staff=(window._shiftsStaffCache||[]);
+  const prevShifts=shifts.filter(s=>(s.date||'').slice(0,7)===prev && !s.leave_type);
+  if(!prevShifts.length){ showToast(`${prev} 沒有可複製的排班`); return; }
+  if(!confirm(`把 ${prev} 的班表複製到 ${month}？\n依「星期」複製每人上月最常見的班別；已排班的日子會跳過、不覆蓋。`)) return;
+  const [cy,cm]=month.split('-').map(Number);
+  const daysInMonth=new Date(cy,cm,0).getDate();
+  const existing=new Set(shifts.filter(s=>(s.date||'').slice(0,7)===month).map(s=>s.emp_id+'|'+s.date));
+  let added=0,skipped=0;
+  for(const e of staff){
+    const byWd={};
+    prevShifts.filter(s=>s.emp_id===e.id).forEach(s=>{
+      const d=parseYmd(s.date); if(!d) return;
+      const wd=d.getDay();
+      const key=[s.code||'',s.start_time||'',s.end_time||'',s.hours||''].join('~');
+      (byWd[wd]=byWd[wd]||{})[key]=(byWd[wd][key]||0)+1;
+    });
+    const pick={};
+    Object.keys(byWd).forEach(wd=>{ pick[wd]=Object.entries(byWd[wd]).sort((a,b)=>b[1]-a[1])[0][0]; });
+    for(let d=1; d<=daysInMonth; d++){
+      const ds=`${month}-${String(d).padStart(2,'0')}`;
+      const wd=new Date(cy,cm-1,d).getDay();
+      const k=pick[wd]; if(!k) continue;
+      if(existing.has(e.id+'|'+ds)){ skipped++; continue; }
+      const [code,st,en,hh]=k.split('~');
+      await dbPut('shifts',{id:uid('shift'),emp_id:e.id,date:ds,start_time:st||null,end_time:en||null,
+        hours:Number(hh)||0,code:code||null,note:null,leave_type:null,leave_hours:0,
+        created_by:(SESSION&&SESSION.id)||'',created_at:new Date().toISOString()});
+      added++;
+    }
+  }
+  showToast(`已複製 ${prev} 班表：新增 ${added} 筆${skipped?`，跳過 ${skipped} 筆（已有排班）`:''}`);
+  navTo(_shiftBackPage());
+}
 
 /* 唯讀當月排班表彈窗（2026-07-25 使用者指示）：行事曆上方「當月排班」→ 跳視窗顯示班表，
    不可編輯，所以櫃台帳號也能看。重用 sh-* 表格樣式，無 ＋/編輯 入口、不 navTo。 */
@@ -18066,7 +18107,7 @@ async function renderShiftsTab(){
     <button class="btn btn-ghost btn-sm" onclick="shiftMonthMove(1)">下個月 ›</button>
   </div>
   <div class="card">
-    <div class="card-title">月排班 <span style="font-size:12px;color:var(--t3);font-weight:400;">值班員工 共 ${staff.length} 位</span>${_canEditShifts?'':' <span class="tag tag-warn" style="font-size:10px;">檢視模式</span>'}</div>
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;"><span>月排班 <span style="font-size:12px;color:var(--t3);font-weight:400;">值班員工 共 ${staff.length} 位</span>${_canEditShifts?'':' <span class="tag tag-warn" style="font-size:10px;">檢視模式</span>'}</span>${_canEditShifts?`<button class="btn btn-ghost btn-sm" onclick="copyPrevMonthShifts()">⧉ 複製上月班表</button>`:''}</div>
     <div style="font-size:11.5px;color:var(--t3);margin-bottom:10px;line-height:1.7;">${_canEditShifts?'點任一格填寫該日起迄時間。值班費以「排班總時數 × 值班時薪」計（半小時為單位）。':'此頁為檢視模式，僅供查看排班。排班編輯由管理員或店長操作。'}</div>
     <div class="sh-scroll"><table class="sh-table"><thead><tr><th class="sh-name sh-corner">員工＼日</th>${dayHeaders}</tr></thead>
     <tbody>${rowsHtml}</tbody></table></div>
