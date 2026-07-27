@@ -5774,8 +5774,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1523';
-const APP_VERSION_LABEL='v260727.1523';
+const APP_VERSION='260727.1527';
+const APP_VERSION_LABEL='v260727.1527';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16603,7 +16603,7 @@ async function openMemberDetail(member_id){
     <div class="md-sec md-tk-sec">
       <div class="md-sec-head">
         <span class="md-sec-title">票券</span>
-        <button class="btn btn-ghost btn-sm" onclick="openMemberRecords('${member_id}')">紀錄</button>
+        ${isCoach?'':`<button class="btn btn-ghost btn-sm" onclick="openMemberRecords('${member_id}')">交易紀錄</button>`}
       </div>
       <div class="tkfilter">
         <button class="tkf-btn active" data-tkf="course" onclick="memDetailTkFilter(event,'course')">課程票券</button>
@@ -16621,6 +16621,7 @@ async function openMemberDetail(member_id){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
   // 預約/付款紀錄資料暫存，供「紀錄」視窗使用
   window._memRecordsData={member_id,bookings:myBookings,purchases:myPurchases,coachMap,typeMap};
+  window._mdTkSecOrig=null;   // 新名片重置交易紀錄的返回快照
 }
 // 會員詳細票券篩選切換（課程票券 / 自主訓練）
 function memDetailTkFilter(ev,which){
@@ -16629,8 +16630,9 @@ function memDetailTkFilter(ev,which){
 }
 // 預約 + 付款紀錄視窗（從會員詳細的「紀錄」按鈕開啟）
 function openMemberRecords(member_id){
+  /* 2026-07-27 使用者指示：不開新視窗——直接把下方票券區換成交易紀錄，左上「‹ 返回」還原。
+     預約紀錄分頁移除（圓形卡上就有各堂日期）；訓練紀錄未開發不列。 */
   const d=window._memRecordsData; if(!d)return;
-  const isCoach=SESSION.role==='coach';
   const myPurchases=d.purchases||[];
   const payTable = myPurchases.length===0
     ? '<div class="empty"><div class="em-t">尚無付款紀錄</div></div>'
@@ -16644,22 +16646,17 @@ function openMemberRecords(member_id){
           <td style="white-space:nowrap;">${payLabel}</td></tr>`;}).join('')}
       </tbody></table>
       <div style="text-align:right;padding:12px 8px 0;font-size:13px;color:var(--t2);">累計收款 <b style="color:var(--green);font-size:16px;">$${myPurchases.reduce((s,p)=>s+(Number(p.deal_amount)||0),0).toLocaleString()}</b></div>`;
-  showModal(`<div class="md-head-card">
-    <div class="modal-title">紀錄</div>
-    <div class="modal-tabs">
-      <div class="modal-tab active" onclick="mDetTab(event,'rec-book')">預約紀錄</div>
-      ${isCoach?'':'<div class="modal-tab" onclick="mDetTab(event,\'rec-pay\')">付款紀錄</div>'}
-    </div>
-    </div>
-    <div class="md-body-card">
-      <div class="mtab-pane active" data-pane="rec-book"><div id="mem-week-cal"></div></div>
-      ${isCoach?'':`<div class="mtab-pane" data-pane="rec-pay">${payTable}</div>`}
-    </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="openMemberDetail('${member_id}')">返回</button><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
-  // 初始化預約月曆
-  window._memWeekData={member_id,bookings:d.bookings,coachMap:d.coachMap,typeMap:d.typeMap};
-  const td=new Date(TODAY); window._memMonth={y:td.getFullYear(),m:td.getMonth()};
-  renderMemberWeek();
+  const sec=document.querySelector('.md-tk-sec'); if(!sec) return;
+  if(!window._mdTkSecOrig) window._mdTkSecOrig=sec.innerHTML;   // 保存原票券區，返回時還原
+  sec.innerHTML=`<div class="md-sec-head">
+      <button class="btn btn-ghost btn-sm" onclick="mdRecordsBack()">‹ 返回</button>
+      <span class="md-sec-title">交易紀錄</span>
+    </div>${payTable}`;
+  sec.scrollTop=0;
+}
+function mdRecordsBack(){
+  const sec=document.querySelector('.md-tk-sec');
+  if(sec && window._mdTkSecOrig){ sec.innerHTML=window._mdTkSecOrig; window._mdTkSecOrig=null; }
 }
 // 會員預約紀錄：月曆呈現（整月格子，每格放預約小卡，可翻月）
 function memWeekStep(n){
