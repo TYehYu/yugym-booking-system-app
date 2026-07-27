@@ -1432,6 +1432,10 @@ tr:hover td{background:var(--card2);}
 /* 會員明細：加寬、固定高度，內容區內部捲動，切換分頁不忽大忽小 */
 .modal:has(.md-head-card){max-width:720px;height:82vh;display:flex;flex-direction:column;}
 /* 唯讀當月排班表彈窗：寬版（容納整月表格，內部 sh-scroll 再水平捲）2026-07-25 */
+/* 今天整欄高亮（2026-07-27 使用者指示：今日值班要好讀） */
+.sh-dayhead.sh-today-h{background:var(--green);color:#fff;}
+.sh-dayhead.sh-today-h span{color:rgba(255,255,255,.85);}
+.sh-cell.sh-today-c{background:rgba(0,61,50,.09);}
 .modal:has(.msched){max-width:min(96vw,1120px);}
 /* 會員詳細單頁：整體限高，基本資料+會員屬性固定，只有票券列表捲動 */
 .modal:has(.md-detail-single){max-width:720px;height:82vh;display:flex;flex-direction:column;}
@@ -5745,8 +5749,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1142';
-const APP_VERSION_LABEL='v260727.1142';
+const APP_VERSION='260727.1144';
+const APP_VERSION_LABEL='v260727.1144';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17664,9 +17668,10 @@ async function openMonthScheduleModal(mon){
   const monthShifts=shifts.filter(s=>(s.date||'').slice(0,7)===month);
   const staff=coaches.filter(c=>c.need_duty && c.status!=='inactive' && c.invite_status!=='pending');
   const empTotal={}; staff.forEach(e=>{ empTotal[e.id]=monthShifts.filter(s=>s.emp_id===e.id).reduce((a,s)=>a+(Number(s.hours)||0),0); });
+  const _todayD=(month===ymd(TODAY).slice(0,7))?Number(ymd(TODAY).slice(8,10)):-1;
   const dayHeaders=Array.from({length:daysInMonth},(_,i)=>{
     const d=new Date(Number(my),Number(mm)-1,i+1); const dow='日一二三四五六'[d.getDay()]; const wk=d.getDay()===0||d.getDay()===6;
-    return `<th class="sh-dayhead${wk?' sh-wk':''}">${i+1}<br><span>${dow}</span></th>`;
+    return `<th class="sh-dayhead${wk?' sh-wk':''}${i+1===_todayD?' sh-today-h':''}">${i+1}<br><span>${dow}</span></th>`;
   }).join('');
   const rowsHtml=staff.map(e=>{
     const cells=Array.from({length:daysInMonth},(_,i)=>{
@@ -17678,11 +17683,29 @@ async function openMonthScheduleModal(mon){
         const main=code?`<span class="sh-chip sh-chip-code"><b class="sh-code">${code}</b></span>`:`<span class="sh-chip sh-chip-time"><span class="sh-t1">${s.start_time}</span><span class="sh-t2">${s.end_time}</span></span>`;
         return main+leaveTag; }).join('');
       const hasLeave=list.some(s=>s.leave_type);
-      return `<td class="sh-cell${list.length?' has':''}${hasLeave?' has-leave':''}${isWk?' sh-cell-wk':''} sh-cell-ro">${inner}</td>`;
+      return `<td class="sh-cell${list.length?' has':''}${hasLeave?' has-leave':''}${isWk?' sh-cell-wk':''}${i+1===_todayD?' sh-today-c':''} sh-cell-ro">${inner}</td>`;
     }).join('');
     return `<tr><td class="sh-name"><div class="shn-row1"><span class="shn-name">${e.name||'—'}</span><span class="shn-hr">${empTotal[e.id].toFixed(1)}h</span></div></td>${cells}</tr>`;
   }).join('');
   const isCur=month===ymd(TODAY).slice(0,7);
+  /* 今日值班放大卡（2026-07-27 使用者指示：當天的值班放大顯示方便閱讀） */
+  let todayCard='';
+  if(isCur){
+    const tds=ymd(TODAY);
+    const nameOf=Object.fromEntries(staff.map(e=>[e.id,e.name||'—']));
+    const tlist=monthShifts.filter(s=>s.date===tds && nameOf[s.emp_id])
+      .sort((a,b)=>String(a.start_time||'').localeCompare(String(b.start_time||'')));
+    todayCard=`<div style="background:var(--card2);border:1.5px solid var(--green);border-radius:12px;padding:12px 16px;margin-bottom:12px;">
+      <div style="font-size:11.5px;font-weight:800;color:var(--gold-d);letter-spacing:.12em;margin-bottom:8px;">今日值班　${Number(mm)}/${Number(tds.slice(8,10))}</div>
+      ${tlist.length?`<div style="display:flex;flex-wrap:wrap;gap:10px 22px;">${tlist.map(s=>`
+        <div style="display:flex;align-items:baseline;gap:8px;">
+          <b style="font-size:18px;color:var(--green);">${nameOf[s.emp_id]}</b>
+          <span style="font-family:var(--num);font-size:15.5px;font-weight:700;color:var(--text);">${s.start_time||''}–${s.end_time||''}</span>
+          ${s.leave_type?`<span class="tag tag-warn" style="font-size:10.5px;">${s.leave_type}${s.leave_hours||''}h</span>`:''}
+        </div>`).join('')}</div>`
+      :'<div style="font-size:13.5px;color:var(--t3);">今天沒有排值班</div>'}
+    </div>`;
+  }
   const table = staff.length
     ? `<div class="sh-scroll" style="max-height:58vh;"><table class="sh-table"><thead><tr><th class="sh-name sh-corner">員工</th>${dayHeaders}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`
     : `<div class="empty" style="padding:30px;"><div class="em-t">本月沒有排班</div></div>`;
@@ -17692,7 +17715,7 @@ async function openMonthScheduleModal(mon){
       ${isCur?'':`<button class="btn btn-ghost btn-sm" onclick="openMonthScheduleModal('${ymd(TODAY).slice(0,7)}')">回本月</button>`}
       <button class="btn btn-ghost btn-sm" onclick="openMonthScheduleModal('${_mv(month,1)}')">下個月 ›</button>
     </div>
-    ${table}
+    ${todayCard}${table}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div></div>`);
 }
 async function renderShiftsTab(){
