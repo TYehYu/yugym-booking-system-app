@@ -5739,8 +5739,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260727.1114';
-const APP_VERSION_LABEL='v260727.1114';
+const APP_VERSION='260727.1117';
+const APP_VERSION_LABEL='v260727.1117';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19426,10 +19426,19 @@ function ppHeaderHtml(){
     return `<div class="pp-meta-i" style="align-items:center;gap:8px;"><span class="pp-meta-l">LINE 通知</span>`
       + `<label class="switch" style="transform:scale(.66);transform-origin:left center;margin:-6px 0;" onclick="event.stopPropagation();"><input type="checkbox" ${on?'checked':''} onchange="ppToggleLineNotify('${r.id}')"><span class="switch-slider"></span></label></div>`;
   })();
+  /* 員工表頭（2026-07-27 使用者指示）：基本資料＋身份設定重點併入上方資訊列——
+     電話/對外名稱/職稱/到職日/Email＋身份章（店長/主管/值班/代課/打卡） */
+  const empChips = !isM ? (()=>{ const t=[];
+    if(r.is_manager)t.push('店長'); if(r.is_supervisor)t.push('主管');
+    if(r.need_duty)t.push('值班'); if(r.can_substitute)t.push('代課'); if(r.need_punch)t.push('打卡');
+    return t.length?`<div class="pp-meta-i"><span class="pp-meta-l">身份</span><span class="pp-meta-v">${t.map(x=>`<span class="tag tag-ok" style="margin-right:4px;font-size:10.5px;">${x}</span>`).join('')}</span></div>`:'';
+  })() : '';
   const meta = isM
     ? mvA('電話',fmtPhone(r.phone),'phone','未填') + mvA('主教練', PP.ctx.coachMap?(PP.ctx.coachMap[r.default_coach_id]||''):'','default_coach_id','＋ 指定')
       + bdayItem + lineItem
-    : mv('電話',fmtPhone(r.phone),'phone') + mv('職稱', r.job_title,'job_title') + mv('到職日', r.hire_date,'hire_date');
+    : mv('電話',fmtPhone(r.phone),'phone') + mv('對外名稱', r.name_en?r.name_en.toUpperCase():'','name_en')
+      + mv('職稱', r.job_title,'job_title') + mv('到職日', r.hire_date,'hire_date')
+      + mv('Email', r.email,'email') + empChips;
   const code = r.emp_no ? `<span class="pp-code">${r.emp_no}</span>` : '';
   // 右上操作
   const act = PP.editing
@@ -19491,7 +19500,7 @@ function ppEditFocus(fid){
     },80);
     return;
   }
-  const secs=(PP_SCHEMA[PP.kind]||{})[PP.tab]||[];
+  const secs = PP.kind==='employee' ? ppEmpEditSecs() : ((PP_SCHEMA[PP.kind]||{})[PP.tab]||[]);
   const sec=secs.find(s=>(s.fields||[]).some(f=>f.id===fid));
   if(!sec){ PP.editing=true; PP.draft=JSON.parse(JSON.stringify(PP.rec)); ppRenderBody(); return; }
   ppOpenSecModal(sec, fid);
@@ -19786,13 +19795,21 @@ function ppBodyHtml(){
     ? `<div class="pp-dirty">${PP_ICON.warn}<span>編輯模式：四個分頁的變更會一次儲存。</span></div>` : '';
   return dirtyBar + secs.map(ppCardHtml).join('');
 }
+/* 員工編輯區＝基本資料＋身份設定合併（2026-07-27 使用者指示；系統資料整區移除） */
+function ppEmpEditSecs(){ const S=PP_SCHEMA.employee||{}; return (S.basic||[]).concat(S.ident||[]); }
 function ppRenderBody(){
   const host=document.getElementById('pp-host');
   if(!host) return;
   const isM=PP.kind==='member';
-  // 會員（2026-07-25 使用者指示）：拿掉分頁；檢視時 body 只顯示「活動紀錄」，編輯時顯示可編欄位
-  const tabs = isM ? '' : ppTabsHtml();
-  const body = (isM && !PP.editing) ? ppRecordHtml() : ppBodyHtml();
+  const isE=PP.kind==='employee';
+  // 會員（2026-07-25）與員工（2026-07-27）：拿掉分頁；檢視＝下方只顯示紀錄，編輯＝可編欄位
+  const tabs = (isM||isE) ? '' : ppTabsHtml();
+  const body = !PP.editing
+    ? ppRecordHtml()
+    : (isE
+        ? `<div class="pp-dirty">${PP_ICON.warn}<span>編輯模式：基本資料與身份設定會一次儲存。</span></div>`
+          + ppEmpEditSecs().map(ppCardHtml).join('')
+        : ppBodyHtml());
   host.innerHTML = ppHeaderHtml() + tabs + `<div id="pp-body">${body}</div>`
     + (PP.editing && isMobileLayout()
         ? `<div class="pp-footbar"><button class="btn btn-ghost" onclick="ppCancel()">取消</button><button class="btn btn-green" onclick="ppSave()">儲存</button></div>` : '');
@@ -19811,7 +19828,7 @@ async function ppToggleLineNotify(id){
 // ══════ 編輯模式：切換前先把當前分頁輸入值收進 draft ══════
 function ppCollect(){
   if(!PP.editing) return;
-  const secs=(PP_SCHEMA[PP.kind]||{})[PP.tab];
+  const secs = PP.kind==='employee' ? ppEmpEditSecs() : (PP_SCHEMA[PP.kind]||{})[PP.tab];
   if(!secs) return;
   secs.forEach(sec=>sec.fields.forEach(f=>{
     /* 2026-07-21 區塊彈窗編輯：custom 欄位的輸入元件不在 DOM（別的區塊）時一律跳過，
