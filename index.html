@@ -5776,8 +5776,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.0030';
-const APP_VERSION_LABEL='v260728.0030';
+const APP_VERSION='260728.0031';
+const APP_VERSION_LABEL='v260728.0031';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20251,8 +20251,8 @@ function ppRecordHtml(){
           <div id="mem-week-cal"></div></div>`;
       }
       if(PP.recView==='pay'){
-        const rows=(c.myPc||[]).slice().sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))
-          .map(p=>{ const payLabel={cash:'現金',transfer:'匯款',card:'刷卡'}[p.payment_method]||p.payment_method||'—';
+        const rows=(c.myPc||[]).concat(c.myImpTx||[]).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))
+          .map(p=>{ const payLabel={cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統'}[p.payment_method]||p.payment_method||'—';
             const dt=(p.created_at)?new Date(new Date(p.created_at).getTime()+8*3600000).toISOString().slice(0,10):'—';
             return `<tr><td style="white-space:nowrap;">${dt}</td><td>${p.plan_name||'—'}</td><td style="text-align:right;font-weight:700;color:var(--green);">$${(Number(p.deal_amount)||0).toLocaleString()}</td><td>${payLabel}</td></tr>`; }).join('');
         return `<div class="pp-card">${back}<div class="pp-card-t">交易紀錄（${c.pcCount||0}）</div>
@@ -20583,9 +20583,15 @@ async function ppLoadCtx(){
     c.tkLeft=myTk.filter(t=>t.status==='usable' && (!t.expire_date||String(t.expire_date).slice(0,10)>=_todayYmd))
       .reduce((s,t)=>s+Math.max(0,(Number(t.sessions_remaining)||0)),0);
     c.bkCount=myBk.length;
-    c.pcCount=(purchases||[]).filter(p=>p.member_id===PP.id).length;
+    // 交易＝新系統銷售（purchases）＋舊系統匯入票券的購買紀錄（amount_paid>0、非 TK- 開頭
+    // ——新系統賣票同時會寫 purchases 與 TK- 票，排除 TK- 避免同筆交易列兩次）
+    c.myPc=(purchases||[]).filter(p=>p.member_id===PP.id);
+    c.myImpTx=tickets.filter(t=>t.member_id===PP.id && Number(t.amount_paid)>0 && !String(t.id).startsWith('TK-'))
+      .map(t=>({created_at:(t.purchase_date||'')+'T04:00:00Z', plan_name:t.plan_name,
+        deal_amount:Number(t.amount_paid)||0, payment_method:'imported'}));
+    c.pcCount=c.myPc.length+c.myImpTx.length;
     // 行內展開用明細（2026-07-27：活動紀錄不再開新視窗）
-    c.myTk=myTk; c.myBk=myBk; c.myPc=(purchases||[]).filter(p=>p.member_id===PP.id);
+    c.myTk=myTk; c.myBk=myBk;
     c.tierOpts=[['','—']].concat(Object.entries(TIER_DEFS).map(([k,d])=>[k,d.label]));
   }else{
     c.bankOpts=HR_BANKS.slice();
