@@ -5853,8 +5853,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1638';
-const APP_VERSION_LABEL='v260728.1638';
+const APP_VERSION='260728.1640';
+const APP_VERSION_LABEL='v260728.1640';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22524,7 +22524,8 @@ function ctSetType(v){
   const p=document.getElementById('ct-paper-box'); if(p) p.style.display=(v==='paper')?'':'none';
   const r=document.getElementById('ct-remote-box'); if(r) r.style.display=(v==='remote')?'':'none';
   if(v==='paper'){ const pv=document.getElementById('ct-paper-preview');
-    if(pv) pv.textContent=window._ctBody||''; }
+    if(pv) pv.innerHTML=contractFillBlockHTML(window._ctFill)
+      +`<div style="white-space:pre-wrap;">${(window._ctBody||'').replace(/</g,'&lt;')}</div>`; }
 }
 /* 紙本列印（2026-07-28）：帶本次購買內容的合約全文，開列印視窗並自動叫出印表機 */
 function ctPrintPaper(){
@@ -22535,7 +22536,7 @@ function ctPrintPaper(){
     h1{font-size:19px;text-align:center;letter-spacing:.1em;margin:0 0 4px;}
     .sub{text-align:center;font-size:11.5px;color:#8a6a3a;letter-spacing:.25em;margin-bottom:22px;}</style></head>
     <body><h1>YUGYM 有肌訓練　會員服務合約</h1><div class="sub">版本 ${CONTRACT_VERSION}</div>
-    ${contractFillBlockHTML()}<div>${(window._ctBody||'').replace(/</g,'&lt;')}</div>
+    ${contractFillBlockHTML(window._ctFill)}<div>${(window._ctBody||'').replace(/</g,'&lt;')}</div>
     <div style="margin-top:40px;display:flex;gap:40px;font-size:13px;">
       <div style="flex:1;">會員簽名：＿＿＿＿＿＿＿＿＿＿＿＿</div>
       <div style="flex:1;">日期：＿＿＿＿年＿＿月＿＿日</div>
@@ -22564,6 +22565,12 @@ async function renderContractStep(){
   };
   /* 2026-07-28：範本未設定時退回系統版合約全文（CONTRACT_TEXT），不再顯示占位訊息 */
   window._ctBody=fillContract(tpl?tpl.body:CONTRACT_TEXT, window._ctCtx);
+  const _instN=isInstall?(Number((document.getElementById('gt-install')||{}).value)||1):1;
+  window._ctFill={ name:m.name||'', phone:m.phone?fmtPhone(m.phone):'', buyDate:ymd(TODAY),
+    planName:plan.name||'', sessions:total, bonus:plan.sessions_bonus||0,
+    unit:plan.unit_price||0, amount:paid, validDays:Number(plan.valid_days)||365,
+    pay:(document.getElementById('gt-method')||{}).value||'cash',
+    installN:_instN, instAmts:_instN>1?splitAmount(deal,_instN):null };
   const box=document.getElementById('ct-body'); if(box) box.textContent=window._ctBody;
   /* 2026-07-28 使用者定案：電子簽約統一在會員手機（限 LINE 綁定者）；未綁定僅紙本 */
   const _hasLine=!!(m&&m.line_user_id);
@@ -28178,8 +28185,31 @@ function refreshApplyInstall(){
 // 全螢幕合約閱讀視窗（手機友善：大字、滿版、好捲動）
 /* 合約「購買內容」填寫區（2026-07-27 使用者指示）：電腦版檢視與列印版共用——
    紙本簽約時手寫：會員資料／課程明細／付款與分期 */
-function contractFillBlockHTML(){
+function contractFillBlockHTML(d){
+  /* d（2026-07-28 使用者指示）：帶入本次簽約的會員與購買資料自動填寫；未帶＝空白手寫版 */
   const td=(label,attrs)=>`<td ${attrs||''} style="border:1px solid #999;padding:9px 10px;font-size:12.5px;color:#444;">${label}</td>`;
+  const ck=b=>b?'☑':'□';
+  const v=x=>`<b style="color:#111;">${x}</b>`;
+  if(d){
+    const eight=d.validDays===56, year=d.validDays===365||d.validDays===366;
+    const other=(!eight&&!year)?`${d.validDays} 天`:'';
+    const instRow = d.installN>1
+      ? `分期：□一次付清　${ck(1)}分期付款——`+(d.instAmts||[]).map((a,i)=>`第${['一','二','三','四','五','六'][i]||i+1}期＄${v(a.toLocaleString())}（　／　）`).join('　')
+      : `分期：${ck(1)}一次付清　□分期付款——第一期＄＿＿＿＿＿（　／　）　第二期＄＿＿＿＿＿（　／　）　第三期＄＿＿＿＿＿（　／　）`;
+    return `<div style="margin:6px 0 20px;white-space:normal;">
+    <div style="font-weight:700;font-size:14px;margin-bottom:7px;">會員資料 Member Information</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+      <tr>${td(`會員姓名：${v(d.name)}`,'width="50%"')}${td(`行動電話：${v(d.phone)}`,'width="50%"')}</tr>
+    </table>
+    <div style="font-weight:700;font-size:14px;margin-bottom:7px;">購買內容 Personal Training Sessions</div>
+    <table style="width:100%;border-collapse:collapse;">
+      <tr>${td(`購買日期：${v(d.buyDate)}`)}${td(`課程類別：${v(d.planName)}`)}${td(`課程堂數：${v(d.sessions)} 堂`)}</tr>
+      <tr>${td(`每堂費用：${v('$'+Number(d.unit).toLocaleString())}`)}${td(`贈送堂數：${v(d.bonus||0)}`)}${td(`應付總金額：${v('$'+Number(d.amount).toLocaleString())}`)}</tr>
+      <tr>${td(`課程有效期限：${ck(eight)}啟用日起 8 週　${ck(year)}啟用日起 12 個月　${ck(!!other)}其他：${other?v(other):'＿＿＿＿＿＿'}`,'colspan="2"')}${td(`付款方式：${ck(d.pay==='cash')}現金　${ck(d.pay==='transfer')}匯款`)}</tr>
+      <tr>${td(instRow,'colspan="3"')}</tr>
+    </table>
+  </div>`;
+  }
   return `<div style="margin:6px 0 20px;white-space:normal;">
     <div style="font-weight:700;font-size:14px;margin-bottom:7px;">會員資料 Member Information</div>
     <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
