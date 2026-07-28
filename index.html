@@ -5853,8 +5853,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1641';
-const APP_VERSION_LABEL='v260728.1641';
+const APP_VERSION='260728.1646';
+const APP_VERSION_LABEL='v260728.1646';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20600,7 +20600,10 @@ function ppRecordHtml(){
             <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null)}</div>
             <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
               <span>效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}</span>
-              ${(isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger);" onclick="voidTicketAsk('${t.id}')">作廢</button>`:''}
+              <span style="display:flex;gap:6px;">
+                ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">📄 合約</button>`:''}
+                ${(isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger);" onclick="voidTicketAsk('${t.id}')">作廢</button>`:''}
+              </span>
             </div>
           </div>`; };
         const tabs=[['pt','教練課'],['group','團體課'],['self','自主訓練'],['voucher','折抵券']]
@@ -20952,9 +20955,10 @@ async function openPersonProfile(kind, id, backPage){
 async function ppLoadCtx(){
   const c=PP.ctx;
   if(PP.kind==='member'){
-    const [coaches,tickets,bookings,purchases,ttypes]=await Promise.all([
+    const [coaches,tickets,bookings,purchases,ttypes,contractsAll]=await Promise.all([
       dbGetAll('coaches'), dbGetAll('member_tickets'), dbGetAll('bookings'), dbGetAll('purchases').catch(()=>[]),
-      dbGetAll('ticket_types').catch(()=>[])]);
+      dbGetAll('ticket_types').catch(()=>[]), dbGetAll('contracts').catch(()=>[])]);
+    c.ctByTicket=Object.fromEntries((contractsAll||[]).filter(x=>x.ticket_id&&x.member_id===PP.id).map(x=>[x.ticket_id,x.id]));   // 合約綁票券（2026-07-28）
     c.typeMap=Object.fromEntries((ttypes||[]).map(t=>[t.id,t]));
     c.coachMap=Object.fromEntries(coaches.map(x=>[x.id,coachDisp(x)]));
     c.coachOpts=[['','—']].concat(coaches.filter(isCoachable).map(x=>[x.id,coachDisp(x)]));
@@ -27642,6 +27646,7 @@ let _memTkData=null;
 PAGES.mem_tickets=async function(){
   const[tickets,types,logs,bookings,contracts]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types'),dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('bookings').catch(()=>[]),dbGetAll('contracts').catch(()=>[])]);
   window._memContracts=(contracts||[]).filter(c=>c.member_id===SESSION.id);   // 我的合約（RLS 已限本人，這裡再過濾一次）
+  window._ctByTicket=Object.fromEntries(window._memContracts.filter(c=>c.ticket_id).map(c=>[c.ticket_id,c.id]));   // 合約綁票券圓形卡（2026-07-28）
   window._ttCache=types;
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const mine=tickets.filter(t=>tkUsableBy(t,SESSION.id));   // 含共享給我的票（2026-07-26）
@@ -27762,7 +27767,7 @@ function renderMemTickets(){
         ${(t.installment && t.unlocked_sessions!=null && t.unlocked_sessions<total)?`<div class="mck-install">分期方案・目前開通 <b>${t.unlocked_sessions}</b> / ${total} 堂　·　🔒 部分堂數需繳下一期後開通</div>`:''}
         <div class="mck-figures">
           <div class="mck-num"><span class="mck-num-big">${usedCnt}</span><span class="mck-num-tot">/ ${total} 堂</span></div>
-          <div class="mck-exp">${t.expire_date?`${dim?'':'到期'} ${t.expire_date}`:'永久有效'}</div>
+          <div class="mck-exp">${(window._ctByTicket&&window._ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px;margin-right:8px;" onclick="openContractView('${window._ctByTicket[t.id]}')">📄 合約</button>`:''}${t.expire_date?`${dim?'':'到期'} ${t.expire_date}`:'永久有效'}</div>
         </div>
       </div>
     </div>`;
@@ -29353,7 +29358,27 @@ async function openContractView(id){
     <div class="ct-body">${String(c.body_snapshot||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
     ${c.signature?`<div style="margin-top:10px;"><div style="font-size:11.5px;color:var(--t3);margin-bottom:4px;">會員簽名</div>
       <img class="ct-sig-img" src="${c.signature}" alt="簽名"></div>`:''}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      ${isDeskLike()?`<button class="btn btn-green" onclick="ctViewPrint('${c.id}')">🖨 列印</button>`:''}</div>`);
+}
+/* 已簽合約列印（2026-07-28）：全文快照＋簽名影像；僅後台人員（會員端唯讀不可列印） */
+async function ctViewPrint(id){
+  if(!isDeskLike()) return;
+  const c=await dbGet('contracts',id).catch(()=>null); if(!c) return;
+  const w=window.open('','_blank');
+  if(!w){ showToast('瀏覽器阻擋了新視窗，請允許彈出視窗'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${c.plan_name||'合約'}（${c.member_name||''}）</title>
+    <style>body{font-family:'Noto Sans TC','PingFang TC',sans-serif;max-width:720px;margin:0 auto;padding:36px 28px;line-height:2;font-size:13px;color:#222;white-space:pre-wrap;}
+    h1{font-size:19px;text-align:center;letter-spacing:.1em;margin:0 0 4px;}
+    .sub{text-align:center;font-size:11.5px;color:#8a6a3a;margin-bottom:22px;}
+    img{max-width:280px;border:1px solid #ccc;border-radius:8px;}</style></head>
+    <body><h1>YUGYM 有肌訓練　會員服務合約</h1>
+    <div class="sub">${c.member_name||''}　·　${c.plan_name||''}　·　簽約日 ${(c.signed_at||'').slice(0,10)}</div>
+    <div>${String(c.body_snapshot||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+    ${c.signature?`<div style="margin-top:28px;">會員簽名：<br><img src="${c.signature}"></div>`:'<div style="margin-top:40px;">會員簽名：＿＿＿＿＿＿＿＿＿＿＿＿（紙本另存）</div>'}
+    </body></html>`);
+  w.document.close(); w.focus();
+  setTimeout(()=>{ try{ w.print(); }catch(_){} }, 350);
 }
 function openShiftQuickEdit(){
   window._sqDraft=SHIFT_QUICK.map(([code,start,end])=>({code,start,end}));
