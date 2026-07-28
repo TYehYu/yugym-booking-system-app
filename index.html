@@ -393,6 +393,22 @@ select option{color:var(--text);}
   text-align:left;padding:13px 13px 12px;min-height:128px;box-sizing:border-box;
   border-left:4px solid var(--pc,#1f6f54);background:color-mix(in srgb,var(--pc,#1f6f54) 4%,#fff);}
 .gt-c2-name{font-size:14px;font-weight:800;color:var(--text);line-height:1.35;}
+/* 員工直式卡（2026-07-28）：一列 6 個 */
+.st-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;}
+@media(max-width:1100px){ .st-grid{grid-template-columns:repeat(4,1fr);} }
+@media(max-width:700px){ .st-grid{grid-template-columns:repeat(2,1fr);} }
+.st-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;
+  background:#fff;border:1px solid var(--bd);border-radius:14px;padding:16px 10px 12px;cursor:pointer;transition:.14s;}
+.st-card:hover{border-color:var(--green);box-shadow:0 4px 14px rgba(0,61,50,.1);transform:translateY(-1px);}
+.st-badge{position:absolute;top:8px;right:8px;transform:scale(.85);transform-origin:top right;}
+.st-ava{width:52px;height:52px;border-radius:50%;overflow:hidden;background:var(--card2);display:flex;align-items:center;justify-content:center;margin-bottom:2px;}
+.st-ava svg{width:100%;height:100%;}
+.st-nm{font-size:14px;font-weight:800;color:var(--text);line-height:1.3;}
+.st-en{font-size:10.5px;color:var(--t3);letter-spacing:.05em;}
+.st-meta{font-size:11px;color:var(--t2);}
+.st-wr{display:flex;justify-content:center;min-height:20px;}
+.st-wr .wr-tags{justify-content:center;flex-wrap:wrap;}
+.st-act{display:flex;align-items:center;gap:2px;margin-top:4px;}
 .gt-card2 .gt-c2-tag{color:var(--pc,#1f6f54);}
 .gt-card.gt-card2.on{border-color:var(--pc,#1f6f54);box-shadow:0 0 0 3px color-mix(in srgb,var(--pc,#1f6f54) 32%,transparent);
   background:color-mix(in srgb,var(--pc,#1f6f54) 8%,#fff);border-left:4px solid var(--pc,#1f6f54);}
@@ -5821,8 +5837,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1520';
-const APP_VERSION_LABEL='v260728.1520';
+const APP_VERSION='260728.1524';
+const APP_VERSION_LABEL='v260728.1524';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19090,22 +19106,28 @@ async function renderStaffList(){
     if(c.phone)  parts.push(c.phone);
     return parts.join(' · ');
   };
-  const rows=pageRows.map(c=>{
+  /* 2026-07-28 使用者指示：員工卡直式排列、一列 6 個 */
+  const stCard=c=>{
     const pending=c.invite_status==='pending';
-    const nm=(c.name||'（待填寫）')
-      + (c.name_en?` <span style="font-size:12px;color:var(--t3);font-weight:400;">${c.name_en.toUpperCase()}</span>`:'');
     const tl=typeLabel(c);
-    return {
-      onclick: pending ? `copyInvite('${c.invite_token}')` : `openPersonProfile('employee','${c.id}')`,
-      cells:[
-        lpPerson(c.gender, nm, nameSub(c), stateOf(c)!=='active'?' '+statusBadge(c):''),
-        (tl&&tl!=='—')?`<span class="lp-ictxt">${LNI.briefcase}${tl}</span>`:'',
-        c.job_title || '',
-        wrCell(c),
-        actOf(c),
-      ],
-    };
-  });
+    const click=pending?`copyInvite('${c.invite_token}')`:`openPersonProfile('employee','${c.id}')`;
+    const badge=stateOf(c)!=='active'?`<div class="st-badge">${statusBadge(c)}</div>`:'';
+    const act=pending
+      ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 9px;" onclick="event.stopPropagation();copyInvite('${c.invite_token}')">複製邀請</button>`
+      : `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 9px;" onclick="event.stopPropagation();openPersonProfile('employee','${c.id}')">編輯</button>`
+        + `<span onclick="event.stopPropagation();">${lpIconBtn('key', `openResetStaffPw('${c.id}')`, '重設密碼')}${c.status!=='inactive'
+            ? lpDangerBtn('pause', `setStaffStatus('${c.id}','inactive')`, '停用')
+            : lpIconBtn('play', `setStaffStatus('${c.id}','active')`, '啟用')}</span>`;
+    return `<div class="st-card" onclick="${click}">
+      ${badge}
+      <div class="st-ava">${genderAvatarSVG(c.gender)}</div>
+      <div class="st-nm">${c.name||'（待填寫）'}</div>
+      ${c.name_en?`<div class="st-en">${c.name_en.toUpperCase()}</div>`:''}
+      <div class="st-meta">${[tl!=='—'?tl:'',c.job_title||''].filter(Boolean).join('・')||'　'}</div>
+      <div class="st-wr">${wrCell(c)||'　'}</div>
+      <div class="st-act">${act}</div>
+    </div>`;
+  };
 
   // Body
   let body;
@@ -19118,7 +19140,7 @@ async function renderStaffList(){
       '試試調整搜尋關鍵字，或清除目前的篩選條件。',
       `<button class="btn btn-green btn-sm" onclick="stClearFilters()">清除篩選</button>`);
   } else {
-    body = lpTable(cols, rows, {key:_stSort, dir:_stSortDir, onclick:"stSortBy('{k}')"});
+    body = `<div class="st-grid">${pageRows.map(stCard).join('')}</div>`;
   }
 
   // 設備帳號（次級區塊，非人事員工）
