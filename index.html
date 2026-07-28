@@ -5817,8 +5817,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1349';
-const APP_VERSION_LABEL='v260728.1349';
+const APP_VERSION='260728.1350';
+const APP_VERSION_LABEL='v260728.1350';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22816,8 +22816,10 @@ function refreshGrantPlans(){
   const members=window._grantMembers||[]; const plans=window._grantPlans||[];
   const mid=document.getElementById('gt-member').value;
   const m=members.find(x=>x.id===mid);
-  /* 2026-07-28 使用者指示：等級不足的方案（VIP/主顧客）改灰階顯示，不再隱藏 */
-  let usable=plans.filter(p=>p.active);
+  /* 2026-07-28 使用者指示：等級不足的方案（VIP/主顧客）改灰階顯示，不再隱藏；
+     自主訓練方案不進銷售/發放選單（簽到自動贈點、場租票另有入口） */
+  const _catOf=Object.fromEntries((window._grantTypes||[]).map(t=>[t.id,t.category]));
+  let usable=plans.filter(p=>p.active && _catOf[p.ticket_type_id]!=='自主訓練');
   // 銷售彈窗入口：只列所選課種的方案（教練課=私人教練／團體課=小班肌力）
   const salesCat=window._grantSalesActive&&window._grantSalesActive.cat;
   if(salesCat){
@@ -22912,19 +22914,19 @@ function renderGrantPicker(){
   let html='';
   /* 2026-07-28 使用者指示：教練課商品矩陣——第一列 1V1、第二列 1V2、第三列 自訂方案；
      每列欄序 VIP→主顧客→一般→一般優惠→友善→友善優惠；等級不足灰階。 */
+  const mSel=(window._grantMembers||[]).find(x=>x.id===(document.getElementById('gt-member')||{}).value);
+  const isVipPlan=p=>p.plan_type==='vip'||/vip/i.test(p.name||'');
+  const blockOf=p=>{
+    if(isVipPlan(p)) return (mSel&&effTier(mSel)==='vip')?null:'需 VIP 等級';
+    if(p.plan_type==='loyal') return memberCanUseLoyal(mSel)?null:'需主顧客以上';
+    return null; };
+  const slotOf=p=>{ if(isVipPlan(p)) return 0;
+    if(p.plan_type==='loyal') return /友善/.test(p.name||'')?1.5:1;
+    const s={general:2,promo:3,friendly:4,friendly_promo:5}[p.plan_type]; return s==null?6:s; };
+  const slotLabelOf=p=>{ if(isVipPlan(p)) return 'VIP';
+    if(p.plan_type==='loyal') return /友善/.test(p.name||'')?'主顧客友善':'主顧客';
+    return ({general:'一般',promo:'一般優惠',friendly:'友善',friendly_promo:'友善優惠'})[p.plan_type]||'其他'; };
   if(hasV1||hasV2){
-    const mSel=(window._grantMembers||[]).find(x=>x.id===(document.getElementById('gt-member')||{}).value);
-    const isVipPlan=p=>p.plan_type==='vip'||/vip/i.test(p.name||'');
-    const blockOf=p=>{
-      if(isVipPlan(p)) return (mSel&&effTier(mSel)==='vip')?null:'需 VIP 等級';
-      if(p.plan_type==='loyal') return memberCanUseLoyal(mSel)?null:'需主顧客以上';
-      return null; };
-    const slotOf=p=>{ if(isVipPlan(p)) return 0;
-      if(p.plan_type==='loyal') return /友善/.test(p.name||'')?1.5:1;
-      const s={general:2,promo:3,friendly:4,friendly_promo:5}[p.plan_type]; return s==null?6:s; };
-    const slotLabelOf=p=>{ if(isVipPlan(p)) return 'VIP';
-      if(p.plan_type==='loyal') return /友善/.test(p.name||'')?'主顧客友善':'主顧客';
-      return ({general:'一般',promo:'一般優惠',friendly:'友善',friendly_promo:'友善優惠'})[p.plan_type]||'其他'; };
     /* 2026-07-28 三修：自訂方案移到最上方、格子縮短 */
     if(window._grantSalesActive&&window._grantSalesActive.cat==='私人教練'&&!window._grantSalesActive.custom){
       html+=`<div class="gt-group" style="margin-bottom:10px;">
@@ -22944,10 +22946,12 @@ function renderGrantPicker(){
         <div class="gt-matrix-row">${arr.map(p=>cardHtml(p,blockOf(p),slotLabelOf(p))).join('')}</div></div>`;
     }
   }
-  // 團課、其他方案：常駐顯示，不受篩選影響
+  // 團課、其他方案：與教練課同一套結構化卡（2026-07-28 使用者指示統一規格）
   ['group','other'].forEach(g=>{
     if(groups[g]){
-      html+=`<div class="gt-group"><div class="gt-group-lbl">${GROUP_LABEL[g]}</div>${groupBody(groups[g])}</div>`;
+      const arr=groups[g].slice().sort((a,b)=>(slotOf(a)-slotOf(b))||((a.sessions_base||0)-(b.sessions_base||0)));
+      html+=`<div class="gt-group"><div class="gt-group-lbl">${GROUP_LABEL[g]}</div>
+        <div class="gt-matrix-row">${arr.map(p=>cardHtml(p,blockOf(p),slotLabelOf(p))).join('')}</div></div>`;
     }
   });
   box.innerHTML=html;
