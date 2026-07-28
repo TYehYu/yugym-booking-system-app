@@ -2759,6 +2759,13 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 空心環的邊色＝課種色（52% 混，實測下團課橘/按摩青/體驗紫皆可辨） */
 .mtk-free,.mtk-booked{background:#fff;border:2px solid color-mix(in srgb,var(--tk-acc,#1F6F54) 52%,#d8d2c6);box-shadow:none;color:var(--tk-acc,#1F6F54);}
 .mtk-lock{background:#f0ece3;border:1.5px dashed #cfc7b8;box-shadow:none;color:#a39b8f;font-size:11px;}
+/* 會員列表迷你圓形卡（2026-07-28）：最上方那張票的名稱＋縮小點點 */
+.tk-minicard{display:flex;flex-direction:column;gap:5px;min-width:0;}
+.tkm-t{font-size:11.5px;font-weight:700;color:var(--text);display:flex;align-items:baseline;gap:8px;}
+.tkm-rem{font-size:10.5px;color:var(--t3);font-weight:600;}
+.tkm-dots{display:flex;flex-wrap:wrap;gap:3px;}
+.tkm-dots .mtk{width:21px;height:21px;font-size:7.5px;}
+.tkm-dots .mtk-free,.tkm-dots .mtk-booked{border-width:1.5px;}
 /* 本堂（僅預約明細會傳 curId）：外加金環，不動原本的填色/描邊，實心空心兩態都適用 */
 .mtk.mtk-cur{border-color:var(--gold,#b48a56);box-shadow:0 0 0 3px rgba(180,138,86,.28);}
 /* ── 自主訓練點數獨立入口（2026-07-23 使用者指示）──
@@ -5783,8 +5790,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.0850';
-const APP_VERSION_LABEL='v260728.0850';
+const APP_VERSION='260728.0852';
+const APP_VERSION_LABEL='v260728.0852';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16326,35 +16333,59 @@ PAGES.members=async function(){
     actions: actionsHtml,
   };
 
-  // (3) Table
+  // (3) Table（2026-07-28 使用者指示：票券欄改「最上方那張票」的迷你圓形卡；
+  //     等級＋主教練併一欄，整列重排避免擁擠）
   const cols=[
-    {label:'姓名',     width:'1.8fr', sortKey:'name'},
-    {label:'會員等級', width:'1fr',   sortKey:'tier'},
-    {label:'主教練',   width:'1fr'},
-    {label:'票券',     width:'1.6fr'},
-    {label:'最近上課', width:'1fr',   sortKey:'last'},
-    {label:'',         width:'54px'},
+    {label:'姓名',       width:'1.5fr', sortKey:'name'},
+    {label:'等級／教練', width:'1fr',   sortKey:'tier'},
+    {label:'票券',       width:'2.3fr'},
+    {label:'最近上課',   width:'0.9fr', sortKey:'last'},
+    {label:'',           width:'54px'},
   ];
+  const typeMapFull=Object.fromEntries(types.map(t=>[t.id,t]));
   const tkCell=(m)=>{
-    const t=tkSummary[m.id]||{pt:0,friendly:0,group:0,makeup:0,anyUsable:false,everPt:false};
+    const t=tkSummary[m.id]||{anyUsable:false};
     if(!t.anyUsable) return '<span class="tk-chip" style="background:#fbe9e7;color:#c0392b;">無有效票券</span>';
-    /* 2026-07-23 使用者指示：票券顯示統一走「課種色」語言 —— 形狀 glyph（■●◆）自票券
-       相關 chip 退場，課種改由 chip 底色表達（行事曆篩選 chips／月曆課種點仍保留形狀）。 */
-    const parts=[];
-    if(t.pt>0)       parts.push(`<span class="tk-chip" style="background:#1f6f54;">教練 ${t.pt}</span>`);
-    if(t.friendly>0) parts.push(`<span class="tk-chip" style="background:#23508a;">友善 ${t.friendly}</span>`);
-    if(t.group>0)    parts.push(`<span class="tk-chip" style="background:#9a5a1e;">團課 ${t.group}</span>`);
-    if(t.makeup>0)   parts.push(`<span class="tk-chip" style="background:#eceae4;color:#9a7344;">補課 ${t.makeup}</span>`);
-    return parts.length?`<div class="tk-chips">${parts.join('')}</div>`
-      : '<span style="color:var(--t3);font-size:12px;">有效</span>';
+    // 主票券＝排除自主訓練/折抵券後，可用優先、購買日最新（＝票券分頁最上方那張）
+    const isMain=tk=>{ const tt=typeMapFull[tk.ticket_type_id]||{};
+      if(/折抵/.test(tk.plan_name||'')||/折抵/.test(tt.name||'')) return false;
+      if((tt.category||'')==='自主訓練'||/自主/.test(tt.name||'')) return false;
+      return true; };
+    const mine=allTk.filter(tk=>tk.member_id===m.id&&isMain(tk));
+    const byBuy=(a,b)=>String(b.purchase_date||'').localeCompare(String(a.purchase_date||''));
+    const top=mine.filter(tk=>tk.status==='usable'&&(tk.sessions_remaining||0)>0
+        &&(!tk.expire_date||String(tk.expire_date).slice(0,10)>=today)).sort(byBuy)[0]
+      || mine.sort(byBuy)[0];
+    if(!top) return '<span style="color:var(--t3);font-size:12px;">僅自主訓練點數</span>';
+    const myBk=allBk.filter(b=>b.member_id===m.id&&b.status!=='cancelled');
+    const alloc=allocBookingsToTickets([top],myBk,typeMapFull);
+    const bks=alloc.byTicket[top.id]||[];
+    const direct=bks.filter(b=>b.ticket_id===top.id);
+    const dAtt=direct.filter(b=>b.status==='checked_in'||b.status==='completed').length;
+    const dBooked=direct.filter(b=>b.status==='booked').length;
+    const att=bks.filter(b=>b.status==='checked_in'||b.status==='completed');
+    const total=Number(top.sessions_total)||0, rem=top.sessions_remaining;
+    let used;
+    if(rem==null) used=Math.max(dAtt,att.length);
+    else { const face=Math.max(0,total-(Number(rem)||0)-dBooked); used=Math.max(dAtt,face); }
+    used=Math.min(used,total);
+    let dots=ticketTokens(top,bks,typeMapFull,used,null);
+    const MAXDOT=14;
+    if(total>MAXDOT){   // 一列容納不下的長票：截前 13 顆＋「+N」
+      const spans=dots.split('</span>').filter(x=>x.trim());
+      dots=spans.slice(0,MAXDOT-1).join('</span>')+'</span>'
+        +`<span class="mtk" style="background:#eceae4;color:#9a7344;font-size:8px;" title="共 ${total} 堂">+${total-(MAXDOT-1)}</span>`;
+    }
+    return `<div class="tk-minicard"><div class="tkm-t">${top.plan_name||'票券'}<span class="tkm-rem">剩 ${rem??'—'}</span></div>
+      <div class="tkm-dots">${dots}</div></div>`;
   };
-  /* 2026-07-21 清單簡化：頭像列、空欄位留白（未指定/尚無等填充文字退場）、最近上課改相對時間 */
+  /* 2026-07-21 清單簡化：頭像列、空欄位留白、最近上課改相對時間 */
   const rows=pageRows.map(m=>({
     onclick:`openPersonProfile('member','${m.id}')`,
     cells:[
       lpPerson(m.gender, m.name||'—', fmtPhone(m.phone)),
-      tierTag(effTier(m)),
-      m.default_coach_id ? (coachMap[m.default_coach_id]||'') : '',
+      `<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start;">${tierTag(effTier(m))}
+        ${m.default_coach_id?`<span style="font-size:11.5px;color:var(--t2);">${coachMap[m.default_coach_id]||''}</span>`:''}</div>`,
       tkCell(m),
       lastClassMap[m.id] ? `<span title="${lastClassMap[m.id]}">${fmtRelDay(lastClassMap[m.id])}</span>` : '',
       lpRowAct(lpIconBtn('eye', `openPersonProfile('member','${m.id}')`, '查看詳細')),
