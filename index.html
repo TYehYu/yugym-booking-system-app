@@ -1406,6 +1406,12 @@ tr:hover td{background:var(--card2);}
   @keyframes mSideDim{from{opacity:0;}to{opacity:1;}}
 }
 .modal{background:var(--surface-3);border-radius:var(--radius-2xl);padding:26px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-xl);-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
+/* 手機版彈窗改頂部對齊（2026-07-28 使用者回報：預約視窗上方的會員搜尋列打字時被鍵盤/畫面遮住）——
+   置中對齊在鍵盤彈出時會把視窗上緣推出畫面；頂部對齊讓上方輸入列永遠看得到。 */
+@media (max-width:600px){
+  .modal-bg:not(.modal-side){align-items:flex-start;}
+  .modal-bg:not(.modal-side) .modal{margin-top:10px;max-height:calc(100dvh - 20px);}
+}
 /* ── 彈窗互動語意統一（2026-07-27 使用者指示）：能點/能改＝白底（像按鈕）、純顯示＝米色 ──
    全站基準已大多符合：select/input/.btn-ghost 皆白底、資訊卡 var(--card2)。
    此處補強：彈窗內嵌的白色卡片/列表列（頁面預設白卡）在彈窗裡壓成米色；
@@ -5861,8 +5867,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260728.1913';
-const APP_VERSION_LABEL='v260728.1913';
+const APP_VERSION = '260728.2237';
+const APP_VERSION_LABEL='v260728.2237';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -27849,7 +27855,13 @@ function renderMemTickets(){
   // 「有效」判斷：只看「已簽到/完成」堂數 —— 只要還有沒上完的堂（已簽到 < 總堂數），票券就算持有中。
   //  已預約但還沒上（沒簽到）不算用掉，避免「約了課就被歸到已完成」而反灰跑到下方。
   const doneOf=t=>((usedMap||{})[t.id]||0);   // 已簽到/完成堂數
-  const isLive=t=>t.status==='usable' && doneOf(t)<(t.sessions_total||0) && (!t.expire_date||t.expire_date>=today);
+  /* 2026-07-28 使用者指示（歷史整合修正）：帳面剩 0 且沒有「已預約未上」的票＝用完 → 收進歷史。
+     原本只看「已簽到 < 總堂數」，匯入票（舊系統已用完但無逐堂紀錄）會一直掛在有效區。
+     剩 0 但還有已預約未上的堂（預約即扣）仍算持有中，不會提早消失。 */
+  const isLive=t=>t.status==='usable' && (!t.expire_date||t.expire_date>=today)
+    && ( (Number(t.sessions_remaining)||0)>0
+      || ((bookedMap||{})[t.id]||0)>0
+      || (t.sessions_remaining==null && doneOf(t)<(t.sessions_total||0)) );
   /* 2026-07-23 使用者指示：自主訓練點數效期短（7 天）、數量多且由會員自行預約，
      不與課程票券混列 —— 抽到頁面上方獨立入口（openSelfPtsModal）。 */
   /* 折抵券獨立顯示（2026-07-26 使用者指示）：下方清單只留一般課程票券 */
@@ -30324,6 +30336,16 @@ function showModal(html){
     document.body.style.position='fixed';
   }
   document.body.style.overflow='hidden'; // 鎖住底層捲動
+  if(!window._mFocusBound){
+    /* 手機鍵盤遮擋（2026-07-28）：彈窗內輸入框聚焦後，把它捲進彈窗可視範圍 */
+    window._mFocusBound=true;
+    document.addEventListener('focusin',e=>{
+      const t=e.target;
+      if(!t||!t.closest||!/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) return;
+      if(!t.closest('.modal')) return;
+      setTimeout(()=>{ try{ t.scrollIntoView({block:'center',behavior:'smooth'}); }catch(_){} },320);
+    });
+  }
   if(!window._escBound){
     window._escBound=true;
     document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.getElementById('modal-bg'))closeModal(); });
