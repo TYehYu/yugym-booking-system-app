@@ -5853,8 +5853,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1612';
-const APP_VERSION_LABEL='v260728.1612';
+const APP_VERSION='260728.1613';
+const APP_VERSION_LABEL='v260728.1613';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20553,6 +20553,7 @@ async function revRowGo(mid){
 }
 /* 票券分頁「儲值」（2026-07-28 使用者指示）：開銷售流程並預選本會員 */
 function ppTopUp(mid){
+  window._salesPreMember=mid;   // 銷售第一步的會員選單預選（2026-07-28）
   if(window._grantPreMemberSet) window._grantPreMemberSet(mid);
   openSalesModal();
 }
@@ -21715,27 +21716,63 @@ function goIssueTicket(){ _tkTab='tickets'; navTo('ticketing','g_finance'); }
    首頁快速操作入口改彈窗：教練課/團體課（售課＝簽約）、場租、蛋白粉/筋膜球（商品零售）。
    教練課/團體課先選「業績歸屬」教練 → 記入 purchases.coach_id
    （migration 20260721_06；正式庫未套欄位時 dbPutPurchaseSafe 自動退回不帶）。 */
-function openSalesModal(){
+async function openSalesModal(){
   window._grantSales=null;
-  /* 2026-07-28 使用者指示：入口卡與方案卡統一規格（gt-card2：課種色條＋淡底） */
+  /* 2026-07-28 使用者定案：銷售第一步＝先選會員（帶入所有後續流程）；商品可散客 */
+  const members=(await dbGetAll('members')).filter(m=>m.status==='active');
+  window._slMembers=members;
+  const pre=window._salesPreMember||''; window._salesPreMember=null;
+  const memOpts=`<option value="" ${pre?'':'selected'}>— 請先選擇會員 —</option><option value="__walkin__">散客（僅限商品）</option>`
+    + members.map(m=>`<option value="${m.id}" ${pre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
   const card=(color,label,sub,fn)=>`<button type="button" class="gt-card gt-card2" style="--pc:${color};" onclick="${fn}">
     <div class="gt-c2-name" style="font-size:15.5px;">${label}</div>
     ${sub?`<div class="gt-c2-valid" style="font-size:12.5px;line-height:1.6;">${sub}</div>`:''}</button>`;
   showModal(`<div class="modal-title">銷售 / 儲值</div>
+    <div class="form-row"><label>會員（步驟 1）</label>
+      <div class="mem-pick-row">
+        <input class="gt-search" placeholder="輸入姓名或手機搜尋（共 ${members.length} 位）" oninput="slFilterMembers(this.value)" autocomplete="off">
+        <select id="sl-member">${memOpts}</select>
+      </div>
+    </div>
     <div class="form-row"><label>課程銷售</label><div class="bk-cards">
-      ${card('var(--course-pt-accent,#1f6f54)','教練課','會員 → 簽約 → 業績歸屬',"salesCourse('pt')")}
-      ${card('var(--course-group-accent,#9a5a1e)','團體課','會員 → 售課 → 業績歸屬',"salesCourse('group')")}
-      ${card('#2f8f83','運動按摩','會員 → 售課 → 業績歸屬',"salesCourse('massage')")}
-      ${card('#6a655c','場地租借','單次自主訓練 · 效期 7 天',"salesFacility()")}
-      ${card('#6a655c','自訂','自填堂數／價格 → 業績歸屬',"salesCustom()")}
+      ${card('var(--course-pt-accent,#1f6f54)','教練課','簽約 → 業績歸屬',"slGo('pt')")}
+      ${card('var(--course-group-accent,#9a5a1e)','團體課','售課 → 業績歸屬',"slGo('group')")}
+      ${card('#2f8f83','運動按摩','售課 → 業績歸屬',"slGo('massage')")}
+      ${card('#6a655c','場地租借','單次自主訓練 · 效期 7 天',"slGo('facility')")}
+      ${card('#6a655c','自訂','自填堂數／價格 → 業績歸屬',"slGo('custom')")}
     </div></div>
     <div class="form-row"><label>其他收費</label><div class="bk-cards">
-      ${card('#8a7a5c','蛋白粉','$50',"openMerchSale('蛋白粉',50)")}
-      ${card('#8a7a5c','筋膜球','$200',"openMerchSale('筋膜球',200)")}
+      ${card('#8a7a5c','蛋白粉','$50（可散客）',"slGoMerch('蛋白粉',50)")}
+      ${card('#8a7a5c','筋膜球','$200（可散客）',"slGoMerch('筋膜球',200)")}
     </div></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
   /* 2026-07-28 使用者指示：銷售入口視窗與簽約視窗統一大小（720px、四張卡寬） */
   const _mEl=document.querySelector('#modal-bg .modal'); if(_mEl) _mEl.classList.add('modal-wide');
+}
+/* 銷售第一步選會員（2026-07-28）：類別卡守門＋帶入後續流程 */
+function slFilterMembers(q){
+  const sel=document.getElementById('sl-member'); if(!sel) return;
+  const prev=sel.value, qq=(q||'').trim(), qp=normPhone(qq);
+  const list=qq?(window._slMembers||[]).filter(m=>(m.name||'').includes(qq)||(qp&&normPhone(m.phone).includes(qp))):(window._slMembers||[]);
+  sel.innerHTML=`<option value="">— 請先選擇會員 —</option><option value="__walkin__">散客（僅限商品）</option>`
+    + list.map(m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
+  if(list.some(m=>m.id===prev)||prev==='__walkin__') sel.value=prev;
+  else if(qq&&list.length===1) sel.value=list[0].id;
+}
+function slMember(){ return (document.getElementById('sl-member')||{}).value||''; }
+function slGo(kind){
+  const mid=slMember();
+  if(!mid||mid==='__walkin__'){ showToast('請先選擇會員'); return; }
+  window._grantPreMemberSet(mid);
+  window._salesFacilityMember=mid;
+  if(kind==='facility') return salesFacility();
+  if(kind==='custom') return salesCustom();
+  return salesCourse(kind);
+}
+function slGoMerch(name,price){
+  const mid=slMember();
+  window._merchPreMember=(mid&&mid!=='__walkin__')?mid:'';
+  openMerchSale(name,price);
 }
 /* 銷售順序（2026-07-21 使用者指示）：第一頁產品 → 第二頁會員（非課程在此結帳）→
    第三頁才選業績歸屬教練（僅教練課/團體課需要）。 */
@@ -21769,13 +21806,14 @@ async function salesAttribSubmit(cid){
 async function salesFacility(){
   const members=(await dbGetAll('members')).filter(m=>m.status==='active');
   window._msMembers=members;
+  const _fpre=window._salesFacilityMember||''; window._salesFacilityMember=null;
   const today=ymd(TODAY);
   showModal(`<div class="modal-title">銷售 · 場地租借票券</div>
     <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">1 次場地租借，效期 <b>7 天</b>（自啟用日起算）。租用時在「新增預約 → 場地租借」選會員票券折抵。</div>
     <div class="form-row"><label>會員（必選）</label>
       <div class="mem-pick-row">
         <input class="gt-search" placeholder="輸入姓名或手機搜尋" oninput="msFilterMembers(this.value)" autocomplete="off">
-        <select id="ms-member">${members.map(m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
+        <select id="ms-member">${members.map(m=>`<option value="${m.id}" ${_fpre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
       </div>
     </div>
     <div class="form-2col">
@@ -21818,7 +21856,7 @@ async function openMerchSale(name,defPrice){
     <div class="form-row"><label>會員（選填，可散客）</label>
       <div class="mem-pick-row">
         <input id="ms-mq" class="gt-search" placeholder="輸入姓名或手機搜尋，留空＝散客" oninput="msFilterMembers(this.value)" autocomplete="off">
-        <select id="ms-member"><option value="">散客（不指定）</option>${members.map(m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
+        <select id="ms-member"><option value="">散客（不指定）</option>${members.map(m=>`<option value="${m.id}" ${(window._merchPreMember||'')===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
       </div>
     </div>
     <div class="form-2col">
