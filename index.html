@@ -5817,8 +5817,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1350';
-const APP_VERSION_LABEL='v260728.1350';
+const APP_VERSION='260728.1351';
+const APP_VERSION_LABEL='v260728.1351';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -27762,22 +27762,23 @@ PAGES.mem_purchase=async function(){
   const curFmt=window._purFmtFilter || (hasV1?'1v1':(hasV2?'1v2':'1v1'));
   window._purFmtFilter=curFmt;
   const GLABEL={'1v1':'1V1 個人教練課','1v2':'1V2 雙人教練課','group':'團課','other':'其他方案'};
+  /* 2026-07-28 使用者指示：方案卡全站統一規格——單價／名稱·堂數／費用／效期＋課種色 */
+  const slotOfP=p=>{ if(p.plan_type==='vip'||/vip/i.test(p.name||'')) return 0;
+    if(p.plan_type==='loyal') return /友善/.test(p.name||'')?1.5:1;
+    const s={general:2,promo:3,friendly:4,friendly_promo:5}[p.plan_type]; return s==null?6:s; };
   const planCard=p=>{
-    const ty=typeMap[p.ticket_type_id];const tot=p.sessions_base+p.sessions_bonus;const price=(p.unit_price||0)*p.sessions_base;
+    const tot=p.sessions_base+p.sessions_bonus;const price=(p.unit_price||0)*p.sessions_base;
     const col=planColor(p);
-    const tag=isPromoP(p)?`<span class="gt-card-tag">優惠</span>`:'';
-    return `<button type="button" class="gt-card pur-card" onclick="openApplyPlan('${p.id}')">
-      <div class="gt-card-name">${p.name}${tag}</div>
-      <div class="gt-card-meta"><span class="gt-card-sess">${tot} 堂</span><span class="gt-card-price">$${price.toLocaleString()}</span></div>
-      <div style="font-size:11px;color:var(--t3);margin-top:2px;">效期 ${p.valid_days} 天${p.installment?'　·　可分期':''}</div>
+    return `<button type="button" class="gt-card gt-card2 pur-card" style="--pc:${col};" title="${p.name}" onclick="openApplyPlan('${p.id}')">
+      <div class="gt-c2-tag">$${(p.unit_price||0).toLocaleString()}/堂</div>
+      <div class="gt-c2-name">${p.name}·${tot}堂</div>
+      <div class="gt-c2-price">$${price.toLocaleString()}</div>
+      <div class="gt-c2-valid">效期 ${p.valid_days} 天${p.installment?'　·　可分期':''}</div>
     </button>`;
   };
-  const groupBody=(arr)=>{
-    const normal=arr.filter(p=>!isPromoP(p));const promo=arr.filter(p=>isPromoP(p));
-    const n=Math.max(normal.length,promo.length);let cells='';
-    for(let i=0;i<n;i++){cells+=normal[i]?planCard(normal[i]):'<div class="gt-card-empty"></div>';cells+=promo[i]?planCard(promo[i]):'<div class="gt-card-empty"></div>';}
-    return `<div class="gt-cards2">${cells}</div>`;
-  };
+  const groupBody=(arr)=>`<div class="gt-matrix-row">${arr.slice()
+    .sort((a,b)=>(slotOfP(a)-slotOfP(b))||((a.sessions_base||0)-(b.sessions_base||0)))
+    .map(planCard).join('')}</div>`;
   let body='';
   if(hasV1||hasV2){
     body+=`<div class="gt-fmt-filter">`;
