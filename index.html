@@ -5815,8 +5815,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1000';
-const APP_VERSION_LABEL='v260728.1000';
+const APP_VERSION='260728.1001';
+const APP_VERSION_LABEL='v260728.1001';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7587,8 +7587,18 @@ function effTier(m){
   if(!m) return 'regular';
   if(m.level==='vip') return 'vip';
   const c=window._memberTierCache;
-  if(c && c.__ready) return c[m.id]||c.__default||'regular';   // 無簽到史者吃起點條款預設值
-  return m.level||'regular';
+  let t=(c && c.__ready) ? (c[m.id]||c.__default||'regular') : (m.level||'regular');
+  /* 2026-07-28 使用者定案：起點名單（2026-07-28 含以前建檔）維持主顧客起點；
+     之後新增的客戶一律從「會員」開始——建檔未滿 3 個完整月前不可能靠自動制升主顧客，
+     這段期間把繼承到的起點預設『主顧客』壓回『會員』；之後交回自動升降制。 */
+  const _cd=String(m.created_at||'').slice(0,10);
+  if(_cd>='2026-07-29' && t==='loyal'){
+    const nowYm=ymd(TODAY).slice(0,7);
+    let ym=_cd.slice(0,7), n=0;
+    while(ym<nowYm && n<5){ ym=_nextYm(ym); n++; }
+    if(n<4) t='regular';   // 建檔後未累積 3 個完整月 → 仍是會員
+  }
+  return t;
 }
 // 各頁載入時呼叫：抓 bookings（有 8 秒 TTL 快取）建等級快取
 async function ensureMemberTiers(){
