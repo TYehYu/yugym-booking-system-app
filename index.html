@@ -5817,8 +5817,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1331';
-const APP_VERSION_LABEL='v260728.1331';
+const APP_VERSION='260728.1339';
+const APP_VERSION_LABEL='v260728.1339';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14355,6 +14355,13 @@ async function doConvertPending(memberId){
  }catch(e){ showToast('轉換失敗：'+(e&&e.message?e.message:e)); }
 }
 async function submitBooking(){
+  /* 防連點（2026-07-28 魚媽案例：長連續預約無回饋被連按兩次 → 27 筆重複）：
+     建立期間鎖住，按鈕顯示進度。 */
+  if(window._bkSubmitting){ showToast('建立中，請稍候…'); return; }
+  window._bkSubmitting=true;
+  try{ await _submitBookingInner(); } finally{ window._bkSubmitting=false; }
+}
+async function _submitBookingInner(){
  try{
   const{type_id,t,coach_id,date,time}=_bkWizard;
   const isGroup = t.category==='小班肌力';
@@ -14411,6 +14418,8 @@ async function submitBooking(){
     let made=0, skippedWeeks=[], charged=0, skipped=0;
     for(let w=0;w<grpDates.length;w++){
       const dW=grpDates[w];
+      if(repeatN>1){ const btn=[...document.querySelectorAll('#modal-bg .btn.btn-green')].pop();
+        if(btn){ btn.disabled=true; btn.textContent=`建立中 ${w+1} / ${repeatN}…`; } }
       const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id};
       const verr=await validateBooking(vbk,dW,time,60);
       if(verr){ if(repeatN===1){showToast(verr);return;} skippedWeeks.push(dW.slice(5).replace('-','/')); continue; }
@@ -14476,6 +14485,10 @@ async function submitBooking(){
     count: recurring ? 60 : 1,          // 上限交由 結束日期＋票券剩餘 決定
     until: recurring ? _rc.until : null,
     findTicketFn: bkFindTk,
+    onProgress:(cur,total)=>{   // 逐堂進度寫回按鈕（2026-07-28：長連續預約不再像當機）
+      const btn=[...document.querySelectorAll('#modal-bg .btn.btn-green')].pop();
+      if(btn){ btn.disabled=true; btn.textContent=`建立中 ${cur} / ${total}…`; }
+    },
   });
   const created=r.ok, skipped=r.skipped, noTicket=r.noTicket, results=r.results;
   if(created>0) await pushNotification(member_id,'booking','預約成立',`已為您建立 ${created} 筆${t.category}預約。`);
