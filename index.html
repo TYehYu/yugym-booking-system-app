@@ -5853,8 +5853,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1634';
-const APP_VERSION_LABEL='v260728.1634';
+const APP_VERSION='260728.1636';
+const APP_VERSION_LABEL='v260728.1636';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23270,21 +23270,35 @@ function splitAmount(amount, n){
   return Array.from({length:n},(_,i)=>per+(i<rem?1:0));
 }
 // 顯示分期試算（每期金額、開通堂數）
+/* 分段開通改在摘要卡圓圈呈現（2026-07-28 使用者指示）：前段空心可用、後段 🔒 鎖定，
+   下方不再跳文字訊息；本期實收以小字附在圓圈列旁。 */
 function refreshInstallPreview(){
-  const box=document.getElementById('gt-install-preview'); if(!box)return;
-  const plan=window._grantPlanCache;
+  const box=document.getElementById('gt-install-preview'); if(box) box.style.display='none';
+  const grid=document.querySelector('#gt-info .tkc-grid'); if(!grid) return;
+  const plan=window._grantPlanCache; if(!plan) return;
   const n=Number((document.getElementById('gt-install')||{}).value||1);
-  if(!plan || n<=1){ box.style.display='none'; return; }
   const total=(plan.sessions_base||0)+(plan.sessions_bonus||0);
-  const amount=Number((document.getElementById('gt-amount')||{}).value)||0;
+  if(n<=1){
+    let c=''; for(let i=0;i<total;i++) c+='<div class="tkc-dot tkc-empty"></div>';
+    grid.innerHTML=c;
+    const old=document.getElementById('gt-inst-note'); if(old) old.remove();
+    return;
+  }
   const segs=splitSessions(total,n);
+  const amount=Number((document.getElementById('gt-amount')||{}).value)||0;
   const amts=splitAmount(amount,n);
-  const rows=segs.map((s,i)=>{
-    const from=segs.slice(0,i).reduce((a,b)=>a+b,0)+1, to=from+s-1;
-    return `第 ${i+1} 期：$${amts[i].toLocaleString()}　·　開通第 ${from}–${to} 堂（${s} 堂）${i===0?'　<b style="color:var(--green);">發放即開通</b>':'　<span style="color:var(--t3);">上到接近上限時收款解鎖</span>'}`;
-  }).join('<br>');
-  box.innerHTML=`<div style="font-size:14px;margin-bottom:6px;">本期實收 <b style="color:var(--green);font-size:17px;">$${amts[0].toLocaleString()}</b>　<span style="color:var(--t3);font-size:11.5px;">（總金額 $${amount.toLocaleString()} ÷ ${n} 期）</span></div><b style="color:var(--green);">分 ${n} 期・分段開通</b><br>${rows}<br><span style="color:var(--t3);">發放時只記第 1 期營收（$${amts[0].toLocaleString()}），第 2、3 期收款時再認列。</span>`;
-  box.style.display='';
+  const unlocked=segs[0]||0;
+  let c='';
+  for(let i=0;i<total;i++){
+    c += i<unlocked ? '<div class="tkc-dot tkc-empty"></div>'
+                    : '<div class="tkc-dot tkc-locked" title="需繳下一期才開通">🔒</div>';
+  }
+  grid.innerHTML=c;
+  let note=document.getElementById('gt-inst-note');
+  if(!note){ note=document.createElement('div'); note.id='gt-inst-note';
+    note.style.cssText='font-size:11.5px;color:var(--t2);margin-top:6px;';
+    grid.insertAdjacentElement('afterend',note); }
+  note.textContent=`分 ${n} 期・本期開通 ${unlocked} 堂・本期實收 $${(amts[0]||0).toLocaleString()}`;
 }
 async function submitGrant(){
   const member_id=document.getElementById('gt-member').value;
