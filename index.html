@@ -5815,8 +5815,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1018';
-const APP_VERSION_LABEL='v260728.1018';
+const APP_VERSION='260728.1029';
+const APP_VERSION_LABEL='v260728.1029';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16342,9 +16342,10 @@ PAGES.members=async function(){
   };
   allTk.forEach(t=>{
     if(!t.member_id)return;
-    const s=tkSummary[t.member_id]||(tkSummary[t.member_id]={pt:0,friendly:0,group:0,makeup:0,anyUsable:false,everPt:false});
-    // everPt：曾購買過教練類課程（不論是否已用完或過期）→ 用來判定「待續約」
+    const s=tkSummary[t.member_id]||(tkSummary[t.member_id]={pt:0,friendly:0,group:0,makeup:0,anyUsable:false,everPt:false,everGrp:false});
+    // everPt／everGrp：曾購買過教練類／團體課（不論是否已用完或過期）→ 用來判定「待續約」
     if(isCoachClass(t)) s.everPt=true;
+    if((typeCatMap[t.ticket_type_id]||'')==='小班肌力') s.everGrp=true;
     const usable = t.status==='usable' && t.sessions_remaining>0 && (!t.expire_date||t.expire_date>=today);
     if(!usable)return;
     s.anyUsable=true;
@@ -16425,21 +16426,31 @@ PAGES.members=async function(){
   const _memById=Object.fromEntries(members.map(m=>[m.id,m]));
   const proIds=tierPromotionWatchIds(allBk).filter(id=>_memById[id]&&effTier(_memById[id])==='regular');
   const demIds=tierDemotionWatchIds(allBk).filter(id=>_memById[id]&&effTier(_memById[id])==='loyal');
-  /* 待續約（2026-07-28 使用者定義）：教練課剩餘 0、且「最後一堂」（含已上/已預約，未取消）落在本月
-     ——這個月上完就沒了，正是要談續約的名單。 */
-  const _lastCoach={};
+  /* 待續約（2026-07-28 使用者定義二修）：教練課（含友善）與團體課分開判定——
+     該類剩餘 0、且該類「最後一堂」（含已上/已預約，未取消）落在本月；名單標注課程。 */
+  const _lastByGrp={};   // mid -> {pt:date, grp:date}
   allBk.forEach(b=>{
     if(b.status==='cancelled') return;
-    if(b.category!=='私人教練') return;
-    const mid=b.member_id; if(!mid||!b.date) return;
-    if(!_lastCoach[mid]||b.date>_lastCoach[mid]) _lastCoach[mid]=b.date;
+    let g=null;
+    if(b.category==='私人教練') g='pt';
+    else if(b.category==='小班肌力') g='grp';
+    else return;
+    const mids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
+    mids.forEach(mid=>{ if(!mid||!b.date) return;
+      const e=(_lastByGrp[mid]=_lastByGrp[mid]||{});
+      if(!e[g]||b.date>e[g]) e[g]=b.date; });
   });
-  const renewList=members.filter(m=>{
-    const t=tkSummary[m.id];
-    if(!t || !t.everPt) return false;
-    if(((t.pt||0)+(t.friendly||0))>0) return false;          // 還有未預約堂數 → 不算
-    return (_lastCoach[m.id]||'').slice(0,7)===nowYm;        // 最後一堂在本月
-  }).map(m=>({...m,__last:_lastCoach[m.id]}));
+  const renewList=[];
+  members.forEach(m=>{
+    const t=tkSummary[m.id]; if(!t) return;
+    const lg=_lastByGrp[m.id]||{};
+    const hits=[];
+    if(t.everPt && ((t.pt||0)+(t.friendly||0))===0 && (lg.pt||'').slice(0,7)===nowYm) hits.push(['教練課',lg.pt]);
+    if(t.everGrp && (t.group||0)===0 && (lg.grp||'').slice(0,7)===nowYm) hits.push(['團體課',lg.grp]);
+    if(hits.length) renewList.push({...m,
+      __course:hits.map(x=>x[0]).join('・'),
+      __last:hits.map(x=>x[1]).sort().pop()});
+  });
   window._memTierWatch={up:proIds.map(id=>_memById[id]), down:demIds.map(id=>_memById[id]), renew:renewList};
   const stats=[
     {label:'總人數',       value:members.length,   unit:'位'},
@@ -16453,10 +16464,9 @@ PAGES.members=async function(){
   const tkOpts=[['','全部票券'],['pt2','教練課剩 1-2 堂'],['pt1','教練課剩 1 堂'],['expired','無有效票券']];
   const sortOpts=[['reg','依註冊日'],['name','依姓名'],['tier','依等級'],['last','依最近上課']];
   const canManage = isDeskLike();
+  /* 2026-07-28 使用者指示：移除 購買審核／申辦 QR；新增會員縮小 */
   const actionsHtml =
-    (canManage?`<button class="btn btn-ghost btn-sm" onclick="navTo('purchase_review','g_member')">購買審核</button>`:'')
-    + `<button class="btn btn-ghost btn-sm" onclick="openMemberRegisterLink()">申辦 QR</button>`
-    + (canManage?`<button class="btn btn-green btn-sm" onclick="openBackofficeMember()">${LP_ICON.plus}　新增會員</button>`:'');
+    (canManage?`<button class="btn btn-green btn-sm" style="padding:6px 13px;font-size:12.5px;" onclick="openBackofficeMember()">＋ 新增會員</button>`:'');
   const toolbar={
     search:{ value:_memSearch, placeholder:'搜尋姓名或電話', oninput:'memSetSearch(this.value)' },
     filters:[
@@ -16564,7 +16574,7 @@ function memTierWatchList(kind){
     renew:'本月待續約名單（本月已安排最後一堂課）'}[kind]||'名單';
   const rows=list.map(m=>`<button class="list-item" style="width:100%;text-align:left;cursor:pointer;background:none;border:none;border-bottom:1px solid var(--bd);padding:11px 6px;display:flex;justify-content:space-between;align-items:center;" onclick="closeModal();openPersonProfile('member','${m.id}')">
       <span style="font-weight:600;">${m.name||'—'}</span>
-      <span style="color:var(--t3);font-size:12px;">${kind==='renew'&&m.__last?`最後一堂 ${m.__last.slice(5).replace('-','/')}　`:''}${fmtPhone(m.phone)}</span>
+      <span style="color:var(--t3);font-size:12px;">${kind==='renew'?`${m.__course?`<span class="tag tag-warn" style="font-size:10.5px;margin-right:6px;">${m.__course}</span>`:''}${m.__last?`最後一堂 ${m.__last.slice(5).replace('-','/')}　`:''}`:''}${fmtPhone(m.phone)}</span>
     </button>`).join('');
   showModal(`<div class="modal-title">${title}</div>
     ${rows||'<div class="pp-card-tip" style="padding:20px 0;">目前沒有符合條件的會員。</div>'}
