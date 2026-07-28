@@ -5871,8 +5871,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.0006';
-const APP_VERSION_LABEL='v260729.0006';
+const APP_VERSION = '260729.0017';
+const APP_VERSION_LABEL='v260729.0017';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7263,6 +7263,7 @@ function openMoreMenu(){
     items+=`<div class="more-sep"></div>`;
   }
   if(role==='coach') items+=`<button class="more-item" onclick="closeModal();openCoachProfile()">👤　個人資料</button>`;
+  if(role==='member') items+=`<button class="more-item" onclick="closeModal();openFamilyShare()">👪　家庭成員</button>`;   // 家庭共享（2026-07-29）
   items+=`<button class="more-item" onclick="closeModal();openChangePassword()">🔑　修改密碼</button>`;
   items+=`<div class="more-sep"></div>`;
   items+=`<button class="more-item more-logout" onclick="doLogout()">↩　登出</button>`;
@@ -11438,7 +11439,10 @@ async function renderCalendar(opts){
       if(b.category==='小班肌力' && Array.isArray(b.member_ids) && b.member_ids.length){
         // memMap[id] 本身即姓名字串（見上方 memMap 定義），不可再取 .name（會變 —）
         _tipMem = b.member_ids.map(mid=>memMap[mid]||'—').join('\n');
-      }else if(b.trial_name){ _tipMem = b.trial_name+'（體驗）'; }
+      }else if(b.category==='自主訓練'&&b.trial_name){
+        /* 家庭共享使用人（2026-07-29）：自主訓練的 trial_name＝家人稱呼，不可標成「體驗」 */
+        _tipMem = ((b.member_id&&memMap[b.member_id])||'')+'（'+b.trial_name+'）';
+      }else if(b.trial_name&&!b.member_id){ _tipMem = b.trial_name+'（體驗）'; }
       else { _tipMem = hideMember ? typeName : ((b.member_id&&memMap[b.member_id])||memName||'—'); }
       const _tipCoach = (subCoachName||coachName) ? `教練：${subCoachName||coachName}${subCoachName?'（代）':''}` : '';
       const _tipStr = _tipEsc([`${b.start_time}–${_endT}`, _tipMem, _tipCoach].filter(Boolean).join('\n'));
@@ -12460,13 +12464,19 @@ async function validateBooking(bk,date,time,duration){
   }
 
   // 2) 會員重複預約（同會員、時間重疊）
-  //    2026-07-29 使用者指示：自主訓練不擋——共享帳號（全家共用）可同時段約多個
-  //    自主訓練名額（場地容量與點數本身就是上限）；教練課等其他課種維持防呆。
-  //    比對兩側只要有一邊是自主訓練就放行。
-  if(bk.member_id && bk.category!=='自主訓練'){
-    const dup=sameDay.find(x=> x.member_id===bk.member_id && x.category!=='自主訓練' &&
+  //    2026-07-29 使用者指示（二修）：改「家庭共享」閘門——會員有設定家庭成員名單、
+  //    且重疊的任一邊是自主訓練才放行（同時段多名額給家人用）；未設定者維持防呆。
+  if(bk.member_id){
+    const dup=sameDay.find(x=> x.member_id===bk.member_id &&
       overlaps(ns,ne, timeToMin(x.start_time), timeToMin(x.start_time)+(x.duration||60)) );
-    if(dup) return '會員於該時段已有預約';
+    if(dup){
+      let famOK=false;
+      if(bk.category==='自主訓練' || dup.category==='自主訓練'){
+        try{ const mrec=await dbGet('members',bk.member_id);
+          famOK=Array.isArray(mrec&&mrec.family_members)&&mrec.family_members.length>0; }catch(_){}
+      }
+      if(!famOK) return '會員於該時段已有預約';
+    }
   }
 
   // 3) 場地分配（依課程類型可用場地優先序，找該時段未被佔的單位）
@@ -15544,7 +15554,9 @@ async function openBookingDetail(id){
   }else{
     memberLine = (b.pending_contract&&!b.member_id)
       ? `<div><span style="color:var(--t2);">客戶</span>　${b.trial_name||'—'}　<span class="tag tag-warn" style="font-size:10.5px;">待簽約</span>${b.trial_phone?`　<span style="color:var(--t3);font-size:12px;">${b.trial_phone}</span>`:''}</div>`
-      : `<div><span style="color:var(--t2);">會員</span>　${mem?(isMemberView?`<span style="font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'—'}</div>`;
+      : `<div><span style="color:var(--t2);">會員</span>　${mem?(isMemberView?`<span style="font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'—'}</div>`
+      /* 家庭共享使用人（2026-07-29）：自主訓練由家人使用時，trial_name 記稱呼 */
+      + ((b.category==='自主訓練'&&b.trial_name)?`<div><span style="color:var(--t2);">使用人</span>　${b.trial_name}<span style="color:var(--t3);font-size:11.5px;">（家庭成員）</span></div>`:'');
   }
   showModal(`<div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <span>預約明細</span>
@@ -26375,6 +26387,45 @@ async function doMemCancelSelf(id){
   navTo('mem_bookings');
 }
 
+/* ══ 家庭共享（2026-07-29 使用者指示）══
+   會員自行維護家庭成員名單（存 members.family_members，jsonb 陣列）；
+   有名單才可同時段預約多個自主訓練名額，預約時選「使用人」記在該筆（trial_name）。 */
+async function openFamilyShare(){
+  const me=await dbGet('members',SESSION.id).catch(()=>null);
+  if(!me){ showToast('讀取資料失敗，請稍後再試'); return; }
+  window._famList=Array.isArray(me.family_members)?me.family_members.filter(Boolean):[];
+  renderFamilyShare();
+}
+function renderFamilyShare(){
+  const list=window._famList||[];
+  showModal(`<div class="modal-title">家庭成員</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">新增家庭成員（例：爸爸、媽媽）後，同一時段可預約多個自主訓練名額給家人使用，預約時選擇使用人。</div>
+    <div class="form-row"><label>新增成員稱呼</label>
+      <div class="mem-pick-row"><input id="fam-name" placeholder="例：爸爸" maxlength="10" autocomplete="off"><button class="btn btn-ghost" style="flex:0 0 auto;" onclick="famAdd()">加入</button></div></div>
+    <div style="font-size:12px;color:var(--t2);font-weight:600;margin:12px 0 2px;">目前成員（${list.length}）</div>
+    ${list.length?list.map((n,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd);font-size:13.5px;"><span>${n}</span><button class="btn btn-ghost btn-sm" onclick="famDel(${i})">移除</button></div>`).join('')
+      :'<div style="padding:10px 0;color:var(--t3);font-size:12.5px;">尚未新增家庭成員</div>'}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button><button class="btn btn-green" onclick="famSave()">儲存</button></div>`);
+}
+function famAdd(){
+  let v=((document.getElementById('fam-name')||{}).value||'').trim().replace(/[<>'"`\\]/g,'');
+  if(!v){ showToast('請輸入稱呼'); return; }
+  window._famList=window._famList||[];
+  if(window._famList.includes(v)){ showToast('已在名單中'); return; }
+  window._famList.push(v);
+  renderFamilyShare();
+}
+function famDel(i){ (window._famList||[]).splice(i,1); renderFamilyShare(); }
+async function famSave(){
+ try{
+  const list=(window._famList||[]).filter(Boolean);
+  const {error}=await sb.from('members').update({family_members:list.length?list:null}).eq('id',SESSION.id);
+  if(error){ showToast('儲存失敗：'+error.message); return; }
+  dbCacheClear('members');
+  closeModal();
+  showToast(list.length?`已儲存家庭成員（${list.length} 位）`:'已清空家庭成員名單');
+ }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+}
 /* 取消團體課報名（2026-07-28）：只退自己的名額＋退 1 堂，整堂課不動 */
 async function memLeaveGroup(id){
   const b=await dbGet('bookings',id);
@@ -26417,10 +26468,17 @@ function msbGroupTks(){
   return s.groups[s.type]||[];
 }
 // 該日是否在點數效期內（友善點另要求平日；金框只框可用日）
+/* 換時段模式（2026-07-29 使用者指示）：目前分頁沒有可用點數、但有未來自主預約
+   → 仍可瀏覽時段，點新時段時選一筆既有預約換過來（改期語意，不另扣點）。 */
+function _msbSwapMode(){
+  const s=window._msb; if(!s||s.resched||s.type==='group') return false;
+  return !msbGroupTks().some(t=>(Number(t.sessions_remaining)||0)>0) && (s.futureSelf||[]).length>0;
+}
 function msbDateOk(ds){
   const s=window._msb; if(!s) return false;
   if(ds<ymd(TODAY)) return false;
   if(s.resched) return true;   // 改期：點數已扣，不看票券效期
+  if(_msbSwapMode()) return true;   // 換時段：同改期語意，不看票券效期
   if(s.type==='friendly'){
     const dow=parseYmd(ds).getDay();
     if(dow===0||dow===6) return false;
@@ -26477,8 +26535,10 @@ async function msbStart(reschedId){
       && new Date(x.date+'T'+x.start_time+':00').getTime()>now)
       .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   }catch(_){}
-  window._msb={on:true,groups,hasPoints:usable.length>0,grpTks,grpClasses,hasGrp:grpTks.length>0,resched,futureSelf,
-    type:groups.self.length>0?'self':(groups.friendly.length>0?'friendly':'group'),
+  /* 家庭成員名單（2026-07-29 家庭共享）：有名單才可同時段多名額、預約時選使用人 */
+  let _fam=[]; try{ const _me=await dbGet('members',SESSION.id); _fam=Array.isArray(_me&&_me.family_members)?_me.family_members.filter(Boolean):[]; }catch(_){}
+  window._msb={on:true,groups,hasPoints:usable.length>0,grpTks,grpClasses,hasGrp:grpTks.length>0,resched,futureSelf,family:_fam,
+    type:groups.self.length>0?'self':(groups.friendly.length>0?'friendly':((futureSelf||[]).length?'self':'group')),
     date:resched?resched.origDate:ymd(TODAY),free:null};
   const fab=document.getElementById('msb-fab'); if(fab){ fab.classList.add('on'); fab.textContent='✕'; }
   /* 2026-07-28 使用者指示：首頁週曆（日期卡列）已固定一列、移除收合——
@@ -26500,7 +26560,7 @@ function msbRenderSheet(){
   const s=window._msb; if(!s) return;
   let host=document.getElementById('msb-sheet');
   if(!host){ host=document.createElement('div'); host.id='msb-sheet'; document.body.appendChild(host); }
-  if(!s.hasPoints && !s.hasGrp && !s.resched){
+  if(!s.hasPoints && !s.hasGrp && !(s.futureSelf||[]).length && !s.resched){
     const fb=(s.futureSelf||[]).map(b=>`<div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-top:8px;">
       <span style="font-size:13.5px;"><b style="font-family:var(--num);">${b.date.slice(5).replace('-','/')}</b>　${b.start_time}</span>
       <span style="display:flex;gap:6px;">
@@ -26520,6 +26580,7 @@ function msbRenderSheet(){
   /* 分頁列（2026-07-28 使用者指示：加［團體課］；自主訓練選中＝米色、團體課選中＝整張橘） */
   const btns=[];
   if(s.groups.self.length) btns.push(`<button class="${s.type==='self'?'on':''}" onclick="msbSetType('self')">自主訓練（${sum(s.groups.self)} 點）</button>`);
+  else if(!s.groups.friendly.length && (s.futureSelf||[]).length) btns.push(`<button class="${s.type==='self'?'on':''}" onclick="msbSetType('self')">自主訓練（換時段）</button>`);   // 點數用完仍可挑新時段換（2026-07-29）
   if(s.groups.friendly.length) btns.push(`<button class="${s.type==='friendly'?'on':''}" onclick="msbSetType('friendly')">友善（${sum(s.groups.friendly)} 點）</button>`);
   btns.push(`<button class="msb-tg ${isGrpType?'on':''}" onclick="msbSetType('group')">團體課（${sum(s.grpTks||[])} 堂）</button>`);
   const typeRow=`<div class="msb-types">${btns.join('')}</div>`;
@@ -26552,7 +26613,7 @@ function msbRenderSheet(){
     ${s.resched?'':typeRow}
     <div class="msb-sub">${s.date.slice(5).replace('-','/')}（週${WD[d.getDay()]}）</div>
     <div id="msb-slots"><div class="msb-empty" style="padding:18px;">載入時段中…</div></div>
-    <div class="msb-hint">${s.resched?'改期不另扣點；開課 24 小時前可改。':(isGrpType?'點「報名」加入該堂團體課，確認後扣 1 堂；開課前可在「我的預約」取消退堂。':'點選時段即可預約（60 分鐘）；系統自動使用最快到期的點數，確認後扣 1 點。')}</div>
+    <div class="msb-hint">${s.resched?'改期不另扣點；開課 24 小時前可改。':(isGrpType?'點「報名」加入該堂團體課，確認後扣 1 堂；開課前可在「我的預約」取消退堂。':(_msbSwapMode()?'點數已用於現有預約——點選新時段，選擇要把哪一筆換過來（原時段開課 24 小時前可換，不另扣點）。':'點選時段即可預約（60 分鐘）；系統自動使用最快到期的點數，確認後扣 1 點。'))}</div>
   </div>`;
   if(isGrpType && !s.resched) msbRenderGrpList(); else msbLoadSlots();
 }
@@ -26615,18 +26676,21 @@ async function msbGrpJoinDo(bid){
 }
 let _msbLoadSeq=0;
 async function msbLoadSlots(){
-  const s=window._msb; if(!s||!s.hasPoints) return;
+  const s=window._msb; if(!s) return;
+  const swap=_msbSwapMode();
+  if(!s.hasPoints && !s.resched && !swap) return;
   const box=document.getElementById('msb-slots'); if(!box) return;
   const seq=++_msbLoadSeq;
   const tk=s.resched?null:msbPickTicket();
-  if(!s.resched && !tk){ box.innerHTML='<div class="msb-empty">這天點數已過效期，請選金框內的日期</div>'; return; }
+  if(!s.resched && !tk && !swap){ box.innerHTML='<div class="msb-empty">這天點數已過效期，請選金框內的日期</div>'; return; }
+  const probeTtid=s.resched?s.resched.ttid:(tk?tk.ticket_type_id:(((s.futureSelf||[])[0]||{}).ticket_type_id||null));
   const free=new Set(); const vids={};
   /* 並行探測（2026-07-26 提速）：24 個時段同時驗證。佔用資料與票種都走共用快取，
      實際只有 1 支 RPC＋1 支表查詢。每個時段用獨立物件（validateBooking 會寫回 venue_unit）。 */
   const probes=[]; for(let m=540;m<1260;m+=30) probes.push(m);
   const results=await Promise.all(probes.map(async m=>{
     const vbk={id:s.resched?s.resched.id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',
-      ticket_type_id:s.resched?s.resched.ttid:tk.ticket_type_id};
+      ticket_type_id:probeTtid};
     const err=await validateBooking(vbk,s.date,minToTime(m),60);
     return [m,err,vbk.venue_unit];
   }));
@@ -26643,7 +26707,10 @@ async function msbLoadSlots(){
 async function msbPickSlot(t){
   const s=window._msb; if(!s) return;
   const tk=s.resched?null:msbPickTicket();
-  if(!s.resched && !tk){ showToast('這天沒有可用的點數'); return; }
+  if(!s.resched && !tk){
+    if(_msbSwapMode()){ return msbSwapAsk(t); }   // 點數用完 → 選一筆既有預約換到這個時段（2026-07-29）
+    showToast('這天沒有可用的點數'); return;
+  }
   const d=parseYmd(s.date);
   /* 場地選擇（2026-07-26 使用者指示）：確認視窗內選場地，預設＝自動分配到的；
      逐一驗證該時段各場地是否還有位，沒位的不顯示。 */
@@ -26669,6 +26736,8 @@ async function msbPickSlot(t){
       <div><span style="color:var(--t2);">${s.resched?'新時段':'日期'}</span>　${s.date.replace(/-/g,'/')}（週${WD[d.getDay()]}）${s.resched?'　'+t:''}</div>
       ${s.resched?'':`<div><span style="color:var(--t2);">時間</span>　${t}（60 分鐘）</div>`}
       <div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--t2);">場地</span><span id="msb-vbtns" style="display:flex;gap:7px;">${vbtns}</span></div>
+      ${(!s.resched&&(s.family||[]).length)?(()=>{ s.famOpts=['自己'].concat(s.family); s.pickFam=0;
+        return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">使用人</span><span id="msb-fbtns" style="display:flex;gap:7px;flex-wrap:wrap;">${s.famOpts.map((n,i)=>`<button class="msb-vbtn${i===0?' on':''}" data-fi="${i}" onclick="msbChooseFam(${i})">${n}</button>`).join('')}</span></div>`; })():''}
       ${s.resched?'':`<div><span style="color:var(--t2);">使用票券</span>　${tk.plan_name||'自主訓練點數'}（剩 ${tk.sessions_remaining} 點）</div>`}
     </div>
     <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">${s.resched?'改期不另扣點。':'確認後將扣 1 點。'}</div>
@@ -26679,6 +26748,41 @@ function msbChooseVenue(vid){
   s.pickVenue=vid;
   document.querySelectorAll('#msb-vbtns .msb-vbtn').forEach(b=>b.classList.toggle('on',b.dataset.vid===vid));
 }
+function msbChooseFam(i){
+  const s=window._msb; if(!s) return;
+  s.pickFam=i;
+  document.querySelectorAll('#msb-fbtns .msb-vbtn').forEach(b=>b.classList.toggle('on',Number(b.dataset.fi)===i));
+}
+/* 換時段（2026-07-29 使用者指示）：點數用完時點到更好的時間 → 選一筆既有預約換過來 */
+function msbSwapAsk(t){
+  const s=window._msb; if(!s) return;
+  const list=(s.futureSelf||[]);
+  if(!list.length){ showToast('沒有可更換的預約'); return; }
+  showModal(`<div class="modal-title">更換時間</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">點數已用於現有預約。要把哪一個時段換到 <b>${s.date.replace(/-/g,'/')}　${t}</b>？<br><span style="font-size:11px;color:var(--t3);">更換不另扣點；原時段開課 24 小時前可換。</span></div>
+    ${list.map(b=>`<button class="btn btn-ghost" style="width:100%;text-align:left;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;" onclick="msbSwapDo('${b.id}','${t}')">
+      <span><b style="font-family:var(--num);">${b.date.slice(5).replace('-','/')}</b>　${b.start_time}${b.trial_name?`　<span style="color:var(--t3);font-size:11.5px;">${b.trial_name}</span>`:''}</span><span style="color:var(--t3);font-size:12px;">換到新時段 ›</span></button>`).join('')}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button></div>`);
+}
+async function msbSwapDo(bid,t){
+ try{
+  const s=window._msb; if(!s) return;
+  const b=(s.futureSelf||[]).find(x=>x.id===bid); if(!b){ showToast('找不到預約'); return; }
+  const vbk={id:bid,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:b.ticket_type_id||null};
+  const verr=await validateBooking(vbk,s.date,t,60);
+  if(verr){ showToast('無法更換：'+verr); return; }
+  const {data,error}=await sb.rpc('fn_member_self_reschedule',{p_booking_id:bid,p_date:s.date,p_start_time:t,p_venue_unit:vbk.venue_unit||null});
+  dbCacheClear(['bookings']); try{ occCacheClear(); }catch(_){}
+  if(error){ showToast('連線失敗：'+(error.message||error)); return; }
+  if(!data||!data.ok){
+    const M={'BOOKING.TOO_LATE':'原時段開課前 24 小時內無法更換','BOOKING.DUP':'您於該時段已有預約',
+      'BOOKING.RESOURCE_BUSY':'該場地剛被約走了','BOOKING.PAST_DATE':'不可換到過去的日期'};
+    showToast(M[data&&data.error_code]||('更換失敗：'+((data&&data.error_code)||'未知錯誤'))); return;
+  }
+  closeModal(); showToast('已更換時段');
+  msbExit(true); navTo('mem_bookings');
+ }catch(e){ showToast('更換失敗：'+(e&&e.message?e.message:e)); }
+}
 /* 會員自主訓練預約一律走 RPC（2026-07-26 資安總檢）：RLS 沒有（也不該有）會員的
    資料表寫入權——直接 dbPut 會被擋。fn_member_self_book 在 DB 端以 security definer
    一次完成：本人驗證、票券歸屬/效期/類別、限時票平日18前、重複預約、場地單位占用、
@@ -26688,8 +26792,8 @@ const SELF_BOOK_ERR={
   'POINT.EMPTY':'沒有可用的自主訓練點數','TICKET.WRONG_TYPE':'此票券不能預約自主訓練',
   'TICKET.TIME_RESTRICTED':'此票券僅限平日 18:00 前使用','BOOKING.DUP':'您於該時段已有預約',
   'BOOKING.RESOURCE_BUSY':'該場地剛被約走了，請重新選擇'};
-async function memberSelfBookRpc(tk,date,time,venueUnit){
-  const {data,error}=await sb.rpc('fn_member_self_book',{p_date:date,p_start_time:time,p_ticket_id:tk.id,p_venue_unit:venueUnit||null});
+async function memberSelfBookRpc(tk,date,time,venueUnit,famUser){
+  const {data,error}=await sb.rpc('fn_member_self_book',{p_date:date,p_start_time:time,p_ticket_id:tk.id,p_venue_unit:venueUnit||null,p_family_user:famUser||null});
   dbCacheClear(['bookings','member_tickets','ticket_logs']);   // RPC 不經 dbPut，自行清快取（含佔用快取）
   if(error) return {ok:false,reason:'連線失敗：'+(error.message||error)};
   if(data&&data.ok) return {ok:true,booking_id:data.booking_id};
@@ -26725,7 +26829,8 @@ async function msbConfirm(time){
     venue_pref:s.pickVenue||null};
   const verr=await validateBooking(vbk,s.date,time,60);
   if(verr){ showToast(verr); return; }
-  const r=await memberSelfBookRpc(tk,s.date,time,vbk.venue_unit||null);
+  const famUser=(s.pickFam>0&&Array.isArray(s.famOpts))?s.famOpts[s.pickFam]:null;   // 家庭共享使用人（2026-07-29）
+  const r=await memberSelfBookRpc(tk,s.date,time,vbk.venue_unit||null,famUser);
   if(!r.ok){ showToast(r.reason); return; }
   closeModal();
   showToast('預約成功，已扣 1 點');
