@@ -5853,8 +5853,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1701';
-const APP_VERSION_LABEL='v260728.1701';
+const APP_VERSION='260728.1707';
+const APP_VERSION_LABEL='v260728.1707';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22493,6 +22493,23 @@ function signPadClear(){
   cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
   window._signInk=false;
 }
+/* 待簽合約浮動橫幅（2026-07-28）：固定蓋在畫面上方、不受頁面重繪影響；
+   首頁與我的票券頁都會觸發檢查；簽完或無待簽自動消失。 */
+function memSignBannerCheck(){
+  setTimeout(async()=>{ try{
+    if(!SESSION||SESSION.role!=='member') return;
+    const cs=(await dbGetAll('contracts').catch(()=>[])).filter(c=>c.sign_type==='remote'&&!c.signed_at);
+    const old=document.getElementById('mem-sign-banner'); if(old) old.remove();
+    if(!cs.length) return;
+    const div=document.createElement('div'); div.id='mem-sign-banner';
+    div.style.cssText='position:fixed;left:12px;right:12px;top:64px;z-index:180;padding:13px 16px;border-radius:14px;'
+      +'background:#f7efe0;border:1.5px solid #d9b96a;box-shadow:0 6px 20px rgba(126,102,49,.25);'
+      +'display:flex;justify-content:space-between;align-items:center;gap:10px;';
+    div.innerHTML=`<span style="font-size:13.5px;color:#7E6631;font-weight:800;">📝 您有 ${cs.length} 份合約待簽名</span>
+      <button class="btn btn-green btn-sm" onclick="memSignContract('${cs[0].id}')">立即簽署</button>`;
+    document.body.appendChild(div);
+  }catch(_){} },600);
+}
 /* 會員手機端簽名（2026-07-28）：讀自己的待簽合約 → 全文＋簽名板 → RPC 寫回 */
 async function memSignContract(id){
   const c=await dbGet('contracts',id).catch(()=>null);
@@ -25916,22 +25933,7 @@ async function tlxApplyMove(id,ds,newTime,dur){
 let _memCalMonth=null;  // {y,m}
 let _memCalSel=null;    // 選中日期 ymd
 PAGES.mem_bookings=async function(){
-  /* 手機簽名（2026-07-28 二修）：改「固定浮動橫幅」蓋在畫面上方——
-     原本插進頁面內容，資料載入完成重繪會把橫幅蓋掉（時序競態）；
-     浮動版掛在 body 上不受重繪影響，簽完或無待簽自動消失。 */
-  setTimeout(async()=>{ try{
-    if(!SESSION||SESSION.role!=='member') return;
-    const cs=(await dbGetAll('contracts').catch(()=>[])).filter(c=>c.sign_type==='remote'&&!c.signed_at);
-    const old=document.getElementById('mem-sign-banner'); if(old) old.remove();
-    if(!cs.length) return;
-    const div=document.createElement('div'); div.id='mem-sign-banner';
-    div.style.cssText='position:fixed;left:12px;right:12px;top:64px;z-index:180;padding:13px 16px;border-radius:14px;'
-      +'background:#f7efe0;border:1.5px solid #d9b96a;box-shadow:0 6px 20px rgba(126,102,49,.25);'
-      +'display:flex;justify-content:space-between;align-items:center;gap:10px;';
-    div.innerHTML=`<span style="font-size:13.5px;color:#7E6631;font-weight:800;">📝 您有 ${cs.length} 份合約待簽名</span>
-      <button class="btn btn-green btn-sm" onclick="memSignContract('${cs[0].id}')">立即簽署</button>`;
-    document.body.appendChild(div);
-  }catch(_){} },600);
+  memSignBannerCheck();   // 待簽合約浮動橫幅（2026-07-28）
   const[bookings,coaches,ttypes,mtickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('ticket_types').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[])]);
   window._ttCache=ttypes;
   window._allTkCache=mtickets;
@@ -27643,6 +27645,7 @@ let _mcOpen={}; // 展開狀態
 function toggleMcCard(id){ _mcOpen[id]=!_mcOpen[id]; renderMemTickets(); }
 let _memTkData=null;
 PAGES.mem_tickets=async function(){
+  memSignBannerCheck();   // 待簽合約浮動橫幅（我的票券頁也觸發，2026-07-28）
   const[tickets,types,logs,bookings,contracts]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types'),dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('bookings').catch(()=>[]),dbGetAll('contracts').catch(()=>[])]);
   window._memContracts=(contracts||[]).filter(c=>c.member_id===SESSION.id);   // 我的合約（RLS 已限本人，這裡再過濾一次）
   window._ctByTicket=Object.fromEntries(window._memContracts.filter(c=>c.ticket_id).map(c=>[c.ticket_id,c.id]));   // 合約綁票券圓形卡（2026-07-28）
