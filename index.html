@@ -5243,14 +5243,11 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .mc-kpi-rev-sub{font-size:10.5px;color:var(--t3);margin-top:3px;white-space:nowrap;}
 /* ── 手機版（2026-07-20 使用者指示）：頂欄＋底部導覽改品牌綠；三角色首頁段落節奏統一 ── */
 @media(max-width:600px){
-  /* 頂欄品牌綠：logo/副標/版本/漢堡全轉淺色（logo 原為行內 gold/t2，需 !important 蓋） */
-  .topbar{background:var(--green);}
-  .topbar .tb-mark span{color:#F4F1E8 !important;}
-  .topbar .tb-mark span:last-child{color:rgba(244,241,232,.72) !important;}
-  .topbar .tb-ver{color:rgba(244,241,232,.45);}
-  .topbar .tb-role{color:rgba(244,241,232,.7);}
-  .topbar .tb-acct-btn{color:#F4F1E8;}
-  .topbar .tb-butler{color:#F4F1E8;}
+  /* 2026-07-29 使用者指示：頂欄（含漢堡）改米色，品牌綠只留下方日期區。
+     原本整條頂欄為品牌綠＋淺色字，改回底色 var(--bg) 與預設字色。 */
+  .topbar{background:var(--bg);}
+  .topbar .tb-acct-btn{color:var(--green);}
+  .topbar .tb-butler{color:var(--green);}
   /* 底部導覽回歸米色（2026-07-21 使用者指示：品牌綠只留上方行事曆區）——
      原 7/20 的品牌綠覆蓋（綠底＋淡白/純白字）移除，基底樣式即米色底＋未選灰/選中綠字 */
   /* 三角色首頁段落節奏統一：卡片同圓角 18、段落間距一律 12px（原 card 22px／dcard 各自為政） */
@@ -5888,8 +5885,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.0036';
-const APP_VERSION_LABEL='v260729.0036';
+const APP_VERSION = '260729.0041';
+const APP_VERSION_LABEL='v260729.0041';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9605,7 +9602,13 @@ PAGES.g_dashboard=async function(){
       </div>
       <div class="mc-grid mc-wd">${_W2.map((w,i)=>`<div class="mc-wdh${i===0||i===6?' mc-wk':''}">${w}</div>`).join('')}</div>
       ${_weeks}`;
-    adminCalCard=`<div class="cal-hero${_heroMinCls()}" id="cal-hero">${_calGuts}<div class="cal-hero-expand" onclick="calHeroExpand()"></div></div>`;
+    /* 手機端：頂部改七天日期卡（2026-07-29 使用者指示）；桌機側欄維持月格月曆 */
+    adminCalCard=isMobileLayout()
+      ? `<div class="cal-hero" id="cal-hero">${heroDayCardsHTML({y:_ayy,m:_amm,sel:date,today:ymd(TODAY),
+          pickFn:'dashPickDate',prevFn:'admCalShift(-1)',nextFn:'admCalShift(1)',id:'adm-days',
+          metaOf:ds=>{const n=_cnt[ds]||0;return n?n+' 堂':'';}})}</div>`
+      : `<div class="cal-hero${_heroMinCls()}" id="cal-hero">${_calGuts}<div class="cal-hero-expand" onclick="calHeroExpand()"></div></div>`;
+    if(isMobileLayout()) setTimeout(()=>heroDayCardsScroll('adm-days',date),0);
     deskCalCard=`<div class="card mc-card cal-side">${_calGuts}</div>`;
     /* 「當月排班」鈕（2026-07-26 使用者指示）：放在首頁左欄月曆上方，
        且跟著月曆翻頁走 —— 名稱與開啟的月份都用月曆當前檢視的月（7月班表／8月班表）。 */
@@ -24265,7 +24268,13 @@ PAGES.coach_today=async function(){
   for(let i=0;i<_cwArr.length;i+=7)
     _cwWeeks+=`<div class="mc-grid mc-week${Math.floor(i/7)===_cwCur?' mc-week-cur':''}">${_cwArr.slice(i,i+7).join('')}</div>`;
   const _WDH2=['日','一','二','三','四','五','六'];
-  const calCard=`<div class="cal-hero${_heroMinCls()}" id="cal-hero">
+  /* 手機端：頂部改七天日期卡（2026-07-29 使用者指示，與教練預約行事曆同款）；桌機維持月格 */
+  const calCard=isMobileLayout()
+    ? `<div class="cal-hero" id="cal-hero">${heroDayCardsHTML({y:_ay,m:_am,sel:viewDate,today:ymd(TODAY),
+        pickFn:'coachPickDay2',prevFn:'coachAttnShift(-1)',nextFn:'coachAttnShift(1)',id:'coach-days',
+        metaOf:ds=>{const n=(_calPt[ds]||0)+(_calGrp[ds]||0), sh=_calShift[ds]||'';
+          return [sh, n?n+' 堂':''].filter(Boolean).join(' · ');}})}</div>`
+    : `<div class="cal-hero${_heroMinCls()}" id="cal-hero">
     <div class="cal-hero-nav mcal-head">
       <span class="mcal-t">${_ay}/${String(_am).padStart(2,'0')}</span>
       <span class="mcal-sp"></span>
@@ -24276,6 +24285,7 @@ PAGES.coach_today=async function(){
     ${_cwWeeks}
     <div class="cal-hero-expand" onclick="calHeroExpand()"></div>
   </div>`;
+  if(isMobileLayout()) setTimeout(()=>heroDayCardsScroll('coach-days',viewDate),0);
   // 有值班 → 三環並列（教練課/團體課/值班時數）；無值班維持兩環放大版
   // 2026-07-20 使用者指示：月曆統一移到首頁第一列（見下方組裝）、本月成績最下
   const ringCard=`<div class="dcard">
@@ -24366,6 +24376,36 @@ PAGES.coach_today=async function(){
 function calHeroExpand(){ const h=document.getElementById('cal-hero'); if(h) window._heroMin=h.classList.toggle('cal-hero-min'); }
 /* 手機首頁月曆預設收合（2026-07-22 使用者指示）；使用者切換後跨重繪保留 */
 function _heroMinCls(){ return (isMobileLayout() && window._heroMin!==false)?' cal-hero-min':''; }
+/* ══ 手機端頂部週曆（2026-07-29 使用者指示）══
+   三角色首頁統一成「七天日期卡」（整月卡片、一屏七天、逐日吸附），與教練預約行事曆同款。
+   桌機維持原本的月格月曆（.cal-side / 白卡）。
+   metaOf(ds) 回傳卡片第三行文字（課堂數／班別等）；空值顯示「－」。 */
+const HERO_WD=['日','一','二','三','四','五','六'];
+function heroDayCardsHTML(o){
+  const {y,m,sel,today,pickFn,prevFn,nextFn,metaOf,id}=o;   // m 為 1-based
+  const dim=new Date(y,m,0).getDate();
+  let cards='';
+  for(let d=1;d<=dim;d++){
+    const ds=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dow=new Date(y,m-1,d).getDay();
+    const meta=(metaOf&&metaOf(ds))||'';
+    cards+=`<button class="msb-date${ds===sel?' on':''}" id="${id}-${ds}" onclick="${pickFn}('${ds}')">
+      <span>${ds===today?'今天':'週'+HERO_WD[dow]}</span><b>${m}/${d}</b><span class="cag-dn">${meta||'－'}</span></button>`;
+  }
+  return `<div class="mcal-head cal-hero-nav" style="margin:4px 0 6px;">
+      <span class="mcal-t">${y}/${String(m).padStart(2,'0')}</span>
+      ${(sel&&today&&sel!==today)?`<button class="cag-thisweek" onclick="${pickFn}('${today}')">回到今天</button>`:''}
+      <span class="mcal-sp"></span>
+      <button class="mcal-btn" onclick="${prevFn}">‹</button>
+      <button class="mcal-btn" onclick="${nextFn}">›</button>
+    </div>
+    <div class="msb-dates cag-days" id="${id}">${cards}</div>`;
+}
+// 選中日捲到置中（渲染後呼叫）
+function heroDayCardsScroll(id,sel){
+  const el=document.getElementById(id+'-'+sel), box=document.getElementById(id);
+  if(el&&box) box.scrollLeft=Math.max(0,(el.offsetLeft-box.offsetLeft)-(box.clientWidth-el.offsetWidth)/2);
+}
 // 管理員首頁月曆點日期（2026-07-20）：切換 _dashViewDate，下方「今日」各卡改顯示該日
 function dashPickDate(ds){
   _dashViewDate = (ds===ymd(TODAY)) ? null : ds;
