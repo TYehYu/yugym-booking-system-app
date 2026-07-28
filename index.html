@@ -5853,8 +5853,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1655';
-const APP_VERSION_LABEL='v260728.1655';
+const APP_VERSION='260728.1701';
+const APP_VERSION_LABEL='v260728.1701';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22515,6 +22515,7 @@ async function memSignContractDo(id){
     const {data,error}=await sb.rpc('fn_member_sign_contract',{p_contract_id:id,p_signature:sig});
     if(error||!(data&&data.ok)){ showToast('簽署失敗：'+((data&&data.error_code)||error&&error.message||'請稍後再試')); return; }
     dbCacheClear(['contracts']);
+    document.getElementById('mem-sign-banner')?.remove();
     closeModal(); showToast('合約已完成簽署，謝謝！'); navTo(CUR_PAGE);
   }catch(e){ showToast('簽署失敗：'+(e&&e.message?e.message:e)); }
 }
@@ -25915,18 +25916,22 @@ async function tlxApplyMove(id,ds,newTime,dur){
 let _memCalMonth=null;  // {y,m}
 let _memCalSel=null;    // 選中日期 ymd
 PAGES.mem_bookings=async function(){
-  /* 手機簽名（2026-07-28）：有待簽合約時首頁頂端出橫幅（RLS 只讀得到自己的合約） */
+  /* 手機簽名（2026-07-28 二修）：改「固定浮動橫幅」蓋在畫面上方——
+     原本插進頁面內容，資料載入完成重繪會把橫幅蓋掉（時序競態）；
+     浮動版掛在 body 上不受重繪影響，簽完或無待簽自動消失。 */
   setTimeout(async()=>{ try{
     if(!SESSION||SESSION.role!=='member') return;
     const cs=(await dbGetAll('contracts').catch(()=>[])).filter(c=>c.sign_type==='remote'&&!c.signed_at);
     const old=document.getElementById('mem-sign-banner'); if(old) old.remove();
     if(!cs.length) return;
     const div=document.createElement('div'); div.id='mem-sign-banner';
-    div.style.cssText='margin:0 0 12px;padding:12px 14px;border-radius:12px;background:#f7efe0;border:1px solid #e0c98f;display:flex;justify-content:space-between;align-items:center;gap:10px;';
-    div.innerHTML=`<span style="font-size:13px;color:#7E6631;font-weight:700;">📝 您有 ${cs.length} 份合約待簽名</span>
+    div.style.cssText='position:fixed;left:12px;right:12px;top:64px;z-index:180;padding:13px 16px;border-radius:14px;'
+      +'background:#f7efe0;border:1.5px solid #d9b96a;box-shadow:0 6px 20px rgba(126,102,49,.25);'
+      +'display:flex;justify-content:space-between;align-items:center;gap:10px;';
+    div.innerHTML=`<span style="font-size:13.5px;color:#7E6631;font-weight:800;">📝 您有 ${cs.length} 份合約待簽名</span>
       <button class="btn btn-green btn-sm" onclick="memSignContract('${cs[0].id}')">立即簽署</button>`;
-    C.prepend(div);
-  }catch(_){} },80);
+    document.body.appendChild(div);
+  }catch(_){} },600);
   const[bookings,coaches,ttypes,mtickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('ticket_types').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[])]);
   window._ttCache=ttypes;
   window._allTkCache=mtickets;
