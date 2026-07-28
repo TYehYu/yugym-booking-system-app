@@ -5844,8 +5844,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1540';
-const APP_VERSION_LABEL='v260728.1540';
+const APP_VERSION='260728.1542';
+const APP_VERSION_LABEL='v260728.1542';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22817,12 +22817,37 @@ function renderGrantAttrib(){
   const m=(window._grantMembers||[]).find(x=>x.id===mid);
   const defId=m&&m.default_coach_id;
   if(defId) coaches.sort((a,b)=>(a.id===defId?0:1)-(b.id===defId?0:1));
+  window._attribPending=undefined;
+  /* 2026-07-28 使用者指示：①點教練先確認再繼續（防選錯）②可「不歸屬教練」 */
   box.innerHTML=coaches.map(c=>{
     const isDef=c.id===defId;
-    return `<button type="button" class="bk-card${isDef?' on':''}" onclick="salesAttribSubmit('${c.id}')">
+    return `<button type="button" class="bk-card${isDef?' on':''}" data-attrib="${c.id}" onclick="attribPick('${c.id}','${(coachDisp(c)||'').replace(/'/g,'')}')">
       <span class="bk-card-name">${isDef?'★ ':''}${coachDisp(c)}</span>${isDef?'<span class="bk-card-sub">主責教練</span>':''}
     </button>`;
-  }).join('')||'<span style="color:var(--t3);font-size:13px;">沒有可選教練</span>';
+  }).join('')
+  +`<button type="button" class="bk-card" data-attrib="" onclick="attribPick('','不歸屬教練')">
+      <span class="bk-card-name">不歸屬教練</span><span class="bk-card-sub">店內業績／無個人歸屬</span>
+    </button>`;
+  const bar=document.createElement('div'); bar.id='gt-attrib-confirm';
+  bar.style.cssText='display:none;margin-top:12px;padding:12px 14px;border-radius:12px;background:var(--card2);border:1.5px solid var(--green);align-items:center;justify-content:space-between;gap:10px;';
+  box.parentElement.appendChild(bar);
+}
+function attribPick(cid,name){
+  window._attribPending={cid:cid||null,name};
+  document.querySelectorAll('#gt-attrib .bk-card').forEach(b=>b.classList.toggle('on', b.dataset.attrib===(cid||'')));
+  const bar=document.getElementById('gt-attrib-confirm');
+  if(bar){
+    bar.style.display='flex';
+    bar.innerHTML=`<span style="font-size:13.5px;font-weight:700;">業績歸屬：<span style="color:var(--green);">${name}</span>，確定嗎？</span>
+      <span style="display:flex;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="window._attribPending=undefined;this.closest('#gt-attrib-confirm').style.display='none';document.querySelectorAll('#gt-attrib .bk-card').forEach(b=>b.classList.remove('on'));">重選</button>
+        <button class="btn btn-green btn-sm" onclick="attribConfirm()">確認，繼續 →</button>
+      </span>`;
+  }
+}
+async function attribConfirm(){
+  const p=window._attribPending; if(!p) return;
+  await salesAttribSubmit(p.cid);
 }
 // 會員是否可使用主顧客方案：主顧客(loyal)或 VIP 才可（等級走自動制 effTier）
 function memberCanUseLoyal(m){
