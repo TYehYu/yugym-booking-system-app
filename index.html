@@ -5817,8 +5817,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1312';
-const APP_VERSION_LABEL='v260728.1312';
+const APP_VERSION='260728.1331';
+const APP_VERSION_LABEL='v260728.1331';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22365,11 +22365,37 @@ function signPadClear(){
   cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
   window._signInk=false;
 }
+/* 會員手機端簽名（2026-07-28）：讀自己的待簽合約 → 全文＋簽名板 → RPC 寫回 */
+async function memSignContract(id){
+  const c=await dbGet('contracts',id).catch(()=>null);
+  if(!c||c.signed_at){ showToast('找不到待簽合約'); navTo(CUR_PAGE); return; }
+  showModal(`<div class="modal-title">合約簽署</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:8px;">${c.plan_name||''}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</div>
+    <div class="ct-body" style="max-height:38vh;overflow-y:auto;">${(c.body_snapshot||'').replace(/</g,'&lt;')}</div>
+    <div id="ct-sign-box">
+      <div class="ct-sign-wrap"><canvas class="ct-sign" id="ct-sign"></canvas></div>
+      <div class="ct-sign-bar"><span>請在上方框內簽名</span><button type="button" class="ct-sign-clear" onclick="signPadClear()">清除重簽</button></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">稍後再簽</button>
+      <button class="btn btn-green" onclick="memSignContractDo('${id}')">完成簽署</button></div>`);
+  setTimeout(signPadInit,60);
+}
+async function memSignContractDo(id){
+  if(!window._signInk){ showToast('請先在簽名區簽名'); return; }
+  const sig=(document.getElementById('ct-sign')||{toDataURL:()=>null}).toDataURL('image/png');
+  try{
+    const {data,error}=await sb.rpc('fn_member_sign_contract',{p_contract_id:id,p_signature:sig});
+    if(error||!(data&&data.ok)){ showToast('簽署失敗：'+((data&&data.error_code)||error&&error.message||'請稍後再試')); return; }
+    dbCacheClear(['contracts']);
+    closeModal(); showToast('合約已完成簽署，謝謝！'); navTo(CUR_PAGE);
+  }catch(e){ showToast('簽署失敗：'+(e&&e.message?e.message:e)); }
+}
 function ctSetType(v){
   window._ctSignType=v;
   document.querySelectorAll('.ct-tbtn').forEach(b=>b.classList.toggle('on',b.dataset.t===v));
   const s=document.getElementById('ct-sign-box'); if(s) s.style.display=(v==='electronic')?'':'none';
   const p=document.getElementById('ct-paper-box'); if(p) p.style.display=(v==='paper')?'':'none';
+  const r=document.getElementById('ct-remote-box'); if(r) r.style.display=(v==='remote')?'':'none';
 }
 // 步驟 4：組合合約全文（帶入本次購買的實際數字）並初始化簽名板
 async function renderContractStep(){
@@ -22398,7 +22424,7 @@ async function renderContractStep(){
 // 簽約完成 → 送出（發票券＋收款＋合約）
 async function ctSubmit(){
   const type=window._ctSignType||'electronic';
-  if(type==='electronic' && !window._signInk){ showToast('請讓會員在簽名區簽名，或改選紙本簽約'); return; }
+  if(type==='electronic' && !window._signInk){ showToast('請讓會員在簽名區簽名，或改選手機簽名／紙本簽約'); return; }
   if(window._salesSubmitting) return;
   window._salesSubmitting=true;
   try{
@@ -22688,7 +22714,12 @@ async function openGrantModal(){
       <div class="ct-body" id="ct-body">載入合約內容…</div>
       <div class="ct-types">
         <button type="button" class="ct-tbtn on" data-t="electronic" onclick="ctSetType('electronic')">電子簽約</button>
+        <button type="button" class="ct-tbtn" data-t="remote" onclick="ctSetType('remote')">手機簽名</button>
         <button type="button" class="ct-tbtn" data-t="paper" onclick="ctSetType('paper')">紙本簽約</button>
+      </div>
+      <div id="ct-remote-box" class="ct-paper-hint" style="display:none;">
+        手機簽名：完成發放後，系統通知會員（含 LINE 綁定者）到會員首頁簽名——
+        合約先記「待簽名」，會員在自己手機上簽完即完成。適合客人手機在身邊、不方便用櫃台平板時。
       </div>
       <div id="ct-sign-box">
         <div class="ct-sign-wrap"><canvas class="ct-sign" id="ct-sign"></canvas></div>
@@ -23147,12 +23178,16 @@ async function submitGrant(){
   if(window._grantSalesActive && window._ctBody){
     try{
       const mem=await dbGet('members',member_id).catch(()=>null);
-      await dbPut('contracts',{id:uid('CT'),member_id,member_name:(mem&&mem.name)||null,
+      const _remote=(window._ctSignType==='remote');   // 手機簽名：先發放、後補簽（2026-07-28）
+      const _ctId=uid('CT');
+      await dbPut('contracts',{id:_ctId,member_id,member_name:(mem&&mem.name)||null,
         plan_name:plan.name,sessions:total,amount:(isInstall?firstAmount:paidAmount),
         expire_date:t.expire_date,sign_type:(window._ctSignType||'paper'),
         signature:(window._ctSignature||null),body_snapshot:window._ctBody,
-        ticket_id:t.id,staff_id:SESSION.id,signed_at:new Date().toISOString(),
+        ticket_id:t.id,staff_id:SESSION.id,signed_at:_remote?null:new Date().toISOString(),
         created_at:new Date().toISOString()});
+      if(_remote){ try{ await pushNotification(member_id,'announce','合約待簽名',
+        `您購買的「${plan.name}」有一份合約待簽名，請開啟會員首頁完成簽署。`); }catch(_){} }
     }catch(e){ console.error('contract write fail',e); showToast('合約紀錄寫入失敗（票券已發放，請補簽）：'+dbFriendlyError(e)); }
   }
   window._ctBody=null; window._ctSignature=null;   // 一次性，避免下一筆沿用
@@ -25650,6 +25685,18 @@ async function tlxApplyMove(id,ds,newTime,dur){
 let _memCalMonth=null;  // {y,m}
 let _memCalSel=null;    // 選中日期 ymd
 PAGES.mem_bookings=async function(){
+  /* 手機簽名（2026-07-28）：有待簽合約時首頁頂端出橫幅（RLS 只讀得到自己的合約） */
+  setTimeout(async()=>{ try{
+    if(!SESSION||SESSION.role!=='member') return;
+    const cs=(await dbGetAll('contracts').catch(()=>[])).filter(c=>c.sign_type==='remote'&&!c.signed_at);
+    const old=document.getElementById('mem-sign-banner'); if(old) old.remove();
+    if(!cs.length) return;
+    const div=document.createElement('div'); div.id='mem-sign-banner';
+    div.style.cssText='margin:0 0 12px;padding:12px 14px;border-radius:12px;background:#f7efe0;border:1px solid #e0c98f;display:flex;justify-content:space-between;align-items:center;gap:10px;';
+    div.innerHTML=`<span style="font-size:13px;color:#7E6631;font-weight:700;">📝 您有 ${cs.length} 份合約待簽名</span>
+      <button class="btn btn-green btn-sm" onclick="memSignContract('${cs[0].id}')">立即簽署</button>`;
+    C.prepend(div);
+  }catch(_){} },80);
   const[bookings,coaches,ttypes,mtickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('ticket_types').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[])]);
   window._ttCache=ttypes;
   window._allTkCache=mtickets;
@@ -27527,7 +27574,7 @@ function openMemContracts(){
     ${list.length?list.map(c=>`<div class="ct-row" onclick="openContractView('${c.id}')">
       <div class="ct-row-b"><div class="ct-row-t">${c.plan_name||'課程合約'}</div>
         <span class="ct-row-s">簽約日 ${(c.signed_at||'').slice(0,10)}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</span></div>
-      <span class="ct-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}">${c.sign_type==='electronic'?'電子':'紙本'}</span>
+      <span class="ct-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}" ${(c.sign_type==='remote'&&!c.signed_at)?'style="background:#fbe4e2;color:#b5372e;"':''}>${c.sign_type==='electronic'?'電子':(c.sign_type==='remote'?(c.signed_at?'手機':'待簽名'):'紙本')}</span>
     </div>`).join(''):'<div class="empty" style="padding:22px;"><div class="em-t">尚無合約紀錄</div></div>'}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
@@ -29005,7 +29052,7 @@ PAGES.settings_contract=async function(){
     ${recent.length?recent.map(c=>`<div class="ct-row" onclick="openContractView('${c.id}')">
       <div class="ct-row-b"><div class="ct-row-t">${c.member_name||'—'}　<span style="font-weight:400;color:var(--t2);">${c.plan_name||''}</span></div>
         <span class="ct-row-s">${(c.signed_at||'').slice(0,10)}　·　$${(Number(c.amount)||0).toLocaleString()}　·　${c.sessions||0} 堂</span></div>
-      <span class="ct-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}">${c.sign_type==='electronic'?'電子':'紙本'}</span>
+      <span class="ct-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}" ${(c.sign_type==='remote'&&!c.signed_at)?'style="background:#fbe4e2;color:#b5372e;"':''}>${c.sign_type==='electronic'?'電子':(c.sign_type==='remote'?(c.signed_at?'手機':'待簽名'):'紙本')}</span>
     </div>`).join('')
     :'<div class="empty" style="padding:22px;"><div class="em-t">尚無簽約紀錄</div></div>'}
   </div>`;
