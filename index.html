@@ -5594,6 +5594,10 @@ body.mc-mode .cal-body{background:rgba(255,255,255,.8);}
 .cag-days{gap:4px;scroll-snap-type:x mandatory;}
 .cag-days .msb-date{flex:0 0 calc((100% - 24px)/7);scroll-snap-align:start;padding:8px 0;gap:2px;}
 .cag-days .msb-date b{font-size:13px;}
+/* 會員首頁日期卡的 msb 模式（可預約日金框、選中日金底）——沿用原月曆金框語意 */
+.cag-days .msb-date.msb-ok{box-shadow:inset 0 0 0 1.6px var(--gold);cursor:pointer;}
+.cag-days .msb-date.msb-sel{background:var(--gold);color:#3d2f10;}
+.cag-days .msb-date.msb-sel span,.cag-days .msb-date.msb-sel b{color:#3d2f10;opacity:1;}
 /* 確認視窗內的場地選擇鈕（2026-07-26 使用者指示） */
 .msb-vbtn{border:1px solid var(--bd);border-radius:999px;padding:5px 13px;font-size:12px;font-weight:700;cursor:pointer;
   background:#fff;color:var(--t2);font-family:inherit;}
@@ -5867,8 +5871,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260728.2237';
-const APP_VERSION_LABEL='v260728.2237';
+const APP_VERSION = '260728.2242';
+const APP_VERSION_LABEL='v260728.2242';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14630,7 +14634,7 @@ function buildRecurringDates(startDate,dows,maxN,until){
 async function runRecurringBooking(opts){
   const o=opts||{};
   const dur=o.duration||60;
-  const operator=(window.SESSION&&SESSION.id)||o.coach_id||null;
+  const operator=(SESSION&&SESSION.id)||o.coach_id||null;   // SESSION 是 let，不可用 window.SESSION（2026-07-28 修正）
   // 找票券函式：預設用 listUsableTickets(依類別)；呼叫端可傳 findTicketFn(memberId, dateStr) 覆寫
   const findTk = o.findTicketFn || (async(mid,ds)=>{ const c=await listUsableTickets(mid,o.type_id,ds); return c[0]||null; });
   const countRemain = o.countRemainFn || (async(mid)=>{ const c=await listUsableTickets(mid,o.type_id,o.startDate); return c.reduce((s,t)=>s+(t.sessions_remaining||0),0); });
@@ -15687,8 +15691,11 @@ async function checkInBooking(id, opts){  opts=opts||{};
   // ── Sprint 3：簽到改走 RPC（旗標開啟時；發點由後端 handle_checkin_reward 統一處理）──
   // 已通過上方「開課前 30 分鐘」時間限制。RPC 成功即 return；未成功回退舊邏輯（RPC 單一交易，回退安全）。
   if(window.FEATURE_FLAGS && FEATURE_FLAGS.checkinBookingRpc && CLOUD){
-    const src = (window.SESSION && SESSION.role==='member') ? 'member_app'
-              : (window.SESSION && SESSION.role==='coach') ? 'coach' : 'front_desk';
+    /* ⚠ SESSION 是 let 宣告，window.SESSION 永遠 undefined（已知地雷）——
+       原寫法讓會員自簽被誤標成 front_desk 來源 → RPC 驗員工身分失敗 → 回退直寫又被
+       RLS 擋 → 「簽到失敗」（2026-07-28 黃柏瑜案例）。 */
+    const src = (SESSION && SESSION.role==='member') ? 'member_app'
+              : (SESSION && SESSION.role==='coach') ? 'coach' : 'front_desk';
     let res;
     try{ res=await sb.rpc('fn_checkin_booking',{p_booking_id:id,p_checkin_source:src}); }
     catch(e){ res={error:e}; }
@@ -26110,27 +26117,20 @@ function renderMemMonthView(){
   const WDH=['日','一','二','三','四','五','六'];
   const cntByDate={};
   mine.forEach(b=>{ if(!b.date)return; cntByDate[b.date]=(cntByDate[b.date]||0)+1; });
-  // 週列結構（月曆 Hero 收合用）：收合時留今日所在週（非本月則第一週）
-  const _mwArr=[]; let _mwIdx=-1;
-  const _mwAdj=mcAdjCells(y,m+1);   // 前後月補日（2026-07-21）
-  _mwAdj.lead.forEach(d=>_mwArr.push(mcAdjCell(d)));
+  /* 2026-07-28 使用者指示：首頁上方改「直式日期卡」一週七天版（與教練預約行事曆同款）——
+     月格退場；一天一張卡（週幾/日期/當日堂數），左右滑逐日吸附。
+     預約自主訓練模式（msb）沿用：效期內日期金框可點、選中日金底。 */
+  let _dayCards='';
   for(let d=1;d<=daysInMonth;d++){
     const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const cnt=cntByDate[ds]||0;
     const isToday=ds===todayStr;
-    if(isToday) _mwIdx=_mwArr.length;
-    // 固定行高；點日期不再展開下方清單（2026-07-20 使用者指示）→ 格子改為純顯示
-    // 預約自主訓練模式（2026-07-22）：效期內日期金框可點、選中日金底
+    const dow=new Date(y,m,d).getDay();
     const msbOk=window._msb&&window._msb.hasPoints&&msbDateOk(ds);
     const msbSel=msbOk&&window._msb.date===ds;
-    _mwArr.push(`<div class="mc-cell${isToday?' mc-today':''}${msbOk?' mc-msb':''}${msbSel?' mc-msb-sel':''}" style="cursor:${msbOk?'pointer':'default'};"${msbOk?` onclick="msbPickDate('${ds}')"`:''}>
-      <span class="mc-d">${d}</span><span class="mc-dot${cnt>0?'':' mc-dot-empty'}">${cnt>0?cnt:'0'}</span></div>`);
+    _dayCards+=`<button class="msb-date${isToday&&!msbSel?' on':''}${msbOk?' msb-ok':''}${msbSel?' msb-sel':''}" id="memd-${ds}"${msbOk?` onclick="msbPickDate('${ds}')"`:''} style="${msbOk?'':'cursor:default;'}">
+      <span>${isToday?'今天':'週'+WDH[dow]}</span><b>${m+1}/${d}</b><span class="cag-dn">${cnt?cnt+' 堂':'－'}</span></button>`;
   }
-  _mwAdj.tail.forEach(d=>_mwArr.push(mcAdjCell(d)));
-  const _mwCur=_mwIdx>=0?Math.floor(_mwIdx/7):0;
-  let cells='';
-  for(let i=0;i<_mwArr.length;i+=7)
-    cells+=`<div class="mc-grid mc-week${Math.floor(i/7)===_mwCur?' mc-week-cur':''}">${_mwArr.slice(i,i+7).join('')}</div>`;
   const sel=parseYmd(_memCalSel);
   const selBk=mine.filter(b=>b.date===_memCalSel).sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   const selLabel=`${_memCalSel.slice(5).replace('-','/')}（${WDH[sel.getDay()]}）`;
@@ -26173,11 +26173,14 @@ function renderMemMonthView(){
     <div class="mc-head cal-hero-nav mcal-head" style="flex-direction:row;">  <!-- 手機斷點 .mc-head 強制直排，需 inline 蓋回列向 -->
       <span class="mcal-t">${y}/${String(m+1).padStart(2,'0')}</span>
       <span class="mcal-sp"></span>
-      <button class="mcal-btn" onclick="memCalShiftMonth(-1)">︿</button>
-      <button class="mcal-btn" onclick="memCalShiftMonth(1)">﹀</button>
+      <button class="mcal-btn" onclick="memCalShiftMonth(-1)">‹</button>
+      <button class="mcal-btn" onclick="memCalShiftMonth(1)">›</button>
     </div>
-    <div class="mc-wd mc-grid">${WDH.map((w,i)=>`<div class="mc-wdh${i===0||i===6?' mc-wk':''}">${w}</div>`).join('')}</div>
-    ${cells}`;
+    <div class="msb-dates cag-days" id="mem-days" style="padding:0 2px 6px;">${_dayCards}</div>`;
+  // 今天（或 msb 選中日）自動捲到置中
+  const _tEl=document.getElementById('memd-'+((window._msb&&window._msb.date)||todayStr));
+  const _tBox=document.getElementById('mem-days');
+  if(_tEl&&_tBox) _tBox.scrollLeft=Math.max(0,(_tEl.offsetLeft-_tBox.offsetLeft)-(_tBox.clientWidth-_tEl.offsetWidth)/2);
   /* 選日課程清單已移除（2026-07-20 使用者指示：點日期不展開）；selLabel/listHtml 計算暫留未刪 */
 }
 function memCalPick(ds){ _memCalSel=ds; renderMemMonthView(); }
