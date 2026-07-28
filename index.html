@@ -5856,8 +5856,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260728.1811';
-const APP_VERSION_LABEL='v260728.1811';
+const APP_VERSION = '260728.1908';
+const APP_VERSION_LABEL='v260728.1908';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15596,7 +15596,13 @@ async function openBookingDetail(id){
       ${/* 補課券只屬於團課的四週方案（2026-07-26 使用者指示：教練課沒有補課機制，取消的教練課不出現此鈕） */''}
       ${(isDeskLike())&&b.status==='cancelled'&&b.member_id&&b.category==='小班肌力'&&!b.makeup_granted?`<button class="btn btn-gold" onclick="confirmMakeup('${b.id}')">補發補課券</button>`:''}
       ${(b.pending_contract&&!b.member_id&&b.status==='booked'&&(isDeskLike()))?`<button class="btn btn-green" onclick="openConvertPending('${b.id}')">已簽約，轉正式預約</button>`:''}
-      ${canCancel&&ownByCoach?`<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`:''}
+      ${canCancel&&ownByCoach?(isMemberView
+        ? (isGroupD&&Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id)&&!isPastD
+            ? `<button class="btn btn-danger" onclick="memLeaveGroup('${b.id}')">取消報名</button>`
+            : (b.category==='自主訓練'&&b.member_id===SESSION.id
+                ? `<button class="btn btn-danger" onclick="memCancelSelf('${b.id}')">取消預約</button>`
+                : ''))   /* 會員視角：教練課取消請洽櫃檯；原本誤走櫃檯流程（無寫入權）點了沒反應（2026-07-28） */
+        : `<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`):''}
     </div>`);
 }
 // 確認補發補課券
@@ -26302,6 +26308,13 @@ async function doMemCancelSelf(id){
 async function memLeaveGroup(id){
   const b=await dbGet('bookings',id);
   if(!b||!(Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id))){showToast('找不到報名紀錄');return;}
+  /* 2026-07-28 使用者指示：開課當天不可自行取消 */
+  if(b.date<=ymd(TODAY)){
+    showModal(`<div class="modal-title">無法取消</div>
+      <div style="font-size:13.5px;padding:6px 0 4px;line-height:1.9;">開課當天無法自行取消報名，<br>如有需要請聯繫櫃檯處理。</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">我知道了</button></div>`);
+    return;
+  }
   showModal(`<div class="modal-title">取消團體課報名</div>
     <div style="font-size:13.5px;padding:6px 0 4px;">確定取消 ${b.date} ${b.start_time} 的團體課報名嗎？</div>
     <div style="font-size:12px;color:var(--t2);margin-top:6px;line-height:1.6;">取消後退回 1 堂團體課票券；只取消您的名額，這堂課照常開課。</div>
@@ -26500,7 +26513,8 @@ function msbRenderGrpList(){
 }
 const GRP_JOIN_ERR={'AUTH.FORBIDDEN':'僅限本人操作','BOOKING.NOT_FOUND':'找不到這堂課，可能已取消',
   'BOOKING.PAST_DATE':'這堂課已開始或結束','BOOKING.DUP':'您已報名這堂課',
-  'BOOKING.FULL':'這堂課名額已滿','TICKET.NONE':'沒有可用的團體課票券，請洽櫃檯'};
+  'BOOKING.FULL':'這堂課名額已滿','TICKET.NONE':'沒有可用的團體課票券，請洽櫃檯',
+  'CANCEL.SAME_DAY':'開課當天無法自行取消，請聯繫櫃檯處理'};
 async function msbGrpJoin(bid){
   const s=window._msb; if(!s) return;
   const c=(s.grpClasses||[]).find(x=>x.id===bid); if(!c){ showToast('找不到這堂課'); return; }
