@@ -5815,8 +5815,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1030';
-const APP_VERSION_LABEL='v260728.1030';
+const APP_VERSION='260728.1036';
+const APP_VERSION_LABEL='v260728.1036';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11052,14 +11052,18 @@ function calCoachChips(coaches, filterCoach){
 // 課程 Filter Chips：讀集中設定 CALENDAR_COURSE_FILTERS。
 // 2026-07-19 使用者指示：移除形狀 glyph、加回課程色（淡底＋accent 字，與課卡同源；選中=accent 實色白字）
 /* 課卡字體試調工具已拆除（2026-07-22 定案：思源黑體＋110%，寫死於 CSS .evc-* 規則） */
+/* 2026-07-28 使用者指示：課種 chips 改「開關」邏輯——預設全開，點一下＝關掉該課種（半透明），
+   再點＝恢復；「全部」＝全部打開。 */
 function calCourseChips(){
-  const cur = window._calCourse||'all';
-  let html = `<button class="cal-chip ${cur==='all'?'on':''}" onclick="calSetCourse('all')">全部</button>`;
-  html += CALENDAR_COURSE_FILTERS.map(f=>`<button class="cal-chip cal-chip-course ${f.cls} ${cur===f.cls?'on':''}" onclick="calSetCourse('${f.cls}')">${f.label}</button>`).join('');
+  const off=window._calCourseOff||{};
+  const anyOff=CALENDAR_COURSE_FILTERS.some(f=>off[f.cls]);
+  let html = `<button class="cal-chip ${!anyOff?'on':''}" onclick="calCourseAll()">全部</button>`;
+  html += CALENDAR_COURSE_FILTERS.map(f=>`<button class="cal-chip cal-chip-course ${f.cls} ${off[f.cls]?'':'on'}" style="${off[f.cls]?'opacity:.35;filter:grayscale(.5);':''}" title="${off[f.cls]?'點擊顯示':'點擊隱藏'}" onclick="calSetCourse('${f.cls}')">${f.label}</button>`).join('');
   return html;
 }
+function calCourseAll(){ window._calCourseOff={}; navTo(CUR_PAGE); }
 function calSetCoach(id){ window._calFilter = (id==='all'?undefined:id); navTo(CUR_PAGE); }
-function calSetCourse(cls){ window._calCourse = (cls==='all'?undefined:cls); navTo(CUR_PAGE); }
+function calSetCourse(cls){ const o=window._calCourseOff=window._calCourseOff||{}; o[cls]=!o[cls]; navTo(CUR_PAGE); }
 
 async function renderCalendar(opts){
   // opts: {coachFilter(bool), onSlot(fnName), me(coach_id), editable(bool), _data(預先抓好的資料，避免重複) }
@@ -11165,8 +11169,8 @@ async function renderCalendar(opts){
     // maskOthers（教練端「我的預約」）：別人的課保留作遮蔽佔位（顯示「已預約」、不可點），不濾掉
     if(opts.me && !opts.allMode && !opts.maskOthers && (b.substitute_coach_id||b.coach_id)!==opts.me) return false;
     if(opts.coachFilter && filterCoach!=='all' && b.coach_id!==filterCoach) return false;
-    // 課程 Filter Chip：依 evColorClass 對應的顯示群組篩選（帶票券快照，與卡片顯示同一判定）
-    if(window._calCourse && evColorClass(b,typeMap,b.ticket_id?ticketMap[b.ticket_id]:null)!==window._calCourse) return false;
+    // 課程 Filter Chip（2026-07-28 開關制）：被關掉的課種隱藏
+    if(window._calCourseOff && window._calCourseOff[evColorClass(b,typeMap,b.ticket_id?ticketMap[b.ticket_id]:null)]) return false;
     return true;
   }));
 
