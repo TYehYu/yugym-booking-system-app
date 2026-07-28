@@ -5871,8 +5871,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.0017';
-const APP_VERSION_LABEL='v260729.0017';
+const APP_VERSION = '260729.0022';
+const APP_VERSION_LABEL='v260729.0022';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16116,21 +16116,20 @@ async function confirmCancelBooking(id){
   const isAdmin = isDeskLike();   // 2026-07-28：店長同櫃台，取消時保留扣票/退票選擇
   const isTrial = b.category==='體驗';
 
+  /* 2026-07-29 使用者定案：取消一律退還票券（含 24 小時內）——「取消・不退票」選項移除。
+     教練若要扣課（如客人未到），改成「不要取消這筆預約」，讓它照常簽到／完成即可。 */
   if(isAdmin && !isTrial){
-    // 管理員：可選擇是否退回票券
-    const note = '目前政策：取消一律退回票券；僅特殊情況才選「不退票」。';
     showModal(`<div class="modal-title">取消預約</div>
       <div style="font-size:13px;color:var(--text);padding:4px 0;">${b.date} ${b.start_time}　${b.category}</div>
-      <div style="font-size:12px;color:var(--t2);margin:8px 0 14px;line-height:1.6;">${note}</div>
+      <div style="font-size:12px;color:var(--t2);margin:8px 0 14px;line-height:1.7;">取消後<b>一律退回票券</b>（含開課 24 小時內）。<br>若要扣這堂課（例如客人未到），請<b>不要取消</b>這筆預約，直接簽到即可。</div>
       <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
         <button class="btn btn-ghost" onclick="closeModal()">返回</button>
-        <button class="btn btn-ghost" onclick="cancelBooking('${id}','none')">取消・不退票</button>
         <button class="btn btn-danger" onclick="cancelBooking('${id}','force')">取消・退回票券</button>
       </div>`);
     return;
   }
-  // 教練 / 會員：依 24h 自動判斷
-  const refundText = isTrial ? '體驗課不涉及票券。' : '取消後票券將退回。';
+  // 教練 / 會員：一律退票
+  const refundText = isTrial ? '體驗課不涉及票券。' : '取消後票券將退回。若要扣課請不要取消，直接簽到即可。';
   showModal(`<div class="modal-title">取消預約</div>
     <div style="font-size:13.5px;color:var(--text);padding:6px 0 4px;">確定要取消 ${b.date} ${b.start_time} 的${b.category}嗎？</div>
     <div style="font-size:12px;color:var(--t2);margin-top:6px;line-height:1.6;">${refundText}</div>
@@ -17767,7 +17766,11 @@ const SALARY_TPL_DEFAULT = {
 const SALARY_GLOBAL_DEFAULT = {
   renew_bonus: 1000,            // 每張續約獎金
   supervisor_bonus: 4000,       // 主管固定津貼
-  // 店長階梯津貼：依「每位教練（含店長本人，不含老闆/admin）」當月教練課堂數給津貼，可累加
+  /* 店長津貼（2026-07-29 使用者定案改制）：全店當月教練課總堂數（不含老闆/admin）
+     每滿 leader_per_classes 堂給 leader_per_amount 元，可累計（120 堂＝1 個 80 → $4,000）。
+     舊的「逐位教練查階梯」制（leader_tiers）已停用，欄位保留供歷史對照。 */
+  leader_per_classes: 80,
+  leader_per_amount: 4000,
   leader_tiers: [
     { min:80,  max:99,   amount:4000 },
     { min:100, max:null, amount:6000 },
@@ -17953,6 +17956,19 @@ function dutyHoursCapped(attendance, shifts, empId, month){
   });
   return total;
 }
+/* 店長津貼（2026-07-29 使用者定案）：全店當月教練課「總堂數」（extras.leaderHeads 已排除
+   老闆/admin 與櫃台，含店長本人）每滿 N 堂給一筆獎金，可累計。
+   例：總 200 堂、每 80 堂 $4,000 → 2 筆 ＝ $8,000（餘 40 堂不足一筆不計）。 */
+function leaderBonusOf(emp, extras, G){
+  const per=Number((G||{}).leader_per_classes)||80;
+  const amt=Number((G||{}).leader_per_amount)||4000;
+  if(!(emp&&emp.is_manager)||!Array.isArray(extras&&extras.leaderHeads)) return {pay:0,total:0,units:0,detail:'—'};
+  const total=extras.leaderHeads.reduce((s,h)=>s+(Number(h)||0),0);
+  const units=Math.floor(total/per);
+  return { pay:units*amt, total, units,
+    detail: units>0 ? `全店 ${total} 堂 ÷ 每 ${per} 堂 ＝ ${units} 筆 × $${amt.toLocaleString()}`
+                    : `全店 ${total} 堂（未滿 ${per} 堂）` };
+}
 function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, extras){
   extras=extras||{};
   // 【重構後停用】舊「自訂薪資」簡化路徑（僅固定費率、無級距/獎金）。
@@ -17973,11 +17989,8 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
     const Gc=window.SALARY_GLOBAL||{};
     const renewCountC=Number(extras.renewCount)||0, renewEachC=Number(Gc.renew_bonus)||0, renewPayC=renewCountC*renewEachC;
     const supC=emp.is_supervisor?(Number(Gc.supervisor_bonus)||0):0;
-    let leaderPayC=0; const leaderPartsC=[];
-    if(emp.is_manager && Array.isArray(extras.leaderHeads)){
-      const tiersC=(Gc.leader_tiers||[]).slice().sort((a,b)=>(a.min||0)-(b.min||0));
-      extras.leaderHeads.forEach(h=>{const hh=Number(h)||0;for(const t of tiersC){const lo=t.min||0,hi=(t.max==null?Infinity:t.max);if(hh>=lo&&hh<=hi){leaderPayC+=Number(t.amount)||0;leaderPartsC.push(`${hh}堂+$${t.amount}`);break;}}});
-    }
+    const _ldC=leaderBonusOf(emp,extras,Gc);   // 店長津貼（總堂數制，2026-07-29）
+    const leaderPayC=_ldC.pay, leaderTotalC=_ldC.total;
     const mgmtPayC=supC+leaderPayC;
     const gradeC=emp.insured_grade||emp.insurance_grade||emp.labor_insurance_level||emp.health_insurance_level;
     const lvlC=(Gc.insurance_levels||[]).find(x=>String(x.grade)===String(gradeC));
@@ -17995,7 +18008,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
       bonus:0, bonusDetail:'—', groupPay, groupDetail:`${groupHeads} 人 × $${emp.group_rate||0}`,
       dutyGross, dutyLeaveDeduct, dutyClassDeduct, classOverlap:coC, dutyPay, dutyDetail:`${dutyHours.toFixed(1)} hr × $${dhrC}`,
       renewCount:renewCountC, renewPay:renewPayC, renewDetail:renewCountC>0?`${renewCountC} 張 × $${renewEachC}`:'—',
-      isSupervisor:!!emp.is_supervisor, supPay:supC, isLeader:!!emp.is_manager, leaderPay:leaderPayC, leaderDetail:leaderPayC>0?leaderPartsC.join('、'):'—', mgmtPay:mgmtPayC,
+      isSupervisor:!!emp.is_supervisor, supPay:supC, isLeader:!!emp.is_manager, leaderPay:leaderPayC, leaderDetail:_ldC.detail, leaderTotal:leaderTotalC, leaderUnits:_ldC.units, mgmtPay:mgmtPayC,
       insGrade:gradeC||null, insLaborEmp:0, insHealthEmp:0, insEmpDeduct:insEmpC, insLaborCo:0, insHealthCo:0, insCoCost:insCoC,
       leave:Lc,
       grossPay:grossC, netPay:Math.max(grossC-insEmpC,0),
@@ -18084,21 +18097,11 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   // ⑥ 主管津貼：固定（is_supervisor）
   const isSup=!!(emp&&emp.is_supervisor);
   const supPay=isSup?(Number(G.supervisor_bonus)||0):0;
-  // ⑦ 店長階梯津貼：傳入所管理教練的堂數陣列 extras.leaderHeads=[105,85,102...]
-  //    每位教練的堂數落在哪一階就加該階金額，可累加（名單排除老闆/admin，店長本人列入——2026-07-27 使用者指示）
+  // ⑦ 店長津貼：全店總堂數制（見 leaderBonusOf）
   const isLeader=!!(emp&&emp.is_manager);
-  let leaderPay=0; const leaderParts=[];
-  if(isLeader && Array.isArray(extras.leaderHeads)){
-    const tiers=(G.leader_tiers||[]).slice().sort((a,b)=>(a.min||0)-(b.min||0));
-    extras.leaderHeads.forEach(h=>{
-      const hh=Number(h)||0;
-      for(const t of tiers){
-        const lo=t.min||0, hi=(t.max==null?Infinity:t.max);
-        if(hh>=lo && hh<=hi){ leaderPay+=Number(t.amount)||0; leaderParts.push(`${hh}堂+$${t.amount}`); break; }
-      }
-    });
-  }
-  const leaderDetail=leaderPay>0?leaderParts.join('、'):'—';
+  const _ld=leaderBonusOf(emp,extras,G);
+  const leaderPay=_ld.pay, leaderTotal=_ld.total, leaderUnits=_ld.units;
+  const leaderDetail=_ld.detail;
   const mgmtPay=supPay+leaderPay; // 管理職津貼合計
   // ⑧ 勞健保員工負擔：依員工投保級距查級距表（insured_grade 為勞健保管理填的欄位）
   const grade=emp&&(emp.insured_grade||emp.insurance_grade||emp.labor_insurance_level||emp.health_insurance_level);
@@ -18130,7 +18133,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
     bonus, bonusDetail, groupPay, groupDetail,
     dutyGross, dutyLeaveDeduct, dutyClassDeduct, classOverlap:co, dutyPay, dutyDetail,
     renewCount, renewPay, renewDetail,
-    isSupervisor:isSup, supPay, isLeader, leaderPay, leaderDetail, mgmtPay,
+    isSupervisor:isSup, supPay, isLeader, leaderPay, leaderDetail, leaderTotal, leaderUnits, mgmtPay,
     insGrade:grade||null, insLaborEmp, insHealthEmp, insEmpDeduct, insLaborCo, insHealthCo, insCoCost,
     leave:L,
     grossPay, netPay,
@@ -18942,7 +18945,7 @@ async function renderSalaryTemplates(targetId){
   // 全域制度卡片（公司層級：續約/主管/店長/勞健保）
   const G=window.SALARY_GLOBAL||{};
   const grow=(lb,val)=>`<div style="display:flex;gap:8px;"><span style="min-width:84px;color:var(--t3);">${lb}</span><span>${val}</span></div>`;
-  const leaderTxt=(G.leader_tiers||[]).map(x=>`${x.min}~${x.max==null?'∞':x.max}堂 +${money(x.amount)}`).join('　')||'未設定';
+  const leaderTxt=`全店每滿 ${G.leader_per_classes??80} 堂 +${money(G.leader_per_amount??4000)}（不含老闆）`;
   const insTxt=(G.insurance_levels||[]).length?`${G.insurance_levels.length} 個級距`:'未設定';
   const globalCard=`<div class="card" style="margin-bottom:14px;border-left:3px solid var(--gold-d);">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
@@ -18966,7 +18969,6 @@ async function renderSalaryTemplates(targetId){
 // ── 全域制度編輯 ──
 function openSalaryGlobalEdit(){
   const G=window.SALARY_GLOBAL||{};
-  const lt=(G.leader_tiers&&G.leader_tiers.length?G.leader_tiers:[{min:80,max:99,amount:4000},{min:100,max:null,amount:6000}]);
   const ins=(G.insurance_levels&&G.insurance_levels.length?G.insurance_levels:[{grade:'',labor_emp:0,labor_co:0,health_emp:0,health_co:0}]);
   const sec=(t)=>`<div style="font-size:12.5px;font-weight:700;color:var(--green);margin:16px 0 8px;">${t}</div>`;
   showModal(`<div class="modal-title">全域薪資制度</div>
@@ -18976,13 +18978,12 @@ function openSalaryGlobalEdit(){
       <div class="form-row"><input type="number" id="sg-renew" value="${G.renew_bonus??0}"></div>
       ${sec('② 主管津貼（固定）')}
       <div class="form-row"><input type="number" id="sg-sup" value="${G.supervisor_bonus??0}"></div>
-      ${sec('③ 店長津貼階梯（依所管理每位教練當月堂數，可累加）')}
-      <div id="sg-lt">${lt.map((x,i)=>`<div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:8px;margin-bottom:8px;align-items:end;">
-        <div class="form-row" style="margin:0;"><label>起(堂)</label><input type="number" id="sg-lt-min-${i}" value="${x.min}"></div>
-        <div class="form-row" style="margin:0;"><label>迄(空=∞)</label><input type="number" id="sg-lt-max-${i}" value="${x.max==null?'':x.max}"></div>
-        <div class="form-row" style="margin:0;"><label>津貼</label><input type="number" id="sg-lt-amt-${i}" value="${x.amount}"></div>
-      </div>`).join('')}</div>
-      <div style="font-size:11px;color:var(--t3);margin-bottom:6px;">＊計算時不含老闆與店長本人。</div>
+      ${sec('③ 店長津貼（全店總堂數制）')}
+      <div class="form-2col">
+        <div class="form-row" style="margin:0;"><label>每滿幾堂</label><input type="number" id="sg-ldper" value="${G.leader_per_classes??80}"></div>
+        <div class="form-row" style="margin:0;"><label>給多少津貼</label><input type="number" id="sg-ldamt" value="${G.leader_per_amount??4000}"></div>
+      </div>
+      <div style="font-size:11px;color:var(--t3);margin:6px 0;">＊計算基準＝全店當月教練課總堂數（<b>不含老闆</b>，含店長本人）；每滿一組即累加一筆。例：總 200 堂 ÷ 80 ＝ 2 筆 ＝ $8,000。</div>
       ${sec('④ 勞健保級距表（員工負擔／公司三合一負擔）')}
       <div id="sg-ins">${ins.map((x,i)=>`<div style="border:1px solid var(--bd);border-radius:8px;padding:8px;margin-bottom:8px;">
         <div class="form-row" style="margin:0 0 6px;"><label>投保級距</label><input type="text" id="sg-ins-grade-${i}" value="${x.grade||''}" placeholder="如 29500"></div>
@@ -18993,7 +18994,7 @@ function openSalaryGlobalEdit(){
       <button class="btn btn-ghost btn-sm" onclick="sgAddInsRow()">＋ 新增級距</button>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveSalaryGlobal()">儲存</button></div>`);
-  window._sgInsCount=ins.length; window._sgLtCount=lt.length;
+  window._sgInsCount=ins.length;
 }
 function sgAddInsRow(){
   const i=window._sgInsCount||0; window._sgInsCount=i+1;
@@ -19009,9 +19010,11 @@ async function saveSalaryGlobal(){
     const gv=id=>{const el=document.getElementById(id);return el?Number(el.value)||0:0;};
     const gs=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};
     const gr=id=>{const el=document.getElementById(id);return el?el.value:'';};
-    const leader_tiers=[]; for(let i=0;i<(window._sgLtCount||2);i++){ if(document.getElementById(`sg-lt-min-${i}`)){ const mx=gr(`sg-lt-max-${i}`); leader_tiers.push({min:gv(`sg-lt-min-${i}`),max:mx===''?null:Number(mx),amount:gv(`sg-lt-amt-${i}`)}); } }
     const insurance_levels=[]; for(let i=0;i<(window._sgInsCount||0);i++){ if(document.getElementById(`sg-ins-grade-${i}`)){ const g=gs(`sg-ins-grade-${i}`); if(g) insurance_levels.push({grade:g,labor_emp:gv(`sg-ins-le-${i}`),health_emp:gv(`sg-ins-he-${i}`),co_total:gv(`sg-ins-co-${i}`)}); } }
-    const config={ renew_bonus:gv('sg-renew'), supervisor_bonus:gv('sg-sup'), leader_tiers, insurance_levels };
+    /* 店長津貼改總堂數制（2026-07-29）：leader_tiers 停用但保留原值，避免舊資料被清掉 */
+    const config={ renew_bonus:gv('sg-renew'), supervisor_bonus:gv('sg-sup'),
+      leader_per_classes:gv('sg-ldper')||80, leader_per_amount:gv('sg-ldamt')||4000,
+      leader_tiers:((window.SALARY_GLOBAL||{}).leader_tiers)||[], insurance_levels };
     await dbPut('salary_templates',{id:'_global',config});
     window.SALARY_GLOBAL=Object.assign(JSON.parse(JSON.stringify(SALARY_GLOBAL_DEFAULT)),config);
     closeModal(); showToast('全域薪資制度已更新'); if(window._salaryHost==='settings'){navTo('settings_staff','g_settings');}else{navTo('staff');}
@@ -29993,9 +29996,9 @@ async function renderSalaryContent(TARGET, withHead){
       </div>
     </div>`;
   })()+
-  // ── 明細（收於下方）──
-  `<details class="sal-details"${hasData?'':' style="display:none;"'}>
-    <summary>薪資項目明細</summary>
+  /* ── 薪資項目明細（2026-07-29 使用者指示：改常駐展開、逐列列出每筆表現與金額）── */
+  `<div class="card sal-details-card" style="margin-bottom:14px;"${hasData?'':' hidden'}>
+    <div class="card-title">薪資項目明細 <span style="font-size:12px;color:var(--t3);font-weight:400;">每一筆表現與對應金額</span></div>
     <div class="sal-rows">
       ${(()=>{
         const row=(label,val,sub,opt)=>`<div class="sal-row${opt&&opt.strong?' sal-row-strong':''}${opt&&opt.top?' sal-row-top':''}"><span class="sal-rl">${label}${sub?`<span class="sal-rsub"> ${sub}</span>`:''}</span><span class="sal-rv${opt&&opt.color?` ${opt.color}`:''}">${val}</span></div>`;
@@ -30030,7 +30033,7 @@ async function renderSalaryContent(TARGET, withHead){
         return h;
       })()}
     </div>
-  </details>`+
+  </div>`+
   `<div class="card"><div class="card-title">本月月曆 <span style="font-size:12px;color:var(--t3);font-weight:400;">每格為當日課程堂數，點日期看當天課程</span></div>${salaryCalendar(month, bookings, shifts, (function(){
     const er2=effRates(me); const dutyRate2=(me.custom_salary?(me.duty_hourly||0):(er2.duty_hourly||0)); const cs2=me.count_salary!==false;
     return (d)=>{
