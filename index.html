@@ -5853,8 +5853,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1707';
-const APP_VERSION_LABEL='v260728.1707';
+const APP_VERSION='260728.1718';
+const APP_VERSION_LABEL='v260728.1718';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7389,10 +7389,12 @@ function navTo(key, gkey){
   // 故 window.scrollY 一律為 0，救不到它。沿用 PAGES.calendar 既有的 _calScrollTop
   // 還原機制（原本只有拖曳排課會設定，簽到/取消不會，因而每次操作都跳回頂端）。
   // 已有值時不覆寫，讓拖曳流程自己存的優先。
+  let _calSaved=null;
   if(_keepScroll && window._calScrollTop==null){
     const _cb=document.querySelector('.cal-body');
     if(_cb && _cb.scrollTop>0) window._calScrollTop=_cb.scrollTop;
   }
+  _calSaved=window._calScrollTop;   // wrapNav2 搬移 DOM 會把捲動歸零，渲染後要再還原一次（2026-07-28）
   // 切到不支援上下文的頁面 → 清除，避免殘留篩選
   if(SCOPE.id && !SCOPE._entering && SCOPE_PAGES.indexOf(key)<0) scopeClear();
   SCOPE._entering=false;
@@ -7430,6 +7432,10 @@ function navTo(key, gkey){
   Promise.resolve(PAGES[key]()).then(()=>{
     if(isNav2) wrapNav2(gkey, key); // 頁面渲染到 C 後，包進左側次選單版面
     if(_keepScroll && _scrollY) window.scrollTo({top:_scrollY}); // 內容就位後才還原，否則會被夾回頂端
+    if(_keepScroll && _calSaved!=null){   // 行事曆內部捲動：wrapNav2 搬移後補還原（簽到/取消不再跳回頂端）
+      const _cb2=document.querySelector('.cal-body');
+      if(_cb2) _cb2.scrollTop=_calSaved;
+    }
   }).catch(e=>{
     console.error('頁面執行錯誤 '+key+':',e);
     C.innerHTML='<div class="empty"><div class="em-t">資料載入錯誤</div><div style="font-size:11px;margin-top:6px;color:var(--danger);">'+(e&&e.message?e.message:e)+'</div></div>';
@@ -16176,12 +16182,15 @@ async function voidTicketAsk(id){
       <button class="btn btn-danger" onclick="voidTicketDo('${id}')">確認作廢</button></div>`);
 }
 async function voidTicketDo(id){
+ try{
   const reason=(document.getElementById('void-reason')?.value||'').trim();
   const tk=await dbGet('member_tickets',id);
   if(!tk||tk.status!=='usable'){ showToast('此票券不可作廢'); return; }
   tk.status='refunded'; tk.sessions_remaining=0; tk.amount_paid=0;   // 金額歸零：今日營收/交易同步消失（原額留在紀錄）
   await dbPut('member_tickets',tk);
-  await dbPut('ticket_logs',{id:uid('LG'),ticket_id:id,action:'void',delta:-(Number(tk.sessions_total)||0),
+  /* action 用 'adjust'——ticket_logs.action 是列舉（grant/deduct/refund/adjust/expire），
+     'void' 會被資料庫拒絕（2026-07-28 作廢卡住案例） */
+  await dbPut('ticket_logs',{id:uid('LG'),ticket_id:id,action:'adjust',delta:-(Number(tk.sessions_total)||0),
     operator:SESSION.id,note:'作廢'+(reason?`：${reason}`:''),created_at:new Date().toISOString()});
   const purchases=(await dbGetAll('purchases').catch(()=>[])).filter(pc=>pc.ticket_id===id);
   for(const pc of purchases){
@@ -16195,6 +16204,7 @@ async function voidTicketDo(id){
   closeModal(); showToast('票券已作廢');
   try{ if(typeof PP!=='undefined'&&PP.id===tk.member_id){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }
   catch(_){ navTo(CUR_PAGE); }
+ }catch(e){ console.error('voidTicketDo',e); showToast('作廢失敗：'+(e&&e.message?e.message:e)); }
 }
 /* 特例補退（2026-07-28 使用者指示：24 小時內取消保留扣票彈性）——
    會員自行取消被自動沒收後，櫃台/店長可在明細補退該堂。 */
