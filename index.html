@@ -5815,8 +5815,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1304';
-const APP_VERSION_LABEL='v260728.1304';
+const APP_VERSION='260728.1307';
+const APP_VERSION_LABEL='v260728.1307';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16102,6 +16102,46 @@ function hoursUntilStart(b){
   catch(_){ return 999; }
 }
 // refundMode：'auto'(依24h自動)、'force'(強制退)、'none'(強制不退)
+/* 票券作廢（2026-07-28 使用者指示：儲值錯誤要能取消）——
+   限「完全未使用」的票：已扣堂或已綁未取消預約 → 擋下並提示。
+   作廢＝status refunded、剩餘歸零、寫 ticket_logs、購買紀錄金額歸零（營收同步修正）。 */
+async function voidTicketAsk(id){
+  if(!isDeskLike()) return;
+  const tk=await dbGet('member_tickets',id);
+  if(!tk||tk.status!=='usable'){ showToast('此票券不可作廢'); return; }
+  const used=(Number(tk.sessions_total)||0)-(Number(tk.sessions_remaining)||0);
+  const bks=(await dbGetAll('bookings')).filter(b=>b.ticket_id===id&&b.status!=='cancelled');
+  if(used>0||bks.length>0){ showToast(`不可作廢：此票已有使用紀錄（扣 ${used} 堂、綁定預約 ${bks.length} 筆），請先處理`); return; }
+  const purchases=(await dbGetAll('purchases').catch(()=>[])).filter(pc=>pc.ticket_id===id);
+  const amt=purchases.reduce((s,pc)=>s+(Number(pc.deal_amount)||0),0);
+  showModal(`<div class="modal-title">作廢票券</div>
+    <div style="font-size:13px;color:var(--text);line-height:1.9;">${tk.plan_name||'票券'}　${tk.sessions_total} 堂${amt?`　·　交易金額 $${amt.toLocaleString()}`:''}<br>
+    <span style="color:var(--t2);font-size:12px;">作廢後票券失效、交易金額歸零（營收同步修正）；此操作不可復原。</span></div>
+    <div class="form-row" style="margin-top:12px;"><label>作廢原因</label><input id="void-reason" placeholder="例：選錯方案／重複儲值"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
+      <button class="btn btn-danger" onclick="voidTicketDo('${id}')">確認作廢</button></div>`);
+}
+async function voidTicketDo(id){
+  const reason=(document.getElementById('void-reason')?.value||'').trim();
+  const tk=await dbGet('member_tickets',id);
+  if(!tk||tk.status!=='usable'){ showToast('此票券不可作廢'); return; }
+  tk.status='refunded'; tk.sessions_remaining=0;
+  await dbPut('member_tickets',tk);
+  await dbPut('ticket_logs',{id:uid('LG'),ticket_id:id,action:'void',delta:-(Number(tk.sessions_total)||0),
+    operator:SESSION.id,note:'作廢'+(reason?`：${reason}`:''),created_at:new Date().toISOString()});
+  const purchases=(await dbGetAll('purchases').catch(()=>[])).filter(pc=>pc.ticket_id===id);
+  for(const pc of purchases){
+    const orig=Number(pc.deal_amount)||0;
+    if(orig===0) continue;
+    pc.deal_amount=0;
+    pc.note=((pc.note||'')+`【已作廢 原$${orig.toLocaleString()}${reason?`：${reason}`:''}】`).trim();
+    await dbPut('purchases',pc);
+  }
+  dbCacheClear(['member_tickets','ticket_logs','purchases']);
+  closeModal(); showToast('票券已作廢');
+  try{ if(typeof PP!=='undefined'&&PP.id===tk.member_id){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }
+  catch(_){ navTo(CUR_PAGE); }
+}
 /* 特例補退（2026-07-28 使用者指示：24 小時內取消保留扣票彈性）——
    會員自行取消被自動沒收後，櫃台/店長可在明細補退該堂。 */
 async function deskRefundCancelled(id){
@@ -20461,7 +20501,10 @@ function ppRecordHtml(){
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${t.plan_name||'票券'}${shrTag}</span>
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
             <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null)}</div>
-            <div style="font-size:11px;color:var(--t3);margin-top:8px;">效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}</div>
+            <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+              <span>效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}</span>
+              ${(isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger);" onclick="voidTicketAsk('${t.id}')">作廢</button>`:''}
+            </div>
           </div>`; };
         const tabs=[['pt','教練課'],['group','團體課'],['self','自主訓練'],['voucher','折抵券']]
           .map(([k,l])=>`<button class="tkf-btn${tab===k?' active':''}" onclick="ppTkTab('${k}')">${l}</button>`).join('');
