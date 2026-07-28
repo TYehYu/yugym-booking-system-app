@@ -5072,10 +5072,17 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .dw-h span{font-family:var(--num);font-size:11.5px;color:var(--t3);font-weight:600;}
 .dw-h.today{color:var(--green);}
 .dw-seg{display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--gold-d);}
-.dw-cell{min-height:64px;background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:6px;display:flex;flex-wrap:wrap;gap:4px;align-content:flex-start;}
-.dw-cell.dw-edit{cursor:pointer;transition:border-color .13s;}
+.dw-cell{min-height:64px;background:#fff;border:1px solid var(--bd);border-radius:12px;padding:7px;display:flex;flex-wrap:wrap;gap:5px;align-content:flex-start;box-shadow:0 1px 4px rgba(0,0,0,0.04);}
+.dw-cell.dw-edit{cursor:pointer;transition:border-color .13s, background .13s;}
 .dw-cell.dw-edit:hover{border-color:var(--green);}
+.dw-cell.dw-over{border-color:var(--green);background:#eef7f2;border-style:dashed;}
 .dw-chip{background:#fff;border:1px solid var(--bd);border-radius:999px;padding:2px 8px;font-size:11.5px;font-weight:700;color:var(--green);white-space:nowrap;}
+/* 上色教練標籤（2026-07-28）：值班模板拖曳用——實色底白字，可拖曳游標 */
+.dw-chip-c{color:#fff;border:none;padding:3px 10px;cursor:grab;box-shadow:0 1px 3px rgba(0,0,0,0.15);}
+.dw-chip-c:active{cursor:grabbing;}
+.dw-tray{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;margin-bottom:12px;background:var(--card2);border:1px solid var(--bd);border-radius:12px;}
+.dw-tray .dw-chip-c{font-size:12.5px;}
+.dw-tray-tip{font-size:11.5px;color:var(--t3);margin-left:auto;}
 .dw-none{color:var(--t3);font-size:12px;margin:auto;}
 .dw-pick{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--bd);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;user-select:none;}
 .dw-pick:has(input:checked){background:var(--green);color:#fff;border-color:var(--green);}
@@ -5776,8 +5783,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.0830';
-const APP_VERSION_LABEL='v260728.0830';
+const APP_VERSION='260728.0850';
+const APP_VERSION_LABEL='v260728.0850';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29102,29 +29109,85 @@ function salaryShowDay(ds, bookings, shifts, memMap, dayResult){
    資料表 duty_slots（一格一列，id=DS-<日期>-<時段>）；
    讀＝全體員工、寫＝管理員/櫃台/店長/主管（RLS ds_manager）。 */
 PAGES.coach_duty_week=async function(){
-  /* 2026-07-27 使用者指示（二修）：不綁月份/日期——純「一週模板」，
-     只要清楚一週裡每個時段有哪些教練可安排，方便店長分配資源。
-     資料改用 weekday（1=週一..7=週日）當鍵，id=DS-W<wd>-<seg>。 */
+  /* 2026-07-27 使用者指示（二修）：不綁月份/日期——純「一週模板」，weekday 當鍵，id=DS-W<wd>-<seg>。
+     2026-07-28 使用者指示（三修）：卡片排版＋教練標籤上色＋上方標籤列可拖進格子、拖出即移除
+     （拖拉限桌機；點格子勾選的舊路徑保留給手機與不便拖拉時使用）。 */
   const [coaches,slots]=await Promise.all([dbGetAll('coaches'),dbGetAll('duty_slots').catch(()=>[])]);
-  const cMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)||c.name]));
+  const list=coaches.filter(c=>isCoachable(c)&&c.status!=='inactive'&&c.invite_status!=='pending')
+    .sort((a,b)=>String(a.id).localeCompare(String(b.id)));
   const canEdit = isDeskLike()||SESSION.is_manager;
+  const byKey={}; (slots||[]).forEach(s=>{ if(s.weekday) byKey[s.weekday+'|'+s.segment]={id:s.id,ids:(Array.isArray(s.coach_ids)?s.coach_ids.slice():[])} ; });
+  // 教練代表色：依名單序位固定配色（同一位教練每次同色）
+  const PAL=['#2e7d5b','#a8642a','#7c5cbf','#c2453f','#2b6cb0','#b8860b','#d9628f','#3f8f8f','#6d7f2e','#8a5a44'];
+  const color={}; list.forEach((c,i)=>color[c.id]=PAL[i%PAL.length]);
+  window._dw={byKey, canEdit, color,
+    cMap:Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)||c.name])), drag:null};
+  const tray = canEdit
+    ? `<div class="dw-tray">${list.map(c=>`<span class="dw-chip dw-chip-c" draggable="true" style="background:${color[c.id]};"
+         ondragstart="dwDragStart(event,'${c.id}',0,'')">${window._dw.cMap[c.id]}</span>`).join('')}
+       <span class="dw-tray-tip">拖標籤進格子＝加入；把格內標籤拖出＝移除</span></div>`
+    : '';
+  C.innerHTML=head('DUTY','教練值班時段', canEdit?'一週固定模板：拖曳教練標籤排時段（點格子也可勾選）':'一週各時段可排課教練')+
+  `<div class="card" style="padding:14px;">${tray}
+    <div style="overflow-x:auto;"><div class="dw-grid" id="dw-grid"></div></div>
+  </div>`;
+  dwRenderGrid();
+};
+function dwRenderGrid(){
+  const D=window._dw; if(!D) return;
+  const host=document.getElementById('dw-grid'); if(!host) return;
   const SEGS=[['am','早'],['pm','午'],['eve','晚']];
   const WDS=[[1,'一'],[2,'二'],[3,'三'],[4,'四'],[5,'五'],[6,'六'],[7,'日']];
-  const byKey={}; (slots||[]).forEach(s=>{ if(s.weekday) byKey[s.weekday+'|'+s.segment]=s; });
-  const todayWd=((new Date(TODAY)).getDay()+6)%7+1;   // 1=週一..7=週日
+  const todayWd=((new Date(TODAY)).getDay()+6)%7+1;
   const cell=(wd,seg)=>{
-    const s=byKey[wd+'|'+seg];
-    const ids=(s&&Array.isArray(s.coach_ids))?s.coach_ids:[];
-    const chips=ids.map(id=>`<span class="dw-chip">${cMap[id]||'—'}</span>`).join('');
-    return `<div class="dw-cell${canEdit?' dw-edit':''}" ${canEdit?`onclick="dwEditCell(${wd},'${seg}')"`:''}>${chips||'<span class="dw-none">—</span>'}</div>`;
+    const ids=(D.byKey[wd+'|'+seg]||{}).ids||[];
+    const chips=ids.map(id=>`<span class="dw-chip dw-chip-c" style="background:${D.color[id]||'#6b7f76'};"
+      ${D.canEdit?`draggable="true" ondragstart="dwDragStart(event,'${id}',${wd},'${seg}')" ondragend="dwDragEnd(event)"`:''}>${D.cMap[id]||'—'}</span>`).join('');
+    return `<div class="dw-cell${D.canEdit?' dw-edit':''}" data-wd="${wd}" data-seg="${seg}"
+      ${D.canEdit?`onclick="dwEditCell(${wd},'${seg}')" ondragover="dwDragOver(event)" ondragleave="dwDragLeave(event)" ondrop="dwDrop(event,${wd},'${seg}')"`:''}>${chips||'<span class="dw-none">—</span>'}</div>`;
   };
   const header=WDS.map(([wd,label])=>`<div class="dw-h${wd===todayWd?' today':''}">週${label}</div>`).join('');
   const rows=SEGS.map(([k,label])=>`<div class="dw-seg">${label}</div>`+WDS.map(([wd])=>cell(wd,k)).join('')).join('');
-  C.innerHTML=head('DUTY','教練值班時段', canEdit?'一週固定模板：點格子勾選該時段可排課的教練':'一週各時段可排課教練')+
-  `<div class="card" style="padding:14px;overflow-x:auto;">
-    <div class="dw-grid"><div></div>${header}${rows}</div>
-  </div>`;
-};
+  host.innerHTML=`<div></div>${header}${rows}`;
+}
+function dwDragStart(ev,cid,wd,seg){
+  window._dw.drag={cid,wd:Number(wd)||0,seg:seg||'',dropped:false};
+  ev.dataTransfer.effectAllowed='move';
+  try{ev.dataTransfer.setData('text/plain',cid);}catch(_){}
+}
+function dwDragOver(ev){ ev.preventDefault(); ev.dataTransfer.dropEffect='move'; ev.currentTarget.classList.add('dw-over'); }
+function dwDragLeave(ev){ ev.currentTarget.classList.remove('dw-over'); }
+async function dwDrop(ev,wd,seg){
+  ev.preventDefault(); ev.stopPropagation(); ev.currentTarget.classList.remove('dw-over');
+  const D=window._dw, dg=D&&D.drag; if(!dg) return;
+  dg.dropped=true;
+  const same = dg.wd===wd && dg.seg===seg;
+  if(same) return;
+  const tgt=D.byKey[wd+'|'+seg]||(D.byKey[wd+'|'+seg]={ids:[]});
+  const changed=[];
+  if(!tgt.ids.includes(dg.cid)){ tgt.ids.push(dg.cid); changed.push([wd,seg]); }
+  if(dg.wd){ const src=D.byKey[dg.wd+'|'+dg.seg];   // 從其他格拖來＝搬移
+    if(src&&src.ids.includes(dg.cid)){ src.ids=src.ids.filter(x=>x!==dg.cid); changed.push([dg.wd,dg.seg]); } }
+  dwRenderGrid();
+  for(const [w,s] of changed) await dwPersist(w,s);
+}
+async function dwDragEnd(ev){
+  // 從格子拖出、沒有落在任何格子上 → 移除（2026-07-28 使用者指示）
+  const D=window._dw, dg=D&&D.drag; window._dw.drag=null;
+  if(!dg||dg.dropped||!dg.wd) return;
+  const src=D.byKey[dg.wd+'|'+dg.seg];
+  if(src&&src.ids.includes(dg.cid)){
+    src.ids=src.ids.filter(x=>x!==dg.cid);
+    dwRenderGrid(); await dwPersist(dg.wd,dg.seg);
+  }
+}
+async function dwPersist(wd,seg){
+  const D=window._dw; const ids=(D.byKey[wd+'|'+seg]||{}).ids||[];
+  try{
+    await dbPut('duty_slots',{id:`DS-W${wd}-${seg}`,weekday:wd,date:null,segment:seg,coach_ids:ids,
+      updated_by:SESSION.id,updated_at:new Date().toISOString()});
+  }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); navTo('coach_duty_week', CUR_GROUP); }
+}
 async function dwEditCell(wd,seg){
   const [coaches,slots]=await Promise.all([dbGetAll('coaches'),dbGetAll('duty_slots').catch(()=>[])]);
   const list=coaches.filter(c=>isCoachable(c)&&c.status!=='inactive'&&c.invite_status!=='pending');
