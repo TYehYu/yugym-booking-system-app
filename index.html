@@ -5795,8 +5795,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.0912';
-const APP_VERSION_LABEL='v260728.0912';
+const APP_VERSION='260728.0924';
+const APP_VERSION_LABEL='v260728.0924';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13924,7 +13924,7 @@ async function bkStep2(){
       ${bkSummaryCard(t,date,time,coach_id?await coachName(coach_id):'')}
       <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;background:var(--card2);padding:10px 12px;border-radius:9px;">名單可現在選或之後在明細再加。有團體課票券的會員會扣 1 堂，沒票的由教練負責。帶親友同行可按已選會員的「＋」重複報名，每個名額各算 1 人、各扣 1 堂。</div>
       <div class="form-row" style="display:flex;align-items:center;gap:10px;"><label style="margin:0;flex:none;">本堂人數上限</label><input type="number" id="grp-max" value="5" min="1" max="12" style="width:76px;" oninput="window._grpMax=Math.max(1,Number(this.value)||5);renderGrpPick()"><span style="font-size:11.5px;color:var(--t3);">預設 5 人，場地有餘裕可放寬</span></div>
-      <div class="form-row" style="display:flex;align-items:center;gap:10px;"><label style="margin:0;flex:none;">重複建立</label><select id="grp-repeat" style="width:150px;">${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}">${n===1?'僅此一堂':`每週同時段 × ${n} 週`}</option>`).join('')}</select><span style="font-size:11.5px;color:var(--t3);">衝堂的那週會自動略過</span></div>
+      <div style="margin-top:4px;">${recurBoxHtml('grp')}</div>
       <div class="form-row"><label>加入會員（點選即可複選）</label>
         <input type="hidden" id="bk-member" value="">
         <input id="grp-search" class="ms-search" style="margin:0 0 8px;width:100%;box-sizing:border-box;" placeholder="搜尋姓名…" oninput="renderGrpPick()" autocomplete="off">
@@ -13963,7 +13963,7 @@ async function bkStep2(){
       <button type="button" class="btn btn-ghost" style="width:100%;" onclick="openPendingHold()">🕒 待簽約卡位（客人尚未購票）</button>
       <div style="font-size:11px;color:var(--t3);margin-top:5px;">先佔住時段與場地；客人簽約付款後，在課卡明細按「轉正式預約」。</div>
     </div>
-    <div class="form-row" style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><label style="margin:0;flex:none;">重複建立</label><select id="bk-repeat" style="width:150px;">${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}">${n===1?'僅此一堂':`每週同時段 × ${n} 週`}</option>`).join('')}</select><span style="font-size:11.5px;color:var(--t3);">衝堂的那週會自動略過；達票券剩餘堂數即停</span></div>   <!-- 2026-07-28 使用者指示：與團課重複開課統一 -->
+    ${recurBoxHtml('bk')}
 
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button><button class="btn btn-green" onclick="submitBooking()">確認預約</button></div>`);
   refreshBkTicket();
@@ -13977,8 +13977,38 @@ async function openBookingModalBack(){
   const co=document.getElementById('bk-coach'); if(co&&_bkWizard.coach_id)co.value=_bkWizard.coach_id;
 }
 async function coachName(id){const c=await dbGet('coaches',id);return c?coachDisp(c):'';}
-/* toggleRecurring／rec-dow／rec-max／rec-until 已移除（2026-07-28）：
-   教練課連續預約改與團課同一介面——「重複建立：每週同時段 × N 週」下拉。 */
+/* 連續預約統一介面（2026-07-28 使用者定案）：開關＋勾星期＋結束日期——
+   後台教練課／團課／教練端快速預約三處共用同一語言。 */
+function recurBoxHtml(prefix){
+  const WD=['一','二','三','四','五','六','日'];
+  return `<label class="switch-row" style="margin-bottom:6px;"><span class="switch"><input type="checkbox" id="${prefix}-recurring" onchange="toggleRecurBox('${prefix}')"><span class="switch-slider"></span></span><span class="switch-label">連續預約（每週重複）</span></label>
+    <div id="${prefix}-recurring-box" style="display:none;border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--card2);">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">勾選要重複的星期（以所選日期為起點）：</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        ${WD.map((w,i)=>`<label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" class="${prefix}-dow" value="${i===6?0:i+1}">週${w}</label>`).join('')}
+      </div>
+      <div class="form-row"><label>結束日期（含）</label><input type="date" id="${prefix}-until" value=""></div>
+      <div style="font-size:11px;color:var(--t3);">起始日～結束日間逐週建立；衝堂自動跳過${prefix==='grp'?'':'、達票券剩餘堂數即停'}。</div>
+    </div>`;
+}
+function toggleRecurBox(prefix){
+  const on=document.getElementById(prefix+'-recurring').checked;
+  document.getElementById(prefix+'-recurring-box').style.display=on?'block':'none';
+  if(on){
+    const dstr=_bkWizard&&_bkWizard.date;
+    if(dstr){
+      const dow=new Date(dstr+'T00:00:00').getDay();
+      document.querySelectorAll('.'+prefix+'-dow').forEach(cb=>{ if(Number(cb.value)===dow) cb.checked=true; });
+    }
+  }
+}
+function readRecur(prefix){
+  const on=document.getElementById(prefix+'-recurring')?.checked;
+  if(!on) return {on:false};
+  const dows=[...document.querySelectorAll('.'+prefix+'-dow:checked')].map(c=>Number(c.value));
+  const until=(document.getElementById(prefix+'-until')||{}).value||'';
+  return {on:true,dows,until};
+}
 function bkMemberOpts(list){
   const cid=window._bkCoachId;
   return list.map(m=>{
@@ -14262,11 +14292,18 @@ async function submitBooking(){
     const ids=(window._grpSel||[]).filter(Boolean);
     const gmax=grpMax();
     if(ids.length>gmax){showToast(`已達本堂人數上限（${gmax} 人）`);return;}
-    /* 連續預約（2026-07-27 使用者指示）：每週同時段重複建立 N 週；衝堂/場地滿的那週跳過 */
-    const repeatN=Math.max(1,Number((document.getElementById('grp-repeat')||{}).value)||1);
+    /* 連續預約（2026-07-28 統一）：開關＋勾星期＋結束日期，逐日建立；衝堂/場地滿跳過 */
+    const rc=readRecur('grp');
+    if(rc.on){
+      if(!rc.dows.length){showToast('請勾選至少一個星期');return;}
+      if(!rc.until){showToast('請選擇結束日期');return;}
+    }
+    const grpDates=rc.on?buildRecurringDates(date,rc.dows,60,rc.until):[date];
+    if(!grpDates.length){showToast('日期區間內沒有符合勾選星期的日子');return;}
+    const repeatN=grpDates.length;
     let made=0, skippedWeeks=[], charged=0, skipped=0;
-    for(let w=0;w<repeatN;w++){
-      const dW=ymd(addDays(parseYmd(date),7*w));
+    for(let w=0;w<grpDates.length;w++){
+      const dW=grpDates[w];
       const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id};
       const verr=await validateBooking(vbk,dW,time,60);
       if(verr){ if(repeatN===1){showToast(verr);return;} skippedWeeks.push(dW.slice(5).replace('-','/')); continue; }
@@ -14294,8 +14331,12 @@ async function submitBooking(){
   // ── 一般課程（私教/友善/自主）──
   const member_id=document.getElementById('bk-member').value;
   if(!member_id){showToast('請選擇會員');return;}
-  const repeatN=Math.max(1,Number((document.getElementById('bk-repeat')||{}).value)||1);   // 與團課統一：每週同時段 × N
-  const recurring=repeatN>1;
+  const _rc=readRecur('bk');
+  if(_rc.on){
+    if(!_rc.dows.length){showToast('請勾選至少一個星期');return;}
+    if(!_rc.until){showToast('請選擇結束日期');return;}
+  }
+  const recurring=_rc.on;
   // 使用者選定的票券（多張時的下拉，或單張的 hidden）
   const selTicketId=document.getElementById('bk-ticket-sel')?.value||null;
   // 確認有可用票券（用起始日過濾過期）
@@ -14324,8 +14365,9 @@ async function submitBooking(){
     member_id, coach_id, substitute_coach_id:null,
     category:t.category, type_id, format:fmt,
     startDate:date, time, duration:60,
-    dows: recurring ? [parseYmd(date).getDay()] : [],   // 每週同一天
-    count: recurring ? repeatN : 1,
+    dows: recurring ? _rc.dows : [],
+    count: recurring ? 60 : 1,          // 上限交由 結束日期＋票券剩餘 決定
+    until: recurring ? _rc.until : null,
     findTicketFn: bkFindTk,
   });
   const created=r.ok, skipped=r.skipped, noTicket=r.noTicket, results=r.results;
@@ -14410,7 +14452,7 @@ async function runRecurringBooking(opts){
   if(o.dows && o.dows.length){
     const reqCount=Math.max(1, o.count||1);
     const cap = noDeduct ? reqCount : Math.min(reqCount, remainTotal||0);
-    const far=ymd(addDays(parseYmd(o.startDate), o.horizonDays||370));
+    const far=o.until||ymd(addDays(parseYmd(o.startDate), o.horizonDays||370));   // 結束日期（含）優先
     dates=buildRecurringDates(o.startDate, o.dows, cap, far);
   }else{
     dates=[o.startDate];
@@ -25899,7 +25941,7 @@ async function openQuickBookCoach(){
   const pf=_prefill||{}; _prefill=null;
   const initDate=pf.date||ymd(TODAY);
   const initTime=pf.time||'18:00';
-  window._qbForm={memberId:null,memberName:null,typeId,date:initDate,time:initTime,repeatN:1};
+  window._qbForm={memberId:null,memberName:null,typeId,date:initDate,time:initTime,recurring:false,dows:[],until:''};
   // 預載會員 + 票券 + 票券種類（供教練課判斷）
   try{
     const[members,tickets,types]=await Promise.all([dbGetAll('members'),dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
@@ -25936,9 +25978,14 @@ function renderQuickBookForm(){
           </div>
           <div><div class="qb-f-label">時間</div><select id="qb-f-time" onchange="window._qbForm.time=this.value">${timeOpts}</select></div>
         </div>
-        <div class="qb-f-label">重複建立</div>   <!-- 2026-07-28：與後台/團課重複開課統一 -->
-        <select onchange="window._qbForm.repeatN=Number(this.value)">${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}" ${(f.repeatN||1)===n?'selected':''}>${n===1?'僅此一堂':`每週同時段 × ${n} 週`}</option>`).join('')}</select>
-        <div style="font-size:11px;color:var(--t3);margin-top:6px;">衝堂的那週會自動略過；達票券剩餘堂數即停。</div>
+        <label class="qb-f-rec"><input type="checkbox" ${f.recurring?'checked':''} onchange="qbToggleRecurring(this.checked)"> 連續預約（每週重複）</label>
+        ${f.recurring?`<div class="qb-rec-box">
+          <div class="qb-f-label">重複星期</div>
+          <div class="qb-dows">${[1,2,3,4,5,6,0].map(d=>`<button class="qb-dow ${f.dows.includes(d)?'active':''}" onclick="qbToggleDow(${d})">${['日','一','二','三','四','五','六'][d]}</button>`).join('')}</div>
+          <div class="qb-f-label">結束日期（含）</div>
+          <input type="date" value="${f.until||''}" onchange="window._qbForm.until=this.value" style="width:100%;box-sizing:border-box;">
+          <div style="font-size:11px;color:var(--t3);margin-top:8px;">起始日～結束日間逐週建立；衝堂自動跳過、達票券剩餘堂數即停。</div>
+        </div>`:''}
       </div>
       <div class="ae-foot"><button class="btn btn-green" style="width:100%;" onclick="qbSubmitForm()">確認預約</button></div>
     </div>`;
@@ -25977,12 +26024,17 @@ function qbOpenDatePick(){
 }
 function qbCloseDatePick(){ const s=document.getElementById('qb-date-pick'); if(s)s.remove(); }
 function qbPickDate(ds){
-  window._qbForm.date=ds;
+  const f=window._qbForm; f.date=ds;
+  if(f.recurring){ const wd=parseYmd(ds).getDay(); if(!f.dows.includes(wd)) f.dows.push(wd); }
   qbCloseDatePick();
   renderQuickBookForm();
 }
-/* qbCountStep／qbToggleRecurring／qbToggleDow 已移除（2026-07-28）：
-   重複開課統一為「每週同時段 × N 週」下拉（repeatN），引擎仍以票券剩餘為上限。 */
+function qbToggleDow(d){ const f=window._qbForm; const i=f.dows.indexOf(d); if(i<0)f.dows.push(d); else f.dows.splice(i,1); renderQuickBookForm(); }
+function qbToggleRecurring(v){
+  const f=window._qbForm; f.recurring=v;
+  if(v && f.dows.length===0){ const wd=parseYmd(f.date).getDay(); f.dows=[wd]; }
+  renderQuickBookForm();
+}
 // 私人教練類的所有 ticket_type_id（含友善教練課）+ 字串相容
 function ptTicketTypeIds(){
   const ids=new Set(['pt','pt_friendly']);
@@ -26055,7 +26107,11 @@ async function qbSubmitForm(){
   const f=window._qbForm;
   if(!f.memberId){ showToast('請選擇會員'); return; }
   if(!f.date||!f.time){ showToast('請選日期與時間'); return; }
-  const repeatN=Math.max(1,Number(f.repeatN)||1); const isRec=repeatN>1;
+  const isRec=!!f.recurring;
+  if(isRec){
+    if(!f.dows.length){ showToast('請選重複星期'); return; }
+    if(!f.until){ showToast('請選結束日期'); return; }
+  }
   qbShowProgress(0,0); // 立即回饋
   // 教練課找票（含友善教練課）：用 isPtTicket
   const ptFindTk=async(mid,ds)=>{
@@ -26077,8 +26133,9 @@ async function qbSubmitForm(){
     member_id:f.memberId, coach_id:SESSION.id, substitute_coach_id:null,
     category:'私人教練', type_id:f.typeId, format:'1v1',
     startDate:f.date, time:f.time, duration:60,
-    dows: isRec ? [parseYmd(f.date).getDay()] : [],   // 每週同一天
-    count: isRec ? repeatN : 1,
+    dows: isRec ? f.dows : [],
+    count: isRec ? 60 : 1,          // 上限交由 結束日期＋票券剩餘 決定
+    until: isRec ? f.until : null,
     findTicketFn: ptFindTk, countRemainFn: ptCountRemain,
     onProgress:(cur,total)=>qbShowProgress(cur,total),
   });
