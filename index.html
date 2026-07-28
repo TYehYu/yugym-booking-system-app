@@ -5855,8 +5855,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260728.1737';
-const APP_VERSION_LABEL='v260728.1737';
+const APP_VERSION = '260728.1755';
+const APP_VERSION_LABEL='v260728.1755';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13775,13 +13775,14 @@ function quickBookAt(date,time){
 }
 
 /* ══════ 預約精靈（兩頁式） ══════
-   第1頁：課程類型 / 教練 / 日期 / 時間（從行事曆點選會自動帶入日期時間）
-   第2頁：會員 / 票券 / 連續預約
+   第1頁：會員 / 課程類型 / 教練 / 日期 / 時間（從行事曆點選會自動帶入日期時間）
+   第2頁：票券 / 連續預約（2026-07-28 使用者指示：先選會員；體驗課／待簽約卡位／場租保留不選會員的彈性）
    全部不預設值；連續預約預設「否」。 */
 let _bkMembers=[];
 let _bkWizard={};   // 暫存第1頁選擇
 async function openBookingModal(){
-  const[coaches,types]=await Promise.all([dbGetAll('coaches'),dbGetAll('ticket_types')]);
+  const[coaches,types,_bkMemsAll]=await Promise.all([dbGetAll('coaches'),dbGetAll('ticket_types'),dbGetAll('members')]);
+  window._bkAllMembers=_bkMemsAll.filter(m=>m.status==='active').sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const isCoach=SESSION.role==='coach' && !SESSION.is_manager;   // 店長比照櫃台（2026-07-27）
   const isMobileBk=isMobileLayout();
   // 課程類型過濾：
@@ -13794,6 +13795,7 @@ async function openBookingModal(){
     if(isCoach && !coachAllowed.includes(t.category)) return false; // 教練：只留教練課/體驗
     if(isMobileBk && t.category==='小班肌力') return false;          // 手機：不建團體課
     if(isMobileBk && t.category==='自主訓練') return false;          // 手機：自主訓練由會員自約
+    if(t.category==='場租') return false;   // 場租票是銷售商品（＝單次自主訓練）；預約走下方合成的「場地租借」卡，不重複顯示（2026-07-28）
     return true;
   });
   // 排序（2026-07-20 使用者指定）：第一列 教練課/友善教練課/團體課、第二列 運動按摩/體驗課/自主訓練
@@ -13827,6 +13829,12 @@ async function openBookingModal(){
   const timeOpts=bkTimeOptions(pf.time);
   /* 2026-07-20 使用者指示：日期/時間放最上方（並排）、課程排序固定、教練名單直接顯示 */
   showModal(`<div class="modal-title">新增預約 · 步驟 1 / 2</div>
+    <div class="form-row"><label>會員<span style="font-weight:400;color:var(--t3);">（體驗課／待簽約卡位／場地租借可不選）</span></label>
+      <div class="mem-pick-row">
+        <input class="gt-search" placeholder="輸入姓名或手機搜尋（共 ${window._bkAllMembers.length} 位）" oninput="bkFilterMembers(this.value)" autocomplete="off">
+        <select id="bk-mem-pre"><option value="">— 選擇會員 —</option>${window._bkAllMembers.map(m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
+      </div>
+    </div>
     <div class="form-2col">
       <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}"></div>
       <div class="form-row"><label>時間</label><select id="bk-time">${timeOpts}</select></div>
@@ -14034,7 +14042,8 @@ async function bkStep2(){
   const date=document.getElementById('bk-date').value;
   const time=document.getElementById('bk-time').value.slice(0,5);
   if(!date||!time){showToast('請選擇日期與時間');return;}
-  Object.assign(_bkWizard,{type_id,t,coach_id,date,time});
+  const preMid=(document.getElementById('bk-mem-pre')||{}).value||'';   // 步驟 1 選的會員（2026-07-28）
+  Object.assign(_bkWizard,{type_id,t,coach_id,date,time,member_id:preMid});
   // 載入會員清單；若步驟一有選教練，該教練的會員排前面
   const members=await dbGetAll('members');
   let actives=members.filter(m=>m.status==='active');
@@ -14068,11 +14077,12 @@ async function bkStep2(){
     // 預先查每位會員的團體課票（顯示剩餘張數，方便櫃台判斷誰要扣票）
     const allTk=await dbGetAll('member_tickets');
     window._grpData=_bkMembers.map(m=>{
-      const tks=allTk.filter(tt=>tt.member_id===m.id && ticketMatchesCategory(tt,categoryOfTypeId(type_id)) && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=date));
+      const tks=allTk.filter(tt=>tkUsableBy(tt,m.id) && ticketMatchesCategory(tt,categoryOfTypeId(type_id)) && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=date));
       const sum=tks.reduce((s,tt)=>s+tt.sessions_remaining,0);
       return {id:m.id, name:m.name||'—', sum, mine:!!(coach_id&&m.default_coach_id===coach_id)};
     });
-    window._grpSel=[]; window._grpMax=5;
+    window._grpSel=(preMid&&window._grpData.some(g=>g.id===preMid))?[preMid]:[];   // 步驟 1 已選會員 → 預先加入名單（2026-07-28）
+    window._grpMax=5;
     showModal(`<div class="modal-title">新增團體課 · 步驟 2 / 2</div>
       ${bkSummaryCard(t,date,time,coach_id?await coachName(coach_id):'')}
       <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;background:var(--card2);padding:10px 12px;border-radius:9px;">名單可現在選或之後在明細再加。有團體課票券的會員會扣 1 堂，沒票的由教練負責。帶親友同行可按已選會員的「＋」重複報名，每個名額各算 1 人、各扣 1 堂。</div>
@@ -14092,7 +14102,7 @@ async function bkStep2(){
   // 只顯示有可用票券的會員，標籤改為票券張數
   const allTkG=await dbGetAll('member_tickets');
   const withTicket=_bkMembers.map(m=>{
-    const tks=allTkG.filter(tt=>tt.member_id===m.id && bkTicketTypeOk(tt,type_id) && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=date));
+    const tks=allTkG.filter(tt=>tkUsableBy(tt,m.id) && bkTicketTypeOk(tt,type_id) && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=date));
     const sum=tks.reduce((s,tt)=>s+tt.sessions_remaining,0);
     return {m,sum};
   }).filter(x=>x.sum>0);
@@ -14102,24 +14112,28 @@ async function bkStep2(){
     const mine=coach_id && m.default_coach_id===coach_id;
     return `<option value="${m.id}">${mine?'★ ':''}${m.name}（${fmtPhone(m.phone)}）· 剩 ${sum} 堂</option>`;
   }).join('');
+  /* 2026-07-28 使用者指示：會員已在步驟 1 選定 → 這裡鎖定顯示不再挑人；
+     沒選會員（或沒票）時保留「待簽約卡位」彈性。 */
+  const preInfo=preMid?members.find(m=>m.id===preMid):null;
+  const preSum=preMid?(window._bkTicketSum[preMid]||0):0;
+  const hasTk=!!(preMid&&preSum>0);
   showModal(`<div class="modal-title">新增預約 · 步驟 2 / 2</div>
     ${bkSummaryCard(t,date,time,coach_id?await coachName(coach_id):'')}
-    <div class="form-row"><label>會員（僅顯示有可用票券者）</label>
-      <input type="hidden" id="bk-member" value="">
-      <button type="button" class="bk-mem-pick" id="bk-mem-pick" onclick="openMemberSheet()">
-        <span id="bk-mem-pick-label" style="color:var(--t3);">${withTicket.length?'點此選擇會員…':'目前沒有持此類票券的會員'}</span>
-        <span style="color:var(--t3);">▾</span>
-      </button>
-      ${coach_id?'<div style="font-size:11px;color:#1f6f3f;margin-top:5px;">★ 標示為該教練的指定會員</div>':''}</div>
-    <div class="form-row" style="margin-bottom:10px;"><div id="bk-ticket-info" style="font-size:12px;color:var(--t2);padding:10px 12px;background:var(--card2);border-radius:9px;">選擇會員後，將自動帶入可用票券。</div></div>
-    <div class="form-row" style="margin-bottom:10px;">
-      <button type="button" class="btn btn-ghost" style="width:100%;" onclick="openPendingHold()">🕒 待簽約卡位（客人尚未購票）</button>
-      <div style="font-size:11px;color:var(--t3);margin-top:5px;">先佔住時段與場地；客人簽約付款後，在課卡明細按「轉正式預約」。</div>
-    </div>
-    ${recurBoxHtml('bk')}
-
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button><button class="btn btn-green" onclick="submitBooking()">確認預約</button></div>`);
-  refreshBkTicket();
+    <input type="hidden" id="bk-member" value="${hasTk?preMid:''}">
+    ${hasTk
+      ?`<div class="form-row"><label>會員</label>
+          <div class="bk-mem-pick" style="cursor:default;"><span>${preInfo?preInfo.name:''}（${preInfo?fmtPhone(preInfo.phone):''}）· 剩 ${preSum} 堂</span></div></div>
+        <div class="form-row" style="margin-bottom:10px;"><div id="bk-ticket-info" style="font-size:12px;color:var(--t2);padding:10px 12px;background:var(--card2);border-radius:9px;"></div></div>
+        ${recurBoxHtml('bk')}`
+      :`<div class="form-row"><div style="font-size:12.5px;color:var(--t2);line-height:1.8;padding:12px 14px;background:var(--card2);border-radius:10px;">
+          ${preMid?`<b>${preInfo?preInfo.name:'該會員'}</b> 沒有此課程的可用票券。可回上一步改選會員或先完成儲值，`
+                  :'尚未選擇會員。請回上一步選擇會員，'}或用「待簽約卡位」先佔住時段。</div></div>
+        <div class="form-row" style="margin-bottom:10px;">
+          <button type="button" class="btn btn-ghost" style="width:100%;" onclick="openPendingHold()">🕒 待簽約卡位（客人尚未購票）</button>
+          <div style="font-size:11px;color:var(--t3);margin-top:5px;">先佔住時段與場地；客人簽約付款後，在課卡明細按「轉正式預約」。</div>
+        </div>`}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button>${hasTk?'<button class="btn btn-green" onclick="submitBooking()">確認預約</button>':''}</div>`);
+  if(hasTk) refreshBkTicket();
 }
 // 上一步：回第1頁並保留選擇
 async function openBookingModalBack(){
@@ -14128,8 +14142,18 @@ async function openBookingModalBack(){
   // 還原第1頁選擇
   const ty=document.getElementById('bk-type'); if(ty){ty.value=_bkWizard.type_id;await onBkTypeChange();}
   const co=document.getElementById('bk-coach'); if(co&&_bkWizard.coach_id)co.value=_bkWizard.coach_id;
+  const mp=document.getElementById('bk-mem-pre'); if(mp&&_bkWizard.member_id)mp.value=_bkWizard.member_id;   // 還原步驟 1 的會員（2026-07-28）
 }
 async function coachName(id){const c=await dbGet('coaches',id);return c?coachDisp(c):'';}
+/* 步驟 1 會員搜索（2026-07-28 使用者指示：預約也先選會員，與銷售同規格） */
+function bkFilterMembers(q){
+  const sel=document.getElementById('bk-mem-pre'); if(!sel) return;
+  const prev=sel.value, qq=(q||'').trim(), qp=normPhone(qq);
+  const list=qq?(window._bkAllMembers||[]).filter(m=>(m.name||'').includes(qq)||(qp&&normPhone(m.phone).includes(qp))):(window._bkAllMembers||[]);
+  sel.innerHTML='<option value="">— 選擇會員 —</option>'+list.map(m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
+  if(list.some(m=>m.id===prev)) sel.value=prev;
+  else if(qq&&list.length===1) sel.value=list[0].id;
+}
 /* 連續預約統一介面（2026-07-28 使用者定案）：開關＋勾星期＋結束日期——
    後台教練課／團課／教練端快速預約三處共用同一語言。 */
 function recurBoxHtml(prefix){
