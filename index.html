@@ -2452,7 +2452,7 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
    選擇器用 .pp-sheet.pp-sheet-desk 提高特異度，蓋過其後的 .pp-sheet .pp-root 基底規則 */
 .pp-sheet.pp-sheet-desk{background:rgba(18,26,22,.48);padding:24px;z-index:200;  /* 高於 mc-mode 頂列 120~131，避免被標題列擋住 */
   display:flex;align-items:center;justify-content:center;overflow:hidden;}       /* 垂直置中；長內容改卡內捲動 */
-.pp-sheet.pp-sheet-desk .pp-root{background:var(--bg);max-width:920px;width:100%;margin:0;border-radius:20px;
+.pp-sheet.pp-sheet-desk .pp-root{background:var(--bg);max-width:760px;width:100%;margin:0;border-radius:20px;  /* 2026-07-28 使用者指示：表頭併兩列後視窗縮窄 */
   box-shadow:0 24px 64px rgba(0,20,16,.35);padding:0 24px 26px;overflow-y:auto;max-height:calc(100vh - 48px);}
 .pp-sheet.pp-sheet-desk .pp-sheet-bar{position:static;margin:0 -24px 10px;padding:12px 18px;border-radius:20px 20px 0 0;background:var(--card2,#FAF7F0);border-bottom:1px solid var(--bd);}
 .pp-sheet{position:fixed;inset:0;z-index:90;background:var(--bg);overflow-y:auto;
@@ -5776,8 +5776,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.0825';
-const APP_VERSION_LABEL='v260728.0825';
+const APP_VERSION='260728.0830';
+const APP_VERSION_LABEL='v260728.0830';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19926,9 +19926,13 @@ function ppHeaderHtml(){
   const ecItem = isM ? (()=>{ const v=[r.emergency_name,r.emergency_relation?`（${r.emergency_relation}）`:'',r.emergency_phone?`　${fmtPhone(r.emergency_phone)}`:''].join('');
     return `<div class="pp-meta-i pp-f-click" onclick="ppEmergencyEdit(event)"><span class="pp-meta-l">緊急聯絡人</span><span class="pp-meta-v">${v||'<span style="color:var(--t3);">＋ 設定</span>'}</span></div>`; })() : '';
   const genderItem = isM ? `<div class="pp-meta-i${_canBase?' pp-f-click':''}"${_canBase?` onclick="ppInlineEdit(event,'gender')"`:''}><span class="pp-meta-l">性別</span><span class="pp-meta-v">${({male:'男',female:'女',other:'其他'})[r.gender]||'<span style="color:var(--t3);">'+(_canBase?'＋ 設定':'未填')+'</span>'}</span></div>` : '';
+  /* 2026-07-28 使用者指示：會員表頭固定兩列——
+     第一列 姓名/電話/性別/生日；第二列 等級/教練/緊急聯絡人/LINE 開關 */
+  const metaRow1 = isM ? mvA('電話',fmtPhone(r.phone),'','未填') + genderItem + bdayItem : '';
+  const tierItem = isM ? `<div class="pp-meta-i"><span class="pp-meta-l">等級</span><span class="pp-meta-v">${statusBadge||'—'}</span></div>` : '';
   const meta = isM
-    ? mvA('電話',fmtPhone(r.phone),'','未填') + mvA('主教練', PP.ctx.coachMap?(PP.ctx.coachMap[r.default_coach_id]||''):'',_canBase?'default_coach_id':'',_canBase?'＋ 指定':'未指定')
-      + genderItem + bdayItem + ecItem + lineItem
+    ? tierItem + mvA('主教練', PP.ctx.coachMap?(PP.ctx.coachMap[r.default_coach_id]||''):'',_canBase?'default_coach_id':'',_canBase?'＋ 指定':'未指定')
+      + ecItem + lineItem
     : mv('電話',fmtPhone(r.phone),'phone') + mv('對外名稱', r.name_en?r.name_en.toUpperCase():'','name_en')
       + mv('職稱', r.job_title,'job_title') + mv('到職日', r.hire_date,'hire_date')
       + mv('Email', r.email,'email') + empChips;
@@ -19944,8 +19948,8 @@ function ppHeaderHtml(){
   return `<div class="pp-head">
     <div class="pp-avatar${avatarGenderClass(r.gender)}">${av}</div>
     <div class="pp-head-main">
-      <div class="pp-name-row">
-        <span class="pp-name">${r.name||'—'}</span>${code}${typeBadge}${statusBadge}
+      <div class="pp-name-row" style="${isM?'display:flex;align-items:baseline;gap:6px 24px;flex-wrap:wrap;':''}">
+        <span class="pp-name">${r.name||'—'}</span>${code}${typeBadge}${isM?`<div class="pp-meta" style="margin-top:0;">${metaRow1}</div>`:statusBadge}
       </div>
       <div class="pp-meta">${meta}</div>
     </div>
@@ -20271,14 +20275,14 @@ function ppRecordHtml(){
     return `<div class="pp-card">
       <div class="pp-card-t">活動紀錄</div>
       <div class="pp-card-tip">點卡片直接在此展開內容。</div>
-      <div class="pp-dash">
+      <div class="pp-dash" style="grid-template-columns:repeat(2,1fr);">
         ${ppDashCard('ticket','票券',
           (c.tkLeft!=null?`${c.tkLeft}<small>堂可用</small>`:''), '持有票券與剩餘堂數', `ppShowRecord('tickets')`)}
         ${ppDashCard('calendar','預約紀錄',
           (c.bkCount!=null?`${c.bkCount}<small>筆</small>`:''), '歷史與未來預約', `ppShowRecord('bookings')`)}
-        ${ppDashCard('dumbbell','訓練紀錄','', '課堂訓練紀錄', `ppShowRecord('training')`)}
         ${ppDashCard('money','交易',
           (c.pcCount!=null?`${c.pcCount}<small>筆</small>`:''), '付款／退款／發票', `ppShowRecord('pay')`)}
+        ${ppDashCard('dumbbell','訓練紀錄','', '課堂訓練紀錄', `ppShowRecord('training')`)}
       </div>
     </div>`;
   }
