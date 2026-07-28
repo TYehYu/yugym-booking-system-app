@@ -2759,6 +2759,13 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 空心環的邊色＝課種色（52% 混，實測下團課橘/按摩青/體驗紫皆可辨） */
 .mtk-free,.mtk-booked{background:#fff;border:2px solid color-mix(in srgb,var(--tk-acc,#1F6F54) 52%,#d8d2c6);box-shadow:none;color:var(--tk-acc,#1F6F54);}
 .mtk-lock{background:#f0ece3;border:1.5px dashed #cfc7b8;box-shadow:none;color:#a39b8f;font-size:11px;}
+/* 會員資料票券分頁：歷史紀錄摺疊區（2026-07-28）——過期/用完縮成單行 */
+.pp-hist{margin-top:14px;border-top:1px dashed var(--bd);padding-top:10px;}
+.pp-hist summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--t2);user-select:none;padding:4px 0;}
+.pp-hist-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 10px;border-radius:8px;font-size:12.5px;}
+.pp-hist-row:nth-child(even){background:var(--card2);}
+.pp-hist-name{color:var(--t2);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pp-hist-meta{color:var(--t3);font-size:11.5px;white-space:nowrap;}
 /* 會員列表迷你圓形卡（2026-07-28 二修）：只放點點、不放名稱——課種由顏色表示，點點放大 */
 .tk-minicard{display:flex;min-width:0;}
 .tkm-dots{display:flex;flex-wrap:wrap;gap:4px;}
@@ -5788,8 +5795,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.0901';
-const APP_VERSION_LABEL='v260728.0901';
+const APP_VERSION='260728.0907';
+const APP_VERSION_LABEL='v260728.0907';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20284,9 +20291,26 @@ function ppRecordHtml(){
           </div>`; };
         const tabs=[['pt','教練課'],['group','團體課'],['self','自主訓練'],['voucher','折抵券']]
           .map(([k,l])=>`<button class="tkf-btn${tab===k?' active':''}" onclick="ppTkTab('${k}')">${l}</button>`).join('');
+        /* 2026-07-28 使用者指示：過期/用完的票縮小收進「歷史紀錄」摺疊區（同會員端收合語意） */
+        const _tYmd=ymd(TODAY);
+        const isHist=t=> t.status!=='usable'
+          || (t.sessions_remaining!=null && Number(t.sessions_remaining)<=0)
+          || (t.expire_date && String(t.expire_date).slice(0,10)<_tYmd);
+        const act=list.filter(t=>!isHist(t)), hist=list.filter(isHist);
+        const histRow=t=>{
+          const total=Number(t.sessions_total)||0;
+          const used=(t.sessions_remaining!=null)?Math.max(0,total-(Number(t.sessions_remaining)||0)):total;
+          const st={used_up:'已用畢',expired:'已過期',refunded:'已退費'}[t.status]
+            || ((t.expire_date&&String(t.expire_date).slice(0,10)<_tYmd)?'已過期':'已用畢');
+          return `<div class="pp-hist-row"><span class="pp-hist-name">${t.plan_name||'票券'}</span>
+            <span class="pp-hist-meta"><b class="num">${used}</b>/${total}　·　${st}　·　${String(t.purchase_date||'').slice(0,10)||'—'}</span></div>`; };
+        const histSec=hist.length?`<details class="pp-hist"><summary>歷史紀錄（${hist.length}）</summary>
+          ${hist.map(histRow).join('')}</details>`:'';
         return `<div class="pp-card">${back}<div class="pp-card-t">票券</div>
           <div class="tkfilter" style="margin:8px 0 12px;">${tabs}</div>
-          ${list.length?list.map(cardOf).join(''):'<div class="pp-card-tip">此分類尚無票券</div>'}</div>`;
+          ${act.length?act.map(cardOf).join(''):(hist.length?'':'<div class="pp-card-tip">此分類尚無票券</div>')}
+          ${!act.length&&hist.length?'<div class="pp-card-tip">目前沒有可用票券</div>':''}
+          ${histSec}</div>`;
       }
       if(PP.recView==='bookings'){
         /* 2026-07-27 使用者指示：預約紀錄改月曆呈現（教練課/團體課/自主訓練依課程色標示），
