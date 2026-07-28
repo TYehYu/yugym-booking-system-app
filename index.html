@@ -5884,8 +5884,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.0028';
-const APP_VERSION_LABEL='v260729.0028';
+const APP_VERSION = '260729.0033';
+const APP_VERSION_LABEL='v260729.0033';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7601,7 +7601,15 @@ const TIER_DEFS={
    降級回「會員」：主顧客連續 2 個完整月 < 4 堂（含 0 堂的空月）。
    實作＝純推算不落庫：從歷史簽到逐月重播狀態機，規則改動自動全體重算、無舊資料殘留。
    當月未結束不計入。VIP 為手動設定，不受自動制影響；members.level 僅 vip 仍有意義。 */
-function computeMemberTiers(bookings){
+/* 等級起點名單（2026-07-29 使用者定案）：只有「原本就在舊系統的既有會員」從主顧客起算，
+   新加入的客戶一律從『會員』開始、之後靠自動升級制（連 3 個完整月 ≥4 堂）升等。
+   判定以 members.tier_epoch 為準；未回填時退回 id 前綴備援（MEM-＝會員主檔匯入、IMPM-＝預約補匯）。 */
+function isLegacyMember(m){
+  if(!m) return false;
+  if(m.tier_epoch!=null) return !!m.tier_epoch;
+  return /^(MEM-|IMPM-)/.test(String(m.id||''));
+}
+function computeMemberTiers(bookings, members){
   const counts={};                         // mid -> { 'YYYY-MM': 已簽到教練課數 }
   (bookings||[]).forEach(b=>{
     if(!(b.status==='checked_in'||b.status==='completed')) return;
@@ -7615,8 +7623,16 @@ function computeMemberTiers(bookings){
   // 制度起點條款（2026-07-18 使用者指示）：起點當下所有既有會員一律「主顧客」，
   // 之後由降級規則自然運作（未達標者連 2 個完整月後降級）。起點前的歷史不追溯。
   const TIER_EPOCH_YM='2026-07';
-  Object.entries(counts).forEach(([mid,byYm])=>{
-    let cur=TIER_EPOCH_YM, state='loyal', ok=0, low=0;
+  /* 有帶 members 時逐人判定起點（既有會員＝主顧客／新客＝會員，且從建檔月起算）；
+     沒帶時維持舊行為（全部視為起點名單），避免其他呼叫端行為改變。 */
+  const _mById={}; (members||[]).forEach(m=>{ _mById[m.id]=m; });
+  const _hasM=(members&&members.length)>0;
+  const walk=(mid,byYm)=>{
+    const m=_mById[mid];
+    const legacy=_hasM ? isLegacyMember(m) : true;
+    const cYm=String((m&&m.created_at)||'').slice(0,7);
+    let cur=(legacy||!cYm||cYm<TIER_EPOCH_YM) ? TIER_EPOCH_YM : cYm;   // 新客從建檔月起算
+    let state=legacy?'loyal':'regular', ok=0, low=0;
     while(cur<nowYm){                      // 只走到上個月（當月未結束）
       const n=byYm[cur]||0;                // 空月＝0 堂，計入降級判定
       ok  = n>=4 ? ok+1  : 0;
@@ -7625,8 +7641,10 @@ function computeMemberTiers(bookings){
       else if(state==='loyal' && low>=2){ state='regular'; ok=0; }
       cur=_nextYm(cur);
     }
-    res[mid]=state;
-  });
+    return state;
+  };
+  const _ids=_hasM ? Object.keys(_mById) : Object.keys(counts);
+  _ids.forEach(mid=>{ res[mid]=walk(mid, counts[mid]||{}); });
   // 完全沒有簽到紀錄的會員：以「每月 0 堂」走同一條規則（起點滿 2 個完整月即降級），
   // 結果掛在 __default 供 effTier 當預設值 —— 起點初期人人主顧客，之後自然收斂。
   let zs='loyal', zlow=0, zc=TIER_EPOCH_YM;
@@ -7695,22 +7713,17 @@ function effTier(m){
   if(m.level==='vip') return 'vip';
   const c=window._memberTierCache;
   let t=(c && c.__ready) ? (c[m.id]||c.__default||'regular') : (m.level||'regular');
-  /* 2026-07-28 使用者定案：起點名單（2026-07-28 含以前建檔）維持主顧客起點；
-     之後新增的客戶一律從「會員」開始——建檔未滿 3 個完整月前不可能靠自動制升主顧客，
-     這段期間把繼承到的起點預設『主顧客』壓回『會員』；之後交回自動升降制。 */
-  const _cd=String(m.created_at||'').slice(0,10);
-  if(_cd>='2026-07-29' && t==='loyal'){
-    const nowYm=ymd(TODAY).slice(0,7);
-    let ym=_cd.slice(0,7), n=0;
-    while(ym<nowYm && n<5){ ym=_nextYm(ym); n++; }
-    if(n<4) t='regular';   // 建檔後未累積 3 個完整月 → 仍是會員
-  }
+  /* 2026-07-29 使用者定案（二修）：起點名單改以「是否為舊系統既有會員」判定（members.tier_epoch），
+     不再用建檔日期分界——原本以 2026-07-29 為界，會把 7/25–7/28 新加入的客戶誤判成既有會員而給主顧客。
+     新客的正確路徑：從『會員』開始 → 連 3 個完整月每月 ≥4 堂才升主顧客（由 computeMemberTiers 判定）。
+     快取尚未就緒時（讀 m.level 的退路），新客不採用繼承來的『主顧客』。 */
+  if(!isLegacyMember(m) && t==='loyal' && !(c&&c.__ready)) t='regular';
   return t;
 }
 // 各頁載入時呼叫：抓 bookings（有 8 秒 TTL 快取）建等級快取
 async function ensureMemberTiers(){
-  const bks=await dbGetAll('bookings');
-  window._memberTierCache=Object.assign(computeMemberTiers(bks),{__ready:true});
+  const[bks,mems]=await Promise.all([dbGetAll('bookings'),dbGetAll('members').catch(()=>[])]);
+  window._memberTierCache=Object.assign(computeMemberTiers(bks,mems),{__ready:true});
   return window._memberTierCache;
 }
 // 會員標籤（可多選）：目標類 + 傷痛部位類
@@ -14495,7 +14508,7 @@ async function _submitBookingInner(){
     if(tphone){
       try{ mem=(await sb.from('members').select('id,name').eq('phone',tphone).maybeSingle()).data; }catch(_){}
       if(!mem){
-        mem={id:uid('m'),name:tname,phone:tphone,status:'active',level:'regular',must_setup:true,
+        mem={id:uid('m'),name:tname,phone:tphone,status:'active',level:'regular',must_setup:true,tier_epoch:false,
           default_coach_id:coach_id||null,created_at:new Date().toISOString()};
         try{ await dbPut('members',mem); memIsNew=true; }
         catch(e){ showToast('建立會員失敗：'+(e&&e.message?e.message:e)); return; }
@@ -16565,7 +16578,7 @@ async function renderMemQuickResult(){
 PAGES.members=async function(){
   const[members,coaches,allBk,allTk,types]=await Promise.all([dbGetAll('members'),dbGetAll('coaches'),dbGetAll('bookings'),dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
   // 會員升降級（自動制）：以完整簽到史重播出目前等級
-  window._memberTierCache=Object.assign(computeMemberTiers(allBk),{__ready:true});
+  window._memberTierCache=Object.assign(computeMemberTiers(allBk,members),{__ready:true});
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const typeCatMap=Object.fromEntries(types.map(t=>[t.id,t.category]));
   const typeColorMap=Object.fromEntries(types.map(t=>[t.id,t.color]));
@@ -16891,7 +16904,7 @@ async function openMemberDetail(member_id){
   const[m,coaches,tickets,bookings,types,purchases]=await Promise.all([
     dbGet('members',member_id),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('bookings'),dbGetAll('ticket_types'),dbGetAll('purchases').catch(()=>[])]);
   // 會員升降級（自動制）：確保等級快取就緒（此頁本就載入全部 bookings，順手重算）
-  window._memberTierCache=Object.assign(computeMemberTiers(bookings),{__ready:true});
+  window._memberTierCache=Object.assign(computeMemberTiers(bookings,await dbGetAll('members').catch(()=>[])),{__ready:true});
   const myPurchases=(purchases||[]).filter(p=>p.member_id===member_id).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
@@ -17348,7 +17361,7 @@ async function submitBackofficeMember(){
     if(dup){ showErr('此手機已有會員資料（'+(dup.name||'')+'），請改用搜尋找到該會員。'); if(btn){btn.disabled=false;btn.textContent='建立會員';} return; }
     const m={id:uid('m'),name,phone,email:v('bo-email')||null,birthday:readBirthday('bo'),
       default_coach_id:document.getElementById('bo-coach').value||null,status:'active',level:'regular',
-      must_setup:true,created_at:new Date().toISOString()};
+      must_setup:true,tier_epoch:false,created_at:new Date().toISOString()};   /* 新客＝會員起點（2026-07-29） */
     await dbPut('members',m);
     closeModal();
     showToast('已建立會員：'+name);
@@ -17654,7 +17667,7 @@ async function submitRegister(){
       }
       return;
     }
-    const m={id:uid('m'),name,phone,email:v('reg-email')||null,birthday:readBirthday('reg'),status:'active',level:'regular',created_at:new Date().toISOString()};
+    const m={id:uid('m'),name,phone,email:v('reg-email')||null,birthday:readBirthday('reg'),status:'active',level:'regular',tier_epoch:false,created_at:new Date().toISOString()};
     const r=await cloudCreateAuth('member',phone,pw);
     if(r.error){
       const dup=/already|exists|registered/i.test(r.error);
@@ -21172,7 +21185,7 @@ async function ppLoadCtx(){
     c.coachOpts=[['','—']].concat(coaches.filter(isCoachable).map(x=>[x.id,coachDisp(x)]));
     /* 2026-07-21：名片等級章改用 effTier（自動制）——bookings 本來就載了，順手建快取，
        確保直接開名片（未先進列表）時等級判定與列表一致 */
-    window._memberTierCache=Object.assign(computeMemberTiers(bookings),{__ready:true});
+    window._memberTierCache=Object.assign(computeMemberTiers(bookings,await dbGetAll('members').catch(()=>[])),{__ready:true});
     const myTk=tickets.filter(t=>tkUsableBy(t,PP.id));   // 含共享給他的票（與會員端一致）
     const myBk=bookings.filter(b=>b.member_id===PP.id);
     const used=usedSessionsMap(myBk);
@@ -29076,7 +29089,7 @@ async function anaMember(){
   const active=members.filter(m=>{ const last=lastMap[m.id]; return last && diffDays(today,last)<=30; }).length;
 
   // 等級分布（自動制：以簽到史推算，非 members.level 欄位）
-  window._memberTierCache=Object.assign(computeMemberTiers(bookings||[]),{__ready:true});
+  window._memberTierCache=Object.assign(computeMemberTiers(bookings||[],members),{__ready:true});
   const tierCount={regular:0,loyal:0,vip:0};
   members.forEach(m=>{ const t=effTier(m); if(tierCount[t]!=null)tierCount[t]++; else tierCount.regular++; });
   const TIER_LABEL={regular:'會員',loyal:'主顧客',vip:'VIP'};
