@@ -5815,8 +5815,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1016';
-const APP_VERSION_LABEL='v260728.1016';
+const APP_VERSION='260728.1018';
+const APP_VERSION_LABEL='v260728.1018';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9729,12 +9729,13 @@ PAGES.g_dashboard=async function(){
         const unlocked = tk.unlocked_sessions!=null ? tk.unlocked_sessions : tk.sessions_total;
         if(unlocked>0 && unlocked<tk.sessions_total){ const lb=bks[unlocked-1]; if(lb&&!_lastBk[lb.id]) _lastBk[lb.id]='install'; }
       }
-      // ② 續課最後一堂（票快用完 ≤2；自主/體驗不提醒；分期尚未到最後一段屬「繳費」非「續課」）
+      // ② 續課最後一堂（2026-07-28 使用者定義：票已排光「剩 0」＝今天這堂是最後一堂；
+      //    自主/體驗不提醒；分期尚未到最後一段屬「繳費」非「續課」）
       if(!tk.status || tk.status==='usable'){
         const _tt=_typeMapD[tk.ticket_type_id]; const _c=_tt?_tt.color:'';
         const _selfTrial=_c==='self'||_c==='trial'||(tk.plan_name&&(tk.plan_name.indexOf('自主訓練')>=0||tk.plan_name.indexOf('體驗')>=0));
         const remain = tk.sessions_remaining!=null ? tk.sessions_remaining : (tk.sessions_total||0);
-        let skip=_selfTrial||remain>2;
+        let skip=_selfTrial||remain>0;
         if(!skip && tk.installment && typeof tk.installment==='object'){
           const unlocked = tk.unlocked_sessions!=null ? tk.unlocked_sessions : tk.sessions_total;
           if(unlocked<tk.sessions_total) skip=true;
@@ -9743,14 +9744,29 @@ PAGES.g_dashboard=async function(){
       }
     });
   }catch(_){}
+  /* 會員層檢查（2026-07-28）：同類（教練課含友善／團體課）還有別張可用票有剩 → 不算最後一堂 */
+  const _memGrpLeft={};
+  (mtickets||[]).forEach(tk=>{
+    if(tk.status&&tk.status!=='usable') return;
+    if(tk.expire_date&&String(tk.expire_date).slice(0,10)<date) return;
+    const _tt=_typeMapD[tk.ticket_type_id]||{}; const cat=_tt.category||'';
+    let g=null;
+    if(cat==='私人教練') g='pt';
+    else if(cat==='小班肌力'||cat==='團體課') g='grp';
+    else return;
+    const rem=Number(tk.sessions_remaining)||0;
+    (_memGrpLeft[tk.member_id]=_memGrpLeft[tk.member_id]||{})[g]=((_memGrpLeft[tk.member_id]||{})[g]||0)+rem;
+  });
   const _signBy={};
   (bookings||[]).forEach(b=>{
     if((b.date||'').slice(0,10)!==date) return;
     if(b.status==='cancelled') return;
     if(b.category!=='私人教練' && b.category!=='小班肌力') return;
     const kind=_lastBk[b.id]; if(!kind) return;
+    const g=b.category==='私人教練'?'pt':'grp';
     const mids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
     mids.forEach(mid=>{ const m=memMap[mid]; if(!m) return;
+      if(kind==='renew' && ((_memGrpLeft[mid]||{})[g]||0)>0) return;   // 已買新票 → 不用談續約
       const e=(_signBy[mid]=_signBy[mid]||{id:mid,name:m.name,tags:new Set()});
       e.tags.add(kind==='install'?'分期繳費':'續課'); });
   });
@@ -9799,7 +9815,7 @@ PAGES.g_dashboard=async function(){
     : '今日打卡皆正常';
   _todoItems.push(_todoRow(OPS_TODO_IC.check,'今日未打卡名單',_l3,_noPunch.length,'gold',"openTodoList('nopunch')"));
   window._todoLists={
-    sign:{title:'今日待簽約名單',items:_signList,empty:'今日無待簽約',note:'今天是最後一堂（分期繳費或續課）；點會員可進入會員資料'},
+    sign:{title:'今日待簽約名單',items:_signList,empty:'今日無待簽約',note:'今天是最後一堂（教練課／友善教練課／團體課，分期繳費或續課）；點會員可進入會員資料'},
     demote:{title:'本月即將降級名單',items:_demoteList,empty:'本月尚無即將降級的會員',
       note:'主顧客且上個完整月未達 4 堂教練課；本月結束仍未達，下月 1 日降級。點會員可進入會員資料'},
     nopunch:{title:'今日未打卡名單',items:_noPunchList,empty:'今日打卡皆正常',note:''}
