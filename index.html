@@ -5871,8 +5871,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260728.2255';
-const APP_VERSION_LABEL='v260728.2255';
+const APP_VERSION = '260728.2303';
+const APP_VERSION_LABEL='v260728.2303';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6347,7 +6347,12 @@ async function lineExchange(){
     const mm=(await sb.from('members').select('*').eq('auth_id',uid).maybeSingle()).data;
     if(!mm){ showErr('會員資料讀取失敗，請洽櫃台'); return; }
     SESSION={role:'member',id:mm.id,name:mm.name,gender:mm.gender||null};
-    if(mm.must_setup){ showMemberSetup(mm); return; }
+    /* 2026-07-28 使用者指示：LINE 登入的會員不必走「首次設定改密碼」——
+       綁定申請櫃台審核通過即可直接使用（資料櫃台已核對）；密碼想改再從選單「修改密碼」。
+       這裡靜默解除 must_setup（電話＋預設密碼登入的路徑仍保留強制改密碼）。 */
+    if(mm.must_setup){
+      try{ await sb.from('members').update({must_setup:false}).eq('id',mm.id); dbCacheClear('members'); }catch(_){}
+    }
     enterApp(); return;
   }
   showLineRegisterPage(d.line_name||''); // 未綁定 → 引導申辦（session 已建立）
@@ -20601,6 +20606,14 @@ async function revRowGo(mid){
   await openPersonProfile('member', mid);
   try{ ppShowRecord('tickets'); }catch(_){}
 }
+/* 票券分頁「共享設定」（2026-07-28 使用者回報：統一版會員資料看不到共享功能）——
+   重用 openTicketShare，儲存/取消後返回本彈窗的票券分頁而非舊版明細 */
+function ppShareTk(tid){ window._tkShareFromPP=true; openTicketShare(tid, PP.id); }
+async function _tkShareBack(mid){
+  if(window._tkShareFromPP){ window._tkShareFromPP=false;
+    await openPersonProfile('member',mid); try{ ppShowRecord('tickets'); }catch(_){} return; }
+  openMemberDetail(mid);
+}
 /* 票券分頁「儲值」（2026-07-28 使用者指示）：開銷售流程並預選本會員 */
 function ppTopUp(mid){
   window._salesPreMember=mid;   // 銷售第一步的會員選單預選（2026-07-28）
@@ -20642,7 +20655,10 @@ function ppRecordHtml(){
           else { const face=Math.max(0, total-(Number(rem)||0)-dBooked); used=Math.max(dAtt, face); }
           used=Math.min(used,total);
           const stTag={used_up:'已用畢',expired:'已過期',refunded:'已退費'}[t.status]||'';
-          const shrTag=(t.member_id!==PP.id)?`<span style="font-size:11px;color:var(--gold-d);border:1px solid var(--gold-d);border-radius:6px;padding:1px 6px;margin-left:6px;">共享</span>`:'';
+          /* 共享標籤（2026-07-28 使用者回報補齊）：共享給我的票標「共享」；我是持有人且有共享者標「共享中」 */
+          const _shN=tkSharedIds(t).length;
+          const shrTag=(t.member_id!==PP.id)?`<span style="font-size:11px;color:var(--gold-d);border:1px solid var(--gold-d);border-radius:6px;padding:1px 6px;margin-left:6px;">共享</span>`
+            :(_shN?`<span style="font-size:11px;color:#2f6b4f;border:1px solid #2f6b4f;border-radius:6px;padding:1px 6px;margin-left:6px;" title="共用同一個堂數池，任一人上課都從這張票扣">共享中・${_shN}人</span>`:'');
           return `<div class="bkd-tkcard" style="margin-bottom:10px;">
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${t.plan_name||'票券'}${shrTag}</span>
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
@@ -20651,6 +20667,7 @@ function ppRecordHtml(){
               <span>效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}</span>
               <span style="display:flex;gap:6px;">
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">📄 合約</button>`:''}
+                ${(isDeskLike()&&t.status==='usable'&&(tab==='pt'||tab==='group')&&t.member_id===PP.id)?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="ppShareTk('${t.id}')">${_shN?'共享設定':'設為共享'}</button>`:''}
                 ${(isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger);" onclick="voidTicketAsk('${t.id}')">作廢</button>`:''}
               </span>
             </div>
@@ -23531,7 +23548,7 @@ function renderTicketShareModal(members,nameOf,t){
     <div style="font-size:12px;color:var(--t2);font-weight:600;margin:12px 0 2px;">目前共享者（${st.ids.length}）</div>
     ${rows}
     <div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-top:12px;">共享者與持有人共用同一個堂數池，任一人上課都從這張票扣 1 堂。自主訓練點數與折抵券不提供共享。</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="openMemberDetail('${st.back}')">取消</button>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="_tkShareBack('${st.back}')">取消</button>
       <button class="btn btn-green" onclick="doSaveTicketShare()">儲存</button></div>`);
   window._tkShareMembers=members;
 }
@@ -23579,7 +23596,7 @@ async function doSaveTicketShare(){
   await logTicket(t.id,'adjust',0,null,SESSION.name,
     `共享設定：${before.length?before.map(nm).join('、'):'（無）'} → ${ids.length?ids.map(nm).join('、'):'（無）'}`);
   showToast(ids.length?`已設定共享（${ids.length} 人）`:'已取消共享');
-  openMemberDetail(st.back);
+  _tkShareBack(st.back);
  }catch(e){ console.error('共享設定失敗:',e); showToast('儲存失敗：'+(e&&e.message||e)); }
 }
 async function openInstallNext(ticket_id){
