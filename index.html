@@ -5815,8 +5815,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1001';
-const APP_VERSION_LABEL='v260728.1001';
+const APP_VERSION='260728.1009';
+const APP_VERSION_LABEL='v260728.1009';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7582,6 +7582,32 @@ function tierDemotionWatchIds(bookings){
   });
   return out;
 }
+/* 待升級觀察名單（2026-07-28 使用者指示）：目前為「會員」、已連 2 個完整月教練課 ≥4 堂——
+   本月再達 4 堂即於下月 1 日升主顧客。重播規則與 computeMemberTiers 同源。 */
+function tierPromotionWatchIds(bookings){
+  const counts={};
+  (bookings||[]).forEach(b=>{
+    if(!(b.status==='checked_in'||b.status==='completed')) return;
+    if(b.category!=='私人教練') return;
+    const mid=b.member_id; if(!mid) return;
+    const ym=(b.date||'').slice(0,7); if(ym.length!==7) return;
+    (counts[mid]=counts[mid]||{})[ym]=(counts[mid][ym]||0)+1;
+  });
+  const nowYm=ymd(TODAY).slice(0,7);
+  const out=[];
+  Object.entries(counts).forEach(([mid,byYm])=>{
+    let cur='2026-07', state='loyal', ok=0, low=0;
+    while(cur<nowYm){
+      const n=byYm[cur]||0;
+      ok=n>=4?ok+1:0; low=n<4?low+1:0;
+      if(state==='regular'&&ok>=3) state='loyal';
+      else if(state==='loyal'&&low>=2){ state='regular'; ok=0; low=0; }
+      cur=_nextYm(cur);
+    }
+    if(state==='regular' && ok===2) out.push(mid);
+  });
+  return out;
+}
 // 會員實際等級：VIP（手動）優先；快取就緒用自動推算值；快取未備妥時退回舊 level 欄位（避免閃跳）
 function effTier(m){
   if(!m) return 'regular';
@@ -7704,7 +7730,7 @@ function lpScopeBar(entityLabel){
 function lpStats(stats){
   if(!stats || !stats.length) return '';
   return `<div class="lp-stats">${stats.map(s=>
-    `<div class="lp-stat${s.tone?' '+s.tone:''}">
+    `<div class="lp-stat${s.tone?' '+s.tone:''}"${s.onclick?` onclick="${s.onclick}" style="cursor:pointer;"`:''}>
       <span class="lp-stat-l">${s.label}</span>
       <span class="lp-stat-v">${s.value}${s.unit?`<small>${s.unit}</small>`:''}</span>
     </div>`).join('')}</div>`;
@@ -16379,11 +16405,21 @@ PAGES.members=async function(){
     return coachLeft <= 2;                     // 0 / 1 / 2 堂皆列入
   }).length;
   const birthdayToday = members.filter(m=>String(m.birthday||'').slice(5)===todayMd).length;
+  /* 2026-07-28 使用者指示：上方三卡＝總人數／待升級名單／待降級名單（點卡看名單） */
+  const _memById=Object.fromEntries(members.map(m=>[m.id,m]));
+  const proIds=tierPromotionWatchIds(allBk).filter(id=>_memById[id]&&effTier(_memById[id])==='regular');
+  const demIds=tierDemotionWatchIds(allBk).filter(id=>_memById[id]&&effTier(_memById[id])==='loyal');
+  const renewList=members.filter(m=>{
+    const t=tkSummary[m.id];
+    if(!t || !t.everPt) return false;
+    return ((t.pt||0)+(t.friendly||0))<=2;
+  }).map(m=>({...m,__left:(tkSummary[m.id].pt||0)+(tkSummary[m.id].friendly||0)}));
+  window._memTierWatch={up:proIds.map(id=>_memById[id]), down:demIds.map(id=>_memById[id]), renew:renewList};
   const stats=[
-    {label:'總會員',   value:members.length,  unit:'位'},
-    {label:'本月新增', value:newThisMonth,    unit:'位', tone:'ok'},
-    {label:'待續約',   value:needRenew,       unit:'位', tone:'warn'},
-    {label:'今天生日', value:birthdayToday,   unit:'位', tone:'accent'},
+    {label:'總人數',       value:members.length,   unit:'位'},
+    {label:'本月待升級名單', value:proIds.length,   unit:'位', tone:'ok',     onclick:"memTierWatchList('up')"},
+    {label:'本月待降級名單', value:demIds.length,   unit:'位', tone:'warn',   onclick:"memTierWatchList('down')"},
+    {label:'本月待續約名單', value:renewList.length,unit:'位', tone:'accent', onclick:"memTierWatchList('renew')"},
   ];
 
   // (2) Toolbar
@@ -16494,6 +16530,20 @@ PAGES.members=async function(){
   const si=C.querySelector('.lp-search input');
   if(si&&_memSearch){ si.focus(); si.setSelectionRange(si.value.length,si.value.length); }
 };
+/* 待升級／待降級名單視窗（2026-07-28）：點上方統計卡開啟，點人進會員資料 */
+function memTierWatchList(kind){
+  const list=((window._memTierWatch||{})[kind])||[];
+  const title={up:'本月待升級名單（本月再達 4 堂即升主顧客）',
+    down:'本月待降級名單（本月未達 4 堂將降回會員）',
+    renew:'本月待續約名單（教練課剩 2 堂以內）'}[kind]||'名單';
+  const rows=list.map(m=>`<button class="list-item" style="width:100%;text-align:left;cursor:pointer;background:none;border:none;border-bottom:1px solid var(--bd);padding:11px 6px;display:flex;justify-content:space-between;align-items:center;" onclick="closeModal();openPersonProfile('member','${m.id}')">
+      <span style="font-weight:600;">${m.name||'—'}</span>
+      <span style="color:var(--t3);font-size:12px;">${kind==='renew'?`剩 ${m.__left} 堂　`:''}${fmtPhone(m.phone)}</span>
+    </button>`).join('');
+  showModal(`<div class="modal-title">${title}</div>
+    ${rows||'<div class="pp-card-tip" style="padding:20px 0;">目前沒有符合條件的會員。</div>'}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
 // 手機版卡片列表：滑動時讓畫面中央的卡片浮起高亮
 function initFeedFocus(){
   if(window.innerWidth>600) return;
