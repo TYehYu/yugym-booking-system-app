@@ -5815,8 +5815,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1036';
-const APP_VERSION_LABEL='v260728.1036';
+const APP_VERSION='260728.1304';
+const APP_VERSION_LABEL='v260728.1304';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15445,7 +15445,7 @@ async function openBookingDetail(id){
         : memberCkBtn ? memberCkBtn
         : (b.status==='checked_in'&&!isGroupD&&staffCanCheckin
             ? `<span style="display:flex;align-items:center;gap:8px;"><span class="tag tag-ok" style="font-size:12px;">已簽到</span><button class="btn btn-ghost btn-sm" onclick="undoCheckin('${b.id}')">取消簽到</button></span>`
-            : `<span class="tag ${b.status==='cancelled'?'tag-danger':(b.status==='completed'||b.status==='checked_in')?'tag-ok':'tag-warn'}" style="font-size:12px;">${statusLabel(b.status)}</span>`)}
+            : `<span style="display:flex;align-items:center;gap:8px;"><span class="tag ${b.status==='cancelled'?'tag-danger':(b.status==='completed'||b.status==='checked_in')?'tag-ok':'tag-warn'}" style="font-size:12px;">${statusLabel(b.status)}</span>${(b.status==='cancelled'&&b.refund_waived&&b.ticket_id&&isDeskLike())?`<button class="btn btn-ghost btn-sm" title="24 小時內取消被扣的票，特殊情況可補退" onclick="deskRefundCancelled('${b.id}')">特例補退 1 堂</button>`:''}</span>`)}
     </div>
     <div class="bkd-marker" style="display:none;"></div>
     ${isPersonalPT?`
@@ -15944,7 +15944,7 @@ async function confirmCancelBooking(id){
   if(!b){showToast('找不到預約');return;}
   const hrs=hoursUntilStart(b);
   const within24 = hrs < 24;
-  const isAdmin = SESSION.role==='admin' || SESSION.role==='front_desk';
+  const isAdmin = isDeskLike();   // 2026-07-28：店長同櫃台，取消時保留扣票/退票選擇
   const isTrial = b.category==='體驗';
 
   if(isAdmin && !isTrial){
@@ -16102,6 +16102,24 @@ function hoursUntilStart(b){
   catch(_){ return 999; }
 }
 // refundMode：'auto'(依24h自動)、'force'(強制退)、'none'(強制不退)
+/* 特例補退（2026-07-28 使用者指示：24 小時內取消保留扣票彈性）——
+   會員自行取消被自動沒收後，櫃台/店長可在明細補退該堂。 */
+async function deskRefundCancelled(id){
+  if(!isDeskLike()) return;
+  const b=await dbGet('bookings',id);
+  if(!b||b.status!=='cancelled'||!b.refund_waived||!b.ticket_id){ showToast('此預約不適用補退'); return; }
+  const tk=await dbGet('member_tickets',b.ticket_id);
+  if(!tk){ showToast('找不到票券'); return; }
+  tk.sessions_remaining=(Number(tk.sessions_remaining)||0)+1;
+  if(tk.status==='used_up') tk.status='usable';
+  await dbPut('member_tickets',tk);
+  await dbPut('ticket_logs',{id:uid('LG'),ticket_id:tk.id,action:'refund',delta:1,booking_id:b.id,
+    operator:SESSION.id,note:'櫃台特例補退（24 小時內取消）',created_at:new Date().toISOString()});
+  b.refund_waived=false; await dbPut('bookings',b);
+  try{ if(b.member_id) await pushNotification(b.member_id,'cancel','票券已補退',`您 ${b.date} ${b.start_time} 取消的${b.category}，經櫃台核可已退回 1 堂票券。`); }catch(_){}
+  dbCacheClear(['bookings','member_tickets','ticket_logs']);
+  closeModal(); showToast('已補退 1 堂票券'); navTo(CUR_PAGE);
+}
 async function cancelBooking(id, refundMode){
   const b=await dbGet('bookings',id);
   if(!b)return;
