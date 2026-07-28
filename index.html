@@ -406,6 +406,19 @@ select option{color:var(--text);}
   border-top:4px solid var(--pc,#8a8478);border-radius:14px;padding:14px 10px 12px;cursor:pointer;transition:.14s;}
 .st-card:hover{border-color:var(--green);box-shadow:0 4px 14px rgba(0,61,50,.1);transform:translateY(-1px);}
 .st-badge{position:absolute;top:8px;right:8px;transform:scale(.85);transform-origin:top right;}
+/* 啟用燈號（2026-07-29 使用者指示）：卡片左上角，綠＝啟用、灰＝停用 */
+.st-led{position:absolute;top:10px;left:10px;width:9px;height:9px;border-radius:50%;
+  background:#1f6f54;box-shadow:0 0 0 3px rgba(31,111,84,.15);}
+.st-led.off{background:#b3ada2;box-shadow:0 0 0 3px rgba(179,173,162,.18);}
+.st-card.st-off{opacity:.62;}
+/* 員工權限開關面板 */
+.pp-sw-list{display:flex;flex-direction:column;}
+.pp-sw{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 2px;border-bottom:1px solid var(--bd);cursor:pointer;}
+.pp-sw:last-child{border-bottom:none;}
+.pp-sw-tx{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.pp-sw-t{font-size:14px;font-weight:600;color:var(--text);}
+.pp-sw-s{font-size:11.5px;color:var(--t3);line-height:1.5;}
+.pp-sw-lock{opacity:.5;cursor:not-allowed;}
 .st-ava{width:52px;height:52px;border-radius:50%;overflow:hidden;background:var(--card2);display:flex;align-items:center;justify-content:center;margin-bottom:2px;}
 .st-ava svg{width:100%;height:100%;}
 .st-nm{font-size:14px;font-weight:800;color:var(--text);line-height:1.3;}
@@ -5871,8 +5884,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.0022';
-const APP_VERSION_LABEL='v260729.0022';
+const APP_VERSION = '260729.0028';
+const APP_VERSION_LABEL='v260729.0028';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17959,6 +17972,16 @@ function dutyHoursCapped(attendance, shifts, empId, month){
 /* 店長津貼（2026-07-29 使用者定案）：全店當月教練課「總堂數」（extras.leaderHeads 已排除
    老闆/admin 與櫃台，含店長本人）每滿 N 堂給一筆獎金，可累計。
    例：總 200 堂、每 80 堂 $4,000 → 2 筆 ＝ $8,000（餘 40 堂不足一筆不計）。 */
+/* 店長津貼的堂數基準（2026-07-29 使用者指示）：教練課＋友善教練課（皆為 category='私人教練'）
+   ＋團體課（小班肌力，一堂算 1 堂、不看人數）。體驗課與自主訓練不列入。
+   ⚠ 排除老闆的名單過濾在呼叫端（role!=='admin'），三處計算共用本函式確保口徑一致。 */
+const LEADER_CATS=['私人教練','小班肌力'];
+function leaderClassCount(bookings, coachId, month){
+  return (bookings||[]).filter(b=>b.coach_id===coachId
+    && (b.status==='completed'||b.status==='checked_in')
+    && String(b.date||'').slice(0,7)===month
+    && LEADER_CATS.includes(b.category)).length;
+}
 function leaderBonusOf(emp, extras, G){
   const per=Number((G||{}).leader_per_classes)||80;
   const amt=Number((G||{}).leader_per_amount)||4000;
@@ -18796,9 +18819,9 @@ async function computeMonthlyPayroll(month){
     const dutyOverlap=emp.need_duty ? dutyClassOverlapHours(shifts, bookings, emp.id, month) : 0;
     const dutyHours=Math.max(dutyCap - dutyOverlap, 0);
     const classOverlap=0; // 重疊已從值班時數扣除，不再於 calcSalary 重複扣
-    // 店長津貼名單：所有教練（排除老闆 role==='admin' 與店長本人）的當月堂數
+    // 店長津貼名單：全體員工（排除老闆 role==='admin'；店長本人列入）的當月教練課＋友善＋團體課堂數
     const leaderHeads = emp.is_manager
-      ? staff.filter(o=>o.role!=='admin').map(o=>ptDoneById[o.id]||0)   // 2026-07-27 使用者指示：店長本人也列入計算
+      ? staff.filter(o=>o.role!=='admin').map(o=>leaderClassCount(bookings,o.id,month))
       : [];
     const extras={ renewCount:renewById[emp.id]||0, leaderHeads };
     const sal=calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, extras);
@@ -18945,7 +18968,7 @@ async function renderSalaryTemplates(targetId){
   // 全域制度卡片（公司層級：續約/主管/店長/勞健保）
   const G=window.SALARY_GLOBAL||{};
   const grow=(lb,val)=>`<div style="display:flex;gap:8px;"><span style="min-width:84px;color:var(--t3);">${lb}</span><span>${val}</span></div>`;
-  const leaderTxt=`全店每滿 ${G.leader_per_classes??80} 堂 +${money(G.leader_per_amount??4000)}（不含老闆）`;
+  const leaderTxt=`全店每滿 ${G.leader_per_classes??80} 堂 +${money(G.leader_per_amount??4000)}（教練課＋友善＋團課，不含老闆）`;
   const insTxt=(G.insurance_levels||[]).length?`${G.insurance_levels.length} 個級距`:'未設定';
   const globalCard=`<div class="card" style="margin-bottom:14px;border-left:3px solid var(--gold-d);">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
@@ -18983,7 +19006,7 @@ function openSalaryGlobalEdit(){
         <div class="form-row" style="margin:0;"><label>每滿幾堂</label><input type="number" id="sg-ldper" value="${G.leader_per_classes??80}"></div>
         <div class="form-row" style="margin:0;"><label>給多少津貼</label><input type="number" id="sg-ldamt" value="${G.leader_per_amount??4000}"></div>
       </div>
-      <div style="font-size:11px;color:var(--t3);margin:6px 0;">＊計算基準＝全店當月教練課總堂數（<b>不含老闆</b>，含店長本人）；每滿一組即累加一筆。例：總 200 堂 ÷ 80 ＝ 2 筆 ＝ $8,000。</div>
+      <div style="font-size:11px;color:var(--t3);margin:6px 0;">＊計算基準＝全店當月「教練課＋友善教練課＋團體課」總堂數（<b>不含老闆</b>，含店長本人；體驗課與自主訓練不計）；每滿一組即累加一筆。例：總 200 堂 ÷ 80 ＝ 2 筆 ＝ $8,000。</div>
       ${sec('④ 勞健保級距表（員工負擔／公司三合一負擔）')}
       <div id="sg-ins">${ins.map((x,i)=>`<div style="border:1px solid var(--bd);border-radius:8px;padding:8px;margin-bottom:8px;">
         <div class="form-row" style="margin:0 0 6px;"><label>投保級距</label><input type="text" id="sg-ins-grade-${i}" value="${x.grade||''}" placeholder="如 29500"></div>
@@ -19270,7 +19293,9 @@ async function renderStaffList(){
       : `<span onclick="event.stopPropagation();">${lpIconBtn(LNI.coin, `stGoEmp('${c.id}','salary')`, '本月薪資摘要')}${lpIconBtn(LNI.clock, `stGoEmp('${c.id}','punch')`, '打卡紀錄')}${lpIconBtn('key', `openResetStaffPw('${c.id}')`, '重設密碼')}${c.status!=='inactive'
             ? lpDangerBtn('pause', `setStaffStatus('${c.id}','inactive')`, '停用')
             : lpIconBtn('play', `setStaffStatus('${c.id}','active')`, '啟用')}</span>`;   /* 員工事項捷徑（2026-07-28）：薪資/打卡直達；編輯＝點卡片 */
-    return `<div class="st-card" style="--pc:${etc};" onclick="${click}">
+    const _off=c.status==='inactive';   // 停用＝燈號轉灰、卡片淡化（2026-07-29）
+    return `<div class="st-card${_off?' st-off':''}" style="--pc:${etc};" onclick="${click}">
+      <span class="st-led${_off?' off':''}" title="${_off?'已停用':'啟用中'}"></span>
       ${badge}
       <div class="st-ava">${genderAvatarSVG(c.gender)}</div>
       <div class="st-nm">${c.name||'（待填寫）'}</div>
@@ -20233,11 +20258,11 @@ const PP_SCHEMA = {
       { id:'emergency_phone',    label:'電話', type:'tel' },
     ]}],
 
-    /* ── 2. 身份設定：在系統裡的角色與規則 ── */
-    ident:[{ title:'職務與權限', tip:'職稱僅影響顯示；權限一律由「系統角色」決定，與薪資無關。', fields:[
-      { id:'role',   label:'系統角色', type:'select',
-        opts:[['admin','管理員'],['front_desk','櫃台'],['coach','教練']],
-        view:r=>({admin:'管理員',front_desk:'櫃台',coach:'教練'})[r.role]||'' },
+    /* ── 2. 身份設定：在系統裡的角色與規則 ──
+       2026-07-29 使用者指示：權限相關只留五個開關（見 ppEmpSwitchCard），
+       原本散落的「系統角色／需要打卡／開放開課」欄位收進開關面板。 */
+    ident:[{ title:'權限與功能', switches:true, fields:[] },
+    { title:'職務與到職', fields:[
       { id:'job_title', label:'職稱', type:'select',
         /* 2026-07-21：補空白選項——原本沒有時，職稱為空的員工一進編輯就 fallback 顯示「老闆」，儲存即誤寫入 */
         opts:[['','—'],['老闆','老闆'],['店長','店長'],['主管','主管'],['行政','行政'],['教練','教練'],['工讀','工讀']] },
@@ -20247,9 +20272,6 @@ const PP_SCHEMA = {
       { id:'hire_date',      label:'到職日', type:'date', addLabel:'新增到職日' },
       { id:'permanent_date', label:'轉正日', type:'date', hint:'選填', addLabel:'新增轉正日' },
       { id:'resign_date',    label:'離職日', type:'date', hint:'選填', addLabel:'新增離職日' },
-      { id:'need_punch',     label:'需要打卡', type:'checkbox', view:r=>r.need_punch?'是':'否' },
-      { id:'can_teach',      label:'開放開課', type:'checkbox',
-        hint:'關閉＝不出現在行事曆教練篩選、預約與代課的教練名單（既有預約不受影響）' },
     ]},
     { title:'排班規則', tip:'排班系統會直接讀取這裡的設定。', fields:[
       { id:'can_substitute', label:'可代課', type:'checkbox', view:r=>r.can_substitute?'是':'否' },
@@ -20630,13 +20652,68 @@ function ppFieldEdit(f){
 }
 /* 區塊標題圖示（2026-07-21 介面簡化：圖示輔助閱讀）——對映 LNI 線條圖示集 */
 const PP_SEC_LNI={'基本資料':'user','地址':'pin','緊急聯絡人':'phone','會員屬性':'user','標籤':'tag',
-  '帳號資訊':'login','內部備註':'book','職務與權限':'briefcase','排班規則':'calendar','特休':'timer',
+  '帳號資訊':'login','內部備註':'book','職務與權限':'briefcase','權限與功能':'briefcase','職務與到職':'briefcase','排班規則':'calendar','特休':'timer',
   '值班與薪資制度':'coin','銀行帳戶':'coin','工作紀錄':'book'};
 function ppSecTitle(title){
   const ic=PP_SEC_LNI[title];
   return `<div class="pp-card-t">${ic&&LNI[ic]?`<span class="pp-card-ic">${LNI[ic]}</span>`:''}${title}</div>`;
 }
+/* ══ 員工開關面板（2026-07-29 使用者指示）══
+   員工卡只留五個開關：管理員權限／店長權限／上班打卡／能否開課／啟用員工。
+   即點即存（不需進編輯模式），關閉「啟用員工」＝停用，員工卡左上角燈號轉灰。 */
+const PP_EMP_SWITCHES=[
+  {key:'admin',   label:'管理員權限', sub:'可進入後台所有功能與系統設定'},
+  {key:'manager', label:'店長權限',   sub:'可排班、看全店行事曆與店長津貼'},
+  {key:'punch',   label:'上班需打卡', sub:'出勤與值班時數以打卡計算'},
+  {key:'teach',   label:'能否開課',   sub:'關閉＝不出現在預約與代課的教練名單'},
+  {key:'active',  label:'啟用員工',   sub:'關閉＝停用，無法登入、不列入排班與計薪'},
+];
+function ppEmpSwitchOn(r,key){
+  if(key==='admin')   return r.role==='admin';
+  if(key==='manager') return !!r.is_manager;
+  if(key==='punch')   return !!r.need_punch;
+  if(key==='teach')   return r.can_teach!==false;
+  return r.status!=='inactive';
+}
+function ppEmpSwitchCard(){
+  const r=PP.rec||{};
+  const isDesk=r.role==='front_desk';
+  return `<div class="pp-card">
+    ${ppSecTitle('權限與功能')}
+    <div class="pp-sw-list">
+      ${PP_EMP_SWITCHES.map(s=>{
+        const on=ppEmpSwitchOn(r,s.key);
+        const lock=(s.key==='admin'&&isDesk);   // 櫃台裝置帳號不從這裡改角色
+        return `<label class="pp-sw${lock?' pp-sw-lock':''}">
+          <span class="pp-sw-tx"><span class="pp-sw-t">${s.label}</span><span class="pp-sw-s">${lock?'櫃台裝置帳號，角色請由系統管理調整':s.sub}</span></span>
+          <span class="switch"><input type="checkbox" ${on?'checked':''} ${lock?'disabled':''} onchange="ppEmpToggle('${s.key}',this)"><span class="switch-slider"></span></span>
+        </label>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+async function ppEmpToggle(key,el){
+  const on=!!(el&&el.checked);
+  try{
+    const c=await dbGet('coaches',PP.id);
+    if(!c){ showToast('找不到員工'); return; }
+    if(key==='admin')        c.role = on?'admin':'coach';
+    else if(key==='manager') c.is_manager = on;
+    else if(key==='punch')   c.need_punch = on;
+    else if(key==='teach')   c.can_teach = on;
+    else if(key==='active')  c.status = on?'active':'inactive';
+    await dbPut('coaches',c);
+    PP.rec=c; if(PP.draft) Object.assign(PP.draft,c);
+    const L={admin:'管理員權限',manager:'店長權限',punch:'上班打卡',teach:'開課',active:'員工啟用'}[key];
+    showToast(`${L}已${on?'開啟':'關閉'}`);
+    ppRenderBody();
+  }catch(e){
+    if(el) el.checked=!on;   // 失敗回捲
+    showToast('設定失敗：'+(e&&e.message?e.message:e));
+  }
+}
 function ppCardHtml(sec){
+  if(sec.switches) return ppEmpSwitchCard();
   // 值班與薪資制度 → 專屬視窗入口
   if(sec.link){
     return `<div class="pp-card">
@@ -28835,8 +28912,8 @@ async function anaMonth(){
       const dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month),0):0;
       const lv=leaveSummary(shifts,c.id,month);
       const leaderHeads=c.is_manager
-        ? coaches.filter(o=>o.role!=='admin'&&o.role!=='front_desk'&&o.status!=='inactive')   /* 店長本人也列入（2026-07-27） */
-            .map(o=>bookings.filter(b=>b.coach_id===o.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month&&(b.category==='私人教練'||b.category==='體驗')).length)
+        ? coaches.filter(o=>o.role!=='admin'&&o.role!=='front_desk'&&o.status!=='inactive')   /* 排除老闆；店長本人列入 */
+            .map(o=>leaderClassCount(bookings,o.id,month))
         : [];
       const sal=calcSalary(c, ptD, gHeads, dutyH, lv, 0, {renewCount:renewMap[c.id]||0, leaderHeads});
       totalSalary+=(sal&&sal.grossPay)||0;
@@ -29911,8 +29988,8 @@ async function renderSalaryContent(TARGET, withHead){
   const payTypeLabel=PAY_LABEL[me.employment_type||me.pay_type]||'—';
   // v2.0：店長津貼需全體教練當月堂數；續約張數由 member_tickets 統計
   const leaderHeads = me.is_manager
-    ? coaches.filter(o=>o.role!=='admin' && o.role!=='front_desk' && o.status!=='inactive')   /* 店長本人也列入（2026-07-27） */
-        .map(o=>bookings.filter(b=>b.coach_id===o.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month&&(b.category==='私人教練'||b.category==='體驗')).length)
+    ? coaches.filter(o=>o.role!=='admin' && o.role!=='front_desk' && o.status!=='inactive')   /* 排除老闆；店長本人列入 */
+        .map(o=>leaderClassCount(bookings,o.id,month))
     : [];
   let renewCount=0;
   try{ const tks=await dbGetAll('member_tickets'); tks.forEach(t=>{ const who=t.renewed_by||t.sold_by||t.coach_id; const when=(t.purchase_date||t.created_at||'').slice(0,7); if(t.is_renewal&&who===empId&&when===month) renewCount++; }); }catch(_){}
