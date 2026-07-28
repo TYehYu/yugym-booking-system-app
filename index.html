@@ -5855,8 +5855,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260728.1731';
-const APP_VERSION_LABEL='v260728.1731';
+const APP_VERSION = '260728.1737';
+const APP_VERSION_LABEL='v260728.1737';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16469,7 +16469,9 @@ PAGES.members=async function(){
   };
   allTk.forEach(t=>{
     if(!t.member_id)return;
-    const s=tkSummary[t.member_id]||(tkSummary[t.member_id]={pt:0,friendly:0,group:0,makeup:0,anyUsable:false,everPt:false,everGrp:false});
+    /* 共享票（2026-07-28 使用者指示）：持有人與共享者名下都要顯示——彙整時兩邊都計入同一張票 */
+    tkParticipants(t).forEach(pid=>{
+    const s=tkSummary[pid]||(tkSummary[pid]={pt:0,friendly:0,group:0,makeup:0,anyUsable:false,everPt:false,everGrp:false});
     // everPt／everGrp：曾購買過教練類／團體課（不論是否已用完或過期）→ 用來判定「待續約」
     if(isCoachClass(t)) s.everPt=true;
     if((typeCatMap[t.ticket_type_id]||'')==='小班肌力') s.everGrp=true;
@@ -16486,6 +16488,7 @@ PAGES.members=async function(){
     else if(isFriendly) s.friendly+=t.sessions_remaining;
     else if(cat==='私人教練'||cat==='體驗') s.pt+=t.sessions_remaining;
     else s.pt+=t.sessions_remaining; // 其他歸教練課類
+    });
   });
   // 票券狀態等級：red 無有效票 / yellow 剩1-2堂(教練課) / green 充足
   const tkLevel=mid=>{
@@ -16624,7 +16627,7 @@ PAGES.members=async function(){
       if(/折抵/.test(tk.plan_name||'')||/折抵/.test(tt.name||'')) return false;
       if((tt.category||'')==='自主訓練'||/自主/.test(tt.name||'')) return false;
       return true; };
-    const mine=allTk.filter(tk=>tk.member_id===m.id&&isMain(tk));
+    const mine=allTk.filter(tk=>tkUsableBy(tk,m.id)&&isMain(tk));   // 含共享給他的票（2026-07-28）
     const byBuy=(a,b)=>String(b.purchase_date||'').localeCompare(String(a.purchase_date||''));
     const top=mine.filter(tk=>tk.status==='usable'&&(tk.sessions_remaining||0)>0
         &&(!tk.expire_date||String(tk.expire_date).slice(0,10)>=today)).sort(byBuy)[0]
