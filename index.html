@@ -5580,6 +5580,8 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 /* ── 今日營收收款名單卡（2026-07-22）：桌機右欄「今日值班」下方 ── */
 .mc-revlist{display:flex;flex-direction:column;gap:4px;}
 .mc-rev-row{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:10px;background:var(--card2);}
+.mc-rev-row.mc-rev-go{cursor:pointer;transition:.13s;}
+.mc-rev-row.mc-rev-go:hover{background:#e9f2ec;box-shadow:0 2px 8px rgba(31,111,84,.12);}
 .mc-rev-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
 .mc-rev-nm{font-size:12.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mc-rev-it{font-size:10.5px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -5815,8 +5817,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1308';
-const APP_VERSION_LABEL='v260728.1308';
+const APP_VERSION='260728.1312';
+const APP_VERSION_LABEL='v260728.1312';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9625,11 +9627,11 @@ PAGES.g_dashboard=async function(){
   /* ── 今日營收收款名單卡（2026-07-22 使用者指示：桌機右欄「今日值班」下方）──
      與今日營收 KPI 同源：_dayTk（今日售票）＋ _dayPur（場租/重啟/商品）。 */
   const _revRows=[
-    ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—',
+    ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—', mid:t.member_id||null,
       it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
       amt:Number(t.amount_paid)||0,
       inv:(t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued')})),
-    ..._dayPur.map(p=>({nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客',
+    ..._dayPur.map(p=>({nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客', mid:p.member_id||null,
       it:p.plan_name||({reactivate:'票券重啟',facility_rental:'場地租借',merchandise:'商品'}[p.source]||'收款'),
       amt:Number(p.deal_amount)||0,
       inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')})),
@@ -9648,10 +9650,11 @@ PAGES.g_dashboard=async function(){
   /* 2026-07-23 使用者指示：標題與總額都不顯示（上方 KPI 已有今日營收）—— 只留收款名單 */
   const revListCard=`<div class="card mc-card mc-revlist-card">
     ${_revRows.length?`<div class="mc-revlist">${_revRows.map(r=>`
-      <div class="mc-rev-row">
+      <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
         <div class="mc-rev-b"><span class="mc-rev-nm">${r.nm}</span><span class="mc-rev-it">${r.it}</span></div>
         ${r.inv?'<span class="mc-rev-inv">發票</span>':''}
         <span class="mc-rev-amt">$${_fm(r.amt)}</span>
+        ${r.mid?'<span class="mc-td-arrow">›</span>':''}
       </div>`).join('')}</div>`:'<div class="mc-duty-empty">今日尚無收款</div>'}
   </div>`;
 
@@ -20460,6 +20463,12 @@ function ppRecCard(icon, title, sub, num, onclick){
     <span class="pp-rec-b"><span class="pp-rec-t">${title}</span><span class="pp-rec-s">${sub}</span></span>
     ${num?`<span class="pp-rec-n">${num}</span>`:`<span class="pp-rec-arrow">${PP_ICON.arrow}</span>`}
   </button>`;
+}
+/* 首頁今日收款列（2026-07-28 使用者指示）：點客戶 → 直接開該會員的票券分頁調整 */
+async function revRowGo(mid){
+  if(!mid) return;
+  await openPersonProfile('member', mid);
+  try{ ppShowRecord('tickets'); }catch(_){}
 }
 /* 票券分頁「儲值」（2026-07-28 使用者指示）：開銷售流程並預選本會員 */
 function ppTopUp(mid){
