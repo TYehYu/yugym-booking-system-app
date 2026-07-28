@@ -5839,8 +5839,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1533';
-const APP_VERSION_LABEL='v260728.1533';
+const APP_VERSION='260728.1538';
+const APP_VERSION_LABEL='v260728.1538';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22681,7 +22681,9 @@ async function openGrantModal(){
   if(sales){ try{ window._grantCoaches=(await dbGetAll('coaches')).filter(isTeachable); }catch(_){ window._grantCoaches=[]; } }
   const pre=_grantPreMember;
   const actives=members.filter(m=>m.status==='active');
-  const memOpts=actives.map(m=>`<option value="${m.id}" ${pre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
+  /* 2026-07-28 使用者指示：不預設會員——空白首選項，避免沒注意賣給名單第一位 */
+  const memOpts=`<option value="" ${pre?'':'selected'}>— 請先選擇會員 —</option>`
+    + actives.map(m=>`<option value="${m.id}" ${pre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
   /* 自訂銷售票種白名單（2026-07-28 使用者指示）：教練課／友善教練課／團體課／場地租借 */
   const _CUSTOM_TT=['教練課','友善教練課','團體課','場地租借'];
   const _ttOpts=(types||[]).filter(t=>t.active!==false&&_CUSTOM_TT.includes(t.name)).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
@@ -22897,18 +22899,19 @@ function renderGrantPicker(){
     const price=(p.unit_price||0)*(p.sessions_base||0);
     const col=planColor(p);
     const on=sel.planId===p.id;
-    /* 矩陣結構化卡（2026-07-28 使用者指示：段落統一）：類型標籤／總價／堂數×單價／效期 */
+    /* 矩陣結構化卡（2026-07-28 使用者指示：段落統一）：類型標籤／總價／堂數×單價／效期
+       色彩（2026-07-28 使用者定調）：VIP＝品牌紅、主顧客＝品牌金 */
     if(slotLabel){
+      const colC=(p.plan_type==='vip'||/vip/i.test(p.name||''))?'#d9342b'
+        :(p.plan_type==='loyal'?'#b48a56':col);
       if(blocked){
-        return `<button type="button" class="gt-card gt-card2 gt-card-off" disabled title="${p.name}：${blocked}">
+        return `<button type="button" class="gt-card gt-card2 gt-card-off" disabled style="--pc:${colC};" title="${p.name}：${blocked}">
           <div class="gt-c2-tag">$${(p.unit_price||0).toLocaleString()}/堂</div>
           <div class="gt-c2-name">${p.name}·${total}堂</div>
           <div class="gt-c2-price">$${price.toLocaleString()}</div>
           <div class="gt-c2-valid">🔒 ${blocked}</div>
         </button>`;
       }
-      /* 2026-07-28 三修：最上方課單價 → 名稱·堂數 → 費用 → 效期 */
-      const colC=(p.plan_type==='vip'||/vip/i.test(p.name||''))?'#8a5e28':col;
       return `<button type="button" class="gt-card gt-card2${on?' on':''}" style="--pc:${colC};" title="${p.name}" onclick="grantPickPlan('${p.id}')">
         <div class="gt-c2-tag">$${(p.unit_price||0).toLocaleString()}/堂</div>
         <div class="gt-c2-name">${p.name}·${total}堂</div>
@@ -23139,6 +23142,7 @@ function refreshInstallPreview(){
 async function submitGrant(){
   const member_id=document.getElementById('gt-member').value;
   const _custom = window._grantSalesActive && window._grantSalesActive.custom;
+  if(!(document.getElementById('gt-member')||{}).value){ showToast('請先選擇會員'); return; }
   const plan_id = _custom ? null : document.getElementById('gt-plan').value;
   if(!_custom && !plan_id){ showToast('此會員沒有可發放的方案'); return; }
   const plan = _custom ? _grantCustomPlan() : await dbGet('course_plans',plan_id);
