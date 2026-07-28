@@ -5853,8 +5853,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1619';
-const APP_VERSION_LABEL='v260728.1619';
+const APP_VERSION='260728.1625';
+const APP_VERSION_LABEL='v260728.1625';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22519,9 +22519,28 @@ async function memSignContractDo(id){
 function ctSetType(v){
   window._ctSignType=v;
   document.querySelectorAll('.ct-tbtn').forEach(b=>b.classList.toggle('on',b.dataset.t===v));
-  const s=document.getElementById('ct-sign-box'); if(s) s.style.display=(v==='electronic')?'':'none';
+  const s=document.getElementById('ct-sign-box'); if(s) s.style.display='none';   // 平板簽名廢除（2026-07-28：統一會員手機）
   const p=document.getElementById('ct-paper-box'); if(p) p.style.display=(v==='paper')?'':'none';
   const r=document.getElementById('ct-remote-box'); if(r) r.style.display=(v==='remote')?'':'none';
+  if(v==='paper'){ const pv=document.getElementById('ct-paper-preview');
+    if(pv) pv.textContent=window._ctBody||''; }
+}
+/* 紙本列印（2026-07-28）：帶本次購買內容的合約全文，開列印視窗並自動叫出印表機 */
+function ctPrintPaper(){
+  const w=window.open('','_blank');
+  if(!w){ showToast('瀏覽器阻擋了新視窗，請允許彈出視窗'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>會員服務合約（${CONTRACT_VERSION}）</title>
+    <style>body{font-family:'Noto Sans TC','PingFang TC',sans-serif;max-width:720px;margin:0 auto;padding:36px 28px;line-height:2;font-size:13px;color:#222;white-space:pre-wrap;}
+    h1{font-size:19px;text-align:center;letter-spacing:.1em;margin:0 0 4px;}
+    .sub{text-align:center;font-size:11.5px;color:#8a6a3a;letter-spacing:.25em;margin-bottom:22px;}</style></head>
+    <body><h1>YUGYM 有肌訓練　會員服務合約</h1><div class="sub">版本 ${CONTRACT_VERSION}</div>
+    ${contractFillBlockHTML()}<div>${(window._ctBody||'').replace(/</g,'&lt;')}</div>
+    <div style="margin-top:40px;display:flex;gap:40px;font-size:13px;">
+      <div style="flex:1;">會員簽名：＿＿＿＿＿＿＿＿＿＿＿＿</div>
+      <div style="flex:1;">日期：＿＿＿＿年＿＿月＿＿日</div>
+    </div></body></html>`);
+  w.document.close();
+  setTimeout(()=>{ try{ w.focus(); w.print(); }catch(_){} }, 350);
 }
 // 步驟 4：組合合約全文（帶入本次購買的實際數字）並初始化簽名板
 async function renderContractStep(){
@@ -22542,15 +22561,22 @@ async function renderContractStep(){
     金額:paid.toLocaleString()+(voucherN?`（折抵券×${voucherN}，原價 $${deal.toLocaleString()}）`:''),
     付款方式:payLabel+(isInstall?`（分${(Number((document.getElementById('gt-install')||{}).value)||1)}期）`:''),
   };
-  window._ctBody=fillContract(tpl?tpl.body:'（尚未設定合約範本 —— 請管理員至「系統設定 → 合約範本」建立）', window._ctCtx);
+  /* 2026-07-28：範本未設定時退回系統版合約全文（CONTRACT_TEXT），不再顯示占位訊息 */
+  window._ctBody=fillContract(tpl?tpl.body:CONTRACT_TEXT, window._ctCtx);
   const box=document.getElementById('ct-body'); if(box) box.textContent=window._ctBody;
-  ctSetType(window._ctSignType||'electronic');
-  setTimeout(signPadInit,60);   // 等 display 生效後量寬度
+  /* 2026-07-28 使用者定案：電子簽約統一在會員手機（限 LINE 綁定者）；未綁定僅紙本 */
+  const _hasLine=!!(m&&m.line_user_id);
+  const tt=document.getElementById('ct-types');
+  if(tt){
+    tt.innerHTML=(_hasLine?`<button type="button" class="ct-tbtn" data-t="remote" onclick="ctSetType('remote')">電子簽約（會員手機）</button>`:'')
+      + `<button type="button" class="ct-tbtn" data-t="paper" onclick="ctSetType('paper')">紙本簽約</button>`
+      + (_hasLine?'':`<div style="flex-basis:100%;font-size:11.5px;color:var(--t3);margin-top:4px;">此會員尚未綁定 LINE，僅能使用紙本簽約。</div>`);
+  }
+  ctSetType(_hasLine?'remote':'paper');
 }
 // 簽約完成 → 送出（發票券＋收款＋合約）
 async function ctSubmit(){
-  const type=window._ctSignType||'electronic';
-  if(type==='electronic' && !window._signInk){ showToast('請讓會員在簽名區簽名，或改選手機簽名／紙本簽約'); return; }
+  const type=window._ctSignType||'paper';
   if(window._salesSubmitting) return;
   window._salesSubmitting=true;
   try{
@@ -22853,21 +22879,15 @@ async function openGrantModal(){
     <div class="gt-step" data-gtstep="4" style="display:none;">
       <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">請會員確認合約內容後簽名，簽完即發放票券。</div>
       <div class="ct-body" id="ct-body">載入合約內容…</div>
-      <div class="ct-types">
-        <button type="button" class="ct-tbtn on" data-t="electronic" onclick="ctSetType('electronic')">電子簽約</button>
-        <button type="button" class="ct-tbtn" data-t="remote" onclick="ctSetType('remote')">手機簽名</button>
-        <button type="button" class="ct-tbtn" data-t="paper" onclick="ctSetType('paper')">紙本簽約</button>
-      </div>
+      <div class="ct-types" id="ct-types"></div>   <!-- 2026-07-28 使用者定案：依 LINE 綁定動態決定選項 -->
       <div id="ct-remote-box" class="ct-paper-hint" style="display:none;">
-        手機簽名：完成發放後，系統通知會員（含 LINE 綁定者）到會員首頁簽名——
-        合約先記「待簽名」，會員在自己手機上簽完即完成。適合客人手機在身邊、不方便用櫃台平板時。
+        電子簽約（會員手機）：完成發放後系統以 LINE 通知會員，會員在自己手機上檢視合約並簽名——
+        合約先記「待簽名」，簽完即完成。
       </div>
-      <div id="ct-sign-box">
-        <div class="ct-sign-wrap"><canvas class="ct-sign" id="ct-sign"></canvas></div>
-        <div class="ct-sign-bar"><span>請會員在上方框內簽名</span><button type="button" class="ct-sign-clear" onclick="signPadClear()">清除重簽</button></div>
-      </div>
-      <div id="ct-paper-box" class="ct-paper-hint" style="display:none;">
-        紙本簽約：請列印或使用紙本合約讓會員簽署後留存；系統只記錄「已用紙本簽約」與合約內容，會員端可查看條款但不會有簽名影像。
+      <div id="ct-paper-box" style="display:none;">
+        <div class="ct-paper-hint" style="margin-bottom:8px;">紙本簽約：請先確認下方合約內容，列印後由會員簽署留存；系統記錄「已用紙本簽約」與合約全文。</div>
+        <div id="ct-paper-preview" style="max-height:34vh;overflow-y:auto;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:16px 18px;font-size:12px;line-height:1.9;white-space:pre-wrap;"></div>
+        <div style="text-align:right;margin-top:10px;"><button type="button" class="btn btn-ghost" onclick="ctPrintPaper()">🖨 列印合約</button></div>
       </div>
       <div class="modal-foot">
         <button class="btn btn-ghost" onclick="grantGoStep(3)">上一步</button>
