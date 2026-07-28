@@ -2877,12 +2877,14 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 合約範本編輯（系統設定）＋ 會員端我的合約 */
 .ct-tpl-area{width:100%;min-height:320px;font-family:var(--font-zh),inherit;font-size:12.5px;line-height:1.9;padding:12px 14px;border:1px solid var(--bd);border-radius:10px;background:#fff;resize:vertical;}
 .ct-var{display:inline-block;font-size:11px;font-family:var(--num),inherit;color:var(--gold-d);background:#f7efe0;border-radius:6px;padding:2px 7px;margin:0 4px 4px 0;cursor:pointer;}
-.ct-row{display:flex;align-items:center;gap:10px;padding:11px 2px;border-bottom:1px solid var(--bd);cursor:pointer;}
-.ct-row:last-child{border-bottom:none;}
-.ct-row-b{flex:1;min-width:0;}
-.ct-row-t{font-size:13px;font-weight:600;color:var(--t1);}
-.ct-row-s{display:block;font-size:11px;color:var(--t2);margin-top:2px;}
-.ct-row-tag{font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 8px;flex:0 0 auto;}
+/* 2026-07-28：原 .ct-row 與課表時間軸樣式撞名（4214 行的 grid 蓋掉這裡的 flex，
+   造成會員端「我的合約」列被壓成窄欄），改用 ctl- 前綴 */
+.ctl-row{display:flex;align-items:center;gap:10px;padding:11px 2px;border-bottom:1px solid var(--bd);cursor:pointer;}
+.ctl-row:last-child{border-bottom:none;}
+.ctl-row-b{flex:1;min-width:0;}
+.ctl-row-t{font-size:13px;font-weight:600;color:var(--t1);}
+.ctl-row-s{display:block;font-size:11px;color:var(--t2);margin-top:2px;}
+.ctl-row-tag{font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 8px;flex:0 0 auto;}
 .ct-tag-e{background:#e3efe7;color:#2e6b4f;}
 .ct-tag-p{background:#f0ece3;color:#8a7350;}
 /* 2026-07-23 使用者指示：桌機首頁移除「今日值班／今日待辦事項」卡片標題
@@ -5853,8 +5855,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.1718';
-const APP_VERSION_LABEL='v260728.1718';
+const APP_VERSION = '260728.1728';
+const APP_VERSION_LABEL='v260728.1728';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16573,7 +16575,7 @@ PAGES.members=async function(){
     const lg=_lastByGrp[m.id]||{};
     const hits=[];
     if(t.everPt && ((t.pt||0)+(t.friendly||0))===0 && (lg.pt||'').slice(0,7)===nowYm) hits.push(['教練課',lg.pt]);
-    if(t.everGrp && (t.group||0)===0 && (lg.grp||'').slice(0,7)===nowYm) hits.push(['團體課',lg.grp]);
+    /* 2026-07-28 使用者指示：本名單只列教練課／友善教練課；團體課續約只出現在首頁「今日待簽約」 */
     if(hits.length) renewList.push({...m,
       __course:hits.map(x=>x[0]).join('・'),
       __last:hits.map(x=>x[1]).sort().pop()});
@@ -16698,7 +16700,7 @@ function memTierWatchList(kind){
   const list=((window._memTierWatch||{})[kind])||[];
   const title={up:'本月待升級名單（本月再達 4 堂即升主顧客）',
     down:'本月待降級名單（本月未達 4 堂將降回會員）',
-    renew:'本月待續約名單（本月已安排最後一堂課）'}[kind]||'名單';
+    renew:'本月待續約名單（教練課・本月已安排最後一堂課）'}[kind]||'名單';
   const rows=list.map(m=>`<button class="list-item" style="width:100%;text-align:left;cursor:pointer;background:none;border:none;border-bottom:1px solid var(--bd);padding:11px 6px;display:flex;justify-content:space-between;align-items:center;" onclick="closeModal();openPersonProfile('member','${m.id}')">
       <span style="font-weight:600;">${m.name||'—'}</span>
       <span style="color:var(--t3);font-size:12px;">${kind==='renew'?`${m.__course?`<span class="tag tag-warn" style="font-size:10.5px;margin-right:6px;">${m.__course}</span>`:''}${m.__last?`最後一堂 ${m.__last.slice(5).replace('-','/')}　`:''}`:''}${fmtPhone(m.phone)}</span>
@@ -22511,12 +22513,18 @@ function memSignBannerCheck(){
     const cs=(await dbGetAll('contracts').catch(()=>[])).filter(c=>c.sign_type==='remote'&&!c.signed_at);
     const old=document.getElementById('mem-sign-banner'); if(old) old.remove();
     if(!cs.length) return;
+    /* 2026-07-28 使用者指示：提示改到畫面正中間、加遮罩更醒目 */
     const div=document.createElement('div'); div.id='mem-sign-banner';
-    div.style.cssText='position:fixed;left:12px;right:12px;top:64px;z-index:180;padding:13px 16px;border-radius:14px;'
-      +'background:#f7efe0;border:1.5px solid #d9b96a;box-shadow:0 6px 20px rgba(126,102,49,.25);'
-      +'display:flex;justify-content:space-between;align-items:center;gap:10px;';
-    div.innerHTML=`<span style="font-size:13.5px;color:#7E6631;font-weight:800;">📝 您有 ${cs.length} 份合約待簽名</span>
-      <button class="btn btn-green btn-sm" onclick="memSignContract('${cs[0].id}')">立即簽署</button>`;
+    div.style.cssText='position:fixed;inset:0;z-index:180;background:rgba(20,24,20,.5);'
+      +'display:flex;align-items:center;justify-content:center;padding:24px;';
+    div.innerHTML=`<div style="background:#fdf9f0;border:1.5px solid #d9b96a;border-radius:18px;max-width:320px;width:100%;
+        padding:26px 22px 20px;text-align:center;box-shadow:0 12px 36px rgba(0,0,0,.3);">
+      <div style="font-size:38px;line-height:1;margin-bottom:10px;">📝</div>
+      <div style="font-size:16px;font-weight:800;color:#5c4a1e;margin-bottom:6px;">您有 ${cs.length} 份合約待簽名</div>
+      <div style="font-size:12.5px;color:#8a7350;margin-bottom:16px;">請完成簽署以啟用您的課程</div>
+      <button class="btn btn-green" style="width:100%;margin-bottom:8px;" onclick="memSignContract('${cs[0].id}')">立即簽署</button>
+      <button class="btn btn-ghost" style="width:100%;" onclick="document.getElementById('mem-sign-banner')?.remove()">稍後再簽</button>
+    </div>`;
     document.body.appendChild(div);
   }catch(_){} },600);
 }
@@ -27817,10 +27825,10 @@ function memContractEntryHTML(){
 function openMemContracts(){
   const list=(window._memContracts||[]).slice().sort((a,b)=>(b.signed_at||'').localeCompare(a.signed_at||''));
   showModal(`<div class="modal-title">我的合約</div>
-    ${list.length?list.map(c=>`<div class="ct-row" onclick="openContractView('${c.id}')">
-      <div class="ct-row-b"><div class="ct-row-t">${c.plan_name||'課程合約'}</div>
-        <span class="ct-row-s">簽約日 ${(c.signed_at||'').slice(0,10)}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</span></div>
-      <span class="ct-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}" ${(c.sign_type==='remote'&&!c.signed_at)?'style="background:#fbe4e2;color:#b5372e;"':''}>${c.sign_type==='electronic'?'電子':(c.sign_type==='remote'?(c.signed_at?'手機':'待簽名'):'紙本')}</span>
+    ${list.length?list.map(c=>`<div class="ctl-row" onclick="openContractView('${c.id}')">
+      <div class="ctl-row-b"><div class="ctl-row-t">${c.plan_name||'課程合約'}</div>
+        <span class="ctl-row-s">${c.signed_at?`簽約日 ${c.signed_at.slice(0,10)}`:'尚未簽名'}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</span></div>
+      <span class="ctl-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}" ${(c.sign_type==='remote'&&!c.signed_at)?'style="background:#fbe4e2;color:#b5372e;"':''}>${c.sign_type==='electronic'?'電子':(c.sign_type==='remote'?(c.signed_at?'手機':'待簽名'):'紙本')}</span>
     </div>`).join(''):'<div class="empty" style="padding:22px;"><div class="em-t">尚無合約紀錄</div></div>'}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
@@ -29327,10 +29335,10 @@ PAGES.settings_contract=async function(){
   </div>
   <div class="card">
     <div class="card-title">最近簽約紀錄</div>
-    ${recent.length?recent.map(c=>`<div class="ct-row" onclick="openContractView('${c.id}')">
-      <div class="ct-row-b"><div class="ct-row-t">${c.member_name||'—'}　<span style="font-weight:400;color:var(--t2);">${c.plan_name||''}</span></div>
-        <span class="ct-row-s">${(c.signed_at||'').slice(0,10)}　·　$${(Number(c.amount)||0).toLocaleString()}　·　${c.sessions||0} 堂</span></div>
-      <span class="ct-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}" ${(c.sign_type==='remote'&&!c.signed_at)?'style="background:#fbe4e2;color:#b5372e;"':''}>${c.sign_type==='electronic'?'電子':(c.sign_type==='remote'?(c.signed_at?'手機':'待簽名'):'紙本')}</span>
+    ${recent.length?recent.map(c=>`<div class="ctl-row" onclick="openContractView('${c.id}')">
+      <div class="ctl-row-b"><div class="ctl-row-t">${c.member_name||'—'}　<span style="font-weight:400;color:var(--t2);">${c.plan_name||''}</span></div>
+        <span class="ctl-row-s">${(c.signed_at||'').slice(0,10)}　·　$${(Number(c.amount)||0).toLocaleString()}　·　${c.sessions||0} 堂</span></div>
+      <span class="ctl-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}" ${(c.sign_type==='remote'&&!c.signed_at)?'style="background:#fbe4e2;color:#b5372e;"':''}>${c.sign_type==='electronic'?'電子':(c.sign_type==='remote'?(c.signed_at?'手機':'待簽名'):'紙本')}</span>
     </div>`).join('')
     :'<div class="empty" style="padding:22px;"><div class="em-t">尚無簽約紀錄</div></div>'}
   </div>`;
