@@ -5871,8 +5871,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260728.2303';
-const APP_VERSION_LABEL='v260728.2303';
+const APP_VERSION = '260728.2356';
+const APP_VERSION_LABEL='v260728.2356';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15598,6 +15598,10 @@ async function openBookingDetail(id){
       <div class="form-row" style="margin-bottom:0;"><label>時長（分鐘）</label>
         <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30</option><option value="60" ${b.duration===60?'selected':''}>60</option><option value="90" ${b.duration===90?'selected':''}>90</option><option value="120" ${b.duration===120?'selected':''}>120</option></select></div>
     </div>`:`<div style="margin-top:10px;font-size:13px;"><span style="color:var(--t2);">時間</span>　${b.date}（週${WD[d.getDay()]}）${b.start_time}　${b.duration}分鐘</div>`)}
+    ${(b.category!=='小班肌力'&&!isMemberView)?`<div style="margin-top:10px;font-size:13px;display:flex;align-items:center;gap:10px;">
+      <span style="color:var(--t2);">場地</span>　<span>${venueName(b.venue_unit)||'—'}</span>
+      ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
+    </div>`:''}
     ${b.status==='cancelled'&&b.refund_waived?`<div style="margin-top:12px;padding:10px;background:#f7efe0;border-radius:8px;font-size:12px;color:#8a5e28;">此預約於開課 24 小時內取消，未退回票券。${b.makeup_granted?'（已補發補課券）':''}</div>`:''}
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
@@ -15613,6 +15617,40 @@ async function openBookingDetail(id){
                 : ''))   /* 會員視角：教練課取消請洽櫃檯；原本誤走櫃檯流程（無寫入權）點了沒反應（2026-07-28） */
         : `<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`):''}
     </div>`);
+}
+/* 更換場地（2026-07-28 使用者回報：體驗課因額滿被排到團課教室，場地釋出後沒有選項改回）——
+   逐場地驗證該時段可用性（沿用 validateBooking 的 venue_pref 強制配置），可用才能點。 */
+async function openVenueChange(id){
+  const b=await dbGet('bookings',id); if(!b){showToast('找不到預約');return;}
+  const curVid=String(b.venue_unit||'').split('_')[0];
+  const opts=await Promise.all(getVenues().filter(v=>v.active!==false).map(async v=>{
+    if(v.id===curVid) return {vid:v.id,name:v.name,ok:true,cur:true};
+    const probe={...b, venue_pref:v.id};
+    const err=await validateBooking(probe,b.date,b.start_time,b.duration||60);
+    return {vid:v.id,name:v.name,ok:!err,cur:false};
+  }));
+  showModal(`<div class="modal-title">更換場地</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">${b.date.replace(/-/g,'/')}　${b.start_time}　·　目前：${venueName(b.venue_unit)||'—'}</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${opts.map(o=>o.cur
+        ?`<button class="btn btn-ghost" disabled style="opacity:.55;">${o.name}（目前場地）</button>`
+        :(o.ok?`<button class="btn btn-ghost" onclick="doVenueChange('${id}','${o.vid}')">${o.name}</button>`
+              :`<button class="btn btn-ghost" disabled style="opacity:.4;">${o.name}（該時段已滿）</button>`)).join('')}
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button></div>`);
+}
+async function doVenueChange(id,vid){
+ try{
+  const b=await dbGet('bookings',id); if(!b){showToast('找不到預約');return;}
+  const probe={...b, venue_pref:vid};
+  const err=await validateBooking(probe,b.date,b.start_time,b.duration||60);
+  if(err){ showToast('無法更換：'+err); return; }
+  b.venue_unit=probe.venue_unit;
+  await dbPut('bookings',b);
+  try{ occCacheClear(); }catch(_){}
+  showToast('已更換場地：'+venueName(b.venue_unit));
+  openBookingDetail(id);
+ }catch(e){ showToast('更換失敗：'+(e&&e.message?e.message:e)); }
 }
 // 確認補發補課券
 async function confirmMakeup(id){
