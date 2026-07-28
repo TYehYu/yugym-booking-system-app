@@ -5583,6 +5583,7 @@ body.mc-mode .cal-body{background:rgba(255,255,255,.8);}
 .msb-date span{font-size:10.5px;opacity:.8;}
 .msb-date b{font-size:14px;font-weight:800;}
 .msb-date.on{background:#F4F1E8;color:var(--green);}
+.cag-days .cag-dn{font-size:9.5px;opacity:.72;font-family:var(--num),inherit;}   /* 教練行事曆日期鈕的當日堂數（2026-07-28） */
 /* 確認視窗內的場地選擇鈕（2026-07-26 使用者指示） */
 .msb-vbtn{border:1px solid var(--bd);border-radius:999px;padding:5px 13px;font-size:12px;font-weight:700;cursor:pointer;
   background:#fff;color:var(--t2);font-family:inherit;}
@@ -5856,8 +5857,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260728.1908';
-const APP_VERSION_LABEL='v260728.1908';
+const APP_VERSION = '260728.1912';
+const APP_VERSION_LABEL='v260728.1912';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13093,44 +13094,30 @@ async function renderCoachAgenda(){
   /* 月曆日期下方＝課堂數數字（2026-07-23 使用者指示：形狀點退場、改回數字）——
      教練＝該教練當日總課堂（cntSrc=mine）、管理員＝全店（cntSrc=allBk）。 */
 
-  /* ── 上方：首頁同款品牌綠「月曆」（2026-07-21 使用者定版）——
-     點日期切換下方日曆、‹›切月；週曆導覽（週切換＋週日期列）退場。 ── */
+  /* ── 上方：整月「一天一顆按鈕」左右滑選日期（2026-07-28 使用者指示）——
+     月曆退場（手機端月曆只留首頁）；‹›換月、按鈕顯示當日課堂數、選中日自動置中。 ── */
   const _my=window._cagMonth.y, _mm=window._cagMonth.m;   // m: 0-based
-  const _fd=new Date(_my,_mm,1).getDay();
   const _dim=new Date(_my,_mm+1,0).getDate();
-  /* 逐週列結構（2026-07-21 使用者回報「月曆不會自動縮小」）：與首頁月曆同款 .mc-week，
-     時間軸往下捲時收合成「選取日那一週」一列（見下方 #cag-body scroll 綁定）。 */
-  const _mcArr=[];
-  let _curWk=0;
-  const _cagAdj=mcAdjCells(_my,_mm+1);   // 前後月補日（2026-07-21）——可點：切到該月該日（含資料）
-  const _pmY=_mm===0?_my-1:_my, _pmM=_mm===0?12:_mm;      // 上月（1-based）
-  const _nmY=_mm===11?_my+1:_my, _nmM=_mm===11?1:_mm+2;   // 下月（1-based）
-  _cagAdj.lead.forEach(d=>_mcArr.push(mcAdjCell(d,null,`cagAdjPick('${_pmY}-${String(_pmM).padStart(2,'0')}-${String(d).padStart(2,'0')}')`)));
+  const _W2=['日','一','二','三','四','五','六'];
+  let _dayBtns='';
   for(let d2=1;d2<=_dim;d2++){
     const ds=`${_my}-${String(_mm+1).padStart(2,'0')}-${String(d2).padStart(2,'0')}`;
     const n=cntByDate[ds]||0;
-    if(ds===selDate||(selDate.slice(0,7)!==`${_my}-${String(_mm+1).padStart(2,'0')}`&&ds===todayStr)) _curWk=Math.floor(_mcArr.length/7);
-    _mcArr.push(`<div class="mc-cell${ds===todayStr?' mc-today':''}${ds===selDate&&ds!==todayStr?' mc-sel':''}" onclick="cagSelectDate('${ds}')">
-      <span class="mc-d">${d2}</span><span class="mc-dot${n>0?'':' mc-dot-empty'}">${n>0?n:'0'}</span></div>`);
+    const dow=new Date(_my,_mm,d2).getDay();
+    _dayBtns+=`<button class="msb-date${ds===selDate?' on':''}" id="cagd-${ds}" onclick="cagSelectDate('${ds}')">
+      <span>${ds===todayStr?'今天':'週'+_W2[dow]}</span><b>${_mm+1}/${d2}</b><span class="cag-dn">${n?n+' 堂':'－'}</span></button>`;
   }
-  _cagAdj.tail.forEach(d=>_mcArr.push(mcAdjCell(d,null,`cagAdjPick('${_nmY}-${String(_nmM).padStart(2,'0')}-${String(d).padStart(2,'0')}')`)));
-  let _mcWeeks='';
-  for(let i=0;i<_mcArr.length;i+=7)
-    _mcWeeks+=`<div class="mc-grid mc-week${Math.floor(i/7)===_curWk?' mc-week-cur':''}">${_mcArr.slice(i,i+7).join('')}</div>`;
-  const _W2=['日','一','二','三','四','五','六'];
-  const monthRow=`<div class="cag-mcal">
-    <div class="cag-mcal-nav mcal-head">
+  const monthRow=`<div class="cag-mcal" style="padding-bottom:10px;">
+    <div class="mcal-head" style="margin:4px 0 6px;">
       <span class="mcal-t">${_my}/${String(_mm+1).padStart(2,'0')}</span>
-      ${selDate!==todayStr?`<button class="cag-thisweek" onclick="cagThisWeek()">回到現在</button>`:''}
+      ${selDate!==todayStr?`<button class="cag-thisweek" onclick="cagThisWeek()">回到今天</button>`:''}
       <span class="mcal-sp"></span>
-      <button class="mcal-btn" onclick="cagMcalShift(-1)">︿</button>
-      <button class="mcal-btn" onclick="cagMcalShift(1)">﹀</button>
+      <button class="mcal-btn" onclick="cagMcalShift(-1)">‹</button>
+      <button class="mcal-btn" onclick="cagMcalShift(1)">›</button>
     </div>
-    <div class="mc-grid mc-wd">${_W2.map((w,i)=>`<div class="mc-wdh${i===0||i===6?' mc-wk':''}">${w}</div>`).join('')}</div>
-    ${_mcWeeks}
-    <div class="cag-expand-row" onclick="cagExpandCal()"></div>
+    <div class="msb-dates cag-days" id="cag-days" style="padding:0 2px 4px;">${_dayBtns}</div>
   </div>`;
-  const weekRow='';   // 週日期導覽退場（由月曆承接）
+  const weekRow='';   // 週日期導覽退場（由日期按鈕列承接）
 
   // ── 第四列：7 欄同屏週時間軸 ──
   const nowMin=nowMinOfDay();
@@ -13300,7 +13287,7 @@ async function renderCoachAgenda(){
 
   /* 篩選列（cag-layers）已移除（2026-07-21 使用者指示）——cagToggleLayer 暫留無出口 */
 
-  host.innerHTML=`<div class="cag-wrap${window._cagMin?' cag-min':''}" id="cag-wrap">
+  host.innerHTML=`<div class="cag-wrap" id="cag-wrap">
     ${monthRow}
     ${weekRow}
     <div class="cag-body" id="cag-body">
@@ -13316,6 +13303,9 @@ async function renderCoachAgenda(){
 
   // 定位：頂列固定，本容器填滿其下方到底部導覽
   cagPositionWrap();
+  // 日期按鈕列：選中日自動捲到置中（2026-07-28）
+  const _dsEl=document.getElementById('cagd-'+selDate), _dsBox=document.getElementById('cag-days');
+  if(_dsEl&&_dsBox) _dsBox.scrollLeft=Math.max(0,(_dsEl.offsetLeft-_dsBox.offsetLeft)-(_dsBox.clientWidth-_dsEl.offsetWidth)/2);
   // 捲到目前時間附近（若本週含今天），否則捲到 09:00
   const body=document.getElementById('cag-body');
   if(body){
