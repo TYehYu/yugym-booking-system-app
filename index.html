@@ -387,6 +387,12 @@ select option{color:var(--text);}
 /* 教練課方案矩陣（2026-07-28）：一列橫向滑動，卡片固定寬 */
 .gt-matrix-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;}
 .gt-matrix-row .gt-card{flex:0 0 128px;}
+/* 矩陣結構化方案卡（2026-07-28）：類型／總價／堂數單價／效期 四行對齊 */
+.gt-card2{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:10px 12px;}
+.gt-c2-tag{font-size:11px;font-weight:800;letter-spacing:.04em;}
+.gt-c2-price{font-size:16.5px;font-weight:800;font-family:var(--font-en),var(--num);color:var(--text);line-height:1.1;}
+.gt-c2-meta{font-size:11px;color:var(--t2);}
+.gt-c2-valid{font-size:10px;color:var(--t3);}
 /* 簽約寬版視窗（2026-07-28）：方案矩陣一次展示 */
 .modal.modal-wide{max-width:940px;width:94vw;}
 .modal-wide .gt-matrix-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));overflow:visible;padding-bottom:2px;}
@@ -5803,8 +5809,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260728.0936';
-const APP_VERSION_LABEL='v260728.0936';
+const APP_VERSION='260728.0938';
+const APP_VERSION_LABEL='v260728.0938';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22621,11 +22627,31 @@ function renderGrantPicker(){
     if(isFriendly) return '#23508a';
     return '#1f6f54'; // 教練課
   };
-  const cardHtml=(p,blocked)=>{
+  const cardHtml=(p,blocked,slotLabel)=>{
     const total=(p.sessions_base||0)+(p.sessions_bonus||0);
     const price=(p.unit_price||0)*(p.sessions_base||0);
     const col=planColor(p);
     const on=sel.planId===p.id;
+    /* 矩陣結構化卡（2026-07-28 使用者指示：段落統一）：類型標籤／總價／堂數×單價／效期 */
+    if(slotLabel){
+      if(blocked){
+        return `<button type="button" class="gt-card gt-card2 gt-card-off" disabled title="${p.name}：${blocked}">
+          <div class="gt-c2-tag">${slotLabel}</div>
+          <div class="gt-c2-price">$${price.toLocaleString()}</div>
+          <div class="gt-c2-meta">${total} 堂 · $${(p.unit_price||0).toLocaleString()}/堂</div>
+          <div class="gt-c2-valid">🔒 ${blocked}</div>
+        </button>`;
+      }
+      const st=on?`style="background:${col};border-color:${col};box-shadow:0 4px 14px ${col}55;"`:'';
+      const wc=on?'style="color:#fff;"':'';
+      const wc2=on?'style="color:rgba(255,255,255,.85);"':'';
+      return `<button type="button" class="gt-card gt-card2${on?' on':''}" ${st} title="${p.name}" onclick="grantPickPlan('${p.id}')">
+        <div class="gt-c2-tag" ${on?wc2:`style="color:${col};"`}>${slotLabel}</div>
+        <div class="gt-c2-price" ${wc}>$${price.toLocaleString()}</div>
+        <div class="gt-c2-meta" ${wc2}>${total} 堂 · $${(p.unit_price||0).toLocaleString()}/堂</div>
+        <div class="gt-c2-valid" ${wc2}>效期 ${p.valid_days||365} 天</div>
+      </button>`;
+    }
     if(blocked){   // 等級不足 → 灰階不可點（2026-07-28 使用者指示）
       return `<button type="button" class="gt-card gt-card-off" disabled title="${blocked}">
         <div class="gt-card-name">${p.name}</div>
@@ -22669,10 +22695,13 @@ function renderGrantPicker(){
     const slotOf=p=>{ if(isVipPlan(p)) return 0;
       if(p.plan_type==='loyal') return /友善/.test(p.name||'')?1.5:1;
       const s={general:2,promo:3,friendly:4,friendly_promo:5}[p.plan_type]; return s==null?6:s; };
+    const slotLabelOf=p=>{ if(isVipPlan(p)) return 'VIP';
+      if(p.plan_type==='loyal') return /友善/.test(p.name||'')?'主顧客友善':'主顧客';
+      return ({general:'一般',promo:'一般優惠',friendly:'友善',friendly_promo:'友善優惠'})[p.plan_type]||'其他'; };
     ['1v1','1v2'].forEach(fmt=>{
       const arr=(groups[fmt]||[]).slice().sort((a,b)=>slotOf(a)-slotOf(b));
       if(arr.length) html+=`<div class="gt-group"><div class="gt-group-lbl">${GROUP_LABEL[fmt]}</div>
-        <div class="gt-matrix-row">${arr.map(p=>cardHtml(p,blockOf(p))).join('')}</div></div>`;
+        <div class="gt-matrix-row">${arr.map(p=>cardHtml(p,blockOf(p),slotLabelOf(p))).join('')}</div></div>`;
     });
     if(window._grantSalesActive&&window._grantSalesActive.cat==='私人教練'&&!window._grantSalesActive.custom){
       html+=`<div class="gt-group"><div class="gt-group-lbl">自訂方案</div>
