@@ -6011,8 +6011,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1512';
-const APP_VERSION_LABEL='v260729.1512';
+const APP_VERSION = '260729.1518';
+const APP_VERSION_LABEL='v260729.1518';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7657,6 +7657,7 @@ function bootYugym(){
     await openDB();
     // ── 路由優先順序：member-signup → invite=token → 登入 ──
     const hash=location.hash||'';
+    if(/staff-signup/i.test(hash)){ showStaffSignupPage(); return; }     // 0) 員工申辦（公開，掃 QR 進入）
     if(/member-signup/i.test(hash)){ showRegisterPage(); return; }       // 1) 會員申辦（公開）
     const inv=hash.match(/invite=([a-zA-Z0-9]+)/);
     if(inv){ try{ await showInvitePage(inv[1]); }catch(e){ showInviteError('載入邀請失敗：'+(e.message||e)); } return; }  // 2) 員工邀請（公開）
@@ -7713,6 +7714,7 @@ function showConfigNeeded(){
 }
 window.addEventListener('hashchange',()=>{
   const hash=location.hash||'';
+  if(/staff-signup/i.test(hash)){ showStaffSignupPage(); return; }
   if(/member-signup/i.test(hash)){ showRegisterPage(); return; }
   const inv=hash.match(/invite=([a-zA-Z0-9]+)/);
   if(inv){ showInvitePage(inv[1]); return; }
@@ -9217,6 +9219,77 @@ async function groupToggleLeave(bid,mid){
     await dbPut('bookings',b);
   }catch(e){ showToast('操作失敗：'+((e&&e.message)||e)); return; }
   openBookingDetail(bid);
+}
+
+/* 團體課「取消預約」（2026-07-29 使用者指示）：把該會員移出名單並退回 1 堂。
+   與「請假」不同——請假是本堂照扣、另發 14 天補課券；取消是直接退回票券、名額釋出。
+   同名多名額（親友同行）一次只取消一個。 */
+async function groupCancelSeat(bid,mid){
+  const b=await dbGet('bookings',bid);
+  if(!b){ showToast('找不到預約'); return; }
+  const ids=(Array.isArray(b.member_ids)?b.member_ids:[]).map(String);
+  const seats=ids.filter(x=>x===String(mid)).length;
+  if(!seats){ showToast('此會員不在名單中'); return; }
+  let m=null; try{ m=await dbGet('members',mid); }catch(_){}
+  const hrs=hoursUntilStart(b), within24=hrs<24;
+  showModal(`<div class="modal-title">取消團體課預約</div>
+    <div style="font-size:13.5px;color:var(--text);padding:2px 0 10px;">
+      ${m?m.name:'會員'}　·　${b.date.replace(/-/g,'/')} ${b.start_time}${seats>1?`　（共 ${seats} 個名額，本次取消 1 個）`:''}</div>
+    <div style="background:${within24?'#fbeceb':'#eef5f1'};border:1.5px solid ${within24?'#e0a8a2':'#cfe3d8'};border-radius:12px;padding:12px 14px;font-size:13px;color:${within24?'#b5372e':'#1f6f54'};line-height:1.9;">
+      ${within24?`⚠ 距離開課不到 24 小時（約 ${Math.max(0,Math.floor(hrs))} 小時）。`:`距離開課還有 ${Math.floor(hrs)} 小時。`}
+      取消後<b>退回 1 堂團體課票券</b>、名額釋出。</div>
+    <div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:1.8;">
+      若客人是臨時有事、想保留補課權益，請改用「請假」（本堂照扣並發 14 天補課券）。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${bid}')">返回</button>
+      <button class="btn btn-danger" onclick="doGroupCancelSeat('${bid}','${mid}')">確定取消・退回票券</button></div>`);
+}
+async function doGroupCancelSeat(bid,mid){
+ try{
+  const b=await dbGet('bookings',bid);
+  if(!b){ showToast('找不到預約'); return; }
+  const ids=(Array.isArray(b.member_ids)?b.member_ids:[]).map(String);
+  const i=ids.indexOf(String(mid));
+  if(i<0){ showToast('此會員不在名單中'); return; }
+  ids.splice(i,1);                       // 只移除一個名額
+  b.member_ids=ids;
+  const att=attObj(b); 
+  if(!ids.includes(String(mid))) delete att[mid];   // 沒有其他名額才清掉出席狀態
+  b.attendance=att;
+  await dbPut('bookings',b);
+  // 退票：優先退回當初這筆預約扣的那張，找不到就退最晚到期的團體課票
+  let tkId=null;
+  try{
+    const logs=await dbGetAll('ticket_logs');
+    const tks=await dbGetAll('member_tickets');
+    const mine=new Set(tks.filter(t=>String(t.member_id)===String(mid)).map(t=>t.id));
+    const hit=(logs||[]).filter(l=>l.booking_id===bid&&l.action==='deduct'&&mine.has(l.ticket_id))
+      .sort((a,c)=>String(c.created_at||'').localeCompare(String(a.created_at||'')))[0];
+    tkId=hit?hit.ticket_id:null;
+    if(!tkId){
+      const types=await dbGetAll('ticket_types').catch(()=>[]);
+      const tm=Object.fromEntries((types||[]).map(t=>[t.id,t]));
+      const cand=tks.filter(t=>String(t.member_id)===String(mid)
+        &&((tm[t.ticket_type_id]||{}).category==='小班肌力')&&['usable','used_up'].includes(t.status||'usable'))
+        .sort((a,c)=>String(c.expire_date||'').localeCompare(String(a.expire_date||'')));
+      tkId=cand[0]?cand[0].id:null;
+    }
+    if(tkId){
+      const tk=await dbGet('member_tickets',tkId);
+      if(tk){
+        tk.sessions_remaining=(Number(tk.sessions_remaining)||0)+1;
+        if(tk.status==='used_up') tk.status='usable';
+        await dbPut('member_tickets',tk);
+        await logTicket(tkId,'refund',1,bid,SESSION.id,'團體課取消預約退回');
+      }
+    }
+  }catch(e){ console.error('團課取消退票失敗',e); }
+  try{ if(mid) await pushNotification(mid,'cancel','團體課已取消',
+    `您 ${b.date} ${b.start_time} 的團體課已由櫃檯取消${tkId?'，已退回 1 堂票券':''}。`); }catch(_){}
+  dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
+  closeModal();
+  showToast(tkId?'已取消並退回 1 堂':'已取消（找不到可退的票券，請手動確認）');
+  openBookingDetail(bid);
+ }catch(e){ showToast('取消失敗：'+((e&&e.message)||e)); }
 }
 
 /* ════════ 營運中心（取代每日前台表，可切換日期）════════ */
@@ -15779,6 +15852,9 @@ async function openBookingDetail(id){
         btn = onLeaveM
           ? `<span style="margin-left:auto;"><button class="btn btn-ghost btn-sm" onclick="groupToggleLeave('${b.id}','${mid}')">取消請假</button></span>`
           : `<span style="margin-left:auto;display:flex;gap:6px;">`
+            /* 2026-07-29 使用者指示：團體課補上「取消」——退出名單並退回票券，
+               與「請假」（本堂照扣、另發補課券）區隔。 */
+            + (inHere?'':`<button class="btn btn-ghost btn-sm" style="color:#b5372e;" onclick="groupCancelSeat('${b.id}','${mid}')">取消</button>`)
             + (inHere?'':`<button class="btn btn-ghost btn-sm" onclick="groupToggleLeave('${b.id}','${mid}')">請假</button>`)
             + `<button class="btn btn-ghost btn-sm" onclick="toggleGroupAttend('${b.id}','${mid}')">${inHere?'取消簽到':(isPastD?'補簽':'簽到')}</button></span>`;
       }
@@ -17675,6 +17751,139 @@ function downloadMemberQR(){
   showToast('已下載申辦 QR 圖片');
 }
 
+/* 待審申請清單（2026-07-29）：掃 QR 送出的申請在此核可；核可＝建立登入帳號並轉為正式員工 */
+async function openStaffApplyList(){
+  let apps=[];
+  try{ apps=(await sb.from('staff_applications').select('*').eq('status','pending')
+    .order('created_at',{ascending:true})).data||[]; }catch(_){}
+  const rows=apps.map(a=>`<div class="ctl-row" style="cursor:default;">
+    <div class="ctl-row-b"><div class="ctl-row-t">${a.name}${a.name_en?`　<span style="font-weight:400;color:var(--t2);">${a.name_en}</span>`:''}</div>
+      <span class="ctl-row-s">${fmtPhone(a.phone)}　·　${a.job_title||'—'}　·　${String(a.created_at||'').slice(0,10)}</span></div>
+    <span style="display:flex;gap:6px;flex:0 0 auto;">
+      <button class="btn btn-ghost btn-sm" style="color:#b5372e;" onclick="staffApplyReject('${a.id}')">婉拒</button>
+      <button class="btn btn-green btn-sm" onclick="staffApplyApprove('${a.id}')">核可建帳號</button>
+    </span></div>`).join('');
+  showModal(`<div class="modal-title">員工待審申請（${apps.length}）</div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.8;margin-bottom:12px;">
+      核可後會以預設密碼 <b>${STAFF_DEFAULT_PW}</b> 建立登入帳號（帳號＝手機），該員工首次登入須改密碼。
+      職務與薪資制度請於建立後在員工卡設定。</div>
+    ${apps.length?rows:'<div class="empty" style="padding:22px;"><div class="em-t">目前沒有待審申請</div><div style="font-size:12px;color:var(--t2);margin-top:6px;">請新員工掃「申辦 QR」填寫資料。</div></div>'}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+async function staffApplyApprove(id){
+  try{
+    const{data:a}=await sb.from('staff_applications').select('*').eq('id',id).maybeSingle();
+    if(!a){ showToast('找不到申請'); return; }
+    if((await dbGetAll('coaches')).some(c=>c.phone===a.phone)){ showToast('此電話已存在員工資料'); return; }
+    const r=await cloudCreateAuth('staff',a.phone,STAFF_DEFAULT_PW,true);
+    if(r.error){
+      const dup=/already|exists|registered/i.test(r.error);
+      showToast(dup?'此電話的登入帳號已存在':('建立帳號失敗：'+r.error)); return;
+    }
+    const c={ id:uid('c'), name:a.name, phone:a.phone, name_en:a.name_en||null, job_title:a.job_title||null,
+      role:'coach', status:'active', invite_status:'completed', must_setup:true,
+      employment_type:'part_time', need_punch:true, need_duty:true, can_teach:true,
+      created_at:new Date().toISOString() };
+    await dbPut('coaches',c);
+    await sb.from('staff_applications').update({status:'approved',employee_id:c.id,
+      reviewed_by:SESSION.id,reviewed_at:new Date().toISOString()}).eq('id',id);
+    dbCacheClear(['coaches']);
+    closeModal();
+    showToast(`${a.name} 已建立帳號（預設密碼 ${STAFF_DEFAULT_PW}）`);
+    navTo('staff','g_staff');
+  }catch(e){ showToast('核可失敗：'+((e&&e.message)||e)); }
+}
+async function staffApplyReject(id){
+  try{
+    await sb.from('staff_applications').update({status:'rejected',
+      reviewed_by:SESSION.id,reviewed_at:new Date().toISOString()}).eq('id',id);
+    showToast('已婉拒此申請');
+    openStaffApplyList();
+  }catch(e){ showToast('操作失敗：'+((e&&e.message)||e)); }
+}
+/* ══ 員工申辦 QR（2026-07-29 使用者指示）══
+   新員工掃 QR → 填姓名/手機/職稱 → 進 employees 待審（invite_status='applied'）
+   → 管理員在員工管理看到待審卡，核可後才建立登入帳號並設定薪資制度。 */
+function staffSignupLink(){
+  const base=location.href.split('#')[0].split('?')[0];
+  return base+'?v='+appVersionTag()+'#staff-signup';
+}
+function openStaffSignupQR(){
+  const link=staffSignupLink();
+  showModal(`<div class="modal-title">員工申辦 QR Code</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:14px;line-height:1.8;">
+      請新員工用手機掃描並填寫基本資料。送出後會出現在員工管理的「待審核」，由管理員核可並設定職務與薪資制度後才會開通帳號。</div>
+    <div class="mrq-poster">
+      <div class="mrq-brand">YUGYM<span>有 肌 訓 練</span></div>
+      <div class="mrq-title">員工申辦</div>
+      <div class="mrq-qr" id="staff-qr"></div>
+      <div class="mrq-steps"><span>① 掃描 QR</span><span>② 填基本資料</span><span>③ 管理員核可</span></div>
+    </div>
+    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px;font-size:11.5px;word-break:break-all;color:var(--t2);margin-top:12px;">${link}</div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      <button class="btn btn-green" onclick="copyText('${link}')">複製連結</button>
+    </div>`);
+  const box=document.getElementById('staff-qr');
+  if(box && window.QRCode){ try{ new QRCode(box,{text:link,width:200,height:200,colorDark:'#003d32',colorLight:'#ffffff'}); }
+    catch(e){ box.innerHTML='<span style="font-size:11px;color:var(--t3);">QR 產生失敗，請使用連結</span>'; } }
+  else if(box){ box.innerHTML='<span style="font-size:11px;color:var(--t3);">（離線無法產生 QR，請使用連結）</span>'; }
+}
+/* 公開申辦頁（#staff-signup）：不需登入，只寫入待審資料，不建 Auth 帳號 */
+function showStaffSignupPage(){
+  document.getElementById('login-screen')?.classList.add('hidden');
+  document.getElementById('app-screen')?.classList.add('hidden');
+  let host=document.getElementById('invite-screen');
+  if(!host){host=document.createElement('div');host.id='invite-screen';document.body.appendChild(host);}
+  host.style.cssText='min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(160deg,#003d32,#0a5044);';
+  host.innerHTML=`<div class="login-card" style="max-width:440px;">
+    <div class="login-logo"><div class="mark">YUGYM</div><div class="sub">員 工 申 辦</div></div>
+    <div class="login-tag">請填寫基本資料，送出後由管理員核可開通帳號。</div>
+    <div class="login-err" id="ss-err"></div>
+    <div class="form-2col">
+      <div class="form-row"><label>姓名 *</label><input id="ss-name" placeholder="本名" maxlength="20"></div>
+      <div class="form-row"><label>手機 *</label><input id="ss-phone" placeholder="09 開頭 10 碼" inputmode="numeric"></div>
+    </div>
+    <div class="form-row"><label>英文名／暱稱（選填）</label><input id="ss-en" placeholder="例：Randy" maxlength="20"></div>
+    <div class="form-row"><label>應徵職務</label>
+      <select id="ss-title"><option value="教練">教練</option><option value="行政">行政</option><option value="工讀">工讀</option><option value="其他">其他</option></select></div>
+    <button class="btn-primary" onclick="submitStaffSignup()">送出申請</button>
+    <div class="login-hint">送出後請等候管理員通知；帳號開通後以手機號碼登入。</div>
+  </div>`;
+}
+async function submitStaffSignup(){
+  const v=id=>(document.getElementById(id)||{}).value||'';
+  const err=document.getElementById('ss-err');
+  const fail=m=>{ if(err){err.textContent=m;err.style.display='block';} };
+  const name=v('ss-name').trim();
+  const phone=normPhone(v('ss-phone').trim());
+  if(!name) return fail('請填寫姓名');
+  if(!/^09\d{8}$/.test(phone)) return fail('手機格式不正確，請填 09 開頭的 10 位數字');
+  const btn=document.querySelector('#invite-screen .btn-primary');
+  if(btn){ btn.disabled=true; btn.textContent='送出中…'; }
+  try{
+    /* 匿名沒有 employees 寫入權（RLS 只給管理員）→ 走 security definer RPC，
+       在 DB 端驗手機格式、擋重複，寫入 staff_applications 待審佇列。 */
+    const{data,error}=await sb.rpc('fn_staff_apply',{p_name:name,p_phone:phone,
+      p_name_en:v('ss-en').trim()||null, p_job_title:v('ss-title')});
+    if(error) throw error;
+    if(!(data&&data.ok)){
+      if(btn){btn.disabled=false;btn.textContent='送出申請';}
+      const M={'PHONE.INVALID':'手機格式不正確','NAME.REQUIRED':'請填寫姓名',
+        'STAFF.EXISTS':'此手機已有員工帳號，請直接登入或洽管理員',
+        'APPLY.DUP':'此手機已提出申請，請等候管理員核可'};
+      return fail(M[data&&data.error_code]||('送出失敗：'+((data&&data.error_code)||'請稍後再試')));
+    }
+    document.getElementById('invite-screen').innerHTML=`<div class="login-card" style="max-width:420px;text-align:center;">
+      <div class="login-logo"><div class="mark">YUGYM</div><div class="sub">申 請 已 送 出</div></div>
+      <div style="font-size:14px;color:var(--text);line-height:2;padding:10px 0;">
+        <b>${name}</b> 您好，申請已送出。<br>管理員核可後會通知您，屆時以手機號碼登入即可。</div>
+    </div>`;
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='送出申請';}
+    fail('送出失敗：'+((e&&e.message)||e));
+  }
+}
 /* ── 會員自助註冊頁（公開，#member-signup） ── */
 /* 生日年/月/日下拉（比手機原生日期選擇器好操作，尤其選早年份）
    prefix 用於 id，例如 'reg' → reg-by / reg-bm / reg-bd */
@@ -19629,7 +19838,9 @@ async function renderStaffList(){
       { value:_stStatus, options:statusOpts, onchange:'stSetStatus(this.value)' },
     ],
     sort:{ value:_stSort, options:sortOpts, onchange:'stSetSort(this.value)' },
-    actions:`<button class="btn btn-green btn-sm" onclick="openStaffModal()">${LP_ICON.plus}　邀請員工</button>`,
+    actions:`<button class="btn btn-ghost btn-sm" onclick="openStaffApplyList()">${LNI.book||'▤'}　待審申請<span id="st-app-n"></span></button>`
+      +`<button class="btn btn-ghost btn-sm" onclick="openStaffSignupQR()">${LNI.qr||'▣'}　申辦 QR</button>`
+      +`<button class="btn btn-green btn-sm" onclick="openStaffModal()">${LP_ICON.plus}　邀請員工</button>`,
   };
 
   // Table（2026-07-21 清單簡化：狀態欄退場——非常態〔待填寫/待設定/留停/停用〕改為姓名旁掛章，
