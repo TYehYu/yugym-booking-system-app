@@ -145,6 +145,24 @@ ok('　　名單／代課面板改吊在彈窗裡', /bkPanelHost\(\) \|\| el/.te
 ok('　　且彈窗版面板有自己的樣式（舊樣式只掛在課卡上）',
    /#bk-card-pop \.evc-roster\{/.test(src));
 
+/* ── 合約 PDF 下載（2026-07-29 使用者回報「還是不能下載，會直接跳列印頁面」） ── */
+console.log('\n合約要能真的產出 PDF 檔');
+ok('★ 不再自動跳列印對話框（改由使用者按鈕決定）',
+   /if\(opts&&opts\.auto===true\)/.test(src));
+ok('★ 有獨立的「下載 PDF」鈕', /id="ct-dl" onclick="ctSavePdf\(\)"/.test(src));
+ok('　　「列印」另外一顆，兩件事分開', /id="ct-pr" class="ghost" onclick="window\.print\(\)"/.test(src));
+ok('★ 產檔用 jsPDF + html2canvas（避免內嵌數 MB 中文字型）',
+   /html2canvas@1\.4\.1/.test(src) && /jspdf@2\.5\.1/.test(src));
+ok('★ 依 A4 可用高度切頁（210×297，邊界 16／18／16mm）',
+   /const A4W=210, A4H=297, MARGIN_X=16, MARGIN_TOP=18, MARGIN_BOT=16;/.test(src));
+ok('★ 切頁前往上找空白列，不把字攔腰切斷', /function ctCutAt\(/.test(src));
+ok('　　有無限迴圈保險絲', /if\(page>40\) break;/.test(src));
+ok('　　產檔失敗會退回列印路徑並說明', /請改按「列印」，在印表機選「另存為 PDF」/.test(src));
+ok('　　量測用的暫時樣式一定會還原（finally）',
+   /\}finally\{[\s\S]{0,220}pg\.style\.width=keep\.w/.test(src));
+ok('★ 三個入口都走同一支（檔名帶會員與日期）',
+   (src.match(/ctPrintOpen\(ctPdfName\(/g)||[]).length===3);
+
 /* ── 課程類型清單：友善自主訓練／場租不列 ── */
 console.log('\n新增預約的課程類型清單');
 ok('★ 友善自主訓練已排除', /自主訓練'\s*&&\s*\/友善\/\.test\(t\.name\|\|''\)\) return false/.test(src));

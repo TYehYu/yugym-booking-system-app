@@ -6037,8 +6037,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1619';
-const APP_VERSION_LABEL='v260729.1619';
+const APP_VERSION = '260729.1628';
+const APP_VERSION_LABEL='v260729.1628';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29652,9 +29652,11 @@ img.ct-sig{max-width:70mm;border:1px solid #ccc;border-radius:6px;}
 .bar{position:fixed;top:10px;right:12px;z-index:9;display:flex;align-items:center;gap:10px;
   background:rgba(255,255,255,.94);border:1px solid #ddd;border-radius:10px;padding:8px 10px;
   box-shadow:0 4px 16px rgba(0,0,0,.12);}
-.bar button{font-size:13px;padding:8px 16px;border-radius:8px;border:1px solid #ccc;
-  background:#003d32;color:#fff;cursor:pointer;font-family:inherit;font-weight:700;}
-.bar .tip{font-size:11.5px;color:#666;line-height:1.5;max-width:210px;}
+.bar button{font-size:13px;padding:8px 16px;border-radius:8px;border:1px solid #003d32;
+  background:#003d32;color:#fff;cursor:pointer;font-family:inherit;font-weight:700;white-space:nowrap;}
+.bar button.ghost{background:#fff;color:#003d32;}
+.bar button[disabled]{opacity:.6;cursor:default;}
+.bar .tip{font-size:11.5px;color:#666;line-height:1.5;max-width:170px;}
 @media screen{
   body{background:#e9e7e2;padding:18px 0;}
   .ct-page{width:210mm;min-height:297mm;margin:0 auto;padding:18mm 16mm;
@@ -29664,6 +29666,80 @@ img.ct-sig{max-width:70mm;border:1px solid #ccc;border-radius:6px;}
   .bar{display:none;}
   body{background:#fff;}
   .ct-page{width:auto;min-height:0;margin:0;padding:0;box-shadow:none;}
+}`;
+/* 真正產出 PDF 檔（2026-07-29 使用者回報「還是不能下載，會直接跳列印頁面」）。
+   這段字串會被寫進列印視窗裡執行，所以只能用該視窗自己的 html2canvas / jsPDF。
+
+   為什麼用「畫成圖再包成 PDF」而不是把文字寫進 PDF：
+   PDF 內嵌文字要帶字型，中文字型動輒數 MB，為了一份合約讓全站多背這個負擔不划算。
+   改用 html2canvas 把已排好版的 A4 內容轉點陣圖，再依 A4 可用高度切頁塞進 jsPDF。
+   切頁時會往上找一條「整列空白」當切點，避免把某一行字攔腰切斷。 */
+const CT_PDF_JS=`
+const A4W=210, A4H=297, MARGIN_X=16, MARGIN_TOP=18, MARGIN_BOT=16;
+const CONTENT_W=A4W-MARGIN_X*2, CONTENT_H=A4H-MARGIN_TOP-MARGIN_BOT;
+function ctBusy(on,msg){
+  const b=document.getElementById('ct-dl');
+  if(!b) return;
+  b.disabled=!!on;
+  b.textContent=on?(msg||'產生中…'):'下載 PDF';
+}
+// 從 y 往上找一條幾乎全白的橫列當切點（找不到就照原位切）
+function ctCutAt(ctx,w,y,limit){
+  for(let k=0;k<limit;k++){
+    const yy=y-k; if(yy<=0) break;
+    const d=ctx.getImageData(0,yy,w,1).data;
+    let blank=true;
+    for(let i=0;i<d.length;i+=4){ if(d[i]<245||d[i+1]<245||d[i+2]<245){ blank=false; break; } }
+    if(blank) return yy;
+  }
+  return y;
+}
+async function ctSavePdf(){
+  if(typeof html2canvas!=='function' || !(window.jspdf&&window.jspdf.jsPDF)){
+    alert('PDF 元件載入失敗（可能是網路問題）。請改按「列印」，在印表機選「另存為 PDF」。');
+    return;
+  }
+  ctBusy(true);
+  const pg=document.querySelector('.ct-page');
+  const keep={w:pg.style.width,p:pg.style.padding,s:pg.style.boxShadow,m:pg.style.minHeight};
+  const keepBg=document.body.style.background;
+  try{
+    // 量成「內容寬」再拍，邊界交給 PDF 自己留，第二頁以後才會有上邊界
+    pg.style.width=CONTENT_W+'mm'; pg.style.padding='0';
+    pg.style.boxShadow='none'; pg.style.minHeight='0';
+    document.body.style.background='#ffffff';
+    const wpx=pg.offsetWidth;
+    const S=2;
+    const canvas=await html2canvas(pg,{scale:S,backgroundColor:'#ffffff',logging:false});
+    const mmPerPx=CONTENT_W/wpx;                 // css px → mm
+    const pageHpx=Math.floor(CONTENT_H/mmPerPx*S);
+    const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    const tmp=document.createElement('canvas');
+    const tctx=tmp.getContext('2d');
+    let y=0, page=0;
+    while(y<canvas.height){
+      let end=Math.min(canvas.height, y+pageHpx);
+      if(end<canvas.height) end=ctCutAt(ctx,canvas.width,end,Math.floor(40*S));
+      const h=end-y;
+      tmp.width=canvas.width; tmp.height=h;
+      tctx.fillStyle='#ffffff'; tctx.fillRect(0,0,tmp.width,h);
+      tctx.drawImage(canvas,0,y,canvas.width,h,0,0,canvas.width,h);
+      if(page>0) doc.addPage();
+      doc.addImage(tmp.toDataURL('image/jpeg',0.94),'JPEG',
+        MARGIN_X, MARGIN_TOP, CONTENT_W, h/S*mmPerPx);
+      y=end; page++;
+      if(page>40) break;   // 保險絲：切頁若異常不至於無限迴圈
+    }
+    doc.save((document.title||'contract')+'.pdf');
+  }catch(e){
+    alert('PDF 產生失敗：'+(e&&e.message||e)+'\\n請改按「列印」，在印表機選「另存為 PDF」。');
+  }finally{
+    pg.style.width=keep.w; pg.style.padding=keep.p;
+    pg.style.boxShadow=keep.s; pg.style.minHeight=keep.m;
+    document.body.style.background=keepBg;
+    ctBusy(false);
+  }
 }`;
 /* 開列印視窗（螢幕上先看到 A4 紙張預覽，再自動叫出列印／存 PDF）。
    PDF 是走瀏覽器列印對話框的「另存為 PDF」——中文合約若要在前端自行產 PDF，
@@ -29676,14 +29752,19 @@ function ctPrintOpen(title, inner, opts){
   const w=window.open('','_blank');
   if(!w){ showToast('瀏覽器阻擋了新視窗，請允許彈出視窗'); return null; }
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
-    <style>${CT_PRINT_CSS}</style></head><body>
+    <style>${CT_PRINT_CSS}</style>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"><\/script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"><\/script>
+    </head><body>
     <div class="bar">
-      <button onclick="window.print()">下載 PDF / 列印</button>
-      <div class="tip">存成 PDF：在印表機選「另存為 PDF」<br>雙面紙本：印表機設定選「雙面列印」</div>
+      <button id="ct-dl" onclick="ctSavePdf()">下載 PDF</button>
+      <button id="ct-pr" class="ghost" onclick="window.print()">列印</button>
+      <div class="tip">雙面紙本：印表機設定選「雙面列印」</div>
     </div>
-    <div class="ct-page">${inner}</div></body></html>`);
+    <div class="ct-page">${inner}</div>
+    <script>${CT_PDF_JS}<\/script></body></html>`);
   w.document.close(); w.focus();
-  if(!opts||opts.auto!==false) setTimeout(()=>{ try{ w.print(); }catch(_){} },350);
+  if(opts&&opts.auto===true) setTimeout(()=>{ try{ w.print(); }catch(_){} },350);
   return w;
 }
 const CT_SIGN_BLANK=`<div class="ct-sign">
