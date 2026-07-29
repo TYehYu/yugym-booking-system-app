@@ -4874,7 +4874,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 @media(min-width:601px){ #mem-task-pop .mtp,#bk-card-pop .mtp{transform:none;} @keyframes mtpPop{from{opacity:0;}} }
 /* ══ 行事曆／教練任務課卡的彈出面板（2026-07-29 使用者指示：環繞圓鈕 → 小卡＋下方圓鈕）══
    沿用 #mem-task-pop 的小卡樣式，按鈕改用 evo-btn 但取消環繞絕對定位、排成一列圓鈕。 */
-#bk-card-pop .mtp-back{position:fixed;inset:0;z-index:9800;background:rgba(20,18,14,.34);}
+/* 2026-07-29 使用者指示：被選取的課卡不做暗處理 → 遮罩改透明（仍可點外面關閉），
+   彈窗自身的陰影已足以浮出，行事曆維持原本亮度 */
+#bk-card-pop .mtp-back{position:fixed;inset:0;z-index:9800;background:transparent;}
 #bk-card-pop .mtp{position:fixed;z-index:9801;left:50%;top:50%;transform:translate(-50%,-50%);
   width:max-content;max-width:min(360px,92vw);display:flex;flex-direction:column;align-items:center;gap:12px;
   animation:mtpPop .16s var(--soft-ease,ease-out) backwards;}
@@ -5956,8 +5958,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.0957';
-const APP_VERSION_LABEL='v260729.0957';
+const APP_VERSION = '260729.1002';
+const APP_VERSION_LABEL='v260729.1002';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14904,7 +14906,7 @@ async function expandBkCard(el, id){
      桌機貼在被點的課卡旁、手機置中；掛在 body 且置頂，不被容器裁切或其他浮層遮住。 */
   el.style.marginLeft=''; el.style.marginTop='';
   el.classList.add('cal-ev-active');
-  bkCardPop(el, b, btns);
+  await bkCardPop(el, b, btns);
   window._expandedBkEl = el;
   /* 抽獎鈕（2026-07-25 功能）改為背景補入（2026-07-26 使用者回報卡頓）：
      原本為了判斷資格，展開前 await 整表 bookings＋purchases（數千筆），
@@ -14949,22 +14951,43 @@ const EVO_IC={
 };
 /* 課卡彈出面板（2026-07-29 使用者指示）：橫式小卡顯示課程摘要，圓形按鈕依附在卡片下方。
    桌機定位在被點課卡下方（空間不足翻上、超界夾回）；手機固定畫面正中。 */
-function bkCardPop(el, b, btns){
+/* 姓名對照（2026-07-29 使用者回報「小卡沒抓到會員姓名」）：各頁的 memMap 都是區域變數，
+   彈窗取不到 → 改用資料層（dbGetAll 有 20 秒快取）自建對照表，60 秒內重複點卡不再重查。 */
+async function bkNameMaps(){
+  const c=window._bkNameMapC;
+  if(c && Date.now()-c.ts<60000) return c;
+  const [ms,cs]=await Promise.all([dbGetAll('members').catch(()=>[]),dbGetAll('coaches').catch(()=>[])]);
+  const r={ts:Date.now(),
+    mem:Object.fromEntries((ms||[]).map(m=>[m.id,m.name])),
+    coach:Object.fromEntries((cs||[]).map(x=>[x.id,(typeof coachDisp==='function')?coachDisp(x):x.name]))};
+  window._bkNameMapC=r; return r;
+}
+async function bkCardPop(el, b, btns){
   bkCardPopClose();
   const cc=(typeof bkCC==='function')?bkCC(b):'pt';
   const col={pt:'#1f6f54',friendly:'#23508a',group:'#9a5a1e',self:'#6a655c',trial:'#6e3a86',massage:'#2f8f83'}[cc]||'#1f6f54';
-  const mm=(window._coachCalData&&window._coachCalData.memMap)||window._memMapAll||{};
-  const cm=(window._coachCalData&&window._coachCalData.coachMap)||{};
+  const _maps=await bkNameMaps();
+  const mm=Object.assign({}, _maps.mem, (window._coachCalData&&window._coachCalData.memMap)||{});
+  const cm=Object.assign({}, _maps.coach, (window._coachCalData&&window._coachCalData.coachMap)||{});
+  const _nm=id=>{ const v=mm[id]; return (v&&typeof v==='object')?(v.name||''):(v||''); };   // 有些頁的 memMap 存整個物件
+  const _gIds=mids(b);
   let who;
-  if(b.category==='小班肌力'||mids(b).length){ const n=mids(b).length; who=n?`團體課 ${n} 人`:'團體課'; }
+  if(b.category==='小班肌力'||_gIds.length){
+    const names=_gIds.map(_nm).filter(Boolean);
+    who = names.length===0 ? '團體課（未排名單）'
+        : names.length<=2 ? names.join('、')
+        : `${names[0]} 等 ${names.length} 人`;
+  }
   else if(b.category==='體驗') who=(b.trial_name||'體驗客戶')+'（體驗）';
-  else if(b.member_id) who=mm[b.member_id]||'—';
-  else who={'自主訓練':'自主訓練','場租':'場地租借'}[b.category]||'課程';
+  else if(b.pending_contract&&!b.member_id) who=(b.trial_name||'客戶')+'（待簽約）';
+  else if(b.member_id) who=_nm(b.member_id)||'—';
+  else if(b.category==='場租') who=(b.trial_name?b.trial_name+'（場租）':'場地租借');
+  else who={'自主訓練':'自主訓練'}[b.category]||'課程';
   const nm=(typeof bookingTypeName==='function')?bookingTypeName(b,window._ttMapCache||window._memTypeMap):(b.category||'課程');
   const d=parseYmd(b.date), wd=d?'日一二三四五六'[d.getDay()]:'';
   const endT=minToTime(timeToMin(b.start_time)+(Number(b.duration)||60));
   const coach=b.substitute_coach_id||b.coach_id;
-  const coachNm=coach?(cm[coach]||''):'';
+  const _cn=cm[coach]; const coachNm=coach?((_cn&&typeof _cn==='object')?(_cn.name||''):(_cn||'')):'';
   const done=b.status==='checked_in'||b.status==='completed';
   const host=document.createElement('div');
   host.id='bk-card-pop';
