@@ -31,9 +31,12 @@ ok('★ 紅叉與紅字提醒用 danger', /\.ev-pa-no\{background:var\(--danger,
    && /\.ev-pa-warn\{background:var\(--danger,#b5372e\)/.test(src));
 ok('★ 待處理的課卡整張反紅',
    /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,200}background:rgba\(181,55,46,\.12\) !important;/.test(src));
-ok('　　已續約／不續約不反紅（只有待付費／待處理才反紅）',
-   /const _alertCls = \(_isUnpaid\|\|_renewAlert\|\|_payAlert\) \? ' cal-ev-renew'/.test(src)
-   && !/_renewDone[\s\S]{0,40}cal-ev-renew/.test(src));
+ok('★ 只有未繳費才反紅（2026-07-30 定案）',
+   /const _alertCls = _isUnpaid \? ' cal-ev-renew'/.test(src));
+ok('★ 最後一堂／分期繳費只留右上角驚嘆號，不整張反紅',
+   !/_renewAlert\|\|_payAlert\) \? ' cal-ev-renew'/.test(src)
+   && /if\(o\.renew\)return '<span class="ev-payalert ev-pa-warn"/.test(src));
+ok('　　手機端同一套', /const _mkAlert = _unpaidM \? ' cal-ev-renew' : \(_newM \? ' cal-ev-newtoday' : ''\);/.test(src));
 
 console.log('\n判定邏輯');
 ok('★ 已續約＝同類別有「更晚買」的票（不是只看當天收款）',
@@ -58,18 +61,18 @@ ok('　　考慮中／不續約可手動標記與取消標記', /async function 
 console.log('\n課卡外框提示（品牌色階 紅 > 金）');
 ok('★ 待付費（待簽約卡位／分期待繳費保留）→ 品牌紅',
    /const _isUnpaid   = !!b\.pending_contract;/.test(src)
-   && /const _alertCls = \(_isUnpaid\|\|_renewAlert\|\|_payAlert\) \? ' cal-ev-renew'/.test(src));
+   && /const _alertCls = _isUnpaid \? ' cal-ev-renew'/.test(src));
 ok('★ 今天新增的預約 → 品牌金',
    /const _isNewToday = String\(b\.created_at\|\|''\)\.slice\(0,10\)===ymd\(TODAY\);/.test(src)
    && /_isNewToday \? ' cal-ev-newtoday' : ''/.test(src));
-ok('★ 同時符合時紅色優先（錢的事比「今天新增」重要）',
-   /\(_isUnpaid\|\|_renewAlert\|\|_payAlert\) \? ' cal-ev-renew'\s*\n\s*: \(_isNewToday/.test(src));
+ok('★ 同時符合時紅色優先（未繳費比「今天新增」重要）',
+   /_isUnpaid \? ' cal-ev-renew'\s*\n\s*: \(_isNewToday/.test(src));
 ok('　　金框用品牌金、紅框用 danger',
    /\.cal-ev\.cal-ev-std\.cal-ev-newtoday \.evc-body\{[\s\S]{0,120}border-color:var\(--gold-d,#b48a56\)/.test(src)
    && /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,120}border-color:var\(--danger,#b5372e\)/.test(src));
 ok('　　手機端同一套（別人的課卡不標）',
    /const _vis=\(layer==='mine'\|\|isAdmin\);/.test(src)
-   && /const _mkAlert = \(_unpaidM\|\|_alertM\) \? ' cal-ev-renew' : \(_newM \? ' cal-ev-newtoday' : ''\);/.test(src));
+   && /const _mkAlert = _unpaidM \? ' cal-ev-renew'/.test(src));
 
 console.log('\n外框 CSS 必須壓過 .cal-ev-std 的 box-shadow:none');
 {
