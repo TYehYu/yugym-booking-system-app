@@ -67,20 +67,25 @@ console.log('\n資料庫端同一道規則');
 ok('前端有對應的錯誤訊息', /'TICKET.INSTALLMENT_LOCKED'/.test(src));
 
 console.log('\n連續取消');
-ok('★ 有整批取消入口', /onclick="openSeriesCancel\('\$\{b\.id\}'\)"/.test(src));
-ok('★ 只有真的屬於一系列時才出現這顆鈕（單堂課不顯示）',
-   /let _hasSeries=false;/.test(src) && /_hasSeries=\(await seriesOf\(b\)\)\.length>1;/.test(src)
-   && /b\.category!=='小班肌力'&&_hasSeries\)/.test(src));
+ok('★ 不做獨立的「連續取消」按鈕（2026-07-29 二修）',
+   !/openSeriesCancel/.test(src) && !/連續取消…/.test(src));
+ok('★ 改成取消時追問：只取消這堂／連同後面',
+   /async function askSeriesCancel\(id, mode\)/.test(src)
+   && /只取消這堂/.test(src) && /連同後面 \$\{later\.length\} 堂/.test(src));
+ok('　　單堂課不會多這一步（沒有後續就直接取消）',
+   /if\(!later\.length\) return cancelBooking\(id, mode\);/.test(src));
+ok('　　只算「這堂之後」的課，不會回頭取消已上過的',
+   /later=\(await seriesOf\(b\)\)\.filter\(x=>x\.id!==id && key\(x\)>key\(b\)\);/.test(src));
+ok('　　沿用上一步選的退課／扣課方式', /取消方式沿用上一步的選擇/.test(src));
 ok('★ 系列判定＝同會員＋同課別＋同教練＋同星期＋同時間',
    /async function seriesOf\(b\)\{/.test(src)
    && /\(parseYmd\(x\.date\)\|\|new Date\(\)\)\.getDay\(\)===dow/.test(src));
 ok('　　只抓今天以後、仍為已預約的課',
    /x\.status==='booked'[\s\S]{0,80}String\(x\.date\)>=today/.test(src));
-ok('★ 可逐筆勾選，不是全有全無', /class="sc-ck"/.test(src) && /function scAll\(/.test(src));
-ok('★ 退課／扣課兩種結果都要明講',
-   /runSeriesCancel\('none'\)/.test(src) && /runSeriesCancel\('force'\)/.test(src));
+ok('★ 退課／扣課在前一步就選定並明講',
+   /askSeriesCancel\('\$\{id\}','none'\)/.test(src) && /askSeriesCancel\('\$\{id\}','force'\)/.test(src));
 ok('　　批次取消用 silent，不逐筆關視窗重繪',
-   /cancelBooking\(id, mode, \{silent:true\}\)/.test(src) && /const _silent=!!\(opts&&opts\.silent\);/.test(src));
+   /cancelBooking\(id, p\.mode, \{silent:true\}\)/.test(src) && /const _silent=!!\(opts&&opts\.silent\);/.test(src));
 ok('　　RPC 建立的連續預約會補標 recurring（否則認不出同系列）',
    /update\(\{recurring:true\}\)/.test(src));
 

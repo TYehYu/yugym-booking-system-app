@@ -4985,6 +4985,19 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 }
 /* 手機不顯示（櫃檯用桌機盯場，手機版空間留給操作） */
 @media (max-width:900px){ #desk-feed{display:none;} }
+/* 待簽約名單：續約狀態標籤與手動標記鈕（2026-07-29） */
+.tdl-row2{display:flex;align-items:center;gap:8px;padding:0;}
+.tdl-main{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:transparent;
+  border:none;padding:10px 12px;cursor:pointer;font-family:inherit;text-align:left;}
+.tdl-acts{flex:0 0 auto;display:flex;gap:6px;padding-right:10px;}
+.tdl-b{font-size:11.5px;padding:5px 10px;border-radius:8px;border:1px solid var(--bd);
+  background:#fff;color:var(--t2);cursor:pointer;font-family:inherit;white-space:nowrap;}
+.tdl-b:hover{color:var(--text);}
+.tdl-b.on{background:var(--gold-d,#b48a56);border-color:var(--gold-d,#b48a56);color:#fff;font-weight:700;}
+.tdl-rs{margin-left:7px;font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 8px;}
+.tdl-rs-ok{background:var(--sage-bg);color:var(--green);}
+.tdl-rs-gold{background:#f7efe0;color:#8a5e28;}
+.tdl-rs-muted{background:var(--card2);color:var(--t3);}
 /* 連續取消清單（2026-07-29） */
 .sc-list{max-height:min(38vh,300px);overflow-y:auto;border:1px solid var(--bd);border-radius:10px;
   background:var(--card2);padding:4px;}
@@ -6082,8 +6095,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.2151';
-const APP_VERSION_LABEL='v260729.2151';
+const APP_VERSION = '260729.2212';
+const APP_VERSION_LABEL='v260729.2212';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10276,10 +10289,23 @@ PAGES.g_dashboard=async function(){
     const mids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
     mids.forEach(mid=>{ const m=memMap[mid]; if(!m) return;
       if(kind==='renew' && ((_memGrpLeft[mid]||{})[g]||0)>0) return;   // 已買新票 → 不用談續約
-      const e=(_signBy[mid]=_signBy[mid]||{id:mid,name:m.name,tags:new Set()});
+      const e=(_signBy[mid]=_signBy[mid]||{id:mid,name:m.name,tags:new Set(),tkid:b.ticket_id||null});
+      if(!e.tkid && b.ticket_id) e.tkid=b.ticket_id;
       e.tags.add(kind==='install'?'分期繳費':'續課'); });
   });
-  const _signList=Object.values(_signBy).map(e=>({id:e.id,name:e.name,sub:[...e.tags].join('・')}));
+  /* 續約狀態（2026-07-29 使用者定案）：
+     ・已續約＝今天有這位會員的購買紀錄（自動判定，不用人工標）
+     ・考慮中／不續約＝櫃檯手動標在票券上（renew_status），標了就不再催 */
+  const _paidToday=new Set();
+  (_dayTk||[]).forEach(t=>{ if(t.member_id) _paidToday.add(t.member_id); });
+  (_dayPur||[]).forEach(p=>{ if(p.member_id) _paidToday.add(p.member_id); });
+  const _tkById={}; (mtickets||[]).forEach(t=>{ _tkById[t.id]=t; });
+  const _signList=Object.values(_signBy).map(e=>{
+    const tk=e.tkid?_tkById[e.tkid]:null;
+    const st=_paidToday.has(e.id) ? 'renewed' : ((tk&&tk.renew_status)||'');
+    const stLbl={renewed:'已續約',considering:'考慮中',declined:'不續約'}[st]||'';
+    return {id:e.id,name:e.name,sub:[...e.tags].join('・'),tkid:e.tkid||'',rs:st,rsLabel:stLbl};
+  });
   const _signNames=_signList.map(x=>x.name);
   const _l=_signNames.length
     ? _signNames.slice(0,6).join('、')+(_signNames.length>6?` 等 ${_signNames.length} 人`:'')
@@ -10446,14 +10472,41 @@ function openTodoList(kind){
   const L=(window._todoLists||{})[kind];
   if(!L) return;
   const ava=n=>`<span class="tdl-ava">${(n||'—').trim().slice(0,1)}</span>`;
-  const body=(it)=>`${ava(it.name)}<span class="tdl-tx"><span class="tdl-n">${it.name||'—'}</span>${it.sub?`<span class="tdl-s">${it.sub}</span>`:''}</span>`;
+  /* 續約追蹤（2026-07-29 使用者定案）：已續約自動判定（今天有收款），
+     另給兩顆手動鈕——「考慮中」給不是當天付款的中間答案、「不續約」給明確不再上課的。
+     標了就不再天天催，但名單仍看得到結果，老闆一眼知道這筆續約談完了沒。 */
+  const RS={renewed:['已續約','ok'],considering:['考慮中','gold'],declined:['不續約','muted']};
+  const tag=(it)=>{ const r=RS[it.rs]; return r?`<span class="tdl-rs tdl-rs-${r[1]}">${r[0]}</span>`:''; };
+  const body=(it)=>`${ava(it.name)}<span class="tdl-tx"><span class="tdl-n">${it.name||'—'}${tag(it)}</span>${it.sub?`<span class="tdl-s">${it.sub}</span>`:''}</span>`;
+  const acts=(it)=>(kind!=='sign'||!it.tkid||it.rs==='renewed')?'':
+    `<span class="tdl-acts">
+       <button class="tdl-b${it.rs==='considering'?' on':''}" onclick="event.stopPropagation();setRenewStatus('${it.tkid}','considering')">考慮中</button>
+       <button class="tdl-b${it.rs==='declined'?' on':''}" onclick="event.stopPropagation();setRenewStatus('${it.tkid}','declined')">不續約</button>
+     </span>`;
   const rows=(L.items||[]).map(it=> it.id
-    ? `<button class="tdl-row" onclick="openMemberDetail('${it.id}')">${body(it)}<span class="tdl-ar">›</span></button>`
+    ? `<div class="tdl-row tdl-row2"><button class="tdl-main" onclick="openMemberDetail('${it.id}')">${body(it)}<span class="tdl-ar">›</span></button>${acts(it)}</div>`
     : `<div class="tdl-row tdl-static">${body(it)}</div>`).join('');
   showModal(`<div class="modal-title">${L.title}　<span style="font-size:12.5px;color:var(--t3);font-weight:500;">${(L.items||[]).length} 位</span></div>
     ${L.note?`<div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:12px;">${L.note}</div>`:''}
     ${rows?`<div class="tdl-list">${rows}</div>`:`<div class="empty"><div class="em-t">${L.empty||'沒有資料'}</div></div>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+/* 標記續約狀態（2026-07-29）：考慮中／不續約寫在票券上，再按一次同一顆＝取消標記 */
+async function setRenewStatus(tkid, st){
+  if(!isDeskLike()){ showToast('只有管理員或櫃台可標記'); return; }
+  try{
+    const t=await dbGet('member_tickets',tkid);
+    if(!t){ showToast('找不到票券'); return; }
+    const next=(t.renew_status===st)?null:st;
+    const{error}=await sb.from('member_tickets').update({
+      renew_status:next, renew_noted_at:next?new Date().toISOString():null,
+      renew_noted_by:next?SESSION.id:null }).eq('id',tkid);
+    if(error) throw error;
+    dbCacheClear('member_tickets');
+    showToast(next?({considering:'已標記「考慮中」',declined:'已標記「不續約」'}[next]):'已取消標記');
+    closeModal();
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('標記失敗：'+((e&&e.message)||e)); }
 }
 /* ══ 會員申辦審核（2026-07-23 使用者定案）══
    會員掃 QR 填完資料 → 進 member_link_requests 佇列 → 櫃台在首頁右下角滑出訊息看到 →
@@ -12969,12 +13022,13 @@ async function validateBooking(bk,date,time,duration){
     const dup=sameDay.find(x=> x.member_id===bk.member_id &&
       overlaps(ns,ne, timeToMin(x.start_time), timeToMin(x.start_time)+(x.duration||60)) );
     if(dup){
-      let famOK=false;
-      if(bk.category==='自主訓練' || dup.category==='自主訓練'){
-        try{ const mrec=await dbGet('members',bk.member_id);
-          famOK=Array.isArray(mrec&&mrec.family_members)&&mrec.family_members.length>0; }catch(_){}
-      }
-      if(!famOK) return '會員於該時段已有預約';
+      /* 2026-07-29 使用者定案（三修）：自主訓練同一時段可用同一個帳號約多個名額
+         （場地有幾個位就能約幾個，例如多功能 2 位就能約 2 次），但一次只能約一個 ——
+         每次都要重跑一遍預約流程，避免一人一次掃掉整排位子。
+         名額上限仍由下方的場地容量把關；家庭成員名單不再是前提。
+         其他課種（教練課／團課／體驗）維持一人一時段的防呆。 */
+      const selfOK = bk.category==='自主訓練' && dup.category==='自主訓練';
+      if(!selfOK) return '會員於該時段已有預約';
     }
   }
 
@@ -16265,13 +16319,6 @@ async function openBookingDetail(id){
       /* 家庭共享使用人（2026-07-29）：自主訓練由家人使用時，trial_name 記稱呼 */
       + ((b.category==='自主訓練'&&b.trial_name)?`<div><span style="color:var(--t2);">使用人</span>　${b.trial_name}<span style="color:var(--t3);font-size:11.5px;">（家庭成員）</span></div>`:'');
   }
-  /* 「連續取消」只在這堂真的屬於一系列連續預約時才出現（2026-07-29 使用者指示）——
-     單堂課出現這顆鈕只會讓人困惑。判定同 seriesOf()：今天以後、同會員／同課別／同教練／
-     同星期幾／同時段，超過 1 堂才算一系列。 */
-  let _hasSeries=false;
-  if(!isMemberView && b.member_id && b.category!=='小班肌力' && (b.status==='booked'||b.status==='checked_in')){
-    try{ _hasSeries=(await seriesOf(b)).length>1; }catch(_){}
-  }
   showModal(`<div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <span>預約明細</span>
       ${b.status==='booked'&&!isGroupD&&staffCanCheckin
@@ -16344,8 +16391,6 @@ async function openBookingDetail(id){
       ${/* 補課券只屬於團課的四週方案（2026-07-26 使用者指示：教練課沒有補課機制，取消的教練課不出現此鈕） */''}
       ${(isDeskLike())&&b.status==='cancelled'&&b.member_id&&b.category==='小班肌力'&&!b.makeup_granted?`<button class="btn btn-gold" onclick="confirmMakeup('${b.id}')">補發補課券</button>`:''}
       ${(b.pending_contract&&!b.member_id&&b.status==='booked'&&(isDeskLike()))?`<button class="btn btn-green" onclick="openConvertPending('${b.id}')">已簽約，轉正式預約</button>`:''}
-      ${(canCancel&&ownByCoach&&!isMemberView&&b.member_id&&b.category!=='小班肌力'&&_hasSeries)
-        ? `<button class="btn btn-ghost" style="color:#b5372e;" onclick="openSeriesCancel('${b.id}')">連續取消…</button>` : ''}
       ${canCancel&&ownByCoach?(isMemberView
         ? (isGroupD&&Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id)&&!isPastD
             ? `<button class="btn btn-danger" onclick="memLeaveGroup('${b.id}')">取消報名</button>`
@@ -16373,55 +16418,55 @@ async function seriesOf(b){
       && (parseYmd(x.date)||new Date()).getDay()===dow)
     .sort((a,c)=>String(a.date).localeCompare(String(c.date)));
 }
-async function openSeriesCancel(id){
+/* 取消時追問（2026-07-29 使用者指示，二修）：不做獨立的「連續取消」按鈕 ——
+   按下取消後，如果這堂屬於一系列連續預約（同會員／同課別／同教練／同星期／同時段），
+   再跳一個視窗問「只取消這堂」還是「連同後面的一起取消」。單堂課不會多這一步。 */
+async function askSeriesCancel(id, mode){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
-  const list=await seriesOf(b);
-  if(list.length<=1){ showToast('這個時段沒有其他同系列的課'); return; }
+  let later=[];
+  try{
+    const key=x=>String(x.date)+String(x.start_time||'');
+    later=(await seriesOf(b)).filter(x=>x.id!==id && key(x)>key(b));
+  }catch(_){}
+  if(!later.length) return cancelBooking(id, mode);
+  window._scPend={id, mode, ids:later.map(x=>x.id)};
   const WD=['日','一','二','三','四','五','六'];
-  const withTk=list.filter(x=>x.ticket_id).length;
-  const held=list.filter(x=>x.pending_contract&&!x.ticket_id).length;
-  const rows=list.map((x,i)=>{
-    const d=parseYmd(x.date);
-    return `<label class="sc-row">
-      <input type="checkbox" class="sc-ck" value="${x.id}" checked>
-      <span class="sc-d">${String(x.date).replace(/-/g,'/')}（${d?WD[d.getDay()]:''}）</span>
+  const d=parseYmd(b.date);
+  const list=later.slice(0,8).map(x=>{
+    const dx=parseYmd(x.date);
+    return `<div class="sc-row"><span class="sc-d">${String(x.date).replace(/-/g,'/')}（${dx?WD[dx.getDay()]:''}）</span>
       <span class="sc-t">${String(x.start_time).slice(0,5)}</span>
-      <span class="sc-x">${x.pending_contract&&!x.ticket_id?'待繳費保留':(x.ticket_id?'已扣 1 堂':'未綁票券')}</span>
-    </label>`;
-  }).join('');
-  showModal(`<div class="modal-title">連續取消</div>
+      <span class="sc-x">${x.pending_contract&&!x.ticket_id?'待繳費保留':(x.ticket_id?'已扣 1 堂':'未綁票券')}</span></div>`;
+  }).join('')+(later.length>8?`<div class="sc-row"><span class="sc-x" style="margin:0;">…另有 ${later.length-8} 堂</span></div>`:'');
+  showModal(`<div class="modal-title">後面的課要一起取消嗎？</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:10px;">
-      這位會員在 <b>週${WD[(parseYmd(b.date)||new Date()).getDay()]} ${String(b.start_time).slice(0,5)}</b> 的
-      ${b.category}，今天以後還有 <b>${list.length}</b> 堂。取消哪幾堂請自行勾選。</div>
-    <div style="display:flex;gap:8px;margin-bottom:8px;">
-      <button class="btn btn-ghost btn-sm" onclick="scAll(true)">全選</button>
-      <button class="btn btn-ghost btn-sm" onclick="scAll(false)">全不選</button>
-    </div>
-    <div class="sc-list">${rows}</div>
+      這堂是 <b>週${d?WD[d.getDay()]:''} ${String(b.start_time).slice(0,5)}</b> 連續預約的其中一堂，
+      後面還有 <b>${later.length}</b> 堂：</div>
+    <div class="sc-list">${list}</div>
     <div style="font-size:12px;color:var(--t2);margin:12px 0 4px;line-height:1.8;">
-      其中 <b>${withTk}</b> 堂已扣票${held?`、<b>${held}</b> 堂是待繳費保留（本來就沒扣）`:''}。<br>
-      待繳費保留的課取消不涉及票券；已扣票的依下面選擇處理。</div>
+      取消方式沿用上一步的選擇（${mode==='force'?'退回票券':mode==='none'?'扣課不退':'依 24 小時規則'}）。</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">返回</button>
-      <button class="btn btn-ghost" style="color:#b5372e;" onclick="runSeriesCancel('none')">取消・扣課不退</button>
-      <button class="btn btn-danger" onclick="runSeriesCancel('force')">取消・退回票券</button>
+      <button class="btn btn-ghost" onclick="runSeriesCancel(false)">只取消這堂</button>
+      <button class="btn btn-danger" onclick="runSeriesCancel(true)">連同後面 ${later.length} 堂</button>
     </div>`);
 }
-function scAll(on){ document.querySelectorAll('.sc-ck').forEach(c=>{c.checked=!!on;}); }
-async function runSeriesCancel(mode){
-  const ids=[...document.querySelectorAll('.sc-ck')].filter(c=>c.checked).map(c=>c.value);
-  if(!ids.length){ showToast('請至少勾選一堂'); return; }
+async function runSeriesCancel(withLater){
+  const p=window._scPend; if(!p) return;
+  const ids=withLater?[p.id].concat(p.ids):[p.id];
   const foot=document.querySelector('.modal-foot');
   if(foot) foot.innerHTML='<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">取消中…（0/'+ids.length+'）</div>';
   let done=0, fail=0;
   for(const id of ids){
-    try{ await cancelBooking(id, mode, {silent:true}); done++; }
+    try{ await cancelBooking(id, p.mode, {silent:true}); done++; }
     catch(e){ fail++; console.error('連續取消失敗',id,e); }
     if(foot) foot.innerHTML='<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">取消中…（'+(done+fail)+'/'+ids.length+'）</div>';
   }
+  window._scPend=null;
   dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
   closeModal();
-  showToast(`已取消 ${done} 堂`+(fail?`，${fail} 堂失敗`:'')+(mode==='force'?'（票券已退回）':'（扣課不退）'));
+  showToast(`已取消 ${done} 堂`+(fail?`，${fail} 堂失敗`:'')
+    +(p.mode==='force'?'（票券已退回）':p.mode==='none'?'（扣課不退）':''));
   navTo(CUR_PAGE);
 }
 /* ── 課卡備註（2026-07-29 使用者指示：讓教練或櫃檯填寫特殊狀況）──
@@ -16968,8 +17013,8 @@ async function confirmCancelBooking(id){
         ・<b>扣課不退</b>：視同已使用，票券不加回（會員端會收到通知）。</div>
       <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
         <button class="btn btn-ghost" onclick="closeModal()">返回</button>
-        <button class="btn btn-ghost" style="color:#b5372e;" onclick="cancelBooking('${id}','none')">取消・扣課不退</button>
-        <button class="btn btn-danger" onclick="cancelBooking('${id}','force')">取消・退回票券</button>
+        <button class="btn btn-ghost" style="color:#b5372e;" onclick="askSeriesCancel('${id}','none')">取消・扣課不退</button>
+        <button class="btn btn-danger" onclick="askSeriesCancel('${id}','force')">取消・退回票券</button>
       </div>`);
     return;
   }
@@ -16979,7 +17024,7 @@ async function confirmCancelBooking(id){
   showModal(`<div class="modal-title">取消預約</div>
     <div style="font-size:13.5px;color:var(--text);padding:6px 0 4px;">確定要取消 ${b.date} ${b.start_time} 的${b.category}嗎？</div>
     <div style="font-size:12px;color:${within24&&!isTrial?'#b5372e':'var(--t2)'};margin-top:6px;line-height:1.7;">${refundText}</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-danger" onclick="cancelBooking('${id}','auto')">確定取消</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-danger" onclick="askSeriesCancel('${id}','auto')">確定取消</button></div>`);
 }
 // 回傳 true=已儲存（或無變更、視同完成）／false=驗證失敗（呼叫端應保留編輯狀態讓使用者修正）
 async function saveBookingTime(id){
