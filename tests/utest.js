@@ -7,8 +7,8 @@ const h=fs.readFileSync('/Users/tungyeh/Projects/yugym-booking-system-app/index.
 const a=h.indexOf('  const tkUsedCount=(t)=>{');
 const b=h.indexOf('  // 票券卡片渲染（圓圈進度）', a);
 const src=h.slice(a,b);
-const calc=(total,dates,t,inferByTk,bkByTk)=>new Function('usedDates','inferByTk','bkByTk',
-  src+' return tkUsedCount;')({[t.id]:dates},inferByTk||{},bkByTk||{})(Object.assign({sessions_total:total},t));
+const calc=(total,dates,t,inferByTk,bkByTk)=>new Function('usedDates','inferByTk','bkByTk','_grpTkNewest','_grpPending',
+  src+' return tkUsedCount;')({[t.id]:dates},inferByTk||{},bkByTk||{},null,0)(Object.assign({sessions_total:total},t));
 let pass=0,fail=0;
 const chk=(n,got,want)=>{const ok=got===want;ok?pass++:fail++;console.log(`  ${ok?'✓':'✗'} ${n}  got=${got} want=${want}`);};
 const BK=st=>({status:st});

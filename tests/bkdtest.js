@@ -58,7 +58,7 @@ ok('　　簽到章在右下，不會跟徽章打架',
 /* ── 會員票券：預約了但還沒上，不該被收進「歷史紀錄」（2026-07-29 使用者指示） ── */
 console.log('\n會員票券的歷史紀錄判定');
 const hs=src.slice(src.indexOf('const tkUsedCount=(t)=>{'), src.indexOf('  // 票券卡片渲染（圓圈進度）'));
-const mk=(usedDates,bkByTk)=>new Function('usedDates','inferByTk','bkByTk', hs+'\nreturn tkUsedCount;')(usedDates||{},{},bkByTk||{});
+const mk=(usedDates,bkByTk)=>new Function('usedDates','inferByTk','bkByTk','_grpTkNewest','_grpPending', hs+'\nreturn tkUsedCount;')(usedDates||{},{},bkByTk||{},null,0);
 const BKD=n=>Array.from({length:n},()=>({status:'booked'}));
 
 eq('★ 四堂全約完但一堂都還沒上 → 已上 0（不是 4）',
@@ -75,6 +75,18 @@ ok('★ 卡片圓點與歷史判定用同一個數字（不會出現空心圓卻
 ok('　　過期票仍照原規則歸類（不被新規則攔截）',
    /if\(_isExpiredTk\(t\)\) return false;[\s\S]{0,260}if\(t\.expire_date&&String\(t\.expire_date\)\.slice\(0,10\)<_todayYmd2\) return true;/.test(src));
 ok('　　已退款的票仍算歷史', /if\(t\.status==='refunded'\) return true;/.test(src));
+
+console.log('\n後台會員檔案的票券分頁也要同一套判準');
+ok('★ 已上堂數抽成 usedOf()，卡片與歷史判定共用', /const usedOf=t=>\{/.test(src)
+   && /const used=usedOf\(t\);/.test(src));
+ok('★ 歷史判定先看已上堂數', /if\(total>0 && usedOf\(t\)<total\) return false;/.test(src));
+ok('★ 團課待上堂數另外算（團課預約不綁 ticket_id）',
+   /const _grpPendingP=\(\(\)=>\{/.test(src) && /const _grpPending=\(\(\)=>\{/.test(src));
+ok('　　只算新制預約（BK- 開頭），匯入的舊預約不重複扣',
+   (src.match(/String\(b\.id\|\|''\)\.indexOf\('BK-'\)!==0\) return;/g)||[]).length===2);
+ok('　　待上堂數只從最近買的那張團課票扣',
+   /_grpTkNewest && t\.id===_grpTkNewest\.id/.test(src) && /_grpNewestP && t\.id===_grpNewestP\.id/.test(src));
+ok('　　已簽到就算真的用掉了', (src.match(/if\(at==='checked_in'\) return;/g)||[]).length>=2);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

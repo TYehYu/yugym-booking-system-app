@@ -24,7 +24,8 @@ const myBookings=[];
 const tkUsedCount=t=>{
   const total=Number(t.sessions_total)||0;
   const rem=t.sessions_remaining==null?total:Number(t.sessions_remaining);
-  return Math.min(total, Math.max(0, total-rem));
+  // 測試替身：t._pending 代表「已預約但還沒簽到」的堂數（那些不算已用）
+  return Math.min(total, Math.max(0, total-rem-(Number(t._pending)||0)));
 };
 const typeMap={
   'tt-mqdt55uosz5n':{id:'tt-mqdt55uosz5n',name:'自主訓練',category:'自主訓練',color:'self'},
@@ -100,6 +101,21 @@ const S2=build(ymd,TODAY,{role:'coach'},myBookings,typeMap,renderTkCard,mkDeskLi
 // 註：標題「已過期（可重新啟用）」本身含「重新啟用」四字，故以 onclick 判定按鈕是否存在
 ok('教練看不到重新啟用按鈕', S2.tkListHtml(COURSE,true).indexOf('openReactivateTicket')<0);
 ok('教練仍看得到過期區塊',   S2.tkListHtml(COURSE,true).indexOf('已過期（可重新啟用）')>=0);
+
+/* 2026-07-29 使用者指示：只完成預約、還沒簽到銷課 → 不算用掉，不能收進歷史紀錄 */
+console.log('已預約但還沒簽到的票券不進歷史');
+{
+  const {_isHistoryTk}=build(ymd,TODAY,SESSION,myBookings,typeMap,renderTkCard,mkDeskLike(SESSION),tkUsedCount);
+  const T=(o)=>Object.assign({id:'g',ticket_type_id:'tt-pt',sessions_total:4,status:'usable'},o);
+  ok('★ 四堂全約完但一堂都沒簽到 → 不是歷史',
+     _isHistoryTk(T({sessions_remaining:0,_pending:4}))===false);
+  ok('★ 上完兩堂、另兩堂只是預約 → 仍不是歷史',
+     _isHistoryTk(T({sessions_remaining:0,_pending:2}))===false);
+  ok('★ 四堂都簽到完 → 才進歷史',
+     _isHistoryTk(T({sessions_remaining:0,_pending:0}))===true);
+  ok('　　已過期仍照舊歸類（不被新規則攔截）',
+     _isHistoryTk(T({sessions_remaining:0,_pending:4,expire_date:'2026-07-01'}))===true);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
