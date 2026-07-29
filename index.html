@@ -5018,6 +5018,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tdl-rs-ok{background:var(--sage-bg);color:var(--green);}
 .tdl-rs-gold{background:#f7efe0;color:#8a5e28;}
 .tdl-rs-no{background:#fbeaea;color:var(--danger,#b5372e);}
+.msb-note{margin:6px 2px 0;padding:8px 10px;background:#f7efe0;border:1px solid #e8d9b8;
+  border-radius:9px;font-size:11.5px;line-height:1.7;color:#8a5e28;}
+.msb-note b{color:#7a4f1e;}
 /* 會員首頁課卡上方的小提示與課程顏色圖例（2026-07-29 使用者指示） */
 .mem-hint{margin:-2px 0 12px;padding:9px 11px;background:var(--card2);border-radius:10px;
   display:flex;flex-direction:column;gap:7px;}
@@ -6128,8 +6131,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.0006';
-const APP_VERSION_LABEL='v260730.0006';
+const APP_VERSION = '260730.0016';
+const APP_VERSION_LABEL='v260730.0016';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9021,23 +9024,53 @@ function tkUnlockedLeft(t){
   return Math.max(0, Math.min(remain, unlocked-used));
 }
 function tkIsInstall(t){ return !!(t && t.installment && typeof t.installment==='object'); }
-async function listUsableTickets(member_id,type_id,bookDate){
+/* 該票券在「這個日期＋時段」是否可用（2026-07-30）：
+   票種設 time_restricted（友善自主訓練、友善教練課）＝僅限平日 18:00 前。
+   沒帶時間就只檢查星期，時段留給 validateBooking 最後把關。 */
+function tkTimeOk(t,bookDate,bookTime){
+  const tt=(window._ttCache||[]).find(x=>x.id===t.ticket_type_id);
+  if(!tt || !tt.time_restricted) return true;
+  if(!bookDate) return true;
+  const d=parseYmd(bookDate); if(!d) return true;
+  const dow=d.getDay();
+  if(dow===0||dow===6) return false;                 // 週末不可用
+  if(bookTime && timeToMin(bookTime)>=1080) return false;  // 18:00 之後不可用
+  return true;
+}
+async function listUsableTickets(member_id,type_id,bookDate,bookTime){
   const all=await dbGetAll('member_tickets');
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
   const wantCat=categoryOfTypeId(type_id); // 目標課程類別
   const groupMode = wantCat==='小班肌力';   // 團課：不同方案票券互通（同為團課即可用）
+  /* 自主訓練（2026-07-30 使用者指示）：一般自主訓練與友善自主訓練視為同一池 ——
+     「友善自主訓練」已從課程類型清單移除（與自主訓練同義），若仍嚴格比對票種，
+     櫃檯開自主訓練就永遠扣不到友善點數。改成同類別即可用，再由 tkTimeOk 依時段篩掉
+     不能用的（友善點限平日 18:00 前）。 */
+  const selfMode = wantCat==='自主訓練';
   return all.filter(t=>{
       if(!tkUsableBy(t,member_id)) return false;   // 持有人或共享者皆可用
       if(t.status!=='usable' || !(t.sessions_remaining>0)) return false;
       if(!(tkUnlockedLeft(t)>0)) return false;     // 分期：未繳期數的堂數不可預約（2026-07-29）
       if(bookDate && t.expire_date && t.expire_date<bookDate) return false; // 已過期
+      if(!tkTimeOk(t,bookDate,bookTime)) return false;   // 限時段票券：星期／18:00 前
       if(groupMode) return ticketCategoryOf(t)==='小班肌力'; // 團課：同類別即可（不分方案）
+      if(selfMode)  return ticketCategoryOf(t)==='自主訓練'; // 自主：一般與友善同池
       return bkTicketTypeOk(t,type_id);                      // 其他類別：嚴格比對＋「教練課」兼容 VIP/限定舊票
     })
-    .sort((a,b)=>(a.expire_date||'').localeCompare(b.expire_date||''));
+    /* 排序：限時段的票（友善）優先用掉 —— 它只能平日 18:00 前用，留著最容易白白過期；
+       其餘依到期日先進先出。 */
+    .sort((a,b)=>{
+      const ra=tkIsTimeRestricted(a)?0:1, rb=tkIsTimeRestricted(b)?0:1;
+      if(ra!==rb) return ra-rb;
+      return (a.expire_date||'').localeCompare(b.expire_date||'');
+    });
 }
-async function findUsableTicket(member_id,type_id,bookDate){
-  const cand=await listUsableTickets(member_id,type_id,bookDate);
+function tkIsTimeRestricted(t){
+  const tt=(window._ttCache||[]).find(x=>x.id===(t&&t.ticket_type_id));
+  return !!(tt && tt.time_restricted);
+}
+async function findUsableTicket(member_id,type_id,bookDate,bookTime){
+  const cand=await listUsableTickets(member_id,type_id,bookDate,bookTime);
   return cand[0]||null;
 }
 async function logTicket(ticket_id,action,delta,booking_id,operator,note){
@@ -15076,7 +15109,7 @@ async function refreshBkTicket(){
   const info=document.getElementById('bk-ticket-info');
   if(!info)return;
   if(!mid){info.innerHTML='選擇會員後，將自動帶入可用票券。';return;}
-  const list=await listUsableTickets(mid,tid,bookDate);
+  const list=await listUsableTickets(mid,tid,bookDate,_bkWizard.time);
   if(list.length===0){
     info.innerHTML='<span style="color:var(--danger);">⚠ 此會員沒有可用的該類票券（或票券已過期），無法預約。</span>';
     return;
@@ -15194,7 +15227,7 @@ async function doConvertPending(memberId){
  try{
   const id=window._cpBid; const b=await dbGet('bookings',id);
   if(!b||!b.pending_contract){ showToast('這筆不是待簽約卡位'); return; }
-  const tk=await findUsableTicket(memberId,b.ticket_type_id,b.date);
+  const tk=await findUsableTicket(memberId,b.ticket_type_id,b.date,b.start_time);
   if(!tk){ showToast('該會員沒有此課程的可用票券，請先完成銷售'); return; }
   b.member_id=memberId; b.ticket_id=tk.id; b.pending_contract=false;
   b.trial_name=null; b.trial_phone=null;
@@ -15283,7 +15316,7 @@ async function _submitBookingInner(){
       await dbPut('bookings',bk);
       // 為有團體課票的會員各扣 1 堂（沒票的略過，由教練負責）
       for(const mid of ids){
-        const tk=await findUsableTicket(mid,type_id,dW);
+        const tk=await findUsableTicket(mid,type_id,dW,time);
         if(tk){ await deductTicket(tk,bk.id,SESSION.id); charged++; }
         else skipped++;
       }
@@ -15307,7 +15340,7 @@ async function _submitBookingInner(){
   // 使用者選定的票券（多張時的下拉，或單張的 hidden）
   const selTicketId=document.getElementById('bk-ticket-sel')?.value||null;
   // 確認有可用票券（用起始日過濾過期）
-  const firstTk=selTicketId?await dbGet('member_tickets',selTicketId):await findUsableTicket(member_id,type_id,date);
+  const firstTk=selTicketId?await dbGet('member_tickets',selTicketId):await findUsableTicket(member_id,type_id,date,time);
   if(!firstTk){showToast('此會員沒有可用票券（或已過期），無法預約');return;}
   let fmt=firstTk.format||null;
   if(!fmt&&firstTk.source_plan_id){const pl=await dbGet('course_plans',firstTk.source_plan_id);fmt=pl?pl.format:null;}
@@ -15319,7 +15352,7 @@ async function _submitBookingInner(){
       const sel=await dbGet('member_tickets',selTicketId);
       if(sel && sel.member_id===mid && sel.status==='usable' && sel.sessions_remaining>0 && (!sel.expire_date||sel.expire_date>=d)) return sel;
     }
-    return await findUsableTicket(mid,type_id,d);
+    return await findUsableTicket(mid,type_id,d,time);
   };
   // 單筆預約（非連續）：先預驗證場地，若溢出到次選場地→跳確認，教練同意才建立
   if(!recurring){
@@ -15412,9 +15445,9 @@ async function runRecurringBooking(opts){
   const dur=o.duration||60;
   const operator=(SESSION&&SESSION.id)||o.coach_id||null;   // SESSION 是 let，不可用 window.SESSION（2026-07-28 修正）
   // 找票券函式：預設用 listUsableTickets(依類別)；呼叫端可傳 findTicketFn(memberId, dateStr) 覆寫
-  const findTk = o.findTicketFn || (async(mid,ds)=>{ const c=await listUsableTickets(mid,o.type_id,ds); return c[0]||null; });
+  const findTk = o.findTicketFn || (async(mid,ds)=>{ const c=await listUsableTickets(mid,o.type_id,ds,o.time); return c[0]||null; });
   // 上限用「已開通可約堂數」而非 sessions_remaining —— 分期票未繳的期數不能先約走（2026-07-29）
-  const countRemain = o.countRemainFn || (async(mid)=>{ const c=await listUsableTickets(mid,o.type_id,o.startDate); return c.reduce((s,t)=>s+tkUnlockedLeft(t),0); });
+  const countRemain = o.countRemainFn || (async(mid)=>{ const c=await listUsableTickets(mid,o.type_id,o.startDate,o.time); return c.reduce((s,t)=>s+tkUnlockedLeft(t),0); });
   // 1) 票券剩餘上限
   let remainTotal=0;
   try{ remainTotal=await countRemain(o.member_id); }catch(_){}
@@ -17238,7 +17271,7 @@ async function saveGroupMembers(id){
   }
   // 新加入的有票就扣、移除的退回（依該 booking 的票券類型）
   for(const mid of added){
-    const tk=await findUsableTicket(mid,b.ticket_type_id,b.date);
+    const tk=await findUsableTicket(mid,b.ticket_type_id,b.date,b.start_time);
     if(tk) await deductTicket(tk,b.id,SESSION.id);
   }
   for(const mid of removed){
@@ -28328,7 +28361,10 @@ function msbRenderSheet(){
   else if(!s.groups.friendly.length && (s.futureSelf||[]).length) btns.push(`<button class="${s.type==='self'?'on':''}" onclick="msbSetType('self')">自主訓練（換時段）</button>`);   // 點數用完仍可挑新時段換（2026-07-29）
   if(s.groups.friendly.length) btns.push(`<button class="${s.type==='friendly'?'on':''}" onclick="msbSetType('friendly')">友善（${sum(s.groups.friendly)} 點）</button>`);
   btns.push(`<button class="msb-tg ${isGrpType?'on':''}" onclick="msbSetType('group')">團體課（${sum(s.grpTks||[])} 堂）</button>`);
-  const typeRow=`<div class="msb-types">${btns.join('')}</div>`;
+  /* 友善點限平日 18:00 前（2026-07-30 使用者指示）：規則本來就有生效（週末不可選、
+     18:00 後時段不出現），但畫面沒說原因，會員會以為系統壞了。這裡明講。 */
+  const typeRow=`<div class="msb-types">${btns.join('')}</div>`
+    + (s.type==='friendly'?`<div class="msb-note">友善自主訓練點數僅限<b>平日 18:00 前</b>使用；假日或晚間時段請改用一般自主訓練點數。</div>`:'');
   /* 可預約日期按鈕列（2026-07-26 使用者指示）：往後掃 14 天、效期內的日子做成按鈕，
      不用回月曆挑日（月曆此時已收合）。團體課模式改列「有開課的日子」。 */
   let _dateBtns='';

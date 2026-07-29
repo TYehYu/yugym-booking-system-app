@@ -17,9 +17,10 @@ const {tkSharedIds,tkParticipants,tkUsableBy,findRefundTargetTicket,allocBooking
 
 // listUsableTickets 的篩選條件（原始碼裡的那段 filter，逐字抽出來跑）
 const lu=h.slice(h.indexOf('async function listUsableTickets('));
-const filtSrc=lu.slice(lu.indexOf('return all.filter(t=>{'), lu.indexOf(".sort((a,b)=>(a.expire_date||'')"));
-const mkUsable=new Function('all','member_id','type_id','bookDate','wantCat','groupMode',
-  'ticketCategoryOf','bkTicketTypeOk','tkUsableBy',
+// 2026-07-30：排序改成「限時段票優先」多行寫法，終點改抓 .sort( 起點
+const filtSrc=lu.slice(lu.indexOf('return all.filter(t=>{'), lu.indexOf('\n    .sort('));
+const mkUsable=new Function('all','member_id','type_id','bookDate','bookTime','wantCat','groupMode','selfMode',
+  'ticketCategoryOf','bkTicketTypeOk','tkUsableBy','tkTimeOk',
   grabFn('tkUnlockedLeft')+'\n'+filtSrc+';');   // filtSrc 已含完整的 all.filter(...)，只補分號
 
 let pass=0,fail=0;
@@ -49,15 +50,18 @@ const TT={'tt-pt':{id:'tt-pt',name:'教練課',category:'私人教練'}};
 const SHARED={id:'TK-XU',member_id:'XU',shared_with:['LAN'],ticket_type_id:'tt-pt',format:'1V2',
   sessions_total:10,sessions_remaining:4,status:'usable',expire_date:'2026-08-03',start_date:'2026-05-18'};
 const all=[SHARED];  // 2026-07-27 效期改 8/3：分配器新增「未來預約只分給效期涵蓋的票」守門（楊文華案例），過期票吃未來課的舊測資不再成立
-const usableFor=(mid)=>mkUsable(all,mid,'tt-pt','2026-07-01','私人教練',false,
-  ()=>'私人教練',(t,id)=>t.ticket_type_id===id,tkUsableBy);
+// 參數順序：all, member_id, type_id, bookDate, bookTime, wantCat, groupMode, selfMode,
+//           ticketCategoryOf, bkTicketTypeOk, tkUsableBy, tkTimeOk
+const CAT=()=>'私人教練', TYPEOK=(t,id)=>t.ticket_type_id===id, TIMEOK=()=>true;
+const usableFor=(mid)=>mkUsable(all,mid,'tt-pt','2026-07-01','10:00','私人教練',false,false,
+  CAT,TYPEOK,tkUsableBy,TIMEOK);
 ok('陳蘭馨預約時挑得到這張共享票', usableFor('LAN').length===1);
 ok('許朱同本人也挑得到',            usableFor('XU').length===1);
 ok('無關會員挑不到',                usableFor('OTHER').length===0);
-ok('過期後誰都挑不到', mkUsable(all,'LAN','tt-pt','2026-08-04','私人教練',false,
-    ()=>'私人教練',(t,id)=>t.ticket_type_id===id,tkUsableBy).length===0);
-ok('堂數用完挑不到', mkUsable([Object.assign({},SHARED,{sessions_remaining:0})],'LAN','tt-pt','2026-07-01',
-    '私人教練',false,()=>'私人教練',(t,id)=>t.ticket_type_id===id,tkUsableBy).length===0);
+ok('過期後誰都挑不到', mkUsable(all,'LAN','tt-pt','2026-08-04','10:00','私人教練',false,false,
+    CAT,TYPEOK,tkUsableBy,TIMEOK).length===0);
+ok('堂數用完挑不到', mkUsable([Object.assign({},SHARED,{sessions_remaining:0})],'LAN','tt-pt','2026-07-01','10:00',
+    '私人教練',false,false,CAT,TYPEOK,tkUsableBy,TIMEOK).length===0);
 
 console.log('取消退堂也認共享');
 ok('共享者取消 → 退回持有人那張票',
