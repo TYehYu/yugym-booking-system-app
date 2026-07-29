@@ -6119,8 +6119,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.2331';
-const APP_VERSION_LABEL='v260729.2331';
+const APP_VERSION = '260729.2336';
+const APP_VERSION_LABEL='v260729.2336';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11252,7 +11252,7 @@ PAGES.ops_center=async function(){
         `<div>${dayShifts.map(s=>{
           const nm=coachMap[s.emp_id]||(memMap[s.emp_id]?memMap[s.emp_id].name:s.emp_id);
           const att=attByEmp[s.emp_id];
-          const code=s.code||shiftCode(s.start_time,s.end_time);
+          const code=s.code||shiftCode(s.start_time,s.end_time,s.date);
           const status=att?(att.clock_out?`<span class="tag tag-ok" style="font-size:10px;">已下班</span>`:`<span class="tag tag-warn" style="font-size:10px;">上班中</span>`):`<span class="tag" style="font-size:10px;color:var(--t3);background:var(--card2);">未打卡</span>`;
           const punchTxt = att&&att.clock_in
             ? `🕒 打卡 ${att.clock_in}${att.clock_out?'–'+att.clock_out:'– 上班中'}`
@@ -19493,9 +19493,18 @@ async function saveShiftQuickEditor(){
   }catch(e){ console.error('saveShiftQuickEditor 失敗:',e); showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
 }
 // 依起迄時間反推班別代號（給舊資料或手動輸入用）
-function shiftCode(start,end){
+function shiftCode(start,end,dateStr){
   const m=SHIFT_QUICK.find(([c,s,e])=>s===start&&e===end);
-  return m?m[0]:'';
+  if(m) return m[0];
+  /* 2026-07-29 使用者回報（小曾 7/29 10:00–22:00 沒變紅）：常用時段對不上就推不出代號，
+     格子退回顯示起迄時間、也就沒有班別色。這裡補一道保險 ——
+     班表「涵蓋當日完整營業時間」即視為全班（顯示「全」、標品牌紅）。
+     只推全班這一種：早/晚/中的界線因人而異，硬猜會標錯。 */
+  if(start&&end&&dateStr){
+    const bh=BUSINESS_HOURS[(parseYmd(dateStr)||new Date(TODAY)).getDay()];
+    if(bh && timeToMin(start)<=timeToMin(bh[0]) && timeToMin(end)>=timeToMin(bh[1])) return '全';
+  }
+  return '';
 }
 // 班表顯示統一（2026-07-27 使用者指示）：A→早、C→晚、午→中（僅顯示層，儲存代碼不動）
 function shiftCodeDisp(c){ return ({'A':'早','A1':'早','C':'晚','C1':'晚','午':'中','B':'中','B1':'中'})[c]||c; }
@@ -19691,7 +19700,7 @@ async function openMonthScheduleModal(mon){
       const dateStr=`${my}-${mm}-${String(i+1).padStart(2,'0')}`;
       const dow=new Date(Number(my),Number(mm)-1,i+1).getDay(); const isWk=dow===0||dow===6;
       const list=monthShifts.filter(s=>s.emp_id===e.id&&s.date===dateStr);
-      const inner=list.map(s=>{ const code=s.code||shiftCode(s.start_time,s.end_time);
+      const inner=list.map(s=>{ const code=s.code||shiftCode(s.start_time,s.end_time,s.date);
         const leaveTag=s.leave_type?`<span class="sh-leave">${s.leave_type[0]}${s.leave_hours||''}</span>`:'';
         const _cd=shiftCodeDisp(code);
         /* 2026-07-27 使用者指示：平日綠、假日金（假日晚班 15:00 起，順便做區別）、全班紅（9:00–17:00） */
@@ -19768,7 +19777,7 @@ async function renderShiftsTab(){
       const isWk=dow===0||dow===6;
       const list=monthShifts.filter(s=>s.emp_id===e.id&&s.date===dateStr);
       const inner=list.map(s=>{
-        const code=s.code||shiftCode(s.start_time,s.end_time);
+        const code=s.code||shiftCode(s.start_time,s.end_time,s.date);
         const leaveTag=s.leave_type?`<span class="sh-leave">${s.leave_type[0]}${s.leave_hours||''}</span>`:'';
         const _cd=shiftCodeDisp(code);
         /* 2026-07-27 使用者指示：平日綠、假日金（假日晚班 15:00 起，順便做區別）、全班紅（9:00–17:00） */
@@ -19869,7 +19878,7 @@ function openShiftEdit(empId,dateStr){
     <div style="margin-bottom:10px;padding-top:10px;border-top:1px solid var(--bd);">
       <button class="btn btn-ghost btn-sm" style="width:100%;" onclick="applyThisToWeekly('${empId}','${dateStr}')">📌 設為每週${'日一二三四五六'[parseYmd(dateStr).getDay()]}固定（套用本月所有週${'日一二三四五六'[parseYmd(dateStr).getDay()]}）</button>
     </div>
-    <input type="hidden" id="sh-empid" value="${empId}"><input type="hidden" id="sh-date" value="${dateStr}"><input type="hidden" id="sh-id" value="${cur?cur.id:''}"><input type="hidden" id="sh-code" value="${cur?(cur.code||shiftCode(cur.start_time,cur.end_time)):''}">
+    <input type="hidden" id="sh-empid" value="${empId}"><input type="hidden" id="sh-date" value="${dateStr}"><input type="hidden" id="sh-id" value="${cur?cur.id:''}"><input type="hidden" id="sh-code" value="${cur?(cur.code||shiftCode(cur.start_time,cur.end_time,cur.date)):''}">
     <div class="modal-foot">
       ${cur?`<button class="btn btn-ghost" style="color:#c0392b;" onclick="deleteShift('${cur.id}')">刪除</button>`:''}
       <button class="btn btn-ghost" onclick="closeModal()">取消</button>
@@ -26033,7 +26042,7 @@ function unifiedCalendar(opts){
         }else if(att&&att.clock_in){
           topRight=`<span class="ucal-tr ucal-tr-on"><i class="ucal-dot ucal-dot-g"></i>上班</span>`;
         }else{
-          const code=myShift.code||shiftCode(myShift.start_time,myShift.end_time);
+          const code=myShift.code||shiftCode(myShift.start_time,myShift.end_time,myShift.date);
           topRight=`<span class="ucal-tr ucal-tr-shift">${shiftLabelOf(code)}</span>`;
         }
       }
@@ -26721,7 +26730,7 @@ function renderAttToday(needPunch,all,coaches,shifts){
     ? `<tr><td colspan="5" style="text-align:center;color:var(--t3);padding:20px;">本日無人排班</td></tr>`
     : dutyEmpIds.map(id=>{
         const c=coachMap[id]; const nm=c?(c.name||'—'):id;
-        const segs=byEmp[id].map(s=>{const code=s.code||shiftCode(s.start_time,s.end_time);return `${code?code+' ':''}${s.start_time}–${s.end_time}`;}).join('、');
+        const segs=byEmp[id].map(s=>{const code=s.code||shiftCode(s.start_time,s.end_time,s.date);return `${code?code+' ':''}${s.start_time}–${s.end_time}`;}).join('、');
         const r=recMap[id]; const wh=r?calcWorkHours(r):null;
         return `<tr>
           <td data-label="姓名">${nm}</td>
@@ -31656,7 +31665,7 @@ PAGES.coach_attendance=async function(){
     let inner='';
     if(list.length){
       const s=list[0];
-      const code=s.code||shiftCode(s.start_time,s.end_time);
+      const code=s.code||shiftCode(s.start_time,s.end_time,s.date);
       const leave=list.find(x=>x.leave_type);
       // 第一列：班別代號（無代號則顯示起迄）
       const codeHtml=code?`<div class="ca-code">${code}</div>`:`<div class="ca-time">${s.start_time}<br>${s.end_time}</div>`;
