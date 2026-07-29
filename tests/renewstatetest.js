@@ -58,5 +58,17 @@ ok('★ 取消一律由櫃檯手動觸發，並可選只取消這堂或連同後
    /async function askSeriesCancel\(id, mode\)/.test(src)
    && /只取消這堂/.test(src) && /連同後面/.test(src));
 
+/* ── 會員首頁課卡上方的提示（2026-07-29 使用者指示） ── */
+console.log('\n會員首頁課卡提示');
+ok('★ 有「開課前 30 分鐘開放簽到」的提示',
+   /課程開始前 <b>30 分鐘<\/b>開放簽到（團體課由教練點名）/.test(src));
+ok('★ 附課程顏色圖例', /const _MEM_LEGEND=\[\['pt','教練課'\]/.test(src)
+   && /<span class="mem-lg"><i style="background:\$\{_colMap3\[k\]\}"><\/i>\$\{l\}<\/span>/.test(src));
+ok('★ 圖例顏色與圓點同一份色表（不會兩邊對不上）',
+   /_MEM_LEGEND\.map\(\(\[k,l\]\)=>[\s\S]{0,80}_colMap3\[k\]/.test(src));
+ok('　　沒有課時不顯示提示', /const taskHint=_cardDots\?/.test(src));
+ok('　　提示插在標題與圓點之間', /\$\{taskHint\}\s*\n\s*\$\{_cardDots\?/.test(src));
+ok('　　圖例可換行、不撐破畫面', /\.mem-lgs\{display:flex;flex-wrap:wrap;/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
