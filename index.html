@@ -2909,6 +2909,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 空心環的邊色＝課種色（52% 混，實測下團課橘/按摩青/體驗紫皆可辨） */
 .mtk-free,.mtk-booked{background:#fff;border:2px solid color-mix(in srgb,var(--tk-acc,#1F6F54) 52%,#d8d2c6);box-shadow:none;color:var(--tk-acc,#1F6F54);}
 .mtk-lock{background:#f0ece3;border:1.5px dashed #cfc7b8;box-shadow:none;color:#a39b8f;font-size:11px;}
+/* 已預約、但這張票券已經沒堂數可對應（票用完或還沒買新票）→ 紅虛線圈提醒要補票
+   （2026-07-30 使用者回報：8/1 團課明明有預約，三位會員的圓形卡都看不到那一堂） */
+.mtk-over{background:#fff;border:1.5px dashed var(--danger,#b5372e);box-shadow:none;color:var(--danger,#b5372e);}
 /* 會員資料票券分頁：歷史紀錄摺疊區（2026-07-28）——過期/用完縮成單行 */
 .pp-hist{margin-top:14px;border-top:1px dashed var(--bd);padding-top:10px;}
 .pp-hist summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--t2);user-select:none;padding:4px 0;}
@@ -4973,8 +4976,22 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 手機端行事曆：別人的課卡不吃觸控（2026-07-29 使用者回報滑頁面會被卡住） */
 .cag-std.cag-noint{pointer-events:none;}
 /* ── 會員自助異動的桌機滑出通知（2026-07-29 使用者指示：右下角滑出）── */
-#desk-feed{position:fixed;right:18px;bottom:18px;z-index:9999;display:flex;flex-direction:column;
+/* z-index 250：壓在頁面內容之上、但在對話框（.modal-bg 300）之下 ——
+   通知卡固定在右下角，若蓋過視窗會擋住「確認預約」那排按鈕（2026-07-30）。 */
+#desk-feed{position:fixed;right:18px;bottom:18px;z-index:250;display:flex;flex-direction:column;
   gap:10px;align-items:flex-end;pointer-events:none;max-width:min(380px,90vw);}
+#dfeed-list{display:flex;flex-direction:column;gap:10px;align-items:flex-end;width:100%;}
+/* 過夜累積多則時的抬頭：一眼看到還有幾則沒確認，並可一次確認完 */
+.dfeed-head{pointer-events:auto;display:flex;align-items:center;gap:10px;width:100%;
+  background:var(--text,#241f18);color:#fff;border-radius:10px;padding:7px 8px 7px 12px;
+  font-size:12px;font-weight:700;box-shadow:0 8px 22px rgba(20,18,14,.22);}
+.dfeed-head span{flex:1;min-width:0;}
+.dfeed-allok{flex:0 0 auto;border:1px solid rgba(255,255,255,.5);background:transparent;color:#fff;
+  font-size:11.5px;font-weight:700;border-radius:7px;padding:5px 10px;cursor:pointer;
+  font-family:inherit;white-space:nowrap;}
+.dfeed-allok:hover{background:rgba(255,255,255,.14);}
+.dfeed-more{pointer-events:auto;width:100%;text-align:center;font-size:11px;color:var(--t3);
+  background:var(--card2,#f4f1ea);border:1px solid var(--bd);border-radius:9px;padding:6px 8px;}
 .dfeed-card{pointer-events:auto;display:flex;align-items:flex-start;gap:11px;width:100%;
   background:#fff;border:1px solid var(--bd);border-left:4px solid var(--green);border-radius:12px;
   padding:12px 12px 12px 13px;box-shadow:0 10px 30px rgba(20,18,14,.18);
@@ -6114,8 +6131,8 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
   <!-- 教練端手機版：右下浮動打卡 FAB -->
   <button id="punch-fab" class="punch-fab" style="display:none;"></button>
   <!-- 教練端手機版：底部固定導覽列 -->
-  <nav id="bottom-nav" class="bottom-nav" style="display:none;"></nav>
-</div>
+const APP_VERSION = '260730.0114';
+const APP_VERSION_LABEL='v260730.0114';
 
 <div id="toast"></div>
 
@@ -6966,10 +6983,38 @@ let _deskFeedTimer=null, _deskFeedBusy=false;
 function deskFeedEnabled(){
   return CLOUD && SESSION && isDeskLike() && !isMobileLayout();
 }
+/* 掛在 <body> 底下（不是頁面容器）→ 換到哪一頁都留在右下角，不會被 navTo 重繪掉。 */
 function deskFeedHost(){
   let el=document.getElementById('desk-feed');
-  if(!el){ el=document.createElement('div'); el.id='desk-feed'; document.body.appendChild(el); }
-  return el;
+  if(!el){
+    el=document.createElement('div'); el.id='desk-feed';
+    el.innerHTML=`<div class="dfeed-head" id="dfeed-head" hidden><span id="dfeed-cnt"></span>
+        <button class="dfeed-allok" onclick="deskFeedAckAll()">✓ 全部確認</button></div>
+      <div id="dfeed-list"></div>`;
+    document.body.appendChild(el);
+  }
+  return document.getElementById('dfeed-list');
+}
+/* 抬頭：過夜累積多則時，一眼看到還有幾則沒確認（單則就不佔位） */
+function deskFeedHead(total, shown){
+  const h=document.getElementById('dfeed-head'); if(!h) return;
+  h.hidden = !(total>1);
+  const c=document.getElementById('dfeed-cnt');
+  if(c) c.textContent=`會員異動　${total} 則待確認`;
+  const list=document.getElementById('dfeed-list'); if(!list) return;
+  let more=document.getElementById('dfeed-more');
+  if(total>shown){
+    if(!more){ more=document.createElement('div'); more.id='dfeed-more'; more.className='dfeed-more'; list.appendChild(more); }
+    more.textContent=`另有 ${total-shown} 則，確認後會接著顯示`;
+    list.appendChild(more); // 永遠留在最下面
+  }else if(more) more.remove();
+}
+/* 一次確認全部（過夜累積時逐張點很花時間）——只確認畫面上這幾張，剩下的下一輪補上 */
+async function deskFeedAckAll(){
+  const ids=[...document.querySelectorAll('#desk-feed [data-nid]')].map(el=>el.getAttribute('data-nid'));
+  if(!ids.length) return;
+  if(!confirm(`確認這 ${ids.length} 則會員異動通知？`)) return;
+  for(const id of ids) await deskFeedAck(id);
 }
 const DESK_FEED_IC={
   self_book:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>',
@@ -6992,7 +7037,7 @@ function deskFeedPush(n){
     <span class="dfeed-body"><span class="dfeed-t">${String(n.title||'').replace(/</g,'&lt;')}</span>
       <span class="dfeed-b">${String(n.body||'').replace(/</g,'&lt;')}</span>
       ${when?`<span class="dfeed-w">${when}</span>`:''}</span>
-    <button class="dfeed-ok" onclick="deskFeedAck('${n.id}')">確認</button>`;
+    <button class="dfeed-ok" onclick="deskFeedAck('${n.id}')">✓ 確認</button>`;
   host.appendChild(el);
 }
 /* 櫃檯按「確認」才消失並標已讀（先移除、寫入失敗再抓回來，避免訊息被默默吃掉） */
@@ -7012,7 +7057,9 @@ async function deskFeedPoll(){
   if(!deskFeedEnabled() || _deskFeedBusy || document.hidden) return;
   _deskFeedBusy=true;
   try{
-    const q=await sb.from('notifications').select('id,type,title,body,created_at')
+    /* 不分時間、不分頁面：只要是還沒確認的會員異動就撈回來。
+       一次最多 20 張卡（畫面塞得下的量），總數用 count 取回，多的在抬頭標明。 */
+    const q=await sb.from('notifications').select('id,type,title,body,created_at',{count:'exact'})
       .eq('recipient_type','desk').eq('read',false)
       .order('created_at',{ascending:true}).limit(20);
     if(q && !q.error){
@@ -7021,6 +7068,7 @@ async function deskFeedPoll(){
         if(!live.has(el.getAttribute('data-nid'))) el.remove();
       });
       (q.data||[]).forEach(deskFeedPush);
+      deskFeedHead(q.count==null?(q.data||[]).length:q.count, (q.data||[]).length);
     }
   }catch(_){}
   _deskFeedBusy=false;
@@ -29799,6 +29847,14 @@ function ticketTokens(t,bks,typeMap,usedCount,curId){
       s+=`<span class="mtk mtk-booked${cur}" style="--tk-acc:${v.accent};" title="已預約 ${b.date||''} ${b.start_time||''}${cur?'（本堂）':''}">${md(b)}</span>`;
     }
     else s+=`<span class="mtk mtk-free" style="--tk-acc:${v.accent};" title="未使用"></span>`;
+  }
+  /* 票券堂數不夠放的已預約課程仍要看得到（2026-07-30 使用者回報：8/1 團課明明有預約，
+     名單三個人的圓形卡都沒有那一堂）—— 票用完或新票還沒買時，這幾堂等於沒有票可扣，
+     用紅虛線圈標出來，櫃檯才知道要補票。 */
+  while(bi<booked.length){
+    const b=booked[bi++];
+    const cur=(curId&&b.id===curId)?' mtk-cur':'';
+    s+=`<span class="mtk mtk-over${cur}" title="已預約 ${b.date||''} ${b.start_time||''}　·　此票券已無堂數可對應，需補票${cur?'（本堂）':''}">${md(b)}</span>`;
   }
   return s||`<span class="mtk mtk-free" style="--tk-acc:${v.accent};"></span>`;
 }

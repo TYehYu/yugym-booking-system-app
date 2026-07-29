@@ -114,6 +114,28 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('已簽到者不顯示請假鈕', !html.includes('>請假<'));
     chk('已簽到者可取消簽到', html.includes('>取消簽到<'));
   }
+  /* 2026-07-30 使用者回報：8/1 的團課預約明細，三位會員的圓形卡都沒看到 8/1。
+     原因是圓點只畫 sessions_total 顆——票券已用完（剩 0）時就沒有位子放已預約的課。
+     票用完或新票還沒買的那幾堂要另外用紅虛線圈標出來，櫃檯才知道要補票。 */
+  console.log('\n票券堂數放不下的已預約課程（紅虛線圈）');
+  {
+    const T={id:'TK',ticket_type_id:'grp',sessions_total:4,sessions_remaining:0};
+    const done=['2026-05-23','2026-06-06','2026-06-13','2026-06-20']
+      .map((d,i)=>({id:'D'+i,date:d,start_time:'11:00',status:'checked_in',category:'小班肌力'}));
+    const soon={id:'B-0801',date:'2026-08-01',start_time:'11:00',status:'booked',category:'小班肌力'};
+    const h=helpers.ticketTokens(T,[...done,soon],{},4,'B-0801');
+    chk('★ 票券 4 堂全用完，8/1 的預約仍看得到', h.includes('8/1'));
+    chk('★ 用紅虛線圈標示（本張票券已無堂數可對應）', /class="mtk mtk-over/.test(h));
+    chk('★ 本堂仍會被高亮（mtk-cur）', /mtk-over mtk-cur/.test(h));
+    chk('　　原本的 4 顆實心不受影響', (h.match(/mtk-used/g)||[]).length===4);
+    chk('　　總共畫 5 顆（4 實心＋1 溢出）', (h.match(/class="mtk /g)||[]).length===5);
+    const h2=helpers.ticketTokens({id:'T2',ticket_type_id:'grp',sessions_total:4,sessions_remaining:3},
+      [done[0],soon],{},1,'B-0801');
+    chk('　　票還有堂數時，已預約的照舊畫在空位（不是紅圈）',
+      h2.includes('8/1') && /mtk-booked/.test(h2) && !/mtk-over/.test(h2));
+    chk('　　紅虛線圈的樣式有定義', /\.mtk-over\{[^}]*var\(--danger/.test(require('fs').readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8')));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail?1:0);
 })();

@@ -43,5 +43,33 @@ ok('　　三種事件用不同顏色（預約綠／取消紅／改期金）',
 ok('　　尊重系統的減少動態設定', /@media \(prefers-reduced-motion:reduce\)/.test(src));
 ok('　　標題與內容都做過跳脫', (src.match(/\.replace\(\/<\/g,'&lt;'\)/g)||[]).length>=2);
 
+/* 2026-07-30 使用者指示：預約／移動／刪除三種都要跳，不管幾點，
+   顯示在桌機任何頁面的右下角，等櫃檯勾確認才消失。 */
+console.log('\n三種異動都要有卡片');
+ok('★ 預約（self_book）有圖示與綠色', /self_book:'<svg/.test(src) && /\.dfeed-card\{[\s\S]{0,200}border-left:4px solid var\(--green\)/.test(src));
+ok('★ 取消（self_cancel）有圖示與紅色', /self_cancel:'<svg/.test(src) && /\.dfeed-cancel\{border-left-color:var\(--danger/.test(src));
+ok('★ 改期（self_move）有圖示與金色', /self_move:'<svg/.test(src) && /\.dfeed-move\{border-left-color:var\(--gold-d/.test(src));
+ok('★ 不分時間：查詢沒有任何日期條件，只看 read=false',
+   /\.eq\('recipient_type','desk'\)\.eq\('read',false\)/.test(src)
+   && !/desk[\s\S]{0,120}\.gte\('created_at'/.test(src));
+
+console.log('\n換頁不會不見');
+ok('★ 卡片掛在 <body>，不在頁面容器裡（navTo 重繪不到）',
+   /掛在 <body> 底下（不是頁面容器）/.test(src)
+   && /document\.body\.appendChild\(el\)/.test(src));
+ok('★ 壓在內容之上、對話框之下（不會擋住視窗按鈕）',
+   /#desk-feed\{position:fixed;right:18px;bottom:18px;z-index:250;/.test(src)
+   && /\.modal-bg\{[^}]*z-index:300;/.test(src));
+
+console.log('\n過夜累積時的抬頭');
+ok('★ 顯示還有幾則待確認', /h\.hidden = !\(total>1\);/.test(src)
+   && /會員異動　\$\{total\} 則待確認/.test(src));
+ok('★ 可一次全部確認', /async function deskFeedAckAll\(\)/.test(src)
+   && /確認這 \$\{ids\.length\} 則會員異動通知？/.test(src));
+ok('　　超過一次顯示上限時講清楚還有幾則，不做無聲截斷',
+   /另有 \$\{total-shown\} 則，確認後會接著顯示/.test(src)
+   && /\{count:'exact'\}/.test(src));
+ok('　　按鈕用勾號', /✓ 確認<\/button>/.test(src) && /✓ 全部確認<\/button>/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
