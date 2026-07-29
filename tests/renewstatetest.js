@@ -30,8 +30,9 @@ ok('★ 綠勾用品牌綠', /\.ev-pa-ok\{background:var\(--green,#1f6f54\);colo
 ok('★ 紅叉與紅字提醒用 danger', /\.ev-pa-no\{background:var\(--danger,#b5372e\)/.test(src)
    && /\.ev-pa-warn\{background:var\(--danger,#b5372e\)/.test(src));
 ok('★ 待處理的課卡整張反紅', /\.cal-ev\.cal-ev-renew\{box-shadow:inset 0 0 0 1\.5px var\(--danger/.test(src));
-ok('　　已續約／不續約不反紅（只有待處理才反紅）',
-   /const _alertCls = \(_renewAlert\|\|_payAlert\) \? ' cal-ev-renew' : '';/.test(src));
+ok('　　已續約／不續約不反紅（只有待付費／待處理才反紅）',
+   /const _alertCls = \(_isUnpaid\|\|_renewAlert\|\|_payAlert\) \? ' cal-ev-renew'/.test(src)
+   && !/_renewDone[\s\S]{0,40}cal-ev-renew/.test(src));
 
 console.log('\n判定邏輯');
 ok('★ 已續約＝同類別有「更晚買」的票（不是只看當天收款）',
@@ -50,6 +51,22 @@ ok('　　待處理排最前，已續約／不續約排後面',
    /const w=x=>x\.rs==='renewed'\?2:\(x\.rs==='declined'\?3:\(x\.rs==='considering'\?1:0\)\);/.test(src));
 ok('　　考慮中／不續約可手動標記與取消標記', /async function setRenewStatus\(tkid, st\)/.test(src)
    && /const next=\(t\.renew_status===st\)\?null:st;/.test(src));
+
+console.log('\n課卡外框提示（品牌色階 紅 > 金）');
+ok('★ 待付費（待簽約卡位／分期待繳費保留）→ 品牌紅',
+   /const _isUnpaid   = !!b\.pending_contract;/.test(src)
+   && /const _alertCls = \(_isUnpaid\|\|_renewAlert\|\|_payAlert\) \? ' cal-ev-renew'/.test(src));
+ok('★ 今天新增的預約 → 品牌金',
+   /const _isNewToday = String\(b\.created_at\|\|''\)\.slice\(0,10\)===ymd\(TODAY\);/.test(src)
+   && /_isNewToday \? ' cal-ev-newtoday' : ''/.test(src));
+ok('★ 同時符合時紅色優先（錢的事比「今天新增」重要）',
+   /\(_isUnpaid\|\|_renewAlert\|\|_payAlert\) \? ' cal-ev-renew'\s*\n\s*: \(_isNewToday/.test(src));
+ok('　　金框用品牌金、紅框用 danger',
+   /\.cal-ev\.cal-ev-newtoday\{box-shadow:inset 0 0 0 1\.5px var\(--gold-d,#b48a56\)/.test(src)
+   && /\.cal-ev\.cal-ev-renew\{box-shadow:inset 0 0 0 1\.5px var\(--danger,#b5372e\)/.test(src));
+ok('　　手機端同一套（別人的課卡不標）',
+   /const _vis=\(layer==='mine'\|\|isAdmin\);/.test(src)
+   && /const _mkAlert = \(_unpaidM\|\|_alertM\) \? ' cal-ev-renew' : \(_newM \? ' cal-ev-newtoday' : ''\);/.test(src));
 
 console.log('\n不做全自動取消');
 ok('★ 沒有任何自動取消後續預約的排程／批次',
