@@ -6049,8 +6049,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1654';
-const APP_VERSION_LABEL='v260729.1654';
+const APP_VERSION = '260729.1715';
+const APP_VERSION_LABEL='v260729.1715';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16074,6 +16074,13 @@ async function openBookingDetail(id){
       /* 家庭共享使用人（2026-07-29）：自主訓練由家人使用時，trial_name 記稱呼 */
       + ((b.category==='自主訓練'&&b.trial_name)?`<div><span style="color:var(--t2);">使用人</span>　${b.trial_name}<span style="color:var(--t3);font-size:11.5px;">（家庭成員）</span></div>`:'');
   }
+  /* 「連續取消」只在這堂真的屬於一系列連續預約時才出現（2026-07-29 使用者指示）——
+     單堂課出現這顆鈕只會讓人困惑。判定同 seriesOf()：今天以後、同會員／同課別／同教練／
+     同星期幾／同時段，超過 1 堂才算一系列。 */
+  let _hasSeries=false;
+  if(!isMemberView && b.member_id && b.category!=='小班肌力' && (b.status==='booked'||b.status==='checked_in')){
+    try{ _hasSeries=(await seriesOf(b)).length>1; }catch(_){}
+  }
   showModal(`<div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <span>預約明細</span>
       ${b.status==='booked'&&!isGroupD&&staffCanCheckin
@@ -16146,7 +16153,7 @@ async function openBookingDetail(id){
       ${/* 補課券只屬於團課的四週方案（2026-07-26 使用者指示：教練課沒有補課機制，取消的教練課不出現此鈕） */''}
       ${(isDeskLike())&&b.status==='cancelled'&&b.member_id&&b.category==='小班肌力'&&!b.makeup_granted?`<button class="btn btn-gold" onclick="confirmMakeup('${b.id}')">補發補課券</button>`:''}
       ${(b.pending_contract&&!b.member_id&&b.status==='booked'&&(isDeskLike()))?`<button class="btn btn-green" onclick="openConvertPending('${b.id}')">已簽約，轉正式預約</button>`:''}
-      ${(canCancel&&ownByCoach&&!isMemberView&&b.member_id&&b.category!=='小班肌力')
+      ${(canCancel&&ownByCoach&&!isMemberView&&b.member_id&&b.category!=='小班肌力'&&_hasSeries)
         ? `<button class="btn btn-ghost" style="color:#b5372e;" onclick="openSeriesCancel('${b.id}')">連續取消…</button>` : ''}
       ${canCancel&&ownByCoach?(isMemberView
         ? (isGroupD&&Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id)&&!isPastD
@@ -29807,9 +29814,13 @@ function contractFillBlockHTML(d){
   if(d){
     const eight=d.validDays===56, year=d.validDays===365||d.validDays===366;
     const other=(!eight&&!year)?`${d.validDays} 天`:'';
+    /* 2026-07-29 使用者指示：分期付款的各期金額另起一行 —— 跟「一次付清／分期付款」擠同一行
+       會被壓成很窄的一長串，簽約當下看不清楚每期要收多少。 */
     const instRow = d.installN>1
-      ? `分期：□一次付清　${ck(1)}分期付款——`+(d.instAmts||[]).map((a,i)=>`第${['一','二','三','四','五','六'][i]||i+1}期＄${v(a.toLocaleString())}（　／　）`).join('　')
-      : `分期：${ck(1)}一次付清　□分期付款——第一期＄＿＿＿＿＿（　／　）　第二期＄＿＿＿＿＿（　／　）　第三期＄＿＿＿＿＿（　／　）`;
+      ? `分期：□一次付清　${ck(1)}分期付款<div style="margin-top:6px;">`
+        +(d.instAmts||[]).map((a,i)=>`第${['一','二','三','四','五','六'][i]||i+1}期＄${v(a.toLocaleString())}（　／　）`).join('　　')
+        +`</div>`
+      : `分期：${ck(1)}一次付清　□分期付款<div style="margin-top:6px;">第一期＄＿＿＿＿＿（　／　）　　第二期＄＿＿＿＿＿（　／　）　　第三期＄＿＿＿＿＿（　／　）</div>`;
     return `<div class="ct-fill" style="margin:6px 0 20px;white-space:normal;">
     <div style="font-weight:700;font-size:14px;margin-bottom:7px;">會員資料 Member Information</div>
     <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
@@ -29834,7 +29845,7 @@ function contractFillBlockHTML(d){
       <tr>${td('購買日期：')}${td('課程類別：')}${td('課程堂數：　　　堂')}</tr>
       <tr>${td('每堂費用：')}${td('贈送堂數：')}${td('應付總金額：')}</tr>
       <tr>${td('課程有效期限：□啟用日起 8 週　□啟用日起 12 個月　□其他：＿＿＿＿＿＿','colspan="2"')}${td('付款方式：□現金　□匯款')}</tr>
-      <tr>${td('分期：□一次付清　□分期付款——第一期＄＿＿＿＿＿（　／　）　第二期＄＿＿＿＿＿（　／　）　第三期＄＿＿＿＿＿（　／　）','colspan="3"')}</tr>
+      <tr>${td('分期：□一次付清　□分期付款<div style="margin-top:6px;">第一期＄＿＿＿＿＿（　／　）　　第二期＄＿＿＿＿＿（　／　）　　第三期＄＿＿＿＿＿（　／　）</div>','colspan="3"')}</tr>
     </table>
   </div>`;
 }

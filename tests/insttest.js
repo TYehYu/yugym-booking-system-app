@@ -68,6 +68,9 @@ ok('前端有對應的錯誤訊息', /'TICKET.INSTALLMENT_LOCKED'/.test(src));
 
 console.log('\n連續取消');
 ok('★ 有整批取消入口', /onclick="openSeriesCancel\('\$\{b\.id\}'\)"/.test(src));
+ok('★ 只有真的屬於一系列時才出現這顆鈕（單堂課不顯示）',
+   /let _hasSeries=false;/.test(src) && /_hasSeries=\(await seriesOf\(b\)\)\.length>1;/.test(src)
+   && /b\.category!=='小班肌力'&&_hasSeries\)/.test(src));
 ok('★ 系列判定＝同會員＋同課別＋同教練＋同星期＋同時間',
    /async function seriesOf\(b\)\{/.test(src)
    && /\(parseYmd\(x\.date\)\|\|new Date\(\)\)\.getDay\(\)===dow/.test(src));
