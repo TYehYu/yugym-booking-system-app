@@ -5247,8 +5247,12 @@ body.wtl-dragging-active *{-webkit-user-select:none!important;user-select:none!i
 .sh-table .sh-cell.has{background:#EEF3E9;}
 .sh-table .sh-chip{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;}
 .sh-code{display:inline-flex;align-items:center;justify-content:center;background:var(--green);color:#fff;border-radius:6px;min-width:26px;height:24px;padding:0 6px;font-size:15px;font-weight:500;letter-spacing:0.02em;}   /* 2026-07-27 使用者指示：不用粗體 */
-.sh-code.sh-code-wkd{background:var(--gold);}    /* 假日＝品牌金（假日晚班 15:00 起） */
-.sh-code.sh-code-full{background:#d9342b;}       /* 全班＝品牌紅（9:00–17:00） */
+/* 班別配色（2026-07-29 使用者指示）：全班＝品牌紅、早班＝品牌金、晚班＝品牌綠。
+   自訂代號（A/C 之類）沒有對應班別時，維持原本的假日金／平日綠。 */
+.sh-code.sh-code-full{background:var(--danger,#b5372e);}   /* 全班 */
+.sh-code.sh-code-am{background:var(--gold-d,#b48a56);}     /* 早班 */
+.sh-code.sh-code-pm{background:var(--green);}              /* 晚班 */
+.sh-code.sh-code-wkd{background:var(--gold);}              /* 自訂代號的假日底色 */
 .sh-chip-time .sh-t1,.sh-chip-time .sh-t2{font-size:12px;font-weight:700;color:var(--green);font-family:var(--num);}
 .sh-chip-time .sh-t2{color:var(--t2);font-weight:600;}
 .sh-leave{display:inline-block;margin-top:2px;font-size:9.5px;font-weight:700;color:#c0392b;background:#fbeae8;border-radius:4px;padding:0 4px;}
@@ -6115,8 +6119,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.2323';
-const APP_VERSION_LABEL='v260729.2323';
+const APP_VERSION = '260729.2331';
+const APP_VERSION_LABEL='v260729.2331';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19413,6 +19417,15 @@ function shiftHours(start,end){
   return Math.round(mins/30)/2;      // 0.5 小時為單位
 }
 // 常用時段（可在「系統設定 → 常用時段」自訂；存於 salary_templates:_shift_quick）
+/* 班別 → 顏色 class（2026-07-29 使用者指示：全班紅、早班金、晚班綠）。
+   以代號文字判斷，自訂代號沒對到就退回原本的假日金／平日綠。 */
+function shiftCodeCls(code, isWeekend){
+  const c=String(code||'');
+  if(c.indexOf('全')>=0) return ' sh-code-full';
+  if(c.indexOf('早')>=0) return ' sh-code-am';
+  if(c.indexOf('晚')>=0) return ' sh-code-pm';
+  return isWeekend ? ' sh-code-wkd' : '';
+}
 const SHIFT_QUICK_DEFAULT=[ ['早','10:00','16:00'], ['晚','16:00','22:00'], ['全','10:00','22:00'] ];
 let SHIFT_QUICK=JSON.parse(JSON.stringify(SHIFT_QUICK_DEFAULT));
 async function loadShiftQuick(){
@@ -19682,7 +19695,7 @@ async function openMonthScheduleModal(mon){
         const leaveTag=s.leave_type?`<span class="sh-leave">${s.leave_type[0]}${s.leave_hours||''}</span>`:'';
         const _cd=shiftCodeDisp(code);
         /* 2026-07-27 使用者指示：平日綠、假日金（假日晚班 15:00 起，順便做區別）、全班紅（9:00–17:00） */
-        const _ccls=_cd==='全'?' sh-code-full':(isWk?' sh-code-wkd':'');
+        const _ccls=shiftCodeCls(_cd,isWk);
         const main=code?`<span class="sh-chip sh-chip-code"><b class="sh-code${_ccls}">${_cd}</b></span>`:`<span class="sh-chip sh-chip-time"><span class="sh-t1">${s.start_time}</span><span class="sh-t2">${s.end_time}</span></span>`;
         return main+leaveTag; }).join('');
       const hasLeave=list.some(s=>s.leave_type);
@@ -19759,7 +19772,7 @@ async function renderShiftsTab(){
         const leaveTag=s.leave_type?`<span class="sh-leave">${s.leave_type[0]}${s.leave_hours||''}</span>`:'';
         const _cd=shiftCodeDisp(code);
         /* 2026-07-27 使用者指示：平日綠、假日金（假日晚班 15:00 起，順便做區別）、全班紅（9:00–17:00） */
-        const _ccls=_cd==='全'?' sh-code-full':(isWk?' sh-code-wkd':'');
+        const _ccls=shiftCodeCls(_cd,isWk);
         const main=code?`<span class="sh-chip sh-chip-code"><b class="sh-code${_ccls}">${_cd}</b></span>`:`<span class="sh-chip sh-chip-time"><span class="sh-t1">${s.start_time}</span><span class="sh-t2">${s.end_time}</span></span>`;
         return main+leaveTag;
       }).join('');
@@ -19823,7 +19836,10 @@ function openShiftEdit(empId,dateStr){
   const shifts=window._shiftsCache||[];
   const list=shifts.filter(s=>s.emp_id===empId&&s.date===dateStr);
   const cur=list[0]||null; // 一天一班為主（如需多班可擴充）
-  const quick=SHIFT_QUICK.map(([c,s,e])=>`<button type="button" class="btn btn-ghost btn-sm" style="margin:2px;" onclick="document.getElementById('sh-start').value='${s}';document.getElementById('sh-end').value='${e}';document.getElementById('sh-code').value='${c}';shiftCalcPreview();"><b style="color:var(--green);">${c}</b>　${s}–${e}</button>`).join('');
+  /* 快捷鈕的代號跟月曆同一套配色（2026-07-29）：全班紅、早班金、晚班綠 */
+  const _qcol=c=>String(c).indexOf('全')>=0?'var(--danger,#b5372e)'
+    :(String(c).indexOf('早')>=0?'var(--gold-d,#b48a56)':'var(--green)');
+  const quick=SHIFT_QUICK.map(([c,s,e])=>`<button type="button" class="btn btn-ghost btn-sm" style="margin:2px;" onclick="document.getElementById('sh-start').value='${s}';document.getElementById('sh-end').value='${e}';document.getElementById('sh-code').value='${c}';shiftCalcPreview();"><b style="color:${_qcol(c)};">${c}</b>　${s}–${e}</button>`).join('');
   showModal(`<div class="modal-title">排班 · ${dateStr}</div>
     <div style="display:flex;gap:10px;margin-bottom:10px;">
       <div class="form-row" style="flex:1;margin-bottom:0;"><label>起時間</label><select id="sh-start" onchange="shiftCalcPreview()">${shiftTimeOptions(cur?cur.start_time:'')}</select></div>
