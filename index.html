@@ -6051,8 +6051,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1752';
-const APP_VERSION_LABEL='v260729.1752';
+const APP_VERSION = '260729.1812';
+const APP_VERSION_LABEL='v260729.1812';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16067,14 +16067,28 @@ async function openBookingDetail(id){
         const cur=live[0] || own.slice().sort((p,q)=>String(q.start_date||q.purchase_date||'').localeCompare(String(p.start_date||p.purchase_date||'')))[0] || null;
         if(!cur){ _gTk[mid]=null; return; }
         const total=cur.sessions_total||0;
-        const used=Math.max(0, total-(cur.sessions_remaining||0));
         /* ⚠️ 團課預約的 ticket_id 為 null，無法逐堂對應到票券，日期只能用推的：
            取這位會員「最近 used 堂」的出席紀錄當作這張票扣掉的堂數，未來已預約的課
            填進剩餘圓點。所以日期是合理推估、不是帳本事實。 */
         const h=_hist[mid]||[];
-        const doneAll=h.filter(x=>x.status==='checked_in'||x.status==='completed');
+        const _isDone=x=>{
+          const at=(x.attendance&&typeof x.attendance==='object')?x.attendance[mid]:null;
+          return at==='checked_in' || (!at && (x.status==='checked_in'||x.status==='completed'));
+        };
+        const doneAll=h.filter(_isDone);
+        /* 2026-07-29 使用者回報「日期又跑回 7 月那份」：
+           已用堂數原本直接用「總−剩餘」，但新制是預約當下就扣課 —— 四堂全約在 8 月、
+           一堂都還沒上時餘額也是 0，於是這裡誤判成「用掉 4 堂」，再拿她最近 4 次出席
+           （7/7、7/16、7/23、7/28）去填圓點，看起來就像日期倒退回七月。
+           改成扣掉「已預約但還沒上」的堂數，那些要畫成空心＋預約日期。 */
+        const bookedAhead=h.filter(x=>!_isDone(x) && x.status!=='cancelled');
+        /* 只有新制預約（id 以 BK- 開頭）在「建立當下」就扣了課，那幾堂要從已用堂數扣回來；
+           匯入的舊預約（IMP-／IMPB-）當初沒扣票，餘額裡本來就沒算它們，不能重複扣減
+           —— 否則鍾明潔那種「餘額已反映歷史、未來預約沒扣」的票會少畫實心圓。 */
+        const deductedAhead=bookedAhead.filter(x=>String(x.id||'').indexOf('BK-')===0).length;
+        const used=Math.max(0, total-(cur.sessions_remaining||0)-deductedAhead);
         // used=0 時 slice(-0) 會回傳整個陣列，必須擋掉
-        const bks=[...(used>0?doneAll.slice(-used):[]), ...h.filter(x=>x.status==='booked')];
+        const bks=[...(used>0?doneAll.slice(-used):[]), ...bookedAhead];
         _gTk[mid]={
           left: live.reduce((s,t)=>s+(t.sessions_remaining||0),0),
           tokens: ticketTokens(cur,bks,_typeMapG,Math.min(used,total),b.id),
@@ -17670,6 +17684,18 @@ async function openMemberDetail(member_id){
   const f=(l,v)=>`<div class="mdetail-field"><div class="mdf-l">${l}</div>${v||'—'}</div>`;
   const isCoach = SESSION.role==='coach'; // 教練：精簡檢視，隱藏付款/發票/金額/等級調整等
 
+  /* 已上堂數（2026-07-29 抽成共用）：卡片圓點與「是否該歸到歷史紀錄」要用同一個數字，
+     否則會出現「圓點還有空心、卡片卻被收進歷史」的矛盾。算式說明見 renderTkCard 內註解。 */
+  const tkUsedCount=(t)=>{
+    const total=t.sessions_total||0;
+    const dates=(usedDates[t.id]||[]);
+    const inf=inferByTk[t.id]||[];
+    const bookedBound=((bkByTk[t.id]||[]).filter(x=>x.status==='booked')).length;
+    const faceUsed=Math.max(0,(total-(t.sessions_remaining??total))-bookedBound);
+    return Math.min(total,(t.sessions_remaining==null)
+      ? Math.max(dates.length, inf.filter(x=>x.status==='checked_in'||x.status==='completed').length)
+      : Math.max(dates.length, faceUsed));
+  };
   // 票券卡片渲染（圓圈進度）
   const renderTkCard=(t,extraBtn)=>{
     const ty=typeMap[t.ticket_type_id];
@@ -17685,16 +17711,12 @@ async function openMemberDetail(member_id){
        ② 先進先出推算的已上課數 —— 沒綁預約的匯入票靠這個；
        ③ 帳面已用（總−剩餘−直連仍預約中的扣課）—— 歷史在舊系統、prod 沒有逐筆課的票靠這個。
           「直連仍預約中」要扣掉：新系統預約當下就扣課，還沒上的課不算已用。 */
-    const inf=inferByTk[t.id]||[];
-    const _bookedBound=((bkByTk[t.id]||[]).filter(x=>x.status==='booked')).length;
-    const _faceUsed=Math.max(0,(total-(t.sessions_remaining??total))-_bookedBound);
     /* 2026-07-26 全會員比對（2,478 張 vs 舊系統）修正：推算已上數不能參與取最大 ——
        正式庫有 2,272 筆「已上課未扣票」的歷史課，先進先出會把它們塞進沒用過的票
        （自主訓練 2 點的卡整排被填滿）。餘額口徑修正後帳面已用可信，推算只在
-       沒有餘額資訊時當後備。 */
-    const usedCount = Math.min(total, (t.sessions_remaining==null)
-      ? Math.max(dates.length, inf.filter(x=>x.status==='checked_in'||x.status==='completed').length)
-      : Math.max(dates.length, _faceUsed));
+       沒有餘額資訊時當後備。（實際算式已抽到上方 tkUsedCount） */
+    const inf=inferByTk[t.id]||[];
+    const usedCount = tkUsedCount(t);
     const isDim=(t.status!=='usable')||(t.expire_date&&t.expire_date<ymd(TODAY));
     /* 2026-07-23 使用者指示：票券逐堂顯示全系統統一 —— 改用 ticketTokens
        （課種色圓點：實心＋上課日期／空心＋預約日期／空心未使用），取代原本的灰色 tkc-dot。 */
@@ -17739,7 +17761,18 @@ async function openMemberDetail(member_id){
   const _todayYmd2=ymd(TODAY);
   const _hasFutureBk=t=>myBookings.some(b=>b.ticket_id===t.id&&b.date>=_todayYmd2&&(b.status==='booked'||b.status==='checked_in'));
   const _isExpiredTk=t=>t.status!=='refunded'&&t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2&&(Number(t.sessions_remaining)||0)>0;
-  const _isHistoryTk=t=>!_isExpiredTk(t)&&(t.status==='used_up'||t.status==='refunded'||(((Number(t.sessions_remaining)||0)<=0)&&!_hasFutureBk(t))||(t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2));
+  /* 2026-07-29 使用者指示：「預約了但還沒上（空心圓）」不該算進歷史紀錄。
+     原本只看 sessions_remaining<=0 —— 新制預約當下就扣課，四堂全約完但一堂還沒上的票
+     餘額就是 0，於是整張被收進歷史。團課更明顯：團課預約的 member_id 是 null，
+     _hasFutureBk 掃不到，救不回來。改成以「已上堂數」為準，與卡片圓點同一個數字。 */
+  const _isHistoryTk=t=>{
+    if(_isExpiredTk(t)) return false;                                             // 過期但還有堂數 → 另立區塊
+    if(t.status==='refunded') return true;
+    if(t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2) return true;  // 已過期且無剩餘
+    const total=Number(t.sessions_total)||0;
+    if(total>0 && tkUsedCount(t)<total) return false;                             // 還有已預約未上的堂數
+    return t.status==='used_up'||(((Number(t.sessions_remaining)||0)<=0)&&!_hasFutureBk(t));
+  };
   const _canReact=(isDeskLike());
   /* allowReact：只有課程票券（教練課／友善教練課／團體課）能重新啟用。
      自主訓練點數是簽到贈送、效期 7 天的短效點數，過期即作廢，不提供重新啟用

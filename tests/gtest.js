@@ -83,6 +83,20 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('全新票券三格皆空心', (html.match(/mtk-free/g)||[]).length===3);
   }
 
+  console.log('新制預約（BK-）已預扣，不可再算成已上課：');
+  {
+    // 黃孟琦情境：4 堂票全約在 8 月、一堂都還沒上 → 餘額 0，但已上課應為 0
+    const tk4=T({id:'g4',member_id:'M',sessions_total:4,sessions_remaining:0,start_date:'2026-07-28'});
+    const past=['2026-07-07','2026-07-16','2026-07-23','2026-07-28'].map((d,i)=>BK('p'+i,d,'checked_in',['M']));
+    const future=['2026-08-04','2026-08-11','2026-08-18','2026-08-25']
+      .map((d,i)=>({id:'BK-f'+i,date:d,start_time:'16:30',status:'booked',category:'小班肌力',member_ids:['M']}));
+    let html=await render({ids:['M'],tickets:[tk4],bookings:[...past,...future],names:{M:'黃孟琦'},
+      thisDate:'2026-08-04',thisId:'BK-f0'});
+    chk('★ 不會把七月的舊出席畫成這張票的實心', !html.includes('>7/7<')&&!html.includes('>7/28<'));
+    chk('★ 四顆都是空心＋八月預約日期', (html.match(/mtk-booked/g)||[]).length===4);
+    chk('　　本堂 8/4 標金框', /mtk-booked mtk-cur[^>]*>8\/4</.test(html));
+  }
+
   console.log('請假狀態的名單列：');
   {
     const tk=T({id:'t',member_id:'M',sessions_total:4,sessions_remaining:2,start_date:'2026-07-01'});

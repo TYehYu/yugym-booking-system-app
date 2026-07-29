@@ -19,6 +19,13 @@ const TODAY=new Date('2026-07-26T00:00:00');
 const ymd=d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
 const SESSION={role:'admin'};
 const myBookings=[];
+/* 2026-07-29：_isHistoryTk 改用 tkUsedCount（與卡片圓點同一個數字）。
+   這裡給一個等價替身：沒有逐筆預約紀錄時，已上堂數＝總堂−剩餘。 */
+const tkUsedCount=t=>{
+  const total=Number(t.sessions_total)||0;
+  const rem=t.sessions_remaining==null?total:Number(t.sessions_remaining);
+  return Math.min(total, Math.max(0, total-rem));
+};
 const typeMap={
   'tt-mqdt55uosz5n':{id:'tt-mqdt55uosz5n',name:'自主訓練',category:'自主訓練',color:'self'},
   'tt-pt':{id:'tt-pt',name:'私人教練課',category:'私人教練',color:'pt'},
@@ -30,11 +37,11 @@ const typeMap={
 // renderTkCard 用最小替身：把 id 與 extraBtn 吐出來，方便斷言
 const renderTkCard=(t,extraBtn)=>`<card id="${t.id}">${extraBtn||''}</card>`;
 
-const build=new Function('ymd','TODAY','SESSION','myBookings','typeMap','renderTkCard','isDeskLike',
+const build=new Function('ymd','TODAY','SESSION','myBookings','typeMap','renderTkCard','isDeskLike','tkUsedCount',
   `${catSrc}\n${bukSrc}\nreturn {tkCategoryOf,tkListHtml,_isExpiredTk,_isHistoryTk};`);
 // isDeskLike 替身：與 index.html 相同語意（admin/front_desk/店長）
 const mkDeskLike=s=>()=>!!(s&&(s.role==='admin'||s.role==='front_desk'||(s.role==='coach'&&s.is_manager)));
-const {tkCategoryOf,tkListHtml,_isExpiredTk}=build(ymd,TODAY,SESSION,myBookings,typeMap,renderTkCard,mkDeskLike(SESSION));
+const {tkCategoryOf,tkListHtml,_isExpiredTk}=build(ymd,TODAY,SESSION,myBookings,typeMap,renderTkCard,mkDeskLike(SESSION),tkUsedCount);
 
 // ── 正式庫真實資料（朱庭箴 MEM-69D90A949008 的三張自主訓練點數）──
 const SELF=[
@@ -89,7 +96,7 @@ ok('用畢票沒有重新啟用按鈕',            courseHtml.indexOf("openReact
 ok('用畢票在歷史紀錄',                  courseHtml.indexOf('C-usedup')>courseHtml.indexOf('歷史紀錄'));
 
 console.log('權限');
-const S2=build(ymd,TODAY,{role:'coach'},myBookings,typeMap,renderTkCard,mkDeskLike({role:'coach'}));
+const S2=build(ymd,TODAY,{role:'coach'},myBookings,typeMap,renderTkCard,mkDeskLike({role:'coach'}),tkUsedCount);
 // 註：標題「已過期（可重新啟用）」本身含「重新啟用」四字，故以 onclick 判定按鈕是否存在
 ok('教練看不到重新啟用按鈕', S2.tkListHtml(COURSE,true).indexOf('openReactivateTicket')<0);
 ok('教練仍看得到過期區塊',   S2.tkListHtml(COURSE,true).indexOf('已過期（可重新啟用）')>=0);

@@ -55,5 +55,26 @@ ok('　　別人的課卡不顯示（不外洩誰快用完票）',
 ok('　　簽到章在右下，不會跟徽章打架',
    /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;top:auto;left:auto;bottom:0;right:0;/.test(src));
 
+/* ── 會員票券：預約了但還沒上，不該被收進「歷史紀錄」（2026-07-29 使用者指示） ── */
+console.log('\n會員票券的歷史紀錄判定');
+const hs=src.slice(src.indexOf('const tkUsedCount=(t)=>{'), src.indexOf('  // 票券卡片渲染（圓圈進度）'));
+const mk=(usedDates,bkByTk)=>new Function('usedDates','inferByTk','bkByTk', hs+'\nreturn tkUsedCount;')(usedDates||{},{},bkByTk||{});
+const BKD=n=>Array.from({length:n},()=>({status:'booked'}));
+
+eq('★ 四堂全約完但一堂都還沒上 → 已上 0（不是 4）',
+   mk({},{t:BKD(4)})({id:'t',sessions_total:4,sessions_remaining:0}), 0);
+eq('　　上完兩堂、另兩堂已約 → 已上 2',
+   mk({t:['2026-08-04','2026-08-11']},{t:BKD(2)})({id:'t',sessions_total:4,sessions_remaining:0}), 2);
+eq('　　全部上完（沒有待上的預約）→ 已上 4',
+   mk({t:['a','b','c','d']},{})({id:'t',sessions_total:4,sessions_remaining:0}), 4);
+
+ok('★ 歷史判定改看「已上堂數」而非只看剩餘',
+   /if\(total>0 && tkUsedCount\(t\)<total\) return false;/.test(src));
+ok('★ 卡片圓點與歷史判定用同一個數字（不會出現空心圓卻被收進歷史）',
+   /const usedCount = tkUsedCount\(t\);/.test(src));
+ok('　　過期票仍照原規則歸類（不被新規則攔截）',
+   /if\(_isExpiredTk\(t\)\) return false;[\s\S]{0,260}if\(t\.expire_date&&String\(t\.expire_date\)\.slice\(0,10\)<_todayYmd2\) return true;/.test(src));
+ok('　　已退款的票仍算歷史', /if\(t\.status==='refunded'\) return true;/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

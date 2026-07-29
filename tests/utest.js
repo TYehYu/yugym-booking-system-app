@@ -2,11 +2,13 @@
    2026-07-26 改版：三訊號取最大（直連已上／FIFO 推算已上／帳面已用−直連預約中）。 */
 const fs=require('fs');
 const h=fs.readFileSync('/Users/tungyeh/Projects/yugym-booking-system-app/index.html','utf8');
-const a=h.indexOf('    const inf=inferByTk[t.id]||[];');
-const b=h.indexOf('const isDim=', a);
+/* 2026-07-29：算式抽成共用的 tkUsedCount（卡片圓點與歷史紀錄判定共用同一個數字），
+   這裡改抽那支；測試案例維持原樣。 */
+const a=h.indexOf('  const tkUsedCount=(t)=>{');
+const b=h.indexOf('  // 票券卡片渲染（圓圈進度）', a);
 const src=h.slice(a,b);
-const calc=(total,dates,t,inferByTk,bkByTk)=>new Function('total','dates','t','inferByTk','bkByTk',
-  src+' return usedCount;')(total,dates,t,inferByTk||{},bkByTk||{});
+const calc=(total,dates,t,inferByTk,bkByTk)=>new Function('usedDates','inferByTk','bkByTk',
+  src+' return tkUsedCount;')({[t.id]:dates},inferByTk||{},bkByTk||{})(Object.assign({sessions_total:total},t));
 let pass=0,fail=0;
 const chk=(n,got,want)=>{const ok=got===want;ok?pass++:fail++;console.log(`  ${ok?'✓':'✗'} ${n}  got=${got} want=${want}`);};
 const BK=st=>({status:st});
