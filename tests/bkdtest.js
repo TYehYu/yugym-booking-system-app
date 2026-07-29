@@ -1,0 +1,59 @@
+/* 預約明細的票券圓點與「本堂第幾堂」（2026-07-29 使用者回報：張正怡）
+   她的 7 堂 1V2 實際只剩 2 堂（7/30、8/6），卡片卻標「本堂 第 1／7 堂」＋5 顆空心。
+   成因：直接綁到票券時，已用堂數只數「清單裡的出席筆數」，
+   而匯入會員的歷史課沒有逐筆預約 → 已核銷的堂數整個消失，看起來像全新的票。 */
+const fs=require('fs');
+const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+
+let pass=0,fail=0;
+const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const eq=(n,a,e)=>ok(n,a===e,`得到 ${a}，預期 ${e}`);
+
+// 抽出修好的已用堂數算式（直接綁票券那條路）
+const i=src.indexOf('const doneCount=_tkInferred ? _inferDone : (function(){');
+if(i<0) throw new Error('找不到 doneCount 算式');
+const body=src.slice(src.indexOf('(function(){',i), src.indexOf('})();',i)+5);
+const calc=new Function('tkBks2','tkC','total', 'return '+body+';');
+
+const BK=(st,date)=>({status:st,date,start_time:'16:00'});
+
+console.log('已用堂數＝max(清單出席, 帳面已用−已預約)');
+/* 張正怡：7 堂票、帳面剩 2、歷史 5 堂沒有逐筆紀錄。
+   補綁前那 2 筆預約沒綁到票（ticket_id 為 null），所以根本不在清單裡 → 清單是空的。 */
+eq('★ 張正怡（補綁前：剩 2、預約還沒綁到票）',
+   calc([],{sessions_remaining:2},7), 5);
+// 補綁後帳面變 0，但那 2 堂已被扣過 → 已用仍是 5，位置不變
+eq('★ 張正怡（補綁後：剩 0、同樣 2 筆已預約）',
+   calc([BK('booked','2026-07-30'),BK('booked','2026-08-06')],{sessions_remaining:0},7), 5);
+
+console.log('\n其他情境不受影響');
+eq('全新票（剩＝總、無預約）→ 0', calc([],{sessions_remaining:8},8), 0);
+eq('逐筆完整的票（4 堂上完 3）→ 3',
+   calc([BK('completed','2026-07-01'),BK('completed','2026-07-08'),BK('checked_in','2026-07-15'),
+         BK('booked','2026-07-22')],{sessions_remaining:1},4), 3);
+eq('清單出席數比帳面多時以清單為準（帳面沒跟上）',
+   calc([BK('completed','2026-07-01'),BK('completed','2026-07-08')],{sessions_remaining:4},4), 2);
+eq('餘額欄壞掉（null）→ 退回只數清單',
+   calc([BK('completed','2026-07-01')],{sessions_remaining:null},5), 1);
+eq('不會超過總堂數', calc([],{sessions_remaining:-3},4), 4);
+eq('不會變負數', calc([BK('booked','2026-08-01')],{sessions_remaining:9},5), 0);
+
+console.log('\n圓點渲染吃得到這個數字');
+ok('★ doneCount 傳給 ticketTokens', /ticketTokens\(tkC,tkBks2,_typeMapD,doneCount,b\.id\)/.test(src));
+ok('★ 已用堂數多於清單時，多出來的畫實心 ✓（沒有日期可標）',
+   /const b=di<done\.length\?done\[di\+\+\]:null;/.test(src) && /\$\{b\?md\(b\):'✓'\}/.test(src));
+ok('　　「本堂第幾堂」與圓點位置同源', /curIdx=_bi>=0\?doneCount\+_bi:-1/.test(src));
+
+console.log('\n繳費／續約提醒統一在右上角');
+ok('★ 徽章改到右上', /\.ev-payalert\{position:absolute;top:2px;right:3px;left:auto;/.test(src));
+ok('★ 判準抽成共用函式，桌機與手機同一套', /function computeLastBkMarks\(allTickets, bookings, typeMap\)\{/.test(src));
+ok('　　桌機行事曆改呼叫它', /computeLastBkMarks\(allTickets, bookings, typeMap\);/.test(src));
+ok('　　手機端週課表也算', /computeLastBkMarks\(_tkAll, bookings, Object\.fromEntries/.test(src));
+ok('★ 手機端課卡渲染徽章', /const _mk = \(layer==='mine'\|\|isAdmin\)/.test(src));
+ok('　　別人的課卡不顯示（不外洩誰快用完票）',
+   /const _mk = \(layer==='mine'\|\|isAdmin\)[\s\S]{0,400}: '';/.test(src));
+ok('　　簽到章在右下，不會跟徽章打架',
+   /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;top:auto;left:auto;bottom:0;right:0;/.test(src));
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail?1:0);

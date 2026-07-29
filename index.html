@@ -2845,7 +2845,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .ev-stamp-todo{background:transparent;border:1.5px solid rgba(0,0,0,0.18);width:11px;height:11px;}
 .ev-checked svg{width:10px;height:10px;}
 /* 分期本期最後一堂：繳費提醒（左上角小錢袋）*/
-.ev-payalert{position:absolute;top:2px;left:3px;font-size:11px;line-height:1;z-index:3;}
+/* 繳費／續約提醒（2026-07-29 使用者指示：統一放課卡右上角）——
+   左上是課種色條與時間，右上是空的；簽到章在右下（.evc-check），不會打架。 */
+.ev-payalert{position:absolute;top:2px;right:3px;left:auto;font-size:11px;line-height:1;z-index:4;}
 .cal-ev:active{cursor:grabbing;}
 .cal-ev:not(.readonly){touch-action:none;}
 .cal-ev .ev-time{font-family:var(--num);font-size:14px;font-weight:700;line-height:1.2;letter-spacing:0.02em;opacity:0.85;}
@@ -6049,8 +6051,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1715';
-const APP_VERSION_LABEL='v260729.1715';
+const APP_VERSION = '260729.1726';
+const APP_VERSION_LABEL='v260729.1726';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11495,43 +11497,12 @@ function calCourseAll(){ window._calCourseOff={}; navTo(CUR_PAGE); }
 function calSetCoach(id){ window._calFilter = (id==='all'?undefined:id); navTo(CUR_PAGE); }
 function calSetCourse(cls){ const o=window._calCourseOff=window._calCourseOff||{}; o[cls]=!o[cls]; navTo(CUR_PAGE); }
 
-async function renderCalendar(opts){
-  // opts: {coachFilter(bool), onSlot(fnName), me(coach_id), editable(bool), _data(預先抓好的資料，避免重複) }
-  _calOpts=opts;
-  // Phase 3：Hover 新增預覽卡的每日 Lane 占用資料（僅日檢視用）
-  window._calHoverData = { onSlot: (opts&&opts.onSlot)||null, editable: !!(opts&&opts.editable), byDate:{} };
-  if(!calWeekStart)initCalWeek();
-  // 若呼叫端已抓好資料（_data），直接沿用避免重複向雲端要同一批表；否則自行抓取
-  let bookings,coaches,members,types,allTickets;
-  if(opts&&opts._data){
-    ({bookings,coaches,members,types,allTickets}=opts._data);
-  }else if((opts&&opts.stepping||window._calStepping) && window._calDataCache && (Date.now()-window._calDataCache._t<120000)){
-    /* 左右換頁卡頓對策（2026-07-23 使用者回報）：翻頁＝純瀏覽，不該等網路。
-       翻頁時直接用上一次渲染的整組資料**立即**畫出（0 網路等待），同時在背景
-       重抓 bookings/member_tickets 校驗——內容有異動才悄悄重繪一次（_calRevalidate）。
-       本機的簽到/取消/新增走非翻頁路徑（_calStepping=false），一律現抓現繪不受影響。 */
-    ({bookings,coaches,members,types,allTickets}=window._calDataCache);
-    _calRevalidate();
-  }else{
-    // 效能優化：coaches / members / ticket_types 很少變動 → 首次抓取後快取（60 秒內），切週時沿用，
-    // 只有 bookings / member_tickets 每次重抓（會新增/異動）。大幅減少切週的等待時間。
-    const cacheFresh = window._calStaticCache && (Date.now()-window._calStaticCache._t < 60000);
-    const useCache = (opts&&opts.stepping||window._calStepping) && cacheFresh;
-    if(useCache){
-      ({coaches,members,types}=window._calStaticCache);
-      [bookings,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('member_tickets')]);
-    }else{
-      [bookings,coaches,members,types,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('members'),dbGetAll('ticket_types'),dbGetAll('member_tickets')]);
-      window._calStaticCache={coaches,members,types,_t:Date.now()};
-    }
-    // 翻頁快取：每次「現抓」都更新整組（本機寫入後的重繪也走這裡，快取必為最新）
-    window._calDataCache={bookings,coaches,members,types,allTickets,_t:Date.now()};
-  }
-  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
-  const coachObjMap=Object.fromEntries(coaches.map(c=>[c.id,c]));   // 卡片第三行教練縮寫 tag 用（coachAbbr 需完整物件）
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
-  const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
-  const ticketMap=Object.fromEntries(allTickets.map(t=>[t.id,t]));
+/* 課卡右上角的「繳費／續約」提醒（2026-07-29 使用者指示：統一放右上角）——
+   原本只有桌機行事曆算這兩張表，手機端課卡看不到提醒。抽成共用函式，
+   桌機行事曆與手機端週課表都呼叫它，兩邊的判準才不會漂移。
+   ・_installLastBk：分期票「本期開通區最後一堂」→ 下次上課前要收下一期
+   ・_renewLastBk ：整張票剩 ≤2 堂時「已排最晚那堂」→ 提醒續約 */
+function computeLastBkMarks(allTickets, bookings, typeMap){
   // 分期票：標記「目前開通區的最後一堂」對應的預約（提醒下期需繳費）
   window._installLastBk={};
   try{
@@ -11572,6 +11543,45 @@ async function renderCalendar(opts){
       if(lastBk) window._renewLastBk[lastBk.id]=true;
     });
   }catch(_){}
+}
+async function renderCalendar(opts){
+  // opts: {coachFilter(bool), onSlot(fnName), me(coach_id), editable(bool), _data(預先抓好的資料，避免重複) }
+  _calOpts=opts;
+  // Phase 3：Hover 新增預覽卡的每日 Lane 占用資料（僅日檢視用）
+  window._calHoverData = { onSlot: (opts&&opts.onSlot)||null, editable: !!(opts&&opts.editable), byDate:{} };
+  if(!calWeekStart)initCalWeek();
+  // 若呼叫端已抓好資料（_data），直接沿用避免重複向雲端要同一批表；否則自行抓取
+  let bookings,coaches,members,types,allTickets;
+  if(opts&&opts._data){
+    ({bookings,coaches,members,types,allTickets}=opts._data);
+  }else if((opts&&opts.stepping||window._calStepping) && window._calDataCache && (Date.now()-window._calDataCache._t<120000)){
+    /* 左右換頁卡頓對策（2026-07-23 使用者回報）：翻頁＝純瀏覽，不該等網路。
+       翻頁時直接用上一次渲染的整組資料**立即**畫出（0 網路等待），同時在背景
+       重抓 bookings/member_tickets 校驗——內容有異動才悄悄重繪一次（_calRevalidate）。
+       本機的簽到/取消/新增走非翻頁路徑（_calStepping=false），一律現抓現繪不受影響。 */
+    ({bookings,coaches,members,types,allTickets}=window._calDataCache);
+    _calRevalidate();
+  }else{
+    // 效能優化：coaches / members / ticket_types 很少變動 → 首次抓取後快取（60 秒內），切週時沿用，
+    // 只有 bookings / member_tickets 每次重抓（會新增/異動）。大幅減少切週的等待時間。
+    const cacheFresh = window._calStaticCache && (Date.now()-window._calStaticCache._t < 60000);
+    const useCache = (opts&&opts.stepping||window._calStepping) && cacheFresh;
+    if(useCache){
+      ({coaches,members,types}=window._calStaticCache);
+      [bookings,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('member_tickets')]);
+    }else{
+      [bookings,coaches,members,types,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('members'),dbGetAll('ticket_types'),dbGetAll('member_tickets')]);
+      window._calStaticCache={coaches,members,types,_t:Date.now()};
+    }
+    // 翻頁快取：每次「現抓」都更新整組（本機寫入後的重繪也走這裡，快取必為最新）
+    window._calDataCache={bookings,coaches,members,types,allTickets,_t:Date.now()};
+  }
+  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
+  const coachObjMap=Object.fromEntries(coaches.map(c=>[c.id,c]));   // 卡片第三行教練縮寫 tag 用（coachAbbr 需完整物件）
+  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
+  const ticketMap=Object.fromEntries(allTickets.map(t=>[t.id,t]));
+  computeLastBkMarks(allTickets, bookings, typeMap);
   window._ttCache=types;
   window._allTkCache=allTickets;
   const nDays=effCalDays();
@@ -13481,6 +13491,11 @@ async function renderCoachAgenda(){
 
   const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
+  /* 課卡右上角的繳費／續約提醒（2026-07-29 使用者指示：手機端也要有，判準與桌機同一支） */
+  try{
+    const _tkAll=await dbGetAll('member_tickets');
+    computeLastBkMarks(_tkAll, bookings, Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t])));
+  }catch(_){ window._installLastBk=window._installLastBk||{}; window._renewLastBk=window._renewLastBk||{}; }
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const coachObj=Object.fromEntries(coaches.map(c=>[c.id,c]));
   const isMineBk=(b)=> (b.coach_id===myId||b.substitute_coach_id===myId);
@@ -13572,7 +13587,16 @@ async function renderCoachAgenda(){
        原本掛 onclick=stopPropagation，卡片仍會攔截手指，滑頁面時碰到就滑不動。
        改成 pointer-events:none（class cag-noint），觸控直接穿透到捲動容器。
        管理員／店長仍可點（canClick 為真時不加這個 class）。 */
+    /* 繳費／續約提醒（2026-07-29）：只標在看得到會員的卡上——別人的課卡本來就不顯示會員，
+       也不該外洩「誰快用完票了」。 */
+    const _mk = (layer==='mine'||isAdmin)
+      ? ((window._renewLastBk&&window._renewLastBk[b.id])
+          ? '<span class="ev-payalert" title="這是本張票券最後幾堂，記得提醒會員續約">🔁</span>'
+          : ((window._installLastBk&&window._installLastBk[b.id])
+              ? '<span class="ev-payalert" title="此堂為本期最後一堂，下次上課前需先繳費開通">💰</span>' : ''))
+      : '';
     return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${canClick?'':' cag-noint'}" ${layer==='mine'?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}')"`:''}>
+      ${_mk}
       ${done?'<span class="evc-check" title="已完成">簽</span>':''}
       <div class="evc-body"></div>
       <div class="evc-txt">${showTime?`<span class="evc-time">${b.start_time}</span>`:''}<span class="evc-name">${disp}</span>${tag}</div>
@@ -15937,9 +15961,20 @@ async function openBookingDetail(id){
       tkBks2=win;
       _inferDone=win.filter(x=>x.status==='checked_in'||x.status==='completed').length;
     }
-    // 推估時已用堂數＝實際挑進來的出席筆數（不是票券餘額，理由見上）
-    const doneCount=_tkInferred ? _inferDone
-      : tkBks2.filter(x=>x.status==='completed'||x.status==='checked_in').length;
+    /* 已用堂數（2026-07-29 使用者回報：張正怡 7 堂票實際只剩 2 堂，卡片卻標「第 1／7 堂」＋5 顆空心）——
+       直接綁到票券時原本只數清單裡的出席筆數。匯入會員的歷史課多半沒有逐筆預約，
+       那些已核銷的堂數就整個消失，看起來像全新的票。
+       改成與「先進先出推估」那條路同一套口徑：
+         已用 = max(清單出席數, 帳面已用(總−剩餘) − 清單裡已預約的堂數)
+       帳面已用扣掉已預約，是因為預約當下就扣過票，那幾堂不算「已上」。 */
+    const doneCount=_tkInferred ? _inferDone : (function(){
+      const _att=tkBks2.filter(x=>x.status==='completed'||x.status==='checked_in').length;
+      const _bkd=tkBks2.filter(x=>x.status==='booked').length;
+      const _hasRem=tkC.sessions_remaining!=null && !isNaN(Number(tkC.sessions_remaining));
+      const _rem=Number(tkC.sessions_remaining);
+      const _face=_hasRem?Math.max(0,(total-_rem)-_bkd):0;   // 沒有餘額資訊就只信清單
+      return Math.min(total, Math.max(_att,_face));
+    })();
     /* 本堂序改成與 ticketTokens 的圓點位置一致（2026-07-26 李唯案例）：
        實心區＝出席（依日期排），空心預約接在第 doneCount 顆之後 ——
        清單順序（日期混排）不再直接當序號，否則歷史缺筆時會少算。 */
