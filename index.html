@@ -6011,8 +6011,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1518';
-const APP_VERSION_LABEL='v260729.1518';
+const APP_VERSION = '260729.1531';
+const APP_VERSION_LABEL='v260729.1531';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6702,10 +6702,17 @@ async function submitStaffSetup(id){
     if(error){err.textContent='密碼更新失敗：'+error.message;err.style.display='block';return;}
   }catch(e){err.textContent='密碼更新失敗：'+(e.message||e);err.style.display='block';return;}
   // 2) 更新員工資料、解除 must_setup
+  //    只能用 update()，不可用 dbPut（upsert）：upsert 會一併要求 employees 的 INSERT 權限，
+  //    而新增員工只開放管理員 → 員工本人自行設定必被 RLS 擋成「權限不足」。（2026-07-29 修）
   const c=await dbGet('coaches',id);
-  c.name_en=v('su-nick'); c.email=v('su-email'); c.birthday=bday; c.must_setup=false;
-  try{ await dbPut('coaches',c); }
+  const upd={name_en:v('su-nick'), email:v('su-email'), birthday:bday, must_setup:false};
+  try{
+    const{error}=await sb.from('employees').update(upd).eq('id',id);
+    if(error) throw error;
+    dbCacheClear('coaches');   // 直接寫入、不經 dbPut → 自行失效
+  }
   catch(e){ err.textContent='資料儲存失敗：'+(e.message||e);err.style.display='block';return; }
+  Object.assign(c,upd);
   // 進入系統
   SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager};
   const host=document.getElementById('invite-screen'); if(host) host.remove();
@@ -17933,10 +17940,13 @@ async function saveCoachProfile(){
   const c=await dbGet('coaches',id);
   if(!c){ showToast('找不到資料'); return; }
   const v=x=>{const el=document.getElementById(x);return el?el.value.trim():'';};
-  c.name_en=v('cp-nick');
-  c.email=v('cp-email');
-  const bday=readBirthday('cp'); if(bday) c.birthday=bday;
-  try{ await dbPut('coaches',c); showToast('已更新個人資料'); closeModal();
+  const upd={name_en:v('cp-nick'), email:v('cp-email')};
+  const bday=readBirthday('cp'); if(bday) upd.birthday=bday;
+  Object.assign(c,upd);
+  // 同 submitStaffSetup：教練改自己的資料只能用 update()，upsert 會要 INSERT 權限而被 RLS 擋
+  try{ const{error}=await sb.from('employees').update(upd).eq('id',id); if(error) throw error;
+    dbCacheClear('coaches');
+    showToast('已更新個人資料'); closeModal();
     if(SESSION) SESSION.gender=c.gender||SESSION.gender;
     setAcctHead(c.name||SESSION.name, ROLE_LABEL[SESSION.role], c.gender||SESSION.gender); // 顯示名沿用本名
   }catch(e){ showToast('儲存失敗：'+(e.message||e)); }
