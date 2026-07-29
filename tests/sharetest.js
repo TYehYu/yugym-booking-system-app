@@ -20,7 +20,7 @@ const lu=h.slice(h.indexOf('async function listUsableTickets('));
 const filtSrc=lu.slice(lu.indexOf('return all.filter(t=>{'), lu.indexOf(".sort((a,b)=>(a.expire_date||'')"));
 const mkUsable=new Function('all','member_id','type_id','bookDate','wantCat','groupMode',
   'ticketCategoryOf','bkTicketTypeOk','tkUsableBy',
-  filtSrc+';');   // filtSrc 已含完整的 all.filter(...)，只補分號
+  grabFn('tkUnlockedLeft')+'\n'+filtSrc+';');   // filtSrc 已含完整的 all.filter(...)，只補分號
 
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };

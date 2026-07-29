@@ -4950,6 +4950,16 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 #bk-card-pop .mtp-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
 #bk-card-pop .mtp-t1{font-size:14.5px;font-weight:800;color:var(--text);line-height:1.3;}
 #bk-card-pop .mtp-t2{font-size:11.5px;color:var(--t2);white-space:nowrap;}
+/* 連續取消清單（2026-07-29） */
+.sc-list{max-height:min(38vh,300px);overflow-y:auto;border:1px solid var(--bd);border-radius:10px;
+  background:var(--card2);padding:4px;}
+.sc-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;
+  font-size:13px;}
+.sc-row:hover{background:#fff;}
+.sc-row input{margin:0;flex:0 0 auto;}
+.sc-d{font-family:var(--num),inherit;font-weight:700;color:var(--text);white-space:nowrap;}
+.sc-t{font-family:var(--num),inherit;color:var(--t2);white-space:nowrap;}
+.sc-x{margin-left:auto;font-size:11px;color:var(--t3);white-space:nowrap;}
 /* 名單／代課面板（2026-07-29 修）：原本的 .evc-roster 樣式只掛在 .cal-ev-std／.tcard-std 上，
    面板改吊在彈窗裡就完全沒樣式。這裡補一份彈窗版：接在小卡下方、整排寬、可捲動。 */
 #bk-card-pop .evc-roster{width:100%;background:#fff;border:1px solid var(--bd);border-radius:12px;
@@ -6037,8 +6047,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1628';
-const APP_VERSION_LABEL='v260729.1628';
+const APP_VERSION = '260729.1646';
+const APP_VERSION_LABEL='v260729.1646';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8830,6 +8840,23 @@ function tkUsableBy(t,member_id){
 }
 // 找會員某類型最早到期的可用票券
 // 列出會員在某類型、某預約日仍有效（未過期、有剩餘堂數）的所有票券
+/* 分期票券「還能預約幾堂」（2026-07-29 使用者回報：徐千晴只繳第 1 期 4 堂，
+   連續預約卻拿得到 12 堂而超約）。
+   分期票在售出時 sessions_total 就是整個方案（12），只有 unlocked_sessions（4）代表已繳期數
+   對應的堂數 —— 但預約流程一路只看 sessions_remaining，等於把還沒繳錢的 8 堂也放出來。
+   已用堂數 = sessions_total − sessions_remaining；可約 = min(剩餘, 已開通 − 已用)。
+   非分期票不受影響（回傳 sessions_remaining）。 */
+function tkUnlockedLeft(t){
+  if(!t) return 0;
+  const remain=Number(t.sessions_remaining)||0;
+  const inst=t.installment;
+  if(!inst || typeof inst!=='object') return remain;
+  const total=Number(t.sessions_total)||0;
+  const unlocked = t.unlocked_sessions!=null ? Number(t.unlocked_sessions) : total;
+  const used = Math.max(0, total-remain);
+  return Math.max(0, Math.min(remain, unlocked-used));
+}
+function tkIsInstall(t){ return !!(t && t.installment && typeof t.installment==='object'); }
 async function listUsableTickets(member_id,type_id,bookDate){
   const all=await dbGetAll('member_tickets');
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
@@ -8838,6 +8865,7 @@ async function listUsableTickets(member_id,type_id,bookDate){
   return all.filter(t=>{
       if(!tkUsableBy(t,member_id)) return false;   // 持有人或共享者皆可用
       if(t.status!=='usable' || !(t.sessions_remaining>0)) return false;
+      if(!(tkUnlockedLeft(t)>0)) return false;     // 分期：未繳期數的堂數不可預約（2026-07-29）
       if(bookDate && t.expire_date && t.expire_date<bookDate) return false; // 已過期
       if(groupMode) return ticketCategoryOf(t)==='小班肌力'; // 團課：同類別即可（不分方案）
       return bkTicketTypeOk(t,type_id);                      // 其他類別：嚴格比對＋「教練課」兼容 VIP/限定舊票
@@ -9143,6 +9171,7 @@ function rpcBookingErrMsg(code){
     'BOOKING.RESOURCE_MAINTENANCE':'該資源維修中，暫不可預約',
     'TICKET.EMPTY':'會員無可用票券',
     'TICKET.EXPIRED':'會員票券已過期',
+    'TICKET.INSTALLMENT_LOCKED':'分期票券尚未繳費的堂數不可預約，請先收款並「開通下一期」',
     'POINT.EMPTY':'會員自主訓練點數不足',
   };
   return M[code]||('建立失敗：'+(code||'未知錯誤'));
@@ -9163,7 +9192,14 @@ async function createBookingViaRpc(o, tk, ds){
   // 2026-07-20 LAG 對策：只清 RPC 實際動到的表（原全清會連 coaches/members/shifts 一起重抓）。
   dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
   if(error) return { ok:false, reason:'連線失敗：'+(error.message||error) };
-  if(data && data.ok) return { ok:true, booking_id:data.booking_id };
+  if(data && data.ok){
+    /* RPC 沒有 recurring 參數 → 連續預約建出來的課全是 recurring=false，
+       之後要「整批取消」就認不出這是一系列（2026-07-29 補）。建完補標上去。 */
+    if(o.dows && o.dows.length){
+      try{ await sb.from('bookings').update({recurring:true}).eq('id',data.booking_id); dbCacheClear('bookings'); }catch(_){}
+    }
+    return { ok:true, booking_id:data.booking_id };
+  }
   return { ok:false, reason:rpcBookingErrMsg(data && data.error_code) };
 }
 /* 一鍵補發補課券：綁原課同類型，1 堂，效期 14 天，source='makeup'
@@ -11647,6 +11683,8 @@ async function renderCalendar(opts){
           : `${names[0]} 等 ${names.length} 人`;
       }else if(b.pending_contract && !b.member_id){
         memName=(b.trial_name||'客戶')+'（待簽約）';   // 待簽約卡位（2026-07-27）
+      }else if(b.pending_contract && b.member_id){
+        memName=(memMap[b.member_id]||'—')+'（待繳費）';   // 分期未繳期數的保留課（2026-07-29）
       }else{
         memName=memMap[b.member_id]||'—';
       }
@@ -14679,20 +14717,29 @@ async function refreshBkTicket(){
     return;
   }
   const fmtLabel=(tk)=> tk.format?`　<b style="color:var(--gold);">${tk.format.toUpperCase()}</b>`:'';
+  /* 分期票（2026-07-29）：顯示的是「已開通可約」堂數，不是整個方案的剩餘 —— 未繳期數不能先約走 */
+  const instNote=(tk)=>{
+    if(!tkIsInstall(tk)) return '';
+    const i=tk.installment;
+    return `<div style="margin-top:6px;background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:9px;padding:8px 10px;font-size:11.5px;line-height:1.7;">
+      🔒 分期方案（共 ${i.count} 期，已繳第 ${i.current} 期）：目前可約 <b>${tkUnlockedLeft(tk)}</b> 堂。
+      方案總共 ${tk.sessions_total} 堂，其餘要收到下一期款項後，在會員票券卡按「開通下一期」才會放出來。</div>`;
+  };
   if(list.length===1){
     const tk=list[0];
-    info.innerHTML=`將扣抵票券　${tk.plan_name||''}${fmtLabel(tk)}　剩餘 <b>${tk.sessions_remaining}</b> 堂　效期至 ${fmtExpire(tk.expire_date,tk)}
-      <input type="hidden" id="bk-ticket-sel" value="${tk.id}">`;
+    info.innerHTML=`將扣抵票券　${tk.plan_name||''}${fmtLabel(tk)}　可約 <b>${tkUnlockedLeft(tk)}</b> 堂　效期至 ${fmtExpire(tk.expire_date,tk)}
+      <input type="hidden" id="bk-ticket-sel" value="${tk.id}">${instNote(tk)}`;
   }else{
     // 多張可用票券 → 卡片式選擇（清楚區分 1V1／1V2、剩餘堂數、效期）
     if(!window._bkTkSel || !list.some(x=>x.id===window._bkTkSel)) window._bkTkSel=list[0].id;
     const cards=list.map(tk=>`<button type="button" class="bk-tk-card${window._bkTkSel===tk.id?' on':''}" onclick="pickBkTicket('${tk.id}')">
         <div class="bk-tk-top"><span class="bk-tk-name">${tk.plan_name||'票券'}</span>${tk.format?`<span class="bk-tk-fmt">${tk.format.toUpperCase()}</span>`:''}</div>
-        <div class="bk-tk-meta">剩 <b>${tk.sessions_remaining}</b> 堂　·　效期至 ${fmtExpire(tk.expire_date,tk)}</div>
+        <div class="bk-tk-meta">可約 <b>${tkUnlockedLeft(tk)}</b> 堂${tkIsInstall(tk)?`／共 ${tk.sessions_total}`:''}　·　效期至 ${fmtExpire(tk.expire_date,tk)}</div>
       </button>`).join('');
     info.innerHTML=`<div style="margin-bottom:8px;color:var(--text);">此會員有多張可用票券，請選擇要扣抵：</div>
       <div class="bk-tk-cards">${cards}</div>
-      <input type="hidden" id="bk-ticket-sel" value="${window._bkTkSel}">`;
+      <input type="hidden" id="bk-ticket-sel" value="${window._bkTkSel}">
+      ${list.filter(tkIsInstall).map(instNote).join('')}`;
   }
 }
 // 場地溢出確認：若 vbk 帶 _venueOverflow（分到次選場地），跳確認框詢問教練
@@ -15000,45 +15047,63 @@ async function runRecurringBooking(opts){
   const operator=(SESSION&&SESSION.id)||o.coach_id||null;   // SESSION 是 let，不可用 window.SESSION（2026-07-28 修正）
   // 找票券函式：預設用 listUsableTickets(依類別)；呼叫端可傳 findTicketFn(memberId, dateStr) 覆寫
   const findTk = o.findTicketFn || (async(mid,ds)=>{ const c=await listUsableTickets(mid,o.type_id,ds); return c[0]||null; });
-  const countRemain = o.countRemainFn || (async(mid)=>{ const c=await listUsableTickets(mid,o.type_id,o.startDate); return c.reduce((s,t)=>s+(t.sessions_remaining||0),0); });
+  // 上限用「已開通可約堂數」而非 sessions_remaining —— 分期票未繳的期數不能先約走（2026-07-29）
+  const countRemain = o.countRemainFn || (async(mid)=>{ const c=await listUsableTickets(mid,o.type_id,o.startDate); return c.reduce((s,t)=>s+tkUnlockedLeft(t),0); });
   // 1) 票券剩餘上限
   let remainTotal=0;
   try{ remainTotal=await countRemain(o.member_id); }catch(_){}
   const noDeduct = (o.category==='體驗');
+  /* 分期票未繳的期數（2026-07-29 使用者定案）：不扣票、也不擋預約，改以「待繳費」保留時段。
+     收到下一期款項、在票券卡按「開通下一期」時，會自動把最早的保留課補綁票券並扣課。
+     這樣會員排得住固定時段，帳上也不會提前把沒繳錢的堂數扣掉。 */
+  let canHold=false;
+  if(!noDeduct && o.member_id){
+    try{
+      const _all=await dbGetAll('member_tickets');
+      canHold=_all.some(t=>tkUsableBy(t,o.member_id) && t.status==='usable' && tkIsInstall(t)
+        && (Number(t.sessions_total)||0) - (Number(t.unlocked_sessions)||0) > 0
+        && bkTicketTypeOk(t, o.type_id));
+    }catch(_){}
+  }
   // 2) 產生日期清單
   let dates;
   if(o.dows && o.dows.length){
     const reqCount=Math.max(1, o.count||1);
-    const cap = noDeduct ? reqCount : Math.min(reqCount, remainTotal||0);
+    const cap = (noDeduct||canHold) ? reqCount : Math.min(reqCount, remainTotal||0);
     const far=o.until||ymd(addDays(parseYmd(o.startDate), o.horizonDays||370));   // 結束日期（含）優先
     dates=buildRecurringDates(o.startDate, o.dows, cap, far);
   }else{
     dates=[o.startDate];
   }
   const total=dates.length;
-  const capped = (o.dows&&o.dows.length) ? (!noDeduct && (o.count||1) > (remainTotal||0)) : false;
+  const capped = (o.dows&&o.dows.length) ? (!noDeduct && !canHold && (o.count||1) > (remainTotal||0)) : false;
 
-  let ok=0, skipped=0, noTicket=0;
+  let ok=0, skipped=0, noTicket=0, held=0;
   const results=[];
   let done=0;
   for(const ds of dates){
     done++;
     if(typeof o.onProgress==='function'){ try{ o.onProgress(done,total); }catch(_){} await new Promise(r=>setTimeout(r,0)); }
-    let tk=null;
+    let tk=null, holdOnly=false;
     if(!noDeduct){
       try{ tk=await findTk(o.member_id, ds); }catch(_){}
-      if(!tk){ noTicket++; results.push({date:ds,ok:false,reason:'票券不足或已過期'}); continue; }
+      if(!tk){
+        if(canHold) holdOnly=true;               // 分期未繳期數 → 保留時段、不扣票
+        else { noTicket++; results.push({date:ds,ok:false,reason:'票券不足或已過期'}); continue; }
+      }
     }
     const bk={id:uid('BK'), member_id:o.member_id||null, coach_id:o.coach_id||null,
       substitute_coach_id:o.substitute_coach_id||null,
       ticket_id:tk?tk.id:null, ticket_type_id:(tk&&tk.ticket_type_id)||o.type_id||null,
       category:o.category, format:o.format||null,
       date:ds, start_time:o.time, duration:dur, status:'booked',
+      pending_contract:holdOnly||false,          // 分期待繳費保留（2026-07-29）
+      note:holdOnly?'分期待繳費保留（收款後自動補扣）':null,
       recurring:(o.dows&&o.dows.length>0)||false, created_by:operator, created_at:new Date().toISOString()};
     const verr=await validateBooking(bk, ds, o.time, dur);
     if(verr){ skipped++; results.push({date:ds,ok:false,reason:verr}); continue; }
     try{
-      if(window.FEATURE_FLAGS&&FEATURE_FLAGS.createBookingRpc&&CLOUD&&!noDeduct&&tk){
+      if(window.FEATURE_FLAGS&&FEATURE_FLAGS.createBookingRpc&&CLOUD&&!noDeduct&&tk&&!holdOnly){
         // ── Sprint 3：改由後端 RPC 單一交易建立＋扣票（旗標開啟時）──
         const rr=await createBookingViaRpc(o, tk, ds);
         if(rr.ok){ ok++; results.push({date:ds,ok:true}); }
@@ -15047,15 +15112,17 @@ async function runRecurringBooking(opts){
         // ── 原路徑（旗標關閉，維持與過往完全一致）──
         await dbPut('bookings', bk);
         if(tk) await deductTicket(tk, bk.id, operator);
-        ok++; results.push({date:ds,ok:true});
+        if(holdOnly) held++; else ok++;
+        results.push({date:ds,ok:true,held:holdOnly});
       }
     }catch(e){ skipped++; results.push({date:ds,ok:false,reason:'寫入失敗'}); }
   }
-  return { ok, skipped, noTicket, total, results, capped, remainTotal };
+  return { ok, skipped, noTicket, held, total, results, capped, remainTotal };
 }
 // 把連續預約結果組成回報訊息
 function recurringResultMsg(r){
   let msg=`已建立 ${r.ok} 筆`;
+  if(r.held>0) msg+=`，另 ${r.held} 筆以「待繳費」保留時段（收下一期款項時自動補扣）`;
   const fails=r.skipped+r.noTicket;
   if(fails>0){
     msg+=`，${fails} 筆未建立`;
@@ -15216,6 +15283,7 @@ async function bkCardPop(el, b, btns){
   }
   else if(b.category==='體驗') who=(b.trial_name||'體驗客戶')+'（體驗）';
   else if(b.pending_contract&&!b.member_id) who=(b.trial_name||'客戶')+'（待簽約）';
+  else if(b.pending_contract&&b.member_id) who=(_nm(b.member_id)||'—')+'（待繳費）';
   else if(b.member_id) who=_nm(b.member_id)||'—';
   else if(b.category==='場租') who=(b.trial_name?b.trial_name+'（場租）':'場地租借');
   else who={'自主訓練':'自主訓練'}[b.category]||'課程';
@@ -15968,7 +16036,9 @@ async function openBookingDetail(id){
     // 場租的使用人存 trial_name（不綁會員；2026-07-26 使用者回報「魚大東」沒顯示）
     memberLine=`<div><span style="color:var(--t2);">使用人</span>　${b.trial_name||'—'}</div>`;
   }else{
-    memberLine = (b.pending_contract&&!b.member_id)
+    const _holdNote=(b.pending_contract&&b.member_id&&!b.ticket_id)
+      ? `<div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:9px;padding:8px 10px;font-size:11.5px;line-height:1.7;">🔒 <b>分期待繳費保留</b>：這堂尚未扣課。收到下一期款項、在會員票券卡按「開通下一期」後，會自動補綁票券並扣課。</div>` : '';
+    memberLine = _holdNote + (b.pending_contract&&!b.member_id)
       ? `<div><span style="color:var(--t2);">客戶</span>　${b.trial_name||'—'}　<span class="tag tag-warn" style="font-size:10.5px;">待簽約</span>${b.trial_phone?`　<span style="color:var(--t3);font-size:12px;">${b.trial_phone}</span>`:''}</div>`
       : `<div><span style="color:var(--t2);">會員</span>　${mem?(isMemberView?`<span style="font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'—'}</div>`
       /* 家庭共享使用人（2026-07-29）：自主訓練由家人使用時，trial_name 記稱呼 */
@@ -16046,6 +16116,8 @@ async function openBookingDetail(id){
       ${/* 補課券只屬於團課的四週方案（2026-07-26 使用者指示：教練課沒有補課機制，取消的教練課不出現此鈕） */''}
       ${(isDeskLike())&&b.status==='cancelled'&&b.member_id&&b.category==='小班肌力'&&!b.makeup_granted?`<button class="btn btn-gold" onclick="confirmMakeup('${b.id}')">補發補課券</button>`:''}
       ${(b.pending_contract&&!b.member_id&&b.status==='booked'&&(isDeskLike()))?`<button class="btn btn-green" onclick="openConvertPending('${b.id}')">已簽約，轉正式預約</button>`:''}
+      ${(canCancel&&ownByCoach&&!isMemberView&&b.member_id&&b.category!=='小班肌力')
+        ? `<button class="btn btn-ghost" style="color:#b5372e;" onclick="openSeriesCancel('${b.id}')">連續取消…</button>` : ''}
       ${canCancel&&ownByCoach?(isMemberView
         ? (isGroupD&&Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id)&&!isPastD
             ? `<button class="btn btn-danger" onclick="memLeaveGroup('${b.id}')">取消報名</button>`
@@ -16054,6 +16126,75 @@ async function openBookingDetail(id){
                 : ''))   /* 會員視角：教練課取消請洽櫃檯；原本誤走櫃檯流程（無寫入權）點了沒反應（2026-07-28） */
         : `<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`):''}
     </div>`);
+}
+/* ── 連續取消（2026-07-29 使用者指示：連續預約也要有連續取消）─────────────
+   「同一系列」怎麼認：同會員＋同課別＋同教練＋同星期幾＋同開始時間，且是今天以後、
+   仍為已預約的課。不單靠 recurring 旗標——走 RPC 建立的連續預約旗標是空的（已補標，
+   但既有資料仍是 false），用時段特徵才抓得全。 */
+async function seriesOf(b){
+  if(!b || !b.member_id) return [];
+  const all=await dbGetAll('bookings');
+  const today=ymd(TODAY);
+  const dow=(parseYmd(b.date)||new Date()).getDay();
+  return all.filter(x=> x && x.member_id===b.member_id
+      && x.status==='booked'
+      && String(x.date)>=today
+      && x.category===b.category
+      && (x.coach_id||'')===(b.coach_id||'')
+      && String(x.start_time).slice(0,5)===String(b.start_time).slice(0,5)
+      && (parseYmd(x.date)||new Date()).getDay()===dow)
+    .sort((a,c)=>String(a.date).localeCompare(String(c.date)));
+}
+async function openSeriesCancel(id){
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+  const list=await seriesOf(b);
+  if(list.length<=1){ showToast('這個時段沒有其他同系列的課'); return; }
+  const WD=['日','一','二','三','四','五','六'];
+  const withTk=list.filter(x=>x.ticket_id).length;
+  const held=list.filter(x=>x.pending_contract&&!x.ticket_id).length;
+  const rows=list.map((x,i)=>{
+    const d=parseYmd(x.date);
+    return `<label class="sc-row">
+      <input type="checkbox" class="sc-ck" value="${x.id}" checked>
+      <span class="sc-d">${String(x.date).replace(/-/g,'/')}（${d?WD[d.getDay()]:''}）</span>
+      <span class="sc-t">${String(x.start_time).slice(0,5)}</span>
+      <span class="sc-x">${x.pending_contract&&!x.ticket_id?'待繳費保留':(x.ticket_id?'已扣 1 堂':'未綁票券')}</span>
+    </label>`;
+  }).join('');
+  showModal(`<div class="modal-title">連續取消</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:10px;">
+      這位會員在 <b>週${WD[(parseYmd(b.date)||new Date()).getDay()]} ${String(b.start_time).slice(0,5)}</b> 的
+      ${b.category}，今天以後還有 <b>${list.length}</b> 堂。取消哪幾堂請自行勾選。</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <button class="btn btn-ghost btn-sm" onclick="scAll(true)">全選</button>
+      <button class="btn btn-ghost btn-sm" onclick="scAll(false)">全不選</button>
+    </div>
+    <div class="sc-list">${rows}</div>
+    <div style="font-size:12px;color:var(--t2);margin:12px 0 4px;line-height:1.8;">
+      其中 <b>${withTk}</b> 堂已扣票${held?`、<b>${held}</b> 堂是待繳費保留（本來就沒扣）`:''}。<br>
+      待繳費保留的課取消不涉及票券；已扣票的依下面選擇處理。</div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">返回</button>
+      <button class="btn btn-ghost" style="color:#b5372e;" onclick="runSeriesCancel('none')">取消・扣課不退</button>
+      <button class="btn btn-danger" onclick="runSeriesCancel('force')">取消・退回票券</button>
+    </div>`);
+}
+function scAll(on){ document.querySelectorAll('.sc-ck').forEach(c=>{c.checked=!!on;}); }
+async function runSeriesCancel(mode){
+  const ids=[...document.querySelectorAll('.sc-ck')].filter(c=>c.checked).map(c=>c.value);
+  if(!ids.length){ showToast('請至少勾選一堂'); return; }
+  const foot=document.querySelector('.modal-foot');
+  if(foot) foot.innerHTML='<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">取消中…（0/'+ids.length+'）</div>';
+  let done=0, fail=0;
+  for(const id of ids){
+    try{ await cancelBooking(id, mode, {silent:true}); done++; }
+    catch(e){ fail++; console.error('連續取消失敗',id,e); }
+    if(foot) foot.innerHTML='<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">取消中…（'+(done+fail)+'/'+ids.length+'）</div>';
+  }
+  dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
+  closeModal();
+  showToast(`已取消 ${done} 堂`+(fail?`，${fail} 堂失敗`:'')+(mode==='force'?'（票券已退回）':'（扣課不退）'));
+  navTo(CUR_PAGE);
 }
 /* ── 課卡備註（2026-07-29 使用者指示：讓教練或櫃檯填寫特殊狀況）──
    bookings.note 舊有兩種來源：匯入字串（「舊系統匯入｜教室:跑步機2」，selfVenueLabel 會讀它推
@@ -16064,7 +16205,8 @@ function bkNoteSplit(note){
   const s=String(note||'');
   const i=s.indexOf(BK_NOTE_SEP);
   if(i>=0) return {sys:s.slice(0,i), user:s.slice(i+BK_NOTE_SEP.length)};
-  if(/^舊系統匯入/.test(s)) return {sys:s, user:''};   // 純匯入字串：整段當系統註記
+  // 純系統字串（匯入註記、分期待繳費標記）整段當系統註記，人工備註另外接在後面
+  if(/^舊系統匯入|^分期待繳費保留/.test(s)) return {sys:s, user:''};
   return {sys:'', user:s};
 }
 function bkNoteJoin(sys,user){
@@ -16809,7 +16951,10 @@ async function deskRefundCancelled(id){
   dbCacheClear(['bookings','member_tickets','ticket_logs']);
   closeModal(); showToast('已補退 1 堂票券'); navTo(CUR_PAGE);
 }
-async function cancelBooking(id, refundMode){
+/* opts.silent（2026-07-29）：連續取消一次跑很多筆——每筆都關視窗、跳 toast、重繪整頁
+   會互相打斷且極慢。silent 時只做資料異動與通知，收尾交給呼叫端統一處理。 */
+async function cancelBooking(id, refundMode, opts){
+  const _silent=!!(opts&&opts.silent);
   const b=await dbGet('bookings',id);
   if(!b)return;
 
@@ -16833,9 +16978,11 @@ async function cancelBooking(id, refundMode){
           : `您的${b.category}${when}已取消。因開課 24 小時內取消，本次恕不退回票券。`;
         if(b.member_id) await pushNotification(b.member_id,'cancel','預約已取消',body);
       }catch(_){}
-      closeModal();
-      showToast(refunded?'已取消預約，退回 1 堂票券':'已取消預約（24 小時內，扣課不退）');
-      navTo(CUR_PAGE);
+      if(!_silent){
+        closeModal();
+        showToast(refunded?'已取消預約，退回 1 堂票券':'已取消預約（24 小時內，扣課不退）');
+        navTo(CUR_PAGE);
+      }
       return;
     }
     console.error('RPC 取消未成功，回退前端舊邏輯：', res && (res.error || res.data));
@@ -16894,6 +17041,7 @@ async function cancelBooking(id, refundMode){
   }
   if(b.member_id) await pushNotification(b.member_id,'cancel','預約已取消',body);
 
+  if(_silent) return;
   closeModal();
   if(refundedCount>0) showToast(`已取消預約，退回 ${refundedCount} 堂票券`);
   else if(refundMissed) showToast('已取消預約，但找不到可退的票券 —— 請到會員票券手動確認堂數');
@@ -24551,9 +24699,39 @@ async function confirmInstallNext(ticket_id){
       created_at:new Date().toISOString()});
   }catch(e){ console.error('install purchase log fail',e); showToast('付款紀錄寫入失敗：'+(e.message||e)); }
   try{ await logTicket(t.id,'installment_unlock',seg,null,SESSION.id,`開通第 ${cur+1} 期（${seg} 堂），實收 $${amt.toLocaleString()}`); }catch(_){}
+  // 把先前以「待繳費」保留的課補綁票券並扣課（由早到晚，最多本期開通的堂數）
+  let bound=0;
+  try{ bound=await bindHeldBookings(t.id, seg); }catch(e){ console.error('補綁待繳費預約失敗',e); }
   closeModal();
-  showToast(`已收款並開通第 ${cur+1} 期（${seg} 堂）`);
+  showToast(`已收款並開通第 ${cur+1} 期（${seg} 堂）`+(bound?`，並補扣 ${bound} 筆待繳費預約`:''));
   openMemberDetail(t.member_id);
+}
+/* 待繳費保留 → 正式預約（2026-07-29）：分期收到下一期時呼叫。
+   由早到晚綁，綁到已開通堂數用完為止；每筆都重讀票券，避免連續扣課時用到過期的餘額。 */
+async function bindHeldBookings(ticket_id, maxN){
+  if(!(maxN>0)) return 0;
+  const tk0=await dbGet('member_tickets',ticket_id); if(!tk0) return 0;
+  const all=await dbGetAll('bookings');
+  const today=ymd(TODAY);
+  const held=all.filter(b=>b && b.pending_contract && !b.ticket_id && b.status==='booked'
+      && b.member_id===tk0.member_id && String(b.date)>=today
+      && bkTicketTypeOk(tk0, b.ticket_type_id))
+    .sort((a,b)=>String(a.date+a.start_time).localeCompare(String(b.date+b.start_time)));
+  let done=0;
+  for(const b of held){
+    if(done>=maxN) break;
+    const tk=await dbGet('member_tickets',ticket_id);
+    if(!tk || tkUnlockedLeft(tk)<=0) break;
+    b.ticket_id=tk.id;
+    b.ticket_type_id=tk.ticket_type_id||b.ticket_type_id;
+    b.pending_contract=false;
+    b.note=bkNoteJoin('', bkNoteSplit(b.note).user)||null;   // 拿掉待繳費標記，保留員工寫的備註
+    await dbPut('bookings',b);
+    await deductTicket(tk,b.id,SESSION.id);
+    done++;
+  }
+  if(done) dbCacheClear(['bookings','member_tickets','ticket_logs']);
+  return done;
 }
 /* ── 過期票券重新啟用（2026-07-21 商業規則 A2：預設 1 堂／效期 1 週／收費 $100，皆可調）──
    帳面：total=已用+新堂數、remaining=新堂數、status=usable、到期日重設；
@@ -27847,6 +28025,7 @@ async function msbSwapDo(bid,t){
 const SELF_BOOK_ERR={
   'AUTH.FORBIDDEN':'僅限本人操作','BOOKING.PAST_DATE':'不可預約已過去的日期',
   'POINT.EMPTY':'沒有可用的自主訓練點數','TICKET.WRONG_TYPE':'此票券不能預約自主訓練',
+  'TICKET.INSTALLMENT_LOCKED':'分期尚未繳費的堂數不可預約，請洽櫃檯',
   'TICKET.TIME_RESTRICTED':'此票券僅限平日 18:00 前使用','BOOKING.DUP':'您於該時段已有預約',
   'BOOKING.RESOURCE_BUSY':'該場地剛被約走了，請重新選擇'};
 async function memberSelfBookRpc(tk,date,time,venueUnit,famUser){
@@ -29637,15 +29816,17 @@ const CT_PRINT_CSS=`
 @page :left{margin-left:14mm;margin-right:20mm;}
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
+/* 字級／行高（2026-07-29 使用者回報「合約又變成 3 份」）：11pt/1.85 會溢到第 3 頁，
+   雙面就得用到 2 張紙。收成 10.5pt/1.7 讓全文落在 2 頁 —— 雙面正好 1 張。 */
 body{font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;color:#222;
-  font-size:11pt;line-height:1.85;orphans:3;widows:3;}
+  font-size:10.5pt;line-height:1.7;orphans:3;widows:3;}
 .ct-page{background:#fff;}
 .ct-text{white-space:pre-wrap;}
-h1{font-size:16pt;text-align:center;letter-spacing:.1em;margin:0 0 5px;font-weight:700;}
-.sub{text-align:center;font-size:9pt;color:#8a6a3a;letter-spacing:.18em;margin:0 0 16px;}
+h1{font-size:15pt;text-align:center;letter-spacing:.08em;margin:0 0 4px;font-weight:700;}
+.sub{text-align:center;font-size:8.5pt;color:#8a6a3a;letter-spacing:.16em;margin:0 0 12px;}
 .ct-fill{break-inside:avoid;page-break-inside:avoid;}
 .ct-fill table{width:100%;border-collapse:collapse;}
-.ct-sign{margin-top:14mm;display:flex;gap:16mm;font-size:11pt;
+.ct-sign{margin-top:10mm;display:flex;gap:16mm;font-size:10pt;
   break-inside:avoid;page-break-inside:avoid;}
 .ct-sign>div{flex:1;}
 img.ct-sig{max-width:70mm;border:1px solid #ccc;border-radius:6px;}
