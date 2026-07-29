@@ -36,8 +36,7 @@ eq('週日 10:00 → 可用', tkTimeOk(GEN,'2026-08-02','10:00'), true);
 
 console.log('\n兩種點數同池');
 ok('★ 自主訓練改為同類別即可用（友善點也扣得到）',
-   /const selfMode = wantCat==='自主訓練';/.test(src)
-   && /if\(selfMode\)  return ticketCategoryOf\(t\)==='自主訓練';/.test(src));
+   /if\(wantCat==='自主訓練'\) return ticketCategoryOf\(t\)==='自主訓練';/.test(src));
 ok('★ 挑票時先篩掉時段不符的', /if\(!tkTimeOk\(t,bookDate,bookTime\)\) return false;/.test(src));
 ok('★ 受限的票優先用掉（否則最容易白白過期）',
    /const ra=tkIsTimeRestricted\(a\)\?0:1, rb=tkIsTimeRestricted\(b\)\?0:1;/.test(src)
@@ -57,6 +56,53 @@ ok('★ 前端也有對應的錯誤訊息（資料庫端擋下來時看得懂）
    /'TICKET.TIME_RESTRICTED'/.test(src));
 ok('★ 畫面明講原因，不讓會員以為系統壞了',
    /友善自主訓練點數僅限<b>平日 18:00 前<\/b>使用/.test(src));
+
+/* ── 步驟 2 的「這位會員有幾堂可用」必須跟挑票同一套 ──────────────
+   2026-07-30 使用者回報：陳蘭馨明明還有友善自主訓練點數，櫃檯開自主訓練卻沒有票可選。
+   真因是步驟 2 自己寫了一套（只用 bkTicketTypeOk 嚴格比對票種），友善點數比不上
+   「自主訓練」票種 → 判定她 0 堂 → 整個人被 filter 掉 → 畫面變成「待簽約卡位」。 */
+console.log('\n步驟 2 與挑票共用同一套判定');
+ok('★ 抽出共用判定 tkFitsBooking', /function tkFitsBooking\(t, member_id, type_id, bookDate, bookTime\)\{/.test(src));
+ok('★ listUsableTickets 改用它', /return all\.filter\(t=>tkFitsBooking\(t,member_id,type_id,bookDate,bookTime\)\)/.test(src));
+ok('★ 步驟 2 一般課程改用它（不再自寫一套）',
+   /const tks=allTkG\.filter\(tt=>tkFitsBooking\(tt,m\.id,type_id,date,time\)\);/.test(src)
+   && !/allTkG\.filter\(tt=>tkUsableBy\(tt,m\.id\) && bkTicketTypeOk/.test(src));
+ok('★ 步驟 2 團體課也改用它',
+   /const tks=allTk\.filter\(tt=>tkFitsBooking\(tt,m\.id,type_id,date,time\)\);/.test(src));
+ok('　　顯示的堂數用 tkUnlockedLeft（分期未開通的不能先算進去）',
+   (src.match(/const sum=tks\.reduce\(\(s,tt\)=>s\+tkUnlockedLeft\(tt\),0\);/g)||[]).length===2);
+ok('　　步驟 2 先確保票種快取（tkFitsBooking 要靠它判類別）',
+   /票種表：tkFitsBooking 要靠它判類別與限時段，先確保有快取/.test(src));
+
+{
+  // 用陳蘭馨正式庫的真實票券跑一次
+  const TT=[
+    {id:'tt-mqdt55uosz5n',name:'自主訓練',category:'自主訓練',time_restricted:false},
+    {id:'tt-mqdt5kbxusgt',name:'友善自主訓練',category:'自主訓練',time_restricted:true},
+    {id:'tt-mqdt435bbizd',name:'教練課',category:'私人教練',time_restricted:false},
+  ];
+  const T=[
+    {id:'新友善A',ticket_type_id:'tt-mqdt5kbxusgt',member_id:'M',status:'usable',sessions_remaining:1,sessions_total:2,expire_date:'2026-08-02'},
+    {id:'新友善B',ticket_type_id:'tt-mqdt5kbxusgt',member_id:'M',status:'usable',sessions_remaining:2,sessions_total:2,expire_date:'2026-08-03'},
+    {id:'一般點數用完',ticket_type_id:'tt-mqdt55uosz5n',member_id:'M',status:'usable',sessions_remaining:0,sessions_total:2,expire_date:'2026-08-02'},
+    {id:'舊友善已過期',ticket_type_id:'tt-mqdt5kbxusgt',member_id:'M',status:'usable',sessions_remaining:2,sessions_total:2,expire_date:'2026-07-26'},
+  ];
+  const grab=m=>{const i=src.indexOf(m);return src.slice(i,src.indexOf('\n}',i)+2);};
+  const body=['function tkUsableBy','function ticketCategoryOf','function tkTimeOk','function tkUnlockedLeft','function tkFitsBooking']
+    .map(grab).join('\n');
+  const fits=new Function('window','timeToMin','parseYmd','categoryOfTypeId','tkSharedIds','bkTicketTypeOk',
+    body+'\nreturn tkFitsBooking;')(
+      {_ttCache:TT}, t2m, pymd,
+      id=>(TT.find(x=>x.id===id)||{}).category||null, ()=>[], (t,id)=>t.ticket_type_id===id);
+  const cnt=(d,t)=>T.filter(x=>fits(x,'M','tt-mqdt55uosz5n',d,t)).length;
+  eq('★ 平日 09:30 開自主訓練 → 兩張友善點數都算數', cnt('2026-07-30','09:30'), 2);
+  eq('★ 舊的過期點數不算', T.filter(x=>fits(x,'M','tt-mqdt55uosz5n','2026-07-30','09:30')).some(x=>x.id==='舊友善已過期'), false);
+  eq('　　剩 0 堂的一般點數不算', T.filter(x=>fits(x,'M','tt-mqdt55uosz5n','2026-07-30','09:30')).some(x=>x.id==='一般點數用完'), false);
+  eq('★ 平日 19:00 → 友善點數不能用，判定 0 堂', cnt('2026-07-30','19:00'), 0);
+  eq('★ 週六 09:30 → 友善點數不能用，判定 0 堂', cnt('2026-08-01','09:30'), 0);
+  eq('　　教練課類別不會誤撈到自主訓練點數',
+     T.filter(x=>fits(x,'M','tt-mqdt435bbizd','2026-07-30','09:30')).length, 0);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

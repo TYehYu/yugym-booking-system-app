@@ -6131,8 +6131,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.0044';
-const APP_VERSION_LABEL='v260730.0044';
+const APP_VERSION = '260730.0054';
+const APP_VERSION_LABEL='v260730.0054';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9045,26 +9045,29 @@ function tkTimeOk(t,bookDate,bookTime){
   if(bookTime && timeToMin(bookTime)>=1080) return false;  // 18:00 之後不可用
   return true;
 }
+/* 「這張票能不能用在這筆預約」的唯一判定（2026-07-30）——
+   原本步驟 2「這位會員有幾堂可用」自己寫了一套（只用 bkTicketTypeOk 嚴格比對票種），
+   與 listUsableTickets 不一致：陳蘭馨手上有友善自主訓練點數，櫃檯開「自主訓練」時
+   步驟 2 判定她 0 堂，人就直接從名單被濾掉 → 看起來像「有點數卻沒有票可用」。
+   兩邊改共用這支，順便把分期未開通、限時段票也一起納入計算。 */
+function tkFitsBooking(t, member_id, type_id, bookDate, bookTime){
+  if(!tkUsableBy(t,member_id)) return false;   // 持有人或共享者皆可用
+  if(t.status!=='usable' || !(t.sessions_remaining>0)) return false;
+  if(!(tkUnlockedLeft(t)>0)) return false;     // 分期：未繳期數的堂數不可預約（2026-07-29）
+  if(bookDate && t.expire_date && t.expire_date<bookDate) return false; // 已過期
+  if(!tkTimeOk(t,bookDate,bookTime)) return false;   // 限時段票券：星期／18:00 前
+  const wantCat=categoryOfTypeId(type_id);
+  if(wantCat==='小班肌力') return ticketCategoryOf(t)==='小班肌力'; // 團課：同類別即可（不分方案）
+  /* 自主訓練（2026-07-30 使用者指示）：一般自主訓練與友善自主訓練視為同一池 ——
+     「友善自主訓練」已從課程類型清單移除（與自主訓練同義），若仍嚴格比對票種，
+     櫃檯開自主訓練就永遠扣不到友善點數。由 tkTimeOk 依時段篩掉不能用的。 */
+  if(wantCat==='自主訓練') return ticketCategoryOf(t)==='自主訓練';
+  return bkTicketTypeOk(t,type_id);            // 其他類別：嚴格比對＋「教練課」兼容 VIP/限定舊票
+}
 async function listUsableTickets(member_id,type_id,bookDate,bookTime){
   const all=await dbGetAll('member_tickets');
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
-  const wantCat=categoryOfTypeId(type_id); // 目標課程類別
-  const groupMode = wantCat==='小班肌力';   // 團課：不同方案票券互通（同為團課即可用）
-  /* 自主訓練（2026-07-30 使用者指示）：一般自主訓練與友善自主訓練視為同一池 ——
-     「友善自主訓練」已從課程類型清單移除（與自主訓練同義），若仍嚴格比對票種，
-     櫃檯開自主訓練就永遠扣不到友善點數。改成同類別即可用，再由 tkTimeOk 依時段篩掉
-     不能用的（友善點限平日 18:00 前）。 */
-  const selfMode = wantCat==='自主訓練';
-  return all.filter(t=>{
-      if(!tkUsableBy(t,member_id)) return false;   // 持有人或共享者皆可用
-      if(t.status!=='usable' || !(t.sessions_remaining>0)) return false;
-      if(!(tkUnlockedLeft(t)>0)) return false;     // 分期：未繳期數的堂數不可預約（2026-07-29）
-      if(bookDate && t.expire_date && t.expire_date<bookDate) return false; // 已過期
-      if(!tkTimeOk(t,bookDate,bookTime)) return false;   // 限時段票券：星期／18:00 前
-      if(groupMode) return ticketCategoryOf(t)==='小班肌力'; // 團課：同類別即可（不分方案）
-      if(selfMode)  return ticketCategoryOf(t)==='自主訓練'; // 自主：一般與友善同池
-      return bkTicketTypeOk(t,type_id);                      // 其他類別：嚴格比對＋「教練課」兼容 VIP/限定舊票
-    })
+  return all.filter(t=>tkFitsBooking(t,member_id,type_id,bookDate,bookTime))
     /* 排序：限時段的票（友善）優先用掉 —— 它只能平日 18:00 前用，留著最容易白白過期；
        其餘依到期日先進先出。 */
     .sort((a,b)=>{
@@ -14854,6 +14857,8 @@ async function bkStep2(){
   if(!date||!time){showToast('請選擇日期與時間');return;}
   const preMid=(document.getElementById('bk-mem-pre')||{}).value||'';   // 步驟 1 選的會員（2026-07-28）
   Object.assign(_bkWizard,{type_id,t,coach_id,date,time,member_id:preMid});
+  // 票種表：tkFitsBooking 要靠它判類別與限時段，先確保有快取
+  if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
   // 載入會員清單；若步驟一有選教練，該教練的會員排前面
   const members=await dbGetAll('members');
   let actives=members.filter(m=>m.status==='active');
@@ -14887,8 +14892,8 @@ async function bkStep2(){
     // 預先查每位會員的團體課票（顯示剩餘張數，方便櫃台判斷誰要扣票）
     const allTk=await dbGetAll('member_tickets');
     window._grpData=_bkMembers.map(m=>{
-      const tks=allTk.filter(tt=>tkUsableBy(tt,m.id) && ticketMatchesCategory(tt,categoryOfTypeId(type_id)) && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=date));
-      const sum=tks.reduce((s,tt)=>s+tt.sessions_remaining,0);
+      const tks=allTk.filter(tt=>tkFitsBooking(tt,m.id,type_id,date,time)); // 與 listUsableTickets 同一套判定
+      const sum=tks.reduce((s,tt)=>s+tkUnlockedLeft(tt),0);
       return {id:m.id, name:m.name||'—', sum, mine:!!(coach_id&&m.default_coach_id===coach_id)};
     });
     window._grpSel=(preMid&&window._grpData.some(g=>g.id===preMid))?[preMid]:[];   // 步驟 1 已選會員 → 預先加入名單（2026-07-28）
@@ -14911,9 +14916,12 @@ async function bkStep2(){
   // ── 一般課程（私教/友善/自主）：單選會員 + 票券 + 連續預約 ──
   // 只顯示有可用票券的會員，標籤改為票券張數
   const allTkG=await dbGetAll('member_tickets');
+  /* 判定必須與 listUsableTickets 同一套（tkFitsBooking），否則會出現
+     「票券明明還有點數，步驟 2 卻說這位會員沒票」——2026-07-30 陳蘭馨的友善自主訓練點數。
+     堂數也改用 tkUnlockedLeft，分期未開通的不能先算進去。 */
   const withTicket=_bkMembers.map(m=>{
-    const tks=allTkG.filter(tt=>tkUsableBy(tt,m.id) && bkTicketTypeOk(tt,type_id) && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=date));
-    const sum=tks.reduce((s,tt)=>s+tt.sessions_remaining,0);
+    const tks=allTkG.filter(tt=>tkFitsBooking(tt,m.id,type_id,date,time));
+    const sum=tks.reduce((s,tt)=>s+tkUnlockedLeft(tt),0);
     return {m,sum};
   }).filter(x=>x.sum>0);
   window._bkMembers=withTicket.map(x=>x.m);

@@ -15,13 +15,13 @@ const api=new Function('COURSE_SHAPE','parseYmd',
   +'; return {tkSharedIds,tkParticipants,tkUsableBy,findRefundTargetTicket,allocBookingsToTickets};')(COURSE_SHAPE,parseYmd);
 const {tkSharedIds,tkParticipants,tkUsableBy,findRefundTargetTicket,allocBookingsToTickets}=api;
 
-// listUsableTickets 的篩選條件（原始碼裡的那段 filter，逐字抽出來跑）
-const lu=h.slice(h.indexOf('async function listUsableTickets('));
-// 2026-07-30：排序改成「限時段票優先」多行寫法，終點改抓 .sort( 起點
-const filtSrc=lu.slice(lu.indexOf('return all.filter(t=>{'), lu.indexOf('\n    .sort('));
+/* listUsableTickets 的篩選條件。2026-07-30 起這段抽成共用的 tkFitsBooking
+   （步驟 2 的「這位會員有幾堂可用」也改用它），這裡直接跑那支。
+   wantCat 沿用原本的參數位置，用假的 categoryOfTypeId 餵進去。 */
 const mkUsable=new Function('all','member_id','type_id','bookDate','bookTime','wantCat','groupMode','selfMode',
   'ticketCategoryOf','bkTicketTypeOk','tkUsableBy','tkTimeOk',
-  grabFn('tkUnlockedLeft')+'\n'+filtSrc+';');   // filtSrc 已含完整的 all.filter(...)，只補分號
+  grabFn('tkUnlockedLeft')+'\nconst categoryOfTypeId=()=>wantCat;\n'+grabFn('tkFitsBooking')
+  +'\nreturn all.filter(t=>tkFitsBooking(t,member_id,type_id,bookDate,bookTime));');
 
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
