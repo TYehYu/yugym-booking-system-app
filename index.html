@@ -6131,8 +6131,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.0054';
-const APP_VERSION_LABEL='v260730.0054';
+const APP_VERSION = '260730.0100';
+const APP_VERSION_LABEL='v260730.0100';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17245,11 +17245,12 @@ async function saveBookingTime(id){
   const nsub=document.getElementById('ed-subcoach')?document.getElementById('ed-subcoach').value||null:b.substitute_coach_id||null;
   // 教室：下拉選的是場地 id；若換了場地 → 給場地首單位讓 validateBooking 重新分配
   let nVenue=b.venue_unit;
+  const curVid=String(b.venue_unit||'').split('_')[0];
   const venSel=document.getElementById('ed-venue');
+  let pickedVid=null;                       // 使用者在下拉「明確指定」的場地
   if(venSel){
     const newVid=venSel.value;
-    const curVid=String(b.venue_unit||'').split('_')[0];
-    if(newVid && newVid!==curVid) nVenue=`${newVid}_1`;
+    if(newVid && newVid!==curVid){ nVenue=`${newVid}_1`; pickedVid=newVid; }
   }
   /* 備註（2026-07-29）：打完備註直接按「儲存變更」也要存到，不能被 noChange 早退吃掉 */
   const noteEl=document.getElementById('ed-note');
@@ -17259,8 +17260,21 @@ async function saveBookingTime(id){
   if(noteEl) b.note=nNote;
   // 用更新後的內容驗證：時間衝突、代課教練該時段衝堂、場地容量、過去時間等
   const vbk={...b, substitute_coach_id:nsub, venue_unit:nVenue};
-  const verr=await validateBooking(vbk,nd,nt,ndur);
+  /* 場地要不要重新分配（2026-07-30 使用者指示：改備註不該跳場地提示）——
+     validateBooking 每次都會重跑分配，時段沒動時也會把已在團課教室的課「重新推派」一輪，
+     於是只改備註也跳出「多功能已滿，是否改用團課教室？」。
+     ① 使用者在下拉明確選了場地 → 就用那個，不自動改派。
+     ② 時間／時長沒動 → 沿用原場地。
+     ③ 只有真的改了時間／時長且沒指定場地時，才讓系統重新分配（此時才可能跳提示）。 */
+  const _timeMoved = nd!==b.date || nt!==b.start_time || ndur!==b.duration;
+  const _forceVid = pickedVid || (!_timeMoved ? (curVid||null) : null);
+  const _keepVenue = !_timeMoved && !pickedVid && !!b.venue_unit; // 場地原地不動
+  if(_forceVid) vbk.venue_pref=_forceVid;
+  let verr=await validateBooking(vbk,nd,nt,ndur);
+  // 只改備註／代課時，場地本來就沒動 → 不因場地擠不下而擋住存檔（也不重新編號）
+  if(verr && _keepVenue && verr.indexOf('場地')>=0) verr=null;
   if(verr){showToast(verr);return false;}   // 驗證失敗：讓呼叫端保留編輯狀態
+  if(_keepVenue) vbk.venue_unit=b.venue_unit;
   /* 首選場地被卡住、要擠去次選 → 先問過操作者（2026-07-30 使用者指示）。
      視窗版的編輯表單會被確認框頂掉，取消時要把明細叫回來；卡片內嵌編輯則原地保留。 */
   if(vbk._venueOverflow){

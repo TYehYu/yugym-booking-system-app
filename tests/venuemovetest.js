@@ -67,6 +67,40 @@ ok('　　確認框的否定鈕文案可依情境改（移動時不該寫「取�
    /function confirmVenueOverflow\(vbk, noLabel\)\{/.test(src)
    && /\$\{noLabel\|\|'取消預約'\}/.test(src));
 
+/* ── 2b. 沒動到時間就別重新分配場地 ─────────────────────── */
+console.log('\n只改備註不該跳場地提示（2026-07-30 使用者指示）');
+ok('★ 時間／時長沒動 → 沿用原場地，不讓 validateBooking 重新推派',
+   /const _timeMoved = nd!==b\.date \|\| nt!==b\.start_time \|\| ndur!==b\.duration;/.test(src)
+   && /const _forceVid = pickedVid \|\| \(!_timeMoved \? \(curVid\|\|null\) : null\);/.test(src)
+   && /if\(_forceVid\) vbk\.venue_pref=_forceVid;/.test(src));
+ok('★ 下拉明確選了場地就用那個，不自動改派',
+   /if\(newVid && newVid!==curVid\)\{ nVenue=`\$\{newVid\}_1`; pickedVid=newVid; \}/.test(src));
+ok('★ 指定場地時 allocateVenue 只試那一個 → overflow 必為 false（不會跳提示）',
+   /const pri=forceVid\?\[forceVid\]:venuePriorityFor\(category\);/.test(src)
+   && /overflow: vid!==primaryVid/.test(src));
+ok('　　只改備註時場地原地不動，連編號都不重排',
+   /const _keepVenue = !_timeMoved && !pickedVid && !!b\.venue_unit;/.test(src)
+   && /if\(_keepVenue\) vbk\.venue_unit=b\.venue_unit;/.test(src));
+ok('　　也不會因為場地擠不下而擋住備註存檔',
+   /if\(verr && _keepVenue && verr\.indexOf\('場地'\)>=0\) verr=null;/.test(src));
+{
+  const g=(s,e)=>{const i=src.indexOf(s);return src.slice(i,src.indexOf(e,i)+e.length);};
+  const VEN=[{id:'multi',name:'多功能訓練區',cap:3},{id:'treadmill',name:'跑步機區',cap:2},{id:'group',name:'團課教室',cap:1}];
+  const alloc=new Function('getVenues','venueCap','venuePriorityFor','timeToMin',
+    g('function allocateVenue(','\n}')+'\nreturn allocateVenue;')(
+      ()=>VEN, v=>(VEN.find(x=>x.id===v)||{}).cap||0,
+      c=>c==='小班肌力'?['group']:(c==='自主訓練'?['multi','treadmill','group']:['multi','group']),
+      t=>{const p=String(t).split(':');return (+p[0])*60+(+p[1]||0);});
+  const day=[
+    {id:'BK-19fa308315d574c',start_time:'18:00',duration:60,category:'自主訓練',venue_unit:'multi_2'},
+    {id:'BK-ms4u17qlae7h',   start_time:'18:00',duration:60,category:'體驗',    venue_unit:'multi_3'},
+    {id:'IMPB-B2026072417744498',start_time:'18:30',duration:60,category:'自主訓練',venue_unit:null},
+  ];
+  const r=alloc('私人教練',day,1080,1140,'IMP-00034','group');
+  ok('★ 張正怡已在團課教室、只改備註 → 指定 group 重驗，不跳提示',
+     r.unit==='group_1' && r.overflow===false && !r.error, r);
+}
+
 /* ── 3. 迴歸：allocateVenue 對 7/30 現場資料的判定 ───────── */
 console.log('\n7/30 現場資料迴歸（張正怡 IMP-00034）');
 {
