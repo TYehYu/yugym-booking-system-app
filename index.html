@@ -1249,6 +1249,24 @@ body.mc-mode .layout{padding-top:8px;}
 .ov-i-l{flex:1;min-width:0;font-size:13.5px;color:var(--text);font-weight:600;}
 .ov-i-v{font-size:17px;font-weight:800;font-family:var(--num);color:var(--text);white-space:nowrap;}
 .ov-i-v2{font-size:12.5px;font-weight:700;font-family:var(--num);color:var(--gold-d);margin-left:8px;white-space:nowrap;}
+/* 員工表現列可點（2026-07-29）＋當月薪資明細彈窗 */
+.perf-clickable{cursor:pointer;transition:background .12s;}
+.perf-clickable:hover{background:var(--sage-bg);}
+.pfd-stats{display:flex;flex-wrap:wrap;gap:8px;margin:-6px 0 14px;}
+.pfd-stats span{flex:1 1 auto;min-width:62px;background:var(--card2);border:1px solid var(--bd);border-radius:10px;
+  padding:8px 6px;text-align:center;display:flex;flex-direction:column;gap:1px;}
+.pfd-stats b{font-size:17px;font-weight:800;font-family:var(--num);color:var(--green);line-height:1;}
+.pfd-stats i{font-style:normal;font-size:10.5px;color:var(--t3);}
+.pfd-list{display:flex;flex-direction:column;}
+.pfd-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 2px;border-bottom:1px solid var(--bd2);}
+.pfd-row:last-child{border-bottom:none;}
+.pfd-l{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:13.5px;color:var(--text);}
+.pfd-f{font-size:11px;color:var(--t3);font-family:var(--num),inherit;line-height:1.5;}
+.pfd-v{font-size:15px;font-weight:800;font-family:var(--num);white-space:nowrap;color:var(--text);}
+.pfd-row.pfd-neg .pfd-v{color:#b5372e;}
+.pfd-row.pfd-sum{border-top:1.5px solid var(--bd);border-bottom:none;margin-top:2px;}
+.pfd-row.pfd-sum .pfd-l{font-weight:800;}
+.pfd-row.pfd-sum .pfd-v{color:var(--green);font-size:17px;}
 /* 手機員工表現：5 欄對齊（姓名｜營收｜教練課｜團體課｜工時）*/
 .perf-m-head,.perf-m-row{display:grid;grid-template-columns:1.4fr 1.3fr 0.8fr 0.8fr 0.8fr;gap:4px;align-items:baseline;}
 .perf-m-head{padding:4px 0 8px;border-bottom:1.5px solid var(--bd);}
@@ -5974,8 +5992,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1011';
-const APP_VERSION_LABEL='v260729.1011';
+const APP_VERSION = '260729.1024';
+const APP_VERSION_LABEL='v260729.1024';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11062,7 +11080,7 @@ PAGES.dashboard=async function(){
     }else{
       hours=attAll.filter(a=>a.emp_id===c.id&&inRange(a.date)).reduce((s,r)=>s+(calcWorkHours(r)||0),0);
     }
-    return {name:coachDisp(c),rev,renew:renewMap[c.id]||0,ptCount,ptDone,groupCount,groupDone,hours,need_punch:!!c.need_punch,need_duty:!!c.need_duty};
+    return {id:c.id,name:coachDisp(c),rev,renew:renewMap[c.id]||0,ptCount,ptDone,groupCount,groupDone,hours,need_punch:!!c.need_punch,need_duty:!!c.need_duty};
   }).filter(r=>r.rev>0||r.ptCount>0||r.groupCount>0||r.hours>0||r.renew>0)
     .sort((a,b)=>b.ptDone-a.ptDone||b.rev-a.rev); // 預設依教練課堂數由高到低
 
@@ -11102,7 +11120,7 @@ PAGES.dashboard=async function(){
         <div class="perf-m-head">
           <span>姓名</span><span>續約</span><span>教練課</span><span>團體課</span><span>值班</span>
         </div>
-        ${perfRows.map(r=>`<div class="perf-m-row">
+        ${perfRows.map(r=>`<div class="perf-m-row perf-clickable" onclick="openPerfDetail('${r.id}','${ym}')">
           <span class="perf-m-name">${r.name}</span>
           <span style="color:var(--green);font-weight:700;">${r.renew||'—'}</span>
           <span><b>${r.ptDone}</b>/${r.ptCount}</span>
@@ -11124,7 +11142,7 @@ PAGES.dashboard=async function(){
   <div class="card"><div class="card-title">員工表現</div>
     ${perfRows.length===0?'<div class="empty"><div class="em-t">本期無資料</div></div>':
     `<table><thead><tr><th>姓名</th><th>營收</th><th>教練課</th><th>團體課</th><th>上班時數</th></tr></thead><tbody>
-    ${perfRows.map(r=>`<tr><td style="font-weight:500;">${r.name}</td><td class="num" style="color:var(--green);font-weight:600;">${fmtNT(r.rev)}</td><td class="num">${r.ptCount} 堂</td><td class="num">${r.groupCount} 堂</td><td class="num">${r.need_punch?r.hours.toFixed(1)+' hr':'—'}</td></tr>`).join('')}
+    ${perfRows.map(r=>`<tr class="perf-clickable" onclick="openPerfDetail('${r.id}','${ym}')" title="查看當月薪資明細"><td style="font-weight:500;">${r.name}</td><td class="num" style="color:var(--green);font-weight:600;">${fmtNT(r.rev)}</td><td class="num">${r.ptCount} 堂</td><td class="num">${r.groupCount} 堂</td><td class="num">${r.need_punch?r.hours.toFixed(1)+' hr':'—'}</td></tr>`).join('')}
     </tbody></table>`}
   </div>
   <div class="dash-grid dash-2col">
@@ -18972,6 +18990,74 @@ function payrollThisMonth(){ _payrollMonth=ymd(TODAY).slice(0,7); navTo('staff')
 /* 月薪資計算（2026-07-24 抽出為共用函式）：
    營運分析的「本月利潤」需要教練薪資總額，必須與薪資彙總頁用同一套邏輯，
    否則兩頁數字對不起來。此處只算數字、不碰畫面；renderPayrollSummary 負責呈現。 */
+/* ══ 員工當月表現／薪資明細彈窗（2026-07-29 使用者指示）══
+   點營運分析的員工表現列 → 一列一列顯示：項目、計算公式、該列金額。
+   計算完全走 calcSalary（與薪資單、月結表同一套），不另算一份避免口徑漂移。 */
+async function openPerfDetail(empId, month){
+  try{
+    const [emp,bookings,shifts,attendance,tickets]=await Promise.all([
+      dbGet('coaches',empId), dbGetAll('bookings'), dbGetAll('shifts').catch(()=>[]),
+      dbGetAll('attendance').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[])]);
+    if(!emp){ showToast('找不到員工'); return; }
+    const ym=month||ymd(TODAY).slice(0,7);
+    const mine=bookings.filter(b=>(b.substitute_coach_id||b.coach_id)===empId
+      && String(b.date||'').slice(0,7)===ym && b.status!=='cancelled');
+    const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in');
+    const ptDone=done.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+    const grpList=done.filter(b=>b.category==='小班肌力');
+    const groupHeads=grpList.reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
+    const leave=leaveSummary(shifts, empId, ym);
+    const dutyCap=emp.need_duty?dutyHoursCapped(attendance,shifts,empId,ym):0;
+    const dutyOv=emp.need_duty?dutyClassOverlapHours(shifts,bookings,empId,ym):0;
+    const dutyHours=Math.max(dutyCap-dutyOv,0);
+    let renewCount=0;
+    (tickets||[]).forEach(t=>{ const who=t.renewed_by||t.sold_by||t.coach_id;
+      if(t.is_renewal && who===empId && String(t.purchase_date||t.created_at||'').slice(0,7)===ym) renewCount++; });
+    const leaderHeads = emp.is_manager
+      ? (await dbGetAll('coaches')).filter(o=>o.role!=='admin'&&o.role!=='front_desk'&&o.status!=='inactive')
+          .map(o=>leaderClassCount(bookings,o.id,ym))
+      : [];
+    const sal=calcSalary(emp, ptDone, groupHeads, dutyHours, leave, 0, {renewCount, leaderHeads});
+    const money=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+    const row=(label,formula,amount,opt)=>`<div class="pfd-row${opt&&opt.sum?' pfd-sum':''}${opt&&opt.neg?' pfd-neg':''}">
+      <span class="pfd-l">${label}${formula?`<span class="pfd-f">${formula}</span>`:''}</span>
+      <span class="pfd-v">${amount}</span></div>`;
+    let rows='';
+    if(sal.base>0){
+      rows+=row('底薪', sal.schedHours>0?`月薪制・當月排班 ${sal.schedHours.toFixed(1)} 小時`:'月薪制', money(sal.base));
+      if(sal.baseLeaveDeduct>0) rows+=row('請假扣薪', sal.leaveDeductDetail||'事假全扣・病假半薪', '−'+money(sal.baseLeaveDeduct), {neg:true});
+      rows+=row('教練課費', sal.ptDetail||`${ptDone} 堂`, money(sal.ptPay));
+      rows+=row('教練課收入', sal.ptIsFloor?'保障底薪較高 → 取底薪':'課費較高 → 取課費', money(sal.ptIncome), {sum:true});
+    }else{
+      rows+=row('教練課費', sal.ptDetail||`${ptDone} 堂`, money(sal.ptPay));
+    }
+    if(sal.bonus>0)    rows+=row('達標獎金', sal.bonusDetail||'', money(sal.bonus));
+    if(sal.groupPay>0) rows+=row('團體課費', sal.groupDetail||`${groupHeads} 人次`, money(sal.groupPay));
+    if(sal.dutyPay>0)  rows+=row('值班費', sal.dutyDetail||`${dutyHours.toFixed(1)} 小時`, money(sal.dutyPay));
+    if(sal.renewPay>0) rows+=row('續約獎金', sal.renewDetail||`${renewCount} 張`, money(sal.renewPay));
+    if(sal.leaderPay>0)rows+=row('店長津貼', sal.leaderDetail||'', money(sal.leaderPay));
+    if(sal.supPay>0)   rows+=row('主管津貼', '固定津貼', money(sal.supPay));
+    rows+=row('應發合計','', money(sal.grossPay), {sum:true});
+    if(sal.insEmpDeduct>0){
+      if(sal.insLaborEmp>0)  rows+=row('勞保（員工負擔）', sal.insGrade?`投保級距 ${Number(sal.insGrade).toLocaleString()}`:'', '−'+money(sal.insLaborEmp), {neg:true});
+      if(sal.insHealthEmp>0) rows+=row('健保（員工負擔）', '', '−'+money(sal.insHealthEmp), {neg:true});
+    }
+    rows+=row('實領薪資','', money(sal.netPay), {sum:true});
+    const [yy,mm]=ym.split('-');
+    showModal(`<div class="modal-title">${coachDisp(emp)}　${yy}/${mm} 表現與薪資</div>
+      <div class="pfd-stats">
+        <span><b>${ptDone}</b>堂<i>教練課</i></span>
+        <span><b>${grpList.length}</b>堂<i>團體課</i></span>
+        <span><b>${groupHeads}</b>人次<i>團課人數</i></span>
+        <span><b>${dutyHours.toFixed(1)}</b>hr<i>值班</i></span>
+        <span><b>${renewCount}</b>張<i>續約</i></span>
+      </div>
+      <div class="pfd-list">${rows}</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:10px;line-height:1.7;">＊與薪資單同一套計算；實際發放以公司結算為準。</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+        <button class="btn btn-green" onclick="closeModal();stGoEmp('${empId}','salary')">完整薪資單</button></div>`);
+  }catch(e){ showToast('讀取失敗：'+(e&&e.message?e.message:e)); }
+}
 async function computeMonthlyPayroll(month){
   await loadSalaryTemplates();
   const[bookings,coaches,shifts,attendance]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('shifts').catch(()=>[]),dbGetAll('attendance').catch(()=>[])]);
