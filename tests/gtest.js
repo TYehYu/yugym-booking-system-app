@@ -53,7 +53,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
   console.log('多位子合併與補課券：');
   html=await render({ids:['M','M','M'],tickets:[live],bookings:[],names:{M:'許佳慈'}});
   chk('同一人只一列', (html.match(/許佳慈/g)||[]).length===1);
-  chk('標 ×3', html.includes('×3'));
+  chk('標「3 個名額」（2026-07-29 使用者指示：不用 ×N）', html.includes('3 個名額'));
   html=await render({ids:['M'],tickets:[T({id:'mk',member_id:'M',sessions_total:1,sessions_remaining:1,source:'makeup',start_date:'2026-07-24'})],bookings:[],names:{M:'徐翎娟'}});
   chk('顯示「含補課券」', html.includes('含補課券'));
 
@@ -72,7 +72,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('圓點總數 = 2', (html.match(/class="mtk/g)||[]).length===2);
     chk('兩個都標本堂金框', (html.match(/mtk-cur/g)||[]).length===2);
     chk('沒有殘留空心', !html.includes('mtk-free'));
-    chk('名字仍合併成一列標 ×2', (html.match(/呂宜臻/g)||[]).length===1 && html.includes('×2'));
+    chk('名字仍合併成一列、標「2 個名額」', (html.match(/呂宜臻/g)||[]).length===1 && html.includes('2 個名額'));
   }
   {
     // used=0 的票不可把過去所有出席都塞進來（slice(-0) 陷阱）
