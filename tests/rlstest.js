@@ -35,7 +35,7 @@ console.log('非管理員自助寫入不可走 upsert');
 });
 
 console.log('\n寫入後必須清快取');
-ok('dbPut 內建 dbCacheClear', /async function dbPut\([\s\S]{0,400}?dbCacheClear/.test(src));
+ok('dbPut 內建 dbCacheClear', /async function dbPut\([\s\S]{0,900}?dbCacheClear/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

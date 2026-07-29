@@ -6131,8 +6131,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.0016';
-const APP_VERSION_LABEL='v260730.0016';
+const APP_VERSION = '260730.0044';
+const APP_VERSION_LABEL='v260730.0044';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6320,6 +6320,14 @@ async function dbGet(store,id){
   return data||null;
 }
 async function dbPut(store,obj){
+  /* 2026-07-30 使用者回報「移動課卡一直跳錯誤」的真兇：
+     validateBooking 會在傳入物件上掛暫存欄位（_venueOverflow），拖曳路徑又把同一個物件
+     直接丟進 upsert → PostgREST 找不到該欄位而整筆失敗（PGRST204）。
+     資料庫沒有任何以底線開頭的欄位，統一在這裡濾掉，其他暫存欄位也一併免疫。 */
+  if(obj && typeof obj==='object' && !Array.isArray(obj)){
+    const keys=Object.keys(obj).filter(k=>k.charAt(0)==='_');
+    if(keys.length){ obj=Object.assign({},obj); keys.forEach(k=>delete obj[k]); }
+  }
   const{data,error}=await sb.from(tbl(store)).upsert(obj).select().maybeSingle();
   if(error) throw dbFriendlyError(error, store, '儲存');
   dbCacheClear(store);   // 寫入即失效：自己的操作必須立刻看得到
@@ -13091,14 +13099,34 @@ function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){
   const pri=forceVid?[forceVid]:venuePriorityFor(category);
   const primaryVid=pri[0]; // 首選場地
   for(const vid of pri){
-    let okAll=true, peak=0;
+    let okAll=true;
     for(let inst=ns; inst<ne; inst+=30){
       const u=loadAt(inst)[vid];
       if(u==null || u>=venueCap(vid)){ okAll=false; break; }
-      if(u>peak) peak=u;
     }
     if(okAll){
-      return { unit:`${vid}_${Math.min(venueCap(vid),peak+1)}`, overflow: vid!==primaryVid, fromVid:primaryVid, toVid:vid };
+      /* 2026-07-30 修正：原本回傳 `${vid}_${peak+1}`，只看併發數不看「哪幾號被佔」——
+         多功能已被 multi_2、multi_3 佔住時 peak=2 就吐 multi_3，跟現有預約撞號；
+         loadAt 又以單位編號去重，兩筆同號只算一位，容量因此少算一個 → 會超賣。
+         改成挑「整個時窗內都沒被用到的最小號」。 */
+      const cap=venueCap(vid);
+      const taken={};
+      others.forEach(x=>{
+        if(!x.venue_unit || String(x.venue_unit).split('_')[0]!==vid) return;
+        const s0=timeToMin(x.start_time), e0=s0+(x.duration||60);
+        if(s0<ne && ns<e0) taken[x.venue_unit]=1;
+      });
+      // 沒標場地的舊資料同樣佔位，只是沒有號碼 → 讓它們先佔住最前面幾號
+      let inf=0;
+      for(let inst=ns; inst<ne; inst+=30){
+        const cur=others.filter(x=>{ const s0=timeToMin(x.start_time), e0=s0+(x.duration||60); return s0<=inst && inst<e0; });
+        const lab={}; cur.forEach(x=>{ if(x.venue_unit && String(x.venue_unit).split('_')[0]===vid) lab[x.venue_unit]=1; });
+        const d=(loadAt(inst)[vid]||0)-Object.keys(lab).length;
+        if(d>inf) inf=d;
+      }
+      const free=[]; for(let n=1;n<=cap;n++) if(!taken[`${vid}_${n}`]) free.push(n);
+      const pick=free.length?free[Math.min(inf,free.length-1)]:cap;
+      return { unit:`${vid}_${pick}`, overflow: vid!==primaryVid, fromVid:primaryVid, toVid:vid };
     }
   }
   return { error:'該時段沒有可用場地（已額滿）', hardFull:true };
@@ -13198,6 +13226,17 @@ function fmtRange(date,time,dur){
   const end=minToTime(timeToMin(time)+dur);
   return `${date}（${WD[d.getDay()]}）${time}–${end}`;
 }
+/* 移動後被擠到次選場地時的提示（2026-07-30 使用者指示：卡到空間就要讓操作者自己選）。
+   併進「是否修改預約時間」同一個確認框，不再連跳兩個視窗。 */
+function venueMoveNote(b){
+  const ov=b&&b._venueOverflow; if(!ov) return '';
+  const fromName=venueName(ov.fromVid+'_1')||'首選場地';
+  const toName=venueName(ov.toVid+'_1')||'次選場地';
+  return `<div style="background:rgba(181,55,46,.10);border:1px solid var(--danger,#b5372e);border-radius:9px;padding:10px 12px;">
+      <div style="color:var(--danger,#b5372e);font-size:11px;margin-bottom:3px;font-weight:600;">場地變更</div>
+      <div style="line-height:1.8;">${fromName}該時段已額滿，將改用 <b>${toName}</b>。</div>
+    </div>`;
+}
 function confirmCalMove(b,od,ot,odur, nd,nt,ndur, onYes){
   window._calYes=onYes||(()=>{}); window._calNo=()=>navTo(CUR_PAGE);
   showModal(`<div class="modal-title">是否修改預約時間？</div>
@@ -13207,6 +13246,7 @@ function confirmCalMove(b,od,ot,odur, nd,nt,ndur, onYes){
       <div style="text-align:center;color:var(--gold-d);">↓</div>
       <div style="background:#f3efe2;border-radius:9px;padding:10px 12px;border:1px solid var(--gold);">
         <div style="color:var(--gold-d);font-size:11px;margin-bottom:3px;">新時間</div>${fmtRange(nd,nt,ndur)}</div>
+      ${venueMoveNote(b)}
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal();window._calNo()">取消</button>
@@ -13644,6 +13684,8 @@ async function wtlDropAt(bid, ds, mm){
     if(ds===b.date && ntime===b.start_time){ return; } // 沒移動
     const verr=await validateBooking(b,ds,ntime,b.duration);
     if(verr){ showToast(verr); return; }
+    // 被擠到次選場地 → 先讓操作者確認（2026-07-30 使用者指示）
+    if(b._venueOverflow && !(await confirmVenueOverflow(b,'取消移動'))){ renderWeekTimeline(); return; }
     b.date=ds; b.start_time=ntime; await dbPut('bookings',b);
     hapticFeedback(10);
     showToast('已移動預約至 '+ds+' '+ntime);
@@ -13661,6 +13703,7 @@ async function wtlDropMove(ds, mm){
     if(ds===b.date && ntime===b.start_time){ wtlCancelMove(); return; }
     const verr=await validateBooking(b,ds,ntime,b.duration);
     if(verr){ showToast(verr); return; } // 留在移動模式讓使用者改放別處
+    if(b._venueOverflow && !(await confirmVenueOverflow(b,'取消移動'))) return; // 場地被擠 → 操作者決定
     b.date=ds; b.start_time=ntime; await dbPut('bookings',b);
     wtlCancelMove();
     showToast('已移動預約至 '+ds+' '+ntime);
@@ -15142,7 +15185,7 @@ async function refreshBkTicket(){
 }
 // 場地溢出確認：若 vbk 帶 _venueOverflow（分到次選場地），跳確認框詢問教練
 //  回傳 Promise<boolean>：教練按「改用」→true；「取消」→false。無溢出直接 true。
-function confirmVenueOverflow(vbk){
+function confirmVenueOverflow(vbk, noLabel){
   return new Promise(resolve=>{
     const ov=vbk&&vbk._venueOverflow;
     if(!ov){ resolve(true); return; }
@@ -15153,7 +15196,7 @@ function confirmVenueOverflow(vbk){
         <b>${fromName}</b>該時段已額滿。<br>是否改用 <b>${toName}</b>？
       </div>
       <div class="modal-foot">
-        <button class="btn btn-ghost" onclick="closeModal();window._venueOvNo&&window._venueOvNo()">取消預約</button>
+        <button class="btn btn-ghost" onclick="closeModal();window._venueOvNo&&window._venueOvNo()">${noLabel||'取消預約'}</button>
         <button class="btn btn-green" onclick="closeModal();window._venueOvYes&&window._venueOvYes()">改用${toName}</button>
       </div>`);
     window._venueOvYes=()=>{ resolve(true); };
@@ -17210,6 +17253,12 @@ async function saveBookingTime(id){
   const vbk={...b, substitute_coach_id:nsub, venue_unit:nVenue};
   const verr=await validateBooking(vbk,nd,nt,ndur);
   if(verr){showToast(verr);return false;}   // 驗證失敗：讓呼叫端保留編輯狀態
+  /* 首選場地被卡住、要擠去次選 → 先問過操作者（2026-07-30 使用者指示）。
+     視窗版的編輯表單會被確認框頂掉，取消時要把明細叫回來；卡片內嵌編輯則原地保留。 */
+  if(vbk._venueOverflow){
+    const _inModal=!!(document.getElementById('ed-date')&&document.getElementById('ed-date').closest('.modal'));
+    if(!(await confirmVenueOverflow(vbk,'取消修改'))){ if(_inModal) openBookingDetail(id); return false; }
+  }
   const _oldDur=Number(b.duration)||60;
   b.date=nd;b.start_time=nt;b.duration=ndur;b.substitute_coach_id=nsub;
   b.venue_unit = vbk.venue_unit || nVenue; // validateBooking 重新分配後的場地單位
