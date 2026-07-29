@@ -29,7 +29,8 @@ console.log('\n顏色定義');
 ok('★ 綠勾用品牌綠', /\.ev-pa-ok\{background:var\(--green,#1f6f54\);color:#fff;\}/.test(src));
 ok('★ 紅叉與紅字提醒用 danger', /\.ev-pa-no\{background:var\(--danger,#b5372e\)/.test(src)
    && /\.ev-pa-warn\{background:var\(--danger,#b5372e\)/.test(src));
-ok('★ 待處理的課卡整張反紅', /\.cal-ev\.cal-ev-renew\{box-shadow:inset 0 0 0 1\.5px var\(--danger/.test(src));
+ok('★ 待處理的課卡整張反紅',
+   /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,200}background:rgba\(181,55,46,\.12\) !important;/.test(src));
 ok('　　已續約／不續約不反紅（只有待付費／待處理才反紅）',
    /const _alertCls = \(_isUnpaid\|\|_renewAlert\|\|_payAlert\) \? ' cal-ev-renew'/.test(src)
    && !/_renewDone[\s\S]{0,40}cal-ev-renew/.test(src));
@@ -62,11 +63,40 @@ ok('★ 今天新增的預約 → 品牌金',
 ok('★ 同時符合時紅色優先（錢的事比「今天新增」重要）',
    /\(_isUnpaid\|\|_renewAlert\|\|_payAlert\) \? ' cal-ev-renew'\s*\n\s*: \(_isNewToday/.test(src));
 ok('　　金框用品牌金、紅框用 danger',
-   /\.cal-ev\.cal-ev-newtoday\{box-shadow:inset 0 0 0 1\.5px var\(--gold-d,#b48a56\)/.test(src)
-   && /\.cal-ev\.cal-ev-renew\{box-shadow:inset 0 0 0 1\.5px var\(--danger,#b5372e\)/.test(src));
+   /\.cal-ev\.cal-ev-std\.cal-ev-newtoday \.evc-body\{[\s\S]{0,120}border-color:var\(--gold-d,#b48a56\)/.test(src)
+   && /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,120}border-color:var\(--danger,#b5372e\)/.test(src));
 ok('　　手機端同一套（別人的課卡不標）',
    /const _vis=\(layer==='mine'\|\|isAdmin\);/.test(src)
    && /const _mkAlert = \(_unpaidM\|\|_alertM\) \? ' cal-ev-renew' : \(_newM \? ' cal-ev-newtoday' : ''\);/.test(src));
+
+console.log('\n外框 CSS 必須壓過 .cal-ev-std 的 box-shadow:none');
+{
+  const iStd=src.indexOf('.cal-ev.cal-ev-std{padding:0 !important;');
+  const iRenew=src.indexOf('.cal-ev.cal-ev-std.cal-ev-renew .evc-body{');
+  const iNew=src.indexOf('.cal-ev.cal-ev-std.cal-ev-newtoday .evc-body{');
+  ok('★ 紅框規則排在 .cal-ev-std 之後', iRenew>iStd, {iStd,iRenew});
+  ok('★ 金框規則排在 .cal-ev-std 之後', iNew>iStd, {iStd,iNew});
+  ok('★ 選擇器帶 .cal-ev-std（同分特異性下靠順序取勝）',
+     iRenew>0 && iNew>0);
+  ok('★ 外框畫在 .evc-body（色塊層），不會被它蓋住',
+     /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,200}border-color:var\(--danger/.test(src));
+  ok('　　底色與邊框都用 !important 壓過後面的通用色塊規則',
+     (src.slice(iRenew,iRenew+260).match(/!important/g)||[]).length>=3);
+}
+
+console.log('\n待簽約卡位的「轉正簽約」按鈕');
+ok('★ 改名為「轉正簽約」', /<button class="btn btn-green bkd-signup"[^>]*>轉正簽約<\/button>/.test(src)
+   && !/已簽約，轉正式預約/.test(src));
+{
+  const f=src.indexOf('<div class="modal-foot">', src.indexOf('bkNoteBlock(b, isMemberView, ownByCoach)'));
+  const seg=src.slice(f, src.indexOf('</div>`);', f));
+  ok('★ 放在明細最下方（footer 內排在取消預約之後）',
+     seg.indexOf('bkd-signup') > seg.indexOf('取消預約'), 
+     {sign:seg.indexOf('bkd-signup'), cancel:seg.indexOf('取消預約')});
+}
+ok('★ 獨佔一列', /\.modal-foot \.btn\.bkd-signup\{flex:1 0 100%;/.test(src));
+ok('　　只有櫃檯／管理員、且還沒綁會員的卡位才出現',
+   /b\.pending_contract&&!b\.member_id&&b\.status==='booked'&&\(isDeskLike\(\)\)/.test(src));
 
 console.log('\n不做全自動取消');
 ok('★ 沒有任何自動取消後續預約的排程／批次',
