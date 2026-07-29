@@ -6011,8 +6011,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1115';
-const APP_VERSION_LABEL='v260729.1115';
+const APP_VERSION = '260729.1128';
+const APP_VERSION_LABEL='v260729.1128';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18231,13 +18231,28 @@ function renewAttribOf(t, purByTk, bookings){
     &&b.date>=from&&b.date<=upTo&&(b.category==='私人教練'||b.category==='體驗')) cnt[b.coach_id]=(cnt[b.coach_id]||0)+1; });
   return Object.entries(cnt).sort((a,b)=>b[1]-a[1]).map(e=>e[0])[0]||null;
 }
+/* 續約獎金只算「教練課類」（私人教練，含友善／限定／VIP）——2026-07-29 使用者回報：
+   團課的「4 週優惠」在銷售時也會被標成續約，害 SANDY 多算 4 張、小曾多算 3 張。
+   團課有自己的人次計酬，不另發續約獎金。 */
+function isCoachClassTicket(t, typeMap){
+  const tt=(typeMap||{})[t&&t.ticket_type_id];
+  const cat=tt?tt.category:null;
+  if(cat) return cat==='私人教練';
+  // 沒有票種資料時的備援：用方案名稱判斷（團課／小班一律排除）
+  const nm=String((t&&t.plan_name)||'');
+  if(/團課|團體課|小班/.test(nm)) return false;
+  return /教練課|1V1|1V2/i.test(nm);
+}
 // 某月各教練的續約張數 → {empId: n}
-function renewMapOf(month, tickets, purchases, bookings){
+function renewMapOf(month, tickets, purchases, bookings, types){
   const purByTk={}; (purchases||[]).forEach(p=>{ if(p.ticket_id&&p.coach_id) purByTk[p.ticket_id]=p.coach_id; });
+  const _ty=types||window._ttCache||[];
+  const typeMap=Object.fromEntries((_ty||[]).map(x=>[x.id,x]));
   const map={};
   (tickets||[]).forEach(t=>{
     if(t.sale_kind!=='renewal') return;
     if(String(t.purchase_date||'').slice(0,7)!==month) return;
+    if(!isCoachClassTicket(t, typeMap)) return;   // 團課等不計續約獎金
     const who=renewAttribOf(t, purByTk, bookings);
     if(who) map[who]=(map[who]||0)+1;
   });
@@ -19075,8 +19090,8 @@ async function openPerfDetail(empId, month){
     const dutyCap=emp.need_duty?dutyHoursCapped(attendance,shifts,empId,ym):0;
     const dutyOv=emp.need_duty?dutyClassOverlapHours(shifts,bookings,empId,ym):0;
     const dutyHours=Math.max(dutyCap-dutyOv,0);
-    const purAll=await dbGetAll('purchases').catch(()=>[]);
-    const renewCount=(renewMapOf(ym, tickets, purAll, bookings)||{})[empId]||0;   // 2026-07-29：統一計數
+    const[purAll,ttAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[])]);
+    const renewCount=(renewMapOf(ym, tickets, purAll, bookings, ttAll)||{})[empId]||0;   // 2026-07-29：統一計數（只算教練課類）
     const leaderHeads = emp.is_manager
       ? (await dbGetAll('coaches')).filter(o=>o.role!=='admin'&&o.role!=='front_desk'&&o.status!=='inactive')
           .map(o=>leaderClassCount(bookings,o.id,ym))
@@ -19137,8 +19152,8 @@ async function computeMonthlyPayroll(month){
   const renewById={};
   staff.forEach(emp=>{ renewById[emp.id]=0; });
   try{
-    const[tks,purs]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('purchases').catch(()=>[])]);
-    Object.entries(renewMapOf(month,tks,purs,bookings)).forEach(([k,v])=>{ if(renewById[k]!=null) renewById[k]=v; });
+    const[tks,purs,tys]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('purchases').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[])]);
+    Object.entries(renewMapOf(month,tks,purs,bookings,tys)).forEach(([k,v])=>{ if(renewById[k]!=null) renewById[k]=v; });
   }catch(_){}
 
   const rows=staff.map(emp=>{
@@ -23441,7 +23456,7 @@ async function openGrantModal(){
       <div class="form-2col">
         <div class="form-row"><label>發票</label><select id="gt-invoice"><option value="none">免發票</option><option value="cloud">雲端發票</option><option value="paper">紙本發票</option></select></div>
         <!-- 約別（2026-07-27 使用者指示：續約靠人工標記，報表/薪資才數得準；會員有舊教練課票時自動預選續約 -->
-        <div class="form-row"><label>約別</label><select id="gt-salekind" onchange="this.dataset.touched=1"><option value="new">新約</option><option value="renewal">續約</option></select></div>
+        <div class="form-row"><label>約別</label><select id="gt-salekind" onchange="this.dataset.touched=1"><option value="new">新約</option><option value="renewal">續約</option><option value="group">團課</option><option value="installment">分期</option></select></div>
       </div>
       <!-- 折抵券（2026-07-22 待辦2；2026-07-29 改品牌金醒目框＋預設帶入）：持有對應券才顯示；分期不併用 -->
       <div id="gt-voucher-wrap" class="gt-voucher-hi" style="display:none;">
@@ -23492,6 +23507,14 @@ function grantGoStep(n){
     if(!mid||!sel||sel.dataset.touched) return;
     const [mts,tts]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
     const tm=Object.fromEntries((tts||[]).map(t=>[t.id,t]));
+    /* 2026-07-29 使用者指示：約別加入「團課」「分期」（對齊帳務表四類）。
+       自動預選：賣團課 → 團課；分期 → 分期；否則看是否買過教練課決定新約/續約。
+       續約獎金只認 renewal，團課/分期不再被誤記成續約（原本團課 4 週優惠被標續約）。 */
+    const _planNow=window._grantPlanCache;
+    const _catNow=_planNow?((tm[_planNow.ticket_type_id]||{}).category||''):'';
+    const _instNow=Number((document.getElementById('gt-install')||{}).value||1)>1;
+    if(_catNow==='小班肌力'||_catNow==='團體課'||/團課|團體課|小班/.test((_planNow&&_planNow.name)||'')){ sel.value='group'; return; }
+    if(_instNow){ sel.value='installment'; return; }
     const hasPt=(mts||[]).some(t=>{ if(t.member_id!==mid) return false;
       const c=(tm[t.ticket_type_id]||{}).category||'';
       return c!=='自主訓練'&&c!=='團體課'&&!(t.plan_name||'').includes('團'); });
@@ -29496,7 +29519,7 @@ async function anaMonth(){
     return s+ids.reduce((a,mid)=>a+memAvg(mid,'grp'),0); },0);
   const salesValue=ptValue+grpValue;
   /* ── 教練總薪資：與薪資頁同一套 calcSalary（課時費＋團課費＋值班費＋續約/店長/主管獎金）── */
-  const renewMap=renewMapOf(month, mtks, purchases, bookings);   // 2026-07-29：統一計數
+  const renewMap=renewMapOf(month, mtks, purchases, bookings, types);   // 2026-07-29：統一計數（只算教練課類）
   let totalSalary=0;
   try{
     coaches.filter(isCoachable).forEach(c=>{
@@ -29567,7 +29590,7 @@ async function anaCoach(){
   /* 續約數（2026-07-27 改標記制）：只數賣票時標「續約」的票（sale_kind='renewal'）。
      推測法（會員曾買過同類票）會嚴重高估——7 月推出 38 張、實際 9 張，加購/補儲全被誤算。
      歸屬教練＝① 收款紀錄（purchases）的 coach_id ② 購買前 90 天內帶該會員最多教練課的教練。 */
-  const renewMap=renewMapOf(month, mtks, purchases, bookings);
+  const renewMap=renewMapOf(month, mtks, purchases, bookings, types);
   const coachList=coaches.filter(isCoachable);
   const rowsData=coachList.map(c=>{
     const mine=monthBk.filter(b=>b.coach_id===c.id);
@@ -30574,8 +30597,8 @@ async function renderSalaryContent(TARGET, withHead){
     : [];
   let renewCount=0;
   try{
-    const[tks,purs]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('purchases').catch(()=>[])]);
-    renewCount=(renewMapOf(month,tks,purs,bookings)||{})[empId]||0;   // 2026-07-29：統一計數，原本讀不存在的欄位
+    const[tks,purs,tys]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('purchases').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[])]);
+    renewCount=(renewMapOf(month,tks,purs,bookings,tys)||{})[empId]||0;   // 2026-07-29：統一計數（只算教練課類）
   }catch(_){}
   // 完整薪資計算（v2.0：含續約、店長階梯、主管津貼、勞健保）
   const sal=calcSalary(me, ptDone, groupHeads, dutyHours, myLeave, myClassOverlap, {renewCount, leaderHeads});
