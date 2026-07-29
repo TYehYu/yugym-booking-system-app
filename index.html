@@ -6011,8 +6011,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1128';
-const APP_VERSION_LABEL='v260729.1128';
+const APP_VERSION = '260729.1512';
+const APP_VERSION_LABEL='v260729.1512';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7023,9 +7023,11 @@ const ADMIN_NAV2=[
     {label:'權限設定', page:'settings_staff'},
     {label:'系統設定', page:'settings'},
   ]},
-  {key:'g_supervisor', icon:'🗓️', label:'店長', sup:true, sub:[
-    {label:'排班表', page:'coach_shifts'},
-    {label:'教練值班時段', page:'coach_duty_week'},
+  /* 2026-07-29 使用者指示：原「店長」群組改名「班表」；櫃檯也看得到（唯讀），
+     只有店長／管理員可以修改（編輯權限由 checkCanEditShifts 控管）。 */
+  {key:'g_supervisor', icon:'🗓️', label:'班表', sup:true, fd:true, sub:[
+    {label:'排班表', page:'coach_shifts', fd:true},
+    {label:'教練值班時段', page:'coach_duty_week', fd:true},
   ]},
 ];
 // 舊群組 key → 新群組（navTo/外部呼叫點相容用；勿刪，全檔多處仍傳舊 key）
@@ -7176,7 +7178,7 @@ function visibleGroups(){
   const isMgr=SESSION.role==='coach'&&!!SESSION.is_manager;   // 店長教練：桌機同櫃台＋店長列（2026-07-27）
   const limited=isFd||isMgr;
   return ADMIN_NAV2
-    .filter(g=>!g.sup || !!SESSION.is_manager || SESSION.role==='admin')   // 店長群組：僅店長/管理員
+    .filter(g=>!g.sup || !!SESSION.is_manager || SESSION.role==='admin' || SESSION.role==='front_desk')   // 班表：店長/管理員可改，櫃檯唯讀（2026-07-29）
     .filter(g=>!limited||g.fd||g.sup).map(g=>{
     if(!limited||g.sup) return g;
     return Object.assign({},g,{sub:g.sub.filter(s=>s.fd)}); // 櫃台/店長只看 fd 的次功能
@@ -7194,7 +7196,7 @@ function buildNav2(){
   renderLeftSidebar(groups);
 }
 // Mission Control 左側固定側欄（桌機管理員）
-const MC_LABELS={g_dashboard:'首頁總覽',g_booking:'預約管理',g_member:'會員管理',g_admin:'管理員',g_supervisor:'店長'};
+const MC_LABELS={g_dashboard:'首頁總覽',g_booking:'預約管理',g_member:'會員管理',g_admin:'管理員',g_supervisor:'班表'};
 // 側欄收合狀態：首頁預設收合(72px)最大化內容；其它頁記住上次狀態
 function _sidebarSaved(){ try{ return localStorage.getItem('mc_sidebar'); }catch(e){ return null; } }
 function _sidebarSave(v){ try{ localStorage.setItem('mc_sidebar', v); }catch(e){} }
@@ -11205,6 +11207,7 @@ function typeOfCat(cat){return {'私人教練':'pt','小班肌力':'group','自�
    「自己的課」＝ 授課教練（含代課）是登入者本人。 */
 function bkIsMasked(b){
   if(!SESSION || SESSION.role!=='coach') return false; // 非教練不遮蔽
+  if(SESSION.is_manager) return false;                  // 店長：可讀全部課卡（2026-07-29 使用者指示）
   if(b.category==='小班肌力') return false;             // 團體課本就不顯示會員名
   const acting = b.substitute_coach_id || b.coach_id;
   return acting !== SESSION.id;                          // 不是我帶的 → 遮蔽
@@ -11522,7 +11525,7 @@ async function renderCalendar(opts){
       const acting=b.substitute_coach_id||b.coach_id;
       const isMine = opts.me && acting===opts.me;
       // 教練端（含全部預約模式）：自己的課顯示會員名；別的教練的課隱藏會員名
-      const hideMember = (opts.me && !isMine) || bkIsMasked(b);
+      const hideMember = ((opts.me && !isMine) || bkIsMasked(b)) && !(SESSION&&SESSION.is_manager);   // 店長可讀全部（2026-07-29）
       if(hideMember){
         // 別的教練的課：隱藏會員名，顯示課程類型（如「教練課」「自主訓練」）
         memName = {'私人教練':'教練課','自主訓練':'自主訓練','體驗':'體驗','小班肌力':'團體課'}[b.category] || typeName;
@@ -13360,7 +13363,7 @@ async function renderCoachAgenda(){
   const showNow = weekHasToday && nowMin>=AG_START && nowMin<=WTL_END;
 
   // 課卡渲染（layer: mine/other/group 決定樣式與可否點）
-  const isAdmin=SESSION.role==='admin';
+  const isAdmin=SESSION.role==='admin'||!!SESSION.is_manager;   // 店長比照管理員：可讀/可點全部課卡（2026-07-29）
   const renderCard=(b,layer,dim,pos)=>{
     const s=timeToMin(b.start_time); const dur=b.duration||60;
     const top=yOf(s); const height=Math.max(dur/60*HOUR_H-2, 16);
@@ -13373,7 +13376,7 @@ async function renderCoachAgenda(){
     /* 名稱行沿用原邏輯（2026-07-23）：自己的課＝會員名／團 N（可互動）；
        別的教練的課＝教練名、不可互動（管理員仍可點所有卡）。 */
     let disp;
-    if(layer==='mine'){
+    if(layer==='mine' || isAdmin){   // 店長/管理員：別人的課也顯示會員名（2026-07-29）
       if(b.category==='小班肌力'||(Array.isArray(b.member_ids)&&b.member_ids.length)){
         const n=(Array.isArray(b.member_ids)?b.member_ids.length:0); disp=n>0?`團 ${n}`:'團體課';
       }else if(b.category==='體驗'){ disp=b.trial_name?b.trial_name+'（體驗）':'體驗課'; }
