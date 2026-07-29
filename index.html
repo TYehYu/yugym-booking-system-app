@@ -5992,8 +5992,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1050';
-const APP_VERSION_LABEL='v260729.1050';
+const APP_VERSION = '260729.1103';
+const APP_VERSION_LABEL='v260729.1103';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9953,7 +9953,9 @@ PAGES.g_dashboard=async function(){
       }
       // ② 續課最後一堂（2026-07-28 使用者定義：票已排光「剩 0」＝今天這堂是最後一堂；
       //    自主/體驗不提醒；分期尚未到最後一段屬「繳費」非「續課」）
-      if(!tk.status || tk.status==='usable'){
+      /* 2026-07-29 修正：扣到 0 堂時票券會轉為 used_up（markTicketUsedIfDone 也是），
+         原本只認 usable → 剛上完最後一堂的會員反而不會進待簽約名單（李唯 7/29 案例）。 */
+      if(!tk.status || tk.status==='usable' || tk.status==='used_up'){
         const _tt=_typeMapD[tk.ticket_type_id]; const _c=_tt?_tt.color:'';
         const _selfTrial=_c==='self'||_c==='trial'||(tk.plan_name&&(tk.plan_name.indexOf('自主訓練')>=0||tk.plan_name.indexOf('體驗')>=0));
         const remain = tk.sessions_remaining!=null ? tk.sessions_remaining : (tk.sessions_total||0);
@@ -10725,8 +10727,9 @@ PAGES.ops_center=async function(){
 
   // 今日續約：購買日為當日、is_renewal、且票券類型為教練課類（私人教練，含友善教練課）
   const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
+  const _purByTkOps={}; (window._purAllCache||[]).forEach(p=>{ if(p.ticket_id&&p.coach_id) _purByTkOps[p.ticket_id]=p.coach_id; });
   const todayRenews=(mtickets||[]).filter(t=>{
-    if(!t.is_renewal) return false;
+    if(t.sale_kind!=='renewal') return false;   // 2026-07-29：統一用 sale_kind（is_renewal 欄位不存在）
     const when=(t.purchase_date||t.created_at||'').slice(0,10);
     if(when!==date) return false;
     const tt=typeMap[t.ticket_type_id];
@@ -10848,7 +10851,7 @@ PAGES.ops_center=async function(){
       ${renewCount===0?'<div style="font-size:12px;color:var(--t3);text-align:center;padding:12px;">本日無續約</div>':
         `<div>${todayRenews.map(t=>{
           const mem=memMap[t.member_id];
-          const who=t.renewed_by||t.sold_by||t.coach_id;
+          const who=renewAttribOf(t,_purByTkOps,bookings);   // 2026-07-29：統一歸屬判定
           return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd);font-size:12.5px;">
             <span style="flex:1;font-weight:500;">${mem?mem.name:'—'}</span>
             <span style="color:var(--t2);">${t.plan_name||'教練課'}</span>
@@ -15796,7 +15799,7 @@ async function openBookingDetail(id){
                <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30 分</option><option value="60" ${b.duration===60?'selected':''}>60 分</option><option value="90" ${b.duration===90?'selected':''}>90 分</option><option value="120" ${b.duration===120?'selected':''}>120 分</option></select>
              </span>`
           : `<span style="font-family:var(--num);font-size:15px;font-weight:700;color:var(--text);">${b.date.replace(/-/g,'/')}（${WD[d.getDay()]}）${b.start_time}　<span style="font-size:12px;color:var(--t3);font-weight:400;">${b.duration}分</span></span>`}
-        <span class="tag tag-${colorClass(typeOfCat(b.category))}" style="font-size:11px;">${b.category}${b.format?'·'+b.format:''}</span>
+        ${/* 2026-07-29 使用者指示：課種標籤移除——下方票券圓形卡已顯示方案名稱與 1V1/1V2，重複 */''}
       </div>
       ${tkCircleHtml}
       <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
@@ -19040,9 +19043,8 @@ async function openPerfDetail(empId, month){
     const dutyCap=emp.need_duty?dutyHoursCapped(attendance,shifts,empId,ym):0;
     const dutyOv=emp.need_duty?dutyClassOverlapHours(shifts,bookings,empId,ym):0;
     const dutyHours=Math.max(dutyCap-dutyOv,0);
-    let renewCount=0;
-    (tickets||[]).forEach(t=>{ const who=t.renewed_by||t.sold_by||t.coach_id;
-      if(t.is_renewal && who===empId && String(t.purchase_date||t.created_at||'').slice(0,7)===ym) renewCount++; });
+    const purAll=await dbGetAll('purchases').catch(()=>[]);
+    const renewCount=(renewMapOf(ym, tickets, purAll, bookings)||{})[empId]||0;   // 2026-07-29：統一計數
     const leaderHeads = emp.is_manager
       ? (await dbGetAll('coaches')).filter(o=>o.role!=='admin'&&o.role!=='front_desk'&&o.status!=='inactive')
           .map(o=>leaderClassCount(bookings,o.id,ym))
@@ -19099,16 +19101,12 @@ async function computeMonthlyPayroll(month){
   staff.forEach(emp=>{
     ptDoneById[emp.id]=bookings.filter(b=>b.coach_id===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month&&(b.category==='私人教練'||b.category==='體驗')).length;
   });
-  // 續約張數：每位教練當月續約數（資料來源：member_tickets.renewed_by + 月份；無則 0）
+  // 續約張數：每位教練當月續約數（2026-07-29 統一走 renewMapOf）
   const renewById={};
   staff.forEach(emp=>{ renewById[emp.id]=0; });
   try{
-    const tks=await dbGetAll('member_tickets');
-    tks.forEach(t=>{
-      const who=t.renewed_by||t.sold_by||t.coach_id;
-      const when=(t.purchase_date||t.created_at||'').slice(0,7);
-      if(t.is_renewal && who && when===month && renewById[who]!=null) renewById[who]++;
-    });
+    const[tks,purs]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('purchases').catch(()=>[])]);
+    Object.entries(renewMapOf(month,tks,purs,bookings)).forEach(([k,v])=>{ if(renewById[k]!=null) renewById[k]=v; });
   }catch(_){}
 
   const rows=staff.map(emp=>{
@@ -23902,6 +23900,9 @@ async function submitGrant(){
     sessions_total:total,sessions_remaining:total,
     unlocked_sessions:unlocked, installment:installment,   // 分期分段解鎖
     sale_kind:(document.getElementById('gt-salekind')||{}).value||null,   // 新約/續約（2026-07-27）
+    /* 業績歸屬教練（2026-07-29 使用者指示）：續約/新約獎金依此計算。
+       原本只寫在 purchases.coach_id，票券本身沒有歸屬 → 續約獎金查不到人。 */
+    sold_by:(window._grantSalesActive&&window._grantSalesActive.coach_id)||null,
     status:'usable',
     payment_status:document.getElementById('gt-pay').value,
     invoice_status:(document.getElementById('gt-invoice')?.value)||'none',   // 2026-07-21 A3：營收分有無發票
@@ -29425,10 +29426,7 @@ async function anaMonth(){
     return s+ids.reduce((a,mid)=>a+memAvg(mid,'grp'),0); },0);
   const salesValue=ptValue+grpValue;
   /* ── 教練總薪資：與薪資頁同一套 calcSalary（課時費＋團課費＋值班費＋續約/店長/主管獎金）── */
-  const renewMap={};
-  (mtks||[]).forEach(t=>{ if(t.is_renewal){ const who=t.renewed_by||t.sold_by||t.coach_id;
-    const when=(t.purchase_date||t.created_at||'').slice(0,7);
-    if(who&&when===month) renewMap[who]=(renewMap[who]||0)+1; } });
+  const renewMap=renewMapOf(month, mtks, purchases, bookings);   // 2026-07-29：統一計數
   let totalSalary=0;
   try{
     coaches.filter(isCoachable).forEach(c=>{
