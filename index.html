@@ -4939,6 +4939,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 #bk-card-pop .mtp-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
 #bk-card-pop .mtp-t1{font-size:14.5px;font-weight:800;color:var(--text);line-height:1.3;}
 #bk-card-pop .mtp-t2{font-size:11.5px;color:var(--t2);white-space:nowrap;}
+/* 課卡備註（2026-07-29）：金色次要提示，兩行截斷；只有員工看得到 */
+#bk-card-pop .mtp-note{font-size:11.5px;color:var(--gold-d,#b48a56);line-height:1.5;white-space:normal;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 #bk-card-pop .mtp-tag{flex:0 0 auto;font-size:10.5px;font-weight:700;color:var(--green);background:var(--sage-bg);border-radius:999px;padding:3px 9px;}
 #bk-card-pop .mtp-orbs{display:flex;justify-content:center;flex-wrap:wrap;gap:14px;}
 /* 按鈕：解除環繞絕對定位，改一列圓鈕 */
@@ -6011,8 +6014,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1531';
-const APP_VERSION_LABEL='v260729.1531';
+const APP_VERSION = '260729.1549';
+const APP_VERSION_LABEL='v260729.1549';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14084,7 +14087,11 @@ async function openBookingModal(){
     if(isCoach && !coachAllowed.includes(t.category)) return false; // 教練：只留教練課/體驗
     if(isMobileBk && t.category==='小班肌力') return false;          // 手機：不建團體課
     if(isMobileBk && t.category==='自主訓練') return false;          // 手機：自主訓練由會員自約
-    if(t.category==='場租') return false;   // 場租票是銷售商品（＝單次自主訓練）；預約走下方合成的「場地租借」卡，不重複顯示（2026-07-28）
+    /* 場租與友善自主訓練都等同「自主訓練」，不重複列（2026-07-29 使用者指示）：
+       場租票是銷售商品；友善自主訓練只是票種名不同，預約行為與自主訓練一致。
+       （場地租借的收款流程仍在，入口改由銷售視窗進；bkStep2Facility 保留。） */
+    if(t.category==='場租') return false;
+    if(t.category==='自主訓練' && /友善/.test(t.name||'')) return false;
     return true;
   });
   // 排序（2026-07-20 使用者指定）：第一列 教練課/友善教練課/團體課、第二列 運動按摩/體驗課/自主訓練
@@ -14110,35 +14117,6 @@ async function openBookingModal(){
     else if(window._calMineOnly) prefillCoach = SESSION.id; // 桌機只看我的課
   }
   window._bkPrefillCoach=null; // 用完即清
-  const coachOpts=coaches.filter(isTeachable).map(c=>{
-    const sel = (isCoach&&c.id===SESSION.id) || (prefillCoach&&c.id===prefillCoach);
-    return `<option value="${c.id}" ${sel?'selected':''}>${coachDisp(c)}</option>`;
-  }).join('');
-  // 30 分鐘時段選項（08:00～22:00）
-  const timeOpts=bkTimeOptions(pf.time);
-  /* 2026-07-20 使用者指示：日期/時間放最上方（並排）、課程排序固定、教練名單直接顯示 */
-  showModal(`<div class="modal-title">新增預約 · 步驟 1 / 2</div>
-    <div class="form-row"><label>會員<span style="font-weight:400;color:var(--t3);">（體驗課／待簽約卡位／場地租借可不選）</span></label>
-      <div class="mem-pick-row">
-        <input class="gt-search" placeholder="輸入姓名或手機搜尋（共 ${window._bkAllMembers.length} 位）" oninput="bkFilterMembers(this.value)" autocomplete="off">
-        <select id="bk-mem-pre"><option value="">— 選擇會員 —</option>${window._bkAllMembers.map(m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
-      </div>
-    </div>
-    <div class="form-2col">
-      <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}"></div>
-      <div class="form-row"><label>時間</label><select id="bk-time">${timeOpts}</select></div>
-    </div>
-    <div class="form-row"><label>課程類型</label>
-      <div id="bk-type-cards" class="bk-cards"></div>
-      <input type="hidden" id="bk-type" value="" onchange="onBkTypeChange()"></div>
-    ${isCoach
-      ? `<input type="hidden" id="bk-coach" value="${SESSION.id}">`
-      : `<div class="form-row" id="bk-coach-row"><label>授課教練</label>
-          <div id="bk-coach-cards" class="bk-cards"></div>
-          <input type="hidden" id="bk-coach" value=""></div>`}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="cancelBookingModal()">取消</button><button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`);
-  // 渲染卡片（場地租借＝合成類型，僅管理員/櫃台；教練端維持原限制）
-  window._bkTypes=isCoach?activeTypes:activeTypes.concat([BK_FACILITY_TYPE]);
   window._bkCoaches=coaches.filter(isTeachable);
   /* 手機版（2026-07-20 使用者指示）：教練名單只留「登入者本人」——手機行事曆＝自己的
      課表，幫其他教練排課請用桌機。登入者非教練（純櫃台帳號）時仍顯示全部。 */
@@ -14146,9 +14124,39 @@ async function openBookingModal(){
     const _mine=window._bkCoaches.filter(c=>c.id===SESSION.id);
     if(_mine.length) window._bkCoaches=_mine;
   }
+  window._bkCoachSel = prefillCoach || '';   // 會員下拉的分組依據（該教練的會員排前）
+  const coachOpts=window._bkCoaches.map(c=>{
+    const sel = (isCoach&&c.id===SESSION.id) || (prefillCoach&&c.id===prefillCoach);
+    return `<option value="${c.id}" ${sel?'selected':''}>${coachDisp(c)}</option>`;
+  }).join('');
+  // 30 分鐘時段選項（08:00～22:00）
+  const timeOpts=bkTimeOptions(pf.time);
+  /* 2026-07-20 使用者指示：日期/時間放最上方（並排）、課程排序固定、教練名單直接顯示 */
+  /* 2026-07-29 使用者指示：欄位順序改為 課程類型 → 教練 → 會員 → 日期／時間。
+     教練與會員都用下拉；選完教練後，該教練的會員會被分組排到會員下拉最上面。 */
+  showModal(`<div class="modal-title">新增預約 · 步驟 1 / 2</div>
+    <div class="form-row"><label>課程類型</label>
+      <div id="bk-type-cards" class="bk-cards"></div>
+      <input type="hidden" id="bk-type" value="" onchange="onBkTypeChange()"></div>
+    ${isCoach
+      ? `<input type="hidden" id="bk-coach" value="${SESSION.id}">`
+      : `<div class="form-row" id="bk-coach-row"><label>授課教練<span id="bk-coach-opt" style="font-weight:400;color:var(--t3);display:none;">（自主訓練可不指定）</span></label>
+          <select id="bk-coach" onchange="bkCoachChange()"><option value="">— 選擇教練 —</option>${coachOpts}</select></div>`}
+    <div class="form-row"><label>會員<span style="font-weight:400;color:var(--t3);">（體驗課／待簽約卡位可不選）</span></label>
+      <div class="mem-pick-row">
+        <input class="gt-search" id="bk-mem-q" placeholder="輸入姓名或手機搜尋（共 ${window._bkAllMembers.length} 位）" oninput="bkFilterMembers(this.value)" autocomplete="off">
+        <select id="bk-mem-pre">${bkMemberOptsHTML('')}</select>
+      </div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}"></div>
+      <div class="form-row"><label>時間</label><select id="bk-time">${timeOpts}</select></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="cancelBookingModal()">取消</button><button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`);
+  // 渲染課程類型卡（場地租借＝銷售流程，不再列於此）
+  window._bkTypes=activeTypes;
   window._bkPrefillCoachId=prefillCoach||null;
   renderBkTypeCards();
-  if(!isCoach) renderBkCoachCards();   // 教練名單一開就顯示（2026-07-20 使用者指示）
 }
 /* 課種形狀/色（行事曆同語彙）：color 欄位可能為空（測試庫即如此）→ 從類別推導；
    私人教練且名稱含「友善」歸友善課。renderBkTypeCards 與步驟 2 摘要卡共用。 */
@@ -14186,21 +14194,35 @@ function pickBkType(tid){
   document.getElementById('bk-type').value=tid;
   renderBkTypeCards();
   onBkTypeChange();
-  renderBkCoachCards();
 }
-// 教練卡片（依課程類型是否需要教練顯示）
-function renderBkCoachCards(){
-  const box=document.getElementById('bk-coach-cards'); if(!box)return;
-  const coaches=window._bkCoaches||[];
-  const cur=document.getElementById('bk-coach').value || window._bkPrefillCoachId || '';
-  if(cur && !document.getElementById('bk-coach').value){ document.getElementById('bk-coach').value=cur; }
-  box.innerHTML=coaches.map(c=>`<button type="button" class="bk-card${cur===c.id?' on':''}" onclick="pickBkCoach('${c.id}')">
-    <span class="bk-card-name">${coachDisp(c)}</span>
-  </button>`).join('');
+/* 步驟 1 會員下拉（2026-07-29 使用者指示：與教練連動）——
+   選了教練就把該教練的會員（members.default_coach_id）分組排到最上面，其餘放下一組。
+   沒選教練時就是一般的全名單。q 是搜尋字串（姓名或手機）。 */
+function bkMemberOptsHTML(q){
+  const all=window._bkAllMembers||[];
+  const qq=(q||'').trim(), qp=qq?normPhone(qq):'';
+  const list=qq?all.filter(m=>(m.name||'').includes(qq)||(qp&&normPhone(m.phone).includes(qp))):all;
+  const cid=window._bkCoachSel||'';
+  const opt=m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`;
+  const head='<option value="">— 選擇會員 —</option>';
+  if(!cid) return head+list.map(opt).join('');
+  const mine=list.filter(m=>m.default_coach_id===cid);
+  const rest=list.filter(m=>m.default_coach_id!==cid);
+  const cName=((window._bkCoaches||[]).find(c=>c.id===cid)||{});
+  const label=cName.id?coachDisp(cName):'該教練';
+  return head
+    +(mine.length?`<optgroup label="${label}的會員（${mine.length}）">${mine.map(opt).join('')}</optgroup>`:'')
+    +(rest.length?`<optgroup label="其他會員（${rest.length}）">${rest.map(opt).join('')}</optgroup>`:'');
 }
-function pickBkCoach(cid){
-  document.getElementById('bk-coach').value=cid;
-  renderBkCoachCards();
+// 教練下拉變更 → 重排會員下拉（保留已選的會員）
+function bkCoachChange(){
+  const co=document.getElementById('bk-coach');
+  window._bkCoachSel=(co&&co.value)||'';
+  const sel=document.getElementById('bk-mem-pre'); if(!sel) return;
+  const prev=sel.value;
+  const q=(document.getElementById('bk-mem-q')||{}).value||'';
+  sel.innerHTML=bkMemberOptsHTML(q);
+  if(prev && sel.querySelector(`option[value="${prev}"]`)) sel.value=prev;
 }
 // 產生 30 分鐘間隔時段選項（08:00～22:00）
 function bkTimeOptions(selected){
@@ -14312,8 +14334,10 @@ async function onBkTypeChange(){
   const tid=document.getElementById('bk-type').value;
   const t=types.find(x=>x.id===tid);
   const needCoach = bkNeedCoach(t);
-  const row=document.getElementById('bk-coach-row');
-  if(row){ row.style.display=needCoach?'block':'none'; if(needCoach) renderBkCoachCards(); } // 教練端無此 row（已固定自己）
+  /* 2026-07-29 使用者指示：自主訓練「不用一定要安排教練」——欄位仍留著（想指定就指定），
+     只是不強制；其餘課種一律必填。（教練端無此 row，已固定為自己） */
+  const hint=document.getElementById('bk-coach-opt');
+  if(hint) hint.style.display=needCoach?'none':'inline';
 }
 // 第1頁 → 第2頁
 async function bkStep2(){
@@ -14325,8 +14349,8 @@ async function bkStep2(){
   const t=types.find(x=>x.id===type_id);
   const needCoach = bkNeedCoach(t);   // 與 onBkTypeChange() 共用同一判斷，避免兩處各寫一份而漂移
   const coachEl=document.getElementById('bk-coach');
-  // 教練端：永遠用自己；管理員/櫃台：需要教練的類型才取下拉值
-  const coach_id = window._bkSelfCoach ? window._bkSelfCoach : (needCoach ? (coachEl?coachEl.value:'') : null);
+  /* 教練端：永遠用自己；管理員/櫃台：一律取下拉值（自主訓練可留空，其餘下面會擋） */
+  const coach_id = window._bkSelfCoach ? window._bkSelfCoach : ((coachEl&&coachEl.value)||null);
   if(needCoach && !coach_id){showToast(t.category==='體驗'?'體驗課請指定接洽教練':t.category==='小班肌力'?'團體課請指定授課教練':'請選擇授課教練');return;}
   const date=document.getElementById('bk-date').value;
   const time=document.getElementById('bk-time').value.slice(0,5);
@@ -14429,19 +14453,19 @@ async function openBookingModalBack(){
   _prefill={date:_bkWizard.date,time:_bkWizard.time};
   await openBookingModal();
   // 還原第1頁選擇
-  const ty=document.getElementById('bk-type'); if(ty){ty.value=_bkWizard.type_id;await onBkTypeChange();}
-  const co=document.getElementById('bk-coach'); if(co&&_bkWizard.coach_id)co.value=_bkWizard.coach_id;
+  const ty=document.getElementById('bk-type'); if(ty){ty.value=_bkWizard.type_id;renderBkTypeCards();await onBkTypeChange();}
+  const co=document.getElementById('bk-coach'); if(co&&_bkWizard.coach_id){co.value=_bkWizard.coach_id;bkCoachChange();}
   const mp=document.getElementById('bk-mem-pre'); if(mp&&_bkWizard.member_id)mp.value=_bkWizard.member_id;   // 還原步驟 1 的會員（2026-07-28）
 }
 async function coachName(id){const c=await dbGet('coaches',id);return c?coachDisp(c):'';}
 /* 步驟 1 會員搜索（2026-07-28 使用者指示：預約也先選會員，與銷售同規格） */
 function bkFilterMembers(q){
   const sel=document.getElementById('bk-mem-pre'); if(!sel) return;
-  const prev=sel.value, qq=(q||'').trim(), qp=normPhone(qq);
-  const list=qq?(window._bkAllMembers||[]).filter(m=>(m.name||'').includes(qq)||(qp&&normPhone(m.phone).includes(qp))):(window._bkAllMembers||[]);
-  sel.innerHTML='<option value="">— 選擇會員 —</option>'+list.map(m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
-  if(list.some(m=>m.id===prev)) sel.value=prev;
-  else if(qq&&list.length===1) sel.value=list[0].id;
+  const prev=sel.value, qq=(q||'').trim();
+  sel.innerHTML=bkMemberOptsHTML(qq);            // 分組邏輯與教練連動共用一份
+  const opts=[...sel.querySelectorAll('option')].filter(o=>o.value);
+  if(opts.some(o=>o.value===prev)) sel.value=prev;
+  else if(qq&&opts.length===1) sel.value=opts[0].value;
 }
 /* 連續預約統一介面（2026-07-28 使用者定案）：開關＋勾星期＋結束日期——
    後台教練課／團課／教練端快速預約三處共用同一語言。 */
@@ -15161,6 +15185,7 @@ async function bkCardPop(el, b, btns){
         <span class="mtp-body">
           <span class="mtp-t1">${who}</span>
           <span class="mtp-t2">${String(b.date).slice(5).replace('-','/')}（${wd}）　${b.start_time}–${endT}　·　${nm}${coachNm?'　·　'+coachNm:''}</span>
+          ${(SESSION&&SESSION.role!=='member'&&bkNoteSplit(b.note).user)?`<span class="mtp-note">✎ ${bkNoteSplit(b.note).user.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span>`:''}
         </span>
         ${done?'<span class="mtp-tag">已簽到</span>':''}
       </div>
@@ -15959,6 +15984,7 @@ async function openBookingDetail(id){
       ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
     </div>`:''}
     ${b.status==='cancelled'&&b.refund_waived?`<div style="margin-top:12px;padding:10px;background:#f7efe0;border-radius:8px;font-size:12px;color:#8a5e28;">此預約於開課 24 小時內取消，未退回票券。${b.makeup_granted?'（已補發補課券）':''}</div>`:''}
+    ${bkNoteBlock(b, isMemberView, ownByCoach)}
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
       ${editable?`<button class="btn btn-ghost" onclick="saveBookingTime('${b.id}')">儲存變更</button>`:''}
@@ -15973,6 +15999,61 @@ async function openBookingDetail(id){
                 : ''))   /* 會員視角：教練課取消請洽櫃檯；原本誤走櫃檯流程（無寫入權）點了沒反應（2026-07-28） */
         : `<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`):''}
     </div>`);
+}
+/* ── 課卡備註（2026-07-29 使用者指示：讓教練或櫃檯填寫特殊狀況）──
+   bookings.note 舊有兩種來源：匯入字串（「舊系統匯入｜教室:跑步機2」，selfVenueLabel 會讀它推
+   場地）與人工備註。人工編輯不能把匯入註記蓋掉，否則自主訓練的教室標示會憑空消失，
+   因此用分隔符把兩段拆開：系統段唯讀保留，只讓人改後面那段。 */
+const BK_NOTE_SEP='｜備註：';
+function bkNoteSplit(note){
+  const s=String(note||'');
+  const i=s.indexOf(BK_NOTE_SEP);
+  if(i>=0) return {sys:s.slice(0,i), user:s.slice(i+BK_NOTE_SEP.length)};
+  if(/^舊系統匯入/.test(s)) return {sys:s, user:''};   // 純匯入字串：整段當系統註記
+  return {sys:'', user:s};
+}
+function bkNoteJoin(sys,user){
+  const u=String(user||'').trim();
+  if(!sys) return u;
+  return u?sys+BK_NOTE_SEP+u:sys;
+}
+/* 明細裡的備註區塊。會員視角不顯示（純內部紀錄）；
+   可編輯條件不綁 editable —— 特殊狀況常是課後才補記，過期/已完成的課也要能寫。 */
+function bkNoteBlock(b, isMemberView, ownByCoach){
+  if(isMemberView) return '';
+  const p=bkNoteSplit(b.note);
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const can = !window._coachReadonly && ownByCoach;
+  return `<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--bd);">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="color:var(--t2);font-size:12.5px;">備註</span>
+      <span style="color:var(--t3);font-size:11px;">特殊狀況紀錄，僅員工可見</span>
+      ${can?`<button class="btn btn-ghost btn-sm" style="margin-left:auto;padding:3px 12px;" onclick="saveBookingNote('${b.id}')">儲存備註</button>`:''}
+    </div>
+    ${can
+      ? `<textarea id="ed-note" rows="2" placeholder="例：會員肩傷本堂調整動作／遲到 15 分鐘／臨時換教室" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bd);border-radius:9px;font-family:inherit;font-size:13.5px;line-height:1.6;resize:vertical;background:#fff;">${esc(p.user)}</textarea>`
+      : `<div style="font-size:13px;line-height:1.6;color:${p.user?'var(--text)':'var(--t3)'};white-space:pre-wrap;">${p.user?esc(p.user):'—'}</div>`}
+    ${p.sys?`<div style="margin-top:6px;font-size:11px;color:var(--t3);">系統註記：${esc(p.sys)}</div>`:''}
+  </div>`;
+}
+async function saveBookingNote(id){
+  const el=document.getElementById('ed-note'); if(!el) return;
+  const b=await dbGet('bookings',id); if(!b){showToast('找不到預約');return;}
+  const next=bkNoteJoin(bkNoteSplit(b.note).sys, el.value);
+  if(next===String(b.note||'')){ showToast('備註未變更'); return; }
+  b.note=next;
+  try{ await dbPut('bookings',b); }
+  catch(e){ showToast('備註儲存失敗：'+(e.message||e)); return; }
+  /* 舊匯入團課一堂被拆成多筆同時段預約（openBookingDetail 會即時聚合顯示）——
+     備註要寫到同一堂的每一筆，否則從別人那筆點進來看不到。 */
+  if(b.category==='小班肌力' && !(Array.isArray(b.member_ids)&&b.member_ids.length)){
+    try{
+      const sibs=(await dbGetAll('bookings')).filter(x=>x.id!==b.id&&x.category==='小班肌力'
+        &&x.status!=='cancelled'&&(x.coach_id||'')===(b.coach_id||'')&&x.date===b.date&&x.start_time===b.start_time);
+      for(const s of sibs){ s.note=bkNoteJoin(bkNoteSplit(s.note).sys, el.value); await dbPut('bookings',s); }
+    }catch(_){}
+  }
+  showToast('備註已儲存');
 }
 /* 更換場地（2026-07-28 使用者回報：體驗課因額滿被排到團課教室，場地釋出後沒有選項改回）——
    逐場地驗證該時段可用性（沿用 validateBooking 的 venue_pref 強制配置），可用才能點。 */
@@ -16491,8 +16572,12 @@ async function saveBookingTime(id){
     const curVid=String(b.venue_unit||'').split('_')[0];
     if(newVid && newVid!==curVid) nVenue=`${newVid}_1`;
   }
-  const noChange = nd===b.date&&nt===b.start_time&&ndur===b.duration&&nsub===(b.substitute_coach_id||null)&&nVenue===b.venue_unit;
+  /* 備註（2026-07-29）：打完備註直接按「儲存變更」也要存到，不能被 noChange 早退吃掉 */
+  const noteEl=document.getElementById('ed-note');
+  const nNote=noteEl?bkNoteJoin(bkNoteSplit(b.note).sys, noteEl.value):String(b.note||'');
+  const noChange = nd===b.date&&nt===b.start_time&&ndur===b.duration&&nsub===(b.substitute_coach_id||null)&&nVenue===b.venue_unit&&nNote===String(b.note||'');
   if(noChange){closeModal();return true;}
+  if(noteEl) b.note=nNote;
   // 用更新後的內容驗證：時間衝突、代課教練該時段衝堂、場地容量、過去時間等
   const vbk={...b, substitute_coach_id:nsub, venue_unit:nVenue};
   const verr=await validateBooking(vbk,nd,nt,ndur);
