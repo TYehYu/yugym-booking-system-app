@@ -5992,8 +5992,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1024';
-const APP_VERSION_LABEL='v260729.1024';
+const APP_VERSION = '260729.1050';
+const APP_VERSION_LABEL='v260729.1050';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17966,8 +17966,10 @@ const SALARY_TPL_DEFAULT = {
     salary_type:'monthly_guarantee',
     pt_mode:'tier',
     pt_rate:0,
+    /* 級距起點 1（2026-07-29 修正）：原本 min:0 會讓第一階算成 60 堂（0~59），
+       每人每月多算 1 堂。實際規則是「前 59 堂」，與手動薪資表一致。 */
     pt_tiers:[
-      {min:0,  max:59,  rate:625},
+      {min:1,  max:59,  rate:625},
       {min:60, max:79,  rate:650},
       {min:80, max:99,  rate:675},
       {min:100,max:null,rate:700},
@@ -18178,6 +18180,34 @@ function dutyHoursCapped(attendance, shifts, empId, month){
 /* 店長津貼（2026-07-29 使用者定案）：全店當月教練課「總堂數」（extras.leaderHeads 已排除
    老闆/admin 與櫃台，含店長本人）每滿 N 堂給一筆獎金，可累計。
    例：總 200 堂、每 80 堂 $4,000 → 2 筆 ＝ $8,000（餘 40 堂不足一筆不計）。 */
+/* ══ 續約張數與業績歸屬（2026-07-29 統一）══
+   原本三處各寫一份，薪資頁那份讀的是不存在的欄位（renewed_by/sold_by/coach_id + is_renewal），
+   導致續約獎金永遠是 0。統一成本函式：
+     只數 sale_kind='renewal' 的票；歸屬優先序＝① 票券 sold_by（業績歸屬）
+     ② 收款紀錄 purchases.coach_id ③ 購買前 90 天內帶該會員最多教練課的教練。 */
+function renewAttribOf(t, purByTk, bookings){
+  if(t.sold_by) return t.sold_by;
+  if(purByTk && purByTk[t.id]) return purByTk[t.id];
+  const upTo=t.purchase_date||'';
+  if(!upTo) return null;
+  const from=ymd(addDays(parseYmd(upTo),-90));
+  const cnt={};
+  (bookings||[]).forEach(b=>{ if(b.member_id===t.member_id&&b.status!=='cancelled'&&b.coach_id
+    &&b.date>=from&&b.date<=upTo&&(b.category==='私人教練'||b.category==='體驗')) cnt[b.coach_id]=(cnt[b.coach_id]||0)+1; });
+  return Object.entries(cnt).sort((a,b)=>b[1]-a[1]).map(e=>e[0])[0]||null;
+}
+// 某月各教練的續約張數 → {empId: n}
+function renewMapOf(month, tickets, purchases, bookings){
+  const purByTk={}; (purchases||[]).forEach(p=>{ if(p.ticket_id&&p.coach_id) purByTk[p.ticket_id]=p.coach_id; });
+  const map={};
+  (tickets||[]).forEach(t=>{
+    if(t.sale_kind!=='renewal') return;
+    if(String(t.purchase_date||'').slice(0,7)!==month) return;
+    const who=renewAttribOf(t, purByTk, bookings);
+    if(who) map[who]=(map[who]||0)+1;
+  });
+  return map;
+}
 /* 店長津貼的堂數基準（2026-07-29 使用者指示）：教練課＋友善教練課（皆為 category='私人教練'）
    ＋團體課（小班肌力，一堂算 1 堂、不看人數）。體驗課與自主訓練不列入。
    ⚠ 排除老闆的名單過濾在呼叫端（role!=='admin'），三處計算共用本函式確保口徑一致。 */
@@ -19321,7 +19351,7 @@ function openSalaryTplEdit(typeKey){
   const label={full_time:'正職',part_time:'兼職',intern:'工讀',contractor:'合作'}[typeKey]||typeKey;
   const t=(window.SALARY_TPL||{})[typeKey]||{};
   const mode=t.pt_mode||'flat';
-  const tiers=(t.pt_tiers&&t.pt_tiers.length?t.pt_tiers:[{min:0,max:59,rate:0},{min:60,max:79,rate:0},{min:80,max:99,rate:0},{min:100,max:null,rate:0}]);
+  const tiers=(t.pt_tiers&&t.pt_tiers.length?t.pt_tiers:[{min:1,max:59,rate:0},{min:60,max:79,rate:0},{min:80,max:99,rate:0},{min:100,max:null,rate:0}]);
   const bonus=(t.pt_bonus&&t.pt_bonus.length?t.pt_bonus:[{threshold:80,amount:0},{threshold:100,amount:0}]);
   const sec=(title)=>`<div style="font-size:12.5px;font-weight:700;color:var(--green);margin:16px 0 8px;">${title}</div>`;
   const num=(id,val)=>`<input type="number" id="${id}" value="${val??0}">`;
@@ -20365,7 +20395,7 @@ function hrRerenderDuty(){
 function hrTeachBlockHtml(c){
   const cfg=empPayConfig(c);
   const mode=cfg.pt_mode==='tier'?'tier':'flat';
-  const tiers=(cfg.pt_tiers||[]).length?cfg.pt_tiers:[{min:0,max:59,rate:625}];
+  const tiers=(cfg.pt_tiers||[]).length?cfg.pt_tiers:[{min:1,max:59,rate:625}];
   const bonus=(cfg.pt_bonus||[]);
   return `
     <div class="form-row"><label>課堂薪資制度</label><select id="hr-ptmode" onchange="hrTogglePtMode()">
@@ -21579,7 +21609,7 @@ function hrSalaryBodyHtml(c,et){
   const n=(v,d)=> (v==null||v==='')?d:v;
   const needDuty = (c.need_duty!=null) ? !!c.need_duty : (et!=='contractor');
   const mode=cfg.pt_mode==='tier'?'tier':'flat';
-  const tiers=(cfg.pt_tiers||[]).length?cfg.pt_tiers:[{min:0,max:59,rate:625}];
+  const tiers=(cfg.pt_tiers||[]).length?cfg.pt_tiers:[{min:1,max:59,rate:625}];
   const bonus=(cfg.pt_bonus||[]);
   // ① 值班設定（依模式不同）
   let dutyRows='';
@@ -29469,21 +29499,7 @@ async function anaCoach(){
   /* 續約數（2026-07-27 改標記制）：只數賣票時標「續約」的票（sale_kind='renewal'）。
      推測法（會員曾買過同類票）會嚴重高估——7 月推出 38 張、實際 9 張，加購/補儲全被誤算。
      歸屬教練＝① 收款紀錄（purchases）的 coach_id ② 購買前 90 天內帶該會員最多教練課的教練。 */
-  const _purByTk={}; (purchases||[]).forEach(p=>{ if(p.ticket_id&&p.coach_id) _purByTk[p.ticket_id]=p.coach_id; });
-  const renewMap={};
-  (mtks||[]).forEach(t=>{
-    if((t.purchase_date||'').slice(0,7)!==month || t.sale_kind!=='renewal') return;
-    let who=_purByTk[t.id]||null;
-    if(!who){
-      const upTo=t.purchase_date||'';
-      const from=ymd(addDays(parseYmd(upTo),-90));
-      const cnt={};
-      bookings.forEach(b=>{ if(b.member_id===t.member_id&&b.status!=='cancelled'&&b.coach_id
-        &&b.date>=from&&b.date<=upTo&&(b.category==='私人教練'||b.category==='體驗')) cnt[b.coach_id]=(cnt[b.coach_id]||0)+1; });
-      who=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).map(e=>e[0])[0]||null;
-    }
-    if(who) renewMap[who]=(renewMap[who]||0)+1;
-  });
+  const renewMap=renewMapOf(month, mtks, purchases, bookings);
   const coachList=coaches.filter(isCoachable);
   const rowsData=coachList.map(c=>{
     const mine=monthBk.filter(b=>b.coach_id===c.id);
@@ -30489,7 +30505,10 @@ async function renderSalaryContent(TARGET, withHead){
         .map(o=>leaderClassCount(bookings,o.id,month))
     : [];
   let renewCount=0;
-  try{ const tks=await dbGetAll('member_tickets'); tks.forEach(t=>{ const who=t.renewed_by||t.sold_by||t.coach_id; const when=(t.purchase_date||t.created_at||'').slice(0,7); if(t.is_renewal&&who===empId&&when===month) renewCount++; }); }catch(_){}
+  try{
+    const[tks,purs]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('purchases').catch(()=>[])]);
+    renewCount=(renewMapOf(month,tks,purs,bookings)||{})[empId]||0;   // 2026-07-29：統一計數，原本讀不存在的欄位
+  }catch(_){}
   // 完整薪資計算（v2.0：含續約、店長階梯、主管津貼、勞健保）
   const sal=calcSalary(me, ptDone, groupHeads, dutyHours, myLeave, myClassOverlap, {renewCount, leaderHeads});
   const countSalary=me.count_salary!==false;
