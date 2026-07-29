@@ -81,5 +81,18 @@ ok('　　批次取消用 silent，不逐筆關視窗重繪',
 ok('　　RPC 建立的連續預約會補標 recurring（否則認不出同系列）',
    /update\(\{recurring:true\}\)/.test(src));
 
+console.log('\n班表權限：櫃檯讀得到、不能改');
+ok('★ 排班表頁不再把櫃檯擋在門外',
+   /SESSION\.role==='admin'\|\|SESSION\.is_manager\|\|SESSION\.role==='front_desk'/.test(src));
+ok('★ 教練值班時段的編輯權收回給管理員／店長（原本 isDeskLike 把櫃檯也算進去）',
+   /const canEdit = SESSION\.role==='admin'\|\|!!SESSION\.is_manager;/.test(src));
+ok('　　標題會標明是檢視模式', /檢視模式 · 排班由店長或管理員編輯/.test(src));
+const guarded=['openWeeklyShift','openShiftEdit','saveShift','applyWeeklyToMonth','copyPrevMonthShifts'];
+guarded.forEach(fn=>{
+  const i=src.indexOf('function '+fn+'(');
+  const head=src.slice(i, i+260);
+  ok(`　　${fn} 直接呼叫也擋得住`, /if\(!_canEditShifts\)/.test(head));
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

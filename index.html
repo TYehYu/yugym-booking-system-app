@@ -6047,8 +6047,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1646';
-const APP_VERSION_LABEL='v260729.1646';
+const APP_VERSION = '260729.1648';
+const APP_VERSION_LABEL='v260729.1648';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19139,6 +19139,7 @@ function weeklyOpts(){ return [['off','休'], ...SHIFT_QUICK.map(([c])=>[c,c])];
 // 班別代號 → 起迄時間（與 SHIFT_QUICK 一致）
 function codeToTime(code){ const m=SHIFT_QUICK.find(([c])=>c===code); return m?[m[1],m[2]]:null; }
 function openWeeklyShift(empId){
+  if(!_canEditShifts){ showToast('無排班編輯權限'); return; }
   const c=(window._shiftsStaffCache||[]).find(x=>x.id===empId);
   const name=c?(c.name||'員工'):'員工';
   // 解析已存模式：weekly_shift = "週日,週一,...,週六" 七碼（off/A/C/A1/C1/全）
@@ -19181,6 +19182,7 @@ async function saveWeeklyPattern(){
   }
 }
 async function applyWeeklyToMonth(){
+  if(!_canEditShifts){ showToast('無排班編輯權限'); return; }
   const empId=document.getElementById('wk-empid').value;
   const pattern=readWeeklyPattern();
   // 先嘗試記住模式（失敗不影響套用）
@@ -19416,6 +19418,7 @@ function shiftTimeOptions(sel){
   return o;
 }
 function openShiftEdit(empId,dateStr){
+  if(!_canEditShifts){ showToast('無排班編輯權限'); return; }
   const shifts=window._shiftsCache||[];
   const list=shifts.filter(s=>s.emp_id===empId&&s.date===dateStr);
   const cur=list[0]||null; // 一天一班為主（如需多班可擴充）
@@ -19463,6 +19466,7 @@ function shiftCalcPreview(){
   if(el) el.textContent = (s&&e)?`時數：${h.toFixed(1)} hr`:'';
 }
 async function saveShift(){
+  if(!_canEditShifts){ showToast('無排班編輯權限'); return; }
   const empId=document.getElementById('sh-empid').value;
   const date=document.getElementById('sh-date').value;
   const start=document.getElementById('sh-start').value;
@@ -31204,14 +31208,19 @@ PAGES.coach_attendance=async function(){
 };
 // ══════ 主管：排班表（可編輯，複用出勤管理的排班表）══════
 PAGES.coach_shifts=async function(){
-  // 2026-07-27 權限分層：管理員與店長可進（原只認 is_supervisor，把管理員/店長都擋掉了）
-  if(!(SESSION.role==='admin'||SESSION.is_manager)){ C.innerHTML=head('SHIFTS','排班表','')+`<div class="card"><div class="empty" style="padding:36px;"><div class="em-t">無權限</div></div></div>`; return; }
+  /* 2026-07-27 權限分層：管理員與店長可進（原只認 is_supervisor，把管理員/店長都擋掉了）
+     2026-07-29 使用者指示：櫃檯也要看得到排班表，只是不能改 —— 導覽列早就給了櫃檯入口，
+     但這裡仍擋著，點進來只有「無權限」。改成可進、由 _canEditShifts 決定能不能編輯。 */
+  if(!(SESSION.role==='admin'||SESSION.is_manager||SESSION.role==='front_desk')){
+    C.innerHTML=head('SHIFTS','排班表','')+`<div class="card"><div class="empty" style="padding:36px;"><div class="em-t">無權限</div></div></div>`; return; }
+  await checkCanEditShifts();
+  const sub = _canEditShifts?'店長 · 可編輯排班':'檢視模式 · 排班由店長或管理員編輯';
   const scoped = scopeActive('employee');
   const bc = scoped ? scopeBreadcrumb('員工管理','排班') : '';
   const sb = scoped ? lpScopeBar('排班') : '';
   const hd = scoped
-    ? head('SHIFTS', SCOPE.name+' · 排班', '店長 · 可編輯排班')
-    : head('SHIFTS','排班表','店長 · 可編輯排班');
+    ? head('SHIFTS', SCOPE.name+' · 排班', sub)
+    : head('SHIFTS','排班表',sub);
   C.innerHTML = bc + hd + sb + `<div id="att-body"></div>`;
   await renderShiftsTab();
 };
@@ -31509,7 +31518,9 @@ PAGES.coach_duty_week=async function(){
   const [coaches,slots]=await Promise.all([dbGetAll('coaches'),dbGetAll('duty_slots').catch(()=>[])]);
   const list=coaches.filter(c=>isCoachable(c)&&c.status!=='inactive'&&c.invite_status!=='pending')
     .sort((a,b)=>String(a.id).localeCompare(String(b.id)));
-  const canEdit = isDeskLike()||SESSION.is_manager;
+  /* 2026-07-29 使用者指示：櫃檯讀得到、不能改 —— 原本 isDeskLike() 把櫃檯也算成可編輯。
+     編輯權與排班表同一條線：管理員或店長。 */
+  const canEdit = SESSION.role==='admin'||!!SESSION.is_manager;
   const byKey={}; (slots||[]).forEach(s=>{ if(s.weekday) byKey[s.weekday+'|'+s.segment]={id:s.id,ids:(Array.isArray(s.coach_ids)?s.coach_ids.slice():[])} ; });
   // 教練代表色＝行事曆課卡同一套 coachTagColor（COACH_TAG_COLORS 固定配色，2026-07-28 使用者指正）
   window._dw={byKey, canEdit,
