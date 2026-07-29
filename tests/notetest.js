@@ -121,6 +121,30 @@ ok('★ 已選的會員不會被截斷吃掉', html.includes('value="x199"'));
 html=bkMemberOptsHTML('會員199');
 ok('搜尋仍找得到被截掉的人', html.includes('value="x199"'));
 
+/* ── 課卡彈出面板：不得再指向已退場的環繞層（2026-07-29「紀蘢無法刪除」） ──
+   課卡按鈕從環繞圓鈕 .evc-orbit 改成 #bk-card-pop 的 .mtp-orbs 之後，
+   仍寫死 .evc-orbit 的處理器會找不到容器而靜默 return，按了完全沒反應。 */
+console.log('\n課卡按鈕不得指向已退場的環繞層');
+// 只允許兩處：bkOrbHost 的舊版相容退路、collapseBkCard 的 DOM 清理
+const OK_FNS=['bkOrbHost','collapseBkCard'];
+const orbitHardcoded=[...src.matchAll(/closest\('\.evc-orbit'\)|querySelector\('\.evc-orbit'\)/g)]
+  .map(m=>{
+    const before=src.slice(0,m.index);
+    const fn=[...before.matchAll(/function\s+([A-Za-z0-9_$]+)\s*\(/g)].pop();
+    return fn?fn[1]:'(頂層)';
+  })
+  .filter(fn=>!OK_FNS.includes(fn));
+ok('★ 沒有處理器再寫死 .evc-orbit', orbitHardcoded.length===0,
+   `還在寫死的函式：${orbitHardcoded.join('、')}`);
+ok('★ 改用共用的容器解析（新彈窗優先、舊環繞層相容）',
+   /function bkOrbHost\(/.test(src) && /\.mtp-orbs, \.evc-orbit/.test(src));
+ok('★ 課卡「取消」直接開取消視窗（含 24 小時警示與退課/扣課選擇）',
+   /'x','取消'\)/.test(src) && /collapseBkCard\(\);confirmCancelBooking\('\$\{id\}'\)/.test(src));
+ok('　　名單／代課面板改吊在彈窗裡', /bkPanelHost\(\) \|\| el/.test(src)
+   && /host\.insertAdjacentHTML\('beforeend', html\)/.test(src));
+ok('　　且彈窗版面板有自己的樣式（舊樣式只掛在課卡上）',
+   /#bk-card-pop \.evc-roster\{/.test(src));
+
 /* ── 課程類型清單：友善自主訓練／場租不列 ── */
 console.log('\n新增預約的課程類型清單');
 ok('★ 友善自主訓練已排除', /自主訓練'\s*&&\s*\/友善\/\.test\(t\.name\|\|''\)\) return false/.test(src));
