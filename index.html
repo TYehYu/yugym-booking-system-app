@@ -6128,8 +6128,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.2357';
-const APP_VERSION_LABEL='v260729.2357';
+const APP_VERSION = '260730.0002';
+const APP_VERSION_LABEL='v260730.0002';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10272,10 +10272,14 @@ PAGES.g_dashboard=async function(){
      ① 分期票開通段最後一堂（需繳下期）② 整張票快用完的最後一堂（需續課）。與行事曆 💰/🔁 同源。 */
   const _typeMapD=Object.fromEntries((types||[]).map(t=>[t.id,t]));
   const _lastBk={};   // bookingId -> 'install' | 'renew'
+  /* 效能（2026-07-29）：原本每張票券都 filter 一次整個 bookings（2,400 票 × 上萬筆預約），
+     首頁一進來就要跑兩千多萬次比對。改成先做一次分組索引，之後兩個迴圈共用。 */
+  const _bkByTk={};
+  (bookings||[]).forEach(b=>{ if(b.ticket_id && b.status!=='cancelled'){ (_bkByTk[b.ticket_id]=_bkByTk[b.ticket_id]||[]).push(b); } });
+  Object.values(_bkByTk).forEach(a=>a.sort((x,y)=>((x.date||'')+(x.start_time||'')).localeCompare((y.date||'')+(y.start_time||''))));
   try{
     (mtickets||[]).forEach(tk=>{
-      const bks=(bookings||[]).filter(b=>b.ticket_id===tk.id && b.status!=='cancelled')
-        .sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
+      const bks=_bkByTk[tk.id]||[];
       if(!bks.length) return;
       // ① 分期開通段最後一堂
       if(tk.installment && typeof tk.installment==='object'){
@@ -10300,16 +10304,24 @@ PAGES.g_dashboard=async function(){
     });
     /* 續約狀態（2026-07-29 使用者定案）：首頁自行判定一份，不依賴行事曆頁的快取。
        已續約＝同類別有「更晚買」的票；不續約＝票券上人工標了 declined。 */
-    window._renewDoneBk=window._renewDoneBk||{}; window._renewNoBk=window._renewNoBk||{};
-    (mtickets||[]).forEach(tk=>{
-      const bks=(bookings||[]).filter(b=>b.ticket_id===tk.id && b.status!=='cancelled')
-        .sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
+    /* 重置（不可沿用行事曆頁留下的舊標記，否則會出現不該有的綠勾） */
+    window._renewDoneBk={}; window._renewNoBk={};
+    /* 效能：先把「每位會員各類別最晚的購買日」建成索引，判定已續約才不用每張票再掃一次全表。
+       原本是 O(票數²)，2,400 多張票時明顯卡頓。 */
+    const _newestBuy={};
+    (mtickets||[]).forEach(t2=>{
+      if(t2.status==='refunded') return;
+      const g2=tkRenewGroup(t2,_typeMapD); if(!g2) return;
+      const k=t2.member_id+'|'+g2, d=String(t2.purchase_date||t2.created_at||'');
+      if(!_newestBuy[k] || d>_newestBuy[k]) _newestBuy[k]=d;
+    });
+    Object.keys(_bkByTk).forEach(tkid=>{
+      const tk=(mtickets||[]).find(x=>x.id===tkid); if(!tk) return;
+      const bks=_bkByTk[tkid];
       const lb=bks[bks.length-1]; if(!lb || _lastBk[lb.id]!=='renew') return;
       const g=tkRenewGroup(tk,_typeMapD); if(!g) return;
-      const done=(mtickets||[]).some(t2=> t2.id!==tk.id && t2.member_id===tk.member_id
-        && tkRenewGroup(t2,_typeMapD)===g && t2.status!=='refunded'
-        && String(t2.purchase_date||t2.created_at||'') > String(tk.purchase_date||tk.created_at||''));
-      if(done) window._renewDoneBk[lb.id]=true;
+      const mine=String(tk.purchase_date||tk.created_at||'');
+      if((_newestBuy[tk.member_id+'|'+g]||'') > mine) window._renewDoneBk[lb.id]=true;
       else if(tk.renew_status==='declined') window._renewNoBk[lb.id]=true;
     });
   }catch(_){}
@@ -11745,6 +11757,19 @@ function tkRenewGroup(t, typeMap){
 function computeLastBkMarks(allTickets, bookings, typeMap){
   window._renewDoneBk={};   // 已續約 → 綠勾
   window._renewNoBk={};     // 不續約 → 紅叉
+  /* 效能（2026-07-29）：原本兩個迴圈各自對每張票 filter 一次整個 bookings
+     （2,400 票 × 上萬筆＝兩千多萬次比對），行事曆每次重繪都要跑。
+     改成先做一次分組索引與「每人各類別最晚購買日」索引，兩個迴圈共用。 */
+  const _bkByTk={};
+  (bookings||[]).forEach(b=>{ if(b&&b.ticket_id&&b.status!=='cancelled'){ (_bkByTk[b.ticket_id]=_bkByTk[b.ticket_id]||[]).push(b); } });
+  Object.values(_bkByTk).forEach(a=>a.sort((x,y)=>((x.date||'')+(x.start_time||'')).localeCompare((y.date||'')+(y.start_time||''))));
+  const _newestBuy={};
+  (allTickets||[]).forEach(t2=>{
+    if(t2.status==='refunded') return;
+    const g2=tkRenewGroup(t2,typeMap); if(!g2) return;
+    const k=t2.member_id+'|'+g2, d=String(t2.purchase_date||t2.created_at||'');
+    if(!_newestBuy[k] || d>_newestBuy[k]) _newestBuy[k]=d;
+  });
   // 分期票：標記「目前開通區的最後一堂」對應的預約（提醒下期需繳費）
   window._installLastBk={};
   try{
@@ -11752,9 +11777,8 @@ function computeLastBkMarks(allTickets, bookings, typeMap){
       if(!tk.installment || typeof tk.installment!=='object') return;
       const unlocked = tk.unlocked_sessions!=null ? tk.unlocked_sessions : tk.sessions_total;
       if(!(unlocked>0) || unlocked>=tk.sessions_total) return; // 全開通就不用提醒
-      // 這張票的預約（未取消），按時間排序
-      const tkBks=bookings.filter(b=>b.ticket_id===tk.id && b.status!=='cancelled')
-        .sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
+      // 這張票的預約（未取消），按時間排序 —— 走上方一次建好的索引
+      const tkBks=_bkByTk[tk.id]||[];
       // 第 unlocked 堂（索引 unlocked-1）就是開通區最後一堂
       const lastBk = tkBks[unlocked-1];
       if(lastBk) window._installLastBk[lastBk.id]=true;
@@ -11779,15 +11803,12 @@ function computeLastBkMarks(allTickets, bookings, typeMap){
         const unlocked = tk.unlocked_sessions!=null ? tk.unlocked_sessions : tk.sessions_total;
         if(unlocked < tk.sessions_total) return;
       }
-      const tkBks=bookings.filter(b=>b.ticket_id===tk.id && b.status!=='cancelled')
-        .sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
+      const tkBks=_bkByTk[tk.id]||[];
       const lastBk = tkBks[tkBks.length-1];   // 已排預約中時間最晚那堂
       if(!lastBk) return;
       const grp=tkRenewGroup(tk,typeMap);
       // 已續約：同類別有「更晚買」的票（不看是否已排光，剛買剛排完也算數）
-      const done = grp && allTickets.some(t2=> t2.id!==tk.id && t2.member_id===tk.member_id
-        && tkRenewGroup(t2,typeMap)===grp && t2.status!=='refunded'
-        && String(t2.purchase_date||t2.created_at||'') > String(tk.purchase_date||tk.created_at||''));
+      const done = grp && (_newestBuy[tk.member_id+'|'+grp]||'') > String(tk.purchase_date||tk.created_at||'');
       if(done){ window._renewDoneBk[lastBk.id]=true; return; }
       if(tk.renew_status==='declined'){ window._renewNoBk[lastBk.id]=true; return; }
       window._renewLastBk[lastBk.id]=true;
@@ -19981,7 +20002,8 @@ async function applyThisToWeekly(empId, dateStr){
 async function _doApplyWeekly(overwrite){
   const ctx=window._applyWeeklyCtx; if(!ctx){ closeModal(); return; }
   const{ empId, dateStr, start, end, hours, note, targetDow, byDate, targetDates }=ctx;
-  const code=shiftCode(start,end);
+  // 代號依「該天的營業時間」推導（週日只到 15:00，全班判定會不同）（2026-07-29）
+  const codeOf=d=>shiftCode(start,end,d);
   let added=0, updated=0, skipped=0;
   for(const ds of targetDates){
     const dayList=byDate[ds]||[];
@@ -20003,7 +20025,7 @@ async function _doApplyWeekly(overwrite){
     const c=await dbGet('coaches',empId);
     let pat=(c.weekly_shift?String(c.weekly_shift).split(','):['off','off','off','off','off','off','off']);
     while(pat.length<7) pat.push('off');
-    pat[targetDow]= code || 'off';
+    pat[targetDow]= codeOf(dateStr) || 'off';   // 週期模式以原始選定日推導（ds 已離開迴圈作用域）
     c.weekly_shift=pat.join(',');
     await dbPut('coaches',c);
   }catch(_){}

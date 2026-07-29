@@ -37,9 +37,11 @@ ok('　　已續約／不續約不反紅（只有待付費／待處理才反紅�
 
 console.log('\n判定邏輯');
 ok('★ 已續約＝同類別有「更晚買」的票（不是只看當天收款）',
-   /String\(t2\.purchase_date\|\|t2\.created_at\|\|''\) > String\(tk\.purchase_date\|\|tk\.created_at\|\|''\)/.test(src));
+   /\(_newestBuy\[tk\.member_id\+'\|'\+grp\]\|\|''\) > String\(tk\.purchase_date\|\|tk\.created_at\|\|''\)/.test(src));
+ok('　　「最晚購買日」先建索引，不是每張票掃全表（2,478 票實測 226ms → 3ms）',
+   /const _newestBuy=\{\};/.test(src) && !/allTickets\.some\(t2=>/.test(src));
 ok('　　只比同一類（教練課／團體課各自算）', /function tkRenewGroup\(t, typeMap\)\{/.test(src));
-ok('　　已退款的票不算續約', /t2\.status!=='refunded'/.test(src));
+ok('　　已退款的票不算續約', /if\(t2\.status==='refunded'\) return;/.test(src));
 ok('★ 不續約＝票券上人工標記 declined', /tk\.renew_status==='declined'/.test(src));
 ok('　　首頁自行算一份，不依賴行事曆頁的快取',
    /首頁自行判定一份，不依賴行事曆頁的快取/.test(src));
