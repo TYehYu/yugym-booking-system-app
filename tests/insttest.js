@@ -94,5 +94,16 @@ guarded.forEach(fn=>{
   ok(`　　${fn} 直接呼叫也擋得住`, /if\(!_canEditShifts\)/.test(head));
 });
 
+console.log('\n教練手機端行事曆：別人的課卡不吃觸控');
+ok('★ 不可點的卡加上 cag-noint', /\$\{canClick\?'':' cag-noint'\}/.test(src));
+ok('★ cag-noint 是 pointer-events:none（滑動時觸控直接穿透）',
+   /\.cag-std\.cag-noint\{pointer-events:none;\}/.test(src));
+ok('　　不再掛 stopPropagation 的空 onclick（那仍會攔截手指）',
+   !/onclick="event\.stopPropagation\(\)"`\}>/.test(src));
+ok('　　管理員／店長仍可點別人的課卡（canClick 為真就不加 class）',
+   /const canClick = layer==='mine' \|\| isAdmin;/.test(src));
+ok('　　拖曳只綁自己的卡（data-bid 只給 mine）',
+   /\$\{layer==='mine'\?`data-bid=/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

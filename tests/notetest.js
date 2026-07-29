@@ -8,6 +8,15 @@ let pass=0,fail=0;
 const ok=(n,c,extra)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(extra?'  → '+extra:''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
+function grabBody(name){
+  const i=src.indexOf('function '+name+'(');
+  if(i<0) throw new Error('找不到函式 '+name);
+  let d=0,st=false;
+  for(let k=src.indexOf('{',i);k<src.length;k++){
+    if(src[k]==='{'){d++;st=true;} else if(src[k]==='}'){d--; if(st&&d===0) return src.slice(i,k+1);}
+  }
+  throw new Error('抓不到 '+name+' 的結尾');
+}
 function grab(startMark,endMark){
   const i=src.indexOf(startMark);
   if(i<0) throw new Error('找不到 '+startMark);
@@ -162,6 +171,19 @@ ok('　　量測用的暫時樣式一定會還原（finally）',
    /\}finally\{[\s\S]{0,220}pg\.style\.width=keep\.w/.test(src));
 ok('★ 三個入口都走同一支（檔名帶會員與日期）',
    (src.match(/ctPrintOpen\(ctPdfName\(/g)||[]).length===3);
+
+/* ── 沒綁會員的課：標籤要對（2026-07-29 使用者回報：施佩怡待簽約卡位被標成「體驗」） ── */
+const gl=new Function(grabBody('bkGuestLabel')+'\n'+grabBody('bkGuestName')+'\nreturn {bkGuestLabel,bkGuestName};')();
+console.log('\n沒綁會員的課（trial_name）標籤');
+eq('★ 待簽約卡位 → 待簽約', gl.bkGuestName({trial_name:'施佩怡',category:'私人教練',pending_contract:true}), '施佩怡（待簽約）');
+eq('★ 體驗課仍是體驗', gl.bkGuestName({trial_name:'王小明',category:'體驗'}), '王小明（體驗）');
+eq('★ 場租是場租', gl.bkGuestName({trial_name:'王媽媽',category:'場租'}), '王媽媽（場租）');
+eq('　　認不出身分就只顯示姓名，不亂貼標籤', gl.bkGuestName({trial_name:'某人',category:'私人教練'}), '某人');
+eq('　　待簽約優先於類別', gl.bkGuestLabel({category:'體驗',pending_contract:true}), '待簽約');
+ok('★ 三處顯示共用同一支（時間軸／卡片／hover 提示）',
+   (src.match(/bkGuestName\(b\)/g)||[]).length>=3);
+ok('　　不再有寫死的「（體驗）」直接接 trial_name',
+   !/b\.trial_name\+'（體驗）'/.test(src) || /b\.category==='體驗'/.test(src));
 
 /* ── 課程類型清單：友善自主訓練／場租不列 ── */
 console.log('\n新增預約的課程類型清單');

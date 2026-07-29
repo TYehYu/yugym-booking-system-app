@@ -4950,6 +4950,8 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 #bk-card-pop .mtp-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
 #bk-card-pop .mtp-t1{font-size:14.5px;font-weight:800;color:var(--text);line-height:1.3;}
 #bk-card-pop .mtp-t2{font-size:11.5px;color:var(--t2);white-space:nowrap;}
+/* 手機端行事曆：別人的課卡不吃觸控（2026-07-29 使用者回報滑頁面會被卡住） */
+.cag-std.cag-noint{pointer-events:none;}
 /* 連續取消清單（2026-07-29） */
 .sc-list{max-height:min(38vh,300px);overflow-y:auto;border:1px solid var(--bd);border-radius:10px;
   background:var(--card2);padding:4px;}
@@ -6047,8 +6049,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1648';
-const APP_VERSION_LABEL='v260729.1648';
+const APP_VERSION = '260729.1654';
+const APP_VERSION_LABEL='v260729.1654';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9611,7 +9613,7 @@ PAGES.g_dashboard=async function(){
       const dur=Number(b.duration)||60;
       const emin=smin+dur;
       const nm = b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
-               : (b.trial_name?b.trial_name+'（體驗）':(Array.isArray(b.member_ids)&&b.member_ids.length?`團課 ${b.member_ids.length} 人`:'—'));   /* 體驗課顯示客戶姓名（2026-07-27） */
+               : (b.trial_name?bkGuestName(b):(Array.isArray(b.member_ids)&&b.member_ids.length?`團課 ${b.member_ids.length} 人`:'—'));   /* 體驗／待簽約／場租都顯示客戶姓名（2026-07-27、2026-07-29 修標籤） */
       const subbed = b.substitute_coach_id && b.substitute_coach_id!==c.id;
       const isLive = nowMin>=smin && nowMin<emin && !isDone(b);           // 進行中
       const isUpcoming = !isDone(b) && !isLive && (smin-nowMin>0) && (smin-nowMin<=30); // 30分內即將開始
@@ -9645,7 +9647,7 @@ PAGES.g_dashboard=async function(){
           const mt=b.ticket_id?_mtTL[b.ticket_id]:null;
           const cc=evColorClass(b,typeMap,mt);
           const nm = b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
-                   : (b.trial_name?b.trial_name+'（體驗）':(Array.isArray(b.member_ids)&&b.member_ids.length?`${b.member_ids.length} 人`:'—'));   /* 體驗課顯示客戶姓名（2026-07-27） */
+                   : (b.trial_name?bkGuestName(b):(Array.isArray(b.member_ids)&&b.member_ids.length?`${b.member_ids.length} 人`:'—'));   /* 體驗／待簽約／場租都顯示客戶姓名（2026-07-27、2026-07-29 修標籤） */
           const canceled=isCancelled(b);
           const mn=timeToMin(b.start_time||'0:0');
           const live = !canceled && nowMin>=mn && nowMin<mn+(Number(b.duration)||60) && !isDone(b);
@@ -11354,6 +11356,21 @@ function bkIsMasked(b){
   const acting = b.substitute_coach_id || b.coach_id;
   return acting !== SESSION.id;                          // 不是我帶的 → 遮蔽
 }
+/* 沒綁會員、只有 trial_name 的課不只體驗課：待簽約卡位、場租都長這樣。
+   統一由這支決定括號裡要寫什麼，避免各處各寫一份而把待簽約標成「體驗」
+   （2026-07-29 使用者回報：施佩怡 7/31 21:00）。 */
+function bkGuestLabel(b){
+  if(!b) return '';
+  if(b.pending_contract) return '待簽約';
+  if(b.category==='場租') return '場租';
+  if(b.category==='體驗') return '體驗';
+  return '';
+}
+function bkGuestName(b){
+  const nm=(b&&b.trial_name)||'';
+  const lb=bkGuestLabel(b);
+  return nm + (lb?`（${lb}）`:'');
+}
 // 取得行事曆上應顯示的名稱（遮蔽時回課程類型，如「教練課」「自主訓練」）
 function bkDisplayName(b, realName){
   if(bkIsMasked(b)){
@@ -11787,7 +11804,16 @@ async function renderCalendar(opts){
       }else if(b.category==='自主訓練'&&b.trial_name){
         /* 家庭共享使用人（2026-07-29）：自主訓練的 trial_name＝家人稱呼，不可標成「體驗」 */
         _tipMem = ((b.member_id&&memMap[b.member_id])||'')+'（'+b.trial_name+'）';
-      }else if(b.trial_name&&!b.member_id){ _tipMem = b.trial_name+'（體驗）'; }
+      }else if(b.trial_name&&!b.member_id){
+        /* 2026-07-29 使用者回報（施佩怡 7/31 21:00 待簽約卡位被標成「體驗」）：
+           沒綁會員、只有 trial_name 的不只體驗課 —— 待簽約卡位與場租都長這樣，
+           標籤要依實際身分給，不能一律寫「體驗」。 */
+        _tipMem = bkGuestName(b);
+      }
+      else if(b.pending_contract && b.member_id){
+        // 分期未繳期數的保留課（2026-07-29）
+        _tipMem = ((b.member_id&&memMap[b.member_id])||memName||'—')+'（待繳費）';
+      }
       else { _tipMem = hideMember ? typeName : ((b.member_id&&memMap[b.member_id])||memName||'—'); }
       const _tipCoach = (subCoachName||coachName) ? `教練：${subCoachName||coachName}${subCoachName?'（代）':''}` : '';
       const _tipStr = _tipEsc([`${b.start_time}–${_endT}`, _tipMem, _tipCoach].filter(Boolean).join('\n'));
@@ -13542,7 +13568,11 @@ async function renderCoachAgenda(){
     const _venue=selfVenueLabel(b);
     // 2026-07-27 使用者指示：教練本人的課卡不放教練縮寫標籤（多餘）；只留場地標籤（自主訓練用教室/跑步機時）
     const tag = _venue?`<span class="evc-coach" style="background:${_ccol.bg};color:${_ccol.fg};">${_venue}</span>`:'';
-    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}" ${layer==='mine'?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}')"`:` onclick="event.stopPropagation()"`}>
+    /* 2026-07-29 使用者指示：手機端右側「其他教練的課卡」完全不吃觸控 ——
+       原本掛 onclick=stopPropagation，卡片仍會攔截手指，滑頁面時碰到就滑不動。
+       改成 pointer-events:none（class cag-noint），觸控直接穿透到捲動容器。
+       管理員／店長仍可點（canClick 為真時不加這個 class）。 */
+    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${canClick?'':' cag-noint'}" ${layer==='mine'?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}')"`:''}>
       ${done?'<span class="evc-check" title="已完成">簽</span>':''}
       <div class="evc-body"></div>
       <div class="evc-txt">${showTime?`<span class="evc-time">${b.start_time}</span>`:''}<span class="evc-name">${disp}</span>${tag}</div>
