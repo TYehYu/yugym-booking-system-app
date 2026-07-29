@@ -6014,8 +6014,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1552';
-const APP_VERSION_LABEL='v260729.1552';
+const APP_VERSION = '260729.1557';
+const APP_VERSION_LABEL='v260729.1557';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14198,21 +14198,39 @@ function pickBkType(tid){
 /* 步驟 1 會員下拉（2026-07-29 使用者指示：與教練連動）——
    選了教練就把該教練的會員（members.default_coach_id）分組排到最上面，其餘放下一組。
    沒選教練時就是一般的全名單。q 是搜尋字串（姓名或手機）。 */
-function bkMemberOptsHTML(q){
+/* 2026-07-29 使用者回報「選單會一直變長」：正式庫 400 多位會員，整份攤在下拉裡要滑很久。
+   改成「該教練的會員全列 ＋ 其他會員只列前 BK_MEM_CAP 位」，被截掉的用一列灰字說清楚
+   還有幾位、請用搜尋 —— 不做無聲截斷。已選到的會員一定保留在清單裡（不然會被截掉而消失）。 */
+const BK_MEM_CAP=40;
+function bkMemberOptsHTML(q, keepId){
   const all=window._bkAllMembers||[];
   const qq=(q||'').trim(), qp=qq?normPhone(qq):'';
   const list=qq?all.filter(m=>(m.name||'').includes(qq)||(qp&&normPhone(m.phone).includes(qp))):all;
   const cid=window._bkCoachSel||'';
   const opt=m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`;
   const head='<option value="">— 選擇會員 —</option>';
-  if(!cid) return head+list.map(opt).join('');
+  // 截斷但保住「目前已選的那位」，並回報被藏起來幾位
+  const cut=arr=>{
+    if(arr.length<=BK_MEM_CAP) return {rows:arr, hidden:0};
+    let rows=arr.slice(0,BK_MEM_CAP);
+    if(keepId && !rows.some(m=>m.id===keepId)){
+      const k=arr.find(m=>m.id===keepId);
+      if(k) rows=[k].concat(rows.slice(0,BK_MEM_CAP-1));
+    }
+    return {rows, hidden:arr.length-rows.length};
+  };
+  const more=n=>n?`<option value="" disabled>— 還有 ${n} 位，請用左邊搜尋 —</option>`:'';
+  if(!cid){
+    const {rows,hidden}=cut(list);
+    return head+rows.map(opt).join('')+more(hidden);
+  }
   const mine=list.filter(m=>m.default_coach_id===cid);
-  const rest=list.filter(m=>m.default_coach_id!==cid);
+  const rest=cut(list.filter(m=>m.default_coach_id!==cid));
   const cName=((window._bkCoaches||[]).find(c=>c.id===cid)||{});
   const label=cName.id?coachDisp(cName):'該教練';
   return head
     +(mine.length?`<optgroup label="${label}的會員（${mine.length}）">${mine.map(opt).join('')}</optgroup>`:'')
-    +(rest.length?`<optgroup label="其他會員（${rest.length}）">${rest.map(opt).join('')}</optgroup>`:'');
+    +(rest.rows.length?`<optgroup label="其他會員（${list.length-mine.length}）">${rest.rows.map(opt).join('')}${more(rest.hidden)}</optgroup>`:'');
 }
 // 教練下拉變更 → 重排會員下拉（保留已選的會員）
 function bkCoachChange(){
@@ -14221,7 +14239,7 @@ function bkCoachChange(){
   const sel=document.getElementById('bk-mem-pre'); if(!sel) return;
   const prev=sel.value;
   const q=(document.getElementById('bk-mem-q')||{}).value||'';
-  sel.innerHTML=bkMemberOptsHTML(q);
+  sel.innerHTML=bkMemberOptsHTML(q, prev);   // 已選的那位不會被截斷吃掉
   if(prev && sel.querySelector(`option[value="${prev}"]`)) sel.value=prev;
 }
 // 產生 30 分鐘間隔時段選項（08:00～22:00）
@@ -14455,14 +14473,19 @@ async function openBookingModalBack(){
   // 還原第1頁選擇
   const ty=document.getElementById('bk-type'); if(ty){ty.value=_bkWizard.type_id;renderBkTypeCards();await onBkTypeChange();}
   const co=document.getElementById('bk-coach'); if(co&&_bkWizard.coach_id){co.value=_bkWizard.coach_id;bkCoachChange();}
-  const mp=document.getElementById('bk-mem-pre'); if(mp&&_bkWizard.member_id)mp.value=_bkWizard.member_id;   // 還原步驟 1 的會員（2026-07-28）
+  /* 還原步驟 1 的會員（2026-07-28）：名單有截斷，要先把這位塞進清單再選，否則選不回來 */
+  const mp=document.getElementById('bk-mem-pre');
+  if(mp&&_bkWizard.member_id){
+    mp.innerHTML=bkMemberOptsHTML('', _bkWizard.member_id);
+    mp.value=_bkWizard.member_id;
+  }
 }
 async function coachName(id){const c=await dbGet('coaches',id);return c?coachDisp(c):'';}
 /* 步驟 1 會員搜索（2026-07-28 使用者指示：預約也先選會員，與銷售同規格） */
 function bkFilterMembers(q){
   const sel=document.getElementById('bk-mem-pre'); if(!sel) return;
   const prev=sel.value, qq=(q||'').trim();
-  sel.innerHTML=bkMemberOptsHTML(qq);            // 分組邏輯與教練連動共用一份
+  sel.innerHTML=bkMemberOptsHTML(qq, prev);      // 分組／截斷邏輯與教練連動共用一份
   const opts=[...sel.querySelectorAll('option')].filter(o=>o.value);
   if(opts.some(o=>o.value===prev)) sel.value=prev;
   else if(qq&&opts.length===1) sel.value=opts[0].value;

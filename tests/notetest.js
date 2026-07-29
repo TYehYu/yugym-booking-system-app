@@ -53,7 +53,7 @@ ok('★ 「教室:教室(代課)」＋人工備註 → 仍標「教室」',
 ok('venue_unit 優先於 note', selfVenueLabel({category:'自主訓練',venue_unit:'multi_1',note:'舊系統匯入｜教室:跑步機2'})==='');
 
 /* ── 步驟 1：會員下拉與教練連動 ── */
-const optSrc=grab('function bkMemberOptsHTML(','// 教練下拉變更');
+const optSrc=grab('const BK_MEM_CAP=','// 教練下拉變更');
 const sandbox={window:{},normPhone:s=>String(s||'').replace(/\D/g,''),
   fmtPhone:s=>String(s||''),coachDisp:c=>c.name};
 const bkMemberOptsHTML=new Function('window','normPhone','fmtPhone','coachDisp',
@@ -93,6 +93,33 @@ ok('可用手機搜尋', html.includes('value="m2"')&&!html.includes('value="m1"
 sandbox.window._bkCoachSel='c2';
 html=bkMemberOptsHTML('');
 ok('換教練 → 分組跟著換', html.includes('MANGO的會員（1）')&&html.includes('其他會員（3）'));
+
+/* ── 名單長度上限（2026-07-29 使用者回報「選單會一直變長」） ── */
+console.log('\n會員下拉不得無限長');
+const MANY=Array.from({length:200},(_,i)=>({id:'x'+i,name:'會員'+i,phone:'09'+String(i).padStart(8,'0'),
+  default_coach_id:i<3?'c1':null}));
+sandbox.window._bkAllMembers=MANY;
+
+sandbox.window._bkCoachSel='';
+html=bkMemberOptsHTML('');
+let shown=(html.match(/<option value="x/g)||[]).length;
+ok('★ 沒選教練：200 位不會整份攤開', shown<=40, `列出 ${shown} 位`);
+ok('★ 被截掉的有明講還有幾位', /還有 160 位，請用左邊搜尋/.test(html), html.slice(-120));
+
+sandbox.window._bkCoachSel='c1';
+html=bkMemberOptsHTML('');
+ok('★ 該教練的會員一定全列（不被截）',
+   ['x0','x1','x2'].every(id=>html.includes(`value="${id}"`)));
+shown=(html.match(/<option value="x/g)||[]).length;
+ok('★ 其他會員仍受上限保護', shown<=43, `列出 ${shown} 位`);
+ok('　　組名顯示的是全部人數、不是截斷後的', html.includes('其他會員（197）'), html.match(/其他會員（\d+）/));
+
+// 已選到的那位即使排在很後面，也必須留在清單裡，否則回上一步會選不回來
+html=bkMemberOptsHTML('', 'x199');
+ok('★ 已選的會員不會被截斷吃掉', html.includes('value="x199"'));
+
+html=bkMemberOptsHTML('會員199');
+ok('搜尋仍找得到被截掉的人', html.includes('value="x199"'));
 
 /* ── 課程類型清單：友善自主訓練／場租不列 ── */
 console.log('\n新增預約的課程類型清單');
