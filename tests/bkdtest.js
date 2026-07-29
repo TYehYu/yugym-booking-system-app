@@ -90,5 +90,24 @@ ok('　　已簽到就算真的用掉了', (src.match(/if\(at==='checked_in'\) r
 ok('★ 後台檔案頁的預約清單要含團課（學員在 member_ids、member_id 是 null）',
    /const myBk=bookings\.filter\(b=>b\.member_id===PP\.id\s*\n\s*\|\| \(Array\.isArray\(b\.member_ids\)&&b\.member_ids\.includes\(PP\.id\)\)\);/.test(src));
 
+/* ── 預約明細版面順序（2026-07-29 使用者指示） ── */
+console.log('\n預約明細：教練與場地在時間下面、圓形卡上面');
+{
+  // 錨在明細視窗那一段（bkd-timeedit 只出現在這裡），不要抓到卡片內嵌編輯表單
+  const i=src.indexOf('<span class="bkd-timeedit">');
+  const j=src.indexOf('</div>`:`', i);
+  const blk=src.slice(i,j);
+  const pDate=blk.indexOf('id="ed-dur"');
+  const pCoach=blk.indexOf('>教練<');
+  const pVenue=blk.indexOf('>場地<');
+  const pDots=blk.indexOf('${tkCircleHtml}');
+  ok('★ 教練排在時間之後', pCoach>pDate, {pDate,pCoach});
+  ok('★ 場地排在教練之後', pVenue>pCoach, {pCoach,pVenue});
+  ok('★ 圓形卡排在教練與場地之後', pDots>pVenue, {pVenue,pDots});
+  ok('　　會員視角不顯示場地（內部資訊）', /\$\{isMemberView\?'':`<div[\s\S]{0,120}>場地</.test(blk));
+}
+ok('　　私人教練不再重複顯示下方那組場地',
+   /\$\{\(!isPersonalPT&&b\.category!=='小班肌力'&&!isMemberView\)\?/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
