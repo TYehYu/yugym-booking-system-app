@@ -2097,6 +2097,8 @@ tr:hover td{background:var(--card2);}
 .gt-vh-none{margin-left:auto;border:none;background:none;color:var(--t3);font-size:11.5px;
   text-decoration:underline;cursor:pointer;font-family:inherit;padding:0;}
 .gt-vh-calc{font-size:13px;font-weight:800;color:var(--gold-d);font-family:var(--num),inherit;}
+.gt-vh-lim{display:inline-block;margin-left:8px;font-size:11px;font-weight:700;color:#b5372e;
+  background:#fbeceb;border:1px solid #e0a8a2;border-radius:999px;padding:1px 8px;vertical-align:1px;}
 /* 購票大項選擇卡 */
 .pur-cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:8px;}
 .pur-cat-card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:28px 16px;
@@ -6009,8 +6011,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1111';
-const APP_VERSION_LABEL='v260729.1111';
+const APP_VERSION = '260729.1115';
+const APP_VERSION_LABEL='v260729.1115';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9361,7 +9363,7 @@ PAGES.g_dashboard=async function(){
   const catName={'ev-pt':'教練課','ev-friendly':'友善課','ev-group':'團體課','ev-trial':'體驗課','ev-self':'自主訓練','ev-massage':'運動按摩'};
   const catColor={'ev-pt':'#1f6f54','ev-friendly':'#23508a','ev-group':'#9a5a1e','ev-trial':'#6e3a86','ev-self':'#6a655c','ev-massage':'#2f8f83'};
   // 抽獎狀態 map（首頁課卡禮物圖示用）：算一次，卡片渲染時查表
-  const _lotMap = (typeof lottoMapAll==='function') ? lottoMapAll(bookings, purchases||[], ymd(TODAY).slice(0,7)) : {};
+  const _lotMap = (typeof lottoMapAll==='function') ? lottoMapAll(bookings, purchases||[], ymd(TODAY).slice(0,7), members) : {};
 
   const rows=coachable.map(c=>{
     const myBk=dayBkAll.filter(b=>b.coach_id===c.id).sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
@@ -9874,7 +9876,7 @@ PAGES.g_dashboard=async function(){
   ];
   /* 現場抽獎名單滑出鈕（2026-07-22 使用者指示）：桌機首頁右下角、有可抽名額才出現。
      資格算當下月份（非檢視日期）——登記永遠對本月。 */
-  const _lotEls=lottoStats(bookings||[],purchases||[],ymd(TODAY).slice(0,7));
+  const _lotEls=lottoStats(bookings||[],purchases||[],ymd(TODAY).slice(0,7),members);
   /* 會員申辦待審滑出鈕（2026-07-23 使用者指示：新會員與舊會員綁定統一在櫃台右下角提示）。
      兩顆都在時，抽獎鈕往上疊一層（mc-fab-up）。 */
   const _pendReq=(memberReqs||[]).filter(r=>r.status==='pending');
@@ -10344,6 +10346,15 @@ function startDashNowTimer(isToday, axisStart, axisEnd){
 /* 抽獎獎品票券的權益註記（2026-07-23 使用者定案）：**永久期限、不得轉讓或退費**。
    期限本來就以 expire_date=null 發放（顯示「永久有效」）；此處只負責把規則寫在畫面上，
    會員端票券卡與後台票券詳細共用。 */
+/* VIP 不參與常態抽獎（2026-07-29 使用者定案）：VIP 已享專屬價與權益，
+   常態抽獎（教練課簽到滿 4 堂抽 1 次）不重複給。判定走 effTier（手動 VIP 或自動制皆算）。
+   members 未載入時（部分呼叫端只有 bookings/purchases）退回不排除，避免誤殺。 */
+function lottoIsVip(m){ return !!m && (typeof effTier==='function' ? effTier(m)==='vip' : m.level==='vip'); }
+function lottoVipSet(members){
+  const s=new Set();
+  (members||[]).forEach(m=>{ if(lottoIsVip(m)) s.add(m.id); });
+  return s;
+}
 function lottoRuleNote(t){
   return (t && t.source==='lottery') ? '　抽獎獎品：永久有效，不得轉讓或退費。' : '';
 }
@@ -10367,7 +10378,8 @@ function _lotPuDate(p){
 /* 全會員抽獎狀態 map（2026-07-25，供首頁課卡圖示）：沿用 lottoStats 同規則
    （當月私人教練課簽到 ÷4 = earned；lottery 購買數 = used；left=earned-used）。
    與 lottoStats 差別：不 filter，回傳含「已抽完(left≤0 但 used>0)」者，卡片才能顯示打開的禮物。 */
-function lottoMapAll(bookings,purchases,ym){
+function lottoMapAll(bookings,purchases,ym,members){
+  const _vip=lottoVipSet(members);   // VIP 不參與常態抽獎（2026-07-29）
   const cnt={}, used={};
   (bookings||[]).forEach(b=>{
     if((b.date||'').slice(0,7)!==ym || b.status==='cancelled') return;
@@ -10377,6 +10389,7 @@ function lottoMapAll(bookings,purchases,ym){
   (purchases||[]).forEach(p=>{ if(p.source==='lottery' && p.member_id && _lotPuDate(p).slice(0,7)===ym) used[p.member_id]=(used[p.member_id]||0)+1; });
   const map={};
   new Set([...Object.keys(cnt),...Object.keys(used)]).forEach(id=>{
+    if(_vip.has(id)) return;   // VIP：不顯示抽獎禮物圖示、也不列可抽名單
     const earned=Math.floor((cnt[id]||0)/4), u=used[id]||0;
     map[id]={earned,used:u,left:earned-u};
   });
@@ -10404,7 +10417,8 @@ function lottoGiftIcon(st){
   const cls=(left>0?'tcard-gift-need':'tcard-gift-done')+(earned>=2?' tcard-gift-multi':'');
   return `<span class="tcard-gift ${cls}" title="本月可抽 ${earned} 次（已抽 ${used}、待抽 ${left}）">${inner}</span>`;
 }
-function lottoStats(bookings,purchases,ym){
+function lottoStats(bookings,purchases,ym,members){
+  const _vip=lottoVipSet(members);   // VIP 不參與常態抽獎（2026-07-29）
   const cnt={};
   (bookings||[]).forEach(b=>{
     if((b.date||'').slice(0,7)!==ym || b.status==='cancelled') return;
@@ -10415,14 +10429,15 @@ function lottoStats(bookings,purchases,ym){
   });
   const used={};
   (purchases||[]).forEach(p=>{ if(p.source==='lottery' && p.member_id && _lotPuDate(p).slice(0,7)===ym) used[p.member_id]=(used[p.member_id]||0)+1; });
-  return Object.keys(cnt).map(id=>({id,att:cnt[id],earned:Math.floor(cnt[id]/4),used:used[id]||0}))
+  return Object.keys(cnt).filter(id=>!_vip.has(id))
+    .map(id=>({id,att:cnt[id],earned:Math.floor(cnt[id]/4),used:used[id]||0}))
     .map(x=>Object.assign(x,{left:x.earned-x.used}))
     .filter(x=>x.left>0);
 }
 async function openLottoModal(selId){
   const[bookings,purchases,members]=await Promise.all([dbGetAll('bookings'),dbGetAll('purchases').catch(()=>[]),dbGetAll('members')]);
   const ym=ymd(TODAY).slice(0,7);
-  const list=lottoStats(bookings,purchases,ym);
+  const list=lottoStats(bookings,purchases,ym,members);
   const mMap=Object.fromEntries(members.map(m=>[m.id,m]));
   if(!list.length){
     showModal(`<div class="modal-title">現場抽獎登記</div>
@@ -14984,8 +14999,8 @@ async function expandBkCard(el, id){
         const _ym=ymd(TODAY).slice(0,7);
         let _c=window._lottoMapCache;
         if(!_c || _c.ym!==_ym || (Date.now()-_c.ts)>60000){
-          const [_bkAll,_puAll]=await Promise.all([dbGetAll('bookings'),dbGetAll('purchases').catch(()=>[])]);
-          _c={ym:_ym, ts:Date.now(), map:(typeof lottoMapAll==='function')?lottoMapAll(_bkAll,_puAll,_ym):{}};
+          const [_bkAll,_puAll,_meAll]=await Promise.all([dbGetAll('bookings'),dbGetAll('purchases').catch(()=>[]),dbGetAll('members').catch(()=>[])]);
+          _c={ym:_ym, ts:Date.now(), map:(typeof lottoMapAll==='function')?lottoMapAll(_bkAll,_puAll,_ym,_meAll):{}};
           window._lottoMapCache=_c;
         }
         const _st=_c.map[b.member_id];
@@ -23110,7 +23125,8 @@ async function renderContractStep(){
   const total=(Number(plan.sessions_base)||0)+(Number(plan.sessions_bonus)||0);
   const deal=Number((document.getElementById('gt-amount')||{}).value)||0;
   const isInstall=!!plan.installment && (Number((document.getElementById('gt-install')||{}).value)||1)>1;
-  const voucherN=isInstall?0:Math.max(0,Math.min(Math.floor(Number((document.getElementById('gt-voucher')||{}).value)||0), Number(window._gtVoucherMax)||0));
+  const voucherN=Math.max(0,Math.min(Math.floor(Number((document.getElementById('gt-voucher')||{}).value)||0),
+    Number(window._gtVoucherMax)||0, isInstall?1:Infinity));   // 分期每期限 1 張（2026-07-29）
   const paid=Math.max(0,deal-voucherN*300);
   const payLabel={cash:'現金',transfer:'匯款',card:'刷卡'}[(document.getElementById('gt-method')||{}).value]||'—';
   const expire=plan.valid_days?`${plan.valid_days} 天（至 ${ymd(addDays(TODAY,plan.valid_days))}）`:'—';
@@ -23797,26 +23813,31 @@ async function refreshGrantVoucher(){
     vt=tt?VOUCHER_TT[tt.category]:null;
   }catch(_){}
   window._gtVoucherMax=0; window._gtVoucherTks=[];
-  if(!plan||!mid||!vt||inst>1){ wrap.style.display='none'; return; }
+  if(!plan||!mid||!vt){ wrap.style.display='none'; return; }
   let tks=[];
   try{
     tks=(await dbGetAll('member_tickets')).filter(t=>t.member_id===mid&&t.ticket_type_id===vt
       &&(!t.status||t.status==='usable')&&(Number(t.sessions_remaining)||0)>0
       &&(!t.expire_date||String(t.expire_date).slice(0,10)>=ymd(TODAY)));
   }catch(_){}
-  const total=tks.reduce((s,t)=>s+(Number(t.sessions_remaining)||0),0);
-  if(!total){ wrap.style.display='none'; return; }
-  window._gtVoucherMax=total; window._gtVoucherTks=tks;
+  const held=tks.reduce((s,t)=>s+(Number(t.sessions_remaining)||0),0);
+  if(!held){ wrap.style.display='none'; return; }
+  /* 2026-07-29 使用者定案：分期＝一期只能用 1 張；一次付清＝無張數上限（仍受金額與持有量限制）。
+     原本分期完全不能用券，改為每期上限 1 張。 */
+  const isInst=inst>1;
+  const total=isInst?Math.min(held,1):held;
+  window._gtVoucherMax=total; window._gtVoucherTks=tks; window._gtVoucherInst=isInst; window._gtVoucherHeld=held;
   wrap.style.display='';
   /* 2026-07-29 使用者指示：改品牌金醒目框，且「預設帶入」可用張數（櫃檯要不用再自己減），
      避免會員的券被忽略（原本預設 0 張、長得像一般欄位，很容易略過）。 */
   /* 預設帶入張數不超過本次金額能吸收的量（每張 $300），避免折過頭浪費會員的券 */
-  const _amt0=Number((document.getElementById('gt-amount')||{}).value)||0;
+  const _amt0raw=Number((document.getElementById('gt-amount')||{}).value)||0;
+  const _amt0=isInst?Math.round(_amt0raw/inst):_amt0raw;   // 分期看本期應收
   const _def=Math.max(0,Math.min(total, Math.floor(_amt0/300)));
   document.getElementById('gt-voucher-box').innerHTML=`
     <div class="gt-vh-top">
       <span class="gt-vh-ic">${LNI.gift||'🎟'}</span>
-      <span class="gt-vh-t">此會員有 <b>${total}</b> 張折抵券可用（每張折 $300）</span>
+      <span class="gt-vh-t">此會員有 <b>${held}</b> 張折抵券（每張折 $300）${isInst?'<span class="gt-vh-lim">分期：本期限用 1 張</span>':''}</span>
     </div>
     <div class="gt-vh-row">
       <span>本次使用</span>
@@ -23843,10 +23864,14 @@ function gtVoucherCalc(){
   if(!el||!out) return;
   let n=Math.floor(Number(el.value)||0);
   n=Math.max(0,Math.min(n,Number(window._gtVoucherMax)||0)); el.value=n;
-  const amt=Number((document.getElementById('gt-amount')||{}).value)||0;
+  /* 分期時折抵的是「本期應收」而非總額（總額會分段），顯示才不會誤導 */
+  let amt=Number((document.getElementById('gt-amount')||{}).value)||0;
+  const _inst=Number((document.getElementById('gt-install')||{}).value||1);
+  if(_inst>1) amt=Math.round(amt/_inst);
+  const _lbl=_inst>1?'本期實收':'實收';
   out.innerHTML = n>0
-    ? `折抵 $${(300*n).toLocaleString()}　→　實收 <b>$${Math.max(0,amt-300*n).toLocaleString()}</b>`
-    : `<span style="color:var(--t3);font-weight:400;">未使用折抵券，實收 $${amt.toLocaleString()}</span>`;
+    ? `折抵 $${(300*n).toLocaleString()}　→　${_lbl} <b>$${Math.max(0,amt-300*n).toLocaleString()}</b>`
+    : `<span style="color:var(--t3);font-weight:400;">未使用折抵券，${_lbl} $${amt.toLocaleString()}</span>`;
 }
 // 把總堂數平均切成 n 段（前段多、後段補），回傳陣列。例：10,3 → [4,3,3]
 function splitSessions(total, n){
@@ -23927,12 +23952,16 @@ async function submitGrant(){
     current: 1                                      // 已開通到第 1 段
   } : null;
   // ── 折抵券（2026-07-22 待辦2）：每張折 $300、分期不併用；實收＝成交金額−折抵 ──
-  const voucherN = isInstall ? 0
-    : Math.max(0,Math.min(Math.floor(Number((document.getElementById('gt-voucher')||{}).value)||0), Number(window._gtVoucherMax)||0));
+  /* 折抵券（2026-07-29 使用者定案）：分期＝每期限用 1 張；一次付清＝無張數上限。
+     window._gtVoucherMax 在 refreshGrantVoucher 已依此夾好，這裡再夾一次防繞過。 */
+  const _vCap = isInstall ? 1 : Infinity;
+  const voucherN = Math.max(0, Math.min(
+    Math.floor(Number((document.getElementById('gt-voucher')||{}).value)||0),
+    Number(window._gtVoucherMax)||0, _vCap));
   const voucherAmt=voucherN*300;
-  const paidAmount=Math.max(0,dealAmount-voucherAmt);   // 非分期實收
+  const paidAmount=Math.max(0,dealAmount-voucherAmt);   // 非分期實收（分期見下方 firstAmount 折抵）
   const t={id:uid('TK'),member_id,ticket_type_id:plan.ticket_type_id,source_plan_id:plan_id,plan_name:plan.name,format:plan.format||null,source:'purchase',
-    unit_price:unitPrice, amount_paid:(isInstall?firstAmount:paidAmount),   // 營收：分期只記第1期實收；折抵後記實收
+    unit_price:unitPrice, amount_paid:(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount),   // 營收：分期只記第1期實收（扣折抵）；一次付清記折抵後實收
     /* 效期自「第一堂預約」起算（2026-07-24 使用者定案）：售票當下不寫 expire_date，
        改把方案效期天數記在 valid_days，等 deductTicket 首次扣課時才算到期日。
        start_date / expire_date / activated_at 皆留空＝尚未開通。 */
