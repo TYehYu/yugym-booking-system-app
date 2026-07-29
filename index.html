@@ -4954,6 +4954,32 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 #bk-card-pop .mtp-t2{font-size:11.5px;color:var(--t2);white-space:nowrap;}
 /* 手機端行事曆：別人的課卡不吃觸控（2026-07-29 使用者回報滑頁面會被卡住） */
 .cag-std.cag-noint{pointer-events:none;}
+/* ── 會員自助異動的桌機滑出通知（2026-07-29 使用者指示：右下角滑出）── */
+#desk-feed{position:fixed;right:18px;bottom:18px;z-index:9999;display:flex;flex-direction:column;
+  gap:10px;align-items:flex-end;pointer-events:none;max-width:min(380px,90vw);}
+.dfeed-card{pointer-events:auto;display:flex;align-items:flex-start;gap:11px;width:100%;
+  background:#fff;border:1px solid var(--bd);border-left:4px solid var(--green);border-radius:12px;
+  padding:12px 12px 12px 13px;box-shadow:0 10px 30px rgba(20,18,14,.18);
+  animation:dfeedIn .28s cubic-bezier(.22,.9,.3,1) backwards;}
+.dfeed-card.out{animation:dfeedOut .24s ease forwards;}
+.dfeed-cancel{border-left-color:var(--danger,#b5372e);}
+.dfeed-move{border-left-color:var(--gold-d,#b48a56);}
+.dfeed-ic{flex:0 0 auto;color:var(--green);margin-top:1px;}
+.dfeed-cancel .dfeed-ic{color:var(--danger,#b5372e);}
+.dfeed-move .dfeed-ic{color:var(--gold-d,#b48a56);}
+.dfeed-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
+.dfeed-t{font-size:13.5px;font-weight:800;color:var(--text);line-height:1.35;}
+.dfeed-b{font-size:12px;color:var(--t2);line-height:1.6;font-family:var(--num),inherit;}
+.dfeed-x{flex:0 0 auto;border:none;background:transparent;color:var(--t3);font-size:13px;
+  cursor:pointer;padding:0 2px;line-height:1;}
+.dfeed-x:hover{color:var(--text);}
+@keyframes dfeedIn{from{opacity:0;transform:translateX(28px);}to{opacity:1;transform:none;}}
+@keyframes dfeedOut{to{opacity:0;transform:translateX(28px);}}
+@media (prefers-reduced-motion:reduce){
+  .dfeed-card,.dfeed-card.out{animation:none;}
+}
+/* 手機不顯示（櫃檯用桌機盯場，手機版空間留給操作） */
+@media (max-width:900px){ #desk-feed{display:none;} }
 /* 連續取消清單（2026-07-29） */
 .sc-list{max-height:min(38vh,300px);overflow-y:auto;border:1px solid var(--bd);border-radius:10px;
   background:var(--card2);padding:4px;}
@@ -6051,8 +6077,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1820';
-const APP_VERSION_LABEL='v260729.1820';
+const APP_VERSION = '260729.1828';
+const APP_VERSION_LABEL='v260729.1828';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6865,6 +6891,79 @@ function applyDeepLink(){
 /* 店長＝櫃台級權限（2026-07-27 使用者定案：桌機同櫃台介面＋店長導覽列）。
    前端所有「後台人員」判斷統一走這裡；資料庫層 is_staff_desk() 已同步納入店長。 */
 function isDeskLike(){ return !!(SESSION && (SESSION.role==='admin'||SESSION.role==='front_desk'||(SESSION.role==='coach'&&SESSION.is_manager))); }
+
+/* ══════ 會員自助異動 → 桌機右下角滑出通知（2026-07-29 使用者指示）══════
+   會員自己在手機上改自主訓練／團體課時，櫃檯桌機不會知道。這裡輪詢
+   notifications（recipient_type='desk'，由會員端的 security definer RPC 寫入），
+   把新的幾筆從右下角滑出來。
+   ・只在桌機、且是櫃檯/管理員/店長身分時啟用（教練與會員不需要）
+   ・看過就標 read，換頁或重整不會重複跳
+   ・分頁在背景時不輪詢，回到前景立刻補查一次 */
+const DESK_FEED_MS=45000;
+let _deskFeedTimer=null, _deskFeedBusy=false;
+function deskFeedEnabled(){
+  return CLOUD && SESSION && isDeskLike() && !isMobileLayout();
+}
+function deskFeedHost(){
+  let el=document.getElementById('desk-feed');
+  if(!el){ el=document.createElement('div'); el.id='desk-feed'; document.body.appendChild(el); }
+  return el;
+}
+const DESK_FEED_IC={
+  self_book:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>',
+  self_cancel:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
+  self_move:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12h13M13 7l5 5-5 5"/></svg>'
+};
+function deskFeedPush(n){
+  const host=deskFeedHost();
+  if(host.querySelector(`[data-nid="${n.id}"]`)) return;
+  const kind=n.type==='self_cancel'?'cancel':(n.type==='self_move'?'move':'book');
+  const el=document.createElement('div');
+  el.className='dfeed-card dfeed-'+kind;
+  el.setAttribute('data-nid',n.id);
+  el.innerHTML=`<span class="dfeed-ic">${DESK_FEED_IC[n.type]||DESK_FEED_IC.self_book}</span>
+    <span class="dfeed-body"><span class="dfeed-t">${String(n.title||'').replace(/</g,'&lt;')}</span>
+      <span class="dfeed-b">${String(n.body||'').replace(/</g,'&lt;')}</span></span>
+    <button class="dfeed-x" title="關閉" onclick="deskFeedClose('${n.id}')">✕</button>`;
+  host.appendChild(el);
+  // 自動收起（滑鼠停在上面時不收，避免看到一半消失）
+  let t=setTimeout(()=>deskFeedClose(n.id), 12000);
+  el.addEventListener('mouseenter',()=>{ clearTimeout(t); });
+  el.addEventListener('mouseleave',()=>{ t=setTimeout(()=>deskFeedClose(n.id), 4000); });
+}
+function deskFeedClose(id){
+  const el=document.querySelector(`#desk-feed [data-nid="${id}"]`);
+  if(!el) return;
+  el.classList.add('out');
+  setTimeout(()=>{ el.remove(); },260);
+}
+async function deskFeedPoll(){
+  if(!deskFeedEnabled() || _deskFeedBusy || document.hidden) return;
+  _deskFeedBusy=true;
+  try{
+    const q=await sb.from('notifications').select('id,type,title,body,created_at')
+      .eq('recipient_type','desk').eq('read',false)
+      .order('created_at',{ascending:true}).limit(6);
+    if(q && !q.error && (q.data||[]).length){
+      const ids=q.data.map(x=>x.id);
+      q.data.forEach(deskFeedPush);
+      // 標為已讀：同一則不會在別台機器或重整後重複跳
+      await sb.from('notifications').update({read:true}).in('id',ids);
+      dbCacheClear('notifications');
+    }
+  }catch(_){}
+  _deskFeedBusy=false;
+}
+function deskFeedStart(){
+  if(_deskFeedTimer){ clearInterval(_deskFeedTimer); _deskFeedTimer=null; }
+  if(!deskFeedEnabled()) return;
+  deskFeedPoll();
+  _deskFeedTimer=setInterval(deskFeedPoll, DESK_FEED_MS);
+  if(!window._deskFeedVis){
+    window._deskFeedVis=true;
+    document.addEventListener('visibilitychange',()=>{ if(!document.hidden) deskFeedPoll(); });
+  }
+}
 function enterApp(){
   document.getElementById('login-screen').classList.add('hidden');
   const app=document.getElementById('app-screen');
@@ -6907,6 +7006,7 @@ function enterApp(){
   // 載入場地設定（若雲端有 venues 表）→ 供 validateBooking 容量檢查
   dbGetAll('venues').then(v=>{ if(v&&v.length) window.VENUES=v; }).catch(()=>{});
   loadSalaryTemplates();
+  deskFeedStart();          // 會員自助異動 → 桌機右下角滑出通知（2026-07-29）
   buildNav();
   const isMobile=isMobileLayout();
   // 桌機｜管理員/櫃台 → 兩層導覽：開啟第一個主選單
