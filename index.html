@@ -4970,9 +4970,14 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .dfeed-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
 .dfeed-t{font-size:13.5px;font-weight:800;color:var(--text);line-height:1.35;}
 .dfeed-b{font-size:12px;color:var(--t2);line-height:1.6;font-family:var(--num),inherit;}
-.dfeed-x{flex:0 0 auto;border:none;background:transparent;color:var(--t3);font-size:13px;
-  cursor:pointer;padding:0 2px;line-height:1;}
-.dfeed-x:hover{color:var(--text);}
+.dfeed-w{font-size:11px;color:var(--t3);font-family:var(--num),inherit;}
+/* 「確認」鈕：訊息要留到櫃檯按下才消失（2026-07-29 二修） */
+.dfeed-ok{flex:0 0 auto;align-self:center;border:1px solid var(--green);background:var(--green);
+  color:#fff;font-size:12px;font-weight:700;border-radius:8px;padding:6px 12px;cursor:pointer;
+  font-family:inherit;white-space:nowrap;}
+.dfeed-ok:hover{opacity:.88;}
+/* 數量多時整疊可捲動，不會蓋滿整個畫面 */
+#desk-feed{max-height:min(70vh,620px);overflow-y:auto;padding:4px;}
 @keyframes dfeedIn{from{opacity:0;transform:translateX(28px);}to{opacity:1;transform:none;}}
 @keyframes dfeedOut{to{opacity:0;transform:translateX(28px);}}
 @media (prefers-reduced-motion:reduce){
@@ -6077,8 +6082,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260729.1828';
-const APP_VERSION_LABEL='v260729.1828';
+const APP_VERSION = '260729.2151';
+const APP_VERSION_LABEL='v260729.2151';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6914,6 +6919,10 @@ const DESK_FEED_IC={
   self_cancel:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
   self_move:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12h13M13 7l5 5-5 5"/></svg>'
 };
+/* 2026-07-29 使用者指示（二修）：訊息要一直保留，直到櫃檯點選確認 ——
+   原本滑出 12 秒就自動收、而且一顯示就標已讀，人不在桌前就永遠錯過。
+   改成：不自動收、不自動已讀；按「確認」才寫回 read=true 並移除。
+   每輪輪詢重抓所有未讀，換頁或重整後仍在；別台確認掉的這台也會跟著消失。 */
 function deskFeedPush(n){
   const host=deskFeedHost();
   if(host.querySelector(`[data-nid="${n.id}"]`)) return;
@@ -6921,21 +6930,26 @@ function deskFeedPush(n){
   const el=document.createElement('div');
   el.className='dfeed-card dfeed-'+kind;
   el.setAttribute('data-nid',n.id);
+  const when=n.created_at?String(n.created_at).slice(5,16).replace('T',' '):'';
   el.innerHTML=`<span class="dfeed-ic">${DESK_FEED_IC[n.type]||DESK_FEED_IC.self_book}</span>
     <span class="dfeed-body"><span class="dfeed-t">${String(n.title||'').replace(/</g,'&lt;')}</span>
-      <span class="dfeed-b">${String(n.body||'').replace(/</g,'&lt;')}</span></span>
-    <button class="dfeed-x" title="關閉" onclick="deskFeedClose('${n.id}')">✕</button>`;
+      <span class="dfeed-b">${String(n.body||'').replace(/</g,'&lt;')}</span>
+      ${when?`<span class="dfeed-w">${when}</span>`:''}</span>
+    <button class="dfeed-ok" onclick="deskFeedAck('${n.id}')">確認</button>`;
   host.appendChild(el);
-  // 自動收起（滑鼠停在上面時不收，避免看到一半消失）
-  let t=setTimeout(()=>deskFeedClose(n.id), 12000);
-  el.addEventListener('mouseenter',()=>{ clearTimeout(t); });
-  el.addEventListener('mouseleave',()=>{ t=setTimeout(()=>deskFeedClose(n.id), 4000); });
 }
-function deskFeedClose(id){
+/* 櫃檯按「確認」才消失並標已讀（先移除、寫入失敗再抓回來，避免訊息被默默吃掉） */
+async function deskFeedAck(id){
   const el=document.querySelector(`#desk-feed [data-nid="${id}"]`);
-  if(!el) return;
-  el.classList.add('out');
-  setTimeout(()=>{ el.remove(); },260);
+  if(el){ el.classList.add('out'); setTimeout(()=>{ el.remove(); },260); }
+  try{
+    const r=await sb.from('notifications').update({read:true}).eq('id',id);
+    if(r && r.error) throw r.error;
+    dbCacheClear('notifications');
+  }catch(e){
+    showToast('確認失敗，訊息保留：'+((e&&e.message)||e));
+    deskFeedPoll();
+  }
 }
 async function deskFeedPoll(){
   if(!deskFeedEnabled() || _deskFeedBusy || document.hidden) return;
@@ -6943,13 +6957,13 @@ async function deskFeedPoll(){
   try{
     const q=await sb.from('notifications').select('id,type,title,body,created_at')
       .eq('recipient_type','desk').eq('read',false)
-      .order('created_at',{ascending:true}).limit(6);
-    if(q && !q.error && (q.data||[]).length){
-      const ids=q.data.map(x=>x.id);
-      q.data.forEach(deskFeedPush);
-      // 標為已讀：同一則不會在別台機器或重整後重複跳
-      await sb.from('notifications').update({read:true}).in('id',ids);
-      dbCacheClear('notifications');
+      .order('created_at',{ascending:true}).limit(20);
+    if(q && !q.error){
+      const live=new Set((q.data||[]).map(x=>x.id));
+      document.querySelectorAll('#desk-feed [data-nid]').forEach(el=>{
+        if(!live.has(el.getAttribute('data-nid'))) el.remove();
+      });
+      (q.data||[]).forEach(deskFeedPush);
     }
   }catch(_){}
   _deskFeedBusy=false;
@@ -9276,6 +9290,7 @@ function rpcBookingErrMsg(code){
     'TICKET.EMPTY':'會員無可用票券',
     'TICKET.EXPIRED':'會員票券已過期',
     'TICKET.INSTALLMENT_LOCKED':'分期票券尚未繳費的堂數不可預約，請先收款並「開通下一期」',
+    'BOOKING.CLOSED_HOURS':'此時段非營業時間',
     'POINT.EMPTY':'會員自主訓練點數不足',
   };
   return M[code]||('建立失敗：'+(code||'未知錯誤'));
@@ -9614,7 +9629,10 @@ PAGES.g_dashboard=async function(){
   const _lotMap = (typeof lottoMapAll==='function') ? lottoMapAll(bookings, purchases||[], ymd(TODAY).slice(0,7), members) : {};
 
   const rows=coachable.map(c=>{
-    const myBk=dayBkAll.filter(b=>b.coach_id===c.id).sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
+    /* 2026-07-29 使用者指示：教練任務區不再顯示已取消的課卡。
+       取消的課不是任務，留著只會讓時間軸看起來比實際忙。 */
+    const myBk=dayBkAll.filter(b=>b.coach_id===c.id && !isCancelled(b))
+      .sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
     const myShift=dayShifts.find(s=>s.emp_id===c.id);
     const onLeave=myShift&&myShift.leave_type;
     const hasDuty=myShift&&!onLeave&&myShift.start_time&&myShift.end_time;
@@ -24242,7 +24260,7 @@ async function openGrantModal(){
         <div class="form-row"><label>付款方式</label><select id="gt-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
       </div>
       <div class="form-2col">
-        <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher()"><option value="1">不分期（一次付清）</option><option value="3">分 3 期（分段開通）</option></select></div>
+        <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>
         <div class="form-row"><label>付款狀態</label><select id="gt-pay"><option value="paid">已付款</option><option value="unpaid">未付款</option></select></div>
       </div>
       <div class="form-2col">
@@ -28210,7 +28228,14 @@ async function msbLoadSlots(){
   const free=new Set(); const vids={};
   /* 並行探測（2026-07-26 提速）：24 個時段同時驗證。佔用資料與票種都走共用快取，
      實際只有 1 支 RPC＋1 支表查詢。每個時段用獨立物件（validateBooking 會寫回 venue_unit）。 */
-  const probes=[]; for(let m=540;m<1260;m+=30) probes.push(m);
+  /* 2026-07-29 使用者指示：自主訓練限營業時間內（週一~五 10–22、週六 9–21、週日 9–15）。
+     原本固定 09:00–21:00，週日晚上也開放，客人約得到但門是關的。
+     營業時間外要預約，請教練用櫃檯帳號代排（員工端不受此限）。
+     最後一個可選時段＝關門前 60 分鐘（自主訓練固定 60 分）。 */
+  const _bh=BUSINESS_HOURS[(parseYmd(s.date)||new Date(TODAY)).getDay()]||['09:00','21:00'];
+  const _open=timeToMin(_bh[0]), _close=timeToMin(_bh[1]);
+  s.bh=_bh;
+  const probes=[]; for(let m=Math.max(540,_open); m+60<=_close; m+=30) probes.push(m);
   const results=await Promise.all(probes.map(async m=>{
     const vbk={id:s.resched?s.resched.id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',
       ticket_type_id:probeTtid};
@@ -28220,10 +28245,11 @@ async function msbLoadSlots(){
   results.forEach(([m,err,vu])=>{ if(!err){ free.add(m); vids[m]=String(vu||'').split('_')[0]; } });
   if(seq!==_msbLoadSeq||!window._msb) return;   // 換日/換類型的過期回應丟棄
   s.free=free; s.vids=vids;
-  if(free.size===0){ box.innerHTML='<div class="msb-empty">這天沒有可預約的時段<br><span class="em-s">換一天試試</span></div>'; return; }
+  if(free.size===0){ box.innerHTML=`<div class="msb-empty">這天沒有可預約的時段<br><span class="em-s">本日營業 ${s.bh?s.bh[0]+'–'+s.bh[1]:''}；換一天試試，或洽櫃檯協助安排</span></div>`; return; }
   const now=new Date();
   box.innerHTML=slotPanelHTML({date:s.date,todayStr:ymd(TODAY),nowMin:now.getHours()*60+now.getMinutes(),
-    startH:9,endH:21,duration:60,isFree:(a,b)=>free.has(a),pickFn:'msbPickSlot',
+    startH:Math.floor(Math.max(540,_open)/60), endH:Math.ceil(_close/60),
+    duration:60,isFree:(a,b)=>free.has(a),pickFn:'msbPickSlot',
     /* 第一順位（多功能）沒位時，該時段標出實際會用的場地（教室／跑步機） */
     tagFn:(mm)=>({group:'教室',treadmill:'跑步機'}[vids[mm]]||'')});
 }
@@ -28314,6 +28340,7 @@ const SELF_BOOK_ERR={
   'AUTH.FORBIDDEN':'僅限本人操作','BOOKING.PAST_DATE':'不可預約已過去的日期',
   'POINT.EMPTY':'沒有可用的自主訓練點數','TICKET.WRONG_TYPE':'此票券不能預約自主訓練',
   'TICKET.INSTALLMENT_LOCKED':'分期尚未繳費的堂數不可預約，請洽櫃檯',
+  'BOOKING.CLOSED_HOURS':'此時段非營業時間，請洽櫃檯協助安排',
   'TICKET.TIME_RESTRICTED':'此票券僅限平日 18:00 前使用','BOOKING.DUP':'您於該時段已有預約',
   'BOOKING.RESOURCE_BUSY':'該場地剛被約走了，請重新選擇'};
 async function memberSelfBookRpc(tk,date,time,venueUnit,famUser){
