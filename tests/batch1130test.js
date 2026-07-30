@@ -88,12 +88,14 @@ console.log('\n管理員次選單分組');
   const items=[...html.matchAll(/<div class="subnav-item[^"]*"[^>]*>([^<]+)/g)].map(m=>m[1]);
   ok('★ 三個組別、順序為 人事 → 財務 → 環境設定',
      JSON.stringify(grps)===JSON.stringify(['人事','財務','環境設定']), grps);
-  ok('★ 15 個項目一個都沒少', items.length===15, items.length);
-  ok('★ 人事：員工管理／出勤／人資／薪資／勞健保／特休／工作規則／權限設定／教練統計',
-     items.slice(0,9).join()==='員工管理,出勤,人資制度,薪資制度,勞健保,特休,工作規則,權限設定,教練統計', items.slice(0,9));
-  ok('★ 財務：財務總覽／營運分析', items.slice(9,11).join()==='財務總覽,營運分析', items.slice(9,11));
+  ok('★ 17 個項目（2026-07-30 出勤整併後：出勤 1 項 → 今日出勤／出勤紀錄／打卡異常與補卡 3 項）',
+     items.length===17, items.length);
+  ok('★ 人事：出勤三頁緊接在員工管理前後，其餘制度類在後',
+     items.slice(0,11).join()==='今日出勤,員工管理,出勤紀錄,打卡異常與補卡,人資制度,薪資制度,勞健保,特休,工作規則,權限設定,教練統計',
+     items.slice(0,11));
+  ok('★ 財務：財務總覽／營運分析', items.slice(11,13).join()==='財務總覽,營運分析', items.slice(11,13));
   ok('★ 環境設定：課程方案／場地・班別／合約範本／動作資料庫',
-     items.slice(11).join()==='課程方案,場地・班別,合約範本,動作資料庫', items.slice(11));
+     items.slice(13).join()==='課程方案,場地・班別,合約範本,動作資料庫', items.slice(13));
   ok('　　「系統設定」改名成看得懂的「場地・班別」', /grp:'環境設定', label:'場地・班別', page:'settings'/.test(src));
   ok('　　目前所在頁仍會高亮', /subnav-item active[^>]*>員工管理/.test(html));
   ok('　　組別標籤前面有分隔線，第一組不畫',
@@ -150,7 +152,9 @@ console.log('\n員工管理：卡片改回列表');
   const env={ST_SWITCHES, ppEmpSwitchOn:(c,kk)=>kk==='teach'||(kk==='disabled'&&c.status==='inactive'),
     ET_COLOR:{full_time:'#1f6f54'}, normEmp:x=>x||'full_time', typeLabel:()=>'正職',
     genderAvatarSVG:()=>'<svg/>', stateOf:c=>c.status||'active', statusBadge:()=>'<span class="tag">停用</span>',
-    nameSub:c=>[c.emp_no,c.phone].filter(Boolean).join(' · '), ST_GEAR:'<svg class="gear"/>', LNI:{link:'🔗'}};
+    nameSub:c=>[c.emp_no,c.phone].filter(Boolean).join(' · '), ST_GEAR:'<svg class="gear"/>', LNI:{link:'🔗'},
+    // 2026-07-30：列表多了本月統計（教練課／團體課／續約／工時）
+    _ym:'2026-07', _stat:{E1:{pt:12,ptAll:14,grp:4,grpAll:4,renew:2,hours:58.4}}};
   const fn=new Function(...Object.keys(env), src.slice(k,l)+'\n'+src.slice(i,j)+'\nreturn stRow;')(...Object.values(env));
   const h=fn({id:'E1',name:'王教練',name_en:'wang',gender:'male',employment_type:'full_time',
               job_title:'資深教練',emp_no:'A01',phone:'0912345678',status:'active'});
@@ -170,6 +174,69 @@ console.log('\n員工管理：卡片改回列表');
   ok('　　舊的 stCard 已移除，不留兩套', !/const stCard=c=>\{/.test(src) && /〔已移除〕stCard（直式員工卡）/.test(src));
   ok('　　窄畫面時開關換行到下一列，齒輪固定右上',
      /@media\(max-width:900px\)\{\s*\n\s*\.st-lrow\{flex-wrap:wrap;/.test(src));
+  ok('★ 列表直接顯示本月教練課／團體課／續約數／工作時數（2026-07-30）',
+     /教練課<\/i><b>12<\/b>/.test(h) && /團體課<\/i><b>4<\/b>/.test(h)
+     && /續約<\/i><b>2<\/b>/.test(h) && /工時<\/i><b>58<\/b><u>h<\/u>/.test(h));
+  ok('　　排定堂數與已上不同時附註（12/14）', /<b>12<\/b><u>\/14<\/u>/.test(h));
+  ok('　　工時四捨五入到整數', /<b>58<\/b>/.test(h) && !/58\.4/.test(h));
+  {
+    const zero=fn({id:'Z',name:'純櫃檯',employment_type:'full_time',status:'active'});
+    ok('　　當月完全沒數字的員工不顯示這一組（不會整排「—」）', !/st-l-stats/.test(zero));
+  }
+}
+
+
+/* ── ⑧ 出勤整併進員工管理＋員工表現欄位重排（2026-07-30 使用者指示）── */
+console.log('\n出勤整併進員工管理');
+ok('★ 分頁：今日出勤在最上面，出勤紀錄與打卡異常補卡併進來',
+   /\{key:'today',label:'今日出勤'\},\s*\n\s*\{key:'list',label:'員工'\},\s*\n\s*\{key:'records',label:'出勤紀錄'\},\s*\n\s*\{key:'punchfix',label:'打卡異常與補卡'\},/.test(src));
+ok('★ 工時統計分頁移除（工時已在員工列表那一列顯示）',
+   !/\{key:'hours',label:'工時統計'\},[\s\S]{0,200}STAFF_TABS/.test(src)
+   && /原本的「工時統計」分頁移除，工時直接顯示在員工列表那一列/.test(src));
+ok('★ 異常打卡與補卡申請合成一頁（沿用原本兩支渲染函式，不分岔）',
+   /renderAttAbnormal\(needPunch,all\);\s*\n\s*const abnHtml=att\.innerHTML;/.test(src)
+   && /await renderAttRequests\(\);\s*\n\s*const reqHtml=att\.innerHTML;/.test(src));
+ok('　　補卡待辦的跳轉改指向新分頁',
+   /function gotoPunchReview\(\)\{ _staffTab='punchfix'; CUR_TAB='punchfix'; window\._navTab='punchfix'; navTo\('staff','g_admin'\); \}/.test(src));
+ok('　　排班表仍留在「班表」群組（櫃檯唯讀），沒有重複收進來',
+   /\{label:'排班表', page:'coach_shifts', fd:true\}/.test(src));
+ok('★ 本月統計與營運分析／薪資頁同口徑（同一支 dutyHoursCapped／dutyClassOverlapHours／renewMapOf）',
+   /dutyHoursCapped\(_att,_sh,c\.id,_ym\)-dutyClassOverlapHours\(_sh,_bk,c\.id,_ym\)/.test(src)
+   && /const _renew=renewMapOf\(_ym,_tk,_pu,_bk,_ty\);/.test(src));
+ok('　　不需值班但要打卡的（正職）顯示實際打卡時數', /if\(!hrs && c\.need_punch\)\{/.test(src));
+
+console.log('\n員工表現欄位重排');
+ok('★ 順序改成 教練課／團體課／續約／工時',
+   /<span>姓名<\/span><span>教練課<\/span><span>團體課<\/span><span>續約<\/span><span>工時<\/span>/.test(src));
+ok('★ 姓名欄只佔實際寬度，四個數字欄等寬（不再留大片空白）',
+   /grid-template-columns:minmax\(56px,max-content\) repeat\(4,minmax\(0,1fr\)\);/.test(src));
+ok('　　說明文字的「值班」改成「工時」', /工時＝打卡時數（排班封頂、扣上課重疊，與薪資頁同口徑）/.test(src));
+
+console.log('\n手機版營運分析：銷課金額與堂數');
+ok('★ 銷課金額移到銷課堂數前面',
+   /ovRow\(OV_IC\.rev,'銷課金額',fmtNT\(usedFee\),''\)\}\s*\n\s*\$\{ovRow\(OV_IC\.done,'銷課堂數'/.test(src));
+ok('★ 銷課堂數附上組成（回答「726 怎麼算的」）',
+   /const _doneMix=\(\(\)=>\{/.test(src) && /ovRow\(OV_IC\.done,'銷課堂數',`\$\{doneCount\} 堂`,'',_doneMix\)/.test(src));
+ok('　　組成含自主訓練與體驗，不是只有教練課＋團體課',
+   /'自主訓練':'自主','體驗':'體驗'/.test(src)
+   && /而是所有已簽到／已完成的課，含自主訓練與體驗；團課一堂算 1，不看人數/.test(src));
+ok('　　小字說明有自己的樣式', /\.ov-i-note\{font-style:normal;font-size:10\.5px;/.test(src));
+{
+  // _doneMix 實跑：用 7 月真實比例
+  const rangeBk=[].concat(
+    Array(412).fill({category:'私人教練',status:'checked_in'}),
+    Array(259).fill({category:'自主訓練',status:'completed'}),
+    Array(49).fill({category:'小班肌力',status:'checked_in'}),
+    Array(6).fill({category:'體驗',status:'checked_in'}),
+    Array(30).fill({category:'私人教練',status:'booked'}));
+  const m={};
+  rangeBk.forEach(b=>{ if(b.status!=='completed'&&b.status!=='checked_in') return;
+    const k={'私人教練':'教練課','小班肌力':'團體課','自主訓練':'自主','體驗':'體驗','運動按摩':'按摩','場租':'場租'}[b.category]||b.category||'其他';
+    m[k]=(m[k]||0)+1; });
+  const mix=Object.entries(m).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${v}`).join('・');
+  const done=rangeBk.filter(b=>b.status==='completed'||b.status==='checked_in').length;
+  ok('★ 726 = 教練課 412 ＋ 自主 259 ＋ 團體課 49 ＋ 體驗 6', done===726 && mix==='教練課 412・自主 259・團體課 49・體驗 6', {done,mix});
+  ok('　　未簽到的課不計入', done===726);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
