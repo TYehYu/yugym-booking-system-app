@@ -2811,6 +2811,18 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-half:hover{background:rgba(31,111,84,0.07);}
 .cal-half.cal-half-noadd{cursor:default;}
 .cal-half.cal-half-noadd:hover{background:transparent;}
+/* ── 預約模式（2026-07-30 使用者指示）──
+   課卡整層不吃點擊與拖曳，整片時間格都能直接點來排課；課卡降低透明度表示現在只是背景。 */
+.cal-bookmode .cal-ev{pointer-events:none !important;}
+.cal-bookmode .cal-ev:not(.cal-ev-active){opacity:.62;}
+.cal-bookmode .cal-half:not(.cal-half-noadd){cursor:crosshair;background:rgba(31,111,84,.045);}
+.cal-bookmode .cal-half:not(.cal-half-noadd):hover{background:rgba(31,111,84,.15);}
+.cal-bookmode .cal-early-add{pointer-events:auto;}
+/* 開啟時在行事曆上方掛一條提示，避免有人不知道為什麼課卡點不動 */
+.cal-bookmode-bar{display:flex;align-items:center;gap:10px;margin:0 0 8px;padding:8px 12px;
+  background:var(--sage-bg,#E4EAD9);border:1px solid var(--green);border-radius:10px;
+  font-size:12px;color:var(--green);font-weight:700;}
+.cal-bookmode-bar .btn{margin-left:auto;padding:4px 12px;font-size:11.5px;}
 .cal-ev{position:absolute;left:3px;right:3px;border-radius:8px;padding:4px 8px;font-size:10px;line-height:1.25;
   overflow:hidden;cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,0.06);z-index:3;user-select:none;
   display:flex;flex-direction:column;align-items:flex-start;justify-content:center;text-align:left;}
@@ -6194,8 +6206,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1024';
-const APP_VERSION_LABEL='v260730.1024';
+const APP_VERSION = '260730.1033';
+const APP_VERSION_LABEL='v260730.1033';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12045,6 +12057,34 @@ function computeLastBkMarks(allTickets, bookings, typeMap){
       window._renewLastBk[lastBk.id]=true;
     });
   }catch(_){}
+  /* 團體課的最後一堂（2026-07-30 使用者指示：只要名單裡有一位是最後一堂，課卡就要標驚嘆號）——
+     團課預約不綁 ticket_id（一筆多位學員，欄位放不下），上面以票券為主軸的判定完全撈不到它，
+     所以團課課卡從來沒出現過提醒。改用會員層判定：
+     該會員團課餘額已 0（預約當下就扣課，所以 0 代表都排掉了）→ 他「時間最晚的那堂團課」
+     就是最後一堂。課卡只要有一位符合就標。 */
+  try{
+    const _grpLeft={};
+    (allTickets||[]).forEach(t=>{
+      if(t.status && t.status!=='usable') return;
+      if(t.expire_date && String(t.expire_date).slice(0,10) < ymd(TODAY)) return;   // 過期的不算餘額
+      const cat=(typeMap[t.ticket_type_id]||{}).category||'';
+      if(cat!=='小班肌力' && cat!=='團體課') return;
+      _grpLeft[t.member_id]=(_grpLeft[t.member_id]||0)+(Number(t.sessions_remaining)||0);
+    });
+    const _grpBk=(bookings||[]).filter(b=>b && b.category==='小班肌力' && b.status!=='cancelled')
+      .sort((x,y)=>((x.date||'')+(x.start_time||'')).localeCompare((y.date||'')+(y.start_time||'')));
+    const _lastGrpOf={};   // 會員 → 他時間最晚的那筆團課預約
+    _grpBk.forEach(b=>{
+      ((Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]))
+        .forEach(mid=>{ _lastGrpOf[mid]=b.id; });
+    });
+    Object.keys(_lastGrpOf).forEach(mid=>{
+      if((_grpLeft[mid]||0)>0) return;                       // 還有堂數 → 不是最後一堂
+      const bid=_lastGrpOf[mid];
+      if(window._renewDoneBk[bid] || window._renewNoBk[bid]) return;   // 已續約／不續約的標記優先
+      window._renewLastBk[bid]=true;
+    });
+  }catch(_){}
 }
 async function renderCalendar(opts){
   // opts: {coachFilter(bool), onSlot(fnName), me(coach_id), editable(bool), _data(預先抓好的資料，避免重複) }
@@ -12387,17 +12427,26 @@ async function renderCalendar(opts){
         <div class="cal-arrow" onclick="${nDays===1?`calStep(1)`:`calStepWeek(1)`}" title="下一週">›</div>
         <button class="btn btn-ghost cal-today-btn" onclick="calToToday();navTo(CUR_PAGE)">今天</button>
       </div>`;
-  return `<div class="cal-wrap">
+  return `<div class="cal-wrap${window._calBookMode?' cal-bookmode':''}">
     <div class="cal-head">
       <div class="cal-head-left">
         ${opts.coachFilter?`<div class="cal-chip-row">${calCoachChips(coaches,filterCoach)}</div>`:''}
       </div>
       ${opts.coachFilter?'':_calNavHtml}
     </div>
+    ${(window._calBookMode&&opts.coachFilter)?`<div class="cal-bookmode-bar">
+      <span>預約模式中：課卡暫時不反應點擊，直接點時間格即可新增預約</span>
+      <button class="btn btn-ghost" onclick="toggleCalBookMode()">結束預約模式</button>
+    </div>`:''}
     ${opts.coachFilter?`<div class="cal-chips-bar cal-bar2">
       <div class="cal-chip-row">${calCourseChips()}</div>
       ${_calNavHtml}
       <div class="cal-head-right" style="display:flex;gap:8px;">
+        ${/* 預約模式（2026-07-30 使用者指示）：關掉課卡互動，整片時間格都能直接點來排課。
+             課多的時候要在卡與卡之間戳空格很難點，開了這個模式就不會誤點到課卡。 */''}
+        <button class="btn ${window._calBookMode?'btn-green':'btn-ghost'}" id="cal-bookmode-btn"
+                title="開啟後：課卡不再反應點擊，直接點時間格就能新增預約"
+                onclick="toggleCalBookMode()">${window._calBookMode?'✓ 預約模式':'預約模式'}</button>
         <button class="btn btn-ghost" title="刷新（重新抓取最新資料）" onclick="dashManualRefresh()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M20 11a8 8 0 10.5 4.5"/><path d="M20 4v7h-7"/></svg>　刷新</button>
         <button class="btn" style="background:var(--course-group-soft);color:var(--course-group-accent);border:1.5px solid var(--course-group-accent);font-weight:700;" onclick="openGroupScheduleModal()">團課課表</button>
         <button class="btn btn-green" onclick="openBookingModal()">＋ 新增預約</button>
@@ -14734,6 +14783,18 @@ function quickBookAt(date,time){
   if(window._justTapped){return;}
   _prefill={date,time};openBookingModal();
 }
+/* 預約模式（2026-07-30 使用者指示）：課卡不吃點擊與拖曳，整片時間格直接點就能排課。
+   課排滿時要在卡與卡的縫隙裡戳空格很難點，開了這個模式就不會一直誤點到課卡。 */
+function toggleCalBookMode(){
+  window._calBookMode = !window._calBookMode;
+  if(window._calBookMode) collapseBkCard();          // 先收掉已展開的課卡面板
+  try{ localStorage.setItem('yugym_cal_bookmode', window._calBookMode?'1':''); }catch(_){}
+  const _sb=document.querySelector('.cal-body'); if(_sb) window._calScrollTop=_sb.scrollTop;
+  window._calStepping=true;                          // 保留當前檢視週，不跳回本週
+  showToast(window._calBookMode?'已開啟預約模式：直接點時間格新增預約':'已結束預約模式');
+  navTo(CUR_PAGE);
+}
+try{ window._calBookMode = localStorage.getItem('yugym_cal_bookmode')==='1'; }catch(_){ window._calBookMode=false; }
 
 /* ══════ 預約精靈（兩頁式） ══════
    第1頁：會員 / 課程類型 / 教練 / 日期 / 時間（從行事曆點選會自動帶入日期時間）
@@ -16072,7 +16133,9 @@ async function undoCheckinDirect(id){
 // ── 團課簽到名單：卡片下方吊出白色小卡，逐人點選簽到/取消簽到 ──
 // 新結構（單筆多人 member_ids + attendance）與舊結構（同時段多筆單人合併卡）都支援。
 async function bkOrbitRoster(id){
-  const el = window._expandedBkEl; if(!el) return;
+  // 面板已改掛 <body>，容器由 bkPanelHost() 決定；沒有課卡參照也要能開（2026-07-30）
+  const el = window._expandedBkEl;
+  if(!el && !bkPanelHost()){ openBookingDetail(id); return; }
   const b = await dbGet('bookings', id);
   if(!b){ showToast('找不到預約'); return; }
   const members = await dbGetAll('members');
@@ -16141,7 +16204,8 @@ async function setSelfVenue(id,unit){
   navTo(CUR_PAGE);
 }
 async function bkOrbitSub(id){
-  const el = window._expandedBkEl; if(!el) return;
+  const el = window._expandedBkEl;
+  if(!el && !bkPanelHost()){ openBookingDetail(id); return; }   // 拿不到容器就退回明細，不要靜靜什麼都不做
   const b = await dbGet('bookings', id);
   if(!b){ showToast('找不到預約'); return; }
   const coaches = await dbGetAll('coaches');
@@ -16241,6 +16305,12 @@ function _bkOutsideClose(e){
   const el = window._expandedBkEl;
   if(!el) return;
   if(el.contains(e.target)) return;
+  /* 2026-07-30 使用者回報「代課按鈕失效」的真因：
+     按鈕面板改掛在 <body>（#bk-card-pop）後就不在課卡裡了，下面的 el.contains 與
+     「卡片＋.evo-btn 聯集」都判定成「點在卡外」→ 先 collapseBkCard() 清掉
+     _expandedBkEl 與面板，接著才跑到的 bkOrbitSub 因為拿不到容器整支 return。
+     明細／取消／簽到沒事，是因為它們自己先 collapse 再做，不依賴那個參照。 */
+  if(e.target && e.target.closest && e.target.closest('#bk-card-pop')) return;
   // 誤觸緩衝（2026-07-18 正式站回報「點簽到沒反應」的成因之一）：周邊按鈕懸在卡片外，
   // 按鈕與卡片間有幾 px 縫隙，點到縫隙＝點到卡外 → 整組收合，體感就是「按了沒反應」。
   // 點擊落在「卡片＋按鈕聯集 + 8px 緩衝」內時不收合，讓使用者能再點一次按鈕。
