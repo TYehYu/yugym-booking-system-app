@@ -5318,6 +5318,8 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   gap:10px;align-items:flex-end;pointer-events:none;max-width:min(380px,90vw);}
 #dfeed-list{display:flex;flex-direction:column;gap:10px;align-items:flex-end;width:100%;}
 /* 過夜累積多則時的抬頭：一眼看到還有幾則沒確認，並可一次確認完 */
+/* 〔已停用〕2026-07-30 使用者指示：抬頭「會員異動 N 則待確認」移除，只顯示卡片。
+   樣式暫留（deskFeedAckAll 仍在，日後若要恢復入口可直接沿用）。 */
 .dfeed-head{pointer-events:auto;display:flex;align-items:center;gap:10px;width:100%;
   background:var(--text,#241f18);color:#fff;border-radius:10px;padding:7px 8px 7px 12px;
   font-size:12px;font-weight:700;box-shadow:0 8px 22px rgba(20,18,14,.22);}
@@ -6546,8 +6548,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1907';
-const APP_VERSION_LABEL='v260730.1907';
+const APP_VERSION = '260730.1918';
+const APP_VERSION_LABEL='v260730.1918';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7489,7 +7491,10 @@ function isDeskLike(){ return !!(SESSION && (SESSION.role==='admin'||SESSION.rol
    ・只在桌機、且是櫃檯/管理員/店長身分時啟用（教練與會員不需要）
    ・看過就標 read，換頁或重整不會重複跳
    ・分頁在背景時不輪詢，回到前景立刻補查一次 */
-const DESK_FEED_MS=45000;
+/* 2026-07-30 使用者回報「從預約到跳出訊息等了好久」：原本 45 秒才輪一次，
+   最壞情況要等三分之三分鐘。查詢本身很輕（只撈未讀、limit 20、有索引），
+   縮到 15 秒；分頁在背景時本來就不輪詢，回到前景會立刻補查一次。 */
+const DESK_FEED_MS=15000;
 let _deskFeedTimer=null, _deskFeedBusy=false;
 function deskFeedEnabled(){
   return CLOUD && SESSION && isDeskLike() && !isMobileLayout();
@@ -7499,9 +7504,11 @@ function deskFeedHost(){
   let el=document.getElementById('desk-feed');
   if(!el){
     el=document.createElement('div'); el.id='desk-feed';
-    el.innerHTML=`<div class="dfeed-head" id="dfeed-head" hidden><span id="dfeed-cnt"></span>
-        <button class="dfeed-allok" onclick="deskFeedAckAll()">✓ 全部確認</button></div>
-      <div id="dfeed-list"></div>`;
+    /* 2026-07-30 使用者指示：移除上面「會員異動 N 則待確認」的抬頭，只顯示卡片。
+       每張卡自己就有「✓ 確認」，抬頭與「全部確認」一起收掉。
+       未顯示的則數（超過單輪 20 則上限）仍以一行小字附在最下方 —— 那是資訊不是標題，
+       不然會變成無聲截斷。 */
+    el.innerHTML=`<div id="dfeed-list"></div>`;
     document.body.appendChild(el);
   }
   return document.getElementById('dfeed-list');
@@ -7513,10 +7520,7 @@ function deskFeedSyncHead(){
   deskFeedHead(n, n);
 }
 function deskFeedHead(total, shown){
-  const h=document.getElementById('dfeed-head'); if(!h) return;
-  h.hidden = !(total>1);
-  const c=document.getElementById('dfeed-cnt');
-  if(c) c.textContent=`會員異動　${total} 則待確認`;
+  // 抬頭已移除（2026-07-30 使用者指示：只要顯示卡片）；這裡只維護「另有 N 則」那一行
   const list=document.getElementById('dfeed-list'); if(!list) return;
   let more=document.getElementById('dfeed-more');
   if(total>shown){
@@ -7525,7 +7529,7 @@ function deskFeedHead(total, shown){
     list.appendChild(more); // 永遠留在最下面
   }else if(more) more.remove();
 }
-/* 一次確認全部（過夜累積時逐張點很花時間）——只確認畫面上這幾張，剩下的下一輪補上 */
+/* 一次確認全部：抬頭按鈕已移除（2026-07-30），函式保留供程式呼叫／日後恢復入口用 */
 async function deskFeedAckAll(){
   const ids=[...document.querySelectorAll('#desk-feed [data-nid]')].map(el=>el.getAttribute('data-nid'));
   if(!ids.length) return;
@@ -7549,13 +7553,30 @@ function deskFeedPush(n){
   const el=document.createElement('div');
   el.className='dfeed-card dfeed-'+kind;
   el.setAttribute('data-nid',n.id);
-  const when=n.created_at?String(n.created_at).slice(5,16).replace('T',' '):'';
+  /* 2026-07-30 使用者回報「7-30 11:11 是什麼意思？也對不上」：
+     這是會員操作的時間，但原本直接切 created_at 字串 —— 那是 UTC，台灣要 +8，
+     所以 19:11 的操作顯示成 11:11。改成轉台灣時間，並補上「幾分鐘前」與欄位說明。 */
+  const when=deskFeedWhen(n.created_at);
   el.innerHTML=`<span class="dfeed-ic">${DESK_FEED_IC[n.type]||DESK_FEED_IC.self_book}</span>
     <span class="dfeed-body"><span class="dfeed-t">${String(n.title||'').replace(/</g,'&lt;')}</span>
       <span class="dfeed-b">${String(n.body||'').replace(/</g,'&lt;')}</span>
       ${when?`<span class="dfeed-w">${when}</span>`:''}</span>
     <button class="dfeed-ok" onclick="deskFeedAck('${n.id}')">✓ 確認</button>`;
   host.appendChild(el);
+}
+/* 會員操作時間（台灣時間；今天只顯示時刻＋幾分鐘前，跨日才帶日期） */
+function deskFeedWhen(iso){
+  if(!iso) return '';
+  const d=new Date(iso);
+  if(isNaN(d)) return '';
+  const tw=new Date(d.getTime()+8*3600000);            // UTC → 台灣（+8）
+  const hh=String(tw.getUTCHours()).padStart(2,'0')+':'+String(tw.getUTCMinutes()).padStart(2,'0');
+  const nowTw=new Date(Date.now()+8*3600000);
+  const sameDay = tw.toISOString().slice(0,10)===nowTw.toISOString().slice(0,10);
+  const mins=Math.max(0,Math.round((Date.now()-d.getTime())/60000));
+  const ago = mins<1?'剛剛' : (mins<60?`${mins} 分鐘前` : (mins<1440?`${Math.floor(mins/60)} 小時前`:''));
+  const date = sameDay?'' : `${String(tw.getUTCMonth()+1).padStart(2,'0')}/${String(tw.getUTCDate()).padStart(2,'0')} `;
+  return `會員操作 ${date}${hh}${ago?`　·　${ago}`:''}`;
 }
 /* 櫃檯按「確認」才消失並標已讀（先移除、寫入失敗再抓回來，避免訊息被默默吃掉） */
 async function deskFeedAck(id){
@@ -12630,15 +12651,27 @@ function computeLastBkMarks(allTickets, bookings, typeMap){
       const _isSelfOrTrial = _c==='self' || _c==='trial'
         || (tk.plan_name&&(tk.plan_name.indexOf('自主訓練')>=0||tk.plan_name.indexOf('體驗')>=0));
       if(_isSelfOrTrial) return;
-      const remain = tk.sessions_remaining!=null ? tk.sessions_remaining : (tk.sessions_total||0);
-      if(remain>2) return;                 // 還很多堂，不用提醒續約
+      /* 2026-07-30 使用者回報（蔡佳音 8/10 該標卻沒標、楊慧淳 8/11 不是最後一堂卻標了）：
+         原本用 sessions_remaining ≤ 2 當觸發條件，但那個數字有兩種口徑
+         （匯入票有的把「已預約未上」預扣了、有的沒有），所以兩邊都會判錯：
+           ・蔡佳音 8 堂票已核銷 5、已排 3（8/03・8/05・8/10）→ 餘額欄是 4 → 沒觸發，
+             但 8/10 其實就是這張票的最後一堂。
+           ・楊慧淳 4 堂票已核銷 0、只排了 2（8/04・8/11）→ 餘額欄是 1 → 觸發並標了 8/11，
+             但她還有 2 堂可以約，8/11 根本不是最後一堂。
+         改用口徑無關的算法：**還沒排的堂數 = 總堂數 − 已核銷 − 已預約**。
+         等於 0（或負數＝超約）才代表「已排的最後那堂就是這張票的最後一堂」。 */
+      const tkAll=_bkByTk[tk.id]||[];
+      const _done=tkAll.filter(x=>x.status==='checked_in'||x.status==='completed').length;
+      const _ahead=tkAll.length-_done;                       // 已預約未上
+      const _total=Number(tk.sessions_total)||0;
+      if(!(_total>0)) return;                                // 沒有總堂數無法判定
+      if(_total-_done-_ahead > 0) return;                     // 還有沒排的堂數 → 不是最後一堂
       // 分期票：若尚未開通到最後一段（unlocked < total），這是「繳費」情境不是「續約」，跳過
       if(tk.installment && typeof tk.installment==='object'){
         const unlocked = tk.unlocked_sessions!=null ? tk.unlocked_sessions : tk.sessions_total;
         if(unlocked < tk.sessions_total) return;
       }
-      const tkBks=_bkByTk[tk.id]||[];
-      const lastBk = tkBks[tkBks.length-1];   // 已排預約中時間最晚那堂
+      const lastBk = tkAll[tkAll.length-1];   // 已排預約中時間最晚那堂
       if(!lastBk) return;
       const grp=tkRenewGroup(tk,typeMap);
       // 已續約：同類別有「更晚買」的票（不看是否已排光，剛買剛排完也算數）

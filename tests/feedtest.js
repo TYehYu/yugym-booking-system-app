@@ -61,15 +61,18 @@ ok('★ 壓在內容之上、對話框之下（不會擋住視窗按鈕）',
    /#desk-feed\{position:fixed;right:18px;bottom:18px;z-index:250;/.test(src)
    && /\.modal-bg\{[^}]*z-index:300;/.test(src));
 
-console.log('\n過夜累積時的抬頭');
-ok('★ 顯示還有幾則待確認', /h\.hidden = !\(total>1\);/.test(src)
-   && /會員異動　\$\{total\} 則待確認/.test(src));
-ok('★ 可一次全部確認', /async function deskFeedAckAll\(\)/.test(src)
+/* 2026-07-30 使用者指示：抬頭「會員異動 N 則待確認」移除，只顯示卡片。
+   細節見 lastmarktest.js；這裡改成驗「已移除」＋「另有 N 則」仍在。 */
+console.log('\n過夜累積：抬頭已移除，只留卡片');
+ok('★ 抬頭與「全部確認」按鈕不再渲染',
+   !/<div class="dfeed-head" id="dfeed-head" hidden>/.test(src)
+   && /el\.innerHTML=`<div id="dfeed-list"><\/div>`;/.test(src));
+ok('★ deskFeedAckAll 保留（函式不刪，日後可恢復入口）', /async function deskFeedAckAll\(\)/.test(src)
    && /確認這 \$\{ids\.length\} 則會員異動通知？/.test(src));
 ok('　　超過一次顯示上限時講清楚還有幾則，不做無聲截斷',
    /另有 \$\{total-shown\} 則，確認後會接著顯示/.test(src)
    && /\{count:'exact'\}/.test(src));
-ok('　　按鈕用勾號', /✓ 確認<\/button>/.test(src) && /✓ 全部確認<\/button>/.test(src));
+ok('　　每張卡自己的確認鈕用勾號', /✓ 確認<\/button>/.test(src));
 
 
 console.log('\n確認完抬頭要一起消失（2026-07-30 使用者回報）');
@@ -81,19 +84,15 @@ ok('★ 全部確認完也立刻收掉，不等 45 秒輪詢',
    /deskFeedSyncHead\(\);   \/\/ 全部確認完立刻把抬頭收掉，不等輪詢/.test(src));
 ok('　　原因寫在程式裡', /卡片點掉了、上面的「會員異動 N 則待確認」還留著/.test(src));
 {
-  // 實跑 deskFeedHead：n<=1 就隱藏
+  // 實跑 deskFeedHead：抬頭已移除，只驗「另有 N 則」的出現與收回
   const i=src.indexOf('function deskFeedHead(total, shown){'); const j=src.indexOf('\n}\n',i)+2;
-  let hidden=null, txt=null, moreRemoved=0;
-  const head={ set hidden(v){hidden=v;}, get hidden(){return hidden;} };
-  const cnt={ set textContent(v){txt=v;}, get textContent(){return txt;} };
-  const more={ id:'', className:'', textContent:'', remove(){moreRemoved++;} };
-  const doc={ getElementById:id=>({ 'dfeed-head':head, 'dfeed-cnt':cnt,
-    'dfeed-list':{appendChild(){}}, 'dfeed-more':more })[id]||null };
+  let moreRemoved=0, moreTxt='';
+  const more={ id:'', className:'', get textContent(){return moreTxt;}, set textContent(v){moreTxt=v;}, remove(){moreRemoved++;} };
+  const doc={ getElementById:id=>({ 'dfeed-list':{appendChild(){}}, 'dfeed-more':more })[id]||null };
   const fn=new Function('document', src.slice(i,j)+'\nreturn deskFeedHead;')(doc);
-  fn(3,3); ok('★ 3 則 → 抬頭顯示、文字帶數量', hidden===false && /3 則待確認/.test(txt));
-  fn(1,1); ok('★ 只剩 1 則 → 抬頭收起（單則不佔位）', hidden===true);
-  fn(0,0); ok('★ 全部確認完（0 則）→ 抬頭收起', hidden===true);
-  ok('　　「另有 N 則」也一併移除', moreRemoved>0);
+  fn(25,20); ok('★ 25 則只顯示 20 張 → 出現「另有 5 則」', /另有 5 則/.test(moreTxt));
+  fn(3,3);   ok('★ 全部都顯示得下 → 收回「另有 N 則」', moreRemoved>0);
+  ok('　　沒有抬頭元素也不會爆（已移除）', true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
