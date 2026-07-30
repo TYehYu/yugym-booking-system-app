@@ -143,5 +143,45 @@ ok('★ 沒有誤植到別的函式（refreshCoachNotifBadge 不該有它）',
   ok('　　全部上完、也沒有未來預約 → 才是真的紅燈', !pend2['N']);
 }
 
+
+/* ── ⑥ 兩邊規則要一致：預約明細有日期、會員列表卻整排 ✓（2026-07-30 游晴雅）── */
+console.log('\n團課圓點：兩個畫面要同一套規則');
+ok('★ 配對 key 不再把 format 算進團課（票券空白 vs 預約寫「團體」永遠對不上）',
+   /const key=x=>\{ const c=tyCat\(x\.ticket_type_id\);\s*\n\s*return \[tyName\(x\.ticket_type_id\), \(c==='小班肌力'\?'':\(x\.format\|\|''\)\)\]\.join\('\|'\); \};/.test(src));
+ok('★ 原因寫在程式裡（配不到又不會落到第二輪，整批被丟掉）',
+   /那些課配不到票也不會落到第二輪（它們有 ticket_type_id），整批被丟掉/.test(src));
+ok('★ 會員列表也把「配不進這張票的已預約未上」帶上，跟名單一樣看得到',
+   /let dots=ticketTokens\(top,bks\.concat\(_extra\),typeMapFull,used,null\);/.test(src)
+   && /名單那邊看得到 7\/30，列表這邊也要看得到/.test(src));
+ok('　　已經配進去的不重複列（用計數扣抵）',
+   /if\(c>0\)\{ _seen\.set\(b\.id,c-1\); return; \}        \/\/ 已經被配進這張票了/.test(src));
+ok('　　只帶同課別、今天以後的', /if\(String\(b\.category\|\|''\)!==_catTop\) return;/.test(src));
+{
+  const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
+  const alloc=new Function(g('function allocBookingsToTickets(','\n}\n')+'\nreturn allocBookingsToTickets;')();
+  const tokens=new Function('tkVisual','parseYmd',g('function ticketTokens(','\n}\n')+'\nreturn ticketTokens;')
+    (()=>({accent:'#9a5a1e'}), x=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(x||'');return m?new Date(+m[1],+m[2]-1,+m[3]):null;});
+  const TM={'tt-g':{name:'團體課',category:'小班肌力'}};
+  const top={id:'TK',ticket_type_id:'tt-g',format:null,sessions_total:10,sessions_remaining:0,
+    start_date:'2026-06-25',purchase_date:'2026-06-25',member_id:'M',plan_name:'團體課'};
+  const raw=[['2026-06-25',2,'completed'],['2026-06-29',1,'completed'],['2026-07-02',2,'completed'],
+             ['2026-07-09',2,'completed'],['2026-07-16',2,'checked_in'],['2026-07-23',2,'checked_in'],
+             ['2026-07-30',2,'booked']];
+  const myBk=[]; raw.forEach(([d,n,st],k)=>{for(let x=0;x<n;x++) myBk.push({id:'b'+k,date:d,start_time:'19:30',
+    status:st,category:'小班肌力',ticket_type_id:'tt-g',format:'團體'});});
+  const bks=alloc([top],myBk,TM).byTicket['TK']||[];
+  ok('★ 游晴雅：10 堂全部配得到（修好前是 0 堂 → 整排只有 ✓）', bks.length===10, bks.length);
+  const today='2026-07-30';
+  const seen=new Map(); bks.forEach(b=>seen.set(b.id,(seen.get(b.id)||0)+1));
+  const extra=[]; myBk.forEach(b=>{ if(b.status!=='booked'||b.date<today) return;
+    if(b.category!=='小班肌力') return; const c=seen.get(b.id)||0; if(c>0){seen.set(b.id,c-1);return;} extra.push(b); });
+  const html=tokens(top,bks.concat(extra),TM,10,null);
+  const dates=[...html.matchAll(/>(\d+\/\d+)</g)].map(m=>m[1]).join(' ');
+  ok('★ 每一顆都有戳記日期（不再是空白的 ✓）', dates==='6/25 6/25 6/29 7/2 7/2 7/9 7/9 7/16 7/16 7/23 7/30 7/30', dates);
+  ok('★ 一次佔兩個名額就畫兩顆同日期', (dates.match(/6\/25/g)||[]).length===2);
+  ok('★ 今天那堂（票已用完）用紅虛線圈接在後面，與名單一致',
+     (html.match(/mtk-over/g)||[]).length===2 && (html.match(/mtk-used/g)||[]).length===10);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

@@ -6251,8 +6251,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1128';
-const APP_VERSION_LABEL='v260730.1128';
+const APP_VERSION = '260730.1140';
+const APP_VERSION_LABEL='v260730.1140';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9392,7 +9392,11 @@ function allocBookingsToTickets(tickets,bookings,typeMap){
   const tyOf=id=>(typeMap&&typeMap[id])||null;
   const tyName=id=>{ const ty=tyOf(id); return ty?ty.name:''; };
   const tyCat=id=>{ const ty=tyOf(id); return ty?String(ty.category||''):''; };
-  const key=x=>[tyName(x.ticket_type_id), x.format||''].join('|');
+  /* 團體課不分 1V1／1V2：票券的 format 是空的、預約卻寫「團體」，把 format 一起當 key
+     就永遠對不上 —— 那些課配不到票也不會落到第二輪（它們有 ticket_type_id），整批被丟掉。
+     2026-07-30 游晴雅：預約明細的圓點有日期，會員列表卻整排只有 ✓，就是這裡。 */
+  const key=x=>{ const c=tyCat(x.ticket_type_id);
+    return [tyName(x.ticket_type_id), (c==='小班肌力'?'':(x.format||''))].join('|'); };
   /* v2（2026-07-26 徐子芸案例）：
      ・容量感知 —— 已有直連預約的票不再整張跳過，剩餘容量（總−直連數）仍可吸收未綁的課；
      ・未來預約找「還有剩餘堂數」的票 —— 舊系統把未來的課記在有餘額的那張（7/29 記在 7/01
@@ -18405,7 +18409,19 @@ PAGES.members=async function(){
     if(rem==null) used=Math.max(dAtt,att.length);
     else { const face=Math.max(0,total-(Number(rem)||0)-dBooked); used=Math.max(dAtt,face); }
     used=Math.min(used,total);
-    let dots=ticketTokens(top,bks,typeMapFull,used,null);
+    /* 與預約明細一致（2026-07-30）：配不進這張票的「已預約未上」也帶上去，
+       ticketTokens 會用紅虛線圈接在後面 —— 名單那邊看得到 7/30，列表這邊也要看得到。 */
+    const _catTop=(typeMapFull[top.ticket_type_id]||{}).category||'';
+    const _seen=new Map(); bks.forEach(b=>_seen.set(b.id,(_seen.get(b.id)||0)+1));
+    const _extra=[];
+    myBk.forEach(b=>{
+      if(b.status!=='booked' || String(b.date||'').slice(0,10)<today) return;
+      if(String(b.category||'')!==_catTop) return;
+      const c=_seen.get(b.id)||0;
+      if(c>0){ _seen.set(b.id,c-1); return; }        // 已經被配進這張票了
+      _extra.push(b);
+    });
+    let dots=ticketTokens(top,bks.concat(_extra),typeMapFull,used,null);
     const MAXDOT=12;
     if(total>MAXDOT){   // 一列容納不下的長票：截前 11 顆＋「+N」
       const spans=dots.split('</span>').filter(x=>x.trim());
