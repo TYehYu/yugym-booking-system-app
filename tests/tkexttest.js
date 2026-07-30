@@ -147,13 +147,16 @@ ok('　　有合約的歷史票也能點開合約', /onclick="openContractView\(
 console.log('\n更新畫面按鈕統一（2026-07-30 使用者指示：放在標題列時間左邊）');
 ok('★ 抽成共用的一顆鈕', /function refreshBtn\(cls\)\{ return `<button type="button" class="rf-btn/.test(src)
    && /const RF_ICON=/.test(src));
-ok('★ 三處都改用它：今日事項、總覽、行事曆',
-   (src.match(/\$\{refreshBtn\(\)\}/g)||[]).length===3);
-ok('★ 今日事項：排在日期翻頁鈕左邊',
-   /<div class="tl-title tl-title-date">\$\{refreshBtn\(\)\}<button class="tl-daynav" onclick="dashDayShift\(-1\)"/.test(src));
-ok('★ 行事曆：排在週切換左邊', /<div class="cal-nav">\s*\n\s*\$\{refreshBtn\(\)\}/.test(src));
-ok('★ 總覽：排在「今日／本月總覽」左邊',
-   /\$\{refreshBtn\(\)\}<span style="font-size:11\.5px;color:var\(--t3\);letter-spacing:0\.08em;font-weight:600;">\$\{_dashRange==='month'\?'本月':'今日'\}總覽<\/span>/.test(src));
+// 二修：使用者要的是「頂欄時鐘的左邊」，不是頁面標題列 → 全站只留頂欄那一顆
+ok('★ 頂欄時鐘左邊有一顆（全站唯一入口）',
+   /<button type="button" class="rf-btn" id="tb-refresh" title="更新畫面（重新抓取最新資料）"\s*\n\s*aria-label="更新畫面" onclick="dashManualRefresh\(\)"><\/button>\s*\n\s*<span id="tb-clock" class="tb-clock"><\/span>/.test(src));
+ok('★ 頁內三處都不再放（不重複入口）', !/\$\{refreshBtn\(\)\}/.test(src));
+ok('　　圖示在啟動時填入（topbar HTML 排在腳本之前）',
+   /function initTopRefresh\(\)\{ const el=document\.getElementById\('tb-refresh'\); if\(el && !el\.innerHTML\) el\.innerHTML=RF_ICON; \}/.test(src)
+   && /initTopRefresh\(\);   \/\/ 時鐘左邊那顆「更新畫面」的圖示/.test(src));
+ok('　　頂欄尺寸與時鐘對齊、深色模式另有配色',
+   /\.topbar \.tb-right \.rf-btn\{width:30px;height:30px;margin-right:2px;color:var\(--green\);\}/.test(src)
+   && /body\.mc-mode \.tb-right \.rf-btn\{background:rgba\(255,255,255,\.16\)/.test(src));
 ok('　　舊的三種樣式都移除（不留兩套）',
    !/class="tl-fullcal" onclick="dashManualRefresh\(\)"/.test(src)
    && !/class="lp-iconbtn" title="更新畫面"/.test(src)
