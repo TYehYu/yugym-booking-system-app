@@ -150,12 +150,13 @@ ok('★ 配對 key 不再把 format 算進團課（票券空白 vs 預約寫「�
    /const key=x=>\{ const c=tyCat\(x\.ticket_type_id\);\s*\n\s*return \[tyName\(x\.ticket_type_id\), \(c==='小班肌力'\?'':\(x\.format\|\|''\)\)\]\.join\('\|'\); \};/.test(src));
 ok('★ 原因寫在程式裡（配不到又不會落到第二輪，整批被丟掉）',
    /那些課配不到票也不會落到第二輪（它們有 ticket_type_id），整批被丟掉/.test(src));
-ok('★ 會員列表也把「配不進這張票的已預約未上」帶上，跟名單一樣看得到',
-   /let dots=ticketTokens\(top,bks\.concat\(_extra\),typeMapFull,used,null\);/.test(src)
-   && /名單那邊看得到 7\/30，列表這邊也要看得到/.test(src));
-ok('　　已經配進去的不重複列（用計數扣抵）',
-   /if\(c>0\)\{ _seen\.set\(b\.id,c-1\); return; \}        \/\/ 已經被配進這張票了/.test(src));
-ok('　　只帶同課別、今天以後的', /if\(String\(b\.category\|\|''\)!==_catTop\) return;/.test(src));
+ok('★ 會員列表也把「沒有票可扣的已預約未上」帶上，跟名單一樣看得到（見下方票券袋子）',
+   /let dots=ticketTokens\(tk,bks\.concat\(extra\|\|\[\]\),typeMapFull,used,null\);/.test(src));
+ok('　　已經配到票的不重複列（用計數扣抵）',
+   /const c=placed\.get\(b\.id\)\|\|0;\s*\n\s*if\(c>0\)\{ placed\.set\(b\.id,c-1\); return; \}/.test(src));
+ok('　　只帶今天以後、且依課別歸戶',
+   /if\(b\.status!=='booked' \|\| String\(b\.date\|\|''\)\.slice\(0,10\)<today\) return;/.test(src)
+   && /const k=String\(b\.category\|\|''\);/.test(src));
 {
   const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
   const alloc=new Function(g('function allocBookingsToTickets(','\n}\n')+'\nreturn allocBookingsToTickets;')();
@@ -182,6 +183,35 @@ ok('　　只帶同課別、今天以後的', /if\(String\(b\.category\|\|''\)!=
   ok('★ 今天那堂（票已用完）用紅虛線圈接在後面，與名單一致',
      (html.match(/mtk-over/g)||[]).length===2 && (html.match(/mtk-used/g)||[]).length===10);
 }
+
+
+/* ── ⑦ 票券袋子：一組票券一列，預設 2 組其餘收合（2026-07-30 使用者定案）── */
+console.log('\n票券袋子：一組一列、預設 2 組');
+ok('★ 預設顯示 2 組', /const TK_ROWS_SHOWN=2;/.test(src)
+   && /show\.slice\(0,TK_ROWS_SHOWN\)\.map\(rowOf\)\.join\(''\)/.test(src));
+ok('★ 其餘收合，按鈕寫還有幾組', /<div class="tkbag-more" hidden>/.test(src)
+   && /＋ 還有 \$\{moreTk\.length\} 組/.test(src));
+ok('★ 展開／收合會換文字', /function tkBagToggle\(id,btn\)\{/.test(src)
+   && /btn\.textContent = open \? '－ 收合' : `＋ 還有 \$\{n\} 組`;/.test(src));
+ok('　　點展開不會連帶開啟會員資料', /onclick="event\.stopPropagation\(\);tkBagToggle/.test(src));
+ok('★ 還在用的排前面（購買日新的先），用完／過期的排後面',
+   /const live=mine\.filter\(liveOf\)\.sort\(byBuy\);/.test(src)
+   && /const rest=mine\.filter\(tk=>!liveOf\(tk\)\)\.sort\(byBuy\);/.test(src));
+ok('　　完全沒有在用的票時只列最近一組（歷史票十幾張不全攤開）',
+   /const show=live\.length\?live\.concat\(rest\):rest\.slice\(0,1\);/.test(src));
+ok('　　自主訓練點數與折抵券不進袋子（那不是「一組課」）',
+   /袋子裡要列出來的票券：排除自主訓練點數與折抵券/.test(src));
+ok('★ 整袋一起配一次，不是每張票各配一次',
+   /const alloc=allocBookingsToTickets\(show,myBk,typeMapFull\);/.test(src)
+   && /各配一次的話，同一堂還沒上的課會在每一張同類別的票上都冒出一顆紅圈（假的）/.test(src));
+ok('★ 沒被任何票吸收的已預約未上 → 只掛在該課別的第一張票',
+   /const catDone=\{\};/.test(src) && /if\(!catDone\[k\] && leftover\[k\]\)\{ extra=leftover\[k\]; catDone\[k\]=true; \}/.test(src));
+ok('　　每一列的 title 標方案名、剩餘／總堂數與效期',
+   /title="\$\{\(tk\.plan_name\|\|'票券'\)\.replace\(\/"\/g,'&quot;'\)\}・剩 \$\{rem\?\?'—'\}／\$\{total\}\$\{_exp\}"/.test(src));
+
+console.log(`
+（版面與互動另以 Playwright 實測：陳蘭馨三組票 → 顯示 2 列＋「＋ 還有 1 組」，
+  展開後三列，8/4 那堂只出現在真正扣它的那一組，另兩組不再冒出假的紅圈。）`);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

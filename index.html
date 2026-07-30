@@ -2969,6 +2969,13 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .pp-hist-name{color:var(--t2);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .pp-hist-meta{color:var(--t3);font-size:11.5px;white-space:nowrap;}
 /* 會員列表迷你圓形卡（2026-07-28 二修）：只放點點、不放名稱——課種由顏色表示，點點放大 */
+/* ── 票券袋子（2026-07-30 使用者定案）：一組票券一列圓點，預設 2 組、其餘收合 ── */
+.tkbag{display:flex;flex-direction:column;gap:5px;min-width:0;align-items:flex-start;}
+.tkbag-more[hidden]{display:none;}
+.tkbag-more{display:flex;flex-direction:column;gap:5px;}
+.tkbag-toggle{align-self:flex-start;border:1px dashed var(--bd);background:transparent;color:var(--t3);
+  font-family:inherit;font-size:10.5px;line-height:1;padding:4px 9px;border-radius:999px;cursor:pointer;}
+.tkbag-toggle:hover{color:var(--text);border-color:var(--t3);}
 .tk-minicard{display:flex;min-width:0;}
 .tkm-dots{display:flex;flex-wrap:wrap;gap:4px;}
 .tkm-dots .mtk{width:26px;height:26px;font-size:8.5px;}
@@ -6251,8 +6258,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1140';
-const APP_VERSION_LABEL='v260730.1140';
+const APP_VERSION = '260730.1150';
+const APP_VERSION_LABEL='v260730.1150';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18189,6 +18196,15 @@ async function renderMemQuickResult(){
   const more=(!exact.length&&matched.length>show.length)?`<div style="font-size:12px;color:var(--t3);text-align:center;padding:4px 0 8px;">共 ${matched.length} 筆，顯示前 ${show.length} 筆，請輸入更精確的關鍵字</div>`:'';
   box.innerHTML=show.map(card).join('')+more;
 }
+/* 票券袋子：展開／收合其餘組別（2026-07-30 使用者定案：預設顯示 2 組） */
+function tkBagToggle(id,btn){
+  const box=document.getElementById(id); if(!box) return;
+  const more=box.querySelector('.tkbag-more'); if(!more) return;
+  const open=more.hasAttribute('hidden');
+  if(open) more.removeAttribute('hidden'); else more.setAttribute('hidden','');
+  const n=more.children.length;
+  btn.textContent = open ? '－ 收合' : `＋ 還有 ${n} 組`;
+}
 PAGES.members=async function(){
   const[members,coaches,allBk,allTk,types]=await Promise.all([dbGetAll('members'),dbGetAll('coaches'),dbGetAll('bookings'),dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
   // 會員升降級（自動制）：以完整簽到史重播出目前等級
@@ -18383,53 +18399,81 @@ PAGES.members=async function(){
     {label:'',         width:'54px'},
   ];
   const typeMapFull=Object.fromEntries(types.map(t=>[t.id,t]));
-  const tkCell=(m)=>{
-    const t=tkSummary[m.id]||{anyUsable:false};
-    if(!t.anyUsable && !_memPendingIdx[m.id]) return '<span class="tk-chip" style="background:#fbe9e7;color:#c0392b;">無有效票券</span>';
-    // 主票券＝排除自主訓練/折抵券後，可用優先、購買日最新（＝票券分頁最上方那張）
-    const isMain=tk=>{ const tt=typeMapFull[tk.ticket_type_id]||{};
-      if(/折抵/.test(tk.plan_name||'')||/折抵/.test(tt.name||'')) return false;
-      if((tt.category||'')==='自主訓練'||/自主/.test(tt.name||'')) return false;
-      return true; };
-    const mine=allTk.filter(tk=>tkUsableBy(tk,m.id)&&isMain(tk));   // 含共享給他的票（2026-07-28）
-    const byBuy=(a,b)=>String(b.purchase_date||'').localeCompare(String(a.purchase_date||''));
-    const top=mine.filter(tk=>tk.status==='usable'&&(tk.sessions_remaining||0)>0
-        &&(!tk.expire_date||String(tk.expire_date).slice(0,10)>=today)).sort(byBuy)[0]
-      || mine.sort(byBuy)[0];
-    if(!top) return '<span style="color:var(--t3);font-size:12px;">僅自主訓練點數</span>';
-    const myBk=_memBkIdx[m.id]||[];   // 含團課（學員在 member_ids、member_id 是 null）
-    const alloc=allocBookingsToTickets([top],myBk,typeMapFull);
-    const bks=alloc.byTicket[top.id]||[];
-    const direct=bks.filter(b=>b.ticket_id===top.id);
+  /* ── 票券袋子（2026-07-30 使用者定案）──
+     一位會員手上可以有很多組票券，每一組各自獨立使用、各自戳上課日期。
+     列表就照這個模型呈現：一組票券一列圓點，預設顯示 2 組、其餘收合。
+     （原本只挑「一張主要票券」畫，袋子裡其他組在列表完全看不到。） */
+  const TK_ROWS_SHOWN=2;
+  const tkRowHtml=(tk,bks,extra)=>{
+    const direct=bks.filter(b=>b.ticket_id===tk.id);
     const dAtt=direct.filter(b=>b.status==='checked_in'||b.status==='completed').length;
     const dBooked=direct.filter(b=>b.status==='booked').length;
     const att=bks.filter(b=>b.status==='checked_in'||b.status==='completed');
-    const total=Number(top.sessions_total)||0, rem=top.sessions_remaining;
+    const total=Number(tk.sessions_total)||0, rem=tk.sessions_remaining;
     let used;
     if(rem==null) used=Math.max(dAtt,att.length);
     else { const face=Math.max(0,total-(Number(rem)||0)-dBooked); used=Math.max(dAtt,face); }
     used=Math.min(used,total);
-    /* 與預約明細一致（2026-07-30）：配不進這張票的「已預約未上」也帶上去，
-       ticketTokens 會用紅虛線圈接在後面 —— 名單那邊看得到 7/30，列表這邊也要看得到。 */
-    const _catTop=(typeMapFull[top.ticket_type_id]||{}).category||'';
-    const _seen=new Map(); bks.forEach(b=>_seen.set(b.id,(_seen.get(b.id)||0)+1));
-    const _extra=[];
-    myBk.forEach(b=>{
-      if(b.status!=='booked' || String(b.date||'').slice(0,10)<today) return;
-      if(String(b.category||'')!==_catTop) return;
-      const c=_seen.get(b.id)||0;
-      if(c>0){ _seen.set(b.id,c-1); return; }        // 已經被配進這張票了
-      _extra.push(b);
-    });
-    let dots=ticketTokens(top,bks.concat(_extra),typeMapFull,used,null);
+    let dots=ticketTokens(tk,bks.concat(extra||[]),typeMapFull,used,null);
     const MAXDOT=12;
     if(total>MAXDOT){   // 一列容納不下的長票：截前 11 顆＋「+N」
       const spans=dots.split('</span>').filter(x=>x.trim());
       dots=spans.slice(0,MAXDOT-1).join('</span>')+'</span>'
-        +`<span class="mtk" style="background:#eceae4;color:#9a7344;font-size:9px;" title="${top.plan_name||''} 共 ${total} 堂・剩 ${rem??'—'}">+${total-(MAXDOT-1)}</span>`;
+        +`<span class="mtk" style="background:#eceae4;color:#9a7344;font-size:9px;" title="${tk.plan_name||''} 共 ${total} 堂・剩 ${rem??'—'}">+${total-(MAXDOT-1)}</span>`;
     }
-    /* 2026-07-28 使用者指示：不顯示票券名稱——課種由點點顏色表示，圓形卡放大（title 保留完整資訊） */
-    return `<div class="tk-minicard" title="${top.plan_name||'票券'}・剩 ${rem??'—'}"><div class="tkm-dots">${dots}</div></div>`;
+    const _exp=tk.expire_date?`・效期至 ${String(tk.expire_date).slice(0,10)}`:'';
+    return `<div class="tk-minicard" title="${(tk.plan_name||'票券').replace(/"/g,'&quot;')}・剩 ${rem??'—'}／${total}${_exp}"><div class="tkm-dots">${dots}</div></div>`;
+  };
+  const tkCell=(m)=>{
+    const t=tkSummary[m.id]||{anyUsable:false};
+    if(!t.anyUsable && !_memPendingIdx[m.id]) return '<span class="tk-chip" style="background:#fbe9e7;color:#c0392b;">無有效票券</span>';
+    // 袋子裡要列出來的票券：排除自主訓練點數與折抵券（那兩種不是「一組課」）
+    const isMain=tk=>{ const tt=typeMapFull[tk.ticket_type_id]||{};
+      if(/折抵/.test(tk.plan_name||'')||/折抵/.test(tt.name||'')) return false;
+      if((tt.category||'')==='自主訓練'||/自主/.test(tt.name||'')) return false;
+      return true; };
+    const myBk=_memBkIdx[m.id]||[];   // 含團課（學員在 member_ids、member_id 是 null）
+    const byBuy=(a,b)=>String(b.purchase_date||'').localeCompare(String(a.purchase_date||''));
+    const mine=allTk.filter(tk=>tkUsableBy(tk,m.id)&&isMain(tk));   // 含共享給他的票（2026-07-28）
+    const liveOf=tk=>tk.status==='usable'&&(tk.sessions_remaining||0)>0
+        &&(!tk.expire_date||String(tk.expire_date).slice(0,10)>=today);
+    /* 還在用的排前面（購買日新的先），其餘（已用完／過期）排後面 ——
+       整期都排完的票餘額是 0，但課還沒上完，仍要看得到，所以不是直接濾掉。 */
+    const live=mine.filter(liveOf).sort(byBuy);
+    const rest=mine.filter(tk=>!liveOf(tk)).sort(byBuy);
+    /* 沒有還在用的票時，只列最近那一組就好（歷史票十幾張全攤開沒有意義） */
+    const show=live.length?live.concat(rest):rest.slice(0,1);
+    if(!show.length) return '<span style="color:var(--t3);font-size:12px;">僅自主訓練點數</span>';
+    /* ⚠ 整袋一起配一次，不可以每張票各配一次 ——
+       各配一次的話，同一堂還沒上的課會在每一張同類別的票上都冒出一顆紅圈（假的）。 */
+    const alloc=allocBookingsToTickets(show,myBk,typeMapFull);
+    const placed=new Map();
+    show.forEach(tk=>(alloc.byTicket[tk.id]||[]).forEach(b=>placed.set(b.id,(placed.get(b.id)||0)+1)));
+    /* 沒被任何一張票吸收的「已預約未上」＝這幾堂沒有票可扣，需要補票。
+       依課別歸戶，只掛在該課別的第一張票上，用紅虛線圈畫在那一列後面。 */
+    const leftover={};
+    myBk.forEach(b=>{
+      if(b.status!=='booked' || String(b.date||'').slice(0,10)<today) return;
+      const c=placed.get(b.id)||0;
+      if(c>0){ placed.set(b.id,c-1); return; }
+      const k=String(b.category||'');
+      (leftover[k]=leftover[k]||[]).push(b);
+    });
+    const catDone={};
+    const rowOf=tk=>{
+      const k=(typeMapFull[tk.ticket_type_id]||{}).category||'';
+      let extra=[];
+      if(!catDone[k] && leftover[k]){ extra=leftover[k]; catDone[k]=true; }
+      return tkRowHtml(tk, alloc.byTicket[tk.id]||[], extra);
+    };
+    const head=show.slice(0,TK_ROWS_SHOWN).map(rowOf).join('');
+    const moreTk=show.slice(TK_ROWS_SHOWN);
+    if(!moreTk.length) return `<div class="tkbag">${head}</div>`;
+    const gid='tkbag'+(window._tkBagN=(window._tkBagN||0)+1);
+    return `<div class="tkbag" id="${gid}">${head}
+      <div class="tkbag-more" hidden>${moreTk.map(rowOf).join('')}</div>
+      <button type="button" class="tkbag-toggle" onclick="event.stopPropagation();tkBagToggle('${gid}',this)">＋ 還有 ${moreTk.length} 組</button>
+    </div>`;
   };
   /* 2026-07-21 清單簡化：頭像列、空欄位留白、最近上課改相對時間 */
   const rows=pageRows.map(m=>({
