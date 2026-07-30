@@ -98,15 +98,15 @@ ok('　　雙重把關：視窗與寫入都再驗一次條件',
 ok('　　原因寫在程式裡', /過期票在系統裡完全動不了/.test(src));
 
 console.log('\n會員名片的票券頁也要看得到（2026-07-30 使用者回報「邱美珠過期的票券還沒有設定展延按鈕」）');
-ok('★ 過期但沒用完的票會被收進「歷史紀錄」→ 按鈕直接放進那一列',
+ok('★ 過期但沒用完的票會被收進「歷史紀錄」→ 展延按鈕就放在那張卡上',
    /const canExt=isDeskLike\(\)&&tkCanExtend\(t,_tYmd\);/.test(src)
    && /\$\{canExt\?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event\.stopPropagation\(\);openTicketExtend\('\$\{t\.id\}'\)"/.test(src));
 ok('★ 有可展延的票時「歷史紀錄」預設展開，不用自己去點開',
    /<details class="pp-hist"\$\{_extable\.length\?' open':''\}>/.test(src));
 ok('★ 摺疊標題標出有幾張可展延',
    /\$\{_extable\.length\?`<span class="pp-hist-sum">\$\{_extable\.length\} 張可展延<\/span>`:''\}/.test(src));
-ok('　　可展延那一列用品牌金標出來（過期票整片灰，不標會看不到）',
-   /\.pp-hist-row\.pp-hist-ext\{background:#FBF6EC;box-shadow:inset 2px 0 0 var\(--gold-d,#b48a56\);\}/.test(src));
+ok('　　可展延那張卡用品牌金框標出來、且不淡化（過期卡整片灰，不標會看不到）',
+   /\.bkd-tkcard-hist\.bkd-tkcard-ext\{opacity:1;filter:none;background:#FBF6EC;/.test(src));
 ok('　　按鈕上的提示直接寫可延幾天、延到哪天',
    /title="剩 \$\{Number\(t\.sessions_remaining\)\|\|0\} 堂沒用完，可展延 \$\{tkPlanDays\(t\)\} 天至 \$\{String\(tkExtendTo\(t\)\)\.replace\(\/-\/g,'\/'\)\}"/.test(src));
 ok('★ 展延後票券回到可用區，卡片標「已展延（不得退費）」',
@@ -127,6 +127,40 @@ ok('　　原因寫在程式裡', /展延開關只做在管理端的\s*\n\s*票�
   ok('★ 且符合展延條件 → 那一列會出現「展延」按鈕', api.tkCanExtend(t,today)===true);
   ok('★ 可延 84 天至 2026-10-08', api.tkPlanDays(t)===84 && api.tkExtendTo(t)==='2026-10-08');
 }
+
+console.log('\n票券歷史紀錄改用圓形卡（2026-07-30 使用者指示）');
+ok('★ 歷史紀錄沿用可用票券的同一張卡（同一套 ticketTokens，不另做一套）',
+   /return `<div class="bkd-tkcard bkd-tkcard-hist\$\{canExt\?' bkd-tkcard-ext':''\}">/.test(src)
+   && /<div class="mck-dots2" style="margin:8px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null\)\}<\/div>/.test(src));
+ok('★ 原本的一行式列表已移除（看不出哪幾堂上在哪一天）',
+   !/<div class="pp-hist-row\$\{canExt\?' pp-hist-ext':''\}">/.test(src));
+ok('★ 歷史卡縮小＋淡化表示「已結束」，滑過恢復',
+   /\.bkd-tkcard-hist\{margin-bottom:8px;padding:11px 13px;opacity:\.72;filter:saturate\(\.85\);\}/.test(src)
+   && /\.bkd-tkcard-hist:hover\{opacity:1;transition:opacity \.18s;\}/.test(src));
+ok('　　圓點跟著縮小，卡片不會被撐高', /\.bkd-tkcard-hist \.mtk\{transform:scale\(\.92\);\}/.test(src));
+ok('　　狀態（已用畢／已過期／已退費）標在進度旁',
+   /<span class="bkd-tkcard-prog"><b class="num">\$\{used\}<\/b> \/ \$\{total\}　·　\$\{st\}<\/span>/.test(src));
+ok('　　購買日與效期都保留，共享標籤照舊', /購買 \$\{String\(t\.purchase_date\|\|''\)\.slice\(0,10\)\|\|'—'\}　·　效期至/.test(src)
+   && /const shrTag=\(t\.member_id!==PP\.id\)/.test(src));
+ok('　　有合約的歷史票也能點開合約', /onclick="openContractView\('\$\{c\.ctByTicket\[t\.id\]\}'\)">📄 合約<\/button>/.test(src));
+
+console.log('\n更新畫面按鈕統一（2026-07-30 使用者指示：放在標題列時間左邊）');
+ok('★ 抽成共用的一顆鈕', /function refreshBtn\(cls\)\{ return `<button type="button" class="rf-btn/.test(src)
+   && /const RF_ICON=/.test(src));
+ok('★ 三處都改用它：今日事項、總覽、行事曆',
+   (src.match(/\$\{refreshBtn\(\)\}/g)||[]).length===3);
+ok('★ 今日事項：排在日期翻頁鈕左邊',
+   /<div class="tl-title tl-title-date">\$\{refreshBtn\(\)\}<button class="tl-daynav" onclick="dashDayShift\(-1\)"/.test(src));
+ok('★ 行事曆：排在週切換左邊', /<div class="cal-nav">\s*\n\s*\$\{refreshBtn\(\)\}/.test(src));
+ok('★ 總覽：排在「今日／本月總覽」左邊',
+   /\$\{refreshBtn\(\)\}<span style="font-size:11\.5px;color:var\(--t3\);letter-spacing:0\.08em;font-weight:600;">\$\{_dashRange==='month'\?'本月':'今日'\}總覽<\/span>/.test(src));
+ok('　　舊的三種樣式都移除（不留兩套）',
+   !/class="tl-fullcal" onclick="dashManualRefresh\(\)"/.test(src)
+   && !/class="lp-iconbtn" title="更新畫面"/.test(src)
+   && !/title="刷新（重新抓取最新資料）"/.test(src));
+ok('　　深色標題列（今日事項）上有專屬配色，看得見',
+   /\.tl-panel-top \.rf-btn\{background:rgba\(255,255,255,\.14\);/.test(src));
+ok('　　有 aria-label（只有圖示，讀螢幕聽不出來）', /aria-label="更新畫面"/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

@@ -28,8 +28,9 @@ console.log('票券金額與備註');
   eq('　　沒有備註就只顯示 $0', /\$0</.test(f({amount_paid:0})), true);
   eq('★ 只有櫃檯／管理員看得到金額（教練與會員端不顯示）', g({amount_paid:38400}), '');
   eq('　　null 不炸', g(null), '');
-  ok('★ 會員票券卡與人物檢視兩處都帶上',
-     (src.match(/\$\{tkMoneyHtml\(t\)\}/g)||[]).length===2);
+  // 2026-07-30：歷史紀錄也改用圓形卡，所以第三處（歷史卡）也帶上金額
+  ok('★ 會員票券卡、人物檢視、歷史卡三處都帶上',
+     (src.match(/\$\{tkMoneyHtml\(t\)\}/g)||[]).length===3);
   ok('　　金額用等寬數字、0 元依備註分色',
      /\.tk-amt\{font-family:var\(--num\),inherit;/.test(src)
      && /\.tk-amt-gift\{color:var\(--green\);\}/.test(src)
