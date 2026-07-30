@@ -2677,6 +2677,11 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .pp-dc-val{font-family:var(--font-en);font-size:25px;font-weight:700;color:var(--text);line-height:1.25;}
 .pp-dc-val small{font-family:var(--font-zh);font-size:12.5px;font-weight:400;color:var(--t3);margin-left:5px;}
 .pp-dc-none{font-size:19px;color:var(--t3);font-weight:400;}
+/* 票券卡：剩餘堂數拆成「教練課 2　自主 1」（2026-07-30 使用者指示）——
+   單一總數看不出剩的是哪一種課，櫃檯得點進去才知道。 */
+.pp-dc-split{display:flex;flex-wrap:wrap;gap:3px 13px;align-items:baseline;}
+.pp-dcs{font-family:var(--font-zh);font-size:12px;font-weight:600;color:var(--t2);white-space:nowrap;}
+.pp-dcs b{font-family:var(--font-en);font-size:22px;font-weight:700;color:var(--text);margin-right:3px;}
 .pp-dc-sub{font-size:11.5px;color:var(--t3);line-height:1.5;}
 .pp-dc-more{font-size:11.5px;color:var(--green);font-weight:600;margin-top:4px;}
 @media(max-width:520px){ .pp-dash{grid-template-columns:1fr;} }
@@ -5254,7 +5259,18 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 #bk-card-pop .evc-roster{width:100%;background:#fff;border:1px solid var(--bd);border-radius:12px;
   box-shadow:0 6px 20px rgba(60,50,38,.18);padding:8px;display:flex;flex-direction:column;gap:5px;
   max-height:min(46vh,300px);overflow-y:auto;-webkit-overflow-scrolling:touch;}
-#bk-card-pop .evc-roster.evr-up{order:-1;}   /* 代課名單排在按鈕列上方 */
+/* 2026-07-30 使用者指示：代課名單改掛在小卡「左側」。
+   原本用 order:-1 插在按鈕列上方，面板在 flex 流內 → 彈窗被撐高、整張小卡往上跳
+   （使用者回報「擠壓畫面」）。改成絕對定位浮在左邊，彈窗本身完全不動。
+   .mtp 是 position:fixed，本身就是定位基準；左邊放不下時 JS 會補 .evr-side-r 翻到右邊。 */
+#bk-card-pop .evc-roster.evr-up{position:absolute;right:100%;top:0;margin-right:10px;
+  width:max-content;min-width:172px;max-width:min(240px,42vw);}
+#bk-card-pop .evc-roster.evr-up.evr-side-r{right:auto;left:100%;margin-right:0;margin-left:10px;}
+/* 手機：左右都塞不下 → 回到直式（排在按鈕列上方） */
+@media(max-width:600px){
+  #bk-card-pop .evc-roster.evr-up{position:static;right:auto;top:auto;margin:0;order:-1;
+    width:100%;min-width:0;max-width:none;}
+}
 #bk-card-pop .evr-title{font-size:11px;font-weight:800;color:var(--t2);padding:2px 6px 0;}
 #bk-card-pop .evr-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
   font-size:13px;font-weight:700;padding:9px 12px;border-radius:9px;background:var(--card2);
@@ -6386,8 +6402,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1341';
-const APP_VERSION_LABEL='v260730.1341';
+const APP_VERSION = '260730.1359';
+const APP_VERSION_LABEL='v260730.1359';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16553,7 +16569,8 @@ async function bkOrbitSub(id){
   const coaches = await dbGetAll('coaches');
   const list = coaches.filter(c=>isTeachable(c) && c.invite_status!=='pending' && c.id!==b.coach_id);
   const host = bkPanelHost() || el;
-  // 2026-07-20 使用者指示：代課名單往代課按鈕（卡片左上）「上方」展開，不吊在卡片下方
+  /* 2026-07-30 使用者指示：代課名單改掛在小卡「左側」（原本在上方會把彈窗撐高、擠壓畫面）。
+     .evr-up 這個 class 名保留 —— 舊的行事曆課卡路徑（window._expandedBkEl）仍靠它往上展開。 */
   const html = `<div class="evc-roster evr-up" onclick="event.stopPropagation()">`
     + `<div class="evr-title">代課教練（點選改派）</div>`
     /* 教練請假（2026-07-21 商業規則二）：退票＋保留 booking(status=coach_leave)；
@@ -16566,6 +16583,15 @@ async function bkOrbitSub(id){
     + `</div>`;
   const old = host.querySelector('.evc-roster'); if(old) old.remove();
   host.insertAdjacentHTML('beforeend', html);
+  /* 面板浮在小卡左側（CSS），這裡只處理放不下的情況：
+     左邊不夠 → 翻到右邊；下緣超出視窗 → 往上收。手機端 CSS 已改回直式，不必調。 */
+  const pane = host.querySelector('.evc-roster.evr-up');
+  if(pane && !isMobileLayout()){
+    const hr = host.getBoundingClientRect();
+    if(hr.left - pane.offsetWidth - 10 < 8) pane.classList.add('evr-side-r');
+    const pr = pane.getBoundingClientRect();
+    if(pr.bottom > window.innerHeight - 8) pane.style.top = Math.round(window.innerHeight - 8 - pr.height - hr.top)+'px';
+  }
 }
 /* 教練請假（2026-07-21 商業規則二）：①有扣票→退回 1 堂（refund 帳本）；
    ②booking 保留、status=coach_leave；③會員屆時到場可照常簽到（fn_checkin_booking 不擋
@@ -23278,7 +23304,10 @@ function ppRecordHtml(){
       <div class="pp-card-tip">點卡片直接在此展開內容。</div>
       <div class="pp-dash" style="grid-template-columns:repeat(2,1fr);">
         ${ppDashCard('ticket','票券',
-          (c.tkLeft!=null?`${c.tkLeft}<small>堂可用</small>`:''), '持有票券與剩餘堂數', `ppShowRecord('tickets')`)}
+          ((c.tkSplit&&c.tkSplit.length)
+            ? `<span class="pp-dc-split">${c.tkSplit.map(x=>`<span class="pp-dcs"><b>${x[1]}</b>${x[0]}</span>`).join('')}</span>`
+            : (c.tkLeft!=null?`${c.tkLeft}<small>堂可用</small>`:'')),
+          (c.tkLeft ? `共 ${c.tkLeft} 堂可用` : '持有票券與剩餘堂數'), `ppShowRecord('tickets')`)}
         ${ppDashCard('calendar','預約紀錄',
           (c.bkCount!=null?`${c.bkCount}<small>筆</small>`:''), '歷史與未來預約', `ppShowRecord('bookings')`)}
         ${ppDashCard('money','交易',
@@ -23592,8 +23621,24 @@ async function ppLoadCtx(){
     const used=usedSessionsMap(myBk);
     // 剩餘票券摘要：只計「仍有效（未過期）且還有剩餘堂數」的票券（歷史/已用完/已過期不計）
     const _todayYmd=ymd(TODAY);
-    c.tkLeft=myTk.filter(t=>t.status==='usable' && (!t.expire_date||String(t.expire_date).slice(0,10)>=_todayYmd))
-      .reduce((s,t)=>s+Math.max(0,(Number(t.sessions_remaining)||0)),0);
+    const _liveTk=myTk.filter(t=>t.status==='usable' && (!t.expire_date||String(t.expire_date).slice(0,10)>=_todayYmd));
+    c.tkLeft=_liveTk.reduce((s,t)=>s+Math.max(0,(Number(t.sessions_remaining)||0)),0);
+    /* 2026-07-30 使用者指示：票券卡要拆開顯示「教練課 2　自主 1」。
+       折抵券自成一格 —— 它不是一組課，混進教練課會讓人以為還有正課可上。 */
+    c.tkSplit=(function(){
+      const LB={'私人教練':'教練課','小班肌力':'團體課','自主訓練':'自主','運動按摩':'按摩','體驗':'體驗','場租':'場租'};
+      const ORDER=['教練課','團體課','自主','按摩','體驗','折抵','場租','其他'];
+      const acc={};
+      _liveTk.forEach(t=>{
+        const n=Math.max(0,Number(t.sessions_remaining)||0); if(!n) return;
+        const tt=(window._ttCache||[]).find(x=>x.id===t.ticket_type_id)||{};
+        const nm=(t.plan_name||'')+' '+(tt.name||'');
+        const k=(String(t.ticket_type_id||'').indexOf('tt-discount-')===0||nm.indexOf('折抵')>=0)
+          ? '折抵' : (LB[ticketCategoryOf(t)]||'其他');
+        acc[k]=(acc[k]||0)+n;
+      });
+      return ORDER.filter(k=>acc[k]).map(k=>[k,acc[k]]);
+    })();
     c.bkCount=myBk.length;
     // 交易＝新系統銷售（purchases）＋舊系統匯入票券的購買紀錄（amount_paid>0、非 TK- 開頭
     // ——新系統賣票同時會寫 purchases 與 TK- 票，排除 TK- 避免同筆交易列兩次）
