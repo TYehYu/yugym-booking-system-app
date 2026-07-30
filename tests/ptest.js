@@ -135,6 +135,26 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('本堂 7/29 為已預約且標金框', /mtk-booked mtk-cur[^>]*>7\/29</.test(r.tkCircleHtml));
     chk('後續 8/5 也顯示', r.tkCircleHtml.includes('>8/5<'));
   }
-  console.log(`\n${pass} passed, ${fail} failed`);
+  
+/* 重設密碼（2026-07-30 使用者指示）：員工忘記密碼 → 一鍵還原成預設密碼 88888888，
+   並強制他下次登入自己重設，櫃檯不用替他想一組新的、也不會有人一直用預設密碼。 */
+console.log('\n員工重設密碼');
+{
+  const src=require('fs').readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const ok2=(n,c)=>{ if(c){pass++;console.log('  \u2713 '+n);} else {fail++;console.log('  \u2717 '+n);} };
+  ok2('\u2605 預設密碼是 88888888', /const STAFF_DEFAULT_PW='88888888';/.test(src));
+  ok2('\u2605 不再要櫃檯輸入新密碼（改成一鍵還原）',
+     !/id="rsp-pw"/.test(src) && /還原為預設密碼<\/button>/.test(src));
+  ok2('\u2605 送出時用預設密碼', /body:JSON\.stringify\(\{action:'reset_password',email,password:STAFF_DEFAULT_PW\}\)/.test(src));
+  ok2('\u2605 同時打開 must_setup（下次登入強制自己設定）',
+     /\.update\(\{must_setup:true\}\)\.eq\('id',id\)/.test(src));
+  ok2('\u2605 must_setup 寫入失敗要講出來，不能默默放過',
+     /密碼已還原，但「強制改密碼」設定失敗/.test(src));
+  ok2('   首次登入頁不接受沿用預設密碼', /if\(p1===STAFF_DEFAULT_PW\)\{err\.textContent='請勿沿用預設密碼/.test(src));
+  ok2('   視窗上直接把預設密碼顯示出來給櫃檯轉告', /letter-spacing:\.14em;text-align:center;font-family:var\(--num\),inherit;">\$\{STAFF_DEFAULT_PW\}/.test(src));
+  ok2('   沒有手機帳號的員工擋掉', /if\(!c\.phone\)\{showToast\('此員工沒有手機帳號，無法重設'\);return;\}/.test(src));
+}
+
+console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail?1:0);
 })();

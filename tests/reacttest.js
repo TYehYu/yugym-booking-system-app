@@ -117,5 +117,19 @@ console.log('已預約但還沒簽到的票券不進歷史');
      _isHistoryTk(T({sessions_remaining:0,_pending:4,expire_date:'2026-07-01'}))===true);
 }
 
+/* 2026-07-30 使用者回報（Jackie）：7/24 買的團課四堂票 8/01 才開始、一堂都還沒上，
+   卻標成「已用畢 4/4」收進歷史紀錄。成因是「已預約未上」的團課只算新制預約（BK- 開頭），
+   她那筆 8/01 是匯入的（IMPB-）→ 算不到 → 帳面已用＝4。 */
+console.log('\n團課「已預約未上」要含匯入的未來預約');
+{
+  const two=(src.match(/未來的課一定還沒上/g)||[]).length;
+  ok('★ 會員票券頁與人物檢視都改了（兩處）', two>=2, two);
+  ok('★ 未來的課不看 BK- 前綴（匯入的預約也算）',
+     (src.match(/if\(String\(b\.date\|\|''\)<ymd\(TODAY\) && String\(b\.id\|\|''\)\.indexOf\('BK-'\)!==0\) return;/g)||[]).length===2);
+  ok('　　過去未簽到的仍只算新制預約（匯入舊預約當初沒扣票，扣了會重複）',
+     /過去未簽到的才維持「只算新制預約」/.test(src));
+  ok('　　已簽到的一律不算待上', (src.match(/if\(at==='checked_in'\) return;/g)||[]).length>=2);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

@@ -6131,8 +6131,8 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
   <!-- 教練端手機版：右下浮動打卡 FAB -->
   <button id="punch-fab" class="punch-fab" style="display:none;"></button>
   <!-- 教練端手機版：底部固定導覽列 -->
-const APP_VERSION = '260730.0114';
-const APP_VERSION_LABEL='v260730.0114';
+const APP_VERSION = '260730.0915';
+const APP_VERSION_LABEL='v260730.0915';
 
 <div id="toast"></div>
 
@@ -18134,9 +18134,14 @@ async function openMemberDetail(member_id){
     let n=0;
     (bookings||[]).forEach(b=>{
       if(!b || b.category!=='小班肌力' || b.status==='cancelled') return;
-      if(String(b.id||'').indexOf('BK-')!==0) return;
       const at=(b.attendance&&typeof b.attendance==='object')?b.attendance[member_id]:null;
       if(at==='checked_in') return;                       // 已簽到＝真的用掉了
+      /* 2026-07-30 使用者回報（Jackie）：7/24 買的四堂團課票 8/01 才開始，一堂都還沒上，
+         卻被標成「已用畢」收進歷史紀錄 —— 因為她那筆 8/01 的預約是匯入的（IMPB-），
+         被下面的 BK- 條件濾掉，算不到任何「已預約未上」。
+         未來的課一定還沒上，不管哪個系統建的都要算；過去未簽到的才維持「只算新制預約」
+         （匯入的舊預約當初沒扣過票，扣了會重複扣）。 */
+      if(String(b.date||'')<ymd(TODAY) && String(b.id||'').indexOf('BK-')!==0) return;
       (mids(b)||[]).forEach(id=>{ if(id===member_id) n++; });   // 同一人多名額就算多堂
     });
     return n;
@@ -22273,9 +22278,10 @@ function ppRecordHtml(){
           let n=0;
           (c.myBk||[]).forEach(b=>{
             if(!b || b.category!=='小班肌力' || b.status==='cancelled') return;
-            if(String(b.id||'').indexOf('BK-')!==0) return;
             const at=(b.attendance&&typeof b.attendance==='object')?b.attendance[PP.id]:null;
             if(at==='checked_in') return;
+            // 未來的課一定還沒上，匯入的預約也要算（2026-07-30 Jackie 案例，同 openMemberDetail）
+            if(String(b.date||'')<ymd(TODAY) && String(b.id||'').indexOf('BK-')!==0) return;
             (mids(b)||[]).forEach(x=>{ if(x===PP.id) n++; });
           });
           return n;
@@ -22975,21 +22981,28 @@ function hrTypeHint(){
 }
 // 〔已移除〕舊版 saveHrEdit（單一大表單）→ 已拆為 saveHrEdit（基本資料）＋ saveHrSalary（薪資規則）
 
+/* 重設密碼（2026-07-30 使用者指示）——員工忘記密碼時櫃檯不必替他想一組新的：
+   一鍵還原成預設密碼 88888888，並把 must_setup 打開，他下次登入會被帶到
+   「首次登入設定」自己設一組新的（那頁不接受沿用預設密碼）。 */
 function openResetStaffPw(id){
   dbGet('coaches',id).then(c=>{
     if(!c){showToast('找不到員工');return;}
+    if(!c.phone){showToast('此員工沒有手機帳號，無法重設');return;}
     showModal(`<div class="modal-title">重設密碼</div>
-      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">為 <b>${c.name||'此員工'}</b>（${c.phone||'—'}）設定一組新密碼。設定後請告知該員工，並建議他登入後自行修改。</div>
-      <div class="form-row"><label>新密碼（至少 6 個字元）</label><input type="password" id="rsp-pw" placeholder="輸入新密碼"></div>
+      <div style="font-size:13px;color:var(--text);line-height:1.9;padding:2px 0 10px;">
+        將 <b>${c.name||'此員工'}</b>（帳號 ${fmtPhone(c.phone)}）的密碼還原成預設密碼：</div>
+      <div style="background:var(--card2);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:12px;
+                  font-size:22px;font-weight:800;letter-spacing:.14em;text-align:center;font-family:var(--num),inherit;">${STAFF_DEFAULT_PW}</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.8;background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:9px;padding:10px 12px;">
+        請告知他用這組密碼登入，系統會要求他<b>當場設定自己的新密碼</b>（不能沿用預設密碼）。</div>
       <input type="hidden" id="rsp-id" value="${c.id}">
-      <input type="hidden" id="rsp-phone" value="${c.phone||''}">
-      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitResetStaffPw()">確認重設</button></div>`);
+      <input type="hidden" id="rsp-phone" value="${c.phone}">
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitResetStaffPw()">還原為預設密碼</button></div>`);
   });
 }
 async function submitResetStaffPw(){
-  const pw=document.getElementById('rsp-pw').value;
+  const id=document.getElementById('rsp-id').value;
   const phone=document.getElementById('rsp-phone').value;
-  if(!pw||pw.length<6){showToast('密碼至少 6 個字元');return;}
   if(!phone){showToast('此員工沒有帳號（手機），無法重設');return;}
   const email=toEmail('staff',phone);
   try{
@@ -22998,11 +23011,22 @@ async function submitResetStaffPw(){
     const res=await fetch(base+'/functions/v1/create-staff-account',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+window.YUGYM_CONFIG.anonKey,'apikey':window.YUGYM_CONFIG.anonKey},
-      body:JSON.stringify({action:'reset_password',email,password:pw})
+      body:JSON.stringify({action:'reset_password',email,password:STAFF_DEFAULT_PW})
     });
     const out=await res.json();
     if(!res.ok||out.error){showToast('重設失敗：'+(out.error||('伺服器回應 '+res.status)));return;}
-    closeModal();showToast('已重設密碼，請告知該員工');
+    /* 打開 must_setup → 他下次登入會被強制設定自己的密碼。
+       這步失敗不能默默過去：不然密碼已還原成大家都知道的 88888888 卻不強制改。 */
+    try{
+      const{error}=await sb.from('employees').update({must_setup:true}).eq('id',id);
+      if(error) throw error;
+      dbCacheClear('coaches');
+    }catch(e){
+      showToast('密碼已還原，但「強制改密碼」設定失敗：'+((e&&e.message)||e)+'　請再試一次');
+      return;
+    }
+    closeModal();
+    showToast(`已還原為預設密碼 ${STAFF_DEFAULT_PW}，請告知該員工登入後自行設定`);
   }catch(e){showToast('無法連線重設服務：'+(e.message||e));}
 }
 function payRoleFields(prefix,c,showRate){
