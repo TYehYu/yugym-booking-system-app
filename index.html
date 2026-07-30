@@ -2345,6 +2345,9 @@ tr:hover td{background:var(--card2);}
 .mck-prog .mck-prog-tot{font-size:12.5px;color:var(--t3);}
 /* 卡片淡化（歷史/過期票） */
 .mck-dim2{opacity:0.46;filter:saturate(0.7);}
+/* 2026-07-30：過期票整張淡化，但如果卡上有「展延」開關就別淡 —— 那是要人操作的東西，
+   父層 opacity 沒辦法被子層蓋回來，只能整張卡不淡化。 */
+.mwtk-card.mck-dim2:has(.tk-ext){opacity:1;filter:none;}
 .mck-dim2:hover{opacity:0.72;transition:opacity .18s;}
 /* 後台會員卡精簡版 */
 .mwtk-card{position:relative;background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:16px 18px 16px 22px;margin:10px 0;overflow:hidden;box-shadow:0 2px 10px rgba(60,50,30,0.05);}
@@ -2353,6 +2356,19 @@ tr:hover td{background:var(--card2);}
 .mwtk-name{font-weight:700;font-size:15px;color:var(--text);}
 .mwtk-sub{font-size:11.5px;color:var(--t3);margin-top:3px;}
 .mwtk-foot{display:flex;justify-content:space-between;align-items:center;margin-top:4px;}
+/* 票券展延（2026-07-30 使用者指示）：過期但沒用完的票，櫃檯可展延一次、期限同原方案。
+   金色＝需要留意的次要提示（品牌色階：紅>金>綠）。 */
+.tk-ext{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding-top:10px;
+  border-top:1px dashed var(--bd);}
+.tk-ext .switch{width:40px;height:23px;}
+.tk-ext .switch-slider::before{height:17px;width:17px;}
+.tk-ext .switch input:checked + .switch-slider::before{transform:translateX(17px);}
+.tk-ext-t{font-size:12px;color:var(--t2);line-height:1.5;}
+.tk-ext-t b{font-family:var(--font-en),inherit;color:var(--text);font-weight:700;}
+.tk-ext-no{margin-left:auto;font-size:10.5px;font-weight:700;color:var(--gold-d,#b48a56);
+  background:#f7efe0;border-radius:999px;padding:3px 9px;white-space:nowrap;}
+.tk-ext-on .tk-ext-t{color:var(--text);}
+@media(max-width:600px){ .tk-ext-no{margin-left:0;} }
 .mck-exp{font-size:12px;color:var(--t3);text-align:right;white-space:nowrap;}
 .mck-toggle{text-align:center;font-size:12px;color:var(--gold-d);font-weight:600;margin-top:16px;letter-spacing:0.04em;}
 .mck-dim{opacity:0.5;}
@@ -6423,8 +6439,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1505';
-const APP_VERSION_LABEL='v260730.1505';
+const APP_VERSION = '260730.1522';
+const APP_VERSION_LABEL='v260730.1522';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6812,6 +6828,119 @@ function fmtPhone(p){ return normPhone(p)||'—'; }
 /* 傳入票券物件（第 2 參數）時可分辨「尚未開通」與「永久有效」——
    兩者 expire_date 都是 null，但意義完全相反：
    未開通＝還沒約第一堂、效期還沒起算；永久有效＝舊方案本來就不設效期。 */
+/* ── 票券展延（2026-07-30 使用者指示；對應合約〔展延規則〕）──
+   「課程到期後可申請展延一次（展延期限同原方案期限）；展延之課程不得申請退費。」
+   起因：邱美珠有一張還沒用完就過期的票，過期票在系統裡完全動不了，只能重發一張假票蓋過去。
+   原方案期限＝這張票原本的 start_date → expire_date 天數；抓不到就退回 valid_days／票種預設。 */
+function tkPlanDays(t){
+  if(!t) return null;
+  const from = t.extended_from || t.expire_date;   // 已展延過的以「原到期日」為準，重算才穩定
+  const st = t.start_date || t.purchase_date;
+  if(st && from){
+    const d = Math.round((parseYmd(String(from).slice(0,10)) - parseYmd(String(st).slice(0,10)))/86400000);
+    if(d > 0) return d;
+  }
+  if(Number(t.valid_days) > 0) return Number(t.valid_days);
+  const tt = (window._ttCache||[]).find(x=>x.id===t.ticket_type_id);
+  if(tt && Number(tt.validity_days) > 0) return Number(tt.validity_days);
+  return null;
+}
+function tkIsExtended(t){ return !!(t && t.extended_from); }
+/* 展延確認視窗（2026-07-30 使用者指示）：一次為限，期限同原方案，展延後不得申請退費。 */
+async function openTicketExtend(id){
+  const t=await dbGet('member_tickets',id);
+  if(!t){ showToast('找不到票券'); return; }
+  if(tkIsExtended(t)){ showToast('這張票券已經展延過了（一次為限）'); return; }
+  if(!tkCanExtend(t)){ showToast('這張票券不符合展延條件（需為已過期、且還有剩餘堂數）'); return; }
+  const days=tkPlanDays(t), to=tkExtendTo(t), rem=Number(t.sessions_remaining)||0;
+  const f=d=>String(d).slice(0,10).replace(/-/g,'/');
+  showModal(`<div class="modal-title">票券展延</div>
+    <div style="font-size:13.5px;color:var(--text);padding:2px 0 12px;">
+      ${t.plan_name||'票券'}${t.format?' · '+String(t.format).toUpperCase():''}　·　剩 <b>${rem}</b> 堂</div>
+    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:13px 15px;font-size:13px;line-height:2;">
+      <div>原到期日　<b class="num">${f(t.expire_date)}</b></div>
+      <div>展延期限　<b class="num">${days}</b> 天（同原方案期限）</div>
+      <div style="color:var(--green);font-weight:700;">展延後到期　<b class="num">${f(to)}</b></div>
+    </div>
+    <div style="background:#f7efe0;border:1.5px solid #e6d3ae;border-radius:12px;padding:12px 14px;margin-top:10px;
+      font-size:12.5px;color:#8a5e28;line-height:1.9;">
+      依合約〔展延規則〕：課程到期後可申請<b>展延一次</b>，展延期限同原方案期限；<br>
+      <b>展延之課程不得申請退費。</b>確認後這張票券會標記為不得退費。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="doTicketExtend('${id}')">確認展延至 ${f(to)}</button></div>`);
+}
+async function doTicketExtend(id){
+ try{
+  const t=await dbGet('member_tickets',id);
+  if(!t){ showToast('找不到票券'); return; }
+  if(tkIsExtended(t)){ showToast('這張票券已經展延過了'); return; }
+  if(!tkCanExtend(t)){ showToast('這張票券不符合展延條件'); return; }
+  const to=tkExtendTo(t), days=tkPlanDays(t), from=String(t.expire_date).slice(0,10);
+  t.extended_from=from;
+  t.extended_at=new Date().toISOString();
+  t.extended_by=(SESSION&&SESSION.id)||null;
+  t.no_refund=true;
+  t.expire_date=to;
+  if(t.status==='expired') t.status='usable';   // 期限延了就回可用（堂數本來就還有）
+  await dbPut('member_tickets',t);
+  try{ await logTicket(id,'adjust',0,null,SESSION&&SESSION.id,
+    `展延一次：${from} → ${to}（${days} 天，同原方案期限）；依合約展延之課程不得申請退費`); }catch(_){}
+  /* type 用 'announce'：notifications.type 現有值為 self_book/self_move/booking/announce/cancel/payment，
+     沒有票券專用類別，硬塞新值會被資料庫擋下（票券展延屬於通知性質，歸 announce）。 */
+  try{ if(t.member_id) await pushNotification(t.member_id,'announce','票券已展延',
+    `您的「${t.plan_name||'票券'}」已展延至 ${to.replace(/-/g,'/')}（剩 ${t.sessions_remaining} 堂）。依合約，展延之課程不得申請退費。`); }catch(_){}
+  closeModal();
+  showToast(`已展延至 ${to.replace(/-/g,'/')}`);
+  navTo(CUR_PAGE);
+ }catch(e){ showToast('展延失敗：'+((e&&e.message)||e)); }
+}
+/* 撤銷展延（只給管理員）：按錯了要救得回來。還原原到期日與退費資格，並留下帳本紀錄。 */
+async function undoTicketExtend(id){
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以撤銷展延'); return; }
+  const t=await dbGet('member_tickets',id);
+  if(!t||!tkIsExtended(t)){ showToast('這張票券沒有展延紀錄'); return; }
+  const back=String(t.extended_from).slice(0,10), was=String(t.expire_date).slice(0,10);
+  showModal(`<div class="modal-title">撤銷展延</div>
+    <div style="font-size:13px;color:var(--t2);line-height:1.9;padding:2px 0 12px;">
+      ${t.plan_name||'票券'} 的到期日會還原為 <b class="num">${back.replace(/-/g,'/')}</b>（目前 ${was.replace(/-/g,'/')}），
+      「不得退費」的標記一併解除，展延額度也會還回去。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-danger" onclick="doUndoTicketExtend('${id}')">確定撤銷</button></div>`);
+}
+async function doUndoTicketExtend(id){
+ try{
+  const t=await dbGet('member_tickets',id);
+  if(!t||!tkIsExtended(t)){ showToast('這張票券沒有展延紀錄'); return; }
+  const back=String(t.extended_from).slice(0,10), was=String(t.expire_date).slice(0,10);
+  t.expire_date=back; t.extended_from=null; t.extended_at=null; t.extended_by=null; t.no_refund=false;
+  if(back < ymd(TODAY)) t.status='expired';
+  await dbPut('member_tickets',t);
+  try{ await logTicket(id,'adjust',0,null,SESSION&&SESSION.id,`撤銷展延：到期日還原 ${was} → ${back}`); }catch(_){}
+  closeModal();
+  showToast('已撤銷展延');
+  navTo(CUR_PAGE);
+ }catch(e){ showToast('撤銷失敗：'+((e&&e.message)||e)); }
+}
+// 展延後的新到期日（原到期日 ＋ 原方案期限）
+function tkExtendTo(t){
+  const days = tkPlanDays(t);
+  const from = t && (t.extended_from || t.expire_date);
+  if(!days || !from) return null;
+  const d = parseYmd(String(from).slice(0,10));
+  d.setDate(d.getDate() + days);
+  return ymd(d);
+}
+/* 可以展延的條件：已過期、還有沒用完的堂數、還沒展延過、算得出期限。
+   已退費／作廢的不行；永久有效的票本來就不會過期，也不需要。 */
+function tkCanExtend(t, today){
+  if(!t) return false;
+  const td = today || ymd(TODAY);
+  if(['refunded','void','cancelled'].includes(t.status)) return false;
+  if(!((Number(t.sessions_remaining)||0) > 0)) return false;
+  if(tkIsExtended(t)) return false;
+  if(!t.expire_date || String(t.expire_date).slice(0,10) >= td) return false;
+  return !!tkExtendTo(t);
+}
 function fmtExpire(d,t){
   if(!d && t && t.valid_days && !t.activated_at) return `未開通（首堂課後 ${t.valid_days} 天）`;
   return d || '永久有效';
@@ -11252,6 +11381,8 @@ function lottoVipSet(members){
   return s;
 }
 function lottoRuleNote(t){
+  if(t && (t.no_refund || tkIsExtended(t)) && t.source!=='lottery')
+    return '　已展延：不得申請退費。';   // 2026-07-30 使用者指示（合約〔展延規則〕）
   return (t && t.source==='lottery') ? '　抽獎獎品：永久有效，不得轉讓或退費。' : '';
 }
 const LOTTO_PRIZES=[
@@ -25051,6 +25182,24 @@ PAGES.m_tickets=async function(){
                           : rk===2 ? '<span class="mck-badge">已到期</span>'
                           : rk===1 ? '<span class="mck-badge">已使用完</span>'
                           : `<span class="tag ${stTag[t.status]||'tag-ok'}">${stLabel[t.status]||'可用'}</span>`;
+        /* 展延開關（2026-07-30 使用者指示）：過期但沒用完的票可展延一次，
+           期限同原方案；展延後不得申請退費（合約〔展延規則〕）。只有櫃檯／管理員看得到。 */
+        const _canExt = isDeskLike() && tkCanExtend(t, today);
+        const extRow = tkIsExtended(t)
+          ? `<div class="tk-ext tk-ext-on">
+               <span class="tk-ext-t">已展延　<b>${String(t.extended_from).slice(0,10).replace(/-/g,'/')}</b> → <b>${String(t.expire_date).slice(0,10).replace(/-/g,'/')}</b>（${tkPlanDays(t)} 天，同原方案）</span>
+               <span class="tk-ext-no">不得申請退費</span>
+               ${SESSION&&SESSION.role==='admin'?`<button class="btn btn-ghost btn-sm" onclick="undoTicketExtend('${t.id}')">撤銷</button>`:''}
+             </div>`
+          : (_canExt
+            ? `<div class="tk-ext">
+                 <label class="switch-row" style="margin:0;" onclick="event.preventDefault();openTicketExtend('${t.id}')">
+                   <span class="switch"><input type="checkbox"><span class="switch-slider"></span></span>
+                   <span class="tk-ext-t">展延一次　·　可延至 <b>${String(tkExtendTo(t)).replace(/-/g,'/')}</b>（${tkPlanDays(t)} 天，同原方案）</span>
+                 </label>
+                 <span class="tk-ext-no">展延後不得退費</span>
+               </div>`
+            : '');
         const accent = 'mck-'+(ty?ty.color:'pt');
         return `<div class="mwtk-card ${accent}${dim?' mck-dim2':''}">
           <div class="mwtk-head">
@@ -25069,6 +25218,7 @@ PAGES.m_tickets=async function(){
             <div class="mck-prog"><b>${used}</b><span class="mck-prog-tot">/ ${total} 堂</span>${rem>0&&rk===0?`<span style="font-size:11.5px;color:var(--t3);margin-left:8px;">剩 ${rem} 堂</span>`:''}</div>
             <button class="btn btn-ghost btn-sm" onclick="viewLogs('${t.id}')">使用紀錄</button>
           </div>
+          ${extRow}
         </div>`;
       }).join('')}</div>`;
 
