@@ -6251,8 +6251,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1107';
-const APP_VERSION_LABEL='v260730.1107';
+const APP_VERSION = '260730.1128';
+const APP_VERSION_LABEL='v260730.1128';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18194,6 +18194,23 @@ PAGES.members=async function(){
   const typeColorMap=Object.fromEntries(types.map(t=>[t.id,t.color]));
   const typeNameMap=Object.fromEntries(types.map(t=>[t.id,t.name]));
   const today=ymd(TODAY);
+  /* 2026-07-30 使用者回報（游晴雅）：她今天還有一堂團課，會員列表的票券欄卻是空的。
+     兩個成因，兩個都在這裡修：
+     ① 這格只認「還有剩餘堂數的票」。團課是預約當下就扣課，整期都排完的人餘額就是 0，
+        但課還沒上完 —— 於是被判成「無有效票券」什麼都不畫。
+     ② 下面組 myBk 時只比 member_id，而團課的 member_id 是 null（學員在 member_ids），
+        就算走到畫圓點那一步，團課的課也一筆都撈不到。
+     先建兩個索引，避免每位會員都掃一次上萬筆預約。 */
+  const _memBkIdx={};      // 會員 → 他的預約（含團課，一個名額一筆）
+  const _memPendingIdx={}; // 會員 → 是否還有「今天以後、已預約未簽到」的課
+  (allBk||[]).forEach(b=>{
+    if(!b || b.status==='cancelled') return;
+    const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
+    ids.forEach(mid=>{
+      (_memBkIdx[mid]=_memBkIdx[mid]||[]).push(b);
+      if(b.status==='booked' && String(b.date||'').slice(0,10)>=today) _memPendingIdx[mid]=true;
+    });
+  });
   // 每位會員的票券彙整：教練課剩餘 / 友善課 / 團課剩餘 / 補課券 / 是否有有效票
   const tkSummary={};
   // 教練類課程 = 一般教練課 + 友善教練課（不含團課、補課券、自主訓練）
@@ -18233,7 +18250,10 @@ PAGES.members=async function(){
   // 票券狀態等級：red 無有效票 / yellow 剩1-2堂(教練課) / green 充足
   const tkLevel=mid=>{
     const s=tkSummary[mid];
-    if(!s||!s.anyUsable) return 'red';
+    /* 2026-07-30 使用者回報（施佳靜）：她 7/09 買的 8 堂 1V2 全排完了（已上 3、已約 5），
+       餘額因此是 0 —— 但那 5 堂還沒上，不能標成「無有效票券」的紅燈。
+       改成：沒餘額但還有未上的課 → 黃燈（快用完，該談續約），真的什麼都沒有才紅燈。 */
+    if(!s||!s.anyUsable) return _memPendingIdx[mid] ? 'yellow' : 'red';
     if(s.pt>0 && s.pt<=2) return 'yellow';
     return 'green';
   };
@@ -18361,7 +18381,7 @@ PAGES.members=async function(){
   const typeMapFull=Object.fromEntries(types.map(t=>[t.id,t]));
   const tkCell=(m)=>{
     const t=tkSummary[m.id]||{anyUsable:false};
-    if(!t.anyUsable) return '<span class="tk-chip" style="background:#fbe9e7;color:#c0392b;">無有效票券</span>';
+    if(!t.anyUsable && !_memPendingIdx[m.id]) return '<span class="tk-chip" style="background:#fbe9e7;color:#c0392b;">無有效票券</span>';
     // 主票券＝排除自主訓練/折抵券後，可用優先、購買日最新（＝票券分頁最上方那張）
     const isMain=tk=>{ const tt=typeMapFull[tk.ticket_type_id]||{};
       if(/折抵/.test(tk.plan_name||'')||/折抵/.test(tt.name||'')) return false;
@@ -18373,7 +18393,7 @@ PAGES.members=async function(){
         &&(!tk.expire_date||String(tk.expire_date).slice(0,10)>=today)).sort(byBuy)[0]
       || mine.sort(byBuy)[0];
     if(!top) return '<span style="color:var(--t3);font-size:12px;">僅自主訓練點數</span>';
-    const myBk=allBk.filter(b=>b.member_id===m.id&&b.status!=='cancelled');
+    const myBk=_memBkIdx[m.id]||[];   // 含團課（學員在 member_ids、member_id 是 null）
     const alloc=allocBookingsToTickets([top],myBk,typeMapFull);
     const bks=alloc.byTicket[top.id]||[];
     const direct=bks.filter(b=>b.ticket_id===top.id);

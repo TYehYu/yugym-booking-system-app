@@ -80,5 +80,68 @@ ok('★ 收款提醒與降級名單維持獨立（使用者：那兩份之後可
 ok('　　_noPunchList 仍保留給狀態卡的「未打卡 N 位」用', /const _noPunchList=\[\];/.test(src)
    && /nopunch:\{title:'今日未打卡名單'/.test(src));
 
+
+/* ── ④ 會員列表的票券欄看不到團課（2026-07-30 游晴雅）── */
+console.log('\n會員列表的票券欄要看得到團課');
+ok('★ 餘額 0 但還有待上的課 → 不再判成「無有效票券」',
+   /if\(!t\.anyUsable && !_memPendingIdx\[m\.id\]\) return '<span class="tk-chip"/.test(src));
+ok('★ 組預約清單改用索引，含團課（學員在 member_ids、member_id 是 null）',
+   /const myBk=_memBkIdx\[m\.id\]\|\|\[\];   \/\/ 含團課/.test(src)
+   && !/const myBk=allBk\.filter\(b=>b\.member_id===m\.id&&b\.status!=='cancelled'\);/.test(src));
+ok('★ 兩個索引各建一次，不是每位會員掃一次上萬筆',
+   /const _memBkIdx=\{\};/.test(src) && /const _memPendingIdx=\{\};/.test(src)
+   && /\(allBk\|\|\[\]\)\.forEach\(b=>\{/.test(src));
+ok('　　同一人佔多個名額就算多筆（團課圓點要出現多次）',
+   /ids\.forEach\(mid=>\{\s*\n\s*\(_memBkIdx\[mid\]=_memBkIdx\[mid\]\|\|\[\]\)\.push\(b\);/.test(src));
+ok('　　只有「今天以後、已預約未簽到」才算待上',
+   /if\(b\.status==='booked' && String\(b\.date\|\|''\)\.slice\(0,10\)>=today\) _memPendingIdx\[mid\]=true;/.test(src));
+ok('　　已取消的不算', /if\(!b \|\| b\.status==='cancelled'\) return;/.test(src));
+ok('★ 原因寫在程式裡（兩個成因都記下來）',
+   /她今天還有一堂團課，會員列表的票券欄卻是空的/.test(src)
+   && /團課的 member_id 是 null（學員在 member_ids）/.test(src));
+{
+  // 游晴雅的真實情境
+  const today='2026-07-30';
+  const T=[{id:'TK',status:'usable',sessions_total:10,sessions_remaining:0,purchase_date:'2026-06-25'}];
+  const B=[{id:'b1',date:'2026-07-30',status:'booked',category:'小班肌力',member_id:null,member_ids:['M','M']},
+           {id:'b2',date:'2026-07-23',status:'checked_in',category:'小班肌力',member_id:null,member_ids:['M','M']}];
+  const memBk={}, memPending={};
+  B.forEach(b=>{ if(b.status==='cancelled')return;
+    const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
+    ids.forEach(mid=>{ (memBk[mid]=memBk[mid]||[]).push(b);
+      if(b.status==='booked' && String(b.date||'').slice(0,10)>=today) memPending[mid]=true; }); });
+  ok('★ 游晴雅：團課票剩 0（舊判斷會說「無有效票券」）',
+     !T.some(t=>t.status==='usable'&&t.sessions_remaining>0));
+  ok('★ 但她今天還有課 → 新判斷會繼續畫圓形卡', memPending['M']===true);
+  ok('　　她的團課預約撈得到（2 個名額算 2 筆）', (memBk['M']||[]).length===4);
+}
+
+
+/* ── ⑤ 施佳靜：教練課全排完（餘額 0、還有 5 堂沒上）卻標「無有效票券」── */
+console.log('\n餘額 0 但課還沒上完 ≠ 無票');
+ok('★ 票券燈號：沒餘額但還有未上的課 → 黃燈，不是紅燈',
+   /if\(!s\|\|!s\.anyUsable\) return _memPendingIdx\[mid\] \? 'yellow' : 'red';/.test(src));
+ok('★ 原因寫在程式裡（施佳靜 8 堂全排完：已上 3、已約 5）',
+   /她 7\/09 買的 8 堂 1V2 全排完了（已上 3、已約 5）/.test(src));
+ok('★ 索引建在 PAGES.members 裡（tkLevel 與 tkCell 共用）',
+   /PAGES\.members=async function\(\)\{[\s\S]{0,1200}const _memBkIdx=\{\};/.test(src));
+ok('★ 沒有誤植到別的函式（refreshCoachNotifBadge 不該有它）',
+   !/async function refreshCoachNotifBadge\(\)\{[\s\S]{0,600}_memBkIdx/.test(src));
+{
+  const today='2026-07-30';
+  const B=[{id:'a',date:'2026-07-09',status:'completed',member_id:'M'},
+           {id:'b',date:'2026-07-30',status:'booked',member_id:'M'},
+           {id:'c',date:'2026-08-27',status:'booked',member_id:'M'}];
+  const pend={};
+  B.forEach(b=>{ if(b.status==='cancelled')return;
+    const ids=b.member_ids&&b.member_ids.length?b.member_ids:(b.member_id?[b.member_id]:[]);
+    ids.forEach(mid=>{ if(b.status==='booked'&&String(b.date).slice(0,10)>=today) pend[mid]=true; }); });
+  ok('★ 施佳靜：餘額 0 但 7/30 之後還有 5 堂 → 判定為「還有未上的課」', pend['M']===true);
+  const pend2={};
+  [{id:'x',date:'2026-07-09',status:'completed',member_id:'N'}].forEach(b=>{
+    const ids=[b.member_id]; ids.forEach(mid=>{ if(b.status==='booked'&&String(b.date).slice(0,10)>=today) pend2[mid]=true; }); });
+  ok('　　全部上完、也沒有未來預約 → 才是真的紅燈', !pend2['N']);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
