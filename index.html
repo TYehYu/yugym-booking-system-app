@@ -2679,6 +2679,24 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .pp-dc-t{font-size:12.5px;color:var(--t2);letter-spacing:.02em;}
 .pp-dc-val{font-family:var(--font-en);font-size:25px;font-weight:700;color:var(--text);line-height:1.25;}
 .pp-dc-val small{font-family:var(--font-zh);font-size:12.5px;font-weight:400;color:var(--t3);margin-left:5px;}
+/* 今日出勤（2026-07-30 使用者指示：版面收斂＋可翻頁看別天）——
+   原本兩張大 KPI 卡（應出勤／已打卡）把第一屏整個吃掉，改成標題列旁的一行摘要。 */
+.att-today .att-hd{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;}
+.att-hd-t{font-size:15px;font-weight:800;color:var(--text);}
+.att-sum{font-size:12.5px;color:var(--t2);}
+.att-sum b{font-family:var(--font-en);font-size:16px;font-weight:700;color:var(--text);margin:0 2px;}
+.att-sum b.ok{color:var(--green);}
+.att-sum b.miss{color:var(--gold-d,#b48a56);}
+.att-nav{margin-left:auto;display:flex;align-items:center;gap:6px;}
+.att-nav input[type=date]{padding:5px 8px;border:1px solid var(--bd);border-radius:8px;
+  background-color:#fff;font-size:12.5px;font-family:var(--font-en),inherit;}
+.att-wd{font-size:12px;color:var(--t3);}
+.att-arw{width:26px;height:26px;border-radius:7px;border:1px solid var(--bd);background:#fff;
+  color:var(--t2);font-size:15px;line-height:1;cursor:pointer;padding:0;
+  display:flex;align-items:center;justify-content:center;transition:.14s;}
+.att-arw:hover{background:var(--card2);color:var(--text);}
+.att-tbl th,.att-tbl td{padding-top:7px;padding-bottom:7px;font-size:13px;}
+@media(max-width:600px){ .att-nav{margin-left:0;width:100%;} }
 .pp-dc-none{font-size:19px;color:var(--t3);font-weight:400;}
 /* 票券卡：剩餘堂數拆成「教練課 2　自主 1」（2026-07-30 使用者指示）——
    單一總數看不出剩的是哪一種課，櫃檯得點進去才知道。 */
@@ -6405,8 +6423,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1500';
-const APP_VERSION_LABEL='v260730.1500';
+const APP_VERSION = '260730.1505';
+const APP_VERSION_LABEL='v260730.1505';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -27884,6 +27902,15 @@ function punchFabTap(){
 let _attTab='today';
 let _attEmp='';
 let _attDate=null; // 出勤管理頁選取日（補回遺失宣告）
+/* 出勤日期翻頁（2026-07-30 使用者指示）：前一天／後一天，不必每次點開日曆。
+   員工管理頁最上方與出勤管理頁共用同一支渲染，所以重繪目前頁面即可。 */
+function attStepDate(n){
+  const d=parseYmd(_attDate||ymd(TODAY)); if(!d||isNaN(d)) return;
+  d.setDate(d.getDate()+Number(n||0));
+  _attDate=ymd(d);
+  navTo(CUR_PAGE);
+}
+function attToday(){ _attDate=null; navTo(CUR_PAGE); }
 const ATT_TABS_FULL=[
   {key:'today',label:'今日出勤'},
   {key:'shifts',label:'排班表'},
@@ -28015,14 +28042,26 @@ function renderAttToday(needPunch,all,coaches,shifts){
           <td data-label="當日工時">${wh!=null?wh+' 小時':'—'}</td>
         </tr>`;
       }).join('');
-  document.getElementById('att-body').innerHTML=`<div class="card">
-    <div class="card-title">今日出勤
-      <!-- 2026-07-30：今日出勤也嵌在員工管理頁最上方 → 換日要重繪目前那一頁，不能寫死 attendance -->
-      <input type="date" value="${date}" onchange="_attDate=this.value;navTo(CUR_PAGE)" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background-color:#fff;font-size:13px;padding-right:30px;">
+  /* 2026-07-30 使用者指示：這塊版面佔太大 → 兩張 KPI 卡收成標題列旁的一行摘要，
+     並加上前一天／後一天的翻頁（原本只有一個日曆輸入框）。
+     今日出勤也嵌在員工管理頁最上方 → 換日重繪目前那一頁，不能寫死 attendance。 */
+  const _today=ymd(TODAY), isToday=date===_today;
+  const _d=parseYmd(date);
+  const wd=(_d&&!isNaN(_d))?'日一二三四五六'[_d.getDay()]:'';
+  const miss=Math.max(0,dutyEmpIds.length-punchedIn);
+  document.getElementById('att-body').innerHTML=`<div class="card att-today">
+    <div class="att-hd">
+      <span class="att-hd-t">${isToday?'今日出勤':'出勤'}</span>
+      <span class="att-sum">排班 <b>${dutyEmpIds.length}</b> 人　·　已打卡 <b class="ok">${punchedIn}</b> 人${miss?`　·　未打卡 <b class="miss">${miss}</b> 人`:''}</span>
+      <span class="att-nav">
+        <button type="button" class="att-arw" onclick="attStepDate(-1)" title="前一天" aria-label="前一天">‹</button>
+        <input type="date" value="${date}" onchange="_attDate=this.value;navTo(CUR_PAGE)">
+        ${wd?`<span class="att-wd">（${wd}）</span>`:''}
+        <button type="button" class="att-arw" onclick="attStepDate(1)" title="後一天" aria-label="後一天">›</button>
+        ${isToday?'':'<button type="button" class="btn btn-ghost btn-sm" onclick="attToday()">回今天</button>'}
+      </span>
     </div>
-    <div class="stat-grid dash-summary"><div class="stat-card"><div class="sc-label">應出勤（排班）</div><div><span class="sc-num">${dutyEmpIds.length}</span><span class="sc-unit">人</span></div></div>
-      <div class="stat-card"><div class="sc-label">已上班打卡</div><div><span class="sc-num" style="color:var(--green);">${punchedIn}</span><span class="sc-unit">人</span></div></div></div>
-    <table class="rwd-card"><thead><tr><th>姓名</th><th>排班</th><th>上班</th><th>下班</th><th>當日工時</th></tr></thead><tbody>
+    <table class="rwd-card att-tbl"><thead><tr><th>姓名</th><th>排班</th><th>上班</th><th>下班</th><th>當日工時</th></tr></thead><tbody>
     ${rowsHtml}
     </tbody></table>
   </div>`;
