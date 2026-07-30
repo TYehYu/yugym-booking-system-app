@@ -53,5 +53,19 @@ ok('　　bkIsMasked 保留（仍控制別人的課卡淡化，不再管名字�
    /function bkIsMasked\(b\)\{/.test(src) && /不再管名字/.test(src));
 ok('　　原因寫在程式裡', /教練也開放看其他預約課卡的會員名字，只是關閉互動功能/.test(src));
 
+console.log('\n教練桌機首頁：維持手機版的一週日期列（2026-07-30 使用者指示）');
+ok('★ 桌機不再走整月月曆，統一用 heroWeekBarHTML',
+   /const calCard=`<div class="cal-hero cal-hero-week" id="cal-hero">\$\{heroWeekBarHTML\(\{anchor:viewDate/.test(src)
+   && !/const calCard=isMobileLayout\(\)/.test(src));
+ok('★ 桌機補上品牌綠底（手機那組寫在 max-width:600px 裡，桌機吃不到）',
+   /@media\(min-width:601px\)\{\s*\n\s*\.cal-hero\.cal-hero-week\{background:var\(--green\);border:none;/.test(src));
+ok('★ 選中日反白（米白底＋綠字），今天用金框標',
+   /\.cal-hero\.cal-hero-week \.msb-date\.on\{background:#F4F1E8;border-color:#F4F1E8;color:var\(--green\);\}/.test(src)
+   && /\.cal-hero\.cal-hero-week \.msb-date\.hero-today\{border-color:rgba\(233,203,156,\.85\);\}/.test(src));
+ok('　　桌機七格平均攤開，不用橫向捲',
+   /\.cal-hero\.cal-hero-week \.msb-dates\{display:grid;grid-template-columns:repeat\(7,1fr\);gap:8px;overflow:visible;\}/.test(src));
+ok('　　每格帶當日班別與堂數', /return \[sh, n\?n\+' 堂':''\]\.filter\(Boolean\)\.join\(' · '\);/.test(src));
+ok('　　原因寫在程式裡', /原本桌機走整月月曆（就是那個放大版的大月曆），資訊密度低又佔掉整個第一屏/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
