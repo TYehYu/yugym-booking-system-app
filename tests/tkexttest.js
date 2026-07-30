@@ -140,7 +140,8 @@ ok('★ 歷史卡縮小＋淡化表示「已結束」，滑過恢復',
 ok('　　圓點跟著縮小，卡片不會被撐高', /\.bkd-tkcard-hist \.mtk\{transform:scale\(\.92\);\}/.test(src));
 ok('　　狀態（已用畢／已過期／已退費）標在進度旁',
    /<span class="bkd-tkcard-prog"><b class="num">\$\{used\}<\/b> \/ \$\{total\}　·　\$\{st\}<\/span>/.test(src));
-ok('　　購買日與效期都保留，共享標籤照舊', /購買 \$\{String\(t\.purchase_date\|\|''\)\.slice\(0,10\)\|\|'—'\}　·　效期至/.test(src)
+// 2026-07-30：購買日改用共用的 tkBuyDateHtml（沒有購買日的退回起始日並標示）
+ok('　　購買日與效期都保留，共享標籤照舊', /\$\{tkBuyDateHtml\(t\)\}　·　效期至/.test(src)
    && /const shrTag=\(t\.member_id!==PP\.id\)/.test(src));
 ok('　　有合約的歷史票也能點開合約', /onclick="openContractView\('\$\{c\.ctByTicket\[t\.id\]\}'\)">📄 合約<\/button>/.test(src));
 

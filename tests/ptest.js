@@ -20,9 +20,11 @@ async function render({b,tickets,bookings,tk=null}){
   const fmtExpire=(d)=>d||'永久有效';
   // 2026-07-30：圓形卡下方多了「更換票券」鈕（只給櫃檯），替身回 true
   const isDeskLike=()=>true;
-  const fn=new Function('b','tk','dbGetAll','window','findRefundTargetTicket','allocBookingsToTickets','ticketTokens','fmtExpire','_payAlertLine','isDeskLike',
+  // 2026-07-30：票券卡多了購買日（tkBuyDateHtml），替身回固定字串
+  const tkBuyDateHtml=(t)=>`購買 ${(t&&(t.purchase_date||t.start_date))||'—'}`;
+  const fn=new Function('b','tk','dbGetAll','window','findRefundTargetTicket','allocBookingsToTickets','ticketTokens','fmtExpire','_payAlertLine','isDeskLike','tkBuyDateHtml',
     `return (async()=>{ ${body} return {tkCircleHtml,_tkInferred,_tkCard}; })();`);
-  return await fn(b,tk,dbGetAll,win,helpers.findRefundTargetTicket,helpers.allocBookingsToTickets,helpers.ticketTokens,fmtExpire,'',isDeskLike);
+  return await fn(b,tk,dbGetAll,win,helpers.findRefundTargetTicket,helpers.allocBookingsToTickets,helpers.ticketTokens,fmtExpire,'',isDeskLike,tkBuyDateHtml);
 }
 const T=(o)=>Object.assign({ticket_type_id:'tt-pt',member_id:'M',format:'1V1',sessions_total:4,sessions_remaining:1,expire_date:null},o);
 const BK=(id,date,st)=>({id,member_id:'M',category:'私人教練',ticket_type_id:'tt-pt',format:'1V1',date,start_time:'19:00',status:st});

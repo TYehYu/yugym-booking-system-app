@@ -6589,8 +6589,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.2227';
-const APP_VERSION_LABEL='v260730.2227';
+const APP_VERSION = '260730.2238';
+const APP_VERSION_LABEL='v260730.2238';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7090,6 +7090,17 @@ function tkCanExtend(t, today){
   if(tkIsExtended(t)) return false;
   if(!t.expire_date || String(t.expire_date).slice(0,10) >= td) return false;
   return !!tkExtendTo(t);
+}
+/* 票券購買日（2026-07-30 使用者指示：列在票券下方）——
+   匯入的票券有 96.6% 帶得到 purchase_date；只有起始日的用起始日並標「起」，
+   兩者都沒有的顯示破折號，不要假裝有資料。 */
+function tkBuyDateHtml(t){
+  if(!t) return '';
+  const d=t.purchase_date||null, sd=t.start_date||null;
+  const f=x=>String(x).slice(0,10).replace(/-/g,'/');
+  if(d)  return `購買 <b class="num">${f(d)}</b>`;
+  if(sd) return `購買 <b class="num" title="這張票沒有購買日，顯示的是舊系統的起始日">${f(sd)}</b><span style="opacity:.7;">（起始日）</span>`;
+  return `購買 <span style="opacity:.7;">—</span>`;
 }
 function fmtExpire(d,t){
   if(!d && t && t.valid_days && !t.activated_at) return `未開通（首堂課後 ${t.valid_days} 天）`;
@@ -12051,6 +12062,9 @@ PAGES.ops_center=async function(){
     dbGetAll('punch_requests').catch(()=>[]),dbGetAll('attendance').catch(()=>[]),dbGetAll('ticket_types'),
     dbGetAll('shifts').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[])
   ]);
+  /* 團課逐人頭金額要看「這堂實際扣了誰的哪一張票」（2026-07-30 使用者說明：
+     團課補課券也是 0 元，只拿來算當天上課的薪水）→ 需要扣款帳本。 */
+  let _tkLogs=[]; try{ _tkLogs=await dbGetAll('ticket_logs'); }catch(_){}
   const memMap=Object.fromEntries(members.map(m=>[m.id,m]));
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
 
@@ -12340,10 +12354,25 @@ PAGES.dashboard=async function(){
       (_grpMem[t.member_id]=_grpMem[t.member_id]||{a:0,n:0}); _grpMem[t.member_id].a+=a; _grpMem[t.member_id].n+=n; } });
   const _grpAvg=_grpBucket.n>0?_grpBucket.a/_grpBucket.n:0;
   const _grpUnit=mid=>{ const k=_grpMem[mid]; return (k&&k.n>0)?k.a/k.n:_grpAvg; };
+  /* 2026-07-30 使用者說明：「團課的補課券也是 0 元，所以只拿來算當天上課的薪水」。
+     原本每個人頭一律用該會員團課票的平均單價，不看實際扣哪一張 —— 於是
+     請假那堂認列一次金額、補課那堂又用平均價認列一次，同一筆錢被算兩次。
+     改成優先用「這堂實際扣的那張票」的單價（補課券 $0 → 補課不再重複認列），
+     查不到扣款紀錄（匯入的舊團課多半沒有）才退回該會員的平均單價。 */
+  const _tkById=Object.fromEntries((tickets||[]).map(t=>[t.id,t]));
+  const _grpDeduct={};
+  (_tkLogs||[]).forEach(l=>{ if(l&&l.booking_id&&l.action==='deduct'){ (_grpDeduct[l.booking_id]=_grpDeduct[l.booking_id]||[]).push(l.ticket_id); } });
+  const _tkUnitOf=t=>{ const a=Number(t&&t.amount_paid)||0, n=Number(t&&t.sessions_total)||0; return n>0?a/n:0; };
   const _grpFeeOf=b=>{
     const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
     if(!ids.length) return _feeOf(b);
-    return ids.reduce((a,mid)=>a+_grpUnit(mid),0);
+    const pool=(_grpDeduct[b.id]||[]).slice();     // 這堂扣過的票（同一人多名額就有多筆）
+    return ids.reduce((a,mid)=>{
+      const i=pool.findIndex(tid=>{ const t=_tkById[tid];
+        return t && (String(t.member_id)===String(mid) || (typeof tkSharedIds==='function' && tkSharedIds(t).includes(mid))); });
+      if(i>=0){ const t=_tkById[pool[i]]; pool.splice(i,1); return a+_tkUnitOf(t); }
+      return a+_grpUnit(mid);                       // 沒有扣款紀錄 → 用平均單價估
+    },0);
   };
   const grpFee=grpDoneBk.reduce((s,b)=>s+_grpFeeOf(b),0);
   // 利潤基礎同步採用團課逐人頭銷課（原 coachedFee 的團課部分同樣被低估）
@@ -16417,10 +16446,24 @@ async function openConvertPending(id){
   if(!b||!b.pending_contract){ showToast('這筆不是待簽約卡位'); return; }
   const members=(await dbGetAll('members')).filter(m=>m.status==='active');
   window._cpMembers=members; window._cpBid=id;
+  /* 2026-07-30 使用者指示：卡位當下就填了姓名與手機，轉正還要再搜尋一次很多餘。
+     先用手機（正規化後比對）自動對，手機沒填或對不到再用姓名完全相同去對；
+     對到唯一一位就直接進「選票券／扣課」，不再出搜尋清單。 */
+  const _norm=p=>String(p||'').replace(/\D/g,'').replace(/^886/,'0');
+  const _ph=_norm(b.trial_phone);
+  let hit=_ph?members.filter(m=>_norm(m.phone)===_ph):[];
+  if(!hit.length && b.trial_name){
+    const nm=String(b.trial_name).trim();
+    hit=members.filter(m=>String(m.name||'').trim()===nm);
+  }
+  if(hit.length===1){ doConvertPending(hit[0].id); return; }
+  const _why = hit.length>1
+    ? `<div style="font-size:12px;color:var(--gold-d);margin-bottom:10px;line-height:1.8;">卡位資料「${b.trial_name||''}${b.trial_phone?'／'+fmtPhone(b.trial_phone):''}」對到 <b>${hit.length}</b> 位同名會員，請選擇正確的一位。</div>`
+    : `<div style="font-size:12px;color:var(--t2);margin-bottom:10px;line-height:1.8;">卡位資料「${b.trial_name||''}${b.trial_phone?'／'+fmtPhone(b.trial_phone):''}」找不到對應會員。<br>請先完成「銷售」（建會員＋賣票），再回這裡選擇；轉換後會從其可用票券扣 1 堂。</div>`;
   showModal(`<div class="modal-title">轉正式預約 · ${b.trial_name||''}</div>
-    <div style="font-size:12px;color:var(--t2);margin-bottom:10px;">請先完成「銷售」（建會員＋賣票），再回這裡選擇會員；轉換後會從其可用票券扣 1 堂。</div>
+    ${_why}
     <div class="form-row"><label>選擇會員</label>
-      <input id="cp-q" class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:8px;" placeholder="搜尋姓名或手機…" oninput="cpRenderList()" autocomplete="off">
+      <input id="cp-q" class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:8px;" placeholder="搜尋姓名或手機…" value="${String(b.trial_name||'').replace(/"/g,'&quot;')}" oninput="cpRenderList()" autocomplete="off">
       <div id="cp-list" class="ms-list" style="max-height:280px;border:1px solid var(--bd);border-radius:10px;padding:6px;"></div></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button></div>`);
   cpRenderList();
@@ -17633,7 +17676,7 @@ async function openBookingDetail(id){
       </div>
       <div class="mck-dots2" style="margin:10px 0 2px;">${dots}</div>
       <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <span>效期至 ${fmtExpire(tkC.expire_date,tkC)}${isInstall2?`　·　分期開通 ${unlocked2}/${total}`:''}</span>
+        <span>${tkBuyDateHtml(tkC)}　·　效期至 ${fmtExpire(tkC.expire_date,tkC)}${isInstall2?`　·　分期開通 ${unlocked2}/${total}`:''}</span>
         ${/* 2026-07-30 使用者指示：所有預約都要能改用別張票券。只開放給櫃檯／管理員，
               且限「還沒簽到」的預約——已銷課的要改請走取消簽到。 */''}
         ${/* ⚠ isGroupD 在這行之後才宣告（const，TDZ）→ 直接比 category，不要引用它 */''}
@@ -18088,13 +18131,24 @@ async function doGrantMakeup(id){
 // 會員資料頁：補發補課券（不綁特定預約，由管理員選課程類型）
 async function openMakeupForMember(member_id){
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
-  // 列出各票券種類（友善教練課、友善自主訓練等都獨立顯示），value=種類 id
-  const types=(window._ttCache||[]).filter(t=>t.name);
+  /* 2026-07-30 使用者指示：教練課沒有補課機制 —— 補課券只屬於團體課（四週優惠方案）
+     的請假規則。這裡原本把所有票種都列出來，會讓櫃檯補發到教練課上。
+     只留小班肌力；找不到就退回不給選，並在畫面說明原因。 */
+  const types=(window._ttCache||[]).filter(t=>t.name && (t.category==='小班肌力'||t.category==='團體課'));
   const opts=types.length
     ? types.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')
-    : '<option value="">私人教練</option>';
+    : '';
+  if(!types.length){
+    showModal(`<div class="modal-title">補發補課券</div>
+      <div style="font-size:13px;color:var(--t2);line-height:1.9;padding:4px 0 10px;">
+        補課券只適用<b>團體課</b>（四週優惠方案的請假規則）；教練課沒有補課機制。<br>
+        目前找不到團體課票種，請先到「課程方案」確認設定。</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="openMemberDetail('${member_id}')">返回</button></div>`);
+    return;
+  }
   showModal(`<div class="modal-title">補發補課券</div>
-    <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">補課券 1 堂，綁定所選課程類型（同類型可用）。效期：自主訓練 7 天、其他 14 天。</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">補課券 1 堂，效期 14 天。<br>
+      <span style="color:var(--gold-d);">只適用團體課 —— 教練課沒有補課機制。</span></div>
     <div class="form-row"><label>課程類型</label><select id="mk-cat" onchange="document.getElementById('mk-days').textContent=this.options[this.selectedIndex].text.includes('自主')?'7':'14';">${opts}</select></div>
     <div style="font-size:12px;color:var(--gold-d);margin-bottom:12px;">此補課券效期 <b id="mk-days">14</b> 天</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openMemberDetail('${member_id}')">返回</button><button class="btn btn-gold" onclick="doGrantMakeupForMember('${member_id}')">確認補發</button></div>`);
@@ -19759,7 +19813,7 @@ async function openMemberDetail(member_id){
       </div>
       <div class="mck-dots2" style="margin:10px 0 12px;">${circles}</div>
       <div class="md-tk-foot">
-        <span class="md-tk-meta">到期 ${fmtExpire(t.expire_date,t)}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span>${tkMoneyHtml(t)}</span>
+        <span class="md-tk-meta">${tkBuyDateHtml(t)}　·　到期 ${fmtExpire(t.expire_date,t)}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span>${tkMoneyHtml(t)}</span>
         ${(inst && (t.unlocked_sessions||0)<total && (isDeskLike()))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
         ${canShare?`<button class="btn btn-ghost btn-sm" onclick="openTicketShare('${t.id}','${member_id}')">${_others.length?'共享設定':'設為共享'}</button>`:''}
         ${extraBtn||''}
@@ -24052,7 +24106,7 @@ function ppRecordHtml(){
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
             <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null)}</div>
             <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
-              <span>效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}${tkIsExtended(t)?`　·　<b style="color:var(--gold-d);">已展延（不得退費）</b>`:''}${tkMoneyHtml(t)}</span>
+              <span>${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}${tkIsExtended(t)?`　·　<b style="color:var(--gold-d);">已展延（不得退費）</b>`:''}${tkMoneyHtml(t)}</span>
               <span style="display:flex;gap:6px;">
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">📄 合約</button>`:''}
                 ${(isDeskLike()&&t.status==='usable'&&(tab==='pt'||tab==='group')&&t.member_id===PP.id)?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="ppShareTk('${t.id}')">${_shN?'共享設定':'設為共享'}</button>`:''}
@@ -24105,7 +24159,7 @@ function ppRecordHtml(){
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}　·　${st}</span></div>
             <div class="mck-dots2" style="margin:8px 0 2px;">${ticketTokens(t,bks,typeMap,used,null)}</div>
             <div style="font-size:11px;color:var(--t3);margin-top:7px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
-              <span>購買 ${String(t.purchase_date||'').slice(0,10)||'—'}　·　效期至 ${fmtExpire(t.expire_date,t)}${tkMoneyHtml(t)}</span>
+              <span>${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${tkMoneyHtml(t)}</span>
               <span style="display:flex;gap:6px;">
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">📄 合約</button>`:''}
                 ${canExt?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();openTicketExtend('${t.id}')" title="剩 ${Number(t.sessions_remaining)||0} 堂沒用完，可展延 ${tkPlanDays(t)} 天至 ${String(tkExtendTo(t)).replace(/-/g,'/')}">展延</button>`:''}
@@ -25818,7 +25872,7 @@ PAGES.m_tickets=async function(){
             <div>
               <div class="mwtk-name">${t.plan_name||(ty?ty.name:'票券')}${t.format?' · '+String(t.format).toUpperCase():''}
                 <span class="tag tag-${ty?ty.color:'pt'}" style="margin-left:6px;font-size:10.5px;vertical-align:1px;">${ty?ty.name:'—'}</span></div>
-              <div class="mwtk-sub">來源 ${srcLabel(t.source)}　·　到期 ${t.expire_date||'—'}</div>
+              <div class="mwtk-sub">${tkBuyDateHtml(t)}　·　來源 ${srcLabel(t.source)}　·　到期 ${t.expire_date||'—'}</div>
             </div>
             ${stateBadge}
           </div>
