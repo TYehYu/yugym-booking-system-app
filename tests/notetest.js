@@ -192,5 +192,34 @@ ok('★ 場租已排除', /if\(t\.category==='場租'\) return false/.test(src))
 ok('★ 場地租借不再合成進課程卡', !/activeTypes\.concat\(\[BK_FACILITY_TYPE\]\)/.test(src));
 ok('場地租借的收款流程仍保留（改由銷售視窗進）', /async function bkStep2Facility\(/.test(src));
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail?1:0);
+
+/* ── 沒綁票券的預約不該問「是否退回票券」（2026-07-30 使用者回報：8/03 劉雪珠待簽約卡位）── */
+console.log('\n取消沒綁票券的預約');
+{
+  const i=src.indexOf('async function confirmCancelBooking(id){');
+  const j=src.indexOf('\n}\n', src.indexOf("askSeriesCancel('${id}','auto')", i))+2;
+  const run=(b)=>{ let html='';
+    const fn=new Function('dbGet','showToast','showModal','hoursUntilStart','isDeskLike',
+      src.slice(i,j)+'\nreturn confirmCancelBooking;')(async()=>b,()=>{},h=>{html=h;},()=>72,()=>true);
+    return fn('X').then(()=>html); };
+  return Promise.all([
+    run({id:'X',date:'2026-08-03',start_time:'16:00',category:'私人教練',pending_contract:true,ticket_id:null,trial_name:'劉雪珠'}),
+    run({id:'X',date:'2026-08-03',start_time:'16:00',category:'場租',pending_contract:false,ticket_id:null}),
+    run({id:'X',date:'2026-08-03',start_time:'16:00',category:'私人教練',pending_contract:false,ticket_id:null}),
+    run({id:'X',date:'2026-08-10',start_time:'16:00',category:'私人教練',pending_contract:false,ticket_id:'MTK-1'}),
+  ]).then(([pend,rent,noTk,normal])=>{
+    ok('★ 待簽約卡位：不再問退票，說明「還沒收款也沒有票券」',
+       !/退回票券/.test(pend) && /這是<b>待簽約卡位<\/b>，還沒收款也沒有票券/.test(pend));
+    ok('　　卡位上填的客戶姓名會帶出來', /劉雪珠/.test(pend));
+    ok('　　只留一顆「確定取消」', (pend.match(/<button/g)||[]).length===2 && /確定取消/.test(pend));
+    ok('★ 場租：說明不涉及票券', /場地租借不涉及票券/.test(rent) && !/退回票券/.test(rent));
+    ok('★ 未綁票券的匯入預約：說明不影響堂數', /沒有綁票券/.test(noTk) && !/退回票券/.test(noTk));
+    ok('★ 正常有綁票券的預約 → 兩種選擇照舊', /退回票券/.test(normal) && /扣課不退/.test(normal));
+    ok('　　判斷條件是「有沒有綁票券」而非只看 pending_contract',
+       /const noTicket = !b\.ticket_id;/.test(src));
+    ok('　　原因寫在程式裡', /刪除「待簽約卡位」時跳出「是否退回票券」——那種卡位本來就沒有票券/.test(src));
+    console.log(`\n${pass} passed, ${fail} failed`);
+    process.exit(fail?1:0);
+  });
+}
+

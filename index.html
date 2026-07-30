@@ -6383,8 +6383,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1313';
-const APP_VERSION_LABEL='v260730.1313';
+const APP_VERSION = '260730.1331';
+const APP_VERSION_LABEL='v260730.1331';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17889,6 +17889,21 @@ async function confirmCancelBooking(id){
   const within24 = hrs < 24;
   const isAdmin = isDeskLike();   // 2026-07-28：店長同櫃台，取消時保留扣票/退票選擇
   const isTrial = b.category==='體驗';
+  /* 2026-07-30 使用者回報：刪除「待簽約卡位」時跳出「是否退回票券」——那種卡位本來就沒有票券
+     （pending_contract=true、ticket_id=null），問退票沒有意義。凡是沒綁票券的預約
+     （待簽約卡位、場租、未綁票的匯入預約）都不該出現退票/扣課的選擇，直接確認取消即可。 */
+  const noTicket = !b.ticket_id;
+  if(noTicket && !isTrial){
+    const why = b.pending_contract ? '這是<b>待簽約卡位</b>，還沒收款也沒有票券 —— 取消只會釋出時段與場地。'
+      : (b.category==='場租' ? '場地租借不涉及票券，取消只會釋出時段與場地。'
+      : '這筆預約沒有綁票券（舊系統匯入的課多半如此），取消不會影響任何堂數。');
+    showModal(`<div class="modal-title">取消預約</div>
+      <div style="font-size:13.5px;color:var(--text);padding:6px 0 4px;">確定要取消 ${b.date} ${String(b.start_time).slice(0,5)} 的${b.category}嗎？${b.trial_name?`<br><span style="color:var(--t2);font-size:12.5px;">客戶：${b.trial_name}</span>`:''}</div>
+      <div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;">${why}</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
+        <button class="btn btn-danger" onclick="askSeriesCancel('${id}','none')">確定取消</button></div>`);
+    return;
+  }
 
   /* 2026-07-29 使用者定案（取消政策三修）：櫃檯可自行選擇退課或扣課，但一定要有明確說明避免爭議；
      會員自行取消則由系統依 24 小時規則判定（見 memCancelBooking / fn_cancel_booking）。 */
