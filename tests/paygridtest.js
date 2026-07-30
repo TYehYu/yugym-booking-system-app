@@ -91,9 +91,9 @@ ok('★ 改成逐列，不再擠成一行「甲、乙、丙」',
 ok('★ 依上課時間排序（沒有時間的排最後）',
    /String\(a\.time\|\|'99:99'\)\.localeCompare\(String\(b\.time\|\|'99:99'\)\) \|\| String\(a\.name\)\.localeCompare\(String\(b\.name\)\)/.test(src));
 ok('　　時間欄位對齊、用等寬數字', /\.mc-td-line b\{font-family:var\(--num\),inherit;[\s\S]{0,120}min-width:34px;/.test(src));
-ok('　　待收款的另外標「待收」（品牌紅）',
+ok('　　待收款的另外標「待收」（2026-07-30 改實心紅底白字，對比不足）',
    /x\.pay\?'<i class="mc-td-pay">待收<\/i>':''/.test(src)
-   && /\.mc-td-line \.mc-td-pay\{[\s\S]{0,160}color:var\(--danger,#b5372e\)/.test(src));
+   && /\.mc-td-line \.mc-td-pay\{[\s\S]{0,160}background:var\(--danger,#b5372e\);color:#fff;/.test(src));
 ok('　　最多列 6 位，其餘明講還有幾位（不做無聲截斷）',
    /_signByTime\.slice\(0,6\)/.test(src) && /還有 \$\{_signByTime\.length-6\} 位…/.test(src));
 ok('　　深色儀表板版面的字色另外定義', /\.mc-dash \.mc-todo-card \.mc-td-line\{/.test(src));

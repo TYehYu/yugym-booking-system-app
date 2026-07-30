@@ -40,9 +40,9 @@ ok('　　沒有會員 id 時該列不可點（走 tdl-static）', /\? `<div cla
 console.log('\n時間標示');
 ok('★ 名字旁邊標上課時間', /const tm=\(it\)=>it\.time\?`<span class="tdl-tm\$\{it\.pay\?' tdl-tm-pay':''\}">\$\{it\.time\}<\/span>`:'';/.test(src)
    && /\$\{it\.name\|\|'—'\}\$\{tm\(it\)\}\$\{tag\(it\)\}/.test(src));
-ok('★ 待付費用品牌紅、一般續課用品牌金（紅 > 金 色階）',
+ok('★ 待付費用品牌紅、一般續課用品牌金（紅 > 金 色階；2026-07-30 待付費改實心底白字）',
    /\.tdl-tm\{[^}]*color:var\(--gold-d,#b48a56\);\}/.test(src)
-   && /\.tdl-tm-pay\{[^}]*color:var\(--danger,#b5372e\);\}/.test(src));
+   && /\.tdl-tm-pay\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src));
 ok('　　同一人同一天多堂 → 時間都列出來', /e\.times\.add\(String\(b\.start_time\)\.slice\(0,5\)\);/.test(src)
    && /time:\[\.\.\.e\.times\]\.sort\(\)\.join\('、'\)/.test(src));
 ok('　　首頁摘要改成一個名字一列、時間在前（見 paygridtest）',
