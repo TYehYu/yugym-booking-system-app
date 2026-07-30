@@ -11,10 +11,11 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 
 const g=(a,b)=>{const i=src.indexOf(a); return src.slice(i,src.indexOf(b,i)+b.length);};
 const code=g('function seatKeys(b){','\n}\n')+'\n'+g('function seatMid(key){','\n')+'\n'
+  +g('function seatKeysDisplay(b){','\n}\n')+'\n'
   +g('function seatNo(key){','\n')+'\n'+g('function seatAnyState(b,mid,state){','\n}\n')+'\n'
   +g('function seatReindexAfterRemove(b, idx){','\n}\n')+'\n'+g('function attObj(b){','\n}\n')+'\n'
   +g('function mids(b){','\n}\n');
-const api=new Function(code+'\nreturn {seatKeys,seatMid,seatNo,seatAnyState,seatReindexAfterRemove};')();
+const api=new Function(code+'\nreturn {seatKeys,seatMid,seatNo,seatAnyState,seatReindexAfterRemove,seatKeysDisplay};')();
 const B=(ids,att)=>({member_ids:ids,attendance:att||{}});
 
 console.log('名額鍵');
@@ -68,7 +69,7 @@ console.log('\n取消其中一個名額後重新編號');
 
 console.log('\n接線');
 ok('★ 名單改成逐名額一列', /const rows = _seatKeys\.length \? _seatKeys\.map\(sk=>\{/.test(src)
-   && /const _seatKeys=seatKeys\(b\);/.test(src));
+   && /const _seatKeys=seatKeysDisplay\(b\);/.test(src));
 ok('★ 每列的簽到／請假／取消都帶名額鍵',
    /toggleGroupAttend\('\$\{b\.id\}','\$\{sk\}'\)/.test(src)
    && /groupToggleLeave\('\$\{b\.id\}','\$\{sk\}'\)/.test(src)
@@ -76,7 +77,7 @@ ok('★ 每列的簽到／請假／取消都帶名額鍵',
 ok('★ 多名額每列標「第 N 個名額」', /第 \$\{seatNo\(sk\)\} 個名額/.test(src));
 ok('　　票券圓點只畫在第一列（同一張票不重複畫）', /const st = seatNo\(sk\)===1 \? _gTk\[mid\] : null;/.test(src));
 ok('★ 課卡快捷簽到面板也逐名額（原本合併標 ×N）',
-   /rows = seatKeys\(b\)\.map\(sk=>\{/.test(src) && !/name:nameOf\(mid\)\+\(_rc\[mid\]>1\?`（×\$\{_rc\[mid\]\}）`:''\)/.test(src));
+   /rows = seatKeysDisplay\(b\)\.map\(sk=>\{/.test(src) && !/name:nameOf\(mid\)\+\(_rc\[mid\]>1\?`（×\$\{_rc\[mid\]\}）`:''\)/.test(src));
 ok('★ 請假／取消收名額鍵，補課券與退票仍認會員本人',
    /async function groupToggleLeave\(bid,seatKey\)\{/.test(src)
    && /const sk=String\(seatKey\), mid=seatMid\(sk\);/.test(src)
@@ -112,6 +113,27 @@ ok('　　原因寫在程式裡', /兩個名額不能分開處理/.test(src));
   eq('　　名額還在的狀態一律保留', prune(B(['A','A','B'],{A:'checked_in','A#2':'leave',B:'booked'})),
      {A:'checked_in','A#2':'leave',B:'booked'});
 }
+
+console.log('\n同一個人的名額排在一起（2026-07-30 使用者指示）');
+eq('★ A、B、A → 顯示順序變成 A、A#2、B（同一人連在一起）',
+   api.seatKeysDisplay(B(['A','B','A'])), ['A','A#2','B']);
+eq('★ 原本的 seatKeys 不動（它要跟 member_ids 同索引）',
+   api.seatKeys(B(['A','B','A'])), ['A','B','A#2']);
+eq('　　同一人內維持第 1、第 2 個名額的順序',
+   api.seatKeysDisplay(B(['A','B','A','B','A'])), ['A','A#2','A#3','B','B#2']);
+eq('　　依「第一次出現的位置」決定人的先後（B 先報名就排前面）',
+   api.seatKeysDisplay(B(['B','A','B'])), ['B','B#2','A']);
+eq('　　本來就連在一起的不會被打亂', api.seatKeysDisplay(B(['A','A','B'])), ['A','A#2','B']);
+eq('　　每人各一個名額 → 順序完全不變', api.seatKeysDisplay(B(['A','B','C'])), ['A','B','C']);
+eq('　　空名單不會爆', api.seatKeysDisplay(B([])), []);
+ok('★ 名單與課卡快捷簽到面板都改用顯示順序',
+   /const _seatKeys=seatKeysDisplay\(b\);   \/\/ 同一個人的名額排在一起/.test(src)
+   && /rows = seatKeysDisplay\(b\)\.map\(sk=>\{   \/\/ 同一個人的名額排在一起/.test(src));
+ok('★ 取消名額仍用原順序（indexOf 要對得上 member_ids 的索引）',
+   /const idx=seatKeys\(b\)\.indexOf\(sk\);/.test(src)
+   && /const _att=attObj\(b\), _live=new Set\(seatKeys\(b\)\);/.test(src));
+ok('　　為什麼不能直接改 seatKeys，寫在程式裡',
+   /seatReindexAfterRemove／doGroupCancelSeat 是用 indexOf 去 splice member_ids 的/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

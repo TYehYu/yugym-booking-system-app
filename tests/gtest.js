@@ -2,7 +2,7 @@ const fs=require('fs');
 const h=fs.readFileSync('index.html','utf8');
 const grabFn=n=>{const i=h.indexOf('function '+n+'(');let d=0;for(let k=h.indexOf('{',i);k<h.length;k++){if(h[k]==='{')d++;else if(h[k]==='}'){d--;if(!d)return h.slice(i,k+1);}}};
 // 取出 index.html 內真正的團課名單渲染程式碼
-const s=h.indexOf("const _seatKeys=seatKeys(b);");
+const s=h.indexOf("const _seatKeys=seatKeysDisplay(b);");
 const e=h.indexOf("尚未排名單</div>'", s);
 const body=h.slice(s, h.indexOf(";", e)+1);
 if(s<0||e<0) throw new Error('找不到目標程式碼');
@@ -10,8 +10,8 @@ if(s<0||e<0) throw new Error('找不到目標程式碼');
 const COURSE_SHAPE={};
 const parseYmd=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(x||'');return m?new Date(+m[1],+m[2]-1,+m[3]):null;};
 const helpers=new Function('COURSE_SHAPE','parseYmd',[grabFn('tkVisual'),grabFn('ticketTokens'),grabFn('mids'),
-  grabFn('seatKeys'),grabFn('seatMid'),grabFn('seatNo')].join('\n')+
-  '; return {tkVisual,ticketTokens,mids,seatKeys,seatMid,seatNo};')(COURSE_SHAPE,parseYmd);
+  grabFn('seatKeys'),grabFn('seatMid'),grabFn('seatKeysDisplay'),grabFn('seatNo')].join('\n')+
+  '; return {tkVisual,ticketTokens,mids,seatKeys,seatMid,seatKeysDisplay,seatNo};')(COURSE_SHAPE,parseYmd);
 const ticketCategoryOf=t=>t.__cat;
 const attObj=b=>b.attendance||{};
 
@@ -19,10 +19,10 @@ async function render({ids,att={},tickets=[],bookings=[],names={},thisDate='2026
   const dbGetAll=async t=>t==='member_tickets'?tickets:t==='bookings'?bookings:[];
   // 名額鍵是從 b.member_ids 推的（2026-07-30），所以 b 也要帶名單
   const b={id:thisId,date:thisDate,attendance:att,member_ids:ids};
-  const fn=new Function('gIdsD','b','memMapD','groupCkOK','isPastD','attObj','ticketCategoryOf','dbGetAll','window','mids','ticketTokens','seatKeys','seatMid','seatNo',
+  const fn=new Function('gIdsD','b','memMapD','groupCkOK','isPastD','attObj','ticketCategoryOf','dbGetAll','window','mids','ticketTokens','seatKeys','seatMid','seatKeysDisplay','seatNo',
     `return (async()=>{ const att=attObj(b); ${body} return rows; })();`);
   return await fn(ids,b,names,true,false,attObj,ticketCategoryOf,dbGetAll,{_ttCache:[]},helpers.mids,helpers.ticketTokens,
-    helpers.seatKeys,helpers.seatMid,helpers.seatNo);
+    helpers.seatKeys,helpers.seatMid,helpers.seatKeysDisplay,helpers.seatNo);
 }
 const T=(o)=>Object.assign({__cat:'小班肌力',ticket_type_id:'tt-g',source:'purchase'},o);
 const BK=(id,date,st,ids)=>({id,date,start_time:'11:00',status:st,category:'小班肌力',member_ids:ids});

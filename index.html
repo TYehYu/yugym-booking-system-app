@@ -6566,8 +6566,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1936';
-const APP_VERSION_LABEL='v260730.1936';
+const APP_VERSION = '260730.1947';
+const APP_VERSION_LABEL='v260730.1947';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16944,7 +16944,7 @@ async function bkOrbitRoster(id){
     /* 同名重複報名：2026-07-30 使用者指示改成一個名額一列（原本合併成一列標 ×N，
        兩個名額共用同一個開關，沒辦法只簽到其中一位）。 */
     const _rc={}; mids(b).forEach(mid=>{_rc[mid]=(_rc[mid]||0)+1;});
-    rows = seatKeys(b).map(sk=>{
+    rows = seatKeysDisplay(b).map(sk=>{   // 同一個人的名額排在一起（2026-07-30）
       const mid=seatMid(sk);
       return {key:'att|'+b.id+'|'+sk,
               name:nameOf(mid)+(_rc[mid]>1?`（第 ${seatNo(sk)} 位）`:''),
@@ -17539,7 +17539,7 @@ async function openBookingDetail(id){
        2026-07-30 使用者指示改成「每個名額一列，獨立顯示」——原本合併成一列標「N 個名額」，
        簽到／請假／取消都只有一個開關，兩個名額無法分開處理（黃姸元 7/31 案例）。
        各列以 seatKeys 的名額鍵操作；票券圓點只畫在該會員的第一列（同一張票不重複畫）。 */
-    const _seatKeys=seatKeys(b);
+    const _seatKeys=seatKeysDisplay(b);   // 同一個人的名額排在一起（2026-07-30 使用者指示）
     const _seat={}; gIdsD.forEach(x=>{ _seat[x]=(_seat[x]||0)+1; });
     const _uniqIds=[...new Set(gIdsD)];
     const _gTk={};
@@ -18664,6 +18664,21 @@ function seatKeys(b){
   return mids(b).map(id=>{ c[id]=(c[id]||0)+1; return c[id]>1 ? id+'#'+c[id] : id; });
 }
 function seatMid(key){ const k=String(key), i=k.indexOf('#'); return i<0?k:k.slice(0,i); }
+/* 顯示順序（2026-07-30 使用者指示：團課如果是同一個人的預約，放在一起）——
+   member_ids 的順序是報名順序，同一個人的多個名額可能被別人插在中間
+   （例：A、B、A → 名單會排成 A / B / A#2，同一個人被拆開，很難看出他佔了兩個位子）。
+   這裡依「該會員第一次出現的位置」重排，讓同一個人的名額連在一起。
+   ⚠ 只用於顯示。seatKeys() 必須維持與 member_ids 同索引 ——
+   seatReindexAfterRemove／doGroupCancelSeat 是用 indexOf 去 splice member_ids 的。 */
+function seatKeysDisplay(b){
+  const keys=seatKeys(b);
+  const order={}; let n=0;
+  keys.forEach(k=>{ const m=seatMid(k); if(order[m]==null) order[m]=n++; });
+  return keys.map((k,i)=>({k,i})).sort((x,y)=>{
+    const d=order[seatMid(x.k)]-order[seatMid(y.k)];
+    return d!==0 ? d : x.i-y.i;      // 同一人內維持原順序（第 1、第 2 個名額）
+  }).map(x=>x.k);
+}
 function seatNo(key){ const k=String(key), i=k.indexOf('#'); return i<0?1:(Number(k.slice(i+1))||1); }
 // 這位會員在這堂課是否有「任一名額」處於某狀態（給只認 member id 的地方用）
 function seatAnyState(b,mid,state){
