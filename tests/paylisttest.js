@@ -1,4 +1,4 @@
-/* 今日付款名單（2026-07-30 使用者指示，原「今日待簽約名單」）：
+/* 今日收款提醒（2026-07-30 使用者指示，原「今日待簽約名單」）：
    櫃檯要一眼知道今天有哪些人要收款 —— 含團體課、含今天要簽約的新客戶，並標上課時間。
 
    團體課原本從來沒進過這份名單：判定是以「票券 → 綁到的預約」為主軸，但團課預約的
@@ -10,10 +10,10 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
-console.log('改名');
-ok('★ 首頁待辦列改成「今日付款名單」', /'今日付款名單',_l,_signNames\.length,'ok',"openTodoList\('sign'\)"/.test(src)
+console.log('改名（2026-07-30 二修：定名為「今日收款提醒」）');
+ok('★ 首頁待辦列改成「今日收款提醒」', /'今日收款提醒',_l,_signByTime\.length,'ok',"openTodoList\('sign'\)"/.test(src)
    && !/'今日待簽約名單',_l,/.test(src));
-ok('★ 展開的視窗標題也改了', /sign:\{title:'今日付款名單'/.test(src));
+ok('★ 展開的視窗標題也改了', /sign:\{title:'今日收款提醒'/.test(src));
 ok('　　空狀態文案一致（兩處都是「今日無人待收款」）',
    (src.match(/今日無人待收款/g)||[]).length===2 && !/'今日無待簽約'/.test(src));
 ok('　　說明講清楚收款對象與時間', /今天要向這些人收款[\s\S]{0,120}名字後面是上課時間/.test(src));
@@ -45,7 +45,8 @@ ok('★ 待付費用品牌紅、一般續課用品牌金（紅 > 金 色階）',
    && /\.tdl-tm-pay\{[^}]*color:var\(--danger,#b5372e\);\}/.test(src));
 ok('　　同一人同一天多堂 → 時間都列出來', /e\.times\.add\(String\(b\.start_time\)\.slice\(0,5\)\);/.test(src)
    && /time:\[\.\.\.e\.times\]\.sort\(\)\.join\('、'\)/.test(src));
-ok('　　首頁摘要那行也帶時間', /x\.time\?`\$\{x\.name\}（\$\{x\.time\}）`:x\.name/.test(src));
+ok('　　首頁摘要改成一個名字一列、時間在前（見 paygridtest）',
+   /<span class="mc-td-line"><b>\$\{x\.time\|\|'—'\}<\/b>\$\{x\.name\}/.test(src));
 ok('　　時間用等寬數字排版', /\.tdl-tm\{[^}]*font-family:var\(--num\),inherit;/.test(src));
 
 console.log('\n排序：待處理在前，然後照上課時間');
