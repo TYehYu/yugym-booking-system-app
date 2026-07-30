@@ -3408,6 +3408,11 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard.tcard-std{width:84px;min-height:98px;}
 .tcard-std .tcard-txt{min-height:98px;gap:3px;}
 .tcard-std .tcard-body{position:absolute;inset:0;z-index:0;border-radius:10px;border:1px solid #33302A;background:var(--tk-soft,#EAF3EF);}
+/* 待簽約（還沒收款）→ 紅框；與行事曆課卡同一套做法：只加粗外框，不覆蓋課程底色
+   （2026-07-30 使用者指示：首頁的任務課卡也要標） */
+.tcard.tcard-std.tcard-pend .tcard-body{
+  border:2px solid var(--danger,#b5372e) !important;
+  box-shadow:inset 0 0 0 1px rgba(181,55,46,.45) !important;}
 .tcard-std.course-pt .tcard-body{--tk-soft:var(--course-pt-soft);}             .tcard-std.course-pt .tcard-txt{color:var(--course-pt-accent);}
 .tcard-std.course-friendly .tcard-body{--tk-soft:var(--course-friendly-soft);} .tcard-std.course-friendly .tcard-txt{color:var(--course-friendly-accent);}
 .tcard-std.course-group .tcard-body{--tk-soft:var(--course-group-soft);}       .tcard-std.course-group .tcard-txt{color:var(--course-group-accent);}
@@ -3777,11 +3782,11 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 教練端：一律隱藏頂部 nav、顯示底部固定導覽（不分手機/平板寬度） */
 .role-coach .navbar-row{display:none;}
 #app-screen.desktop-wide.role-coach .navbar-row{display:flex;}   /* 店長桌機：上方導覽列要顯示（2026-07-28） */
-/* 教練桌機（2026-07-30 使用者指示）：導覽列改到上方，底部那條收起來。
+/* 教練桌機（2026-07-30 使用者指示）：頂欄改成跟櫃檯版一樣的綠底頂列（body.mc-mode），
+   導覽只放「首頁」與「預約行事曆」；底部導覽與打卡 FAB 收起。
    原本教練不管螢幕多寬都走手機版面（底部導覽），在電腦上就是一個放大版的手機介面。 */
-#app-screen.coach-wide.role-coach .navbar-row{display:flex;}
 #app-screen.coach-wide.role-coach #bottom-nav{display:none !important;}
-#app-screen.coach-wide.role-coach{--fixed-h:118px;}
+#app-screen.coach-wide.role-coach{--fixed-h:62px;}
 #app-screen.coach-wide.role-coach .content{padding-bottom:32px;}
 #app-screen.coach-wide.role-coach #punch-fab{display:none !important;}
 .role-coach{--fixed-h:62px;} /* 教練端無導覽列，sticky 只需避開 topbar */
@@ -6584,8 +6589,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.2215';
-const APP_VERSION_LABEL='v260730.2215';
+const APP_VERSION = '260730.2225';
+const APP_VERSION_LABEL='v260730.2225';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8015,9 +8020,9 @@ function buildNav(){
        跟手機端的底部導覽（首頁／行事曆）維持同一組入口，只是行事曆換成桌機版週曆；
        薪資單、個人資料、補打卡等仍在右上角 ☰ 選單裡。 */
     if(!isMobile && !SESSION.is_manager){
-      items=[{key:'coach_today',label:'首頁'},{key:'calendar',label:'預約行事曆'}];
-      nav.innerHTML=items.map(n=>
-        `<div class="nav-item" data-key="${n.key}" onclick="navTo('${n.key}')"><span class="ni-label">${n.label}</span><span class="ni-badge" data-badge="${n.key}" style="display:none;"></span></div>`).join('');
+      /* 桌機：與櫃檯／管理員同一條綠底頂列（mc-mode），導覽只放兩項 —— 見 renderLeftSidebar */
+      nav.innerHTML='';
+      renderLeftSidebar();
       refreshNavBadges();
       buildBottomNav();
       return;
@@ -8101,9 +8106,12 @@ function renderLeftSidebar(groups){
   groups = groups || visibleGroups();
   // Desktop 統一 Layout：管理員與櫃台共用左側固定導覽列（mc-mode），差異只由 visibleGroups() 權限過濾
   const isDeskStaff = !isMobileLayout() && isDeskLike();   // 2026-07-28：店長桌機同櫃台（原漏掉 coach+is_manager）
-  document.body.classList.toggle('mc-mode', !!isDeskStaff);
-  if(!isDeskStaff){ el.innerHTML=''; return; }
-  const nm=SESSION.name||(SESSION.role==='front_desk'?'櫃台':'管理員');
+  /* 2026-07-30 使用者指示：教練桌機的頂欄要跟櫃檯版一樣（同一條綠底頂列），
+     只是導覽只放「首頁」與「預約行事曆」兩個。非店長教練走這條。 */
+  const isCoachWide = !isMobileLayout() && !!(SESSION && SESSION.role==='coach' && !SESSION.is_manager);
+  document.body.classList.toggle('mc-mode', !!(isDeskStaff||isCoachWide));
+  if(!isDeskStaff && !isCoachWide){ el.innerHTML=''; return; }
+  const nm=SESSION.name||(SESSION.role==='front_desk'?'櫃台':(SESSION.role==='coach'?'教練':'管理員'));
   const av=(nm[0]||'R').toUpperCase();
   const roleLbl=SESSION.role==='admin'?'管理員':SESSION.role==='front_desk'?'櫃台':SESSION.role==='coach'?'教練':'會員';
   const avHtml=(typeof genderAvatarSVG==='function')?genderAvatarSVG(SESSION&&SESSION.gender):av;
@@ -8113,7 +8121,13 @@ function renderLeftSidebar(groups){
       <span class="mc-brand-sub">有肌訓練</span>
     </div>
     <nav class="mc-nav">
-      ${groups.map(g=>`<div class="mc-nav-item${CUR_GROUP===g.key?' active':''}" data-group="${g.key}" onclick="selectGroup('${g.key}')" title="${MC_LABELS[g.key]||g.label}">
+      ${isCoachWide
+        ? [['coach_today','首頁','g_dashboard'],['calendar','預約行事曆','g_booking']].map(([pg,lb,ic])=>
+            `<div class="mc-nav-item${CUR_PAGE===pg?' active':''}" data-page="${pg}" onclick="navTo('${pg}')" title="${lb}">
+              <span class="mc-ni-ic">${NAV2_ICONS[ic]||''}</span>
+              <span class="mc-ni-label">${lb}</span>
+            </div>`).join('')
+        : groups.map(g=>`<div class="mc-nav-item${CUR_GROUP===g.key?' active':''}" data-group="${g.key}" onclick="selectGroup('${g.key}')" title="${MC_LABELS[g.key]||g.label}">
         <span class="mc-ni-ic">${NAV2_ICONS[g.key]||''}</span>
         <span class="mc-ni-label">${MC_LABELS[g.key]||g.label}</span>
       </div>`).join('')}
@@ -8465,6 +8479,8 @@ function navTo(key, gkey){
     document.querySelectorAll('.nav2-main').forEach(el=>el.classList.toggle('active',el.dataset.group===gkey));
   }else{
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.key===key));
+    /* 教練桌機的綠底頂列導覽（data-page）也要跟著換高亮（2026-07-30） */
+    document.querySelectorAll('.mc-nav-item[data-page]').forEach(n=>n.classList.toggle('active',n.dataset.page===key));
   }
   if(typeof syncBottomNavActive==='function') syncBottomNavActive(key);
   if(typeof PAGES[key]!=='function'){
@@ -10549,8 +10565,11 @@ PAGES.g_dashboard=async function(){
       const smin=timeToMin(b.start_time||'0:0');
       const dur=Number(b.duration)||60;
       const emin=smin+dur;
-      const nm = b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
-               : (b.trial_name?bkGuestName(b):(Array.isArray(b.member_ids)&&b.member_ids.length?`團課 ${b.member_ids.length} 人`:'—'));   /* 體驗／待簽約／場租都顯示客戶姓名（2026-07-27、2026-07-29 修標籤） */
+      /* 團課一律顯示人數（member_id 在團課上是殘留欄位，2026-07-30 修） */
+      const nm = (b.category==='小班肌力'||(Array.isArray(b.member_ids)&&b.member_ids.length>0))
+                 ? `團課 ${(Array.isArray(b.member_ids)?b.member_ids.length:0)} 人`
+                 : (b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
+                 : (b.trial_name?bkGuestName(b):'—'));   /* 體驗／待簽約／場租都顯示客戶姓名（2026-07-27、2026-07-29 修標籤） */
       const subbed = b.substitute_coach_id && b.substitute_coach_id!==c.id;
       const isLive = nowMin>=smin && nowMin<emin && !isDone(b);           // 進行中
       const isUpcoming = !isDone(b) && !isLive && (smin-nowMin>0) && (smin-nowMin<=30); // 30分內即將開始
@@ -10583,14 +10602,22 @@ PAGES.g_dashboard=async function(){
         const cards=drawBk.slice().sort((a,b)=>timeToMin(a.start_time||'0:0')-timeToMin(b.start_time||'0:0')).map(b=>{
           const mt=b.ticket_id?_mtTL[b.ticket_id]:null;
           const cc=evColorClass(b,typeMap,mt);
-          const nm = b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
-                   : (b.trial_name?bkGuestName(b):(Array.isArray(b.member_ids)&&b.member_ids.length?`${b.member_ids.length} 人`:'—'));   /* 體驗／待簽約／場租都顯示客戶姓名（2026-07-27、2026-07-29 修標籤） */
+          /* 2026-07-30 使用者回報「7/31 11:00 團課顯示蔡票阿姨，她根本沒上這堂」：
+             原本先看 b.member_id，但團課的學員在 member_ids、member_id 應該是 null；
+             匯入資料有殘留的 member_id（那堂殘留的是別人），就被拿去當卡片名稱。
+             團課一律顯示人數，不再掉回 member_id。 */
+          const _isGrp = b.category==='小班肌力' || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
+          const nm = _isGrp ? `${(Array.isArray(b.member_ids)?b.member_ids.length:0)} 人`
+                   : (b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
+                   : (b.trial_name?bkGuestName(b):'—'));   /* 體驗／待簽約／場租都顯示客戶姓名（2026-07-27、2026-07-29 修標籤） */
+          /* 待簽約（還沒收款）→ 紅框，與行事曆課卡同一套提示（2026-07-30 使用者指示） */
+          const _pend = !!b.pending_contract;
           const canceled=isCancelled(b);
           const mn=timeToMin(b.start_time||'0:0');
           const live = !canceled && nowMin>=mn && nowMin<mn+(Number(b.duration)||60) && !isDone(b);
           const done = isDone(b);
           const coTag=`<span class="tcard-co" style="background:${_cc2.bg};color:${_cc2.fg};">${coachAbbr(c)}${b.substitute_coach_id===c.id?'（代）':''}</span>`;
-          return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${nm}${live?'（進行中）':''}${canceled?'（已取消）':''}">
+          return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}${_pend?' tcard-pend':''}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${nm}${_pend?'（待簽約・尚未收款）':''}${live?'（進行中）':''}${canceled?'（已取消）':''}">
             <div class="tcard-body"></div>
             <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-mem">${nm}</span>${(b.member_id?lottoGiftIcon(_lotMap[b.member_id]):'')}${coTag}${done?'<span class="tcard-chk">簽</span>':''}</div>${canceled?'<span class="tcard-del">刪</span>':''}
           </div>`;
@@ -34048,14 +34075,9 @@ async function renderSalaryContent(TARGET, withHead){
       })()}
     </div>
   </div>`+
-  `<div class="card"><div class="card-title">本月月曆 <span style="font-size:12px;color:var(--t3);font-weight:400;">每格為當日課程堂數，點日期看當天課程</span></div>${salaryCalendar(month, bookings, shifts, (function(){
-    const er2=effRates(me); const dutyRate2=(me.custom_salary?(me.duty_hourly||0):(er2.duty_hourly||0)); const cs2=me.count_salary!==false;
-    return (d)=>{
-      const dCls=bookings.filter(b=>b.coach_id===empId&&b.date===d&&b.status!=='cancelled').length;
-      const dDuty=(shifts||[]).filter(s=>s.emp_id===empId&&s.date===d).reduce((a,s)=>a+(Number(s.hours)||0),0);
-      return {clsCnt:dCls, duty:dDuty, pay:0};
-    };
-  })())}<div id="salary-cal-day"></div></div>`+
+  /* 2026-07-30 使用者指示：薪資單下方的「本月月曆」移除 —— 課表在首頁與行事曆都看得到，
+     薪資單只留金額組成與排班明細。
+     ⚠ salaryCalendar()／salaryCalDay() 因此沒有呼叫端了，函式暫留未刪（要恢復只需接回這裡）。 */
   (isDutyType(me)?`<div class="card"><div class="card-title">本月排班 <span style="font-size:12px;color:var(--t3);font-weight:400;">共 ${dutyHours.toFixed(1)} 小時</span></div>
     ${myShifts.length===0?'<div class="empty"><div class="em-t">本月尚未排班</div></div>':
     `<table><thead><tr><th>日期</th><th>時間</th><th>時數</th><th>備註</th></tr></thead><tbody>
