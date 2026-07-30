@@ -29,7 +29,8 @@ ok('　　日期旁標星期', /\$\{wd\?`<span class="att-wd">（\$\{wd\}）<\/s
 ok('　　員工管理頁與出勤管理頁共用 → 重繪目前那一頁', /_attDate=ymd\(d\);\s*\n\s*navTo\(CUR_PAGE\);/.test(src));
 ok('　　按鈕標了 aria-label（只有箭頭符號，讀螢幕聽不出來）',
    /aria-label="前一天"/.test(src) && /aria-label="後一天"/.test(src));
-ok('　　type="button"，不會誤觸表單送出', (src.match(/<button type="button" class="att-arw"/g)||[]).length===2);
+// .att-arw 現在有兩組：出勤的日期翻頁 ＋ 員工列表的月份翻頁（共用同一顆箭頭樣式）
+ok('　　type="button"，不會誤觸表單送出', (src.match(/<button type="button" class="att-arw"/g)||[]).length===4);
 ok('　　原因寫在程式裡', /版面佔太大/.test(src) && /不必每次點開日曆/.test(src));
 
 // 實跑翻頁

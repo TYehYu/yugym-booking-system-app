@@ -88,13 +88,14 @@ console.log('\n管理員次選單分組');
   const items=[...html.matchAll(/<div class="subnav-item[^"]*"[^>]*>([^<]+)/g)].map(m=>m[1]);
   ok('★ 三個組別、順序為 人事 → 財務 → 環境設定',
      JSON.stringify(grps)===JSON.stringify(['人事','財務','環境設定']), grps);
-  ok('★ 15 個項目（今日出勤嵌進員工頁、人資制度移除）', items.length===15, items.length);
-  ok('★ 人事：員工管理 → 出勤紀錄 → 打卡異常與補卡 → 制度類',
-     items.slice(0,9).join()==='員工管理,出勤紀錄,打卡異常與補卡,薪資制度,勞健保,特休,工作規則,權限設定,教練統計',
-     items.slice(0,9));
-  ok('★ 財務：財務總覽／營運分析', items.slice(9,11).join()==='財務總覽,營運分析', items.slice(9,11));
+  // 2026-07-30 三修：「出勤紀錄」入口移除（逐日打卡改看員工各自的資料）→ 15 → 14 項
+  ok('★ 14 個項目（今日出勤嵌進員工頁→再移除、人資制度移除、出勤紀錄移除）', items.length===14, items.length);
+  ok('★ 人事：員工管理 → 打卡異常與補卡 → 制度類',
+     items.slice(0,8).join()==='員工管理,打卡異常與補卡,薪資制度,勞健保,特休,工作規則,權限設定,教練統計',
+     items.slice(0,8));
+  ok('★ 財務：財務總覽／營運分析', items.slice(8,10).join()==='財務總覽,營運分析', items.slice(8,10));
   ok('★ 環境設定：課程方案／場地・班別／合約範本／動作資料庫',
-     items.slice(11).join()==='課程方案,場地・班別,合約範本,動作資料庫', items.slice(11));
+     items.slice(10).join()==='課程方案,場地・班別,合約範本,動作資料庫', items.slice(10));
   ok('　　「系統設定」改名成看得懂的「場地・班別」', /grp:'環境設定', label:'場地・班別', page:'settings'/.test(src));
   ok('　　目前所在頁仍會高亮', /subnav-item active[^>]*>員工管理/.test(html));
   ok('　　組別標籤前面有分隔線，第一組不畫',
@@ -169,35 +170,41 @@ console.log('\n員工管理：卡片改回列表');
   const pend=fn({id:'E3',name:'待邀請',invite_status:'pending',invite_token:'T',employment_type:'full_time'});
   ok('　　待接受邀請：標籤照舊、齒輪變成複製邀請連結',
      /待接受邀請/.test(pend) && /copyInvite\('T'\)/.test(pend));
-  ok('★ 依聘僱類型分區維持不變', /<div class="st-list">\$\{secs\[k\]\.map\(stRow\)\.join\(''\)\}<\/div>/.test(src));
+  // 2026-07-30 三修：分區取消，整份合成一張表、類型改用色條＋色票（詳見 stlisttest.js）
+  ok('★ 排序仍照聘僱類型', /const allRows=ET_ORDER\.flatMap\(\(\[k\]\)=>secs\[k\]\|\|\[\]\);/.test(src));
   ok('　　舊的 stCard 已移除，不留兩套', !/const stCard=c=>\{/.test(src) && /〔已移除〕stCard（直式員工卡）/.test(src));
   ok('　　窄畫面（<900px）收起表頭、數字自己一排並補回欄名',
      /@media\(max-width:900px\)\{\s*\n\s*\.st-lhead\{display:none;\}/.test(src)
-     && /\.st-l-n:nth-of-type\(1\)::before\{content:'教練課';\}/.test(src));
-  ok('★ 列表顯示本月教練課／團體課／續約數／工作時數（2026-07-30 二修：欄名移到表頭）',
-     [...h.matchAll(/<span class="st-l-n">([\s\S]*?)<\/span>/g)].map(m=>m[1].replace(/<[^>]+>/g,'')).join('|')
+     && /\.st-l-n1::before\{content:'教練課';\}/.test(src));   // 三修：nth-of-type 本來就沒生效，改類別
+  ok('★ 列表顯示本月教練課／團體課／續約數／工作時數（欄名在表頭）',
+     [...h.matchAll(/<span class="st-l-n st-l-n\d">([\s\S]*?)<\/span>/g)].map(m=>m[1].replace(/<[^>]+>/g,'')).join('|')
        ==='12/14|4|2|58h');
-  ok('　　排定堂數與已上不同時附註（12 /14）', /<span class="st-l-n">12<u>\/14<\/u><\/span>/.test(h));
+  ok('　　排定堂數與已上不同時附註（12 /14）', /<span class="st-l-n st-l-n1">12<u>\/14<\/u><\/span>/.test(h));
   ok('　　工時四捨五入到整數並帶 h', /58<u>h<\/u>/.test(h) && !/58\.4/.test(h));
   ok('★ 每一格不再重複印欄名（改由表頭統一）', !/<i>教練課<\/i>/.test(h) && !/st-l-stats/.test(src));
-  ok('★ 表頭：姓名／教練課／團體課／續約／工作時數／權限開關',
-     /<span>姓名<\/span>\s*\n\s*<span>教練課<\/span><span>團體課<\/span><span>續約<\/span><span>工作時數<\/span>\s*\n\s*<span>權限開關<\/span>/.test(src));
-  ok('★ 改成固定欄位的 grid，姓名不再把中間撐開一大片空白',
-     /\.st-lhead,\.st-lrow\{display:grid;\s*\n\s*grid-template-columns:10px 34px minmax\(150px,1\.3fr\) 66px 66px 56px 62px max-content 30px;/.test(src));
+  // 三修：加入「工作規則／休假日」兩欄，數字欄名在翻月時會附月份標記
+  ok('★ 表頭：姓名／教練課／團體課／續約／工作時數／工作規則／休假日／權限開關',
+     /<span>姓名<\/span>\s*\n\s*<span>教練課\$\{_mTag\}<\/span><span>團體課\$\{_mTag\}<\/span><span>續約\$\{_mTag\}<\/span><span>工作時數\$\{_mTag\}<\/span>\s*\n\s*<span>工作規則<\/span><span>休假日<\/span>\s*\n\s*<span>權限開關<\/span>/.test(src));
+  ok('★ 固定欄位的 grid（三修：最後一欄不再用 max-content，剩餘寬度改給右邊的開關欄）',
+     /\.st-lhead,\.st-lrow\{display:grid;\s*\n\s*grid-template-columns:10px 34px minmax\(160px,1fr\) 58px 58px 46px 54px 92px 78px minmax\(320px,3fr\) 30px;/.test(src));
   ok('★ 舊的 flex 版樣式已移除（它排在後面會蓋掉 grid）',
      /〔已移除〕舊的 flex 版員工列樣式/.test(src) && !/\.st-lrow\{position:relative;display:flex/.test(src));
   ok('　　0 用灰字，不會跟有數字的搶注意',
-     /<span class="st-l-n"><i class="st-l-z">0<\/i>/.test(fn({id:'Z',name:'純櫃檯',employment_type:'full_time',status:'active'})));
+     /<span class="st-l-n st-l-n\d"><i class="st-l-z">0<\/i>/.test(fn({id:'Z',name:'純櫃檯',employment_type:'full_time',status:'active'})));
 }
 
 
 /* ── ⑧ 出勤整併進員工管理＋員工表現欄位重排（2026-07-30 使用者指示）── */
 console.log('\n出勤整併進員工管理');
-ok('★ 分頁：員工 → 出勤紀錄 → 打卡異常與補卡（今日出勤改嵌在員工頁最上方）',
-   /\{key:'list',label:'員工'\},\s*\n\s*\{key:'records',label:'出勤紀錄'\},\s*\n\s*\{key:'punchfix',label:'打卡異常與補卡'\},/.test(src));
-ok('★ 工時統計分頁移除（工時已在員工列表那一列顯示）',
-   !/\{key:'hours',label:'工時統計'\},[\s\S]{0,200}STAFF_TABS/.test(src)
-   && /原本的「工時統計」分頁移除，工時直接顯示在員工列表那一列/.test(src));
+// 2026-07-30 三修：出勤紀錄分頁也移除，只剩員工＋打卡異常與補卡
+ok('★ 分頁：員工 → 打卡異常與補卡',
+   /\{key:'list',label:'員工'\},\s*\n\s*\{key:'punchfix',label:'打卡異常與補卡'\},/.test(src));
+{
+  // 只檢查 STAFF_TABS 自己那份（ATT_TABS_FULL 是未掛導覽的舊出勤頁，不動）
+  const i=src.indexOf('const STAFF_TABS=['); const st=src.slice(i, src.indexOf('];',i));
+  ok('★ 工時統計分頁移除（工時已在員工列表那一列顯示）',
+     !/hours/.test(st) && /「工時統計」分頁移除，工時直接顯示在員工列表那一列/.test(src));
+}
 ok('★ 異常打卡與補卡申請合成一頁（沿用原本兩支渲染函式，不分岔）',
    /renderAttAbnormal\(needPunch,all\);\s*\n\s*const abnHtml=att\.innerHTML;/.test(src)
    && /await renderAttRequests\(\);\s*\n\s*const reqHtml=att\.innerHTML;/.test(src));
@@ -300,18 +307,17 @@ ok('　　深色卡的文字也一併拉亮', /\.mc-dash \.mc-todo-card \.mc-td-
 
 
 console.log('\n今日出勤嵌在員工管理最上方');
-ok('★ 不再是獨立分頁（STAFF_TABS 移除 today；出勤頁自己的 ATT_TABS 不算）',
-   !/\{key:'today',label:'今日出勤'\},\s*\n\s*\{key:'list',label:'員工'\}/.test(src)
-   && /今日出勤改成直接嵌在「員工」頁最上方，不另開一個分頁/.test(src));
-ok('★ 次選單也移除單獨的「今日出勤」', !/label:'今日出勤', page:'staff', tab:'today'/.test(src));
-ok('★ 員工頁最上方預留容器並用出勤頁原本的 renderAttToday 填',
-   /`<div id="staff-today"><\/div>` \+ lpStats\(stats\)/.test(src)
-   && /renderAttToday\(_np,_att,coaches,_sh\);/.test(src));
-ok('　　沿用同一支渲染，兩邊口徑不分岔', /兩邊口徑不分岔/.test(src));
+// 2026-07-30 三修：「今日出勤」整塊移除（改看員工各自的資料），細節見 staffattrmtest.js
+ok('★ STAFF_TABS 沒有今日出勤分頁',
+   !/\{key:'today',label:'今日出勤'\},\s*\n\s*\{key:'list',label:'員工'\}/.test(src));
+ok('★ 次選單也沒有單獨的「今日出勤」', !/label:'今日出勤', page:'staff', tab:'today'/.test(src));
+ok('★ 員工頁最上方不再嵌今日出勤',
+   !/`<div id="staff-today"><\/div>` \+ lpStats\(stats\)/.test(src)
+   && !/renderAttToday\(_np,_att,coaches,_sh\);/.test(src));
 ok('★ 換日期改重繪當前頁（原本寫死 attendance，嵌進來後會跳頁）',
    /onchange="_attDate=this\.value;navTo\(CUR_PAGE\)"/.test(src));
-ok('　　出勤紀錄與打卡異常補卡仍是分頁',
-   /else if\(_staffTab==='records'\|\|_staffTab==='punchfix'\) await renderStaffAttendance\(_staffTab\);/.test(src));
+ok('　　打卡異常與補卡仍是分頁',
+   /else if\(_staffTab==='punchfix'\) await renderStaffAttendance\(_staffTab\);/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
