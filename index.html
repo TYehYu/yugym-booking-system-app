@@ -2222,6 +2222,9 @@ tr:hover td{background:var(--card2);}
 .grp-on .grp-check{background:#1f6f54;border-color:#1f6f54;color:#fff;}
 /* 同名重複報名（2026-07-21）：×N 名額數＋「＋/−」增減鈕（span 模擬按鈕，避免 button 巢套） */
 .grp-mult{font-size:11.5px;font-weight:800;color:#1f6f54;background:#dcebe3;padding:1px 7px;border-radius:999px;flex:0 0 auto;}
+/* 已選區與其餘會員的分隔（2026-07-30 使用者指示：已選取的排最上面） */
+.grp-div{font-size:11px;font-weight:800;color:var(--t3);letter-spacing:.04em;
+  padding:9px 8px 5px;margin-top:4px;border-top:1px solid var(--bd);}
 .grp-step{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border:1px solid var(--bd);border-radius:6px;background:#fff;color:#1f6f54;font-size:14px;font-weight:700;line-height:1;cursor:pointer;flex:0 0 auto;user-select:none;}
 .grp-step:hover{background:#eaf3ee;border-color:#1f6f54;}
 /* 快速預約浮動按鈕 */
@@ -6402,8 +6405,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1359';
-const APP_VERSION_LABEL='v260730.1359';
+const APP_VERSION = '260730.1452';
+const APP_VERSION_LABEL='v260730.1452';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15712,10 +15715,23 @@ function renderGrpPick(){
   const box=document.getElementById('grp-list'); if(!box)return;
   const q=(document.getElementById('grp-search')?.value||'').trim().toLowerCase();
   const sel=window._grpSel||(window._grpSel=[]);
+  /* 2026-07-30 使用者指示：已選取的會員排到名單最上面。
+     會員多的時候要往下捲才看得到剛加的人，也不容易一眼確認名單對不對。
+     已選區內依「加入順序」排（＝實際報名順序），其餘維持 ★我的會員 → 姓名。 */
+  const selOrder={}; (sel||[]).forEach((x,i)=>{ if(selOrder[x]==null) selOrder[x]=i; });
+  const isSel=m=>selOrder[m.id]!=null;
   let list=(window._grpData||[]).filter(m=> !q || (m.name||'').toLowerCase().includes(q));
-  list=list.slice().sort((a,b)=>{ if(a.mine!==b.mine)return a.mine?-1:1; return (a.name||'').localeCompare(b.name||''); });
+  list=list.slice().sort((a,b)=>{
+    const sa=isSel(a), sb=isSel(b);
+    if(sa!==sb) return sa?-1:1;
+    if(sa&&sb) return selOrder[a.id]-selOrder[b.id];
+    if(a.mine!==b.mine) return a.mine?-1:1;
+    return (a.name||'').localeCompare(b.name||'');
+  });
+  const firstUnsel=list.findIndex(m=>!isSel(m));   // 已選區與其餘會員之間放一條分隔
   if(list.length===0){ box.innerHTML='<div class="ms-empty">找不到符合的會員</div>'; }
-  else box.innerHTML=list.map(m=>{
+  else box.innerHTML=list.map((m,_i)=>{
+    const _div=(_i===firstUnsel&&firstUnsel>0)?'<div class="grp-div">其他會員</div>':'';
     const n=sel.filter(x=>x===m.id).length;
     const on=n>0;
     const tag=m.sum>0?`團體課票 剩 ${m.sum} 堂`:'無票（教練負責）';
@@ -15730,7 +15746,7 @@ function renderGrpPick(){
             ${tks.map(t=>`<option value="${t.id}" ${t.id===picked?'selected':''}>扣：${String(t.name).replace(/</g,'&lt;')}　剩 ${t.left} 堂${t.exp?`　效期至 ${t.exp.slice(5).replace('-','/')}`:'　無到期日'}</option>`).join('')}
           </select></div>`
       : '';
-    return `<button type="button" class="ms-item grp-item${on?' grp-on':''}" onclick="toggleGrpMember('${m.id}')">
+    return _div+`<button type="button" class="ms-item grp-item${on?' grp-on':''}" onclick="toggleGrpMember('${m.id}')">
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="grp-check">${on?'✓':''}</span>
         <span class="ms-name" style="margin:0;">${m.mine?'<span class="ms-star">★</span> ':''}${m.name}</span>
@@ -15742,7 +15758,14 @@ function renderGrpPick(){
       ${pick}
     </button>`;
   }).join('');
-  const c=document.getElementById('grp-count'); if(c)c.textContent=`已選 ${sel.length} / ${grpMax()} 人`;
+  const c=document.getElementById('grp-count');
+  if(c){
+    /* 搜尋會把不符關鍵字的已選會員濾掉 → 明講被藏了幾位，免得以為名單掉了 */
+    const shown=new Set(list.filter(isSel).map(m=>m.id)).size;
+    const total=new Set(sel).size;
+    c.textContent=`已選 ${sel.length} / ${grpMax()} 人`
+      + ((q && shown<total) ? `（搜尋中隱藏了 ${total-shown} 位已選會員）` : '');
+  }
 }
 // 團課本堂人數上限（2026-07-27 使用者指示）：預設 5，場地有餘裕時可放寬（開課/名單視窗皆可調）
 function grpMax(){ return Math.max(1, Number(window._grpMax)||5); }
