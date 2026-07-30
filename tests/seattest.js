@@ -87,12 +87,12 @@ ok('　　取消前先重編剩餘名額，不留孤兒鍵',
    /const att=seatReindexAfterRemove\(b, i\);/.test(src));
 ok('　　傳純 member id 的舊呼叫仍可用（＝第 1 個名額）',
    /傳純 member id 進來也照舊能用（＝第 1 個名額）/.test(src));
-ok('★ 票券圓點的歷史改逐名額判定（原本兩個名額共讀 att[mid]）',
-   /const _hist=\{\}, _histDone=\{\};/.test(src)
-   && /const doneAll=h\.filter\(\(x,i\)=>hd\[i\]\);/.test(src)
-   && /const bookedAhead=h\.filter\(\(x,i\)=>!hd\[i\] && x\.status!=='cancelled'\);/.test(src));
-ok('　　排序時 _hist 與 _histDone 同步重排（索引不能錯位）',
-   /_hist\[mid\]=ord\.map\(i=>H\[i\]\); _histDone\[mid\]=ord\.map\(i=>D\[i\]\);/.test(src));
+// 2026-07-30 二修：圓點改與會員票券頁共用 allocBookingsToTickets，_hist 那套推算退場
+ok('★ 圓點的「已上」仍逐名額判定（名額鍵）',
+   /const _doneFor=x=>\{/.test(src)
+   && /const st=at\[seen\[v\]>1\?v\+'#'\+seen\[v\]:v\];/.test(src));
+ok('★ 同一人在某堂佔多個名額 → 那一堂畫多顆圓點',
+   /bks=bks\.reduce\(\(arr,x\)=>\{ const n=mids\(x\)\.filter\(v=>v===mid\)\.length\|\|1;/.test(src));
 ok('★ 票券剩餘推算（_grpPending）也逐名額',
    /if\(at\[seen\[id\]>1\?id\+'#'\+seen\[id\]:id\]==='checked_in'\) return;/.test(src));
 ok('　　整堂「有人簽到」的判斷不受影響（仍看 Object.values）',

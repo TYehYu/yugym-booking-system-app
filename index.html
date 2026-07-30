@@ -6589,8 +6589,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.2238';
-const APP_VERSION_LABEL='v260730.2238';
+const APP_VERSION = '260730.2252';
+const APP_VERSION_LABEL='v260730.2252';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17709,62 +17709,33 @@ async function openBookingDetail(id){
       const _typeMapG=Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t]));
       const _allTk=await dbGetAll('member_tickets');
       const _allBk=await dbGetAll('bookings').catch(()=>[]);
-      /* 每位會員的團課出席／預約紀錄（團課學員放在 member_ids，故用 includes 撈）。
-         一個名額一筆（不可去重）：同一帳號訂 N 個名額就是扣 N 堂，圓點要出現 N 次同日期。
-         2026-07-30：出席狀態改名額鍵後，這裡也逐名額判定（原本兩個名額共讀 att[mid]，
-         只到一個人時會兩顆都算成已上）。_histDone 與 _hist 同索引平行維護。 */
-      const _hist={}, _histDone={};
-      _allBk.forEach(x=>{
-        if(x.category!=='小班肌力' || x.status==='cancelled') return;
-        const ids=mids(x); const one=ids.length?ids:(x.member_id?[x.member_id]:[]);
-        const at=(x.attendance&&typeof x.attendance==='object')?x.attendance:{};
-        const seen={};
-        one.forEach(mid=>{
-          seen[mid]=(seen[mid]||0)+1;
-          const st=at[seen[mid]>1?mid+'#'+seen[mid]:mid];
-          (_hist[mid]=_hist[mid]||[]).push(x);
-          (_histDone[mid]=_histDone[mid]||[]).push(st==='checked_in' || (!st && (x.status==='checked_in'||x.status==='completed')));
-        });
-      });
-      Object.keys(_hist).forEach(mid=>{
-        const H=_hist[mid], D=_histDone[mid];
-        const ord=H.map((_,i)=>i).sort((p,q)=>((H[p].date||'')+(H[p].start_time||'')).localeCompare((H[q].date||'')+(H[q].start_time||'')));
-        _hist[mid]=ord.map(i=>H[i]); _histDone[mid]=ord.map(i=>D[i]);
-      });
+      /* 統一推算來源（2026-07-30）：與會員票券頁共用 allocBookingsToTickets。 */
       _uniqIds.forEach(mid=>{
-        // 團課票券不分方案，同類別即可用（與 listUsableTickets 的 groupMode 一致）
-        const own=_allTk.filter(t=>t.member_id===mid && ticketCategoryOf(t)==='小班肌力');
+        const own=_allTk.filter(t=>tkUsableBy(t,mid) && ticketCategoryOf(t)==='小班肌力');
         const live=own.filter(t=>(t.sessions_remaining||0)>0 && (!t.expire_date || t.expire_date>=b.date))
           .sort((p,q)=>String(p.start_date||p.purchase_date||'').localeCompare(String(q.start_date||q.purchase_date||'')));
-        /* 顯示「目前在用的那張」：有餘額的取最早開始那張（與扣課的先進先出一致）；
-           全部用完則取最近一張，圓點會是整排實心＝已用畢，一眼看得出要續約。
-           會員常持有十幾張已用完的舊票（李曉娟 19 張），全列出來反而看不懂。 */
         const cur=live[0] || own.slice().sort((p,q)=>String(q.start_date||q.purchase_date||'').localeCompare(String(p.start_date||p.purchase_date||'')))[0] || null;
         if(!cur){ _gTk[mid]=null; return; }
-        const total=cur.sessions_total||0;
-        /* ⚠️ 團課預約的 ticket_id 為 null，無法逐堂對應到票券，日期只能用推的：
-           取這位會員「最近 used 堂」的出席紀錄當作這張票扣掉的堂數，未來已預約的課
-           填進剩餘圓點。所以日期是合理推估、不是帳本事實。 */
-        const h=_hist[mid]||[], hd=_histDone[mid]||[];
-        const doneAll=h.filter((x,i)=>hd[i]);
-        /* 2026-07-29 使用者回報「日期又跑回 7 月那份」：
-           已用堂數原本直接用「總−剩餘」，但新制是預約當下就扣課 —— 四堂全約在 8 月、
-           一堂都還沒上時餘額也是 0，於是這裡誤判成「用掉 4 堂」，再拿她最近 4 次出席
-           （7/7、7/16、7/23、7/28）去填圓點，看起來就像日期倒退回七月。
-           改成扣掉「已預約但還沒上」的堂數，那些要畫成空心＋預約日期。 */
-        const bookedAhead=h.filter((x,i)=>!hd[i] && x.status!=='cancelled');
-        /* 只有新制預約（id 以 BK- 開頭）在「建立當下」就扣了課，那幾堂要從已用堂數扣回來；
-           匯入的舊預約（IMP-／IMPB-）當初沒扣票，餘額裡本來就沒算它們，不能重複扣減
-           —— 否則鍾明潔那種「餘額已反映歷史、未來預約沒扣」的票會少畫實心圓。 */
-        const deductedAhead=bookedAhead.filter(x=>String(x.id||'').indexOf('BK-')===0).length;
-        const used=Math.max(0, total-(cur.sessions_remaining||0)-deductedAhead);
-        // used=0 時 slice(-0) 會回傳整個陣列，必須擋掉
-        const bks=[...(used>0?doneAll.slice(-used):[]), ...bookedAhead];
-        _gTk[mid]={
-          left: live.reduce((s,t)=>s+(t.sessions_remaining||0),0),
-          tokens: ticketTokens(cur,bks,_typeMapG,Math.min(used,total),b.id),
-          makeup: live.some(t=>t.source==='makeup')
+        const myGrp=(_allBk||[]).filter(x=>x && x.category==='小班肌力' && x.status!=='cancelled'
+          && (mids(x).includes(mid) || x.member_id===mid));
+        const _al=allocBookingsToTickets(own, myGrp, _typeMapG);
+        let bks=(_al.byTicket[cur.id]||[]).slice()
+          .sort((p,q)=>((p.date||'')+(p.start_time||'')).localeCompare((q.date||'')+(q.start_time||'')));
+        bks=bks.reduce((arr,x)=>{ const n=mids(x).filter(v=>v===mid).length||1;
+          for(let k=0;k<n;k++) arr.push(x); return arr; },[]);
+        const _doneFor=x=>{
+          const at=(x.attendance&&typeof x.attendance==='object')?x.attendance:{};
+          const seen={}; let any=false, has=false;
+          (mids(x)||[]).forEach(v=>{ seen[v]=(seen[v]||0)+1; if(v!==mid) return;
+            has=true; const st=at[seen[v]>1?v+'#'+seen[v]:v];
+            if(st==='checked_in') any=true; });
+          if(has && Object.keys(at).length) return any;
+          return x.status==='checked_in'||x.status==='completed';
         };
+        const used=bks.filter(_doneFor).length;
+        _gTk[mid]={ left: live.reduce((s,t)=>s+(t.sessions_remaining||0),0),
+          tokens: ticketTokens(cur,bks,_typeMapG,Math.min(used,Number(cur.sessions_total)||0),b.id),
+          makeup: live.some(t=>t.source==='makeup') };
       });
     }catch(_){}
     const rows = _seatKeys.length ? _seatKeys.map(sk=>{

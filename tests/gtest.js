@@ -10,8 +10,9 @@ if(s<0||e<0) throw new Error('找不到目標程式碼');
 const COURSE_SHAPE={};
 const parseYmd=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(x||'');return m?new Date(+m[1],+m[2]-1,+m[3]):null;};
 const helpers=new Function('COURSE_SHAPE','parseYmd',[grabFn('tkVisual'),grabFn('ticketTokens'),grabFn('mids'),
-  grabFn('seatKeys'),grabFn('seatMid'),grabFn('seatKeysDisplay'),grabFn('seatNo')].join('\n')+
-  '; return {tkVisual,ticketTokens,mids,seatKeys,seatMid,seatKeysDisplay,seatNo};')(COURSE_SHAPE,parseYmd);
+  grabFn('seatKeys'),grabFn('seatMid'),grabFn('seatKeysDisplay'),grabFn('seatNo'),
+  grabFn('tkSharedIds'),grabFn('tkUsableBy'),grabFn('allocBookingsToTickets')].join('\n')+
+  '; return {tkVisual,ticketTokens,mids,seatKeys,seatMid,seatKeysDisplay,seatNo,tkUsableBy,allocBookingsToTickets};')(COURSE_SHAPE,parseYmd);
 const ticketCategoryOf=t=>t.__cat;
 const attObj=b=>b.attendance||{};
 
@@ -19,17 +20,21 @@ async function render({ids,att={},tickets=[],bookings=[],names={},thisDate='2026
   const dbGetAll=async t=>t==='member_tickets'?tickets:t==='bookings'?bookings:[];
   // 名額鍵是從 b.member_ids 推的（2026-07-30），所以 b 也要帶名單
   const b={id:thisId,date:thisDate,attendance:att,member_ids:ids};
-  const fn=new Function('gIdsD','b','memMapD','groupCkOK','isPastD','attObj','ticketCategoryOf','dbGetAll','window','mids','ticketTokens','seatKeys','seatMid','seatKeysDisplay','seatNo',
+  const fn=new Function('gIdsD','b','memMapD','groupCkOK','isPastD','attObj','ticketCategoryOf','dbGetAll','window','mids','ticketTokens','seatKeys','seatMid','seatKeysDisplay','seatNo','tkUsableBy','allocBookingsToTickets',
     `return (async()=>{ const att=attObj(b); ${body} return rows; })();`);
-  return await fn(ids,b,names,true,false,attObj,ticketCategoryOf,dbGetAll,{_ttCache:[]},helpers.mids,helpers.ticketTokens,
-    helpers.seatKeys,helpers.seatMid,helpers.seatKeysDisplay,helpers.seatNo);
+  return await fn(ids,b,names,true,false,attObj,ticketCategoryOf,dbGetAll,{_ttCache:[{id:'tt-g',name:'團體課',category:'小班肌力',color:'group'}]},helpers.mids,helpers.ticketTokens,
+    helpers.seatKeys,helpers.seatMid,helpers.seatKeysDisplay,helpers.seatNo,helpers.tkUsableBy,helpers.allocBookingsToTickets);
 }
 const T=(o)=>Object.assign({__cat:'小班肌力',ticket_type_id:'tt-g',source:'purchase'},o);
-const BK=(id,date,st,ids)=>({id,date,start_time:'11:00',status:st,category:'小班肌力',member_ids:ids});
+const BK=(id,date,st,ids)=>({id,date,start_time:'11:00',status:st,category:'小班肌力',member_ids:ids,ticket_type_id:'tt-g'});
 let pass=0,fail=0;
 const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
 (async()=>{
-  // 鍾明潔情境：17 張票，只有一張 2/4 還有餘額；出席 5 堂 → 該票用掉 2 堂，日期取最近 2 堂
+  /* 鍾明潔情境（2026-07-30 二修）：名單圓點改與「會員票券頁」共用 allocBookingsToTickets
+     —— 同一個問題不該有兩套推法（使用者：「會員票券是一切的基礎，預約明細要從這邊調出去」）。
+     舊票只有 3 堂容量、且都排在 live 之前 → 5/09 5/17 5/31 落到最早那張，
+     7/17 7/25 落到下一張，live（7/01 起、4 堂）承接 7/27 這一堂。
+     這與票券頁看到的完全一致，才是「對齊」的意思。 */
   const many=[...Array(16)].map((_,i)=>T({id:'old'+i,member_id:'M',sessions_total:3,sessions_remaining:0,start_date:'2026-0'+(1+i%9)+'-01'}));
   const live=T({id:'live',member_id:'M',sessions_total:4,sessions_remaining:2,start_date:'2026-07-01'});
   const hist=['2026-05-09','2026-05-17','2026-05-31','2026-07-17','2026-07-25']
@@ -37,8 +42,8 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
   let html=await render({ids:['M'],tickets:[...many,live],bookings:[...hist,BK('B-NOW','2026-07-27','booked',['M'])],names:{M:'鍾明潔'}});
   console.log('挑「目前在用」的那張票：');
   chk('圓點數 = 該票總堂數 4', (html.match(/class="mtk/g)||[]).length===4);
-  chk('已用 2 堂取最近的 7/17', html.includes('>7/17<'));
-  chk('已用 2 堂取最近的 7/25', html.includes('>7/25<'));
+  chk('★ 舊票還有容量時，舊出席歸舊票（與票券頁同一套分配）',
+    !html.includes('>7/17<') && !html.includes('>7/25<'));
   chk('不會取到最早的 5/9', !html.includes('>5/9<'));
   chk('本堂 7/27 標金框', /mtk-booked mtk-cur[^>]*>7\/27</.test(html));
   console.log('不再顯示文字標籤：');
@@ -51,7 +56,11 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     T({id:'b',member_id:'M',sessions_total:4,sessions_remaining:0,start_date:'2026-07-01'})],
     bookings:hist.map(x=>({...x,member_ids:['M']})),names:{M:'許建助'}});
   chk('取最近一張（4 格）', (html.match(/class="mtk/g)||[]).length===4);
-  chk('整排實心＝已用畢', (html.match(/mtk-used/g)||[]).length===4 && !html.includes('mtk-free'));
+  /* 2026-07-30 二修：改用 allocBookingsToTickets 後，5 月的課歸 5/01 那張（2 堂）、
+     7 月的兩堂歸 7/01 這張，所以這張是「2 實心＋2 空心」而不是整排實心。
+     依起始日分配比「把 5 月的課算進 7 月的票」合理，這是修正不是退步。 */
+  chk('★ 依起始日分配：只有 7 月那兩堂算這張', (html.match(/mtk-used/g)||[]).length===2
+    && html.includes('>7/17<') && html.includes('>7/25<') && !html.includes('>5/9<'));
 
   /* 2026-07-30 使用者指示改成「一個名額一列」：原本三個名額合併成一列標「3 個名額」，
      簽到／請假／取消只有一個開關，沒辦法只處理其中一位。 */
@@ -95,11 +104,14 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
   console.log('新制預約（BK-）已預扣，不可再算成已上課：');
   {
     // 黃孟琦情境：4 堂票全約在 8 月、一堂都還沒上 → 餘額 0，但已上課應為 0
+    /* 2026-07-30 二修：補上「前一張已用完的票」——現實中 7 月那四堂是上一期的課，
+       原本的測資只給一張票，分配演算法沒有別的地方可放，才會把 7/28 算進新票。 */
+    const tk4prev=T({id:'g4prev',member_id:'M',sessions_total:4,sessions_remaining:0,start_date:'2026-06-30'});
     const tk4=T({id:'g4',member_id:'M',sessions_total:4,sessions_remaining:0,start_date:'2026-07-28'});
     const past=['2026-07-07','2026-07-16','2026-07-23','2026-07-28'].map((d,i)=>BK('p'+i,d,'checked_in',['M']));
     const future=['2026-08-04','2026-08-11','2026-08-18','2026-08-25']
       .map((d,i)=>({id:'BK-f'+i,date:d,start_time:'16:30',status:'booked',category:'小班肌力',member_ids:['M']}));
-    let html=await render({ids:['M'],tickets:[tk4],bookings:[...past,...future],names:{M:'黃孟琦'},
+    let html=await render({ids:['M'],tickets:[tk4prev,tk4],bookings:[...past,...future],names:{M:'黃孟琦'},
       thisDate:'2026-08-04',thisId:'BK-f0'});
     chk('★ 不會把七月的舊出席畫成這張票的實心', !html.includes('>7/7<')&&!html.includes('>7/28<'));
     chk('★ 四顆都是空心＋八月預約日期', (html.match(/mtk-booked/g)||[]).length===4);
