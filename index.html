@@ -488,7 +488,10 @@ select option{color:var(--text);}
 .gt-c2-meta{font-size:11px;color:var(--t2);}
 .gt-c2-valid{font-size:10px;color:var(--t3);}
 /* 簽約寬版視窗（2026-07-28 三修：內容過高時視窗內捲動，返回/下一步永遠搆得到） */
-.modal.modal-wide{max-width:720px;width:94vw;max-height:92vh;overflow-y:auto;}
+.modal.modal-wide{max-width:720px;width:94vw;max-height:92vh;overflow-y:auto;overflow-x:hidden;}
+/* ⚠ overflow-y:auto 會讓 overflow-x 的 visible 自動變成 auto（CSS 規範），
+   而 .modal-foot 用 margin:0 -18px 做滿版底條 —— 那 18px 就變成一條左右捲軸。
+   （2026-07-30 使用者回報「銷售視窗下方出現左右捲軸」）滿版是刻意的，直接切掉即可。 */
 /* 步驟2 摘要卡壓縮：圓圈縮小、明細橫排（原直排四行把按鈕推出畫面） */
 .modal-wide .gt-preview-card .tkc-dot{width:18px;height:18px;}
 .modal-wide .gt-pv-meta{flex-direction:row;flex-wrap:wrap;gap:4px 20px;margin-top:4px;padding-top:8px;}
@@ -1271,7 +1274,10 @@ body.mc-mode .layout{padding-top:8px;}
 .ov-label{font-size:13px;color:var(--t2);}
 .ov-val{font-size:21px;font-weight:700;font-family:var(--num);line-height:1;}
 /* 利潤主數字區 */
-.ov-hero{display:flex;flex-direction:column;gap:2px;padding:10px 0 14px;border-bottom:1px solid var(--bd2);}
+/* 2026-07-30 使用者指示：手機端「利潤」這一區靠右對齊（數字對齊右緣比較好讀、
+   也與下方 .ov-i-v 的數值同一條右緣線） */
+.ov-hero{display:flex;flex-direction:column;gap:2px;padding:10px 0 14px;border-bottom:1px solid var(--bd2);
+  align-items:flex-end;text-align:right;}
 .ov-hero-l{font-size:12.5px;color:var(--t2);}
 .ov-hero-v{font-size:30px;font-weight:800;font-family:var(--num);line-height:1.15;letter-spacing:-.01em;}
 .ov-hero-s{font-size:12px;color:var(--t2);font-family:var(--num),inherit;margin-top:3px;}
@@ -2976,6 +2982,11 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tkbag-toggle{align-self:flex-start;border:1px dashed var(--bd);background:transparent;color:var(--t3);
   font-family:inherit;font-size:10.5px;line-height:1;padding:4px 9px;border-radius:999px;cursor:pointer;}
 .tkbag-toggle:hover{color:var(--text);border-color:var(--t3);}
+/* 票券金額（2026-07-30）：一般用等寬數字、0 元依備註分色 —— 加贈綠、待確認紅、無金額灰 */
+.tk-amt{font-family:var(--num),inherit;font-weight:700;color:var(--text);}
+.tk-amt-zero{color:var(--t3);font-weight:600;}
+.tk-amt-gift{color:var(--green);}
+.tk-amt-wait{color:var(--danger,#b5372e);}
 .tk-minicard{display:flex;min-width:0;}
 .tkm-dots{display:flex;flex-wrap:wrap;gap:4px;}
 .tkm-dots .mtk{width:26px;height:26px;font-size:8.5px;}
@@ -6258,8 +6269,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1150';
-const APP_VERSION_LABEL='v260730.1150';
+const APP_VERSION = '260730.1206';
+const APP_VERSION_LABEL='v260730.1206';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11767,7 +11778,10 @@ PAGES.dashboard=async function(){
     .map(([name,d])=>({name,...d}))
     .sort((a,b)=>b.amount-a.amount||b.used-a.used); // 依銷課金額由高到低
 
-  const fmtNT=(n)=>'$'+(n||0).toLocaleString();
+  /* 2026-07-30 使用者指示：營運分析的數字不要有小數點，四捨五入到整數。
+     金額本來就靠 Math.round 各處自己處理，容易漏（例如利潤、營收、員工營收都算得出小數），
+     統一在這裡收斂。 */
+  const fmtNT=(n)=>'$'+Math.round(Number(n)||0).toLocaleString();
   /* 總覽列圖示（2026-07-29 使用者指示：簡化為「圖示＋短標題＋數值」）：線條單色、只做辨識輔助 */
   const OV_IC={
     pt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="3.2"/><path d="M5.5 20c0-3.4 2.9-5.6 6.5-5.6s6.5 2.2 6.5 5.6"/></svg>',
@@ -11863,7 +11877,7 @@ PAGES.dashboard=async function(){
           <span style="color:var(--green);font-weight:700;">${r.renew||'—'}</span>
           <span><b>${r.ptDone}</b>/${r.ptCount}</span>
           <span><b>${r.groupDone}</b>/${r.groupCount}</span>
-          <span>${r.need_duty||r.hours>0?r.hours.toFixed(1):'—'}</span>
+          <span>${r.need_duty||r.hours>0?Math.round(r.hours):'—'}</span>
         </div>`).join('')}
       </div>
       <div style="font-size:10.5px;color:var(--t3);padding:8px 2px 2px;line-height:1.6;">教練課／團體課＝已上/排定；值班＝打卡時數（排班封頂、扣上課重疊，與薪資頁同口徑）；續約＝賣票流程標記的續約單（7/27 起）。</div>`}
@@ -11880,7 +11894,7 @@ PAGES.dashboard=async function(){
   <div class="card"><div class="card-title">員工表現</div>
     ${perfRows.length===0?'<div class="empty"><div class="em-t">本期無資料</div></div>':
     `<table><thead><tr><th>姓名</th><th>營收</th><th>教練課</th><th>團體課</th><th>上班時數</th></tr></thead><tbody>
-    ${perfRows.map(r=>`<tr class="perf-clickable" onclick="openPerfDetail('${r.id}','${ym}')" title="查看當月薪資明細"><td style="font-weight:500;">${r.name}</td><td class="num" style="color:var(--green);font-weight:600;">${fmtNT(r.rev)}</td><td class="num">${r.ptCount} 堂</td><td class="num">${r.groupCount} 堂</td><td class="num">${r.need_punch?r.hours.toFixed(1)+' hr':'—'}</td></tr>`).join('')}
+    ${perfRows.map(r=>`<tr class="perf-clickable" onclick="openPerfDetail('${r.id}','${ym}')" title="查看當月薪資明細"><td style="font-weight:500;">${r.name}</td><td class="num" style="color:var(--green);font-weight:600;">${fmtNT(r.rev)}</td><td class="num">${r.ptCount} 堂</td><td class="num">${r.groupCount} 堂</td><td class="num">${r.need_punch?Math.round(r.hours)+' hr':'—'}</td></tr>`).join('')}
     </tbody></table>`}
   </div>
   <div class="dash-grid dash-2col">
@@ -18702,6 +18716,9 @@ async function openMemberDetail(member_id){
       : Math.max(dates.length, faceUsed));
   };
   // 票券卡片渲染（圓圈進度）
+  /* 票券金額（2026-07-30 使用者指示）：每張票旁邊顯示收了多少錢；
+     金額 0 的就把備註帶出來（隨方案加贈／舊系統匯入無金額／金額待確認），
+     櫃檯看到 $0 才不用每次回頭查一遍。只有櫃檯與管理員看得到金額。 */
   const renderTkCard=(t,extraBtn)=>{
     const ty=typeMap[t.ticket_type_id];
     const total=t.sessions_total||0;
@@ -18749,7 +18766,7 @@ async function openMemberDetail(member_id){
       </div>
       <div class="mck-dots2" style="margin:10px 0 12px;">${circles}</div>
       <div class="md-tk-foot">
-        <span class="md-tk-meta">到期 ${fmtExpire(t.expire_date,t)}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span></span>
+        <span class="md-tk-meta">到期 ${fmtExpire(t.expire_date,t)}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span>${tkMoneyHtml(t)}</span>
         ${(inst && (t.unlocked_sessions||0)<total && (isDeskLike()))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
         ${canShare?`<button class="btn btn-ghost btn-sm" onclick="openTicketShare('${t.id}','${member_id}')">${_others.length?'共享設定':'設為共享'}</button>`:''}
         ${extraBtn||''}
@@ -22859,7 +22876,7 @@ function ppRecordHtml(){
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
             <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null)}</div>
             <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
-              <span>效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}</span>
+              <span>效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}${tkMoneyHtml(t)}</span>
               <span style="display:flex;gap:6px;">
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">📄 合約</button>`:''}
                 ${(isDeskLike()&&t.status==='usable'&&(tab==='pt'||tab==='group')&&t.member_id===PP.id)?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="ppShareTk('${t.id}')">${_shN?'共享設定':'設為共享'}</button>`:''}
@@ -23947,10 +23964,15 @@ function renderFdMonthView(){
       const isSelf=b.category==='自主訓練';
       const dur=b.duration||60;
       const end=minToTime(timeToMin(b.start_time)+dur);
-      const who=b.category==='小班肌力'?'團體課':(b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—'));
+      /* 2026-07-30 使用者回報：體驗課不顯示姓名。原本只看 trial_name，沒填就退成「體驗」；
+         已建會員檔的體驗客戶（trial_name 空、member_id 有值）就整個看不到人名。改成兩邊都取。 */
+      const who=b.category==='小班肌力'?'團體課'
+        :(b.category==='體驗'?((b.trial_name||memMap[b.member_id]||'體驗'))
+        :(memMap[b.member_id]||b.trial_name||'—'));
       const coachNm=b.coach_id?(coachMap[b.coach_id]||'教練'):'—';
       const barCls=isSelf?'mc-bar-self':(b.category==='小班肌力'?'mc-bar-group':(b.category==='體驗'?'mc-bar-trial':'mc-bar-pt'));
-      return `<div class="mc-ev">
+      // 2026-07-30 使用者指示：手機版首頁的課卡點了要跳簡易資訊（原本 CSS 是手指游標，卻沒有掛事件）
+      return `<div class="mc-ev" onclick="openCourseCard('${b.id}')">
         <div class="mc-ev-time"><span class="mc-ev-t1">${b.start_time}</span><span class="mc-ev-t2">${end}</span></div>
         <div class="mc-ev-bar ${barCls}"></div>
         <div class="mc-ev-body"><div class="mc-ev-name">${who}</div>
@@ -27975,7 +27997,9 @@ function renderCoachMonthView(){
   }else{
     listHtml=selBk.map(b=>{
       const cc=bkCC(b);
-      const who=b.category==='小班肌力'?'團體課':(b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—'));
+      const who=b.category==='小班肌力'?'團體課'
+        :(b.category==='體驗'?((b.trial_name||memMap[b.member_id]||'體驗'))
+        :(memMap[b.member_id]||b.trial_name||'—'));   // 體驗課取 trial_name 或會員名（2026-07-30）
       const dur=b.duration||60;
       const end=minToTime(timeToMin(b.start_time)+dur);
       return `<div class="mc-ev" onclick="openCourseCard('${b.id}')">
@@ -30419,6 +30443,17 @@ function ticketCopy(t){
    12 堂＝12 個票券形狀圖示（形狀＝課種，同行事曆語言）：
    未使用＝實色形狀；已使用＝淡底＋該堂上課日期；分期未開通＝鎖。 */
 // 票券 → 課程視覺（形狀 + 主色）；判定順序同 evColorClass（color 欄 → 名稱含友善 → category）
+/* 票券金額與備註（2026-07-30 使用者指示：每張票旁邊顯示金額；0 元且能辨認就標原因）。
+   金額只給櫃檯／管理員看，會員端與教練端不顯示。 */
+function tkMoneyHtml(t){
+  if(!t || !isDeskLike()) return '';
+  const amt=Number(t.amount_paid);
+  if(amt>0) return `　·　<b class="tk-amt">$${amt.toLocaleString()}</b>`;
+  const n=String(t.note||'').trim();
+  if(!n) return '　·　<span class="tk-amt tk-amt-zero">$0</span>';
+  const gift=/加贈/.test(n), wait=/待確認/.test(n);
+  return `　·　<span class="tk-amt ${gift?'tk-amt-gift':(wait?'tk-amt-wait':'tk-amt-zero')}" title="${n.replace(/"/g,'&quot;')}">$0${gift?'・加贈':(wait?'・待確認':'・無金額')}</span>`;
+}
 function tkVisual(t,typeMap){
   const ty=typeMap?typeMap[t.ticket_type_id]:null;
   const col=(ty&&ty.color)||'';
