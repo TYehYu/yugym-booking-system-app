@@ -151,8 +151,9 @@ ok('　　鍵盤也能開（Enter／Space）', /if\(event\.key==='Enter'\|\|even
 ok('　　待續約顯示課別與最後一堂日期', /最後一堂 \$\{m\.__last\.slice\(5\)\.replace\('-','\/'\)\}/.test(src));
 
 console.log('\n權限開關排成一列');
+// 2026-07-30 四修：改靠左，讓表頭「權限開關」對得上第一顆開關「管理員」
 ok('★ 員工列的開關改 flex 一列（原本 3 欄 × 2 列的九宮格）',
-   /\.st-l-sw \.st-sw\{display:flex;flex-wrap:nowrap;gap:4px;width:auto;margin:0;justify-content:flex-end;\}/.test(src));
+   /\.st-l-sw \.st-sw\{display:flex;flex-wrap:nowrap;gap:4px;width:auto;margin:0;justify-content:flex-start;\}/.test(src));
 ok('　　一列版把小圓點移到文字左邊，卡片不會被撐高',
    /\.st-l-sw \.st-swb\{flex-direction:row;padding:5px 8px;/.test(src));
 ok('　　手機仍可換行', /\.st-l-sw \.st-sw\{justify-content:flex-start;flex-wrap:wrap;\}/.test(src));

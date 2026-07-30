@@ -84,7 +84,8 @@ console.log('\n管理員次選單分組');
   const gdef=new Function('return ['+src.slice(gi,gj).replace(/\]\},$/,']}')+']')();
   const fn=new Function('visibleGroups','CUR_TAB', src.slice(i,j)+'\nreturn renderSubnav;')(()=>gdef,'list');
   const html=fn('g_admin','staff');
-  const grps=[...html.matchAll(/<span class="subnav-grp">([^<]+)<\/span>/g)].map(m=>m[1]);
+  // 2026-07-30 四修：組別標籤多帶配色類別（人事金／財務紅／環境綠）
+  const grps=[...html.matchAll(/<span class="subnav-grp[^"]*">([^<]+)<\/span>/g)].map(m=>m[1]);
   const items=[...html.matchAll(/<div class="subnav-item[^"]*"[^>]*>([^<]+)/g)].map(m=>m[1]);
   ok('★ 三個組別、順序為 人事 → 財務 → 環境設定',
      JSON.stringify(grps)===JSON.stringify(['人事','財務','環境設定']), grps);
@@ -154,7 +155,9 @@ console.log('\n員工管理：卡片改回列表');
     genderAvatarSVG:()=>'<svg/>', stateOf:c=>c.status||'active', statusBadge:()=>'<span class="tag">停用</span>',
     nameSub:c=>[c.emp_no,c.phone].filter(Boolean).join(' · '), ST_GEAR:'<svg class="gear"/>', LNI:{link:'🔗'},
     // 2026-07-30：列表多了本月統計（教練課／團體課／續約／工時）
-    _ym:'2026-07', _stat:{E1:{pt:12,ptAll:14,grp:4,grpAll:4,renew:2,hours:58.4}}};
+    // 2026-07-30 四修：多了工作規則／休假日／實領薪資
+    WD_FULL:['日','一','二','三','四','五','六'], _canPay:true,
+    _ym:'2026-07', _stat:{E1:{pt:12,ptAll:14,grp:4,grpAll:4,renew:2,hours:58.4,net:71250}}};
   const fn=new Function(...Object.keys(env), src.slice(k,l)+'\n'+src.slice(i,j)+'\nreturn stRow;')(...Object.values(env));
   const h=fn({id:'E1',name:'王教練',name_en:'wang',gender:'male',employment_type:'full_time',
               job_title:'資深教練',emp_no:'A01',phone:'0912345678',status:'active'});
@@ -182,11 +185,11 @@ console.log('\n員工管理：卡片改回列表');
   ok('　　排定堂數與已上不同時附註（12 /14）', /<span class="st-l-n st-l-n1">12<u>\/14<\/u><\/span>/.test(h));
   ok('　　工時四捨五入到整數並帶 h', /58<u>h<\/u>/.test(h) && !/58\.4/.test(h));
   ok('★ 每一格不再重複印欄名（改由表頭統一）', !/<i>教練課<\/i>/.test(h) && !/st-l-stats/.test(src));
-  // 三修：加入「工作規則／休假日」兩欄，數字欄名在翻月時會附月份標記
-  ok('★ 表頭：姓名／教練課／團體課／續約／工作時數／工作規則／休假日／權限開關',
-     /<span>姓名<\/span>\s*\n\s*<span>教練課\$\{_mTag\}<\/span><span>團體課\$\{_mTag\}<\/span><span>續約\$\{_mTag\}<\/span><span>工作時數\$\{_mTag\}<\/span>\s*\n\s*<span>工作規則<\/span><span>休假日<\/span>\s*\n\s*<span>權限開關<\/span>/.test(src));
-  ok('★ 固定欄位的 grid（三修：最後一欄不再用 max-content，剩餘寬度改給右邊的開關欄）',
-     /\.st-lhead,\.st-lrow\{display:grid;\s*\n\s*grid-template-columns:10px 34px minmax\(160px,1fr\) 58px 58px 46px 54px 92px 78px minmax\(320px,3fr\) 30px;/.test(src));
+  // 三／四修：加入「工作規則／休假日／實領薪資」，數字欄名在翻月時會附月份標記
+  ok('★ 表頭：姓名／教練課／團體課／續約／工作時數／工作規則／休假日／實領薪資／權限開關',
+     /<span>姓名<\/span>\s*\n\s*<span>教練課\$\{_mTag\}<\/span><span>團體課\$\{_mTag\}<\/span><span>續約\$\{_mTag\}<\/span><span>工作時數\$\{_mTag\}<\/span>\s*\n\s*<span>工作規則<\/span><span>休假日<\/span><span>實領薪資\$\{_mTag\}<\/span>\s*\n\s*<span>權限開關<\/span>/.test(src));
+  ok('★ 固定欄位的 grid（最後一欄不再用 max-content；四修：開關欄改固定寬以對齊標題）',
+     /\.st-lhead,\.st-lrow\{display:grid;\s*\n\s*grid-template-columns:10px 34px minmax\(160px,1fr\) 58px 58px 46px 54px 92px 78px 96px 372px 30px;/.test(src));
   ok('★ 舊的 flex 版樣式已移除（它排在後面會蓋掉 grid）',
      /〔已移除〕舊的 flex 版員工列樣式/.test(src) && !/\.st-lrow\{position:relative;display:flex/.test(src));
   ok('　　0 用灰字，不會跟有數字的搶注意',
