@@ -57,10 +57,11 @@ console.log('\n按鈕內容');
 ok('★ 時間已在左欄 → 格子裡不再重複標同一個時間',
    /<span class="tdl-cell-nm">陳蘭馨<\/span><\/span>/.test(grid));
 ok('★ 課別與原因在下一行', /<span class="tdl-cell-sub">教練課・續課<\/span>/.test(grid));
-ok('★ 待付費那格反紅', /class="tdl-cell tdl-cell-pay tdl-static"/.test(grid)
-   && /\.tdl-cell\.tdl-cell-pay\{border-color:var\(--danger/.test(src));
+ok('★ 待付費那格用紅框＋紅左帶（2026-07-30：底色改白，不再整格反紅）',
+   /class="tdl-cell tdl-cc-[a-z]+ tdl-cell-pay tdl-static"/.test(grid)
+   && /\.tdl-cell\.tdl-cell-pay\{--cc:var\(--danger,#b5372e\);border-color:var\(--danger,#b5372e\);\}/.test(src));
 ok('　　沒綁會員的那格不可點（沒有 role=button）',
-   /<div class="tdl-cell tdl-cell-pay tdl-static">/.test(grid));
+   /<div class="tdl-cell tdl-cc-[a-z]+ tdl-cell-pay tdl-static">/.test(grid));
 ok('★ 已續約標綠勾', /tdl-rs-ok/.test(grid));
 ok('　　考慮中標金色', /tdl-rs-gold/.test(grid));
 ok('★ 考慮中／不續約兩顆鈕放在格子裡', /class="tdl-cell-acts"/.test(grid)
@@ -125,6 +126,36 @@ console.log('\n依時間分組');
   ok('　　沒有時間的那組標「未定」', /<span class="tdl-tg-t">未定<\/span>/.test(g));
   ok('　　待收款那格照樣反紅', /tdl-cell-pay/.test(g));
 }
+
+
+console.log('\n卡片改白底＋依課別上色（2026-07-30 使用者指示）');
+ok('★ 卡片底色改白（原本米色底不好讀）',
+   /\.tdl-cell\{[\s\S]{0,260}background:#fff;/.test(src));
+ok('★ 左緣依課別上色：教練課綠／團體課橘／體驗紫',
+   /\.tdl-cc-pt\{--cc:var\(--course-pt-accent,#1f6f54\);\}/.test(src)
+   && /\.tdl-cc-group\{--cc:var\(--course-group-accent,#9a5a1e\);\}/.test(src)
+   && /\.tdl-cc-trial\{--cc:var\(--course-trial-accent,#6e3a86\);\}/.test(src));
+ok('★ 名單建立時就帶課別（團課 group／教練課 pt／體驗 trial）',
+   /e\.cc = isGrp\?'group':'pt';/.test(src)
+   && /cc:\(b\.category==='小班肌力'\?'group':\(b\.category==='體驗'\?'trial':'pt'\)\)/.test(src));
+ok('　　hover 改用陰影（白底不再換底色）', /\.tdl-cell:hover\{box-shadow:0 4px 14px rgba\(20,18,14,\.10\);\}/.test(src));
+
+console.log('\n本月待升級／待降級／待續約也改課卡模式');
+ok('★ 三份名單改用同一套 .tdl-grid / .tdl-cell 版型',
+   /const cell=m=>\{[\s\S]{0,400}<div class="tdl-cell tdl-cc-\$\{_cc\(m\)\}" role="button" tabindex="0"/.test(src));
+ok('★ 待續約依課別上色（教練課／團體課）',
+   /const _cc=m=>\{ const c=String\(m\.__course\|\|''\); return c\.indexOf\('團'\)>=0\?'group':'pt'; \};/.test(src));
+ok('　　標題帶人數、視窗加寬', /\$\{list\.length\} 位/.test(src)
+   && /\{ const mm=document\.querySelector\('#modal-bg \.modal'\); if\(mm\) mm\.classList\.add\('modal-wide'\); \}/.test(src));
+ok('　　鍵盤也能開（Enter／Space）', /if\(event\.key==='Enter'\|\|event\.key===' '\)\{event\.preventDefault\(\);closeModal\(\);openPersonProfile\('member'/.test(src));
+ok('　　待續約顯示課別與最後一堂日期', /最後一堂 \$\{m\.__last\.slice\(5\)\.replace\('-','\/'\)\}/.test(src));
+
+console.log('\n權限開關排成一列');
+ok('★ 員工列的開關改 flex 一列（原本 3 欄 × 2 列的九宮格）',
+   /\.st-l-sw \.st-sw\{display:flex;flex-wrap:nowrap;gap:4px;width:auto;margin:0;justify-content:flex-end;\}/.test(src));
+ok('　　一列版把小圓點移到文字左邊，卡片不會被撐高',
+   /\.st-l-sw \.st-swb\{flex-direction:row;padding:5px 8px;/.test(src));
+ok('　　手機仍可換行', /\.st-l-sw \.st-sw\{justify-content:flex-start;flex-wrap:wrap;\}/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

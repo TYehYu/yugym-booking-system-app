@@ -71,5 +71,30 @@ ok('　　超過一次顯示上限時講清楚還有幾則，不做無聲截斷'
    && /\{count:'exact'\}/.test(src));
 ok('　　按鈕用勾號', /✓ 確認<\/button>/.test(src) && /✓ 全部確認<\/button>/.test(src));
 
+
+console.log('\n確認完抬頭要一起消失（2026-07-30 使用者回報）');
+ok('★ 移除卡片後立刻依畫面剩幾張重算抬頭',
+   /if\(el\)\{ el\.classList\.add\('out'\); setTimeout\(\(\)=>\{ el\.remove\(\); deskFeedSyncHead\(\); \},260\); \}/.test(src));
+ok('★ 有一支專門重算的函式（讀 DOM 上剩幾張）',
+   /function deskFeedSyncHead\(\)\{\s*\n\s*const n=document\.querySelectorAll\('#desk-feed \[data-nid\]'\)\.length;\s*\n\s*deskFeedHead\(n, n\);/.test(src));
+ok('★ 全部確認完也立刻收掉，不等 45 秒輪詢',
+   /deskFeedSyncHead\(\);   \/\/ 全部確認完立刻把抬頭收掉，不等輪詢/.test(src));
+ok('　　原因寫在程式裡', /卡片點掉了、上面的「會員異動 N 則待確認」還留著/.test(src));
+{
+  // 實跑 deskFeedHead：n<=1 就隱藏
+  const i=src.indexOf('function deskFeedHead(total, shown){'); const j=src.indexOf('\n}\n',i)+2;
+  let hidden=null, txt=null, moreRemoved=0;
+  const head={ set hidden(v){hidden=v;}, get hidden(){return hidden;} };
+  const cnt={ set textContent(v){txt=v;}, get textContent(){return txt;} };
+  const more={ id:'', className:'', textContent:'', remove(){moreRemoved++;} };
+  const doc={ getElementById:id=>({ 'dfeed-head':head, 'dfeed-cnt':cnt,
+    'dfeed-list':{appendChild(){}}, 'dfeed-more':more })[id]||null };
+  const fn=new Function('document', src.slice(i,j)+'\nreturn deskFeedHead;')(doc);
+  fn(3,3); ok('★ 3 則 → 抬頭顯示、文字帶數量', hidden===false && /3 則待確認/.test(txt));
+  fn(1,1); ok('★ 只剩 1 則 → 抬頭收起（單則不佔位）', hidden===true);
+  fn(0,0); ok('★ 全部確認完（0 則）→ 抬頭收起', hidden===true);
+  ok('　　「另有 N 則」也一併移除', moreRemoved>0);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
