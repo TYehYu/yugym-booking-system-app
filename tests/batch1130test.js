@@ -103,5 +103,41 @@ console.log('\n管理員次選單分組');
      /if\(s\.grp && s\.grp!==lastGrp\)\{/.test(src));
 }
 
+
+/* ── ⑥ 手機端薪資彙總卡（2026-07-30 使用者指示）── */
+console.log('\n手機端薪資彙總');
+ok('★ 第一列＝姓名＋實發大字', /<span class="pr-m-net"><i>實發<\/i><b>\$\$\{Math\.round\(nt\)\.toLocaleString\(\)\}<\/b><\/span>/.test(src)
+   && /\.pr-m-net b\{font-size:24px;font-weight:800;/.test(src));
+ok('★ 第二列＝教練課／團體課／值班／續約，四格一列',
+   /\$\{cell\('教練課',s2\.ptIncome\)\}\$\{cell\('團體課',s2\.groupPay\)\}\$\{cell\('值班',s2\.dutyPay\)\}\$\{cell\('續約',s2\.renewPay\)\}/.test(src)
+   && /\.pr-m-stats\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/.test(src));
+ok('　　太窄（<340px）才退成兩排', /@media \(max-width:340px\)\{ \.pr-m-stats\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(src));
+ok('★ 下方列出各項薪資的計算方式', /<details class="pr-m-calc"><summary>計算方式<\/summary>/.test(src)
+   && /\$\{payrollCalcRows\(r\)\}\s*\n\s*<div class="pr-m-sum">/.test(src));
+ok('　　卡片底部帶應發／勞健保扣款／實發', /pr-m-sum[\s\S]{0,300}pr-m-ded[\s\S]{0,200}pr-m-net2/.test(src));
+ok('★ 計算明細抽成共用函式，桌機與手機同一份',
+   /function payrollCalcRows\(r\)\{/.test(src)
+   && (src.match(/payrollCalcRows\(r\)/g)||[]).length===3);
+ok('　　桌機仍用原本的表格（加 desktop-only 讓兩邊不重疊）',
+   /<table class="rwd-card desktop-only">/.test(src));
+ok('　　金額都取整數（與營運分析同口徑）',
+   /Math\.round\(nt\)\.toLocaleString\(\)/.test(src) && /v>0\?'\$'\+Math\.round\(v\)\.toLocaleString\(\):'—'/.test(src));
+{
+  const i=src.indexOf('function payrollCalcRows(r){'); const j=src.indexOf('\n}\n',i)+2;
+  const calc=new Function(src.slice(i,j)+'\nreturn payrollCalcRows;')();
+  const r={countSalary:true, emp:{name:'王教練'}, ptDone:20, groupHeads:14, dutyHours:60.5,
+    leave:{事假:0,病假:0,特休:8},
+    sal:{base:28000,adjBase:28000,baseHourly:175,schedHours:160,baseLeaveDeduct:0,
+         ptPay:24000,ptIncome:28000,ptIsFloor:true,bonus:0,groupPay:4200,groupDetail:'14 人次',
+         dutyGross:9075,dutyPay:8000,dutyLeaveDeduct:0,dutyClassDeduct:1075,classOverlap:7.2,
+         renewPay:3000,renewDetail:'2 筆',leaderPay:0,supPay:0,mgmtPay:0,
+         grossPay:43200,insEmpDeduct:1800,netPay:41400}};
+  const h=calc(r);
+  ok('★ 計算方式各項都列得出來（底薪／教練課收入／團課人頭／值班費／續約獎金）',
+     /底薪/.test(h)&&/教練課收入/.test(h)&&/團課人頭/.test(h)&&/值班費/.test(h)&&/續約獎金/.test(h));
+  ok('　　特休標「不扣薪」', /特休 8 小時[\s\S]{0,140}不扣薪/.test(h));
+  ok('　　值班時段上課的扣款也列出來', /值班時段上課 7\.2 小時/.test(h));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

@@ -1263,6 +1263,32 @@ body.mc-mode .layout{padding-top:8px;}
 .show-mobile-inline{display:none;}
 /* 手機/桌機專屬顯示切換 */
 .mobile-only{display:none;}
+/* ── 手機版薪資彙總卡（2026-07-30 使用者指示）：
+   第一列＝姓名＋實發大字，第二列＝教練課／團體課／值班／續約 四格一列，
+   下方收合「計算方式」。原本套 .rwd-card 會攤成 7 列，翻很久還看不到重點。 */
+.pr-mlist{display:flex;flex-direction:column;gap:10px;}
+.pr-mcard{background:var(--card,#fff);border:1px solid var(--bd);border-radius:14px;padding:13px 14px;}
+.pr-m-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;}
+.pr-m-who{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:15px;font-weight:700;color:var(--text);}
+.pr-m-who i{font-style:normal;font-size:11px;font-weight:600;color:var(--t3);}
+.pr-m-net{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:0 0 auto;}
+.pr-m-net i{font-style:normal;font-size:10.5px;color:var(--t3);}
+.pr-m-net b{font-size:24px;font-weight:800;font-family:var(--num),inherit;color:var(--gold-d,#b48a56);line-height:1.1;}
+.pr-m-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:11px;
+  padding-top:11px;border-top:1px solid var(--bd2,var(--bd));}
+.pr-m-cell{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;}
+.pr-m-cell i{font-style:normal;font-size:10.5px;color:var(--t3);white-space:nowrap;}
+.pr-m-cell b{font-size:13.5px;font-weight:800;font-family:var(--num),inherit;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.pr-m-calc{margin-top:10px;border-top:1px dashed var(--bd);padding-top:8px;}
+.pr-m-calc summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--t2);user-select:none;}
+.pr-m-calc-in{padding-top:6px;}
+.pr-m-sum,.pr-m-ded,.pr-m-net2{display:flex;justify-content:space-between;font-size:13px;padding:6px 0 0;}
+.pr-m-sum{font-weight:700;color:var(--gold-d,#b48a56);}
+.pr-m-ded{font-size:12.5px;color:var(--danger,#b5372e);}
+.pr-m-net2{font-weight:800;color:var(--green);border-top:1px solid var(--bd);margin-top:4px;padding-top:7px;}
+/* 太窄時四格退成兩排，數字不擠成一團 */
+@media (max-width:340px){ .pr-m-stats{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:9px;} }
 .desktop-only{display:block;}
 @media(max-width:600px),(orientation:portrait) and (max-width:1024px){
   .mobile-only{display:block;}
@@ -6276,8 +6302,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1211';
-const APP_VERSION_LABEL='v260730.1211';
+const APP_VERSION = '260730.1215';
+const APP_VERSION_LABEL='v260730.1215';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20883,41 +20909,11 @@ async function computeMonthlyPayroll(month){
   const grandCoCost=rows.reduce((s,r)=>s+(r.countSalary?r.sal.insCoCost:0),0);
   return {rows,staff,grandTotal,grandNet,grandCoCost,month};
 }
-async function renderPayrollSummary(){
-  if(!_payrollMonth) _payrollMonth=ymd(TODAY).slice(0,7);
-  const month=_payrollMonth;
-  const[my,mm]=month.split('-');
-  const isCur=month===ymd(TODAY).slice(0,7);
-  const{rows,staff,grandTotal,grandNet,grandCoCost}=await computeMonthlyPayroll(month);
-
-  document.getElementById('staff-body').innerHTML=`
-  <div class="card ops-datebar" style="margin-bottom:14px;">
-    <button class="btn btn-ghost btn-sm" onclick="payrollShiftMonth(-1)">‹ 上個月</button>
-    <div class="ops-date-mid"><div class="ops-date-main">${my} 年 ${mm} 月 薪資彙總</div>
-      ${isCur?`<div class="ops-date-today">本月</div>`:`<button class="ops-date-back" onclick="payrollThisMonth()">回本月</button>`}</div>
-    <button class="btn btn-ghost btn-sm" onclick="payrollShiftMonth(1)">下個月 ›</button>
-  </div>
-  <div class="card">
-    <div class="card-title">月結明細 <span style="font-size:12px;color:var(--t3);font-weight:400;">共 ${rows.length} 位</span></div>
-    <div style="font-size:11.5px;color:var(--t3);margin-bottom:12px;line-height:1.7;">教練課收入＝課費與底薪取高者（保障底薪）。點員工列可展開計算明細。</div>
-    <table class="rwd-card"><thead><tr><th>員工</th><th>類型</th><th>教練課</th><th>團課</th><th>值班費</th><th>津貼</th><th>實發</th></tr></thead><tbody>
-    ${rows.map((r,i)=>{
-      const e=r.emp, s=r.sal;
-      return `<tr style="cursor:pointer;" onclick="document.getElementById('pr-d-${i}').classList.toggle('pr-open')">
-        <td data-label="員工" style="font-weight:500;">${e.name||'—'}${r.countSalary?'':' <span class="tag tag-warn" style="font-size:10px;">不計薪</span>'}</td>
-        <td data-label="類型">${PAY_LABEL[e.employment_type||e.pay_type]||'—'}</td>
-        <td data-label="教練課" class="num">$${s.ptIncome.toLocaleString()}${s.ptIsFloor?'<span style="font-size:10px;color:var(--gold-d);"> 底</span>':''}</td>
-        <td data-label="團課" class="num">${s.groupPay>0?'$'+s.groupPay.toLocaleString():'—'}</td>
-        <td data-label="值班費" class="num">${s.dutyPay>0?'$'+s.dutyPay.toLocaleString():'—'}</td>
-        <td data-label="津貼" class="num">${(s.renewPay+s.mgmtPay)>0?'$'+(s.renewPay+s.mgmtPay).toLocaleString():'—'}</td>
-        <td data-label="實發" class="num" style="font-weight:700;color:var(--gold-d);">$${(r.countSalary?s.netPay:0).toLocaleString()}</td>
-      </tr>
-      <tr id="pr-d-${i}" class="pr-detail"><td colspan="7" style="padding:0;">
-        <div class="pr-detail-inner" style="background:var(--card2);padding:16px 18px;">
-          <div style="font-weight:700;color:var(--text);margin-bottom:10px;">${e.name} · ${month} 計算明細</div>
-          <div style="max-width:420px;">
-          ${(()=>{
-            const rowL=(label,val,sub)=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bd);font-size:13px;"><span style="color:var(--t2);">${label}${sub?`<span style="color:var(--t3);font-size:11.5px;"> ${sub}</span>`:''}</span><span style="font-weight:600;color:var(--text);">${val}</span></div>`;
+/* 薪資計算明細列（2026-07-30 抽成具名函式）：桌機表格展開列與手機卡片共用同一份，
+   兩邊不會再各寫一套而算法不一致。 */
+function payrollCalcRows(r){
+  const s=r.sal, e=r.emp;
+const rowL=(label,val,sub)=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bd);font-size:13px;"><span style="color:var(--t2);">${label}${sub?`<span style="color:var(--t3);font-size:11.5px;"> ${sub}</span>`:''}</span><span style="font-weight:600;color:var(--text);">${val}</span></div>`;
             const rowDeduct=(label,val)=>`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">${label}</span><span style="color:#c0392b;font-weight:600;">−$${val.toLocaleString()}</span></div>`;
             let h='';
             // 正職：底薪 + 請假扣 → 取高
@@ -20948,7 +20944,64 @@ async function renderPayrollSummary(){
             if(s.leaderPay>0) h+=rowL('店長津貼',`$${s.leaderPay.toLocaleString()}`, s.leaderDetail);
             if(s.supPay>0) h+=rowL('主管津貼',`$${s.supPay.toLocaleString()}`);
             return h;
-          })()}
+}
+async function renderPayrollSummary(){
+  if(!_payrollMonth) _payrollMonth=ymd(TODAY).slice(0,7);
+  const month=_payrollMonth;
+  const[my,mm]=month.split('-');
+  const isCur=month===ymd(TODAY).slice(0,7);
+  const{rows,staff,grandTotal,grandNet,grandCoCost}=await computeMonthlyPayroll(month);
+
+  document.getElementById('staff-body').innerHTML=`
+  <div class="card ops-datebar" style="margin-bottom:14px;">
+    <button class="btn btn-ghost btn-sm" onclick="payrollShiftMonth(-1)">‹ 上個月</button>
+    <div class="ops-date-mid"><div class="ops-date-main">${my} 年 ${mm} 月 薪資彙總</div>
+      ${isCur?`<div class="ops-date-today">本月</div>`:`<button class="ops-date-back" onclick="payrollThisMonth()">回本月</button>`}</div>
+    <button class="btn btn-ghost btn-sm" onclick="payrollShiftMonth(1)">下個月 ›</button>
+  </div>
+  <div class="card">
+    <div class="card-title">月結明細 <span style="font-size:12px;color:var(--t3);font-weight:400;">共 ${rows.length} 位</span></div>
+    <div style="font-size:11.5px;color:var(--t3);margin-bottom:12px;line-height:1.7;">教練課收入＝課費與底薪取高者（保障底薪）。點員工列可展開計算明細。</div>
+    ${/* 手機版（2026-07-30 使用者指示）：第一列應領金額、第二列教練課／團體課／值班／續約，
+         下方直接列出各項的計算方式。原本套 .rwd-card 會把 7 個欄位攤成 7 列，很難讀。 */''}
+    <div class="mobile-only pr-mlist">
+      ${rows.map(r=>{ const e=r.emp, s2=r.sal; const nt=r.countSalary?s2.netPay:0;
+        const cell=(lb,v)=>`<span class="pr-m-cell"><i>${lb}</i><b>${v>0?'$'+Math.round(v).toLocaleString():'—'}</b></span>`;
+        return `<div class="pr-mcard">
+          <div class="pr-m-top">
+            <span class="pr-m-who">${e.name||'—'}<i>${PAY_LABEL[e.employment_type||e.pay_type]||'—'}${r.countSalary?'':'・不計薪'}</i></span>
+            <span class="pr-m-net"><i>實發</i><b>$${Math.round(nt).toLocaleString()}</b></span>
+          </div>
+          <div class="pr-m-stats">
+            ${cell('教練課',s2.ptIncome)}${cell('團體課',s2.groupPay)}${cell('值班',s2.dutyPay)}${cell('續約',s2.renewPay)}
+          </div>
+          <details class="pr-m-calc"><summary>計算方式</summary>
+            <div class="pr-m-calc-in">${payrollCalcRows(r)}
+              <div class="pr-m-sum"><span>應發薪資</span><span>$${Math.round(r.countSalary?s2.grossPay:0).toLocaleString()}</span></div>
+              ${(r.countSalary && s2.insEmpDeduct>0)?`<div class="pr-m-ded"><span>勞健保扣款</span><span>−$${Math.round(s2.insEmpDeduct).toLocaleString()}</span></div>`:''}
+              <div class="pr-m-net2"><span>實發薪資</span><span>$${Math.round(nt).toLocaleString()}</span></div>
+            </div>
+          </details>
+        </div>`; }).join('')}
+    </div>
+    <table class="rwd-card desktop-only"><thead><tr><th>員工</th><th>類型</th><th>教練課</th><th>團課</th><th>值班費</th><th>津貼</th><th>實發</th></tr></thead><tbody>
+    ${rows.map((r,i)=>{
+      const e=r.emp, s=r.sal;
+      return `<tr style="cursor:pointer;" onclick="document.getElementById('pr-d-${i}').classList.toggle('pr-open')">
+        <td data-label="員工" style="font-weight:500;">${e.name||'—'}${r.countSalary?'':' <span class="tag tag-warn" style="font-size:10px;">不計薪</span>'}</td>
+        <td data-label="類型">${PAY_LABEL[e.employment_type||e.pay_type]||'—'}</td>
+        <td data-label="教練課" class="num">$${s.ptIncome.toLocaleString()}${s.ptIsFloor?'<span style="font-size:10px;color:var(--gold-d);"> 底</span>':''}</td>
+        <td data-label="團課" class="num">${s.groupPay>0?'$'+s.groupPay.toLocaleString():'—'}</td>
+        <td data-label="值班費" class="num">${s.dutyPay>0?'$'+s.dutyPay.toLocaleString():'—'}</td>
+        <td data-label="津貼" class="num">${(s.renewPay+s.mgmtPay)>0?'$'+(s.renewPay+s.mgmtPay).toLocaleString():'—'}</td>
+        <td data-label="實發" class="num" style="font-weight:700;color:var(--gold-d);">$${(r.countSalary?s.netPay:0).toLocaleString()}</td>
+      </tr>
+      <tr id="pr-d-${i}" class="pr-detail"><td colspan="7" style="padding:0;">
+        <div class="pr-detail-inner" style="background:var(--card2);padding:16px 18px;">
+          <div style="font-weight:700;color:var(--text);margin-bottom:10px;">${e.name} · ${month} 計算明細</div>
+          <div style="max-width:420px;">
+          ${payrollCalcRows(r)}
+
           <div style="display:flex;justify-content:space-between;padding:10px 0 0;font-size:14px;"><span style="font-weight:700;color:var(--gold-d);">應發薪資</span><span style="font-weight:700;color:var(--gold-d);">$${(r.countSalary?s.grossPay:0).toLocaleString()}</span></div>
           ${(r.countSalary && s.insEmpDeduct>0)?`${s.insGrade?`<div style="padding:4px 0 2px 16px;font-size:11px;color:var(--t3);">投保級距 $${Number(s.insGrade).toLocaleString()}</div>`:''}
           ${s.insLaborEmp>0?`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;font-size:12.5px;"><span style="color:var(--t3);">勞保（員工負擔）</span><span style="color:#c0392b;font-weight:600;">−$${s.insLaborEmp.toLocaleString()}</span></div>`:''}
