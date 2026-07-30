@@ -62,13 +62,14 @@ ok('★ 畫面明講原因，不讓會員以為系統壞了',
    真因是步驟 2 自己寫了一套（只用 bkTicketTypeOk 嚴格比對票種），友善點數比不上
    「自主訓練」票種 → 判定她 0 堂 → 整個人被 filter 掉 → 畫面變成「待簽約卡位」。 */
 console.log('\n步驟 2 與挑票共用同一套判定');
-ok('★ 抽出共用判定 tkFitsBooking', /function tkFitsBooking\(t, member_id, type_id, bookDate, bookTime\)\{/.test(src));
-ok('★ listUsableTickets 改用它', /return all\.filter\(t=>tkFitsBooking\(t,member_id,type_id,bookDate,bookTime\)\)/.test(src));
+// 2026-07-30：多帶一個 bkCntByTicket（超約防線），簽名與呼叫端一起更新
+ok('★ 抽出共用判定 tkFitsBooking', /function tkFitsBooking\(t, member_id, type_id, bookDate, bookTime, bkCntByTicket\)\{/.test(src));
+ok('★ listUsableTickets 改用它', /return all\.filter\(t=>tkFitsBooking\(t,member_id,type_id,bookDate,bookTime,cnt\)\)/.test(src));
 ok('★ 步驟 2 一般課程改用它（不再自寫一套）',
-   /const tks=allTkG\.filter\(tt=>tkFitsBooking\(tt,m\.id,type_id,date,time\)\);/.test(src)
+   /const tks=allTkG\.filter\(tt=>tkFitsBooking\(tt,m\.id,type_id,date,time,_bkCntG\)\);/.test(src)
    && !/allTkG\.filter\(tt=>tkUsableBy\(tt,m\.id\) && bkTicketTypeOk/.test(src));
 ok('★ 步驟 2 團體課也改用它',
-   /const tks=allTk\.filter\(tt=>tkFitsBooking\(tt,m\.id,type_id,date,time\)\)/.test(src));
+   /const tks=allTk\.filter\(tt=>tkFitsBooking\(tt,m\.id,type_id,date,time,_bkCnt\)\)/.test(src));
 ok('　　顯示的堂數用 tkUnlockedLeft（分期未開通的不能先算進去）',
    (src.match(/const sum=tks\.reduce\(\(s,tt\)=>s\+tkUnlockedLeft\(tt\),0\);/g)||[]).length===2);
 ok('　　步驟 2 先確保票種快取（tkFitsBooking 要靠它判類別）',
@@ -88,7 +89,9 @@ ok('　　步驟 2 先確保票種快取（tkFitsBooking 要靠它判類別）',
     {id:'舊友善已過期',ticket_type_id:'tt-mqdt5kbxusgt',member_id:'M',status:'usable',sessions_remaining:2,sessions_total:2,expire_date:'2026-07-26'},
   ];
   const grab=m=>{const i=src.indexOf(m);return src.slice(i,src.indexOf('\n}',i)+2);};
-  const body=['function tkUsableBy','function ticketCategoryOf','function tkTimeOk','function tkUnlockedLeft','function tkFitsBooking']
+  // 2026-07-30：tkFitsBooking 多了超約防線 tkOverBooked（不傳計數時不生效）
+  const body=['function tkUsableBy','function ticketCategoryOf','function tkTimeOk','function tkUnlockedLeft',
+              'function tkOverBooked','function tkFitsBooking']
     .map(grab).join('\n');
   const fits=new Function('window','timeToMin','parseYmd','categoryOfTypeId','tkSharedIds','bkTicketTypeOk',
     body+'\nreturn tkFitsBooking;')(

@@ -20,7 +20,8 @@ const {tkSharedIds,tkParticipants,tkUsableBy,findRefundTargetTicket,allocBooking
    wantCat 沿用原本的參數位置，用假的 categoryOfTypeId 餵進去。 */
 const mkUsable=new Function('all','member_id','type_id','bookDate','bookTime','wantCat','groupMode','selfMode',
   'ticketCategoryOf','bkTicketTypeOk','tkUsableBy','tkTimeOk',
-  grabFn('tkUnlockedLeft')+'\nconst categoryOfTypeId=()=>wantCat;\n'+grabFn('tkFitsBooking')
+  grabFn('tkUnlockedLeft')+'\nconst categoryOfTypeId=()=>wantCat;\n'
+  +grabFn('tkOverBooked')+'\n'+grabFn('tkFitsBooking')   // 2026-07-30：多了超約防線
   +'\nreturn all.filter(t=>tkFitsBooking(t,member_id,type_id,bookDate,bookTime));');
 
 let pass=0,fail=0;

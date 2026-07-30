@@ -199,8 +199,11 @@ console.log('\n取消沒綁票券的預約');
   const i=src.indexOf('async function confirmCancelBooking(id){');
   const j=src.indexOf('\n}\n', src.indexOf("askSeriesCancel('${id}','auto')", i))+2;
   const run=(b)=>{ let html='';
+    // 2026-07-30：取消視窗會問「這堂發過幾點贈點」→ 補上依賴（測試情境無贈點，回空字串）
     const fn=new Function('dbGet','showToast','showModal','hoursUntilStart','isDeskLike',
-      src.slice(i,j)+'\nreturn confirmCancelBooking;')(async()=>b,()=>{},h=>{html=h;},()=>72,()=>true);
+      'cancelRewardWarnHtml','dbGetAll',
+      src.slice(i,j)+'\nreturn confirmCancelBooking;')(async()=>b,()=>{},h=>{html=h;},()=>72,()=>true,
+      async()=>'', async()=>[]);
     return fn('X').then(()=>html); };
   return Promise.all([
     run({id:'X',date:'2026-08-03',start_time:'16:00',category:'私人教練',pending_contract:true,ticket_id:null,trial_name:'劉雪珠'}),
