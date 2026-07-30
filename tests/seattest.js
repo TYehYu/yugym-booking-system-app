@@ -135,5 +135,29 @@ ok('★ 取消名額仍用原順序（indexOf 要對得上 member_ids 的索引�
 ok('　　為什麼不能直接改 seatKeys，寫在程式裡',
    /seatReindexAfterRemove／doGroupCancelSeat 是用 indexOf 去 splice member_ids 的/.test(src));
 
+console.log('\n團課請假不算銷課名額（2026-07-30 使用者指示）');
+ok('★ 抽出共用的人頭計算，請假的名額排除',
+   /function grpAttendHeads\(b\)\{[\s\S]{0,180}return keys\.filter\(k=>att\[k\]!=='leave'\)\.length;/.test(src));
+ok('★ 三處計薪的人頭加總都改用它（薪資單／月結明細／教練薪資頁）',
+   (src.match(/reduce\(\(s,b\)=>s\+grpAttendHeads\(b\),0\)/g)||[]).length===3);
+ok('★ 教練端本月統計的人次也排除請假',
+   /const groupHeadCount=groupDoneBks\.reduce\(\(a,b\)=>a\+grpAttendHeads\(b\),0\);/.test(src));
+ok('　　沒有名單的舊資料維持算 1（行為不變）', /if\(!keys\.length\) return 1;/.test(src));
+ok('　　逐名額判斷（同一人可能只請假其中一個名額）', /逐名額判斷（同一人可能佔多個名額，可能只請假其中一個）/.test(src));
+ok('　　命名避開既有的同名區域變數', /名稱不用 groupHeadCount —— 教練端本月統計裡已有同名的區域變數（數字），會遮蔽掉這支函式/.test(src));
+
+// 實跑
+{
+  const i=src.indexOf('function grpAttendHeads(b){'); const j=src.indexOf('\n}\n',i)+2;
+  const f=new Function('seatKeys','attObj', src.slice(i,j)+'\nreturn grpAttendHeads;')(api.seatKeys, b=>b.attendance||{});
+  eq('★ 3 人都到 → 3', f(B(['A','B','C'],{A:'checked_in',B:'checked_in',C:'booked'})), 3);
+  eq('★ 其中 1 人請假 → 2', f(B(['A','B','C'],{A:'checked_in',B:'leave',C:'booked'})), 2);
+  eq('★ 同一人兩個名額、只請假一個 → 另一個仍算',
+     f(B(['A','A','B'],{A:'checked_in','A#2':'leave',B:'booked'})), 2);
+  eq('　　全員請假 → 0', f(B(['A','B'],{A:'leave',B:'leave'})), 0);
+  eq('　　沒有名單的舊資料 → 1', f(B([],{})), 1);
+  eq('　　未簽到仍算（只排除請假）', f(B(['A','B'],{})), 2);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

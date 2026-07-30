@@ -3777,6 +3777,13 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 教練端：一律隱藏頂部 nav、顯示底部固定導覽（不分手機/平板寬度） */
 .role-coach .navbar-row{display:none;}
 #app-screen.desktop-wide.role-coach .navbar-row{display:flex;}   /* 店長桌機：上方導覽列要顯示（2026-07-28） */
+/* 教練桌機（2026-07-30 使用者指示）：導覽列改到上方，底部那條收起來。
+   原本教練不管螢幕多寬都走手機版面（底部導覽），在電腦上就是一個放大版的手機介面。 */
+#app-screen.coach-wide.role-coach .navbar-row{display:flex;}
+#app-screen.coach-wide.role-coach #bottom-nav{display:none !important;}
+#app-screen.coach-wide.role-coach{--fixed-h:118px;}
+#app-screen.coach-wide.role-coach .content{padding-bottom:32px;}
+#app-screen.coach-wide.role-coach #punch-fab{display:none !important;}
 .role-coach{--fixed-h:62px;} /* 教練端無導覽列，sticky 只需避開 topbar */
 .role-coach #bottom-nav{display:flex;}
 .role-coach .content{padding-bottom:96px;}
@@ -6577,8 +6584,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.2016';
-const APP_VERSION_LABEL='v260730.2016';
+const APP_VERSION = '260730.2215';
+const APP_VERSION_LABEL='v260730.2215';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7672,6 +7679,9 @@ function enterApp(){
   }catch(_){} })();
   // 管理員 / 櫃台 → 桌機放大版面（會員/教練用手機，維持原樣）
   app.classList.toggle('desktop-wide', (isDeskLike()) && !isMobileLayout());
+  /* 2026-07-30 使用者指示：教練用桌機時是「放大版的手機介面」，導覽要移到上方。
+     非店長教練不吃 desktop-wide（那是櫃檯／管理員的左側側欄版面），另給一個 class。 */
+  app.classList.toggle('coach-wide', !!(SESSION&&SESSION.role==='coach'&&!SESSION.is_manager) && !isMobileLayout());
   app.classList.toggle('role-member', SESSION.role==='member'); app.classList.toggle('role-coach', SESSION.role==='coach'); app.classList.toggle('role-admin', SESSION.role==='admin'); // 會員端：手機頂部顯示姓名取代天氣
   document.getElementById('tb-role').textContent=ROLE_LABEL[SESSION.role];
   const tv=document.getElementById('tb-ver'); if(tv) tv.textContent=APP_VERSION;
@@ -7729,6 +7739,9 @@ function switchPreviewRole(role){
   closeModal();
   const app=document.getElementById('app-screen');
   app.classList.toggle('desktop-wide', (isDeskLike()) && !isMobileLayout());
+  /* 2026-07-30 使用者指示：教練用桌機時是「放大版的手機介面」，導覽要移到上方。
+     非店長教練不吃 desktop-wide（那是櫃檯／管理員的左側側欄版面），另給一個 class。 */
+  app.classList.toggle('coach-wide', !!(SESSION&&SESSION.role==='coach'&&!SESSION.is_manager) && !isMobileLayout());
   app.classList.toggle('role-member', SESSION.role==='member'); app.classList.toggle('role-coach', SESSION.role==='coach'); app.classList.toggle('role-admin', SESSION.role==='admin');
   document.getElementById('tb-role').textContent=ROLE_LABEL[SESSION.role];
   buildNav();
@@ -7998,6 +8011,17 @@ function buildNav(){
   if(SESSION.role==='admin'){
     items = isMobile ? MOBILE_ADMIN_NAV : NAV.admin;
   }else if(SESSION.role==='coach'){
+    /* 2026-07-30 使用者指示：教練桌機的導覽列移到上方，顯示「首頁」與「預約行事曆」。
+       跟手機端的底部導覽（首頁／行事曆）維持同一組入口，只是行事曆換成桌機版週曆；
+       薪資單、個人資料、補打卡等仍在右上角 ☰ 選單裡。 */
+    if(!isMobile && !SESSION.is_manager){
+      items=[{key:'coach_today',label:'首頁'},{key:'calendar',label:'預約行事曆'}];
+      nav.innerHTML=items.map(n=>
+        `<div class="nav-item" data-key="${n.key}" onclick="navTo('${n.key}')"><span class="ni-label">${n.label}</span><span class="ni-badge" data-badge="${n.key}" style="display:none;"></span></div>`).join('');
+      refreshNavBadges();
+      buildBottomNav();
+      return;
+    }
     items = (isMobile ? MOBILE_COACH_NAV : NAV.coach).slice();
     // 我的出勤（唯讀班表）：所有教練
     if(!items.find(n=>n.key==='coach_attendance'))
@@ -15432,6 +15456,7 @@ function handleLayoutModeChange(){
     // 重新套用寬版 class（admin/front_desk 且非手機版才用桌機寬版）
     const wide = (isDeskLike()) && !nowMobile;
     app.classList.toggle('desktop-wide', wide);
+    app.classList.toggle('coach-wide', !!(SESSION.role==='coach'&&!SESSION.is_manager) && !nowMobile);
   }
   // 重建導覽列（手機簡易導覽 ⇄ 桌機主導覽 nav2），避免旋轉後導覽不一致
   if(typeof buildNav==='function' && SESSION){ try{ buildNav(); }catch(_){} }
@@ -18746,6 +18771,18 @@ function seatKeysDisplay(b){
   }).map(x=>x.k);
 }
 function seatNo(key){ const k=String(key), i=k.indexOf('#'); return i<0?1:(Number(k.slice(i+1))||1); }
+/* 團課人頭數（2026-07-30 使用者指示：會員請假不能算一個銷課名額）——
+   請假的規則是「本堂票券照扣、另發 14 天補課券」，但人沒有來上課，
+   所以不該計入教練的團課人頭費，也不該算成一個銷課名額。
+   逐名額判斷（同一人可能佔多個名額，可能只請假其中一個）。
+   沒有名單的舊資料維持算 1，與原本的 `member_ids.length ? … : 1` 行為一致。
+   ⚠ 名稱不用 groupHeadCount —— 教練端本月統計裡已有同名的區域變數（數字），會遮蔽掉這支函式。 */
+function grpAttendHeads(b){
+  const keys=seatKeys(b);
+  if(!keys.length) return 1;
+  const att=attObj(b);
+  return keys.filter(k=>att[k]!=='leave').length;
+}
 // 這位會員在這堂課是否有「任一名額」處於某狀態（給只認 member id 的地方用）
 function seatAnyState(b,mid,state){
   const att=attObj(b);
@@ -21712,7 +21749,7 @@ async function openPerfDetail(empId, month){
     const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in');
     const ptDone=done.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
     const grpList=done.filter(b=>b.category==='小班肌力');
-    const groupHeads=grpList.reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
+    const groupHeads=grpList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 請假不算（2026-07-30）
     const leave=leaveSummary(shifts, empId, ym);
     const dutyCap=emp.need_duty?dutyHoursCapped(attendance,shifts,empId,ym):0;
     const dutyOv=emp.need_duty?dutyClassOverlapHours(shifts,bookings,empId,ym):0;
@@ -21788,7 +21825,7 @@ async function computeMonthlyPayroll(month){
     const myDone=bookings.filter(b=>b.coach_id===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month);
     const ptDone=ptDoneById[emp.id]||0;
     const groupList=myDone.filter(b=>b.category==='小班肌力');
-    const groupHeads=groupList.reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
+    const groupHeads=groupList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 請假不算（2026-07-30）
     // 值班費：打卡封頂時數 再扣掉「值班時段內上課」重疊 → 淨值班時數（顯示與計薪一致）
     const leave=leaveSummary(shifts, emp.id, month);
     const dutyCap=emp.need_duty ? dutyHoursCapped(attendance, shifts, emp.id, month) : 0;
@@ -27426,7 +27463,7 @@ PAGES.coach_today=async function(){
   // 團體課（小班肌力）：堂數與總人次
   const groupDoneBks=monthDoneBk.filter(b=>b.category==='小班肌力');
   const groupClassCount=groupDoneBks.length;
-  const groupHeadCount=groupDoneBks.reduce((a,b)=>a+((Array.isArray(b.member_ids)?b.member_ids.length:0)||0),0);
+  const groupHeadCount=groupDoneBks.reduce((a,b)=>a+grpAttendHeads(b),0);   // 請假不算（2026-07-30）
   // 值班日期（本月有排班的日）
   const dutyDates=new Set(shifts.filter(s=>s.emp_id===SESSION.id&&(s.date||'').slice(0,7)===thisMonth&&(s.hours>0||s.start_time)).map(s=>s.date));
   // 教練課門檻與達標
@@ -33873,8 +33910,8 @@ async function renderSalaryContent(TARGET, withHead){
   const ptDone=myDone.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
   const groupDoneList=myDone.filter(b=>b.category==='小班肌力');
   const groupDone=groupDoneList.length;
-  // 團課總人頭：每堂實際參加人數加總（member_ids 長度；至少算 1）
-  const groupHeads=groupDoneList.reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
+  // 團課總人頭：每堂實際參加人數加總（請假的不算 —— 2026-07-30 使用者指示）
+  const groupHeads=groupDoneList.reduce((s,b)=>s+grpAttendHeads(b),0);
   // 值班費：打卡封頂時數 再扣掉「值班時段內上課」重疊 → 淨值班時數
   const myShifts=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   const myLeave=leaveSummary(shifts, empId, month);
