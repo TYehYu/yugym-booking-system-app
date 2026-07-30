@@ -3174,6 +3174,15 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .pp-hist-row:nth-child(even){background:var(--card2);}
 .pp-hist-name{color:var(--t2);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .pp-hist-meta{color:var(--t3);font-size:11.5px;white-space:nowrap;}
+/* 過期但沒用完的票可以展延（2026-07-30 使用者回報看不到按鈕）：那一列用品牌金標出來 */
+.pp-hist-row.pp-hist-ext{background:#FBF6EC;box-shadow:inset 2px 0 0 var(--gold-d,#b48a56);}
+.pp-hist-row.pp-hist-ext .pp-hist-name{color:var(--text);}
+.pp-hist-btn{flex:0 0 auto;padding:3px 12px;font-size:11.5px;color:var(--gold-d,#b48a56);
+  border-color:var(--gold,#c9a227);}
+.pp-hist-tag{font-size:10px;font-weight:700;color:var(--gold-d,#b48a56);background:#f7efe0;
+  border-radius:999px;padding:2px 7px;margin-left:6px;}
+.pp-hist-sum{font-size:11px;font-weight:700;color:var(--gold-d,#b48a56);background:#f7efe0;
+  border-radius:999px;padding:2px 9px;margin-left:8px;}
 /* 會員列表迷你圓形卡（2026-07-28 二修）：只放點點、不放名稱——課種由顏色表示，點點放大 */
 /* ── 票券袋子（2026-07-30 使用者定案）：一組票券一列圓點，預設 2 組、其餘收合 ── */
 .tkbag{display:flex;flex-direction:column;gap:5px;min-width:0;align-items:flex-start;}
@@ -6515,8 +6524,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1554';
-const APP_VERSION_LABEL='v260730.1554';
+const APP_VERSION = '260730.1558';
+const APP_VERSION_LABEL='v260730.1558';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23611,7 +23620,7 @@ function ppRecordHtml(){
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
             <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null)}</div>
             <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
-              <span>效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}${tkMoneyHtml(t)}</span>
+              <span>效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}${tkIsExtended(t)?`　·　<b style="color:var(--gold-d);">已展延（不得退費）</b>`:''}${tkMoneyHtml(t)}</span>
               <span style="display:flex;gap:6px;">
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">📄 合約</button>`:''}
                 ${(isDeskLike()&&t.status==='usable'&&(tab==='pt'||tab==='group')&&t.member_id===PP.id)?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="ppShareTk('${t.id}')">${_shN?'共享設定':'設為共享'}</button>`:''}
@@ -23633,14 +23642,20 @@ function ppRecordHtml(){
           return t.status!=='usable' || (t.sessions_remaining!=null && Number(t.sessions_remaining)<=0);
         };
         const act=list.filter(t=>!isHist(t)), hist=list.filter(isHist);
+        /* 2026-07-30 使用者回報「邱美珠過期的票券還沒有設定展延按鈕」：
+           過期但還沒用完的票會被 isHist 收進「歷史紀錄」摺疊區，展延開關只做在管理端的
+           票券頁，這邊看不到 —— 直接把按鈕放進歷史列，並在有可展延的票時預設展開。 */
+        const _extable=hist.filter(t=>isDeskLike()&&tkCanExtend(t,_tYmd));
         const histRow=t=>{
           const total=Number(t.sessions_total)||0;
           const used=usedOf(t);
           const st={used_up:'已用畢',expired:'已過期',refunded:'已退費'}[t.status]
             || ((t.expire_date&&String(t.expire_date).slice(0,10)<_tYmd)?'已過期':'已用畢');
-          return `<div class="pp-hist-row"><span class="pp-hist-name">${t.plan_name||'票券'}</span>
-            <span class="pp-hist-meta"><b class="num">${used}</b>/${total}　·　${st}　·　${String(t.purchase_date||'').slice(0,10)||'—'}</span></div>`; };
-        const histSec=hist.length?`<details class="pp-hist"><summary>歷史紀錄（${hist.length}）</summary>
+          const canExt=isDeskLike()&&tkCanExtend(t,_tYmd);
+          return `<div class="pp-hist-row${canExt?' pp-hist-ext':''}"><span class="pp-hist-name">${t.plan_name||'票券'}${tkIsExtended(t)?'<span class="pp-hist-tag">已展延</span>':''}</span>
+            <span class="pp-hist-meta"><b class="num">${used}</b>/${total}　·　${st}　·　${String(t.purchase_date||'').slice(0,10)||'—'}</span>
+            ${canExt?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();openTicketExtend('${t.id}')" title="剩 ${Number(t.sessions_remaining)||0} 堂沒用完，可展延 ${tkPlanDays(t)} 天至 ${String(tkExtendTo(t)).replace(/-/g,'/')}">展延</button>`:''}</div>`; };
+        const histSec=hist.length?`<details class="pp-hist"${_extable.length?' open':''}><summary>歷史紀錄（${hist.length}）${_extable.length?`<span class="pp-hist-sum">${_extable.length} 張可展延</span>`:''}</summary>
           ${hist.map(histRow).join('')}</details>`:'';
         return `<div class="pp-card">${back}<div class="pp-card-t" style="display:flex;justify-content:space-between;align-items:center;">票券
           ${isDeskLike()?`<button class="btn btn-green btn-sm" style="padding:5px 14px;font-size:12.5px;" onclick="ppTopUp('${PP.id}')">＋ 儲值</button>`:''}</div>

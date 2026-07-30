@@ -97,5 +97,36 @@ ok('　　雙重把關：視窗與寫入都再驗一次條件',
    (src.match(/if\(!tkCanExtend\(t\)\)\{ showToast\('這張票券不符合展延條件/g)||[]).length===2);
 ok('　　原因寫在程式裡', /過期票在系統裡完全動不了/.test(src));
 
+console.log('\n會員名片的票券頁也要看得到（2026-07-30 使用者回報「邱美珠過期的票券還沒有設定展延按鈕」）');
+ok('★ 過期但沒用完的票會被收進「歷史紀錄」→ 按鈕直接放進那一列',
+   /const canExt=isDeskLike\(\)&&tkCanExtend\(t,_tYmd\);/.test(src)
+   && /\$\{canExt\?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event\.stopPropagation\(\);openTicketExtend\('\$\{t\.id\}'\)"/.test(src));
+ok('★ 有可展延的票時「歷史紀錄」預設展開，不用自己去點開',
+   /<details class="pp-hist"\$\{_extable\.length\?' open':''\}>/.test(src));
+ok('★ 摺疊標題標出有幾張可展延',
+   /\$\{_extable\.length\?`<span class="pp-hist-sum">\$\{_extable\.length\} 張可展延<\/span>`:''\}/.test(src));
+ok('　　可展延那一列用品牌金標出來（過期票整片灰，不標會看不到）',
+   /\.pp-hist-row\.pp-hist-ext\{background:#FBF6EC;box-shadow:inset 2px 0 0 var\(--gold-d,#b48a56\);\}/.test(src));
+ok('　　按鈕上的提示直接寫可延幾天、延到哪天',
+   /title="剩 \$\{Number\(t\.sessions_remaining\)\|\|0\} 堂沒用完，可展延 \$\{tkPlanDays\(t\)\} 天至 \$\{String\(tkExtendTo\(t\)\)\.replace\(\/-\/g,'\/'\)\}"/.test(src));
+ok('★ 展延後票券回到可用區，卡片標「已展延（不得退費）」',
+   /\$\{tkIsExtended\(t\)\?`　·　<b style="color:var\(--gold-d\);">已展延（不得退費）<\/b>`:''\}/.test(src));
+ok('　　歷史列若是已展延過的也標一下', /\$\{tkIsExtended\(t\)\?'<span class="pp-hist-tag">已展延<\/span>':''\}/.test(src));
+ok('　　只有櫃檯／管理員看得到按鈕（會員自己不能展延）',
+   /const _extable=hist\.filter\(t=>isDeskLike\(\)&&tkCanExtend\(t,_tYmd\)\);/.test(src));
+ok('　　點按鈕不會連帶收合／展開摺疊區', /onclick="event\.stopPropagation\(\);openTicketExtend/.test(src));
+ok('　　原因寫在程式裡', /展延開關只做在管理端的\s*\n\s*票券頁，這邊看不到/.test(src));
+
+// 邱美珠那張實跑一次：確認會被判成「歷史 ＋ 可展延」
+{
+  const t={ticket_type_id:'tt-limited-legacy',status:'usable',plan_name:'限定教練課 1V1',
+           start_date:'2026-04-23',expire_date:'2026-07-16',sessions_total:10,sessions_remaining:4};
+  const today='2026-07-30';
+  const isHist = t.expire_date && String(t.expire_date).slice(0,10) < today;
+  ok('★ 邱美珠 MTK-47027B003586：被收進歷史紀錄', isHist===true);
+  ok('★ 且符合展延條件 → 那一列會出現「展延」按鈕', api.tkCanExtend(t,today)===true);
+  ok('★ 可延 84 天至 2026-10-08', api.tkPlanDays(t)===84 && api.tkExtendTo(t)==='2026-10-08');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
