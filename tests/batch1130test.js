@@ -139,5 +139,38 @@ ok('　　金額都取整數（與營運分析同口徑）',
   ok('　　值班時段上課的扣款也列出來', /值班時段上課 7\.2 小時/.test(h));
 }
 
+
+/* ── ⑦ 員工管理改回列表，保留開關與齒輪（2026-07-30 使用者指示）── */
+console.log('\n員工管理：卡片改回列表');
+{
+  const i=src.indexOf('    const stRow=c=>{'); const j=src.indexOf('\n    };\n', i)+8;
+  const k=src.indexOf('function stSwitchRow(c){'); const l=src.indexOf('\n}\n',k)+2;
+  const ST_SWITCHES=[{key:'admin',label:'管理員'},{key:'manager',label:'店長'},{key:'supervisor',label:'主管'},
+                     {key:'punch',label:'打卡'},{key:'teach',label:'開課'},{key:'disabled',label:'停用'}];
+  const env={ST_SWITCHES, ppEmpSwitchOn:(c,kk)=>kk==='teach'||(kk==='disabled'&&c.status==='inactive'),
+    ET_COLOR:{full_time:'#1f6f54'}, normEmp:x=>x||'full_time', typeLabel:()=>'正職',
+    genderAvatarSVG:()=>'<svg/>', stateOf:c=>c.status||'active', statusBadge:()=>'<span class="tag">停用</span>',
+    nameSub:c=>[c.emp_no,c.phone].filter(Boolean).join(' · '), ST_GEAR:'<svg class="gear"/>', LNI:{link:'🔗'}};
+  const fn=new Function(...Object.keys(env), src.slice(k,l)+'\n'+src.slice(i,j)+'\nreturn stRow;')(...Object.values(env));
+  const h=fn({id:'E1',name:'王教練',name_en:'wang',gender:'male',employment_type:'full_time',
+              job_title:'資深教練',emp_no:'A01',phone:'0912345678',status:'active'});
+  ok('★ 一列一人的列表（不再是直式卡）', /class="st-lrow/.test(h) && !/class="st-card/.test(h));
+  ok('★ 權限開關全部保留（6 顆）', (h.match(/class="st-swb/g)||[]).length===6);
+  ok('★ 右上角齒輪保留（點開員工明細）', /st-gear st-gear-row/.test(h) && /openPersonProfile\('employee','E1'\)/.test(h));
+  ok('　　點整列也能開明細', /<div class="st-lrow[^"]*"[^>]*onclick="openPersonProfile\('employee','E1'\)"/.test(h));
+  ok('　　點開關不會連帶開明細', /class="st-l-sw" onclick="event\.stopPropagation\(\);"/.test(h));
+  ok('　　姓名、對外名稱、聘僱類型、職稱、工號電話都在同一列',
+     /王教練/.test(h) && /WANG/.test(h) && /正職/.test(h) && /資深教練/.test(h) && /A01 · 0912345678/.test(h));
+  const off=fn({id:'E2',name:'離職者',status:'inactive',employment_type:'full_time'});
+  ok('　　停用的列淡化、燈號轉灰', /st-lrow st-off/.test(off) && /st-led off/.test(off));
+  const pend=fn({id:'E3',name:'待邀請',invite_status:'pending',invite_token:'T',employment_type:'full_time'});
+  ok('　　待接受邀請：標籤照舊、齒輪變成複製邀請連結',
+     /待接受邀請/.test(pend) && /copyInvite\('T'\)/.test(pend));
+  ok('★ 依聘僱類型分區維持不變', /<div class="st-list">\$\{secs\[k\]\.map\(stRow\)\.join\(''\)\}<\/div>/.test(src));
+  ok('　　舊的 stCard 已移除，不留兩套', !/const stCard=c=>\{/.test(src) && /〔已移除〕stCard（直式員工卡）/.test(src));
+  ok('　　窄畫面時開關換行到下一列，齒輪固定右上',
+     /@media\(max-width:900px\)\{\s*\n\s*\.st-lrow\{flex-wrap:wrap;/.test(src));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
