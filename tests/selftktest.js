@@ -41,8 +41,8 @@ ok('★ 挑票時先篩掉時段不符的', /if\(!tkTimeOk\(t,bookDate,bookTime\
 ok('★ 受限的票優先用掉（否則最容易白白過期）',
    /const ra=tkIsTimeRestricted\(a\)\?0:1, rb=tkIsTimeRestricted\(b\)\?0:1;/.test(src)
    && /if\(ra!==rb\) return ra-rb;/.test(src));
-ok('　　其餘仍依到期日先進先出',
-   /return \(a\.expire_date\|\|''\)\.localeCompare\(b\.expire_date\|\|''\);/.test(src));
+ok('　　其餘仍依到期日先進先出，沒有效期的排最後（2026-07-30 修）',
+   /String\(a\.expire_date\|\|'9999-12-31'\)\.localeCompare\(String\(b\.expire_date\|\|'9999-12-31'\)\)/.test(src));
 ok('　　挑票函式一路把時間傳下去',
    /async function listUsableTickets\(member_id,type_id,bookDate,bookTime\)/.test(src)
    && /async function findUsableTicket\(member_id,type_id,bookDate,bookTime\)/.test(src));
@@ -68,7 +68,7 @@ ok('★ 步驟 2 一般課程改用它（不再自寫一套）',
    /const tks=allTkG\.filter\(tt=>tkFitsBooking\(tt,m\.id,type_id,date,time\)\);/.test(src)
    && !/allTkG\.filter\(tt=>tkUsableBy\(tt,m\.id\) && bkTicketTypeOk/.test(src));
 ok('★ 步驟 2 團體課也改用它',
-   /const tks=allTk\.filter\(tt=>tkFitsBooking\(tt,m\.id,type_id,date,time\)\);/.test(src));
+   /const tks=allTk\.filter\(tt=>tkFitsBooking\(tt,m\.id,type_id,date,time\)\)/.test(src));
 ok('　　顯示的堂數用 tkUnlockedLeft（分期未開通的不能先算進去）',
    (src.match(/const sum=tks\.reduce\(\(s,tt\)=>s\+tkUnlockedLeft\(tt\),0\);/g)||[]).length===2);
 ok('　　步驟 2 先確保票種快取（tkFitsBooking 要靠它判類別）',

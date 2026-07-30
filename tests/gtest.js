@@ -136,6 +136,38 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('　　紅虛線圈的樣式有定義', /\.mtk-over\{[^}]*var\(--danger/.test(require('fs').readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8')));
   }
 
+
+  /* 團課票券可指定要扣哪一張（2026-07-30 使用者指示）——
+     會員同時有「12 個月 12 堂」與「四週 4 堂優惠」時，先進先出會把長期方案先吃掉，
+     快到期的優惠票反而被留到過期。 */
+  console.log('\n團課票券可指定要扣哪一張');
+  {
+    const src=require('fs').readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+    chk('★ 挑票排序：沒有效期的排最後（不再讓長期方案插到最前面）',
+      /String\(a\.expire_date\|\|'9999-12-31'\)\.localeCompare\(String\(b\.expire_date\|\|'9999-12-31'\)\)/.test(src)
+      && !/return \(a\.expire_date\|\|''\)\.localeCompare\(b\.expire_date\|\|''\);/.test(src));
+    chk('★ 櫃檯：名單上每人可下拉指定票券', /function grpPickTk\(mid,tkid\)\{/.test(src)
+      && /onchange="grpPickTk\('\$\{m\.id\}',this\.value\)"/.test(src));
+    chk('　　只有選了、且有兩張以上才出現下拉', /const pick=\(on&&tks\.length>1\)/.test(src));
+    chk('　　下拉標明剩餘堂數與效期', /扣：\$\{String\(t\.name\)\.replace\(\/<\/g,'&lt;'\)\}　剩 \$\{t\.left\} 堂/.test(src));
+    chk('★ 管理名單存檔時照指定的扣', /const want=\(window\._grpTkPick\|\|\{\}\)\[mid\];/.test(src)
+      && /tk=cand\.find\(t=>t\.id===want\)\|\|null;/.test(src));
+    chk('★ 新增團體課（含連續數週）也照指定的扣',
+      /if\(want\)\{ const cand=await listUsableTickets\(mid,type_id,dW,time\); tk=cand\.find\(x=>x\.id===want\)\|\|null; \}/.test(src));
+    chk('　　指定的票不能用時退回自動挑選，不讓整堂建不起來',
+      /if\(!tk\) tk=await findUsableTicket\(mid,type_id,dW,time\);/.test(src)
+      && /指定的票券已不能用，改用最快到期的那張/.test(src));
+    chk('　　每次開視窗重置指定，不跨堂殘留',
+      (src.match(/window\._grpTkPick=\{\};/g)||[]).length===2);
+    chk('★ 會員端：多張票時出下拉，預設最快到期',
+      /<select id="grp-join-tk" onchange="window\._grpJoinTk=this\.value"/.test(src)
+      && /const cand=\(s\.grpTks\|\|\[\]\)\.filter\(t=>!t\.expire_date\|\|t\.expire_date>=c\.date\)/.test(src));
+    chk('★ 會員端報名時把指定的票帶給 RPC',
+      /sb\.rpc\('fn_member_join_group',\{p_booking_id:bid,p_ticket_id:_pick\}\)/.test(src));
+    chk('　　指定失效有看得懂的訊息', /'TICKET\.INVALID_PICK':'選的票券已不能用於這堂課/.test(src));
+    chk('　　只有一張時不出下拉、維持原本的一行說明', /cand\.length===1/.test(src));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail?1:0);
 })();
