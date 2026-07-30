@@ -6383,8 +6383,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1310';
-const APP_VERSION_LABEL='v260730.1310';
+const APP_VERSION = '260730.1313';
+const APP_VERSION_LABEL='v260730.1313';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18623,7 +18623,17 @@ PAGES.members=async function(){
     const rest=mine.filter(tk=>!liveOf(tk)).sort(byBuy);
     /* 沒有還在用的票時，只列最近那一組就好（歷史票十幾張全攤開沒有意義） */
     const show=live.length?live.concat(rest):rest.slice(0,1);
-    if(!show.length) return '<span style="color:var(--t3);font-size:12px;">僅自主訓練點數</span>';
+    if(!show.length){
+      /* 2026-07-30 使用者回報（林孟玉、蘇美帆）：兩人一張票都沒有，列表卻寫「僅自主訓練點數」。
+         這句原本是「有票但都被 isMain 濾掉」的訊息，沒票的人也一併掉進來。分開講：
+         真的有自主訓練點數／折抵券 → 照舊；完全沒票、只是排了課 → 標那堂課。 */
+      const others=allTk.filter(tk=>tkUsableBy(tk,m.id));
+      if(others.length) return '<span style="color:var(--t3);font-size:12px;">僅自主訓練點數／折抵券</span>';
+      const nx=(myBk||[]).filter(b=>b.status==='booked'&&String(b.date||'').slice(0,10)>=today)
+        .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))[0];
+      if(nx) return `<span class="tk-chip" style="background:#f5edf7;color:#6e3a86;">尚未儲值・${nx.category||'已排課'} ${String(nx.date||'').slice(5).replace('-','/')}</span>`;
+      return '<span class="tk-chip" style="background:#fbe9e7;color:#c0392b;">無有效票券</span>';
+    }
     /* ⚠ 整袋一起配一次，不可以每張票各配一次 ——
        各配一次的話，同一堂還沒上的課會在每一張同類別的票上都冒出一顆紅圈（假的）。 */
     const alloc=allocBookingsToTickets(show,myBk,typeMapFull);

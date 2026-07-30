@@ -8,6 +8,7 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 /* ── ① 會員選擇器合併 ─────────────────────────────── */
 console.log('會員搜尋框＋下拉合併成一個');
@@ -212,6 +213,33 @@ ok('　　每一列的 title 標方案名、剩餘／總堂數與效期',
 console.log(`
 （版面與互動另以 Playwright 實測：陳蘭馨三組票 → 顯示 2 列＋「＋ 還有 1 組」，
   展開後三列，8/4 那堂只出現在真正扣它的那一組，另兩組不再冒出假的紅圈。）`);
+
+
+/* ── ⑧ 一張票都沒有的人不該顯示「僅自主訓練點數」（2026-07-30 林孟玉、蘇美帆）── */
+console.log('\n沒有票券的人要講對');
+ok('★ 三種情況分開講：只有自主／折抵券、完全沒票但已排課、什麼都沒有',
+   /if\(others\.length\) return '<span style="color:var\(--t3\);font-size:12px;">僅自主訓練點數／折抵券<\/span>';/.test(src)
+   && /尚未儲值・\$\{nx\.category\|\|'已排課'\}/.test(src)
+   && /return '<span class="tk-chip" style="background:#fbe9e7;color:#c0392b;">無有效票券<\/span>';/.test(src));
+ok('★ 原因寫在程式裡（原句是「有票但被 isMain 濾掉」的訊息，沒票的人也掉進來）',
+   /兩人一張票都沒有，列表卻寫「僅自主訓練點數」/.test(src));
+ok('　　已排課的顯示最近那一堂的課別與日期',
+   /\.sort\(\(a,b\)=>String\(a\.date\|\|''\)\.localeCompare\(String\(b\.date\|\|''\)\)\)\[0\]/.test(src));
+{
+  const today='2026-07-30';
+  const pick=(others,myBk)=>{
+    if(others.length) return '僅自主訓練點數／折抵券';
+    const nx=myBk.filter(b=>b.status==='booked'&&b.date>=today).sort((a,b)=>a.date.localeCompare(b.date))[0];
+    return nx?`尚未儲值・${nx.category} ${nx.date.slice(5).replace('-','/')}`:'無有效票券';
+  };
+  eq('★ 林孟玉：0 張票＋8/04 體驗 → 尚未儲值・體驗 08/04',
+     pick([],[{status:'booked',date:'2026-08-04',category:'體驗'}]), '尚未儲值・體驗 08/04');
+  eq('★ 只有自主訓練點數 → 照舊講「僅自主訓練點數／折抵券」',
+     pick([{id:'S'}],[]), '僅自主訓練點數／折抵券');
+  eq('★ 什麼都沒有 → 無有效票券', pick([],[]), '無有效票券');
+  eq('　　只有過去的課、沒有未來的 → 無有效票券',
+     pick([],[{status:'booked',date:'2026-07-01',category:'體驗'}]), '無有效票券');
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
