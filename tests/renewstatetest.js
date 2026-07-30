@@ -29,9 +29,9 @@ console.log('\n顏色定義');
 ok('★ 綠勾用品牌綠', /\.ev-pa-ok\{background:var\(--green,#1f6f54\);color:#fff;\}/.test(src));
 ok('★ 紅叉與紅字提醒用 danger', /\.ev-pa-no\{background:var\(--danger,#b5372e\)/.test(src)
    && /\.ev-pa-warn\{background:var\(--danger,#b5372e\)/.test(src));
-ok('★ 待處理的課卡整張反紅（2026-07-30 改不透明底色，避免課卡看起來變透明）',
-   /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,240}background:color-mix\(in srgb,var\(--danger,#b5372e\) 10%,#fff\) !important;/.test(src)
-   && !/background:rgba\(181,55,46,\.12\) !important/.test(src));
+// 2026-07-30 三修（使用者：金／紅不要淡化，色調不舒服）→ 底色完全不動，只加粗外框
+ok('★ 待處理的課卡用加粗紅框標示（不再覆蓋底色）',
+   /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,160}border:2px solid var\(--danger,#b5372e\) !important;/.test(src));
 ok('★ 只有未繳費才反紅（2026-07-30 定案）',
    /const _alertCls = _isUnpaid \? ' cal-ev-renew'/.test(src));
 ok('★ 最後一堂／分期繳費只留右上角驚嘆號，不整張反紅',
@@ -69,8 +69,8 @@ ok('★ 今天新增的預約 → 品牌金',
 ok('★ 同時符合時紅色優先（未繳費比「今天新增」重要）',
    /_isUnpaid \? ' cal-ev-renew'\s*\n\s*: \(_isNewToday/.test(src));
 ok('　　金框用品牌金、紅框用 danger',
-   /\.cal-ev\.cal-ev-std\.cal-ev-newtoday \.evc-body\{[\s\S]{0,120}border-color:var\(--gold-d,#b48a56\)/.test(src)
-   && /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,120}border-color:var\(--danger,#b5372e\)/.test(src));
+   /\.cal-ev\.cal-ev-std\.cal-ev-newtoday \.evc-body\{[\s\S]{0,120}border:2px solid var\(--gold-d,#b48a56\)/.test(src)
+   && /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,120}border:2px solid var\(--danger,#b5372e\)/.test(src));
 ok('　　手機端同一套（別人的課卡不標）',
    /const _vis=\(layer==='mine'\|\|isAdmin\);/.test(src)
    && /const _mkAlert = _unpaidM \? ' cal-ev-renew'/.test(src));
@@ -85,9 +85,9 @@ console.log('\n外框 CSS 必須壓過 .cal-ev-std 的 box-shadow:none');
   ok('★ 選擇器帶 .cal-ev-std（同分特異性下靠順序取勝）',
      iRenew>0 && iNew>0);
   ok('★ 外框畫在 .evc-body（色塊層），不會被它蓋住',
-     /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,200}border-color:var\(--danger/.test(src));
-  ok('　　底色與邊框都用 !important 壓過後面的通用色塊規則',
-     (src.slice(iRenew,iRenew+260).match(/!important/g)||[]).length>=3);
+     /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,200}border:2px solid var\(--danger/.test(src));
+  ok('　　邊框用 !important 壓過後面的通用色塊規則',
+     (src.slice(iRenew,iRenew+260).match(/!important/g)||[]).length>=2);
 }
 
 console.log('\n待簽約卡位的「轉正簽約」按鈕');
@@ -126,16 +126,19 @@ ok('　　圖例可換行、不撐破畫面', /\.mem-lgs\{display:flex;flex-wrap
 
 
 console.log('\n紅／金框不再讓課卡透明（2026-07-30 使用者回報）');
-ok('★ 兩種提示底色都改成不透明（color-mix 混白）',
-   /background:color-mix\(in srgb,var\(--danger,#b5372e\) 10%,#fff\) !important;/.test(src)
-   && /background:color-mix\(in srgb,var\(--gold-d,#b48a56\) 12%,#fff\) !important;/.test(src));
+ok('★ 提示完全不動底色（課卡保留自己的課程色，沒有任何一層被沖淡）',
+   !/background:color-mix\(in srgb,var\(--danger,#b5372e\)/.test(src)
+   && !/background:color-mix\(in srgb,var\(--gold-d,#b48a56\)/.test(src)
+   && /\.cal-ev\.cal-ev-std \.evc-body\{position:absolute;inset:0;[\s\S]{0,120}background:var\(--tk-soft,#EAF3EF\);\}/.test(src));
 ok('★ 舊的半透明底色完全移除',
    !/background:rgba\(181,55,46,\.12\) !important/.test(src)
    && !/background:rgba\(180,138,86,\.14\) !important/.test(src));
-ok('　　邊框與內圈仍是提示色（提示效果不變）',
-   /\.cal-ev-renew \.evc-body\{[\s\S]{0,120}border-color:var\(--danger,#b5372e\) !important;/.test(src)
-   && /\.cal-ev-newtoday \.evc-body\{[\s\S]{0,120}border-color:var\(--gold-d,#b48a56\) !important;/.test(src));
-ok('　　原因寫在程式裡', /半透明底色（rgba \.12\/\.14）疊在課程色塊上，會透出下面的行事曆格線/.test(src));
+ok('　　外框加粗到 2px、內圈用半透明同色勾邊，提示比原本更明顯',
+   /box-shadow:inset 0 0 0 1px rgba\(181,55,46,\.45\) !important;/.test(src)
+   && /box-shadow:inset 0 0 0 1px rgba\(180,138,86,\.45\) !important;/.test(src));
+ok('　　三次修改的來由都寫在程式裡（透明 → 淡粉／淡米 → 只加框）',
+   /一修用半透明底色（rgba \.12\/\.14）→ 卡片看起來變透明/.test(src)
+   && /二修改成不透明的 color-mix 混白 → 變成一片淡粉／淡米色，把課程色蓋掉/.test(src))
 ok('　　手機端共用同一組 class，一併生效', /const _mkAlert = _unpaidM \? ' cal-ev-renew'/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
