@@ -84,5 +84,19 @@ console.log('\n實跑 buildRecurringSlots');
      f('2026-08-04','10:00',[2,4],{},12,'2026-08-13').length, 4);
 }
 
+console.log('\n自主訓練改期：不會被「自己另一筆」卡住（2026-07-30 使用者提問）');
+ok('★ 前端驗證帶原預約 id → 不會跟自己那一筆衝突',
+   /const vbk=\{id:s\.resched\.id,member_id:SESSION\.id,coach_id:null,category:'自主訓練'/.test(src));
+ok('★ 前端本來就放行自主訓練彼此重疊（多名額）',
+   /const selfOK = bk\.category==='自主訓練' && dup\.category==='自主訓練';/.test(src));
+ok('★ sameDay 排除自己那一筆', /const sameDay=all\.filter\(x=> x\.id!==bk\.id && x\.status!=='cancelled' && x\.date===date \);/.test(src));
+ok('　　DB 端規則差異已記錄在 migration', (()=>{
+  const fs2=require('fs');
+  const f=process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260730_reschedule_self_dup_rule.sql';
+  if(!fs2.existsSync(f)) return false;
+  const t=fs2.readFileSync(f,'utf8');
+  return /and x\.category::text <> '自主訓練'/.test(t) && /這裡修的是「跟自己另一筆」/.test(t);
+})());
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
