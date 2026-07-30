@@ -4097,10 +4097,13 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mc-td-line b{font-family:var(--num),inherit;font-weight:700;color:var(--gold-d,#b48a56);
   flex:0 0 auto;min-width:34px;}
-.mc-td-line .mc-td-pay{font-style:normal;font-size:10px;font-weight:700;border-radius:5px;
-  padding:0 5px;background:rgba(181,55,46,.12);color:var(--danger,#b5372e);flex:0 0 auto;}
+/* 2026-07-30 使用者回報「待收」跟背景太近看不清楚 —— 原本是淡紅底＋紅字，
+   在深色儀表板卡上幾乎融進去。改成實心紅底＋白字，兩種底色都夠對比。 */
+.mc-td-line .mc-td-pay{font-style:normal;font-size:10px;font-weight:800;border-radius:5px;
+  padding:1px 6px;background:var(--danger,#b5372e);color:#fff;flex:0 0 auto;letter-spacing:.02em;}
 .mc-td-more{color:var(--t3);}
-.mc-dash .mc-todo-card .mc-td-line{color:rgba(244,241,232,.72);}
+.mc-dash .mc-todo-card .mc-td-line{color:rgba(244,241,232,.86);}
+.mc-dash .mc-todo-card .mc-td-pay{background:#e0574c;color:#fff;}
 .mc-dash .mc-todo-card .mc-td-line b{color:var(--gold,#c9a227);}
 .mc-td-n{font-size:19px;font-weight:800;font-family:var(--font-en),var(--num);flex-shrink:0;}
 .mc-td-n-danger{color:var(--danger);}
@@ -5188,7 +5191,8 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 收款提醒的上課時間（2026-07-30 使用者指示）：一般續課用品牌金、待付費用品牌紅 */
 .tdl-tm{margin-left:7px;font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;
   font-family:var(--num),inherit;background:rgba(180,138,86,.16);color:var(--gold-d,#b48a56);}
-.tdl-tm-pay{background:rgba(181,55,46,.12);color:var(--danger,#b5372e);}
+/* 待付費的時間標籤：實心紅底白字（2026-07-30 使用者回報對比不足，與首頁的「待收」同一套） */
+.tdl-tm-pay{background:var(--danger,#b5372e);color:#fff;}
 .tdl-rs-ok{background:var(--sage-bg);color:var(--green);}
 .tdl-rs-gold{background:#f7efe0;color:#8a5e28;}
 .tdl-rs-no{background:#fbeaea;color:var(--danger,#b5372e);}
@@ -6345,8 +6349,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1250';
-const APP_VERSION_LABEL='v260730.1250';
+const APP_VERSION = '260730.1257';
+const APP_VERSION_LABEL='v260730.1257';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10327,10 +10331,19 @@ PAGES.g_dashboard=async function(){
     const _aYm=window._admCalYm||date.slice(0,7);
     const [_ayy,_amm]=_aYm.split('-').map(Number);
     const _cnt={};
-    /* 日期下的數字＝當日「課堂數」（教練課/友善/團課/體驗/按摩），與「今日教練任務」同口徑。
-       自主訓練與場租不計（2026-07-23 使用者回報：原本全部預約都算，跟教練任務對不起來——
-       正式庫匯入了大量舊系統自主訓練史，數字被灌高）。 */
-    (bookings||[]).forEach(b=>{ if(b.status==='cancelled')return; if(b.category==='自主訓練'||b.category==='場租')return; if((b.date||'').slice(0,7)!==_aYm)return; _cnt[b.date]=(_cnt[b.date]||0)+1; });
+    /* 日期下的數字＝當日課堂數，與上方 KPI 的「總課堂數」同口徑（2026-07-30 使用者回報：
+       月曆今天顯示 23、KPI 是 18＋3＝21）。差在體驗課 —— KPI 的 totalClasses 只算
+       pt／friendly／group／massage，月曆卻把體驗也算進去。改成同一組課種：
+       教練課（含友善）＋團體課＋運動按摩；自主訓練、場租、體驗都不計。
+       體驗課仍會列在格子的提示文字裡，不會看不到。 */
+    const _calCats=b=>{const c=bkCC(b);return c==='pt'||c==='friendly'||c==='group'||c==='massage';};
+    const _cntTip={};
+    (bookings||[]).forEach(b=>{ if(b.status==='cancelled')return; if((b.date||'').slice(0,7)!==_aYm)return;
+      if(_calCats(b)) _cnt[b.date]=(_cnt[b.date]||0)+1;
+      const k={'私人教練':'教練課','小班肌力':'團體課','運動按摩':'按摩','體驗':'體驗','自主訓練':'自主','場租':'場租'}[b.category]||b.category||'其他';
+      const t=(_cntTip[b.date]=_cntTip[b.date]||{}); t[k]=(t[k]||0)+1; });
+    const _tipOf=ds=>{ const t=_cntTip[ds]; if(!t) return '';
+      return Object.entries(t).map(([k,v])=>k+' '+v).join('・'); };
     const _fd=new Date(_ayy,_amm-1,1).getDay();
     const _dim=new Date(_ayy,_amm,0).getDate();
     // 週列結構（月曆 Hero 收合用）：格子按週分組，收合時只留「當週」（檢視日所在週）
@@ -10342,7 +10355,7 @@ PAGES.g_dashboard=async function(){
       const n=_cnt[ds]||0;
       if(ds===date) _curIdx=_cellArr.length;
       // 點日期 → 下方「今日」各卡切換為該日（沿用 _dashViewDate 機制）
-      _cellArr.push(`<div class="mc-cell${ds===ymd(TODAY)?' mc-today':''}${ds===date&&!isTodayView?' mc-sel':''}" onclick="dashPickDate('${ds}')"><span class="mc-d">${d2}</span><span class="mc-dot${n>0?'':' mc-dot-empty'}">${n>0?n:'0'}</span></div>`);
+      _cellArr.push(`<div class="mc-cell${ds===ymd(TODAY)?' mc-today':''}${ds===date&&!isTodayView?' mc-sel':''}" onclick="dashPickDate('${ds}')" title="${ds}${_tipOf(ds)?'　'+_tipOf(ds):'　沒有預約'}"><span class="mc-d">${d2}</span><span class="mc-dot${n>0?'':' mc-dot-empty'}">${n>0?n:'0'}</span></div>`);
     }
     _adj.tail.forEach(d=>_cellArr.push(mcAdjCell(d)));
     const _curWk=_curIdx>=0?Math.floor(_curIdx/7):0;

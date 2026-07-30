@@ -255,5 +255,42 @@ ok('　　空狀態的按鈕也改成申辦 QR', /讓第一位員工掃 QR 自�
 ok('★ 人資制度入口移除（與員工列表重複；openHrEdit 本來就只是轉開同一個員工明細）',
    !/label:'人資制度'/.test(src) && /function openHrEdit\(id\)\{ return openPersonProfile\('employee', id\); \}/.test(src));
 
+
+console.log('\n首頁月曆的堂數與 KPI 對齊');
+ok('★ 月曆改用與 KPI 相同的課種（pt／friendly／group／massage）',
+   /const _calCats=b=>\{const c=bkCC\(b\);return c==='pt'\|\|c==='friendly'\|\|c==='group'\|\|c==='massage';\};/.test(src));
+ok('★ 體驗課不再算進月曆數字（原因寫在程式裡）',
+   /月曆今天顯示 23、KPI 是 18＋3＝21）。差在體驗課/.test(src));
+ok('★ 格子加上組成提示（體驗與自主仍看得到，只是不算進數字）',
+   /const _tipOf=ds=>\{ const t=_cntTip\[ds\]; if\(!t\) return '';/.test(src)
+   && /title="\$\{ds\}\$\{_tipOf\(ds\)\?'　'\+_tipOf\(ds\):'　沒有預約'\}"/.test(src));
+{
+  const bkCC=b=>({'私人教練':'pt','小班肌力':'group','運動按摩':'massage','體驗':'trial','自主訓練':'self','場租':'rent'})[b.category]||'';
+  const bookings=[].concat(
+    Array(15).fill({date:'D',category:'私人教練',status:'booked'}),
+    Array(3).fill({date:'D',category:'私人教練',status:'checked_in'}),
+    Array(3).fill({date:'D',category:'小班肌力',status:'booked'}),
+    Array(2).fill({date:'D',category:'體驗',status:'booked'}),
+    Array(8).fill({date:'D',category:'自主訓練',status:'booked'}));
+  const calCats=b=>{const c=bkCC(b);return c==='pt'||c==='friendly'||c==='group'||c==='massage';};
+  const cnt={},tip={};
+  bookings.forEach(b=>{ if(b.status==='cancelled')return;
+    if(calCats(b)) cnt[b.date]=(cnt[b.date]||0)+1;
+    const k={'私人教練':'教練課','小班肌力':'團體課','運動按摩':'按摩','體驗':'體驗','自主訓練':'自主'}[b.category]||'其他';
+    const t=(tip[b.date]=tip[b.date]||{}); t[k]=(t[k]||0)+1; });
+  eq('★ 7/30 實際資料：月曆顯示 21（教練課 18 ＋ 團體課 3）', cnt['D'], 21);
+  eq('　　提示列出全部（含體驗 2、自主 8）',
+     Object.entries(tip['D']).map(([k,v])=>k+' '+v).join('・'), '教練課 18・團體課 3・體驗 2・自主 8');
+}
+
+console.log('\n「待收」標籤對比');
+ok('★ 首頁的「待收」改實心紅底白字（原本淡紅底紅字，在深色卡上融進背景）',
+   /\.mc-td-line \.mc-td-pay\{[\s\S]{0,140}background:var\(--danger,#b5372e\);color:#fff;/.test(src));
+ok('★ 深色儀表板另外調亮（底色換淺一點的紅，字仍是白）',
+   /\.mc-dash \.mc-todo-card \.mc-td-pay\{background:#e0574c;color:#fff;\}/.test(src));
+ok('　　收款提醒視窗裡的時間標籤同一套處理',
+   /\.tdl-tm-pay\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src));
+ok('　　深色卡的文字也一併拉亮', /\.mc-dash \.mc-todo-card \.mc-td-line\{color:rgba\(244,241,232,\.86\);\}/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
