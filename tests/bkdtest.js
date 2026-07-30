@@ -109,5 +109,32 @@ console.log('\n預約明細：教練與場地在時間下面、圓形卡上面')
 ok('　　私人教練不再重複顯示下方那組場地',
    /\$\{\(!isPersonalPT&&b\.category!=='小班肌力'&&!isMemberView\)\?/.test(src));
 
+/* 所有預約都能自己選票券（2026-07-30 使用者指示）——
+   會員同時有長期方案與快到期的優惠票時，自動挑選未必是客人要的。 */
+console.log('\n每個扣票的地方都能選票券');
+ok('★ 會員端自主訓練：多張點數出下拉，預設最快到期（受限的先用）',
+   /function msbTkCand\(time\)\{/.test(src) && /<select id="msb-tk-sel"/.test(src)
+   && /const ra=tkIsTimeRestricted\(a\)\?0:1, rb=tkIsTimeRestricted\(b\)\?0:1;[\s\S]{0,200}9999-12-31/.test(src));
+ok('　　只列該時段能用的（友善點 18:00 後不列）', /\.filter\(t=>!time \|\| tkTimeOk\(t,s\.date,time\)\)/.test(src));
+ok('　　送出時用選的那張，失效才退回自動挑選',
+   /const _sel=\(document\.getElementById\('msb-tk-sel'\)\|\|\{\}\)\.value\|\|s\.pickTk\|\|null;/.test(src)
+   && /const tk=_cand\.find\(x=>x\.id===_sel\)\|\|_cand\[0\]\|\|null;/.test(src));
+ok('　　換時段會重挑（候選會變）', /s\.pickTk=null;\s+\/\/ 換時段重挑/.test(src));
+ok('★ 轉正簽約：兩張以上先問要扣哪一張',
+   /async function doConvertPending\(memberId, tkId\)\{/.test(src)
+   && /if\(!tkId && cand\.length>1\)\{/.test(src));
+ok('★ 既有預約可事後更換票券', /async function openBkTicketChange\(id\)\{/.test(src)
+   && /onclick="openBkTicketChange\('\$\{b\.id\}'\)"/.test(src));
+ok('　　只給櫃檯／管理員、且限還沒簽到的預約',
+   /已簽到的預約要先取消簽到才能換票券/.test(src)
+   && /b\.status==='booked'&&b\.category!=='小班肌力'&&isDeskLike\(\)/.test(src));
+ok('　　換票＝退舊扣新，兩邊都留票券紀錄',
+   /await deductTicket\(tk,b\.id,SESSION\.id\);[\s\S]{0,300}refundTicket\(old,b\.id,SESSION\.id\)/.test(src));
+ok('　　先扣新再退舊：中途失敗寧可重複扣也不憑空少扣，並提示人工處理',
+   /先扣新的再退舊的/.test(src) && /新票已扣，但原票退回失敗，請手動調整/.test(src));
+ok('　　沒有其他可用票券時明講', /沒有其他可用票券可以換。/.test(src));
+ok('　　不會踩到 isGroupD 的 TDZ（宣告在這行之後）',
+   /isGroupD 在這行之後才宣告（const，TDZ）/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

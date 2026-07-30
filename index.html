@@ -6131,8 +6131,8 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
   <!-- 教練端手機版：右下浮動打卡 FAB -->
   <button id="punch-fab" class="punch-fab" style="display:none;"></button>
   <!-- 教練端手機版：底部固定導覽列 -->
-const APP_VERSION = '260730.0934';
-const APP_VERSION_LABEL='v260730.0934';
+const APP_VERSION = '260730.0940';
+const APP_VERSION_LABEL='v260730.0940';
 
 <div id="toast"></div>
 
@@ -15343,12 +15343,27 @@ function cpRenderList(){
   const list=(window._cpMembers||[]).filter(m=>!q||(m.name||'').toLowerCase().includes(q)||(m.phone||'').includes(q)).slice(0,30);
   host.innerHTML=list.map(m=>`<button class="btn btn-ghost" style="width:100%;text-align:left;margin-bottom:6px;" onclick="doConvertPending('${m.id}')">${m.name}　<span style="color:var(--t3);font-size:12px;">${fmtPhone(m.phone)}</span></button>`).join('')||'<div style="padding:14px;color:var(--t3);font-size:13px;">找不到會員</div>';
 }
-async function doConvertPending(memberId){
+/* 轉正簽約：會員有兩張以上可用票券時先問要扣哪一張（2026-07-30 使用者指示：所有預約都能選票券） */
+async function doConvertPending(memberId, tkId){
  try{
   const id=window._cpBid; const b=await dbGet('bookings',id);
   if(!b||!b.pending_contract){ showToast('這筆不是待簽約卡位'); return; }
-  const tk=await findUsableTicket(memberId,b.ticket_type_id,b.date,b.start_time);
-  if(!tk){ showToast('該會員沒有此課程的可用票券，請先完成銷售'); return; }
+  const cand=await listUsableTickets(memberId,b.ticket_type_id,b.date,b.start_time);
+  if(!cand.length){ showToast('該會員沒有此課程的可用票券，請先完成銷售'); return; }
+  if(!tkId && cand.length>1){
+    const m=(window._cpMembers||[]).find(x=>x.id===memberId)||{};
+    showModal(`<div class="modal-title">要扣哪一張票券？</div>
+      <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">${m.name||''}　${b.date.replace(/-/g,'/')} ${b.start_time}　${b.category}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${cand.map(t=>`<button class="btn btn-ghost" style="width:100%;text-align:left;" onclick="doConvertPending('${memberId}','${t.id}')">
+          <b>${(t.plan_name||b.category).replace(/</g,'&lt;')}</b>　<span style="color:var(--t3);font-size:12px;">可約 ${tkUnlockedLeft(t)} 堂${t.expire_date?`　效期至 ${t.expire_date}`:'　無到期日'}</span></button>`).join('')}
+      </div>
+      <div style="font-size:11px;color:var(--t3);margin-top:10px;">第一張是最快到期的，通常先用它。</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="openConvertPending('${id}')">返回</button></div>`);
+    return;
+  }
+  const tk=(tkId&&cand.find(t=>t.id===tkId))||cand[0];
+  if(!tk){ showToast('選的票券已不能用，請重新選一次'); return; }
   b.member_id=memberId; b.ticket_id=tk.id; b.pending_contract=false;
   b.trial_name=null; b.trial_phone=null;
   await dbPut('bookings',b);
@@ -16468,7 +16483,14 @@ async function openBookingDetail(id){
         <span class="bkd-tkcard-prog">本堂 ${curLabel}${(tkC.sessions_remaining<=2&&!/自主訓練|體驗|折抵/.test(tkC.plan_name||''))?'　<span class="tag tag-warn" style="font-size:10px;">建議續約</span>':''}</span>
       </div>
       <div class="mck-dots2" style="margin:10px 0 2px;">${dots}</div>
-      <div style="font-size:11px;color:var(--t3);margin-top:8px;">效期至 ${fmtExpire(tkC.expire_date,tkC)}${isInstall2?`　·　分期開通 ${unlocked2}/${total}`:''}</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span>效期至 ${fmtExpire(tkC.expire_date,tkC)}${isInstall2?`　·　分期開通 ${unlocked2}/${total}`:''}</span>
+        ${/* 2026-07-30 使用者指示：所有預約都要能改用別張票券。只開放給櫃檯／管理員，
+              且限「還沒簽到」的預約——已銷課的要改請走取消簽到。 */''}
+        ${/* ⚠ isGroupD 在這行之後才宣告（const，TDZ）→ 直接比 category，不要引用它 */''}
+        ${(b.status==='booked'&&b.category!=='小班肌力'&&isDeskLike())
+          ? `<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="openBkTicketChange('${b.id}')">更換票券</button>`:''}
+      </div>
     </div>`+_payAlertLine;
   }
   const memMapD=Object.fromEntries(members.map(m=>[m.id,m.name]));
@@ -16807,6 +16829,47 @@ async function saveBookingNote(id){
     }catch(_){}
   }
   showToast('備註已儲存');
+}
+/* 更換票券（2026-07-30 使用者指示：所有預約都要能自己選票券）——
+   已建立的預約也能改扣別張票：退回原本那張、扣新的那張，兩筆都寫進票券紀錄。
+   同時有「12 個月長期方案」與「四週優惠票」時，這是事後補救的入口。 */
+async function openBkTicketChange(id){
+  const b=await dbGet('bookings',id); if(!b){showToast('找不到預約');return;}
+  if(b.status!=='booked'){ showToast('已簽到的預約要先取消簽到才能換票券'); return; }
+  if(!b.member_id){ showToast('這筆沒有綁會員，無法換票券'); return; }
+  const cand=await listUsableTickets(b.member_id,b.ticket_type_id,b.date,b.start_time);
+  const curId=b.ticket_id||null;
+  const cur=curId?await dbGet('member_tickets',curId):null;
+  // 目前這張不在候選裡（已扣到 0 而被濾掉）也要列出來，讓人看得到現況
+  const list=cand.filter(t=>t.id!==curId);
+  showModal(`<div class="modal-title">更換票券</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">${b.date.replace(/-/g,'/')}　${b.start_time}　${b.category}
+      <br>目前扣的是：<b>${cur?(cur.plan_name||'票券').replace(/</g,'&lt;'):'（未綁票券）'}</b></div>
+    ${list.length?`<div style="display:flex;flex-direction:column;gap:8px;">
+      ${list.map(t=>`<button class="btn btn-ghost" style="width:100%;text-align:left;" onclick="doBkTicketChange('${id}','${t.id}')">
+        <b>${(t.plan_name||'票券').replace(/</g,'&lt;')}</b>　<span style="color:var(--t3);font-size:12px;">可約 ${tkUnlockedLeft(t)} 堂${t.expire_date?`　效期至 ${t.expire_date}`:'　無到期日'}</span></button>`).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-top:10px;">換過去會退回原本那張 1 堂、扣新的那張 1 堂，兩邊的票券紀錄都會留痕。第一張是最快到期的。</div>`
+    :`<div style="font-size:13px;color:var(--t2);padding:6px 0;">沒有其他可用票券可以換。</div>`}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button></div>`);
+}
+async function doBkTicketChange(id,newTkId){
+ try{
+  const b=await dbGet('bookings',id); if(!b){showToast('找不到預約');return;}
+  if(b.status!=='booked'){ showToast('已簽到的預約要先取消簽到才能換票券'); return; }
+  const cand=await listUsableTickets(b.member_id,b.ticket_type_id,b.date,b.start_time);
+  const tk=cand.find(t=>t.id===newTkId);
+  if(!tk){ showToast('這張票券已不能用於這堂課，請重新選'); return; }
+  const old=b.ticket_id;
+  if(old===tk.id){ closeModal(); openBookingDetail(id); return; }
+  // 先扣新的再退舊的：中途失敗時寧可重複扣（看得到、可人工退），也不要憑空少扣
+  await deductTicket(tk,b.id,SESSION.id);
+  b.ticket_id=tk.id; b.ticket_type_id=tk.ticket_type_id||b.ticket_type_id;
+  await dbPut('bookings',b);
+  if(old){ try{ await refundTicket(old,b.id,SESSION.id); }catch(e){ showToast('新票已扣，但原票退回失敗，請手動調整：'+((e&&e.message)||e)); } }
+  showToast('已改用 '+(tk.plan_name||'該票券'));
+  openBookingDetail(id);
+ }catch(e){ showToast('更換失敗：'+(e&&e.message?e.message:e)); }
 }
 /* 更換場地（2026-07-28 使用者回報：體驗課因額滿被排到團課教室，場地釋出後沒有選項改回）——
    逐場地驗證該時段可用性（沿用 validateBooking 的 venue_pref 強制配置），可用才能點。 */
@@ -28468,11 +28531,34 @@ function msbDateOk(ds){
   return msbGroupTks().some(t=>!t.expire_date||String(t.expire_date).slice(0,10)>=ds);
 }
 // 選中日可用的票券：最快到期優先（null 到期排最後）
-function msbPickTicket(){
-  const s=window._msb; if(!s) return null;
+/* 該日／該時段可用的點數清單（2026-07-30 使用者指示：所有預約都要能自己選票券）。
+   排序與櫃檯端 listUsableTickets 一致：受限的（友善點）先用掉，其餘依到期日、無到期日排最後。 */
+function msbTkCand(time){
+  const s=window._msb; if(!s) return [];
   return msbGroupTks()
     .filter(t=>!t.expire_date||String(t.expire_date).slice(0,10)>=s.date)
-    .sort((a,b)=>(a.expire_date||'9999').localeCompare(b.expire_date||'9999'))[0]||null;
+    .filter(t=>!time || tkTimeOk(t,s.date,time))   // 友善點限平日 18:00 前
+    .sort((a,b)=>{
+      const ra=tkIsTimeRestricted(a)?0:1, rb=tkIsTimeRestricted(b)?0:1;
+      if(ra!==rb) return ra-rb;
+      return String(a.expire_date||'9999-12-31').localeCompare(String(b.expire_date||'9999-12-31'));
+    });
+}
+function msbPickTicket(time){ return msbTkCand(time)[0]||null; }
+// 確認視窗的「使用票券」那一行：只有一張就純文字，多張出下拉
+function msbTkLine(time){
+  const s=window._msb; if(!s) return '';
+  const cand=msbTkCand(time); s.tkCand=cand;
+  const cur=cand.find(t=>t.id===s.pickTk)||cand[0];
+  if(!cur) return '';
+  s.pickTk=cur.id;
+  const nm=t=>(t.plan_name||'自主訓練點數').replace(/</g,'&lt;');
+  if(cand.length===1) return `<div><span style="color:var(--t2);">使用票券</span>　${nm(cur)}（剩 ${cur.sessions_remaining} 點）</div>`;
+  return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">使用票券</span>
+    <select id="msb-tk-sel" onchange="window._msb.pickTk=this.value"
+            style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:7px 8px;border:1px solid var(--bd);border-radius:8px;background:#fff;">
+      ${cand.map(t=>`<option value="${t.id}" ${t.id===cur.id?'selected':''}>${nm(t)}　剩 ${t.sessions_remaining} 點${t.expire_date?`　效期至 ${String(t.expire_date).slice(5,10).replace('-','/')}`:'　無到期日'}</option>`).join('')}
+    </select></div>`;
 }
 async function memSelfBookToggle(){
   if(window._msb){ msbExit(); return; }
@@ -28714,7 +28800,8 @@ async function msbLoadSlots(){
 }
 async function msbPickSlot(t){
   const s=window._msb; if(!s) return;
-  const tk=s.resched?null:msbPickTicket();
+  s.pickTk=null;                       // 換時段重挑（友善點在 18:00 後不能用，候選會變）
+  const tk=s.resched?null:msbPickTicket(t);
   if(!s.resched && !tk){
     if(_msbSwapMode()){ return msbSwapAsk(t); }   // 點數用完 → 選一筆既有預約換到這個時段（2026-07-29）
     showToast('這天沒有可用的點數'); return;
@@ -28746,9 +28833,9 @@ async function msbPickSlot(t){
       <div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--t2);">場地</span><span id="msb-vbtns" style="display:flex;gap:7px;">${vbtns}</span></div>
       ${(!s.resched&&(s.family||[]).length)?(()=>{ s.famOpts=['自己'].concat(s.family); s.pickFam=0;
         return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">使用人</span><span id="msb-fbtns" style="display:flex;gap:7px;flex-wrap:wrap;">${s.famOpts.map((n,i)=>`<button class="msb-vbtn${i===0?' on':''}" data-fi="${i}" onclick="msbChooseFam(${i})">${n}</button>`).join('')}</span></div>`; })():''}
-      ${s.resched?'':`<div><span style="color:var(--t2);">使用票券</span>　${tk.plan_name||'自主訓練點數'}（剩 ${tk.sessions_remaining} 點）</div>`}
+      ${s.resched?'':msbTkLine(t)}
     </div>
-    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">${s.resched?'改期不另扣點。':'確認後將扣 1 點。'}</div>
+    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">${s.resched?'改期不另扣點。':((s.tkCand||[]).length>1?'有多張點數可用，預設扣最快到期的那張，可自行改選。':'')+'確認後將扣 1 點。'}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-green" onclick="msbConfirm('${t}')">${s.resched?'確認改期':'確認預約'}</button></div>`);
 }
 function msbChooseVenue(vid){
@@ -28833,7 +28920,10 @@ async function msbConfirm(time){
     navTo('mem_bookings');
     return;
   }
-  const tk=msbPickTicket();
+  // 會員在確認視窗選了哪一張就用哪一張（2026-07-30 使用者指示）；選的已不可用就退回自動挑選
+  const _cand=msbTkCand(time);
+  const _sel=(document.getElementById('msb-tk-sel')||{}).value||s.pickTk||null;
+  const tk=_cand.find(x=>x.id===_sel)||_cand[0]||null;
   if(!tk){ showToast('沒有可用的自主訓練點數'); return; }
   const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id,
     venue_pref:s.pickVenue||null};
