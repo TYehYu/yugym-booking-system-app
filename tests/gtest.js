@@ -2,24 +2,27 @@ const fs=require('fs');
 const h=fs.readFileSync('index.html','utf8');
 const grabFn=n=>{const i=h.indexOf('function '+n+'(');let d=0;for(let k=h.indexOf('{',i);k<h.length;k++){if(h[k]==='{')d++;else if(h[k]==='}'){d--;if(!d)return h.slice(i,k+1);}}};
 // 取出 index.html 內真正的團課名單渲染程式碼
-const s=h.indexOf("const _seat={}; gIdsD.forEach");
+const s=h.indexOf("const _seatKeys=seatKeys(b);");
 const e=h.indexOf("尚未排名單</div>'", s);
 const body=h.slice(s, h.indexOf(";", e)+1);
 if(s<0||e<0) throw new Error('找不到目標程式碼');
 
 const COURSE_SHAPE={};
 const parseYmd=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(x||'');return m?new Date(+m[1],+m[2]-1,+m[3]):null;};
-const helpers=new Function('COURSE_SHAPE','parseYmd',[grabFn('tkVisual'),grabFn('ticketTokens'),grabFn('mids')].join('\n')+
-  '; return {tkVisual,ticketTokens,mids};')(COURSE_SHAPE,parseYmd);
+const helpers=new Function('COURSE_SHAPE','parseYmd',[grabFn('tkVisual'),grabFn('ticketTokens'),grabFn('mids'),
+  grabFn('seatKeys'),grabFn('seatMid'),grabFn('seatNo')].join('\n')+
+  '; return {tkVisual,ticketTokens,mids,seatKeys,seatMid,seatNo};')(COURSE_SHAPE,parseYmd);
 const ticketCategoryOf=t=>t.__cat;
 const attObj=b=>b.attendance||{};
 
 async function render({ids,att={},tickets=[],bookings=[],names={},thisDate='2026-07-27',thisId='B-NOW'}){
   const dbGetAll=async t=>t==='member_tickets'?tickets:t==='bookings'?bookings:[];
-  const b={id:thisId,date:thisDate,attendance:att};
-  const fn=new Function('gIdsD','b','memMapD','groupCkOK','isPastD','attObj','ticketCategoryOf','dbGetAll','window','mids','ticketTokens',
+  // 名額鍵是從 b.member_ids 推的（2026-07-30），所以 b 也要帶名單
+  const b={id:thisId,date:thisDate,attendance:att,member_ids:ids};
+  const fn=new Function('gIdsD','b','memMapD','groupCkOK','isPastD','attObj','ticketCategoryOf','dbGetAll','window','mids','ticketTokens','seatKeys','seatMid','seatNo',
     `return (async()=>{ const att=attObj(b); ${body} return rows; })();`);
-  return await fn(ids,b,names,true,false,attObj,ticketCategoryOf,dbGetAll,{_ttCache:[]},helpers.mids,helpers.ticketTokens);
+  return await fn(ids,b,names,true,false,attObj,ticketCategoryOf,dbGetAll,{_ttCache:[]},helpers.mids,helpers.ticketTokens,
+    helpers.seatKeys,helpers.seatMid,helpers.seatNo);
 }
 const T=(o)=>Object.assign({__cat:'小班肌力',ticket_type_id:'tt-g',source:'purchase'},o);
 const BK=(id,date,st,ids)=>({id,date,start_time:'11:00',status:st,category:'小班肌力',member_ids:ids});
@@ -50,10 +53,15 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
   chk('取最近一張（4 格）', (html.match(/class="mtk/g)||[]).length===4);
   chk('整排實心＝已用畢', (html.match(/mtk-used/g)||[]).length===4 && !html.includes('mtk-free'));
 
-  console.log('多位子合併與補課券：');
+  /* 2026-07-30 使用者指示改成「一個名額一列」：原本三個名額合併成一列標「3 個名額」，
+     簽到／請假／取消只有一個開關，沒辦法只處理其中一位。 */
+  console.log('多名額逐列與補課券：');
   html=await render({ids:['M','M','M'],tickets:[live],bookings:[],names:{M:'許佳慈'}});
-  chk('同一人只一列', (html.match(/許佳慈/g)||[]).length===1);
-  chk('標「3 個名額」（2026-07-29 使用者指示：不用 ×N）', html.includes('3 個名額'));
+  chk('三個名額＝三列', (html.match(/許佳慈/g)||[]).length===3);
+  chk('每列標「第 N 個名額」', html.includes('第 1 個名額')&&html.includes('第 2 個名額')&&html.includes('第 3 個名額'));
+  chk('三列各有自己的簽到鈕', (html.match(/toggleGroupAttend\(/g)||[]).length===3);
+  chk('第 2、3 列帶名額鍵 M#2 / M#3', html.includes("'M#2'")&&html.includes("'M#3'"));
+  chk('票券圓點只畫一次（同一張票不重複畫）', (html.match(/mck-dots2/g)||[]).length===1);
   html=await render({ids:['M'],tickets:[T({id:'mk',member_id:'M',sessions_total:1,sessions_remaining:1,source:'makeup',start_date:'2026-07-24'})],bookings:[],names:{M:'徐翎娟'}});
   chk('顯示「含補課券」', html.includes('含補課券'));
 
@@ -72,7 +80,8 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('圓點總數 = 2', (html.match(/class="mtk/g)||[]).length===2);
     chk('兩個都標本堂金框', (html.match(/mtk-cur/g)||[]).length===2);
     chk('沒有殘留空心', !html.includes('mtk-free'));
-    chk('名字仍合併成一列、標「2 個名額」', (html.match(/呂宜臻/g)||[]).length===1 && html.includes('2 個名額'));
+    chk('兩個名額＝兩列，各標第幾個', (html.match(/呂宜臻/g)||[]).length===2
+      && html.includes('第 1 個名額') && html.includes('第 2 個名額'));
   }
   {
     // used=0 的票不可把過去所有出席都塞進來（slice(-0) 陷阱）

@@ -128,7 +128,8 @@ console.log('\n團課「已預約未上」要含匯入的未來預約');
      (src.match(/if\(String\(b\.date\|\|''\)<ymd\(TODAY\) && String\(b\.id\|\|''\)\.indexOf\('BK-'\)!==0\) return;/g)||[]).length===2);
   ok('　　過去未簽到的仍只算新制預約（匯入舊預約當初沒扣票，扣了會重複）',
      /過去未簽到的才維持「只算新制預約」/.test(src));
-  ok('　　已簽到的一律不算待上', (src.match(/if\(at==='checked_in'\) return;/g)||[]).length>=2);
+  ok('　　已簽到的一律不算待上，且改逐名額判斷（2026-07-30 名額鍵）',
+     (src.match(/if\(at\[seen\[[a-zA-Z]+\]>1\?[a-zA-Z]+\+'#'\+seen\[[a-zA-Z]+\]:[a-zA-Z]+\]==='checked_in'\) return;/g)||[]).length>=2);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

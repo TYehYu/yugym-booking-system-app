@@ -6405,8 +6405,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1452';
-const APP_VERSION_LABEL='v260730.1452';
+const APP_VERSION = '260730.1500';
+const APP_VERSION_LABEL='v260730.1500';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9810,19 +9810,22 @@ async function revokeMakeupTicket(booking,memberId){
    該堂票券「照扣不退」，另發一張 14 天補課券。
    ⚠️ 這裡刻意不動票券餘額：團課的扣課發生在「管理名單」加入名額時（見 openGroupMembers），
    請假只是不退回，所以再扣一次會變成扣兩堂。與「移除名單」的差別就在退不退。 */
-async function groupToggleLeave(bid,mid){
+async function groupToggleLeave(bid,seatKey){
   const b=await dbGet('bookings',bid);
   if(!b){ showToast('找不到預約'); return; }
   if(b.status==='cancelled'){ showToast('已取消的課不可標記請假'); return; }
+  /* 2026-07-30：參數改收「名額鍵」（id 或 id#2），出席狀態寫在名額上、
+     補課券仍發給會員本人。傳純 member id 進來也照舊能用（＝第 1 個名額）。 */
+  const sk=String(seatKey), mid=seatMid(sk);
   const att=attObj(b);
-  const wasLeave = att[mid]==='leave';
+  const wasLeave = att[sk]==='leave';
   try{
     if(wasLeave){
-      att[mid]='booked';
+      att[sk]='booked';
       const n=await revokeMakeupTicket(b,mid);
       showToast(n?'已取消請假，並收回未使用的補課券':'已取消請假（補課券已使用，保留不收回）');
     }else{
-      att[mid]='leave';
+      att[sk]='leave';
       const tk=await grantMakeupTicket(b,mid);
       showToast(tk?'已標記請假：本堂照扣，已發 14 天補課券':'已標記請假（補課券發放失敗，請手動處理）');
     }
@@ -9837,9 +9840,12 @@ async function groupToggleLeave(bid,mid){
 /* 團體課「取消預約」（2026-07-29 使用者指示）：把該會員移出名單並退回 1 堂。
    與「請假」不同——請假是本堂照扣、另發 14 天補課券；取消是直接退回票券、名額釋出。
    同名多名額（親友同行）一次只取消一個。 */
-async function groupCancelSeat(bid,mid){
+async function groupCancelSeat(bid,seatKey){
   const b=await dbGet('bookings',bid);
   if(!b){ showToast('找不到預約'); return; }
+  /* 2026-07-30：參數改收「名額鍵」（id 或 id#2）——名單改成一個名額一列後，
+     要取消的是「哪一個名額」，不是「這個人」。傳純 member id 進來＝第 1 個名額。 */
+  const sk=String(seatKey), mid=seatMid(sk), sno=seatNo(sk);
   const ids=(Array.isArray(b.member_ids)?b.member_ids:[]).map(String);
   const seats=ids.filter(x=>x===String(mid)).length;
   if(!seats){ showToast('此會員不在名單中'); return; }
@@ -9847,26 +9853,30 @@ async function groupCancelSeat(bid,mid){
   const hrs=hoursUntilStart(b), within24=hrs<24;
   showModal(`<div class="modal-title">取消團體課預約</div>
     <div style="font-size:13.5px;color:var(--text);padding:2px 0 10px;">
-      ${m?m.name:'會員'}　·　${b.date.replace(/-/g,'/')} ${b.start_time}${seats>1?`　（共 ${seats} 個名額，本次取消 1 個）`:''}</div>
+      ${m?m.name:'會員'}　·　${b.date.replace(/-/g,'/')} ${b.start_time}${seats>1?`　（共 ${seats} 個名額，本次取消<b>第 ${sno} 個</b>）`:''}</div>
     <div style="background:${within24?'#fbeceb':'#eef5f1'};border:1.5px solid ${within24?'#e0a8a2':'#cfe3d8'};border-radius:12px;padding:12px 14px;font-size:13px;color:${within24?'#b5372e':'#1f6f54'};line-height:1.9;">
       ${within24?`⚠ 距離開課不到 24 小時（約 ${Math.max(0,Math.floor(hrs))} 小時）。`:`距離開課還有 ${Math.floor(hrs)} 小時。`}
       取消後<b>退回 1 堂團體課票券</b>、名額釋出。</div>
     <div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:1.8;">
       若客人是臨時有事、想保留補課權益，請改用「請假」（本堂照扣並發 14 天補課券）。</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${bid}')">返回</button>
-      <button class="btn btn-danger" onclick="doGroupCancelSeat('${bid}','${mid}')">確定取消・退回票券</button></div>`);
+      <button class="btn btn-danger" onclick="doGroupCancelSeat('${bid}','${sk}')">確定取消・退回票券</button></div>`);
 }
-async function doGroupCancelSeat(bid,mid){
+async function doGroupCancelSeat(bid,seatKey){
  try{
   const b=await dbGet('bookings',bid);
   if(!b){ showToast('找不到預約'); return; }
+  const sk=String(seatKey), mid=seatMid(sk);
   const ids=(Array.isArray(b.member_ids)?b.member_ids:[]).map(String);
-  const i=ids.indexOf(String(mid));
+  // 取消的是指定的那個名額；找不到就退回該會員的第一個名額（相容舊呼叫）
+  const idx=seatKeys(b).indexOf(sk);
+  const i=idx>=0?idx:ids.indexOf(String(mid));
   if(i<0){ showToast('此會員不在名單中'); return; }
+  /* 先重編這位會員剩下的名額狀態，再從名單移除 ——
+     不能留下 id#3 卻沒有 id#2，否則第二列會讀不到自己的狀態。 */
+  const att=seatReindexAfterRemove(b, i);
   ids.splice(i,1);                       // 只移除一個名額
   b.member_ids=ids;
-  const att=attObj(b); 
-  if(!ids.includes(String(mid))) delete att[mid];   // 沒有其他名額才清掉出席狀態
   b.attendance=att;
   await dbPut('bookings',b);
   // 退票：優先退回當初這筆預約扣的那張，找不到就退最晚到期的團體課票
@@ -16524,9 +16534,15 @@ async function bkOrbitRoster(id){
   let rows=[];
   if(mids(b).length){                       // 新結構：attendance 物件逐人
     const att=attObj(b);
-    // 同名重複報名（2026-07-21）：同一會員佔多個名額時合併成一列（點名以「姓名」為單位，×N 標示名額數）
+    /* 同名重複報名：2026-07-30 使用者指示改成一個名額一列（原本合併成一列標 ×N，
+       兩個名額共用同一個開關，沒辦法只簽到其中一位）。 */
     const _rc={}; mids(b).forEach(mid=>{_rc[mid]=(_rc[mid]||0)+1;});
-    rows = Object.keys(_rc).map(mid=>({key:'att|'+b.id+'|'+mid, name:nameOf(mid)+(_rc[mid]>1?`（×${_rc[mid]}）`:''), on:att[mid]==='checked_in'}));
+    rows = seatKeys(b).map(sk=>{
+      const mid=seatMid(sk);
+      return {key:'att|'+b.id+'|'+sk,
+              name:nameOf(mid)+(_rc[mid]>1?`（第 ${seatNo(sk)} 位）`:''),
+              on:att[sk]==='checked_in'};
+    });
   }else{                                    // 舊結構：同教練同時段的多筆單人團課
     const all=await dbGetAll('bookings');
     const set=all.filter(x=>x.category==='小班肌力' && (x.coach_id||'')===(b.coach_id||'') && x.date===b.date && x.start_time===b.start_time && x.status!=='cancelled');
@@ -17101,9 +17117,11 @@ async function openBookingDetail(id){
     /* 團課名單顯示票券狀態（2026-07-26 使用者要求）：單人課的明細早就有票券卡，
        但團課才是最常需要提醒續約的（四週限制方案），所以名單每人加一行自己的
        團體課餘額：≤2 堂標「建議續約」、0 堂標「需購票」。
-       同一帳號訂多個位子時 member_ids 會重複同一個 id（正確慣例，見 7/24 那堂），
-       這裡合併成一列並標 ×N —— 否則同一個人會列出多行、票券資訊重複，
-       而且逐人簽到本來就以 member 為鍵，多行的按鈕其實是同一個開關。 */
+       同一帳號訂多個位子時 member_ids 會重複同一個 id（正確慣例，見 7/24 那堂）。
+       2026-07-30 使用者指示改成「每個名額一列，獨立顯示」——原本合併成一列標「N 個名額」，
+       簽到／請假／取消都只有一個開關，兩個名額無法分開處理（黃姸元 7/31 案例）。
+       各列以 seatKeys 的名額鍵操作；票券圓點只畫在該會員的第一列（同一張票不重複畫）。 */
+    const _seatKeys=seatKeys(b);
     const _seat={}; gIdsD.forEach(x=>{ _seat[x]=(_seat[x]||0)+1; });
     const _uniqIds=[...new Set(gIdsD)];
     const _gTk={};
@@ -17112,15 +17130,28 @@ async function openBookingDetail(id){
       const _typeMapG=Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t]));
       const _allTk=await dbGetAll('member_tickets');
       const _allBk=await dbGetAll('bookings').catch(()=>[]);
-      // 每位會員的團課出席／預約紀錄（團課學員放在 member_ids，故用 includes 撈）
-      const _hist={};
+      /* 每位會員的團課出席／預約紀錄（團課學員放在 member_ids，故用 includes 撈）。
+         一個名額一筆（不可去重）：同一帳號訂 N 個名額就是扣 N 堂，圓點要出現 N 次同日期。
+         2026-07-30：出席狀態改名額鍵後，這裡也逐名額判定（原本兩個名額共讀 att[mid]，
+         只到一個人時會兩顆都算成已上）。_histDone 與 _hist 同索引平行維護。 */
+      const _hist={}, _histDone={};
       _allBk.forEach(x=>{
         if(x.category!=='小班肌力' || x.status==='cancelled') return;
         const ids=mids(x); const one=ids.length?ids:(x.member_id?[x.member_id]:[]);
-        // 一個位子一筆（不可去重）：同一帳號訂 N 個位子就是扣 N 堂，圓點要出現 N 次同日期
-        one.forEach(mid=>{ (_hist[mid]=_hist[mid]||[]).push(x); });
+        const at=(x.attendance&&typeof x.attendance==='object')?x.attendance:{};
+        const seen={};
+        one.forEach(mid=>{
+          seen[mid]=(seen[mid]||0)+1;
+          const st=at[seen[mid]>1?mid+'#'+seen[mid]:mid];
+          (_hist[mid]=_hist[mid]||[]).push(x);
+          (_histDone[mid]=_histDone[mid]||[]).push(st==='checked_in' || (!st && (x.status==='checked_in'||x.status==='completed')));
+        });
       });
-      Object.values(_hist).forEach(a=>a.sort((p,q)=>((p.date||'')+(p.start_time||'')).localeCompare((q.date||'')+(q.start_time||''))));
+      Object.keys(_hist).forEach(mid=>{
+        const H=_hist[mid], D=_histDone[mid];
+        const ord=H.map((_,i)=>i).sort((p,q)=>((H[p].date||'')+(H[p].start_time||'')).localeCompare((H[q].date||'')+(H[q].start_time||'')));
+        _hist[mid]=ord.map(i=>H[i]); _histDone[mid]=ord.map(i=>D[i]);
+      });
       _uniqIds.forEach(mid=>{
         // 團課票券不分方案，同類別即可用（與 listUsableTickets 的 groupMode 一致）
         const own=_allTk.filter(t=>t.member_id===mid && ticketCategoryOf(t)==='小班肌力');
@@ -17135,18 +17166,14 @@ async function openBookingDetail(id){
         /* ⚠️ 團課預約的 ticket_id 為 null，無法逐堂對應到票券，日期只能用推的：
            取這位會員「最近 used 堂」的出席紀錄當作這張票扣掉的堂數，未來已預約的課
            填進剩餘圓點。所以日期是合理推估、不是帳本事實。 */
-        const h=_hist[mid]||[];
-        const _isDone=x=>{
-          const at=(x.attendance&&typeof x.attendance==='object')?x.attendance[mid]:null;
-          return at==='checked_in' || (!at && (x.status==='checked_in'||x.status==='completed'));
-        };
-        const doneAll=h.filter(_isDone);
+        const h=_hist[mid]||[], hd=_histDone[mid]||[];
+        const doneAll=h.filter((x,i)=>hd[i]);
         /* 2026-07-29 使用者回報「日期又跑回 7 月那份」：
            已用堂數原本直接用「總−剩餘」，但新制是預約當下就扣課 —— 四堂全約在 8 月、
            一堂都還沒上時餘額也是 0，於是這裡誤判成「用掉 4 堂」，再拿她最近 4 次出席
            （7/7、7/16、7/23、7/28）去填圓點，看起來就像日期倒退回七月。
            改成扣掉「已預約但還沒上」的堂數，那些要畫成空心＋預約日期。 */
-        const bookedAhead=h.filter(x=>!_isDone(x) && x.status!=='cancelled');
+        const bookedAhead=h.filter((x,i)=>!hd[i] && x.status!=='cancelled');
         /* 只有新制預約（id 以 BK- 開頭）在「建立當下」就扣了課，那幾堂要從已用堂數扣回來；
            匯入的舊預約（IMP-／IMPB-）當初沒扣票，餘額裡本來就沒算它們，不能重複扣減
            —— 否則鍾明潔那種「餘額已反映歷史、未來預約沒扣」的票會少畫實心圓。 */
@@ -17161,9 +17188,10 @@ async function openBookingDetail(id){
         };
       });
     }catch(_){}
-    const rows = _uniqIds.length ? _uniqIds.map(mid=>{
-      const inHere = att[mid]==='checked_in';
-      const onLeaveM = att[mid]==='leave';   // 請假：本堂照扣、另發補課券（見 groupToggleLeave）
+    const rows = _seatKeys.length ? _seatKeys.map(sk=>{
+      const mid = seatMid(sk);
+      const inHere = att[sk]==='checked_in';
+      const onLeaveM = att[sk]==='leave';   // 請假：本堂照扣、另發補課券（見 groupToggleLeave）
       const badge = inHere
         ? '<span class="tag tag-ok" style="font-size:11px;">已簽到</span>'
         : onLeaveM
@@ -17176,13 +17204,14 @@ async function openBookingDetail(id){
           : `<span style="margin-left:auto;display:flex;gap:6px;">`
             /* 2026-07-29 使用者指示：團體課補上「取消」——退出名單並退回票券，
                與「請假」（本堂照扣、另發補課券）區隔。 */
-            + (inHere?'':`<button class="btn btn-ghost btn-sm" style="color:#b5372e;" onclick="groupCancelSeat('${b.id}','${mid}')">取消</button>`)
-            + (inHere?'':`<button class="btn btn-ghost btn-sm" onclick="groupToggleLeave('${b.id}','${mid}')">請假</button>`)
-            + `<button class="btn btn-ghost btn-sm" onclick="toggleGroupAttend('${b.id}','${mid}')">${inHere?'取消簽到':(isPastD?'補簽':'簽到')}</button></span>`;
+            + (inHere?'':`<button class="btn btn-ghost btn-sm" style="color:#b5372e;" onclick="groupCancelSeat('${b.id}','${sk}')">取消</button>`)
+            + (inHere?'':`<button class="btn btn-ghost btn-sm" onclick="groupToggleLeave('${b.id}','${sk}')">請假</button>`)
+            + `<button class="btn btn-ghost btn-sm" onclick="toggleGroupAttend('${b.id}','${sk}')">${inHere?'取消簽到':(isPastD?'補簽':'簽到')}</button></span>`;
       }
-      /* 2026-07-29 使用者指示：多名額寫「N 個名額」，不要用 ×N（看不出是什麼的乘號） */
-      const seatTag = _seat[mid]>1 ? `<span class="tag" style="font-size:10.5px;background:#f7efe0;color:#8a5e28;">${_seat[mid]} 個名額</span>` : '';
-      const st=_gTk[mid];
+      /* 多名額 → 每列標「第 N 個名額」，讓櫃檯知道這列是同一個人的哪一個位子 */
+      const seatTag = _seat[mid]>1 ? `<span class="tag" style="font-size:10.5px;background:#f7efe0;color:#8a5e28;">第 ${seatNo(sk)} 個名額</span>` : '';
+      // 票券圓點只畫在該會員的第一列（同一張票畫兩次只是重複資訊）
+      const st = seatNo(sk)===1 ? _gTk[mid] : null;
       /* 圓點本身就說明了狀態（實心＝已上・空心＝未使用・整排實心＝已用畢），
          所以不再加「建議續約／需購票」字樣（2026-07-26 使用者指示）。 */
       const tkInfo = st
@@ -18117,6 +18146,13 @@ async function saveGroupMembers(id){
     if(log) await refundTicket(log.ticket_id,b.id,SESSION.id);
   }
   b.member_ids=next;
+  /* 名額變動後清掉沒有對應名額的出席狀態（2026-07-30 發現）——
+     原本只更新 member_ids，被移出名單的人狀態會留在 attendance 變成孤兒鍵
+     （7/31 11:00 那堂就留著一位已不在名單的 booked），
+     而「整堂有沒有人簽到」是看 Object.values(attendance)，孤兒鍵會讓判斷失準。 */
+  const _att=attObj(b), _live=new Set(seatKeys(b));
+  Object.keys(_att).forEach(k=>{ if(!_live.has(k)) delete _att[k]; });
+  b.attendance=_att;
   await dbPut('bookings',b);
   showToast('名單已更新');
   openBookingDetail(id);
@@ -18128,6 +18164,33 @@ function mids(b){
   if(Array.isArray(v))return v;
   if(typeof v==='string'&&v.trim()){try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch(e){return [];}}
   return [];
+}
+/* ── 團課「名額鍵」（2026-07-30 使用者指示：黃姸元約兩個名額 → 用兩列獨立顯示）──
+   同一帳號訂多個名額時 member_ids 會重複同一個 id（正確慣例，見 7/24 那堂）。
+   原本名單把重複的合併成一列標「N 個名額」，但簽到／請假／取消其實是同一個開關 ——
+   兩個名額不能分開處理。改成每個名額一列，出席狀態改用「名額鍵」：
+     第 1 個名額 → 純 member id（與既有資料、以及只認 member id 的讀取端完全相容）
+     第 2 個以後 → `id#2`、`id#3`
+   這樣舊資料不用搬，attendance 仍是同一個物件，Object.values(att) 那類統計也照舊可用。 */
+function seatKeys(b){
+  const c={};
+  return mids(b).map(id=>{ c[id]=(c[id]||0)+1; return c[id]>1 ? id+'#'+c[id] : id; });
+}
+function seatMid(key){ const k=String(key), i=k.indexOf('#'); return i<0?k:k.slice(0,i); }
+function seatNo(key){ const k=String(key), i=k.indexOf('#'); return i<0?1:(Number(k.slice(i+1))||1); }
+// 這位會員在這堂課是否有「任一名額」處於某狀態（給只認 member id 的地方用）
+function seatAnyState(b,mid,state){
+  const att=attObj(b);
+  return seatKeys(b).some(k=>seatMid(k)===String(mid) && att[k]===state);
+}
+// 移除第 idx 個名額後，把這位會員剩下的名額狀態重新編號（不能留下 id#3 卻沒有 id#2）
+function seatReindexAfterRemove(b, idx){
+  const keys=seatKeys(b), att=attObj(b);
+  const mid=seatMid(keys[idx]);
+  const kept=keys.filter((k,i)=>i!==idx && seatMid(k)===mid).map(k=>att[k]);
+  keys.forEach(k=>{ if(seatMid(k)===mid) delete att[k]; });
+  kept.forEach((st,i)=>{ if(st!=null) att[i>0?mid+'#'+(i+1):mid]=st; });
+  return att;
 }
 // 安全取得團課每人簽到狀態物件 {memberId: 'checked_in'|'booked'}
 function attObj(b){
@@ -18945,15 +19008,22 @@ async function openMemberDetail(member_id){
     let n=0;
     (bookings||[]).forEach(b=>{
       if(!b || b.category!=='小班肌力' || b.status==='cancelled') return;
-      const at=(b.attendance&&typeof b.attendance==='object')?b.attendance[member_id]:null;
-      if(at==='checked_in') return;                       // 已簽到＝真的用掉了
+      const at=(b.attendance&&typeof b.attendance==='object')?b.attendance:{};
       /* 2026-07-30 使用者回報（Jackie）：7/24 買的四堂團課票 8/01 才開始，一堂都還沒上，
          卻被標成「已用畢」收進歷史紀錄 —— 因為她那筆 8/01 的預約是匯入的（IMPB-），
          被下面的 BK- 條件濾掉，算不到任何「已預約未上」。
          未來的課一定還沒上，不管哪個系統建的都要算；過去未簽到的才維持「只算新制預約」
          （匯入的舊預約當初沒扣過票，扣了會重複扣）。 */
       if(String(b.date||'')<ymd(TODAY) && String(b.id||'').indexOf('BK-')!==0) return;
-      (mids(b)||[]).forEach(id=>{ if(id===member_id) n++; });   // 同一人多名額就算多堂
+      /* 同一人多名額就算多堂；2026-07-30 出席狀態改名額鍵後改成逐名額判斷
+         （原本整筆共讀 att[member_id]，兩個名額只到一個時會整筆當成已用掉）。 */
+      const seen={};
+      (mids(b)||[]).forEach(id=>{
+        seen[id]=(seen[id]||0)+1;
+        if(id!==member_id) return;
+        if(at[seen[id]>1?id+'#'+seen[id]:id]==='checked_in') return;   // 這個名額已簽到＝真的用掉了
+        n++;
+      });
     });
     return n;
   })();
@@ -23222,11 +23292,17 @@ function ppRecordHtml(){
           let n=0;
           (c.myBk||[]).forEach(b=>{
             if(!b || b.category!=='小班肌力' || b.status==='cancelled') return;
-            const at=(b.attendance&&typeof b.attendance==='object')?b.attendance[PP.id]:null;
-            if(at==='checked_in') return;
+            const at=(b.attendance&&typeof b.attendance==='object')?b.attendance:{};
             // 未來的課一定還沒上，匯入的預約也要算（2026-07-30 Jackie 案例，同 openMemberDetail）
             if(String(b.date||'')<ymd(TODAY) && String(b.id||'').indexOf('BK-')!==0) return;
-            (mids(b)||[]).forEach(x=>{ if(x===PP.id) n++; });
+            // 逐名額判斷（2026-07-30 名額鍵）：同一人兩個名額，只到一個時另一個仍是待上
+            const seen={};
+            (mids(b)||[]).forEach(x=>{
+              seen[x]=(seen[x]||0)+1;
+              if(x!==PP.id) return;
+              if(at[seen[x]>1?x+'#'+seen[x]:x]==='checked_in') return;
+              n++;
+            });
           });
           return n;
         })();

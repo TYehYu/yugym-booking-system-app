@@ -86,7 +86,8 @@ ok('　　只算新制預約（BK- 開頭），匯入的舊預約不重複扣',
    (src.match(/String\(b\.id\|\|''\)\.indexOf\('BK-'\)!==0\) return;/g)||[]).length===2);
 ok('　　待上堂數只從最近買的那張團課票扣',
    /_grpTkNewest && t\.id===_grpTkNewest\.id/.test(src) && /_grpNewestP && t\.id===_grpNewestP\.id/.test(src));
-ok('　　已簽到就算真的用掉了', (src.match(/if\(at==='checked_in'\) return;/g)||[]).length>=2);
+ok('　　已簽到就算真的用掉了，且改逐名額判斷（2026-07-30 名額鍵）',
+     (src.match(/if\(at\[seen\[[a-zA-Z]+\]>1\?[a-zA-Z]+\+'#'\+seen\[[a-zA-Z]+\]:[a-zA-Z]+\]==='checked_in'\) return;/g)||[]).length>=2);
 ok('★ 後台檔案頁的預約清單要含團課（學員在 member_ids、member_id 是 null）',
    /const myBk=bookings\.filter\(b=>b\.member_id===PP\.id\s*\n\s*\|\| \(Array\.isArray\(b\.member_ids\)&&b\.member_ids\.includes\(PP\.id\)\)\);/.test(src));
 

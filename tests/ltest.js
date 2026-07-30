@@ -19,6 +19,7 @@ const env={
   showToast:m=>TOASTS.push(m),
   openBookingDetail:id=>REOPENED.push(id),
   attObj:b=>b.attendance||{},
+  seatMid:k=>{const x=String(k),i=x.indexOf('#');return i<0?x:x.slice(0,i);},
   uid:p=>p+'-'+(Object.keys(DB.member_tickets).length+1),
   ymd:d=>d.toISOString().slice(0,10),
   addDays:(d,n)=>new Date(d.getTime()+n*86400000),

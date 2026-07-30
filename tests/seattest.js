@@ -1,0 +1,117 @@
+/* 團課「一個名額一列」（2026-07-30 使用者指示：黃姸元 7/31 11:00 約兩個名額）
+   原本 member_ids 重複同一個 id 時，名單合併成一列標「N 個名額」——
+   簽到／請假／取消都只有一個開關，兩個名額沒辦法分開處理。
+   改成出席狀態掛「名額鍵」：第 1 個名額用純 member id（向下相容），第 2 個以後 id#2、id#3。 */
+const fs=require('fs');
+const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+
+let pass=0,fail=0;
+const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
+
+const g=(a,b)=>{const i=src.indexOf(a); return src.slice(i,src.indexOf(b,i)+b.length);};
+const code=g('function seatKeys(b){','\n}\n')+'\n'+g('function seatMid(key){','\n')+'\n'
+  +g('function seatNo(key){','\n')+'\n'+g('function seatAnyState(b,mid,state){','\n}\n')+'\n'
+  +g('function seatReindexAfterRemove(b, idx){','\n}\n')+'\n'+g('function attObj(b){','\n}\n')+'\n'
+  +g('function mids(b){','\n}\n');
+const api=new Function(code+'\nreturn {seatKeys,seatMid,seatNo,seatAnyState,seatReindexAfterRemove};')();
+const B=(ids,att)=>({member_ids:ids,attendance:att||{}});
+
+console.log('名額鍵');
+eq('★ 一人一個名額 → 就是純 member id（舊資料完全不用搬）',
+   api.seatKeys(B(['A','B'])), ['A','B']);
+eq('★ 同一人兩個名額 → 第 1 個純 id、第 2 個 id#2',
+   api.seatKeys(B(['A','A','B'])), ['A','A#2','B']);
+eq('　　三個名額 → A / A#2 / A#3', api.seatKeys(B(['A','A','A'])), ['A','A#2','A#3']);
+eq('　　不連續出現也照出現順序編號', api.seatKeys(B(['A','B','A'])), ['A','B','A#2']);
+eq('　　空名單 → 空陣列', api.seatKeys(B([])), []);
+eq('　　member_ids 是 JSON 字串也能解（資料庫回傳相容）',
+   api.seatKeys({member_ids:'["A","A"]'}), ['A','A#2']);
+eq('★ 名額鍵反解回 member id', [api.seatMid('A'),api.seatMid('A#2'),api.seatMid('MEM-F29#3')], ['A','A','MEM-F29']);
+eq('★ 名額序號', [api.seatNo('A'),api.seatNo('A#2'),api.seatNo('A#3')], [1,2,3]);
+ok('　　壞掉的鍵不會爆（#後面不是數字 → 當第 1 個）', api.seatNo('A#x')===1);
+
+console.log('\n兩個名額各自獨立');
+{
+  const b=B(['A','A','B'],{'A':'checked_in','A#2':'booked','B':'booked'});
+  eq('★ 第 1 個名額已簽到、第 2 個還沒 → 兩列狀態不同',
+     api.seatKeys(b).map(k=>b.attendance[k]), ['checked_in','booked','booked']);
+  ok('★ 只有一個名額簽到，整堂仍算「有人簽到」',
+     Object.values(b.attendance).some(s=>s==='checked_in'));
+  ok('　　seatAnyState：A 有名額已簽到', api.seatAnyState(b,'A','checked_in')===true);
+  ok('　　seatAnyState：B 沒有名額已簽到', api.seatAnyState(b,'B','checked_in')===false);
+  const b2=B(['A','A'],{'A':'booked','A#2':'leave'});
+  ok('　　同一人可以一個名額請假、另一個照上', api.seatAnyState(b2,'A','leave')===true
+     && api.seatAnyState(b2,'A','checked_in')===false);
+}
+
+console.log('\n取消其中一個名額後重新編號');
+{
+  const b=B(['A','A','A','B'],{'A':'checked_in','A#2':'leave','A#3':'booked','B':'booked'});
+  const att=api.seatReindexAfterRemove(b,1);   // 取消第 2 個名額
+  const ids=b.member_ids.slice(); ids.splice(1,1);
+  const after={member_ids:ids,attendance:att};
+  eq('★ 移除中間那個名額後，鍵重新收斂成 A / A#2（不會留下沒有 A#2 的 A#3）',
+     api.seatKeys(after), ['A','A#2','B']);
+  eq('★ 剩下兩個名額的狀態順序保持不變（原第1、第3）',
+     api.seatKeys(after).map(k=>att[k]), ['checked_in','booked','booked']);
+  ok('　　不再有殘留的 A#3 鍵', att['A#3']===undefined);
+  const c=B(['A','A'],{'A':'checked_in','A#2':'booked'});
+  const cAtt=api.seatReindexAfterRemove(c,0);
+  const cIds=c.member_ids.slice(); cIds.splice(0,1);
+  eq('　　移除第 1 個名額 → 剩下的接手成純 id，狀態跟著搬',
+     [api.seatKeys({member_ids:cIds,attendance:cAtt}), cAtt['A']], [['A'],'booked']);
+  const d=B(['A','B'],{'A':'checked_in','B':'booked'});
+  const dAtt=api.seatReindexAfterRemove(d,0);
+  ok('　　只有一個名額時直接清掉自己的狀態，不動別人', dAtt['A']===undefined && dAtt['B']==='booked');
+}
+
+console.log('\n接線');
+ok('★ 名單改成逐名額一列', /const rows = _seatKeys\.length \? _seatKeys\.map\(sk=>\{/.test(src)
+   && /const _seatKeys=seatKeys\(b\);/.test(src));
+ok('★ 每列的簽到／請假／取消都帶名額鍵',
+   /toggleGroupAttend\('\$\{b\.id\}','\$\{sk\}'\)/.test(src)
+   && /groupToggleLeave\('\$\{b\.id\}','\$\{sk\}'\)/.test(src)
+   && /groupCancelSeat\('\$\{b\.id\}','\$\{sk\}'\)/.test(src));
+ok('★ 多名額每列標「第 N 個名額」', /第 \$\{seatNo\(sk\)\} 個名額/.test(src));
+ok('　　票券圓點只畫在第一列（同一張票不重複畫）', /const st = seatNo\(sk\)===1 \? _gTk\[mid\] : null;/.test(src));
+ok('★ 課卡快捷簽到面板也逐名額（原本合併標 ×N）',
+   /rows = seatKeys\(b\)\.map\(sk=>\{/.test(src) && !/name:nameOf\(mid\)\+\(_rc\[mid\]>1\?`（×\$\{_rc\[mid\]\}）`:''\)/.test(src));
+ok('★ 請假／取消收名額鍵，補課券與退票仍認會員本人',
+   /async function groupToggleLeave\(bid,seatKey\)\{/.test(src)
+   && /const sk=String\(seatKey\), mid=seatMid\(sk\);/.test(src)
+   && /async function groupCancelSeat\(bid,seatKey\)\{/.test(src)
+   && /async function doGroupCancelSeat\(bid,seatKey\)\{/.test(src));
+ok('　　取消前先重編剩餘名額，不留孤兒鍵',
+   /const att=seatReindexAfterRemove\(b, i\);/.test(src));
+ok('　　傳純 member id 的舊呼叫仍可用（＝第 1 個名額）',
+   /傳純 member id 進來也照舊能用（＝第 1 個名額）/.test(src));
+ok('★ 票券圓點的歷史改逐名額判定（原本兩個名額共讀 att[mid]）',
+   /const _hist=\{\}, _histDone=\{\};/.test(src)
+   && /const doneAll=h\.filter\(\(x,i\)=>hd\[i\]\);/.test(src)
+   && /const bookedAhead=h\.filter\(\(x,i\)=>!hd\[i\] && x\.status!=='cancelled'\);/.test(src));
+ok('　　排序時 _hist 與 _histDone 同步重排（索引不能錯位）',
+   /_hist\[mid\]=ord\.map\(i=>H\[i\]\); _histDone\[mid\]=ord\.map\(i=>D\[i\]\);/.test(src));
+ok('★ 票券剩餘推算（_grpPending）也逐名額',
+   /if\(at\[seen\[id\]>1\?id\+'#'\+seen\[id\]:id\]==='checked_in'\) return;/.test(src));
+ok('　　整堂「有人簽到」的判斷不受影響（仍看 Object.values）',
+   /const anyIn=Object\.values\(att\)\.some\(s=>s==='checked_in'\);/.test(src));
+ok('★ 存名單時清掉沒有對應名額的孤兒出席鍵',
+   /const _att=attObj\(b\), _live=new Set\(seatKeys\(b\)\);\s*\n\s*Object\.keys\(_att\)\.forEach\(k=>\{ if\(!_live\.has\(k\)\) delete _att\[k\]; \}\);/.test(src));
+ok('　　孤兒鍵的危害寫在程式裡（會讓「整堂有沒有人簽到」失準）',
+   /孤兒鍵會讓判斷失準/.test(src));
+ok('　　原因寫在程式裡', /兩個名額不能分開處理/.test(src));
+
+// 實跑：存名單後的孤兒清理
+{
+  const prune=(b)=>{ const att=api.seatKeys(b).reduce((o,k)=>(o[k]=1,o),{});
+    Object.keys(b.attendance).forEach(k=>{ if(!att[k]) delete b.attendance[k]; }); return b.attendance; };
+  eq('★ 移出名單的人狀態不留下', prune(B(['A'],{A:'booked',Z:'booked'})), {A:'booked'});
+  eq('　　名額從 2 減到 1 → 第 2 個名額的狀態清掉',
+     prune(B(['A'],{A:'checked_in','A#2':'booked'})), {A:'checked_in'});
+  eq('　　名額還在的狀態一律保留', prune(B(['A','A','B'],{A:'checked_in','A#2':'leave',B:'booked'})),
+     {A:'checked_in','A#2':'leave',B:'booked'});
+}
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail?1:0);
