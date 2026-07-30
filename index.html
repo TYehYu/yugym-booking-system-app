@@ -3595,6 +3595,13 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .subnav-item.soon{color:var(--t3);cursor:pointer;}
 .subnav-item.soon:hover{background:var(--card2);}
 .subnav-soon{font-size:10px;color:var(--gold);background:var(--card2);padding:1px 6px;border-radius:10px;white-space:nowrap;}
+/* 次選單的組別標籤（2026-07-30 使用者指示：管理員項目太多，分成人事／財務／環境設定） */
+.subnav-grp{flex:0 0 auto;align-self:center;display:inline-flex;align-items:center;gap:8px;
+  margin:0 4px 0 10px;padding:2px 0;font-size:10.5px;font-weight:800;letter-spacing:.1em;
+  color:var(--t3);white-space:nowrap;text-transform:none;}
+.subnav-grp::before{content:'';width:1px;height:15px;background:var(--bd);display:inline-block;}
+.subnav-grp:first-child{margin-left:0;}
+.subnav-grp:first-child::before{display:none;}
 .subnav-item.active .subnav-soon{color:var(--gold);background:var(--card2);}
 .nav2-content{flex:1;min-width:0;padding-left:0;}
 /* ── 儀表板：今日概況 + 教練任務 ── */
@@ -6269,8 +6276,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1206';
-const APP_VERSION_LABEL='v260730.1206';
+const APP_VERSION = '260730.1211';
+const APP_VERSION_LABEL='v260730.1211';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7393,22 +7400,24 @@ const ADMIN_NAV2=[
      主管排班獨立「主管」群組（sup:true → 僅 is_supervisor 顯示，與管理員身分疊加）。
      原 g_staff／g_analytics／g_settings 三群組併入 g_admin；舊 key 由 navTo 的
      NAV2_GROUP_ALIAS 對應，既有 navTo(page,'g_staff') 等呼叫點不需逐一改。 */
+  /* 2026-07-30 使用者指示：管理員底下 15 個項目排成一長條，不知道從哪開始。
+     依「人事／財務／環境設定」分三組，次選單插入組別標籤當分隔。 */
   {key:'g_admin', icon:'🛠️', label:'管理員', sub:[
-    {label:'員工管理', page:'staff', tab:'list'},
-    {label:'出勤',     page:'attendance'},
-    {label:'教練統計', soon:true},
-    {label:'財務總覽', page:'finance'},
-    {label:'營運分析', page:'analytics'},
-    {label:'人資制度', page:'hr',    tab:'staff_data'},
-    {label:'薪資制度', page:'staff', tab:'payroll'},
-    {label:'勞健保',   page:'staff', tab:'insurance'},
-    {label:'特休',     page:'staff', tab:'leave'},
-    {label:'工作規則', page:'staff', tab:'schedule'},
-    {label:'課程方案', page:'settings_ticket'},
-    {label:'合約範本', page:'settings_contract'},
-    {label:'動作資料庫', page:'exercise_db'},
-    {label:'權限設定', page:'settings_staff'},
-    {label:'系統設定', page:'settings'},
+    {grp:'人事', label:'員工管理', page:'staff', tab:'list'},
+    {grp:'人事', label:'出勤',     page:'attendance'},
+    {grp:'人事', label:'人資制度', page:'hr',    tab:'staff_data'},
+    {grp:'人事', label:'薪資制度', page:'staff', tab:'payroll'},
+    {grp:'人事', label:'勞健保',   page:'staff', tab:'insurance'},
+    {grp:'人事', label:'特休',     page:'staff', tab:'leave'},
+    {grp:'人事', label:'工作規則', page:'staff', tab:'schedule'},
+    {grp:'人事', label:'權限設定', page:'settings_staff'},
+    {grp:'人事', label:'教練統計', soon:true},
+    {grp:'財務', label:'財務總覽', page:'finance'},
+    {grp:'財務', label:'營運分析', page:'analytics'},
+    {grp:'環境設定', label:'課程方案', page:'settings_ticket'},
+    {grp:'環境設定', label:'場地・班別', page:'settings'},
+    {grp:'環境設定', label:'合約範本', page:'settings_contract'},
+    {grp:'環境設定', label:'動作資料庫', page:'exercise_db'},
   ]},
   /* 2026-07-29 使用者指示：原「店長」群組改名「班表」；櫃檯也看得到（唯讀），
      只有店長／管理員可以修改（編輯權限由 checkCanEditShifts 控管）。 */
@@ -7670,6 +7679,9 @@ function renderSubnav(gkey, activePage){
   const visibleSubs=g.sub.filter(s=>!s.hideInSubnav);
   const realSubs=visibleSubs.filter(s=>s.page || s.soon);
   if(realSubs.length<=1) return '';
+  /* 分組（2026-07-30 使用者指示）：項目多的群組（管理員 15 項）在次選單插入組別標籤，
+     一眼看得出「人事／財務／環境設定」三塊，不必從一長條裡面找。沒標 grp 的維持原樣。 */
+  let lastGrp=null;
   return `<div class="subnav">${visibleSubs.map(s=>{
     // 同一頁面可掛不同 tab（例：薪資制度／勞健保／特休 都在 staff）→ 需一併比對 tab
     const on = s.page && s.page===activePage && (!s.tab || s.tab===CUR_TAB);
@@ -7677,7 +7689,9 @@ function renderSubnav(gkey, activePage){
     const click = s.soon
       ? `showSoon2('${(s.label||'').replace(/'/g,"")}')`
       : `navToTab('${s.page}','${gkey}',${s.tab?`'${s.tab}'`:'null'})`;
-    return `<div class="${cls}" onclick="${click}">${s.label}${s.soon?'<span class="subnav-soon">即將推出</span>':''}</div>`;
+    let head='';
+    if(s.grp && s.grp!==lastGrp){ head=`<span class="subnav-grp">${s.grp}</span>`; lastGrp=s.grp; }
+    return head+`<div class="${cls}" onclick="${click}">${s.label}${s.soon?'<span class="subnav-soon">即將推出</span>':''}</div>`;
   }).join('')}</div>`;
 }
 // 目前次功能頁的 tab（供 subnav 高亮使用）

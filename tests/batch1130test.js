@@ -74,5 +74,34 @@ console.log('\n營運分析：數字不要小數點');
      /\.ov-hero\{[\s\S]{0,200}align-items:flex-end;text-align:right;\}/.test(src));
 }
 
+
+/* ── ⑤ 管理員次選單分成 人事／財務／環境設定（2026-07-30 使用者指示）── */
+console.log('\n管理員次選單分組');
+{
+  const i=src.indexOf('function renderSubnav(gkey, activePage){');
+  const j=src.indexOf('\n}\n', i)+2;
+  const gi=src.indexOf("{key:'g_admin'"); const gj=src.indexOf("]},", gi)+3;
+  const gdef=new Function('return ['+src.slice(gi,gj).replace(/\]\},$/,']}')+']')();
+  const fn=new Function('visibleGroups','CUR_TAB', src.slice(i,j)+'\nreturn renderSubnav;')(()=>gdef,'list');
+  const html=fn('g_admin','staff');
+  const grps=[...html.matchAll(/<span class="subnav-grp">([^<]+)<\/span>/g)].map(m=>m[1]);
+  const items=[...html.matchAll(/<div class="subnav-item[^"]*"[^>]*>([^<]+)/g)].map(m=>m[1]);
+  ok('★ 三個組別、順序為 人事 → 財務 → 環境設定',
+     JSON.stringify(grps)===JSON.stringify(['人事','財務','環境設定']), grps);
+  ok('★ 15 個項目一個都沒少', items.length===15, items.length);
+  ok('★ 人事：員工管理／出勤／人資／薪資／勞健保／特休／工作規則／權限設定／教練統計',
+     items.slice(0,9).join()==='員工管理,出勤,人資制度,薪資制度,勞健保,特休,工作規則,權限設定,教練統計', items.slice(0,9));
+  ok('★ 財務：財務總覽／營運分析', items.slice(9,11).join()==='財務總覽,營運分析', items.slice(9,11));
+  ok('★ 環境設定：課程方案／場地・班別／合約範本／動作資料庫',
+     items.slice(11).join()==='課程方案,場地・班別,合約範本,動作資料庫', items.slice(11));
+  ok('　　「系統設定」改名成看得懂的「場地・班別」', /grp:'環境設定', label:'場地・班別', page:'settings'/.test(src));
+  ok('　　目前所在頁仍會高亮', /subnav-item active[^>]*>員工管理/.test(html));
+  ok('　　組別標籤前面有分隔線，第一組不畫',
+     /\.subnav-grp::before\{content:'';width:1px;/.test(src)
+     && /\.subnav-grp:first-child::before\{display:none;\}/.test(src));
+  ok('　　沒標 grp 的群組（班表等）維持原樣不顯示標籤',
+     /if\(s\.grp && s\.grp!==lastGrp\)\{/.test(src));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
