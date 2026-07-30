@@ -1,5 +1,6 @@
-/* 今日收款提醒改成「一列三個按鈕」（2026-07-30 使用者指示）——
-   櫃檯是「掃一眼、挑一個點進去」，格狀按鈕比一列一人的清單好抓。
+/* 今日收款提醒的展開視窗（2026-07-30 使用者指示，二修）——
+   依上課時間分組：時間標在左邊一欄，同一時間的人四個一列、超過就換到第二列。
+   櫃檯是「照時間準備、掃一眼挑一個點進去」，格狀按鈕比一列一人的清單好抓。
    其他待辦名單（降級／未打卡）維持清單。 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
@@ -19,9 +20,9 @@ const ITEMS=[
 ];
 const run=(kind,list)=>{
   let html='';
-  const fn=new Function('window','showModal','openMemberDetail','setRenewStatus',
+  const fn=new Function('window','document','showModal','openMemberDetail','setRenewStatus',
     src.slice(i,j)+'\nreturn openTodoList;')(
-    {_todoLists:{[kind]:list}}, h=>{html=h;}, ()=>{}, ()=>{});
+    {_todoLists:{[kind]:list}}, {querySelector:()=>null}, h=>{html=h;}, ()=>{}, ()=>{});
   fn(kind);
   return html;
 };
@@ -35,19 +36,26 @@ ok('　　畫面上不再出現「付款名單」／「待簽約名單」（註�
    !/'今日付款名單'/.test(src) && !/title:'今日待簽約名單'/.test(src)
    && !/OPS_TODO_IC\.money,'今日待簽約名單'/.test(src));
 
-console.log('\n版面：一列三個按鈕');
+console.log('\n版面：時間在左、同一時間四個一列');
 ok('★ 收款提醒走格狀容器', /class="tdl-grid"/.test(grid) && !/class="tdl-list"/.test(grid));
-ok('★ CSS 一列三格', /\.tdl-grid\{[\s\S]{0,120}grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/.test(src));
+ok('★ CSS 一列四格（超過自動換到第二列）',
+   /\.tdl-tg-cells\{[\s\S]{0,140}grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/.test(src));
+ok('★ 時間標在左邊獨立一欄、右對齊、等寬數字',
+   /\.tdl-tg-t\{flex:0 0 52px;[\s\S]{0,160}font-family:var\(--num\),inherit;[\s\S]{0,60}text-align:right;/.test(src));
 eq('★ 四個人 → 四個按鈕格', (grid.match(/<div class="tdl-cell[ "]/g)||[]).length, 4);
-ok('　　窄畫面退成兩格（手機不擠成三欄）',
-   /@media \(max-width:560px\)\{ \.tdl-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\} \}/.test(src));
+ok('　　中等寬度退成三格、手機退成兩格',
+   /@media \(max-width:820px\)\{ \.tdl-tg-cells\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\);\} \}/.test(src)
+   && /@media \(max-width:560px\)\{ \.tdl-tg-cells\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\}/.test(src));
+ok('　　一列四個要放得下 → 視窗加寬（modal-wide）',
+   /if\(useGrid\)\{ const m=document\.querySelector\('#modal-bg \.modal'\); if\(m\) m\.classList\.add\('modal-wide'\); \}/.test(src));
 ok('　　名字過長會截斷，不撐破格子', /\.tdl-cell-nm\{[\s\S]{0,140}text-overflow:ellipsis;/.test(src)
    && /\.tdl-cell-sub\{[\s\S]{0,140}text-overflow:ellipsis;/.test(src));
 ok('　　整疊可捲動', /\.tdl-grid\{[\s\S]{0,160}overflow-y:auto;/.test(src));
 ok('★ 其他名單不受影響，維持清單', /class="tdl-list"/.test(plain) && !/class="tdl-grid"/.test(plain));
 
 console.log('\n按鈕內容');
-ok('★ 名字＋時間在同一列', /<span class="tdl-cell-top"><span class="tdl-cell-nm">陳蘭馨<\/span><span class="tdl-tm">10:00<\/span><\/span>/.test(grid));
+ok('★ 時間已在左欄 → 格子裡不再重複標同一個時間',
+   /<span class="tdl-cell-nm">陳蘭馨<\/span><\/span>/.test(grid));
 ok('★ 課別與原因在下一行', /<span class="tdl-cell-sub">教練課・續課<\/span>/.test(grid));
 ok('★ 待付費那格反紅', /class="tdl-cell tdl-cell-pay tdl-static"/.test(grid)
    && /\.tdl-cell\.tdl-cell-pay\{border-color:var\(--danger/.test(src));
@@ -96,6 +104,26 @@ ok('　　名字太長會截斷，不撐破卡片', /\.mc-td-line\{[\s\S]{0,160}
   const sorted=L.slice().sort((a,b)=>
     String(a.time||'99:99').localeCompare(String(b.time||'99:99'))||String(a.name).localeCompare(String(b.name)));
   eq('★ 10:00 → 19:00 → 21:00 → 無時間', sorted.map(x=>x.name), ['甲','乙','丙','丁']);
+}
+
+
+console.log('\n依時間分組');
+{
+  const T=(n,t,extra)=>Object.assign({id:n,name:n,sub:'x',tkid:'',rs:'',time:t},extra||{});
+  const g=run('sign',{title:'今日收款提醒',grid:true,empty:'x',note:'n',items:[
+    T('戊','10:00'),T('甲','10:00'),T('乙','10:00'),T('丙','10:00'),T('丁','10:00'),
+    T('蘭馨','10:00、11:00'), T('晚客','20:30',{pay:true}), T('沒時間',''),
+  ]});
+  const groups=[...g.matchAll(/<span class="tdl-tg-t">([^<]*)<\/span>/g)].map(m=>m[1]);
+  eq('★ 分組後依時間排序，沒有時間的排最後', groups, ['10:00','20:30','未定']);
+  const per=[...g.matchAll(/<div class="tdl-tg-cells">([\s\S]*?)<\/div>\s*<\/div>/g)]
+    .map(m=>(m[1].match(/<div class="tdl-cell[ "]/g)||[]).length);
+  eq('★ 同一時間 6 個人放在同一組（四個一列 → 自動換第二列）', per, [6,1,1]);
+  ok('★ 同一人今天有兩堂 → 以第一堂分組，第二堂在格子裡補標',
+     /蘭馨<\/span><span class="tdl-tm">11:00<\/span>/.test(g));
+  ok('　　組內依姓名排序（待處理仍在前）', g.indexOf('>乙<')<g.indexOf('>戊<'));
+  ok('　　沒有時間的那組標「未定」', /<span class="tdl-tg-t">未定<\/span>/.test(g));
+  ok('　　待收款那格照樣反紅', /tdl-cell-pay/.test(g));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
