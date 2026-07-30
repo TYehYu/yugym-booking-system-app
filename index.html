@@ -6329,8 +6329,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1219';
-const APP_VERSION_LABEL='v260730.1219';
+const APP_VERSION = '260730.1224';
+const APP_VERSION_LABEL='v260730.1224';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8184,12 +8184,15 @@ window.addEventListener('hashchange',()=>{
 // 會員等級（一人一個；新朋友→會員自動，其他手動）
 const TIER_DEFS={
   regular: {label:'會員',   color:'#1a3a6e', bg:'#e8eef7', desc:'一般會員（未達主顧客條件）'},
-  loyal:   {label:'主顧客', color:'#8A5E28', bg:'#f5ede0', desc:'連續 3 個月教練課皆達 4 堂，自動升級'},
+  loyal:   {label:'主顧客', color:'#8A5E28', bg:'#f5ede0', desc:'連續 3 個月完成抽獎目標（教練課 4 堂）自動升級；連續 3 個月未完成則降回會員'},
   vip:     {label:'VIP',    color:'#7E2828', bg:'#f7e9e9', desc:'管理員手動調整'},
 };
 /* ══ 會員升降級制度（2026-07-18 使用者定案）══
-   升級「主顧客」：連續 3 個「完整月份」，每月已簽到的教練課（含友善；category=私人教練）≥ 4 堂。
-   降級回「會員」：主顧客連續 2 個完整月 < 4 堂（含 0 堂的空月）。
+   ══ 2026-07-30 使用者定案：等級制度與抽獎機制綁在一起 ══
+   抽獎目標本來就是「當月已簽到教練課（含友善；category=私人教練）滿 4 堂＝一次抽獎機會」
+   （見 lottoMapAll 的 floor(堂數/4)），與升降級判定的是同一個數字，所以只要對齊門檻即可：
+     升級「主顧客」：連續 3 個完整月都完成抽獎目標（≥ 4 堂）。
+     降級回「會員」：連續 3 個完整月都沒完成（< 4 堂，含 0 堂的空月）。原本是 2 個月。
    實作＝純推算不落庫：從歷史簽到逐月重播狀態機，規則改動自動全體重算、無舊資料殘留。
    當月未結束不計入。VIP 為手動設定，不受自動制影響；members.level 僅 vip 仍有意義。 */
 /* 等級起點名單（2026-07-29 使用者定案）：只有「原本就在舊系統的既有會員」從主顧客起算，
@@ -8212,7 +8215,7 @@ function computeMemberTiers(bookings, members){
   const nowYm=ymd(TODAY).slice(0,7);
   const res={};
   // 制度起點條款（2026-07-18 使用者指示）：起點當下所有既有會員一律「主顧客」，
-  // 之後由降級規則自然運作（未達標者連 2 個完整月後降級）。起點前的歷史不追溯。
+  // 之後由降級規則自然運作（未達標者連 3 個完整月後降級）。起點前的歷史不追溯。
   const TIER_EPOCH_YM='2026-07';
   /* 有帶 members 時逐人判定起點（既有會員＝主顧客／新客＝會員，且從建檔月起算）；
      沒帶時維持舊行為（全部視為起點名單），避免其他呼叫端行為改變。 */
@@ -8229,7 +8232,7 @@ function computeMemberTiers(bookings, members){
       ok  = n>=4 ? ok+1  : 0;
       low = n<4  ? low+1 : 0;
       if(state==='regular' && ok>=3) state='loyal';
-      else if(state==='loyal' && low>=2){ state='regular'; ok=0; }
+      else if(state==='loyal' && low>=3){ state='regular'; ok=0; }   // 連續 3 個月未完成抽獎目標（2026-07-30）
       cur=_nextYm(cur);
     }
     return state;
@@ -8239,15 +8242,16 @@ function computeMemberTiers(bookings, members){
   // 完全沒有簽到紀錄的會員：以「每月 0 堂」走同一條規則（起點滿 2 個完整月即降級），
   // 結果掛在 __default 供 effTier 當預設值 —— 起點初期人人主顧客，之後自然收斂。
   let zs='loyal', zlow=0, zc=TIER_EPOCH_YM;
-  while(zc<nowYm){ zlow++; if(zs==='loyal'&&zlow>=2){ zs='regular'; } zc=_nextYm(zc); }
+  while(zc<nowYm){ zlow++; if(zs==='loyal'&&zlow>=3){ zs='regular'; } zc=_nextYm(zc); }
   res.__default=zs;
   return res;
 }
 function _nextYm(ym){ let[y,m]=ym.split('-').map(Number); m++; if(m>12){m=1;y++;} return y+'-'+String(m).padStart(2,'0'); }
 /* 本月即將降級名單（2026-07-20 使用者指示，首頁待辦用）：
-   主顧客、上一個完整月未達 4 堂（降級連續計數=1）、且本月至今仍 <4 堂 ——
+   主顧客、已連續 2 個完整月未完成抽獎目標（< 4 堂）、且本月至今仍 <4 堂 ——
    若本月結束仍未達即於下月 1 日降級。重播規則與 computeMemberTiers 同源。
-   注意：7 月為制度起點月（無已結束的完整月）→ 名單必為空，8 月起才會出現。 */
+   2026-07-30 使用者定案：降級門檻由 2 個月改為 3 個月，故觀察條件同步改成 low===2。
+   注意：7 月為制度起點月（無已結束的完整月）→ 名單要 9 月起才會出現。 */
 function tierDemotionWatchIds(bookings){
   const counts={};
   (bookings||[]).forEach(b=>{
@@ -8265,15 +8269,15 @@ function tierDemotionWatchIds(bookings){
       const n=byYm[cur]||0;
       ok=n>=4?ok+1:0; low=n<4?low+1:0;
       if(state==='regular'&&ok>=3) state='loyal';
-      else if(state==='loyal'&&low>=2){ state='regular'; ok=0; low=0; }
+      else if(state==='loyal'&&low>=3){ state='regular'; ok=0; low=0; }
       cur=_nextYm(cur);
     }
-    if(state==='loyal' && low===1 && (byYm[nowYm]||0)<4) out.push(mid);
+    if(state==='loyal' && low===2 && (byYm[nowYm]||0)<4) out.push(mid);   // 已連 2 個月未達，本月再未達就降（2026-07-30）
   });
   return out;
 }
-/* 待升級觀察名單（2026-07-28 使用者指示）：目前為「會員」、已連 2 個完整月教練課 ≥4 堂——
-   本月再達 4 堂即於下月 1 日升主顧客。重播規則與 computeMemberTiers 同源。 */
+/* 待升級觀察名單（2026-07-28 使用者指示）：目前為「會員」、已連 2 個完整月完成抽獎目標
+   （教練課 ≥4 堂）—— 本月再達 4 堂即於下月 1 日升主顧客。重播規則與 computeMemberTiers 同源。 */
 function tierPromotionWatchIds(bookings){
   const counts={};
   (bookings||[]).forEach(b=>{
@@ -8291,7 +8295,7 @@ function tierPromotionWatchIds(bookings){
       const n=byYm[cur]||0;
       ok=n>=4?ok+1:0; low=n<4?low+1:0;
       if(state==='regular'&&ok>=3) state='loyal';
-      else if(state==='loyal'&&low>=2){ state='regular'; ok=0; low=0; }
+      else if(state==='loyal'&&low>=3){ state='regular'; ok=0; low=0; }
       cur=_nextYm(cur);
     }
     if(state==='regular' && ok===2) out.push(mid);
@@ -10719,7 +10723,7 @@ PAGES.g_dashboard=async function(){
   const _demoteList=tierDemotionWatchIds(bookings||[])
     .filter(id=>memMap[id])
     .map(id=>{ const n=_ptCntThisMonth[id]||0;
-      return {id,name:memMap[id].name,sub:`本月至今 ${n} 堂・還差 ${Math.max(0,4-n)} 堂即可保住主顧客`}; });
+      return {id,name:memMap[id].name,sub:`已連 2 個月未達・本月至今 ${n} 堂・還差 ${Math.max(0,4-n)} 堂即可保住主顧客`}; });
   const _demoteNames=_demoteList.map(x=>x.name);
   const _l2=_demoteNames.length
     ? _demoteNames.slice(0,6).join('、')+(_demoteNames.length>6?` 等 ${_demoteNames.length} 人`:'')
@@ -18601,8 +18605,10 @@ PAGES.members=async function(){
 /* 待升級／待降級名單視窗（2026-07-28）：點上方統計卡開啟，點人進會員資料 */
 function memTierWatchList(kind){
   const list=((window._memTierWatch||{})[kind])||[];
-  const title={up:'本月待升級名單（本月再達 4 堂即升主顧客）',
-    down:'本月待降級名單（本月未達 4 堂將降回會員）',
+  /* 2026-07-30 使用者定案：等級與抽獎目標同一套（當月教練課簽到 4 堂＝完成抽獎目標）；
+     連 3 個月完成升主顧客、連 3 個月未完成降回會員。 */
+  const title={up:'本月待升級名單（已連 2 個月完成抽獎目標，本月再達 4 堂即升主顧客）',
+    down:'本月待降級名單（已連 2 個月未完成，本月再未達 4 堂將降回會員）',
     renew:'本月待續約名單（教練課・本月已安排最後一堂課）'}[kind]||'名單';
   const rows=list.map(m=>`<button class="list-item" style="width:100%;text-align:left;cursor:pointer;background:none;border:none;border-bottom:1px solid var(--bd);padding:11px 6px;display:flex;justify-content:space-between;align-items:center;" onclick="closeModal();openPersonProfile('member','${m.id}')">
       <span style="font-weight:600;">${m.name||'—'}</span>
@@ -19121,7 +19127,7 @@ async function openTierModal(member_id){
       <span style="font-size:11.5px;color:var(--t2);">${d.desc}</span>
     </label>`).join('');
   showModal(`<div class="modal-title">調整等級 · ${m.name}</div>
-    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;">⚠️ 會員／主顧客已改為<b>自動判定</b>（連續 3 個月教練課皆 ≥4 堂升級；連續 2 個月未達降級），此處手動設定僅 <b>VIP</b> 會生效並凌駕自動制。目前自動判定：<b>${(TIER_DEFS[effTier(m)]||{}).label||'會員'}</b></div>
+    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;">⚠️ 會員／主顧客已改為<b>自動判定</b>，與抽獎目標同一套：當月教練課簽到滿 4 堂＝完成該月抽獎目標，<b>連續 3 個月完成</b>升主顧客、<b>連續 3 個月未完成</b>降回會員。此處手動設定僅 <b>VIP</b> 會生效並凌駕自動制。目前自動判定：<b>${(TIER_DEFS[effTier(m)]||{}).label||'會員'}</b></div>
     ${opts}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="${PP.id===member_id?'closeModal()':`openMemberDetail('${member_id}')`}">返回</button><button class="btn btn-green" onclick="saveTier('${member_id}')">儲存等級</button></div>`);
 }
