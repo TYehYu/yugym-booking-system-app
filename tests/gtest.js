@@ -161,10 +161,11 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('　　下拉標明剩餘堂數與效期', /扣：\$\{String\(t\.name\)\.replace\(\/<\/g,'&lt;'\)\}　剩 \$\{t\.left\} 堂/.test(src));
     chk('★ 管理名單存檔時照指定的扣', /const want=\(window\._grpTkPick\|\|\{\}\)\[mid\];/.test(src)
       && /tk=cand\.find\(t=>t\.id===want\)\|\|null;/.test(src));
+    // 2026-07-30：各天可不同時間 → 挑票改用那一筆的時間 tW
     chk('★ 新增團體課（含連續數週）也照指定的扣',
-      /if\(want\)\{ const cand=await listUsableTickets\(mid,type_id,dW,time\); tk=cand\.find\(x=>x\.id===want\)\|\|null; \}/.test(src));
+      /if\(want\)\{ const cand=await listUsableTickets\(mid,type_id,dW,tW\); tk=cand\.find\(x=>x\.id===want\)\|\|null; \}/.test(src));
     chk('　　指定的票不能用時退回自動挑選，不讓整堂建不起來',
-      /if\(!tk\) tk=await findUsableTicket\(mid,type_id,dW,time\);/.test(src)
+      /if\(!tk\) tk=await findUsableTicket\(mid,type_id,dW,tW\);/.test(src)
       && /指定的票券已不能用，改用最快到期的那張/.test(src));
     chk('　　每次開視窗重置指定，不跨堂殘留',
       (src.match(/window\._grpTkPick=\{\};/g)||[]).length===2);

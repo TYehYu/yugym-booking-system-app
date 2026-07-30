@@ -105,14 +105,17 @@ guarded.forEach(fn=>{
 console.log('\n連續預約改用「次數」');
 ok('★ 介面改成次數輸入（不再選結束日期）',
    /id="\$\{prefix\}-count" min="1"/.test(src) && !/id="\$\{prefix\}-until"/.test(src));
-ok('★ 次數上限＝可約堂數，並帶進畫面', /recurBoxHtml\('bk', preSum\)/.test(src)
-   && /目前可約 <b>\$\{maxN\}<\/b> 堂，最多就排 \$\{maxN\} 次/.test(src));
+// 2026-07-30：上限改成 min(可約堂數, 12)，文案由「次」改「堂」
+ok('★ 次數上限＝min(可約堂數, 12)，並帶進畫面', /recurBoxHtml\('bk', preSum\)/.test(src)
+   && /目前可約 <b>\$\{maxN\}<\/b> 堂，最多就排 \$\{maxN\} 堂。/.test(src));
 ok('★ 超過上限會被夾回並提示', /function recurClampCount\(/.test(src)
-   && /最多只能排 \$\{mx\} 次（可約堂數上限）/.test(src));
+   && /最多只能排 \$\{cap\} 堂（可約堂數上限）/.test(src)
+   && /最多只能排 \$\{RECUR_MAX\} 堂（方案上限）/.test(src));
 ok('　　讀值時再夾一次（避免直接改 DOM 繞過）',
    /if\(mx>0\) count=Math\.min\(count,mx\);/.test(src));
 ok('　　送出改帶 count，不再帶 until',
-   /count: recurring \? _rc\.count : 1,/.test(src) && /count: isRec \? Math\.max\(1,Math\.floor\(Number\(f\.count\)\|\|1\)\) : 1,/.test(src));
+   /count: recurring \? _rc\.count : 1,/.test(src)
+   && /count: isRec \? Math\.min\(Math\.max\(1,Math\.floor\(Number\(f\.count\)\|\|1\)\), RECUR_MAX\) : 1,/.test(src));
 ok('　　沒填次數會擋下來', /請填寫預約次數/.test(src));
 
 console.log('\n教練手機端行事曆：別人的課卡不吃觸控');

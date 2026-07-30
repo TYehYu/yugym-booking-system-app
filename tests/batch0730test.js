@@ -81,11 +81,12 @@ ok('★ 贈點會被收回也先講（教練端與櫃檯端都有）',
 
 console.log('\n⑤ 待簽約卡位的連續預約');
 ok('★ 卡位視窗加上連續預約區塊', /<div style="margin-top:4px;">\$\{recurBoxHtml\('ph'\)\}<\/div>/.test(src));
-ok('★ 沿用正式預約同一套 readRecur／buildRecurringDates',
+// 2026-07-30：改用 buildRecurringSlots（各天可不同時間）＋上限 12 堂
+ok('★ 沿用正式預約同一套 readRecur／buildRecurringSlots',
    /const rc=readRecur\('ph'\);/.test(src)
-   && /const dates=rc\.on\?buildRecurringDates\(date,rc\.dows,rc\.count,ymd\(addDays\(parseYmd\(date\),370\)\)\):\[date\];/.test(src));
-ok('★ 每一堂各自驗證，衝堂跳過不中斷',
-   /const verr=await validateBooking\(vbk,d,time,60\);\s*\n\s*if\(verr\)\{ skipped\.push/.test(src));
+   && /const slots=rc\.on\s*\n\s*\? buildRecurringSlots\(date,time,rc\.dows,rc\.times,Math\.min\(rc\.count,RECUR_MAX\),ymd\(addDays\(parseYmd\(date\),370\)\)\)/.test(src));
+ok('★ 每一堂各自驗證（用那一筆的時間），衝堂跳過不中斷',
+   /const verr=await validateBooking\(vbk,d,tv,60\);\s*\n\s*if\(verr\)\{ skipped\.push/.test(src));
 ok('　　沒有票券所以不設次數上限（recurBoxHtml 不傳 maxN）', /recurBoxHtml\('ph'\)/.test(src));
 ok('　　防連點（長串卡位無回饋會被連按）', /if\(window\._phSubmitting\)\{ showToast\('建立中，請稍候…'\); return; \}/.test(src));
 ok('　　建立中顯示進度、結果講清楚成功幾堂跳過幾堂',

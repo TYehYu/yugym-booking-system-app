@@ -5402,6 +5402,13 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
 /* 連續取消清單（2026-07-29） */
 .sc-list{max-height:min(38vh,300px);overflow-y:auto;border:1px solid var(--bd);border-radius:10px;
   background:var(--card2);padding:4px;}
+/* 連續預約：每個星期一列（勾選＋該天時間），2026-07-30 使用者指示 */
+.rc-dows{display:flex;flex-direction:column;gap:5px;}
+.rc-dow{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;}
+.rc-dow input[type=checkbox]{flex:0 0 auto;margin:0;}
+.rc-dow input[type=time]{margin-left:auto;width:110px;padding:4px 8px;border:1px solid var(--bd);
+  border-radius:7px;font-family:var(--num),inherit;font-size:12.5px;background:#fff;}
+.rc-dow input[type=time]:disabled{opacity:.4;background:var(--card2);}
 .sc-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;
   font-size:13px;}
 .sc-row:hover{background:#fff;}
@@ -6566,8 +6573,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1947';
-const APP_VERSION_LABEL='v260730.1947';
+const APP_VERSION = '260730.2003';
+const APP_VERSION_LABEL='v260730.2003';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10068,14 +10075,14 @@ function rpcBookingErrMsg(code){
   return M[code]||('建立失敗：'+(code||'未知錯誤'));
 }
 // 呼叫 fn_create_booking；回傳 {ok:true} 或 {ok:false, reason}
-async function createBookingViaRpc(o, tk, ds){
+async function createBookingViaRpc(o, tk, ds, ts){
   const bt=benefitTypeOfTypeId((tk&&tk.ticket_type_id)||o.type_id);
   if(!bt) return { ok:false, reason:'無法判斷票券類型（benefit_type）' };  // 保險：回報而非誤扣
   const sp=spaceForBooking(o.category);
   const { data, error } = await sb.rpc('fn_create_booking', {
     p_member_id:o.member_id, p_coach_id:o.coach_id||null,
     p_category:o.category, p_benefit_type:bt,
-    p_date:ds, p_start_time:o.time, p_duration:o.duration||60,
+    p_date:ds, p_start_time:ts||o.time, p_duration:o.duration||60,
     p_space_id:sp.space, p_resource_id:sp.resource, p_note:null
   });
   // RPC 在 DB 端會動 bookings / member_tickets / ticket_logs / notifications 多張表，
@@ -15982,24 +15989,39 @@ function bkFilterMembers(q){
    櫃檯心裡想的是「還有 4 堂就約 4 次」，換算成結束日期還要自己數週數，容易算錯。
    次數上限＝可約堂數（maxN，由呼叫端在開啟時填入）。團課一次可排多人、各人餘額不同，
    沒有單一上限可用，故不帶 maxN（仍會在建立時逐堂檢查票券）。 */
+/* 連續預約的上限（2026-07-30 使用者指示）：方案最多只賣 12 堂，所以次數上限一律 12。
+   ⚠ 這裡的「次數」＝堂數不是週數 —— 一週勾兩天就是一週消耗 2 堂
+   （buildRecurringSlots 是數日期不是數週，語意本來就一致）。 */
+const RECUR_MAX=12;
 function recurBoxHtml(prefix, maxN){
   const WD=['一','二','三','四','五','六','日'];
-  const hasMax=Number(maxN)>0;
+  const _m=Number(maxN)>0 ? Math.min(Number(maxN), RECUR_MAX) : RECUR_MAX;
+  const hasTk=Number(maxN)>0;
+  /* 2026-07-30 使用者指示：一週兩天但兩天時間不同也要排得起來 ——
+     每個星期各給一個時間欄，留空＝沿用步驟 1 選的時間。 */
   return `<label class="switch-row" style="margin-bottom:6px;"><span class="switch"><input type="checkbox" id="${prefix}-recurring" onchange="toggleRecurBox('${prefix}')"><span class="switch-slider"></span></span><span class="switch-label">連續預約（每週重複）</span></label>
     <div id="${prefix}-recurring-box" style="display:none;border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--card2);">
-      <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">勾選要重複的星期（以所選日期為起點）：</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-        ${WD.map((w,i)=>`<label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" class="${prefix}-dow" value="${i===6?0:i+1}">週${w}</label>`).join('')}
+      <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">勾選要重複的星期（以所選日期為起點）；<b>各天可以排不同時間</b>，留空＝同第一堂。</div>
+      <div class="rc-dows">
+        ${WD.map((w,i)=>{ const v=(i===6?0:i+1); return `<label class="rc-dow"><input type="checkbox" class="${prefix}-dow" value="${v}" onchange="recurDowToggle('${prefix}',${v})">週${w}
+          <input type="time" class="${prefix}-dowt" data-dow="${v}" step="1800" disabled placeholder="同第一堂"></label>`; }).join('')}
       </div>
-      <div class="form-row" style="margin-bottom:6px;"><label>預約次數（含第一堂）</label>
-        <input type="number" id="${prefix}-count" min="1" ${hasMax?`max="${maxN}"`:''} step="1"
-               value="${hasMax?maxN:4}" data-max="${hasMax?maxN:''}" oninput="recurClampCount('${prefix}')"
+      <div class="form-row" style="margin:10px 0 6px;"><label>預約堂數（含第一堂，最多 ${RECUR_MAX} 堂）</label>
+        <input type="number" id="${prefix}-count" min="1" max="${_m}" step="1"
+               value="${_m}" data-max="${_m}" oninput="recurClampCount('${prefix}')"
                style="font-family:var(--num),inherit;">
       </div>
       <div id="${prefix}-count-hint" style="font-size:11px;color:var(--t3);line-height:1.7;">
-        ${hasMax?`目前可約 <b>${maxN}</b> 堂，最多就排 ${maxN} 次。`:''}
-        依勾選的星期逐週建立；衝堂自動跳過${prefix==='grp'?'':'、達票券剩餘堂數即停'}。</div>
+        ${hasTk&&Number(maxN)<RECUR_MAX?`目前可約 <b>${maxN}</b> 堂，最多就排 ${maxN} 堂。`:`方案最多 ${RECUR_MAX} 堂，所以上限 ${RECUR_MAX}。`}
+        數的是<b>堂數</b>不是週數 —— 一週勾兩天就是一週消耗 2 堂。
+        衝堂自動跳過${prefix==='grp'?'':'、達票券剩餘堂數即停'}。</div>
     </div>`;
+}
+/* 勾了某個星期才讓那天的時間欄可填（沒勾就別讓人填了以為有效） */
+function recurDowToggle(prefix,dow){
+  const cb=[...document.querySelectorAll('.'+prefix+'-dow')].find(x=>Number(x.value)===Number(dow));
+  const tm=[...document.querySelectorAll('.'+prefix+'-dowt')].find(x=>Number(x.getAttribute('data-dow'))===Number(dow));
+  if(tm) tm.disabled=!(cb&&cb.checked);
 }
 /* 次數不得超過可約堂數（也不得小於 1）。上限記在 data-max，沒有上限就只擋下界。 */
 function recurClampCount(prefix){
@@ -16007,7 +16029,9 @@ function recurClampCount(prefix){
   const mx=Number(el.getAttribute('data-max'))||0;
   let v=Math.floor(Number(el.value)||0);
   if(v<1) v=1;
-  if(mx>0 && v>mx){ v=mx; showToast(`最多只能排 ${mx} 次（可約堂數上限）`); }
+  /* 上限 12（方案最多 12 堂）；票券剩得比 12 少就以票券為準（2026-07-30） */
+  const cap = mx>0 ? Math.min(mx, RECUR_MAX) : RECUR_MAX;
+  if(v>cap){ v=cap; showToast(cap<RECUR_MAX?`最多只能排 ${cap} 堂（可約堂數上限）`:`最多只能排 ${RECUR_MAX} 堂（方案上限）`); }
   if(String(v)!==el.value) el.value=v;
 }
 function toggleRecurBox(prefix){
@@ -16019,6 +16043,15 @@ function toggleRecurBox(prefix){
       const dow=new Date(dstr+'T00:00:00').getDay();
       document.querySelectorAll('.'+prefix+'-dow').forEach(cb=>{ if(Number(cb.value)===dow) cb.checked=true; });
     }
+    /* 2026-07-30：每個星期各有一個時間欄，只有勾了的才可填；
+       起始日那天先帶入步驟 1 選的時間，其他天留空（＝同第一堂）。 */
+    document.querySelectorAll('.'+prefix+'-dow').forEach(cb=>{
+      const d=Number(cb.value);
+      const tm=[...document.querySelectorAll('.'+prefix+'-dowt')].find(x=>Number(x.getAttribute('data-dow'))===d);
+      if(!tm) return;
+      tm.disabled=!cb.checked;
+      if(cb.checked && !tm.value && _bkWizard&&_bkWizard.time) tm.value=String(_bkWizard.time).slice(0,5);
+    });
   }
 }
 function readRecur(prefix){
@@ -16029,7 +16062,16 @@ function readRecur(prefix){
   const mx=el?(Number(el.getAttribute('data-max'))||0):0;
   let count=Math.max(1, Math.floor(Number(el&&el.value)||1));
   if(mx>0) count=Math.min(count,mx);
-  return {on:true,dows,count,max:mx};
+  count=Math.min(count, RECUR_MAX);                 // 方案最多 12 堂（2026-07-30）
+  /* 各天各自的時間（2026-07-30 使用者指示：一週兩天可以不同時間）；留空的不放進 map，
+     buildRecurringSlots 會退回起始時間。 */
+  const times={};
+  [...document.querySelectorAll('.'+prefix+'-dowt')].forEach(el2=>{
+    const d=Number(el2.getAttribute('data-dow'));
+    const v=String(el2.value||'').slice(0,5);
+    if(dows.includes(d) && /^\d{2}:\d{2}$/.test(v)) times[d]=v;
+  });
+  return {on:true,dows,count,max:mx,times};
 }
 function bkMemberOpts(list){
   const cid=window._bkCoachId;
@@ -16287,21 +16329,24 @@ async function submitPendingHold(){
     if(!rc.dows.length){ showToast('請勾選至少一個星期'); return; }
     if(!(rc.count>0)){ showToast('請填寫預約次數'); return; }
   }
-  const dates=rc.on?buildRecurringDates(date,rc.dows,rc.count,ymd(addDays(parseYmd(date),370))):[date];
+  const slots=rc.on
+    ? buildRecurringSlots(date,time,rc.dows,rc.times,Math.min(rc.count,RECUR_MAX),ymd(addDays(parseYmd(date),370)))
+    : [{date,time}];
   const foot=document.querySelector('.modal-foot');
   let made=0, skipped=[];
-  for(const d of dates){
+  for(const sl of slots){
+    const d=sl.date, tv=sl.time;
     const vbk={id:null,coach_id,category:t.category,ticket_type_id:null};   // 無票 → 不做限時票檢查
-    const verr=await validateBooking(vbk,d,time,60);
-    if(verr){ skipped.push(`${String(d).slice(5).replace('-','/')}（${verr}）`); continue; }
+    const verr=await validateBooking(vbk,d,tv,60);
+    if(verr){ skipped.push(`${String(d).slice(5).replace('-','/')} ${tv}（${verr}）`); continue; }
     const bk={id:uid('BK'),member_id:null,trial_name:name,trial_phone:phone,
       coach_id,ticket_id:null,ticket_type_id:type_id,category:t.category,format:t.format||null,
-      date:d,start_time:time,duration:60,status:'booked',recurring:!!rc.on,
+      date:d,start_time:tv,duration:60,status:'booked',recurring:!!rc.on,
       pending_contract:true, venue_unit:vbk.venue_unit||null,
       created_by:SESSION.id,created_at:new Date().toISOString()};
     await dbPut('bookings',bk);
     made++;
-    if(foot && dates.length>1) foot.innerHTML=`<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">建立中…（${made}/${dates.length}）</div>`;
+    if(foot && slots.length>1) foot.innerHTML=`<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">建立中…（${made}/${slots.length}）</div>`;
   }
   if(!made){ showToast('沒有可建立的時段：'+(skipped[0]||'請確認時間')); return; }
   closeModal();
@@ -16418,22 +16463,24 @@ async function _submitBookingInner(){
       if(!(rc.count>0)){showToast('請填寫預約次數');return;}
     }
     /* 次數優先（2026-07-29）：拿掉結束日期，改用次數；遠端邊界只當保險絲（一年） */
-    const grpDates=rc.on?buildRecurringDates(date,rc.dows,rc.count,ymd(addDays(parseYmd(date),370))):[date];
-    if(!grpDates.length){showToast('日期區間內沒有符合勾選星期的日子');return;}
-    const repeatN=grpDates.length;
+    const grpSlots=rc.on
+      ? buildRecurringSlots(date,time,rc.dows,rc.times,Math.min(rc.count,RECUR_MAX),ymd(addDays(parseYmd(date),370)))
+      : [{date,time}];
+    if(!grpSlots.length){showToast('日期區間內沒有符合勾選星期的日子');return;}
+    const repeatN=grpSlots.length;
     let made=0, skippedWeeks=[], charged=0, skipped=0;
-    for(let w=0;w<grpDates.length;w++){
-      const dW=grpDates[w];
+    for(let w=0;w<grpSlots.length;w++){
+      const dW=grpSlots[w].date, tW=grpSlots[w].time;   // 各天可不同時間（2026-07-30）
       if(repeatN>1){ const btn=[...document.querySelectorAll('#modal-bg .btn.btn-green')].pop();
         if(btn){ btn.disabled=true; btn.textContent=`建立中 ${w+1} / ${repeatN}…`; } }
       const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id};
-      const verr=await validateBooking(vbk,dW,time,60);
-      if(verr){ if(repeatN===1){showToast(verr);return;} skippedWeeks.push(dW.slice(5).replace('-','/')); continue; }
+      const verr=await validateBooking(vbk,dW,tW,60);
+      if(verr){ if(repeatN===1){showToast(verr);return;} skippedWeeks.push(dW.slice(5).replace('-','/')+' '+tW); continue; }
       if(w===0 && !(await confirmVenueOverflow(vbk))) return; // 首堂場地溢出→教練取消（後續週沿用）
       const bk={id:uid('BK'),member_id:null,member_ids:ids,trial_name:null,trial_phone:null,
         coach_id,ticket_id:null,ticket_type_id:type_id,category:t.category,format:t.format||null,
         max_heads:gmax,
-        date:dW,start_time:time,duration:60,status:'booked',recurring:repeatN>1,venue_unit:vbk.venue_unit||null,
+        date:dW,start_time:tW,duration:60,status:'booked',recurring:repeatN>1,venue_unit:vbk.venue_unit||null,
         created_by:SESSION.id,created_at:new Date().toISOString()};
       await dbPut('bookings',bk);
       // 為有團體課票的會員各扣 1 堂（沒票的略過，由教練負責）
@@ -16442,8 +16489,8 @@ async function _submitBookingInner(){
            （效期不到、或前幾週已扣光）就自動退回最快到期的那張，不要整堂建不起來。 */
         let tk=null;
         const want=(window._grpTkPick||{})[mid];
-        if(want){ const cand=await listUsableTickets(mid,type_id,dW,time); tk=cand.find(x=>x.id===want)||null; }
-        if(!tk) tk=await findUsableTicket(mid,type_id,dW,time);
+        if(want){ const cand=await listUsableTickets(mid,type_id,dW,tW); tk=cand.find(x=>x.id===want)||null; }
+        if(!tk) tk=await findUsableTicket(mid,type_id,dW,tW);
         if(tk){ await deductTicket(tk,bk.id,SESSION.id); charged++; }
         else skipped++;
       }
@@ -16474,12 +16521,15 @@ async function _submitBookingInner(){
 
 
   // 找票券：優先用選定票券（若仍可用且該日未過期），否則找同類別可用票
-  const bkFindTk=async(mid,d)=>{
+  /* 2026-07-30：各天可能不同時間 → 挑票要用「那一筆的時間」判定，
+     不然友善課（限平日 18:00 前）在晚上那天會挑到不該用的票。 */
+  const bkFindTk=async(mid,d,tsv)=>{
     if(selTicketId){
       const sel=await dbGet('member_tickets',selTicketId);
-      if(sel && sel.member_id===mid && sel.status==='usable' && sel.sessions_remaining>0 && (!sel.expire_date||sel.expire_date>=d)) return sel;
+      if(sel && sel.member_id===mid && sel.status==='usable' && sel.sessions_remaining>0 && (!sel.expire_date||sel.expire_date>=d)
+         && tkTimeOk(sel,d,tsv||time)) return sel;
     }
-    return await findUsableTicket(mid,type_id,d,time);
+    return await findUsableTicket(mid,type_id,d,tsv||time);
   };
   // 單筆預約（非連續）：先預驗證場地，若溢出到次選場地→跳確認，教練同意才建立
   if(!recurring){
@@ -16493,6 +16543,7 @@ async function _submitBookingInner(){
     category:t.category, type_id, format:fmt,
     startDate:date, time, duration:60,
     dows: recurring ? _rc.dows : [],
+    times: recurring ? _rc.times : null,   // 各天各自的時間（2026-07-30）
     count: recurring ? _rc.count : 1,   // 2026-07-29：改由「次數」決定（上限＝可約堂數）
     until: null,
     findTicketFn: bkFindTk,
@@ -16532,6 +16583,16 @@ async function _submitBookingInner(){
  }
 }
 // 依起始日、星期清單、次數上限、結束日，產生日期陣列
+/* 日期＋時間清單（2026-07-30 使用者指示：各天可不同時間）。
+   times 是 {星期:'HH:MM'}，沒設的那天就用 startTime。 */
+function buildRecurringSlots(startDate,startTime,dows,times,maxN,until){
+  const T=times||{};
+  return buildRecurringDates(startDate,dows,maxN,until).map(d=>{
+    const dt=parseYmd(d);
+    const dow=dt?dt.getDay():null;
+    return { date:d, time:(dow!=null && T[dow]) ? T[dow] : startTime };
+  });
+}
 function buildRecurringDates(startDate,dows,maxN,until){
   const out=[];
   const start=parseYmd(startDate);
@@ -16572,7 +16633,7 @@ async function runRecurringBooking(opts){
   const dur=o.duration||60;
   const operator=(SESSION&&SESSION.id)||o.coach_id||null;   // SESSION 是 let，不可用 window.SESSION（2026-07-28 修正）
   // 找票券函式：預設用 listUsableTickets(依類別)；呼叫端可傳 findTicketFn(memberId, dateStr) 覆寫
-  const findTk = o.findTicketFn || (async(mid,ds)=>{ const c=await listUsableTickets(mid,o.type_id,ds,o.time); return c[0]||null; });
+  const findTk = o.findTicketFn || (async(mid,ds,ts)=>{ const c=await listUsableTickets(mid,o.type_id,ds,ts||o.time); return c[0]||null; });
   // 上限用「已開通可約堂數」而非 sessions_remaining —— 分期票未繳的期數不能先約走（2026-07-29）
   const countRemain = o.countRemainFn || (async(mid)=>{ const c=await listUsableTickets(mid,o.type_id,o.startDate,o.time); return c.reduce((s,t)=>s+tkUnlockedLeft(t),0); });
   // 1) 票券剩餘上限
@@ -16591,28 +16652,29 @@ async function runRecurringBooking(opts){
         && bkTicketTypeOk(t, o.type_id));
     }catch(_){}
   }
-  // 2) 產生日期清單
-  let dates;
+  // 2) 產生「日期＋時間」清單（2026-07-30：各天可不同時間）
+  let slots;
   if(o.dows && o.dows.length){
-    const reqCount=Math.max(1, o.count||1);
+    const reqCount=Math.min(Math.max(1, o.count||1), RECUR_MAX);   // 方案最多 12 堂
     const cap = (noDeduct||canHold) ? reqCount : Math.min(reqCount, remainTotal||0);
     const far=o.until||ymd(addDays(parseYmd(o.startDate), o.horizonDays||370));   // 結束日期（含）優先
-    dates=buildRecurringDates(o.startDate, o.dows, cap, far);
+    slots=buildRecurringSlots(o.startDate, o.time, o.dows, o.times, cap, far);
   }else{
-    dates=[o.startDate];
+    slots=[{date:o.startDate, time:o.time}];
   }
-  const total=dates.length;
+  const total=slots.length;
   const capped = (o.dows&&o.dows.length) ? (!noDeduct && !canHold && (o.count||1) > (remainTotal||0)) : false;
 
   let ok=0, skipped=0, noTicket=0, held=0;
   const results=[];
   let done=0;
-  for(const ds of dates){
+  for(const _slot of slots){
+    const ds=_slot.date, ts=_slot.time;      // 這一筆自己的日期與時間
     done++;
     if(typeof o.onProgress==='function'){ try{ o.onProgress(done,total); }catch(_){} await new Promise(r=>setTimeout(r,0)); }
     let tk=null, holdOnly=false;
     if(!noDeduct){
-      try{ tk=await findTk(o.member_id, ds); }catch(_){}
+      try{ tk=await findTk(o.member_id, ds, ts); }catch(_){}
       if(!tk){
         if(canHold) holdOnly=true;               // 分期未繳期數 → 保留時段、不扣票
         else { noTicket++; results.push({date:ds,ok:false,reason:'票券不足或已過期'}); continue; }
@@ -16622,16 +16684,16 @@ async function runRecurringBooking(opts){
       substitute_coach_id:o.substitute_coach_id||null,
       ticket_id:tk?tk.id:null, ticket_type_id:(tk&&tk.ticket_type_id)||o.type_id||null,
       category:o.category, format:o.format||null,
-      date:ds, start_time:o.time, duration:dur, status:'booked',
+      date:ds, start_time:ts, duration:dur, status:'booked',
       pending_contract:holdOnly||false,          // 分期待繳費保留（2026-07-29）
       note:holdOnly?'分期待繳費保留（收款後自動補扣）':null,
       recurring:(o.dows&&o.dows.length>0)||false, created_by:operator, created_at:new Date().toISOString()};
-    const verr=await validateBooking(bk, ds, o.time, dur);
+    const verr=await validateBooking(bk, ds, ts, dur);
     if(verr){ skipped++; results.push({date:ds,ok:false,reason:verr}); continue; }
     try{
       if(window.FEATURE_FLAGS&&FEATURE_FLAGS.createBookingRpc&&CLOUD&&!noDeduct&&tk&&!holdOnly){
         // ── Sprint 3：改由後端 RPC 單一交易建立＋扣票（旗標開啟時）──
-        const rr=await createBookingViaRpc(o, tk, ds);
+        const rr=await createBookingViaRpc(o, tk, ds, ts);
         if(rr.ok){ ok++; results.push({date:ds,ok:true}); }
         else { skipped++; results.push({date:ds,ok:false,reason:rr.reason}); }
       } else {
@@ -30804,7 +30866,8 @@ async function qbSubmitForm(){
     category:'私人教練', type_id:f.typeId, format:'1v1',
     startDate:f.date, time:f.time, duration:60,
     dows: isRec ? f.dows : [],
-    count: isRec ? Math.max(1,Math.floor(Number(f.count)||1)) : 1,   // 2026-07-29：改用次數
+    times: isRec ? (f.times||null) : null,   // 各天各自的時間（2026-07-30；教練端表單目前沿用同一時間）
+    count: isRec ? Math.min(Math.max(1,Math.floor(Number(f.count)||1)), RECUR_MAX) : 1,   // 上限 12 堂
     until: null,
     findTicketFn: ptFindTk, countRemainFn: ptCountRemain,
     onProgress:(cur,total)=>qbShowProgress(cur,total),
