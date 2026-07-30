@@ -88,14 +88,13 @@ console.log('\n管理員次選單分組');
   const items=[...html.matchAll(/<div class="subnav-item[^"]*"[^>]*>([^<]+)/g)].map(m=>m[1]);
   ok('★ 三個組別、順序為 人事 → 財務 → 環境設定',
      JSON.stringify(grps)===JSON.stringify(['人事','財務','環境設定']), grps);
-  ok('★ 17 個項目（2026-07-30 出勤整併後：出勤 1 項 → 今日出勤／出勤紀錄／打卡異常與補卡 3 項）',
-     items.length===17, items.length);
-  ok('★ 人事：出勤三頁緊接在員工管理前後，其餘制度類在後',
-     items.slice(0,11).join()==='今日出勤,員工管理,出勤紀錄,打卡異常與補卡,人資制度,薪資制度,勞健保,特休,工作規則,權限設定,教練統計',
-     items.slice(0,11));
-  ok('★ 財務：財務總覽／營運分析', items.slice(11,13).join()==='財務總覽,營運分析', items.slice(11,13));
+  ok('★ 16 個項目（出勤 1 → 3 項、人資制度移除）', items.length===16, items.length);
+  ok('★ 人事：出勤三頁緊接在員工管理前後，其餘制度類在後（已無「人資制度」）',
+     items.slice(0,10).join()==='今日出勤,員工管理,出勤紀錄,打卡異常與補卡,薪資制度,勞健保,特休,工作規則,權限設定,教練統計',
+     items.slice(0,10));
+  ok('★ 財務：財務總覽／營運分析', items.slice(10,12).join()==='財務總覽,營運分析', items.slice(10,12));
   ok('★ 環境設定：課程方案／場地・班別／合約範本／動作資料庫',
-     items.slice(13).join()==='課程方案,場地・班別,合約範本,動作資料庫', items.slice(13));
+     items.slice(12).join()==='課程方案,場地・班別,合約範本,動作資料庫', items.slice(12));
   ok('　　「系統設定」改名成看得懂的「場地・班別」', /grp:'環境設定', label:'場地・班別', page:'settings'/.test(src));
   ok('　　目前所在頁仍會高亮', /subnav-item active[^>]*>員工管理/.test(html));
   ok('　　組別標籤前面有分隔線，第一組不畫',
@@ -238,6 +237,23 @@ ok('　　小字說明有自己的樣式', /\.ov-i-note\{font-style:normal;font-
   ok('★ 726 = 教練課 412 ＋ 自主 259 ＋ 團體課 49 ＋ 體驗 6', done===726 && mix==='教練課 412・自主 259・團體課 49・體驗 6', {done,mix});
   ok('　　未簽到的課不計入', done===726);
 }
+
+
+console.log('\n右上按鈕與待審申請');
+ok('★ 移除「待審申請」按鈕', !/onclick="openStaffApplyList\(\)"/.test(src));
+ok('★ 右上只留一顆「員工申辦 QR」（原「邀請員工」改成開 QR）',
+   /actions:`<button class="btn btn-green btn-sm" onclick="openStaffSignupQR\(\)">\$\{LNI\.qr\|\|'▣'\}　員工申辦 QR<\/button>`,/.test(src)
+   && !/onclick="openStaffModal\(\)">\$\{LP_ICON\.plus\}　邀請員工/.test(src));
+ok('★ 待審申請改列在員工列表最上面（核可入口沒有消失）',
+   /const _appBlock=_apps\.length\?`<div class="st-sec st-appsec">/.test(src)
+   && /lpStats\(stats\) \+ lpToolbar\(toolbar\) \+ _appBlock \+ body/.test(src));
+ok('　　核可／婉拒直接在那一列操作',
+   /staffApplyApprove\('\$\{a\.id\}'\)">核可建帳號/.test(src) && /staffApplyReject\('\$\{a\.id\}'\)">婉拒/.test(src));
+ok('　　說明寫清楚核可後的預設密碼與後續設定', /核可後以預設密碼 <b>\$\{STAFF_DEFAULT_PW\}<\/b> 建立帳號/.test(src));
+ok('　　待審區用品牌金區隔、不可整列點開', /\.st-appsec \.st-lrow\{background:#fdfaf3;border-color:#e8d9b8;cursor:default;\}/.test(src));
+ok('　　空狀態的按鈕也改成申辦 QR', /讓第一位員工掃 QR 自行申辦帳號/.test(src));
+ok('★ 人資制度入口移除（與員工列表重複；openHrEdit 本來就只是轉開同一個員工明細）',
+   !/label:'人資制度'/.test(src) && /function openHrEdit\(id\)\{ return openPersonProfile\('employee', id\); \}/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

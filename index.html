@@ -449,6 +449,10 @@ select option{color:var(--text);}
 .st-card.st-off{opacity:.62;}
 /* ── 員工列表（2026-07-30 使用者指示：改回列表，保留開關與齒輪）── */
 .st-list{display:flex;flex-direction:column;gap:6px;}
+/* 待審申請區（2026-07-30）：列在員工列表最上面，用品牌金區隔 */
+.st-appsec .st-lrow{background:#fdfaf3;border-color:#e8d9b8;cursor:default;}
+.st-appsec .st-lrow:hover{background:#fdfaf3;}
+.st-approw .st-l-sw{display:flex;gap:6px;}
 .st-lrow{position:relative;display:flex;align-items:center;gap:12px;padding:11px 44px 11px 16px;
   background:var(--card,#fff);border:1px solid var(--bd);border-radius:12px;cursor:pointer;
   border-left:4px solid var(--pc,#8a8478);transition:border-color .12s,background-color .12s;}
@@ -6341,8 +6345,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1246';
-const APP_VERSION_LABEL='v260730.1246';
+const APP_VERSION = '260730.1250';
+const APP_VERSION_LABEL='v260730.1250';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7472,7 +7476,8 @@ const ADMIN_NAV2=[
     {grp:'人事', label:'員工管理', page:'staff', tab:'list'},
     {grp:'人事', label:'出勤紀錄', page:'staff', tab:'records'},
     {grp:'人事', label:'打卡異常與補卡', page:'staff', tab:'punchfix'},
-    {grp:'人事', label:'人資制度', page:'hr',    tab:'staff_data'},
+    /* 2026-07-30 使用者指示：「人資制度」那份列表與員工列表重複（openHrEdit 本來就只是
+         轉去開同一個員工明細），入口移除。PAGES.hr 保留，舊的 navTo('hr') 呼叫仍可用。 */
     {grp:'人事', label:'薪資制度', page:'staff', tab:'payroll'},
     {grp:'人事', label:'勞健保',   page:'staff', tab:'insurance'},
     {grp:'人事', label:'特休',     page:'staff', tab:'leave'},
@@ -21486,9 +21491,10 @@ async function renderStaffList(){
       { value:_stStatus, options:statusOpts, onchange:'stSetStatus(this.value)' },
     ],
     sort:{ value:_stSort, options:sortOpts, onchange:'stSetSort(this.value)' },
-    actions:`<button class="btn btn-ghost btn-sm" onclick="openStaffApplyList()">${LNI.book||'▤'}　待審申請<span id="st-app-n"></span></button>`
-      +`<button class="btn btn-ghost btn-sm" onclick="openStaffSignupQR()">${LNI.qr||'▣'}　申辦 QR</button>`
-      +`<button class="btn btn-green btn-sm" onclick="openStaffModal()">${LP_ICON.plus}　邀請員工</button>`,
+    /* 2026-07-30 使用者指示：右上移除「待審申請」；「邀請員工」改成開申辦 QR，
+       讓新員工自己掃碼辦帳號。待審的申請不會因此沒人管 —— 改成直接列在員工列表最上面
+       （見下方 _appBlock），比藏在按鈕後面更難漏掉。 */
+    actions:`<button class="btn btn-green btn-sm" onclick="openStaffSignupQR()">${LNI.qr||'▣'}　員工申辦 QR</button>`,
   };
 
   // Table（2026-07-21 清單簡化：狀態欄退場——非常態〔待填寫/待設定/留停/停用〕改為姓名旁掛章，
@@ -21540,8 +21546,8 @@ async function renderStaffList(){
   let body;
   if(staffAll.length===0){
     body = lpEmpty('還沒有任何員工',
-      '邀請第一位員工後，就能安排排班、記錄出勤與計算薪資。',
-      `<button class="btn btn-green btn-sm" onclick="openStaffModal()">${LP_ICON.plus}　邀請員工</button>`);
+      '讓第一位員工掃 QR 自行申辦帳號，核可後就能安排排班、記錄出勤與計算薪資。',
+      `<button class="btn btn-green btn-sm" onclick="openStaffSignupQR()">${LNI.qr||'▣'}　員工申辦 QR</button>`);
   } else if(filtered.length===0){
     body = lpEmpty('找不到符合條件的員工',
       '試試調整搜尋關鍵字，或清除目前的篩選條件。',
@@ -21593,6 +21599,27 @@ async function renderStaffList(){
       : '').join('');
   }
 
+  /* 待審申請（2026-07-30 使用者指示：右上的按鈕移除，改直接列在列表最上面）——
+     新員工掃 QR 填完資料會進 staff_applications，核可才建立登入帳號。 */
+  let _apps=[];
+  try{ _apps=(await sb.from('staff_applications').select('*').eq('status','pending')
+    .order('created_at',{ascending:true})).data||[]; }catch(_){}
+  const _appBlock=_apps.length?`<div class="st-sec st-appsec">
+    <div class="st-sec-t" style="color:var(--gold-d,#b48a56);">待審申請<span class="st-sec-n">${_apps.length}</span></div>
+    <div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin:-2px 0 8px;">
+      新員工掃「員工申辦 QR」填完資料會出現在這裡。核可後以預設密碼 <b>${STAFF_DEFAULT_PW}</b> 建立帳號（帳號＝手機），他首次登入須自行改密碼；職務與薪資制度在核可後於員工明細設定。</div>
+    <div class="st-list">${_apps.map(a=>`<div class="st-lrow st-approw" style="--pc:var(--gold-d,#b48a56);">
+      <span class="st-l-ava">${genderAvatarSVG(a.gender)}</span>
+      <span class="st-l-who">
+        <span class="st-l-nm">${a.name||'—'}${a.name_en?`<i>${String(a.name_en).toUpperCase()}</i>`:''}<span class="tag tag-warn" style="font-size:10.5px;">待核可</span></span>
+        <span class="st-l-sub">${fmtPhone(a.phone)}　${a.job_title||'—'}　申請日 ${String(a.created_at||'').slice(0,10)}</span>
+      </span>
+      <span class="st-l-sw">
+        <button class="btn btn-ghost btn-sm" style="color:#b5372e;" onclick="staffApplyReject('${a.id}')">婉拒</button>
+        <button class="btn btn-green btn-sm" onclick="staffApplyApprove('${a.id}')">核可建帳號</button>
+      </span>
+    </div>`).join('')}</div>
+  </div>`:'';
   // 設備帳號（次級區塊，非人事員工）
   const devCols=[
     {label:'帳號名稱', width:'2fr'},
@@ -21626,7 +21653,7 @@ async function renderStaffList(){
     </div>`;
 
   document.getElementById('staff-body').innerHTML =
-    lpStats(stats) + lpToolbar(toolbar) + body
+    lpStats(stats) + lpToolbar(toolbar) + _appBlock + body
     + lpPager({ page:_stPage, size:_stSize, total:filtered.length,
                 onpage:'stGoPage({p})', onsize:'stSetSize(this.value)' })
     + deviceSection;
