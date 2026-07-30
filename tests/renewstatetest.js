@@ -29,8 +29,9 @@ console.log('\n顏色定義');
 ok('★ 綠勾用品牌綠', /\.ev-pa-ok\{background:var\(--green,#1f6f54\);color:#fff;\}/.test(src));
 ok('★ 紅叉與紅字提醒用 danger', /\.ev-pa-no\{background:var\(--danger,#b5372e\)/.test(src)
    && /\.ev-pa-warn\{background:var\(--danger,#b5372e\)/.test(src));
-ok('★ 待處理的課卡整張反紅',
-   /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,200}background:rgba\(181,55,46,\.12\) !important;/.test(src));
+ok('★ 待處理的課卡整張反紅（2026-07-30 改不透明底色，避免課卡看起來變透明）',
+   /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,240}background:color-mix\(in srgb,var\(--danger,#b5372e\) 10%,#fff\) !important;/.test(src)
+   && !/background:rgba\(181,55,46,\.12\) !important/.test(src));
 ok('★ 只有未繳費才反紅（2026-07-30 定案）',
    /const _alertCls = _isUnpaid \? ' cal-ev-renew'/.test(src));
 ok('★ 最後一堂／分期繳費只留右上角驚嘆號，不整張反紅',
@@ -122,6 +123,20 @@ ok('★ 圖例顏色與圓點同一份色表（不會兩邊對不上）',
 ok('　　沒有課時不顯示提示', /const taskHint=_cardDots\?/.test(src));
 ok('　　提示插在標題與圓點之間', /\$\{taskHint\}\s*\n\s*\$\{_cardDots\?/.test(src));
 ok('　　圖例可換行、不撐破畫面', /\.mem-lgs\{display:flex;flex-wrap:wrap;/.test(src));
+
+
+console.log('\n紅／金框不再讓課卡透明（2026-07-30 使用者回報）');
+ok('★ 兩種提示底色都改成不透明（color-mix 混白）',
+   /background:color-mix\(in srgb,var\(--danger,#b5372e\) 10%,#fff\) !important;/.test(src)
+   && /background:color-mix\(in srgb,var\(--gold-d,#b48a56\) 12%,#fff\) !important;/.test(src));
+ok('★ 舊的半透明底色完全移除',
+   !/background:rgba\(181,55,46,\.12\) !important/.test(src)
+   && !/background:rgba\(180,138,86,\.14\) !important/.test(src));
+ok('　　邊框與內圈仍是提示色（提示效果不變）',
+   /\.cal-ev-renew \.evc-body\{[\s\S]{0,120}border-color:var\(--danger,#b5372e\) !important;/.test(src)
+   && /\.cal-ev-newtoday \.evc-body\{[\s\S]{0,120}border-color:var\(--gold-d,#b48a56\) !important;/.test(src));
+ok('　　原因寫在程式裡', /半透明底色（rgba \.12\/\.14）疊在課程色塊上，會透出下面的行事曆格線/.test(src));
+ok('　　手機端共用同一組 class，一併生效', /const _mkAlert = _unpaidM \? ' cal-ev-renew'/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
