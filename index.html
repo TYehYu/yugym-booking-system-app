@@ -6589,8 +6589,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.2225';
-const APP_VERSION_LABEL='v260730.2225';
+const APP_VERSION = '260730.2227';
+const APP_VERSION_LABEL='v260730.2227';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12953,8 +12953,11 @@ async function renderCalendar(opts){
       const gIds=mids(b);
       const acting=b.substitute_coach_id||b.coach_id;
       const isMine = opts.me && acting===opts.me;
-      // 教練端（含全部預約模式）：自己的課顯示會員名；別的教練的課隱藏會員名
-      const hideMember = ((opts.me && !isMine) || bkIsMasked(b)) && !(SESSION&&SESSION.is_manager);   // 店長可讀全部（2026-07-29）
+      /* 2026-07-30 使用者指示：教練也開放看其他預約課卡的會員名字，只是關閉互動功能。
+         原本別的教練的課會把會員名換成課程種類（隱私考量），現在一律顯示真名；
+         「不能動別人的課」改由 cal-ev-noint（整張不吃事件）＋ coachOwnsBk（各入口把關）負責。
+         bkIsMasked 保留 —— 它還在控制別人的課卡要不要淡化（視覺區隔），不再管名字。 */
+      const hideMember = false;
       if(hideMember){
         // 別的教練的課：隱藏會員名，顯示課程類型（如「教練課」「自主訓練」）
         memName = {'私人教練':'教練課','自主訓練':'自主訓練','體驗':'體驗','小班肌力':'團體課'}[b.category] || typeName;
@@ -14271,6 +14274,8 @@ PAGES.calendar=async function(){
      排課才知道時段被佔住），互動則由 cal-ev-noint 整個關掉。 */
   const _isCoachView = SESSION.role==='coach' && !SESSION.is_manager;
   const calOpts={coachFilter:true,onSlot:'quickBookAt',editable:true,stepping:_stepping,
+    /* me＝判斷哪張是自己的（關互動、標 own）；maskOthers＝別人的課仍畫出來（時段佔用要看得到）。
+       會員名字不再隱藏（2026-07-30 使用者指示），見 renderCalendar 的 hideMember。 */
     ...(_isCoachView?{me:SESSION.id, maskOthers:true}:{})};
   const bc = scoped ? scopeBreadcrumb('員工管理','教學') : '';
   const sb = scoped ? lpScopeBar('教學排程') : '';
@@ -14891,19 +14896,14 @@ async function renderCoachAgenda(){
     const canClick = layer==='mine' || isAdmin;
     /* 名稱行沿用原邏輯（2026-07-23）：自己的課＝會員名／團 N（可互動）；
        別的教練的課＝教練名、不可互動（管理員仍可點所有卡）。 */
+    /* 2026-07-30 使用者指示：教練也開放看其他預約課卡的會員名字，只是關閉互動功能。
+       原本別人的課只顯示授課教練名，現在一律顯示會員名（不能點仍由 cag-noint 控制）。 */
     let disp;
-    if(layer==='mine' || isAdmin){   // 店長/管理員：別人的課也顯示會員名（2026-07-29）
-      if(b.category==='小班肌力'||(Array.isArray(b.member_ids)&&b.member_ids.length)){
-        const n=(Array.isArray(b.member_ids)?b.member_ids.length:0); disp=n>0?`團 ${n}`:'團體課';
-      }else if(b.category==='體驗'){ disp=b.trial_name?b.trial_name+'（體驗）':'體驗課'; }
-      else if(b.member_id){ disp=memMap[b.member_id]||'—'; }
-      else disp={'自主訓練':'自主訓練','場租':'場租'}[b.category]||'課程';
-    }else{
-      const _cid0=b.substitute_coach_id||b.coach_id;
-      const _co0=_cid0?coachObj[_cid0]:null;
-      disp=_co0?coachDisp(_co0):({'自主訓練':'自主','場租':'場租'}[b.category]||'—');
-      if((layer==='group'||b.category==='小班肌力')&&_co0) disp=coachDisp(_co0);   // 團課也標授課教練
-    }
+    if(b.category==='小班肌力'||(Array.isArray(b.member_ids)&&b.member_ids.length)){
+      const n=(Array.isArray(b.member_ids)?b.member_ids.length:0); disp=n>0?`團 ${n}`:'團體課';
+    }else if(b.category==='體驗'){ disp=b.trial_name?b.trial_name+'（體驗）':'體驗課'; }
+    else if(b.member_id){ disp=memMap[b.member_id]||'—'; }
+    else disp={'自主訓練':'自主訓練','場租':'場租'}[b.category]||'課程';
     /* 卡片視覺改桌機版標準卡（2026-07-26 使用者指示）：cal-ev-std 淡彩置中設計
        （時間／名稱／第三行教練縮寫 tag；簽到＝右下「簽」章，底色維持課程淡彩）。 */
     const _cc=bkCC(b);
