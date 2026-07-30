@@ -152,10 +152,19 @@ console.log('\n員工重設密碼');
      /密碼已還原，但「強制改密碼」設定失敗/.test(src));
   ok2('   首次登入頁不接受沿用預設密碼', /if\(p1===STAFF_DEFAULT_PW\)\{err\.textContent='請勿沿用預設密碼/.test(src));
   ok2('   視窗上直接把預設密碼顯示出來給櫃檯轉告', /letter-spacing:\.14em;text-align:center;font-family:var\(--num\),inherit;">\$\{STAFF_DEFAULT_PW\}/.test(src));
+  ok2('\u2605 帶管理員自己的 JWT，不是 anon key（2026-07-30 FORBIDDEN 真因）',
+     /'Authorization':'Bearer '\+jwt,'apikey':window\.YUGYM_CONFIG\.anonKey/.test(src)
+     && /const s=await sb\.auth\.getSession\(\); if\(s&&s\.data&&s\.data\.session\) jwt=s\.data\.session\.access_token;/.test(src));
+  ok2('\u2605 沒有登入 token 就先講，不要送出去被 403',
+     /if\(!jwt\)\{showToast\('登入狀態已過期，請重新登入後再試'\);return;\}/.test(src));
+  ok2('\u2605 403 給看得懂的訊息（不是丟 FORBIDDEN 給櫃檯看）',
+     /res\.status===403\|\|\/FORBIDDEN\/i\.test\(msg\)/.test(src)
+     && /重設密碼只有管理員帳號可以操作，請用管理員登入/.test(src));
+  ok2('\u2605 非管理員連視窗都不開', /if\(!\(SESSION && SESSION\.role==='admin'\)\)\{showToast\('重設密碼只有管理員帳號可以操作'\);return;\}/.test(src));
+  ok2('   按鈕本身也只給管理員看', /const pwBtn = \(!isM && r\.phone && SESSION && SESSION\.role==='admin'\)/.test(src));
   ok2('\u2605 員工明細右上就有「重設密碼」（不用翻到系統資料分頁）',
-     /const pwBtn = \(!isM && r\.phone && isDeskLike\(\)\)/.test(src)
-     && /\? `<button class="btn btn-ghost btn-sm" onclick="openResetStaffPw\('\$\{r\.id\}'\)">重設密碼<\/button>` : ''/.test(src));
-  ok2('   會員的明細不會出現這顆鈕', /!isM && r\.phone/.test(src));
+     /\? `<button class="btn btn-ghost btn-sm" onclick="openResetStaffPw\('\$\{r\.id\}'\)">重設密碼<\/button>` : ''/.test(src));
+  ok2('   會員的明細不會出現這顆鈕', /\(!isM && r\.phone &&/.test(src));
   ok2('   編輯模式下讓位給取消／儲存', /PP\.editing[\s\S]{0,200}: \(isM \? '' : pwBtn\+/.test(src));
   ok2('   沒有手機帳號的員工擋掉', /if\(!c\.phone\)\{showToast\('此員工沒有手機帳號，無法重設'\);return;\}/.test(src));
 }

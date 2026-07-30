@@ -6131,8 +6131,8 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
   <!-- 教練端手機版：右下浮動打卡 FAB -->
   <button id="punch-fab" class="punch-fab" style="display:none;"></button>
   <!-- 教練端手機版：底部固定導覽列 -->
-const APP_VERSION = '260730.0922';
-const APP_VERSION_LABEL='v260730.0922';
+const APP_VERSION = '260730.0928';
+const APP_VERSION_LABEL='v260730.0928';
 
 <div id="toast"></div>
 
@@ -21958,7 +21958,8 @@ function ppHeaderHtml(){
      員工資料欄位多，維持編輯模式按鈕。 */
   /* 2026-07-30 使用者回報「員工的重設密碼找不到地方按」——原本只在員工列表的鑰匙小圖示
      和「系統資料」分頁裡面，員工忘記密碼時要翻三層才找到。移到表頭右上，跟「編輯」並排。 */
-  const pwBtn = (!isM && r.phone && isDeskLike())
+  // 只有管理員能重設（Edge Function 會反查 employees.role，其他角色一律 403）
+  const pwBtn = (!isM && r.phone && SESSION && SESSION.role==='admin')
     ? `<button class="btn btn-ghost btn-sm" onclick="openResetStaffPw('${r.id}')">重設密碼</button>` : '';
   const act = PP.editing
     ? `<button class="btn btn-ghost btn-sm" onclick="ppCancel()">取消</button>
@@ -22989,6 +22990,8 @@ function hrTypeHint(){
    一鍵還原成預設密碼 88888888，並把 must_setup 打開，他下次登入會被帶到
    「首次登入設定」自己設一組新的（那頁不接受沿用預設密碼）。 */
 function openResetStaffPw(id){
+  // 後端只認管理員（Edge Function 反查 employees.role）→ 先在這裡講清楚，不要點下去才 403
+  if(!(SESSION && SESSION.role==='admin')){showToast('重設密碼只有管理員帳號可以操作');return;}
   dbGet('coaches',id).then(c=>{
     if(!c){showToast('找不到員工');return;}
     if(!c.phone){showToast('此員工沒有手機帳號，無法重設');return;}
@@ -23011,14 +23014,27 @@ async function submitResetStaffPw(){
   const email=toEmail('staff',phone);
   try{
     const base=window.YUGYM_CONFIG.url.replace(/\/$/,'');
+    /* ⚠ 必須帶「管理員自己的 JWT」，不是 anon key（2026-07-30 使用者回報 FORBIDDEN）——
+       Edge Function 加固版 v4 起會拿這個 token 反查 employees.role 必須是 admin；
+       送 anon key 反查不到人就一律 403。建立帳號那邊（cloudCreateAuth）早就這樣做了，
+       只有重設密碼漏改。 */
+    let jwt=null;
+    try{ const s=await sb.auth.getSession(); if(s&&s.data&&s.data.session) jwt=s.data.session.access_token; }catch(_){}
+    if(!jwt){showToast('登入狀態已過期，請重新登入後再試');return;}
     // 統一改打 create-staff-account：以 action 區分「建立」與「重設密碼」，後端只需維護一支 Edge Function
     const res=await fetch(base+'/functions/v1/create-staff-account',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+window.YUGYM_CONFIG.anonKey,'apikey':window.YUGYM_CONFIG.anonKey},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+jwt,'apikey':window.YUGYM_CONFIG.anonKey},
       body:JSON.stringify({action:'reset_password',email,password:STAFF_DEFAULT_PW})
     });
     const out=await res.json();
-    if(!res.ok||out.error){showToast('重設失敗：'+(out.error||('伺服器回應 '+res.status)));return;}
+    if(!res.ok||out.error){
+      const msg=String(out.error||('伺服器回應 '+res.status));
+      showToast(res.status===403||/FORBIDDEN/i.test(msg)
+        ? '重設密碼只有管理員帳號可以操作，請用管理員登入'
+        : '重設失敗：'+msg);
+      return;
+    }
     /* 打開 must_setup → 他下次登入會被強制設定自己的密碼。
        這步失敗不能默默過去：不然密碼已還原成大家都知道的 88888888 卻不強制改。 */
     try{
