@@ -152,6 +152,11 @@ console.log('\n員工重設密碼');
      /密碼已還原，但「強制改密碼」設定失敗/.test(src));
   ok2('   首次登入頁不接受沿用預設密碼', /if\(p1===STAFF_DEFAULT_PW\)\{err\.textContent='請勿沿用預設密碼/.test(src));
   ok2('   視窗上直接把預設密碼顯示出來給櫃檯轉告', /letter-spacing:\.14em;text-align:center;font-family:var\(--num\),inherit;">\$\{STAFF_DEFAULT_PW\}/.test(src));
+  ok2('\u2605 員工明細右上就有「重設密碼」（不用翻到系統資料分頁）',
+     /const pwBtn = \(!isM && r\.phone && isDeskLike\(\)\)/.test(src)
+     && /\? `<button class="btn btn-ghost btn-sm" onclick="openResetStaffPw\('\$\{r\.id\}'\)">重設密碼<\/button>` : ''/.test(src));
+  ok2('   會員的明細不會出現這顆鈕', /!isM && r\.phone/.test(src));
+  ok2('   編輯模式下讓位給取消／儲存', /PP\.editing[\s\S]{0,200}: \(isM \? '' : pwBtn\+/.test(src));
   ok2('   沒有手機帳號的員工擋掉', /if\(!c\.phone\)\{showToast\('此員工沒有手機帳號，無法重設'\);return;\}/.test(src));
 }
 
