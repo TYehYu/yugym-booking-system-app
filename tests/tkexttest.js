@@ -148,11 +148,24 @@ console.log('\n更新畫面按鈕統一（2026-07-30 使用者指示：放在標
 ok('★ 抽成共用的一顆鈕', /function refreshBtn\(cls\)\{ return `<button type="button" class="rf-btn/.test(src)
    && /const RF_ICON=/.test(src));
 // 二修：使用者要的是「頂欄時鐘的左邊」，不是頁面標題列 → 全站只留頂欄那一顆
-ok('★ 頂欄時鐘左邊有一顆（全站唯一入口）',
+ok('★ 教練／手機頂列：#tb-refresh 排在 #tb-clock 左邊',
    /<button type="button" class="rf-btn" id="tb-refresh" title="更新畫面（重新抓取最新資料）"\s*\n\s*aria-label="更新畫面" onclick="dashManualRefresh\(\)"><\/button>\s*\n\s*<span id="tb-clock" class="tb-clock"><\/span>/.test(src));
+/* 三修：桌機管理版（body.mc-mode）整條 .tb-right 是 display:none，看得見的時鐘是
+   頂列的 #mc-topclock —— 按鈕做在 .tb-right 裡等於看不到（使用者回報「按鈕不見了」）。 */
+ok('★ 桌機管理版頂列：#mc-refresh 排在 #mc-topclock 左邊',
+   /<button type="button" class="rf-btn mc-rf" id="mc-refresh" title="更新畫面（重新抓取最新資料）"\s*\n\s*aria-label="更新畫面" onclick="dashManualRefresh\(\)">\$\{RF_ICON\}<\/button>\s*\n\s*<span class="mc-topclock" id="mc-topclock">/.test(src));
+ok('　　靠右對齊由按鈕接手，時鐘的 margin-left:auto 讓給它',
+   /body\.mc-mode \.mc-rf\{margin-left:auto;/.test(src)
+   && /body\.mc-mode \.mc-rf \+ \.mc-topclock\{margin-left:0;\}/.test(src));
+ok('　　非 mc-mode 時這顆不顯示（避免兩顆同時出現）', /body:not\(\.mc-mode\) \.mc-rf\{display:none;\}/.test(src));
+ok('　　綠底頂列上的配色（半透明白底＋淺色圖示）',
+   /body\.mc-mode \.mc-rf\{[\s\S]{0,180}background:rgba\(255,255,255,\.1\);border:1px solid rgba\(255,255,255,\.18\);color:#F4F1E8;/.test(src));
+ok('　　側欄重繪也不會掉圖示（直接寫在 template 裡，不靠 init）',
+   /aria-label="更新畫面" onclick="dashManualRefresh\(\)">\$\{RF_ICON\}<\/button>/.test(src));
+ok('　　兩顆都在 initTopRefresh 的清單裡', /\['tb-refresh','mc-refresh'\]\.forEach/.test(src));
 ok('★ 頁內三處都不再放（不重複入口）', !/\$\{refreshBtn\(\)\}/.test(src));
-ok('　　圖示在啟動時填入（topbar HTML 排在腳本之前）',
-   /function initTopRefresh\(\)\{ const el=document\.getElementById\('tb-refresh'\); if\(el && !el\.innerHTML\) el\.innerHTML=RF_ICON; \}/.test(src)
+ok('　　#tb-refresh 的圖示在啟動時填入（那段 topbar HTML 排在腳本之前）',
+   /function initTopRefresh\(\)\{\s*\n\s*\['tb-refresh','mc-refresh'\]\.forEach\(id=>\{/.test(src)
    && /initTopRefresh\(\);   \/\/ 時鐘左邊那顆「更新畫面」的圖示/.test(src));
 ok('　　頂欄尺寸與時鐘對齊、深色模式另有配色',
    /\.topbar \.tb-right \.rf-btn\{width:30px;height:30px;margin-right:2px;color:var\(--green\);\}/.test(src)
