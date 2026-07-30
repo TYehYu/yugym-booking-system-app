@@ -5022,7 +5022,7 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 @media (max-width:900px){ #desk-feed{display:none;} }
 /* 待簽約卡位的主要動作：獨佔一列放最下方（2026-07-29 使用者指示） */
 .modal-foot .btn.bkd-signup{flex:1 0 100%;margin-top:2px;font-weight:700;}
-/* 待簽約名單：續約狀態標籤與手動標記鈕（2026-07-29） */
+/* 付款名單：續約狀態標籤與手動標記鈕（2026-07-29；2026-07-30 改名為付款名單） */
 .tdl-row2{display:flex;align-items:center;gap:8px;padding:0;}
 .tdl-main{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:transparent;
   border:none;padding:10px 12px;cursor:pointer;font-family:inherit;text-align:left;}
@@ -5032,6 +5032,10 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tdl-b:hover{color:var(--text);}
 .tdl-b.on{background:var(--gold-d,#b48a56);border-color:var(--gold-d,#b48a56);color:#fff;font-weight:700;}
 .tdl-rs{margin-left:7px;font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 8px;}
+/* 付款名單的上課時間（2026-07-30 使用者指示）：一般續課用品牌金、待付費用品牌紅 */
+.tdl-tm{margin-left:7px;font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;
+  font-family:var(--num),inherit;background:rgba(180,138,86,.16);color:var(--gold-d,#b48a56);}
+.tdl-tm-pay{background:rgba(181,55,46,.12);color:var(--danger,#b5372e);}
 .tdl-rs-ok{background:var(--sage-bg);color:var(--green);}
 .tdl-rs-gold{background:#f7efe0;color:#8a5e28;}
 .tdl-rs-no{background:#fbeaea;color:var(--danger,#b5372e);}
@@ -6148,8 +6152,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.0952';
-const APP_VERSION_LABEL='v260730.0952';
+const APP_VERSION = '260730.0957';
+const APP_VERSION_LABEL='v260730.0957';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10362,7 +10366,8 @@ PAGES.g_dashboard=async function(){
      會員名單（簽約／即將降級）點列進會員資料；未打卡名單只顯示不互動。
      名單資料掛 window._todoLists 供 openTodoList() 取用。 */
   const _todoItems=[];
-  /* 今日待簽約名單（2026-07-25 使用者指示，取代「今日簽約名單」）：
+  /* 今日付款名單（2026-07-30 使用者指示改名，原「今日待簽約名單」）：
+     櫃檯要一眼知道今天有哪些人要收款 —— 含團體課，以及今天要簽約的新客戶，並標上課時間。
      今天有 教練課/友善(私人教練) 或 團體課(小班肌力) 的預約，且該堂是「最後一堂」——
      ① 分期票開通段最後一堂（需繳下期）② 整張票快用完的最後一堂（需續課）。與行事曆 💰/🔁 同源。 */
   const _typeMapD=Object.fromEntries((types||[]).map(t=>[t.id,t]));
@@ -10433,37 +10438,69 @@ PAGES.g_dashboard=async function(){
     const rem=Number(tk.sessions_remaining)||0;
     (_memGrpLeft[tk.member_id]=_memGrpLeft[tk.member_id]||{})[g]=((_memGrpLeft[tk.member_id]||{})[g]||0)+rem;
   });
+  /* 團體課的最後一堂（2026-07-30 使用者指示：付款名單要含團體課）——
+     團課預約不綁 ticket_id（一筆多位學員，欄位放不下），上面那套以票券為主的判定
+     完全撈不到團課，所以團課從來沒進過這份名單。
+     改用會員層判定：今天有團課、該會員團課餘額已 0、且今天之後沒有別的團課預約
+     → 今天就是他這期的最後一堂，要收下一期的錢。 */
+  const _futGrpByMem={};
+  (bookings||[]).forEach(b=>{
+    if(b.category!=='小班肌力' || b.status==='cancelled') return;
+    if((b.date||'').slice(0,10)<=date) return;
+    ((Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]))
+      .forEach(mid=>{ _futGrpByMem[mid]=(_futGrpByMem[mid]||0)+1; });
+  });
   const _signBy={};
   (bookings||[]).forEach(b=>{
     if((b.date||'').slice(0,10)!==date) return;
     if(b.status==='cancelled') return;
     if(b.category!=='私人教練' && b.category!=='小班肌力') return;
-    const kind=_lastBk[b.id]; if(!kind) return;
-    const g=b.category==='私人教練'?'pt':'grp';
+    const isGrp=b.category==='小班肌力';
+    const g=isGrp?'grp':'pt';
     const mids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
     /* 2026-07-29 使用者定案（三修）：已續約的不從名單消失，改標綠勾 ——
        原本一買新票就整列不見，隔天卻又因為別的原因跳回來，看起來像「消失又出現」。
        留在名單上、狀態標清楚，老闆才看得出這筆到底談完了沒。 */
     mids.forEach(mid=>{ const m=memMap[mid]; if(!m) return;
-      const e=(_signBy[mid]=_signBy[mid]||{id:mid,name:m.name,tags:new Set(),tkid:b.ticket_id||null,bkid:b.id});
+      let kind=_lastBk[b.id];
+      if(!kind && isGrp){
+        const left=((_memGrpLeft[mid]||{}).grp)||0;
+        if(left===0 && !(_futGrpByMem[mid]>0)) kind='renew';
+      }
+      if(!kind) return;
+      const e=(_signBy[mid]=_signBy[mid]||{id:mid,name:m.name,tags:new Set(),times:new Set(),tkid:b.ticket_id||null,bkid:b.id});
       if(!e.tkid && b.ticket_id) e.tkid=b.ticket_id;
-      e.tags.add(kind==='install'?'分期繳費':'續課'); });
+      e.tags.add((isGrp?'團體課・':'教練課・')+(kind==='install'?'分期繳費':'續課'));
+      if(b.start_time) e.times.add(String(b.start_time).slice(0,5)); });
   });
   /* 續約狀態：已續約＝這筆預約已被標為「已續約」（同類別有更新的票，見 computeLastBkMarks）；
      考慮中／不續約＝櫃檯手動標在票券上（renew_status）。 */
   const _tkById={}; (mtickets||[]).forEach(t=>{ _tkById[t.id]=t; });
+  const _tsort=s=>[...s].sort()[0]||'';
   const _signList=Object.values(_signBy).map(e=>{
     const tk=e.tkid?_tkById[e.tkid]:null;
     const done=!!(window._renewDoneBk&&window._renewDoneBk[e.bkid]);
     const st= done ? 'renewed' : ((tk&&tk.renew_status)||'');
-    return {id:e.id,name:e.name,sub:[...e.tags].join('・'),tkid:e.tkid||'',rs:st};
-  }).sort((a,b)=>{ const w=x=>x.rs==='renewed'?2:(x.rs==='declined'?3:(x.rs==='considering'?1:0));
-    return w(a)-w(b) || String(a.name).localeCompare(String(b.name)); });
-  const _signNames=_signList.map(x=>x.name);
+    return {id:e.id,name:e.name,sub:[...e.tags].join('・'),tkid:e.tkid||'',rs:st,time:[...e.times].sort().join('、')};
+  });
+  /* 今天要簽約的新客戶（2026-07-30 使用者指示）——「待簽約卡位」與「分期待繳費保留」
+     這兩種課卡都是還沒收到錢就先佔住時段，今天上課前一定要收款，所以也要進這份名單。 */
+  (bookings||[]).forEach(b=>{
+    if((b.date||'').slice(0,10)!==date || b.status==='cancelled') return;
+    if(!b.pending_contract) return;
+    const nm=b.member_id?((memMap[b.member_id]||{}).name||'會員'):(b.trial_name||'客戶');
+    _signList.push({id:b.member_id||'', name:nm, tkid:'', rs:'',
+      sub:(b.member_id?'分期待繳費・':'新客戶簽約・')+(b.category||''),
+      time:String(b.start_time||'').slice(0,5), pay:true});
+  });
+  _signList.sort((a,b)=>{ const w=x=>x.rs==='renewed'?2:(x.rs==='declined'?3:(x.rs==='considering'?1:0));
+    return w(a)-w(b) || String(a.time||'99:99').localeCompare(String(b.time||'99:99'))
+        || String(a.name).localeCompare(String(b.name)); });
+  const _signNames=_signList.map(x=>x.time?`${x.name}（${x.time}）`:x.name);
   const _l=_signNames.length
-    ? _signNames.slice(0,6).join('、')+(_signNames.length>6?` 等 ${_signNames.length} 人`:'')
-    : '今日無待簽約';
-  _todoItems.push(_todoRow(OPS_TODO_IC.money,'今日待簽約名單',_l,_signNames.length,'ok',"openTodoList('sign')"));
+    ? _signNames.slice(0,5).join('、')+(_signNames.length>5?` 等 ${_signNames.length} 人`:'')
+    : '今日無人待收款';
+  _todoItems.push(_todoRow(OPS_TODO_IC.money,'今日付款名單',_l,_signNames.length,'ok',"openTodoList('sign')"));
   // 即將降級：附上本月至今的教練課簽到堂數，櫃台一眼知道還差幾堂
   const _thisYm=date.slice(0,7);
   const _ptCntThisMonth={};
@@ -10503,7 +10540,8 @@ PAGES.g_dashboard=async function(){
     : '今日打卡皆正常';
   _todoItems.push(_todoRow(OPS_TODO_IC.check,'今日未打卡名單',_l3,_noPunch.length,'gold',"openTodoList('nopunch')"));
   window._todoLists={
-    sign:{title:'今日待簽約名單',items:_signList,empty:'今日無待簽約',note:'今天是最後一堂（教練課／友善教練課／團體課，分期繳費或續課）；點會員可進入會員資料'},
+    sign:{title:'今日付款名單',items:_signList,empty:'今日無人待收款',
+      note:'今天要向這些人收款：教練課／友善教練課／團體課的最後一堂（續課或分期繳費），以及待簽約卡位的新客戶。名字後面是上課時間；點會員可進入會員資料'},
     demote:{title:'本月即將降級名單',items:_demoteList,empty:'本月尚無即將降級的會員',
       note:'主顧客且上個完整月未達 4 堂教練課；本月結束仍未達，下月 1 日降級。點會員可進入會員資料'},
     nopunch:{title:'今日未打卡名單',items:_noPunchList,empty:'今日打卡皆正常',note:''}
@@ -10630,7 +10668,10 @@ function openTodoList(kind){
      標了就不再天天催，但名單仍看得到結果，老闆一眼知道這筆續約談完了沒。 */
   const RS={renewed:['✓ 已續約','ok'],considering:['考慮中','gold'],declined:['✕ 不續約','no']};
   const tag=(it)=>{ const r=RS[it.rs]; return r?`<span class="tdl-rs tdl-rs-${r[1]}">${r[0]}</span>`:''; };
-  const body=(it)=>`${ava(it.name)}<span class="tdl-tx"><span class="tdl-n">${it.name||'—'}${tag(it)}</span>${it.sub?`<span class="tdl-s">${it.sub}</span>`:''}</span>`;
+  /* 上課時間標在名字旁邊（2026-07-30 使用者指示：櫃檯要知道幾點見得到人）。
+     待付費的（待簽約卡位／分期保留）用品牌紅，一般續課用金色 —— 紅 > 金 的色階。 */
+  const tm=(it)=>it.time?`<span class="tdl-tm${it.pay?' tdl-tm-pay':''}">${it.time}</span>`:'';
+  const body=(it)=>`${ava(it.name)}<span class="tdl-tx"><span class="tdl-n">${it.name||'—'}${tm(it)}${tag(it)}</span>${it.sub?`<span class="tdl-s">${it.sub}</span>`:''}</span>`;
   const acts=(it)=>(kind!=='sign'||!it.tkid||it.rs==='renewed')?'':
     `<span class="tdl-acts">
        <button class="tdl-b${it.rs==='considering'?' on':''}" onclick="event.stopPropagation();setRenewStatus('${it.tkid}','considering')">考慮中</button>
@@ -17963,7 +18004,7 @@ PAGES.members=async function(){
     const lg=_lastByGrp[m.id]||{};
     const hits=[];
     if(t.everPt && ((t.pt||0)+(t.friendly||0))===0 && (lg.pt||'').slice(0,7)===nowYm) hits.push(['教練課',lg.pt]);
-    /* 2026-07-28 使用者指示：本名單只列教練課／友善教練課；團體課續約只出現在首頁「今日待簽約」 */
+    /* 2026-07-28 使用者指示：本名單只列教練課／友善教練課；團體課續約只出現在首頁「今日付款名單」 */
     if(hits.length) renewList.push({...m,
       __course:hits.map(x=>x[0]).join('・'),
       __last:hits.map(x=>x[1]).sort().pop()});
