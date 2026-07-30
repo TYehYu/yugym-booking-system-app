@@ -2637,6 +2637,10 @@ tr:hover td{background:var(--card2);}
 .exdb-inactive input{width:15px;height:15px;}
 /* 行事曆隱私遮蔽：別人的課灰階呈現 */
 .bk-masked{filter:grayscale(1);opacity:0.62;}
+/* 教練端別人的課卡（2026-07-30 使用者指示：其他人的課卡保持移除互動功能）——
+   卡片照畫（排課要知道時段被佔住），但完全不吃事件：不展開、不開明細、也不出 hover 提示。 */
+.cal-ev.cal-ev-noint{pointer-events:none !important;cursor:default !important;}
+.cal-ev.cal-ev-noint::after{display:none !important;}
 /* 手機版 modal：限制寬度、可垂直捲動、底部按鈕固定、input 不溢出 */
 @media(max-width:600px),(orientation:portrait) and (max-width:1024px){
   .modal{max-width:calc(100vw - 24px);width:calc(100vw - 24px);max-height:88vh;padding:18px;box-sizing:border-box;display:flex;flex-direction:column;}
@@ -6548,8 +6552,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.1923';
-const APP_VERSION_LABEL='v260730.1923';
+const APP_VERSION = '260730.1926';
+const APP_VERSION_LABEL='v260730.1926';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12922,6 +12926,10 @@ async function renderCalendar(opts){
          最後一堂／分期繳費提醒只在右上角顯示驚嘆號，不整張變色 —— 反紅的卡太多就失去警示作用。 */
       const _alertCls = _isUnpaid ? ' cal-ev-renew'
                       : (_isNewToday ? ' cal-ev-newtoday' : '');
+      /* 教練端別人的課卡：完全移除互動（2026-07-30 使用者指示）——
+         原本 bk-masked 只是灰階＋淡化，點下去還是會開明細（onEvClick 對 masked 卡
+         會退回 openBookingDetail）。這裡直接讓整張卡不吃事件。 */
+      const _noInt = SESSION.role==='coach' && !SESSION.is_manager && opts.me && !isMine;
       const _isCheckedIn = b.status==='checked_in'||b.status==='completed'
         || (b.category==='小班肌力' && b.attendance && Object.values(b.attendance).some(s=>s==='checked_in'));
       const _isMakeup = !!b.makeup_granted;
@@ -13006,7 +13014,7 @@ async function renderCalendar(opts){
       else { _tipMem = hideMember ? typeName : ((b.member_id&&memMap[b.member_id])||memName||'—'); }
       const _tipCoach = (subCoachName||coachName) ? `教練：${subCoachName||coachName}${subCoachName?'（代）':''}` : '';
       const _tipStr = _tipEsc([`${b.start_time}–${_endT}`, _tipMem, _tipCoach].filter(Boolean).join('\n'));
-      evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${wCls} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''} cal-ev-day cal-ev-std ${_densityCls} ${_courseCls} ${_checkedCls} ${_pastCls}${_alertCls}" data-bid="${b.id}" data-time="${b.start_time}" data-tip="${_tipStr}"
+      evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${wCls} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''}${_noInt?' cal-ev-noint':''} cal-ev-day cal-ev-std ${_densityCls} ${_courseCls} ${_checkedCls} ${_pastCls}${_alertCls}" data-bid="${b.id}" data-time="${b.start_time}" data-tip="${_tipStr}"
         style="${useFixedLane?dayLaneStyle:`top:${top}px;height:${Math.max(h-2,(nDays===7||nDays===5)?40:64)}px;left:calc(${lane.idx*wpct}% + 3px);width:calc(${wpct}% - 6px);`}"
         ${editable?`onclick="onEvClick(event,'${b.id}')"`:(opts.allMode||bkIsMasked(b)?'':`onclick="openBookingDetail('${b.id}')"`)}>
         ${bkRenewBadge({done:_renewDone,no:_renewNo,renew:_renewAlert,pay:_payAlert})}
@@ -14167,7 +14175,13 @@ PAGES.calendar=async function(){
   const scoped = scopeActive('employee');
   if(scoped) window._calFilter = SCOPE.id;
   const subtitle='30 分鐘為單位 · 可拖曳調整 · 點空格新增';
-  const calOpts={coachFilter:true,onSlot:'quickBookAt',editable:true,stepping:_stepping};
+  /* 2026-07-30 使用者說明：教練桌機版是給「在家調整自己的預約」用的 ——
+     只能調整與查看自己的課卡，其他人的課卡保持「移除互動」。
+     所以教練進來時帶 me（自己的 id）＋ maskOthers（別人的課仍畫出來但匿名，
+     排課才知道時段被佔住），互動則由 cal-ev-noint 整個關掉。 */
+  const _isCoachView = SESSION.role==='coach' && !SESSION.is_manager;
+  const calOpts={coachFilter:true,onSlot:'quickBookAt',editable:true,stepping:_stepping,
+    ...(_isCoachView?{me:SESSION.id, maskOthers:true}:{})};
   const bc = scoped ? scopeBreadcrumb('員工管理','教學') : '';
   const sb = scoped ? lpScopeBar('教學排程') : '';
   const hd = scoped
@@ -16653,6 +16667,7 @@ async function expandBkCard(el, id){
   collapseBkCard();
   const b = await dbGet('bookings', id);
   if(!b){ openBookingDetail(id); return; }
+  if(!coachOwnsBk(b)){ showToast('這不是你的課，只能操作自己的課程'); return; }   // 2026-07-30
   const checked = b.status==='checked_in' || b.status==='completed';
   const canCancel = b.status==='booked' || b.status==='checked_in';
   const staff = SESSION.role==='admin' || SESSION.role==='front_desk';
@@ -17245,8 +17260,19 @@ async function openCourseCard(id){
   // 訓練紀錄功能暫不下放：點課卡一律開課程明細（可改期 / 取消 / 簽到）
   openBookingDetail(id);
 }
+/* 教練只能看／改自己的課（2026-07-30 使用者指示）——
+   桌機課卡已用 cal-ev-noint 關掉互動，這裡再把「任何其他路徑」都堵住
+   （深連結、程式呼叫、鍵盤操作），免得換一條路就繞過去。店長／管理員／櫃檯不受限。 */
+function coachOwnsBk(b){
+  if(!b) return false;
+  if(!SESSION || SESSION.role!=='coach' || SESSION.is_manager) return true;
+  if(b.coach_id===SESSION.id || b.substitute_coach_id===SESSION.id) return true;
+  // 團課沒有主責教練欄位就看不出歸屬 → 有教練欄才擋，避免誤鎖
+  return !b.coach_id && !b.substitute_coach_id;
+}
 async function openBookingDetail(id){
   const b=await dbGet('bookings',id);
+  if(b && !coachOwnsBk(b)){ showToast('這不是你的課，只能查看自己的課程明細'); return; }
   // 舊匯入團課相容：一堂被拆成多筆（每人一筆）。若本筆是小班肌力且無 member_ids，
   // 即時聚合同教練＋同日期＋同時段的所有 booking，讓明細顯示完整名單與簽到。
   if(b && b.category==='小班肌力' && !(Array.isArray(b.member_ids)&&b.member_ids.length)){
