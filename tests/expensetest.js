@@ -22,26 +22,57 @@ ok('★ 只取這一頁在看的月份（ym 欄位）', /\(expAll\|\|\[\]\)\.fil
 ok('★ 依日期排序，同日看建立時間', /String\(a\.date\|\|''\)\.localeCompare\(String\(b\.date\|\|''\)\)\|\|String\(a\.created_at\|\|''\)\.localeCompare\(String\(b\.created_at\|\|''\)\)/.test(fm));
 ok('　　讀不到（沒權限／表不存在）不會整頁壞掉', /dbGetAll\('expenses'\)\.catch\(\(\)=>\[\]\)/.test(fm));
 
-console.log('\n畫面');
-ok('★ 統計列多一格「其他支出」', /\{label:'其他支出', value:finMoney\(expTotal\), unit:'', tone:'danger'\}/.test(fm));
+console.log('\n本月營收那頁只留一格可點的統計');
+ok('★ 統計格點了跳到「其他支出」分頁',
+   /\{label:'其他支出', value:finMoney\(expTotal\), unit:'', tone:'danger', onclick:"setFinTab\('expenses'\)"\}/.test(fm));
 ok('　　danger 這個色調有定義（紅字，但不是警告）', /\.lp-stat\.danger \.lp-stat-v\{color:var\(--danger\);\}/.test(src));
-ok('★ 表格欄位：日期／項目／備註／金額', /<th>日期<\/th><th>項目<\/th><th>備註<\/th><th style="text-align:right;">金額<\/th>/.test(fm));
-ok('★ 有合計列', /<td colspan="3" style="font-weight:700;">合計<\/td>/.test(fm) && /finMoney\(expTotal\)/.test(fm));
-ok('★ 每列可編輯、可刪除', /onclick="finExpenseEdit\('\$\{e\.id\}'\)"/.test(fm) && /onclick="finExpenseDel\('\$\{e\.id\}'\)"/.test(fm));
-ok('★ 有「＋ 新增支出」', /onclick="finExpenseAdd\(\)"/.test(fm));
-ok('　　沒資料時給空狀態，不是空白表格', /本月還沒有記錄其他支出/.test(fm));
-ok('　　接在付款方式比例後面', /body\.innerHTML = dateBar \+ stats \+ methodCard \+ expCard;/.test(fm));
-ok('　　項目與備註都做過跳脫', (fm.match(/\.replace\(\/<\/g,'&lt;'\)/g)||[]).length>=2);
-ok('　　說明寫清楚不含教練薪資', /房租・水電・耗材等固定開銷（不含教練薪資）/.test(fm));
+ok('★ 填寫表格已搬走，這頁不再重複一份', /body\.innerHTML = dateBar \+ stats \+ methodCard;/.test(fm));
+
+console.log('\n其他支出分頁：固定支出與其他支出分開列');
+{
+  const fe=g('async function finExpenses(){','\n}\n');
+  ok('★ 財務分頁多一個「其他支出」', /\{key:'expenses',   label:'其他支出'\}/.test(src)
+     && /else if\(_finTab==='expenses'\) await finExpenses\(\);/.test(src));
+  ok('★ 依 is_fixed 分成兩區', /const fixed=mine\.filter\(e=>e\.is_fixed\), other=mine\.filter\(e=>!e\.is_fixed\);/.test(fe));
+  ok('★ 固定支出排前面、其他支出在後', fe.indexOf("section('固定支出'")<fe.indexOf("section('其他支出'"));
+  ok('★ 三個統計：固定／其他／合計',
+     /\{label:'固定支出', value:finMoney\(sum\(fixed\)\), unit:''\}/.test(fe)
+     && /\{label:'其他支出', value:finMoney\(sum\(other\)\), unit:''\}/.test(fe)
+     && /\{label:'本月合計', value:finMoney\(sum\(mine\)\), unit:'', tone:'danger'\}/.test(fe));
+  ok('★ 兩區各自有小計', (fe.match(/<td colspan="3" style="font-weight:700;">小計<\/td>/g)||[]).length===1
+     && /\$\{finMoney\(sum\(arr\)\)\}/.test(fe));
+  ok('★ 每區各有自己的「＋ 新增」，且帶入該區的類型',
+     /onclick="finExpenseAdd\('',\$\{fixedNew\?1:0\}\)"/.test(fe)
+     && /section\('固定支出','房租・水電・網路・清潔等每月都有的開銷', fixed, true\)/.test(fe)
+     && /section\('其他支出','耗材・設備・稅務規費等一次性開銷', other, false\)/.test(fe));
+  ok('★ 表格欄位：日期／項目／備註／金額', /<th>日期<\/th><th>項目<\/th><th>備註<\/th><th style="text-align:right;">金額<\/th>/.test(fe));
+  ok('★ 每列可編輯、可刪除', /onclick="finExpenseEdit\('\$\{e\.id\}'\)"/.test(fe) && /onclick="finExpenseDel\('\$\{e\.id\}'\)"/.test(fe));
+  ok('★ 沿用同一組月份翻頁（與本月營收同一個 _finMonth）',
+     /const month=\(window\._finMonth\|\|ymd\(TODAY\)\.slice\(0,7\)\);/.test(fe)
+     && /onclick="finMonthMove\(-1\)"/.test(fe));
+  ok('　　空區塊給空狀態', /本月還沒有\$\{title\}/.test(fe));
+  ok('　　項目與備註都做過跳脫', (fe.match(/\.replace\(\/<\/g,'&lt;'\)/g)||[]).length>=2);
+  ok('　　頁尾寫明兩區都會被利潤扣掉、以及歸月規則',
+     /兩區都會被營運分析的「本月利潤」扣掉/.test(fe) && /歸月看日期：房租算當月的/.test(fe));
+  ok('　　讀不到不會整頁壞掉', /dbGetAll\('expenses'\)\.catch\(\(\)=>\[\]\)/.test(fe));
+}
 
 console.log('\n新增／編輯');
 {
-  const add=g('async function finExpenseAdd(id){','\n}\n');
+  const add=g('async function finExpenseAdd(id, fixedNew){','\n}\n');
   ok('★ 編輯與新增共用同一個視窗', /async function finExpenseEdit\(id\)\{ return finExpenseAdd\(id\); \}/.test(src));
   ok('★ 常用項目給選單', /const EXPENSE_CATS=\['房租','水電','網路','清潔','耗材','設備','稅務規費','其他'\];/.test(src));
   ok('★ 舊資料的自訂項目不會消失（不在清單裡就補一個選項）',
      /\(cat&&EXPENSE_CATS\.indexOf\(cat\)<0\?`<option value="\$\{cat\}" selected>\$\{cat\}<\/option>`:''\)/.test(add));
   ok('★ 新增時日期預設該月 1 號', /:month\+'-01'/.test(add));
+  ok('★ 視窗有「類型」欄位（固定／其他）',
+     /<option value="1" \$\{isFixed\?'selected':''\}>固定支出（每月都有）<\/option>/.test(add)
+     && /<option value="0" \$\{isFixed\?'':'selected'\}>其他支出（一次性）<\/option>/.test(add));
+  ok('★ 從哪一區按新增就預設哪一種', /const isFixed = e \? !!e\.is_fixed : !!fixedNew;/.test(add));
+  ok('★ 選了房租／水電這類項目會自動跳固定（可再改回來）',
+     /const EXPENSE_FIXED_CATS=\['房租','水電','網路','清潔'\];/.test(src)
+     && /f\.value = EXPENSE_FIXED_CATS\.indexOf\(c\)>=0 \? '1' : '0';/.test(src)
+     && /onchange="finExpenseCatSync\(\)"/.test(add));
   ok('　　找不到那筆就講清楚，不會開出空視窗', /if\(!e\)\{ showToast\('找不到這筆支出'\); return; \}/.test(add));
   ok('　　備註裡的引號不會把 value 屬性截斷', /String\(e\.note\)\.replace\(\/"\/g,'&quot;'\)/.test(add));
 }
@@ -53,7 +84,9 @@ console.log('\n新增／編輯');
   /* 2026-07-31 使用者定案：房租是算當月的（7 月繳＝用 7 月的場地，預付概念）
      → 發生日期在哪個月就記在那個月，沒有另外的歸屬規則。 */
   ok('★ ym 由日期決定（日期空白才退回這一頁的月份）',
-     /const obj=\{ id:id\|\|uid\('EXP'\), ym:\(String\(date\|\|''\)\.slice\(0,7\)\|\|month\), date, category, amount, note:note\|\|null \};/.test(sv));
+     /const obj=\{ id:id\|\|uid\('EXP'\), ym:\(String\(date\|\|''\)\.slice\(0,7\)\|\|month\), date, category, amount, note:note\|\|null, is_fixed \};/.test(sv));
+  ok('★ 類型有存進去', /const is_fixed=\(\(document\.getElementById\('ex-fixed'\)\|\|\{\}\)\.value\|\|'0'\)==='1';/.test(sv));
+  ok('　　存完停在「其他支出」分頁', /_finTab='expenses'; navTo\('finance','g_admin'\);/.test(sv));
   ok('　　原因寫在程式裡', /房租是算當月的，7 月繳就是用 7 月的場地，/.test(src));
   ok('★ 編輯時不覆蓋原始建立者', /if\(!id\)\{ obj\.created_by=\(SESSION&&SESSION\.id\)\|\|null; \}/.test(sv));
   ok('　　存檔失敗會講原因，不會默默關掉', /showToast\('儲存失敗：'\+\(\(err&&err\.message\)\|\|err\)\)/.test(sv));

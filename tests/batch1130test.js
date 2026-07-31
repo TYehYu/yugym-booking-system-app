@@ -90,14 +90,17 @@ console.log('\n管理員次選單分組');
   const items=[...html.matchAll(/<div class="subnav-item[^"]*"[^>]*>([^<]+)/g)].map(m=>m[1]);
   ok('★ 三個組別、順序為 人事 → 財務 → 環境設定',
      JSON.stringify(grps)===JSON.stringify(['人事','財務','環境設定']), grps);
-  // 2026-07-30 三修：「出勤紀錄」入口移除（逐日打卡改看員工各自的資料）→ 15 → 14 項
-  ok('★ 14 個項目（今日出勤嵌進員工頁→再移除、人資制度移除、出勤紀錄移除）', items.length===14, items.length);
-  ok('★ 人事：員工管理 → 打卡異常與補卡 → 制度類',
-     items.slice(0,8).join()==='員工管理,打卡異常與補卡,薪資制度,勞健保,特休,工作規則,權限設定,教練統計',
-     items.slice(0,8));
-  ok('★ 財務：財務總覽／營運分析', items.slice(8,10).join()==='財務總覽,營運分析', items.slice(8,10));
+  /* 2026-07-30 三修：「出勤紀錄」入口移除 → 14 項
+     2026-07-31：再移除「薪資制度」「工作規則」「教練統計」→ 11 項 */
+  ok('★ 11 個項目', items.length===11, items.length);
+  ok('★ 人事：員工管理 → 打卡異常與補卡 → 勞健保／特休／權限設定',
+     items.slice(0,5).join()==='員工管理,打卡異常與補卡,勞健保,特休,權限設定',
+     items.slice(0,5));
+  ok('★ 已移除薪資制度／工作規則／教練統計',
+     !items.includes('薪資制度') && !items.includes('工作規則') && !items.includes('教練統計'));
+  ok('★ 財務：財務總覽／營運分析', items.slice(5,7).join()==='財務總覽,營運分析', items.slice(5,7));
   ok('★ 環境設定：課程方案／場地・班別／合約範本／動作資料庫',
-     items.slice(10).join()==='課程方案,場地・班別,合約範本,動作資料庫', items.slice(10));
+     items.slice(7).join()==='課程方案,場地・班別,合約範本,動作資料庫', items.slice(7));
   ok('　　「系統設定」改名成看得懂的「場地・班別」', /grp:'環境設定', label:'場地・班別', page:'settings'/.test(src));
   ok('　　目前所在頁仍會高亮', /subnav-item active[^>]*>員工管理/.test(html));
   ok('　　組別標籤前面有分隔線，第一組不畫',

@@ -6631,8 +6631,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1300';
-const APP_VERSION_LABEL='v260731.1300';
+const APP_VERSION = '260731.1330';
+const APP_VERSION_LABEL='v260731.1330';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7973,12 +7973,13 @@ const ADMIN_NAV2=[
     {grp:'人事', label:'打卡異常與補卡', page:'staff', tab:'punchfix'},
     /* 2026-07-30 使用者指示：「人資制度」那份列表與員工列表重複（openHrEdit 本來就只是
          轉去開同一個員工明細），入口移除。PAGES.hr 保留，舊的 navTo('hr') 呼叫仍可用。 */
-    {grp:'人事', label:'薪資制度', page:'staff', tab:'payroll'},
+    /* 2026-07-31 使用者指示：移除「薪資制度」「工作規則」「教練統計」三個入口 ——
+       前兩個的內容在員工各自的資料裡就看得到（員工管理→該員工），不必在管理頁再開一層；
+       「教練統計」一直是 soon 佔位，沒有內容。對應的 staff 分頁（payroll／schedule）
+       程式保留，舊的 navToTab('staff',...,'payroll') 呼叫仍可用。 */
     {grp:'人事', label:'勞健保',   page:'staff', tab:'insurance'},
     {grp:'人事', label:'特休',     page:'staff', tab:'leave'},
-    {grp:'人事', label:'工作規則', page:'staff', tab:'schedule'},
     {grp:'人事', label:'權限設定', page:'settings_staff'},
-    {grp:'人事', label:'教練統計', soon:true},
     {grp:'財務', label:'財務總覽', page:'finance'},
     {grp:'財務', label:'營運分析', page:'analytics'},
     {grp:'環境設定', label:'課程方案', page:'settings_ticket'},
@@ -32981,6 +32982,7 @@ const FIN_TABS=[
   {key:'today',      label:'今日營收'},
   {key:'month',      label:'本月營收'},
   {key:'receivable', label:'待收款'},
+  {key:'expenses',   label:'其他支出'},   // 2026-07-31 使用者指示：固定支出與其他支出分開列
   {key:'review',     label:'購買審核'},
   {key:'refunds',    label:'退款紀錄'},
 ];
@@ -33374,6 +33376,7 @@ PAGES.finance=async function(){
   if(_finTab==='today') await finToday();
   else if(_finTab==='month') await finMonth();
   else if(_finTab==='receivable') await finReceivable();
+  else if(_finTab==='expenses') await finExpenses();
   else if(_finTab==='review'){ document.getElementById('fin-body').innerHTML=`<div id="tk-body"></div>`; await PAGES.purchase_review(); }
   else if(_finTab==='refunds') await finRefunds();
 };
@@ -33447,7 +33450,7 @@ async function finMonth(){
   const stats=lpStats([
     {label:'本月營收', value:finMoney(revenue), unit:'', tone:'ok'},
     {label:'本月筆數', value:monthPur.length, unit:'筆'},
-    {label:'其他支出', value:finMoney(expTotal), unit:'', tone:'danger'},
+    {label:'其他支出', value:finMoney(expTotal), unit:'', tone:'danger', onclick:"setFinTab('expenses')"},
     {label:'待收款（分期）', value:finMoney(receivable), unit:'', tone:'warn'},
   ]);
   const methodRows=Object.entries(byMethod).sort((a,b)=>b[1]-a[1]).map(([m,amt])=>{
@@ -33461,11 +33464,35 @@ async function finMonth(){
   const methodCard = monthPur.length
     ? `<div class="card" style="padding:14px 16px;"><div style="font-size:13px;font-weight:700;margin-bottom:4px;">付款方式比例</div>${methodRows}</div>`
     : lpEmpty('本月還沒有收款','','');
-  /* 本月其他支出表格（2026-07-31 使用者指示）——
-     這裡記的房租、水電等固定成本會被營運分析的「本月利潤」扣掉
-     （利潤 ＝ 銷課金額 − 教練薪資 − 本月其他支出），所以這張表沒填＝利潤會偏高。
-     歸月規則：房租算當月的（7 月繳＝用 7 月的場地，預付概念）→ 日期在哪個月就記在那個月。 */
-  const expRows=monthExp.map(e=>`<tr>
+  /* 支出的填寫表格已搬到「其他支出」分頁（2026-07-31 二修：固定支出與其他支出要分開列）。
+     這裡只留一格可點的統計，點了就跳過去。 */
+  body.innerHTML = dateBar + stats + methodCard;
+}
+/* ── 其他支出分頁：固定支出與其他支出分開列（2026-07-31 使用者指示）──
+   只有管理員進得來（財務總覽在 g_admin 群組），資料表 RLS 也只放行 is_admin()。
+   固定＝每月都會發生的（房租、水電、網路、清潔）；其他＝一次性的（耗材、設備、稅務規費…）。
+   分類只影響「列在哪一區」，兩區都會被營運分析的本月利潤扣掉。 */
+const EXPENSE_CATS=['房租','水電','網路','清潔','耗材','設備','稅務規費','其他'];
+const EXPENSE_FIXED_CATS=['房租','水電','網路','清潔'];   // 新增時的預設分類，仍可自己改
+async function finExpenses(){
+  const body=document.getElementById('fin-body'); if(!body) return;
+  const month=(window._finMonth||ymd(TODAY).slice(0,7));
+  const all=(await dbGetAll('expenses').catch(()=>[]))||[];
+  const mine=all.filter(e=>e&&e.ym===month)
+    .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  const fixed=mine.filter(e=>e.is_fixed), other=mine.filter(e=>!e.is_fixed);
+  const sum=arr=>arr.reduce((a,e)=>a+(Number(e.amount)||0),0);
+  const [my,mm]=month.split('-');
+  const dateBar=`<div class="card ops-datebar" style="margin-bottom:14px;">
+    <button class="btn btn-ghost btn-sm" onclick="finMonthMove(-1)">‹ 上個月</button>
+    <div class="ops-date-mid"><div class="ops-date-main">${my} 年 ${mm} 月</div></div>
+    <button class="btn btn-ghost btn-sm" onclick="finMonthMove(1)">下個月 ›</button></div>`;
+  const stats=lpStats([
+    {label:'固定支出', value:finMoney(sum(fixed)), unit:''},
+    {label:'其他支出', value:finMoney(sum(other)), unit:''},
+    {label:'本月合計', value:finMoney(sum(mine)), unit:'', tone:'danger'},
+  ]);
+  const rowsOf=arr=>arr.map(e=>`<tr>
       <td class="num" style="white-space:nowrap;">${e.date?String(e.date).slice(5).replace('-','/'):'—'}</td>
       <td>${String(e.category||'—').replace(/</g,'&lt;')}</td>
       <td style="color:var(--t2);font-size:12.5px;">${String(e.note||'').replace(/</g,'&lt;')||'—'}</td>
@@ -33474,38 +33501,51 @@ async function finMonth(){
         <button class="btn btn-ghost btn-sm" onclick="finExpenseEdit('${e.id}')">編輯</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="finExpenseDel('${e.id}')">刪除</button>
       </td></tr>`).join('');
-  const expCard=`<div class="card" style="padding:14px 16px;margin-top:14px;">
+  const section=(title,hint,arr,fixedNew)=>`<div class="card" style="padding:14px 16px;margin-bottom:14px;">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-      <span style="font-size:13px;font-weight:700;">本月其他支出</span>
-      <span style="font-size:11px;color:var(--t3);">房租・水電・耗材等固定開銷（不含教練薪資）</span>
-      <button class="btn btn-green btn-sm" style="margin-left:auto;" onclick="finExpenseAdd()">＋ 新增支出</button>
+      <span style="font-size:13px;font-weight:700;">${title}</span>
+      <span style="font-size:11px;color:var(--t3);">${hint}</span>
+      <button class="btn btn-green btn-sm" style="margin-left:auto;" onclick="finExpenseAdd('',${fixedNew?1:0})">＋ 新增</button>
     </div>
-    ${monthExp.length?`<table class="rwd-card"><thead><tr><th>日期</th><th>項目</th><th>備註</th><th style="text-align:right;">金額</th><th></th></tr></thead>
-      <tbody>${expRows}</tbody>
-      <tfoot><tr><td colspan="3" style="font-weight:700;">合計</td>
-        <td class="num" style="text-align:right;font-weight:800;color:var(--danger);">${finMoney(expTotal)}</td><td></td></tr></tfoot></table>`
-      :'<div class="empty" style="padding:18px;"><div class="em-t" style="font-size:13px;">本月還沒有記錄其他支出</div></div>'}
+    ${arr.length?`<table class="rwd-card"><thead><tr><th>日期</th><th>項目</th><th>備註</th><th style="text-align:right;">金額</th><th></th></tr></thead>
+      <tbody>${rowsOf(arr)}</tbody>
+      <tfoot><tr><td colspan="3" style="font-weight:700;">小計</td>
+        <td class="num" style="text-align:right;font-weight:800;color:var(--danger);">${finMoney(sum(arr))}</td><td></td></tr></tfoot></table>`
+      :`<div class="empty" style="padding:18px;"><div class="em-t" style="font-size:13px;">本月還沒有${title}</div></div>`}
   </div>`;
-  body.innerHTML = dateBar + stats + methodCard + expCard;
+  body.innerHTML = dateBar + stats
+    + section('固定支出','房租・水電・網路・清潔等每月都有的開銷', fixed, true)
+    + section('其他支出','耗材・設備・稅務規費等一次性開銷', other, false)
+    + `<div style="font-size:11px;color:var(--t3);line-height:1.8;padding:0 2px;">
+        ＊兩區都會被營運分析的「本月利潤」扣掉（利潤 ＝ 銷課金額 − 教練薪資 − 本月支出）；分類只影響列在哪一區。<br>
+        ＊歸月看日期：房租算當月的（7 月繳＝用 7 月的場地），日期在哪個月就記在那個月。</div>`;
 }
-/* ── 本月其他支出：新增／編輯／刪除（2026-07-31 使用者指示）──
-   只有管理員進得來（財務總覽在 g_admin 群組），資料表 RLS 也只放行 is_admin()。 */
-const EXPENSE_CATS=['房租','水電','網路','清潔','耗材','設備','稅務規費','其他'];
 async function finExpenseEdit(id){ return finExpenseAdd(id); }
-async function finExpenseAdd(id){
+async function finExpenseAdd(id, fixedNew){
   const month=(window._finMonth||ymd(TODAY).slice(0,7));
   let e=null;
   if(id){ try{ e=await dbGet('expenses',id); }catch(_){} if(!e){ showToast('找不到這筆支出'); return; } }
   const cat=e&&e.category||'';
+  const isFixed = e ? !!e.is_fixed : !!fixedNew;
   const opts=EXPENSE_CATS.map(c=>`<option value="${c}" ${cat===c?'selected':''}>${c}</option>`).join('')
     + (cat&&EXPENSE_CATS.indexOf(cat)<0?`<option value="${cat}" selected>${cat}</option>`:'');
   showModal(`<div class="modal-title">${id?'編輯支出':'新增支出'}　<span style="font-size:12px;color:var(--t3);">${month}</span></div>
     <div class="form-row"><label>日期</label><input type="date" id="ex-date" value="${(e&&e.date)?String(e.date).slice(0,10):month+'-01'}"></div>
-    <div class="form-row"><label>項目</label><select id="ex-cat">${opts}</select></div>
+    <div class="form-row"><label>類型</label><select id="ex-fixed">
+      <option value="1" ${isFixed?'selected':''}>固定支出（每月都有）</option>
+      <option value="0" ${isFixed?'':'selected'}>其他支出（一次性）</option>
+    </select></div>
+    <div class="form-row"><label>項目</label><select id="ex-cat" onchange="finExpenseCatSync()">${opts}</select></div>
     <div class="form-row"><label>金額</label><input type="number" id="ex-amt" min="0" step="1" value="${e?Number(e.amount)||0:''}" placeholder="0"></div>
     <div class="form-row"><label>備註</label><input type="text" id="ex-note" value="${e&&e.note?String(e.note).replace(/"/g,'&quot;'):''}" placeholder="例：8 月房租、台電 7-8 月"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="finExpenseSave('${id||''}')">儲存</button></div>`);
+}
+/* 選了房租／水電這類項目就自動跳到「固定支出」（可再改回來） */
+function finExpenseCatSync(){
+  const c=(document.getElementById('ex-cat')||{}).value||'';
+  const f=document.getElementById('ex-fixed'); if(!f) return;
+  f.value = EXPENSE_FIXED_CATS.indexOf(c)>=0 ? '1' : '0';
 }
 async function finExpenseSave(id){
   const month=(window._finMonth||ymd(TODAY).slice(0,7));
@@ -33518,11 +33558,12 @@ async function finExpenseSave(id){
   /* ym 由日期決定（2026-07-31 使用者定案：房租是算當月的，7 月繳就是用 7 月的場地，
      預付概念）—— 所以「發生日期在哪個月，就記在那個月」，沒有另外的歸屬規則。
      日期空白時才退回這一頁在看的月份。 */
-  const obj={ id:id||uid('EXP'), ym:(String(date||'').slice(0,7)||month), date, category, amount, note:note||null };
+  const is_fixed=((document.getElementById('ex-fixed')||{}).value||'0')==='1';
+  const obj={ id:id||uid('EXP'), ym:(String(date||'').slice(0,7)||month), date, category, amount, note:note||null, is_fixed };
   if(!id){ obj.created_by=(SESSION&&SESSION.id)||null; }
   try{
     await dbPut('expenses',obj);
-    closeModal(); showToast(id?'已更新':'已新增'); navTo('finance','g_admin');
+    closeModal(); showToast(id?'已更新':'已新增'); _finTab='expenses'; navTo('finance','g_admin');
   }catch(err){ showToast('儲存失敗：'+((err&&err.message)||err)); }
 }
 async function finExpenseDel(id){
