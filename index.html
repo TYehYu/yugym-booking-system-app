@@ -1453,8 +1453,15 @@ body.mc-mode .layout{padding-top:8px;}
 /* 員工表現列可點（2026-07-29）＋當月薪資明細彈窗 */
 .perf-clickable{cursor:pointer;transition:background .12s;}
 .perf-clickable:hover{background:var(--sage-bg);}
-.pfd-stats{display:flex;flex-wrap:wrap;gap:8px;margin:-6px 0 14px;}
-.pfd-stats span{flex:1 1 auto;min-width:62px;background:var(--card2);border:1px solid var(--bd);border-radius:10px;
+/* 2026-07-31 使用者指示：最上方先看到實領薪資，再看四格，分隔線以下才是計算公式 */
+.pfd-hero{display:flex;flex-direction:column;align-items:flex-end;gap:1px;margin:-4px 0 12px;}
+.pfd-hero-l{font-size:12px;color:var(--t2);}
+.pfd-hero-v{font-size:30px;font-weight:800;font-family:var(--num);color:var(--green);line-height:1.15;letter-spacing:-.01em;}
+.pfd-sep{height:1px;background:var(--bd);margin:2px 0 4px;}
+/* 四格固定一列（教練課／團體課／續約／值班工時），太窄才退成兩排 */
+.pfd-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 14px;}
+@media (max-width:360px){ .pfd-stats{grid-template-columns:repeat(2,minmax(0,1fr));} }
+.pfd-stats span{min-width:0;background:var(--card2);border:1px solid var(--bd);border-radius:10px;
   padding:8px 6px;text-align:center;display:flex;flex-direction:column;gap:1px;}
 .pfd-stats b{font-size:17px;font-weight:800;font-family:var(--num);color:var(--green);line-height:1;}
 .pfd-stats i{font-style:normal;font-size:10.5px;color:var(--t3);}
@@ -6615,8 +6622,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1055';
-const APP_VERSION_LABEL='v260731.1055';
+const APP_VERSION = '260731.1120';
+const APP_VERSION_LABEL='v260731.1120';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21970,10 +21977,11 @@ async function openPerfDetail(empId, month){
       <span class="pfd-v">${amount}</span></div>`;
     let rows='';
     if(sal.base>0){
-      rows+=row('底薪', sal.schedHours>0?`月薪制・當月排班 ${sal.schedHours.toFixed(1)} 小時`:'月薪制', money(sal.base));
+      /* 2026-07-31 使用者指示：叫「保障底薪」才看得出下面那條「取數字高者」在比什麼 */
+      rows+=row('保障底薪', sal.schedHours>0?`月薪制・當月排班 ${sal.schedHours.toFixed(1)} 小時`:'月薪制', money(sal.base));
       if(sal.baseLeaveDeduct>0) rows+=row('請假扣薪', sal.leaveDeductDetail||'事假全扣・病假半薪', '−'+money(sal.baseLeaveDeduct), {neg:true});
       rows+=row('教練課費', sal.ptDetail||`${ptDone} 堂`, money(sal.ptPay));
-      rows+=row('教練課收入', sal.ptIsFloor?'保障底薪較高 → 取底薪':'課費較高 → 取課費', money(sal.ptIncome), {sum:true});
+      rows+=row('教練課收入', `取數字高者 → ${sal.ptIsFloor?'保障底薪':'教練課費'}`, money(sal.ptIncome), {sum:true});
     }else{
       rows+=row('教練課費', sal.ptDetail||`${ptDone} 堂`, money(sal.ptPay));
     }
@@ -21991,13 +21999,17 @@ async function openPerfDetail(empId, month){
     rows+=row('實領薪資','', money(sal.netPay), {sum:true});
     const [yy,mm]=ym.split('-');
     showModal(`<div class="modal-title">${coachDisp(emp)}　${yy}/${mm} 表現與薪資</div>
+      ${/* 2026-07-31 使用者指示：最上方顯示實領薪資 → 四格（教練課／團體課含人次／續約／值班工時）
+           → 分隔線 → 薪資計算公式。原本一進來先看到五格統計，最想知道的「這個月領多少」
+           要捲到最下面才看得到。「團課人數」不再獨立一格，併進團體課那格。 */''}
+      <div class="pfd-hero"><span class="pfd-hero-l">實領薪資</span><span class="pfd-hero-v">${money(sal.netPay)}</span></div>
       <div class="pfd-stats">
         <span><b>${ptDone}</b>堂<i>教練課</i></span>
-        <span><b>${grpList.length}</b>堂<i>團體課</i></span>
-        <span><b>${groupHeads}</b>人次<i>團課人數</i></span>
-        <span><b>${dutyHours.toFixed(1)}</b>hr<i>值班</i></span>
+        <span><b>${grpList.length}</b>堂<i>團體課・${groupHeads} 人次</i></span>
         <span><b>${renewCount}</b>張<i>續約</i></span>
+        <span><b>${dutyHours.toFixed(1)}</b>hr<i>值班工時</i></span>
       </div>
+      <div class="pfd-sep"></div>
       <div class="pfd-list">${rows}</div>
       <div style="font-size:11px;color:var(--t3);margin-top:10px;line-height:1.7;">＊與薪資單同一套計算；實際發放以公司結算為準。</div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
