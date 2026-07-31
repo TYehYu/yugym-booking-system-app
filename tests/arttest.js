@@ -46,28 +46,47 @@ console.log('\n隨機連播');
 }
 
 console.log('\n版面');
-ok('★ 放在首頁左欄最上方（「當月排班」按鈕之上）',
-   /\$\{butlerArtHtml\(\)\}\s*\n\s*<!-- 2026-07-26 使用者指示：「當月排班」按鈕/.test(src));
+/* 2026-07-31 二修：往上移到頂欄正下方（原本在左欄第一格），並關閉自動輪播改成點選換圖 */
+ok('★ 放在頁面最上方、頂欄正下方（不再包在左欄裡）',
+   /\$\{isMobileLayout\(\)\?'':butlerArtHtml\(\)\}/.test(src)
+   && !/\$\{butlerArtHtml\(\)\}\s*\n\s*<!-- 2026-07-26 使用者指示：「當月排班」/.test(src));
+ok('★ 寬度對齊左欄（300px），負上邊距抵掉頁面內距',
+   /\.mc-art-top\{width:300px;max-width:100%;margin:-6px 0 12px;\}/.test(src));
+ok('★ 手機版面不顯示（那裡沒有這一塊）', /isMobileLayout\(\)\?'':butlerArtHtml\(\)/.test(src));
 ok('★ 兩層 <img> 交叉淡入（換圖不閃白）',
    /<img class="mc-art-img" id="mc-art-a" alt=""><img class="mc-art-img" id="mc-art-b" alt="">/.test(src)
    && /\.mc-art-img\{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity \.7s ease;\}/.test(src));
 ok('★ 維持原圖比例，不裁切到角色', /aspect-ratio:1854\/854;/.test(src));
 ok('　　尊重系統的減少動態設定', /@media \(prefers-reduced-motion:reduce\)\{ \.mc-art-img\{transition:none;\} \}/.test(src));
-ok('　　純裝飾，不進輔助工具的朗讀', /aria-hidden="true"/.test(g('function butlerArtHtml(){','\n}\n')));
-ok('　　標註插畫作者', /title="插畫：@_Fergus\.art_"/.test(src));
+ok('　　標註插畫作者與操作方式', /title="點一下換一張　·　插畫：@_Fergus\.art_"/.test(src));
 
-console.log('\n計時器');
+console.log('\n點選更換（不再自動輪播）');
+{
+  const sw=g('function butlerArtSwap(){','\n}\n');
+  ok('★ 自動輪播整組移除（沒有 setInterval、沒有 BUTLER_ART_MS）',
+     !/BUTLER_ART_MS/.test(src) && !/_artTimer/.test(src));
+  ok('★ 點一下換下一張', /onclick="butlerArtSwap\(\)"/.test(src));
+  ok('★ 看得出可以點（游標、hover 邊框、按下回饋）',
+     /\.mc-art\{[\s\S]{0,220}cursor:pointer;\}/.test(src)
+     && /\.mc-art:hover\{border-color:var\(--green\);\}/.test(src)
+     && /\.mc-art:active\{transform:scale\(\.995\);\}/.test(src));
+  ok('★ 鍵盤也能操作（Enter／空白鍵）',
+     /role="button" tabindex="0"/.test(src)
+     && /onkeydown="if\(event\.key==='Enter'\|\|event\.key===' '\)\{event\.preventDefault\(\);butlerArtSwap\(\);\}"/.test(src));
+  ok('★ 連點保護：上一張還沒載完不會再換（避免兩層都半透明）',
+     /if\(!a\|\|!b\|\|_artBusy\) return;/.test(sw) && /_artBusy=true;/.test(sw));
+  ok('★ 圖載不出來也要解鎖，不會從此點不動', /nxt\.onload=nxt\.onerror=\(\)=>\{/.test(sw));
+  ok('★ onload 先掛再設 src（快取命中時也會觸發）',
+     sw.indexOf('nxt.onload=')<sw.indexOf('nxt.src=butlerArtNext();'));
+  ok('　　換完才把「哪一層在上面」翻面', /_artTop=!_artTop; _artBusy=false;/.test(sw));
+}
+
+console.log('\n初始');
 {
   const st=g('function startButlerArt(){','\n}\n');
-  ok('★ 每 9 秒換一張', /const BUTLER_ART_MS=9000;/.test(src) && /\}, BUTLER_ART_MS\);/.test(st));
-  ok('★ 元素不在就自己收掉（換頁不留殘留計時器）',
-     /if\(!document\.getElementById\('mc-art'\)\)\{ clearInterval\(_artTimer\); _artTimer=null; return; \}/.test(st));
-  ok('★ 重入保護：重新進首頁不會疊兩個計時器',
-     /if\(_artTimer\)\{ clearInterval\(_artTimer\); _artTimer=null; \}/.test(st));
-  ok('★ 分頁在背景時不換圖', /if\(document\.hidden\) return;/.test(st));
-  ok('★ onload 先掛再設 src（快取命中時也會觸發）',
-     st.indexOf('nxt.onload=')<st.indexOf('nxt.src=butlerArtNext();'));
+  ok('★ 進首頁先隨機給一張', /a\.src=butlerArtNext\(\); a\.style\.opacity='1'; b\.style\.opacity='0';/.test(st));
   ok('★ 沒有元素就直接返回（手機版面沒有這一塊）', /if\(!a\|\|!b\) return;/.test(st));
+  ok('　　重進首頁時把狀態歸零', /_artTop=false; _artBusy=false;/.test(st));
   ok('　　首頁渲染完才啟動，且不讓它拖垮整頁',
      /try\{ startButlerArt\(\); \}catch\(_\)\{\}/.test(src));
 }

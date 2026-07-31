@@ -26,7 +26,7 @@ ok('★ 最後一欄不再用 max-content（表頭字短、資料列有六顆按
 /* 2026-07-31 使用者指示改版：教練課前面加「總堂數」、實領薪資移到工作時數後面、整列分三區
    → 軌道從 12 欄變 13 欄。細節見 stzonetest.js。 */
 ok('★ 全部欄位改成固定寬或 fr，兩個 grid 才會算出同一組軌道',
-   /grid-template-columns:10px 34px minmax\(150px,1fr\) 62px 62px 62px 48px 58px 100px 92px 78px 372px 30px;/.test(src));
+   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 48px 58px 100px 92px 78px minmax\(372px,1fr\) 30px;/.test(src));
 ok('★ 表頭補上資料列的邊框寬度（左 4px 色條＋右 1px），並扣掉自己那 1px 邊框',
    /\.st-lhead\{padding:8px 14px 8px 17px;background:var\(--card2,#F2EEE4\);\s*\n\s*border:1px solid var\(--bd\);border-radius:10px;/.test(src));
 ok('★ 表頭欄數與資料列欄數一致（13 欄＋3 個區塊標題）', (()=>{
@@ -38,23 +38,25 @@ ok('★ 權限開關標題對齊第一顆開關「管理員」（2026-07-30 使�
    /\.st-lhead span:not\(\.st-hz\):nth-of-type\(15\)\{text-align:left;\}/.test(src)
    && /\.st-l-sw\{justify-self:stretch;\}/.test(src)
    && /\.st-l-sw \.st-sw\{display:flex;flex-wrap:nowrap;gap:4px;width:auto;margin:0;justify-content:flex-start;\}/.test(src));
-ok('　　開關欄改固定寬（原本 3fr＋靠右，左緣會隨畫面浮動，標題不可能對齊按鈕）',
-   /92px 78px 372px 30px;/.test(src) && /欄位左緣會隨畫面寬度浮動，標題不可能對齊按鈕/.test(src));
+/* 2026-07-31：使用者回報姓名欄佔太多版面 → 姓名欄設上限，剩餘寬度回到開關欄 */
+ok('　　姓名欄設上限，剩餘寬度給開關欄（開關本來就靠左排，空白落在最右邊）',
+   /minmax\(130px,240px\)/.test(src) && /minmax\(372px,1fr\) 30px;/.test(src)
+   && /使用者回報「姓名欄佔太多版面」/.test(src));
 ok('　　「待接受邀請」橫跨的欄位範圍跟著改', /\.st-l-pend\{grid-column:4 \/ 13;justify-self:start;\}/.test(src));
 ok('　　待審申請列欄位數不同，另給自己的軌道（不套主表）',
    /\.st-lrow\.st-approw\{grid-template-columns:34px minmax\(160px,1fr\) max-content;\}/.test(src));
 
 console.log('\n中間空白');
-ok('★ 剩餘寬度由姓名欄吸收（其餘欄位一律固定寬）',
-   /minmax\(150px,1fr\) 62px 62px 62px 48px 58px 100px 92px 78px 372px/.test(src));
+ok('★ 姓名欄有上限、不再獨佔剩餘寬度',
+   /minmax\(130px,240px\) 62px 62px 62px 48px 58px 100px 92px 78px minmax\(372px,1fr\)/.test(src));
 ok('　　原因寫在程式裡', /中間那片大空白則是姓名欄吃掉全部剩餘寬度造成的/.test(src));
 ok('　　窄螢幕分兩段收緊（≤1400px、≤1150px），開關字級一起縮',
    /@media\(max-width:1400px\)\{[\s\S]{0,400}\.st-l-sw \.st-swb\{padding:5px 6px;font-size:10px;\}/.test(src)
    && /@media\(max-width:1150px\)\{[\s\S]{0,400}\.st-l-sw \.st-swb\{padding:4px 5px;font-size:9\.5px;gap:4px;\}/.test(src));
 
 console.log('\n新增兩欄');
-ok('★ 表頭有「工作規則」與「休假日」',
-   /<span>工作規則<\/span><span>休假日<\/span>/.test(src));
+ok('★ 表頭有「工作規則」與「休假日」（2026-07-31 起歸在權限管理區）',
+   /<span class="st-zb">工作規則<\/span><span>休假日<\/span>/.test(src));
 ok('★ 工作規則只放值班與代課（打卡／開課已在右邊的權限開關，不重複）',
    /if\(c\.need_duty\) _rules\.push\('<i class="wd">值班<\/i>'\);/.test(src)
    && /if\(c\.can_substitute\) _rules\.push\('<i class="ws">代課<\/i>'\);/.test(src)
@@ -69,7 +71,7 @@ ok('　　沒有跟既有的 _off（停用旗標）撞名', /const _off=c\.statu
 
 console.log('\n當月實領薪資');
 ok('★ 實領薪資欄會跟著月份翻頁（2026-07-31 起改排在工作時數後面）',
-   /<span>實領薪資\$\{_mTag\}<\/span><span>工作規則<\/span><span>休假日<\/span>/.test(src)
+   /<span>實領薪資\$\{_mTag\}<\/span><span class="st-zb">工作規則<\/span><span>休假日<\/span>/.test(src)
    && /\+ `<span class="st-l-pay">\$\{payCell\}<\/span>`/.test(src));
 ok('★ 直接用薪資彙總那支 computeMonthlyPayroll，口徑與月結明細一致（不另算一套）',
    /const _pr=await computeMonthlyPayroll\(_ym\);/.test(src)
@@ -118,7 +120,7 @@ ok('★ 翻到別月時，表頭數字欄名補上月份（免得看成本月）
 ok('　　回到本月會把狀態清成 null（標示才會顯示「本月」）',
    /_stMonth = \(ym===ymd\(TODAY\)\.slice\(0,7\)\) \? null : ym;/.test(src));
 ok('　　工作規則／休假日不是月份資料，不加月份標記',
-   /<span>實領薪資\$\{_mTag\}<\/span><span>工作規則<\/span><span>休假日<\/span>/.test(src));
+   /<span>實領薪資\$\{_mTag\}<\/span><span class="st-zb">工作規則<\/span><span>休假日<\/span>/.test(src));
 
 // 實跑月份切換
 {
