@@ -84,10 +84,12 @@ ok('　　_noPunchList 仍保留給狀態卡的「未打卡 N 位」用', /const
 
 /* ── ④ 會員列表的票券欄看不到團課（2026-07-30 游晴雅）── */
 console.log('\n會員列表的票券欄要看得到團課');
-ok('★ 餘額 0 但還有待上的課 → 不再判成「無有效票券」',
-   /if\(!t\.anyUsable && !_memPendingIdx\[m\.id\]\) return '<span class="tk-chip"/.test(src));
+/* 2026-07-31：票券欄從「一格袋子」改成「五個課別各一格」（tkCatCell），
+   tkCell 整支移除；下面兩項改驗新的位置。 */
+ok('★ 餘額 0 但還有待上的課 → 票券燈號不判成紅燈',
+   /if\(!s\|\|!s\.anyUsable\) return _memPendingIdx\[mid\] \? 'yellow' : 'red';/.test(src));
 ok('★ 組預約清單改用索引，含團課（學員在 member_ids、member_id 是 null）',
-   /const myBk=_memBkIdx\[m\.id\]\|\|\[\];   \/\/ 含團課/.test(src)
+   /const myBk=_memBkIdx\[mid\]\|\|\[\];/.test(src)
    && !/const myBk=allBk\.filter\(b=>b\.member_id===m\.id&&b\.status!=='cancelled'\);/.test(src));
 ok('★ 兩個索引各建一次，不是每位會員掃一次上萬筆',
    /const _memBkIdx=\{\};/.test(src) && /const _memPendingIdx=\{\};/.test(src)
@@ -124,7 +126,7 @@ ok('★ 票券燈號：沒餘額但還有未上的課 → 黃燈，不是紅燈'
    /if\(!s\|\|!s\.anyUsable\) return _memPendingIdx\[mid\] \? 'yellow' : 'red';/.test(src));
 ok('★ 原因寫在程式裡（施佳靜 8 堂全排完：已上 3、已約 5）',
    /她 7\/09 買的 8 堂 1V2 全排完了（已上 3、已約 5）/.test(src));
-ok('★ 索引建在 PAGES.members 裡（tkLevel 與 tkCell 共用）',
+ok('★ 索引建在 PAGES.members 裡（tkLevel 與票券欄共用）',
    /PAGES\.members=async function\(\)\{[\s\S]{0,1200}const _memBkIdx=\{\};/.test(src));
 ok('★ 沒有誤植到別的函式（refreshCoachNotifBadge 不該有它）',
    !/async function refreshCoachNotifBadge\(\)\{[\s\S]{0,600}_memBkIdx/.test(src));
@@ -155,9 +157,9 @@ ok('★ 會員列表也把「沒有票可扣的已預約未上」帶上，跟名
    /let dots=ticketTokens\(tk,bks\.concat\(extra\|\|\[\]\),typeMapFull,used,null\);/.test(src));
 ok('　　已經配到票的不重複列（用計數扣抵）',
    /const c=placed\.get\(b\.id\)\|\|0;\s*\n\s*if\(c>0\)\{ placed\.set\(b\.id,c-1\); return; \}/.test(src));
-ok('　　只帶今天以後、且依課別歸戶',
+ok('　　只帶今天以後、且依課別歸戶（2026-07-31 起用票券五分類歸戶）',
    /if\(b\.status!=='booked' \|\| String\(b\.date\|\|''\)\.slice\(0,10\)<today\) return;/.test(src)
-   && /const k=String\(b\.category\|\|''\);/.test(src));
+   && /const k5=tkClass5\(\{ticket_type_id:b\.ticket_type_id, plan_name:b\.category\}, typeMapFull\);/.test(src));
 {
   const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
   const alloc=new Function(g('function allocBookingsToTickets(','\n}\n')+'\nreturn allocBookingsToTickets;')();
@@ -187,59 +189,30 @@ ok('　　只帶今天以後、且依課別歸戶',
 
 
 /* ── ⑦ 票券袋子：一組票券一列，預設 2 組其餘收合（2026-07-30 使用者定案）── */
-console.log('\n票券袋子：一組一列、預設 2 組');
-ok('★ 預設顯示 2 組', /const TK_ROWS_SHOWN=2;/.test(src)
-   && /show\.slice\(0,TK_ROWS_SHOWN\)\.map\(rowOf\)\.join\(''\)/.test(src));
-ok('★ 其餘收合，按鈕寫還有幾組', /<div class="tkbag-more" hidden>/.test(src)
-   && /＋ 還有 \$\{moreTk\.length\} 組/.test(src));
-ok('★ 展開／收合會換文字', /function tkBagToggle\(id,btn\)\{/.test(src)
-   && /btn\.textContent = open \? '－ 收合' : `＋ 還有 \$\{n\} 組`;/.test(src));
-ok('　　點展開不會連帶開啟會員資料', /onclick="event\.stopPropagation\(\);tkBagToggle/.test(src));
-ok('★ 還在用的排前面（購買日新的先），用完／過期的排後面',
-   /const live=mine\.filter\(liveOf\)\.sort\(byBuy\);/.test(src)
-   && /const rest=mine\.filter\(tk=>!liveOf\(tk\)\)\.sort\(byBuy\);/.test(src));
-ok('　　完全沒有在用的票時只列最近一組（歷史票十幾張不全攤開）',
-   /const show=live\.length\?live\.concat\(rest\):rest\.slice\(0,1\);/.test(src));
-ok('　　自主訓練點數與折抵券不進袋子（那不是「一組課」）',
-   /袋子裡要列出來的票券：排除自主訓練點數與折抵券/.test(src));
-ok('★ 整袋一起配一次，不是每張票各配一次',
-   /const alloc=allocBookingsToTickets\(show,myBk,typeMapFull\);/.test(src)
-   && /各配一次的話，同一堂還沒上的課會在每一張同類別的票上都冒出一顆紅圈（假的）/.test(src));
-ok('★ 沒被任何票吸收的已預約未上 → 只掛在該課別的第一張票',
-   /const catDone=\{\};/.test(src) && /if\(!catDone\[k\] && leftover\[k\]\)\{ extra=leftover\[k\]; catDone\[k\]=true; \}/.test(src));
-ok('　　每一列的 title 標方案名、剩餘／總堂數與效期',
-   /title="\$\{\(tk\.plan_name\|\|'票券'\)\.replace\(\/"\/g,'&quot;'\)\}・剩 \$\{rem\?\?'—'\}／\$\{total\}\$\{_exp\}"/.test(src));
+/* 2026-07-31：票券欄從「一格袋子」改成「五個課別各一格」（tkCatCell），
+   袋子（tkbag／isMain／展開收合）整組退場。以下改驗新版面保住了哪些事。 */
+console.log('\n票券欄改成五個課別各一格');
+ok('★ 每位會員只算一次（掃票券＋配預約），不是五個課別各算一次',
+   /const _mCache=\{\};/.test(src)
+   && /return \(_mCache\[mid\]=\{mine, alloc, leftover\}\);/.test(src)
+   && /原本五個課別各算一次＝同樣的工做五遍/.test(src));
+ok('★ 整袋一起配一次（同一堂不會在多張票上重複冒出來）',
+   /const alloc=allocBookingsToTickets\(mine,myBk,typeMapFull\);/.test(src));
+ok('★ 沒被任何票吸收的已預約未上 → 仍畫紅虛線圈，依課別歸戶',
+   /const leftover=\{\};/.test(src)
+   && /\(leftover\[k5\]=leftover\[k5\]\|\|\[\]\)\.push\(b\);/.test(src)
+   && /tkRowHtml\(tk, alloc\.byTicket\[tk\.id\]\|\|\[\], leftover\[k\]\|\|null\)/.test(src));
+ok('　　只帶今天以後的', /if\(b\.status!=='booked' \|\| String\(b\.date\|\|''\)\.slice\(0,10\)<today\) return;/.test(src));
+ok('★ 同課別還有幾張在用會標「＋N」', /＋\$\{n-1\}<\/span>/.test(src));
 
-console.log(`
-（版面與互動另以 Playwright 實測：陳蘭馨三組票 → 顯示 2 列＋「＋ 還有 1 組」，
-  展開後三列，8/4 那堂只出現在真正扣它的那一組，另兩組不再冒出假的紅圈。）`);
-
-
-/* ── ⑧ 一張票都沒有的人不該顯示「僅自主訓練點數」（2026-07-30 林孟玉、蘇美帆）── */
 console.log('\n沒有票券的人要講對');
-ok('★ 三種情況分開講：只有自主／折抵券、完全沒票但已排課、什麼都沒有',
-   /if\(others\.length\) return '<span style="color:var\(--t3\);font-size:12px;">僅自主訓練點數／折抵券<\/span>';/.test(src)
-   && /尚未儲值・\$\{nx\.category\|\|'已排課'\}/.test(src)
-   && /return '<span class="tk-chip" style="background:#fbe9e7;color:#c0392b;">無有效票券<\/span>';/.test(src));
-ok('★ 原因寫在程式裡（原句是「有票但被 isMain 濾掉」的訊息，沒票的人也掉進來）',
-   /兩人一張票都沒有，列表卻寫「僅自主訓練點數」/.test(src));
-ok('　　已排課的顯示最近那一堂的課別與日期',
-   /\.sort\(\(a,b\)=>String\(a\.date\|\|''\)\.localeCompare\(String\(b\.date\|\|''\)\)\)\[0\]/.test(src));
-{
-  const today='2026-07-30';
-  const pick=(others,myBk)=>{
-    if(others.length) return '僅自主訓練點數／折抵券';
-    const nx=myBk.filter(b=>b.status==='booked'&&b.date>=today).sort((a,b)=>a.date.localeCompare(b.date))[0];
-    return nx?`尚未儲值・${nx.category} ${nx.date.slice(5).replace('-','/')}`:'無有效票券';
-  };
-  eq('★ 林孟玉：0 張票＋8/04 體驗 → 尚未儲值・體驗 08/04',
-     pick([],[{status:'booked',date:'2026-08-04',category:'體驗'}]), '尚未儲值・體驗 08/04');
-  eq('★ 只有自主訓練點數 → 照舊講「僅自主訓練點數／折抵券」',
-     pick([{id:'S'}],[]), '僅自主訓練點數／折抵券');
-  eq('★ 什麼都沒有 → 無有效票券', pick([],[]), '無有效票券');
-  eq('　　只有過去的課、沒有未來的 → 無有效票券',
-     pick([],[{status:'booked',date:'2026-07-01',category:'體驗'}]), '無有效票券');
-}
+ok('★ 五格全空看起來像沒載入 → 第一格掛提示',
+   /if\(!mine\.length\) return k==='pt' \? tkNoneChip\(m\) : '';/.test(src));
+ok('★ 完全沒票但已排課 → 講出最近那一堂的課別與日期',
+   /尚未儲值・\$\{nx\.category\|\|'已排課'\} \$\{String\(nx\.date\|\|''\)\.slice\(5\)\.replace\('-','\/'\)\}/.test(src));
+ok('★ 什麼都沒有 → 無有效票券', /無有效票券<\/span>';/.test(src));
+ok('　　這段改版時一度掉了，補回來的紀錄留在程式裡',
+   /2026-07-31 改版時這段一度隨舊的票券袋子被移除，補回來/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

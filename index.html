@@ -6728,8 +6728,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1521';
-const APP_VERSION_LABEL='v260731.1521';
+const APP_VERSION = '260731.1527';
+const APP_VERSION_LABEL='v260731.1527';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19931,7 +19931,6 @@ PAGES.members=async function(){
      一位會員手上可以有很多組票券，每一組各自獨立使用、各自戳上課日期。
      列表就照這個模型呈現：一組票券一列圓點，預設顯示 2 組、其餘收合。
      （原本只挑「一張主要票券」畫，袋子裡其他組在列表完全看不到。） */
-  const TK_ROWS_SHOWN=2;
   const tkRowHtml=(tk,bks,extra)=>{
     const direct=bks.filter(b=>b.ticket_id===tk.id);
     const dAtt=direct.filter(b=>b.status==='checked_in'||b.status==='completed').length;
@@ -19957,10 +19956,45 @@ PAGES.members=async function(){
      ・一位會員同課別可能有好幾張 → 只畫「還在用的最新一張」，沒有在用的就畫最近一張
      ・整袋一起 allocBookingsToTickets，不可以每格各配一次（同一堂會在多張票上重複冒出來）
      ・沒有那個課別的票就留空，不要塞「—」把五格擠滿 */
-  const tkCatCell=(m,k)=>{
-    const myBk=_memBkIdx[m.id]||[];
-    const mine=allTk.filter(tk=>tkUsableBy(tk,m.id));
+  /* ⚠ 每位會員只算一次（2026-07-31 效能）：這兩件事跟課別無關 ——
+     ・tkUsableBy 要掃過全部票券（正式庫 2,400 張，還會 JSON.parse 共享名單）
+     ・allocBookingsToTickets 要把他所有預約配到票上
+     原本五個課別各算一次＝同樣的工做五遍。一頁 20 列就是 100 次全表掃描。 */
+  const _mCache={};
+  const _mTk=(mid)=>{
+    if(_mCache[mid]) return _mCache[mid];
+    const myBk=_memBkIdx[mid]||[];
+    const mine=allTk.filter(tk=>tkUsableBy(tk,mid));
     const alloc=allocBookingsToTickets(mine,myBk,typeMapFull);
+    /* 沒被任何一張票吸收的「已預約未上」＝這幾堂沒有票可扣，需要補票（2026-07-30 游晴雅案例）。
+       依課別歸戶，畫成紅虛線圈接在該課別的圓形卡後面。
+       ⚠ 也是整袋一起算一次 —— 逐格算會把同一堂在每個課別各算一次。 */
+    const placed=new Map();
+    mine.forEach(tk=>(alloc.byTicket[tk.id]||[]).forEach(b=>placed.set(b.id,(placed.get(b.id)||0)+1)));
+    const leftover={};
+    myBk.forEach(b=>{
+      if(b.status!=='booked' || String(b.date||'').slice(0,10)<today) return;
+      const c=placed.get(b.id)||0;
+      if(c>0){ placed.set(b.id,c-1); return; }
+      const k5=tkClass5({ticket_type_id:b.ticket_type_id, plan_name:b.category}, typeMapFull);
+      (leftover[k5]=leftover[k5]||[]).push(b);
+    });
+    return (_mCache[mid]={mine, alloc, leftover});
+  };
+  /* 完全沒有票券的人（2026-07-30 林孟玉／蘇美帆案例）——
+     五格全空看起來像「還沒載入」，要講清楚是哪一種沒票。掛在第一格（教練課）。
+     ⚠ 2026-07-31 改版時這段一度隨舊的票券袋子被移除，補回來。 */
+  const tkNoneChip=(m)=>{
+    const {mine}=_mTk(m.id);
+    if(mine.length) return '';
+    const nx=(_memBkIdx[m.id]||[]).filter(b=>b.status==='booked'&&String(b.date||'').slice(0,10)>=today)
+      .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))[0];
+    if(nx) return `<span class="tk-chip" style="background:#f5edf7;color:#6e3a86;">尚未儲值・${nx.category||'已排課'} ${String(nx.date||'').slice(5).replace('-','/')}</span>`;
+    return '<span class="tk-chip" style="background:#fbe9e7;color:#c0392b;">無有效票券</span>';
+  };
+  const tkCatCell=(m,k)=>{
+    const {mine,alloc,leftover}=_mTk(m.id);
+    if(!mine.length) return k==='pt' ? tkNoneChip(m) : '';
     const byBuy=(a,b)=>String(b.purchase_date||b.start_date||'').localeCompare(String(a.purchase_date||a.start_date||''));
     const liveOf=tk=>tk.status==='usable'&&(tk.sessions_remaining||0)>0
         &&(!tk.expire_date||String(tk.expire_date).slice(0,10)>=today);
@@ -19970,70 +20004,12 @@ PAGES.members=async function(){
     const tk=live[0]||grp.slice().sort(byBuy)[0];
     if(!tk) return '';
     const n=live.length;
-    return tkRowHtml(tk, alloc.byTicket[tk.id]||[], null)
+    return tkRowHtml(tk, alloc.byTicket[tk.id]||[], leftover[k]||null)
       + (n>1?`<span class="tkcat-n" title="這個課別還有 ${n-1} 張在用">＋${n-1}</span>`:'');
   };
-  const tkCell=(m)=>{
-    const t=tkSummary[m.id]||{anyUsable:false};
-    if(!t.anyUsable && !_memPendingIdx[m.id]) return '<span class="tk-chip" style="background:#fbe9e7;color:#c0392b;">無有效票券</span>';
-    // 袋子裡要列出來的票券：排除自主訓練點數與折抵券（那兩種不是「一組課」）
-    const isMain=tk=>{ const tt=typeMapFull[tk.ticket_type_id]||{};
-      if(/折抵/.test(tk.plan_name||'')||/折抵/.test(tt.name||'')) return false;
-      if((tt.category||'')==='自主訓練'||/自主/.test(tt.name||'')) return false;
-      return true; };
-    const myBk=_memBkIdx[m.id]||[];   // 含團課（學員在 member_ids、member_id 是 null）
-    const byBuy=(a,b)=>String(b.purchase_date||'').localeCompare(String(a.purchase_date||''));
-    const mine=allTk.filter(tk=>tkUsableBy(tk,m.id)&&isMain(tk));   // 含共享給他的票（2026-07-28）
-    const liveOf=tk=>tk.status==='usable'&&(tk.sessions_remaining||0)>0
-        &&(!tk.expire_date||String(tk.expire_date).slice(0,10)>=today);
-    /* 還在用的排前面（購買日新的先），其餘（已用完／過期）排後面 ——
-       整期都排完的票餘額是 0，但課還沒上完，仍要看得到，所以不是直接濾掉。 */
-    const live=mine.filter(liveOf).sort(byBuy);
-    const rest=mine.filter(tk=>!liveOf(tk)).sort(byBuy);
-    /* 沒有還在用的票時，只列最近那一組就好（歷史票十幾張全攤開沒有意義） */
-    const show=live.length?live.concat(rest):rest.slice(0,1);
-    if(!show.length){
-      /* 2026-07-30 使用者回報（林孟玉、蘇美帆）：兩人一張票都沒有，列表卻寫「僅自主訓練點數」。
-         這句原本是「有票但都被 isMain 濾掉」的訊息，沒票的人也一併掉進來。分開講：
-         真的有自主訓練點數／折抵券 → 照舊；完全沒票、只是排了課 → 標那堂課。 */
-      const others=allTk.filter(tk=>tkUsableBy(tk,m.id));
-      if(others.length) return '<span style="color:var(--t3);font-size:12px;">僅自主訓練點數／折抵券</span>';
-      const nx=(myBk||[]).filter(b=>b.status==='booked'&&String(b.date||'').slice(0,10)>=today)
-        .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))[0];
-      if(nx) return `<span class="tk-chip" style="background:#f5edf7;color:#6e3a86;">尚未儲值・${nx.category||'已排課'} ${String(nx.date||'').slice(5).replace('-','/')}</span>`;
-      return '<span class="tk-chip" style="background:#fbe9e7;color:#c0392b;">無有效票券</span>';
-    }
-    /* ⚠ 整袋一起配一次，不可以每張票各配一次 ——
-       各配一次的話，同一堂還沒上的課會在每一張同類別的票上都冒出一顆紅圈（假的）。 */
-    const alloc=allocBookingsToTickets(show,myBk,typeMapFull);
-    const placed=new Map();
-    show.forEach(tk=>(alloc.byTicket[tk.id]||[]).forEach(b=>placed.set(b.id,(placed.get(b.id)||0)+1)));
-    /* 沒被任何一張票吸收的「已預約未上」＝這幾堂沒有票可扣，需要補票。
-       依課別歸戶，只掛在該課別的第一張票上，用紅虛線圈畫在那一列後面。 */
-    const leftover={};
-    myBk.forEach(b=>{
-      if(b.status!=='booked' || String(b.date||'').slice(0,10)<today) return;
-      const c=placed.get(b.id)||0;
-      if(c>0){ placed.set(b.id,c-1); return; }
-      const k=String(b.category||'');
-      (leftover[k]=leftover[k]||[]).push(b);
-    });
-    const catDone={};
-    const rowOf=tk=>{
-      const k=(typeMapFull[tk.ticket_type_id]||{}).category||'';
-      let extra=[];
-      if(!catDone[k] && leftover[k]){ extra=leftover[k]; catDone[k]=true; }
-      return tkRowHtml(tk, alloc.byTicket[tk.id]||[], extra);
-    };
-    const head=show.slice(0,TK_ROWS_SHOWN).map(rowOf).join('');
-    const moreTk=show.slice(TK_ROWS_SHOWN);
-    if(!moreTk.length) return `<div class="tkbag">${head}</div>`;
-    const gid='tkbag'+(window._tkBagN=(window._tkBagN||0)+1);
-    return `<div class="tkbag" id="${gid}">${head}
-      <div class="tkbag-more" hidden>${moreTk.map(rowOf).join('')}</div>
-      <button type="button" class="tkbag-toggle" onclick="event.stopPropagation();tkBagToggle('${gid}',this)">＋ 還有 ${moreTk.length} 組</button>
-    </div>`;
-  };
+  /* 〔已移除〕舊的「票券袋子」單格（tkCell）—— 2026-07-31 改成五個課別各一格
+     （tkCatCell）之後就沒有呼叫點了。袋子的圓形卡邏輯仍活在 tkRowHtml。 */
+;
   /* 2026-07-21 清單簡化：頭像列、空欄位留白、最近上課改相對時間 */
   const rows=pageRows.map(m=>({
     /* 左緣色條＝會員等級（2026-07-31 使用者指示，比照員工列表的聘僱類型色條） */
