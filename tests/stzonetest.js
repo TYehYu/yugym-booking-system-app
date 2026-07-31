@@ -53,10 +53,16 @@ ok('★ 分區改由兩條線表達：員工表現從「總堂數」起、權限
 ok('★ 工作規則／休假日歸在權限管理那一側（不在員工表現裡）',
    /<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">工作規則<\/span><span>休假日<\/span>/.test(src)
    && /工作規則與休假日屬於權限管理，不是員工表現/.test(src));
-ok('★ 分隔線畫在該區第一格的左緣，拉滿列高',
-   /\.st-zb\{border-left:1px solid var\(--bd\);align-self:stretch;padding-left:12px;margin-left:-6px;\}/.test(src));
+/* 2026-07-31 使用者回報「總堂數的數字比較高」：原本 align-self:stretch 讓那一格被拉成整列高、
+   內容從頂端排，只有它偏高 → 改用絕對定位的細線，格子不再 stretch */
+ok('★ 分隔線改用絕對定位畫，格子不再 stretch（所有格子一致置中）',
+   /\.st-zb\{position:relative;padding-left:12px;margin-left:-6px;\}/.test(src)
+   && /\.st-zb::before\{content:'';position:absolute;left:0;top:-10px;bottom:-10px;width:1px;background:var\(--bd\);\}/.test(src)
+   && !/\.st-zb\{[^}]*align-self:stretch/.test(src));
+ok('　　表頭的上下內距不同（8px），線的長度跟著調',
+   /\.st-lhead \.st-zb::before\{top:-8px;bottom:-8px;\}/.test(src));
 ok('　　窄版（≤900px）換排法，分區線關掉',
-   /\.st-zb\{border-left:none;padding-left:0;margin-left:0;align-self:center;\}/.test(src));
+   /\.st-zb::before\{display:none;\}/.test(src));
 ok('　　工作規則那格套上分隔線後仍垂直置中', /\.st-l-tags\{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;align-items:center;min-height:26px;\}/.test(src));
 
 console.log('\n放大與基線對齊');
