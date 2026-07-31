@@ -217,7 +217,7 @@ ok('　　補卡待辦的跳轉改指向新分頁',
 ok('　　排班表仍留在「班表」群組（櫃檯唯讀），沒有重複收進來',
    /\{label:'排班表', page:'coach_shifts', fd:true\}/.test(src));
 ok('★ 本月統計與營運分析／薪資頁同口徑（同一支 dutyHoursCapped／dutyClassOverlapHours／renewMapOf）',
-   /dutyHoursCapped\(_att,_sh,c\.id,_ym\)-dutyClassOverlapHours\(_sh,_bk,c\.id,_ym\)/.test(src)
+   /dutyHoursCapped\(_att,_sh,c\.id,_ym\)-dutyClassOverlapHours\(_sh,_bk,c\.id,_ym,c\)/.test(src)   // 2026-07-31 起多帶 emp（正職不扣重疊）
    && /const _renew=renewMapOf\(_ym,_tk,_pu,_bk,_ty\);/.test(src));
 ok('　　不需值班但要打卡的（正職）顯示實際打卡時數', /if\(!hrs && c\.need_punch\)\{/.test(src));
 

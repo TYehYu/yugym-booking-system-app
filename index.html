@@ -6610,8 +6610,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260730.2300';
-const APP_VERSION_LABEL='v260730.2300';
+const APP_VERSION = '260731.0020';
+const APP_VERSION_LABEL='v260731.0020';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12471,8 +12471,8 @@ PAGES.dashboard=async function(){
   const perfRows=coaches.filter(c=>c.role!=='front_desk'&&isCoachable(c)).map(c=>{
     const myBk=rangeBk.filter(b=>(b.substitute_coach_id||b.coach_id)===c.id);
     const myDone=myBk.filter(b=>b.status==='completed'||b.status==='checked_in');
-    const ptCount=myBk.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
-    const ptDone=myDone.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+    const ptCount=myBk.filter(isPtPayClass).length;      // 體驗不算（2026-07-31）
+    const ptDone=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
     const groupCount=myBk.filter(b=>b.category==='小班肌力').length;
     const groupDone=myDone.filter(b=>b.category==='小班肌力').length;
     // 業績營收：該教練負責、已銷課的單堂金額加總
@@ -12481,7 +12481,7 @@ PAGES.dashboard=async function(){
     /* 值班時數：本月模式＝與薪資頁同口徑（打卡封頂−上課重疊）；今日模式＝當日打卡時數 */
     let hours=0;
     if(_dashRange==='month'){
-      try{ hours=c.need_duty?Math.max(dutyHoursCapped(attAll,shiftsAll,c.id,ym)-dutyClassOverlapHours(shiftsAll,bookings,c.id,ym),0):0; }catch(_){}
+      try{ hours=c.need_duty?Math.max(dutyHoursCapped(attAll,shiftsAll,c.id,ym)-dutyClassOverlapHours(shiftsAll,bookings,c.id,ym,c),0):0; }catch(_){}
     }else{
       hours=attAll.filter(a=>a.emp_id===c.id&&inRange(a.date)).reduce((s,r)=>s+(calcWorkHours(r)||0),0);
     }
@@ -20869,7 +20869,15 @@ function annualLeaveAccount(emp, shifts, year){
 }
 // ── 值班時段內上課重疊時數：每天分別算該員工教練課與排班的重疊，加總（小時）──
 // 規則：兼職/工讀/合作教練在值班時段內上教練課，該重疊時段以課程抽成為主，不重複計值班費
-function dutyClassOverlapHours(shifts, bookings, empId, month){
+/* 教練課堂數（2026-07-31 使用者定案：體驗課不算進教練課堂數，也不支薪）——
+   原本 私人教練＋體驗 一起算，與櫃檯的薪資表（只算私人教練）差了 7 堂／7 月。
+   體驗課仍會建卡、仍算銷課堂數，只是不進教練的堂數與課費。 */
+function isPtPayClass(b){ return !!b && b.category==='私人教練'; }
+function dutyClassOverlapHours(shifts, bookings, empId, month, emp){
+  /* 2026-07-31 使用者定案：正職不再扣「值班時段內上課」的重疊時數
+     （正職是月薪制，值班與上課本來就在同一段班內，扣了等於雙重懲罰）。
+     兼職／工讀維持原規則 —— 他們的值班費是時薪，上課時段已另計課費。 */
+  if(emp && normEmp(emp.employment_type||emp.pay_type)==='full_time') return 0;
   const myShifts=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month);
   if(!myShifts.length) return 0;
   // 該員工當月已上課（已完成或已簽到）、且有授課時段的課（私人教練/體驗/小班肌力團課）
@@ -21820,12 +21828,12 @@ async function openPerfDetail(empId, month){
     const mine=bookings.filter(b=>(b.substitute_coach_id||b.coach_id)===empId
       && String(b.date||'').slice(0,7)===ym && b.status!=='cancelled');
     const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in');
-    const ptDone=done.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+    const ptDone=done.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
     const grpList=done.filter(b=>b.category==='小班肌力');
     const groupHeads=grpList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 請假不算（2026-07-30）
     const leave=leaveSummary(shifts, empId, ym);
     const dutyCap=emp.need_duty?dutyHoursCapped(attendance,shifts,empId,ym):0;
-    const dutyOv=emp.need_duty?dutyClassOverlapHours(shifts,bookings,empId,ym):0;
+    const dutyOv=emp.need_duty?dutyClassOverlapHours(shifts,bookings,empId,ym,emp):0;
     const dutyHours=Math.max(dutyCap-dutyOv,0);
     const[purAll,ttAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[])]);
     const renewCount=(renewMapOf(ym, tickets, purAll, bookings, ttAll)||{})[empId]||0;   // 2026-07-29：統一計數（只算教練課類）
@@ -21883,7 +21891,7 @@ async function computeMonthlyPayroll(month){
   // 先算每位教練當月教練課堂數（店長津貼需要全體名單堂數）
   const ptDoneById={};
   staff.forEach(emp=>{
-    ptDoneById[emp.id]=bookings.filter(b=>b.coach_id===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month&&(b.category==='私人教練'||b.category==='體驗')).length;
+    ptDoneById[emp.id]=bookings.filter(b=>b.coach_id===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month&&isPtPayClass(b)).length;   // 體驗不算（2026-07-31）
   });
   // 續約張數：每位教練當月續約數（2026-07-29 統一走 renewMapOf）
   const renewById={};
@@ -21902,7 +21910,7 @@ async function computeMonthlyPayroll(month){
     // 值班費：打卡封頂時數 再扣掉「值班時段內上課」重疊 → 淨值班時數（顯示與計薪一致）
     const leave=leaveSummary(shifts, emp.id, month);
     const dutyCap=emp.need_duty ? dutyHoursCapped(attendance, shifts, emp.id, month) : 0;
-    const dutyOverlap=emp.need_duty ? dutyClassOverlapHours(shifts, bookings, emp.id, month) : 0;
+    const dutyOverlap=emp.need_duty ? dutyClassOverlapHours(shifts, bookings, emp.id, month, emp) : 0;
     const dutyHours=Math.max(dutyCap - dutyOverlap, 0);
     const classOverlap=0; // 重疊已從值班時數扣除，不再於 calcSalary 重複扣
     // 店長津貼名單：全體員工（排除老闆 role==='admin'；店長本人列入）的當月教練課＋友善＋團體課堂數
@@ -22348,9 +22356,9 @@ async function renderStaffList(){
     coaches.forEach(c=>{
       const mine=_mBk.filter(b=>(b.substitute_coach_id||b.coach_id)===c.id);
       const done=mine.filter(b=>b.status==='checked_in'||b.status==='completed');
-      const isPt=b=>b.category==='私人教練'||b.category==='體驗';
+      const isPt=isPtPayClass;   // 體驗不算（2026-07-31 使用者定案）
       let hrs=0;
-      try{ hrs=c.need_duty?Math.max(dutyHoursCapped(_att,_sh,c.id,_ym)-dutyClassOverlapHours(_sh,_bk,c.id,_ym),0):0; }catch(_){}
+      try{ hrs=c.need_duty?Math.max(dutyHoursCapped(_att,_sh,c.id,_ym)-dutyClassOverlapHours(_sh,_bk,c.id,_ym,c),0):0; }catch(_){}
       if(!hrs && c.need_punch){   // 不需值班但要打卡的（正職）→ 顯示實際打卡時數
         try{ hrs=(_att||[]).filter(a=>a.emp_id===c.id&&String(a.date||'').slice(0,7)===_ym)
           .reduce((t,r)=>t+(calcWorkHours(r)||0),0); }catch(_){}
@@ -27511,7 +27519,7 @@ PAGES.coach_today=async function(){
   const selfCheckins=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===today&&b.category==='自主訓練'&&(b.status==='checked_in'||b.status==='completed')).length;
   // 今日預估薪資：今日完成課時費 + 今日值班費（簡化）
   const er=effRates(me);
-  const todayPtDone=myToday.filter(b=>(b.status==='completed'||b.status==='checked_in')&&(b.category==='私人教練'||b.category==='體驗')).length;
+  const todayPtDone=myToday.filter(b=>(b.status==='completed'||b.status==='checked_in')&&isPtPayClass(b)).length;   // 體驗不算（2026-07-31）
   const todayGroupHeads=myToday.filter(b=>(b.status==='completed'||b.status==='checked_in')&&b.category==='小班肌力').reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
   const dutyRate=(me.custom_salary?(me.duty_hourly||0):(er.duty_hourly||0));
   const estToday = (todayPtDone*(er.pt_rate||0)) + (todayGroupHeads*(er.group_rate||0)) + (dutyToday*dutyRate);
@@ -32915,9 +32923,9 @@ async function anaMonth(){
     coaches.filter(isCoachable).forEach(c=>{
       if(c.count_salary===false) return;
       const myDone=done.filter(b=>b.coach_id===c.id);
-      const ptD=myDone.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+      const ptD=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
       const gHeads=myDone.filter(b=>b.category==='小班肌力').reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
-      const dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month),0):0;
+      const dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month,c),0):0;
       const lv=leaveSummary(shifts,c.id,month);
       const leaderHeads=c.is_manager
         ? coaches.filter(o=>o.role!=='admin'&&o.role!=='front_desk'&&o.status!=='inactive')   /* 排除老闆；店長本人列入 */
@@ -32985,13 +32993,13 @@ async function anaCoach(){
   const rowsData=coachList.map(c=>{
     const mine=monthBk.filter(b=>b.coach_id===c.id);
     const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in');
-    const ptAll=mine.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
-    const ptDone=done.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+    const ptAll=mine.filter(isPtPayClass).length;        // 體驗不算（2026-07-31）
+    const ptDone=done.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
     const grpAll=mine.filter(b=>b.category==='小班肌力').length;
     const grpDone=done.filter(b=>b.category==='小班肌力');
     const grpHeads=grpDone.reduce((a,b)=>a+((Array.isArray(b.member_ids)?b.member_ids.length:0)||0),0);
     let dutyH=0;
-    try{ dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month),0):0; }catch(_){}
+    try{ dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month,c),0):0; }catch(_){}
     return { name:coachDisp(c), renew:renewMap[c.id]||0, ptDone, ptAll, grpDone:grpDone.length, grpAll, grpHeads, dutyH, total:mine.length };
   }).filter(r=>r.total>0 || r.dutyH>0 || r.renew>0)
     .sort((a,b)=>(b.ptDone+b.grpDone)-(a.ptDone+a.grpDone));
@@ -33971,7 +33979,7 @@ async function renderSalaryContent(TARGET, withHead){
   // 已上課堂（已簽到或已完成皆計入；系統實務上「簽到」即視為上課完成）
   const myDone=bookings.filter(b=>b.coach_id===empId&&(b.status==='completed'||b.status==='checked_in')&&b.date.slice(0,7)===month);
   const myAll=bookings.filter(b=>b.coach_id===empId&&b.status!=='cancelled'&&b.date.slice(0,7)===month);
-  const ptDone=myDone.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+  const ptDone=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
   const groupDoneList=myDone.filter(b=>b.category==='小班肌力');
   const groupDone=groupDoneList.length;
   // 團課總人頭：每堂實際參加人數加總（請假的不算 —— 2026-07-30 使用者指示）
@@ -33980,7 +33988,7 @@ async function renderSalaryContent(TARGET, withHead){
   const myShifts=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   const myLeave=leaveSummary(shifts, empId, month);
   const _dutyCap=me.need_duty ? dutyHoursCapped(attendance, shifts, empId, month) : 0;
-  const _dutyOverlap=me.need_duty ? dutyClassOverlapHours(shifts, bookings, empId, month) : 0;
+  const _dutyOverlap=me.need_duty ? dutyClassOverlapHours(shifts, bookings, empId, month, me) : 0;
   const dutyHours=Math.max(_dutyCap - _dutyOverlap, 0);
   const myClassOverlap=0; // 重疊已從值班時數扣除
   const payTypeLabel=PAY_LABEL[me.employment_type||me.pay_type]||'—';
@@ -34007,7 +34015,7 @@ async function renderSalaryContent(TARGET, withHead){
   const dutyRate2=(me.custom_salary?(me.duty_hourly||0):(er2.duty_hourly||0));
   function dayResult(ds){
     const dayBk=bookings.filter(b=>b.coach_id===empId&&b.date===ds&&(b.status==='completed'||b.status==='checked_in'));
-    const dPt=dayBk.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+    const dPt=dayBk.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
     const dGroupHeads=dayBk.filter(b=>b.category==='小班肌力').reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
     const dClsCnt=bookings.filter(b=>b.coach_id===empId&&b.date===ds&&b.status!=='cancelled').length;
     const dDuty=(shifts||[]).filter(s=>s.emp_id===empId&&s.date===ds).reduce((a,s)=>a+(Number(s.hours)||0),0);
@@ -34190,7 +34198,7 @@ async function salaryClickDay(ds){
   const er=effRates(me); const dutyRate=(me.custom_salary?(me.duty_hourly||0):(er.duty_hourly||0)); const countSalary=me.count_salary!==false;
   const dayResult=(d)=>{
     const dayBk=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===d&&(b.status==='completed'||b.status==='checked_in'));
-    const dPt=dayBk.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
+    const dPt=dayBk.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
     const dGH=dayBk.filter(b=>b.category==='小班肌力').reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
     const dCls=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===d&&b.status!=='cancelled').length;
     const dDuty=(shifts||[]).filter(s=>s.emp_id===SESSION.id&&s.date===d).reduce((a,s)=>a+(Number(s.hours)||0),0);
