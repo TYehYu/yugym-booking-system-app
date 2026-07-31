@@ -118,6 +118,22 @@ ok('★ 友善與否仍看原本那張票', /友善與否仍看原本那張票�
 ok('　　重複發放的防線沒動（同一筆 booking 只發一次）',
    /t\.source==='checkin_grant' && t\.source_booking_id===b\.id/.test(src));
 
+/* 2026-08-01 使用者指示：明細裡的教練那一列也要有「教練請假」——
+   原本只有課卡圓形按鈕的代課選單裡才有，從明細進來的人找不到。 */
+console.log('\n明細的教練列也有教練請假');
+ok('★ 明細裡有按鈕（桌機與手機兩種版面都有）',
+   (src.match(/onclick="bkCoachLeave\('\$\{b\.id\}'\)"/g)||[]).length===2);
+ok('★ 走同一支 bkCoachLeave（規則不會再分岔）',
+   /class="btn btn-ghost btn-sm bkd-cleave" onclick="bkCoachLeave/.test(src));
+ok('★ 只有可編輯、且是教練課才出現', /editable&&canCoachLeave\(b\)&&b\.status!=='coach_leave'/.test(src));
+ok('★ 已簽到／已完成／已取消的課不給按',
+   /b\.status!=='cancelled'&&b\.status!=='checked_in'&&b\.status!=='completed'/.test(src));
+ok('★ 已標記過就顯示紅色標籤，不會重複按',
+   /b\.status==='coach_leave'\?'<span class="tag" style="background:#fbe9e7;color:#b5372e;">教練請假<\/span>':''/.test(src));
+ok('　　按鈕做成紅字外框（不可逆的動作，要跟代課下拉區隔）',
+   /\.bkd-cleave\{color:var\(--danger,#b5372e\);border-color:var\(--danger,#b5372e\);/.test(src));
+ok('　　滑過看得到會發生什麼', /title="退票、效期＋7 天、課種改自主訓練"/.test(src));
+
 console.log('\n只有教練課與友善教練課適用（2026-07-31 使用者定案）');
 {
   /* 2026-07-31：canCoachLeave 改問票卡口袋（TK_POCKETS.*.coachLeave），一併抽進來 */
