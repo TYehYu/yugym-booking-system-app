@@ -32,7 +32,8 @@ console.log('畫幾顆、什麼顏色');
 {
   let h=await mk([])(SELF(),true);
   eq('★ 跑步機畫兩顆', dots(h), ['cur','']);
-  ok('　　本堂那顆帶金框（cur）、另一顆是可點的按鈕', /<button type="button" class="vu-dot" title="改到 2 號"/.test(h));
+  ok('　　本堂那顆帶金框（cur）、另一顆是可點的開關',
+     /<button type="button" class="vu-dot" title="打開 2 號（同行使用，不另外扣點）"/.test(h));
   ok('　　燈上有台號', />1<\/span>|>1<\/button>/.test(h) && />2<\/button>/.test(h));
 
   h=await mk([T('treadmill_2','17:00')])(SELF(),true);
@@ -62,6 +63,9 @@ console.log('\n佔用的判定');
   eq('★ 舊資料沒編號（venue_unit=treadmill）→ 先佔住最前面沒被用到的號碼',
      dots(await mk([T('treadmill','17:00')])(SELF({venue_unit:'treadmill_1'}),true)), ['cur','taken']);
   eq('　　自己那筆不會算成佔用', dots(await mk([SELF()])(SELF(),true)), ['cur','']);
+  eq('★ 同一組的第二台也算「自己的」（金框，可以關）',
+     dots(await mk([{id:'B9',date:'2026-07-31',status:'booked',venue_unit:'treadmill_2',
+                     start_time:'17:00',duration:60,sibling_of:'B0'}])(SELF(),true)), ['cur','cur']);
 }
 
 console.log('\n權限');
@@ -74,8 +78,16 @@ console.log('\n接到明細裡');
 ok('★ 模板不能 await → 先算好再帶進去',
    /const _vuDots=\(typeof venueUnitDots==='function'\)\?await venueUnitDots\(b, editable\):'';/.test(src));
 ok('★ 三處場地列都掛上', (src.match(/\$\{_vuDots\}/g)||[]).length===4);
-ok('★ 點灰燈 → 改到那一台', /async function bkSetVenueUnit\(id, unit\)\{/.test(src));
-ok('★ 存檔前再確認一次沒被搶走', /if\(clash\)\{ showToast\('這一台剛被約走了'\); openBookingDetail\(id\); return; \}/.test(src));
+/* 2026-07-31 二修（使用者定案）：燈號改成開關，一堂可以佔兩台 */
+ok('★ 點燈號 → 開關這一台', /async function bkToggleVenueUnit\(id, unit\)\{/.test(src));
+ok('★ 打開＝建一筆「同行使用」的預約，不綁票不扣點',
+   /ticket_id:null, ticket_type_id:b\.ticket_type_id\|\|null,/.test(src)
+   && /note:`同行使用（\$\{venueName\(vid\)\} \$\{no\} 號）・不另外扣點`/.test(src));
+ok('★ 關掉＝取消那一筆；主預約不能關',
+   /if\(hit\.id===root\)\{ showToast\('這是本堂的主要機台，不能關；要換台請先打開另一台'\); return; \}/.test(src));
+ok('★ 同一組用 sibling_of 串起來', /sibling_of:root,/.test(src)
+   && /const root=b\.sibling_of\|\|b\.id;/.test(src));
+ok('★ 開之前確認沒被別人搶走', /showToast\('這一台剛被別人約走了'\); openBookingDetail\(id\); return;/.test(src));
 ok('★ 教練不能動別人的課', /if\(typeof coachOwnsBk==='function' && !coachOwnsBk\(b\)\)\{ showToast\('這不是你的課，只能查看'\); return; \}/.test(src));
 ok('　　改完重開明細並重繪行事曆', /openBookingDetail\(id\);\s*\n\s*if\(typeof navTo==='function' && \(CUR_PAGE==='calendar'\|\|CUR_PAGE==='g_dashboard'\)\) navTo\(CUR_PAGE\);/.test(src));
 ok('　　存檔失敗會講原因', /showToast\('儲存失敗：'\+\(\(e&&e\.message\)\|\|e\)\)/.test(src));
