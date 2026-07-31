@@ -6795,8 +6795,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.0053';
-const APP_VERSION_LABEL='v260801.0053';
+const APP_VERSION = '260801.0102';
+const APP_VERSION_LABEL='v260801.0102';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21953,7 +21953,7 @@ function dutyClassOverlapHours(shifts, bookings, empId, month, emp){
   const myShifts=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month);
   if(!myShifts.length) return 0;
   // 該員工當月已上課（已完成或已簽到）、且有授課時段的課（私人教練/體驗/小班肌力團課）
-  const myClasses=(bookings||[]).filter(b=>b.coach_id===empId && (b.status==='completed'||b.status==='checked_in')
+  const myClasses=(bookings||[]).filter(b=>bkCoachId(b)===empId && (b.status==='completed'||b.status==='checked_in')
     && (b.category==='私人教練'||b.category==='體驗'||bkIsGroup(b)) && (b.date||'').slice(0,7)===month);
   if(!myClasses.length) return 0;
   let overlapMin=0;
@@ -22269,6 +22269,10 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   } else {
     insHealthEmp = (healthOn && lvl)?(Number(lvl.health_emp)||0):0;
   }
+  /* 投保中、但級距表裡查不到這一級（2026-08-01 使用者回報：曾邦宏的薪資單沒扣到勞健保）——
+     原本 lvl 找不到就安靜地扣 0，薪資單上完全看不出哪裡出錯，只會少扣一整個月。
+     這種「設定不完整」必須講出來，不能默默算成 0。 */
+  const insGradeMissing = ((laborOn||healthOn) && grade && !lvl) ? String(grade) : '';
   const insEmpDeduct=insLaborEmp+insHealthEmp; // 員工負擔合計（從應發扣除）
   const insLaborCo  = lvl?(Number(lvl.labor_co)||0):0;
   const insHealthCo = lvl?(Number(lvl.health_co)||0):0;
@@ -22287,7 +22291,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
     dutyGross, dutyLeaveDeduct, dutyClassDeduct, classOverlap:co, dutyPay, dutyDetail,
     renewCount, renewPay, renewDetail,
     isSupervisor:isSup, supPay, isLeader, leaderPay, leaderDetail, leaderTotal, leaderUnits, mgmtPay,
-    insGrade:grade||null, insLaborEmp, insHealthEmp, insEmpDeduct, insLaborCo, insHealthCo, insCoCost,
+    insGrade:grade||null, insGradeMissing, insLaborEmp, insHealthEmp, insEmpDeduct, insLaborCo, insHealthCo, insCoCost,
     leave:L, leaveDeduct, divisor:_divisor,
     grossPay, netPay,
     total: grossPay }; // total 維持＝應發，相容既有顯示
@@ -23015,6 +23019,7 @@ async function openPerfDetail(empId, month){
     rows+=row('應發合計','', money(sal.grossPay), {sum:true});
     /* 請假扣薪移到應發合計之後（2026-08-01 使用者指示：算完本月總薪資後再扣除） */
     if(sal.leaveDeduct>0) rows+=row('請假扣薪', sal.leaveDeductDetail||'事假全扣・病假半薪', '−'+money(sal.leaveDeduct), {neg:true});
+    if(sal.insGradeMissing) rows+=row('⚠ 勞健保未扣', `投保級距 ${Number(sal.insGradeMissing).toLocaleString()} 不在級距表裡，請到「全域薪資制度」補上這一級`, '$0', {neg:true});
     if(sal.insEmpDeduct>0){
       if(sal.insLaborEmp>0)  rows+=row('勞保（員工負擔）', sal.insGrade?`投保級距 ${Number(sal.insGrade).toLocaleString()}`:'', '−'+money(sal.insLaborEmp), {neg:true});
       if(sal.insHealthEmp>0) rows+=row('健保（員工負擔）', '', '−'+money(sal.insHealthEmp), {neg:true});
@@ -23048,7 +23053,11 @@ async function computeMonthlyPayroll(month){
   // 先算每位教練當月教練課堂數（店長津貼需要全體名單堂數）
   const ptDoneById={};
   staff.forEach(emp=>{
-    ptDoneById[emp.id]=bookings.filter(b=>b.coach_id===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month&&isPtPayClass(b)).length;   // 體驗不算（2026-07-31）
+    /* 2026-08-01 使用者回報：mango 的團課人次多 2、曾邦宏少 3 —— 兩邊是同一個原因。
+       薪資這裡用「主責教練」歸戶，但 7/13 那堂是 mango 主責、曾邦宏代課：
+       人次算給了 mango，實際上課的是曾邦宏。改用 bkCoachId（有代課算代課教練），
+       與行事曆篩選、教練 chips 的堂數同一個口徑。 */
+    ptDoneById[emp.id]=bookings.filter(b=>bkCoachId(b)===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month&&isPtPayClass(b)).length;   // 體驗不算（2026-07-31）
   });
   // 續約張數：每位教練當月續約數（2026-07-29 統一走 renewMapOf）
   const renewById={};
@@ -23060,7 +23069,7 @@ async function computeMonthlyPayroll(month){
 
   const rows=staff.map(emp=>{
     const countSalary=emp.count_salary!==false;
-    const myDone=bookings.filter(b=>b.coach_id===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month);
+    const myDone=bookings.filter(b=>bkCoachId(b)===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month);
     const ptDone=ptDoneById[emp.id]||0;
     const groupList=myDone.filter(b=>bkIsGroup(b));
     const groupHeads=groupList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 只算已簽到（2026-07-31）
@@ -35216,8 +35225,9 @@ async function renderSalaryContent(TARGET, withHead){
   if(!window._salaryMonth) window._salaryMonth=ymd(TODAY).slice(0,7);
   const month=window._salaryMonth; // 可切換月份 2026-06
   // 已上課堂（已簽到或已完成皆計入；系統實務上「簽到」即視為上課完成）
-  const myDone=bookings.filter(b=>b.coach_id===empId&&(b.status==='completed'||b.status==='checked_in')&&b.date.slice(0,7)===month);
-  const myAll=bookings.filter(b=>b.coach_id===empId&&b.status!=='cancelled'&&b.date.slice(0,7)===month);
+  // 有代課算代課教練（2026-08-01，與月結明細同口徑）
+  const myDone=bookings.filter(b=>bkCoachId(b)===empId&&(b.status==='completed'||b.status==='checked_in')&&b.date.slice(0,7)===month);
+  const myAll=bookings.filter(b=>bkCoachId(b)===empId&&b.status!=='cancelled'&&b.date.slice(0,7)===month);
   const ptDone=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
   const groupDoneList=myDone.filter(b=>bkIsGroup(b));
   const groupDone=groupDoneList.length;
@@ -35263,10 +35273,10 @@ async function renderSalaryContent(TARGET, withHead){
   const er2=effRates(me);
   const dutyRate2=(me.custom_salary?(me.duty_hourly||0):(er2.duty_hourly||0));
   function dayResult(ds){
-    const dayBk=bookings.filter(b=>b.coach_id===empId&&b.date===ds&&(b.status==='completed'||b.status==='checked_in'));
+    const dayBk=bookings.filter(b=>bkCoachId(b)===empId&&b.date===ds&&(b.status==='completed'||b.status==='checked_in'));
     const dPt=dayBk.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
     const dGroupHeads=dayBk.filter(b=>bkIsGroup(b)).reduce((s,b)=>s+grpAttendHeads(b),0);   // 只算已簽到（2026-07-31）
-    const dClsCnt=bookings.filter(b=>b.coach_id===empId&&b.date===ds&&b.status!=='cancelled').length;
+    const dClsCnt=bookings.filter(b=>bkCoachId(b)===empId&&b.date===ds&&b.status!=='cancelled').length;
     const dDuty=(shifts||[]).filter(s=>s.emp_id===empId&&s.date===ds).reduce((a,s)=>a+(Number(s.hours)||0),0);
     const dPay=countSalary?(dPt*(er2.pt_rate||0)+dGroupHeads*(er2.group_rate||0)+dDuty*dutyRate2):0;
     return {clsCnt:dClsCnt, duty:dDuty, pay:Math.round(dPay)};
