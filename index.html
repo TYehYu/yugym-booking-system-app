@@ -1422,6 +1422,14 @@ body.mc-mode .layout{padding-top:8px;}
   .mobile-only{display:block;}
   .desktop-only{display:none;}
 }
+/* 營運分析翻頁列（2026-07-31） */
+.dash-pager{display:inline-flex;align-items:center;gap:6px;}
+.dash-pg{min-width:28px;height:28px;padding:0 8px;border:1px solid var(--bd);border-radius:8px;background:#fff;
+  color:var(--t2);font-size:15px;font-weight:700;line-height:1;cursor:pointer;font-family:inherit;}
+.dash-pg:hover:not(:disabled){border-color:var(--green);color:var(--green);}
+.dash-pg:disabled{opacity:.35;cursor:default;}
+.dash-pg-now{font-size:12px;font-weight:600;}
+.dash-pg-l{font-size:12.5px;color:var(--t2);font-family:var(--num),inherit;min-width:96px;text-align:center;}
 /* 儀表板總覽（2026-07-29 改版：圖示＋短標題＋數值） */
 .ov-row{display:flex;justify-content:space-between;align-items:baseline;padding:12px 0;border-bottom:1px solid var(--bd2);}
 .ov-row:last-child{border-bottom:none;}
@@ -6622,8 +6630,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1120';
-const APP_VERSION_LABEL='v260731.1120';
+const APP_VERSION = '260731.1150';
+const APP_VERSION_LABEL='v260731.1150';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12342,6 +12350,21 @@ function opsTab(tab){
 
 /* ════════ 管理員:營運分析（統計報表） ════════ */
 let _dashRange='month'; // 'month' | 'today'
+/* 營運分析翻頁（2026-07-31 使用者指示：要看得到前一個月／前一天）——
+   _dashAnchor＝目前在看的日期；'month' 模式只用它的年月，'today' 模式用整個日期。
+   不開放看未來（報表是回顧用的，往前翻到今天／本月為止）。 */
+let _dashAnchor=null;
+function dashAnchorYmd(){ return _dashAnchor||ymd(TODAY); }
+function dashShift(n){
+  const d=parseYmd(dashAnchorYmd()); if(!d) return;
+  if(_dashRange==='today') d.setDate(d.getDate()+n);
+  else { d.setDate(1); d.setMonth(d.getMonth()+n); }
+  const nx=ymd(d), t=ymd(TODAY);
+  if(_dashRange==='today' ? nx>t : nx.slice(0,7)>t.slice(0,7)) return;   // 不看未來
+  _dashAnchor=nx; navTo('dashboard');
+}
+/* 切換本月／今日時把錨點拉回今天 —— 停在五月又按「今日」會看到 5/01，很難解釋 */
+function dashSetRange(r){ _dashRange=r; _dashAnchor=null; navTo('dashboard'); }
 PAGES.dashboard=async function(){
   const[members,coaches,tickets,bookings,plans,types]=await Promise.all([
     dbGetAll('members'),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('bookings'),dbGetAll('course_plans'),dbGetAll('ticket_types')]);
@@ -12355,11 +12378,16 @@ PAGES.dashboard=async function(){
   const planMap=Object.fromEntries(plans.map(p=>[p.id,p]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
 
-  // 區間判斷
-  const today=ymd(TODAY);
+  // 區間判斷（today／ym 走翻頁錨點，不再寫死今天）
+  const _realToday=ymd(TODAY);
+  const today=dashAnchorYmd();
   const ym=today.slice(0,7); // YYYY-MM
   const inRange=(dateStr)=> _dashRange==='today' ? dateStr===today : (dateStr||'').slice(0,7)===ym;
-  const rangeLabel=_dashRange==='today'?`今日（${today}）`:`本月（${ym}）`;
+  /* 標題與各處小標：停在當期就講「本月／今日」，翻到過去就直接寫日期，免得看錯期間 */
+  const _atNow = _dashRange==='today' ? (today===_realToday) : (ym===_realToday.slice(0,7));
+  const periodLabel = _atNow ? (_dashRange==='today'?'今日':'本月')
+    : (_dashRange==='today' ? today.slice(5).replace('-','/') : ym.replace('-','/'));
+  const rangeLabel=_dashRange==='today'?`${periodLabel}（${today}）`:`${periodLabel}（${ym}）`;
 
   // ── 營收：發票券金額（purchase_date 在區間內）──
   /* 儲值營收（2026-07-26 使用者定案：用「已付金額」、排除員工、認列在購買當日）
@@ -12566,21 +12594,27 @@ PAGES.dashboard=async function(){
   C.innerHTML=head('ANALYTICS','營運分析','')+
   `<div class="filter-row" style="margin-bottom:18px;">
     <div class="seg">
-      <button class="seg-btn ${_dashRange==='month'?'active':''}" onclick="_dashRange='month';navTo('dashboard')">本月</button>
-      <button class="seg-btn ${_dashRange==='today'?'active':''}" onclick="_dashRange='today';navTo('dashboard')">今日</button>
+      <button class="seg-btn ${_dashRange==='month'?'active':''}" onclick="dashSetRange('month')">本月</button>
+      <button class="seg-btn ${_dashRange==='today'?'active':''}" onclick="dashSetRange('today')">今日</button>
     </div>
-    <span style="font-size:12.5px;color:var(--t2);">${rangeLabel}</span>
+    ${/* 2026-07-31 使用者指示：要能翻到前一個月／前一天。往後只到當期為止（不看未來）。 */''}
+    <span class="dash-pager">
+      <button class="dash-pg" onclick="dashShift(-1)" aria-label="上一${_dashRange==='today'?'天':'月'}">‹</button>
+      <span class="dash-pg-l">${rangeLabel}</span>
+      <button class="dash-pg" onclick="dashShift(1)" ${_atNow?'disabled':''} aria-label="下一${_dashRange==='today'?'天':'月'}">›</button>
+      ${_atNow?'':`<button class="dash-pg dash-pg-now" onclick="_dashAnchor=null;navTo('dashboard')">回${_dashRange==='today'?'今天':'本月'}</button>`}
+    </span>
   </div>
 
   <!-- ═══ 手機版：營運速覽 ═══ -->
   <div class="mobile-only">
     <div class="card" style="padding:4px 14px;">
-      <div style="display:flex;align-items:center;padding:12px 0 4px;"><span style="font-size:11.5px;color:var(--t3);letter-spacing:0.08em;font-weight:600;">${_dashRange==='month'?'本月':'今日'}總覽</span></div>
+      <div style="display:flex;align-items:center;padding:12px 0 4px;"><span style="font-size:11.5px;color:var(--t3);letter-spacing:0.08em;font-weight:600;">${periodLabel}總覽</span></div>
       ${/* 2026-07-29 使用者指示：畫面太雜亂 → 改「圖示＋短標題＋數值」的簡易列表，
            利潤獨立成主數字、拆解收合在一行小字，其餘一列一項不再堆疊副標。 */''}
       ${profit!=null?`
       <div class="ov-hero">
-        <span class="ov-hero-l">${_dashRange==='month'?'本月':'今日'}利潤</span>
+        <span class="ov-hero-l">${periodLabel}利潤</span>
         <span class="ov-hero-v" style="color:${profit>=0?'var(--green)':'#c0392b'};">${fmtNT(profit)}</span>
         <span class="ov-hero-s">銷課 ${fmtNT(coachedFee)}　−　薪資 ${fmtNT(salaryTotal)}</span>
         <span class="ov-hero-s2">不含房租水電・不計自主訓練</span>
