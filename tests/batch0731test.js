@@ -99,5 +99,25 @@ console.log('\n團課名單：同一人兩個名額，兩個都畫圓形卡');
 ok('★ 不再只畫第一列', /const st = _gTk\[mid\];/.test(src) && !/seatNo\(sk\)===1 \? _gTk/.test(src));
 ok('　　原因寫在程式裡', /同一個會員約了兩個名額，兩個名額都要顯示圓形卡/.test(src));
 
+console.log('\n會員票券：已過期方案獨立成一區（2026-07-31 使用者指示）');
+ok('★ 過期票不再和「用完的」混在歷史紀錄裡',
+   /const isExpiredTk=t=>t\.status!=='refunded' && t\.expire_date && String\(t\.expire_date\)\.slice\(0,10\)<_tYmd;/.test(src)
+   && /const expd=_histAll\.filter\(isExpiredTk\);/.test(src)
+   && /const hist=_histAll\.filter\(t=>!isExpiredTk\(t\)\);/.test(src));
+ok('★ 兩區各自有標題與筆數', /<summary>已過期方案（\$\{expd\.length\}）/.test(src)
+   && /<summary>歷史紀錄（\$\{hist\.length\}）<\/summary>/.test(src));
+ok('★ 已過期方案排在歷史紀錄前面', /\$\{expdSec\}\$\{histSec\}<\/div>/.test(src));
+ok('★ 展延按鈕跟著搬到已過期方案那一區（展延只對過期票有意義）',
+   /const _extable=expd\.filter\(t=>isDeskLike\(\)&&tkCanExtend\(t,_tYmd\)\);/.test(src));
+ok('　　有可展延的票時預設展開', /<details class="pp-hist"\$\{_extable\.length\?' open':''\}><summary>已過期方案/.test(src));
+ok('　　「目前沒有可用票券」要把兩區都算進去', /\$\{!act\.length&&\(hist\.length\|\|expd\.length\)\?/.test(src));
+ok('★ 教練端簡易名片同一套語意：過期就歸已過期，不看剩不剩堂數',
+   /const _isExpiredTk=t=>t\.status!=='refunded'&&t\.expire_date&&String\(t\.expire_date\)\.slice\(0,10\)<_todayYmd2;/.test(src)
+   && /const _canReactTk=t=>_isExpiredTk\(t\)&&\(Number\(t\.sessions_remaining\)\|\|0\)>0;/.test(src));
+ok('★ 「重新啟用」仍只給還有剩餘堂數的票（用完的沒東西可啟用）',
+   /expired\.map\(t=>renderTkCard\(t,\(_canReact&&_canReactTk\(t\)\)\?/.test(src));
+ok('　　標題改成「已過期方案」', /<div class="md-tk-subhead">已過期方案<\/div>/.test(src));
+ok('　　原因寫在程式裡', /原本過期的票和用完的票一起收進「歷史紀錄」，限定方案這種有效期的票就找不到了/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

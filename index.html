@@ -6612,8 +6612,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.0210';
-const APP_VERSION_LABEL='v260731.0210';
+const APP_VERSION = '260731.0255';
+const APP_VERSION_LABEL='v260731.0255';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19929,7 +19929,11 @@ async function openMemberDetail(member_id){
      歷史＝剩餘 0 且無未來預約（或 used_up/refunded）→ 收合區，完整保留。 */
   const _todayYmd2=ymd(TODAY);
   const _hasFutureBk=t=>myBookings.some(b=>b.ticket_id===t.id&&b.date>=_todayYmd2&&(b.status==='booked'||b.status==='checked_in'));
-  const _isExpiredTk=t=>t.status!=='refunded'&&t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2&&(Number(t.sessions_remaining)||0)>0;
+  /* 2026-07-31 使用者指示：有效期的票只要過期就歸「已過期」，不再看還剩不剩堂數
+     （原本剩 0 的過期票會掉進歷史紀錄摺疊區，限定方案這種有效期的票就找不到了）。
+     「重新啟用」仍只對還有剩餘堂數的票出現 —— 用完的票沒有東西可以啟用。 */
+  const _isExpiredTk=t=>t.status!=='refunded'&&t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2;
+  const _canReactTk=t=>_isExpiredTk(t)&&(Number(t.sessions_remaining)||0)>0;
   /* 2026-07-29 使用者指示：「預約了但還沒上（空心圓）」不該算進歷史紀錄。
      原本只看 sessions_remaining<=0 —— 新制預約當下就扣課，四堂全約完但一堂還沒上的票
      餘額就是 0，於是整張被收進歷史。團課更明顯：團課預約的 member_id 是 null，
@@ -19953,8 +19957,8 @@ async function openMemberDetail(member_id){
     let html= active.length?`<div class="md-tklist">${active.map(t=>renderTkCard(t)).join('')}</div>`
       :((expired.length||history.length)?'':'<div class="empty" style="padding:20px;"><div class="em-t" style="font-size:13px;">此分類尚無票券</div></div>');
     if(expired.length){
-      html+=`<div class="md-tk-subhead">已過期（可重新啟用）</div><div class="md-tklist">${
-        expired.map(t=>renderTkCard(t,_canReact?`<button class="btn btn-gold btn-sm" onclick="openReactivateTicket('${t.id}')">重新啟用</button>`:'')).join('')}</div>`;
+      html+=`<div class="md-tk-subhead">已過期方案</div><div class="md-tklist">${
+        expired.map(t=>renderTkCard(t,(_canReact&&_canReactTk(t))?`<button class="btn btn-gold btn-sm" onclick="openReactivateTicket('${t.id}')">重新啟用</button>`:'')).join('')}</div>`;
     }
     if(history.length){
       html+=`<details class="md-tk-hist"><summary>歷史紀錄（${history.length}）</summary><div class="md-tklist">${
@@ -24233,7 +24237,15 @@ function ppRecordHtml(){
           if(total>0 && usedOf(t)<total) return false;
           return t.status!=='usable' || (t.sessions_remaining!=null && Number(t.sessions_remaining)<=0);
         };
-        const act=list.filter(t=>!isHist(t)), hist=list.filter(isHist);
+        /* 2026-07-31 使用者指示：「因為都是有期限的票券，應該在已過期方案裡面」——
+           原本過期的票和用完的票一起收進「歷史紀錄」，限定方案這種有效期的票就找不到了。
+           拆成兩區：已過期方案（有效期、且效期已過）／歷史紀錄（用完但沒效期、已退費）。
+           展延只對過期票有意義，按鈕跟著搬到已過期方案那一區。 */
+        const isExpiredTk=t=>t.status!=='refunded' && t.expire_date && String(t.expire_date).slice(0,10)<_tYmd;
+        const act=list.filter(t=>!isHist(t));
+        const _histAll=list.filter(isHist);
+        const expd=_histAll.filter(isExpiredTk);
+        const hist=_histAll.filter(t=>!isExpiredTk(t));
         /* 分頁與各分頁的「可用張數」（2026-07-30 使用者指示）——
            可用＝沒被收進歷史紀錄的那些（同一個 isHist 判準，數字不會跟畫面對不上）。
            所以這段必須排在 isHist 定義之後。 */
@@ -24247,7 +24259,7 @@ function ppRecordHtml(){
         /* 2026-07-30 使用者回報「邱美珠過期的票券還沒有設定展延按鈕」：
            過期但還沒用完的票會被 isHist 收進「歷史紀錄」摺疊區，展延開關只做在管理端的
            票券頁，這邊看不到 —— 直接把按鈕放進歷史列，並在有可展延的票時預設展開。 */
-        const _extable=hist.filter(t=>isDeskLike()&&tkCanExtend(t,_tYmd));
+        const _extable=expd.filter(t=>isDeskLike()&&tkCanExtend(t,_tYmd));
         /* 2026-07-30 使用者指示：歷史紀錄也用圓形卡顯示 ——
            原本只有一行「N/總・已過期・購買日」，看不出哪幾堂上在哪一天。
            直接沿用上面 cardOf 的同一張卡（同一套 ticketTokens），加 .bkd-tkcard-hist
@@ -24274,14 +24286,16 @@ function ppRecordHtml(){
               </span>
             </div>
           </div>`; };
-        const histSec=hist.length?`<details class="pp-hist"${_extable.length?' open':''}><summary>歷史紀錄（${hist.length}）${_extable.length?`<span class="pp-hist-sum">${_extable.length} 張可展延</span>`:''}</summary>
+        const expdSec=expd.length?`<details class="pp-hist"${_extable.length?' open':''}><summary>已過期方案（${expd.length}）${_extable.length?`<span class="pp-hist-sum">${_extable.length} 張可展延</span>`:''}</summary>
+          ${expd.map(histRow).join('')}</details>`:'';
+        const histSec=hist.length?`<details class="pp-hist"><summary>歷史紀錄（${hist.length}）</summary>
           ${hist.map(histRow).join('')}</details>`:'';
         return `<div class="pp-card">${back}<div class="pp-card-t" style="display:flex;justify-content:space-between;align-items:center;">票券
           ${isDeskLike()?`<button class="btn btn-green btn-sm" style="padding:5px 14px;font-size:12.5px;" onclick="ppTopUp('${PP.id}')">＋ 儲值</button>`:''}</div>
           <div class="tkfilter" style="margin:8px 0 12px;">${tabs}</div>
-          ${act.length?act.map(cardOf).join(''):(hist.length?'':'<div class="pp-card-tip">此分類尚無票券</div>')}
-          ${!act.length&&hist.length?'<div class="pp-card-tip">目前沒有可用票券</div>':''}
-          ${histSec}</div>`;
+          ${act.length?act.map(cardOf).join(''):((hist.length||expd.length)?'':'<div class="pp-card-tip">此分類尚無票券</div>')}
+          ${!act.length&&(hist.length||expd.length)?'<div class="pp-card-tip">目前沒有可用票券</div>':''}
+          ${expdSec}${histSec}</div>`;
       }
       if(PP.recView==='bookings'){
         /* 2026-07-27 使用者指示：預約紀錄改月曆呈現（教練課/團體課/自主訓練依課程色標示），

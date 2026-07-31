@@ -113,7 +113,7 @@ ok('★ 展延後票券回到可用區，卡片標「已展延（不得退費）
    /\$\{tkIsExtended\(t\)\?`　·　<b style="color:var\(--gold-d\);">已展延（不得退費）<\/b>`:''\}/.test(src));
 ok('　　歷史列若是已展延過的也標一下', /\$\{tkIsExtended\(t\)\?'<span class="pp-hist-tag">已展延<\/span>':''\}/.test(src));
 ok('　　只有櫃檯／管理員看得到按鈕（會員自己不能展延）',
-   /const _extable=hist\.filter\(t=>isDeskLike\(\)&&tkCanExtend\(t,_tYmd\)\);/.test(src));
+   /const _extable=expd\.filter\(t=>isDeskLike\(\)&&tkCanExtend\(t,_tYmd\)\);/.test(src));   // 2026-07-31：展延搬到「已過期方案」那一區
 ok('　　點按鈕不會連帶收合／展開摺疊區', /onclick="event\.stopPropagation\(\);openTicketExtend/.test(src));
 ok('　　原因寫在程式裡', /展延開關只做在管理端的\s*\n\s*票券頁，這邊看不到/.test(src));
 

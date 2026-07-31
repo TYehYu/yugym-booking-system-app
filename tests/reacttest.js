@@ -78,7 +78,7 @@ ok('折抵券沒有重新啟用鈕',       vHtml.indexOf('openReactivateTicket')
 
 console.log('自主訓練分頁（allowReact=false）');
 const selfHtml=tkListHtml(SELF,false);
-ok('不出現「已過期（可重新啟用）」標題', selfHtml.indexOf('已過期（可重新啟用）')<0);
+ok('不出現「已過期方案」標題', selfHtml.indexOf('已過期方案')<0);
 ok('不出現「重新啟用」按鈕',            selfHtml.indexOf('重新啟用')<0);
 ok('不呼叫 openReactivateTicket',       selfHtml.indexOf('openReactivateTicket')<0);
 ok('未過期那張仍在可用區',              selfHtml.indexOf('TK-19f9befb2544abf')>=0
@@ -90,7 +90,9 @@ ok('兩張過期都沒被吞掉（歷史數=2）',    /歷史紀錄（2）/.test
 
 console.log('課程票券分頁（allowReact=true）');
 const courseHtml=tkListHtml(COURSE,true);
-ok('出現「已過期（可重新啟用）」標題',  courseHtml.indexOf('已過期（可重新啟用）')>=0);
+/* 2026-07-31 使用者指示：標題改「已過期方案」——有效期的票只要過期就歸這一區，
+     不再看還剩不剩堂數；「重新啟用」按鈕仍只給還有剩餘堂數的票。 */
+ok('出現「已過期方案」標題',  courseHtml.indexOf('已過期方案')>=0);
 ok('過期票有重新啟用按鈕',              /openReactivateTicket\('C-expired'\)/.test(courseHtml));
 ok('可用票沒有重新啟用按鈕',            courseHtml.indexOf("openReactivateTicket('C-active')")<0);
 ok('用畢票沒有重新啟用按鈕',            courseHtml.indexOf("openReactivateTicket('C-usedup')")<0);
@@ -100,7 +102,7 @@ console.log('權限');
 const S2=build(ymd,TODAY,{role:'coach'},myBookings,typeMap,renderTkCard,mkDeskLike({role:'coach'}),tkUsedCount);
 // 註：標題「已過期（可重新啟用）」本身含「重新啟用」四字，故以 onclick 判定按鈕是否存在
 ok('教練看不到重新啟用按鈕', S2.tkListHtml(COURSE,true).indexOf('openReactivateTicket')<0);
-ok('教練仍看得到過期區塊',   S2.tkListHtml(COURSE,true).indexOf('已過期（可重新啟用）')>=0);
+ok('教練仍看得到過期區塊',   S2.tkListHtml(COURSE,true).indexOf('已過期方案')>=0);
 
 /* 2026-07-29 使用者指示：只完成預約、還沒簽到銷課 → 不算用掉，不能收進歷史紀錄 */
 console.log('已預約但還沒簽到的票券不進歷史');
@@ -113,8 +115,8 @@ console.log('已預約但還沒簽到的票券不進歷史');
      _isHistoryTk(T({sessions_remaining:0,_pending:2}))===false);
   ok('★ 四堂都簽到完 → 才進歷史',
      _isHistoryTk(T({sessions_remaining:0,_pending:0}))===true);
-  ok('　　已過期仍照舊歸類（不被新規則攔截）',
-     _isHistoryTk(T({sessions_remaining:0,_pending:4,expire_date:'2026-07-01'}))===true);
+  ok('★ 已過期的改歸「已過期方案」，不再落進歷史紀錄（2026-07-31）',
+     _isHistoryTk(T({sessions_remaining:0,_pending:4,expire_date:'2026-07-01'}))===false);
 }
 
 /* 2026-07-30 使用者回報（Jackie）：7/24 買的團課四堂票 8/01 才開始、一堂都還沒上，
