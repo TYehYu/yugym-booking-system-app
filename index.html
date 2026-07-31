@@ -6378,6 +6378,13 @@ body.mc-mode .cal-body{background:rgba(255,255,255,.8);}
   background:#fff;color:var(--t2);font-family:inherit;}
 .msb-vbtn.on{background:var(--green);border-color:var(--green);color:#fff;}
 .msb-vbtn.off{opacity:.35;cursor:not-allowed;background:var(--card2);}
+/* 跑步機兩台的佔用燈號（2026-07-31 使用者指示）：灰＝可預約、綠＝已預約。
+   跑步機是「一個場地兩台」，一對二的客人可能一次佔掉兩台，客人要看得出還剩幾台。 */
+.msb-vdots{display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle;}
+.msb-vdot{width:7px;height:7px;border-radius:50%;background:var(--bd,#d8d2c4);}
+.msb-vdot.taken{background:var(--green,#1f6f54);}
+.msb-vbtn.on .msb-vdot{background:rgba(255,255,255,.45);}
+.msb-vbtn.on .msb-vdot.taken{background:#fff;}
 .cag-slot-tag{font-size:10px;opacity:.8;margin-left:5px;font-weight:600;}
 .msb-types{display:flex;gap:8px;padding:2px 16px 4px;}
 .msb-types button{flex:1;border:none;border-radius:999px;padding:8px 0;font-size:12.5px;font-weight:700;cursor:pointer;
@@ -6686,8 +6693,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1840';
-const APP_VERSION_LABEL='v260731.1840';
+const APP_VERSION = '260731.1930';
+const APP_VERSION_LABEL='v260731.1930';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -30954,6 +30961,23 @@ async function msbPickSlot(t){
     const err=await validateBooking(probe,s.date,t,60);
     return [vid,label,!err];
   }));
+  /* 跑步機的佔用燈號（2026-07-31 使用者指示）：兩台各一顆燈，灰＝可預約、綠＝已預約。
+     一對二的客人可能一張票就佔掉兩台，客人要看得出來還剩幾台。
+     ⚠ 舊資料有不帶編號的 venue_unit='treadmill'（櫃檯換場地寫的），所以用「筆數」而不是
+       「不同編號的數量」去數，再以容量封頂 —— 用編號去重會把兩筆 treadmill 算成一台。 */
+  const _tmCap=(typeof venueCap==='function')?(venueCap('treadmill')||2):2;
+  let _tmUsed=0;
+  try{
+    const _allBk=await dbGetAll('bookings').catch(()=>[]);
+    const _ns=timeToMin(t), _ne=_ns+60, _selfId=s.resched?s.resched.id:null;
+    _tmUsed=(_allBk||[]).filter(x=>x && x.date===s.date && x.status!=='cancelled' && x.id!==_selfId
+      && String(x.venue_unit||'').split('_')[0]==='treadmill'
+      && timeToMin(x.start_time)<_ne && timeToMin(x.start_time)+(Number(x.duration)||60)>_ns).length;
+    _tmUsed=Math.min(_tmUsed,_tmCap);
+  }catch(_){}
+  const _tmDots=`<span class="msb-vdots" title="跑步機 ${_tmCap} 台：已預約 ${_tmUsed} 台">${
+    Array.from({length:_tmCap},(_,i)=>`<i class="msb-vdot${i<_tmUsed?' taken':''}"></i>`).join('')}</span>`;
+  const _dotsOf=vid=>vid==='treadmill'?_tmDots:'';
   const avail=opts.filter(o=>o[2]);
   if(!avail.length){ showToast('這個時段剛被約走了，請選其他時段'); msbLoadSlots(); return; }
   const mm=timeToMin(t);
@@ -30961,8 +30985,8 @@ async function msbPickSlot(t){
   s.pickVenue=avail.some(v=>v[0]===autoVid)?autoVid:avail[0][0];
   /* 三個場地都顯示：沒位的變暗不可按（2026-07-26 使用者指示） */
   const vbtns=opts.map(([vid,label,ok])=> ok
-    ? `<button class="msb-vbtn${s.pickVenue===vid?' on':''}" data-vid="${vid}" onclick="msbChooseVenue('${vid}')">${label}</button>`
-    : `<button class="msb-vbtn off" disabled title="此時段已滿">${label}</button>`).join('');
+    ? `<button class="msb-vbtn${s.pickVenue===vid?' on':''}" data-vid="${vid}" onclick="msbChooseVenue('${vid}')">${label}${_dotsOf(vid)}</button>`
+    : `<button class="msb-vbtn off" disabled title="此時段已滿">${label}${_dotsOf(vid)}</button>`).join('');
   showModal(`<div class="modal-title">${s.resched?'確認改期':'確認預約'}</div>
     <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:2;">
       ${s.resched?`<div><span style="color:var(--t2);">原時段</span>　${s.resched.origDate.replace(/-/g,'/')}　${s.resched.origTime}</div>`:`<div><span style="color:var(--t2);">類型</span>　${s.type==='friendly'?'友善自主訓練':'自主訓練'}</div>`}
