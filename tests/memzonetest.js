@@ -105,8 +105,18 @@ ok('★ 上方有色票說明，帶各等級人數（比照員工列表）',
 }
 
 console.log('\n右區');
-ok('★ 最近上課與註冊日都用相對日期（今天／3 天前／日期）',
-   /m\.created_at \? `<span title="\$\{String\(m\.created_at\)\.slice\(0,10\)\}">\$\{fmtRelDay\(String\(m\.created_at\)\.slice\(0,10\)\)\}<\/span>` : ''/.test(src));
+/* 2026-07-31 使用者指示：最近上課與註冊日都改用日期顯示（原本是「3 天前」那種相對日期） */
+ok('★ 兩欄都用日期，不用相對日期',
+   /lastClassMap\[m\.id\] \? `<span class="num" title="\$\{lastClassMap\[m\.id\]\}">\$\{fmtDateShort\(lastClassMap\[m\.id\]\)\}<\/span>` : ''/.test(src)
+   && /m\.created_at \? `<span class="num" title="\$\{String\(m\.created_at\)\.slice\(0,10\)\}">\$\{fmtDateShort\(String\(m\.created_at\)\.slice\(0,10\)\)\}<\/span>` : ''/.test(src));
+ok('　　滑過仍看得到完整年月日', /title="\$\{lastClassMap\[m\.id\]\}"/.test(src));
+{
+  const f=new Function('ymd','TODAY',g('function fmtDateShort(ds){','\n}\n')+'\nreturn fmtDateShort;')(()=>'2026-07-31',null);
+  eq('★ 同一年只顯示 MM/DD（欄位窄也塞得下）', f('2026-07-14'), '07/14');
+  eq('★ 跨年才帶年份', f('2025-12-03'), '2025/12/03');
+  eq('　　帶時間的 created_at 也切得出來', f('2026-07-14T10:00:00Z'), '07/14');
+  eq('　　空值／格式不對回空字串', f('')+f(null)+f('abc'), '');
+}
 ok('　　等級排序的表頭沒了，這件事有寫在程式裡',
    /會員等級不再是獨立欄位 → 少了「依等級排序」的表頭；等級篩選仍在上方工具列/.test(src));
 
