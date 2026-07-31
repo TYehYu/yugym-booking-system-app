@@ -8,8 +8,10 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 
 console.log('分頁');
 /* 2026-07-31：分類器抽成共用的 tkClass5（會員列表也要用同一套），分頁清單抽成 TK5 */
-ok('★ 五個分頁：教練課／團體課／自主訓練／運動按摩／折抵券',
-   /const TK5=\[\['pt','教練課'\],\['group','團體課'\],\['self','自主訓練'\],\['massage','運動按摩'\],\['voucher','折抵券'\]\];/.test(src)
+/* 2026-07-31 二修：五個分頁改由票卡口袋（TK_POCKETS）產生，順序與名稱只寫在那裡 */
+ok('★ 五個分頁：教練課／團體課／自主訓練／運動按摩／折價券',
+   /const TK5=Object\.keys\(TK_POCKETS\)\.map\(k=>\[k,TK_POCKETS\[k\]\.label\]\);/.test(src)
+   && ['教練課','團體課','自主訓練','運動按摩','折價券'].every(l=>src.indexOf("label:'"+l+"'")>0)
    && /const _tkTabs=TK5;/.test(src));
 ok('★ cls() 認得運動按摩', /if\(\(tt\.category\|\|''\)==='運動按摩'\|\|\/按摩\/\.test\(\(t&&t\.plan_name\)\|\|''\)\) return 'massage';/.test(src));
 ok('★ 折抵券的判定排在最前面（按摩折抵券不能被歸進按摩分頁）', (()=>{

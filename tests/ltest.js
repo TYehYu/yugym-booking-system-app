@@ -6,7 +6,8 @@ const grab=n=>{
   let d=0;
   for(let k=h.indexOf('{',i);k<h.length;k++){ if(h[k]==='{')d++; else if(h[k]==='}'){d--; if(!d) return h.slice(i,k+1);} }
 };
-const src=[grab('grantMakeupTicket'),grab('revokeMakeupTicket'),grab('groupToggleLeave')].join('\n');
+/* 2026-07-31：補課券改用「名額鍵」防重複（同一人兩個名額要兩張），一併抽進來 */
+const src=[grab('seatNo'),grab('makeupKey'),grab('grantMakeupTicket'),grab('revokeMakeupTicket'),grab('groupToggleLeave')].join('\n');
 
 let DB={bookings:{},member_tickets:{}}, LOGS=[], TOASTS=[], REOPENED=[];
 const reset=()=>{DB={bookings:{},member_tickets:{}};LOGS=[];TOASTS=[];REOPENED=[];};
@@ -27,7 +28,7 @@ const env={
   SESSION:{id:'staff1'},
   window:{_ttCache:[{id:'tt-g',name:'團體課',category:'小班肌力'}]},
 };
-const api=new Function(...Object.keys(env), src+'; return {groupToggleLeave,grantMakeupTicket,revokeMakeupTicket};')(...Object.values(env));
+const api=new Function(...Object.keys(env), src+'; return {groupToggleLeave,grantMakeupTicket,revokeMakeupTicket,makeupKey};')(...Object.values(env));
 
 let pass=0,fail=0;
 const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
@@ -49,6 +50,28 @@ const mkTicket=()=>({id:'T1',member_id:'M1',ticket_type_id:'tt-g',sessions_total
   chk('不設整堂的 makeup_granted', !DB.bookings.G1.makeup_granted);
   chk('未影響其他學員', DB.bookings.G1.attendance.M2===undefined);
   chk('狀態維持 booked', DB.bookings.G1.status==='booked');
+
+  /* 2026-07-31 使用者回報：同一堂團課一個人報了兩個名額、兩個名額都請假，只發一張。
+     成因：防重複用（課卡 × 會員）當鍵，但團體課是逐名額的（TK_POCKETS.group.perSeat）。 */
+  console.log('同一人兩個名額都請假 → 兩張補課券：');
+  {
+    reset();
+    DB.bookings.G1=Object.assign(mkBooking(),{member_ids:['M1','M1','M2']});
+    DB.member_tickets.T1=mkTicket();
+    await api.groupToggleLeave('G1','M1');
+    await api.groupToggleLeave('G1','M1#2');
+    const mks=Object.values(DB.member_tickets).filter(t=>t.source==='makeup');
+    chk('★ 兩個名額各一張（不是一張）', mks.length===2);
+    chk('★ 兩張都給同一位會員', mks.every(t=>t.member_id==='M1'));
+    chk('★ 鍵分得出是哪一個名額', mks.map(t=>t.makeup_for_booking).sort().join(',')==='G1,G1#2');
+    chk('　　兩個名額的出席都標成 leave',
+        DB.bookings.G1.attendance['M1']==='leave' && DB.bookings.G1.attendance['M1#2']==='leave');
+    // 只取消第 2 個名額的請假 → 只收回那一張
+    await api.groupToggleLeave('G1','M1#2');
+    const left=Object.values(DB.member_tickets).filter(t=>t.source==='makeup');
+    chk('★ 只取消第 2 個名額 → 只收回第 2 張', left.length===1 && left[0].makeup_for_booking==='G1');
+    chk('　　第 1 個名額仍是請假', DB.bookings.G1.attendance['M1']==='leave');
+  }
 
   console.log('重複點請假不會重複發券：');
   await api.grantMakeupTicket(DB.bookings.G1,'M1');

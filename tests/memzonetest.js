@@ -19,11 +19,14 @@ const lpTable=new Function(g('function lpTable(cols, rows, sort){','\n}\n')+'\nr
 console.log('欄位順序與分區');
 {
   const i=src.indexOf("  const cols=[\n    {label:'姓名',     width:'1.5fr', sortKey:'name'},");
-  const TK5=new Function('return '+src.slice(src.indexOf('const TK5=')+10, src.indexOf('];',src.indexOf('const TK5='))+1))();
+  /* 2026-07-31 二修：TK5 由 TK_POCKETS 產生，這裡連口袋定義一起抽出來跑 */
+  const _pi=src.indexOf('const TK_POCKETS={');
+  const TK5=new Function(src.slice(_pi, src.indexOf('\nconst TK5=',_pi))
+    +'\nreturn Object.keys(TK_POCKETS).map(k=>[k,TK_POCKETS[k].label]);')();
   const cols=new Function('TK5','return '+src.slice(src.indexOf('[',i), src.indexOf('  ];',i)+3))(TK5);
   eq('★ 姓名 → 五個課別 → 最近上課 → 註冊日 → 操作',
      cols.map(c=>c.label),
-     ['姓名','教練課','團體課','自主訓練','運動按摩','折抵券','最近上課','註冊日','']);
+     ['姓名','教練課','團體課','自主訓練','運動按摩','折價券','最近上課','註冊日','']);
   eq('★ 分區線畫在「教練課」（中區起點）與「最近上課」（右區起點）',
      cols.filter(c=>c.zone).map(c=>c.label), ['教練課','最近上課']);
   ok('　　排序鍵：姓名／最近上課／註冊日', cols.filter(c=>c.sortKey).map(c=>c.sortKey).join()==='name,last,reg');

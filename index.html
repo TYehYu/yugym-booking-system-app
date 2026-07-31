@@ -6752,8 +6752,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1842';
-const APP_VERSION_LABEL='v260731.1842';
+const APP_VERSION = '260731.1904';
+const APP_VERSION_LABEL='v260731.1904';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9185,13 +9185,84 @@ function lpPrimary(name, sub){
     sub?`<span class="lp-sub">${sub}</span>`:''}</div>`;
 }
 /* 頭像＋姓名＋副標（2026-07-21 清單簡化）：badge 接在姓名後（僅非常態時傳入） */
-/* 票券五分類（2026-07-31 抽成共用）：教練課／團體課／自主訓練／運動按摩／折抵券。
-   會員票券分頁的分頁鍵與會員列表的欄位用同一支，兩邊不會分到不同格子。 */
-const TK5=[['pt','教練課'],['group','團體課'],['self','自主訓練'],['massage','運動按摩'],['voucher','折抵券']];
+/* 票券五分類（2026-07-31 抽成共用）：教練課／團體課／自主訓練／運動按摩／折價券。
+   分頁鍵、列表欄位、票卡口袋都用同一組（TK5 由 TK_POCKETS 產生，見下方）。 */
+/* ══════════════════════════════════════════════════════════════════════
+   票卡口袋（2026-07-31 使用者定案）
+
+   「票卡夾分成五個口袋，分別裝 教練課／團體課／自主訓練／運動按摩／折價券，
+     因為每種票券規則都不一樣。」
+
+   在此之前，各口袋的差異是散在程式各處的 202 個 `category==='小班肌力'` 這種比較 ——
+   沒有任何地方擁有「團體課的規則是什麼」的答案，於是加一種票要去兩百處找該補哪幾個，
+   必漏；而漏掉的地方就變成下一次的「某某會員的卡片怪怪的」。
+
+   規則寫在這裡，只寫一遍。畫面與流程一律問 tkPocket(票) / bkPocket(課卡)，
+   不要再自己寫課別字串比較 —— tests/pockettest.js 有一道棘輪擋住新增的散裝比較。
+
+   ⚠ 口袋不是互不相干的：教練課簽到會發自主訓練點數、團課請假會發補課券、
+     教練請假會展延並把課改成自主訓練。跨口袋的動作寫在 grants／leave 欄位裡，
+     不要在各自的口袋裡再實作一次。 */
+const TK_POCKETS={
+  pt:{ key:'pt', label:'教練課', unit:'堂', isCourse:true,
+    /* 預約當下就把 ticket_id 寫在課卡上 —— 這是帳本事實，最可信 */
+    stampFrom:['direct','infer'],
+    perSeat:false, sharedBooking:false,
+    canShare:true, canExtend:true, canInstall:true,
+    coachLeave:true,          // 教練請假 → 展延效期＋改成自主訓練（canCoachLeave）
+    memberLeave:false,        // 沒有逐人請假的機制，客人不能來就取消
+    grantsOnCheckin:'self',   // 簽到發自主訓練點數（grantCheckinReward）
+  },
+  group:{ key:'group', label:'團體課', unit:'堂', isCourse:true,
+    /* 一堂多人、各扣各的票，課卡不綁 ticket_id → 只能靠 ticket_logs 的扣課紀錄 */
+    stampFrom:['log','infer'],
+    perSeat:true,             // 同一人可佔多個名額（名額鍵 M / M#2）
+    sharedBooking:true,       // 一張課卡多位學員（member_ids）
+    canShare:true, canExtend:true, canInstall:false,
+    coachLeave:false,         // 團課請改派代課，或取消後補發補課券
+    memberLeave:'makeup',     // 逐人請假 → 本堂照扣、另發補課券（groupToggleLeave）
+    grantsOnCheckin:null,
+  },
+  self:{ key:'self', label:'自主訓練', unit:'點', isCourse:true,
+    stampFrom:['direct','infer'],
+    perSeat:false, sharedBooking:false,
+    canShare:false,           // 簽到贈送的短效點數，不提供共享
+    canExtend:false,          // 效期 7 天、過期即作廢（2026-07-26 定案）
+    canInstall:false,
+    coachLeave:false, memberLeave:false, grantsOnCheckin:null,
+    expiryDays:7,
+    multiPerBooking:true,     // 120 分鐘＝扣 2 點（圓形卡畫 2 顆同日期）
+    timeRestricted:true,      // 友善點限平日 18:00 前（tkTimeOk）
+    businessHoursOnly:true,   // 會員自助預約限營業時間內
+  },
+  massage:{ key:'massage', label:'運動按摩', unit:'堂', isCourse:true,
+    stampFrom:['direct','infer'],
+    perSeat:false, sharedBooking:false,
+    canShare:false, canExtend:true, canInstall:false,
+    coachLeave:false,         // 不設請假，跟教練另外約時間、直接取消就好
+    memberLeave:false, grantsOnCheckin:null,
+  },
+  voucher:{ key:'voucher', label:'折價券', unit:'張', isCourse:false,
+    /* 折價券不是一堂課：不會被課卡蓋章、不進「剩幾堂」、也不畫逐堂圓點。
+       ⚠ 現有票種掛在「私人教練」與「運動按摩」類別底下（tt-discount-pt300 /
+         tt-discount-ms300），所以分類一定要先攔折抵券再看 category。 */
+    stampFrom:[],
+    perSeat:false, sharedBooking:false,
+    canShare:false, canExtend:false, canInstall:false,
+    coachLeave:false, memberLeave:false, grantsOnCheckin:null,
+  },
+};
+const TK5=Object.keys(TK_POCKETS).map(k=>[k,TK_POCKETS[k].label]);
+// 票券 → 口袋
+function tkPocket(t, typeMap){ return TK_POCKETS[tkClass5(t,typeMap)]||TK_POCKETS.pt; }
+// 課卡 → 口袋（課卡沒有 plan_name，用 category 當名稱去分類，與票券同一支分類器）
+function bkPocket(b, typeMap){
+  return TK_POCKETS[tkClass5({ticket_type_id:b&&b.ticket_type_id, plan_name:b&&b.category}, typeMap)]||TK_POCKETS.pt;
+}
 function tkClass5(t, typeMap){
   const tt=(typeMap||{})[t&&t.ticket_type_id]||{};
   if(/折抵/.test((t&&t.plan_name)||'')||/折抵/.test(tt.name||'')) return 'voucher';
-  if((tt.category||'')==='自主訓練') return 'self';
+  if((tt.category||'')==='自主訓練'||/自主/.test((t&&t.plan_name)||'')) return 'self';
   if((tt.category||'')==='小班肌力'||(tt.category||'')==='團體課'||/團/.test((t&&t.plan_name)||'')) return 'group';
   if((tt.category||'')==='運動按摩'||/按摩/.test((t&&t.plan_name)||'')) return 'massage';
   return 'pt';
@@ -10599,13 +10670,25 @@ async function createBookingViaRpc(o, tk, ds, ts){
 /* 一鍵補發補課券：綁原課同類型，1 堂，效期 14 天，source='makeup'
    memberIdOverride（2026-07-26）：團課的 booking.member_id 為 null、學員在 member_ids，
    故請假補發時由呼叫端指定是哪一位。 */
-async function grantMakeupTicket(booking, memberIdOverride){
+/* 補課券的「這是哪一堂、哪一個名額」（2026-07-31 使用者回報：同一堂團課一個人報了
+   兩個名額、兩個名額都請假，卻只發了一份補課券）。
+   成因：防重複是用（課卡 × 會員）當鍵，但團體課這個口袋是「逐名額」的（TK_POCKETS.group
+   的 perSeat）—— 2026-07-30 出席狀態改成名額鍵之後，同一位會員在同一堂課本來就可能
+   需要兩張補課券，舊的鍵把第二張擋掉了。
+   鍵沿用既有的 makeup_for_booking 欄位、不另存一份：第 1 個名額維持課卡 id（舊資料不動），
+   第 2 個以後加上 #N，與出席狀態的名額鍵同一套寫法。 */
+function makeupKey(bookingId, seatKey){
+  const n=(typeof seatNo==='function')?seatNo(seatKey||''):1;
+  return (n>1) ? `${bookingId}#${n}` : String(bookingId||'');
+}
+async function grantMakeupTicket(booking, memberIdOverride, seatKey){
   const _mid = memberIdOverride || (booking&&booking.member_id);
   if(!booking||!_mid){ showToast('此預約無綁定會員，無法補發'); return; }
-  // 防重複：同一堂課、同一位會員只發一張
+  const _key=makeupKey(booking.id, seatKey);
+  // 防重複：同一堂課、同一位會員的同一個名額只發一張
   try{
     const _ex=(await dbGetAll('member_tickets')||[]).find(t=>t.source==='makeup'
-      && t.makeup_for_booking===booking.id && t.member_id===_mid);
+      && t.makeup_for_booking===_key && t.member_id===_mid);
     if(_ex) return _ex;
   }catch(_){}
   // 找原課同類型的票券種類 id（優先用原 booking 的 ticket_type_id，否則依 category 找）
@@ -10631,7 +10714,7 @@ async function grantMakeupTicket(booking, memberIdOverride){
     source:'makeup', purchase_date:today, start_date:today, expire_date:expire,
     sessions_total:1, sessions_remaining:1, status:'usable',
     payment_status:'paid', invoice_status:'none',
-    makeup_for_booking:booking.id||null, created_at:new Date().toISOString() };
+    makeup_for_booking:_key||null, created_at:new Date().toISOString() };
   await dbPut('member_tickets',tk);
   await logTicket(tk.id,'grant',1,booking.id||null,SESSION.id,'補發補課券');
   /* makeup_granted 是整筆 booking 的旗標。團課一堂多人、只有部分人請假，
@@ -10641,12 +10724,13 @@ async function grantMakeupTicket(booking, memberIdOverride){
 }
 /* 收回請假補課券（取消請假時）：只收「這堂課、這位會員、完全沒用過」的那張，
    用過了就保留不動 —— 與 revokeCheckinReward 同一套保守原則。 */
-async function revokeMakeupTicket(booking,memberId){
+async function revokeMakeupTicket(booking,memberId,seatKey){
   if(!booking||!memberId) return 0;
   let n=0;
+  const _key=makeupKey(booking.id, seatKey);   // 收回的是「那一個名額」的那一張（2026-07-31）
   try{
     const all=await dbGetAll('member_tickets')||[];
-    const tks=all.filter(t=>t.source==='makeup' && t.makeup_for_booking===booking.id && t.member_id===memberId);
+    const tks=all.filter(t=>t.source==='makeup' && t.makeup_for_booking===_key && t.member_id===memberId);
     for(const t of tks){
       if((t.sessions_total||0)-(t.sessions_remaining||0)>0) continue;   // 已用過→保留
       await dbDel('member_tickets',t.id);
@@ -10672,11 +10756,11 @@ async function groupToggleLeave(bid,seatKey){
   try{
     if(wasLeave){
       att[sk]='booked';
-      const n=await revokeMakeupTicket(b,mid);
+      const n=await revokeMakeupTicket(b,mid,sk);
       showToast(n?'已取消請假，並收回未使用的補課券':'已取消請假（補課券已使用，保留不收回）');
     }else{
       att[sk]='leave';
-      const tk=await grantMakeupTicket(b,mid);
+      const tk=await grantMakeupTicket(b,mid,sk);
       showToast(tk?'已標記請假：本堂照扣，已發 14 天補課券':'已標記請假（補課券發放失敗，請手動處理）');
     }
     b.attendance=att;
