@@ -79,14 +79,18 @@ ok('　　過期票仍照原規則歸類（不被新規則攔截）',
 ok('　　已退款的票仍算歷史', /if\(t\.status==='refunded'\) return true;/.test(src));
 
 console.log('\n後台會員檔案的票券分頁也要同一套判準');
-ok('★ 已上堂數抽成 usedOf()，卡片與歷史判定共用', /const usedOf=t=>\{/.test(src)
-   && /const used=usedOf\(t\);/.test(src));
-ok('★ 歷史判定先看已上堂數', /if\(total>0 && usedOf\(t\)<total\) return false;/.test(src));
+/* 2026-07-31 二修：後台票券分頁改從票券夾拿（buildWallet），已上堂數與三區判定同一份 */
+ok('★ 已上堂數與三區判定同一份（票券夾）',
+   /const usedOf=t=>\(WAL\.of\(t\.id\)\|\|\{\}\)\.used\|\|0;/.test(src)
+   && /const used=sl\.used;/.test(src));
+ok('★ 歷史判定先看已上堂數', /else if\(total>0 && used<total\) state='active';/.test(src)
+   && /if\(total>0 && tkUsedCount\(t\)<total\) return false;/.test(src));
 /* 2026-07-31：兩處的「團課待上堂數」改吃 grpTicketAlloc（扣課紀錄），細節見 grpalloctest.js */
 ok('★ 團課待上堂數另外算（團課預約不綁 ticket_id）',
    (src.match(/grpTicketAlloc\(/g)||[]).length===4);
 ok('　　兩個後台畫面都吃同一支',
-   /const gp=_grpA\.pend\[t\.id\]\|\|0;/.test(src) && /const grpPending=_grpA\.pend\[t\.id\]\|\|0;/.test(src));
+   /const pending=bks\.filter\(b=>b\.ticket_id===t\.id && b\.status==='booked'\)\.length \+ \(ga\.pend\[t\.id\]\|\|0\);/.test(src)
+   && /const grpPending=_grpA\.pend\[t\.id\]\|\|0;/.test(src));
 ok('★ 後台檔案頁的預約清單要含團課（學員在 member_ids、member_id 是 null）',
    /const myBk=bookings\.filter\(b=>b\.member_id===PP\.id\s*\n\s*\|\| \(Array\.isArray\(b\.member_ids\)&&b\.member_ids\.includes\(PP\.id\)\)\);/.test(src));
 

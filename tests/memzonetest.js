@@ -77,17 +77,19 @@ ok('　　那一行放不下色塊 tag → 另做純文字＋顏色的 tierLabel
    && /那裡是小字副標，塞不下色塊 tag/.test(src));
 
 console.log('\n中間五格：各自的圓形卡');
-ok('★ 一格一個課別，用共用的 tkClass5 分類', /const grp=mine\.filter\(tk=>tkClass5\(tk,typeMapFull\)===k\);/.test(src));
+/* 2026-07-31 二修：列表改從票券夾拿（buildWallet），分類／分配／leftover 都在那裡算 */
+ok('★ 一格一個課別，用共用的 tkClass5 分類', /const live=w\.active\(k\);/.test(src)
+   && /cls:tkClass5\(t,typeMap\), total, used, pending,/.test(src));
 ok('★ 整袋一起分配，不是每格各配一次（同一堂會在多張票上重複冒出來）',
-   /const alloc=allocBookingsToTickets\(mine,myBk,typeMapFull\);/.test(src));
+   /const w=_mTk\(m\.id\);/.test(src) && /put=\(tid,b\)=>\{ if\(!tid\|\|byBooking\[b\.id\]\) return;/.test(src));
 ok('★ 每位會員只算一次（掃票券＋配預約＋算 leftover 都跟課別無關）',
-   /const _mCache=\{\};/.test(src) && /if\(_mCache\[mid\]\) return _mCache\[mid\];/.test(src));
+   /const _mCache=\{\};/.test(src) && /const _mTk=\(mid\)=>_mCache\[mid\]\|\|\(_mCache\[mid\]=buildWallet\(mid,/.test(src));
 ok('★ 只畫「還在用的最新一張」，沒有在用的就畫最近一張',
-   /const tk=live\[0\]\|\|grp\.slice\(\)\.sort\(byBuy\)\[0\];/.test(src));
+   /const sl=live\[0\] \|\| w\.inClass\(k\)\.slice\(\)/.test(src));
 ok('★ 同課別還有幾張在用會標出來', /＋\$\{n-1\}<\/span>/.test(src) && /\.tkcat-n\{font-size:10px;/.test(src));
 ok('★ 沒有那個課別的票就留空（不要塞「—」把五格擠滿）',
-   /if\(!grp\.length\) return '';/.test(src));
-ok('　　沿用原本那顆圓形卡（tkRowHtml），不另做一套', /return tkRowHtml\(tk, alloc\.byTicket\[tk\.id\]\|\|\[\], leftover\[k\]\|\|null\)/.test(src));
+   /if\(!sl\) return '';/.test(src));
+ok('　　沿用原本那顆圓形卡（tkRowHtml），不另做一套', /return tkRowHtml\(sl, w\.leftoverIn\(k\)\)/.test(src));
 
 console.log('\n左緣色條＝會員等級（2026-07-31 使用者指示）');
 ok('★ 每一列帶等級色', /lc:\(TIER_DEFS\[effTier\(m\)\]\|\|\{\}\)\.color\|\|'#8a8478',/.test(src));

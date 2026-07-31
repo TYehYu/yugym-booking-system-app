@@ -88,8 +88,10 @@ console.log('\n會員列表的票券欄要看得到團課');
    tkCell 整支移除；下面兩項改驗新的位置。 */
 ok('★ 餘額 0 但還有待上的課 → 票券燈號不判成紅燈',
    /if\(!s\|\|!s\.anyUsable\) return _memPendingIdx\[mid\] \? 'yellow' : 'red';/.test(src));
+/* 2026-07-31 二修：改成把索引交給票券夾（buildWallet 的 bookingsOf），一樣不逐人掃全表 */
 ok('★ 組預約清單改用索引，含團課（學員在 member_ids、member_id 是 null）',
-   /const myBk=_memBkIdx\[mid\]\|\|\[\];/.test(src)
+   /bookingsOf:m=>_memBkIdx\[m\]\|\|\[\]/.test(src)
+   && /const myBk=c\.bookingsOf \? \(c\.bookingsOf\(memberId\)\|\|\[\]\)/.test(src)
    && !/const myBk=allBk\.filter\(b=>b\.member_id===m\.id&&b\.status!=='cancelled'\);/.test(src));
 ok('★ 兩個索引各建一次，不是每位會員掃一次上萬筆',
    /const _memBkIdx=\{\};/.test(src) && /const _memPendingIdx=\{\};/.test(src)
@@ -154,12 +156,12 @@ ok('★ 配對 key 不再把 format 算進團課（票券空白 vs 預約寫「�
 ok('★ 原因寫在程式裡（配不到又不會落到第二輪，整批被丟掉）',
    /那些課配不到票也不會落到第二輪（它們有 ticket_type_id），整批被丟掉/.test(src));
 ok('★ 會員列表也把「沒有票可扣的已預約未上」帶上，跟名單一樣看得到（見下方票券袋子）',
-   /let dots=ticketTokens\(tk,bks\.concat\(extra\|\|\[\]\),typeMapFull,used,null\);/.test(src));
-ok('　　已經配到票的不重複列（用計數扣抵）',
-   /const c=placed\.get\(b\.id\)\|\|0;\s*\n\s*if\(c>0\)\{ placed\.set\(b\.id,c-1\); return; \}/.test(src));
+   /let dots=ticketTokens\(tk,sl\.stamps\.concat\(extra\|\|\[\]\),typeMapFull,used,null\);/.test(src));
+ok('　　已經配到票的不重複列（同一堂只會蓋在一張票上）',
+   /put=\(tid,b\)=>\{ if\(!tid\|\|byBooking\[b\.id\]\) return;/.test(src));
 ok('　　只帶今天以後、且依課別歸戶（2026-07-31 起用票券五分類歸戶）',
-   /if\(b\.status!=='booked' \|\| String\(b\.date\|\|''\)\.slice\(0,10\)<today\) return;/.test(src)
-   && /const k5=tkClass5\(\{ticket_type_id:b\.ticket_type_id, plan_name:b\.category\}, typeMapFull\);/.test(src));
+   /const leftover=live\.filter\(b=>!byBooking\[b\.id\] && b\.status==='booked'/.test(src)
+   && /leftoverIn:k=>leftover\.filter\(b=>tkClass5\(\{ticket_type_id:b\.ticket_type_id,plan_name:b\.category\},typeMap\)===k\)/.test(src));
 {
   const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
   const alloc=new Function(g('function allocBookingsToTickets(','\n}\n')+'\nreturn allocBookingsToTickets;')();
@@ -192,22 +194,20 @@ ok('　　只帶今天以後、且依課別歸戶（2026-07-31 起用票券五�
 /* 2026-07-31：票券欄從「一格袋子」改成「五個課別各一格」（tkCatCell），
    袋子（tkbag／isMain／展開收合）整組退場。以下改驗新版面保住了哪些事。 */
 console.log('\n票券欄改成五個課別各一格');
-ok('★ 每位會員只算一次（掃票券＋配預約），不是五個課別各算一次',
+ok('★ 每位會員只算一次（一人一個票券夾，快取起來）',
    /const _mCache=\{\};/.test(src)
-   && /return \(_mCache\[mid\]=\{mine, alloc, leftover\}\);/.test(src)
-   && /原本五個課別各算一次＝同樣的工做五遍/.test(src));
+   && /const _mTk=\(mid\)=>_mCache\[mid\]\|\|\(_mCache\[mid\]=buildWallet\(mid,/.test(src));
 ok('★ 整袋一起配一次（同一堂不會在多張票上重複冒出來）',
-   /const alloc=allocBookingsToTickets\(mine,myBk,typeMapFull\);/.test(src));
+   /const w=_mTk\(m\.id\);/.test(src));
 ok('★ 沒被任何票吸收的已預約未上 → 仍畫紅虛線圈，依課別歸戶',
-   /const leftover=\{\};/.test(src)
-   && /\(leftover\[k5\]=leftover\[k5\]\|\|\[\]\)\.push\(b\);/.test(src)
-   && /tkRowHtml\(tk, alloc\.byTicket\[tk\.id\]\|\|\[\], leftover\[k\]\|\|null\)/.test(src));
-ok('　　只帶今天以後的', /if\(b\.status!=='booked' \|\| String\(b\.date\|\|''\)\.slice\(0,10\)<today\) return;/.test(src));
+   /const leftover=live\.filter\(b=>!byBooking\[b\.id\] && b\.status==='booked'/.test(src)
+   && /tkRowHtml\(sl, w\.leftoverIn\(k\)\)/.test(src));
+ok('　　只帶今天以後的', /&& String\(b\.date\|\|''\)\.slice\(0,10\)>=today\);/.test(src));
 ok('★ 同課別還有幾張在用會標「＋N」', /＋\$\{n-1\}<\/span>/.test(src));
 
 console.log('\n沒有票券的人要講對');
 ok('★ 五格全空看起來像沒載入 → 第一格掛提示',
-   /if\(!mine\.length\) return k==='pt' \? tkNoneChip\(m\) : '';/.test(src));
+   /if\(!w\.tickets\.length\) return k==='pt' \? tkNoneChip\(m\) : '';/.test(src));
 ok('★ 完全沒票但已排課 → 講出最近那一堂的課別與日期',
    /尚未儲值・\$\{nx\.category\|\|'已排課'\} \$\{String\(nx\.date\|\|''\)\.slice\(5\)\.replace\('-','\/'\)\}/.test(src));
 ok('★ 什麼都沒有 → 無有效票券', /無有效票券<\/span>';/.test(src));

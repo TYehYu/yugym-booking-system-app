@@ -148,16 +148,16 @@ console.log('\n圓點合併 grpMergeAlloc');
 }
 
 console.log('\n三個後台畫面都改吃同一支');
+/* 2026-07-31 二修：這一頁改從票券夾拿（buildWallet 內部就是呼叫 grpTicketAlloc） */
 ok('★ 會員個人資料頁（櫃檯／管理員）',
-   /const _grpA=grpTicketAlloc\(c\.myTk\|\|\[\], c\.myBk\|\|\[\], c\.myLogs\|\|\[\], PP\.id, t=>cls\(t\)==='group'\);/.test(src)
-   && /const _bksOf=grpMergeAlloc\(alloc\.byTicket, _grpA\);/.test(src)
-   && /const gp=_grpA\.pend\[t\.id\]\|\|0;/.test(src));
+   /const WAL=buildWallet\(PP\.id,\{tickets:c\.myTk\|\|\[\], bookings:c\.myBk\|\|\[\], logs:c\.myLogs\|\|\[\], typeMap\}\);/.test(src)
+   && /const ga=grpTicketAlloc\(mine, live, c\.logs\|\|\[\], memberId, \(\)=>true\);/.test(src));
 ok('★ 教練的簡易名片（openMemberDetail）',
    /const _grpA=grpTicketAlloc\(myTickets\|\|\[\], bookings\|\|\[\], tkLogs\|\|\[\], member_id,/.test(src)
    && /const grpPending=_grpA\.pend\[t\.id\]\|\|0;/.test(src));
 ok('★ 三邊都載入 ticket_logs', (src.match(/團課扣課紀錄（2026-07-31，見 grpTicketAlloc）/g)||[]).length===3);
 ok('★ 「已用堂數」與「是否收進歷史」用同一個數字（圓點不會跟卡片矛盾）',
-   /if\(total>0 && usedOf\(t\)<total\) return false;/.test(src)
+   /else if\(total>0 && used<total\) state='active';/.test(src)
    && /if\(total>0 && tkUsedCount\(t\)<total\) return false;/.test(src));
 ok('★ 團課簽到名單的圓點（2026-07-31 使用者回報：會員票券頁對、簽到名單少一顆）',
    /const _ga=grpTicketAlloc\(own, myGrp, _allLg, mid, \(\)=>true\);/.test(src)
@@ -168,7 +168,7 @@ ok('★ 簽到名單顯示「本堂扣的那張票」，不是猜最快到期的
 ok('　　沒有扣課紀錄（舊系統匯入）才退回原本的挑法',
    /\/\/ 本堂扣的那張優先；沒有扣課紀錄（舊系統匯入）才退回「最快到期的可用票／最新的票」/.test(src));
 ok('★ 圓點也改吃合併結果',
-   /const bks=_bksOf\(t\.id\);/.test(src)
+   /const bks=sl\.stamps;/.test(src)
    && /const _mg=_grpMerge\(t\.id\);/.test(src));
 ok('　　舊的「最近那張團課票」猜法已經拿掉',
    !/_grpNewestP/.test(src) && !/_grpTkNewest/.test(src));

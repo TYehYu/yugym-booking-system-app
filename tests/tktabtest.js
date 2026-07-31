@@ -17,15 +17,16 @@ ok('★ 折抵券的判定排在最前面（按摩折抵券不能被歸進按摩
    const seg=src.slice(i, src.indexOf("return 'pt';",i));
    return seg.indexOf("return 'voucher';") < seg.indexOf("return 'massage';");
 })());
-ok('★ 會員票券分頁與會員列表用同一支分類器', /const cls=t=>tkClass5\(t, typeMap\);/.test(src));
+/* 2026-07-31 二修：分類搬進票券夾（buildWallet 的 slot.cls＝tkClass5），畫面只問 inClass/active */
+ok('★ 會員票券分頁與會員列表用同一支分類器', /cls:tkClass5\(t,typeMap\), total, used, pending,/.test(src));
 ok('　　原因寫在程式裡', /運動按摩折抵券的 category 也是「運動按摩」，\s*\n\s*不先攔下來就會被歸進按摩分頁/.test(src));
 
 console.log('\n可用張數');
 ok('★ 每個分頁後面帶可用張數', /return `<button class="tkf-btn\$\{tab===k\?' active':''\}" onclick="ppTkTab\('\$\{k\}'\)">\$\{l\}\$\{n\?`<i class="tkf-n">\$\{n\}<\/i>`:''\}<\/button>`;/.test(src));
-ok('★ 「可用」＝沒被收進歷史紀錄的（與畫面同一個判準）',
-   /\(c\.myTk\|\|\[\]\)\.forEach\(t=>\{ const k=cls\(t\); if\(!isHist\(t\)\) _liveCnt\[k\]=\(_liveCnt\[k\]\|\|0\)\+1; \}\);/.test(src));
-ok('★ 分頁字串搬到 isHist 之後才組（不然算不到）',
-   src.indexOf('const isHist=t=>{') < src.indexOf('const _tkTabs=TK5;'));
+ok('★ 「可用」＝票券夾裡持有中的那些（與畫面同一個判準）',
+   /WAL\.active\(\)\.forEach\(s=>\{ _liveCnt\[s\.cls\]=\(_liveCnt\[s\.cls\]\|\|0\)\+1; \}\);/.test(src));
+ok('★ 分頁字串搬到票券夾之後才組（不然算不到）',
+   src.indexOf('const WAL=buildWallet(PP.id,') < src.indexOf('const _tkTabs=TK5;'));
 ok('　　0 張的分頁不顯示數字（不用一排 0 干擾）', /\$\{n\?`<i class="tkf-n">\$\{n\}<\/i>`:''\}/.test(src));
 ok('　　數字樣式：選中的分頁用半透明白底', /\.tkf-btn\.active \.tkf-n\{background:rgba\(255,255,255,\.24\);color:#fff;\}/.test(src));
 
