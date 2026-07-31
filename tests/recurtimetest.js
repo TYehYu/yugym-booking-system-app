@@ -3,6 +3,11 @@
    ・「預約最大次數是 12 次，因為我們的方案最多也只賣 12 堂」
    ・「一週預約兩堂的話，一週就會消耗 2 堂課」→ 數的是堂數不是週數（原本語意就對，補上說明） */
 const fs=require('fs');
+/* 2026-07-31：課種判斷抽成共用的 bkIsGroup／bkIsSelf／bkIsMassage（見 TK_POCKETS）——
+   沙箱裡給等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
+globalThis.bkIsSelf=b=>!!(b&&b.category==='自主訓練');
+globalThis.bkIsMassage=b=>!!(b&&b.category==='運動按摩');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
@@ -88,7 +93,7 @@ console.log('\n自主訓練改期：不會被「自己另一筆」卡住（2026-
 ok('★ 前端驗證帶原預約 id → 不會跟自己那一筆衝突',
    /const vbk=\{id:s\.resched\.id,member_id:SESSION\.id,coach_id:null,category:'自主訓練'/.test(src));
 ok('★ 前端本來就放行自主訓練彼此重疊（多名額）',
-   /const selfOK = bk\.category==='自主訓練' && dup\.category==='自主訓練';/.test(src));
+   /const selfOK = bkIsSelf\(bk\) && bkIsSelf\(dup\);/.test(src));
 ok('★ sameDay 排除自己那一筆', /const sameDay=all\.filter\(x=> x\.id!==bk\.id && x\.status!=='cancelled' && x\.date===date \);/.test(src));
 ok('　　DB 端規則差異已記錄在 migration', (()=>{
   const fs2=require('fs');

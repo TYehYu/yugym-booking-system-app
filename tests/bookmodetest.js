@@ -6,6 +6,8 @@ const fs=require('fs');
 /* 2026-07-31：「是不是團課」抽成共用的 bkIsGroup（見 TK_POCKETS.group）——
    沙箱裡給一個等價替身，測資只有 category 可判。 */
 globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
+globalThis.bkIsSelf=b=>!!(b&&b.category==='自主訓練');
+globalThis.bkIsMassage=b=>!!(b&&b.category==='運動按摩');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

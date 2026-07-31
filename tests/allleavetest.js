@@ -60,6 +60,37 @@ ok('★ 三種角章都是紅底（沿用既有角章的形狀與位置，只換
 ok('★ 全員請假排在「已簽到」前面判斷（兩者不會同時成立）',
    src.indexOf("const _allLeave = !hideMember && grpAllOnLeave(b);")<src.indexOf("? `<span class=\"evc-check evc-leave\""));
 
+console.log('\n簽到章要等全部名額都處理完（2026-07-31 使用者回報）');
+{
+  const done=new Function('bkIsGroup','seatKeys','attObj',
+    g('function grpAllDone(b){','\n}\n')+'\nreturn grpAllDone;')(
+      b=>!!(b&&b.category==='小班肌力'),
+      new Function(g('function mids(','\n}\n')+'\n'+g('function seatKeys(b){','\n}\n')+'\nreturn seatKeys;')(),
+      new Function(g('function attObj(b){','\n}\n')+'\nreturn attObj;')());
+  const B2=(o)=>Object.assign({category:'小班肌力',status:'booked',member_ids:['A','B','C']},o);
+  eq('★ 三個人全簽到 → 蓋章', done(B2({attendance:{A:'checked_in',B:'checked_in',C:'checked_in'}})), true);
+  eq('★ 只有兩個人簽到、一個還沒 → 不蓋（使用者回報的狀況）',
+     done(B2({attendance:{A:'checked_in',B:'checked_in'}})), false);
+  eq('★ 沒來的那位是請假（已另發補課券）→ 算處理完，蓋章',
+     done(B2({attendance:{A:'checked_in',B:'checked_in',C:'leave'}})), true);
+  eq('★ 全員請假 → 這裡不算（走紅色「假」章）',
+     done(B2({attendance:{A:'leave',B:'leave',C:'leave'}})), false);
+  eq('　　一個都還沒簽 → 不蓋', done(B2({attendance:{}})), false);
+  eq('　　同一人兩個名額，只到一個 → 不蓋',
+     done(B2({member_ids:['A','A'],attendance:{'A':'checked_in'}})), false);
+  eq('　　兩個名額都到 → 蓋',
+     done(B2({member_ids:['A','A'],attendance:{'A':'checked_in','A#2':'checked_in'}})), true);
+  eq('　　已取消的課不看', done(B2({status:'cancelled',attendance:{A:'checked_in',B:'checked_in',C:'checked_in'}})), false);
+  eq('　　教練課不適用（走整堂 status）',
+     done(B2({category:'私人教練',attendance:{A:'checked_in'}})), false);
+}
+ok('★ 三個畫面都改（行事曆標準卡、三態徽章、共用的狀態章）',
+   /const _isCheckedIn = bkIsGroup\(b\) \? grpAllDone\(b\)/.test(src)
+   && /const done=bkIsGroup\(b\) \? grpAllDone\(b\)/.test(src)
+   && /const checked = bkIsGroup\(b\) \? grpAllDone\(b\)/.test(src));
+ok('　　整堂 status 不能直接信（有一個人簽到就會被寫成 checked_in）',
+   /因為只要有一個人簽到，status 就會被寫成 checked_in/.test(src));
+
 console.log('\n名單本身不動');
 ok('★ 請假的人仍列在名單上（可以取消請假）', /groupToggleLeave\('\$\{b\.id\}','\$\{mid\}'\)">取消請假/.test(src));
 ok('★ 請假仍不算銷課名額（2026-07-30 定案，這次沒動到）',

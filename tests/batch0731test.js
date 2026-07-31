@@ -5,6 +5,11 @@
    2) 教練端的預約課卡「互動開啟，但不要圓形按鈕，只能看明細不能修改」。
    3) 團課預約明細排列：日期時間時長 → 教練 → 場地 → 名單 → 備註。 */
 const fs=require('fs');
+/* 2026-07-31：課種判斷抽成共用的 bkIsGroup／bkIsSelf／bkIsMassage（見 TK_POCKETS）——
+   沙箱裡給等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
+globalThis.bkIsSelf=b=>!!(b&&b.category==='自主訓練');
+globalThis.bkIsMassage=b=>!!(b&&b.category==='運動按摩');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
@@ -130,7 +135,7 @@ console.log('\n手機行事曆：待簽約的課要看得到名字（2026-07-31 
   ok('★ 非團課一律走共用層（體驗／待簽約／場租／待繳費都涵蓋）',
      /else \{ disp=bkName\(b,id=>memMap\[id\]\); dispTag=bkTag\(b\); if\(disp==='—'\) disp='課程'; \}/.test(blk));
   ok('★ 團課主行仍是人數（各畫面不同，維持各自處理）', /disp=n>0\?`團 \$\{n\}`:'團體課';/.test(blk));
-  ok('　　沒有人的自主訓練仍顯示「自主訓練」', /b\.category==='自主訓練' && !b\.member_id && !b\.trial_name/.test(blk));
+  ok('　　沒有人的自主訓練仍顯示「自主訓練」', /bkIsSelf\(b\) && !b\.member_id && !b\.trial_name/.test(blk));
   ok('★ 標籤畫成第二列，與桌機一致', /\$\{dispTag\?`<span class="evc-sub">\$\{dispTag\}<\/span>`:''\}/.test(src));
 }
 

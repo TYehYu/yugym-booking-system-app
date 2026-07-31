@@ -12,6 +12,8 @@ const fs=require('fs');
 /* 2026-07-31：「是不是團課」抽成共用的 bkIsGroup（見 TK_POCKETS.group）——
    沙箱裡給一個等價替身，測資只有 category 可判。 */
 globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
+globalThis.bkIsSelf=b=>!!(b&&b.category==='自主訓練');
+globalThis.bkIsMassage=b=>!!(b&&b.category==='運動按摩');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
@@ -19,10 +21,10 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
 
-const api=new Function('grpAllOnLeave',
+const api=new Function('grpAllOnLeave','grpAllDone',
   g('function bkTag(b){','\n}\n')+'\n'+g('function bkName(b, nameOf){','\n}\n')+'\n'
   +g('function bkNameFull(b, nameOf){','\n}\n')+'\n'+g('function bkStampKind(b){','\n}\n')
-  +'\nreturn {bkTag,bkName,bkNameFull,bkStampKind};')(b=>!!(b&&b._allLeave));
+  +'\nreturn {bkTag,bkName,bkNameFull,bkStampKind};')(b=>!!(b&&b._allLeave), b=>!!(b&&b._allDone));
 
 const NAMES={M1:'林小明', M2:'王大華'};
 const nameOf=id=>NAMES[id]||'';
@@ -62,8 +64,11 @@ eq('★ 取消優先於一切', api.bkStampKind({status:'cancelled',_allLeave:tr
 eq('★ 全員請假排在已簽到前面', api.bkStampKind({status:'booked',_allLeave:true}), 'leave');
 eq('★ 已簽到', api.bkStampKind({status:'checked_in'}), 'done');
 eq('★ 已完成也算已簽到', api.bkStampKind({status:'completed'}), 'done');
-eq('★ 團課有人簽到就算', api.bkStampKind({status:'booked',category:'小班肌力',attendance:{A:'checked_in'}}), 'done');
-eq('　　團課只有請假不算簽到', api.bkStampKind({status:'booked',category:'小班肌力',attendance:{A:'leave'}}), '');
+/* 2026-07-31 使用者回報：有些會員還沒簽到，簽到圓章就出現了 → 改成全部名額都處理完才蓋 */
+eq('★ 團課要全部名額都處理完才算已簽到', api.bkStampKind({status:'checked_in',category:'小班肌力',_allDone:true}), 'done');
+eq('★ 只有部分人簽到 → 不蓋章（整堂 status 已被寫成 checked_in 也一樣）',
+   api.bkStampKind({status:'checked_in',category:'小班肌力',_allDone:false}), '');
+eq('　　團課只有請假不算簽到', api.bkStampKind({status:'booked',category:'小班肌力',_allDone:false}), '');
 eq('　　補簽', api.bkStampKind({status:'booked',makeup_granted:true}), 'makeup');
 eq('　　還沒簽到 → 沒有章', api.bkStampKind({status:'booked'}), '');
 eq('　　null 不會爆', api.bkStampKind(null), '');

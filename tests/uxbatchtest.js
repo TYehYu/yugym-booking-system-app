@@ -4,6 +4,11 @@
    ③ 首頁右邊「今日未打卡名單」併進左邊「今日值班」：顯示完整名單，未打卡＝空心
       （收款提醒與降級名單維持獨立，那兩份之後可能很長） */
 const fs=require('fs');
+/* 2026-07-31：課種判斷抽成共用的 bkIsGroup／bkIsSelf／bkIsMassage（見 TK_POCKETS）——
+   沙箱裡給等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
+globalThis.bkIsSelf=b=>!!(b&&b.category==='自主訓練');
+globalThis.bkIsMassage=b=>!!(b&&b.category==='運動按摩');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

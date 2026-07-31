@@ -6752,8 +6752,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.2155';
-const APP_VERSION_LABEL='v260731.2155';
+const APP_VERSION = '260731.2213';
+const APP_VERSION_LABEL='v260731.2213';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9872,7 +9872,7 @@ function bkCC(b){
   const tt=(window._ttCache||[]).find(t=>t.id===b.ticket_type_id);
   if(tt){
     if(tt.color){
-      if(tt.color==='friendly') return b.category==='自主訓練'?'self':'friendly';
+      if(tt.color==='friendly') return bkIsSelf(b)?'self':'friendly';
       if(tt.color==='group') return 'group';
       if(tt.color==='self') return 'self';
       if(tt.color==='trial') return 'trial';
@@ -9880,7 +9880,7 @@ function bkCC(b){
       if(tt.color==='pt') return 'pt';
     }
     if((tt.name||'').indexOf('友善')>=0){
-      return b.category==='自主訓練'?'self':'friendly';
+      return bkIsSelf(b)?'self':'friendly';
     }
     // category_id 判定（新結構，color 未設時的可靠來源）
     const _cid=tt.category_id||'';
@@ -9894,11 +9894,11 @@ function bkCC(b){
   // 3) 查 member_tickets 的 plan_name
   const mt=(window._allTkCache||[]).find(t=>t.id===b.ticket_id);
   if(mt && (mt.plan_name||'').indexOf('友善')>=0){
-    return b.category==='自主訓練'?'self':'friendly';
+    return bkIsSelf(b)?'self':'friendly';
   }
   // 3.5) 票券種類 category 為運動按摩
   if(tt && tt.category==='運動按摩') return 'massage';
-  if(b.category==='運動按摩') return 'massage';
+  if(bkIsMassage(b)) return 'massage';
   if(b.category==='場租') return 'self';   // 場地租借（2026-07-21）：歸中性灰、不列教練堂數 KPI
   // 4) 退回 category
   return colorClass(typeOfCat(b.category));
@@ -9949,12 +9949,12 @@ function evColorClass(b,typeMap,mt){
     if(cid==='cat_self') return 'ev-self';
     if(cid==='cat_trial') return 'ev-trial';
     const nm=ty.name||'';
-    if(nm.indexOf('友善')>=0) return b.category==='自主訓練'?'ev-self':'ev-friendly';
+    if(nm.indexOf('友善')>=0) return bkIsSelf(b)?'ev-self':'ev-friendly';
   }
   // 1.6) booking 未帶 ticket_type_id（現行預約流程常見）→ 用會員票券快照的 plan_name 判定友善
   if(mt){
     const pn=mt.plan_name||'';
-    if(pn.indexOf('友善')>=0) return b.category==='自主訓練'?'ev-self':'ev-friendly';
+    if(pn.indexOf('友善')>=0) return bkIsSelf(b)?'ev-self':'ev-friendly';
   }
   // 2) 退回 category（舊資料相容）
   const cat=b.category;
@@ -11372,7 +11372,7 @@ PAGES.g_dashboard=async function(){
   const _roomOf=b=>{
     if(b.venue_unit){ const vid=String(b.venue_unit).split('_')[0]; if(vid==='group')return 'group'; if(vid==='treadmill')return 'B'; return 'A'; }
     if(bkIsGroup(b)) return 'group';
-    if(b.category==='自主訓練') return 'B';
+    if(bkIsSelf(b)) return 'B';
     return 'A'; // 私人教練/友善/體驗
   };
   const _roomDef=[
@@ -11479,7 +11479,7 @@ PAGES.g_dashboard=async function(){
     /* 手機端：頂部改七天日期卡（2026-07-29 使用者指示）；桌機側欄維持月格月曆 */
     /* 週曆的堂數不能受單月限制（跨月的那一週會缺數字）→ 另建全期間計數 */
     const _cntAll={};
-    (bookings||[]).forEach(b=>{ if(b.status==='cancelled')return; if(b.category==='自主訓練'||b.category==='場租')return;
+    (bookings||[]).forEach(b=>{ if(b.status==='cancelled')return; if(bkIsSelf(b)||b.category==='場租')return;
       if(!b.date)return; _cntAll[b.date]=(_cntAll[b.date]||0)+1; });
     adminCalCard=isMobileLayout()
       ? `<div class="cal-hero" id="cal-hero">${heroWeekBarHTML({anchor:date,sel:date,today:ymd(TODAY),
@@ -12685,7 +12685,7 @@ PAGES.ops_center=async function(){
   const dayBk=bookings.filter(b=>b.date===date && b.status!=='cancelled');
   const ptCount=dayBk.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
   const groupCount=dayBk.filter(b=>bkIsGroup(b)).length;
-  const selfCount=dayBk.filter(b=>b.category==='自主訓練').length;
+  const selfCount=dayBk.filter(b=>bkIsSelf(b)).length;
   const dayBkSorted=dayBk.slice().sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   // 分頁清單：教練課（含體驗）、團課
   const ptList=dayBkSorted.filter(b=>b.category==='私人教練'||b.category==='體驗');
@@ -13274,8 +13274,10 @@ function bkStampKind(b){
   if(!b) return '';
   if(b.status==='cancelled') return 'cancel';
   if(typeof grpAllOnLeave==='function' && grpAllOnLeave(b)) return 'leave';
-  const checked = b.status==='checked_in' || b.status==='completed'
-    || (bkIsGroup(b) && b.attendance && Object.values(b.attendance).some(x=>x==='checked_in'));
+  /* 團課要全部名額都處理完才算「已簽到」（見 grpAllDone）；整堂的 status 也不能直接信，
+     因為只要有一個人簽到，status 就會被寫成 checked_in。 */
+  const checked = bkIsGroup(b) ? grpAllDone(b)
+    : (b.status==='checked_in' || b.status==='completed');
   if(checked) return 'done';
   if(b.makeup_granted) return 'makeup';
   return '';
@@ -13755,7 +13757,7 @@ async function renderCalendar(opts){
       </div>` : `<div class="ev-tip">
         <div class="ev-tip-h"><b>${memName}</b><span>${b.start_time}–${minToTime(timeToMin(b.start_time)+(b.duration||60))}</span></div>
         <div class="ev-tip-r">${typeName}${b.format?' · '+b.format:''}</div>
-        ${(b.category==='自主訓練'&&b.venue_unit&&String(b.venue_unit).split('_')[0]!=='multi')?`<div class="ev-tip-r" style="color:#a8642a;font-weight:600;">場地：${venueName(b.venue_unit)}</div>`:''}
+        ${(bkIsSelf(b)&&b.venue_unit&&String(b.venue_unit).split('_')[0]!=='multi')?`<div class="ev-tip-r" style="color:#a8642a;font-weight:600;">場地：${venueName(b.venue_unit)}</div>`:''}
         ${coachName?`<div class="ev-tip-r">教練：${coachName}${subCoachName?`　→ 代課：${subCoachName}`:''}</div>`:''}
         ${tk?`<div class="ev-tip-tk">${tk.plan_name||'票券'}　剩 ${remain}　<span style="opacity:.7;">效期至 ${fmtExpire(tk.expire_date,tk)}</span>${(window._renewLastBk&&window._renewLastBk[b.id])?`<br><span style="color:#a8642a;font-weight:600;">🔁 本張票最後一堂・記得提醒續約</span>`:((window._installLastBk&&window._installLastBk[b.id])?`<br><span style="color:#a8642a;font-weight:600;">💰 本期最後一堂・下次上課前需繳費</span>`:'')}</div>`:''}
         <div class="ev-tip-s">${statusLabel(b.status)}</div>
@@ -13782,8 +13784,8 @@ async function renderCalendar(opts){
          現在改成點得開「課程明細」，但不彈出那組圓形按鈕（簽到／代課／取消／編輯），
          明細裡的所有修改動作也照舊由 ownByCoach 關掉 —— 只能看，不能改。 */
       const _viewOnly = SESSION.role==='coach' && !SESSION.is_manager && opts.me && !isMine;
-      const _isCheckedIn = b.status==='checked_in'||b.status==='completed'
-        || (bkIsGroup(b) && b.attendance && Object.values(b.attendance).some(s=>s==='checked_in'));
+      const _isCheckedIn = bkIsGroup(b) ? grpAllDone(b)
+        : (b.status==='checked_in'||b.status==='completed');
       const _isMakeup = !!b.makeup_granted;
       // 完成狀態三態：完成✓ / 補簽! / 未簽○（僅未取消、非遮蔽時顯示）
       const _stStamp = (b.status==='cancelled'||hideMember) ? ''
@@ -13859,7 +13861,7 @@ async function renderCalendar(opts){
       if(bkIsGroup(b) && Array.isArray(b.member_ids) && b.member_ids.length){
         // memMap[id] 本身即姓名字串（見上方 memMap 定義），不可再取 .name（會變 —）
         _tipMem = b.member_ids.map(mid=>memMap[mid]||'—').join('\n');
-      }else if(b.category==='自主訓練'&&b.trial_name){
+      }else if(bkIsSelf(b)&&b.trial_name){
         /* 家庭共享使用人（2026-07-29）：自主訓練的 trial_name＝家人稱呼，不可標成「體驗」 */
         _tipMem = ((b.member_id&&memMap[b.member_id])||'')+'（'+b.trial_name+'）';
       }else if(b.trial_name&&!b.member_id){
@@ -14218,7 +14220,7 @@ try{ initCalCursorTip(); }catch(_){}
   document.addEventListener('compositionend', e=>{ const t=e.target; if(t&&t.tagName==='INPUT'){ t._imeComposing=false; try{ t.dispatchEvent(new Event('input',{bubbles:true})); }catch(_){} } }, true);
   document.addEventListener('input', e=>{ if(e.target && e.target._imeComposing) e.stopImmediatePropagation(); }, true);
 })();
-function CAL_isTreadmillCat(b){ return b.category==='自主訓練'; }
+function CAL_isTreadmillCat(b){ return bkIsSelf(b); }
 function CAL_isNormalCat(b){ return !CAL_isGroupCat(b) && !CAL_isTreadmillCat(b); } // 私人教練/友善/體驗
 function CAL_overlap(aS,aE,bS,bE){ return aS < bE && aE > bS; } // 區間重疊公式
 function assignLanesDay(evs){
@@ -14827,7 +14829,7 @@ function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){
     const fill=(vid,n)=>{ if(use[vid]==null) return n; const take=Math.min(Math.max(0,venueCap(vid)-use[vid]),n); use[vid]+=take; return n-take; };
     let g=cur.filter(x=>!x.venue_unit&&bkIsGroup(x)).length;
     let m=cur.filter(x=>!x.venue_unit&&(x.category==='私人教練'||x.category==='體驗')).length;
-    let sf=cur.filter(x=>!x.venue_unit&&x.category==='自主訓練').length;
+    let sf=cur.filter(x=>!x.venue_unit&&bkIsSelf(x)).length;
     g=fill('group',g);
     m=fill('multi',m); if(m>0) fill('group',m);
     sf=fill('multi',sf); sf=fill('group',sf); if(sf>0) fill('treadmill',sf);
@@ -14938,7 +14940,7 @@ async function validateBooking(bk,date,time,duration){
          每次都要重跑一遍預約流程，避免一人一次掃掉整排位子。
          名額上限仍由下方的場地容量把關；家庭成員名單不再是前提。
          其他課種（教練課／團課／體驗）維持一人一時段的防呆。 */
-      const selfOK = bk.category==='自主訓練' && dup.category==='自主訓練';
+      const selfOK = bkIsSelf(bk) && bkIsSelf(dup);
       if(!selfOK) return '會員於該時段已有預約';
     }
   }
@@ -15148,7 +15150,7 @@ async function renderDayTimeline(){
     const top=dtlYOf(s); const height=Math.max((e-s)/DTL_SLOT*DTL_ROWH-3, 22);
     const cc=bkCC(b);
     const done=(b.status==='completed'||b.status==='checked_in');
-    const mname=b.member_id?(memMap[b.member_id]||'—'):(b.category==='自主訓練'?'自主':'—');
+    const mname=b.member_id?(memMap[b.member_id]||'—'):(bkIsSelf(b)?'自主':'—');
     const catLabel={'私人教練':'教練課','小班肌力':'團體課','自主訓練':'自主訓練','體驗':'體驗'}[b.category]||b.category;
     const wPct=100/maxCol; const leftPct=col*wPct;
     cards+=`<div class="dtl-card dtl-${cc}${done?' dtl-done':''}" style="top:${top}px;height:${height}px;left:calc(${leftPct}% + 4px);width:calc(${wPct}% - 8px);" onclick="event.stopPropagation();openCourseCard('${b.id}',this)">
@@ -15482,7 +15484,7 @@ function cagCardName(b,memMap,coachObj){
     return n>0?`小班 ${n} 人`:'小班肌力';
   }
   if(b.member_id) return memMap[b.member_id]||'—';
-  if(b.category==='自主訓練') return '自主訓練';
+  if(bkIsSelf(b)) return '自主訓練';
   return b.trial_name||'—';
 }
 function cagStatus(b){
@@ -15666,8 +15668,8 @@ async function renderCoachAgenda(){
     const top=yOf(s); const height=Math.max(dur/60*HOUR_H-2, 16);
     // pos={lane,of}：在容器內依重疊群組分欄定位（桌機版行為——單張整寬、兩張平分…）
     const posStyle=pos?`left:calc(${pos.lane*100/pos.of}% + 1px);width:calc(${100/pos.of}% - 2px);right:auto;`:'';
-    const done=(b.status==='completed'||b.status==='checked_in')
-      || (bkIsGroup(b) && b.attendance && Object.values(b.attendance).some(st=>st==='checked_in'));
+    const done=bkIsGroup(b) ? grpAllDone(b)
+      : (b.status==='completed'||b.status==='checked_in');
     const showTime=height>=30;
     const canClick = layer==='mine' || isAdmin;
     /* 名稱行沿用原邏輯（2026-07-23）：自己的課＝會員名／團 N（可互動）；
@@ -15678,7 +15680,7 @@ async function renderCoachAgenda(){
     let disp, dispTag='';
     if(bkIsGroup(b)||(Array.isArray(b.member_ids)&&b.member_ids.length)){
       const n=(Array.isArray(b.member_ids)?b.member_ids.length:0); disp=n>0?`團 ${n}`:'團體課';
-    }else if(b.category==='自主訓練' && !b.member_id && !b.trial_name){ disp='自主訓練'; }
+    }else if(bkIsSelf(b) && !b.member_id && !b.trial_name){ disp='自主訓練'; }
     else { disp=bkName(b,id=>memMap[id]); dispTag=bkTag(b); if(disp==='—') disp='課程'; }
     /* 卡片視覺改桌機版標準卡（2026-07-26 使用者指示）：cal-ev-std 淡彩置中設計
        （時間／名稱／第三行教練縮寫 tag；簽到＝右下「簽」章，底色維持課程淡彩）。 */
@@ -15996,7 +15998,7 @@ async function renderWeekTimeline(){
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const coachObj=Object.fromEntries(coaches.map(c=>[c.id,c]));
   const cardLabel=(b)=>{
-    if(b.category==='自主訓練') return '自主';
+    if(bkIsSelf(b)) return '自主';
     if(bkIsGroup(b)) return '團課';
     const cid=b.substitute_coach_id||b.coach_id;
     return coachAbbr(coachObj[cid]);
@@ -16004,7 +16006,7 @@ async function renderWeekTimeline(){
   // 我的卡顯示會員名（自己的課要看是哪位會員）
   const myCardLabel=(b)=>{
     if(b.member_id) return memMap[b.member_id]||'—';
-    if(b.category==='自主訓練') return '自主';
+    if(bkIsSelf(b)) return '自主';
     if(bkIsGroup(b)) return b.member_ids&&b.member_ids.length?`團${b.member_ids.length}`:'團課';
     return b.trial_name||'—';
   };
@@ -17629,7 +17631,7 @@ async function expandBkCard(el, id){
      中左 編輯（過期改明細）、中央 簽到、中右 團課「新增」。格位由 evoFanLayout 定位。 */
   // 上左：自主訓練→「場地」（切換團課教室/跑步機，2026-07-25）；其餘→「代課」
   if(staff && !closed && b.date>=ymd(TODAY)){
-    if(b.category==='自主訓練') btns += evoBtn('evo-t1','',`bkOrbitVenue('${id}')`,'venue','場地');
+    if(bkIsSelf(b)) btns += evoBtn('evo-t1','',`bkOrbitVenue('${id}')`,'venue','場地');
     else btns += evoBtn('evo-t1','',`bkOrbitSub('${id}')`,'swap','代課');
   }
   // 上右：取消（教練只能取消自己的課）
@@ -18632,7 +18634,7 @@ async function openBookingDetail(id){
       ? `<div><span style="color:var(--t2);">客戶</span>　${b.trial_name||'—'}　<span class="tag tag-warn" style="font-size:10.5px;">待簽約</span>${b.trial_phone?`　<span style="color:var(--t3);font-size:12px;">${b.trial_phone}</span>`:''}</div>`
       : `<div><span style="color:var(--t2);">會員</span>　${mem?(isMemberView?`<span style="font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'—'}</div>`
       /* 家庭共享使用人（2026-07-29）：自主訓練由家人使用時，trial_name 記稱呼 */
-      + ((b.category==='自主訓練'&&b.trial_name)?`<div><span style="color:var(--t2);">使用人</span>　${b.trial_name}<span style="color:var(--t3);font-size:11.5px;">（家庭成員）</span></div>`:'');
+      + ((bkIsSelf(b)&&b.trial_name)?`<div><span style="color:var(--t2);">使用人</span>　${b.trial_name}<span style="color:var(--t3);font-size:11.5px;">（家庭成員）</span></div>`:'');
   }
   showModal(`<div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <span>預約明細</span>
@@ -18749,7 +18751,7 @@ async function openBookingDetail(id){
       ${canCancel&&ownByCoach?(isMemberView
         ? (isGroupD&&Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id)&&!isPastD
             ? `<button class="btn btn-danger" onclick="memLeaveGroup('${b.id}')">取消報名</button>`
-            : (b.category==='自主訓練'&&b.member_id===SESSION.id
+            : (bkIsSelf(b)&&b.member_id===SESSION.id
                 ? `<button class="btn btn-danger" onclick="memCancelSelf('${b.id}')">取消預約</button>`
                 : ''))   /* 會員視角：教練課取消請洽櫃檯；原本誤走櫃檯流程（無寫入權）點了沒反應（2026-07-28） */
         : `<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`):''}
@@ -19664,7 +19666,7 @@ async function saveBookingTime(id){
   await dbPut('bookings',b);
   /* 自主訓練時長增減＝點數增減（2026-07-27 使用者定案：120 分＝2 點）。
      只處理有綁票券的預約（新系統路徑）；匯入未綁票的請至會員票券手動調整。 */
-  if(b.category==='自主訓練' && b.ticket_id){
+  if(bkIsSelf(b) && b.ticket_id){
     const diff=Math.max(1,Math.round((Number(ndur)||60)/60)) - Math.max(1,Math.round(_oldDur/60));
     if(diff!==0){
       try{
@@ -19784,6 +19786,18 @@ function bkIsGroup(b){
   if(b && b.category==='小班肌力') return true;
   return !!bkPocketNow(b).sharedBooking;
 }
+/* 「這是不是自主訓練／運動按摩」（2026-07-31 第二批搬遷）——
+   自主訓練的規則跟別人差最多（單位是「點」不是「堂」、效期 7 天、120 分扣 2 點、
+   友善點限平日 18:00 前、過期不展延），原本這句話寫了 34 次。
+   同樣一律用這兩支問，規則見 TK_POCKETS.self / TK_POCKETS.massage。 */
+function bkIsSelf(b){
+  if(b && b.category==='自主訓練') return true;   // 唯一該寫這句的地方
+  return bkPocketNow(b).key==='self';
+}
+function bkIsMassage(b){
+  if(b && b.category==='運動按摩') return true;   // 唯一該寫這句的地方
+  return bkPocketNow(b).key==='massage';
+}
 // 這位會員在這張課卡佔了幾個名額（團課可能一人多個名額）
 function bkSeatCount(b, mid){ return mids(b).filter(x=>String(x)===String(mid)).length || (bkHasMember(b,mid)?1:0); }
 /* ── 團課「名額鍵」（2026-07-30 使用者指示：黃姸元約兩個名額 → 用兩列獨立顯示）──
@@ -19832,6 +19846,18 @@ function grpAllOnLeave(b){
   const keys=seatKeys(b); if(!keys.length) return false;
   const att=attObj(b);
   return keys.every(k=>att[k]==='leave');
+}
+/* 團課的簽到章要等「全部名額都處理完」才蓋（2026-07-31 使用者回報：有些會員還沒簽到，
+   簽到圓章就出現了）。原本只要有任一個人簽到就蓋，櫃檯看到章會以為整堂都到齊了。
+   「處理完」＝每個名額不是已簽到、就是已請假（請假的人不會來，本堂照扣、已另發補課券），
+   而且至少有一個人真的到 —— 全員請假走的是紅色「假」章，不是這裡。 */
+function grpAllDone(b){
+  if(!b || b.status==='cancelled') return false;
+  if(!bkIsGroup(b)) return false;
+  const keys=seatKeys(b); if(!keys.length) return false;
+  const att=attObj(b);
+  return keys.every(k=>att[k]==='checked_in'||att[k]==='leave')
+      && keys.some(k=>att[k]==='checked_in');
 }
 function grpAttendHeads(b){
   const keys=seatKeys(b);
@@ -20284,7 +20310,7 @@ PAGES.members=async function(){
   const lastClassMap={};
   allBk.forEach(b=>{
     if(b.status==='cancelled')return;
-    if(b.category==='自主訓練')return;   // 2026-07-28 使用者指示：最近上課不含自主訓練
+    if(bkIsSelf(b))return;   // 2026-07-28 使用者指示：最近上課不含自主訓練
     if(!b.date||b.date>today)return; // 只看已發生
     const ids=[]; if(b.member_id)ids.push(b.member_id); (mids(b)||[]).forEach(x=>ids.push(x));
     ids.forEach(mid=>{ if(!lastClassMap[mid]||b.date>lastClassMap[mid])lastClassMap[mid]=b.date; });
@@ -26128,7 +26154,7 @@ function renderFdMonthView(){
     listHtml=`<div style="text-align:center;color:var(--t3);font-size:13px;padding:24px 0;">這天沒有預約</div>`;
   }else{
     listHtml=selBk.map(b=>{
-      const isSelf=b.category==='自主訓練';
+      const isSelf=bkIsSelf(b);
       const dur=b.duration||60;
       const end=minToTime(timeToMin(b.start_time)+dur);
       /* 2026-07-30 使用者回報：體驗課不顯示姓名。原本只看 trial_name，沒填就退成「體驗」；
@@ -28382,7 +28408,7 @@ PAGES.coach_today=async function(){
   // 今日值班時數（排班表）
   const dutyToday=shifts.filter(s=>s.emp_id===SESSION.id&&s.date===today).reduce((a,s)=>a+(Number(s.hours)||0),0);
   // 今日自主訓練簽到人數
-  const selfCheckins=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===today&&b.category==='自主訓練'&&(b.status==='checked_in'||b.status==='completed')).length;
+  const selfCheckins=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===today&&bkIsSelf(b)&&(b.status==='checked_in'||b.status==='completed')).length;
   // 今日預估薪資：今日完成課時費 + 今日值班費（簡化）
   const er=effRates(me);
   const todayPtDone=myToday.filter(b=>(b.status==='completed'||b.status==='checked_in')&&isPtPayClass(b)).length;   // 體驗不算（2026-07-31）
@@ -29083,7 +29109,7 @@ async function ucalClickDay(ds){
     ${abnHtml}
     ${list.length===0?'<div style="font-size:12.5px;color:var(--t3);padding:8px 0;">這天沒有課</div>':
       list.map(b=>{
-        const mname=b.member_id?(memMap[b.member_id]||'—'):(b.category==='自主訓練'?'自主':'—');
+        const mname=b.member_id?(memMap[b.member_id]||'—'):(bkIsSelf(b)?'自主':'—');
         const done=(b.status==='completed'||b.status==='checked_in');
         return `<div class="cdash-dayitem">
           <span class="cdash-dt">${b.start_time}</span>
@@ -29113,7 +29139,7 @@ async function opsDashClickDay(ds){
     <div class="cdash-daytitle">${Number(m)}/${Number(d)}（週${WD[new Date(Number(y),Number(m)-1,Number(d)).getDay()]}）　·　<span style="color:#3f9d6a;">已完成 ${doneN}</span>　<span style="color:#e08a2b;">未簽到 ${pendN}</span></div>
     ${list.length===0?'<div style="font-size:12.5px;color:var(--t3);padding:8px 0;">這天沒有課</div>':
       list.map(b=>{
-        const mname=b.member_id?(memMap[b.member_id]||'—'):(b.category==='自主訓練'?'自主':'—');
+        const mname=b.member_id?(memMap[b.member_id]||'—'):(bkIsSelf(b)?'自主':'—');
         const done=(b.status==='completed'||b.status==='checked_in');
         return `<div class="cdash-dayitem">
           <span class="cdash-dt">${b.start_time}</span>
@@ -30847,7 +30873,7 @@ function renderMemMonthView(){
   }else{
     listHtml=selBk.map(b=>{
       const d=parseYmd(b.date);
-      const isSelf=b.category==='自主訓練';
+      const isSelf=bkIsSelf(b);
       const dur=b.duration||60;
       const end=minToTime(timeToMin(b.start_time)+dur);
       const who=b.coach_id?(window._memCalData.coachMap[b.coach_id]||'教練'):'自主訓練';
@@ -31079,7 +31105,7 @@ async function memTaskTap(id,el){
   const wd='日一二三四五六'[slotDt.getDay()];
   const end=minToTime(timeToMin(b.start_time)+(Number(b.duration)||60));
   const who=b.coach_id?(((window._memCalData||{}).coachMap||{})[b.coach_id]||'教練')
-    :(b.category==='自主訓練'?(selfVenueLabel(b)||'自主訓練'):'');
+    :(bkIsSelf(b)?(selfVenueLabel(b)||'自主訓練'):'');
   const orb=(cls,ic,label,onclick,title)=>onclick
     ? `<button class="mtp-orb ${cls}" onclick="${onclick}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></button>`
     : `<div class="mtp-orb ${cls}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></div>`;
@@ -31122,7 +31148,7 @@ async function memCancelTap(id){
   const b=await dbGet('bookings',id);
   if(!b){ showToast('找不到預約'); return; }
   if(bkIsGroup(b)) return memLeaveGroup(id);
-  if(b.category==='自主訓練') return memCancelSelf(id);
+  if(bkIsSelf(b)) return memCancelSelf(id);
   return memCancelBooking(id);
 }
 /* 會員自行取消教練課（2026-07-29 使用者定案）：
@@ -31284,7 +31310,7 @@ async function msbStart(reschedId){
   if(reschedId&&typeof reschedId==='string'){
     try{
       const b=await dbGet('bookings',reschedId);
-      if(b&&b.member_id===SESSION.id&&b.category==='自主訓練'&&b.status==='booked')
+      if(b&&b.member_id===SESSION.id&&bkIsSelf(b)&&b.status==='booked')
         resched={id:b.id,ttid:b.ticket_type_id||null,origDate:b.date,origTime:b.start_time};
     }catch(_){}
   }
@@ -31293,7 +31319,7 @@ async function msbStart(reschedId){
   try{
     const bks=await dbGetAll('bookings');
     const now=Date.now();
-    futureSelf=(bks||[]).filter(x=>x.member_id===SESSION.id&&x.category==='自主訓練'&&x.status==='booked'
+    futureSelf=(bks||[]).filter(x=>x.member_id===SESSION.id&&bkIsSelf(x)&&x.status==='booked'
       && new Date(x.date+'T'+x.start_time+':00').getTime()>now)
       .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
     /* 未來的團體課場次（RLS 已開放會員讀「小班肌力」場次） */
@@ -32741,7 +32767,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId){
   const v=tkVisual(t,typeMap);
   /* 自主訓練依時長展開（2026-07-27 楊慧淳案例：120 分鐘＝扣 2 點 → 圓形卡畫 2 顆同日期） */
   const expand=list=>{ const out=[]; (list||[]).forEach(b=>{
-      const n=(b.category==='自主訓練')?Math.max(1,Math.round((Number(b.duration)||60)/60)):1;
+      const n=(bkIsSelf(b))?Math.max(1,Math.round((Number(b.duration)||60)/60)):1;
       for(let k=0;k<n;k++) out.push(b);
     }); return out; };
   const done=expand((bks||[]).filter(b=>b.status==='checked_in'||b.status==='completed'))
@@ -33734,7 +33760,7 @@ async function anaToday(){
   const done=todayBk.filter(b=>b.status==='completed'||b.status==='checked_in').length;
   const pt=todayBk.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
   const grp=todayBk.filter(b=>bkIsGroup(b)).length;
-  const self=todayBk.filter(b=>b.category==='自主訓練').length;
+  const self=todayBk.filter(b=>bkIsSelf(b)).length;
   const revenue=(purchases||[]).filter(p=>(p.created_at||'').slice(0,10)===today).reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
   const stats=lpStats([
     {label:'今日課程', value:todayBk.length, unit:'堂'},

@@ -140,10 +140,19 @@ ok('★ 對照表有快取（每一筆課卡都會呼叫，重建會拖垮清單
 ok('　　為什麼要抽，寫在程式裡',
    /原本這句話被寫了 88 次，\s*\n\s*規則一改就得逐句找/.test(src));
 
+console.log('\n第二批（2026-07-31）：自主訓練與運動按摩');
+ok('★ 「是不是自主訓練」也收成一支（34 處 → 1 處）',
+   /function bkIsSelf\(b\)\{/.test(src)
+   && (src.match(/\bb\.category==='自主訓練'/g)||[]).length===1);
+ok('★ 運動按摩同樣', /function bkIsMassage\(b\)\{/.test(src)
+   && (src.match(/\bb\.category==='運動按摩'/g)||[]).length===1);
+ok('　　為什麼自主訓練差最多，寫在程式裡',
+   /單位是「點」不是「堂」、效期 7 天、120 分扣 2 點/.test(src));
+
 console.log('\n棘輪：散裝的課別比較不得增加');
-/* 2026-07-31 立基準 210；第一批搬完（「是不是團課」82 處收成 bkIsGroup）降到 129。
+/* 2026-07-31 立基準 210 → 第一批（團體課 bkIsGroup）129 → 第二批（自主訓練／運動按摩）95。
    之後每搬一批就把這個數字調低，只能往下。 */
-const SCATTER_BASELINE=129;
+const SCATTER_BASELINE=95;
 const scattered=(src.match(/(===|!==)\s*'(小班肌力|自主訓練|運動按摩)'/g)||[]).length;
 ok(`★ 散裝課別比較 ${scattered} 處（基準 ${SCATTER_BASELINE}，只能減不能增）`,
    scattered<=SCATTER_BASELINE, scattered);
