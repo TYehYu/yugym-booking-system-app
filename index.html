@@ -1619,6 +1619,11 @@ tr:hover td{background:var(--card2);}
 /* 票券類型色塊 */
 .tk-chips{display:flex;flex-wrap:wrap;gap:5px;}
 .tk-chip{display:inline-block;padding:3px 10px;border-radius:9px;font-size:12px;font-weight:600;color:#fff;white-space:nowrap;}
+/* 票卡編號（2026-07-31 使用者定案）：每套票卡一個號碼，卡片與下拉講的是同一個。
+   刻意做得安靜 —— 它是給人對照用的索引，不是重點資訊。 */
+.tk-no{display:inline-block;margin-right:6px;padding:0 5px;border-radius:5px;font-size:11px;font-weight:700;
+  font-variant-numeric:tabular-nums;color:var(--t3);background:color-mix(in srgb,var(--t3) 12%,transparent);
+  vertical-align:1px;}
 /* 詳細 眼睛圖示鈕 */
 .mb-detail-btn{width:34px;height:34px;border-radius:9px;border:1px solid var(--bd);background:#fff;color:var(--green);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:.12s;}
 .mb-detail-btn:hover{background:var(--green);color:#fff;border-color:var(--green);}
@@ -6747,8 +6752,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1838';
-const APP_VERSION_LABEL='v260731.1838';
+const APP_VERSION = '260731.1842';
+const APP_VERSION_LABEL='v260731.1842';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10400,6 +10405,16 @@ function buildWallet(memberId, ctx){
   /* 團課的學員放在 member_ids、member_id 是 null —— 只用 member_id 過濾會整批漏掉團課。
      清單頁一頁上百人，逐人掃全表太慢，允許呼叫端傳現成的索引進來。 */
   const mineIds={}; mine.forEach(t=>{ mineIds[t.id]=1; });
+  /* 每套票卡一個編號（2026-07-31 使用者定案：「每套票卡給一個編號」）——
+     同一個票券夾內依購買順序編號，櫃檯與會員講「第 3 套」指的是同一張。
+     用算的、不另存：後買的排後面，既有票的號碼不會因為又買一張而改變
+     （補登一張比較早購買日的舊票才會往後推，那本來就該插在中間）。 */
+  const _noOf={};
+  mine.slice().sort((a,b)=>
+      String(a.purchase_date||a.start_date||'').localeCompare(String(b.purchase_date||b.start_date||''))
+      || String(a.created_at||'').localeCompare(String(b.created_at||''))
+      || String(a.id||'').localeCompare(String(b.id||'')))
+    .forEach((t,i)=>{ _noOf[t.id]=i+1; });
   /* 共享票的堂數是共用的：蓋在我票上的課卡，就算上課的是共享者也要算進來
      （2026-07-26 起支援共享票，堂數共用一個池）。 */
   const myBk=c.bookingsOf ? (c.bookingsOf(memberId)||[])
@@ -10452,7 +10467,7 @@ function buildWallet(memberId, ctx){
     else if(total>0 && used<total) state='active';
     else if(t.status!=='usable' || (rem!=null && Number(rem)<=0)) state='history';
     else state='active';
-    return {t, id:t.id, cls:tkClass5(t,typeMap), total, used, pending,
+    return {t, id:t.id, no:_noOf[t.id]||0, cls:tkClass5(t,typeMap), total, used, pending,
       left:Math.max(0,total-used-pending), stamps:bks, state};
   };
   const slots=mine.map(slotOf);
@@ -10462,6 +10477,7 @@ function buildWallet(memberId, ctx){
   return {
     id:memberId, tickets:mine, slots, byId, byBooking, leftover,
     of:tid=>byId[tid]||null,
+    noOf:tid=>_noOf[tid]||0,
     stampsOf:tid=>(byId[tid]?byId[tid].stamps:[]),
     ticketOf:bid=>byId[byBooking[bid]]||null,          // 這張課卡蓋在哪張票上
     inClass:k=>slots.filter(s=>s.cls===k),
@@ -10471,6 +10487,10 @@ function buildWallet(memberId, ctx){
     leftoverIn:k=>leftover.filter(b=>tkClass5({ticket_type_id:b.ticket_type_id,plan_name:b.category},typeMap)===k),
     sessionsLeft:k=>slots.filter(s=>s.state==='active'&&(!k||s.cls===k)).reduce((n,s)=>n+s.left,0)
   };
+}
+/* 票卡編號的顯示樣式（2026-07-31）：一律 #N，卡片、下拉、明細講的都是同一個號碼。 */
+function tkNoTag(no){
+  return no?`<span class="tk-no" title="這是票券夾裡的第 ${no} 套票卡">#${no}</span>`:'';
 }
 /* 票券夾的資料來源：四張表一次撈齊（dbGetAll 都有快取），清單頁撈一次給整頁共用。 */
 async function walletCtx(){
@@ -20555,7 +20575,7 @@ async function openMemberDetail(member_id){
     const canShare=(isDeskLike())&&tkCategoryOf(t)==='course';
     return `<div class="md-tk-item"${isDim?' style="opacity:.55;"':''}>
       <div class="md-tk-top">
-        <div class="md-tk-name">${t.plan_name||(ty?ty.name:'—')}<span class="tag tag-${ty?ty.color:'pt'}" style="margin-left:8px;">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span>${instTag}${shareTag}</div>
+        <div class="md-tk-name">${tkNoTag(WAL.noOf(t.id))}${t.plan_name||(ty?ty.name:'—')}<span class="tag tag-${ty?ty.color:'pt'}" style="margin-left:8px;">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span>${instTag}${shareTag}</div>
         <!-- 2026-07-26 使用者指示：右上角改顯示「已用/總數」（原本是剩餘/總數） -->
         <div class="md-tk-count"><b style="color:var(--green);">${usedCount}</b><span style="color:var(--t3);font-weight:600;font-size:13px;"> / ${total}</span></div>
       </div>
@@ -24826,7 +24846,7 @@ function ppRecordHtml(){
           const shrTag=(t.member_id!==PP.id)?`<span style="font-size:11px;color:var(--gold-d);border:1px solid var(--gold-d);border-radius:6px;padding:1px 6px;margin-left:6px;">共享</span>`
             :(_shN?`<span style="font-size:11px;color:#2f6b4f;border:1px solid #2f6b4f;border-radius:6px;padding:1px 6px;margin-left:6px;" title="共用同一個堂數池，任一人上課都從這張票扣">共享中・${_shN}人</span>`:'');
           return `<div class="bkd-tkcard" style="margin-bottom:10px;">
-            <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${t.plan_name||'票券'}${shrTag}</span>
+            <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${tkNoTag(sl.no)}${t.plan_name||'票券'}${shrTag}</span>
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
             <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null)}</div>
             <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
@@ -24874,7 +24894,7 @@ function ppRecordHtml(){
           const shrTag=(t.member_id!==PP.id)?`<span style="font-size:11px;color:var(--gold-d);border:1px solid var(--gold-d);border-radius:6px;padding:1px 6px;margin-left:6px;">共享</span>`
             :(_shN?`<span style="font-size:11px;color:#2f6b4f;border:1px solid #2f6b4f;border-radius:6px;padding:1px 6px;margin-left:6px;">共享中・${_shN}人</span>`:'');
           return `<div class="bkd-tkcard bkd-tkcard-hist${canExt?' bkd-tkcard-ext':''}">
-            <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${t.plan_name||'票券'}${shrTag}${tkIsExtended(t)?'<span class="pp-hist-tag">已展延</span>':''}</span>
+            <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${tkNoTag(WAL.noOf(t.id))}${t.plan_name||'票券'}${shrTag}${tkIsExtended(t)?'<span class="pp-hist-tag">已展延</span>':''}</span>
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}　·　${st}</span></div>
             <div class="mck-dots2" style="margin:8px 0 2px;">${ticketTokens(t,bks,typeMap,used,null)}</div>
             <div style="font-size:11px;color:var(--t3);margin-top:7px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
@@ -26586,7 +26606,7 @@ PAGES.m_tickets=async function(){
         return `<div class="mwtk-card ${accent}${dim?' mck-dim2':''}">
           <div class="mwtk-head">
             <div>
-              <div class="mwtk-name">${t.plan_name||(ty?ty.name:'票券')}${t.format?' · '+String(t.format).toUpperCase():''}
+              <div class="mwtk-name">${tkNoTag(WAL.noOf(t.id))}${t.plan_name||(ty?ty.name:'票券')}${t.format?' · '+String(t.format).toUpperCase():''}
                 <span class="tag tag-${ty?ty.color:'pt'}" style="margin-left:6px;font-size:10.5px;vertical-align:1px;">${ty?ty.name:'—'}</span></div>
               <div class="mwtk-sub">${tkBuyDateHtml(t)}　·　來源 ${srcLabel(t.source)}　·　到期 ${t.expire_date||'—'}</div>
             </div>
@@ -31083,6 +31103,8 @@ function msbTkCand(time){
 }
 function msbPickTicket(time){ return msbTkCand(time)[0]||null; }
 // 確認視窗的「使用票券」那一行：只有一張就純文字，多張出下拉
+// 票卡編號（票券夾算好的，msbStart 存進 s.tkNo）
+function msbNo(id){ const s=window._msb; const n=s&&s.tkNo&&s.tkNo[id]; return n?`#${n} `:''; }
 function msbTkLine(time){
   const s=window._msb; if(!s) return '';
   const cand=msbTkCand(time); s.tkCand=cand;
@@ -31090,12 +31112,15 @@ function msbTkLine(time){
   if(!cur) return '';
   s.pickTk=cur.id;
   const nm=t=>(t.plan_name||'自主訓練點數').replace(/</g,'&lt;');
-  if(cand.length===1) return `<div><span style="color:var(--t2);">使用票券</span>　${nm(cur)}（剩 ${cur.sessions_remaining} 點）</div>`;
-  return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">使用票券</span>
+  if(cand.length===1) return `<div><span style="color:var(--t2);">使用票卡</span>　${msbNo(cur.id)}${nm(cur)}（剩 ${cur.sessions_remaining} 點）</div>`;
+  /* 多套票卡讓會員自己選（2026-07-31 使用者定案），預設是最快到期的那一套
+     —— 排序見 msbTkCand：限時段的（友善點）最先，其餘依到期日，沒有效期的排最後。 */
+  return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">使用票卡</span>
     <select id="msb-tk-sel" onchange="window._msb.pickTk=this.value"
             style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:7px 8px;border:1px solid var(--bd);border-radius:8px;background:#fff;">
-      ${cand.map(t=>`<option value="${t.id}" ${t.id===cur.id?'selected':''}>${nm(t)}　剩 ${t.sessions_remaining} 點${t.expire_date?`　效期至 ${String(t.expire_date).slice(5,10).replace('-','/')}`:'　無到期日'}</option>`).join('')}
-    </select></div>`;
+      ${cand.map(t=>`<option value="${t.id}" ${t.id===cur.id?'selected':''}>${msbNo(t.id)}${nm(t)}　剩 ${t.sessions_remaining} 點${t.expire_date?`　效期至 ${String(t.expire_date).slice(5,10).replace('-','/')}`:'　無到期日'}</option>`).join('')}
+    </select>
+    <span style="flex:1 0 100%;font-size:11.5px;color:var(--t3);">有多套票卡可用，預設扣最快到期的那一套，可自行改選。</span></div>`;
 }
 async function memSelfBookToggle(){
   if(window._msb){ msbExit(); return; }
@@ -31107,6 +31132,11 @@ async function msbStart(reschedId){
   let mine=[],types=[];
   try{ [mine,types]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types').catch(()=>[])]); }catch(_){}
   const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
+  /* 票卡編號（2026-07-31 使用者定案）：選票下拉要標「第幾套」，跟票券頁的卡片是同一個號碼
+     —— 一律問票券夾，不在這裡另編一套。 */
+  const _tkNo={};
+  try{ const _w=buildWallet(SESSION.id,{tickets:mine,bookings:[],logs:[],typeMap});
+       _w.tickets.forEach(t=>{ _tkNo[t.id]=_w.noOf(t.id); }); }catch(_){}
   const selfIds=(types||[]).filter(t=>t.category==='自主訓練').map(t=>t.id).concat(['self_training','self_friendly']);
   const usable=(mine||[]).filter(t=>t.member_id===SESSION.id && selfIds.includes(t.ticket_type_id)
     && (!t.status||t.status==='usable') && (Number(t.sessions_remaining)||0)>0
@@ -31142,7 +31172,7 @@ async function msbStart(reschedId){
   }catch(_){}
   /* 家庭成員名單（2026-07-29 家庭共享）：有名單才可同時段多名額、預約時選使用人 */
   let _fam=[]; try{ const _me=await dbGet('members',SESSION.id); _fam=Array.isArray(_me&&_me.family_members)?_me.family_members.filter(Boolean):[]; }catch(_){}
-  window._msb={on:true,groups,hasPoints:usable.length>0,grpTks,grpClasses,hasGrp:grpTks.length>0,resched,futureSelf,family:_fam,
+  window._msb={on:true,groups,tkNo:_tkNo,hasPoints:usable.length>0,grpTks,grpClasses,hasGrp:grpTks.length>0,resched,futureSelf,family:_fam,
     type:groups.self.length>0?'self':(groups.friendly.length>0?'friendly':((futureSelf||[]).length?'self':'group')),
     date:resched?resched.origDate:ymd(TODAY),free:null};
   const fab=document.getElementById('msb-fab'); if(fab){ fab.classList.add('on'); fab.textContent='✕'; }
@@ -31268,11 +31298,11 @@ async function msbGrpJoin(bid){
   const d=parseYmd(c.date);
   const cm=(window._memCalData||{}).coachMap||{};
   const tkLine=cand.length===1
-    ? `<div><span style="opacity:.7;">使用票券</span>　${tk.plan_name||'團體課票券'}（剩 ${tk.sessions_remaining} 堂）</div>`
-    : `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="opacity:.7;">使用票券</span>
+    ? `<div><span style="opacity:.7;">使用票卡</span>　${msbNo(tk.id)}${tk.plan_name||'團體課票券'}（剩 ${tk.sessions_remaining} 堂）</div>`
+    : `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="opacity:.7;">使用票卡</span>
         <select id="grp-join-tk" onchange="window._grpJoinTk=this.value"
                 style="flex:1;min-width:180px;font-family:inherit;font-size:13px;padding:7px 8px;border:1px solid #d8c3a4;border-radius:8px;background:#fff;color:#5a3410;">
-          ${cand.map((t,i)=>`<option value="${t.id}" ${i===0?'selected':''}>${(t.plan_name||'團體課票券').replace(/</g,'&lt;')}　剩 ${t.sessions_remaining} 堂${t.expire_date?`　效期至 ${t.expire_date.slice(5).replace('-','/')}`:'　無到期日'}</option>`).join('')}
+          ${cand.map((t,i)=>`<option value="${t.id}" ${i===0?'selected':''}>${msbNo(t.id)}${(t.plan_name||'團體課票券').replace(/</g,'&lt;')}　剩 ${t.sessions_remaining} 堂${t.expire_date?`　效期至 ${t.expire_date.slice(5).replace('-','/')}`:'　無到期日'}</option>`).join('')}
         </select></div>`;
   showModal(`<div class="modal-title">確認報名團體課</div>
     <div style="background:#F1E4D2;border-radius:10px;padding:14px;font-size:13.5px;line-height:2;color:#5a3410;">
@@ -31281,7 +31311,7 @@ async function msbGrpJoin(bid){
       <div><span style="opacity:.7;">教練</span>　${cm[c.coach_id]||'教練'}</div>
       ${tkLine}
     </div>
-    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">${cand.length>1?'有多張票券可用，預設扣最快到期的那張，可自行改選。':''}確認後扣 1 堂；開課前可在「我的預約」取消退堂。</div>
+    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">${cand.length>1?'有多套票卡可用，預設扣最快到期的那一套，可自行改選。':''}確認後扣 1 堂；開課前可在「我的預約」取消退堂。</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
       <button class="btn btn-green" style="background:#9a5a1e;" onclick="msbGrpJoinDo('${bid}')">確認報名</button></div>`);
 }
@@ -32731,7 +32761,7 @@ function renderMemTickets(){
     return `<div class="mck-card mck-${color}${dim?' mck-dim':''}">
       <div class="mck-head">
         <div class="mck-top">
-          <div class="mck-name">${name}${fmt}</div>
+          <div class="mck-name">${tkNoTag(_sl.no)}${name}${fmt}</div>
           ${dim?`<span class="mck-badge">${(t.status==='expired'||(t.expire_date&&t.expire_date<today))?'已到期':'已使用完'}</span>`
                 :(soon?`<span class="mck-badge mck-badge-warn">${days} 天後到期</span>`:'')}
         </div>
@@ -32870,7 +32900,7 @@ function openSelfPtsModal(){
       ? (dim?`已於 ${mdx} 到期`:(d<=0?'今天到期':(d===1?`明天到期（${mdx}）`:`到期 ${mdx}（剩 ${d} 天）`)))
       : (dim?'已使用完':'永久有效');
     return `<div class="spt-row${dim?' spt-dim':(d!=null&&d<=2?' spt-soon':'')}">
-      <span class="spt-nm">${t.plan_name||'自主訓練點數'}<span class="spt-ex">${exp}</span></span>
+      <span class="spt-nm">${tkNoTag(_sl.no)}${t.plan_name||'自主訓練點數'}<span class="spt-ex">${exp}</span></span>
       ${dim?'':`<span class="mck-dots2" style="flex:0 0 auto;">${ticketTokens(t,_sl.stamps,typeMap,_sl.used)}</span>`}
       <span class="spt-n"><b>${unused}</b> / ${total} 點</span>
     </div>`;

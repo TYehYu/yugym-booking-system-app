@@ -159,6 +159,51 @@ console.log('\n邊界');
        logs:[],typeMap:TYPES}).stampsOf('T0').length, 1);
 }
 
+console.log('\n每套票卡一個編號（2026-07-31 使用者定案）');
+{
+  const w=W([TK('B',{purchase_date:'2026-06-10'}),TK('A',{purchase_date:'2026-05-01'}),
+             TK('C',{purchase_date:'2026-07-20'})],[]);
+  eq('★ 依購買順序編號，不看陣列順序', [w.noOf('A'),w.noOf('B'),w.noOf('C')], [1,2,3]);
+  eq('★ 卡片上拿得到編號', w.of('B').no, 2);
+  /* 又買一張不會把既有的號碼往前推 —— 櫃檯跟會員講「第 2 套」指的是同一張 */
+  const w2=W([TK('B',{purchase_date:'2026-06-10'}),TK('A',{purchase_date:'2026-05-01'}),
+              TK('C',{purchase_date:'2026-07-20'}),TK('D',{purchase_date:'2026-07-31'})],[]);
+  eq('★ 再買一張，既有票的號碼不變', [w2.noOf('A'),w2.noOf('B'),w2.noOf('C'),w2.noOf('D')], [1,2,3,4]);
+  eq('　　用完／過期／作廢的票也佔一個號（號碼不會被回收）',
+     W([TK('X',{purchase_date:'2026-05-01',status:'refunded'}),TK('Y',{purchase_date:'2026-06-01'})],[]).noOf('Y'), 2);
+  eq('　　同一天買兩張也分得出來（依建立時間）',
+     (()=>{const w3=W([TK('P',{purchase_date:'2026-06-01',created_at:'2026-06-01T02:00:00Z'}),
+                       TK('Q',{purchase_date:'2026-06-01',created_at:'2026-06-01T01:00:00Z'})],[]);
+           return [w3.noOf('Q'),w3.noOf('P')];})(), [1,2]);
+  eq('　　不在票券夾裡的票沒有號碼', w.noOf('ZZ'), 0);
+}
+ok('★ 卡片與下拉用同一個號碼樣式（#N）',
+   /function tkNoTag\(no\)\{/.test(src) && /<span class="tk-no" title="這是票券夾裡的第 \$\{no\} 套票卡">#\$\{no\}<\/span>/.test(src));
+ok('★ 五個票券畫面都標編號',
+   /\$\{tkNoTag\(sl\.no\)\}\$\{t\.plan_name\|\|'票券'\}/.test(src)              // 後台票券分頁
+   && /\$\{tkNoTag\(WAL\.noOf\(t\.id\)\)\}\$\{t\.plan_name\|\|'票券'\}/.test(src)  // 歷史卡
+   && /<div class="md-tk-name">\$\{tkNoTag\(WAL\.noOf\(t\.id\)\)\}/.test(src)      // 教練名片
+   && /<div class="mwtk-name">\$\{tkNoTag\(WAL\.noOf\(t\.id\)\)\}/.test(src)      // 管理員票券頁
+   && /<div class="mck-name">\$\{tkNoTag\(_sl\.no\)\}\$\{name\}\$\{fmt\}<\/div>/.test(src));  // 會員端我的票券
+
+console.log('\n會員可選擇用哪一套，預設快過期的先用');
+ok('★ 自主訓練：多套就出下拉，預設最快到期',
+   /<select id="msb-tk-sel" onchange="window\._msb\.pickTk=this\.value"/.test(src)
+   && /有多套票卡可用，預設扣最快到期的那一套，可自行改選。/.test(src)
+   && /return String\(a\.expire_date\|\|'9999-12-31'\)\.localeCompare\(String\(b\.expire_date\|\|'9999-12-31'\)\);/.test(src));
+ok('★ 團體課：同樣可選，預設最快到期（DB 端 expire_date asc nulls last）',
+   /<select id="grp-join-tk" onchange="window\._grpJoinTk=this\.value"/.test(src)
+   && /fn_member_join_group 的 expire_date asc nulls last/.test(src));
+ok('★ 限時段的票（友善點）排在最前面 —— 它最容易白白過期',
+   /const ra=tkIsTimeRestricted\(a\)\?0:1, rb=tkIsTimeRestricted\(b\)\?0:1;/.test(src));
+ok('★ 選了哪一套就扣哪一套（沒帶就退回自動挑）',
+   /const tk=_cand\.find\(x=>x\.id===_sel\)\|\|_cand\[0\]\|\|null;/.test(src)
+   && /p_ticket_id:tk\.id/.test(src));
+ok('　　下拉裡也看得到編號', /\$\{msbNo\(t\.id\)\}\$\{nm\(t\)\}/.test(src)
+   && /function msbNo\(id\)\{/.test(src));
+ok('　　編號一律問票券夾，預約表單不另編一套',
+   /一律問票券夾，不在這裡另編一套/.test(src));
+
 console.log('\n只回答「已經蓋了什麼」');
 ok('★ 「新的預約該扣哪張票」不歸票券夾管（tkFitsBooking）',
    /⚠ 這一層只回答「已經蓋了什麼」。「新的預約該扣哪張票」是另一件事（tkFitsBooking）。/.test(src));
