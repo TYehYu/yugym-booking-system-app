@@ -49,20 +49,39 @@ console.log('\n哪些表要通知');
   ok('　　原因寫在程式裡', /全都通知就是同一件事跳三張卡/.test(src));
 }
 
-console.log('\n卡片內容');
+/* 2026-07-31 使用者指示：右下角滑出的課卡調整訊息要帶會員姓名，方便閱讀 */
+console.log('\n卡片內容（含會員姓名）');
 {
-  const fn=g('function mchgDescribe(store, obj){','\n}\n');
-  const d=new Function('MCHG_LABEL',fn+'\nreturn mchgDescribe;')
-    ({bookings:'預約',attendance:'出勤打卡'});
-  eq('★ 預約寫得出「哪一堂」',
-     d('bookings',{date:'2026-07-31',start_time:'11:00',category:'小班肌力',status:'checked_in'}),
-     '07/31 11:00　小班肌力　·　已簽到');
-  eq('　　取消也標出來', d('bookings',{date:'2026-08-01',start_time:'19:00',category:'私人教練',status:'cancelled'}),
-     '08/01 19:00　私人教練　·　已取消');
-  eq('　　沒有狀態就不硬加', d('bookings',{date:'2026-08-01',start_time:'19:00',category:'體驗'}),
-     '08/01 19:00　體驗');
-  eq('　　其他表用表名（櫃檯至少知道去哪裡看）', d('attendance',{id:'A1'}), '出勤打卡');
+  const MEM={'M1':{id:'M1',name:'黃姸元'}};
+  const mk=async()=>{
+    const fn=g('async function mchgWho(obj){','\n}\n')+'\n'+g('async function mchgDescribe(store, obj){','\n}\n');
+    return new Function('MCHG_LABEL','dbGet','bkIsGroup','mids','bkName',fn+'\nreturn mchgDescribe;')
+      ({bookings:'預約',attendance:'出勤打卡'},
+       async(t,id)=>MEM[id]||null,
+       b=>!!(b&&b.category==='小班肌力'),
+       b=>(b&&Array.isArray(b.member_ids))?b.member_ids:[],
+       (b,nameOf)=>b.trial_name||'—');
+  };
+  return mk().then(async d=>{
+    eq('★ 一般課帶會員姓名',
+       await d('bookings',{date:'2026-08-01',start_time:'19:00',category:'私人教練',member_id:'M1',status:'booked'}),
+       '08/01 19:00　私人教練　黃姸元　·　已預約');
+    eq('★ 團課是一堂多人 → 顯示人數',
+       await d('bookings',{date:'2026-07-31',start_time:'11:00',category:'小班肌力',member_ids:['A','B','C'],status:'checked_in'}),
+       '07/31 11:00　小班肌力　3 人　·　已簽到');
+    eq('★ 體驗沒有會員 → 用客戶名',
+       await d('bookings',{date:'2026-08-01',start_time:'19:00',category:'體驗',trial_name:'程凱郁'}),
+       '08/01 19:00　體驗　程凱郁');
+    eq('　　查不到名字就不寫（不塞破折號）',
+       await d('bookings',{date:'2026-08-01',start_time:'19:00',category:'私人教練',member_id:'ZZ',status:'cancelled'}),
+       '08/01 19:00　私人教練　·　已取消');
+    eq('　　其他表用表名（櫃檯至少知道去哪裡看）', await d('attendance',{id:'A1'}), '出勤打卡');
+    ok('　　為什麼要帶名字，寫在程式裡',
+       /有名字才知道是誰的課，不然櫃檯得自己去行事曆對時間/.test(src));
+    return rest();
+  });
 }
+function rest(){
 
 console.log('\n顏色與去重');
 ok('★ 取消／刪除用紅（self_cancel），其餘用金（self_move）',
@@ -135,3 +154,4 @@ ok('　　為什麼分兩支，寫在程式裡',
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
+}

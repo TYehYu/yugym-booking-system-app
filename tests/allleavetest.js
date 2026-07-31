@@ -12,11 +12,13 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
+/* 2026-07-31：課種判斷抽成共用的 bkIsGroup（見 TK_POCKETS）—— 沙箱給等價替身 */
+const bkIsGroupT=b=>!!(b&&b.category==='小班肌力');
 
-const api=new Function(
+const api=new Function('bkIsGroup',
   g('function mids(','\n}\n')+'\n'+g('function seatKeys(b){','\n}\n')+'\n'
   +g('function attObj(b){','\n}\n')+'\n'+g('function grpAllOnLeave(b){','\n}\n')
-  +'\nreturn grpAllOnLeave;')();
+  +'\nreturn grpAllOnLeave;')(bkIsGroupT);
 
 const B=(o)=>Object.assign({category:'小班肌力',status:'booked',member_ids:['A','B','C']},o);
 
@@ -110,9 +112,10 @@ ok('　　原因寫在程式裡（品牌色強度：紅＞金＞綠）',
 
 console.log('\n名單本身不動');
 ok('★ 請假的人仍列在名單上（可以取消請假）', /groupToggleLeave\('\$\{b\.id\}','\$\{mid\}'\)">取消請假/.test(src));
-ok('★ 請假仍不算銷課名額（2026-07-30 定案，這次沒動到）',
-   /return keys\.filter\(k=>att\[k\]!=='leave'\)\.length;/.test(src));
-ok('　　原因寫在程式裡', /這種課不會有人簽到，卡片看起來就跟「還沒簽」一樣/.test(src));
+/* 2026-07-31 使用者指示再收緊：人次改成「簽到才算」（請假與漏簽都不算），見 seattest.js */
+ok('★ 請假不算人次（2026-07-30 定案，2026-07-31 收緊成只算已簽到）',
+   /return keys\.filter\(k=>att\[k\]==='checked_in'\)\.length;/.test(src));
+ok('　　原因寫在程式裡', /人頭費是付給「實際來上課的人」/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

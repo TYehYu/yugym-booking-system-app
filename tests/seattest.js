@@ -139,28 +139,31 @@ ok('★ 取消名額仍用原順序（indexOf 要對得上 member_ids 的索引�
 ok('　　為什麼不能直接改 seatKeys，寫在程式裡',
    /seatReindexAfterRemove／doGroupCancelSeat 是用 indexOf 去 splice member_ids 的/.test(src));
 
-console.log('\n團課請假不算銷課名額（2026-07-30 使用者指示）');
-ok('★ 抽出共用的人頭計算，請假的名額排除',
-   /function grpAttendHeads\(b\)\{[\s\S]{0,180}return keys\.filter\(k=>att\[k\]!=='leave'\)\.length;/.test(src));
+console.log('\n團課人次：只算已簽到（2026-07-31 使用者指示）');
+/* 2026-07-30 是「請假不算」；2026-07-31 使用者收緊成「簽到才算」——
+   人頭費付給實際來上課的人，排在名單上卻沒人簽到的名額不算。 */
+ok('★ 抽出共用的人頭計算，只算已簽到的名額',
+   /function grpAttendHeads\(b\)\{[\s\S]{0,220}return keys\.filter\(k=>att\[k\]==='checked_in'\)\.length;/.test(src));
 ok('★ 三處計薪的人頭加總都改用它（薪資單／月結明細／教練薪資頁）',
    (src.match(/reduce\(\(s,b\)=>s\+grpAttendHeads\(b\),0\)/g)||[]).length===3);
-ok('★ 教練端本月統計的人次也排除請假',
+ok('★ 教練端本月統計的人次也一樣',
    /const groupHeadCount=groupDoneBks\.reduce\(\(a,b\)=>a\+grpAttendHeads\(b\),0\);/.test(src));
 ok('　　沒有名單的舊資料維持算 1（行為不變）', /if\(!keys\.length\) return 1;/.test(src));
-ok('　　逐名額判斷（同一人可能只請假其中一個名額）', /逐名額判斷（同一人可能佔多個名額，可能只請假其中一個）/.test(src));
-ok('　　命名避開既有的同名區域變數', /名稱不用 groupHeadCount —— 教練端本月統計裡已有同名的區域變數（數字），會遮蔽掉這支函式/.test(src));
+ok('★ 櫃檯漏簽＝少一個人次，這件事寫在程式裡',
+   /⚠ 這代表櫃檯漏簽 = 少一個人次，簽到紀錄同時是計薪依據。/.test(src));
 
 // 實跑
 {
   const i=src.indexOf('function grpAttendHeads(b){'); const j=src.indexOf('\n}\n',i)+2;
   const f=new Function('seatKeys','attObj', src.slice(i,j)+'\nreturn grpAttendHeads;')(api.seatKeys, b=>b.attendance||{});
-  eq('★ 3 人都到 → 3', f(B(['A','B','C'],{A:'checked_in',B:'checked_in',C:'booked'})), 3);
-  eq('★ 其中 1 人請假 → 2', f(B(['A','B','C'],{A:'checked_in',B:'leave',C:'booked'})), 2);
-  eq('★ 同一人兩個名額、只請假一個 → 另一個仍算',
-     f(B(['A','A','B'],{A:'checked_in','A#2':'leave',B:'booked'})), 2);
+  eq('★ 3 人都簽到 → 3', f(B(['A','B','C'],{A:'checked_in',B:'checked_in',C:'checked_in'})), 3);
+  eq('★ 1 人請假 → 不算他', f(B(['A','B','C'],{A:'checked_in',B:'leave',C:'checked_in'})), 2);
+  eq('★ 1 人沒簽到（排在名單上但沒人幫他簽）→ 也不算', f(B(['A','B','C'],{A:'checked_in',B:'checked_in',C:'booked'})), 2);
+  eq('★ 同一人兩個名額、只簽到一個 → 算 1',
+     f(B(['A','A','B'],{A:'checked_in','A#2':'leave',B:'checked_in'})), 2);
   eq('　　全員請假 → 0', f(B(['A','B'],{A:'leave',B:'leave'})), 0);
+  eq('　　一個都沒簽 → 0', f(B(['A','B'],{})), 0);
   eq('　　沒有名單的舊資料 → 1', f(B([],{})), 1);
-  eq('　　未簽到仍算（只排除請假）', f(B(['A','B'],{})), 2);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

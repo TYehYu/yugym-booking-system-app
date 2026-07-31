@@ -6767,8 +6767,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.2224';
-const APP_VERSION_LABEL='v260731.2224';
+const APP_VERSION = '260731.2230';
+const APP_VERSION_LABEL='v260731.2230';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6975,13 +6975,26 @@ function mchgEnabled(){
   return !!(CLOUD && SESSION && (SESSION.role==='coach'||SESSION.role==='member') && isMobileLayout());
 }
 /* 預約寫得出「哪一堂」，其餘資料表就用表名 —— 櫃檯至少知道有人動了什麼、去哪裡看 */
-function mchgDescribe(store, obj){
+/* 通知內容要帶會員姓名（2026-07-31 使用者指示：右下角滑出的課卡調整訊息，
+   有名字才知道是誰的課，不然櫃檯得自己去行事曆對時間）。
+   名字來源：一般課用 memMap 快取（頁面本來就載過會員）；團課是一堂多人 → 顯示「N 人」；
+   體驗／待簽約沒有會員 → 用 bkName 的同一套規則拿客戶名。查不到就不寫，不要塞「—」。 */
+async function mchgWho(obj){
+  if(!obj) return '';
+  if(bkIsGroup(obj)) return `${mids(obj).length||0} 人`;
+  let nm='';
+  if(obj.member_id){ try{ const m=await dbGet('members',obj.member_id); nm=(m&&m.name)||''; }catch(_){} }
+  if(!nm && typeof bkName==='function'){ const v=bkName(obj,()=>''); if(v && v!=='—') nm=v; }
+  return nm;
+}
+async function mchgDescribe(store, obj){
   if(store!=='bookings' || !obj) return MCHG_LABEL[store]||store;
   const d=String(obj.date||'').slice(5).replace('-','/');
   const t=obj.start_time||'';
   const cat=obj.category||'課程';
+  const who=await mchgWho(obj);
   const st={booked:'已預約',checked_in:'已簽到',completed:'已完成',cancelled:'已取消'}[obj.status]||obj.status||'';
-  return `${d} ${t}　${cat}${st?'　·　'+st:''}`.trim();
+  return `${d} ${t}　${cat}${who?'　'+who:''}${st?'　·　'+st:''}`.trim();
 }
 async function mchgNotify(store, obj, action){
   if(!mchgEnabled()) return;
@@ -6996,7 +7009,7 @@ async function mchgNotify(store, obj, action){
   const type = (action==='delete'||obj&&obj.status==='cancelled') ? 'self_cancel' : 'self_move';
   const title = action==='delete' ? `從手機刪除了${what}` : `從手機變更了${what}`;
   try{
-    await sb.rpc('fn_mobile_change_alert',{p_type:type,p_title:title,p_body:mchgDescribe(store,obj)});
+    await sb.rpc('fn_mobile_change_alert',{p_type:type,p_title:title,p_body:await mchgDescribe(store,obj)});
   }catch(_){}
 }
 async function dbPut(store,obj){
@@ -19880,21 +19893,9 @@ function seatKeysDisplay(b){
   }).map(x=>x.k);
 }
 function seatNo(key){ const k=String(key), i=k.indexOf('#'); return i<0?1:(Number(k.slice(i+1))||1); }
-/* 團課人頭數（2026-07-30 使用者指示：會員請假不能算一個銷課名額）——
-   請假的規則是「本堂票券照扣、另發 14 天補課券」，但人沒有來上課，
-   所以不該計入教練的團課人頭費，也不該算成一個銷課名額。
-   逐名額判斷（同一人可能佔多個名額，可能只請假其中一個）。
-   沒有名單的舊資料維持算 1，與原本的 `member_ids.length ? … : 1` 行為一致。
-   ⚠ 名稱不用 groupHeadCount —— 教練端本月統計裡已有同名的區域變數（數字），會遮蔽掉這支函式。 */
-/* 整堂團課的人全部請假（2026-07-31 使用者回報：今天有一堂三個人同時請假）——
-   這種課不會有人簽到，卡片看起來就跟「還沒簽」一樣，櫃檯得點進去才知道沒人會來。
-   在卡片右下角蓋一個紅色的「假」章。
-   ・限團體課，而且名單上要有人（空名單不算）
-   ・每一個名額都要是 leave 才算（有一個人沒請假就不蓋）
-   ・取消掉的課不看（那本來就有自己的樣式） */
 function grpAllOnLeave(b){
   if(!b || b.status==='cancelled') return false;
-  if(b.category!=='小班肌力') return false;
+  if(!bkIsGroup(b)) return false;
   const keys=seatKeys(b); if(!keys.length) return false;
   const att=attObj(b);
   return keys.every(k=>att[k]==='leave');
@@ -19911,11 +19912,17 @@ function grpAllDone(b){
   return keys.every(k=>att[k]==='checked_in'||att[k]==='leave')
       && keys.some(k=>att[k]==='checked_in');
 }
+/* 團課人次（2026-07-31 使用者指示：「簽到」才算人數，請假的不能計算）——
+   人頭費是付給「實際來上課的人」。原本算的是「非請假的名額」（2026-07-30），
+   但那樣連「排在名單上、卻沒人幫他簽到」的名額也照算。
+   現在一律以逐名額的簽到紀錄為準：att[名額]==='checked_in' 才算一個人次。
+   ⚠ 這代表櫃檯漏簽 = 少一個人次，簽到紀錄同時是計薪依據。
+   舊資料若整堂沒有名單（member_ids 空）無從逐名額判斷，維持算 1（與原行為一致）。 */
 function grpAttendHeads(b){
   const keys=seatKeys(b);
   if(!keys.length) return 1;
   const att=attObj(b);
-  return keys.filter(k=>att[k]!=='leave').length;
+  return keys.filter(k=>att[k]==='checked_in').length;
 }
 // 這位會員在這堂課是否有「任一名額」處於某狀態（給只認 member id 的地方用）
 function seatAnyState(b,mid,state){
@@ -22812,7 +22819,7 @@ async function openPerfDetail(empId, month){
     const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in');
     const ptDone=done.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
     const grpList=done.filter(b=>bkIsGroup(b));
-    const groupHeads=grpList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 請假不算（2026-07-30）
+    const groupHeads=grpList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 只算已簽到（2026-07-31）
     const leave=leaveSummary(shifts, empId, ym);
     const dutyCap=emp.need_duty?dutyHoursCapped(attendance,shifts,empId,ym):0;
     const dutyOv=emp.need_duty?dutyClassOverlapHours(shifts,bookings,empId,ym,emp):0;
@@ -22893,7 +22900,7 @@ async function computeMonthlyPayroll(month){
     const myDone=bookings.filter(b=>b.coach_id===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month);
     const ptDone=ptDoneById[emp.id]||0;
     const groupList=myDone.filter(b=>bkIsGroup(b));
-    const groupHeads=groupList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 請假不算（2026-07-30）
+    const groupHeads=groupList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 只算已簽到（2026-07-31）
     // 值班費：打卡封頂時數 再扣掉「值班時段內上課」重疊 → 淨值班時數（顯示與計薪一致）
     const leave=leaveSummary(shifts, emp.id, month);
     const dutyCap=emp.need_duty ? dutyHoursCapped(attendance, shifts, emp.id, month) : 0;
@@ -28488,7 +28495,7 @@ PAGES.coach_today=async function(){
   // 團體課（小班肌力）：堂數與總人次
   const groupDoneBks=monthDoneBk.filter(b=>bkIsGroup(b));
   const groupClassCount=groupDoneBks.length;
-  const groupHeadCount=groupDoneBks.reduce((a,b)=>a+grpAttendHeads(b),0);   // 請假不算（2026-07-30）
+  const groupHeadCount=groupDoneBks.reduce((a,b)=>a+grpAttendHeads(b),0);   // 只算已簽到（2026-07-31）
   // 值班日期（本月有排班的日）
   const dutyDates=new Set(shifts.filter(s=>s.emp_id===SESSION.id&&(s.date||'').slice(0,7)===thisMonth&&(s.hours>0||s.start_time)).map(s=>s.date));
   // 教練課門檻與達標
@@ -35048,7 +35055,7 @@ async function renderSalaryContent(TARGET, withHead){
   const ptDone=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
   const groupDoneList=myDone.filter(b=>bkIsGroup(b));
   const groupDone=groupDoneList.length;
-  // 團課總人頭：每堂實際參加人數加總（請假的不算 —— 2026-07-30 使用者指示）
+  // 團課總人頭：每堂實際簽到的人數加總（請假、漏簽都不算 —— 2026-07-31 使用者指示）
   const groupHeads=groupDoneList.reduce((s,b)=>s+grpAttendHeads(b),0);
   // 值班費：打卡封頂時數 再扣掉「值班時段內上課」重疊 → 淨值班時數
   const myShifts=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
