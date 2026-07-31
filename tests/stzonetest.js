@@ -51,7 +51,7 @@ ok('★ 分區改由兩條線表達：員工表現從「總堂數」起、權限
    && /<span class="st-zb">總堂數\$\{_mTag\}<\/span>/.test(src)
    && /<span class="st-zb">工作規則<\/span>/.test(src));
 ok('★ 工作規則／休假日歸在權限管理那一側（不在員工表現裡）',
-   /<span>實領薪資\$\{_mTag\}<\/span><span class="st-zb">工作規則<\/span><span>休假日<\/span>/.test(src)
+   /<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">工作規則<\/span><span>休假日<\/span>/.test(src)
    && /工作規則與休假日屬於權限管理，不是員工表現/.test(src));
 ok('★ 分隔線畫在該區第一格的左緣，拉滿列高',
    /\.st-zb\{border-left:1px solid var\(--bd\);align-self:stretch;padding-left:12px;margin-left:-6px;\}/.test(src));
@@ -70,13 +70,14 @@ ok('　　兩段窄螢幕的字級同步縮',
 ok('　　手機版數字也放大', /\.st-l-n\{grid-column:span 1;position:relative;padding-top:12px;font-size:18px;\}/.test(src));
 
 console.log('\n軌道與其他欄位');
-ok('★ 13 欄，姓名欄有上限、剩餘寬度給開關欄',
-   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 48px 58px 100px 92px 78px minmax\(372px,1fr\) 30px;/.test(src));
-ok('★ 三個斷點的軌道欄數一致（13 欄）', (()=>{
+ok('★ 14 欄：姓名欄有上限，剩餘寬度落在兩區中間（姓名區靠左、權限管理區靠右）',
+   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 48px 58px 100px 1fr 92px 78px 372px 30px;/.test(src)
+   && /空白落在兩區中間/.test(src));
+ok('★ 三個斷點的軌道欄數一致（14 欄）', (()=>{
    const all=[...src.matchAll(/grid-template-columns:10px (?:34|32|28)px minmax\([^)]*\)([^;]*);/g)];
-   return all.length===3 && all.every(m=>m[1].trim().split(/\s+/).length===10);
+   return all.length===3 && all.every(m=>m[1].trim().split(/\s+/).length===11);
 })());
-ok('★ 「待接受邀請」橫跨到權限開關之前', /\.st-l-pend\{grid-column:4 \/ 13;justify-self:start;\}/.test(src));
+ok('★ 「待接受邀請」橫跨到權限開關之前', /\.st-l-pend\{grid-column:4 \/ 14;justify-self:start;\}/.test(src));
 ok('★ 權限開關欄撐滿自己的格子', /\.st-l-sw\{justify-self:stretch;\}/.test(src)
    && /\.st-l-sw \.st-sw\{display:flex;flex-wrap:nowrap;gap:4px;width:auto;margin:0;justify-content:flex-start;\}/.test(src));
 ok('　　手機版補上「總堂數」欄名', /\.st-l-n0::before\{content:'總堂數';\}/.test(src));
