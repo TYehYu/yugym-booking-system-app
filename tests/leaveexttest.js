@@ -75,8 +75,8 @@ console.log('\n接進教練請假流程');
 ok('★ 排在退票之後（退票可能把效期退回未開通）',
    src.indexOf('leaveRefunded = (await refundLegacyBooking(b,SESSION.id))>0;')
    < src.indexOf('for(const tid of ids){ const to=await extendForCoachLeave(tid,b,SESSION.id); if(to) extendTo=to; }'));
-ok('★ 沒退成票就不延', /if\(leaveRefunded\)\{\s*\n\s*let ids=b\.ticket_id\?\[b\.ticket_id\]:\[\];/.test(src));
-ok('★ 有 ticket_id 就延那張', /let ids=b\.ticket_id\?\[b\.ticket_id\]:\[\];/.test(src));
+ok('★ 沒退成票就不延', /if\(leaveRefunded\)\{\s*\n\s*let ids=_tkId\?\[_tkId\]:\[\];/.test(src));
+ok('★ 有 ticket_id 就延那張（用清掉前先留的 _tkId）', /let ids=_tkId\?\[_tkId\]:\[\];/.test(src));
 ok('★ 舊預約走 fallback 退的，從剛寫進去的 refund 帳本回查（團課可能一次退好幾人）',
    /sb\.from\('ticket_logs'\)\.select\('ticket_id'\)\.eq\('booking_id',b\.id\)\.eq\('action','refund'\)/.test(src)
    && /ids=\[\.\.\.new Set\(\(q\.data\|\|\[\]\)\.map\(r=>r\.ticket_id\)\.filter\(Boolean\)\)\]/.test(src));
@@ -84,6 +84,45 @@ ok('★ 通知會員時講出新的期限', /，使用期限延長至 \$\{extend
 ok('★ 櫃檯的提示也講出新的期限', /效期延至 \$\{extendTo\.replace\(\/-\/g,'\/'\)\}/.test(src));
 ok('　　展延失敗不會拖垮整個請假流程（整段包 try）', /\}catch\(_\)\{ return null; \}/.test(src));
 ok('　　原因寫在程式裡', /教練請假等於白白吃掉會員一週的名額，時間要還給他/.test(src));
+
+console.log('\n這堂課改成會員自主訓練（2026-07-31 使用者定案）');
+ok('★ 課種改成自主訓練', /b\.category='自主訓練';/.test(src));
+ok('★ 票券欄位清掉（票已退回，掛著會讓圓形卡多算一堂）', /b\.ticket_id=null;        \/\/ 票已退回/.test(src));
+ok('★ 退票用的是清掉之前先留的那個 id', /const _tkId=b\.ticket_id;/.test(src)
+   && /if\(_tkId\)\{ await refundTicket\(_tkId,b\.id,SESSION\.id\); leaveRefunded=true; \}/.test(src)
+   && /let ids=_tkId\?\[_tkId\]:\[\];/.test(src));
+ok('★ ticket_type_id 刻意保留（那是「本來是哪一種課」的唯一線索）',
+   !/b\.ticket_type_id=null/.test(src)
+   && /ticket_type_id 刻意保留：那是「本來是哪一種課」的唯一線索/.test(src));
+ok('★ 預約備註記下原本的課種', /教練請假，本堂改為自主訓練（原：\$\{_wasCat\}）/.test(src));
+ok('　　通知與提示都講「已改為自主訓練」',
+   /本堂已改為自主訓練，時段與場地保留；若您仍到場並簽到，將照常發放自主訓練點數。/.test(src)
+   && /已標記教練請假：票券已退回、改為自主訓練/.test(src));
+ok('　　通知裡的課種用原本的（已經被改掉了，不能讀 b.category）',
+   /`您的\$\{_wasCat\|\|'課程'\}（\$\{b\.date\} \$\{b\.start_time\}）因教練請假/.test(src));
+
+console.log('\n到場簽到照發自主訓練點數');
+ok('★ grantCheckinReward 補一條：教練請假的課就發',
+   /if\(b\.status==='coach_leave'\)\{ doGrant=true; isFriendly=friendly; \}/.test(src));
+ok('★ 排在 coachClass 判斷之後、return false 之前（不然課種改掉就判成不發）',
+   src.indexOf("if(coachClass){ doGrant=true; isFriendly=friendly; }")
+   < src.indexOf("if(b.status==='coach_leave'){ doGrant=true; isFriendly=friendly; }")
+   && src.indexOf("if(b.status==='coach_leave'){ doGrant=true; isFriendly=friendly; }")
+   < src.indexOf("if(!doGrant) return false;"));
+ok('★ 友善與否仍看原本那張票', /友善與否仍看原本那張票（ttName／tkPlanName／ttColor，上面已經算過）/.test(src));
+ok('　　重複發放的防線沒動（同一筆 booking 只發一次）',
+   /t\.source==='checkin_grant' && t\.source_booking_id===b\.id/.test(src));
+
+console.log('\n請假按鈕的位置');
+ok('★ 移到代課教練名單「後面」', (()=>{
+  const i=src.indexOf('const html = `<div class="evc-roster evr-up"');
+  const blk=src.slice(i, src.indexOf('</div>`;',i));
+  return blk.indexOf('bkOrbitSubSet') < blk.indexOf('bkCoachLeave');
+})());
+ok('★ 按鈕講清楚會發生什麼', /找不到代課 → 教練請假<i>退票・效期＋7 天・改成自主訓練<\/i>/.test(src));
+ok('　　已標記過就不能再按', /<button class="evr-row on" disabled>已標記教練請假<\/button>/.test(src));
+ok('　　樣式：紅字＋副標', /\.evr-row\.evr-leave\{color:#a8433f;flex-direction:column;/.test(src));
+ok('　　原因寫在程式裡', /它也是這個面板裡唯一破壞性的動作，\s*\n\s*放最後比較不會誤點/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

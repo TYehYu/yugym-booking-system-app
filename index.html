@@ -5551,6 +5551,9 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
   color:var(--text);border:none;cursor:pointer;text-align:left;font-family:inherit;}
 #bk-card-pop .evr-row.on{background:var(--sage-bg);color:var(--green);}
 #bk-card-pop .evr-tick{font-size:11px;font-weight:700;color:var(--green);}
+/* 教練請假：面板裡唯一的破壞性動作，紅字＋副標講清楚會發生什麼（2026-07-31） */
+.evr-row.evr-leave{color:#a8433f;flex-direction:column;align-items:flex-start;gap:2px;line-height:1.35;}
+.evr-row.evr-leave i{font-style:normal;font-size:10.5px;color:var(--t3);font-weight:600;white-space:normal;}
 /* 課卡備註（2026-07-29）：金色次要提示，兩行截斷；只有員工看得到 */
 #bk-card-pop .mtp-note{font-size:11.5px;color:var(--gold-d,#b48a56);line-height:1.5;white-space:normal;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
@@ -6725,8 +6728,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1508';
-const APP_VERSION_LABEL='v260731.1508';
+const APP_VERSION = '260731.1515';
+const APP_VERSION_LABEL='v260731.1515';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17511,13 +17514,14 @@ async function bkOrbitSub(id){
      .evr-up 這個 class 名保留 —— 舊的行事曆課卡路徑（window._expandedBkEl）仍靠它往上展開。 */
   const html = `<div class="evc-roster evr-up" onclick="event.stopPropagation()">`
     + `<div class="evr-title">代課教練（點選改派）</div>`
-    /* 教練請假（2026-07-21 商業規則二）：退票＋保留 booking(status=coach_leave)；
-       會員到場簽到照發自主訓練點（走既有簽到 RPC），未到不發。 */
-    + (b.status!=='coach_leave'
-        ? `<button class="evr-row" style="color:#a8433f;" onclick="event.stopPropagation();bkCoachLeave('${id}')">教練請假（退票・保留課卡）</button>`
-        : `<button class="evr-row on" disabled>已標記教練請假</button>`)
     + (b.substitute_coach_id?`<button class="evr-row" onclick="event.stopPropagation();bkOrbitSubSet('${id}','')">清除代課（回主責）</button>`:'')
     + list.map(c=>`<button class="evr-row ${b.substitute_coach_id===c.id?'on':''}" onclick="event.stopPropagation();bkOrbitSubSet('${id}','${c.id}')">${coachDisp(c)}${b.substitute_coach_id===c.id?'<span class="evr-tick">✓ 代課中</span>':''}</button>`).join('')
+    /* 教練請假（2026-07-21 商業規則二；2026-07-31 使用者指示移到教練名單後面）——
+       找不到代課才會走這條，所以排在名單最後；它也是這個面板裡唯一破壞性的動作，
+       放最後比較不會誤點。 */
+    + (b.status!=='coach_leave'
+        ? `<button class="evr-row evr-leave" onclick="event.stopPropagation();bkCoachLeave('${id}')">找不到代課 → 教練請假<i>退票・效期＋7 天・改成自主訓練</i></button>`
+        : `<button class="evr-row on" disabled>已標記教練請假</button>`)
     + `</div>`;
   const old = host.querySelector('.evc-roster'); if(old) old.remove();
   host.insertAdjacentHTML('beforeend', html);
@@ -17554,19 +17558,31 @@ async function extendForCoachLeave(ticket_id, booking, operator){
     return to;
   }catch(_){ return null; }
 }
-/* 教練請假（2026-07-21 商業規則二）：①有扣票→退回 1 堂（refund 帳本）；
-   ②booking 保留、status=coach_leave；③會員屆時到場可照常簽到（fn_checkin_booking 不擋
-   coach_leave、發點照規則、不再扣票）；未到場即不發。 */
+/* 教練請假（2026-07-21 商業規則二；2026-07-31 使用者補充定案）：
+   ①有扣票→退回 1 堂（refund 帳本）
+   ②票券效期展延 7 天（extendForCoachLeave）
+   ③這堂課改成會員的自主訓練 —— 教練沒來，但場地與時段還在，會員可以自己來練
+   ④會員到場簽到照發自主訓練點數；未到場即不發
+   ⚠ 課種改成自主訓練之後，原本靠 category 判斷「這堂是教練課才發點」的
+     grantCheckinReward 會判成不發 → 那邊補了一條 status==='coach_leave' 就發。
+   ⚠ ticket_type_id 刻意保留：那是「本來是哪一種課」的唯一線索，對帳與發點都用得到。 */
 async function bkCoachLeave(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   if(b.status==='cancelled'||b.status==='checked_in'||b.status==='completed'){ showToast('此狀態不可標記請假'); return; }
+  const _tkId=b.ticket_id;   // 先留著：下面要用它退票，但欄位本身會被清掉
+  const _wasCat=b.category||'';
   try{
     /* 順序（2026-07-21）：先寫狀態、成功才退票——正式庫若尚未套 20260721_05（enum 缺
        coach_leave），狀態寫入會先失敗、乾淨中止，不會發生「票退了狀態沒改」的不一致。 */
     b.status='coach_leave';
+    b.category='自主訓練';
+    b.ticket_id=null;        // 票已退回，掛著會讓圓形卡多算一堂
+    b.note=String(b.note||'').trim()
+      ? String(b.note).trim()+`\n${ymd(TODAY)} 教練請假，本堂改為自主訓練（原：${_wasCat}）`
+      : `${ymd(TODAY)} 教練請假，本堂改為自主訓練（原：${_wasCat}）`;
     await dbPut('bookings',b);
     let leaveRefunded=false;
-    if(b.ticket_id){ await refundTicket(b.ticket_id,b.id,SESSION.id); leaveRefunded=true; }
+    if(_tkId){ await refundTicket(_tkId,b.id,SESSION.id); leaveRefunded=true; }
     // 匯入的舊預約沒有 ticket_id，用票種回頭找票退；找不到就據實不宣稱已退
     else{ leaveRefunded = (await refundLegacyBooking(b,SESSION.id))>0; }
     /* 效期展延（2026-07-31 使用者定案）：退票之後才做 —— refundTicket 有可能把效期
@@ -17575,7 +17591,7 @@ async function bkCoachLeave(id){
        從剛寫進去的 refund 帳本回查（團課可能一次退好幾個人）。 */
     let extendTo=null;
     if(leaveRefunded){
-      let ids=b.ticket_id?[b.ticket_id]:[];
+      let ids=_tkId?[_tkId]:[];
       if(!ids.length && CLOUD && sb){
         try{ const q=await sb.from('ticket_logs').select('ticket_id').eq('booking_id',b.id).eq('action','refund');
           if(q && !q.error) ids=[...new Set((q.data||[]).map(r=>r.ticket_id).filter(Boolean))]; }catch(_){}
@@ -17583,11 +17599,11 @@ async function bkCoachLeave(id){
       for(const tid of ids){ const to=await extendForCoachLeave(tid,b,SESSION.id); if(to) extendTo=to; }
     }
     try{ if(b.member_id) await pushNotification(b.member_id,'cancel','教練請假通知',
-      `您的${b.category||'課程'}（${b.date} ${b.start_time}）因教練請假${leaveRefunded?'，票券已退回':''}${extendTo?`，使用期限延長至 ${extendTo.replace(/-/g,'/')}`:''}；若您仍到場自主訓練並簽到，將照常發放自主訓練點數。`); }catch(_){}
+      `您的${_wasCat||'課程'}（${b.date} ${b.start_time}）因教練請假${leaveRefunded?'，票券已退回':''}${extendTo?`，使用期限延長至 ${extendTo.replace(/-/g,'/')}`:''}。本堂已改為自主訓練，時段與場地保留；若您仍到場並簽到，將照常發放自主訓練點數。`); }catch(_){}
     collapseBkCard();
     showToast(leaveRefunded
-      ? `已標記教練請假：票券已退回、課卡保留${extendTo?`，效期延至 ${extendTo.replace(/-/g,'/')}`:''}`
-      : '已標記教練請假：課卡保留（未退票券，請確認堂數）');
+      ? `已標記教練請假：票券已退回、改為自主訓練${extendTo?`，效期延至 ${extendTo.replace(/-/g,'/')}`:''}`
+      : '已標記教練請假：改為自主訓練（未退票券，請確認堂數）');
     navTo(CUR_PAGE);
   }catch(e){ showToast('標記請假失敗：'+(e&&e.message?e.message:e)); }
 }
@@ -18939,6 +18955,10 @@ async function grantCheckinReward(b){  if(b.reward_issued) return true;         
     || cat.indexOf('友善')>=0 || ttName.indexOf('友善')>=0 || tkPlanName.indexOf('友善')>=0;
   const coachClass = cat==='私人教練' || cat==='體驗' || b.ticket_type_id==='pt' || b.ticket_type_id==='trial' || b.ticket_type_id==='pt_friendly' || ttName.indexOf('教練課')>=0 || ttName.indexOf('體驗')>=0 || tkPlanName.indexOf('教練課')>=0 || ttColor==='friendly' || ttColor==='pt';
   if(coachClass){ doGrant=true; isFriendly=friendly; }
+  /* 教練請假的課（2026-07-31 使用者定案）：課種已被改成自主訓練，但會員到場簽到
+     一樣要發點 —— 這是替他被取消的那堂課補償，不是自主訓練本身的規則。
+     友善與否仍看原本那張票（ttName／tkPlanName／ttColor，上面已經算過）。 */
+  if(b.status==='coach_leave'){ doGrant=true; isFriendly=friendly; }
   if(!doGrant) return false;                 // 團課/自主訓練本身不發點
 
   // 資料庫層級防重複：若這堂 booking 已經發過自主訓練券，就不再發（比記憶體旗標可靠，防連點/競態/取消再簽）
