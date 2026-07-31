@@ -119,5 +119,20 @@ ok('★ 「重新啟用」仍只給還有剩餘堂數的票（用完的沒東西
 ok('　　標題改成「已過期方案」', /<div class="md-tk-subhead">已過期方案<\/div>/.test(src));
 ok('　　原因寫在程式裡', /原本過期的票和用完的票一起收進「歷史紀錄」，限定方案這種有效期的票就找不到了/.test(src));
 
+console.log('\n手機行事曆：待簽約的課要看得到名字（2026-07-31 使用者回報）');
+{
+  const i=src.indexOf('    let disp;\n    if(b.category===\'小班肌力\'');
+  const blk=src.slice(i, src.indexOf('\n    /* 卡片視覺改桌機版標準卡', i));
+  ok('★ 待簽約用 trial_name（原本掉到 fallback 只顯示「課程」）',
+     /else if\(b\.pending_contract\)\{ disp=b\.trial_name\|\|'待簽約'; \}/.test(blk));
+  ok('★ 場租也顯示使用人', /else if\(b\.category==='場租'\)\{ disp=b\.trial_name\|\|'場租'; \}/.test(blk));
+  ok('★ 已綁會員的仍優先顯示會員名（待繳費那種）',
+     blk.indexOf("else if(b.member_id)")<blk.indexOf("else if(b.pending_contract)"));
+  ok('　　最後的 fallback 也先試 trial_name 才退成「課程」',
+     /else disp=\{'自主訓練':'自主訓練'\}\[b\.category\]\|\|b\.trial_name\|\|'課程';/.test(blk));
+  ok('　　待簽約不另外加標記（卡片本來就有紅框）', !/待簽約）/.test(blk));
+  ok('　　原因寫在程式裡', /待簽約的課卡只顯示「課程」，看不出是誰/.test(src));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
