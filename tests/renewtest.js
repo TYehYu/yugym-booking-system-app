@@ -13,8 +13,9 @@ const ymd=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()
 const parseYmd=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(s||''));return m?new Date(+m[1],+m[2]-1,+m[3]):null;};
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x;};
 const api=new Function('ymd','parseYmd','addDays','window',
-  grab('isCoachClassTicket')+'\n'+grab('renewAttribOf')+'\n'+grab('renewMapOf')+
-  '\nreturn {isCoachClassTicket,renewAttribOf,renewMapOf};')(ymd,parseYmd,addDays,{});
+  /* 2026-07-31：renewMapOf 改由 renewListOf 產生（計數與名單同一支） */
+  grab('isCoachClassTicket')+'\n'+grab('renewAttribOf')+'\n'+grab('renewListOf')+'\n'+grab('renewMapOf')+
+  '\nreturn {isCoachClassTicket,renewAttribOf,renewMapOf,renewListOf};')(ymd,parseYmd,addDays,{});
 
 const types=[
   {id:'pt',category:'私人教練'}, {id:'fr',category:'私人教練'},
@@ -70,6 +71,47 @@ t('① 票券歸屬最優先', ()=>eq(api.renewAttribOf({id:'x',member_id:'mx',s
 t('② 沒有票券歸屬 → 收款教練', ()=>eq(api.renewAttribOf({id:'x',member_id:'mx',purchase_date:'2026-07-20'},{x:'C2'},bk),'C2'));
 t('③ 都沒有 → 近 90 天主帶教練', ()=>eq(api.renewAttribOf({id:'x',member_id:'mx',purchase_date:'2026-07-20'},{},bk),'C90'));
 t('④ 完全查無 → 不計給任何人', ()=>eq(api.renewAttribOf({id:'x',member_id:'zz',purchase_date:'2026-07-20'},{},bk),null));
+
+/* 2026-07-31 使用者指示：手機端教練薪資的「續約」要能點開看名單（姓名／方案／費用） */
+console.log('\n續約名單（與計數同一支）');
+{
+  const tks=[
+    {id:'T1',member_id:'M1',ticket_type_id:'pt',plan_name:'教練課 10 堂',sessions_total:10,
+     sale_kind:'renewal',purchase_date:'2026-07-05',amount_paid:18000,sold_by:'C1'},
+    {id:'T2',member_id:'M2',ticket_type_id:'pt',plan_name:'教練課 20 堂',sessions_total:20,
+     sale_kind:'renewal',purchase_date:'2026-07-20',amount_paid:0,sold_by:'C1'},
+  ];
+  const purs=[{ticket_id:'T2',coach_id:'C1',deal_amount:34000}];
+  const list=api.renewListOf('2026-07',tks,purs,[],types)['C1']||[];
+  t('★ 名單有兩筆', ()=>eq(list.length,2));
+  t('★ 帶得出方案與堂數', ()=>eq([list[0].plan,list[0].sessions],['教練課 10 堂',10]));
+  t('★ 金額優先取收款紀錄（實收 34000，不是票券上的 0）', ()=>eq(list[1].amount,34000));
+  t('　　沒有收款紀錄就退回票券金額', ()=>eq(list[0].amount,18000));
+  t('　　依購買日排序', ()=>eq(list.map(r=>r.date),['2026-07-05','2026-07-20']));
+  t('★ 計數＝名單長度（兩邊不會對不上）',
+    ()=>eq(api.renewMapOf('2026-07',tks,purs,[],types)['C1'],2));
+  t('★ 彈窗顯示姓名／方案／費用與合計', ()=>eq(
+    /<span class="nl-nm">\$\{esc\(r\.name\|\|'—'\)\}<\/span>/.test(html)
+    && /<span class="nl-plan">\$\{esc\(r\.plan\)\}/.test(html)
+    && /<div class="nl-sum"><span>合計<\/span>/.test(html), true));
+  t('★ 續約數那格看得出可以點', ()=>eq(
+    /<div class="ds-card\$\{renewCount\?' ds-card-tap':''\}"/.test(html)
+    && /onclick="openRenewList\(\)"/.test(html), true));
+}
+
+/* 2026-07-31 使用者指示：手機端管理員首頁的營收也要能點開看名單（誰／方案／多少錢） */
+console.log('\n營收名單');
+t('★ 名單來源＝首頁總額用的同一批收款紀錄', ()=>eq(
+  /const dayPurchases=purchases\.filter\(p=>puLocalDate\(p\)===date\)/.test(html)
+  && /const dayRevenue=dayPurchases\.reduce\(\(s,p\)=>s\+\(Number\(p\.deal_amount\)\|\|0\),0\);/.test(html), true));
+t('★ 帶會員姓名、方案、金額、付款方式', ()=>eq(
+  /name:nm\[p\.member_id\]\|\|p\.member_name\|\|'—',/.test(html)
+  && /plan:p\.plan_name\|\|'方案',/.test(html)
+  && /amount:Number\(p\.deal_amount\)\|\|0,/.test(html), true));
+t('★ 卡片可點（沒有收款就不掛 onclick）', ()=>eq(
+  /dayPurchases\.length\?'openRevList\(\)':''/.test(html), true));
+t('　　彈窗標題帶日期與筆數', ()=>eq(
+  /<div class="modal-title">\$\{d\} 營收（\$\{rows\.length\} 筆）<\/div>/.test(html), true));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

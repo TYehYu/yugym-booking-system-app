@@ -144,8 +144,8 @@ console.log('\n團課人次：只算已簽到（2026-07-31 使用者指示）');
    人頭費付給實際來上課的人，排在名單上卻沒人簽到的名額不算。 */
 ok('★ 抽出共用的人頭計算，只算已簽到的名額',
    /function grpAttendHeads\(b\)\{[\s\S]{0,220}return keys\.filter\(k=>att\[k\]==='checked_in'\)\.length;/.test(src));
-ok('★ 三處計薪的人頭加總都改用它（薪資單／月結明細／教練薪資頁）',
-   (src.match(/reduce\(\(s,b\)=>s\+grpAttendHeads\(b\),0\)/g)||[]).length===3);
+ok('★ 計薪／統計的人頭加總都改用它（薪資單／月結明細／教練薪資頁／每日估算）',
+   (src.match(/grpAttendHeads\(b\),0\)/g)||[]).length===4);
 ok('★ 教練端本月統計的人次也一樣',
    /const groupHeadCount=groupDoneBks\.reduce\(\(a,b\)=>a\+grpAttendHeads\(b\),0\);/.test(src));
 ok('　　沒有名單的舊資料維持算 1（行為不變）', /if\(!keys\.length\) return 1;/.test(src));
