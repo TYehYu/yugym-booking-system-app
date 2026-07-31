@@ -7,8 +7,10 @@ const h=fs.readFileSync('/Users/tungyeh/Projects/yugym-booking-system-app/index.
 const a=h.indexOf('  const tkUsedCount=(t)=>{');
 const b=h.indexOf('  // 票券卡片渲染（圓圈進度）', a);
 const src=h.slice(a,b);
-const calc=(total,dates,t,inferByTk,bkByTk)=>new Function('usedDates','inferByTk','bkByTk','_grpTkNewest','_grpPending',
-  src+' return tkUsedCount;')({[t.id]:dates},inferByTk||{},bkByTk||{},null,0)(Object.assign({sessions_total:total},t));
+/* 2026-07-31：團課待上堂數改由 grpTicketAlloc 逐張票算（見 grpalloctest.js）；
+   這裡的案例都是直連預約的票，_grpA 給空的即可。 */
+const calc=(total,dates,t,inferByTk,bkByTk)=>new Function('usedDates','inferByTk','bkByTk','_grpA','_grpMerge',
+  src+' return tkUsedCount;')({[t.id]:dates},inferByTk||{},bkByTk||{},{pend:{},byTicket:{}},()=>[])(Object.assign({sessions_total:total},t));
 let pass=0,fail=0;
 const chk=(n,got,want)=>{const ok=got===want;ok?pass++:fail++;console.log(`  ${ok?'✓':'✗'} ${n}  got=${got} want=${want}`);};
 const BK=st=>({status:st});

@@ -58,7 +58,9 @@ ok('　　簽到章在右下，不會跟徽章打架',
 /* ── 會員票券：預約了但還沒上，不該被收進「歷史紀錄」（2026-07-29 使用者指示） ── */
 console.log('\n會員票券的歷史紀錄判定');
 const hs=src.slice(src.indexOf('const tkUsedCount=(t)=>{'), src.indexOf('  // 票券卡片渲染（圓圈進度）'));
-const mk=(usedDates,bkByTk)=>new Function('usedDates','inferByTk','bkByTk','_grpTkNewest','_grpPending', hs+'\nreturn tkUsedCount;')(usedDates||{},{},bkByTk||{},null,0);
+/* 2026-07-31：團課待上堂數改由 grpTicketAlloc 逐張票算（見 grpalloctest.js），
+   這裡的案例是「直連預約」的票，_grpA 給空的即可。 */
+const mk=(usedDates,bkByTk)=>new Function('usedDates','inferByTk','bkByTk','_grpA','_grpMerge', hs+'\nreturn tkUsedCount;')(usedDates||{},{},bkByTk||{},{pend:{},byTicket:{}},()=>[]);
 const BKD=n=>Array.from({length:n},()=>({status:'booked'}));
 
 eq('★ 四堂全約完但一堂都還沒上 → 已上 0（不是 4）',
@@ -80,14 +82,11 @@ console.log('\n後台會員檔案的票券分頁也要同一套判準');
 ok('★ 已上堂數抽成 usedOf()，卡片與歷史判定共用', /const usedOf=t=>\{/.test(src)
    && /const used=usedOf\(t\);/.test(src));
 ok('★ 歷史判定先看已上堂數', /if\(total>0 && usedOf\(t\)<total\) return false;/.test(src));
+/* 2026-07-31：兩處的「團課待上堂數」改吃 grpTicketAlloc（扣課紀錄），細節見 grpalloctest.js */
 ok('★ 團課待上堂數另外算（團課預約不綁 ticket_id）',
-   /const _grpPendingP=\(\(\)=>\{/.test(src) && /const _grpPending=\(\(\)=>\{/.test(src));
-ok('　　只算新制預約（BK- 開頭），匯入的舊預約不重複扣',
-   (src.match(/String\(b\.id\|\|''\)\.indexOf\('BK-'\)!==0\) return;/g)||[]).length===2);
-ok('　　待上堂數只從最近買的那張團課票扣',
-   /_grpTkNewest && t\.id===_grpTkNewest\.id/.test(src) && /_grpNewestP && t\.id===_grpNewestP\.id/.test(src));
-ok('　　已簽到就算真的用掉了，且改逐名額判斷（2026-07-30 名額鍵）',
-     (src.match(/if\(at\[seen\[[a-zA-Z]+\]>1\?[a-zA-Z]+\+'#'\+seen\[[a-zA-Z]+\]:[a-zA-Z]+\]==='checked_in'\) return;/g)||[]).length>=2);
+   (src.match(/grpTicketAlloc\(/g)||[]).length===3);
+ok('　　兩個後台畫面都吃同一支',
+   /const gp=_grpA\.pend\[t\.id\]\|\|0;/.test(src) && /const grpPending=_grpA\.pend\[t\.id\]\|\|0;/.test(src));
 ok('★ 後台檔案頁的預約清單要含團課（學員在 member_ids、member_id 是 null）',
    /const myBk=bookings\.filter\(b=>b\.member_id===PP\.id\s*\n\s*\|\| \(Array\.isArray\(b\.member_ids\)&&b\.member_ids\.includes\(PP\.id\)\)\);/.test(src));
 

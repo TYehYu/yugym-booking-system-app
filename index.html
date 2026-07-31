@@ -6747,8 +6747,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1735';
-const APP_VERSION_LABEL='v260731.1735';
+const APP_VERSION = '260731.1807';
+const APP_VERSION_LABEL='v260731.1807';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10308,6 +10308,77 @@ function allocBookingsToTickets(tickets,bookings,typeMap){
     if(inferred[t.id]) inferred[t.id].sort(byDT);
   });
   return {byTicket,byBooking,inferred};
+}
+/* 團課「哪張票扣了哪一堂」（2026-07-31 使用者回報：陳暐濰、王雅雯 7/30 買的四週票
+   四堂都只是預約、一堂都還沒簽到，卻被標成「已用畢」收進歷史紀錄）。
+
+   團課預約的 member_id 是 null、學員放在 member_ids，而且不綁 ticket_id，所以後台一直
+   靠猜：「待上的團課都算在最近買的那張團課票身上」。一位會員手上同時有兩張團課票就會猜錯 ——
+   陳暐濰 7/31 拿到一張補課券（比四週票新，而且當天就作廢了），王雅雯 7/30 有一張同日重複
+   建立、已作廢的票，四堂待上全跑到那張票頭上，四週票的待上堂數變 0、帳面餘額也是 0 → 已用畢。
+   續約、補課券、同日買兩張都是常態，這個猜法遲早會錯。
+
+   改讀 ticket_logs 的扣課紀錄：預約當下扣了哪張票就記在哪張票（deduct 帶 booking_id，
+   取消時寫一筆 refund 加回來）—— 會員端「我的票券」本來就是這樣反查的，後台改吃同一份對照。
+   沒有扣課紀錄的（舊系統匯入的預約）才退回原本「最近那張團課票」的猜法。
+
+   回傳 pend＝每張票「已預約但還沒簽到」的堂數；byTicket＝每張票扣到的團課預約（給圓點）。 */
+function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk){
+  const pend={}, byTicket={};
+  const tkById={}; (myTk||[]).forEach(t=>{ if(t&&t.id) tkById[t.id]=t; });
+  // 每筆預約在每張票上的淨扣課數（同一人兩個名額＝兩筆 deduct；取消會有 refund 抵銷）
+  const charged={};
+  (logs||[]).forEach(l=>{
+    if(!l || !l.booking_id || !l.ticket_id || !tkById[l.ticket_id]) return;
+    const d = l.action==='deduct' ? 1 : (l.action==='refund' ? -1 : 0);
+    if(!d) return;
+    const m=(charged[l.booking_id]=charged[l.booking_id]||{});
+    m[l.ticket_id]=(m[l.ticket_id]||0)+d;
+  });
+  // 後備猜法只挑「還沒作廢」的票 —— 作廢票不會再被拿來扣課（王雅雯案例）
+  const newest=(myTk||[]).filter(t=>{ try{ return !!isGrpTk(t) && t.status!=='refunded'; }catch(_){ return false; } })
+    .sort((a,b)=>String(b.purchase_date||b.start_date||'').localeCompare(String(a.purchase_date||a.start_date||'')))[0];
+  const today=ymd(TODAY);
+  const put=(tid,b)=>{ const arr=(byTicket[tid]=byTicket[tid]||[]); if(!arr.some(x=>x.id===b.id)) arr.push(b); };
+  (myBk||[]).forEach(b=>{
+    if(!b || b.category!=='小班肌力' || b.status==='cancelled') return;
+    /* 逐名額（2026-07-30 名額鍵）：同一人兩個名額，只到一個時另一個仍是待上 */
+    const mine=[], seen={};
+    (mids(b)||[]).forEach(id=>{
+      seen[id]=(seen[id]||0)+1;
+      if(String(id)!==String(memberId)) return;
+      mine.push(seen[id]>1?id+'#'+seen[id]:id);
+    });
+    if(!mine.length) return;
+    const at=attObj(b);
+    const m=charged[b.id]||{};
+    const slots=[];
+    Object.keys(m).filter(k=>m[k]>0)
+      .sort((x,y)=>String((tkById[y]||{}).purchase_date||'').localeCompare(String((tkById[x]||{}).purchase_date||'')))
+      .forEach(tid=>{ for(let i=0;i<m[tid];i++) slots.push(tid); });
+    mine.forEach((k,i)=>{
+      const logged=slots[i]||null;
+      const tid=logged||(newest?newest.id:null);
+      if(!tid) return;
+      // 圓點只認扣課紀錄：猜出來的不畫，否則舊系統匯入的整批課會全掛到最近那張票上
+      if(logged) put(logged,b);
+      if(at[k]==='checked_in') return;      // 這個名額已簽到＝真的用掉了
+      /* 匯入的舊預約當初沒扣過票，餘額裡本來就沒算它，扣了會重複扣；未來的課例外，
+         那些一定還沒上（2026-07-30 Jackie 的 8/01 匯入預約）。 */
+      if(String(b.date||'')<today && String(b.id||'').indexOf('BK-')!==0) return;
+      pend[tid]=(pend[tid]||0)+1;
+    });
+  });
+  return {pend, byTicket};
+}
+/* 團課預約在票券圓點上的歸屬：有扣課紀錄的以紀錄為準（同一堂課不會同時出現在兩張票上），
+   其餘維持 allocBookingsToTickets 的先進先出結果。 */
+function grpMergeAlloc(base, ga){
+  const logged=new Set();
+  Object.keys((ga&&ga.byTicket)||{}).forEach(tid=>(ga.byTicket[tid]||[]).forEach(b=>logged.add(b.id)));
+  return tid=>((base&&base[tid])||[]).filter(b=>!logged.has(b.id))
+    .concat(((ga&&ga.byTicket)||{})[tid]||[])
+    .sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
 }
 async function refundLegacyBooking(b,operator){
   if(!b || b.ticket_id) return 0;            // 有票就該走 refundTicket，不歸這裡管
@@ -20290,8 +20361,9 @@ async function openMemberDetail(member_id){
      一律開「會員管理」的個人資料頁；教練維持簡易名片（檢視權限較窄）。 */
   if(isDeskLike()) return openPersonProfile('member', member_id);
   _detailMemberId=member_id;
-  const[m,coaches,tickets,bookings,types,purchases]=await Promise.all([
-    dbGet('members',member_id),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('bookings'),dbGetAll('ticket_types'),dbGetAll('purchases').catch(()=>[])]);
+  const[m,coaches,tickets,bookings,types,purchases,tkLogs]=await Promise.all([
+    dbGet('members',member_id),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('bookings'),dbGetAll('ticket_types'),dbGetAll('purchases').catch(()=>[]),
+    dbGetAll('ticket_logs').catch(()=>[])]);   // 團課扣課紀錄（2026-07-31，見 grpTicketAlloc）
   // 會員升降級（自動制）：確保等級快取就緒（此頁本就載入全部 bookings，順手重算）
   window._memberTierCache=Object.assign(computeMemberTiers(bookings,await dbGetAll('members').catch(()=>[])),{__ready:true});
   const myPurchases=(purchases||[]).filter(p=>p.member_id===member_id).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
@@ -20361,39 +20433,11 @@ async function openMemberDetail(member_id){
   const f=(l,v)=>`<div class="mdetail-field"><div class="mdf-l">${l}</div>${v||'—'}</div>`;
   const isCoach = SESSION.role==='coach'; // 教練：精簡檢視，隱藏付款/發票/金額/等級調整等
 
-  /* 團課的「已預約但還沒簽到」堂數（2026-07-29 使用者回報：黃孟琦 7/28 買的四週票
-     四堂都只是預約、一堂都還沒簽到，卻被標成「已用畢」收進歷史紀錄）。
-     成因：團課預約的 member_id 是 null、學員放在 member_ids，而且不綁 ticket_id ——
-     下面用 ticket_id 對照的 bookedBound 一律是 0，等於算不到任何「已預約未上」。
-     只算新制預約（id 以 BK- 開頭）：那些在建立當下就扣了課；匯入的舊預約沒扣過，
-     餘額裡本來就沒算它們，扣了會變成重複扣。 */
-  const _grpPending=(()=>{
-    let n=0;
-    (bookings||[]).forEach(b=>{
-      if(!b || b.category!=='小班肌力' || b.status==='cancelled') return;
-      const at=(b.attendance&&typeof b.attendance==='object')?b.attendance:{};
-      /* 2026-07-30 使用者回報（Jackie）：7/24 買的四堂團課票 8/01 才開始，一堂都還沒上，
-         卻被標成「已用畢」收進歷史紀錄 —— 因為她那筆 8/01 的預約是匯入的（IMPB-），
-         被下面的 BK- 條件濾掉，算不到任何「已預約未上」。
-         未來的課一定還沒上，不管哪個系統建的都要算；過去未簽到的才維持「只算新制預約」
-         （匯入的舊預約當初沒扣過票，扣了會重複扣）。 */
-      if(String(b.date||'')<ymd(TODAY) && String(b.id||'').indexOf('BK-')!==0) return;
-      /* 同一人多名額就算多堂；2026-07-30 出席狀態改名額鍵後改成逐名額判斷
-         （原本整筆共讀 att[member_id]，兩個名額只到一個時會整筆當成已用掉）。 */
-      const seen={};
-      (mids(b)||[]).forEach(id=>{
-        seen[id]=(seen[id]||0)+1;
-        if(id!==member_id) return;
-        if(at[seen[id]>1?id+'#'+seen[id]:id]==='checked_in') return;   // 這個名額已簽到＝真的用掉了
-        n++;
-      });
-    });
-    return n;
-  })();
-  // 這些待上的團課屬於「最近買的那張團課票」，只從它身上扣，不影響早就用完的舊票
-  const _grpTkNewest=(myTickets||[])
-    .filter(t=>((typeMap[t.ticket_type_id]||{}).category)==='小班肌力')
-    .sort((a,b)=>String(b.purchase_date||b.start_date||'').localeCompare(String(a.purchase_date||a.start_date||'')))[0];
+  /* 團課的「已預約但還沒簽到」堂數（2026-07-29 黃孟琦、2026-07-30 Jackie、2026-07-31
+     陳暐濰／王雅雯）—— 改由扣課紀錄逐張票算，算式與成因見 grpTicketAlloc。 */
+  const _grpA=grpTicketAlloc(myTickets||[], bookings||[], tkLogs||[], member_id,
+    t=>((typeMap[t.ticket_type_id]||{}).category)==='小班肌力');
+  const _grpMerge=grpMergeAlloc(_tkAlloc.byTicket, _grpA);   // 團課圓點以扣課紀錄為準（2026-07-31）
   /* 已上堂數（2026-07-29 抽成共用）：卡片圓點與「是否該歸到歷史紀錄」要用同一個數字，
      否則會出現「圓點還有空心、卡片卻被收進歷史」的矛盾。算式說明見 renderTkCard 內註解。 */
   const tkUsedCount=(t)=>{
@@ -20401,7 +20445,7 @@ async function openMemberDetail(member_id){
     const dates=(usedDates[t.id]||[]);
     const inf=inferByTk[t.id]||[];
     const bookedBound=((bkByTk[t.id]||[]).filter(x=>x.status==='booked')).length;
-    const grpPending=(_grpTkNewest && t.id===_grpTkNewest.id) ? _grpPending : 0;
+    const grpPending=_grpA.pend[t.id]||0;
     const faceUsed=Math.max(0,(total-(t.sessions_remaining??total))-bookedBound-grpPending);
     return Math.min(total,(t.sessions_remaining==null)
       ? Math.max(dates.length, inf.filter(x=>x.status==='checked_in'||x.status==='completed').length)
@@ -20437,7 +20481,8 @@ async function openMemberDetail(member_id){
     // 有綁預約用真的，沒綁就用先進先出推算出來的那批（見上方 inferByTk）
     /* 圓點改吃合併結果（直連＋分配，2026-07-26 徐子芸案例）：混合票的未來預約（如 7/29）
        原本因票已有直連而被跳過，卡上看不到；byTicket 已把兩者合併排序。 */
-    const circles=ticketTokens(t,(_tkAlloc.byTicket[t.id]||bkByTk[t.id]||inf),typeMap,usedCount);
+    const _mg=_grpMerge(t.id);
+    const circles=ticketTokens(t,(_mg.length?_mg:(bkByTk[t.id]||inf)),typeMap,usedCount);
     const inst=t.installment&&typeof t.installment==='object'?t.installment:null;
     const instTag=inst?`<span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;margin-left:6px;">🔒 分期 ${t.unlocked_sessions||inst.current||0}/${total}</span>`:'';
     /* 共享票（2026-07-26）：標出跟誰共用；持有人非本人時額外註明「◎ 持有人」，
@@ -24722,37 +24767,16 @@ function ppRecordHtml(){
         const list=(c.myTk||[]).filter(t=>cls(t)===tab)
           .sort((a,b)=>String(b.purchase_date||'').localeCompare(String(a.purchase_date||'')));
         /* 團課「已預約但還沒簽到」的堂數（2026-07-29 使用者指示：只完成預約、還沒銷課，
-           不能算已用、也不能收進歷史紀錄）。團課預約的 member_id 是 null、學員在 member_ids，
-           而且不綁 ticket_id → 上面的 dBooked 一律是 0，算不到任何待上堂數。
-           只算新制預約（id 以 BK- 開頭，建立當下就扣了課）；匯入的舊預約沒扣過票不能重複扣。 */
-        const _grpPendingP=(()=>{
-          let n=0;
-          (c.myBk||[]).forEach(b=>{
-            if(!b || b.category!=='小班肌力' || b.status==='cancelled') return;
-            const at=(b.attendance&&typeof b.attendance==='object')?b.attendance:{};
-            // 未來的課一定還沒上，匯入的預約也要算（2026-07-30 Jackie 案例，同 openMemberDetail）
-            if(String(b.date||'')<ymd(TODAY) && String(b.id||'').indexOf('BK-')!==0) return;
-            // 逐名額判斷（2026-07-30 名額鍵）：同一人兩個名額，只到一個時另一個仍是待上
-            const seen={};
-            (mids(b)||[]).forEach(x=>{
-              seen[x]=(seen[x]||0)+1;
-              if(x!==PP.id) return;
-              if(at[seen[x]>1?x+'#'+seen[x]:x]==='checked_in') return;
-              n++;
-            });
-          });
-          return n;
-        })();
-        // 這些待上的團課屬於「最近買的那張團課票」，只從它身上扣
-        const _grpNewestP=(c.myTk||[]).filter(t=>cls(t)==='group')
-          .sort((a,b)=>String(b.purchase_date||'').localeCompare(String(a.purchase_date||'')))[0];
+           不能算已用、也不能收進歷史紀錄）—— 改由扣課紀錄逐張票算，成因見 grpTicketAlloc。 */
+        const _grpA=grpTicketAlloc(c.myTk||[], c.myBk||[], c.myLogs||[], PP.id, t=>cls(t)==='group');
+        const _bksOf=grpMergeAlloc(alloc.byTicket, _grpA);
         const usedOf=t=>{
-          const bks=(alloc.byTicket[t.id]||[]);
+          const bks=_bksOf(t.id);
           const att=bks.filter(b=>b.status==='checked_in'||b.status==='completed');
           const direct=bks.filter(b=>b.ticket_id===t.id);
           const dAtt=direct.filter(b=>b.status==='checked_in'||b.status==='completed').length;
           const dBooked=direct.filter(b=>b.status==='booked').length;
-          const gp=(_grpNewestP && t.id===_grpNewestP.id) ? _grpPendingP : 0;
+          const gp=_grpA.pend[t.id]||0;
           const total=Number(t.sessions_total)||0, rem=t.sessions_remaining;
           let used;
           if(rem==null) used=Math.max(dAtt, att.length);
@@ -24760,7 +24784,7 @@ function ppRecordHtml(){
           return Math.min(used,total);
         };
         const cardOf=t=>{
-          const bks=(alloc.byTicket[t.id]||[]);
+          const bks=_bksOf(t.id);
           const total=Number(t.sessions_total)||0;
           const used=usedOf(t);
           const stTag={used_up:'已用畢',expired:'已過期',refunded:'已退費'}[t.status]||'';
@@ -25194,9 +25218,10 @@ async function openPersonProfile(kind, id, backPage){
 async function ppLoadCtx(){
   const c=PP.ctx;
   if(PP.kind==='member'){
-    const [coaches,tickets,bookings,purchases,ttypes,contractsAll]=await Promise.all([
+    const [coaches,tickets,bookings,purchases,ttypes,contractsAll,tkLogs]=await Promise.all([
       dbGetAll('coaches'), dbGetAll('member_tickets'), dbGetAll('bookings'), dbGetAll('purchases').catch(()=>[]),
-      dbGetAll('ticket_types').catch(()=>[]), dbGetAll('contracts').catch(()=>[])]);
+      dbGetAll('ticket_types').catch(()=>[]), dbGetAll('contracts').catch(()=>[]),
+      dbGetAll('ticket_logs').catch(()=>[])]);   // 團課扣課紀錄（2026-07-31，見 grpTicketAlloc）
     c.ctByTicket=Object.fromEntries((contractsAll||[]).filter(x=>x.ticket_id&&x.member_id===PP.id).map(x=>[x.ticket_id,x.id]));   // 合約綁票券（2026-07-28）
     c.typeMap=Object.fromEntries((ttypes||[]).map(t=>[t.id,t]));
     c.coachMap=Object.fromEntries(coaches.map(x=>[x.id,coachDisp(x)]));
@@ -25239,7 +25264,7 @@ async function ppLoadCtx(){
         deal_amount:Number(t.amount_paid)||0, payment_method:'imported'}));
     c.pcCount=c.myPc.length+c.myImpTx.length;
     // 行內展開用明細（2026-07-27：活動紀錄不再開新視窗）
-    c.myTk=myTk; c.myBk=myBk;
+    c.myTk=myTk; c.myBk=myBk; c.myLogs=tkLogs||[];
     c.tierOpts=[['','—']].concat(Object.entries(TIER_DEFS).map(([k,d])=>[k,d.label]));
   }else{
     c.bankOpts=HR_BANKS.slice();

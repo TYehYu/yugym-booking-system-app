@@ -124,14 +124,17 @@ console.log('已預約但還沒簽到的票券不進歷史');
    她那筆 8/01 是匯入的（IMPB-）→ 算不到 → 帳面已用＝4。 */
 console.log('\n團課「已預約未上」要含匯入的未來預約');
 {
-  const two=(src.match(/未來的課一定還沒上/g)||[]).length;
-  ok('★ 會員票券頁與人物檢視都改了（兩處）', two>=2, two);
+  /* 2026-07-31：兩處合併成同一支 grpTicketAlloc，規則只寫一遍、兩個畫面都吃它 */
+  ok('★ 會員票券頁與人物檢視吃同一支',
+     /那些一定還沒上（2026-07-30 Jackie 的 8\/01 匯入預約）/.test(src)
+     && (src.match(/grpTicketAlloc\(/g)||[]).length===3);
+  /* 2026-07-31：兩處的算式抽成共用的 grpTicketAlloc，規則不變（細節見 grpalloctest.js） */
   ok('★ 未來的課不看 BK- 前綴（匯入的預約也算）',
-     (src.match(/if\(String\(b\.date\|\|''\)<ymd\(TODAY\) && String\(b\.id\|\|''\)\.indexOf\('BK-'\)!==0\) return;/g)||[]).length===2);
+     /if\(String\(b\.date\|\|''\)<today && String\(b\.id\|\|''\)\.indexOf\('BK-'\)!==0\) return;/.test(src));
   ok('　　過去未簽到的仍只算新制預約（匯入舊預約當初沒扣票，扣了會重複）',
-     /過去未簽到的才維持「只算新制預約」/.test(src));
+     /匯入的舊預約當初沒扣過票，餘額裡本來就沒算它，扣了會重複扣/.test(src));
   ok('　　已簽到的一律不算待上，且改逐名額判斷（2026-07-30 名額鍵）',
-     (src.match(/if\(at\[seen\[[a-zA-Z]+\]>1\?[a-zA-Z]+\+'#'\+seen\[[a-zA-Z]+\]:[a-zA-Z]+\]==='checked_in'\) return;/g)||[]).length>=2);
+     /if\(at\[k\]==='checked_in'\) return;      \/\/ 這個名額已簽到＝真的用掉了/.test(src));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
