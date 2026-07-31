@@ -88,7 +88,7 @@ ok('　　算薪資失敗不影響整張表（自己包 try/catch）',
 ok('　　金額四捨五入到整數並加千分位', /\$\{Math\.round\(st\.net\)\.toLocaleString\(\)\}/.test(src));
 ok('　　非管理員時完全不去算薪資（連查都不查）', /if\(_canPay\)\{\s*\n\s*try\{\s*\n\s*const _pr=await computeMonthlyPayroll/.test(src));
 ok('　　用品牌金標示（金額屬次要提示層級）',
-   /\.st-l-pay\{font-size:17px;font-weight:800;font-family:var\(--num\),inherit;color:var\(--gold-d,#b48a56\);/.test(src));
+   /\.st-l-pay\{display:flex;align-items:baseline;justify-content:flex-end;gap:1px;\s*\n\s*color:var\(--gold-d,#b48a56\);/.test(src));
 
 console.log('\n標題列底色');
 ok('★ 標題列有背景與邊框，跟資料列區隔',

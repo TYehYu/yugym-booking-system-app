@@ -57,16 +57,21 @@ ok('★ 分隔線畫在該區第一格的左緣，拉滿列高',
    /\.st-zb\{border-left:1px solid var\(--bd\);align-self:stretch;padding-left:12px;margin-left:-6px;\}/.test(src));
 ok('　　窄版（≤900px）換排法，分區線關掉',
    /\.st-zb\{border-left:none;padding-left:0;margin-left:0;align-self:center;\}/.test(src));
-ok('　　工作規則那格套上分隔線後仍垂直置中', /\.st-l-tags\{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;align-items:center;\}/.test(src));
+ok('　　工作規則那格套上分隔線後仍垂直置中', /\.st-l-tags\{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;align-items:center;min-height:26px;\}/.test(src));
 
-console.log('\n放大');
-ok('★ 總堂數～工作時數的數字放大到 21px（原 16px）',
-   /\.st-l-n\{display:flex;align-items:baseline;justify-content:center;gap:2px;\s*\n\s*font-size:21px;/.test(src));
-ok('★ 實領薪資跟著放大（它現在就排在工作時數旁邊）', /\.st-l-pay\{font-size:17px;/.test(src));
+console.log('\n放大與基線對齊');
+/* 使用者回報「文字高高低低」：那幾格是 grid 項目、垂直置中，字級不同時行框高度就不同，
+   置中後基線自然對不齊 → 整排共用同一個字級與行高 */
+ok('★ 數字與實領薪資共用同一個字級與行高（20px / 26px）',
+   /\.st-l-n,\.st-l-pay\{font-size:20px;line-height:26px;font-weight:800;font-family:var\(--num\),inherit;\}/.test(src));
+ok('★ 原因寫在程式裡', /每格的行框高度就不一樣，置中後基線自然對不齊/.test(src));
 ok('　　「/排定」小字也跟著調', /\.st-l-n u\{text-decoration:none;font-size:11px;/.test(src));
-ok('　　兩段窄螢幕的字級同步縮',
-   /@media\(max-width:1400px\)\{[\s\S]{0,300}\.st-l-n\{font-size:19px;\}[\s\S]{0,120}\.st-l-pay\{font-size:15px;\}/.test(src)
-   && /\.st-l-n\{font-size:17px;\}[\s\S]{0,120}\.st-l-pay\{font-size:13\.5px;\}/.test(src));
+ok('　　兩段窄螢幕一起縮，且兩者仍同字級',
+   /@media\(max-width:1400px\)\{[\s\S]{0,320}\.st-l-n,\.st-l-pay\{font-size:18px;\}/.test(src)
+   && /\.st-l-n,\.st-l-pay\{font-size:16px;\}/.test(src));
+ok('　　工作規則／休假日也吃同一個行高，整排一條基線',
+   /\.st-l-off\{font-size:11\.5px;line-height:26px;/.test(src)
+   && /\.st-l-tags\{[^}]*min-height:26px;\}/.test(src));
 ok('　　手機版數字也放大', /\.st-l-n\{grid-column:span 1;position:relative;padding-top:12px;font-size:18px;\}/.test(src));
 
 console.log('\n軌道與其他欄位');
