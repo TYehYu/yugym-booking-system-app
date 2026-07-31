@@ -68,6 +68,14 @@ console.log('\n佔用的判定');
                      start_time:'17:00',duration:60,sibling_of:'B0'}])(SELF(),true)), ['cur','cur']);
 }
 
+console.log('\n只有櫃檯能開兩台（2026-07-31 使用者定案）');
+ok('★ 會員自己一次只能約一個名額，兩台請洽櫃檯',
+   /這是\*\*櫃檯專屬\*\*的操作（同日使用者定案）：會員自己在 App 只能一次約一個名額/.test(src));
+ok('★ 理由寫在程式裡（避免一人占掉多筆，對其他會員不公平）',
+   /避免一個人一次占掉多筆預約，對其他會員不公平/.test(src));
+ok('★ 會員端沒有「兩台」的入口（自助預約的確認視窗只選場地，不選台數）',
+   !/p_venue_unit2/.test(src));
+
 console.log('\n權限');
 {
   const h=await mk([])(SELF(),false);
