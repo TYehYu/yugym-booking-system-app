@@ -3401,6 +3401,10 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 文字層級（2026-07-19 使用者指示）：會員姓名放大為主角；時間、教練縮寫取消粗體退居輔助 */
 .cal-ev.cal-ev-std .evc-time{font-family:var(--num);font-size:10px;font-weight:500;line-height:1.1;opacity:.8;letter-spacing:.01em;white-space:nowrap;}
 .cal-ev.cal-ev-std .evc-name{font-size:13px;font-weight:800;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+/* 姓名下面那一列：體驗／待簽約／待繳費（2026-07-31 使用者指示，原本接在名字後面會把名字擠掉） */
+.cal-ev.cal-ev-std .evc-sub{font-size:9.5px;font-weight:700;line-height:1.1;opacity:.72;letter-spacing:.02em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.cal-ev.cal-ev-std.cal-ev-7d .evc-sub,.cal-ev.cal-ev-std.ev-w-tiny .evc-sub{font-size:9px;}
 /* 第三行：教練縮寫 tag（教練色小膠囊，如 RA） */
 .cal-ev.cal-ev-std .evc-coach{font-size:8.5px;font-weight:500;line-height:1;padding:2px 6px;border-radius:999px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
 /* 簽到章（2026-07-25 使用者指示）：放大移到卡片右下角，只露四分之一圓角落（品牌綠、白字） */
@@ -6380,6 +6384,15 @@ body.mc-mode .cal-body{background:rgba(255,255,255,.8);}
 .msb-vbtn.off{opacity:.35;cursor:not-allowed;background:var(--card2);}
 /* 跑步機兩台的佔用燈號（2026-07-31 使用者指示）：灰＝可預約、綠＝已預約。
    跑步機是「一個場地兩台」，一對二的客人可能一次佔掉兩台，客人要看得出還剩幾台。 */
+/* 預約明細：場地旁邊的單位燈號開關（2026-07-31 使用者指示） */
+.vu-dots{display:inline-flex;gap:6px;align-items:center;margin-left:2px;}
+.vu-dot{width:18px;height:18px;border-radius:50%;border:1px solid var(--bd);background:var(--card2);
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:800;color:var(--t3);font-family:var(--num),inherit;padding:0;line-height:1;}
+button.vu-dot{cursor:pointer;}
+button.vu-dot:hover{border-color:var(--green);color:var(--green);}
+.vu-dot.taken{background:var(--green,#1f6f54);border-color:var(--green,#1f6f54);color:#fff;}
+.vu-dot.cur{box-shadow:0 0 0 2px var(--gold-d,#b48a56);}
 .msb-vdots{display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle;}
 .msb-vdot{width:7px;height:7px;border-radius:50%;background:var(--bd,#d8d2c4);}
 .msb-vdot.taken{background:var(--green,#1f6f54);}
@@ -6693,8 +6706,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1930';
-const APP_VERSION_LABEL='v260731.1930';
+const APP_VERSION = '260731.2010';
+const APP_VERSION_LABEL='v260731.2010';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13219,6 +13232,11 @@ async function renderCalendar(opts){
       // 顯示名稱：團體課=多會員、體驗課=客戶名、一般=單一會員
       // 教練端（opts.me）：自己的課顯示會員名；別人的課顯示課程種類（隱私）
       let memName;
+      /* 課卡上的「體驗／待簽約／待繳費」另起一列放在姓名下面（2026-07-31 使用者指示）——
+         原本是接在名字後面（「程凱郁（體驗）」），窄卡會折行把名字擠掉。
+         _nameBase＝純姓名（標準卡用）、_nameTag＝下面那一列的小字；
+         memName 維持含括號的完整字串，Hover 提示與舊版卡片照舊。 */
+      let _nameBase=null, _nameTag='';
       const gIds=mids(b);
       const acting=b.substitute_coach_id||b.coach_id;
       const isMine = opts.me && acting===opts.me;
@@ -13232,6 +13250,7 @@ async function renderCalendar(opts){
         memName = {'私人教練':'教練課','自主訓練':'自主訓練','體驗':'體驗','小班肌力':'團體課'}[b.category] || typeName;
       }else if(b.category==='體驗'){
         memName=(b.trial_name?b.trial_name+'（體驗）':'體驗客戶');
+        _nameBase=b.trial_name||'體驗客戶'; _nameTag='體驗';
       }else if(b.category==='場租'){
         // 場租使用人存 trial_name（2026-07-26 使用者回報：課卡與明細都沒顯示「魚大東」）
         memName=(b.trial_name?b.trial_name+'（場租）':'場地租借');
@@ -13242,8 +13261,10 @@ async function renderCalendar(opts){
           : `${names[0]} 等 ${names.length} 人`;
       }else if(b.pending_contract && !b.member_id){
         memName=(b.trial_name||'客戶')+'（待簽約）';   // 待簽約卡位（2026-07-27）
+        _nameBase=b.trial_name||'客戶'; _nameTag='待簽約';
       }else if(b.pending_contract && b.member_id){
         memName=(memMap[b.member_id]||'—')+'（待繳費）';   // 分期未繳期數的保留課（2026-07-29）
+        _nameBase=memMap[b.member_id]||'—'; _nameTag='待繳費';
       }else{
         memName=memMap[b.member_id]||'—';
       }
@@ -13320,7 +13341,8 @@ async function renderCalendar(opts){
       const _grpCard = !hideMember && b.category==='小班肌力';
       const _grpCoachNm = subCoachName||coachName||'';
       // 團課卡（2026-07-25 使用者指示）：主行改「人數」，教練改到第三行 tag（與一般卡一致）
-      const _stdName = hideMember ? typeName : (_grpCard ? (gHeadsN>0?`${gHeadsN} 人`:'團課') : memName);
+      const _stdName = hideMember ? typeName : (_grpCard ? (gHeadsN>0?`${gHeadsN} 人`:'團課') : (_nameBase||memName));
+      const _stdTag = (!hideMember && !_grpCard && _nameTag) ? `<span class="evc-sub">${_nameTag}</span>` : '';
       // ══ 卡片視覺定版（2026-07-19 使用者指示）：統一方形＋細黑框、底色回歸課程色系、
       // 第三行教練縮寫 tag（教練色，Randy→RA；coachAbbr 既有函式）。形狀 Token 語言退場。 ══
       const _cc = coachTagColor(_coachId);                 // 教練色（縮寫 tag 用）；無教練→中性米灰
@@ -13336,7 +13358,7 @@ async function renderCalendar(opts){
       const _abbrOut = (!hideMember && _coachObj)
         ? `<span class="evc-coach" style="background:${_cc.bg};color:${_cc.fg};">${coachAbbr(_coachObj)}${b.substitute_coach_id?'（代）':''}</span>`+_venueTag
         : _venueTag;   // 2026-07-27：教練課排到教室/跑步機時，教練縮寫旁並列場地標籤
-      const _bodyOut = `<div class="evc-body"></div><div class="evc-txt"><span class="evc-time">${b.start_time}</span><span class="evc-name">${_stdName}</span>${_abbrOut}${_moreHtml}</div>`;
+      const _bodyOut = `<div class="evc-body"></div><div class="evc-txt"><span class="evc-time">${b.start_time}</span><span class="evc-name">${_stdName}</span>${_stdTag}${_abbrOut}${_moreHtml}</div>`;
       // 課程色 class：共用 course-* token（--course-accent 仍供簽到填色等既有樣式使用）
       const _courseCls = (({'ev-pt':'course-pt','ev-friendly':'course-friendly','ev-group':'course-group','ev-self':'course-self','ev-trial':'course-trial','ev-massage':'course-friendly'})[cls]||'course-pt');
       const _densityCls = (nDays===7||nDays===5)?'cal-ev-7d':(nDays===3?'cal-ev-3d':'cal-ev-1d-card');
@@ -17950,6 +17972,8 @@ async function openBookingDetail(id){
       </div>
     </div>`+_payAlertLine;
   }
+  /* 場地單位燈號（2026-07-31 使用者指示）：模板裡不能 await，先算好再帶進去 */
+  const _vuDots=(typeof venueUnitDots==='function')?await venueUnitDots(b, editable):'';
   const memMapD=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const isGroupD=b.category==='小班肌力', isTrialD=b.category==='體驗';
   const gIdsD=mids(b);
@@ -18098,7 +18122,7 @@ async function openBookingDetail(id){
       </div>
       ${isMemberView?'':`<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
         <span style="color:var(--t2);flex-shrink:0;">場地</span>
-        <span style="flex-shrink:0;">${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>
+        <span style="flex-shrink:0;">${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>${_vuDots}
         ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
       </div>`}
       ${tkCircleHtml}
@@ -18129,7 +18153,7 @@ async function openBookingDetail(id){
       </div>
       ${isMemberView?'':`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="color:var(--t2);flex-shrink:0;">場地</span>
-        <span style="flex-shrink:0;">${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>
+        <span style="flex-shrink:0;">${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>${_vuDots}
         ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
       </div>`}
       ${memberLine}
@@ -18139,7 +18163,7 @@ async function openBookingDetail(id){
     <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
       ${memberLine}
       <div><span style="color:var(--t2);">類型</span>　<span class="tag tag-${colorClass(typeOfCat(b.category))}">${b.category}${b.format?'·'+b.format:''}</span></div>
-      ${b.venue_unit?`<div><span style="color:var(--t2);">場地</span>　${venueName(b.venue_unit)}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;">非主場地</span>':''}</div>`:''}
+      ${b.venue_unit?`<div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--t2);">場地</span><span>${venueName(b.venue_unit)}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;">非主場地</span>':''}</span>${_vuDots}</div>`:''}
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">教練</span><span>${coach?coach.name:'—'}</span>
         ${editable?`<select id="ed-subcoach" style="font-size:12.5px;padding:4px 8px;border:1px solid var(--bd);border-radius:7px;background:#fff;max-width:170px;">
           <option value="">無代課</option>
@@ -18160,7 +18184,7 @@ async function openBookingDetail(id){
     </div>`:`<div style="margin-top:10px;font-size:13px;"><span style="color:var(--t2);">時間</span>　${b.date}（週${WD[d.getDay()]}）${b.start_time}　${b.duration}分鐘</div>`)}
     ${/* 體驗改由上方那一列顯示場地（2026-07-31 使用者指示：場地訊息重複了，留一個就好） */''}
     ${(!isPersonalPT&&!isGroupD&&!isTrialD&&!isMemberView)?`<div style="margin-top:10px;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <span style="color:var(--t2);">場地</span>　<span>${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>
+      <span style="color:var(--t2);">場地</span>　<span>${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>${_vuDots}
       ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
     </div>`:''}
     ${b.status==='cancelled'&&b.refund_waived?`<div style="margin-top:12px;padding:10px;background:#f7efe0;border-radius:8px;font-size:12px;color:#8a5e28;">此預約於開課 24 小時內取消，未退回票券。${b.makeup_granted?'（已補發補課券）':''}</div>`:''}
@@ -18348,6 +18372,63 @@ async function doBkTicketChange(id,newTkId){
   showToast('已改用 '+(tk.plan_name||'該票券'));
   openBookingDetail(id);
  }catch(e){ showToast('更換失敗：'+(e&&e.message?e.message:e)); }
+}
+/* ── 場地單位燈號開關（2026-07-31 使用者指示：明細的場地旁邊要有燈號讓我選）──
+   跑步機是「一個場地兩台」，一對二的客人可能一張票就佔掉兩台。
+   在預約明細的場地右邊直接畫出每一台的燈：灰＝可預約（可點，點了就改到那一台）、
+   綠＝已預約、金框＝本堂目前用的那一台。
+   只有兩台以上的場地才畫（教室只有一間，沒得選）。 */
+async function venueUnitDots(b, editable){
+  try{
+    if(!b || !b.date || !b.start_time) return '';
+    const vid=String(b.venue_unit||'').split('_')[0]
+      || ((typeof venuePriorityFor==='function'?venuePriorityFor(b.category):[])||[])[0];
+    const cap=(typeof venueCap==='function')?(venueCap(vid)||0):0;
+    if(cap<2) return '';
+    const all=await dbGetAll('bookings').catch(()=>[]);
+    const ns=timeToMin(b.start_time), ne=ns+(Number(b.duration)||60);
+    const busy={}; let anon=0;
+    (all||[]).forEach(x=>{
+      if(!x || x.id===b.id || x.date!==b.date || x.status==='cancelled') return;
+      const u=String(x.venue_unit||''); if(u.split('_')[0]!==vid) return;
+      const s0=timeToMin(x.start_time), e0=s0+(Number(x.duration)||60);
+      if(!(s0<ne && ns<e0)) return;
+      if(u===vid) anon++;            // 舊資料沒編號（櫃檯換場地寫的）→ 佔位但不知道是哪一台
+      else busy[u]=1;
+    });
+    const cur=String(b.venue_unit||'');
+    let out='';
+    for(let i=1;i<=cap;i++){
+      const u=`${vid}_${i}`;
+      const isCur=(u===cur);
+      let taken=!!busy[u];
+      if(!taken && !isCur && anon>0){ taken=true; anon--; }   // 沒編號的先佔最前面的號碼
+      const cls='vu-dot'+(taken?' taken':'')+(isCur?' cur':'');
+      const t=isCur?`本堂使用中（${i} 號）`:(taken?`${i} 號已被預約`:`改到 ${i} 號`);
+      out += (editable && !taken && !isCur)
+        ? `<button type="button" class="${cls}" title="${t}" onclick="bkSetVenueUnit('${b.id}','${u}')">${i}</button>`
+        : `<span class="${cls}" title="${t}">${i}</span>`;
+    }
+    return `<span class="vu-dots" title="${venueName(vid)} 共 ${cap} 台">${out}</span>`;
+  }catch(_){ return ''; }
+}
+/* 點灰燈 → 把這筆改到那一台（存檔前再確認一次沒被搶走） */
+async function bkSetVenueUnit(id, unit){
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到這筆預約'); return; }
+  if(typeof coachOwnsBk==='function' && !coachOwnsBk(b)){ showToast('這不是你的課，只能查看'); return; }
+  const vid=String(unit).split('_')[0];
+  const all=await dbGetAll('bookings').catch(()=>[]);
+  const ns=timeToMin(b.start_time), ne=ns+(Number(b.duration)||60);
+  const clash=(all||[]).some(x=>x && x.id!==b.id && x.date===b.date && x.status!=='cancelled'
+    && String(x.venue_unit||'')===unit
+    && timeToMin(x.start_time)<ne && timeToMin(x.start_time)+(Number(x.duration)||60)>ns);
+  if(clash){ showToast('這一台剛被約走了'); openBookingDetail(id); return; }
+  try{
+    await dbPut('bookings', Object.assign({}, b, {venue_unit:unit}));
+    showToast(`已改到 ${venueName(vid)} ${String(unit).split('_')[1]} 號`);
+    openBookingDetail(id);
+    if(typeof navTo==='function' && (CUR_PAGE==='calendar'||CUR_PAGE==='g_dashboard')) navTo(CUR_PAGE);
+  }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
 }
 /* 更換場地（2026-07-28 使用者回報：體驗課因額滿被排到團課教室，場地釋出後沒有選項改回）——
    逐場地驗證該時段可用性（沿用 validateBooking 的 venue_pref 強制配置），可用才能點。 */

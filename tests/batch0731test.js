@@ -134,5 +134,28 @@ console.log('\n手機行事曆：待簽約的課要看得到名字（2026-07-31 
   ok('　　原因寫在程式裡', /待簽約的課卡只顯示「課程」，看不出是誰/.test(src));
 }
 
+console.log('\n課卡：體驗／待簽約另起一列放在姓名下面（2026-07-31 使用者指示）');
+{
+  const i=src.indexOf('      let memName;');
+  const blk=src.slice(i, src.indexOf('const _stdTag', i)+400);
+  ok('★ 純姓名與標籤分開存（memName 仍是含括號的完整字串，Hover 提示照舊）',
+     /let _nameBase=null, _nameTag='';/.test(blk));
+  ok('★ 體驗', /_nameBase=b\.trial_name\|\|'體驗客戶'; _nameTag='體驗';/.test(blk));
+  ok('★ 待簽約', /_nameBase=b\.trial_name\|\|'客戶'; _nameTag='待簽約';/.test(blk));
+  ok('★ 待繳費也一起（同一種「名字後面掛括號」的寫法）',
+     /_nameBase=memMap\[b\.member_id\]\|\|'—'; _nameTag='待繳費';/.test(blk));
+  ok('★ 標準卡主行只放純姓名',
+     /const _stdName = hideMember \? typeName : \(_grpCard \? \(gHeadsN>0\?`\$\{gHeadsN\} 人`:'團課'\) : \(_nameBase\|\|memName\)\);/.test(src));
+  ok('★ 標籤畫成姓名下面那一列',
+     /const _stdTag = \(!hideMember && !_grpCard && _nameTag\) \? `<span class="evc-sub">\$\{_nameTag\}<\/span>` : '';/.test(src)
+     && /<span class="evc-name">\$\{_stdName\}<\/span>\$\{_stdTag\}/.test(src));
+  ok('　　遮蔽卡與團課卡不掛（那兩種主行不是姓名）',
+     /!hideMember && !_grpCard && _nameTag/.test(src));
+  ok('　　小字樣式有定義，窄卡再縮一級',
+     /\.cal-ev\.cal-ev-std \.evc-sub\{font-size:9\.5px;/.test(src)
+     && /\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-sub,\.cal-ev\.cal-ev-std\.ev-w-tiny \.evc-sub\{font-size:9px;\}/.test(src));
+  ok('　　原因寫在程式裡', /原本是接在名字後面（「程凱郁（體驗）」），窄卡會折行把名字擠掉/.test(src));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

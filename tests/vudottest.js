@@ -1,0 +1,90 @@
+/* 預約明細：場地旁邊的單位燈號開關（2026-07-31 使用者指示）
+
+   「像今天下午五點的客人黃麗琴，我點開明細，場地旁邊要有燈號開關讓我選。」
+
+   跑步機是「一個場地兩台」，一對二的客人可能一張票就佔掉兩台。
+   灰＝可預約（可點，點了就改到那一台）、綠＝已預約、金框＝本堂目前用的那一台。
+   只有兩台以上的場地才畫（教室只有一間，沒得選）。 */
+const fs=require('fs');
+const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+
+let pass=0,fail=0;
+const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
+const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
+
+/* 實跑 venueUnitDots：把 dbGetAll 換成假資料 */
+const mk=(BK)=>new Function('dbGetAll','timeToMin','venueCap','venuePriorityFor','venueName',
+  g('async function venueUnitDots(b, editable){','\n}\n')+'\nreturn venueUnitDots;')(
+  async()=>BK,
+  t=>{const[h,m]=String(t||'0:0').split(':').map(Number);return h*60+(m||0);},
+  v=>({multi:3,treadmill:2,group:1}[v]||0),
+  c=>c==='自主訓練'?['multi','group','treadmill']:['multi','group'],
+  u=>({multi:'多功能訓練區',treadmill:'跑步機',group:'團課教室'}[String(u).split('_')[0]]||u));
+
+const SELF=(o)=>Object.assign({id:'B0',category:'自主訓練',date:'2026-07-31',start_time:'17:00',duration:60,venue_unit:'treadmill_1'},o);
+const T=(u,t,o)=>Object.assign({id:u+t,date:'2026-07-31',status:'booked',venue_unit:u,start_time:t,duration:60},o||{});
+/* ⚠ 外層是 class="vu-dots"，要用邊界避免把它也抓進來 */
+const dots=h=>[...String(h).matchAll(/class="vu-dot( [^"]*)?"/g)].map(m=>(m[1]||'').trim());
+
+(async()=>{
+console.log('畫幾顆、什麼顏色');
+{
+  let h=await mk([])(SELF(),true);
+  eq('★ 跑步機畫兩顆', dots(h), ['cur','']);
+  ok('　　本堂那顆帶金框（cur）、另一顆是可點的按鈕', /<button type="button" class="vu-dot" title="改到 2 號"/.test(h));
+  ok('　　燈上有台號', />1<\/span>|>1<\/button>/.test(h) && />2<\/button>/.test(h));
+
+  h=await mk([T('treadmill_2','17:00')])(SELF(),true);
+  eq('★ 另一台被別人約走 → 綠燈、不可點', dots(h), ['cur','taken']);
+  ok('　　被佔的那顆不是按鈕（點不下去）', !/<button[^>]*class="vu-dot taken"/.test(h));
+
+  h=await mk([])(SELF({venue_unit:'treadmill_2'}),true);
+  eq('　　本堂在 2 號 → 金框跟著跑到第二顆', dots(h), ['','cur']);
+}
+
+console.log('\n只在有得選的場地畫');
+{
+  eq('★ 團課教室只有一間 → 不畫', await mk([])(SELF({venue_unit:'group_1'}),true), '');
+  ok('★ 多功能三位 → 畫三顆', dots(await mk([])(SELF({venue_unit:'multi_2'}),true)).length===3);
+  eq('　　沒有 venue_unit 時看課種的第一順位（自主訓練＝多功能）',
+     dots(await mk([])(SELF({venue_unit:null}),true)).length, 3);
+  eq('　　沒有日期／時間不畫', await mk([])(SELF({start_time:null}),true), '');
+}
+
+console.log('\n佔用的判定');
+{
+  eq('　　別的時段不算', dots(await mk([T('treadmill_2','15:00')])(SELF(),true)), ['cur','']);
+  eq('　　跨時段重疊要算（16:30 的 60 分課壓到 17:00）',
+     dots(await mk([T('treadmill_2','16:30')])(SELF(),true)), ['cur','taken']);
+  eq('　　已取消的不算', dots(await mk([T('treadmill_2','17:00',{status:'cancelled'})])(SELF(),true)), ['cur','']);
+  eq('　　別的場地不算', dots(await mk([T('multi_1','17:00')])(SELF(),true)), ['cur','']);
+  eq('★ 舊資料沒編號（venue_unit=treadmill）→ 先佔住最前面沒被用到的號碼',
+     dots(await mk([T('treadmill','17:00')])(SELF({venue_unit:'treadmill_1'}),true)), ['cur','taken']);
+  eq('　　自己那筆不會算成佔用', dots(await mk([SELF()])(SELF(),true)), ['cur','']);
+}
+
+console.log('\n權限');
+{
+  const h=await mk([])(SELF(),false);
+  ok('★ 不可編輯時只顯示、不給點', !/<button/.test(h) && dots(h).length===2);
+}
+
+console.log('\n接到明細裡');
+ok('★ 模板不能 await → 先算好再帶進去',
+   /const _vuDots=\(typeof venueUnitDots==='function'\)\?await venueUnitDots\(b, editable\):'';/.test(src));
+ok('★ 三處場地列都掛上', (src.match(/\$\{_vuDots\}/g)||[]).length===4);
+ok('★ 點灰燈 → 改到那一台', /async function bkSetVenueUnit\(id, unit\)\{/.test(src));
+ok('★ 存檔前再確認一次沒被搶走', /if\(clash\)\{ showToast\('這一台剛被約走了'\); openBookingDetail\(id\); return; \}/.test(src));
+ok('★ 教練不能動別人的課', /if\(typeof coachOwnsBk==='function' && !coachOwnsBk\(b\)\)\{ showToast\('這不是你的課，只能查看'\); return; \}/.test(src));
+ok('　　改完重開明細並重繪行事曆', /openBookingDetail\(id\);\s*\n\s*if\(typeof navTo==='function' && \(CUR_PAGE==='calendar'\|\|CUR_PAGE==='g_dashboard'\)\) navTo\(CUR_PAGE\);/.test(src));
+ok('　　存檔失敗會講原因', /showToast\('儲存失敗：'\+\(\(e&&e\.message\)\|\|e\)\)/.test(src));
+ok('　　樣式：灰底可點、綠底已預約、金框本堂',
+   /\.vu-dot\.taken\{background:var\(--green,#1f6f54\);border-color:var\(--green,#1f6f54\);color:#fff;\}/.test(src)
+   && /\.vu-dot\.cur\{box-shadow:0 0 0 2px var\(--gold-d,#b48a56\);\}/.test(src)
+   && /button\.vu-dot\{cursor:pointer;\}/.test(src));
+ok('　　讀不到資料不會讓明細開不起來（整段包 try）', /\}catch\(_\)\{ return ''; \}/.test(src));
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail?1:0);
+})();
