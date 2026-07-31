@@ -107,14 +107,18 @@ console.log('\n算進本月利潤（2026-07-31 使用者定案）');
      /if\(_dashRange==='month'\)\{\s*\n\s*try\{ otherExp=/.test(dash));
   ok('　　讀不到支出不會讓整頁壞掉', /dbGetAll\('expenses'\)\.catch\(\(\)=>\[\]\)/.test(dash));
   ok('★ 拆解那行把其他支出也列出來',
-     /\$\{otherExp>0\?`　−　<b class="ovh-exp">其他支出 \$\{fmtNT\(otherExp\)\}<\/b>`:''\}/.test(dash));
+     /<b class="ovh-exp"><i>其他支出<\/i>\$\{fmtNT\(otherExp\)\}<\/b>/.test(dash));
   /* 2026-07-31 使用者指示：三個組成各自上色 */
   ok('★ 銷課金色、薪資綠色、其他支出紅色',
-     /<b class="ovh-in">銷課 \$\{fmtNT\(coachedFee\)\}<\/b>/.test(dash)
-     && /<b class="ovh-pay">薪資 \$\{fmtNT\(salaryTotal\)\}<\/b>/.test(dash)
+     /<b class="ovh-in"><i>銷課<\/i>\$\{fmtNT\(coachedFee\)\}<\/b>/.test(dash)
+     && /<b class="ovh-pay"><i>薪資<\/i>\$\{fmtNT\(salaryTotal\)\}<\/b>/.test(dash)
      && /\.ovh-in\{color:var\(--gold-d,#b48a56\);\}/.test(src)
      && /\.ovh-pay\{color:var\(--green,#1f6f54\);\}/.test(src)
      && /\.ovh-exp\{color:var\(--danger,#b5372e\);\}/.test(src));
+  ok('★ 三項都是「標題在上、數字在下」，高度才一致',
+     /\.ov-hero-s b\{display:flex;flex-direction:column;align-items:flex-end;gap:1px;/.test(src)
+     && /\.ov-hero-s b i\{font-style:normal;font-size:10\.5px;/.test(src));
+  ok('　　減號自己一格，不跟著換行', /\.ovh-op\{color:var\(--t3\);padding-bottom:1px;\}/.test(src));
   ok('★ 沒登錄支出時講清楚去哪裡填，不是默默當成 0',
      /其他支出尚未登錄（財務→本月營收）/.test(dash));
   ok('　　登錄了就標明已扣', /已扣房租水電等其他支出/.test(dash));
