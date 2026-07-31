@@ -3897,6 +3897,12 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
    原則：拿掉 > 增加；統一圓角 16px、間距 8px 系統
    ══════════════════════════════════════════════════════ */
 /* ⑥ Hero + ② 4數字摘要 */
+/* 首頁左上角的插畫輪播（2026-07-31 使用者指示：隨機連播）——
+   兩層 <img> 交叉淡入，換圖時不會閃白。插畫原圖 1854×854，維持同比例避免裁切到角色。 */
+.mc-art{position:relative;width:100%;aspect-ratio:1854/854;border-radius:14px;overflow:hidden;
+  margin-bottom:10px;background:var(--card2);border:1px solid var(--bd);}
+.mc-art-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .7s ease;}
+@media (prefers-reduced-motion:reduce){ .mc-art-img{transition:none;} }
 .mc-hero-row{display:flex;align-items:stretch;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;}
 .mc-hero{position:relative;flex:0 0 40%;min-width:360px;padding:10px 22px;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;justify-content:center;}
 .mc-hero-art{position:absolute;right:0;bottom:0;width:160px;height:84px;opacity:0.85;pointer-events:none;}
@@ -6631,8 +6637,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1330';
-const APP_VERSION_LABEL='v260731.1330';
+const APP_VERSION = '260731.1400';
+const APP_VERSION_LABEL='v260731.1400';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10432,6 +10438,42 @@ let _dashWeekOffset=0;
 function dashPickDay(ds){ _dashViewDate=ds; navTo('g_dashboard'); }
 function dashWeekStep(delta){ _dashWeekOffset+=delta; navTo('g_dashboard'); }
 function dashBackToday(){ _dashViewDate=null; _dashWeekOffset=0; navTo('g_dashboard'); }
+/* ── 首頁左上角插畫輪播（2026-07-31 使用者指示）──────────────────
+   隨機連播：每輪把清單洗牌後依序播完再重洗，所以不會連續出現同一張。
+   計時器不另外做清理掛勾 —— 每次 tick 先確認元素還在，不在就自己收掉
+   （換頁時 C.innerHTML 被換掉，元素自然消失）。
+   插畫作者浮水印在圖上保留未裁切。 */
+const BUTLER_ART=['butler-01.jpg','butler-02.jpg','butler-03.jpg','butler-04.jpg','butler-05.jpg',
+  'butler-06.jpg','butler-07.jpg','butler-08.jpg','butler-09.jpg','butler-10.jpg',
+  'butler-11.jpg','butler-12.jpg','butler-13.jpg'];
+const BUTLER_ART_MS=9000;
+let _artTimer=null, _artQueue=[], _artTop=false;
+function butlerArtNext(){
+  if(!_artQueue.length){
+    _artQueue=BUTLER_ART.slice();
+    for(let i=_artQueue.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [_artQueue[i],_artQueue[j]]=[_artQueue[j],_artQueue[i]]; }
+  }
+  return 'img/butler/'+_artQueue.pop();
+}
+function butlerArtHtml(){
+  return `<div class="mc-art" id="mc-art" title="插畫：@_Fergus.art_" aria-hidden="true">
+    <img class="mc-art-img" id="mc-art-a" alt=""><img class="mc-art-img" id="mc-art-b" alt=""></div>`;
+}
+function startButlerArt(){
+  if(_artTimer){ clearInterval(_artTimer); _artTimer=null; }
+  const a=document.getElementById('mc-art-a'), b=document.getElementById('mc-art-b');
+  if(!a||!b) return;
+  _artTop=false;
+  a.src=butlerArtNext(); a.style.opacity='1'; b.style.opacity='0';
+  _artTimer=setInterval(()=>{
+    if(!document.getElementById('mc-art')){ clearInterval(_artTimer); _artTimer=null; return; }
+    if(document.hidden) return;                     // 分頁在背景時不換，回來再繼續
+    const cur=_artTop?b:a, nxt=_artTop?a:b;
+    nxt.onload=()=>{ nxt.style.opacity='1'; cur.style.opacity='0'; };
+    nxt.src=butlerArtNext();
+    _artTop=!_artTop;
+  }, BUTLER_ART_MS);
+}
 PAGES.g_dashboard=async function(){
   const today=ymd(TODAY);
   const date=_dashViewDate||today;   // 檢視日期，可切換
@@ -11448,6 +11490,8 @@ PAGES.g_dashboard=async function(){
       <div class="mc-grid5"><!-- v5.1（2026-07-21 使用者指示）：月曆左下、快捷右下 -->
         <div class="mc-g5-left"><!-- 2026-07-23 使用者指示：月曆上移、知識卡下移（原知識卡在上）；
              同日再指示：今日值班移到左欄行事曆下方（原在右欄快捷之下） -->
+          ${/* 2026-07-31 使用者指示：左上角放插畫，隨機連播 */''}
+          ${butlerArtHtml()}
           <!-- 2026-07-26 使用者指示：「當月排班」按鈕放在首頁左欄月曆的上方（原本誤放在預約行事曆的標頭），並跟著月曆翻頁改名 -->
           ${schedBtnCard}
           <div class="mc-b4-cal">${deskCalCard}</div>
@@ -11472,6 +11516,7 @@ PAGES.g_dashboard=async function(){
   `;
   // 現在線每分鐘自動更新（只在檢視今天時）
   startDashNowTimer(isTodayView, AXIS_START, AXIS_END);
+  try{ startButlerArt(); }catch(_){}   // 左上角插畫輪播（桌機版面才有這個元素）
   /* Hero 時鐘計時器已移除（2026-07-20）：大時鐘移到頂部導覽列（#mc-topclock），
      由全域 _clockTimer（startClock 的每秒 tick）順帶更新，本頁不再自管計時器。 */
   // ── SWR 收尾（2026-07-23）：這次若用了過期快取 → 背景重抓，有異動才悄悄重繪一次
