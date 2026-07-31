@@ -135,9 +135,11 @@ ok('　　金額都取整數（與營運分析同口徑）',
    /Math\.round\(nt\)\.toLocaleString\(\)/.test(src) && /v>0\?'\$'\+Math\.round\(v\)\.toLocaleString\(\):'—'/.test(src));
 {
   const i=src.indexOf('function payrollCalcRows(r){'); const j=src.indexOf('\n}\n',i)+2;
-  const calc=new Function(src.slice(i,j)+'\nreturn payrollCalcRows;')();
+  /* 2026-08-01：明細改用共用的 fmtHours（工時不進位） */
+  const calc=new Function('fmtHours', src.slice(i,j)+'\nreturn payrollCalcRows;')(
+    h=>{const n=Number(h)||0;return (n%1===0)?String(n):n.toFixed(1);});
   const r={countSalary:true, emp:{name:'王教練'}, ptDone:20, groupHeads:14, dutyHours:60.5,
-    leave:{事假:0,病假:0,特休:8},
+    leave:{事假:0,病假:0,特休:8,其他:0},
     sal:{base:28000,adjBase:28000,baseHourly:175,schedHours:160,baseLeaveDeduct:0,
          ptPay:24000,ptIncome:28000,ptIsFloor:true,bonus:0,groupPay:4200,groupDetail:'14 人次',
          dutyGross:9075,dutyPay:8000,dutyLeaveDeduct:0,dutyClassDeduct:1075,classOverlap:7.2,

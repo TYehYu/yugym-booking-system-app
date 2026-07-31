@@ -6793,8 +6793,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.0021';
-const APP_VERSION_LABEL='v260801.0021';
+const APP_VERSION = '260801.0032';
+const APP_VERSION_LABEL='v260801.0032';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22179,12 +22179,15 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const _dutyHrs = tpl.need_duty ? dutyHours : 0;   // 不需值班 → 不計值班薪資
   const dutyGross=Math.round(_dutyHrs*dhr); // 原應值班費（依排班時數）
   const L=leave||{特休:0,病假:0,事假:0,其他:0};
-  // 值班費請假扣除：事假全扣、病假半扣、特休不扣（皆 × 時薪）
-  const dutyLeaveDeduct=Math.round((L.事假||0)*dhr + (L.病假||0)*dhr*0.5);
+  /* 2026-08-01 使用者指示：請假扣薪改成「算完本月總薪資後再扣除」。
+     原本先扣底薪（adjBase）、再與課費取高者 —— 課費高於調整後底薪時，扣款會被
+     max() 整個吃掉，等於沒扣；而且值班費那邊又扣一次，語意重複。
+     現在統一成一筆，從應發合計扣（見下方 leaveDeduct）。 */
+  const dutyLeaveDeduct=0;   // 保留欄位以相容既有顯示；請假一律在最後統一扣
   // 值班時段內上課：重疊時數以課程抽成為主，不重複計值班費 → 扣除
   const co=Number(classOverlap)||0;
   const dutyClassDeduct=Math.round(co*dhr);
-  const dutyPay=Math.max(dutyGross-dutyLeaveDeduct-dutyClassDeduct,0);
+  const dutyPay=Math.max(dutyGross-dutyClassDeduct,0);
   const dutyDetail = tpl.need_duty ? `${_dutyHrs.toFixed(1)} hr × $${dhr}` : '不需值班';
 
   // 正職保障底薪的請假扣除（固定排班制，非傳統 8h 月薪）：
@@ -22197,20 +22200,20 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const baseLeavePersonalDed = Math.round(leavePersonal*baseHourly);       // 事假：全扣
   const baseLeaveSickDed = Math.round(leaveSick*baseHourly*0.5);           // 病假：折半
   const baseLeaveDeduct = baseLeavePersonalDed + baseLeaveSickDed;
-  const adjBase = Math.max(base-baseLeaveDeduct,0); // 調整後保障薪資
+  const adjBase = base;   // 2026-08-01：底薪不再先扣請假，請假在最後統一扣
   // 請假扣款計算說明（供薪資明細顯示）
   const leaveDeductDetail = (baseLeaveDeduct>0 && baseHourly>0)
-    ? `時薪 $${Math.round(baseHourly).toLocaleString()}（底薪 $${base.toLocaleString()} ÷ 當月排班 ${schedHours.toFixed(1)}h）`
+    ? `時薪 $${Math.round(baseHourly).toLocaleString()}（底薪 $${base.toLocaleString()} ÷ 當月排班 ${fmtHours(schedHours)}h）`
       + (leavePersonal>0?`　事假 ${leavePersonal}h × 時薪 = −$${baseLeavePersonalDed.toLocaleString()}`:'')
       + (leaveSick>0?`　病假 ${leaveSick}h × 時薪 × 50% = −$${baseLeaveSickDed.toLocaleString()}`:'')
     : '';
 
-  // 保障底薪：教練課費與「調整後底薪」取高者（其餘項目另外加）
+  // 保障底薪：教練課費與底薪取高者（其餘項目另外加）
   const ptIncome = Math.max(ptPay, adjBase);
   const ptIsFloor = adjBase>0 && adjBase>ptPay; // 是否觸發保障底薪
   const ptIncomeDetail = base>0
-    ? (ptIsFloor ? `保障底薪 $${adjBase.toLocaleString()}${baseLeaveDeduct>0?`（底薪 $${base.toLocaleString()} − 請假 $${baseLeaveDeduct.toLocaleString()}）`:''}（課費 $${ptPay.toLocaleString()} 未達底薪）`
-                 : `教練課費 $${ptPay.toLocaleString()}（高於調整後底薪 $${adjBase.toLocaleString()}）`)
+    ? (ptIsFloor ? `保障底薪 $${adjBase.toLocaleString()}（課費 $${ptPay.toLocaleString()} 未達底薪）`
+                 : `教練課費 $${ptPay.toLocaleString()}（高於底薪 $${adjBase.toLocaleString()}）`)
     : ptDetail;
   // ── v2.0 加項（全部讀全域設定，不寫死）──
   const G=window.SALARY_GLOBAL||{};
@@ -22251,7 +22254,10 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const insCoCost   = lvl ? (Number(lvl.co_total)>0 ? Number(lvl.co_total) : (insLaborCo+insHealthCo)) : 0;
 
   const grossPay = ptIncome + bonus + groupPay + dutyPay + renewPay + mgmtPay; // 應發
-  const netPay   = Math.max(grossPay - insEmpDeduct, 0);                       // 實發
+  /* 請假扣薪在「算完本月總薪資後」才扣（2026-08-01 使用者指示）——
+     這樣課費高於底薪的人也會實際被扣到，不會被保障底薪的 max() 吃掉。 */
+  const leaveDeduct = baseLeaveDeduct;
+  const netPay   = Math.max(grossPay - leaveDeduct - insEmpDeduct, 0);         // 實發
 
   return { base, adjBase, baseLeaveDeduct, baseHourly, schedHours, baseLeavePersonalDed, baseLeaveSickDed, leaveDeductDetail,
     ptPay, ptDetail, ptIncome, ptIsFloor, ptIncomeDetail,
@@ -22260,7 +22266,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
     renewCount, renewPay, renewDetail,
     isSupervisor:isSup, supPay, isLeader, leaderPay, leaderDetail, leaderTotal, leaderUnits, mgmtPay,
     insGrade:grade||null, insLaborEmp, insHealthEmp, insEmpDeduct, insLaborCo, insHealthCo, insCoCost,
-    leave:L,
+    leave:L, leaveDeduct,
     grossPay, netPay,
     total: grossPay }; // total 維持＝應發，相容既有顯示
 }
@@ -22972,8 +22978,7 @@ async function openPerfDetail(empId, month){
     let rows='';
     if(sal.base>0){
       /* 2026-07-31 使用者指示：叫「保障底薪」才看得出下面那條「取數字高者」在比什麼 */
-      rows+=row('保障底薪', sal.schedHours>0?`月薪制・當月排班 ${sal.schedHours.toFixed(1)} 小時`:'月薪制', money(sal.base));
-      if(sal.baseLeaveDeduct>0) rows+=row('請假扣薪', sal.leaveDeductDetail||'事假全扣・病假半薪', '−'+money(sal.baseLeaveDeduct), {neg:true});
+      rows+=row('保障底薪', sal.schedHours>0?`月薪制・當月排班 ${fmtHours(sal.schedHours)} 小時`:'月薪制', money(sal.base));
       rows+=row('教練課費', sal.ptDetail||`${ptDone} 堂`, money(sal.ptPay));
       rows+=row('教練課收入', `取數字高者 → ${sal.ptIsFloor?'保障底薪':'教練課費'}`, money(sal.ptIncome), {sum:true});
     }else{
@@ -22981,11 +22986,13 @@ async function openPerfDetail(empId, month){
     }
     if(sal.bonus>0)    rows+=row('達標獎金', sal.bonusDetail||'', money(sal.bonus));
     if(sal.groupPay>0) rows+=row('團體課費', sal.groupDetail||`${groupHeads} 人次`, money(sal.groupPay));
-    if(sal.dutyPay>0)  rows+=row('值班費', sal.dutyDetail||`${dutyHours.toFixed(1)} 小時`, money(sal.dutyPay));
+    if(sal.dutyPay>0)  rows+=row('值班費', sal.dutyDetail||`${fmtHours(dutyHours)} 小時`, money(sal.dutyPay));
     if(sal.renewPay>0) rows+=row('續約獎金', sal.renewDetail||`${renewCount} 張`, money(sal.renewPay));
     if(sal.leaderPay>0)rows+=row('店長津貼', sal.leaderDetail||'', money(sal.leaderPay));
     if(sal.supPay>0)   rows+=row('主管津貼', '固定津貼', money(sal.supPay));
     rows+=row('應發合計','', money(sal.grossPay), {sum:true});
+    /* 請假扣薪移到應發合計之後（2026-08-01 使用者指示：算完本月總薪資後再扣除） */
+    if(sal.leaveDeduct>0) rows+=row('請假扣薪', sal.leaveDeductDetail||'事假全扣・病假半薪', '−'+money(sal.leaveDeduct), {neg:true});
     if(sal.insEmpDeduct>0){
       if(sal.insLaborEmp>0)  rows+=row('勞保（員工負擔）', sal.insGrade?`投保級距 ${Number(sal.insGrade).toLocaleString()}`:'', '−'+money(sal.insLaborEmp), {neg:true});
       if(sal.insHealthEmp>0) rows+=row('健保（員工負擔）', '', '−'+money(sal.insHealthEmp), {neg:true});
@@ -23066,11 +23073,9 @@ const rowL=(label,val,sub)=>`<div style="display:flex;justify-content:space-betw
             if(s.base>0){
               h+=rowL('底薪',`$${s.base.toLocaleString()}`);
               if(s.schedHours>0) h+=`<div style="padding:2px 0 6px 16px;font-size:11px;color:var(--t3);">時薪 $${Math.round(s.baseHourly).toLocaleString()}（底薪 $${s.base.toLocaleString()} ÷ 當月排班 ${s.schedHours.toFixed(1)}h）</div>`;
-              if(r.leave.事假>0) h+=rowDeduct(`事假 ${r.leave.事假} 小時`, s.baseLeavePersonalDed);
-              if(r.leave.病假>0) h+=rowDeduct(`病假 ${r.leave.病假} 小時（半薪）`, s.baseLeaveSickDed);
+              /* 2026-08-01：請假扣薪移到最後統一扣，底薪這裡只列不扣薪的假別 */
               if(r.leave.特休>0) h+=`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">特休 ${r.leave.特休} 小時</span><span style="color:var(--t3);">不扣薪</span></div>`;
               if(r.leave.其他>0) h+=`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">其他假 ${r.leave.其他} 小時</span><span style="color:var(--t3);">不扣薪</span></div>`;
-              if(s.baseLeaveDeduct>0) h+=rowL('調整後底薪',`$${s.adjBase.toLocaleString()}`);
               h+=rowL('教練課費',`$${s.ptPay.toLocaleString()}`, `${r.ptDone} 堂`);
               h+=rowL('教練課收入',`<b>$${s.ptIncome.toLocaleString()}</b>`, s.ptIsFloor?'取底薪':'取課費');
             } else {
@@ -23081,11 +23086,9 @@ const rowL=(label,val,sub)=>`<div style="display:flex;justify-content:space-betw
             if(s.groupPay>0) h+=rowL('團課人頭',`$${s.groupPay.toLocaleString()}`, `${r.groupHeads} 人次`);
             // 值班費（僅實領 > 0 才顯示；正職值班費 0 不干擾）
             if(r.dutyHours>0 && s.dutyPay>0){
-              h+=rowL('值班費',`$${s.dutyGross.toLocaleString()}`, `${r.dutyHours.toFixed(1)} 小時`);
-              if(r.leave.事假>0 && s.dutyGross>0 && r.dutyHours>0) h+=rowDeduct(`事假 ${r.leave.事假} 小時`, Math.round(r.leave.事假*(s.dutyGross/r.dutyHours)));
-              if(r.leave.病假>0 && s.dutyGross>0 && r.dutyHours>0) h+=rowDeduct(`病假 ${r.leave.病假} 小時（半薪）`, Math.round(r.leave.病假*(s.dutyGross/r.dutyHours)*0.5));
-              if(s.dutyClassDeduct>0) h+=rowDeduct(`值班時段上課 ${s.classOverlap.toFixed(1)} 小時（課程抽成為主）`, s.dutyClassDeduct);
-              if(s.dutyLeaveDeduct>0||s.dutyClassDeduct>0) h+=rowL('實領值班費',`<b>$${s.dutyPay.toLocaleString()}</b>`);
+              h+=rowL('值班費',`$${s.dutyGross.toLocaleString()}`, `${fmtHours(r.dutyHours)} 小時`);
+              if(s.dutyClassDeduct>0) h+=rowDeduct(`值班時段上課 ${fmtHours(s.classOverlap)} 小時（課程抽成為主）`, s.dutyClassDeduct);
+              if(s.dutyClassDeduct>0) h+=rowL('實領值班費',`<b>$${s.dutyPay.toLocaleString()}</b>`);
             }
             if(s.renewPay>0) h+=rowL('續約獎金',`$${s.renewPay.toLocaleString()}`, s.renewDetail);
             if(s.leaderPay>0) h+=rowL('店長津貼',`$${s.leaderPay.toLocaleString()}`, s.leaderDetail);
@@ -23125,6 +23128,7 @@ async function renderPayrollSummary(){
           <details class="pr-m-calc"><summary>計算方式</summary>
             <div class="pr-m-calc-in">${payrollCalcRows(r)}
               <div class="pr-m-sum"><span>應發薪資</span><span>$${Math.round(r.countSalary?s2.grossPay:0).toLocaleString()}</span></div>
+              ${(r.countSalary && s2.leaveDeduct>0)?`<div class="pr-m-ded"><span>請假扣薪</span><span>−$${Math.round(s2.leaveDeduct).toLocaleString()}</span></div>`:''}
               ${(r.countSalary && s2.insEmpDeduct>0)?`<div class="pr-m-ded"><span>勞健保扣款</span><span>−$${Math.round(s2.insEmpDeduct).toLocaleString()}</span></div>`:''}
               <div class="pr-m-net2"><span>實發薪資</span><span>$${Math.round(nt).toLocaleString()}</span></div>
             </div>
@@ -23150,6 +23154,7 @@ async function renderPayrollSummary(){
           ${payrollCalcRows(r)}
 
           <div style="display:flex;justify-content:space-between;padding:10px 0 0;font-size:14px;"><span style="font-weight:700;color:var(--gold-d);">應發薪資</span><span style="font-weight:700;color:var(--gold-d);">$${(r.countSalary?s.grossPay:0).toLocaleString()}</span></div>
+          ${(r.countSalary && s.leaveDeduct>0)?`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;font-size:12.5px;"><span style="color:var(--t3);">請假扣薪</span><span style="color:#c0392b;font-weight:600;">−$${s.leaveDeduct.toLocaleString()}</span></div>`:''}
           ${(r.countSalary && s.insEmpDeduct>0)?`${s.insGrade?`<div style="padding:4px 0 2px 16px;font-size:11px;color:var(--t3);">投保級距 $${Number(s.insGrade).toLocaleString()}</div>`:''}
           ${s.insLaborEmp>0?`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;font-size:12.5px;"><span style="color:var(--t3);">勞保（員工負擔）</span><span style="color:#c0392b;font-weight:600;">−$${s.insLaborEmp.toLocaleString()}</span></div>`:''}
           ${s.insHealthEmp>0?`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;font-size:12.5px;"><span style="color:var(--t3);">健保（員工負擔）</span><span style="color:#c0392b;font-weight:600;">−$${s.insHealthEmp.toLocaleString()}</span></div>`:''}
