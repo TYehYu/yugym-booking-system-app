@@ -1155,6 +1155,12 @@ body.mc-mode .layout{padding-top:8px;}
 .lp-thead{display:grid;gap:12px;padding:12px 18px;background:var(--surface-3);
   border-bottom:1px solid var(--border-normal);}
 .lp-th{font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;}
+/* 分區線（2026-07-31）：與員工列表同一套做法 —— 用絕對定位畫，格子不 stretch，
+   所有欄位維持垂直置中。±12px／±15px＝表頭與資料列各自的上下內距。 */
+.lp-zb{position:relative;padding-left:12px;margin-left:-6px;}
+.lp-thead .lp-zb::before{content:'';position:absolute;left:0;top:-12px;bottom:-12px;width:1px;background:var(--border-normal);}
+.lp-row .lp-zb::before{content:'';position:absolute;left:0;top:-15px;bottom:-15px;width:1px;background:var(--bd);}
+@media(max-width:900px){ .lp-zb{padding-left:0;margin-left:0;} .lp-zb::before{display:none;} }
 .lp-th.sortable{cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:color var(--dur-fast) var(--ease-out);}
 .lp-th.sortable:hover{color:var(--brand);}
 .lp-th .sort-ar{font-size:9px;opacity:.5;}
@@ -6706,8 +6712,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.2010';
-const APP_VERSION_LABEL='v260731.2010';
+const APP_VERSION = '260731.2045';
+const APP_VERSION_LABEL='v260731.2045';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9100,15 +9106,19 @@ function lpToolbar(opts){
 }
 
 /* ── 3. Table ── */
+/* 分區線（2026-07-31 使用者指示：會員列表比照員工列表分三區）——
+   欄位帶 zone:true 就在該欄左緣畫一條線，把它左右分成兩區。
+   opt-in，其他用 lpTable 的頁面完全不受影響。 */
 function lpTable(cols, rows, sort){
   const grid = cols.map(c=>c.width||'1fr').join(' ');
   const s = sort || {};
+  const zb = c => c.zone ? ' lp-zb' : '';
   const thead = `<div class="lp-thead" style="grid-template-columns:${grid};">${
     cols.map(c=>{
-      if(!c.sortKey) return `<div class="lp-th"${c.align?` style="text-align:${c.align};"`:''}>${c.label}</div>`;
+      if(!c.sortKey) return `<div class="lp-th${zb(c)}"${c.align?` style="text-align:${c.align};"`:''}>${c.label}</div>`;
       const on = s.key===c.sortKey;
       const ar = on ? (s.dir>0?'▲':'▼') : '▲';
-      return `<div class="lp-th sortable${on?' sorted':''}"${c.align?` style="text-align:${c.align};"`:''}
+      return `<div class="lp-th sortable${on?' sorted':''}${zb(c)}"${c.align?` style="text-align:${c.align};"`:''}
         onclick="${(s.onclick||'').split('{k}').join(c.sortKey)}">${c.label}<span class="sort-ar">${ar}</span></div>`;
     }).join('')
   }</div>`;
@@ -9118,8 +9128,8 @@ function lpTable(cols, rows, sort){
         const c = cols[i]||{};
         const lbl = c.label ? ` data-label="${c.label}"` : '';
         return (typeof cell==='string' && cell.indexOf('<div class="lp-')===0)
-          ? cell
-          : `<div class="lp-cell"${lbl}${c.align?` style="text-align:${c.align};"`:''}>${cell}</div>`;
+          ? (c.zone ? cell.replace('<div class="lp-','<div class="lp-zb lp-') : cell)
+          : `<div class="lp-cell${zb(c)}"${lbl}${c.align?` style="text-align:${c.align};"`:''}>${cell}</div>`;
       }).join('')
     }</div>`).join('');
   return `<div class="lp-table">${thead}${tbody}</div>`;
@@ -19785,12 +19795,15 @@ PAGES.members=async function(){
 
   // (3) Table（2026-07-28 使用者指示：票券欄改「最上方那張票」的迷你圓形卡；
   //     等級＋主教練併一欄，整列重排避免擁擠）
+  /* 2026-07-31 使用者指示：比照員工列表分三區 ——
+     左＝姓名｜中＝會員狀態（票券、最近上課）｜右＝分類管理（等級、主教練、操作）。
+     等級與主教練是「櫃檯怎麼歸類這個人」，和員工列表的權限開關同一種性質，所以歸右邊。 */
   const cols=[
     {label:'姓名',     width:'1.4fr', sortKey:'name'},
-    {label:'會員等級', width:'0.8fr', sortKey:'tier'},
-    {label:'主教練',   width:'0.8fr'},
-    {label:'票券',     width:'2.3fr'},
+    {label:'票券',     width:'2.3fr', zone:true},
     {label:'最近上課', width:'0.9fr', sortKey:'last'},
+    {label:'會員等級', width:'0.8fr', sortKey:'tier', zone:true},
+    {label:'主教練',   width:'0.8fr'},
     {label:'',         width:'54px'},
   ];
   const typeMapFull=Object.fromEntries(types.map(t=>[t.id,t]));
@@ -19885,11 +19898,11 @@ PAGES.members=async function(){
     onclick:`openPersonProfile('member','${m.id}')`,
     cells:[
       lpPerson(m.gender, m.name||'—', fmtPhone(m.phone)),
+      tkCell(m),
+      lastClassMap[m.id] ? `<span title="${lastClassMap[m.id]}">${fmtRelDay(lastClassMap[m.id])}</span>` : '',
       tierTag(effTier(m)),
       m.default_coach_id ? (()=>{const cl=coachTagColor(m.default_coach_id);   // 2026-07-28：主教練用教練 tag 色
         return `<span style="background:${cl.bg};color:${cl.fg};border-radius:999px;padding:2.5px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;">${coachMap[m.default_coach_id]||''}</span>`;})() : '',
-      tkCell(m),
-      lastClassMap[m.id] ? `<span title="${lastClassMap[m.id]}">${fmtRelDay(lastClassMap[m.id])}</span>` : '',
       lpRowAct(lpIconBtn('eye', `openPersonProfile('member','${m.id}')`, '查看詳細')),
     ],
   }));
