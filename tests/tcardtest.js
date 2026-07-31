@@ -23,7 +23,20 @@ ok('★ 待簽約的任務課卡加 tcard-pend', /const _pend = !!b\.pending_con
    && /\$\{_pend\?' tcard-pend':''\}/.test(src));
 ok('★ 樣式與行事曆同一套：只加粗外框、不覆蓋課程底色',
    /\.tcard\.tcard-std\.tcard-pend \.tcard-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;\s*\n\s*box-shadow:inset 0 0 0 1px rgba\(181,55,46,\.45\) !important;\}/.test(src));
-ok('　　滑鼠提示也標明待簽約', /\$\{_pend\?'（待簽約・尚未收款）':''\}/.test(src));
+/* 2026-07-31：標籤改成姓名下面一列，title 用 _nmFull（已含「（待簽約）」）＋尚未收款 */
+ok('　　滑鼠提示也標明待簽約', /\$\{_nmFull\}\$\{_pend\?'・尚未收款':''\}/.test(src));
+
+console.log('\n體驗／待簽約放在姓名下面一列（2026-07-31 使用者指示）');
+ok('★ 卡片主行只放純姓名', /: \(b\.trial_name\|\|'—'\)\);/.test(src));
+ok('★ 標籤另起一列', /const _tagOut = _tag \? `<span class="tcard-sub">\$\{_tag\}<\/span>` : '';/.test(src)
+   && /<span class="tcard-mem">\$\{nm\}<\/span>\$\{_tagOut\}/.test(src));
+ok('★ 待簽約／待繳費分得開（有沒有綁會員）',
+   /const _tag = _isGrp \? '' : \(b\.pending_contract \? \(b\.member_id\?'待繳費':'待簽約'\) : bkGuestLabel\(b\)\);/.test(src));
+ok('　　體驗與場租沿用 bkGuestLabel（與行事曆同一套判定）',
+   /if\(b\.category==='體驗'\) return '體驗';/.test(src));
+ok('　　團課不掛（主行是人數，不是姓名）', /_isGrp \? '' :/.test(src));
+ok('　　小字樣式有定義', /\.tcard-sub\{font-size:10px;font-weight:700;opacity:\.72;/.test(src));
+ok('　　原因寫在程式裡', /原本是「程凱郁（體驗）」接在名字後面，窄卡會折行把名字擠掉/.test(src));
 
 console.log('\n薪資單移除月曆');
 ok('★ 薪資單不再組月曆區塊', !/<div class="card"><div class="card-title">本月月曆 /.test(src));

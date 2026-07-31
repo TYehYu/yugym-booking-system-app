@@ -3497,6 +3497,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 文字層級同行事曆（2026-07-19；07-20 再放大）：姓名為主角、時間/教練縮寫不粗體 */
 .tcard-std .tcard-time{font-size:11.5px;font-weight:500;opacity:.8;}
 .tcard-std .tcard-mem{font-size:14.5px;font-weight:800;}
+/* 姓名下面那一列：體驗／待簽約／待繳費／場租（2026-07-31 使用者指示，原本接在名字後面會把名字擠掉） */
+.tcard-sub{font-size:10px;font-weight:700;opacity:.72;letter-spacing:.02em;line-height:1.1;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
 .tcard-co{font-size:9.5px;font-weight:500;line-height:1;padding:2px 7px;border-radius:999px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
 .tcard-chk{position:absolute;top:auto;left:auto;bottom:0;right:0;width:30px;height:30px;border-radius:100% 0 10px 0;background:var(--green,#1f6f54);border:none;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:flex-end;justify-content:flex-end;padding:0 4px 3px 0;line-height:1;transform:none;}
 .tcard-chk.tcard-chk-leave{background:var(--danger,#b5372e);}   /* 全員請假（2026-07-31） */
@@ -6729,8 +6732,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1547';
-const APP_VERSION_LABEL='v260731.1547';
+const APP_VERSION = '260731.1550';
+const APP_VERSION_LABEL='v260731.1550';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10875,9 +10878,16 @@ PAGES.g_dashboard=async function(){
              匯入資料有殘留的 member_id（那堂殘留的是別人），就被拿去當卡片名稱。
              團課一律顯示人數，不再掉回 member_id。 */
           const _isGrp = b.category==='小班肌力' || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
+          /* 體驗／待簽約／場租都顯示客戶姓名（2026-07-27、2026-07-29 修標籤）。
+             2026-07-31 使用者指示：那個標籤改成放在姓名「下面一列」——
+             原本是「程凱郁（體驗）」接在名字後面，窄卡會折行把名字擠掉。
+             nm＝純姓名、_tag＝下面那一列的小字；title 仍用含括號的完整字串。 */
           const nm = _isGrp ? `${(Array.isArray(b.member_ids)?b.member_ids.length:0)} 人`
                    : (b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
-                   : (b.trial_name?bkGuestName(b):'—'));   /* 體驗／待簽約／場租都顯示客戶姓名（2026-07-27、2026-07-29 修標籤） */
+                   : (b.trial_name||'—'));
+          const _tag = _isGrp ? '' : (b.pending_contract ? (b.member_id?'待繳費':'待簽約') : bkGuestLabel(b));
+          const _tagOut = _tag ? `<span class="tcard-sub">${_tag}</span>` : '';
+          const _nmFull = nm + (_tag?`（${_tag}）`:'');
           /* 待簽約（還沒收款）→ 紅框，與行事曆課卡同一套提示（2026-07-30 使用者指示） */
           const _pend = !!b.pending_contract;
           const canceled=isCancelled(b);
@@ -10885,9 +10895,9 @@ PAGES.g_dashboard=async function(){
           const live = !canceled && nowMin>=mn && nowMin<mn+(Number(b.duration)||60) && !isDone(b);
           const done = isDone(b);
           const coTag=`<span class="tcard-co" style="background:${_cc2.bg};color:${_cc2.fg};">${coachAbbr(c)}${b.substitute_coach_id===c.id?'（代）':''}</span>`;
-          return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}${_pend?' tcard-pend':''}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${nm}${_pend?'（待簽約・尚未收款）':''}${live?'（進行中）':''}${canceled?'（已取消）':''}">
+          return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}${_pend?' tcard-pend':''}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${_nmFull}${_pend?'・尚未收款':''}${live?'（進行中）':''}${canceled?'（已取消）':''}">
             <div class="tcard-body"></div>
-            <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-mem">${nm}</span>${(b.member_id?lottoGiftIcon(_lotMap[b.member_id]):'')}${coTag}${grpAllOnLeave(b)?'<span class="tcard-chk tcard-chk-leave">假</span>':(done?'<span class="tcard-chk">簽</span>':'')}</div>${canceled?'<span class="tcard-del">刪</span>':''}
+            <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-mem">${nm}</span>${_tagOut}${(b.member_id?lottoGiftIcon(_lotMap[b.member_id]):'')}${coTag}${grpAllOnLeave(b)?'<span class="tcard-chk tcard-chk-leave">假</span>':(done?'<span class="tcard-chk">簽</span>':'')}</div>${canceled?'<span class="tcard-del">刪</span>':''}
           </div>`;
         }).join('');
         const emptyC = (!drawBk.length)
