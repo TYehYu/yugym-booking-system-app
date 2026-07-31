@@ -107,8 +107,9 @@ console.log('\n預約明細：教練與場地在時間下面、圓形卡上面')
   ok('★ 圓形卡排在教練與場地之後', pDots>pVenue, {pVenue,pDots});
   ok('　　會員視角不顯示場地（內部資訊）', /\$\{isMemberView\?'':`<div[\s\S]{0,120}>場地</.test(blk));
 }
-ok('　　私人教練不再重複顯示下方那組場地',
-   /\$\{\(!isPersonalPT&&b\.category!=='小班肌力'&&!isMemberView\)\?/.test(src));
+/* 2026-07-31 使用者指示：體驗的場地也重複了 → 下方那組再排除 isTrialD（團課本來就排除） */
+ok('　　私人教練／團課／體驗都不再重複顯示下方那組場地',
+   /\$\{\(!isPersonalPT&&!isGroupD&&!isTrialD&&!isMemberView\)\?/.test(src));
 
 /* 所有預約都能自己選票券（2026-07-30 使用者指示）——
    會員同時有長期方案與快到期的優惠票時，自動挑選未必是客人要的。 */

@@ -118,10 +118,13 @@ ok('　　送出改帶 count，不再帶 until',
    && /count: isRec \? Math\.min\(Math\.max\(1,Math\.floor\(Number\(f\.count\)\|\|1\)\), RECUR_MAX\) : 1,/.test(src));
 ok('　　沒填次數會擋下來', /請填寫預約次數/.test(src));
 
-console.log('\n教練手機端行事曆：別人的課卡不吃觸控');
-ok('★ 不可點的卡加上 cag-noint', /\$\{canClick\?'':' cag-noint'\}/.test(src));
-ok('★ cag-noint 是 pointer-events:none（滑動時觸控直接穿透）',
-   /\.cag-std\.cag-noint\{pointer-events:none;\}/.test(src));
+/* 2026-07-31 使用者指示：教練端課卡「互動開啟，但不要圓形按鈕，只能看明細不能修改」。
+   0729 的 cag-noint（整張不吃觸控）退場，改成點一下直接開唯讀明細。 */
+console.log('\n教練手機端行事曆：別人的課卡可點開明細（唯讀）');
+ok('★ 不可點的卡改標 cag-view（不再是 cag-noint）', /\$\{canClick\?'':' cag-view'\}/.test(src));
+ok('★ 點下去直接開明細，不走 wtlCardClick（那條會彈圓形按鈕）',
+   /\$\{canClick\?` onclick="wtlCardClick\('\$\{b\.id\}'\)"`:` onclick="openBookingDetail\('\$\{b\.id\}'\)"`\}/.test(src));
+ok('　　cag-view 只是游標，不關 pointer-events', /\.cal-ev\.cal-ev-view,\.cag-std\.cag-view\{cursor:pointer;\}/.test(src));
 ok('　　不再掛 stopPropagation 的空 onclick（那仍會攔截手指）',
    !/onclick="event\.stopPropagation\(\)"`\}>/.test(src));
 ok('　　管理員／店長仍可點別人的課卡（canClick 為真就不加 class）',

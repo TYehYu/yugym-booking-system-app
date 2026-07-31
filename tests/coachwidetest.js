@@ -45,10 +45,11 @@ ok('★ 桌機行事曆不再把別人的課換成課程種類', /const hideMemb
 ok('★ 手機 agenda 也一律顯示會員名（原本只顯示授課教練名）',
    /原本別人的課只顯示授課教練名，現在一律顯示會員名（不能點仍由 cag-noint 控制）/.test(src)
    && !/if\(layer==='mine' \|\| isAdmin\)\{   \/\/ 店長\/管理員：別人的課也顯示會員名/.test(src));
-ok('★ 不能動別人的課仍然成立（三道：cal-ev-noint／cag-noint／coachOwnsBk）',
-   /\.cal-ev\.cal-ev-noint\{pointer-events:none !important;/.test(src)
-   && /\.cag-std\.cag-noint\{pointer-events:none;\}/.test(src)
-   && /function coachOwnsBk\(b\)\{/.test(src));
+/* 2026-07-31 使用者改口：課卡互動開啟、只能看明細不能修改（見 coachviewtest.js）。
+   「不能動」現在靠 coachOwnsBk（修改路徑）＋ 明細裡的 ownByCoach（每個修改元件）。 */
+ok('★ 不能動別人的課仍然成立（coachOwnsBk 擋修改路徑）',
+   /function coachOwnsBk\(b\)\{/.test(src)
+   && /if\(!coachOwnsBk\(b\)\)\{ openBookingDetail\(id\); return; \}/.test(src));
 ok('　　bkIsMasked 保留（仍控制別人的課卡淡化，不再管名字）',
    /function bkIsMasked\(b\)\{/.test(src) && /不再管名字/.test(src));
 ok('　　原因寫在程式裡', /教練也開放看其他預約課卡的會員名字，只是關閉互動功能/.test(src));

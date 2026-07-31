@@ -75,7 +75,9 @@ ok('★ 每列的簽到／請假／取消都帶名額鍵',
    && /groupToggleLeave\('\$\{b\.id\}','\$\{sk\}'\)/.test(src)
    && /groupCancelSeat\('\$\{b\.id\}','\$\{sk\}'\)/.test(src));
 ok('★ 多名額每列標「第 N 個名額」', /第 \$\{seatNo\(sk\)\} 個名額/.test(src));
-ok('　　票券圓點只畫在第一列（同一張票不重複畫）', /const st = seatNo\(sk\)===1 \? _gTk\[mid\] : null;/.test(src));
+/* 2026-07-31 使用者指示改為：兩個名額都要顯示圓形卡 */
+ok('★ 每個名額都畫自己的圓形卡（不再只畫第一列）', /const st = _gTk\[mid\];/.test(src)
+   && !/seatNo\(sk\)===1 \? _gTk/.test(src));
 ok('★ 課卡快捷簽到面板也逐名額（原本合併標 ×N）',
    /rows = seatKeysDisplay\(b\)\.map\(sk=>\{/.test(src) && !/name:nameOf\(mid\)\+\(_rc\[mid\]>1\?`（×\$\{_rc\[mid\]\}）`:''\)/.test(src));
 ok('★ 請假／取消收名額鍵，補課券與退票仍認會員本人',

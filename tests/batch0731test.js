@@ -1,0 +1,103 @@
+/* 2026-07-31 這批（管理員手機版報表／教練唯讀課卡／團課明細排列）
+
+   1) 管理員手機版「報表」打不開 —— PAGES.dashboard 用了 _tkLogs 卻沒宣告。
+      這頁只有手機版底部導覽進得來（桌機管理員走 analytics），所以只有手機壞。
+   2) 教練端的預約課卡「互動開啟，但不要圓形按鈕，只能看明細不能修改」。
+   3) 團課預約明細排列：日期時間時長 → 教練 → 場地 → 名單 → 備註。 */
+const fs=require('fs');
+const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+
+let pass=0,fail=0;
+const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const seg=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
+
+console.log('管理員手機版報表打不開');
+{
+  const dash=seg('PAGES.dashboard=async function(){','\n};\n');
+  ok('★ _tkLogs 有宣告了（原本整頁在 _grpDeduct 那裡拋 ReferenceError）',
+     /let _tkLogs=\[\]; try\{ _tkLogs=await dbGetAll\('ticket_logs'\); \}catch\(_\)\{\}/.test(dash));
+  ok('★ 宣告在用它之前', dash.indexOf('let _tkLogs=[]')>=0
+     && dash.indexOf('let _tkLogs=[]') < dash.indexOf('(_tkLogs||[]).forEach'));
+  ok('　　原因寫在程式裡（為什麼只有手機壞）', /這頁只有管理員手機版的「報表」進得來/.test(src));
+  ok('　　手機底部導覽的「報表」確實指向這一頁', /\{key:'dashboard',  label:'報表', ic:'📊'\}/.test(src));
+  ok('　　桌機管理員走的是另一頁（analytics），所以桌機一直沒事',
+     /\{grp:'財務', label:'營運分析', page:'analytics'\}/.test(src));
+  // 這頁沒有其他未宣告的區域變數（同一類錯誤的通用防線）
+  const used=new Set(); const declared=new Set();
+  for(const m of dash.matchAll(/(?:(?:const|let|var)\s+|,\s*)(_[A-Za-z][\w$]*)\s*=/g)) declared.add(m[1]);
+  for(const m of dash.matchAll(/(?<![.\w$'"])(_[A-Za-z][\w$]*)/g)) used.add(m[1]);
+  const globals=new Set(); const head=src.slice(0,src.indexOf('PAGES.dashboard='));
+  for(const m of src.matchAll(/(?:^|\n)\s*(?:const|let|var|function)\s+(_[A-Za-z][\w$]*)/g)) globals.add(m[1]);
+  const miss=[...used].filter(x=>!declared.has(x)&&!globals.has(x));
+  ok('★ 這頁沒有其他「用了卻沒宣告」的區域變數', miss.length===0, miss);
+}
+
+console.log('\n教練端課卡：互動開啟，只能看明細');
+ok('★ 桌機別人的課卡改標 cal-ev-view（不再 cal-ev-noint 整張不吃事件）',
+   /const _viewOnly = SESSION\.role==='coach' && !SESSION\.is_manager && opts\.me && !isMine;/.test(src)
+   && /\$\{_viewOnly\?' cal-ev-view':''\}/.test(src)
+   && !/\$\{_noInt\?' cal-ev-noint':''\}/.test(src));
+ok('★ 點下去直接開明細，不經過 onEvClick（那條會彈圓形按鈕）',
+   /\$\{_viewOnly\?`onclick="openBookingDetail\('\$\{b\.id\}'\)"`/.test(src));
+ok('★ 手機 agenda 同樣改成可點開明細', /\$\{canClick\?'':' cag-view'\}/.test(src)
+   && /:` onclick="openBookingDetail\('\$\{b\.id\}'\)"`\}/.test(src));
+ok('★ 唯讀卡不能拖（互動放開後 pointer-events 回來了，不擋就拖得動別人的課改期）',
+   /if\(ev\.classList\.contains\('cal-ev-view'\)\) return;/.test(src));
+ok('★ 手動 tap 路徑（pointer capture 那條）也不彈圓形按鈕',
+   (src.match(/&& !_card\.classList\.contains\('bk-masked'\) && !_card\.classList\.contains\('cal-ev-view'\)\)\{/g)||[]).length===1
+   && /&& !el\.classList\.contains\('bk-masked'\) && !el\.classList\.contains\('cal-ev-view'\)\)\{/.test(src));
+ok('★ 圓形按鈕面板本身：不是自己的課就改開明細（不再只跳 toast）',
+   /if\(!coachOwnsBk\(b\)\)\{ openBookingDetail\(id\); return; \}/.test(src));
+ok('★ 明細不再擋在門口（唯讀放行）',
+   !/if\(b && !coachOwnsBk\(b\)\)\{ showToast\('這不是你的課，只能查看自己的課程明細'\); return; \}/.test(src));
+ok('★ 但每個修改元件仍然關著：editable 綁 ownByCoach',
+   /const editable=!window\._coachReadonly && !isMemberView && ownByCoach &&/.test(src));
+ok('★ 取消預約鈕綁 ownByCoach', /\$\{canCancel&&ownByCoach\?\(isMemberView/.test(src));
+ok('★ 簽到綁「自己主帶／代課」', /\|\| \(SESSION\.role==='coach' && \(b\.coach_id===SESSION\.id \|\| b\.substitute_coach_id===SESSION\.id\)\);/.test(src));
+ok('★ 備註也只有自己的課能寫', /const can = !window\._coachReadonly && ownByCoach;/.test(src));
+ok('　　唯讀卡只改游標，不關 pointer-events（關了就點不開明細）',
+   /\.cal-ev\.cal-ev-view,\.cag-std\.cag-view\{cursor:pointer;\}/.test(src));
+ok('　　原因寫在程式裡', /現在改成點得開「課程明細」，但不彈出那組圓形按鈕/.test(src));
+
+console.log('\n團課明細排列：日期時間時長／教練／場地／名單／備註');
+{
+  const i=src.indexOf('    </div>`:((isGroupD||isTrialD)?`');
+  const j=src.indexOf('</div>`:`\n    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">',i);
+  const g=src.slice(i,j);
+  ok('★ 團課／體驗走自己一套版面（與其餘課種分開）', i>0 && j>i);
+  const at=t=>g.indexOf(t);
+  ok('★ 第一列＝日期・時間・時長', at('id="ed-date"')>0 && at('id="ed-dur"')>at('id="ed-date"'));
+  ok('★ 第二列＝教練', at('>教練<')>at('id="ed-date"'));
+  ok('★ 第三列＝場地', at('>場地<')>at('>教練<'));
+  ok('★ 再來才是會員預約名單', at('${memberLine}')>at('>場地<'));
+  const noteAt=src.indexOf('${bkNoteBlock(b, isMemberView, ownByCoach)}');
+  ok('★ 備註在最後（整個版面之外、按鈕列之前）',
+     noteAt>src.indexOf('${memberLine}')
+     && noteAt<src.indexOf('<div class="modal-foot">', noteAt));
+  ok('★ 下方的「調整時間」區塊對團課不再重複輸出（同樣的 ed-date/ed-time id 會撞）',
+     /\$\{\(isPersonalPT\|\|isGroupD\|\|isTrialD\)\?'':\(editable\?/.test(src));
+  ok('　　ed-date/ed-time/ed-dur 在團課明細裡各只出現一次',
+     (g.match(/id="ed-date"/g)||[]).length===1 && (g.match(/id="ed-time"/g)||[]).length===1
+     && (g.match(/id="ed-dur"/g)||[]).length===1);
+  ok('　　代課下拉還在（團課也會換教練）', /id="ed-subcoach"/.test(g));
+  ok('　　更換場地鈕還在', /openVenueChange\('\$\{b\.id\}'\)/.test(g));
+  ok('　　原因寫在程式裡', /原本是「名單在最上面、時間掉到最下方那塊調整區」/.test(src));
+}
+
+console.log('\n體驗明細（2026-07-31 使用者指示）');
+ok('★ 日期時間時長收斂成一列（與團課共用同一套版面）',
+   /<\/div>`:\(\(isGroupD\|\|isTrialD\)\?`/.test(src));
+ok('★ 下方那塊「調整時間」不再對體驗重複輸出',
+   /\$\{\(isPersonalPT\|\|isGroupD\|\|isTrialD\)\?'':\(editable\?/.test(src));
+ok('★ 場地只留一個（原本上面一列、下面又一塊）',
+   /\$\{\(!isPersonalPT&&!isGroupD&&!isTrialD&&!isMemberView\)\?`<div style="margin-top:10px;/.test(src));
+ok('　　體驗保留「類型」那一行（團課不需要，看名單就知道）',
+   /\$\{isTrialD\?`<div><span style="color:var\(--t2\);">類型<\/span>/.test(src));
+ok('　　原因寫在程式裡', /場地只留一個 —— 原本上面一列、下面那塊又一個，同樣的資訊講兩次/.test(src));
+
+console.log('\n團課名單：同一人兩個名額，兩個都畫圓形卡');
+ok('★ 不再只畫第一列', /const st = _gTk\[mid\];/.test(src) && !/seatNo\(sk\)===1 \? _gTk/.test(src));
+ok('　　原因寫在程式裡', /同一個會員約了兩個名額，兩個名額都要顯示圓形卡/.test(src));
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail?1:0);

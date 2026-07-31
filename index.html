@@ -5336,6 +5336,8 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
 #bk-card-pop .mtp-t2{font-size:11.5px;color:var(--t2);white-space:nowrap;}
 /* 手機端行事曆：別人的課卡不吃觸控（2026-07-29 使用者回報滑頁面會被卡住） */
 .cag-std.cag-noint{pointer-events:none;}
+/* 唯讀（別人的課）：點得開明細，但沒有圓形按鈕；游標維持可點，視覺不另外淡化 */
+.cal-ev.cal-ev-view,.cag-std.cag-view{cursor:pointer;}
 /* ── 會員自助異動的桌機滑出通知（2026-07-29 使用者指示：右下角滑出）── */
 /* z-index 250：壓在頁面內容之上、但在對話框（.modal-bg 300）之下 ——
    通知卡固定在右下角，若蓋過視窗會擋住「確認預約」那排按鈕（2026-07-30）。 */
@@ -6610,8 +6612,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.0020';
-const APP_VERSION_LABEL='v260731.0020';
+const APP_VERSION = '260731.0135';
+const APP_VERSION_LABEL='v260731.0135';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12283,6 +12285,11 @@ let _dashRange='month'; // 'month' | 'today'
 PAGES.dashboard=async function(){
   const[members,coaches,tickets,bookings,plans,types]=await Promise.all([
     dbGetAll('members'),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('bookings'),dbGetAll('course_plans'),dbGetAll('ticket_types')]);
+  /* 團課逐人頭金額要看「這堂實際扣了誰的哪一張票」→ 需要扣款帳本。
+     2026-07-31 修：這段邏輯 0730 從 ops_center 抄過來時漏了這一行，_tkLogs 沒宣告，
+     整頁在 _grpDeduct 那裡拋 ReferenceError —— 這頁只有管理員手機版的「報表」進得來
+     （桌機走 analytics），所以症狀是「手機版報表打不開」。 */
+  let _tkLogs=[]; try{ _tkLogs=await dbGetAll('ticket_logs'); }catch(_){}
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const planMap=Object.fromEntries(plans.map(p=>[p.id,p]));
@@ -13069,10 +13076,11 @@ async function renderCalendar(opts){
          最後一堂／分期繳費提醒只在右上角顯示驚嘆號，不整張變色 —— 反紅的卡太多就失去警示作用。 */
       const _alertCls = _isUnpaid ? ' cal-ev-renew'
                       : (_isNewToday ? ' cal-ev-newtoday' : '');
-      /* 教練端別人的課卡：完全移除互動（2026-07-30 使用者指示）——
-         原本 bk-masked 只是灰階＋淡化，點下去還是會開明細（onEvClick 對 masked 卡
-         會退回 openBookingDetail）。這裡直接讓整張卡不吃事件。 */
-      const _noInt = SESSION.role==='coach' && !SESSION.is_manager && opts.me && !isMine;
+      /* 教練端別人的課卡（2026-07-31 使用者指示改為「唯讀可看」）——
+         0730 是整張不吃事件（cal-ev-noint），教練連看都看不到內容；
+         現在改成點得開「課程明細」，但不彈出那組圓形按鈕（簽到／代課／取消／編輯），
+         明細裡的所有修改動作也照舊由 ownByCoach 關掉 —— 只能看，不能改。 */
+      const _viewOnly = SESSION.role==='coach' && !SESSION.is_manager && opts.me && !isMine;
       const _isCheckedIn = b.status==='checked_in'||b.status==='completed'
         || (b.category==='小班肌力' && b.attendance && Object.values(b.attendance).some(s=>s==='checked_in'));
       const _isMakeup = !!b.makeup_granted;
@@ -13157,9 +13165,10 @@ async function renderCalendar(opts){
       else { _tipMem = hideMember ? typeName : ((b.member_id&&memMap[b.member_id])||memName||'—'); }
       const _tipCoach = (subCoachName||coachName) ? `教練：${subCoachName||coachName}${subCoachName?'（代）':''}` : '';
       const _tipStr = _tipEsc([`${b.start_time}–${_endT}`, _tipMem, _tipCoach].filter(Boolean).join('\n'));
-      evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${wCls} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''}${_noInt?' cal-ev-noint':''} cal-ev-day cal-ev-std ${_densityCls} ${_courseCls} ${_checkedCls} ${_pastCls}${_alertCls}" data-bid="${b.id}" data-time="${b.start_time}" data-tip="${_tipStr}"
+      evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${wCls} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''}${_viewOnly?' cal-ev-view':''} cal-ev-day cal-ev-std ${_densityCls} ${_courseCls} ${_checkedCls} ${_pastCls}${_alertCls}" data-bid="${b.id}" data-time="${b.start_time}" data-tip="${_tipStr}"
         style="${useFixedLane?dayLaneStyle:`top:${top}px;height:${Math.max(h-2,(nDays===7||nDays===5)?40:64)}px;left:calc(${lane.idx*wpct}% + 3px);width:calc(${wpct}% - 6px);`}"
-        ${editable?`onclick="onEvClick(event,'${b.id}')"`:(opts.allMode||bkIsMasked(b)?'':`onclick="openBookingDetail('${b.id}')"`)}>
+        ${_viewOnly?`onclick="openBookingDetail('${b.id}')"`
+          :(editable?`onclick="onEvClick(event,'${b.id}')"`:(opts.allMode||bkIsMasked(b)?'':`onclick="openBookingDetail('${b.id}')"`))}>
         ${bkRenewBadge({done:_renewDone,no:_renewNo,renew:_renewAlert,pay:_payAlert})}
         ${_stampOut}
         ${_bodyOut}
@@ -13863,6 +13872,9 @@ function initCalDrag(){
   wrap.addEventListener('pointerdown',e=>{
     const ev=e.target.closest('.cal-ev');
     if(!ev||ev.classList.contains('readonly'))return;
+    /* 唯讀卡（教練看別人的課，2026-07-31）：可點開明細，但不能拖 ——
+       互動開放後 pointer-events 回來了，不擋在這裡就拖得動別人的課改期。 */
+    if(ev.classList.contains('cal-ev-view')) return;
     // 卡片互動元件：不啟動拖曳/tap，讓按鈕/輸入自身事件生效。
     // ⚠️ 這份豁免名單必須跟上新元件 —— 2026-07-18 周邊四按鈕(.evc-orbit)上線時漏加，
     // pointerdown 啟動拖曳 → pointer capture 吞掉按鈕 click、pointerup 又被當成點卡收合，
@@ -13944,7 +13956,8 @@ function initCalDrag(){
       if(_bid){
         // Inline Expand Card · Phase 3a：標準卡 + 非遮蔽 → 原地展開；否則沿用舊 Modal
         const _card = ev && ev.closest ? ev.closest('.cal-ev') : ev;
-        if(_card && _card.classList && _card.classList.contains('cal-ev-std') && !_card.classList.contains('bk-masked')){
+        if(_card && _card.classList && _card.classList.contains('cal-ev-std')
+           && !_card.classList.contains('bk-masked') && !_card.classList.contains('cal-ev-view')){
           if(_card.classList.contains('cal-ev-active')||_card.classList.contains('cal-ev-expanded')) collapseBkCard(); else { bkTapBounce(_card); expandBkCard(_card, _bid); }
         } else {
           openBookingDetail(_bid);
@@ -14964,10 +14977,11 @@ async function renderCoachAgenda(){
     const _venue=selfVenueLabel(b);
     // 2026-07-27 使用者指示：教練本人的課卡不放教練縮寫標籤（多餘）；只留場地標籤（自主訓練用教室/跑步機時）
     const tag = _venue?`<span class="evc-coach" style="background:${_ccol.bg};color:${_ccol.fg};">${_venue}</span>`:'';
-    /* 2026-07-29 使用者指示：手機端右側「其他教練的課卡」完全不吃觸控 ——
-       原本掛 onclick=stopPropagation，卡片仍會攔截手指，滑頁面時碰到就滑不動。
-       改成 pointer-events:none（class cag-noint），觸控直接穿透到捲動容器。
-       管理員／店長仍可點（canClick 為真時不加這個 class）。 */
+    /* 其他教練的課卡（2026-07-31 使用者指示改為「唯讀可看」）——
+       0729 是 pointer-events:none（cag-noint，怕卡片攔手指讓頁面滑不動），
+       現在改成點一下直接開「課程明細」：不走 wtlCardClick（那條會彈圓形按鈕），
+       明細本身對非自己的課全程唯讀。單純的 onclick 不會影響捲動，
+       原本會攔手指的是舊版掛的 onclick=stopPropagation，不是可點這件事。 */
     /* 繳費／續約提醒（2026-07-29）：只標在看得到會員的卡上——別人的課卡本來就不顯示會員，
        也不該外洩「誰快用完票了」。 */
     const _mk = (layer==='mine'||isAdmin) ? bkRenewBadge({
@@ -14979,7 +14993,7 @@ async function renderCoachAgenda(){
     const _unpaidM=_vis && !!b.pending_contract;
     const _newM=_vis && String(b.created_at||'').slice(0,10)===ymd(TODAY);
     const _mkAlert = _unpaidM ? ' cal-ev-renew' : (_newM ? ' cal-ev-newtoday' : '');
-    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${canClick?'':' cag-noint'}${_mkAlert}" ${layer==='mine'?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}')"`:''}>
+    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${canClick?'':' cag-view'}${_mkAlert}" ${layer==='mine'?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}')"`:` onclick="openBookingDetail('${b.id}')"`}>
       ${_mk}
       ${done?'<span class="evc-check" title="已完成">簽</span>':''}
       <div class="evc-body"></div>
@@ -16860,7 +16874,8 @@ function onEvClick(e,id){
   if(window._justTapped){return;}
   // Inline Expand Card · Phase 3a：標準卡 + 非遮蔽 → 原地展開（查看+簽到+取消）；否則沿用舊 Modal
   const el = e && e.currentTarget;
-  if(el && el.classList && el.classList.contains('cal-ev-std') && !el.classList.contains('bk-masked')){
+  if(el && el.classList && el.classList.contains('cal-ev-std')
+     && !el.classList.contains('bk-masked') && !el.classList.contains('cal-ev-view')){
     if(el.classList.contains('cal-ev-active') || el.classList.contains('cal-ev-expanded')){ collapseBkCard(); return; }
     if(e.stopPropagation) e.stopPropagation();
     bkTapBounce(el);
@@ -16877,7 +16892,10 @@ async function expandBkCard(el, id){
   collapseBkCard();
   const b = await dbGet('bookings', id);
   if(!b){ openBookingDetail(id); return; }
-  if(!coachOwnsBk(b)){ showToast('這不是你的課，只能操作自己的課程'); return; }   // 2026-07-30
+  /* 2026-07-31 使用者指示：別人的課「互動開啟、但不要圓形按鈕，只能看明細」——
+     原本這裡是 showToast 擋掉，現在改成直接開明細（明細內所有修改動作仍由
+     ownByCoach／staffCanCheckin 關掉）。 */
+  if(!coachOwnsBk(b)){ openBookingDetail(id); return; }
   const checked = b.status==='checked_in' || b.status==='completed';
   const canCancel = b.status==='booked' || b.status==='checked_in';
   const staff = SESSION.role==='admin' || SESSION.role==='front_desk';
@@ -17470,9 +17488,11 @@ async function openCourseCard(id){
   // 訓練紀錄功能暫不下放：點課卡一律開課程明細（可改期 / 取消 / 簽到）
   openBookingDetail(id);
 }
-/* 教練只能看／改自己的課（2026-07-30 使用者指示）——
-   桌機課卡已用 cal-ev-noint 關掉互動，這裡再把「任何其他路徑」都堵住
-   （深連結、程式呼叫、鍵盤操作），免得換一條路就繞過去。店長／管理員／櫃檯不受限。 */
+/* 教練只能「改」自己的課（2026-07-30 → 2026-07-31 放寬為可看不可改）——
+   0730 是連明細都不給開；0731 使用者指示改成「互動開啟，只能看明細不能修改」。
+   所以 coachOwnsBk 現在只守修改路徑（expandBkCard 的圓形按鈕、儲存、取消、簽到），
+   openBookingDetail 一律放行 —— 那一頁的每個修改元件本來就綁 ownByCoach。
+   店長／管理員／櫃檯不受限。 */
 function coachOwnsBk(b){
   if(!b) return false;
   if(!SESSION || SESSION.role!=='coach' || SESSION.is_manager) return true;
@@ -17482,7 +17502,8 @@ function coachOwnsBk(b){
 }
 async function openBookingDetail(id){
   const b=await dbGet('bookings',id);
-  if(b && !coachOwnsBk(b)){ showToast('這不是你的課，只能查看自己的課程明細'); return; }
+  /* 2026-07-31：別人的課也看得到明細（唯讀）。修改元件全部綁 ownByCoach／
+     staffCanCheckin／editable，那三個對非自己的課一律 false。 */
   // 舊匯入團課相容：一堂被拆成多筆（每人一筆）。若本筆是小班肌力且無 member_ids，
   // 即時聚合同教練＋同日期＋同時段的所有 booking，讓明細顯示完整名單與簽到。
   if(b && b.category==='小班肌力' && !(Array.isArray(b.member_ids)&&b.member_ids.length)){
@@ -17781,8 +17802,10 @@ async function openBookingDetail(id){
       }
       /* 多名額 → 每列標「第 N 個名額」，讓櫃檯知道這列是同一個人的哪一個位子 */
       const seatTag = _seat[mid]>1 ? `<span class="tag" style="font-size:10.5px;background:#f7efe0;color:#8a5e28;">第 ${seatNo(sk)} 個名額</span>` : '';
-      // 票券圓點只畫在該會員的第一列（同一張票畫兩次只是重複資訊）
-      const st = seatNo(sk)===1 ? _gTk[mid] : null;
+      /* 2026-07-31 使用者指示：同一個會員約了兩個名額，兩個名額都要顯示圓形卡。
+         （原本只畫第一列 —— 但兩個名額是各自獨立的一堂，第二列沒有圓點就看不出
+           這個位子扣的是哪一張票、還剩幾堂。） */
+      const st = _gTk[mid];
       /* 圓點本身就說明了狀態（實心＝已上・空心＝未使用・整排實心＝已用畢），
          所以不再加「建議續約／需購票」字樣（2026-07-26 使用者指示）。 */
       const tkInfo = st
@@ -17856,6 +17879,39 @@ async function openBookingDetail(id){
         ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
       </div>`}
       ${tkCircleHtml}
+    </div>`:((isGroupD||isTrialD)?`
+    ${/* 團課明細的排列（2026-07-31 使用者指示）：
+         第一列 日期・時間・時長 → 第二列 教練 → 第三列 場地 → 會員預約名單 → 最後備註。
+         原本是「名單在最上面、時間掉到最下方那塊調整區」，看一堂課的基本資料要上下跳。
+         時間欄位就是原本下方那組（同樣的 ed-date／ed-time／ed-dur id，saveBookingTime 照讀），
+         所以下方的「調整時間」區塊對團課不再重複輸出。
+         體驗課同一套（2026-07-31 使用者指示）：日期時間時長收斂成一列，
+         而且場地只留一個 —— 原本上面一列、下面那塊又一個，同樣的資訊講兩次。 */''}
+    <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        ${editable
+          ? `<span class="bkd-timeedit">
+               <input type="date" id="ed-date" value="${b.date}">
+               <input type="time" id="ed-time" value="${b.start_time}" step="1800">
+               <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30 分</option><option value="60" ${b.duration===60?'selected':''}>60 分</option><option value="90" ${b.duration===90?'selected':''}>90 分</option><option value="120" ${b.duration===120?'selected':''}>120 分</option></select>
+             </span>`
+          : `<span style="font-family:var(--num);font-size:15px;font-weight:700;color:var(--text);">${b.date.replace(/-/g,'/')}（${WD[d.getDay()]}）${b.start_time}　<span style="font-size:12px;color:var(--t3);font-weight:400;">${b.duration}分</span></span>`}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="color:var(--t2);flex-shrink:0;">教練</span><span style="flex-shrink:0;">${coach?coach.name:'—'}</span>
+        ${editable?`<select id="ed-subcoach" style="font-size:12.5px;padding:4px 8px;border:1px solid var(--bd);border-radius:7px;background:#fff;max-width:170px;">
+          <option value="">無代課</option>
+          ${coachableList.filter(c=>c.id!==b.coach_id).map(c=>`<option value="${c.id}" ${b.substitute_coach_id===c.id?'selected':''}>代課：${coachDisp(c)}</option>`).join('')}</select>`
+          :(subCoach?`<span class="tag" style="background:#f5ede0;color:#8A5E28;">代課：${subCoach.name}</span>`:'')}
+      </div>
+      ${isMemberView?'':`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="color:var(--t2);flex-shrink:0;">場地</span>
+        <span style="flex-shrink:0;">${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>
+        ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
+      </div>`}
+      ${memberLine}
+      ${isTrialD?`<div><span style="color:var(--t2);">類型</span>　<span class="tag tag-${colorClass(typeOfCat(b.category))}">${b.category}${b.format?'·'+b.format:''}</span></div>`:''}
+      ${tkLine}
     </div>`:`
     <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
       ${memberLine}
@@ -17868,8 +17924,9 @@ async function openBookingDetail(id){
           :(subCoach?`<span class="tag" style="background:#f5ede0;color:#8A5E28;">代課：${subCoach.name}</span>`:'')}
       </div>
       ${tkLine}
-    </div>`}
-    ${isPersonalPT?'':(editable?`<div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--bd);">
+    </div>`)}
+    ${/* 團課／體驗的時間已經移到第一列（2026-07-31），這裡不再重複；教練課走 isPersonalPT 那條 */''}
+    ${(isPersonalPT||isGroupD||isTrialD)?'':(editable?`<div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--bd);">
       <div style="font-size:11.5px;color:var(--t2);margin-bottom:8px;">調整時間（手機可用此處改期改時間）</div>
       <div class="form-2col">
         <div class="form-row" style="margin-bottom:8px;"><label>日期</label><input type="date" id="ed-date" value="${b.date}"></div>
@@ -17878,7 +17935,8 @@ async function openBookingDetail(id){
       <div class="form-row" style="margin-bottom:0;"><label>時長（分鐘）</label>
         <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30</option><option value="60" ${b.duration===60?'selected':''}>60</option><option value="90" ${b.duration===90?'selected':''}>90</option><option value="120" ${b.duration===120?'selected':''}>120</option></select></div>
     </div>`:`<div style="margin-top:10px;font-size:13px;"><span style="color:var(--t2);">時間</span>　${b.date}（週${WD[d.getDay()]}）${b.start_time}　${b.duration}分鐘</div>`)}
-    ${(!isPersonalPT&&b.category!=='小班肌力'&&!isMemberView)?`<div style="margin-top:10px;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    ${/* 體驗改由上方那一列顯示場地（2026-07-31 使用者指示：場地訊息重複了，留一個就好） */''}
+    ${(!isPersonalPT&&!isGroupD&&!isTrialD&&!isMemberView)?`<div style="margin-top:10px;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span style="color:var(--t2);">場地</span>　<span>${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>
       ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
     </div>`:''}

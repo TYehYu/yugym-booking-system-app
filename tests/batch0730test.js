@@ -33,17 +33,14 @@ console.log('　教練端：別人的課卡完全不能互動');
 ok('★ 教練進來時帶 me＋maskOthers（看得到時段被佔住，但別人的課匿名）',
    /const _isCoachView = SESSION\.role==='coach' && !SESSION\.is_manager;/.test(src)
    && /\.\.\.\(_isCoachView\?\{me:SESSION\.id, maskOthers:true\}:\{\}\)/.test(src));
-ok('★ 別人的課卡加 cal-ev-noint，整張不吃事件',
-   /const _noInt = SESSION\.role==='coach' && !SESSION\.is_manager && opts\.me && !isMine;/.test(src)
-   && /\$\{_noInt\?' cal-ev-noint':''\}/.test(src)
-   && /\.cal-ev\.cal-ev-noint\{pointer-events:none !important;cursor:default !important;\}/.test(src));
-ok('　　連 hover 提示也不出（互動整組移除）', /\.cal-ev\.cal-ev-noint::after\{display:none !important;\}/.test(src));
-ok('　　原本 bk-masked 只是灰階，點下去還會開明細 —— 原因寫在程式裡',
-   /原本 bk-masked 只是灰階＋淡化，點下去還是會開明細/.test(src));
-ok('★ 另有一層把關：任何路徑打開別人的課卡都擋下（深連結／程式呼叫）',
+/* 2026-07-31 使用者改口：「教練端的預約課卡互動開啟，但是不要有圓形按鈕，
+   只能看明細不能修改」→ cal-ev-noint 退場，改標 cal-ev-view。細節見 coachviewtest.js。 */
+ok('★ 別人的課卡改標 cal-ev-view（可點開明細、不彈圓形按鈕）',
+   /const _viewOnly = SESSION\.role==='coach' && !SESSION\.is_manager && opts\.me && !isMine;/.test(src)
+   && /\$\{_viewOnly\?' cal-ev-view':''\}/.test(src));
+ok('★ 另有一層把關：修改路徑仍由 coachOwnsBk 擋下（2026-07-31 起明細本身放行）',
    /function coachOwnsBk\(b\)\{/.test(src)
-   && /if\(b && !coachOwnsBk\(b\)\)\{ showToast\('這不是你的課，只能查看自己的課程明細'\); return; \}/.test(src)
-   && /if\(!coachOwnsBk\(b\)\)\{ showToast\('這不是你的課，只能操作自己的課程'\); return; \}/.test(src));
+   && /if\(!coachOwnsBk\(b\)\)\{ openBookingDetail\(id\); return; \}/.test(src));
 ok('　　代課也算自己的課', /if\(b\.coach_id===SESSION\.id \|\| b\.substitute_coach_id===SESSION\.id\) return true;/.test(src));
 ok('　　店長／管理員／櫃檯不受限', /if\(!SESSION \|\| SESSION\.role!=='coach' \|\| SESSION\.is_manager\) return true;/.test(src));
 ok('　　沒有教練欄位的課（舊團課）不誤鎖', /return !b\.coach_id && !b\.substitute_coach_id;/.test(src));

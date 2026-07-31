@@ -70,7 +70,9 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
   chk('每列標「第 N 個名額」', html.includes('第 1 個名額')&&html.includes('第 2 個名額')&&html.includes('第 3 個名額'));
   chk('三列各有自己的簽到鈕', (html.match(/toggleGroupAttend\(/g)||[]).length===3);
   chk('第 2、3 列帶名額鍵 M#2 / M#3', html.includes("'M#2'")&&html.includes("'M#3'"));
-  chk('票券圓點只畫一次（同一張票不重複畫）', (html.match(/mck-dots2/g)||[]).length===1);
+  /* 2026-07-31 使用者指示：同一個會員約兩個名額，兩個名額都要顯示圓形卡
+     （原本只畫第一列 —— 第二個位子看不出扣哪張票、剩幾堂）。 */
+  chk('★ 每個名額都畫自己的圓形卡（三個名額＝三組）', (html.match(/mck-dots2/g)||[]).length===3);
   html=await render({ids:['M'],tickets:[T({id:'mk',member_id:'M',sessions_total:1,sessions_remaining:1,source:'makeup',start_date:'2026-07-24'})],bookings:[],names:{M:'徐翎娟'}});
   chk('顯示「含補課券」', html.includes('含補課券'));
 
@@ -85,9 +87,11 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     const tk2=T({id:'t2',member_id:'M',sessions_total:2,sessions_remaining:2,start_date:'2026-07-24'});
     const cls=BK('B-NOW','2026-07-26','booked',['M','M']);   // 同一人佔 2 個位子
     let html=await render({ids:['M','M'],tickets:[tk2],bookings:[cls],names:{M:'呂宜臻'},thisDate:'2026-07-26',thisId:'B-NOW'});
-    chk('兩個圓點都顯示 7/26', (html.match(/>7\/26</g)||[]).length===2);
-    chk('圓點總數 = 2', (html.match(/class="mtk/g)||[]).length===2);
-    chk('兩個都標本堂金框', (html.match(/mtk-cur/g)||[]).length===2);
+    /* 兩列 × 每列兩顆（這張票共 2 堂，兩個位子各扣一堂）＝ 4 顆 */
+    chk('★ 兩列都有圓形卡（2026-07-31）', (html.match(/mck-dots2/g)||[]).length===2);
+    chk('每列兩個圓點都顯示 7/26', (html.match(/>7\/26</g)||[]).length===4);
+    chk('圓點總數 = 2 顆 × 2 列', (html.match(/class="mtk/g)||[]).length===4);
+    chk('都標本堂金框', (html.match(/mtk-cur/g)||[]).length===4);
     chk('沒有殘留空心', !html.includes('mtk-free'));
     chk('兩個名額＝兩列，各標第幾個', (html.match(/呂宜臻/g)||[]).length===2
       && html.includes('第 1 個名額') && html.includes('第 2 個名額'));
