@@ -58,7 +58,7 @@ ok('★ 明細不再擋在門口（唯讀放行）',
 ok('★ 但每個修改元件仍然關著：editable 綁 ownByCoach',
    /const editable=!window\._coachReadonly && !isMemberView && ownByCoach &&/.test(src));
 ok('★ 取消預約鈕綁 ownByCoach', /\$\{canCancel&&ownByCoach\?\(isMemberView/.test(src));
-ok('★ 簽到綁「自己主帶／代課」', /\|\| \(SESSION\.role==='coach' && \(b\.coach_id===SESSION\.id \|\| b\.substitute_coach_id===SESSION\.id\)\);/.test(src));
+ok('★ 簽到綁「自己主帶／代課」', /\|\| \(SESSION\.role==='coach' && \(bkIsCoach\(b,SESSION\.id\)\)\);/.test(src));
 ok('★ 備註也只有自己的課能寫', /const can = !window\._coachReadonly && ownByCoach;/.test(src));
 ok('　　唯讀卡只改游標，不關 pointer-events（關了就點不開明細）',
    /\.cal-ev\.cal-ev-view,\.cag-std\.cag-view\{cursor:pointer;\}/.test(src));

@@ -5490,6 +5490,13 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
 .dfeed-t{font-size:13.5px;font-weight:800;color:var(--text);line-height:1.35;}
 .dfeed-b{font-size:12px;color:var(--t2);line-height:1.6;font-family:var(--num),inherit;}
 .dfeed-w{font-size:11px;color:var(--t3);font-family:var(--num),inherit;}
+/* 狀態字樣上底色（2026-07-31 使用者指示：右下角通知一眼要看得出是哪一種）——
+   已預約＝綠、已取消＝紅、只是調整時間＝黃。品牌色強度：紅 > 金 > 綠。 */
+.dfeed-chip{display:inline-block;padding:1px 8px;border-radius:6px;font-weight:800;
+  font-size:11.5px;line-height:1.7;white-space:nowrap;}
+.dfeed-chip-ok{background:var(--green,#1f6f54);color:#fff;}
+.dfeed-chip-bad{background:var(--danger,#b5372e);color:#fff;}
+.dfeed-chip-warn{background:#e6c274;color:#4a2f10;}
 /* 「確認」鈕：訊息要留到櫃檯按下才消失（2026-07-29 二修） */
 .dfeed-ok{flex:0 0 auto;align-self:center;border:1px solid var(--green);background:var(--green);
   color:#fff;font-size:12px;font-weight:700;border-radius:8px;padding:6px 12px;cursor:pointer;
@@ -6752,8 +6759,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.2213';
-const APP_VERSION_LABEL='v260731.2213';
+const APP_VERSION = '260731.2218';
+const APP_VERSION_LABEL='v260731.2218';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7818,6 +7825,27 @@ const DESK_FEED_IC={
    原本滑出 12 秒就自動收、而且一顯示就標已讀，人不在桌前就永遠錯過。
    改成：不自動收、不自動已讀；按「確認」才寫回 read=true 並移除。
    每輪輪詢重抓所有未讀，換頁或重整後仍在；別台確認掉的這台也會跟著消失。 */
+/* 通知文字裡的狀態字樣→色塊（2026-07-31 使用者指示）。
+   先跳脫 HTML 再包標籤，順序＝取消(紅) → 預約/簽到(綠) → 變更時間(黃)，
+   先比對長的詞（「取消預約」要整組上色，不能被「預約」先吃掉）。 */
+const DFEED_CHIPS=[
+  [/已取消|取消預約|取消了|刪除了|已刪除/g,'bad'],
+  [/已預約|已報名|新增預約|預約成功/g,'ok'],
+  [/已簽到|已完成/g,'ok'],
+  [/調整時間|變更時間|時間變更|已改期|改期/g,'warn'],
+  [/變更了|已變更/g,'warn'],
+];
+function dfeedText(str){
+  let out=String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const marks=[];
+  DFEED_CHIPS.forEach(([re,cls])=>{
+    out=out.replace(re,m=>{ marks.push([m,cls]); return '\u0000'+(marks.length-1)+'\u0000'; });
+  });
+  return out.replace(/\u0000(\d+)\u0000/g,(_,i)=>{
+    const [m,cls]=marks[Number(i)];
+    return `<b class="dfeed-chip dfeed-chip-${cls}">${m}</b>`;
+  });
+}
 function deskFeedPush(n){
   const host=deskFeedHost();
   if(host.querySelector(`[data-nid="${n.id}"]`)) return;
@@ -7830,8 +7858,8 @@ function deskFeedPush(n){
      所以 19:11 的操作顯示成 11:11。改成轉台灣時間，並補上「幾分鐘前」與欄位說明。 */
   const when=deskFeedWhen(n.created_at);
   el.innerHTML=`<span class="dfeed-ic">${DESK_FEED_IC[n.type]||DESK_FEED_IC.self_book}</span>
-    <span class="dfeed-body"><span class="dfeed-t">${String(n.title||'').replace(/</g,'&lt;')}</span>
-      <span class="dfeed-b">${String(n.body||'').replace(/</g,'&lt;')}</span>
+    <span class="dfeed-body"><span class="dfeed-t">${dfeedText(n.title)}</span>
+      <span class="dfeed-b">${dfeedText(n.body)}</span>
       ${when?`<span class="dfeed-w">${when}</span>`:''}</span>
     <button class="dfeed-ok" onclick="deskFeedAck('${n.id}')">✓ 確認</button>`;
   host.appendChild(el);
@@ -13042,7 +13070,7 @@ PAGES.dashboard=async function(){
 
   // ── 各教練課堂數 ──
   const byCoach={};
-  rangeBk.forEach(b=>{const k=b.substitute_coach_id||b.coach_id||'_none';byCoach[k]=(byCoach[k]||0)+1;}); // 有代課算代課教練
+  rangeBk.forEach(b=>{const k=bkCoachId(b)||'_none';byCoach[k]=(byCoach[k]||0)+1;}); // 有代課算代課教練
   const coachRows=Object.entries(byCoach).sort((a,b)=>b[1]-a[1])
     .map(([cid,n])=>({name:cid==='_none'?'（無教練）':(coachMap[cid]||'—'),n}));
 
@@ -13102,7 +13130,7 @@ PAGES.dashboard=async function(){
     if(who) renewMap[who]=(renewMap[who]||0)+1;
   });
   const perfRows=coaches.filter(c=>c.role!=='front_desk'&&isCoachable(c)).map(c=>{
-    const myBk=rangeBk.filter(b=>(b.substitute_coach_id||b.coach_id)===c.id);
+    const myBk=rangeBk.filter(b=>(bkCoachId(b))===c.id);
     const myDone=myBk.filter(b=>b.status==='completed'||b.status==='checked_in');
     const ptCount=myBk.filter(isPtPayClass).length;      // 體驗不算（2026-07-31）
     const ptDone=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
@@ -13622,8 +13650,9 @@ async function renderCalendar(opts){
     if(b.status==='cancelled') return false; // 已取消的課不顯示
     // allMode（全部預約總覽）：不依登入教練過濾，顯示全館佔用狀況
     // maskOthers（教練端「我的預約」）：別人的課保留作遮蔽佔位（顯示「已預約」、不可點），不濾掉
-    if(opts.me && !opts.allMode && !opts.maskOthers && (b.substitute_coach_id||b.coach_id)!==opts.me) return false;
-    if(opts.coachFilter && filterCoach!=='all' && b.coach_id!==filterCoach) return false;
+    if(opts.me && !opts.allMode && !opts.maskOthers && (bkCoachId(b))!==opts.me) return false;
+    // 有代課要算代課教練（2026-07-31 使用者回報：小曾代的那堂篩不出來）
+    if(opts.coachFilter && filterCoach!=='all' && bkCoachId(b)!==filterCoach) return false;
     // 課程 Filter Chip（2026-07-28 開關制）：被關掉的課種隱藏
     if(window._calCourseOff && window._calCourseOff[evColorClass(b,typeMap,b.ticket_id?ticketMap[b.ticket_id]:null)]) return false;
     return true;
@@ -13711,7 +13740,7 @@ async function renderCalendar(opts){
          memName 維持含括號的完整字串，Hover 提示與舊版卡片照舊。 */
       let _nameBase=null, _nameTag='';
       const gIds=mids(b);
-      const acting=b.substitute_coach_id||b.coach_id;
+      const acting=bkCoachId(b);
       const isMine = opts.me && acting===opts.me;
       /* 2026-07-30 使用者指示：教練也開放看其他預約課卡的會員名字，只是關閉互動功能。
          原本別的教練的課會把會員名換成課程種類（隱私考量），現在一律顯示真名；
@@ -13980,7 +14009,7 @@ async function openGroupScheduleModal(){
     const max=Math.max(1,Number(b.max_heads)||5);
     (byDay[b.date]=byDay[b.date]||[]).push({
       time:b.start_time, name:(typeof bookingTypeName==='function'?bookingTypeName(b,typeMap):'團體課'),
-      coach:cMap[b.substitute_coach_id||b.coach_id]||'', heads, max, tag:gsTagOf(heads,max)});
+      coach:cMap[bkCoachId(b)]||'', heads, max, tag:gsTagOf(heads,max)});
   });
   window._gsData={byDay, from, to};
   const _cv=gsRenderCanvas();
@@ -15113,7 +15142,7 @@ async function renderDayTimeline(){
   const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
-  const isMine=(b)=> role==='admin' ? true : (b.coach_id===myId||b.substitute_coach_id===myId);
+  const isMine=(b)=> role==='admin' ? true : (bkIsCoach(b,myId));
   const dayBk=mergeSiblingUnits(bookings.filter(b=>b.date===ds&&b.status!=='cancelled'&&isMine(b)))
     .sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   const d=parseYmd(ds);
@@ -15612,7 +15641,7 @@ async function renderCoachAgenda(){
   }catch(_){ window._installLastBk=window._installLastBk||{}; window._renewLastBk=window._renewLastBk||{}; }
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const coachObj=Object.fromEntries(coaches.map(c=>[c.id,c]));
-  const isMineBk=(b)=> (b.coach_id===myId||b.substitute_coach_id===myId);
+  const isMineBk=(b)=> (bkIsCoach(b,myId));
   const isGroupBk=(b)=> bkIsGroup(b) || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
   const allBk=mergeSiblingUnits(bookings.filter(b=>b.status!=='cancelled'));   // 同行第二台併回主卡（2026-07-31）
   const mine=allBk.filter(isMineBk);
@@ -15686,7 +15715,7 @@ async function renderCoachAgenda(){
        （時間／名稱／第三行教練縮寫 tag；簽到＝右下「簽」章，底色維持課程淡彩）。 */
     const _cc=bkCC(b);
     const courseCls = _cc==='massage' ? 'ev-massage' : ('course-'+_cc);
-    const _cid=b.substitute_coach_id||b.coach_id;
+    const _cid=bkCoachId(b);
     const _co=_cid?coachObj[_cid]:null;
     const _ccol=coachTagColor(_cid);
     const _venue=selfVenueLabel(b);
@@ -16000,7 +16029,7 @@ async function renderWeekTimeline(){
   const cardLabel=(b)=>{
     if(bkIsSelf(b)) return '自主';
     if(bkIsGroup(b)) return '團課';
-    const cid=b.substitute_coach_id||b.coach_id;
+    const cid=bkCoachId(b);
     return coachAbbr(coachObj[cid]);
   };
   // 我的卡顯示會員名（自己的課要看是哪位會員）
@@ -16010,7 +16039,7 @@ async function renderWeekTimeline(){
     if(bkIsGroup(b)) return b.member_ids&&b.member_ids.length?`團${b.member_ids.length}`:'團課';
     return b.trial_name||'—';
   };
-  const isMineBk=(b)=> (b.coach_id===myId||b.substitute_coach_id===myId);
+  const isMineBk=(b)=> (bkIsCoach(b,myId));
   const isGroupBk=(b)=> bkIsGroup(b) || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
   // 團課卡內容：時間 / 教練 / 人數（依卡高分級顯示）
   const groupHeads=(b)=>{
@@ -16019,7 +16048,7 @@ async function renderWeekTimeline(){
     return 0;
   };
   const wtlGroupInner=(b,height)=>{
-    const cid=b.substitute_coach_id||b.coach_id;
+    const cid=bkCoachId(b);
     const coach=coachAbbr(coachObj[cid])||'團課';
     const heads=groupHeads(b);
     const headStr=heads>0?`${heads}人`:'—';
@@ -17620,7 +17649,7 @@ async function expandBkCard(el, id){
      原本 staff 不含 coach，所以代課/簽到/新增本來就看不到；但「取消」只看 canCancel，
      教練點別人的課卡也能取消 —— 開放桌機行事曆後這個破口一定要補。
      own＝主責或代課是自己（非教練角色一律 true）。 */
-  const own = SESSION.role!=='coach' || b.coach_id===SESSION.id || b.substitute_coach_id===SESSION.id;
+  const own = SESSION.role!=='coach' || bkIsCoach(b,SESSION.id);
   // 教練簽到：限自己主帶／代課的課（口徑與 openBookingDetail 的 staffCanCheckin 一致）
   const coachCk = SESSION.role==='coach' && own;
   const closed = b.status==='cancelled' || b.status==='completed';
@@ -17741,7 +17770,7 @@ async function bkCardPop(el, b, btns){
   const nm=(typeof bookingTypeName==='function')?bookingTypeName(b,window._ttMapCache||window._memTypeMap):(b.category||'課程');
   const d=parseYmd(b.date), wd=d?'日一二三四五六'[d.getDay()]:'';
   const endT=minToTime(timeToMin(b.start_time)+(Number(b.duration)||60));
-  const coach=b.substitute_coach_id||b.coach_id;
+  const coach=bkCoachId(b);
   const _cn=cm[coach]; const coachNm=coach?((_cn&&typeof _cn==='object')?(_cn.name||''):(_cn||'')):'';
   const done=b.status==='checked_in'||b.status==='completed';
   const host=document.createElement('div');
@@ -18288,7 +18317,7 @@ async function openCourseCard(id, el){
 function coachOwnsBk(b){
   if(!b) return false;
   if(!SESSION || SESSION.role!=='coach' || SESSION.is_manager) return true;
-  if(b.coach_id===SESSION.id || b.substitute_coach_id===SESSION.id) return true;
+  if(bkIsCoach(b,SESSION.id)) return true;
   // 團課沒有主責教練欄位就看不出歸屬 → 有教練欄才擋，避免誤鎖
   return !b.coach_id && !b.substitute_coach_id;
 }
@@ -18338,13 +18367,13 @@ async function openBookingDetail(id){
   const d=parseYmd(b.date);
   const canCancel=b.status==='booked'||b.status==='checked_in';
   // 教練只能改自己負責（主責或代課）的課；管理員 / 櫃台全權
-  const ownByCoach = SESSION.role!=='coach' || b.coach_id===SESSION.id || b.substitute_coach_id===SESSION.id;
+  const ownByCoach = SESSION.role!=='coach' || bkIsCoach(b,SESSION.id);
   const isMemberView = SESSION.role==='member';   // 會員視角：唯讀明細＋自簽，不出現員工編輯欄位
   const editable=!window._coachReadonly && !isMemberView && ownByCoach && b.status!=='cancelled'&&b.status!=='completed'&&b.date>=ymd(TODAY);
   // 簽到僅後台（管理員/櫃台）可代為操作；教練端不能幫簽（會員自行簽到）
   // 2026-07-27 使用者指示：簽到開放教練操作（限自己主帶/代課的課）；櫃台/管理員不變
   const staffCanCheckin = SESSION.role==='admin' || SESSION.role==='front_desk'
-    || (SESSION.role==='coach' && (b.coach_id===SESSION.id || b.substitute_coach_id===SESSION.id));
+    || (SESSION.role==='coach' && (bkIsCoach(b,SESSION.id)));
   /* 團課補簽（2026-07-24 修正）：過期團課原本完全無法補簽。成因是兩條路都斷了——
      ① 名單裡的逐人簽到鈕綁在 editable 上，而 editable 對 b.date<today 一律 false；
      ② 標題列那條「過期→補簽」路徑以 !isGroupD 明確排除團課（團課要逐人簽，非整筆簽）。
@@ -19797,6 +19826,17 @@ function bkIsSelf(b){
 function bkIsMassage(b){
   if(b && b.category==='運動按摩') return true;   // 唯一該寫這句的地方
   return bkPocketNow(b).key==='massage';
+}
+/* 「這堂課實際由誰上」（2026-07-31 使用者回報：7/13 13:00 小曾代課，行事曆上方
+   篩選小曾卻看不到這堂 —— 篩選只比對 coach_id，沒看代課）。
+   有代課就以代課教練為準（與教練 chips 的堂數、薪資、業績口徑一致）。
+   ⚠ 兩種問法不一樣，用錯就會出這種漏網的課：
+     bkCoachId(b)      ＝「這堂實際由誰上」→ 篩選、統計、計薪用
+     bkIsCoach(b,cid)  ＝「這堂跟這位教練有沒有關係」→ 權限（主責交出去了仍看得到）用 */
+function bkCoachId(b){ return (b && (b.substitute_coach_id || b.coach_id)) || null; }
+function bkIsCoach(b, cid){
+  if(!b || !cid) return false;
+  return String(b.coach_id||'')===String(cid) || String(b.substitute_coach_id||'')===String(cid);
 }
 // 這位會員在這張課卡佔了幾個名額（團課可能一人多個名額）
 function bkSeatCount(b, mid){ return mids(b).filter(x=>String(x)===String(mid)).length || (bkHasMember(b,mid)?1:0); }
@@ -22755,7 +22795,7 @@ async function openPerfDetail(empId, month){
       dbGetAll('attendance').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[])]);
     if(!emp){ showToast('找不到員工'); return; }
     const ym=month||ymd(TODAY).slice(0,7);
-    const mine=bookings.filter(b=>(b.substitute_coach_id||b.coach_id)===empId
+    const mine=bookings.filter(b=>(bkCoachId(b))===empId
       && String(b.date||'').slice(0,7)===ym && b.status!=='cancelled');
     const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in');
     const ptDone=done.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
@@ -23289,7 +23329,7 @@ async function renderStaffList(){
     const _mBk=(_bk||[]).filter(b=>String(b.date||'').slice(0,7)===_ym && b.status!=='cancelled');
     const _renew=renewMapOf(_ym,_tk,_pu,_bk,_ty);
     coaches.forEach(c=>{
-      const mine=_mBk.filter(b=>(b.substitute_coach_id||b.coach_id)===c.id);
+      const mine=_mBk.filter(b=>(bkCoachId(b))===c.id);
       const done=mine.filter(b=>b.status==='checked_in'||b.status==='completed');
       const isPt=isPtPayClass;   // 體驗不算（2026-07-31 使用者定案）
       let hrs=0;
@@ -25148,7 +25188,7 @@ async function ppOpenEmpClasses(id){
   const month=ymd(TODAY).slice(0,7);
   const [bookings,members]=await Promise.all([dbGetAll('bookings'),dbGetAll('members')]);
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
-  const mine=bookings.filter(b=>(b.coach_id===id||b.substitute_coach_id===id)
+  const mine=bookings.filter(b=>(bkIsCoach(b,id))
     &&(b.date||'').slice(0,7)===month&&b.status!=='cancelled')
     .sort((a,b)=>(b.date+b.start_time).localeCompare(a.date+a.start_time));
   const stName=s=>({booked:'已預約',checked_in:'已簽到',completed:'已完成',no_show:'未到'})[s]||s;
@@ -25485,7 +25525,7 @@ async function ppLoadCtx(){
 
     // ── 本月課堂（已完成／排定）──
     const myBk = bookings.filter(b=>
-      (b.coach_id===PP.id || b.substitute_coach_id===PP.id)
+      (bkIsCoach(b,PP.id))
       && (b.date||'').slice(0,7)===month && b.status!=='cancelled');
     const myDone = myBk.filter(b=>b.status==='completed'||b.status==='checked_in');
     c.mClassDone  = myDone.length;
@@ -29016,7 +29056,7 @@ function unifiedCalendar(opts){
   // 角色對應的「我的課」判斷
   const isMine=(b)=> role==='admin' ? true
     : role==='member' ? bkHasMember(b,myId)
-    : (b.coach_id===myId || b.substitute_coach_id===myId); // coach
+    : (bkIsCoach(b,myId)); // coach
   let cells='';
   for(let i=0;i<firstDow;i++) cells+='<div class="ucal-cell ucal-empty"></div>';
   for(let d=1;d<=daysInMonth;d++){
@@ -29097,7 +29137,7 @@ async function ucalClickDay(ds){
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const isMine=(b)=> role==='admin' ? true
     : role==='member' ? bkHasMember(b,myId)
-    : (b.coach_id===myId||b.substitute_coach_id===myId);
+    : (bkIsCoach(b,myId));
   const list=bookings.filter(b=>b.date===ds&&b.status!=='cancelled'&&isMine(b)).sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   const [y,m,d]=ds.split('-');
   const doneN=list.filter(b=>b.status==='completed'||b.status==='checked_in').length;
@@ -29908,7 +29948,7 @@ PAGES.coach_calendar=async function(){
   const typeMap={};
   const visible=bookings.filter(b=>{
     if(b.status==='cancelled') return false;
-    return b.coach_id===myId || b.substitute_coach_id===myId; // 月曆/週量只看我的課
+    return bkIsCoach(b,myId); // 月曆/週量只看我的課
   });
   // 全店當日預約（未取消）：供「當日排課表」依場地容量判斷座位（含別人的課）
   const allView2=bookings.filter(b=>b.status!=='cancelled');
@@ -30133,7 +30173,7 @@ function renderCoachWeekInline(box){
   const wlabel=['一','二','三','四','五','六','日'];
   const fmtMD=d=>`${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
   const todayStr=ymd(TODAY);
-  const isMine=(b)=> b.coach_id===myId||b.substitute_coach_id===myId;
+  const isMine=(b)=> bkIsCoach(b,myId);
 
   // 時間軸參數（壓縮版，一頁顯示一週）
   const START=8*60, END=22*60, SLOT=30, ROWH=22; // 08:00–22:00
@@ -30297,7 +30337,7 @@ function renderCoach3Day(){
   const fmtMD=d=>`${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
   const todayStr=ymd(TODAY);
   const now=new Date();
-  const isMine=(b)=> b.coach_id===myId||b.substitute_coach_id===myId;
+  const isMine=(b)=> bkIsCoach(b,myId);
 
   const START=8*60, END=23*60, SLOT=30, ROWH=40; // 08:00–23:00，格高加大好點選
   const axisH=((END-START)/SLOT)*ROWH;
@@ -30455,7 +30495,7 @@ function renderCoachDayList(){
   const wd=['日','一','二','三','四','五','六'][d.getDay()];
   const source = allBk || window._coachCalData.visible || [];
   const list=source.filter(b=>b.date===ds);
-  const myList=list.filter(b=>b.coach_id===myId||b.substitute_coach_id===myId);
+  const myList=list.filter(b=>bkIsCoach(b,myId));
   const ptN=myList.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
   const grpN=myList.filter(b=>bkIsGroup(b)).length;
   // 教練課場地容量（多功能訓練區：教練課+體驗）→ 取代寫死 3
@@ -30464,7 +30504,7 @@ function renderCoachDayList(){
   { const v=getVenues().filter(v=>v.categories.includes('私人教練'));
     if(v.length){ PT_SLOTS=v.reduce((s,x)=>s+(x.capacity||0),0); v.forEach(x=>x.categories.forEach(c=>PT_VENUE_CATS.add(c))); }
     else { ['私人教練','體驗'].forEach(c=>PT_VENUE_CATS.add(c)); } }
-  const isMine=(b)=> b.coach_id===myId||b.substitute_coach_id===myId;
+  const isMine=(b)=> bkIsCoach(b,myId);
 
   // 依開始時間分組
   const slots={};

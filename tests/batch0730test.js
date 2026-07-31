@@ -15,8 +15,10 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 console.log('① 教練桌機版行事曆');
 ok('★ 教練導覽列加「預約行事曆」（導覽仍在上方，不走左側 Sidebar）',
    /\{key:'calendar',label:'預約行事曆'\},\s*\n\s*\{key:'coach_salary',label:'薪資紀錄'\},/.test(src));
+/* 2026-07-31：「這堂跟這位教練有沒有關係」抽成共用的 bkIsCoach（權限用；
+   「實際由誰上」是另一支 bkCoachId，篩選與計薪用） */
 ok('★ 只能動自己的課卡：own＝主責或代課是自己',
-   /const own = SESSION\.role!=='coach' \|\| b\.coach_id===SESSION\.id \|\| b\.substitute_coach_id===SESSION\.id;/.test(src));
+   /const own = SESSION\.role!=='coach' \|\| bkIsCoach\(b,SESSION\.id\);/.test(src));
 ok('★ 「取消」補上 own 判定（原本只看 canCancel，教練點別人的課也能取消）',
    /\/\/ 上右：取消（教練只能取消自己的課）\s*\n\s*if\(canCancel && own\)\{/.test(src));
 ok('★ 簽到開放給教練自己的課（口徑同 openBookingDetail 的 staffCanCheckin）',
@@ -41,7 +43,7 @@ ok('★ 別人的課卡改標 cal-ev-view（可點開明細、不彈圓形按鈕
 ok('★ 另有一層把關：修改路徑仍由 coachOwnsBk 擋下（2026-07-31 起明細本身放行）',
    /function coachOwnsBk\(b\)\{/.test(src)
    && /if\(!coachOwnsBk\(b\)\)\{ openBookingDetail\(id\); return; \}/.test(src));
-ok('　　代課也算自己的課', /if\(b\.coach_id===SESSION\.id \|\| b\.substitute_coach_id===SESSION\.id\) return true;/.test(src));
+ok('　　代課也算自己的課', /if\(bkIsCoach\(b,SESSION\.id\)\) return true;/.test(src));
 ok('　　店長／管理員／櫃檯不受限', /if\(!SESSION \|\| SESSION\.role!=='coach' \|\| SESSION\.is_manager\) return true;/.test(src));
 ok('　　沒有教練欄位的課（舊團課）不誤鎖', /return !b\.coach_id && !b\.substitute_coach_id;/.test(src));
 

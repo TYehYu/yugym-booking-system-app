@@ -84,5 +84,54 @@ ok('　　「全部確認」的確認語也跟著改', /確認這 \$\{ids\.lengt
 ok('　　會員自助的三支 RPC 不走 dbPut，所以不會重複跳',
    /會員自助預約／改期／取消走的是 RPC（fn_member_self_\*），那邊已經有 desk_alert，/.test(src));
 
+/* 2026-07-31 使用者指示：右下角跳的提示，狀態字樣要給底色才好讀 ——
+   已預約＝綠、已取消＝紅、只是調整時間＝黃。 */
+console.log('\n狀態字樣上底色');
+{
+  const i=src.indexOf('const DFEED_CHIPS=');
+  const j=src.indexOf('function deskFeedPush(n){', i);
+  const dfeedText=new Function(src.slice(i,j)+'\nreturn dfeedText;')();
+  const cls=t=>{ const m=/dfeed-chip-(\w+)">([^<]+)</.exec(dfeedText(t)); return m?[m[2],m[1]]:null; };
+  eq('★ 已預約 → 綠', cls('08/13 13:00　小班肌力　·　已預約'), ['已預約','ok']);
+  eq('★ 已取消 → 紅', cls('08/13 13:00　小班肌力　·　已取消'), ['已取消','bad']);
+  eq('★ 只是調整時間 → 黃', cls('從手機變更了預約'), ['變更了','warn']);
+  eq('　　刪除也算取消那一類（紅）', cls('從手機刪除了預約'), ['刪除了','bad']);
+  eq('　　改期＝調整時間（黃）', cls('已改期至 8/20 14:00'), ['已改期','warn']);
+  eq('　　已簽到／已完成也是綠', cls('08/13 已簽到'), ['已簽到','ok']);
+  eq('★ 「取消預約」整組上色，不會被「預約」先吃掉', cls('會員取消預約'), ['取消預約','bad']);
+  ok('★ 先跳脫 HTML 再包標籤（通知內容來自使用者輸入）',
+     dfeedText('<b>x</b> 已取消').indexOf('&lt;b&gt;')===0);
+  ok('　　沒有狀態字樣就不加東西', dfeedText('會員資料變動')==='會員資料變動');
+  ok('　　null 不會爆', dfeedText(null)==='');
+  ok('★ 三種底色都定義了',
+     /\.dfeed-chip-ok\{background:var\(--green,#1f6f54\);color:#fff;\}/.test(src)
+     && /\.dfeed-chip-bad\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src)
+     && /\.dfeed-chip-warn\{background:#e6c274;color:#4a2f10;\}/.test(src));
+  ok('　　標題與內容都套用', /<span class="dfeed-t">\$\{dfeedText\(n\.title\)\}<\/span>/.test(src)
+     && /<span class="dfeed-b">\$\{dfeedText\(n\.body\)\}<\/span>/.test(src));
+}
+
+/* 2026-07-31 使用者回報：7/13 13:00 小曾代課，行事曆上方篩選小曾卻看不到這堂 */
+console.log('\n行事曆教練篩選要算代課');
+ok('★ 篩選比對「實際上課的教練」（有代課就是代課教練）',
+   /if\(opts\.coachFilter && filterCoach!=='all' && bkCoachId\(b\)!==filterCoach\) return false;/.test(src));
+ok('★ 「實際由誰上」與「跟誰有關係」分成兩支，不會再用錯',
+   /function bkCoachId\(b\)\{ return \(b && \(b\.substitute_coach_id \|\| b\.coach_id\)\) \|\| null; \}/.test(src)
+   && /function bkIsCoach\(b, cid\)\{/.test(src));
+{
+  const g2=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
+  const api=new Function(g2('function bkCoachId(b){','\n')+'\n'+g2('function bkIsCoach(b, cid){','\n}\n')
+    +'\nreturn {bkCoachId,bkIsCoach};')();
+  const B={coach_id:'C-MEI',substitute_coach_id:'C-TSENG'};
+  eq('★ 有代課 → 實際上課的是代課教練', api.bkCoachId(B), 'C-TSENG');
+  eq('　　沒代課 → 主責', api.bkCoachId({coach_id:'C-MEI'}), 'C-MEI');
+  eq('　　都沒有 → null', api.bkCoachId({}), null);
+  ok('★ 權限問法：主責交出去了仍算他的課', api.bkIsCoach(B,'C-MEI')===true && api.bkIsCoach(B,'C-TSENG')===true);
+  ok('　　不相干的教練 → false', api.bkIsCoach(B,'C-X')===false);
+  ok('　　null 不會爆', api.bkIsCoach(null,'C-MEI')===false && api.bkCoachId(null)===null);
+}
+ok('　　為什麼分兩支，寫在程式裡',
+   /兩種問法不一樣，用錯就會出這種漏網的課/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
