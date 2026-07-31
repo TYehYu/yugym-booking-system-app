@@ -39,8 +39,9 @@ console.log('票券金額與備註');
 
 /* ── ② 手機版首頁課卡 ───────────────────────────── */
 console.log('\n管理員手機版首頁課卡');
-ok('★ 課卡可點，開簡易資訊（原本 CSS 是手指游標卻沒掛事件）',
-   /return `<div class="mc-ev" onclick="openCourseCard\('\$\{b\.id\}'\)">\s*\n\s*<div class="mc-ev-time"><span class="mc-ev-t1">\$\{b\.start_time\}<\/span><span class="mc-ev-t2">\$\{end\}<\/span><\/div>\s*\n\s*<div class="mc-ev-bar \$\{barCls\}">/.test(src));
+/* 2026-07-31 使用者指示：手機版互動統一成桌機那套「小卡片＋圓形按鈕」→ 多傳 this 當錨點 */
+ok('★ 課卡可點，開小卡片＋圓形按鈕（原本 CSS 是手指游標卻沒掛事件）',
+   /return `<div class="mc-ev" onclick="openCourseCard\('\$\{b\.id\}',this\)">\s*\n\s*<div class="mc-ev-time"><span class="mc-ev-t1">\$\{b\.start_time\}<\/span><span class="mc-ev-t2">\$\{end\}<\/span><\/div>\s*\n\s*<div class="mc-ev-bar \$\{barCls\}">/.test(src));
 ok('★ 體驗課顯示客戶姓名：trial_name 沒填就退到會員名',
    (src.match(/b\.category==='體驗'\?\(\(b\.trial_name\|\|memMap\[b\.member_id\]\|\|'體驗'\)\)/g)||[]).length===2);
 ok('　　一般課反過來也補：會員名沒有就用 trial_name',

@@ -123,7 +123,7 @@ ok('　　沒填次數會擋下來', /請填寫預約次數/.test(src));
 console.log('\n教練手機端行事曆：別人的課卡可點開明細（唯讀）');
 ok('★ 不可點的卡改標 cag-view（不再是 cag-noint）', /\$\{canClick\?'':' cag-view'\}/.test(src));
 ok('★ 點下去直接開明細，不走 wtlCardClick（那條會彈圓形按鈕）',
-   /\$\{canClick\?` onclick="wtlCardClick\('\$\{b\.id\}'\)"`:` onclick="openBookingDetail\('\$\{b\.id\}'\)"`\}/.test(src));
+   /\$\{canClick\?` onclick="wtlCardClick\('\$\{b\.id\}',this\)"`:` onclick="openBookingDetail\('\$\{b\.id\}'\)"`\}/.test(src));
 ok('　　cag-view 只是游標，不關 pointer-events', /\.cal-ev\.cal-ev-view,\.cag-std\.cag-view\{cursor:pointer;\}/.test(src));
 ok('　　不再掛 stopPropagation 的空 onclick（那仍會攔截手指）',
    !/onclick="event\.stopPropagation\(\)"`\}>/.test(src));

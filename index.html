@@ -6741,8 +6741,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1713';
-const APP_VERSION_LABEL='v260731.1713';
+const APP_VERSION = '260731.1719';
+const APP_VERSION_LABEL='v260731.1719';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10963,10 +10963,12 @@ PAGES.g_dashboard=async function(){
             :(doneB2?`background:${col};border:2px solid ${col};color:#fff;`
                     :`background:#fff;border:2px solid ${col};color:${col};`));
           const _title=`${b.start_time}｜${nm2}${_lb2?`（${_lb2}）`:''}${allLeave2?'・全員請假':''}${cx2?'・已取消':''}`;
-          return `<span class="task-dot-wrap task-dot-static" title="${_title}">
+          /* 2026-07-31 使用者指示：手機版首頁的圓點原本是純顯示（task-dot-static），
+             改成可點 → 開「小卡片＋圓形按鈕」，與桌機一致。 */
+          return `<button type="button" class="task-dot-wrap" title="${_title}" onclick="openCourseCard('${b.id}',this)">
             <span class="task-dot" style="${circle}"><span class="td-time">${b.start_time}</span></span>
             <span class="task-dot-name">${cx2?'取消':(allLeave2?'請假':nm2)}</span>
-          </span>`;
+          </button>`;
         }).join('');
         return `<div class="mtc-row2">
           <span class="mtc-r2-name"><span class="mtc-r2-nm">${coachDisp(c)}</span><span class="mtc-r2-cnt">（${total}）</span></span>
@@ -14831,7 +14833,7 @@ async function renderDayTimeline(){
     const mname=b.member_id?(memMap[b.member_id]||'—'):(b.category==='自主訓練'?'自主':'—');
     const catLabel={'私人教練':'教練課','小班肌力':'團體課','自主訓練':'自主訓練','體驗':'體驗'}[b.category]||b.category;
     const wPct=100/maxCol; const leftPct=col*wPct;
-    cards+=`<div class="dtl-card dtl-${cc}${done?' dtl-done':''}" style="top:${top}px;height:${height}px;left:calc(${leftPct}% + 4px);width:calc(${wPct}% - 8px);" onclick="event.stopPropagation();openCourseCard('${b.id}')">
+    cards+=`<div class="dtl-card dtl-${cc}${done?' dtl-done':''}" style="top:${top}px;height:${height}px;left:calc(${leftPct}% + 4px);width:calc(${wPct}% - 8px);" onclick="event.stopPropagation();openCourseCard('${b.id}',this)">
       <div class="dtl-c-time">${b.start_time}</div>
       <div class="dtl-c-name">${mname}</div>
       ${height>=58?`<div class="dtl-c-meta">${catLabel}${b.coach_id&&role==='admin'?' · '+(coachMap[b.coach_id]||''):''}</div>`:''}
@@ -14948,9 +14950,12 @@ async function wtlSlotClick(ds,mm){
   dtlAddAt(ds, minToTime(mm));
 }
 // 點課卡：移動模式中再點 = 取消；否則開明細
-function wtlCardClick(id){
+/* 2026-07-31 使用者指示：手機版的互動全部改成桌機那套「小卡片＋圓形按鈕」
+   （bkCardPop／evoBtn，手機會自動置中）。呼叫端把 this 傳進來當定位錨點；
+   沒有錨點（程式呼叫、深連結）才退回原本的明細視窗。 */
+function wtlCardClick(id, el){
   if(window._wtlMoving){ wtlCancelMove(); return; }
-  openCourseCard(id);
+  openCourseCard(id, el);
 }
 // 長按課卡 → 跟手拖曳
 let _wtlPressTimer=null;
@@ -15383,7 +15388,7 @@ async function renderCoachAgenda(){
     const _unpaidM=_vis && !!b.pending_contract;
     const _newM=_vis && String(b.created_at||'').slice(0,10)===ymd(TODAY);
     const _mkAlert = _unpaidM ? ' cal-ev-renew' : (_newM ? ' cal-ev-newtoday' : '');
-    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${canClick?'':' cag-view'}${_mkAlert}" ${layer==='mine'?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}')"`:` onclick="openBookingDetail('${b.id}')"`}>
+    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${canClick?'':' cag-view'}${_mkAlert}" ${layer==='mine'?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:` onclick="openBookingDetail('${b.id}')"`}>
       ${_mk}
       ${(()=>{const k=bkStampKind(b);
         return k==='leave'?'<span class="evc-check evc-leave" title="全員請假">假</span>'
@@ -15796,7 +15801,7 @@ async function renderWeekTimeline(){
         const top=wtlYOf(s); const height=Math.max((e-s)/WTL_SLOT*WTL_ROWH-1, 14);
         const cc=bkCC(b);
         const wPct=100/cols; const leftPct=col*wPct;
-        layerOther+=`<div class="wtl-card wtl-other${otherDim?' wtl-other-dim':''}${canClickOthers?'':' wtl-noclick'} wtl-${cc}" style="top:${top}px;height:${height}px;left:calc(${leftPct}% + 1px);width:calc(${wPct}% - 2px);"${canClickOthers?` onclick="event.stopPropagation();wtlCardClick('${b.id}')"`:''}>
+        layerOther+=`<div class="wtl-card wtl-other${otherDim?' wtl-other-dim':''}${canClickOthers?'':' wtl-noclick'} wtl-${cc}" style="top:${top}px;height:${height}px;left:calc(${leftPct}% + 1px);width:calc(${wPct}% - 2px);"${canClickOthers?` onclick="event.stopPropagation();wtlCardClick('${b.id}',this)"`:''}>
           ${isGroupBk(b)?wtlGroupInner(b,height):`${height>=44?`<div class="wtl-c-time">${b.start_time}</div>`:''}<div class="wtl-c-name">${cardLabel(b)}</div>`}
         </div>`;
       });
@@ -15810,7 +15815,7 @@ async function renderWeekTimeline(){
         const cc=bkCC(b);
         const done=(b.status==='completed'||b.status==='checked_in');
         const wPct=100/cols; const leftPct=col*wPct;
-        layerMine+=`<div class="wtl-card wtl-mine wtl-${cc}${done?' wtl-done':''}" data-bid="${b.id}" style="top:${top}px;height:${height}px;left:calc(${leftPct}% + 1px);width:calc(${wPct}% - 2px);" onclick="event.stopPropagation();wtlCardClick('${b.id}')">
+        layerMine+=`<div class="wtl-card wtl-mine wtl-${cc}${done?' wtl-done':''}" data-bid="${b.id}" style="top:${top}px;height:${height}px;left:calc(${leftPct}% + 1px);width:calc(${wPct}% - 2px);" onclick="event.stopPropagation();wtlCardClick('${b.id}',this)">
           ${/* 教練縮寫 sub 已移除（2026-07-20 使用者指示：手機卡不放教練 tag） */''}
           ${isGroupBk(b)?wtlGroupInner(b,height):`${height>=44?`<div class="wtl-c-time">${b.start_time}</div>`:''}<div class="wtl-c-name">${myCardLabel(b)}</div>`}
         </div>`;
@@ -17940,12 +17945,17 @@ async function bkInlineEditSave(id){
   document.removeEventListener('click', _bkOutsideClose, true);
 }
 // 課卡點擊分流：教練 → 訓練課表；管理員/櫃台 → 預約明細
-async function openCourseCard(id){
+async function openCourseCard(id, el){
   const b=await dbGet('bookings',id);
   if(!b){showToast('找不到課程');return;}
   // 別人的課 → 維持精簡時段資訊
   if(bkIsMasked(b)){ openBookingDetail(id); return; }
-  // 訓練紀錄功能暫不下放：點課卡一律開課程明細（可改期 / 取消 / 簽到）
+  /* 有錨點就開「小卡片＋圓形按鈕」（2026-07-31 使用者指示：手機版統一成桌機那套）。
+     expandBkCard 自己會擋「不是自己的課」（coachOwnsBk）並退回唯讀明細。 */
+  if(el && typeof expandBkCard==='function'){
+    if(el.classList && el.classList.contains('cal-ev-active')){ collapseBkCard(); return; }
+    expandBkCard(el, id); return;
+  }
   openBookingDetail(id);
 }
 /* 教練只能「改」自己的課（2026-07-30 → 2026-07-31 放寬為可看不可改）——
@@ -25927,7 +25937,7 @@ function renderFdMonthView(){
       const coachNm=b.coach_id?(coachMap[b.coach_id]||'教練'):'—';
       const barCls=isSelf?'mc-bar-self':(b.category==='小班肌力'?'mc-bar-group':(b.category==='體驗'?'mc-bar-trial':'mc-bar-pt'));
       // 2026-07-30 使用者指示：手機版首頁的課卡點了要跳簡易資訊（原本 CSS 是手指游標，卻沒有掛事件）
-      return `<div class="mc-ev" onclick="openCourseCard('${b.id}')">
+      return `<div class="mc-ev" onclick="openCourseCard('${b.id}',this)">
         <div class="mc-ev-time"><span class="mc-ev-t1">${b.start_time}</span><span class="mc-ev-t2">${end}</span></div>
         <div class="mc-ev-bar ${barCls}"></div>
         <div class="mc-ev-body"><div class="mc-ev-name">${who}</div>
@@ -28302,7 +28312,7 @@ PAGES.coach_today=async function(){
     const circle = done
       ? `background:${ci.color};border:2px solid ${ci.color};color:#fff;`
       : `background:#fff;border:2px solid ${ci.color};color:${ci.color};`;
-    taskDots+=`<button class="task-dot-wrap" onclick="wtlCardClick('${b.id}')">
+    taskDots+=`<button class="task-dot-wrap" onclick="wtlCardClick('${b.id}',this)">
       <span class="task-dot" style="${circle}"><span class="td-time">${b.start_time}</span></span>
       <span class="task-dot-name">${nm}</span>
     </button>`;
@@ -29938,7 +29948,7 @@ function renderCoachWeekInline(box){
       const who=b.category==='小班肌力'?'團':(b.category==='體驗'?(b.trial_name||'體驗').slice(0,3):(memMap[b.member_id]||'—').slice(0,3));
       // 高度夠才顯示時間（避免太擠）
       const showTime=height>=30;
-      evs+=`<div class="wkx-ev wkx-${cc}" style="top:${top}px;height:${height}px;" onclick="event.stopPropagation();openCourseCard('${b.id}')" title="${b.start_time} ${who}">
+      evs+=`<div class="wkx-ev wkx-${cc}" style="top:${top}px;height:${height}px;" onclick="event.stopPropagation();openCourseCard('${b.id}',this)" title="${b.start_time} ${who}">
         ${showTime?`<span class="wkx-evt">${b.start_time}</span>`:''}<span class="wkx-evn">${who}</span></div>`;
     });
     const isWeekend=(i>=5); // 週六(5)、週日(6)
@@ -30023,7 +30033,7 @@ function renderCoachMonthView(){
         :(memMap[b.member_id]||b.trial_name||'—'));   // 體驗課取 trial_name 或會員名（2026-07-30）
       const dur=b.duration||60;
       const end=minToTime(timeToMin(b.start_time)+dur);
-      return `<div class="mc-ev" onclick="openCourseCard('${b.id}')">
+      return `<div class="mc-ev" onclick="openCourseCard('${b.id}',this)">
         <div class="mc-ev-time"><span class="mc-ev-t1">${b.start_time}</span><span class="mc-ev-t2">${end}</span></div>
         <div class="mc-ev-bar mc-bar-${cc}"></div>
         <div class="mc-ev-body"><div class="mc-ev-name">${who}</div><div class="mc-ev-cat">${b.category}${b.format?' · '+b.format:''}</div></div>
@@ -30099,7 +30109,7 @@ function renderCoach3Day(){
       const who=b.category==='小班肌力'?'團':(b.category==='體驗'?(b.trial_name||'體驗').slice(0,3):(memMap[b.member_id]||'—').slice(0,3));
       const showTime=height>=34;
       for(let mm=s; mm<s+dur; mm+=SLOT) occupied.add(mm);
-      evs+=`<div class="wkx-ev wkx-${cc}" style="top:${top}px;height:${height}px;" onclick="event.stopPropagation();openCourseCard('${b.id}')" title="${b.start_time} ${who}">
+      evs+=`<div class="wkx-ev wkx-${cc}" style="top:${top}px;height:${height}px;" onclick="event.stopPropagation();openCourseCard('${b.id}',this)" title="${b.start_time} ${who}">
         ${showTime?`<span class="wkx-evt">${b.start_time}</span>`:''}<span class="wkx-evn">${who}</span></div>`;
     });
     // 不可預約的空白時段標 ✕（過去時間 / 場地已滿），且該格我沒有課
@@ -30355,7 +30365,7 @@ function renderCoachDayList(){
     }
     cardLayer+=`<div class="tkr-row tkr-${cc}${mine?'':' tkr-other'}${compact}"
       style="${style}"
-      ${mine?`data-bid="${first.id}" data-start="${startM}" data-dur="${dur}" onpointerdown="tlxDragStart(event,'${first.id}',${startM},${dur})" onclick="tlxClick('${first.id}')"`:`style="cursor:default;"`}>
+      ${mine?`data-bid="${first.id}" data-start="${startM}" data-dur="${dur}" onpointerdown="tlxDragStart(event,'${first.id}',${startM},${dur})" onclick="tlxClick('${first.id}',this)"`:`style="cursor:default;"`}>
       ${badge}
       <div class="tkr-time"><span class="tkr-t1">${minToTime(startM)}</span><span class="tkr-tline"></span><span class="tkr-t2">${endT}</span></div>
       <div class="tkr-mid">${midLines}</div>
@@ -30383,10 +30393,10 @@ function renderCoachDayList(){
 
 /* ── 時間軸：長按卡片拖移調整時間 ── */
 window._tlxDrag=null;
-function tlxClick(id){
+function tlxClick(id, el){
   // 若剛拖移過，吞掉這次 click
   if(window._tlxJustDragged){ window._tlxJustDragged=false; return; }
-  openCourseCard(id);
+  openCourseCard(id, el);   // 有錨點就開小卡片＋圓形按鈕（2026-07-31）
 }
 function tlxDragStart(e,id,startM,dur){
   const el=e.currentTarget;
