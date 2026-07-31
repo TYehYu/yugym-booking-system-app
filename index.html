@@ -6793,8 +6793,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.2237';
-const APP_VERSION_LABEL='v260731.2237';
+const APP_VERSION = '260801.0018';
+const APP_VERSION_LABEL='v260801.0018';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13271,7 +13271,7 @@ PAGES.dashboard=async function(){
           <span><b>${r.ptDone}</b>/${r.ptCount}</span>
           <span><b>${r.groupDone}</b>/${r.groupCount}</span>
           <span style="color:var(--green);font-weight:700;">${r.renew||'—'}</span>
-          <span>${r.need_duty||r.hours>0?Math.round(r.hours):'—'}</span>
+          <span>${r.need_duty||r.hours>0?fmtHours(r.hours):'—'}</span>
         </div>`).join('')}
       </div>
       <div style="font-size:10.5px;color:var(--t3);padding:8px 2px 2px;line-height:1.6;">教練課／團體課＝已上/排定；工時＝打卡時數（排班封頂、扣上課重疊，與薪資頁同口徑）；續約＝賣票流程標記的續約單（7/27 起）。</div>`}
@@ -13289,7 +13289,7 @@ PAGES.dashboard=async function(){
   <div class="card"><div class="card-title">員工表現</div>
     ${perfRows.length===0?'<div class="empty"><div class="em-t">本期無資料</div></div>':
     `<table><thead><tr><th>姓名</th><th>營收</th><th>教練課</th><th>團體課</th><th>上班時數</th></tr></thead><tbody>
-    ${perfRows.map(r=>`<tr class="perf-clickable" onclick="openPerfDetail('${r.id}','${ym}')" title="查看當月薪資明細"><td style="font-weight:500;">${r.name}</td><td class="num" style="color:var(--green);font-weight:600;">${fmtNT(r.rev)}</td><td class="num">${r.ptCount} 堂</td><td class="num">${r.groupCount} 堂</td><td class="num">${r.need_punch?Math.round(r.hours)+' hr':'—'}</td></tr>`).join('')}
+    ${perfRows.map(r=>`<tr class="perf-clickable" onclick="openPerfDetail('${r.id}','${ym}')" title="查看當月薪資明細"><td style="font-weight:500;">${r.name}</td><td class="num" style="color:var(--green);font-weight:600;">${fmtNT(r.rev)}</td><td class="num">${r.ptCount} 堂</td><td class="num">${r.groupCount} 堂</td><td class="num">${r.need_punch?fmtHours(r.hours)+' hr':'—'}</td></tr>`).join('')}
     </tbody></table>`}
   </div>
   <div class="dash-grid dash-2col">
@@ -21858,19 +21858,29 @@ function effRates(emp){
 // ════════ 完整薪資計算（依模板：底薪＋教練課階梯／固定＋達標獎金＋團課人頭＋值班費）════════
 // 參數：emp 員工、ptDone 教練課完成堂數、groupHeads 團課總人頭、dutyHours 值班工時
 // 回傳各項金額與合計，供薪資頁顯示
+/* 工時顯示（2026-08-01 使用者回報：羅威 51.5 小時被顯示成 52）——
+   工時是薪資的計算基礎，半小時就是半小時，不能四捨五入。
+   整數就不帶小數點，有半小時才顯示 .5，畫面不會變雜。 */
+function fmtHours(h){
+  const n=Number(h)||0;
+  return (n%1===0) ? String(n) : n.toFixed(1);
+}
 // ── 請假彙總：算某員工某月各假別時數 ──
 function leaveSummary(shifts, empId, month){
   const list=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month);
-  let 特休=0, 病假=0, 事假=0, scheduled=0;
+  let 特休=0, 病假=0, 事假=0, 其他=0, scheduled=0;
   list.forEach(s=>{
     scheduled+=(Number(s.hours)||0);
     const lh=Number(s.leave_hours)||0;
     if(s.leave_type==='特休') 特休+=lh;
     else if(s.leave_type==='病假') 病假+=lh;
     else if(s.leave_type==='事假') 事假+=lh;
+    /* 「其他」＝颱風假、公假這類天災或公務因素（2026-08-01 使用者指示）。
+       不扣薪，與特休同一條規則；原因寫在班表的備註欄。 */
+    else if(s.leave_type==='其他') 其他+=lh;
   });
-  const leaveTotal=特休+病假+事假;
-  return { scheduled, 特休, 病假, 事假, leaveTotal, actual:Math.max(scheduled-leaveTotal,0) };
+  const leaveTotal=特休+病假+事假+其他;
+  return { scheduled, 特休, 病假, 事假, 其他, leaveTotal, actual:Math.max(scheduled-leaveTotal,0) };
 }
 // ── 年度特休帳（設計A）──
 // 基數存員工欄位：al_carry_hours(去年結轉)、al_earned_hours(本年度新增)
@@ -22082,7 +22092,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
     let dhrC=Number(emp.duty_hourly)||0;
     if(etC==='contractor' && dutyHours>0 && dhrC<200) dhrC=200; // 合作教練值班保底 200
     const dutyGross=Math.round(dutyHours*dhrC);
-    const Lc=leave||{特休:0,病假:0,事假:0};
+    const Lc=leave||{特休:0,病假:0,事假:0,其他:0};
     const dutyLeaveDeduct=Math.round((Lc.事假||0)*dhrC + (Lc.病假||0)*dhrC*0.5);
     const coC=Number(classOverlap)||0;
     const dutyClassDeduct=Math.round(coC*dhrC);
@@ -22154,7 +22164,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   if(et==='contractor' && dutyHours>0 && dhr<200) dhr=200; // 合作教練值班保底 200
   const _dutyHrs = tpl.need_duty ? dutyHours : 0;   // 不需值班 → 不計值班薪資
   const dutyGross=Math.round(_dutyHrs*dhr); // 原應值班費（依排班時數）
-  const L=leave||{特休:0,病假:0,事假:0};
+  const L=leave||{特休:0,病假:0,事假:0,其他:0};
   // 值班費請假扣除：事假全扣、病假半扣、特休不扣（皆 × 時薪）
   const dutyLeaveDeduct=Math.round((L.事假||0)*dhr + (L.病假||0)*dhr*0.5);
   // 值班時段內上課：重疊時數以課程抽成為主，不重複計值班費 → 扣除
@@ -22757,6 +22767,9 @@ function openShiftEdit(empId,dateStr){
             <option value="特休"${cur.leave_type==='特休'?' selected':''}>特休（不扣薪）</option>
             <option value="病假"${cur.leave_type==='病假'?' selected':''}>病假（半薪）</option>
             <option value="事假"${cur.leave_type==='事假'?' selected':''}>事假（不給薪）</option>
+            ${/* 2026-08-01 使用者指示：新增「其他」，這個月有兩天颱風假。
+                 天災停班不扣薪，與特休同一條規則；原因寫在備註欄。 */''}
+            <option value="其他"${cur.leave_type==='其他'?' selected':''}>其他（不扣薪，如颱風假）</option>
           </select></div>
         <div class="form-row" style="flex:1;margin-bottom:0;"><label>請假時數</label>
           <input type="number" id="sh-leave-hours" min="0" step="0.5" value="${cur.leave_hours||''}" placeholder="小時" onchange="shiftCalcPreview()"></div>
@@ -22789,12 +22802,24 @@ async function saveShift(){
   const leaveEl=document.getElementById('sh-leave');
   const leaveHrEl=document.getElementById('sh-leave-hours');
   const leave_type=leaveEl?leaveEl.value:'';
-  const leave_hours=leaveHrEl?(Number(leaveHrEl.value)||0):0;
+  let leave_hours=leaveHrEl?(Number(leaveHrEl.value)||0):0;
   const id=document.getElementById('sh-id').value;
   if(!start||!end){ showToast('請填起迄時間'); return; }
   const hours=shiftHours(start,end);
   if(hours<=0){ showToast('時數需大於 0'); return; }
   if(leave_type&&leave_hours>hours){ showToast('請假時數不可超過排班時數'); return; }
+  /* 假別與時數必須同進同出（2026-08-01 使用者回報：黃美蓉 7 月有 3 天事假沒扣到薪）。
+     成因：兩個欄位各自獨立，可以只填一半 ——
+       ・選了假別、時數留空 → 時數 0 → 計薪時扣 0（7/13）
+       ・填了時數、假別選「無」→ 沒有假別 → 計薪時整筆略過（7/10、7/11）
+     兩種都會安靜地少扣薪水，而且畫面上看起來「有請假」。改成：
+       選了假別沒填時數 → 自動帶整段排班時數（最常見是請整天）
+       填了時數沒選假別 → 擋下來，請他選 */
+  if(leave_type && !leave_hours){
+    leave_hours=hours;
+    showToast(`未填請假時數，以整段排班 ${fmtHours(hours)} 小時計`);
+  }
+  if(!leave_type && leave_hours>0){ showToast('填了請假時數，請一併選擇假別'); return; }
   const obj={ id:id||uid('shift'), emp_id:empId, date, start_time:start, end_time:end, hours, note,
     leave_type:leave_type||null, leave_hours:leave_hours||0,
     created_by:(SESSION&&SESSION.id)||'', created_at:new Date().toISOString() };
@@ -23030,6 +23055,7 @@ const rowL=(label,val,sub)=>`<div style="display:flex;justify-content:space-betw
               if(r.leave.事假>0) h+=rowDeduct(`事假 ${r.leave.事假} 小時`, s.baseLeavePersonalDed);
               if(r.leave.病假>0) h+=rowDeduct(`病假 ${r.leave.病假} 小時（半薪）`, s.baseLeaveSickDed);
               if(r.leave.特休>0) h+=`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">特休 ${r.leave.特休} 小時</span><span style="color:var(--t3);">不扣薪</span></div>`;
+              if(r.leave.其他>0) h+=`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">其他假 ${r.leave.其他} 小時</span><span style="color:var(--t3);">不扣薪</span></div>`;
               if(s.baseLeaveDeduct>0) h+=rowL('調整後底薪',`$${s.adjBase.toLocaleString()}`);
               h+=rowL('教練課費',`$${s.ptPay.toLocaleString()}`, `${r.ptDone} 堂`);
               h+=rowL('教練課收入',`<b>$${s.ptIncome.toLocaleString()}</b>`, s.ptIsFloor?'取底薪':'取課費');
@@ -23667,7 +23693,7 @@ async function renderStaffList(){
             + num(st.pt, st.ptAll>st.pt?`/${st.ptAll}`:'', 1)
             + num(st.grp, st.grpAll>st.grp?`/${st.grpAll}`:'', 2)
             + num(st.renew,'', 3)
-            + num(Math.round(st.hours),'h', 4)
+            + num(fmtHours(st.hours),'h', 4)
             + `<span class="st-l-pay">${payCell}</span>`
             + `<span></span>`
             + `<span class="st-l-tags st-zb">${_rules.length?_rules.join(''):'<i class="st-l-none">—</i>'}</span>`
@@ -35274,6 +35300,7 @@ async function renderSalaryContent(TARGET, withHead){
           if(myLeave.事假>0) h+=ded(`事假 ${myLeave.事假} 小時`, sal.baseLeavePersonalDed);
           if(myLeave.病假>0) h+=ded(`病假 ${myLeave.病假} 小時（半薪）`, sal.baseLeaveSickDed);
           if(myLeave.特休>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">特休 ${myLeave.特休} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;
+          if(myLeave.其他>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">其他假 ${myLeave.其他} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;
           if(sal.baseLeaveDeduct>0) h+=row('調整後底薪',`$${sal.adjBase.toLocaleString()}`);
           h+=row('教練課費',`$${sal.ptPay.toLocaleString()}`,`${ptDone} 堂`);
           h+=row('教練課收入',`<b>$${sal.ptIncome.toLocaleString()}</b>`, sal.ptIsFloor?'取底薪':'取課費');

@@ -69,9 +69,12 @@ console.log('\n營運分析：數字不要小數點');
   eq('　　千分位照舊', fmtNT(1234567), '$1,234,567');
   ok('★ 不再有 .toLocaleString() 直接吃小數的寫法',
      !/const fmtNT=\(n\)=>'\$'\+\(n\|\|0\)\.toLocaleString\(\);/.test(src));
-  ok('★ 值班／上班時數也不留小數',
-     /\$\{r\.need_duty\|\|r\.hours>0\?Math\.round\(r\.hours\):'—'\}/.test(src)
-     && /\$\{r\.need_punch\?Math\.round\(r\.hours\)\+' hr':'—'\}/.test(src));
+  /* 2026-08-01 使用者回報：羅威 51.5 小時被進位成 52。工時是薪資的計算基礎，
+     半小時就是半小時 —— 改成整數不帶小數、有半小時才顯示 .5 */
+  ok('★ 值班／上班時數不進位（整數不帶小數、半小時照實顯示）',
+     /\$\{r\.need_duty\|\|r\.hours>0\?fmtHours\(r\.hours\):'—'\}/.test(src)
+     && /\$\{r\.need_punch\?fmtHours\(r\.hours\)\+' hr':'—'\}/.test(src)
+     && /return \(n%1===0\) \? String\(n\) : n\.toFixed\(1\);/.test(src));
   ok('★ 手機端利潤區靠右',
      /\.ov-hero\{[\s\S]{0,200}align-items:flex-end;text-align:right;\}/.test(src));
 }
@@ -162,7 +165,9 @@ console.log('\n員工管理：卡片改回列表');
     // 2026-07-30：列表多了本月統計（教練課／團體課／續約／工時）
     // 2026-07-30 四修：多了工作規則／休假日／實領薪資
     WD_FULL:['日','一','二','三','四','五','六'], _canPay:true,
-    _ym:'2026-07', _stat:{E1:{pt:12,ptAll:14,grp:4,grpAll:4,renew:2,hours:58.4,net:71250}}};
+    /* 2026-08-01：工時顯示改用共用的 fmtHours（不進位） */
+    fmtHours:h=>{const n=Number(h)||0;return (n%1===0)?String(n):n.toFixed(1);},
+    _ym:'2026-07', _stat:{E1:{pt:12,ptAll:14,grp:4,grpAll:4,renew:2,hours:58.5,net:71250}}};
   const fn=new Function(...Object.keys(env), src.slice(k,l)+'\n'+src.slice(i,j)+'\nreturn stRow;')(...Object.values(env));
   const h=fn({id:'E1',name:'王教練',name_en:'wang',gender:'male',employment_type:'full_time',
               job_title:'資深教練',emp_no:'A01',phone:'0912345678',status:'active'});
@@ -186,9 +191,10 @@ console.log('\n員工管理：卡片改回列表');
      && /\.st-l-n1::before\{content:'教練課';\}/.test(src));   // 三修：nth-of-type 本來就沒生效，改類別
   ok('★ 列表顯示本月教練課／團體課／續約數／工作時數（欄名在表頭）',
      [...h.matchAll(/<span class="st-l-n st-l-n\d">([\s\S]*?)<\/span>/g)].map(m=>m[1].replace(/<[^>]+>/g,'')).join('|')
-       ==='12/14|4|2|58h');
+       ==='12/14|4|2|58.5h');
   ok('　　排定堂數與已上不同時附註（12 /14）', /<span class="st-l-n st-l-n1">12<u>\/14<\/u><\/span>/.test(h));
-  ok('　　工時四捨五入到整數並帶 h', /58<u>h<\/u>/.test(h) && !/58\.4/.test(h));
+  /* 2026-08-01 使用者回報：51.5 被進位成 52 → 改成不進位，半小時照實顯示 */
+  ok('　　工時不進位、半小時照實顯示', /58\.5<u>h<\/u>/.test(h));
   ok('★ 每一格不再重複印欄名（改由表頭統一）', !/<i>教練課<\/i>/.test(h) && !/st-l-stats/.test(src));
   // 三／四修：加入「工作規則／休假日／實領薪資」，數字欄名在翻月時會附月份標記
   /* 2026-07-31 使用者指示改版：總堂數在教練課前面、實領薪資移到工作時數後面、整列分三區 */

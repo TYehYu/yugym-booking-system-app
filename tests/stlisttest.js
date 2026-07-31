@@ -99,7 +99,7 @@ ok('★ 手機版數字欄名改用明確類別（原本用 nth-of-type，從來
    /\.st-l-n1::before\{content:'教練課';\}/.test(src)
    && !/\.st-l-n:nth-of-type\(1\)::before/.test(src));
 ok('　　資料列也帶上對應的類別', /const num=\(v,sub,i,cls\)=>`<span class="st-l-n st-l-n\$\{i\}\$\{cls\?' '\+cls:''\}">/.test(src)
-   && /num\(Math\.round\(st\.hours\),'h', 4\)/.test(src));
+   && /num\(fmtHours\(st\.hours\),'h', 4\)/.test(src));
 ok('　　原因寫在程式裡', /nth-of-type 只看元素型別（span）/.test(src));
 ok('　　手機版工作規則／休假日／實領薪資各自一行、前面補欄名',
    /\.st-l-tags::before\{content:'工作規則';/.test(src) && /\.st-l-off::before\{content:'休假日';/.test(src)
