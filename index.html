@@ -1093,6 +1093,7 @@ body.mc-mode .layout{padding-top:8px;}
 .lp-stat.accent .lp-stat-v{color:var(--gold);}
 .lp-stat.warn .lp-stat-v{color:var(--danger);}
 .lp-stat.ok .lp-stat-v{color:var(--green);}
+.lp-stat.danger .lp-stat-v{color:var(--danger);}   /* 支出（2026-07-31）：是紅字但不是警告 */
 
 /* ── Toolbar：兩列 ── */
 .lp-toolbar{margin-bottom:12px;}
@@ -6630,8 +6631,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1150';
-const APP_VERSION_LABEL='v260731.1150';
+const APP_VERSION = '260731.1215';
+const APP_VERSION_LABEL='v260731.1215';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -33413,8 +33414,12 @@ async function finToday(){
 async function finMonth(){
   const body=document.getElementById('fin-body'); if(!body) return;
   const month=(window._finMonth||ymd(TODAY).slice(0,7));
-  const [purchases,tickets]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[])]);
+  const [purchases,tickets,expAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[]),dbGetAll('expenses').catch(()=>[])]);
   const monthPur=(purchases||[]).filter(p=>(p.created_at||'').slice(0,7)===month);
+  /* 本月其他支出（2026-07-31 使用者指示）：房租、水電等額外開銷 */
+  const monthExp=(expAll||[]).filter(e=>e.ym===month)
+    .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  const expTotal=monthExp.reduce((s2,e)=>s2+(Number(e.amount)||0),0);
   const revenue=monthPur.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
   // 待收款：分期未收期數的金額（全體，非限本月）
   let receivable=0;
@@ -33434,6 +33439,7 @@ async function finMonth(){
   const stats=lpStats([
     {label:'本月營收', value:finMoney(revenue), unit:'', tone:'ok'},
     {label:'本月筆數', value:monthPur.length, unit:'筆'},
+    {label:'其他支出', value:finMoney(expTotal), unit:'', tone:'danger'},
     {label:'待收款（分期）', value:finMoney(receivable), unit:'', tone:'warn'},
   ]);
   const methodRows=Object.entries(byMethod).sort((a,b)=>b[1]-a[1]).map(([m,amt])=>{
@@ -33447,7 +33453,73 @@ async function finMonth(){
   const methodCard = monthPur.length
     ? `<div class="card" style="padding:14px 16px;"><div style="font-size:13px;font-weight:700;margin-bottom:4px;">付款方式比例</div>${methodRows}</div>`
     : lpEmpty('本月還沒有收款','','');
-  body.innerHTML = dateBar + stats + methodCard;
+  /* 本月其他支出表格（2026-07-31 使用者指示）——
+     營運分析的「利潤」只算課堂這門生意（銷課金額 − 教練薪資），刻意不含房租水電；
+     那些固定成本記在這裡，由財務頁自己加總，兩邊的口徑各自清楚不互相污染。 */
+  const expRows=monthExp.map(e=>`<tr>
+      <td class="num" style="white-space:nowrap;">${e.date?String(e.date).slice(5).replace('-','/'):'—'}</td>
+      <td>${String(e.category||'—').replace(/</g,'&lt;')}</td>
+      <td style="color:var(--t2);font-size:12.5px;">${String(e.note||'').replace(/</g,'&lt;')||'—'}</td>
+      <td class="num" style="text-align:right;font-weight:700;">${finMoney(e.amount)}</td>
+      <td style="text-align:right;white-space:nowrap;">
+        <button class="btn btn-ghost btn-sm" onclick="finExpenseEdit('${e.id}')">編輯</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="finExpenseDel('${e.id}')">刪除</button>
+      </td></tr>`).join('');
+  const expCard=`<div class="card" style="padding:14px 16px;margin-top:14px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <span style="font-size:13px;font-weight:700;">本月其他支出</span>
+      <span style="font-size:11px;color:var(--t3);">房租・水電・耗材等固定開銷（不含教練薪資）</span>
+      <button class="btn btn-green btn-sm" style="margin-left:auto;" onclick="finExpenseAdd()">＋ 新增支出</button>
+    </div>
+    ${monthExp.length?`<table class="rwd-card"><thead><tr><th>日期</th><th>項目</th><th>備註</th><th style="text-align:right;">金額</th><th></th></tr></thead>
+      <tbody>${expRows}</tbody>
+      <tfoot><tr><td colspan="3" style="font-weight:700;">合計</td>
+        <td class="num" style="text-align:right;font-weight:800;color:var(--danger);">${finMoney(expTotal)}</td><td></td></tr></tfoot></table>`
+      :'<div class="empty" style="padding:18px;"><div class="em-t" style="font-size:13px;">本月還沒有記錄其他支出</div></div>'}
+  </div>`;
+  body.innerHTML = dateBar + stats + methodCard + expCard;
+}
+/* ── 本月其他支出：新增／編輯／刪除（2026-07-31 使用者指示）──
+   只有管理員進得來（財務總覽在 g_admin 群組），資料表 RLS 也只放行 is_admin()。 */
+const EXPENSE_CATS=['房租','水電','網路','清潔','耗材','設備','稅務規費','其他'];
+async function finExpenseEdit(id){ return finExpenseAdd(id); }
+async function finExpenseAdd(id){
+  const month=(window._finMonth||ymd(TODAY).slice(0,7));
+  let e=null;
+  if(id){ try{ e=await dbGet('expenses',id); }catch(_){} if(!e){ showToast('找不到這筆支出'); return; } }
+  const cat=e&&e.category||'';
+  const opts=EXPENSE_CATS.map(c=>`<option value="${c}" ${cat===c?'selected':''}>${c}</option>`).join('')
+    + (cat&&EXPENSE_CATS.indexOf(cat)<0?`<option value="${cat}" selected>${cat}</option>`:'');
+  showModal(`<div class="modal-title">${id?'編輯支出':'新增支出'}　<span style="font-size:12px;color:var(--t3);">${month}</span></div>
+    <div class="form-row"><label>日期</label><input type="date" id="ex-date" value="${(e&&e.date)?String(e.date).slice(0,10):month+'-01'}"></div>
+    <div class="form-row"><label>項目</label><select id="ex-cat">${opts}</select></div>
+    <div class="form-row"><label>金額</label><input type="number" id="ex-amt" min="0" step="1" value="${e?Number(e.amount)||0:''}" placeholder="0"></div>
+    <div class="form-row"><label>備註</label><input type="text" id="ex-note" value="${e&&e.note?String(e.note).replace(/"/g,'&quot;'):''}" placeholder="例：8 月房租、台電 7-8 月"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="finExpenseSave('${id||''}')">儲存</button></div>`);
+}
+async function finExpenseSave(id){
+  const month=(window._finMonth||ymd(TODAY).slice(0,7));
+  const date=(document.getElementById('ex-date')||{}).value||null;
+  const category=(document.getElementById('ex-cat')||{}).value||'';
+  const amount=Number((document.getElementById('ex-amt')||{}).value||0);
+  const note=((document.getElementById('ex-note')||{}).value||'').trim();
+  if(!category){ showToast('請選擇項目'); return; }
+  if(!(amount>0)){ showToast('金額要大於 0'); return; }
+  /* ym 一律以「這一頁在看的月份」為準，不用日期回推 ——
+     7 月底繳 8 月房租時，日期是 7/31 但要記在 7 月的支出裡，由櫃檯決定放哪個月。 */
+  const obj={ id:id||uid('EXP'), ym:month, date, category, amount, note:note||null };
+  if(!id){ obj.created_by=(SESSION&&SESSION.id)||null; }
+  try{
+    await dbPut('expenses',obj);
+    closeModal(); showToast(id?'已更新':'已新增'); navTo('finance','g_admin');
+  }catch(err){ showToast('儲存失敗：'+((err&&err.message)||err)); }
+}
+async function finExpenseDel(id){
+  const e=await dbGet('expenses',id).catch(()=>null);
+  if(!confirm(`刪除「${(e&&e.category)||'這筆'}${e&&e.amount?' $'+Number(e.amount).toLocaleString():''}」支出？`)) return;
+  try{ await dbDel('expenses',id); showToast('已刪除'); navTo('finance','g_admin'); }
+  catch(err){ showToast('刪除失敗：'+((err&&err.message)||err)); }
 }
 function finMonthMove(delta){
   let [y,m]=(window._finMonth||ymd(TODAY).slice(0,7)).split('-').map(Number);
