@@ -1447,6 +1447,9 @@ body.mc-mode .layout{padding-top:8px;}
 .ov-i-note{font-style:normal;font-size:10.5px;font-weight:500;color:var(--t3);line-height:1.5;}
 .ov-i-v{font-size:17px;font-weight:800;font-family:var(--num);color:var(--text);white-space:nowrap;}
 .ov-i-v2{font-size:12.5px;font-weight:700;font-family:var(--num);color:var(--gold-d);margin-left:8px;white-space:nowrap;}
+/* 2026-07-31 使用者指示：金額一律金色、堂數維持深色（教練課／團體課是「金額在左、堂數在右」） */
+.ov-i-v.ov-i-gold{color:var(--gold-d);}
+.ov-i-v2.ov-i-plain{color:var(--text);}
 /* 員工表現列可點（2026-07-29）＋當月薪資明細彈窗 */
 .perf-clickable{cursor:pointer;transition:background .12s;}
 .perf-clickable:hover{background:var(--sage-bg);}
@@ -6612,8 +6615,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.0255';
-const APP_VERSION_LABEL='v260731.0255';
+const APP_VERSION = '260731.1055';
+const APP_VERSION_LABEL='v260731.1055';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12389,11 +12392,16 @@ PAGES.dashboard=async function(){
   const rangeBk=bookings.filter(b=>inRange(b.date)&&b.status!=='cancelled');
   const classCount=rangeBk.length;
   const doneCount=rangeBk.filter(b=>b.status==='completed'||b.status==='checked_in').length;
-  /* 銷課堂數的組成（2026-07-30 使用者提問）：不是只有教練課＋團體課，
-     而是所有已簽到／已完成的課；團課一堂算 1、不看人數。列出來免得對不上。 */
+  /* 銷課堂數（2026-07-31 使用者定案）：只記教練課與團體課 ——
+     原本把自主訓練（多為簽到贈點、$0）與體驗也算進去，749 堂裡有 272 堂不是賣出去的課，
+     擺在「營收／銷課金額」旁邊會誤導。團課一堂算 1、不看人數。
+     _doneMix 仍列出組成，免得跟別頁的數字對不上。 */
+  const DONE_CATS=['私人教練','小班肌力'];
+  const doneMainCount=rangeBk.filter(b=>(b.status==='completed'||b.status==='checked_in')&&DONE_CATS.includes(b.category)).length;
   const _doneMix=(()=>{
     const m={};
     rangeBk.forEach(b=>{ if(b.status!=='completed'&&b.status!=='checked_in') return;
+      if(!DONE_CATS.includes(b.category)) return;
       const k={'私人教練':'教練課','小班肌力':'團體課','自主訓練':'自主','體驗':'體驗','運動按摩':'按摩','場租':'場租'}[b.category]||b.category||'其他';
       m[k]=(m[k]||0)+1; });
     return Object.entries(m).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${v}`).join('・');
@@ -12497,10 +12505,12 @@ PAGES.dashboard=async function(){
     rev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7.8v8.4M14.2 9.6c0-1-1-1.7-2.2-1.7s-2.2.7-2.2 1.8c0 2.4 4.4 1.3 4.4 3.6 0 1-1 1.7-2.2 1.7s-2.2-.6-2.2-1.6"/></svg>',
     done:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><path d="M8.2 12.4l2.6 2.6 5-5.2"/></svg>',
   };
-  /* note＝標籤下方的小字說明（2026-07-30：銷課堂數要講清楚組成） */
-  const ovRow=(ic,label,val,sub,note)=>`<div class="ov-i"><span class="ov-i-ic">${ic}</span>
+  /* note＝標籤下方的小字說明（2026-07-30：銷課堂數要講清楚組成）
+     opt.gold＝主數值上金色、opt.subPlain＝副數值不上色（2026-07-31 使用者指示：
+     金額一律金色、堂數維持深色，這樣一眼分得出哪個是錢哪個是課）。 */
+  const ovRow=(ic,label,val,sub,note,opt)=>`<div class="ov-i"><span class="ov-i-ic">${ic}</span>
     <span class="ov-i-l">${label}${note?`<i class="ov-i-note">${note}</i>`:''}</span>
-    <span class="ov-i-v">${val}</span>${sub?`<span class="ov-i-v2">${sub}</span>`:''}</div>`;
+    <span class="ov-i-v${(opt&&opt.gold)?' ov-i-gold':''}">${val}</span>${sub?`<span class="ov-i-v2${(opt&&opt.subPlain)?' ov-i-plain':''}">${sub}</span>`:''}</div>`;
 
   // ── 員工表現（手機版營運速覽）──
   // 載入本月出勤工時＋排班（值班時數）＋收款（續約歸屬）
@@ -12569,14 +12579,13 @@ PAGES.dashboard=async function(){
         <span class="ov-hero-s2">不含房租水電・不計自主訓練</span>
       </div>`:''}
       <div class="ov-list">
-        ${ovRow(OV_IC.pt,'教練課',`${ptDoneBk.length}/${ptClassCount} 堂`,fmtNT(Math.round(ptFee)))}
-        ${ovRow(OV_IC.grp,'團體課',`${grpDoneBk.length}/${groupClassCount} 堂`,fmtNT(Math.round(grpFee)))}
-        ${ovRow(OV_IC.rev,'營收',fmtNT(revenue),'')}
-        ${/* 2026-07-30 使用者指示：銷課金額與銷課堂數位置交換（金額放前面）。
-             銷課堂數把組成寫出來 —— 使用者問「726 怎麼算的」，它不是只有教練課＋團體課，
-             而是所有已簽到／已完成的課，含自主訓練與體驗；團課一堂算 1，不看人數。 */''}
-        ${ovRow(OV_IC.rev,'銷課金額',fmtNT(usedFee),'')}
-        ${ovRow(OV_IC.done,'銷課堂數',`${doneCount} 堂`,'',_doneMix)}
+        ${/* 2026-07-31 使用者指示：營收放第一列，接著教練課／團體課／銷課金額／銷課堂數；
+             教練課與團體課改成「金額在左、堂數在右」，金額一律金色。 */''}
+        ${ovRow(OV_IC.rev,'營收',fmtNT(revenue),'','',{gold:true})}
+        ${ovRow(OV_IC.pt,'教練課',fmtNT(Math.round(ptFee)),`${ptDoneBk.length}/${ptClassCount} 堂`,'',{gold:true,subPlain:true})}
+        ${ovRow(OV_IC.grp,'團體課',fmtNT(Math.round(grpFee)),`${grpDoneBk.length}/${groupClassCount} 堂`,'',{gold:true,subPlain:true})}
+        ${ovRow(OV_IC.rev,'銷課金額',fmtNT(usedFee),'','',{gold:true})}
+        ${ovRow(OV_IC.done,'銷課堂數',`${doneMainCount} 堂`,'',_doneMix)}
       </div>
     </div>
     <div class="card">
@@ -12604,7 +12613,8 @@ PAGES.dashboard=async function(){
   <div class="desktop-only">
   <div class="stat-grid dash-summary">
     <div class="stat-card"><div class="sc-label">營收</div><div><span class="sc-num" style="font-size:28px;">${fmtNT(revenue)}</span></div></div>
-    <div class="stat-card"><div class="sc-label">銷課數</div><div><span class="sc-num">${doneCount}</span><span class="sc-unit">堂</span></div></div>
+    ${/* 2026-07-31：與手機版同口徑（只記教練課＋團體課），同一個名稱不能是兩個數字 */''}
+    <div class="stat-card"><div class="sc-label">銷課數</div><div><span class="sc-num">${doneMainCount}</span><span class="sc-unit">堂</span></div></div>
     <div class="stat-card"><div class="sc-label">銷課金額</div><div><span class="sc-num" style="font-size:28px;color:var(--gold-d);">${fmtNT(usedFee)}</span></div></div>
   </div>
   <div class="card"><div class="card-title">員工表現</div>

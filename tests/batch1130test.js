@@ -229,13 +229,15 @@ ok('★ 姓名欄只佔實際寬度，四個數字欄等寬（不再留大片空
 ok('　　說明文字的「值班」改成「工時」', /工時＝打卡時數（排班封頂、扣上課重疊，與薪資頁同口徑）/.test(src));
 
 console.log('\n手機版營運分析：銷課金額與堂數');
-ok('★ 銷課金額移到銷課堂數前面',
-   /ovRow\(OV_IC\.rev,'銷課金額',fmtNT\(usedFee\),''\)\}\s*\n\s*\$\{ovRow\(OV_IC\.done,'銷課堂數'/.test(src));
+/* 2026-07-31 使用者改口徑：銷課堂數只記教練課與團體課；順序改成
+   營收／教練課／團體課／銷課金額／銷課堂數。細節見 ovlisttest.js。 */
+ok('★ 銷課金額仍排在銷課堂數前面',
+   /ovRow\(OV_IC\.rev,'銷課金額',fmtNT\(usedFee\),'','',\{gold:true\}\)\}\s*\n\s*\$\{ovRow\(OV_IC\.done,'銷課堂數'/.test(src));
 ok('★ 銷課堂數附上組成（回答「726 怎麼算的」）',
-   /const _doneMix=\(\(\)=>\{/.test(src) && /ovRow\(OV_IC\.done,'銷課堂數',`\$\{doneCount\} 堂`,'',_doneMix\)/.test(src));
-ok('　　組成含自主訓練與體驗，不是只有教練課＋團體課',
-   /'自主訓練':'自主','體驗':'體驗'/.test(src)
-   && /而是所有已簽到／已完成的課，含自主訓練與體驗；團課一堂算 1，不看人數/.test(src));
+   /const _doneMix=\(\(\)=>\{/.test(src) && /ovRow\(OV_IC\.done,'銷課堂數',`\$\{doneMainCount\} 堂`,'',_doneMix\)/.test(src));
+ok('★ 組成只剩教練課與團體課（2026-07-31 使用者定案）',
+   /const DONE_CATS=\['私人教練','小班肌力'\];/.test(src)
+   && /if\(!DONE_CATS\.includes\(b\.category\)\) return;/.test(src));
 ok('　　小字說明有自己的樣式', /\.ov-i-note\{font-style:normal;font-size:10\.5px;/.test(src));
 {
   // _doneMix 實跑：用 7 月真實比例
