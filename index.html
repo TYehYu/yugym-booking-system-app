@@ -3426,6 +3426,8 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-ev.cal-ev-std.cal-ev-7d .evc-sub,.cal-ev.cal-ev-std.ev-w-tiny .evc-sub{font-size:9px;}
 /* 第三行：教練縮寫 tag（教練色小膠囊，如 RA） */
 .cal-ev.cal-ev-std .evc-coach{font-size:8.5px;font-weight:500;line-height:1;padding:2px 6px;border-radius:999px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+/* 佔兩台以上的機台燈號（2026-07-31）：接在場地標籤後面 */
+.evc-unit{font-style:normal;margin-left:3px;letter-spacing:1px;color:var(--green,#1f6f54);}
 /* 簽到章（2026-07-25 使用者指示）：放大移到卡片右下角，只露四分之一圓角落（品牌綠、白字） */
 .cal-ev.cal-ev-std .evc-check{position:absolute;top:auto;left:auto;bottom:0;right:0;width:30px;height:30px;border-radius:100% 0 10px 0;background:var(--green,#1f6f54);border:none;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:flex-end;justify-content:flex-end;padding:0 4px 3px 0;line-height:1;z-index:3;transform:none;}
 /* 全員請假（2026-07-31 使用者指示）：同一顆角章改紅色、字改「假」 */
@@ -6728,8 +6730,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1537';
-const APP_VERSION_LABEL='v260731.1537';
+const APP_VERSION = '260731.1542';
+const APP_VERSION_LABEL='v260731.1542';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10624,7 +10626,7 @@ PAGES.g_dashboard=async function(){
   const isDone=b=>b.status==='checked_in'||b.status==='completed';
   const isCancelled=b=>b.status==='cancelled';
 
-  const dayBk=bookings.filter(b=>b.date===date && !isCancelled(b));
+  const dayBk=mergeSiblingUnits(bookings.filter(b=>b.date===date && !isCancelled(b)));   // 同行第二台併回主卡（2026-07-31）
   const dayBkAll=bookings.filter(b=>b.date===date);
 
   // ── 第一區資料 ──
@@ -12933,7 +12935,18 @@ let _calOpts=null;
 // 團課合併顯示：舊匯入資料把一堂團課拆成多筆 booking（每人一筆）。
 // 這裡在渲染前，把「同教練＋同日期＋同開始時間」的小班肌力 booking 合併成一張虛擬卡，
 // 帶 member_ids 陣列 + _bkIds（原始各筆 id，供點擊展開/簽到）。已含 member_ids 的新資料不受影響。
+/* 同行使用的第二台（2026-07-31 使用者回報「這邊應該是一張課卡」）——
+   一堂佔兩台跑步機是兩筆預約（venue_unit 一筆只存得下一台），但行事曆上應該是
+   一張卡。這裡把 sibling_of 指到別人的那幾筆濾掉，並把台數記在主預約的 _units 上，
+   課卡的場地標籤就畫成「跑步機 ●●」。 */
+function mergeSiblingUnits(list){
+  const n={};
+  (list||[]).forEach(b=>{ if(b&&b.sibling_of) n[b.sibling_of]=(n[b.sibling_of]||0)+1; });
+  return (list||[]).filter(b=>!(b&&b.sibling_of))
+    .map(b=>n[b.id] ? Object.assign({}, b, {_units:n[b.id]+1}) : b);
+}
 function mergeGroupBookings(list){
+  list=mergeSiblingUnits(list);
   const groups={}; const passthrough=[];
   list.forEach(b=>{
     const already=Array.isArray(b.member_ids)&&b.member_ids.length; // 新結構：本身就是一筆多人
@@ -13404,7 +13417,9 @@ async function renderCalendar(opts){
       const _coachObj = _coachId ? (coachObjMap[_coachId]||null) : null;
       // 自主訓練用教室/跑步機時，第三列改標場地（無教練故原本是空的；2026-07-23 使用者指示）
       const _selfVenue = selfVenueLabel(b);
-      const _venueTag = _selfVenue ? `<span class="evc-coach" style="background:${_cc.bg};color:${_cc.fg};">${_selfVenue}</span>` : '';
+      /* 佔兩台以上時在場地標籤後面點燈（2026-07-31 使用者指示：一張卡＋兩個綠燈） */
+      const _unitDots = (b._units>1) ? `<i class="evc-unit">${'●'.repeat(b._units)}</i>` : '';
+      const _venueTag = _selfVenue ? `<span class="evc-coach" style="background:${_cc.bg};color:${_cc.fg};">${_selfVenue}${_unitDots}</span>` : '';
       const _abbrOut = (!hideMember && _coachObj)
         ? `<span class="evc-coach" style="background:${_cc.bg};color:${_cc.fg};">${coachAbbr(_coachObj)}${b.substitute_coach_id?'（代）':''}</span>`+_venueTag
         : _venueTag;   // 2026-07-27：教練課排到教室/跑步機時，教練縮寫旁並列場地標籤
@@ -14692,7 +14707,7 @@ async function renderDayTimeline(){
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const isMine=(b)=> role==='admin' ? true : (b.coach_id===myId||b.substitute_coach_id===myId);
-  const dayBk=bookings.filter(b=>b.date===ds&&b.status!=='cancelled'&&isMine(b))
+  const dayBk=mergeSiblingUnits(bookings.filter(b=>b.date===ds&&b.status!=='cancelled'&&isMine(b)))
     .sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   const d=parseYmd(ds);
   const dateLabel=`${d.getMonth()+1}/${d.getDate()}（週${WD[d.getDay()]}）`;
@@ -15189,7 +15204,7 @@ async function renderCoachAgenda(){
   const coachObj=Object.fromEntries(coaches.map(c=>[c.id,c]));
   const isMineBk=(b)=> (b.coach_id===myId||b.substitute_coach_id===myId);
   const isGroupBk=(b)=> b.category==='小班肌力' || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
-  const allBk=bookings.filter(b=>b.status!=='cancelled');
+  const allBk=mergeSiblingUnits(bookings.filter(b=>b.status!=='cancelled'));   // 同行第二台併回主卡（2026-07-31）
   const mine=allBk.filter(isMineBk);
 
   /* 圖層（2026-07-21 使用者定案）：篩選列移除、當日預約永遠全部顯示
@@ -15270,7 +15285,7 @@ async function renderCoachAgenda(){
     const _ccol=coachTagColor(_cid);
     const _venue=selfVenueLabel(b);
     // 2026-07-27 使用者指示：教練本人的課卡不放教練縮寫標籤（多餘）；只留場地標籤（自主訓練用教室/跑步機時）
-    const tag = _venue?`<span class="evc-coach" style="background:${_ccol.bg};color:${_ccol.fg};">${_venue}</span>`:'';
+    const tag = _venue?`<span class="evc-coach" style="background:${_ccol.bg};color:${_ccol.fg};">${_venue}${(b._units>1)?`<i class="evc-unit">${'●'.repeat(b._units)}</i>`:''}</span>`:'';
     /* 其他教練的課卡（2026-07-31 使用者指示改為「唯讀可看」）——
        0729 是 pointer-events:none（cag-noint，怕卡片攔手指讓頁面滑不動），
        現在改成點一下直接開「課程明細」：不走 wtlCardClick（那條會彈圓形按鈕），

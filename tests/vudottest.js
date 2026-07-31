@@ -68,6 +68,27 @@ console.log('\n佔用的判定');
                      start_time:'17:00',duration:60,sibling_of:'B0'}])(SELF(),true)), ['cur','cur']);
 }
 
+console.log('\n行事曆上是一張卡，不是兩張（2026-07-31 使用者回報）');
+{
+  const merge=new Function(g('function mergeSiblingUnits(list){','\n}\n')+'\nreturn mergeSiblingUnits;')();
+  const L=[{id:'A',venue_unit:'treadmill_2'},{id:'S1',sibling_of:'A',venue_unit:'treadmill_1'},{id:'B',venue_unit:'multi_1'}];
+  const out=merge(L);
+  eq('★ 同行那筆不另外畫卡', out.map(x=>x.id), ['A','B']);
+  eq('★ 主卡記下佔幾台', out[0]._units, 2);
+  eq('　　沒有同行的維持原樣（不多加 _units）', out[1]._units, undefined);
+  eq('　　三台也算得對', merge([{id:'A'},{id:'S1',sibling_of:'A'},{id:'S2',sibling_of:'A'}])[0]._units, 3);
+  eq('　　空陣列／null 不會爆', [merge([]).length, merge(null).length], [0,0]);
+}
+ok('★ 場地標籤後面點燈（跑步機 ●●）',
+   /const _unitDots = \(b\._units>1\) \? `<i class="evc-unit">\$\{'●'\.repeat\(b\._units\)\}<\/i>` : '';/.test(src)
+   && /\.evc-unit\{font-style:normal;margin-left:3px;letter-spacing:1px;color:var\(--green,#1f6f54\);\}/.test(src));
+ok('★ 四個畫課卡的地方都併卡：桌機行事曆／手機週檢視／首頁任務／桌機日檢視',
+   /function mergeGroupBookings\(list\)\{\s*\n\s*list=mergeSiblingUnits\(list\);/.test(src)
+   && (src.match(/mergeSiblingUnits\(bookings\.filter/g)||[]).length===3);
+ok('　　手機週檢視的場地標籤也帶燈號',
+   /\$\{_venue\}\$\{\(b\._units>1\)\?`<i class="evc-unit">\$\{'●'\.repeat\(b\._units\)\}<\/i>`:''\}/.test(src));
+ok('　　原因寫在程式裡', /一堂佔兩台跑步機是兩筆預約（venue_unit 一筆只存得下一台），但行事曆上應該是\s*\n\s*一張卡/.test(src));
+
 console.log('\n只有櫃檯能開兩台（2026-07-31 使用者定案）');
 ok('★ 會員自己一次只能約一個名額，兩台請洽櫃檯',
    /這是\*\*櫃檯專屬\*\*的操作（同日使用者定案）：會員自己在 App 只能一次約一個名額/.test(src));
