@@ -46,22 +46,25 @@ console.log('\n隨機連播');
 }
 
 console.log('\n版面');
-/* 2026-07-31 定版：這一列由左到右＝插畫｜問候｜KPI｜按鈕 */
-ok('★ 併進 KPI 條的最左邊（問候之前）',
-   /<div class="mc-kpistrip">\s*\n\s*\$\{isMobileLayout\(\)\?'':butlerArtHtml\(\)\}\s*\n\s*<div class="kpi-greet">/.test(src));
-ok('★ 順序＝插畫 → 問候 → KPI 數字（右邊接快速操作卡）',
-   /這一列由左到右＝插畫｜問候｜KPI｜按鈕/.test(src));
-ok('　　不再是頁面最上方那一整條', !/插畫往上移到頂欄正下方/.test(src));
+/* 2026-07-31 定版：放在左欄「當月排班」按鈕上方、貼著頂欄下方，不進中間那欄 */
+ok('★ 放在左欄「當月排班」按鈕的上方',
+   /\$\{butlerArtHtml\(\)\}\s*\n\s*<!-- 2026-07-26 使用者指示：「當月排班」按鈕[\s\S]{0,120}\$\{schedBtnCard\}/.test(src));
+ok('★ 不在中間那欄（KPI 條裡沒有插畫）',
+   /<div class="mc-kpistrip">\s*\n\s*<div class="kpi-greet">/.test(src));
+ok('★ 貼著頂欄下方：負上邊距要壓過 .mc-g5-left>* 的 !important',
+   /\.mc-g5-left>\.mc-art-top\{margin:-6px 0 16px !important;\}/.test(src));
 /* 使用者回報「太高了 跟旁邊的 KPI 一樣高就好」 */
-ok('★ 高度對齊 KPI（80px），寬度由比例算出來 —— 不裁切也不留白邊',
-   /\.mc-art\{position:relative;height:80px;width:auto;aspect-ratio:1854\/854;/.test(src)
-   && /高度定死 80px（與 KPI 數字那組差不多高）/.test(src));
-ok('　　在 flex 列裡不被壓縮', /\.mc-art-top\{flex:0 0 auto;margin-right:18px;\}/.test(src));
-ok('★ 手機版面不顯示（那裡沒有這一塊）', /isMobileLayout\(\)\?'':butlerArtHtml\(\)/.test(src));
+ok('★ 寬度吃滿左欄、高度 96px 與 KPI 條相當',
+   /\.mc-art\{position:relative;width:100%;height:96px;/.test(src)
+   && /高度壓到 96px 與旁邊的 KPI 條相當/.test(src));
+ok('　　裁切幅度寫在程式裡（上下各約 15%，不會切到角色）',
+   /這個高度會裁掉原圖上下\s*\n\s*各約 15%，插畫的角色都留有邊界/.test(src));
+ok('★ 只在桌機版面渲染（左欄三格是 isMobileLayout() 的 else 分支）',
+   /\$\{isMobileLayout\(\)\?`[\s\S]{0,4000}\$\{butlerArtHtml\(\)\}/.test(src));
 ok('★ 兩層 <img> 交叉淡入（換圖不閃白）',
    /<img class="mc-art-img" id="mc-art-a" alt=""><img class="mc-art-img" id="mc-art-b" alt="">/.test(src)
    && /\.mc-art-img\{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity \.7s ease;\}/.test(src));
-ok('★ 維持原圖比例，不裁切到角色', /aspect-ratio:1854\/854;/.test(src));
+ok('★ 用 cover 填滿，裁切幅度控制在上下各 15%', /object-fit:cover;/.test(src));
 ok('　　尊重系統的減少動態設定', /@media \(prefers-reduced-motion:reduce\)\{ \.mc-art-img\{transition:none;\} \}/.test(src));
 ok('　　標註插畫作者與操作方式', /title="點一下換一張　·　插畫：@_Fergus\.art_"/.test(src));
 
