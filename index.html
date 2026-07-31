@@ -6631,8 +6631,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1215';
-const APP_VERSION_LABEL='v260731.1215';
+const APP_VERSION = '260731.1240';
+const APP_VERSION_LABEL='v260731.1240';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12444,11 +12444,13 @@ PAGES.dashboard=async function(){
   })();
 
   /* ── 本月利潤與課堂拆分（2026-07-24 使用者定案）──────────────────
-     利潤 ＝ 銷課金額 − 教練應發薪資。刻意不含房租水電等固定成本，
-     只回答「課堂這門生意本身賺不賺」。
+     利潤 ＝ 銷課金額 − 教練應發薪資 − 本月其他支出（房租水電等，記在財務頁）。
      · 收入用「銷課金額」（已上完的課 × 該票單堂價），與薪資同一個基礎
        （都是「實際上了幾堂」），相減才有意義；用售票營收會對不起來。
      · 薪資用薪資彙總頁的應發總額，走 computeMonthlyPayroll 同一套計算。
+     · 其他支出（2026-07-31 使用者定案）：財務頁「本月其他支出」記的房租、水電等固定成本
+       也要扣掉 —— 原本刻意不含，但那樣算出來的不是老闆真正在意的數字。
+       只在本月模式扣（支出以月為單位記帳，切到「今日」沒有對應的分攤方式）。
      · 自主訓練排除：無教練、不產生教練薪資成本，計入會虛增利潤。
      · 堂數顯示：教練課只算「私人教練」（不含體驗）、團體課為「小班肌力」。 */
   const NON_COACHED=['自主訓練','場租'];
@@ -12501,12 +12503,14 @@ PAGES.dashboard=async function(){
   coachedFee = doneBkCoached.filter(b=>b.category!=='小班肌力').reduce((s,b)=>s+_feeOf(b),0) + grpFee;
   /* 薪資是「整月」概念，切到「今日」時無法對應 → 只在本月模式算利潤。
      薪資計算另外要抓 shifts/attendance/薪資模板，故只在需要時才跑。 */
-  let salaryTotal=null, profit=null;
+  let salaryTotal=null, profit=null, otherExp=0;
   if(_dashRange==='month'){
+    try{ otherExp=((await dbGetAll('expenses').catch(()=>[]))||[])
+      .filter(e=>e&&e.ym===ym).reduce((a,e)=>a+(Number(e.amount)||0),0); }catch(_){ otherExp=0; }
     try{
       const pr=await computeMonthlyPayroll(ym);
       salaryTotal=pr.grandTotal;
-      profit=coachedFee-salaryTotal;
+      profit=coachedFee-salaryTotal-otherExp;
     }catch(_){ salaryTotal=null; profit=null; }
   }
 
@@ -12617,8 +12621,8 @@ PAGES.dashboard=async function(){
       <div class="ov-hero">
         <span class="ov-hero-l">${periodLabel}利潤</span>
         <span class="ov-hero-v" style="color:${profit>=0?'var(--green)':'#c0392b'};">${fmtNT(profit)}</span>
-        <span class="ov-hero-s">銷課 ${fmtNT(coachedFee)}　−　薪資 ${fmtNT(salaryTotal)}</span>
-        <span class="ov-hero-s2">不含房租水電・不計自主訓練</span>
+        <span class="ov-hero-s">銷課 ${fmtNT(coachedFee)}　−　薪資 ${fmtNT(salaryTotal)}${otherExp>0?`　−　其他支出 ${fmtNT(otherExp)}`:''}</span>
+        <span class="ov-hero-s2">${otherExp>0?'已扣房租水電等其他支出':'其他支出尚未登錄（財務→本月營收）'}・不計自主訓練</span>
       </div>`:''}
       <div class="ov-list">
         ${/* 2026-07-31 使用者指示：營收放第一列，接著教練課／團體課／銷課金額／銷課堂數；
@@ -33454,8 +33458,9 @@ async function finMonth(){
     ? `<div class="card" style="padding:14px 16px;"><div style="font-size:13px;font-weight:700;margin-bottom:4px;">付款方式比例</div>${methodRows}</div>`
     : lpEmpty('本月還沒有收款','','');
   /* 本月其他支出表格（2026-07-31 使用者指示）——
-     營運分析的「利潤」只算課堂這門生意（銷課金額 − 教練薪資），刻意不含房租水電；
-     那些固定成本記在這裡，由財務頁自己加總，兩邊的口徑各自清楚不互相污染。 */
+     這裡記的房租、水電等固定成本會被營運分析的「本月利潤」扣掉
+     （利潤 ＝ 銷課金額 − 教練薪資 − 本月其他支出），所以這張表沒填＝利潤會偏高。
+     歸月規則：房租算當月的（7 月繳＝用 7 月的場地，預付概念）→ 日期在哪個月就記在那個月。 */
   const expRows=monthExp.map(e=>`<tr>
       <td class="num" style="white-space:nowrap;">${e.date?String(e.date).slice(5).replace('-','/'):'—'}</td>
       <td>${String(e.category||'—').replace(/</g,'&lt;')}</td>
@@ -33506,9 +33511,10 @@ async function finExpenseSave(id){
   const note=((document.getElementById('ex-note')||{}).value||'').trim();
   if(!category){ showToast('請選擇項目'); return; }
   if(!(amount>0)){ showToast('金額要大於 0'); return; }
-  /* ym 一律以「這一頁在看的月份」為準，不用日期回推 ——
-     7 月底繳 8 月房租時，日期是 7/31 但要記在 7 月的支出裡，由櫃檯決定放哪個月。 */
-  const obj={ id:id||uid('EXP'), ym:month, date, category, amount, note:note||null };
+  /* ym 由日期決定（2026-07-31 使用者定案：房租是算當月的，7 月繳就是用 7 月的場地，
+     預付概念）—— 所以「發生日期在哪個月，就記在那個月」，沒有另外的歸屬規則。
+     日期空白時才退回這一頁在看的月份。 */
+  const obj={ id:id||uid('EXP'), ym:(String(date||'').slice(0,7)||month), date, category, amount, note:note||null };
   if(!id){ obj.created_by=(SESSION&&SESSION.id)||null; }
   try{
     await dbPut('expenses',obj);

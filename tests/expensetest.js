@@ -3,8 +3,9 @@
    「桌機版管理員 財務要有一個本月其他支出的表格可以填寫，這邊就要紀錄房租、水電等額外開銷」
 
    放在「本月營收」分頁裡（那裡本來就有月份翻頁），與營收並列才看得出當月進出。
-   營運分析的「利潤」刻意只算課堂這門生意（銷課金額 − 教練薪資），不含這些固定成本 ——
-   兩邊口徑各自清楚，不互相污染。 */
+   後續使用者定案（同日）：這些支出要算進營運分析的「本月利潤」
+   → 利潤 ＝ 銷課金額 − 教練薪資 − 本月其他支出；
+   歸月規則＝房租算當月的（7 月繳＝用 7 月的場地，預付概念），日期在哪個月就記在那個月。 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
@@ -49,10 +50,11 @@ console.log('\n新增／編輯');
   ok('★ 項目沒選、金額不是正數都擋下來',
      /if\(!category\)\{ showToast\('請選擇項目'\); return; \}/.test(sv)
      && /if\(!\(amount>0\)\)\{ showToast\('金額要大於 0'\); return; \}/.test(sv));
-  ok('★ ym 用「這一頁在看的月份」，不用日期回推',
-     /const obj=\{ id:id\|\|uid\('EXP'\), ym:month, date, category, amount, note:note\|\|null \};/.test(sv));
-  ok('　　原因寫在程式裡（7 月底繳 8 月房租的情況）',
-     /7 月底繳 8 月房租時，日期是 7\/31 但要記在 7 月的支出裡/.test(src));
+  /* 2026-07-31 使用者定案：房租是算當月的（7 月繳＝用 7 月的場地，預付概念）
+     → 發生日期在哪個月就記在那個月，沒有另外的歸屬規則。 */
+  ok('★ ym 由日期決定（日期空白才退回這一頁的月份）',
+     /const obj=\{ id:id\|\|uid\('EXP'\), ym:\(String\(date\|\|''\)\.slice\(0,7\)\|\|month\), date, category, amount, note:note\|\|null \};/.test(sv));
+  ok('　　原因寫在程式裡', /房租是算當月的，7 月繳就是用 7 月的場地，/.test(src));
   ok('★ 編輯時不覆蓋原始建立者', /if\(!id\)\{ obj\.created_by=\(SESSION&&SESSION\.id\)\|\|null; \}/.test(sv));
   ok('　　存檔失敗會講原因，不會默默關掉', /showToast\('儲存失敗：'\+\(\(err&&err\.message\)\|\|err\)\)/.test(sv));
   ok('　　存完重繪同一頁', /navTo\('finance','g_admin'\)/.test(sv));
@@ -63,13 +65,26 @@ console.log('\n新增／編輯');
   ok('　　刪除失敗會講原因', /showToast\('刪除失敗：'\+\(\(err&&err\.message\)\|\|err\)\)/.test(del));
 }
 
+console.log('\n算進本月利潤（2026-07-31 使用者定案）');
+{
+  const dash=g('PAGES.dashboard=async function(){','\n};\n');
+  ok('★ 利潤扣掉其他支出', /profit=coachedFee-salaryTotal-otherExp;/.test(dash));
+  ok('★ 只取該月的支出', /\.filter\(e=>e&&e\.ym===ym\)\.reduce\(\(a,e\)=>a\+\(Number\(e\.amount\)\|\|0\),0\)/.test(dash));
+  ok('★ 只在本月模式扣（支出以月記帳，切到「今日」沒有分攤方式）',
+     /if\(_dashRange==='month'\)\{\s*\n\s*try\{ otherExp=/.test(dash));
+  ok('　　讀不到支出不會讓整頁壞掉', /dbGetAll\('expenses'\)\.catch\(\(\)=>\[\]\)/.test(dash));
+  ok('★ 拆解那行把其他支出也列出來',
+     /\$\{otherExp>0\?`　−　其他支出 \$\{fmtNT\(otherExp\)\}`:''\}/.test(dash));
+  ok('★ 沒登錄支出時講清楚去哪裡填，不是默默當成 0',
+     /其他支出尚未登錄（財務→本月營收）/.test(dash));
+  ok('　　登錄了就標明已扣', /已扣房租水電等其他支出/.test(dash));
+  ok('　　舊的「不含房租水電」字樣已移除', !/不含房租水電・不計自主訓練/.test(src));
+}
+
 console.log('\n權限與口徑');
 ok('★ 只有管理員：財務總覽掛在 g_admin（沒有 fd:true）',
    /\{grp:'財務', label:'財務總覽', page:'finance'\}/.test(src));
-ok('★ 註解講清楚與營運分析「利潤」的分工',
-   /營運分析的「利潤」只算課堂這門生意（銷課金額 − 教練薪資），刻意不含房租水電/.test(src));
-ok('★ 營運分析那句「不含房租水電」還在（兩邊口徑沒被混掉）',
-   /不含房租水電・不計自主訓練/.test(src));
+ok('★ 利潤公式的註解已同步', /利潤 ＝ 銷課金額 − 教練應發薪資 − 本月其他支出（房租水電等，記在財務頁）。/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
