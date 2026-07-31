@@ -113,6 +113,26 @@ ok('★ 友善與否仍看原本那張票', /友善與否仍看原本那張票�
 ok('　　重複發放的防線沒動（同一筆 booking 只發一次）',
    /t\.source==='checkin_grant' && t\.source_booking_id===b\.id/.test(src));
 
+console.log('\n只有教練課與友善教練課適用（2026-07-31 使用者定案）');
+{
+  const can=new Function(g('function canCoachLeave(b){','\n')+'\nreturn canCoachLeave;')();
+  eq('★ 教練課 → 可以', can({category:'私人教練'}), true);
+  eq('★ 友善教練課 → 可以（category 也是私人教練，靠票券區分）', can({category:'私人教練'}), true);
+  eq('★ 團體課 → 不行', can({category:'小班肌力'}), false);
+  eq('★ 自主訓練 → 不行', can({category:'自主訓練'}), false);
+  eq('　　體驗 → 不行（本來就不扣票）', can({category:'體驗'}), false);
+  eq('　　運動按摩 → 不行', can({category:'運動按摩'}), false);
+  eq('　　null 不會爆', can(null), false);
+  ok('★ 不適用的課根本不畫那顆按鈕', /\+ \(!canCoachLeave\(b\) \? ''/.test(src));
+  ok('★ 函式本身也擋一次（深連結／程式呼叫繞不過去）',
+     /if\(!canCoachLeave\(b\)\)\{\s*\n\s*showToast\(b\.category==='小班肌力'/.test(src));
+  ok('★ 團體課給的訊息指向正確的做法（代課或補課券）',
+     /'團體課不適用教練請假：請改派代課，或取消後補發補課券'/.test(src));
+  ok('　　為什麼團課不適用，原因寫在程式裡',
+     /一堂團課有好幾個人，改成「自主訓練」講不通/.test(src)
+     && /團課本來就有自己的補償機制 —— 取消後補發補課券/.test(src));
+}
+
 console.log('\n請假按鈕的位置');
 ok('★ 移到代課教練名單「後面」', (()=>{
   const i=src.indexOf('const html = `<div class="evc-roster evr-up"');

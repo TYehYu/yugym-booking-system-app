@@ -6728,8 +6728,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1515';
-const APP_VERSION_LABEL='v260731.1515';
+const APP_VERSION = '260731.1518';
+const APP_VERSION_LABEL='v260731.1518';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17518,8 +17518,10 @@ async function bkOrbitSub(id){
     + list.map(c=>`<button class="evr-row ${b.substitute_coach_id===c.id?'on':''}" onclick="event.stopPropagation();bkOrbitSubSet('${id}','${c.id}')">${coachDisp(c)}${b.substitute_coach_id===c.id?'<span class="evr-tick">✓ 代課中</span>':''}</button>`).join('')
     /* 教練請假（2026-07-21 商業規則二；2026-07-31 使用者指示移到教練名單後面）——
        找不到代課才會走這條，所以排在名單最後；它也是這個面板裡唯一破壞性的動作，
-       放最後比較不會誤點。 */
-    + (b.status!=='coach_leave'
+       放最後比較不會誤點。
+       ⚠ 只有教練課（含友善，category 都是「私人教練」）適用 —— 見 canCoachLeave。 */
+    + (!canCoachLeave(b) ? ''
+      : b.status!=='coach_leave'
         ? `<button class="evr-row evr-leave" onclick="event.stopPropagation();bkCoachLeave('${id}')">找不到代課 → 教練請假<i>退票・效期＋7 天・改成自主訓練</i></button>`
         : `<button class="evr-row on" disabled>已標記教練請假</button>`)
     + `</div>`;
@@ -17566,9 +17568,22 @@ async function extendForCoachLeave(ticket_id, booking, operator){
    ⚠ 課種改成自主訓練之後，原本靠 category 判斷「這堂是教練課才發點」的
      grantCheckinReward 會判成不發 → 那邊補了一條 status==='coach_leave' 就發。
    ⚠ ticket_type_id 刻意保留：那是「本來是哪一種課」的唯一線索，對帳與發點都用得到。 */
+/* 哪些課適用「教練請假」（2026-07-31 使用者定案：只有教練課與友善教練課）——
+   友善教練課的 category 也是「私人教練」，靠票券區分，所以這一條就涵蓋兩者。
+   為什麼團體課不適用：
+   ・一堂團課有好幾個人，改成「自主訓練」講不通（自主訓練是一個人的事）
+   ・團課本來就有自己的補償機制 —— 取消後補發補課券（2026-07-26 定案：補課券只屬團課）
+   體驗課不適用：本來就不扣票，沒有堂數可退、也沒有效期可延。 */
+function canCoachLeave(b){ return !!b && b.category==='私人教練'; }
 async function bkCoachLeave(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   if(b.status==='cancelled'||b.status==='checked_in'||b.status==='completed'){ showToast('此狀態不可標記請假'); return; }
+  if(!canCoachLeave(b)){
+    showToast(b.category==='小班肌力'
+      ? '團體課不適用教練請假：請改派代課，或取消後補發補課券'
+      : `${b.category||'這種課'}不適用教練請假（只有教練課與友善教練課）`);
+    return;
+  }
   const _tkId=b.ticket_id;   // 先留著：下面要用它退票，但欄位本身會被清掉
   const _wasCat=b.category||'';
   try{
