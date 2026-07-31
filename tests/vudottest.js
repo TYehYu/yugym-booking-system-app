@@ -115,6 +115,13 @@ ok('★ 理由寫在程式裡（避免一人占掉多筆，對其他會員不公
 ok('★ 會員端沒有「兩台」的入口（自助預約的確認視窗只選場地，不選台數）',
    !/p_venue_unit2/.test(src));
 
+console.log('\n手機點課卡時背景淡化（2026-07-31 使用者指示）');
+ok('★ 手機才壓暗，桌機維持透明',
+   /#bk-card-pop \.mtp-back\{position:fixed;inset:0;z-index:9800;background:transparent;\}/.test(src)
+   && /@media \(max-width:600px\),\(max-width:1024px\) and \(orientation:portrait\)\{\s*\n\s*#bk-card-pop \.mtp-back\{background:rgba\(20,18,14,\.34\);\}\s*\n\}/.test(src));
+ok('　　條件與 isMobileLayout() 一致', /條件與 isMobileLayout\(\) 一致：寬 ≤600px，或直向且寬 ≤1024px/.test(src));
+ok('　　點遮罩仍可關閉', /<div class="mtp-back" onclick="collapseBkCard\(\)"><\/div>/.test(src));
+
 console.log('\n權限');
 {
   const h=await mk([])(SELF(),false);
