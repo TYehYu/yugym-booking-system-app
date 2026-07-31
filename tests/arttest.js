@@ -46,12 +46,17 @@ console.log('\n隨機連播');
 }
 
 console.log('\n版面');
-/* 2026-07-31 二修：往上移到頂欄正下方（原本在左欄第一格），並關閉自動輪播改成點選換圖 */
-ok('★ 放在頁面最上方、頂欄正下方（不再包在左欄裡）',
-   /\$\{isMobileLayout\(\)\?'':butlerArtHtml\(\)\}/.test(src)
-   && !/\$\{butlerArtHtml\(\)\}\s*\n\s*<!-- 2026-07-26 使用者指示：「當月排班」/.test(src));
-ok('★ 寬度對齊左欄（300px），負上邊距抵掉頁面內距',
-   /\.mc-art-top\{width:300px;max-width:100%;margin:-6px 0 12px;\}/.test(src));
+/* 2026-07-31 定版：這一列由左到右＝插畫｜問候｜KPI｜按鈕 */
+ok('★ 併進 KPI 條的最左邊（問候之前）',
+   /<div class="mc-kpistrip">\s*\n\s*\$\{isMobileLayout\(\)\?'':butlerArtHtml\(\)\}\s*\n\s*<div class="kpi-greet">/.test(src));
+ok('★ 順序＝插畫 → 問候 → KPI 數字（右邊接快速操作卡）',
+   /這一列由左到右＝插畫｜問候｜KPI｜按鈕/.test(src));
+ok('　　不再是頁面最上方那一整條', !/插畫往上移到頂欄正下方/.test(src));
+/* 使用者回報「太高了 跟旁邊的 KPI 一樣高就好」 */
+ok('★ 高度對齊 KPI（80px），寬度由比例算出來 —— 不裁切也不留白邊',
+   /\.mc-art\{position:relative;height:80px;width:auto;aspect-ratio:1854\/854;/.test(src)
+   && /高度定死 80px（與 KPI 數字那組差不多高）/.test(src));
+ok('　　在 flex 列裡不被壓縮', /\.mc-art-top\{flex:0 0 auto;margin-right:18px;\}/.test(src));
 ok('★ 手機版面不顯示（那裡沒有這一塊）', /isMobileLayout\(\)\?'':butlerArtHtml\(\)/.test(src));
 ok('★ 兩層 <img> 交叉淡入（換圖不閃白）',
    /<img class="mc-art-img" id="mc-art-a" alt=""><img class="mc-art-img" id="mc-art-b" alt="">/.test(src)

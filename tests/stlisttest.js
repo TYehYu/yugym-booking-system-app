@@ -29,13 +29,14 @@ ok('★ 全部欄位改成固定寬或 fr，兩個 grid 才會算出同一組軌
    /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 48px 58px 100px 92px 78px minmax\(372px,1fr\) 30px;/.test(src));
 ok('★ 表頭補上資料列的邊框寬度（左 4px 色條＋右 1px），並扣掉自己那 1px 邊框',
    /\.st-lhead\{padding:8px 14px 8px 17px;background:var\(--card2,#F2EEE4\);\s*\n\s*border:1px solid var\(--bd\);border-radius:10px;/.test(src));
-ok('★ 表頭欄數與資料列欄數一致（13 欄＋3 個區塊標題）', (()=>{
+/* 2026-07-31 定版：區塊標題那一列移除，分區只靠 .st-zb 兩條線表達 */
+ok('★ 表頭欄數與資料列欄數一致（13 欄）', (()=>{
    const i=src.indexOf('const stHead=`<div class="st-lhead">');
    const h=src.slice(i, src.indexOf('</div>`;',i));
-   return (h.match(/<span/g)||[]).length===16 && (h.match(/<span class="st-hz/g)||[]).length===3;
+   return (h.match(/<span/g)||[]).length===13 && !/st-hz/.test(h);
 })());
 ok('★ 權限開關標題對齊第一顆開關「管理員」（2026-07-30 使用者指示）',
-   /\.st-lhead span:not\(\.st-hz\):nth-of-type\(15\)\{text-align:left;\}/.test(src)
+   /\.st-lhead span:nth-child\(12\)\{text-align:left;\}/.test(src)
    && /\.st-l-sw\{justify-self:stretch;\}/.test(src)
    && /\.st-l-sw \.st-sw\{display:flex;flex-wrap:nowrap;gap:4px;width:auto;margin:0;justify-content:flex-start;\}/.test(src));
 /* 2026-07-31：使用者回報姓名欄佔太多版面 → 姓名欄設上限，剩餘寬度回到開關欄 */
@@ -89,7 +90,7 @@ ok('　　用品牌金標示（金額屬次要提示層級）',
 
 console.log('\n標題列底色');
 ok('★ 標題列有背景與邊框，跟資料列區隔',
-   /background:var\(--card2,#F2EEE4\);\s*\n\s*border:1px solid var\(--bd\);border-radius:10px;margin-bottom:2px;grid-template-rows:auto auto;/.test(src));
+   /background:var\(--card2,#F2EEE4\);\s*\n\s*border:1px solid var\(--bd\);border-radius:10px;margin-bottom:2px;\}/.test(src));
 
 console.log('\n順手修掉的舊 bug');
 ok('★ 手機版數字欄名改用明確類別（原本用 nth-of-type，從來沒生效）',

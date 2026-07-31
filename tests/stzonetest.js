@@ -40,33 +40,24 @@ ok('　　拿不到統計時的預設值也補上 all', /const st=_stat\[c\.id\]
   ok('　　不帶 cls 不會多出空白 class', /class="st-l-n st-l-n1"/.test(num(5,'',1)));
 }
 
-console.log('\n三個區域');
-ok('★ 表頭第一列是三個區塊標題',
-   /<span class="st-hz st-hz-1">姓名<\/span>/.test(head)
-   && /<span class="st-hz st-hz-2 st-zb">員工表現<\/span>/.test(head)
-   && /<span class="st-hz st-hz-3 st-zb">權限管理<\/span>/.test(head));
-/* 2026-07-31 三修（使用者指示）：工作規則與休假日屬於權限管理，不是員工表現 */
-ok('★ 三個區塊各自涵蓋正確的欄位範圍（姓名 1–3｜表現 4–9｜權限 10–13）',
-   /\.st-hz-1\{grid-column:1 \/ 4;\}/.test(src)
-   && /\.st-hz-2\{grid-column:4 \/ 10;\}/.test(src)
-   && /\.st-hz-3\{grid-column:10 \/ 14;\}/.test(src));
-ok('★ 工作規則／休假日歸在權限管理那一區',
-   /<span>實領薪資\$\{_mTag\}<\/span><span class="st-zb">工作規則<\/span><span>休假日<\/span>/.test(src)
-   && /工作規則與休假日屬於權限管理，不是員工表現/.test(src));
-ok('★ 欄名落在第二列，不會跟區塊標題擠在一起',
-   /\.st-lhead span:not\(\.st-hz\)\{grid-row:2;\}/.test(src)
-   && /\.st-hz\{grid-row:1;/.test(src)
-   && /grid-template-rows:auto auto;row-gap:7px;\}/.test(src));
-ok('★ 區與區之間畫一條線（畫在該區第一格的左緣，拉滿高度）',
-   /\.st-zb\{border-left:1px solid var\(--bd\);align-self:stretch;padding-left:12px;margin-left:-6px;\}/.test(src));
-ok('★ 資料列的分區線位置與表頭一致（總堂數＋工作規則）',
+console.log('\n三個區域（只用分隔線表達，不放標題列）');
+/* 2026-07-31 定版：使用者指示移除「姓名／員工表現／權限管理」那一列標題 */
+ok('★ 區塊標題那一列已移除', !/st-hz/.test(src));
+ok('★ 表頭回到單列（沒有第二列的 grid-template-rows）',
+   /border:1px solid var\(--bd\);border-radius:10px;margin-bottom:2px;\}/.test(src));
+ok('★ 分區改由兩條線表達：員工表現從「總堂數」起、權限管理從「工作規則」起',
    /num\(st\.all, [^)]*, 0, 'st-zb'\)/.test(src)
    && /<span class="st-l-tags st-zb">/.test(src)
-   && /<span class="st-l-sw" onclick="event\.stopPropagation\(\);">/.test(src));
-ok('★ 區塊標題文字置中靠下（貼著下面那排欄名）',
-   /\.st-hz\{grid-row:1;[\s\S]{0,120}align-self:end;text-align:center;\}/.test(src));
+   && /<span class="st-zb">總堂數\$\{_mTag\}<\/span>/.test(src)
+   && /<span class="st-zb">工作規則<\/span>/.test(src));
+ok('★ 工作規則／休假日歸在權限管理那一側（不在員工表現裡）',
+   /<span>實領薪資\$\{_mTag\}<\/span><span class="st-zb">工作規則<\/span><span>休假日<\/span>/.test(src)
+   && /工作規則與休假日屬於權限管理，不是員工表現/.test(src));
+ok('★ 分隔線畫在該區第一格的左緣，拉滿列高',
+   /\.st-zb\{border-left:1px solid var\(--bd\);align-self:stretch;padding-left:12px;margin-left:-6px;\}/.test(src));
 ok('　　窄版（≤900px）換排法，分區線關掉',
    /\.st-zb\{border-left:none;padding-left:0;margin-left:0;align-self:center;\}/.test(src));
+ok('　　工作規則那格套上分隔線後仍垂直置中', /\.st-l-tags\{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;align-items:center;\}/.test(src));
 
 console.log('\n放大');
 ok('★ 總堂數～工作時數的數字放大到 21px（原 16px）',
