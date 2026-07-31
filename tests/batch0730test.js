@@ -133,8 +133,11 @@ ok('★ 每一期有金額／開通堂數／收款日／客戶簽名',
    /\$\{td\('期別','width="10%"'\)\}\$\{td\('金額','width="20%"'\)\}\$\{td\('本期開通堂數','width="18%"'\)\}\$\{td\('收款日','width="20%"'\)\}\$\{td\('客戶簽名','width="32%"'\)\}/.test(src));
 ok('★ 分期各期的開通堂數會帶進合約（與方案平分同一套 splitAmount）',
    /instSess:_instN>1\?splitAmount\(total,_instN\):null \};/.test(src));
-ok('★ 簽名區加「教練簽名」（空白版與已簽版都有）',
-   (src.match(/教練簽名：＿＿＿＿＿＿＿＿＿＿＿＿/g)||[]).length>=3);
+/* 2026-07-31：簽名區改由 ctSignBlock() 統一產生（三個入口共用），
+   簽名線改用 border-bottom 畫，不再用全形底線 —— 見 ctsigntest.js */
+ok('★ 簽名區加「教練簽名」（三個入口共用同一支）',
+   /return `<div class="ct-sign">\$\{mem\}<div><b>教練簽名<\/b>\$\{line\}<\/div>\$\{date\}<\/div>`;/.test(src)
+   && /const CT_SIGN_BLANK=ctSignBlock\(\);/.test(src));
 ok('★ 會員端合約補上「購買內容」快照（原本只存條文）',
    /fill_snapshot:\(window\._ctFill\?contractFillBlockHTML\(window\._ctFill\):null\),/.test(src)
    && /\$\{c\.fill_snapshot\?`<div class="ct-fill-view">\$\{c\.fill_snapshot\}<\/div>`:''\}/.test(src));

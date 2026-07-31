@@ -1168,6 +1168,14 @@ body.mc-mode .layout{padding-top:8px;}
 .lp-th.sorted .sort-ar{opacity:1;}
 .lp-row{display:grid;gap:12px;padding:15px 18px;align-items:center;
   border-bottom:1px solid var(--bd);cursor:pointer;transition:.12s;}
+/* 列左緣色條（2026-07-31 使用者指示：會員列表左邊也用色條顯示會員等級）——
+   與員工列表用聘僱類型上色是同一種語言（.st-lrow 的 border-left:4px solid var(--pc)）。
+   opt-in：rows 帶 lc 才畫，其他用 lpTable 的頁面不受影響。 */
+.lp-row.lp-lc{border-left:4px solid var(--lc,#8a8478);}
+.lp-legend{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:0 4px 8px;font-size:11.5px;color:var(--t3);}
+.lp-legend b{display:inline-flex;align-items:center;gap:5px;font-weight:600;color:var(--t2);}
+.lp-legend b::before{content:"";width:10px;height:10px;border-radius:3px;background:var(--lc);}
+.lp-legend b i{font-style:normal;font-family:var(--num),inherit;font-weight:700;color:var(--t3);}
 .lp-row:last-child{border-bottom:none;}
 .lp-row:hover{background:var(--sage-bg);}
 /* 主欄：姓名放大一級，第一眼先看到名字 */
@@ -6717,8 +6725,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.2130';
-const APP_VERSION_LABEL='v260731.2130';
+const APP_VERSION = '260731.2205';
+const APP_VERSION_LABEL='v260731.2205';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9134,7 +9142,7 @@ function lpTable(cols, rows, sort){
     }).join('')
   }</div>`;
   const tbody = rows.map(r=>
-    `<div class="lp-row" style="grid-template-columns:${grid};"${r.onclick?` onclick="${r.onclick}"`:''}>${
+    `<div class="lp-row${r.lc?' lp-lc':''}" style="grid-template-columns:${grid};${r.lc?`--lc:${r.lc};`:''}"${r.onclick?` onclick="${r.onclick}"`:''}>${
       r.cells.map((cell,i)=>{
         const c = cols[i]||{};
         const lbl = c.label ? ` data-label="${c.label}"` : '';
@@ -19823,6 +19831,12 @@ PAGES.members=async function(){
      中＝五個課別各一格，下面用圓形卡
      右＝最近上課、註冊日、操作
      ⚠ 會員等級不再是獨立欄位 → 少了「依等級排序」的表頭；等級篩選仍在上方工具列。 */
+  /* 色票說明：哪個顏色是哪一級（比照員工列表上方的聘僱類型色票） */
+  const tierLegend=`<div class="lp-legend">${
+    Object.entries(TIER_DEFS).map(([k,d])=>{
+      const n=filtered.filter(m=>effTier(m)===k).length;
+      return `<b style="--lc:${d.color};">${d.label}<i>${n}</i></b>`;
+    }).join('')}</div>`;
   const cols=[
     {label:'姓名',     width:'1.5fr', sortKey:'name'},
     ...TK5.map(([k,lb],i)=>({label:lb, width:'1fr', tkKey:k, zone:i===0})),
@@ -19940,6 +19954,8 @@ PAGES.members=async function(){
   };
   /* 2026-07-21 清單簡化：頭像列、空欄位留白、最近上課改相對時間 */
   const rows=pageRows.map(m=>({
+    /* 左緣色條＝會員等級（2026-07-31 使用者指示，比照員工列表的聘僱類型色條） */
+    lc:(TIER_DEFS[effTier(m)]||{}).color||'#8a8478',
     onclick:`openPersonProfile('member','${m.id}')`,
     cells:[
       lpPerson(m.gender, m.name||'—',
@@ -19965,7 +19981,7 @@ PAGES.members=async function(){
       '試試調整搜尋關鍵字，或清除目前的篩選條件。',
       `<button class="btn btn-green btn-sm" onclick="memClearFilters()">清除篩選</button>`);
   } else {
-    body = lpTable(cols, rows, {key:_memSort, dir:_memSortDir, onclick:"memSortBy('{k}')"});
+    body = tierLegend + lpTable(cols, rows, {key:_memSort, dir:_memSortDir, onclick:"memSortBy('{k}')"});
   }
 
   // (5) 一次組合：Header -> Stats -> Toolbar -> Table/Empty -> Pagination
@@ -33015,25 +33031,35 @@ function contractFillBlockHTML(d){
    ・字級用 pt（列印單位），11pt／1.85 行高，中文合約看得舒服又不會多印好幾頁
    ・購買內容表格與簽名欄 break-inside:avoid，不會被切在兩頁之間 */
 const CT_PRINT_CSS=`
-@page{size:A4;margin:18mm 16mm;}
-@page :right{margin-left:20mm;margin-right:14mm;}
-@page :left{margin-left:14mm;margin-right:20mm;}
+@page{size:A4;margin:15mm 14mm;}
+@page :right{margin-left:17mm;margin-right:12mm;}
+@page :left{margin-left:12mm;margin-right:17mm;}
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
-/* 字級／行高（2026-07-29 使用者回報「合約又變成 3 份」）：11pt/1.85 會溢到第 3 頁，
-   雙面就得用到 2 張紙。收成 10.5pt/1.7 讓全文落在 2 頁 —— 雙面正好 1 張。 */
+/* 字級／行高（2026-07-29 使用者回報「合約又變成 3 份」）：11pt/1.85 會溢到第 3 頁。
+   2026-07-31 二修（又變 3 頁）：購買內容表多了一列、簽名區三欄擠不下會換行撐高，
+   一起收 —— 邊界 18/16mm→15/14mm、字級 10.5/1.7→10pt/1.55、表格內距也縮，
+   目標仍是全文落在 2 頁（雙面正好 1 張）。 */
 body{font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;color:#222;
-  font-size:10.5pt;line-height:1.7;orphans:3;widows:3;}
+  font-size:10pt;line-height:1.55;orphans:3;widows:3;}
 .ct-page{background:#fff;}
 .ct-text{white-space:pre-wrap;}
-h1{font-size:15pt;text-align:center;letter-spacing:.08em;margin:0 0 4px;font-weight:700;}
-.sub{text-align:center;font-size:8.5pt;color:#8a6a3a;letter-spacing:.16em;margin:0 0 12px;}
+h1{font-size:14pt;text-align:center;letter-spacing:.08em;margin:0 0 3px;font-weight:700;}
+.sub{text-align:center;font-size:8.5pt;color:#8a6a3a;letter-spacing:.16em;margin:0 0 10px;}
 .ct-fill{break-inside:avoid;page-break-inside:avoid;}
 .ct-fill table{width:100%;border-collapse:collapse;}
-.ct-sign{margin-top:10mm;display:flex;gap:16mm;font-size:10pt;
+/* 表格內距吃掉不少高度，列印時收一點（螢幕版不動） */
+.ct-fill table td{padding:5pt 7pt !important;font-size:9.5pt !important;}
+/* 簽名區（2026-07-31 使用者回報「格式跑掉」）：原本三欄 flex，每欄還塞 12 個全形底線，
+   合計寬度超過可印寬度就會擠成一團／換行。改成兩欄 grid（會員／教練），日期獨佔一列，
+   簽名線用 border-bottom 畫 —— 線的長度自己跟著欄寬走，永遠不會溢出。 */
+.ct-sign{margin-top:8mm;display:grid;grid-template-columns:1fr 1fr;gap:7mm 12mm;font-size:10pt;
   break-inside:avoid;page-break-inside:avoid;}
-.ct-sign>div{flex:1;}
-img.ct-sig{max-width:70mm;border:1px solid #ccc;border-radius:6px;}
+.ct-sign b{font-weight:700;font-size:9.5pt;color:#444;}
+.ct-sign .sig-line{display:block;border-bottom:1px solid #333;height:10mm;margin-top:1mm;}
+.ct-sign .sig-note{font-style:normal;font-size:8.5pt;color:#888;}
+.ct-sign .sig-date{grid-column:1 / -1;}
+img.ct-sig{display:block;max-width:100%;max-height:22mm;border:1px solid #ccc;border-radius:6px;margin-top:1mm;}
 .bar{position:fixed;top:10px;right:12px;z-index:9;display:flex;align-items:center;gap:10px;
   background:rgba(255,255,255,.94);border:1px solid #ddd;border-radius:10px;padding:8px 10px;
   box-shadow:0 4px 16px rgba(0,0,0,.12);}
@@ -33152,12 +33178,22 @@ function ctPrintOpen(title, inner, opts){
   if(opts&&opts.auto===true) setTimeout(()=>{ try{ w.print(); }catch(_){} },350);
   return w;
 }
-/* 2026-07-30 使用者指示：合約新增教練簽名的地方（原本只有會員簽名與日期） */
-const CT_SIGN_BLANK=`<div class="ct-sign">
-  <div>會員簽名：＿＿＿＿＿＿＿＿＿＿＿＿</div>
-  <div>教練簽名：＿＿＿＿＿＿＿＿＿＿＿＿</div>
-  <div>日期：＿＿＿＿年＿＿月＿＿日</div>
-</div>`;
+/* 簽名區（2026-07-30 新增教練簽名；2026-07-31 改由同一支產生）——
+   空白版、紙本簽約版、已簽版三個入口共用，格式不會各長各的。
+   簽名線用 border-bottom 畫（.sig-line），不用全形底線 —— 底線字數固定，
+   欄寬不夠就會換行把版面撐爛（使用者回報「簽名格式跑掉」）。 */
+function ctSignBlock(o){
+  o=o||{};
+  const line='<span class="sig-line"></span>';
+  const mem=o.sigImg
+    ? `<div><b>會員簽名</b><img class="ct-sig" src="${o.sigImg}"></div>`
+    : `<div><b>會員簽名</b>${o.paperNote?'<i class="sig-note">（紙本另存）</i>':''}${line}</div>`;
+  const date=o.dateText
+    ? `<div class="sig-date"><b>簽署日期</b>　${o.dateText}</div>`
+    : '<div class="sig-date"><b>日期</b>　＿＿＿＿ 年 ＿＿ 月 ＿＿ 日</div>';
+  return `<div class="ct-sign">${mem}<div><b>教練簽名</b>${line}</div>${date}</div>`;
+}
+const CT_SIGN_BLANK=ctSignBlock();
 /* 首頁「查看合約」（2026-07-27 使用者指示改彈窗）：彈窗閱讀全文，列印/存 PDF 另開列印視窗 */
 function openContractQuickView(){
   /* A4 版面（2026-07-27 使用者指示）：與列印版同版型——白紙、置中標題、寬幅好讀 */
@@ -34387,12 +34423,8 @@ async function ctViewPrint(id){
      ${c.fill_snapshot||''}
      <div class="ct-text">${String(c.body_snapshot||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
      ${c.signature
-       ? `<div class="ct-sign"><div>會員簽名：<br><img class="ct-sig" src="${c.signature}"></div>
-           <div>教練簽名：＿＿＿＿＿＿＿＿＿＿＿＿</div>
-           <div>簽署日期：${(c.signed_at||'').slice(0,10).replace(/-/g,' / ')}</div></div>`
-       : `<div class="ct-sign"><div>會員簽名：＿＿＿＿＿＿＿＿＿＿＿＿（紙本另存）</div>
-           <div>教練簽名：＿＿＿＿＿＿＿＿＿＿＿＿</div>
-           <div>日期：＿＿＿＿年＿＿月＿＿日</div></div>`}`);
+       ? ctSignBlock({sigImg:c.signature, dateText:(c.signed_at||'').slice(0,10).replace(/-/g,' / ')})
+       : ctSignBlock({paperNote:true})}`);
 }
 function openShiftQuickEdit(){
   window._sqDraft=SHIFT_QUICK.map(([code,start,end])=>({code,start,end}));

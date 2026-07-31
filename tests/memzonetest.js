@@ -87,6 +87,23 @@ ok('★ 沒有那個課別的票就留空（不要塞「—」把五格擠滿）
    /if\(!grp\.length\) return '';/.test(src));
 ok('　　沿用原本那顆圓形卡（tkRowHtml），不另做一套', /return tkRowHtml\(tk, alloc\.byTicket\[tk\.id\]\|\|\[\], null\)/.test(src));
 
+console.log('\n左緣色條＝會員等級（2026-07-31 使用者指示）');
+ok('★ 每一列帶等級色', /lc:\(TIER_DEFS\[effTier\(m\)\]\|\|\{\}\)\.color\|\|'#8a8478',/.test(src));
+ok('★ lpTable 支援 row.lc（opt-in，其他頁不受影響）',
+   /<div class="lp-row\$\{r\.lc\?' lp-lc':''\}" style="grid-template-columns:\$\{grid\};\$\{r\.lc\?`--lc:\$\{r\.lc\};`:''\}"/.test(src));
+ok('★ 與員工列表同一種語言（那邊是聘僱類型色條）',
+   /\.lp-row\.lp-lc\{border-left:4px solid var\(--lc,#8a8478\);\}/.test(src)
+   && /border-left:4px solid var\(--pc,#8a8478\);/.test(src));
+ok('★ 上方有色票說明，帶各等級人數（比照員工列表）',
+   /const tierLegend=`<div class="lp-legend">/.test(src)
+   && /body = tierLegend \+ lpTable\(cols, rows,/.test(src)
+   && /\.lp-legend b::before\{content:"";width:10px;height:10px;border-radius:3px;background:var\(--lc\);\}/.test(src));
+{
+  const cols=[{label:'A',width:'1fr'}];
+  const html=lpTable(cols,[{lc:'#8A5E28',cells:['a']},{cells:['b']}],{});
+  ok('　　有帶 lc 的列才畫色條', (html.match(/lp-lc/g)||[]).length===1 && /--lc:#8A5E28;/.test(html));
+}
+
 console.log('\n右區');
 ok('★ 最近上課與註冊日都用相對日期（今天／3 天前／日期）',
    /m\.created_at \? `<span title="\$\{String\(m\.created_at\)\.slice\(0,10\)\}">\$\{fmtRelDay\(String\(m\.created_at\)\.slice\(0,10\)\)\}<\/span>` : ''/.test(src));
