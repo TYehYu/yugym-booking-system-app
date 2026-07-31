@@ -1,0 +1,88 @@
+/* 手機端的任何變更 → 櫃檯／管理員桌機右下角跳通知（2026-07-31 使用者新規則）
+
+   「只要從手機端變更的內容，不管會員還是教練，都要在櫃檯跟管理員桌機帳號右下角跳通知」
+
+   實作掛在 dbPut／dbDel（唯一的兩個寫入口），不是逐一改呼叫點 ——
+   漏一個就是規則有破洞，而且日後新功能自動被涵蓋。
+   寫入靠 security definer RPC fn_mobile_change_alert（notifications 的 RLS
+   只讓 is_staff_desk() 寫，教練／會員自己 insert 會被擋）。 */
+const fs=require('fs');
+const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+
+let pass=0,fail=0;
+const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
+const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
+
+console.log('掛在資料層，不逐一改呼叫點');
+ok('★ dbPut 寫完就通知', /if\(typeof mchgNotify==='function'\) mchgNotify\(store, data\|\|obj, 'save'\);/.test(src));
+ok('★ dbDel 刪除也通知', /if\(typeof mchgNotify==='function'\) mchgNotify\(store, _snap\|\|\{id\}, 'delete'\);/.test(src));
+ok('★ 刪除前先把內容撈起來（刪完就查不到了）',
+   /if\(typeof mchgEnabled==='function' && MCHG_LABEL\[store\] && mchgEnabled\(\)\)\{ try\{ _snap=await dbGet\(store,id\); \}catch\(_\)\{\} \}/.test(src));
+ok('　　通知不擋主流程（不 await、RPC 失敗吞掉）',
+   /try\{\s*\n\s*await sb\.rpc\('fn_mobile_change_alert'/.test(src) && /\}catch\(_\)\{\}\n\}\nasync function dbPut/.test(src));
+ok('　　原因寫在程式裡', /漏掉一個\s*\n\s*就等於這條規則有破洞/.test(src));
+
+console.log('\n誰會觸發');
+{
+  const fn=g('function mchgEnabled(){','\n}\n');
+  const mk=(role,mobile)=>new Function('CLOUD','SESSION','isMobileLayout',fn+'\nreturn mchgEnabled();')
+    (true,{role},()=>mobile);
+  eq('★ 教練用手機 → 會通知', mk('coach',true), true);
+  eq('★ 會員用手機 → 會通知', mk('member',true), true);
+  eq('★ 櫃檯 → 不通知（人就在桌機前，不用通知自己）', mk('front_desk',true), false);
+  eq('★ 管理員 → 不通知', mk('admin',true), false);
+  eq('★ 教練用桌機（在家調課）→ 不通知，規則講的是「手機端」', mk('coach',false), false);
+  eq('　　沒登入不通知', new Function('CLOUD','SESSION','isMobileLayout',fn+'\nreturn mchgEnabled();')(true,null,()=>true), false);
+  eq('　　離線／本機模式不通知', new Function('CLOUD','SESSION','isMobileLayout',fn+'\nreturn mchgEnabled();')(false,{role:'coach'},()=>true), false);
+}
+
+console.log('\n哪些表要通知');
+{
+  const lbl=new Function(g('const MCHG_LABEL=','};')+'\nreturn MCHG_LABEL;')();
+  eq('★ 預約', lbl.bookings, '預約');
+  eq('★ 出勤打卡', lbl.attendance, '出勤打卡');
+  eq('★ 補卡申請', lbl.punch_requests, '補卡申請');
+  eq('★ 會員資料', lbl.members, '會員資料');
+  ok('★ 不含 member_tickets／ticket_logs —— 簽到一次連寫三張表，會跳三張卡',
+     !('member_tickets' in lbl) && !('ticket_logs' in lbl));
+  ok('　　原因寫在程式裡', /全都通知就是同一件事跳三張卡/.test(src));
+}
+
+console.log('\n卡片內容');
+{
+  const fn=g('function mchgDescribe(store, obj){','\n}\n');
+  const d=new Function('MCHG_LABEL',fn+'\nreturn mchgDescribe;')
+    ({bookings:'預約',attendance:'出勤打卡'});
+  eq('★ 預約寫得出「哪一堂」',
+     d('bookings',{date:'2026-07-31',start_time:'11:00',category:'小班肌力',status:'checked_in'}),
+     '07/31 11:00　小班肌力　·　已簽到');
+  eq('　　取消也標出來', d('bookings',{date:'2026-08-01',start_time:'19:00',category:'私人教練',status:'cancelled'}),
+     '08/01 19:00　私人教練　·　已取消');
+  eq('　　沒有狀態就不硬加', d('bookings',{date:'2026-08-01',start_time:'19:00',category:'體驗'}),
+     '08/01 19:00　體驗');
+  eq('　　其他表用表名（櫃檯至少知道去哪裡看）', d('attendance',{id:'A1'}), '出勤打卡');
+}
+
+console.log('\n顏色與去重');
+ok('★ 取消／刪除用紅（self_cancel），其餘用金（self_move）',
+   /const type = \(action==='delete'\|\|obj&&obj\.status==='cancelled'\) \? 'self_cancel' : 'self_move';/.test(src));
+ok('　　綠色（self_book）留給會員自助預約那條，兩種來源看得出差別',
+   /self_book 綠留給會員自助預約那條/.test(src));
+ok('★ 同一筆短時間重複寫只跳一次（連點、先存時間再存備註）',
+   /if\(_mchgSeen\[key\] && now-_mchgSeen\[key\] < 20000\) return;/.test(src));
+ok('　　去重的鍵含表名＋id＋動作', /const key=store\+':'\+\(\(obj&&obj\.id\)\|\|''\)\+':'\+action;/.test(src));
+
+console.log('\n桌機那頭：收得到、看得懂');
+ok('★ 右下角的 feed 本來就只給櫃檯／管理員／店長的桌機',
+   /return CLOUD && SESSION && isDeskLike\(\) && !isMobileLayout\(\);/.test(src));
+ok('★ 撈的是同一批（recipient_type=desk、未讀）',
+   /\.eq\('recipient_type','desk'\)\.eq\('read',false\)/.test(src));
+ok('★ 時間字樣改「手機操作」（來源不再只有會員）',
+   /return `手機操作 \$\{date\}\$\{hh\}\$\{ago\?`　·　\$\{ago\}`:''\}`;/.test(src));
+ok('　　「全部確認」的確認語也跟著改', /確認這 \$\{ids\.length\} 則手機端異動通知？/.test(src));
+ok('　　會員自助的三支 RPC 不走 dbPut，所以不會重複跳',
+   /會員自助預約／改期／取消走的是 RPC（fn_member_self_\*），那邊已經有 desk_alert，/.test(src));
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail?1:0);

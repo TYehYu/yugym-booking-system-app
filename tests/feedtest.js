@@ -68,7 +68,7 @@ ok('★ 抬頭與「全部確認」按鈕不再渲染',
    !/<div class="dfeed-head" id="dfeed-head" hidden>/.test(src)
    && /el\.innerHTML=`<div id="dfeed-list"><\/div>`;/.test(src));
 ok('★ deskFeedAckAll 保留（函式不刪，日後可恢復入口）', /async function deskFeedAckAll\(\)/.test(src)
-   && /確認這 \$\{ids\.length\} 則會員異動通知？/.test(src));
+   && /確認這 \$\{ids\.length\} 則手機端異動通知？/.test(src));   // 2026-07-31：來源含教練
 ok('　　超過一次顯示上限時講清楚還有幾則，不做無聲截斷',
    /另有 \$\{total-shown\} 則，確認後會接著顯示/.test(src)
    && /\{count:'exact'\}/.test(src));

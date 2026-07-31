@@ -61,8 +61,9 @@ ok('★ 時間改成台灣時間（原本直接切 UTC 字串，19:11 顯示成 
    /function deskFeedWhen\(iso\)\{/.test(src)
    && /const tw=new Date\(d\.getTime\(\)\+8\*3600000\);/.test(src)
    && !/String\(n\.created_at\)\.slice\(5,16\)\.replace\('T',' '\)/.test(src));
-ok('★ 講明是「會員操作」時間，並附幾分鐘前',
-   /return `會員操作 \$\{date\}\$\{hh\}\$\{ago\?`　·　\$\{ago\}`:''\}`;/.test(src));
+/* 2026-07-31：來源不再只有會員（教練從手機做的變更也會進來）→ 字樣改「手機操作」 */
+ok('★ 講明是「手機操作」時間，並附幾分鐘前',
+   /return `手機操作 \$\{date\}\$\{hh\}\$\{ago\?`　·　\$\{ago\}`:''\}`;/.test(src));
 ok('　　今天不重複顯示日期，跨日才帶', /const date = sameDay\?'' : /.test(src));
 ok('　　壞掉的時間字串不會爆', /if\(isNaN\(d\)\) return '';/.test(src));
 ok('★ 輪詢從 45 秒縮到 15 秒（使用者：等了好久）', /const DESK_FEED_MS=15000;/.test(src));

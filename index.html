@@ -6612,8 +6612,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.0135';
-const APP_VERSION_LABEL='v260731.0135';
+const APP_VERSION = '260731.0210';
+const APP_VERSION_LABEL='v260731.0210';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6800,6 +6800,50 @@ async function dbGet(store,id){
   if(error) throw dbFriendlyError(error, store, '讀取');
   return data||null;
 }
+/* ══════ 手機端的任何變更 → 櫃檯／管理員桌機右下角跳通知（2026-07-31 使用者新規則）══════
+   「只要從手機端變更的內容，不管會員還是教練，都要在櫃檯跟管理員桌機帳號右下角跳通知」。
+
+   掛在 dbPut／dbDel 這兩個唯一的寫入口，而不是逐一改幾十個呼叫點 —— 漏掉一個
+   就等於這條規則有破洞，而且日後新增的功能會自動被涵蓋。
+   ・只有會員與教練（含店長）會觸發；櫃檯／管理員本來就在桌機前，不必通知自己。
+   ・只有手機版版面才觸發（使用者講的是「手機端」）；教練桌機版在家調課不算。
+   ・會員自助預約／改期／取消走的是 RPC（fn_member_self_*），那邊已經有 desk_alert，
+     不經過 dbPut，所以不會重複跳。
+   ・寫入失敗一律吞掉，通知不能拖垮原本的操作（RPC 內部也再吞一層）。 */
+/* 刻意不含 member_tickets／ticket_logs：簽到一次會連寫「預約＋票券＋帳本」三張表，
+   全都通知就是同一件事跳三張卡。票券的異動一定伴隨預約的異動，通知預約就夠了。 */
+const MCHG_LABEL={ bookings:'預約', attendance:'出勤打卡', punch_requests:'補卡申請',
+  members:'會員資料' };
+/* 同一筆資料短時間內重複寫（連點、先存時間再存備註）只跳一次 */
+const _mchgSeen={};
+function mchgEnabled(){
+  return !!(CLOUD && SESSION && (SESSION.role==='coach'||SESSION.role==='member') && isMobileLayout());
+}
+/* 預約寫得出「哪一堂」，其餘資料表就用表名 —— 櫃檯至少知道有人動了什麼、去哪裡看 */
+function mchgDescribe(store, obj){
+  if(store!=='bookings' || !obj) return MCHG_LABEL[store]||store;
+  const d=String(obj.date||'').slice(5).replace('-','/');
+  const t=obj.start_time||'';
+  const cat=obj.category||'課程';
+  const st={booked:'已預約',checked_in:'已簽到',completed:'已完成',cancelled:'已取消'}[obj.status]||obj.status||'';
+  return `${d} ${t}　${cat}${st?'　·　'+st:''}`.trim();
+}
+async function mchgNotify(store, obj, action){
+  if(!mchgEnabled()) return;
+  if(!MCHG_LABEL[store]) return;              // 只通知會影響營運的那幾張表
+  const key=store+':'+((obj&&obj.id)||'')+':'+action;
+  const now=Date.now();
+  if(_mchgSeen[key] && now-_mchgSeen[key] < 20000) return;
+  _mchgSeen[key]=now;
+  const what=MCHG_LABEL[store];
+  /* 沿用 desk feed 既有的三種樣式：新增/一般變更＝金、取消/刪除＝紅
+     （self_book 綠留給會員自助預約那條，避免兩種來源看起來一樣） */
+  const type = (action==='delete'||obj&&obj.status==='cancelled') ? 'self_cancel' : 'self_move';
+  const title = action==='delete' ? `從手機刪除了${what}` : `從手機變更了${what}`;
+  try{
+    await sb.rpc('fn_mobile_change_alert',{p_type:type,p_title:title,p_body:mchgDescribe(store,obj)});
+  }catch(_){}
+}
 async function dbPut(store,obj){
   /* 2026-07-30 使用者回報「移動課卡一直跳錯誤」的真兇：
      validateBooking 會在傳入物件上掛暫存欄位（_venueOverflow），拖曳路徑又把同一個物件
@@ -6812,6 +6856,7 @@ async function dbPut(store,obj){
   const{data,error}=await sb.from(tbl(store)).upsert(obj).select().maybeSingle();
   if(error) throw dbFriendlyError(error, store, '儲存');
   dbCacheClear(store);   // 寫入即失效：自己的操作必須立刻看得到
+  if(typeof mchgNotify==='function') mchgNotify(store, data||obj, 'save');   // 手機端變更 → 櫃檯桌機跳通知（不擋主流程）
   return data||obj;
 }
 /* 收款紀錄防護寫入（2026-07-21）：正式庫若尚未套 20260721_04（purchases.invoice_type 欄），
@@ -6829,9 +6874,13 @@ async function dbPutPurchaseSafe(obj){
   }
 }
 async function dbDel(store,id){
+  /* 刪除後就查不到內容了 → 先把要寫進通知的資料撈起來（撈不到也不影響刪除） */
+  let _snap=null;
+  if(typeof mchgEnabled==='function' && MCHG_LABEL[store] && mchgEnabled()){ try{ _snap=await dbGet(store,id); }catch(_){} }
   const{error}=await sb.from(tbl(store)).delete().eq('id',id);
   if(error) throw dbFriendlyError(error, store, '刪除');
   dbCacheClear(store);
+  if(typeof mchgNotify==='function') mchgNotify(store, _snap||{id}, 'delete');
 }
 // 用 invite_token 查單筆待填寫（pending）員工邀請；配合 token RLS policy，匿名也能讀到
 async function dbGetByToken(token){
@@ -7608,7 +7657,7 @@ function deskFeedHead(total, shown){
 async function deskFeedAckAll(){
   const ids=[...document.querySelectorAll('#desk-feed [data-nid]')].map(el=>el.getAttribute('data-nid'));
   if(!ids.length) return;
-  if(!confirm(`確認這 ${ids.length} 則會員異動通知？`)) return;
+  if(!confirm(`確認這 ${ids.length} 則手機端異動通知？`)) return;
   for(const id of ids) await deskFeedAck(id);
   deskFeedSyncHead();   // 全部確認完立刻把抬頭收掉，不等輪詢
 }
@@ -7639,7 +7688,8 @@ function deskFeedPush(n){
     <button class="dfeed-ok" onclick="deskFeedAck('${n.id}')">✓ 確認</button>`;
   host.appendChild(el);
 }
-/* 會員操作時間（台灣時間；今天只顯示時刻＋幾分鐘前，跨日才帶日期） */
+/* 操作時間（台灣時間；今天只顯示時刻＋幾分鐘前，跨日才帶日期）
+   2026-07-31：來源不再只有會員（教練從手機做的變更也會進來）→ 字樣改「手機操作」。 */
 function deskFeedWhen(iso){
   if(!iso) return '';
   const d=new Date(iso);
@@ -7651,7 +7701,7 @@ function deskFeedWhen(iso){
   const mins=Math.max(0,Math.round((Date.now()-d.getTime())/60000));
   const ago = mins<1?'剛剛' : (mins<60?`${mins} 分鐘前` : (mins<1440?`${Math.floor(mins/60)} 小時前`:''));
   const date = sameDay?'' : `${String(tw.getUTCMonth()+1).padStart(2,'0')}/${String(tw.getUTCDate()).padStart(2,'0')} `;
-  return `會員操作 ${date}${hh}${ago?`　·　${ago}`:''}`;
+  return `手機操作 ${date}${hh}${ago?`　·　${ago}`:''}`;
 }
 /* 櫃檯按「確認」才消失並標已讀（先移除、寫入失敗再抓回來，避免訊息被默默吃掉） */
 async function deskFeedAck(id){
