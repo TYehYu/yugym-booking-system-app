@@ -6793,8 +6793,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.0018';
-const APP_VERSION_LABEL='v260801.0018';
+const APP_VERSION = '260801.0021';
+const APP_VERSION_LABEL='v260801.0021';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11188,7 +11188,7 @@ PAGES.g_dashboard=async function(){
     // 下一堂
     const nextTime = nextBk ? nextBk.start_time : '—';
     const nextMem = nextBk ? (nextBk.member_id?(memMap[nextBk.member_id]?memMap[nextBk.member_id].name:'')
-                    : (Array.isArray(nextBk.member_ids)&&nextBk.member_ids.length?`團課 ${nextBk.member_ids.length} 人`:'')) : '';
+                    : (Array.isArray(nextBk.member_ids)&&nextBk.member_ids.length?`團課 ${grpHeadLabel(nextBk)}`:'')) : '';
     // 打卡時間（上班/下班）；下班後顯示「值班時數」取代「已下班」
     const att = attMap[c.id];
     // 值班時數（供桌機打卡欄與手機卡片共用）：班表為上限，不足顯示實際捨去到0.5，超過以班表計
@@ -11255,7 +11255,7 @@ PAGES.g_dashboard=async function(){
       const emin=smin+dur;
       /* 團課一律顯示人數（member_id 在團課上是殘留欄位，2026-07-30 修） */
       const nm = (bkIsGroup(b)||(Array.isArray(b.member_ids)&&b.member_ids.length>0))
-                 ? `團課 ${(Array.isArray(b.member_ids)?b.member_ids.length:0)} 人`
+                 ? `團課 ${grpHeadLabel(b)}`
                  : (b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
                  : (b.trial_name?bkGuestName(b):'—'));   /* 體驗／待簽約／場租都顯示客戶姓名（2026-07-27、2026-07-29 修標籤） */
       const subbed = b.substitute_coach_id && b.substitute_coach_id!==c.id;
@@ -11300,7 +11300,7 @@ PAGES.g_dashboard=async function(){
              原本是「程凱郁（體驗）」接在名字後面，窄卡會折行把名字擠掉。
              nm＝純姓名、_tag＝下面那一列的小字；title 仍用含括號的完整字串。 */
           const _nameOf=id=>memMap[id]?memMap[id].name:'';
-          const nm = _isGrp ? `${(Array.isArray(b.member_ids)?b.member_ids.length:0)} 人` : bkName(b,_nameOf);
+          const nm = _isGrp ? grpHeadLabel(b) : bkName(b,_nameOf);
           const _tag = _isGrp ? '' : bkTag(b);
           const _tagOut = _tag ? `<span class="tcard-sub">${_tag}</span>` : '';
           const _nmFull = _isGrp ? nm : bkNameFull(b,_nameOf);
@@ -11359,7 +11359,7 @@ PAGES.g_dashboard=async function(){
              這一套是首頁手機版自己畫的，沒跟到。） */
           const _grpN2=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids.length:0;
           const _nameOf2=id=>memMap[id]?memMap[id].name:'';
-          const nm2=_grpN2?`${_grpN2} 人`:bkName(b,_nameOf2);
+          const nm2=_grpN2?grpHeadLabel(b):bkName(b,_nameOf2);
           const _lb2=_grpN2?'':bkTag(b);
           const doneB2=isDone(b), cx2=isCancelled(b);
           /* 2026-07-31 使用者回報：MANGO 11:00 全員請假，圓圈卻跟「還沒簽到」長一樣。
@@ -13891,7 +13891,7 @@ async function renderCalendar(opts){
       const _coachTag = (nm, isSub)=>{ if(!nm) return ''; const cl=coachTagColor(_coachId); return `<span class="ev-coach-tag" style="background:${cl.bg};color:${cl.fg};">${nm}${isSub?'（代）':''}</span>`; };
       const _bodyHtml = bkIsGroup(b)
         ? (()=>{ const gCoachNm=subCoachName||coachName||'';
-                 const sub = _showCoach ? `<div class="ev-m">${gHeadsN>0?gHeadsN+' 人 ':''}${gCoachNm?_coachTag(gCoachNm,!!subCoachName):''}</div>` : (gHeadsN>0?`<div class="ev-m">${gHeadsN} 人</div>`:'');
+                 const sub = _showCoach ? `<div class="ev-m">${gHeadsN>0?grpHeadLabel(b)+' ':''}${gCoachNm?_coachTag(gCoachNm,!!subCoachName):''}</div>` : (gHeadsN>0?`<div class="ev-m">${gHeadsN} 人</div>`:'');
                  return `<div class="ev-hd"><span class="ev-time">${b.start_time}</span><span class="ev-t">${bookingTypeName(b,typeMap)}</span></div>${sub}`; })()
         : `<div class="ev-hd"><span class="ev-time">${b.start_time}</span><span class="ev-t">${memName}</span></div>${_showCoach?`<div class="ev-m">${_coachTag(subCoachName||coachName,!!subCoachName)}</div>`:(hideMember?`<div class="ev-m">${typeName}</div>`:'')}`;
       // ── Inline Expand Card · Phase 1 標準卡 ──
@@ -13902,7 +13902,7 @@ async function renderCalendar(opts){
       const _grpCard = !hideMember && bkIsGroup(b);
       const _grpCoachNm = subCoachName||coachName||'';
       // 團課卡（2026-07-25 使用者指示）：主行改「人數」，教練改到第三行 tag（與一般卡一致）
-      const _stdName = hideMember ? typeName : (_grpCard ? (gHeadsN>0?`${gHeadsN} 人`:'團課') : (_nameBase||memName));
+      const _stdName = hideMember ? typeName : (_grpCard ? (gHeadsN>0?grpHeadLabel(b):'團課') : (_nameBase||memName));
       const _stdTag = (!hideMember && !_grpCard && _nameTag) ? `<span class="evc-sub">${_nameTag}</span>` : '';
       // ══ 卡片視覺定版（2026-07-19 使用者指示）：統一方形＋細黑框、底色回歸課程色系、
       // 第三行教練縮寫 tag（教練色，Randy→RA；coachAbbr 既有函式）。形狀 Token 語言退場。 ══
@@ -15571,8 +15571,8 @@ function cagCardType(b){
 }
 function cagCardName(b,memMap,coachObj){
   if(bkIsGroup(b)||(Array.isArray(b.member_ids)&&b.member_ids.length)){
-    const n=(Array.isArray(b.member_ids)?b.member_ids.length:0);
-    return n>0?`小班 ${n} 人`:'小班肌力';
+    const lb=grpHeadLabel(b);
+    return lb?`小班 ${lb}`:'小班肌力';
   }
   if(b.member_id) return memMap[b.member_id]||'—';
   if(bkIsSelf(b)) return '自主訓練';
@@ -19952,6 +19952,20 @@ function grpAllDone(b){
   const att=attObj(b);
   return keys.every(k=>att[k]==='checked_in'||att[k]==='leave')
       && keys.some(k=>att[k]==='checked_in');
+}
+/* 團課課卡上的人數（2026-08-01 使用者回報：7/23 19:30 小曾的團課有一個名額請假，
+   應該顯示 4/5 人）。原本只印報名人數，櫃檯看到「5 人」會準備 5 份，但其中一位
+   請假了不會來。改成：有人請假時標「會來的/報名的」，沒人請假就照舊只印一個數字，
+   畫面不會變雜。
+   ⚠ 這與計薪的 grpAttendHeads 是兩件事 —— 那支只算「已簽到」（人頭費付給實際來的人），
+     這支算「會來的」＝報名 − 請假（課前就要知道要準備幾份）。 */
+function grpHeadLabel(b){
+  const keys=seatKeys(b);
+  const total=keys.length || (b&&b.member_id?1:0);
+  if(!total) return '';
+  const att=attObj(b);
+  const onLeave=keys.filter(k=>att[k]==='leave').length;
+  return onLeave>0 ? `${total-onLeave}/${total} 人` : `${total} 人`;
 }
 /* 團課人次（2026-07-31 使用者指示：「簽到」才算人數，請假的不能計算）——
    人頭費是付給「實際來上課的人」。原本算的是「非請假的名額」（2026-07-30），

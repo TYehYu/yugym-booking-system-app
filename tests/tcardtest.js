@@ -15,11 +15,11 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
 console.log('團課課卡的名稱');
+/* 2026-08-01：人數改用共用的 grpHeadLabel（有人請假就標「會來的/報名的」） */
 ok('★ 團課一律顯示人數，不再掉回 member_id',
    /const _isGrp = bkIsGroup\(b\) \|\| \(Array\.isArray\(b\.member_ids\)&&b\.member_ids\.length>0\);/.test(src)
-   && /const nm = _isGrp \? `\$\{\(Array\.isArray\(b\.member_ids\)\?b\.member_ids\.length:0\)\} 人`/.test(src));
-ok('★ 滑過細條的提示也一起修',
-   /\? `團課 \$\{\(Array\.isArray\(b\.member_ids\)\?b\.member_ids\.length:0\)\} 人`/.test(src));
+   && /const nm = _isGrp \? grpHeadLabel\(b\) : bkName\(b,_nameOf\);/.test(src));
+ok('★ 滑過細條的提示也一起修', /\? `團課 \$\{grpHeadLabel\(b\)\}`/.test(src));
 ok('　　體驗／待簽約／場租仍顯示客戶姓名', /\(b\.trial_name\?bkGuestName\(b\):'—'\)\)/.test(src));
 ok('　　原因寫在程式裡', /她根本沒上這堂/.test(src));
 

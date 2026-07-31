@@ -148,8 +148,9 @@ console.log('\n課卡：體驗／待簽約另起一列放在姓名下面（2026-
 /* 2026-07-31 重構：姓名與標籤改走共用的 bkName／bkTag／bkNameFull（見 bkviewtest.js） */
   ok('★ 體驗／待簽約／待繳費／場租都走同一支',
      (blk.match(/_nameBase=bkName\(b,id=>memMap\[id\]\); _nameTag=bkTag\(b\); memName=bkNameFull\(b,id=>memMap\[id\]\);/g)||[]).length===4);
+/* 2026-08-01：人數改用共用的 grpHeadLabel（有人請假就標「會來的/報名的」） */
   ok('★ 標準卡主行只放純姓名',
-     /const _stdName = hideMember \? typeName : \(_grpCard \? \(gHeadsN>0\?`\$\{gHeadsN\} 人`:'團課'\) : \(_nameBase\|\|memName\)\);/.test(src));
+     /const _stdName = hideMember \? typeName : \(_grpCard \? \(gHeadsN>0\?grpHeadLabel\(b\):'團課'\) : \(_nameBase\|\|memName\)\);/.test(src));
   ok('★ 標籤畫成姓名下面那一列',
      /const _stdTag = \(!hideMember && !_grpCard && _nameTag\) \? `<span class="evc-sub">\$\{_nameTag\}<\/span>` : '';/.test(src)
      && /<span class="evc-name">\$\{_stdName\}<\/span>\$\{_stdTag\}/.test(src));

@@ -110,6 +110,30 @@ ok('　　已簽到／未簽到不受影響',
 ok('　　原因寫在程式裡（品牌色強度：紅＞金＞綠）',
    /跟旁邊的「已簽到」淡綠幾乎一樣，一整排掃過去看不出誰沒來/.test(src));
 
+/* 2026-08-01 使用者回報：7/23 19:30 小曾的團課有一個名額請假，課卡應顯示 4/5 人 */
+console.log('\n課卡上的人數：有人請假就標「會來的/報名的」');
+{
+  const lb=new Function('seatKeys','attObj',
+    g('function grpHeadLabel(b){','\n}\n')+'\nreturn grpHeadLabel;')(
+      new Function(g('function mids(','\n}\n')+'\n'+g('function seatKeys(b){','\n}\n')+'\nreturn seatKeys;')(),
+      new Function(g('function attObj(b){','\n}\n')+'\nreturn attObj;')());
+  const G=(ids,att)=>({category:'小班肌力',member_ids:ids,attendance:att||{}});
+  eq('★ 5 人報名、1 人請假 → 4/5 人（7/23 那堂）',
+     lb(G(['A','B','C','D','E'],{C:'leave'})), '4/5 人');
+  eq('★ 沒有人請假 → 只印一個數字，畫面不變雜', lb(G(['A','B','C'],{})), '3 人');
+  eq('★ 已簽到不影響（課前就要知道要準備幾份）',
+     lb(G(['A','B','C'],{A:'checked_in',B:'checked_in'})), '3 人');
+  eq('　　兩人請假 → 3/5', lb(G(['A','B','C','D','E'],{A:'leave',C:'leave'})), '3/5 人');
+  eq('　　全員請假 → 0/3', lb(G(['A','B','C'],{A:'leave',B:'leave',C:'leave'})), '0/3 人');
+  eq('　　同一人兩個名額、只請假一個 → 1/2',
+     lb(G(['A','A'],{'A#2':'leave'})), '1/2 人');
+  eq('　　沒有名單 → 空字串（呼叫端自己決定顯示什麼）', lb(G([],{})), '');
+}
+ok('★ 五個顯示課卡人數的地方都改（行事曆主行與副標、手機課表、首頁任務卡、首頁圓點、下一堂）',
+   (src.match(/grpHeadLabel\(b\)/g)||[]).length>=5 && /grpHeadLabel\(nextBk\)/.test(src));
+ok('★ 與計薪的人次分開（那支只算已簽到，這支算會來的）',
+   /⚠ 這與計薪的 grpAttendHeads 是兩件事/.test(src));
+
 console.log('\n名單本身不動');
 ok('★ 請假的人仍列在名單上（可以取消請假）', /groupToggleLeave\('\$\{b\.id\}','\$\{mid\}'\)">取消請假/.test(src));
 /* 2026-07-31 使用者指示再收緊：人次改成「簽到才算」（請假與漏簽都不算），見 seattest.js */
