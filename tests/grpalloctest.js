@@ -152,13 +152,15 @@ console.log('\n三個後台畫面都改吃同一支');
 ok('★ 會員個人資料頁（櫃檯／管理員）',
    /const WAL=buildWallet\(PP\.id,\{tickets:c\.myTk\|\|\[\], bookings:c\.myBk\|\|\[\], logs:c\.myLogs\|\|\[\], typeMap\}\);/.test(src)
    && /const ga=grpTicketAlloc\(mine, live, c\.logs\|\|\[\], memberId, \(\)=>true\);/.test(src));
+/* 2026-07-31 二修：教練名片也改從票券夾拿（票券夾內部就是呼叫 grpTicketAlloc） */
 ok('★ 教練的簡易名片（openMemberDetail）',
-   /const _grpA=grpTicketAlloc\(myTickets\|\|\[\], bookings\|\|\[\], tkLogs\|\|\[\], member_id,/.test(src)
-   && /const grpPending=_grpA\.pend\[t\.id\]\|\|0;/.test(src));
-ok('★ 三邊都載入 ticket_logs', (src.match(/團課扣課紀錄（2026-07-31，見 grpTicketAlloc）/g)||[]).length===3);
+   /const WAL=buildWallet\(member_id,\{tickets, bookingsOf:\(\)=>sharedBookings, logs:tkLogs\|\|\[\], typeMap\}\);/.test(src)
+   && /const tkUsedCount=\(t\)=>\(\(WAL\.of\(t\.id\)\|\|\{\}\)\.used\)\|\|0;/.test(src));
+ok('★ 各畫面都載入 ticket_logs', (src.match(/團課扣課紀錄（2026-07-31，見 grpTicketAlloc）/g)||[]).length===3
+   && /票券夾要用扣課紀錄（2026-07-31，見 buildWallet）/.test(src));
 ok('★ 「已用堂數」與「是否收進歷史」用同一個數字（圓點不會跟卡片矛盾）',
    /else if\(total>0 && used<total\) state='active';/.test(src)
-   && /if\(total>0 && tkUsedCount\(t\)<total\) return false;/.test(src));
+   && /return \(\(WAL\.of\(t\.id\)\|\|\{\}\)\.state\)==='history';/.test(src));
 ok('★ 團課簽到名單的圓點（2026-07-31 使用者回報：會員票券頁對、簽到名單少一顆）',
    /const _ga=grpTicketAlloc\(own, myGrp, _allLg, mid, \(\)=>true\);/.test(src)
    && /let bks=grpMergeAlloc\(_al\.byTicket, _ga\)\(cur\.id\)\.slice\(\);/.test(src));
@@ -167,13 +169,15 @@ ok('★ 簽到名單顯示「本堂扣的那張票」，不是猜最快到期的
    && /const cur=\(_paid&&own\.find\(t=>t\.id===_paid\)\)/.test(src));
 ok('　　沒有扣課紀錄（舊系統匯入）才退回原本的挑法',
    /\/\/ 本堂扣的那張優先；沒有扣課紀錄（舊系統匯入）才退回「最快到期的可用票／最新的票」/.test(src));
-ok('★ 圓點也改吃合併結果',
+ok('★ 圓點也改吃合併結果（票券夾的戳記）',
    /const bks=sl\.stamps;/.test(src)
-   && /const _mg=_grpMerge\(t\.id\);/.test(src));
+   && /const circles=ticketTokens\(t,WAL\.stampsOf\(t\.id\),typeMap,usedCount\);/.test(src));
 ok('　　舊的「最近那張團課票」猜法已經拿掉',
    !/_grpNewestP/.test(src) && !/_grpTkNewest/.test(src));
-ok('　　會員端「我的票券」本來就是這樣反查的（沒動它）',
-   /由扣票紀錄反查（涵蓋團課等 booking\.ticket_id 為 null 的情況）/.test(src));
+/* 2026-07-31 二修：會員端「我的票券」那份反查邏輯搬進票券夾，全系統共用同一份 */
+ok('　　會員端「我的票券」也改吃票券夾',
+   /const WAL=buildWallet\(SESSION\.id,\{tickets,bookings,logs,typeMap\}\);/.test(src)
+   && /原本這裡就是全系統唯一算對的一份（直連＋扣課紀錄反查），現在那份邏輯住在票券夾裡/.test(src));
 ok('　　為什麼改，寫在程式裡',
    /續約、補課券、同日買兩張都是常態，這個猜法遲早會錯/.test(src));
 

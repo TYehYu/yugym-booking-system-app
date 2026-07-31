@@ -6747,8 +6747,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1829';
-const APP_VERSION_LABEL='v260731.1829';
+const APP_VERSION = '260731.1838';
+const APP_VERSION_LABEL='v260731.1838';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10399,8 +10399,12 @@ function buildWallet(memberId, ctx){
   const mine=(c.tickets||[]).filter(t=>tkUsableBy(t,memberId));
   /* 團課的學員放在 member_ids、member_id 是 null —— 只用 member_id 過濾會整批漏掉團課。
      清單頁一頁上百人，逐人掃全表太慢，允許呼叫端傳現成的索引進來。 */
+  const mineIds={}; mine.forEach(t=>{ mineIds[t.id]=1; });
+  /* 共享票的堂數是共用的：蓋在我票上的課卡，就算上課的是共享者也要算進來
+     （2026-07-26 起支援共享票，堂數共用一個池）。 */
   const myBk=c.bookingsOf ? (c.bookingsOf(memberId)||[])
     : (c.bookings||[]).filter(b=>b && (b.member_id===memberId
+        || (b.ticket_id&&mineIds[b.ticket_id])
         || (Array.isArray(b.member_ids)&&b.member_ids.includes(memberId))));
   const live=myBk.filter(b=>b && b.status!=='cancelled');
 
@@ -20484,21 +20488,9 @@ async function openMemberDetail(member_id){
   if(_shrPeers.size){
     try{ (await dbGetAll('members')).forEach(x=>{ peerName[x.id]=x.name; }); }catch(_){}
   }
-  // 票券顯示「未使用堂數 = 總數 − 已簽到/完成」（已預約未上仍算未使用）
-  //  共享票的堂數共用，故一律以 sharedBookings 為準（無共享票時它就等於 myBookings）
-  const usedMap=usedSessionsMap(sharedBookings);
-  const usedDates=usedDatesMap(sharedBookings);
-  /* 每張票券扣抵的預約（給逐堂圓點標日期）：ticket_id 直連；團課 ticket_id 為 null 者
-     此視窗未載入 ticket_logs，故只少了日期標示，實心格數仍以 usedDates 為準 */
-  const bkByTk={};
-  (sharedBookings||[]).forEach(b=>{ if(b.ticket_id&&b.status!=='cancelled'){ (bkByTk[b.ticket_id]=bkByTk[b.ticket_id]||[]).push(b); } });
-  Object.values(bkByTk).forEach(arr=>arr.sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||''))));
-  /* 匯入票券沒有 ticket_id 直連（全庫 2,400 多張票只有 11 筆預約有綁），逐堂圓點會完全沒有日期，
-     而且「已用堂數」只能拿 總堂−剩餘 來推 —— 但舊系統的「未核銷額度」把已預約也算掉了，
-     於是未來的預約會被畫成已上課的實心勾（朱庭箴 8/02、8/09 的課被畫成 ✓）。
-     這裡改用先進先出推算（allocBookingsToTickets，與預約明細共用同一支，兩邊才會一致）。 */
-  const _tkAlloc=allocBookingsToTickets(myTickets,sharedBookings,typeMap);
-  const inferByTk=_tkAlloc.inferred;
+  /* 2026-07-31 使用者定案：票券一律從票券夾拿（見 buildWallet）。
+     共享票的堂數共用，所以餵給票券夾的是 sharedBookings（無共享票時它就等於 myBookings）。 */
+  const WAL=buildWallet(member_id,{tickets, bookingsOf:()=>sharedBookings, logs:tkLogs||[], typeMap});
   // 票券分類：課程票券（教練/友善/團課）vs 自主訓練
   const tkCategoryOf=(t)=>{
     const ty=typeMap[t.ticket_type_id];
@@ -20519,24 +20511,9 @@ async function openMemberDetail(member_id){
   const f=(l,v)=>`<div class="mdetail-field"><div class="mdf-l">${l}</div>${v||'—'}</div>`;
   const isCoach = SESSION.role==='coach'; // 教練：精簡檢視，隱藏付款/發票/金額/等級調整等
 
-  /* 團課的「已預約但還沒簽到」堂數（2026-07-29 黃孟琦、2026-07-30 Jackie、2026-07-31
-     陳暐濰／王雅雯）—— 改由扣課紀錄逐張票算，算式與成因見 grpTicketAlloc。 */
-  const _grpA=grpTicketAlloc(myTickets||[], bookings||[], tkLogs||[], member_id,
-    t=>((typeMap[t.ticket_type_id]||{}).category)==='小班肌力');
-  const _grpMerge=grpMergeAlloc(_tkAlloc.byTicket, _grpA);   // 團課圓點以扣課紀錄為準（2026-07-31）
-  /* 已上堂數（2026-07-29 抽成共用）：卡片圓點與「是否該歸到歷史紀錄」要用同一個數字，
-     否則會出現「圓點還有空心、卡片卻被收進歷史」的矛盾。算式說明見 renderTkCard 內註解。 */
-  const tkUsedCount=(t)=>{
-    const total=t.sessions_total||0;
-    const dates=(usedDates[t.id]||[]);
-    const inf=inferByTk[t.id]||[];
-    const bookedBound=((bkByTk[t.id]||[]).filter(x=>x.status==='booked')).length;
-    const grpPending=_grpA.pend[t.id]||0;
-    const faceUsed=Math.max(0,(total-(t.sessions_remaining??total))-bookedBound-grpPending);
-    return Math.min(total,(t.sessions_remaining==null)
-      ? Math.max(dates.length, inf.filter(x=>x.status==='checked_in'||x.status==='completed').length)
-      : Math.max(dates.length, faceUsed));
-  };
+  /* 已上堂數：卡片圓點與「是否該歸到歷史紀錄」用同一個數字，
+     否則會出現「圓點還有空心、卡片卻被收進歷史」的矛盾。 */
+  const tkUsedCount=(t)=>((WAL.of(t.id)||{}).used)||0;
   // 票券卡片渲染（圓圈進度）
   /* 票券金額（2026-07-30 使用者指示）：每張票旁邊顯示收了多少錢；
      金額 0 的就把備註帶出來（隨方案加贈／舊系統匯入無金額／金額待確認），
@@ -20544,7 +20521,6 @@ async function openMemberDetail(member_id){
   const renderTkCard=(t,extraBtn)=>{
     const ty=typeMap[t.ticket_type_id];
     const total=t.sessions_total||0;
-    const dates=(usedDates[t.id]||[]).slice();
     /* 2026-07-26：已用堂數原本只數「綁到這張票的預約」，但舊系統匯入的票券一筆預約都沒綁
        （全庫 2,400 多張票只有 11 筆預約有 ticket_id），導致早就用完的歷史票券整排空心、
        未使用堂數也算成滿的。改取「帳面已用（總堂−剩餘）」與「有紀錄的預約數」較大者：
@@ -20559,16 +20535,12 @@ async function openMemberDetail(member_id){
        正式庫有 2,272 筆「已上課未扣票」的歷史課，先進先出會把它們塞進沒用過的票
        （自主訓練 2 點的卡整排被填滿）。餘額口徑修正後帳面已用可信，推算只在
        沒有餘額資訊時當後備。（實際算式已抽到上方 tkUsedCount） */
-    const inf=inferByTk[t.id]||[];
     const usedCount = tkUsedCount(t);
     const isDim=(t.status!=='usable')||(t.expire_date&&t.expire_date<ymd(TODAY));
     /* 2026-07-23 使用者指示：票券逐堂顯示全系統統一 —— 改用 ticketTokens
-       （課種色圓點：實心＋上課日期／空心＋預約日期／空心未使用），取代原本的灰色 tkc-dot。 */
-    // 有綁預約用真的，沒綁就用先進先出推算出來的那批（見上方 inferByTk）
-    /* 圓點改吃合併結果（直連＋分配，2026-07-26 徐子芸案例）：混合票的未來預約（如 7/29）
-       原本因票已有直連而被跳過，卡上看不到；byTicket 已把兩者合併排序。 */
-    const _mg=_grpMerge(t.id);
-    const circles=ticketTokens(t,(_mg.length?_mg:(bkByTk[t.id]||inf)),typeMap,usedCount);
+       （課種色圓點：實心＋上課日期／空心＋預約日期／空心未使用），取代原本的灰色 tkc-dot。
+       2026-07-31 起圓點直接拿票券夾的戳記，與已用堂數同源。 */
+    const circles=ticketTokens(t,WAL.stampsOf(t.id),typeMap,usedCount);
     const inst=t.installment&&typeof t.installment==='object'?t.installment:null;
     const instTag=inst?`<span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;margin-left:6px;">🔒 分期 ${t.unlocked_sessions||inst.current||0}/${total}</span>`:'';
     /* 共享票（2026-07-26）：標出跟誰共用；持有人非本人時額外註明「◎ 持有人」，
@@ -20604,23 +20576,15 @@ async function openMemberDetail(member_id){
      已過期＝到期日已過且剩餘>0 → 列表下方、可「重新啟用」（管理員/櫃台）；
      歷史＝剩餘 0 且無未來預約（或 used_up/refunded）→ 收合區，完整保留。 */
   const _todayYmd2=ymd(TODAY);
-  const _hasFutureBk=t=>myBookings.some(b=>b.ticket_id===t.id&&b.date>=_todayYmd2&&(b.status==='booked'||b.status==='checked_in'));
-  /* 2026-07-31 使用者指示：有效期的票只要過期就歸「已過期」，不再看還剩不剩堂數
-     （原本剩 0 的過期票會掉進歷史紀錄摺疊區，限定方案這種有效期的票就找不到了）。
+  /* 三區的判定改問票券夾（2026-07-31）：
+     ・有效期的票只要過期就歸「已過期」，不看還剩不剩堂數 —— 否則剩 0 的過期票會掉進
+       歷史摺疊區，限定方案這種有效期的票就找不到了
+     ・「預約了但還沒上（空心圓）」不算用掉，整張票就還沒結束（2026-07-29）
      「重新啟用」仍只對還有剩餘堂數的票出現 —— 用完的票沒有東西可以啟用。 */
-  const _isExpiredTk=t=>t.status!=='refunded'&&t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2;
+  const _isExpiredTk=t=>((WAL.of(t.id)||{}).state)==='expired';
   const _canReactTk=t=>_isExpiredTk(t)&&(Number(t.sessions_remaining)||0)>0;
-  /* 2026-07-29 使用者指示：「預約了但還沒上（空心圓）」不該算進歷史紀錄。
-     原本只看 sessions_remaining<=0 —— 新制預約當下就扣課，四堂全約完但一堂還沒上的票
-     餘額就是 0，於是整張被收進歷史。團課更明顯：團課預約的 member_id 是 null，
-     _hasFutureBk 掃不到，救不回來。改成以「已上堂數」為準，與卡片圓點同一個數字。 */
   const _isHistoryTk=t=>{
-    if(_isExpiredTk(t)) return false;                                             // 過期但還有堂數 → 另立區塊
-    if(t.status==='refunded') return true;
-    if(t.expire_date&&String(t.expire_date).slice(0,10)<_todayYmd2) return true;  // 已過期且無剩餘
-    const total=Number(t.sessions_total)||0;
-    if(total>0 && tkUsedCount(t)<total) return false;                             // 還有已預約未上的堂數
-    return t.status==='used_up'||(((Number(t.sessions_remaining)||0)<=0)&&!_hasFutureBk(t));
+    return ((WAL.of(t.id)||{}).state)==='history';
   };
   const _canReact=(isDeskLike());
   /* allowReact：只有課程票券（教練課／友善教練課／團體課）能重新啟用。
@@ -26552,16 +26516,9 @@ PAGES.m_tickets=async function(){
     dbGetAll('member_tickets'),dbGetAll('ticket_types'),dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('bookings').catch(()=>[])]);
   window._ttCache=types; window._allTkCache=tickets;
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
-  const mine=tickets.filter(t=>tkUsableBy(t,mid)).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));   // 含共享票（2026-07-26）
-  const myBk=(bookings||[]).filter(b=>b.member_id===mid || (Array.isArray(b.member_ids)&&b.member_ids.includes(mid)));
-  const usedMap=usedSessionsMap(myBk);
-  // 每張票券扣抵的預約（給圓圈進度）
-  const bkByTicket={};
-  myBk.forEach(b=>{ if(b.ticket_id && b.status!=='cancelled'){ (bkByTicket[b.ticket_id]=bkByTicket[b.ticket_id]||[]).push(b); } });
-  (logs||[]).forEach(lg=>{ if(lg.action==='deduct' && lg.ticket_id && lg.booking_id){ const b=myBk.find(x=>x.id===lg.booking_id); if(b && b.status!=='cancelled'){ const arr=(bkByTicket[lg.ticket_id]=bkByTicket[lg.ticket_id]||[]); if(!arr.some(x=>x.id===b.id)) arr.push(b); } } });
-  Object.values(bkByTicket).forEach(arr=>arr.sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||''))));
-  // 依 bkByTicket 重算已簽到堂數（涵蓋團課：booking.ticket_id 為 null、靠 ticket_logs 反查者）
-  Object.keys(bkByTicket).forEach(tid=>{ usedMap[tid]=bkByTicket[tid].filter(b=>b.status==='checked_in'||b.status==='completed').length; });
+  // 2026-07-31 使用者定案：從票券夾拿（見 buildWallet）
+  const WAL=buildWallet(mid,{tickets,bookings,logs,typeMap});
+  const mine=WAL.tickets.slice().sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));   // 含共享票（2026-07-26）
 
   const stLabel={usable:'可用',used_up:'用畢',expired:'過期',refunded:'已退'};
   const stTag={usable:'tag-ok',used_up:'tag-warn',expired:'tag-danger',refunded:'tag-danger'};
@@ -26599,9 +26556,10 @@ PAGES.m_tickets=async function(){
         const ty=typeMap[t.ticket_type_id];
         const rk=rankOf(t);
         const dim = rk>=1;                             // 已使用完/過期/退款 → 淡化
+        const _sl=WAL.of(t.id)||{stamps:[],used:0};
         const total=Number(t.sessions_total)||0;
         const rem=Number(t.sessions_remaining)||0;
-        const used=Math.max(0,total-rem);              // 已使用堂數（實心格數）
+        const used=_sl.used;                           // 已使用堂數（實心格數，與圓點同源）
         const stateBadge = rk===3 ? '<span class="mck-badge">已退款</span>'
                           : rk===2 ? '<span class="mck-badge">已到期</span>'
                           : rk===1 ? '<span class="mck-badge">已使用完</span>'
@@ -26636,8 +26594,7 @@ PAGES.m_tickets=async function(){
           </div>
           <!-- 2026-07-23：逐堂顯示全系統統一為課種色圓點（實心＋日期／空心＋預約日期／空心）
                實心格數＝已簽到/完成（與會員端同口徑），已預約未上算未使用但標預約日期 -->
-          <div class="mck-dots2">${ticketTokens(t,bkByTicket[t.id]||[],typeMap,
-            Math.max(0,total-ticketUnused(t,usedMap,(bkByTicket[t.id]||[]).filter(b=>b.status==='booked'||b.status==='scheduled').length)))}</div>
+          <div class="mck-dots2">${ticketTokens(t,_sl.stamps,typeMap,used)}</div>
           <div class="mwtk-foot">
             <div class="mck-prog"><b>${used}</b><span class="mck-prog-tot">/ ${total} 堂</span>${rem>0&&rk===0?`<span style="font-size:11.5px;color:var(--t3);margin-left:8px;">剩 ${rem} 堂</span>`:''}</div>
             <button class="btn btn-ghost btn-sm" onclick="viewLogs('${t.id}')">使用紀錄</button>
@@ -32705,60 +32662,21 @@ PAGES.mem_tickets=async function(){
   window._ctByTicket=Object.fromEntries(window._memContracts.filter(c=>c.ticket_id).map(c=>[c.ticket_id,c.id]));   // 合約綁票券圓形卡（2026-07-28）
   window._ttCache=types;
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
-  const mine=tickets.filter(t=>tkUsableBy(t,SESSION.id));   // 含共享給我的票（2026-07-26）
-  const myBk=(bookings||[]).filter(b=>b.member_id===SESSION.id || (Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id)));
-  // 未使用堂數 = 總數 − 已簽到/完成（已預約未上仍算未使用，避免會員誤會堂數用完）
-  const usedMap=usedSessionsMap(myBk);
-  // 每張票券扣抵的預約清單（給圓圈進度條：已上=反白、已預約=標日期），依日期時間排序
-  //  一般課：booking.ticket_id 直接對應；
-  //  團課：booking.ticket_id 為 null，改由 ticket_logs 的 deduct 紀錄反查（ticket_id ↔ booking_id）
-  const bkById=Object.fromEntries(myBk.map(b=>[b.id,b]));
-  const bkByTicket={};
-  const pushUniq=(tid,b)=>{ const arr=(bkByTicket[tid]=bkByTicket[tid]||[]); if(!arr.some(x=>x.id===b.id)) arr.push(b); };
-  // ① 直接關聯
-  myBk.forEach(b=>{
-    if(!b.ticket_id || b.status==='cancelled') return;
-    pushUniq(b.ticket_id, b);
-  });
-  // ② 由扣票紀錄反查（涵蓋團課等 booking.ticket_id 為 null 的情況）
-  (logs||[]).forEach(lg=>{
-    if(lg.action!=='deduct' || !lg.ticket_id || !lg.booking_id) return;
-    const b=bkById[lg.booking_id];
-    if(!b || b.status==='cancelled') return;
-    // 只補進屬於本會員的票券
-    const tk=mine.find(t=>t.id===lg.ticket_id); if(!tk) return;
-    pushUniq(lg.ticket_id, b);
-  });
-  Object.values(bkByTicket).forEach(arr=>arr.sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||''))));
-  // 依 bkByTicket 重算已使用堂數（涵蓋團課：ticket_id=null 但由 log 反查到的預約）
-  Object.keys(bkByTicket).forEach(tid=>{
-    usedMap[tid]=bkByTicket[tid].filter(b=>b.status==='checked_in'||b.status==='completed').length;
-  });
-  // 每張票券「已預約但尚未上課」堂數（給 ticketUnused 的上限鉗制用）
-  const bookedMap={};
-  Object.keys(bkByTicket).forEach(tid=>{
-    bookedMap[tid]=bkByTicket[tid].filter(b=>b.status==='booked'||b.status==='scheduled').length;
-  });
-  /* 圓形卡改用與「課卡點開（預約明細）」同一套（2026-07-26 使用者指示）：
-     merged 圓點＝直連＋先進先出分配（有日期）；已用堂數＝三訊號（直連已上／推算已上／帳面）。 */
-  const tkAlloc=allocBookingsToTickets(mine,myBk,typeMap);
-  _memTkData={mine,typeMap,logs,usedMap,bkByTicket,bookedMap,tkAlloc};
+  /* 2026-07-31 使用者定案：這一頁不再自己算票券，全部從票券夾拿（見 buildWallet）。
+     原本這裡就是全系統唯一算對的一份（直連＋扣課紀錄反查），現在那份邏輯住在票券夾裡，
+     其他畫面也吃同一份，不會再出現「會員端對、後台錯」。 */
+  const WAL=buildWallet(SESSION.id,{tickets,bookings,logs,typeMap});
+  const mine=WAL.tickets;
+  _memTkData={mine,typeMap,logs,WAL};
   renderMemTickets();
 };
 function renderMemTickets(){
   if(!_memTkData) return;
-  const {mine,typeMap,logs,usedMap,bkByTicket,bookedMap,tkAlloc}=_memTkData;
+  const {mine,typeMap,logs,WAL}=_memTkData;
   const today=ymd(TODAY);
-  // 「有效」判斷：只看「已簽到/完成」堂數 —— 只要還有沒上完的堂（已簽到 < 總堂數），票券就算持有中。
-  //  已預約但還沒上（沒簽到）不算用掉，避免「約了課就被歸到已完成」而反灰跑到下方。
-  const doneOf=t=>((usedMap||{})[t.id]||0);   // 已簽到/完成堂數
-  /* 2026-07-28 使用者指示（歷史整合修正）：帳面剩 0 且沒有「已預約未上」的票＝用完 → 收進歷史。
-     原本只看「已簽到 < 總堂數」，匯入票（舊系統已用完但無逐堂紀錄）會一直掛在有效區。
-     剩 0 但還有已預約未上的堂（預約即扣）仍算持有中，不會提早消失。 */
-  const isLive=t=>t.status==='usable' && (!t.expire_date||t.expire_date>=today)
-    && ( (Number(t.sessions_remaining)||0)>0
-      || ((bookedMap||{})[t.id]||0)>0
-      || (t.sessions_remaining==null && doneOf(t)<(t.sessions_total||0)) );
+  /* 「持有中」由票券夾判定（2026-07-31）：已預約但還沒簽到不算用掉，
+     避免「約了課就被歸到已完成」而反灰跑到下方；帳面剩 0 且沒有待上的才收進歷史。 */
+  const isLive=t=>((WAL.of(t.id)||{}).state)==='active';
   /* 2026-07-23 使用者指示：自主訓練點數效期短（7 天）、數量多且由會員自行預約，
      不與課程票券混列 —— 抽到頁面上方獨立入口（openSelfPtsModal）。 */
   /* 折抵券獨立顯示（2026-07-26 使用者指示）：下方清單只留一般課程票券 */
@@ -32784,19 +32702,12 @@ function renderMemTickets(){
     const ty=typeMap[t.ticket_type_id];
     const color=ty?ty.color:'pt';
     const remain=t.sessions_remaining||0, total=t.sessions_total||0;
-    const unused=ticketUnused(t,usedMap,((bookedMap||{})[t.id]||0)); // 顯示用：未使用（以真實剩餘+已預約為上限）
     const days=t.expire_date?diffDays(t.expire_date,today):null;
     const soon=!dim&&days!=null&&days<=7&&days>=0;
-    /* 圓點與數字同源（2026-07-26 使用者回報：1 顆實心卻寫 3/4）：
-       數字改「已用/總數」，與圓點實心數一致；已用＝明細版三訊號。 */
-    const _bksC=(tkAlloc&&tkAlloc.byTicket&&tkAlloc.byTicket[t.id])||(bkByTicket||{})[t.id]||[];
-    const _isAttC=x=>x.status==='checked_in'||x.status==='completed';
-    const _datesN=(((bkByTicket||{})[t.id])||[]).filter(_isAttC).length;
-    const _infAtt=((tkAlloc&&tkAlloc.inferred&&tkAlloc.inferred[t.id])||[]).filter(_isAttC).length;
-    const _bbC=(((bkByTicket||{})[t.id])||[]).filter(x=>x.status==='booked').length;
-    const _remC=t.sessions_remaining;
-    const _faceC=_remC==null?0:Math.max(0,(total-_remC)-_bbC);
-    const usedCnt=Math.min(total,_remC==null?Math.max(_datesN,_infAtt):Math.max(_datesN,_faceC));
+    /* 圓點與數字同源（2026-07-26 使用者回報：1 顆實心卻寫 3/4）——
+       2026-07-31 起兩者都直接問票券夾，不可能再對不上。 */
+    const _sl=WAL.of(t.id)||{stamps:[],used:0};
+    const _bksC=_sl.stamps, usedCnt=_sl.used;
     const open=!!_mcOpen[t.id];
     const name=t.plan_name||(ty?ty.name:'票券');
     // 若名稱已含 1V1/1V2 等授課型別，不重複附加
@@ -32879,15 +32790,16 @@ function openMemContracts(){
    入口＝「我的票券」頁上方一顆按鈕（顯示可用點數與最近到期）；明細在視窗裡看。 */
 function selfPtLive(){
   if(!_memTkData) return {live:[],dead:[],pts:0,soon:null,days:null};
-  const {mine,typeMap,usedMap,bookedMap}=_memTkData;
+  const {mine,typeMap,WAL}=_memTkData;
   const today=ymd(TODAY);
   const all=mine.filter(t=>isSelfPtTicket(t,typeMap));
-  const alive=t=>(!t.status||t.status==='usable')
-    && ticketUnused(t,usedMap,((bookedMap||{})[t.id]||0))>0
+  // 點數也從票券夾拿（2026-07-31）：可用點數＝票券夾裡「還沒用掉、也還沒約走」的
+  const unusedOf=t=>((WAL.of(t.id)||{}).left)||0;
+  const alive=t=>(!t.status||t.status==='usable') && unusedOf(t)>0
     && (!t.expire_date||String(t.expire_date).slice(0,10)>=today);
   const live=all.filter(alive).sort((a,b)=>(a.expire_date||'9999-99-99').localeCompare(b.expire_date||'9999-99-99'));
   const dead=all.filter(t=>!alive(t)).sort((a,b)=>(b.expire_date||'').localeCompare(a.expire_date||''));
-  const pts=live.reduce((s,t)=>s+ticketUnused(t,usedMap,((bookedMap||{})[t.id]||0)),0);
+  const pts=live.reduce((s,t)=>s+unusedOf(t),0);
   const soon=live.map(t=>t.expire_date&&String(t.expire_date).slice(0,10)).filter(Boolean).sort()[0]||null;
   return {live,dead,pts,soon,days:soon?diffDays(soon,today):null};
 }
@@ -32945,12 +32857,13 @@ function selfPtEntryHTML(){
 }
 function openSelfPtsModal(){
   if(!_memTkData) return;
-  const {typeMap,usedMap,bkByTicket,bookedMap}=_memTkData;
+  const {typeMap,WAL}=_memTkData;
   const today=ymd(TODAY);
   const s=selfPtLive();
   const row=(t,dim)=>{
     const total=Number(t.sessions_total)||0;
-    const unused=ticketUnused(t,usedMap,((bookedMap||{})[t.id]||0));
+    const _sl=WAL.of(t.id)||{stamps:[],used:0,left:0};
+    const unused=_sl.left;
     const d=t.expire_date?diffDays(String(t.expire_date).slice(0,10),today):null;
     const mdx=t.expire_date?String(t.expire_date).slice(5).replace('-','/'):'';
     const exp=t.expire_date
@@ -32958,7 +32871,7 @@ function openSelfPtsModal(){
       : (dim?'已使用完':'永久有效');
     return `<div class="spt-row${dim?' spt-dim':(d!=null&&d<=2?' spt-soon':'')}">
       <span class="spt-nm">${t.plan_name||'自主訓練點數'}<span class="spt-ex">${exp}</span></span>
-      ${dim?'':`<span class="mck-dots2" style="flex:0 0 auto;">${ticketTokens(t,(bkByTicket||{})[t.id]||[],typeMap,Math.max(0,total-unused))}</span>`}
+      ${dim?'':`<span class="mck-dots2" style="flex:0 0 auto;">${ticketTokens(t,_sl.stamps,typeMap,_sl.used)}</span>`}
       <span class="spt-n"><b>${unused}</b> / ${total} 點</span>
     </div>`;
   };
