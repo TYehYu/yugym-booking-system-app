@@ -6741,8 +6741,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1701';
-const APP_VERSION_LABEL='v260731.1701';
+const APP_VERSION = '260731.1709';
+const APP_VERSION_LABEL='v260731.1709';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10944,15 +10944,28 @@ PAGES.g_dashboard=async function(){
         const catColor2={'ev-pt':'#1f6f54','ev-friendly':'#23508a','ev-group':'#9a5a1e','ev-trial':'#6e3a86','ev-self':'#6a655c','ev-massage':'#2f8f83'};
         const dots=drawBk.slice().sort((a,b)=>timeToMin(a.start_time||'0:0')-timeToMin(b.start_time||'0:0')).map(b=>{
           const cc=evColorClass(b,typeMap); const col=catColor2[cc]||'#1f6f54';
-          const nm2=b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
-                   :(Array.isArray(b.member_ids)&&b.member_ids.length?`${b.member_ids.length} 人`:'—');
+          /* 2026-07-31 使用者回報：BARRY 19:00 的體驗沒有名字。
+             體驗／待簽約／場租沒有 member_id，客戶名記在 trial_name —— 這裡原本只看
+             member_id 與 member_ids，兩個都沒有就掉到「—」。（行事曆早就處理了，
+             這一套是首頁手機版自己畫的，沒跟到。） */
+          const _grpN2=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids.length:0;
+          const nm2=_grpN2?`${_grpN2} 人`
+                   :(b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
+                   :(b.trial_name||'—'));
+          const _lb2=(typeof bkGuestLabel==='function')?bkGuestLabel(b):'';
           const doneB2=isDone(b), cx2=isCancelled(b);
+          /* 2026-07-31 使用者回報：MANGO 11:00 全員請假，圓圈卻跟「還沒簽到」長一樣。
+             請假的人不會簽到 → 永遠是空心。給它自己的樣式：紅色實線圈＋名字寫「請假」
+             （取消是紅色虛線圈，兩者分得開）。 */
+          const allLeave2=(typeof grpAllOnLeave==='function') && grpAllOnLeave(b);
           const circle=cx2?`background:#fff;border:2px dashed #c0392b;color:#c0392b;`
+            :(allLeave2?`background:#fff;border:2px solid #b5372e;color:#b5372e;`
             :(doneB2?`background:${col};border:2px solid ${col};color:#fff;`
-                    :`background:#fff;border:2px solid ${col};color:${col};`);
-          return `<span class="task-dot-wrap task-dot-static">
+                    :`background:#fff;border:2px solid ${col};color:${col};`));
+          const _title=`${b.start_time}｜${nm2}${_lb2?`（${_lb2}）`:''}${allLeave2?'・全員請假':''}${cx2?'・已取消':''}`;
+          return `<span class="task-dot-wrap task-dot-static" title="${_title}">
             <span class="task-dot" style="${circle}"><span class="td-time">${b.start_time}</span></span>
-            <span class="task-dot-name">${cx2?'取消':nm2}</span>
+            <span class="task-dot-name">${cx2?'取消':(allLeave2?'請假':nm2)}</span>
           </span>`;
         }).join('');
         return `<div class="mtc-row2">
@@ -31250,12 +31263,16 @@ async function msbPickSlot(t){
      一對二的客人可能一張票就佔掉兩台，客人要看得出來還剩幾台。
      ⚠ 舊資料有不帶編號的 venue_unit='treadmill'（櫃檯換場地寫的），所以用「筆數」而不是
        「不同編號的數量」去數，再以容量封頂 —— 用編號去重會把兩筆 treadmill 算成一台。 */
+  /* ⚠ 2026-07-31 修：這裡原本用 dbGetAll('bookings') —— 會員端 RLS 只讀得到「自己的
+     ＋所有團課」，別人的跑步機預約根本看不到（燈號永遠是空的），而且那是整張表的
+     分頁抓取，會員按下時段時要多等好幾個往返（使用者回報「李約儒預約自主訓練畫面卡住」）。
+     改走 fetchDayOccupancy —— 與 validateBooking 同一支當日佔用 RPC，有快取、只回當天。 */
   const _tmCap=(typeof venueCap==='function')?(venueCap('treadmill')||2):2;
   let _tmUsed=0;
   try{
-    const _allBk=await dbGetAll('bookings').catch(()=>[]);
+    const _allBk=await fetchDayOccupancy(s.date).catch(()=>[]);
     const _ns=timeToMin(t), _ne=_ns+60, _selfId=s.resched?s.resched.id:null;
-    _tmUsed=(_allBk||[]).filter(x=>x && x.date===s.date && x.status!=='cancelled' && x.id!==_selfId
+    _tmUsed=(_allBk||[]).filter(x=>x && x.status!=='cancelled' && x.id!==_selfId
       && String(x.venue_unit||'').split('_')[0]==='treadmill'
       && timeToMin(x.start_time)<_ne && timeToMin(x.start_time)+(Number(x.duration)||60)>_ns).length;
     _tmUsed=Math.min(_tmUsed,_tmCap);

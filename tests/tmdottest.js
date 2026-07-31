@@ -29,9 +29,9 @@ ok('　　跑步機容量確實是 2', /\{ id:'treadmill', name:'跑步機',    
 console.log('\n數佔用的方式');
 {
   /* 實跑那段計數：用同樣的條件去篩，驗各種情境 */
-  const i=src.indexOf('    _tmUsed=(_allBk||[]).filter(x=>x && x.date===s.date');
+  const i=src.indexOf('    _tmUsed=(_allBk||[]).filter(x=>x && x.status!==');
   const j=src.indexOf('\n', src.indexOf('_tmUsed=Math.min(_tmUsed,_tmCap);'));
-  const body=src.slice(i,j).replace(/_allBk\|\|\[\]/,'BK').replace(/s\.date/g,'DATE');
+  const body=src.slice(i,j).replace(/_allBk\|\|\[\]/,'BK');
   const run=(BK,used=null)=>{
     const fn=new Function('BK','DATE','_ne','_ns','_selfId','_tmCap','timeToMin',
       'let _tmUsed=0;\n'+body+'\nreturn _tmUsed;');
@@ -47,6 +47,10 @@ console.log('\n數佔用的方式');
   eq('　　超過容量也封頂在 2', run([T('treadmill','10:00'),T('treadmill_1','10:00'),T('treadmill_2','10:00')]), 2);
   eq('　　別的場地不算', run([T('multi_1','10:00'),T('group_1','10:00')]), 0);
   eq('　　別的時段不算', run([T('treadmill_1','08:00'),T('treadmill_2','11:00')]), 0);
+  /* 2026-07-31：改吃 fetchDayOccupancy（只回當天），所以不必再自己比日期 */
+  ok('★ 會員端改走當日佔用 RPC，不再抓整張 bookings',
+     /const _allBk=await fetchDayOccupancy\(s\.date\)\.catch\(\(\)=>\[\]\);/.test(src)
+     && /與 validateBooking 同一支當日佔用 RPC，有快取、只回當天/.test(src));
   eq('　　跨時段重疊要算（09:30 的 60 分課壓到 10:00）', run([T('treadmill_1','09:30')]), 1);
   eq('　　已取消的不算', run([T('treadmill_1','10:00',{status:'cancelled'})]), 0);
   eq('★ 改期時不把自己算進去', run([T('treadmill_1','10:00')],'treadmill_110:00'), 0);
