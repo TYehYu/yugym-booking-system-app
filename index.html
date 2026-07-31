@@ -6793,8 +6793,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.0032';
-const APP_VERSION_LABEL='v260801.0032';
+const APP_VERSION = '260801.0041';
+const APP_VERSION_LABEL='v260801.0041';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21765,6 +21765,10 @@ const SALARY_TPL_DEFAULT = {
 //  全部設定化，不寫死。計薪時讀取 window.SALARY_GLOBAL。
 const SALARY_GLOBAL_DEFAULT = {
   renew_bonus: 1000,            // 每張續約獎金
+  /* 請假扣薪的時薪分母（2026-08-01 使用者定案）：底薪 ÷ 130。
+     130 是一年的月排班時數中位數 —— 用固定值，同一個人每個月的時薪才一樣；
+     若改用「當月實際排班時數」，班排多的月份時薪反而變低，同樣請一天扣的錢會不同。 */
+  base_hours_divisor: 130,
   supervisor_bonus: 4000,       // 主管固定津貼
   /* 店長津貼（2026-07-29 使用者定案改制）：全店當月教練課總堂數（不含老闆/admin）
      每滿 leader_per_classes 堂給 leader_per_amount 元，可累計（120 堂＝1 個 80 → $4,000）。
@@ -22190,11 +22194,15 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const dutyPay=Math.max(dutyGross-dutyClassDeduct,0);
   const dutyDetail = tpl.need_duty ? `${_dutyHrs.toFixed(1)} hr × $${dhr}` : '不需值班';
 
-  // 正職保障底薪的請假扣除（固定排班制，非傳統 8h 月薪）：
-  //  時薪 = 當月保障底薪 ÷ 當月應排班時數（由班表自動換算，不寫死時薪/工時）
-  //  事假全扣、病假折半(50%)、特休/公假不扣
+  /* 請假扣款的時薪基準（2026-08-01 使用者定案）：
+     時薪 = 底薪 ÷ 130（一年的月排班時數中位數，設定值 base_hours_divisor）。
+     用固定分母，同一個人每個月的時薪才一樣 —— 改用「當月實際排班時數」的話，
+     班排比較多的月份時薪反而變低，同樣請一天扣的錢會不一樣。
+     時薪先四捨五入到整數再乘時數，薪資單上的算式才對得起來（227 × 18 = 4,086）。
+     事假全扣、病假折半(50%)、特休與其他（颱風假等）不扣。 */
+  const _divisor = Number((window.SALARY_GLOBAL||{}).base_hours_divisor) || 130;
   const schedHours = (leave && Number(leave.scheduled)>0) ? Number(leave.scheduled) : 0;
-  const baseHourly = (base>0 && schedHours>0) ? base/schedHours : 0;
+  const baseHourly = base>0 ? Math.round(base/_divisor) : 0;
   const leavePersonal = (L.事假||0); // 事假時數
   const leaveSick = (L.病假||0);     // 病假時數
   const baseLeavePersonalDed = Math.round(leavePersonal*baseHourly);       // 事假：全扣
@@ -22203,7 +22211,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const adjBase = base;   // 2026-08-01：底薪不再先扣請假，請假在最後統一扣
   // 請假扣款計算說明（供薪資明細顯示）
   const leaveDeductDetail = (baseLeaveDeduct>0 && baseHourly>0)
-    ? `時薪 $${Math.round(baseHourly).toLocaleString()}（底薪 $${base.toLocaleString()} ÷ 當月排班 ${fmtHours(schedHours)}h）`
+    ? `時薪 $${baseHourly.toLocaleString()}（底薪 $${base.toLocaleString()} ÷ ${_divisor}h）`
       + (leavePersonal>0?`　事假 ${leavePersonal}h × 時薪 = −$${baseLeavePersonalDed.toLocaleString()}`:'')
       + (leaveSick>0?`　病假 ${leaveSick}h × 時薪 × 50% = −$${baseLeaveSickDed.toLocaleString()}`:'')
     : '';
@@ -22266,7 +22274,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
     renewCount, renewPay, renewDetail,
     isSupervisor:isSup, supPay, isLeader, leaderPay, leaderDetail, leaderTotal, leaderUnits, mgmtPay,
     insGrade:grade||null, insLaborEmp, insHealthEmp, insEmpDeduct, insLaborCo, insHealthCo, insCoCost,
-    leave:L, leaveDeduct,
+    leave:L, leaveDeduct, divisor:_divisor,
     grossPay, netPay,
     total: grossPay }; // total 維持＝應發，相容既有顯示
 }
@@ -23072,7 +23080,7 @@ const rowL=(label,val,sub)=>`<div style="display:flex;justify-content:space-betw
             // 正職：底薪 + 請假扣 → 取高
             if(s.base>0){
               h+=rowL('底薪',`$${s.base.toLocaleString()}`);
-              if(s.schedHours>0) h+=`<div style="padding:2px 0 6px 16px;font-size:11px;color:var(--t3);">時薪 $${Math.round(s.baseHourly).toLocaleString()}（底薪 $${s.base.toLocaleString()} ÷ 當月排班 ${s.schedHours.toFixed(1)}h）</div>`;
+              if(s.baseHourly>0) h+=`<div style="padding:2px 0 6px 16px;font-size:11px;color:var(--t3);">請假時薪 $${s.baseHourly.toLocaleString()}（底薪 $${s.base.toLocaleString()} ÷ ${s.divisor}h）</div>`;
               /* 2026-08-01：請假扣薪移到最後統一扣，底薪這裡只列不扣薪的假別 */
               if(r.leave.特休>0) h+=`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">特休 ${r.leave.特休} 小時</span><span style="color:var(--t3);">不扣薪</span></div>`;
               if(r.leave.其他>0) h+=`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">其他假 ${r.leave.其他} 小時</span><span style="color:var(--t3);">不扣薪</span></div>`;
@@ -23254,15 +23262,18 @@ function openSalaryGlobalEdit(){
     <div style="max-height:62vh;overflow-y:auto;padding-right:4px;">
       ${sec('① 續約獎金（每張）')}
       <div class="form-row"><input type="number" id="sg-renew" value="${G.renew_bonus??0}"></div>
-      ${sec('② 主管津貼（固定）')}
+      ${sec('② 請假扣薪的時薪分母')}
+      <div class="form-row"><input type="number" id="sg-div" value="${G.base_hours_divisor??130}"></div>
+      <div style="font-size:11px;color:var(--t3);margin:6px 0;">＊時薪＝底薪 ÷ 這個數字（預設 130＝一年的月排班時數中位數）。用固定分母，同一個人每個月的時薪才一樣；事假全扣、病假半扣、特休與其他假不扣。</div>
+      ${sec('③ 主管津貼（固定）')}
       <div class="form-row"><input type="number" id="sg-sup" value="${G.supervisor_bonus??0}"></div>
-      ${sec('③ 店長津貼（全店總堂數制）')}
+      ${sec('④ 店長津貼（全店總堂數制）')}
       <div class="form-2col">
         <div class="form-row" style="margin:0;"><label>每滿幾堂</label><input type="number" id="sg-ldper" value="${G.leader_per_classes??80}"></div>
         <div class="form-row" style="margin:0;"><label>給多少津貼</label><input type="number" id="sg-ldamt" value="${G.leader_per_amount??4000}"></div>
       </div>
       <div style="font-size:11px;color:var(--t3);margin:6px 0;">＊計算基準＝全店當月「教練課＋友善教練課＋團體課」總堂數（<b>不含老闆</b>，含店長本人；體驗課與自主訓練不計）；每滿一組即累加一筆。例：總 200 堂 ÷ 80 ＝ 2 筆 ＝ $8,000。</div>
-      ${sec('④ 勞健保級距表（員工負擔／公司三合一負擔）')}
+      ${sec('⑤ 勞健保級距表（員工負擔／公司三合一負擔）')}
       <div id="sg-ins">${ins.map((x,i)=>`<div style="border:1px solid var(--bd);border-radius:8px;padding:8px;margin-bottom:8px;">
         <div class="form-row" style="margin:0 0 6px;"><label>投保級距</label><input type="text" id="sg-ins-grade-${i}" value="${x.grade||''}" placeholder="如 29500"></div>
         <div class="form-2col"><div class="form-row" style="margin:0;"><label>勞保·員工</label><input type="number" id="sg-ins-le-${i}" value="${x.labor_emp||0}"></div>
@@ -23291,6 +23302,7 @@ async function saveSalaryGlobal(){
     const insurance_levels=[]; for(let i=0;i<(window._sgInsCount||0);i++){ if(document.getElementById(`sg-ins-grade-${i}`)){ const g=gs(`sg-ins-grade-${i}`); if(g) insurance_levels.push({grade:g,labor_emp:gv(`sg-ins-le-${i}`),health_emp:gv(`sg-ins-he-${i}`),co_total:gv(`sg-ins-co-${i}`)}); } }
     /* 店長津貼改總堂數制（2026-07-29）：leader_tiers 停用但保留原值，避免舊資料被清掉 */
     const config={ renew_bonus:gv('sg-renew'), supervisor_bonus:gv('sg-sup'),
+      base_hours_divisor:gv('sg-div')||130,
       leader_per_classes:gv('sg-ldper')||80, leader_per_amount:gv('sg-ldamt')||4000,
       leader_tiers:((window.SALARY_GLOBAL||{}).leader_tiers)||[], insurance_levels };
     await dbPut('salary_templates',{id:'_global',config});
@@ -35315,7 +35327,7 @@ async function renderSalaryContent(TARGET, withHead){
         let h='';
         if(sal.base>0){
           h+=row('底薪',`$${sal.base.toLocaleString()}`);
-          if(sal.schedHours>0) h+=`<div class="sal-note">時薪 $${Math.round(sal.baseHourly).toLocaleString()}（底薪 ÷ 當月排班 ${sal.schedHours.toFixed(1)}h）</div>`;
+          if(sal.baseHourly>0) h+=`<div class="sal-note">請假時薪 $${sal.baseHourly.toLocaleString()}（底薪 ÷ ${sal.divisor}h）</div>`;
           if(myLeave.事假>0) h+=ded(`事假 ${myLeave.事假} 小時`, sal.baseLeavePersonalDed);
           if(myLeave.病假>0) h+=ded(`病假 ${myLeave.病假} 小時（半薪）`, sal.baseLeaveSickDed);
           if(myLeave.特休>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">特休 ${myLeave.特休} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;
