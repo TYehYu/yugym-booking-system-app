@@ -82,8 +82,11 @@ ok('★ 團課待上堂數另外算（團課預約不綁 ticket_id）',
    (src.match(/grpTicketAlloc\(/g)||[]).length===3);
 ok('　　兩個後台畫面都吃同一支',
    /const pending=bks\.filter\(b=>b\.ticket_id===t\.id && b\.status==='booked'\)\.length \+ \(ga\.pend\[t\.id\]\|\|0\);/.test(src));
+/* 2026-07-31 二修：「這位會員的課卡」抽成共用的 bkHasMember／bkOfMember，
+   原本這個判斷被抄在九個地方，漏改其中幾處就會整批漏掉團課 */
 ok('★ 後台檔案頁的預約清單要含團課（學員在 member_ids、member_id 是 null）',
-   /const myBk=bookings\.filter\(b=>b\.member_id===PP\.id\s*\n\s*\|\| \(Array\.isArray\(b\.member_ids\)&&b\.member_ids\.includes\(PP\.id\)\)\);/.test(src));
+   /const myBk=bkOfMember\(bookings, PP\.id\);/.test(src)
+   && /return String\(b\.member_id\|\|''\)===String\(mid\) \|\| mids\(b\)\.some\(x=>String\(x\)===String\(mid\)\);/.test(src));
 
 /* ── 預約明細版面順序（2026-07-29 使用者指示） ── */
 console.log('\n預約明細：教練與場地在時間下面、圓形卡上面');

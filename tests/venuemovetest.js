@@ -8,6 +8,9 @@
    1) dbPut 一律濾掉底線開頭的暫存欄位（資料庫沒有這種欄位）。
    2) 會擠到次選場地的移動，四條路徑都要先問過操作者。 */
 const fs=require('fs');
+/* 2026-07-31：「是不是團課」抽成共用的 bkIsGroup（見 TK_POCKETS.group）——
+   沙箱裡給一個等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

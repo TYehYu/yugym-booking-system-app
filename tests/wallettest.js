@@ -25,7 +25,7 @@ const parseYmd=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(x||''));return
 const attObj=b=>{const v=b&&b.attendance;return (v&&typeof v==='object'&&!Array.isArray(v))?v:{};};
 
 const buildWallet=new Function('ymd','TODAY','parseYmd','attObj',
-  [grabFn('mids'),grabFn('tkSharedIds'),grabFn('tkUsableBy'),grabFn('tkClass5'),
+  [grabFn('mids'),grabFn('bkHasMember'),grabFn('tkSharedIds'),grabFn('tkUsableBy'),grabFn('tkClass5'),
    grabFn('allocBookingsToTickets'),grabFn('grpTicketAlloc'),grabFn('buildWallet')].join('\n')
   +'\nreturn buildWallet;')(ymd,TODAY,parseYmd,attObj);
 

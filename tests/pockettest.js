@@ -109,8 +109,41 @@ ok('　　為什麼會漏，寫在程式裡',
    這道門檻只能往下走：要新增課別判斷，請加在 TK_POCKETS 並問 tkPocket()／bkPocket()，
    不要再寫一個 category==='小班肌力'。
    （真的需要提高門檻時，請連同「為什麼這條非散不可」一起寫進註解再調整基準。） */
+console.log('\n第一批搬遷（2026-07-31）：團體課的規則');
+eq('★ 體驗與場租不吃票、不屬於任何口袋', bkPocket({category:'體驗'},TYPES), null);
+eq('　　場租也是', bkPocket({category:'場租'},TYPES), null);
+ok('★ 「這位會員的課卡」抽成共用（原本抄在九個地方）',
+   /function bkHasMember\(b, mid\)\{/.test(src) && /function bkOfMember\(bookings, mid\)\{/.test(src)
+   && /function bkSeatCount\(b, mid\)\{/.test(src));
+ok('★ 九個呼叫點都改吃共用（不再各自拼 member_id / member_ids）',
+   (src.match(/member_ids\.includes\(/g)||[]).length<=3);
+ok('　　為什麼要抽，寫在程式裡',
+   /這個判斷原本被抄在九個地方，\s*\n\s*每次有人只改其中幾處就出事/.test(src));
+ok('★ 教練請假改問口袋（不再自己比 category）',
+   /function canCoachLeave\(b\)\{ return !!b && !!bkPocketNow\(b\)\.coachLeave; \}/.test(src));
+ok('★ 展延改問口袋 —— 自主訓練點數過期不能展延（2026-07-31 使用者指示）',
+   /if\(!tkPocketNow\(t\)\.canExtend\) return false;/.test(src)
+   && /自主訓練點數過期不能展延（效期本來就只有 7 天、簽到贈送，/.test(src));
+ok('　　按不到時說得出原因（不是只說「不符合條件」）',
+   /`\$\{tkPocketNow\(t\)\.label\}不提供展延`/.test(src));
+
+console.log('\n「是不是團課」收成一支（82 處 → 1 處）');
+/* 剩下的 .category==='小班肌力' 是在判「票種」的類別（t=ticket_type），那是另一回事；
+   課卡（b）上的判斷只剩 bkIsGroup 定義裡那一句。 */
+ok('★ 課卡上只剩定義那一句在比字串',
+   (src.match(/\bb\.category==='小班肌力'/g)||[]).length===1
+   && /if\(b && b\.category==='小班肌力'\) return true;/.test(src));
+ok('★ 定義本身仍問口袋（票種帶進來時也認得）',
+   /return !!bkPocketNow\(b\)\.sharedBooking;/.test(src));
+ok('★ 對照表有快取（每一筆課卡都會呼叫，重建會拖垮清單頁）',
+   /function typeMapNow\(\)\{/.test(src) && /if\(_tmNowSrc!==c\)\{ _tmNowSrc=c;/.test(src));
+ok('　　為什麼要抽，寫在程式裡',
+   /原本這句話被寫了 88 次，\s*\n\s*規則一改就得逐句找/.test(src));
+
 console.log('\n棘輪：散裝的課別比較不得增加');
-const SCATTER_BASELINE=210;   // 2026-07-31 立此基準；之後每搬一條進口袋就把它調低
+/* 2026-07-31 立基準 210；第一批搬完（「是不是團課」82 處收成 bkIsGroup）降到 129。
+   之後每搬一批就把這個數字調低，只能往下。 */
+const SCATTER_BASELINE=129;
 const scattered=(src.match(/(===|!==)\s*'(小班肌力|自主訓練|運動按摩)'/g)||[]).length;
 ok(`★ 散裝課別比較 ${scattered} 處（基準 ${SCATTER_BASELINE}，只能減不能增）`,
    scattered<=SCATTER_BASELINE, scattered);

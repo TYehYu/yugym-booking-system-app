@@ -6752,8 +6752,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1904';
-const APP_VERSION_LABEL='v260731.1904';
+const APP_VERSION = '260731.2155';
+const APP_VERSION_LABEL='v260731.2155';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7213,7 +7213,11 @@ async function openTicketExtend(id){
   const t=await dbGet('member_tickets',id);
   if(!t){ showToast('找不到票券'); return; }
   if(tkIsExtended(t)){ showToast('這張票券已經展延過了（一次為限）'); return; }
-  if(!tkCanExtend(t)){ showToast('這張票券不符合展延條件（需為已過期、且還有剩餘堂數）'); return; }
+  if(!tkCanExtend(t)){
+    showToast(tkPocketNow(t).canExtend
+      ? '這張票券不符合展延條件（需為已過期、且還有剩餘堂數）'
+      : `${tkPocketNow(t).label}不提供展延`);   // 自主訓練點數過期即作廢（2026-07-31）
+    return; }
   const days=tkPlanDays(t), to=tkExtendTo(t), rem=Number(t.sessions_remaining)||0;
   const f=d=>String(d).slice(0,10).replace(/-/g,'/');
   showModal(`<div class="modal-title">票券展延</div>
@@ -7296,6 +7300,10 @@ function tkExtendTo(t){
    已退費／作廢的不行；永久有效的票本來就不會過期，也不需要。 */
 function tkCanExtend(t, today){
   if(!t) return false;
+  /* 2026-07-31 使用者指示：自主訓練點數過期不能展延（效期本來就只有 7 天、簽到贈送，
+     過期即作廢 —— 2026-07-26 定案）。規則寫在口袋（TK_POCKETS.self.canExtend=false），
+     這裡只負責問，展延按鈕與「N 張可展延」的計數都會跟著消失。 */
+  if(!tkPocketNow(t).canExtend) return false;
   const td = today || ymd(TODAY);
   if(['refunded','void','cancelled'].includes(t.status)) return false;
   if(!((Number(t.sessions_remaining)||0) > 0)) return false;
@@ -9255,15 +9263,33 @@ const TK_POCKETS={
 const TK5=Object.keys(TK_POCKETS).map(k=>[k,TK_POCKETS[k].label]);
 // 票券 → 口袋
 function tkPocket(t, typeMap){ return TK_POCKETS[tkClass5(t,typeMap)]||TK_POCKETS.pt; }
-// 課卡 → 口袋（課卡沒有 plan_name，用 category 當名稱去分類，與票券同一支分類器）
+/* 手邊沒有 typeMap 時的便利版：用全域票種快取。畫面幾乎都已經載過票種。
+   ⚠ 這兩支會在「每一筆課卡」上被呼叫（清單頁上萬筆），對照表一定要快取 ——
+   每次重建的話，一頁行事曆就要重建幾千次。快取跟著 _ttCache 這個陣列的身分走，
+   重新載入票種時自然失效。 */
+let _tmNowSrc=null, _tmNow=null;
+function typeMapNow(){
+  const c=window._ttCache||[];
+  if(_tmNowSrc!==c){ _tmNowSrc=c; _tmNow={}; c.forEach(x=>{ if(x&&x.id) _tmNow[x.id]=x; }); }
+  return _tmNow;
+}
+function tkPocketNow(t){ return tkPocket(t, typeMapNow()); }
+function bkPocketNow(b){ return bkPocket(b, typeMapNow()) || {}; }   // 體驗／場租沒有口袋 → 空物件
+/* 課卡 → 口袋（課卡沒有 plan_name，用 category 當名稱去分類，與票券同一支分類器）。
+   體驗與場租不吃票、不屬於任何口袋 → 回 null，呼叫端要自己處理沒有口袋的情況。
+   這是全系統唯一該知道「哪些課不吃票」的地方。 */
 function bkPocket(b, typeMap){
-  return TK_POCKETS[tkClass5({ticket_type_id:b&&b.ticket_type_id, plan_name:b&&b.category}, typeMap)]||TK_POCKETS.pt;
+  const c=String((b&&b.category)||'');
+  if(c==='體驗'||c==='場租') return null;
+  return TK_POCKETS[tkClass5({ticket_type_id:b&&b.ticket_type_id, plan_name:c}, typeMap)]||TK_POCKETS.pt;
 }
 function tkClass5(t, typeMap){
   const tt=(typeMap||{})[t&&t.ticket_type_id]||{};
   if(/折抵/.test((t&&t.plan_name)||'')||/折抵/.test(tt.name||'')) return 'voucher';
   if((tt.category||'')==='自主訓練'||/自主/.test((t&&t.plan_name)||'')) return 'self';
-  if((tt.category||'')==='小班肌力'||(tt.category||'')==='團體課'||/團/.test((t&&t.plan_name)||'')) return 'group';
+  /* 課卡只帶 category（沒有 plan_name／票種）時也要認得出來 —— bkPocket 靠這個，
+     所以「小班肌力」四個字本身要能被認出是團體課（2026-07-31）。 */
+  if((tt.category||'')==='小班肌力'||(tt.category||'')==='團體課'||/團|小班/.test((t&&t.plan_name)||'')) return 'group';
   if((tt.category||'')==='運動按摩'||/按摩/.test((t&&t.plan_name)||'')) return 'massage';
   return 'pt';
 }
@@ -10489,9 +10515,7 @@ function buildWallet(memberId, ctx){
   /* 共享票的堂數是共用的：蓋在我票上的課卡，就算上課的是共享者也要算進來
      （2026-07-26 起支援共享票，堂數共用一個池）。 */
   const myBk=c.bookingsOf ? (c.bookingsOf(memberId)||[])
-    : (c.bookings||[]).filter(b=>b && (b.member_id===memberId
-        || (b.ticket_id&&mineIds[b.ticket_id])
-        || (Array.isArray(b.member_ids)&&b.member_ids.includes(memberId))));
+    : (c.bookings||[]).filter(b=>b && (bkHasMember(b,memberId) || (b.ticket_id&&mineIds[b.ticket_id])));
   const live=myBk.filter(b=>b && b.status!=='cancelled');
 
   const stamps={}, byBooking={};
@@ -11140,7 +11164,7 @@ PAGES.g_dashboard=async function(){
       const dur=Number(b.duration)||60;
       const emin=smin+dur;
       /* 團課一律顯示人數（member_id 在團課上是殘留欄位，2026-07-30 修） */
-      const nm = (b.category==='小班肌力'||(Array.isArray(b.member_ids)&&b.member_ids.length>0))
+      const nm = (bkIsGroup(b)||(Array.isArray(b.member_ids)&&b.member_ids.length>0))
                  ? `團課 ${(Array.isArray(b.member_ids)?b.member_ids.length:0)} 人`
                  : (b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
                  : (b.trial_name?bkGuestName(b):'—'));   /* 體驗／待簽約／場租都顯示客戶姓名（2026-07-27、2026-07-29 修標籤） */
@@ -11180,7 +11204,7 @@ PAGES.g_dashboard=async function(){
              原本先看 b.member_id，但團課的學員在 member_ids、member_id 應該是 null；
              匯入資料有殘留的 member_id（那堂殘留的是別人），就被拿去當卡片名稱。
              團課一律顯示人數，不再掉回 member_id。 */
-          const _isGrp = b.category==='小班肌力' || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
+          const _isGrp = bkIsGroup(b) || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
           /* 體驗／待簽約／場租都顯示客戶姓名（2026-07-27、2026-07-29 修標籤）。
              2026-07-31 使用者指示：那個標籤改成放在姓名「下面一列」——
              原本是「程凱郁（體驗）」接在名字後面，窄卡會折行把名字擠掉。
@@ -11347,7 +11371,7 @@ PAGES.g_dashboard=async function(){
   //  A 教室＝私人教練/體驗主場（multi）；B 教室＝自主訓練/次要（treadmill）；團課教室＝group
   const _roomOf=b=>{
     if(b.venue_unit){ const vid=String(b.venue_unit).split('_')[0]; if(vid==='group')return 'group'; if(vid==='treadmill')return 'B'; return 'A'; }
-    if(b.category==='小班肌力') return 'group';
+    if(bkIsGroup(b)) return 'group';
     if(b.category==='自主訓練') return 'B';
     return 'A'; // 私人教練/友善/體驗
   };
@@ -11646,7 +11670,7 @@ PAGES.g_dashboard=async function(){
   const _mBkAll=(bookings||[]).filter(b=>(b.date||'').slice(0,7)===_mYm&&b.status!=='cancelled');
   const _mPtDone=_mBkAll.filter(b=>b.category==='私人教練'&&(b.status==='checked_in'||b.status==='completed')).length;
   const _mPtSched=_mBkAll.filter(b=>b.category==='私人教練').length;
-  const _mGrpDoneBk=_mBkAll.filter(b=>b.category==='小班肌力'&&(b.status==='checked_in'||b.status==='completed'));
+  const _mGrpDoneBk=_mBkAll.filter(b=>bkIsGroup(b)&&(b.status==='checked_in'||b.status==='completed'));
   const _mGrpHead=_mGrpDoneBk.reduce((s,b)=>s+((Array.isArray(b.member_ids)&&b.member_ids.length)||1),0);
   /* 2026-07-20 使用者指示：營收環移除；第三環改「自己的值班時數」，本月無排班則只顯示兩環 */
   const _mMyShifts=(shifts||[]).filter(s=>s.emp_id===SESSION.id&&(s.date||'').slice(0,7)===_mYm&&(s.hours>0||s.start_time));
@@ -11769,7 +11793,7 @@ PAGES.g_dashboard=async function(){
     if((b.date||'').slice(0,10)!==date) return;
     if(b.status==='cancelled') return;
     if(b.category!=='私人教練' && b.category!=='小班肌力') return;
-    const isGrp=b.category==='小班肌力';
+    const isGrp=bkIsGroup(b);
     const g=isGrp?'grp':'pt';
     const mids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
     /* 2026-07-29 使用者定案（三修）：已續約的不從名單消失，改標綠勾 ——
@@ -11808,7 +11832,7 @@ PAGES.g_dashboard=async function(){
     _signList.push({id:b.member_id||'', name:nm, tkid:'', rs:'',
       sub:(b.member_id?'分期待繳費・':'新客戶簽約・')+(b.category||''),
       time:String(b.start_time||'').slice(0,5), pay:true,
-      cc:(b.category==='小班肌力'?'group':(b.category==='體驗'?'trial':'pt'))});
+      cc:(bkIsGroup(b)?'group':(b.category==='體驗'?'trial':'pt'))});
   });
   _signList.sort((a,b)=>{ const w=x=>x.rs==='renewed'?2:(x.rs==='declined'?3:(x.rs==='considering'?1:0));
     return w(a)-w(b) || String(a.time||'99:99').localeCompare(String(b.time||'99:99'))
@@ -12660,12 +12684,12 @@ PAGES.ops_center=async function(){
 
   const dayBk=bookings.filter(b=>b.date===date && b.status!=='cancelled');
   const ptCount=dayBk.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
-  const groupCount=dayBk.filter(b=>b.category==='小班肌力').length;
+  const groupCount=dayBk.filter(b=>bkIsGroup(b)).length;
   const selfCount=dayBk.filter(b=>b.category==='自主訓練').length;
   const dayBkSorted=dayBk.slice().sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   // 分頁清單：教練課（含體驗）、團課
   const ptList=dayBkSorted.filter(b=>b.category==='私人教練'||b.category==='體驗');
-  const groupList=dayBkSorted.filter(b=>b.category==='小班肌力');
+  const groupList=dayBkSorted.filter(b=>bkIsGroup(b));
 
   // 今日續約：購買日為當日、is_renewal、且票券類型為教練課類（私人教練，含友善教練課）
   const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
@@ -12963,11 +12987,11 @@ PAGES.dashboard=async function(){
     coachedFee+=_bkFee(b,tk);
   }
   const ptClassCount=rangeBk.filter(b=>b.category==='私人教練').length;
-  const groupClassCount=rangeBk.filter(b=>b.category==='小班肌力').length;
+  const groupClassCount=rangeBk.filter(b=>bkIsGroup(b)).length;
   /* 分課種銷課金額（2026-07-27 使用者指示：教練課堂數/銷課金額、團課堂數/銷課金額） */
   const _feeOf=b=>_bkFee(b,tickets.find(t=>t.id===b.ticket_id));
   const ptDoneBk=usedBk.filter(b=>b.category==='私人教練');
-  const grpDoneBk=usedBk.filter(b=>b.category==='小班肌力');
+  const grpDoneBk=usedBk.filter(b=>bkIsGroup(b));
   const ptFee=ptDoneBk.reduce((s,b)=>s+_feeOf(b),0);
   /* 團課銷課＝逐人頭計（2026-07-27 修正）：合併匯入的團課 session_fee 只剩一個人的費用、
      多數團課也沒綁票券 → 每堂只算到 $0–400 嚴重低估。改為每個人頭用該會員團課票的
@@ -13082,8 +13106,8 @@ PAGES.dashboard=async function(){
     const myDone=myBk.filter(b=>b.status==='completed'||b.status==='checked_in');
     const ptCount=myBk.filter(isPtPayClass).length;      // 體驗不算（2026-07-31）
     const ptDone=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
-    const groupCount=myBk.filter(b=>b.category==='小班肌力').length;
-    const groupDone=myDone.filter(b=>b.category==='小班肌力').length;
+    const groupCount=myBk.filter(b=>bkIsGroup(b)).length;
+    const groupDone=myDone.filter(b=>bkIsGroup(b)).length;
     // 業績營收：該教練負責、已銷課的單堂金額加總
     let rev=0;
     myDone.forEach(b=>{ rev+=_feeOf(b); });
@@ -13204,7 +13228,7 @@ function typeOfCat(cat){return {'私人教練':'pt','小班肌力':'group','自�
 function bkIsMasked(b){
   if(!SESSION || SESSION.role!=='coach') return false; // 非教練不遮蔽
   if(SESSION.is_manager) return false;                  // 店長：可讀全部課卡（2026-07-29 使用者指示）
-  if(b.category==='小班肌力') return false;             // 團體課本就不顯示會員名
+  if(bkIsGroup(b)) return false;             // 團體課本就不顯示會員名
   const acting = b.substitute_coach_id || b.coach_id;
   return acting !== SESSION.id;                          // 不是我帶的 → 遮蔽
 }
@@ -13251,7 +13275,7 @@ function bkStampKind(b){
   if(b.status==='cancelled') return 'cancel';
   if(typeof grpAllOnLeave==='function' && grpAllOnLeave(b)) return 'leave';
   const checked = b.status==='checked_in' || b.status==='completed'
-    || (b.category==='小班肌力' && b.attendance && Object.values(b.attendance).some(x=>x==='checked_in'));
+    || (bkIsGroup(b) && b.attendance && Object.values(b.attendance).some(x=>x==='checked_in'));
   if(checked) return 'done';
   if(b.makeup_granted) return 'makeup';
   return '';
@@ -13334,7 +13358,7 @@ function mergeGroupBookings(list){
   const groups={}; const passthrough=[];
   list.forEach(b=>{
     const already=Array.isArray(b.member_ids)&&b.member_ids.length; // 新結構：本身就是一筆多人
-    if(b.category==='小班肌力' && !already){
+    if(bkIsGroup(b) && !already){
       const key=(b.coach_id||'')+'|'+(b.date||'')+'|'+(b.start_time||'');
       (groups[key]=groups[key]||[]).push(b);
     }else{
@@ -13518,7 +13542,7 @@ function computeLastBkMarks(allTickets, bookings, typeMap){
       if(cat!=='小班肌力' && cat!=='團體課') return;
       _grpLeft[t.member_id]=(_grpLeft[t.member_id]||0)+(Number(t.sessions_remaining)||0);
     });
-    const _grpBk=(bookings||[]).filter(b=>b && b.category==='小班肌力' && b.status!=='cancelled')
+    const _grpBk=(bookings||[]).filter(b=>b && bkIsGroup(b) && b.status!=='cancelled')
       .sort((x,y)=>((x.date||'')+(x.start_time||'')).localeCompare((y.date||'')+(y.start_time||'')));
     const _lastGrpOf={};   // 會員 → 他時間最晚的那筆團課預約
     _grpBk.forEach(b=>{
@@ -13700,7 +13724,7 @@ async function renderCalendar(opts){
       }else if(b.category==='場租'){
         // 場租使用人存 trial_name（2026-07-26 使用者回報：課卡與明細都沒顯示「魚大東」）
         _nameBase=bkName(b,id=>memMap[id]); _nameTag=bkTag(b); memName=bkNameFull(b,id=>memMap[id]);
-      }else if(b.category==='小班肌力'){
+      }else if(bkIsGroup(b)){
         const names=gIds.map(id=>memMap[id]).filter(Boolean);
         memName = names.length===0 ? '團體課（未排名單）'
           : names.length<=2 ? names.join('、')
@@ -13759,7 +13783,7 @@ async function renderCalendar(opts){
          明細裡的所有修改動作也照舊由 ownByCoach 關掉 —— 只能看，不能改。 */
       const _viewOnly = SESSION.role==='coach' && !SESSION.is_manager && opts.me && !isMine;
       const _isCheckedIn = b.status==='checked_in'||b.status==='completed'
-        || (b.category==='小班肌力' && b.attendance && Object.values(b.attendance).some(s=>s==='checked_in'));
+        || (bkIsGroup(b) && b.attendance && Object.values(b.attendance).some(s=>s==='checked_in'));
       const _isMakeup = !!b.makeup_granted;
       // 完成狀態三態：完成✓ / 補簽! / 未簽○（僅未取消、非遮蔽時顯示）
       const _stStamp = (b.status==='cancelled'||hideMember) ? ''
@@ -13772,7 +13796,7 @@ async function renderCalendar(opts){
       const _catMark = ''; // 課程種類僅靠卡片底色辨識
       const _coachId = b.substitute_coach_id || b.coach_id;
       const _coachTag = (nm, isSub)=>{ if(!nm) return ''; const cl=coachTagColor(_coachId); return `<span class="ev-coach-tag" style="background:${cl.bg};color:${cl.fg};">${nm}${isSub?'（代）':''}</span>`; };
-      const _bodyHtml = b.category==='小班肌力'
+      const _bodyHtml = bkIsGroup(b)
         ? (()=>{ const gCoachNm=subCoachName||coachName||'';
                  const sub = _showCoach ? `<div class="ev-m">${gHeadsN>0?gHeadsN+' 人 ':''}${gCoachNm?_coachTag(gCoachNm,!!subCoachName):''}</div>` : (gHeadsN>0?`<div class="ev-m">${gHeadsN} 人</div>`:'');
                  return `<div class="ev-hd"><span class="ev-time">${b.start_time}</span><span class="ev-t">${bookingTypeName(b,typeMap)}</span></div>${sub}`; })()
@@ -13782,7 +13806,7 @@ async function renderCalendar(opts){
       // 所有卡片規格統一（移除特殊卡差異樣式）；完整資訊靠 hover tooltip（Phase 2 將改 fish-eye）。
       // 團體課卡（2026-07-22 使用者指示）：內容改「時間＋教練名＋人數」——
       // 主行放教練名（代課優先）、第三行 tag 改人數；會員名單看 hover 提示或點卡明細。
-      const _grpCard = !hideMember && b.category==='小班肌力';
+      const _grpCard = !hideMember && bkIsGroup(b);
       const _grpCoachNm = subCoachName||coachName||'';
       // 團課卡（2026-07-25 使用者指示）：主行改「人數」，教練改到第三行 tag（與一般卡一致）
       const _stdName = hideMember ? typeName : (_grpCard ? (gHeadsN>0?`${gHeadsN} 人`:'團課') : (_nameBase||memName));
@@ -13832,7 +13856,7 @@ async function renderCalendar(opts){
       // hover 跟游標提示內容（2026-07-25 使用者指示）：時間 / 會員（團課逐人分行）/ 教練；白底黑字浮框由 initCalCursorTip 顯示
       const _tipEsc = s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
       let _tipMem;
-      if(b.category==='小班肌力' && Array.isArray(b.member_ids) && b.member_ids.length){
+      if(bkIsGroup(b) && Array.isArray(b.member_ids) && b.member_ids.length){
         // memMap[id] 本身即姓名字串（見上方 memMap 定義），不可再取 .name（會變 —）
         _tipMem = b.member_ids.map(mid=>memMap[mid]||'—').join('\n');
       }else if(b.category==='自主訓練'&&b.trial_name){
@@ -13945,7 +13969,7 @@ async function openGroupScheduleModal(){
   const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
   const cMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)||c.name||'']));
   const from=ymd(_gsStart), to=ymd(addDays(_gsStart,6));
-  const list=bookings.filter(b=>b.category==='小班肌力'&&b.status!=='cancelled'&&b.date>=from&&b.date<=to)
+  const list=bookings.filter(b=>bkIsGroup(b)&&b.status!=='cancelled'&&b.date>=from&&b.date<=to)
     .sort((a,b)=>((a.date+a.start_time).localeCompare(b.date+b.start_time)));
   // 組資料：依日分組
   const byDay={};
@@ -14141,7 +14165,7 @@ function assignLanes(evs){
 function selfVenueLabel(b){
   /* 2026-07-27 使用者回報（劉雪珠 16:00 改團課教室沒顯示）：
      原本只標自主訓練——放寬到教練課/體驗課（非預設多功能時都標）；團課/場租不標。 */
-  if(!b || b.category==='小班肌力' || b.category==='場租') return '';
+  if(!b || bkIsGroup(b) || b.category==='場租') return '';
   const u=String(b.venue_unit||'');
   if(u.startsWith('treadmill')) return '跑步機';
   if(u.startsWith('group')) return '教室';
@@ -14154,7 +14178,7 @@ function selfVenueLabel(b){
   if(/^教室|[^A-Za-z]教室/.test(raw)||raw==='教室') return '教室';
   return '';
 }
-function CAL_isGroupCat(b){ return b.category==='小班肌力'; }
+function CAL_isGroupCat(b){ return bkIsGroup(b); }
 /* 行事曆卡 hover 跟游標提示（2026-07-25 使用者指示）：白底黑字浮框，內容 data-tip（時間/會員/教練，
    團課逐人分行）。委派在 document 上、只初始化一次；浮框 pointer-events:none 不干擾點擊。 */
 function initCalCursorTip(){
@@ -14801,7 +14825,7 @@ function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){
       const vid=String(x.venue_unit).split('_')[0]; if(use[vid]!=null) use[vid]++; } });
     // ② 舊資料沒 venue_unit → 按課種優先序回推佔位（多功能→教室→跑步機）
     const fill=(vid,n)=>{ if(use[vid]==null) return n; const take=Math.min(Math.max(0,venueCap(vid)-use[vid]),n); use[vid]+=take; return n-take; };
-    let g=cur.filter(x=>!x.venue_unit&&x.category==='小班肌力').length;
+    let g=cur.filter(x=>!x.venue_unit&&bkIsGroup(x)).length;
     let m=cur.filter(x=>!x.venue_unit&&(x.category==='私人教練'||x.category==='體驗')).length;
     let sf=cur.filter(x=>!x.venue_unit&&x.category==='自主訓練').length;
     g=fill('group',g);
@@ -15453,7 +15477,7 @@ function cagCardType(b){
   return {c:info.c, label};
 }
 function cagCardName(b,memMap,coachObj){
-  if(b.category==='小班肌力'||(Array.isArray(b.member_ids)&&b.member_ids.length)){
+  if(bkIsGroup(b)||(Array.isArray(b.member_ids)&&b.member_ids.length)){
     const n=(Array.isArray(b.member_ids)?b.member_ids.length:0);
     return n>0?`小班 ${n} 人`:'小班肌力';
   }
@@ -15587,7 +15611,7 @@ async function renderCoachAgenda(){
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const coachObj=Object.fromEntries(coaches.map(c=>[c.id,c]));
   const isMineBk=(b)=> (b.coach_id===myId||b.substitute_coach_id===myId);
-  const isGroupBk=(b)=> b.category==='小班肌力' || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
+  const isGroupBk=(b)=> bkIsGroup(b) || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
   const allBk=mergeSiblingUnits(bookings.filter(b=>b.status!=='cancelled'));   // 同行第二台併回主卡（2026-07-31）
   const mine=allBk.filter(isMineBk);
 
@@ -15643,7 +15667,7 @@ async function renderCoachAgenda(){
     // pos={lane,of}：在容器內依重疊群組分欄定位（桌機版行為——單張整寬、兩張平分…）
     const posStyle=pos?`left:calc(${pos.lane*100/pos.of}% + 1px);width:calc(${100/pos.of}% - 2px);right:auto;`:'';
     const done=(b.status==='completed'||b.status==='checked_in')
-      || (b.category==='小班肌力' && b.attendance && Object.values(b.attendance).some(st=>st==='checked_in'));
+      || (bkIsGroup(b) && b.attendance && Object.values(b.attendance).some(st=>st==='checked_in'));
     const showTime=height>=30;
     const canClick = layer==='mine' || isAdmin;
     /* 名稱行沿用原邏輯（2026-07-23）：自己的課＝會員名／團 N（可互動）；
@@ -15652,7 +15676,7 @@ async function renderCoachAgenda(){
        原本別人的課只顯示授課教練名，現在一律顯示會員名（不能點仍由 cag-noint 控制）。 */
     /* 名稱與標籤走共用層（2026-07-31 重構，見 bkName／bkTag）；團課主行是人數，另外處理 */
     let disp, dispTag='';
-    if(b.category==='小班肌力'||(Array.isArray(b.member_ids)&&b.member_ids.length)){
+    if(bkIsGroup(b)||(Array.isArray(b.member_ids)&&b.member_ids.length)){
       const n=(Array.isArray(b.member_ids)?b.member_ids.length:0); disp=n>0?`團 ${n}`:'團體課';
     }else if(b.category==='自主訓練' && !b.member_id && !b.trial_name){ disp='自主訓練'; }
     else { disp=bkName(b,id=>memMap[id]); dispTag=bkTag(b); if(disp==='—') disp='課程'; }
@@ -15973,7 +15997,7 @@ async function renderWeekTimeline(){
   const coachObj=Object.fromEntries(coaches.map(c=>[c.id,c]));
   const cardLabel=(b)=>{
     if(b.category==='自主訓練') return '自主';
-    if(b.category==='小班肌力') return '團課';
+    if(bkIsGroup(b)) return '團課';
     const cid=b.substitute_coach_id||b.coach_id;
     return coachAbbr(coachObj[cid]);
   };
@@ -15981,11 +16005,11 @@ async function renderWeekTimeline(){
   const myCardLabel=(b)=>{
     if(b.member_id) return memMap[b.member_id]||'—';
     if(b.category==='自主訓練') return '自主';
-    if(b.category==='小班肌力') return b.member_ids&&b.member_ids.length?`團${b.member_ids.length}`:'團課';
+    if(bkIsGroup(b)) return b.member_ids&&b.member_ids.length?`團${b.member_ids.length}`:'團課';
     return b.trial_name||'—';
   };
   const isMineBk=(b)=> (b.coach_id===myId||b.substitute_coach_id===myId);
-  const isGroupBk=(b)=> b.category==='小班肌力' || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
+  const isGroupBk=(b)=> bkIsGroup(b) || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
   // 團課卡內容：時間 / 教練 / 人數（依卡高分級顯示）
   const groupHeads=(b)=>{
     if(Array.isArray(b.member_ids)&&b.member_ids.length) return b.member_ids.length;
@@ -17598,7 +17622,7 @@ async function expandBkCard(el, id){
   // 教練簽到：限自己主帶／代課的課（口徑與 openBookingDetail 的 staffCanCheckin 一致）
   const coachCk = SESSION.role==='coach' && own;
   const closed = b.status==='cancelled' || b.status==='completed';
-  const isGroup = b.category==='小班肌力' || mids(b).length>0;   // 團課 → 簽到改開名單
+  const isGroup = bkIsGroup(b) || mids(b).length>0;   // 團課 → 簽到改開名單
   let btns='';
   /* 方位定案（2026-07-23 使用者指示，取代 07-22 卡緣方位）：「簽到」在卡片正中央，
      其餘按鈕圍繞中央排列（上2／中3／下2 格位）：上左 代課、上右 取消、
@@ -17700,7 +17724,7 @@ async function bkCardPop(el, b, btns){
   const _nm=id=>{ const v=mm[id]; return (v&&typeof v==='object')?(v.name||''):(v||''); };   // 有些頁的 memMap 存整個物件
   const _gIds=mids(b);
   let who;
-  if(b.category==='小班肌力'||_gIds.length){
+  if(bkIsGroup(b)||_gIds.length){
     const names=_gIds.map(_nm).filter(Boolean);
     who = names.length===0 ? '團體課（未排名單）'
         : names.length<=2 ? names.join('、')
@@ -17843,7 +17867,7 @@ async function bkOrbitRoster(id){
     });
   }else{                                    // 舊結構：同教練同時段的多筆單人團課
     const all=await dbGetAll('bookings');
-    const set=all.filter(x=>x.category==='小班肌力' && (x.coach_id||'')===(b.coach_id||'') && x.date===b.date && x.start_time===b.start_time && x.status!=='cancelled');
+    const set=all.filter(x=>bkIsGroup(x) && (x.coach_id||'')===(b.coach_id||'') && x.date===b.date && x.start_time===b.start_time && x.status!=='cancelled');
     rows = set.map(x=>({key:'bk|'+x.id, name:nameOf(x.member_id), on:(x.status==='checked_in'||x.status==='completed')}));
   }
   const host = bkPanelHost() || el;
@@ -17972,12 +17996,14 @@ async function extendForCoachLeave(ticket_id, booking, operator){
    體驗課不適用：本來就不扣票，沒有堂數可退、也沒有效期可延。
    運動按摩不適用（2026-07-31 使用者定案）：按摩是跟老師另外約時間，
    臨時不能來就直接取消重約，不需要「退票＋展延＋改自主訓練」這一整套。 */
-function canCoachLeave(b){ return !!b && b.category==='私人教練'; }
+/* 只有教練課有「教練請假 → 展延效期＋改成自主訓練」（2026-07-31 使用者定案）。
+   規則寫在口袋裡（TK_POCKETS.*.coachLeave），這裡只負責問。 */
+function canCoachLeave(b){ return !!b && !!bkPocketNow(b).coachLeave; }
 async function bkCoachLeave(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   if(b.status==='cancelled'||b.status==='checked_in'||b.status==='completed'){ showToast('此狀態不可標記請假'); return; }
   if(!canCoachLeave(b)){
-    showToast(b.category==='小班肌力'
+    showToast(bkIsGroup(b)
       ? '團體課不適用教練請假：請改派代課，或取消後補發補課券'
       : `${b.category||'這種課'}不適用教練請假（只有教練課與友善教練課）`);
     return;
@@ -18270,10 +18296,10 @@ async function openBookingDetail(id){
      staffCanCheckin／editable，那三個對非自己的課一律 false。 */
   // 舊匯入團課相容：一堂被拆成多筆（每人一筆）。若本筆是小班肌力且無 member_ids，
   // 即時聚合同教練＋同日期＋同時段的所有 booking，讓明細顯示完整名單與簽到。
-  if(b && b.category==='小班肌力' && !(Array.isArray(b.member_ids)&&b.member_ids.length)){
+  if(b && bkIsGroup(b) && !(Array.isArray(b.member_ids)&&b.member_ids.length)){
     try{
       const _all=await dbGetAll('bookings');
-      const _sib=_all.filter(x=>x.category==='小班肌力'&&x.status!=='cancelled'
+      const _sib=_all.filter(x=>bkIsGroup(x)&&x.status!=='cancelled'
         &&(x.coach_id||'')===(b.coach_id||'')&&x.date===b.date&&x.start_time===b.start_time);
       if(_sib.length>1){
         const _ids=[...new Set(_sib.map(x=>x.member_id).filter(Boolean))];
@@ -18494,7 +18520,7 @@ async function openBookingDetail(id){
   /* 場地單位燈號（2026-07-31 使用者指示）：模板裡不能 await，先算好再帶進去 */
   const _vuDots=(typeof venueUnitDots==='function')?await venueUnitDots(b, editable):'';
   const memMapD=Object.fromEntries(members.map(m=>[m.id,m.name]));
-  const isGroupD=b.category==='小班肌力', isTrialD=b.category==='體驗';
+  const isGroupD=bkIsGroup(b), isTrialD=b.category==='體驗';
   const gIdsD=mids(b);
   let memberLine;
   if(isTrialD){
@@ -18521,7 +18547,7 @@ async function openBookingDetail(id){
       /* 統一推算來源（2026-07-30）：與會員票券頁共用 allocBookingsToTickets。 */
       _uniqIds.forEach(mid=>{
         const own=_allTk.filter(t=>tkUsableBy(t,mid) && ticketCategoryOf(t)==='小班肌力');
-        const myGrp=(_allBk||[]).filter(x=>x && x.category==='小班肌力' && x.status!=='cancelled'
+        const myGrp=(_allBk||[]).filter(x=>x && bkIsGroup(x) && x.status!=='cancelled'
           && (mids(x).includes(mid) || x.member_id===mid));
         /* 2026-07-31 使用者回報：簽到名單的圓點少了本堂（陳暐濰 8/06 那顆是空的），
            會員自己的票券頁卻是對的 —— 因為那邊讀扣課紀錄、這邊還在先進先出推算。
@@ -18719,7 +18745,7 @@ async function openBookingDetail(id){
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
       ${editable?`<button class="btn btn-ghost" onclick="saveBookingTime('${b.id}')">儲存變更</button>`:''}
       ${/* 補課券只屬於團課的四週方案（2026-07-26 使用者指示：教練課沒有補課機制，取消的教練課不出現此鈕） */''}
-      ${(isDeskLike())&&b.status==='cancelled'&&b.member_id&&b.category==='小班肌力'&&!b.makeup_granted?`<button class="btn btn-gold" onclick="confirmMakeup('${b.id}')">補發補課券</button>`:''}
+      ${(isDeskLike())&&b.status==='cancelled'&&b.member_id&&bkIsGroup(b)&&!b.makeup_granted?`<button class="btn btn-gold" onclick="confirmMakeup('${b.id}')">補發補課券</button>`:''}
       ${canCancel&&ownByCoach?(isMemberView
         ? (isGroupD&&Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id)&&!isPastD
             ? `<button class="btn btn-danger" onclick="memLeaveGroup('${b.id}')">取消報名</button>`
@@ -18849,9 +18875,9 @@ async function saveBookingNote(id){
   catch(e){ showToast('備註儲存失敗：'+(e.message||e)); return; }
   /* 舊匯入團課一堂被拆成多筆同時段預約（openBookingDetail 會即時聚合顯示）——
      備註要寫到同一堂的每一筆，否則從別人那筆點進來看不到。 */
-  if(b.category==='小班肌力' && !(Array.isArray(b.member_ids)&&b.member_ids.length)){
+  if(bkIsGroup(b) && !(Array.isArray(b.member_ids)&&b.member_ids.length)){
     try{
-      const sibs=(await dbGetAll('bookings')).filter(x=>x.id!==b.id&&x.category==='小班肌力'
+      const sibs=(await dbGetAll('bookings')).filter(x=>x.id!==b.id&&bkIsGroup(x)
         &&x.status!=='cancelled'&&(x.coach_id||'')===(b.coach_id||'')&&x.date===b.date&&x.start_time===b.start_time);
       for(const s of sibs){ s.note=bkNoteJoin(bkNoteSplit(s.note).sys, el.value); await dbPut('bookings',s); }
     }catch(_){}
@@ -19738,6 +19764,28 @@ function mids(b){
   if(typeof v==='string'&&v.trim()){try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch(e){return [];}}
   return [];
 }
+/* 「這張課卡算不算這位會員的」（2026-07-31 抽成共用）——
+   團體課的 member_id 是 null、學員放在 member_ids（TK_POCKETS.group.sharedBooking），
+   所以「只看 member_id」的寫法會整批漏掉團課。這個判斷原本被抄在九個地方，
+   每次有人只改其中幾處就出事（2026-07-31 教練名片的團課待上堂數算不到，就是漏了這裡）。
+   要問「這位會員的課」一律用這兩支，不要再自己拼 member_id / member_ids。 */
+function bkHasMember(b, mid){
+  if(!b||!mid) return false;
+  return String(b.member_id||'')===String(mid) || mids(b).some(x=>String(x)===String(mid));
+}
+function bkOfMember(bookings, mid){ return (bookings||[]).filter(b=>bkHasMember(b,mid)); }
+/* 「這是不是一堂團體課」（2026-07-31 抽成共用）——
+   團體課是唯一「一張課卡多位學員、不綁 ticket_id、逐名額」的課種，
+   所以幾乎每個處理課卡的地方都要特判它。原本這句話被寫了 88 次，
+   規則一改就得逐句找（2026-07-31 的補課券漏發就是漏了其中一句）。
+   要問「是不是團課」一律用這支；口袋規則見 TK_POCKETS.group。 */
+function bkIsGroup(b){
+  // 快路徑：課卡的 category 就是最直接的答案（這是全系統唯一該寫這句的地方）
+  if(b && b.category==='小班肌力') return true;
+  return !!bkPocketNow(b).sharedBooking;
+}
+// 這位會員在這張課卡佔了幾個名額（團課可能一人多個名額）
+function bkSeatCount(b, mid){ return mids(b).filter(x=>String(x)===String(mid)).length || (bkHasMember(b,mid)?1:0); }
 /* ── 團課「名額鍵」（2026-07-30 使用者指示：黃姸元約兩個名額 → 用兩列獨立顯示）──
    同一帳號訂多個名額時 member_ids 會重複同一個 id（正確慣例，見 7/24 那堂）。
    原本名單把重複的合併成一列標「N 個名額」，但簽到／請假／取消其實是同一個開關 ——
@@ -19950,7 +19998,7 @@ async function cancelBooking(id, refundMode, opts){
 
   let refundedCount=0, refundMissed=false;
   if(doRefund){
-    if(b.category==='小班肌力'){
+    if(bkIsGroup(b)){
       const logs=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='deduct');
       const refunded=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='refund');
       const refundCntByTk={};
@@ -19984,7 +20032,7 @@ async function cancelBooking(id, refundMode, opts){
     body=`您的體驗課${when}已取消。`;
   }else if(!doRefund && within24){
     body=`您的${b.category}${when}已取消。因開課 24 小時內取消，本次恕不退回票券。`;
-  }else if(b.category==='小班肌力'){
+  }else if(bkIsGroup(b)){
     body=`您的小班肌力課${when}已取消${refundedCount>0?`，已退回 ${refundedCount} 堂團體課票券`:''}。`;
   }else{
     body=`您的${b.category}${when}已取消${refundedCount>0?'，票券已退回 1 堂':'，本次未退回票券'}。`;
@@ -20300,7 +20348,7 @@ PAGES.members=async function(){
     if(b.status==='cancelled') return;
     let g=null;
     if(b.category==='私人教練') g='pt';
-    else if(b.category==='小班肌力') g='grp';
+    else if(bkIsGroup(b)) g='grp';
     else return;
     const mids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
     mids.forEach(mid=>{ if(!mid||!b.date) return;
@@ -21738,7 +21786,7 @@ function dutyClassOverlapHours(shifts, bookings, empId, month, emp){
   if(!myShifts.length) return 0;
   // 該員工當月已上課（已完成或已簽到）、且有授課時段的課（私人教練/體驗/小班肌力團課）
   const myClasses=(bookings||[]).filter(b=>b.coach_id===empId && (b.status==='completed'||b.status==='checked_in')
-    && (b.category==='私人教練'||b.category==='體驗'||b.category==='小班肌力') && (b.date||'').slice(0,7)===month);
+    && (b.category==='私人教練'||b.category==='體驗'||bkIsGroup(b)) && (b.date||'').slice(0,7)===month);
   if(!myClasses.length) return 0;
   let overlapMin=0;
   // 依日期分組比對
@@ -22685,7 +22733,7 @@ async function openPerfDetail(empId, month){
       && String(b.date||'').slice(0,7)===ym && b.status!=='cancelled');
     const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in');
     const ptDone=done.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
-    const grpList=done.filter(b=>b.category==='小班肌力');
+    const grpList=done.filter(b=>bkIsGroup(b));
     const groupHeads=grpList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 請假不算（2026-07-30）
     const leave=leaveSummary(shifts, empId, ym);
     const dutyCap=emp.need_duty?dutyHoursCapped(attendance,shifts,empId,ym):0;
@@ -22766,7 +22814,7 @@ async function computeMonthlyPayroll(month){
     const countSalary=emp.count_salary!==false;
     const myDone=bookings.filter(b=>b.coach_id===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month);
     const ptDone=ptDoneById[emp.id]||0;
-    const groupList=myDone.filter(b=>b.category==='小班肌力');
+    const groupList=myDone.filter(b=>bkIsGroup(b));
     const groupHeads=groupList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 請假不算（2026-07-30）
     // 值班費：打卡封頂時數 再扣掉「值班時段內上課」重疊 → 淨值班時數（顯示與計薪一致）
     const leave=leaveSummary(shifts, emp.id, month);
@@ -23229,8 +23277,8 @@ async function renderStaffList(){
          兩個數字用途不同，所以分開列。 */
       _stat[c.id]={ all:done.length, allAll:mine.length,
         pt:done.filter(isPt).length, ptAll:mine.filter(isPt).length,
-        grp:done.filter(b=>b.category==='小班肌力').length,
-        grpAll:mine.filter(b=>b.category==='小班肌力').length,
+        grp:done.filter(b=>bkIsGroup(b)).length,
+        grpAll:mine.filter(b=>bkIsGroup(b)).length,
         renew:_renew[c.id]||0, hours:hrs };
     });
   }catch(e){ console.error('員工列表本月統計失敗:',e); }
@@ -25356,8 +25404,7 @@ async function ppLoadCtx(){
     const myTk=tickets.filter(t=>tkUsableBy(t,PP.id));   // 含共享給他的票（與會員端一致）
     /* 團課的學員放在 member_ids、member_id 是 null（2026-07-29 使用者回報：團課票券被誤判
        成「已用畢」收進歷史）—— 只用 member_id 過濾會整批漏掉團課，票券的待上堂數就算不出來。 */
-    const myBk=bookings.filter(b=>b.member_id===PP.id
-      || (Array.isArray(b.member_ids)&&b.member_ids.includes(PP.id)));
+    const myBk=bkOfMember(bookings, PP.id);
     const used=usedSessionsMap(myBk);
     // 剩餘票券摘要：只計「仍有效（未過期）且還有剩餘堂數」的票券（歷史/已用完/已過期不計）
     const _todayYmd=ymd(TODAY);
@@ -26086,11 +26133,11 @@ function renderFdMonthView(){
       const end=minToTime(timeToMin(b.start_time)+dur);
       /* 2026-07-30 使用者回報：體驗課不顯示姓名。原本只看 trial_name，沒填就退成「體驗」；
          已建會員檔的體驗客戶（trial_name 空、member_id 有值）就整個看不到人名。改成兩邊都取。 */
-      const who=b.category==='小班肌力'?'團體課'
+      const who=bkIsGroup(b)?'團體課'
         :(b.category==='體驗'?((b.trial_name||memMap[b.member_id]||'體驗'))
         :(memMap[b.member_id]||b.trial_name||'—'));
       const coachNm=b.coach_id?(coachMap[b.coach_id]||'教練'):'—';
-      const barCls=isSelf?'mc-bar-self':(b.category==='小班肌力'?'mc-bar-group':(b.category==='體驗'?'mc-bar-trial':'mc-bar-pt'));
+      const barCls=isSelf?'mc-bar-self':(bkIsGroup(b)?'mc-bar-group':(b.category==='體驗'?'mc-bar-trial':'mc-bar-pt'));
       // 2026-07-30 使用者指示：手機版首頁的課卡點了要跳簡易資訊（原本 CSS 是手指游標，卻沒有掛事件）
       return `<div class="mc-ev" onclick="openCourseCard('${b.id}',this)">
         <div class="mc-ev-time"><span class="mc-ev-t1">${b.start_time}</span><span class="mc-ev-t2">${end}</span></div>
@@ -26720,7 +26767,7 @@ PAGES.m_bookings=async function(){
   const [bookings,coaches,types]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('ticket_types').catch(()=>[])]);
   window._ttCache=types;
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
-  const mine=bookings.filter(b=>(b.member_id===mid || (Array.isArray(b.member_ids)&&b.member_ids.includes(mid))))
+  const mine=bookings.filter(b=>bkHasMember(b,mid))
     .sort((a,b)=>((b.date||'')+(b.start_time||'')).localeCompare((a.date||'')+(a.start_time||'')));
   const today=ymd(TODAY);
   const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in').length;
@@ -28339,7 +28386,7 @@ PAGES.coach_today=async function(){
   // 今日預估薪資：今日完成課時費 + 今日值班費（簡化）
   const er=effRates(me);
   const todayPtDone=myToday.filter(b=>(b.status==='completed'||b.status==='checked_in')&&isPtPayClass(b)).length;   // 體驗不算（2026-07-31）
-  const todayGroupHeads=myToday.filter(b=>(b.status==='completed'||b.status==='checked_in')&&b.category==='小班肌力').reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
+  const todayGroupHeads=myToday.filter(b=>(b.status==='completed'||b.status==='checked_in')&&bkIsGroup(b)).reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
   const dutyRate=(me.custom_salary?(me.duty_hourly||0):(er.duty_hourly||0));
   const estToday = (todayPtDone*(er.pt_rate||0)) + (todayGroupHeads*(er.group_rate||0)) + (dutyToday*dutyRate);
   // 值班進度環（共用元件 dutyRingHTML，2026-07-19）：已打卡才顯示，未打卡不放空環
@@ -28361,7 +28408,7 @@ PAGES.coach_today=async function(){
   // 教練課（1v1，含友善課；排除小班肌力團課與體驗）
   const ptDoneCount=monthDoneBk.filter(b=>b.category!=='小班肌力'&&b.category!=='體驗').length;
   // 團體課（小班肌力）：堂數與總人次
-  const groupDoneBks=monthDoneBk.filter(b=>b.category==='小班肌力');
+  const groupDoneBks=monthDoneBk.filter(b=>bkIsGroup(b));
   const groupClassCount=groupDoneBks.length;
   const groupHeadCount=groupDoneBks.reduce((a,b)=>a+grpAttendHeads(b),0);   // 請假不算（2026-07-30）
   // 值班日期（本月有排班的日）
@@ -28375,7 +28422,7 @@ PAGES.coach_today=async function(){
   const monthDone=ptDoneCount, MONTH_GOAL=PT_T3, monthPct=Math.round(ptRing);
   // 本月排定總數（分母，含未完成、排除取消）
   const ptSchedCount=monthBk.filter(b=>b.category!=='小班肌力'&&b.category!=='體驗').length;
-  const groupSchedBks=monthBk.filter(b=>b.category==='小班肌力');
+  const groupSchedBks=monthBk.filter(b=>bkIsGroup(b));
   const groupSchedCount=groupSchedBks.length;
   const groupDoneClassCount=groupClassCount;
   // 值班：完成（已過去含今天）/ 排定總數
@@ -28388,7 +28435,7 @@ PAGES.coach_today=async function(){
   const dutyHrsDone=monthShiftsMine.filter(s=>(s.date||'')<=today).reduce((a,s)=>a+(Number(s.hours)||0),0);
   // 每日課程數（教練課／團課）與值班標記
   const dayPt={}, dayGroup={};
-  monthBk.forEach(b=>{ const d=b.date; if(!d)return; if(b.category==='小班肌力'){dayGroup[d]=(dayGroup[d]||0)+1;} else if(b.category!=='體驗'){dayPt[d]=(dayPt[d]||0)+1;} });
+  monthBk.forEach(b=>{ const d=b.date; if(!d)return; if(bkIsGroup(b)){dayGroup[d]=(dayGroup[d]||0)+1;} else if(b.category!=='體驗'){dayPt[d]=(dayPt[d]||0)+1;} });
 
   // ── 待處理事項（小管家）：與自己相關的待辦 ──
   const ICO={
@@ -28453,7 +28500,7 @@ PAGES.coach_today=async function(){
   let taskDots='';
   myToday.forEach(b=>{
     const cc=evColorClass(b,typeMap); const ci=catInfo(cc);
-    const isGroup = b.category==='小班肌力' || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
+    const isGroup = bkIsGroup(b) || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
     const nm = isGroup ? `${(Array.isArray(b.member_ids)?b.member_ids.length:0)} 人`
              : (b.member_id ? (memMap[b.member_id]||'—') : (b.trial_name||'—'));
     const done=(b.status==='completed'||b.status==='checked_in');
@@ -28556,7 +28603,7 @@ PAGES.coach_today=async function(){
   const [_ay,_am]=_attnYm.split('-').map(Number);
   const _calBk=bookings.filter(b=>b.coach_id===SESSION.id&&(b.date||'').slice(0,7)===_attnYm&&b.status!=='cancelled');
   const _calPt={},_calGrp={};
-  _calBk.forEach(b=>{const d=b.date;if(!d)return;if(b.category==='小班肌力'){_calGrp[d]=(_calGrp[d]||0)+1;}else if(b.category!=='體驗'){_calPt[d]=(_calPt[d]||0)+1;}});
+  _calBk.forEach(b=>{const d=b.date;if(!d)return;if(bkIsGroup(b)){_calGrp[d]=(_calGrp[d]||0)+1;}else if(b.category!=='體驗'){_calPt[d]=(_calPt[d]||0)+1;}});
   /* 值班班別代號（2026-07-20 使用者指示：取代金圈）：依班表開始時間分 A早班(<12)/B中班(12-17)/C晚班(≥17)；
      無 start_time 的舊資料（僅時數）顯示「值」。 */
   const _calShift={};
@@ -28594,7 +28641,7 @@ PAGES.coach_today=async function(){
   /* 週曆跨月時也要有數字 → 另建全期間計數（不限 _attnYm） */
   const _calPtAll={},_calGrpAll={},_calShiftAll={};
   bookings.filter(b=>b.coach_id===SESSION.id&&b.status!=='cancelled').forEach(b=>{const d=b.date;if(!d)return;
-    if(b.category==='小班肌力'){_calGrpAll[d]=(_calGrpAll[d]||0)+1;}else if(b.category!=='體驗'){_calPtAll[d]=(_calPtAll[d]||0)+1;}});
+    if(bkIsGroup(b)){_calGrpAll[d]=(_calGrpAll[d]||0)+1;}else if(b.category!=='體驗'){_calPtAll[d]=(_calPtAll[d]||0)+1;}});
   shifts.filter(s=>s.emp_id===SESSION.id&&(s.hours>0||s.start_time)).forEach(s=>{
     const st=s.start_time||''; const h=st?Number(st.slice(0,2)):null;
     _calShiftAll[s.date]= h==null?'值':(h<12?'A':(h<17?'B':'C'));});
@@ -28626,7 +28673,7 @@ PAGES.coach_today=async function(){
      教練課/團體課，同管理員手機版）②今日值班（桌機同款圈型進度環 dutyRingHTML；
      上班/下班打卡按鈕自底部導覽移入此卡）。原「今日總覽」三格卡退場。 */
   const _cPtN=myToday.filter(b=>b.category==='私人教練').length;
-  const _cGrpN=myToday.filter(b=>b.category==='小班肌力').length;
+  const _cGrpN=myToday.filter(b=>bkIsGroup(b)).length;
   const _schedH=(Math.floor(dutyToday*2)/2).toFixed(1);
   let _dutyInner;
   if(punched){
@@ -28942,7 +28989,7 @@ function unifiedCalendar(opts){
   const fn=onDayFn||'ucalClickDay';
   // 角色對應的「我的課」判斷
   const isMine=(b)=> role==='admin' ? true
-    : role==='member' ? (b.member_id===myId || (Array.isArray(b.member_ids)&&b.member_ids.includes(myId)))
+    : role==='member' ? bkHasMember(b,myId)
     : (b.coach_id===myId || b.substitute_coach_id===myId); // coach
   let cells='';
   for(let i=0;i<firstDow;i++) cells+='<div class="ucal-cell ucal-empty"></div>';
@@ -29023,7 +29070,7 @@ async function ucalClickDay(ds){
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const isMine=(b)=> role==='admin' ? true
-    : role==='member' ? (b.member_id===myId||(Array.isArray(b.member_ids)&&b.member_ids.includes(myId)))
+    : role==='member' ? bkHasMember(b,myId)
     : (b.coach_id===myId||b.substitute_coach_id===myId);
   const list=bookings.filter(b=>b.date===ds&&b.status!=='cancelled'&&isMine(b)).sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   const [y,m,d]=ds.split('-');
@@ -30093,7 +30140,7 @@ function renderCoachWeekInline(box){
       const dur=b.duration||60;
       const top=yOf(s), height=Math.max(dur/SLOT*ROWH-2, ROWH-2);
       const cc=bkCC(b);
-      const who=b.category==='小班肌力'?'團':(b.category==='體驗'?(b.trial_name||'體驗').slice(0,3):(memMap[b.member_id]||'—').slice(0,3));
+      const who=bkIsGroup(b)?'團':(b.category==='體驗'?(b.trial_name||'體驗').slice(0,3):(memMap[b.member_id]||'—').slice(0,3));
       // 高度夠才顯示時間（避免太擠）
       const showTime=height>=30;
       evs+=`<div class="wkx-ev wkx-${cc}" style="top:${top}px;height:${height}px;" onclick="event.stopPropagation();openCourseCard('${b.id}',this)" title="${b.start_time} ${who}">
@@ -30176,7 +30223,7 @@ function renderCoachMonthView(){
   }else{
     listHtml=selBk.map(b=>{
       const cc=bkCC(b);
-      const who=b.category==='小班肌力'?'團體課'
+      const who=bkIsGroup(b)?'團體課'
         :(b.category==='體驗'?((b.trial_name||memMap[b.member_id]||'體驗'))
         :(memMap[b.member_id]||b.trial_name||'—'));   // 體驗課取 trial_name 或會員名（2026-07-30）
       const dur=b.duration||60;
@@ -30254,7 +30301,7 @@ function renderCoach3Day(){
       const dur=b.duration||60;
       const top=yOf(s), height=Math.max(dur/SLOT*ROWH-2, ROWH-2);
       const cc=bkCC(b);
-      const who=b.category==='小班肌力'?'團':(b.category==='體驗'?(b.trial_name||'體驗').slice(0,3):(memMap[b.member_id]||'—').slice(0,3));
+      const who=bkIsGroup(b)?'團':(b.category==='體驗'?(b.trial_name||'體驗').slice(0,3):(memMap[b.member_id]||'—').slice(0,3));
       const showTime=height>=34;
       for(let mm=s; mm<s+dur; mm+=SLOT) occupied.add(mm);
       evs+=`<div class="wkx-ev wkx-${cc}" style="top:${top}px;height:${height}px;" onclick="event.stopPropagation();openCourseCard('${b.id}',this)" title="${b.start_time} ${who}">
@@ -30355,7 +30402,7 @@ function renderCoachWeek(){
     const dayBk=visible.filter(b=>b.date===ds).sort((a,b)=>a.start_time.localeCompare(b.start_time));
     const chips=dayBk.slice(0,3).map(b=>{
       const cc=bkCC(b);
-      const realName=b.category==='小班肌力'?'團課':(b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—'));
+      const realName=bkIsGroup(b)?'團課':(b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—'));
       const who=bkDisplayName(b,realName);
       return `<div class="wk-chip wk-${cc}${bkIsMasked(b)?' bk-masked':''}">${b.start_time} ${who}</div>`;
     }).join('');
@@ -30384,7 +30431,7 @@ function renderCoachDayList(){
   const list=source.filter(b=>b.date===ds);
   const myList=list.filter(b=>b.coach_id===myId||b.substitute_coach_id===myId);
   const ptN=myList.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
-  const grpN=myList.filter(b=>b.category==='小班肌力').length;
+  const grpN=myList.filter(b=>bkIsGroup(b)).length;
   // 教練課場地容量（多功能訓練區：教練課+體驗）→ 取代寫死 3
   const PT_VENUE_CATS=new Set();
   let PT_SLOTS=3;
@@ -30486,7 +30533,7 @@ function renderCoachDayList(){
     let midLines='', tkRem='';
     if(mine){
       showArr.forEach(b=>{
-        const who=b.category==='小班肌力'?'團體課':(b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—'));
+        const who=bkIsGroup(b)?'團體課':(b.category==='體驗'?(b.trial_name||'體驗'):(memMap[b.member_id]||'—'));
         const fmt=b.format?b.format.toUpperCase():'';
         const typeM={'私人教練':'教練課','自主訓練':'自主訓練','體驗':'體驗','小班肌力':'團體課'}[b.category]||'課程';
         const venTag = venueIsNotable(b.category,b.venue_unit) ? `<span class="tkr-venue">📍${venueName(b.venue_unit)}</span>` : '';
@@ -30625,7 +30672,7 @@ PAGES.mem_bookings=async function(){
   try{ window._meMember=await dbGet('members',SESSION.id); }catch(_){}
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   /* 團體課（member_id 為空、會員在 member_ids 名單裡）也算自己的課（2026-07-28 團課自主報名） */
-  const mine=bookings.filter(b=>(b.member_id===SESSION.id||(Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id)))&&b.status!=='cancelled')
+  const mine=bookings.filter(b=>bkHasMember(b,SESSION.id)&&b.status!=='cancelled')
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   window._memCalData={mine,coachMap};
   if(!window._memCalKeep){ _memCalMonth=null; _memCalSel=null; }   // 選日/換週時保留（2026-07-29）
@@ -30811,7 +30858,7 @@ function renderMemMonthView(){
       }else if(b.status==='booked'||b.status==='scheduled'){
         const slotDt=new Date(b.date+'T'+b.start_time+':00');
         const openDt=new Date(slotDt.getTime()-30*60000);
-        const isGrp=b.category==='小班肌力';
+        const isGrp=bkIsGroup(b);
         const canCheckin=new Date()>=openDt && b.date===ymd(TODAY) && !isGrp;   // 團課由教練點名，會員不可整堂簽到
         if(canCheckin) actionBtn=`<button class="btn btn-green btn-sm" onclick="memCheckin('${b.id}')">簽到</button>`;
         else if(isSelf) actionBtn=`<button class="btn btn-ghost btn-sm" onclick="memCancelSelf('${b.id}')">取消</button>`;
@@ -31023,7 +31070,7 @@ async function memTaskTap(id,el){
   memTaskClose();
   const done=b.status==='checked_in'||b.status==='completed';
   const slotDt=new Date(b.date+'T'+b.start_time+':00');
-  const isGrp=b.category==='小班肌力';
+  const isGrp=bkIsGroup(b);
   const ckOpen=!done && !isGrp && b.date===ymd(TODAY) && Date.now()>=slotDt.getTime()-30*60000;
   const past=slotDt.getTime()<Date.now();
   const cc=bkCC(b);
@@ -31074,7 +31121,7 @@ async function memCancelTap(id){
   memTaskClose();
   const b=await dbGet('bookings',id);
   if(!b){ showToast('找不到預約'); return; }
-  if(b.category==='小班肌力') return memLeaveGroup(id);
+  if(bkIsGroup(b)) return memLeaveGroup(id);
   if(b.category==='自主訓練') return memCancelSelf(id);
   return memCancelBooking(id);
 }
@@ -31115,7 +31162,7 @@ async function doMemCancelBooking(id){
 /* 取消團體課報名（2026-07-28）：只退自己的名額＋退 1 堂，整堂課不動 */
 async function memLeaveGroup(id){
   const b=await dbGet('bookings',id);
-  if(!b||!(Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id))){showToast('找不到報名紀錄');return;}
+  if(!b||!mids(b).includes(SESSION.id)){showToast('找不到報名紀錄');return;}
   /* 2026-07-28 使用者指示：開課當天不可自行取消 */
   if(b.date<=ymd(TODAY)){
     showModal(`<div class="modal-title">無法取消</div>
@@ -31250,7 +31297,7 @@ async function msbStart(reschedId){
       && new Date(x.date+'T'+x.start_time+':00').getTime()>now)
       .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
     /* 未來的團體課場次（RLS 已開放會員讀「小班肌力」場次） */
-    grpClasses=(bks||[]).filter(x=>x.category==='小班肌力'&&x.status==='booked'
+    grpClasses=(bks||[]).filter(x=>bkIsGroup(x)&&x.status==='booked'
       && new Date(x.date+'T'+x.start_time+':00').getTime()>now)
       .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   }catch(_){}
@@ -31350,7 +31397,7 @@ function msbRenderGrpList(){
   box.innerHTML='<div style="padding:4px 14px 12px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;">'+list.map(c=>{
     const n=Array.isArray(c.member_ids)?c.member_ids.length:0;
     const mx=Math.max(1,Number(c.max_heads)||5);
-    const joined=Array.isArray(c.member_ids)&&c.member_ids.includes(SESSION.id);
+    const joined=mids(c).includes(SESSION.id);
     const full=n>=mx;
     const end=minToTime(timeToMin(c.start_time)+(Number(c.duration)||60));
     const btn=joined?'<span class="tag tag-ok" style="font-size:11px;flex:none;">已報名</span>'
@@ -33686,7 +33733,7 @@ async function anaToday(){
   const todayBk=bookings.filter(b=>b.date===today && b.status!=='cancelled');
   const done=todayBk.filter(b=>b.status==='completed'||b.status==='checked_in').length;
   const pt=todayBk.filter(b=>b.category==='私人教練'||b.category==='體驗').length;
-  const grp=todayBk.filter(b=>b.category==='小班肌力').length;
+  const grp=todayBk.filter(b=>bkIsGroup(b)).length;
   const self=todayBk.filter(b=>b.category==='自主訓練').length;
   const revenue=(purchases||[]).filter(p=>(p.created_at||'').slice(0,10)===today).reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
   const stats=lpStats([
@@ -33742,7 +33789,7 @@ async function anaMonth(){
   const memAvg=(mid,cl)=>{ const k=memUnit[mid+'|'+cl]; return (k&&k.n>0)?k.a/k.n:avgUnit(cl); };
   const ptDoneList=done.filter(b=>b.category==='私人教練');
   const ptValue=ptDoneList.reduce((s,b)=>{ const u=unitOf(tkById[b.ticket_id]); return s+(u>0?u:memAvg(b.member_id,'pt')); },0);
-  const grpDoneList=done.filter(b=>b.category==='小班肌力');
+  const grpDoneList=done.filter(b=>bkIsGroup(b));
   let grpHeads=0;
   const grpValue=grpDoneList.reduce((s,b)=>{
     const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
@@ -33757,7 +33804,7 @@ async function anaMonth(){
       if(c.count_salary===false) return;
       const myDone=done.filter(b=>b.coach_id===c.id);
       const ptD=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
-      const gHeads=myDone.filter(b=>b.category==='小班肌力').reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
+      const gHeads=myDone.filter(b=>bkIsGroup(b)).reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
       const dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month,c),0):0;
       const lv=leaveSummary(shifts,c.id,month);
       const leaderHeads=c.is_manager
@@ -33828,8 +33875,8 @@ async function anaCoach(){
     const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in');
     const ptAll=mine.filter(isPtPayClass).length;        // 體驗不算（2026-07-31）
     const ptDone=done.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
-    const grpAll=mine.filter(b=>b.category==='小班肌力').length;
-    const grpDone=done.filter(b=>b.category==='小班肌力');
+    const grpAll=mine.filter(b=>bkIsGroup(b)).length;
+    const grpDone=done.filter(b=>bkIsGroup(b));
     const grpHeads=grpDone.reduce((a,b)=>a+((Array.isArray(b.member_ids)?b.member_ids.length:0)||0),0);
     let dutyH=0;
     try{ dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month,c),0):0; }catch(_){}
@@ -34479,7 +34526,7 @@ PAGES.admin_today=async function(){
         const renderCard=b=>{
           const acting=b.substitute_coach_id?coachMap[b.substitute_coach_id]+'（代）':(b.coach_id?coachMap[b.coach_id]:'—');
           const colorCls=evColorClass(b,typeMap);
-          if(b.category==='小班肌力'){
+          if(bkIsGroup(b)){
             const ids=mids(b); const att=attObj(b);
             const nameList = ids.length ? ids.map(id=>{
               const inHere=att[id]==='checked_in';
@@ -34501,7 +34548,7 @@ PAGES.admin_today=async function(){
         };
         // 迷你卡（已完成/已簽到）
         const renderMini=b=>{
-          const who = b.category==='體驗' ? (b.trial_name||'體驗') : (b.category==='小班肌力'?'團體課':(memMap[b.member_id]||'—'));
+          const who = b.category==='體驗' ? (b.trial_name||'體驗') : (bkIsGroup(b)?'團體課':(memMap[b.member_id]||'—'));
           const colorCls=evColorClass(b,typeMap);
           return `<div class="tc-mini ${colorCls}" onclick="openBookingDetail('${b.id}')"><b class="tcm-t">${b.start_time}</b> ${who}</div>`;
         };
@@ -34518,7 +34565,7 @@ PAGES.admin_today=async function(){
         pending.forEach(b=>{(groups[b.start_time]=groups[b.start_time]||[]).push(b);});
         const pendingHtml = pending.length? Object.keys(groups).sort().map(t=>{
           const arr=groups[t];
-          const grp=arr.filter(b=>b.category==='小班肌力');
+          const grp=arr.filter(b=>bkIsGroup(b));
           const solo=arr.filter(b=>b.category!=='小班肌力');
           const grpLine = grp.length? `<div class="tc-cards">${grp.map(renderCard).join('')}</div>`:'';
           const soloLine = solo.length? `<div class="tc-cards">${solo.map(renderCard).join('')}</div>`:'';
@@ -34921,7 +34968,7 @@ async function renderSalaryContent(TARGET, withHead){
   const myDone=bookings.filter(b=>b.coach_id===empId&&(b.status==='completed'||b.status==='checked_in')&&b.date.slice(0,7)===month);
   const myAll=bookings.filter(b=>b.coach_id===empId&&b.status!=='cancelled'&&b.date.slice(0,7)===month);
   const ptDone=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
-  const groupDoneList=myDone.filter(b=>b.category==='小班肌力');
+  const groupDoneList=myDone.filter(b=>bkIsGroup(b));
   const groupDone=groupDoneList.length;
   // 團課總人頭：每堂實際參加人數加總（請假的不算 —— 2026-07-30 使用者指示）
   const groupHeads=groupDoneList.reduce((s,b)=>s+grpAttendHeads(b),0);
@@ -34957,7 +35004,7 @@ async function renderSalaryContent(TARGET, withHead){
   function dayResult(ds){
     const dayBk=bookings.filter(b=>b.coach_id===empId&&b.date===ds&&(b.status==='completed'||b.status==='checked_in'));
     const dPt=dayBk.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
-    const dGroupHeads=dayBk.filter(b=>b.category==='小班肌力').reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
+    const dGroupHeads=dayBk.filter(b=>bkIsGroup(b)).reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
     const dClsCnt=bookings.filter(b=>b.coach_id===empId&&b.date===ds&&b.status!=='cancelled').length;
     const dDuty=(shifts||[]).filter(s=>s.emp_id===empId&&s.date===ds).reduce((a,s)=>a+(Number(s.hours)||0),0);
     const dPay=countSalary?(dPt*(er2.pt_rate||0)+dGroupHeads*(er2.group_rate||0)+dDuty*dutyRate2):0;
@@ -35140,7 +35187,7 @@ async function salaryClickDay(ds){
   const dayResult=(d)=>{
     const dayBk=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===d&&(b.status==='completed'||b.status==='checked_in'));
     const dPt=dayBk.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
-    const dGH=dayBk.filter(b=>b.category==='小班肌力').reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
+    const dGH=dayBk.filter(b=>bkIsGroup(b)).reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
     const dCls=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===d&&b.status!=='cancelled').length;
     const dDuty=(shifts||[]).filter(s=>s.emp_id===SESSION.id&&s.date===d).reduce((a,s)=>a+(Number(s.hours)||0),0);
     const dPay=countSalary?(dPt*(er.pt_rate||0)+dGH*(er.group_rate||0)+dDuty*dutyRate):0;

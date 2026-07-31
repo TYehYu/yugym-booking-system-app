@@ -9,13 +9,18 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
-const code=[g('function tkPlanDays(t){','\n}\n'),g('function tkIsExtended(t){','\n'),
+/* 2026-07-31：tkCanExtend 先問票卡口袋（自主訓練點數不提供展延），一併抽進來 */
+const _pi=src.indexOf('const TK_POCKETS={');
+const code=[src.slice(_pi, src.indexOf('\nfunction tkClass5(',_pi)),
+            g('function tkClass5(t, typeMap){','\n}\n'),
+            g('function tkPlanDays(t){','\n}\n'),g('function tkIsExtended(t){','\n'),
             g('function tkExtendTo(t){','\n}\n'),g('function tkCanExtend(t, today){','\n}\n')].join('\n');
 const env={ parseYmd:s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);},
             ymd:d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),
             TODAY:new Date(2026,6,30),
-            window:{_ttCache:[{id:'tt-limited-legacy',name:'限定教練課',validity_days:28}]} };
-const api=new Function(...Object.keys(env),code+'\nreturn {tkPlanDays,tkIsExtended,tkExtendTo,tkCanExtend};')(...Object.values(env));
+            window:{_ttCache:[{id:'tt-limited-legacy',name:'限定教練課',validity_days:28},
+                              {id:'tt-self',name:'自主訓練',category:'自主訓練'}]} };
+const api=new Function(...Object.keys(env),code+'\nreturn {tkPlanDays,tkIsExtended,tkExtendTo,tkCanExtend,tkPocketNow};')(...Object.values(env));
 const T=o=>Object.assign({ticket_type_id:'tt-limited-legacy',status:'usable',sessions_remaining:4},o);
 
 console.log('原方案期限');
@@ -94,7 +99,8 @@ ok('　　金色＝次要提示，符合品牌色階（紅>金>綠）',
 ok('　　過期票整張淡化，但有展延開關時不淡（要能看清楚才點得下去）',
    /\.mwtk-card\.mck-dim2:has\(\.tk-ext\)\{opacity:1;filter:none;\}/.test(src));
 ok('　　雙重把關：視窗與寫入都再驗一次條件',
-   (src.match(/if\(!tkCanExtend\(t\)\)\{ showToast\('這張票券不符合展延條件/g)||[]).length===2);
+   /if\(!tkCanExtend\(t\)\)\{\s*\n\s*showToast\(tkPocketNow\(t\)\.canExtend/.test(src)
+   && /if\(!tkCanExtend\(t\)\)\{ showToast\('這張票券不符合展延條件'\); return; \}/.test(src));
 ok('　　原因寫在程式裡', /過期票在系統裡完全動不了/.test(src));
 
 console.log('\n會員名片的票券頁也要看得到（2026-07-30 使用者回報「邱美珠過期的票券還沒有設定展延按鈕」）');

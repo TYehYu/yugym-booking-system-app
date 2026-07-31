@@ -3,6 +3,9 @@
    櫃檯是「照時間準備、掃一眼挑一個點進去」，格狀按鈕比一列一人的清單好抓。
    其他待辦名單（降級／未打卡）維持清單。 */
 const fs=require('fs');
+/* 2026-07-31：「是不是團課」抽成共用的 bkIsGroup（見 TK_POCKETS.group）——
+   沙箱裡給一個等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
@@ -137,7 +140,7 @@ ok('★ 左緣依課別上色：教練課綠／團體課橘／體驗紫',
    && /\.tdl-cc-trial\{--cc:var\(--course-trial-accent,#6e3a86\);\}/.test(src));
 ok('★ 名單建立時就帶課別（團課 group／教練課 pt／體驗 trial）',
    /e\.cc = isGrp\?'group':'pt';/.test(src)
-   && /cc:\(b\.category==='小班肌力'\?'group':\(b\.category==='體驗'\?'trial':'pt'\)\)/.test(src));
+   && /cc:\(bkIsGroup\(b\)\?'group':\(b\.category==='體驗'\?'trial':'pt'\)\)/.test(src));
 ok('　　hover 改用陰影（白底不再換底色）', /\.tdl-cell:hover\{box-shadow:0 4px 14px rgba\(20,18,14,\.10\);\}/.test(src));
 
 console.log('\n本月待升級／待降級／待續約也改課卡模式');

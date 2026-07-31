@@ -4,6 +4,9 @@
    ② 待簽約（還沒收款）的課卡也要標紅框，與行事曆同一套提示。
    ③ 教練薪資單下方的「本月月曆」移除。 */
 const fs=require('fs');
+/* 2026-07-31：「是不是團課」抽成共用的 bkIsGroup（見 TK_POCKETS.group）——
+   沙箱裡給一個等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
@@ -11,7 +14,7 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 
 console.log('團課課卡的名稱');
 ok('★ 團課一律顯示人數，不再掉回 member_id',
-   /const _isGrp = b\.category==='小班肌力' \|\| \(Array\.isArray\(b\.member_ids\)&&b\.member_ids\.length>0\);/.test(src)
+   /const _isGrp = bkIsGroup\(b\) \|\| \(Array\.isArray\(b\.member_ids\)&&b\.member_ids\.length>0\);/.test(src)
    && /const nm = _isGrp \? `\$\{\(Array\.isArray\(b\.member_ids\)\?b\.member_ids\.length:0\)\} 人`/.test(src));
 ok('★ 滑過細條的提示也一起修',
    /\? `團課 \$\{\(Array\.isArray\(b\.member_ids\)\?b\.member_ids\.length:0\)\} 人`/.test(src));

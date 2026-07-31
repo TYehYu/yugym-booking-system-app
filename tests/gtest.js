@@ -1,4 +1,7 @@
 const fs=require('fs');
+/* 2026-07-31：「是不是團課」抽成共用的 bkIsGroup（見 TK_POCKETS.group）——
+   沙箱裡給一個等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
 const h=fs.readFileSync('index.html','utf8');
 const grabFn=n=>{const i=h.indexOf('function '+n+'(');let d=0;for(let k=h.indexOf('{',i);k<h.length;k++){if(h[k]==='{')d++;else if(h[k]==='}'){d--;if(!d)return h.slice(i,k+1);}}};
 // 取出 index.html 內真正的團課名單渲染程式碼

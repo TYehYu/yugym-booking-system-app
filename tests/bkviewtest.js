@@ -9,6 +9,9 @@
    抽出 bkName／bkTag／bkNameFull／bkStampKind：只回「要顯示什麼」，
    不決定「長什麼樣」，版面仍由各畫面自己排。 */
 const fs=require('fs');
+/* 2026-07-31：「是不是團課」抽成共用的 bkIsGroup（見 TK_POCKETS.group）——
+   沙箱裡給一個等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

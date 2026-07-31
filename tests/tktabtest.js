@@ -34,7 +34,7 @@ ok('　　數字樣式：選中的分頁用半透明白底', /\.tkf-btn\.active 
 
 console.log('\n順手修掉的舊 bug');
 ok('★ 團課比對補上「小班肌力」（票種的 category 實際是小班肌力，團體課從來沒對上）',
-   /if\(\(tt\.category\|\|''\)==='小班肌力'\|\|\(tt\.category\|\|''\)==='團體課'\|\|\/團\/\.test\(\(t&&t\.plan_name\)\|\|''\)\) return 'group';/.test(src));
+   /if\(\(tt\.category\|\|''\)==='小班肌力'\|\|\(tt\.category\|\|''\)==='團體課'\|\|\/團\|小班\/\.test\(\(t&&t\.plan_name\)\|\|''\)\) return 'group';/.test(src));
 ok('　　原因寫在程式裡', /'團體課' 從來沒對上過/.test(src));
 
 // 實跑分類

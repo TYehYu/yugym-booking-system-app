@@ -7,6 +7,9 @@
    這次在退票之後補上展延，順序不能反 —— refundTicket 有可能把效期退回未開通
    （expire_date 變 null），那種情況沒有效期可延。 */
 const fs=require('fs');
+/* 2026-07-31：「是不是團課」抽成共用的 bkIsGroup（見 TK_POCKETS.group）——
+   沙箱裡給一個等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
@@ -115,7 +118,12 @@ ok('　　重複發放的防線沒動（同一筆 booking 只發一次）',
 
 console.log('\n只有教練課與友善教練課適用（2026-07-31 使用者定案）');
 {
-  const can=new Function(g('function canCoachLeave(b){','\n')+'\nreturn canCoachLeave;')();
+  /* 2026-07-31：canCoachLeave 改問票卡口袋（TK_POCKETS.*.coachLeave），一併抽進來 */
+  const _pi2=src.indexOf('const TK_POCKETS={');
+  const can=new Function('window',
+    src.slice(_pi2, src.indexOf('\nfunction tkClass5(',_pi2))+'\n'
+    +g('function tkClass5(t, typeMap){','\n}\n')+'\n'
+    +g('function canCoachLeave(b){','\n')+'\nreturn canCoachLeave;')({_ttCache:[]});
   eq('★ 教練課 → 可以', can({category:'私人教練'}), true);
   eq('★ 友善教練課 → 可以（category 也是私人教練，靠票券區分）', can({category:'私人教練'}), true);
   eq('★ 團體課 → 不行', can({category:'小班肌力'}), false);
@@ -126,7 +134,7 @@ console.log('\n只有教練課與友善教練課適用（2026-07-31 使用者定
   eq('　　null 不會爆', can(null), false);
   ok('★ 不適用的課根本不畫那顆按鈕', /\+ \(!canCoachLeave\(b\) \? ''/.test(src));
   ok('★ 函式本身也擋一次（深連結／程式呼叫繞不過去）',
-     /if\(!canCoachLeave\(b\)\)\{\s*\n\s*showToast\(b\.category==='小班肌力'/.test(src));
+     /if\(!canCoachLeave\(b\)\)\{\s*\n\s*showToast\(bkIsGroup\(b\)/.test(src));
   ok('★ 團體課給的訊息指向正確的做法（代課或補課券）',
      /'團體課不適用教練請假：請改派代課，或取消後補發補課券'/.test(src));
   ok('　　為什麼團課不適用，原因寫在程式裡',

@@ -6,6 +6,9 @@
    2) 值班工時：正職不再扣「值班時段內上課」的重疊時數。
       正職是月薪制，值班與上課在同一段班內，扣了等於雙重懲罰；兼職／工讀維持原規則。 */
 const fs=require('fs');
+/* 2026-07-31：「是不是團課」抽成共用的 bkIsGroup（見 TK_POCKETS.group）——
+   沙箱裡給一個等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
@@ -52,7 +55,7 @@ ok('　　續約歸屬「購買前 90 天帶最多教練課的教練」（體驗
    (src.match(/&&b\.date>=from&&b\.date<=upTo&&\(b\.category==='私人教練'\|\|b\.category==='體驗'\)\) cnt\[b\.coach_id\]/g)||[]).length===2);
 ok('　　今日課程分佈（營運分析看的是課量不是薪水）', /const pt=todayBk\.filter\(b=>b\.category==='私人教練'\|\|b\.category==='體驗'\)\.length;/.test(src));
 ok('　　值班重疊仍把體驗算進「有上課」（人確實在課上）',
-   /b\.category==='私人教練'\|\|b\.category==='體驗'\|\|b\.category==='小班肌力'/.test(src));
+   /b\.category==='私人教練'\|\|b\.category==='體驗'\|\|bkIsGroup\(b\)/.test(src));
 
 console.log('\n值班重疊：正職不扣');
 {

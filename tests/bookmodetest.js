@@ -3,6 +3,9 @@
    ② 團體課卡只要名單裡有一位是最後一堂，就要顯示驚嘆號
    ③ 回報「代課按鈕失效」—— 按鈕面板改掛 <body> 後，點外收合把它自己當成「點在卡外」 */
 const fs=require('fs');
+/* 2026-07-31：「是不是團課」抽成共用的 bkIsGroup（見 TK_POCKETS.group）——
+   沙箱裡給一個等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

@@ -13,7 +13,7 @@ const ymd=d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(
 const parseYmd=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(x||''));return m?new Date(+m[1],+m[2]-1,+m[3]):null;};
 const attObj=b=>{const v=b&&b.attendance;return (v&&typeof v==='object'&&!Array.isArray(v))?v:{};};
 const buildWallet=new Function('ymd','TODAY','parseYmd','attObj',
-  [grabFn('mids'),grabFn('tkSharedIds'),grabFn('tkUsableBy'),grabFn('tkClass5'),
+  [grabFn('mids'),grabFn('bkHasMember'),grabFn('tkSharedIds'),grabFn('tkUsableBy'),grabFn('tkClass5'),
    grabFn('allocBookingsToTickets'),grabFn('grpTicketAlloc'),grabFn('buildWallet')].join('\n')
   +'\nreturn buildWallet;')(ymd,TODAY,parseYmd,attObj);
 

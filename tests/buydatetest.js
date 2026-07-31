@@ -1,5 +1,8 @@
 /* 票券卡列出購買日（2026-07-30 使用者要求）＋ 補課券只屬於團課 ＋ 團課補課不重複認列金額 */
 const fs=require('fs');
+/* 2026-07-31：「是不是團課」抽成共用的 bkIsGroup（見 TK_POCKETS.group）——
+   沙箱裡給一個等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
@@ -30,7 +33,7 @@ ok('★ 會員頁補發補課券的課程類型只列團課',
 ok('★ 找不到團課票種時擋下並說明原因',
    /補課券只適用<b>團體課<\/b>（四週優惠方案的請假規則）；教練課沒有補課機制。/.test(src));
 ok('　　說明文案寫在視窗上', /只適用團體課 —— 教練課沒有補課機制。/.test(src));
-ok('　　課卡上的「補發補課券」本來就只給團課', /b\.category==='小班肌力'&&!b\.makeup_granted/.test(src));
+ok('　　課卡上的「補發補課券」本來就只給團課', /bkIsGroup\(b\)&&!b\.makeup_granted/.test(src));
 
 console.log('\n團課補課不重複認列銷課金額');
 ok('★ 逐人頭改用「這堂實際扣的那張票」的單價',

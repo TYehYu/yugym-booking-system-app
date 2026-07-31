@@ -1,6 +1,9 @@
 /* 場地分配 allocateVenue —— 從 index.html 抽真實原始碼驗證（2026-07-26）。
    重點：匯入課沒有 venue_unit，挑位必須把「舊資料估算占用」算進去，否則超賣。 */
 const fs=require('fs');
+/* 2026-07-31：「是不是團課」抽成共用的 bkIsGroup（見 TK_POCKETS.group）——
+   沙箱裡給一個等價替身，測資只有 category 可判。 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
 const path=require('path');
 const h=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
 const grab=n=>{let i=h.indexOf('function '+n+'(');let d=0;for(let k=h.indexOf('{',i);;k++){if(h[k]==='{')d++;else if(h[k]==='}'){d--;if(!d)return h.slice(i,k+1);}}};
