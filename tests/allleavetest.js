@@ -91,6 +91,23 @@ ok('★ 三個畫面都改（行事曆標準卡、三態徽章、共用的狀態
 ok('　　整堂 status 不能直接信（有一個人簽到就會被寫成 checked_in）',
    /因為只要有一個人簽到，status 就會被寫成 checked_in/.test(src));
 
+console.log('\n請假的會員要標示清楚（2026-07-31 使用者指示）');
+ok('★ 「請假」改成紅底白字（原本淡金色，跟旁邊的淡綠「已簽到」分不出來）',
+   /\.gr-leave-tag\{font-size:11px;background:var\(--danger,#b5372e\);color:#fff;font-weight:800;\}/.test(src)
+   && /\? '<span class="tag gr-leave-tag">請假<\/span>'/.test(src));
+ok('★ 整列淡化＋左緣紅線（這個人今天不會來）',
+   /const onLeaveM = att\[sk\]==='leave';/.test(src)
+   && /gr-row\$\{onLeaveM\?' gr-row-leave':''\}/.test(src)
+   && /\.gr-row-leave::before\{content:'';position:absolute;left:0;/.test(src)
+   && /\.gr-row-leave \.gr-name\{opacity:\.55;\}/.test(src));
+ok('★ 顏色與課卡右下角的紅色「假」章同一個語彙',
+   /\.evc-check\.evc-leave,\.cal-ev\.cal-ev-std \.evc-check\.evc-leave\{background:var\(--danger,#b5372e\);\}/.test(src));
+ok('　　已簽到／未簽到不受影響',
+   /\? '<span class="tag tag-ok" style="font-size:11px;">已簽到<\/span>'/.test(src)
+   && /: '<span class="tag tag-warn" style="font-size:11px;">未簽到<\/span>'/.test(src));
+ok('　　原因寫在程式裡（品牌色強度：紅＞金＞綠）',
+   /跟旁邊的「已簽到」淡綠幾乎一樣，一整排掃過去看不出誰沒來/.test(src));
+
 console.log('\n名單本身不動');
 ok('★ 請假的人仍列在名單上（可以取消請假）', /groupToggleLeave\('\$\{b\.id\}','\$\{mid\}'\)">取消請假/.test(src));
 ok('★ 請假仍不算銷課名額（2026-07-30 定案，這次沒動到）',
