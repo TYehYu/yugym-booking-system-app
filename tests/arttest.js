@@ -51,9 +51,14 @@ ok('★ 放在左欄「當月排班」按鈕的上方',
    /\$\{butlerArtHtml\(\)\}\s*\n\s*<!-- 2026-07-26 使用者指示：「當月排班」按鈕[\s\S]{0,120}\$\{schedBtnCard\}/.test(src));
 ok('★ 不在中間那欄（KPI 條裡沒有插畫）',
    /<div class="mc-kpistrip">\s*\n\s*<div class="kpi-greet">/.test(src));
-ok('★ 貼著頂欄下方：負上邊距剛好抵掉 .content 的 10px 上內距，且壓過 .mc-g5-left>* 的 !important',
-   /\.mc-g5-left>\.mc-art-top\{margin:-10px 0 16px !important;\}/.test(src)
+ok('★ 貼著頂欄下方：左欄的齊頭 padding 歸零，插畫自己抵掉 .content 的 10px 上內距',
+   /\.mc-g5-left>\.mc-art-top\{margin:-10px 0 34px !important;\}/.test(src)
+   && /padding-top:0;\}  \/\* 2026-07-21 使用者指示：左欄與「今日教練任務」齊頭/.test(src)
    && /body\.mc-mode \.content\{max-width:none;padding:10px 32px 10px;\}/.test(src));
+ok('★ 下一格（月班表）的位置與原本一致：−10 ＋ 98 ＋ 34 ＝ 122',
+   /插畫連框高 98px，−10 ＋ 98 ＋ 34 ＝ 122，下一格（月班表）位置與原本完全一致/.test(src));
+ok('　　真兇寫在程式裡（不是 margin 不夠，是左欄的 padding-top:122px）',
+   /真兇是 \.mc-g5-left 的 padding-top:122px（左欄齊頭用）/.test(src));
 /* 使用者回報「太高了 跟旁邊的 KPI 一樣高就好」 */
 ok('★ 寬度吃滿左欄、高度 96px 與 KPI 條相當',
    /\.mc-art\{position:relative;width:100%;height:96px;/.test(src)
