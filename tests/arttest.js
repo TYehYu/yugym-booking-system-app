@@ -51,8 +51,9 @@ ok('★ 放在左欄「當月排班」按鈕的上方',
    /\$\{butlerArtHtml\(\)\}\s*\n\s*<!-- 2026-07-26 使用者指示：「當月排班」按鈕[\s\S]{0,120}\$\{schedBtnCard\}/.test(src));
 ok('★ 不在中間那欄（KPI 條裡沒有插畫）',
    /<div class="mc-kpistrip">\s*\n\s*<div class="kpi-greet">/.test(src));
-ok('★ 貼著頂欄下方：負上邊距要壓過 .mc-g5-left>* 的 !important',
-   /\.mc-g5-left>\.mc-art-top\{margin:-6px 0 16px !important;\}/.test(src));
+ok('★ 貼著頂欄下方：負上邊距剛好抵掉 .content 的 10px 上內距，且壓過 .mc-g5-left>* 的 !important',
+   /\.mc-g5-left>\.mc-art-top\{margin:-10px 0 16px !important;\}/.test(src)
+   && /body\.mc-mode \.content\{max-width:none;padding:10px 32px 10px;\}/.test(src));
 /* 使用者回報「太高了 跟旁邊的 KPI 一樣高就好」 */
 ok('★ 寬度吃滿左欄、高度 96px 與 KPI 條相當',
    /\.mc-art\{position:relative;width:100%;height:96px;/.test(src)
