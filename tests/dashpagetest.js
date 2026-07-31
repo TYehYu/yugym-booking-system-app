@@ -76,9 +76,12 @@ console.log('\n切換本月／今日會把錨點拉回今天');
 }
 
 console.log('\n畫面');
-ok('★ 期間標題與各處小標跟著錨點走（不是寫死「本月／今日」）',
+ok('★ 期間標題跟著錨點走（不是寫死「本月／今日」）',
    /const periodLabel = _atNow \? \(_dashRange==='today'\?'今日':'本月'\)/.test(src)
-   && /\$\{periodLabel\}總覽</.test(src) && /\$\{periodLabel\}利潤</.test(src));
+   && /\$\{periodLabel\}總覽</.test(src));
+/* 2026-07-31 使用者回報：總覽標題與右邊的利潤都寫同一個期間，重複 → 利潤那邊拿掉 */
+ok('★ 利潤那邊不再重複期間', /<span class="ov-hero-l">利潤<\/span>/.test(src)
+   && !/\$\{periodLabel\}利潤</.test(src));
 ok('★ 翻到過去就直接顯示日期／年月，不會還寫「本月」',
    /: \(_dashRange==='today' \? today\.slice\(5\)\.replace\('-','\/'\) : ym\.replace\('-','\/'\)\);/.test(src));
 ok('★ 上一頁／下一頁按鈕都在', /onclick="dashShift\(-1\)"/.test(src) && /onclick="dashShift\(1\)"/.test(src));
@@ -86,8 +89,15 @@ ok('★ 當期時「下一頁」是 disabled', /onclick="dashShift\(1\)" \$\{_at
 ok('★ 不在當期才出現「回今天／回本月」', /\$\{_atNow\?'':`<button class="dash-pg dash-pg-now" onclick="_dashAnchor=null;navTo\('dashboard'\)">回\$\{_dashRange==='today'\?'今天':'本月'\}<\/button>`\}/.test(src));
 ok('　　按鈕有樣式、disabled 看得出來',
    /\.dash-pg:disabled\{opacity:\.35;cursor:default;\}/.test(src)
-   && /\.dash-pager\{display:inline-flex;align-items:center;gap:6px;\}/.test(src));
-ok('　　期間文字寬度固定，翻頁時按鈕不會跳動', /\.dash-pg-l\{[^}]*min-width:96px;text-align:center;\}/.test(src));
+   && /\.dash-pager\{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;\}/.test(src));
+/* 2026-07-31 使用者回報「日期被換行了」：原本翻頁列寫「2026/06（2026-06）」，
+   同一個期間講兩次、字太長把整列擠到第二行還切掉箭頭 → 只留 periodLabel */
+ok('★ 翻頁列只寫一次期間，完整日期放 title',
+   /const rangeLabel=periodLabel;/.test(src)
+   && /const rangeFull=_dashRange==='today'\?today:ym;/.test(src)
+   && /<span class="dash-pg-l" title="\$\{rangeFull\}">\$\{rangeLabel\}<\/span>/.test(src));
+ok('　　期間文字寬度固定、不換行，翻頁時按鈕不會跳動',
+   /\.dash-pg-l\{[^}]*min-width:62px;text-align:center;white-space:nowrap;\}/.test(src));
 
 console.log('\n資料真的跟著錨點走');
 ok('★ inRange 用錨點的 today／ym', /const today=dashAnchorYmd\(\);/.test(src)
