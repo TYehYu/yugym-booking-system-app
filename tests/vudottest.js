@@ -33,8 +33,10 @@ console.log('畫幾顆、什麼顏色');
   let h=await mk([])(SELF(),true);
   eq('★ 跑步機畫兩顆', dots(h), ['cur','']);
   ok('　　本堂那顆帶金框（cur）、另一顆是可點的開關',
-     /<button type="button" class="vu-dot" title="打開 2 號（同行使用，不另外扣點）"/.test(h));
-  ok('　　燈上有台號', />1<\/span>|>1<\/button>/.test(h) && />2<\/button>/.test(h));
+     /<button type="button" class="vu-dot" title="再開一台（同行使用，不另外扣點）"/.test(h));
+  /* 2026-07-31 使用者指示：燈上不標 1、2 —— 點哪一顆都只是「多開／少開一台」 */
+  ok('★ 燈上不標號碼（點哪一顆都只是多開／少開一台）',
+     !/>[12]<\/(span|button)>/.test(h) && /><\/button>/.test(h));
 
   h=await mk([T('treadmill_2','17:00')])(SELF(),true);
   eq('★ 另一台被別人約走 → 綠燈、不可點', dots(h), ['cur','taken']);
@@ -66,6 +68,22 @@ console.log('\n佔用的判定');
   eq('★ 同一組的第二台也算「自己的」（金框，可以關）',
      dots(await mk([{id:'B9',date:'2026-07-31',status:'booked',venue_unit:'treadmill_2',
                      start_time:'17:00',duration:60,sibling_of:'B0'}])(SELF(),true)), ['cur','cur']);
+}
+
+console.log('\n名額：亮幾個燈就佔幾台（2026-07-31 使用者確認）');
+{
+  const g2=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
+  const code=g2('window.VENUES = window.VENUES || [','\n}\n')+'\n'
+    +g2('function venuePriorityFor(category){','\n}\n')+'\n'
+    +g2('function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){','\n}\n');
+  const alloc=new Function('window','timeToMin', code+'\nreturn allocateVenue;')({}, t=>{const[h,m]=String(t).split(':').map(Number);return h*60+(m||0);});
+  const B=(u,extra)=>Object.assign({id:u,venue_unit:u,start_time:'17:00',duration:60,category:'自主訓練'},extra||{});
+  ok('★ 只亮一個燈 → 還有一個名額，別人約得到',
+     !!alloc('自主訓練',[B('treadmill_2')],1020,1080,null,'treadmill').unit);
+  ok('★ 兩個燈都亮 → 別人約不到（額滿）',
+     !!alloc('自主訓練',[B('treadmill_2'),B('treadmill_1',{sibling_of:'treadmill_2'})],1020,1080,null,'treadmill').hardFull);
+  ok('　　同行那筆是真的預約，佔位邏輯不必特別處理它（venue_unit 有值就算數）',
+     /if\(!x\.venue_unit \|\| String\(x\.venue_unit\)\.split\('_'\)\[0\]!==vid\) return;/.test(src));
 }
 
 console.log('\n行事曆上是一張卡，不是兩張（2026-07-31 使用者回報）');
@@ -111,9 +129,9 @@ ok('★ 三處場地列都掛上', (src.match(/\$\{_vuDots\}/g)||[]).length===4)
 ok('★ 點燈號 → 開關這一台', /async function bkToggleVenueUnit\(id, unit\)\{/.test(src));
 ok('★ 打開＝建一筆「同行使用」的預約，不綁票不扣點',
    /ticket_id:null, ticket_type_id:b\.ticket_type_id\|\|null,/.test(src)
-   && /note:`同行使用（\$\{venueName\(vid\)\} \$\{no\} 號）・不另外扣點`/.test(src));
-ok('★ 關掉＝取消那一筆；主預約不能關',
-   /if\(hit\.id===root\)\{ showToast\('這是本堂的主要機台，不能關；要換台請先打開另一台'\); return; \}/.test(src));
+   && /note:`同行使用（\$\{venueName\(vid\)\}）・不另外扣點`/.test(src));
+ok('★ 關掉＝取消那一筆；至少要留一台',
+   /if\(hit\.id===root\)\{ showToast\('至少要留一台；要收掉這一堂請用「取消預約」'\); return; \}/.test(src));
 ok('★ 同一組用 sibling_of 串起來', /sibling_of:root,/.test(src)
    && /const root=b\.sibling_of\|\|b\.id;/.test(src));
 ok('★ 開之前確認沒被別人搶走', /showToast\('這一台剛被別人約走了'\); openBookingDetail\(id\); return;/.test(src));

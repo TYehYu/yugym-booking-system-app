@@ -6410,9 +6410,8 @@ body.mc-mode .cal-body{background:rgba(255,255,255,.8);}
    跑步機是「一個場地兩台」，一對二的客人可能一次佔掉兩台，客人要看得出還剩幾台。 */
 /* 預約明細：場地旁邊的單位燈號開關（2026-07-31 使用者指示） */
 .vu-dots{display:inline-flex;gap:6px;align-items:center;margin-left:2px;}
-.vu-dot{width:18px;height:18px;border-radius:50%;border:1px solid var(--bd);background:var(--card2);
-  display:inline-flex;align-items:center;justify-content:center;
-  font-size:10px;font-weight:800;color:var(--t3);font-family:var(--num),inherit;padding:0;line-height:1;}
+.vu-dot{width:15px;height:15px;border-radius:50%;border:1px solid var(--bd);background:var(--card2);
+  display:inline-block;padding:0;line-height:1;}
 button.vu-dot{cursor:pointer;}
 button.vu-dot:hover{border-color:var(--green);color:var(--green);}
 .vu-dot.taken{background:var(--green,#1f6f54);border-color:var(--green,#1f6f54);color:#fff;}
@@ -6730,8 +6729,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1542';
-const APP_VERSION_LABEL='v260731.1542';
+const APP_VERSION = '260731.1547';
+const APP_VERSION_LABEL='v260731.1547';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18539,13 +18538,15 @@ async function venueUnitDots(b, editable){
       const mineId=mineIds[u];
       let taken=!!busy[u];
       if(!taken && !mineId && anon>0){ taken=true; anon--; }   // 沒編號的先佔最前面的號碼
+      /* 2026-07-31 使用者指示：燈上不標 1、2 —— 點哪一顆都只是「多開／少開一台」，
+         機台編號對櫃檯沒有意義（客人到現場自己挑）。編號只留在資料裡與 title。 */
       const cls='vu-dot'+(mineId?' cur':(taken?' taken':''));
-      const t=mineId?`本堂使用中（${i} 號）　點一下關閉`:(taken?`${i} 號已被別人預約`:`打開 ${i} 號（同行使用，不另外扣點）`);
+      const t=mineId?'本堂使用中　點一下關閉':(taken?'這一台已被別人預約':'再開一台（同行使用，不另外扣點）');
       out += (editable && !taken)
-        ? `<button type="button" class="${cls}" title="${t}" onclick="bkToggleVenueUnit('${b.id}','${u}')">${i}</button>`
-        : `<span class="${cls}" title="${t}">${i}</span>`;
+        ? `<button type="button" class="${cls}" title="${t}" onclick="bkToggleVenueUnit('${b.id}','${u}')"></button>`
+        : `<span class="${cls}" title="${t}"></span>`;
     }
-    return `<span class="vu-dots" title="${venueName(vid)} 共 ${cap} 台　·　點燈號開關這一堂佔用哪幾台">${out}</span>`;
+    return `<span class="vu-dots" title="${venueName(vid)} 共 ${cap} 台　·　點燈號開關這一堂要用幾台">${out}</span>`;
   }catch(_){ return ''; }
 }
 /* 點燈號＝開關這一堂佔用哪幾台（2026-07-31 使用者定案）——
@@ -18561,7 +18562,7 @@ async function venueUnitDots(b, editable){
 async function bkToggleVenueUnit(id, unit){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到這筆預約'); return; }
   if(typeof coachOwnsBk==='function' && !coachOwnsBk(b)){ showToast('這不是你的課，只能查看'); return; }
-  const vid=String(unit).split('_')[0], no=String(unit).split('_')[1];
+  const vid=String(unit).split('_')[0];
   const root=b.sibling_of||b.id;
   const all=await dbGetAll('bookings').catch(()=>[]);
   const ns=timeToMin(b.start_time), ne=ns+(Number(b.duration)||60);
@@ -18571,9 +18572,9 @@ async function bkToggleVenueUnit(id, unit){
   try{
     if(hit && (hit.id===root || hit.sibling_of===root)){
       // 關掉：主預約不能關（關了這一堂就沒了，那是「取消預約」該做的事）
-      if(hit.id===root){ showToast('這是本堂的主要機台，不能關；要換台請先打開另一台'); return; }
+      if(hit.id===root){ showToast('至少要留一台；要收掉這一堂請用「取消預約」'); return; }
       await dbPut('bookings', Object.assign({}, hit, {status:'cancelled'}));
-      showToast(`已關閉 ${venueName(vid)} ${no} 號`);
+      showToast(`已關閉一台${venueName(vid)}`);
     }else if(hit){
       showToast('這一台剛被別人約走了'); openBookingDetail(id); return;
     }else{
@@ -18583,9 +18584,9 @@ async function bkToggleVenueUnit(id, unit){
         date:b.date, start_time:b.start_time, duration:Number(b.duration)||60,
         status:'booked', venue_unit:unit, sibling_of:root,
         trial_name:b.trial_name||null, created_by:(SESSION&&SESSION.id)||null,
-        note:`同行使用（${venueName(vid)} ${no} 號）・不另外扣點` };
+        note:`同行使用（${venueName(vid)}）・不另外扣點` };
       await dbPut('bookings', sib);
-      showToast(`已打開 ${venueName(vid)} ${no} 號（同行使用，不扣點）`);
+      showToast(`已再開一台${venueName(vid)}（同行使用，不扣點）`);
     }
     openBookingDetail(id);
     if(typeof navTo==='function' && (CUR_PAGE==='calendar'||CUR_PAGE==='g_dashboard')) navTo(CUR_PAGE);
