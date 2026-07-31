@@ -9,21 +9,25 @@ if(s<0||e<0) throw new Error('找不到目標程式碼');
 
 const COURSE_SHAPE={};
 const parseYmd=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(x||'');return m?new Date(+m[1],+m[2]-1,+m[3]):null;};
-const helpers=new Function('COURSE_SHAPE','parseYmd',[grabFn('tkVisual'),grabFn('ticketTokens'),grabFn('mids'),
-  grabFn('seatKeys'),grabFn('seatMid'),grabFn('seatKeysDisplay'),grabFn('seatNo'),
-  grabFn('tkSharedIds'),grabFn('tkUsableBy'),grabFn('allocBookingsToTickets')].join('\n')+
-  '; return {tkVisual,ticketTokens,mids,seatKeys,seatMid,seatKeysDisplay,seatNo,tkUsableBy,allocBookingsToTickets};')(COURSE_SHAPE,parseYmd);
 const ticketCategoryOf=t=>t.__cat;
 const attObj=b=>b.attendance||{};
+const ymd=d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
+const TODAY=new Date(2026,6,27);
+/* 2026-07-31：名單圓點改吃 ticket_logs 的扣課紀錄（grpTicketAlloc），一併注入 */
+const helpers=new Function('COURSE_SHAPE','parseYmd','attObj','ymd','TODAY',[grabFn('tkVisual'),grabFn('ticketTokens'),grabFn('mids'),
+  grabFn('seatKeys'),grabFn('seatMid'),grabFn('seatKeysDisplay'),grabFn('seatNo'),
+  grabFn('tkSharedIds'),grabFn('tkUsableBy'),grabFn('allocBookingsToTickets'),
+  grabFn('grpTicketAlloc'),grabFn('grpMergeAlloc')].join('\n')+
+  '; return {tkVisual,ticketTokens,mids,seatKeys,seatMid,seatKeysDisplay,seatNo,tkUsableBy,allocBookingsToTickets,grpTicketAlloc,grpMergeAlloc};')(COURSE_SHAPE,parseYmd,attObj,ymd,TODAY);
 
-async function render({ids,att={},tickets=[],bookings=[],names={},thisDate='2026-07-27',thisId='B-NOW'}){
-  const dbGetAll=async t=>t==='member_tickets'?tickets:t==='bookings'?bookings:[];
+async function render({ids,att={},tickets=[],bookings=[],logs=[],names={},thisDate='2026-07-27',thisId='B-NOW'}){
+  const dbGetAll=async t=>t==='member_tickets'?tickets:t==='bookings'?bookings:t==='ticket_logs'?logs:[];
   // 名額鍵是從 b.member_ids 推的（2026-07-30），所以 b 也要帶名單
   const b={id:thisId,date:thisDate,attendance:att,member_ids:ids};
-  const fn=new Function('gIdsD','b','memMapD','groupCkOK','isPastD','attObj','ticketCategoryOf','dbGetAll','window','mids','ticketTokens','seatKeys','seatMid','seatKeysDisplay','seatNo','tkUsableBy','allocBookingsToTickets',
+  const fn=new Function('gIdsD','b','memMapD','groupCkOK','isPastD','attObj','ticketCategoryOf','dbGetAll','window','mids','ticketTokens','seatKeys','seatMid','seatKeysDisplay','seatNo','tkUsableBy','allocBookingsToTickets','grpTicketAlloc','grpMergeAlloc',
     `return (async()=>{ const att=attObj(b); ${body} return rows; })();`);
   return await fn(ids,b,names,true,false,attObj,ticketCategoryOf,dbGetAll,{_ttCache:[{id:'tt-g',name:'團體課',category:'小班肌力',color:'group'}]},helpers.mids,helpers.ticketTokens,
-    helpers.seatKeys,helpers.seatMid,helpers.seatKeysDisplay,helpers.seatNo,helpers.tkUsableBy,helpers.allocBookingsToTickets);
+    helpers.seatKeys,helpers.seatMid,helpers.seatKeysDisplay,helpers.seatNo,helpers.tkUsableBy,helpers.allocBookingsToTickets,helpers.grpTicketAlloc,helpers.grpMergeAlloc);
 }
 const T=(o)=>Object.assign({__cat:'小班肌力',ticket_type_id:'tt-g',source:'purchase'},o);
 const BK=(id,date,st,ids)=>({id,date,start_time:'11:00',status:st,category:'小班肌力',member_ids:ids,ticket_type_id:'tt-g'});
@@ -46,6 +50,27 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     !html.includes('>7/17<') && !html.includes('>7/25<'));
   chk('不會取到最早的 5/9', !html.includes('>5/9<'));
   chk('本堂 7/27 標金框', /mtk-booked mtk-cur[^>]*>7\/27</.test(html));
+  /* 2026-07-31 使用者回報：「這邊顯示錯誤，但是會員票券那邊是正確」——
+     陳暐濰的簽到列少了本堂 8/06 那顆圓點（8/13 8/20 8/27 ＋ 一顆空的）。
+     成因：名單這邊靠先進先出「猜」是哪張票，會員票券頁讀的是 ticket_logs 的扣課紀錄。
+     改成同一份對照：這堂課當初扣了哪張票，就顯示那張票、那張票的圓點。 */
+  console.log('本堂扣的那張票優先（扣課紀錄）：');
+  {
+    const t4w=T({id:'t4w',member_id:'M',sessions_total:4,sessions_remaining:0,start_date:'2026-08-06',expire_date:'2026-09-03'});
+    const tmk=T({id:'tmk',member_id:'M',sessions_total:1,sessions_remaining:1,source:'makeup',start_date:'2026-07-31'});
+    const bkG=['2026-08-06','2026-08-13','2026-08-20','2026-08-27'].map((d,i)=>BK('g'+i,d,'booked',['M']));
+    bkG[0].id='B-NOW';
+    const lg=bkG.map(x=>({ticket_id:'t4w',booking_id:x.id,action:'deduct'}));
+    let h2=await render({ids:['M'],tickets:[t4w,tmk],bookings:bkG,logs:lg,names:{M:'陳暐濰'},thisDate:'2026-08-06'});
+    chk('★ 顯示扣課的那張四週票（4 格），不是剩 1 堂的補課券', (h2.match(/class="mtk/g)||[]).length===4);
+    chk('★ 本堂 8/6 有圓點且標金框', /mtk-booked mtk-cur[^>]*>8\/6</.test(h2));
+    chk('★ 四堂日期都在（沒有多出來的空圈）',
+      ['8/6','8/13','8/20','8/27'].every(d=>h2.includes('>'+d+'<')) && !/mtk-free/.test(h2));
+    /* 沒有扣課紀錄（舊系統匯入）時退回原本的挑法 —— 剩 1 堂的補課券 */
+    h2=await render({ids:['M'],tickets:[t4w,tmk],bookings:bkG,logs:[],names:{M:'陳暐濰'},thisDate:'2026-08-06'});
+    chk('　　沒有扣課紀錄時退回原本的挑法（不會整個壞掉）', (h2.match(/class="mtk/g)||[]).length===1);
+  }
+
   console.log('不再顯示文字標籤：');
   chk('沒有「建議續約」', !html.includes('建議續約'));
   chk('沒有「需購票」', !html.includes('需購票'));

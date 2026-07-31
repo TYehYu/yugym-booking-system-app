@@ -84,7 +84,7 @@ ok('★ 已上堂數抽成 usedOf()，卡片與歷史判定共用', /const usedO
 ok('★ 歷史判定先看已上堂數', /if\(total>0 && usedOf\(t\)<total\) return false;/.test(src));
 /* 2026-07-31：兩處的「團課待上堂數」改吃 grpTicketAlloc（扣課紀錄），細節見 grpalloctest.js */
 ok('★ 團課待上堂數另外算（團課預約不綁 ticket_id）',
-   (src.match(/grpTicketAlloc\(/g)||[]).length===3);
+   (src.match(/grpTicketAlloc\(/g)||[]).length===4);
 ok('　　兩個後台畫面都吃同一支',
    /const gp=_grpA\.pend\[t\.id\]\|\|0;/.test(src) && /const grpPending=_grpA\.pend\[t\.id\]\|\|0;/.test(src));
 ok('★ 後台檔案頁的預約清單要含團課（學員在 member_ids、member_id 是 null）',

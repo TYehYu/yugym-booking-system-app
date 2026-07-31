@@ -6747,8 +6747,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1807';
-const APP_VERSION_LABEL='v260731.1807';
+const APP_VERSION = '260731.1814';
+const APP_VERSION_LABEL='v260731.1814';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18300,18 +18300,25 @@ async function openBookingDetail(id){
       const _typeMapG=Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t]));
       const _allTk=await dbGetAll('member_tickets');
       const _allBk=await dbGetAll('bookings').catch(()=>[]);
+      const _allLg=await dbGetAll('ticket_logs').catch(()=>[]);   // 團課扣課紀錄（2026-07-31，見 grpTicketAlloc）
       /* 統一推算來源（2026-07-30）：與會員票券頁共用 allocBookingsToTickets。 */
       _uniqIds.forEach(mid=>{
         const own=_allTk.filter(t=>tkUsableBy(t,mid) && ticketCategoryOf(t)==='小班肌力');
-        const live=own.filter(t=>(t.sessions_remaining||0)>0 && (!t.expire_date || t.expire_date>=b.date))
-          .sort((p,q)=>String(p.start_date||p.purchase_date||'').localeCompare(String(q.start_date||q.purchase_date||'')));
-        const cur=live[0] || own.slice().sort((p,q)=>String(q.start_date||q.purchase_date||'').localeCompare(String(p.start_date||p.purchase_date||'')))[0] || null;
-        if(!cur){ _gTk[mid]=null; return; }
         const myGrp=(_allBk||[]).filter(x=>x && x.category==='小班肌力' && x.status!=='cancelled'
           && (mids(x).includes(mid) || x.member_id===mid));
+        /* 2026-07-31 使用者回報：簽到名單的圓點少了本堂（陳暐濰 8/06 那顆是空的），
+           會員自己的票券頁卻是對的 —— 因為那邊讀扣課紀錄、這邊還在先進先出推算。
+           改成同一份對照：這堂課當初扣了哪張票，就顯示那張票的圓點。 */
+        const _ga=grpTicketAlloc(own, myGrp, _allLg, mid, ()=>true);
+        const _paid=Object.keys(_ga.byTicket).find(tid=>(_ga.byTicket[tid]||[]).some(x=>x.id===b.id));
+        const live=own.filter(t=>(t.sessions_remaining||0)>0 && (!t.expire_date || t.expire_date>=b.date))
+          .sort((p,q)=>String(p.start_date||p.purchase_date||'').localeCompare(String(q.start_date||q.purchase_date||'')));
+        // 本堂扣的那張優先；沒有扣課紀錄（舊系統匯入）才退回「最快到期的可用票／最新的票」
+        const cur=(_paid&&own.find(t=>t.id===_paid))
+          || live[0] || own.slice().sort((p,q)=>String(q.start_date||q.purchase_date||'').localeCompare(String(p.start_date||p.purchase_date||'')))[0] || null;
+        if(!cur){ _gTk[mid]=null; return; }
         const _al=allocBookingsToTickets(own, myGrp, _typeMapG);
-        let bks=(_al.byTicket[cur.id]||[]).slice()
-          .sort((p,q)=>((p.date||'')+(p.start_time||'')).localeCompare((q.date||'')+(q.start_time||'')));
+        let bks=grpMergeAlloc(_al.byTicket, _ga)(cur.id).slice();
         bks=bks.reduce((arr,x)=>{ const n=mids(x).filter(v=>v===mid).length||1;
           for(let k=0;k<n;k++) arr.push(x); return arr; },[]);
         const _doneFor=x=>{
