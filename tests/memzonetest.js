@@ -1,7 +1,9 @@
 /* 會員列表比照員工列表分三區（2026-07-31 使用者指示）
 
-   左＝姓名｜中＝會員狀態（票券、最近上課）｜右＝分類管理（會員等級、主教練、操作）。
-   等級與主教練是「櫃檯怎麼歸類這個人」，和員工列表的權限開關同一種性質，所以歸右邊。
+   二修（同日使用者定案，整份對齊員工列表）：
+   左＝姓名（主教練接在姓名旁＝員工英文名的位置；會員等級與電話在下面那行＝員工「正職・職稱」的位置）
+   中＝教練課／團體課／自主訓練／運動按摩／折抵券 五格，各自用圓形卡
+   右＝最近上課、註冊日、操作
 
    分區線的做法與員工列表一致：絕對定位畫線，格子不 stretch，欄位維持垂直置中。 */
 const fs=require('fs');
@@ -16,14 +18,16 @@ const lpTable=new Function(g('function lpTable(cols, rows, sort){','\n}\n')+'\nr
 
 console.log('欄位順序與分區');
 {
-  const i=src.indexOf('  const cols=[\n    {label:\'姓名\',     width:\'1.4fr\', sortKey:\'name\'},');
-  const cols=new Function('return '+src.slice(src.indexOf('[',i), src.indexOf('];',i)+1))();
-  eq('★ 姓名 → 票券 → 最近上課 → 會員等級 → 主教練 → 操作',
-     cols.map(c=>c.label), ['姓名','票券','最近上課','會員等級','主教練','']);
-  eq('★ 分區線畫在「票券」（中區起點）與「會員等級」（右區起點）',
-     cols.filter(c=>c.zone).map(c=>c.label), ['票券','會員等級']);
-  ok('　　排序鍵沒掉（姓名／最近上課／會員等級）',
-     cols.filter(c=>c.sortKey).map(c=>c.sortKey).join()==='name,last,tier');
+  const i=src.indexOf("  const cols=[\n    {label:'姓名',     width:'1.5fr', sortKey:'name'},");
+  const TK5=new Function('return '+src.slice(src.indexOf('const TK5=')+10, src.indexOf('];',src.indexOf('const TK5='))+1))();
+  const cols=new Function('TK5','return '+src.slice(src.indexOf('[',i), src.indexOf('  ];',i)+3))(TK5);
+  eq('★ 姓名 → 五個課別 → 最近上課 → 註冊日 → 操作',
+     cols.map(c=>c.label),
+     ['姓名','教練課','團體課','自主訓練','運動按摩','折抵券','最近上課','註冊日','']);
+  eq('★ 分區線畫在「教練課」（中區起點）與「最近上課」（右區起點）',
+     cols.filter(c=>c.zone).map(c=>c.label), ['教練課','最近上課']);
+  ok('　　排序鍵：姓名／最近上課／註冊日', cols.filter(c=>c.sortKey).map(c=>c.sortKey).join()==='name,last,reg');
+  ok('　　五個課別欄各自帶 tkKey', cols.filter(c=>c.tkKey).map(c=>c.tkKey).join()==='pt,group,self,massage,voucher');
 }
 
 console.log('\nlpTable 畫得出分區線');
@@ -60,7 +64,34 @@ ok('　　窄螢幕（≤900px）換排法，分區線關掉',
    /@media\(max-width:900px\)\{ \.lp-zb\{padding-left:0;margin-left:0;\} \.lp-zb::before\{display:none;\} \}/.test(src));
 ok('　　與員工列表同一套做法（那邊是 .st-zb）',
    /\.st-zb\{position:relative;padding-left:12px;margin-left:-6px;\}/.test(src));
-ok('　　原因寫在程式裡', /等級與主教練是「櫃檯怎麼歸類這個人」/.test(src));
+ok('　　原因寫在程式裡', /主教練接在姓名旁，位置比照員工的英文名/.test(src));
+
+console.log('\n姓名區：比照員工列表');
+ok('★ 主教練接在姓名旁（＝員工英文名的位置）',
+   /<i class="lp-coach" style="background:\$\{cl\.bg\};color:\$\{cl\.fg\};">\$\{coachMap\[m\.default_coach_id\]\|\|''\}<\/i>/.test(src)
+   && /\.lp-name \.lp-coach\{font-style:normal;font-size:11px;font-weight:700;border-radius:999px;/.test(src));
+ok('★ 會員等級移到姓名下面那行（＝員工「正職・職稱」的位置），與電話同一行',
+   /`\$\{tierLabel\(effTier\(m\)\)\}\$\{m\.phone\?'　'\+fmtPhone\(m\.phone\):''\}`/.test(src));
+ok('　　那一行放不下色塊 tag → 另做純文字＋顏色的 tierLabel',
+   /function tierLabel\(tier\)\{/.test(src)
+   && /那裡是小字副標，塞不下色塊 tag/.test(src));
+
+console.log('\n中間五格：各自的圓形卡');
+ok('★ 一格一個課別，用共用的 tkClass5 分類', /const grp=mine\.filter\(tk=>tkClass5\(tk,typeMapFull\)===k\);/.test(src));
+ok('★ 整袋一起分配，不是每格各配一次（同一堂會在多張票上重複冒出來）',
+   /const alloc=allocBookingsToTickets\(mine,myBk,typeMapFull\);/.test(src));
+ok('★ 只畫「還在用的最新一張」，沒有在用的就畫最近一張',
+   /const tk=live\[0\]\|\|grp\.slice\(\)\.sort\(byBuy\)\[0\];/.test(src));
+ok('★ 同課別還有幾張在用會標出來', /＋\$\{n-1\}<\/span>/.test(src) && /\.tkcat-n\{font-size:10px;/.test(src));
+ok('★ 沒有那個課別的票就留空（不要塞「—」把五格擠滿）',
+   /if\(!grp\.length\) return '';/.test(src));
+ok('　　沿用原本那顆圓形卡（tkRowHtml），不另做一套', /return tkRowHtml\(tk, alloc\.byTicket\[tk\.id\]\|\|\[\], null\)/.test(src));
+
+console.log('\n右區');
+ok('★ 最近上課與註冊日都用相對日期（今天／3 天前／日期）',
+   /m\.created_at \? `<span title="\$\{String\(m\.created_at\)\.slice\(0,10\)\}">\$\{fmtRelDay\(String\(m\.created_at\)\.slice\(0,10\)\)\}<\/span>` : ''/.test(src));
+ok('　　等級排序的表頭沒了，這件事有寫在程式裡',
+   /會員等級不再是獨立欄位 → 少了「依等級排序」的表頭；等級篩選仍在上方工具列/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

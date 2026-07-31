@@ -1174,6 +1174,11 @@ body.mc-mode .layout{padding-top:8px;}
 .lp-primary{display:flex;flex-direction:column;gap:3px;min-width:0;}
 .lp-name{font-size:17px;font-weight:700;color:var(--text);letter-spacing:-0.01em;line-height:1.25;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* 主教練小膠囊：接在會員姓名旁邊（2026-07-31 使用者指示：位置比照員工列表的英文名） */
+.lp-name .lp-coach{font-style:normal;font-size:11px;font-weight:700;border-radius:999px;
+  padding:2px 9px;margin-left:7px;white-space:nowrap;vertical-align:middle;}
+/* 同課別還有幾張在用 */
+.tkcat-n{font-size:10px;font-weight:700;color:var(--t3);margin-left:4px;white-space:nowrap;}
 .lp-sub{font-size:11.5px;color:var(--t3);font-family:var(--font-en);letter-spacing:.02em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .lp-cell{font-size:13.5px;color:var(--t2);min-width:0;
@@ -6712,8 +6717,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.2045';
-const APP_VERSION_LABEL='v260731.2045';
+const APP_VERSION = '260731.2130';
+const APP_VERSION_LABEL='v260731.2130';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8972,6 +8977,12 @@ function tierTag(tier){
   const d=TIER_DEFS[tier]; if(!d)return '<span style="color:var(--t3);font-size:11px;">—</span>';
   return `<span class="tag" style="background:${d.bg};color:${d.color};">${d.label}</span>`;
 }
+/* 會員等級的純文字＋顏色（2026-07-31）：會員列表姓名下面那行用，
+   位置比照員工列表的「正職・職稱」——那裡是小字副標，塞不下色塊 tag。 */
+function tierLabel(tier){
+  const d=TIER_DEFS[tier];
+  return d?`<b style="color:${d.color};font-weight:700;">${d.label}</b>`:'';
+}
 function renderTags(tags){
   const valid=(tags||[]).filter(t=>TAG_DEFS[t]); // 過濾舊的未知標籤(如舊 tier key)
   if(valid.length===0)return '<span style="color:var(--t3);font-size:11px;">—</span>';
@@ -9139,6 +9150,17 @@ function lpPrimary(name, sub){
     sub?`<span class="lp-sub">${sub}</span>`:''}</div>`;
 }
 /* 頭像＋姓名＋副標（2026-07-21 清單簡化）：badge 接在姓名後（僅非常態時傳入） */
+/* 票券五分類（2026-07-31 抽成共用）：教練課／團體課／自主訓練／運動按摩／折抵券。
+   會員票券分頁的分頁鍵與會員列表的欄位用同一支，兩邊不會分到不同格子。 */
+const TK5=[['pt','教練課'],['group','團體課'],['self','自主訓練'],['massage','運動按摩'],['voucher','折抵券']];
+function tkClass5(t, typeMap){
+  const tt=(typeMap||{})[t&&t.ticket_type_id]||{};
+  if(/折抵/.test((t&&t.plan_name)||'')||/折抵/.test(tt.name||'')) return 'voucher';
+  if((tt.category||'')==='自主訓練') return 'self';
+  if((tt.category||'')==='小班肌力'||(tt.category||'')==='團體課'||/團/.test((t&&t.plan_name)||'')) return 'group';
+  if((tt.category||'')==='運動按摩'||/按摩/.test((t&&t.plan_name)||'')) return 'massage';
+  return 'pt';
+}
 function lpPerson(gender, name, sub, badge){
   return `<div class="lp-person"><span class="lp-avatar${avatarGenderClass(gender)}">${genderAvatarSVG(gender)}</span>
     <div class="lp-primary"><span class="lp-name">${name||'—'}${badge||''}</span>${
@@ -19795,16 +19817,18 @@ PAGES.members=async function(){
 
   // (3) Table（2026-07-28 使用者指示：票券欄改「最上方那張票」的迷你圓形卡；
   //     等級＋主教練併一欄，整列重排避免擁擠）
-  /* 2026-07-31 使用者指示：比照員工列表分三區 ——
-     左＝姓名｜中＝會員狀態（票券、最近上課）｜右＝分類管理（等級、主教練、操作）。
-     等級與主教練是「櫃檯怎麼歸類這個人」，和員工列表的權限開關同一種性質，所以歸右邊。 */
+  /* 2026-07-31 使用者指示（二修）：整份比照員工列表 ——
+     左＝姓名（主教練接在姓名旁，位置比照員工的英文名；會員等級與電話在下面那行，
+             位置比照員工的「正職・職稱 電話」）
+     中＝五個課別各一格，下面用圓形卡
+     右＝最近上課、註冊日、操作
+     ⚠ 會員等級不再是獨立欄位 → 少了「依等級排序」的表頭；等級篩選仍在上方工具列。 */
   const cols=[
-    {label:'姓名',     width:'1.4fr', sortKey:'name'},
-    {label:'票券',     width:'2.3fr', zone:true},
-    {label:'最近上課', width:'0.9fr', sortKey:'last'},
-    {label:'會員等級', width:'0.8fr', sortKey:'tier', zone:true},
-    {label:'主教練',   width:'0.8fr'},
-    {label:'',         width:'54px'},
+    {label:'姓名',     width:'1.5fr', sortKey:'name'},
+    ...TK5.map(([k,lb],i)=>({label:lb, width:'1fr', tkKey:k, zone:i===0})),
+    {label:'最近上課', width:'0.8fr', sortKey:'last', zone:true},
+    {label:'註冊日',   width:'0.8fr', sortKey:'reg'},
+    {label:'',         width:'44px'},
   ];
   const typeMapFull=Object.fromEntries(types.map(t=>[t.id,t]));
   /* ── 票券袋子（2026-07-30 使用者定案）──
@@ -19831,6 +19855,27 @@ PAGES.members=async function(){
     }
     const _exp=tk.expire_date?`・效期至 ${String(tk.expire_date).slice(0,10)}`:'';
     return `<div class="tk-minicard" title="${(tk.plan_name||'票券').replace(/"/g,'&quot;')}・剩 ${rem??'—'}／${total}${_exp}"><div class="tkm-dots">${dots}</div></div>`;
+  };
+  /* 2026-07-31 使用者指示：中間那區改成「教練課／團體課／自主訓練／運動按摩／折抵券」
+     五格，每一格下面用圓形卡顯示那個課別目前在用的那張票。
+     ・一位會員同課別可能有好幾張 → 只畫「還在用的最新一張」，沒有在用的就畫最近一張
+     ・整袋一起 allocBookingsToTickets，不可以每格各配一次（同一堂會在多張票上重複冒出來）
+     ・沒有那個課別的票就留空，不要塞「—」把五格擠滿 */
+  const tkCatCell=(m,k)=>{
+    const myBk=_memBkIdx[m.id]||[];
+    const mine=allTk.filter(tk=>tkUsableBy(tk,m.id));
+    const alloc=allocBookingsToTickets(mine,myBk,typeMapFull);
+    const byBuy=(a,b)=>String(b.purchase_date||b.start_date||'').localeCompare(String(a.purchase_date||a.start_date||''));
+    const liveOf=tk=>tk.status==='usable'&&(tk.sessions_remaining||0)>0
+        &&(!tk.expire_date||String(tk.expire_date).slice(0,10)>=today);
+    const grp=mine.filter(tk=>tkClass5(tk,typeMapFull)===k);
+    if(!grp.length) return '';
+    const live=grp.filter(liveOf).sort(byBuy);
+    const tk=live[0]||grp.slice().sort(byBuy)[0];
+    if(!tk) return '';
+    const n=live.length;
+    return tkRowHtml(tk, alloc.byTicket[tk.id]||[], null)
+      + (n>1?`<span class="tkcat-n" title="這個課別還有 ${n-1} 張在用">＋${n-1}</span>`:'');
   };
   const tkCell=(m)=>{
     const t=tkSummary[m.id]||{anyUsable:false};
@@ -19897,12 +19942,13 @@ PAGES.members=async function(){
   const rows=pageRows.map(m=>({
     onclick:`openPersonProfile('member','${m.id}')`,
     cells:[
-      lpPerson(m.gender, m.name||'—', fmtPhone(m.phone)),
-      tkCell(m),
+      lpPerson(m.gender, m.name||'—',
+        `${tierLabel(effTier(m))}${m.phone?'　'+fmtPhone(m.phone):''}`,
+        m.default_coach_id ? (()=>{const cl=coachTagColor(m.default_coach_id);   // 2026-07-28：主教練用教練 tag 色
+          return `<i class="lp-coach" style="background:${cl.bg};color:${cl.fg};">${coachMap[m.default_coach_id]||''}</i>`;})() : ''),
+      ...TK5.map(([k])=>tkCatCell(m,k)),
       lastClassMap[m.id] ? `<span title="${lastClassMap[m.id]}">${fmtRelDay(lastClassMap[m.id])}</span>` : '',
-      tierTag(effTier(m)),
-      m.default_coach_id ? (()=>{const cl=coachTagColor(m.default_coach_id);   // 2026-07-28：主教練用教練 tag 色
-        return `<span style="background:${cl.bg};color:${cl.fg};border-radius:999px;padding:2.5px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;">${coachMap[m.default_coach_id]||''}</span>`;})() : '',
+      m.created_at ? `<span title="${String(m.created_at).slice(0,10)}">${fmtRelDay(String(m.created_at).slice(0,10))}</span>` : '',
       lpRowAct(lpIconBtn('eye', `openPersonProfile('member','${m.id}')`, '查看詳細')),
     ],
   }));
@@ -24451,12 +24497,7 @@ function ppRecordHtml(){
              不先攔下來就會被歸進按摩分頁（那張不是一堂課）。
            順手修掉團課比對：票種的 category 實際是「小班肌力」，'團體課' 從來沒對上過，
            一直是靠 plan_name 帶「團」字才進 group（沒帶字的就被誤歸 pt）。 */
-        const cls=t=>{ const tt=typeMap[t.ticket_type_id]||{};
-          if(/折抵/.test(t.plan_name||'')||/折抵/.test(tt.name||'')) return 'voucher';
-          if((tt.category||'')==='自主訓練') return 'self';
-          if((tt.category||'')==='小班肌力'||(tt.category||'')==='團體課'||/團/.test(t.plan_name||'')) return 'group';
-          if((tt.category||'')==='運動按摩'||/按摩/.test(t.plan_name||'')) return 'massage';
-          return 'pt'; };
+        const cls=t=>tkClass5(t, typeMap);   // 2026-07-31 抽成共用，與會員列表同一套分類
         const tab=PP.tkTab||'pt';
         const alloc=allocBookingsToTickets(c.myTk||[], (c.myBk||[]).filter(b=>b.status!=='cancelled'), typeMap);
         const list=(c.myTk||[]).filter(t=>cls(t)===tab)
@@ -24544,7 +24585,7 @@ function ppRecordHtml(){
         /* 分頁與各分頁的「可用張數」（2026-07-30 使用者指示）——
            可用＝沒被收進歷史紀錄的那些（同一個 isHist 判準，數字不會跟畫面對不上）。
            所以這段必須排在 isHist 定義之後。 */
-        const _tkTabs=[['pt','教練課'],['group','團體課'],['self','自主訓練'],['massage','運動按摩'],['voucher','折抵券']];
+        const _tkTabs=TK5;   // 2026-07-31：與會員列表共用同一組分類
         const _liveCnt={};
         (c.myTk||[]).forEach(t=>{ const k=cls(t); if(!isHist(t)) _liveCnt[k]=(_liveCnt[k]||0)+1; });
         const tabs=_tkTabs.map(([k,l])=>{

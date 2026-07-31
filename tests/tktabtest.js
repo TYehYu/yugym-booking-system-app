@@ -7,14 +7,17 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('分頁');
+/* 2026-07-31：分類器抽成共用的 tkClass5（會員列表也要用同一套），分頁清單抽成 TK5 */
 ok('★ 五個分頁：教練課／團體課／自主訓練／運動按摩／折抵券',
-   /const _tkTabs=\[\['pt','教練課'\],\['group','團體課'\],\['self','自主訓練'\],\['massage','運動按摩'\],\['voucher','折抵券'\]\];/.test(src));
-ok('★ cls() 認得運動按摩', /if\(\(tt\.category\|\|''\)==='運動按摩'\|\|\/按摩\/\.test\(t\.plan_name\|\|''\)\) return 'massage';/.test(src));
+   /const TK5=\[\['pt','教練課'\],\['group','團體課'\],\['self','自主訓練'\],\['massage','運動按摩'\],\['voucher','折抵券'\]\];/.test(src)
+   && /const _tkTabs=TK5;/.test(src));
+ok('★ cls() 認得運動按摩', /if\(\(tt\.category\|\|''\)==='運動按摩'\|\|\/按摩\/\.test\(\(t&&t\.plan_name\)\|\|''\)\) return 'massage';/.test(src));
 ok('★ 折抵券的判定排在最前面（按摩折抵券不能被歸進按摩分頁）', (()=>{
-   const i=src.indexOf("        const cls=t=>{ const tt=typeMap[t.ticket_type_id]||{};");
-   const seg=src.slice(i, src.indexOf("return 'pt'; };",i));
+   const i=src.indexOf("function tkClass5(t, typeMap){");
+   const seg=src.slice(i, src.indexOf("return 'pt';",i));
    return seg.indexOf("return 'voucher';") < seg.indexOf("return 'massage';");
 })());
+ok('★ 會員票券分頁與會員列表用同一支分類器', /const cls=t=>tkClass5\(t, typeMap\);/.test(src));
 ok('　　原因寫在程式裡', /運動按摩折抵券的 category 也是「運動按摩」，\s*\n\s*不先攔下來就會被歸進按摩分頁/.test(src));
 
 console.log('\n可用張數');
@@ -22,25 +25,26 @@ ok('★ 每個分頁後面帶可用張數', /return `<button class="tkf-btn\$\{t
 ok('★ 「可用」＝沒被收進歷史紀錄的（與畫面同一個判準）',
    /\(c\.myTk\|\|\[\]\)\.forEach\(t=>\{ const k=cls\(t\); if\(!isHist\(t\)\) _liveCnt\[k\]=\(_liveCnt\[k\]\|\|0\)\+1; \}\);/.test(src));
 ok('★ 分頁字串搬到 isHist 之後才組（不然算不到）',
-   src.indexOf('const isHist=t=>{') < src.indexOf('const _tkTabs=['));
+   src.indexOf('const isHist=t=>{') < src.indexOf('const _tkTabs=TK5;'));
 ok('　　0 張的分頁不顯示數字（不用一排 0 干擾）', /\$\{n\?`<i class="tkf-n">\$\{n\}<\/i>`:''\}/.test(src));
 ok('　　數字樣式：選中的分頁用半透明白底', /\.tkf-btn\.active \.tkf-n\{background:rgba\(255,255,255,\.24\);color:#fff;\}/.test(src));
 
 console.log('\n順手修掉的舊 bug');
 ok('★ 團課比對補上「小班肌力」（票種的 category 實際是小班肌力，團體課從來沒對上）',
-   /if\(\(tt\.category\|\|''\)==='小班肌力'\|\|\(tt\.category\|\|''\)==='團體課'\|\|\/團\/\.test\(t\.plan_name\|\|''\)\) return 'group';/.test(src));
+   /if\(\(tt\.category\|\|''\)==='小班肌力'\|\|\(tt\.category\|\|''\)==='團體課'\|\|\/團\/\.test\(\(t&&t\.plan_name\)\|\|''\)\) return 'group';/.test(src));
 ok('　　原因寫在程式裡', /'團體課' 從來沒對上過/.test(src));
 
 // 實跑分類
 console.log('\n實跑 cls()');
 {
-  const i=src.indexOf("        const cls=t=>{ const tt=typeMap[t.ticket_type_id]||{};");
-  const j=src.indexOf("return 'pt'; };",i)+15;
+  const i=src.indexOf("function tkClass5(t, typeMap){");
+  const j=src.indexOf("\n}\n",i)+2;
   const TM={ pt:{name:'教練課',category:'私人教練'}, fr:{name:'友善教練課',category:'私人教練'},
              grp:{name:'團體課',category:'小班肌力'}, self:{name:'自主訓練',category:'自主訓練'},
              ms:{name:'運動按摩',category:'運動按摩'},
              vpt:{name:'教練課折抵300',category:'私人教練'}, vms:{name:'運動按摩折抵300',category:'運動按摩'} };
-  const cls=new Function('typeMap', src.slice(i,j)+'\nreturn cls;')(TM);
+  const _f=new Function(src.slice(i,j)+'\nreturn tkClass5;')();
+  const cls=t=>_f(t,TM);
   const T=(ttid,plan)=>({ticket_type_id:ttid,plan_name:plan||''});
   eq('★ 運動按摩 1 堂 → massage', cls(T('ms','運動按摩')), 'massage');
   eq('★ 運動按摩折抵券 → voucher（不是 massage）', cls(T('vms','運動按摩折抵300')), 'voucher');
