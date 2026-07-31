@@ -46,9 +46,13 @@ ok('★ 桌機行事曆的標準卡（右下角角章，紅底「假」）',
    && /<span class="evc-check evc-leave" title="全員請假">假<\/span>/.test(src));
 ok('★ 桌機行事曆的三態小徽章（右上角）也改成紅色「假」',
    /: grpAllOnLeave\(b\) \? '<span class="ev-stamp ev-stamp-leave" title="全員請假">假<\/span>'/.test(src));
-ok('★ 手機週檢視的課卡', /\$\{grpAllOnLeave\(b\)\?'<span class="evc-check evc-leave" title="全員請假">假<\/span>'/.test(src));
+/* 2026-07-31 重構：狀態章改走共用的 bkStampKind（取消 → 全員請假 → 已簽到／補簽） */
+ok('★ 手機週檢視的課卡', /return k==='leave'\?'<span class="evc-check evc-leave" title="全員請假">假<\/span>'/.test(src));
 ok('★ 首頁「今日教練任務」課卡',
-   /\$\{grpAllOnLeave\(b\)\?'<span class="tcard-chk tcard-chk-leave">假<\/span>':\(done\?'<span class="tcard-chk">簽<\/span>':''\)\}/.test(src));
+   /return k==='leave'\?'<span class="tcard-chk tcard-chk-leave">假<\/span>'/.test(src));
+ok('★ 首頁手機版的圓點也吃同一支', /const allLeave2=bkStampKind\(b\)==='leave';/.test(src));
+ok('★ 狀態章的判斷順序固定（取消 → 全員請假 → 已簽到）',
+   /function bkStampKind\(b\)\{[\s\S]{0,120}if\(b\.status==='cancelled'\) return 'cancel';[\s\S]{0,160}return 'leave';/.test(src));
 ok('★ 三種角章都是紅底（沿用既有角章的形狀與位置，只換顏色與字）',
    /\.evc-check\.evc-leave,\.cal-ev\.cal-ev-std \.evc-check\.evc-leave\{background:var\(--danger,#b5372e\);\}/.test(src)
    && /\.tcard-chk\.tcard-chk-leave\{background:var\(--danger,#b5372e\);\}/.test(src)

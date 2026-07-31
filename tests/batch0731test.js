@@ -120,18 +120,15 @@ ok('　　標題改成「已過期方案」', /<div class="md-tk-subhead">已過
 ok('　　原因寫在程式裡', /原本過期的票和用完的票一起收進「歷史紀錄」，限定方案這種有效期的票就找不到了/.test(src));
 
 console.log('\n手機行事曆：待簽約的課要看得到名字（2026-07-31 使用者回報）');
+/* 2026-07-31 重構：名稱與標籤改走共用的 bkName／bkTag（見 bkviewtest.js） */
 {
-  const i=src.indexOf('    let disp;\n    if(b.category===\'小班肌力\'');
+  const i=src.indexOf('    let disp, dispTag=\'\';');
   const blk=src.slice(i, src.indexOf('\n    /* 卡片視覺改桌機版標準卡', i));
-  ok('★ 待簽約用 trial_name（原本掉到 fallback 只顯示「課程」）',
-     /else if\(b\.pending_contract\)\{ disp=b\.trial_name\|\|'待簽約'; \}/.test(blk));
-  ok('★ 場租也顯示使用人', /else if\(b\.category==='場租'\)\{ disp=b\.trial_name\|\|'場租'; \}/.test(blk));
-  ok('★ 已綁會員的仍優先顯示會員名（待繳費那種）',
-     blk.indexOf("else if(b.member_id)")<blk.indexOf("else if(b.pending_contract)"));
-  ok('　　最後的 fallback 也先試 trial_name 才退成「課程」',
-     /else disp=\{'自主訓練':'自主訓練'\}\[b\.category\]\|\|b\.trial_name\|\|'課程';/.test(blk));
-  ok('　　待簽約不另外加標記（卡片本來就有紅框）', !/待簽約）/.test(blk));
-  ok('　　原因寫在程式裡', /待簽約的課卡只顯示「課程」，看不出是誰/.test(src));
+  ok('★ 非團課一律走共用層（體驗／待簽約／場租／待繳費都涵蓋）',
+     /else \{ disp=bkName\(b,id=>memMap\[id\]\); dispTag=bkTag\(b\); if\(disp==='—'\) disp='課程'; \}/.test(blk));
+  ok('★ 團課主行仍是人數（各畫面不同，維持各自處理）', /disp=n>0\?`團 \$\{n\}`:'團體課';/.test(blk));
+  ok('　　沒有人的自主訓練仍顯示「自主訓練」', /b\.category==='自主訓練' && !b\.member_id && !b\.trial_name/.test(blk));
+  ok('★ 標籤畫成第二列，與桌機一致', /\$\{dispTag\?`<span class="evc-sub">\$\{dispTag\}<\/span>`:''\}/.test(src));
 }
 
 console.log('\n課卡：體驗／待簽約另起一列放在姓名下面（2026-07-31 使用者指示）');
@@ -140,10 +137,9 @@ console.log('\n課卡：體驗／待簽約另起一列放在姓名下面（2026-
   const blk=src.slice(i, src.indexOf('const _stdTag', i)+400);
   ok('★ 純姓名與標籤分開存（memName 仍是含括號的完整字串，Hover 提示照舊）',
      /let _nameBase=null, _nameTag='';/.test(blk));
-  ok('★ 體驗', /_nameBase=b\.trial_name\|\|'體驗客戶'; _nameTag='體驗';/.test(blk));
-  ok('★ 待簽約', /_nameBase=b\.trial_name\|\|'客戶'; _nameTag='待簽約';/.test(blk));
-  ok('★ 待繳費也一起（同一種「名字後面掛括號」的寫法）',
-     /_nameBase=memMap\[b\.member_id\]\|\|'—'; _nameTag='待繳費';/.test(blk));
+/* 2026-07-31 重構：姓名與標籤改走共用的 bkName／bkTag／bkNameFull（見 bkviewtest.js） */
+  ok('★ 體驗／待簽約／待繳費／場租都走同一支',
+     (blk.match(/_nameBase=bkName\(b,id=>memMap\[id\]\); _nameTag=bkTag\(b\); memName=bkNameFull\(b,id=>memMap\[id\]\);/g)||[]).length===4);
   ok('★ 標準卡主行只放純姓名',
      /const _stdName = hideMember \? typeName : \(_grpCard \? \(gHeadsN>0\?`\$\{gHeadsN\} 人`:'團課'\) : \(_nameBase\|\|memName\)\);/.test(src));
   ok('★ 標籤畫成姓名下面那一列',

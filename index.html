@@ -6741,8 +6741,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260731.1709';
-const APP_VERSION_LABEL='v260731.1709';
+const APP_VERSION = '260731.1713';
+const APP_VERSION_LABEL='v260731.1713';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10891,12 +10891,11 @@ PAGES.g_dashboard=async function(){
              2026-07-31 使用者指示：那個標籤改成放在姓名「下面一列」——
              原本是「程凱郁（體驗）」接在名字後面，窄卡會折行把名字擠掉。
              nm＝純姓名、_tag＝下面那一列的小字；title 仍用含括號的完整字串。 */
-          const nm = _isGrp ? `${(Array.isArray(b.member_ids)?b.member_ids.length:0)} 人`
-                   : (b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
-                   : (b.trial_name||'—'));
-          const _tag = _isGrp ? '' : (b.pending_contract ? (b.member_id?'待繳費':'待簽約') : bkGuestLabel(b));
+          const _nameOf=id=>memMap[id]?memMap[id].name:'';
+          const nm = _isGrp ? `${(Array.isArray(b.member_ids)?b.member_ids.length:0)} 人` : bkName(b,_nameOf);
+          const _tag = _isGrp ? '' : bkTag(b);
           const _tagOut = _tag ? `<span class="tcard-sub">${_tag}</span>` : '';
-          const _nmFull = nm + (_tag?`（${_tag}）`:'');
+          const _nmFull = _isGrp ? nm : bkNameFull(b,_nameOf);
           /* 待簽約（還沒收款）→ 紅框，與行事曆課卡同一套提示（2026-07-30 使用者指示） */
           const _pend = !!b.pending_contract;
           const canceled=isCancelled(b);
@@ -10906,7 +10905,9 @@ PAGES.g_dashboard=async function(){
           const coTag=`<span class="tcard-co" style="background:${_cc2.bg};color:${_cc2.fg};">${coachAbbr(c)}${b.substitute_coach_id===c.id?'（代）':''}</span>`;
           return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}${_pend?' tcard-pend':''}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${_nmFull}${_pend?'・尚未收款':''}${live?'（進行中）':''}${canceled?'（已取消）':''}">
             <div class="tcard-body"></div>
-            <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-mem">${nm}</span>${_tagOut}${(b.member_id?lottoGiftIcon(_lotMap[b.member_id]):'')}${coTag}${grpAllOnLeave(b)?'<span class="tcard-chk tcard-chk-leave">假</span>':(done?'<span class="tcard-chk">簽</span>':'')}</div>${canceled?'<span class="tcard-del">刪</span>':''}
+            <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-mem">${nm}</span>${_tagOut}${(b.member_id?lottoGiftIcon(_lotMap[b.member_id]):'')}${coTag}${(()=>{const k=bkStampKind(b);
+              return k==='leave'?'<span class="tcard-chk tcard-chk-leave">假</span>'
+                   :(k==='done'||k==='makeup')?'<span class="tcard-chk">簽</span>':'';})()}</div>${canceled?'<span class="tcard-del">刪</span>':''}
           </div>`;
         }).join('');
         const emptyC = (!drawBk.length)
@@ -10949,15 +10950,14 @@ PAGES.g_dashboard=async function(){
              member_id 與 member_ids，兩個都沒有就掉到「—」。（行事曆早就處理了，
              這一套是首頁手機版自己畫的，沒跟到。） */
           const _grpN2=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids.length:0;
-          const nm2=_grpN2?`${_grpN2} 人`
-                   :(b.member_id?(memMap[b.member_id]?memMap[b.member_id].name:'—')
-                   :(b.trial_name||'—'));
-          const _lb2=(typeof bkGuestLabel==='function')?bkGuestLabel(b):'';
+          const _nameOf2=id=>memMap[id]?memMap[id].name:'';
+          const nm2=_grpN2?`${_grpN2} 人`:bkName(b,_nameOf2);
+          const _lb2=_grpN2?'':bkTag(b);
           const doneB2=isDone(b), cx2=isCancelled(b);
           /* 2026-07-31 使用者回報：MANGO 11:00 全員請假，圓圈卻跟「還沒簽到」長一樣。
              請假的人不會簽到 → 永遠是空心。給它自己的樣式：紅色實線圈＋名字寫「請假」
              （取消是紅色虛線圈，兩者分得開）。 */
-          const allLeave2=(typeof grpAllOnLeave==='function') && grpAllOnLeave(b);
+          const allLeave2=bkStampKind(b)==='leave';
           const circle=cx2?`background:#fff;border:2px dashed #c0392b;color:#c0392b;`
             :(allLeave2?`background:#fff;border:2px solid #b5372e;color:#b5372e;`
             :(doneB2?`background:${col};border:2px solid ${col};color:#fff;`
@@ -12915,6 +12915,52 @@ function bkIsMasked(b){
 /* 沒綁會員、只有 trial_name 的課不只體驗課：待簽約卡位、場租都長這樣。
    統一由這支決定括號裡要寫什麼，避免各處各寫一份而把待簽約標成「體驗」
    （2026-07-29 使用者回報：施佩怡 7/31 21:00）。 */
+/* ══ 課卡顯示層（2026-07-31 重構）════════════════════════════════════
+   「一筆預約要顯示成什麼」只寫一次，四個畫課卡的地方共用：
+     ① 桌機行事曆的標準卡（renderCalendar）
+     ② 手機週檢視（教練端 agenda）
+     ③ 首頁「今日教練任務」課卡（桌機）
+     ④ 首頁「今日教練任務」圓點（手機）
+   為什麼要抽出來：這四處各寫各的，同一條規則得改四次。2026-07-31 一天之內
+   就被咬兩次 —— 行事曆補好「體驗顯示客戶姓名」「全員請假蓋假章」，首頁那兩處
+   都沒跟到，使用者回報後才發現。
+   ⚠ 這一層只回「要顯示什麼」，不決定「長什麼樣」—— 版面仍由各畫面自己排。
+   ⚠ 團課的主行各畫面不同（有的顯示人數、有的顯示到課人頭），維持各自處理，
+     這裡只負責「非團課」的姓名與標籤，那才是重複出錯的地方。 */
+function bkTag(b){
+  if(!b) return '';
+  if(b.pending_contract) return b.member_id ? '待繳費' : '待簽約';
+  if(b.category==='場租') return '場租';
+  if(b.category==='體驗') return '體驗';
+  return '';
+}
+/* nameOf：各畫面的會員名查法不同（有的 map 存物件、有的存字串），由呼叫端傳入 */
+function bkName(b, nameOf){
+  if(!b) return '—';
+  const v=b.member_id ? (nameOf?nameOf(b.member_id):'') : '';
+  if(v) return v;
+  if(b.member_id) return '—';
+  if(b.trial_name) return b.trial_name;
+  const t=bkTag(b);
+  return t==='體驗'?'體驗客戶' : t==='場租'?'場地租借' : t==='待簽約'?'客戶' : '—';
+}
+/* 含標籤的完整字串（Hover 提示、無處放第二行時用） */
+function bkNameFull(b, nameOf){
+  const n=bkName(b,nameOf), t=bkTag(b);
+  return t?`${n}（${t}）`:n;
+}
+/* 狀態章：取消 → 全員請假 → 已簽到／補簽。順序固定，四處一致。 */
+function bkStampKind(b){
+  if(!b) return '';
+  if(b.status==='cancelled') return 'cancel';
+  if(typeof grpAllOnLeave==='function' && grpAllOnLeave(b)) return 'leave';
+  const checked = b.status==='checked_in' || b.status==='completed'
+    || (b.category==='小班肌力' && b.attendance && Object.values(b.attendance).some(x=>x==='checked_in'));
+  if(checked) return 'done';
+  if(b.makeup_granted) return 'makeup';
+  return '';
+}
+const BK_STAMP_TEXT={cancel:'刪', leave:'假', done:'簽', makeup:'!'};
 function bkGuestLabel(b){
   if(!b) return '';
   if(b.pending_contract) return '待簽約';
@@ -13354,22 +13400,19 @@ async function renderCalendar(opts){
         // 別的教練的課：隱藏會員名，顯示課程類型（如「教練課」「自主訓練」）
         memName = {'私人教練':'教練課','自主訓練':'自主訓練','體驗':'體驗','小班肌力':'團體課'}[b.category] || typeName;
       }else if(b.category==='體驗'){
-        memName=(b.trial_name?b.trial_name+'（體驗）':'體驗客戶');
-        _nameBase=b.trial_name||'體驗客戶'; _nameTag='體驗';
+        _nameBase=bkName(b,id=>memMap[id]); _nameTag=bkTag(b); memName=bkNameFull(b,id=>memMap[id]);
       }else if(b.category==='場租'){
         // 場租使用人存 trial_name（2026-07-26 使用者回報：課卡與明細都沒顯示「魚大東」）
-        memName=(b.trial_name?b.trial_name+'（場租）':'場地租借');
+        _nameBase=bkName(b,id=>memMap[id]); _nameTag=bkTag(b); memName=bkNameFull(b,id=>memMap[id]);
       }else if(b.category==='小班肌力'){
         const names=gIds.map(id=>memMap[id]).filter(Boolean);
         memName = names.length===0 ? '團體課（未排名單）'
           : names.length<=2 ? names.join('、')
           : `${names[0]} 等 ${names.length} 人`;
       }else if(b.pending_contract && !b.member_id){
-        memName=(b.trial_name||'客戶')+'（待簽約）';   // 待簽約卡位（2026-07-27）
-        _nameBase=b.trial_name||'客戶'; _nameTag='待簽約';
+        _nameBase=bkName(b,id=>memMap[id]); _nameTag=bkTag(b); memName=bkNameFull(b,id=>memMap[id]);
       }else if(b.pending_contract && b.member_id){
-        memName=(memMap[b.member_id]||'—')+'（待繳費）';   // 分期未繳期數的保留課（2026-07-29）
-        _nameBase=memMap[b.member_id]||'—'; _nameTag='待繳費';
+        _nameBase=bkName(b,id=>memMap[id]); _nameTag=bkTag(b); memName=bkNameFull(b,id=>memMap[id]);
       }else{
         memName=memMap[b.member_id]||'—';
       }
@@ -15308,16 +15351,12 @@ async function renderCoachAgenda(){
        別的教練的課＝教練名、不可互動（管理員仍可點所有卡）。 */
     /* 2026-07-30 使用者指示：教練也開放看其他預約課卡的會員名字，只是關閉互動功能。
        原本別人的課只顯示授課教練名，現在一律顯示會員名（不能點仍由 cag-noint 控制）。 */
-    let disp;
+    /* 名稱與標籤走共用層（2026-07-31 重構，見 bkName／bkTag）；團課主行是人數，另外處理 */
+    let disp, dispTag='';
     if(b.category==='小班肌力'||(Array.isArray(b.member_ids)&&b.member_ids.length)){
       const n=(Array.isArray(b.member_ids)?b.member_ids.length:0); disp=n>0?`團 ${n}`:'團體課';
-    }else if(b.category==='體驗'){ disp=b.trial_name?b.trial_name+'（體驗）':'體驗課'; }
-    else if(b.member_id){ disp=memMap[b.member_id]||'—'; }
-    /* 待簽約卡位與場租沒有 member_id、名字記在 trial_name（2026-07-31 使用者回報：
-       待簽約的課卡只顯示「課程」，看不出是誰）。待簽約不另外加標記 —— 卡片本來就有紅框。 */
-    else if(b.pending_contract){ disp=b.trial_name||'待簽約'; }
-    else if(b.category==='場租'){ disp=b.trial_name||'場租'; }
-    else disp={'自主訓練':'自主訓練'}[b.category]||b.trial_name||'課程';
+    }else if(b.category==='自主訓練' && !b.member_id && !b.trial_name){ disp='自主訓練'; }
+    else { disp=bkName(b,id=>memMap[id]); dispTag=bkTag(b); if(disp==='—') disp='課程'; }
     /* 卡片視覺改桌機版標準卡（2026-07-26 使用者指示）：cal-ev-std 淡彩置中設計
        （時間／名稱／第三行教練縮寫 tag；簽到＝右下「簽」章，底色維持課程淡彩）。 */
     const _cc=bkCC(b);
@@ -15346,10 +15385,11 @@ async function renderCoachAgenda(){
     const _mkAlert = _unpaidM ? ' cal-ev-renew' : (_newM ? ' cal-ev-newtoday' : '');
     return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${canClick?'':' cag-view'}${_mkAlert}" ${layer==='mine'?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}')"`:` onclick="openBookingDetail('${b.id}')"`}>
       ${_mk}
-      ${grpAllOnLeave(b)?'<span class="evc-check evc-leave" title="全員請假">假</span>'
-        :(done?'<span class="evc-check" title="已完成">簽</span>':'')}
+      ${(()=>{const k=bkStampKind(b);
+        return k==='leave'?'<span class="evc-check evc-leave" title="全員請假">假</span>'
+             :(k==='done'||k==='makeup')?`<span class="evc-check" title="${k==='makeup'?'補簽':'已完成'}">簽</span>`:'';})()}
       <div class="evc-body"></div>
-      <div class="evc-txt">${showTime?`<span class="evc-time">${b.start_time}</span>`:''}<span class="evc-name">${disp}</span>${tag}</div>
+      <div class="evc-txt">${showTime?`<span class="evc-time">${b.start_time}</span>`:''}<span class="evc-name">${disp}</span>${dispTag?`<span class="evc-sub">${dispTag}</span>`:''}${tag}</div>
     </div>`;
   };
 

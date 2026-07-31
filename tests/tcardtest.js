@@ -30,8 +30,10 @@ console.log('\n體驗／待簽約放在姓名下面一列（2026-07-31 使用者
 ok('★ 卡片主行只放純姓名', /: \(b\.trial_name\|\|'—'\)\);/.test(src));
 ok('★ 標籤另起一列', /const _tagOut = _tag \? `<span class="tcard-sub">\$\{_tag\}<\/span>` : '';/.test(src)
    && /<span class="tcard-mem">\$\{nm\}<\/span>\$\{_tagOut\}/.test(src));
+/* 2026-07-31 重構：標籤走共用的 bkTag（待簽約／待繳費由有沒有綁會員決定） */
 ok('★ 待簽約／待繳費分得開（有沒有綁會員）',
-   /const _tag = _isGrp \? '' : \(b\.pending_contract \? \(b\.member_id\?'待繳費':'待簽約'\) : bkGuestLabel\(b\)\);/.test(src));
+   /if\(b\.pending_contract\) return b\.member_id \? '待繳費' : '待簽約';/.test(src)
+   && /const _tag = _isGrp \? '' : bkTag\(b\);/.test(src));
 ok('　　體驗與場租沿用 bkGuestLabel（與行事曆同一套判定）',
    /if\(b\.category==='體驗'\) return '體驗';/.test(src));
 ok('　　團課不掛（主行是人數，不是姓名）', /_isGrp \? '' :/.test(src));
