@@ -169,7 +169,7 @@ console.log('\n員工管理：卡片改回列表');
   ok('★ 權限開關全部保留（6 顆）', (h.match(/class="st-swb/g)||[]).length===6);
   ok('★ 右上角齒輪保留（點開員工明細）', /st-gear st-gear-row/.test(h) && /openPersonProfile\('employee','E1'\)/.test(h));
   ok('　　點整列也能開明細', /<div class="st-lrow[^"]*"[^>]*onclick="openPersonProfile\('employee','E1'\)"/.test(h));
-  ok('　　點開關不會連帶開明細', /class="st-l-sw" onclick="event\.stopPropagation\(\);"/.test(h));
+  ok('　　點開關不會連帶開明細', /class="st-l-sw st-zb" onclick="event\.stopPropagation\(\);"/.test(h));
   ok('　　姓名、對外名稱、聘僱類型、職稱、工號電話都在同一列',
      /王教練/.test(h) && /WANG/.test(h) && /正職/.test(h) && /資深教練/.test(h) && /A01 · 0912345678/.test(h));
   const off=fn({id:'E2',name:'離職者',status:'inactive',employment_type:'full_time'});
@@ -190,10 +190,11 @@ console.log('\n員工管理：卡片改回列表');
   ok('　　工時四捨五入到整數並帶 h', /58<u>h<\/u>/.test(h) && !/58\.4/.test(h));
   ok('★ 每一格不再重複印欄名（改由表頭統一）', !/<i>教練課<\/i>/.test(h) && !/st-l-stats/.test(src));
   // 三／四修：加入「工作規則／休假日／實領薪資」，數字欄名在翻月時會附月份標記
-  ok('★ 表頭：姓名／教練課／團體課／續約／工作時數／工作規則／休假日／實領薪資／權限開關',
-     /<span>姓名<\/span>\s*\n\s*<span>教練課\$\{_mTag\}<\/span><span>團體課\$\{_mTag\}<\/span><span>續約\$\{_mTag\}<\/span><span>工作時數\$\{_mTag\}<\/span>\s*\n\s*<span>工作規則<\/span><span>休假日<\/span><span>實領薪資\$\{_mTag\}<\/span>\s*\n\s*<span>權限開關<\/span>/.test(src));
+  /* 2026-07-31 使用者指示改版：總堂數在教練課前面、實領薪資移到工作時數後面、整列分三區 */
+  ok('★ 表頭：姓名／總堂數／教練課／團體課／續約／工作時數／實領薪資／工作規則／休假日／權限開關',
+     /<span>姓名<\/span>\s*\n\s*<span class="st-zb">總堂數\$\{_mTag\}<\/span><span>教練課\$\{_mTag\}<\/span><span>團體課\$\{_mTag\}<\/span><span>續約\$\{_mTag\}<\/span><span>工作時數\$\{_mTag\}<\/span>\s*\n\s*<span>實領薪資\$\{_mTag\}<\/span><span>工作規則<\/span><span>休假日<\/span>\s*\n\s*<span class="st-zb">權限開關<\/span>/.test(src));
   ok('★ 固定欄位的 grid（最後一欄不再用 max-content；四修：開關欄改固定寬以對齊標題）',
-     /\.st-lhead,\.st-lrow\{display:grid;\s*\n\s*grid-template-columns:10px 34px minmax\(160px,1fr\) 58px 58px 46px 54px 92px 78px 96px 372px 30px;/.test(src));
+     /\.st-lhead,\.st-lrow\{display:grid;\s*\n\s*grid-template-columns:10px 34px minmax\(150px,1fr\) 62px 62px 62px 48px 58px 100px 92px 78px 372px 30px;/.test(src));
   ok('★ 舊的 flex 版樣式已移除（它排在後面會蓋掉 grid）',
      /〔已移除〕舊的 flex 版員工列樣式/.test(src) && !/\.st-lrow\{position:relative;display:flex/.test(src));
   ok('　　0 用灰字，不會跟有數字的搶注意',
