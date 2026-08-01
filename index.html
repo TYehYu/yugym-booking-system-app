@@ -627,6 +627,11 @@ select option{color:var(--text);}
   background:#fff;border:1px solid var(--bd);border-radius:11px;box-shadow:0 10px 28px rgba(20,18,14,.16);
   max-height:min(46vh,300px);overflow-y:auto;padding:5px;}
 .mem-pick-row.mpk-open .mpk-menu{display:block;}
+/* 手機鍵盤擋住時往上開（2026-08-01 使用者回報） */
+.mem-pick-row.mpk-up .mpk-menu{top:auto;bottom:calc(100% + 4px);}
+/* 分組標題（有這個方案的會員／某教練的會員）——原本 optgroup 在自訂選單裡看不到 */
+.mpk-grp{padding:8px 11px 3px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--t3);}
+.mpk-grp:first-child{padding-top:3px;}
 .mpk-item{display:block;width:100%;text-align:left;padding:9px 11px;border:none;background:transparent;
   border-radius:8px;font-family:inherit;font-size:13.5px;color:var(--text);cursor:pointer;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -6823,8 +6828,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.0917';
-const APP_VERSION_LABEL='v260801.0917';
+const APP_VERSION = '260801.0928';
+const APP_VERSION_LABEL='v260801.0928';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16537,17 +16542,58 @@ function mpkLabel(sel){
   if(!sel || !sel.value) return '';
   const o=sel.selectedOptions&&sel.selectedOptions[0]; return o?o.textContent.trim():'';
 }
+/* 自訂下拉要把 <optgroup> 的分組標題畫出來（2026-08-01）——
+   原本只攤平 sel.options，所以「有這個方案的會員」「某某教練的會員」這些分組
+   在選單裡完全看不出來，只剩排序。分組標題就是這個功能的說明文字，不能吞掉。
+   停用的項目（「還有 N 位，請用搜尋」）給 mpk-none：點不到、鍵盤也跳過。 */
 function mpkRender(row){
   const sel=row.querySelector('select'), menu=row.querySelector('.mpk-menu');
   if(!sel||!menu) return;
   const opts=[...sel.options];
-  menu.innerHTML = opts.length
-    ? opts.map((o,i)=>`<button type="button" class="mpk-item${o.value===sel.value?' cur':''}" data-i="${i}"
-        >${String(o.textContent).replace(/</g,'&lt;')}</button>`).join('')
-    : '<div class="mpk-item mpk-none">查無符合的會員</div>';
+  if(!opts.length){
+    menu.innerHTML='<div class="mpk-item mpk-none">查無符合的會員</div>';
+    row._mpkIdx=0; return;
+  }
+  const esc=x=>String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const item=o=>`<button type="button" class="mpk-item${o.value===sel.value?' cur':''}${o.disabled?' mpk-none':''}" data-i="${opts.indexOf(o)}">${esc(o.textContent)}</button>`;
+  let html='';
+  [...sel.children].forEach(ch=>{
+    if(ch.tagName==='OPTGROUP') html+=`<div class="mpk-grp">${esc(ch.label)}</div>`+[...ch.children].map(item).join('');
+    else if(ch.tagName==='OPTION') html+=item(ch);
+  });
+  menu.innerHTML=html;
   row._mpkIdx=Math.max(0, opts.findIndex(o=>o.value===sel.value));
 }
-function mpkOpen(row){ row.classList.add('mpk-open'); mpkRender(row); }
+function mpkOpen(row){ row.classList.add('mpk-open'); mpkRender(row); mpkFit(row); }
+/* 手機版選單被鍵盤蓋住（2026-08-01 使用者回報，附截圖）——
+   選單固定往下開，但輸入框本來就在畫面偏下，鍵盤一升起來下方就只剩幾十像素。
+   鍵盤高度沒有 API，但 visualViewport.height 會跟著縮 —— 用它算真正看得到的高度：
+   ・下方放不下、上方比較寬 → 選單改往上開（mpk-up）
+   ・兩邊都窄 → 把輸入框捲到可視區中間，讓選單有地方長
+   桌機不受影響（沒有 visualViewport 變化，below 一直都夠）。 */
+function mpkFit(row){
+  try{
+    const inp=row.querySelector('input'), menu=row.querySelector('.mpk-menu');
+    if(!inp||!menu) return;
+    const vv=window.visualViewport;
+    const vh=(vv&&vv.height)||window.innerHeight||0;
+    const r=inp.getBoundingClientRect();
+    const below=vh-r.bottom-12, above=r.top-12;
+    const up = below<180 && above>below;
+    row.classList.toggle('mpk-up', up);
+    menu.style.maxHeight=Math.max(120,Math.min(300,(up?above:below)-8))+'px';
+    if(Math.max(below,above)<180){ try{ inp.scrollIntoView({block:'center'}); }catch(_){} }
+  }catch(_){}
+}
+/* 鍵盤升起／收合、或捲動時，開著的選單要重算位置 */
+(function(){
+  const refit=()=>{ try{ document.querySelectorAll('.mem-pick-row.mpk-open').forEach(mpkFit); }catch(_){} };
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', refit);
+    window.visualViewport.addEventListener('scroll', refit);
+  }
+  window.addEventListener('resize', refit);
+})();
 function mpkClose(row,restore){
   row.classList.remove('mpk-open');
   if(restore!==false){ const inp=row.querySelector('input'), sel=row.querySelector('select');
@@ -16571,7 +16617,7 @@ function mpkUpgrade(row){
   inp.setAttribute('role','combobox'); inp.setAttribute('autocomplete','off');
   const menu=row.querySelector('.mpk-menu');
   // 打字：原本的 oninput 已先跑完篩選（inline handler 先註冊先執行），這裡只負責重畫清單
-  inp.addEventListener('input',()=>{ mpkOpen(row); });
+  inp.addEventListener('input',()=>{ mpkOpen(row); });   // mpkOpen 內含 mpkFit，清單變短時選單高度跟著縮
   inp.addEventListener('focus',()=>{ inp.select(); mpkOpen(row); });
   inp.addEventListener('click',()=>{ mpkOpen(row); });
   inp.addEventListener('keydown',e=>{
@@ -16702,12 +16748,13 @@ async function openBookingModal(){
       </div>
     </div>
     <div class="form-2col">
-      <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}"></div>
-      <div class="form-row"><label>時間</label><select id="bk-time">${timeOpts}</select></div>
+      <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}" onchange="bkRefreshPlanFilter()"></div>
+      <div class="form-row"><label>時間</label><select id="bk-time" onchange="bkRefreshPlanFilter()">${timeOpts}</select></div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="cancelBookingModal()">取消</button><button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`);
   // 渲染課程類型卡（場地租借＝銷售流程，不再列於此）
   window._bkTypes=activeTypes;
+  window._bkPlanIds=null; window._bkPlanName='';   // 每次開窗都從「未選方案」開始，不留上一次的名單
   window._bkPrefillCoachId=prefillCoach||null;
   renderBkTypeCards();
 }
@@ -16747,6 +16794,7 @@ function pickBkType(tid){
   document.getElementById('bk-type').value=tid;
   renderBkTypeCards();
   onBkTypeChange();
+  bkRefreshPlanFilter();   // 2026-08-01：點方案卡 → 會員名單把「有這個方案」的排到最上面
 }
 /* 步驟 1 會員下拉（2026-07-29 使用者指示：與教練連動）——
    選了教練就把該教練的會員（members.default_coach_id）分組排到最上面，其餘放下一組。
@@ -16773,6 +16821,30 @@ function bkMemberOptsHTML(q, keepId){
     return {rows, hidden:arr.length-rows.length};
   };
   const more=n=>n?`<option value="" disabled>— 還有 ${n} 位，請用左邊搜尋 —</option>`:'';
+  /* 選了課程類型（方案卡）後，「持有這個方案、現在就能用」的會員排到最上面
+     （2026-08-01 使用者指示：點了方案卡，會員名單要篩選有該方案的會員，方便預約）。
+     這一組不截斷 —— 它就是櫃檯要找的那群人，截掉等於白做。
+     其餘會員仍留在下面一組（體驗客、當場要買方案的、共享票的家人都還找得到），
+     所以是「排序＋標示」而不是硬篩掉，不會做出讓人選不到人的死路。
+     ⚠ 名單由 bkRefreshPlanFilter() 用 tkFitsBooking 算好放在 window._bkPlanIds ——
+       與步驟 2 真正挑票、以及送出時的防呆完全同一支，
+       不會發生「這裡列得出來、下一步卻說沒有可用票券」。 */
+  const _pids=window._bkPlanIds;
+  if(_pids){
+    const _pn=window._bkPlanName||'這個方案';
+    /* 只在有選教練時才重排（把該教練的會員提到前面），而且是穩定排序 ——
+       沒選教練就維持名單原本的順序，不要順手改成依姓名排（那是另一件事，沒人要求）。 */
+    const has=cid
+      ? list.filter(m=>_pids[m.id]).sort((x,y)=>(x.default_coach_id===cid?0:1)-(y.default_coach_id===cid?0:1))
+      : list.filter(m=>_pids[m.id]);
+    const no=list.filter(m=>!_pids[m.id]);
+    const restP=cut(no);
+    return head
+      +(has.length
+        ? `<optgroup label="有「${_pn}」可用的會員（${has.length}）">${has.map(opt).join('')}</optgroup>`
+        : `<option value="" disabled>— 沒有會員持有「${_pn}」的可用票券 —</option>`)
+      +(restP.rows.length?`<optgroup label="其他會員（${no.length}）">${restP.rows.map(opt).join('')}${more(restP.hidden)}</optgroup>`:'');
+  }
   if(!cid){
     const {rows,hidden}=cut(list);
     return head+rows.map(opt).join('')+more(hidden);
@@ -16785,15 +16857,45 @@ function bkMemberOptsHTML(q, keepId){
     +(mine.length?`<optgroup label="${label}的會員（${mine.length}）">${mine.map(opt).join('')}</optgroup>`:'')
     +(rest.rows.length?`<optgroup label="其他會員（${list.length-mine.length}）">${rest.rows.map(opt).join('')}${more(rest.hidden)}</optgroup>`:'');
 }
+/* 算出「持有這個方案、且這個日期時間可用」的會員（2026-08-01 使用者指示）——
+   判定用 tkFitsBooking：狀態、剩餘堂數、超約、分期未開通、效期、限時段、票種比對全都算進去，
+   共享票的共享者也算得到（tkUsableBy）。體驗課不綁票券，篩了會變空名單，所以直接不篩。 */
+async function bkRefreshPlanFilter(){
+  const tid=(document.getElementById('bk-type')||{}).value||'';
+  window._bkPlanIds=null; window._bkPlanName='';
+  try{
+    const t=(window._bkTypes||[]).find(x=>x.id===tid);
+    if(t && tid!=='__facility' && t.category!=='體驗'){
+      if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
+      const [tks,cnt]=await Promise.all([dbGetAll('member_tickets').catch(()=>[]), tkBookedCountMap()]);
+      const d=(document.getElementById('bk-date')||{}).value||'';
+      const tm=String((document.getElementById('bk-time')||{}).value||'').slice(0,5);
+      const set={};
+      (tks||[]).forEach(tk=>{
+        // 一張票要問「持有人」與「共享者」各一次 —— 共享票的家人也該被列出來
+        const cands=[tk.member_id].concat(tkSharedIds(tk)||[]);
+        cands.forEach(mid=>{ if(mid && !set[mid] && tkFitsBooking(tk,mid,tid,d,tm,cnt)) set[mid]=1; });
+      });
+      window._bkPlanIds=set; window._bkPlanName=t.name||'';
+    }
+  }catch(_){ window._bkPlanIds=null; }
+  bkRedrawMemberPick();
+}
+// 重畫步驟 1 的會員下拉並保留已選的那位（自訂下拉要重新掛回去）
+function bkRedrawMemberPick(){
+  const sel=document.getElementById('bk-mem-pre'); if(!sel) return;
+  const prev=sel.value;
+  const q=(document.getElementById('bk-mem-q')||{}).value||'';
+  sel.innerHTML=bkMemberOptsHTML(q, prev);
+  if(prev && sel.querySelector(`option[value="${prev}"]`)) sel.value=prev;
+  const row=sel.closest('.mem-pick-row');
+  if(row && row.classList.contains('mpk-open')) mpkRender(row);
+}
 // 教練下拉變更 → 重排會員下拉（保留已選的會員）
 function bkCoachChange(){
   const co=document.getElementById('bk-coach');
   window._bkCoachSel=(co&&co.value)||'';
-  const sel=document.getElementById('bk-mem-pre'); if(!sel) return;
-  const prev=sel.value;
-  const q=(document.getElementById('bk-mem-q')||{}).value||'';
-  sel.innerHTML=bkMemberOptsHTML(q, prev);   // 已選的那位不會被截斷吃掉
-  if(prev && sel.querySelector(`option[value="${prev}"]`)) sel.value=prev;
+  bkRedrawMemberPick();   // 已選的那位不會被截斷吃掉；開著的自訂選單也一起重畫
 }
 // 產生 30 分鐘間隔時段選項（08:00～22:00）
 function bkTimeOptions(selected){
