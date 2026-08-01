@@ -101,11 +101,11 @@ ok('★ 改成 position:fixed（原本 absolute 掛在輸入框底下，會撐�
    /\.mpk-menu\{position:fixed;z-index:9600;display:none;/.test(src)
    && !/\.mpk-menu\{position:absolute;left:0;right:0;top:calc\(100% \+ 4px\);/.test(src));
 ok('★ z-index 壓過彈窗（modal 是 300）', /z-index:9600/.test(src));
-ok('★ 位置與寬度由 mpkFit 依輸入框座標算', /menu\.style\.left=Math\.round\(r\.left\/_z\)\+'px';/.test(src)
-   && /menu\.style\.width=Math\.round\(r\.width\/_z\)\+'px';/.test(src));
+ok('★ 位置與寬度由 mpkFit 依輸入框座標算', /menu\.style\.left=Math\.round\(r\.left\)\+'px';/.test(src)
+   && /menu\.style\.width=Math\.round\(r\.width\)\+'px';/.test(src));
 ok('★ 往下開貼下緣、往上開貼上緣',
-   /if\(up\)\{ menu\.style\.top='auto'; menu\.style\.bottom=Math\.round\(\(window\.innerHeight-r\.top\)\/_z\+4\)\+'px'; \}/.test(src)
-   && /else  \{ menu\.style\.bottom='auto'; menu\.style\.top=Math\.round\(r\.bottom\/_z\+4\)\+'px'; \}/.test(src));
+   /if\(up\)\{ menu\.style\.top='auto'; menu\.style\.bottom=Math\.round\(window\.innerHeight-r\.top\+4\)\+'px'; \}/.test(src)
+   && /else  \{ menu\.style\.bottom='auto'; menu\.style\.top=Math\.round\(r\.bottom\+4\)\+'px'; \}/.test(src));
 ok('★ bottom 用 window.innerHeight 不是 visualViewport（座標系要一致）',
    /bottom 要用 window\.innerHeight（版面視窗）而不是 vh（視覺視窗）/.test(src));
 ok('★ 舊的 .mpk-up 定位規則已移除（改由 JS 設 top/bottom）',
@@ -120,10 +120,8 @@ ok('　　原因寫在程式裡', /選單一展開就撐高捲動範圍（捲軸
     const menu={style:{},}; const cls=new Set();
     const row={querySelector:sel=>sel==='input'?{getBoundingClientRect:()=>rect,scrollIntoView(){}}:menu,
       classList:{toggle:(c,on)=>{ on?cls.add(c):cls.delete(c); }}};
-    /* 2026-08-01：全系統等比例縮放上線後，mpkFit 會把座標除以縮放比（見 uiScale）。
-       這裡固定注入 1（＝基準寬度 1440 上的行為），驗的是定位邏輯本身。 */
-    const fn=new Function('window','row','uiScale',
-      g2('function mpkFit(row){','\n}\n')+'\nreturn mpkFit;')({visualViewport:{height:vh},innerHeight:innerH},undefined,()=>1);
+    const fn=new Function('window','row',
+      g2('function mpkFit(row){','\n}\n')+'\nreturn mpkFit;')({visualViewport:{height:vh},innerHeight:innerH});
     fn(row); return {menu, up:cls.has('mpk-up')};
   };
   console.log('\n  定位實跑');
