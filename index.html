@@ -7016,8 +7016,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.2035';
-const APP_VERSION_LABEL='v260801.2035';
+const APP_VERSION = '260801.2040';
+const APP_VERSION_LABEL='v260801.2040';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14498,12 +14498,13 @@ async function renderCalendar(opts){
       // hover 詳細資訊卡（滑過仍可看到完整狀態）
       const tip = hideMember ? `<div class="ev-tip">
         <div class="ev-tip-h"><b>${typeName}</b><span>${b.start_time}–${minToTime(timeToMin(b.start_time)+(b.duration||60))}</span></div>
+        ${bkVenueTipLine(b)}
         ${coachName?`<div class="ev-tip-r">教練：${coachName}${subCoachName?`　→ 代課：${subCoachName}`:''}</div>`:''}
         <div class="ev-tip-s">${statusLabel(b.status)}</div>
       </div>` : `<div class="ev-tip">
         <div class="ev-tip-h"><b>${memName}</b><span>${b.start_time}–${minToTime(timeToMin(b.start_time)+(b.duration||60))}</span></div>
         <div class="ev-tip-r">${typeName}${b.format?' · '+b.format:''}</div>
-        ${(bkIsSelf(b)&&b.venue_unit&&String(b.venue_unit).split('_')[0]!=='multi')?`<div class="ev-tip-r" style="color:#a8642a;font-weight:600;">場地：${venueName(b.venue_unit)}</div>`:''}
+        ${bkVenueTipLine(b)}
         ${coachName?`<div class="ev-tip-r">教練：${coachName}${subCoachName?`　→ 代課：${subCoachName}`:''}</div>`:''}
         ${tk?`<div class="ev-tip-tk">${tk.plan_name||'票券'}　剩 ${remain}　<span style="opacity:.7;">效期至 ${fmtExpire(tk.expire_date,tk)}</span>${(window._renewLastBk&&window._renewLastBk[b.id])?`<br><span style="color:#a8642a;font-weight:600;">🔁 本張票最後一堂・記得提醒續約</span>`:((window._installLastBk&&window._installLastBk[b.id])?`<br><span style="color:#a8642a;font-weight:600;">💰 本期最後一堂・下次上課前需繳費</span>`:'')}</div>`:''}
         <div class="ev-tip-s">${statusLabel(b.status)}</div>
@@ -14923,6 +14924,69 @@ function assignLanes(evs){
 //  ② 舊系統匯入：note 帶「舊系統匯入｜教室:跑步機2」「…｜教室:教室(代課)」等；
 //     A/B/C/D自主訓練＝多功能訓練區的位置代號，屬預設不標。
 //     未來匯出檔若把「教室/跑步機」放在教練名稱欄，只要落進 note 一樣吃得到。
+/* 跑步機台數（2026-08-01 使用者指示：「所以在預約跑步機的時候，要多一個選項，要預約幾台」）——
+   跑步機是「一個場地兩台」，一對二的客人一次會佔掉兩台。
+   系統的資料結構是「一台一筆預約」（venue_unit 一筆只存得下一台），第 2 台以
+   sibling_of 指回主預約、不另外扣點（與明細裡的燈號開關 bkToggleVenueUnit 同一套規則）。
+   只有自主訓練會用到跑步機，所以只在那一種課出現這個欄位。
+   選了台數＝明確指定要跑步機（venue_pref），不再讓系統自動配到多功能訓練區。 */
+function bkTreadmillRow(t){
+  if(!t || t.category!=='自主訓練') return '';
+  const cap=((window.VENUES||[]).find(v=>v.id==='treadmill')||{}).capacity||2;
+  const opts=['<option value="0">自動配置（多功能訓練區優先）</option>']
+    .concat(Array.from({length:cap},(_,i)=>`<option value="${i+1}">跑步機 ${i+1} 台</option>`)).join('');
+  return `<div class="form-row"><label>場地／跑步機台數</label>
+    <select id="bk-treadmill">${opts}</select>
+    <div style="font-size:11px;color:var(--t3);margin-top:5px;line-height:1.7;">
+      選了台數就指定用跑步機。兩台＝同行使用，<b>只扣 1 點</b>，第 2 台不另外扣。</div></div>`;
+}
+function bkTreadmillN(){
+  const el=document.getElementById('bk-treadmill');
+  return el ? Math.max(0, Number(el.value)||0) : 0;
+}
+/* 幫一筆已建立的預約補開第 2、3 台（同行使用、不扣點）。
+   回傳實際開成幾台（含主預約那一台）—— 別人先約走時就少開，不讓整筆失敗。 */
+async function bkAddTreadmillUnits(bk, want){
+  const n=Math.max(1, Number(want)||1);
+  if(n<=1 || !bk || !bk.venue_unit) return 1;
+  const vid=String(bk.venue_unit).split('_')[0];
+  if(vid!=='treadmill') return 1;
+  const cap=((window.VENUES||[]).find(v=>v.id==='treadmill')||{}).capacity||2;
+  const all=await dbGetAll('bookings').catch(()=>[]);
+  const ns=timeToMin(bk.start_time), ne=ns+(Number(bk.duration)||60);
+  const ov=x=>{ const s0=timeToMin(x.start_time), e0=s0+(Number(x.duration)||60); return s0<ne && ns<e0; };
+  const taken={};
+  (all||[]).forEach(x=>{ if(x && x.date===bk.date && x.status!=='cancelled' && x.venue_unit && ov(x)) taken[x.venue_unit]=1; });
+  let made=1;
+  for(let i=1;i<=cap && made<n;i++){
+    const unit=`treadmill_${i}`;
+    if(taken[unit]) continue;
+    try{
+      await dbPut('bookings',{ id:uid('BK'), member_id:bk.member_id||null, coach_id:null,
+        category:bk.category, ticket_id:null, ticket_type_id:bk.ticket_type_id||null,
+        date:bk.date, start_time:bk.start_time, duration:Number(bk.duration)||60,
+        status:'booked', venue_unit:unit, sibling_of:bk.id,
+        trial_name:bk.trial_name||null, created_by:(SESSION&&SESSION.id)||null,
+        note:'同行使用（跑步機）・不另外扣點', created_at:new Date().toISOString() });
+      taken[unit]=1; made++;
+    }catch(_){ }
+  }
+  return made;
+}
+/* 課卡滑鼠提示的場地那一行（2026-08-01 使用者指示：
+   「課卡的滑鼠提示，如果是教室或跑步機要顯示使用場地，尤其是跑步機要知道用了幾台」）。
+   ・沿用 selfVenueLabel：教室／跑步機才標，預設的多功能訓練區不標（標了等於每張卡都有）。
+     它也吃得到舊系統匯入、只有 note 帶「教室:跑步機2」的那批。
+   ・跑步機一律附台數 —— 一堂佔兩台是兩筆預約（見 mergeSiblingUnits），
+     台數記在合併後的 _units 上；沒有合併資訊時就是 1 台。
+   ・遮蔽卡（教練看別人的課）也要有：場地不是隱私，而且那正是排課要看的。 */
+function bkVenueTipLine(b){
+  const v=selfVenueLabel(b);
+  if(!v) return '';
+  const n=Math.max(1, Number(b && b._units)||1);
+  const cnt = v==='跑步機' ? `　·　${n} 台` : '';
+  return `<div class="ev-tip-r" style="color:#a8642a;font-weight:600;">場地：${v}${cnt}</div>`;
+}
 function selfVenueLabel(b){
   /* 2026-07-27 使用者回報（劉雪珠 16:00 改團課教室沒顯示）：
      原本只標自主訓練——放寬到教練課/體驗課（非預設多功能時都標）；團課/場租不標。 */
@@ -17762,6 +17826,7 @@ async function bkStep2(){
       ?`<div class="form-row"><label>會員</label>
           <div class="bk-mem-pick" style="cursor:default;"><span>${preInfo?preInfo.name:''}（${preInfo?fmtPhone(preInfo.phone):''}）· 剩 ${preSum} 堂</span></div></div>
         <div class="form-row" style="margin-bottom:10px;"><div id="bk-ticket-info" style="font-size:12px;color:var(--t2);padding:10px 12px;background:var(--card2);border-radius:9px;"></div></div>
+        ${bkTreadmillRow(t)}
         ${recurBoxHtml('bk', preSum)}`
       :`<div class="form-row"><div style="font-size:12.5px;color:var(--t2);line-height:1.8;padding:12px 14px;background:var(--card2);border-radius:10px;">
           ${preMid?`<b>${preInfo?preInfo.name:'該會員'}</b> 沒有此課程的可用票券。可回上一步改選會員或先完成儲值，`
@@ -18436,9 +18501,13 @@ async function _submitBookingInner(){
     }
     return await findUsableTicket(mid,type_id,d,tsv||time);
   };
+  /* 跑步機台數（2026-08-01 使用者指示）：選了台數＝指定用跑步機，
+     第 2 台以 sibling_of 掛在主預約下、不另外扣點。 */
+  const _tmN=bkTreadmillN();
+  const _venuePref=_tmN>0?'treadmill':null;
   // 單筆預約（非連續）：先預驗證場地，若溢出到次選場地→跳確認，教練同意才建立
   if(!recurring){
-    const vbkChk={id:null,coach_id,category:t.category,ticket_type_id:type_id};
+    const vbkChk={id:null,coach_id,category:t.category,ticket_type_id:type_id,venue_pref:_venuePref};
     const preErr=await validateBooking(vbkChk,date,time,60);
     if(preErr){ showToast(preErr); return; }
     if(!(await confirmVenueOverflow(vbkChk))) return; // 教練取消
@@ -18449,6 +18518,7 @@ async function _submitBookingInner(){
     startDate:date, time, duration:60,
     dows: recurring ? _rc.dows : [],
     times: recurring ? _rc.times : null,   // 各天各自的時間（2026-07-30）
+    venue_pref:_venuePref, units:_tmN,     // 跑步機台數（2026-08-01）
     count: recurring ? _rc.count : 1,   // 2026-07-29：改由「次數」決定（上限＝可約堂數）
     until: null,
     findTicketFn: bkFindTk,
@@ -18463,7 +18533,7 @@ async function _submitBookingInner(){
   // 單筆預約：直接吐司；連續預約或有跳過：跳結果摘要視窗
   if(!recurring && results.length===1){
     closeModal();
-    if(results[0].ok){ showToast('預約成功，已扣抵 1 堂票券'); }
+    if(results[0].ok){ showToast('預約成功，已扣抵 1 堂票券'+(_tmN>1?`（跑步機 ${_tmN} 台，第 2 台不扣點）`:'')); }
     else { showToast(results[0].reason); }
     bkAfterSubmit();
     return;
@@ -18598,6 +18668,9 @@ async function runRecurringBooking(opts){
     }
     const bk={id:uid('BK'), member_id:o.member_id||null, coach_id:o.coach_id||null,
       substitute_coach_id:o.substitute_coach_id||null,
+      /* 指定場地（2026-08-01 跑步機台數）：validateBooking 會依這個強制配置，
+         配好之後把 venue_unit 寫回這個物件。 */
+      venue_pref:o.venue_pref||null,
       ticket_id:tk?tk.id:null, ticket_type_id:(tk&&tk.ticket_type_id)||o.type_id||null,
       category:o.category, format:o.format||null,
       date:ds, start_time:ts, duration:dur, status:'booked',
@@ -18607,15 +18680,20 @@ async function runRecurringBooking(opts){
     const verr=await validateBooking(bk, ds, ts, dur);
     if(verr){ skipped++; results.push({date:ds,ok:false,reason:verr}); continue; }
     try{
-      if(window.FEATURE_FLAGS&&FEATURE_FLAGS.createBookingRpc&&CLOUD&&!noDeduct&&tk&&!holdOnly){
+      /* 指定跑步機時走原路徑（2026-08-01）：DB 的 fn_create_booking 只處理一般區，
+         跑步機是「一個場地兩台＋同行第 2 台不扣點」的獨立流程，還沒進那支 RPC。 */
+      if(window.FEATURE_FLAGS&&FEATURE_FLAGS.createBookingRpc&&CLOUD&&!noDeduct&&tk&&!holdOnly&&!o.venue_pref){
         // ── Sprint 3：改由後端 RPC 單一交易建立＋扣票（旗標開啟時）──
         const rr=await createBookingViaRpc(o, tk, ds, ts);
         if(rr.ok){ ok++; results.push({date:ds,ok:true,tkId:tk?tk.id:null,tkName:tk?(tk.plan_name||'票券'):''}); }
         else { skipped++; results.push({date:ds,ok:false,reason:rr.reason}); }
       } else {
         // ── 原路徑（旗標關閉，維持與過往完全一致）──
+        delete bk.venue_pref;                    // 只是配置提示，不入庫
         await dbPut('bookings', bk);
         if(tk) await deductTicket(tk, bk.id, operator);
+        // 跑步機兩台：補開同行使用的那幾筆（不扣點）
+        if(o.units>1){ try{ await bkAddTreadmillUnits(bk, o.units); }catch(_){} }
         if(holdOnly) held++; else ok++;
         // 實際扣了哪張票要記下來（2026-08-01）：跟指定的不一樣時要講，不能默默換票
         results.push({date:ds,ok:true,held:holdOnly,tkId:tk?tk.id:null,tkName:tk?(tk.plan_name||'票券'):''});

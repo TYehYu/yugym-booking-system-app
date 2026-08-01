@@ -28,8 +28,10 @@ ok('★ 指定票券的專屬錯誤訊息（不要籠統說「沒票」）',
 
 console.log('\n這條路徑什麼時候會走到（旗標是開的，所以是主要路徑）');
 ok('★ createBookingRpc 旗標開啟', /createBookingRpc: true,/.test(src));
-ok('★ 只有「有票要扣」時才走 RPC（體驗課／分期保留不走）',
-   /if\(window\.FEATURE_FLAGS&&FEATURE_FLAGS\.createBookingRpc&&CLOUD&&!noDeduct&&tk&&!holdOnly\)\{/.test(src));
+/* 2026-08-01：指定跑步機時也不走 RPC —— 跑步機是「一個場地兩台＋同行第 2 台不扣點」
+   的獨立流程，DB 的 fn_create_booking 只處理一般區。 */
+ok('★ 只有「有票要扣」時才走 RPC（體驗課／分期保留／指定跑步機都不走）',
+   /if\(window\.FEATURE_FLAGS&&FEATURE_FLAGS\.createBookingRpc&&CLOUD&&!noDeduct&&tk&&!holdOnly&&!o\.venue_pref\)\{/.test(src));
 ok('　　所以 tk 一定存在 → p_ticket_id 一定有值，FIFO 只在別的呼叫端才會用到',
    /p_ticket_id:\(tk&&tk\.id\)\|\|null/.test(src));
 
