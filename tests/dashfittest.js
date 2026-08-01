@@ -30,6 +30,14 @@ ok('★ 右欄原本用 padding-top:43px 撐的齊頭留白要拿掉，否則空
 ok('　　壓成矮卡後內文改緊湊版（不再有 190px 直式卡的 52px 上留白）',
    /\.mc-know-top \.know-body\{margin-top:0;/.test(src));
 ok('　　右側留給插圖，字不壓上去', /\.mc-know-top \.know-body\{margin-top:0;padding-right:62px;\}/.test(src));
+/* 2026-08-01 使用者指示：「全系統的健身知識卡 背景色幫我參考首頁插圖的背景色套用」 */
+ok('★ 知識卡底色與插圖卡一致（--card2 ＋ --bd 細框），不再是三個漸層',
+   /\.know-card\{position:relative;min-height:190px;padding:16px 18px;overflow:hidden;cursor:pointer;\s*\n\s*background:var\(--card2,#FAF7F0\);border:1px solid var\(--bd\);/.test(src)
+   && !/\.know-kc\{background:linear-gradient/.test(src));
+ok('　　課別改由分類標籤的實色與插圖著色承接（資訊沒有少）',
+   /\.know-kc\{--kc-acc:#134737;color:#134737;\}/.test(src)
+   && /\.know-chip\{[\s\S]{0,120}background:var\(--kc-acc,#134737\);color:#fff;/.test(src));
+ok('　　底色變淺後插圖透明度提高，才看得出筆觸', /width:120px;height:120px;opacity:\.5;/.test(src));
 ok('　　點一下換下一則仍可用（knowNext 換的是卡本身，外層 .mc-know-top 保留）',
    /el\.outerHTML=knowCardHTML\(\);/.test(src));
 ok('　　手機版知識卡不受影響（走另一條分支）',
@@ -56,9 +64,12 @@ ok('★ 整條靠右，數字與按鈕成為同一群',
    /\.mc-g5-mid \.mc-kpistrip\{margin-bottom:14px;padding:6px 14px 0;justify-content:flex-end;gap:52px;\}/.test(src)
    && !/\.mc-g5-mid \.mc-kpistrip \.mc-quick3\{margin-left:auto;\}/.test(src));
 ok('　　按鈕群靠得比數字之間更近（52−16＝36）',
-   /\.mc-kpistrip \.mc-quick3\{gap:8px;flex:0 0 auto;margin-left:-16px;\}/.test(src));
-ok('　　併進 KPI 條後鈕要收窄，不然整條被撐高',
-   /\.mc-kpistrip \.mc-quick3 \.mc-q3\{flex:0 0 auto;width:84px;/.test(src));
+   /\.mc-kpistrip \.mc-quick3\{gap:10px;flex:0 0 auto;margin-left:-16px;\}/.test(src));
+/* 2026-08-01 二修（使用者：「首頁 KPI 右邊的三個按鈕可以放大一點 改成直式卡片」）——
+   原本壓扁的小方塊跟旁邊 44px 的大數字擺一起太小。 */
+ok('　　三顆鈕改成直式卡片（加寬加高、圖示放大）',
+   /\.mc-kpistrip \.mc-quick3 \.mc-q3\{flex:0 0 auto;width:96px;min-height:96px;padding:16px 6px;gap:10px;/.test(src)
+   && /\.mc-kpistrip \.mc-quick3 \.mc-q3 svg\{width:26px;height:26px;\}/.test(src));
 ok('　　KPI 條允許換行，窄視窗不會把鈕擠出畫面', /\.mc-kpistrip\{display:flex;[^}]*flex-wrap:wrap;\}/.test(src));
 ok('　　整條靠右對齊', /\.mc-kpistrip\{display:flex;align-items:center;justify-content:flex-end;/.test(src));
 
