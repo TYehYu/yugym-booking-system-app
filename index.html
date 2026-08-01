@@ -7016,8 +7016,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.2040';
-const APP_VERSION_LABEL='v260801.2040';
+const APP_VERSION = '260801.2051';
+const APP_VERSION_LABEL='v260801.2051';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11406,7 +11406,9 @@ async function revokeMakeupTicket(booking,memberId,seatKey){
    該堂票券「照扣不退」，另發一張 14 天補課券。
    ⚠️ 這裡刻意不動票券餘額：團課的扣課發生在「管理名單」加入名額時（見 openGroupMembers），
    請假只是不退回，所以再扣一次會變成扣兩堂。與「移除名單」的差別就在退不退。 */
-async function groupToggleLeave(bid,seatKey){
+/* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
+async function groupToggleLeave(bid,seatKey){ return onceAct('grpleave:'+bid+':'+seatKey, ()=>_groupToggleLeave(bid,seatKey)); }
+async function _groupToggleLeave(bid,seatKey){
   const b=await dbGet('bookings',bid);
   if(!b){ showToast('找不到預約'); return; }
   if(b.status==='cancelled'){ showToast('已取消的課不可標記請假'); return; }
@@ -11436,7 +11438,9 @@ async function groupToggleLeave(bid,seatKey){
 /* 團體課「取消預約」（2026-07-29 使用者指示）：把該會員移出名單並退回 1 堂。
    與「請假」不同——請假是本堂照扣、另發 14 天補課券；取消是直接退回票券、名額釋出。
    同名多名額（親友同行）一次只取消一個。 */
-async function groupCancelSeat(bid,seatKey){
+/* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
+async function groupCancelSeat(bid,seatKey){ return onceAct('grpcancel:'+bid+':'+seatKey, ()=>_groupCancelSeat(bid,seatKey)); }
+async function _groupCancelSeat(bid,seatKey){
   const b=await dbGet('bookings',bid);
   if(!b){ showToast('找不到預約'); return; }
   /* 2026-07-30：參數改收「名額鍵」（id 或 id#2）——名單改成一個名額一列後，
@@ -17676,7 +17680,9 @@ function frTicketPick(){
   if(sel&&sel.value){ if(fee)fee.value=0; if(name&&!name.value)name.value=(opt&&opt.dataset.name)||''; }
   else if(fee){ fee.value=200; }
 }
-async function submitFacilityBooking(){
+/* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
+async function submitFacilityBooking(){ return onceAct('facility:'+((_bkWizard&&_bkWizard.date)||'')+((_bkWizard&&_bkWizard.time)||''), ()=>_submitFacilityBooking()); }
+async function _submitFacilityBooking(){
  try{
   const {date,time}=_bkWizard;
   const name=(document.getElementById('fr-name').value||'').trim();
@@ -19987,13 +19993,18 @@ async function openBkTicketChange(id){
    彈窗裡的按鈕是 inline onclick，手機上偶爾會收到兩次事件（touchend 之後補發的 click、
    或手指微移造成的第二次點）。逐顆按鈕加 disabled 容易漏，改在動作層擋：
    同一個 key 還在跑就直接忽略，跑完再放行（多留 400ms 吃掉補發的那一次）。 */
+/* 2026-08-01 二修：原本擋掉的那一次直接回傳 undefined，但有幾個入口的回傳值是有人在看的
+   （checkInBooking 的 ok、saveBookingTime 的 ok），undefined 會被當成「失敗」而跳錯誤訊息。
+   改成讓重複的那一次「跟著等同一個結果」—— 動作只跑一次，兩邊拿到的答案一樣。 */
 const _actBusy={};
 async function onceAct(key, fn){
-  if(_actBusy[key]) return;
-  _actBusy[key]=1;
-  try{ return await fn(); }
+  if(_actBusy[key]) return _actBusy[key];
+  const p=(async()=>fn())();
+  _actBusy[key]=p;
+  try{ return await p; }
   finally{ setTimeout(()=>{ delete _actBusy[key]; }, 400); }
 }
+
 async function doBkTicketChange(id,newTkId){ return onceAct('tkchg:'+id, ()=>_doBkTicketChange(id,newTkId)); }
 async function _doBkTicketChange(id,newTkId){
  try{
@@ -20076,7 +20087,9 @@ async function venueUnitDots(b, editable){
    ・打開空的那一台 → 建一筆「同行使用」的預約佔住它，**不綁票、不扣點**
    ・關掉 → 取消那一筆；主預約本身不能關（要換台請開另一台再關這一台）
    同一組用 sibling_of 串起來（同行那幾筆指回主預約的 id），這樣才知道哪幾台是自己的。 */
-async function bkToggleVenueUnit(id, unit){
+/* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
+async function bkToggleVenueUnit(id, unit){ return onceAct('venunit:'+id+':'+unit, ()=>_bkToggleVenueUnit(id, unit)); }
+async function _bkToggleVenueUnit(id, unit){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到這筆預約'); return; }
   if(typeof coachOwnsBk==='function' && !coachOwnsBk(b)){ showToast('這不是你的課，只能查看'); return; }
   const vid=String(unit).split('_')[0];
@@ -20206,7 +20219,9 @@ async function doGrantMakeupForMember(member_id){
 
 /* ── 簽到：改狀態 checked_in、記簽到時間、發點數（票券已於預約時扣，不重扣） ── */
 // 取消簽到（個人課）：改回未簽到，並收回這堂發放的自主訓練券
-async function undoCheckin(id){
+/* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
+async function undoCheckin(id){ return onceAct('uncheckin:'+id, ()=>_undoCheckin(id)); }
+async function _undoCheckin(id){
   const b=await dbGet('bookings',id);
   if(!b){ showToast('找不到預約'); return; }
   if(b.status!=='checked_in'){ showToast('此預約非已簽到狀態'); return; }
@@ -20219,7 +20234,9 @@ async function undoCheckin(id){
   closeModal();
   navTo(CUR_PAGE);
 }
-async function checkInBooking(id, opts){  opts=opts||{};
+/* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
+async function checkInBooking(id, opts){ return onceAct('checkin:'+id, ()=>_checkInBooking(id, opts)); }
+async function _checkInBooking(id, opts){  opts=opts||{};
  // 整包防禦（2026-07-18 正式站回報「點簽到沒反應」）：任何未預期錯誤都要有 toast，
  // 不允許沉默失敗 —— 沉默失敗＝櫃台以為簽到成功或系統壞掉，兩者都比錯誤訊息糟。
  try{
@@ -20727,7 +20744,9 @@ async function confirmCancelBooking(id){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-danger" onclick="askSeriesCancel('${id}','auto')">確定取消</button></div>`);
 }
 // 回傳 true=已儲存（或無變更、視同完成）／false=驗證失敗（呼叫端應保留編輯狀態讓使用者修正）
-async function saveBookingTime(id){
+/* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
+async function saveBookingTime(id){ return onceAct('bktime:'+id, ()=>_saveBookingTime(id)); }
+async function _saveBookingTime(id){
   const b=await dbGet('bookings',id);
   if(b.date<ymd(TODAY)){showToast('已過期的預約無法修改');return false;} // 原課已過期 → 不可改動
   const nd=document.getElementById('ed-date').value;
@@ -20819,7 +20838,9 @@ async function openGroupMembers(id){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button><button class="btn btn-green" onclick="saveGroupMembers('${id}')">儲存名單</button></div>`);
   renderGrpPick();
 }
-async function saveGroupMembers(id){
+/* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
+async function saveGroupMembers(id){ return onceAct('grpmem:'+id, ()=>_saveGroupMembers(id)); }
+async function _saveGroupMembers(id){
   const b=await dbGet('bookings',id);
   const next=(window._grpSel||[]).slice();
   const gmax=grpMax();
@@ -21018,7 +21039,9 @@ function attObj(b){
   return {};
 }
 // 團課：切換某會員的簽到狀態
-async function toggleGroupAttend(bid,mid){
+/* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
+async function toggleGroupAttend(bid,mid){ return onceAct('grpatt:'+bid+':'+mid, ()=>_toggleGroupAttend(bid,mid)); }
+async function _toggleGroupAttend(bid,mid){
   const b=await dbGet('bookings',bid);
   const att=attObj(b);
   const wasIn = att[mid]==='checked_in';
@@ -29547,7 +29570,9 @@ async function openInstallNext(ticket_id){
       <button class="btn btn-green" onclick="confirmInstallNext('${ticket_id}')">確認收款並開通</button>
     </div>`);
 }
-async function confirmInstallNext(ticket_id){
+/* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
+async function confirmInstallNext(ticket_id){ return onceAct('instnext:'+ticket_id, ()=>_confirmInstallNext(ticket_id)); }
+async function _confirmInstallNext(ticket_id){
   const t=await dbGet('member_tickets',ticket_id);
   if(!t||!t.installment){ showToast('票券資料異常'); return; }
   const inst=t.installment;
@@ -33358,7 +33383,9 @@ async function qbPickMember(mid){
   qbCloseMemberPick();
   renderQuickBookForm();
 }
-async function qbSubmitForm(){
+/* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
+async function qbSubmitForm(){ return onceAct('qbform', ()=>_qbSubmitForm()); }
+async function _qbSubmitForm(){
   const f=window._qbForm;
   if(!f.memberId){ showToast('請選擇會員'); return; }
   if(!f.date||!f.time){ showToast('請選日期與時間'); return; }

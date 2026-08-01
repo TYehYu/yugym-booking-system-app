@@ -46,7 +46,10 @@ console.log('\n實跑重入鎖');
   // 同一個 key 連按三次 → 只跑一次
   const [a1,a2,a3]=await Promise.all([mk('k',slow),mk('k',slow),mk('k',slow)]);
   eq('★ 同一個動作連按三次 → 只執行一次', runs, 1);
-  eq('　　被擋掉的那幾次回 undefined（呼叫端不會拿到假結果）', [a2,a3], [undefined,undefined]);
+/* 2026-08-01 二修：原本擋掉的那一次回 undefined，但 checkInBooking／saveBookingTime
+   的回傳值是有人在看的（const ok=await …），undefined 會被當成「失敗」跳錯誤訊息。
+   改成讓重複的那幾次「跟著等同一個結果」—— 動作仍然只跑一次。 */
+  eq('　　被擋掉的那幾次跟著等同一個結果（不是 undefined，也不是重跑）', [a2,a3], ['done','done']);
   eq('　　真正執行的那次仍拿得到回傳值', a1, 'done');
   // 不同 key 互不影響
   runs=0;

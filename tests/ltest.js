@@ -7,7 +7,8 @@ const grab=n=>{
   for(let k=h.indexOf('{',i);k<h.length;k++){ if(h[k]==='{')d++; else if(h[k]==='}'){d--; if(!d) return h.slice(i,k+1);} }
 };
 /* 2026-07-31：補課券改用「名額鍵」防重複（同一人兩個名額要兩張），一併抽進來 */
-const src=[grab('seatNo'),grab('makeupKey'),grab('grantMakeupTicket'),grab('revokeMakeupTicket'),grab('groupToggleLeave')].join('\n');
+/* 2026-08-01：groupToggleLeave 包了防連點鎖（onceAct），實作改名為 _groupToggleLeave */
+const src=[grab('seatNo'),grab('makeupKey'),grab('grantMakeupTicket'),grab('revokeMakeupTicket'),grab('_groupToggleLeave')].join('\n');
 
 let DB={bookings:{},member_tickets:{}}, LOGS=[], TOASTS=[], REOPENED=[];
 const reset=()=>{DB={bookings:{},member_tickets:{}};LOGS=[];TOASTS=[];REOPENED=[];};
@@ -28,7 +29,7 @@ const env={
   SESSION:{id:'staff1'},
   window:{_ttCache:[{id:'tt-g',name:'團體課',category:'小班肌力'}]},
 };
-const api=new Function(...Object.keys(env), src+'; return {groupToggleLeave,grantMakeupTicket,revokeMakeupTicket,makeupKey};')(...Object.values(env));
+const api=new Function(...Object.keys(env), src+'; return {groupToggleLeave:_groupToggleLeave,grantMakeupTicket,revokeMakeupTicket,makeupKey};')(...Object.values(env));
 
 let pass=0,fail=0;
 const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
