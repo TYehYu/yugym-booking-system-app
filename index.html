@@ -7068,8 +7068,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.2245';
-const APP_VERSION_LABEL='v260801.2245';
+const APP_VERSION = '260801.2258';
+const APP_VERSION_LABEL='v260801.2258';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8569,6 +8569,7 @@ function enterApp(){
     else{ const d=document.getElementById('tb-acct-alertdot'); if(d)d.style.display='none'; }
   })();
   startClock();
+  try{ fitUiScale(); }catch(_){}   // 全系統等比例縮放（2026-08-01）：登入後套一次
   loadWeather();
   refreshHeaderPunch();
   // 載入場地設定（若雲端有 venues 表）→ 供 validateBooking 容量檢查
@@ -11635,14 +11636,49 @@ function butlerArtNext(){
      一起縮，不會錯位）。
    ・縮到下限（0.62）仍放不下才讓它內捲 —— 再小就看不清楚名字了，
      這時寧可捲，也不要把整列教練默默切掉（無聲截斷比捲軸糟）。 */
+/* ══ 全系統等比例縮放（2026-08-01 使用者指示）══
+   「這是 mac 的格式寬距，可以幫我保持這個畫面的相對位子，如果用其他解析度閱讀的話，
+     只要等比例縮放」——
+   原本各處是「重排」：螢幕變窄就換行、間距變小、欄位擠在一起。改成整個桌機畫面
+   依視窗寬度等比放大縮小，版面關係固定不動。
+   ・基準寬度 1440（使用者那台 Mac 的視窗寬）—— 1440 上就是 1:1
+   ・上下限 0.72–1.5：再小字會看不清、再大一屏塞不下幾張課卡
+   ・只作用在桌機版面；手機／會員端維持原本的響應式（那邊本來就該重排）
+   ・UI_SCALE_ON 是總開關，設 false 即完全還原成改版前的行為
+   ⚠ zoom 會讓「元素座標」與「window.innerWidth/Height」不同尺 ——
+     凡是拿 window.innerHeight 減 getBoundingClientRect() 再回寫 style 的地方
+     （fitCalWrapHeight／fitCoachCards／mpkFit）都要除以縮放比，見 uiScale()。 */
+const UI_SCALE_ON=true, UI_SCALE_REF=1440, UI_SCALE_MIN=0.72, UI_SCALE_MAX=1.5;
+function uiScale(){ return Number(window._uiZ)||1; }
+function fitUiScale(){
+  const body=document.body; if(!body) return;
+  const off=()=>{ if(window._uiZ!==1){ window._uiZ=1; body.style.zoom=''; body.classList.remove('ui-scaled'); } };
+  if(!UI_SCALE_ON){ off(); return; }
+  /* 手機版面不套：那邊是窄螢幕的響應式排版，等比縮放只會把字縮到看不見 */
+  let mobile=false; try{ mobile=isMobileLayout(); }catch(_){}
+  if(mobile){ off(); return; }
+  const w=window.innerWidth||UI_SCALE_REF;
+  const z=Math.max(UI_SCALE_MIN, Math.min(UI_SCALE_MAX, Math.round((w/UI_SCALE_REF)*1000)/1000));
+  if(window._uiZ===z) return;
+  window._uiZ=z;
+  body.style.zoom = z===1 ? '' : String(z);
+  body.classList.toggle('ui-scaled', z!==1);
+  /* 縮放改變之後，那幾支「量高度」的要重算（它們的結果依賴縮放比） */
+  try{ if(document.querySelector('.cal-wrap')) fitCalWrapHeight(); }catch(_){}
+  try{ if(document.querySelector('.mc-g5-mid .mc-coachcenter')) fitCoachCards(); }catch(_){}
+}
+window.addEventListener('resize', ()=>{ try{ fitUiScale(); }catch(_){} });
+
 const TCARD_ZOOM_MIN=0.62;
 function fitCoachCards(){
   const cc=document.querySelector('.mc-g5-mid .mc-coachcenter');
   if(!cc) return;
   const body=cc.querySelector('.tcard-body');
   if(isMobileLayout() || !body){ cc.style.removeProperty('max-height'); return; }
+  /* getBoundingClientRect 與 innerHeight 都是「螢幕上的實際像素」，
+     但寫回 style 的是元素自己的座標（被 zoom 放大過）→ 要除以縮放比。 */
   const top=cc.getBoundingClientRect().top;
-  const avail=Math.max(220, Math.round(window.innerHeight - top - 14));
+  const avail=Math.max(220, Math.round((window.innerHeight - top - 14)/uiScale()));
   cc.style.maxHeight=avail+'px';
   /* 先還原成原尺寸再量，量到的才是「不縮」需要多高 */
   body.style.setProperty('--tcz','1');
@@ -15922,7 +15958,8 @@ function fitCalWrapHeight(){
   const w=document.querySelector('.cal-wrap'); if(!w) return;
   const top=w.getBoundingClientRect().top; // 視窗相對位置，正是我們要扣掉的頭部高度
   const gap=14; // 底部留白
-  const h=Math.max(360, Math.round(window.innerHeight - top - gap)); // 下限 360px，避免極端視窗下算出過小值
+  // 同 fitCoachCards：螢幕像素 → 元素自己的座標（見 uiScale）
+  const h=Math.max(360, Math.round((window.innerHeight - top - gap)/uiScale())); // 下限 360px，避免極端視窗下算出過小值
   w.style.height=h+'px';
   w.style.maxHeight=h+'px';
 }
@@ -17201,6 +17238,7 @@ window.addEventListener('resize', ()=>{ if(document.querySelector('.wtl-wrap')) 
 let _lastMobileLayout = isMobileLayout();
 function handleLayoutModeChange(){
   const nowMobile = isMobileLayout();
+  try{ fitUiScale(); }catch(_){}   // 手機版面不套縮放，切換時要跟著開關（2026-08-01）
   if(nowMobile === _lastMobileLayout) return; // 模式沒變，不動作
   _lastMobileLayout = nowMobile;
   const app=document.getElementById('app-screen');
@@ -17288,15 +17326,18 @@ function mpkFit(row){
     const below=vh-r.bottom-12, above=r.top-12;
     const up = below<180 && above>below;
     row.classList.toggle('mpk-up', up);
-    menu.style.maxHeight=Math.max(120,Math.min(300,(up?above:below)-8))+'px';
+    menu.style.maxHeight=Math.max(120,Math.min(300,((up?above:below)-8)/uiScale()))+'px';
     /* 選單是 position:fixed（不參與彈窗版面），所以位置要自己算：
        靠齊輸入框的左邊與寬度；往下開就貼著它的下緣，往上開就貼著上緣。
        ⚠ bottom 要用 window.innerHeight（版面視窗）而不是 vh（視覺視窗）——
          getBoundingClientRect 給的是版面座標，混用會在鍵盤升起時偏掉。 */
-    menu.style.left=Math.round(r.left)+'px';
-    menu.style.width=Math.round(r.width)+'px';
-    if(up){ menu.style.top='auto'; menu.style.bottom=Math.round(window.innerHeight-r.top+4)+'px'; }
-    else  { menu.style.bottom='auto'; menu.style.top=Math.round(r.bottom+4)+'px'; }
+    /* 選單是 position:fixed，但它在 body 內、同樣被 zoom 放大過；
+       getBoundingClientRect 給的是螢幕像素 → 除以縮放比才是它自己的座標（2026-08-01）。 */
+    const _z=uiScale();
+    menu.style.left=Math.round(r.left/_z)+'px';
+    menu.style.width=Math.round(r.width/_z)+'px';
+    if(up){ menu.style.top='auto'; menu.style.bottom=Math.round((window.innerHeight-r.top)/_z+4)+'px'; }
+    else  { menu.style.bottom='auto'; menu.style.top=Math.round(r.bottom/_z+4)+'px'; }
     /* 組字中（注音／拼音的候選視窗還開著）不要捲動 —— scrollIntoView 會把
        進行中的 composition 打斷，打到一半的字直接不見（2026-08-01 使用者回報）。 */
     if(Math.max(below,above)<180 && !row._mpkIME){ try{ inp.scrollIntoView({block:'center'}); }catch(_){} }
