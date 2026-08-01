@@ -50,8 +50,11 @@ console.log('\n版面');
    2026-08-01：「當月排班」按鈕移到月曆與員工值班之間，插畫下面接的改成月曆。 */
 ok('★ 放在左欄最上方（下面接月曆）',
    /\$\{butlerArtHtml\(\)\}\s*\n\s*<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>/.test(src));
+/* 2026-08-01：KPI 條裡的問候（kpi-greet）已移除，改成三個數字＋右側三顆快捷鈕。
+   這一項要驗的是「插畫沒有跑進中間那欄」，改成直接檢查 KPI 條的組成。 */
 ok('★ 不在中間那欄（KPI 條裡沒有插畫）',
-   /<div class="mc-kpistrip">\s*\n\s*<div class="kpi-greet">/.test(src));
+   !/<div class="mc-kpistrip">[\s\S]{0,400}mc-art/.test(src)
+   && /<div class="mc-kpistrip">\s*\n\s*\$\{\[\[ICONS\.cal,'教練課'/.test(src));
 ok('★ 貼著頂欄下方：左欄的齊頭 padding 歸零，插畫自己抵掉 .content 的 10px 上內距',
    /\.mc-g5-left>\.mc-art-top\{margin:-10px 0 16px !important;\}/.test(src)
    && /padding-top:0;\}  \/\* 2026-07-21 使用者指示：左欄與「今日教練任務」齊頭/.test(src)
