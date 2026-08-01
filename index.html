@@ -344,6 +344,10 @@ select option{color:var(--text);}
 .bk-tk-cards{display:flex;flex-direction:column;gap:8px;}
 .bk-tk-card{text-align:left;padding:11px 13px;border:1.5px solid var(--bd);background:#fff;border-radius:10px;cursor:pointer;transition:.15s;font-family:inherit;}
 .bk-tk-card:hover{border-color:var(--green-l);}
+/* 「待確認」的票（2026-08-01）：金額 0、查無訂單編號 —— 自動挑票不會挑它，手動可選但要看得出來 */
+.bk-tk-card.bk-tk-warn{border-color:#e8d3b3;background:#fdf8f0;}
+.bk-tk-warn-tag{margin-left:6px;font-size:10px;font-weight:800;color:#8a5e28;background:#f7efe0;border-radius:999px;padding:2px 7px;}
+.bk-tk-warn-note{margin-top:5px;font-size:10.5px;color:#8a5e28;line-height:1.6;}
 .bk-tk-card.on{border-color:var(--green);background:var(--green);}
 .bk-tk-top{display:flex;align-items:center;gap:8px;margin-bottom:3px;}
 .bk-tk-name{font-size:14px;font-weight:600;color:var(--text);}
@@ -6875,8 +6879,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1712';
-const APP_VERSION_LABEL='v260801.1712';
+const APP_VERSION = '260801.1723';
+const APP_VERSION_LABEL='v260801.1723';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8887,7 +8891,7 @@ async function refreshCoachNotifBadge(){
     const[reqs,att,bookings]=await Promise.all([dbGetAll('punch_requests').catch(()=>[]),dbGetAll('attendance').catch(()=>[]),dbGetAll('bookings').catch(()=>[])]);
     let n=(reqs||[]).filter(r=>r.emp_id===SESSION.id&&r.status==='pending').length;
     const todayRec=(att||[]).find(a=>a.emp_id===SESSION.id&&a.date===today);
-    const hasClass=(bookings||[]).some(b=>b.coach_id===SESSION.id&&b.date===today&&b.status!=='cancelled');
+    const hasClass=(bookings||[]).some(b=>bkCoachId(b)===SESSION.id&&b.date===today&&b.status!=='cancelled');
     if(hasClass&&(!todayRec||!todayRec.clock_in)) n++;
     const el=document.querySelector('.bn-badge[data-bnbadge="coach_notifications"]');
     if(el){ el.style.display = n>0 ? 'block':'none'; }
@@ -10440,9 +10444,25 @@ function tkIsTimeRestricted(t){
   const tt=(window._ttCache||[]).find(x=>x.id===(t&&t.ticket_type_id));
   return !!(tt && tt.time_restricted);
 }
+/* 「這張票還沒確認過」的判定（2026-08-01 使用者問「連今天儲值的票券一直出錯，怎麼避免」）——
+   今天李晏如那張 7/04 的票在舊系統早就註銷了，但在這裡是 usable，於是每次自動挑票都被挑走，
+   一整天排課反覆錯亂。這種票的共同特徵很明確：
+     ・金額 0、而且備註標著「待確認」（櫃檯匯入時就知道金額有問題）
+     ・沒有訂單編號（source_ref）—— 對不上舊系統任何一筆有效訂單
+     ・是實際課程票（不是簽到贈點、補課券、折價券，那些本來就 $0）
+   對策不是把它藏起來（櫃檯有時真的要用），而是**不讓它被自動挑走**：
+   列表照列、可以手動指定，但 FIFO 永遠跳過它。要用就要有人親手選，錯了也看得出是誰選的。 */
+function tkNeedsConfirm(t){
+  if(!t) return false;
+  if(Number(t.amount_paid)>0) return false;
+  if(t.source_ref) return false;                       // 有訂單編號＝對得上舊系統
+  if(t.source && t.source!=='purchase') return false;  // 贈點／補課券／系統發放不算
+  return /待確認/.test(String(t.note||''));
+}
 async function findUsableTicket(member_id,type_id,bookDate,bookTime){
   const cand=await listUsableTickets(member_id,type_id,bookDate,bookTime);
-  return cand[0]||null;
+  // 自動挑票跳過「待確認」的票；全部都待確認時才退而求其次（總比整堂建不起來好）
+  return cand.find(t=>!tkNeedsConfirm(t)) || cand[0] || null;
 }
 async function logTicket(ticket_id,action,delta,booking_id,operator,note){
   await dbPut('ticket_logs',{id:uid('LG'),ticket_id,action,delta,booking_id,operator,note,created_at:new Date().toISOString()});
@@ -10722,7 +10742,12 @@ function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk){
   const newest=(myTk||[]).filter(t=>{ try{ return !!isGrpTk(t) && t.status!=='refunded'; }catch(_){ return false; } })
     .sort((a,b)=>String(b.purchase_date||b.start_date||'').localeCompare(String(a.purchase_date||a.start_date||'')))[0];
   const today=ymd(TODAY);
-  const put=(tid,b)=>{ const arr=(byTicket[tid]=byTicket[tid]||[]); if(!arr.some(x=>x.id===b.id)) arr.push(b); };
+  /* 2026-08-01 使用者回報（許佳慈今天買的 5 張卡：約了 19 堂，圓形卡卻只標到 8 個日期）——
+     這裡原本用 `if(!arr.some(x=>x.id===b.id))` 去重，一堂課只畫一個圓點。
+     但團課是**逐名額扣課**：同一個人在一堂課佔 2–3 個名額就扣 2–3 堂，
+     去重之後扣掉的堂數畫不出來，卡片看起來就像「堂數不見了」。
+     改成一個名額一個圓點（同一堂課會出現同樣的日期兩三次，那正是事實）。 */
+  const put=(tid,b)=>{ (byTicket[tid]=byTicket[tid]||[]).push(b); };
   (myBk||[]).forEach(b=>{
     if(!b || b.category!=='小班肌力' || b.status==='cancelled') return;
     /* 逐名額（2026-07-30 名額鍵）：同一人兩個名額，只到一個時另一個仍是待上 */
@@ -10802,13 +10827,18 @@ function buildWallet(memberId, ctx){
   const stamps={}, byBooking={};
   const put=(tid,b)=>{ if(!tid||byBooking[b.id]) return;
     (stamps[tid]=stamps[tid]||[]).push(b); byBooking[b.id]=tid; };
+  /* 團課專用（2026-08-01）：一堂課可能在同一張票上蓋好幾個戳記（同一人佔多個名額，
+     一個名額扣一堂）。這裡不能用上面那個「一堂課只蓋一次」的 put，否則扣掉的堂數畫不出來。
+     仍然登記 byBooking —— ③ 的先進先出推算才知道這堂已經有歸屬、不要再推一次。 */
+  const putGrp=(tid,b)=>{ if(!tid) return;
+    (stamps[tid]=stamps[tid]||[]).push(b); byBooking[b.id]=tid; };
   const has={}; mine.forEach(t=>{ has[t.id]=1; });
 
   // ① 直連（單人課預約當下就綁）
   live.forEach(b=>{ if(b.ticket_id && has[b.ticket_id]) put(b.ticket_id,b); });
   // ② 團課的扣課紀錄
   const ga=grpTicketAlloc(mine, live, c.logs||[], memberId, ()=>true);
-  Object.keys(ga.byTicket).forEach(tid=>(ga.byTicket[tid]||[]).forEach(b=>put(tid,b)));
+  Object.keys(ga.byTicket).forEach(tid=>(ga.byTicket[tid]||[]).forEach(b=>putGrp(tid,b)));
   /* ③ 剩下的（舊系統匯入）用先進先出推算。容量要扣掉①②已經蓋掉的格子，
         否則會把課推到已經蓋滿的票上 —— 傳入容量已折算的副本，結果再依 id 對回原票。 */
   const rest=live.filter(b=>!byBooking[b.id]);
@@ -15984,6 +16014,10 @@ async function renderCoachAgenda(){
   }catch(_){ window._installLastBk=window._installLastBk||{}; window._renewLastBk=window._renewLastBk||{}; }
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const coachObj=Object.fromEntries(coaches.map(c=>[c.id,c]));
+  /* 2026-08-01 使用者回報：「A 教練請 B 教練代課，這堂課應該要顯示在 B 教練這邊」——
+     這一支本來就用 bkIsCoach（含代課），沒問題；真正漏掉的是教練端另外 15 處
+     還在寫 b.coach_id===SESSION.id（今日課表、本月堂數、出勤月曆、教練首頁…），
+     那些已改成 bkCoachId(b)===SESSION.id ＝「這堂實際由誰上」。 */
   const isMineBk=(b)=> (bkIsCoach(b,myId));
   const isGroupBk=(b)=> bkIsGroup(b) || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
   const allBk=mergeSiblingUnits(bookings.filter(b=>b.status!=='cancelled'));   // 同行第二台併回主卡（2026-07-31）
@@ -17695,9 +17729,10 @@ async function refreshBkTicket(){
   }else{
     // 多張可用票券 → 卡片式選擇（清楚區分 1V1／1V2、剩餘堂數、效期）
     if(!window._bkTkSel || !list.some(x=>x.id===window._bkTkSel)) window._bkTkSel=list[0].id;
-    const cards=list.map(tk=>`<button type="button" class="bk-tk-card${window._bkTkSel===tk.id?' on':''}" onclick="pickBkTicket('${tk.id}')">
-        <div class="bk-tk-top"><span class="bk-tk-name">${tk.plan_name||'票券'}</span>${tk.format?`<span class="bk-tk-fmt">${tk.format.toUpperCase()}</span>`:''}</div>
+    const cards=list.map(tk=>`<button type="button" class="bk-tk-card${window._bkTkSel===tk.id?' on':''}${tkNeedsConfirm(tk)?' bk-tk-warn':''}" onclick="pickBkTicket('${tk.id}')">
+        <div class="bk-tk-top"><span class="bk-tk-name">${tk.plan_name||'票券'}</span>${tk.format?`<span class="bk-tk-fmt">${tk.format.toUpperCase()}</span>`:''}${tkNeedsConfirm(tk)?'<span class="bk-tk-warn-tag">待確認</span>':''}</div>
         <div class="bk-tk-meta">可約 <b>${tkUnlockedLeft(tk)}</b> 堂${tkIsInstall(tk)?`／共 ${tk.sessions_total}`:''}　·　效期至 ${fmtExpire(tk.expire_date,tk)}</div>
+        ${tkNeedsConfirm(tk)?'<div class="bk-tk-warn-note">金額待確認、查無訂單編號 —— 系統不會自動挑這張，確定要用請手動選</div>':''}
       </button>`).join('');
     info.innerHTML=`<div style="margin-bottom:8px;color:var(--text);">此會員有多張可用票券，請選擇要扣抵：</div>
       <div class="bk-tk-cards">${cards}</div>
@@ -29187,7 +29222,7 @@ PAGES.coach_today=async function(){
   </div>` : '';
 
   const viewDate = _coachViewDate || today;  // 週曆選中日，預設今天
-  const myToday=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===viewDate&&b.status!=='cancelled')
+  const myToday=bookings.filter(b=>bkCoachId(b)===SESSION.id&&b.date===viewDate&&b.status!=='cancelled')
     .sort((a,b)=>a.start_time.localeCompare(b.start_time));
   const doneCnt=myToday.filter(b=>b.status==='completed'||b.status==='checked_in').length;
   const leftCnt=myToday.length-doneCnt;
@@ -29287,7 +29322,7 @@ PAGES.coach_today=async function(){
   // 今日值班時數（排班表）
   const dutyToday=shifts.filter(s=>s.emp_id===SESSION.id&&s.date===today).reduce((a,s)=>a+(Number(s.hours)||0),0);
   // 今日自主訓練簽到人數
-  const selfCheckins=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===today&&bkIsSelf(b)&&(b.status==='checked_in'||b.status==='completed')).length;
+  const selfCheckins=bookings.filter(b=>bkCoachId(b)===SESSION.id&&b.date===today&&bkIsSelf(b)&&(b.status==='checked_in'||b.status==='completed')).length;
   // 今日預估薪資：今日完成課時費 + 今日值班費（簡化）
   const er=effRates(me);
   const todayPtDone=myToday.filter(b=>(b.status==='completed'||b.status==='checked_in')&&isPtPayClass(b)).length;   // 體驗不算（2026-07-31）
@@ -29306,7 +29341,7 @@ PAGES.coach_today=async function(){
 
   // ── 本月三項統計：教練課堂數 / 團體課人次 / 值班日期 ──
   const thisMonth=today.slice(0,7);            // YYYY-MM
-  const monthBk=bookings.filter(b=>b.coach_id===SESSION.id
+  const monthBk=bookings.filter(b=>bkCoachId(b)===SESSION.id
       && (b.date||'').slice(0,7)===thisMonth
       && b.status!=='cancelled');
   const monthDoneBk=monthBk.filter(b=>b.status==='completed'||b.status==='checked_in');
@@ -29358,7 +29393,7 @@ PAGES.coach_today=async function(){
     todoItems.push({icon:ICO.camera,color:'#a86b1a',t:'今日尚未上班打卡',n:0,go:''});
   }
   const wkAgo2=ymd(new Date(TODAY.getTime()-7*86400000));
-  const cancelledRecent=bookings.filter(b=>b.coach_id===SESSION.id&&b.status==='cancelled'&&(b.date||'')>=wkAgo2).length;
+  const cancelledRecent=bookings.filter(b=>bkCoachId(b)===SESSION.id&&b.status==='cancelled'&&(b.date||'')>=wkAgo2).length;
   if(cancelledRecent>0) todoItems.push({icon:ICO.cancel,color:'#3f7a66',t:'近期有預約被取消',n:cancelledRecent,go:`navTo('coach_notifications')`});
 
   // ── 一週日期列（可點選查看該日課程、可切換前後週）──
@@ -29373,7 +29408,7 @@ PAGES.coach_today=async function(){
       const ds=ymd(d);
       const isToday=ds===today;
       const isSel=ds===viewDate;
-      const cnt=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===ds&&b.status!=='cancelled').length;
+      const cnt=bookings.filter(b=>bkCoachId(b)===SESSION.id&&b.date===ds&&b.status!=='cancelled').length;
       cells+=`<button class="wk-cell${isSel?' wk-sel':''}${isToday?' wk-today':''}" onclick="ctPickDay('${ds}')">
         <div class="wk-dow">${WDen[i]}</div>
         <div class="wk-date">${d.getDate()}</div>
@@ -29506,7 +29541,7 @@ PAGES.coach_today=async function(){
   window._coachAttnKeep=false;
   const _attnYm=window._coachAttnYm||today.slice(0,7);
   const [_ay,_am]=_attnYm.split('-').map(Number);
-  const _calBk=bookings.filter(b=>b.coach_id===SESSION.id&&(b.date||'').slice(0,7)===_attnYm&&b.status!=='cancelled');
+  const _calBk=bookings.filter(b=>bkCoachId(b)===SESSION.id&&(b.date||'').slice(0,7)===_attnYm&&b.status!=='cancelled');
   const _calPt={},_calGrp={};
   _calBk.forEach(b=>{const d=b.date;if(!d)return;if(bkIsGroup(b)){_calGrp[d]=(_calGrp[d]||0)+1;}else if(b.category!=='體驗'){_calPt[d]=(_calPt[d]||0)+1;}});
   /* 值班班別代號（2026-07-20 使用者指示：取代金圈）：依班表開始時間分 A早班(<12)/B中班(12-17)/C晚班(≥17)；
@@ -29545,7 +29580,7 @@ PAGES.coach_today=async function(){
   /* 手機端：頂部改七天日期卡（2026-07-29 使用者指示，與教練預約行事曆同款）；桌機維持月格 */
   /* 週曆跨月時也要有數字 → 另建全期間計數（不限 _attnYm） */
   const _calPtAll={},_calGrpAll={},_calShiftAll={};
-  bookings.filter(b=>b.coach_id===SESSION.id&&b.status!=='cancelled').forEach(b=>{const d=b.date;if(!d)return;
+  bookings.filter(b=>bkCoachId(b)===SESSION.id&&b.status!=='cancelled').forEach(b=>{const d=b.date;if(!d)return;
     if(bkIsGroup(b)){_calGrpAll[d]=(_calGrpAll[d]||0)+1;}else if(b.category!=='體驗'){_calPtAll[d]=(_calPtAll[d]||0)+1;}});
   shifts.filter(s=>s.emp_id===SESSION.id&&(s.hours>0||s.start_time)).forEach(s=>{
     const st=s.start_time||''; const h=st?Number(st.slice(0,2)):null;
@@ -29769,13 +29804,13 @@ PAGES.coach_notifications=async function(){
   });
   // 今日未打卡提醒
   const todayRec=(att||[]).find(a=>a.emp_id===SESSION.id&&a.date===today);
-  const hasClassToday=(bookings||[]).some(b=>b.coach_id===SESSION.id&&b.date===today&&b.status!=='cancelled');
+  const hasClassToday=(bookings||[]).some(b=>bkCoachId(b)===SESSION.id&&b.date===today&&b.status!=='cancelled');
   if(hasClassToday && (!todayRec||!todayRec.clock_in)){
     items.push({dot:'#a86b1a',t:`今日尚未上班打卡`,sub:`點右下角打卡鈕完成上班`});
   }
   // 近期被取消的預約（自己的課，近 7 天）
   const wkAgo=ymd(new Date(TODAY.getTime()-7*86400000));
-  (bookings||[]).filter(b=>b.coach_id===SESSION.id&&b.status==='cancelled'&&(b.date||'')>=wkAgo).slice(0,8).forEach(b=>{
+  (bookings||[]).filter(b=>bkCoachId(b)===SESSION.id&&b.status==='cancelled'&&(b.date||'')>=wkAgo).slice(0,8).forEach(b=>{
     items.push({dot:'#3f7a66',t:`預約已取消`,sub:`${b.date} ${b.start_time||''}　${b.category||''}`});
   });
   const list = items.length
@@ -29803,7 +29838,7 @@ function coachDashCalendar(month, bookings, shifts){
     const ds=`${my}-${mm}-${String(d).padStart(2,'0')}`;
     const dow=new Date(Number(my),Number(mm)-1,d).getDay();
     const isWk=dow===0||dow===6;
-    const dayBks=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===ds&&b.status!=='cancelled');
+    const dayBks=bookings.filter(b=>bkCoachId(b)===SESSION.id&&b.date===ds&&b.status!=='cancelled');
     // 綠燈＝已完成/已簽到；橘燈＝已預約尚未簽到
     const doneN=dayBks.filter(b=>b.status==='completed'||b.status==='checked_in').length;
     const pendN=dayBks.filter(b=>b.status!=='completed'&&b.status!=='checked_in').length;
@@ -30037,7 +30072,7 @@ async function coachDashClickDay(ds){
 }
 function coachDashShowDay(ds, bookings, shifts, memMap){
   const box=document.getElementById('coach-dash-day'); if(!box)return;
-  const list=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===ds&&b.status!=='cancelled').sort((a,b)=>a.start_time.localeCompare(b.start_time));
+  const list=bookings.filter(b=>bkCoachId(b)===SESSION.id&&b.date===ds&&b.status!=='cancelled').sort((a,b)=>a.start_time.localeCompare(b.start_time));
   const duty=shifts.filter(s=>s.emp_id===SESSION.id&&s.date===ds).reduce((a,s)=>a+(Number(s.hours)||0),0);
   const [y,m,d]=ds.split('-');
   box.innerHTML=`<div class="cdash-daybox">
@@ -36104,10 +36139,10 @@ async function salaryClickDay(ds){
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const er=effRates(me); const dutyRate=(me.custom_salary?(me.duty_hourly||0):(er.duty_hourly||0)); const countSalary=me.count_salary!==false;
   const dayResult=(d)=>{
-    const dayBk=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===d&&(b.status==='completed'||b.status==='checked_in'));
+    const dayBk=bookings.filter(b=>bkCoachId(b)===SESSION.id&&b.date===d&&(b.status==='completed'||b.status==='checked_in'));
     const dPt=dayBk.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
     const dGH=dayBk.filter(b=>bkIsGroup(b)).reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
-    const dCls=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===d&&b.status!=='cancelled').length;
+    const dCls=bookings.filter(b=>bkCoachId(b)===SESSION.id&&b.date===d&&b.status!=='cancelled').length;
     const dDuty=(shifts||[]).filter(s=>s.emp_id===SESSION.id&&s.date===d).reduce((a,s)=>a+(Number(s.hours)||0),0);
     const dPay=countSalary?(dPt*(er.pt_rate||0)+dGH*(er.group_rate||0)+dDuty*dutyRate):0;
     return {clsCnt:dCls, duty:dDuty, pay:Math.round(dPay)};
@@ -36116,7 +36151,7 @@ async function salaryClickDay(ds){
 }
 function salaryShowDay(ds, bookings, shifts, memMap, dayResult){
   const box=document.getElementById('salary-cal-day'); if(!box)return;
-  const list=bookings.filter(b=>b.coach_id===SESSION.id&&b.date===ds&&b.status!=='cancelled').sort((a,b)=>a.start_time.localeCompare(b.start_time));
+  const list=bookings.filter(b=>bkCoachId(b)===SESSION.id&&b.date===ds&&b.status!=='cancelled').sort((a,b)=>a.start_time.localeCompare(b.start_time));
   const duty=(shifts||[]).filter(s=>s.emp_id===SESSION.id&&s.date===ds).reduce((a,s)=>a+(Number(s.hours)||0),0);
   const r=dayResult(ds);
   const [y,m,d]=ds.split('-');
