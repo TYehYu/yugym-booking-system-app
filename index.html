@@ -6923,8 +6923,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1836';
-const APP_VERSION_LABEL='v260801.1836';
+const APP_VERSION = '260801.1905';
+const APP_VERSION_LABEL='v260801.1905';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11450,7 +11450,10 @@ PAGES.g_dashboard=async function(){
   const rows=coachable.map(c=>{
     /* 2026-07-29 使用者指示：教練任務區不再顯示已取消的課卡。
        取消的課不是任務，留著只會讓時間軸看起來比實際忙。 */
-    const myBk=dayBkAll.filter(b=>b.coach_id===c.id && !isCancelled(b))
+    /* 2026-08-01 使用者回報：「首頁的代課課卡，沒有紀錄在代課教練那邊」——
+       這裡本來只比主責教練，A 把課交給 B 之後，卡片還是留在 A 的任務列。
+       改用 bkCoachId（代課優先）＝這堂實際由誰上，與教練端課表、薪資同一個口徑。 */
+    const myBk=dayBkAll.filter(b=>bkCoachId(b)===c.id && !isCancelled(b))
       .sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
     const myShift=dayShifts.find(s=>s.emp_id===c.id);
     const onLeave=myShift&&myShift.leave_type;
@@ -14129,7 +14132,10 @@ async function renderCalendar(opts){
       }
       const lane= useFixedLane ? {idx:0,total:1} : (lanes[b.id]||{idx:0,total:1});
       const wpct=100/lane.total;
-      const editable=opts.editable && !opts.allMode && b.status!=='cancelled' && b.status!=='completed' && b.date>=ymd(TODAY) && (!opts.me || b.coach_id===opts.me);
+      /* 2026-08-01：代課接手的那位也要能編輯自己要上的課 —— 這裡原本只比主責教練，
+         但下面的 isMine 用的是 bkCoachId（代課優先），兩者不一致會出現
+         「卡片算我的、卻不能拖不能改」。統一用「這堂實際由誰上」。 */
+      const editable=opts.editable && !opts.allMode && b.status!=='cancelled' && b.status!=='completed' && b.date>=ymd(TODAY) && (!opts.me || bkCoachId(b)===opts.me);
       const tk=b.ticket_id?ticketMap[b.ticket_id]:null;
       const cls=evColorClass(b,typeMap,tk);   // 帶入票券快照：友善課靠 plan_name 判定
       const remain = tk ? `${tk.sessions_remaining}/${tk.sessions_total}` : '';
@@ -22900,7 +22906,7 @@ function renewMapOf(month, tickets, purchases, bookings, types){
    ⚠ 排除老闆的名單過濾在呼叫端（role!=='admin'），三處計算共用本函式確保口徑一致。 */
 const LEADER_CATS=['私人教練','小班肌力'];
 function leaderClassCount(bookings, coachId, month){
-  return (bookings||[]).filter(b=>b.coach_id===coachId
+  return (bookings||[]).filter(b=>bkCoachId(b)===coachId   // 代課的課算在代課教練身上（2026-08-01）
     && (b.status==='completed'||b.status==='checked_in')
     && String(b.date||'').slice(0,7)===month
     && LEADER_CATS.includes(b.category)).length;
@@ -34881,7 +34887,7 @@ async function anaMonth(){
   try{
     coaches.filter(isCoachable).forEach(c=>{
       if(c.count_salary===false) return;
-      const myDone=done.filter(b=>b.coach_id===c.id);
+      const myDone=done.filter(b=>bkCoachId(b)===c.id);   // 代課的課算在代課教練身上（2026-08-01）
       const ptD=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
       const gHeads=myDone.filter(b=>bkIsGroup(b)).reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
       const dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month,c),0):0;
@@ -34950,7 +34956,7 @@ async function anaCoach(){
   const renewMap=renewMapOf(month, mtks, purchases, bookings, types);
   const coachList=coaches.filter(isCoachable);
   const rowsData=coachList.map(c=>{
-    const mine=monthBk.filter(b=>b.coach_id===c.id);
+    const mine=monthBk.filter(b=>bkCoachId(b)===c.id);   // 代課的課算在代課教練身上（2026-08-01）
     const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in');
     const ptAll=mine.filter(isPtPayClass).length;        // 體驗不算（2026-07-31）
     const ptDone=done.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）

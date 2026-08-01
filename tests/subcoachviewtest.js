@@ -48,5 +48,25 @@ console.log('\n實跑：A 請 B 代課之後，誰看得到這堂課');
      bkIsCoach(B,'A'), true);
 }
 
+/* 2026-08-01 續報：「首頁的代課課卡 沒有紀錄在代課教練那邊」——
+   上一輪只換掉 b.coach_id===SESSION.id（教練自己看的畫面），
+   管理端「逐位教練」的迴圈用的是 b.coach_id===c.id，同樣只認主責。 */
+console.log('\n管理端的逐位教練統計也要算代課');
+{
+  const code=src.replace(/\/\*[\s\S]*?\*\//g,'');
+  const left=(code.match(/b\.coach_id===(c|emp)\.id/g)||[]).length;
+  eq('★ 全站已無 b.coach_id===c.id／emp.id', left, 0);
+}
+ok('★ 首頁教練任務區改用 bkCoachId', /const myBk=dayBkAll\.filter\(b=>bkCoachId\(b\)===c\.id && !isCancelled\(b\)\)/.test(src));
+ok('★ 教練總薪資彙總改用 bkCoachId', /const myDone=done\.filter\(b=>bkCoachId\(b\)===c\.id\);/.test(src));
+ok('★ 教練 KPI 報表改用 bkCoachId', /const mine=monthBk\.filter\(b=>bkCoachId\(b\)===c\.id\);/.test(src));
+ok('★ 店長津貼的堂數基準也一致', /return \(bookings\|\|\[\]\)\.filter\(b=>bkCoachId\(b\)===coachId/.test(src));
+ok('★ 代課接手的人要能編輯那堂課（editable 與 isMine 口徑一致）',
+   /\(!opts\.me \|\| bkCoachId\(b\)===opts\.me\);/.test(src)
+   && /const isMine = opts\.me && acting===opts\.me;/.test(src));
+ok('　　卡片上的「（代）」標記仍看主責是誰（那是標籤不是歸屬）',
+   /\$\{b\.substitute_coach_id===c\.id\?'（代）':''\}/.test(src));
+ok('　　使用者的原話寫在程式裡', /首頁的代課課卡，沒有紀錄在代課教練那邊/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
