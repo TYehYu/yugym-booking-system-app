@@ -169,7 +169,7 @@ ok('★ 配對 key 不再把 format 算進團課（票券空白 vs 預約寫「�
 ok('★ 原因寫在程式裡（配不到又不會落到第二輪，整批被丟掉）',
    /那些課配不到票也不會落到第二輪（它們有 ticket_type_id），整批被丟掉/.test(src));
 ok('★ 會員列表也把「沒有票可扣的已預約未上」帶上，跟名單一樣看得到（見下方票券袋子）',
-   /let dots=ticketTokens\(tk,sl\.stamps\.concat\(extra\|\|\[\]\),typeMapFull,used,null\);/.test(src));
+   /let dots=ticketTokens\(tk,sl\.stamps\.concat\(extra\|\|\[\]\),typeMapFull,used,null,mid\|\|tk\.member_id\);/.test(src));
 ok('　　已經配到票的不重複列（同一堂只會蓋在一張票上）',
    /put=\(tid,b\)=>\{ if\(!tid\|\|byBooking\[b\.id\]\) return;/.test(src));
 ok('　　只帶今天以後、且依課別歸戶（2026-07-31 起用票券五分類歸戶）',
@@ -178,8 +178,9 @@ ok('　　只帶今天以後、且依課別歸戶（2026-07-31 起用票券五�
 {
   const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
   const alloc=new Function(g('function allocBookingsToTickets(','\n}\n')+'\nreturn allocBookingsToTickets;')();
-  const tokens=new Function('tkVisual','parseYmd',g('function ticketTokens(','\n}\n')+'\nreturn ticketTokens;')
-    (()=>({accent:'#9a5a1e'}), x=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(x||'');return m?new Date(+m[1],+m[2]-1,+m[3]):null;});
+  /* 2026-08-01：圓點多了「會員自行預約」的金點標記，沙箱一併注入判斷函式 */
+  const tokens=new Function('tkVisual','parseYmd','bkSelfBooked',g('function ticketTokens(','\n}\n')+'\nreturn ticketTokens;')
+    (()=>({accent:'#9a5a1e'}), x=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(x||'');return m?new Date(+m[1],+m[2]-1,+m[3]):null;}, ()=>false);
   const TM={'tt-g':{name:'團體課',category:'小班肌力'}};
   const top={id:'TK',ticket_type_id:'tt-g',format:null,sessions_total:10,sessions_remaining:0,
     start_date:'2026-06-25',purchase_date:'2026-06-25',member_id:'M',plan_name:'團體課'};
@@ -214,7 +215,7 @@ ok('★ 整袋一起配一次（同一堂不會在多張票上重複冒出來）
    /const w=_mTk\(m\.id\);/.test(src));
 ok('★ 沒被任何票吸收的已預約未上 → 仍畫紅虛線圈，依課別歸戶',
    /const leftover=live\.filter\(b=>!byBooking\[b\.id\] && b\.status==='booked'/.test(src)
-   && /tkRowHtml\(sl, w\.leftoverIn\(k\)\)/.test(src));
+   && /tkRowHtml\(sl, w\.leftoverIn\(k\), m\.id\)/.test(src));
 ok('　　只帶今天以後的', /&& String\(b\.date\|\|''\)\.slice\(0,10\)>=today\);/.test(src));
 ok('★ 同課別還有幾張在用會標「＋N」', /＋\$\{n-1\}<\/span>/.test(src));
 

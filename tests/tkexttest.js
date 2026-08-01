@@ -137,7 +137,7 @@ ok('　　原因寫在程式裡', /展延開關只做在管理端的\s*\n\s*票�
 console.log('\n票券歷史紀錄改用圓形卡（2026-07-30 使用者指示）');
 ok('★ 歷史紀錄沿用可用票券的同一張卡（同一套 ticketTokens，不另做一套）',
    /return `<div class="bkd-tkcard bkd-tkcard-hist\$\{canExt\?' bkd-tkcard-ext':''\}">/.test(src)
-   && /<div class="mck-dots2" style="margin:8px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null\)\}<\/div>/.test(src));
+   && /<div class="mck-dots2" style="margin:8px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id\)\}<\/div>/.test(src));
 ok('★ 原本的一行式列表已移除（看不出哪幾堂上在哪一天）',
    !/<div class="pp-hist-row\$\{canExt\?' pp-hist-ext':''\}">/.test(src));
 ok('★ 歷史卡縮小＋淡化表示「已結束」，滑過恢復',

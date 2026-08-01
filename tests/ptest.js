@@ -18,7 +18,7 @@ globalThis.window={_ttCache:[{id:'tt-pt',name:'教練課',category:'私人教練
 /* 2026-08-01 使用者回報「明細這邊又跟會員票券不一樣了」：預約明細的票券卡不再自己推估，
    改直接問票券夾（walletCtx → buildWallet）。沙箱要注入的是票券夾那一整套。 */
 const helpers=new Function('COURSE_SHAPE','parseYmd','ymd','TODAY',
-  [grabFn('tkVisual'),grabFn('ticketTokens'),grabFn('ticketCategoryOf'),grabFn('ticketMatchesCategory'),
+  [grabFn('tkVisual'),grabFn('bkSelfBooked'),grabFn('ticketTokens'),grabFn('ticketCategoryOf'),grabFn('ticketMatchesCategory'),
    grabFn('bkIsMergedPT'),grabFn('bkTicketTypeOk'),grabFn('categoryOfTypeId'),grabFn('tkSharedIds'),grabFn('tkUsableBy'),
    grabFn('findRefundTargetTicket'),grabFn('allocBookingsToTickets'),grabFn('mids'),grabFn('bkHasMember'),
    grabFn('tkClass5'),grabFn('grpTicketAlloc'),grabFn('buildWallet')].join('\n')

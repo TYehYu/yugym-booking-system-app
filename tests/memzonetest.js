@@ -93,7 +93,7 @@ ok('★ 只畫「還在用的最新一張」，沒有在用的就畫最近一張
 ok('★ 同課別還有幾張在用會標出來', /＋\$\{n-1\}<\/span>/.test(src) && /\.tkcat-n\{font-size:10px;/.test(src));
 ok('★ 沒有那個課別的票就留空（不要塞「—」把五格擠滿）',
    /if\(!sl\) return '';/.test(src));
-ok('　　沿用原本那顆圓形卡（tkRowHtml），不另做一套', /return tkRowHtml\(sl, w\.leftoverIn\(k\)\)/.test(src));
+ok('　　沿用原本那顆圓形卡（tkRowHtml），不另做一套', /return tkRowHtml\(sl, w\.leftoverIn\(k\), m\.id\)/.test(src));
 
 console.log('\n左緣色條＝會員等級（2026-07-31 使用者指示）');
 ok('★ 每一列帶等級色', /lc:\(TIER_DEFS\[effTier\(m\)\]\|\|\{\}\)\.color\|\|'#8a8478',/.test(src));

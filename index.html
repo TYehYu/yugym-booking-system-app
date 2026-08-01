@@ -3339,6 +3339,14 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tkm-dots .mtk-free,.tkm-dots .mtk-booked{border-width:2px;}
 /* 本堂（僅預約明細會傳 curId）：外加金環，不動原本的填色/描邊，實心空心兩態都適用 */
 .mtk.mtk-cur{border-color:var(--gold,#b48a56);box-shadow:0 0 0 3px rgba(180,138,86,.28);}
+/* 會員自行從手機預約的那一堂（2026-08-01 使用者指示：「圓形卡旁邊做個備註」）——
+   右上角一顆小金點。用點不用字：圓點只有 30px，塞字會蓋住日期；
+   金色是既有的「要注意一下」色階（紅>金>綠），這不是錯誤、只是來源不同。
+   滑鼠停留看得到「會員自行預約」，圖例也有說明。 */
+.mtk.mtk-self::after{content:'';position:absolute;top:-1px;right:-1px;width:9px;height:9px;
+  border-radius:50%;background:var(--gold-d,#b48a56);border:1.5px solid var(--card,#fff);box-sizing:border-box;}
+.mtk-self-lg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--t3);}
+.mtk-self-lg i{width:9px;height:9px;border-radius:50%;background:var(--gold-d,#b48a56);display:inline-block;}
 /* ── 自主訓練點數獨立入口（2026-07-23 使用者指示）──
    效期短（7 天）、由會員自行預約，數量又多；混在票券清單裡會把介面塞爆，故收成一顆按鈕。 */
 /* 自主訓練＋折抵券併成一列（2026-07-26 使用者指示：精簡為 圖案＋文字 兩行，不折疊） */
@@ -7016,8 +7024,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.2051';
-const APP_VERSION_LABEL='v260801.2051';
+const APP_VERSION = '260801.2056';
+const APP_VERSION_LABEL='v260801.2056';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19577,7 +19585,7 @@ async function openBookingDetail(id){
     /* 2026-07-26 使用者指示：圓圈由「第幾堂」改成顯示使用日期，與會員票券內容同一套邏輯。
        改用全系統統一的 ticketTokens（實心＋上課日期／空心＋預約日期／空心未使用／🔒未開通），
        並傳入本堂 booking id 讓它多加一圈金框 —— 預約明細比會員視角多的就是這個「本堂」定位。 */
-    const dots=ticketTokens(tkC,tkBks2,_typeMapD,doneCount,b.id);
+    const dots=ticketTokens(tkC,tkBks2,_typeMapD,doneCount,b.id,b.member_id);
     const curLabel = curIdx>=0 ? `第 <b>${curIdx+1}</b> / ${total} 堂` : `${total} 堂`;
     tkCircleHtml=`<div class="bkd-tkcard">
       <div class="bkd-tkcard-head">
@@ -19679,7 +19687,7 @@ async function openBookingDetail(id){
       const tkInfo = _sl
         ? `<div class="gr-tkname">${tkNoTag(_sl.no)}${_sl.t.plan_name||'票券'}`
           +`${st.makeup?'<span class="tag" style="font-size:10px;background:#eef6ee;color:#2f6b39;margin-left:6px;">含補課券</span>':''}</div>`
-          +`<div class="mck-dots2" style="margin:4px 0 2px;">${ticketTokens(_sl.t,_sl.stamps,st.typeMap,_sl.used,b.id)}</div>`
+          +`<div class="mck-dots2" style="margin:4px 0 2px;">${ticketTokens(_sl.t,_sl.stamps,st.typeMap,_sl.used,b.id,mid)}</div>`
         : '';
       return `<div class="gr-row${onLeaveM?' gr-row-leave':''}" style="padding:6px 0;border-bottom:1px solid var(--bd);">
         <div style="display:flex;align-items:center;gap:8px;">
@@ -21598,9 +21606,9 @@ PAGES.members=async function(){
      一位會員手上可以有很多組票券，每一組各自獨立使用、各自戳上課日期。
      列表就照這個模型呈現：一組票券一列圓點，預設顯示 2 組、其餘收合。
      （原本只挑「一張主要票券」畫，袋子裡其他組在列表完全看不到。） */
-  const tkRowHtml=(sl,extra)=>{
+  const tkRowHtml=(sl,extra,mid)=>{
     const tk=sl.t, total=sl.total, used=sl.used, rem=tk.sessions_remaining;
-    let dots=ticketTokens(tk,sl.stamps.concat(extra||[]),typeMapFull,used,null);
+    let dots=ticketTokens(tk,sl.stamps.concat(extra||[]),typeMapFull,used,null,mid||tk.member_id);
     const MAXDOT=12;
     if(total>MAXDOT){   // 一列容納不下的長票：截前 11 顆＋「+N」
       const spans=dots.split('</span>').filter(x=>x.trim());
@@ -21640,7 +21648,7 @@ PAGES.members=async function(){
       .sort((a,b)=>String(b.t.purchase_date||b.t.start_date||'').localeCompare(String(a.t.purchase_date||a.t.start_date||'')))[0];
     if(!sl) return '';
     const n=live.length;
-    return tkRowHtml(sl, w.leftoverIn(k))
+    return tkRowHtml(sl, w.leftoverIn(k), m.id)
       + (n>1?`<span class="tkcat-n" title="這個課別還有 ${n-1} 張在用">＋${n-1}</span>`:'');
   };
   /* 〔已移除〕舊的「票券袋子」單格（tkCell）—— 2026-07-31 改成五個課別各一格
@@ -21874,7 +21882,7 @@ async function openMemberDetail(member_id){
     /* 2026-07-23 使用者指示：票券逐堂顯示全系統統一 —— 改用 ticketTokens
        （課種色圓點：實心＋上課日期／空心＋預約日期／空心未使用），取代原本的灰色 tkc-dot。
        2026-07-31 起圓點直接拿票券夾的戳記，與已用堂數同源。 */
-    const circles=ticketTokens(t,WAL.stampsOf(t.id),typeMap,usedCount);
+    const circles=ticketTokens(t,WAL.stampsOf(t.id),typeMap,usedCount,null,member_id);
     const inst=t.installment&&typeof t.installment==='object'?t.installment:null;
     const instTag=inst?`<span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;margin-left:6px;">🔒 分期 ${t.unlocked_sessions||inst.current||0}/${total}</span>`:'';
     /* 共享票（2026-07-26）：標出跟誰共用；持有人非本人時額外註明「◎ 持有人」，
@@ -26408,7 +26416,7 @@ function ppRecordHtml(){
           return `<div class="bkd-tkcard" style="margin-bottom:10px;">
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${tkNoTag(sl.no)}${t.plan_name||'票券'}${shrTag}</span>
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
-            <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null)}</div>
+            <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id)}</div>
             <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
               <span>${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}${tkIsExtended(t)?`　·　<b style="color:var(--gold-d);">已展延（不得退費）</b>`:''}${tkMoneyHtml(t)}</span>
               <span style="display:flex;gap:6px;">
@@ -26456,7 +26464,7 @@ function ppRecordHtml(){
           return `<div class="bkd-tkcard bkd-tkcard-hist${canExt?' bkd-tkcard-ext':''}">
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${tkNoTag(WAL.noOf(t.id))}${t.plan_name||'票券'}${shrTag}${tkIsExtended(t)?'<span class="pp-hist-tag">已展延</span>':''}</span>
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}　·　${st}</span></div>
-            <div class="mck-dots2" style="margin:8px 0 2px;">${ticketTokens(t,bks,typeMap,used,null)}</div>
+            <div class="mck-dots2" style="margin:8px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id)}</div>
             <div style="font-size:11px;color:var(--t3);margin-top:7px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
               <span>${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${tkMoneyHtml(t)}</span>
               <span style="display:flex;gap:6px;">
@@ -26472,6 +26480,9 @@ function ppRecordHtml(){
         return `<div class="pp-card">${back}<div class="pp-card-t" style="display:flex;justify-content:space-between;align-items:center;">票券
           ${isDeskLike()?`<button class="btn btn-green btn-sm" style="padding:5px 14px;font-size:12.5px;" onclick="ppTopUp('${PP.id}')">＋ 儲值</button>`:''}</div>
           <div class="tkfilter" style="margin:8px 0 12px;">${tabs}</div>
+          ${/* 圖例（2026-08-01）：金點是「會員自己從手機約的」，不解釋沒人看得懂 */''}
+          ${act.some(t=>((WAL.of(t.id)||{stamps:[]}).stamps||[]).some(x=>bkSelfBooked(x,PP.id)))
+            ?'<div class="mtk-self-lg" style="margin:-4px 0 10px;"><i></i>右上角金點＝會員自己從手機預約的</div>':''}
           ${act.length?act.map(cardOf).join(''):((hist.length||expd.length)?'':'<div class="pp-card-tip">此分類尚無票券</div>')}
           ${!act.length&&(hist.length||expd.length)?'<div class="pp-card-tip">目前沒有可用票券</div>':''}
           ${expdSec}${histSec}</div>`;
@@ -28176,7 +28187,7 @@ PAGES.m_tickets=async function(){
           </div>
           <!-- 2026-07-23：逐堂顯示全系統統一為課種色圓點（實心＋日期／空心＋預約日期／空心）
                實心格數＝已簽到/完成（與會員端同口徑），已預約未上算未使用但標預約日期 -->
-          <div class="mck-dots2">${ticketTokens(t,_sl.stamps,typeMap,used)}</div>
+          <div class="mck-dots2">${ticketTokens(t,_sl.stamps,typeMap,used,null,SESSION.id)}</div>
           <div class="mwtk-foot">
             <div class="mck-prog"><b>${used}</b><span class="mck-prog-tot">/ ${total} 堂</span>${rem>0&&rk===0?`<span style="font-size:11.5px;color:var(--t3);margin-left:8px;">剩 ${rem} 堂</span>`:''}</div>
             <button class="btn btn-ghost btn-sm" onclick="viewLogs('${t.id}')">使用紀錄</button>
@@ -29696,7 +29707,7 @@ async function viewLogs(ticket_id){
     const bkIds=logs.filter(l=>l.action==='deduct'&&l.booking_id).map(l=>l.booking_id);
     const bks=(await dbGetAll('bookings')).filter(b=>b.status!=='cancelled'&&(b.ticket_id===ticket_id||bkIds.includes(b.id)));
     const doneN=bks.filter(b=>b.status==='checked_in'||b.status==='completed').length;
-    tokens=`<div class="mck-dots2" style="margin:2px 0 12px;">${ticketTokens(t,bks,typeMap,doneN)}</div>`;
+    tokens=`<div class="mck-dots2" style="margin:2px 0 12px;">${ticketTokens(t,bks,typeMap,doneN,null,t.member_id)}</div>`;
   }catch(_){}
   showModal(`<div class="modal-title">${t.plan_name||(ty?ty.name:'票券')}</div>
     <div style="font-size:13px;color:var(--t2);margin-bottom:6px;">剩餘 ${t.sessions_remaining} / ${t.sessions_total} 堂　·　到期 ${fmtExpire(t.expire_date,t)}${lottoRuleNote(t)}</div>
@@ -34262,7 +34273,18 @@ function isSelfPtTicket(t,typeMap){
 /* 2026-07-23 定案：樣式試選工具（tks-pick / tkStyleSet）已拆除，統一圓形＋課種顏色。 */
 /* curId（選填，2026-07-26）：把某一筆預約標成「本堂」（金框）。預約明細用得到——
    它比會員票券視角多的就是「這堂是第幾堂」的定位；其他呼叫端不傳就完全不受影響。 */
-function ticketTokens(t,bks,typeMap,usedCount,curId){
+/* 這一堂是不是會員自己從手機約的（2026-08-01 使用者指示：
+   「如果該預約是從會員手機自行預約的，幫我在該預約圓形卡旁邊做個備註」）——
+   會員端一律走 security definer 的 RPC，裡面把 created_by 寫成會員自己的 id
+   （fn_member_self_book / fn_member_self_reschedule）；櫃檯或教練建立的寫的是員工 id。
+   所以「created_by ＝ 這位會員本人」就是自助預約，不需要另外加欄位。
+   memberId 要傳進來：共享票的持有人不是使用人，拿 t.member_id 比會比錯。 */
+function bkSelfBooked(b, memberId){
+  if(!b || !b.created_by) return false;
+  const who = memberId || b.member_id;
+  return !!who && String(b.created_by)===String(who);
+}
+function ticketTokens(t,bks,typeMap,usedCount,curId,memberId){
   const total=Math.max(Number(t.sessions_total)||0,0);
   const v=tkVisual(t,typeMap);
   /* 自主訓練依時長展開（2026-07-27 楊慧淳案例：120 分鐘＝扣 2 點 → 圓形卡畫 2 顆同日期） */
@@ -34280,18 +34302,23 @@ function ticketTokens(t,bks,typeMap,usedCount,curId){
      形狀統一圓形（2026-07-23），課種只以 --tk-acc 顏色區分 */
   const booked=expand((bks||[]).filter(b=>b.status==='booked'))
     .sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
+  /* 會員自己從手機約的那幾堂，圓點右上角點一顆金點（2026-08-01 使用者指示）。
+     沒傳 memberId 時退回票券持有人 —— 共享票會比錯，所以有 id 的呼叫端都要傳。 */
+  const selfCls=b=>bkSelfBooked(b, memberId||t.member_id)?' mtk-self':'';
   let s='',di=0,bi=0;
   for(let i=0;i<total;i++){
     if(i>=unlocked){ s+=`<span class="mtk mtk-lock" title="尚未開通（需繳下一期）">🔒</span>`; }
     else if(i<used){
       const b=di<done.length?done[di++]:null;
       const cur=(curId&&b&&b.id===curId)?' mtk-cur':'';
-      s+=`<span class="mtk mtk-used${cur}" style="--tk-acc:${v.accent};" title="已完成${b&&b.date?' '+b.date:''}${cur?'（本堂）':''}">${b?md(b):'✓'}</span>`;
+      const slf=selfCls(b);
+      s+=`<span class="mtk mtk-used${cur}${slf}" style="--tk-acc:${v.accent};" title="已完成${b&&b.date?' '+b.date:''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${b?md(b):'✓'}</span>`;
     }
     else if(bi<booked.length){
       const b=booked[bi++];
       const cur=(curId&&b.id===curId)?' mtk-cur':'';
-      s+=`<span class="mtk mtk-booked${cur}" style="--tk-acc:${v.accent};" title="已預約 ${b.date||''} ${b.start_time||''}${cur?'（本堂）':''}">${md(b)}</span>`;
+      const slf=selfCls(b);
+      s+=`<span class="mtk mtk-booked${cur}${slf}" style="--tk-acc:${v.accent};" title="已預約 ${b.date||''} ${b.start_time||''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}</span>`;
     }
     else s+=`<span class="mtk mtk-free" style="--tk-acc:${v.accent};" title="未使用"></span>`;
   }
@@ -34301,7 +34328,8 @@ function ticketTokens(t,bks,typeMap,usedCount,curId){
   while(bi<booked.length){
     const b=booked[bi++];
     const cur=(curId&&b.id===curId)?' mtk-cur':'';
-    s+=`<span class="mtk mtk-over${cur}" title="已預約 ${b.date||''} ${b.start_time||''}　·　此票券已無堂數可對應，需補票${cur?'（本堂）':''}">${md(b)}</span>`;
+    const slf=selfCls(b);
+    s+=`<span class="mtk mtk-over${cur}${slf}" title="已預約 ${b.date||''} ${b.start_time||''}　·　此票券已無堂數可對應，需補票${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}</span>`;
   }
   return s||`<span class="mtk mtk-free" style="--tk-acc:${v.accent};"></span>`;
 }
@@ -34423,7 +34451,7 @@ function renderMemTickets(){
                 :(soon?`<span class="mck-badge mck-badge-warn">${days} 天後到期</span>`:'')}
         </div>
         ${/* 小管家文案列已移除（2026-07-26 使用者指示） */''}
-        <div class="mck-dots2">${ticketTokens(t,_bksC,typeMap,usedCnt)}</div>
+        <div class="mck-dots2">${ticketTokens(t,_bksC,typeMap,usedCnt,null,SESSION.id)}</div>
         ${(t.installment && t.unlocked_sessions!=null && t.unlocked_sessions<total)?`<div class="mck-install">分期方案・目前開通 <b>${t.unlocked_sessions}</b> / ${total} 堂　·　🔒 部分堂數需繳下一期後開通</div>`:''}
         <div class="mck-figures">
           <div class="mck-num"><span class="mck-num-big">${usedCnt}</span><span class="mck-num-tot">/ ${total} 堂</span></div>
@@ -34558,7 +34586,7 @@ function openSelfPtsModal(){
       : (dim?'已使用完':'永久有效');
     return `<div class="spt-row${dim?' spt-dim':(d!=null&&d<=2?' spt-soon':'')}">
       <span class="spt-nm">${tkNoTag(_sl.no)}${t.plan_name||'自主訓練點數'}<span class="spt-ex">${exp}</span></span>
-      ${dim?'':`<span class="mck-dots2" style="flex:0 0 auto;">${ticketTokens(t,_sl.stamps,typeMap,_sl.used)}</span>`}
+      ${dim?'':`<span class="mck-dots2" style="flex:0 0 auto;">${ticketTokens(t,_sl.stamps,typeMap,_sl.used,null,SESSION.id)}</span>`}
       <span class="spt-n"><b>${unused}</b> / ${total} 點</span>
     </div>`;
   };

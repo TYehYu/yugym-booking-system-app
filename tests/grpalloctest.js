@@ -170,7 +170,7 @@ ok('★ 「已用堂數」與「是否收進歷史」用同一個數字（圓點
    自己數已簽到），與票券頁改用 buildWallet 之後分岔。整段換成直接問票券夾。 */
 ok('★ 團課簽到名單的圓點直接問票券夾（不再自己算一套）',
    /const W=buildWallet\(mid,_wctx\);/.test(src)
-   && /ticketTokens\(_sl\.t,_sl\.stamps,st\.typeMap,_sl\.used,b\.id\)/.test(src));
+   && /ticketTokens\(_sl\.t,_sl\.stamps,st\.typeMap,_sl\.used,b\.id,mid\)/.test(src));
 /* 2026-08-01 使用者指示：「預約明細應該要去對應票券編號，而不是快進快出
    （這個出錯率太高了）」—— 逐名額各自對到扣課紀錄裡的那張票，並標出 #N。 */
 ok('★ 簽到名單逐名額對到票（票券夾的 seatOf，來源是扣課紀錄）',
@@ -187,7 +187,7 @@ ok('　　單人課的票券卡也一起改（原本另有一套「以本堂為�
    && !/以本堂為中心取 total 堂的視窗推估\n/.test(src));
 ok('★ 圓點也改吃合併結果（票券夾的戳記）',
    /const bks=sl\.stamps;/.test(src)
-   && /const circles=ticketTokens\(t,WAL\.stampsOf\(t\.id\),typeMap,usedCount\);/.test(src));
+   && /const circles=ticketTokens\(t,WAL\.stampsOf\(t\.id\),typeMap,usedCount,null,member_id\);/.test(src));
 ok('　　舊的「最近那張團課票」猜法已經拿掉',
    !/_grpNewestP/.test(src) && !/_grpTkNewest/.test(src));
 /* 2026-07-31 二修：會員端「我的票券」那份反查邏輯搬進票券夾，全系統共用同一份 */

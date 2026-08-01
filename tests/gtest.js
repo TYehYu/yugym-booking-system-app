@@ -23,7 +23,7 @@ const TODAY=new Date(2026,6,27);
    「明細這邊又跟會員票券不一樣了…我們不是從會員票券這邊拉圓形卡過來用的嗎」。
    所以沙箱要注入的是票券夾那一整套，測的才是真的跑的那條路。 */
 const TYPES=[{id:'tt-g',name:'團體課',category:'小班肌力',color:'group'}];
-const helpers=new Function('COURSE_SHAPE','parseYmd','attObj','ymd','TODAY',[grabFn('tkVisual'),grabFn('ticketTokens'),grabFn('mids'),
+const helpers=new Function('COURSE_SHAPE','parseYmd','attObj','ymd','TODAY',[grabFn('tkVisual'),grabFn('bkSelfBooked'),grabFn('ticketTokens'),grabFn('mids'),
   grabFn('seatKeys'),grabFn('seatMid'),grabFn('seatKeysDisplay'),grabFn('seatNo'),
   grabFn('tkSharedIds'),grabFn('tkUsableBy'),grabFn('allocBookingsToTickets'),
   grabFn('grpTicketAlloc'),grabFn('grpMergeAlloc'),grabFn('bkHasMember'),grabFn('tkClass5'),
