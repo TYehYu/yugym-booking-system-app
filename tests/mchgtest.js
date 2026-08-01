@@ -28,11 +28,17 @@ console.log('\n誰會觸發');
   const fn=g('function mchgEnabled(){','\n}\n');
   const mk=(role,mobile)=>new Function('CLOUD','SESSION','isMobileLayout',fn+'\nreturn mchgEnabled();')
     (true,{role},()=>mobile);
+  /* 2026-08-01 使用者回報：「我的手機端更新的課卡 沒有顯示在櫃檯畫面右下角」——
+     原本限定 coach/member，理由是「櫃檯／管理員本來就在桌機前」；
+     但老闆本人常拿手機在場邊改課卡，那個前提不成立 → 改成不分角色。
+     會不會「看到」由 deskFeedEnabled 決定（櫃檯／管理員＋桌機版面），
+     所以自己在手機上改不會通知到自己那台手機。 */
   eq('★ 教練用手機 → 會通知', mk('coach',true), true);
   eq('★ 會員用手機 → 會通知', mk('member',true), true);
-  eq('★ 櫃檯 → 不通知（人就在桌機前，不用通知自己）', mk('front_desk',true), false);
-  eq('★ 管理員 → 不通知', mk('admin',true), false);
-  eq('★ 教練用桌機（在家調課）→ 不通知，規則講的是「手機端」', mk('coach',false), false);
+  eq('★ 管理員用手機 → 也要通知（老闆在場邊改課卡，櫃檯桌機要看得到）', mk('admin',true), true);
+  eq('★ 櫃檯用手機 → 也要通知', mk('front_desk',true), true);
+  eq('★ 用桌機（在家調課）→ 不通知，規則講的是「手機端」', mk('coach',false), false);
+  eq('　　管理員用桌機同樣不通知（他就在桌機前）', mk('admin',false), false);
   eq('　　沒登入不通知', new Function('CLOUD','SESSION','isMobileLayout',fn+'\nreturn mchgEnabled();')(true,null,()=>true), false);
   eq('　　離線／本機模式不通知', new Function('CLOUD','SESSION','isMobileLayout',fn+'\nreturn mchgEnabled();')(false,{role:'coach'},()=>true), false);
 }

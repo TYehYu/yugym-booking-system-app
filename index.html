@@ -6863,8 +6863,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1044';
-const APP_VERSION_LABEL='v260801.1044';
+const APP_VERSION = '260801.1647';
+const APP_VERSION_LABEL='v260801.1647';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7056,8 +7056,9 @@ async function dbGet(store,id){
 
    掛在 dbPut／dbDel 這兩個唯一的寫入口，而不是逐一改幾十個呼叫點 —— 漏掉一個
    就等於這條規則有破洞，而且日後新增的功能會自動被涵蓋。
-   ・只有會員與教練（含店長）會觸發；櫃檯／管理員本來就在桌機前，不必通知自己。
    ・只有手機版版面才觸發（使用者講的是「手機端」）；教練桌機版在家調課不算。
+   ・不分角色（2026-08-01 修）：老闆拿手機在場邊改課卡，櫃檯那台桌機也要看得到。
+     原本限定 coach/member，理由是「櫃檯／管理員本來就在桌機前」—— 實際上不成立。
    ・會員自助預約／改期／取消走的是 RPC（fn_member_self_*），那邊已經有 desk_alert，
      不經過 dbPut，所以不會重複跳。
    ・寫入失敗一律吞掉，通知不能拖垮原本的操作（RPC 內部也再吞一層）。 */
@@ -7071,8 +7072,14 @@ const MCHG_LABEL={ bookings:'預約', punch_requests:'補卡申請',
   members:'會員資料' };
 /* 同一筆資料短時間內重複寫（連點、先存時間再存備註）只跳一次 */
 const _mchgSeen={};
+/* 2026-08-01 使用者回報：「我的手機端更新的課卡 沒有顯示在櫃檯畫面右下角」——
+   原本這裡只放行 coach 與 member，理由是「櫃檯／管理員本來就在桌機前，不必通知自己」。
+   但老闆本人常拿手機在場邊改課卡，櫃檯那台桌機就完全不知道 —— 那個前提不成立。
+   改成「只要是從手機版版面做的變更，不分角色都通知」；
+   會不會看到訊息由 deskFeedEnabled() 決定（櫃檯／管理員、且是桌機版面），
+   所以自己在手機上改不會通知到自己那台手機。 */
 function mchgEnabled(){
-  return !!(CLOUD && SESSION && (SESSION.role==='coach'||SESSION.role==='member') && isMobileLayout());
+  return !!(CLOUD && SESSION && isMobileLayout());
 }
 /* 預約寫得出「哪一堂」，其餘資料表就用表名 —— 櫃檯至少知道有人動了什麼、去哪裡看 */
 /* 通知內容要帶會員姓名（2026-07-31 使用者指示：右下角滑出的課卡調整訊息，
