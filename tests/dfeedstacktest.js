@@ -60,8 +60,27 @@ ok('★ 讀得出日期的卡才掛 onclick（左下角新會員卡不掛）',
    && /el\.setAttribute\('onclick',`dfeedGo\('\$\{n\.id\}'\)`\);/.test(src));
 ok('★ 日期時間存在卡片上（data-date／data-time）',
    /el\.setAttribute\('data-date',ref\.date\); el\.setAttribute\('data-time',ref\.time\);/.test(src));
-ok('★ 有可點的樣式與「›」指示', /el\.classList\.add\('dfeed-tap'\);/.test(src)
-   && /\$\{ref\?'<span class="dfeed-goto">›<\/span>':''\}/.test(src));
+ok('★ 有可點的樣式，右邊提示「移動 ›」', /el\.classList\.add\('dfeed-tap'\);/.test(src)
+   && /'<span class="dfeed-goto">移動 ›<\/span>'/.test(src));
+/* 2026-08-01 使用者指示：「左邊增加一個明顯的提示區域 新增/取消/變更
+   顏色綠色/紅色/黃色　移除[確認]　因為點選卡片以後要移動到課卡的位子
+   改成提示在旁邊 移動>」 */
+ok('★ 左邊有動作色塊：新增／取消／變更',
+   /const kindLb=\{book:'新增',cancel:'取消',move:'變更',newmem:'新會員'\}\[kind\]\|\|'變更';/.test(src)
+   && /<span class="dfeed-kind dfeed-kind-\$\{kind\}">\$\{kindLb\}<\/span>/.test(src));
+ok('★ 三個顏色：新增綠、取消紅、變更黃',
+   /\.dfeed-kind-book\{background:var\(--green,#1f6f54\);color:#fff;\}/.test(src)
+   && /\.dfeed-kind-cancel\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src)
+   && /\.dfeed-kind-move\{background:#e6c274;color:#4a2f10;\}/.test(src));
+ok('★「✓ 確認」鈕移除 —— 點卡片＝處理過，順手標已讀',
+   /try\{ deskFeedAck\(id\); \}catch\(_\)\{\}/.test(src)
+   && /點過就等於處理過（2026-08-01 使用者指示：移除「✓ 確認」）/.test(src));
+ok('　　讀不出日期、沒有地方可去的才留確認鈕（否則收不掉）',
+   /const rightTag = ref\s*\n\s*\? '<span class="dfeed-goto">移動 ›<\/span>'\s*\n\s*: `<button class="dfeed-ok"/.test(src));
+ok('　　左下角的新會員卡維持原本的圖示與確認鈕（那邊沒有課可以跳）',
+   /const kindTag = left\s*\n\s*\? `<span class="dfeed-ic">/.test(src));
+ok('　　有色塊時左緣那條 4px 粗邊收回一般邊框（兩塊同色黏在一起像破圖）',
+   /\.dfeed-card\.dfeed-has-kind\{border-left:1px solid var\(--bd\);padding-left:10px;\}/.test(src));
 ok('★「✓ 確認」不能順便觸發跳頁',
    /onclick="event\.stopPropagation\(\);deskFeedAck\('\$\{n\.id\}'\)"/.test(src));
 ok('★ 跳週的算法跟「跳至日期」同一套（7／5 日檢視跳到那週週一）',

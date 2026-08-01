@@ -5559,7 +5559,20 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
 /* 可點的卡（通知文字裡讀得出日期時間的才有）→ 點下去跳到行事曆那一天 */
 .dfeed-card.dfeed-tap{cursor:pointer;}
 .dfeed-card.dfeed-tap:hover{border-color:var(--t3);}
-.dfeed-goto{flex:0 0 auto;align-self:center;color:var(--t3);font-size:15px;font-weight:800;}
+.dfeed-goto{flex:0 0 auto;align-self:center;color:var(--t2);font-size:12px;font-weight:800;white-space:nowrap;}
+.dfeed-card.dfeed-tap:hover .dfeed-goto{color:var(--green);}
+/* 左邊的動作色塊（2026-08-01 使用者指示：「左邊增加一個明顯的提示區域，
+   新增／取消／變更，顏色綠色／紅色／黃色」）——
+   直式兩個字、整條與卡片同高，一眼就分得出來，不必讀完整句話。
+   品牌色強度：紅（取消，不可逆）＞ 金（變更，要留意）＞ 綠（新增，正常）。 */
+.dfeed-kind{flex:0 0 auto;align-self:stretch;display:flex;align-items:center;justify-content:center;
+  width:42px;border-radius:9px;font-size:14px;font-weight:800;line-height:1.2;letter-spacing:.06em;
+  writing-mode:vertical-rl;text-orientation:upright;padding:6px 0;}
+.dfeed-kind-book{background:var(--green,#1f6f54);color:#fff;}
+.dfeed-kind-cancel{background:var(--danger,#b5372e);color:#fff;}
+.dfeed-kind-move{background:#e6c274;color:#4a2f10;}
+/* 有色塊時左緣那條 4px 粗邊就多餘了（兩塊同色黏在一起像破圖）→ 收回一般邊框 */
+.dfeed-card.dfeed-has-kind{border-left:1px solid var(--bd);padding-left:10px;}
 /* 行事曆上被指到的那張課卡：閃兩下金框（2026-08-01） */
 .cal-ev.cal-ev-flash,.cag-std.cal-ev-flash,.wtl-card.cal-ev-flash{
   animation:calEvFlash 1.5s ease-in-out 2;outline:2px solid var(--gold-d,#b48a56);outline-offset:1px;}
@@ -7028,8 +7041,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.2157';
-const APP_VERSION_LABEL='v260801.2157';
+const APP_VERSION = '260801.2209';
+const APP_VERSION_LABEL='v260801.2209';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8243,6 +8256,9 @@ function dfeedGo(id){
   window._dfeedFocus={date,time};
   navTo('calendar');
   dfeedFlashSoon();
+  /* 點過就等於處理過（2026-08-01 使用者指示：移除「✓ 確認」）——
+     順手標已讀並把卡片收掉，不然訊息會一直堆著。 */
+  try{ deskFeedAck(id); }catch(_){}
 }
 /* 行事曆是非同步渲染的（navTo 不會 await），所以用重試等它畫出來 */
 function dfeedFlashSoon(tries){
@@ -8337,12 +8353,25 @@ function deskFeedPush(n){
   if(ref){ el.setAttribute('data-date',ref.date); el.setAttribute('data-time',ref.time);
            el.classList.add('dfeed-tap'); el.title=`前往 ${ref.date} ${ref.time} 的行事曆`;
            el.setAttribute('onclick',`dfeedGo('${n.id}')`); }
-  el.innerHTML=`<span class="dfeed-ic">${DESK_FEED_IC[n.type]||DESK_FEED_IC.self_book}</span>
+  /* 左邊的動作色塊（2026-08-01 使用者指示：「左邊增加一個明顯的提示區域，
+     新增／取消／變更，顏色綠色／紅色／黃色」）——
+     一眼就知道是哪一種，不用讀完整句話。品牌色強度：紅 > 金 > 綠。 */
+  if(!left) el.classList.add('dfeed-has-kind');
+  const kindLb={book:'新增',cancel:'取消',move:'變更',newmem:'新會員'}[kind]||'變更';
+  const kindTag = left
+    ? `<span class="dfeed-ic">${DESK_FEED_IC[n.type]||DESK_FEED_IC.self_book}</span>`
+    : `<span class="dfeed-kind dfeed-kind-${kind}">${kindLb}</span>`;
+  /* 右邊：讀得出日期的就提示「移動 ›」（點卡片會跳到那一天的行事曆）。
+     ✓ 確認鈕移除（2026-08-01 使用者指示）—— 點卡片＝已經處理過，順手標已讀。
+     讀不出日期、沒有地方可去的才留確認鈕，否則會沒辦法收掉。 */
+  const rightTag = ref
+    ? '<span class="dfeed-goto">移動 ›</span>'
+    : `<button class="dfeed-ok" onclick="event.stopPropagation();deskFeedAck('${n.id}')">✓ 確認</button>`;
+  el.innerHTML=`${kindTag}
     <span class="dfeed-body"><span class="dfeed-t">${dfeedText(n.title)}</span>
       <span class="dfeed-b">${dfeedText(n.body)}</span>
       ${when?`<span class="dfeed-w">${when}</span>`:''}</span>
-    <button class="dfeed-ok" onclick="event.stopPropagation();deskFeedAck('${n.id}')">✓ 確認</button>
-    ${ref?'<span class="dfeed-goto">›</span>':''}`;
+    ${rightTag}`;
   host.appendChild(el);
   if(!left) dfeedLayout();
 }

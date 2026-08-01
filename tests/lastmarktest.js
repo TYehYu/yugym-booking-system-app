@@ -144,8 +144,12 @@ ok('★ deskFeedHead 只剩維護「另有 N 則」那一行',
 ok('　　超過單輪上限仍會講「另有 N 則」，不做無聲截斷',
    /more\.textContent=`另有 \$\{total-shown\} 則，確認後會接著顯示`;/.test(src));
 /* 2026-08-01：整張卡改成可點（跳到行事曆那一天），確認鈕要 stopPropagation，
-   不然按「確認」會順便跳頁。 */
-ok('　　每張卡自己的「✓ 確認」照舊', /<button class="dfeed-ok" onclick="event\.stopPropagation\(\);deskFeedAck\('\$\{n\.id\}'\)">✓ 確認<\/button>/.test(src));
+   不然按「確認」會順便跳頁。
+   二修（使用者指示）：確認鈕移除，改成右邊提示「移動 ›」；點卡片＝處理過、順手標已讀。
+   只有讀不出日期、沒有地方可去的那種才留確認鈕。 */
+ok('　　沒有地方可去的那種仍保留「✓ 確認」', /<button class="dfeed-ok" onclick="event\.stopPropagation\(\);deskFeedAck\('\$\{n\.id\}'\)">✓ 確認<\/button>/.test(src));
+ok('　　讀得出日期的改成「移動 ›」，並在點下去時標已讀',
+   /'<span class="dfeed-goto">移動 ›<\/span>'/.test(src) && /try\{ deskFeedAck\(id\); \}catch\(_\)\{\}/.test(src));
 ok('　　deskFeedAckAll 保留（日後要恢復入口可直接用）', /async function deskFeedAckAll\(\)\{/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
