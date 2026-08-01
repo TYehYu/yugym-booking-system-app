@@ -112,9 +112,12 @@ ok('★ 統計月份可翻（列表顯示的是「本月表現」）',
 ok('★ 月份列在色票同一行右邊（‹ 月份 ›＋回本月）',
    /body = `<div class="st-legend">\$\{legend\}\$\{stMonthBar\(_ym,_isCurMonth\)\}<\/div>/.test(src)
    && /onclick="stStepMonth\(-1\)"/.test(src) && /onclick="stStepMonth\(1\)"/.test(src));
-ok('★ 未來月份沒意義 → 「後一月」在本月時停用、日期選擇器也設 max',
+/* 2026-08-01：月份選擇器由 input[type=month] 改成下拉（原生月份滾輪沒有確定鈕），
+   上限改由 monthOptions 的 maxYm 參數擋掉，不再是 input 的 max 屬性。 */
+ok('★ 未來月份沒意義 → 「後一月」在本月時停用、月份下拉也不列未來',
    /aria-label="後一月" \$\{isCur\?'disabled':''\}/.test(src)
-   && /max="\$\{ymd\(TODAY\)\.slice\(0,7\)\}"/.test(src));
+   && /monthOptions\(ym, ymd\(TODAY\)\.slice\(0,7\)\)/.test(src)
+   && /if\(maxYm && ym>maxYm\) continue;/.test(src));
 ok('★ 在本月時顯示「本月」標記，翻走才出現「回本月」按鈕',
    /\$\{isCur\?'<span class="st-mnow">本月<\/span>'/.test(src));
 ok('★ 翻到別月時，表頭數字欄名補上月份（免得看成本月）',

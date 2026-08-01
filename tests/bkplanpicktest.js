@@ -89,8 +89,10 @@ ok('★ 用 visualViewport.height 算真正看得到的高度（鍵盤高度沒�
    /const vv=window\.visualViewport;/.test(src) && /const vh=\(vv&&vv\.height\)\|\|window\.innerHeight\|\|0;/.test(src));
 ok('★ 下方放不下且上方比較寬 → 選單往上開',
    /const up = below<180 && above>below;/.test(src) && /row\.classList\.toggle\('mpk-up', up\);/.test(src));
-ok('★ 往上開的樣式（改用 bottom 定位）',
-   /\.mem-pick-row\.mpk-up \.mpk-menu\{top:auto;bottom:calc\(100% \+ 4px\);\}/.test(src));
+/* 2026-08-01 二修：選單改成 position:fixed 浮在彈窗外（不再撐大彈窗），
+   往上開的定位改由 mpkFit 直接設 top/bottom，不再靠 CSS 規則。見 tests/nativeinputtest.js。 */
+ok('★ 往上開的定位（JS 設 bottom，改用版面高度算）',
+   /if\(up\)\{ menu\.style\.top='auto'; menu\.style\.bottom=Math\.round\(window\.innerHeight-r\.top\+4\)\+'px'; \}/.test(src));
 ok('★ 兩邊都窄 → 把輸入框捲到可視區中間',
    /if\(Math\.max\(below,above\)<180\)\{ try\{ inp\.scrollIntoView\(\{block:'center'\}\); \}catch\(_\)\{\} \}/.test(src));
 ok('★ 選單高度跟著可用空間縮，不會撐破畫面',

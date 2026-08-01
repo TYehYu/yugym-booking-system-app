@@ -623,12 +623,15 @@ select option{color:var(--text);}
 .mem-pick-row.mpk-on input{width:100%;box-sizing:border-box;padding-right:30px;}
 .mpk-caret{position:absolute;right:11px;top:50%;transform:translateY(-50%);pointer-events:none;
   color:var(--t3);font-size:11px;line-height:1;}
-.mpk-menu{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:80;display:none;
+/* 2026-08-01 使用者指示：「下拉式輸入框都可以超過該視窗，才不會導致該視窗被輸入框的內容
+   放大又縮小」——原本是 position:absolute 掛在輸入框底下，而彈窗是 overflow-y:auto，
+   選單一展開就撐高捲動範圍（捲軸忽有忽無、版面跟著跳），長清單還會被彈窗邊界裁掉。
+   改成 position:fixed 浮在彈窗之外，位置與寬度由 mpkFit() 依輸入框的實際座標算，
+   完全不參與彈窗的版面計算。z-index 要壓過 modal（300）。 */
+.mpk-menu{position:fixed;z-index:9600;display:none;
   background:#fff;border:1px solid var(--bd);border-radius:11px;box-shadow:0 10px 28px rgba(20,18,14,.16);
-  max-height:min(46vh,300px);overflow-y:auto;padding:5px;}
+  max-height:min(46vh,300px);overflow-y:auto;padding:5px;-webkit-overflow-scrolling:touch;}
 .mem-pick-row.mpk-open .mpk-menu{display:block;}
-/* 手機鍵盤擋住時往上開（2026-08-01 使用者回報） */
-.mem-pick-row.mpk-up .mpk-menu{top:auto;bottom:calc(100% + 4px);}
 /* 分組標題（有這個方案的會員／某教練的會員）——原本 optgroup 在自訂選單裡看不到 */
 .mpk-grp{padding:8px 11px 3px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--t3);}
 .mpk-grp:first-child{padding-top:3px;}
@@ -2474,8 +2477,8 @@ tr:hover td{background:var(--card2);}
 .bkd-timeedit{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;}
 .bkd-timeedit input,.bkd-timeedit select{font-family:var(--num);font-size:13px;padding:5px 8px;border:1px solid var(--bd);border-radius:8px;background:#fff;color:var(--text);}
 .bkd-timeedit input[type=date]{max-width:140px;}
-.bkd-timeedit input[type=time]{max-width:96px;}
 .bkd-timeedit select{max-width:78px;font-weight:600;}
+.bkd-timeedit select#ed-time{max-width:88px;}   /* 時間下拉要放得下 08:00（2026-08-01 由 input[type=time] 改來） */
 .mck-install{font-size:11.5px;color:var(--mck-accent,#9a6a1e);background:rgba(154,106,30,0.08);border-radius:8px;padding:6px 10px;margin-top:8px;line-height:1.6;}
 .mck-figures{display:flex;width:100%;align-items:flex-end;justify-content:space-between;gap:12px;}
 .mck-num{display:flex;align-items:baseline;gap:6px;flex-shrink:0;}
@@ -5594,6 +5597,15 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
 /* 連續取消清單（2026-07-29） */
 .sc-list{max-height:min(38vh,300px);overflow-y:auto;border:1px solid var(--bd);border-radius:10px;
   background:var(--card2);padding:4px;}
+/* 時：分 兩個下拉（2026-08-01 使用者指示：把原生時間輸入框都換掉）——
+   iOS 的時間滾輪沒有確定鈕，原生下拉才有「完成」。打卡要分鐘精度，所以拆成時／分兩欄。 */
+.hm-pick{display:inline-flex;align-items:center;gap:4px;}
+.hm-pick select{font-family:var(--num),inherit;font-size:13.5px;padding:7px 8px;border:1px solid var(--bd);
+  border-radius:8px;background:#fff;color:var(--text);min-width:64px;}
+.hm-pick i{font-style:normal;font-weight:800;color:var(--t3);}
+/* 月份下拉（取代 input[type=month] 的滾輪） */
+.ym-pick{font-family:var(--num),inherit;font-size:13px;padding:6px 10px;border:1px solid var(--bd);
+  border-radius:8px;background:#fff;color:var(--text);}
 /* 連續預約：每個星期一列（勾選＋該天時間），2026-07-30 使用者指示 */
 .rc-dows{display:flex;flex-direction:column;gap:5px;}
 .rc-dow{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;}
@@ -6851,8 +6863,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1026';
-const APP_VERSION_LABEL='v260801.1026';
+const APP_VERSION = '260801.1035';
+const APP_VERSION_LABEL='v260801.1035';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16663,12 +16675,20 @@ function mpkFit(row){
     const inp=row.querySelector('input'), menu=row.querySelector('.mpk-menu');
     if(!inp||!menu) return;
     const vv=window.visualViewport;
-    const vh=(vv&&vv.height)||window.innerHeight||0;
+    const vh=(vv&&vv.height)||window.innerHeight||0;   // 鍵盤升起時只有這個會縮
     const r=inp.getBoundingClientRect();
     const below=vh-r.bottom-12, above=r.top-12;
     const up = below<180 && above>below;
     row.classList.toggle('mpk-up', up);
     menu.style.maxHeight=Math.max(120,Math.min(300,(up?above:below)-8))+'px';
+    /* 選單是 position:fixed（不參與彈窗版面），所以位置要自己算：
+       靠齊輸入框的左邊與寬度；往下開就貼著它的下緣，往上開就貼著上緣。
+       ⚠ bottom 要用 window.innerHeight（版面視窗）而不是 vh（視覺視窗）——
+         getBoundingClientRect 給的是版面座標，混用會在鍵盤升起時偏掉。 */
+    menu.style.left=Math.round(r.left)+'px';
+    menu.style.width=Math.round(r.width)+'px';
+    if(up){ menu.style.top='auto'; menu.style.bottom=Math.round(window.innerHeight-r.top+4)+'px'; }
+    else  { menu.style.bottom='auto'; menu.style.top=Math.round(r.bottom+4)+'px'; }
     if(Math.max(below,above)<180){ try{ inp.scrollIntoView({block:'center'}); }catch(_){} }
   }catch(_){}
 }
@@ -16680,6 +16700,9 @@ function mpkFit(row){
     window.visualViewport.addEventListener('scroll', refit);
   }
   window.addEventListener('resize', refit);
+  /* 選單浮在彈窗外面 → 彈窗自己捲動時它不會跟著跑，要補一個捲動監聽（capture 才收得到
+     內層容器的捲動事件）。沒有開著的選單時 refit 是空迴圈，成本可以忽略。 */
+  document.addEventListener('scroll', refit, true);
 })();
 function mpkClose(row,restore){
   row.classList.remove('mpk-open');
@@ -17013,16 +17036,61 @@ function bkCoachChange(){
   bkRedrawMemberPick();   // 已選的那位不會被截斷吃掉；開著的自訂選單也一起重畫
 }
 // 產生 30 分鐘間隔時段選項（08:00～22:00）
-function bkTimeOptions(selected){
-  let html='<option value="">請選擇時間…</option>';
+/* 時段選項（08:00–22:00、30 分一格）。
+   ⚠ selected 若不在格線上就額外插一列保留它 —— 匯入資料有 13:50、20:20 這種時間（19 筆），
+     改成下拉之後若不保留，櫃檯只是進去看一眼、按個儲存就會把時間悄悄改掉（2026-08-01）。
+   opts.noEmpty：不要「請選擇時間…」那一列（用在一定有值的編輯欄）。 */
+function bkTimeOptions(selected, opts){
+  const o=opts||{};
+  const list=[];
   for(let h=8;h<=22;h++){
-    for(let mm of ['00','30']){
-      if(h===22&&mm==='30')break;
-      const t=String(h).padStart(2,'0')+':'+mm;
-      html+=`<option value="${t}" ${selected===t?'selected':''}>${t}</option>`;
+    for(const mm of ['00','30']){
+      if(h===22&&mm==='30') break;
+      list.push(String(h).padStart(2,'0')+':'+mm);
     }
   }
-  return html;
+  const sel=String(selected||'').slice(0,5);
+  if(sel && list.indexOf(sel)<0){ list.push(sel); list.sort(); }
+  return (o.noEmpty?'':'<option value="">請選擇時間…</option>')
+    + list.map(t=>`<option value="${t}"${sel===t?' selected':''}>${t}</option>`).join('');
+}
+/* 時：分 兩個下拉（2026-08-01 使用者指示：把原生時間輸入框換掉）——
+   打卡時間需要「分」的精度（工時要算得準），所以不用 30 分一格的時段下拉，
+   改成「小時」＋「分鐘」兩個下拉：手機的原生下拉自帶「完成」，也不會選到看不見的值。
+   小時留空＝這一欄沒填（補打卡允許只填上班或只填下班）。 */
+function hmPicker(id, value, opts){
+  const o=opts||{};
+  const v=String(value||'').slice(0,5);
+  const hv=v?v.slice(0,2):'', mv=v?v.slice(3,5):'00';
+  const h2=n=>String(n).padStart(2,'0');
+  let hs=`<option value="">--</option>`;
+  for(let h=0;h<24;h++){ const t=h2(h); hs+=`<option value="${t}"${hv===t?' selected':''}>${t}</option>`; }
+  let ms='';
+  for(let m=0;m<60;m++){ const t=h2(m); ms+=`<option value="${t}"${mv===t?' selected':''}>${t}</option>`; }
+  return `<span class="hm-pick"><select id="${id}-h"${o.onchange?` onchange="${o.onchange}"`:''}>${hs}</select>`
+    + `<i>:</i><select id="${id}-m"${o.onchange?` onchange="${o.onchange}"`:''}>${ms}</select></span>`;
+}
+// 讀 hmPicker 的值；小時沒選＝這一欄留空（回傳空字串）
+function readHM(id){
+  const h=document.getElementById(id+'-h'), m=document.getElementById(id+'-m');
+  if(!h||!m||!h.value) return '';
+  return h.value+':'+(m.value||'00');
+}
+/* 月份下拉（取代 input[type=month] 的滾輪）：往前 30 個月、往後 1 個月，夠涵蓋查帳範圍。 */
+function monthOptions(sel, maxYm){
+  const cur=ymd(TODAY).slice(0,7);
+  const [cy,cm]=cur.split('-').map(Number);
+  const out=[];
+  for(let i=-1;i<30;i++){
+    let y=cy, m=cm-i;
+    while(m<1){ m+=12; y--; }
+    while(m>12){ m-=12; y++; }
+    const ym=y+'-'+String(m).padStart(2,'0');
+    if(maxYm && ym>maxYm) continue;
+    out.push(ym);
+  }
+  if(sel && out.indexOf(sel)<0) out.unshift(sel);   // 目前看的月份若超出範圍也要留著
+  return out.map(ym=>`<option value="${ym}"${sel===ym?' selected':''}>${ym.replace('-','年')}月</option>`).join('');
 }
 /* 這個課程類型是否必須指定授課教練。
    以 category 為準，而非只看票種上的 requires_coach 旗標 —— 該旗標是可在後台設定的，
@@ -18764,7 +18832,7 @@ async function bkInlineEdit(id){
   const form = `<div class="evx-edit">
     <div class="evx-edit-head"><span>編輯預約</span><button class="evx-close" title="關閉（Esc）" onclick="event.stopPropagation();collapseBkCard()">✕</button></div>
     <label>日期<input type="date" id="ed-date" value="${b.date}"></label>
-    <label>時間<input type="time" id="ed-time" value="${b.start_time}" step="1800"></label>
+    <label>時間<select id="ed-time">${bkTimeOptions(b.start_time,{noEmpty:1})}</select></label>
     <label>時長<select id="ed-dur">${durOpts}</select></label>
     ${isPersonalPT?`<label>教室<select id="ed-venue">${venOpts}</select></label>`:''}
     <label>教練<select id="ed-subcoach">${subOpts}</select></label>
@@ -19180,7 +19248,7 @@ async function openBookingDetail(id){
         ${editable
           ? `<span class="bkd-timeedit">
                <input type="date" id="ed-date" value="${b.date}">
-               <input type="time" id="ed-time" value="${b.start_time}" step="1800">
+               <select id="ed-time">${bkTimeOptions(b.start_time,{noEmpty:1})}</select>
                <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30 分</option><option value="60" ${b.duration===60?'selected':''}>60 分</option><option value="90" ${b.duration===90?'selected':''}>90 分</option><option value="120" ${b.duration===120?'selected':''}>120 分</option></select>
              </span>`
           : `<span style="font-family:var(--num);font-size:15px;font-weight:700;color:var(--text);">${b.date.replace(/-/g,'/')}（${WD[d.getDay()]}）${b.start_time}　<span style="font-size:12px;color:var(--t3);font-weight:400;">${b.duration}分</span></span>`}
@@ -19218,7 +19286,7 @@ async function openBookingDetail(id){
         ${editable
           ? `<span class="bkd-timeedit">
                <input type="date" id="ed-date" value="${b.date}">
-               <input type="time" id="ed-time" value="${b.start_time}" step="1800">
+               <select id="ed-time">${bkTimeOptions(b.start_time,{noEmpty:1})}</select>
                <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30 分</option><option value="60" ${b.duration===60?'selected':''}>60 分</option><option value="90" ${b.duration===90?'selected':''}>90 分</option><option value="120" ${b.duration===120?'selected':''}>120 分</option></select>
              </span>`
           : `<span style="font-family:var(--num);font-size:15px;font-weight:700;color:var(--text);">${b.date.replace(/-/g,'/')}（${WD[d.getDay()]}）${b.start_time}　<span style="font-size:12px;color:var(--t3);font-weight:400;">${b.duration}分</span></span>`}
@@ -19268,7 +19336,7 @@ async function openBookingDetail(id){
       <div style="font-size:11.5px;color:var(--t2);margin-bottom:8px;">調整時間（手機可用此處改期改時間）</div>
       <div class="form-2col">
         <div class="form-row" style="margin-bottom:8px;"><label>日期</label><input type="date" id="ed-date" value="${b.date}"></div>
-        <div class="form-row" style="margin-bottom:8px;"><label>時間</label><input type="time" id="ed-time" value="${b.start_time}" step="1800"></div>
+        <div class="form-row" style="margin-bottom:8px;"><label>時間</label><select id="ed-time">${bkTimeOptions(b.start_time,{noEmpty:1})}</select></div>
       </div>
       <div class="form-row" style="margin-bottom:0;"><label>時長（分鐘）</label>
         <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30</option><option value="60" ${b.duration===60?'selected':''}>60</option><option value="90" ${b.duration===90?'selected':''}>90</option><option value="120" ${b.duration===120?'selected':''}>120</option></select></div>
@@ -24010,7 +24078,7 @@ function stMonthCur(){ return _stMonth || ymd(TODAY).slice(0,7); }
 function stMonthBar(ym, isCur){
   return `<span class="st-mbar">
     <button type="button" class="att-arw" onclick="stStepMonth(-1)" title="前一月" aria-label="前一月">‹</button>
-    <input type="month" value="${ym}" max="${ymd(TODAY).slice(0,7)}" onchange="stSetMonth(this.value)">
+    <select class="ym-pick" onchange="stSetMonth(this.value)">${monthOptions(ym, ymd(TODAY).slice(0,7))}</select>
     <button type="button" class="att-arw" onclick="stStepMonth(1)" title="後一月" aria-label="後一月" ${isCur?'disabled':''}>›</button>
     ${isCur?'<span class="st-mnow">本月</span>':'<button type="button" class="btn btn-ghost btn-sm" onclick="stSetMonth(\'\')">回本月</button>'}
   </span>`;
@@ -30560,7 +30628,7 @@ function renderAttHours(needPunch,all){
   }).sort((a,b)=>b.hours-a.hours);
   document.getElementById('att-body').innerHTML=`<div class="card">
     <div class="card-title">工時統計（${ym}）
-      <input type="month" value="${ym}" onchange="_attDate=this.value+'-01';navTo('attendance')" style="padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background-color:#fff;font-size:13px;padding-right:30px;">
+<select class="ym-pick" onchange="_attDate=this.value+'-01';navTo('attendance')">${monthOptions(ym)}</select>
     </div>
     <table class="rwd-card"><thead><tr><th>姓名</th><th>出勤天數</th><th>累計工時</th></tr></thead><tbody>
     ${stat.map(s=>`<tr>
@@ -30628,12 +30696,14 @@ function renderAttAbnormal(needPunch,all){
 async function fixPunchOut(recId){
   showModal(`<div class="modal-title">補登下班時間</div>
     <div style="font-size:12px;color:var(--t2);margin-bottom:12px;">為缺漏的紀錄補登下班時間，系統將重新計算工時。</div>
-    <div class="form-row"><label>下班時間</label><input type="time" id="fix-time" step="60"></div>
+    ${/* 2026-08-01 使用者指示：原生時間輸入框（iOS 滾輪、沒有確定鈕）換成時：分兩個下拉；
+         打卡工時要算得準，所以保留「分」的精度，不用 30 分一格的時段下拉。 */''}
+    <div class="form-row"><label>下班時間</label>${hmPicker('fix-time','')}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveFixPunchOut('${recId}')">儲存</button></div>`);
 }
 async function saveFixPunchOut(recId){
  try{
-  const t=document.getElementById('fix-time').value;
+  const t=readHM('fix-time');
   if(!t){ showToast('請選擇時間'); return; }
   const rec=await dbGet('attendance',recId);
   if(!rec){ showToast('找不到紀錄'); return; }
@@ -30780,8 +30850,8 @@ function openPunchRequest(){
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;">忘記打卡時填寫申請，送出後由管理員審核。</div>
     <div class="form-row"><label>日期</label><input type="date" id="pr-date" value="${today}" max="${today}"></div>
     <div class="form-2col">
-      <div class="form-row"><label>上班時間</label><input type="time" id="pr-in"></div>
-      <div class="form-row"><label>下班時間</label><input type="time" id="pr-out"></div>
+      <div class="form-row"><label>上班時間</label>${hmPicker('pr-in','')}</div>
+      <div class="form-row"><label>下班時間</label>${hmPicker('pr-out','')}</div>
     </div>
     <div class="form-row"><label>原因</label><input id="pr-reason" placeholder="例：忘記打卡、系統問題"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitPunchRequest()">送出申請</button></div>`);
@@ -30789,8 +30859,8 @@ function openPunchRequest(){
 async function submitPunchRequest(){
  try{
   const date=document.getElementById('pr-date').value;
-  const cin=document.getElementById('pr-in').value;
-  const cout=document.getElementById('pr-out').value;
+  const cin=readHM('pr-in');
+  const cout=readHM('pr-out');
   const reason=document.getElementById('pr-reason').value.trim();
   if(!date){ showToast('請選日期'); return; }
   if(!cin&&!cout){ showToast('請至少填一個時間'); return; }
