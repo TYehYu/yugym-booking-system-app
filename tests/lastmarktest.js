@@ -139,7 +139,9 @@ ok('★ deskFeedHead 只剩維護「另有 N 則」那一行',
    /\/\/ 抬頭已移除（2026-07-30 使用者指示：只要顯示卡片）；這裡只維護「另有 N 則」那一行/.test(src));
 ok('　　超過單輪上限仍會講「另有 N 則」，不做無聲截斷',
    /more\.textContent=`另有 \$\{total-shown\} 則，確認後會接著顯示`;/.test(src));
-ok('　　每張卡自己的「✓ 確認」照舊', /<button class="dfeed-ok" onclick="deskFeedAck\('\$\{n\.id\}'\)">✓ 確認<\/button>/.test(src));
+/* 2026-08-01：整張卡改成可點（跳到行事曆那一天），確認鈕要 stopPropagation，
+   不然按「確認」會順便跳頁。 */
+ok('　　每張卡自己的「✓ 確認」照舊', /<button class="dfeed-ok" onclick="event\.stopPropagation\(\);deskFeedAck\('\$\{n\.id\}'\)">✓ 確認<\/button>/.test(src));
 ok('　　deskFeedAckAll 保留（日後要恢復入口可直接用）', /async function deskFeedAckAll\(\)\{/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);

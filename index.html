@@ -5508,7 +5508,29 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
    通知卡固定在右下角，若蓋過視窗會擋住「確認預約」那排按鈕（2026-07-30）。 */
 #desk-feed{position:fixed;right:18px;bottom:18px;z-index:250;display:flex;flex-direction:column;
   gap:10px;align-items:flex-end;pointer-events:none;max-width:min(380px,90vw);}
-#dfeed-list{display:flex;flex-direction:column;gap:10px;align-items:flex-end;width:100%;}
+/* 疊卡（2026-08-01 使用者指示：「右下角滑出的卡片用重疊顯示，避免畫面一整排被遮住」）——
+   原本是一整欄，累積四五則就從桌面底部長到頂端，把右半邊的內容整條蓋住。
+   改成一疊：最新的一張完整顯示，其餘只露出上緣；滑鼠移過去才攤開。
+   位置由 dfeedLayout() 逐張算 top（絕對定位），所以這裡不能再用 flex 排。
+   左下角的新會員通知維持單欄（一次只會有一兩則，疊起來反而看不到）。 */
+#dfeed-list{position:relative;display:block;width:100%;height:0;
+  transition:height .28s cubic-bezier(.22,.9,.3,1);}
+#dfeed-list .dfeed-card{position:absolute;left:0;right:0;width:auto;transform-origin:50% 0;
+  transition:top .28s cubic-bezier(.22,.9,.3,1),transform .28s cubic-bezier(.22,.9,.3,1),opacity .2s;}
+/* 收合時的張數提示（疊起來看不出有幾則） */
+.dfeed-hint{position:absolute;top:0;right:2px;z-index:400;pointer-events:none;
+  font-size:11px;font-weight:700;color:var(--t3);background:var(--card2,#f4f1ea);
+  border:1px solid var(--bd);border-radius:999px;padding:2px 9px;line-height:1.4;
+  font-family:var(--num),inherit;}
+/* 可點的卡（通知文字裡讀得出日期時間的才有）→ 點下去跳到行事曆那一天 */
+.dfeed-card.dfeed-tap{cursor:pointer;}
+.dfeed-card.dfeed-tap:hover{border-color:var(--t3);}
+.dfeed-goto{flex:0 0 auto;align-self:center;color:var(--t3);font-size:15px;font-weight:800;}
+/* 行事曆上被指到的那張課卡：閃兩下金框（2026-08-01） */
+.cal-ev.cal-ev-flash,.cag-std.cal-ev-flash,.wtl-card.cal-ev-flash{
+  animation:calEvFlash 1.5s ease-in-out 2;outline:2px solid var(--gold-d,#b48a56);outline-offset:1px;}
+@keyframes calEvFlash{0%,100%{box-shadow:0 0 0 0 rgba(180,138,86,0);}50%{box-shadow:0 0 0 7px rgba(180,138,86,.32);}}
+@media (prefers-reduced-motion:reduce){ .cal-ev.cal-ev-flash{animation:none;} }
 /* ── 左下角：新會員加入通知（2026-08-01 使用者指示）──
    新客申辦改成免審核直接建檔，櫃檯要能立刻知道有誰加入（並在必要時停用他）。
    跟右下角的「手機端異動」分開兩角，兩種訊息不會互相推擠。
@@ -5537,6 +5559,7 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
 .dfeed-card{pointer-events:auto;display:flex;align-items:flex-start;gap:11px;width:100%;
   background:#fff;border:1px solid var(--bd);border-left:4px solid var(--green);border-radius:12px;
   padding:12px 12px 12px 13px;box-shadow:0 10px 30px rgba(20,18,14,.18);
+  transform:scale(var(--dfs,1));
   animation:dfeedIn .28s cubic-bezier(.22,.9,.3,1) backwards;}
 .dfeed-card.out{animation:dfeedOut .24s ease forwards;}
 .dfeed-cancel{border-left-color:var(--danger,#b5372e);}
@@ -5572,8 +5595,10 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
 .dfeed-ok:hover{opacity:.88;}
 /* 數量多時整疊可捲動，不會蓋滿整個畫面 */
 #desk-feed{max-height:min(70vh,620px);overflow-y:auto;padding:4px;}
-@keyframes dfeedIn{from{opacity:0;transform:translateX(28px);}to{opacity:1;transform:none;}}
-@keyframes dfeedOut{to{opacity:0;transform:translateX(28px);}}
+/* 關鍵影格要帶 scale(var(--dfs))：動畫在層級上蓋過 inline style，
+   少了它，卡片進場結束的瞬間會從 scale(1) 彈回疊卡的縮放值。 */
+@keyframes dfeedIn{from{opacity:0;transform:translateX(28px) scale(var(--dfs,1));}to{opacity:1;transform:scale(var(--dfs,1));}}
+@keyframes dfeedOut{to{opacity:0;transform:translateX(28px) scale(var(--dfs,1));}}
 @media (prefers-reduced-motion:reduce){
   .dfeed-card,.dfeed-card.out{animation:none;}
 }
@@ -6923,8 +6948,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1905';
-const APP_VERSION_LABEL='v260801.1905';
+const APP_VERSION = '260801.1916';
+const APP_VERSION_LABEL='v260801.1916';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8023,8 +8048,138 @@ function deskFeedHost(){
        不然會變成無聲截斷。 */
     el.innerHTML=`<div id="dfeed-list"></div>`;
     document.body.appendChild(el);
+    /* 疊卡：滑鼠移進來就攤開，移開延遲收合。
+       延遲 300ms 是必要的 —— 攤開後卡片之間有 10px 空隙，容器本身 pointer-events:none，
+       游標經過空隙時 mouseout 的 relatedTarget 會是底下的頁面（看起來像離開了）。
+       容器不改成可點是刻意的：攤開時它可以有 600px 高，不能把底下的畫面全擋住。 */
+    el.addEventListener('mouseover',()=>dfeedSetOpen(true));
+    el.addEventListener('mouseout',ev=>{
+      if(ev.relatedTarget && el.contains(ev.relatedTarget)) return;
+      if(_dfeedCloseT) clearTimeout(_dfeedCloseT);
+      _dfeedCloseT=setTimeout(()=>{ _dfeedCloseT=null; dfeedSetOpen(false); },300);
+    });
+    if(!window._dfeedResize){
+      window._dfeedResize=true;
+      window.addEventListener('resize',()=>{ try{ dfeedLayout(); }catch(_){} });
+    }
   }
   return document.getElementById('dfeed-list');
+}
+/* ══ 右下角通知：疊卡顯示（2026-08-01 使用者指示）══
+   「右下角滑出的卡片用重疊顯示，避免畫面一整排被遮住」
+   最新的一張完整顯示，其餘往上只露出 9px 的邊；最多露三張，再多只計入張數提示。
+   攤開／收合都只改 top 與 scale，不動 DOM 順序 —— 順序一動動畫就會跳。 */
+const DFEED_PEEK=9, DFEED_PEEK_MAX=3, DFEED_GAP=10, DFEED_HINT_H=22;
+let _dfeedOpen=false, _dfeedCloseT=null;
+function dfeedCards(){
+  const list=document.getElementById('dfeed-list'); if(!list) return [];
+  // .out 是正在播移除動畫的卡，排版時當它已經不在（否則會留一個空位）
+  return [...list.querySelectorAll('.dfeed-card')].filter(el=>!el.classList.contains('out'));
+}
+function dfeedSetOpen(v){
+  if(v && _dfeedCloseT){ clearTimeout(_dfeedCloseT); _dfeedCloseT=null; }
+  if(_dfeedOpen===v) return;
+  _dfeedOpen=v; dfeedLayout();
+  if(v){ const box=document.getElementById('desk-feed');
+    // 攤開後超過 max-height 會出現捲軸：捲到底，最新的一張要看得到
+    if(box) setTimeout(()=>{ box.scrollTop=box.scrollHeight; },300); }
+}
+function dfeedLayout(){
+  const list=document.getElementById('dfeed-list'); if(!list) return;
+  const cards=dfeedCards();
+  let hint=document.getElementById('dfeed-hint');
+  if(!cards.length){ list.style.height='0px'; if(hint) hint.remove(); return; }
+  /* 先把收合時鎖的高度清掉再量，量到的才是卡片真正的高度 */
+  cards.forEach(el=>{ el.style.height=''; });
+  const hs=cards.map(el=>el.offsetHeight);
+  const only=cards.length===1;
+  const open=_dfeedOpen||only;
+  const back=Math.min(cards.length-1, DFEED_PEEK_MAX);
+  const hintH=(!open && cards.length>1)?DFEED_HINT_H:0;
+  let H=0;
+  if(open){
+    let y=0;
+    cards.forEach((el,idx)=>{
+      el.style.top=Math.round(y)+'px';
+      el.style.setProperty('--dfs','1');
+      el.style.opacity='1'; el.style.pointerEvents='auto'; el.style.zIndex='100';
+      y+=hs[idx]+DFEED_GAP;
+    });
+    H=y-DFEED_GAP;
+  }else{
+    const frontH=hs[hs.length-1];
+    cards.forEach((el,idx)=>{
+      const i=cards.length-1-idx;              // 0＝最前面那張（最新的）
+      const k=Math.min(i,back);
+      el.style.top=Math.round(hintH+(back-k)*DFEED_PEEK)+'px';
+      el.style.setProperty('--dfs',String((1-k*0.028).toFixed(3)));
+      el.style.opacity=i>DFEED_PEEK_MAX?'0':'1';
+      el.style.pointerEvents=i>DFEED_PEEK_MAX?'none':'auto';
+      el.style.zIndex=String(100-k);
+      /* 後面那幾張只露出上緣，高度鎖成跟最前面那張一樣 ——
+         不然比較高的卡會從最前面那張的下緣露出來，看起來像破圖 */
+      if(i>0) el.style.height=frontH+'px';
+    });
+    H=hintH+back*DFEED_PEEK+frontH;
+  }
+  list.style.height=Math.round(H)+'px';
+  if(hintH){
+    if(!hint){ hint=document.createElement('div'); hint.id='dfeed-hint'; hint.className='dfeed-hint'; list.appendChild(hint); }
+    hint.textContent=`${cards.length} 則　·　滑過展開`;
+  }else if(hint) hint.remove();
+}
+/* ── 通知卡 → 行事曆（2026-08-01 使用者指示）──
+   「例如 8/8 11:00 調整到 8/20 11:00，點這張卡片會跳到 8/20 卡片這頁預約行事曆」
+   通知本身沒有存 booking id 或日期（notifications 只有 title/body 兩個字串，
+   而且寫入的來源有三處：前端 mchgNotify、DB 的 desk_alert、會員自助那三支 RPC）。
+   與其改三處寫入、又只對「之後的新通知」有效，不如從 body 讀 ——
+   三個來源的 body 開頭一律是「MM/DD HH:MM」（見 mchgDescribe 與 desk_alert 的呼叫端），
+   格式一致，而且對已經躺在畫面上的舊通知也直接生效。 */
+function dfeedRefOf(n){
+  const m=String((n&&n.body)||'').match(/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}:\d{2})/);
+  if(!m) return null;
+  const mo=Number(m[1]), da=Number(m[2]);
+  if(!(mo>=1&&mo<=12&&da>=1&&da<=31)) return null;
+  /* body 只有月／日，年份要從 created_at 推：跨年時月份會反向跳
+     （12 月底送出的通知寫著 01/05＝明年）。差距超過半年就當跨年。 */
+  const base=(n&&n.created_at)?new Date(n.created_at):new Date();
+  const tw=new Date((isNaN(base)?Date.now():base.getTime())+8*3600000);
+  let y=tw.getUTCFullYear();
+  const dm=mo-(tw.getUTCMonth()+1);
+  if(dm<-6) y+=1; else if(dm>6) y-=1;
+  const hm=m[3].length===4?('0'+m[3]):m[3];
+  return {date:`${y}-${String(mo).padStart(2,'0')}-${String(da).padStart(2,'0')}`, time:hm};
+}
+function dfeedGo(id){
+  const el=document.querySelector(`.dfeed-card[data-nid="${id}"]`); if(!el) return;
+  const date=el.getAttribute('data-date'), time=el.getAttribute('data-time')||'';
+  if(!date) return;
+  const d=parseYmd(date); if(!d||isNaN(d)) return;
+  /* 跟「跳至日期」（doCalJump）同一套：7／5 日檢視跳到那一週的週一，其餘以該日為第一欄 */
+  const nDays=(typeof effCalDays==='function')?effCalDays():7;
+  if(nDays===7||nDays===5){ const dow=d.getDay(); calWeekStart=addDays(d,-((dow+6)%7)); }
+  else calWeekStart=d;
+  window._calStepping=true;
+  window._dfeedFocus={date,time};
+  navTo('calendar');
+  dfeedFlashSoon();
+}
+/* 行事曆是非同步渲染的（navTo 不會 await），所以用重試等它畫出來 */
+function dfeedFlashSoon(tries){
+  const t=tries==null?14:tries;
+  const f=window._dfeedFocus; if(!f) return;
+  const col=document.querySelector(`.cal-daycol[data-date="${f.date}"]`);
+  const hits=col?[...col.querySelectorAll(`.cal-ev[data-time="${f.time}"]`)]:[];
+  if(!hits.length){
+    if(t>0) setTimeout(()=>dfeedFlashSoon(t-1),160);
+    else window._dfeedFocus=null;
+    return;
+  }
+  window._dfeedFocus=null;
+  document.querySelectorAll('.cal-ev-flash').forEach(e=>e.classList.remove('cal-ev-flash'));
+  hits.forEach(e=>e.classList.add('cal-ev-flash'));
+  try{ hits[0].scrollIntoView({block:'center',behavior:'smooth'}); }catch(_){ }
+  setTimeout(()=>hits.forEach(e=>e.classList.remove('cal-ev-flash')),3200);
 }
 /* 抬頭：過夜累積多則時，一眼看到還有幾則沒確認（單則就不佔位） */
 /* 依畫面上實際剩幾張卡重算抬頭（確認完就整條收掉） */
@@ -8035,11 +8190,14 @@ function deskFeedSyncHead(){
 function deskFeedHead(total, shown){
   // 抬頭已移除（2026-07-30 使用者指示：只要顯示卡片）；這裡只維護「另有 N 則」那一行
   const list=document.getElementById('dfeed-list'); if(!list) return;
+  const box=document.getElementById('desk-feed'); if(!box) return;
   let more=document.getElementById('dfeed-more');
   if(total>shown){
-    if(!more){ more=document.createElement('div'); more.id='dfeed-more'; more.className='dfeed-more'; list.appendChild(more); }
+    if(!more){ more=document.createElement('div'); more.id='dfeed-more'; more.className='dfeed-more'; }
     more.textContent=`另有 ${total-shown} 則，確認後會接著顯示`;
-    list.appendChild(more); // 永遠留在最下面
+    /* 掛在疊卡「上方」且在 #dfeed-list 外（2026-08-01）——
+       list 內部已改成絕對定位的疊卡，放進去會被壓在卡片底下看不到。 */
+    box.insertBefore(more, list);
   }else if(more) more.remove();
 }
 /* 一次確認全部：抬頭按鈕已移除（2026-07-30），函式保留供程式呼叫／日後恢復入口用 */
@@ -8093,12 +8251,20 @@ function deskFeedPush(n){
      這是會員操作的時間，但原本直接切 created_at 字串 —— 那是 UTC，台灣要 +8，
      所以 19:11 的操作顯示成 11:11。改成轉台灣時間，並補上「幾分鐘前」與欄位說明。 */
   const when=deskFeedWhen(n.created_at);
+  /* 讀得出日期時間的就掛上跳轉（2026-08-01 使用者指示：點卡片跳到行事曆那一天）。
+     左下角的新會員通知沒有課，維持不可點。 */
+  const ref=left?null:dfeedRefOf(n);
+  if(ref){ el.setAttribute('data-date',ref.date); el.setAttribute('data-time',ref.time);
+           el.classList.add('dfeed-tap'); el.title=`前往 ${ref.date} ${ref.time} 的行事曆`;
+           el.setAttribute('onclick',`dfeedGo('${n.id}')`); }
   el.innerHTML=`<span class="dfeed-ic">${DESK_FEED_IC[n.type]||DESK_FEED_IC.self_book}</span>
     <span class="dfeed-body"><span class="dfeed-t">${dfeedText(n.title)}</span>
       <span class="dfeed-b">${dfeedText(n.body)}</span>
       ${when?`<span class="dfeed-w">${when}</span>`:''}</span>
-    <button class="dfeed-ok" onclick="deskFeedAck('${n.id}')">✓ 確認</button>`;
+    <button class="dfeed-ok" onclick="event.stopPropagation();deskFeedAck('${n.id}')">✓ 確認</button>
+    ${ref?'<span class="dfeed-goto">›</span>':''}`;
   host.appendChild(el);
+  if(!left) dfeedLayout();
 }
 /* 操作時間（台灣時間；今天只顯示時刻＋幾分鐘前，跨日才帶日期）
    2026-07-31：來源不再只有會員（教練從手機做的變更也會進來）→ 字樣改「手機操作」。 */
@@ -8121,7 +8287,8 @@ async function deskFeedAck(id){
   /* 2026-07-30 使用者回報：卡片點掉了、上面的「會員異動 N 則待確認」還留著。
      原本抬頭只在輪詢時更新（最久要等 45 秒），全部確認完就會剩一條孤零零的抬頭。
      改成移除卡片後立刻依畫面上剩幾張重算。 */
-  if(el){ el.classList.add('out'); setTimeout(()=>{ el.remove(); deskFeedSyncHead(); },260); }
+  if(el){ el.classList.add('out'); dfeedLayout();   // 先讓剩下的卡補位，不等動畫播完
+          setTimeout(()=>{ el.remove(); deskFeedSyncHead(); dfeedLayout(); },260); }
   try{
     const r=await sb.from('notifications').update({read:true}).eq('id',id);
     if(r && r.error) throw r.error;
@@ -8147,6 +8314,7 @@ async function deskFeedPoll(){
       });
       (q.data||[]).forEach(deskFeedPush);
       deskFeedHead(q.count==null?(q.data||[]).length:q.count, (q.data||[]).length);
+      dfeedLayout();   // 別台確認掉的卡移除後要補位
     }
   }catch(_){}
   _deskFeedBusy=false;
@@ -28396,8 +28564,15 @@ async function openGrantModal(){
   /* 2026-07-28 使用者指示：不預設會員——空白首選項，避免沒注意賣給名單第一位 */
   const memOpts=`<option value="" ${pre?'':'selected'}>— 請先選擇會員 —</option>`
     + actives.map(m=>`<option value="${m.id}" ${pre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('');
-  /* 自訂銷售票種白名單（2026-07-28 使用者指示）：教練課／友善教練課／團體課／場地租借 */
-  const _CUSTOM_TT=['教練課','友善教練課','團體課','場地租借'];
+  /* 自訂銷售票種白名單（2026-07-28 使用者指示）：教練課／友善教練課／團體課／自主訓練
+     2026-08-01 使用者指示：「自訂銷售 場地租借＝自主訓練 這邊統一改成自主訓練吧，
+     比較不會誤導以為是兩種不同商品」——
+     這個下拉的作用是「決定這張票可以約什麼課」，而 tt-venue-rental（場租）
+     不是能從一般預約流程約的課，只給「新增預約 → 場地租借」那條特別的流程折抵；
+     真正的自主訓練課對應的是 tt-mqdt55uosz5n。掛錯的話賣出去的票約不了自主訓練。
+     所以這裡不是只換字，是換成真的那個票種。
+     （銷售頁那張「場地租借」卡仍在，賣的還是場租票，供 $200 場地租借流程使用。） */
+  const _CUSTOM_TT=['教練課','友善教練課','團體課','自主訓練'];
   const _ttOpts=(types||[]).filter(t=>t.active!==false&&_CUSTOM_TT.includes(t.name)).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
   showModal(`<!-- 誘餌欄位：吸走 Chrome 密碼管理員的「儲存／更新密碼」判定，避免自訂銷售打字後跳提示（2026-07-25） -->
     <input type="text" autocomplete="username" tabindex="-1" aria-hidden="true" style="position:absolute;opacity:0;height:0;width:0;border:0;padding:0;pointer-events:none;">

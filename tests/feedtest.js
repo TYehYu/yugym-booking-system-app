@@ -33,7 +33,9 @@ ok('　　重入保護（避免上一輪還沒回就再發一輪）', /_deskFeed
 
 console.log('\n卡片');
 ok('★ 固定在右下角', /#desk-feed\{position:fixed;right:18px;bottom:18px;/.test(src));
-ok('★ 由右側滑入', /@keyframes dfeedIn\{from\{opacity:0;transform:translateX\(28px\);\}/.test(src));
+/* 2026-08-01：疊卡上線後，關鍵影格要一併帶 scale(var(--dfs))，
+   否則動畫（層級高於 inline style）結束的瞬間卡片會從 scale(1) 彈回疊卡的縮放值。 */
+ok('★ 由右側滑入', /@keyframes dfeedIn\{from\{opacity:0;transform:translateX\(28px\) scale\(var\(--dfs,1\)\);\}/.test(src));
 ok('　　關閉時滑出', /\.dfeed-card\.out\{animation:dfeedOut/.test(src));
 /* 2026-08-01：新會員通知改走左下角，去重要跨左右兩區找（見 tests/memregtest.js） */
 ok('　　同一則不會插兩張（左右兩區一起找）',
@@ -79,7 +81,7 @@ ok('　　每張卡自己的確認鈕用勾號', /✓ 確認<\/button>/.test(src
 
 console.log('\n確認完抬頭要一起消失（2026-07-30 使用者回報）');
 ok('★ 移除卡片後立刻依畫面剩幾張重算抬頭',
-   /if\(el\)\{ el\.classList\.add\('out'\); setTimeout\(\(\)=>\{ el\.remove\(\); deskFeedSyncHead\(\); \},260\); \}/.test(src));
+   /if\(el\)\{ el\.classList\.add\('out'\); dfeedLayout\(\);[\s\S]{0,80}el\.remove\(\); deskFeedSyncHead\(\); dfeedLayout\(\); \},260\); \}/.test(src));
 ok('★ 有一支專門重算的函式（讀 DOM 上剩幾張）',
    /function deskFeedSyncHead\(\)\{\s*\n\s*const n=document\.querySelectorAll\('#desk-feed \[data-nid\]'\)\.length;\s*\n\s*deskFeedHead\(n, n\);/.test(src));
 ok('★ 全部確認完也立刻收掉，不等 45 秒輪詢',
@@ -90,9 +92,15 @@ ok('　　原因寫在程式裡', /卡片點掉了、上面的「會員異動 N 
   const i=src.indexOf('function deskFeedHead(total, shown){'); const j=src.indexOf('\n}\n',i)+2;
   let moreRemoved=0, moreTxt='';
   const more={ id:'', className:'', get textContent(){return moreTxt;}, set textContent(v){moreTxt=v;}, remove(){moreRemoved++;} };
-  const doc={ getElementById:id=>({ 'dfeed-list':{appendChild(){}}, 'dfeed-more':more })[id]||null };
+  /* 2026-08-01：「另有 N 則」搬出 #dfeed-list（那裡改成絕對定位的疊卡，放進去會被壓住），
+     改成 insertBefore 掛在 #desk-feed 內、疊卡上方。 */
+  let insertedBefore=null;
+  const list={appendChild(){}};
+  const box={ insertBefore(el,ref){ insertedBefore=ref; } };
+  const doc={ getElementById:id=>({ 'dfeed-list':list, 'desk-feed':box, 'dfeed-more':more })[id]||null };
   const fn=new Function('document', src.slice(i,j)+'\nreturn deskFeedHead;')(doc);
   fn(25,20); ok('★ 25 則只顯示 20 張 → 出現「另有 5 則」', /另有 5 則/.test(moreTxt));
+  ok('★ 掛在疊卡上方（#desk-feed 內、#dfeed-list 之前）', insertedBefore===list);
   fn(3,3);   ok('★ 全部都顯示得下 → 收回「另有 N 則」', moreRemoved>0);
   ok('　　沒有抬頭元素也不會爆（已移除）', true);
 }
