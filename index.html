@@ -6823,8 +6823,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.0911';
-const APP_VERSION_LABEL='v260801.0911';
+const APP_VERSION = '260801.0917';
+const APP_VERSION_LABEL='v260801.0917';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11252,6 +11252,10 @@ PAGES.g_dashboard=async function(){
   const catColor={'ev-pt':'#1f6f54','ev-friendly':'#23508a','ev-group':'#9a5a1e','ev-trial':'#6e3a86','ev-self':'#6a655c','ev-massage':'#2f8f83'};
   // 抽獎狀態 map（首頁課卡禮物圖示用）：算一次，卡片渲染時查表
   const _lotMap = (typeof lottoMapAll==='function') ? lottoMapAll(bookings, purchases||[], ymd(TODAY).slice(0,7), members) : {};
+  /* 繳費／續約提醒也要出現在首頁課卡（2026-08-01 使用者指示）——
+     原本只有行事曆與手機端週課表算這兩張表，櫃檯在首頁看教練任務時漏掉最後一堂。
+     這裡先把標記算好（同一支 computeLastBkMarks，判準不會漂移），卡片渲染時查 window 的表。 */
+  try{ computeLastBkMarks(mtickets||[], bookings||[], typeMap||{}); }catch(_){}
 
   const rows=coachable.map(c=>{
     /* 2026-07-29 使用者指示：教練任務區不再顯示已取消的課卡。
@@ -11415,8 +11419,16 @@ PAGES.g_dashboard=async function(){
           const live = !canceled && nowMin>=mn && nowMin<mn+(Number(b.duration)||60) && !isDone(b);
           const done = isDone(b);
           const coTag=`<span class="tcard-co" style="background:${_cc2.bg};color:${_cc2.fg};">${coachAbbr(c)}${b.substitute_coach_id===c.id?'（代）':''}</span>`;
+          /* 繳費／續約提醒角標（2026-08-01 使用者指示：首頁課卡也要顯示）——
+             與行事曆課卡共用 bkRenewBadge，四種狀態的判準完全一致：
+             已續約✓／不續約✕／整張票最後一堂!／分期本期最後一堂! */
+          const _mk = bkRenewBadge({
+            done:(window._renewDoneBk&&window._renewDoneBk[b.id]),
+            no:(window._renewNoBk&&window._renewNoBk[b.id]),
+            renew:(window._renewLastBk&&window._renewLastBk[b.id]),
+            pay:(window._installLastBk&&window._installLastBk[b.id])});
           return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}${_pend?' tcard-pend':''}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${_nmFull}${_pend?'・尚未收款':''}${live?'（進行中）':''}${canceled?'（已取消）':''}">
-            <div class="tcard-body"></div>
+            <div class="tcard-body"></div>${_mk}
             <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-mem">${nm}</span>${_tagOut}${(b.member_id?lottoGiftIcon(_lotMap[b.member_id]):'')}${coTag}${(()=>{const k=bkStampKind(b);
               return k==='leave'?'<span class="tcard-chk tcard-chk-leave">假</span>'
                    :(k==='done'||k==='makeup')?'<span class="tcard-chk">簽</span>':'';})()}</div>${canceled?'<span class="tcard-del">刪</span>':''}
@@ -13708,7 +13720,24 @@ function computeLastBkMarks(allTickets, bookings, typeMap){
       const _ahead=tkAll.length-_done;                       // 已預約未上
       const _total=Number(tk.sessions_total)||0;
       if(!(_total>0)) return;                                // 沒有總堂數無法判定
-      if(_total-_done-_ahead > 0) return;                     // 還有沒排的堂數 → 不是最後一堂
+      /* 2026-08-01 使用者回報（謝郁沁 8/01 15:00、周士賢 8/01 16:00 都是最後一堂卻沒標）：
+         上面那條「連結法」假設**這張票用掉的每一堂都連上了 ticket_id**，
+         但舊系統匯入的票有一部分課根本沒進到正式庫（1–4 月的課從未匯入），
+         連結法算出來的「還沒排的堂數」就會虛胖：
+           ・謝郁沁 8 堂票，連得上的只有 7 堂（已上 6＋已排 1）→ 連結法說還剩 1 堂，
+             但票上的餘額是 0，她其實已經排完了。
+           ・周士賢 8 堂票，連得上的只有 1 堂 → 連結法說還剩 7 堂，餘額同樣是 0。
+         兩種算法會在不同情況失準（餘額欄有兩種口徑、連結有缺漏），所以**取兩者較小的那個**——
+         任何一邊說「沒得再約了」，那就是最後一堂。
+           A 連結法：總堂數 − 已核銷 − 已預約　（連結完整時準）
+           B 餘額法：sessions_remaining　　　　（連結有缺漏時準；沒有餘額欄就當作無限大＝不表態）
+         ⚠ B 一律用「原始餘額」，不可再減 _ahead —— 匯入票的餘額有的已經預扣過已預約未上，
+           再減一次會把 0730 修好的楊慧淳案例（4 堂票只排 2 堂）又標成最後一堂。 */
+      const _byLink=_total-_done-_ahead;
+      // ⚠ Number(null) 是 0 —— 直接 Number() 會把「沒有餘額欄」當成「餘額 0」而全部誤標
+      const _remRaw=(tk.sessions_remaining==null||tk.sessions_remaining==='') ? NaN : Number(tk.sessions_remaining);
+      const _byBal=Number.isFinite(_remRaw) ? _remRaw : Infinity;
+      if(Math.min(_byLink,_byBal) > 0) return;                // 兩種算法都還有剩 → 不是最後一堂
       // 分期票：若尚未開通到最後一段（unlocked < total），這是「繳費」情境不是「續約」，跳過
       if(tk.installment && typeof tk.installment==='object'){
         const unlocked = tk.unlocked_sessions!=null ? tk.unlocked_sessions : tk.sessions_total;

@@ -17,9 +17,19 @@ ok('★ 不再用 sessions_remaining ≤ 2 當觸發',
 ok('★ 改算「還沒排的堂數」＝總 − 已核銷 − 已預約',
    /const _done=tkAll\.filter\(x=>x\.status==='checked_in'\|\|x\.status==='completed'\)\.length;/.test(src)
    && /const _ahead=tkAll\.length-_done;/.test(src)
-   && /if\(_total-_done-_ahead > 0\) return;                     \/\/ 還有沒排的堂數 → 不是最後一堂/.test(src));
+   && /const _byLink=_total-_done-_ahead;/.test(src));
+/* 2026-08-01 使用者回報：謝郁沁 8/01、周士賢 8/01 都是最後一堂卻沒標 ——
+   連結法假設「用掉的每一堂都連上 ticket_id」，但舊系統匯入的票有一部分課從未匯入。 */
+ok('★ 連結法之外再加「餘額法」，取兩者較小者',
+   /const _byBal=Number\.isFinite\(_remRaw\) \? _remRaw : Infinity;/.test(src)
+   && /if\(Math\.min\(_byLink,_byBal\) > 0\) return;/.test(src));
+ok('★ 餘額用原始值，不再減已預約（減了會把楊慧淳案例又標錯）',
+   /不可再減 _ahead/.test(src));
+ok('★ sessions_remaining 為 null 不能當成 0（Number\(null\)===0 會全部誤標）',
+   /const _remRaw=\(tk\.sessions_remaining==null\|\|tk\.sessions_remaining===''\) \? NaN : Number\(tk\.sessions_remaining\);/.test(src));
+ok('　　兩個案例寫在程式裡', /謝郁沁 8 堂票，連得上的只有 7 堂/.test(src) && /周士賢 8 堂票，連得上的只有 1 堂/.test(src));
 ok('　　沒有總堂數的票不判定（避免亂標）', /if\(!\(_total>0\)\) return;/.test(src));
-ok('　　超約（負數）仍標最後那堂', /_total-_done-_ahead > 0/.test(src));
+ok('　　超約（負數）仍標最後那堂', /if\(Math\.min\(_byLink,_byBal\) > 0\) return;/.test(src));
 ok('　　標的是「已排預約中時間最晚那堂」', /const lastBk = tkAll\[tkAll\.length-1\];/.test(src));
 ok('　　已續約／不續約的分流沒被動到',
    /if\(done\)\{ window\._renewDoneBk\[lastBk\.id\]=true; return; \}/.test(src)
@@ -30,11 +40,15 @@ ok('　　兩個案例都寫在程式裡', /蔡佳音 8 堂票已核銷 5、已�
 // 實跑：把判定段抽出來跑兩個真實案例
 console.log('\n實跑兩個案例');
 {
-  const decide=(total, bks)=>{
+  /* 與 index.html 同一套：連結法 A 與餘額法 B 取較小者（2026-08-01） */
+  const decide=(total, bks, remaining)=>{
     const done=bks.filter(x=>x.status==='checked_in'||x.status==='completed').length;
     const ahead=bks.length-done;
     if(!(total>0)) return null;
-    if(total-done-ahead>0) return null;
+    const byLink=total-done-ahead;
+    const r=(remaining==null||remaining==='')?NaN:Number(remaining);
+    const byBal=Number.isFinite(r)?r:Infinity;
+    if(Math.min(byLink,byBal)>0) return null;
     return bks[bks.length-1] ? bks[bks.length-1].date : null;
   };
   const D=(date,status)=>({date,status});
@@ -54,7 +68,55 @@ console.log('\n實跑兩個案例');
   eq('　　總堂數為 0 的票不判定', decide(0,hui), null);
   eq('　　全部上完（沒有未來預約）→ 標最後上的那堂',
      decide(2,[D('2026-07-01','completed'),D('2026-07-08','completed')]), '2026-07-08');
+  // 舊案例在「不知道餘額」時（第三個參數不給）行為必須不變
+  eq('　　沒有餘額欄時 → 只看連結法（蔡佳音仍標）', decide(8,chia,null), '2026-08-10');
+  eq('　　沒有餘額欄時 → 只看連結法（楊慧淳仍不標）', decide(4,hui,null), null);
 }
+
+/* 2026-08-01 使用者回報：「今天有兩課卡最後一堂沒有跳驚嘆號 謝郁沁跟周士賢」
+   兩人的票都是舊系統匯入，用掉的課有一部分沒進正式庫 → 連結法虛胖、餘額法才對。 */
+console.log('\n實跑 0801 兩個案例（連結有缺漏）');
+{
+  const D=(date,status)=>({date,status});
+  const decide=(total, bks, remaining)=>{
+    const done=bks.filter(x=>x.status==='checked_in'||x.status==='completed').length;
+    const ahead=bks.length-done;
+    if(!(total>0)) return null;
+    const byLink=total-done-ahead;
+    const r=(remaining==null||remaining==='')?NaN:Number(remaining);
+    const byBal=Number.isFinite(r)?r:Infinity;
+    if(Math.min(byLink,byBal)>0) return null;
+    return bks[bks.length-1] ? bks[bks.length-1].date : null;
+  };
+  // 謝郁沁：8 堂票，連得上 7 堂（已上 6 + 已排 8/01），票上餘額 0
+  const yu=[...Array(6)].map((_,i)=>D('2026-07-0'+(i+1),'checked_in')).concat([D('2026-08-01','booked')]);
+  eq('★ 謝郁沁（連結法說剩 1、餘額 0）→ 標 8/01', decide(8,yu,0), '2026-08-01');
+  eq('　　只看連結法會漏掉（這就是原本的 bug）', decide(8,yu,null), null);
+  // 周士賢：8 堂票，連得上只有 1 堂，餘額 0
+  const shi=[D('2026-08-01','booked')];
+  eq('★ 周士賢（連結法說剩 7、餘額 0）→ 標 8/01', decide(8,shi,0), '2026-08-01');
+  eq('　　只看連結法會漏掉', decide(8,shi,null), null);
+  // 反向保護：餘額還有的不能因為連結法為 0 就漏標，也不能因為餘額而誤標
+  eq('　　餘額還有 5、但連結法已排滿 → 仍標（連結法為準）',
+     decide(3,[D('2026-08-02','booked'),D('2026-08-09','booked'),D('2026-08-16','booked')],5), '2026-08-16');
+  eq('　　餘額 0 但完全沒排課 → 不標（沒有可標的那一堂）', decide(8,[],0), null);
+}
+
+/* 2026-08-01 使用者指示：「這繳費提醒的功能也要在首頁的課卡顯示」 */
+console.log('\n首頁課卡也要有繳費／續約提醒（2026-08-01）');
+ok('★ 首頁先算好標記（同一支 computeLastBkMarks，判準不漂移）',
+   /try\{ computeLastBkMarks\(mtickets\|\|\[\], bookings\|\|\[\], typeMap\|\|\{\}\); \}catch\(_\)\{\}/.test(src));
+ok('★ 首頁課卡（tcard）掛上 bkRenewBadge 角標',
+   /const _mk = bkRenewBadge\(\{\s*\n\s*done:\(window\._renewDoneBk&&window\._renewDoneBk\[b\.id\]\),/.test(src)
+   && /<div class="tcard-body"><\/div>\$\{_mk\}/.test(src));
+ok('　　四種狀態都吃：已續約✓／不續約✕／整張最後一堂!／分期本期最後一堂!',
+   /no:\(window\._renewNoBk&&window\._renewNoBk\[b\.id\]\),/.test(src)
+   && /renew:\(window\._renewLastBk&&window\._renewLastBk\[b\.id\]\),/.test(src)
+   && /pay:\(window\._installLastBk&&window\._installLastBk\[b\.id\]\)\}\);/.test(src));
+ok('　　行事曆與手機端週課表仍用同一支（三個畫面同源）',
+   (src.match(/bkRenewBadge\(\{/g)||[]).length>=3);
+ok('　　角標樣式沿用 ev-payalert（tcard 是 position:relative，右上角沒被佔）',
+   /\.tcard\{position:relative;/.test(src) && /\.ev-payalert\{position:absolute;top:2px;right:3px;/.test(src));
 
 console.log('\n桌機通知：時間與輪詢（2026-07-30 使用者回報）');
 ok('★ 時間改成台灣時間（原本直接切 UTC 字串，19:11 顯示成 11:11）',
