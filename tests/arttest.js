@@ -46,9 +46,10 @@ console.log('\n隨機連播');
 }
 
 console.log('\n版面');
-/* 2026-07-31 定版：放在左欄「當月排班」按鈕上方、貼著頂欄下方，不進中間那欄 */
-ok('★ 放在左欄「當月排班」按鈕的上方',
-   /\$\{butlerArtHtml\(\)\}\s*\n\s*<!-- 2026-07-26 使用者指示：「當月排班」按鈕[\s\S]{0,120}\$\{schedBtnCard\}/.test(src));
+/* 2026-07-31 定版：插畫放在左欄最上方、貼著頂欄下方，不進中間那欄。
+   2026-08-01：「當月排班」按鈕移到月曆與員工值班之間，插畫下面接的改成月曆。 */
+ok('★ 放在左欄最上方（下面接月曆）',
+   /\$\{butlerArtHtml\(\)\}\s*\n\s*<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>/.test(src));
 ok('★ 不在中間那欄（KPI 條裡沒有插畫）',
    /<div class="mc-kpistrip">\s*\n\s*<div class="kpi-greet">/.test(src));
 ok('★ 貼著頂欄下方：左欄的齊頭 padding 歸零，插畫自己抵掉 .content 的 10px 上內距',
