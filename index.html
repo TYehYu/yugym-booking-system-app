@@ -7068,8 +7068,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.2224';
-const APP_VERSION_LABEL='v260801.2224';
+const APP_VERSION = '260801.2245';
+const APP_VERSION_LABEL='v260801.2245';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15102,6 +15102,10 @@ function initCalCursorTip(){
   if(window._calTipInit) return; window._calTipInit=true;
   const tip=document.createElement('div'); tip.id='cal-cursor-tip'; document.body.appendChild(tip);
   let shown=false;
+  /* 尺寸在「內容換掉時」量一次就好（2026-08-01 效能）——
+     原本每次 mousemove 都讀 offsetWidth/offsetHeight，那會強制瀏覽器同步重新排版，
+     在課卡幾百張的行事曆上，滑鼠一動就卡。 */
+  let tipW=0, tipH=0;
   const hide=()=>{ if(shown){ tip.style.display='none'; shown=false; } };
   document.addEventListener('mouseover',e=>{
     const card=e.target.closest&&e.target.closest('.cal-ev[data-tip]');
@@ -15110,15 +15114,15 @@ function initCalCursorTip(){
     if(!raw){ hide(); return; }
     tip.innerHTML=raw.split('\n').map(l=>`<div>${l}</div>`).join('');
     tip.style.display='block'; shown=true;
+    tipW=tip.offsetWidth; tipH=tip.offsetHeight;    // 只在這裡量
   });
   document.addEventListener('mousemove',e=>{
     if(!shown) return;
     let x=e.clientX+14, y=e.clientY+16;
-    const w=tip.offsetWidth, h=tip.offsetHeight;
-    if(x+w>window.innerWidth-8) x=e.clientX-w-14;
-    if(y+h>window.innerHeight-8) y=e.clientY-h-16;
+    if(x+tipW>window.innerWidth-8) x=e.clientX-tipW-14;
+    if(y+tipH>window.innerHeight-8) y=e.clientY-tipH-16;
     tip.style.left=Math.max(4,x)+'px'; tip.style.top=Math.max(4,y)+'px';
-  });
+  },{passive:true});
   document.addEventListener('mouseout',e=>{
     const card=e.target.closest&&e.target.closest('.cal-ev[data-tip]');
     if(card && !card.contains(e.relatedTarget)) hide();
@@ -16335,7 +16339,14 @@ function initWtlSlotHighlight(){
   body.addEventListener('touchend',()=>{ setTimeout(clear,180); });
   body.addEventListener('touchcancel',clear);
   // 桌機滑鼠
-  body.addEventListener('mousemove',(e)=>{ hlAt(e.clientX,e.clientY); });
+  /* elementFromPoint 每次都要做一次命中測試，掛在 mousemove 上等於滑鼠一動就算一次
+     （2026-08-01 效能）→ 併到下一個畫格，一格最多算一次。 */
+  let _hlTick=false, _hlX=0, _hlY=0;
+  body.addEventListener('mousemove',(e)=>{
+    _hlX=e.clientX; _hlY=e.clientY;
+    if(_hlTick) return; _hlTick=true;
+    requestAnimationFrame(()=>{ _hlTick=false; hlAt(_hlX,_hlY); });
+  },{passive:true});
   body.addEventListener('mouseleave',clear);
 }
 function wtlEnterMove(bid){
@@ -17258,7 +17269,9 @@ function mpkRender(row){
   menu.innerHTML=html;
   row._mpkIdx=Math.max(0, opts.findIndex(o=>o.value===sel.value));
 }
-function mpkOpen(row){ row.classList.add('mpk-open'); mpkRender(row); mpkFit(row); }
+function mpkOpen(row){ row.classList.add('mpk-open');
+  document.documentElement.classList.add('mpk-any-open');   // 給捲動監聽用的旗標（見 refit）
+  mpkRender(row); mpkFit(row); }
 /* 手機版選單被鍵盤蓋住（2026-08-01 使用者回報，附截圖）——
    選單固定往下開，但輸入框本來就在畫面偏下，鍵盤一升起來下方就只剩幾十像素。
    鍵盤高度沒有 API，但 visualViewport.height 會跟著縮 —— 用它算真正看得到的高度：
@@ -17291,7 +17304,14 @@ function mpkFit(row){
 }
 /* 鍵盤升起／收合、或捲動時，開著的選單要重算位置 */
 (function(){
-  const refit=()=>{ try{ document.querySelectorAll('.mem-pick-row.mpk-open').forEach(mpkFit); }catch(_){} };
+  /* ⚠ 效能（2026-08-01 使用者回報「畫面常常 LAG」）：這支掛在 document 的 capture 捲動上，
+     行事曆捲一下就是每秒幾十次。原本每次都 querySelectorAll 掃整份 DOM ——
+     行事曆一週有兩三百張課卡，掃一次就要好幾毫秒，捲動時全花在這裡。
+     改成先看根元素上的旗標（mpkOpen/mpkClose 維護），沒開選單時直接返回。 */
+  const refit=()=>{
+    if(!document.documentElement.classList.contains('mpk-any-open')) return;
+    try{ document.querySelectorAll('.mem-pick-row.mpk-open').forEach(mpkFit); }catch(_){}
+  };
   if(window.visualViewport){
     window.visualViewport.addEventListener('resize', refit);
     window.visualViewport.addEventListener('scroll', refit);
@@ -17303,6 +17323,8 @@ function mpkFit(row){
 })();
 function mpkClose(row,restore){
   row.classList.remove('mpk-open');
+  // 全部關掉才收旗標（掃一次 DOM 的成本只在關閉時付，不在每次捲動）
+  if(!document.querySelector('.mem-pick-row.mpk-open')) document.documentElement.classList.remove('mpk-any-open');
   if(restore===false) return;
   const inp=row.querySelector('input'), sel=row.querySelector('select');
   if(!inp||!sel) return;

@@ -101,7 +101,12 @@ ok('★ 選單高度跟著可用空間縮，不會撐破畫面',
    /menu\.style\.maxHeight=Math\.max\(120,Math\.min\(300,\(up\?above:below\)-8\)\)\+'px';/.test(src));
 ok('★ 鍵盤升起／收合／捲動時重算', /window\.visualViewport\.addEventListener\('resize', refit\);/.test(src)
    && /window\.visualViewport\.addEventListener\('scroll', refit\);/.test(src));
-ok('　　開啟選單時就先算一次', /function mpkOpen\(row\)\{ row\.classList\.add\('mpk-open'\); mpkRender\(row\); mpkFit\(row\); \}/.test(src));
+ok('　　開啟選單時就先算一次', /function mpkOpen\(row\)\{ row\.classList\.add\('mpk-open'\);[\s\S]{0,160}mpkRender\(row\); mpkFit\(row\); \}/.test(src));
+/* 2026-08-01 效能（使用者回報「畫面常常 LAG」）：捲動時的重算原本每次都掃整份 DOM */
+ok('　　沒有開著的選單時，捲動不掃 DOM（旗標擋在最前面）',
+   /if\(!document\.documentElement\.classList\.contains\('mpk-any-open'\)\) return;/.test(src)
+   && /document\.documentElement\.classList\.add\('mpk-any-open'\)/.test(src)
+   && /if\(!document\.querySelector\('\.mem-pick-row\.mpk-open'\)\) document\.documentElement\.classList\.remove\('mpk-any-open'\);/.test(src));
 ok('　　打字讓清單變短時也重算（input 走 mpkOpen）',
    /mpkOpen\(row\);   \/\/ mpkOpen 內含 mpkFit/.test(src));
 ok('　　組字中只重畫清單，不動位置（compositionend 之後才完整重算）',
