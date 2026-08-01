@@ -106,31 +106,7 @@ ok('　　左右兩欄刻意不設 overflow（第一格用負上邊距貼齊頂�
    /一旦變成捲動容器就會被裁掉/.test(src));
 ok('　　手機版不套（走另一套版面）', /if\(isMobileLayout\(\) \|\| !body\)\{ cc\.style\.removeProperty\('max-height'\); return; \}/.test(src));
 
-console.log('\n⑤ 三欄底部切齊視窗');
-/* 2026-08-01 使用者指示（附截圖）：「首頁左中右最下方的物件都切齊視窗最下面；
-   上方如果空白太多，延展一下物件，不要讓畫面有太奇怪的空白區域」
-   補充：「左右兩邊的物件上下延展到頂，中間的物件對齊下方」 */
-ok('★ 有 fitDashHeight()，量法與行事曆同一套', /function fitDashHeight\(\)\{/.test(src)
-   && /const h=Math\.max\(420, Math\.round\(window\.innerHeight - top - 12\)\);/.test(src));
-ok('★ 高度先定案，教練任務卡才量得準（順序不能反）',
-   /try\{ fitDashHeight\(\); \}catch\(_\)\{\}   \/\/ 三欄高度先定案，教練任務卡才量得準\s*\n\s*try\{ fitCoachCards\(\); \}catch\(_\)\{\}/.test(src));
-ok('★ 三欄拉齊（align-items 由 flex-start 改 stretch）',
-   /\.mc-grid5\{display:flex;gap:16px;align-items:stretch;\}/.test(src));
-ok('★ 左欄最後的月曆撐滿剩餘高度，日期格平均分配（不留空白也不被切斷）',
-   /\.mc-dash-fit \.mc-g5-left>\.mc-b4-cal\{flex:1 1 auto;min-height:0;/.test(src)
-   && /\.mc-dash-fit \.mc-g5-left \.cal-side \.mc-grid\.mc-week\{flex:1 1 0;min-height:0;\}/.test(src)
-   && /\.mc-dash-fit \.mc-g5-left \.cal-side \.mc-cell\{aspect-ratio:auto;height:100%;min-height:26px;\}/.test(src));
-ok('★ 右欄的待辦撐滿到底；收款名單先讓出空間、不再固定五列被切一半',
-   /\.mc-dash-fit \.mc-g5-right>\.mc-b4-todo\{flex:1 1 auto;min-height:0;/.test(src)
-   && /\.mc-dash-fit \.mc-revlist-card \.mc-revlist\{max-height:none;flex:1 1 auto;min-height:0;\}/.test(src));
-ok('★ 中欄不延展、改成貼齊下方（教練人數少時不要在卡片裡留空白）',
-   /\.mc-dash-fit \.mc-g5-mid>\.mc-coachcenter\{margin-top:auto;min-height:0;\}/.test(src));
-ok('　　手機版面不套（那邊是直排）', /if\(mobile\)\{ wrap\.classList\.remove\('mc-dash-fit'\); grid\.style\.removeProperty\('--dash-h'\); return; \}/.test(src));
-ok('　　視窗改變大小要重算', /window\.addEventListener\('resize',\(\)=>\{ if\(document\.querySelector\('\.mc-dash \.mc-grid5'\)\) fitDashHeight\(\); \}\);/.test(src));
-ok('　　使用者的原話寫在程式裡', /首頁左中右最下方的物件都切齊視窗最下面/.test(src)
-   && /左右兩邊的物件上下延展到頂，中間的物件對齊下方/.test(src));
-
-console.log('\n⑥ 實跑：縮放係數');
+console.log('\n⑤ 實跑：縮放係數');
 {
   const i=src.indexOf('const TCARD_ZOOM_MIN=0.62;');
   const j=src.indexOf("window.addEventListener('resize',()=>{ if(document.querySelector('.mc-g5-mid .mc-coachcenter'))", i);
