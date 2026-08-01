@@ -84,6 +84,12 @@ ok('　　為什麼從文字讀而不是改三處寫入，寫在程式裡',
 console.log('\n③ 疊卡排版');
 ok('★ #dfeed-list 改成相對定位容器（不再是 flex 欄）',
    /#dfeed-list\{position:relative;display:block;width:100%;height:0;/.test(src));
+/* 2026-08-01 使用者回報「右下角訊息是不是被折疊到不見了」：卡片改成絕對定位之後，
+   list 裡沒有任何在流內的東西 → 內容寬度 0 → 靠內容撐寬的外層縮成 0 寬，整條看不見。 */
+ok('★ 外層容器的寬度要給死，不能只給 max-width（絕對定位撐不出寬度）',
+   /#desk-feed\{position:fixed;right:18px;bottom:18px;z-index:250;display:flex;flex-direction:column;\s*\n\s*gap:10px;align-items:flex-end;pointer-events:none;width:min\(380px,90vw\);max-width:min\(380px,90vw\);\}/.test(src));
+ok('　　原因寫在程式裡（下次不會又把 width 拿掉）',
+   /內容寬度就是 0；這個容器又是靠內容撐寬的/.test(src));
 ok('★ 卡片絕對定位、從上緣縮放（露出的是上緣）',
    /#dfeed-list \.dfeed-card\{position:absolute;left:0;right:0;width:auto;transform-origin:50% 0;/.test(src));
 ok('★ 左下角的新會員通知不受影響（選擇器只鎖 #dfeed-list）',
