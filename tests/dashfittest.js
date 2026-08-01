@@ -89,8 +89,9 @@ console.log('\n④ 教練任務卡收進視窗、課卡按比例縮小');
 ok('★ 有 fitCoachCards()，且首頁渲染完會呼叫',
    /function fitCoachCards\(\)\{/.test(src) && /try\{ fitCoachCards\(\); \}catch\(_\)\{\}/.test(src));
 ok('★ 視窗改變大小要重算', /window\.addEventListener\('resize',\(\)=>\{ if\(document\.querySelector\('\.mc-g5-mid \.mc-coachcenter'\)\) fitCoachCards\(\); \}\);/.test(src));
-ok('★ 高度量法與行事曆同一套（innerHeight − 元素 top − 留白）',
-   /const avail=Math\.max\(220, Math\.round\(window\.innerHeight - top - 14\)\);/.test(src));
+/* 2026-08-01：全系統等比例縮放上線後，螢幕像素要換算回元素自己的座標（見 uiScale） */
+ok('★ 高度量法與行事曆同一套（innerHeight − 元素 top − 留白，再除以縮放比）',
+   /const avail=Math\.max\(220, Math\.round\(\(window\.innerHeight - top - 14\)\/uiScale\(\)\)\);/.test(src));
 ok('★ 縮放用 zoom（會參與版面計算），不是 transform:scale',
    /\.mc-coachcenter \.tcard-body\{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;\s*\n\s*zoom:var\(--tcz,1\);/.test(src));
 ok('　　為什麼不用 transform，寫在程式裡',
@@ -119,8 +120,10 @@ console.log('\n⑤ 實跑：縮放係數');
     const cc={ getBoundingClientRect:()=>({top:ccTop}), querySelector:()=>body,
       style:{ set maxHeight(v){ maxH=v; }, removeProperty(){ removed=true; } } };
     const doc={ querySelector:()=>cc };
-    new Function('document','window','isMobileLayout',code+'\nfitCoachCards();')
-      (doc,{innerHeight:winH},()=>!!mobile);
+    /* 2026-08-01：全系統等比例縮放上線後 fitCoachCards 會除以 uiScale()，
+       這裡固定注入 1（＝基準寬度 1440 上的行為），驗的是高度計算本身。 */
+    new Function('document','window','isMobileLayout','uiScale',code+'\nfitCoachCards();')
+      (doc,{innerHeight:winH},()=>!!mobile,()=>1);
     return {maxH,z,removed};
   };
 
