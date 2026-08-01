@@ -39,6 +39,15 @@ console.log('① 滑鼠提示顯示場地與台數');
 }
 ok('★ 一般（顯示會員名）與遮蔽（教練看別人的課）兩種提示都掛上',
    (src.match(/\$\{bkVenueTipLine\(b\)\}/g)||[]).length===2);
+/* 2026-08-01 二修（使用者回報「滑鼠提示也還沒成功」）：課卡有兩種提示 ——
+   舊的 .ev-tip 懸浮卡，與真正看得到的、跟著游標跑的白底浮框（data-tip）。
+   只加前者等於沒加。 */
+ok('★ 跟著游標的那個浮框（data-tip）也要有場地那一行',
+   /const _tipStr = _tipEsc\(\[`\$\{b\.start_time\}–\$\{_endT\}`, _tipMem, _tipCoach, _tipVenue\]\.filter\(Boolean\)\.join\('\\n'\)\);/.test(src));
+ok('　　它同樣是「教室／跑步機才標、跑步機附台數」',
+   /const _tipVenue = \(function\(\)\{ const v=selfVenueLabel\(b\); if\(!v\) return '';[\s\S]{0,160}v==='跑步機'\?`　·　\$\{n\} 台`:''/.test(src));
+ok('　　兩種提示的存在寫在程式裡（下次不會又只改一邊）',
+   /實際看得到的是後者，只加前者等於沒加（使用者回報/.test(src));
 ok('　　場地不是隱私、正是排課要看的 —— 理由寫在程式裡',
    /遮蔽卡（教練看別人的課）也要有：場地不是隱私，而且那正是排課要看的。/.test(src));
 ok('　　台數來源是合併卡的 _units（一堂佔兩台是兩筆預約）',

@@ -29,7 +29,7 @@ ok('　　使用者的原話寫在程式裡', /我們不是從會員票券這邊
 
 console.log('\n圓點渲染吃得到這個數字');
 ok('★ doneCount 傳給 ticketTokens（2026-08-01 起多帶使用人，用來標「會員自行預約」）',
-   /ticketTokens\(tkC,tkBks2,_typeMapD,doneCount,b\.id,b\.member_id\)/.test(src));
+   /ticketTokens\(tkC,tkBks2,_typeMapD,doneCount,b\.id,b\.member_id,_wSlotD&&_wSlotD\.selfBk\)/.test(src));
 ok('★ 已用堂數多於清單時，多出來的畫實心 ✓（沒有日期可標）',
    /const b=di<done\.length\?done\[di\+\+\]:null;/.test(src) && /\$\{b\?md\(b\):'✓'\}/.test(src));
 ok('　　「本堂第幾堂」與圓點位置同源', /curIdx=_bi>=0\?doneCount\+_bi:-1/.test(src));
@@ -62,7 +62,7 @@ ok('★ 歷史判定改看「已上堂數」而非只看剩餘',
 ok('★ 卡片圓點與歷史判定用同一個數字（不會出現空心圓卻被收進歷史）',
    /const usedCount = tkUsedCount\(t\);/.test(src)
    && /const tkUsedCount=\(t\)=>\(\(WAL\.of\(t\.id\)\|\|\{\}\)\.used\)\|\|0;/.test(src)
-   && /const circles=ticketTokens\(t,WAL\.stampsOf\(t\.id\),typeMap,usedCount,null,member_id\);/.test(src));
+   && /const circles=ticketTokens\(t,WAL\.stampsOf\(t\.id\),typeMap,usedCount,null,member_id,WAL\.selfBk\);/.test(src));
 ok('　　過期票仍照原規則歸類（不被新規則攔截）',
    /else if\(t\.expire_date && String\(t\.expire_date\)\.slice\(0,10\)<today\) state='expired';/.test(src)
    && /const _isExpiredTk=t=>\(\(WAL\.of\(t\.id\)\|\|\{\}\)\.state\)==='expired';/.test(src));

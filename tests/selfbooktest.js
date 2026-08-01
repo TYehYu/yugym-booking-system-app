@@ -16,17 +16,33 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.in
 console.log('① 判斷「這一堂是不是會員自己約的」');
 {
   const f=new Function(grabFn('bkSelfBooked')+'\nreturn bkSelfBooked;')();
+  /* 2026-08-01 二修（使用者回報「8/4 蕭育筑團體課怎麼沒看到提示」）：
+     團課的課卡是櫃檯先開好的班，會員只是「加入名單」→ created_by 是員工，
+     只看 created_by 的話團課永遠標不出來。真正的痕跡在扣課紀錄的 operator。 */
+  eq('★ 團課：課卡是櫃檯開的，但扣課紀錄的操作者是會員本人 → 是自助報名',
+     f({id:'B1',created_by:'c-emp1',member_id:null},'MEM-1',new Set(['B1'])), true);
+  eq('★ 團課：同一堂課別人自己報名的，不在我的集合裡 → 不標',
+     f({id:'B1',created_by:'c-emp1',member_id:null},'MEM-1',new Set(['B9'])), false);
+  eq('　　沒有集合時退回 created_by 的判斷（自主訓練那條路）',
+     f({id:'B1',created_by:'MEM-1',member_id:'MEM-1'},'MEM-1',null), true);
   eq('★ created_by ＝ 會員本人 → 是自助預約', f({created_by:'MEM-1',member_id:'MEM-1'},'MEM-1'), true);
   eq('★ created_by 是員工 → 不是', f({created_by:'c-emp1',member_id:'MEM-1'},'MEM-1'), false);
-  eq('★ 團課（member_id 為 null，人在 member_ids）也認得出來',
+  eq('★ 會員端建的課卡（member_id 為 null）也認得出來',
      f({created_by:'MEM-1',member_id:null},'MEM-1'), true);
-  eq('★ 同一堂團課裡別人自己報名的，不會算到我頭上',
+  eq('★ 別人建的不會算到我頭上',
      f({created_by:'MEM-2',member_id:null},'MEM-1'), false);
   eq('　　沒傳 memberId 時退回課卡上的會員', f({created_by:'MEM-1',member_id:'MEM-1'}), true);
   eq('　　舊系統匯入（沒有 created_by）→ 不是', f({created_by:null,member_id:'MEM-1'},'MEM-1'), false);
   eq('　　沒有課卡 → 不是（不會爆）', f(null,'MEM-1'), false);
   eq('　　id 型別不同（數字 vs 字串）也比得出來', f({created_by:7,member_id:7},7), true);
 }
+ok('★ 票券夾負責整理「這位會員自己約的那幾堂」（扣課紀錄的 operator）',
+   /const selfBk=new Set\(\);/.test(src)
+   && /\(c\.logs\|\|\[\]\)\.forEach\(l=>\{ if\(l && l\.action==='deduct' && l\.booking_id\s*\n\s*&& String\(l\.operator\|\|''\)===String\(memberId\)\) selfBk\.add\(l\.booking_id\); \}\);/.test(src));
+ok('　　每張票卡都帶著這個集合（slot.selfBk），呼叫端不用自己再撈一次 logs',
+   /left:Math\.max\(0,total-used-pending\), stamps:bks, state, selfBk\};/.test(src));
+ok('　　為什麼只看 created_by 不夠，寫在程式裡',
+   /只看 created_by 的話，團課永遠標不出來（使用者回報 8\/04 蕭育筑那筆）。/.test(src));
 ok('★ 共享票要傳使用人的 id（拿票券持有人比會比錯）',
    /memberId 要傳進來：共享票的持有人不是使用人，拿 t\.member_id 比會比錯。/.test(src));
 ok('　　判斷依據寫在程式裡（不需要另外加欄位）',
@@ -81,18 +97,18 @@ console.log('\n③ 每個畫圓點的地方都要把「使用人」傳進去');
   const calls=[...src.matchAll(/ticketTokens\(([^;]*?)\)[};<`]/g)].map(m=>m[0]);
   const bad=[...src.matchAll(/\$?\{?ticketTokens\((?:[^()]|\([^()]*\))*\)/g)]
     .map(m=>m[0]).filter(x=>x.indexOf('function')<0)
-    .filter(x=>x.split(',').length<6);
-  eq('★ 沒有任何呼叫點漏傳（每一處都有 6 個參數）', bad, []);
+    .filter(x=>x.split(',').length<7);
+  eq('★ 沒有任何呼叫點漏傳（每一處都有 7 個參數：使用人＋自助集合）', bad, []);
 }
-ok('　　會員資料 → 票券分頁傳 PP.id', /ticketTokens\(t,bks,typeMap,used,null,PP\.id\)/.test(src));
-ok('　　會員端「我的票券」傳 SESSION.id', /ticketTokens\(t,_bksC,typeMap,usedCnt,null,SESSION\.id\)/.test(src));
-ok('　　團課名單逐名額傳那一列的會員', /ticketTokens\(_sl\.t,_sl\.stamps,st\.typeMap,_sl\.used,b\.id,mid\)/.test(src));
-ok('　　預約明細（單人課）傳這一堂的會員', /ticketTokens\(tkC,tkBks2,_typeMapD,doneCount,b\.id,b\.member_id\)/.test(src));
+ok('　　會員資料 → 票券分頁傳 PP.id', /ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk\)/.test(src));
+ok('　　會員端「我的票券」傳 SESSION.id', /ticketTokens\(t,_bksC,typeMap,usedCnt,null,SESSION\.id,_sl\.selfBk\)/.test(src));
+ok('　　團課名單逐名額傳那一列的會員', /ticketTokens\(_sl\.t,_sl\.stamps,st\.typeMap,_sl\.used,b\.id,mid,_sl\.selfBk\)/.test(src));
+ok('　　預約明細（單人課）傳這一堂的會員', /ticketTokens\(tkC,tkBks2,_typeMapD,doneCount,b\.id,b\.member_id,_wSlotD&&_wSlotD\.selfBk\)/.test(src));
 ok('　　會員列表的五格票券傳那一列的會員', /tkRowHtml\(sl, w\.leftoverIn\(k\), m\.id\)/.test(src));
 ok('★ 有圖例說明金點是什麼（不解釋沒人看得懂）',
    /右上角金點＝會員自己從手機預約的/.test(src));
 ok('　　沒有自助預約的會員不顯示圖例（不佔版面）',
-   /\$\{act\.some\(t=>\(\(WAL\.of\(t\.id\)\|\|\{stamps:\[\]\}\)\.stamps\|\|\[\]\)\.some\(x=>bkSelfBooked\(x,PP\.id\)\)\)/.test(src));
+   /\$\{act\.some\(t=>\(\(WAL\.of\(t\.id\)\|\|\{stamps:\[\]\}\)\.stamps\|\|\[\]\)\.some\(x=>bkSelfBooked\(x,PP\.id,WAL\.selfBk\)\)\)/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

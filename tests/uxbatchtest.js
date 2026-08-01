@@ -169,7 +169,7 @@ ok('★ 配對 key 不再把 format 算進團課（票券空白 vs 預約寫「�
 ok('★ 原因寫在程式裡（配不到又不會落到第二輪，整批被丟掉）',
    /那些課配不到票也不會落到第二輪（它們有 ticket_type_id），整批被丟掉/.test(src));
 ok('★ 會員列表也把「沒有票可扣的已預約未上」帶上，跟名單一樣看得到（見下方票券袋子）',
-   /let dots=ticketTokens\(tk,sl\.stamps\.concat\(extra\|\|\[\]\),typeMapFull,used,null,mid\|\|tk\.member_id\);/.test(src));
+   /let dots=ticketTokens\(tk,sl\.stamps\.concat\(extra\|\|\[\]\),typeMapFull,used,null,mid\|\|tk\.member_id,sl\.selfBk\);/.test(src));
 ok('　　已經配到票的不重複列（同一堂只會蓋在一張票上）',
    /put=\(tid,b\)=>\{ if\(!tid\|\|byBooking\[b\.id\]\) return;/.test(src));
 ok('　　只帶今天以後、且依課別歸戶（2026-07-31 起用票券五分類歸戶）',
