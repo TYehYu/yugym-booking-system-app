@@ -106,8 +106,9 @@ ok('★ 右下角的 feed 本來就只給櫃檯／管理員／店長的桌機',
    /return CLOUD && SESSION && isDeskLike\(\) && !isMobileLayout\(\);/.test(src));
 ok('★ 撈的是同一批（recipient_type=desk、未讀）',
    /\.eq\('recipient_type','desk'\)\.eq\('read',false\)/.test(src));
-ok('★ 時間字樣改「手機操作」（來源不再只有會員）',
-   /return `手機操作 \$\{date\}\$\{hh\}\$\{ago\?`　·　\$\{ago\}`:''\}`;/.test(src));
+/* 2026-08-01 使用者指示：拿掉「幾分鐘前」，直接寫他們操作的時刻 */
+ok('★ 時間字樣改「手機操作」（來源不再只有會員），並直接寫時刻',
+   /return `手機操作 \$\{date\}\$\{hh\}`;/.test(src));
 ok('　　「全部確認」的確認語也跟著改', /確認這 \$\{ids\.length\} 則手機端異動通知？/.test(src));
 ok('　　會員自助的三支 RPC 不走 dbPut，所以不會重複跳',
    /會員自助預約／改期／取消走的是 RPC（fn_member_self_\*），那邊已經有 desk_alert，/.test(src));
