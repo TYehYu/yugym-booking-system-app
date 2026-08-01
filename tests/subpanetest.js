@@ -38,8 +38,12 @@ ok('★ 卡片值改成分類清單（教練課 2　自主 1）',
    && /<span class="pp-dc-split">\$\{c\.tkSplit\.map\(x=>`<span class="pp-dcs"><b>\$\{x\[1\]\}<\/b>\$\{x\[0\]\}<\/span>`\)\.join\(''\)\}<\/span>/.test(src));
 ok('★ 沒有任何分類（完全沒票）時退回原本的總數顯示，不會變空白',
    /: \(c\.tkLeft!=null\?`\$\{c\.tkLeft\}<small>堂可用<\/small>`:''\)\)/.test(src));
-ok('　　副標改顯示總數（分類在上、總數在下，資訊不減）',
-   /\(c\.tkLeft \? `共 \$\{c\.tkLeft\} 堂可用` : '持有票券與剩餘堂數'\)/.test(src));
+/* 2026-08-01 使用者回報「明明有 5 份方案，這邊只顯示 3」——那個數字是「可用堂數」，
+   排滿的方案剩 0 堂就不計入。數字沒錯，是標籤沒講清楚 → 副標同時給堂數與份數。 */
+ok('　　副標同時顯示可用堂數與方案份數（分類在上、總計在下）',
+   /共 \$\{c\.tkLeft\} 堂可用　·　\$\{c\.tkCount\} 份方案/.test(src)
+   && /c\.tkCount=_liveTk\.length;/.test(src));
+ok('　　方案都排滿時講明白（不然會以為票不見了）', /（都排滿了）/.test(src));
 ok('　　樣式：數字大、分類名小，可換行', /\.pp-dc-split\{display:flex;flex-wrap:wrap;/.test(src)
    && /\.pp-dcs b\{font-family:var\(--font-en\);font-size:22px;/.test(src));
 ok('　　總數仍照舊算（tkLeft 沒被拿掉，其他地方還在用）',
