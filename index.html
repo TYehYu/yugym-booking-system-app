@@ -5598,9 +5598,13 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
 .rc-dows{display:flex;flex-direction:column;gap:5px;}
 .rc-dow{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;}
 .rc-dow input[type=checkbox]{flex:0 0 auto;margin:0;}
-.rc-dow input[type=time]{margin-left:auto;width:110px;padding:4px 8px;border:1px solid var(--bd);
-  border-radius:7px;font-family:var(--num),inherit;font-size:12.5px;background:#fff;}
-.rc-dow input[type=time]:disabled{opacity:.4;background:var(--card2);}
+.rc-dow input[type=time],.rc-dow select{margin-left:auto;width:118px;padding:4px 8px;border:1px solid var(--bd);
+  border-radius:7px;font-family:var(--num),inherit;font-size:12.5px;background:#fff;
+  -webkit-appearance:none;appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--t3) 50%),linear-gradient(135deg,var(--t3) 50%,transparent 50%);
+  background-position:calc(100% - 13px) calc(50% + 1px),calc(100% - 9px) calc(50% + 1px);
+  background-size:4px 4px,4px 4px;background-repeat:no-repeat;padding-right:24px;}
+.rc-dow input[type=time]:disabled,.rc-dow select:disabled{opacity:.4;background-color:var(--card2);}
 .sc-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;
   font-size:13px;}
 .sc-row:hover{background:#fff;}
@@ -6847,8 +6851,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1014';
-const APP_VERSION_LABEL='v260801.1014';
+const APP_VERSION = '260801.1023';
+const APP_VERSION_LABEL='v260801.1023';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17287,19 +17291,60 @@ function recurBoxHtml(prefix, maxN){
     <div id="${prefix}-recurring-box" style="display:none;border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--card2);">
       <div style="font-size:12px;color:var(--t2);margin-bottom:8px;">勾選要重複的星期（以所選日期為起點）；<b>各天可以排不同時間</b>，留空＝同第一堂。</div>
       <div class="rc-dows">
+        ${/* 2026-08-01 使用者回報：「右邊選完時間沒有確定的按鈕可以點，不知道要按哪裡確認時間」——
+             原本用 <input type="time">，iOS 會叫出滾輪但沒有確定鈕，只能點空白處關掉，
+             使用者不確定有沒有選到。改成下拉（與步驟 1 的時間欄同一種），
+             手機的原生下拉自帶「完成」，30 分一格也不會選到 20:07 這種時間。 */''}
         ${WD.map((w,i)=>{ const v=(i===6?0:i+1); return `<label class="rc-dow"><input type="checkbox" class="${prefix}-dow" value="${v}" onchange="recurDowToggle('${prefix}',${v})">週${w}
-          <input type="time" class="${prefix}-dowt" data-dow="${v}" step="1800" disabled placeholder="同第一堂"></label>`; }).join('')}
+          <select class="${prefix}-dowt" data-dow="${v}" disabled>${recurTimeOpts()}</select></label>`; }).join('')}
       </div>
-      <div class="form-row" style="margin:10px 0 6px;"><label>預約堂數（含第一堂，最多 ${RECUR_MAX} 堂）</label>
+      ${/* 標籤不寫死「最多 12 堂」（2026-08-01）：上限會跟著選到的票券改，寫死會與下面的說明打架 */''}
+      <div class="form-row" style="margin:10px 0 6px;"><label>預約堂數（含第一堂）</label>
         <input type="number" id="${prefix}-count" min="1" max="${_m}" step="1"
                value="${_m}" data-max="${_m}" oninput="recurClampCount('${prefix}')"
                style="font-family:var(--num),inherit;">
       </div>
       <div id="${prefix}-count-hint" style="font-size:11px;color:var(--t3);line-height:1.7;">
-        ${hasTk&&Number(maxN)<RECUR_MAX?`目前可約 <b>${maxN}</b> 堂，最多就排 ${maxN} 堂。`:`方案最多 ${RECUR_MAX} 堂，所以上限 ${RECUR_MAX}。`}
-        數的是<b>堂數</b>不是週數 —— 一週勾兩天就是一週消耗 2 堂。
-        衝堂自動跳過${prefix==='grp'?'':'、達票券剩餘堂數即停'}。</div>
+        ${recurCountHint(prefix, _m)}</div>
     </div>`;
+}
+/* 連續預約每一天的時間選項：留空＝沿用第一堂的時間。
+   與步驟 1 的 bkTimeOptions 同一個時段範圍（08:00–22:00、30 分一格）。 */
+function recurTimeOpts(){
+  let html='<option value="">同第一堂</option>';
+  for(let h=8;h<=22;h++){
+    for(const mm of ['00','30']){
+      if(h===22&&mm==='30') break;
+      const t=String(h).padStart(2,'0')+':'+mm;
+      html+=`<option value="${t}">${t}</option>`;
+    }
+  }
+  return html;
+}
+/* 堂數欄下方的說明（與 recurSetMax 共用，兩處文字才不會漂移） */
+function recurCountHint(prefix, cap){
+  const c=Number(cap)>0?Number(cap):RECUR_MAX;
+  return `${c<RECUR_MAX?`這張票目前可約 <b>${c}</b> 堂，最多就排 ${c} 堂。`:`方案最多 ${RECUR_MAX} 堂，所以上限 ${RECUR_MAX}。`}
+    數的是<b>堂數</b>不是週數 —— 一週勾兩天就是一週消耗 2 堂。
+    衝堂自動跳過${prefix==='grp'?'':'、達票券剩餘堂數即停'}。`;
+}
+/* 連續預約的堂數上限要跟著「實際選中的那張票」（2026-08-01 使用者回報：
+   「選擇的課程只有 10 堂，但是下方預設的堂數還是 12」）——
+   步驟 2 剛畫出來時只知道「這位會員這類課總共還剩幾堂」（多張票加總），
+   真正要扣的是哪一張要等 refreshBkTicket／使用者點選票券卡之後才確定，
+   所以那時候要再校正一次上限與預設值。
+   ⚠ 待簽約卡位沒有票可扣（客人還沒買），維持方案上限 12 —— 使用者定案。 */
+function recurSetMax(prefix, maxN){
+  const el=document.getElementById(prefix+'-count'); if(!el) return;
+  const cap = Number(maxN)>0 ? Math.min(Number(maxN), RECUR_MAX) : RECUR_MAX;
+  el.setAttribute('data-max', cap);
+  el.max=cap;
+  /* 使用者自己改過的數字不要覆蓋（只在超出上限時往下夾）；沒動過的就跟著新上限走 */
+  const touched = el.getAttribute('data-touched')==='1';
+  const cur=Math.floor(Number(el.value)||0);
+  if(!touched || cur>cap || cur<1) el.value=cap;
+  const hint=document.getElementById(prefix+'-count-hint');
+  if(hint) hint.innerHTML=recurCountHint(prefix, cap);
 }
 /* 勾了某個星期才讓那天的時間欄可填（沒勾就別讓人填了以為有效） */
 function recurDowToggle(prefix,dow){
@@ -17310,6 +17355,7 @@ function recurDowToggle(prefix,dow){
 /* 次數不得超過可約堂數（也不得小於 1）。上限記在 data-max，沒有上限就只擋下界。 */
 function recurClampCount(prefix){
   const el=document.getElementById(prefix+'-count'); if(!el) return;
+  el.setAttribute('data-touched','1');   // 手動改過 → 之後換票券不要覆蓋他打的數字（只夾上限）
   const mx=Number(el.getAttribute('data-max'))||0;
   let v=Math.floor(Number(el.value)||0);
   if(v<1) v=1;
@@ -17511,6 +17557,8 @@ function pickBkTicket(tid){
   document.querySelectorAll('.bk-tk-card').forEach(el=>{
     el.classList.toggle('on', el.getAttribute('onclick').includes("'"+tid+"'"));
   });
+  // 換票券 → 連續預約的堂數上限跟著換（2026-08-01）
+  recurSetMax('bk', (window._bkTkCap||{})[tid]);
 }
 async function refreshBkTicket(){
   const mid=document.getElementById('bk-member').value;
@@ -17533,10 +17581,14 @@ async function refreshBkTicket(){
       🔒 分期方案（共 ${i.count} 期，已繳第 ${i.current} 期）：目前可約 <b>${tkUnlockedLeft(tk)}</b> 堂。
       方案總共 ${tk.sessions_total} 堂，其餘要收到下一期款項後，在會員票券卡按「開通下一期」才會放出來。</div>`;
   };
+  /* 每張票各自可約幾堂 —— 連續預約的堂數上限要跟著「選中的那一張」走（2026-08-01） */
+  window._bkTkCap=Object.fromEntries(list.map(tk=>[tk.id, tkUnlockedLeft(tk)]));
   if(list.length===1){
     const tk=list[0];
     info.innerHTML=`將扣抵票券　${tk.plan_name||''}${fmtLabel(tk)}　可約 <b>${tkUnlockedLeft(tk)}</b> 堂　效期至 ${fmtExpire(tk.expire_date,tk)}
       <input type="hidden" id="bk-ticket-sel" value="${tk.id}">${instNote(tk)}`;
+    window._bkTkSel=tk.id;
+    recurSetMax('bk', tkUnlockedLeft(tk));
   }else{
     // 多張可用票券 → 卡片式選擇（清楚區分 1V1／1V2、剩餘堂數、效期）
     if(!window._bkTkSel || !list.some(x=>x.id===window._bkTkSel)) window._bkTkSel=list[0].id;
@@ -17548,6 +17600,7 @@ async function refreshBkTicket(){
       <div class="bk-tk-cards">${cards}</div>
       <input type="hidden" id="bk-ticket-sel" value="${window._bkTkSel}">
       ${list.filter(tkIsInstall).map(instNote).join('')}`;
+    recurSetMax('bk', window._bkTkCap[window._bkTkSel]);
   }
 }
 // 場地溢出確認：若 vbk 帶 _venueOverflow（分到次選場地），跳確認框詢問教練
@@ -17824,8 +17877,15 @@ async function _submitBookingInner(){
   const bkFindTk=async(mid,d,tsv)=>{
     if(selTicketId){
       const sel=await dbGet('member_tickets',selTicketId);
-      if(sel && sel.member_id===mid && sel.status==='usable' && sel.sessions_remaining>0 && (!sel.expire_date||sel.expire_date>=d)
-         && tkTimeOk(sel,d,tsv||time)) return sel;
+      /* 2026-08-01 使用者回報（鄭雅芳 8/26 20:00 選了限定票券、連續預約 10 堂，
+         系統卻用一般教練課扣）：這一關原本比的是 sel.member_id===mid ——
+         **共享票的持有人不是預約的那位會員**（限定教練課 1V2 幾乎都是共享票，
+         票掛在葉隆震名下、鄭雅芳是共享者），比對失敗就整串退回 findUsableTicket 的 FIFO，
+         於是全部扣到別張票。改用 tkUsableBy（持有人或共享者皆可用），
+         與步驟 2 挑票清單的 tkFitsBooking 同一套判斷。
+         堂數也改用 tkUnlockedLeft —— 分期票未開通的期數不能先約走。 */
+      if(sel && tkUsableBy(sel,mid) && sel.status==='usable' && tkUnlockedLeft(sel)>0
+         && (!sel.expire_date||sel.expire_date>=d) && tkTimeOk(sel,d,tsv||time)) return sel;
     }
     return await findUsableTicket(mid,type_id,d,tsv||time);
   };
@@ -17871,8 +17931,19 @@ async function _submitBookingInner(){
       : `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bd);"><span>${label}</span><span style="color:var(--danger);font-size:12px;">✕ ${rr.reason}</span></div>`;
   }).join('');
   const summary=`成功 ${created} 筆${skipped?`，跳過 ${skipped} 筆衝突/已滿`:''}${noTicket?`，${noTicket} 筆票券不足`:''}${r.capped?`（次數受票券剩餘 ${r.remainTotal} 堂限制）`:''}`;
+  /* 換票警示（2026-08-01 使用者回報：選了限定票券，系統卻用一般教練課扣）——
+     指定的票在某幾堂不能用時，引擎會退回別張票以免整堂建不起來（7/30 定案的行為），
+     但那件事一定要講出來，不然櫃檯以為扣的是自己選的那張，事後才發現扣錯。 */
+  const _swap=results.filter(x=>x.ok&&!x.held&&x.tkId&&selTicketId&&x.tkId!==selTicketId);
+  const _swapNames=[...new Set(_swap.map(x=>x.tkName).filter(Boolean))];
+  const swapWarn=_swap.length
+    ? `<div style="background:#fbf0e2;border:1px solid #e8d3b3;color:#8a5e28;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.7;margin-bottom:10px;">
+        ⚠ 其中 <b>${_swap.length}</b> 堂不是扣您指定的那張票（改扣${_swapNames.length?'「'+_swapNames.join('」「')+'」':'其他票券'}）——
+        指定的票在那幾堂已用完、過期或不符使用時段。要改回來請到會員票券頁調整。</div>`
+    : '';
   showModal(`<div class="modal-title">連續預約結果</div>
     <div style="font-size:13px;color:var(--text);margin-bottom:12px;font-weight:500;">${summary}</div>
+    ${swapWarn}
     <div style="max-height:300px;overflow-y:auto;font-size:13px;">${rows}</div>
     <div class="modal-foot"><button class="btn btn-green" onclick="closeModal();bkAfterSubmit()">完成</button></div>`);
  }catch(e){
@@ -17992,14 +18063,15 @@ async function runRecurringBooking(opts){
       if(window.FEATURE_FLAGS&&FEATURE_FLAGS.createBookingRpc&&CLOUD&&!noDeduct&&tk&&!holdOnly){
         // ── Sprint 3：改由後端 RPC 單一交易建立＋扣票（旗標開啟時）──
         const rr=await createBookingViaRpc(o, tk, ds, ts);
-        if(rr.ok){ ok++; results.push({date:ds,ok:true}); }
+        if(rr.ok){ ok++; results.push({date:ds,ok:true,tkId:tk?tk.id:null,tkName:tk?(tk.plan_name||'票券'):''}); }
         else { skipped++; results.push({date:ds,ok:false,reason:rr.reason}); }
       } else {
         // ── 原路徑（旗標關閉，維持與過往完全一致）──
         await dbPut('bookings', bk);
         if(tk) await deductTicket(tk, bk.id, operator);
         if(holdOnly) held++; else ok++;
-        results.push({date:ds,ok:true,held:holdOnly});
+        // 實際扣了哪張票要記下來（2026-08-01）：跟指定的不一樣時要講，不能默默換票
+        results.push({date:ds,ok:true,held:holdOnly,tkId:tk?tk.id:null,tkName:tk?(tk.plan_name||'票券'):''});
       }
     }catch(e){ skipped++; results.push({date:ds,ok:false,reason:'寫入失敗'}); }
   }

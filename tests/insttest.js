@@ -106,8 +106,10 @@ console.log('\n連續預約改用「次數」');
 ok('★ 介面改成次數輸入（不再選結束日期）',
    /id="\$\{prefix\}-count" min="1"/.test(src) && !/id="\$\{prefix\}-until"/.test(src));
 // 2026-07-30：上限改成 min(可約堂數, 12)，文案由「次」改「堂」
+/* 2026-08-01：說明文字抽成 recurCountHint，並在選定票券後由 recurSetMax 依「那張票」再校正
+   （見 tests/recurcaptest.js）—— 這裡只確認初始值仍以會員可約堂數帶入。 */
 ok('★ 次數上限＝min(可約堂數, 12)，並帶進畫面', /recurBoxHtml\('bk', preSum\)/.test(src)
-   && /目前可約 <b>\$\{maxN\}<\/b> 堂，最多就排 \$\{maxN\} 堂。/.test(src));
+   && /這張票目前可約 <b>\$\{c\}<\/b> 堂，最多就排 \$\{c\} 堂。/.test(src));
 ok('★ 超過上限會被夾回並提示', /function recurClampCount\(/.test(src)
    && /最多只能排 \$\{cap\} 堂（可約堂數上限）/.test(src)
    && /最多只能排 \$\{RECUR_MAX\} 堂（方案上限）/.test(src));

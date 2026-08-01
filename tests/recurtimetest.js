@@ -29,8 +29,10 @@ ok('　　超過上限的提示分兩種（票券上限／方案上限）',
    /最多只能排 \$\{cap\} 堂（可約堂數上限）/.test(src) && /最多只能排 \$\{RECUR_MAX\} 堂（方案上限）/.test(src));
 
 console.log('\n各天不同時間');
+/* 2026-08-01 使用者回報「選完時間沒有確定的按鈕」→ 時間欄由 input[type=time] 改為 select
+   （iOS 的時間滾輪沒有確定鈕）。詳見 tests/recurcaptest.js。 */
 ok('★ 每個星期一列，右邊一個時間欄',
-   /<input type="time" class="\$\{prefix\}-dowt" data-dow="\$\{v\}" step="1800" disabled placeholder="同第一堂">/.test(src));
+   /<select class="\$\{prefix\}-dowt" data-dow="\$\{v\}" disabled>\$\{recurTimeOpts\(\)\}<\/select>/.test(src));
 ok('★ 沒勾的星期時間欄不可填', /function recurDowToggle\(prefix,dow\)\{/.test(src)
    && /if\(tm\) tm\.disabled=!\(cb&&cb\.checked\);/.test(src));
 ok('★ 打開連續預約時，起始日那天先帶入步驟 1 的時間',
