@@ -6065,6 +6065,10 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .mc-kpi-grid{display:grid;grid-template-columns:repeat(2,minmax(92px,1fr)) minmax(178px,1.7fr);gap:10px;flex:0 1 auto;}
 .mc-kpi-rev .mc-k2-n{font-size:20px;}
 .mc-kpi-rev-sub{font-size:10.5px;color:var(--t3);margin-top:3px;white-space:nowrap;}
+/* 可點的 KPI 卡（2026-08-01）：標題後面一個小箭頭當提示，按下去有回饋 */
+.mc-kpi-tap{cursor:pointer;transition:transform .12s var(--ease-out),box-shadow .12s;}
+.mc-kpi-tap:active{transform:scale(.975);}
+.mc-kpi-tap .mc-kpi-tapmark{margin-left:3px;color:var(--t3);font-weight:700;}
 /* ── 手機版（2026-07-20 使用者指示）：頂欄＋底部導覽改品牌綠；三角色首頁段落節奏統一 ── */
 @media(max-width:600px){
   /* 頂欄品牌綠（2026-07-29 使用者定案：試過米色後改回綠）：
@@ -6843,8 +6847,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.0950';
-const APP_VERSION_LABEL='v260801.0950';
+const APP_VERSION = '260801.1001';
+const APP_VERSION_LABEL='v260801.1001';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11817,11 +11821,16 @@ PAGES.g_dashboard=async function(){
   const _revNoInv=Math.max(0,_revTotal-_revInv);
   const _ptN=dayBk.filter(b=>{const c=bkCC(b);return c==='pt'||c==='friendly';}).length;
   const _grpN=dayBk.filter(b=>bkCC(b)==='group').length;
-  const _revCard=`<div class="card mc-card mc-kpi-mini mc-kpi-rev">
+  /* 「今日營收」卡點下去可以看名單（2026-08-01 使用者指示）——
+     桌機右欄本來就有收款名單卡，手機版沒有那一欄，這個數字點不開就只是一個數字，
+     櫃檯想知道「這 $12,000 是誰付的」還得跑去報表。 */
+  const _revCard=`<div class="card mc-card mc-kpi-mini mc-kpi-rev mc-kpi-tap" role="button" tabindex="0"
+      onclick="openTodayRevList()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTodayRevList();}"
+      title="查看今日營收名單">
       <span class="mc-k2-ic">${OPS_TODO_IC.money}</span>
       <div class="mc-k2-b">
         <div class="mc-k2-n">$${_fm(_revTotal)}</div>
-        <div class="mc-k2-l">今日營收</div>
+        <div class="mc-k2-l">今日營收<span class="mc-kpi-tapmark">›</span></div>
         <div class="mc-kpi-rev-sub">有發票 $${_fm(_revInv)} · 無發票 $${_fm(_revNoInv)}</div>
       </div>
     </div>`;
@@ -11891,6 +11900,9 @@ PAGES.g_dashboard=async function(){
       amt:Number(p.deal_amount)||0,
       inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')})),
   ];
+  /* 給「今日營收」彈窗用（2026-08-01）：與上方 KPI、右欄名單卡完全同源，不另外算一份，
+     免得三個地方各自算出不同的數字 —— 這個系統踩過太多次那種坑。 */
+  window._gdRev={date, rows:_revRows, total:_revTotal, inv:_revInv, noInv:_revNoInv};
   /* 現場抽獎名單滑出鈕（2026-07-22 使用者指示）：桌機首頁右下角、有可抽名額才出現。
      資格算當下月份（非檢視日期）——登記永遠對本月。 */
   const _lotEls=lottoStats(bookings||[],purchases||[],ymd(TODAY).slice(0,7),members);
@@ -22437,6 +22449,31 @@ function openRevList(){
       <span class="nl-amt">$${Math.round(r.amount).toLocaleString()}</span>
     </div>`).join('')}</div>
     <div class="nl-sum"><span>合計</span><b>$${Math.round(total).toLocaleString()}</b></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+/* 今日營收名單彈窗（2026-08-01 使用者指示：首頁那張營收卡要點得開）——
+   內容與桌機右欄的收款名單卡一致：誰、買什麼、多少錢、有沒有開發票；
+   有綁會員的那幾列點下去直接跳到他的票券頁。 */
+function openTodayRevList(){
+  const d=window._gdRev||{};
+  const rows=d.rows||[];
+  const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const money=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+  const ds=String(d.date||'').slice(5).replace('-','/');
+  const body = rows.length
+    ? `<div class="mc-revlist">${rows.map(r=>`
+        <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="closeModal();revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
+          <div class="mc-rev-b"><span class="mc-rev-nm">${esc(r.nm)}</span><span class="mc-rev-it">${esc(r.it)}</span></div>
+          ${r.inv?'<span class="mc-rev-inv">發票</span>':''}
+          <span class="mc-rev-amt">${money(r.amt)}</span>
+          ${r.mid?'<span class="mc-td-arrow">›</span>':''}
+        </div>`).join('')}</div>
+      <div class="nl-sum"><span>合計</span><b>${money(d.total)}</b></div>
+      <div style="font-size:11.5px;color:var(--t3);text-align:right;margin-top:5px;">有發票 ${money(d.inv)}　·　無發票 ${money(d.noInv)}</div>`
+    : `<div class="empty" style="padding:26px 8px;"><div class="em-t">這一天還沒有收款</div>
+        <div style="font-size:11.5px;color:var(--t2);margin-top:6px;line-height:1.7;">售出票券、場地租借、票券重啟與商品收款都會列在這裡。</div></div>`;
+  showModal(`<div class="modal-title">${ds} 營收${rows.length?`（${rows.length} 筆）`:''}</div>
+    ${body}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
 /* 續約名單彈窗（2026-07-31 使用者指示）：姓名／方案／費用；金額取實收，沒有收款紀錄
