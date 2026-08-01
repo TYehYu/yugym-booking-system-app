@@ -73,8 +73,9 @@ console.log('\n姓名區：比照員工列表');
 ok('★ 主教練接在姓名旁（＝員工英文名的位置）',
    /<i class="lp-coach" style="background:\$\{cl\.bg\};color:\$\{cl\.fg\};">\$\{coachMap\[m\.default_coach_id\]\|\|''\}<\/i>/.test(src)
    && /\.lp-name \.lp-coach\{font-style:normal;font-size:11px;font-weight:700;border-radius:999px;/.test(src));
+/* 2026-08-01：同一行前面多了「已停用」章（見 tests/memregtest.js），等級與電話的位置不變 */
 ok('★ 會員等級移到姓名下面那行（＝員工「正職・職稱」的位置），與電話同一行',
-   /`\$\{tierLabel\(effTier\(m\)\)\}\$\{m\.phone\?'　'\+fmtPhone\(m\.phone\):''\}`/.test(src));
+   /\$\{tierLabel\(effTier\(m\)\)\}\$\{m\.phone\?'　'\+fmtPhone\(m\.phone\):''\}`/.test(src));
 ok('　　那一行放不下色塊 tag → 另做純文字＋顏色的 tierLabel',
    /function tierLabel\(tier\)\{/.test(src)
    && /那裡是小字副標，塞不下色塊 tag/.test(src));

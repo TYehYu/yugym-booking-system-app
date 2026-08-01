@@ -35,7 +35,9 @@ console.log('\n卡片');
 ok('★ 固定在右下角', /#desk-feed\{position:fixed;right:18px;bottom:18px;/.test(src));
 ok('★ 由右側滑入', /@keyframes dfeedIn\{from\{opacity:0;transform:translateX\(28px\);\}/.test(src));
 ok('　　關閉時滑出', /\.dfeed-card\.out\{animation:dfeedOut/.test(src));
-ok('　　同一則不會插兩張', /host\.querySelector\(`\[data-nid="\$\{n\.id\}"\]`\)\) return;/.test(src));
+/* 2026-08-01：新會員通知改走左下角，去重要跨左右兩區找（見 tests/memregtest.js） */
+ok('　　同一則不會插兩張（左右兩區一起找）',
+   /document\.querySelector\(`\.dfeed-card\[data-nid="\$\{n\.id\}"\]`\)\) return;/.test(src));
 ok('★ 不會自動收掉（沒有計時器）', !/setTimeout\(\(\)=>deskFeedClose/.test(src));
 ok('　　三種事件用不同顏色（預約綠／取消紅／改期金）',
    /\.dfeed-cancel\{border-left-color:var\(--danger/.test(src)

@@ -5489,6 +5489,18 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
 #desk-feed{position:fixed;right:18px;bottom:18px;z-index:250;display:flex;flex-direction:column;
   gap:10px;align-items:flex-end;pointer-events:none;max-width:min(380px,90vw);}
 #dfeed-list{display:flex;flex-direction:column;gap:10px;align-items:flex-end;width:100%;}
+/* ── 左下角：新會員加入通知（2026-08-01 使用者指示）──
+   新客申辦改成免審核直接建檔，櫃檯要能立刻知道有誰加入（並在必要時停用他）。
+   跟右下角的「手機端異動」分開兩角，兩種訊息不會互相推擠。
+   有版本更新提醒時往上讓位（.verup-on）；桌機管理員有左側欄，左邊要讓開。 */
+#desk-feed-left{position:fixed;left:18px;bottom:18px;z-index:250;display:flex;flex-direction:column;
+  gap:10px;align-items:flex-start;pointer-events:none;max-width:min(380px,90vw);}
+#dfeed-left-list{display:flex;flex-direction:column;gap:10px;align-items:flex-start;width:100%;}
+body.verup-on #desk-feed-left{bottom:88px;}
+body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
+@media(max-width:1080px){ body.mc-mode #desk-feed-left{left:calc(64px + 16px);} }
+@media(max-width:600px){ #desk-feed-left,body.mc-mode #desk-feed-left{left:16px;right:16px;max-width:none;} }
+.dfeed-card.dfeed-newmem{border-left-color:var(--gold-d,#b48a56);}
 /* 過夜累積多則時的抬頭：一眼看到還有幾則沒確認，並可一次確認完 */
 /* 〔已停用〕2026-07-30 使用者指示：抬頭「會員異動 N 則待確認」移除，只顯示卡片。
    樣式暫留（deskFeedAckAll 仍在，日後若要恢復入口可直接沿用）。 */
@@ -6831,8 +6843,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.0939';
-const APP_VERSION_LABEL='v260801.0939';
+const APP_VERSION = '260801.0950';
+const APP_VERSION_LABEL='v260801.0950';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7512,6 +7524,12 @@ async function lineExchange(){
     const uid=(await sb.auth.getSession()).data.session.user.id;
     const mm=(await sb.from('members').select('*').eq('auth_id',uid).maybeSingle()).data;
     if(!mm){ showErr('會員資料讀取失敗，請洽櫃台'); return; }
+    /* 帳號停用（2026-08-01）：新客免審核直接建檔，濫註冊改由櫃檯事後停用擋下來，
+       所以登入這一關一定要看 status —— 不看的話停用等於沒有作用。 */
+    if(mm.status && mm.status!=='active'){
+      try{ await sb.auth.signOut(); }catch(_){}
+      showErr('此帳號已停用，請洽櫃台協助'); return;
+    }
     SESSION={role:'member',id:mm.id,name:mm.name,gender:mm.gender||null};
     /* 2026-07-28 使用者指示：LINE 登入的會員不必走「首次設定改密碼」——
        綁定申請櫃台審核通過即可直接使用（資料櫃台已核對）；密碼想改再從選單「修改密碼」。
@@ -7560,8 +7578,24 @@ async function submitLineRegister(){
       showErr(msg); if(btn){btn.disabled=false;btn.textContent='送出申辦';} return;
     }
     if(rpc.result==='already_linked'){ closeModal(); location.reload(); return; }
+    /* 2026-08-01 使用者定案：系統內查無這支手機＝全新的人，不需審核，當場建檔直接用。
+       濫註冊的防線改成櫃檯的「停用開關」（事後處理），不再讓每個新客都卡著等人核准。
+       手機對得上既有會員的（kind='link'）仍走審核 —— 那是要把舊票券與預約接過去，
+       核錯人等於把別人的課給了陌生人，一定要人工核對。 */
+    if(rpc.result==='created'){
+      closeModal();
+      let mm=null;
+      try{
+        const uid=(await sb.auth.getSession()).data.session.user.id;
+        mm=(await sb.from('members').select('*').eq('auth_id',uid).maybeSingle()).data;
+      }catch(_){}
+      if(!mm){ location.reload(); return; }   // 讀不到就重整走一般登入流程，不卡在這裡
+      SESSION={role:'member',id:mm.id,name:mm.name,gender:mm.gender||null};
+      showToast('會員申辦完成，歡迎加入 YUGYM！');
+      enterApp(); return;
+    }
     closeModal();
-    showModal(`<div class="modal-title">申辦已送出</div><div style="font-size:13px;color:var(--t2);line-height:1.8;">編號 <b>${rpc.request_id||''}</b>。<br>請至櫃台完成確認後即可使用。</div><div class="modal-foot"><button class="btn btn-green" onclick="lineAbort()">好</button></div>`);
+    showModal(`<div class="modal-title">申辦已送出</div><div style="font-size:13px;color:var(--t2);line-height:1.8;">編號 <b>${rpc.request_id||''}</b>。<br>系統裡已經有這支手機的資料，為了把您原有的票券與預約正確接回來，<b>請至櫃台完成確認</b>。</div><div class="modal-foot"><button class="btn btn-green" onclick="lineAbort()">好</button></div>`);
   }catch(e){ showErr('送出失敗：'+(e.message||e)); if(btn){btn.disabled=false;btn.textContent='送出申辦';} }
 }
 // 會員登入
@@ -7608,6 +7642,11 @@ async function doLogin(){
     else if(pend && pend.status==='rejected') err.textContent='您的申辦尚未通過，請洽櫃台協助。';
     else err.textContent='查無會員資料，請洽櫃台協助。';
     err.style.display='block';return;
+  }
+  // 帳號停用（2026-08-01）：兩條登入路徑都要擋，只擋一條等於沒擋
+  if(m.status && m.status!=='active'){
+    try{ await sb.auth.signOut(); }catch(_){}
+    err.textContent='此帳號已停用，請洽櫃台協助'; err.style.display='block'; return;
   }
   if(m.must_setup){
     SESSION={role:'member',id:m.id,name:m.name,gender:m.gender||null};
@@ -7873,6 +7912,19 @@ let _deskFeedTimer=null, _deskFeedBusy=false;
 function deskFeedEnabled(){
   return CLOUD && SESSION && isDeskLike() && !isMobileLayout();
 }
+/* 新會員加入的通知走左下角（2026-08-01 使用者指示），其餘手機端異動維持右下角。
+   兩種訊息的處理方式不同：右邊是「剛剛有人動了什麼，看一眼確認」，
+   左邊是「有新面孔加入，可能要去停用或補資料」，混在一起會互相蓋掉。 */
+function dfeedIsLeft(n){ return !!n && n.type==='member_new'; }
+function deskFeedLeftHost(){
+  let el=document.getElementById('desk-feed-left');
+  if(!el){
+    el=document.createElement('div'); el.id='desk-feed-left';
+    el.innerHTML=`<div id="dfeed-left-list"></div>`;
+    document.body.appendChild(el);
+  }
+  return document.getElementById('dfeed-left-list');
+}
 /* 掛在 <body> 底下（不是頁面容器）→ 換到哪一頁都留在右下角，不會被 navTo 重繪掉。 */
 function deskFeedHost(){
   let el=document.getElementById('desk-feed');
@@ -7912,6 +7964,7 @@ async function deskFeedAckAll(){
   deskFeedSyncHead();   // 全部確認完立刻把抬頭收掉，不等輪詢
 }
 const DESK_FEED_IC={
+  member_new:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.6"/><path d="M2.8 20c0-3.3 2.8-5.6 6.2-5.6 1.3 0 2.5.3 3.5.9"/><path d="M17.5 14v6M14.5 17h6"/></svg>',
   self_book:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>',
   self_cancel:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
   self_move:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12h13M13 7l5 5-5 5"/></svg>'
@@ -7942,9 +7995,10 @@ function dfeedText(str){
   });
 }
 function deskFeedPush(n){
-  const host=deskFeedHost();
-  if(host.querySelector(`[data-nid="${n.id}"]`)) return;
-  const kind=n.type==='self_cancel'?'cancel':(n.type==='self_move'?'move':'book');
+  const left=dfeedIsLeft(n);
+  const host=left?deskFeedLeftHost():deskFeedHost();
+  if(document.querySelector(`.dfeed-card[data-nid="${n.id}"]`)) return;
+  const kind=left?'newmem':(n.type==='self_cancel'?'cancel':(n.type==='self_move'?'move':'book'));
   const el=document.createElement('div');
   el.className='dfeed-card dfeed-'+kind;
   el.setAttribute('data-nid',n.id);
@@ -7976,7 +8030,7 @@ function deskFeedWhen(iso){
 }
 /* 櫃檯按「確認」才消失並標已讀（先移除、寫入失敗再抓回來，避免訊息被默默吃掉） */
 async function deskFeedAck(id){
-  const el=document.querySelector(`#desk-feed [data-nid="${id}"]`);
+  const el=document.querySelector(`.dfeed-card[data-nid="${id}"]`);   // 左右兩區都找得到
   /* 2026-07-30 使用者回報：卡片點掉了、上面的「會員異動 N 則待確認」還留著。
      原本抬頭只在輪詢時更新（最久要等 45 秒），全部確認完就會剩一條孤零零的抬頭。
      改成移除卡片後立刻依畫面上剩幾張重算。 */
@@ -8001,7 +8055,7 @@ async function deskFeedPoll(){
       .order('created_at',{ascending:true}).limit(20);
     if(q && !q.error){
       const live=new Set((q.data||[]).map(x=>x.id));
-      document.querySelectorAll('#desk-feed [data-nid]').forEach(el=>{
+      document.querySelectorAll('.dfeed-card[data-nid]').forEach(el=>{
         if(!live.has(el.getAttribute('data-nid'))) el.remove();
       });
       (q.data||[]).forEach(deskFeedPush);
@@ -20881,8 +20935,10 @@ PAGES.members=async function(){
     lc:(TIER_DEFS[effTier(m)]||{}).color||'#8a8478',
     onclick:`openPersonProfile('member','${m.id}')`,
     cells:[
+      /* 已停用的帳號在列表要看得出來（2026-08-01）——列表刻意不篩 status，
+         停用後仍找得到人、點得開明細再啟用回來。 */
       lpPerson(m.gender, m.name||'—',
-        `${tierLabel(effTier(m))}${m.phone?'　'+fmtPhone(m.phone):''}`,
+        `${((m.status||'active')!=='active')?'<span class="tag tag-danger" style="font-size:10px;padding:0 5px;">已停用</span>　':''}${tierLabel(effTier(m))}${m.phone?'　'+fmtPhone(m.phone):''}`,
         m.default_coach_id ? (()=>{const cl=coachTagColor(m.default_coach_id);   // 2026-07-28：主教練用教練 tag 色
           return `<i class="lp-coach" style="background:${cl.bg};color:${cl.fg};">${coachMap[m.default_coach_id]||''}</i>`;})() : ''),
       ...TK5.map(([k])=>tkCatCell(m,k)),
@@ -21180,7 +21236,8 @@ async function openMemberDetail(member_id){
         ${isCoach?'':`<div class="md-basic-f md-basic-click" onclick="openFieldEdit('${member_id}','email')"><span class="md-basic-l">Email</span><span class="md-basic-v">${m.email||'<span style=\"color:var(--t3);\">＋ 新增</span>'}</span></div>
         <div class="md-basic-f md-basic-click" onclick="openFieldEdit('${member_id}','birthday')"><span class="md-basic-l">生日</span><span class="md-basic-v">${m.birthday||'<span style=\"color:var(--t3);\">＋ 新增</span>'}</span></div>
         <div class="md-basic-f md-basic-click" onclick="openFieldEdit('${member_id}','line_id')"><span class="md-basic-l">LINE ID</span><span class="md-basic-v">${m.line_id||'<span style=\"color:var(--t3);\">＋ 新增</span>'}</span></div>
-        <div class="md-basic-f md-basic-click" onclick="openCoachModal('${member_id}')"><span class="md-basic-l">主教練</span><span class="md-basic-v">${m.default_coach_id?(coachMap[m.default_coach_id]||'—'):'<span style=\"color:var(--t3);\">＋ 指定</span>'}</span></div>`}
+        <div class="md-basic-f md-basic-click" onclick="openCoachModal('${member_id}')"><span class="md-basic-l">主教練</span><span class="md-basic-v">${m.default_coach_id?(coachMap[m.default_coach_id]||'—'):'<span style=\"color:var(--t3);\">＋ 指定</span>'}</span></div>
+        <div class="md-basic-f md-basic-click" onclick="toggleMemberDisabled('${member_id}')" title="點一下切換啟用／停用"><span class="md-basic-l">帳號狀態</span><span class="md-basic-v">${(m.status||'active')==='active'?'<span class=\"tag tag-ok\">啟用中</span>':'<span class=\"tag tag-danger\">已停用</span>'}</span></div>`}
       </div>
       ${isCoach?'':`<div class="md-tag-row">
         <div class="md-tag-col md-attr-click" onclick="openTagModal('${member_id}')">
@@ -21317,6 +21374,26 @@ async function openFieldEdit(member_id, field){
     <div class="form-row"><label>${d.label}</label><input id="fe-input" type="${d.type}" value="${String(d.val).replace(/"/g,'&quot;')}" placeholder="${d.ph}"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openMemberDetail('${member_id}')">返回</button><button class="btn btn-green" onclick="saveFieldEdit('${member_id}','${field}')">儲存</button></div>`);
   setTimeout(()=>{const i=document.getElementById('fe-input');if(i)i.focus();},60);
+}
+/* 會員帳號的停用開關（2026-08-01 使用者指示）——
+   新客申辦改成免審核直接建檔，「避免太多人隨意註冊」的防線就落在這裡：
+   事後停用，而不是事前擋每一個人。
+   停用後：兩條登入路徑都會擋下來，也不會出現在預約／銷售的會員名單裡
+   （那些選單本來就只取 status==='active'）。
+   ⚠ 資料、票券、預約紀錄全部保留 —— 這是「關掉登入」不是刪除，隨時可以再啟用。
+   會員列表不篩 status，所以停用後仍找得到那個人、點得開明細再啟用回來。 */
+async function toggleMemberDisabled(mid){
+  const m=await dbGet('members',mid); if(!m) return;
+  const isOff=(m.status||'active')!=='active';
+  const msg=isOff
+    ? `要重新啟用「${m.name}」的帳號嗎？\n啟用後他就能登入、也會回到預約名單裡。`
+    : `要停用「${m.name}」的帳號嗎？\n\n・他將無法登入\n・不會出現在預約與銷售的會員名單裡\n・票券與預約紀錄都會保留，隨時可以再啟用`;
+  if(!confirm(msg)) return;
+  m.status=isOff?'active':'disabled';
+  try{ await dbPut('members',m); }
+  catch(e){ showToast('更新失敗：'+((e&&e.message)||e)); return; }
+  showToast(isOff?'已重新啟用':'已停用此帳號');
+  openMemberDetail(mid);
 }
 async function saveFieldEdit(member_id, field){
   const m=await dbGet('members',member_id);
