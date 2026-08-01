@@ -6863,8 +6863,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1035';
-const APP_VERSION_LABEL='v260801.1035';
+const APP_VERSION = '260801.1044';
+const APP_VERSION_LABEL='v260801.1044';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10924,6 +10924,9 @@ function rpcBookingErrMsg(code){
     'TICKET.INSTALLMENT_LOCKED':'分期票券尚未繳費的堂數不可預約，請先收款並「開通下一期」',
     'BOOKING.CLOSED_HOURS':'此時段非營業時間',
     'POINT.EMPTY':'會員自主訓練點數不足',
+    // 指定票券的專屬錯誤（2026-08-01）：講清楚是「你選的那一張」不能用，而不是籠統的沒票
+    'TICKET.NOT_FOUND':'找不到您選的那張票券（可能剛被刪除），請重新整理後再試',
+    'TICKET.NOT_YOURS':'您選的那張票券不屬於這位會員（也不在他的共享名單裡）',
   };
   return M[code]||('建立失敗：'+(code||'未知錯誤'));
 }
@@ -10932,11 +10935,20 @@ async function createBookingViaRpc(o, tk, ds, ts){
   const bt=benefitTypeOfTypeId((tk&&tk.ticket_type_id)||o.type_id);
   if(!bt) return { ok:false, reason:'無法判斷票券類型（benefit_type）' };  // 保險：回報而非誤扣
   const sp=spaceForBooking(o.category);
+  /* 2026-08-01 使用者回報（兩起，同一個根因）：
+       ・鄭雅芳 8/26 選了「限定教練課 1V2」（共享票），系統扣到她自己的一般教練課
+       ・鄭超元 選了剩 1 堂的那張課卡，系統扣到剩 4 堂的那張
+     根因：這支 RPC 原本只送 p_benefit_type，**票券是 DB 端 benefit_consume 自己 FIFO 挑的**，
+     櫃檯在畫面上點的那一張從頭到尾沒有傳進去。共享票更是完全撈不到
+     （benefit_consume 用 mt.member_id = 會員，票掛在持有人名下）。
+     現在把選定的票券 id 一起送出，DB 端有指定就扣那一張（migration
+     20260801_create_booking_honor_selected_ticket）。 */
   const { data, error } = await sb.rpc('fn_create_booking', {
     p_member_id:o.member_id, p_coach_id:o.coach_id||null,
     p_category:o.category, p_benefit_type:bt,
     p_date:ds, p_start_time:ts||o.time, p_duration:o.duration||60,
-    p_space_id:sp.space, p_resource_id:sp.resource, p_note:null
+    p_space_id:sp.space, p_resource_id:sp.resource, p_note:null,
+    p_ticket_id:(tk&&tk.id)||null
   });
   // RPC 在 DB 端會動 bookings / member_tickets / ticket_logs / notifications 多張表，
   // 且不經過 dbPut → 必須自行清快取，否則行事曆會顯示不到剛建立的課。
