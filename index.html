@@ -3135,6 +3135,10 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* Focus Mode：過去的課淡化（降 opacity+降飽和+提亮），焦點集中現在與未來 */
 .cal-ev.cal-ev-past{opacity:0.5;filter:saturate(0.65) brightness(1.06);transition:opacity .18s, filter .18s;}
 .cal-ev.cal-ev-past:hover{opacity:1;filter:none;}
+/* 未完成的過去課卡不淡化（2026-08-01 使用者指示）——
+   .col-past 會把整欄的舊卡再壓一層灰，這裡要一起讓開，否則週檢視的舊日期還是會把它壓暗。 */
+.cal-ev.cal-ev-todo,
+.cal-daycol.col-past .cal-ev.cal-ev-todo{opacity:1;filter:none;}
 .cal-half{height:var(--slot-px,34px);border-bottom:1px dashed rgba(0,0,0,0.09);cursor:pointer;transition:background .12s;}
 .cal-half.hourline{border-bottom:1px solid rgba(0,0,0,0.18);}
 /* 整列反白提示「此時段可新增」；點擊直接走 .cal-half 自身 onclick（日期時間為字面值，無全域競態） */
@@ -6795,8 +6799,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.0807';
-const APP_VERSION_LABEL='v260801.0807';
+const APP_VERSION = '260801.0901';
+const APP_VERSION_LABEL='v260801.0901';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13947,7 +13951,17 @@ async function renderCalendar(opts){
         const _endM = timeToMin(b.start_time||'0:0') + (b.duration||60);
         if(_endM <= _nowM) _isPastCard = true;   // 已結束的課
       }
-      const _pastCls = _isPastCard ? 'cal-ev-past' : '';
+      /* 只有「已經結案」的過去課卡才淡化（2026-08-01 使用者指示）——
+         未簽到完成的過去課卡維持原色，在一片淡化的舊卡裡就會自己跳出來，
+         櫃檯掃一眼就知道哪一堂還沒處理，不用逐張點開。
+         結案的定義（與卡上的簽到章同源，避免兩套標準）：
+           ・已簽到／補簽（團課＝每個名額都簽到或請假，見 grpAllDone）
+           ・全員請假（蓋紅色「假」章）
+           ・已取消／未到（no_show）—— 已成定局，沒有待辦
+         遮蔽卡（教練看別人的課）沒有簽到章可判讀，維持原本一律淡化，不製造假警訊。 */
+      const _settled = b.status==='cancelled' || b.status==='no_show' || hideMember
+        || _isCheckedIn || _isMakeup || grpAllOnLeave(b);
+      const _pastCls = !_isPastCard ? '' : (_settled ? 'cal-ev-past' : 'cal-ev-todo');
       // hover 跟游標提示內容（2026-07-25 使用者指示）：時間 / 會員（團課逐人分行）/ 教練；白底黑字浮框由 initCalCursorTip 顯示
       const _tipEsc = s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
       let _tipMem;
