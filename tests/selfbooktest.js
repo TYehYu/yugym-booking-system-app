@@ -85,8 +85,13 @@ console.log('\n② 圓形卡上的標記');
 
   // 本堂金框與自助標記可以並存
   h=api(T,[BK('b3','2026-08-05','booked','MEM-1')],{},0,'b3','MEM-1');
-  ok('　　本堂金框與自助標記並存', /mtk-cur/.test(h) && /mtk-self/.test(h));
+  ok('　　本堂標記與自助標記並存', /mtk-cur/.test(h) && /mtk-self/.test(h));
 }
+/* 2026-08-01：「本堂」的框改成綠色（金配金看不出來），金色留給「會員自行預約」，
+   兩個標記才不會混在一起。 */
+ok('　　「本堂」用綠框、「自行預約」用金點，兩者顏色不重疊',
+   /\.mtk\.mtk-cur\{border-color:var\(--green,#1f6f54\)!important;/.test(src)
+   && /background:var\(--gold-d,#b48a56\);border:1\.5px solid var\(--card,#fff\)/.test(src));
 ok('★ 標記樣式：圓點右上角一顆小金點（不塞字，30px 塞不下）',
    /\.mtk\.mtk-self::after\{content:'';position:absolute;top:-1px;right:-1px;width:9px;height:9px;/.test(src));
 ok('　　為什麼用點不用字、為什麼用金色，寫在程式裡',

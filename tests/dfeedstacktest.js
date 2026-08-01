@@ -97,6 +97,11 @@ ok('　　閃完會自己清掉 class', /setTimeout\(\(\)=>hits\.forEach\(e=>e\.
 ok('　　閃爍樣式存在，且尊重「減少動態效果」',
    /\.cal-ev\.cal-ev-flash,\.cag-std\.cal-ev-flash/.test(src)
    && /@media \(prefers-reduced-motion:reduce\)\{ \.cal-ev\.cal-ev-flash\{animation:none;\} \}/.test(src));
+/* 2026-08-01 使用者指示：「圓形卡旁邊提示的黃色閃爍改成綠色 比較明顯」——
+   金色在暖色系的課卡與褐金色圓點上都不夠跳。 */
+ok('　　閃爍改綠色（金色在暖色系的課卡上不夠跳）',
+   /outline:2px solid var\(--green,#1f6f54\);outline-offset:1px;\}/.test(src)
+   && /@keyframes calEvFlash\{0%,100%\{box-shadow:0 0 0 0 rgba\(31,111,84,0\);\}50%\{box-shadow:0 0 0 7px rgba\(31,111,84,\.38\);\}\}/.test(src));
 ok('　　為什麼從文字讀而不是改三處寫入，寫在程式裡',
    /而且對已經躺在畫面上的舊通知也直接生效/.test(src));
 
