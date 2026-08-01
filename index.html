@@ -5627,6 +5627,17 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
 .rc-dows{display:flex;flex-direction:column;gap:5px;}
 .rc-dow{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;}
 .rc-dow input[type=checkbox]{flex:0 0 auto;margin:0;}
+/* 堂數微調（2026-08-01 使用者回報：手機沒有＋－鈕，改數字要叫鍵盤、鍵盤又蓋住視窗） */
+.rc-count{display:flex;align-items:center;gap:8px;}
+.rc-count input{flex:1;min-width:0;text-align:center;font-family:var(--num),inherit;
+  font-size:17px;font-weight:800;margin:0 !important;
+  -moz-appearance:textfield;}
+.rc-count input::-webkit-outer-spin-button,.rc-count input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.rc-cbtn{flex:0 0 auto;width:44px;height:44px;border-radius:12px;border:1.5px solid var(--bd);
+  background:#fff;color:var(--text);font-size:22px;font-weight:700;line-height:1;cursor:pointer;
+  font-family:inherit;display:flex;align-items:center;justify-content:center;
+  -webkit-tap-highlight-color:transparent;}
+.rc-cbtn:active{background:var(--card2);transform:scale(.94);}
 .rc-dow input[type=time],.rc-dow select{margin-left:auto;width:118px;padding:4px 8px;border:1px solid var(--bd);
   border-radius:7px;font-family:var(--num),inherit;font-size:12.5px;background:#fff;
   -webkit-appearance:none;appearance:none;
@@ -6912,8 +6923,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1813';
-const APP_VERSION_LABEL='v260801.1813';
+const APP_VERSION = '260801.1836';
+const APP_VERSION_LABEL='v260801.1836';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17483,10 +17494,16 @@ function recurBoxHtml(prefix, maxN){
           <select class="${prefix}-dowt" data-dow="${v}" disabled>${recurTimeOpts()}</select></label>`; }).join('')}
       </div>
       ${/* 標籤不寫死「最多 12 堂」（2026-08-01）：上限會跟著選到的票券改，寫死會與下面的說明打架 */''}
+      ${/* 2026-08-01 使用者回報：「不能只約 4 堂，因為旁邊沒有＋－的按鈕」——
+           手機上的數字輸入框沒有加減鈕（那是桌機才有），要改數字得叫出鍵盤、鍵盤又蓋住半個視窗。
+           改成「－ 數字 ＋」，常用的微調一根手指就好；要直接打數字仍然可以點中間那格。 */''}
       <div class="form-row" style="margin:10px 0 6px;"><label>預約堂數（含第一堂）</label>
-        <input type="number" id="${prefix}-count" min="1" max="${_m}" step="1"
-               value="${_m}" data-max="${_m}" oninput="recurClampCount('${prefix}')"
-               style="font-family:var(--num),inherit;">
+        <div class="rc-count">
+          <button type="button" class="rc-cbtn" onclick="recurStep('${prefix}',-1)" aria-label="減少一堂">−</button>
+          <input type="number" id="${prefix}-count" min="1" max="${_m}" step="1" inputmode="numeric"
+                 value="${_m}" data-max="${_m}" oninput="recurClampCount('${prefix}')">
+          <button type="button" class="rc-cbtn" onclick="recurStep('${prefix}',1)" aria-label="增加一堂">＋</button>
+        </div>
       </div>
       <div id="${prefix}-count-hint" style="font-size:11px;color:var(--t3);line-height:1.7;">
         ${recurCountHint(prefix, _m)}</div>
@@ -17535,6 +17552,14 @@ function recurDowToggle(prefix,dow){
   const cb=[...document.querySelectorAll('.'+prefix+'-dow')].find(x=>Number(x.value)===Number(dow));
   const tm=[...document.querySelectorAll('.'+prefix+'-dowt')].find(x=>Number(x.getAttribute('data-dow'))===Number(dow));
   if(tm) tm.disabled=!(cb&&cb.checked);
+}
+/* ＋／－ 微調（2026-08-01）：一次一堂，夾在 1～上限之間。
+   走與手動輸入同一條夾值邏輯，兩種操作的結果一定一致。 */
+function recurStep(prefix, d){
+  const el=document.getElementById(prefix+'-count'); if(!el) return;
+  el.value=Math.max(1,(Math.floor(Number(el.value)||0))+d);
+  recurClampCount(prefix);          // 內含上限夾值與 data-touched 標記
+  try{ hapticFeedback(6); }catch(_){}
 }
 /* 次數不得超過可約堂數（也不得小於 1）。上限記在 data-max，沒有上限就只擋下界。 */
 function recurClampCount(prefix){

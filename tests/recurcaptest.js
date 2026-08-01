@@ -151,5 +151,52 @@ ok('　　原因寫在程式裡', /iOS 會叫出滾輪但沒有確定鈕，只�
   ok('　　讀取端的格式檢查吃得下（HH:MM）', vals.slice(1).every(v=>/^\d{2}:\d{2}$/.test(v)));
 }
 
+/* 2026-08-01 使用者回報：「不能只約 4 堂，因為旁邊沒有＋－的按鈕」——
+   手機的數字輸入框沒有加減鈕（那是桌機才有），要改數字得叫鍵盤、鍵盤又蓋住半個視窗。 */
+console.log('\n堂數欄加上＋－微調');
+ok('★ 改成「－ 數字 ＋」三件式', /<div class="rc-count">/.test(src)
+   && /<button type="button" class="rc-cbtn" onclick="recurStep\('\$\{prefix\}',-1\)" aria-label="減少一堂">−<\/button>/.test(src)
+   && /<button type="button" class="rc-cbtn" onclick="recurStep\('\$\{prefix\}',1\)" aria-label="增加一堂">＋<\/button>/.test(src));
+ok('★ 中間仍可直接打字（沒有變成唯讀）', /<input type="number" id="\$\{prefix\}-count" min="1" max="\$\{_m\}" step="1" inputmode="numeric"/.test(src));
+ok('★ ＋－ 走同一條夾值邏輯（兩種操作結果一致）',
+   /function recurStep\(prefix, d\)\{[\s\S]{0,220}recurClampCount\(prefix\);/.test(src));
+ok('　　按了也會標記 touched（之後換票券不覆蓋他調好的數字）',
+   /recurClampCount\(prefix\);          \/\/ 內含上限夾值與 data-touched 標記/.test(src));
+ok('　　有觸覺回饋，且失敗不影響功能', /try\{ hapticFeedback\(6\); \}catch\(_\)\{\}/.test(src));
+ok('★ 隱藏瀏覽器原生的上下箭頭（跟自訂鈕重複）',
+   /\.rc-count input::-webkit-outer-spin-button,\.rc-count input::-webkit-inner-spin-button\{-webkit-appearance:none;margin:0;\}/.test(src));
+ok('　　按鈕夠大好按（44×44，符合觸控最小尺寸）', /\.rc-cbtn\{flex:0 0 auto;width:44px;height:44px;/.test(src));
+ok('　　原因寫在程式裡', /手機上的數字輸入框沒有加減鈕（那是桌機才有）/.test(src));
+
+{
+  const g2=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
+  const mk=(val,dataMax)=>{
+    const el={_a:{'data-max':String(dataMax)}, value:String(val),
+      getAttribute(k){return this._a[k];}, setAttribute(k,v){this._a[k]=String(v);}};
+    const clamp=new Function('document','RECUR_MAX','showToast',
+      g2('function recurClampCount(prefix){','\n}\n')+'\nreturn recurClampCount;')(
+      {getElementById:()=>el}, 12, ()=>{});
+    const step=new Function('document','recurClampCount','hapticFeedback',
+      g2('function recurStep(prefix, d){','\n}\n')+'\nreturn recurStep;')(
+      {getElementById:()=>el}, clamp, ()=>{});
+    return {el, step};
+  };
+  console.log('\n  ＋－ 實跑');
+  { const {el,step}=mk(12,12); step('bk',-1); step('bk',-1);
+    eq('★ 從 12 按兩下減 → 10', Number(el.value), 10); }
+  { const {el,step}=mk(12,12); for(let i=0;i<8;i++) step('bk',-1);
+    eq('★ 一路減到 4（使用者的情境）', Number(el.value), 4); }
+  { const {el,step}=mk(1,12); step('bk',-1);
+    eq('★ 減到 1 就停（不會變 0 或負數）', Number(el.value), 1); }
+  { const {el,step}=mk(10,10); step('bk',1); step('bk',1);
+    eq('★ 加不過票券上限', Number(el.value), 10); }
+  { const {el,step}=mk(3,12); step('bk',1);
+    eq('　　沒有票券上限時最多加到方案上限 12', Number(el.value), 4); }
+  { const {el,step}=mk(3,12); step('bk',1);
+    eq('★ 按過之後標記 touched（換票券不會覆蓋）', el.getAttribute('data-touched'), '1'); }
+  { const {el,step}=mk('',12); step('bk',1);
+    eq('　　空值按加 → 變 1', Number(el.value), 1); }
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
