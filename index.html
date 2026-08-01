@@ -6598,6 +6598,30 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 .mc-req-fab .lni{width:17px;height:17px;color:var(--gold);}
 .mc-req-fab b{color:var(--gold);font-family:var(--num),inherit;}
 .mc-lotto-fab.mc-fab-up{bottom:82px;}
+/* ── 左下角：版本更新提醒（2026-08-01 使用者指示）──
+   與抽獎／審核鈕同一角落，所以提醒出現時把那兩顆往上推（沿用 mc-fab-up 的疊法）。 */
+.ver-up{position:fixed;left:24px;right:auto;bottom:24px;z-index:9400;display:flex;align-items:center;gap:10px;
+  background:var(--text,#241f18);color:#F4F1E8;border-radius:12px;padding:10px 12px 10px 14px;
+  max-width:min(340px,90vw);box-shadow:0 10px 30px rgba(20,18,14,.28);
+  animation:lotIn .45s var(--soft-ease) backwards;}
+.ver-up .vu-ic{flex:0 0 auto;width:18px;height:18px;color:var(--gold);}
+.ver-up .vu-txt{flex:1;min-width:0;font-size:12.5px;line-height:1.5;}
+.ver-up .vu-txt b{display:block;font-size:13px;}
+.ver-up .vu-txt span{color:rgba(244,241,232,.72);font-family:var(--num),inherit;font-size:11.5px;}
+.ver-up .vu-go{flex:0 0 auto;border:none;background:var(--gold);color:#241f18;font-family:inherit;
+  font-size:12px;font-weight:800;border-radius:8px;padding:7px 12px;cursor:pointer;white-space:nowrap;}
+.ver-up .vu-go:hover{filter:brightness(1.06);}
+.ver-up .vu-x{flex:0 0 auto;border:none;background:transparent;color:rgba(244,241,232,.6);
+  font-family:inherit;font-size:15px;line-height:1;padding:4px 2px;cursor:pointer;}
+.ver-up .vu-x:hover{color:#F4F1E8;}
+body.mc-mode .ver-up{left:calc(232px + 20px);}
+@media(max-width:1080px){ body.mc-mode .ver-up{left:calc(64px + 16px);} }
+@media(max-width:600px){ .ver-up,body.mc-mode .ver-up{left:16px;right:16px;max-width:none;} }
+/* 提醒出現時，左下角原本那兩顆讓位往上 */
+body.verup-on .mc-req-fab,body.verup-on .mc-lotto-fab{bottom:88px;}
+body.verup-on .mc-lotto-fab.mc-fab-up{bottom:146px;}
+@media(max-width:600px){ body.verup-on .mc-req-fab,body.verup-on .mc-lotto-fab{bottom:150px;}
+  body.verup-on .mc-lotto-fab.mc-fab-up{bottom:208px;} }
 /* 桌機管理員有左側欄（232px；1080px 以下收成 64px 圖示列）—— 左下角的鈕要讓開，
    不然會被側欄蓋住（2026-07-31）。手機沒有側欄，維持貼左。 */
 body.mc-mode .mc-lotto-fab,body.mc-mode .mc-req-fab{left:calc(232px + 20px);}
@@ -6799,8 +6823,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.0901';
-const APP_VERSION_LABEL='v260801.0901';
+const APP_VERSION = '260801.0911';
+const APP_VERSION_LABEL='v260801.0911';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -6999,7 +7023,11 @@ async function dbGet(store,id){
    ・寫入失敗一律吞掉，通知不能拖垮原本的操作（RPC 內部也再吞一層）。 */
 /* 刻意不含 member_tickets／ticket_logs：簽到一次會連寫「預約＋票券＋帳本」三張表，
    全都通知就是同一件事跳三張卡。票券的異動一定伴隨預約的異動，通知預約就夠了。 */
-const MCHG_LABEL={ bookings:'預約', attendance:'出勤打卡', punch_requests:'補卡申請',
+/* 2026-08-01 使用者指示：移除右下角「手機打卡」的提示。
+   教練每天上下班各打一次卡，櫃檯的右下角就被例行打卡洗版，真正要看的課卡異動反而被推走。
+   打卡紀錄本身在「打卡異常與補卡」與員工名片都查得到，不需要即時通知。
+   ⚠ punch_requests（補卡申請）留著 —— 那是要櫃檯去核准的待辦，不是例行紀錄。 */
+const MCHG_LABEL={ bookings:'預約', punch_requests:'補卡申請',
   members:'會員資料' };
 /* 同一筆資料短時間內重複寫（連點、先存時間再存備註）只跳一次 */
 const _mchgSeen={};
@@ -7790,6 +7818,12 @@ function hapticFeedback(ms){
    LIFF 網址帶 ?go=scan（掃碼簽到）／?go=book（預約自主訓練）。
    LIFF 兩段導轉時參數會先包在 liff.state 裡，兩種形式都解。
    用法：https://liff.line.me/2010821438-e2Kcw1Ca?go=scan */
+/* 版本提醒的「重新整理」會帶 ?v=<版本> 進來（純為穿過 HTML 快取）——
+   用完就從網址清掉，不然櫃檯複製網址時會一直帶著上一次的版本號（2026-08-01）。 */
+(function(){ try{
+  const sp=new URLSearchParams(location.search);
+  if(sp.get('v')) history.replaceState(null,'',location.pathname+(location.hash||''));
+}catch(_){} })();
 window._deepGo=(function(){
   try{
     const sp=new URLSearchParams(location.search);
@@ -7978,6 +8012,69 @@ function deskFeedStart(){
     document.addEventListener('visibilitychange',()=>{ if(!document.hidden) deskFeedPoll(); });
   }
 }
+/* ══ 版本更新提醒（2026-08-01 使用者指示：左下角新增版本更新的提醒）══
+   push 就是上線，但「已經開著的分頁」不會自己換版 —— 櫃檯常整天不關頁面，
+   於是用著舊版問「怎麼沒有那個功能」。這裡固定去問伺服器上的 index.html 換版了沒。
+   ・index.html 有 2.4MB，不能每輪都整份抓 → 先用 HEAD 比 ETag（幾百 bytes 的往返），
+     真的變了才 GET 一次、把新版本號讀出來顯示給人看。
+   ・第一輪只記基準值不提醒（否則一進來就跳）。
+   ・只給員工看：會員每次從 LINE 進來都是新的，跳「有新版本」只會困惑。
+   ・按「稍後」只關掉這一版；之後又有更新版還是會再跳。
+   ・更新走「帶版本號的網址」重新載入 —— GitHub Pages 的 HTML 有快取，
+     單純 location.reload() 可能仍拿到舊檔，那就白提醒了。 */
+const VERUP_MS=300000;                 // 5 分鐘問一次（HEAD，成本極低）
+let _verUpTimer=null, _verUpBusy=false, _verUpTag=null, _verUpSkip=null;
+function verUpEnabled(){ return !!(SESSION && SESSION.role!=='member'); }
+function _verUpProbe(){ return location.pathname+'?_vc='+Date.now(); }   // 查詢字串只為穿過中間快取
+async function verUpCheck(){
+  if(!verUpEnabled() || _verUpBusy || document.hidden) return;
+  _verUpBusy=true;
+  try{
+    const r=await fetch(_verUpProbe(),{method:'HEAD',cache:'no-store'});
+    const tag=r.headers.get('etag')||r.headers.get('last-modified')||r.headers.get('content-length')||'';
+    if(!tag){ /* 伺服器沒給任何指紋 → 無從比對，安靜跳過 */ }
+    else if(!_verUpTag){ _verUpTag=tag; }        // 第一輪：只記基準
+    else if(tag!==_verUpTag){
+      _verUpTag=tag;
+      const txt=await (await fetch(_verUpProbe(),{cache:'no-store'})).text();
+      const m=txt.match(/const APP_VERSION = '([^']+)'/);
+      const nv=m?m[1]:'';
+      if(nv && nv!==APP_VERSION && nv!==_verUpSkip) verUpShow(nv);
+    }
+  }catch(_){}
+  _verUpBusy=false;
+}
+function verUpShow(nv){
+  let el=document.getElementById('ver-up');
+  if(!el){ el=document.createElement('div'); el.id='ver-up'; el.className='ver-up'; document.body.appendChild(el); }
+  el.dataset.ver=nv;
+  el.innerHTML=`<svg class="vu-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 4.5V10H15"/></svg>`
+    +`<div class="vu-txt"><b>系統已更新</b><span>目前 v${APP_VERSION}　→　新版 v${nv}</span></div>`
+    +`<button class="vu-go" onclick="verUpReload()">重新整理</button>`
+    +`<button class="vu-x" onclick="verUpDismiss()" title="稍後再說" aria-label="稍後再說">✕</button>`;
+  document.body.classList.add('verup-on');
+}
+function verUpDismiss(){
+  const el=document.getElementById('ver-up');
+  if(el){ _verUpSkip=el.dataset.ver||null; el.remove(); }
+  document.body.classList.remove('verup-on');
+}
+function verUpReload(){
+  const el=document.getElementById('ver-up');
+  const nv=(el&&el.dataset.ver)||'';
+  location.replace(location.pathname+(nv?'?v='+encodeURIComponent(nv):'')+(location.hash||''));
+}
+function verUpStart(){
+  if(_verUpTimer){ clearInterval(_verUpTimer); _verUpTimer=null; }
+  if(!verUpEnabled()) return;
+  verUpCheck();
+  _verUpTimer=setInterval(verUpCheck, VERUP_MS);
+  if(!window._verUpVis){
+    window._verUpVis=true;
+    // 回到前景立刻補查一次：櫃檯離開再回來時最需要知道有沒有換版
+    document.addEventListener('visibilitychange',()=>{ if(!document.hidden) verUpCheck(); });
+  }
+}
 function enterApp(){
   document.getElementById('login-screen').classList.add('hidden');
   const app=document.getElementById('app-screen');
@@ -8024,6 +8121,7 @@ function enterApp(){
   dbGetAll('venues').then(v=>{ if(v&&v.length) window.VENUES=v; }).catch(()=>{});
   loadSalaryTemplates();
   deskFeedStart();          // 會員自助異動 → 桌機右下角滑出通知（2026-07-29）
+  verUpStart();             // 有新版上線 → 左下角提醒重新整理（2026-08-01）
   buildNav();
   const isMobile=isMobileLayout();
   // 桌機｜管理員/櫃台 → 兩層導覽：開啟第一個主選單
@@ -19050,16 +19148,25 @@ async function doBkTicketChange(id,newTkId){
   openBookingDetail(id);
  }catch(e){ showToast('更換失敗：'+(e&&e.message?e.message:e)); }
 }
+/* 哪些場地可以「一張預約佔多台」（2026-08-01 使用者指示：燈號只出現在跑步機）——
+   跑步機開放了「一張自主訓練預約可以佔一台或兩台」，所以明細才需要燈號讓人開關。
+   多功能訓練區雖然也有 3 個單位，但那是「同時容納 3 個人」，不是同一張預約佔 3 個 ——
+   在那裡畫燈號會讓櫃檯以為可以一次占滿，是誤導。
+   ⚠ 用常數而不是 venues 表的欄位：window.VENUES 會被資料庫的 venues 覆寫（見 enterApp），
+     DB 那份沒有這個欄位的話，功能會無聲消失。 */
+const VENUE_MULTI_UNIT=['treadmill'];
+function venueAllowsMultiUnit(vid){ return VENUE_MULTI_UNIT.indexOf(String(vid||''))>=0; }
 /* ── 場地單位燈號開關（2026-07-31 使用者指示：明細的場地旁邊要有燈號讓我選）──
    跑步機是「一個場地兩台」，一對二的客人可能一張票就佔掉兩台。
    在預約明細的場地右邊直接畫出每一台的燈：灰＝可預約（可點，點了就改到那一台）、
    綠＝已預約、金框＝本堂目前用的那一台。
-   只有兩台以上的場地才畫（教室只有一間，沒得選）。 */
+   只在「可以一張預約佔多台」的場地才畫（2026-08-01 收斂成只有跑步機）。 */
 async function venueUnitDots(b, editable){
   try{
     if(!b || !b.date || !b.start_time) return '';
     const vid=String(b.venue_unit||'').split('_')[0]
       || ((typeof venuePriorityFor==='function'?venuePriorityFor(b.category):[])||[])[0];
+    if(!venueAllowsMultiUnit(vid)) return '';     // 2026-08-01：只有跑步機才有這個燈號
     const cap=(typeof venueCap==='function')?(venueCap(vid)||0):0;
     if(cap<2) return '';
     const all=await dbGetAll('bookings').catch(()=>[]);

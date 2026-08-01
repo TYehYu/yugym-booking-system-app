@@ -14,13 +14,14 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
 
 /* 實跑 venueUnitDots：把 dbGetAll 換成假資料 */
-const mk=(BK)=>new Function('dbGetAll','timeToMin','venueCap','venuePriorityFor','venueName',
+const mk=(BK)=>new Function('dbGetAll','timeToMin','venueCap','venuePriorityFor','venueName','venueAllowsMultiUnit',
   g('async function venueUnitDots(b, editable){','\n}\n')+'\nreturn venueUnitDots;')(
   async()=>BK,
   t=>{const[h,m]=String(t||'0:0').split(':').map(Number);return h*60+(m||0);},
   v=>({multi:3,treadmill:2,group:1}[v]||0),
   c=>c==='自主訓練'?['multi','group','treadmill']:['multi','group'],
-  u=>({multi:'多功能訓練區',treadmill:'跑步機',group:'團課教室'}[String(u).split('_')[0]]||u));
+  u=>({multi:'多功能訓練區',treadmill:'跑步機',group:'團課教室'}[String(u).split('_')[0]]||u),
+  vid=>String(vid)==='treadmill');   // 2026-08-01：燈號只出現在跑步機
 
 const SELF=(o)=>Object.assign({id:'B0',category:'自主訓練',date:'2026-07-31',start_time:'17:00',duration:60,venue_unit:'treadmill_1'},o);
 const T=(u,t,o)=>Object.assign({id:u+t,date:'2026-07-31',status:'booked',venue_unit:u,start_time:t,duration:60},o||{});
@@ -46,12 +47,17 @@ console.log('畫幾顆、什麼顏色');
   eq('　　本堂在 2 號 → 金框跟著跑到第二顆', dots(h), ['','cur']);
 }
 
-console.log('\n只在有得選的場地畫');
+/* 2026-08-01 使用者指示：「更換場地的燈號按鈕只要出現在選擇跑步機的時候，
+   因為有開放一張自主訓練預約兩台跑步機的功能，會員可以選擇要一台還是兩台」。
+   多功能訓練區的 3 個位子是「同時容納 3 個人」，不是同一張預約佔 3 個 —— 在那裡畫燈號是誤導。 */
+console.log('\n只在跑步機畫（2026-08-01 收斂）');
 {
+  ok('★ 跑步機 → 畫兩顆', dots(await mk([])(SELF({venue_unit:'treadmill_1'}),true)).length===2);
+  eq('★ 多功能訓練區 → 不畫（3 個位子是 3 個人，不是一張預約佔 3 個）',
+     await mk([])(SELF({venue_unit:'multi_2'}),true), '');
   eq('★ 團課教室只有一間 → 不畫', await mk([])(SELF({venue_unit:'group_1'}),true), '');
-  ok('★ 多功能三位 → 畫三顆', dots(await mk([])(SELF({venue_unit:'multi_2'}),true)).length===3);
-  eq('　　沒有 venue_unit 時看課種的第一順位（自主訓練＝多功能）',
-     dots(await mk([])(SELF({venue_unit:null}),true)).length, 3);
+  eq('　　沒有 venue_unit 時看課種的第一順位（自主訓練＝多功能）→ 不畫',
+     await mk([])(SELF({venue_unit:null}),true), '');
   eq('　　沒有日期／時間不畫', await mk([])(SELF({start_time:null}),true), '');
 }
 

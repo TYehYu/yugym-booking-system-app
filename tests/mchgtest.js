@@ -41,7 +41,10 @@ console.log('\n哪些表要通知');
 {
   const lbl=new Function(g('const MCHG_LABEL=','};')+'\nreturn MCHG_LABEL;')();
   eq('★ 預約', lbl.bookings, '預約');
-  eq('★ 出勤打卡', lbl.attendance, '出勤打卡');
+  /* 2026-08-01 使用者指示：「移除右下角手機打卡的提示」——
+     教練每天上下班各打一次卡，櫃檯右下角被例行打卡洗版，課卡異動反而被推走。
+     補卡申請留著（那是要核准的待辦，不是例行紀錄）。細節見 tests/veruptest.js。 */
+  eq('★ 出勤打卡不再通知（2026-08-01）', lbl.attendance, undefined);
   eq('★ 補卡申請', lbl.punch_requests, '補卡申請');
   eq('★ 會員資料', lbl.members, '會員資料');
   ok('★ 不含 member_tickets／ticket_logs —— 簽到一次連寫三張表，會跳三張卡',
