@@ -6899,8 +6899,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1748';
-const APP_VERSION_LABEL='v260801.1748';
+const APP_VERSION = '260801.1756';
+const APP_VERSION_LABEL='v260801.1756';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10304,7 +10304,9 @@ function ticketCategoryOf(t){
   if(id==='trial') return '體驗';
   // 用方案名相容
   const nm=(t.plan_name||'')+(tt?tt.name:'');
-  if(nm.indexOf('團體')>=0||nm.indexOf('小班')>=0) return '小班肌力';
+  /* 「團課 4週優惠」不含「團體」也不含「小班」—— 2026-08-01 許佳慈的卡片因此掉進「其他」。
+     票種對得上時本來就走上面那條，這裡只是名稱備援，仍要涵蓋店裡實際在用的講法。 */
+  if(nm.indexOf('團體')>=0||nm.indexOf('小班')>=0||nm.indexOf('團課')>=0) return '小班肌力';
   if(nm.indexOf('自主')>=0) return '自主訓練';
   if(nm.indexOf('體驗')>=0) return '體驗';
   if(nm.indexOf('教練')>=0) return '私人教練';
@@ -26427,33 +26429,18 @@ async function ppLoadCtx(){
        成「已用畢」收進歷史）—— 只用 member_id 過濾會整批漏掉團課，票券的待上堂數就算不出來。 */
     const myBk=bkOfMember(bookings, PP.id);
     const used=usedSessionsMap(myBk);
-    // 剩餘票券摘要：只計「仍有效（未過期）且還有剩餘堂數」的票券（歷史/已用完/已過期不計）
-    const _todayYmd=ymd(TODAY);
-    const _liveTk=myTk.filter(t=>t.status==='usable' && (!t.expire_date||String(t.expire_date).slice(0,10)>=_todayYmd));
-    c.tkLeft=_liveTk.reduce((s,t)=>s+Math.max(0,(Number(t.sessions_remaining)||0)),0);
-    /* 2026-08-01 使用者回報：「佳慈明明就有 5 份今天剛買的方案，怎麼這邊顯示 3 而已」——
-       那個數字算的是「可用堂數」，不是「方案份數」。她 5 份裡有 3 份已經排滿（剩 0 堂），
-       所以只剩 3 堂可用。數字沒錯，是標籤沒講清楚 → 副標同時給「幾堂可用」與「幾份方案」。 */
-    c.tkCount=_liveTk.length;
-    /* 2026-08-01 使用者指示改口徑：「顯示有幾套方案，教練課 24 算一套就只計算 1，
-       每種課程分開計算」——數字從「剩餘堂數」改成「方案份數」。
-       原因很直觀：櫃檯要知道的是「他手上有幾組課在跑」，24 堂那種大方案跟 4 堂的優惠票
-       在管理上是一樣的一份，堂數混在一起看反而失真（一張 24 堂的票就把整格吃掉）。
-       ⚠ 排滿（剩 0 堂）的方案照樣算一份 —— 課還沒上完，那份方案還在跑。
-          剩幾堂改放到副標，兩個數字都看得到。 */
-    c.tkSplit=(function(){
-      const LB={'私人教練':'教練課','小班肌力':'團體課','自主訓練':'自主','運動按摩':'按摩','體驗':'體驗','場租':'場租'};
-      const ORDER=['教練課','團體課','自主','按摩','體驗','折抵','場租','其他'];
-      const acc={};
-      _liveTk.forEach(t=>{
-        const tt=(window._ttCache||[]).find(x=>x.id===t.ticket_type_id)||{};
-        const nm=(t.plan_name||'')+' '+(tt.name||'');
-        const k=(String(t.ticket_type_id||'').indexOf('tt-discount-')===0||nm.indexOf('折抵')>=0)
-          ? '折抵' : (LB[ticketCategoryOf(t)]||'其他');
-        acc[k]=(acc[k]||0)+1;   // 一張票＝一份方案，不看堂數（2026-08-01）
-      });
-      return ORDER.filter(k=>acc[k]).map(k=>[k,acc[k]]);
-    })();
+    /* 票券摘要（2026-08-01 使用者回報：「11 團體課 5 其他是什麼意思？明明只有 5 張團課」）——
+       原本這裡自己挑一套「有效票券」的定義（status usable＋未過期），再自己用
+       ticketCategoryOf 分類，於是跟票券分頁對不起來：
+         ・分類：ticketCategoryOf 在 window._ttCache 沒載到時會退回用方案名猜，
+           「團課 4週優惠」不含「團體」「小班」→ 掉進「其他」；「團體課」才對得上。
+         ・有效：11 張早就上完的舊團課票 status 仍是 usable、餘額 0，被算成還在跑的方案。
+       改成直接跟票券夾拿（buildWallet）—— 分類走五口袋 tkClass5、有效與否走同一個
+       state，跟分頁上的分類與筆數必然一致。這正是票券夾要解決的「同一個事實有很多套算法」。 */
+    const _wal=buildWallet(PP.id,{tickets:myTk, bookings:myBk, logs:tkLogs||[], typeMap:c.typeMap});
+    c.tkLeft=_wal.sessionsLeft();          // 還可以約幾堂（只算持有中的方案）
+    c.tkCount=_wal.active().length;        // 手上有幾份方案（排滿但還沒上完的照算）
+    c.tkSplit=TK5.map(([k,lb])=>[lb,_wal.active(k).length]).filter(x=>x[1]>0);
     c.bkCount=myBk.length;
     // 交易＝新系統銷售（purchases）＋舊系統匯入票券的購買紀錄（amount_paid>0、非 TK- 開頭
     // ——新系統賣票同時會寫 purchases 與 TK- 票，排除 TK- 避免同筆交易列兩次）
