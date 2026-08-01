@@ -5984,7 +5984,14 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .mc-dutyplain .mc-card-h{font-weight:700;color:var(--text);margin-bottom:12px;}
 /* 2026-07-26 使用者指示：桌機值班環改用手機版樣式 —— 環維持基準 64px（不放大）、
    計時器小小的在中間、整排置中。原 88/80px 放大與 22px 大字特例退場。 */
-.mc-dutyplain .dr-row{flex-direction:row;flex-wrap:wrap;align-items:flex-start;justify-content:center;gap:14px 12px;}
+/* 2026-08-01 使用者指示：今日值班改成一列四個 —— 左欄寬度有限，
+   原本的 flex 自動換行會依人數擠成 3 個或 5 個一列，寬度也不一致。
+   改用固定四欄的 grid，人數不管幾位，每一列都是四個、寬度一致。 */
+.mc-dutyplain .dr-row{display:grid;grid-template-columns:repeat(4,1fr);align-items:flex-start;
+  justify-items:center;gap:14px 8px;}
+.mc-dutyplain .duty-ring{min-width:0;width:100%;}
+.mc-dutyplain .dr-name,.mc-dutyplain .dr-time{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+@media(max-width:1280px){ .mc-dutyplain .dr-row{grid-template-columns:repeat(3,1fr);} }
 .mc-dutyplain .dr-center{z-index:3;}
 .mc-dutyplain .dr-center b{text-shadow:0 0 4px rgba(244,241,232,.85);}
 .mc-dutyplain .dr-name{text-align:center;}
@@ -6868,8 +6875,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1656';
-const APP_VERSION_LABEL='v260801.1656';
+const APP_VERSION = '260801.1706';
+const APP_VERSION_LABEL='v260801.1706';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12293,6 +12300,7 @@ PAGES.g_dashboard=async function(){
           ${schedBtnCard}
           <div class="mc-b4-cal">${deskCalCard}</div>
           <div class="mc-dutyplain">${dutyRingCard}</div>
+          ${knowCardHTML()}<!-- 2026-08-01 使用者指示：健身小知識卡從右欄移到左欄「今日值班」下方 -->
         </div>
         <div class="mc-g5-mid">
           ${kpiStrip}
@@ -12304,7 +12312,6 @@ PAGES.g_dashboard=async function(){
           ${quickCard}
           ${revListCard}<!-- 2026-07-22 使用者指示：今日收款名單（原在值班下方，值班已移左欄） -->
           <div class="mc-b4-todo">${todoCard}</div>
-          ${knowCardHTML()}<!-- 2026-07-25 使用者指示：健身知識卡移到今日待辦下方 -->
         </div>
       </div>
       </div>`}
@@ -20187,7 +20194,20 @@ async function confirmCancelBooking(id){
   /* 2026-07-30 使用者回報：刪除「待簽約卡位」時跳出「是否退回票券」——那種卡位本來就沒有票券
      （pending_contract=true、ticket_id=null），問退票沒有意義。凡是沒綁票券的預約
      （待簽約卡位、場租、未綁票的匯入預約）都不該出現退票/扣課的選擇，直接確認取消即可。 */
-  const noTicket = !b.ticket_id;
+  /* 2026-08-01 使用者回報（許佳慈 8/14 團課取消，3 堂被吃掉且完全沒問過退不退）——
+     團課的票券**不在 bookings.ticket_id**（一堂多人，欄位放不下），而是記在 ticket_logs。
+     0730 為了「待簽約卡位不該問退票」加的 noTicket 判斷只看 ticket_id，
+     於是**每一堂團課都被判成「沒有綁票券」**，跳出「取消不會影響任何堂數」然後以「不退」收掉 ——
+     那句話還是錯的：實際上已經扣了人家的堂數。
+     團課要改看帳本：有淨扣課紀錄就當作有票，走下面的「退回／扣課不退」選擇。 */
+  let _grpNetDeduct=0;
+  if(bkIsGroup(b)){
+    try{
+      const _lg=(await dbGetAll('ticket_logs')).filter(l=>l && l.booking_id===b.id);
+      _grpNetDeduct=_lg.filter(l=>l.action==='deduct').length - _lg.filter(l=>l.action==='refund').length;
+    }catch(_){}
+  }
+  const noTicket = !b.ticket_id && _grpNetDeduct<=0;
   if(noTicket && !isTrial){
     const why = b.pending_contract ? '這是<b>待簽約卡位</b>，還沒收款也沒有票券 —— 取消只會釋出時段與場地。'
       : (b.category==='場租' ? '場地租借不涉及票券，取消只會釋出時段與場地。'
@@ -20209,8 +20229,10 @@ async function confirmCancelBooking(id){
     showModal(`<div class="modal-title">取消預約</div>
       <div style="font-size:13px;color:var(--text);padding:4px 0;">${b.date} ${b.start_time}　${b.category}</div>
       ${_w24}
+      ${/* 團課一堂可能扣好幾堂（同一人佔多個名額、或多位會員各扣一堂）→ 講實際筆數，
+           不要一律寫「1 堂」（2026-08-01）。 */''}
       <div style="font-size:12px;color:var(--t2);margin:10px 0 14px;line-height:1.8;">請當面向會員說明後再送出，兩種結果都會寫入紀錄：<br>
-        ・<b>退回票券</b>：這堂不扣，票券加回 1 堂。<br>
+        ・<b>退回票券</b>：這堂不扣，票券加回 ${_grpNetDeduct>0?`<b>${_grpNetDeduct}</b> 堂（本堂共扣了 ${_grpNetDeduct} 堂）`:'1 堂'}。<br>
         ・<b>扣課不退</b>：視同已使用，票券不加回（會員端會收到通知）。</div>
       ${await cancelRewardWarnHtml(b)}
       <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">

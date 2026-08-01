@@ -223,8 +223,11 @@ console.log('\n取消沒綁票券的預約');
     ok('★ 場租：說明不涉及票券', /場地租借不涉及票券/.test(rent) && !/退回票券/.test(rent));
     ok('★ 未綁票券的匯入預約：說明不影響堂數', /沒有綁票券/.test(noTk) && !/退回票券/.test(noTk));
     ok('★ 正常有綁票券的預約 → 兩種選擇照舊', /退回票券/.test(normal) && /扣課不退/.test(normal));
-    ok('　　判斷條件是「有沒有綁票券」而非只看 pending_contract',
-       /const noTicket = !b\.ticket_id;/.test(src));
+    /* 2026-08-01：團課的票券記在 ticket_logs 不是 bookings.ticket_id，
+       只看 ticket_id 會把每一堂團課都判成「沒有綁票券」而以不退收掉（許佳慈 8/14）。
+       判斷條件加上團課的淨扣課筆數。見 tests/grpcanceltest.js。 */
+    ok('　　判斷條件是「有沒有綁票券」而非只看 pending_contract；團課另看扣課帳本',
+       /const noTicket = !b\.ticket_id && _grpNetDeduct<=0;/.test(src));
     ok('　　原因寫在程式裡', /刪除「待簽約卡位」時跳出「是否退回票券」——那種卡位本來就沒有票券/.test(src));
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail?1:0);
