@@ -95,16 +95,17 @@ console.log('\n管理員次選單分組');
   ok('★ 三個組別、順序為 人事 → 財務 → 環境設定',
      JSON.stringify(grps)===JSON.stringify(['人事','財務','環境設定']), grps);
   /* 2026-07-30 三修：「出勤紀錄」入口移除 → 14 項
-     2026-07-31：再移除「薪資制度」「工作規則」「教練統計」→ 11 項 */
-  ok('★ 11 個項目', items.length===11, items.length);
-  ok('★ 人事：員工管理 → 打卡異常與補卡 → 勞健保／特休／權限設定',
-     items.slice(0,5).join()==='員工管理,打卡異常與補卡,勞健保,特休,權限設定',
-     items.slice(0,5));
+     2026-07-31：再移除「薪資制度」「工作規則」「教練統計」→ 11 項
+     2026-08-01：「打卡異常與補卡」入口移除（改掛在員工列表每一列的驚嘆號）→ 10 項 */
+  ok('★ 10 個項目', items.length===10, items.length);
+  ok('★ 人事：員工管理 → 勞健保／特休／權限設定',
+     items.slice(0,4).join()==='員工管理,勞健保,特休,權限設定',
+     items.slice(0,4));
   ok('★ 已移除薪資制度／工作規則／教練統計',
      !items.includes('薪資制度') && !items.includes('工作規則') && !items.includes('教練統計'));
-  ok('★ 財務：財務總覽／營運分析', items.slice(5,7).join()==='財務總覽,營運分析', items.slice(5,7));
+  ok('★ 財務：財務總覽／營運分析', items.slice(4,6).join()==='財務總覽,營運分析', items.slice(4,6));
   ok('★ 環境設定：課程方案／場地・班別／合約範本／動作資料庫',
-     items.slice(7).join()==='課程方案,場地・班別,合約範本,動作資料庫', items.slice(7));
+     items.slice(6).join()==='課程方案,場地・班別,合約範本,動作資料庫', items.slice(6));
   ok('　　「系統設定」改名成看得懂的「場地・班別」', /grp:'環境設定', label:'場地・班別', page:'settings'/.test(src));
   ok('　　目前所在頁仍會高亮', /subnav-item active[^>]*>員工管理/.test(html));
   ok('　　組別標籤前面有分隔線，第一組不畫',
@@ -169,7 +170,9 @@ console.log('\n員工管理：卡片改回列表');
     WD_FULL:['日','一','二','三','四','五','六'], _canPay:true,
     /* 2026-08-01：工時顯示改用共用的 fmtHours（不進位） */
     fmtHours:h=>{const n=Number(h)||0;return (n%1===0)?String(n):n.toFixed(1);},
-    _ym:'2026-07', _stat:{E1:{pt:12,ptAll:14,grp:4,grpAll:4,renew:2,hours:58.5,net:71250}}};
+    _ym:'2026-07', _stat:{E1:{pt:12,ptAll:14,grp:4,grpAll:4,renew:2,hours:58.5,net:71250}},
+    /* 2026-08-01：列表每一列多了「打卡異常／補卡待審」的驚嘆號（見 punchrowtest.js） */
+    _punch:{E1:0}};
   const fn=new Function(...Object.keys(env), src.slice(k,l)+'\n'+src.slice(i,j)+'\nreturn stRow;')(...Object.values(env));
   const h=fn({id:'E1',name:'王教練',name_en:'wang',gender:'male',employment_type:'full_time',
               job_title:'資深教練',emp_no:'A01',phone:'0912345678',status:'active'});
@@ -177,6 +180,7 @@ console.log('\n員工管理：卡片改回列表');
   ok('★ 權限開關全部保留（6 顆）', (h.match(/class="st-swb/g)||[]).length===6);
   ok('★ 右上角齒輪保留（點開員工明細）', /st-gear st-gear-row/.test(h) && /openPersonProfile\('employee','E1'\)/.test(h));
   ok('　　點整列也能開明細', /<div class="st-lrow[^"]*"[^>]*onclick="openPersonProfile\('employee','E1'\)"/.test(h));
+  ok('　　沒有打卡問題就不掛驚嘆號', !/st-punch-x/.test(h));
   ok('　　點開關不會連帶開明細', /class="st-l-sw" onclick="event\.stopPropagation\(\);"/.test(h));
   ok('　　姓名、對外名稱、聘僱類型、職稱、工號電話都在同一列',
      /王教練/.test(h) && /WANG/.test(h) && /正職/.test(h) && /資深教練/.test(h) && /A01 · 0912345678/.test(h));
@@ -213,20 +217,24 @@ console.log('\n員工管理：卡片改回列表');
 
 /* ── ⑧ 出勤整併進員工管理＋員工表現欄位重排（2026-07-30 使用者指示）── */
 console.log('\n出勤整併進員工管理');
-// 2026-07-30 三修：出勤紀錄分頁也移除，只剩員工＋打卡異常與補卡
-ok('★ 分頁：員工 → 打卡異常與補卡',
-   /\{key:'list',label:'員工'\},\s*\n\s*\{key:'punchfix',label:'打卡異常與補卡'\},/.test(src));
+/* 2026-07-30 三修：出勤紀錄分頁也移除，只剩員工＋打卡異常與補卡
+   2026-08-01 使用者指示：「打卡異常與補卡」分頁也移除，改掛在員工列表每一列的驚嘆號 */
+ok('★ 分頁：員工 → 薪資彙總（打卡異常與補卡分頁已退場）',
+   /\{key:'list',label:'員工'\},\s*\n\s*\{key:'payroll',label:'薪資彙總'\},/.test(src));
 {
   // 只檢查 STAFF_TABS 自己那份（ATT_TABS_FULL 是未掛導覽的舊出勤頁，不動）
   const i=src.indexOf('const STAFF_TABS=['); const st=src.slice(i, src.indexOf('];',i));
   ok('★ 工時統計分頁移除（工時已在員工列表那一列顯示）',
      !/hours/.test(st) && /「工時統計」分頁移除，工時直接顯示在員工列表那一列/.test(src));
 }
-ok('★ 異常打卡與補卡申請合成一頁（沿用原本兩支渲染函式，不分岔）',
-   /renderAttAbnormal\(needPunch,all\);\s*\n\s*const abnHtml=att\.innerHTML;/.test(src)
-   && /await renderAttRequests\(\);\s*\n\s*const reqHtml=att\.innerHTML;/.test(src));
-ok('　　補卡待辦的跳轉改指向新分頁',
-   /function gotoPunchReview\(\)\{ _staffTab='punchfix'; CUR_TAB='punchfix'; window\._navTab='punchfix'; navTo\('staff','g_admin'\); \}/.test(src));
+ok('★ 異常打卡與補卡申請仍在同一個地方處理（2026-08-01 起是員工列表的驚嘆號彈窗）',
+   /async function openPunchFixModal\(empId\)\{/.test(src)
+   && /異常打卡（\$\{d\.abn\.length\}）/.test(src)
+   && /補卡申請待審核（\$\{d\.pend\.length\}）/.test(src));
+/* 2026-08-01：分頁退場後，首頁待辦的跳轉改成「回員工列表 ＋ 打開全部員工的打卡彈窗」 */
+ok('　　補卡待辦的跳轉仍直接看得到那幾筆',
+   /function gotoPunchReview\(\)\{ _staffTab='list'; CUR_TAB='list'; window\._navTab='list'; navTo\('staff','g_admin'\);/.test(src)
+   && /openPunchFixModal\(null\)/.test(src));
 ok('　　排班表仍留在「班表」群組（櫃檯唯讀），沒有重複收進來',
    /\{label:'排班表', page:'coach_shifts', fd:true\}/.test(src));
 ok('★ 本月統計與營運分析／薪資頁同口徑（同一支 dutyHoursCapped／dutyClassOverlapHours／renewMapOf）',
@@ -335,8 +343,8 @@ ok('★ 員工頁最上方不再嵌今日出勤',
    && !/renderAttToday\(_np,_att,coaches,_sh\);/.test(src));
 ok('★ 換日期改重繪當前頁（原本寫死 attendance，嵌進來後會跳頁）',
    /onchange="_attDate=this\.value;navTo\(CUR_PAGE\)"/.test(src));
-ok('　　打卡異常與補卡仍是分頁',
-   /else if\(_staffTab==='punchfix'\) await renderStaffAttendance\(_staffTab\);/.test(src));
+ok('　　打卡異常與補卡改掛在員工列表每一列（舊分頁的深連結會落回列表）',
+   /else if\(_staffTab==='punchfix'\)\{ _staffTab='list'; CUR_TAB='list'; await renderStaffList\(\);/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

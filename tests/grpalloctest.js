@@ -156,19 +156,28 @@ ok('★ 會員個人資料頁（櫃檯／管理員）',
 ok('★ 教練的簡易名片（openMemberDetail）',
    /const WAL=buildWallet\(member_id,\{tickets, bookingsOf:\(\)=>sharedBookings, logs:tkLogs\|\|\[\], typeMap\}\);/.test(src)
    && /const tkUsedCount=\(t\)=>\(\(WAL\.of\(t\.id\)\|\|\{\}\)\.used\)\|\|0;/.test(src));
-ok('★ 各畫面都載入 ticket_logs', (src.match(/團課扣課紀錄（2026-07-31，見 grpTicketAlloc）/g)||[]).length===3
-   && /票券夾要用扣課紀錄（2026-07-31，見 buildWallet）/.test(src));
+/* 2026-08-01：預約明細（團課名單與單人課票券卡）不再自己撈四張表，改呼叫 walletCtx()，
+   所以「各畫面都載入 ticket_logs」的檢查改成「都走票券夾」。 */
+ok('★ 各畫面都從票券夾取（walletCtx 一次撈齊四張表）',
+   /票券夾要用扣課紀錄（2026-07-31，見 buildWallet）/.test(src)
+   && (src.match(/await walletCtx\(\)/g)||[]).length>=3);
 ok('★ 「已用堂數」與「是否收進歷史」用同一個數字（圓點不會跟卡片矛盾）',
    /else if\(total>0 && used<total\) state='active';/.test(src)
    && /return \(\(WAL\.of\(t\.id\)\|\|\{\}\)\.state\)==='history';/.test(src));
-ok('★ 團課簽到名單的圓點（2026-07-31 使用者回報：會員票券頁對、簽到名單少一顆）',
-   /const _ga=grpTicketAlloc\(own, myGrp, _allLg, mid, \(\)=>true\);/.test(src)
-   && /let bks=grpMergeAlloc\(_al\.byTicket, _ga\)\(cur\.id\)\.slice\(\);/.test(src));
-ok('★ 簽到名單顯示「本堂扣的那張票」，不是猜最快到期的那張',
-   /const _paid=Object\.keys\(_ga\.byTicket\)\.find\(tid=>\(_ga\.byTicket\[tid\]\|\|\[\]\)\.some\(x=>x\.id===b\.id\)\);/.test(src)
-   && /const cur=\(_paid&&own\.find\(t=>t\.id===_paid\)\)/.test(src));
-ok('　　沒有扣課紀錄（舊系統匯入）才退回原本的挑法',
-   /\/\/ 本堂扣的那張優先；沒有扣課紀錄（舊系統匯入）才退回「最快到期的可用票／最新的票」/.test(src));
+/* 2026-08-01 使用者回報（附截圖）：「為什麼明細這邊又跟會員票券不一樣了」
+   「會員票券那邊正確了，我們不是從會員票券這邊拉圓形卡過來用的嗎」——
+   簽到名單原本自己跑一套（own 篩選→grpTicketAlloc→allocBookingsToTickets→grpMergeAlloc→
+   自己數已簽到），與票券頁改用 buildWallet 之後分岔。整段換成直接問票券夾。 */
+ok('★ 團課簽到名單的圓點直接問票券夾（不再自己算一套）',
+   /const W=buildWallet\(mid,_wctx\);/.test(src)
+   && /tokens: ticketTokens\(sl\.t, sl\.stamps, _wctx\.typeMap, sl\.used, b\.id\),/.test(src));
+ok('★ 簽到名單顯示「本堂扣的那張票」（票券夾的 ticketOf）',
+   /const sl=W\.ticketOf\(b\.id\) \|\| W\.active\('group'\)\[0\]/.test(src));
+ok('　　票券夾也蓋不到（舊系統匯入）才退回持有中／已過期／歷史',
+   /W\.active\('group'\)\[0\] \|\| W\.expired\('group'\)\[0\] \|\| W\.history\('group'\)\[0\] \|\| null;/.test(src));
+ok('　　單人課的票券卡也一起改（原本另有一套「以本堂為中心取 total 堂」的視窗推估）',
+   /_wSlotD = W\.ticketOf\(b\.id\) \|\| \(b\.ticket_id\?W\.of\(b\.ticket_id\):null\);/.test(src)
+   && !/以本堂為中心取 total 堂的視窗推估\n/.test(src));
 ok('★ 圓點也改吃合併結果（票券夾的戳記）',
    /const bks=sl\.stamps;/.test(src)
    && /const circles=ticketTokens\(t,WAL\.stampsOf\(t\.id\),typeMap,usedCount\);/.test(src));

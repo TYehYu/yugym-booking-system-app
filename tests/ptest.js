@@ -8,28 +8,35 @@ const h=fs.readFileSync('index.html','utf8');
 const grabFn=n=>{let i=h.indexOf('function '+n+'(');if(h.slice(i-6,i)==='async ')i-=6;let d=0;
   for(let k=h.indexOf('{',i);k<h.length;k++){if(h[k]==='{')d++;else if(h[k]==='}'){d--;if(!d)return h.slice(i,k+1);}}};
 // 取出真正的推估區塊
-const s=h.indexOf("let tkCircleHtml='';\n  let _tkCard=tk");
+const s=h.indexOf("let tkCircleHtml='';\n  /* 2026-08-01");
 const e=h.indexOf("const memMapD=", s);
 const body=h.slice(s, e);
 const COURSE_SHAPE={}, parseYmd=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(x||'');return m?new Date(+m[1],+m[2]-1,+m[3]):null;};
+const ymd=d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
+const TODAY=new Date(2026,6,27);
 globalThis.window={_ttCache:[{id:'tt-pt',name:'教練課',category:'私人教練'},{id:'tt-fr',name:'友善教練課',category:'私人教練'}]};
-const helpers=new Function('COURSE_SHAPE','parseYmd',
+/* 2026-08-01 使用者回報「明細這邊又跟會員票券不一樣了」：預約明細的票券卡不再自己推估，
+   改直接問票券夾（walletCtx → buildWallet）。沙箱要注入的是票券夾那一整套。 */
+const helpers=new Function('COURSE_SHAPE','parseYmd','ymd','TODAY',
   [grabFn('tkVisual'),grabFn('ticketTokens'),grabFn('ticketCategoryOf'),grabFn('ticketMatchesCategory'),
-   grabFn('bkIsMergedPT'),grabFn('bkTicketTypeOk'),grabFn('categoryOfTypeId'),grabFn('tkSharedIds'),grabFn('tkUsableBy'),grabFn('findRefundTargetTicket'),grabFn('allocBookingsToTickets')].join('\n')
-  +'; return {ticketTokens,findRefundTargetTicket,allocBookingsToTickets};')(COURSE_SHAPE,parseYmd);
+   grabFn('bkIsMergedPT'),grabFn('bkTicketTypeOk'),grabFn('categoryOfTypeId'),grabFn('tkSharedIds'),grabFn('tkUsableBy'),
+   grabFn('findRefundTargetTicket'),grabFn('allocBookingsToTickets'),grabFn('mids'),grabFn('bkHasMember'),
+   grabFn('tkClass5'),grabFn('grpTicketAlloc'),grabFn('buildWallet')].join('\n')
+  +'; return {ticketTokens,findRefundTargetTicket,allocBookingsToTickets,buildWallet};')(COURSE_SHAPE,parseYmd,ymd,TODAY);
 
 async function render({b,tickets,bookings,tk=null}){
-  const dbGetAll=async t=>t==='member_tickets'?tickets:t==='bookings'?bookings:TT;
   const TT=globalThis.window._ttCache;
+  const typeMap=Object.fromEntries(TT.map(t=>[t.id,t]));
+  const walletCtx=async()=>({tickets,bookings,logs:[],types:TT,typeMap});
   const win=globalThis.window;
   const fmtExpire=(d)=>d||'永久有效';
   // 2026-07-30：圓形卡下方多了「更換票券」鈕（只給櫃檯），替身回 true
   const isDeskLike=()=>true;
   // 2026-07-30：票券卡多了購買日（tkBuyDateHtml），替身回固定字串
   const tkBuyDateHtml=(t)=>`購買 ${(t&&(t.purchase_date||t.start_date))||'—'}`;
-  const fn=new Function('b','tk','dbGetAll','window','findRefundTargetTicket','allocBookingsToTickets','ticketTokens','fmtExpire','_payAlertLine','isDeskLike','tkBuyDateHtml',
-    `return (async()=>{ ${body} return {tkCircleHtml,_tkInferred,_tkCard}; })();`);
-  return await fn(b,tk,dbGetAll,win,helpers.findRefundTargetTicket,helpers.allocBookingsToTickets,helpers.ticketTokens,fmtExpire,'',isDeskLike,tkBuyDateHtml);
+  const fn=new Function('b','tk','window','findRefundTargetTicket','ticketTokens','fmtExpire','_payAlertLine','isDeskLike','tkBuyDateHtml','walletCtx','buildWallet','console',
+    `return (async()=>{ ${body} return {tkCircleHtml,_tkCard,_wSlotD}; })();`);
+  return await fn(b,tk,win,helpers.findRefundTargetTicket,helpers.ticketTokens,fmtExpire,'',isDeskLike,tkBuyDateHtml,walletCtx,helpers.buildWallet,console);
 }
 const T=(o)=>Object.assign({ticket_type_id:'tt-pt',member_id:'M',format:'1V1',sessions_total:4,sessions_remaining:1,expire_date:null},o);
 const BK=(id,date,st)=>({id,member_id:'M',category:'私人教練',ticket_type_id:'tt-pt',format:'1V1',date,start_time:'19:00',status:st});
@@ -42,20 +49,23 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
   let r=await render({b:cur,tickets:[T({id:'t1'})],bookings:hist});
   console.log('無綁票券時的推估卡：');
   chk('有產生票券卡', r.tkCircleHtml.length>0);
-  chk('標記為推估', r._tkInferred===true);
+  chk('票券夾蓋到了這一堂（不是退回挑票法）', !!r._wSlotD);
   chk('圓點數 = 票券總堂數 4', (r.tkCircleHtml.match(/class="mtk/g)||[]).length===4);
   chk('已用 3 堂取最近的 6/16', r.tkCircleHtml.includes('>6/16<'));
   chk('已用 3 堂取最近的 7/7', r.tkCircleHtml.includes('>7/7<'));
   chk('已用 3 堂取最近的 7/21', r.tkCircleHtml.includes('>7/21<'));
-  /* 這組走先進先出分配路徑（4 堂恰被 6/2..7/21 填滿）：8/4 屬下一張票、6/2 保留。
-     視窗滑動只作用在「分配不到、退回視窗推估」的路徑（見真實案例③）。 */
-  chk('先進先出：8/4 屬下一張票不列入', !r.tkCircleHtml.includes('>8/4<'));
-  chk('先進先出：視窗含 6/2', r.tkCircleHtml.includes('>6/2<'));
+  /* 2026-08-01：明細改由票券夾供應後，課比票多時保留「最近的幾堂」——
+     這張票帳面剩 1（＝已用 3），所以 3 顆實心（6/16 7/7 7/21）＋ 1 顆已預約（8/4），
+     最早的 6/2 歸前一張票。圓點與票面餘額因此對得起來（原本是 4 顆實心＋餘額 1，
+     自己就矛盾）。 */
+  chk('留最近的四堂：8/4 佔最後一格', r.tkCircleHtml.includes('>8/4<'));
+  chk('留最近的四堂：最早的 6/2 歸前一張票', !r.tkCircleHtml.includes('>6/2<'));
+  chk('實心數＝票面已用 3（與餘額 1 對得起來）', (r.tkCircleHtml.match(/mtk-used/g)||[]).length===3);
   chk('本堂 7/21 標金框', /mtk-cur[^>]*>7\/21</.test(r.tkCircleHtml));
   // 票面剩 0（用畢）→ 8/4 屬下一張票，不得滑入
   r=await render({b:cur,tickets:[T({id:'t1',sessions_remaining:0})],bookings:hist});
-  chk('票面剩 0 → 8/4 屬下一張票不列入', !r.tkCircleHtml.includes('>8/4<'));
-  chk('剩 0 時視窗以本堂結尾（含 6/2）', r.tkCircleHtml.includes('>6/2<'));
+  chk('票面剩 0 → 四格都算用掉，最近四堂上戳記', (r.tkCircleHtml.match(/mtk-used/g)||[]).length===4);
+  chk('　　本堂 7/21 仍在圓點裡', r.tkCircleHtml.includes('>7/21<'));
 
   console.log('票種與 format 隔離：');
   const other=[BK('x1','2026-07-01','completed')]; other[0].format='1V2';
@@ -68,7 +78,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
   const bound=Object.assign(BK('B2','2026-07-21','checked_in'),{ticket_id:'t1'});
   const bhist=[Object.assign(BK('p1','2026-07-01','completed'),{ticket_id:'t1'}),bound];
   r=await render({b:bound,tickets:[T({id:'t1'})],bookings:bhist,tk:T({id:'t1'})});
-  chk('不標記為推估', r._tkInferred===false);
+  chk('本堂直接綁在這張票上（票券夾的直連戳記）', !!r._wSlotD);
   chk('仍正常顯示圓點', (r.tkCircleHtml.match(/class="mtk/g)||[]).length===4);
 
   console.log('邊界：');
@@ -98,10 +108,16 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
               '2026-07-13','2026-07-13','2026-07-20','2026-07-20'].map((d,i)=>BK('c'+i,d,'completed'));
     const bo=[BK('n1','2026-07-27','booked'),BK('n2','2026-07-27','booked')];
     const r=await render({b:bo[0],tickets:[T({id:'t',sessions_total:12,sessions_remaining:0})],bookings:[...at,...bo],thisId:'n1'});
-    chk('圓點數 = 12', (r.tkCircleHtml.match(/class="mtk/g)||[]).length===12);
+    /* 2026-08-01：票券夾把最近 12 堂（10 個已上 ＋ 兩個 7/27 的名額）蓋在這張票上，
+       帳面已用 12（12−0），所以 12 格全滿；放不下的 7/27 那一顆用紅虛線圈標「需補票」，
+       不再默默消失（那正是 7/30 加紅圈的用意）。 */
+    chk('圓點數 = 12 格全滿 ＋ 兩個 7/27 名額放不下的紅圈',
+      (r.tkCircleHtml.match(/class="mtk/g)||[]).length===14
+      && (r.tkCircleHtml.match(/mtk-used/g)||[]).length===12
+      && (r.tkCircleHtml.match(/mtk-over/g)||[]).length===2);
     chk('★ 本堂 7/27 出現在圓點裡', r.tkCircleHtml.includes('>7/27<'));
     chk('本堂標金框', /mtk-cur[^>]*>7\/27</.test(r.tkCircleHtml));
-    chk('本堂序號不溢出（第 12 / 12）', r.tkCircleHtml.includes('第 <b>12</b> / 12 堂'));
+    chk('　　放不下的那一顆是紅虛線圈（需補票）', /mtk-over/.test(r.tkCircleHtml));
     chk('視窗末端是本堂而非 7/20', r.tkCircleHtml.lastIndexOf('7/27')>r.tkCircleHtml.lastIndexOf('7/20'));
   }
 

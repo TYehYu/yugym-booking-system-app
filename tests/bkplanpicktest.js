@@ -93,15 +93,20 @@ ok('★ 下方放不下且上方比較寬 → 選單往上開',
    往上開的定位改由 mpkFit 直接設 top/bottom，不再靠 CSS 規則。見 tests/nativeinputtest.js。 */
 ok('★ 往上開的定位（JS 設 bottom，改用版面高度算）',
    /if\(up\)\{ menu\.style\.top='auto'; menu\.style\.bottom=Math\.round\(window\.innerHeight-r\.top\+4\)\+'px'; \}/.test(src));
-ok('★ 兩邊都窄 → 把輸入框捲到可視區中間',
-   /if\(Math\.max\(below,above\)<180\)\{ try\{ inp\.scrollIntoView\(\{block:'center'\}\); \}catch\(_\)\{\} \}/.test(src));
+/* 2026-08-01 使用者回報「輸入後字就消失」：組字中（注音／拼音候選視窗開著）不能捲動，
+   scrollIntoView 會打斷 composition，打到一半的字直接不見。 */
+ok('★ 兩邊都窄 → 把輸入框捲到可視區中間（但組字中不捲）',
+   /if\(Math\.max\(below,above\)<180 && !row\._mpkIME\)\{ try\{ inp\.scrollIntoView\(\{block:'center'\}\); \}catch\(_\)\{\} \}/.test(src));
 ok('★ 選單高度跟著可用空間縮，不會撐破畫面',
    /menu\.style\.maxHeight=Math\.max\(120,Math\.min\(300,\(up\?above:below\)-8\)\)\+'px';/.test(src));
 ok('★ 鍵盤升起／收合／捲動時重算', /window\.visualViewport\.addEventListener\('resize', refit\);/.test(src)
    && /window\.visualViewport\.addEventListener\('scroll', refit\);/.test(src));
 ok('　　開啟選單時就先算一次', /function mpkOpen\(row\)\{ row\.classList\.add\('mpk-open'\); mpkRender\(row\); mpkFit\(row\); \}/.test(src));
 ok('　　打字讓清單變短時也重算（input 走 mpkOpen）',
-   /inp\.addEventListener\('input',\(\)=>\{ mpkOpen\(row\); \}\);   \/\/ mpkOpen 內含 mpkFit/.test(src));
+   /mpkOpen\(row\);   \/\/ mpkOpen 內含 mpkFit/.test(src));
+ok('　　組字中只重畫清單，不動位置（compositionend 之後才完整重算）',
+   /inp\.addEventListener\('compositionstart',\(\)=>\{ row\._mpkIME=true; \}\);/.test(src)
+   && /if\(row\._mpkIME \|\| \(e && e\.isComposing\)\)\{ row\.classList\.add\('mpk-open'\); mpkRender\(row\); return; \}/.test(src));
 ok('　　整段包 try —— 量不到尺寸不能讓選單開不起來', /function mpkFit\(row\)\{\s*\n\s*try\{/.test(src));
 
 {

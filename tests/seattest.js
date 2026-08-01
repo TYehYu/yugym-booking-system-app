@@ -90,11 +90,14 @@ ok('　　取消前先重編剩餘名額，不留孤兒鍵',
 ok('　　傳純 member id 的舊呼叫仍可用（＝第 1 個名額）',
    /傳純 member id 進來也照舊能用（＝第 1 個名額）/.test(src));
 // 2026-07-30 二修：圓點改與會員票券頁共用 allocBookingsToTickets，_hist 那套推算退場
-ok('★ 圓點的「已上」仍逐名額判定（名額鍵）',
-   /const _doneFor=x=>\{/.test(src)
-   && /const st=at\[seen\[v\]>1\?v\+'#'\+seen\[v\]:v\];/.test(src));
-ok('★ 同一人在某堂佔多個名額 → 那一堂畫多顆圓點',
-   /bks=bks\.reduce\(\(arr,x\)=>\{ const n=mids\(x\)\.filter\(v=>v===mid\)\.length\|\|1;/.test(src));
+/* 2026-08-01：名單的圓點改由票券夾（buildWallet）供應，逐名額這件事也搬進去了 ——
+   ②扣課紀錄本來就一個名額一筆；③先進先出推算原本沒展開，兩個位子只畫得出一顆圓點。 */
+ok('★ 圓點的「已上」仍逐名額判定（名額鍵，在 grpTicketAlloc 裡）',
+   /const st=at\[seen\[v\]>1\?v\+'#'\+seen\[v\]:v\];/.test(src)
+   || /mine\.push\(seen\[id\]>1\?id\+'#'\+seen\[id\]:id\);/.test(src));
+ok('★ 同一人在某堂佔多個名額 → 那一堂畫多顆圓點（票券夾的推算也展開名額）',
+   /const n=bkIsGroup\(b\)\s*\n?\s*\? Math\.max\(1,mids\(b\)\.filter\(x=>String\(x\)===String\(memberId\)\)\.length\) : 1;/.test(src)
+   && /Object\.keys\(inf\.byTicket\)\.forEach\(tid=>\(inf\.byTicket\[tid\]\|\|\[\]\)\.forEach\(b=>\(bkIsGroup\(b\)\?putGrp:put\)\(tid,b\)\)\);/.test(src));
 /* 2026-07-31：算式抽成共用的 grpTicketAlloc，名額鍵在那裡組（見 grpalloctest.js） */
 ok('★ 票券剩餘推算（grpTicketAlloc）也逐名額',
    /mine\.push\(seen\[id\]>1\?id\+'#'\+seen\[id\]:id\);/.test(src)

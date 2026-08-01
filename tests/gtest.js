@@ -18,21 +18,29 @@ const ticketCategoryOf=t=>t.__cat;
 const attObj=b=>b.attendance||{};
 const ymd=d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
 const TODAY=new Date(2026,6,27);
-/* 2026-07-31：名單圓點改吃 ticket_logs 的扣課紀錄（grpTicketAlloc），一併注入 */
+/* 2026-07-31：名單圓點改吃 ticket_logs 的扣課紀錄（grpTicketAlloc）
+   2026-08-01：整段改由票券夾（walletCtx → buildWallet）供應 —— 使用者回報
+   「明細這邊又跟會員票券不一樣了…我們不是從會員票券這邊拉圓形卡過來用的嗎」。
+   所以沙箱要注入的是票券夾那一整套，測的才是真的跑的那條路。 */
+const TYPES=[{id:'tt-g',name:'團體課',category:'小班肌力',color:'group'}];
 const helpers=new Function('COURSE_SHAPE','parseYmd','attObj','ymd','TODAY',[grabFn('tkVisual'),grabFn('ticketTokens'),grabFn('mids'),
   grabFn('seatKeys'),grabFn('seatMid'),grabFn('seatKeysDisplay'),grabFn('seatNo'),
   grabFn('tkSharedIds'),grabFn('tkUsableBy'),grabFn('allocBookingsToTickets'),
-  grabFn('grpTicketAlloc'),grabFn('grpMergeAlloc')].join('\n')+
-  '; return {tkVisual,ticketTokens,mids,seatKeys,seatMid,seatKeysDisplay,seatNo,tkUsableBy,allocBookingsToTickets,grpTicketAlloc,grpMergeAlloc};')(COURSE_SHAPE,parseYmd,attObj,ymd,TODAY);
+  grabFn('grpTicketAlloc'),grabFn('grpMergeAlloc'),grabFn('bkHasMember'),grabFn('tkClass5'),
+  grabFn('buildWallet')].join('\n')+
+  '; return {tkVisual,ticketTokens,mids,seatKeys,seatMid,seatKeysDisplay,seatNo,tkUsableBy,allocBookingsToTickets,grpTicketAlloc,grpMergeAlloc,bkHasMember,tkClass5,buildWallet};')(COURSE_SHAPE,parseYmd,attObj,ymd,TODAY);
 
 async function render({ids,att={},tickets=[],bookings=[],logs=[],names={},thisDate='2026-07-27',thisId='B-NOW'}){
-  const dbGetAll=async t=>t==='member_tickets'?tickets:t==='bookings'?bookings:t==='ticket_logs'?logs:[];
+  const dbGetAll=async t=>t==='member_tickets'?tickets:t==='bookings'?bookings:t==='ticket_logs'?logs:t==='ticket_types'?TYPES:[];
+  const typeMap=Object.fromEntries(TYPES.map(t=>[t.id,t]));
+  const walletCtx=async()=>({tickets,bookings,logs,types:TYPES,typeMap});
   // 名額鍵是從 b.member_ids 推的（2026-07-30），所以 b 也要帶名單
   const b={id:thisId,date:thisDate,attendance:att,member_ids:ids};
-  const fn=new Function('gIdsD','b','memMapD','groupCkOK','isPastD','attObj','ticketCategoryOf','dbGetAll','window','mids','ticketTokens','seatKeys','seatMid','seatKeysDisplay','seatNo','tkUsableBy','allocBookingsToTickets','grpTicketAlloc','grpMergeAlloc',
+  const fn=new Function('gIdsD','b','memMapD','groupCkOK','isPastD','attObj','ticketCategoryOf','dbGetAll','window','mids','ticketTokens','seatKeys','seatMid','seatKeysDisplay','seatNo','tkUsableBy','allocBookingsToTickets','grpTicketAlloc','grpMergeAlloc','walletCtx','buildWallet','console',
     `return (async()=>{ const att=attObj(b); ${body} return rows; })();`);
-  return await fn(ids,b,names,true,false,attObj,ticketCategoryOf,dbGetAll,{_ttCache:[{id:'tt-g',name:'團體課',category:'小班肌力',color:'group'}]},helpers.mids,helpers.ticketTokens,
-    helpers.seatKeys,helpers.seatMid,helpers.seatKeysDisplay,helpers.seatNo,helpers.tkUsableBy,helpers.allocBookingsToTickets,helpers.grpTicketAlloc,helpers.grpMergeAlloc);
+  return await fn(ids,b,names,true,false,attObj,ticketCategoryOf,dbGetAll,{_ttCache:TYPES},helpers.mids,helpers.ticketTokens,
+    helpers.seatKeys,helpers.seatMid,helpers.seatKeysDisplay,helpers.seatNo,helpers.tkUsableBy,helpers.allocBookingsToTickets,helpers.grpTicketAlloc,helpers.grpMergeAlloc,
+    walletCtx,helpers.buildWallet,console);
 }
 const T=(o)=>Object.assign({__cat:'小班肌力',ticket_type_id:'tt-g',source:'purchase'},o);
 const BK=(id,date,st,ids)=>({id,date,start_time:'11:00',status:st,category:'小班肌力',member_ids:ids,ticket_type_id:'tt-g'});
@@ -87,10 +95,16 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     bookings:hist.map(x=>({...x,member_ids:['M']})),names:{M:'許建助'}});
   chk('取最近一張（4 格）', (html.match(/class="mtk/g)||[]).length===4);
   /* 2026-07-30 二修：改用 allocBookingsToTickets 後，5 月的課歸 5/01 那張（2 堂）、
-     7 月的兩堂歸 7/01 這張，所以這張是「2 實心＋2 空心」而不是整排實心。
-     依起始日分配比「把 5 月的課算進 7 月的票」合理，這是修正不是退步。 */
-  chk('★ 依起始日分配：只有 7 月那兩堂算這張', (html.match(/mtk-used/g)||[]).length===2
-    && html.includes('>7/17<') && html.includes('>7/25<') && !html.includes('>5/9<'));
+     7 月的兩堂歸 7/01 這張。
+     2026-08-01 三修：改由票券夾供應之後，已用堂數不再只數清單裡的出席筆數，
+     而是「帳面已用（總 4 − 剩餘 0）」與清單取大者 —— 這張票的餘額是 0，
+     帳面就是四堂都用掉了，只是舊系統匯入的預約只留下兩堂的紀錄。
+     這正是會員票券頁顯示的樣子，兩邊一致才是重點（使用者：
+     「我們不是從會員票券這邊拉圓形卡過來用的嗎」）。 */
+  chk('★ 有日期的兩堂是 7 月那兩堂（5 月的歸前一張票）',
+    html.includes('>7/17<') && html.includes('>7/25<') && !html.includes('>5/9<'));
+  chk('★ 已用堂數跟著票面餘額（剩 0 → 四格都算用掉，與會員票券頁同一個數字）',
+    (html.match(/mtk-used/g)||[]).length===4);
 
   /* 2026-07-30 使用者指示改成「一個名額一列」：原本三個名額合併成一列標「3 個名額」，
      簽到／請假／取消只有一個開關，沒辦法只處理其中一位。 */

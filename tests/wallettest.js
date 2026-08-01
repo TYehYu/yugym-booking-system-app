@@ -10,6 +10,9 @@
      ① bookings.ticket_id（單人課直連，帳本事實）
      ② ticket_logs 扣課紀錄（團課；一堂多人、各扣各的票）
      ③ 先進先出推算（舊系統匯入的預約①②都沒有） */
+/* 2026-08-01：buildWallet 的推算改為「團課依名額展開」，用到共用的 bkIsGroup／mids —— 沙箱補上替身 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
+globalThis.mids=b=>(b&&Array.isArray(b.member_ids))?b.member_ids:[];
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 

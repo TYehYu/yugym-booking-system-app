@@ -15,9 +15,13 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 console.log('① 健身小知識移到右上角，與左上插畫對稱');
 ok('★ 右欄第一格＝知識卡', /<div class="mc-g5-right">[\s\S]{0,240}<div class="mc-know-top">\$\{knowCardHTML\(\)\}<\/div>/.test(src));
 ok('★ 左欄已不再放知識卡', !/<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>\s*\n\s*\$\{knowCardHTML\(\)\}/.test(src));
-ok('★ 高度與插畫一致（插畫 114 + 上下框 = 116）',
-   /\.mc-art\{position:relative;width:100%;height:114px;/.test(src)
-   && /\.mc-know-top \.know-card\{min-height:114px;height:114px;/.test(src));
+/* 2026-08-01 三修（使用者：「健身小知識因為縮得太小了 看不到完整訊息 要放大一點
+   （左邊縮圖也放大一點）」）：兩張一起 114 → 150px，仍然對稱。 */
+ok('★ 高度與插畫一致（兩張都是 150px）',
+   /\.mc-art\{position:relative;width:100%;height:150px;/.test(src)
+   && /\.mc-know-top \.know-card\{min-height:150px;height:150px;/.test(src));
+ok('★ 說明放到四行、字級回到 12.5px（原本兩行會把話截掉）',
+   /-webkit-line-clamp:4;/.test(src) && /\.mc-know-top \.know-s\{font-size:12\.5px;/.test(src));
 ok('★ 貼齊頂欄的負上邊距也一致（-10 / 下 16）',
    /\.mc-g5-left>\.mc-art-top\{margin:-10px 0 16px !important;\}/.test(src)
    && /\.mc-g5-right>\.mc-know-top\{margin:-10px 0 16px !important;\}/.test(src));
@@ -25,8 +29,7 @@ ok('★ 右欄原本用 padding-top:43px 撐的齊頭留白要拿掉，否則空
    /\.mc-g5-right\{flex:0 0 300px;min-width:0;display:flex;flex-direction:column;\s*\n\s*padding-top:0;\}/.test(src));
 ok('　　壓成矮卡後內文改緊湊版（不再有 190px 直式卡的 52px 上留白）',
    /\.mc-know-top \.know-body\{margin-top:0;/.test(src));
-ok('　　說明文超過兩行截斷，不會把卡撐破', /-webkit-line-clamp:2;/.test(src));
-ok('　　右側留給插圖，字不壓上去', /\.mc-know-top \.know-body\{margin-top:0;padding-right:74px;\}/.test(src));
+ok('　　右側留給插圖，字不壓上去', /\.mc-know-top \.know-body\{margin-top:0;padding-right:62px;\}/.test(src));
 ok('　　點一下換下一則仍可用（knowNext 換的是卡本身，外層 .mc-know-top 保留）',
    /el\.outerHTML=knowCardHTML\(\);/.test(src));
 ok('　　手機版知識卡不受影響（走另一條分支）',
@@ -48,12 +51,16 @@ ok('★ 三顆鈕的內容不變（新增會員／銷售／查看合約）',
   ok('　　原處只留說明，沒有第二份定義',
      (src.match(/const quickCard=/g)||[]).length===1);
 }
-ok('★ 數字群改靠左、按鈕群靠右（問候拿掉後不再需要靠右對齊）',
-   /\.mc-g5-mid \.mc-kpistrip\{margin-bottom:14px;padding:6px 14px 0;justify-content:flex-start;gap:56px;\}/.test(src)
-   && /\.mc-g5-mid \.mc-kpistrip \.mc-quick3\{margin-left:auto;\}/.test(src));
+/* 2026-08-01 二修（使用者：「三個中間 KPI 要靠右 跟按鈕靠在一起」） */
+ok('★ 整條靠右，數字與按鈕成為同一群',
+   /\.mc-g5-mid \.mc-kpistrip\{margin-bottom:14px;padding:6px 14px 0;justify-content:flex-end;gap:52px;\}/.test(src)
+   && !/\.mc-g5-mid \.mc-kpistrip \.mc-quick3\{margin-left:auto;\}/.test(src));
+ok('　　按鈕群靠得比數字之間更近（52−16＝36）',
+   /\.mc-kpistrip \.mc-quick3\{gap:8px;flex:0 0 auto;margin-left:-16px;\}/.test(src));
 ok('　　併進 KPI 條後鈕要收窄，不然整條被撐高',
    /\.mc-kpistrip \.mc-quick3 \.mc-q3\{flex:0 0 auto;width:84px;/.test(src));
 ok('　　KPI 條允許換行，窄視窗不會把鈕擠出畫面', /\.mc-kpistrip\{display:flex;[^}]*flex-wrap:wrap;\}/.test(src));
+ok('　　整條靠右對齊', /\.mc-kpistrip\{display:flex;align-items:center;justify-content:flex-end;/.test(src));
 
 console.log('\n③ 移除問候與那句話');
 ok('★ kpi-greet 整塊不再產出', !/<div class="kpi-greet">/.test(src));

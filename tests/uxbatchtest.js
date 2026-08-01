@@ -30,8 +30,16 @@ ok('★ 保留原本的 <select> 當資料來源，只是隱藏 → 既有 .valu
 ok('★ 只升級「輸入框＋下拉」的組合，缺一就跳過',
    /if\(!sel\|\|!inp\) return;\s*\/\/ 只升級「輸入框＋下拉」這種組合/.test(src));
 ok('★ 打字沿用各處原本的篩選函式（inline oninput 先跑，這裡只重畫清單）',
-   /inp\.addEventListener\('input',\(\)=>\{ mpkOpen\(row\); \}\);/.test(src)
+   /inp\.addEventListener\('input',e=>\{/.test(src)
    && /原本的 oninput 已先跑完篩選（inline handler 先註冊先執行）/.test(src));
+/* 2026-08-01 使用者回報：「銷售上方的會員搜尋列，我輸入魚要搜尋，每次輸入後字就消失」 */
+ok('★ 沒選人就不要把打到一半的字清掉（原本一律回填成空的 label）',
+   /if\(lb\) inp\.value=lb;/.test(src)
+   && /打到一半的字整個被清掉/.test(src));
+ok('　　點回欄位時只有「內容剛好是已選定的那個人」才全選',
+   /inp\.addEventListener\('focus',\(\)=>\{ if\(inp\.value===mpkLabel\(sel\)\) inp\.select\(\); mpkOpen\(row\); \}\);/.test(src));
+ok('　　搜不到人時第一個選項直接講「查無符合的會員」',
+   /\$\{\(qq&&!list\.length\)\?'查無符合的會員':'— 請先選擇會員 —'\}/.test(src));
 ok('★ 點選項目會設回 select 並發 change（沿用既有 onchange）',
    /sel\.dispatchEvent\(new Event\('change',\{bubbles:true\}\)\);/.test(src));
 ok('　　用 mousedown 不用 click，才不會先被 blur 關掉',

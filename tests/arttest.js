@@ -64,10 +64,11 @@ ok('★ 下一格（月班表）的位置與原本一致：−10 ＋ 116 ＋ 16 
    && /再接 16px（與其他卡片同一個間距）＝ 122，月班表以下位置仍與原本一致/.test(src));
 ok('　　真兇寫在程式裡（不是 margin 不夠，是左欄的 padding-top:122px）',
    /真兇是 \.mc-g5-left 的 padding-top:122px（左欄齊頭用）/.test(src));
-/* 使用者回報「太高了 跟旁邊的 KPI 一樣高就好」 */
-ok('★ 寬度吃滿左欄、高度 114px（連框 116px）填滿左欄原本那段齊頭空白',
-   /\.mc-art\{position:relative;width:100%;height:114px;/.test(src)
-   && /高度 114px（連框 116px）—— 下緣與中欄 KPI 條切齊/.test(src));
+/* 使用者回報「太高了 跟旁邊的 KPI 一樣高就好」→ 114px
+   2026-08-01 三修（使用者：「左邊縮圖也放大一點」，配合右上角知識卡放大）→ 150px */
+ok('★ 寬度吃滿左欄、高度 150px（與右上角知識卡同高，左右對稱）',
+   /\.mc-art\{position:relative;width:100%;height:150px;/.test(src)
+   && /\.mc-know-top \.know-card\{min-height:150px;height:150px;/.test(src));
 ok('　　裁切幅度寫在程式裡（上下各約 9%，不會切到角色）',
    /這個高度會裁掉原圖上下各約 9%/.test(src));
 ok('★ 只在桌機版面渲染（左欄三格是 isMobileLayout() 的 else 分支）',

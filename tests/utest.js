@@ -4,6 +4,9 @@
    2026-07-29：算式抽成共用的 tkUsedCount（卡片圓點與歷史紀錄判定同一個數字）。
    2026-07-31：算式搬進票券夾（buildWallet），八個畫面都問它 —— 這裡改直接驗票券夾。
                案例維持原樣（陳蘭馨混合票、朱庭箴、全會員比對守則）。 */
+/* 2026-08-01：buildWallet 的推算改為「團課依名額展開」，用到共用的 bkIsGroup／mids —— 沙箱補上替身 */
+globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
+globalThis.mids=b=>(b&&Array.isArray(b.member_ids))?b.member_ids:[];
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
@@ -58,8 +61,23 @@ chk('餘額缺失 → 0', calc(8,{sessions_remaining:null}), 0);
 chk('餘額 > 總堂（髒資料）→ 不變負數', calc(12,{sessions_remaining:16}), 0);
 
 console.log('全會員比對（2026-07-26）新增守則：');
-// 有餘額資訊時，FIFO 推算不得抬高已用（歷史「已上課未扣票」會把沒用過的票塞滿）
-chk('★ 推算 2 已上但帳面全新（剩=總）→ 顯示 0', calc(2,{sessions_remaining:2},[],['completed','completed']), 0);
+/* 有餘額資訊時，FIFO 推算不得抬高已用（歷史「已上課未扣票」會把沒用過的票塞滿）——
+   2026-08-01 修正這條的作法：不是「一律不抬高」，而是靠 allocBookingsToTickets 的
+   okStart 守門（上課日早於票券起始／購買日的課不得回填到該票）。
+   「今天才買的方案卻整排實心」（許佳慈案例）由那道守門擋掉，不需要在這裡再壓一次。
+   壓在這裡反而有害：ticketTokens 是「前 used 格填已完成的課」，used 比實際蓋上的
+   已簽到戳記少，那幾堂就整個畫不出來 —— 使用者在預約明細看到的「本堂沒有圓點」。
+   本例的票 start_date=2026-01-01、兩堂課都在那之後 → 那兩堂確實用的是這張票，算 2 才對。 */
+chk('★ 效期內的兩堂已上（票面沒更新）→ 算 2，圓點才不會漏掉',
+    calc(2,{sessions_remaining:2},[],['completed','completed']), 2);
+chk('★ 上課日早於票券起始日 → 不回填（今天才買的方案不會整排實心）',
+    buildWallet(ME,{tickets:[{id:'tn',member_id:ME,ticket_type_id:'tt-pt',plan_name:'教練課',
+        sessions_total:2,sessions_remaining:2,status:'usable',start_date:'2026-07-25',purchase_date:'2026-07-25'}],
+      bookings:[{id:'BX1',date:'2026-05-10',start_time:'11:00',status:'completed',category:'私人教練',
+        ticket_type_id:'tt-pt',member_id:ME,ticket_id:null},
+        {id:'BX2',date:'2026-05-17',start_time:'11:00',status:'completed',category:'私人教練',
+        ticket_type_id:'tt-pt',member_id:ME,ticket_id:null}],
+      logs:[],typeMap:TYPES}).of('tn').used, 0);
 chk('餘額缺失時推算仍可當後備', calc(4,{sessions_remaining:null},[],['completed','completed']), 2);
 
 console.log(`\n${pass} passed, ${fail} failed`);
