@@ -117,5 +117,47 @@ ok('　　整段包 try —— 量不到尺寸不能讓選單開不起來', /fun
   eq('　　真的兩邊都極窄時保底 120', decide(200,80,120).maxH, 120);
 }
 
+/* 2026-08-01 使用者指示：「新增預約的授課教練 也改成有篩選功能的下拉選單」 */
+console.log('\n④ 授課教練也改成可搜尋的下拉');
+ok('★ 教練欄改用同一個元件（.mem-pick-row → mpkUpgrade）',
+   /<input class="gt-search" id="bk-coach-q" placeholder="輸入教練姓名搜尋（共 \$\{window\._bkCoaches\.length\} 位）" oninput="bkFilterCoaches\(this\.value\)"/.test(src));
+ok('★ 選項改由 bkCoachOptsHTML 產生（原本的 coachOpts 靜態字串已移除）',
+   /<select id="bk-coach" onchange="bkCoachChange\(\)">\$\{bkCoachOptsHTML\(''\)\}<\/select>/.test(src));
+ok('★ 可搜尋顯示名／本名／name_en／縮寫',
+   /String\(coachDisp\(c\)\|\|''\)\.includes\(qq\)/.test(src)
+   && /String\(c\.name\|\|''\)\.includes\(qq\)/.test(src)
+   && /String\(c\.name_en\|\|''\)\.toUpperCase\(\)\.includes\(up\)/.test(src)
+   && /coachAbbr\(c\):''\)\|\|''\)\.toUpperCase\(\)\.includes\(up\)/.test(src));
+ok('★ 已選的那位不會被搜尋洗掉（否則欄位會突然變空）',
+   /const list=all\.filter\(c=>hit\(c\)\|\|\(cur&&c\.id===cur\)\);/.test(src));
+ok('★ 篩到只剩一位就直接選起來，並觸發會員名單重排',
+   /else if\(qq && opts\.length===1\)\{ sel\.value=opts\[0\]\.value; bkCoachChange\(\); \}/.test(src));
+ok('　　「不指定」永遠在（自主訓練可以不排教練）', /return '<option value="">不指定<\/option>'/.test(src));
+ok('　　教練端沒有這個欄位（固定是自己），不受影響',
+   /`<input type="hidden" id="bk-coach" value="\$\{SESSION\.id\}">`/.test(src));
+ok('　　這個系統把暱稱放在 name_en，有寫在程式裡', /這個系統沒有 nickname 欄位/.test(src));
+
+{
+  const g2=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
+  const mk=(coaches,cur)=>{
+    global.window={_bkCoaches:coaches,_bkCoachSel:cur||''};
+    return new Function('coachDisp','coachAbbr',
+      g2('function bkCoachOptsHTML(q, keepId){','\n}\n')+'\nreturn bkCoachOptsHTML;')(
+      c=>((c&&(c.name_en||c.name))||'').toUpperCase(),
+      c=>((c&&c.name_en)||'').slice(0,2).toUpperCase());
+  };
+  const CO=[{id:'c1',name:'余東曄',name_en:'Randy'},{id:'c2',name:'曾邦宏',name_en:'小曾'},{id:'c3',name:'鄭百益',name_en:'Barry'}];
+  const ids=h=>[...String(h).matchAll(/value="([^"]*)"/g)].map(m=>m[1]);
+  console.log('\n  教練搜尋實跑');
+  eq('★ 不打字 → 全部＋不指定', ids(mk(CO)('')), ['','c1','c2','c3']);
+  eq('★ 打中文本名', ids(mk(CO)('鄭百')), ['','c3']);
+  eq('★ 打英文名（不分大小寫）', ids(mk(CO)('randy')), ['','c1']);
+  eq('★ 打中文暱稱（放在 name_en）', ids(mk(CO)('小曾')), ['','c2']);
+  eq('★ 打縮寫 BA 也找得到 Barry', ids(mk(CO)('ba')), ['','c3']);
+  eq('★ 已選 c1 時搜尋別人 → c1 仍留著（欄位不會變空）', ids(mk(CO,'c1')('鄭百')), ['','c1','c3']);
+  ok('★ 已選的那位帶 selected', /value="c1" selected/.test(mk(CO,'c1')('')));
+  eq('　　查無符合 → 只剩「不指定」', ids(mk(CO)('查無此人')), ['']);
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

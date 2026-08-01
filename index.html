@@ -6847,8 +6847,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1001';
-const APP_VERSION_LABEL='v260801.1001';
+const APP_VERSION = '260801.1009';
+const APP_VERSION_LABEL='v260801.1009';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16793,10 +16793,6 @@ async function openBookingModal(){
     if(_mine.length) window._bkCoaches=_mine;
   }
   window._bkCoachSel = prefillCoach || '';   // 會員下拉的分組依據（該教練的會員排前）
-  const coachOpts=window._bkCoaches.map(c=>{
-    const sel = (isCoach&&c.id===SESSION.id) || (prefillCoach&&c.id===prefillCoach);
-    return `<option value="${c.id}" ${sel?'selected':''}>${coachDisp(c)}</option>`;
-  }).join('');
   // 30 分鐘時段選項（08:00～22:00）
   const timeOpts=bkTimeOptions(pf.time);
   /* 2026-07-20 使用者指示：日期/時間放最上方（並排）、課程排序固定、教練名單直接顯示 */
@@ -16809,7 +16805,10 @@ async function openBookingModal(){
     ${isCoach
       ? `<input type="hidden" id="bk-coach" value="${SESSION.id}">`
       : `<div class="form-row" id="bk-coach-row"><label>授課教練<span id="bk-coach-opt" style="font-weight:400;color:var(--t3);display:none;">（自主訓練可不指定）</span></label>
-          <select id="bk-coach" onchange="bkCoachChange()"><option value="">不指定</option>${coachOpts}</select></div>`}
+          <div class="mem-pick-row">
+            <input class="gt-search" id="bk-coach-q" placeholder="輸入教練姓名搜尋（共 ${window._bkCoaches.length} 位）" oninput="bkFilterCoaches(this.value)" autocomplete="off">
+            <select id="bk-coach" onchange="bkCoachChange()">${bkCoachOptsHTML('')}</select>
+          </div></div>`}
     <div class="form-row"><label>會員<span style="font-weight:400;color:var(--t3);">（體驗課／待簽約卡位可不選）</span></label>
       <div class="mem-pick-row">
         <input class="gt-search" id="bk-mem-q" placeholder="輸入姓名或手機搜尋（共 ${window._bkAllMembers.length} 位）" oninput="bkFilterMembers(this.value)" autocomplete="off">
@@ -16957,6 +16956,35 @@ function bkRedrawMemberPick(){
   const q=(document.getElementById('bk-mem-q')||{}).value||'';
   sel.innerHTML=bkMemberOptsHTML(q, prev);
   if(prev && sel.querySelector(`option[value="${prev}"]`)) sel.value=prev;
+  const row=sel.closest('.mem-pick-row');
+  if(row && row.classList.contains('mpk-open')) mpkRender(row);
+}
+/* 步驟 1 的授課教練下拉（2026-08-01 使用者指示：也改成有篩選功能的下拉）——
+   與會員選擇器共用同一個元件（.mem-pick-row → mpkUpgrade 升級成「打字即篩、點一下選定」）。
+   教練人數不多，但兩個欄位長得一樣、操作方式一致，櫃檯不用記「這個要打字、那個要拉」。
+   可搜尋的欄位：顯示名、本名、name_en（英文名或中文暱稱，如「小曾」）、縮寫（打 RA 也找得到 RANDY）。
+   ⚠ 這個系統沒有 nickname 欄位 —— 暱稱是放在 name_en 裡（見 coachAbbr 的註解）。 */
+function bkCoachOptsHTML(q, keepId){
+  const all=window._bkCoaches||[];
+  const qq=String(q||'').trim(), up=qq.toUpperCase();
+  const hit=c=>!qq
+    || String(coachDisp(c)||'').includes(qq)
+    || String(c.name||'').includes(qq)
+    || String(c.name_en||'').toUpperCase().includes(up)
+    || String((typeof coachAbbr==='function'?coachAbbr(c):'')||'').toUpperCase().includes(up);
+  // 已選的那位一定留在清單裡，否則搜尋後他會消失、欄位就空了
+  const cur=keepId!=null?keepId:(window._bkCoachSel||'');
+  const list=all.filter(c=>hit(c)||(cur&&c.id===cur));
+  return '<option value="">不指定</option>'
+    + list.map(c=>`<option value="${c.id}"${cur&&c.id===cur?' selected':''}>${coachDisp(c)}</option>`).join('');
+}
+function bkFilterCoaches(q){
+  const sel=document.getElementById('bk-coach'); if(!sel) return;
+  const prev=sel.value, qq=String(q||'').trim();
+  sel.innerHTML=bkCoachOptsHTML(qq, prev);
+  const opts=[...sel.querySelectorAll('option')].filter(o=>o.value);
+  if(prev && sel.querySelector(`option[value="${prev}"]`)) sel.value=prev;
+  else if(qq && opts.length===1){ sel.value=opts[0].value; bkCoachChange(); }   // 只剩一位就直接選起來
   const row=sel.closest('.mem-pick-row');
   if(row && row.classList.contains('mpk-open')) mpkRender(row);
 }
