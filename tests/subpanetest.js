@@ -36,12 +36,12 @@ console.log('\n會員名片：票券剩餘堂數分類顯示');
 ok('★ 卡片值改成分類清單（教練課 2　自主 1）',
    /\$\{ppDashCard\('ticket','票券',\s*\n\s*\(\(c\.tkSplit&&c\.tkSplit\.length\)/.test(src)
    && /<span class="pp-dc-split">\$\{c\.tkSplit\.map\(x=>`<span class="pp-dcs"><b>\$\{x\[1\]\}<\/b>\$\{x\[0\]\}<\/span>`\)\.join\(''\)\}<\/span>/.test(src));
-ok('★ 沒有任何分類（完全沒票）時退回原本的總數顯示，不會變空白',
-   /: \(c\.tkLeft!=null\?`\$\{c\.tkLeft\}<small>堂可用<\/small>`:''\)\)/.test(src));
+ok('★ 沒有任何分類（完全沒票）時退回總數顯示，不會變空白',
+   /: \(c\.tkCount!=null\?`\$\{c\.tkCount\}<small>份方案<\/small>`:''\)\)/.test(src));
 /* 2026-08-01 使用者回報「明明有 5 份方案，這邊只顯示 3」——那個數字是「可用堂數」，
    排滿的方案剩 0 堂就不計入。數字沒錯，是標籤沒講清楚 → 副標同時給堂數與份數。 */
-ok('　　副標同時顯示可用堂數與方案份數（分類在上、總計在下）',
-   /共 \$\{c\.tkLeft\} 堂可用　·　\$\{c\.tkCount\} 份方案/.test(src)
+ok('　　副標同時顯示方案份數與可用堂數（分類在上、總計在下）',
+   /共 \$\{c\.tkCount\} 份方案　·　\$\{c\.tkLeft\} 堂可用/.test(src)
    && /c\.tkCount=_liveTk\.length;/.test(src));
 ok('　　方案都排滿時講明白（不然會以為票不見了）', /（都排滿了）/.test(src));
 ok('　　樣式：數字大、分類名小，可換行', /\.pp-dc-split\{display:flex;flex-wrap:wrap;/.test(src)
@@ -67,23 +67,25 @@ ok('　　分類與總數同一份來源（_liveTk：usable 且未過期）',
   const run=list=>new Function('window','ticketCategoryOf','_liveTk',body+'\nreturn _split;')(win,catOf,list);
   const T=(ttid,rem,plan)=>({ticket_type_id:ttid,sessions_remaining:rem,plan_name:plan||''});
 
-  eq('★ 教練課 2 ＋ 自主 1 → 依序列出',
-     run([T('tt-mqdt435bbizd',2),T('tt-mqdt55uosz5n',1)]), [['教練課',2],['自主',1]]);
-  eq('★ 教練課／友善／限定合併成同一格「教練課」',
-     run([T('tt-mqdt435bbizd',2),T('tt-mqdt4ijw29ga',3),T('tt-limited-legacy',1)]), [['教練課',6]]);
+  /* 2026-08-01 使用者指示改口徑：數字＝「幾份方案」不是「幾堂」——
+     「教練課 24 算一套就只計算 1，每種課程分開計算」。 */
+  eq('★ 教練課 1 份（24 堂）＋ 自主 1 份 → 各算 1',
+     run([T('tt-mqdt435bbizd',24),T('tt-mqdt55uosz5n',1)]), [['教練課',1],['自主',1]]);
+  eq('★ 教練課／友善／限定合併成同一格「教練課」，三份就是 3',
+     run([T('tt-mqdt435bbizd',2),T('tt-mqdt4ijw29ga',3),T('tt-limited-legacy',1)]), [['教練課',3]]);
   eq('★ 折抵券獨立一格，不併進教練課（否則會被誤認為還有正課）',
-     run([T('tt-mqdt435bbizd',2),T('tt-discount-pt300',1)]), [['教練課',2],['折抵',1]]);
+     run([T('tt-mqdt435bbizd',2),T('tt-discount-pt300',1)]), [['教練課',1],['折抵',1]]);
   eq('　　plan_name 帶「折抵」也認得（舊資料票種 id 不一致）',
      run([T('tt-mqdt435bbizd',1,'教練課折抵券 $300')]), [['折抵',1]]);
-  eq('　　剩 0 堂的票不列（票還在但沒堂數）',
-     run([T('tt-mqdt435bbizd',0),T('tt-mqdt55uosz5n',2)]), [['自主',2]]);
+  eq('★ 排滿（剩 0 堂）的方案照樣算一份 —— 課還沒上完，那份方案還在跑',
+     run([T('tt-mqdt435bbizd',0),T('tt-mqdt55uosz5n',2)]), [['教練課',1],['自主',1]]);
   eq('　　顯示順序固定：教練課→團體課→自主→按摩（不隨資料順序跳動）',
      run([T('tt-mrghed5b6ke2',1),T('tt-mqdt55uosz5n',2),T('tt-mqdt4ubv8e5i',3),T('tt-mqdt435bbizd',4)]),
-     [['教練課',4],['團體課',3],['自主',2],['按摩',1]]);
+     [['教練課',1],['團體課',1],['自主',1],['按摩',1]]);
   eq('　　完全沒票 → 空陣列（渲染端會退回總數）', run([]), []);
   eq('　　認不出票種 → 收進「其他」，不會憑空消失',
-     run([T('tt-unknown-xyz',2)]), [['其他',2]]);
-  eq('　　負數餘額當 0（防匯入髒資料）', run([T('tt-mqdt435bbizd',-3),T('tt-mqdt55uosz5n',1)]), [['自主',1]]);
+     run([T('tt-unknown-xyz',2)]), [['其他',1]]);
+  eq('　　同一類多份就累加份數', run([T('tt-mqdt435bbizd',4),T('tt-mqdt435bbizd',12),T('tt-mqdt435bbizd',24)]), [['教練課',3]]);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

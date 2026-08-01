@@ -6879,8 +6879,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1723';
-const APP_VERSION_LABEL='v260801.1723';
+const APP_VERSION = '260801.1732';
+const APP_VERSION_LABEL='v260801.1732';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26014,9 +26014,9 @@ function ppRecordHtml(){
         ${ppDashCard('ticket','票券',
           ((c.tkSplit&&c.tkSplit.length)
             ? `<span class="pp-dc-split">${c.tkSplit.map(x=>`<span class="pp-dcs"><b>${x[1]}</b>${x[0]}</span>`).join('')}</span>`
-            : (c.tkLeft!=null?`${c.tkLeft}<small>堂可用</small>`:'')),
-          (c.tkCount ? `共 ${c.tkLeft} 堂可用　·　${c.tkCount} 份方案${(c.tkCount>0&&!c.tkLeft)?'（都排滿了）':''}`
-                     : '持有票券與剩餘堂數'), `ppShowRecord('tickets')`)}
+            : (c.tkCount!=null?`${c.tkCount}<small>份方案</small>`:'')),
+          (c.tkCount ? `共 ${c.tkCount} 份方案　·　${c.tkLeft} 堂可用${(c.tkCount>0&&!c.tkLeft)?'（都排滿了）':''}`
+                     : '持有方案與剩餘堂數'), `ppShowRecord('tickets')`)}
         ${ppDashCard('calendar','預約紀錄',
           (c.bkCount!=null?`${c.bkCount}<small>筆</small>`:''), '歷史與未來預約', `ppShowRecord('bookings')`)}
         ${ppDashCard('money','交易',
@@ -26350,19 +26350,22 @@ async function ppLoadCtx(){
        那個數字算的是「可用堂數」，不是「方案份數」。她 5 份裡有 3 份已經排滿（剩 0 堂），
        所以只剩 3 堂可用。數字沒錯，是標籤沒講清楚 → 副標同時給「幾堂可用」與「幾份方案」。 */
     c.tkCount=_liveTk.length;
-    /* 2026-07-30 使用者指示：票券卡要拆開顯示「教練課 2　自主 1」。
-       折抵券自成一格 —— 它不是一組課，混進教練課會讓人以為還有正課可上。 */
+    /* 2026-08-01 使用者指示改口徑：「顯示有幾套方案，教練課 24 算一套就只計算 1，
+       每種課程分開計算」——數字從「剩餘堂數」改成「方案份數」。
+       原因很直觀：櫃檯要知道的是「他手上有幾組課在跑」，24 堂那種大方案跟 4 堂的優惠票
+       在管理上是一樣的一份，堂數混在一起看反而失真（一張 24 堂的票就把整格吃掉）。
+       ⚠ 排滿（剩 0 堂）的方案照樣算一份 —— 課還沒上完，那份方案還在跑。
+          剩幾堂改放到副標，兩個數字都看得到。 */
     c.tkSplit=(function(){
       const LB={'私人教練':'教練課','小班肌力':'團體課','自主訓練':'自主','運動按摩':'按摩','體驗':'體驗','場租':'場租'};
       const ORDER=['教練課','團體課','自主','按摩','體驗','折抵','場租','其他'];
       const acc={};
       _liveTk.forEach(t=>{
-        const n=Math.max(0,Number(t.sessions_remaining)||0); if(!n) return;
         const tt=(window._ttCache||[]).find(x=>x.id===t.ticket_type_id)||{};
         const nm=(t.plan_name||'')+' '+(tt.name||'');
         const k=(String(t.ticket_type_id||'').indexOf('tt-discount-')===0||nm.indexOf('折抵')>=0)
           ? '折抵' : (LB[ticketCategoryOf(t)]||'其他');
-        acc[k]=(acc[k]||0)+n;
+        acc[k]=(acc[k]||0)+1;   // 一張票＝一份方案，不看堂數（2026-08-01）
       });
       return ORDER.filter(k=>acc[k]).map(k=>[k,acc[k]]);
     })();
