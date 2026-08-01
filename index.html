@@ -6891,8 +6891,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1736';
-const APP_VERSION_LABEL='v260801.1736';
+const APP_VERSION = '260801.1744';
+const APP_VERSION_LABEL='v260801.1744';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17880,6 +17880,10 @@ function cpRenderList(){
 }
 /* 轉正簽約：會員有兩張以上可用票券時先問要扣哪一張（2026-07-30 使用者指示：所有預約都能選票券） */
 async function doConvertPending(memberId, tkId){
+  // 防連點（2026-08-01）：轉正式預約會扣課，重覆送出就重覆扣
+  return onceAct('convert:'+(window._cpBid||'')+':'+(tkId||''), ()=>_doConvertPending(memberId,tkId));
+}
+async function _doConvertPending(memberId, tkId){
  try{
   const id=window._cpBid; const b=await dbGet('bookings',id);
   if(!b||!b.pending_contract){ showToast('這筆不是待簽約卡位'); return; }
@@ -19596,7 +19600,19 @@ async function openBkTicketChange(id){
     :`<div style="font-size:13px;color:var(--t2);padding:6px 0;">沒有其他可用票券可以換。</div>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button></div>`);
 }
-async function doBkTicketChange(id,newTkId){
+/* 防連點（2026-08-01 巫雅雯案例：同一筆預約在 51 毫秒內被扣了兩次）——
+   彈窗裡的按鈕是 inline onclick，手機上偶爾會收到兩次事件（touchend 之後補發的 click、
+   或手指微移造成的第二次點）。逐顆按鈕加 disabled 容易漏，改在動作層擋：
+   同一個 key 還在跑就直接忽略，跑完再放行（多留 400ms 吃掉補發的那一次）。 */
+const _actBusy={};
+async function onceAct(key, fn){
+  if(_actBusy[key]) return;
+  _actBusy[key]=1;
+  try{ return await fn(); }
+  finally{ setTimeout(()=>{ delete _actBusy[key]; }, 400); }
+}
+async function doBkTicketChange(id,newTkId){ return onceAct('tkchg:'+id, ()=>_doBkTicketChange(id,newTkId)); }
+async function _doBkTicketChange(id,newTkId){
  try{
   const b=await dbGet('bookings',id); if(!b){showToast('找不到預約');return;}
   if(b.status!=='booked'){ showToast('已簽到的預約要先取消簽到才能換票券'); return; }
@@ -28852,6 +28868,22 @@ async function submitGrant(){
     const memV=await dbGet('members',member_id);
     if(effTier(memV)!=='vip'){ showToast('VIP 方案僅限 VIP 會員，請先調整會員等級'); return; }
   }
+  /* 重複儲值防呆（2026-08-01 巫雅雯案例：同一份 8 堂自訂方案在 15 分鐘內建了兩次，
+     $12,000 被記了兩筆，之後排課還一路挑錯票）——
+     同一位會員、今天、同名同堂數的方案已經有一張了就先問一次。
+     只是確認不是禁止：真的要賣兩份（送人、家人共用）按「仍要發放」即可。 */
+  try{
+    const _todayY=ymd(TODAY);
+    const _sameToday=(await dbGetAll('member_tickets')).filter(t=>
+      t && t.member_id===member_id && t.status!=='refunded'
+      && String(t.purchase_date||'').slice(0,10)===_todayY
+      && String(t.plan_name||'')===String(plan.name||'')
+      && Number(t.sessions_total)===Number((plan.sessions_base||0)+(plan.sessions_bonus||0)));
+    if(_sameToday.length && !confirm(
+        `今天已經發過一張「${plan.name||'方案'}」給這位會員了（${_sameToday.length} 張）。\n\n`
+        +`常見情況是重複儲值 —— 重複的那張之後排課會一直被挑走，很難清乾淨。\n`
+        +`確定還要再發一張嗎？`)) return;
+  }catch(_){}
   const total=plan.sessions_base+plan.sessions_bonus;
   const unitPrice=plan.unit_price||0;
   const listPrice=unitPrice*plan.sessions_base;
