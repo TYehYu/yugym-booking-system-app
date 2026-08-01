@@ -170,9 +170,16 @@ ok('★ 「已用堂數」與「是否收進歷史」用同一個數字（圓點
    自己數已簽到），與票券頁改用 buildWallet 之後分岔。整段換成直接問票券夾。 */
 ok('★ 團課簽到名單的圓點直接問票券夾（不再自己算一套）',
    /const W=buildWallet\(mid,_wctx\);/.test(src)
-   && /tokens: ticketTokens\(sl\.t, sl\.stamps, _wctx\.typeMap, sl\.used, b\.id\),/.test(src));
-ok('★ 簽到名單顯示「本堂扣的那張票」（票券夾的 ticketOf）',
-   /const sl=W\.ticketOf\(b\.id\) \|\| W\.active\('group'\)\[0\]/.test(src));
+   && /ticketTokens\(_sl\.t,_sl\.stamps,st\.typeMap,_sl\.used,b\.id\)/.test(src));
+/* 2026-08-01 使用者指示：「預約明細應該要去對應票券編號，而不是快進快出
+   （這個出錯率太高了）」—— 逐名額各自對到扣課紀錄裡的那張票，並標出 #N。 */
+ok('★ 簽到名單逐名額對到票（票券夾的 seatOf，來源是扣課紀錄）',
+   /slotAt:n=>W\.seatOf\(b\.id,n\) \|\| W\.ticketOf\(b\.id\) \|\| fb,/.test(src)
+   && /seatOf:\(bid,n\)=>byId\[\(seatTk\[bid\]\|\|\[\]\)\[Math\.max\(0,\(Number\(n\)\|\|1\)-1\)\]\]\|\|null,/.test(src));
+ok('★ 每一列標出票券夾裡的第幾套（#N）＋方案名，能直接跟票券頁對照',
+   /<div class="gr-tkname">\$\{tkNoTag\(_sl\.no\)\}\$\{_sl\.t\.plan_name\|\|'票券'\}/.test(src));
+ok('　　補課券不參與先進先出推算（它一定有扣課紀錄；被「發它的那一堂」吃掉會顯示已用畢）',
+   /const proxy=mine\.filter\(t=>t\.source!=='makeup'\)\.map\(/.test(src));
 ok('　　票券夾也蓋不到（舊系統匯入）才退回持有中／已過期／歷史',
    /W\.active\('group'\)\[0\] \|\| W\.expired\('group'\)\[0\] \|\| W\.history\('group'\)\[0\] \|\| null;/.test(src));
 ok('　　單人課的票券卡也一起改（原本另有一套「以本堂為中心取 total 堂」的視窗推估）',

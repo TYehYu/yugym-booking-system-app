@@ -5610,6 +5610,10 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
   border-radius:2px;background:var(--danger,#b5372e);}
 .gr-row-leave .gr-name{opacity:.55;}
 .gr-row-leave .mck-dots2{opacity:.55;}
+/* 名單每一列的票券標題（2026-08-01 使用者指示：明細要能跟會員票券頁的 #N 對起來） */
+.gr-tkname{display:flex;align-items:center;gap:2px;font-size:11.5px;font-weight:700;
+  color:var(--t2);margin:6px 0 0;}
+.gr-row-leave .gr-tkname{opacity:.55;}
 /* 「確認」鈕：訊息要留到櫃檯按下才消失（2026-07-29 二修） */
 .dfeed-ok{flex:0 0 auto;align-self:center;border:1px solid var(--green);background:var(--green);
   color:#fff;font-size:12px;font-weight:700;border-radius:8px;padding:6px 12px;cursor:pointer;
@@ -7012,8 +7016,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.2008';
-const APP_VERSION_LABEL='v260801.2008';
+const APP_VERSION = '260801.2035';
+const APP_VERSION_LABEL='v260801.2035';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11102,14 +11106,19 @@ function buildWallet(memberId, ctx){
     : (c.bookings||[]).filter(b=>b && (bkHasMember(b,memberId) || (b.ticket_id&&mineIds[b.ticket_id])));
   const live=myBk.filter(b=>b && b.status!=='cancelled');
 
-  const stamps={}, byBooking={};
+  const stamps={}, byBooking={}, seatTk={};
+  /* seatTk：一張課卡的「每一個名額」各蓋在哪張票上（2026-08-01 使用者指示：
+     「根據會員的票券編號來看，8/7 的預約明細應該要顯示 #15 #15 #13」）——
+     團課同一個人可以佔多個名額，各名額可能扣到不同張票，byBooking 只存得下一個。 */
   const put=(tid,b)=>{ if(!tid||byBooking[b.id]) return;
-    (stamps[tid]=stamps[tid]||[]).push(b); byBooking[b.id]=tid; };
+    (stamps[tid]=stamps[tid]||[]).push(b); byBooking[b.id]=tid;
+    (seatTk[b.id]=seatTk[b.id]||[]).push(tid); };
   /* 團課專用（2026-08-01）：一堂課可能在同一張票上蓋好幾個戳記（同一人佔多個名額，
      一個名額扣一堂）。這裡不能用上面那個「一堂課只蓋一次」的 put，否則扣掉的堂數畫不出來。
      仍然登記 byBooking —— ③ 的先進先出推算才知道這堂已經有歸屬、不要再推一次。 */
   const putGrp=(tid,b)=>{ if(!tid) return;
-    (stamps[tid]=stamps[tid]||[]).push(b); byBooking[b.id]=tid; };
+    (stamps[tid]=stamps[tid]||[]).push(b); byBooking[b.id]=tid;
+    (seatTk[b.id]=seatTk[b.id]||[]).push(tid); };
   const has={}; mine.forEach(t=>{ has[t.id]=1; });
 
   // ① 直連（單人課預約當下就綁）
@@ -11128,7 +11137,12 @@ function buildWallet(memberId, ctx){
     rest.forEach(b=>{ const n=bkIsGroup(b)
         ? Math.max(1,mids(b).filter(x=>String(x)===String(memberId)).length) : 1;
       for(let k=0;k<n;k++) restX.push(b); });
-    const proxy=mine.map(t=>Object.assign({},t,
+    /* 補課券不參與先進先出推算（2026-08-01 游晴雅案例）——
+       補課券是新制發的券，用掉一定會有扣課紀錄（②那條路）；舊系統匯入、沒扣過票的課
+       不可能用到它。放進推算的後果是它會被「發它的那一堂」吃掉：
+       7/30 兩個名額請假 → 發兩張補課券 → 推算又把 7/30 那堂算成用掉這兩張券，
+       於是券顯示已用畢、可約堂數 0，實際上她手上還有兩張沒用、8/13 就到期的券。 */
+    const proxy=mine.filter(t=>t.source!=='makeup').map(t=>Object.assign({},t,
       {sessions_total:Math.max(0,(Number(t.sessions_total)||0)-((stamps[t.id]||[]).length))}));
     /* 課比票多（舊系統匯入很常見：票券餘額沒反映歷史扣課）→ 只留最近的幾堂。
        先進先出的「順序」是對的，但容量不夠時被丟掉的應該是最舊的那幾堂 ——
@@ -11184,6 +11198,9 @@ function buildWallet(memberId, ctx){
     noOf:tid=>_noOf[tid]||0,
     stampsOf:tid=>(byId[tid]?byId[tid].stamps:[]),
     ticketOf:bid=>byId[byBooking[bid]]||null,          // 這張課卡蓋在哪張票上
+    /* 第 n 個名額蓋在哪張票（1 起算）。團課一堂可以跨多張票，單人課永遠只有第 1 個。 */
+    seatOf:(bid,n)=>byId[(seatTk[bid]||[])[Math.max(0,(Number(n)||1)-1)]]||null,
+    seatCount:bid=>(seatTk[bid]||[]).length,
     inClass:k=>slots.filter(s=>s.cls===k),
     active:k=>slots.filter(s=>s.state==='active'&&(!k||s.cls===k)).sort(byBuy),
     expired:k=>slots.filter(s=>s.state==='expired'&&(!k||s.cls===k)).sort(byBuy),
@@ -19526,15 +19543,18 @@ async function openBookingDetail(id){
       const _wctx=await walletCtx();
       _uniqIds.forEach(mid=>{
         const W=buildWallet(mid,_wctx);
-        /* 本堂扣的那張優先；查不到（舊系統匯入、當初沒扣票）才退回票券夾裡
-           這個人「持有中的團課票」第一張，讓櫃檯至少看得到餘額。 */
-        /* 找不到扣課歸屬時的退路：持有中 → 已過期 → 歷史（都照購買日新的優先）。
+        /* 逐名額各自對到票（2026-08-01 使用者指示：「根據會員的票券編號來看，
+           8/7 的預約明細應該要顯示 #15 #15 #13」「預約明細應該要去對應票券編號，
+           而不是快進快出（這個出錯率太高了）」）——
+           同一個人的三個名額可以扣到不同張票，之前整堂只問一次 ticketOf，三列都畫成同一張。
+           seatOf 對的是扣課紀錄（ticket_logs），不是先進先出推算。
+           找不到扣課歸屬時的退路：持有中 → 已過期 → 歷史（都照購買日新的優先）。
            全部用完的人也要看得到最後那張票，不然名單上會整片空白。 */
-        const sl=W.ticketOf(b.id) || W.active('group')[0] || W.expired('group')[0] || W.history('group')[0] || null;
-        if(!sl){ _gTk[mid]=null; return; }
+        const fb=W.active('group')[0] || W.expired('group')[0] || W.history('group')[0] || null;
         _gTk[mid]={ left: W.sessionsLeft('group'),
-          tokens: ticketTokens(sl.t, sl.stamps, _wctx.typeMap, sl.used, b.id),
-          makeup: W.active('group').some(x=>x.t && x.t.source==='makeup') };
+          makeup: W.active('group').some(x=>x.t && x.t.source==='makeup'),
+          slotAt:n=>W.seatOf(b.id,n) || W.ticketOf(b.id) || fb,
+          typeMap:_wctx.typeMap };
       });
     }catch(e){ console.error('團課名單票券圓點失敗:',e); }
     const rows = _seatKeys.length ? _seatKeys.map(sk=>{
@@ -19568,10 +19588,14 @@ async function openBookingDetail(id){
            這個位子扣的是哪一張票、還剩幾堂。） */
       const st = _gTk[mid];
       /* 圓點本身就說明了狀態（實心＝已上・空心＝未使用・整排實心＝已用畢），
-         所以不再加「建議續約／需購票」字樣（2026-07-26 使用者指示）。 */
-      const tkInfo = st
-        ? `<div class="mck-dots2" style="margin:6px 0 2px;">${st.tokens}`
-          +`${st.makeup?'<span class="tag" style="font-size:10px;background:#eef6ee;color:#2f6b39;align-self:center;">含補課券</span>':''}</div>`
+         所以不再加「建議續約／需購票」字樣（2026-07-26 使用者指示）。
+         2026-08-01：每一列標出這個名額用的是票券夾裡的第幾套（#N）＋方案名 ——
+         使用者要能直接把明細與會員票券頁對起來。 */
+      const _sl = st ? st.slotAt(seatNo(sk)) : null;
+      const tkInfo = _sl
+        ? `<div class="gr-tkname">${tkNoTag(_sl.no)}${_sl.t.plan_name||'票券'}`
+          +`${st.makeup?'<span class="tag" style="font-size:10px;background:#eef6ee;color:#2f6b39;margin-left:6px;">含補課券</span>':''}</div>`
+          +`<div class="mck-dots2" style="margin:4px 0 2px;">${ticketTokens(_sl.t,_sl.stamps,st.typeMap,_sl.used,b.id)}</div>`
         : '';
       return `<div class="gr-row${onLeaveM?' gr-row-leave':''}" style="padding:6px 0;border-bottom:1px solid var(--bd);">
         <div style="display:flex;align-items:center;gap:8px;">

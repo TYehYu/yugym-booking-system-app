@@ -27,8 +27,8 @@ const helpers=new Function('COURSE_SHAPE','parseYmd','attObj','ymd','TODAY',[gra
   grabFn('seatKeys'),grabFn('seatMid'),grabFn('seatKeysDisplay'),grabFn('seatNo'),
   grabFn('tkSharedIds'),grabFn('tkUsableBy'),grabFn('allocBookingsToTickets'),
   grabFn('grpTicketAlloc'),grabFn('grpMergeAlloc'),grabFn('bkHasMember'),grabFn('tkClass5'),
-  grabFn('buildWallet')].join('\n')+
-  '; return {tkVisual,ticketTokens,mids,seatKeys,seatMid,seatKeysDisplay,seatNo,tkUsableBy,allocBookingsToTickets,grpTicketAlloc,grpMergeAlloc,bkHasMember,tkClass5,buildWallet};')(COURSE_SHAPE,parseYmd,attObj,ymd,TODAY);
+  grabFn('buildWallet'),grabFn('tkNoTag')].join('\n')+
+  '; return {tkVisual,ticketTokens,mids,seatKeys,seatMid,seatKeysDisplay,seatNo,tkUsableBy,allocBookingsToTickets,grpTicketAlloc,grpMergeAlloc,bkHasMember,tkClass5,buildWallet,tkNoTag};')(COURSE_SHAPE,parseYmd,attObj,ymd,TODAY);
 
 async function render({ids,att={},tickets=[],bookings=[],logs=[],names={},thisDate='2026-07-27',thisId='B-NOW'}){
   const dbGetAll=async t=>t==='member_tickets'?tickets:t==='bookings'?bookings:t==='ticket_logs'?logs:t==='ticket_types'?TYPES:[];
@@ -36,11 +36,11 @@ async function render({ids,att={},tickets=[],bookings=[],logs=[],names={},thisDa
   const walletCtx=async()=>({tickets,bookings,logs,types:TYPES,typeMap});
   // 名額鍵是從 b.member_ids 推的（2026-07-30），所以 b 也要帶名單
   const b={id:thisId,date:thisDate,attendance:att,member_ids:ids};
-  const fn=new Function('gIdsD','b','memMapD','groupCkOK','isPastD','attObj','ticketCategoryOf','dbGetAll','window','mids','ticketTokens','seatKeys','seatMid','seatKeysDisplay','seatNo','tkUsableBy','allocBookingsToTickets','grpTicketAlloc','grpMergeAlloc','walletCtx','buildWallet','console',
+  const fn=new Function('gIdsD','b','memMapD','groupCkOK','isPastD','attObj','ticketCategoryOf','dbGetAll','window','mids','ticketTokens','seatKeys','seatMid','seatKeysDisplay','seatNo','tkUsableBy','allocBookingsToTickets','grpTicketAlloc','grpMergeAlloc','walletCtx','buildWallet','tkNoTag','console',
     `return (async()=>{ const att=attObj(b); ${body} return rows; })();`);
   return await fn(ids,b,names,true,false,attObj,ticketCategoryOf,dbGetAll,{_ttCache:TYPES},helpers.mids,helpers.ticketTokens,
     helpers.seatKeys,helpers.seatMid,helpers.seatKeysDisplay,helpers.seatNo,helpers.tkUsableBy,helpers.allocBookingsToTickets,helpers.grpTicketAlloc,helpers.grpMergeAlloc,
-    walletCtx,helpers.buildWallet,console);
+    walletCtx,helpers.buildWallet,helpers.tkNoTag,console);
 }
 const T=(o)=>Object.assign({__cat:'小班肌力',ticket_type_id:'tt-g',source:'purchase'},o);
 const BK=(id,date,st,ids)=>({id,date,start_time:'11:00',status:st,category:'小班肌力',member_ids:ids,ticket_type_id:'tt-g'});
@@ -79,9 +79,13 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('★ 本堂 8/6 有圓點且標金框', /mtk-booked mtk-cur[^>]*>8\/6</.test(h2));
     chk('★ 四堂日期都在（沒有多出來的空圈）',
       ['8/6','8/13','8/20','8/27'].every(d=>h2.includes('>'+d+'<')) && !/mtk-free/.test(h2));
-    /* 沒有扣課紀錄（舊系統匯入）時退回原本的挑法 —— 剩 1 堂的補課券 */
+    /* 沒有扣課紀錄（舊系統匯入）時退回票券夾的推算。
+       2026-08-01：補課券不再參與先進先出推算（游晴雅案例：7/30 請假發的兩張券，
+       被推算算成用來扣 7/30 那一堂，於是券顯示已用畢、可約堂數 0），
+       所以這裡推算到的是那張四週票，四堂都對得上 —— 比原本挑到剩 1 堂的補課券合理。 */
     h2=await render({ids:['M'],tickets:[t4w,tmk],bookings:bkG,logs:[],names:{M:'陳暐濰'},thisDate:'2026-08-06'});
-    chk('　　沒有扣課紀錄時退回原本的挑法（不會整個壞掉）', (h2.match(/class="mtk/g)||[]).length===1);
+    chk('　　沒有扣課紀錄時推算到那張四週票（補課券不參與推算）',
+      (h2.match(/class="mtk/g)||[]).length===4 && h2.includes('>8/6<'));
   }
 
   console.log('不再顯示文字標籤：');
@@ -238,6 +242,41 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('　　只有一張時不出下拉、維持原本的一行說明', /cand\.length===1/.test(src));
   }
 
-  console.log(`\n${pass} passed, ${fail} failed`);
+  /* 2026-08-01 使用者指示（附許佳慈的票券頁截圖）：
+   「根據會員的票券編號來看 8/7 的預約明細應該要顯示 #15 #15 #13」
+   「所以在預約明細應該要去對應票券編號，而不是快進快出（這個出錯率太高了）」
+   —— 同一個人的三個名額可以扣到不同張票，明細每一列要標出自己那張的 #N，
+   而且要照「扣課紀錄」對，不是先進先出猜。
+   正式庫的 ticket_logs 本來就是這樣記的（8/07 三筆 deduct：#15 #15 #13），
+   問題只在明細整堂只問一次 ticketOf，三列都畫成同一張。 */
+console.log('逐名額各自對到票（許佳慈 8/07 情境）：');
+{
+  const mk=(id,start,exp)=>T({id,member_id:'M',sessions_total:4,sessions_remaining:0,
+    plan_name:'團課 4週優惠',start_date:start,expire_date:exp,purchase_date:'2026-08-01'});
+  const tkA=mk('tkA','2026-08-07','2026-09-04');   // 先建立 → #1
+  const tkB=mk('tkB','2026-08-24','2026-09-21');   // 後建立 → #2
+  const cls=BK('B-NOW','2026-08-07','booked',['M','M','M']);
+  const logs=[
+    {id:'L1',ticket_id:'tkB',booking_id:'B-NOW',action:'deduct',created_at:'2026-08-01T04:00:00Z'},
+    {id:'L2',ticket_id:'tkB',booking_id:'B-NOW',action:'deduct',created_at:'2026-08-01T04:00:01Z'},
+    {id:'L3',ticket_id:'tkA',booking_id:'B-NOW',action:'deduct',created_at:'2026-08-01T04:00:02Z'},
+  ];
+  const html=await render({ids:['M','M','M'],tickets:[tkA,tkB],bookings:[cls],logs,
+    names:{M:'許佳慈'},thisDate:'2026-08-07',thisId:'B-NOW'});
+  chk('★ 三個名額＝三列，各有自己的圓形卡', (html.match(/mck-dots2/g)||[]).length===3);
+  const nos=[...html.matchAll(/class="tk-no"[^>]*>#(\d+)</g)].map(m=>m[1]);
+  chk('★ 每一列標出自己那張票的編號（兩張 #2、一張 #1，與扣課紀錄一致）',
+      nos.length===3 && nos.filter(x=>x==='2').length===2 && nos.filter(x=>x==='1').length===1);
+  chk('★ 對的是扣課紀錄，不是先進先出 —— tkB 的效期比較晚，先進先出會挑 tkA',
+      nos.filter(x=>x==='2').length===2);
+  chk('　　方案名也標出來，方便跟票券頁對照', (html.match(/團課 4週優惠/g)||[]).length===3);
+  /* 沒有扣課紀錄的那種（舊系統匯入）仍要有東西可看，不能整片空白 */
+  const html2=await render({ids:['M','M'],tickets:[tkA],bookings:[BK('B2','2026-08-07','booked',['M','M'])],
+    logs:[],names:{M:'許佳慈'},thisDate:'2026-08-07',thisId:'B2'});
+  chk('　　沒有扣課紀錄時退回票券夾的推算，兩列都還是有卡',
+      (html2.match(/mck-dots2/g)||[]).length===2);
+}
+
+console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail?1:0);
 })();
