@@ -42,10 +42,12 @@ ok('★ 桌機別人的課卡改標 cal-ev-view（不再 cal-ev-noint 整張不�
    /const _viewOnly = SESSION\.role==='coach' && !SESSION\.is_manager && opts\.me && !isMine;/.test(src)
    && /\$\{_viewOnly\?' cal-ev-view':''\}/.test(src)
    && !/\$\{_noInt\?' cal-ev-noint':''\}/.test(src));
-ok('★ 點下去直接開明細，不經過 onEvClick（那條會彈圓形按鈕）',
-   /\$\{_viewOnly\?`onclick="openBookingDetail\('\$\{b\.id\}'\)"`/.test(src));
-ok('★ 手機 agenda 同樣改成可點開明細', /\$\{canClick\?'':' cag-view'\}/.test(src)
-   && /:` onclick="openBookingDetail\('\$\{b\.id\}'\)"`\}/.test(src));
+/* 2026-08-01 使用者指示定版：「非本人的課卡一樣正常顯示課卡內容，但要移除互動的功能，
+   手機跟桌機都是」→ 0731 的「點得開唯讀明細」收回成純顯示。見 tests/coachviewtest.js。 */
+ok('★ 別人的課卡完全不掛點擊（桌機）', /\$\{_viewOnly\?''/.test(src)
+   && !/\$\{_viewOnly\?`onclick="openBookingDetail\('\$\{b\.id\}'\)"`/.test(src));
+ok('★ 手機 agenda 同樣完全不掛點擊', /\$\{canClick\?'':' cag-view'\}/.test(src)
+   && /\$\{canClick\?` onclick="wtlCardClick\('\$\{b\.id\}',this\)"`:''\}>/.test(src));
 ok('★ 唯讀卡不能拖（互動放開後 pointer-events 回來了，不擋就拖得動別人的課改期）',
    /if\(ev\.classList\.contains\('cal-ev-view'\)\) return;/.test(src));
 ok('★ 手動 tap 路徑（pointer capture 那條）也不彈圓形按鈕',
@@ -60,8 +62,9 @@ ok('★ 但每個修改元件仍然關著：editable 綁 ownByCoach',
 ok('★ 取消預約鈕綁 ownByCoach', /\$\{canCancel&&ownByCoach\?\(isMemberView/.test(src));
 ok('★ 簽到綁「自己主帶／代課」', /\|\| \(SESSION\.role==='coach' && \(bkIsCoach\(b,SESSION\.id\)\)\);/.test(src));
 ok('★ 備註也只有自己的課能寫', /const can = !window\._coachReadonly && ownByCoach;/.test(src));
-ok('　　唯讀卡只改游標，不關 pointer-events（關了就點不開明細）',
-   /\.cal-ev\.cal-ev-view,\.cag-std\.cag-view\{cursor:pointer;\}/.test(src));
+ok('　　純顯示卡：游標不再暗示可點，但仍不關 pointer-events（關了會攔手指、頁面滑不動）',
+   /\.cal-ev\.cal-ev-view,\.cag-std\.cag-view\{cursor:default;\}/.test(src)
+   && !/\.cag-std\.cag-view\{pointer-events:none/.test(src));
 ok('　　原因寫在程式裡', /現在改成點得開「課程明細」，但不彈出那組圓形按鈕/.test(src));
 
 console.log('\n團課明細排列：日期時間時長／教練／場地／名單／備註');
