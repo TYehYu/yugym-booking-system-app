@@ -6622,6 +6622,14 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 .mc-rev-it{font-size:10.5px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mc-rev-amt{font-family:var(--num),inherit;font-size:13px;font-weight:800;color:var(--green);white-space:nowrap;}
 .mc-rev-inv{font-size:9px;font-weight:700;color:#2e6b4f;background:#e3efe7;border-radius:999px;padding:2px 6px;flex-shrink:0;}
+/* 教練課約別標籤（2026-08-01）：續約用品牌金（要看得見，它牽動獎金）、分期用暖棕、新約低調 */
+.rev-kind{font-size:9.5px;font-weight:800;border-radius:999px;padding:2px 7px;flex-shrink:0;
+  border:1px solid transparent;font-family:inherit;line-height:1.5;}
+button.rev-kind{cursor:pointer;}
+button.rev-kind:hover{filter:brightness(.96);box-shadow:0 1px 4px rgba(60,50,38,.18);}
+.rev-kind-new{background:var(--card2,#F2EEE4);color:var(--t2);border-color:var(--bd);}
+.rev-kind-renewal{background:#f7efe0;color:#8a5e28;border-color:#e8d9b8;}
+.rev-kind-installment{background:#efe7f3;color:#6e3a86;border-color:#ddd0e6;}
 /* .mc-revlist-sum 已隨標題列移除（2026-07-23：總額看上方 KPI） */
 /* ── 現場抽獎登記（2026-07-22 使用者指示：保留實體籤筒，系統只做名單提示＋登記發放）── */
 /* 2026-07-31 使用者指示：抽獎與審核提示改到畫面左下角（右下角留給手機端變更通知，
@@ -6891,8 +6899,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1744';
-const APP_VERSION_LABEL='v260801.1744';
+const APP_VERSION = '260801.1748';
+const APP_VERSION_LABEL='v260801.1748';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11980,10 +11988,20 @@ PAGES.g_dashboard=async function(){
 
   /* ── 今日營收收款名單卡（2026-07-22 使用者指示：桌機右欄「今日值班」下方）──
      與今日營收 KPI 同源：_dayTk（今日售票）＋ _dayPur（場租/重啟/商品）。 */
+  /* 教練課要標「新約／續約／分期」（2026-08-01 使用者指示）——
+     續約獎金只認 sale_kind='renewal'，賣票當下按錯就會直接影響教練的錢，
+     所以名單上要看得到、而且點得動（改的是同一個欄位，不另外存一份）。
+     團課與其他類別不標：它們本來就不進續約獎金，多一個標籤只會干擾。 */
+  const _saleKindOf=t=>{
+    const cat=(((types||[]).find(x=>x.id===t.ticket_type_id)||{}).category)||'';
+    if(cat!=='私人教練') return null;                      // 只有教練課系要標
+    const k=String(t.sale_kind||'');
+    return (k==='new'||k==='renewal'||k==='installment') ? k : 'new';   // 沒標過的當新約（與獎金口徑一致）
+  };
   const _revRows=[
     ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—', mid:t.member_id||null,
       it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
-      amt:Number(t.amount_paid)||0,
+      amt:Number(t.amount_paid)||0, tk:t.id, kind:_saleKindOf(t),
       inv:(t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued')})),
     ..._dayPur.map(p=>({nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客', mid:p.member_id||null,
       it:p.plan_name||({reactivate:'票券重啟',facility_rental:'場地租借',merchandise:'商品'}[p.source]||'收款'),
@@ -12009,6 +12027,7 @@ PAGES.g_dashboard=async function(){
     ${_revRows.length?`<div class="mc-revlist">${_revRows.map(r=>`
       <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
         <div class="mc-rev-b"><span class="mc-rev-nm">${r.nm}</span><span class="mc-rev-it">${r.it}</span></div>
+        ${r.kind?saleKindChip(r.tk,r.kind):''}
         ${r.inv?'<span class="mc-rev-inv">發票</span>':''}
         <span class="mc-rev-amt">$${_fm(r.amt)}</span>
         ${r.mid?'<span class="mc-td-arrow">›</span>':''}
@@ -22748,6 +22767,43 @@ function openRevList(){
     <div class="nl-sum"><span>合計</span><b>$${Math.round(total).toLocaleString()}</b></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
+/* 教練課的約別標籤（2026-08-01 使用者指示：營收名單要看得到新約／續約／分期，
+   而且要能改，避免輸入時手誤）——續約獎金只認 renewal，按錯會直接影響教練的錢。
+   點標籤就地改，寫回的是 member_tickets.sale_kind 同一個欄位，不另存一份。 */
+const SALE_KIND_LB={new:'新約', renewal:'續約', installment:'分期'};
+function saleKindChip(tkId, kind){
+  const k=SALE_KIND_LB[kind]?kind:'new';
+  const can=(typeof isDeskLike==='function') && isDeskLike();
+  return `<${can?'button':'span'} class="rev-kind rev-kind-${k}"${can?` onclick="event.stopPropagation();openSaleKindPick('${tkId}')" title="點一下更改約別（影響續約獎金）"`:''}>${SALE_KIND_LB[k]}</${can?'button':'span'}>`;
+}
+async function openSaleKindPick(tkId){
+  if(!isDeskLike()) return;
+  const t=await dbGet('member_tickets',tkId);
+  if(!t){ showToast('找不到票券'); return; }
+  const cur=SALE_KIND_LB[t.sale_kind]?t.sale_kind:'new';
+  const btn=(k)=>`<button type="button" class="btn ${cur===k?'btn-green':'btn-ghost'}" style="flex:1;"
+      onclick="setSaleKind('${tkId}','${k}')">${SALE_KIND_LB[k]}</button>`;
+  showModal(`<div class="modal-title">約別</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">
+      ${String(t.plan_name||'票券').replace(/</g,'&lt;')}　${t.sessions_total||0} 堂　$${Number(t.amount_paid||0).toLocaleString()}<br>
+      <b>續約獎金只認「續約」</b>，改了會即時反映在教練的薪資計算上，請確認後再送出。</div>
+    <div style="display:flex;gap:8px;">${btn('new')}${btn('renewal')}${btn('installment')}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
+}
+async function setSaleKind(tkId, kind){
+  try{
+    const t=await dbGet('member_tickets',tkId); if(!t) return;
+    const before=SALE_KIND_LB[t.sale_kind]||t.sale_kind||'（未標）';
+    if(t.sale_kind===kind){ closeModal(); return; }
+    t.sale_kind=kind;
+    await dbPut('member_tickets',t);
+    // 留痕：改的是會影響獎金的欄位，要看得出誰在什麼時候改的
+    try{ await logTicket(t.id,'adjust',0,null,SESSION.name||SESSION.id,
+      `約別調整：${before} → ${SALE_KIND_LB[kind]}`); }catch(_){}
+    closeModal(); showToast('已改為「'+SALE_KIND_LB[kind]+'」');
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('更改失敗：'+((e&&e.message)||e)); }
+}
 /* 今日營收名單彈窗（2026-08-01 使用者指示：首頁那張營收卡要點得開）——
    內容與桌機右欄的收款名單卡一致：誰、買什麼、多少錢、有沒有開發票；
    有綁會員的那幾列點下去直接跳到他的票券頁。 */
@@ -22761,6 +22817,7 @@ function openTodayRevList(){
     ? `<div class="mc-revlist">${rows.map(r=>`
         <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="closeModal();revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
           <div class="mc-rev-b"><span class="mc-rev-nm">${esc(r.nm)}</span><span class="mc-rev-it">${esc(r.it)}</span></div>
+          ${r.kind?saleKindChip(r.tk,r.kind):''}
           ${r.inv?'<span class="mc-rev-inv">發票</span>':''}
           <span class="mc-rev-amt">${money(r.amt)}</span>
           ${r.mid?'<span class="mc-td-arrow">›</span>':''}
