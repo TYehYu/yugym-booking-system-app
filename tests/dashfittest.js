@@ -61,17 +61,22 @@ ok('★ 三顆鈕的內容不變（新增會員／銷售／查看合約）',
 }
 /* 2026-08-01 二修（使用者：「三個中間 KPI 要靠右 跟按鈕靠在一起」） */
 ok('★ 整條靠右，數字與按鈕成為同一群',
-   /\.mc-g5-mid \.mc-kpistrip\{margin-bottom:14px;padding:6px 14px 0;justify-content:flex-end;gap:52px;\}/.test(src)
+   /\.mc-g5-mid \.mc-kpistrip\{margin-bottom:14px;padding:6px 14px 0;justify-content:flex-end;gap:clamp\(16px,2\.4vw,52px\);\}/.test(src)
    && !/\.mc-g5-mid \.mc-kpistrip \.mc-quick3\{margin-left:auto;\}/.test(src));
-ok('　　按鈕群靠得比數字之間更近（52−16＝36）',
-   /\.mc-kpistrip \.mc-quick3\{gap:10px;flex:0 0 auto;margin-left:-16px;\}/.test(src));
+ok('　　按鈕群自己的間距比數字之間近', /\.mc-kpistrip \.mc-quick3\{gap:10px;flex:0 0 auto;\}/.test(src));
 /* 2026-08-01 二修（使用者：「首頁 KPI 右邊的三個按鈕可以放大一點 改成直式卡片」）——
    原本壓扁的小方塊跟旁邊 44px 的大數字擺一起太小。 */
-ok('　　三顆鈕改成直式卡片（加寬加高、圖示放大）',
-   /\.mc-kpistrip \.mc-quick3 \.mc-q3\{flex:0 0 auto;width:96px;min-height:96px;padding:16px 6px;gap:10px;/.test(src)
+ok('　　三顆鈕改成直式卡片（加寬加高、圖示放大），寬度可隨螢幕伸縮',
+   /\.mc-kpistrip \.mc-quick3 \.mc-q3\{flex:0 0 auto;width:clamp\(76px,6\.4vw,96px\);min-height:96px;/.test(src)
    && /\.mc-kpistrip \.mc-quick3 \.mc-q3 svg\{width:26px;height:26px;\}/.test(src));
-ok('　　KPI 條允許換行，窄視窗不會把鈕擠出畫面', /\.mc-kpistrip\{display:flex;[^}]*flex-wrap:wrap;\}/.test(src));
-ok('　　整條靠右對齊', /\.mc-kpistrip\{display:flex;align-items:center;justify-content:flex-end;/.test(src));
+/* 2026-08-01 使用者回報：「我用 mac 上方會被切成兩列 用一般桌機就沒有」——
+   筆電螢幕窄，固定 52px 間距＋三顆 96px 卡片擠不下，flex-wrap 一換行就變兩列。 */
+ok('★ 不換行，空間不夠時先縮間距（clamp）而不是折行',
+   /\.mc-kpistrip\{display:flex;align-items:center;justify-content:flex-end;\s*\n\s*gap:clamp\(16px,2\.4vw,52px\);min-width:0;padding-right:14px;flex-wrap:nowrap;\}/.test(src));
+ok('　　數字群可壓縮（flex 預設 min-width:auto 會寧可溢出也不縮）',
+   /\.mc-kpistrip \.kpi-it\{min-width:0;\}/.test(src));
+ok('　　發票拆分那行過長時截斷，不把整條撐開',
+   /\.mc-kpistrip \.kpi-sub\{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;\}/.test(src));
 
 console.log('\n③ 移除問候與那句話');
 ok('★ kpi-greet 整塊不再產出', !/<div class="kpi-greet">/.test(src));
