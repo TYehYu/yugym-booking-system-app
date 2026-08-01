@@ -6630,6 +6630,19 @@ button.rev-kind:hover{filter:brightness(.96);box-shadow:0 1px 4px rgba(60,50,38,
 .rev-kind-new{background:var(--card2,#F2EEE4);color:var(--t2);border-color:var(--bd);}
 .rev-kind-renewal{background:#f7efe0;color:#8a5e28;border-color:#e8d9b8;}
 .rev-kind-installment{background:#efe7f3;color:#6e3a86;border-color:#ddd0e6;}
+/* 取消預約的提示（2026-08-01 使用者指示：把會扣課的警示明顯一點）——
+   原本「會扣課」與「會退課」兩種情況長得差不多，會員／櫃檯很容易沒看清楚就按下去。
+   會扣課的用紅底大字橫幅，會退回的維持低調的綠框。 */
+.cx-warn{background:#b5372e;color:#fff;border-radius:14px;padding:16px 18px;
+  box-shadow:0 6px 20px rgba(181,55,46,.28);}
+.cx-warn-t{font-size:19px;font-weight:900;letter-spacing:.02em;line-height:1.3;}
+.cx-warn-s{font-size:13px;line-height:1.85;margin-top:7px;color:rgba(255,255,255,.94);}
+.cx-warn-s b{color:#ffe08a;}
+.cx-note{border-radius:12px;padding:13px 15px;font-size:13.5px;line-height:1.9;}
+.cx-note-ok{background:#eef5f1;border:1.5px solid #cfe3d8;color:#1f6f54;}
+/* 櫃檯端「扣掉這一堂」那顆要跟「退回票券」分得開 */
+.cx-btn-eat{box-shadow:0 3px 12px rgba(181,55,46,.35);}
+.cx-btn-eat b{text-decoration:underline;text-underline-offset:2px;}
 /* .mc-revlist-sum 已隨標題列移除（2026-07-23：總額看上方 KPI） */
 /* ── 現場抽獎登記（2026-07-22 使用者指示：保留實體籤筒，系統只做名單提示＋登記發放）── */
 /* 2026-07-31 使用者指示：抽獎與審核提示改到畫面左下角（右下角留給手機端變更通知，
@@ -6899,8 +6912,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.1801';
-const APP_VERSION_LABEL='v260801.1801';
+const APP_VERSION = '260801.1813';
+const APP_VERSION_LABEL='v260801.1813';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20322,8 +20335,10 @@ async function confirmCancelBooking(id){
       ${await cancelRewardWarnHtml(b)}
       <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
         <button class="btn btn-ghost" onclick="closeModal()">返回</button>
-        <button class="btn btn-ghost" style="color:#b5372e;" onclick="askSeriesCancel('${id}','none')">取消・扣課不退</button>
-        <button class="btn btn-danger" onclick="askSeriesCancel('${id}','force')">取消・退回票券</button>
+        ${/* 2026-08-01 使用者指示：會扣課的那顆要一眼看得出來 —— 原本兩顆長得幾乎一樣，
+             按錯就是直接吃掉客人的堂數。扣課那顆改成紅底實心，退課那顆維持一般樣式。 */''}
+        <button class="btn btn-ghost" onclick="askSeriesCancel('${id}','force')">取消・退回票券</button>
+        <button class="btn btn-danger cx-btn-eat" onclick="askSeriesCancel('${id}','none')">取消・<b>扣掉這一堂</b></button>
       </div>`);
     return;
   }
@@ -32034,14 +32049,14 @@ async function memCancelSelf(id){
   const b=await dbGet('bookings',id);
   if(!b||b.member_id!==SESSION.id){showToast('找不到預約');return;}
   if(b.category!=='自主訓練'){showToast('僅能取消自主訓練預約');return;}
-  const within24 = hoursUntilStart(b) < 24;
-  /* 2026-07-29 使用者定案：會員自行取消，開課 24 小時內視同使用、不退點 */
-  const note = within24
-    ? '⚠ 距離開課不到 24 小時，取消後<b>視同使用，恕不退回點數</b>。如需調整請聯繫小編或教練。'
-    : '取消後將退回 1 點自主訓練票券。（開課前 24 小時內取消則不退回）'
+  /* 2026-08-01 使用者回報（江俊輝：約了自主訓練 18 秒後取消，點數被吃掉）——
+     24 小時規則是為了保護「教練的時間」，自主訓練不佔教練，套那條沒有道理。
+     DB 端（fn_cancel_booking，migration 20260801_self_cancel_grace_and_training_pass）
+     已改成自主訓練一律退點，這裡的說明也跟著改，不要再嚇會員。 */
   showModal(`<div class="modal-title">取消自主訓練</div>
     <div style="font-size:13.5px;padding:6px 0 4px;">確定取消 ${b.date} ${b.start_time} 的自主訓練嗎？</div>
-    <div style="font-size:12px;color:var(--t2);margin-top:6px;line-height:1.6;">${note}</div>
+    <div class="cx-note cx-note-ok"><b>會退回 1 點</b>　自主訓練不佔教練時間，取消不扣點。
+      <span style="display:block;font-size:12px;opacity:.85;margin-top:4px;">提醒：點數本身有 7 天效期，過期就不能用了。</span></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-danger" onclick="doMemCancelSelf('${id}')">確定取消</button></div>`);
 }
 async function doMemCancelSelf(id){
@@ -32167,21 +32182,26 @@ async function memCancelBooking(id){
   if(!b||b.member_id!==SESSION.id){ showToast('找不到預約'); return; }
   const hrs=hoursUntilStart(b);
   const within24=hrs<24;
-  const box=within24
-    ? `<div style="background:#fbeceb;border:1.5px solid #e0a8a2;border-radius:12px;padding:14px 16px;font-size:13.5px;color:#b5372e;line-height:1.9;">
-         ⚠ <b>距離開課不到 24 小時</b>（約 ${Math.max(0,Math.floor(hrs))} 小時）<br>
-         依課程規則，此時取消<b>視同已使用，將扣除本堂課</b>、票券不退回。</div>
+  /* 2026-08-01 使用者指示：「把會扣課的警示明顯一點」——
+     原本扣課與退課兩種情況長得差不多（都是一個淡色框），會員很容易沒看清楚就按下去。
+     改成：會扣課的用大字紅底橫幅打頭，並把按鈕文字寫成「確定取消並扣掉這一堂」。
+     另外剛約完 10 分鐘內取消一律退（DB 端同步放寬），那段時間內不該嚇人。 */
+  const _justBooked = b.created_at && (Date.now()-new Date(b.created_at).getTime()) <= 10*60*1000;
+  const box=(within24 && !_justBooked)
+    ? `<div class="cx-warn">
+         <div class="cx-warn-t">這一堂會被扣掉</div>
+         <div class="cx-warn-s">距離開課不到 24 小時（約 ${Math.max(0,Math.floor(hrs))} 小時），依課程規則視同已使用，<b>票券不會退回</b>。</div>
+       </div>
        <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-top:12px;">
          如遇特殊狀況需要調整，請先<b>聯繫小編或您的教練</b>，由我們協助處理。</div>`
-    : `<div style="background:#eef5f1;border:1.5px solid #cfe3d8;border-radius:12px;padding:14px 16px;font-size:13.5px;color:#1f6f54;line-height:1.9;">
-         距離開課還有 <b>${Math.floor(hrs)}</b> 小時，取消後<b>會退回 1 堂票券</b>。</div>
+    : `<div class="cx-note cx-note-ok"><b>會退回 1 堂票券</b>　${_justBooked?'剛預約完 10 分鐘內取消不扣堂數。':`距離開課還有 ${Math.floor(hrs)} 小時。`}</div>
        <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-top:12px;">
          提醒：開課前 24 小時內取消將視同使用、不退回票券。</div>`;
   showModal(`<div class="modal-title">取消預約</div>
     <div style="font-size:13.5px;color:var(--text);padding:2px 0 12px;">${b.date.replace(/-/g,'/')}　${b.start_time}　${bookingTypeName(b,window._memTypeMap)}</div>
     ${box}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
-      <button class="btn btn-danger" onclick="doMemCancelBooking('${id}')">${within24?'仍要取消（扣課）':'確定取消'}</button></div>`);
+      <button class="btn btn-danger" onclick="doMemCancelBooking('${id}')">${(within24&&!_justBooked)?'確定取消並扣掉這一堂':'確定取消'}</button></div>`);
 }
 async function doMemCancelBooking(id){
  try{
