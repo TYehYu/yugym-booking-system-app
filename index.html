@@ -6354,8 +6354,8 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 /* ══ 首頁不用捲視窗（2026-08-01 使用者指示）══
    「讓版面維持在不用滑動視窗就可以看到所有訊息的大小；中間教練預約課卡如果當天
      有很多教練上課，則按比例縮小課卡，不要用卷軸捲動視窗」
-   作法：只把「今日教練任務」這一卡的高度收進剩下的視窗高度（max-height 由
-   fitCoachCards() 量出），高度不夠時對課卡群整體套 zoom 按比例縮小。
+   作法：把中間那一欄的高度收進剩下的視窗高度（fitCoachCards() 量出），
+   教練卡自己 flex-grow 撐滿；再對課卡群套 zoom 按比例縮放（多就縮、少就放大）。
    為什麼用 zoom 而不是 transform:scale —— zoom 會參與版面計算，寬度自動跟著收，
    而且教練名（sticky 118px 欄）與課卡在同一個座標系裡一起縮，不會錯位；
    transform 只改繪製，寬度不變會在右邊留一大塊空白。
@@ -6367,7 +6367,8 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .mc-coachcenter .mc-timeline-wrap>.card{flex:1;min-height:0;display:flex;flex-direction:column;}
 .mc-coachcenter .tl-panel{flex:1;min-height:0;display:flex;flex-direction:column;}
 .mc-coachcenter .tcard-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
-  zoom:var(--tcz,1);scrollbar-width:thin;scrollbar-color:var(--bd) transparent;}
+  scrollbar-width:thin;scrollbar-color:var(--bd) transparent;}
+.mc-coachcenter .tcard-zoom{zoom:var(--tcz,1);}
 .mc-coachcenter .tcard-body::-webkit-scrollbar{width:6px;}
 .mc-coachcenter .tcard-body::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px;}
 /* 兩層白底修正（2026-07-21 使用者回報）：timelineCell 自帶的 .card 殼在合一卡內去背 */
@@ -7210,8 +7211,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1820';
-const APP_VERSION_LABEL='v260802.1820';
+const APP_VERSION = '260802.1831';
+const APP_VERSION_LABEL='v260802.1831';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11784,31 +11785,57 @@ function butlerArtNext(){
    ・縮到下限（0.62）仍放不下才讓它內捲 —— 再小就看不清楚名字了，
      這時寧可捲，也不要把整列教練默默切掉（無聲截斷比捲軸糟）。
 
-   ⚠ 2026-08-02：使用者要「上下展延到視窗邊緣＋課卡依教練數縮放」，我先後試了
-   ①對容器 zoom 往上放大、②在這裡直接設 height 撐滿 —— 兩次都讓整張卡在實機上
-   變成一條空白（使用者回報「教練任務不見了」）。這一卡的高度是一條
-   flex:1 的鏈（卡→wrap→card→panel→body），在鏈的頂端硬塞尺寸、又對鏈的末端
-   套 zoom，量到的值會跟版面互相餵食。已整段還原成這裡唯一驗證過的做法：
-   只設 max-height、zoom 只往下。要再做展延與放大得換路（CSS 讓外層先有確定高度，
-   課卡改自己的尺寸變數），而且要在瀏覽器上實測過再上。 */
-const TCARD_ZOOM_MIN=0.62;
+   2026-08-02 三修（使用者：「上下展延到視窗邊緣，中間課卡根據當天上課教練縮放」）。
+   前兩次失敗的路（都讓整張卡在實機上變成一條空白）記在這裡，不要再走：
+   ①把 zoom 開到 >1，但 zoom 套在 .tcard-body —— 那是 flex:1 的捲動容器，
+     量到的 clientHeight 本身就被 zoom 除過，放大時測量與版面互相餵食。
+   ②在 .mc-coachcenter 上直接設 height —— 它的 flex 是 1.45（flex-basis:0%），
+     主軸尺寸由 flex 決定，height 根本不會生效。
+   現在的做法（已用瀏覽器實測）：
+   ・高度給「中間那一欄」（.mc-g5-mid）—— 欄有了確定高度，裡面 flex-grow 的
+     教練卡自己就撐到視窗底，不必也不能對卡片本身塞 height。
+   ・zoom 改套在課卡群外面新包的 .tcard-zoom（不參與捲動與 flex），
+     .tcard-body 的 clientHeight 就不再被 zoom 影響，測量穩定。
+   ・縮放比用二分逼近實際量到的結果，不用 box/need 一次算 —— 課卡會換行
+     （.tcard-list 是 flex-wrap:wrap），放大之後一列塞不下就多一排，
+     需要的高度不是等比例變化，一次算會過頭。 */
+const TCARD_ZOOM_MIN=0.62, TCARD_ZOOM_MAX=1.45;
 function fitCoachCards(){
   const cc=document.querySelector('.mc-g5-mid .mc-coachcenter');
   if(!cc) return;
+  const mid=cc.closest('.mc-g5-mid');
   const body=cc.querySelector('.tcard-body');
-  if(isMobileLayout() || !body){ cc.style.removeProperty('max-height'); cc.style.removeProperty('height'); return; }
+  const zoomEl=body && body.querySelector('.tcard-zoom');
+  if(isMobileLayout() || !body || !zoomEl){
+    if(mid) mid.style.removeProperty('height');
+    cc.style.removeProperty('max-height'); cc.style.removeProperty('height');
+    if(zoomEl) zoomEl.style.removeProperty('--tcz');
+    return;
+  }
+  if(mid){
+    const midTop=mid.getBoundingClientRect().top;
+    mid.style.height=Math.max(260, Math.round(window.innerHeight - midTop - 14))+'px';
+  }
   const top=cc.getBoundingClientRect().top;
-  const avail=Math.max(220, Math.round(window.innerHeight - top - 14));
-  cc.style.removeProperty('height');   // 上一版在這裡設 height 會把整張卡壓掉
-  cc.style.maxHeight=avail+'px';
-  /* 先還原成原尺寸再量，量到的才是「不縮」需要多高 */
-  body.style.setProperty('--tcz','1');
-  const box=body.clientHeight, need=body.scrollHeight;
-  if(!box || !need) return;
-  const z = need>box+1 ? Math.max(TCARD_ZOOM_MIN, box/need) : 1;
-  body.style.setProperty('--tcz', z.toFixed(3));
+  cc.style.maxHeight=Math.max(220, Math.round(window.innerHeight - top - 14))+'px';
+  const fits=v=>{ zoomEl.style.setProperty('--tcz', String(v)); return body.scrollHeight<=body.clientHeight+1; };
+  let z;
+  if(fits(TCARD_ZOOM_MAX)) z=TCARD_ZOOM_MAX;          // 教練少 → 直接放到上限
+  else if(!fits(TCARD_ZOOM_MIN)) z=TCARD_ZOOM_MIN;    // 教練太多 → 縮到下限仍放不下，讓它內捲
+  else {
+    let lo=TCARD_ZOOM_MIN, hi=TCARD_ZOOM_MAX;
+    for(let i=0;i<7;i++){ const m=(lo+hi)/2; if(fits(m)) lo=m; else hi=m; }
+    z=lo;
+  }
+  zoomEl.style.setProperty('--tcz', z.toFixed(3));
 }
-window.addEventListener('resize',()=>{ if(document.querySelector('.mc-g5-mid .mc-coachcenter')) fitCoachCards(); });
+/* 縮放要量 7~9 次版面，resize 期間每個事件都跑會卡；併到下一個影格只跑一次 */
+let _fitTick=false;
+window.addEventListener('resize',()=>{
+  if(_fitTick || !document.querySelector('.mc-g5-mid .mc-coachcenter')) return;
+  _fitTick=true;
+  requestAnimationFrame(()=>{ _fitTick=false; try{ fitCoachCards(); }catch(_){} });
+});
 
 function butlerArtHtml(){
   return `<div class="mc-art-top"><div class="mc-art" id="mc-art" onclick="butlerArtSwap()"
@@ -12270,7 +12297,10 @@ PAGES.g_dashboard=async function(){
     ? `<div class="tl-panel tl-desktop-only">
         <div class="tl-panel-top"><div class="tl-title tl-title-date"><button class="tl-daynav" onclick="dashDayShift(-1)" title="前一天">‹</button><span class="tl-date">${_taskDateLbl}</span><button class="tl-daynav" onclick="dashDayShift(1)" title="後一天">›</button>${!isTodayView?`<button class="tl-daynav tl-daynav-today" onclick="dashPickDate('${today}')">回到今天</button>`:''}${_liveCount?`<span class="tl-live-badge">${_liveCount} 人上課中</span>`:''}</div><div class="tl-top-right">${legend}</div></div>
         <div class="tcard-body">
-          ${rows.map(r=>r.cardHtml).join('')}
+          ${/* 2026-08-02：課卡群外包一層 .tcard-zoom —— zoom 要套在「不參與捲動與 flex」的
+               元素上，套在 .tcard-body（flex:1 的捲動容器）本身會讓量到的 clientHeight
+               也被 zoom 除過，放大時測量與版面互相餵食，整張卡會被壓掉。 */''}
+          <div class="tcard-zoom">${rows.map(r=>r.cardHtml).join('')}</div>
         </div>
       </div>
       <div class="mtc-wrap tl-mobile-only">

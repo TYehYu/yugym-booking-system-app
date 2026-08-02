@@ -88,11 +88,13 @@ ok('　　使用者的原話寫在程式裡', /移除『晚安，余東曄』/.t
 console.log('\n④ 教練任務卡收進視窗、課卡按比例縮小');
 ok('★ 有 fitCoachCards()，且首頁渲染完會呼叫',
    /function fitCoachCards\(\)\{/.test(src) && /try\{ fitCoachCards\(\); \}catch\(_\)\{\}/.test(src));
-ok('★ 視窗改變大小要重算', /window\.addEventListener\('resize',\(\)=>\{ if\(document\.querySelector\('\.mc-g5-mid \.mc-coachcenter'\)\) fitCoachCards\(\); \}\);/.test(src));
+ok('★ 視窗改變大小要重算', /window\.addEventListener\('resize',\(\)=>\{/.test(src)
+   && /fitCoachCards\(\);/.test(src));
 ok('★ 高度量法與行事曆同一套（innerHeight − 元素 top − 留白）',
-   /const avail=Math\.max\(220, Math\.round\(window\.innerHeight - top - 14\)\);/.test(src));
+   /Math\.round\(window\.innerHeight - midTop - 14\)/.test(src)
+   && /Math\.round\(window\.innerHeight - top - 14\)/.test(src));
 ok('★ 縮放用 zoom（會參與版面計算），不是 transform:scale',
-   /\.mc-coachcenter \.tcard-body\{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;\s*\n\s*zoom:var\(--tcz,1\);/.test(src));
+   /\.mc-coachcenter \.tcard-zoom\{zoom:var\(--tcz,1\);\}/.test(src));
 ok('　　為什麼不用 transform，寫在程式裡',
    /transform 只改繪製，寬度不變會在右邊留一大塊空白/.test(src));
 ok('★ 高度鏈一路傳到課卡群（卡→wrap→card→panel→body）',
@@ -105,52 +107,67 @@ ok('★ 縮到下限仍放不下 → 保留內捲，不默默切掉整列教練'
 ok('　　左右兩欄刻意不設 overflow（第一格用負上邊距貼齊頂欄，變捲動容器會被裁掉）',
    /一旦變成捲動容器就會被裁掉/.test(src));
 ok('　　手機版不套（走另一套版面）',
-   /if\(isMobileLayout\(\) \|\| !body\)\{ cc\.style\.removeProperty\('max-height'\); cc\.style\.removeProperty\('height'\); return; \}/.test(src));
+   /if\(isMobileLayout\(\) \|\| !body \|\| !zoomEl\)\{/.test(src));
 
-console.log('\n⑤ 實跑：縮放係數');
+console.log('\n⑤ 展延到視窗底＋課卡依教練數縮放（2026-08-02 使用者指示）');
+/* 前兩次做法都讓整張卡在實機上變成一條空白（使用者回報「教練任務不見了」）：
+   ① zoom 開到 >1，但套在 .tcard-body —— 那是 flex:1 的捲動容器，量到的 clientHeight
+      本身就被 zoom 除過，放大時測量與版面互相餵食。
+   ② 在 .mc-coachcenter 上直接設 height —— 它的 flex 是 1.45（flex-basis:0%），
+      主軸尺寸由 flex 決定，height 根本不會生效。
+   這一版改成「高度給欄、zoom 給新包的內層」，而且是在瀏覽器上量過才上線的。 */
+ok('★ 課卡群外包一層 .tcard-zoom（zoom 不能套在捲動容器本身）',
+   /<div class="tcard-zoom">\$\{rows\.map\(r=>r\.cardHtml\)\.join\(''\)\}<\/div>/.test(src));
+ok('★ zoom 從 .tcard-body 移到 .tcard-zoom',
+   /\.mc-coachcenter \.tcard-zoom\{zoom:var\(--tcz,1\);\}/.test(src)
+   && !/\.mc-coachcenter \.tcard-body\{[^}]*zoom:var/.test(src));
+ok('★ 高度給「中間那一欄」，教練卡靠 flex-grow 自己撐滿',
+   /mid\.style\.height=Math\.max\(260, Math\.round\(window\.innerHeight - midTop - 14\)\)\+'px';/.test(src));
+ok('　　兩條走不通的路寫在程式裡，不要再走一次',
+   /主軸尺寸由 flex 決定，height 根本不會生效。/.test(src)
+   && /量到的 clientHeight 本身就被 zoom 除過，放大時測量與版面互相餵食。/.test(src));
+ok('★ 縮放用二分逼近實際量到的結果（課卡會換行，需要的高度不是等比例變化）',
+   /const fits=v=>\{ zoomEl\.style\.setProperty\('--tcz', String\(v\)\); return body\.scrollHeight<=body\.clientHeight\+1; \};/.test(src)
+   && /for\(let i=0;i<7;i\+\+\)\{ const m=\(lo\+hi\)\/2; if\(fits\(m\)\) lo=m; else hi=m; \}/.test(src));
+ok('　　為什麼不能用 box\/need 一次算，寫在程式裡',
+   /放大之後一列塞不下就多一排，\n\s*需要的高度不是等比例變化，一次算會過頭。/.test(src));
+ok('　　resize 併到下一個影格只跑一次（一次要量 7~9 遍版面）',
+   /let _fitTick=false;/.test(src) && /requestAnimationFrame\(\(\)=>\{ _fitTick=false; try\{ fitCoachCards\(\); \}catch\(_\)\{\} \}\);/.test(src));
+
 {
-  const i=src.indexOf('const TCARD_ZOOM_MIN=0.62;');
-  const j=src.indexOf("window.addEventListener('resize',()=>{ if(document.querySelector('.mc-g5-mid .mc-coachcenter'))", i);
-  const code=src.slice(i,j);
+  const i2=src.indexOf('const TCARD_ZOOM_MIN=0.62, TCARD_ZOOM_MAX=1.45;');
+  const j2=src.indexOf('/* 縮放要量 7~9 次版面', i2);
+  const code=src.slice(i2,j2);
 
-  /* 2026-08-02 二修（使用者：「上下展延到視窗邊緣，中間課卡根據當天上課教練縮放課卡」）：
-     ・卡片同時設 height，教練少也撐到視窗底（原本只設 max-height，下面會留白）
-     ・縮放改雙向：教練少就放大把空間用掉
-     ・放大受寬度限制 —— 課卡是一位教練一列橫向排、不換行，放大會把課多的那位擠出右邊 */
-  const run=(winH, ccTop, boxH, needH, mobile, lists)=>{
-    let maxH=null, h=null, z=null, removed=0;
-    const body={ clientHeight:boxH, scrollHeight:needH,
-      style:{ setProperty(k,v){ if(k==='--tcz') z=v; }, removeProperty(){ removed++; } },
-      querySelectorAll:()=>(lists||[]) };
-    const cc={ getBoundingClientRect:()=>({top:ccTop}), querySelector:()=>body,
-      style:{ set maxHeight(v){ maxH=v; }, set height(v){ h=v; }, removeProperty(){ removed++; } } };
-    const doc={ querySelector:()=>cc };
-    new Function('document','window','isMobileLayout',code+'\nfitCoachCards();')
-      (doc,{innerHeight:winH},()=>!!mobile);
-    return {maxH,h,z,removed};
+  /* 沙箱：內容需要的高度隨 zoom 等比變化（真實情況會因換行更複雜，
+     但足以驗證二分法有沒有收斂到「放得下的最大值」）。 */
+  const run=(winH, midTop, ccTop, boxH, need1, mobile)=>{
+    let z=null, midH=null, ccMax=null, cleared=0;
+    const zoomEl={ style:{ setProperty(k,v){ if(k==='--tcz') z=v; }, removeProperty(){ cleared++; } } };
+    const body={ clientHeight:boxH, get scrollHeight(){ return Math.max(boxH, need1*Number(z||1)); },
+      querySelector:()=>zoomEl, querySelectorAll:()=>[] };
+    const mid={ getBoundingClientRect:()=>({top:midTop}),
+      style:{ set height(v){ midH=v; }, removeProperty(){ cleared++; } } };
+    const cc={ getBoundingClientRect:()=>({top:ccTop}), closest:()=>mid,
+      querySelector:()=>body,
+      style:{ set maxHeight(v){ ccMax=v; }, removeProperty(){ cleared++; } } };
+    new Function('document','window','isMobileLayout','requestAnimationFrame',
+      code+'\nfitCoachCards();')({querySelector:()=>cc},{innerHeight:winH},()=>!!mobile,()=>{});
+    return {z:z==null?null:Number(z), midH, ccMax, cleared};
   };
-  const L=(cw,sw)=>({clientWidth:cw, scrollWidth:sw});
 
-  /* ⚠ 2026-08-02：試過「在這裡設 height 撐滿」與「zoom 往上放大」，實機兩次都把整張卡
-     壓成一條空白（使用者回報「教練任務不見了」）。這一卡的高度是一條 flex:1 的鏈，
-     在鏈的頂端硬塞尺寸、又對鏈的末端套 zoom，量到的值會跟版面互相餵食。
-     已整段還原成唯一驗證過的做法：只設 max-height、zoom 只往下。 */
-  eq('★ 只設 max-height，不在這裡塞 height', [run(900,300,586,586).maxH, run(900,300,586,586).h], ['586px',null]);
-  eq('★ 剛好放得下 → 不縮', run(900,300,586,586).z, '1.000');
-  eq('★ 內容超出 → 縮到剛好放得下（586/780）', run(900,300,586,780).z, '0.751');
-  eq('★ 縮放有下限 0.62，再小就看不清楚名字了', run(900,300,586,5000).z, '0.620');
-
-  /* ⚠ 三修（同日，使用者回報「教練任務不見了」）：往上放大那一段先關掉 ——
-     zoom 套在 flex:1 的捲動容器上，量到的 clientHeight 本身就是被 zoom 除過的值，
-     往上放大會跟版面互相餵食，實機把整張卡壓成一條空白。縮小方向維持原本已驗證的行為。 */
-  eq('★ 空間有剩也不放大（zoom 只往下）', run(900,300,586,400,false,[L(600,300)]).z, '1.000');
-  ok('　　兩次失敗的原因與還原決定寫在程式裡',
-     /在鏈的頂端硬塞尺寸、又對鏈的末端\n\s*套 zoom，量到的值會跟版面互相餵食。/.test(src));
-
-  eq('　　視窗很矮時仍給 220px 下限，卡片不會塌成一條',
-     run(300,200,586,520).maxH, '220px');
-  eq('　　手機版直接還原高度、不套縮放',
-     [run(900,300,586,1172,true).maxH, run(900,300,586,1172,true).z, run(900,300,586,1172,true).removed>=2],
+  eq('★ 中間欄撐到視窗底（900−106−14）', run(900,106,300,586,400).midH, '780px');
+  eq('　　教練卡自己的上限也跟著量（900−300−14）', run(900,106,300,586,400).ccMax, '586px');
+  ok('★ 教練少、空間有剩 → 放大到上限 1.45', run(900,106,300,586,300).z===1.45);
+  ok('★ 剛好放得下 → 不縮不放（收斂到 1 附近）',
+     Math.abs(run(900,106,300,586,586).z-1)<0.02, run(900,106,300,586,586).z);
+  ok('★ 內容超出 → 收斂到放得下的最大值（586/780≈0.751）',
+     Math.abs(run(900,106,300,586,780).z-0.751)<0.02, run(900,106,300,586,780).z);
+  eq('★ 縮到下限仍放不下 → 停在 0.62，讓它內捲（不默默切掉整列教練）',
+     run(900,106,300,586,5000).z, 0.62);
+  eq('　　視窗很矮時中間欄仍給 260px 下限', run(300,200,260,200,200).midH, '260px');
+  eq('　　手機版把三個尺寸都還原、不套縮放',
+     [run(900,106,300,586,400,true).z, run(900,106,300,586,400,true).midH, run(900,106,300,586,400,true).cleared>=3],
      [null,null,true]);
 }
 
