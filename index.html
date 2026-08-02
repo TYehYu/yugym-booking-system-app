@@ -2562,6 +2562,27 @@ tr:hover td{background:var(--card2);}
 .mtk-table th{font-size:12px;color:var(--t3);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--bd);}
 .mtk-table td{padding:10px 8px;border-bottom:1px solid var(--bd);vertical-align:middle;}
 .mtk-table td:last-child{text-align:right;}
+/* ── 新舊系統票券核對（2026-08-02 使用者指示）── */
+.lv-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px;padding:10px 14px;
+  background:var(--card2);border:1px solid var(--bd);border-radius:12px;font-size:12.5px;color:var(--t2);}
+.lv-bar .lv-t{font-weight:800;color:var(--text);}
+.lv-bar .lv-n{font-family:var(--num);}
+.lv-bar .lv-n b{font-size:16px;color:var(--green);}
+.lv-bar .lv-p{flex:1;min-width:120px;max-width:260px;height:6px;border-radius:99px;background:var(--bd);overflow:hidden;}
+.lv-bar .lv-p i{display:block;height:100%;background:var(--green);border-radius:99px;}
+.lv-bar .lv-s{font-size:11px;color:var(--t3);}
+.lv-btn{white-space:nowrap;}
+.lv-done{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;font-weight:700;color:var(--green);
+  background:#eef6f1;border:1px solid #cfe4d8;border-radius:999px;padding:3px 10px;white-space:nowrap;font-family:inherit;}
+button.lv-done.lv-tap{cursor:pointer;}
+button.lv-done.lv-tap:hover{background:#e2efe8;}
+.lv-list{display:flex;flex-direction:column;gap:7px;max-height:44vh;overflow-y:auto;}
+.lv-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  background:var(--card2);border:1px solid var(--bd);border-radius:10px;padding:9px 12px;}
+.lv-r-n{font-size:13.5px;font-weight:700;color:var(--text);min-width:0;}
+.lv-r-m{font-size:12px;color:var(--t2);font-family:var(--num),inherit;white-space:nowrap;}
+.lv-r-m b{color:var(--green);font-size:15px;}
+.lv-none{font-size:12.5px;color:var(--t3);padding:16px;text-align:center;background:var(--card2);border-radius:10px;}
 /* 打卡紀錄可點的列（2026-08-02）：看得出來點得動 */
 tr.pe-row{cursor:pointer;transition:background .12s;}
 tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
@@ -7076,8 +7097,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.0906';
-const APP_VERSION_LABEL='v260802.0906';
+const APP_VERSION = '260802.0914';
+const APP_VERSION_LABEL='v260802.0914';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21512,6 +21533,7 @@ PAGES.members=async function(){
   // 會員升降級（自動制）：以完整簽到史重播出目前等級
   window._memberTierCache=Object.assign(computeMemberTiers(allBk,members),{__ready:true});
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
+  window._coachNameMap=coachMap;   // 核對記號要顯示「誰按的」（2026-08-02，legacyVerifyCell 用）
   const typeCatMap=Object.fromEntries(types.map(t=>[t.id,t.category]));
   const typeColorMap=Object.fromEntries(types.map(t=>[t.id,t.color]));
   const typeNameMap=Object.fromEntries(types.map(t=>[t.id,t.name]));
@@ -21699,16 +21721,32 @@ PAGES.members=async function(){
      右＝最近上課、註冊日、操作
      ⚠ 會員等級不再是獨立欄位 → 少了「依等級排序」的表頭；等級篩選仍在上方工具列。 */
   /* 色票說明：哪個顏色是哪一級（比照員工列表上方的聘僱類型色票） */
+  /* 進度：主顧客總數與已核對數（整份掃過去時要知道還剩幾個） */
+  const _loyal=filtered.filter(m=>effTier(m)==='loyal');
+  const _lvDone=_loyal.filter(m=>m.legacy_verified_at).length;
+  const legacyBar=_loyal.length
+    ? `<div class="lv-bar"><span class="lv-t">新舊系統票券核對</span>
+        <span class="lv-n"><b>${_lvDone}</b> / ${_loyal.length}</span>
+        <span class="lv-p"><i style="width:${Math.round(_lvDone/_loyal.length*100)}%;"></i></span>
+        <span class="lv-s">主顧客＝從舊系統匯入的既有會員；核對「還可以用的票券」新舊是否一致</span></div>`
+    : '';
   const tierLegend=`<div class="lp-legend">${
     Object.entries(TIER_DEFS).map(([k,d])=>{
       const n=filtered.filter(m=>effTier(m)===k).length;
       return `<b style="--lc:${d.color};">${d.label}<i>${n}</i></b>`;
     }).join('')}</div>`;
+  /* 新舊系統票券核對（2026-08-02 使用者指示）：
+     「在主顧客新增一個完成連動的按鈕，讓櫃檯手動確認，確認新舊資料還可以用的票券是否一樣」
+     —— 主顧客＝制度起點時從舊系統匯入的那批既有會員。匯入的餘額是照舊系統匯出檔設的、
+     逐堂連結多半不存在，帳面對不對只能靠人看；這一欄就是那個人工核對的印章。
+     只有主顧客那一列會出現按鈕，其他等級留白（新客沒有舊資料要核）。 */
+  const _legacyCol = filtered.some(m=>effTier(m)==='loyal');
   const cols=[
     {label:'姓名',     width:'1.5fr', sortKey:'name'},
     ...TK5.map(([k,lb],i)=>({label:lb, width:'1fr', tkKey:k, zone:i===0})),
     {label:'最近上課', width:'0.8fr', sortKey:'last', zone:true},
     {label:'註冊日',   width:'0.8fr', sortKey:'reg'},
+    ...(_legacyCol?[{label:'連動核對', width:'1fr', zone:true}]:[]),
     {label:'',         width:'44px'},
   ];
   const typeMapFull=Object.fromEntries(types.map(t=>[t.id,t]));
@@ -21781,6 +21819,7 @@ PAGES.members=async function(){
          櫃檯要的是「哪一天」，相對日期還要自己回推。Hover 仍給完整年月日。 */
       lastClassMap[m.id] ? `<span class="num" title="${lastClassMap[m.id]}">${fmtDateShort(lastClassMap[m.id])}</span>` : '',
       m.created_at ? `<span class="num" title="${String(m.created_at).slice(0,10)}">${fmtDateShort(String(m.created_at).slice(0,10))}</span>` : '',
+      ...(_legacyCol?[legacyVerifyCell(m)]:[]),
       lpRowAct(lpIconBtn('eye', `openPersonProfile('member','${m.id}')`, '查看詳細')),
     ],
   }));
@@ -21797,7 +21836,7 @@ PAGES.members=async function(){
       '試試調整搜尋關鍵字，或清除目前的篩選條件。',
       `<button class="btn btn-green btn-sm" onclick="memClearFilters()">清除篩選</button>`);
   } else {
-    body = tierLegend + lpTable(cols, rows, {key:_memSort, dir:_memSortDir, onclick:"memSortBy('{k}')"});
+    body = legacyBar + tierLegend + lpTable(cols, rows, {key:_memSort, dir:_memSortDir, onclick:"memSortBy('{k}')"});
   }
 
   // (5) 一次組合：Header -> Stats -> Toolbar -> Table/Empty -> Pagination
@@ -26759,6 +26798,60 @@ async function ppOpenEmpPunch(id){
     ${_canFix?'<div style="font-size:11px;color:var(--t3);margin-top:8px;">點任一列可以修改那一天的打卡</div>':''}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
       ${_canFix?`<button class="btn btn-green" onclick="openPunchEdit('${id}')">＋ 補登打卡</button>`:''}</div>`);
+}
+/* ══ 新舊系統票券核對（2026-08-02 使用者指示）══
+   「在主顧客新增一個完成連動的按鈕，讓櫃檯手動確認，確認新舊資料還可以用的票券是否一樣」
+   主顧客＝制度起點時從舊系統匯入的那批既有會員（新客沒有舊資料要核，不出現按鈕）。
+   核過的留下時間與經手人，之後整份名單掃過去時知道還剩誰沒看。 */
+function legacyVerifyCell(m){
+  if(effTier(m)!=='loyal') return '';
+  if(!isDeskLike()) return m.legacy_verified_at
+    ? `<span class="lv-done">已核對 ${String(m.legacy_verified_at).slice(5,10).replace('-','/')}</span>` : '';
+  if(m.legacy_verified_at){
+    const who=(window._coachNameMap||{})[m.legacy_verified_by]||'';
+    return `<button class="lv-done lv-tap" title="${String(m.legacy_verified_at).slice(0,16).replace('T',' ')}${who?'　·　'+who:''}　·　點一下可取消核對"
+      onclick="event.stopPropagation();openLegacyVerify('${m.id}')">✓ 已核對 ${String(m.legacy_verified_at).slice(5,10).replace('-','/')}</button>`;
+  }
+  return `<button class="btn btn-ghost btn-sm lv-btn" onclick="event.stopPropagation();openLegacyVerify('${m.id}')">完成連動</button>`;
+}
+/* 核對視窗：把「現在系統認為還能用的票」攤開來，讓櫃檯拿去跟舊系統對 */
+async function openLegacyVerify(mid){
+  if(!isDeskLike()){ showToast('只有管理員或櫃台可以核對'); return; }
+  const m=await dbGet('members',mid); if(!m){ showToast('找不到會員'); return; }
+  const ctx=await walletCtx();
+  const W=buildWallet(mid, ctx);
+  const act=W.active();
+  const rows=act.length ? act.map(sl=>{
+      const t=sl.t;
+      return `<div class="lv-row"><span class="lv-r-n">${tkNoTag(sl.no)}${t.plan_name||'票券'}</span>
+        <span class="lv-r-m">剩 <b>${sl.left}</b> / ${sl.total} 堂${t.expire_date?`　·　效期至 ${String(t.expire_date).slice(0,10)}`:'　·　無效期'}</span></div>`;
+    }).join('')
+    : '<div class="lv-none">系統裡目前沒有還能用的票券</div>';
+  const done=!!m.legacy_verified_at;
+  showModal(`<div class="modal-title">新舊系統票券核對　·　${m.name||''}</div>
+    <div style="font-size:11.5px;color:var(--t2);background:var(--card2);padding:10px 12px;border-radius:9px;line-height:1.8;margin-bottom:10px;">
+      下面是<b>系統目前認為還可以用</b>的票券。請對照舊系統：方案、剩餘堂數、效期都一致再按確認。<br>
+      不一致的話先在票券頁修正，不要直接按 —— 這個記號只代表「有人看過而且對得上」。</div>
+    <div class="lv-list">${rows}</div>
+    <div style="font-size:11px;color:var(--t3);margin-top:10px;">可約堂數合計 <b>${W.sessionsLeft()}</b> 堂</div>
+    ${done?`<div style="font-size:11.5px;color:var(--green);margin-top:8px;">已於 ${String(m.legacy_verified_at).slice(0,16).replace('T',' ')} 核對完成</div>`:''}
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      ${done?`<button class="btn btn-ghost" style="color:var(--danger);" onclick="saveLegacyVerify('${mid}',false)">取消核對</button>`:''}
+      <button class="btn btn-green" onclick="saveLegacyVerify('${mid}',true)">${done?'重新確認':'確認一致，完成連動'}</button>
+    </div>`);
+}
+async function saveLegacyVerify(mid, on){ return onceAct('lv:'+mid, ()=>_saveLegacyVerify(mid,on)); }
+async function _saveLegacyVerify(mid, on){
+ try{
+  const m=await dbGet('members',mid); if(!m){ showToast('找不到會員'); return; }
+  m.legacy_verified_at = on ? new Date().toISOString() : null;
+  m.legacy_verified_by = on ? ((SESSION&&SESSION.id)||null) : null;
+  await dbPut('members',m);
+  closeModal();
+  showToast(on?`已標記「${m.name||''}」核對完成`:`已取消「${m.name||''}」的核對記號`);
+  if(CUR_PAGE==='members') navTo('members');
+ }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
 }
 /* 補登／修改打卡（2026-08-02 使用者回報：「可以點進員工視窗，點了打卡按鈕，
    沒有可以補打卡的功能」）——
