@@ -53,10 +53,32 @@ ok('　　沒有主顧客就不顯示進度條', /const legacyBar=_loyal\.length
 console.log('\n③ 核對視窗');
 ok('★ 攤開「系統認為還可以用」的票券，讓櫃檯拿去跟舊系統對',
    /const W=buildWallet\(mid, ctx\);/.test(src) && /const act=W\.active\(\);/.test(src));
-ok('★ 每一張列出方案、剩餘堂數、效期（那三項就是要對的東西）',
-   /剩 <b>\$\{sl\.left\}<\/b> \/ \$\{sl\.total\} 堂\$\{t\.expire_date\?`　·　效期至/.test(src));
+/* 2026-08-02 使用者回報（附截圖）：「連動資料的時候我發現票券這樣顯示會以為用完了，
+   改成 1/9/10 已預約/已銷課/總堂數，紅色/金色/綠色」——
+   原本只寫「剩 0 / 10 堂」，那個 0 是「還能再約幾堂」，不是「這張票沒了」。 */
+ok('★ 每一張列出方案、三個數字、效期',
+   /\$\{tkCountTriple\(sl\)\}\$\{t\.expire_date\?`　·　效期至/.test(src)
+   && !/剩 <b>\$\{sl\.left\}<\/b>/.test(src));
 ok('★ 也給合計可約堂數（舊系統通常只看得到總數）',
    /可約堂數合計 <b>\$\{W\.sessionsLeft\(\)\}<\/b> 堂/.test(src));
+
+console.log('\n③-2 三個數字：已預約／已銷課／總堂數');
+{
+  const f=new Function(grabFn('tkCountTriple')+'\nreturn tkCountTriple;')();
+  const h=f({pending:1, used:9, total:10});
+  const nums=[...h.matchAll(/<b class="tk3-(\w)">(\d+)<\/b>/g)].map(m=>[m[1],m[2]]);
+  eq('★ 順序與數字：已預約 1 ／已銷課 9 ／總堂數 10', nums, [['b','1'],['u','9'],['t','10']]);
+  ok('★ 顏色：已預約紅、已銷課金、總堂數綠（品牌強度 紅>金>綠）',
+     /\.tk3-b\{color:var\(--danger,#b5372e\);\}/.test(src)
+     && /\.tk3-u\{color:var\(--gold-d,#b48a56\);\}/.test(src)
+     && /\.tk3-t\{color:var\(--green,#1f6f54\);\}/.test(src));
+  ok('★ 數字旁邊寫明是哪三個（不然 1/9/10 看不懂）', /已預約／已銷課／總堂數/.test(h));
+  ok('　　滑過去有完整說明', /已預約 1 堂（約了還沒上）/.test(h));
+  eq('　　欄位缺值時當 0，不會印出 NaN',
+     [...f({}).matchAll(/<b class="tk3-\w">(\d+)<\/b>/g)].map(m=>m[1]), ['0','0','0']);
+  ok('　　為什麼要攤成三個數字，寫在程式裡',
+     /只寫「剩 N」會被讀成「這張票沒了」——約走還沒上的那幾堂其實還在票上。/.test(src));
+}
 ok('★ 講明白這個記號的意思，避免變成「按過就算對」',
    /不一致的話先在票券頁修正，不要直接按 —— 這個記號只代表「有人看過而且對得上」。/.test(src));
 ok('★ 核過的可以取消（按錯要收得回來）',

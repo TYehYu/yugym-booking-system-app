@@ -2581,7 +2581,14 @@ button.lv-done.lv-tap:hover{background:#e2efe8;}
   background:var(--card2);border:1px solid var(--bd);border-radius:10px;padding:9px 12px;}
 .lv-r-n{font-size:13.5px;font-weight:700;color:var(--text);min-width:0;}
 .lv-r-m{font-size:12px;color:var(--t2);font-family:var(--num),inherit;white-space:nowrap;}
-.lv-r-m b{color:var(--green);font-size:15px;}
+/* 三個數字：已預約（紅）／已銷課（金）／總堂數（綠）——2026-08-02 使用者指示 */
+.tk3{display:inline-flex;align-items:baseline;gap:3px;font-family:var(--num),inherit;}
+.tk3 b{font-size:16px;font-weight:800;line-height:1;}
+.tk3 i{font-style:normal;color:var(--t3);font-size:13px;}
+.tk3 em{font-style:normal;font-size:10.5px;color:var(--t3);margin-left:5px;letter-spacing:-.02em;}
+.tk3-b{color:var(--danger,#b5372e);}
+.tk3-u{color:var(--gold-d,#b48a56);}
+.tk3-t{color:var(--green,#1f6f54);}
 .lv-none{font-size:12.5px;color:var(--t3);padding:16px;text-align:center;background:var(--card2);border-radius:10px;}
 /* 打卡紀錄可點的列（2026-08-02）：看得出來點得動 */
 tr.pe-row{cursor:pointer;transition:background .12s;}
@@ -7097,8 +7104,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.0916';
-const APP_VERSION_LABEL='v260802.0916';
+const APP_VERSION = '260802.0951';
+const APP_VERSION_LABEL='v260802.0951';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26803,6 +26810,15 @@ async function ppOpenEmpPunch(id){
    「在主顧客新增一個完成連動的按鈕，讓櫃檯手動確認，確認新舊資料還可以用的票券是否一樣」
    主顧客＝制度起點時從舊系統匯入的那批既有會員（新客沒有舊資料要核，不出現按鈕）。
    核過的留下時間與經手人，之後整份名單掃過去時知道還剩誰沒看。 */
+/* 一張票的三個數字：已預約／已銷課／總堂數（2026-08-02 使用者指示）
+   顏色照品牌強度：紅（已預約＝還欠客人的課，最要盯）＞ 金（已銷課）＞ 綠（總堂數）。
+   只寫「剩 N」會被讀成「這張票沒了」——約走還沒上的那幾堂其實還在票上。 */
+function tkCountTriple(sl){
+  const pend=Number(sl.pending)||0, used=Number(sl.used)||0, total=Number(sl.total)||0;
+  return `<span class="tk3" title="已預約 ${pend} 堂（約了還沒上）　·　已銷課 ${used} 堂　·　總堂數 ${total} 堂">`
+    + `<b class="tk3-b">${pend}</b><i>/</i><b class="tk3-u">${used}</b><i>/</i><b class="tk3-t">${total}</b>`
+    + `<em>已預約／已銷課／總堂數</em></span>`;
+}
 function legacyVerifyCell(m){
   if(effTier(m)!=='loyal') return '';
   if(!isDeskLike()) return m.legacy_verified_at
@@ -26821,10 +26837,14 @@ async function openLegacyVerify(mid){
   const ctx=await walletCtx();
   const W=buildWallet(mid, ctx);
   const act=W.active();
+  /* 2026-08-02 使用者回報（附截圖）：「連動資料的時候我發現票券這樣顯示會以為用完了，
+     改成 1/9/10 已預約/已銷課/總堂數，紅色/金色/綠色」——
+     原本只寫「剩 0 / 10 堂」，但那個 0 是「還能再約幾堂」，不是「這張票沒了」：
+     已經約走還沒上的那幾堂也還在這張票上。三個數字攤開就不會誤讀。 */
   const rows=act.length ? act.map(sl=>{
       const t=sl.t;
       return `<div class="lv-row"><span class="lv-r-n">${tkNoTag(sl.no)}${t.plan_name||'票券'}</span>
-        <span class="lv-r-m">剩 <b>${sl.left}</b> / ${sl.total} 堂${t.expire_date?`　·　效期至 ${String(t.expire_date).slice(0,10)}`:'　·　無效期'}</span></div>`;
+        <span class="lv-r-m">${tkCountTriple(sl)}${t.expire_date?`　·　效期至 ${String(t.expire_date).slice(0,10)}`:'　·　無效期'}</span></div>`;
     }).join('')
     : '<div class="lv-none">系統裡目前沒有還能用的票券</div>';
   const done=!!m.legacy_verified_at;
