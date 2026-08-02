@@ -7076,8 +7076,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.0858';
-const APP_VERSION_LABEL='v260802.0858';
+const APP_VERSION = '260802.0906';
+const APP_VERSION_LABEL='v260802.0906';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -33273,6 +33273,16 @@ async function msbPickSlot(t){
       <div><span style="color:var(--t2);">${s.resched?'新時段':'日期'}</span>　${s.date.replace(/-/g,'/')}（週${WD[d.getDay()]}）${s.resched?'　'+t:''}</div>
       ${s.resched?'':`<div><span style="color:var(--t2);">時間</span>　${t}（60 分鐘）</div>`}
       <div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--t2);">場地</span><span id="msb-vbtns" style="display:flex;gap:7px;">${vbtns}</span></div>
+      ${/* 跑步機台數（2026-08-02 使用者指示）：一對二的客人一次會佔掉兩台，
+           不先講清楚，另一台就會被別人約走。第 2 台不另外扣點。
+           只有「選了跑步機」且「真的還空著兩台以上」時才出現。 */''}
+      <div id="msb-tmrow" style="${(s.pickVenue==='treadmill'&&_tmCap-_tmUsed>1)?'':'display:none;'}display:flex;align-items:center;gap:8px;">
+        <span style="color:var(--t2);">台數</span>
+        <span id="msb-tmbtns" style="display:flex;gap:7px;">${
+          Array.from({length:Math.max(1,_tmCap-_tmUsed)},(_,i)=>i+1).map(n=>
+            `<button class="msb-vbtn${(s.pickUnits||1)===n?' on':''}" onclick="msbChooseUnits(${n})">${n} 台</button>`).join('')}</span>
+        <span style="font-size:11px;color:var(--t3);">第 2 台不扣點</span>
+      </div>
       ${(!s.resched&&(s.family||[]).length)?(()=>{ s.famOpts=['自己'].concat(s.family); s.pickFam=0;
         return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">使用人</span><span id="msb-fbtns" style="display:flex;gap:7px;flex-wrap:wrap;">${s.famOpts.map((n,i)=>`<button class="msb-vbtn${i===0?' on':''}" data-fi="${i}" onclick="msbChooseFam(${i})">${n}</button>`).join('')}</span></div>`; })():''}
       ${s.resched?'':msbTkLine(t)}
@@ -33280,8 +33290,20 @@ async function msbPickSlot(t){
     <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">${s.resched?'改期不另扣點。':((s.tkCand||[]).length>1?'有多張點數可用，預設扣最快到期的那張，可自行改選。':'')+'確認後將扣 1 點。'}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-green" onclick="msbConfirm('${t}')">${s.resched?'確認改期':'確認預約'}</button></div>`);
 }
+/* 台數（2026-08-02）：換場地時重置回 1 —— 只有跑步機有台數的概念 */
+function msbChooseUnits(n){
+  const s=window._msb; if(!s) return;
+  s.pickUnits=Math.max(1,Number(n)||1);
+  document.querySelectorAll('#msb-tmbtns .msb-vbtn').forEach(b=>
+    b.classList.toggle('on', b.textContent.trim()===`${s.pickUnits} 台`));
+}
 function msbChooseVenue(vid){
   const s=window._msb; if(!s) return;
+  s.pickUnits=1;
+  const row=document.getElementById('msb-tmrow');
+  if(row) row.style.display = vid==='treadmill' ? 'flex' : 'none';
+  document.querySelectorAll('#msb-tmbtns .msb-vbtn').forEach(b=>
+    b.classList.toggle('on', b.textContent.trim()==='1 台'));
   s.pickVenue=vid;
   document.querySelectorAll('#msb-vbtns .msb-vbtn').forEach(b=>b.classList.toggle('on',b.dataset.vid===vid));
 }
@@ -33331,11 +33353,14 @@ const SELF_BOOK_ERR={
   'BOOKING.CLOSED_HOURS':'此時段非營業時間，請洽櫃檯協助安排',
   'TICKET.TIME_RESTRICTED':'此票券僅限平日 18:00 前使用','BOOKING.DUP':'您於該時段已有預約',
   'BOOKING.RESOURCE_BUSY':'該場地剛被約走了，請重新選擇'};
-async function memberSelfBookRpc(tk,date,time,venueUnit,famUser){
-  const {data,error}=await sb.rpc('fn_member_self_book',{p_date:date,p_start_time:time,p_ticket_id:tk.id,p_venue_unit:venueUnit||null,p_family_user:famUser||null});
+async function memberSelfBookRpc(tk,date,time,venueUnit,famUser,units){
+  /* units＝跑步機要開幾台（2026-08-02 使用者指示：會影響別人訂場地的地方都要能選台數）。
+     台數由 DB 端自己查還空著哪幾台，不信任這裡傳的數字；第 2 台不另外扣點。 */
+  const {data,error}=await sb.rpc('fn_member_self_book',{p_date:date,p_start_time:time,p_ticket_id:tk.id,
+    p_venue_unit:venueUnit||null,p_family_user:famUser||null,p_units:Math.max(1,Number(units)||1)});
   dbCacheClear(['bookings','member_tickets','ticket_logs']);   // RPC 不經 dbPut，自行清快取（含佔用快取）
   if(error) return {ok:false,reason:'連線失敗：'+(error.message||error)};
-  if(data&&data.ok) return {ok:true,booking_id:data.booking_id};
+  if(data&&data.ok) return {ok:true,booking_id:data.booking_id,units:Number(data.units)||1};
   const code=data&&data.error_code;
   return {ok:false,reason:SELF_BOOK_ERR[code]||('預約失敗：'+(code||'未知錯誤'))};
 }
@@ -33372,10 +33397,17 @@ async function msbConfirm(time){
   const verr=await validateBooking(vbk,s.date,time,60);
   if(verr){ showToast(verr); return; }
   const famUser=(s.pickFam>0&&Array.isArray(s.famOpts))?s.famOpts[s.pickFam]:null;   // 家庭共享使用人（2026-07-29）
-  const r=await memberSelfBookRpc(tk,s.date,time,vbk.venue_unit||null,famUser);
+  /* 跑步機台數（2026-08-02）：只有真的排到跑步機才帶，其他場地沒有台數的概念 */
+  const _units=(String(vbk.venue_unit||'').split('_')[0]==='treadmill')?(s.pickUnits||1):1;
+  const r=await memberSelfBookRpc(tk,s.date,time,vbk.venue_unit||null,famUser,_units);
   if(!r.ok){ showToast(r.reason); return; }
   closeModal();
-  showToast('預約成功，已扣 1 點');
+  /* 實際開成幾台以 DB 回傳的為準 —— 想約兩台但第 2 台剛被別人約走時，要照實說 */
+  const _got=Number(r.units)||1;
+  showToast(_units>1
+    ? (_got>1 ? `預約成功，跑步機 ${_got} 台，已扣 1 點（第 2 台不扣）`
+              : '預約成功，已扣 1 點；第 2 台剛被約走，只保留 1 台')
+    : '預約成功，已扣 1 點');
   msbExit(true);
   navTo('mem_bookings');
  }catch(e){ console.error('msbConfirm 錯誤:',e); showToast('預約失敗：'+(e&&e.message?e.message:e)); }

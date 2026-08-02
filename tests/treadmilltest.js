@@ -76,7 +76,28 @@ ok('　　venue_pref 只是配置提示，不入庫', /delete bk\.venue_pref;   
 ok('　　建立成功的吐司講清楚開了幾台、第 2 台不扣點',
    /（跑步機 \$\{_tmN\} 台，第 2 台不扣點）/.test(src));
 
-console.log('\n③ 實跑：補開第 2 台');
+console.log('\n③ 會員自己從手機約也要能選台數');
+/* 2026-08-02 使用者指示：「只要會連動上行事曆、影響其他人預約場地的地方，
+   都要補上要預約幾台」—— 會員端的自主訓練訂位同樣會佔住跑步機。 */
+ok('★ 確認視窗多一列「台數」，只在選了跑步機且真的還空著兩台以上時出現',
+   /<div id="msb-tmrow" style="\$\{\(s\.pickVenue==='treadmill'&&_tmCap-_tmUsed>1\)\?'':'display:none;'\}/.test(src)
+   && /onclick="msbChooseUnits\(\$\{n\}\)"/.test(src));
+ok('★ 可選的台數＝該時段實際還空著的數量（不會讓人選到已被約走的）',
+   /Array\.from\(\{length:Math\.max\(1,_tmCap-_tmUsed\)\},\(_,i\)=>i\+1\)/.test(src));
+ok('★ 換場地時台數重置回 1（只有跑步機有台數的概念）',
+   /function msbChooseUnits\(n\)\{/.test(src)
+   && /s\.pickUnits=1;\s*\n\s*const row=document\.getElementById\('msb-tmrow'\);/.test(src));
+ok('★ 台數帶給 RPC（p_units），且只有真的排到跑步機才帶',
+   /p_units:Math\.max\(1,Number\(units\)\|\|1\)/.test(src)
+   && /const _units=\(String\(vbk\.venue_unit\|\|''\)\.split\('_'\)\[0\]==='treadmill'\)\?\(s\.pickUnits\|\|1\):1;/.test(src));
+ok('★ 實際開成幾台以 DB 回傳為準，被別人搶走時照實說（不謊報）',
+   /const _got=Number\(r\.units\)\|\|1;/.test(src)
+   && /第 2 台剛被約走，只保留 1 台/.test(src));
+ok('　　標明第 2 台不扣點', /<span style="font-size:11px;color:var\(--t3\);">第 2 台不扣點<\/span>/.test(src));
+ok('　　台數不信任前端，理由寫在程式裡',
+   /台數由 DB 端自己查還空著哪幾台，不信任這裡傳的數字/.test(src));
+
+console.log('\n④ 實跑：補開第 2 台');
 {
   const i=src.indexOf('async function bkAddTreadmillUnits(bk, want){');
   const body=src.slice(i, src.indexOf('\n}\n', i)+3);
