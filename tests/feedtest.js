@@ -61,9 +61,10 @@ console.log('\n換頁不會不見');
 ok('★ 卡片掛在 <body>，不在頁面容器裡（navTo 重繪不到）',
    /掛在 <body> 底下（不是頁面容器）/.test(src)
    && /document\.body\.appendChild\(el\)/.test(src));
+/* 2026-08-02：彈窗層級提到 9750（見 modalztest.js），這裡改成驗「關係」而不是寫死數字 */
 ok('★ 壓在內容之上、對話框之下（不會擋住視窗按鈕）',
    /#desk-feed\{position:fixed;right:18px;bottom:18px;z-index:250;/.test(src)
-   && /\.modal-bg\{[^}]*z-index:300;/.test(src));
+   && Number((/\.modal-bg\{[^}]*z-index:(\d+)/.exec(src)||[])[1]) > 250);
 
 /* 2026-07-30 使用者指示：抬頭「會員異動 N 則待確認」移除，只顯示卡片。
    細節見 lastmarktest.js；這裡改成驗「已移除」＋「另有 N 則」仍在。 */
