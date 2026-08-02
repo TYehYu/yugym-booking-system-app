@@ -23,10 +23,16 @@ console.log('欄位順序與分區');
   const _pi=src.indexOf('const TK_POCKETS={');
   const TK5=new Function(src.slice(_pi, src.indexOf('\nconst TK5=',_pi))
     +'\nreturn Object.keys(TK_POCKETS).map(k=>[k,TK_POCKETS[k].label]);')();
-  const cols=new Function('TK5','return '+src.slice(src.indexOf('[',i), src.indexOf('  ];',i)+3))(TK5);
+  /* 2026-08-02：多了「連動核對」欄（只有名單裡有主顧客時才長出來）——
+     沙箱注入 _legacyCol，兩種情況各驗一次。 */
+  const mkCols=(legacy)=>new Function('TK5','_legacyCol','return '+src.slice(src.indexOf('[',i), src.indexOf('  ];',i)+3))(TK5,legacy);
+  const cols=mkCols(false);
   eq('★ 姓名 → 五個課別 → 最近上課 → 註冊日 → 操作',
      cols.map(c=>c.label),
      ['姓名','教練課','團體課','自主訓練','運動按摩','折價券','最近上課','註冊日','']);
+  eq('★ 名單裡有主顧客時，註冊日後面多一欄「連動核對」',
+     mkCols(true).map(c=>c.label),
+     ['姓名','教練課','團體課','自主訓練','運動按摩','折價券','最近上課','註冊日','連動核對','']);
   eq('★ 分區線畫在「教練課」（中區起點）與「最近上課」（右區起點）',
      cols.filter(c=>c.zone).map(c=>c.label), ['教練課','最近上課']);
   ok('　　排序鍵：姓名／最近上課／註冊日', cols.filter(c=>c.sortKey).map(c=>c.sortKey).join()==='name,last,reg');
@@ -102,9 +108,10 @@ ok('★ lpTable 支援 row.lc（opt-in，其他頁不受影響）',
 ok('★ 與員工列表同一種語言（那邊是聘僱類型色條）',
    /\.lp-row\.lp-lc\{border-left:4px solid var\(--lc,#8a8478\);\}/.test(src)
    && /border-left:4px solid var\(--pc,#8a8478\);/.test(src));
+/* 2026-08-02：色票說明前面再多一條「新舊系統票券核對」的進度條（有主顧客時才出現） */
 ok('★ 上方有色票說明，帶各等級人數（比照員工列表）',
    /const tierLegend=`<div class="lp-legend">/.test(src)
-   && /body = tierLegend \+ lpTable\(cols, rows,/.test(src)
+   && /body = legacyBar \+ tierLegend \+ lpTable\(cols, rows,/.test(src)
    && /\.lp-legend b::before\{content:"";width:10px;height:10px;border-radius:3px;background:var\(--lc\);\}/.test(src));
 {
   const cols=[{label:'A',width:'1fr'}];
