@@ -21,11 +21,14 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 
-const G={leader_per_classes:80, leader_per_amount:4000, leader_target:60, leader_bonus:2000};
+/* 2026-08-02 二修（使用者：「目前獎金門檻是 80 堂 4000、100 堂追加 2000，
+   所以給我兩個設定門檻」）—— 單一門檻換成兩段，門檻②是追加。
+   兩段的算術細節在 payrulemonthtest.js，這裡看的是名單與分店的分離。 */
+const G={leader_per_classes:80, leader_per_amount:4000, leader_t1:60, leader_b1:2000, leader_t2:0, leader_b2:0};
 const F=new Function('LEADER_NEW_FROM', grabFn('leaderBonusOf')+'\nreturn leaderBonusOf;')('2026-08');
 const ROWS=[{id:'A',name:'小安',classes:70},{id:'B',name:'小柏',classes:60},
             {id:'C',name:'小昌',classes:59},{id:'D',name:'小丁',classes:11}];
-const MGR=o=>Object.assign({is_manager:true, leader_target:60, leader_bonus:2000}, o||{});
+const MGR=o=>Object.assign({is_manager:true, leader_t1:60, leader_b1:2000, leader_t2:0, leader_b2:0}, o||{});
 
 console.log('① 新制：逐位教練達標');
 {
@@ -33,8 +36,8 @@ console.log('① 新制：逐位教練達標');
   eq('★ 名單三位、兩位達到 60 堂 → 兩筆 $2,000', r.pay, 4000);
   eq('　　達標人數就是筆數', r.units, 2);
   eq('★ 沒被打勾的人不算進來（小丁 11 堂不在名單，也不影響）', r.total, 70+60+59);
-  ok('★ 明細寫出誰達標，才對得起帳', /2 \/ 3 位達標（每位滿 60 堂）× \$2,000/.test(r.detail)
-     && /小安 70、小柏 60/.test(r.detail), r.detail);
+  ok('★ 明細寫出誰達標，才對得起帳', /2 \/ 3 位達標/.test(r.detail)
+     && /小安 70 堂 \$2,000/.test(r.detail) && /小柏 60 堂 \$2,000/.test(r.detail), r.detail);
 
   const r0=F(MGR({leader_members:['C','D']}), {leaderRows:ROWS}, G, '2026-08');
   eq('★ 名單裡沒人達標 → 0', r0.pay, 0);
@@ -56,13 +59,13 @@ console.log('\n② 名單沒設 → 0，而且說得出原因');
 
 console.log('\n③ 每位店長自己一組設定（分店之後才分得開）');
 {
-  const a=F(MGR({leader_members:['A','B','C','D'], leader_target:60, leader_bonus:2000}), {leaderRows:ROWS}, G, '2026-08');
-  const b=F(MGR({leader_members:['A'], leader_target:70, leader_bonus:5000}), {leaderRows:ROWS}, G, '2026-08');
+  const a=F(MGR({leader_members:['A','B','C','D'], leader_t1:60, leader_b1:2000}), {leaderRows:ROWS}, G, '2026-08');
+  const b=F(MGR({leader_members:['A'], leader_t1:70, leader_b1:5000}), {leaderRows:ROWS}, G, '2026-08');
   eq('★ 甲店長：4 人名單、滿 60 給 2000 → 2 位達標 ＝ $4,000', a.pay, 4000);
   eq('★ 乙店長：只帶小安、滿 70 給 5000 → 1 位達標 ＝ $5,000', b.pay, 5000);
   eq('　　同一份堂數資料，兩位店長各算各的', [a.units,b.units], [2,1]);
-  const c=F(MGR({leader_members:['A'], leader_target:0, leader_bonus:0}), {leaderRows:ROWS}, G, '2026-08');
-  eq('　　個人沒填門檻／金額 → 退回全域預設（60 堂 / $2,000）', [c.per,c.amt,c.pay], [60,2000,2000]);
+  const c=F({is_manager:true, leader_members:['A']}, {leaderRows:ROWS}, G, '2026-08');
+  eq('　　個人沒填門檻／金額 → 退回全域預設（60 堂 / $2,000）', [c.t1,c.b1,c.pay], [60,2000,2000]);
 }
 
 console.log('\n④ 七月以前照舊制算（歷史薪資不會整片變動）');
@@ -108,9 +111,11 @@ ok('　　但仍改得動（聘僱類型在別的地方沒有編輯入口）',
    /const _et=g\('hr-ettype'\)\|\|HR_SAL_ET;/.test(src));
 ok('★ 打開店長才出現下面那塊設定', /onchange="hrToggleMgr\(\)"/.test(src)
    && /<div id="hr-mgr-box" style="display:\$\{c\.is_manager\?'block':'none'\};">/.test(src));
-ok('★ 有達標課堂與達標獎金兩個欄位',
-   /<input type="number" id="hr-ldtarget" min="1" value="\$\{tgt\}">/.test(src)
-   && /<input type="number" id="hr-ldbonus" min="0" value="\$\{amt\}">/.test(src));
+ok('★ 有兩組門檻的欄位（門檻②是追加）',
+   /<input type="number" id="hr-ldt1" min="1" value="\$\{t1\}">/.test(src)
+   && /<input type="number" id="hr-ldb1" min="0" value="\$\{b1\}">/.test(src)
+   && /<input type="number" id="hr-ldt2" min="0" value="\$\{t2\}">/.test(src)
+   && /<input type="number" id="hr-ldb2" min="0" value="\$\{b2\}">/.test(src));
 ok('★ 下方列出全員工，逐一打勾',
    /function hrLeaderBoxHtml\(c\)\{/.test(src)
    && /<input type="checkbox" class="hr-lm" value="\$\{o\.id\}"/.test(src));
@@ -120,12 +125,12 @@ ok('　　店長本人也在名單裡（他自己帶的課也算）', /\$\{o\.id
 ok('　　有全選／全不選（十幾個人一個個點很煩）', /onclick="hrLeaderAll\(true\)"/.test(src) && /onclick="hrLeaderAll\(false\)"/.test(src));
 ok('★ 一個都沒選時當場警告（不然要等發薪才發現是 0）',
    /<div class="hr-lm-warn">還沒選任何人 → 這位店長的獎金會算 0。<\/div>/.test(src));
-ok('★ 存檔存的是這位店長自己的三個欄位',
+ok('★ 存檔存的是這位店長自己的名單與兩組門檻',
    /c\.leader_members=hrReadLeaderMembers\(\);/.test(src)
-   && /c\.leader_target=Number\(g\('hr-ldtarget'\)\)\|\|60;/.test(src)
-   && /c\.leader_bonus=Number\(g\('hr-ldbonus'\)\)\|\|0;/.test(src));
+   && /c\.leader_t1=Number\(g\('hr-ldt1'\)\)\|\|80;/.test(src)
+   && /c\.leader_b2=Number\(g\('hr-ldb2'\)\)\|\|0;/.test(src));
 ok('★ 取消店長身分就把名單清掉（免得日後重開沿用沒人記得的舊名單）',
-   /c\.leader_members=null; c\.leader_target=null; c\.leader_bonus=null;/.test(src));
+   /c\.leader_members=null; c\.leader_t1=null; c\.leader_b1=null; c\.leader_t2=null; c\.leader_b2=null;/.test(src));
 
 console.log('\n⑧ 薪資明細看得到這一行');
 ok('★ 只要是店長就列出來（金額 0 時那句「尚未設定名單」才看得到）',
@@ -135,9 +140,12 @@ ok('　　為什麼改成 isLeader 而不是 pay>0，寫在程式裡',
 ok('★ 全域設定改成「新店長的預設值」，並講明實際計算看各店長自己的',
    /\$\{sec\('④ 店長獎金預設值（2026-08 起：逐位教練達標制）'\)\}/.test(src)
    && /實際計算用的是每位店長自己的名單與金額/.test(src));
+ok('　　全域預設就是現行的 80\/4000、100\/追加 2000',
+   /leader_t1: 80, leader_b1: 4000,\n\s*leader_t2: 100, leader_b2: 2000,/.test(src));
 ok('　　舊制的兩個值沒有編輯欄位了，但原值原樣保留（七月以前還要用）',
    /leader_per_classes:\(\(window\.SALARY_GLOBAL\|\|\{\}\)\.leader_per_classes\)\|\|80,/.test(src));
-ok('　　全域預設值有寫進 SALARY_GLOBAL_DEFAULT', /leader_target: 60,\n\s*leader_bonus: 2000,/.test(src));
+ok('　　每個月一份規則快照（見 payrulemonthtest.js）',
+   /function empAtMonth\(emp, ym\)\{/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

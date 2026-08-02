@@ -7178,8 +7178,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1152';
-const APP_VERSION_LABEL='v260802.1152';
+const APP_VERSION = '260802.1637';
+const APP_VERSION_LABEL='v260802.1637';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23095,9 +23095,10 @@ const SALARY_GLOBAL_DEFAULT = {
      舊的「逐位教練查階梯」制（leader_tiers）已停用，欄位保留供歷史對照。 */
   leader_per_classes: 80,
   leader_per_amount: 4000,
-  /* 2026-08 起的新制預設（每位店長可自己覆寫，見 employees.leader_target / leader_bonus） */
-  leader_target: 60,
-  leader_bonus: 2000,
+  /* 2026-08 起的新制預設（每位店長可自己覆寫，見 employees.leader_t1/b1/t2/b2）：
+     門檻① 80 堂 $4,000；門檻② 100 堂再追加 $2,000（滿 100 堂合計 $6,000）。 */
+  leader_t1: 80, leader_b1: 4000,
+  leader_t2: 100, leader_b2: 2000,
   leader_tiers: [
     { min:80,  max:99,   amount:4000 },
     { min:100, max:null, amount:6000 },
@@ -23191,6 +23192,45 @@ async function loadSalaryTemplates(){
 // ── 取得員工「有效薪資設定」：個人欄位優先，未設定則回退到類型模板 ──
 // 重構後每位員工可獨立設定：base_salary / pt_mode / pt_rate / pt_tiers /
 //   pt_bonus / pt_bonus_enabled / pt_bonus_mode / group_per_head(group_rate) / duty_hourly
+/* ══ 薪資規則按月保存（2026-08-02 使用者指示）══
+   「每個員工的薪資規則每個月都要獨立，有可能七月跟八月的薪資條件會有所不同，
+     但是要先沿用上個月的條件」
+
+   原本規則直接寫在員工資料上，只有「現在」一份：八月調薪，回頭看七月的薪資單
+   也會變成新的條件 —— 對不上當時實際發的錢。改成一個月一份快照存在 pay_rules
+   （{"2026-08":{...}}），算某個月的薪資時取「不晚於那個月」的最後一份快照；
+   沒設過的月份就往前沿用，這正是「先沿用上個月的條件」。 */
+const PAY_RULE_KEYS=['employment_type','need_duty','weekly_work_days','weekly_min_shift_days',
+  'base_salary','duty_hourly','pt_mode','pt_rate','pt_tiers','group_rate',
+  'pt_bonus_enabled','pt_bonus_mode','pt_bonus','custom_salary',
+  'is_manager','is_supervisor','supervisor_bonus',
+  'leader_members','leader_t1','leader_b1','leader_t2','leader_b2'];
+function payRulesMap(emp){
+  const m=emp&&emp.pay_rules;
+  return (m && typeof m==='object' && !Array.isArray(m)) ? m : null;
+}
+/* 這個月適用哪一份快照：取「不晚於這個月」的最後一份；都沒有就回 null（用員工資料上的現值） */
+function empRuleAt(emp, ym){
+  const m=payRulesMap(emp); if(!m) return null;
+  const k=Object.keys(m).filter(x=>/^\d{4}-\d{2}$/.test(x) && x<=String(ym||'')).sort();
+  return k.length ? {ym:k[k.length-1], rule:m[k[k.length-1]]} : null;
+}
+/* 把員工資料換成「那個月的樣子」—— 所有算薪的函式都吃這個物件，
+   只要在計算入口換一次，底下的 empPayConfig / calcSalary / leaderBonusOf 就全都是月份版。 */
+function empAtMonth(emp, ym){
+  const hit=empRuleAt(emp, ym); if(!hit) return emp;
+  const out=Object.assign({}, emp);
+  PAY_RULE_KEYS.forEach(k=>{ if(hit.rule[k]!==undefined) out[k]=hit.rule[k]; });
+  return out;
+}
+function payRuleSnapshot(emp){
+  const o={}; PAY_RULE_KEYS.forEach(k=>{ if(emp[k]!==undefined) o[k]=emp[k]; });
+  return o;
+}
+function prevYm(ym){
+  let[y,m]=String(ym).split('-').map(Number); m--; if(m<1){m=12;y--;}
+  return `${y}-${String(m).padStart(2,'0')}`;
+}
 function empPayConfig(emp){
   const et=normEmp(emp&&(emp.employment_type||emp.pay_type));
   const tpl=(window.SALARY_TPL||{})[et]||{};
@@ -23345,8 +23385,9 @@ function dutyHoursCapped(attendance, shifts, empId, month){
      這樣可以在之後有分店的時候，每個店長影響的獎金可以單獨設定。」
 
    新制（>= LEADER_NEW_FROM）：逐位教練看有沒有達到門檻，達標一位給一筆。
-     名單、門檻、金額都存在「這位店長」自己身上（leader_members / leader_target /
-     leader_bonus）—— 分店之後兩位店長帶不同的人、給不同的錢，才不用共用一組全域設定。
+     名單、門檻、金額都存在「這位店長」自己身上（leader_members / leader_t1 / leader_b1 /
+     leader_t2 / leader_b2）—— 分店之後兩位店長帶不同的人、給不同的錢，
+     才不用共用一組全域設定。
    舊制（< LEADER_NEW_FROM）：全店總堂數每滿 N 堂給一筆，可累計。
      七月以前的月份照舊算，回頭看歷史薪資不會整片變動。 */
 const LEADER_NEW_FROM='2026-08';
@@ -23540,22 +23581,33 @@ function leaderBonusOf(emp, extras, G, month){
       detail: units>0 ? `全店 ${total} 堂 ÷ 每 ${per} 堂 ＝ ${units} 筆 × $${amt.toLocaleString()}`
                       : `全店 ${total} 堂（未滿 ${per} 堂）` };
   }
-  // 新制：逐位教練達標
+  /* 新制：逐位教練達標，兩個門檻（2026-08-02 使用者：「目前獎金門檻是 80 堂 4000、
+     100 堂追加 2000，所以給我兩個設定門檻」）。
+     第二個門檻是「追加」不是「取代」：滿 100 堂 ＝ 4000 ＋ 2000 ＝ 6000。 */
   const picked=Array.isArray(emp.leader_members)?emp.leader_members.map(String):null;
-  const per=Number(emp.leader_target)||Number(G.leader_target)||60;
-  const amt=Number(emp.leader_bonus)||Number(G.leader_bonus)||2000;
+  /* 用 !=null 而不是 ||：門檻②填 0 就是「不用第二段」，
+     用 || 會被當成沒填而退回預設，等於關不掉。 */
+  const _v=(a,b2v,d)=>(a!=null&&a!=='')?Number(a):((b2v!=null&&b2v!=='')?Number(b2v):d);
+  const t1=_v(emp.leader_t1, G.leader_t1, 80);
+  const b1=_v(emp.leader_b1, G.leader_b1, 4000);
+  const t2=_v(emp.leader_t2, G.leader_t2, 0);
+  const b2=_v(emp.leader_b2, G.leader_b2, 0);
   if(!picked || !picked.length){
     /* 名單沒設就是 0，而且要說出來 —— 新制沒有「全員」這個預設可以猜，
        猜出來的金額是憑空生出來的。畫面上寫清楚，比默默給一個數字安全。 */
-    return { pay:0, total, units:0, rows, hitRows:[], per, amt, detail:'尚未設定計算名單（薪資規則 → 店長獎金）' };
+    return { pay:0, total, units:0, rows, hitRows:[], t1, b1, t2, b2,
+      detail:'尚未設定計算名單（薪資規則 → 店長獎金）' };
   }
   const inList=rows.filter(r=>picked.indexOf(String(r.id))>=0);
-  const hitRows=inList.filter(r=>(Number(r.classes)||0)>=per);
+  const each=r=>{ const n=Number(r.classes)||0;
+    return (n>=t1?b1:0) + ((t2>0 && n>=t2)?b2:0); };
+  const hitRows=inList.filter(r=>each(r)>0);
+  const pay=inList.reduce((s,r)=>s+each(r),0);
   const listed=inList.reduce((s,r)=>s+(Number(r.classes)||0),0);
-  return { pay:hitRows.length*amt, total:listed, units:hitRows.length, rows:inList, hitRows, per, amt,
+  return { pay, total:listed, units:hitRows.length, rows:inList, hitRows, t1, b1, t2, b2,
     detail: hitRows.length
-      ? `${hitRows.length} / ${inList.length} 位達標（每位滿 ${per} 堂）× $${amt.toLocaleString()}　·　${hitRows.map(r=>`${r.name} ${r.classes}`).join('、')}`
-      : `名單 ${inList.length} 位，無人達到 ${per} 堂` };
+      ? `${hitRows.length} / ${inList.length} 位達標　·　${hitRows.map(r=>`${r.name} ${r.classes} 堂 $${each(r).toLocaleString()}`).join('、')}`
+      : `名單 ${inList.length} 位，無人達到 ${t1} 堂` };
 }
 function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, extras){
   extras=extras||{};
@@ -24448,7 +24500,7 @@ async function openPerfDetail(empId, month){
     const[purAll,ttAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[])]);
     const renewCount=(renewMapOf(ym, tickets, purAll, bookings, ttAll)||{})[empId]||0;   // 2026-07-29：統一計數（只算教練課類）
     const leaderRows = emp.is_manager ? leaderRowsOf(await dbGetAll('coaches'), bookings, ym) : null;
-    const sal=calcSalary(emp, ptDone, groupHeads, dutyHours, leave, 0, {renewCount, leaderRows, month:ym});
+    const sal=calcSalary(empAtMonth(emp,ym), ptDone, groupHeads, dutyHours, leave, 0, {renewCount, leaderRows, month:ym});
     const money=n=>'$'+Math.round(Number(n)||0).toLocaleString();
     const row=(label,formula,amount,opt)=>`<div class="pfd-row${opt&&opt.sum?' pfd-sum':''}${opt&&opt.neg?' pfd-neg':''}">
       <span class="pfd-l">${label}${formula?`<span class="pfd-f">${formula}</span>`:''}</span>
@@ -24562,7 +24614,7 @@ async function computeMonthlyPayroll(month){
     // 店長津貼名單：全體可帶課的員工（排除老闆與櫃台；店長本人列入）＋各自的當月堂數
     const leaderRows = emp.is_manager ? leaderRowsOf(staff, bookings, month) : null;
     const extras={ renewCount:renewById[emp.id]||0, leaderRows, month };
-    const sal=calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, extras);
+    const sal=calcSalary(empAtMonth(emp,month), ptDone, groupHeads, dutyHours, leave, classOverlap, extras);
     const total=countSalary?sal.grossPay:0; // 應發（v2.0：續約/管理職津貼已含在 calcSalary）
     return {emp,countSalary,ptDone,groupHeads,dutyHours,leave,sal,total};
   });
@@ -24733,7 +24785,7 @@ async function renderSalaryTemplates(targetId){
   const G=window.SALARY_GLOBAL||{};
   const grow=(lb,val)=>`<div style="display:flex;gap:8px;"><span style="min-width:84px;color:var(--t3);">${lb}</span><span>${val}</span></div>`;
   /* 2026-08 起店長獎金改逐位教練達標制，名單與金額存在各店長身上；這裡只是新店長的預設值 */
-  const leaderTxt=`每位教練滿 ${G.leader_target??60} 堂 +${money(G.leader_bonus??2000)}（預設值，各店長可在薪資規則裡自訂名單與金額）`;
+  const leaderTxt=`每位教練滿 ${G.leader_t1??80} 堂 +${money(G.leader_b1??4000)}；滿 ${G.leader_t2??100} 堂再追加 ${money(G.leader_b2??2000)}（預設值，各店長可在薪資規則裡自訂）`;
   const insTxt=(G.insurance_levels||[]).length?`${G.insurance_levels.length} 個級距`:'未設定';
   const globalCard=`<div class="card" style="margin-bottom:14px;border-left:3px solid var(--gold-d);">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
@@ -24771,8 +24823,12 @@ function openSalaryGlobalEdit(){
       <div class="form-row"><input type="number" id="sg-sup" value="${G.supervisor_bonus??0}"></div>
       ${sec('④ 店長獎金預設值（2026-08 起：逐位教練達標制）')}
       <div class="form-2col">
-        <div class="form-row" style="margin:0;"><label>達標課堂（每位）</label><input type="number" id="sg-ldtarget" value="${G.leader_target??60}"></div>
-        <div class="form-row" style="margin:0;"><label>達標獎金（每位）</label><input type="number" id="sg-ldbonus" value="${G.leader_bonus??2000}"></div>
+        <div class="form-row" style="margin:0;"><label>門檻① 課堂</label><input type="number" id="sg-ldt1" value="${G.leader_t1??80}"></div>
+        <div class="form-row" style="margin:0;"><label>門檻① 獎金</label><input type="number" id="sg-ldb1" value="${G.leader_b1??4000}"></div>
+      </div>
+      <div class="form-2col">
+        <div class="form-row" style="margin:0;"><label>門檻② 課堂</label><input type="number" id="sg-ldt2" value="${G.leader_t2??100}"></div>
+        <div class="form-row" style="margin:0;"><label>門檻② 追加獎金</label><input type="number" id="sg-ldb2" value="${G.leader_b2??2000}"></div>
       </div>
       <div style="font-size:11px;color:var(--t3);margin:6px 0;">＊這裡只是<b>新店長的預設值</b>。實際計算用的是每位店長自己的名單與金額（員工資料 → 薪資規則 → 店長），這樣分店之後每位店長可以單獨設定。<br>＊2026 年 7 月以前的月份仍用舊的全店總堂數制（每滿 ${G.leader_per_classes??80} 堂 ${money(G.leader_per_amount??4000)}），歷史薪資不受影響。</div>
       ${sec('⑤ 勞健保級距表（員工負擔／公司三合一負擔）')}
@@ -24808,7 +24864,8 @@ async function saveSalaryGlobal(){
       /* 舊制的兩個值不再有編輯欄位（七月以前才會用到），原值原樣保留 */
       leader_per_classes:((window.SALARY_GLOBAL||{}).leader_per_classes)||80,
       leader_per_amount:((window.SALARY_GLOBAL||{}).leader_per_amount)||4000,
-      leader_target:gv('sg-ldtarget')||60, leader_bonus:gv('sg-ldbonus')||2000,
+      leader_t1:gv('sg-ldt1')||80, leader_b1:gv('sg-ldb1')||4000,
+      leader_t2:gv('sg-ldt2')||0,  leader_b2:gv('sg-ldb2')||0,
       leader_tiers:((window.SALARY_GLOBAL||{}).leader_tiers)||[], insurance_levels };
     await dbPut('salary_templates',{id:'_global',config});
     window.SALARY_GLOBAL=Object.assign(JSON.parse(JSON.stringify(SALARY_GLOBAL_DEFAULT)),config);
@@ -27544,10 +27601,17 @@ function openHrJob(id){ return openPersonProfile('employee', id); }   // 併入�
 // 第一列：四個值班模式按鈕；按下後第二列開始顯示該模式的薪資條件
 let HR_SAL_ET='full_time';
 const HR_ET_LIST=[['full_time','正職'],['part_time','兼職'],['contractor','合作'],['intern','工讀']];
-async function openHrSalary(id){
-  const c=await dbGet('coaches',id);
-  if(!c){showToast('找不到員工');return;}
+async function openHrSalary(id, ym){
+  const c0=await dbGet('coaches',id);
+  if(!c0){showToast('找不到員工');return;}
   HR_CUR_ID=id;
+  /* 2026-08-02 使用者指示：「每個員工的薪資規則每個月都要獨立，有可能七月跟八月的
+     薪資條件會有所不同，但是要先沿用上個月的條件」——
+     這個視窗一次只編一個月：畫面帶出「那個月適用的條件」（沒設過就沿用前一份），
+     儲存時寫成那個月的快照。 */
+  window._hrSalRaw=c0;
+  window._hrSalYm=ym||ymd(TODAY).slice(0,7);
+  const c=empAtMonth(c0, window._hrSalYm);
   window._hrSalEmp=c;
   HR_SAL_ET=normEmp(c.employment_type||c.pay_type)||'full_time';
   await loadSalaryTemplates();
@@ -27558,8 +27622,15 @@ async function openHrSalary(id){
   window._hrRoster=(await dbGetAll('coaches').catch(()=>[]))
     .filter(o=>o.role!=='admin' && o.role!=='front_desk' && o.status!=='inactive')
     .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'));
+  const _hit=empRuleAt(c0, window._hrSalYm);
+  const _inherit=(!_hit || _hit.ym!==window._hrSalYm)
+    ? `<div class="hr-tip" style="margin:-4px 0 12px;">這個月還沒有自己的條件，畫面上是${_hit?`沿用 <b>${_hit.ym.replace('-','/')}</b> 的設定`:'目前的設定'}；按儲存才會建立 ${window._hrSalYm.replace('-','/')} 的版本。</div>`
+    : `<div class="hr-tip" style="margin:-4px 0 12px;">這個月有自己的條件（${window._hrSalYm.replace('-','/')} 版本）。</div>`;
   showModal(`<div class="modal-title">薪資規則 · ${c.name||''}</div>
     <div class="hr-body">
+      <div class="hr-sec">適用月份</div>
+      <div class="form-row"><label>月份</label><select onchange="openHrSalary('${id}',this.value)">${monthOptions(window._hrSalYm,'')}</select></div>
+      ${_inherit}
       <div class="hr-sec">聘僱類型</div>
       <div class="form-row"><label>類型</label><select id="hr-ettype" onchange="hrPickEt(this.value)">
         ${HR_ET_LIST.map(([k,lb])=>`<option value="${k}"${HR_SAL_ET===k?' selected':''}>${lb}</option>`).join('')}
@@ -27649,15 +27720,17 @@ function hrSalaryBodyHtml(c,et){
     <div class="form-row"><label>主管津貼金額</label><input type="number" id="hr-supbonus" value="${c.supervisor_bonus||0}"></div>
     <div id="hr-mgr-box" style="display:${c.is_manager?'block':'none'};">${hrLeaderBoxHtml(c)}</div>`;
 }
-/* 店長獎金（2026-08 起）：名單 × 達標課堂 × 達標獎金，都存在這位店長身上。
+/* 店長獎金（2026-08 起）：名單 × 兩個門檻，都存在這位店長身上。
    之所以不做成全域設定：分店之後兩位店長帶不同的人、給不同的錢，
    全域一組數字就沒辦法分開設。 */
 function hrLeaderBoxHtml(c){
   const G=window.SALARY_GLOBAL||{};
   const roster=(window._hrRoster||[]);
   const picked=Array.isArray(c.leader_members)?c.leader_members.map(String):null;
-  const tgt=Number(c.leader_target)||Number(G.leader_target)||60;
-  const amt=Number(c.leader_bonus)||Number(G.leader_bonus)||2000;
+  const t1=Number(c.leader_t1)||Number(G.leader_t1)||80;
+  const b1=Number(c.leader_b1)||Number(G.leader_b1)||4000;
+  const t2=(c.leader_t2!=null)?Number(c.leader_t2):(Number(G.leader_t2)||100);
+  const b2=(c.leader_b2!=null)?Number(c.leader_b2):(Number(G.leader_b2)||2000);
   const rows=roster.map(o=>`<label class="hr-lmrow">
       <input type="checkbox" class="hr-lm" value="${o.id}"${(picked&&picked.indexOf(String(o.id))>=0)?' checked':''}>
       <span class="hr-lm-n">${o.name||'—'}${o.id===c.id?'<i>（本人）</i>':''}</span>
@@ -27665,11 +27738,17 @@ function hrLeaderBoxHtml(c){
     </label>`).join('');
   return `<div class="hr-dash" style="margin-top:10px;">
     <div class="hr-tip" style="margin-bottom:10px;">
-      2026 年 8 月起：名單裡<b>每有一位教練達到門檻，就給一筆獎金</b>（七月以前仍照舊的全店總堂數制計算）。
+      2026 年 8 月起：名單裡<b>每有一位教練達到門檻，就給一筆獎金</b>（七月以前仍照舊的全店總堂數制計算）。<br>
+      門檻②是<b>追加</b>不是取代：例如滿 ${t1} 堂給 $${b1.toLocaleString()}、滿 ${t2} 堂再加 $${b2.toLocaleString()}，
+      該教練上滿 ${t2} 堂就是 $${(b1+b2).toLocaleString()}。門檻②填 0 ＝ 不用第二段。
     </div>
     <div class="form-2col">
-      <div class="form-row"><label>達標課堂（每位）</label><input type="number" id="hr-ldtarget" min="1" value="${tgt}"></div>
-      <div class="form-row"><label>達標獎金（每位）</label><input type="number" id="hr-ldbonus" min="0" value="${amt}"></div>
+      <div class="form-row"><label>門檻① 課堂（每位）</label><input type="number" id="hr-ldt1" min="1" value="${t1}"></div>
+      <div class="form-row"><label>門檻① 獎金</label><input type="number" id="hr-ldb1" min="0" value="${b1}"></div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>門檻② 課堂（每位）</label><input type="number" id="hr-ldt2" min="0" value="${t2}"></div>
+      <div class="form-row"><label>門檻② 追加獎金</label><input type="number" id="hr-ldb2" min="0" value="${b2}"></div>
     </div>
     <div class="hr-lm-head">
       <span>計算名單　<i>打勾的人，他的課堂數才算進這位店長的獎金</i></span>
@@ -27715,15 +27794,32 @@ async function saveHrSalary(id){
      免得之後重新打開時沿用一份沒人記得的舊名單。 */
   if(c.is_manager){
     c.leader_members=hrReadLeaderMembers();
-    c.leader_target=Number(g('hr-ldtarget'))||60;
-    c.leader_bonus=Number(g('hr-ldbonus'))||0;
+    c.leader_t1=Number(g('hr-ldt1'))||80;
+    c.leader_b1=Number(g('hr-ldb1'))||0;
+    c.leader_t2=Number(g('hr-ldt2'))||0;
+    c.leader_b2=Number(g('hr-ldb2'))||0;
   }else{
-    c.leader_members=null; c.leader_target=null; c.leader_bonus=null;
+    c.leader_members=null; c.leader_t1=null; c.leader_b1=null; c.leader_t2=null; c.leader_b2=null;
   }
 
   c.custom_salary=true;  // 重構後一律使用員工個人設定
+
+  /* 存成「那個月的快照」（2026-08-02）。
+     第一次為某個月建版本時，要先把「編輯前的樣子」凍結到前一個月 ——
+     否則改了八月，沒有版本的七月會跟著讀到新條件，回頭看七月的薪資單就對不上當時發的錢。 */
+  const _ym=window._hrSalYm||ymd(TODAY).slice(0,7);
+  const _map=Object.assign({}, payRulesMap(c)||{});
+  if(!Object.keys(_map).some(k=>k<_ym)) _map[prevYm(_ym)]=payRuleSnapshot(window._hrSalRaw||{});
+  _map[_ym]=payRuleSnapshot(c);
+  c.pay_rules=_map;
+  /* 員工資料上的現值只在編輯「當月或以後」時跟著更新 ——
+     其他畫面（列表、名片、排班）讀的是現值，不該被「回頭改三月」改掉。 */
+  if(_ym < ymd(TODAY).slice(0,7)){
+    const _now=window._hrSalRaw||{};
+    PAY_RULE_KEYS.forEach(k=>{ c[k]=_now[k]; });
+  }
   await dbPut('coaches',c);
-  closeModal(); showToast('薪資規則已儲存');
+  closeModal(); showToast(`${_ym.replace('-','/')} 的薪資規則已儲存`);
   // 若人物資料頁開著，同步刷新
   if(PP.id===c.id){ PP.rec=await dbGet('coaches',c.id);
     const bk=hrSplitBank(PP.rec.bank_account); PP.rec.bank_code=bk.code; PP.rec.bank_account_no=bk.acct;
@@ -36045,7 +36141,7 @@ async function anaMonth(){
       const dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month,c),0):0;
       const lv=leaveSummary(shifts,c.id,month);
       const leaderRows=c.is_manager ? leaderRowsOf(coaches, bookings, month) : null;
-      const sal=calcSalary(c, ptD, gHeads, dutyH, lv, 0, {renewCount:renewMap[c.id]||0, leaderRows, month});
+      const sal=calcSalary(empAtMonth(c,month), ptD, gHeads, dutyH, lv, 0, {renewCount:renewMap[c.id]||0, leaderRows, month});
       totalSalary+=(sal&&sal.grossPay)||0;
     });
   }catch(e){ console.error('教練薪資合計失敗:',e); }
@@ -37241,7 +37337,7 @@ async function renderSalaryContent(TARGET, withHead){
     window._renewRows=renewRows;
   }catch(_){}
   // 完整薪資計算（v2.0：含續約、店長階梯、主管津貼、勞健保）
-  const sal=calcSalary(me, ptDone, groupHeads, dutyHours, myLeave, myClassOverlap, {renewCount, leaderRows, month});
+  const sal=calcSalary(empAtMonth(me,month), ptDone, groupHeads, dutyHours, myLeave, myClassOverlap, {renewCount, leaderRows, month});
   const countSalary=empCountSalary(me, month);
   const estimate=countSalary?sal.grossPay:0;
   const mgrLine=[me.is_manager?`店長`:'',me.is_supervisor?`主管`:''].filter(Boolean).join('　·　');
