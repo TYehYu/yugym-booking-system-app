@@ -17,8 +17,12 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 
 console.log('① 員工列表：薪資數字點得開');
-ok('★ 數字包在可點的元素裡，指向薪資彈窗',
-   /<b class="st-l-paytap" title="看 \$\{c\.name\|\|''\} 的完整薪資明細" onclick="event\.stopPropagation\(\);openSalarySheet\('\$\{c\.id\}'\)">/.test(src));
+/* 2026-08-02 使用者回報：「我點 7 月的要跳 7 月的內容啊」——
+   員工列表可以翻月，點的必須是「那一列那個月」的明細，不能永遠開本月。 */
+ok('★ 數字包在可點的元素裡，指向薪資彈窗，並且把列表現在看的月份一起帶過去',
+   /<b class="st-l-paytap" title="看 \$\{c\.name\|\|''\} \$\{_ym\.replace\('-','年'\)\}月的完整薪資明細" onclick="event\.stopPropagation\(\);openSalarySheet\('\$\{c\.id\}','\$\{_ym\}'\)">/.test(src));
+ok('　　帶的就是列表正在看的那個月（不是今天所在的月）',
+   /const _ym=stMonthCur\(\);/.test(src));
 ok('★ 點數字不會順便開員工明細（整列本來就可點）',
    /onclick="event\.stopPropagation\(\);openSalarySheet/.test(src));
 ok('★ 沒納入計薪的（離職／待接受邀請）維持破折號，不給點',
@@ -36,8 +40,8 @@ ok('　　平常長得跟原本一樣（font:inherit，不會突然變成按鈕�
 console.log('\n② 彈窗指定看誰的薪資');
 {
   const body=grabFn('openSalarySheet');
-  const run=(empId, role)=>{
-    const win={};
+  const run=(empId, role, ym, cur)=>{
+    const win=cur?{_salaryMonth:cur}:{};
     const toasts=[];
     const env={ closeAcctMenu:()=>{}, SESSION:{id:'ME', role}, showToast:t=>toasts.push(t),
       window:win, ymd:()=>'2026-08-02', TODAY:new Date(2026,7,2),
@@ -45,7 +49,7 @@ console.log('\n② 彈窗指定看誰的薪資');
         body:{ appendChild(){}, classList:{add(){}} } },
       renderSalaryContent:()=>{} };
     const f=new Function(...Object.keys(env), body+'\nreturn openSalarySheet;')(...Object.values(env));
-    f(empId);
+    f(empId, ym);
     return {win, toasts};
   };
 
@@ -58,7 +62,16 @@ console.log('\n② 彈窗指定看誰的薪資');
   ok('　　　　而且會講原因', /只有管理員可以查看其他員工的薪資/.test(r.toasts.join('')));
   r=run(undefined,'coach');
   eq('　　教練看自己的不受影響（不帶 id 就放行）', r.win._salaryEmpId, null);
+
+  r=run('E7','admin','2026-07','2026-08');
+  eq('★ 點 7 月那一列 → 彈窗停在 7 月（不是今天所在的 8 月）', r.win._salaryMonth, '2026-07');
+  r=run(undefined,'admin',undefined,'2026-05');
+  eq('　　不帶月份 → 沿用上次看的月份（帳號選單那條路不受影響）', r.win._salaryMonth, '2026-05');
+  r=run(undefined,'admin');
+  eq('　　第一次開又沒帶月份 → 預設本月', r.win._salaryMonth, '2026-08');
 }
+ok('　　為什麼月份要跟著來源走，寫在程式裡',
+   /不然看到的明細跟剛剛點的數字對不起來。/.test(src));
 ok('★ 關掉視窗要把指定對象清掉（不然下次看自己的會看到別人）',
    /function closeSalarySheet\(\)\{[\s\S]*?window\._salaryEmpId=null;\n\}/.test(src));
 ok('　　為什麼要清，寫在程式裡',
