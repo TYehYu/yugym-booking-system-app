@@ -47,18 +47,18 @@ ok('　　舊的 punchfix 深連結落回員工列表並打開彈窗（不是白
    /else if\(_staffTab==='punchfix'\)\{ _staffTab='list'; CUR_TAB='list'; await renderStaffList\(\);/.test(src));
 
 console.log('\n員工名片的打卡紀錄（現在是唯一入口）');
-ok('★ 從近 30 筆放寬到近 90 筆（約三個月）',
-   /const att=all\.slice\(0,90\);/.test(src) && !/\.sort\(\(a,b\)=>\(b\.date\|\|''\)\.localeCompare\(a\.date\|\|''\)\)\.slice\(0,30\);/.test(src));
-ok('★ 最上面給本月出勤天數與工時小計',
-   /本月出勤 <b class="num" style="font-size:16px;color:var\(--text\);">\$\{mRecs\.length\}<\/b> 天/.test(src)
-   && /本月工時 <b class="num" style="font-size:16px;color:var\(--green\);">\$\{mHours\.toFixed\(1\)\}<\/b> 小時/.test(src));
+/* 2026-08-02 使用者指示：「把最近打卡這功能整理在本月值班裡面，就可以移除這個按鈕」
+   —— 那張近 90 筆的長表格改成值班月曆的一部分：排班與打卡排在同一格。
+   細節在 empcaltest.js，這裡只確認「唯一入口」這件事沒有退化成兩個。 */
+ok('★ 打卡仍然只有一個入口，而且就在員工資料裡',
+   /async function ppOpenEmpPunch\(id\)\{ return ppCalOpen\('duty', id,/.test(src)
+   && src.split('async function ppOpenEmpPunch(').length===2);
+ok('★ 本月出勤天數與工時的小計還在（換到月曆的標題列）',
+   /打卡 <b class="ppc-g">\$\{at\.length\}<\/b> 天 \/ <b class="ppc-g">\$\{wh\.toFixed\(1\)\}<\/b> 小時/.test(src));
 ok('★ 有忘記打下班就標出來（金色次要提示）',
-   /const miss=mRecs\.filter\(a=>a\.clock_in&&!a\.clock_out\)\.length;/.test(src)
-   && /\$\{miss\} 天忘記打下班/.test(src));
-ok('　　筆數標示跟著實際筆數走，不會寫死',
-   /　近 \$\{att\.length\} 筆</.test(src));
-ok('　　小計只算本月（不受近 90 筆的截斷影響，用完整資料算）',
-   /const mRecs=all\.filter\(a=>String\(a\.date\|\|''\)\.slice\(0,7\)===month\);/.test(src));
+   /const miss=at\.filter\(a=>a\.clock_in&&!a\.clock_out\)\.length;/.test(src)
+   && /<b class="ppc-w">\$\{miss\}<\/b> 天忘記打下班/.test(src));
+ok('　　舊的長表格沒有留下第二份', !/近 \$\{att\.length\} 筆</.test(src));
 ok('　　原因寫在程式裡', /逐日打卡是流水紀錄，放在員工各自的資料裡/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);

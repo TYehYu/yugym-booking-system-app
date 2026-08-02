@@ -17,16 +17,16 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.in
 console.log('① 員工資料 → 打卡紀錄可以補登');
 ok('★ 有補登／修改的視窗', /async function openPunchEdit\(empId, dateStr\)\{/.test(src));
 ok('★ 只有管理員／櫃台可以補', /if\(!isDeskLike\(\)\)\{ showToast\('只有管理員或櫃台可以補登打卡'\); return; \}/.test(src));
-ok('★ 打卡清單每一列都點得開', /class="pe-row" onclick="openPunchEdit\('\$\{id\}','\$\{a\.date\|\|''\}'\)"/.test(src));
-ok('★ 清單下方有「＋ 補登打卡」（整天沒打到時用）',
-   /<button class="btn btn-green" onclick="openPunchEdit\('\$\{id\}'\)">＋ 補登打卡<\/button>/.test(src));
-ok('★ 忘記打下班的那幾天用紅字標出來',
-   /miss1\?'<span style="color:var\(--danger,#b5372e\);font-weight:700;">未打<\/span>'/.test(src));
-ok('　　看得出來列點得動（游標＋hover）', /tr\.pe-row\{cursor:pointer;/.test(src)
-   && /tr\.pe-row:hover td\{background:var\(--sage-bg,#eef4ee\);\}/.test(src));
-ok('　　教練自己看的時候不出現可點與補登（只有櫃檯能改）',
-   /const _canFix=isDeskLike\(\);/.test(src)
-   && /\$\{_canFix\?`<button class="btn btn-green" onclick="openPunchEdit/.test(src));
+/* 2026-08-02 二修（使用者指示「把最近打卡這功能整理在本月值班裡面」）：
+   那張打卡長表格整份收進值班月曆了，入口改成月曆上的日期格（見 empcaltest.js）。 */
+ok('★ 月曆上點日期就能改那一天的打卡',
+   /openPunchEdit\('\$\{_ppCal\.id\}','\$\{ds\}'\)">\$\{at\?'修改這天的打卡':'補登這天的打卡'\}/.test(src));
+ok('★ 值班視窗下方有「＋ 補登打卡」（整天沒打到時用）',
+   /<button class="btn btn-green" onclick="openPunchEdit\('\$\{_ppCal\.id\}'\)">＋ 補登打卡<\/button>/.test(src));
+ok('★ 忘記打下班的那幾天在月曆上就標出來',
+   /\$\{miss\?'未打下班':/.test(src));
+ok('　　教練自己看的時候不出現補登（只有櫃檯能改）',
+   /\$\{\(!isCls&&isDeskLike\(\)\)\?`<button class="btn btn-green" onclick="openPunchEdit/.test(src));
 ok('★ 上下班都用時：分兩個下拉（工時要算到分，不能用 30 分一格的時段下拉）',
    /\$\{hmPicker\('pe-in', \(rec&&rec\.clock_in\)\|\|''\)\}/.test(src)
    && /\$\{hmPicker\('pe-out',\(rec&&rec\.clock_out\)\|\|''\)\}/.test(src));
@@ -36,7 +36,7 @@ ok('★ 日期是下拉不是手打（避免打錯年份、也不會補到未來
 ok('★ 儲存也上了防連點鎖', /return onceAct\('punchedit:'\+empId, \(\)=>_savePunchEdit\(empId\)\);/.test(src));
 ok('★ 留痕：誰補的、什麼時候補的（事後對薪資有疑問時查得到）',
    /rec\.fixed_by=\(SESSION&&SESSION\.id\)\|\|null; rec\.fixed_at=new Date\(\)\.toISOString\(\);/.test(src));
-ok('　　存完回到打卡清單（連續處理不用重進）',
+ok('　　存完回到值班月曆（連續處理不用重進）',
    (src.match(/ppOpenEmpPunch\(empId\); return;/g)||[]).length>=1
    && /showToast\(rec\.work_hours!=null\?`已儲存，工時 \$\{rec\.work_hours\} 小時`/.test(src));
 
