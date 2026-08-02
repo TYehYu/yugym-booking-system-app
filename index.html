@@ -439,9 +439,6 @@ select option{color:var(--text);}
 .st-swb.on .st-swd{background:var(--green);}
 .st-swb.on.st-swb-warn{background:#fbeceb;border-color:#b5372e;color:#b5372e;}
 .st-swb.on.st-swb-warn .st-swd{background:#b5372e;}
-/* 計薪關掉＝金燈（2026-08-02）：實領會被記成 0，要看得出來是設定造成的 */
-.st-swb.st-swb-note{background:#fbf5ea;border-color:var(--gold-d,#b48a56);color:var(--gold-d,#b48a56);}
-.st-swb.st-swb-note .st-swd{background:var(--gold-d,#b48a56);}
 .st-swb[disabled]{opacity:.4;cursor:not-allowed;}
 .st-badge{position:absolute;top:8px;right:34px;transform:scale(.85);transform-origin:top right;}
 /* 明細齒輪（2026-07-29 使用者指示）：卡片右上角 */
@@ -7115,8 +7112,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1030';
-const APP_VERSION_LABEL='v260802.1030';
+const APP_VERSION = '260802.1035';
+const APP_VERSION_LABEL='v260802.1035';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24378,6 +24375,32 @@ async function openPerfDetail(empId, month){
         <button class="btn btn-green" onclick="closeModal();stGoEmp('${empId}','salary')">完整薪資單</button></div>`);
   }catch(e){ showToast('讀取失敗：'+(e&&e.message?e.message:e)); }
 }
+/* 這個月要不要算他的薪水（2026-08-02 使用者指示：
+   「計薪的開關取消，員工從到職日開始需要給薪的要自動開啟」）
+
+   原本是一個手動勾選框 count_salary，建檔時忘了打開就整個月薪資是 0
+   （余東翰底薪 35000、八月卻顯示 0 就是這樣來的），而且畫面上看不出原因。
+   改成從到職日推：到職當月起算，離職當月仍算（那個月有上班），之後不算。
+   沒填到職日的（舊資料多半沒填）一律算 —— 他們本來就在職。 */
+function empCountSalary(emp, month){
+  if(!emp) return false;
+  const ym=String(month||ymd(TODAY).slice(0,7)).slice(0,7);
+  const first=ym+'-01';
+  const last=ym+'-'+String(new Date(Number(ym.slice(0,4)), Number(ym.slice(5,7)), 0).getDate()).padStart(2,'0');
+  const hire=String(emp.hire_date||'').slice(0,10);
+  if(hire && hire>last) return false;      // 到職日還沒到
+  const resign=String(emp.resign_date||'').slice(0,10);
+  if(resign && resign<first) return false; // 離職當月仍算，之後才不算
+  return true;
+}
+/* 不計薪時把原因講出來（畫面上只寫「不計薪」等於沒說，看的人得自己去翻人事資料） */
+function empPayNote(emp, month){
+  if(!emp || empCountSalary(emp, month)) return '';
+  const ym=String(month||ymd(TODAY).slice(0,7)).slice(0,7);
+  const hire=String(emp.hire_date||'').slice(0,10);
+  if(hire && hire>ym+'-31') return `未到職（${hire.slice(5).replace('-','/')} 起）`;
+  return '已離職';
+}
 async function computeMonthlyPayroll(month){
   await loadSalaryTemplates();
   const[bookings,coaches,shifts,attendance]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('shifts').catch(()=>[]),dbGetAll('attendance').catch(()=>[])]);
@@ -24402,7 +24425,7 @@ async function computeMonthlyPayroll(month){
   }catch(_){}
 
   const rows=staff.map(emp=>{
-    const countSalary=emp.count_salary!==false;
+    const countSalary=empCountSalary(emp, month);
     const myDone=bookings.filter(b=>bkCoachId(b)===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month);
     const ptDone=ptDoneById[emp.id]||0;
     const groupList=myDone.filter(b=>bkIsGroup(b));
@@ -24484,7 +24507,7 @@ async function renderPayrollSummary(){
         const cell=(lb,v)=>`<span class="pr-m-cell"><i>${lb}</i><b>${v>0?'$'+Math.round(v).toLocaleString():'—'}</b></span>`;
         return `<div class="pr-mcard">
           <div class="pr-m-top">
-            <span class="pr-m-who">${e.name||'—'}<i>${PAY_LABEL[e.employment_type||e.pay_type]||'—'}${r.countSalary?'':'・不計薪'}</i></span>
+            <span class="pr-m-who">${e.name||'—'}<i>${PAY_LABEL[e.employment_type||e.pay_type]||'—'}${r.countSalary?'':'・'+empPayNote(r.emp, month)}</i></span>
             <span class="pr-m-net"><i>實發</i><b>$${Math.round(nt).toLocaleString()}</b></span>
           </div>
           <div class="pr-m-stats">
@@ -24504,7 +24527,7 @@ async function renderPayrollSummary(){
     ${rows.map((r,i)=>{
       const e=r.emp, s=r.sal;
       return `<tr style="cursor:pointer;" onclick="document.getElementById('pr-d-${i}').classList.toggle('pr-open')">
-        <td data-label="員工" style="font-weight:500;">${e.name||'—'}${r.countSalary?'':' <span class="tag tag-warn" style="font-size:10px;">不計薪</span>'}</td>
+        <td data-label="員工" style="font-weight:500;">${e.name||'—'}${r.countSalary?'':` <span class="tag tag-warn" style="font-size:10px;">${empPayNote(r.emp, month)}</span>`}</td>
         <td data-label="類型">${PAY_LABEL[e.employment_type||e.pay_type]||'—'}</td>
         <td data-label="教練課" class="num">$${s.ptIncome.toLocaleString()}${s.ptIsFloor?'<span style="font-size:10px;color:var(--gold-d);"> 底</span>':''}</td>
         <td data-label="團課" class="num">${s.groupPay>0?'$'+s.groupPay.toLocaleString():'—'}</td>
@@ -24526,7 +24549,7 @@ async function renderPayrollSummary(){
           <div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;font-size:12.5px;border-top:1px dashed var(--bd);"><span style="color:var(--t2);">勞健保扣款合計</span><span style="color:#c0392b;font-weight:700;">−$${s.insEmpDeduct.toLocaleString()}</span></div>
           <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:15px;border-top:1px solid var(--bd);margin-top:4px;"><span style="font-weight:800;color:var(--green);">實發薪資</span><span style="font-weight:800;color:var(--green);">$${s.netPay.toLocaleString()}</span></div>
           ${s.insCoCost>0?`<div style="font-size:11px;color:var(--t3);margin-top:6px;">公司負擔勞健保 $${s.insCoCost.toLocaleString()}（計入人事成本，不影響實發）</div>`:''}`:''}
-          ${r.countSalary?'':'<div style="font-size:11.5px;color:var(--t3);margin-top:6px;">此員工設為不計薪</div>'}
+          ${r.countSalary?'':`<div style="font-size:11.5px;color:var(--t3);margin-top:6px;">${empPayNote(r.emp, month)}，這個月不列入薪資計算</div>`}
           </div>
         </div>
       </td></tr>`;
@@ -24760,25 +24783,15 @@ const ST_SWITCHES=[
   {key:'supervisor',label:'主管'},
   {key:'punch',     label:'打卡'},
   {key:'teach',     label:'開課'},
-  /* 2026-08-02 使用者指示：「把開關給我，放在員工列表，我自己開」——
-     起因是余東翰底薪 35000、八月薪資卻是 0，因為 count_salary 是關的。
-     原本這個開關只藏在員工明細的人資設定裡，列表上看不出來，$0 跟「這個月真的沒領」
-     長得一模一樣。admin:true ＝ 只有管理員看得到（金額本來就只有管理員看得到）。 */
-  {key:'pay',       label:'計薪', admin:true},
   {key:'disabled',  label:'停用'},   // 反向開關：亮起＝已停用（紅燈），左上燈號同步轉灰
 ];
 function stSwitchRow(c){
-  const _isAdmin=!!(SESSION && SESSION.role==='admin');
-  return `<div class="st-sw">${ST_SWITCHES.filter(s=>!s.admin||_isAdmin).map(s=>{
+  return `<div class="st-sw">${ST_SWITCHES.map(s=>{
     const on=ppEmpSwitchOn(c,s.key);
     const lock=(s.key==='admin'&&c.role==='front_desk');   // 櫃台裝置帳號不從卡片改角色
     const warn=(s.key==='disabled'&&on);                   // 已停用＝紅燈
-    /* 計薪關掉時要看得出來（金燈）：這個人的實領會被記成 0，
-       不標出來的話跟「這個月真的沒領到錢」分不出來。
-       用金色不用紅色 —— 新進員工建檔時先關著是正常流程，是提醒不是錯誤。 */
-    const note=(s.key==='pay'&&!on);
-    return `<button type="button" class="st-swb${on?' on':''}${warn?' st-swb-warn':''}${note?' st-swb-note':''}" ${lock?'disabled':''}
-      title="${s.label}：${on?'開啟':'關閉'}${lock?'（櫃台裝置帳號不可調整）':'，點一下切換'}${note?'　·　不計薪的員工，實領一律顯示 0':''}"
+    return `<button type="button" class="st-swb${on?' on':''}${warn?' st-swb-warn':''}" ${lock?'disabled':''}
+      title="${s.label}：${on?'開啟':'關閉'}${lock?'（櫃台裝置帳號不可調整）':'，點一下切換'}"
       onclick="stCardToggle('${c.id}','${s.key}')">
       <span class="st-swd"></span>${s.label}</button>`;
   }).join('')}</div>`;
@@ -24793,13 +24806,10 @@ async function stCardToggle(id,key){
     else if(key==='supervisor') c.is_supervisor = on;
     else if(key==='punch')      c.need_punch = on;
     else if(key==='teach')      c.can_teach = on;
-    else if(key==='pay')        c.count_salary = on;
     else if(key==='disabled')   c.status = on?'inactive':'active';   // 反向開關
     await dbPut('coaches',c);
-    const L={admin:'管理員權限',manager:'店長權限',supervisor:'主管津貼',punch:'上班打卡',teach:'開課',pay:'計入薪資',disabled:'停用'}[key];
-    /* 計薪是會直接改到金額的開關，關掉時把後果講清楚（不是只回一句「已關閉」） */
-    showToast(key==='pay' ? `${c.name||'員工'}　已${on?'納入':'排除'}薪資計算${on?'':'（實領會顯示 0）'}`
-                          : `${c.name||'員工'}　${L}已${on?'開啟':'關閉'}`);
+    const L={admin:'管理員權限',manager:'店長權限',supervisor:'主管津貼',punch:'上班打卡',teach:'開課',disabled:'停用'}[key];
+    showToast(`${c.name||'員工'}　${L}已${on?'開啟':'關閉'}`);
     stReload();
   }catch(e){ showToast('設定失敗：'+(e&&e.message?e.message:e)); }
 }
@@ -24900,7 +24910,7 @@ async function renderStaffList(){
   }catch(e){ console.error('員工列表打卡待處理統計失敗:',e); }
   /* 當月實領薪資（2026-07-30 使用者指示：放在休假日後面）——
      直接用薪資彙總那支 computeMonthlyPayroll，口徑與「薪資制度 → 月結明細」完全一致，
-     不另外算一套。不計薪的員工（count_salary=false）記 0。 */
+     不另外算一套。還沒到職／已離職的月份記 0（見 empCountSalary，2026-08-02）。 */
   const _canPay = !!(SESSION && SESSION.role==='admin');
   if(_canPay){
     try{
@@ -25079,7 +25089,8 @@ async function renderStaffList(){
       /* 2026-08-02 使用者指示：點薪資數字直接跳出完整薪資明細（彈出視窗）。
          整列本來就會開員工明細，所以這一格要 stopPropagation，不然兩個視窗一起開。 */
       const payCell = !_canPay ? '<i class="st-l-none">•••</i>'
-        : (st.net==null ? '<i class="st-l-none">—</i>'
+        : (!empCountSalary(c,_ym) ? `<i class="st-l-none" title="${empPayNote(c,_ym)}　·　到職當月才開始計薪">${empPayNote(c,_ym).split('（')[0]}</i>`
+          : st.net==null ? '<i class="st-l-none">—</i>'
           : `<b class="st-l-paytap" title="看 ${c.name||''} ${_ym.replace('-','年')}月的完整薪資明細" onclick="event.stopPropagation();openSalarySheet('${c.id}','${_ym}')"><small>$</small>${Math.round(st.net).toLocaleString()}</b>`);
       /* 數字只放值，欄位名稱統一在表頭（2026-07-30 使用者指示：加標題、把中間的空白收掉）。
          已上與排定不同時，用小字補上排定堂數（例 92 /97）。 */
@@ -26511,7 +26522,6 @@ function ppEmpSwitchOn(r,key){
   if(key==='supervisor') return !!r.is_supervisor;
   if(key==='punch')      return !!r.need_punch;
   if(key==='teach')      return r.can_teach!==false;
-  if(key==='pay')        return r.count_salary!==false;   // 未設定視為計薪（2026-08-02）
   if(key==='disabled')   return r.status==='inactive';   // 反向：亮起＝已停用（2026-07-29）
   return r.status!=='inactive';
 }
@@ -27333,7 +27343,6 @@ function hrSalaryBodyHtml(c,et){
     ${dutyRows}
 
     <div class="hr-sec hr-sec2">課堂薪資制度</div>
-    <label class="hr-check"><input type="checkbox" id="hr-countsalary" ${c.count_salary!==false?'checked':''}>計入薪資（取消＝此員工不列入薪資計算）</label>
     <div class="form-row"><label>計算方式</label><select id="hr-ptmode" onchange="hrTogglePtMode()">
       <option value="tier" ${mode==='tier'?'selected':''}>累進制（依堂數級距）</option>
       <option value="flat" ${mode==='flat'?'selected':''}>固定制（每堂固定）</option>
@@ -27387,7 +27396,6 @@ async function saveHrSalary(id){
   const _dh=g('hr-dutyrate2');
   if(_dh!==undefined) c.duty_hourly=Number(_dh)||0;
 
-  c.count_salary=ck('hr-countsalary');
   c.pt_mode=g('hr-ptmode')||'flat';
   if(c.pt_mode==='tier'){ c.pt_tiers=hrReadTiers(); c.pt_rate=0; }
   else { c.pt_rate=Number(g('hr-ptrate'))||0; c.pt_tiers=[]; }
@@ -27534,8 +27542,7 @@ function payRoleFields(prefix,c,showRate){
   if(showRate===undefined) showRate=true;
   const custom = !!c.custom_salary;
   const rateField = showRate
-    ? `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:10px;"><input type="checkbox" id="${prefix}-countsalary" ${c.count_salary!==false?'checked':''}>計入薪資（取消＝此員工不計薪）</label>
-      <div style="border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-bottom:14px;">
+    ? `<div style="border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-bottom:14px;">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="${prefix}-custom" ${custom?'checked':''} onchange="document.getElementById('${prefix}-rate-wrap').style.display=this.checked?'block':'none'">自訂薪資（覆蓋此員工類型的薪資制度模板）</label>
         <div style="font-size:11px;color:var(--t3);margin-top:6px;">不勾選＝依「員工類型」自動套用對應薪資制度模板（在 員工管理 → 薪資制度 設定）。</div>
         <div id="${prefix}-rate-wrap" style="display:${custom?'block':'none'};margin-top:12px;">
@@ -27591,7 +27598,6 @@ function readPayRoleFields(prefix){
   if(customEl){
     const custom=customEl.checked;
     out.custom_salary=custom;
-    out.count_salary=document.getElementById(prefix+'-countsalary').checked;
     if(custom){
       out.pt_rate=Number(document.getElementById(prefix+'-ptrate').value)||0;
       out.group_rate=Number(document.getElementById(prefix+'-grouprate').value)||0;
@@ -35721,7 +35727,7 @@ async function anaMonth(){
   let totalSalary=0;
   try{
     coaches.filter(isCoachable).forEach(c=>{
-      if(c.count_salary===false) return;
+      if(!empCountSalary(c, month)) return;
       const myDone=done.filter(b=>bkCoachId(b)===c.id);   // 代課的課算在代課教練身上（2026-08-01）
       const ptD=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
       const gHeads=myDone.filter(b=>bkIsGroup(b)).reduce((s,b)=>s+(Array.isArray(b.member_ids)&&b.member_ids.length?b.member_ids.length:1),0);
@@ -36931,7 +36937,7 @@ async function renderSalaryContent(TARGET, withHead){
   }catch(_){}
   // 完整薪資計算（v2.0：含續約、店長階梯、主管津貼、勞健保）
   const sal=calcSalary(me, ptDone, groupHeads, dutyHours, myLeave, myClassOverlap, {renewCount, leaderHeads});
-  const countSalary=me.count_salary!==false;
+  const countSalary=empCountSalary(me, month);
   const estimate=countSalary?sal.grossPay:0;
   const mgrLine=[me.is_manager?`店長`:'',me.is_supervisor?`主管`:''].filter(Boolean).join('　·　');
   const[my,mm]=month.split('-');
@@ -36962,8 +36968,8 @@ async function renderSalaryContent(TARGET, withHead){
   const _salSb = (withHead && _salScoped) ? lpScopeBar('薪資') : '';
   const _salHead = withHead
     ? (_salScoped
-        ? head('SALARY', SCOPE.name+' · 薪資', `${payTypeLabel}${mgrLine?'　·　'+mgrLine:''}${countSalary?'':'　·　不計薪'}`)
-        : head('SALARY','薪資',`${payTypeLabel}${mgrLine?'　·　'+mgrLine:''}${countSalary?'':'　·　不計薪'}`))
+        ? head('SALARY', SCOPE.name+' · 薪資', `${payTypeLabel}${mgrLine?'　·　'+mgrLine:''}${countSalary?'':'　·　'+empPayNote(me, month)}`)
+        : head('SALARY','薪資',`${payTypeLabel}${mgrLine?'　·　'+mgrLine:''}${countSalary?'':'　·　'+empPayNote(me, month)}`))
     : '';
   C.innerHTML=_salBc+_salHead+_salSb+
   `<div class="card ops-datebar" style="margin-bottom:14px;">
@@ -37140,7 +37146,7 @@ async function salaryClickDay(ds){
   await loadSalaryTemplates();
   const me=coaches.find(c=>c.id===SESSION.id)||{};
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
-  const er=effRates(me); const dutyRate=(me.custom_salary?(me.duty_hourly||0):(er.duty_hourly||0)); const countSalary=me.count_salary!==false;
+  const er=effRates(me); const dutyRate=(me.custom_salary?(me.duty_hourly||0):(er.duty_hourly||0)); const countSalary=empCountSalary(me, String(ds).slice(0,7));
   const dayResult=(d)=>{
     const dayBk=bookings.filter(b=>bkCoachId(b)===SESSION.id&&b.date===d&&(b.status==='completed'||b.status==='checked_in'));
     const dPt=dayBk.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）

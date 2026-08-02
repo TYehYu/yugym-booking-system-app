@@ -160,8 +160,7 @@ console.log('\n員工管理：卡片改回列表');
   const i=src.indexOf('    const stRow=c=>{'); const j=src.indexOf('\n    };\n', i)+8;
   const k=src.indexOf('function stSwitchRow(c){'); const l=src.indexOf('\n}\n',k)+2;
   const ST_SWITCHES=[{key:'admin',label:'管理員'},{key:'manager',label:'店長'},{key:'supervisor',label:'主管'},
-                     {key:'punch',label:'打卡'},{key:'teach',label:'開課'},
-                     {key:'pay',label:'計薪',admin:true},{key:'disabled',label:'停用'}];
+                     {key:'punch',label:'打卡'},{key:'teach',label:'開課'},{key:'disabled',label:'停用'}];
   const env={ST_SWITCHES, ppEmpSwitchOn:(c,kk)=>kk==='teach'||(kk==='disabled'&&c.status==='inactive'),
     ET_COLOR:{full_time:'#1f6f54'}, normEmp:x=>x||'full_time', typeLabel:()=>'正職',
     genderAvatarSVG:()=>'<svg/>', stateOf:c=>c.status||'active', statusBadge:()=>'<span class="tag">停用</span>',
@@ -173,15 +172,16 @@ console.log('\n員工管理：卡片改回列表');
     fmtHours:h=>{const n=Number(h)||0;return (n%1===0)?String(n):n.toFixed(1);},
     _ym:'2026-07', _stat:{E1:{pt:12,ptAll:14,grp:4,grpAll:4,renew:2,hours:58.5,net:71250}},
     /* 2026-08-01：列表每一列多了「打卡異常／補卡待審」的驚嘆號（見 punchrowtest.js） */
-    /* 2026-08-02：開關多了「計薪」，只有管理員看得到（見 paytoggletest.js） */
     SESSION:{id:'ME',role:'admin'},
+    /* 2026-08-02：計薪改成從到職日自動判定，不再是開關（見 paystarttest.js） */
+    empCountSalary:()=>true, empPayNote:()=>'',
     _punch:{E1:0}};
   const fn=new Function(...Object.keys(env), src.slice(k,l)+'\n'+src.slice(i,j)+'\nreturn stRow;')(...Object.values(env));
   const h=fn({id:'E1',name:'王教練',name_en:'wang',gender:'male',employment_type:'full_time',
               job_title:'資深教練',emp_no:'A01',phone:'0912345678',status:'active'});
   ok('★ 一列一人的列表（不再是直式卡）', /class="st-lrow/.test(h) && !/class="st-card/.test(h));
-  ok('★ 權限開關全部保留（管理員看得到 7 顆：加了「計薪」）',
-     (h.match(/class="st-swb/g)||[]).length===7, (h.match(/class="st-swb/g)||[]).length);
+  ok('★ 權限開關全部保留（6 顆）',
+     (h.match(/class="st-swb/g)||[]).length===6, (h.match(/class="st-swb/g)||[]).length);
   ok('★ 右上角齒輪保留（點開員工明細）', /st-gear st-gear-row/.test(h) && /openPersonProfile\('employee','E1'\)/.test(h));
   ok('　　點整列也能開明細', /<div class="st-lrow[^"]*"[^>]*onclick="openPersonProfile\('employee','E1'\)"/.test(h));
   ok('　　沒有打卡問題就不掛驚嘆號', !/st-punch-x/.test(h));
