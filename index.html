@@ -7183,8 +7183,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1646';
-const APP_VERSION_LABEL='v260802.1646';
+const APP_VERSION = '260802.1658';
+const APP_VERSION_LABEL='v260802.1658';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23095,6 +23095,7 @@ const SALARY_GLOBAL_DEFAULT = {
      若改用「當月實際排班時數」，班排多的月份時薪反而變低，同樣請一天扣的錢會不同。 */
   base_hours_divisor: 130,
   supervisor_bonus: 4000,       // 主管固定津貼
+  birthday_bonus: 1000,         // 生日禮金（生日當月自動加給，2026-08-02 使用者指示）
   /* 店長津貼（2026-07-29 使用者定案改制）：全店當月教練課總堂數（不含老闆/admin）
      每滿 leader_per_classes 堂給 leader_per_amount 元，可累計（120 堂＝1 個 80 → $4,000）。
      舊的「逐位教練查階梯」制（leader_tiers）已停用，欄位保留供歷史對照。 */
@@ -23755,6 +23756,13 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const leaderPay=_ld.pay, leaderTotal=_ld.total, leaderUnits=_ld.units;
   const leaderDetail=_ld.detail;
   const mgmtPay=supPay+leaderPay; // 管理職津貼合計
+  /* ⑦-2 生日禮金（2026-08-02 使用者指示：「還有生日禮金 1000 元」）——
+     生日那個月給一筆，從員工資料的生日推，不需要人記得加。
+     只比月份不比日：整個生日月都算，發薪時不用去care是月初還月底生日。 */
+  const _bd=String((emp&&(emp.birthday||emp.birth_date))||'');
+  const isBday=!!(extras.month && _bd.length>=7 && _bd.slice(5,7)===String(extras.month).slice(5,7));
+  const bdayPay=isBday?(Number(G.birthday_bonus)||0):0;
+  const bdayDetail=isBday?`${_bd.slice(5,7)}/${_bd.slice(8,10)} 生日`:'';
   // ⑧ 勞健保員工負擔：依員工投保級距查級距表（insured_grade 為勞健保管理填的欄位）
   const grade=emp&&(emp.insured_grade||emp.insurance_grade||emp.labor_insurance_level||emp.health_insurance_level);
   const lvl=(G.insurance_levels||[]).find(x=>String(x.grade)===String(grade));
@@ -23781,7 +23789,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   // 公司三合一負擔：優先用 co_total（勞保雇主總額+健保雇主+勞退）；無則退回舊欄位加總
   const insCoCost   = lvl ? (Number(lvl.co_total)>0 ? Number(lvl.co_total) : (insLaborCo+insHealthCo)) : 0;
 
-  const grossPay = ptIncome + bonus + groupPay + dutyPay + renewPay + mgmtPay; // 應發
+  const grossPay = ptIncome + bonus + groupPay + dutyPay + renewPay + mgmtPay + bdayPay; // 應發
   /* 請假扣薪在「算完本月總薪資後」才扣（2026-08-01 使用者指示）——
      這樣課費高於底薪的人也會實際被扣到，不會被保障底薪的 max() 吃掉。 */
   const leaveDeduct = baseLeaveDeduct;
@@ -23793,6 +23801,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
     dutyGross, dutyLeaveDeduct, dutyClassDeduct, classOverlap:co, dutyPay, dutyDetail,
     renewCount, renewPay, renewDetail,
     isSupervisor:isSup, supPay, isLeader, leaderPay, leaderDetail, leaderTotal, leaderUnits, mgmtPay,
+    isBday, bdayPay, bdayDetail,
     insGrade:grade||null, insGradeMissing, insLaborEmp, insHealthEmp, insEmpDeduct, insLaborCo, insHealthCo, insCoCost,
     leave:L, leaveDeduct, divisor:_divisor,
     grossPay, netPay,
@@ -24492,6 +24501,7 @@ async function openPerfDetail(empId, month){
       dbGetAll('attendance').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[])]);
     if(!emp){ showToast('找不到員工'); return; }
     const ym=month||ymd(TODAY).slice(0,7);
+    if(isLegacyPayMonth(ym)){ return openLegacyPerfDetail(emp, ym); }
     const mine=bookings.filter(b=>(bkCoachId(b))===empId
       && String(b.date||'').slice(0,7)===ym && b.status!=='cancelled');
     const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in');
@@ -24522,6 +24532,7 @@ async function openPerfDetail(empId, month){
     if(sal.bonus>0)    rows+=row('達標獎金', sal.bonusDetail||'', money(sal.bonus));
     if(sal.groupPay>0) rows+=row('團體課費', sal.groupDetail||`${groupHeads} 人次`, money(sal.groupPay));
     if(sal.dutyPay>0)  rows+=row('值班費', sal.dutyDetail||`${fmtHours(dutyHours)} 小時`, money(sal.dutyPay));
+    if(sal.bdayPay>0) rows+=row('生日禮金', sal.bdayDetail||'', money(sal.bdayPay));
     if(sal.renewPay>0) rows+=row('續約獎金', sal.renewDetail||`${renewCount} 張`, money(sal.renewPay));
     /* 2026-08-02：改成只要是店長就列 —— 新制沒設名單時金額是 0，
        但那行「尚未設定計算名單」正是最需要被看到的訊息。 */
@@ -24554,6 +24565,50 @@ async function openPerfDetail(empId, month){
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
         <button class="btn btn-green" onclick="closeModal();stGoEmp('${empId}','salary')">完整薪資單</button></div>`);
   }catch(e){ showToast('讀取失敗：'+(e&&e.message?e.message:e)); }
+}
+/* 匯入月份的表現視窗：只有數字，沒有公式 */
+async function openLegacyPerfDetail(emp, ym){
+  const h=salHistOf(await salaryHistoryMap(), emp.id, ym);
+  const money=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+  const row=(label,formula,amount,opt)=>`<div class="pfd-row${opt&&opt.sum?' pfd-sum':''}">
+    <span class="pfd-l">${label}${formula?`<span class="pfd-f">${formula}</span>`:''}</span>
+    <span class="pfd-v">${amount}</span></div>`;
+  const [yy,mm]=ym.split('-');
+  showModal(`<div class="modal-title">${coachDisp(emp)}　${yy}/${mm} 薪資紀錄</div>
+    ${h?`<div class="pfd-hero"><span class="pfd-hero-l">實領薪資</span><span class="pfd-hero-v">${money(h.net)}</span></div>
+      <div class="pfd-list">${legacyPayRowsHtml(h,row)}</div>
+      ${h.note?`<div style="font-size:11px;color:var(--gold-d,#b48a56);margin-top:8px;">${h.note}</div>`:''}
+      <div style="font-size:11px;color:var(--t3);margin-top:10px;line-height:1.7;">
+        ＊系統從 2026 年 7 月開始使用，這個月份是匯入的紀錄，不重新計算。</div>`
+    : `<div class="empty" style="padding:26px;"><div class="em-t">沒有這個月的薪資紀錄</div>
+        <div style="font-size:12px;color:var(--t3);margin-top:8px;">2026 年 7 月以前的薪資由匯入資料提供。</div></div>`}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+/* ══ 2026-07 以前：用匯入的薪資紀錄，不套公式（2026-08-02 使用者指示）══
+   「因為系統從 7 月才正式開始使用，6 月以前的薪資可以用我匯入的這個內容嗎」
+   「6 月份的就不用列公式了」「單純紀錄課堂數、值班數、續約數、實領薪資」
+
+   六月以前系統裡沒有預約與打卡資料，任何公式算出來的都是憑空生出來的數字 ——
+   所以那些月份一律顯示匯入的紀錄（salary_history），只列使用者要的四個數字。 */
+const SYS_PAY_FROM='2026-07';
+function isLegacyPayMonth(ym){ return String(ym||'')<SYS_PAY_FROM; }
+let _salHistCache=null;
+async function salaryHistoryMap(){
+  if(_salHistCache) return _salHistCache;
+  const rows=await dbGetAll('salary_history').catch(()=>[]);
+  const m={}; (rows||[]).forEach(r=>{ m[String(r.emp_id)+'|'+String(r.ym)]=r; });
+  return (_salHistCache=m);
+}
+function salHistOf(map, empId, ym){ return (map||{})[String(empId)+'|'+String(ym)]||null; }
+/* 匯入月份的呈現：四個數字＋實領，沒有公式（列了也只是假的） */
+function legacyPayRowsHtml(h, row){
+  const money=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+  const num=v=>(v==null||v==='')?null:Number(v);
+  const items=[['教練課', num(h&&h.pt), '堂'], ['團體課', num(h&&h.grp), '堂'],
+               ['值班', num(h&&h.duty), '小時'], ['續約', num(h&&h.renew), '張']]
+    .filter(x=>x[1]!=null);
+  return items.map(([lb,v,u])=>row(lb, '', `${(Math.round(v*10)/10).toLocaleString()} ${u}`)).join('')
+    + row('實領薪資', h&&h.source?`來源：${h.source}`:'', money(h&&h.net), {sum:true});
 }
 /* 這個月要不要算他的薪水（2026-08-02 使用者指示：
    「計薪的開關取消，員工從到職日開始需要給薪的要自動開啟」）
@@ -24604,7 +24659,26 @@ async function computeMonthlyPayroll(month){
     Object.entries(renewMapOf(month,tks,purs,bookings,tys)).forEach(([k,v])=>{ if(renewById[k]!=null) renewById[k]=v; });
   }catch(_){}
 
+  /* 2026-07 以前用匯入的紀錄（見 salaryHistoryMap）—— 那些月份系統裡沒有預約與打卡，
+     套公式只會生出假的數字。 */
+  const _legacy=isLegacyPayMonth(month);
+  const _hist=_legacy?await salaryHistoryMap():null;
+  const _zeroSal=n=>({ base:0, adjBase:0, baseLeaveDeduct:0, baseHourly:0, ptPay:0, ptDetail:'', ptIncome:0,
+    ptIsFloor:false, ptIncomeDetail:'', bonus:0, bonusDetail:'', groupPay:0, groupDetail:'',
+    dutyGross:0, dutyLeaveDeduct:0, dutyClassDeduct:0, classOverlap:0, dutyPay:0, dutyDetail:'',
+    renewCount:0, renewPay:0, renewDetail:'', isBday:false, bdayPay:0, bdayDetail:'',
+    isSupervisor:false, supPay:0, isLeader:false, leaderPay:0, leaderDetail:'', leaderTotal:0, leaderUnits:0, mgmtPay:0,
+    insGrade:null, insLaborEmp:0, insHealthEmp:0, insEmpDeduct:0, insLaborCo:0, insHealthCo:0, insCoCost:0,
+    insGradeMissing:'', leave:{特休:0,病假:0,事假:0,其他:0}, leaveDeduct:0,
+    grossPay:n, netPay:n, total:n });
   const rows=staff.map(emp=>{
+    if(_legacy){
+      const h=salHistOf(_hist, emp.id, month);
+      const net=Math.round(Number(h&&h.net)||0);
+      return { emp, countSalary:!!h, legacy:true, hist:h,
+        ptDone:Number(h&&h.pt)||0, groupHeads:0, dutyHours:Number(h&&h.duty)||0,
+        leave:{特休:0,病假:0,事假:0,其他:0}, sal:_zeroSal(net), total:net };
+    }
     const countSalary=empCountSalary(emp, month);
     const myDone=bookings.filter(b=>bkCoachId(b)===emp.id&&(b.status==='completed'||b.status==='checked_in')&&bkCounts(b)&&(b.date||'').slice(0,7)===month);
     const ptDone=ptDoneById[emp.id]||0;
@@ -24632,6 +24706,21 @@ async function computeMonthlyPayroll(month){
    兩邊不會再各寫一套而算法不一致。 */
 function payrollCalcRows(r){
   const s=r.sal, e=r.emp;
+  /* 2026-07 以前：只有匯入的數字，沒有公式（2026-08-02 使用者：「6 月份的就不用列公式了」） */
+  if(r.legacy){
+    const rowL2=(label,val,sub)=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bd);font-size:13px;"><span style="color:var(--t2);">${label}${sub?`<i style="font-style:normal;color:var(--t3);font-size:11.5px;margin-left:6px;">${sub}</i>`:''}</span><span>${val}</span></div>`;
+    if(!r.hist) return `<div style="font-size:12.5px;color:var(--t3);padding:8px 0;">沒有這個月的匯入紀錄。</div>`;
+    const n=v=>(v==null||v==='')?null:Number(v);
+    let h2='';
+    [['教練課', n(r.hist.pt), '堂'],['團體課', n(r.hist.grp), '堂'],
+     ['值班', n(r.hist.duty), '小時'],['續約', n(r.hist.renew), '張']]
+      .filter(x=>x[1]!=null)
+      .forEach(([lb,v,u])=>{ h2+=rowL2(lb, `${Math.round(v*10)/10} ${u}`); });
+    h2+=rowL2('實領薪資', `<b>$${Math.round(Number(r.hist.net)||0).toLocaleString()}</b>`, r.hist.source?`來源：${r.hist.source}`:'');
+    if(r.hist.note) h2+=`<div style="font-size:11px;color:var(--gold-d,#b48a56);padding:6px 0;">${r.hist.note}</div>`;
+    h2+=`<div style="font-size:11px;color:var(--t3);padding:6px 0;">系統從 2026 年 7 月開始使用，這個月份是匯入的紀錄，不重新計算。</div>`;
+    return h2;
+  }
 const rowL=(label,val,sub)=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bd);font-size:13px;"><span style="color:var(--t2);">${label}${sub?`<span style="color:var(--t3);font-size:11.5px;"> ${sub}</span>`:''}</span><span style="font-weight:600;color:var(--text);">${val}</span></div>`;
             const rowDeduct=(label,val)=>`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">${label}</span><span style="color:#c0392b;font-weight:600;">−$${val.toLocaleString()}</span></div>`;
             let h='';
@@ -24656,6 +24745,7 @@ const rowL=(label,val,sub)=>`<div style="display:flex;justify-content:space-betw
               if(s.dutyClassDeduct>0) h+=rowDeduct(`值班時段上課 ${fmtHours(s.classOverlap)} 小時（課程抽成為主）`, s.dutyClassDeduct);
               if(s.dutyClassDeduct>0) h+=rowL('實領值班費',`<b>$${s.dutyPay.toLocaleString()}</b>`);
             }
+            if(s.bdayPay>0) h+=rowL('生日禮金',`$${s.bdayPay.toLocaleString()}`, s.bdayDetail);
             if(s.renewPay>0) h+=rowL('續約獎金',`$${s.renewPay.toLocaleString()}`, s.renewDetail);
             if(s.isLeader) h+=rowL('店長獎金',`$${s.leaderPay.toLocaleString()}`, s.leaderDetail);
             if(s.supPay>0) h+=rowL('主管津貼',`$${s.supPay.toLocaleString()}`);
@@ -24799,6 +24889,7 @@ async function renderSalaryTemplates(targetId){
       </div>
       <div style="font-size:12.5px;color:var(--t2);line-height:1.9;">
         ${grow('續約獎金',money(G.renew_bonus)+' / 張')}
+        ${grow('生日禮金',money(G.birthday_bonus??1000)+'（生日當月自動加給）')}
         ${grow('主管津貼',money(G.supervisor_bonus)+'（固定）')}
         ${grow('店長獎金',leaderTxt)}
         ${grow('勞健保級距',insTxt)}
@@ -24826,6 +24917,8 @@ function openSalaryGlobalEdit(){
       <div style="font-size:11px;color:var(--t3);margin:6px 0;">＊時薪＝底薪 ÷ 這個數字（預設 130＝一年的月排班時數中位數）。用固定分母，同一個人每個月的時薪才一樣；事假全扣、病假半扣、特休與其他假不扣。</div>
       ${sec('③ 主管津貼（固定）')}
       <div class="form-row"><input type="number" id="sg-sup" value="${G.supervisor_bonus??0}"></div>
+      ${sec('②-2 生日禮金（生日當月自動加給）')}
+      <div class="form-row"><input type="number" id="sg-bday" value="${G.birthday_bonus??1000}"></div>
       ${sec('④ 店長獎金預設值（2026-08 起：逐位教練達標制）')}
       <div class="form-2col">
         <div class="form-row" style="margin:0;"><label>門檻① 課堂</label><input type="number" id="sg-ldt1" value="${G.leader_t1??80}"></div>
@@ -24865,6 +24958,7 @@ async function saveSalaryGlobal(){
     const insurance_levels=[]; for(let i=0;i<(window._sgInsCount||0);i++){ if(document.getElementById(`sg-ins-grade-${i}`)){ const g=gs(`sg-ins-grade-${i}`); if(g) insurance_levels.push({grade:g,labor_emp:gv(`sg-ins-le-${i}`),health_emp:gv(`sg-ins-he-${i}`),co_total:gv(`sg-ins-co-${i}`)}); } }
     /* 店長津貼改總堂數制（2026-07-29）：leader_tiers 停用但保留原值，避免舊資料被清掉 */
     const config={ renew_bonus:gv('sg-renew'), supervisor_bonus:gv('sg-sup'),
+      birthday_bonus:gv('sg-bday')??1000,
       base_hours_divisor:gv('sg-div')||130,
       /* 舊制的兩個值不再有編輯欄位（七月以前才會用到），原值原樣保留 */
       leader_per_classes:((window.SALARY_GLOBAL||{}).leader_per_classes)||80,
@@ -37307,6 +37401,41 @@ async function renderSalaryContent(TARGET, withHead){
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   if(!window._salaryMonth) window._salaryMonth=ymd(TODAY).slice(0,7);
   const month=window._salaryMonth; // 可切換月份 2026-06
+  /* 2026-07 以前用匯入的紀錄，不列公式（2026-08-02 使用者指示）——
+     那些月份系統裡沒有預約與打卡，公式算出來的每個數字都是憑空生出來的。 */
+  if(isLegacyPayMonth(month)){
+    const _lh=salHistOf(await salaryHistoryMap(), empId, month);
+    const _lmoney=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+    const _lrow=(lb,v,sub)=>`<div class="pfd-row"><span class="pfd-l">${lb}${sub?`<span class="pfd-f">${sub}</span>`:''}</span><span class="pfd-v">${v}</span></div>`;
+    const _ln=v=>(v==null||v==='')?null:Number(v);
+    const _lprev=withHead?'salaryShiftMonth(-1)':'salarySheetMonth(-1)';
+    const _lnext=withHead?'salaryShiftMonth(1)':'salarySheetMonth(1)';
+    const _lpick=withHead?'salaryPickMonth(this.value)':'salarySheetPickMonth(this.value)';
+    C.innerHTML=(withHead?head('SALARY', (_salScoped?SCOPE.name+' · ':'')+'薪資', '2026 年 7 月以前為匯入紀錄'):'')
+      +`<div class="card ops-datebar" style="margin-bottom:14px;">
+        <button class="btn btn-ghost btn-sm" onclick="${_lprev}">‹ 上個月</button>
+        <div class="ops-date-mid"><select class="sal-mpick" onchange="${_lpick}">${monthOptions(month, ymd(TODAY).slice(0,7))}</select></div>
+        <button class="btn btn-ghost btn-sm" onclick="${_lnext}">下個月 ›</button>
+      </div>`
+      +(_lh
+        ? `<div class="card">
+            <div class="pfd-hero"><span class="pfd-hero-l">實領薪資</span><span class="pfd-hero-v">${_lmoney(_lh.net)}</span></div>
+            <div class="pfd-list">${
+              [['教練課', _ln(_lh.pt), '堂'],['團體課', _ln(_lh.grp), '堂'],
+               ['值班', _ln(_lh.duty), '小時'],['續約', _ln(_lh.renew), '張']]
+                .filter(x=>x[1]!=null)
+                .map(([lb,v,u])=>_lrow(lb, `${Math.round(v*10)/10} ${u}`)).join('')
+              || '<div style="font-size:12.5px;color:var(--t3);padding:8px 0;">這個月只有實領金額，沒有逐項數字。</div>'
+            }</div>
+            ${_lh.note?`<div style="font-size:11.5px;color:var(--gold-d,#b48a56);margin-top:8px;">${_lh.note}</div>`:''}
+            <div style="font-size:11.5px;color:var(--t3);margin-top:10px;line-height:1.7;">
+              ＊系統從 2026 年 7 月開始使用。這個月份直接顯示匯入的紀錄${_lh.source?`（來源：${_lh.source}）`:''}，不重新計算，所以沒有計算公式。</div>
+          </div>`
+        : `<div class="card"><div class="empty" style="padding:36px 16px;text-align:center;">
+            <div class="em-t">沒有這個月的薪資紀錄</div>
+            <div style="font-size:12.5px;color:var(--t2);margin-top:8px;">2026 年 7 月以前的薪資由匯入資料提供。</div></div></div>`);
+    return;
+  }
   // 已上課堂（已簽到或已完成皆計入；系統實務上「簽到」即視為上課完成）
   // 有代課算代課教練（2026-08-01，與月結明細同口徑）
   const myDone=bookings.filter(b=>bkCoachId(b)===empId&&(b.status==='completed'||b.status==='checked_in')&&bkCounts(b)&&b.date.slice(0,7)===month);
@@ -37450,6 +37579,7 @@ async function renderSalaryContent(TARGET, withHead){
         if(sal.bonus>0) h+=row('達標獎金',`$${sal.bonus.toLocaleString()}`, sal.bonusDetail);
         if(sal.groupPay>0) h+=row('團課費',`$${sal.groupPay.toLocaleString()}`, sal.groupDetail);
         if(dutyHours>0 && sal.dutyPay>0) h+=row('值班費',`$${sal.dutyPay.toLocaleString()}`, `${dutyHours.toFixed(1)} 小時`);
+        if(sal.bdayPay>0) h+=row('生日禮金',`$${sal.bdayPay.toLocaleString()}`, sal.bdayDetail);
         if(sal.renewPay>0) h+=row('續約獎金',`$${sal.renewPay.toLocaleString()}`, sal.renewDetail);
         if(sal.isLeader) h+=row('店長獎金',`$${sal.leaderPay.toLocaleString()}`, sal.leaderDetail);
         if(sal.supPay>0) h+=row('主管津貼',`$${sal.supPay.toLocaleString()}`);
