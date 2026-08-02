@@ -2596,13 +2596,27 @@ tr:hover td{background:var(--card2);}
   background:#eef6f1;border:1px solid #cfe4d8;border-radius:999px;padding:3px 10px;white-space:nowrap;font-family:inherit;}
 button.lv-done.lv-tap{cursor:pointer;}
 button.lv-done.lv-tap:hover{background:#e2efe8;}
-.lv-list{display:flex;flex-direction:column;gap:7px;max-height:44vh;overflow-y:auto;}
-.lv-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
-  background:var(--card2);border:1px solid var(--bd);border-radius:10px;padding:9px 12px;}
-.lv-r-n{font-size:13.5px;font-weight:700;color:var(--text);min-width:0;}
-.lv-r-m{font-size:12px;color:var(--t2);font-family:var(--num),inherit;white-space:nowrap;}
+.lv-list{display:flex;flex-direction:column;gap:6px;max-height:44vh;overflow-y:auto;}
+/* 2026-08-02 使用者：「排列一下，這樣不好閱讀」——四個固定欄位，逐列對齊；
+   圖例只在表頭出現一次。方案名那欄可以換行，其餘欄位位置不會被推動。 */
+.lv-head,.lv-row{display:grid;grid-template-columns:46px minmax(0,1fr) 104px 96px;
+  gap:10px;align-items:center;padding:9px 12px;}
+.lv-head{padding-bottom:2px;font-size:10.5px;color:var(--t3);letter-spacing:.02em;}
+.lv-head .lv-h3{text-align:center;}
+.lv-head .lv-h3 i{font-style:normal;font-weight:700;}
+.lv-head>span:last-child{text-align:right;}
+.lv-row{background:var(--card2);border:1px solid var(--bd);border-radius:10px;}
+.lv-r-no{justify-self:start;}
+.lv-r-n{font-size:13.5px;font-weight:700;color:var(--text);min-width:0;line-height:1.35;word-break:break-word;}
+.lv-r-m{justify-self:center;}
+.lv-r-e{font-size:11.5px;color:var(--t2);font-family:var(--num),inherit;text-align:right;white-space:nowrap;}
+@media(max-width:560px){
+  .lv-head,.lv-row{grid-template-columns:42px minmax(0,1fr) 92px;}
+  .lv-head>span:last-child,.lv-r-e{display:none;}
+}
 /* 三個數字：已預約（紅）／已銷課（金）／總堂數（綠）——2026-08-02 使用者指示 */
-.tk3{display:inline-flex;align-items:baseline;gap:3px;font-family:var(--num),inherit;}
+.tk3{display:inline-flex;align-items:baseline;gap:3px;font-family:var(--num),inherit;
+  font-variant-numeric:tabular-nums;}
 .tk3 b{font-size:16px;font-weight:800;line-height:1;}
 .tk3 i{font-style:normal;color:var(--t3);font-size:13px;}
 .tk3 em{font-style:normal;font-size:10.5px;color:var(--t3);margin-left:5px;letter-spacing:-.02em;}
@@ -7186,8 +7200,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1716';
-const APP_VERSION_LABEL='v260802.1716';
+const APP_VERSION = '260802.1735';
+const APP_VERSION_LABEL='v260802.1735';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21830,13 +21844,13 @@ PAGES.members=async function(){
      ⚠ 會員等級不再是獨立欄位 → 少了「依等級排序」的表頭；等級篩選仍在上方工具列。 */
   /* 色票說明：哪個顏色是哪一級（比照員工列表上方的聘僱類型色票） */
   /* 進度：主顧客總數與已核對數（整份掃過去時要知道還剩幾個） */
-  const _loyal=filtered.filter(m=>effTier(m)==='loyal');
+  const _loyal=filtered.filter(needsLegacyVerify);   // 主顧客＋VIP（2026-08-02）
   const _lvDone=_loyal.filter(m=>m.legacy_verified_at).length;
   const legacyBar=_loyal.length
     ? `<div class="lv-bar"><span class="lv-t">新舊系統票券核對</span>
         <span class="lv-n"><b>${_lvDone}</b> / ${_loyal.length}</span>
         <span class="lv-p"><i style="width:${Math.round(_lvDone/_loyal.length*100)}%;"></i></span>
-        <span class="lv-s">主顧客＝從舊系統匯入的既有會員；核對「還可以用的票券」新舊是否一致</span></div>`
+        <span class="lv-s">主顧客與 VIP＝從舊系統匯入的既有會員；核對「還可以用的票券」新舊是否一致</span></div>`
     : '';
   const tierLegend=`<div class="lp-legend">${
     Object.entries(TIER_DEFS).map(([k,d])=>{
@@ -21848,7 +21862,7 @@ PAGES.members=async function(){
      —— 主顧客＝制度起點時從舊系統匯入的那批既有會員。匯入的餘額是照舊系統匯出檔設的、
      逐堂連結多半不存在，帳面對不對只能靠人看；這一欄就是那個人工核對的印章。
      只有主顧客那一列會出現按鈕，其他等級留白（新客沒有舊資料要核）。 */
-  const _legacyCol = filtered.some(m=>effTier(m)==='loyal');
+  const _legacyCol = filtered.some(needsLegacyVerify);
   const cols=[
     {label:'姓名',     width:'1.5fr', sortKey:'name'},
     ...TK5.map(([k,lb],i)=>({label:lb, width:'1fr', tkKey:k, zone:i===0})),
@@ -27288,14 +27302,19 @@ async function ppOpenEmpSalary(id){
 /* 一張票的三個數字：已預約／已銷課／總堂數（2026-08-02 使用者指示）
    顏色照品牌強度：紅（已預約＝還欠客人的課，最要盯）＞ 金（已銷課）＞ 綠（總堂數）。
    只寫「剩 N」會被讀成「這張票沒了」——約走還沒上的那幾堂其實還在票上。 */
-function tkCountTriple(sl){
+function tkCountTriple(sl, noLegend){
   const pend=Number(sl.pending)||0, used=Number(sl.used)||0, total=Number(sl.total)||0;
+  /* noLegend＝表頭已經寫過一次了，逐列再寫十個字只是噪音（2026-08-02 使用者：「排列一下」） */
   return `<span class="tk3" title="已預約 ${pend} 堂（約了還沒上）　·　已銷課 ${used} 堂　·　總堂數 ${total} 堂">`
     + `<b class="tk3-b">${pend}</b><i>/</i><b class="tk3-u">${used}</b><i>/</i><b class="tk3-t">${total}</b>`
-    + `<em>已預約／已銷課／總堂數</em></span>`;
+    + (noLegend?'':`<em>已預約／已銷課／總堂數</em>`)+`</span>`;
 }
+/* 哪些人需要核對（2026-08-02 使用者：「VIP 也要有連動確認按鈕」）——
+   主顧客與 VIP 都是制度起點就在的既有會員，兩邊都有舊系統的票要對；
+   原本只列主顧客，VIP 就整批漏掉了。 */
+function needsLegacyVerify(m){ const t=effTier(m); return t==='loyal'||t==='vip'; }
 function legacyVerifyCell(m){
-  if(effTier(m)!=='loyal') return '';
+  if(!needsLegacyVerify(m)) return '';
   if(!isDeskLike()) return m.legacy_verified_at
     ? `<span class="lv-done">已核對 ${String(m.legacy_verified_at).slice(5,10).replace('-','/')}</span>` : '';
   if(m.legacy_verified_at){
@@ -27316,10 +27335,20 @@ async function openLegacyVerify(mid){
      改成 1/9/10 已預約/已銷課/總堂數，紅色/金色/綠色」——
      原本只寫「剩 0 / 10 堂」，但那個 0 是「還能再約幾堂」，不是「這張票沒了」：
      已經約走還沒上的那幾堂也還在這張票上。三個數字攤開就不會誤讀。 */
-  const rows=act.length ? act.map(sl=>{
+  /* 2026-08-02 使用者回報（附截圖）：「排列一下，這樣不好閱讀」——
+     原本一列是「票號＋方案名」擠成一格、右邊接一長串數字＋圖例，方案名一長就換行，
+     每一列的數字位置都不一樣，而且「已預約／已銷課／總堂數」十個字每列重複一次。
+     改成固定欄位的格線：票號｜方案名｜三個數字｜效期，圖例移到表頭只留一份。 */
+  const rows=act.length ? `<div class="lv-head"><span></span><span>方案</span>
+      <span class="lv-h3"><i class="tk3-b">已預約</i>/<i class="tk3-u">已銷課</i>/<i class="tk3-t">總堂數</i></span>
+      <span>效期</span></div>`
+    + act.map(sl=>{
       const t=sl.t;
-      return `<div class="lv-row"><span class="lv-r-n">${tkNoTag(sl.no)}${t.plan_name||'票券'}</span>
-        <span class="lv-r-m">${tkCountTriple(sl)}${t.expire_date?`　·　效期至 ${String(t.expire_date).slice(0,10)}`:'　·　無效期'}</span></div>`;
+      return `<div class="lv-row">
+        <span class="lv-r-no">${tkNoTag(sl.no)}</span>
+        <span class="lv-r-n">${t.plan_name||'票券'}</span>
+        <span class="lv-r-m">${tkCountTriple(sl,true)}</span>
+        <span class="lv-r-e">${t.expire_date?String(t.expire_date).slice(0,10).replace(/-/g,'/'):'無效期'}</span></div>`;
     }).join('')
     : '<div class="lv-none">系統裡目前沒有還能用的票券</div>';
   const done=!!m.legacy_verified_at;

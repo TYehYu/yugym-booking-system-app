@@ -16,10 +16,13 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.in
 console.log('① 只有主顧客那一列出現按鈕');
 {
   const f=new Function('effTier','isDeskLike','window','tkNoTag',
-    grabFn('legacyVerifyCell')+'\nreturn legacyVerifyCell;');
+    grabFn('needsLegacyVerify')+'\n'+grabFn('legacyVerifyCell')+'\nreturn legacyVerifyCell;');
   const run=(m, tier, desk)=>f((x)=>tier, ()=>desk!==false, {_coachNameMap:{c1:'小曾'}}, n=>'#'+n)(m);
 
   ok('★ 主顧客未核對 → 出現「完成連動」', /完成連動/.test(run({id:'M1'},'loyal')));
+  /* 2026-08-02 使用者：「VIP 也要有連動確認按鈕」—— VIP 同樣是制度起點就在的既有會員，
+     原本只列主顧客，VIP 整批漏掉。 */
+  ok('★ VIP 也要有（同樣是從舊系統來的既有會員）', /完成連動/.test(run({id:'M3'},'vip')));
   eq('★ 一般會員 → 留白（新客沒有舊資料要核）', run({id:'M2'},'regular'), '');
   ok('★ 已核對 → 變成「✓ 已核對 MM/DD」的記號',
      /✓ 已核對 08\/02/.test(run({id:'M1',legacy_verified_at:'2026-08-02T03:00:00Z'},'loyal')));
@@ -53,16 +56,20 @@ ok('　　ppRefreshIfOpen 會重畫表頭（不只是重載資料）',
    /async function ppRefreshIfOpen\(id\)\{[\s\S]*?ppRenderBody\(\);\n\s*return true;/.test(src));
 
 console.log('\n② 列表上的欄位與進度');
-ok('★ 沒有任何主顧客時不多長一欄（其他店別／篩選後）',
-   /const _legacyCol = filtered\.some\(m=>effTier\(m\)==='loyal'\);/.test(src)
+ok('★ 沒有任何要核對的人時不多長一欄（其他店別／篩選後）',
+   /const _legacyCol = filtered\.some\(needsLegacyVerify\);/.test(src)
    && /\.\.\.\(_legacyCol\?\[\{label:'連動核對', width:'1fr', zone:true\}\]:\[\]\),/.test(src));
 ok('★ 每一列的格子只在有那一欄時才產出（欄數要對得上）',
    /\.\.\.\(_legacyCol\?\[legacyVerifyCell\(m\)\]:\[\]\),/.test(src));
-ok('★ 上方有進度條：已核對 N / 主顧客總數',
-   /const _lvDone=_loyal\.filter\(m=>m\.legacy_verified_at\)\.length;/.test(src)
+ok('★ 上方有進度條：已核對 N / 要核對的總數',
+   /const _loyal=filtered\.filter\(needsLegacyVerify\);/.test(src)
+   && /const _lvDone=_loyal\.filter\(m=>m\.legacy_verified_at\)\.length;/.test(src)
    && /<span class="lv-n"><b>\$\{_lvDone\}<\/b> \/ \$\{_loyal\.length\}<\/span>/.test(src));
-ok('　　進度條講清楚主顧客是誰、要核什麼',
-   /主顧客＝從舊系統匯入的既有會員；核對「還可以用的票券」新舊是否一致/.test(src));
+ok('　　進度條講清楚是誰、要核什麼',
+   /主顧客與 VIP＝從舊系統匯入的既有會員；核對「還可以用的票券」新舊是否一致/.test(src));
+ok('　　判斷抽成一支，三個地方共用（欄位、格子、進度條）',
+   /function needsLegacyVerify\(m\)\{ const t=effTier\(m\); return t==='loyal'\|\|t==='vip'; \}/.test(src)
+   && (src.match(/needsLegacyVerify/g)||[]).length>=4);
 ok('　　沒有主顧客就不顯示進度條', /const legacyBar=_loyal\.length/.test(src));
 
 console.log('\n③ 核對視窗');
@@ -71,9 +78,28 @@ ok('★ 攤開「系統認為還可以用」的票券，讓櫃檯拿去跟舊系
 /* 2026-08-02 使用者回報（附截圖）：「連動資料的時候我發現票券這樣顯示會以為用完了，
    改成 1/9/10 已預約/已銷課/總堂數，紅色/金色/綠色」——
    原本只寫「剩 0 / 10 堂」，那個 0 是「還能再約幾堂」，不是「這張票沒了」。 */
-ok('★ 每一張列出方案、三個數字、效期',
-   /\$\{tkCountTriple\(sl\)\}\$\{t\.expire_date\?`　·　效期至/.test(src)
-   && !/剩 <b>\$\{sl\.left\}<\/b>/.test(src));
+/* 2026-08-02 三修（使用者附截圖）：「排列一下，這樣不好閱讀」——
+   原本票號＋方案名擠一格、右邊接一長串數字＋圖例，方案名一長就換行，
+   每列的數字位置都不一樣；「已預約／已銷課／總堂數」十個字還每列重複一次。 */
+ok('★ 每一張列出票號、方案、三個數字、效期，各自一欄',
+   /<span class="lv-r-no">\$\{tkNoTag\(sl\.no\)\}<\/span>/.test(src)
+   && /<span class="lv-r-n">\$\{t\.plan_name\|\|'票券'\}<\/span>/.test(src)
+   && /<span class="lv-r-m">\$\{tkCountTriple\(sl,true\)\}<\/span>/.test(src)
+   && /<span class="lv-r-e">\$\{t\.expire_date\?String\(t\.expire_date\)\.slice\(0,10\)/.test(src));
+ok('★ 逐列對齊（固定欄寬，不是 space-between）',
+   /\.lv-head,\.lv-row\{display:grid;grid-template-columns:46px minmax\(0,1fr\) 104px 96px;/.test(src));
+ok('★ 圖例只在表頭出現一次，不逐列重複',
+   /<div class="lv-head">/.test(src)
+   && /noLegend\?'':`<em>已預約／已銷課／總堂數<\/em>`/.test(src));
+ok('　　表頭的圖例沿用同一組顏色（紅金綠），對得上下面的數字',
+   /<i class="tk3-b">已預約<\/i>\/<i class="tk3-u">已銷課<\/i>\/<i class="tk3-t">總堂數<\/i>/.test(src));
+ok('　　數字等寬，直向對得齊', /font-variant-numeric:tabular-nums;/.test(src));
+ok('　　方案名可以換行，但不會推動其他欄位',
+   /\.lv-r-n\{[^}]*word-break:break-word;\}/.test(src));
+ok('　　窄螢幕收掉效期那欄（寧可少一欄，也不要擠成一團）',
+   /\.lv-head>span:last-child,\.lv-r-e\{display:none;\}/.test(src));
+ok('　　為什麼把圖例移到表頭，寫在程式裡',
+   /逐列再寫十個字只是噪音/.test(src));
 ok('★ 也給合計可約堂數（舊系統通常只看得到總數）',
    /可約堂數合計 <b>\$\{W\.sessionsLeft\(\)\}<\/b> 堂/.test(src));
 
