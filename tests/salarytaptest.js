@@ -34,10 +34,10 @@ ok('　　只有管理員看得到金額（沿用原本的判斷）',
 ok('　　看得出來點得動（游標＋hover）',
    /\.st-l-paytap\{[^}]*cursor:pointer;/.test(src)
    && /\.st-l-paytap:hover\{filter:brightness\(\.96\);\}/.test(src));
-/* 2026-08-02 使用者指示：「員工列表的實領薪資數字，底色用金色數字用紅色」——
-   一整列都是黑字的數字，實領是最後要看的那一個，給它自己的底色才找得到。 */
-ok('★ 金底紅字', /\.st-l-paytap\{[^}]*color:var\(--danger,#b5372e\);background:#f6ecd9;/.test(src)
-   && /\.st-l-paytap small\{color:var\(--danger,#b5372e\);opacity:\.7;\}/.test(src));
+/* 2026-08-02 使用者指示：實領薪資「底色用金色數字用紅色」→ 同日再改為「金底綠字」。
+   紅色在這套系統是警示用，實領不是警示。 */
+ok('★ 金底綠字', /\.st-l-paytap\{[^}]*color:var\(--green,#1f6f54\);background:#f6ecd9;/.test(src)
+   && /\.st-l-paytap small\{color:var\(--green,#1f6f54\);opacity:\.7;\}/.test(src));
 
 console.log('\n② 彈窗指定看誰的薪資');
 {
