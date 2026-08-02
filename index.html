@@ -568,6 +568,11 @@ select option{color:var(--text);}
 .st-l-pay{display:flex;align-items:baseline;justify-content:flex-end;gap:1px;
   color:var(--gold-d,#b48a56);white-space:nowrap;}
 .st-l-pay small{font-size:10px;font-weight:600;color:var(--t3);}
+/* 點得動的薪資數字（2026-08-02）：平常跟原本長得一樣，滑過去才浮出可點的樣子 */
+.st-l-paytap{display:inline-flex;align-items:baseline;gap:1px;font:inherit;color:inherit;
+  cursor:pointer;border-radius:7px;padding:1px 5px;margin:-1px -5px;transition:background .12s,color .12s;}
+.st-l-paytap:hover{background:var(--sage-bg,#eef4ee);color:var(--green,#1f6f54);}
+.st-l-paytap:hover small{color:var(--green,#1f6f54);}
 .st-l-sw{justify-self:stretch;}
 /* 2026-07-30 使用者指示：權限開關排成一列（原本是 3 欄 × 2 列的九宮格，卡片被撐高） */
 .st-l-sw .st-sw{display:flex;flex-wrap:nowrap;gap:4px;width:auto;margin:0;justify-content:flex-start;}
@@ -7104,8 +7109,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.0951';
-const APP_VERSION_LABEL='v260802.0951';
+const APP_VERSION = '260802.1013';
+const APP_VERSION_LABEL='v260802.1013';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -25052,8 +25057,11 @@ async function renderStaffList(){
       const click=pending?`copyInvite('${c.invite_token}')`:`openPersonProfile('employee','${c.id}')`;
       const st=_stat[c.id]||{all:0,allAll:0,pt:0,ptAll:0,grp:0,grpAll:0,renew:0,hours:0};
       /* 實領薪資：只有管理員看得到數字；沒有納入計薪（離職／待接受邀請）顯示破折號 */
+      /* 2026-08-02 使用者指示：點薪資數字直接跳出完整薪資明細（彈出視窗）。
+         整列本來就會開員工明細，所以這一格要 stopPropagation，不然兩個視窗一起開。 */
       const payCell = !_canPay ? '<i class="st-l-none">•••</i>'
-        : (st.net==null ? '<i class="st-l-none">—</i>' : `<small>$</small>${Math.round(st.net).toLocaleString()}`);
+        : (st.net==null ? '<i class="st-l-none">—</i>'
+          : `<b class="st-l-paytap" title="看 ${c.name||''} 的完整薪資明細" onclick="event.stopPropagation();openSalarySheet('${c.id}')"><small>$</small>${Math.round(st.net).toLocaleString()}</b>`);
       /* 數字只放值，欄位名稱統一在表頭（2026-07-30 使用者指示：加標題、把中間的空白收掉）。
          已上與排定不同時，用小字補上排定堂數（例 92 /97）。 */
       const num=(v,sub,i,cls)=>`<span class="st-l-n st-l-n${i}${cls?' '+cls:''}">${v>0?v:'<i class="st-l-z">0</i>'}${sub?`<u>${sub}</u>`:''}</span>`;
@@ -36845,8 +36853,16 @@ async function renderSalaryContent(TARGET, withHead){
   await loadSalaryTemplates();
   const[bookings,coaches,members,shifts,attendance]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('members'),dbGetAll('shifts').catch(()=>[]),dbGetAll('attendance').catch(()=>[])]);
   const _salScoped = scopeActive('employee');
-  const empId = _salScoped ? SCOPE.id : SESSION.id;
+  /* 2026-08-02 使用者指示：「點擊薪資數字，可以直接跳出完整薪資明細，用視窗顯示」
+     —— 員工列表的「實領薪資」那一格點下去要開這一份。指定看誰的薪資：
+     _salaryEmpId（彈窗指定）＞ 員工範圍（管理員切進某位員工）＞ 自己。 */
+  const empId = window._salaryEmpId || (_salScoped ? SCOPE.id : SESSION.id);
   const me=coaches.find(c=>c.id===empId);
+  /* 彈窗版的標題要跟著換人，不然看別人的薪資時標題還是「薪資單」，容易看錯人。 */
+  if(!withHead){
+    const _t=document.querySelector('#salary-sheet-ov .sheet-title');
+    if(_t) _t.textContent = (me && me.id!==(SESSION&&SESSION.id)) ? `薪資單 · ${me.name||''}` : '薪資單';
+  }
   if(!me){
     C.innerHTML=(withHead?head('SALARY','薪資紀錄',''):'')+`<div class="card"><div class="empty" style="padding:36px 16px;text-align:center;">
       <div class="em-t">尚未建立員工資料</div>
@@ -37033,8 +37049,12 @@ async function renderSalaryContent(TARGET, withHead){
   const defDay = isCurMonth ? ymd(TODAY) : `${month}-01`;
 };
 // 薪資單彈窗（滿版覆蓋層，不改變後面頁面）
-function openSalarySheet(){
+function openSalarySheet(empId){
   closeAcctMenu();
+  /* 帶 empId ＝ 從員工列表點薪資數字進來（只有管理員看得到數字，所以只有管理員點得到）；
+     不帶 ＝ 帳號選單裡看自己的。看完要清掉，否則下次看自己的會變成看別人的。 */
+  if(empId && !(SESSION && SESSION.role==='admin')){ showToast('只有管理員可以查看其他員工的薪資'); return; }
+  window._salaryEmpId = empId || null;
   if(!window._salaryMonth) window._salaryMonth=ymd(TODAY).slice(0,7);
   let ov=document.getElementById('salary-sheet-ov');
   if(!ov){
@@ -37053,6 +37073,7 @@ function openSalarySheet(){
 function closeSalarySheet(){
   const ov=document.getElementById('salary-sheet-ov'); if(ov) ov.classList.remove('open');
   document.body.classList.remove('sheet-open');
+  window._salaryEmpId=null;
 }
 function salarySheetMonth(delta){
   let [y,m]=(window._salaryMonth||ymd(TODAY).slice(0,7)).split('-').map(Number);
