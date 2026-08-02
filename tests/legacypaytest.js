@@ -98,25 +98,39 @@ ok('★ 有匯入金額就以匯入為準（到職日填得比匯入資料晚時
 ok('　　原因寫在程式裡', /那些月份系統裡沒有預約與打卡，逐筆算出來一定是 0，\n\s*但薪水確實有發過，欄位全 0 會讓人以為那個月沒上班。/.test(src));
 
 console.log('\n⑤ 生日禮金');
+/* 2026-08-02 二修（使用者）：「如果員工 9 月生日，那生日禮金會跟著 8 月的薪水一起發放，
+   因為 8 月薪水是 9/5 發放」—— 禮金要在壽星生日那個月拿到手，
+   所以掛在「生日月的前一個月」那張薪資單上。 */
 {
   const G={birthday_bonus:1000};
   const code=`const G=${JSON.stringify(G)};
     const emp=EMP, extras=EX;
     const _bd=String((emp&&(emp.birthday||emp.birth_date))||'');
-    const isBday=!!(extras.month && _bd.length>=7 && _bd.slice(5,7)===String(extras.month).slice(5,7));
+    const _payMM=PM(extras.month);
+    const isBday=!!(_payMM && _bd.length>=7 && _bd.slice(5,7)===_payMM);
     const bdayPay=isBday?(Number(G.birthday_bonus)||0):0;
-    const bdayDetail=isBday?\`\${_bd.slice(5,7)}/\${_bd.slice(8,10)} 生日\`:'';
+    const bdayDetail=isBday?\`\${_bd.slice(5,7)}/\${_bd.slice(8,10)} 生日（隨本月薪資於 \${Number(_payMM)}/5 發放）\`:'';
     return {isBday, bdayPay, bdayDetail};`;
-  const f=(emp,month)=>new Function('EMP','EX',code)(emp,{month});
-  eq('★ 生日當月 +1000', f({birthday:'2001-05-29'},'2026-05').bdayPay, 1000);
-  eq('★ 其他月份 0', f({birthday:'2001-05-29'},'2026-06').bdayPay, 0);
-  eq('★ 只比月份不比日：月底生日也是整個月都算',
-     [f({birthday:'1988-04-30'},'2026-04').bdayPay, f({birthday:'2003-12-01'},'2026-12').bdayPay], [1000,1000]);
-  eq('　　明細寫出是哪天生日', f({birthday:'2001-05-29'},'2026-05').bdayDetail, '05/29 生日');
+  const PM=new Function(grabFn('birthPayMonthOf')+'\nreturn birthPayMonthOf;')();
+  const f=(emp,month)=>new Function('EMP','EX','PM',code)(emp,{month},PM);
+
+  eq('★ 使用者的例子：9 月生日 → 掛在 8 月的薪資單（9/5 領到）',
+     f({birthday:'1987-09-08'},'2026-08').bdayPay, 1000);
+  eq('★ 9 月的薪資單不再給（那筆已經在 8 月發過了）', f({birthday:'1987-09-08'},'2026-09').bdayPay, 0);
+  eq('★ 12 月生日 → 掛在 11 月', f({birthday:'2003-12-01'},'2026-11').bdayPay, 1000);
+  eq('★ 1 月生日 → 掛在前一年的 12 月（跨年不能漏）',
+     [f({birthday:'2000-01-15'},'2026-12').bdayPay, f({birthday:'2000-01-15'},'2027-01').bdayPay], [1000,0]);
+  eq('　　發放月份怎麼算', [PM('2026-08'), PM('2026-12'), PM('2026-01')], ['09','01','02']);
+  eq('★ 只比月份不比日：月底生日也整個月都算', f({birthday:'1988-04-30'},'2026-03').bdayPay, 1000);
+  ok('　　明細寫出生日與發放時間', /09\/08 生日（隨本月薪資於 9\/5 發放）/.test(f({birthday:'1987-09-08'},'2026-08').bdayDetail),
+     f({birthday:'1987-09-08'},'2026-08').bdayDetail);
   eq('　　沒填生日 → 不給（不會誤發）', f({},'2026-05').bdayPay, 0);
-  eq('　　舊欄位 birth_date 也認', f({birth_date:'1987-09-08'},'2026-09').bdayPay, 1000);
+  eq('　　舊欄位 birth_date 也認', f({birth_date:'1987-09-08'},'2026-08').bdayPay, 1000);
   eq('　　沒帶月份時不判定（避免不知道在算哪個月就發錢）', f({birthday:'2001-05-29'},undefined).bdayPay, 0);
+  eq('　　月份格式壞掉也不判定', [PM('2026'), PM(''), PM(null)], ['','','']);
 }
+ok('　　為什麼掛在前一個月，寫在程式裡',
+   /所以掛在「生日月的前一個月」那張薪資單上，\n\s*禮金才會在壽星生日那個月拿到手。/.test(src));
 ok('★ 生日禮金算進應發', /const grossPay = ptIncome \+ bonus \+ groupPay \+ dutyPay \+ renewPay \+ mgmtPay \+ bdayPay;/.test(src));
 ok('★ 金額是全域設定，不寫死在計算裡', /birthday_bonus: 1000,/.test(src)
    && /const bdayPay=isBday\?\(Number\(G\.birthday_bonus\)\|\|0\):0;/.test(src));
@@ -126,7 +140,30 @@ ok('　　全域制度卡看得到這一條', /\$\{grow\('生日禮金',money\(G
 ok('★ 三處薪資明細都列得出來（月結表格、月結卡片、個人薪資頁）',
    (src.match(/生日禮金'/g)||[]).length>=3);
 ok('　　為什麼只比月份，寫在程式裡',
-   /只比月份不比日：整個生日月都算，發薪時不用去care是月初還月底生日。/.test(src));
+   /只比月份不比日：整個生日月都算，不用管人是月初還月底生日。/.test(src));
+
+console.log('\n⑥ 員工列表顯示生日');
+{
+  const F=new Function(grabFn('birthPayMonthOf')+'\n'+grabFn('stBdayTag')+'\nreturn stBdayTag;')();
+  const h=F({birthday:'2001-05-29'},'2026-08');
+  ok('★ 列出月/日', /🎂 05\/29/.test(h), h);
+  ok('　　滑過去看得到完整日期', /title="生日 2001\/05\/29/.test(h), h);
+  ok('★ 亮金的條件跟薪資同一套：看 8 月的名單，亮的是 9 月生日的人',
+     / on"/.test(F({birthday:'1987-09-08'},'2026-08'))
+     && !/ on"/.test(F({birthday:'1987-09-08'},'2026-09')));
+  ok('　　　　並在提示裡講發放時間', /生日禮金隨這個月的薪資於 9\/5 發放/.test(F({birthday:'1987-09-08'},'2026-08')));
+  ok('★ 其他月份不亮（不吵）', !/ on"/.test(h));
+  eq('　　沒填生日 → 不顯示', F({},'2026-05'), '');
+  eq('　　只有年月的爛資料也不顯示（不會印出半截）', F({birthday:'2001-05'},'2026-05'), '');
+  eq('　　沒有員工資料 → 不會爆', F(null,'2026-05'), '');
+  ok('　　舊欄位 birth_date 也認', /🎂 09\/08/.test(F({birth_date:'1987-09-08'},'2026-01')));
+}
+ok('★ 放在姓名下面那行，不另外開一欄', /\$\{stBdayTag\(c,_ym\)\}<\/span>/.test(src));
+ok('　　為什麼不開新欄位，寫在程式裡',
+   /右邊的欄位早就擠到要拿掉開關燈號了，再加一欄會把權限開關壓到齒輪上。/.test(src));
+ok('　　列表與薪資用同一支發放月份函式（不會兩邊各算一套）',
+   (src.match(/birthPayMonthOf\(/g)||[]).length>=3);
+ok('　　當月壽星的樣式存在', /\.st-l-bday\.on\{color:var\(--gold-d,#b48a56\);font-weight:700;\}/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

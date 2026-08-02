@@ -175,6 +175,8 @@ console.log('\n員工管理：卡片改回列表');
     SESSION:{id:'ME',role:'admin'},
     /* 2026-08-02：計薪改成從到職日自動判定，不再是開關（見 paystarttest.js） */
     empCountSalary:()=>true, empPayNote:()=>'',
+    /* 2026-08-02：姓名下面那行多了生日（見 legacypaytest.js） */
+    stBdayTag:()=>'',
     _punch:{E1:0}};
   const fn=new Function(...Object.keys(env), src.slice(k,l)+'\n'+src.slice(i,j)+'\nreturn stRow;')(...Object.values(env));
   const h=fn({id:'E1',name:'王教練',name_en:'wang',gender:'male',employment_type:'full_time',
