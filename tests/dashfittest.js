@@ -179,9 +179,20 @@ console.log('\n⑥ 左右兩欄也疊到視窗底＋今日營收最多 10 名（
    「右側今日營收最多顯示 10 名」 */
 ok('★ 三欄同高，高度放在 .mc-grid5 的 --g5h', /grid\.style\.setProperty\('--g5h', colH\+'px'\);/.test(src)
    && /\.mc-grid5\{min-height:var\(--g5h,0\);\}/.test(src));
+/* 2026-08-02 二修（使用者：「左側欄月曆沒有靠到底，從下往上排列 月曆 值班 插畫」）——
+   原本是把最後一張卡拉長來填滿，但月曆的格高是固定的：卡片外框變高，月曆本身
+   還是浮在框的上緣，看起來就是「沒有靠到底」。改成不拉長任何一張卡，
+   把多出來的空白推到「插畫與值班之間」。 */
 ok('★ 左欄用 min-height（月曆是固定格高的表格，硬壓會切掉半排日期）',
-   /\.mc-g5-left\{min-height:var\(--g5h,0\);\}/.test(src)
-   && /\.mc-g5-left>\*:last-child\{flex:1 1 auto;min-height:0;\}/.test(src));
+   /\.mc-g5-left\{min-height:var\(--g5h,0\);\}/.test(src));
+ok('★ 左欄從下往上排：值班以下整組沉到欄底，插畫仍貼齊頂欄',
+   /\.mc-g5-left>\.mc-dutyplain\{margin-top:auto !important;\}/.test(src)
+   && !/\.mc-g5-left>\*:last-child\{flex:1 1 auto/.test(src));
+ok('★ 月曆那格不再被拉長（.mc-b4-cal 在另一個版面是 flex:1，會撐高外框）',
+   /\.mc-g5-left>\.mc-b4-cal\{flex:0 0 auto;\}/.test(src));
+ok('　　為什麼拉長卡片沒用，寫在程式裡',
+   /卡片變高只是在裡面多出白，\n\s*月曆本身還是浮在上面。/.test(src)
+   && /在這一欄會讓「外框」長高、\n\s*月曆本身還是浮在框的上緣/.test(src));
 ok('★ 右欄用 height 真的封頂，讓收款名單在自己的框裡捲',
    /\.mc-g5-right\{height:var\(--g5h,auto\);\}/.test(src)
    && /\.mc-g5-right>\.mc-revlist-card\{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;\}/.test(src)
