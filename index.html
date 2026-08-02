@@ -439,6 +439,9 @@ select option{color:var(--text);}
 .st-swb.on .st-swd{background:var(--green);}
 .st-swb.on.st-swb-warn{background:#fbeceb;border-color:#b5372e;color:#b5372e;}
 .st-swb.on.st-swb-warn .st-swd{background:#b5372e;}
+/* 計薪關掉＝金燈（2026-08-02）：實領會被記成 0，要看得出來是設定造成的 */
+.st-swb.st-swb-note{background:#fbf5ea;border-color:var(--gold-d,#b48a56);color:var(--gold-d,#b48a56);}
+.st-swb.st-swb-note .st-swd{background:var(--gold-d,#b48a56);}
 .st-swb[disabled]{opacity:.4;cursor:not-allowed;}
 .st-badge{position:absolute;top:8px;right:34px;transform:scale(.85);transform-origin:top right;}
 /* 明細齒輪（2026-07-29 使用者指示）：卡片右上角 */
@@ -7109,8 +7112,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1017';
-const APP_VERSION_LABEL='v260802.1017';
+const APP_VERSION = '260802.1024';
+const APP_VERSION_LABEL='v260802.1024';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24754,15 +24757,25 @@ const ST_SWITCHES=[
   {key:'supervisor',label:'主管'},
   {key:'punch',     label:'打卡'},
   {key:'teach',     label:'開課'},
+  /* 2026-08-02 使用者指示：「把開關給我，放在員工列表，我自己開」——
+     起因是余東翰底薪 35000、八月薪資卻是 0，因為 count_salary 是關的。
+     原本這個開關只藏在員工明細的人資設定裡，列表上看不出來，$0 跟「這個月真的沒領」
+     長得一模一樣。admin:true ＝ 只有管理員看得到（金額本來就只有管理員看得到）。 */
+  {key:'pay',       label:'計薪', admin:true},
   {key:'disabled',  label:'停用'},   // 反向開關：亮起＝已停用（紅燈），左上燈號同步轉灰
 ];
 function stSwitchRow(c){
-  return `<div class="st-sw">${ST_SWITCHES.map(s=>{
+  const _isAdmin=!!(SESSION && SESSION.role==='admin');
+  return `<div class="st-sw">${ST_SWITCHES.filter(s=>!s.admin||_isAdmin).map(s=>{
     const on=ppEmpSwitchOn(c,s.key);
     const lock=(s.key==='admin'&&c.role==='front_desk');   // 櫃台裝置帳號不從卡片改角色
     const warn=(s.key==='disabled'&&on);                   // 已停用＝紅燈
-    return `<button type="button" class="st-swb${on?' on':''}${warn?' st-swb-warn':''}" ${lock?'disabled':''}
-      title="${s.label}：${on?'開啟':'關閉'}${lock?'（櫃台裝置帳號不可調整）':'，點一下切換'}"
+    /* 計薪關掉時要看得出來（金燈）：這個人的實領會被記成 0，
+       不標出來的話跟「這個月真的沒領到錢」分不出來。
+       用金色不用紅色 —— 新進員工建檔時先關著是正常流程，是提醒不是錯誤。 */
+    const note=(s.key==='pay'&&!on);
+    return `<button type="button" class="st-swb${on?' on':''}${warn?' st-swb-warn':''}${note?' st-swb-note':''}" ${lock?'disabled':''}
+      title="${s.label}：${on?'開啟':'關閉'}${lock?'（櫃台裝置帳號不可調整）':'，點一下切換'}${note?'　·　不計薪的員工，實領一律顯示 0':''}"
       onclick="stCardToggle('${c.id}','${s.key}')">
       <span class="st-swd"></span>${s.label}</button>`;
   }).join('')}</div>`;
@@ -24777,10 +24790,13 @@ async function stCardToggle(id,key){
     else if(key==='supervisor') c.is_supervisor = on;
     else if(key==='punch')      c.need_punch = on;
     else if(key==='teach')      c.can_teach = on;
+    else if(key==='pay')        c.count_salary = on;
     else if(key==='disabled')   c.status = on?'inactive':'active';   // 反向開關
     await dbPut('coaches',c);
-    const L={admin:'管理員權限',manager:'店長權限',supervisor:'主管津貼',punch:'上班打卡',teach:'開課',disabled:'停用'}[key];
-    showToast(`${c.name||'員工'}　${L}已${on?'開啟':'關閉'}`);
+    const L={admin:'管理員權限',manager:'店長權限',supervisor:'主管津貼',punch:'上班打卡',teach:'開課',pay:'計入薪資',disabled:'停用'}[key];
+    /* 計薪是會直接改到金額的開關，關掉時把後果講清楚（不是只回一句「已關閉」） */
+    showToast(key==='pay' ? `${c.name||'員工'}　已${on?'納入':'排除'}薪資計算${on?'':'（實領會顯示 0）'}`
+                          : `${c.name||'員工'}　${L}已${on?'開啟':'關閉'}`);
     stReload();
   }catch(e){ showToast('設定失敗：'+(e&&e.message?e.message:e)); }
 }
@@ -26492,6 +26508,7 @@ function ppEmpSwitchOn(r,key){
   if(key==='supervisor') return !!r.is_supervisor;
   if(key==='punch')      return !!r.need_punch;
   if(key==='teach')      return r.can_teach!==false;
+  if(key==='pay')        return r.count_salary!==false;   // 未設定視為計薪（2026-08-02）
   if(key==='disabled')   return r.status==='inactive';   // 反向：亮起＝已停用（2026-07-29）
   return r.status!=='inactive';
 }
