@@ -104,37 +104,55 @@ ok('★ 縮到下限仍放不下 → 保留內捲，不默默切掉整列教練'
    /overflow-y:auto/.test(src) && /寧可捲，也不要把整列教練默默切掉/.test(src));
 ok('　　左右兩欄刻意不設 overflow（第一格用負上邊距貼齊頂欄，變捲動容器會被裁掉）',
    /一旦變成捲動容器就會被裁掉/.test(src));
-ok('　　手機版不套（走另一套版面）', /if\(isMobileLayout\(\) \|\| !body\)\{ cc\.style\.removeProperty\('max-height'\); return; \}/.test(src));
+ok('　　手機版不套（走另一套版面）',
+   /if\(isMobileLayout\(\) \|\| !body\)\{\n\s*cc\.style\.removeProperty\('max-height'\); cc\.style\.removeProperty\('height'\);/.test(src));
 
 console.log('\n⑤ 實跑：縮放係數');
 {
-  const i=src.indexOf('const TCARD_ZOOM_MIN=0.62;');
+  const i=src.indexOf('const TCARD_ZOOM_MIN=0.62, TCARD_ZOOM_MAX=1.45;');
   const j=src.indexOf("window.addEventListener('resize',()=>{ if(document.querySelector('.mc-g5-mid .mc-coachcenter'))", i);
   const code=src.slice(i,j);
 
-  const run=(winH, ccTop, boxH, needH, mobile)=>{
-    let maxH=null, z=null, removed=false;
+  /* 2026-08-02 二修（使用者：「上下展延到視窗邊緣，中間課卡根據當天上課教練縮放課卡」）：
+     ・卡片同時設 height，教練少也撐到視窗底（原本只設 max-height，下面會留白）
+     ・縮放改雙向：教練少就放大把空間用掉
+     ・放大受寬度限制 —— 課卡是一位教練一列橫向排、不換行，放大會把課多的那位擠出右邊 */
+  const run=(winH, ccTop, boxH, needH, mobile, lists)=>{
+    let maxH=null, h=null, z=null, removed=0;
     const body={ clientHeight:boxH, scrollHeight:needH,
-      style:{ setProperty(k,v){ if(k==='--tcz') z=v; } } };
+      style:{ setProperty(k,v){ if(k==='--tcz') z=v; }, removeProperty(){ removed++; } },
+      querySelectorAll:()=>(lists||[]) };
     const cc={ getBoundingClientRect:()=>({top:ccTop}), querySelector:()=>body,
-      style:{ set maxHeight(v){ maxH=v; }, removeProperty(){ removed=true; } } };
+      style:{ set maxHeight(v){ maxH=v; }, set height(v){ h=v; }, removeProperty(){ removed++; } } };
     const doc={ querySelector:()=>cc };
     new Function('document','window','isMobileLayout',code+'\nfitCoachCards();')
       (doc,{innerHeight:winH},()=>!!mobile);
-    return {maxH,z,removed};
+    return {maxH,h,z,removed};
   };
+  const L=(cw,sw)=>({clientWidth:cw, scrollWidth:sw});
 
-  eq('★ 內容放得下 → 不縮（zoom 1）', run(900,300,586,520).z, '1.000');
-  eq('★ 卡片高度＝視窗剩下的高度（900−300−14）', run(900,300,586,520).maxH, '586px');
-  eq('★ 內容超出 → 縮到剛好放得下（586/780）',
-     run(900,300,586,780).z, '0.751');
-  eq('★ 縮放有下限 0.62，再小就看不清楚名字了',
-     run(900,300,586,5000).z, '0.620');
-  eq('　　只差一點點（1px 內）不動它，避免每次重繪都抖一下',
-     run(900,300,586,587).z, '1.000');
+  eq('★ 卡片撐到視窗底（900−300−14），height 與 max-height 都設',
+     [run(900,300,586,586).h, run(900,300,586,586).maxH], ['586px','586px']);
+  eq('★ 剛好放得下 → 不縮不放', run(900,300,586,586).z, '1.000');
+  eq('★ 內容超出 → 縮到剛好放得下（586/780）', run(900,300,586,780).z, '0.751');
+  eq('★ 縮放有下限 0.62，再小就看不清楚名字了', run(900,300,586,5000).z, '0.620');
+
+  eq('★ 教練少、空間有剩 → 放大把空間用掉（586/400，寬度夠）',
+     run(900,300,586,400,false,[L(600,300)]).z, '1.450');
+  eq('★ 但放大受寬度限制：最擠的那一列只剩 1.2 倍餘裕 → 只放大到 1.2',
+     run(900,300,586,400,false,[L(600,300),L(600,500)]).z, '1.200');
+  eq('★ 有一列本來就放不下（要左右捲）→ 不再放大，維持 1',
+     run(900,300,586,400,false,[L(600,900)]).z, '1.000');
+  eq('　　放大上限 1.45（再大就只剩兩三張課卡看得到）',
+     run(900,300,900,300,false,[L(600,100)]).z, '1.450');
+  eq('　　沒有量到寬度的列不影響（剛畫好還沒 layout）',
+     run(900,300,586,400,false,[L(0,0)]).z, '1.450');
+
   eq('　　視窗很矮時仍給 220px 下限，卡片不會塌成一條',
      run(300,200,586,520).maxH, '220px');
-  eq('　　手機版直接還原高度、不套縮放', run(900,300,586,1172,true), {maxH:null,z:null,removed:true});
+  eq('　　手機版直接還原高度、不套縮放',
+     [run(900,300,586,1172,true).maxH, run(900,300,586,1172,true).z, run(900,300,586,1172,true).removed>=2],
+     [null,null,true]);
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);

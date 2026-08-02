@@ -6309,6 +6309,7 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .dw-pick input{accent-color:var(--gold);}
 .mc-g5-left .cal-side{padding:12px 12px 10px;}
 /* 首頁左欄月曆上方的「當月排班」鈕（2026-07-26 使用者指示） */
+/* .mc-cal-topbtn 已無使用者（首頁的「N 月班表」鈕移除，2026-08-02），樣式保留備用 */
 .mc-cal-topbtn{display:flex;justify-content:flex-end;margin-bottom:8px;}
 .mc-cal-topbtn .btn{width:100%;justify-content:center;}
 /* ⚠ 不換行（2026-08-01 使用者回報：「我用 mac 上方會被切成兩列，用一般桌機就沒有」）——
@@ -6353,8 +6354,8 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 /* ══ 首頁不用捲視窗（2026-08-01 使用者指示）══
    「讓版面維持在不用滑動視窗就可以看到所有訊息的大小；中間教練預約課卡如果當天
      有很多教練上課，則按比例縮小課卡，不要用卷軸捲動視窗」
-   作法：只把「今日教練任務」這一卡的高度收進剩下的視窗高度（max-height 由
-   fitCoachCards() 量出），高度不夠時對課卡群整體套 zoom 按比例縮小。
+   作法：把「今日教練任務」這一卡撐到視窗底（height/max-height 由 fitCoachCards()
+   量出），再對課卡群整體套 zoom 按比例縮放 —— 教練多就縮小、教練少就放大用掉空間。
    為什麼用 zoom 而不是 transform:scale —— zoom 會參與版面計算，寬度自動跟著收，
    而且教練名（sticky 118px 欄）與課卡在同一個座標系裡一起縮，不會錯位；
    transform 只改繪製，寬度不變會在右邊留一大塊空白。
@@ -7209,8 +7210,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1758';
-const APP_VERSION_LABEL='v260802.1758';
+const APP_VERSION = '260802.1805';
+const APP_VERSION_LABEL='v260802.1805';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11781,21 +11782,44 @@ function butlerArtNext(){
    ・還是放不下 → 對課卡群整體套 zoom 按比例縮小（教練名與課卡在同一個座標系裡
      一起縮，不會錯位）。
    ・縮到下限（0.62）仍放不下才讓它內捲 —— 再小就看不清楚名字了，
-     這時寧可捲，也不要把整列教練默默切掉（無聲截斷比捲軸糟）。 */
-const TCARD_ZOOM_MIN=0.62;
+     這時寧可捲，也不要把整列教練默默切掉（無聲截斷比捲軸糟）。
+
+   2026-08-02 二修（使用者附截圖）：「可以把中間教練課卡的區域上下展延到視窗邊緣，
+   中間課卡根據當天上課教練縮放課卡」——
+   ・原本只設 max-height：教練少、內容短時卡片停在內容高度，下面留一大塊白。
+     改成同時設 height，卡片本身就撐到視窗底。
+   ・縮放原本只往下（放不下才縮）。改成雙向：教練少就把課卡放大，把空間用掉。
+   ・放大要同時看寬度 —— 課卡是「一位教練一列、橫向排、不換行」，一放大就可能把
+     當天課多的那位擠出右邊、變成要左右捲；那比留白更難用。
+     所以成長上限取「最擠的那一列剛好還放得下」。 */
+const TCARD_ZOOM_MIN=0.62, TCARD_ZOOM_MAX=1.45;
 function fitCoachCards(){
   const cc=document.querySelector('.mc-g5-mid .mc-coachcenter');
   if(!cc) return;
   const body=cc.querySelector('.tcard-body');
-  if(isMobileLayout() || !body){ cc.style.removeProperty('max-height'); return; }
+  if(isMobileLayout() || !body){
+    cc.style.removeProperty('max-height'); cc.style.removeProperty('height');
+    if(body) body.style.removeProperty('--tcz');
+    return;
+  }
   const top=cc.getBoundingClientRect().top;
   const avail=Math.max(220, Math.round(window.innerHeight - top - 14));
+  cc.style.height=avail+'px';
   cc.style.maxHeight=avail+'px';
-  /* 先還原成原尺寸再量，量到的才是「不縮」需要多高 */
+  /* 先還原成原尺寸再量，量到的才是「不縮不放」需要多高 */
   body.style.setProperty('--tcz','1');
   const box=body.clientHeight, need=body.scrollHeight;
   if(!box || !need) return;
-  const z = need>box+1 ? Math.max(TCARD_ZOOM_MIN, box/need) : 1;
+  let z = box/need;
+  if(z>1){
+    let zw=TCARD_ZOOM_MAX;
+    body.querySelectorAll('.tcard-list').forEach(l=>{
+      const w=l.clientWidth, sw=l.scrollWidth;
+      if(w>0 && sw>0) zw=Math.min(zw, w/sw);
+    });
+    z=Math.min(z, Math.max(1, zw));   // 本來就放不下的列不再縮，只是不給它放大
+  }
+  z=Math.min(TCARD_ZOOM_MAX, Math.max(TCARD_ZOOM_MIN, z));
   body.style.setProperty('--tcz', z.toFixed(3));
 }
 window.addEventListener('resize',()=>{ if(document.querySelector('.mc-g5-mid .mc-coachcenter')) fitCoachCards(); });
@@ -12353,7 +12377,7 @@ PAGES.g_dashboard=async function(){
   const heroRow=`<div class="mc-hero2 mc-hero2-dateonly"><div class="mc-date-line">${_dateLabel}</div></div>`;
   /* 全店月曆（2026-07-21 使用者指示：桌機也要品牌綠行事曆，方便看每日/每月表現）——
      內容桌機/手機共用：手機＝頂部月曆 Hero；桌機＝右欄品牌綠卡片（.cal-side，無收合行為）。 */
-  let adminCalCard='', deskCalCard='', schedBtnCard='';
+  let adminCalCard='', deskCalCard='';   // 「N 月班表」鈕已移除（2026-08-02 使用者指示）
   {
     if(!window._admCalKeep) window._admCalYm=date.slice(0,7);
     window._admCalKeep=false;
@@ -12413,9 +12437,9 @@ PAGES.g_dashboard=async function(){
           metaOf:ds=>{const n=_cntAll[ds]||0;return n?n+' 堂':'';}})}</div>`
       : `<div class="cal-hero${_heroMinCls()}" id="cal-hero">${_calGuts}<div class="cal-hero-expand" onclick="calHeroExpand()"></div></div>`;
     deskCalCard=`<div class="card mc-card cal-side">${_calGuts}</div>`;
-    /* 「當月排班」鈕（2026-07-26 使用者指示）：放在首頁左欄月曆上方，
-       且跟著月曆翻頁走 —— 名稱與開啟的月份都用月曆當前檢視的月（7月班表／8月班表）。 */
-    schedBtnCard=`<div class="mc-cal-topbtn"><button class="btn btn-ghost btn-sm" onclick="openMonthScheduleModal('${_aYm}')" title="查看 ${_ayy} 年 ${_amm} 月排班／值班人員（唯讀）">${_amm} 月班表</button></div>`;
+    /* 首頁左欄的「N 月班表」鈕已移除（2026-08-02 使用者指示）——
+       頂欄本來就有「班表」分頁，同一件事在同一畫面出現兩次。
+       月排班視窗（openMonthScheduleModal）本身保留，別的地方還有入口。 */
   }
 
   const _expiring=(mtickets||[]).filter(t=>{ if(t.status&&t.status!=='usable'&&t.status!=='active')return false; if((Number(t.sessions_remaining)||0)<=0)return false; if(!t.expire_date)return false; const ed=parseYmd(String(t.expire_date).slice(0,10)); if(!ed)return false; const in7=new Date(TODAY);in7.setDate(TODAY.getDate()+7); return ed>=TODAY&&ed<=in7; }).length;
@@ -12922,7 +12946,6 @@ PAGES.g_dashboard=async function(){
                值班是「現在誰在店裡」，每天都要看；班表是入口按鈕；月曆最大、翻月才用，放最下面。
                （原順序：月曆 → 班表 → 值班） */''}
           <div class="mc-dutyplain">${dutyRingCard}</div>
-          ${schedBtnCard}
           <div class="mc-b4-cal">${deskCalCard}</div>
           ${/* 2026-08-01 二修（使用者指示）：健身小知識卡改放右欄最上方，
                與左上插畫左右對稱、大小一致。早上那版「移到左欄今日值班下方」退場。 */''}
