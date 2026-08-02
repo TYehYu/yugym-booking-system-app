@@ -7209,8 +7209,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1754';
-const APP_VERSION_LABEL='v260802.1754';
+const APP_VERSION = '260802.1758';
+const APP_VERSION_LABEL='v260802.1758';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12485,7 +12485,7 @@ PAGES.g_dashboard=async function(){
       <div class="mc-k2-b">
         <div class="mc-k2-n">$${_fm(_revTotal)}</div>
         <div class="mc-k2-l">今日營收<span class="mc-kpi-tapmark">›</span></div>
-        <div class="mc-kpi-rev-sub">有發票 $${_fm(_revInv)} · 無發票 $${_fm(_revNoInv)}</div>
+        ${_revInv>0?`<div class="mc-kpi-rev-sub">有發票 $${_fm(_revInv)} · 無發票 $${_fm(_revNoInv)}</div>`:''}
       </div>
     </div>`;
   /* 手機版（2026-07-20 使用者指示）：KPI 兩卡並列 —— 教練課＋團體課合併一格
@@ -12528,7 +12528,8 @@ PAGES.g_dashboard=async function(){
   const kpiStrip=`<div class="mc-kpistrip">
     ${[[ICONS.cal,'教練課',`${_ptN}<small>堂</small>`,''],
        [OPS_TODO_IC.calendar,'團體課',`${_grpN}<small>堂</small>`,''],
-       [OPS_TODO_IC.money,'今日營收',`$${_fm(_revTotal)}`,`有發票 $${_fm(_revInv)} · 無發票 $${_fm(_revNoInv)}`]]
+       /* 發票區移除後新的收款一律無發票，只有還有舊資料時才列這一行（2026-08-02） */
+       [OPS_TODO_IC.money,'今日營收',`$${_fm(_revTotal)}`, _revInv>0?`有發票 $${_fm(_revInv)} · 無發票 $${_fm(_revNoInv)}`:'']]
       .map(([ic,l,n,sub])=>`<div class="kpi-it"><div class="kpi-n">${n}</div><div class="kpi-l">${ic}${l}</div>${sub?`<div class="kpi-sub">${sub}</div>`:''}</div>`).join('')}
     ${quickCard}
   </div>`;
@@ -17914,7 +17915,7 @@ async function bkStep2Facility(pDate,pTime){
       <div class="form-row"><label>收費金額</label><input type="number" id="fr-fee" value="200" min="0"></div>
       <div class="form-row"><label>付款方式</label><select id="fr-method"><option value="cash">現金</option><option value="transfer">匯款</option><option value="card">刷卡</option></select></div>
     </div>
-    <div class="form-row"><label>發票</label><select id="fr-invoice"><option value="none">免發票</option><option value="cloud">雲端發票</option><option value="paper">紙本發票</option></select></div>
+    
     <div class="modal-foot"><button class="btn btn-ghost" onclick="${_backFn}">← ${window._facilityFromSales?'返回':'上一步'}</button><button class="btn btn-green" onclick="submitFacilityBooking()">確認租借並收款</button></div>`);
 }
 /* 場租票折抵（2026-07-28）：列出所有會員可用的場租票（效期內、有剩餘） */
@@ -17949,7 +17950,10 @@ async function _submitFacilityBooking(){
   const frTkId=(frTkSel&&frTkSel.value)||null;
   const fee=frTkId?0:Math.max(0,Number(document.getElementById('fr-fee').value)||0);
   const method=document.getElementById('fr-method').value||'cash';
-  const inv=document.getElementById('fr-invoice').value||'none';
+  /* 2026-08-02 使用者指示：「銷售的地方先移除發票區，目前還沒串聯」——
+     發票系統還沒接，欄位留著只是讓櫃檯每次多選一次、而且選了也沒有下文。
+     欄位拿掉、值一律記 'none'；資料欄位保留，之後接上金流時把選單加回來就好。 */
+  const inv='none';
   const frMid=frTkId?((frTkSel.selectedOptions[0]||{}).dataset||{}).mid||null:null;
   const bk={id:uid('BK'),member_id:frMid,member_ids:[],trial_name:name,trial_phone:null,
     coach_id:emp,ticket_id:frTkId,ticket_type_id:frTkId?'tt-venue-rental':null,category:'場租',format:null,
@@ -28712,7 +28716,7 @@ async function salesFacility(){
     </div>
     <div class="form-2col">
       <div class="form-row"><label>付款方式</label><select id="fv-method"><option value="cash">現金</option><option value="transfer">匯款</option><option value="card">刷卡</option></select></div>
-      <div class="form-row"><label>發票</label><select id="fv-invoice"><option value="none">免發票</option><option value="cloud">雲端發票</option><option value="paper">紙本發票</option></select></div>
+      
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openSalesModal()">← 返回</button><button class="btn btn-green" onclick="submitFacilityTicketSale()">確認收款發券</button></div>`);
 }
@@ -28722,7 +28726,7 @@ async function submitFacilityTicketSale(){
   const start=(document.getElementById('fv-start')||{}).value||ymd(TODAY);
   const fee=Math.max(0,Number((document.getElementById('fv-fee')||{}).value)||0);
   const method=(document.getElementById('fv-method')||{}).value||'cash';
-  const inv=(document.getElementById('fv-invoice')||{}).value||'none';
+  const inv='none';
   const expire=ymd(addDays(parseYmd(start),6));   // 效期 7 天（含啟用日）
   try{
     const tk={id:uid('TK'),member_id:mid,ticket_type_id:'tt-mqdt55uosz5n',plan_name:'自主訓練',
@@ -28755,7 +28759,7 @@ async function openMerchSale(name,defPrice){
     </div>
     <div class="form-2col">
       <div class="form-row"><label>付款方式</label><select id="ms-method"><option value="cash">現金</option><option value="transfer">匯款</option><option value="card">刷卡</option></select></div>
-      <div class="form-row"><label>發票</label><select id="ms-invoice"><option value="none">免發票</option><option value="cloud">雲端發票</option><option value="paper">紙本發票</option></select></div>
+      
     </div>
     <div class="form-row"><label>備註</label><input id="ms-note" placeholder="選填"></div>
     <div id="ms-total" style="font-size:15px;font-weight:700;color:var(--green);padding:4px 2px 10px;">合計 $${(defPrice||0).toLocaleString()}</div>
@@ -28779,7 +28783,7 @@ async function submitMerchSale(name){
   const price=Math.max(0,Number(document.getElementById('ms-price').value)||0);
   const amt=qty*price;
   const method=document.getElementById('ms-method').value||'cash';
-  const inv=document.getElementById('ms-invoice').value||'none';
+  const inv='none';
   const note=(document.getElementById('ms-note').value||'').trim()||null;
   const memberId=(document.getElementById('ms-member')?.value)||null;
   try{
@@ -29793,7 +29797,7 @@ async function openGrantModal(){
         <div class="form-row"><label>付款狀態</label><select id="gt-pay"><option value="paid">已付款</option><option value="unpaid">未付款</option></select></div>
       </div>
       <div class="form-2col">
-        <div class="form-row"><label>發票</label><select id="gt-invoice"><option value="none">免發票</option><option value="cloud">雲端發票</option><option value="paper">紙本發票</option></select></div>
+        
         <!-- 約別（2026-07-27 使用者指示：續約靠人工標記，報表/薪資才數得準；會員有舊教練課票時自動預選續約 -->
         <div class="form-row"><label>約別</label><select id="gt-salekind" onchange="this.dataset.touched=1"><option value="new">新約</option><option value="renewal">續約</option><option value="group">團課</option><option value="installment">分期</option></select></div>
       </div>
@@ -30353,7 +30357,7 @@ async function submitGrant(){
     sold_by:(window._grantSalesActive&&window._grantSalesActive.coach_id)||null,
     status:'usable',
     payment_status:document.getElementById('gt-pay').value,
-    invoice_status:(document.getElementById('gt-invoice')?.value)||'none',   // 2026-07-21 A3：營收分有無發票
+    invoice_status:'none',   // 發票區已移除（2026-08-02，還沒串聯）；欄位保留，接上金流時再填
     created_at:new Date().toISOString()};
   /* 防護寫入（2026-07-22）：invoice_status 欄是 enum，資料庫未套 20260722_01 前沒有
      cloud/paper 值 → 整筆售票會失敗。失敗時退回既有值 'issued'（仍算有發票）重寫，
@@ -30388,7 +30392,7 @@ async function submitGrant(){
   try{
     await dbPutPurchaseSafe({id:uid('PUR'),member_id,plan_id,ticket_id:t.id,plan_name:plan.name,
       list_price:listPrice,deal_amount:(isInstall?firstAmount:paidAmount),payment_method:method,installment_count:installCount,
-      invoice_type:(document.getElementById('gt-invoice')?.value)||'none',
+      invoice_type:'none',
       coach_id:(window._grantSalesActive&&window._grantSalesActive.coach_id)||null,   // 業績歸屬（2026-07-21 銷售彈窗）
       note:(note||'')+(isInstall?`（分期第1期／總額 $${(dealAmount||0).toLocaleString()}）`:'')+(voucherN?`（折抵券×${voucherN} −$${voucherAmt.toLocaleString()}）`:''),
       operator:SESSION.id,source:'backoffice',created_at:new Date().toISOString()});
