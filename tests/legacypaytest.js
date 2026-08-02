@@ -76,8 +76,11 @@ ok('　　沒有紀錄時給空狀態並說明原因',
 ok('★ 營運分析點進去的表現視窗：舊月份走另一個視窗',
    /if\(isLegacyPayMonth\(ym\)\)\{ return openLegacyPerfDetail\(emp, ym\); \}/.test(src)
    && /async function openLegacyPerfDetail\(emp, ym\)\{/.test(src));
-ok('　　推算出來的數字會標出來（工讀勞健保那幾筆）',
-   /\$\{h\.note\}/.test(src));
+/* note 是給「推算／待確認」的資料用的欄位。2026-08-02 使用者回覆「羅威跟 eric 不用扣勞健保」
+   之後，目前沒有任何一筆帶 note —— 但欄位與顯示要留著，下次匯入還會用到。 */
+ok('　　有 note 的紀錄會把說明標出來（推算或待確認的資料）',
+   /\$\{h\.note\}/.test(src) && /\$\{_lh\.note\}/.test(src)
+   && /if\(r\.hist\.note\)/.test(src));
 
 console.log('\n⑤ 生日禮金');
 {

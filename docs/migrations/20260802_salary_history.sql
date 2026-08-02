@@ -31,6 +31,7 @@ create policy sh_write on salary_history for all using (is_admin()) with check (
 -- 資料來源：使用者提供的「有肌訓練 薪資-4.xlsx」
 --   ・RANDY / SANDY / MANGO / BARRY / ZOE / 小曾 六人 → 各自的 PAY 分頁（2023–2026/06，實領為原始值）
 --   ・ANN / ROCKY / ERIC / 羅威 四人 → 薪資總表（2026/01–06；沒有 PAY 分頁）
---     其中 ERIC、羅威為工讀，依該檔「薪資設定」分頁的勞健保扣抵（277+458＝735）推算實領，
---     已在 note 標注「待確認」。
+--     這四人沒有勞健保扣抵，薪資總表上的金額就是實領。
+--     （初次匯入時曾依「薪資設定」分頁把 ERIC、羅威當工讀扣 735，
+--       2026-08-02 使用者回覆「羅威跟 eric 不用扣勞健保」→ 已加回並清掉 note。）
 -- 共 205 筆。
