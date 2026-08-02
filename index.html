@@ -7210,8 +7210,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1805';
-const APP_VERSION_LABEL='v260802.1805';
+const APP_VERSION = '260802.1810';
+const APP_VERSION_LABEL='v260802.1810';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11791,8 +11791,14 @@ function butlerArtNext(){
    ・縮放原本只往下（放不下才縮）。改成雙向：教練少就把課卡放大，把空間用掉。
    ・放大要同時看寬度 —— 課卡是「一位教練一列、橫向排、不換行」，一放大就可能把
      當天課多的那位擠出右邊、變成要左右捲；那比留白更難用。
-     所以成長上限取「最擠的那一列剛好還放得下」。 */
-const TCARD_ZOOM_MIN=0.62, TCARD_ZOOM_MAX=1.45;
+     所以成長上限取「最擠的那一列剛好還放得下」。
+
+   ⚠ 三修（同日，使用者回報「教練任務不見了」）：放大那一段先關掉。
+   zoom 套在 flex:1 的捲動容器上，量到的 clientHeight 本身就是被 zoom 除過的值，
+   往上放大時會跟版面互相餵食，實機上把整張卡壓成一條空白。
+   縮小方向（z<=1）沿用原本已驗證過的行為；撐高（height）保留，那部分沒問題。
+   要做放大得換一套做法（例如改課卡自身的尺寸變數，而不是對容器 zoom）。 */
+const TCARD_ZOOM_MIN=0.62;
 function fitCoachCards(){
   const cc=document.querySelector('.mc-g5-mid .mc-coachcenter');
   if(!cc) return;
@@ -11810,16 +11816,7 @@ function fitCoachCards(){
   body.style.setProperty('--tcz','1');
   const box=body.clientHeight, need=body.scrollHeight;
   if(!box || !need) return;
-  let z = box/need;
-  if(z>1){
-    let zw=TCARD_ZOOM_MAX;
-    body.querySelectorAll('.tcard-list').forEach(l=>{
-      const w=l.clientWidth, sw=l.scrollWidth;
-      if(w>0 && sw>0) zw=Math.min(zw, w/sw);
-    });
-    z=Math.min(z, Math.max(1, zw));   // 本來就放不下的列不再縮，只是不給它放大
-  }
-  z=Math.min(TCARD_ZOOM_MAX, Math.max(TCARD_ZOOM_MIN, z));
+  const z = need>box+1 ? Math.max(TCARD_ZOOM_MIN, box/need) : 1;
   body.style.setProperty('--tcz', z.toFixed(3));
 }
 window.addEventListener('resize',()=>{ if(document.querySelector('.mc-g5-mid .mc-coachcenter')) fitCoachCards(); });
