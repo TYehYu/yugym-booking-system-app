@@ -840,6 +840,11 @@ select option{color:var(--text);}
 .nsw.on{background:var(--green);}
 .nsw-dot{position:absolute;height:22px;width:22px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.25s;box-shadow:0 1px 3px rgba(0,0,0,0.3);}
 .nsw.on .nsw-dot{transform:translateX(20px);}
+/* 薪資單上方的月份下拉（2026-08-02 使用者指示）：站在原本「年 月」大字的位置，
+   看起來仍是標題，但點得開。 */
+.sal-mpick{border:1px solid var(--bd);border-radius:9px;background:var(--card,#fff);
+  font-family:inherit;font-size:15px;font-weight:800;color:var(--text);padding:5px 10px;cursor:pointer;}
+.sal-mpick:focus{outline:none;border-color:var(--green);}
 /* 滿版覆蓋層彈窗（薪資單）*/
 .sheet-ov{position:fixed;inset:0;z-index:9700;background:rgba(29,24,19,0.42);opacity:0;pointer-events:none;transition:opacity .25s;display:flex;align-items:flex-end;justify-content:center;}
 .sheet-ov.open{opacity:1;pointer-events:auto;}
@@ -2557,6 +2562,9 @@ tr:hover td{background:var(--card2);}
 .mtk-table th{font-size:12px;color:var(--t3);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--bd);}
 .mtk-table td{padding:10px 8px;border-bottom:1px solid var(--bd);vertical-align:middle;}
 .mtk-table td:last-child{text-align:right;}
+/* 打卡紀錄可點的列（2026-08-02）：看得出來點得動 */
+tr.pe-row{cursor:pointer;transition:background .12s;}
+tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .mck-dim::before{background:#bbb;}
 .mck-dim .mck-num-big{color:#999;}
 .mck-detail{background:var(--card2);border-top:1px solid var(--bd);padding:16px 22px;}
@@ -7068,8 +7076,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260801.2321';
-const APP_VERSION_LABEL='v260801.2321';
+const APP_VERSION = '260802.0858';
+const APP_VERSION_LABEL='v260802.0858';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26727,9 +26735,16 @@ async function ppOpenEmpPunch(id){
   const mRecs=all.filter(a=>String(a.date||'').slice(0,7)===month);
   const mHours=mRecs.reduce((s,a)=>s+(Number(calcWorkHours(a))||0),0);
   const miss=mRecs.filter(a=>a.clock_in&&!a.clock_out).length;
-  const rows=att.map(a=>`<tr><td>${a.date||''}</td><td>${a.clock_in||'—'}</td>
-    <td>${a.clock_out||'<span style="color:var(--warn,#a8642a);">未打</span>'}</td>
-    <td style="text-align:right;">${calcWorkHours(a)!=null?calcWorkHours(a)+' h':'—'}</td></tr>`).join('');
+  /* 每一列都可以點開修改（2026-08-02 使用者回報：打卡按鈕裡沒有補打卡的功能）——
+     忘記打下班的那幾天用紅字標出來，一眼看得到要處理哪幾筆。 */
+  const _canFix=isDeskLike();
+  const rows=att.map(a=>{
+    const miss1=a.clock_in&&!a.clock_out;
+    return `<tr${_canFix?` class="pe-row" onclick="openPunchEdit('${id}','${a.date||''}')" title="點一下修改這一天的打卡"`:''}>
+      <td>${a.date||''}</td><td>${a.clock_in||'—'}</td>
+      <td>${miss1?'<span style="color:var(--danger,#b5372e);font-weight:700;">未打</span>':(a.clock_out||'—')}</td>
+      <td style="text-align:right;">${calcWorkHours(a)!=null?calcWorkHours(a)+' h':'—'}</td></tr>`;
+  }).join('');
   showModal(`<div class="modal-title">打卡紀錄${PP.rec?` · ${PP.rec.name}`:''}<span style="font-size:11.5px;color:var(--t3);font-weight:400;">　近 ${att.length} 筆</span></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;background:var(--card2);border:1px solid var(--bd);
       border-radius:12px;padding:11px 14px;margin-bottom:10px;font-size:12.5px;color:var(--t2);">
@@ -26741,7 +26756,75 @@ async function ppOpenEmpPunch(id){
     <div style="max-height:58vh;overflow-y:auto;">${att.length
       ?`<table class="mtk-table"><thead><tr><th>日期</th><th>上班</th><th>下班</th><th style="text-align:right;">工時</th></tr></thead><tbody>${rows}</tbody></table>`
       :'<div class="empty" style="padding:26px;"><div class="em-t">尚無打卡紀錄</div></div>'}</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+    ${_canFix?'<div style="font-size:11px;color:var(--t3);margin-top:8px;">點任一列可以修改那一天的打卡</div>':''}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      ${_canFix?`<button class="btn btn-green" onclick="openPunchEdit('${id}')">＋ 補登打卡</button>`:''}</div>`);
+}
+/* 補登／修改打卡（2026-08-02 使用者回報：「可以點進員工視窗，點了打卡按鈕，
+   沒有可以補打卡的功能」）——
+   打卡異常的驚嘆號只能「補登下班」，但櫃檯常遇到的是整天沒打到（忘了帶手機、
+   相機壞掉），那要能連上班一起補。這裡直接編輯 attendance 那一天的紀錄：
+   ・已有紀錄 → 修改
+   ・沒有紀錄 → 新建
+   ・兩個時間都清空 → 刪掉那一天（打錯日期時要收得回來）
+   時間用時：分兩個下拉（工時要算得準，不能用 30 分一格的時段下拉）。 */
+async function openPunchEdit(empId, dateStr){
+  if(!isDeskLike()){ showToast('只有管理員或櫃台可以補登打卡'); return; }
+  const emp=await dbGet('coaches',empId).catch(()=>null);
+  const d=dateStr||ymd(TODAY);
+  const rec=await getAttendance(empId,d);
+  window._punchEditEmp=empId;
+  showModal(`<div class="modal-title">${rec?'修改':'補登'}打卡　·　${(emp&&emp.name)||''}</div>
+    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;line-height:1.7;">
+      直接寫入出勤紀錄，工時會重新計算。${rec?'':'這一天目前沒有紀錄，儲存後會新增一筆。'}
+      <br>兩個時間都清空並儲存＝刪除這一天的紀錄（日期打錯時用）。</div>
+    <div class="form-row"><label>日期</label>${dateOptions('pe-date', d)}</div>
+    <div class="form-2col">
+      <div class="form-row"><label>上班時間</label>${hmPicker('pe-in', (rec&&rec.clock_in)||'')}</div>
+      <div class="form-row"><label>下班時間</label>${hmPicker('pe-out',(rec&&rec.clock_out)||'')}</div>
+    </div>
+    <div class="form-row"><label>備註（選填）</label><input id="pe-note" placeholder="例：忘記帶手機、相機故障" value="${((rec&&rec.note)||'').replace(/"/g,'&quot;')}"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="ppOpenEmpPunch('${empId}')">← 返回</button>
+      <button class="btn btn-green" onclick="savePunchEdit('${empId}')">儲存</button>
+    </div>`);
+}
+/* 日期下拉：近 60 天到今天（補登不會補未來，也避免手打錯年份） */
+function dateOptions(id, sel){
+  const out=[];
+  for(let i=0;i<60;i++){
+    const dd=addDays(TODAY,-i), v=ymd(dd);
+    const wd='日一二三四五六'[dd.getDay()];
+    out.push(`<option value="${v}"${v===sel?' selected':''}>${v.replace(/-/g,'/')}（${wd}）${i===0?'　今天':''}</option>`);
+  }
+  if(sel && !out.some(o=>o.indexOf(`value="${sel}"`)>=0))
+    out.unshift(`<option value="${sel}" selected>${String(sel).replace(/-/g,'/')}</option>`);
+  return `<select id="${id}">${out.join('')}</select>`;
+}
+async function savePunchEdit(empId){
+  return onceAct('punchedit:'+empId, ()=>_savePunchEdit(empId));
+}
+async function _savePunchEdit(empId){
+ try{
+  const d=(document.getElementById('pe-date')||{}).value||ymd(TODAY);
+  const tin=readHM('pe-in'), tout=readHM('pe-out');
+  const note=((document.getElementById('pe-note')||{}).value||'').trim()||null;
+  const emp=await dbGet('coaches',empId).catch(()=>null);
+  let rec=await getAttendance(empId,d);
+  if(!tin && !tout){
+    if(rec){ await dbDel('attendance',rec.id); showToast(`已刪除 ${d.slice(5)} 的打卡紀錄`); }
+    else showToast('沒有東西可以刪');
+    ppOpenEmpPunch(empId); return;
+  }
+  if(!rec) rec={id:uid('AT'),emp_id:empId,emp_name:(emp&&emp.name)||'',date:d,created_at:new Date().toISOString()};
+  rec.clock_in=tin||null; rec.clock_out=tout||null; rec.note=note;
+  rec.work_hours=calcWorkHours(rec);
+  /* 留痕：誰補的、什麼時候補的 —— 事後對薪資有疑問時查得到 */
+  rec.fixed_by=(SESSION&&SESSION.id)||null; rec.fixed_at=new Date().toISOString();
+  await dbPut('attendance',rec);
+  showToast(rec.work_hours!=null?`已儲存，工時 ${rec.work_hours} 小時`:'已儲存（只有單邊時間，工時待補）');
+  ppOpenEmpPunch(empId);
+ }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
 }
 // Dashboard 摘要卡：圖示 + 數字 + 說明 + 查看全部
 function ppDashCard(icon, title, value, sub, go){
@@ -36689,6 +36772,11 @@ async function renderSalaryContent(TARGET, withHead){
   const _msPrev = withHead?'salaryShiftMonth(-1)':'salarySheetMonth(-1)';
   const _msNext = withHead?'salaryShiftMonth(1)':'salarySheetMonth(1)';
   const _msBack = withHead?'salaryThisMonth()':'salarySheetThisMonth()';
+  /* 月份下拉（2026-08-02 使用者指示：「薪資單用彈出視窗顯示上方選擇月份」）——
+     原本只有「‹ 上個月／下個月 ›」，要看三個月前得按三次、而且不知道自己在哪一格。
+     中間那塊改成可以直接挑月份的下拉，前後鍵仍保留給「看上一個月」這種順手的操作。
+     最多只列到本月（未來的月份沒有薪資可看）。 */
+  const _msPick = withHead?'salaryPickMonth(this.value)':'salarySheetPickMonth(this.value)';
   const _salBc = (withHead && _salScoped) ? scopeBreadcrumb('員工管理','薪資') : '';
   const _salSb = (withHead && _salScoped) ? lpScopeBar('薪資') : '';
   const _salHead = withHead
@@ -36700,10 +36788,10 @@ async function renderSalaryContent(TARGET, withHead){
   `<div class="card ops-datebar" style="margin-bottom:14px;">
     <button class="btn btn-ghost btn-sm" onclick="${_msPrev}">‹ 上個月</button>
     <div class="ops-date-mid">
-      <div class="ops-date-main">${my} 年 ${mm} 月</div>
+      <select class="sal-mpick" onchange="${_msPick}">${monthOptions(month, ymd(TODAY).slice(0,7))}</select>
       ${isCurMonth?`<div class="ops-date-today">本月</div>`:`<button class="ops-date-back" onclick="${_msBack}">回本月</button>`}
     </div>
-    <button class="btn btn-ghost btn-sm" onclick="${_msNext}">下個月 ›</button>
+    <button class="btn btn-ghost btn-sm"${isCurMonth?' disabled style="opacity:.4;cursor:not-allowed;"':''} onclick="${isCurMonth?'':_msNext}">下個月 ›</button>
   </div>`+
   // ── 區① 本月薪資大字（顯示實發）──
   (countSalary?`<div class="sal-hero">
@@ -36828,6 +36916,9 @@ function salarySheetMonth(delta){
   renderSalaryContent(document.getElementById('salary-sheet-body'), false);
 }
 function salarySheetThisMonth(){ window._salaryMonth=ymd(TODAY).slice(0,7); renderSalaryContent(document.getElementById('salary-sheet-body'), false); }
+/* 直接挑月份（2026-08-02 使用者指示）：彈出視窗版與整頁版各自重繪 */
+function salarySheetPickMonth(ym){ if(!ym) return; window._salaryMonth=ym; renderSalaryContent(document.getElementById('salary-sheet-body'), false); }
+function salaryPickMonth(ym){ if(!ym) return; window._salaryMonth=ym; navTo('coach_salary'); }
 // 薪資月曆：每日顯示課程數＋值班時數，點日期展開當日明細
 function salaryCalendar(month, bookings, shifts, dayResult){
   const [my,mm]=month.split('-');
