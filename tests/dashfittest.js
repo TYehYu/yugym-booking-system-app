@@ -184,15 +184,20 @@ ok('★ 三欄同高，高度放在 .mc-grid5 的 --g5h', /grid\.style\.setPrope
    還是浮在框的上緣，看起來就是「沒有靠到底」。改成不拉長任何一張卡，
    把多出來的空白推到「插畫與值班之間」。 */
 ok('★ 左欄用 min-height（月曆是固定格高的表格，硬壓會切掉半排日期）',
-   /\.mc-g5-left\{min-height:var\(--g5h,0\);\}/.test(src));
-ok('★ 左欄從下往上排：值班以下整組沉到欄底，插畫仍貼齊頂欄',
-   /\.mc-g5-left>\.mc-dutyplain\{margin-top:auto !important;\}/.test(src)
+   /\.mc-g5-left\{min-height:var\(--g5h,0\);/.test(src));
+/* 三修（使用者：「左側空白留白在上方」）：空白不是夾在插畫與值班之間，是整欄靠底、
+   多出來的全部留在最上面。 */
+ok('★ 左欄整欄靠底，空白留在最上方',
+   /\.mc-g5-left\{min-height:var\(--g5h,0\);justify-content:flex-end;\}/.test(src)
+   && !/\.mc-g5-left>\.mc-dutyplain\{margin-top:auto/.test(src)
    && !/\.mc-g5-left>\*:last-child\{flex:1 1 auto/.test(src));
 ok('★ 月曆那格不再被拉長（.mc-b4-cal 在另一個版面是 flex:1，會撐高外框）',
    /\.mc-g5-left>\.mc-b4-cal\{flex:0 0 auto;\}/.test(src));
 ok('　　為什麼拉長卡片沒用，寫在程式裡',
-   /卡片變高只是在裡面多出白，\n\s*月曆本身還是浮在上面。/.test(src)
+   /把卡片外框拉高只是在框裡多出白，\n\s*月曆本身還是浮在上緣/.test(src)
    && /在這一欄會讓「外框」長高、\n\s*月曆本身還是浮在框的上緣/.test(src));
+ok('　　也記下試過「空白夾在中間」那一版（免得又改回去）',
+   /試過把空白夾在插畫與值班之間（插畫留在頂欄下），使用者要的是留在上方。/.test(src));
 ok('★ 右欄用 height 真的封頂，讓收款名單在自己的框裡捲',
    /\.mc-g5-right\{height:var\(--g5h,auto\);\}/.test(src)
    && /\.mc-g5-right>\.mc-revlist-card\{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;\}/.test(src)
