@@ -18,14 +18,17 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
-/* 2026-08-01：值班重疊改用 bkCoachId（有代課算代課教練），沙箱補一個等價替身 */
-const api=new Function('timeToMin','bkCoachId',
+/* 2026-08-01：值班重疊改用 bkCoachId（有代課算代課教練），沙箱補一個等價替身。
+   2026-08-02：又多了 bkCounts（全員請假的課不成立，見 classvoidtest.js）—— 同樣給替身。 */
+const api=new Function('timeToMin','bkCoachId','bkIsGroup','bkCounts',
   g('function normEmp(v){','\n}\n')+'\n'
   +g('function isPtPayClass(b){','\n')+'\n'
   +g('function dutyClassOverlapHours(','\n}\n')
   +'\nreturn {isPtPayClass,dutyClassOverlapHours};')(
     t=>{const[h,m]=String(t||'0:0').split(':').map(Number);return h*60+(m||0);},
-    b=>(b&&(b.substitute_coach_id||b.coach_id))||null);
+    b=>(b&&(b.substitute_coach_id||b.coach_id))||null,
+    b=>!!(b&&Array.isArray(b.member_ids)&&b.member_ids.length),
+    b=>!!b && b.status!=='cancelled');
 
 console.log('體驗不算薪資堂數');
 {

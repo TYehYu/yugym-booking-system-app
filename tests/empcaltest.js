@@ -30,6 +30,15 @@ function mk(state, extra){
       const[a,b]=r.clock_in.split(':').map(Number),[c,d]=r.clock_out.split(':').map(Number);
       let m=(c*60+d)-(a*60+b); if(m<0)m+=1440; return Math.round(m/6)/10; },
     bookingTypeName:b=>b.category||'課',
+    /* 2026-08-02：全員請假的課不計數（見 classvoidtest.js）—— 沙箱給等價替身 */
+    grpAllOnLeave:b=>{ const ids=b.member_ids||[]; if(!ids.length) return false;
+      const att=b.attendance||{}, c={};
+      return ids.map(id=>{ c[id]=(c[id]||0)+1; return c[id]>1?`${id}#${c[id]}`:String(id); })
+        .every(k=>att[k]==='leave'); },
+    bkCounts:b=>!!b && b.status!=='cancelled' && !(function(){ const ids=b.member_ids||[];
+      if(!ids.length) return false; const att=b.attendance||{}, c={};
+      return ids.map(id=>{ c[id]=(c[id]||0)+1; return c[id]>1?`${id}#${c[id]}`:String(id); })
+        .every(k=>att[k]==='leave'); })(),
     isDeskLike:()=>true, PP:{rec:null},
   }, extra||{});
   const code=FNS.map(grabFn).join('\n')+'\nreturn {'+FNS.join(',')+'};';

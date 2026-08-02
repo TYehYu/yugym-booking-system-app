@@ -7178,8 +7178,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1128';
-const APP_VERSION_LABEL='v260802.1128';
+const APP_VERSION = '260802.1152';
+const APP_VERSION_LABEL='v260802.1152';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21237,6 +21237,19 @@ function grpHeadLabel(b){
    現在一律以逐名額的簽到紀錄為準：att[名額]==='checked_in' 才算一個人次。
    ⚠ 這代表櫃檯漏簽 = 少一個人次，簽到紀錄同時是計薪依據。
    舊資料若整堂沒有名單（member_ids 空）無從逐名額判斷，維持算 1（與原行為一致）。 */
+/* 這堂課算不算數（2026-08-02 使用者定案）：
+   「全員請假該堂課就不成立，如果該堂課有一名簽到還是要計算」
+
+   起因：黃美蓉七月顯示 83/84，差的那一堂是 7/31 11:00 小班肌力 —— 三個名額
+   （黃姸元 ×2、徐翎娟）全部請假，沒人到，櫃檯自然沒按簽到，於是卡在「已預約」。
+   但 7/30 19:30 也是全員請假、那堂卻被按了簽到 → 同樣的情況一堂算、一堂不算，
+   差別只在櫃檯當下有沒有順手按。把判斷從「有沒有按到簽到」改成看名單本身。
+
+   全員請假的判斷沿用 grpAllOnLeave（2026-07-31 蓋紅色「假」章用的那一支）——
+   畫面上蓋「假」章的課，跟統計上不算數的課，本來就該是同一批。
+   它只在「每個名額都表態、而且都是請假」時成立：還有名額沒表態的（可能還沒上課、
+   或櫃檯還沒點）不算不成課，否則未來的課會整批消失。 */
+function bkCounts(b){ return !!b && b.status!=='cancelled' && !grpAllOnLeave(b); }
 function grpAttendHeads(b){
   const keys=seatKeys(b);
   if(!keys.length) return 1;
@@ -23286,7 +23299,7 @@ function dutyClassOverlapHours(shifts, bookings, empId, month, emp){
   const myShifts=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month);
   if(!myShifts.length) return 0;
   // 該員工當月已上課（已完成或已簽到）、且有授課時段的課（私人教練/體驗/小班肌力團課）
-  const myClasses=(bookings||[]).filter(b=>bkCoachId(b)===empId && (b.status==='completed'||b.status==='checked_in')
+  const myClasses=(bookings||[]).filter(b=>bkCoachId(b)===empId && (b.status==='completed'||b.status==='checked_in') && bkCounts(b)
     && (b.category==='私人教練'||b.category==='體驗'||bkIsGroup(b)) && (b.date||'').slice(0,7)===month);
   if(!myClasses.length) return 0;
   let overlapMin=0;
@@ -23509,7 +23522,7 @@ function renewMapOf(month, tickets, purchases, bookings, types){
 const LEADER_CATS=['私人教練','小班肌力'];
 function leaderClassCount(bookings, coachId, month){
   return (bookings||[]).filter(b=>bkCoachId(b)===coachId   // 代課的課算在代課教練身上（2026-08-01）
-    && (b.status==='completed'||b.status==='checked_in')
+    && (b.status==='completed'||b.status==='checked_in') && bkCounts(b)   // 全員請假不成課（2026-08-02）
     && String(b.date||'').slice(0,7)===month
     && LEADER_CATS.includes(b.category)).length;
 }
@@ -24524,7 +24537,7 @@ async function computeMonthlyPayroll(month){
        薪資這裡用「主責教練」歸戶，但 7/13 那堂是 mango 主責、曾邦宏代課：
        人次算給了 mango，實際上課的是曾邦宏。改用 bkCoachId（有代課算代課教練），
        與行事曆篩選、教練 chips 的堂數同一個口徑。 */
-    ptDoneById[emp.id]=bookings.filter(b=>bkCoachId(b)===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month&&isPtPayClass(b)).length;   // 體驗不算（2026-07-31）
+    ptDoneById[emp.id]=bookings.filter(b=>bkCoachId(b)===emp.id&&(b.status==='completed'||b.status==='checked_in')&&bkCounts(b)&&(b.date||'').slice(0,7)===month&&isPtPayClass(b)).length;   // 體驗不算（2026-07-31）
   });
   // 續約張數：每位教練當月續約數（2026-07-29 統一走 renewMapOf）
   const renewById={};
@@ -24536,7 +24549,7 @@ async function computeMonthlyPayroll(month){
 
   const rows=staff.map(emp=>{
     const countSalary=empCountSalary(emp, month);
-    const myDone=bookings.filter(b=>bkCoachId(b)===emp.id&&(b.status==='completed'||b.status==='checked_in')&&(b.date||'').slice(0,7)===month);
+    const myDone=bookings.filter(b=>bkCoachId(b)===emp.id&&(b.status==='completed'||b.status==='checked_in')&&bkCounts(b)&&(b.date||'').slice(0,7)===month);
     const ptDone=ptDoneById[emp.id]||0;
     const groupList=myDone.filter(b=>bkIsGroup(b));
     const groupHeads=groupList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 只算已簽到（2026-07-31）
@@ -24989,7 +25002,7 @@ async function renderStaffList(){
       dbGetAll('bookings'), dbGetAll('attendance'), dbGetAll('shifts').catch(()=>[]),
       dbGetAll('member_tickets').catch(()=>[]), dbGetAll('purchases').catch(()=>[]),
       dbGetAll('ticket_types').catch(()=>[])]);
-    const _mBk=(_bk||[]).filter(b=>String(b.date||'').slice(0,7)===_ym && b.status!=='cancelled');
+    const _mBk=(_bk||[]).filter(b=>String(b.date||'').slice(0,7)===_ym && bkCounts(b));   // 全員請假不成課（2026-08-02）
     const _renew=renewMapOf(_ym,_tk,_pu,_bk,_ty);
     coaches.forEach(c=>{
       const mine=_mBk.filter(b=>(bkCoachId(b))===c.id);
@@ -26954,10 +26967,12 @@ function ppCalDaysOf(ym){
   return {y, m, days:new Date(y,m,0).getDate(), first:new Date(y,m-1,1).getDay()};
 }
 function ppCalClassSum(){
-  const{y,m,days}=ppCalDaysOf(_ppCal.month);
-  const all=_ppCal.bookings.filter(b=>String(b.date||'').slice(0,7)===_ppCal.month);
+  const mth=_ppCal.bookings.filter(b=>String(b.date||'').slice(0,7)===_ppCal.month);
+  const all=mth.filter(bkCounts);
+  const voided=mth.length-all.length;
   const done=all.filter(b=>_PPCAL_DONE(b.status)).length;
-  return `本月 <b>${all.length}</b> 堂　·　已完成 <b class="ppc-g">${done}</b> 堂`;
+  return `本月 <b>${all.length}</b> 堂　·　已完成 <b class="ppc-g">${done}</b> 堂`
+    + (voided?`　·　<b class="ppc-w">${voided}</b> 堂不成課（全員請假）`:'');
 }
 function ppCalDutySum(){
   const ym=_ppCal.month;
@@ -26991,9 +27006,11 @@ function ppCalGrid(){
     <div class="cdash-grid">${cells}</div>`;
 }
 function ppCalCellClass(ds){
-  const bk=ppCalBkOf(ds); if(!bk.length) return '';
+  const all=ppCalBkOf(ds); if(!all.length) return '';
+  const bk=all.filter(bkCounts), off=all.length-bk.length;
   const done=bk.filter(b=>_PPCAL_DONE(b.status)).length, pend=bk.length-done;
-  return `<div class="cdash-cls">${done?`<span class="cdash-lamp lamp-done">${done}</span>`:''}${pend?`<span class="cdash-lamp lamp-pend">${pend}</span>`:''}</div>`;
+  return `<div class="cdash-cls">${done?`<span class="cdash-lamp lamp-done">${done}</span>`:''}${pend?`<span class="cdash-lamp lamp-pend">${pend}</span>`:''}</div>`
+    + (off?`<div class="ppc-pn ppc-w">${off} 堂不成課</div>`:'');
 }
 function ppCalCellDuty(ds){
   const sh=ppCalShiftOf(ds), at=ppCalAttOf(ds);
@@ -27022,9 +27039,9 @@ function ppCalDayBox(){
     const rows=bk.map(b=>`<div class="cdash-dayitem">
       <span class="cdash-dt">${b.start_time||''}</span>
       <span class="cdash-dn">${bookingTypeName(b)}　${ppCalNames(b)}</span>
-      <span class="ppc-st">${stName(b.status)}${b.substitute_coach_id===_ppCal.id?'（代課）':''}</span>
+      <span class="ppc-st">${grpAllOnLeave(b)?'<b class="ppc-w">不成課</b>':stName(b.status)}${b.substitute_coach_id===_ppCal.id?'（代課）':''}</span>
     </div>`).join('');
-    return `<div class="cdash-daybox"><div class="cdash-daytitle">${title}　${bk.length} 堂</div>
+    return `<div class="cdash-daybox"><div class="cdash-daytitle">${title}　${bk.filter(bkCounts).length} 堂</div>
       ${rows||'<div class="ppc-hint">這一天沒有課</div>'}</div>`;
   }
   const sh=ppCalShiftOf(ds), at=ppCalAttOf(ds);
@@ -35982,7 +35999,7 @@ async function anaMonth(){
     dbGetAll('bookings').catch(()=>[]),dbGetAll('purchases').catch(()=>[]),dbGetAll('members').catch(()=>[]),
     dbGetAll('coaches').catch(()=>[]),dbGetAll('shifts').catch(()=>[]),dbGetAll('attendance').catch(()=>[]),
     dbGetAll('member_tickets').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[])]);
-  const monthBk=bookings.filter(b=>(b.date||'').slice(0,7)===month && b.status!=='cancelled');
+  const monthBk=bookings.filter(b=>(b.date||'').slice(0,7)===month && bkCounts(b));   // 全員請假不成課（2026-08-02）
   const done=monthBk.filter(b=>b.status==='completed'||b.status==='checked_in');
   /* 本月營收＝當月售出票券金額＋場租/重啟/商品收款（與首頁 KPI 同口徑；
      purchases 的售票列不重複計，避免與 member_tickets 雙算） */
@@ -37191,8 +37208,8 @@ async function renderSalaryContent(TARGET, withHead){
   const month=window._salaryMonth; // 可切換月份 2026-06
   // 已上課堂（已簽到或已完成皆計入；系統實務上「簽到」即視為上課完成）
   // 有代課算代課教練（2026-08-01，與月結明細同口徑）
-  const myDone=bookings.filter(b=>bkCoachId(b)===empId&&(b.status==='completed'||b.status==='checked_in')&&b.date.slice(0,7)===month);
-  const myAll=bookings.filter(b=>bkCoachId(b)===empId&&b.status!=='cancelled'&&b.date.slice(0,7)===month);
+  const myDone=bookings.filter(b=>bkCoachId(b)===empId&&(b.status==='completed'||b.status==='checked_in')&&bkCounts(b)&&b.date.slice(0,7)===month);
+  const myAll=bookings.filter(b=>bkCoachId(b)===empId&&bkCounts(b)&&b.date.slice(0,7)===month);   // 全員請假不成課（2026-08-02）
   const ptDone=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
   const groupDoneList=myDone.filter(b=>bkIsGroup(b));
   const groupDone=groupDoneList.length;
