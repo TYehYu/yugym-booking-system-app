@@ -7183,8 +7183,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1658';
-const APP_VERSION_LABEL='v260802.1658';
+const APP_VERSION = '260802.1707';
+const APP_VERSION_LABEL='v260802.1707';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -25160,7 +25160,20 @@ async function renderStaffList(){
       dbGetAll('ticket_types').catch(()=>[])]);
     const _mBk=(_bk||[]).filter(b=>String(b.date||'').slice(0,7)===_ym && bkCounts(b));   // 全員請假不成課（2026-08-02）
     const _renew=renewMapOf(_ym,_tk,_pu,_bk,_ty);
+    /* 2026-07 以前這幾欄改讀匯入的紀錄（2026-08-02 使用者：「單純紀錄課堂數、值班數、
+       續約數、實領薪資」）—— 那些月份系統裡沒有預約與打卡，逐筆算出來一定是 0，
+       但薪水確實有發過，欄位全 0 會讓人以為那個月沒上班。 */
+    const _legacyM=isLegacyPayMonth(_ym);
+    const _histM=_legacyM?await salaryHistoryMap():null;
     coaches.forEach(c=>{
+      if(_legacyM){
+        const h=salHistOf(_histM, c.id, _ym);
+        const n=v=>Number(v)||0;
+        const _pt=n(h&&h.pt), _grp=n(h&&h.grp);
+        _stat[c.id]={ all:_pt+_grp, allAll:_pt+_grp, pt:_pt, ptAll:_pt, grp:_grp, grpAll:_grp,
+          renew:n(h&&h.renew), hours:n(h&&h.duty), net:h?Math.round(n(h.net)):null, legacy:true };
+        return;
+      }
       const mine=_mBk.filter(b=>(bkCoachId(b))===c.id);
       const done=mine.filter(b=>b.status==='checked_in'||b.status==='completed');
       const isPt=isPtPayClass;   // 體驗不算（2026-07-31 使用者定案）
@@ -25197,7 +25210,10 @@ async function renderStaffList(){
     try{
       const _pr=await computeMonthlyPayroll(_ym);
       (_pr.rows||[]).forEach(r=>{ const id=r.emp&&r.emp.id;
-        if(id && _stat[id]) _stat[id].net = r.countSalary ? (Number(r.sal.netPay)||0) : 0; });
+        /* 匯入月份沒有那個人的紀錄時留白（—），不要寫 0 —— 0 會被讀成「那個月沒領錢」，
+           但真相是「這份匯入資料裡沒有他」（2026-08-02）。 */
+        if(id && _stat[id]) _stat[id].net = r.countSalary ? (Number(r.sal.netPay)||0)
+          : (isLegacyPayMonth(_ym) ? null : 0); });
     }catch(e){ console.error('員工列表實領薪資失敗:',e); }
   }
   const isDevice=c=>c.role==='front_desk';
@@ -25369,8 +25385,10 @@ async function renderStaffList(){
       /* 實領薪資：只有管理員看得到數字；沒有納入計薪（離職／待接受邀請）顯示破折號 */
       /* 2026-08-02 使用者指示：點薪資數字直接跳出完整薪資明細（彈出視窗）。
          整列本來就會開員工明細，所以這一格要 stopPropagation，不然兩個視窗一起開。 */
+      /* 匯入月份有紀錄就以紀錄為準：到職日填得比匯入資料晚時，不該蓋掉真的發過的薪水 */
+      const _noPay = !empCountSalary(c,_ym) && !(Number(st.net)>0);
       const payCell = !_canPay ? '<i class="st-l-none">•••</i>'
-        : (!empCountSalary(c,_ym) ? `<i class="st-l-none" title="${empPayNote(c,_ym)}　·　到職當月才開始計薪">${empPayNote(c,_ym).split('（')[0]}</i>`
+        : (_noPay ? `<i class="st-l-none" title="${empPayNote(c,_ym)}　·　到職當月才開始計薪">${empPayNote(c,_ym).split('（')[0]}</i>`
           : st.net==null ? '<i class="st-l-none">—</i>'
           : `<b class="st-l-paytap" title="看 ${c.name||''} ${_ym.replace('-','年')}月的完整薪資明細" onclick="event.stopPropagation();openSalarySheet('${c.id}','${_ym}')"><small>$</small>${Math.round(st.net).toLocaleString()}</b>`);
       /* 數字只放值，欄位名稱統一在表頭（2026-07-30 使用者指示：加標題、把中間的空白收掉）。

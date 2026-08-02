@@ -60,8 +60,11 @@ ok('★ 月結薪資彙總', /const countSalary=empCountSalary\(emp, month\);/.t
 ok('★ 薪資單／薪資頁', /const countSalary=empCountSalary\(me, month\);/.test(src));
 ok('★ 薪資月曆的每日試算', /const countSalary=empCountSalary\(me, String\(ds\)\.slice\(0,7\)\);/.test(src));
 ok('★ 營運分析的教練總薪資', /if\(!empCountSalary\(c, month\)\) return;/.test(src));
+/* 2026-08-02 二修：匯入月份有金額時以匯入為準（到職日補建得比匯入資料晚的情況），
+   所以條件多了一個「而且沒有匯入金額」。 */
 ok('★ 員工列表的實領欄：未到職／已離職直接寫原因，不寫 0',
-   /!empCountSalary\(c,_ym\) \? `<i class="st-l-none" title="\$\{empPayNote\(c,_ym\)\}　·　到職當月才開始計薪">/.test(src));
+   /const _noPay = !empCountSalary\(c,_ym\) && !\(Number\(st\.net\)>0\);/.test(src)
+   && /_noPay \? `<i class="st-l-none" title="\$\{empPayNote\(c,_ym\)\}　·　到職當月才開始計薪">/.test(src));
 eq('★ 沒有任何地方還在讀寫舊的 count_salary 欄位（只剩註解裡的來龍去脈）',
    [...src.matchAll(/[.\w]count_salary|count_salary\s*[=!]/g)].map(m=>m[0]), []);
 ok('　　手動勾選框兩處都拆掉了（人資設定與薪資設定）',

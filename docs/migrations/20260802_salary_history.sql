@@ -28,6 +28,12 @@ create policy sh_read  on salary_history for select using (is_staff_desk() or is
 create policy sh_self  on salary_history for select using (emp_id = current_employee_id());
 create policy sh_write on salary_history for all using (is_admin()) with check (is_admin());
 
+-- ⚠ RLS 之外還要給 PostgREST 用的角色 GRANT，否則前端一律 401 permission denied
+--   （2026-08-02 使用者回報「還沒匯入嗎？」→ 列表整片 0，就是漏了這一段）。
+--   資料列本身仍由上面的 policy 控管，GRANT 只是讓 API 看得到這張表。
+grant select, insert, update, delete on public.salary_history to anon, authenticated;
+notify pgrst, 'reload schema';
+
 -- 資料來源：使用者提供的「有肌訓練 薪資-4.xlsx」
 --   ・RANDY / SANDY / MANGO / BARRY / ZOE / 小曾 六人 → 各自的 PAY 分頁（2023–2026/06，實領為原始值）
 --   ・ANN / ROCKY / ERIC / 羅威 四人 → 薪資總表（2026/01–06；沒有 PAY 分頁）

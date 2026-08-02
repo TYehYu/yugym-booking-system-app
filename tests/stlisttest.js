@@ -78,7 +78,7 @@ ok('★ 實領薪資欄會跟著月份翻頁（2026-07-31 起改排在工作時�
    && /\+ `<span class="st-l-pay">\$\{payCell\}<\/span>`/.test(src));
 ok('★ 直接用薪資彙總那支 computeMonthlyPayroll，口徑與月結明細一致（不另算一套）',
    /const _pr=await computeMonthlyPayroll\(_ym\);/.test(src)
-   && /if\(id && _stat\[id\]\) _stat\[id\]\.net = r\.countSalary \? \(Number\(r\.sal\.netPay\)\|\|0\) : 0;/.test(src));
+   && /if\(id && _stat\[id\]\) _stat\[id\]\.net = r\.countSalary \? \(Number\(r\.sal\.netPay\)\|\|0\)\n\s*: \(isLegacyPayMonth\(_ym\) \? null : 0\);/.test(src));
 ok('★ 只有管理員看得到金額', /const _canPay = !!\(SESSION && SESSION\.role==='admin'\);/.test(src)
    && /const payCell = !_canPay \? '<i class="st-l-none">•••<\/i>'/.test(src));
 ok('★ 沒納入計薪（離職／待接受邀請）顯示破折號，不是 \$0',

@@ -82,6 +82,21 @@ ok('　　有 note 的紀錄會把說明標出來（推算或待確認的資料�
    /\$\{h\.note\}/.test(src) && /\$\{_lh\.note\}/.test(src)
    && /if\(r\.hist\.note\)/.test(src));
 
+console.log('\n④-2 員工列表：匯入月份的堂數也要出得來');
+/* 使用者截圖回報「還沒匯入嗎？」——2026/01 那個月整列都是 0。
+   兩個原因：① salary_history 少了給 anon/authenticated 的 GRANT，前端根本讀不到；
+   ② 就算讀到了，列表那幾欄仍照 bookings 逐筆算 —— 那些月份沒有預約資料，一定是 0。 */
+ok('★ 匯入月份的堂數／值班／續約改讀匯入紀錄',
+   /const _legacyM=isLegacyPayMonth\(_ym\);/.test(src)
+   && /const _histM=_legacyM\?await salaryHistoryMap\(\):null;/.test(src)
+   && /_stat\[c\.id\]=\{ all:_pt\+_grp, allAll:_pt\+_grp, pt:_pt, ptAll:_pt, grp:_grp, grpAll:_grp,/.test(src));
+ok('　　總堂數＝教練課＋團體課（那些月份沒有別的課種資料）', /all:_pt\+_grp/.test(src));
+ok('★ 沒有那個人的紀錄時留白，不寫 0（0 會被讀成「那個月沒領錢」）',
+   /: \(isLegacyPayMonth\(_ym\) \? null : 0\); \}\);/.test(src));
+ok('★ 有匯入金額就以匯入為準（到職日填得比匯入資料晚時不該蓋掉真的發過的薪水）',
+   /const _noPay = !empCountSalary\(c,_ym\) && !\(Number\(st\.net\)>0\);/.test(src));
+ok('　　原因寫在程式裡', /那些月份系統裡沒有預約與打卡，逐筆算出來一定是 0，\n\s*但薪水確實有發過，欄位全 0 會讓人以為那個月沒上班。/.test(src));
+
 console.log('\n⑤ 生日禮金');
 {
   const G={birthday_bonus:1000};
