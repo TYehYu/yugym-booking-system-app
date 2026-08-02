@@ -6354,8 +6354,8 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 /* ══ 首頁不用捲視窗（2026-08-01 使用者指示）══
    「讓版面維持在不用滑動視窗就可以看到所有訊息的大小；中間教練預約課卡如果當天
      有很多教練上課，則按比例縮小課卡，不要用卷軸捲動視窗」
-   作法：把「今日教練任務」這一卡撐到視窗底（height/max-height 由 fitCoachCards()
-   量出），再對課卡群整體套 zoom 按比例縮放 —— 教練多就縮小、教練少就放大用掉空間。
+   作法：只把「今日教練任務」這一卡的高度收進剩下的視窗高度（max-height 由
+   fitCoachCards() 量出），高度不夠時對課卡群整體套 zoom 按比例縮小。
    為什麼用 zoom 而不是 transform:scale —— zoom 會參與版面計算，寬度自動跟著收，
    而且教練名（sticky 118px 欄）與課卡在同一個座標系裡一起縮，不會錯位；
    transform 只改繪製，寬度不變會在右邊留一大塊空白。
@@ -7210,8 +7210,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1810';
-const APP_VERSION_LABEL='v260802.1810';
+const APP_VERSION = '260802.1820';
+const APP_VERSION_LABEL='v260802.1820';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11784,35 +11784,24 @@ function butlerArtNext(){
    ・縮到下限（0.62）仍放不下才讓它內捲 —— 再小就看不清楚名字了，
      這時寧可捲，也不要把整列教練默默切掉（無聲截斷比捲軸糟）。
 
-   2026-08-02 二修（使用者附截圖）：「可以把中間教練課卡的區域上下展延到視窗邊緣，
-   中間課卡根據當天上課教練縮放課卡」——
-   ・原本只設 max-height：教練少、內容短時卡片停在內容高度，下面留一大塊白。
-     改成同時設 height，卡片本身就撐到視窗底。
-   ・縮放原本只往下（放不下才縮）。改成雙向：教練少就把課卡放大，把空間用掉。
-   ・放大要同時看寬度 —— 課卡是「一位教練一列、橫向排、不換行」，一放大就可能把
-     當天課多的那位擠出右邊、變成要左右捲；那比留白更難用。
-     所以成長上限取「最擠的那一列剛好還放得下」。
-
-   ⚠ 三修（同日，使用者回報「教練任務不見了」）：放大那一段先關掉。
-   zoom 套在 flex:1 的捲動容器上，量到的 clientHeight 本身就是被 zoom 除過的值，
-   往上放大時會跟版面互相餵食，實機上把整張卡壓成一條空白。
-   縮小方向（z<=1）沿用原本已驗證過的行為；撐高（height）保留，那部分沒問題。
-   要做放大得換一套做法（例如改課卡自身的尺寸變數，而不是對容器 zoom）。 */
+   ⚠ 2026-08-02：使用者要「上下展延到視窗邊緣＋課卡依教練數縮放」，我先後試了
+   ①對容器 zoom 往上放大、②在這裡直接設 height 撐滿 —— 兩次都讓整張卡在實機上
+   變成一條空白（使用者回報「教練任務不見了」）。這一卡的高度是一條
+   flex:1 的鏈（卡→wrap→card→panel→body），在鏈的頂端硬塞尺寸、又對鏈的末端
+   套 zoom，量到的值會跟版面互相餵食。已整段還原成這裡唯一驗證過的做法：
+   只設 max-height、zoom 只往下。要再做展延與放大得換路（CSS 讓外層先有確定高度，
+   課卡改自己的尺寸變數），而且要在瀏覽器上實測過再上。 */
 const TCARD_ZOOM_MIN=0.62;
 function fitCoachCards(){
   const cc=document.querySelector('.mc-g5-mid .mc-coachcenter');
   if(!cc) return;
   const body=cc.querySelector('.tcard-body');
-  if(isMobileLayout() || !body){
-    cc.style.removeProperty('max-height'); cc.style.removeProperty('height');
-    if(body) body.style.removeProperty('--tcz');
-    return;
-  }
+  if(isMobileLayout() || !body){ cc.style.removeProperty('max-height'); cc.style.removeProperty('height'); return; }
   const top=cc.getBoundingClientRect().top;
   const avail=Math.max(220, Math.round(window.innerHeight - top - 14));
-  cc.style.height=avail+'px';
+  cc.style.removeProperty('height');   // 上一版在這裡設 height 會把整張卡壓掉
   cc.style.maxHeight=avail+'px';
-  /* 先還原成原尺寸再量，量到的才是「不縮不放」需要多高 */
+  /* 先還原成原尺寸再量，量到的才是「不縮」需要多高 */
   body.style.setProperty('--tcz','1');
   const box=body.clientHeight, need=body.scrollHeight;
   if(!box || !need) return;
