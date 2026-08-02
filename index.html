@@ -6228,6 +6228,21 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
                       那段空白就跑到插畫「上面」（使用者回報「插圖上方留白」）。改成 padding 歸零、
                       齊頭距離由插畫自己的高度＋下邊距補齊，見 .mc-g5-left>.mc-art-top。 */
 .mc-g5-mid{flex:1;min-width:0;display:flex;flex-direction:column;}
+/* 2026-08-02 使用者指示：「首頁左右兩邊的欄位也從視窗底部往上疊加，最高疊加到頂欄為止」——
+   三欄同高：高度由 fitCoachCards() 量出後放在 .mc-grid5 的 --g5h。
+   兩欄用不同的擋法，因為裡面「可以被壓縮的東西」不一樣：
+   ・左欄（插畫→值班→月曆）用 min-height。月曆是固定格高的表格，硬壓就會被切掉半排日期；
+     它本來就差不多有一個視窗高，min-height 足以讓欄底貼齊視窗底。
+   ・右欄（知識卡→收款名單→待辦）用 height 真的封頂。名單是唯一可以捲的東西，
+     收款一多就讓它在自己的框裡捲，而不是把整欄往下推出視窗（那就不叫「最高到頂欄為止」了）。
+   兩邊都不設 overflow：第一格用負上邊距貼齊頂欄，變成捲動容器會被裁掉。 */
+.mc-grid5{min-height:var(--g5h,0);}
+.mc-g5-left{min-height:var(--g5h,0);}
+.mc-g5-left>*:last-child{flex:1 1 auto;min-height:0;}
+.mc-g5-left>*:last-child>.card{height:100%;}
+.mc-g5-right{height:var(--g5h,auto);}
+.mc-g5-right>.mc-revlist-card{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;}
+.mc-g5-right>.mc-revlist-card .mc-revlist{flex:1;min-height:0;}
 .mc-g5-right{flex:0 0 300px;min-width:0;display:flex;flex-direction:column;
   padding-top:0;}   /* 2026-08-01 使用者指示：右上角改擺健身小知識卡，與左上插畫左右對稱。
                        齊頭空白由知識卡自己的高度＋下邊距補齊（同 .mc-g5-left>.mc-art-top 的作法），
@@ -6909,10 +6924,14 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
   .tdl-tg-t{flex-basis:44px;width:44px;font-size:12px;} }
 /* ── 今日營收收款名單卡（2026-07-22）：桌機右欄「今日值班」下方 ── */
 .mc-revlist{display:flex;flex-direction:column;gap:4px;}
-/* 首頁那張收款名單卡最多顯示五列，其餘捲動（2026-08-01 使用者指示：
-   不然收款一多，整個視窗就一直往下延長）。彈窗版不受這條限制（它本來就會捲）。 */
-.mc-revlist-card .mc-revlist{max-height:248px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+/* 首頁那張收款名單卡最多列 10 筆（2026-08-02 使用者指示；原本是 max-height 248px≈5 列）——
+   改用筆數擋，因為右欄現在會撐滿視窗高度，用高度擋會隨螢幕大小忽多忽少。
+   超過的用一行「還有 N 筆」帶到彈窗（彈窗本來就會捲，不受這條限制）。 */
+.mc-revlist-card .mc-revlist{overflow-y:auto;-webkit-overflow-scrolling:touch;
   padding-right:2px;scrollbar-width:thin;}
+.mc-rev-more{display:block;width:100%;margin-top:6px;padding:7px 0;border:1px dashed var(--bd);
+  border-radius:10px;background:none;cursor:pointer;font-size:11.5px;color:var(--t2);}
+.mc-rev-more:hover{border-color:var(--green);color:var(--green);}
 .mc-rev-row{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:10px;background:var(--card2);}
 .mc-rev-row.mc-rev-go{cursor:pointer;transition:.13s;}
 .mc-rev-row.mc-rev-go:hover{background:#e9f2ec;box-shadow:0 2px 8px rgba(31,111,84,.12);}
@@ -7211,8 +7230,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1831';
-const APP_VERSION_LABEL='v260802.1831';
+const APP_VERSION = '260802.2045';
+const APP_VERSION_LABEL='v260802.2045';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11807,14 +11826,21 @@ function fitCoachCards(){
   const body=cc.querySelector('.tcard-body');
   const zoomEl=body && body.querySelector('.tcard-zoom');
   if(isMobileLayout() || !body || !zoomEl){
-    if(mid) mid.style.removeProperty('height');
+    if(mid){
+      mid.style.removeProperty('height');
+      const g=mid.closest('.mc-grid5'); if(g) g.style.removeProperty('--g5h');
+    }
     cc.style.removeProperty('max-height'); cc.style.removeProperty('height');
     if(zoomEl) zoomEl.style.removeProperty('--tcz');
     return;
   }
   if(mid){
     const midTop=mid.getBoundingClientRect().top;
-    mid.style.height=Math.max(260, Math.round(window.innerHeight - midTop - 14))+'px';
+    const colH=Math.max(260, Math.round(window.innerHeight - midTop - 14));
+    mid.style.height=colH+'px';
+    /* 左右兩欄同高（2026-08-02 使用者指示）：放在 .mc-grid5 上，兩欄用 min-height 吃 */
+    const grid=mid.closest('.mc-grid5');
+    if(grid) grid.style.setProperty('--g5h', colH+'px');
   }
   const top=cc.getBoundingClientRect().top;
   cc.style.maxHeight=Math.max(220, Math.round(window.innerHeight - top - 14))+'px';
@@ -12634,15 +12660,21 @@ PAGES.g_dashboard=async function(){
     ?`<button class="mc-lotto-fab${reqFab?' mc-fab-up':''}" onclick="openLottoModal()">${LNI.gift}<span><b>${_lotEls.length}</b> 位會員可抽獎</span></button>`:'';
 
   /* 2026-07-23 使用者指示：標題與總額都不顯示（上方 KPI 已有今日營收）—— 只留收款名單 */
+  /* 名單最多列 10 筆（2026-08-02 使用者指示：「右側今日營收最多顯示 10 名」）——
+     用筆數而不是 max-height 擋：欄位改成撐滿視窗後，用高度擋會隨螢幕大小忽多忽少。
+     超過的用一行提示帶到彈窗看全部（點上方的今日營收 KPI）。 */
+  const _revShown=_revRows.slice(0,10), _revMore=_revRows.length-_revShown.length;
   const revListCard=`<div class="card mc-card mc-revlist-card">
-    ${_revRows.length?`<div class="mc-revlist">${_revRows.map(r=>`
+    ${_revRows.length?`<div class="mc-revlist">${_revShown.map(r=>`
       <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
         <div class="mc-rev-b"><span class="mc-rev-nm">${r.nm}</span><span class="mc-rev-it">${r.it}</span></div>
         ${r.kind?saleKindChip(r.tk,r.kind):''}
         ${r.inv?'<span class="mc-rev-inv">發票</span>':''}
         <span class="mc-rev-amt">$${_fm(r.amt)}</span>
         ${r.mid?'<span class="mc-td-arrow">›</span>':''}
-      </div>`).join('')}</div>`:'<div class="mc-duty-empty">今日尚無收款</div>'}
+      </div>`).join('')}</div>
+      ${_revMore>0?`<button class="mc-rev-more" onclick="openTodayRevList()">還有 ${_revMore} 筆　·　看全部 ›</button>`:''}`
+      :'<div class="mc-duty-empty">今日尚無收款</div>'}
   </div>`;
 
   /* ── 今日待辦事項（右欄上）──

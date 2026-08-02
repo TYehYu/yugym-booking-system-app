@@ -122,7 +122,8 @@ ok('★ zoom 從 .tcard-body 移到 .tcard-zoom',
    /\.mc-coachcenter \.tcard-zoom\{zoom:var\(--tcz,1\);\}/.test(src)
    && !/\.mc-coachcenter \.tcard-body\{[^}]*zoom:var/.test(src));
 ok('★ 高度給「中間那一欄」，教練卡靠 flex-grow 自己撐滿',
-   /mid\.style\.height=Math\.max\(260, Math\.round\(window\.innerHeight - midTop - 14\)\)\+'px';/.test(src));
+   /const colH=Math\.max\(260, Math\.round\(window\.innerHeight - midTop - 14\)\);/.test(src)
+   && /mid\.style\.height=colH\+'px';/.test(src));
 ok('　　兩條走不通的路寫在程式裡，不要再走一次',
    /主軸尺寸由 flex 決定，height 根本不會生效。/.test(src)
    && /量到的 clientHeight 本身就被 zoom 除過，放大時測量與版面互相餵食。/.test(src));
@@ -142,21 +143,23 @@ ok('　　resize 併到下一個影格只跑一次（一次要量 7~9 遍版面�
   /* 沙箱：內容需要的高度隨 zoom 等比變化（真實情況會因換行更複雜，
      但足以驗證二分法有沒有收斂到「放得下的最大值」）。 */
   const run=(winH, midTop, ccTop, boxH, need1, mobile)=>{
-    let z=null, midH=null, ccMax=null, cleared=0;
+    let z=null, midH=null, ccMax=null, cleared=0, g5h=null;
+    const grid={ style:{ setProperty(k,v){ if(k==='--g5h') g5h=v; }, removeProperty(){ cleared++; } } };
     const zoomEl={ style:{ setProperty(k,v){ if(k==='--tcz') z=v; }, removeProperty(){ cleared++; } } };
     const body={ clientHeight:boxH, get scrollHeight(){ return Math.max(boxH, need1*Number(z||1)); },
       querySelector:()=>zoomEl, querySelectorAll:()=>[] };
-    const mid={ getBoundingClientRect:()=>({top:midTop}),
+    const mid={ getBoundingClientRect:()=>({top:midTop}), closest:()=>grid,
       style:{ set height(v){ midH=v; }, removeProperty(){ cleared++; } } };
     const cc={ getBoundingClientRect:()=>({top:ccTop}), closest:()=>mid,
       querySelector:()=>body,
       style:{ set maxHeight(v){ ccMax=v; }, removeProperty(){ cleared++; } } };
     new Function('document','window','isMobileLayout','requestAnimationFrame',
       code+'\nfitCoachCards();')({querySelector:()=>cc},{innerHeight:winH},()=>!!mobile,()=>{});
-    return {z:z==null?null:Number(z), midH, ccMax, cleared};
+    return {z:z==null?null:Number(z), midH, ccMax, g5h, cleared};
   };
 
   eq('★ 中間欄撐到視窗底（900−106−14）', run(900,106,300,586,400).midH, '780px');
+  eq('★ 同一個高度傳給左右兩欄（--g5h）', run(900,106,300,586,400).g5h, '780px');
   eq('　　教練卡自己的上限也跟著量（900−300−14）', run(900,106,300,586,400).ccMax, '586px');
   ok('★ 教練少、空間有剩 → 放大到上限 1.45', run(900,106,300,586,300).z===1.45);
   ok('★ 剛好放得下 → 不縮不放（收斂到 1 附近）',
@@ -170,6 +173,36 @@ ok('　　resize 併到下一個影格只跑一次（一次要量 7~9 遍版面�
      [run(900,106,300,586,400,true).z, run(900,106,300,586,400,true).midH, run(900,106,300,586,400,true).cleared>=3],
      [null,null,true]);
 }
+
+console.log('\n⑥ 左右兩欄也疊到視窗底＋今日營收最多 10 名（2026-08-02 使用者指示）');
+/* 「首頁左右兩邊的欄位也從視窗底部往上疊加，最高疊加到頂欄為止」
+   「右側今日營收最多顯示 10 名」 */
+ok('★ 三欄同高，高度放在 .mc-grid5 的 --g5h', /grid\.style\.setProperty\('--g5h', colH\+'px'\);/.test(src)
+   && /\.mc-grid5\{min-height:var\(--g5h,0\);\}/.test(src));
+ok('★ 左欄用 min-height（月曆是固定格高的表格，硬壓會切掉半排日期）',
+   /\.mc-g5-left\{min-height:var\(--g5h,0\);\}/.test(src)
+   && /\.mc-g5-left>\*:last-child\{flex:1 1 auto;min-height:0;\}/.test(src));
+ok('★ 右欄用 height 真的封頂，讓收款名單在自己的框裡捲',
+   /\.mc-g5-right\{height:var\(--g5h,auto\);\}/.test(src)
+   && /\.mc-g5-right>\.mc-revlist-card\{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;\}/.test(src)
+   && /\.mc-g5-right>\.mc-revlist-card \.mc-revlist\{flex:1;min-height:0;\}/.test(src));
+ok('　　為什麼兩欄用不同擋法，寫在程式裡',
+   /月曆是固定格高的表格，硬壓就會被切掉半排日期/.test(src)
+   && /收款一多就讓它在自己的框裡捲，而不是把整欄往下推出視窗/.test(src));
+ok('　　兩欄都不設 overflow（第一格用負上邊距貼齊頂欄，變捲動容器會被裁掉）',
+   /兩邊都不設 overflow：第一格用負上邊距貼齊頂欄，變成捲動容器會被裁掉。/.test(src));
+ok('　　手機版把 --g5h 也清掉', /const g=mid\.closest\('\.mc-grid5'\); if\(g\) g\.style\.removeProperty\('--g5h'\);/.test(src));
+
+ok('★ 今日營收名單最多列 10 筆', /const _revShown=_revRows\.slice\(0,10\), _revMore=_revRows\.length-_revShown\.length;/.test(src)
+   && /\$\{_revShown\.map\(r=>`/.test(src));
+ok('★ 超過的用一行帶到彈窗看全部（不是默默截掉）',
+   /<button class="mc-rev-more" onclick="openTodayRevList\(\)">還有 \$\{_revMore\} 筆　·　看全部 ›<\/button>/.test(src));
+ok('　　剛好 10 筆以內不顯示那一行', /\$\{_revMore>0\?`<button class="mc-rev-more"/.test(src));
+ok('★ 改用筆數擋，不再用 max-height（欄高會隨螢幕變，用高度擋會忽多忽少）',
+   !/\.mc-revlist-card \.mc-revlist\{max-height:248px/.test(src)
+   && /改用筆數擋，因為右欄現在會撐滿視窗高度，用高度擋會隨螢幕大小忽多忽少。/.test(src));
+ok('　　彈窗版仍列全部（window\._gdRev 收的是完整的 _revRows）',
+   /window\._gdRev=\{date, rows:_revRows,/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
