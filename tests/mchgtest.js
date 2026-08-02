@@ -120,8 +120,15 @@ console.log('\n狀態字樣上底色');
   const i=src.indexOf('const DFEED_CHIPS=');
   const j=src.indexOf('function deskFeedPush(n){', i);
   const dfeedText=new Function(src.slice(i,j)+'\nreturn dfeedText;')();
-  const cls=t=>{ const m=/dfeed-chip-(\w+)">([^<]+)</.exec(dfeedText(t)); return m?[m[2],m[1]]:null; };
+  /* 2026-08-02 使用者回報：「變更了 這三個文字不用背景色，左邊已經有顯示了」——
+     動作那幾個詞改成只上色（dfeed-word），結果狀態才保留色塊（dfeed-chip）。
+     顏色分類本身沒變，所以這裡兩種都收。 */
+  const cls=t=>{ const m=/dfeed-(?:chip|word)-(\w+)">([^<]+)</.exec(dfeedText(t)); return m?[m[2],m[1]]:null; };
+  const kind=t=>{ const m=/dfeed-(chip|word)-/.exec(dfeedText(t)); return m?m[1]:null; };
   eq('★ 已預約 → 綠', cls('08/13 13:00　小班肌力　·　已預約'), ['已預約','ok']);
+  eq('★ 結果狀態保留色塊（那是本文才有的資訊）', kind('已預約'), 'chip');
+  eq('★ 動作的詞只上色不上底（左邊的色塊已經講過同一件事）', kind('變更了'), 'word');
+  eq('　　取消／刪除同理', kind('已取消'), 'word');
   eq('★ 已取消 → 紅', cls('08/13 13:00　小班肌力　·　已取消'), ['已取消','bad']);
   eq('★ 只是調整時間 → 黃', cls('從手機變更了預約'), ['變更了','warn']);
   eq('　　刪除也算取消那一類（紅）', cls('從手機刪除了預約'), ['刪除了','bad']);

@@ -31,11 +31,13 @@ ok('★ 看不到金額的角色只看到 •••，也不會有可點的東�
    /const payCell = !_canPay \? '<i class="st-l-none">•••<\/i>'/.test(src));
 ok('　　只有管理員看得到金額（沿用原本的判斷）',
    /const _canPay = !!\(SESSION && SESSION\.role==='admin'\);/.test(src));
-ok('　　看得出來點得動（游標＋hover 變色）',
+ok('　　看得出來點得動（游標＋hover）',
    /\.st-l-paytap\{[^}]*cursor:pointer;/.test(src)
-   && /\.st-l-paytap:hover\{background:var\(--sage-bg,#eef4ee\);color:var\(--green,#1f6f54\);\}/.test(src));
-ok('　　平常長得跟原本一樣（font:inherit，不會突然變成按鈕）',
-   /\.st-l-paytap\{[^}]*font:inherit;color:inherit;/.test(src));
+   && /\.st-l-paytap:hover\{filter:brightness\(\.96\);\}/.test(src));
+/* 2026-08-02 使用者指示：「員工列表的實領薪資數字，底色用金色數字用紅色」——
+   一整列都是黑字的數字，實領是最後要看的那一個，給它自己的底色才找得到。 */
+ok('★ 金底紅字', /\.st-l-paytap\{[^}]*color:var\(--danger,#b5372e\);background:#f6ecd9;/.test(src)
+   && /\.st-l-paytap small\{color:var\(--danger,#b5372e\);opacity:\.7;\}/.test(src));
 
 console.log('\n② 彈窗指定看誰的薪資');
 {
