@@ -16,9 +16,18 @@ console.log('圖檔');
 {
   const dir=ROOT+'/img/butler';
   const files=fs.existsSync(dir)?fs.readdirSync(dir).filter(f=>/\.jpg$/.test(f)).sort():[];
-  eq('★ 13 張都在 img/butler/', files.length, 13);
+  /* 2026-08-02 使用者又給了三張（黑貓泳裝、黑貓提籃、臘腸狗曬太陽）→ 16 張 */
+  eq('★ 16 張都在 img/butler/', files.length, 16);
   const list=new Function(g('const BUTLER_ART=[','];')+'\nreturn BUTLER_ART;')();
   eq('★ 程式裡的清單與實際檔案一致', list.slice().sort(), files);
+  const dims=files.map(f=>{ const b=fs.readFileSync(path.join(dir,f)); // JPEG SOF0/2 取寬高
+    for(let i=2;i<b.length-9;){ if(b[i]!==0xFF){i++;continue;}
+      const m=b[i+1]; const len=b.readUInt16BE(i+2);
+      if(m>=0xC0&&m<=0xCF&&m!==0xC4&&m!==0xC8&&m!==0xCC) return f+':'+b.readUInt16BE(i+7)+'x'+b.readUInt16BE(i+5);
+      i+=2+len; }
+    return f+':?'; });
+  eq('★ 尺寸統一 760×350（不然輪播時卡片會忽高忽低）',
+     dims.filter(d=>!/:760x350$/.test(d)), []);
   const big=files.filter(f=>fs.statSync(path.join(dir,f)).size>200*1024);
   ok('★ 每張都壓過（<200KB，原圖 2–4MB）', big.length===0, big);
   const total=files.reduce((s,f)=>s+fs.statSync(path.join(dir,f)).size,0);
