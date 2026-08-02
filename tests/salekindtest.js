@@ -36,6 +36,21 @@ ok('★ 改動有留痕（誰、什麼時候、從什麼改成什麼）',
    /`約別調整：\$\{before\} → \$\{SALE_KIND_LB\[kind\]\}`/.test(src));
 ok('　　沒有變更就直接關掉，不寫多餘的紀錄', /if\(t\.sale_kind===kind\)\{ closeModal\(\); return; \}/.test(src));
 
+console.log('\n已退款／作廢的票不算續約（2026-08-02 使用者回報）');
+/* 「mango 那筆巫雅雯是新約，不是續約」——
+   實情是 8/01 05:25 建了一張 $0 的票並標成續約，15 分鐘後才建正確的 $12,000 新約，
+   第一張隨即退掉。但 renewListOf 只看 sale_kind 與購買月份，不看票券狀態，
+   於是錢退了、獎金照發。 */
+{
+  const body=g('function renewListOf(','\n  return out;');
+  ok('★ 續約名單會跳過 refunded 的票', /if\(t\.status==='refunded'\) return;/.test(body), body.slice(0,400));
+  ok('　　而且擋在「算月份、算課種」之前（先排除無效的票再談其他）',
+     body.indexOf("t.status==='refunded'") < body.indexOf("purchase_date"));
+  ok('　　原因寫在程式裡', /錢退了獎金卻照發，等於憑一筆不存在的成交付錢。/.test(src));
+  ok('　　張數與名單走同一支，所以兩邊一起修好',
+     /function renewMapOf\(month, tickets, purchases, bookings, types\)\{\n\s*const list=renewListOf\(/.test(src));
+}
+
 console.log('\n樣式');
 ok('★ 續約用品牌金（要看得見，它牽動獎金）', /\.rev-kind-renewal\{background:#f7efe0;color:#8a5e28;/.test(src));
 ok('　　新約低調、分期另一色', /\.rev-kind-new\{background:var\(--card2,#F2EEE4\);/.test(src)
