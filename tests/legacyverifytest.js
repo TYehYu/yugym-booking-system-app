@@ -37,6 +37,21 @@ console.log('① 只有主顧客那一列出現按鈕');
      /event\.stopPropagation\(\);openLegacyVerify/.test(run({id:'M1'},'loyal')));
 }
 
+console.log('\n①-2 會員資料視窗的右上角也有同一顆');
+/* 2026-08-02 使用者指示：「完成連動的按鈕也放在會員資料的視窗上，個人資料的右上」
+   —— 核對票券的時候本來就開著這位會員的資料在對，跑回列表按那一格很繞。 */
+ok('★ 表頭右上放的是同一顆（共用 legacyVerifyCell，狀態與權限只有一份）',
+   /const lvBtn = isM \? legacyVerifyCell\(r\) : '';/.test(src)
+   && /: \(isM \? lvBtn : pwBtn\+`<button class="btn btn-ghost btn-sm" onclick="ppEdit\(\)">編輯<\/button>`\);/.test(src));
+ok('　　員工的表頭不受影響（重設密碼與編輯照舊）',
+   /const pwBtn = \(!isM && r\.phone && SESSION && SESSION\.role==='admin'\)/.test(src));
+ok('　　編輯模式時讓位給取消／儲存（不會三顆擠在一起）',
+   /const act = PP\.editing\n\s*\? `<button class="btn btn-ghost btn-sm" onclick="ppCancel\(\)">取消<\/button>/.test(src));
+ok('★ 在視窗裡按完要就地更新表頭，不然看起來像沒反應',
+   /if\(!\(await ppRefreshIfOpen\(mid\)\) && CUR_PAGE==='members'\) navTo\('members'\);/.test(src));
+ok('　　ppRefreshIfOpen 會重畫表頭（不只是重載資料）',
+   /async function ppRefreshIfOpen\(id\)\{[\s\S]*?ppRenderBody\(\);\n\s*return true;/.test(src));
+
 console.log('\n② 列表上的欄位與進度');
 ok('★ 沒有任何主顧客時不多長一欄（其他店別／篩選後）',
    /const _legacyCol = filtered\.some\(m=>effTier\(m\)==='loyal'\);/.test(src)

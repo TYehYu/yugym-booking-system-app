@@ -7112,8 +7112,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1035';
-const APP_VERSION_LABEL='v260802.1035';
+const APP_VERSION = '260802.1037';
+const APP_VERSION_LABEL='v260802.1037';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26283,10 +26283,14 @@ function ppHeaderHtml(){
   // 只有管理員能重設（Edge Function 會反查 employees.role，其他角色一律 403）
   const pwBtn = (!isM && r.phone && SESSION && SESSION.role==='admin')
     ? `<button class="btn btn-ghost btn-sm" onclick="openResetStaffPw('${r.id}')">重設密碼</button>` : '';
+  /* 2026-08-02 使用者指示：「完成連動的按鈕也放在會員資料的視窗上，個人資料的右上」——
+     核對票券的時候本來就會開著這位會員的資料在對，跑回列表去按那一格很繞。
+     跟列表共用 legacyVerifyCell，狀態與權限判斷只有一份（只有主顧客會長出東西）。 */
+  const lvBtn = isM ? legacyVerifyCell(r) : '';
   const act = PP.editing
     ? `<button class="btn btn-ghost btn-sm" onclick="ppCancel()">取消</button>
        <button class="btn btn-green btn-sm" onclick="ppSave()">儲存</button>`
-    : (isM ? '' : pwBtn+`<button class="btn btn-ghost btn-sm" onclick="ppEdit()">編輯</button>`);
+    : (isM ? lvBtn : pwBtn+`<button class="btn btn-ghost btn-sm" onclick="ppEdit()">編輯</button>`);
   return `<div class="pp-head">
     <div class="pp-avatar${avatarGenderClass(r.gender)}">${av}</div>
     <div class="pp-head-main">
@@ -26908,7 +26912,8 @@ async function _saveLegacyVerify(mid, on){
   await dbPut('members',m);
   closeModal();
   showToast(on?`已標記「${m.name||''}」核對完成`:`已取消「${m.name||''}」的核對記號`);
-  if(CUR_PAGE==='members') navTo('members');
+  /* 從會員資料視窗按的要就地更新表頭上的記號，不然看起來像沒反應（2026-08-02） */
+  if(!(await ppRefreshIfOpen(mid)) && CUR_PAGE==='members') navTo('members');
  }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
 }
 /* 補登／修改打卡（2026-08-02 使用者回報：「可以點進員工視窗，點了打卡按鈕，
