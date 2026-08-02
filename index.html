@@ -1580,10 +1580,19 @@ body.mc-mode .layout{padding-top:8px;}
 /* 四格固定一列（教練課／團體課／續約／值班工時），太窄才退成兩排 */
 .pfd-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 14px;}
 @media (max-width:360px){ .pfd-stats{grid-template-columns:repeat(2,minmax(0,1fr));} }
-.pfd-stats span{min-width:0;background:var(--card2);border:1px solid var(--bd);border-radius:10px;
-  padding:8px 6px;text-align:center;display:flex;flex-direction:column;gap:1px;}
+.pfd-stats span,.pfd-stats .pfd-tap{min-width:0;background:var(--card2);border:1px solid var(--bd);border-radius:10px;
+  padding:8px 6px;text-align:center;display:flex;flex-direction:column;gap:1px;font:inherit;}
 .pfd-stats b{font-size:17px;font-weight:800;font-family:var(--num);color:var(--green);line-height:1;}
 .pfd-stats i{font-style:normal;font-size:10.5px;color:var(--t3);}
+/* 續約那格點得開（2026-08-02 使用者：「續約要可以看名單」）：
+   平常跟其他三格長得一樣，滑過去才浮出可點的樣子 —— 不能為了一格改掉整排的節奏。 */
+.pfd-stats .pfd-tap{cursor:pointer;transition:border-color .12s,background .12s;}
+.pfd-stats .pfd-tap:hover{border-color:var(--green);background:color-mix(in srgb,var(--green) 5%,var(--card2));}
+.pfd-stats .pfd-tap i{color:var(--green);font-weight:700;}
+/* 名單預設收著，點了才展開（就地展開，不疊第二層彈窗） */
+.pfd-nl{display:none;flex-direction:column;gap:5px;margin:-6px 0 14px;}
+.pfd-nl.open{display:flex;}
+.pfd-nl .nl-row{font-size:12.5px;padding:8px 11px;}
 .pfd-list{display:flex;flex-direction:column;}
 .pfd-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 2px;border-bottom:1px solid var(--bd2);}
 .pfd-row:last-child{border-bottom:none;}
@@ -7200,8 +7209,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.1735';
-const APP_VERSION_LABEL='v260802.1735';
+const APP_VERSION = '260802.1738';
+const APP_VERSION_LABEL='v260802.1738';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24540,8 +24549,12 @@ async function openPerfDetail(empId, month){
     const dutyCap=emp.need_duty?dutyHoursCapped(attendance,shifts,empId,ym):0;
     const dutyOv=emp.need_duty?dutyClassOverlapHours(shifts,bookings,empId,ym,emp):0;
     const dutyHours=Math.max(dutyCap-dutyOv,0);
-    const[purAll,ttAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[])]);
-    const renewCount=(renewMapOf(ym, tickets, purAll, bookings, ttAll)||{})[empId]||0;   // 2026-07-29：統一計數（只算教練課類）
+    const[purAll,ttAll,memAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[]),dbGetAll('members').catch(()=>[])]);
+    /* 2026-08-02 使用者：「續約要可以看名單」—— 原本只給一個張數，對不上就沒得查。
+       這裡直接拿逐筆清單（跟薪資單同一支 renewListOf），數字點下去就攤開。 */
+    const _renewRows=(renewListOf(ym, tickets, purAll, bookings, ttAll)||{})[empId]||[];
+    const _memNm=Object.fromEntries((memAll||[]).map(x=>[x.id,x.name]));
+    const renewCount=_renewRows.length;
     const leaderRows = emp.is_manager ? leaderRowsOf(await dbGetAll('coaches'), bookings, ym) : null;
     const sal=calcSalary(empAtMonth(emp,ym), ptDone, groupHeads, dutyHours, leave, 0, {renewCount, leaderRows, month:ym});
     const money=n=>'$'+Math.round(Number(n)||0).toLocaleString();
@@ -24576,6 +24589,7 @@ async function openPerfDetail(empId, month){
     }
     rows+=row('實領薪資','', money(sal.netPay), {sum:true});
     const [yy,mm]=ym.split('-');
+    const _esc=t=>String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
     showModal(`<div class="modal-title">${coachDisp(emp)}　${yy}/${mm} 表現與薪資</div>
       ${/* 2026-07-31 使用者指示：最上方顯示實領薪資 → 四格（教練課／團體課含人次／續約／值班工時）
            → 分隔線 → 薪資計算公式。原本一進來先看到五格統計，最想知道的「這個月領多少」
@@ -24584,15 +24598,33 @@ async function openPerfDetail(empId, month){
       <div class="pfd-stats">
         <span><b>${ptDone}</b>堂<i>教練課</i></span>
         <span><b>${grpList.length}</b>堂<i>團體課・${groupHeads} 人次</i></span>
-        <span><b>${renewCount}</b>張<i>續約</i></span>
+        ${renewCount
+          ? `<button class="pfd-tap" onclick="pfdToggleRenew()" title="點一下看名單"><b>${renewCount}</b>張<i>續約 ›</i></button>`
+          : `<span><b>0</b>張<i>續約</i></span>`}
         <span><b>${dutyHours.toFixed(1)}</b>hr<i>值班工時</i></span>
       </div>
+      ${renewCount?`<div class="pfd-nl" id="pfd-renew">
+        ${_renewRows.map(r=>`<div class="nl-row">
+          <span class="nl-nm">${_esc(_memNm[r.member_id]||'—')}</span>
+          <span class="nl-plan">${_esc(r.plan)}${r.sessions?`　${r.sessions} 堂`:''}</span>
+          <span class="nl-d">${String(r.date||'').slice(5).replace('-','/')}</span>
+          <span class="nl-amt">${r.amount>0?'$'+Math.round(r.amount).toLocaleString():'—'}</span>
+        </div>`).join('')}
+        <div class="nl-sum"><span>合計</span><b>$${Math.round(_renewRows.reduce((s,r)=>s+(Number(r.amount)||0),0)).toLocaleString()}</b></div>
+      </div>`:''}
       <div class="pfd-sep"></div>
       <div class="pfd-list">${rows}</div>
       <div style="font-size:11px;color:var(--t3);margin-top:10px;line-height:1.7;">＊與薪資單同一套計算；實際發放以公司結算為準。</div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
         <button class="btn btn-green" onclick="closeModal();stGoEmp('${empId}','salary')">完整薪資單</button></div>`);
   }catch(e){ showToast('讀取失敗：'+(e&&e.message?e.message:e)); }
+}
+/* 續約名單就地展開（2026-08-02 使用者：「續約要可以看名單」）——
+   不另外開一個彈窗：這個視窗本身就是彈窗，再疊一層就得做返回，
+   而且看名單的當下多半還想對照上面的薪資列。 */
+function pfdToggleRenew(){
+  const el=document.getElementById('pfd-renew'); if(!el) return;
+  el.classList.toggle('open');
 }
 /* 匯入月份的表現視窗：只有數字，沒有公式 */
 async function openLegacyPerfDetail(emp, ym){

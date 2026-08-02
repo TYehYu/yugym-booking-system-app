@@ -33,9 +33,10 @@ ok('　　公式最後一行仍保留實領薪資（那是算式的結論，不�
 
 console.log('\n四格');
 {
-  const cells=[...blk.matchAll(/<span><b>\$\{[^}]+\}<\/b>([^<]*)<i>([^<]+)<\/i><\/span>/g)].map(m=>m[2]);
+  /* 2026-08-02：續約那格改成可點的 <button>（看名單），所以同時收 span 與 button */
+  const cells=[...blk.matchAll(/<(?:span|button[^>]*)><b>\$\{[^}]+\}<\/b>([^<]*)<i>([^<]+)<\/i><\/(?:span|button)>/g)].map(m=>m[2]);
   eq('★ 剛好四格：教練課／團體課（含人次）／續約／值班工時',
-     cells, ['教練課','團體課・${groupHeads} 人次','續約','值班工時']);
+     cells, ['教練課','團體課・${groupHeads} 人次','續約 ›','值班工時']);
   ok('★ 團課人次併進團體課那格，不再獨立一格', !/<i>團課人數<\/i>/.test(blk));
   ok('★ 團體課那格顯示的是堂數', /<span><b>\$\{grpList\.length\}<\/b>堂<i>團體課・/.test(blk));
   ok('★ 值班那格顯示的是工時', /<span><b>\$\{dutyHours\.toFixed\(1\)\}<\/b>hr<i>值班工時<\/i><\/span>/.test(blk));
@@ -67,6 +68,30 @@ ok('★ 團課人次仍走 grpAttendHeads（請假不算）', /grpList\.reduce\(
 ok('★ 值班工時仍是「打卡封頂 − 上課重疊」，且正職不扣重疊',
    /const dutyOv=emp\.need_duty\?dutyClassOverlapHours\(shifts,bookings,empId,ym,emp\):0;/.test(blk)
    && /const dutyHours=Math\.max\(dutyCap-dutyOv,0\);/.test(blk));
+
+console.log('\n續約可以看名單（2026-08-02 使用者指示）');
+/* 原本只給一個張數，對不上就沒得查 —— 逐筆清單跟薪資單走同一支 renewListOf，
+   不另外算一份。 */
+ok('★ 拿的是逐筆清單，不是只有張數',
+   /const _renewRows=\(renewListOf\(ym, tickets, purAll, bookings, ttAll\)\|\|\{\}\)\[empId\]\|\|\[\];/.test(src)
+   && /const renewCount=_renewRows\.length;/.test(src));
+ok('★ 有續約才變成可點（0 張不給點）',
+   /\$\{renewCount\n?\s*\? `<button class="pfd-tap" onclick="pfdToggleRenew\(\)"/.test(src)
+   && /: `<span><b>0<\/b>張<i>續約<\/i><\/span>`\}/.test(src));
+ok('★ 就地展開，不疊第二層彈窗', /function pfdToggleRenew\(\)\{/.test(src)
+   && /el\.classList\.toggle\('open'\);/.test(src)
+   && /<div class="pfd-nl" id="pfd-renew">/.test(src));
+ok('　　為什麼不另開視窗，寫在程式裡',
+   /這個視窗本身就是彈窗，再疊一層就得做返回，\n\s*而且看名單的當下多半還想對照上面的薪資列。/.test(src));
+ok('★ 名單列出會員、方案、日期、金額，並給合計',
+   /<span class="nl-nm">\$\{_esc\(_memNm\[r\.member_id\]\|\|'—'\)\}<\/span>/.test(src)
+   && /<span class="nl-amt">/.test(src)
+   && /<div class="nl-sum"><span>合計<\/span>/.test(src));
+ok('　　會員名字有跳脫（名字裡有 < 不會壞版）', /const _esc=t=>String\(t\|\|''\)\.replace\(\/&\/g,'&amp;'\)/.test(src));
+ok('　　預設收著，點了才開', /\.pfd-nl\{display:none;/.test(src) && /\.pfd-nl\.open\{display:flex;\}/.test(src));
+ok('　　可點那格平常跟其他三格一樣（滑過去才浮出來）',
+   /\.pfd-stats span,\.pfd-stats \.pfd-tap\{min-width:0;background:var\(--card2\)/.test(src)
+   && /\.pfd-stats \.pfd-tap:hover\{border-color:var\(--green\)/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
