@@ -7303,8 +7303,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.0018';
-const APP_VERSION_LABEL='v260804.0018';
+const APP_VERSION = '260804.0027';
+const APP_VERSION_LABEL='v260804.0027';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22029,6 +22029,27 @@ async function deskRefundCancelled(id){
 }
 /* opts.silent（2026-07-29）：連續取消一次跑很多筆——每筆都關視窗、跳 toast、重繪整頁
    會互相打斷且極慢。silent 時只做資料異動與通知，收尾交給呼叫端統一處理。 */
+/* 把同會員同票最早的「分期待繳費保留」補綁扣課（2026-08-04）——
+   前提：這張票還有已開通、未用掉的堂數（unlocked − 已扣 > 0）。一次補一堂
+   （取消一堂＝多出一堂額度）；補綁後保留旗標與備註清掉，紅框變成正常課卡。 */
+async function promoteHeldBooking(memberId, ticketId){
+  const tk=await dbGet('member_tickets',ticketId); if(!tk||tk.status!=='usable') return;
+  const total=Number(tk.sessions_total)||0, remain=Number(tk.sessions_remaining)||0;
+  const unlocked=(tk.installment&&typeof tk.installment==='object'&&tk.unlocked_sessions!=null)?Number(tk.unlocked_sessions):total;
+  const used=total-remain;
+  if(used>=unlocked || remain<=0) return;   // 開通段沒有多出的額度
+  const holds=(await dbGetAll('bookings'))
+    .filter(x=>x.member_id===memberId && x.pending_contract && !x.ticket_id
+      && x.status==='booked' && x.date>=ymd(TODAY) && x.category===tk.category)
+    .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
+  const hb=holds[0]; if(!hb) return;
+  await deductTicket(tk, hb.id, SESSION&&SESSION.id||'system');
+  hb.ticket_id=ticketId; hb.ticket_type_id=tk.ticket_type_id||hb.ticket_type_id||null;
+  hb.pending_contract=false;
+  if(String(hb.note||'').indexOf('分期待繳費保留')>=0) hb.note=null;
+  await dbPut('bookings',hb);
+  showToast(`已把 ${String(hb.date).slice(5).replace('-','/')} 的保留課補綁到票券（取消退回的額度）`);
+}
 async function cancelBooking(id, refundMode, opts){
   const _silent=!!(opts&&opts.silent);
   const b=await dbGet('bookings',id);
@@ -22110,6 +22131,14 @@ async function cancelBooking(id, refundMode, opts){
   // 贈點回收（2026-07-30 使用者指示）：整堂取消 → 這堂發的自主訓練點數收回，
   // 已經拿去排課的自主訓練也一併取消（贈點的前提沒了）
   const _rv=await revokeRewardOnCancel(b);
+
+  /* 保留課自動遞補（2026-08-04 徐千晴案例）：分期票的已開通段有課被取消退回後，
+     段內多出的額度原本不會補給後面的「分期待繳費保留」——8/1 取消了，8/20 明明
+     落在已繳的第一期卻繼續掛紅框待收款。取消退回成功後，把同會員同票最早的
+     保留課補綁扣課（與「開通下一期」的自動補綁同一個方向）。 */
+  if(refundedCount>0 && b.ticket_id && b.member_id){
+    try{ await promoteHeldBooking(b.member_id, b.ticket_id); }catch(e){ console.error('保留課遞補失敗', e); }
+  }
 
   // 通知文案
   let body;
@@ -36157,6 +36186,10 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
   };
   const _doneL=[], _bookedL=[];
   (bks||[]).forEach(b=>{
+    /* 分期待繳費保留（2026-08-04 徐千晴案例）不畫進圓點——這些課本來就等下一期
+       開通後自動補綁，未開通的堂數已經由 🔒 鎖頭格表達；畫成「超約需補票」的
+       紅虛線是重複又嚇人（看起來像欠 7 堂票，其實是還沒到繳費期）。 */
+    if(b.pending_contract && !b.ticket_id) return;
     if(_isDoneOcc(b)) _doneL.push(b);
     else if(b.status!=='cancelled') _bookedL.push(b);
   });
