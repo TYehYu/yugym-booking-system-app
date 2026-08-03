@@ -6979,6 +6979,26 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 .mc-rev-pay{flex:none;font-size:10px;font-weight:600;padding:1px 7px;border-radius:9px;background:#eef4ee;color:#2f6b39;}
 .mc-rev-pay-tr{background:#f7efe0;color:#8a5e28;}
 .mc-rev-pay-btn{border:none;cursor:pointer;font-family:inherit;}
+/* 課程修改紀錄月曆（2026-08-04）：逐日筆數徽章，紅＝退款/退課、金＝調整 */
+.frc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+.frc-head{margin-bottom:6px;font-size:11px;color:var(--t3);text-align:center;}
+.frc-head>div{padding:2px 0;}
+.frc-cell{position:relative;min-height:52px;border:1px solid var(--bd);border-radius:9px;background:var(--card2);padding:5px 7px;}
+.frc-empty{border:none;background:transparent;}
+.frc-cell.frc-has{background:#fff;cursor:pointer;transition:.12s;}
+.frc-cell.frc-has:hover{box-shadow:0 3px 10px rgba(31,111,84,.14);border-color:var(--green);}
+.frc-today{outline:2px solid var(--gold-d,#b48a56);outline-offset:-1px;}
+.frc-d{font-size:12px;color:var(--t2);}
+.frc-n{position:absolute;bottom:5px;font-size:10.5px;font-weight:800;min-width:18px;height:18px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;padding:0 4px;color:#fff;}
+.frc-n-r{right:5px;background:var(--danger,#b5372e);}
+.frc-n-a{right:27px;background:var(--gold-d,#b48a56);}
+.frc-cell .frc-n-a:only-of-type{right:5px;}
+.frd-list{display:flex;flex-direction:column;gap:8px;max-height:min(52vh,420px);overflow-y:auto;}
+.frd-row{background:var(--card2);border-radius:10px;padding:9px 12px;}
+.frd-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.frd-note{font-size:11.5px;color:var(--t2);margin-top:4px;line-height:1.6;}
+
 /* 會員票券卡金額旁的付款方式（2026-08-03） */
 .tk-pay{margin-left:6px;font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;background:#eef4ee;color:#2f6b39;}
 .tk-pay-tr{background:#f7efe0;color:#8a5e28;}
@@ -7283,8 +7303,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.0016';
-const APP_VERSION_LABEL='v260804.0016';
+const APP_VERSION = '260804.0018';
+const APP_VERSION_LABEL='v260804.0018';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37096,7 +37116,7 @@ const FIN_TABS=[
   {key:'receivable', label:'待收款'},
   {key:'expenses',   label:'其他支出'},   // 2026-07-31 使用者指示：固定支出與其他支出分開列
   {key:'review',     label:'購買審核'},
-  {key:'refunds',    label:'退款紀錄'},
+  {key:'refunds',    label:'課程修改紀錄'},   // 2026-08-04 使用者指示：退款紀錄改課程修改紀錄（月曆版）
 ];
 let _finTab='today';
 function setFinTab(k){ _finTab=k; navTo('finance','g_admin'); }
@@ -37765,44 +37785,86 @@ async function finReceivable(){
 }
 
 // ── ⑤ 退款紀錄：原因 / 金額 / 日期 / 經手人（沿用 ticket_logs 的 refund）──
+/* ── 課程修改紀錄（2026-08-04 使用者指示：「財務的退款紀錄改成課程修改紀錄，
+   畫面改成月曆的模式，點每一天跳出視窗顯示當天的修改內容」）──
+   內容＝票券異動紀錄裡的「退回」與「調整」（refund/adjust）：退課、取消退票、
+   餘額校正、業績歸屬調整……都在這兩類；一般的預約扣課（deduct）是日常營運不列。
+   月曆逐日標筆數（退款紅、調整金），點日期開當天明細視窗。 */
 async function finRefunds(){
   const body=document.getElementById('fin-body'); if(!body) return;
+  if(!window._finRefMonth) window._finRefMonth=ymd(TODAY).slice(0,7);
+  const month=window._finRefMonth;
   const [logs,tickets,members,coaches]=await Promise.all([
     dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[]),
     dbGetAll('members').catch(()=>[]),dbGetAll('coaches').catch(()=>[])]);
   const tkMap=Object.fromEntries((tickets||[]).map(t=>[t.id,t]));
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
   const staffMap=Object.fromEntries((coaches||[]).map(c=>[c.id,c.name]));
-  const refunds=(logs||[]).filter(l=>l.action==='refund')
-    .sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
-
+  const _twDate=l=>{ const d=new Date(l.created_at||''); return isNaN(d)?String(l.created_at||'').slice(0,10)
+    : new Date(d.getTime()+8*3600000).toISOString().slice(0,10); };   // 台北日界線
+  const mods=(logs||[]).filter(l=>l.action==='refund'||l.action==='adjust')
+    .map(l=>Object.assign({_d:_twDate(l)},l))
+    .filter(l=>l._d.slice(0,7)===month)
+    .sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
+  const byDay={}; mods.forEach(l=>{ (byDay[l._d]=byDay[l._d]||[]).push(l); });
+  window._finRefData={byDay, tkMap, memMap, staffMap};
+  const [my,mm]=month.split('-').map(Number);
+  const first=new Date(my,mm-1,1), dim=new Date(my,mm,0).getDate();
+  const lead=(first.getDay()+6)%7;   // 週一起頭
   const stats=lpStats([
-    {label:'退款筆數', value:refunds.length, unit:'筆'},
+    {label:'退款/退課', value:mods.filter(l=>l.action==='refund').length, unit:'筆', tone:'danger'},
+    {label:'調整', value:mods.filter(l=>l.action==='adjust').length, unit:'筆'},
   ]);
-  const cols=[
-    {label:'日期', width:'1fr'},
-    {label:'會員', width:'1.1fr'},
-    {label:'方案', width:'1.4fr'},
-    {label:'退回堂數', width:'0.8fr', align:'right'},
-    {label:'原因', width:'1.4fr'},
-    {label:'經手人', width:'0.9fr'},
-  ];
-  const rows=refunds.map(l=>{
-    const tk=tkMap[l.ticket_id]||{};
-    return { cells:[
-      (l.created_at||'').slice(0,10)||'—',
-      memMap[tk.member_id]||'—',
-      tk.plan_name||'—',
-      `${l.delta>0?'+':''}${l.delta} 堂`,
-      l.note||'—',
-      staffMap[l.operator]||l.operator||'—',
-    ]};
-  });
-  const table = refunds.length===0
-    ? lpEmpty('目前沒有退款紀錄','','')
-    : lpTable(cols, rows, null);
-  // TODO: Design Polish — 未來若加「金額退款」需新增資料欄位，屆時一併處理
-  body.innerHTML = stats + table;
+  let cells='';
+  for(let i=0;i<lead;i++) cells+='<div class="frc-cell frc-empty"></div>';
+  for(let d=1;d<=dim;d++){
+    const ds=`${month}-${String(d).padStart(2,'0')}`;
+    const list=byDay[ds]||[];
+    const rN=list.filter(l=>l.action==='refund').length, aN=list.length-rN;
+    cells+=`<div class="frc-cell${list.length?' frc-has':''}${ds===ymd(TODAY)?' frc-today':''}" ${list.length?`onclick="openFinRefDay('${ds}')"`:''}>
+      <span class="frc-d num">${d}</span>
+      ${rN?`<span class="frc-n frc-n-r">${rN}</span>`:''}${aN?`<span class="frc-n frc-n-a">${aN}</span>`:''}
+    </div>`;
+  }
+  body.innerHTML=`<div class="card ops-datebar" style="margin-bottom:14px;">
+    <button class="btn btn-ghost btn-sm" onclick="finRefMonthMove(-1)">‹ 上個月</button>
+    <div class="ops-date-mid"><div class="ops-date-main">${my} 年 ${String(mm).padStart(2,'0')} 月</div></div>
+    <button class="btn btn-ghost btn-sm" onclick="finRefMonthMove(1)">下個月 ›</button></div>`
+    + stats
+    + `<div class="card" style="padding:14px 16px;">
+      <div class="frc-grid frc-head">${['一','二','三','四','五','六','日'].map(w=>`<div>${w}</div>`).join('')}</div>
+      <div class="frc-grid">${cells}</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:10px;">
+        <span class="frc-n frc-n-r" style="position:static;display:inline-flex;">N</span> 退款/退課　
+        <span class="frc-n frc-n-a" style="position:static;display:inline-flex;">N</span> 調整（餘額校正、業績歸屬…）　·　點有數字的日期看當天明細</div>
+    </div>`;
+}
+function finRefMonthMove(d){
+  const [y,m]=window._finRefMonth.split('-').map(Number);
+  const nd=new Date(y,m-1+d,1);
+  window._finRefMonth=`${nd.getFullYear()}-${String(nd.getMonth()+1).padStart(2,'0')}`;
+  finRefunds();
+}
+function openFinRefDay(ds){
+  const D=window._finRefData||{}; const list=(D.byDay&&D.byDay[ds])||[];
+  if(!list.length) return;
+  const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const rows=list.map(l=>{
+    const tk=D.tkMap[l.ticket_id]||{};
+    const hm=(()=>{ const d=new Date(l.created_at||''); return isNaN(d)?'—'
+      : new Date(d.getTime()+8*3600000).toISOString().slice(11,16); })();
+    return `<div class="frd-row">
+      <div class="frd-top"><span class="num" style="color:var(--t3);font-size:11.5px;">${hm}</span>
+        <span class="tag ${l.action==='refund'?'tag-danger':'tag-warn'}" style="font-size:10.5px;">${l.action==='refund'?'退回':'調整'}</span>
+        <b>${esc(D.memMap[tk.member_id]||'—')}</b>
+        <span style="color:var(--t2);font-size:12px;">${esc(tk.plan_name||'')}</span>
+        ${l.delta?`<span class="num" style="margin-left:auto;font-weight:800;color:${l.delta>0?'var(--green)':'var(--danger)'};">${l.delta>0?'+':''}${l.delta} 堂</span>`:''}</div>
+      <div class="frd-note">${esc(l.note||'—')}<span style="color:var(--t3);">　·　經手：${esc(D.staffMap[l.operator]||l.operator||'—')}</span></div>
+    </div>`;
+  }).join('');
+  showModal(`<div class="modal-title">${ds.slice(5).replace('-','/')} 課程修改紀錄　<span style="font-size:12.5px;color:var(--t3);font-weight:500;">${list.length} 筆</span></div>
+    <div class="frd-list">${rows}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
 
 
