@@ -19,9 +19,9 @@ ok('★ 沒標過的當新約（與獎金口徑一致：只有 renewal 才算續
 ok('　　為什麼團課不標，寫在程式裡', /團課與其他類別不標：它們本來就不進續約獎金/.test(src));
 
 console.log('\n兩個畫面都要有（首頁名單卡＋點開的彈窗）');
-/* 2026-08-03 兩修：約別後面是付款方式標籤（可修正）；發票標籤已移除（見 revpaytest.js） */
-ok('★ 首頁右欄名單卡', /\$\{r\.kind\?saleKindChip\(r\.tk,r\.kind\):''\}\s*\n\s*\$\{revPayChip\(r\)\}\s*\n\s*<span class="mc-rev-amt">\$\$\{_fm\(r\.amt\)\}/.test(src));
-ok('★ 營收彈窗', /\$\{r\.kind\?saleKindChip\(r\.tk,r\.kind\):''\}\s*\n\s*\$\{revPayChip\(r\)\}\s*\n\s*<span class="mc-rev-amt">\$\{money\(r\.amt\)\}/.test(src));
+/* 2026-08-03 三修：發票移除、付款方式可修正、付款方式疊在金額上方（長度才夠） */
+ok('★ 首頁右欄名單卡', /\$\{r\.kind\?saleKindChip\(r\.tk,r\.kind\):''\}\s*\n\s*<span class="mc-rev-r">\$\{revPayChip\(r\)\}<span class="mc-rev-amt">\$\$\{_fm\(r\.amt\)\}/.test(src));
+ok('★ 營收彈窗', /\$\{r\.kind\?saleKindChip\(r\.tk,r\.kind\):''\}\s*\n\s*<span class="mc-rev-r">\$\{revPayChip\(r\)\}<span class="mc-rev-amt">\$\{money\(r\.amt\)\}/.test(src));
 ok('　　列上帶了票券 id，改的時候才知道改哪一張', /amt:Number\(t\.amount_paid\)\|\|0, tk:t\.id, kind:_saleKindOf\(t\),/.test(src));
 
 console.log('\n可以就地更改');
