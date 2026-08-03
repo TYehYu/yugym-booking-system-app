@@ -133,8 +133,8 @@ ok('　　不再掛 stopPropagation 的空 onclick（那仍會攔截手指）',
    !/onclick="event\.stopPropagation\(\)"`\}>/.test(src));
 ok('　　管理員／店長仍可點別人的課卡（canClick 為真就不加 class）',
    /const canClick = layer==='mine' \|\| isAdmin;/.test(src));
-ok('　　拖曳只綁自己的卡（data-bid 只給 mine）',
-   /\$\{layer==='mine'\?`data-bid=/.test(src));
+ok('　　拖曳綁在可互動的卡上（0803 起管理身份全卡可拖，教練只有自己的）',
+   /\$\{canClick\?`data-bid=/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

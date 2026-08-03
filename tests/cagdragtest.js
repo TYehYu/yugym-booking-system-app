@@ -16,14 +16,17 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 console.log('① 拖移與捲動的分工');
 ok('★ 只有帶 data-bid 的課卡關掉原生捲動（拖移需要）',
    /\.cag-wc\[data-bid\],\.cag-std\[data-bid\]\{touch-action:none;\}/.test(src));
-ok('★ data-bid 只掛在自己的課卡上（layer===mine）——右欄別人的卡沒有',
-   /\$\{layer==='mine'\?`data-bid="\$\{b\.id\}"`:''\}/.test(src));
+/* 同日更新（使用者指示「櫃檯/管理員/店長要能調整課卡」）：data-bid 改跟 canClick 走 ——
+   教練（非店長）仍然只有自己的課有；管理身份全卡可拖（見 staffcardtest.js）。 */
+ok('★ 教練的右欄卡沒有 data-bid（canClick 對非管理教練只認 mine）',
+   /\$\{canClick\?`data-bid="\$\{b\.id\}"`:''\}/.test(src)
+   && /const canClick = layer==='mine' \|\| isAdmin;/.test(src));
 ok('★ 長按拖移就是綁在 data-bid 卡上（分工的依據）',
    /host\.querySelectorAll\('\.cag-wc\[data-bid\], \.cag-std\[data-bid\]'\)\.forEach\(card=>\{/.test(src));
 
 console.log('\n② 為什麼要 touch-action:none 才拖得動');
 ok('★ 理由寫在 CSS 旁（長按沒完成前就被瀏覽器搶去捲動）',
-   /長按還沒完成（350ms）前的微小移動就被瀏覽器\n\s*搶去捲動並 touchcancel，拖移永遠起不來。/.test(src));
+   /前的微小移動就被瀏覽器搶去捲動並 touchcancel，拖移永遠起不來。/.test(src));
 ok('　　拖移中的 touchmove 有 preventDefault（passive:false）',
    /card\.addEventListener\('touchmove',\(e\)=>\{ if\(dragging\)e\.preventDefault\(\); const t=e\.touches\[0\]; moveTo\(t\.clientX,t\.clientY\); \},\{passive:false\}\);/.test(src));
 ok('　　touchcancel 有收尾（來電/系統手勢打斷不會卡 dragging）',

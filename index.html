@@ -5566,10 +5566,13 @@ body:has(#wtl-page),body:has(.cag-wrap){overscroll-behavior-y:none;}
 /* 手機行事曆課卡改桌機版標準卡（cal-ev-std）：欄內絕對定位、字級沿用 container query */
 .cag-wk-col .cal-ev.cag-std{left:1px;right:1px;z-index:2;}
 /* 教練手機行事曆的拖移分工（2026-08-03 使用者定案）：左欄自己的課卡要「維持拖移」、
-   右欄別人的預約滑了要捲動。只有自己的課卡帶 data-bid（有綁長按拖移），
-   這些卡關掉原生捲動 —— 否則長按還沒完成（350ms）前的微小移動就被瀏覽器
-   搶去捲動並 touchcancel，拖移永遠起不來。右欄的卡沒有 data-bid，不受影響。 */
+   右欄別人的預約滑了要捲動。自己的課卡（左欄）關掉原生捲動 —— 否則長按還沒完成
+   （350ms）前的微小移動就被瀏覽器搶去捲動並 touchcancel，拖移永遠起不來。
+   同日追加（使用者指示：櫃檯/管理員/店長要能調整課卡）：右欄的卡對這三種身份
+   也綁了長按拖移，但保留 pan-y —— 平常滑動照捲，長按定住才進拖移
+   （tlx 課卡同一套模式）。教練（非店長）的右欄卡沒有 data-bid，原生捲動不受影響。 */
 .cag-wc[data-bid],.cag-std[data-bid]{touch-action:none;}
+.cag-col-rest .cag-std[data-bid]{touch-action:pan-y;}
 .cag-wk-col .cal-ev.cag-std.dim{opacity:.4;}
 /* 時段場地餘裕標籤（2026-07-26 再修）：整列灰底＝該時段預設場地不可用；
    「教室／額滿」字樣在左兩格（mine 區寬 2/6）置中 */
@@ -7254,8 +7257,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.1702';
-const APP_VERSION_LABEL='v260803.1702';
+const APP_VERSION = '260803.1709';
+const APP_VERSION_LABEL='v260803.1709';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16950,7 +16953,12 @@ async function renderCoachAgenda(){
   const showNow = weekHasToday && nowMin>=AG_START && nowMin<=WTL_END;
 
   // 課卡渲染（layer: mine/other/group 決定樣式與可否點）
-  const isAdmin=SESSION.role==='admin'||!!SESSION.is_manager;   // 店長比照管理員：可讀/可點全部課卡（2026-07-29）
+  /* 2026-08-03 使用者指示：「櫃檯帳號、管理員帳號、店長帳號要能夠調整課卡功能」——
+     原本這裡只認 admin 與店長，櫃檯（front_desk）在手機版行事曆連課卡都點不開；
+     長按拖移改期又只綁「自己的課」，三種管理身份都拖不動別人的課。
+     改為三種身份對全部課卡開放：點開（圓形按鈕那層本來就由 coachOwnsBk 放行）、
+     長按拖移、繳費/續約角標。教練（非店長）維持只能動自己的課。 */
+  const isAdmin=SESSION.role==='admin'||SESSION.role==='front_desk'||!!SESSION.is_manager;
   const renderCard=(b,layer,dim,pos)=>{
     const s=timeToMin(b.start_time); const dur=b.duration||60;
     const top=yOf(s); const height=Math.max(dur/60*HOUR_H-2, 16);
@@ -16997,7 +17005,7 @@ async function renderCoachAgenda(){
     const _unpaidM=_vis && !!b.pending_contract;
     const _newM=_vis && String(b.created_at||'').slice(0,10)===ymd(TODAY);
     const _mkAlert = _unpaidM ? ' cal-ev-renew' : (_newM ? ' cal-ev-newtoday' : '');
-    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${canClick?'':' cag-view'}${_mkAlert}" ${layer==='mine'?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:''}>
+    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${canClick?'':' cag-view'}${_mkAlert}" ${canClick?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:''}>
       ${_mk}
       ${(()=>{const k=bkStampKind(b);
         return k==='leave'?'<span class="evc-check evc-leave" title="全員請假">假</span>'
