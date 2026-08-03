@@ -50,7 +50,8 @@ ok('★ 去重與清除改成不分左右的選擇器',
 ok('★ 按「確認」在左右兩區都找得到卡片',
    /const el=document\.querySelector\(`\.dfeed-card\[data-nid="\$\{id\}"\]`\);   \/\/ 左右兩區都找得到/.test(src));
 ok('★ 有新會員專用的圖示', /member_new:'<svg viewBox="0 0 24 24"/.test(src));
-ok('★ 版本更新提醒出現時往上讓位', /body\.verup-on #desk-feed-left\{bottom:88px;\}/.test(src));
+/* 2026-08-03 版本更新提醒移到左上角 → 左下角不再需要讓位 */
+ok('★ 版本更新提醒已不在左下角，讓位規則退場', !/body\.verup-on #desk-feed-left/.test(src));
 ok('　　桌機管理員有側欄 → 左邊讓開', /body\.mc-mode #desk-feed-left\{left:calc\(232px \+ 20px\);\}/.test(src));
 ok('　　兩角分開的理由寫在程式裡', /混在一起會互相蓋掉/.test(src));
 

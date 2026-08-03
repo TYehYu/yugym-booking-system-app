@@ -54,16 +54,18 @@ ok('　　「稍後」只跳過這一版，之後有更新版還是會跳',
    /_verUpSkip=el\.dataset\.ver\|\|null;/.test(src));
 
 console.log('\nCSS：位置與讓位');
-ok('★ 固定在左下角', /\.ver-up\{position:fixed;left:24px;right:auto;bottom:24px;/.test(src));
+/* 2026-08-03 使用者指示：「版本更新的訊息調整到畫面左上角」 */
+ok('★ 固定在左上角（top:78px，與滑出鈕同角落）', /\.ver-up\{position:fixed;left:24px;right:auto;top:78px;bottom:auto;/.test(src));
 ok('★ 桌機管理員有側欄 → 左邊要讓開（與抽獎鈕同一套位移）',
    /body\.mc-mode \.ver-up\{left:calc\(232px \+ 20px\);\}/.test(src)
    && /body\.mc-mode \.ver-up\{left:calc\(64px \+ 16px\);\}/.test(src));
 /* 2026-08-03：抽獎／審核鈕移到左上角（左欄改靠底後，月曆貼齊視窗底，
    左下角那兩顆疊在月曆上）—— 與左下角的更新提醒不再同角落，讓位規則移除。 */
-ok('★ 抽獎／審核鈕已移到左上角，不再與更新提醒搶位置',
+ok('★ 更新提醒與滑出鈕同在左上角：提醒顯示時滑出鈕整排往下讓位（實測高 77px → 168/226）',
    /\.mc-lotto-fab\{position:fixed;left:24px;right:auto;top:78px;bottom:auto;/.test(src)
-   && /\.mc-req-fab\{position:fixed;left:24px;right:auto;top:78px;bottom:auto;/.test(src)
-   && !/body\.verup-on \.mc-req-fab/.test(src));
+   && /body\.verup-on \.mc-req-fab\{top:168px;\}/.test(src)
+   && /body\.verup-on \.mc-lotto-fab\{top:168px;\}/.test(src)
+   && /body\.verup-on \.mc-lotto-fab\.mc-fab-up\{top:226px;\}/.test(src));
 ok('　　顯示/關閉時有加/拿掉 verup-on',
    /document\.body\.classList\.add\('verup-on'\);/.test(src)
    && /document\.body\.classList\.remove\('verup-on'\);/.test(src));
