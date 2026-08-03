@@ -7283,8 +7283,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.2356';
-const APP_VERSION_LABEL='v260803.2356';
+const APP_VERSION = '260804.0008';
+const APP_VERSION_LABEL='v260804.0008';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37621,12 +37621,45 @@ async function finExpenses(){
         <td class="num" style="text-align:right;font-weight:800;color:var(--danger);">${finMoney(sum(arr))}</td><td></td></tr></tfoot></table>`
       :`<div class="empty" style="padding:18px;"><div class="em-t" style="font-size:13px;">本月還沒有${title}</div></div>`}
   </div>`;
-  body.innerHTML = dateBar + stats
+  /* 沿用上月固定支出（2026-08-03 使用者指示：「7 月我已經輸入固定支出，8 月也要沿用」）——
+     本月固定支出還是空的、上月有 → 顯示一鍵沿用。用按鈕不做全自動：水電這類金額
+     每月會變，複製過來後逐筆改比默默出現一批數字可控。 */
+  let copyBar='';
+  if(!fixed.length){
+    const pm=(()=>{ const[y,m]=month.split('-').map(Number); return m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`; })();
+    const prevFixed=all.filter(e=>e&&e.ym===pm&&e.is_fixed);
+    if(prevFixed.length){
+      const pSum=prevFixed.reduce((a,e)=>a+(Number(e.amount)||0),0);
+      copyBar=`<div class="card" style="padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:12.5px;color:var(--t2);">上月（${pm.replace('-','/')}）有 <b>${prevFixed.length}</b> 筆固定支出，合計 <b>${finMoney(pSum)}</b></span>
+        <button class="btn btn-green btn-sm" style="margin-left:auto;" onclick="finExpenseCopyPrev()">⟳ 沿用到本月</button></div>`;
+    }
+  }
+  body.innerHTML = dateBar + stats + copyBar
     + section('固定支出','房租・水電・網路・清潔等每月都有的開銷', fixed, true)
     + section('其他支出','耗材・設備・稅務規費等一次性開銷', other, false)
     + `<div style="font-size:11px;color:var(--t3);line-height:1.8;padding:0 2px;">
         ＊兩區都會被營運分析的「本月利潤」扣掉（利潤 ＝ 銷課金額 − 教練薪資 − 本月支出）；分類只影響列在哪一區。<br>
         ＊歸月看日期：房租算當月的（7 月繳＝用 7 月的場地），日期在哪個月就記在那個月。</div>`;
+}
+/* 一鍵沿用上月固定支出（2026-08-03）：逐筆複製（新 id、日期改本月 1 號），複製後可逐筆編輯 */
+async function finExpenseCopyPrev(){ return onceAct('expcopy', _finExpenseCopyPrev); }
+async function _finExpenseCopyPrev(){
+  const month=(window._finMonth||ymd(TODAY).slice(0,7));
+  const pm=(()=>{ const[y,m]=month.split('-').map(Number); return m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`; })();
+  try{
+    const all=(await dbGetAll('expenses',{fresh:true}).catch(()=>[]))||[];
+    if(all.some(e=>e&&e.ym===month&&e.is_fixed)){ showToast('本月已有固定支出，不重複沿用'); navTo('finance','g_admin'); return; }
+    const prev=all.filter(e=>e&&e.ym===pm&&e.is_fixed);
+    if(!prev.length){ showToast('上月沒有固定支出可沿用'); return; }
+    for(const e of prev){
+      await dbPut('expenses',{id:uid('EXP'), ym:month, date:month+'-01', category:e.category,
+        amount:e.amount, note:e.note||null, is_fixed:true, created_at:new Date().toISOString()});
+    }
+    dbCacheClear('expenses');
+    showToast(`已沿用 ${prev.length} 筆固定支出，金額有變的請逐筆編輯`);
+    finExpenses();
+  }catch(e){ showToast('沿用失敗：'+((e&&e.message)||e)); }
 }
 async function finExpenseEdit(id){ return finExpenseAdd(id); }
 async function finExpenseAdd(id, fixedNew){
