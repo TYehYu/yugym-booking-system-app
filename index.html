@@ -2685,6 +2685,11 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 #qb-progress{position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;}
 .qbp-box{background:#fff;border-radius:14px;padding:24px 30px;display:flex;flex-direction:column;align-items:center;gap:14px;box-shadow:0 10px 40px rgba(0,0,0,0.25);}
 .qbp-spin{width:34px;height:34px;border:3px solid var(--bd);border-top-color:var(--green);border-radius:50%;animation:qbspin 0.8s linear infinite;}
+/* 取消預約的處理中狀態（2026-08-02）：按鈕鎖住＋轉圈，讓人知道它在跑而不是當掉 */
+.cx-busy{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
+  font-size:13px;color:var(--t2);padding:8px 0;}
+.cx-spin{width:15px;height:15px;border:2px solid var(--bd);border-top-color:var(--green);
+  border-radius:50%;animation:qbspin .8s linear infinite;flex:none;}
 @keyframes qbspin{to{transform:rotate(360deg);}}
 .qbp-txt{font-size:14px;font-weight:600;color:var(--text);font-family:var(--num);}
 .qb-section-label{font-size:11.5px;color:var(--t2);font-weight:600;letter-spacing:0.04em;margin:14px 18px 8px;}
@@ -7238,8 +7243,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260802.2112';
-const APP_VERSION_LABEL='v260802.2112';
+const APP_VERSION = '260803.0847';
+const APP_VERSION_LABEL='v260803.0847';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20203,7 +20208,44 @@ async function seriesOf(b){
 /* 取消時追問（2026-07-29 使用者指示，二修）：不做獨立的「連續取消」按鈕 ——
    按下取消後，如果這堂屬於一系列連續預約（同會員／同課別／同教練／同星期／同時段），
    再跳一個視窗問「只取消這堂」還是「連同後面的一起取消」。單堂課不會多這一步。 */
-async function askSeriesCancel(id, mode){
+/* 取消預約按下去要立刻有反應（2026-08-02 使用者回報：「點了不退課，畫面又卡住了」
+   「連讀取的小動畫都沒出現」）——
+   「扣課不退」不走 RPC，是前端一連串 dbGetAll（ticket_logs / member_tickets / bookings
+   都是大表）＋逐筆寫回，網路一慢就是好幾秒。這段原本完全沒有畫面回饋、也沒有防連點，
+   按下去看起來就是當掉。更糟的是原本用 inline onclick 直接呼叫 async 函式，
+   中途丟例外沒有人接 —— 畫面就真的停在那裡，連錯誤訊息都沒有。 */
+function cxBusy(msg){
+  const foot=document.querySelector('#modal-bg .modal-foot');
+  if(!foot) return ()=>{};
+  const html=foot.innerHTML;
+  foot.querySelectorAll('button').forEach(x=>{ x.disabled=true; });
+  foot.insertAdjacentHTML('beforeend',
+    `<div class="cx-busy"><span class="cx-spin"></span>${msg||'處理中…'}</div>`);
+  return ()=>{ const f=document.querySelector('#modal-bg .modal-foot'); if(f) f.innerHTML=html; };
+}
+/* 沒人接的錯誤要出得來（2026-08-02）——
+   這次「點了不退課畫面卡住」之所以查不到，是因為 inline onclick 呼叫 async 函式，
+   丟出來的例外只進 console，畫面完全沒有反應。全域接一次，至少讓操作的人知道
+   「它壞了」而不是「它在跑」，也才有訊息可以回報。 */
+if(!window._errHooked){
+  window._errHooked=true;
+  window.addEventListener('unhandledrejection', e=>{
+    const m=(e&&e.reason&&(e.reason.message||e.reason))||'未知錯誤';
+    console.error('未攔截的錯誤：', e&&e.reason);
+    try{ showToast('操作沒有完成：'+String(m).slice(0,80)); }catch(_){}
+  });
+}
+async function askSeriesCancel(id, mode){ return onceAct('cxask:'+id+':'+mode, ()=>_askSeriesCancel(id,mode)); }
+async function _askSeriesCancel(id, mode){
+  const undo=cxBusy();
+  try{ return await __askSeriesCancel(id, mode); }
+  catch(e){
+    console.error('取消預約失敗', id, mode, e);
+    undo();
+    showToast('取消失敗：'+((e&&e.message)||e)+'　·　請再試一次');
+  }
+}
+async function __askSeriesCancel(id, mode){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   let later=[];
   try{
@@ -20233,7 +20275,8 @@ async function askSeriesCancel(id, mode){
       <button class="btn btn-danger" onclick="runSeriesCancel(true)">連同後面 ${later.length} 堂</button>
     </div>`);
 }
-async function runSeriesCancel(withLater){
+async function runSeriesCancel(withLater){ return onceAct('cxrun', ()=>_runSeriesCancel(withLater)); }
+async function _runSeriesCancel(withLater){
   const p=window._scPend; if(!p) return;
   const ids=withLater?[p.id].concat(p.ids):[p.id];
   const foot=document.querySelector('.modal-foot');
