@@ -97,8 +97,8 @@ ok('★ 薪資那支仍擋掉未來月份', /monthOptions\(ym, ymd\(TODAY\)\.sli
 /* 2026-08-01 使用者指示：「下拉式輸入框 都可以超過該視窗
    才不會導致該視窗被輸入框的內容放大又縮小」 */
 console.log('\n④ 自訂下拉浮在視窗外，不撐大彈窗');
-ok('★ 改成 position:fixed（原本 absolute 掛在輸入框底下，會撐高彈窗的捲動範圍）',
-   /\.mpk-menu\{position:fixed;z-index:9600;display:none;/.test(src)
+ok('★ 改成 position:fixed（0804 起搬到 body、z-index 10080）',
+   /\.mpk-menu\{position:fixed;z-index:10080;display:none;/.test(src)
    && !/\.mpk-menu\{position:absolute;left:0;right:0;top:calc\(100% \+ 4px\);/.test(src));
 ok('★ z-index 壓過彈窗（modal 是 300）', /z-index:9600/.test(src));
 ok('★ 位置與寬度由 mpkFit 依輸入框座標算', /menu\.style\.left=Math\.round\(r\.left\)\+'px';/.test(src)
