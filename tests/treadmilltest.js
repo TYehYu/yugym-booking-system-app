@@ -148,7 +148,23 @@ console.log('\n④ 實跑：補開第 2 台');
       eq('　　沒有場地資訊也不會爆', [n2, put.length], [1,0]);
     }
 
-    console.log(`\n${pass} 通過 / ${fail} 失敗`);
+    console.log('\n⑦ 被約走一台之後，下一位選不到兩台（2026-08-03 使用者確認規則）');
+ok('★ 台數按鈕只長到「還空著的台數」（1 台被約走 → 只剩「1 台」可選）',
+   /Array\.from\(\{length:Math\.max\(1,_tmCap-_tmUsed\)\},\(_,i\)=>i\+1\)/.test(src));
+ok('★ 只剩 1 台時整列台數選擇隱藏（沒得選就不用問）',
+   /id="msb-tmrow" style="\$\{\(s\.pickVenue==='treadmill'&&_tmCap-_tmUsed>1\)\?'':'display:none;'\}/.test(src));
+ok('★ 上一個時段選的 2 台不會漏到只剩 1 台的時段（pickUnits 夾回上限）',
+   /s\.pickUnits=Math\.min\(s\.pickUnits\|\|1, Math\.max\(1,_tmCap-_tmUsed\)\);/.test(src));
+ok('　　為什麼要夾，寫在程式裡',
+   /但 s\.pickUnits 還留著 2 —— 送出時就會带 2。/.test(src));
+ok('★ 佔用數用「筆數」算並以容量封頂（舊資料有不帶編號的 treadmill）',
+   /_tmUsed=Math\.min\(_tmUsed,_tmCap\);/.test(src));
+ok('★ 就算前端被繞過，DB 也只開得成剩下的台數（migration 記載不信任前端）',
+   fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260802_member_self_book_treadmill_units.sql','utf8')
+     .includes('台數不信任前端'));
+ok('　　開不成兩台時吐司照實說', /第 2 台剛被約走，只保留 1 台/.test(src));
+
+console.log(`\n${pass} 通過 / ${fail} 失敗`);
     process.exit(fail?1:0);
   })();
 }

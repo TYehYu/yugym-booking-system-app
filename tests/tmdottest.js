@@ -60,8 +60,10 @@ console.log('\n不影響原本的擋位邏輯');
 ok('★ 場地能不能選仍由 validateBooking 決定（燈號只是顯示）',
    /const err=await validateBooking\(probe,s\.date,t,60\);\s*\n\s*return \[vid,label,!err\];/.test(src));
 ok('★ 已滿的場地仍然變灰不可按', /<button class="msb-vbtn off" disabled title="此時段已滿">/.test(src));
+/* 2026-08-03：catch 與 _tmDots 之間插進了「pickUnits 夾回上限」那一行（treadmilltest ⑦），
+   斷言放寬成同一段落即可。 */
 ok('　　讀不到預約資料時不會擋住整個視窗（燈號退成全灰）',
-   /\}catch\(_\)\{\}\s*\n\s*const _tmDots=/.test(src));
+   /\}catch\(_\)\{\}[\s\S]{0,600}const _tmDots=/.test(src));
 ok('　　滑過看得到台數說明', /title="跑步機 \$\{_tmCap\} 台：已預約 \$\{_tmUsed\} 台"/.test(src));
 ok('　　原因寫在程式裡（為什麼用筆數而不是編號去重）',
    /用編號去重會把兩筆 treadmill 算成一台/.test(src));
