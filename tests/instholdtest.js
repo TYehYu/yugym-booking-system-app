@@ -45,5 +45,15 @@ ok('★ 挑同會員同課種最早的保留課、補綁＋扣課＋清旗標',
    && /hb\.ticket_id=ticketId; hb\.ticket_type_id=tk\.ticket_type_id\|\|hb\.ticket_type_id\|\|null;\n\s*hb\.pending_contract=false;/.test(src));
 ok('　　案例寫在程式裡', /8\/1 取消了，8\/20 明明\n\s*落在已繳的第一期卻繼續掛紅框待收款/.test(src));
 
+console.log('\n③ 預約流程的「待分期」選項（2026-08-04 使用者指示：「後面第五堂同一時間點預約，\n   應該除了待簽約還有待分期的選項，這樣才可以接上原本前面四堂課的票券」）');
+ok('★ 會員有未開通的分期票（票種吻合）→ 步驟 2 多一顆「待分期繳費保留」',
+   /x\.installment && typeof x\.installment==='object'\n\s*&& \(Number\(x\.sessions_total\)\|\|0\)-\(Number\(x\.unlocked_sessions\)\|\|0\)>0\n\s*&& bkTicketTypeOk\(x, type_id\)/.test(src)
+   && /onclick="bkInstHold\(\)">⏳ 待分期繳費保留（接上分期票）<\/button>/.test(src));
+ok('★ 建立走 runRecurringBooking 的保留路徑（findTicketFn 回 null → holdOnly）',
+   /async function _bkInstHold\(\)\{/.test(src) && /findTicketFn:async\(\)=>null,/.test(src));
+ok('★ 防連點', /async function bkInstHold\(\)\{ return onceAct\('bkinsthold', _bkInstHold\); \}/.test(src));
+ok('★ 待簽約卡位選項仍在（沒分期票的客人用）', /onclick="openPendingHold\(\)">🕒 待簽約卡位（客人尚未購票）<\/button>/.test(src));
+ok('　　說明講清楚收款後自動補綁', /收到下一期款項、在票券卡按「開通下一期」後會自動補綁扣課。/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

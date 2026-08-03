@@ -7306,8 +7306,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.0029';
-const APP_VERSION_LABEL='v260804.0029';
+const APP_VERSION = '260804.0032';
+const APP_VERSION_LABEL='v260804.0032';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18442,15 +18442,51 @@ async function bkStep2(){
         <div class="form-row" style="margin-bottom:10px;"><div id="bk-ticket-info" style="font-size:12px;color:var(--t2);padding:10px 12px;background:var(--card2);border-radius:9px;"></div></div>
         ${bkTreadmillRow(t)}
         ${recurBoxHtml('bk', preSum)}`
-      :`<div class="form-row"><div style="font-size:12.5px;color:var(--t2);line-height:1.8;padding:12px 14px;background:var(--card2);border-radius:10px;">
-          ${preMid?`<b>${preInfo?preInfo.name:'該會員'}</b> 沒有此課程的可用票券。可回上一步改選會員或先完成儲值，`
-                  :'尚未選擇會員。請回上一步選擇會員，'}或用「待簽約卡位」先佔住時段。</div></div>
+      :await (async()=>{
+        /* 待分期選項（2026-08-04 使用者指示，徐千晴案例：「後面第五堂同一時間點預約，
+           應該除了待簽約還有待分期的選項，這樣才可以接上原本前面四堂課的票券」）——
+           會員有「分期票、還有未開通堂數、票種吻合」時，多給一顆「待分期繳費保留」：
+           建立與連續預約相同的保留課（pending_contract＋保留備註），收款開通下一期
+           時會自動補綁到同一張分期票，堂序接得上。 */
+        let _instOk=false;
+        if(preMid){ try{
+          const _tks=await dbGetAll('member_tickets');
+          _instOk=_tks.some(x=>tkUsableBy(x,preMid) && x.status==='usable'
+            && x.installment && typeof x.installment==='object'
+            && (Number(x.sessions_total)||0)-(Number(x.unlocked_sessions)||0)>0
+            && bkTicketTypeOk(x, type_id));
+        }catch(_){}}
+        return `<div class="form-row"><div style="font-size:12.5px;color:var(--t2);line-height:1.8;padding:12px 14px;background:var(--card2);border-radius:10px;">
+          ${preMid?`<b>${preInfo?preInfo.name:'該會員'}</b> 沒有此課程的可用票券。${_instOk?'這位會員有分期方案（尚有未開通堂數），可先保留、收款後自動接上；也':'可回上一步改選會員或先完成儲值，或'}用「待簽約卡位」先佔住時段。`
+                  :'尚未選擇會員。請回上一步選擇會員，或用「待簽約卡位」先佔住時段。'}</div></div>
+        ${_instOk?`<div class="form-row" style="margin-bottom:10px;">
+          <button type="button" class="btn btn-green" style="width:100%;" onclick="bkInstHold()">⏳ 待分期繳費保留（接上分期票）</button>
+          <div style="font-size:11px;color:var(--t3);margin-top:5px;">先佔住時段；收到下一期款項、在票券卡按「開通下一期」後會自動補綁扣課。</div>
+        </div>`:''}
         <div class="form-row" style="margin-bottom:10px;">
           <button type="button" class="btn btn-ghost" style="width:100%;" onclick="openPendingHold()">🕒 待簽約卡位（客人尚未購票）</button>
           <div style="font-size:11px;color:var(--t3);margin-top:5px;">先佔住時段與場地；客人簽約付款後，在課卡明細按「轉正式預約」。</div>
-        </div>`}
+        </div>`; })()}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button>${hasTk?'<button class="btn btn-green" onclick="submitBooking()">確認預約</button>':''}</div>`);
   if(hasTk) refreshBkTicket();
+}
+/* 待分期繳費保留（2026-08-04）：單堂建立與連續預約相同的保留課。
+   走 runRecurringBooking —— findTicketFn 回 null、會員有未開通的分期票 → holdOnly。 */
+async function bkInstHold(){ return onceAct('bkinsthold', _bkInstHold); }
+async function _bkInstHold(){
+  const w=_bkWizard||{};
+  if(!w.member_id||!w.t){ showToast('資料不完整，請回上一步'); return; }
+  const r=await runRecurringBooking({
+    member_id:w.member_id, coach_id:w.coach_id||null, substitute_coach_id:null,
+    category:w.t.category, type_id:w.type_id, format:w.t.format||null,
+    startDate:w.date, time:w.time, duration:60, dows:[], times:null, count:1, until:null,
+    findTicketFn:async()=>null,
+  });
+  const ok=(r&&r.results||[]).filter(x=>x.ok).length;
+  closeModal();
+  if(ok){ showToast('已建立分期保留：收款開通下一期後自動補綁扣課'); }
+  else { showToast((r&&r.results&&r.results[0]&&r.results[0].reason)||'建立失敗'); }
+  navTo(CUR_PAGE);
 }
 // 上一步：回第1頁並保留選擇
 async function openBookingModalBack(){
