@@ -7236,8 +7236,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.1408';
-const APP_VERSION_LABEL='v260803.1408';
+const APP_VERSION = '260803.1437';
+const APP_VERSION_LABEL='v260803.1437';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28823,6 +28823,9 @@ async function openSalesModal(){
       ${/* 2026-08-01 使用者指示：「這邊方案卡場地租借改成自主訓練」——
              這張卡的副標本來就寫著「單次自主訓練」，兩個名字指的是同一件事，
              留兩個名字只會讓人以為是兩種商品。 */''}
+      ${/* 團課體驗（2026-08-03 使用者指示：「團體課的預約體驗，幫我新增在銷售，團課體驗600」）
+           —— 走自訂銷售的殼、預填 1 堂 $600，欄位到了下一步仍可改。 */''}
+      ${card('var(--course-trial-accent,#7a4d8c)','團課體驗','1 堂 · $600',"slGo('grptrial')")}
       ${card('#6a655c','自主訓練','單次 · 效期 7 天',"slGo('facility')")}
       ${card('#6a655c','自訂','自填堂數／價格 → 業績歸屬',"slGo('custom')")}
     </div></div>
@@ -28855,6 +28858,7 @@ function slGo(kind){
   window._grantPreMemberSet(mid);
   window._salesFacilityMember=mid;
   if(kind==='facility') return salesFacility();
+  if(kind==='grptrial') return salesGrpTrial();
   if(kind==='custom') return salesCustom();
   return salesCourse(kind);
 }
@@ -28875,6 +28879,14 @@ function salesCourse(kind){
    submitGrant 依自訂值建票。 */
 function salesCustom(){
   window._grantSales={cat:null, coach_id:null, custom:true};
+  openGrantModal();
+}
+/* 團課體驗（2026-08-03 使用者指示）：固定商品 —— 1 堂團體課 $600。
+   沿用自訂銷售的流程（票種鎖團體課、名稱「團課體驗」、效期預設 30 天），
+   之後一樣走業績歸屬；欄位在表單上仍看得到、要調可以調。 */
+function salesGrpTrial(){
+  window._grantSales={cat:'小班肌力', coach_id:null, custom:true,
+    preset:{name:'團課體驗', type:'團體課', sessions:1, price:600, valid:30}};
   openGrantModal();
 }
 // 簽約最後一步：點業績歸屬教練＝完成收款（防連點）
@@ -29936,11 +29948,13 @@ async function openGrantModal(){
      所以這裡不是只換字，是換成真的那個票種。
      （銷售頁那張「場地租借」卡仍在，賣的還是場租票，供 $200 場地租借流程使用。） */
   const _CUSTOM_TT=['教練課','友善教練課','團體課','自主訓練'];
-  const _ttOpts=(types||[]).filter(t=>t.active!==false&&_CUSTOM_TT.includes(t.name)).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  const _pre=(sales&&sales.preset)||null;   // 固定商品的預填值（團課體驗等，2026-08-03）
+  const _ttOpts=(types||[]).filter(t=>t.active!==false&&_CUSTOM_TT.includes(t.name))
+    .map(t=>`<option value="${t.id}"${(_pre&&_pre.type===t.name)?' selected':''}>${t.name}</option>`).join('');
   showModal(`<!-- 誘餌欄位：吸走 Chrome 密碼管理員的「儲存／更新密碼」判定，避免自訂銷售打字後跳提示（2026-07-25） -->
     <input type="text" autocomplete="username" tabindex="-1" aria-hidden="true" style="position:absolute;opacity:0;height:0;width:0;border:0;padding:0;pointer-events:none;">
     <input type="password" autocomplete="new-password" tabindex="-1" aria-hidden="true" style="position:absolute;opacity:0;height:0;width:0;border:0;padding:0;pointer-events:none;">
-    <div class="modal-title">${sales?(sales.custom?'自訂銷售':({'小班肌力':'團體課簽約','運動按摩':'運動按摩銷售','私人教練':'教練課簽約'}[sales.cat]||'課程銷售')):'發放票券'}</div>
+    <div class="modal-title">${sales?(sales.custom?((sales.preset&&sales.preset.name)||'自訂銷售'):({'小班肌力':'團體課簽約','運動按摩':'運動按摩銷售','私人教練':'教練課簽約'}[sales.cat]||'課程銷售')):'發放票券'}</div>
     <!-- 步驟1：選會員 + 模板 -->
     <div class="gt-step" data-gtstep="1">
       <!-- 會員搜尋：正式庫有 432 位會員，原本是一個 432 個選項的 <select>，櫃台要在裡面
@@ -29974,13 +29988,13 @@ async function openGrantModal(){
         <div style="background:var(--card2);border-radius:9px;padding:10px 12px;font-size:11.5px;color:var(--t2);line-height:1.7;margin-bottom:12px;">自訂銷售：自填票種、堂數、價格、效期，之後一樣選業績歸屬與簽約。</div>
         <div class="form-2col">
           <div class="form-row"><label>票種 *（決定可約課程）</label><select id="gt-c-type" onchange="grantCustomValidate()">${_ttOpts}</select></div>
-          <input type="hidden" id="gt-c-name" value="自訂方案">   <!-- 2026-07-28 使用者指示：方案名稱統一「自訂方案」 -->
+          <input type="hidden" id="gt-c-name" value="${(_pre&&_pre.name)||'自訂方案'}">   <!-- 2026-07-28 使用者指示：方案名稱統一「自訂方案」；固定商品帶自己的名字 -->
         </div>
         <div class="form-2col">
-          <div class="form-row"><label>堂數 *</label><input type="number" id="gt-c-sessions" min="1" value="10" oninput="grantCustomValidate()"></div>
-          <div class="form-row"><label>單價 *</label><input type="number" id="gt-c-price" min="0" value="0" oninput="grantCustomValidate()"></div>
+          <div class="form-row"><label>堂數 *</label><input type="number" id="gt-c-sessions" min="1" value="${(_pre&&_pre.sessions)||10}" oninput="grantCustomValidate()"></div>
+          <div class="form-row"><label>單價 *</label><input type="number" id="gt-c-price" min="0" value="${(_pre&&_pre.price!=null)?_pre.price:0}" oninput="grantCustomValidate()"></div>
         </div>
-        <div class="form-row"><label>效期天數 *</label><input type="number" id="gt-c-valid" min="1" value="365"></div>
+        <div class="form-row"><label>效期天數 *</label><input type="number" id="gt-c-valid" min="1" value="${(_pre&&_pre.valid)||365}"></div>
       </div>`:''}
       <div class="modal-foot"><button class="btn btn-ghost" onclick="${sales?'openSalesModal()':'closeModal()'}">← 返回</button><button class="btn btn-green" id="gt-next" onclick="grantGoStep(2)" disabled style="opacity:.4;">下一步</button></div>
     </div>
