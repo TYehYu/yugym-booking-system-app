@@ -7280,8 +7280,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.2337';
-const APP_VERSION_LABEL='v260803.2337';
+const APP_VERSION = '260803.2344';
+const APP_VERSION_LABEL='v260803.2344';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -27660,22 +27660,32 @@ async function ppFamEdit(mid){
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();openPersonProfile('member','${mid}')">完成</button></div>`);
 }
+/* 寫入走 dbPut（2026-08-03 使用者回報「新增後視窗沒馬上出現名單」）——
+   原本裸 update 沒檢查錯誤，寫入被擋時就靜靜維持原名單；dbPut 失敗會拋、
+   成功自動清快取，重畫必然是新資料。 */
 async function ppFamAdd(mid){
   const v=(document.getElementById('ppfam-name').value||'').trim();
   if(!v){ showToast('請輸入稱呼'); return; }
-  const m=await dbGet('members',mid); if(!m) return;
-  const list=Array.isArray(m.family_members)?m.family_members.filter(Boolean):[];
-  if(list.includes(v)){ showToast('已有相同稱呼'); return; }
-  list.push(v);
-  await sb.from('members').update({family_members:list}).eq('id',mid);
-  dbCacheClear('members'); ppFamEdit(mid);
+  try{
+    const m=await dbGet('members',mid); if(!m) return;
+    const list=Array.isArray(m.family_members)?m.family_members.filter(Boolean):[];
+    if(list.includes(v)){ showToast('已有相同稱呼'); return; }
+    list.push(v);
+    m.family_members=list;
+    await dbPut('members',m);
+    showToast('已新增「'+v+'」');
+    ppFamEdit(mid);
+  }catch(e){ showToast('新增失敗：'+((e&&e.message)||e)); }
 }
 async function ppFamRemove(mid,i){
-  const m=await dbGet('members',mid); if(!m) return;
-  const list=Array.isArray(m.family_members)?m.family_members.filter(Boolean):[];
-  list.splice(i,1);
-  await sb.from('members').update({family_members:list.length?list:null}).eq('id',mid);
-  dbCacheClear('members'); ppFamEdit(mid);
+  try{
+    const m=await dbGet('members',mid); if(!m) return;
+    const list=Array.isArray(m.family_members)?m.family_members.filter(Boolean):[];
+    list.splice(i,1);
+    m.family_members=list.length?list:null;
+    await dbPut('members',m);
+    ppFamEdit(mid);
+  }catch(e){ showToast('移除失敗：'+((e&&e.message)||e)); }
 }
 /* 票券分頁「儲值」（2026-07-28 使用者指示）：開銷售流程並預選本會員 */
 function ppTopUp(mid){
