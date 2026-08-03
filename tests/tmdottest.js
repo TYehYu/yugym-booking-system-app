@@ -1,10 +1,10 @@
-/* 會員自助預約自主訓練：跑步機的佔用燈號（2026-07-31 使用者指示）
+/* 會員自助預約自主訓練：跑步機的佔用數
 
-   「在客人自己預約自主訓練的表單上，就要顯示跑步機＋兩個燈號，
-     灰燈是可預約、綠燈是已預約。」
-
-   跑步機是「一個場地、兩台」（capacity 2）。一對二的客人可能一張票就佔掉兩台，
-   客人要在確認視窗看得出還剩幾台。 */
+   2026-07-31 使用者指示：確認視窗顯示兩顆燈號（灰＝可預約、綠＝已預約）。
+   2026-08-03 使用者指示：「跑步機的燈號從按鈕上移除，只要能確認客戶預約時
+   一台或兩台不會出錯」—— 燈號整組退場，但佔用數（_tmUsed）留著：
+   它是台數按鈕上限與 pickUnits 夾制的依據，算錯它台數就會出錯。
+   台數選擇本身的正確性見 treadmilltest ⑦。 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
@@ -12,21 +12,18 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
-console.log('燈號顏色（使用者定義：灰＝可預約、綠＝已預約）');
-ok('★ 預設灰底', /\.msb-vdot\{width:7px;height:7px;border-radius:50%;background:var\(--bd,#d8d2c4\);\}/.test(src));
-ok('★ 已預約的那顆上綠', /\.msb-vdot\.taken\{background:var\(--green,#1f6f54\);\}/.test(src));
-ok('　　選中的按鈕是綠底 → 燈號改用白／半透明白，才看得見',
-   /\.msb-vbtn\.on \.msb-vdot\{background:rgba\(255,255,255,\.45\);\}/.test(src)
-   && /\.msb-vbtn\.on \.msb-vdot\.taken\{background:#fff;\}/.test(src));
-
-console.log('\n只有跑步機掛燈號');
-ok('★ 其他場地不掛', /const _dotsOf=vid=>vid==='treadmill'\?_tmDots:'';/.test(src));
-ok('★ 可選與已滿兩種按鈕都掛得上',
-   (src.match(/\$\{label\}\$\{_dotsOf\(vid\)\}/g)||[]).length===2);
+console.log('① 燈號整組退場（2026-08-03）');
+ok('★ 按鈕上不再畫燈號', !/msb-vdots/.test(src) && !/_tmDots/.test(src) && !/_dotsOf/.test(src));
+ok('★ 燈號樣式一併移除，不留無主規則', !/\.msb-vdot\{/.test(src) && !/\.msb-vbtn\.on \.msb-vdot/.test(src));
+ok('　　場地按鈕回到只有名稱',
+   /onclick="msbChooseVenue\('\$\{vid\}'\)">\$\{label\}<\/button>/.test(src)
+   && /disabled title="此時段已滿">\$\{label\}<\/button>/.test(src));
+ok('　　為什麼佔用數留著，寫在程式裡',
+   /_tmUsed 留著：台數按鈕的上限與 pickUnits 的夾制都靠它。/.test(src));
 ok('　　台數讀場地設定，不寫死', /const _tmCap=\(typeof venueCap==='function'\)\?\(venueCap\('treadmill'\)\|\|2\):2;/.test(src));
 ok('　　跑步機容量確實是 2', /\{ id:'treadmill', name:'跑步機',       capacity:2, active:true \}/.test(src));
 
-console.log('\n數佔用的方式');
+console.log('\n② 數佔用的方式（台數不出錯的根據）');
 {
   /* 實跑那段計數：用同樣的條件去篩，驗各種情境 */
   const i=src.indexOf('    _tmUsed=(_allBk||[]).filter(x=>x && x.status!==');
@@ -38,17 +35,15 @@ console.log('\n數佔用的方式');
     return fn(BK,'2026-08-03',660,600,used,2,t=>{const[h,m]=String(t||'0:0').split(':').map(Number);return h*60+(m||0);});
   };
   const T=(u,t,o)=>Object.assign({id:u+t,date:'2026-08-03',status:'booked',venue_unit:u,start_time:t,duration:60},o||{});
-  eq('★ 沒人用 → 0（兩顆都灰）', run([]), 0);
-  eq('★ 一台被佔 → 1（一灰一綠）', run([T('treadmill_1','10:00')]), 1);
-  eq('★ 兩台都被佔 → 2（兩顆綠）', run([T('treadmill_1','10:00'),T('treadmill_2','10:00')]), 2);
-  eq('★ 同一張票約走兩台，也是 2', run([T('treadmill_1','10:00'),T('treadmill_2','10:00')]), 2);
+  eq('★ 沒人用 → 0（可選 2 台）', run([]), 0);
+  eq('★ 一台被佔 → 1（下一位只能選 1 台）', run([T('treadmill_1','10:00')]), 1);
+  eq('★ 兩台都被佔 → 2', run([T('treadmill_1','10:00'),T('treadmill_2','10:00')]), 2);
   eq('★ 舊資料沒編號（venue_unit=treadmill）兩筆 → 仍算 2，不會被去重成 1',
      run([T('treadmill','10:00'),T('treadmill','10:00')]), 2);
   eq('　　超過容量也封頂在 2', run([T('treadmill','10:00'),T('treadmill_1','10:00'),T('treadmill_2','10:00')]), 2);
   eq('　　別的場地不算', run([T('multi_1','10:00'),T('group_1','10:00')]), 0);
   eq('　　別的時段不算', run([T('treadmill_1','08:00'),T('treadmill_2','11:00')]), 0);
-  /* 2026-07-31：改吃 fetchDayOccupancy（只回當天），所以不必再自己比日期 */
-  ok('★ 會員端改走當日佔用 RPC，不再抓整張 bookings',
+  ok('★ 會員端走當日佔用 RPC，不抓整張 bookings（RLS 下讀不到別人的單人預約）',
      /const _allBk=await fetchDayOccupancy\(s\.date\)\.catch\(\(\)=>\[\]\);/.test(src)
      && /與 validateBooking 同一支當日佔用 RPC，有快取、只回當天/.test(src));
   eq('　　跨時段重疊要算（09:30 的 60 分課壓到 10:00）', run([T('treadmill_1','09:30')]), 1);
@@ -56,17 +51,14 @@ console.log('\n數佔用的方式');
   eq('★ 改期時不把自己算進去', run([T('treadmill_1','10:00')],'treadmill_110:00'), 0);
 }
 
-console.log('\n不影響原本的擋位邏輯');
-ok('★ 場地能不能選仍由 validateBooking 決定（燈號只是顯示）',
+console.log('\n③ 不影響原本的擋位邏輯');
+ok('★ 場地能不能選仍由 validateBooking 決定',
    /const err=await validateBooking\(probe,s\.date,t,60\);\s*\n\s*return \[vid,label,!err\];/.test(src));
 ok('★ 已滿的場地仍然變灰不可按', /<button class="msb-vbtn off" disabled title="此時段已滿">/.test(src));
-/* 2026-08-03：catch 與 _tmDots 之間插進了「pickUnits 夾回上限」那一行（treadmilltest ⑦），
-   斷言放寬成同一段落即可。 */
-ok('　　讀不到預約資料時不會擋住整個視窗（燈號退成全灰）',
-   /\}catch\(_\)\{\}[\s\S]{0,600}const _tmDots=/.test(src));
-ok('　　滑過看得到台數說明', /title="跑步機 \$\{_tmCap\} 台：已預約 \$\{_tmUsed\} 台"/.test(src));
+ok('　　讀不到預約資料時不擋流程（_tmUsed 保持 0，台數照常可選）',
+   /\}catch\(_\)\{\}[\s\S]{0,700}s\.pickUnits=Math\.min/.test(src));
 ok('　　原因寫在程式裡（為什麼用筆數而不是編號去重）',
    /用編號去重會把兩筆 treadmill 算成一台/.test(src));
 
-console.log(`\n${pass} passed, ${fail} failed`);
+console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
