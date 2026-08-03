@@ -7236,8 +7236,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.1220';
-const APP_VERSION_LABEL='v260803.1220';
+const APP_VERSION = '260803.1239';
+const APP_VERSION_LABEL='v260803.1239';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -34306,6 +34306,19 @@ async function memberSelfBookRpc(tk,date,time,venueUnit,famUser,units){
   const code=data&&data.error_code;
   return {ok:false,reason:SELF_BOOK_ERR[code]||('預約失敗：'+(code||'未知錯誤'))};
 }
+/* 撞到「本人同時段已有課」時把出路講出來（2026-08-03 使用者問「家庭共享從手機端
+   預約自主訓練是不是會很麻煩」）——
+   流程本身只多一步（確認頁點一下使用人），真正麻煩的是忘了選、或還沒建名單時，
+   只會得到一句「該時段已有預約」的死路，看不出下一步。這裡把提示補上。 */
+function _msbDupHint(msg){
+  const s=window._msb;
+  if(!/該時段已有預約/.test(String(msg||''))) return msg;
+  if(s && Array.isArray(s.famOpts) && s.famOpts.length>1 && !(s.pickFam>0))
+    return '您本人這個時段已有課程 —— 若是家人要使用，請在「使用人」選擇家人後再送出';
+  if(s && !(s.family||[]).length)
+    return '您本人這個時段已有課程。若是家人要使用，先到「☰ → 家庭成員」建立名單，預約時選擇使用人即可同時段預約';
+  return msg;
+}
 async function msbConfirm(time){
  try{
   const s=window._msb; if(!s){ showToast('資料遺失，請重試'); return; }
@@ -34340,11 +34353,11 @@ async function msbConfirm(time){
   const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id,
     venue_pref:s.pickVenue||null, trial_name:famUser||null};
   const verr=await validateBooking(vbk,s.date,time,60);
-  if(verr){ showToast(verr); return; }
+  if(verr){ showToast(_msbDupHint(verr)); return; }
   /* 跑步機台數（2026-08-02）：只有真的排到跑步機才帶，其他場地沒有台數的概念 */
   const _units=(String(vbk.venue_unit||'').split('_')[0]==='treadmill')?(s.pickUnits||1):1;
   const r=await memberSelfBookRpc(tk,s.date,time,vbk.venue_unit||null,famUser,_units);
-  if(!r.ok){ showToast(r.reason); return; }
+  if(!r.ok){ showToast(_msbDupHint(r.reason)); return; }
   closeModal();
   /* 實際開成幾台以 DB 回傳的為準 —— 想約兩台但第 2 台剛被別人約走時，要照實說 */
   const _got=Number(r.units)||1;

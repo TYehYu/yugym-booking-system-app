@@ -61,5 +61,25 @@ console.log('\n③ DB 端同一條規則（migration 已套用正式庫）');
   ok('　　規則的立意寫清楚（防的是同一個人分身）', /那是防同一個人分身/.test(mig));
 }
 
+console.log('\n④ 手機端撞到重疊時要指路，不是死路');
+/* 2026-08-03 使用者問：「家庭共享從會員手機端預約自主訓練是不是會很麻煩」——
+   流程本身只多一步（確認頁點一下使用人）；真正麻煩的是忘了選、或還沒建名單時，
+   只會得到一句「該時段已有預約」，看不出下一步。 */
+{
+  const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
+  const mk=st=>new Function('window', grabFn('_msbDupHint')+'\nreturn _msbDupHint;')({_msb:st});
+  const MSG='會員於該時段已有預約';
+  ok('★ 有名單但忘了選使用人 → 提示去選',
+     /請在「使用人」選擇家人後再送出/.test(mk({famOpts:['自己','爸爸'],pickFam:0,family:['爸爸']})(MSG)));
+  ok('★ 還沒建家庭名單 → 指到「☰ → 家庭成員」',
+     /先到「☰ → 家庭成員」建立名單/.test(mk({family:[]})(MSG)));
+  ok('★ 已經選了家人卻仍被擋（真的撞位）→ 原訊息照出，不誤導',
+     mk({famOpts:['自己','爸爸'],pickFam:1,family:['爸爸']})(MSG)===MSG);
+  ok('★ 其他錯誤訊息原樣通過', mk({family:[]})('點數不足')==='點數不足');
+  ok('　　前端驗證與 RPC 失敗兩條路都套', /showToast\(_msbDupHint\(verr\)\)/.test(src)
+     && /showToast\(_msbDupHint\(r\.reason\)\)/.test(src));
+  ok('　　為什麼補提示，寫在程式裡', /只會得到一句「該時段已有預約」的死路，看不出下一步。/.test(src));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
