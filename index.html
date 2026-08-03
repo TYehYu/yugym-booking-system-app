@@ -7236,8 +7236,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.1345';
-const APP_VERSION_LABEL='v260803.1345';
+const APP_VERSION = '260803.1408';
+const APP_VERSION_LABEL='v260803.1408';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11343,7 +11343,15 @@ function buildWallet(memberId, ctx){
   const c=ctx||{};
   const typeMap=c.typeMap||{};
   const today=ymd(TODAY);
-  const isAtt=b=>b.status==='checked_in'||b.status==='completed';
+  /* 團課的「已上」看的是這位會員自己名額的點名狀態（2026-08-03 使用者回報：
+     「簽到第一個客人以後，下面的客人的圓形卡也一併呈現實心了」）——
+     團課多人共用同一筆預約，第一個人簽到時整筆 status 會變 checked_in，
+     只看 status 就會把整堂的人全標成已上。有點過名的以名額為準；
+     整堂都沒逐名額點過名（舊匯入資料）才退回看整筆狀態。 */
+  const isAtt=b=>{
+    if(typeof grpSeatAttCount==='function' && bkIsGroup(b)) return grpSeatAttCount(b, memberId)>0;
+    return b.status==='checked_in'||b.status==='completed';
+  };
   const byDT=(a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||''));
   const mine=(c.tickets||[]).filter(t=>tkUsableBy(t,memberId));
   /* 團課的學員放在 member_ids、member_id 是 null —— 只用 member_id 過濾會整批漏掉團課。
@@ -21450,6 +21458,20 @@ function grpHeadLabel(b){
    現在一律以逐名額的簽到紀錄為準：att[名額]==='checked_in' 才算一個人次。
    ⚠ 這代表櫃檯漏簽 = 少一個人次，簽到紀錄同時是計薪依據。
    舊資料若整堂沒有名單（member_ids 空）無從逐名額判斷，維持算 1（與原行為一致）。 */
+/* 這位會員在這堂團課「已簽到」的名額數（2026-08-03，圓形卡實心分開記的依據）——
+   ・有任一名額點過名（含請假／未到）→ 逐名額算，只數 checked_in
+   ・整堂都沒點過名 → 舊資料退路：整筆 status 是已簽/已完成就當全員已上
+   非團課回 0，呼叫端自行看 status。 */
+function grpSeatAttCount(b, memberId){
+  if(!b || !bkIsGroup(b)) return 0;
+  const mid=String(memberId||'');
+  const ks=seatKeys(b).filter(k=>seatMid(k)===mid);
+  if(!ks.length) return 0;
+  const att=attObj(b);
+  const marked=seatKeys(b).some(k=>att[k]!=null);
+  if(!marked) return (b.status==='checked_in'||b.status==='completed')?ks.length:0;
+  return ks.filter(k=>att[k]==='checked_in').length;
+}
 /* 這堂課算不算數（2026-08-02 使用者定案）：
    「全員請假該堂課就不成立，如果該堂課有一名簽到還是要計算」
 
@@ -35490,7 +35512,22 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet){
       const n=(bkIsSelf(b))?Math.max(1,Math.round((Number(b.duration)||60)/60)):1;
       for(let k=0;k<n;k++) out.push(b);
     }); return out; };
-  const done=expand((bks||[]).filter(b=>b.status==='checked_in'||b.status==='completed'))
+  /* 團課逐名額分實心（2026-08-03 使用者回報：簽到第一個客人，其他人的圓形卡跟著實心）——
+     stamps 裡同一堂團課每個名額出現一次；這位會員簽到幾個名額，就只有幾顆實心。 */
+  const _grpLeft={};
+  const _isDoneOcc=b=>{
+    if(typeof grpSeatAttCount!=='function' || !bkIsGroup(b))
+      return b.status==='checked_in'||b.status==='completed';
+    if(_grpLeft[b.id]==null) _grpLeft[b.id]=grpSeatAttCount(b, memberId||t.member_id);
+    if(_grpLeft[b.id]>0){ _grpLeft[b.id]--; return true; }
+    return false;
+  };
+  const _doneL=[], _bookedL=[];
+  (bks||[]).forEach(b=>{
+    if(_isDoneOcc(b)) _doneL.push(b);
+    else if(b.status!=='cancelled') _bookedL.push(b);
+  });
+  const done=expand(_doneL)
     .sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
   const md=b=>{ const d=parseYmd(b.date); return d?(d.getMonth()+1)+'/'+d.getDate():''; };
   const isInstall=t.installment&&t.unlocked_sessions!=null&&t.unlocked_sessions<total;
@@ -35498,7 +35535,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet){
   const used=Math.min(Math.max(Number(usedCount)||0,0),total);
   /* 三態（2026-07-21）：未使用＝空心、已預約未上＝空心＋日期、已使用＝實心＋日期
      形狀統一圓形（2026-07-23），課種只以 --tk-acc 顏色區分 */
-  const booked=expand((bks||[]).filter(b=>b.status==='booked'))
+  const booked=expand(_bookedL)
     .sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
   /* 會員自己從手機約的那幾堂，圓點右上角點一顆金點（2026-08-01 使用者指示）。
      沒傳 memberId 時退回票券持有人 —— 共享票會比錯，所以有 id 的呼叫端都要傳。 */
