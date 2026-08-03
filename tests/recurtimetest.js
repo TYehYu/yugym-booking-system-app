@@ -94,8 +94,9 @@ console.log('\n實跑 buildRecurringSlots');
 console.log('\n自主訓練改期：不會被「自己另一筆」卡住（2026-07-30 使用者提問）');
 ok('★ 前端驗證帶原預約 id → 不會跟自己那一筆衝突',
    /const vbk=\{id:s\.resched\.id,member_id:SESSION\.id,coach_id:null,category:'自主訓練'/.test(src));
+/* 2026-08-03：重疊規則多了家庭使用人的放行（見 famoverlaptest.js），寫法改了 */
 ok('★ 前端本來就放行自主訓練彼此重疊（多名額）',
-   /const selfOK = bkIsSelf\(bk\) && bkIsSelf\(dup\);/.test(src));
+   /const selfOK = \(bkIsSelf\(bk\) && bkIsSelf\(dup\)\) \|\| _famName\(bk\) \|\| _famName\(dup\);/.test(src));
 ok('★ sameDay 排除自己那一筆', /const sameDay=all\.filter\(x=> x\.id!==bk\.id && x\.status!=='cancelled' && x\.date===date \);/.test(src));
 ok('　　DB 端規則差異已記錄在 migration', (()=>{
   const fs2=require('fs');

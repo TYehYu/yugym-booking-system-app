@@ -16124,8 +16124,14 @@ async function validateBooking(bk,date,time,duration){
          （場地有幾個位就能約幾個，例如多功能 2 位就能約 2 次），但一次只能約一個 ——
          每次都要重跑一遍預約流程，避免一人一次掃掉整排位子。
          名額上限仍由下方的場地容量把關；家庭成員名單不再是前提。
-         其他課種（教練課／團課／體驗）維持一人一時段的防呆。 */
-      const selfOK = bkIsSelf(bk) && bkIsSelf(dup);
+         其他課種（教練課／團課／體驗）維持一人一時段的防呆。
+
+         2026-08-03 使用者案例（陳蘭馨帳號）：媽媽 11:00 上教練課、爸爸想約同時段的
+         自主訓練 —— 這個防呆防的是「同一個人分身」，但自主訓練指定了使用人
+         （trial_name＝家庭成員稱呼）就不是本人在用，放行。任一邊符合都算：
+         新約的是家人用的自主訓練，或擋路的那筆本來就是家人用的。 */
+      const _famName=x=>!!(x && bkIsSelf(x) && String(x.trial_name||'').trim());
+      const selfOK = (bkIsSelf(bk) && bkIsSelf(dup)) || _famName(bk) || _famName(dup);
       if(!selfOK) return '會員於該時段已有預約';
     }
   }
@@ -34328,11 +34334,13 @@ async function msbConfirm(time){
   const _sel=(document.getElementById('msb-tk-sel')||{}).value||s.pickTk||null;
   const tk=_cand.find(x=>x.id===_sel)||_cand[0]||null;
   if(!tk){ showToast('沒有可用的自主訓練點數'); return; }
+  /* 使用人要在 validateBooking 之前決定（2026-08-03）：重疊防呆看的是 trial_name ——
+     家人用的自主訓練可以與本人的課同時段，晚一步掛上去就會被誤擋。 */
+  const famUser=(s.pickFam>0&&Array.isArray(s.famOpts))?s.famOpts[s.pickFam]:null;   // 家庭共享使用人（2026-07-29）
   const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id,
-    venue_pref:s.pickVenue||null};
+    venue_pref:s.pickVenue||null, trial_name:famUser||null};
   const verr=await validateBooking(vbk,s.date,time,60);
   if(verr){ showToast(verr); return; }
-  const famUser=(s.pickFam>0&&Array.isArray(s.famOpts))?s.famOpts[s.pickFam]:null;   // 家庭共享使用人（2026-07-29）
   /* 跑步機台數（2026-08-02）：只有真的排到跑步機才帶，其他場地沒有台數的概念 */
   const _units=(String(vbk.venue_unit||'').split('_')[0]==='treadmill')?(s.pickUnits||1):1;
   const r=await memberSelfBookRpc(tk,s.date,time,vbk.venue_unit||null,famUser,_units);
