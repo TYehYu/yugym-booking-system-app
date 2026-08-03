@@ -7257,8 +7257,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.1713';
-const APP_VERSION_LABEL='v260803.1713';
+const APP_VERSION = '260803.1718';
+const APP_VERSION_LABEL='v260803.1718';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21444,7 +21444,96 @@ async function _saveGroupMembers(id){
   b.attendance=_att;
   await dbPut('bookings',b);
   showToast('名單已更新');
+  /* 開課後補位的連續預約（2026-08-03 使用者指示）：「團體課已經開課後，新加入的
+     會員要有重複預約的能力」「先開了 10 堂 10 週，新會員只買了 4 堂 → 可以重複預約 4 堂」。
+     名單有新加入、同系列還有後續場次時追問一次；只移除或沒後續就照舊回明細。 */
+  const _addUniq=[...new Set(added)];
+  if(_addUniq.length){ try{ await grpFollowAsk(id,_addUniq); return; }catch(e){ console.error('連續加入詢問失敗',e); } }
   openBookingDetail(id);
+}
+/* 團課的「同系列後續場次」：同教練＋同星期＋同時段＋未取消未完成、時間在這堂之後。
+   取消側的 seriesOf 認 member_id，團課的學員在 member_ids（見 bkIsGroup 註解），
+   所以另立這支；口徑對齊使用者的開課習慣（每週同時段連開 N 週）。 */
+async function grpSeriesOf(b){
+  if(!b) return [];
+  const all=await dbGetAll('bookings');
+  const dow=(parseYmd(b.date)||new Date()).getDay();
+  const key=x=>String(x.date)+String(x.start_time||'');
+  return all.filter(x=> x && x.id!==b.id && bkIsGroup(x)
+      && x.status!=='cancelled' && x.status!=='completed'
+      && (x.coach_id||'')===(b.coach_id||'')
+      && String(x.start_time).slice(0,5)===String(b.start_time).slice(0,5)
+      && (parseYmd(x.date)||new Date()).getDay()===dow
+      && key(x)>key(b))
+    .sort((a,c)=>String(a.date).localeCompare(String(c.date)));
+}
+async function grpFollowAsk(id, addedIds){
+  const b=await dbGet('bookings',id);
+  const later=await grpSeriesOf(b);
+  if(!later.length){ openBookingDetail(id); return; }
+  const allTk=await dbGetAll('member_tickets');
+  const members=await dbGetAll('members');
+  const nameOf=mid=>{ const m=members.find(x=>String(x.id)===String(mid)); return (m&&m.name)||'—'; };
+  const rows=addedIds.map(mid=>{
+    const left=allTk.filter(t=>t.member_id===mid && ticketMatchesCategory(t,'小班肌力')
+        && t.status==='usable' && t.sessions_remaining>0)
+      .reduce((sum,t)=>sum+t.sessions_remaining,0);
+    /* 使用者的例子：開 10 週、新會員買 4 堂 → 預設就是 4（票剩幾堂就約幾堂，
+       不超過剩餘場次）。沒票的（教練負責）預設 0，要約再自己調。 */
+    const cap=later.length;
+    const def=Math.min(left, cap);
+    return {mid, left, def, cap};
+  });
+  window._gfPend={id, laterIds:later.map(x=>x.id)};
+  const WD=['日','一','二','三','四','五','六'];
+  const dowLbl=WD[(parseYmd(b.date)||new Date()).getDay()];
+  showModal(`<div class="modal-title">後面的場次要一起預約嗎？</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:10px;">
+      這堂是 <b>週${dowLbl} ${String(b.start_time).slice(0,5)}</b> 的團體課，後面還有 <b>${later.length}</b> 堂
+      （${String(later[0].date).replace(/-/g,'/')} 起）。剛加入的會員可以連續預約，堂數預設照票券剩餘：</div>
+    ${rows.map((r,i)=>`<div class="form-row" style="display:flex;align-items:center;gap:10px;">
+      <label style="margin:0;flex:1;">${nameOf(r.mid)}<span style="font-size:11.5px;color:var(--t3);">　票剩 ${r.left} 堂</span></label>
+      <input type="number" id="gf-n-${i}" value="${r.def}" min="0" max="${r.cap}" style="width:76px;"><span style="font-size:12px;color:var(--t3);">/ ${r.cap} 堂</span>
+    </div>`).join('')}
+    <div style="font-size:11.5px;color:var(--t2);margin-top:6px;">滿員或已在名單的場次會自動跳過、往後遞補；有票逐堂扣，票不夠會停下來告訴你。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();openBookingDetail('${id}')">不用</button>
+      <button class="btn btn-green" onclick="grpFollowRun(${JSON.stringify(rows.map(r=>r.mid)).replace(/"/g,'&quot;')})">連續預約</button></div>`);
+}
+async function grpFollowRun(mids2){ return onceAct('gfrun', ()=>_grpFollowRun(mids2)); }
+async function _grpFollowRun(mids2){
+  const p=window._gfPend; if(!p) return;
+  const wants=mids2.map((mid,i)=>({mid, n:Math.max(0,Number((document.getElementById('gf-n-'+i)||{}).value)||0)}))
+    .filter(w=>w.n>0);
+  if(!wants.length){ closeModal(); openBookingDetail(p.id); return; }
+  const foot=document.querySelector('.modal-foot');
+  const prog=(t)=>{ if(foot) foot.innerHTML='<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">'+t+'</div>'; };
+  prog('預約中…');
+  const report=[];
+  for(const w of wants){
+    let done=0, noTk=false;
+    for(const bid of p.laterIds){
+      if(done>=w.n) break;
+      const x=await dbGet('bookings',bid); if(!x) continue;
+      const cur=mids(x);
+      if(cur.some(m=>String(m)===String(w.mid))) continue;              // 已在名單 → 跳過不佔次數
+      if(cur.length>=Math.max(1,Number(x.max_heads)||5)) continue;      // 滿員 → 跳過往後遞補
+      /* 有票就扣、沒票不加（票不夠就停）——名單視窗的單堂規則是「沒票＝教練負責照加」，
+         但連續預約是照「買了幾堂」來的，票扣不到就不該繼續佔位。 */
+      const tk=await findUsableTicket(w.mid, x.ticket_type_id, x.date, x.start_time);
+      if(!tk){ noTk=true; break; }
+      await deductTicket(tk, x.id, SESSION.id);
+      x.member_ids=cur.concat([w.mid]);
+      await dbPut('bookings',x);
+      done++;
+      prog(`預約中…（${report.length+1}/${wants.length} 人）`);
+    }
+    report.push(`${(await dbGet('members',w.mid).catch(()=>null)||{}).name||'會員'}：加入 ${done}/${w.n} 堂`+(noTk&&done<w.n?'（票券不足或過期，先停在這）':''));
+  }
+  window._gfPend=null;
+  dbCacheClear(['bookings','member_tickets','ticket_logs']);
+  closeModal();
+  showToast(report.join('；'));
+  openBookingDetail(p.id);
 }
 function statusLabel(s){return {scheduled:'已預約',booked:'已預約',checked_in:'已簽到',completed:'已完成',cancelled:'已取消',no_show:'未到',coach_leave:'教練請假'}[s]||s;}
 // 安全取得團體課會員 id 陣列（相容資料庫回傳陣列或 JSON 字串）
