@@ -34,9 +34,11 @@ console.log('\n② 標籤（實跑 revPayChip）');
 console.log('\n③ 發票標籤移除＋修正流程');
 ok('★ 兩個畫面都不再出現發票標籤（列上）', !/mc-rev-inv">發票/.test(src));
 ok('★ 兩個畫面共用 revPayChip', (src.match(/\$\{revPayChip\(r\)\}/g)||[]).length===2);
-ok('★ 修正視窗：三選一、講清楚影響財務報表',
+/* 2026-08-03 使用者指示：「不要列出刷卡，我們沒提供刷卡功能」——修正視窗二選一 */
+ok('★ 修正視窗：現金／匯款二選一（不列刷卡）、講清楚影響財務報表',
    /改的是這一筆收款的付款方式，財務報表會跟著更新。/.test(src)
-   && /\$\{btn\('cash'\)\}\$\{btn\('transfer'\)\}\$\{btn\('card'\)\}/.test(src));
+   && /\$\{btn\('cash'\)\}\$\{btn\('transfer'\)\}<\/div>/.test(src)
+   && !/\$\{btn\('card'\)\}/.test(src));
 ok('★ 只有櫃檯／管理員能開', /async function openRevPayPick\(pid\)\{\n\s*if\(!isDeskLike\(\)\) return;/.test(src));
 ok('★ 防連點', /async function setRevPay\(pid, m\)\{ return onceAct\('revpay:'\+pid, \(\)=>_setRevPay\(pid,m\)\); \}/.test(src));
 ok('　　為什麼移除發票，寫在程式裡', /發票欄位還沒串（銷售端已先移除），\n\s*名單上不再出現/.test(src));
