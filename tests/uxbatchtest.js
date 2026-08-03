@@ -62,8 +62,11 @@ ok('★ 上緣課程色帶（跟行事曆課卡同語彙）',
 ok('★ 名稱放大成主資訊（19px 粗體）', /\.sl-card-name\{font-size:19px;font-weight:800;/.test(src));
 ok('★ 直式：色帶在上、內容在下', /\.sl-card\{[\s\S]{0,120}flex-direction:column;/.test(src));
 ok('　　說明縮小放在名稱下面', /\.sl-card-sub\{font-size:12px;color:var\(--t2\);/.test(src));
+/* 2026-08-03 排序定版：課程銷售改 sl-cards-3（一列三張），其他收費維持 sl-cards */
 ok('★ 課程銷售與其他收費都換成新的卡片容器',
-   (src.match(/<div class="sl-cards">/g)||[]).length===2 && !/openSalesModal[\s\S]{0,1200}<div class="bk-cards">/.test(src));
+   (src.match(/<div class="sl-cards sl-cards-3">/g)||[]).length===1
+   && (src.match(/<div class="sl-cards">/g)||[]).length===1
+   && !/openSalesModal[\s\S]{0,1200}<div class="bk-cards">/.test(src));
 ok('　　視窗加寬，直式卡才排得開', /直式卡要寬一點才排得開/.test(src));
 ok('　　手機退成兩欄', /@media\(max-width:560px\)\{ \.sl-cards\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\}/.test(src));
 ok('　　hover 有回饋、鍵盤有焦點框', /\.sl-card:hover\{border-color:var\(--pc/.test(src)
