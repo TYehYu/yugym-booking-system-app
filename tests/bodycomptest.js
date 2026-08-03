@@ -12,8 +12,9 @@ ok('★ 其他收費區有「測量身體組成」卡，副標 $150（可散客�
    /card\('#8a7a5c','測量身體組成','\$150（可散客）',"slGoMerch\('測量身體組成',150\)"\)/.test(src));
 ok('★ 走商品收款的殼（slGoMerch → openMerchSale，名稱/價格參數化）',
    /function slGoMerch\(name,price\)\{/.test(src) && /async function openMerchSale\(name,defPrice\)\{/.test(src));
+/* 2026-08-03 蛋白粉改自訂金額後，單價欄支援留白（defPrice=null），見 merchpricetest.js */
 ok('★ 單價帶 150 但仍可改（openMerchSale 的單價欄吃 defPrice）',
-   /<input type="number" id="ms-price" value="\$\{defPrice\}" min="0" oninput="msCalc\(\)">/.test(src));
+   /id="ms-price" value="\$\{defPrice!=null\?defPrice:''\}" min="0" placeholder="輸入金額" oninput="msCalc\(\)">/.test(src));
 ok('　　為什麼走商品殼不發票券，寫在程式裡',
    /單次服務收費，\n\s*走商品收款的殼（可散客、數量\/單價可調、選付款方式），不發票券。/.test(src));
 
