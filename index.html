@@ -673,6 +673,7 @@ select option{color:var(--text);}
   background:#fff;border:1px solid var(--bd);border-radius:11px;box-shadow:0 10px 28px rgba(20,18,14,.16);
   max-height:min(46vh,300px);overflow-y:auto;padding:5px;-webkit-overflow-scrolling:touch;}
 .mem-pick-row.mpk-open .mpk-menu{display:block;}
+.mpk-menu.on{display:block;}   /* 選單移到 body 層級後由自己的 class 控制（2026-08-04） */
 /* 分組標題（有這個方案的會員／某教練的會員）——原本 optgroup 在自訂選單裡看不到 */
 .mpk-grp{padding:8px 11px 3px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--t3);}
 .mpk-grp:first-child{padding-top:3px;}
@@ -17712,7 +17713,7 @@ function mpkLabel(sel){
    在選單裡完全看不出來，只剩排序。分組標題就是這個功能的說明文字，不能吞掉。
    停用的項目（「還有 N 位，請用搜尋」）給 mpk-none：點不到、鍵盤也跳過。 */
 function mpkRender(row){
-  const sel=row.querySelector('select'), menu=row.querySelector('.mpk-menu');
+  const sel=row.querySelector('select'), menu=row._mpkMenu||row.querySelector('.mpk-menu');
   if(!sel||!menu) return;
   const opts=[...sel.options];
   if(!opts.length){
@@ -17730,6 +17731,7 @@ function mpkRender(row){
   row._mpkIdx=Math.max(0, opts.findIndex(o=>o.value===sel.value));
 }
 function mpkOpen(row){ row.classList.add('mpk-open');
+  if(row._mpkMenu) row._mpkMenu.classList.add('on');   // 選單在 body 層級，顯示由自己的 class 控制
   document.documentElement.classList.add('mpk-any-open');   // 給捲動監聽用的旗標（見 refit）
   mpkRender(row); mpkFit(row); }
 /* 手機版選單被鍵盤蓋住（2026-08-01 使用者回報，附截圖）——
@@ -17740,7 +17742,7 @@ function mpkOpen(row){ row.classList.add('mpk-open');
    桌機不受影響（沒有 visualViewport 變化，below 一直都夠）。 */
 function mpkFit(row){
   try{
-    const inp=row.querySelector('input'), menu=row.querySelector('.mpk-menu');
+    const inp=row.querySelector('input'), menu=row._mpkMenu||row.querySelector('.mpk-menu');
     if(!inp||!menu) return;
     const vv=window.visualViewport;
     const vh=(vv&&vv.height)||window.innerHeight||0;   // 鍵盤升起時只有這個會縮
@@ -17783,6 +17785,7 @@ function mpkFit(row){
 })();
 function mpkClose(row,restore){
   row.classList.remove('mpk-open');
+  if(row._mpkMenu) row._mpkMenu.classList.remove('on');
   // 全部關掉才收旗標（掃一次 DOM 的成本只在關閉時付，不在每次捲動）
   if(!document.querySelector('.mem-pick-row.mpk-open')) document.documentElement.classList.remove('mpk-any-open');
   if(restore===false) return;
@@ -17810,9 +17813,16 @@ function mpkUpgrade(row){
   if(!sel||!inp) return;                       // 只升級「輸入框＋下拉」這種組合
   row.classList.add('mpk-on');
   row.insertAdjacentHTML('beforeend','<span class="mpk-caret">▾</span><div class="mpk-menu"></div>');
+  /* 選單搬到 body（2026-08-04 使用者回報：Mac Safari 在銷售視窗打「陳」沒有選單）——
+     選單是 position:fixed、座標本來就用視窗座標算，但放在彈窗裡會受 Safari 對
+     「捲動容器/動畫祖先內的 fixed 元素」的私房行為影響（被裁切或蓋住）。
+     搬到 body 層級就沒有任何祖先能干擾；事件監聽跟著節點走，appendChild 不會掉。 */
+  const _menuEl=row.querySelector('.mpk-menu');
+  row._mpkMenu=_menuEl; _menuEl._mpkRow=row;
+  document.body.appendChild(_menuEl);
   inp.value=mpkLabel(sel);
   inp.setAttribute('role','combobox'); inp.setAttribute('autocomplete','off');
-  const menu=row.querySelector('.mpk-menu');
+  const menu=_menuEl;   // 已搬到 body（見上方），不能再從 row 底下找
   /* 中文輸入法：組字期間只重畫清單，不動位置也不捲動（2026-08-01）。
      compositionend 之後才做完整的 mpkOpen。 */
   inp.addEventListener('compositionstart',()=>{ row._mpkIME=true; });
@@ -39098,6 +39108,8 @@ function showModal(html){
   if(typeof mpkScan==='function') mpkScan();   // 會員選擇器：搜尋框＋下拉合併（2026-07-30）
 }
 function closeModal(){const m=document.getElementById('modal-bg');if(m)m.remove(); window._modalSideUntilClose=false; document.body.style.overflow='';
+  /* 會員選單搬到 body 層級（2026-08-04）：彈窗關掉時把孤兒選單清掉 */
+  try{ document.querySelectorAll('body > .mpk-menu').forEach(x=>{ if(!x._mpkRow || !document.contains(x._mpkRow)) x.remove(); }); }catch(_){}
   // 還原捲動鎖（與 showModal 的 position:fixed 保存式鎖成對）
   if(document.body.style.position==='fixed'){
     document.body.style.position=''; document.body.style.top=''; document.body.style.left=''; document.body.style.right='';
