@@ -23,8 +23,9 @@ ok('★ 原本那一整套推估（先進先出 → 以本堂為中心的視窗 
    !/const doneCount=_tkInferred \? _inferDone/.test(src)
    && !/_tkInferred/.test(src)
    && !/以本堂為中心取一個剛好 total 長的視窗/.test(src));
-ok('　　票券夾也蓋不到（舊系統匯入）才退回原本的挑票法',
-   /if\(!_tkCard\) _tkCard=findRefundTargetTicket\(_wctxD\.tickets,b\.member_id,b\.ticket_type_id,b\.category,b\.format\);/.test(src));
+/* 2026-08-04：備援票也要回票券夾撈 slot（分期保留課的圓形卡才有日期） */
+ok('　　票券夾也蓋不到（舊系統匯入/分期保留）才退回原本的挑票法，且備援票補撈戳記',
+   /_tkCard=findRefundTargetTicket\(_wctxD\.tickets,b\.member_id,b\.ticket_type_id,b\.category,b\.format\);\n\s*if\(_tkCard\)\{ try\{ _wSlotD=W\.of\(_tkCard\.id\)\|\|null; \}catch\(_\)\{\} \}/.test(src));
 ok('　　使用者的原話寫在程式裡', /我們不是從會員票券這邊拉圓形卡過來用的嗎/.test(src));
 
 console.log('\n圓點渲染吃得到這個數字');

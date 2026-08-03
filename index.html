@@ -7306,8 +7306,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.0039';
-const APP_VERSION_LABEL='v260804.0039';
+const APP_VERSION = '260804.0048';
+const APP_VERSION_LABEL='v260804.0048';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18480,6 +18480,12 @@ async function bkStep2(){
    走 runRecurringBooking —— findTicketFn 回 null、會員有未開通的分期票 → holdOnly。 */
 async function bkInstHold(){ return onceAct('bkinsthold', _bkInstHold); }
 async function _bkInstHold(){
+ /* 畫面回饋（2026-08-04 使用者回報：「按了什麼提示都沒有，像當機」）——
+    建立期間按鈕轉「建立中…」，任何錯誤都要吐司。 */
+ const _btn=[...document.querySelectorAll('#modal-bg .btn.btn-green')].pop();
+ const _btnTxt=_btn?_btn.textContent:'';
+ if(_btn){ _btn.disabled=true; _btn.textContent='建立中…'; }
+ try{
   const w=_bkWizard||{};
   if(!w.member_id||!w.t){ showToast('資料不完整，請回上一步'); return; }
   /* 連續預約（2026-08-04 使用者指示）：同一套 readRecur；保留課不扣票，
@@ -18504,8 +18510,10 @@ async function _bkInstHold(){
   const ok=(r&&r.results||[]).filter(x=>x.ok).length, skip=(r&&r.results||[]).filter(x=>!x.ok).length;
   closeModal();
   if(ok){ showToast(`已建立 ${ok} 堂分期保留${skip?`（${skip} 堂跳過）`:''}：收款開通下一期後自動補綁扣課`); }
-  else { showToast((r&&r.results&&r.results[0]&&r.results[0].reason)||'建立失敗'); }
+  else { showToast((r&&r.results&&r.results[0]&&r.results[0].reason)||'建立失敗：沒有任何時段成立'); }
   navTo(CUR_PAGE);
+ }catch(e){ showToast('建立失敗：'+((e&&e.message)||e)); }
+ finally{ if(_btn){ _btn.disabled=false; _btn.textContent=_btnTxt; } }
 }
 // 上一步：回第1頁並保留選擇
 async function openBookingModalBack(){
@@ -20381,9 +20389,14 @@ async function openBookingDetail(id){
       const W=buildWallet(b.member_id,_wctxD);
       _wSlotD = W.ticketOf(b.id) || (b.ticket_id?W.of(b.ticket_id):null);
       if(_wSlotD) _tkCard=_wSlotD.t;
-      /* 票券夾也蓋不到（舊系統匯入、當初沒扣票）→ 退回原本的挑票法，
-         至少讓櫃檯看得到這個人手上是哪張票。 */
-      if(!_tkCard) _tkCard=findRefundTargetTicket(_wctxD.tickets,b.member_id,b.ticket_type_id,b.category,b.format);
+      /* 票券夾也蓋不到（舊系統匯入、當初沒扣票、分期保留課）→ 退回原本的挑票法，
+         至少讓櫃檯看得到這個人手上是哪張票。
+         2026-08-04 使用者回報（徐千晴 8/27 分期保留）：備援只拿到票、沒拿 slot，
+         圓形卡整排空白沒日期 —— 備援票也要回票券夾撈戳記。 */
+      if(!_tkCard){
+        _tkCard=findRefundTargetTicket(_wctxD.tickets,b.member_id,b.ticket_type_id,b.category,b.format);
+        if(_tkCard){ try{ _wSlotD=W.of(_tkCard.id)||null; }catch(_){} }
+      }
     }catch(e){ console.error('預約明細票券卡失敗:',e); }
   }
   const isPersonalPT = _tkCard && b.category!=='小班肌力' && b.category!=='體驗';
@@ -20400,6 +20413,19 @@ async function openBookingDetail(id){
     const _bkdL=tkBks2.filter(x=>x.status==='booked').sort(_byDT2);
     let curIdx=_doneL.findIndex(x=>x.id===b.id);
     if(curIdx<0){ const _bi=_bkdL.findIndex(x=>x.id===b.id); curIdx=_bi>=0?doneCount+_bi:-1; }
+    /* 分期保留課不在票上（2026-08-04）：本堂序＝票上已有的戳記數＋這堂在保留課裡的日期序 */
+    let _isHoldCard=false;
+    if(curIdx<0 && b.pending_contract && b.member_id){
+      _isHoldCard=true;
+      try{
+        const _hAll=(await dbGetAll('bookings')).filter(x=>x.member_id===b.member_id
+          && x.pending_contract && !x.ticket_id && x.status==='booked'
+          && (x.ticket_type_id||null)===(b.ticket_type_id||null))
+          .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
+        const _hi=_hAll.findIndex(x=>x.id===b.id);
+        if(_hi>=0) curIdx=tkBks2.length+_hi;
+      }catch(_){}
+    }
     const isInstall2 = tkC.installment && typeof tkC.installment==='object';
     const unlocked2 = isInstall2 ? (tkC.unlocked_sessions!=null?tkC.unlocked_sessions:total) : total;
     /* 2026-07-26 使用者指示：圓圈由「第幾堂」改成顯示使用日期，與會員票券內容同一套邏輯。
@@ -20413,6 +20439,7 @@ async function openBookingDetail(id){
         <span class="bkd-tkcard-prog">本堂 ${curLabel}${(tkC.sessions_remaining<=2&&!/自主訓練|體驗|折抵/.test(tkC.plan_name||''))?'　<span class="tag tag-warn" style="font-size:10px;">建議續約</span>':''}</span>
       </div>
       <div class="mck-dots2" style="margin:10px 0 2px;">${dots}</div>
+      ${_isHoldCard?`<div style="font-size:11px;color:#8a5e28;background:#f7efe0;border-radius:8px;padding:6px 10px;margin-top:8px;">⏳ 本堂為<b>分期繳費保留</b>（上方 🔒 未開通額度）——收款開通下一期後自動補綁扣課。</div>`:''}
       <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span>${tkBuyDateHtml(tkC)}　·　效期至 ${fmtExpire(tkC.expire_date,tkC)}${isInstall2?`　·　分期開通 ${unlocked2}/${total}`:''}</span>
         ${/* 2026-07-30 使用者指示：所有預約都要能改用別張票券。只開放給櫃檯／管理員，
