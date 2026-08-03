@@ -1,0 +1,21 @@
+/* 2026-08-03 使用者指示：「銷售新增一個『測量身體組成150』」
+
+   單次服務收費 —— 走商品收款的殼（openMerchSale：可散客、數量/單價可調、
+   選付款方式、進 purchases 當日營收），不發票券。 */
+const fs=require('fs');
+const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+
+let pass=0,fail=0;
+const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+
+ok('★ 其他收費區有「測量身體組成」卡，副標 $150（可散客）',
+   /card\('#8a7a5c','測量身體組成','\$150（可散客）',"slGoMerch\('測量身體組成',150\)"\)/.test(src));
+ok('★ 走商品收款的殼（slGoMerch → openMerchSale，名稱/價格參數化）',
+   /function slGoMerch\(name,price\)\{/.test(src) && /async function openMerchSale\(name,defPrice\)\{/.test(src));
+ok('★ 單價帶 150 但仍可改（openMerchSale 的單價欄吃 defPrice）',
+   /<input type="number" id="ms-price" value="\$\{defPrice\}" min="0" oninput="msCalc\(\)">/.test(src));
+ok('　　為什麼走商品殼不發票券，寫在程式裡',
+   /單次服務收費，\n\s*走商品收款的殼（可散客、數量\/單價可調、選付款方式），不發票券。/.test(src));
+
+console.log(`\n${pass} 通過 / ${fail} 失敗`);
+process.exit(fail?1:0);
