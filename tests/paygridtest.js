@@ -86,7 +86,8 @@ ok('　　有可見的焦點框', /\.tdl-cell:focus-visible\{outline:2px solid v
 {
   // 格子裡唯一的 <button> 應該只有那兩顆手動標記鈕（4 人中 2 人有 → 4 顆）
   const btns=(grid.match(/<button /g)||[]).length;
-  eq('　　整份 HTML 裡的 <button> 只有手動標記鈕（陳蘭馨 2 顆＋李中間 2 顆＋關閉 1 顆）', btns, 5);
+  /* 2026-08-03 使用者指示「增加［續約］按鈕、統一手動確認」：每人三顆、已續約的也能改 */
+  eq('　　整份 HTML 裡的 <button> 只有手動標記鈕（3 位 × 3 顆＋關閉 1 顆）', btns, 10);
 }
 
 

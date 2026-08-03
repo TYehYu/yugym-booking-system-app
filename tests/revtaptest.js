@@ -27,10 +27,11 @@ ok('　　為什麼不另外算一份，寫在程式裡', /免得三個地方各
 
 console.log('\n彈窗內容');
 ok('★ 有這支函式', /function openTodayRevList\(\)\{/.test(src));
-/* 2026-08-03：姓名右邊多了業績歸屬 tag（見 revattribtest.js） */
-ok('★ 每一列：姓名／歸屬 tag／品項／發票章／金額',
+/* 2026-08-03：姓名右邊多了業績歸屬 tag（revattribtest.js）；同日再指示發票標籤移除、
+   付款方式可修正（revpaytest.js）。 */
+ok('★ 每一列：姓名／歸屬 tag／品項／付款方式／金額（發票標籤已移除）',
    /<span class="mc-rev-nm">\$\{esc\(r\.nm\)\}\$\{revAttribChip\(r\)\}<\/span><span class="mc-rev-it">\$\{esc\(r\.it\)\}<\/span>/.test(src)
-   && /\$\{r\.inv\?'<span class="mc-rev-inv">發票<\/span>':''\}/.test(src));
+   && !/mc-rev-inv">發票/.test(src));
 ok('★ 有綁會員的列點下去跳到他的票券頁', /onclick="closeModal\(\);revRowGo\('\$\{r\.mid\}'\)"/.test(src));
 ok('　　revRowGo 就是開會員資料並切到票券分頁', /async function revRowGo\(mid\)\{[\s\S]{0,160}ppShowRecord\('tickets'\)/.test(src));
 ok('★ 有合計，以及有發票／無發票的拆分', /<div class="nl-sum"><span>合計<\/span><b>\$\{money\(d\.total\)\}<\/b><\/div>/.test(src)
@@ -48,18 +49,18 @@ console.log('\n實跑：彈窗組裝');
   const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
   let shown=null;
   /* 2026-08-03：列上多了 revAttribChip（業績歸屬 tag），沙箱給替身 */
-  const fn=new Function('showModal','window','revAttribChip',
-    g('function openTodayRevList(){','\n}\n')+'\nreturn openTodayRevList;')(h=>{shown=h;}, globalThis, ()=>'');
+  const fn=new Function('showModal','window','revAttribChip','revPayChip','saleKindChip',
+    g('function openTodayRevList(){','\n}\n')+'\nreturn openTodayRevList;')(h=>{shown=h;}, globalThis, ()=>'', r=>r.pay?`<span class="mc-rev-pay">${r.pay}</span>`:'', ()=>'');
 
   globalThis._gdRev={date:'2026-08-01',total:12000,inv:9000,noInv:3000,rows:[
-    {nm:'王小明',mid:'m1',it:'私人教練課 1V1',amt:9000,inv:true},
-    {nm:'散客',mid:null,it:'場地租借',amt:3000,inv:false},
+    {nm:'王小明',mid:'m1',it:'私人教練課 1V1',amt:9000,inv:true,pay:'現金'},
+    {nm:'散客',mid:null,it:'場地租借',amt:3000,inv:false,pay:'匯款'},
   ]};
   fn();
   ok('★ 兩筆都畫出來', /王小明/.test(shown) && /場地租借/.test(shown));
   ok('★ 標題帶日期與筆數', /08\/01 營收（2 筆）/.test(shown));
-  ok('★ 有發票的那筆掛發票章、沒有的不掛',
-     (shown.match(/mc-rev-inv/g)||[]).length===1);
+  ok('★ 列上沒有發票標籤、有付款方式（0803 兩修）',
+     !/mc-rev-inv/.test(shown) && /現金/.test(shown) && /匯款/.test(shown));
   ok('★ 有會員的可點、散客不可點',
      /revRowGo\('m1'\)/.test(shown) && (shown.match(/mc-rev-go/g)||[]).length===1);
   ok('★ 合計與拆分正確', /\$12,000/.test(shown) && /有發票 \$9,000　·　無發票 \$3,000/.test(shown));

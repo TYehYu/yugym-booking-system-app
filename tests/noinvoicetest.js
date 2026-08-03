@@ -33,8 +33,8 @@ ok('★ 桌機版：沒有發票金額就不列那一行',
    /\$\{_revInv>0\?`<div class="mc-kpi-rev-sub">有發票 \$\$\{_fm\(_revInv\)\} · 無發票 \$\$\{_fm\(_revNoInv\)\}<\/div>`:''\}/.test(src));
 ok('★ 手機版同樣處理', /_revInv>0\?`有發票 \$\$\{_fm\(_revInv\)\} · 無發票 \$\$\{_fm\(_revNoInv\)\}`:''\]\]/.test(src));
 ok('　　舊資料還有發票時仍看得到（不是整段砍掉）', /_revInv>0\?/.test(src));
-ok('　　營收名單上的「發票」標籤也只在該筆有發票時才出現',
-   /\$\{r\.inv\?'<span class="mc-rev-inv">發票<\/span>':''\}/.test(src));
+/* 2026-08-03 使用者指示：發票標籤整個移除（付款方式取代其位置，見 revpaytest.js） */
+ok('　　營收名單上不再出現「發票」標籤', !/mc-rev-inv">發票/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

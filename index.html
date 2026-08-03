@@ -3449,6 +3449,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 已預約、但這張票券已經沒堂數可對應（票用完或還沒買新票）→ 紅虛線圈提醒要補票
    （2026-07-30 使用者回報：8/1 團課明明有預約，三位會員的圓形卡都看不到那一堂） */
 .mtk-over{background:#fff;border:1.5px dashed var(--danger,#b5372e);box-shadow:none;color:var(--danger,#b5372e);}
+/* 圓形卡的場地徽章（2026-08-03）：自主訓練約在教室/跑步機時掛在圓下緣（跑／教） */
+.mtk-venue{position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);font-size:8px;font-weight:700;
+  font-style:normal;padding:0 4px;border-radius:6px;background:#6a655c;color:#fff;line-height:1.5;white-space:nowrap;}
 /* 會員資料票券分頁：歷史紀錄摺疊區（2026-07-28）——過期/用完縮成單行 */
 .pp-hist{margin-top:14px;border-top:1px dashed var(--bd);padding-top:10px;}
 .pp-hist summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--t2);user-select:none;padding:4px 0;}
@@ -5839,6 +5842,7 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
   background:#fff;color:var(--t2);cursor:pointer;font-family:inherit;white-space:nowrap;}
 .tdl-b:hover{color:var(--text);}
 .tdl-b.on{background:var(--gold-d,#b48a56);border-color:var(--gold-d,#b48a56);color:#fff;font-weight:700;}
+.tdl-b-ok.on{background:var(--green,#1f6f54);border-color:var(--green,#1f6f54);}
 .tdl-rs{margin-left:7px;font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 8px;}
 /* 收款提醒的上課時間（2026-07-30 使用者指示）：一般續課用品牌金、待付費用品牌紅 */
 .tdl-tm{margin-left:7px;font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;
@@ -6971,6 +6975,7 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 /* 付款方式（2026-08-03）：現金＝綠、匯款＝金（匯款要對帳，醒目一階） */
 .mc-rev-pay{flex:none;font-size:10px;font-weight:600;padding:1px 7px;border-radius:9px;background:#eef4ee;color:#2f6b39;}
 .mc-rev-pay-tr{background:#f7efe0;color:#8a5e28;}
+.mc-rev-pay-btn{border:none;cursor:pointer;font-family:inherit;}
 .mc-rev-amt{font-family:var(--num),inherit;font-size:13px;font-weight:800;color:var(--green);white-space:nowrap;}
 .mc-rev-inv{font-size:9px;font-weight:700;color:#2e6b4f;background:#e3efe7;border-radius:999px;padding:2px 6px;flex-shrink:0;}
 /* 教練課約別標籤（2026-08-01）：續約用品牌金（要看得見，它牽動獎金）、分期用暖棕、新約低調 */
@@ -7266,8 +7271,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.2108';
-const APP_VERSION_LABEL='v260803.2108';
+const APP_VERSION = '260803.2120';
+const APP_VERSION_LABEL='v260803.2120';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12729,18 +12734,19 @@ PAGES.g_dashboard=async function(){
      分期票同一天只會有一筆，取當日那筆即可。 */
   const _payLb=m=>({cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統'}[m]||m||'');
   const _payByTk={}; (purchases||[]).forEach(p=>{
-    if(p.ticket_id&&p.payment_method&&puLocalDate(p)===date) _payByTk[p.ticket_id]=p.payment_method; });
+    if(p.ticket_id&&puLocalDate(p)===date) _payByTk[p.ticket_id]={m:p.payment_method||'',pid:p.id}; });
   const _revRows=[
     ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—', mid:t.member_id||null,
       it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
       amt:Number(t.amount_paid)||0, tk:t.id, kind:_saleKindOf(t),
-      att:t.sold_by||null, attKind:'tk', attRef:t.id, pay:_payLb(_payByTk[t.id]),
+      att:t.sold_by||null, attKind:'tk', attRef:t.id,
+      pay:_payLb((_payByTk[t.id]||{}).m), payRef:(_payByTk[t.id]||{}).pid||null,
       inv:(t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued')})),
     ..._dayPur.filter(p=>!(p.ticket_id&&_dayTk.some(t=>t.id===p.ticket_id)))
       .map(p=>({nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客', mid:p.member_id||null,
       it:p.plan_name||({reactivate:'票券重啟',facility_rental:'場地租借',merchandise:'商品'}[p.source]||'收款'),
       amt:Number(p.deal_amount)||0,
-      att:p.coach_id||null, attKind:'pur', attRef:p.id, pay:_payLb(p.payment_method),
+      att:p.coach_id||null, attKind:'pur', attRef:p.id, pay:_payLb(p.payment_method), payRef:p.id,
       inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')})),
   ];
   /* 給「今日營收」彈窗用（2026-08-01）：與上方 KPI、右欄名單卡完全同源，不另外算一份，
@@ -12767,8 +12773,7 @@ PAGES.g_dashboard=async function(){
       <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
         <div class="mc-rev-b"><span class="mc-rev-nm">${r.nm}${revAttribChip(r)}</span><span class="mc-rev-it">${r.it}</span></div>
         ${r.kind?saleKindChip(r.tk,r.kind):''}
-        ${r.pay?`<span class="mc-rev-pay${r.pay==='匯款'?' mc-rev-pay-tr':''}">${r.pay}</span>`:''}
-        ${r.inv?'<span class="mc-rev-inv">發票</span>':''}
+        ${revPayChip(r)}
         <span class="mc-rev-amt">$${_fm(r.amt)}</span>
         ${r.mid?'<span class="mc-td-arrow">›</span>':''}
       </div>`).join('')}</div>
@@ -12949,8 +12954,11 @@ PAGES.g_dashboard=async function(){
   const _tsort=s=>[...s].sort()[0]||'';
   const _signList=Object.values(_signBy).map(e=>{
     const tk=e.tkid?_tkById[e.tkid]:null;
-    const done=!!(window._renewDoneBk&&window._renewDoneBk[e.bkid]);
-    const st= done ? 'renewed' : ((tk&&tk.renew_status)||'');
+    /* 2026-08-03 使用者指示：「今日收款提醒增加［續約］的按鈕，然後這邊統一用手動確認」——
+       原本「已續約」是自動判定（同類別有更新的票），但買了別張票不代表這筆談完了；
+       這份名單改成三顆鈕（續約／考慮中／不續約）都由櫃檯手動標，狀態即紀錄。
+       行事曆課卡的 🔁 綠勾（computeLastBkMarks）維持自動，不在此列。 */
+    const st=((tk&&tk.renew_status)||'');
     return {id:e.id,name:e.name,sub:[...e.tags].join('・'),tkid:e.tkid||'',rs:st,
       time:[...e.times].sort().join('、'), cc:e.cc||'pt'};
   });
@@ -13151,8 +13159,10 @@ function openTodoList(kind){
      待付費的（待簽約卡位／分期保留）用品牌紅，一般續課用金色 —— 紅 > 金 的色階。 */
   const tm=(it)=>it.time?`<span class="tdl-tm${it.pay?' tdl-tm-pay':''}">${it.time}</span>`:'';
   const body=(it)=>`${ava(it.name)}<span class="tdl-tx"><span class="tdl-n">${it.name||'—'}${tm(it)}${tag(it)}</span>${it.sub?`<span class="tdl-s">${it.sub}</span>`:''}</span>`;
-  const acts=(it)=>(kind!=='sign'||!it.tkid||it.rs==='renewed')?'':
+  /* 三顆都手動（2026-08-03 使用者指示）：續約也用按的，按同一顆＝取消標記。 */
+  const acts=(it)=>(kind!=='sign'||!it.tkid)?'':
     `<span class="tdl-acts">
+       <button class="tdl-b tdl-b-ok${it.rs==='renewed'?' on':''}" onclick="event.stopPropagation();setRenewStatus('${it.tkid}','renewed')">續約</button>
        <button class="tdl-b${it.rs==='considering'?' on':''}" onclick="event.stopPropagation();setRenewStatus('${it.tkid}','considering')">考慮中</button>
        <button class="tdl-b${it.rs==='declined'?' on':''}" onclick="event.stopPropagation();setRenewStatus('${it.tkid}','declined')">不續約</button>
      </span>`;
@@ -13223,7 +13233,7 @@ async function setRenewStatus(tkid, st){
       renew_noted_by:next?SESSION.id:null }).eq('id',tkid);
     if(error) throw error;
     dbCacheClear('member_tickets');
-    showToast(next?({considering:'已標記「考慮中」',declined:'已標記「不續約」'}[next]):'已取消標記');
+    showToast(next?({renewed:'已標記「續約」',considering:'已標記「考慮中」',declined:'已標記「不續約」'}[next]):'已取消標記');
     closeModal();
     navTo(CUR_PAGE);
   }catch(e){ showToast('標記失敗：'+((e&&e.message)||e)); }
@@ -23967,6 +23977,44 @@ function openRevList(){
 /* 教練課的約別標籤（2026-08-01 使用者指示：營收名單要看得到新約／續約／分期，
    而且要能改，避免輸入時手誤）——續約獎金只認 renewal，按錯會直接影響教練的錢。
    點標籤就地改，寫回的是 member_tickets.sale_kind 同一個欄位，不另存一份。 */
+/* 付款方式標籤（2026-08-03 使用者兩連指示：「要顯示這一筆是現金還是匯款」
+   「發票移除，然後付款方式改成可以修正」）——發票欄位還沒串（銷售端已先移除），
+   名單上不再出現；付款方式櫃檯可點開修正，寫回該筆收款的 payment_method。 */
+const REV_PAY_LB={cash:'現金', transfer:'匯款', card:'刷卡'};
+function revPayChip(r){
+  const can=(typeof isDeskLike==='function')&&isDeskLike()&&r.payRef;
+  const lb=r.pay||(can?'—':'');
+  if(!lb) return '';
+  const cls='mc-rev-pay'+(r.pay==='匯款'?' mc-rev-pay-tr':'');
+  return can
+    ? `<button class="${cls} mc-rev-pay-btn" onclick="event.stopPropagation();openRevPayPick('${r.payRef}')" title="點一下修正付款方式">${lb}</button>`
+    : `<span class="${cls}">${lb}</span>`;
+}
+async function openRevPayPick(pid){
+  if(!isDeskLike()) return;
+  const p=await dbGet('purchases',pid);
+  if(!p){ showToast('找不到收款紀錄'); return; }
+  const cur=p.payment_method||'';
+  const btn=k=>`<button type="button" class="btn ${cur===k?'btn-green':'btn-ghost'}" style="flex:1;" onclick="setRevPay('${pid}','${k}')">${REV_PAY_LB[k]}</button>`;
+  showModal(`<div class="modal-title">付款方式</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">
+      ${String(p.plan_name||'收款').replace(/</g,'&lt;')}　$${Number(p.deal_amount||0).toLocaleString()}<br>
+      改的是這一筆收款的付款方式，財務報表會跟著更新。</div>
+    <div style="display:flex;gap:8px;">${btn('cash')}${btn('transfer')}${btn('card')}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
+}
+async function setRevPay(pid, m){ return onceAct('revpay:'+pid, ()=>_setRevPay(pid,m)); }
+async function _setRevPay(pid, m){
+  try{
+    const p=await dbGet('purchases',pid); if(!p) return;
+    if(p.payment_method===m){ closeModal(); return; }
+    p.payment_method=m;
+    await dbPut('purchases',p);
+    dbCacheClear('purchases');
+    closeModal(); showToast('付款方式已改為「'+(REV_PAY_LB[m]||m)+'」');
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('修改失敗：'+((e&&e.message)||e)); }
+}
 const SALE_KIND_LB={new:'新約', renewal:'續約', installment:'分期'};
 function saleKindChip(tkId, kind){
   const k=SALE_KIND_LB[kind]?kind:'new';
@@ -24063,8 +24111,7 @@ function openTodayRevList(){
         <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="closeModal();revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
           <div class="mc-rev-b"><span class="mc-rev-nm">${esc(r.nm)}${revAttribChip(r)}</span><span class="mc-rev-it">${esc(r.it)}</span></div>
           ${r.kind?saleKindChip(r.tk,r.kind):''}
-          ${r.pay?`<span class="mc-rev-pay${r.pay==='匯款'?' mc-rev-pay-tr':''}">${esc(r.pay)}</span>`:''}
-          ${r.inv?'<span class="mc-rev-inv">發票</span>':''}
+          ${revPayChip(r)}
           <span class="mc-rev-amt">${money(r.amt)}</span>
           ${r.mid?'<span class="mc-td-arrow">›</span>':''}
         </div>`).join('')}</div>
@@ -35885,7 +35932,11 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
       const b=booked[bi++];
       const cur=_isCur(b)?' mtk-cur':'';
       const slf=selfCls(b);
-      s+=`<span class="mtk mtk-booked${cur}${slf}" style="--tk-acc:${v.accent};" title="已預約 ${b.date||''} ${b.start_time||''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}</span>`;
+      /* 場地徽章（2026-08-03 使用者指示：「會員預約的自主訓練如果是教室或跑步機，
+         要在他們首頁的圓形卡顯示場地」）——跑＝跑步機、教＝教室；預設多功能區不標。 */
+      const vlb=(typeof selfVenueLabel==='function'&&bkIsSelf(b))?selfVenueLabel(b):'';
+      const vch=({'跑步機':'跑','教室':'教'})[vlb]||'';
+      s+=`<span class="mtk mtk-booked${cur}${slf}" style="--tk-acc:${v.accent};" title="已預約 ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}</span>`;
     }
     else s+=`<span class="mtk mtk-free" style="--tk-acc:${v.accent};" title="未使用"></span>`;
   }
@@ -35896,7 +35947,9 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
     const b=booked[bi++];
     const cur=_isCur(b)?' mtk-cur':'';
     const slf=selfCls(b);
-    s+=`<span class="mtk mtk-over${cur}${slf}" title="已預約 ${b.date||''} ${b.start_time||''}　·　此票券已無堂數可對應，需補票${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}</span>`;
+    const vlb=(typeof selfVenueLabel==='function'&&bkIsSelf(b))?selfVenueLabel(b):'';
+    const vch=({'跑步機':'跑','教室':'教'})[vlb]||'';
+    s+=`<span class="mtk mtk-over${cur}${slf}" title="已預約 ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}　·　此票券已無堂數可對應，需補票${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}</span>`;
   }
   return s||`<span class="mtk mtk-free" style="--tk-acc:${v.accent};"></span>`;
 }
