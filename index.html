@@ -7306,8 +7306,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.0032';
-const APP_VERSION_LABEL='v260804.0032';
+const APP_VERSION = '260804.0039';
+const APP_VERSION_LABEL='v260804.0039';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18448,20 +18448,26 @@ async function bkStep2(){
            會員有「分期票、還有未開通堂數、票種吻合」時，多給一顆「待分期繳費保留」：
            建立與連續預約相同的保留課（pending_contract＋保留備註），收款開通下一期
            時會自動補綁到同一張分期票，堂序接得上。 */
-        let _instOk=false;
+        let _instOk=false, _instMax=0;
         if(preMid){ try{
           const _tks=await dbGetAll('member_tickets');
-          _instOk=_tks.some(x=>tkUsableBy(x,preMid) && x.status==='usable'
+          _tks.forEach(x=>{ if(tkUsableBy(x,preMid) && x.status==='usable'
             && x.installment && typeof x.installment==='object'
-            && (Number(x.sessions_total)||0)-(Number(x.unlocked_sessions)||0)>0
-            && bkTicketTypeOk(x, type_id));
+            && bkTicketTypeOk(x, type_id)){
+              const lk=(Number(x.sessions_total)||0)-(Number(x.unlocked_sessions)||0);
+              if(lk>0){ _instOk=true; _instMax+=lk; }
+            }});
         }catch(_){}}
+        window._bkInstMax=_instMax;   // 給 bkInstHold 夾上限用（最多約剩下的未開通堂數）
         return `<div class="form-row"><div style="font-size:12.5px;color:var(--t2);line-height:1.8;padding:12px 14px;background:var(--card2);border-radius:10px;">
           ${preMid?`<b>${preInfo?preInfo.name:'該會員'}</b> 沒有此課程的可用票券。${_instOk?'這位會員有分期方案（尚有未開通堂數），可先保留、收款後自動接上；也':'可回上一步改選會員或先完成儲值，或'}用「待簽約卡位」先佔住時段。`
                   :'尚未選擇會員。請回上一步選擇會員，或用「待簽約卡位」先佔住時段。'}</div></div>
         ${_instOk?`<div class="form-row" style="margin-bottom:10px;">
+          ${/* 連續預約（2026-08-04 使用者指示：「這種待分期繳費的也要能重複預約」）——
+               同一套 recurBox；上限＝分期票未開通的堂數。 */''}
+          ${recurBoxHtml('bk', _instMax||12)}
           <button type="button" class="btn btn-green" style="width:100%;" onclick="bkInstHold()">⏳ 待分期繳費保留（接上分期票）</button>
-          <div style="font-size:11px;color:var(--t3);margin-top:5px;">先佔住時段；收到下一期款項、在票券卡按「開通下一期」後會自動補綁扣課。</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:5px;">先佔住時段；收到下一期款項、在票券卡按「開通下一期」後會自動補綁扣課。可搭配上方連續預約一次保留多堂。</div>
         </div>`:''}
         <div class="form-row" style="margin-bottom:10px;">
           <button type="button" class="btn btn-ghost" style="width:100%;" onclick="openPendingHold()">🕒 待簽約卡位（客人尚未購票）</button>
@@ -18476,15 +18482,28 @@ async function bkInstHold(){ return onceAct('bkinsthold', _bkInstHold); }
 async function _bkInstHold(){
   const w=_bkWizard||{};
   if(!w.member_id||!w.t){ showToast('資料不完整，請回上一步'); return; }
+  /* 連續預約（2026-08-04 使用者指示）：同一套 readRecur；保留課不扣票，
+     runRecurringBooking 的 canHold 會放行整串。 */
+  const rc=readRecur('bk');
+  if(rc.on){
+    if(!rc.dows.length){ showToast('請勾選至少一個星期'); return; }
+    if(!(rc.count>0)){ showToast('請填寫預約次數'); return; }
+  }
+  /* 上限＝分期票剩下的未開通堂數（2026-08-04 使用者指示：「最多只能約剩下的堂數」）——
+     保留超過未開通數的堂，開通到最後一期也補不到票，等於永遠掛紅框。 */
+  const maxN=Math.max(1, Number(window._bkInstMax)||1);
+  let cnt=rc.on?rc.count:1;
+  if(cnt>maxN){ showToast(`分期票未開通的堂數只剩 ${maxN} 堂，已依上限保留`); cnt=maxN; }
   const r=await runRecurringBooking({
     member_id:w.member_id, coach_id:w.coach_id||null, substitute_coach_id:null,
     category:w.t.category, type_id:w.type_id, format:w.t.format||null,
-    startDate:w.date, time:w.time, duration:60, dows:[], times:null, count:1, until:null,
+    startDate:w.date, time:w.time, duration:60,
+    dows:rc.on?rc.dows:[], times:rc.on?rc.times:null, count:cnt, until:null,
     findTicketFn:async()=>null,
   });
-  const ok=(r&&r.results||[]).filter(x=>x.ok).length;
+  const ok=(r&&r.results||[]).filter(x=>x.ok).length, skip=(r&&r.results||[]).filter(x=>!x.ok).length;
   closeModal();
-  if(ok){ showToast('已建立分期保留：收款開通下一期後自動補綁扣課'); }
+  if(ok){ showToast(`已建立 ${ok} 堂分期保留${skip?`（${skip} 堂跳過）`:''}：收款開通下一期後自動補綁扣課`); }
   else { showToast((r&&r.results&&r.results[0]&&r.results[0].reason)||'建立失敗'); }
   navTo(CUR_PAGE);
 }
@@ -19009,11 +19028,51 @@ async function _doConvertPending(memberId, tkId){
   }
   const tk=(tkId&&cand.find(t=>t.id===tkId))||cand[0];
   if(!tk){ showToast('選的票券已不能用，請重新選一次'); return; }
-  b.member_id=memberId; b.ticket_id=tk.id; b.pending_contract=false;
-  b.trial_name=null; b.trial_phone=null;
-  await dbPut('bookings',b);
-  await deductTicket(tk,b.id,SESSION.id);
-  closeModal(); showToast('已轉正式預約並扣 1 堂');
+  /* 整串卡位一起轉（2026-08-04 使用者指示）：
+     「待簽約先約了 12 堂、先繳 4 堂 → 後面 8 堂直接轉分期繳費保留」
+     「只簽約 8 堂 → 直接取消後面佔位子的 4 堂」
+     同名同手機同票種的未來卡位視為同一串，照日期序處理：
+     ①放得進已開通堂數的 → 綁票扣課
+     ②分期票未開通的額度 → 轉成會員的「分期待繳費保留」（開通下一期自動補綁）
+     ③超過簽約總堂數的 → 自動取消，把時段還出來。 */
+  const _all=await dbGetAll('bookings');
+  const _k=x=>String(x.date)+String(x.start_time||'');
+  let series=_all.filter(x=>x.pending_contract && !x.member_id && x.status==='booked'
+      && String(x.trial_name||'')===String(b.trial_name||'')
+      && String(x.trial_phone||'')===String(b.trial_phone||'')
+      && (x.ticket_type_id||null)===(b.ticket_type_id||null)
+      && x.date>=ymd(TODAY))
+    .sort((a,c)=>_k(a).localeCompare(_k(c)));
+  if(!series.some(x=>x.id===b.id)) series=[b].concat(series);
+  const isInst=tk.installment&&typeof tk.installment==='object';
+  let avail=Math.max(0, tkUnlockedLeft(tk));
+  let lockedLeft=isInst?Math.max(0,(Number(tk.sessions_total)||0)-(Number(tk.unlocked_sessions)||0)):0;
+  let bound=0, held=0, dropped=0;
+  for(const hb of series){
+    if(avail>0){
+      hb.member_id=memberId; hb.ticket_id=tk.id; hb.ticket_type_id=tk.ticket_type_id||hb.ticket_type_id||null;
+      hb.pending_contract=false; hb.trial_name=null; hb.trial_phone=null;
+      await dbPut('bookings',hb);
+      await deductTicket(tk,hb.id,SESSION.id);
+      avail--; bound++;
+    }else if(lockedLeft>0){
+      hb.member_id=memberId; hb.ticket_type_id=tk.ticket_type_id||hb.ticket_type_id||null;
+      hb.trial_name=null; hb.trial_phone=null;
+      hb.note='分期待繳費保留（收款後自動補扣）';
+      await dbPut('bookings',hb);      // pending_contract 維持 true＝分期保留（紅框待收款）
+      lockedLeft--; held++;
+    }else{
+      hb.status='cancelled'; hb.cancelled_at=new Date().toISOString();
+      hb.note=(hb.note?hb.note+'｜':'')+'簽約堂數不含此堂，轉正時自動取消';
+      await dbPut('bookings',hb);
+      dropped++;
+    }
+  }
+  dbCacheClear(['bookings','member_tickets','ticket_logs']);
+  closeModal();
+  showToast(`已轉正式預約：扣課 ${bound} 堂`
+    +(held?`、轉分期保留 ${held} 堂`:'')
+    +(dropped?`、取消多出的 ${dropped} 堂`:''));
   navTo(CUR_PAGE);
  }catch(e){ showToast('轉換失敗：'+(e&&e.message?e.message:e)); }
 }
