@@ -7280,8 +7280,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.2344';
-const APP_VERSION_LABEL='v260803.2344';
+const APP_VERSION = '260803.2348';
+const APP_VERSION_LABEL='v260803.2348';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16308,7 +16308,13 @@ async function validateBooking(bk,date,time,duration){
 
   // 3) 場地分配（依課程類型可用場地優先序，找該時段未被佔的單位）
   //    團課→團課教室；教練/體驗→多功能→團課教室；自主→多功能→跑步機→團課教室
-  const alloc = allocateVenue(bk.category, sameDay, ns, ne, bk.id, bk.venue_pref||null);
+  /* 改期沿用跑步機（2026-08-03 林秋香案例：週四 19:00 跑步機移 18:00，18:00 明明有
+     跑步機卻被推薦教室）—— venue_pref 只存在記憶體、不入庫，既有預約改期時是空的，
+     重新配置就走 多功能→教室→跑步機 的預設順位。已在跑步機上的預約＝當初就是指定
+     跑步機，改期自動視為指定。用區域變數、不寫回 bk —— bookings 表沒有 venue_pref
+     欄位，寫回會讓後續 dbPut 整筆失敗（PGRST204）。 */
+  const _vpref = bk.venue_pref || ((bk.id && String(bk.venue_unit||'').startsWith('treadmill'))?'treadmill':null);
+  const alloc = allocateVenue(bk.category, sameDay, ns, ne, bk.id, _vpref);
   if(alloc.error) return alloc.error;
   bk.venue_unit = alloc.unit; // 寫回，呼叫端存 booking 時帶上
   // 溢出到次選場地：標記供呼叫端先跳確認（不在此擋，維持同步驗證相容）
