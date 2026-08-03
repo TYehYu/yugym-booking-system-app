@@ -137,7 +137,8 @@ console.log('\n權限');
 console.log('\n接到明細裡');
 ok('★ 模板不能 await → 先算好再帶進去',
    /const _vuDots=\(typeof venueUnitDots==='function'\)\?await venueUnitDots\(b, editable\):'';/.test(src));
-ok('★ 三處場地列都掛上', (src.match(/\$\{_vuDots\}/g)||[]).length===4);
+/* 2026-08-03 排列定版：下方重複的場地列退場，剩三處（PT/團課體驗/通用） */
+ok('★ 三處場地列都掛上', (src.match(/\$\{_vuDots\}/g)||[]).length===3);
 /* 2026-07-31 二修（使用者定案）：燈號改成開關，一堂可以佔兩台 */
 ok('★ 點燈號 → 開關這一台', /async function bkToggleVenueUnit\(id, unit\)\{/.test(src));
 ok('★ 打開＝建一筆「同行使用」的預約，不綁票不扣點',

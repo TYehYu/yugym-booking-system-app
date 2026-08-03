@@ -44,7 +44,10 @@ console.log('\n② 相容性');
 }
 
 console.log('\n③ 接線');
-ok('★ 團課名單每列帶入自己的名額序', /ticketTokens\(_sl\.t,_sl\.stamps,st\.typeMap,_sl\.used,b\.id,mid,_sl\.selfBk,seatNo\(sk\)\)/.test(src));
+/* 2026-08-03 二修（許佳慈 #15）：名額跨兩張票時要傳「同票內的序」——
+   第三個名額在 #15 上是第 1 次出現，傳全體序 3 會永遠圈不到。 */
+ok('★ 團課名單每列帶入「同票內」的名額序', /ticketTokens\(_sl\.t,_sl\.stamps,st\.typeMap,_sl\.used,b\.id,mid,_sl\.selfBk,_ord\)/.test(src)
+   && /if\(_s2&&_s2\.t&&_s2\.t\.id===_sl\.t\.id\) _ord\+\+;/.test(src));
 ok('★ 三種圓點（已上/已預約/超額）都走同一支 _isCur',
    (src.match(/const cur=_isCur\(b\)\?' mtk-cur':'';/g)||[]).length===3);
 ok('　　使用者的指示寫在程式裡', /「第一名額跟第二名額圓課卡要分開來圈」/.test(src));

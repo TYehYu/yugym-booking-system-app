@@ -7280,8 +7280,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.2300';
-const APP_VERSION_LABEL='v260803.2300';
+const APP_VERSION = '260803.2337';
+const APP_VERSION_LABEL='v260803.2337';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17809,11 +17809,12 @@ function mpkUpgrade(row){
      compositionend 之後才做完整的 mpkOpen。 */
   inp.addEventListener('compositionstart',()=>{ row._mpkIME=true; });
   inp.addEventListener('compositionend',()=>{ row._mpkIME=false; mpkOpen(row); });
-  // 打字：原本的 oninput 已先跑完篩選（inline handler 先註冊先執行），這裡只負責重畫清單
-  inp.addEventListener('input',e=>{
-    if(row._mpkIME || (e && e.isComposing)){ row.classList.add('mpk-open'); mpkRender(row); return; }
-    mpkOpen(row);   // mpkOpen 內含 mpkFit，清單變短時選單高度跟著縮
-  });
+  /* 打字：原本的 oninput 已先跑完篩選（inline handler 先註冊先執行），這裡負責開選單。
+     2026-08-03 使用者回報：「輸入會員姓名的時候下方沒有列表跑出來，還要按方向鍵下才看得到」——
+     組字期間原本只重畫清單不定位，但選單是 position:fixed，沒跑 mpkFit 就沒有座標＝看不到。
+     mpkFit 內部本來就會在組字中跳過 scrollIntoView（不打斷 composition），
+     組字期間跑完整 mpkOpen 是安全的。 */
+  inp.addEventListener('input',()=>{ mpkOpen(row); });
   /* focus 時全選：讓「點一下欄位就能重打」。但已經打到一半又回來時全選會很煩，
      所以只在欄位內容剛好等於「目前選定的那個人」時才全選。 */
   inp.addEventListener('focus',()=>{ if(inp.value===mpkLabel(sel)) inp.select(); mpkOpen(row); });
@@ -17870,6 +17871,7 @@ try{ window._calBookMode = localStorage.getItem('yugym_cal_bookmode')==='1'; }ca
 let _bkMembers=[];
 let _bkWizard={};   // 暫存第1頁選擇
 async function openBookingModal(){
+  window._bkFamUser=null;   // 家庭成員使用人旗標只作用單筆（2026-08-03）
   const[coaches,types,_bkMemsAll]=await Promise.all([dbGetAll('coaches'),dbGetAll('ticket_types'),dbGetAll('members')]);
   window._bkAllMembers=_bkMemsAll.filter(m=>m.status==='active').sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const isCoach=SESSION.role==='coach' && !SESSION.is_manager;   // 店長比照櫃台（2026-07-27）
@@ -18938,6 +18940,30 @@ async function _doConvertPending(memberId, tkId){
   navTo(CUR_PAGE);
  }catch(e){ showToast('轉換失敗：'+(e&&e.message?e.message:e)); }
 }
+/* 家庭成員選擇視窗（2026-08-03 使用者指示）：櫃檯幫同帳號在同一時段約第二個
+   自主訓練名額時，先選這格是哪位家人使用（寫進 trial_name，與會員端同一套規則）。 */
+/* ⚠ 用獨立浮層而非 showModal —— showModal 會蓋掉底下的預約表單，
+   重送 submitBooking 時就讀不到欄位了。浮層蓋在彈窗之上（z-index 9860 > modal-bg 9750）。 */
+function openBkFamPickNew(fam){
+  let ov=document.getElementById('bkfam-ov'); if(ov)ov.remove();
+  ov=document.createElement('div'); ov.id='bkfam-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:9860;background:rgba(20,18,14,0.45);display:flex;align-items:center;justify-content:center;padding:24px;';
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;padding:22px 20px;max-width:340px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);">
+      <div style="font-size:15px;font-weight:700;margin-bottom:8px;">這格給誰使用？</div>
+      <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">
+        本人這個時段已有預約。家庭共享帳號可以幫家人再約一格自主訓練，請選擇使用人：</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${fam.map(f=>`<button class="btn btn-ghost" style="text-align:left;padding:12px 14px;" onclick="bkFamPickGo('${String(f).replace(/['"<>]/g,'')}')">👤　${f}</button>`).join('')}
+      </div>
+      <div style="margin-top:14px;text-align:right;"><button class="btn btn-ghost" onclick="window._bkFamUser=null;document.getElementById('bkfam-ov').remove()">取消</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+async function bkFamPickGo(name){
+  window._bkFamUser=name;
+  const ov=document.getElementById('bkfam-ov'); if(ov)ov.remove();
+  await submitBooking();   // 重送：表單還在底下，這次帶著使用人，重疊防呆會放行（famoverlap 同規則）
+}
 async function submitBooking(){
   /* 防連點（2026-07-28 魚媽案例：長連續預約無回饋被連按兩次 → 27 筆重複）：
      建立期間鎖住，按鈕顯示進度。 */
@@ -19079,13 +19105,25 @@ async function _submitBookingInner(){
   const _venuePref=_tmN>0?'treadmill':null;
   // 單筆預約（非連續）：先預驗證場地，若溢出到次選場地→跳確認，教練同意才建立
   if(!recurring){
-    const vbkChk={id:null,coach_id,category:t.category,ticket_type_id:type_id,venue_pref:_venuePref};
+    const vbkChk={id:null,coach_id,category:t.category,ticket_type_id:type_id,venue_pref:_venuePref,
+      member_id, trial_name:window._bkFamUser||null};
     const preErr=await validateBooking(vbkChk,date,time,60);
-    if(preErr){ showToast(preErr); return; }
+    if(preErr){
+      /* 2026-08-03 使用者指示：「在同一個位子用同帳號預約第二次的時候，要跳出選擇
+         家庭成員的視窗」—— 撞到本人既有預約、會員有家庭成員名單、且這筆是自主訓練
+         （具名名額只有自主訓練適用，同家庭共享規則），就開選擇視窗；選完自動重送。 */
+      if(preErr==='會員於該時段已有預約' && t.category==='自主訓練' && member_id && !window._bkFamUser){
+        const _m=await dbGet('members',member_id).catch(()=>null);
+        const _fam=Array.isArray(_m&&_m.family_members)?_m.family_members.filter(Boolean):[];
+        if(_fam.length){ openBkFamPickNew(_fam); return; }
+      }
+      showToast(preErr); return;
+    }
     if(!(await confirmVenueOverflow(vbkChk))) return; // 教練取消
   }
   const r=await runRecurringBooking({
     member_id, coach_id, substitute_coach_id:null,
+    trial_name:window._bkFamUser||null,   /* 家庭成員使用人（2026-08-03） */
     category:t.category, type_id, format:fmt,
     startDate:date, time, duration:60,
     dows: recurring ? _rc.dows : [],
@@ -19105,8 +19143,9 @@ async function _submitBookingInner(){
   // 單筆預約：直接吐司；連續預約或有跳過：跳結果摘要視窗
   if(!recurring && results.length===1){
     closeModal();
-    if(results[0].ok){ showToast('預約成功，已扣抵 1 堂票券'+(_tmN>1?`（跑步機 ${_tmN} 台，第 2 台不扣點）`:'')); }
+    if(results[0].ok){ showToast('預約成功，已扣抵 1 堂票券'+(_tmN>1?`（跑步機 ${_tmN} 台，第 2 台不扣點）`:'')+(window._bkFamUser?`（使用人：${window._bkFamUser}）`:'')); }
     else { showToast(results[0].reason); }
+    window._bkFamUser=null;   // 使用人旗標只作用這一筆（2026-08-03 家庭成員）
     bkAfterSubmit();
     return;
   }
@@ -19239,6 +19278,7 @@ async function runRecurringBooking(opts){
       }
     }
     const bk={id:uid('BK'), member_id:o.member_id||null, coach_id:o.coach_id||null,
+      trial_name:o.trial_name||null,   /* 家庭成員使用人（2026-08-03 櫃檯端；自主訓練具名名額） */
       substitute_coach_id:o.substitute_coach_id||null,
       /* 指定場地（2026-08-01 跑步機台數）：validateBooking 會依這個強制配置，
          配好之後把 venue_unit 寫回這個物件。 */
@@ -20052,6 +20092,41 @@ async function openCourseCard(id, el){
    所以 coachOwnsBk 現在只守修改路徑（expandBkCard 的圓形按鈕、儲存、取消、簽到），
    openBookingDetail 一律放行 —— 那一頁的每個修改元件本來就綁 ownByCoach。
    店長／管理員／櫃檯不受限。 */
+/* 明細第一列姓名旁的「使用人」按鈕（2026-08-03 使用者指示：「如果該會員有設定
+   家庭成員，第一列會員姓名旁邊就要多一個按鈕顯示選擇是哪個成員」）——
+   顯示目前使用人（trial_name 空＝本人），櫃檯可點開改；沒有家庭名單的會員不顯示。 */
+function bkFamBtn(b, mem, editable){
+  const fam=(mem&&Array.isArray(mem.family_members))?mem.family_members.filter(Boolean):[];
+  if(!fam.length) return '';
+  const cur=(String(b.trial_name||'').trim())||'本人';
+  const can=editable&&(typeof isDeskLike==='function')&&isDeskLike();
+  return can
+    ? `<button class="tag" style="font-size:11px;background:#eef4ee;color:#2f6b39;border:none;cursor:pointer;" onclick="openBkFamChange('${b.id}')" title="點一下更改使用人">👤 ${cur} ▾</button>`
+    : `<span class="tag" style="font-size:11px;background:#eef4ee;color:#2f6b39;">👤 ${cur}</span>`;
+}
+async function openBkFamChange(bid){
+  const b=await dbGet('bookings',bid); if(!b) return;
+  const m=b.member_id?await dbGet('members',b.member_id).catch(()=>null):null;
+  const fam=(m&&Array.isArray(m.family_members))?m.family_members.filter(Boolean):[];
+  const cur=(String(b.trial_name||'').trim())||'';
+  const btn=(v,lb)=>`<button class="btn ${cur===v?'btn-green':'btn-ghost'}" style="justify-content:flex-start;text-align:left;padding:11px 14px;" onclick="setBkFamUser('${bid}','${v.replace(/['"<>]/g,'')}')">👤　${lb}</button>`;
+  showModal(`<div class="modal-title">這格的使用人</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${btn('','本人（'+(m?m.name:'—')+'）').replace("setBkFamUser('"+bid+"','')","setBkFamUser('"+bid+"','')")}
+      ${fam.map(f=>btn(f,f)).join('')}
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();openBookingDetail('${bid}')">取消</button></div>`);
+}
+async function setBkFamUser(bid, name){
+  try{
+    const b=await dbGet('bookings',bid); if(!b) return;
+    b.trial_name=name||null;
+    await dbPut('bookings',b);
+    dbCacheClear('bookings');
+    closeModal(); showToast('使用人已改為「'+(name||'本人')+'」');
+    openBookingDetail(bid);
+  }catch(e){ showToast('更改失敗：'+((e&&e.message)||e)); }
+}
 function coachOwnsBk(b){
   if(!b) return false;
   if(!SESSION || SESSION.role!=='coach' || SESSION.is_manager) return true;
@@ -20293,10 +20368,15 @@ async function openBookingDetail(id){
          2026-08-01：每一列標出這個名額用的是票券夾裡的第幾套（#N）＋方案名 ——
          使用者要能直接把明細與會員票券頁對起來。 */
       const _sl = st ? st.slotAt(seatNo(sk)) : null;
+      /* 圈選序＝「同一張票內的第幾個名額」（2026-08-03 許佳慈 #15 案例）——
+         三個名額跨兩張票（#13×2＋#15×1）時，第三個名額在 #15 上是第 1 次出現，
+         傳全體序 3 會永遠圈不到。逐一往前數同票的名額得到票內序。 */
+      let _ord=1;
+      if(st&&_sl&&_sl.t){ for(let _k=1;_k<seatNo(sk);_k++){ const _s2=st.slotAt(_k); if(_s2&&_s2.t&&_s2.t.id===_sl.t.id) _ord++; } }
       const tkInfo = _sl
         ? `<div class="gr-tkname">${tkNoTag(_sl.no)}${_sl.t.plan_name||'票券'}`
           +`${st.makeup?'<span class="tag" style="font-size:10px;background:#eef6ee;color:#2f6b39;margin-left:6px;">含補課券</span>':''}</div>`
-          +`<div class="mck-dots2" style="margin:4px 0 2px;">${ticketTokens(_sl.t,_sl.stamps,st.typeMap,_sl.used,b.id,mid,_sl.selfBk,seatNo(sk))}</div>`
+          +`<div class="mck-dots2" style="margin:4px 0 2px;">${ticketTokens(_sl.t,_sl.stamps,st.typeMap,_sl.used,b.id,mid,_sl.selfBk,_ord)}</div>`
         : '';
       return `<div class="gr-row${onLeaveM?' gr-row-leave':''}" style="padding:6px 0;border-bottom:1px solid var(--bd);">
         <div style="display:flex;align-items:center;gap:8px;">
@@ -20317,9 +20397,9 @@ async function openBookingDetail(id){
       ? `<div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:9px;padding:8px 10px;font-size:11.5px;line-height:1.7;">🔒 <b>分期待繳費保留</b>：這堂尚未扣課。收到下一期款項、在會員票券卡按「開通下一期」後，會自動補綁票券並扣課。</div>` : '';
     memberLine = _holdNote + (b.pending_contract&&!b.member_id)
       ? `<div><span style="color:var(--t2);">客戶</span>　${b.trial_name||'—'}　<span class="tag tag-warn" style="font-size:10.5px;">待簽約</span>${b.trial_phone?`　<span style="color:var(--t3);font-size:12px;">${b.trial_phone}</span>`:''}</div>`
-      : `<div><span style="color:var(--t2);">會員</span>　${mem?(isMemberView?`<span style="font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'—'}</div>`
-      /* 家庭共享使用人（2026-07-29）：自主訓練由家人使用時，trial_name 記稱呼 */
-      + ((bkIsSelf(b)&&b.trial_name)?`<div><span style="color:var(--t2);">使用人</span>　${b.trial_name}<span style="color:var(--t3);font-size:11.5px;">（家庭成員）</span></div>`:'');
+      : `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">會員</span>　${mem?(isMemberView?`<span style="font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'—'}${bkFamBtn(b,mem,editable)}</div>`
+      /* 家庭共享使用人（2026-07-29；2026-08-03 起有家庭名單的改由姓名旁按鈕顯示/更改） */
+      + ((bkIsSelf(b)&&b.trial_name&&!(mem&&Array.isArray(mem.family_members)&&mem.family_members.length))?`<div><span style="color:var(--t2);">使用人</span>　${b.trial_name}<span style="color:var(--t3);font-size:11.5px;">（家庭成員）</span></div>`:'');
   }
   showModal(`<div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <span>預約明細</span>
@@ -20334,9 +20414,14 @@ async function openBookingDetail(id){
     </div>
     <div class="bkd-marker${isGroupD?' bkd-wide':''}" style="display:none;"></div>
     ${isPersonalPT?`
+    ${/* 排列定版（2026-08-03 使用者指示）：第一列會員姓名 → 第二列日期時間時長 →
+         第三列教練 → 第四列場地。原本姓名與時間擠同一列。 */''}
     <div style="display:flex;flex-direction:column;gap:11px;font-size:13px;padding-bottom:2px;">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         ${mem?(isMemberView?`<span style="font-size:14px;font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:4px 13px;font-size:14px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'<span>—</span>'}
+        ${bkFamBtn(b,mem,editable)}
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         ${editable
           ? `<span class="bkd-timeedit">
                <input type="date" id="ed-date" value="${b.date}">
@@ -20374,6 +20459,8 @@ async function openBookingDetail(id){
          體驗課同一套（2026-07-31 使用者指示）：日期時間時長收斂成一列，
          而且場地只留一個 —— 原本上面一列、下面那塊又一個，同樣的資訊講兩次。 */''}
     <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;">
+      ${/* 排列定版（2026-08-03）：單人（體驗）姓名放第一列；團課名單維持 0731 定案在基本資料後 */''}
+      ${isTrialD?memberLine:''}
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         ${editable
           ? `<span class="bkd-timeedit">
@@ -20401,14 +20488,25 @@ async function openBookingDetail(id){
         <span style="flex-shrink:0;">${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>${_vuDots}
         ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
       </div>`}
-      ${memberLine}
+      ${isGroupD?memberLine:''}
       ${isTrialD?`<div><span style="color:var(--t2);">類型</span>　<span class="tag tag-${colorClass(typeOfCat(b.category))}">${b.category}${b.format?'·'+b.format:''}</span></div>`:''}
       ${tkLine}
     </div>`:`
+    ${/* 排列定版（2026-08-03 使用者指示：所有預約明細統一）：
+         第一列姓名 → 第二列日期時間時長 → 第三列教練 → 第四列場地。
+         時間列從下方「調整時間」區塊移上來（同一組 ed-* id，saveBookingTime 照讀），
+         下方那塊與重複的場地列退場。 */''}
     <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
       ${memberLine}
-      <div><span style="color:var(--t2);">類型</span>　<span class="tag tag-${colorClass(typeOfCat(b.category))}">${b.category}${b.format?'·'+b.format:''}</span></div>
-      ${b.venue_unit?`<div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--t2);">場地</span><span>${venueName(b.venue_unit)}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;">非主場地</span>':''}</span>${_vuDots}</div>`:''}
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        ${editable
+          ? `<span class="bkd-timeedit">
+               <input type="date" id="ed-date" value="${b.date}">
+               <select id="ed-time">${bkTimeOptions(b.start_time,{noEmpty:1})}</select>
+               <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30 分</option><option value="60" ${b.duration===60?'selected':''}>60 分</option><option value="90" ${b.duration===90?'selected':''}>90 分</option><option value="120" ${b.duration===120?'selected':''}>120 分</option></select>
+             </span>`
+          : `<span style="font-family:var(--num);font-size:15px;font-weight:700;color:var(--text);">${b.date.replace(/-/g,'/')}（${WD[d.getDay()]}）${b.start_time}　<span style="font-size:12px;color:var(--t3);font-weight:400;">${b.duration}分</span></span>`}
+      </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">教練</span><span>${coach?coach.name:'—'}</span>
         ${editable?`<select id="ed-subcoach" style="font-size:12.5px;padding:4px 8px;border:1px solid var(--bd);border-radius:7px;background:#fff;max-width:170px;">
           <option value="">無代課</option>
@@ -20421,23 +20519,16 @@ async function openBookingDetail(id){
           ?`<button class="btn btn-ghost btn-sm bkd-cleave" onclick="bkCoachLeave('${b.id}')" title="退票、效期＋7 天、課種改自主訓練">教練請假</button>`
           :(b.status==='coach_leave'?'<span class="tag" style="background:#fbe9e7;color:#b5372e;">教練請假</span>':'')}
       </div>
+      ${isMemberView?'':`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="color:var(--t2);flex-shrink:0;">場地</span>
+        <span style="flex-shrink:0;">${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>${_vuDots}
+        ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
+      </div>`}
+      <div><span style="color:var(--t2);">類型</span>　<span class="tag tag-${colorClass(typeOfCat(b.category))}">${b.category}${b.format?'·'+b.format:''}</span></div>
       ${tkLine}
     </div>`)}
-    ${/* 團課／體驗的時間已經移到第一列（2026-07-31），這裡不再重複；教練課走 isPersonalPT 那條 */''}
-    ${(isPersonalPT||isGroupD||isTrialD)?'':(editable?`<div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--bd);">
-      <div style="font-size:11.5px;color:var(--t2);margin-bottom:8px;">調整時間（手機可用此處改期改時間）</div>
-      <div class="form-2col">
-        <div class="form-row" style="margin-bottom:8px;"><label>日期</label><input type="date" id="ed-date" value="${b.date}"></div>
-        <div class="form-row" style="margin-bottom:8px;"><label>時間</label><select id="ed-time">${bkTimeOptions(b.start_time,{noEmpty:1})}</select></div>
-      </div>
-      <div class="form-row" style="margin-bottom:0;"><label>時長（分鐘）</label>
-        <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30</option><option value="60" ${b.duration===60?'selected':''}>60</option><option value="90" ${b.duration===90?'selected':''}>90</option><option value="120" ${b.duration===120?'selected':''}>120</option></select></div>
-    </div>`:`<div style="margin-top:10px;font-size:13px;"><span style="color:var(--t2);">時間</span>　${b.date}（週${WD[d.getDay()]}）${b.start_time}　${b.duration}分鐘</div>`)}
-    ${/* 體驗改由上方那一列顯示場地（2026-07-31 使用者指示：場地訊息重複了，留一個就好） */''}
-    ${(!isPersonalPT&&!isGroupD&&!isTrialD&&!isMemberView)?`<div style="margin-top:10px;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <span style="color:var(--t2);">場地</span>　<span>${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>${_vuDots}
-      ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
-    </div>`:''}
+    ${/* 時間列已統一為各分支的第二列（2026-08-03 排列定版），下方的「調整時間」
+         與重複的場地區塊退場 —— ed-date/ed-time/ed-dur 同一組 id，saveBookingTime 照讀。 */''}
     ${b.status==='cancelled'&&b.refund_waived?`<div style="margin-top:12px;padding:10px;background:#f7efe0;border-radius:8px;font-size:12px;color:#8a5e28;">此預約於開課 24 小時內取消，未退回票券。${b.makeup_granted?'（已補發補課券）':''}</div>`:''}
     ${bkNoteBlock(b, isMemberView, ownByCoach)}
     <div class="modal-foot">
@@ -27244,6 +27335,9 @@ function ppHeaderHtml(){
   const meta = isM
     ? tierItem + mvA('主教練', PP.ctx.coachMap?(PP.ctx.coachMap[r.default_coach_id]||''):'',_canBase?'default_coach_id':'',_canBase?'＋ 指定':'未指定')
       + ecItem + lineItem
+      /* 家庭成員（2026-08-03 使用者指示：「會員資料新增一個＋家庭成員」）——
+         與會員端同一個欄位 members.family_members；櫃檯可代客維護。 */
+      + (_canBase?`<div class="pp-meta-i pp-f-click" onclick="ppFamEdit('${r.id}')"><span class="pp-meta-l">家庭成員</span><span class="pp-meta-v">${(Array.isArray(r.family_members)&&r.family_members.length)?r.family_members.join('、'):'<span style="color:var(--t3);">＋ 家庭成員</span>'}</span></div>`:'')
     : mv('電話',fmtPhone(r.phone),'phone') + mv('對外名稱', r.name_en?r.name_en.toUpperCase():'','name_en')
       + mv('職稱', r.job_title,'job_title') + mv('到職日', r.hire_date,'hire_date')
       + mv('Email', r.email,'email') + empChips;
@@ -27545,6 +27639,43 @@ async function _tkShareBack(mid){
   if(window._tkShareFromPP){ window._tkShareFromPP=false;
     await openPersonProfile('member',mid); try{ ppShowRecord('tickets'); }catch(_){} return; }
   openMemberDetail(mid);
+}
+/* 家庭成員（櫃檯版，2026-08-03 使用者指示）：與會員端 openFamilyShare 同一個欄位
+   members.family_members，櫃檯代客新增/移除稱呼（例：爸爸、媽媽）。 */
+async function ppFamEdit(mid){
+  const m=await dbGet('members',mid); if(!m){ showToast('找不到會員'); return; }
+  const list=Array.isArray(m.family_members)?m.family_members.filter(Boolean):[];
+  showModal(`<div class="modal-title">家庭成員　<span style="font-size:12px;color:var(--t3);font-weight:400;">${m.name}</span></div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">
+      設定後，同一個帳號可在同一時段幫家人多約一格自主訓練（預約時選使用人）。</div>
+    <div id="ppfam-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+      ${list.length?list.map((f,i)=>`<div style="display:flex;align-items:center;gap:8px;background:var(--card2);border-radius:9px;padding:8px 12px;">
+        <span style="flex:1;">👤　${f}</span>
+        <button class="btn btn-ghost btn-sm" style="color:#b5372e;padding:3px 10px;" onclick="ppFamRemove('${mid}',${i})">移除</button></div>`).join('')
+      :'<div style="padding:8px 0;color:var(--t3);font-size:12.5px;">尚未新增家庭成員</div>'}
+    </div>
+    <div style="display:flex;gap:8px;">
+      <input id="ppfam-name" placeholder="稱呼（例：爸爸、媽媽）" style="flex:1;" maxlength="8">
+      <button class="btn btn-green" onclick="ppFamAdd('${mid}')">＋ 新增</button>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();openPersonProfile('member','${mid}')">完成</button></div>`);
+}
+async function ppFamAdd(mid){
+  const v=(document.getElementById('ppfam-name').value||'').trim();
+  if(!v){ showToast('請輸入稱呼'); return; }
+  const m=await dbGet('members',mid); if(!m) return;
+  const list=Array.isArray(m.family_members)?m.family_members.filter(Boolean):[];
+  if(list.includes(v)){ showToast('已有相同稱呼'); return; }
+  list.push(v);
+  await sb.from('members').update({family_members:list}).eq('id',mid);
+  dbCacheClear('members'); ppFamEdit(mid);
+}
+async function ppFamRemove(mid,i){
+  const m=await dbGet('members',mid); if(!m) return;
+  const list=Array.isArray(m.family_members)?m.family_members.filter(Boolean):[];
+  list.splice(i,1);
+  await sb.from('members').update({family_members:list.length?list:null}).eq('id',mid);
+  dbCacheClear('members'); ppFamEdit(mid);
 }
 /* 票券分頁「儲值」（2026-07-28 使用者指示）：開銷售流程並預選本會員 */
 function ppTopUp(mid){

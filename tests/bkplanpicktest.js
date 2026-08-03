@@ -107,11 +107,13 @@ ok('　　沒有開著的選單時，捲動不掃 DOM（旗標擋在最前面）
    /if\(!document\.documentElement\.classList\.contains\('mpk-any-open'\)\) return;/.test(src)
    && /document\.documentElement\.classList\.add\('mpk-any-open'\)/.test(src)
    && /if\(!document\.querySelector\('\.mem-pick-row\.mpk-open'\)\) document\.documentElement\.classList\.remove\('mpk-any-open'\);/.test(src));
-ok('　　打字讓清單變短時也重算（input 走 mpkOpen）',
-   /mpkOpen\(row\);   \/\/ mpkOpen 內含 mpkFit/.test(src));
-ok('　　組字中只重畫清單，不動位置（compositionend 之後才完整重算）',
+/* 2026-08-03 使用者回報「打字沒有列表、要按方向鍵才看得到」：組字期間也要跑完整
+   mpkOpen（選單是 fixed，沒定位就看不見）；mpkFit 在組字中本就跳過捲動。 */
+ok('　　打字（含組字中）都走完整 mpkOpen（定位＋重畫）',
+   /inp\.addEventListener\('input',\(\)=>\{ mpkOpen\(row\); \}\);/.test(src));
+ok('　　組字狀態仍有追蹤（mpkFit 靠它跳過 scrollIntoView）',
    /inp\.addEventListener\('compositionstart',\(\)=>\{ row\._mpkIME=true; \}\);/.test(src)
-   && /if\(row\._mpkIME \|\| \(e && e\.isComposing\)\)\{ row\.classList\.add\('mpk-open'\); mpkRender\(row\); return; \}/.test(src));
+   && /if\(Math\.max\(below,above\)<180 && !row\._mpkIME\)/.test(src));
 ok('　　整段包 try —— 量不到尺寸不能讓選單開不起來', /function mpkFit\(row\)\{\s*\n\s*try\{/.test(src));
 
 {

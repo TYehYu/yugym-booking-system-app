@@ -70,20 +70,23 @@ ok('　　原因寫在程式裡', /現在改成點得開「課程明細」，但
 console.log('\n團課明細排列：日期時間時長／教練／場地／名單／備註');
 {
   const i=src.indexOf('    </div>`:((isGroupD||isTrialD)?`');
-  const j=src.indexOf('</div>`:`\n    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">',i);
+  /* 2026-08-03 排列定版：通用分支前多了說明註解，錨點跟進 */
+  const j=src.indexOf('排列定版（2026-08-03 使用者指示：所有預約明細統一）',i);
   const g=src.slice(i,j);
   ok('★ 團課／體驗走自己一套版面（與其餘課種分開）', i>0 && j>i);
   const at=t=>g.indexOf(t);
   ok('★ 第一列＝日期・時間・時長', at('id="ed-date"')>0 && at('id="ed-dur"')>at('id="ed-date"'));
   ok('★ 第二列＝教練', at('>教練<')>at('id="ed-date"'));
   ok('★ 第三列＝場地', at('>場地<')>at('>教練<'));
-  ok('★ 再來才是會員預約名單', at('${memberLine}')>at('>場地<'));
+  /* 2026-08-03 排列定版：體驗的姓名移到第一列（isTrialD?memberLine）、團課名單仍在場地後 */
+  ok('★ 團課名單仍在場地之後、體驗姓名移到第一列', at("${isGroupD?memberLine:''}")>at('>場地<')
+     && at("${isTrialD?memberLine:''}")>=0 && at("${isTrialD?memberLine:''}")<at('id="ed-date"'));
   const noteAt=src.indexOf('${bkNoteBlock(b, isMemberView, ownByCoach)}');
   ok('★ 備註在最後（整個版面之外、按鈕列之前）',
      noteAt>src.indexOf('${memberLine}')
      && noteAt<src.indexOf('<div class="modal-foot">', noteAt));
-  ok('★ 下方的「調整時間」區塊對團課不再重複輸出（同樣的 ed-date/ed-time id 會撞）',
-     /\$\{\(isPersonalPT\|\|isGroupD\|\|isTrialD\)\?'':\(editable\?/.test(src));
+  ok('★ 下方的「調整時間」區塊已整個退場（2026-08-03 各分支時間都在第二列，不會撞 id）',
+     !/調整時間（手機可用此處改期改時間）/.test(src));
   ok('　　ed-date/ed-time/ed-dur 在團課明細裡各只出現一次',
      (g.match(/id="ed-date"/g)||[]).length===1 && (g.match(/id="ed-time"/g)||[]).length===1
      && (g.match(/id="ed-dur"/g)||[]).length===1);
@@ -95,10 +98,10 @@ console.log('\n團課明細排列：日期時間時長／教練／場地／名�
 console.log('\n體驗明細（2026-07-31 使用者指示）');
 ok('★ 日期時間時長收斂成一列（與團課共用同一套版面）',
    /<\/div>`:\(\(isGroupD\|\|isTrialD\)\?`/.test(src));
-ok('★ 下方那塊「調整時間」不再對體驗重複輸出',
-   /\$\{\(isPersonalPT\|\|isGroupD\|\|isTrialD\)\?'':\(editable\?/.test(src));
-ok('★ 場地只留一個（原本上面一列、下面又一塊）',
-   /\$\{\(!isPersonalPT&&!isGroupD&&!isTrialD&&!isMemberView\)\?`<div style="margin-top:10px;/.test(src));
+ok('★ 下方那塊「調整時間」已整個退場（2026-08-03 統一為各分支第二列）',
+   !/調整時間（手機可用此處改期改時間）/.test(src));
+ok('★ 場地只留一個（下方重複那塊已退場，各分支只在第四列出現）',
+   !/\$\{\(!isPersonalPT&&!isGroupD&&!isTrialD&&!isMemberView\)\?`<div style="margin-top:10px;/.test(src));
 ok('　　體驗保留「類型」那一行（團課不需要，看名單就知道）',
    /\$\{isTrialD\?`<div><span style="color:var\(--t2\);">類型<\/span>/.test(src));
 ok('　　原因寫在程式裡', /場地只留一個 —— 原本上面一列、下面那塊又一個，同樣的資訊講兩次/.test(src));

@@ -170,7 +170,7 @@ ok('★ 「已用堂數」與「是否收進歷史」用同一個數字（圓點
    自己數已簽到），與票券頁改用 buildWallet 之後分岔。整段換成直接問票券夾。 */
 ok('★ 團課簽到名單的圓點直接問票券夾（不再自己算一套）',
    /const W=buildWallet\(mid,_wctx\);/.test(src)
-   && /ticketTokens\(_sl\.t,_sl\.stamps,st\.typeMap,_sl\.used,b\.id,mid,_sl\.selfBk,seatNo\(sk\)\)/.test(src));
+   && /ticketTokens\(_sl\.t,_sl\.stamps,st\.typeMap,_sl\.used,b\.id,mid,_sl\.selfBk,_ord\)/.test(src));
 /* 2026-08-01 使用者指示：「預約明細應該要去對應票券編號，而不是快進快出
    （這個出錯率太高了）」—— 逐名額各自對到扣課紀錄裡的那張票，並標出 #N。 */
 ok('★ 簽到名單逐名額對到票（票券夾的 seatOf，來源是扣課紀錄）',
