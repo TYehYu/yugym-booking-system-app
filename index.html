@@ -7263,8 +7263,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.1801';
-const APP_VERSION_LABEL='v260803.1801';
+const APP_VERSION = '260803.1804';
+const APP_VERSION_LABEL='v260803.1804';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12109,7 +12109,8 @@ PAGES.g_dashboard=async function(){
   const catName={'ev-pt':'教練課','ev-friendly':'友善課','ev-group':'團體課','ev-trial':'體驗課','ev-self':'自主訓練','ev-massage':'運動按摩'};
   const catColor={'ev-pt':'#1f6f54','ev-friendly':'#23508a','ev-group':'#9a5a1e','ev-trial':'#6e3a86','ev-self':'#6a655c','ev-massage':'#2f8f83'};
   // 抽獎狀態 map（首頁課卡禮物圖示用）：算一次，卡片渲染時查表
-  const _lotMap = (typeof lottoMapAll==='function') ? lottoMapAll(bookings, purchases||[], ymd(TODAY).slice(0,7), members) : {};
+  /* 課卡禮物走「本月版」（2026-08-03 使用者指示：隔月要重新統計）；可抽名單仍是累積版 */
+  const _lotMap = (typeof lottoMapMonth==='function') ? lottoMapMonth(bookings, purchases||[], ymd(TODAY).slice(0,7), members) : {};
   /* 繳費／續約提醒也要出現在首頁課卡（2026-08-01 使用者指示）——
      原本只有行事曆與手機端週課表算這兩張表，櫃檯在首頁看教練任務時漏掉最後一堂。
      這裡先把標記算好（同一支 computeLastBkMarks，判準不會漂移），卡片渲染時查 window 的表。 */
@@ -13462,6 +13463,26 @@ function lottoMapAll(bookings,purchases,ym,members){
   });
   return map;
 }
+/* 首頁課卡的禮物「隔月要重新統計」（2026-08-03 使用者指示）——
+   右下角「N 位會員可抽獎」名單維持跨月保留（同日稍早「保持提醒直到來抽」的定案不變）；
+   但課卡上的禮物只畫「本月」：本月簽到掙到幾次、其中抽掉幾次，8/1 歸零重新累積。
+   上月沒抽的舊帳不畫在課卡上（名單裡看得到、也抽得到）。
+   本月已抽數＝總已抽 − 之前月份掙到的（抽獎先抵舊帳，與 lottoPendingFrom 同口徑），
+   夾在 0 與本月 earned 之間。 */
+function lottoMapMonth(bookings,purchases,ym,members){
+  const all=lottoMapAll(bookings,purchases,ym,members);
+  const out={};
+  Object.keys(all).forEach(id=>{
+    const st=all[id];
+    const curM=(st.months||[]).find(m=>m.ym===ym);
+    const earnedM=curM?curM.n:0;
+    if(earnedM<=0) return;
+    const before=(st.months||[]).reduce((sum,m)=>sum+(m.ym<ym?m.n:0),0);
+    const usedM=Math.min(earnedM, Math.max(0,(st.used||0)-before));
+    out[id]={earned:earnedM, used:usedM, left:earnedM-usedM, monthly:ym};
+  });
+  return out;
+}
 // 線條禮物圖示（未抽=禮物盒；已抽=打開的禮物盒）。回傳空字串＝不顯示。
 /* 禮物圖示（2026-07-25 使用者指示）：依「本月可抽次數 earned」顯示 earned 個禮物——
    已抽(used)畫「打開的禮物盒」(灰)、未抽(left)畫「未拆禮物盒」(金)。
@@ -13482,7 +13503,9 @@ function lottoGiftIcon(st){
           + (left>0?g('lg-need',closedSvg)+`<span class="tcard-gift-n">×${left}</span>`:'');
   }
   const cls=(left>0?'tcard-gift-need':'tcard-gift-done')+(earned>=2?' tcard-gift-multi':'');
-  return `<span class="tcard-gift ${cls}" title="累計可抽 ${earned} 次（已抽 ${used}、待抽 ${left}）　·　沒來抽的不會過期">${inner}</span>`;
+  const ttl=st.monthly?`本月可抽 ${earned} 次（已抽 ${used}、待抽 ${left}）　·　上月未抽的看右下角名單`
+                      :`累計可抽 ${earned} 次（已抽 ${used}、待抽 ${left}）　·　沒來抽的不會過期`;
+  return `<span class="tcard-gift ${cls}" title="${ttl}">${inner}</span>`;
 }
 function lottoStats(bookings,purchases,ym,members){
   const _vip=lottoVipSet(members);   // VIP 不參與常態抽獎（2026-07-29）
