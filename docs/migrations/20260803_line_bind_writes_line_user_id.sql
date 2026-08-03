@@ -1,0 +1,9 @@
+-- LINE 綁定要寫回 members.line_user_id（2026-08-03 使用者回報：
+-- 「陳蘭馨已經綁定 LINE，為什麼會員資料看還是未綁定」。已套用正式庫，
+-- 完整內容見 Supabase migration line_bind_writes_line_user_id）
+--
+-- 核准連動的 RPC（fn_review_member_link_request）只寫 auth_id（登入用），
+-- 名片顯示用的 line_user_id 從來沒有人寫 —— 功能上綁定成功、畫面永遠顯示未綁定。
+-- LINE 帳號的 uid 就在 auth email 裡（line_{uid}@line.yugym.local）：
+-- ・核准時（link 與新建兩條路）都取出 uid 一併寫入
+-- ・回填既有資料：auth email 是 LINE 型且 line_user_id 為空的全部補上（100+ 位）

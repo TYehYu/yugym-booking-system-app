@@ -6950,6 +6950,12 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 .mc-rev-amt{font-family:var(--num),inherit;font-size:13px;font-weight:800;color:var(--green);white-space:nowrap;}
 .mc-rev-inv{font-size:9px;font-weight:700;color:#2e6b4f;background:#e3efe7;border-radius:999px;padding:2px 6px;flex-shrink:0;}
 /* 教練課約別標籤（2026-08-01）：續約用品牌金（要看得見，它牽動獎金）、分期用暖棕、新約低調 */
+/* 業績歸屬 tag（2026-08-03）：會員名右邊的小教練名；可點的浮出手感、未歸屬用金色提醒 */
+.rev-att{display:inline-block;margin-left:6px;font-size:9.5px;font-weight:800;border-radius:999px;
+  padding:2px 7px;background:#eef1ec;color:#4c6457;vertical-align:1px;border:none;font-family:inherit;}
+.rev-att-tap{cursor:pointer;transition:filter .12s;}
+.rev-att-tap:hover{filter:brightness(.94);}
+.rev-att-none{background:#f7efe0;color:#8a5e28;}
 .rev-kind{font-size:9.5px;font-weight:800;border-radius:999px;padding:2px 7px;flex-shrink:0;
   border:1px solid transparent;font-family:inherit;line-height:1.5;}
 button.rev-kind{cursor:pointer;}
@@ -12666,14 +12672,24 @@ PAGES.g_dashboard=async function(){
     const k=String(t.sale_kind||'');
     return (k==='new'||k==='renewal'||k==='installment') ? k : 'new';   // 沒標過的當新約（與獎金口徑一致）
   };
+  /* 業績歸屬 tag（2026-08-03 使用者指示：「會員名稱右邊新增教練 tag，顯示該筆的
+     業績歸屬，可以後續修改，如果不小心選錯人」）——
+     票券的歸屬在 sold_by（同一筆收款的 purchases.coach_id 也要跟著改，續約獎金認的
+     是那邊）；純收款（場租／商品／重啟）在 purchases.coach_id。 */
+  const _coachTag={}; (coaches||[]).forEach(c=>{ _coachTag[c.id]=coachDisp(c); });
+  window._revCoachTag=_coachTag;
+  const _purByTk={}; (_dayPur||[]).forEach(p=>{ if(p.ticket_id) _purByTk[p.ticket_id]=p.id; });
   const _revRows=[
     ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—', mid:t.member_id||null,
       it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
       amt:Number(t.amount_paid)||0, tk:t.id, kind:_saleKindOf(t),
+      att:t.sold_by||null, attKind:'tk', attRef:t.id,
       inv:(t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued')})),
-    ..._dayPur.map(p=>({nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客', mid:p.member_id||null,
+    ..._dayPur.filter(p=>!(p.ticket_id&&_dayTk.some(t=>t.id===p.ticket_id)))
+      .map(p=>({nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客', mid:p.member_id||null,
       it:p.plan_name||({reactivate:'票券重啟',facility_rental:'場地租借',merchandise:'商品'}[p.source]||'收款'),
       amt:Number(p.deal_amount)||0,
+      att:p.coach_id||null, attKind:'pur', attRef:p.id,
       inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')})),
   ];
   /* 給「今日營收」彈窗用（2026-08-01）：與上方 KPI、右欄名單卡完全同源，不另外算一份，
@@ -12698,7 +12714,7 @@ PAGES.g_dashboard=async function(){
   const revListCard=`<div class="card mc-card mc-revlist-card">
     ${_revRows.length?`<div class="mc-revlist">${_revShown.map(r=>`
       <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
-        <div class="mc-rev-b"><span class="mc-rev-nm">${r.nm}</span><span class="mc-rev-it">${r.it}</span></div>
+        <div class="mc-rev-b"><span class="mc-rev-nm">${r.nm}${revAttribChip(r)}</span><span class="mc-rev-it">${r.it}</span></div>
         ${r.kind?saleKindChip(r.tk,r.kind):''}
         ${r.inv?'<span class="mc-rev-inv">發票</span>':''}
         <span class="mc-rev-amt">$${_fm(r.amt)}</span>
@@ -23760,6 +23776,54 @@ async function setSaleKind(tkId, kind){
 /* 今日營收名單彈窗（2026-08-01 使用者指示：首頁那張營收卡要點得開）——
    內容與桌機右欄的收款名單卡一致：誰、買什麼、多少錢、有沒有開發票；
    有綁會員的那幾列點下去直接跳到他的票券頁。 */
+/* 業績歸屬 tag（2026-08-03 使用者指示）：顯示這筆收入算誰的業績，點一下可改 ——
+   賣票當下選錯人，續約獎金與營運分析就整筆算錯邊，要能當場修。
+   教練／會員看得到 tag 但點不動（金額歸屬只有櫃檯能動）。 */
+function revAttribChip(r){
+  if(!r || !r.attKind) return '';
+  const nm=(window._revCoachTag||{})[r.att]||'';
+  const can=(typeof isDeskLike==='function')&&isDeskLike();
+  const label=nm||'未歸屬';
+  if(!can) return nm?`<span class="rev-att">${nm}</span>`:'';
+  return `<button class="rev-att rev-att-tap${nm?'':' rev-att-none'}" title="業績歸屬：${label}　·　點一下更改"
+    onclick="event.stopPropagation();openRevAttribPick('${r.attKind}','${r.attRef}')">${label}</button>`;
+}
+async function openRevAttribPick(kind, ref){
+  if(!isDeskLike()) return;
+  const coaches=(await dbGetAll('coaches')).filter(isCoachable);
+  showModal(`<div class="modal-title">更改業績歸屬</div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.7;background:var(--card2);border-radius:9px;padding:10px 12px;margin-bottom:12px;">
+      這筆收入要算在誰的業績？<b>續約獎金與營運分析都會跟著改</b>，請確認後再點。</div>
+    <div class="lot-btns">${coaches.map(c=>`<button class="lot-btn" onclick="setRevAttrib('${kind}','${ref}','${c.id}')">
+      <span class="lot-btn-nm">${coachDisp(c)}</span></button>`).join('')}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-ghost" style="color:var(--danger);" onclick="setRevAttrib('${kind}','${ref}','')">改為未歸屬</button></div>`);
+}
+async function setRevAttrib(kind, ref, cid){ return onceAct('revatt:'+ref, ()=>_setRevAttrib(kind,ref,cid)); }
+async function _setRevAttrib(kind, ref, cid){
+ try{
+  const who=cid?((window._revCoachTag||{})[cid]||cid):'未歸屬';
+  if(kind==='tk'){
+    const t=await dbGet('member_tickets', ref); if(!t){ showToast('找不到票券'); return; }
+    const before=(window._revCoachTag||{})[t.sold_by]||'未歸屬';
+    t.sold_by=cid||null;
+    await dbPut('member_tickets', t);
+    /* 同一筆收款的 purchases 也要跟著改 —— 續約獎金的歸屬優先看那邊 */
+    try{
+      const pur=(await dbGetAll('purchases')).filter(p=>p.ticket_id===ref);
+      for(const p of pur){ p.coach_id=cid||null; await dbPut('purchases', p); }
+    }catch(_){}
+    try{ await logTicket(ref,'adjust',0,null,SESSION&&SESSION.id,`業績歸屬調整：${before} → ${who}`); }catch(_){}
+  }else{
+    const p=await dbGet('purchases', ref); if(!p){ showToast('找不到收款紀錄'); return; }
+    p.coach_id=cid||null;
+    await dbPut('purchases', p);
+  }
+  closeModal();
+  showToast('業績歸屬已改為 '+who);
+  navTo(CUR_PAGE);
+ }catch(e){ showToast('更改失敗：'+((e&&e.message)||e)); }
+}
 function openTodayRevList(){
   const d=window._gdRev||{};
   const rows=d.rows||[];
@@ -23769,7 +23833,7 @@ function openTodayRevList(){
   const body = rows.length
     ? `<div class="mc-revlist">${rows.map(r=>`
         <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="closeModal();revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
-          <div class="mc-rev-b"><span class="mc-rev-nm">${esc(r.nm)}</span><span class="mc-rev-it">${esc(r.it)}</span></div>
+          <div class="mc-rev-b"><span class="mc-rev-nm">${esc(r.nm)}${revAttribChip(r)}</span><span class="mc-rev-it">${esc(r.it)}</span></div>
           ${r.kind?saleKindChip(r.tk,r.kind):''}
           ${r.inv?'<span class="mc-rev-inv">發票</span>':''}
           <span class="mc-rev-amt">${money(r.amt)}</span>
