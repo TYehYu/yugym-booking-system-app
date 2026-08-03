@@ -54,14 +54,16 @@ console.log('① 從通知文字讀出日期時間');
   eq('　　只有日期沒有時間 → null', dfeedRefOf({body:'08/20　私人教練'}), null);
 }
 
-console.log('\n② 點卡片跳到行事曆那一天');
-ok('★ 讀得出日期的卡才掛 onclick（左下角新會員卡不掛）',
-   /const ref=left\?null:dfeedRefOf\(n\);/.test(src)
-   && /el\.setAttribute\('onclick',`dfeedGo\('\$\{n\.id\}'\)`\);/.test(src));
-ok('★ 日期時間存在卡片上（data-date／data-time）',
-   /el\.setAttribute\('data-date',ref\.date\); el\.setAttribute\('data-time',ref\.time\);/.test(src));
-ok('★ 有可點的樣式，右邊提示「移動 ›」', /el\.classList\.add\('dfeed-tap'\);/.test(src)
-   && /'<span class="dfeed-goto">移動 ›<\/span>'/.test(src));
+console.log('\n② 提醒只是知會（2026-08-03：「移動 ›」跳行事曆移除）');
+/* 使用者：「移除櫃檯右下角課卡通知的[移動>]功能，只要櫃檯有收到提醒就好」——
+   跳轉會把櫃檯正在做的頁面切走。一律回到 ✓ 確認收掉。 */
+ok('★ 卡片不再掛跳轉 onclick', !/el\.setAttribute\('onclick',`dfeedGo/.test(src));
+ok('★ 也不再顯示「移動 ›」', !/<span class="dfeed-goto">移動 ›<\/span>/.test(src));
+ok('★ 每張卡都有 ✓ 確認可以收掉',
+   /const rightTag = `<button class="dfeed-ok" onclick="event\.stopPropagation\(\);deskFeedAck\('\$\{n\.id\}'\)">✓ 確認<\/button>`;/.test(src));
+ok('　　dfeedGo／dfeedRefOf 保留（要恢復只要接回去）',
+   /function dfeedGo\(id\)\{/.test(src) && /function dfeedRefOf\(n\)\{/.test(src)
+   && /之後想恢復只要把這段接回去/.test(src));
 /* 2026-08-01 使用者指示：「左邊增加一個明顯的提示區域 新增/取消/變更
    顏色綠色/紅色/黃色　移除[確認]　因為點選卡片以後要移動到課卡的位子
    改成提示在旁邊 移動>」 */
@@ -72,11 +74,8 @@ ok('★ 三個顏色：新增綠、取消紅、變更黃',
    /\.dfeed-kind-book\{background:var\(--green,#1f6f54\);color:#fff;\}/.test(src)
    && /\.dfeed-kind-cancel\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src)
    && /\.dfeed-kind-move\{background:#e6c274;color:#4a2f10;\}/.test(src));
-ok('★「✓ 確認」鈕移除 —— 點卡片＝處理過，順手標已讀',
-   /try\{ deskFeedAck\(id\); \}catch\(_\)\{\}/.test(src)
-   && /點過就等於處理過（2026-08-01 使用者指示：移除「✓ 確認」）/.test(src));
-ok('　　讀不出日期、沒有地方可去的才留確認鈕（否則收不掉）',
-   /const rightTag = ref\s*\n\s*\? '<span class="dfeed-goto">移動 ›<\/span>'\s*\n\s*: `<button class="dfeed-ok"/.test(src));
+ok('★ 為什麼移除跳轉，寫在程式裡',
+   /跳轉會把櫃檯正在做的頁面切走，提醒的目的只是知會/.test(src));
 ok('　　左下角的新會員卡維持原本的圖示與確認鈕（那邊沒有課可以跳）',
    /const kindTag = left\s*\n\s*\? `<span class="dfeed-ic">/.test(src));
 ok('　　有色塊時左緣那條 4px 粗邊收回一般邊框（兩塊同色黏在一起像破圖）',

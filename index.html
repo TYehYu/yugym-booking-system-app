@@ -7242,8 +7242,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.1437';
-const APP_VERSION_LABEL='v260803.1437';
+const APP_VERSION = '260803.1503';
+const APP_VERSION_LABEL='v260803.1503';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8554,12 +8554,9 @@ function deskFeedPush(n){
      這是會員操作的時間，但原本直接切 created_at 字串 —— 那是 UTC，台灣要 +8，
      所以 19:11 的操作顯示成 11:11。改成轉台灣時間，並補上「幾分鐘前」與欄位說明。 */
   const when=deskFeedWhen(n.created_at);
-  /* 讀得出日期時間的就掛上跳轉（2026-08-01 使用者指示：點卡片跳到行事曆那一天）。
-     左下角的新會員通知沒有課，維持不可點。 */
-  const ref=left?null:dfeedRefOf(n);
-  if(ref){ el.setAttribute('data-date',ref.date); el.setAttribute('data-time',ref.time);
-           el.classList.add('dfeed-tap'); el.title=`前往 ${ref.date} ${ref.time} 的行事曆`;
-           el.setAttribute('onclick',`dfeedGo('${n.id}')`); }
+  /* 「移動 ›」跳行事曆已移除（2026-08-03 使用者指示：「只要櫃檯有收到提醒就好」）——
+     跳轉會把櫃檯正在做的頁面切走，提醒的目的只是知會；一律回到 ✓ 確認收掉。
+     dfeedGo／dfeedRefOf 保留（之後想恢復只要把這段接回去）。 */
   /* 左邊的動作色塊（2026-08-01 使用者指示：「左邊增加一個明顯的提示區域，
      新增／取消／變更，顏色綠色／紅色／黃色」）——
      一眼就知道是哪一種，不用讀完整句話。品牌色強度：紅 > 金 > 綠。 */
@@ -8568,12 +8565,7 @@ function deskFeedPush(n){
   const kindTag = left
     ? `<span class="dfeed-ic">${DESK_FEED_IC[n.type]||DESK_FEED_IC.self_book}</span>`
     : `<span class="dfeed-kind dfeed-kind-${kind}">${kindLb}</span>`;
-  /* 右邊：讀得出日期的就提示「移動 ›」（點卡片會跳到那一天的行事曆）。
-     ✓ 確認鈕移除（2026-08-01 使用者指示）—— 點卡片＝已經處理過，順手標已讀。
-     讀不出日期、沒有地方可去的才留確認鈕，否則會沒辦法收掉。 */
-  const rightTag = ref
-    ? '<span class="dfeed-goto">移動 ›</span>'
-    : `<button class="dfeed-ok" onclick="event.stopPropagation();deskFeedAck('${n.id}')">✓ 確認</button>`;
+  const rightTag = `<button class="dfeed-ok" onclick="event.stopPropagation();deskFeedAck('${n.id}')">✓ 確認</button>`;
   el.innerHTML=`${kindTag}
     <span class="dfeed-body"><span class="dfeed-t">${dfeedText(n.title)}</span>
       <span class="dfeed-b">${dfeedText(n.body)}</span>
@@ -19479,24 +19471,72 @@ async function bkRosterToggle(key, baseId){
 // ── 代課：卡片下方吊出教練清單，點選即改派（重用名單面板樣式）──
 /* 自主訓練場地切換（2026-07-25 使用者指示）：卡片圓形按鈕「場地」→ 選團課教室/跑步機/多功能區。
    寫入 venue_unit（group/treadmill/multi）；selfVenueLabel 依此在課卡第三行標示。 */
+/* 2026-08-03 使用者回報（附截圖）兩件事：
+   ①「沒有預約確認，點了就送出了，這樣會誤點」—— 原本點選項直接寫入，改成
+     先選（亮起）再按確認才送出。
+   ② 「跑步機沒有幾台可以選擇」—— 這是會佔用場地的入口（8/02 定案：都要能選台數），
+     選跑步機時多一列 1 台／2 台。 */
 async function bkOrbitVenue(id){
   collapseBkCard();
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   const cur=selfVenueLabel(b);   // '教室' | '跑步機' | ''
-  const opt=(unit,label,on)=>`<button class="btn ${on?'btn-green':'btn-ghost'}" style="width:100%;padding:13px;margin-bottom:8px;text-align:left;" onclick="setSelfVenue('${id}','${unit}')">${on?'● ':''}${label}</button>`;
+  window._svPick={id, unit:cur==='教室'?'group':(cur==='跑步機'?'treadmill':'multi'),
+    units:Math.max(1,Number(b._units)||1)};
+  const opt=(unit,label)=>`<button class="btn btn-ghost sv-opt" data-unit="${unit}" style="width:100%;padding:13px;margin-bottom:8px;text-align:left;" onclick="svPickVenue('${unit}')">${label}</button>`;
   showModal(`<div class="modal-title">自主訓練場地</div>
-    <div style="font-size:12.5px;color:var(--t2);line-height:1.7;margin-bottom:14px;">選擇這堂自主訓練使用的場地（會顯示在課卡上）。</div>
-    ${opt('group','團課教室',cur==='教室')}
-    ${opt('treadmill','跑步機',cur==='跑步機')}
-    ${opt('multi','多功能訓練區（不標示）',cur==='')}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.7;margin-bottom:14px;">選擇這堂自主訓練使用的場地（會顯示在課卡上），按「確認」才會套用。</div>
+    ${opt('group','團課教室')}
+    ${opt('treadmill','跑步機')}
+    ${opt('multi','多功能訓練區（不標示）')}
+    <div id="sv-tmrow" style="display:none;align-items:center;gap:8px;margin:2px 0 8px;">
+      <span style="font-size:12.5px;color:var(--t2);">台數</span>
+      <span style="display:flex;gap:7px;">
+        <button class="btn btn-ghost btn-sm sv-un" data-n="1" onclick="svPickUnits(1)">1 台</button>
+        <button class="btn btn-ghost btn-sm sv-un" data-n="2" onclick="svPickUnits(2)">2 台</button>
+      </span>
+      <span style="font-size:11px;color:var(--t3);">第 2 台不扣點</span>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="setSelfVenue()">確認</button></div>`);
+  svPickVenue(window._svPick.unit, true);
+  svPickUnits(window._svPick.units, true);
 }
-async function setSelfVenue(id,unit){
+function svPickVenue(unit, init){
+  const s=window._svPick; if(!s) return;
+  s.unit=unit;
+  document.querySelectorAll('.sv-opt').forEach(x=>{
+    const on=x.dataset.unit===unit;
+    x.classList.toggle('btn-green',on); x.classList.toggle('btn-ghost',!on);
+  });
+  const row=document.getElementById('sv-tmrow');
+  if(row) row.style.display=unit==='treadmill'?'flex':'none';
+  if(!init && unit!=='treadmill') s.units=1;
+}
+function svPickUnits(n, init){
+  const s=window._svPick; if(!s) return;
+  s.units=Math.max(1,Math.min(2,Number(n)||1));
+  document.querySelectorAll('.sv-un').forEach(x=>{
+    const on=Number(x.dataset.n)===s.units;
+    x.classList.toggle('btn-green',on); x.classList.toggle('btn-ghost',!on);
+  });
+}
+async function setSelfVenue(){ const s=window._svPick; if(!s) return; return onceAct('svset:'+s.id, ()=>_setSelfVenue()); }
+async function _setSelfVenue(){
+  const s=window._svPick; if(!s) return;
+  const {id,unit}=s;
   const b=await dbGet('bookings',id); if(!b) return;
   b.venue_unit=unit;
   try{ await dbPut('bookings',b); }catch(e){ showToast('設定失敗：'+(e.message||e)); return; }
+  let got=1;
+  if(unit==='treadmill' && s.units>1){
+    /* 開第 2 台：走既有的 sibling 機制（不扣點；被搶走就少開，照實說） */
+    try{ got=await bkAddTreadmillUnits(b, s.units); }catch(e){ console.error('開第2台失敗',e); }
+  }
+  window._svPick=null;
   closeModal();
-  showToast('場地已設為「'+({group:'團課教室',treadmill:'跑步機',multi:'多功能訓練區'}[unit]||unit)+'」');
+  const nm={group:'團課教室',treadmill:'跑步機',multi:'多功能訓練區'}[unit]||unit;
+  showToast('場地已設為「'+nm+'」'+(unit==='treadmill'&&s.units>1
+    ? (got>1?`　·　${got} 台`:'　·　第 2 台已被約走，只保留 1 台'):''));
   navTo(CUR_PAGE);
 }
 async function bkOrbitSub(id){
@@ -22094,7 +22134,10 @@ PAGES.members=async function(){
   const _legacyCol = filtered.some(needsLegacyVerify);
   const cols=[
     {label:'姓名',     width:'1.5fr', sortKey:'name'},
-    ...TK5.map(([k,lb],i)=>({label:lb, width:'1fr', tkKey:k, zone:i===0})),
+    /* 欄寬照實際內容配（2026-08-03 使用者附截圖：「視窗的比例調整一下，教練課通常會
+       比較多，後面的幾個通常都不多」）—— 教練課動輒 8~30 顆圓點會摺行，
+       團體課次之，自主訓練／按摩／折價券通常 0~2 顆。 */
+    ...TK5.map(([k,lb],i)=>({label:lb, width:({pt:'2fr',group:'1.2fr'})[k]||'0.6fr', tkKey:k, zone:i===0})),
     {label:'最近上課', width:'0.8fr', sortKey:'last', zone:true},
     {label:'註冊日',   width:'0.8fr', sortKey:'reg'},
     ...(_legacyCol?[{label:'連動核對', width:'1fr', zone:true}]:[]),
