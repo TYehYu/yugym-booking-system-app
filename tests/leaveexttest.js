@@ -121,8 +121,9 @@ ok('　　重複發放的防線沒動（同一筆 booking 只發一次）',
 /* 2026-08-01 使用者指示：明細裡的教練那一列也要有「教練請假」——
    原本只有課卡圓形按鈕的代課選單裡才有，從明細進來的人找不到。 */
 console.log('\n明細的教練列也有教練請假');
-ok('★ 明細裡有按鈕（桌機與手機兩種版面都有）',
-   (src.match(/onclick="bkCoachLeave\('\$\{b\.id\}'\)"/g)||[]).length===2);
+/* 2026-08-03：教練課分支補上第三顆（0801 放錯分支，真正適用的教練課反而沒有） */
+ok('★ 明細裡有按鈕（教練課／團課體驗／通用三個分支都有）',
+   (src.match(/onclick="bkCoachLeave\('\$\{b\.id\}'\)"/g)||[]).length===3);
 ok('★ 走同一支 bkCoachLeave（規則不會再分岔）',
    /class="btn btn-ghost btn-sm bkd-cleave" onclick="bkCoachLeave/.test(src));
 ok('★ 只有可編輯、且是教練課才出現', /editable&&canCoachLeave\(b\)&&b\.status!=='coach_leave'/.test(src));
