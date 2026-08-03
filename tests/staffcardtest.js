@@ -44,5 +44,19 @@ ok('　　教練（非店長）看別人的課維持純顯示（0801 定版沒�
 ok('　　使用者的指示寫在程式裡',
    /「櫃檯帳號、管理員帳號、店長帳號要能夠調整課卡功能」/.test(src));
 
+console.log('\n④ 店長＝教練帳號升級（2026-08-03 使用者定案：教練不該動別人的課，升店長後要能）');
+ok('★ 圓形按鈕的 staff 判定含店長（原本點開別人的課是一圈空按鈕）',
+   /const staff = SESSION\.role==='admin' \|\| SESSION\.role==='front_desk' \|\| !!SESSION\.is_manager;/.test(src));
+ok('★ own 判定：店長一律視同自己的課（取消/編輯開放）',
+   /const own = SESSION\.role!=='coach' \|\| !!SESSION\.is_manager \|\| bkIsCoach\(b,SESSION\.id\);/.test(src));
+ok('★ 明細頁 ownByCoach 含店長（不再唯讀）',
+   /const ownByCoach = SESSION\.role!=='coach' \|\| !!SESSION\.is_manager \|\| bkIsCoach\(b,SESSION\.id\);/.test(src));
+ok('★ 簽到權限含店長',
+   /const staffCanCheckin = SESSION\.role==='admin' \|\| SESSION\.role==='front_desk' \|\| !!SESSION\.is_manager/.test(src));
+ok('★ 店長桌機「教學」頁不再以 me 鎖卡（與管理員同權；一般教練照舊）',
+   /\.\.\.\(SESSION\.is_manager\?\{\}:\{me:myId,maskOthers:true\}\)/.test(src));
+ok('　　定案原話寫在程式裡',
+   /店長帳號原本是教練帳號，教練本來就不該動別人的課卡；\n\s*但升為店長後就要有調整全部課卡的能力/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

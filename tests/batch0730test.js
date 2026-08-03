@@ -17,8 +17,9 @@ ok('★ 教練導覽列加「預約行事曆」（導覽仍在上方，不走左
    /\{key:'calendar',label:'預約行事曆'\},\s*\n\s*\{key:'coach_salary',label:'薪資紀錄'\},/.test(src));
 /* 2026-07-31：「這堂跟這位教練有沒有關係」抽成共用的 bkIsCoach（權限用；
    「實際由誰上」是另一支 bkCoachId，篩選與計薪用） */
-ok('★ 只能動自己的課卡：own＝主責或代課是自己',
-   /const own = SESSION\.role!=='coach' \|\| bkIsCoach\(b,SESSION\.id\);/.test(src));
+/* 2026-08-03 使用者定案：店長（is_manager）視同後台，own 加了豁免（見 staffcardtest.js） */
+ok('★ 只能動自己的課卡：own＝主責或代課是自己（店長除外）',
+   /const own = SESSION\.role!=='coach' \|\| !!SESSION\.is_manager \|\| bkIsCoach\(b,SESSION\.id\);/.test(src));
 ok('★ 「取消」補上 own 判定（原本只看 canCancel，教練點別人的課也能取消）',
    /\/\/ 上右：取消（教練只能取消自己的課）\s*\n\s*if\(canCancel && own\)\{/.test(src));
 ok('★ 簽到開放給教練自己的課（口徑同 openBookingDetail 的 staffCanCheckin）',

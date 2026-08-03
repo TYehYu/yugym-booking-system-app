@@ -7257,8 +7257,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.1709';
-const APP_VERSION_LABEL='v260803.1709';
+const APP_VERSION = '260803.1713';
+const APP_VERSION_LABEL='v260803.1713';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19231,12 +19231,15 @@ async function expandBkCard(el, id){
   if(!coachOwnsBk(b)){ openBookingDetail(id); return; }
   const checked = b.status==='checked_in' || b.status==='completed';
   const canCancel = b.status==='booked' || b.status==='checked_in';
-  const staff = SESSION.role==='admin' || SESSION.role==='front_desk';
+  /* 2026-08-03 使用者定案：店長帳號原本是教練帳號，教練本來就不該動別人的課卡；
+     但升為店長後就要有調整全部課卡的能力 —— staff／own 都把 is_manager 視同後台。
+     （coachOwnsBk 早就放行店長，卡在這裡的按鈕條件，點開只會看到一圈空按鈕。） */
+  const staff = SESSION.role==='admin' || SESSION.role==='front_desk' || !!SESSION.is_manager;
   /* 2026-07-30 使用者指示：教練桌機版共用同一個預約行事曆，但「只能點編輯自己的課卡」。
      原本 staff 不含 coach，所以代課/簽到/新增本來就看不到；但「取消」只看 canCancel，
      教練點別人的課卡也能取消 —— 開放桌機行事曆後這個破口一定要補。
-     own＝主責或代課是自己（非教練角色一律 true）。 */
-  const own = SESSION.role!=='coach' || bkIsCoach(b,SESSION.id);
+     own＝主責或代課是自己（非教練角色與店長一律 true）。 */
+  const own = SESSION.role!=='coach' || !!SESSION.is_manager || bkIsCoach(b,SESSION.id);
   // 教練簽到：限自己主帶／代課的課（口徑與 openBookingDetail 的 staffCanCheckin 一致）
   const coachCk = SESSION.role==='coach' && own;
   const closed = b.status==='cancelled' || b.status==='completed';
@@ -20001,13 +20004,13 @@ async function openBookingDetail(id){
   const tk=b.ticket_id?await dbGet('member_tickets',b.ticket_id):null;
   const d=parseYmd(b.date);
   const canCancel=b.status==='booked'||b.status==='checked_in';
-  // 教練只能改自己負責（主責或代課）的課；管理員 / 櫃台全權
-  const ownByCoach = SESSION.role!=='coach' || bkIsCoach(b,SESSION.id);
+  // 教練只能改自己負責（主責或代課）的課；管理員 / 櫃台 / 店長（2026-08-03）全權
+  const ownByCoach = SESSION.role!=='coach' || !!SESSION.is_manager || bkIsCoach(b,SESSION.id);
   const isMemberView = SESSION.role==='member';   // 會員視角：唯讀明細＋自簽，不出現員工編輯欄位
   const editable=!window._coachReadonly && !isMemberView && ownByCoach && b.status!=='cancelled'&&b.status!=='completed'&&b.date>=ymd(TODAY);
   // 簽到僅後台（管理員/櫃台）可代為操作；教練端不能幫簽（會員自行簽到）
   // 2026-07-27 使用者指示：簽到開放教練操作（限自己主帶/代課的課）；櫃台/管理員不變
-  const staffCanCheckin = SESSION.role==='admin' || SESSION.role==='front_desk'
+  const staffCanCheckin = SESSION.role==='admin' || SESSION.role==='front_desk' || !!SESSION.is_manager
     || (SESSION.role==='coach' && (bkIsCoach(b,SESSION.id)));
   /* 團課補簽（2026-07-24 修正）：過期團課原本完全無法補簽。成因是兩條路都斷了——
      ① 名單裡的逐人簽到鈕綁在 editable 上，而 editable 對 b.date<today 一律 false；
@@ -32755,9 +32758,13 @@ PAGES.coach_calendar=async function(){
     window._coachReadonly=false;
     window._calMineOnly=true;            // 新增預約預設帶自己
     if(!calWeekStart) initCalWeek();
+    /* 店長（2026-08-03 使用者定案）：帳號雖是教練，升店長後要能調整全部課卡 ——
+       不帶 me/maskOthers，整張行事曆與管理員同權（拖曳、點編輯都開）。
+       一般教練照舊：me＝只能動自己的課，別人的課匿名佔位。 */
     C.innerHTML=head('SCHEDULE','預約','週時間軸 · 點空格排課 · 拖曳改期 · 點課卡看明細')
       +`<div id="coach-punch"></div>`
-      +(await renderCalendar({onSlot:'quickBookAt',editable:true,me:myId,maskOthers:true,stepping:_stepping}));
+      +(await renderCalendar({onSlot:'quickBookAt',editable:true,stepping:_stepping,
+          ...(SESSION.is_manager?{}:{me:myId,maskOthers:true})}));
     renderPunchPanel();
     initCalDrag();
     initCalSwipe(document.querySelector('.cal-body'));
