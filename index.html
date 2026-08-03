@@ -7243,8 +7243,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.0847';
-const APP_VERSION_LABEL='v260803.0847';
+const APP_VERSION = '260803.1119';
+const APP_VERSION_LABEL='v260803.1119';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13293,7 +13293,8 @@ function startDashNowTimer(isToday, axisStart, axisEnd){
 /* ══════ 現場抽獎登記（2026-07-22 使用者定案）══════
    抽獎維持實體籤筒（長輩不一定有手機）；系統只負責：
    ① 桌機首頁右下滑出「N 位會員可抽獎」→ ② 彈窗選會員 → ③ 點客人抽中的獎品登記。
-   資格＝當月「教練課（含友善）」簽到滿 4 堂抽 1 次（可累計、次月歸零；
+   資格＝每月「教練課（含友善）」簽到滿 4 堂抽 1 次（可累計；沒來抽的不會過期，
+   見 lottoEarnedByMember —— 2026-08-03 使用者：「保持抽獎提醒直到客戶來抽」；
    團課/自主訓練/體驗/按摩皆不計 —— 2026-07-23 使用者指示，原團課逐人計名的規則移除）。
    登記＝purchases(source:'lottery', $0，今日營收 KPI 不計)；票券類獎品同步發
    member_tickets(source:'lottery')。獎品票券預設無到期日（與匯入舊折抵券決策一致）。 */
@@ -13331,23 +13332,59 @@ function _lotPuDate(p){
   return new Date(d.getTime()+8*3600000).toISOString().slice(0,10);
 }
 // 名單：{id, att 當月簽到堂數, earned, used, left}，left>0 才列出
-/* 全會員抽獎狀態 map（2026-07-25，供首頁課卡圖示）：沿用 lottoStats 同規則
-   （當月私人教練課簽到 ÷4 = earned；lottery 購買數 = used；left=earned-used）。
+/* ══ 抽獎機會累積到抽完為止（2026-08-03 使用者指示）══
+   「上個月尚未抽獎的客戶名單不見了，可以幫我保持抽獎提醒直到客戶來抽嗎？」
+
+   原本 earned 與 used 都只看「當月」，所以 8/1 一到，七月滿了 4 堂卻還沒來抽的人
+   就整批從名單上消失 —— 機會是客人掙到的，不該因為換月就沒了。
+   改成：earned＝從系統上線那個月起、逐月 floor(當月教練課簽到 ÷ 4) 累加；
+        used ＝已登記的抽獎次數（不分月份）。left 就是「還欠客人幾次」。
+
+   「滿 4 堂」仍然是逐月結算（月底沒滿 4 堂的零頭不會帶到下個月）—— 變的只有
+   「抽獎機會不會過期」，不是門檻的算法。
+   起算月份要卡住：舊系統匯入的簽到紀錄不該回頭生出抽獎機會。 */
+const LOTTO_FROM='2026-07';
+function lottoEarnedByMember(bookings, ym){
+  const per={};
+  (bookings||[]).forEach(b=>{
+    const m=(b.date||'').slice(0,7);
+    if(!m || m<LOTTO_FROM || (ym && m>ym)) return;
+    if(b.status==='cancelled' || b.category!=='私人教練') return;   // 團課／自主／體驗／按摩皆不計
+    if(!b.member_id || !(b.status==='checked_in'||b.status==='completed')) return;
+    (per[b.member_id]=per[b.member_id]||{})[m]=(per[b.member_id][m]||0)+1;
+  });
+  const out={};
+  Object.keys(per).forEach(id=>{
+    const months=per[id]; let earned=0, att=0; const from=[];
+    Object.keys(months).sort().forEach(m=>{
+      att+=months[m];
+      const e=Math.floor(months[m]/4);
+      if(e>0){ earned+=e; from.push({ym:m, n:e}); }
+    });
+    out[id]={earned, att, months:from};
+  });
+  return out;
+}
+function lottoUsedByMember(purchases, ym){
+  const used={};
+  (purchases||[]).forEach(p=>{
+    if(p.source!=='lottery' || !p.member_id) return;
+    const d=_lotPuDate(p).slice(0,7);
+    if(ym && d && d>ym) return;   // 看歷史月份時，之後才登記的不算
+    used[p.member_id]=(used[p.member_id]||0)+1;
+  });
+  return used;
+}
+/* 全會員抽獎狀態 map（2026-07-25，供首頁課卡圖示）——
    與 lottoStats 差別：不 filter，回傳含「已抽完(left≤0 但 used>0)」者，卡片才能顯示打開的禮物。 */
 function lottoMapAll(bookings,purchases,ym,members){
   const _vip=lottoVipSet(members);   // VIP 不參與常態抽獎（2026-07-29）
-  const cnt={}, used={};
-  (bookings||[]).forEach(b=>{
-    if((b.date||'').slice(0,7)!==ym || b.status==='cancelled') return;
-    if(b.category!=='私人教練') return;
-    if(b.member_id && (b.status==='checked_in'||b.status==='completed')) cnt[b.member_id]=(cnt[b.member_id]||0)+1;
-  });
-  (purchases||[]).forEach(p=>{ if(p.source==='lottery' && p.member_id && _lotPuDate(p).slice(0,7)===ym) used[p.member_id]=(used[p.member_id]||0)+1; });
+  const E=lottoEarnedByMember(bookings, ym), U=lottoUsedByMember(purchases, ym);
   const map={};
-  new Set([...Object.keys(cnt),...Object.keys(used)]).forEach(id=>{
+  new Set([...Object.keys(E),...Object.keys(U)]).forEach(id=>{
     if(_vip.has(id)) return;   // VIP：不顯示抽獎禮物圖示、也不列可抽名單
-    const earned=Math.floor((cnt[id]||0)/4), u=used[id]||0;
-    map[id]={earned,used:u,left:earned-u};
+    const earned=(E[id]&&E[id].earned)||0, u=U[id]||0;
+    map[id]={earned, used:u, left:earned-u, months:(E[id]&&E[id].months)||[]};
   });
   return map;
 }
@@ -13371,24 +13408,27 @@ function lottoGiftIcon(st){
           + (left>0?g('lg-need',closedSvg)+`<span class="tcard-gift-n">×${left}</span>`:'');
   }
   const cls=(left>0?'tcard-gift-need':'tcard-gift-done')+(earned>=2?' tcard-gift-multi':'');
-  return `<span class="tcard-gift ${cls}" title="本月可抽 ${earned} 次（已抽 ${used}、待抽 ${left}）">${inner}</span>`;
+  return `<span class="tcard-gift ${cls}" title="累計可抽 ${earned} 次（已抽 ${used}、待抽 ${left}）　·　沒來抽的不會過期">${inner}</span>`;
 }
 function lottoStats(bookings,purchases,ym,members){
   const _vip=lottoVipSet(members);   // VIP 不參與常態抽獎（2026-07-29）
-  const cnt={};
-  (bookings||[]).forEach(b=>{
-    if((b.date||'').slice(0,7)!==ym || b.status==='cancelled') return;
-    // 只計「教練課（含友善）」＝category 私人教練（2026-07-23 使用者指示：團課/自主/體驗/按摩皆不計）
-    if(b.category!=='私人教練') return;
-    if(b.member_id && (b.status==='checked_in'||b.status==='completed'))
-      cnt[b.member_id]=(cnt[b.member_id]||0)+1;
-  });
-  const used={};
-  (purchases||[]).forEach(p=>{ if(p.source==='lottery' && p.member_id && _lotPuDate(p).slice(0,7)===ym) used[p.member_id]=(used[p.member_id]||0)+1; });
-  return Object.keys(cnt).filter(id=>!_vip.has(id))
-    .map(id=>({id,att:cnt[id],earned:Math.floor(cnt[id]/4),used:used[id]||0}))
+  const E=lottoEarnedByMember(bookings, ym), U=lottoUsedByMember(purchases, ym);
+  return Object.keys(E).filter(id=>!_vip.has(id))
+    .map(id=>({id, att:E[id].att, earned:E[id].earned, used:U[id]||0, months:E[id].months}))
     .map(x=>Object.assign(x,{left:x.earned-x.used}))
     .filter(x=>x.left>0);
+}
+/* 這幾次是哪幾個月掙到的（名單上標出來，櫃檯才知道是舊帳，客人問也答得出來） */
+function lottoPendingFrom(x, ym){
+  const ms=(x&&x.months)||[]; if(!ms.length) return '';
+  let need=x.left, out=[];
+  for(let i=ms.length-1;i>=0 && need>0;i--){        // 先抵掉最早掙到的 → 剩下的是最近幾個月的
+    const take=Math.min(ms[i].n, need); need-=take;
+    out.unshift({ym:ms[i].ym, n:take});
+  }
+  const old=out.filter(o=>o.ym!==ym);
+  if(!old.length) return '';
+  return old.map(o=>`${Number(o.ym.slice(5))} 月${o.n>1?` ${o.n} 次`:''}`).join('、')+' 未抽';
 }
 async function openLottoModal(selId){
   const[bookings,purchases,members]=await Promise.all([dbGetAll('bookings'),dbGetAll('purchases').catch(()=>[]),dbGetAll('members')]);
@@ -13397,21 +13437,21 @@ async function openLottoModal(selId){
   const mMap=Object.fromEntries(members.map(m=>[m.id,m]));
   if(!list.length){
     showModal(`<div class="modal-title">現場抽獎登記</div>
-      <div class="empty" style="padding:22px 8px;"><div class="em-t">本月目前沒有可抽獎的會員</div>
-      <div style="font-size:11.5px;color:var(--t2);margin-top:6px;">當月教練課簽到滿 4 堂可抽 1 次（可累計）</div></div>
+      <div class="empty" style="padding:22px 8px;"><div class="em-t">目前沒有待抽獎的會員</div>
+      <div style="font-size:11.5px;color:var(--t2);margin-top:6px;">教練課簽到每滿 4 堂可抽 1 次；沒來抽的會一直留著</div></div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
     return;
   }
   const rows=list.sort((a,b)=>b.left-a.left).map(x=>`<button class="lot-btn${selId===x.id?' sel':''}" onclick="openLottoModal('${x.id}')">
     <span class="lot-btn-nm">${(mMap[x.id]&&mMap[x.id].name)||'—'}</span>
     <span class="lot-btn-n">可抽 ${x.left} 次</span>
-    <span class="lot-btn-sub">簽到 ${x.att} 堂</span></button>`).join('');
+    <span class="lot-btn-sub">${lottoPendingFrom(x, ym)||`簽到 ${x.att} 堂`}</span></button>`).join('');
   const prizeGrid=selId?`<div class="lot-sec">客人抽中哪一項？</div><div class="lot-prizes">${LOTTO_PRIZES.map(p=>
     `<button class="lot-prize" onclick="lottoAward('${selId}','${p.key}')">${
       p.kind==='goods'?LNI[p.icon]:(p.kind==='voucher'?LNI.coin:`<span class="lot-glyph" style="color:${p.gcol};">${p.glyph}</span>`)
     }<span>${p.label}</span></button>`).join('')}</div>`:'';
   showModal(`<div class="modal-title">現場抽獎登記</div>
-    <div class="lot-hint">當月<b>教練課（含友善）</b>簽到滿 4 堂可抽 1 次（可累計、次月歸零；團課/自主訓練不計）。請客人抽<b>實體籤筒</b>後在此登記中獎項目——折抵券與課程獎品會自動發進會員票券。</div>
+    <div class="lot-hint">當月<b>教練課（含友善）</b>簽到滿 4 堂可抽 1 次（可累計；團課/自主訓練不計）。<b>沒來抽的次數會一直留著</b>，直到客人來抽為止。請客人抽<b>實體籤筒</b>後在此登記中獎項目——折抵券與課程獎品會自動發進會員票券。</div>
     <div class="lot-btns">${rows}</div>
     ${prizeGrid}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);

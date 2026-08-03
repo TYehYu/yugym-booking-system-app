@@ -25,16 +25,21 @@ const tier=(who,plan)=>api.computeMemberTiers(mk(who.id,plan),[who])[who.id];
 
 console.log('抽獎目標與等級判定用同一個數字');
 {
-  const i=src.indexOf('function lottoMapAll('); const j=src.indexOf('\n}\n',i)+2;
-  const lotto=new Function('lottoVipSet','_lotPuDate',src.slice(i,j)+'\nreturn lottoMapAll;')(()=>new Set(),p=>p.date||'');
+  /* 2026-08-03：抽獎機會改成跨月累積（見 lottocarrytest.js），
+     earned 的計算搬到 lottoEarnedByMember —— 這裡把兩支一起帶進沙箱。 */
+  const grab=n=>{const a=src.indexOf('function '+n+'(');let d=0;
+    for(let k=src.indexOf('{',a);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(a,k+1);}}};
+  const seg=grab('lottoEarnedByMember')+'\n'+grab('lottoUsedByMember')+'\n'+grab('lottoMapAll');
+  const lotto=new Function('lottoVipSet','_lotPuDate',
+    "const LOTTO_FROM='2026-07';\n"+seg+'\nreturn lottoMapAll;')(()=>new Set(),p=>p.date||'');
   const bks=BK('A','2026-08',9);
   const m=lotto(bks,[],'2026-08',[]);
   eq('★ 抽獎：9 堂 → 可抽 2 次（floor(9/4)）', m['A'].earned, 2);
   eq('★ 抽獎：3 堂 → 0 次（＝當月沒完成目標）', lotto(BK('A','2026-08',3),[],'2026-08',[])['A'].earned, 0);
   eq('★ 抽獎：剛好 4 堂 → 1 次（＝完成目標）', lotto(BK('A','2026-08',4),[],'2026-08',[])['A'].earned, 1);
   ok('★ 抽獎只算已簽到的教練課，與等級同一個條件',
-     /if\(b\.category!=='私人教練'\) return;/.test(src.slice(i,j))
-     && /b\.status==='checked_in'\|\|b\.status==='completed'/.test(src.slice(i,j)));
+     /b\.status==='cancelled' \|\| b\.category!=='私人教練'/.test(seg)
+     && /b\.status==='checked_in'\|\|b\.status==='completed'/.test(seg));
 }
 
 console.log('\n升級：連續 3 個月完成抽獎目標');
