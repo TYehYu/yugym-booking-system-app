@@ -7280,8 +7280,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.2237';
-const APP_VERSION_LABEL='v260803.2237';
+const APP_VERSION = '260803.2300';
+const APP_VERSION_LABEL='v260803.2300';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13238,10 +13238,23 @@ function openTodoList(kind){
         : `<div class="tdl-row tdl-static">${body(it)}</div>`).join('');
   showModal(`<div class="modal-title">${L.title}　<span style="font-size:12.5px;color:var(--t3);font-weight:500;">${(L.items||[]).length} 位</span></div>
     ${L.note?`<div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:12px;">${L.note}</div>`:''}
+    ${(L.items||[]).length>=8?`<input class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:10px;" placeholder="輸入姓名篩選…" oninput="tdlFilter(this.value)" autocomplete="off">`:''}
     ${rows?`<div class="${useGrid?'tdl-grid':'tdl-list'}">${rows}</div>`:`<div class="empty"><div class="em-t">${L.empty||'沒有資料'}</div></div>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
   // 一列四個要寬一點才放得下（2026-07-30）
   if(useGrid){ const m=document.querySelector('#modal-bg .modal'); if(m) m.classList.add('modal-wide'); }
+}
+/* 名單就地篩選（2026-08-03，同 lotFilter）：格狀（收款提醒）與清單兩種版型都吃；
+   格狀模式整個時間組都被濾掉時，把該組（含左側時間標）一起藏。 */
+function tdlFilter(q){
+  q=String(q||'').trim();
+  const hit=(el,sel)=>{ const n=el.querySelector(sel); return !q||((n&&n.textContent)||'').indexOf(q)>=0; };
+  document.querySelectorAll('.tdl-cell').forEach(c=>{ c.style.display=hit(c,'.tdl-cell-nm')?'':'none'; });
+  document.querySelectorAll('.tdl-tg').forEach(g=>{
+    const any=[...g.querySelectorAll('.tdl-cell')].some(c=>c.style.display!=='none');
+    g.style.display=any?'':'none';
+  });
+  document.querySelectorAll('.tdl-row').forEach(r=>{ r.style.display=hit(r,'.tdl-n')?'':'none'; });
 }
 /* 標記續約狀態（2026-07-29）：考慮中／不續約寫在票券上，再按一次同一顆＝取消標記 */
 async function setRenewStatus(tkid, st){
@@ -13591,9 +13604,19 @@ async function openLottoModal(selId){
     }<span>${p.label}</span></button>`).join('')}</div>`:'';
   showModal(`<div class="modal-title">現場抽獎登記</div>
     <div class="lot-hint">當月<b>教練課（含友善）</b>簽到滿 4 堂可抽 1 次（可累計；團課/自主訓練不計）。<b>沒來抽的次數會一直留著</b>，直到客人來抽為止。請客人抽<b>實體籤筒</b>後在此登記中獎項目——折抵券與課程獎品會自動發進會員票券。</div>
+    ${list.length>=8?`<input class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:8px;" placeholder="輸入姓名篩選…" oninput="lotFilter(this.value)" autocomplete="off">`:''}
     <div class="lot-btns">${rows}</div>
     ${prizeGrid}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+/* 名單就地篩選（2026-08-03 使用者指示：「方便的地方改成輸入名字下面就會做出篩選」）——
+   抽獎機會跨月保留後名單只會越來越長。用隱藏而非重繪：重繪會讓輸入框失焦。 */
+function lotFilter(q){
+  q=String(q||'').trim();
+  document.querySelectorAll('.lot-btn').forEach(b=>{
+    const nm=(b.querySelector('.lot-btn-nm')||{}).textContent||'';
+    b.style.display=(!q||nm.indexOf(q)>=0)?'':'none';
+  });
 }
 async function lottoAward(mid,key){
   const p=LOTTO_PRIZES.find(x=>x.key===key); if(!p) return;
@@ -37614,10 +37637,11 @@ PAGES.purchase_review=async function(){
         ${a.signature?`<img src="${a.signature}" alt="簽名" style="width:120px;height:56px;object-fit:contain;border:1px solid var(--bd);border-radius:6px;background:#fff;cursor:pointer;" onclick="viewSig('${a.id}')">`:'<span style="font-size:11px;color:var(--t3);">無簽名</span>'}
       </div>
     </div>
+    ${/* 發票按鈕收掉（2026-08-03 使用者指示；發票尚未串聯，銷售端 8/2 已先移除）——
+         核准＝走原免發票路徑直接發券。invoicing 分支保留：萬一有歷史申請卡在
+         待開立仍能完成。 */''}
     ${a.status==='pending'?`<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-      <button class="btn btn-green btn-sm" onclick="appInvoice('${a.id}','none')">免發票（直接發券）</button>
-      <button class="btn btn-gold btn-sm" onclick="appInvoice('${a.id}','cloud')">雲端發票</button>
-      <button class="btn btn-gold btn-sm" onclick="appInvoice('${a.id}','paper')">紙本發票</button>
+      <button class="btn btn-green btn-sm" onclick="appInvoice('${a.id}','none')">核准發券</button>
       <button class="btn btn-danger btn-sm" onclick="appCancel('${a.id}')">取消</button>
       <button class="btn btn-ghost btn-sm" onclick="viewContract('${a.id}')">查看合約</button>
     </div>`:a.status==='invoicing'?`<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center;">
