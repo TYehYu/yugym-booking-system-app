@@ -142,7 +142,8 @@ ok('★ 簽名區加「教練簽名」（三個入口共用同一支）',
    && /const CT_SIGN_BLANK=ctSignBlock\(\);/.test(src));
 ok('★ 會員端合約補上「購買內容」快照（原本只存條文）',
    /fill_snapshot:\(window\._ctFill\?contractFillBlockHTML\(window\._ctFill\):null\),/.test(src)
-   && /\$\{c\.fill_snapshot\?`<div class="ct-fill-view">\$\{c\.fill_snapshot\}<\/div>`:''\}/.test(src));
+   /* 2026-08-03 檢視改手機滿版後，這段模板搬進 fill 常數（見 ctreadertest.js） */
+   && /const fill=c\.fill_snapshot\?`<div class="ct-fill-view">\$\{c\.fill_snapshot\}<\/div>`:'';/.test(src));
 ok('　　列印已簽合約也帶購買內容', /\$\{c\.fill_snapshot\|\|''\}\s*\n\s*<div class="ct-text">/.test(src));
 ok('　　窄畫面表格自己捲，頁面不橫向捲',
    /\.ct-fill-view\{overflow-x:auto;/.test(src) && /\.ct-fill-view table\{min-width:520px;\}/.test(src));

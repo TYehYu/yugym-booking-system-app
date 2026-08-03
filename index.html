@@ -2411,6 +2411,9 @@ tr:hover td{background:var(--card2);}
 .ms-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 10px;}
 /* 全螢幕合約閱讀器 */
 #contract-reader{position:fixed;inset:0;z-index:10050;}
+/* 滿版閱讀器裡的購買內容表與簽名要回到一般排版（cr-body 是 pre-wrap，表格會被撐爆） */
+#contract-reader .ct-fill-view{white-space:normal;margin-bottom:14px;}
+#contract-reader .ct-sig-img{max-width:min(320px,80%);background:#fff;border:1px solid var(--bd);border-radius:8px;}
 .cr-backdrop{position:absolute;inset:0;background:rgba(20,18,14,0.55);}
 .cr-panel{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);}
 @media (min-width:601px) and (orientation:landscape),(min-width:1025px){.cr-panel{left:50%;top:50%;transform:translate(-50%,-50%);width:680px;max-width:calc(100vw - 32px);height:88vh;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3);}}
@@ -36485,18 +36488,23 @@ function openContractPrint(){
      <div class="ct-text">${CONTRACT_TEXT}</div>
      ${CT_SIGN_BLANK}`);
 }
-function openContractReader(){
+/* 滿版閱讀器共用殼（2026-08-03）：範本閱讀與已簽合約檢視都用它 —— 滿版、大字、
+   一路捲到底，不再是視窗裡的小框。 */
+function openContractReaderWith(title, bodyHtml, footLabel){
   let host=document.getElementById('contract-reader'); if(host)host.remove();
   host=document.createElement('div'); host.id='contract-reader'; document.body.appendChild(host);
   host.innerHTML=`<div class="cr-backdrop" onclick="closeContractReader()"></div>
     <div class="cr-panel">
       <div class="cr-head">
-        <div class="cr-title">會員服務合約　${CONTRACT_VERSION}</div>
+        <div class="cr-title">${title}</div>
         <button class="cr-close" onclick="closeContractReader()">✕</button>
       </div>
-      <div class="cr-body">${CONTRACT_TEXT}</div>
-      <div class="cr-foot"><button class="btn btn-green" style="width:100%;padding:14px;font-size:15px;" onclick="closeContractReader()">我讀完了</button></div>
+      <div class="cr-body">${bodyHtml}</div>
+      <div class="cr-foot"><button class="btn btn-green" style="width:100%;padding:14px;font-size:15px;" onclick="closeContractReader()">${footLabel||'關閉'}</button></div>
     </div>`;
+}
+function openContractReader(){
+  openContractReaderWith(`會員服務合約　${CONTRACT_VERSION}`, CONTRACT_TEXT, '我讀完了');
 }
 function closeContractReader(){ const s=document.getElementById('contract-reader'); if(s)s.remove(); }
 // 勾選同意 → 開啟簽名區並初始化簽名板
@@ -37671,16 +37679,35 @@ async function saveContractTpl(){
 async function openContractView(id){
   const c=await dbGet('contracts',id).catch(()=>null);
   if(!c){ showToast('找不到這份合約'); return; }
-  showModal(`<div class="modal-title">${c.plan_name||'合約'}</div>
-    <div style="font-size:12px;color:var(--t2);line-height:1.9;margin-bottom:8px;">
+  const meta=`<div style="font-size:12px;color:var(--t2);line-height:1.9;margin-bottom:8px;">
       ${c.member_name||''}　·　簽約日 ${(c.signed_at||'').slice(0,10)}　·　${c.sign_type==='electronic'?'電子簽約':'紙本簽約'}
-    </div>
-    ${c.fill_snapshot?`<div class="ct-fill-view">${c.fill_snapshot}</div>`:''}
-    <div class="ct-body">${String(c.body_snapshot||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
-    ${c.signature?`<div style="margin-top:10px;"><div style="font-size:11.5px;color:var(--t3);margin-bottom:4px;">會員簽名</div>
-      <img class="ct-sig-img" src="${c.signature}" alt="簽名"></div>`:''}
+    </div>`;
+  const fill=c.fill_snapshot?`<div class="ct-fill-view">${c.fill_snapshot}</div>`:'';
+  const body=String(c.body_snapshot||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const sig=c.signature?`<div style="margin-top:10px;"><div style="font-size:11.5px;color:var(--t3);margin-bottom:4px;">會員簽名</div>
+      <img class="ct-sig-img" src="${c.signature}" alt="簽名"></div>`:'';
+  /* 手機端直接滿版閱讀（2026-08-03 使用者：「會員手機端的合約，因為頁面的關係
+     沒辦法一次閱讀」）—— 原本是彈窗裡一個 32vh 的小框自己捲，手機上等於在
+     兩層捲軸裡讀合約。滿版閱讀器一路捲到底。桌機維持彈窗，另給「放大閱讀」。 */
+  if(isMobileLayout()){
+    openContractReaderWith(c.plan_name||'合約', `${meta}${fill}${body}${sig?'<div style="white-space:normal;">'+sig+'</div>':''}`);
+    return;
+  }
+  showModal(`<div class="modal-title">${c.plan_name||'合約'}</div>
+    ${meta}
+    ${fill}
+    <div class="ct-body">${body}</div>
+    ${sig}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      <button class="btn btn-ghost" onclick="openContractView_reader('${c.id}')">🔍 放大閱讀</button>
       ${isDeskLike()?`<button class="btn btn-green" onclick="ctViewPrint('${c.id}')">下載 PDF / 列印</button>`:''}</div>`);
+}
+/* 桌機的放大閱讀：同一份內容進滿版閱讀器 */
+async function openContractView_reader(id){
+  const c=await dbGet('contracts',id).catch(()=>null); if(!c) return;
+  const body=String(c.body_snapshot||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  openContractReaderWith(c.plan_name||'合約',
+    `${c.fill_snapshot?`<div class="ct-fill-view" style="white-space:normal;">${c.fill_snapshot}</div>`:''}${body}`);
 }
 /* 已簽合約列印（2026-07-28）：全文快照＋簽名影像；僅後台人員（會員端唯讀不可列印） */
 async function ctViewPrint(id){
