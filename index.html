@@ -7280,8 +7280,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.2147';
-const APP_VERSION_LABEL='v260803.2147';
+const APP_VERSION = '260803.2237';
+const APP_VERSION_LABEL='v260803.2237';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8133,6 +8133,7 @@ async function submitMemberSetup(id){
   if(p1!==p2){err.textContent='兩次輸入的密碼不一致';err.style.display='block';return;}
   if(p1===STAFF_DEFAULT_PW){err.textContent='請勿沿用預設密碼，請設定新的密碼';err.style.display='block';return;}
   if(!v('ms-name')){err.textContent='請填寫姓名';err.style.display='block';return;}
+  if(memNameErr(v('ms-name'))){err.textContent=memNameErr(v('ms-name'));err.style.display='block';return;}
   if(!v('ms-phone')){err.textContent='請填寫手機';err.style.display='block';return;}
   // 與後台建立會員同一套規則：先正規化再驗格式。手機是登入識別，格式錯會讓帳號失聯。
   const msPhone=normPhone(v('ms-phone'));
@@ -18935,6 +18936,7 @@ async function _submitBookingInner(){
     const tphoneRaw=(document.getElementById('bk-trial-phone').value||'').trim();
     const tphone=normPhone(tphoneRaw);
     if(!tname){showToast('請填寫客戶姓名');return;}
+    if(memNameErr(tname)){showToast(memNameErr(tname));return;}
     if(tphoneRaw && !/^09\d{8}$/.test(tphone)){showToast('手機格式不正確：請填 09 開頭的 10 位數字，或留空');return;}
     let mem=null, memIsNew=false;
     if(tphone){
@@ -23005,6 +23007,13 @@ async function openBackofficeMember(){
     <div id="bo-err" style="display:none;color:var(--danger);font-size:12.5px;margin-bottom:10px;"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" id="bo-submit" onclick="submitBackofficeMember()">建立會員</button></div>`);
 }
+/* 姓名防呆（2026-08-03 使用者回報：會員名「陳詠菱0976157559」——把電話黏在姓名裡
+   也建得起來）。連續 6 位以上數字＝電話黏進姓名，擋下並指路；不全面禁數字，
+   外文名或暱稱帶 1、2 個數字不誤殺。所有會建/改會員姓名的入口共用這一支。 */
+function memNameErr(name){
+  if(/\d{6,}/.test(String(name||''))) return '姓名裡好像黏了電話號碼，請把電話填在手機欄位、姓名只留名字';
+  return null;
+}
 async function submitBackofficeMember(){
   const v=id=>(document.getElementById(id).value||'').trim();
   const err=document.getElementById('bo-err');
@@ -23019,6 +23028,7 @@ async function submitBackofficeMember(){
      驗證用 ^09\d{8}$：已比對正式庫 432 位會員全數符合此格式、無一例外，故不會擋到既有資料。*/
   const phone=normPhone(v('bo-phone'));
   if(!name||!phone){showErr('請填寫姓名與手機');return;}
+  if(memNameErr(name)){showErr(memNameErr(name));return;}
   if(!/^09\d{8}$/.test(phone)){showErr('手機號碼格式不正確，請填 09 開頭的 10 位數字（會員日後用它登入）');return;}
   const btn=document.getElementById('bo-submit'); if(btn){btn.disabled=true;btn.textContent='建立中…';}
   try{
@@ -23412,6 +23422,7 @@ async function submitRegister(){
   const phone=v('reg-phone'), pw=document.getElementById('reg-pw').value;
   const pw2=document.getElementById('reg-pw2')?document.getElementById('reg-pw2').value:'';
   if(!v('reg-surname')||!v('reg-given')){showErr('請填寫姓與名（本名）');return;}
+  if(memNameErr(name)){showErr(memNameErr(name));return;}
   if(!phone||!pw){showErr('請填寫手機與密碼');return;}
   if(!/^09\d{8}$/.test(phone)){showErr('手機號碼格式不正確，請輸入 09 開頭的 10 位數字（例：0912345678）');return;}
   if(pw.length<8){showErr('密碼至少需要 8 個字元');return;}
@@ -28204,6 +28215,7 @@ async function ppSave(){
   ppCollect();
   const d=PP.draft;
   if(!d.name || !String(d.name).trim()){ showToast('請輸入姓名'); return; }
+  if(PP.kind==='member' && typeof memNameErr==='function' && memNameErr(d.name)){ showToast(memNameErr(d.name)); return; }
   d.phone = PP.rec.phone;                     // 電話為帳號，永不寫回
   ['sys_account','sys_created','sys_last_login','sys_id'].forEach(k=>delete d[k]);
   if(PP.kind==='employee'){
@@ -36835,6 +36847,7 @@ async function submitApply(){
   const g=x=>(document.getElementById(x).value||'').trim();
   const name=g('ap-name'), birth=g('ap-birth'), phone=g('ap-phone'), email=g('ap-email'), ec=g('ap-ec'), ecphone=g('ap-ecphone');
   if(!name||!birth||!phone||!ec||!ecphone){ showToast('請完整填寫會員基本資料（Email 選填）'); return; }
+  if(memNameErr(name)){ showToast(memNameErr(name)); return; }
   if(!_sigPad||!_sigPad.hasInk()){showToast('請完成電子簽名');return;}
   const p=await dbGet('course_plans',_applyPlanId);
   const ty=await dbGet('ticket_types',p.ticket_type_id);
