@@ -139,7 +139,9 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('★ 兩列都有圓形卡（2026-07-31）', (html.match(/mck-dots2/g)||[]).length===2);
     chk('每列兩個圓點都顯示 7/26', (html.match(/>7\/26</g)||[]).length===4);
     chk('圓點總數 = 2 顆 × 2 列', (html.match(/class="mtk/g)||[]).length===4);
-    chk('都標本堂金框', (html.match(/mtk-cur/g)||[]).length===4);
+    /* 2026-08-03 使用者指示「第一名額跟第二名額圓課卡要分開來圈」：
+       原本 4 顆全圈（兩列各兩顆）；現在每列只圈自己的那顆 → 共 2。 */
+    chk('本堂金框每列各一顆（分開來圈）', (html.match(/mtk-cur/g)||[]).length===2);
     chk('沒有殘留空心', !html.includes('mtk-free'));
     chk('兩個名額＝兩列，各標第幾個', (html.match(/呂宜臻/g)||[]).length===2
       && html.includes('第 1 個名額') && html.includes('第 2 個名額'));

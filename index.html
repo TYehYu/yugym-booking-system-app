@@ -7257,8 +7257,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.1718';
-const APP_VERSION_LABEL='v260803.1718';
+const APP_VERSION = '260803.1736';
+const APP_VERSION_LABEL='v260803.1736';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20196,7 +20196,7 @@ async function openBookingDetail(id){
       const tkInfo = _sl
         ? `<div class="gr-tkname">${tkNoTag(_sl.no)}${_sl.t.plan_name||'票券'}`
           +`${st.makeup?'<span class="tag" style="font-size:10px;background:#eef6ee;color:#2f6b39;margin-left:6px;">含補課券</span>':''}</div>`
-          +`<div class="mck-dots2" style="margin:4px 0 2px;">${ticketTokens(_sl.t,_sl.stamps,st.typeMap,_sl.used,b.id,mid,_sl.selfBk)}</div>`
+          +`<div class="mck-dots2" style="margin:4px 0 2px;">${ticketTokens(_sl.t,_sl.stamps,st.typeMap,_sl.used,b.id,mid,_sl.selfBk,seatNo(sk))}</div>`
         : '';
       return `<div class="gr-row${onLeaveM?' gr-row-leave':''}" style="padding:6px 0;border-bottom:1px solid var(--bd);">
         <div style="display:flex;align-items:center;gap:8px;">
@@ -35770,7 +35770,7 @@ function bkSelfBooked(b, memberId, selfSet){
   const who = memberId || b.member_id;
   return !!who && String(b.created_by)===String(who);
 }
-function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet){
+function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
   const total=Math.max(Number(t.sessions_total)||0,0);
   const v=tkVisual(t,typeMap);
   /* 自主訓練依時長展開（2026-07-27 楊慧淳案例：120 分鐘＝扣 2 點 → 圓形卡畫 2 顆同日期） */
@@ -35806,18 +35806,24 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet){
   /* 會員自己從手機約的那幾堂，圓點右上角點一顆金點（2026-08-01 使用者指示）。
      沒傳 memberId 時退回票券持有人 —— 共享票會比錯，所以有 id 的呼叫端都要傳。 */
   const selfCls=b=>bkSelfBooked(b, memberId||t.member_id, selfSet)?' mtk-self':'';
+  /* 「本堂」圈選逐名額（2026-08-03 使用者指示：「第一名額跟第二名額圓課卡要分開來圈」）——
+     同一人佔兩個名額時，這張票上同一堂有兩顆圓點，原本兩顆都命中 curId、
+     每一列都圈兩顆。改成第 N 個名額的列只圈第 N 顆命中的；沒傳 seatN 的呼叫端
+     維持原樣（單人課同一堂只有一顆，不受影響）。 */
+  let _curSeen=0;
+  const _isCur=b=>{ if(!(curId&&b&&b.id===curId)) return false; _curSeen++; return seatN==null || _curSeen===Number(seatN); };
   let s='',di=0,bi=0;
   for(let i=0;i<total;i++){
     if(i>=unlocked){ s+=`<span class="mtk mtk-lock" title="尚未開通（需繳下一期）">🔒</span>`; }
     else if(i<used){
       const b=di<done.length?done[di++]:null;
-      const cur=(curId&&b&&b.id===curId)?' mtk-cur':'';
+      const cur=_isCur(b)?' mtk-cur':'';
       const slf=selfCls(b);
       s+=`<span class="mtk mtk-used${cur}${slf}" style="--tk-acc:${v.accent};" title="已完成${b&&b.date?' '+b.date:''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${b?md(b):'✓'}</span>`;
     }
     else if(bi<booked.length){
       const b=booked[bi++];
-      const cur=(curId&&b.id===curId)?' mtk-cur':'';
+      const cur=_isCur(b)?' mtk-cur':'';
       const slf=selfCls(b);
       s+=`<span class="mtk mtk-booked${cur}${slf}" style="--tk-acc:${v.accent};" title="已預約 ${b.date||''} ${b.start_time||''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}</span>`;
     }
@@ -35828,7 +35834,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet){
      用紅虛線圈標出來，櫃檯才知道要補票。 */
   while(bi<booked.length){
     const b=booked[bi++];
-    const cur=(curId&&b.id===curId)?' mtk-cur':'';
+    const cur=_isCur(b)?' mtk-cur':'';
     const slf=selfCls(b);
     s+=`<span class="mtk mtk-over${cur}${slf}" title="已預約 ${b.date||''} ${b.start_time||''}　·　此票券已無堂數可對應，需補票${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}</span>`;
   }
