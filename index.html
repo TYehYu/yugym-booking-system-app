@@ -7280,8 +7280,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.2142';
-const APP_VERSION_LABEL='v260803.2142';
+const APP_VERSION = '260803.2147';
+const APP_VERSION_LABEL='v260803.2147';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11149,6 +11149,22 @@ async function deductTicket(ticket,booking_id,operator){
   await logTicket(ticket.id,'deduct',-1,booking_id,operator,'預約扣課'+(newExpire?`（首堂開通，效期至 ${newExpire}）`:''));
 }
 // 退一堂
+/* 這筆預約裡「還有淨扣課」的票（2026-08-03 游晴雅 20:00 團課案例）——
+   同一人兩個名額扣在兩張補課券上，取消兩個名額時原本都退到「最近一筆扣課」那張：
+   第一張多退一堂、第二張的帳懸空，之後再預約就兩個名額都扣到同一張。
+   改成逐張算淨額（扣−退），只退還有淨扣的那張（多張都有淨扣時退最近扣的）。 */
+async function grpNetDeductTicket(bid, mid){
+  const logs=await dbGetAll('ticket_logs');
+  const tks=await dbGetAll('member_tickets');
+  const mine=new Set(tks.filter(t=>String(t.member_id)===String(mid)).map(t=>t.id));
+  const net={}, last={};
+  (logs||[]).filter(l=>l.booking_id===bid&&mine.has(l.ticket_id)).forEach(l=>{
+    if(l.action==='deduct'){ net[l.ticket_id]=(net[l.ticket_id]||0)+1; last[l.ticket_id]=l.created_at||''; }
+    else if(l.action==='refund'){ net[l.ticket_id]=(net[l.ticket_id]||0)-1; }
+  });
+  return Object.keys(net).filter(k=>net[k]>0)
+    .sort((a,b)=>String(last[b]||'').localeCompare(String(last[a]||'')))[0]||null;
+}
 async function refundTicket(ticket_id,booking_id,operator){
   const t=await dbGet('member_tickets',ticket_id);
   if(!t)return;
@@ -11823,12 +11839,9 @@ async function doGroupCancelSeat(bid,seatKey){
   // 退票：優先退回當初這筆預約扣的那張，找不到就退最晚到期的團體課票
   let tkId=null;
   try{
-    const logs=await dbGetAll('ticket_logs');
-    const tks=await dbGetAll('member_tickets');
-    const mine=new Set(tks.filter(t=>String(t.member_id)===String(mid)).map(t=>t.id));
-    const hit=(logs||[]).filter(l=>l.booking_id===bid&&l.action==='deduct'&&mine.has(l.ticket_id))
-      .sort((a,c)=>String(c.created_at||'').localeCompare(String(a.created_at||'')))[0];
-    tkId=hit?hit.ticket_id:null;
+    /* 2026-08-03 修（游晴雅案例）：改抓「還有淨扣課」的那張，不再是「最近一筆扣課」——
+       兩個名額扣在兩張券上時，連續取消才不會兩次都退到同一張。 */
+    tkId=await grpNetDeductTicket(bid, mid);
     if(!tkId){
       const types=await dbGetAll('ticket_types').catch(()=>[]);
       const tm=Object.fromEntries((types||[]).map(t=>[t.id,t]));
@@ -21490,11 +21503,11 @@ async function _saveGroupMembers(id){
     if(tk) await deductTicket(tk,b.id,SESSION.id);
   }
   for(const mid of removed){
-    // 找該會員因這堂課扣的票退回（用 ticket_logs 對應）；簡化：找該會員同類型最近一筆可退
-    const logs=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='deduct');
-    const tickets=await dbGetAll('member_tickets');
-    const log=logs.find(l=>{const t=tickets.find(t=>t.id===l.ticket_id);return t&&t.member_id===mid;});
-    if(log) await refundTicket(log.ticket_id,b.id,SESSION.id);
+    /* 找該會員因這堂課「還有淨扣課」的票退回（2026-08-03 修：原本抓第一筆扣課紀錄，
+       同一人兩個名額扣在不同票上時會退錯張／退兩次同一張）。
+       refundTicket 內的 dbPut 會清快取，迴圈下一輪能看到剛寫入的退回紀錄。 */
+    const tkid=await grpNetDeductTicket(b.id, mid);
+    if(tkid) await refundTicket(tkid,b.id,SESSION.id);
   }
   b.member_ids=next;
   /* 名額變動後清掉沒有對應名額的出席狀態（2026-07-30 發現）——
