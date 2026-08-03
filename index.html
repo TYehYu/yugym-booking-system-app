@@ -6968,6 +6968,9 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 .mc-rev-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
 .mc-rev-nm{font-size:12.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mc-rev-it{font-size:10.5px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* 付款方式（2026-08-03）：現金＝綠、匯款＝金（匯款要對帳，醒目一階） */
+.mc-rev-pay{flex:none;font-size:10px;font-weight:600;padding:1px 7px;border-radius:9px;background:#eef4ee;color:#2f6b39;}
+.mc-rev-pay-tr{background:#f7efe0;color:#8a5e28;}
 .mc-rev-amt{font-family:var(--num),inherit;font-size:13px;font-weight:800;color:var(--green);white-space:nowrap;}
 .mc-rev-inv{font-size:9px;font-weight:700;color:#2e6b4f;background:#e3efe7;border-radius:999px;padding:2px 6px;flex-shrink:0;}
 /* 教練課約別標籤（2026-08-01）：續約用品牌金（要看得見，它牽動獎金）、分期用暖棕、新約低調 */
@@ -7263,8 +7266,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.1804';
-const APP_VERSION_LABEL='v260803.1804';
+const APP_VERSION = '260803.2108';
+const APP_VERSION_LABEL='v260803.2108';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12721,17 +12724,23 @@ PAGES.g_dashboard=async function(){
   const _coachTag={}; (coaches||[]).forEach(c=>{ _coachTag[c.id]=coachDisp(c); });
   window._revCoachTag=_coachTag;
   const _purByTk={}; (_dayPur||[]).forEach(p=>{ if(p.ticket_id) _purByTk[p.ticket_id]=p.id; });
+  /* 付款方式標籤（2026-08-03 使用者指示：「今日營收要顯示這一筆是現金還是匯款」）——
+     票券本身不存付款方式，在同日的收款紀錄（purchases.payment_method）上；
+     分期票同一天只會有一筆，取當日那筆即可。 */
+  const _payLb=m=>({cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統'}[m]||m||'');
+  const _payByTk={}; (purchases||[]).forEach(p=>{
+    if(p.ticket_id&&p.payment_method&&puLocalDate(p)===date) _payByTk[p.ticket_id]=p.payment_method; });
   const _revRows=[
     ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—', mid:t.member_id||null,
       it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
       amt:Number(t.amount_paid)||0, tk:t.id, kind:_saleKindOf(t),
-      att:t.sold_by||null, attKind:'tk', attRef:t.id,
+      att:t.sold_by||null, attKind:'tk', attRef:t.id, pay:_payLb(_payByTk[t.id]),
       inv:(t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued')})),
     ..._dayPur.filter(p=>!(p.ticket_id&&_dayTk.some(t=>t.id===p.ticket_id)))
       .map(p=>({nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客', mid:p.member_id||null,
       it:p.plan_name||({reactivate:'票券重啟',facility_rental:'場地租借',merchandise:'商品'}[p.source]||'收款'),
       amt:Number(p.deal_amount)||0,
-      att:p.coach_id||null, attKind:'pur', attRef:p.id,
+      att:p.coach_id||null, attKind:'pur', attRef:p.id, pay:_payLb(p.payment_method),
       inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')})),
   ];
   /* 給「今日營收」彈窗用（2026-08-01）：與上方 KPI、右欄名單卡完全同源，不另外算一份，
@@ -12758,6 +12767,7 @@ PAGES.g_dashboard=async function(){
       <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
         <div class="mc-rev-b"><span class="mc-rev-nm">${r.nm}${revAttribChip(r)}</span><span class="mc-rev-it">${r.it}</span></div>
         ${r.kind?saleKindChip(r.tk,r.kind):''}
+        ${r.pay?`<span class="mc-rev-pay${r.pay==='匯款'?' mc-rev-pay-tr':''}">${r.pay}</span>`:''}
         ${r.inv?'<span class="mc-rev-inv">發票</span>':''}
         <span class="mc-rev-amt">$${_fm(r.amt)}</span>
         ${r.mid?'<span class="mc-td-arrow">›</span>':''}
@@ -24053,6 +24063,7 @@ function openTodayRevList(){
         <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="closeModal();revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
           <div class="mc-rev-b"><span class="mc-rev-nm">${esc(r.nm)}${revAttribChip(r)}</span><span class="mc-rev-it">${esc(r.it)}</span></div>
           ${r.kind?saleKindChip(r.tk,r.kind):''}
+          ${r.pay?`<span class="mc-rev-pay${r.pay==='匯款'?' mc-rev-pay-tr':''}">${esc(r.pay)}</span>`:''}
           ${r.inv?'<span class="mc-rev-inv">發票</span>':''}
           <span class="mc-rev-amt">${money(r.amt)}</span>
           ${r.mid?'<span class="mc-td-arrow">›</span>':''}
