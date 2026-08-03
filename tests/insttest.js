@@ -131,8 +131,8 @@ ok('　　cag-view 只改游標，不關 pointer-events（關了會攔手指、�
    /\.cal-ev\.cal-ev-view,\.cag-std\.cag-view\{cursor:default;\}/.test(src));
 ok('　　不再掛 stopPropagation 的空 onclick（那仍會攔截手指）',
    !/onclick="event\.stopPropagation\(\)"`\}>/.test(src));
-ok('　　管理員／店長仍可點別人的課卡（canClick 為真就不加 class）',
-   /const canClick = layer==='mine' \|\| isAdmin;/.test(src));
+ok('　　管理員／櫃檯仍可點別人的課卡；教練與店長手機回純顯示（0803 再定案）',
+   /const canClick = layer==='mine' \|\| mobTouch;/.test(src));
 ok('　　拖曳綁在可互動的卡上（0803 起管理身份全卡可拖，教練只有自己的）',
    /\$\{canClick\?`data-bid=/.test(src));
 

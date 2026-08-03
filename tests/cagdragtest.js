@@ -20,7 +20,7 @@ ok('★ 只有帶 data-bid 的課卡關掉原生捲動（拖移需要）',
    教練（非店長）仍然只有自己的課有；管理身份全卡可拖（見 staffcardtest.js）。 */
 ok('★ 教練的右欄卡沒有 data-bid（canClick 對非管理教練只認 mine）',
    /\$\{canClick\?`data-bid="\$\{b\.id\}"`:''\}/.test(src)
-   && /const canClick = layer==='mine' \|\| isAdmin;/.test(src));
+   && /const canClick = layer==='mine' \|\| mobTouch;/.test(src));
 ok('★ 長按拖移就是綁在 data-bid 卡上（分工的依據）',
    /host\.querySelectorAll\('\.cag-wc\[data-bid\], \.cag-std\[data-bid\]'\)\.forEach\(card=>\{/.test(src));
 

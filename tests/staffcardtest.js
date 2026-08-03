@@ -20,7 +20,11 @@ ok('★ 櫃檯納入 isAdmin（原本只有 admin 與店長）',
    /const isAdmin=SESSION\.role==='admin'\|\|SESSION\.role==='front_desk'\|\|!!SESSION\.is_manager;/.test(src));
 ok('★ 課卡的 data-bid 跟著 canClick 走（三種身份＝全部課卡可拖，教練＝只有自己的）',
    /\$\{canClick\?`data-bid="\$\{b\.id\}"`:''\} style="top:\$\{top\}px;height:\$\{height\}px;\$\{posStyle\}"\$\{canClick\?` onclick="wtlCardClick\('\$\{b\.id\}',this\)"`:''\}/.test(src));
-ok('★ canClick 的定義沒變（mine 或管理身份）', /const canClick = layer==='mine' \|\| isAdmin;/.test(src));
+/* 2026-08-03 使用者再定案：教練手機端（含店長）別人的課卡回純顯示；
+   互動保留給櫃檯與管理員帳號（mobTouch）。 */
+ok('★ canClick：mine 或「非教練的管理身份」（店長手機回純顯示）',
+   /const mobTouch = isAdmin && SESSION\.role!=='coach';/.test(src)
+   && /const canClick = layer==='mine' \|\| mobTouch;/.test(src));
 ok('　　長按拖移本來就綁在 data-bid 卡上，新卡自動生效',
    /host\.querySelectorAll\('\.cag-wc\[data-bid\], \.cag-std\[data-bid\]'\)\.forEach\(card=>\{/.test(src));
 ok('　　繳費/續約角標與紅框提醒也對櫃檯開（_mk/_vis 走同一個 isAdmin）',

@@ -15,9 +15,9 @@ ok('★ 有 openContractReaderWith（自訂標題與內容）',
    /function openContractReaderWith\(title, bodyHtml, footLabel\)\{/.test(src));
 ok('★ 簽約前的範本閱讀改走同一個殼（行為不變）',
    /function openContractReader\(\)\{\n\s*openContractReaderWith\(`會員服務合約　\$\{CONTRACT_VERSION\}`, CONTRACT_TEXT, '我讀完了'\);\n\}/.test(src));
-ok('　　滿版樣式本來就有（inset:0、大字 15px、touch 捲動）',
+ok('　　滿版樣式本來就有（inset:0、大字 15px、touch 捲動；0803 加防外溢）',
    /\.cr-panel\{position:absolute;inset:0;display:flex;flex-direction:column;/.test(src)
-   && /\.cr-body\{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px 18px;font-size:15px;/.test(src));
+   && /\.cr-body\{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;word-break:break-word;-webkit-overflow-scrolling:touch;padding:20px 18px;font-size:15px;/.test(src));
 
 console.log('\n② 已簽合約：手機滿版、桌機彈窗＋放大');
 ok('★ 手機端直接開滿版（不再是 32vh 小框）',
