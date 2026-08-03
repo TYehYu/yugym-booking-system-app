@@ -7254,8 +7254,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.1556';
-const APP_VERSION_LABEL='v260803.1556';
+const APP_VERSION = '260803.1702';
+const APP_VERSION_LABEL='v260803.1702';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7425,6 +7425,8 @@ function dbFriendlyError(e, store, op){
     msg = '資料內容不符合規則，請檢查輸入的欄位';
   }else if(/JWT|not authenticated|invalid.*token|session.*expire/i.test(raw) || code==='PGRST301'){
     msg = '登入已逾期，請重新登入後再試';
+    // 讀取層撞到憑證失效 → 直接進「登入已逾時」流程（見 authExpired），不讓畫面空著猜
+    try{ if(typeof authExpired==='function') authExpired(); }catch(_){}
   }else if(/Failed to fetch|NetworkError|network|ERR_INTERNET|ERR_NETWORK|timeout/i.test(raw)){
     msg = '連線失敗，請確認網路後再試一次';
   }else{
@@ -8201,7 +8203,33 @@ async function submitStaffSetup(id){
   const host=document.getElementById('invite-screen'); if(host) host.remove();
   enterApp();
 }
-async function doLogout(){ try{await sb.auth.signOut();}catch(_){} sessionStorage.removeItem('previewRole'); SESSION=null;location.reload(); }
+async function doLogout(){ window._loggingOut=true; try{await sb.auth.signOut();}catch(_){} sessionStorage.removeItem('previewRole'); SESSION=null;location.reload(); }
+/* ── 登入猝死防線（2026-08-03 櫃檯回報「登入後資料都不見了」）──
+   實況：櫃檯分頁的 refresh token 換發失敗（auth log 連串 refresh_token_not_found，
+   常見於同帳號多分頁/多裝置互相撤銷），supabase-js 把登入丟掉之後，所有查詢改以
+   匿名身份送出 —— members/bookings 這些表匿名查得到（200）但 RLS 一列都不給，
+   每張表都回空陣列，畫面看起來就是「資料全被清空」，其實資料好好的。
+   app 自己的 SESSION 只存在記憶體，完全不知道底下的登入已經死了。
+   防線：登入死掉就直接明講、一鍵回登入頁，不讓櫃檯對著空畫面猜。 */
+function authExpired(){
+  if(window._authExpShown || window._loggingOut || !SESSION) return;
+  window._authExpShown=true;
+  const d=document.createElement('div');
+  d.id='auth-expired';
+  d.style.cssText='position:fixed;inset:0;z-index:10060;background:rgba(0,30,24,0.55);display:flex;align-items:center;justify-content:center;padding:24px;';
+  d.innerHTML=`<div style="background:#fff;border-radius:16px;padding:28px 26px;max-width:360px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.3);text-align:center;">
+      <div style="font-size:17px;font-weight:700;color:var(--green,#003d32);margin-bottom:10px;">登入已逾時</div>
+      <div style="font-size:13.5px;color:#2C2A25;line-height:1.9;margin-bottom:18px;">連線的登入憑證已失效（常見於同一個帳號<br>在其他分頁或裝置重新登入）。<br><b>資料都在，沒有遺失</b>，重新登入即可。</div>
+      <button class="btn btn-green" style="width:100%;padding:13px;font-size:15px;" onclick="location.reload()">重新登入</button>
+    </div>`;
+  document.body.appendChild(d);
+}
+/* 兩個偵測入口：①supabase-js 換發失敗會發 SIGNED_OUT ②保險起見每 60 秒摸一次
+   本地 session（getSession 只讀 storage，不打網路）。 */
+try{ if(sb&&sb.auth) sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT') authExpired(); }); }catch(_){}
+setInterval(async()=>{ if(!SESSION||window._authExpShown) return;
+  try{ const{data}=await sb.auth.getSession(); if(!data||!data.session) authExpired(); }catch(_){}
+},60000);
 // 修改自己的密碼（登入後）
 // 通知設定：LINE 開課前一天推播開關（2026-07-25 接後端 members.line_notify，opt-out）
 async function openNotifSettings(){
