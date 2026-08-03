@@ -194,9 +194,10 @@ ok('★ 自主訓練：多套就出下拉，預設最快到期',
    /<select id="msb-tk-sel" onchange="window\._msb\.pickTk=this\.value"/.test(src)
    && /有多套票卡可用，預設扣最快到期的那一套，可自行改選。/.test(src)
    && /return String\(a\.expire_date\|\|'9999-12-31'\)\.localeCompare\(String\(b\.expire_date\|\|'9999-12-31'\)\);/.test(src));
-ok('★ 團體課：同樣可選，預設最快到期（DB 端 expire_date asc nulls last）',
-   /<select id="grp-join-tk" onchange="window\._grpJoinTk=this\.value"/.test(src)
-   && /fn_member_join_group 的 expire_date asc nulls last/.test(src));
+/* 2026-08-03：listUsableTickets 的排序改成「30 天內到期的先、其餘照購買順序」
+   （李約儒 #1/#4 案例，見 tkordertest.js），註解裡那句 DB 口徑的字樣移掉了 */
+ok('★ 團體課：同樣可選（DB 端 fn_member_join_group 仍為 expire_date asc nulls last）',
+   /<select id="grp-join-tk" onchange="window\._grpJoinTk=this\.value"/.test(src));
 ok('★ 限時段的票（友善點）排在最前面 —— 它最容易白白過期',
    /const ra=tkIsTimeRestricted\(a\)\?0:1, rb=tkIsTimeRestricted\(b\)\?0:1;/.test(src));
 ok('★ 選了哪一套就扣哪一套（沒帶就退回自動挑）',

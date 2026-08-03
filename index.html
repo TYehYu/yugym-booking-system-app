@@ -7236,8 +7236,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260803.1239';
-const APP_VERSION_LABEL='v260803.1239';
+const APP_VERSION = '260803.1345';
+const APP_VERSION_LABEL='v260803.1345';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10928,6 +10928,9 @@ function tkFitsBooking(t, member_id, type_id, bookDate, bookTime, bkCntByTicket)
   if(tkOverBooked(t,bkCntByTicket)) return false;   // 已排滿總堂數 → 不能再排（超約防線）
   if(!(tkUnlockedLeft(t)>0)) return false;     // 分期：未繳期數的堂數不可預約（2026-07-29）
   if(bookDate && t.expire_date && t.expire_date<bookDate) return false; // 已過期
+  /* 還沒到起始日的票不能用（2026-08-03 李約儒案例：主顧友善票 9/4 才開始，
+     7/31 的課卻扣了它）—— 起始日是賣票時談好的開課日，之前的課本來就該用舊票。 */
+  if(bookDate && t.start_date && String(t.start_date).slice(0,10)>bookDate) return false;
   if(!tkTimeOk(t,bookDate,bookTime)) return false;   // 限時段票券：星期／18:00 前
   const wantCat=categoryOfTypeId(type_id);
   if(wantCat==='小班肌力') return ticketCategoryOf(t)==='小班肌力'; // 團課：同類別即可（不分方案）
@@ -10942,14 +10945,27 @@ async function listUsableTickets(member_id,type_id,bookDate,bookTime){
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
   const cnt=await tkBookedCountMap();
   return all.filter(t=>tkFitsBooking(t,member_id,type_id,bookDate,bookTime,cnt))
-    /* 排序：限時段的票（友善）優先用掉 —— 它只能平日 18:00 前用，留著最容易白白過期；
-       其餘依到期日先進先出。 */
+    /* 排序（2026-08-03 使用者定案，李約儒 #1/#4 案例）：
+       「應該從編號比較前面的票券先使用，除非後面的票券期限比較短才先用期限較近的」
+       ① 限時段的票（友善）最先 —— 只能平日 18:00 前用，留著最容易白白過期。
+       ② 30 天內要到期的票 → 依到期日先用（「期限比較短」的例外；四週票天生會落在這裡，
+          所以 2026-07-30 那次「別把四週票留到過期」的行為不變）。
+       ③ 其餘照購買順序先進先出（＝票券編號的順序）。
+       之前的「到期日 asc、無到期日排最後」在 #1 沒效期、#4 一年後到期時會反過來
+       先吃新票 —— 一年後才到期不叫「期限比較短」。 */
     .sort((a,b)=>{
       const ra=tkIsTimeRestricted(a)?0:1, rb=tkIsTimeRestricted(b)?0:1;
       if(ra!==rb) return ra-rb;
-      /* 沒有效期的票排最後（2026-07-30 使用者回報）：原本 (expire_date||'') 讓「無到期日」
-         排在最前面，於是 12 個月的長期方案會先被吃掉，快到期的四週優惠票反而被留到過期。
-         與資料庫端（fn_member_join_group 的 expire_date asc nulls last）口徑一致。 */
+      const soon=t=>{ if(!t.expire_date) return false;
+        const d=(parseYmd(String(t.expire_date).slice(0,10))-TODAY)/86400000;
+        return d<=30; };
+      const sa=soon(a)?0:1, sb=soon(b)?0:1;
+      if(sa!==sb) return sa-sb;
+      if(sa===1) {   // 兩張都不急（soon 旗標 0=急、1=不急）→ 購買順序
+        const pa=String(a.purchase_date||a.created_at||'9999'), pb=String(b.purchase_date||b.created_at||'9999');
+        if(pa!==pb) return pa.localeCompare(pb);
+        return String(a.created_at||'').localeCompare(String(b.created_at||''));
+      }
       return String(a.expire_date||'9999-12-31').localeCompare(String(b.expire_date||'9999-12-31'));
     });
 }
