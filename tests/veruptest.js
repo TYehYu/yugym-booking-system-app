@@ -58,21 +58,23 @@ ok('★ 固定在左下角', /\.ver-up\{position:fixed;left:24px;right:auto;bott
 ok('★ 桌機管理員有側欄 → 左邊要讓開（與抽獎鈕同一套位移）',
    /body\.mc-mode \.ver-up\{left:calc\(232px \+ 20px\);\}/.test(src)
    && /body\.mc-mode \.ver-up\{left:calc\(64px \+ 16px\);\}/.test(src));
-ok('★ 提醒出現時，左下角原本的抽獎／審核鈕往上讓位',
-   /body\.verup-on \.mc-req-fab,body\.verup-on \.mc-lotto-fab\{bottom:88px;\}/.test(src)
-   && /body\.verup-on \.mc-lotto-fab\.mc-fab-up\{bottom:146px;\}/.test(src));
+/* 2026-08-03：抽獎／審核鈕移到左上角（左欄改靠底後，月曆貼齊視窗底，
+   左下角那兩顆疊在月曆上）—— 與左下角的更新提醒不再同角落，讓位規則移除。 */
+ok('★ 抽獎／審核鈕已移到左上角，不再與更新提醒搶位置',
+   /\.mc-lotto-fab\{position:fixed;left:24px;right:auto;top:78px;bottom:auto;/.test(src)
+   && /\.mc-req-fab\{position:fixed;left:24px;right:auto;top:78px;bottom:auto;/.test(src)
+   && !/body\.verup-on \.mc-req-fab/.test(src));
 ok('　　顯示/關閉時有加/拿掉 verup-on',
    /document\.body\.classList\.add\('verup-on'\);/.test(src)
    && /document\.body\.classList\.remove\('verup-on'\);/.test(src));
 ok('　　右下角的 desk-feed 沒被動到（兩邊各據一角）',
    /#desk-feed\{position:fixed;right:18px;bottom:18px;/.test(src));
 {
-  // 疊放：兩顆鈕同時在、又有更新提醒時，三者不可互相蓋住
-  const px=s=>Number((src.match(new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\{bottom:(\\d+)px'))||[])[1]);
-  const verUp=24;                                   // .ver-up bottom
-  const req=px('body.verup-on .mc-req-fab,body.verup-on .mc-lotto-fab');
-  const lot=px('body.verup-on .mc-lotto-fab.mc-fab-up');
-  ok('★ 更新提醒 < 審核鈕 < 抽獎鈕（由下往上不重疊）', verUp<req && req<lot, {verUp,req,lot});
+  // 疊放：兩顆鈕同時在左上角時，抽獎鈕往下疊一層，不可互相蓋住
+  const reqTop=Number((src.match(/\.mc-req-fab\{[^}]*top:(\d+)px/)||[])[1]);
+  const lotUp=Number((src.match(/\.mc-lotto-fab\.mc-fab-up\{top:(\d+)px/)||[])[1]);
+  ok('★ 審核鈕在上、抽獎鈕往下疊（78 → 136，差一顆鈕的高度）',
+     reqTop===78 && lotUp>reqTop+40, {reqTop,lotUp});
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
