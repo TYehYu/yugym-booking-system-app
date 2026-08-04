@@ -10,14 +10,13 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
-ok('★ 蛋白粉卡改自訂金額（defPrice=null）',
-   /card\('#8a7a5c','蛋白粉','自訂金額 · 點卡加入',"slGoMerch\('蛋白粉',null\)"\)/.test(src)
-   && !/slGoMerch\('蛋白粉',50\)/.test(src));   // 2026-08-04 副標改購物車說法
+ok('★ 蛋白粉預設 $75、搖搖杯 $200（2026-08-04 使用者指示），仍可改',
+   /card\('#8a7a5c','蛋白粉','\$75 · 點卡加入',"slGoMerch\('蛋白粉',75\)"\)/.test(src)
+   && /\{n:'蛋白粉',p:75\}/.test(src) && /\{n:'搖搖杯',p:200\}/.test(src));
+ok('★ 單價欄 ＋− 一格 5 元', (src.match(/type="number" min="0" step="5"/g)||[]).length===2);
 /* 2026-08-04 使用者指示改購物車模式（可加多品項、自訂品名），自訂價行為保留 */
-ok('★ 單價欄：無固定價 → 留白（蛋白粉/搖搖杯/自訂 p:null）',
-   /\{n:'蛋白粉',p:null\}/.test(src) && /\{n:'搖搖杯',p:null\}/.test(src)
+ok('★ 自訂品項仍留白必填', /\{n:'自訂',p:null\}/.test(src)
    && /placeholder="單價" oninput="msCartSet\(\$\{i\},'price',this\.value\)"/.test(src));
-ok('★ 沒有固定價的說明仍在', /蛋白粉／搖搖杯／自訂品項沒有固定價，請依現場售價輸入單價。/.test(src));
 ok('★ 留白送出被擋（防 $0 收款，逐列驗證）',
    /if\(String\(r\.price\)\.trim\(\)===''\)\{ showToast\(`請輸入「\$\{nm\}」的單價`\); return; \}/.test(src));
 /* 2026-08-04 再進一步（使用者指示：「左邊選好商品點加入，右邊視窗出現商品，再一併結帳」）——
