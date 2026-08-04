@@ -64,7 +64,9 @@ function makeEnv(db,o){
     },
     _dbGetAllFresh:async()=>{ db.calls.full++; return [...db.rows.values()].map(r=>Object.assign({},r)); },
   };
-  const code=[grabFn('dbCacheClear'),
+  /* 2026-08-04 第三批第二段：dbGetAll 會順手排程存檔到 IndexedDB。
+     這支測的是增量補資料，存檔行為由 idbcachetest 驗，這裡放個空的即可。 */
+  const code=['function cacheMarkDirty(){}', grabFn('dbCacheClear'),
     'let _sigPromise=null,_sigAt=0;\n'+grabFn('tableSigs'),
     'async '+grabFn('dbDeltaPatch'),
     'async '+grabFn('dbGetAll')].join('\n');

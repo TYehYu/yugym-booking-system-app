@@ -36,7 +36,7 @@ ok('★ 每 60 秒摸一次本地 session（getSession 不打網路）',
 ok('★ 資料層撞到 JWT 失效（dbFriendlyError 的登入逾期分支）',
    /msg = '登入已逾期，請重新登入後再試';\n\s*\/\/ 讀取層撞到憑證失效[^\n]*\n\s*try\{ if\(typeof authExpired==='function'\) authExpired\(\); \}catch\(_\)\{\}/.test(src));
 ok('★ doLogout 先立旗標，自己登出不會誤觸發',
-   /async function doLogout\(\)\{ window\._loggingOut=true; try\{await sb\.auth\.signOut\(\);\}catch\(_\)\{\}/.test(src));
+   /async function doLogout\(\)\{ window\._loggingOut=true;[\s\S]{0,400}?try\{await sb\.auth\.signOut\(\);\}catch\(_\)\{\}/.test(src));   // 2026-08-04 中間插入了本機快取清空
 
 console.log('\n③ 給櫃檯看的話');
 ok('★ 明講資料都在、沒有遺失', /<b>資料都在，沒有遺失<\/b>，重新登入即可。/.test(src));

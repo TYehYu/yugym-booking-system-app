@@ -7306,8 +7306,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.0953';
-const APP_VERSION_LABEL='v260804.0953';
+const APP_VERSION = '260804.1000';
+const APP_VERSION_LABEL='v260804.1000';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7474,6 +7474,78 @@ function tableSigs(){
     .catch(()=>null);
   return _sigPromise;
 }
+/* ══ 跨工作階段保留快取（2026-08-04 讀取量優化第三批第二段）══════════════
+   前兩段解決的是「同一次使用中換頁」。但重新整理、關掉再開、隔天早上開店，
+   整組表還是要重抓一次（bookings 約 5MB）—— 這正是使用者最早說的「開首頁會 lag」。
+
+   作法：把每張表的快取（含簽章與日誌水位）存進 IndexedDB，下次開場先載回來，
+   再走既有的簽章校驗：沒人改過＝一支 RPC 就開工、0 張表；有人改＝只補那幾列。
+
+   安全性與正確性：
+   ・存的是「這個登入者看得到的資料」（RLS 過的），所以鍵含 auth uid；
+     換人登入讀不到別人的那份，登出（doLogout）整個清空。
+   ・載回來的快取一律 t=0 ＝ 強制先校驗簽章，不會直接拿舊資料畫面。
+     簽章是整表內容雜湊，對得起來就代表這份快取與資料庫逐列相同。
+   ・超過 1 天的存檔直接丟掉（水位可能已過日誌保留期，補不回來）。
+   ・IndexedDB 出任何錯（無痕模式、容量不足）一律安靜略過，退回原本的行為。 */
+const IDB_NAME='yugym-cache', IDB_STORE='tables', IDB_MAX_AGE=86400000;
+let _idbP=null, _idbUid=null, _idbSaveT=null;
+const _idbDirty=new Set();
+function idbOpen(){
+  if(_idbP) return _idbP;
+  _idbP=new Promise(res=>{
+    try{
+      const rq=indexedDB.open(IDB_NAME,1);
+      rq.onupgradeneeded=()=>{ try{ rq.result.createObjectStore(IDB_STORE); }catch(_){} };
+      rq.onsuccess=()=>res(rq.result);
+      rq.onerror=()=>res(null);
+    }catch(_){ res(null); }
+  });
+  return _idbP;
+}
+function idbTx(mode){
+  return idbOpen().then(db=>{ try{ return db?db.transaction(IDB_STORE,mode).objectStore(IDB_STORE):null; }catch(_){ return null; } });
+}
+/* 存檔用排程：資料層每次更新快取只做記號，閒下來才一次寫入（避免每筆操作都序列化 5MB） */
+function cacheMarkDirty(key){
+  if(!_idbUid) return;
+  _idbDirty.add(key);
+  if(_idbSaveT) return;
+  const run=()=>{ _idbSaveT=null; cacheFlush(); };
+  _idbSaveT=setTimeout(()=>{ if(window.requestIdleCallback) requestIdleCallback(run,{timeout:3000}); else run(); }, 2000);
+}
+async function cacheFlush(){
+  if(!_idbUid || !_idbDirty.size) return;
+  const keys=[..._idbDirty]; _idbDirty.clear();
+  try{
+    const st=await idbTx('readwrite'); if(!st) return;
+    keys.forEach(k=>{
+      const hit=_dbCache.get(k); if(!hit || !hit.sig) return;
+      try{ st.put({uid:_idbUid,table:k,data:hit.data,sig:hit.sig,logAt:hit.logAt,savedAt:Date.now()}, _idbUid+'|'+k); }catch(_){}
+    });
+  }catch(_){}
+}
+async function cacheHydrate(uid){
+  if(!uid) return 0;
+  _idbUid=uid;
+  try{
+    const st=await idbTx('readonly'); if(!st) return 0;
+    const rows=await new Promise(res=>{ try{ const rq=st.getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>res([]); }catch(_){ res([]); } });
+    let n=0;
+    rows.forEach(r=>{
+      if(!r || r.uid!==uid || !Array.isArray(r.data) || !r.sig) return;
+      if(Date.now()-(r.savedAt||0) > IDB_MAX_AGE) return;
+      /* t=0 → 下一次讀取一定先校驗簽章；fullAt=now → 之後照常每 10 分鐘整表校正一次 */
+      _dbCache.set(r.table,{t:0,fullAt:Date.now(),data:r.data,sig:r.sig,logAt:r.logAt});
+      n++;
+    });
+    return n;
+  }catch(_){ return 0; }
+}
+async function cacheWipe(){
+  _idbDirty.clear(); _idbUid=null;
+  try{ const st=await idbTx('readwrite'); if(st) st.clear(); }catch(_){}
+}
 /* ══ 增量補資料（2026-08-04 讀取量優化第三批）══════════════════════════
    第二批做到「沒人改過就不抓表」。但只要有人動一筆（簽到、取消、售票），簽章就變了，
    下一次讀取仍是整張 bookings 重抓 —— 櫃檯忙起來幾乎每次換頁都踩到。
@@ -7535,13 +7607,14 @@ async function dbGetAll(store,opts){
       const sigs=await tableSigs();
       if(sigs && sigs[key] && sigs[key]===hit.sig){
         const cur=_dbCache.get(key);
-        if(cur===hit){ hit.t=Date.now(); return hit.data.slice(); }   // 校驗期間被寫入清掉就不沿用
+        if(cur===hit){ hit.t=Date.now(); cacheMarkDirty(key); return hit.data.slice(); }   // 校驗期間被寫入清掉就不沿用
       }
       // 簽章不同 → 先試「只補變動的那幾列」，補不成才整表重抓
       if(sigs && sigs[key] && _dbCache.get(key)===hit){
         const patched=await dbDeltaPatch(key, hit, sigs);
         if(patched && _dbCache.get(key)===hit){
           _dbCache.set(key,{t:Date.now(),fullAt:hit.fullAt||hit.t,data:patched.data,sig:sigs[key],logAt:patched.logAt});
+          cacheMarkDirty(key);
           return patched.data.slice();
         }
       }
@@ -7563,6 +7636,7 @@ async function dbGetAll(store,opts){
   try{
     const {data,sig,logAt}=await p;
     _dbCache.set(key,{t:Date.now(),fullAt:Date.now(),data,sig,logAt});   // fullAt＝上一次整表重抓
+    cacheMarkDirty(key);                                                 // 排程寫進 IndexedDB（下次開場用）
     return data.slice();
   }finally{
     _dbInflight.delete(key);
@@ -8400,7 +8474,11 @@ async function submitStaffSetup(id){
   const host=document.getElementById('invite-screen'); if(host) host.remove();
   enterApp();
 }
-async function doLogout(){ window._loggingOut=true; try{await sb.auth.signOut();}catch(_){} sessionStorage.removeItem('previewRole'); SESSION=null;location.reload(); }
+async function doLogout(){ window._loggingOut=true;
+  /* 登出要把本機存的那份資料清掉（2026-08-04）：那是「這個登入者看得到的資料」，
+     下一個人（可能是別的角色）不該在這台裝置上留有前一個人的快取。 */
+  try{ await cacheWipe(); }catch(_){}
+  try{await sb.auth.signOut();}catch(_){} sessionStorage.removeItem('previewRole'); SESSION=null;location.reload(); }
 /* ── 登入猝死防線（2026-08-03 櫃檯回報「登入後資料都不見了」）──
    實況：櫃檯分頁的 refresh token 換發失敗（auth log 連串 refresh_token_not_found，
    常見於同帳號多分頁/多裝置互相撤銷），supabase-js 把登入丟掉之後，所有查詢改以
@@ -9847,9 +9925,15 @@ function bootYugym(){
     if(data&&data.session){
       const uid=data.session.user.id;
       let c=(await sb.from('employees').select('*').eq('auth_id',uid).maybeSingle()).data;
-      if(c){ SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager}; enterApp(); return; }
+      /* 重新整理／重開 App：先把上一輪的快取載回來（2026-08-04 第三批第二段）——
+         這是使用者說的「開首頁會 lag」的那一下。載回來的快取一律先校驗簽章才會被採用。 */
+      if(c){ SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager};
+        try{ await cacheHydrate(uid); }catch(_){}
+        enterApp(); return; }
       let mm=(await sb.from('members').select('*').eq('auth_id',uid).maybeSingle()).data;
-      if(mm){ SESSION={role:'member',id:mm.id,name:mm.name}; enterApp(); return; }
+      if(mm){ SESSION={role:'member',id:mm.id,name:mm.name};
+        try{ await cacheHydrate(uid); }catch(_){}
+        enterApp(); return; }
     }
     // LINE 登入導向返回後自動續跑（liff.login 會離開頁面再導回）
     try{

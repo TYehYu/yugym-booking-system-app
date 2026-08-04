@@ -34,7 +34,7 @@ function makeEnv(o){
   /* 2026-08-04 第三批：dbGetAll 會先試增量補資料。這支測的是「簽章校驗」本身，
      所以這裡放一個永遠放棄的 dbDeltaPatch（＝退回整表重抓），行為與第二批相同；
      增量補資料本身由 deltasynctest 驗。 */
-  const code=[grabFn('dbCacheClear'), 'let _sigPromise=null,_sigAt=0;\n'+grabFn('tableSigs'),
+  const code=['function cacheMarkDirty(){}', grabFn('dbCacheClear'), 'let _sigPromise=null,_sigAt=0;\n'+grabFn('tableSigs'),
     'async function dbDeltaPatch(){ return null; }', 'const DELTA_MAX=400;',
     'async '+grabFn('dbGetAll')].join('\n');
   const api=new Function(...Object.keys(env), code+'\nreturn {dbGetAll,dbCacheClear,tableSigs};')(...Object.values(env));
@@ -121,7 +121,7 @@ console.log('\n⑦ 程式碼層面的把關');
   ok('★ 簽章 RPC 失敗一律回 null（不會誤判成沒變）',
      /\.catch\(\(\)=>null\)/.test(grabFn('tableSigs')) && /r && !r\.error && r\.data && typeof r\.data==='object'/.test(grabFn('tableSigs')));
   ok('★ 校驗期間被寫入清掉就不沿用（避免用到已失效的快取）',
-     /const cur=_dbCache\.get\(key\);\n\s*if\(cur===hit\)\{ hit\.t=Date\.now\(\); return hit\.data\.slice\(\); \}/.test(src));
+     /const cur=_dbCache\.get\(key\);\n\s*if\(cur===hit\)\{ hit\.t=Date\.now\(\); cacheMarkDirty\(key\); return hit\.data\.slice\(\); \}/.test(src));
   ok('★ 寫入時把共用簽章丟掉（下次記到的是寫入後的簽章）',
      /_sigPromise=null; _sigAt=0;\n\s*if\(store===undefined\)/.test(src));
   ok('　　DB 端函式存在於 migration 留檔', fs.existsSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260804_fn_table_sigs.sql'));
