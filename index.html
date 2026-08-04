@@ -7301,8 +7301,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1336';
-const APP_VERSION_LABEL='v260804.1336';
+const APP_VERSION = '260804.1350';
+const APP_VERSION_LABEL='v260804.1350';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11993,6 +11993,19 @@ async function createBookingViaRpc(o, tk, ds, ts){
        指定的使用人優先，其次票券的預設使用人（member_tickets.family_user）。 */
     const _fam=o.trial_name||(tk&&tk.family_user)||null;
     if(_fam){ try{ await sb.from('bookings').update({trial_name:_fam}).eq('id',data.booking_id); dbCacheClear('bookings'); }catch(_){} }
+    /* 首堂開通（2026-08-04 蕭育筑案例：效期一直顯示「未開通」）——
+       RPC 在 DB 端扣課，前端 deductTicket 的 activateTicketIfNeeded 從沒跑到。
+       建立成功後補跑同一支：重讀票券（RPC 已改過餘額，不能用舊物件）再開通。 */
+    if(tk && tk.valid_days && !tk.activated_at){
+      try{
+        const fresh=await dbGet('member_tickets', tk.id);
+        if(fresh && fresh.valid_days && !fresh.activated_at){
+          const nd=await activateTicketIfNeeded(fresh, data.booking_id);
+          if(nd){ await dbPut('member_tickets', fresh);
+            await logTicket(fresh.id,'adjust',0,data.booking_id,SESSION&&SESSION.id||'system',`首堂開通（RPC 路徑補跑），效期至 ${nd}`); }
+        }
+      }catch(_){}
+    }
     return { ok:true, booking_id:data.booking_id };
   }
   return { ok:false, reason:rpcBookingErrMsg(data && data.error_code) };
@@ -21957,9 +21970,25 @@ async function grantCheckinReward(b){  if(b.reward_issued) return true;         
   // 效期一律以「課程當天」起算（2026-07-25 使用者定案，補簽亦同）。
   const rewardStart = courseDate;
   const expire=ymd(addDays(rewardStart,VALID_DAYS)); // 課程日 +7
+  /* 歸屬（2026-08-04 使用者指示：「共享的票券，課程贈送的自主訓練也要歸屬於上課的那一方」）——
+     預約掛在持有人名下、使用人（trial_name）寫上課者時，若名字對得上票券的
+     持有人/共享者之一（真實會員）→ 發給那位；對不上（家庭成員稱呼）維持發給帳號本人。
+     DB 端 handle_checkin_reward 同一規則（migration 20260804_reward_grant_to_named_attendee）。 */
+  let _grantTo=b.member_id;
+  if(b.trial_name && b.ticket_id){
+    try{
+      const _t=await dbGet('member_tickets', b.ticket_id);
+      const _cands=[_t&&_t.member_id].concat(_t?tkSharedIds(_t):[]).filter(Boolean);
+      if(_cands.length){
+        const _ms=await dbGetAll('members');
+        const _hit=_ms.find(m=>_cands.includes(m.id)&&String(m.name||'').trim()===String(b.trial_name).trim());
+        if(_hit) _grantTo=_hit.id;
+      }
+    }catch(_){}
+  }
   const tk={
     id:uid('TK'),
-    member_id:b.member_id,
+    member_id:_grantTo,
     ticket_type_id:rewardTypeId,
     source_plan_id:null,
     plan_name: isFriendly?'友善自主訓練點數':'自主訓練點數',
@@ -28477,9 +28506,11 @@ function ppRecordHtml(){
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${tkNoTag(sl.no)}${t.plan_name||'票券'}${shrTag}</span>
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
             <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id,WAL.selfBk)}</div>
-            <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
-              <span>${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}${tkIsExtended(t)?`　·　<b style="color:var(--gold-d);">已展延（不得退費）</b>`:''}${tkMoneyHtml(t)}</span>
-              <span style="display:flex;gap:6px;">
+            ${/* 2026-08-04 使用者回報：加了「使用人」後右邊四顆按鈕被擠成直條 ——
+                 允許整列換行、按鈕列不縮不折字。 */''}
+            <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 10px;">
+              <span style="min-width:0;">${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}${tkIsExtended(t)?`　·　<b style="color:var(--gold-d);">已展延（不得退費）</b>`:''}${tkMoneyHtml(t)}</span>
+              <span style="display:flex;gap:6px;flex:none;margin-left:auto;white-space:nowrap;">
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">📄 合約</button>`:''}
                 ${/* 票券預設使用人（2026-08-04 使用者指示：票券指定家庭成員，預約自動帶使用人） */''}
                 ${/* 會員資料在這個函式裡是 PP.rec（2026-08-04 初版誤用表頭的 r → ReferenceError，
