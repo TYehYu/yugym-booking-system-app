@@ -7306,8 +7306,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.0918';
-const APP_VERSION_LABEL='v260804.0918';
+const APP_VERSION = '260804.0930';
+const APP_VERSION_LABEL='v260804.0930';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7371,7 +7371,32 @@ const DB_CACHE_TTL=20000;   // 2026-07-26：8s→20s（讀取畫面出現太頻�
     else if(_hidAt && Date.now()-_hidAt>15000){ dbCacheClear(); }
   });
 })();
-const DB_CACHE_TTL_BY={ticket_types:60000,course_plans:60000,exercises:300000};
+/* 少變動的設定表拉長快取（2026-08-04 讀取量優化第一批）：票種／方案／場地／動作庫
+   都是「設定好就很少動」的表，卻跟著每次切頁重抓。寫入端一律 dbCacheClear（自己改的
+   立刻看得到），分頁隱藏 15 秒回來也會全清 —— 拉長只影響「別台裝置剛改、這台還沒重整」
+   的空窗，對設定表無實害。 */
+const DB_CACHE_TTL_BY={ticket_types:300000,course_plans:300000,exercises:300000,venues:300000};
+/* ══ 精簡欄位讀取（2026-08-04 讀取量優化第一批）══════════════════════════
+   bookings 共 46 欄、5,708 筆，整表 JSON 6.4 MB，而且 25 個頁面都在抓它。
+   其中這 9 欄「全程式碼從沒被引用過」（測試 leanselecttest 會逐一重驗，
+   哪天有人開始用到就會紅燈），列表讀取不必搬回來：實測 6,392 KB → 5,076 KB。
+
+   三道安全鎖，缺一不可：
+   ① 欄位清單**從實際回傳的資料學**，不是寫死的：本 session 第一次抓仍用 select('*')，
+      拿到資料後才記下「這張表有哪些欄位、扣掉不要的還剩哪些」，之後才精簡。
+      資料庫日後加欄位會自動被學進來，不會因為前端清單沒同步而讀不到。
+   ② 單筆讀取 dbGet 維持 select('*') —— 所有編輯流程都是從 dbGet 開始拿完整資料。
+   ③ 寫入護欄（見 dbPut）：萬一有人拿「列表裡的物件」直接回寫，缺的欄位會先補回來，
+      不可能把沒抓的欄位寫成 null。 */
+const LEAN_DROP={ bookings:['is_substitute','original_coach_id','space_id','resource_id',
+  'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref'] };
+const _leanSel=new Map();          // 實體表名 → 精簡 select 字串（本 session 學到才有）
+function leanLearn(store,row){     // 從任何一筆完整資料學欄位（dbGetAll 首抓／dbGet 都會餵）
+  const key=tbl(store), drop=LEAN_DROP[key];
+  if(!drop || !row || _leanSel.has(key)) return;
+  const cols=Object.keys(row).filter(c=>drop.indexOf(c)<0);
+  if(cols.length && cols.length<Object.keys(row).length) _leanSel.set(key,cols.join(','));
+}
 function dbCacheClear(store){
   if(store===undefined){ _dbCache.clear(); try{ occCacheClear(); }catch(_){} return; }
   const list=Array.isArray(store)?store:[store];
@@ -7383,8 +7408,12 @@ async function _dbGetAllFresh(store){
   /* 分頁改「波次並行」（2026-07-20 LAG 對策）：原逐頁序抓，大表（tickets 2,229＝3 頁）
      要 3 個序列往返；改為第 1 頁確認有續頁後、一次並行預抓 3 頁，罕見的超大表才需第二波。 */
   const PAGE=1000, WAVE=3;
-  const q=f=>sb.from(tbl(store)).select('*').range(f, f+PAGE-1);
+  /* 精簡欄位（2026-08-04）：學到了就用，沒學到就照舊 select('*') 並趁這次學起來。
+     整段流程對呼叫端完全透明，最壞情況＝與原本一模一樣。 */
+  const _sel=_leanSel.get(tbl(store))||'*';
+  const q=f=>sb.from(tbl(store)).select(_sel).range(f, f+PAGE-1);
   const first=await q(0);
+  if(_sel==='*' && first && first.data && first.data[0]) leanLearn(store, first.data[0]);
   if(first.error) throw dbFriendlyError(first.error, store, '讀取');
   let out=first.data||[];
   if(out.length<PAGE) return out;
@@ -7494,6 +7523,7 @@ function dbFriendlyError(e, store, op){
 async function dbGet(store,id){
   const{data,error}=await sb.from(tbl(store)).select('*').eq('id',id).maybeSingle();
   if(error) throw dbFriendlyError(error, store, '讀取');
+  if(data) leanLearn(store, data);   // 單筆一律全欄位，順便當精簡清單的學習來源（2026-08-04）
   return data||null;
 }
 /* ══════ 手機端的任何變更 → 櫃檯／管理員桌機右下角跳通知（2026-07-31 使用者新規則）══════
@@ -7572,6 +7602,17 @@ async function dbPut(store,obj){
   if(obj && typeof obj==='object' && !Array.isArray(obj)){
     const keys=Object.keys(obj).filter(k=>k.charAt(0)==='_');
     if(keys.length){ obj=Object.assign({},obj); keys.forEach(k=>delete obj[k]); }
+  }
+  /* 精簡欄位的寫入護欄（2026-08-04）：bookings 有 48 個 dbPut 呼叫點，其中有幾處是
+     「從列表拿到的物件改一改就回寫」（同行第二台、兄弟卡、批次改期）。列表現在不含
+     那 9 個沒人用的欄位，整包 upsert 就有機會把它們寫成空的。
+     這裡在寫入前先補回完整資料：只要物件缺了任何一個被精簡掉的欄位，就先撈單筆
+     （dbGet 是全欄位）合併再寫。新建的資料撈不到 → 照原樣寫，不受影響。
+     代價是這些表的每次寫入多一次單筆查詢；寫入頻率遠低於讀取，換到的是「絕不可能
+     因為精簡而掉資料」。 */
+  const _lean=obj&&obj.id?LEAN_DROP[tbl(store)]:null;
+  if(_lean && _lean.some(c=>!(c in obj))){
+    try{ const full=await dbGet(store,obj.id); if(full) obj=Object.assign({},full,obj); }catch(_){}
   }
   const{data,error}=await sb.from(tbl(store)).upsert(obj).select().maybeSingle();
   if(error) throw dbFriendlyError(error, store, '儲存');

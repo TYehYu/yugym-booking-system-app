@@ -26,8 +26,13 @@ console.log('dbPut 送出前濾掉暫存欄位');
   const j=src.indexOf('\n}', i)+2;
   let sent=null;
   const sb={from:()=>({upsert:(o)=>{sent=o;return{select:()=>({maybeSingle:async()=>({data:o,error:null})})};}})};
-  const dbPut=new Function('sb','tbl','dbFriendlyError','dbCacheClear',
-    src.slice(i,j)+'\nreturn dbPut;')(sb,x=>x,e=>e,()=>{});
+  /* 2026-08-04 精簡欄位讀取後，dbPut 多了「缺欄位先補齊」的護欄 → 這裡補上它的兩個相依。
+     dbGet 回 null＝資料庫沒有這一筆（新建情境），護欄不介入，本段原本驗的東西不變。
+     護欄本身的行為由 leanselecttest 實跑驗證。 */
+  const dbPut=new Function('sb','tbl','dbFriendlyError','dbCacheClear','LEAN_DROP','dbGet',
+    src.slice(i,j)+'\nreturn dbPut;')(sb,x=>x,e=>e,()=>{},
+    {bookings:['is_substitute','original_coach_id','space_id','resource_id','checkin_source',
+      'actor_user_id','operator_employee_id','makeup_status','import_ref']}, async()=>null);
 
   const bk={id:'IMP-00034',date:'2026-07-30',start_time:'18:00',venue_unit:'group_1',
             _venueOverflow:{fromVid:'multi',toVid:'group',unit:'group_1'}};

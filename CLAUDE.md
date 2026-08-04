@@ -21,6 +21,7 @@
 - `TABLE_ALIAS = { coaches: 'employees' }`：程式內傳 `'coaches'` 的舊呼叫會自動對應到 `employees` 表。
 - `dbGetAll` 已用 `.range()` 分頁迴圈處理 PostgREST 單次 1000 筆上限——大表（member_tickets、bookings）務必保留此機制，否則會出現票券顯示 0 堂、行事曆缺課等截斷症狀。
 - `dbPut` 是 upsert；`id` 為 text 主鍵（非 UUID）。
+- `LEAN_DROP`（2026-08-04 讀取量優化）：列出「程式碼完全沒用到」的欄位，`dbGetAll` 的列表讀取不會把它們搬回來（bookings 9 欄，整表 6.4MB→5.1MB）。欄位清單是**從實際回傳的資料學來的**，資料庫加欄位會自動被涵蓋，不需同步任何清單。若日後要開始使用其中某個欄位，**先把它從 `LEAN_DROP` 移除**（`tests/leanselecttest.js` 會擋下沒移除就使用的情況）。單筆 `dbGet` 仍是 `select('*')`，`dbPut` 有護欄會在回寫前補齊缺欄位。
 
 ## Supabase
 

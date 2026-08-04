@@ -35,7 +35,7 @@ console.log('非管理員自助寫入不可走 upsert');
 });
 
 console.log('\n寫入後必須清快取');
-ok('dbPut 內建 dbCacheClear', /async function dbPut\([\s\S]{0,900}?dbCacheClear/.test(src));
+ok('dbPut 內建 dbCacheClear', /async function dbPut\([\s\S]{0,2000}?dbCacheClear/.test(src));   // 2026-08-04 dbPut 加了精簡欄位護欄，視窗放寬
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
