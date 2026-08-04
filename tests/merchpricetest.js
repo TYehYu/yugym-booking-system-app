@@ -20,6 +20,16 @@ ok('★ 單價欄：無固定價 → 留白（蛋白粉/搖搖杯/自訂 p:null�
 ok('★ 沒有固定價的說明仍在', /蛋白粉／搖搖杯／自訂品項沒有固定價，請依現場售價輸入單價。/.test(src));
 ok('★ 留白送出被擋（防 $0 收款，逐列驗證）',
    /if\(String\(r\.price\)\.trim\(\)===''\)\{ showToast\(`請輸入「\$\{nm\}」的單價`\); return; \}/.test(src));
+/* 2026-08-04 再進一步（使用者指示：「左邊選好商品點加入，右邊視窗出現商品，再一併結帳」）——
+   銷售頁右側常駐購物車：點卡＝加入（同品項數量+1）、結帳把整車帶進收款視窗。 */
+ok('★ 銷售頁右側購物車：點卡加入、同品項合併、結帳帶整車',
+   /function slCartRender\(\)\{/.test(src)
+   && /if\(hit\) hit\.qty=Math\.max\(1,Number\(hit\.qty\)\|\|1\)\+1;/.test(src)
+   && /openMerchSale\(null,null,cart\.map\(/.test(src));
+ok('★ 開新銷售視窗清空、從結帳返回保留、結帳成功清空',
+   /if\(window\._slKeepCart\)\{ window\._slKeepCart=0; \} else \{ window\._slCart=\[\]; \}/.test(src)
+   && /window\._slKeepCart=1;openSalesModal\(\)/.test(src)
+   && /window\._slCart=\[\];   \/\/ 結帳完成，清空購物車/.test(src));
 ok('★ 購物車：可加品項、自訂品名、一列一筆收款紀錄',
    /function msCartAdd\(\)\{/.test(src) && /自訂品項請填品名/.test(src)
    && /一列一筆收款紀錄/.test(src));
