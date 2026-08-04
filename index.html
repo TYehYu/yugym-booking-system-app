@@ -2417,7 +2417,9 @@ tr:hover td{background:var(--card2);}
 #contract-reader .ct-sig-img{max-width:min(320px,80%);background:#fff;border:1px solid var(--bd);border-radius:8px;}
 .cr-backdrop{position:absolute;inset:0;background:rgba(20,18,14,0.55);}
 .cr-panel{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);}
-@media (min-width:601px) and (orientation:landscape),(min-width:1025px){.cr-panel{left:50%;top:50%;transform:translate(-50%,-50%);width:680px;max-width:calc(100vw - 32px);height:88vh;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3);}}
+/* 2026-08-04 使用者指示：「合約可以完整顯示，不要被限制在視窗裡面，可以把視窗放大」——
+   680px 塞不下購買內容表（分期五欄），放大到 960px（小螢幕自動縮）。 */
+@media (min-width:601px) and (orientation:landscape),(min-width:1025px){.cr-panel{left:50%;top:50%;transform:translate(-50%,-50%);width:min(960px,calc(100vw - 32px));max-width:calc(100vw - 32px);height:92vh;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3);}}
 .cr-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;background:var(--green);color:#fff;flex-shrink:0;}
 .cr-title{font-size:15px;font-weight:600;}
 .cr-close{background:rgba(255,255,255,0.2);color:#fff;border:none;width:32px;height:32px;border-radius:50%;font-size:16px;cursor:pointer;flex-shrink:0;}
@@ -7301,8 +7303,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1350';
-const APP_VERSION_LABEL='v260804.1350';
+const APP_VERSION = '260804.1355';
+const APP_VERSION_LABEL='v260804.1355';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37753,9 +37755,10 @@ function openContractPrint(){
 }
 /* 滿版閱讀器共用殼（2026-08-03）：範本閱讀與已簽合約檢視都用它 —— 滿版、大字、
    一路捲到底，不再是視窗裡的小框。 */
-function openContractReaderWith(title, bodyHtml, footLabel){
+function openContractReaderWith(title, bodyHtml, footLabel, extraBtnHtml){
   let host=document.getElementById('contract-reader'); if(host)host.remove();
   host=document.createElement('div'); host.id='contract-reader'; document.body.appendChild(host);
+  /* extraBtnHtml（2026-08-04）：底部可以多放一顆（桌機合約檢視的「下載 PDF / 列印」） */
   host.innerHTML=`<div class="cr-backdrop" onclick="closeContractReader()"></div>
     <div class="cr-panel">
       <div class="cr-head">
@@ -37763,7 +37766,10 @@ function openContractReaderWith(title, bodyHtml, footLabel){
         <button class="cr-close" onclick="closeContractReader()">✕</button>
       </div>
       <div class="cr-body">${bodyHtml}</div>
-      <div class="cr-foot"><button class="btn btn-green" style="width:100%;padding:14px;font-size:15px;" onclick="closeContractReader()">${footLabel||'關閉'}</button></div>
+      <div class="cr-foot" style="display:flex;gap:10px;">
+        <button class="btn ${extraBtnHtml?'btn-ghost':'btn-green'}" style="flex:1;padding:14px;font-size:15px;" onclick="closeContractReader()">${footLabel||'關閉'}</button>
+        ${extraBtnHtml||''}
+      </div>
     </div>`;
 }
 function openContractReader(){
@@ -39030,25 +39036,13 @@ async function openContractView(id){
   /* 手機端直接滿版閱讀（2026-08-03 使用者：「會員手機端的合約，因為頁面的關係
      沒辦法一次閱讀」）—— 原本是彈窗裡一個 32vh 的小框自己捲，手機上等於在
      兩層捲軸裡讀合約。滿版閱讀器一路捲到底。桌機維持彈窗，另給「放大閱讀」。 */
-  if(isMobileLayout()){
-    openContractReaderWith(c.plan_name||'合約', `${meta}${fill}${body}${sig?'<div style="white-space:normal;">'+sig+'</div>':''}`);
-    return;
-  }
-  showModal(`<div class="modal-title">${c.plan_name||'合約'}</div>
-    ${meta}
-    ${fill}
-    <div class="ct-body">${body}</div>
-    ${sig}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
-      <button class="btn btn-ghost" onclick="openContractView_reader('${c.id}')">🔍 放大閱讀</button>
-      ${isDeskLike()?`<button class="btn btn-green" onclick="ctViewPrint('${c.id}')">下載 PDF / 列印</button>`:''}</div>`);
-}
-/* 桌機的放大閱讀：同一份內容進滿版閱讀器 */
-async function openContractView_reader(id){
-  const c=await dbGet('contracts',id).catch(()=>null); if(!c) return;
-  const body=String(c.body_snapshot||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  /* 2026-08-04 使用者指示：「合約可以完整顯示，不要被限制在視窗裡面，可以把視窗放大」——
+     桌機也不再用一般彈窗（購買內容表被右緣裁掉），直接進放大閱讀器；
+     列印鈕放在閱讀器底部。原「放大閱讀」按鈕退場（本體就是放大版）。 */
   openContractReaderWith(c.plan_name||'合約',
-    `${c.fill_snapshot?`<div class="ct-fill-view" style="white-space:normal;">${c.fill_snapshot}</div>`:''}${body}`);
+    `${meta}${fill}${body}${sig?'<div style="white-space:normal;">'+sig+'</div>':''}`,
+    null,
+    isDeskLike()?`<button class="btn btn-green" style="flex:1;padding:14px;font-size:15px;" onclick="ctViewPrint('${c.id}')">下載 PDF / 列印</button>`:null);
 }
 /* 已簽合約列印（2026-07-28）：全文快照＋簽名影像；僅後台人員（會員端唯讀不可列印） */
 async function ctViewPrint(id){
