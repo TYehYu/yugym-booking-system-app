@@ -7305,8 +7305,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1554';
-const APP_VERSION_LABEL='v260804.1554';
+const APP_VERSION = '260804.1644';
+const APP_VERSION_LABEL='v260804.1644';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -30226,6 +30226,8 @@ async function openSalesModal(){
       ${/* 2026-08-03 使用者指示：「銷售新增一個『測量身體組成150』」——單次服務收費，
            走商品收款的殼（可散客、數量/單價可調、選付款方式），不發票券。 */''}
       ${card('#8a7a5c','測量身體組成','$150（可散客）',"slGoMerch('測量身體組成',150)")}
+      ${card('#8a7a5c','搖搖杯','自訂金額（可散客）',"slGoMerch('搖搖杯',null)")}
+      ${card('#8a7a5c','其他商品','自訂品名／金額',"slGoMerch('自訂',null)")}
     </div></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
   { const m=document.querySelector('#modal-bg .modal'); if(m) m.classList.add('modal-wide'); }   // 直式卡要寬一點才排得開
@@ -30348,29 +30350,56 @@ async function submitFacilityTicketSale(){
     navTo(CUR_PAGE);
   }catch(e){ showToast('發券失敗：'+(e&&e.message?e.message:e)); }
 }
-// 商品零售（蛋白粉/筋膜球）：第二頁＝會員（可散客）＋結帳 → purchases(source:merchandise)，併入今日營收
+/* 商品零售（2026-08-04 使用者指示：「蛋白粉、筋膜球、身體組成、搖搖杯這些非課程商品，
+   保留自訂金額跟項目；這一頁要能新增其他商品，或像加入購物車的模式」）——
+   改成購物車：點任一商品卡進來，可繼續「＋ 新增品項」；每列選預設品項或「自訂」
+   （自填品名），單價都可改（蛋白粉本來就有三種價）。結帳＝每列一筆 purchases
+   （source:merchandise），今日營收逐筆看得到品項。 */
+const MS_PRESETS=[{n:'蛋白粉',p:null},{n:'筋膜球',p:200},{n:'測量身體組成',p:150},{n:'搖搖杯',p:null},{n:'自訂',p:null}];
+let _msCart=[];
 async function openMerchSale(name,defPrice){
   const members=(await dbGetAll('members')).filter(m=>m.status==='active');
   window._msMembers=members;
-  showModal(`<div class="modal-title">銷售 · ${name}</div>
+  _msCart=[{name:name||'自訂', cname:'', qty:1, price:defPrice!=null?defPrice:''}];
+  showModal(`<div class="modal-title">銷售 · 商品</div>
     <div class="form-row"><label>會員（選填，可散客）</label>
       <div class="mem-pick-row">
         <input id="ms-mq" class="gt-search" placeholder="輸入姓名或手機搜尋，留空＝散客" oninput="msFilterMembers(this.value)" autocomplete="off">
         <select id="ms-member"><option value="">散客（不指定）</option>${members.map(m=>`<option value="${m.id}" ${(window._merchPreMember||'')===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
       </div>
     </div>
-    <div class="form-2col">
-      <div class="form-row"><label>數量</label><input type="number" id="ms-qty" value="1" min="1" oninput="msCalc()"></div>
-      <div class="form-row"><label>單價</label><input type="number" id="ms-price" value="${defPrice!=null?defPrice:''}" min="0" placeholder="輸入金額" oninput="msCalc()"></div>
-    </div>
-    <div class="form-2col">
-      <div class="form-row"><label>付款方式</label><select id="ms-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
-      
-    </div>
+    <div class="form-row"><label>品項</label><div id="ms-cart"></div>
+      <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="msCartAdd()">＋ 新增品項</button></div>
+    <div class="form-row"><label>付款方式</label><select id="ms-method" style="max-width:200px;"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
     <div class="form-row"><label>備註</label><input id="ms-note" placeholder="選填"></div>
-    <div id="ms-total" style="font-size:15px;font-weight:700;color:var(--green);padding:4px 2px 10px;">合計 $${(defPrice||0).toLocaleString()}</div>
-    ${defPrice==null?`<div style="font-size:11.5px;color:var(--t3);margin:-6px 0 10px;">這個品項沒有固定價，請依現場售價輸入單價。</div>`:''}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="openSalesModal()">← 返回</button><button class="btn btn-green" onclick="submitMerchSale('${name}')">確認收款</button></div>`);
+    <div id="ms-total" style="font-size:15px;font-weight:700;color:var(--green);padding:4px 2px 10px;">合計 $0</div>
+    <div style="font-size:11.5px;color:var(--t3);margin:-6px 0 10px;">蛋白粉／搖搖杯／自訂品項沒有固定價，請依現場售價輸入單價。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openSalesModal()">← 返回</button><button class="btn btn-green" onclick="submitMerchSale()">確認收款</button></div>`);
+  msCartRender();
+}
+function msCartRender(){
+  const host=document.getElementById('ms-cart'); if(!host) return;
+  host.innerHTML=_msCart.map((r,i)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
+    <select onchange="msCartSet(${i},'name',this.value)" style="flex:1.2;min-width:110px;">
+      ${MS_PRESETS.map(x=>`<option value="${x.n}" ${r.name===x.n?'selected':''}>${x.n}${x.p!=null?`（$${x.p}）`:''}</option>`).join('')}
+    </select>
+    ${r.name==='自訂'?`<input placeholder="品名" value="${String(r.cname||'').replace(/"/g,'&quot;')}" oninput="msCartSet(${i},'cname',this.value)" style="flex:1.2;min-width:100px;">`:''}
+    <input type="number" min="1" value="${r.qty}" oninput="msCartSet(${i},'qty',this.value)" title="數量" style="width:64px;">
+    <input type="number" min="0" value="${r.price}" placeholder="單價" oninput="msCartSet(${i},'price',this.value)" style="width:92px;">
+    <span class="num" style="min-width:70px;text-align:right;color:var(--t2);font-size:12.5px;">$${((Math.max(1,Number(r.qty)||1))*(Number(r.price)||0)).toLocaleString()}</span>
+    ${_msCart.length>1?`<button type="button" class="btn btn-ghost btn-sm" style="color:#b5372e;padding:2px 8px;" onclick="msCartRm(${i})">✕</button>`:''}
+  </div>`).join('');
+  msCalc();
+}
+function msCartAdd(){ _msCart.push({name:'蛋白粉',cname:'',qty:1,price:''}); msCartRender(); }
+function msCartRm(i){ _msCart.splice(i,1); msCartRender(); }
+function msCartSet(i,k,v){
+  const r=_msCart[i]; if(!r) return;
+  if(k==='name'){ r.name=v; const pre=MS_PRESETS.find(x=>x.n===v); r.price=(pre&&pre.p!=null)?pre.p:''; msCartRender(); return; }
+  if(k==='qty'){ r.qty=Math.max(1,Number(v)||1); }
+  else if(k==='price'){ r.price=v; }
+  else r[k]=v;
+  msCalc();
 }
 function msFilterMembers(q){
   const sel=document.getElementById('ms-member'); if(!sel) return;
@@ -30381,26 +30410,33 @@ function msFilterMembers(q){
   else if(qq&&list.length===1) sel.value=list[0].id;   // 搜尋唯一命中直接帶入
 }
 function msCalc(){
-  const q=Math.max(1,Number(document.getElementById('ms-qty').value)||1);
-  const p=Math.max(0,Number(document.getElementById('ms-price').value)||0);
-  const el=document.getElementById('ms-total'); if(el) el.textContent='合計 $'+(q*p).toLocaleString();
+  const sum=_msCart.reduce((a,r)=>a+(Math.max(1,Number(r.qty)||1))*(Number(r.price)||0),0);
+  const el=document.getElementById('ms-total'); if(el) el.textContent='合計 $'+sum.toLocaleString();
 }
-async function submitMerchSale(name){
-  const qty=Math.max(1,Number(document.getElementById('ms-qty').value)||1);
-  const _pv=(document.getElementById('ms-price').value||'').trim();
-  if(_pv===''){ showToast('請輸入單價'); return; }   // 自訂金額品項（蛋白粉）留白防呆
-  const price=Math.max(0,Number(_pv)||0);
-  const amt=qty*price;
+async function submitMerchSale(){
+  // 逐列驗證：品名（自訂要填）＋單價（自訂金額品項留白防呆）
+  for(const r of _msCart){
+    const nm=r.name==='自訂'?String(r.cname||'').trim():r.name;
+    if(!nm){ showToast('自訂品項請填品名'); return; }
+    if(String(r.price).trim()===''){ showToast(`請輸入「${nm}」的單價`); return; }
+  }
   const method=document.getElementById('ms-method').value||'cash';
-  const inv='none';
   const note=(document.getElementById('ms-note').value||'').trim()||null;
   const memberId=(document.getElementById('ms-member')?.value)||null;
   try{
-    await dbPutPurchaseSafe({id:uid('PUR'),member_id:memberId,plan_id:null,ticket_id:null,
-      plan_name:`${name}×${qty}`,list_price:amt,deal_amount:amt,payment_method:method,
-      invoice_type:inv,installment_count:1,note,operator:SESSION.id,
-      source:'merchandise',created_at:new Date().toISOString()});
-    closeModal(); showToast(`已收款 $${amt.toLocaleString()}（${name}×${qty}）`);
+    let total=0; const names=[];
+    for(const r of _msCart){
+      const nm=r.name==='自訂'?String(r.cname||'').trim():r.name;
+      const qty=Math.max(1,Number(r.qty)||1);
+      const price=Math.max(0,Number(r.price)||0);
+      const amt=qty*price; total+=amt; names.push(`${nm}×${qty}`);
+      /* 一列一筆收款紀錄：今日營收與財務逐筆看得到品項，不併成一筆糊掉 */
+      await dbPutPurchaseSafe({id:uid('PUR'),member_id:memberId,plan_id:null,ticket_id:null,
+        plan_name:`${nm}×${qty}`,list_price:amt,deal_amount:amt,payment_method:method,
+        invoice_type:'none',installment_count:1,note,operator:SESSION.id,
+        source:'merchandise',created_at:new Date().toISOString()});
+    }
+    closeModal(); showToast(`已收款 $${total.toLocaleString()}（${names.join('、')}）`);
     navTo(CUR_PAGE);   // 刷新今日營收 KPI
   }catch(e){ showToast('收款紀錄寫入失敗：'+(e&&e.message?e.message:e)); }
 }

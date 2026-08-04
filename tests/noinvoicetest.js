@@ -22,8 +22,8 @@ ok('　　商品銷售', !/ms-invoice/.test(src));
 console.log('\n② 值一律記「免發票」，欄位保留');
 ok('★ 賣票寫入 none', /invoice_status:'none',   \/\/ 發票區已移除（2026-08-02，還沒串聯）/.test(src)
    && /invoice_type:'none',/.test(src));
-eq('★ 其餘三處也是 none（不是 undefined，免得存進去變空值）',
-   (src.match(/const inv='none';/g)||[]).length, 3);
+eq('★ 其餘也是 none（不是 undefined，免得存進去變空值；商品購物車改 inline invoice_type:none）',
+   (src.match(/const inv='none';/g)||[]).length + (src.match(/invoice_type:'none',installment_count:1,note,operator/g)||[]).length, 3);
 ok('　　為什麼拿掉、什麼時候加回來，寫在程式裡',
    /發票系統還沒接，欄位留著只是讓櫃檯每次多選一次、而且選了也沒有下文。/.test(src)
    && /欄位保留，之後接上金流時把選單加回來就好。/.test(src));

@@ -13,12 +13,16 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 ok('★ 蛋白粉卡改自訂金額（defPrice=null）',
    /card\('#8a7a5c','蛋白粉','自訂金額（可散客）',"slGoMerch\('蛋白粉',null\)"\)/.test(src)
    && !/slGoMerch\('蛋白粉',50\)/.test(src));
-ok('★ 單價欄：null → 留白＋「輸入金額」提示',
-   /id="ms-price" value="\$\{defPrice!=null\?defPrice:''\}" min="0" placeholder="輸入金額"/.test(src));
-ok('★ 自訂金額品項有一行說明（沒有固定價）',
-   /\$\{defPrice==null\?`<div[^`]*這個品項沒有固定價，請依現場售價輸入單價。<\/div>`:''\}/.test(src));
-ok('★ 留白送出被擋（防 $0 收款）',
-   /const _pv=\(document\.getElementById\('ms-price'\)\.value\|\|''\)\.trim\(\);\n\s*if\(_pv===''\)\{ showToast\('請輸入單價'\); return; \}/.test(src));
+/* 2026-08-04 使用者指示改購物車模式（可加多品項、自訂品名），自訂價行為保留 */
+ok('★ 單價欄：無固定價 → 留白（蛋白粉/搖搖杯/自訂 p:null）',
+   /\{n:'蛋白粉',p:null\}/.test(src) && /\{n:'搖搖杯',p:null\}/.test(src)
+   && /placeholder="單價" oninput="msCartSet\(\$\{i\},'price',this\.value\)"/.test(src));
+ok('★ 沒有固定價的說明仍在', /蛋白粉／搖搖杯／自訂品項沒有固定價，請依現場售價輸入單價。/.test(src));
+ok('★ 留白送出被擋（防 $0 收款，逐列驗證）',
+   /if\(String\(r\.price\)\.trim\(\)===''\)\{ showToast\(`請輸入「\$\{nm\}」的單價`\); return; \}/.test(src));
+ok('★ 購物車：可加品項、自訂品名、一列一筆收款紀錄',
+   /function msCartAdd\(\)\{/.test(src) && /自訂品項請填品名/.test(src)
+   && /一列一筆收款紀錄/.test(src));
 ok('　　筋膜球與測量身體組成維持預填價',
    /slGoMerch\('筋膜球',200\)/.test(src) && /slGoMerch\('測量身體組成',150\)/.test(src));
 
