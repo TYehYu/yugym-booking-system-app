@@ -7306,8 +7306,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.0048';
-const APP_VERSION_LABEL='v260804.0048';
+const APP_VERSION = '260804.0857';
+const APP_VERSION_LABEL='v260804.0857';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9689,6 +9689,11 @@ function bootYugym(){
     // ── 路由優先順序：member-signup → invite=token → 登入 ──
     const hash=location.hash||'';
     if(/staff-signup/i.test(hash)){ showStaffSignupPage(); return; }     // 0) 員工申辦（公開，掃 QR 進入）
+    /* 0.5) 員工 LINE 綁定（2026-08-04，公開，掃 QR 進入）——liff.login 導回後 hash 會不見，
+       故也認 sessionStorage 的待辦 token 續跑。 */
+    let _slbPend=null; try{ _slbPend=sessionStorage.getItem('_staffBindToken'); }catch(_){}
+    const slb=hash.match(/staff-line-bind=([a-zA-Z0-9]+)/);
+    if(slb||_slbPend){ runStaffLineBind(slb?slb[1]:_slbPend); return; }
     if(/member-signup/i.test(hash)){ showRegisterPage(); return; }       // 1) 會員申辦（公開）
     const inv=hash.match(/invite=([a-zA-Z0-9]+)/);
     if(inv){ try{ await showInvitePage(inv[1]); }catch(e){ showInviteError('載入邀請失敗：'+(e.message||e)); } return; }  // 2) 員工邀請（公開）
@@ -9743,9 +9748,59 @@ function showConfigNeeded(){
       詳見「YUGYM-MVP2-Supabase遷移.md」第 5、6 節。</div>
   </div>`;
 }
+/* ── 員工 LINE 綁定頁（2026-08-04）─────────────────────────
+   管理員在員工資料產 QR（#staff-line-bind=TOKEN）→ 員工用 LINE 掃描 →
+   LIFF 授權取 ID token → line-member-auth（action=staff_bind）驗明正身後
+   把 LINE userId 寫進 employees.line_user_id、清掉一次性 token。
+   之後收款／續約提醒會直接推播給教練本人（line-push-daily）。 */
+function showStaffBindPage(state,msg){
+  document.getElementById('login-screen')?.classList.add('hidden');
+  document.getElementById('app-screen')?.classList.add('hidden');
+  let host=document.getElementById('staff-bind-screen');
+  if(!host){host=document.createElement('div');host.id='staff-bind-screen';document.body.appendChild(host);}
+  host.style.cssText='min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(160deg,#003d32,#0a5044);';
+  const inner = state==='done'
+    ? `<div style="font-size:44px;">✅</div><div style="font-size:17px;font-weight:700;color:#003d32;margin-top:10px;">LINE 綁定完成</div><div style="font-size:13px;color:#2C2A25;margin-top:8px;line-height:1.8;">${msg?`已將此 LINE 綁定到員工「<b>${msg}</b>」。<br>`:''}之後收款與續約提醒會直接推播到這個 LINE。<br>此頁可以直接關閉。</div>`
+    : state==='err'
+    ? `<div style="font-size:44px;">⚠️</div><div style="font-size:17px;font-weight:700;color:#7E2828;margin-top:10px;">綁定失敗</div><div style="font-size:13px;color:#2C2A25;margin-top:8px;line-height:1.8;">${msg||''}</div>`
+    : `<div style="font-size:44px;">⏳</div><div style="font-size:15px;color:#2C2A25;margin-top:10px;">${msg||'連線 LINE 中，請稍候…'}</div>`;
+  host.innerHTML=`<div style="background:#fff;border-radius:20px;padding:40px 32px;max-width:420px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.28);">
+    <div style="font-family:'Cormorant Garamond',serif;font-size:40px;font-weight:600;color:#003d32;">YUGYM</div>
+    <div style="font-size:11px;color:#b5863f;letter-spacing:.3em;margin-bottom:18px;">員工 LINE 綁定</div>
+    ${inner}</div>`;
+}
+async function runStaffLineBind(token){
+  try{ if(token) sessionStorage.setItem('_staffBindToken',token); else token=sessionStorage.getItem('_staffBindToken'); }catch(_){}
+  showStaffBindPage('busy');
+  try{
+    if(!token) throw new Error('缺少綁定代碼，請回員工資料重新產生 QR Code');
+    const cfg=window.YUGYM_CONFIG||{};
+    if(!cfg.lineLiffId) throw new Error('LINE 尚未設定');
+    await ensureLiff();
+    if(!liff.isLoggedIn()){ liff.login({redirectUri:location.href.split('#')[0]}); return; }   // 導去 LINE 授權，回來由 bootYugym 憑 sessionStorage 續跑
+    const idToken=liff.getIDToken();
+    if(!idToken) throw new Error('取不到 LINE 身分，請重新掃描 QR Code');
+    const r=await fetch(cfg.url+'/functions/v1/line-member-auth',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.anonKey,'apikey':cfg.anonKey},
+      body:JSON.stringify({id_token:idToken,action:'staff_bind',bind_token:token})});
+    const d=await r.json().catch(()=>({}));
+    if(!d.ok) throw new Error(d.error==='BIND_TOKEN_INVALID'
+      ?'綁定代碼已失效（可能已被使用）。請回員工資料重新產生 QR Code。'
+      :('驗證失敗：'+(d.error||r.status)));
+    try{ sessionStorage.removeItem('_staffBindToken'); }catch(_){}
+    history.replaceState(null,'',location.pathname);   // 清掉 hash，避免重新整理又觸發
+    showStaffBindPage('done', d.staff_name||'');
+  }catch(e){
+    try{ sessionStorage.removeItem('_staffBindToken'); }catch(_){}   // 清掉待辦，重掃 QR 可重來
+    showStaffBindPage('err', e.message||String(e));
+  }
+}
 window.addEventListener('hashchange',()=>{
   const hash=location.hash||'';
   if(/staff-signup/i.test(hash)){ showStaffSignupPage(); return; }
+  const slb=hash.match(/staff-line-bind=([a-zA-Z0-9]+)/);
+  if(slb){ runStaffLineBind(slb[1]); return; }
   if(/member-signup/i.test(hash)){ showRegisterPage(); return; }
   const inv=hash.match(/invite=([a-zA-Z0-9]+)/);
   if(inv){ showInvitePage(inv[1]); return; }
@@ -18459,19 +18514,23 @@ async function bkStep2(){
             }});
         }catch(_){}}
         window._bkInstMax=_instMax;   // 給 bkInstHold 夾上限用（最多約剩下的未開通堂數）
+        /* 2026-08-04 使用者指示：「待分期跟待簽約改成兩個明顯的按鈕一左一右；
+           該會員本身有分期的票券才顯示待分期可按，不然淡化且不能按」——
+           兩顆並排（分期左、簽約右），沒有分期票時左鈕 disabled＋降透明度。 */
         return `<div class="form-row"><div style="font-size:12.5px;color:var(--t2);line-height:1.8;padding:12px 14px;background:var(--card2);border-radius:10px;">
-          ${preMid?`<b>${preInfo?preInfo.name:'該會員'}</b> 沒有此課程的可用票券。${_instOk?'這位會員有分期方案（尚有未開通堂數），可先保留、收款後自動接上；也':'可回上一步改選會員或先完成儲值，或'}用「待簽約卡位」先佔住時段。`
+          ${preMid?`<b>${preInfo?preInfo.name:'該會員'}</b> 沒有此課程的可用票券。${_instOk?'這位會員有分期方案（尚有未開通堂數），可用「待分期」先保留、收款後自動接上；也':'可回上一步改選會員或先完成儲值，或'}用「待簽約卡位」先佔住時段。`
                   :'尚未選擇會員。請回上一步選擇會員，或用「待簽約卡位」先佔住時段。'}</div></div>
-        ${_instOk?`<div class="form-row" style="margin-bottom:10px;">
-          ${/* 連續預約（2026-08-04 使用者指示：「這種待分期繳費的也要能重複預約」）——
-               同一套 recurBox；上限＝分期票未開通的堂數。 */''}
-          ${recurBoxHtml('bk', _instMax||12)}
-          <button type="button" class="btn btn-green" style="width:100%;" onclick="bkInstHold()">⏳ 待分期繳費保留（接上分期票）</button>
-          <div style="font-size:11px;color:var(--t3);margin-top:5px;">先佔住時段；收到下一期款項、在票券卡按「開通下一期」後會自動補綁扣課。可搭配上方連續預約一次保留多堂。</div>
-        </div>`:''}
+        ${_instOk?`${/* 連續預約（2026-08-04 使用者指示：「這種待分期繳費的也要能重複預約」）——
+               同一套 recurBox；上限＝分期票未開通的堂數。只作用在左邊的待分期。 */''}
+          <div class="form-row" style="margin-bottom:8px;">${recurBoxHtml('bk', _instMax||12)}</div>`:''}
         <div class="form-row" style="margin-bottom:10px;">
-          <button type="button" class="btn btn-ghost" style="width:100%;" onclick="openPendingHold()">🕒 待簽約卡位（客人尚未購票）</button>
-          <div style="font-size:11px;color:var(--t3);margin-top:5px;">先佔住時段與場地；客人簽約付款後，在課卡明細按「轉正式預約」。</div>
+          <div style="display:flex;gap:10px;">
+            <button type="button" class="btn btn-green" style="flex:1;padding:13px 8px;${_instOk?'':'opacity:.4;filter:grayscale(.5);cursor:not-allowed;'}" ${_instOk?'onclick="bkInstHold()"':'disabled'}>⏳ 待分期繳費保留</button>
+            <button type="button" class="btn btn-gold" style="flex:1;padding:13px 8px;" onclick="openPendingHold()">🕒 待簽約卡位</button>
+          </div>
+          <div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.7;">${_instOk
+            ?'<b>待分期</b>：接上這位會員的分期票，收到下一期款項、開通後自動補綁扣課；可搭配上方連續預約一次保留多堂。<br>'
+            :'<b>待分期</b>：這位會員沒有分期中的票券，故不可選。<br>'}<b>待簽約</b>：客人尚未購票，先佔住時段與場地；簽約付款後在課卡明細按「轉正式預約」。</div>
         </div>`; })()}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button>${hasTk?'<button class="btn btn-green" onclick="submitBooking()">確認預約</button>':''}</div>`);
   if(hasTk) refreshBkTicket();
@@ -27524,6 +27583,14 @@ function ppHeaderHtml(){
     if(r.need_duty)t.push('值班'); if(r.can_substitute)t.push('代課'); if(r.need_punch)t.push('打卡');
     return t.length?`<div class="pp-meta-i"><span class="pp-meta-l">身份</span><span class="pp-meta-v">${t.map(x=>`<span class="tag tag-ok" style="margin-right:4px;font-size:10.5px;">${x}</span>`).join('')}</span></div>`:'';
   })() : '';
+  /* 員工 LINE 綁定（2026-08-04 使用者指示：「製作一個 QR Code 在管理員員工資料[綁定 LINE]，
+     點開讓員工用 LINE 掃描後點授權」）——綁好之後收款／續約提醒直接推給教練本人。
+     權限比照 employees 的 update policy：櫃檯以上，或員工看自己的資料。 */
+  const empLine = !isM ? (()=>{
+    const canBind = isDeskLike() || (SESSION && SESSION.id===r.id);
+    if(r.line_user_id) return `<div class="pp-meta-i"><span class="pp-meta-l">LINE</span><span class="pp-meta-v"><span class="tag tag-ok" style="font-size:10.5px;">已綁定</span>${canBind?`<span class="pp-f-click" style="font-size:11px;color:var(--t3);margin-left:6px;" onclick="ppStaffLineUnbind('${r.id}')">解除</span>`:''}</span></div>`;
+    return `<div class="pp-meta-i${canBind?' pp-f-click':''}"${canBind?` onclick="ppStaffLineBind('${r.id}')"`:''}><span class="pp-meta-l">LINE</span><span class="pp-meta-v" style="color:var(--t3);">${canBind?'＋ 綁定 LINE':'未綁定'}</span></div>`;
+  })() : '';
   const ecItem = isM ? (()=>{ const v=[r.emergency_name,r.emergency_relation?`（${r.emergency_relation}）`:'',r.emergency_phone?`　${fmtPhone(r.emergency_phone)}`:''].join('');
     return `<div class="pp-meta-i pp-f-click" onclick="ppEmergencyEdit(event)"><span class="pp-meta-l">緊急聯絡人</span><span class="pp-meta-v">${v||'<span style="color:var(--t3);">＋ 設定</span>'}</span></div>`; })() : '';
   const genderItem = isM ? `<div class="pp-meta-i${_canBase?' pp-f-click':''}"${_canBase?` onclick="ppInlineEdit(event,'gender')"`:''}><span class="pp-meta-l">性別</span><span class="pp-meta-v">${({male:'男',female:'女',other:'其他'})[r.gender]||'<span style="color:var(--t3);">'+(_canBase?'＋ 設定':'未填')+'</span>'}</span></div>` : '';
@@ -27539,7 +27606,7 @@ function ppHeaderHtml(){
       + (_canBase?`<div class="pp-meta-i pp-f-click" onclick="ppFamEdit('${r.id}')"><span class="pp-meta-l">家庭成員</span><span class="pp-meta-v">${(Array.isArray(r.family_members)&&r.family_members.length)?r.family_members.join('、'):'<span style="color:var(--t3);">＋ 家庭成員</span>'}</span></div>`:'')
     : mv('電話',fmtPhone(r.phone),'phone') + mv('對外名稱', r.name_en?r.name_en.toUpperCase():'','name_en')
       + mv('職稱', r.job_title,'job_title') + mv('到職日', r.hire_date,'hire_date')
-      + mv('Email', r.email,'email') + empChips;
+      + mv('Email', r.email,'email') + empChips + empLine;
   const code = r.emp_no ? `<span class="pp-code">${r.emp_no}</span>` : '';
   // 右上操作
   /* 2026-07-27 使用者指示：會員資料的「編輯」鈕移除——表頭欄位已可原地編輯
@@ -27885,6 +27952,55 @@ async function ppFamRemove(mid,i){
     await dbPut('members',m);
     ppFamEdit(mid);
   }catch(e){ showToast('移除失敗：'+((e&&e.message)||e)); }
+}
+/* ── 員工 LINE 綁定 QR（2026-08-04 使用者指示）────────────────
+   「製作一個 QR Code 在管理員員工資料[綁定 LINE]，點開讓員工用 LINE 掃描後點授權」。
+   流程：這裡產一次性 token 存 employees.line_bind_token → QR 帶 #staff-line-bind=TOKEN →
+   員工用 LINE 掃描開啟 LIFF → 授權後 line-member-auth(action=staff_bind) 憑 token
+   把 LINE userId 寫進 employees.line_user_id 並清掉 token（用完即失效）。
+   綁定後即可收到收款／續約提醒的推播（line-push-daily）。 */
+function staffLineBindLink(token){
+  const base=location.href.split('#')[0].split('?')[0];
+  return base+'?v='+appVersionTag()+'#staff-line-bind='+token;
+}
+async function ppStaffLineBind(empId){
+  let link='';
+  try{
+    const c=await dbGet('coaches',empId); if(!c){ showToast('找不到員工'); return; }
+    const token=(uid('slb')+Math.random().toString(36).slice(2)).replace(/[^a-zA-Z0-9]/g,'');
+    c.line_bind_token=token;
+    await dbPut('coaches',c);
+    link=staffLineBindLink(token);
+  }catch(e){ showToast('產生綁定連結失敗：'+((e&&e.message)||e)); return; }
+  showModal(`<div class="modal-title">綁定 LINE</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:14px;line-height:1.8;">
+      請本人用 <b>LINE 的掃描器</b>掃這個 QR Code，開啟後點「授權」即完成綁定。<br>
+      綁定後，續約與收款提醒會直接推播到這位員工的 LINE。<br>
+      <span style="color:var(--t3);">此 QR 只能用一次，掃過即失效；要重新綁定再點一次即可。</span></div>
+    <div class="mrq-poster">
+      <div class="mrq-brand">YUGYM<span>有 肌 訓 練</span></div>
+      <div class="mrq-title">綁定 LINE 通知</div>
+      <div class="mrq-qr" id="staff-line-qr"></div>
+      <div class="mrq-steps"><span>① LINE 掃描</span><span>② 點授權</span><span>③ 完成</span></div>
+    </div>
+    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px;font-size:11.5px;word-break:break-all;color:var(--t2);margin-top:12px;">${link}</div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="copyText('${link}')">複製連結</button>
+      <button class="btn btn-green" onclick="closeModal();openPersonProfile('employee','${empId}')">完成</button>
+    </div>`);
+  const box=document.getElementById('staff-line-qr');
+  if(box && window.QRCode){ try{ new QRCode(box,{text:link,width:200,height:200,colorDark:'#003d32',colorLight:'#ffffff'}); }catch(e){ box.innerHTML='<span style="font-size:11px;color:var(--t3);">QR 產生失敗，請使用下方連結</span>'; } }
+  else if(box){ box.innerHTML='<span style="font-size:11px;color:var(--t3);">（離線無法產生 QR，請使用下方連結）</span>'; }
+}
+async function ppStaffLineUnbind(empId){
+  if(!confirm('解除這位員工的 LINE 綁定？\n\n解除後就收不到系統的 LINE 提醒，之後可再重新掃 QR 綁定。')) return;
+  try{
+    const c=await dbGet('coaches',empId); if(!c) return;
+    c.line_user_id=null; c.line_bind_token=null;
+    await dbPut('coaches',c);
+    showToast('已解除 LINE 綁定');
+    await openPersonProfile('employee',empId);
+  }catch(e){ showToast('解除失敗：'+((e&&e.message)||e)); }
 }
 /* 票券分頁「儲值」（2026-07-28 使用者指示）：開銷售流程並預選本會員 */
 function ppTopUp(mid){

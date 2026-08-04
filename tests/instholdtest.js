@@ -48,7 +48,7 @@ ok('　　案例寫在程式裡', /8\/1 取消了，8\/20 明明\n\s*落在已�
 console.log('\n③ 預約流程的「待分期」選項（2026-08-04 使用者指示：「後面第五堂同一時間點預約，\n   應該除了待簽約還有待分期的選項，這樣才可以接上原本前面四堂課的票券」）');
 ok('★ 會員有未開通的分期票（票種吻合）→ 步驟 2 多一顆「待分期繳費保留」',
    /x\.installment && typeof x\.installment==='object'\n\s*&& bkTicketTypeOk\(x, type_id\)/.test(src)
-   && /onclick="bkInstHold\(\)">⏳ 待分期繳費保留（接上分期票）<\/button>/.test(src));
+   && /\$\{_instOk\?'onclick="bkInstHold\(\)"':'disabled'\}>⏳ 待分期繳費保留<\/button>/.test(src));
 /* 2026-08-04 追加：「最多只能約剩下的堂數」 */
 ok('★ 連續保留夾上限＝未開通堂數（超過自動縮並提示）',
    /window\._bkInstMax=_instMax;/.test(src)
@@ -56,11 +56,13 @@ ok('★ 連續保留夾上限＝未開通堂數（超過自動縮並提示）',
 ok('★ 建立走 runRecurringBooking 的保留路徑（findTicketFn 回 null → holdOnly）',
    /async function _bkInstHold\(\)\{/.test(src) && /findTicketFn:async\(\)=>null,/.test(src));
 ok('★ 防連點', /async function bkInstHold\(\)\{ return onceAct\('bkinsthold', _bkInstHold\); \}/.test(src));
-ok('★ 待簽約卡位選項仍在（沒分期票的客人用）', /onclick="openPendingHold\(\)">🕒 待簽約卡位（客人尚未購票）<\/button>/.test(src));
-ok('　　說明講清楚收款後自動補綁', /收到下一期款項、在票券卡按「開通下一期」後會自動補綁扣課。/.test(src));
+ok('★ 待簽約卡位選項仍在（沒分期票的客人用）', /onclick="openPendingHold\(\)">🕒 待簽約卡位<\/button>/.test(src));
+/* 2026-08-04 使用者指示：「待分期跟待簽約改成兩個明顯的按鈕一左一右；如果該會員本身
+   有分期的票券才顯示待分期，不然待分期的按鈕應該要淡化且不能按」（並排與停用細節見 stafflinetest） */
+ok('　　說明講清楚收款後自動補綁', /收到下一期款項、開通後自動補綁扣課/.test(src));
 /* 2026-08-04 追加：「這種待分期繳費的也要能重複預約」 */
 ok('★ 待分期也能連續預約（同一套 recurBox，上限＝未開通堂數）',
-   /\$\{recurBoxHtml\('bk', _instMax\|\|12\)\}/.test(src)
+   /recurBoxHtml\('bk', _instMax\|\|12\)/.test(src)
    && /const rc=readRecur\('bk'\);/.test(src)
    && /dows:rc\.on\?rc\.dows:\[\], times:rc\.on\?rc\.times:null, count:cnt, until:null,/.test(src));
 ok('★ 回報建立堂數（含跳過）', /已建立 \$\{ok\} 堂分期保留/.test(src));
