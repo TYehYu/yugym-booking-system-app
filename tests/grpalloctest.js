@@ -185,8 +185,8 @@ ok('　　票券夾也蓋不到（舊系統匯入）才退回持有中／已過�
 ok('　　單人課的票券卡也一起改（原本另有一套「以本堂為中心取 total 堂」的視窗推估）',
    /_wSlotD = W\.ticketOf\(b\.id\) \|\| \(b\.ticket_id\?W\.of\(b\.ticket_id\):null\);/.test(src)
    && !/以本堂為中心取 total 堂的視窗推估\n/.test(src));
-ok('★ 圓點也改吃合併結果（票券夾的戳記）',
-   /const bks=sl\.stamps;/.test(src)
+ok('★ 圓點也改吃合併結果（票券夾的戳記；2026-08-04 起最新一張加畫無帳預約的紅圈）',
+   /const bks=\(t\.id===_loTid\)\?sl\.stamps\.concat\(_lo\):sl\.stamps;/.test(src)
    && /const circles=ticketTokens\(t,WAL\.stampsOf\(t\.id\),typeMap,usedCount,null,member_id,WAL\.selfBk\);/.test(src));
 ok('　　舊的「最近那張團課票」猜法已經拿掉',
    !/_grpNewestP/.test(src) && !/_grpTkNewest/.test(src));
