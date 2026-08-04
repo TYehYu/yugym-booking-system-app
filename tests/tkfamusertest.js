@@ -11,8 +11,11 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');if(i<0)return'';let d=0;
 
 console.log('① 設定入口（會員資料的票券卡）');
 {
-  ok('★ 持有中票券卡有「使用人」鈕（櫃檯、該會員有家庭成員才顯示）',
-     /Array\.isArray\(r\.family_members\)&&r\.family_members\.length\)\?`<button[^`]*ppTkFamUser\('\$\{t\.id\}'\)/.test(src));
+  /* 2026-08-04 使用者回報「團體課點不進去」：初版誤用表頭的 r（此函式沒這個變數）
+     → ReferenceError 整個票券分頁掛掉。要用 PP.rec，而且要驗到這件事。 */
+  ok('★ 持有中票券卡有「使用人」鈕（用 PP.rec，不是表頭的 r）',
+     /PP\.rec&&Array\.isArray\(PP\.rec\.family_members\)&&PP\.rec\.family_members\.length\)\?`<button[^`]*ppTkFamUser\('\$\{t\.id\}'\)/.test(src)
+     && !/Array\.isArray\(r\.family_members\)&&r\.family_members\.length\)\?`<button[^`]*ppTkFamUser/.test(src));
   ok('★ 已設定的顯示「使用人：稱呼」', /使用人：'\+t\.family_user/.test(src));
   const f=grabFn('ppTkFamUser');
   ok('★ 選項＝本人＋家庭成員清單', /btn\('','本人（'\+\(m\?m\.name:'—'\)\+'）'\)/.test(f)
