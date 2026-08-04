@@ -7306,8 +7306,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1000';
-const APP_VERSION_LABEL='v260804.1000';
+const APP_VERSION = '260804.1023';
+const APP_VERSION_LABEL='v260804.1023';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19301,23 +19301,41 @@ function cpRenderList(){
   host.innerHTML=list.map(m=>`<button class="btn btn-ghost" style="width:100%;text-align:left;margin-bottom:6px;" onclick="doConvertPending('${m.id}')">${m.name}　<span style="color:var(--t3);font-size:12px;">${fmtPhone(m.phone)}</span></button>`).join('')||'<div style="padding:14px;color:var(--t3);font-size:13px;">找不到會員</div>';
 }
 /* 轉正簽約：會員有兩張以上可用票券時先問要扣哪一張（2026-07-30 使用者指示：所有預約都能選票券） */
-async function doConvertPending(memberId, tkId){
+async function doConvertPending(memberId, tkId, mode){
   // 防連點（2026-08-01）：轉正式預約會扣課，重覆送出就重覆扣
-  return onceAct('convert:'+(window._cpBid||'')+':'+(tkId||''), ()=>_doConvertPending(memberId,tkId));
+  return onceAct('convert:'+(window._cpBid||'')+':'+(tkId||'')+':'+(mode||''), ()=>_doConvertPending(memberId,tkId,mode));
 }
-async function _doConvertPending(memberId, tkId){
+async function _doConvertPending(memberId, tkId, mode){
  try{
   const id=window._cpBid; const b=await dbGet('bookings',id);
   if(!b||!b.pending_contract){ showToast('這筆不是待簽約卡位'); return; }
-  const cand=await listUsableTickets(memberId,b.ticket_type_id,b.date,b.start_time);
+  let cand=await listUsableTickets(memberId,b.ticket_type_id,b.date,b.start_time);
+  /* 分期票已開通的堂數用完時（2026-08-04 使用者提問：教練們早就用待簽約卡了位，
+     這些卡位轉正會怎樣？）—— listUsableTickets 會把「未開通堂數不可預約」的分期票
+     整張濾掉，於是連「轉成分期待繳費保留」都做不到，只會跳「沒有可用票券」。
+     這裡補一條：沒有可用票券、但有「還有未開通堂數」的分期票 → 讓它進候選，
+     轉正時整串走保留（收款開通後自動補綁）。 */
+  let _instOnly=false;
+  if(!cand.length){
+    try{
+      const _tks=await dbGetAll('member_tickets');
+      const hold=_tks.filter(t=>tkUsableBy(t,memberId) && t.status==='usable'
+        && t.installment && typeof t.installment==='object'
+        && bkTicketTypeOk(t, b.ticket_type_id)
+        && ((Number(t.sessions_total)||0)-(Number(t.unlocked_sessions)||0))>0);
+      if(hold.length){ cand=hold; _instOnly=true; }
+    }catch(_){}
+  }
   if(!cand.length){ showToast('該會員沒有此課程的可用票券，請先完成銷售'); return; }
   if(!tkId && cand.length>1){
     const m=(window._cpMembers||[]).find(x=>x.id===memberId)||{};
     showModal(`<div class="modal-title">要扣哪一張票券？</div>
       <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">${m.name||''}　${b.date.replace(/-/g,'/')} ${b.start_time}　${b.category}</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
-        ${cand.map(t=>`<button class="btn btn-ghost" style="width:100%;text-align:left;" onclick="doConvertPending('${memberId}','${t.id}')">
-          <b>${(t.plan_name||b.category).replace(/</g,'&lt;')}</b>　<span style="color:var(--t3);font-size:12px;">可約 ${tkUnlockedLeft(t)} 堂${t.expire_date?`　效期至 ${t.expire_date}`:'　無到期日'}</span></button>`).join('')}
+        ${cand.map(t=>{ const _lk=(Number(t.sessions_total)||0)-(Number(t.unlocked_sessions)||0);
+          const _inst=t.installment&&typeof t.installment==='object';
+          return `<button class="btn btn-ghost" style="width:100%;text-align:left;" onclick="doConvertPending('${memberId}','${t.id}')">
+          <b>${(t.plan_name||b.category).replace(/</g,'&lt;')}</b>　<span style="color:var(--t3);font-size:12px;">可約 ${tkUnlockedLeft(t)} 堂${_inst&&_lk>0?`・分期未開通 ${_lk} 堂`:''}${t.expire_date?`　效期至 ${t.expire_date}`:'　無到期日'}</span></button>`; }).join('')}
       </div>
       <div style="font-size:11px;color:var(--t3);margin-top:10px;">第一張是最快到期的，通常先用它。</div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="openConvertPending('${id}')">返回</button></div>`);
@@ -19344,6 +19362,37 @@ async function _doConvertPending(memberId, tkId){
   const isInst=tk.installment&&typeof tk.installment==='object';
   let avail=Math.max(0, tkUnlockedLeft(tk));
   let lockedLeft=isInst?Math.max(0,(Number(tk.sessions_total)||0)-(Number(tk.unlocked_sessions)||0)):0;
+  /* 先讓人看清楚會動到什麼（2026-08-04 使用者提問：教練們早就大量用待簽約卡位了，
+     這個功能上線後會有什麼影響？）——正式庫現有 538 筆待簽約卡位、66 個人，
+     最長一串 24 堂。整串轉正會「扣課／轉保留／取消」三種結果一次發生，
+     其中「取消」是把教練排好的時段還出去，按下去之前一定要先看到數字。
+     只有一堂的卡位不會多這一步。 */
+  if(series.length>1 && mode!=='one' && mode!=='series'){
+    let a=avail, l=lockedLeft, nB=0, nH=0, drop=[];
+    series.forEach(x=>{ if(a>0){a--;nB++;} else if(l>0){l--;nH++;} else drop.push(x); });
+    const m=(window._cpMembers||[]).find(x=>x.id===memberId)||{};
+    const _d=x=>String(x.date).replace(/-/g,'/')+' '+String(x.start_time).slice(0,5);
+    showModal(`<div class="modal-title">整串卡位要怎麼轉？</div>
+      <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-bottom:10px;">
+        <b>${m.name||b.trial_name||''}</b> 名下同時段的待簽約卡位共 <b>${series.length}</b> 堂
+        （${_d(series[0])} 起）。用「${(tk.plan_name||b.category).replace(/</g,'&lt;')}」轉正的結果會是：</div>
+      <div class="sc-list">
+        <div class="sc-row"><span class="sc-d">扣課（正式預約）</span><span class="sc-x">${nB} 堂</span></div>
+        ${nH?`<div class="sc-row"><span class="sc-d">轉分期待繳費保留</span><span class="sc-x">${nH} 堂</span></div>`:''}
+        ${drop.length?`<div class="sc-row"><span class="sc-d" style="color:#b5372e;">超出簽約堂數 → 取消</span><span class="sc-x" style="color:#b5372e;">${drop.length} 堂</span></div>`:''}
+      </div>
+      ${drop.length?`<div style="background:#fbeceb;border:1px solid #f0c9c5;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px;color:#b5372e;line-height:1.8;">
+        ⚠ 會被取消的時段：${drop.slice(0,6).map(_d).join('、')}${drop.length>6?`…等 ${drop.length} 堂`:''}<br>
+        取消後時段會還出去，別人就約得走。若這些堂之後還要上，請改用「只轉這一堂」，
+        或先幫會員補足堂數／開通下一期再整串轉。</div>`:''}
+      <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
+        <button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button>
+        <button class="btn btn-ghost" onclick="doConvertPending('${memberId}','${tk.id}','one')">只轉這一堂</button>
+        <button class="btn btn-green" onclick="doConvertPending('${memberId}','${tk.id}','series')">整串轉正</button>
+      </div>`);
+    return;
+  }
+  if(mode==='one') series=[b];
   let bound=0, held=0, dropped=0;
   for(const hb of series){
     if(avail>0){

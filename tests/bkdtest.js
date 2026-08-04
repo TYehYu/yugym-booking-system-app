@@ -122,7 +122,7 @@ ok('　　送出時用選的那張，失效才退回自動挑選',
    && /const tk=_cand\.find\(x=>x\.id===_sel\)\|\|_cand\[0\]\|\|null;/.test(src));
 ok('　　換時段會重挑（候選會變）', /s\.pickTk=null;\s+\/\/ 換時段重挑/.test(src));
 ok('★ 轉正簽約：兩張以上先問要扣哪一張',
-   /async function doConvertPending\(memberId, tkId\)\{/.test(src)
+   /async function doConvertPending\(memberId, tkId, mode\)\{/.test(src)   // 2026-08-04 多了整串轉正的模式
    && /if\(!tkId && cand\.length>1\)\{/.test(src));
 ok('★ 既有預約可事後更換票券', /async function openBkTicketChange\(id\)\{/.test(src)
    && /onclick="openBkTicketChange\('\$\{b\.id\}'\)"/.test(src));

@@ -32,7 +32,7 @@ ok('★ 跑完再多留 400ms，吃掉補發的那一次點擊',
    /finally\{ setTimeout\(\(\)=>\{ delete _actBusy\[key\]; \}, 400\); \}/.test(src));
 ok('★ 換票券的動作有上鎖', /async function doBkTicketChange\(id,newTkId\)\{ return onceAct\('tkchg:'\+id, \(\)=>_doBkTicketChange\(id,newTkId\)\); \}/.test(src));
 ok('★ 轉正式預約（會扣課）也有上鎖',
-   /return onceAct\('convert:'\+\(window\._cpBid\|\|''\)\+':'\+\(tkId\|\|''\), \(\)=>_doConvertPending\(memberId,tkId\)\);/.test(src));
+   /return onceAct\('convert:'\+\(window\._cpBid\|\|''\)\+':'\+\(tkId\|\|''\)\+':'\+\(mode\|\|''\), \(\)=>_doConvertPending\(memberId,tkId,mode\)\);/.test(src));   // 2026-08-04 鍵多帶模式
 ok('　　鎖的 key 帶票券 id —— 選不同票券是不同動作，不會被互相擋住',
    /'convert:'\+\(window\._cpBid\|\|''\)\+':'\+\(tkId\|\|''\)/.test(src));
 ok('　　成因寫在程式裡', /手機上偶爾會收到兩次事件（touchend 之後補發的 click、/.test(src));
