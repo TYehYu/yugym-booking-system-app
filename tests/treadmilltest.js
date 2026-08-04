@@ -60,9 +60,13 @@ ok('★ 台數選項依場地設定的容量產生（不寫死 2）',
    /const cap=\(\(window\.VENUES\|\|\[\]\)\.find\(v=>v\.id==='treadmill'\)\|\|\{\}\)\.capacity\|\|2;/.test(src));
 ok('★ 有「自動配置」這一項（預設不指定場地，行為與改版前一致）',
    /<option value="0">自動配置（多功能訓練區優先）<\/option>/.test(src));
-ok('★ 選了台數＝指定用跑步機（venue_pref），不再自動配到多功能區',
-   /const _venuePref=_tmN>0\?'treadmill':null;/.test(src)
+/* 2026-08-04：選單多了「團課教室」，讀值收斂到 bkVenueChoice（'treadmill'＋台數／'group'／null） */
+ok('★ 選了台數＝指定用跑步機、選團課教室＝指定 group（venue_pref）',
+   /if\(el\.value==='g'\) return \{pref:'group', units:0\};/.test(src)
+   && /return \{pref:n>0\?'treadmill':null, units:n\};/.test(src)
+   && /const _venuePref=_vc\.pref;/.test(src)
    && /venue_pref:o\.venue_pref\|\|null,/.test(src));
+ok('★ 選單有「團課教室」選項', /<option value="g">團課教室<\/option>/.test(src));
 /* 2026-08-03 家庭成員：vbkChk 多帶 member_id 與使用人 */
 ok('★ 單筆預約的場地預驗證也帶上指定（否則會先被判成多功能區可用）',
    /const vbkChk=\{id:null,coach_id,category:t\.category,ticket_type_id:type_id,venue_pref:_venuePref,\n\s*member_id, trial_name:\(window\._bkFamUser!=null\?window\._bkFamUser:null\)\};/.test(src));   // 2026-08-04 '' 哨兵不塌成 null

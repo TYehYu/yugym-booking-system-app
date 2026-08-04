@@ -7313,8 +7313,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1738';
-const APP_VERSION_LABEL='v260804.1738';
+const APP_VERSION = '260804.2323';
+const APP_VERSION_LABEL='v260804.2323';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15813,8 +15813,11 @@ function assignLanes(evs){
 function bkTreadmillRow(t){
   if(!t || t.category!=='自主訓練') return '';
   const cap=((window.VENUES||[]).find(v=>v.id==='treadmill')||{}).capacity||2;
+  /* 2026-08-04 使用者回報：「這邊沒有團課教室的選項」——allocateVenue 本來就支援
+     forceVid='group'，只是選單沒放。值用 'g' 區隔台數數字。 */
   const opts=['<option value="0">自動配置（多功能訓練區優先）</option>']
-    .concat(Array.from({length:cap},(_,i)=>`<option value="${i+1}">跑步機 ${i+1} 台</option>`)).join('');
+    .concat(Array.from({length:cap},(_,i)=>`<option value="${i+1}">跑步機 ${i+1} 台</option>`))
+    .concat(['<option value="g">團課教室</option>']).join('');
   return `<div class="form-row"><label>場地／跑步機台數</label>
     <select id="bk-treadmill">${opts}</select>
     <div style="font-size:11px;color:var(--t3);margin-top:5px;line-height:1.7;">
@@ -15822,7 +15825,16 @@ function bkTreadmillRow(t){
 }
 function bkTreadmillN(){
   const el=document.getElementById('bk-treadmill');
+  if(el && el.value==='g') return 0;             // 團課教室：不是台數（見 bkVenueChoice）
   return el ? Math.max(0, Number(el.value)||0) : 0;
+}
+/* 場地選擇（2026-08-04）：'treadmill'＋台數／'group' 團課教室／null 自動配置 */
+function bkVenueChoice(){
+  const el=document.getElementById('bk-treadmill');
+  if(!el) return {pref:null, units:0};
+  if(el.value==='g') return {pref:'group', units:0};
+  const n=Math.max(0, Number(el.value)||0);
+  return {pref:n>0?'treadmill':null, units:n};
 }
 /* 幫一筆已建立的預約補開第 2、3 台（同行使用、不扣點）。
    回傳實際開成幾台（含主預約那一台）—— 別人先約走時就少開，不讓整筆失敗。 */
@@ -19738,8 +19750,9 @@ async function _submitBookingInner(){
   };
   /* 跑步機台數（2026-08-01 使用者指示）：選了台數＝指定用跑步機，
      第 2 台以 sibling_of 掛在主預約下、不另外扣點。 */
-  const _tmN=bkTreadmillN();
-  const _venuePref=_tmN>0?'treadmill':null;
+  const _vc=bkVenueChoice();                     // 場地指定：跑步機台數或團課教室（2026-08-04）
+  const _tmN=_vc.units;
+  const _venuePref=_vc.pref;
   // 單筆預約（非連續）：先預驗證場地，若溢出到次選場地→跳確認，教練同意才建立
   if(!recurring){
     const vbkChk={id:null,coach_id,category:t.category,ticket_type_id:type_id,venue_pref:_venuePref,
