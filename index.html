@@ -7306,8 +7306,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.0904';
-const APP_VERSION_LABEL='v260804.0904';
+const APP_VERSION = '260804.0918';
+const APP_VERSION_LABEL='v260804.0918';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20783,12 +20783,24 @@ async function openBookingDetail(id){
    「同一系列」怎麼認：同會員＋同課別＋同教練＋同星期幾＋同開始時間，且是今天以後、
    仍為已預約的課。不單靠 recurring 旗標——走 RPC 建立的連續預約旗標是空的（已補標，
    但既有資料仍是 false），用時段特徵才抓得全。 */
+/* 2026-08-04 使用者指示：「如果是連續預約的課卡包含簽約或分期，取消也要有連續取消的功能」——
+   原本第一行就是 `if(!b.member_id) return []`，所以**待簽約卡位**（沒有 member_id、
+   客戶名記在 trial_name）整串連續預約永遠問不出來，只能一堂一堂點掉。
+   分期的待繳費保留有 member_id，本來就抓得到，一併在下面的清單標清楚是哪一種。
+   沒有會員的就用 trial_name 認人（同一批卡位本來就是同一個名字建出來的）。 */
 async function seriesOf(b){
-  if(!b || !b.member_id) return [];
+  if(!b) return [];
+  const isHold=!b.member_id;                               // 待簽約卡位／場租這類只有客戶名的
+  const nm=String(b.trial_name||'').trim();
+  if(isHold && !nm) return [];                             // 認不出是誰就不猜，維持單堂取消
+  if(!isHold && !b.member_id) return [];
   const all=await dbGetAll('bookings');
   const today=ymd(TODAY);
   const dow=(parseYmd(b.date)||new Date()).getDay();
-  return all.filter(x=> x && x.member_id===b.member_id
+  const samePerson=x=> isHold
+    ? (!x.member_id && String(x.trial_name||'').trim()===nm)
+    : x.member_id===b.member_id;
+  return all.filter(x=> x && samePerson(x)
       && x.status==='booked'
       && String(x.date)>=today
       && x.category===b.category
@@ -20848,19 +20860,29 @@ async function __askSeriesCancel(id, mode){
   window._scPend={id, mode, ids:later.map(x=>x.id)};
   const WD=['日','一','二','三','四','五','六'];
   const d=parseYmd(b.date);
+  /* 每一堂是哪一種要標清楚（2026-08-04）：待簽約卡位（沒會員、沒收款）、
+     分期待繳費保留（有會員、票還沒開通）、已扣課的正式預約 —— 三種取消後果不同，
+     整串一起取消前要看得出來自己要取消掉什麼。 */
+  const kindOf=x=> x.pending_contract&&!x.ticket_id ? (x.member_id?'分期保留':'待簽約卡位')
+    : (x.ticket_id?'已扣 1 堂':'未綁票券');
   const list=later.slice(0,8).map(x=>{
     const dx=parseYmd(x.date);
     return `<div class="sc-row"><span class="sc-d">${String(x.date).replace(/-/g,'/')}（${dx?WD[dx.getDay()]:''}）</span>
       <span class="sc-t">${String(x.start_time).slice(0,5)}</span>
-      <span class="sc-x">${x.pending_contract&&!x.ticket_id?'待繳費保留':(x.ticket_id?'已扣 1 堂':'未綁票券')}</span></div>`;
+      <span class="sc-x">${kindOf(x)}</span></div>`;
   }).join('')+(later.length>8?`<div class="sc-row"><span class="sc-x" style="margin:0;">…另有 ${later.length-8} 堂</span></div>`:'');
+  /* 整串都沒綁票券（待簽約卡位、分期保留）→ 不要講「扣課不退／退回票券」，
+     那會讓人以為有堂數要動；這種只是釋出時段。 */
+  const _noTk=[b].concat(later).every(x=>!x.ticket_id);
+  const whoLine=b.member_id?'':(b.trial_name?`客戶：<b>${b.trial_name}</b>　`:'');
   showModal(`<div class="modal-title">後面的課要一起取消嗎？</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:10px;">
-      這堂是 <b>週${d?WD[d.getDay()]:''} ${String(b.start_time).slice(0,5)}</b> 連續預約的其中一堂，
+      ${whoLine}這堂是 <b>週${d?WD[d.getDay()]:''} ${String(b.start_time).slice(0,5)}</b> 連續預約的其中一堂，
       後面還有 <b>${later.length}</b> 堂：</div>
     <div class="sc-list">${list}</div>
     <div style="font-size:12px;color:var(--t2);margin:12px 0 4px;line-height:1.8;">
-      取消方式沿用上一步的選擇（${mode==='force'?'退回票券':mode==='none'?'扣課不退':'依 24 小時規則'}）。</div>
+      ${_noTk?'這些課都沒有綁票券（待簽約卡位／分期待繳費保留），取消只會釋出時段與場地，不會動到任何堂數。'
+             :`取消方式沿用上一步的選擇（${mode==='force'?'退回票券':mode==='none'?'扣課不退':'依 24 小時規則'}）。`}</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">返回</button>
       <button class="btn btn-ghost" onclick="runSeriesCancel(false)">只取消這堂</button>
