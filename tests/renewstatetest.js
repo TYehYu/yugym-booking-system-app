@@ -102,7 +102,7 @@ ok('★ 改名為「轉正簽約」', /<button class="btn btn-green bkd-signup"[
 }
 ok('★ 獨佔一列', /\.modal-foot \.btn\.bkd-signup\{flex:1 0 100%;/.test(src));
 ok('　　只有櫃檯／管理員、且還沒綁會員的卡位才出現',
-   /b\.pending_contract&&!b\.member_id&&b\.status==='booked'&&\(isDeskLike\(\)\)/.test(src));
+   /b\.pending_contract&&!b\.ticket_id&&b\.status==='booked'&&\(isDeskLike\(\)\)&&!bkIsInstHold\(b\)/.test(src));   // 2026-08-04 已綁定會員的卡位也能轉正，分期保留除外
 
 console.log('\n不做全自動取消');
 ok('★ 沒有任何自動取消後續預約的排程／批次',

@@ -56,8 +56,9 @@ console.log('\n② 分期的待繳費保留（有 member_id）照樣成串');
 console.log('\n③ 追問視窗要講清楚取消掉的是什麼');
 {
   const f=grabFn('__askSeriesCancel');
-  ok('★ 三種標示分開：待簽約卡位／分期保留／已扣 1 堂',
-     /x\.member_id\?'分期保留':'待簽約卡位'/.test(f) && /x\.ticket_id\?'已扣 1 堂':'未綁票券'/.test(f));
+  ok('★ 標示分開：分期保留／待簽約(已綁定)／待簽約卡位／已扣 1 堂',
+     /bkIsInstHold\(x\)\?'分期保留':\(x\.member_id\?'待簽約\(已綁定\)':'待簽約卡位'\)/.test(f)
+     && /x\.ticket_id\?'已扣 1 堂':'未綁票券'/.test(f));   // 2026-08-04 綁定會員路徑上線後三分為四
   ok('★ 整串都沒票券時不講「扣課不退／退回票券」',
      /const _noTk=\[b\]\.concat\(later\)\.every\(x=>!x\.ticket_id\);/.test(f)
      && /取消只會釋出時段與場地，不會動到任何堂數/.test(f));

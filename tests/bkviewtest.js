@@ -21,8 +21,11 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
 
+/* 2026-08-04「綁定會員」上線後：pending＋member 不再必然是待繳費，改由 bkIsInstHold
+   （分期備註標記）判別 —— 一併注入真的 bkIsInstHold 實跑。 */
 const api=new Function('grpAllOnLeave','grpAllDone',
-  g('function bkTag(b){','\n}\n')+'\n'+g('function bkName(b, nameOf){','\n}\n')+'\n'
+  g('function bkIsInstHold(b){','\n}\n')+'\n'
+  +g('function bkTag(b){','\n}\n')+'\n'+g('function bkName(b, nameOf){','\n}\n')+'\n'
   +g('function bkNameFull(b, nameOf){','\n}\n')+'\n'+g('function bkStampKind(b){','\n}\n')
   +'\nreturn {bkTag,bkName,bkNameFull,bkStampKind};')(b=>!!(b&&b._allLeave), b=>!!(b&&b._allDone));
 
@@ -31,7 +34,8 @@ const nameOf=id=>NAMES[id]||'';
 
 console.log('標籤 bkTag');
 eq('★ 待簽約（沒綁會員）', api.bkTag({pending_contract:true}), '待簽約');
-eq('★ 待繳費（已綁會員）', api.bkTag({pending_contract:true,member_id:'M1'}), '待繳費');
+eq('★ 待繳費（分期保留：有會員＋分期標記）', api.bkTag({pending_contract:true,member_id:'M1',note:'分期待繳費保留（收款後自動補扣）'}), '待繳費');
+eq('★ 純綁定會員（無分期標記）仍是待簽約', api.bkTag({pending_contract:true,member_id:'M1'}), '待簽約');
 eq('★ 體驗', api.bkTag({category:'體驗'}), '體驗');
 eq('★ 場租', api.bkTag({category:'場租'}), '場租');
 eq('　　一般教練課沒有標籤', api.bkTag({category:'私人教練',member_id:'M1'}), '');
@@ -56,7 +60,8 @@ eq('★ 已綁會員的待繳費仍顯示會員名，不是客戶名',
 
 console.log('\n完整字串 bkNameFull（Hover 提示用）');
 eq('★ 體驗', api.bkNameFull({category:'體驗',trial_name:'程凱郁'}, nameOf), '程凱郁（體驗）');
-eq('★ 待繳費', api.bkNameFull({member_id:'M1',pending_contract:true}, nameOf), '林小明（待繳費）');
+eq('★ 待繳費（分期保留）', api.bkNameFull({member_id:'M1',pending_contract:true,note:'分期待繳費保留（收款後自動補扣）'}, nameOf), '林小明（待繳費）');
+eq('★ 純綁定 → （待簽約）', api.bkNameFull({member_id:'M1',pending_contract:true}, nameOf), '林小明（待簽約）');
 eq('　　沒有標籤時不加括號', api.bkNameFull({member_id:'M2'}, nameOf), '王大華');
 
 console.log('\n狀態章 bkStampKind（順序固定）');

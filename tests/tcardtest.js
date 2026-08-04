@@ -37,7 +37,7 @@ ok('★ 標籤另起一列', /const _tagOut = _tag \? `<span class="tcard-sub">\
    && /<span class="tcard-mem">\$\{nm\}<\/span>\$\{_tagOut\}/.test(src));
 /* 2026-07-31 重構：標籤走共用的 bkTag（待簽約／待繳費由有沒有綁會員決定） */
 ok('★ 待簽約／待繳費分得開（有沒有綁會員）',
-   /if\(b\.pending_contract\) return b\.member_id \? '待繳費' : '待簽約';/.test(src)
+   /if\(b\.pending_contract\) return bkIsInstHold\(b\) \? '待繳費' : '待簽約';/.test(src)   // 2026-08-04 純綁定仍是待簽約
    && /const _tag = _isGrp \? '' : bkTag\(b\);/.test(src));
 ok('　　體驗與場租沿用 bkGuestLabel（與行事曆同一套判定）',
    /if\(b\.category==='體驗'\) return '體驗';/.test(src));

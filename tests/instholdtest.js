@@ -41,7 +41,7 @@ ok('★ cancelBooking 退回成功後呼叫 promoteHeldBooking',
 ok('★ 前提：開通段還有多出的額度（used<unlocked 且 remain>0）',
    /if\(used>=unlocked \|\| remain<=0\) return;   \/\/ 開通段沒有多出的額度/.test(src));
 ok('★ 挑同會員同課種最早的保留課、補綁＋扣課＋清旗標',
-   /x\.member_id===memberId && x\.pending_contract && !x\.ticket_id/.test(src)
+   /x\.member_id===memberId && bkIsInstHold\(x\)/.test(src)   // 2026-08-04 純綁定的卡位不遞補，只認分期標記
    && /hb\.ticket_id=ticketId; hb\.ticket_type_id=tk\.ticket_type_id\|\|hb\.ticket_type_id\|\|null;\n\s*hb\.pending_contract=false;/.test(src));
 ok('　　案例寫在程式裡', /8\/1 取消了，8\/20 明明\n\s*落在已繳的第一期卻繼續掛紅框待收款/.test(src));
 

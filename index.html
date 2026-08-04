@@ -7306,8 +7306,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1023';
-const APP_VERSION_LABEL='v260804.1023';
+const APP_VERSION = '260804.1046';
+const APP_VERSION_LABEL='v260804.1046';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14804,7 +14804,7 @@ function bkIsMasked(b){
      這裡只負責「非團課」的姓名與標籤，那才是重複出錯的地方。 */
 function bkTag(b){
   if(!b) return '';
-  if(b.pending_contract) return b.member_id ? '待繳費' : '待簽約';
+  if(b.pending_contract) return bkIsInstHold(b) ? '待繳費' : '待簽約';
   if(b.category==='場租') return '場租';
   if(b.category==='體驗') return '體驗';
   return '';
@@ -19267,9 +19267,88 @@ async function submitPendingHold(){
  }catch(e){ showToast('卡位失敗：'+(e&&e.message?e.message:e)); }
  finally{ window._phSubmitting=false; }
 }
+/* ── 綁定會員（2026-08-04 使用者指示：「綁定由櫃檯跟教練手動確認，只是要有這一條路徑」）──
+   把「還沒建檔就先卡位」的待簽約課掛到會員身上：不扣課、不轉正、狀態仍是待簽約，
+   只寫 member_id（trial 資料保留當身分軌跡）。掛上之後：
+   ・會員在自己手機看得到這些課、開課前 24 小時的 LINE 提醒會發
+   ・之後「轉正簽約」不用再比對身分，直接進扣票
+   ・不會被任何自動扣課路徑碰到（遞補與開通下一期只認分期保留標記，見 bkIsInstHold） */
+async function openBindPending(id){
+  const b=await dbGet('bookings',id);
+  if(!b||!b.pending_contract||b.member_id){ showToast('這筆不是未綁定的待簽約卡位'); return; }
+  const members=(await dbGetAll('members')).filter(m=>m.status==='active');
+  window._bpMembers=members; window._bpBid=id;
+  showModal(`<div class="modal-title">綁定會員 · ${b.trial_name||''}</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:10px;line-height:1.8;">
+      只是把卡位掛到會員身上，<b>不扣課、也還不算簽約</b>。綁定後會員在自己手機看得到這些課、
+      開課前一天會收到 LINE 提醒；之後收款轉正也不用再對身分。</div>
+    <div class="form-row"><label>選擇會員</label>
+      <input id="bp-q" class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:8px;" placeholder="搜尋姓名或手機…" value="${String(b.trial_name||'').replace(/"/g,'&quot;')}" oninput="bpRenderList()" autocomplete="off">
+      <div id="bp-list" class="ms-list" style="max-height:280px;border:1px solid var(--bd);border-radius:10px;padding:6px;"></div></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button></div>`);
+  bpRenderList();
+}
+function bpRenderList(){
+  const q=((document.getElementById('bp-q')||{}).value||'').trim().toLowerCase();
+  const host=document.getElementById('bp-list'); if(!host) return;
+  const list=(window._bpMembers||[]).filter(m=>!q||(m.name||'').toLowerCase().includes(q)||(m.phone||'').includes(q)).slice(0,30);
+  host.innerHTML=list.map(m=>`<button class="btn btn-ghost" style="width:100%;text-align:left;margin-bottom:6px;" onclick="bpConfirm('${m.id}')">${m.name}　<span style="color:var(--t3);font-size:12px;">${fmtPhone(m.phone)}</span></button>`).join('')||'<div style="padding:14px;color:var(--t3);font-size:13px;">找不到會員（還沒建檔的話，請先從「銷售」或「後台辦理會員」建立）</div>';
+}
+async function bpSeriesOf(b){
+  const _all=await dbGetAll('bookings');
+  const _k=x=>String(x.date)+String(x.start_time||'');
+  let series=_all.filter(x=>x.pending_contract && !x.member_id && x.status==='booked'
+      && String(x.trial_name||'')===String(b.trial_name||'')
+      && String(x.trial_phone||'')===String(b.trial_phone||'')
+      && (x.ticket_type_id||null)===(b.ticket_type_id||null)
+      && x.date>=ymd(TODAY))
+    .sort((a,c)=>_k(a).localeCompare(_k(c)));
+  if(!series.some(x=>x.id===b.id)) series=[b].concat(series);
+  return series;
+}
+async function bpConfirm(memberId){
+  const id=window._bpBid; const b=await dbGet('bookings',id); if(!b) return;
+  const m=(window._bpMembers||[]).find(x=>x.id===memberId)||{};
+  const series=await bpSeriesOf(b);
+  const _d=x=>String(x.date).replace(/-/g,'/')+' '+String(x.start_time).slice(0,5);
+  showModal(`<div class="modal-title">確認綁定</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-bottom:10px;">
+      把 <b>${b.trial_name||''}</b> 的待簽約卡位掛到會員 <b>${m.name||''}</b>（${fmtPhone(m.phone)}）名下：</div>
+    <div class="sc-list">
+      <div class="sc-row"><span class="sc-d">同一串卡位</span><span class="sc-x">${series.length} 堂</span></div>
+      <div class="sc-row"><span class="sc-d">${_d(series[0])} 起</span><span class="sc-x">${series.length>1?('至 '+_d(series[series.length-1])):''}</span></div>
+    </div>
+    <div style="font-size:11.5px;color:var(--t3);margin-top:8px;line-height:1.7;">不扣課、不收款，狀態仍是「待簽約」。之後收款請照常按「轉正簽約」。</div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="openBindPending('${id}')">返回</button>
+      <button class="btn btn-green" onclick="bpGo('${memberId}')">確認綁定 ${series.length} 堂</button>
+    </div>`);
+}
+async function bpGo(memberId){ return onceAct('bindpend:'+(window._bpBid||''), ()=>_bpGo(memberId)); }
+async function _bpGo(memberId){
+ try{
+  const id=window._bpBid; const b=await dbGet('bookings',id);
+  if(!b||!b.pending_contract||b.member_id){ showToast('這筆卡位已被處理過'); return; }
+  const series=await bpSeriesOf(b);
+  for(const hb of series){
+    hb.member_id=memberId;            // trial_name / trial_phone 保留：身分軌跡＋轉正比對仍用得到
+    await dbPut('bookings',hb);
+  }
+  dbCacheClear(['bookings']);
+  const m=(window._bpMembers||[]).find(x=>x.id===memberId)||{};
+  closeModal();
+  showToast(`已綁定 ${m.name||'會員'}：${series.length} 堂（仍為待簽約，收款後再轉正）`);
+  navTo(CUR_PAGE);
+ }catch(e){ showToast('綁定失敗：'+((e&&e.message)||e)); }
+}
 async function openConvertPending(id){
   const b=await dbGet('bookings',id);
   if(!b||!b.pending_contract){ showToast('這筆不是待簽約卡位'); return; }
+  /* 已用「綁定會員」掛過名的卡位（2026-08-04）：身分已經人工確認過，直接進扣票流程 */
+  if(b.member_id){
+    window._cpMembers=await dbGetAll('members'); window._cpBid=id;
+    doConvertPending(b.member_id); return;
+  }
   const members=(await dbGetAll('members')).filter(m=>m.status==='active');
   window._cpMembers=members; window._cpBid=id;
   /* 2026-07-30 使用者指示：卡位當下就填了姓名與手機，轉正還要再搜尋一次很多餘。
@@ -19352,11 +19431,16 @@ async function _doConvertPending(memberId, tkId, mode){
      ③超過簽約總堂數的 → 自動取消，把時段還出來。 */
   const _all=await dbGetAll('bookings');
   const _k=x=>String(x.date)+String(x.start_time||'');
-  let series=_all.filter(x=>x.pending_contract && !x.member_id && x.status==='booked'
-      && String(x.trial_name||'')===String(b.trial_name||'')
-      && String(x.trial_phone||'')===String(b.trial_phone||'')
+  /* 同一串（2026-08-04 擴充）：除了「同名同手機」的未綁定卡位，
+     也包含「已用綁定會員掛到這位會員身上、還沒簽約」的卡位（分期保留不算——
+     那些已經屬於某張分期票，由開通下一期接手）。 */
+  let series=_all.filter(x=>x.pending_contract && !x.ticket_id && x.status==='booked'
       && (x.ticket_type_id||null)===(b.ticket_type_id||null)
-      && x.date>=ymd(TODAY))
+      && x.date>=ymd(TODAY)
+      && ( ((b.trial_name||b.trial_phone) && !x.member_id
+            && String(x.trial_name||'')===String(b.trial_name||'')
+            && String(x.trial_phone||'')===String(b.trial_phone||''))
+         || (x.member_id===memberId && !bkIsInstHold(x)) ))
     .sort((a,c)=>_k(a).localeCompare(_k(c)));
   if(!series.some(x=>x.id===b.id)) series=[b].concat(series);
   const isInst=tk.installment&&typeof tk.installment==='object';
@@ -19975,7 +20059,7 @@ async function bkCardPop(el, b, btns){
   }
   else if(b.category==='體驗') who=(b.trial_name||'體驗客戶')+'（體驗）';
   else if(b.pending_contract&&!b.member_id) who=(b.trial_name||'客戶')+'（待簽約）';
-  else if(b.pending_contract&&b.member_id) who=(_nm(b.member_id)||'—')+'（待繳費）';
+  else if(b.pending_contract&&b.member_id) who=(_nm(b.member_id)||'—')+(bkIsInstHold(b)?'（待繳費）':'（待簽約）');
   else if(b.member_id) who=_nm(b.member_id)||'—';
   else if(b.category==='場租') who=(b.trial_name?b.trial_name+'（場租）':'場地租借');
   else who={'自主訓練':'自主訓練'}[b.category]||'課程';
@@ -20894,8 +20978,10 @@ async function openBookingDetail(id){
     // 場租的使用人存 trial_name（不綁會員；2026-07-26 使用者回報「魚大東」沒顯示）
     memberLine=`<div><span style="color:var(--t2);">使用人</span>　${b.trial_name||'—'}</div>`;
   }else{
-    const _holdNote=(b.pending_contract&&b.member_id&&!b.ticket_id)
-      ? `<div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:9px;padding:8px 10px;font-size:11.5px;line-height:1.7;">🔒 <b>分期待繳費保留</b>：這堂尚未扣課。收到下一期款項、在會員票券卡按「開通下一期」後，會自動補綁票券並扣課。</div>` : '';
+    const _holdNote=bkIsInstHold(b)
+      ? `<div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:9px;padding:8px 10px;font-size:11.5px;line-height:1.7;">🔒 <b>分期待繳費保留</b>：這堂尚未扣課。收到下一期款項、在會員票券卡按「開通下一期」後，會自動補綁票券並扣課。</div>`
+      : (b.pending_contract&&b.member_id&&!b.ticket_id)
+      ? `<div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:9px;padding:8px 10px;font-size:11.5px;line-height:1.7;">👤 <b>已綁定會員、尚未簽約</b>：這堂還沒扣課也還沒收款。會員在自己手機看得到這堂課、開課前一天會收到 LINE 提醒；收款後按「轉正簽約」完成扣課。</div>` : '';
     memberLine = _holdNote + (b.pending_contract&&!b.member_id)
       ? `<div><span style="color:var(--t2);">客戶</span>　${b.trial_name||'—'}　<span class="tag tag-warn" style="font-size:10.5px;">待簽約</span>${b.trial_phone?`　<span style="color:var(--t3);font-size:12px;">${b.trial_phone}</span>`:''}</div>`
       : `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">會員</span>　${mem?(isMemberView?`<span style="font-weight:700;">${mem.name}</span>`:`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openMemberDetail('${mem.id}')">${mem.name} ›</button>`):'—'}${bkFamBtn(b,mem,editable)}</div>`
@@ -21052,7 +21138,12 @@ async function openBookingDetail(id){
         : `<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`):''}
       ${/* 待簽約卡位（2026-07-29 使用者指示）：主要動作放最下方、獨佔一列，
            收完錢就按這顆轉成正式預約（綁會員＋扣票）。 */''}
-      ${(b.pending_contract&&!b.member_id&&b.status==='booked'&&(isDeskLike()))
+      ${/* 綁定會員（2026-08-04 使用者指示：「綁定由櫃檯跟教練手動確認，只是要有這一條路徑」）——
+           純掛名不扣課；教練只能綁自己的課，扣課的「轉正簽約」仍限櫃檯。 */''}
+      ${(b.pending_contract&&!b.member_id&&b.status==='booked'
+          &&(isDeskLike()||(SESSION&&SESSION.role==='coach'&&(bkCoachId(b))===SESSION.id)))
+        ? `<button class="btn btn-ghost" onclick="openBindPending('${b.id}')">綁定會員</button>`:''}
+      ${(b.pending_contract&&!b.ticket_id&&b.status==='booked'&&(isDeskLike())&&!bkIsInstHold(b))
         ? `<button class="btn btn-green bkd-signup" onclick="openConvertPending('${b.id}')">轉正簽約</button>`:''}
     </div>`);
 }
@@ -21140,7 +21231,7 @@ async function __askSeriesCancel(id, mode){
   /* 每一堂是哪一種要標清楚（2026-08-04）：待簽約卡位（沒會員、沒收款）、
      分期待繳費保留（有會員、票還沒開通）、已扣課的正式預約 —— 三種取消後果不同，
      整串一起取消前要看得出來自己要取消掉什麼。 */
-  const kindOf=x=> x.pending_contract&&!x.ticket_id ? (x.member_id?'分期保留':'待簽約卡位')
+  const kindOf=x=> x.pending_contract&&!x.ticket_id ? (bkIsInstHold(x)?'分期保留':(x.member_id?'待簽約(已綁定)':'待簽約卡位'))
     : (x.ticket_id?'已扣 1 堂':'未綁票券');
   const list=later.slice(0,8).map(x=>{
     const dx=parseYmd(x.date);
@@ -22517,6 +22608,12 @@ async function deskRefundCancelled(id){
 /* 把同會員同票最早的「分期待繳費保留」補綁扣課（2026-08-04）——
    前提：這張票還有已開通、未用掉的堂數（unlocked − 已扣 > 0）。一次補一堂
    （取消一堂＝多出一堂額度）；補綁後保留旗標與備註清掉，紅框變成正常課卡。 */
+/* 分期保留的判別（2026-08-04）：pending_contract＋member_id 不再等於「分期保留」——
+   新增的「綁定會員」路徑也會產生 pending＋member 的卡位（純掛名、還沒簽約收款）。
+   兩者的差別在備註標記：分期保留一定帶「分期待繳費保留」。所有自動扣課路徑
+   （取消退回遞補、開通下一期補綁）只認這個標記，純綁定的卡位絕不會被自動扣課。 */
+function bkIsInstHold(b){ return !!(b && b.pending_contract && b.member_id && !b.ticket_id
+  && String(b.note||'').indexOf('分期待繳費保留')>=0); }
 async function promoteHeldBooking(memberId, ticketId){
   const tk=await dbGet('member_tickets',ticketId); if(!tk||tk.status!=='usable') return;
   const total=Number(tk.sessions_total)||0, remain=Number(tk.sessions_remaining)||0;
@@ -22524,7 +22621,7 @@ async function promoteHeldBooking(memberId, ticketId){
   const used=total-remain;
   if(used>=unlocked || remain<=0) return;   // 開通段沒有多出的額度
   const holds=(await dbGetAll('bookings'))
-    .filter(x=>x.member_id===memberId && x.pending_contract && !x.ticket_id
+    .filter(x=>x.member_id===memberId && bkIsInstHold(x)
       && x.status==='booked' && x.date>=ymd(TODAY) && x.category===tk.category)
     .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
   const hb=holds[0]; if(!hb) return;
@@ -31975,7 +32072,7 @@ async function bindHeldBookings(ticket_id, maxN){
   const tk0=await dbGet('member_tickets',ticket_id); if(!tk0) return 0;
   const all=await dbGetAll('bookings');
   const today=ymd(TODAY);
-  const held=all.filter(b=>b && b.pending_contract && !b.ticket_id && b.status==='booked'
+  const held=all.filter(b=>b && bkIsInstHold(b) && b.status==='booked'
       && b.member_id===tk0.member_id && String(b.date)>=today
       && bkTicketTypeOk(tk0, b.ticket_type_id))
     .sort((a,b)=>String(a.date+a.start_time).localeCompare(String(b.date+b.start_time)));
