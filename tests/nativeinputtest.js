@@ -94,44 +94,26 @@ ok('★ 薪資那支仍擋掉未來月份', /monthOptions\(ym, ymd\(TODAY\)\.sli
   ok('　　顯示成「2026年08月」', /2026年08月/.test(fn('2026-08')));
 }
 
-/* 2026-08-01 使用者指示：「下拉式輸入框 都可以超過該視窗
-   才不會導致該視窗被輸入框的內容放大又縮小」 */
-console.log('\n④ 自訂下拉浮在視窗外，不撐大彈窗');
-ok('★ 改成 position:fixed（0804 起搬到 body、z-index 10080）',
-   /\.mpk-menu\{position:fixed;z-index:10080;display:none;/.test(src)
-   && !/\.mpk-menu\{position:absolute;left:0;right:0;top:calc\(100% \+ 4px\);/.test(src));
-ok('★ z-index 壓過彈窗（modal 是 300）', /z-index:9600/.test(src));
-ok('★ 位置與寬度由 mpkFit 依輸入框座標算', /menu\.style\.left=Math\.round\(r\.left\)\+'px';/.test(src)
-   && /menu\.style\.width=Math\.round\(r\.width\)\+'px';/.test(src));
-ok('★ 往下開貼下緣、往上開貼上緣',
-   /if\(up\)\{ menu\.style\.top='auto'; menu\.style\.bottom=Math\.round\(window\.innerHeight-r\.top\+4\)\+'px'; \}/.test(src)
-   && /else  \{ menu\.style\.bottom='auto'; menu\.style\.top=Math\.round\(r\.bottom\+4\)\+'px'; \}/.test(src));
-ok('★ bottom 用 window.innerHeight 不是 visualViewport（座標系要一致）',
-   /bottom 要用 window\.innerHeight（版面視窗）而不是 vh（視覺視窗）/.test(src));
-ok('★ 舊的 .mpk-up 定位規則已移除（改由 JS 設 top/bottom）',
-   !/\.mem-pick-row\.mpk-up \.mpk-menu\{top:auto;bottom:calc\(100% \+ 4px\);\}/.test(src));
-ok('★ 彈窗捲動時選單要跟著移動（capture 才收得到內層捲動）',
-   /document\.addEventListener\('scroll', refit, true\);/.test(src));
-ok('　　原因寫在程式裡', /選單一展開就撐高捲動範圍（捲軸忽有忽無、版面跟著跳）/.test(src));
-
-{
-  const g2=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
-  const mkFit=(rect, vh, innerH)=>{
-    const menu={style:{},}; const cls=new Set();
-    const row={querySelector:sel=>sel==='input'?{getBoundingClientRect:()=>rect,scrollIntoView(){}}:menu,
-      classList:{toggle:(c,on)=>{ on?cls.add(c):cls.delete(c); }}};
-    const fn=new Function('window','row',
-      g2('function mpkFit(row){','\n}\n')+'\nreturn mpkFit;')({visualViewport:{height:vh},innerHeight:innerH});
-    fn(row); return {menu, up:cls.has('mpk-up')};
-  };
-  console.log('\n  定位實跑');
-  { const {menu,up}=mkFit({left:20,right:320,width:300,top:200,bottom:236}, 800, 800);
-    eq('★ 下方夠寬 → 往下開，貼著輸入框下緣', [up, menu.style.top, menu.style.bottom], [false,'240px','auto']);
-    eq('　　左邊與寬度對齊輸入框', [menu.style.left, menu.style.width], ['20px','300px']); }
-  { const {menu,up}=mkFit({left:16,right:360,width:344,top:1050,bottom:1086}, 1150, 1990);
-    eq('★ 鍵盤升起、下方只剩約 60px → 往上開，bottom 用版面高度算',
-       [up, menu.style.bottom, menu.style.top], [true, (1990-1050+4)+'px', 'auto']); }
-}
+/* 2026-08-01 使用者指示：「下拉式輸入框都可以超過該視窗」→
+   2026-08-04 使用者建議再進一步：「需要輸入會員名字搜尋的地方，點選後統一跳出視窗，
+   輸入姓名或電話產生下拉選單」。行內浮動選單（定位、往上開、鍵盤遮擋、IME 那三輪修）
+   整個退場，改成滿版挑選視窗（#mpk-sheet）—— 本段改驗新設計。 */
+console.log('\n④ 統一挑選視窗（原行內下拉退場）');
+ok('★ 視窗滿版固定、z-index 10080（蓋過 modal 9750／bkfam 9860／bk-mem-sheet 9999）',
+   /#mpk-sheet\{position:fixed;inset:0;z-index:10080;\}/.test(src));
+ok('★ 行內選單的定位機制整個移除（mpkFit／mpk-up／refit 捲動監聽）',
+   !/function mpkFit\(/.test(src) && !/mpk-up/.test(src) && !/mpk-any-open/.test(src));
+ok('★ 欄位改成入口：readOnly＋點選開視窗（不再有 IME 組字問題）',
+   /inp\.readOnly=true;/.test(src) && /inp\.addEventListener\('click',\(\)=>mpkSheetOpen\(row\)\);/.test(src)
+   && !/_mpkIME/.test(src));
+ok('★ 視窗裡打字沿用各欄位既有的過濾（代填回原欄位觸發 oninput）',
+   /if\(hasOwn\)\{ inp\.value=q; inp\.dispatchEvent\(new Event\('input',\{bubbles:true\}\)\); \}/.test(src));
+ok('★ 沒自帶過濾的欄位自己濾：文字＋數字（電話）',
+   /\(t\.includes\(qq\)\|\|\(qd&&t\.replace\(\/\\D\/g,''\)\.includes\(qd\)\)\)/.test(src));
+ok('★ 關窗時洗掉代填的字、回填選定的人',
+   /inp\.value=''; inp\.dispatchEvent\(new Event\('input',\{bubbles:true\}\)\)/.test(src)
+   && /inp\.value=mpkLabel\(sel\);/.test(src));
+ok('　　彈窗關閉時挑選視窗跟著收', /if\(typeof mpkSheetClose==='function'\) mpkSheetClose\(\);/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

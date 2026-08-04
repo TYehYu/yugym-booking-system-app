@@ -29,24 +29,23 @@ ok('★ 保留原本的 <select> 當資料來源，只是隱藏 → 既有 .valu
    && /\.mem-pick-row\.mpk-on select\{position:absolute;width:1px;height:1px;opacity:0;/.test(src));
 ok('★ 只升級「輸入框＋下拉」的組合，缺一就跳過',
    /if\(!sel\|\|!inp\) return;\s*\/\/ 只升級「輸入框＋下拉」這種組合/.test(src));
-ok('★ 打字沿用各處原本的篩選函式（inline oninput 先跑，這裡開選單）',
-   /inp\.addEventListener\('input',\(\)=>\{ mpkOpen\(row\); \}\);/.test(src)
-   && /原本的 oninput 已先跑完篩選（inline handler 先註冊先執行）/.test(src));
-/* 2026-08-01 使用者回報：「銷售上方的會員搜尋列，我輸入魚要搜尋，每次輸入後字就消失」 */
-ok('★ 沒選人就不要把打到一半的字清掉（原本一律回填成空的 label）',
-   /if\(lb\) inp\.value=lb;/.test(src)
-   && /打到一半的字整個被清掉/.test(src));
-ok('　　點回欄位時只有「內容剛好是已選定的那個人」才全選',
-   /inp\.addEventListener\('focus',\(\)=>\{ if\(inp\.value===mpkLabel\(sel\)\) inp\.select\(\); mpkOpen\(row\); \}\);/.test(src));
+/* 2026-08-04 使用者建議：「點選後統一跳出視窗，輸入姓名或電話產生下拉選單」——
+   打字從欄位移進視窗；「打到一半的字消失」「IME 組字」這些行內輸入的問題整類消失。 */
+ok('★ 打字沿用各處原本的篩選函式（視窗代填回原欄位觸發 oninput）',
+   /if\(hasOwn\)\{ inp\.value=q; inp\.dispatchEvent\(new Event\('input',\{bubbles:true\}\)\); \}/.test(src));
+ok('★ 欄位是入口（readOnly），點選／聚焦／鍵盤都能開視窗',
+   /inp\.readOnly=true;/.test(src)
+   && /inp\.addEventListener\('focus',\(\)=>mpkSheetOpen\(row\)\);/.test(src)
+   && /if\(e\.key==='Enter'\|\|e\.key===' '\|\|e\.key==='ArrowDown'\)\{ e\.preventDefault\(\); mpkSheetOpen\(row\); \}/.test(src));
 ok('　　搜不到人時第一個選項直接講「查無符合的會員」',
    /\$\{\(qq&&!list\.length\)\?'查無符合的會員':'— 請先選擇會員 —'\}/.test(src));
 ok('★ 點選項目會設回 select 並發 change（沿用既有 onchange）',
    /sel\.dispatchEvent\(new Event\('change',\{bubbles:true\}\)\);/.test(src));
-ok('　　用 mousedown 不用 click，才不會先被 blur 關掉',
-   /menu\.addEventListener\('mousedown'/.test(src) && /早於 blur，才不會先被關掉/.test(src));
+ok('　　清單點選用 mousedown（一致的舊習慣，選定即關窗）',
+   /row\._mpkMenu\.addEventListener\('mousedown'/.test(src));
 ok('　　鍵盤可用：上下選、Enter 確定、Esc 關閉',
    /e\.key==='ArrowDown'\|\|e\.key==='ArrowUp'/.test(src) && /if\(e\.key==='Enter'\)\{/.test(src)
-   && /if\(e\.key==='Escape'\)\{ mpkClose\(row\); return; \}/.test(src));
+   && /if\(e\.key==='Escape'\)\{ mpkSheetClose\(\); return; \}/.test(src));
 ok('　　沒選人時欄位留空，讓 placeholder 露出來',
    /if\(!sel \|\| !sel\.value\) return '';/.test(src));
 ok('　　清單空的時候講「查無符合的會員」', /查無符合的會員/.test(src));

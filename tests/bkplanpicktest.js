@@ -84,37 +84,25 @@ ok('★ data-i 仍是 sel.options 的索引（mpkChoose 靠它取值）', /data-
 ok('★ 停用的提示列點不到（給 mpk-none）', /\$\{o\.disabled\?' mpk-none':''\}/.test(src));
 ok('　　分組標題有樣式', /\.mpk-grp\{padding:8px 11px 3px;/.test(src));
 
-console.log('\n③ 手機鍵盤擋住選單');
-ok('★ 用 visualViewport.height 算真正看得到的高度（鍵盤高度沒有 API）',
-   /const vv=window\.visualViewport;/.test(src) && /const vh=\(vv&&vv\.height\)\|\|window\.innerHeight\|\|0;/.test(src));
-ok('★ 下方放不下且上方比較寬 → 選單往上開',
-   /const up = below<180 && above>below;/.test(src) && /row\.classList\.toggle\('mpk-up', up\);/.test(src));
-/* 2026-08-01 二修：選單改成 position:fixed 浮在彈窗外（不再撐大彈窗），
-   往上開的定位改由 mpkFit 直接設 top/bottom，不再靠 CSS 規則。見 tests/nativeinputtest.js。 */
-ok('★ 往上開的定位（JS 設 bottom，改用版面高度算）',
-   /if\(up\)\{ menu\.style\.top='auto'; menu\.style\.bottom=Math\.round\(window\.innerHeight-r\.top\+4\)\+'px'; \}/.test(src));
-/* 2026-08-01 使用者回報「輸入後字就消失」：組字中（注音／拼音候選視窗開著）不能捲動，
-   scrollIntoView 會打斷 composition，打到一半的字直接不見。 */
-ok('★ 兩邊都窄 → 把輸入框捲到可視區中間（但組字中不捲）',
-   /if\(Math\.max\(below,above\)<180 && !row\._mpkIME\)\{ try\{ inp\.scrollIntoView\(\{block:'center'\}\); \}catch\(_\)\{\} \}/.test(src));
-ok('★ 選單高度跟著可用空間縮，不會撐破畫面',
-   /menu\.style\.maxHeight=Math\.max\(120,Math\.min\(300,\(up\?above:below\)-8\)\)\+'px';/.test(src));
-ok('★ 鍵盤升起／收合／捲動時重算', /window\.visualViewport\.addEventListener\('resize', refit\);/.test(src)
-   && /window\.visualViewport\.addEventListener\('scroll', refit\);/.test(src));
-ok('　　開啟選單時就先算一次（0804 起選單在 body、加自身 class）', /function mpkOpen\(row\)\{ row\.classList\.add\('mpk-open'\);[\s\S]{0,280}mpkRender\(row\); mpkFit\(row\); \}/.test(src));
-/* 2026-08-01 效能（使用者回報「畫面常常 LAG」）：捲動時的重算原本每次都掃整份 DOM */
-ok('　　沒有開著的選單時，捲動不掃 DOM（旗標擋在最前面）',
-   /if\(!document\.documentElement\.classList\.contains\('mpk-any-open'\)\) return;/.test(src)
-   && /document\.documentElement\.classList\.add\('mpk-any-open'\)/.test(src)
-   && /if\(!document\.querySelector\('\.mem-pick-row\.mpk-open'\)\) document\.documentElement\.classList\.remove\('mpk-any-open'\);/.test(src));
-/* 2026-08-03 使用者回報「打字沒有列表、要按方向鍵才看得到」：組字期間也要跑完整
-   mpkOpen（選單是 fixed，沒定位就看不見）；mpkFit 在組字中本就跳過捲動。 */
-ok('　　打字（含組字中）都走完整 mpkOpen（定位＋重畫）',
-   /inp\.addEventListener\('input',\(\)=>\{ mpkOpen\(row\); \}\);/.test(src));
-ok('　　組字狀態仍有追蹤（mpkFit 靠它跳過 scrollIntoView）',
-   /inp\.addEventListener\('compositionstart',\(\)=>\{ row\._mpkIME=true; \}\);/.test(src)
-   && /if\(Math\.max\(below,above\)<180 && !row\._mpkIME\)/.test(src));
-ok('　　整段包 try —— 量不到尺寸不能讓選單開不起來', /function mpkFit\(row\)\{\s*\n\s*try\{/.test(src));
+console.log('\n③ 手機鍵盤擋住選單 → 已由統一挑選視窗根治');
+/* 2026-08-04 使用者建議：「點選後統一跳出視窗，輸入姓名或電話產生下拉選單」。
+   原本這一節驗的是行內選單的定位求生術（visualViewport 算高度、往上開、組字不捲、
+   捲動重算、mpk-any-open 旗標）—— 滿版視窗沒有定位問題，那一整套機制退場。
+   這裡改驗「真的退乾淨」＋新視窗的關鍵行為。 */
+ok('★ 定位求生術整套移除（mpkFit／mpk-up／refit／組字追蹤）',
+   !/function mpkFit\(/.test(src) && !/mpk-up/.test(src)
+   && !/mpk-any-open/.test(src) && !/_mpkIME/.test(src));
+ok('★ 改為滿版視窗：#mpk-sheet 用 .ms-panel（與預約選會員同一套版型）',
+   /#mpk-sheet\{position:fixed;inset:0;z-index:10080;\}/.test(src)
+   && /host\.id='mpk-sheet';/.test(src) && /<div class="ms-panel">/.test(src));
+ok('★ mpkRender 的輸出目標改成視窗清單（row._mpkMenu 指向 #mpk-sheet-list）',
+   /row\._mpkMenu=document\.getElementById\('mpk-sheet-list'\);/.test(src));
+ok('★ 視窗打字：有自帶過濾就代填回原欄位、沒有就自己濾（含電話數字）',
+   /function mpkSheetType\(row\)\{/.test(src) && /const hasOwn=!!\(inp && inp\.getAttribute\('oninput'\)\);/.test(src));
+ok('　　自己濾的時候分組標題跟著藏（整組都沒命中就不顯示標題）',
+   /\[\.\.\.menu\.querySelectorAll\('\.mpk-grp'\)\]\.forEach\(g=>\{/.test(src));
+ok('　　搜尋框自動聚焦（開窗即可打字）',
+   /setTimeout\(\(\)=>\{ try\{ q\.focus\(\); \}catch\(_\)\{\} \},80\);/.test(src));
 
 {
   // 實跑翻轉判定

@@ -664,19 +664,14 @@ select option{color:var(--text);}
 .mem-pick-row.mpk-on input{width:100%;box-sizing:border-box;padding-right:30px;}
 .mpk-caret{position:absolute;right:11px;top:50%;transform:translateY(-50%);pointer-events:none;
   color:var(--t3);font-size:11px;line-height:1;}
-/* 2026-08-01 使用者指示：「下拉式輸入框都可以超過該視窗，才不會導致該視窗被輸入框的內容
-   放大又縮小」——原本是 position:absolute 掛在輸入框底下，而彈窗是 overflow-y:auto，
-   選單一展開就撐高捲動範圍（捲軸忽有忽無、版面跟著跳），長清單還會被彈窗邊界裁掉。
-   改成 position:fixed 浮在彈窗之外，位置與寬度由 mpkFit() 依輸入框的實際座標算，
-   完全不參與彈窗的版面計算。z-index 要壓過 modal（300）。 */
-/* z-index 10080（2026-08-04）：選單搬到 body 後不再是彈窗的子孫，9600 會被
-   modal-bg 9750 蓋掉（教練名單跑到視窗後面）。要高於所有會放選擇器的容器：
-   modal-bg 9750、bkfam-ov 9860、bk-mem-sheet 9999。 */
-.mpk-menu{position:fixed;z-index:10080;display:none;
-  background:#fff;border:1px solid var(--bd);border-radius:11px;box-shadow:0 10px 28px rgba(20,18,14,.16);
-  max-height:min(46vh,300px);overflow-y:auto;padding:5px;-webkit-overflow-scrolling:touch;}
-.mem-pick-row.mpk-open .mpk-menu{display:block;}
-.mpk-menu.on{display:block;}   /* 選單移到 body 層級後由自己的 class 控制（2026-08-04） */
+/* 統一挑選視窗（2026-08-04 使用者建議：「需要輸入會員名字搜尋的地方，點選後統一
+   跳出視窗，輸入姓名或電話產生下拉選單」）——行內浮動選單（.mpk-menu）在 Mac／
+   Safari／手機鍵盤上修了三輪（座標、被彈窗蓋住、鍵盤遮擋、IME 組字），根源是
+   「浮動選單要跟著欄位定位」這件事本身。改成與預約選會員（bk-mem-sheet）同一種
+   模式：點欄位 → 開滿版視窗 → 視窗裡打字 → 清單點選。不再有任何定位計算。
+   z-index 10080：要蓋過所有會放選擇器的容器（modal-bg 9750、bkfam-ov 9860、
+   bk-mem-sheet 9999）。清單項目沿用 .mpk-item／.mpk-grp 樣式。 */
+#mpk-sheet{position:fixed;inset:0;z-index:10080;}
 /* 分組標題（有這個方案的會員／某教練的會員）——原本 optgroup 在自訂選單裡看不到 */
 .mpk-grp{padding:8px 11px 3px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--t3);}
 .mpk-grp:first-child{padding-top:3px;}
@@ -7306,8 +7301,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1046';
-const APP_VERSION_LABEL='v260804.1046';
+const APP_VERSION = '260804.1059';
+const APP_VERSION_LABEL='v260804.1059';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18038,136 +18033,119 @@ function mpkRender(row){
   menu.innerHTML=html;
   row._mpkIdx=Math.max(0, opts.findIndex(o=>o.value===sel.value));
 }
-function mpkOpen(row){ row.classList.add('mpk-open');
-  if(row._mpkMenu) row._mpkMenu.classList.add('on');   // 選單在 body 層級，顯示由自己的 class 控制
-  document.documentElement.classList.add('mpk-any-open');   // 給捲動監聽用的旗標（見 refit）
-  mpkRender(row); mpkFit(row); }
-/* 手機版選單被鍵盤蓋住（2026-08-01 使用者回報，附截圖）——
-   選單固定往下開，但輸入框本來就在畫面偏下，鍵盤一升起來下方就只剩幾十像素。
-   鍵盤高度沒有 API，但 visualViewport.height 會跟著縮 —— 用它算真正看得到的高度：
-   ・下方放不下、上方比較寬 → 選單改往上開（mpk-up）
-   ・兩邊都窄 → 把輸入框捲到可視區中間，讓選單有地方長
-   桌機不受影響（沒有 visualViewport 變化，below 一直都夠）。 */
-function mpkFit(row){
-  try{
-    const inp=row.querySelector('input'), menu=row._mpkMenu||row.querySelector('.mpk-menu');
-    if(!inp||!menu) return;
-    const vv=window.visualViewport;
-    const vh=(vv&&vv.height)||window.innerHeight||0;   // 鍵盤升起時只有這個會縮
-    const r=inp.getBoundingClientRect();
-    const below=vh-r.bottom-12, above=r.top-12;
-    const up = below<180 && above>below;
-    row.classList.toggle('mpk-up', up);
-    menu.style.maxHeight=Math.max(120,Math.min(300,(up?above:below)-8))+'px';
-    /* 選單是 position:fixed（不參與彈窗版面），所以位置要自己算：
-       靠齊輸入框的左邊與寬度；往下開就貼著它的下緣，往上開就貼著上緣。
-       ⚠ bottom 要用 window.innerHeight（版面視窗）而不是 vh（視覺視窗）——
-         getBoundingClientRect 給的是版面座標，混用會在鍵盤升起時偏掉。 */
-    menu.style.left=Math.round(r.left)+'px';
-    menu.style.width=Math.round(r.width)+'px';
-    if(up){ menu.style.top='auto'; menu.style.bottom=Math.round(window.innerHeight-r.top+4)+'px'; }
-    else  { menu.style.bottom='auto'; menu.style.top=Math.round(r.bottom+4)+'px'; }
-    /* 組字中（注音／拼音的候選視窗還開著）不要捲動 —— scrollIntoView 會把
-       進行中的 composition 打斷，打到一半的字直接不見（2026-08-01 使用者回報）。 */
-    if(Math.max(below,above)<180 && !row._mpkIME){ try{ inp.scrollIntoView({block:'center'}); }catch(_){} }
-  }catch(_){}
-}
-/* 鍵盤升起／收合、或捲動時，開著的選單要重算位置 */
-(function(){
-  /* ⚠ 效能（2026-08-01 使用者回報「畫面常常 LAG」）：這支掛在 document 的 capture 捲動上，
-     行事曆捲一下就是每秒幾十次。原本每次都 querySelectorAll 掃整份 DOM ——
-     行事曆一週有兩三百張課卡，掃一次就要好幾毫秒，捲動時全花在這裡。
-     改成先看根元素上的旗標（mpkOpen/mpkClose 維護），沒開選單時直接返回。 */
-  const refit=()=>{
-    if(!document.documentElement.classList.contains('mpk-any-open')) return;
-    try{ document.querySelectorAll('.mem-pick-row.mpk-open').forEach(mpkFit); }catch(_){}
-  };
-  if(window.visualViewport){
-    window.visualViewport.addEventListener('resize', refit);
-    window.visualViewport.addEventListener('scroll', refit);
-  }
-  window.addEventListener('resize', refit);
-  /* 選單浮在彈窗外面 → 彈窗自己捲動時它不會跟著跑，要補一個捲動監聽（capture 才收得到
-     內層容器的捲動事件）。沒有開著的選單時 refit 是空迴圈，成本可以忽略。 */
-  document.addEventListener('scroll', refit, true);
-})();
-function mpkClose(row,restore){
-  row.classList.remove('mpk-open');
-  if(row._mpkMenu) row._mpkMenu.classList.remove('on');
-  // 全部關掉才收旗標（掃一次 DOM 的成本只在關閉時付，不在每次捲動）
-  if(!document.querySelector('.mem-pick-row.mpk-open')) document.documentElement.classList.remove('mpk-any-open');
-  if(restore===false) return;
-  const inp=row.querySelector('input'), sel=row.querySelector('select');
-  if(!inp||!sel) return;
-  const lb=mpkLabel(sel);
-  /* 2026-08-01 使用者回報：「銷售上方的會員搜尋列，我輸入魚要搜尋，每次輸入後字就消失」
-     ——原本一律把欄位回填成 mpkLabel(sel)，而還沒選人時那是空字串，
-     所以只要焦點離開（點清單外、切到別的欄位、輸入法的候選視窗一互動就可能失焦），
-     打到一半的字整個被清掉，看起來就像「打了就消失」。
-     改成：有選定的人才回填他的名字；沒選定就保留使用者打的字，讓他接著改。 */
-  if(lb) inp.value=lb;
-}
-function mpkChoose(row,i){
+/* 開啟統一挑選視窗（2026-08-04 使用者建議）。<select> 仍在 DOM，
+   .value 讀取與 onchange 全部照舊；mpkRender 直接把清單畫進視窗。 */
+function mpkSheetOpen(row){
+  if(!row) return;
   const sel=row.querySelector('select'), inp=row.querySelector('input');
-  const o=sel&&sel.options[i]; if(!o) return;
-  sel.value=o.value;
-  sel.dispatchEvent(new Event('change',{bubbles:true}));   // 沿用各處既有的 onchange
-  if(inp) inp.value=mpkLabel(sel);
-  mpkClose(row,false);
-}
-function mpkUpgrade(row){
-  if(!row || row.classList.contains('mpk-on')) return;
-  const sel=row.querySelector('select'), inp=row.querySelector('input');
-  if(!sel||!inp) return;                       // 只升級「輸入框＋下拉」這種組合
-  row.classList.add('mpk-on');
-  row.insertAdjacentHTML('beforeend','<span class="mpk-caret">▾</span><div class="mpk-menu"></div>');
-  /* 選單搬到 body（2026-08-04 使用者回報：Mac Safari 在銷售視窗打「陳」沒有選單）——
-     選單是 position:fixed、座標本來就用視窗座標算，但放在彈窗裡會受 Safari 對
-     「捲動容器/動畫祖先內的 fixed 元素」的私房行為影響（被裁切或蓋住）。
-     搬到 body 層級就沒有任何祖先能干擾；事件監聽跟著節點走，appendChild 不會掉。 */
-  const _menuEl=row.querySelector('.mpk-menu');
-  row._mpkMenu=_menuEl; _menuEl._mpkRow=row;
-  document.body.appendChild(_menuEl);
-  inp.value=mpkLabel(sel);
-  inp.setAttribute('role','combobox'); inp.setAttribute('autocomplete','off');
-  const menu=_menuEl;   // 已搬到 body（見上方），不能再從 row 底下找
-  /* 中文輸入法：組字期間只重畫清單，不動位置也不捲動（2026-08-01）。
-     compositionend 之後才做完整的 mpkOpen。 */
-  inp.addEventListener('compositionstart',()=>{ row._mpkIME=true; });
-  inp.addEventListener('compositionend',()=>{ row._mpkIME=false; mpkOpen(row); });
-  /* 打字：原本的 oninput 已先跑完篩選（inline handler 先註冊先執行），這裡負責開選單。
-     2026-08-03 使用者回報：「輸入會員姓名的時候下方沒有列表跑出來，還要按方向鍵下才看得到」——
-     組字期間原本只重畫清單不定位，但選單是 position:fixed，沒跑 mpkFit 就沒有座標＝看不到。
-     mpkFit 內部本來就會在組字中跳過 scrollIntoView（不打斷 composition），
-     組字期間跑完整 mpkOpen 是安全的。 */
-  inp.addEventListener('input',()=>{ mpkOpen(row); });
-  /* focus 時全選：讓「點一下欄位就能重打」。但已經打到一半又回來時全選會很煩，
-     所以只在欄位內容剛好等於「目前選定的那個人」時才全選。 */
-  inp.addEventListener('focus',()=>{ if(inp.value===mpkLabel(sel)) inp.select(); mpkOpen(row); });
-  inp.addEventListener('click',()=>{ mpkOpen(row); });
-  inp.addEventListener('keydown',e=>{
-    const items=[...menu.querySelectorAll('.mpk-item:not(.mpk-none)')];
-    if(e.key==='Escape'){ mpkClose(row); return; }
+  if(!sel) return;
+  if(window._mpkSheetRow===row && document.getElementById('mpk-sheet')) return;   // 已開著
+  mpkSheetClose();
+  const fr=row.closest('.form-row'), lab=fr&&fr.querySelector('label');
+  const title=lab?String(lab.textContent||'').replace(/（[^）]*）/g,'').replace(/[＊*]\s*$/,'').trim():'';
+  const host=document.createElement('div');
+  host.id='mpk-sheet';
+  host.innerHTML=`<div class="ms-backdrop" onclick="mpkSheetClose()"></div>
+    <div class="ms-panel">
+      <div class="ms-head"><div class="ms-title">${title||'選擇'}</div><button class="ms-close" onclick="mpkSheetClose()">✕</button></div>
+      <input id="mpk-sheet-q" class="ms-search" placeholder="${String((inp&&inp.getAttribute('placeholder'))||'輸入姓名或電話搜尋…').replace(/"/g,'&quot;')}" autocomplete="off">
+      <div id="mpk-sheet-list" class="ms-list" style="padding:4px 12px 16px;"></div>
+    </div>`;
+  document.body.appendChild(host);
+  window._mpkSheetRow=row;
+  row._mpkMenu=document.getElementById('mpk-sheet-list');   // mpkRender 的輸出目標
+  const q=document.getElementById('mpk-sheet-q');
+  q.addEventListener('input',()=>mpkSheetType(row));
+  q.addEventListener('keydown',e=>{
+    const items=[...row._mpkMenu.querySelectorAll('.mpk-item:not(.mpk-none)')].filter(x=>x.style.display!=='none');
+    if(e.key==='Escape'){ mpkSheetClose(); return; }
     if(e.key==='ArrowDown'||e.key==='ArrowUp'){
-      e.preventDefault(); if(!row.classList.contains('mpk-open')) mpkOpen(row);
-      if(!items.length) return;
+      e.preventDefault(); if(!items.length) return;
       row._mpkIdx=Math.min(items.length-1,Math.max(0,(row._mpkIdx||0)+(e.key==='ArrowDown'?1:-1)));
       items.forEach((x,k)=>x.classList.toggle('on',k===row._mpkIdx));
       items[row._mpkIdx].scrollIntoView({block:'nearest'});
       return;
     }
     if(e.key==='Enter'){
-      if(!row.classList.contains('mpk-open')) return;
       e.preventDefault();
       const t=items[row._mpkIdx]||items[0];
       if(t) mpkChoose(row, Number(t.getAttribute('data-i')));
     }
   });
-  menu.addEventListener('mousedown',e=>{           // 用 mousedown：早於 blur，才不會先被關掉
+  row._mpkMenu.addEventListener('mousedown',e=>{
     const b=e.target.closest('.mpk-item:not(.mpk-none)'); if(!b) return;
     e.preventDefault(); mpkChoose(row, Number(b.getAttribute('data-i')));
   });
-  inp.addEventListener('blur',()=>{ setTimeout(()=>mpkClose(row), 120); });
+  mpkSheetType(row);
+  setTimeout(()=>{ try{ q.focus(); }catch(_){} },80);
+}
+/* 視窗裡打字：沿用每個欄位既有的過濾（oninput 會重建 select 的選項，含
+   「還有 N 位，請用搜尋」與分組），把字代填回原欄位觸發它，再重畫清單。
+   沒有自帶過濾的欄位（例如方案挑選）→ 這裡自己濾：比對文字與數字（電話）。 */
+function mpkSheetType(row){
+  const qEl=document.getElementById('mpk-sheet-q'); if(!qEl||!row) return;
+  const q=qEl.value||'';
+  const inp=row.querySelector('input');
+  const hasOwn=!!(inp && inp.getAttribute('oninput'));
+  if(hasOwn){ inp.value=q; inp.dispatchEvent(new Event('input',{bubbles:true})); }
+  mpkRender(row);
+  if(!hasOwn && q.trim()){
+    const qq=q.trim().toLowerCase(), qd=qq.replace(/\D/g,'');
+    const menu=row._mpkMenu;
+    [...menu.querySelectorAll('.mpk-item')].forEach(b=>{
+      const t=(b.textContent||'').toLowerCase();
+      b.style.display=(t.includes(qq)||(qd&&t.replace(/\D/g,'').includes(qd)))?'':'none';
+    });
+    [...menu.querySelectorAll('.mpk-grp')].forEach(g=>{
+      let n=g.nextElementSibling, any=false;
+      while(n && !n.classList.contains('mpk-grp')){ if(n.style.display!=='none') any=true; n=n.nextElementSibling; }
+      g.style.display=any?'':'none';
+    });
+  }
+  row._mpkIdx=0;
+}
+function mpkSheetClose(){
+  const s=document.getElementById('mpk-sheet'); if(s) s.remove();
+  const row=window._mpkSheetRow; window._mpkSheetRow=null;
+  if(!row) return;
+  row._mpkMenu=null;
+  const inp=row.querySelector('input'), sel=row.querySelector('select');
+  if(!inp||!sel) return;
+  /* 過濾代打進原欄位的字要洗掉（清空並觸發一次過濾、恢復完整選單）。
+     ⚠ 過濾函式會重建 select 的選項 —— 剛選定的值會被洗掉（實測：選完人欄位變空白），
+     所以先記住、重建後放回去。 */
+  if(inp.getAttribute('oninput')){
+    const keep=sel.value;
+    try{ inp.value=''; inp.dispatchEvent(new Event('input',{bubbles:true})); }catch(_){}
+    if(keep && [...sel.options].some(o=>o.value===keep)) sel.value=keep;
+  }
+  inp.value=mpkLabel(sel);
+}
+function mpkClose(row){ mpkSheetClose(); }   // 舊名沿用（mpkChoose 會叫它）
+function mpkChoose(row,i){
+  const sel=row.querySelector('select'), inp=row.querySelector('input');
+  const o=sel&&sel.options[i]; if(!o) return;
+  sel.value=o.value;
+  sel.dispatchEvent(new Event('change',{bubbles:true}));   // 沿用各處既有的 onchange
+  mpkClose(row,false);
+  if(inp) inp.value=mpkLabel(sel);   // 關窗後回填（mpkSheetClose 也會填，這行保底）
+}
+function mpkUpgrade(row){
+  if(!row || row.classList.contains('mpk-on')) return;
+  const sel=row.querySelector('select'), inp=row.querySelector('input');
+  if(!sel||!inp) return;                       // 只升級「輸入框＋下拉」這種組合
+  row.classList.add('mpk-on');
+  row.insertAdjacentHTML('beforeend','<span class="mpk-caret">▾</span>');
+  inp.value=mpkLabel(sel);
+  /* readOnly：打字改到跳出的視窗裡。欄位只當入口與顯示 —— 手機不再彈原生鍵盤、
+     桌機不再有 IME 組字與行內選單的座標問題（那三輪修的根源）。 */
+  inp.readOnly=true;
+  inp.setAttribute('role','combobox'); inp.setAttribute('autocomplete','off');
+  inp.style.cursor='pointer';
+  inp.addEventListener('click',()=>mpkSheetOpen(row));
+  inp.addEventListener('focus',()=>mpkSheetOpen(row));
+  inp.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '||e.key==='ArrowDown'){ e.preventDefault(); mpkSheetOpen(row); } });
+  sel.addEventListener('change',()=>{ if(!document.getElementById('mpk-sheet')) inp.value=mpkLabel(sel); });
 }
 function mpkScan(){ try{ document.querySelectorAll('.mem-pick-row').forEach(mpkUpgrade); }catch(_){} }
 let _prefill=null;
@@ -18414,7 +18392,7 @@ function bkRedrawMemberPick(){
   sel.innerHTML=bkMemberOptsHTML(q, prev);
   if(prev && sel.querySelector(`option[value="${prev}"]`)) sel.value=prev;
   const row=sel.closest('.mem-pick-row');
-  if(row && row.classList.contains('mpk-open')) mpkRender(row);
+  if(row && window._mpkSheetRow===row) mpkRender(row);   // 挑選視窗開著就重畫清單（2026-08-04 改視窗版）
 }
 /* 步驟 1 的授課教練下拉（2026-08-01 使用者指示：也改成有篩選功能的下拉）——
    與會員選擇器共用同一個元件（.mem-pick-row → mpkUpgrade 升級成「打字即篩、點一下選定」）。
@@ -18443,7 +18421,7 @@ function bkFilterCoaches(q){
   if(prev && sel.querySelector(`option[value="${prev}"]`)) sel.value=prev;
   else if(qq && opts.length===1){ sel.value=opts[0].value; bkCoachChange(); }   // 只剩一位就直接選起來
   const row=sel.closest('.mem-pick-row');
-  if(row && row.classList.contains('mpk-open')) mpkRender(row);
+  if(row && window._mpkSheetRow===row) mpkRender(row);   // 挑選視窗開著就重畫清單（2026-08-04 改視窗版）
 }
 // 教練下拉變更 → 重排會員下拉（保留已選的會員）
 function bkCoachChange(){
@@ -39877,7 +39855,7 @@ function showModal(html){
 }
 function closeModal(){const m=document.getElementById('modal-bg');if(m)m.remove(); window._modalSideUntilClose=false; document.body.style.overflow='';
   /* 會員選單搬到 body 層級（2026-08-04）：彈窗關掉時把孤兒選單清掉 */
-  try{ document.querySelectorAll('body > .mpk-menu').forEach(x=>{ if(!x._mpkRow || !document.contains(x._mpkRow)) x.remove(); }); }catch(_){}
+  try{ if(typeof mpkSheetClose==='function') mpkSheetClose(); }catch(_){}   // 挑選視窗跟著彈窗一起收
   // 還原捲動鎖（與 showModal 的 position:fixed 保存式鎖成對）
   if(document.body.style.position==='fixed'){
     document.body.style.position=''; document.body.style.top=''; document.body.style.left=''; document.body.style.right='';

@@ -27,12 +27,12 @@ const zModal=zOf('.modal-bg'), zSheet=zOf('.sheet-ov');
 eq('★ 薪資單那類滿版彈窗仍是 9700', zSheet, 9700);
 ok('★ 一般彈窗高於它（續約名單才不會開在後面）', zModal>zSheet, {zModal, zSheet});
 eq('　　實際值', zModal, 9750);
-/* 2026-08-04：mpk 選單搬到 body 後 z-index 改 10080（要蓋過所有裝著它的容器），
-   不再受「彈窗要高於選單」約束 —— 選單本來就是彈窗裡的元件叫出來的。 */
+/* 2026-08-04：行內 mpk 選單退場，改成統一挑選視窗 #mpk-sheet（使用者建議：
+   「點選後統一跳出視窗輸入姓名或電話產生下拉選單」）—— 一樣要蓋過所有容器。 */
 ok('★ 也高於帳號側欄與快捷選單（那些也會叫出彈窗）',
    zModal>zOf('.tb-acct-menu') && zModal>zOf('.dtl-modal'),
    {acct:zOf('.tb-acct-menu'), dtl:zOf('.dtl-modal')});
-ok('★ mpk 選單在 body 層級、蓋過彈窗（10080 > modal-bg 9750）', zOf('.mpk-menu')===10080);
+ok('★ 統一挑選視窗在最上層（10080 > modal-bg 9750／bk-mem-sheet 9999）', zOf('#mpk-sheet')===10080);
 
 console.log('\n② 但不能反過來蓋住彈窗自己叫出來的東西');
 ok('★ 彈窗裡的挑選面板（選會員／快速預約／時段）仍在彈窗之上',
