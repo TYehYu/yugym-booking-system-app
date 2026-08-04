@@ -7313,8 +7313,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1717';
-const APP_VERSION_LABEL='v260804.1717';
+const APP_VERSION = '260804.1738';
+const APP_VERSION_LABEL='v260804.1738';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28575,9 +28575,18 @@ function ppRecordHtml(){
         const WAL=buildWallet(PP.id,{tickets:c.myTk||[], bookings:c.myBk||[], logs:c.myLogs||[], typeMap});
         const tab=PP.tkTab||'pt';
         const usedOf=t=>(WAL.of(t.id)||{}).used||0;
+        /* 沒有帳的預約（超約待收款）也要畫（2026-08-04 使用者回報：這裡跟會員列表
+           顯示不同）——列表的五格會把 leftover 掛在該課別最新的票上畫紅圈，
+           這一頁原本只畫有帳的，8/12 這種「約了但沒票可扣」在票券頁完全看不到。
+           掛法與列表同一套：最新的持有中，沒有就最近一張。 */
+        const _lo=WAL.leftoverIn(tab)||[];
+        const _loTid=(()=>{ if(!_lo.length) return null;
+          const sl=WAL.active(tab)[0] || WAL.inClass(tab).slice()
+            .sort((a,b)=>String(b.t.purchase_date||b.t.start_date||'').localeCompare(String(a.t.purchase_date||a.t.start_date||'')))[0];
+          return sl?sl.t.id:null; })();
         const cardOf=t=>{
           const sl=WAL.of(t.id)||{stamps:[],used:0};
-          const bks=sl.stamps;
+          const bks=(t.id===_loTid)?sl.stamps.concat(_lo):sl.stamps;
           const total=Number(t.sessions_total)||0;
           const used=sl.used;
           const stTag={used_up:'已用畢',expired:'已過期',refunded:'已退費'}[t.status]||'';
@@ -28631,7 +28640,8 @@ function ppRecordHtml(){
            直接沿用上面 cardOf 的同一張卡（同一套 ticketTokens），加 .bkd-tkcard-hist
            縮小＋淡化以區隔「已結束」，展延按鈕也留在卡上。 */
         const histRow=t=>{
-          const bks=WAL.stampsOf(t.id);
+          /* 徐翎娟 8/12 型：課別的票全用畢時，沒帳的預約掛在最近那張（歷史卡）上畫紅圈 */
+          const bks=(t.id===_loTid)?WAL.stampsOf(t.id).concat(_lo):WAL.stampsOf(t.id);
           const total=Number(t.sessions_total)||0;
           const used=usedOf(t);
           const st={used_up:'已用畢',expired:'已過期',refunded:'已退費'}[t.status]
