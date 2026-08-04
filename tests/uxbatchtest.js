@@ -46,6 +46,12 @@ ok('　　清單點選用 mousedown（一致的舊習慣，選定即關窗）',
 ok('　　鍵盤可用：上下選、Enter 確定、Esc 關閉',
    /e\.key==='ArrowDown'\|\|e\.key==='ArrowUp'/.test(src) && /if\(e\.key==='Enter'\)\{/.test(src)
    && /if\(e\.key==='Escape'\)\{ mpkSheetClose\(\); return; \}/.test(src));
+/* 2026-08-04 使用者回報：「Mac Safari 在預約 1/2 的會員姓名輸入中文按 Enter 會直接關閉」——
+   那個 Enter 是輸入法在選字。 */
+ok('★ IME 組字中的按鍵不攔（選字的 Enter 不會被當成確定）',
+   /if\(e\.isComposing \|\| e\.keyCode===229\) return;/.test(src));
+ok('★ Enter 跳過佔位列，選第一個有值的項目',
+   /items\.find\(x=>\{ const o=sel\.options\[Number\(x\.getAttribute\('data-i'\)\)\]; return o&&o\.value; \}\)/.test(src));
 ok('　　沒選人時欄位留空，讓 placeholder 露出來',
    /if\(!sel \|\| !sel\.value\) return '';/.test(src));
 ok('　　清單空的時候講「查無符合的會員」', /查無符合的會員/.test(src));
