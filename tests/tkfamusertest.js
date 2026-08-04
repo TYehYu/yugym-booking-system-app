@@ -36,6 +36,11 @@ console.log('\n② 三條預約路徑都自動帶入（指定的使用人優先�
   ok('★ 步驟 2 有使用人選單（會員有家庭成員才出現）',
      /Array\.isArray\(preInfo\.family_members\)&&preInfo\.family_members\.length\)\?`<div class="form-row"><label>使用人<\/label>/.test(src)
      && /bkFamSel\(this\.value\)/.test(src));
+  /* 2026-08-04 使用者回報（蕭育筑）：票設定了媽媽，步驟 2 的使用人沒預設帶出 ——
+     選定票券後把票上的預設使用人同步進選單（顯示用；寫入本來就吃 null＝依票券）。 */
+  ok('★ 選定票券後同步預設使用人到選單', /function bkFamSyncFromTicket\(tk\)\{/.test(src)
+     && (src.match(/bkFamSyncFromTicket\(/g)||[]).length>=4
+     && /if\(window\._bkFamUser!=null\) return;/.test(src));
   ok('★ 明確選本人可蓋過票券預設（\'\' 哨兵）',
      /function bkFamSel\(v\)\{ window\._bkFamUser = v==='__self__' \? '' : \(v\|\|null\); \}/.test(src));
   ok('★ 會員自助：沒特別選使用人時帶票券預設',

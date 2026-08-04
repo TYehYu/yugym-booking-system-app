@@ -7305,8 +7305,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1415';
-const APP_VERSION_LABEL='v260804.1415';
+const APP_VERSION = '260804.1423';
+const APP_VERSION_LABEL='v260804.1423';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19157,6 +19157,16 @@ function filterBkMembers(){
   const el=document.getElementById('bk-mem-search'); if(!el)return;
 }
 // 多張票券時，點選要扣抵哪張
+/* 使用人選單跟著選定的票券帶預設（2026-08-04 使用者回報：蕭育筑的票設定了媽媽，
+   步驟 2 的使用人卻沒預設帶出）——選單值只是顯示；使用者沒動過選單（_bkFamUser
+   還是 null）時，把票上的預設使用人帶進畫面，讓人看得到這格會給誰。
+   實際寫入本來就吃「null＝依票券設定」的取值，顯示與結果必然一致。 */
+function bkFamSyncFromTicket(tk){
+  const sel=document.getElementById('bk-fam-user'); if(!sel) return;
+  if(window._bkFamUser!=null) return;                 // 使用者自己選過就不動
+  const v=(tk&&tk.family_user)||'';
+  sel.value=(v && [...sel.options].some(o=>o.value===v)) ? v : '';
+}
 function pickBkTicket(tid){
   window._bkTkSel=tid;
   const h=document.getElementById('bk-ticket-sel'); if(h)h.value=tid;
@@ -19165,6 +19175,7 @@ function pickBkTicket(tid){
   });
   // 換票券 → 連續預約的堂數上限跟著換（2026-08-01）
   recurSetMax('bk', (window._bkTkCap||{})[tid]);
+  bkFamSyncFromTicket((window._bkTkList||[]).find(t=>t.id===tid));   // 使用人預設跟著票（2026-08-04）
 }
 async function refreshBkTicket(){
   const mid=document.getElementById('bk-member').value;
@@ -19189,12 +19200,14 @@ async function refreshBkTicket(){
   };
   /* 每張票各自可約幾堂 —— 連續預約的堂數上限要跟著「選中的那一張」走（2026-08-01） */
   window._bkTkCap=Object.fromEntries(list.map(tk=>[tk.id, tkUnlockedLeft(tk)]));
+  window._bkTkList=list;   // pickBkTicket／使用人同步要用（2026-08-04）
   if(list.length===1){
     const tk=list[0];
     info.innerHTML=`將扣抵票券　${tk.plan_name||''}${fmtLabel(tk)}　可約 <b>${tkUnlockedLeft(tk)}</b> 堂　效期至 ${fmtExpire(tk.expire_date,tk)}
       <input type="hidden" id="bk-ticket-sel" value="${tk.id}">${instNote(tk)}`;
     window._bkTkSel=tk.id;
     recurSetMax('bk', tkUnlockedLeft(tk));
+    bkFamSyncFromTicket(tk);   // 使用人預設跟著票（2026-08-04）
   }else{
     // 多張可用票券 → 卡片式選擇（清楚區分 1V1／1V2、剩餘堂數、效期）
     if(!window._bkTkSel || !list.some(x=>x.id===window._bkTkSel)) window._bkTkSel=list[0].id;
@@ -19208,6 +19221,7 @@ async function refreshBkTicket(){
       <input type="hidden" id="bk-ticket-sel" value="${window._bkTkSel}">
       ${list.filter(tkIsInstall).map(instNote).join('')}`;
     recurSetMax('bk', window._bkTkCap[window._bkTkSel]);
+    bkFamSyncFromTicket(list.find(t=>t.id===window._bkTkSel));   // 使用人預設跟著票（2026-08-04）
   }
 }
 // 場地溢出確認：若 vbk 帶 _venueOverflow（分到次選場地），跳確認框詢問教練
