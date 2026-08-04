@@ -87,7 +87,7 @@ ok('　　兩個後台畫面都吃同一支',
 /* 2026-07-31 二修：「這位會員的課卡」抽成共用的 bkHasMember／bkOfMember，
    原本這個判斷被抄在九個地方，漏改其中幾處就會整批漏掉團課 */
 ok('★ 後台檔案頁的預約清單要含團課（學員在 member_ids、member_id 是 null）',
-   /const myBk=bkOfMember\(bookings, PP\.id\);/.test(src)
+   /let myBk=bkOfMember\(bookings, PP\.id\);/.test(src)   /* 2026-08-04 共享票併入池內他人預約，改 let */
    && /return String\(b\.member_id\|\|''\)===String\(mid\) \|\| mids\(b\)\.some\(x=>String\(x\)===String\(mid\)\);/.test(src));
 
 /* ── 預約明細版面順序（2026-07-29 使用者指示） ── */
