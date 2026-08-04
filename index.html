@@ -7306,8 +7306,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.0930';
-const APP_VERSION_LABEL='v260804.0930';
+const APP_VERSION = '260804.0939';
+const APP_VERSION_LABEL='v260804.0939';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7357,6 +7357,8 @@ function openDB(){ return Promise.resolve(); }  // 純雲端不需本機 DB
    需要強制重抓時：dbGetAll(store, {fresh:true})。
    ══════════════════════════════════════════════════════ */
 const _dbCache=new Map();      // 實體表名 → {t, data}
+const DB_SWR_MAX=600000;   // 簽章校驗可沿用快取的上限（見 dbGetAll）
+let _sigPromise=null, _sigAt=0;   // 共用的表簽章請求（3 秒內同一次往返）
 const _dbInflight=new Map();   // 實體表名 → Promise（同時發出的請求共用一次往返）
 const DB_CACHE_TTL=20000;   // 2026-07-26：8s→20s（讀取畫面出現太頻繁）；本機寫入仍即時失效
 /* 少變動表拉長快取（2026-07-20 LAG 對策：每個 Supabase 往返約 0.5s，操作後全表重抓＝
@@ -7398,6 +7400,9 @@ function leanLearn(store,row){     // 從任何一筆完整資料學欄位（dbG
   if(cols.length && cols.length<Object.keys(row).length) _leanSel.set(key,cols.join(','));
 }
 function dbCacheClear(store){
+  /* 有寫入就把共用的簽章丟掉（2026-08-04）：不丟的話，下一次重抓會記到「寫入之前」
+     的舊簽章，之後每次校驗都判定有變、白白多抓一輪。丟掉只是多打一支幾十 bytes 的 RPC。 */
+  _sigPromise=null; _sigAt=0;
   if(store===undefined){ _dbCache.clear(); try{ occCacheClear(); }catch(_){} return; }
   const list=Array.isArray(store)?store:[store];
   list.forEach(s=>_dbCache.delete(tbl(s)));
@@ -7445,6 +7450,30 @@ function dbPeek(store,maxAge){
   if(age >= (maxAge||120000)) return null;
   return { data:hit.data.slice(), stale: age >= (DB_CACHE_TTL_BY[key]||DB_CACHE_TTL) };
 }
+/* ══ 簽章校驗：沒人改過就不要重抓（2026-08-04 讀取量優化第二批）══════════
+   盤點發現 40 個頁面裡有 25 頁在抓 bookings（6.4MB）與 member_tickets（2.4MB），
+   但絕大多數換頁期間根本沒有人改過任何資料 —— 純粹是 TTL 到了就整表重抓。
+
+   fn_table_sigs()（DB 端，約 60ms）回傳每張表的「筆數:整列雜湊和」。
+   快取填入時把當下的簽章一起記起來；之後快取過期時先問一次簽章：
+     一樣   → 直接沿用快取、把時間戳往後推，**完全不抓表**
+     不一樣 → 才真的重抓那一張（只抓變動的那些）
+   一次換頁最多打一支 RPC（3 秒內的並行呼叫共用同一次往返），閒置時幾乎零流量。
+
+   正確性：
+   ・簽章一定「先於」資料取得（下面是 await 簽章 → 再抓資料），所以絕不會把
+     「抓完資料之後別人做的改動」誤記成已看過。反過來（簽章舊、資料新）只會多抓一次。
+   ・自己的寫入照舊 dbCacheClear() 立刻失效，跟簽章無關。
+   ・RPC 掛掉／沒權限 → 拿不到簽章 → 一律照原本的方式重抓，行為與改版前相同。
+   ・DB_SWR_MAX：快取太舊（超過 10 分鐘）就不玩簽章，老實重抓。 */
+function tableSigs(){
+  if(_sigPromise && Date.now()-_sigAt<3000) return _sigPromise;   // 同一次換頁共用一支
+  _sigAt=Date.now();
+  _sigPromise=sb.rpc('fn_table_sigs')
+    .then(r=>(r && !r.error && r.data && typeof r.data==='object') ? r.data : null)
+    .catch(()=>null);
+  return _sigPromise;
+}
 async function dbGetAll(store,opts){
   const key=tbl(store);
   if(opts&&opts.fresh){
@@ -7454,12 +7483,29 @@ async function dbGetAll(store,opts){
     if(hit && Date.now()-hit.t < (DB_CACHE_TTL_BY[key]||DB_CACHE_TTL)) return hit.data.slice();
     const inflight=_dbInflight.get(key);
     if(inflight) return (await inflight).slice();
+    // 快取過期但還不算太舊 → 問簽章，沒人動過就直接沿用（省掉整張表）
+    if(hit && hit.sig && Date.now()-hit.t < DB_SWR_MAX){
+      const sigs=await tableSigs();
+      if(sigs && sigs[key] && sigs[key]===hit.sig){
+        const cur=_dbCache.get(key);
+        if(cur===hit){ hit.t=Date.now(); return hit.data.slice(); }   // 校驗期間被寫入清掉就不沿用
+      }
+      const again=_dbInflight.get(key);       // 校驗時別人已經開抓 → 跟著等同一份
+      if(again) return (await again).slice();
+    }
   }
-  const p=_dbGetAllFresh(store);
-  _dbInflight.set(key,p);
+  /* 先拿簽章、再抓資料（順序不可對調，理由見上面的正確性說明） */
+  const p=(async()=>{
+    let sig=null;
+    try{ const sigs=await tableSigs(); if(sigs && sigs[key]) sig=sigs[key]; }catch(_){}
+    const data=await _dbGetAllFresh(store);
+    return {data,sig};
+  })();
+  const dataP=p.then(r=>r.data);
+  _dbInflight.set(key,dataP);
   try{
-    const data=await p;
-    _dbCache.set(key,{t:Date.now(),data});
+    const {data,sig}=await p;
+    _dbCache.set(key,{t:Date.now(),data,sig});
     return data.slice();
   }finally{
     _dbInflight.delete(key);

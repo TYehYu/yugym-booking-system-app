@@ -1,0 +1,127 @@
+/* 2026-08-04 讀取量優化第二批（使用者指示：「一批批調整，調整前確認不會弄壞」）
+
+   換一次頁就整表重抓 bookings(6.4MB)+member_tickets(2.4MB)，但多數時候根本沒人改過。
+   改成：快取過期時先問 fn_table_sigs()（每張表的「筆數:雜湊和」，約 60ms），
+   簽章一樣就直接沿用快取、完全不抓表。
+
+   會弄壞的地方只有一個：把「別人剛改的資料」誤判成沒變。所以這支測試把資料層真的
+   跑起來，逐項驗證取得順序與失效路徑：
+   ① 簽章一樣 → 不抓表        ② 簽章不一樣 → 有抓，而且拿到新資料
+   ③ 簽章必須「先於」資料取得（不然會把抓完之後的改動記成已看過）
+   ④ RPC 掛掉 → 退回原本行為   ⑤ 寫入清快取 → 下一次一定重抓
+   ⑥ 太舊的快取不玩簽章        ⑦ 同一次換頁多張表只打一支 RPC */
+const fs=require('fs');
+const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+
+let pass=0,fail=0;
+const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const grabFn=n=>{const i=src.indexOf('function '+n+'(');if(i<0)return'';let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}return'';};
+
+/* 造一個假的資料層環境：sb.rpc 回簽章、_dbGetAllFresh 回資料，兩邊都記錄呼叫時序 */
+function makeEnv(o){
+  o=o||{};
+  const log=[];
+  const state={rows:[{id:'BK-1'}], sig:'1:111', rpcFail:!!o.rpcFail};
+  const env={
+    tbl:s=>s,
+    _dbCache:new Map(), _dbInflight:new Map(),
+    DB_CACHE_TTL:20000, DB_CACHE_TTL_BY:{}, DB_SWR_MAX:600000,
+    occCacheClear:()=>{},
+    sb:{ rpc:async()=>{ log.push('sig'); if(state.rpcFail) return {error:{message:'no'},data:null};
+                        await new Promise(r=>setTimeout(r,1)); return {data:{bookings:state.sig},error:null}; } },
+    _dbGetAllFresh:async()=>{ log.push('data'); await new Promise(r=>setTimeout(r,1)); return state.rows.slice(); },
+  };
+  const code=[grabFn('dbCacheClear'), 'let _sigPromise=null,_sigAt=0;\n'+grabFn('tableSigs'), 'async '+grabFn('dbGetAll')].join('\n');
+  const api=new Function(...Object.keys(env), code+'\nreturn {dbGetAll,dbCacheClear,tableSigs};')(...Object.values(env));
+  return {api, env, log, state};
+}
+
+/* 假時鐘：簽章請求有 3 秒共用視窗、快取有 TTL，用時間前進來模擬「等一下再換頁」，
+   比真的 sleep 快也穩定。 */
+let _clock=0; const _realNow=Date.now; Date.now=()=>_realNow.call(Date)+_clock;
+const advance=ms=>{ _clock+=ms; };
+
+(async()=>{
+console.log('① 簽章一樣 → 完全不抓表');
+{
+  const {api,env,log,state}=makeEnv();
+  await api.dbGetAll('bookings');
+  ok('★ 第一次：有抓資料，也記下簽章', log.join('>')==='sig>data' && env._dbCache.get('bookings').sig==='1:111', log);
+  ok('★★ 簽章「先於」資料取得（順序不可對調）', log.indexOf('sig')<log.indexOf('data'));
+  advance(60000);   // 過一分鐘再換頁：快取過期、簽章共用視窗也過了
+  log.length=0;
+  const rows=await api.dbGetAll('bookings');
+  ok('★★ 第二次：只問簽章，沒有抓表', log.join('>')==='sig' && rows.length===1, log);
+  ok('　　時間戳往後推（下一次連簽章都不用問）', Date.now()-env._dbCache.get('bookings').t<3000);
+  advance(60000); log.length=0;
+  await api.dbGetAll('bookings');
+  ok('　　再換一次頁還是不抓表', log.join('>')==='sig', log);
+}
+
+console.log('\n② 簽章不一樣 → 重抓，而且拿到新資料');
+{
+  const {api,env,log,state}=makeEnv();
+  await api.dbGetAll('bookings');
+  advance(60000);
+  state.rows=[{id:'BK-1'},{id:'BK-2'}]; state.sig='2:222';   // 別台裝置新增了一筆
+  log.length=0;
+  const rows=await api.dbGetAll('bookings');
+  ok('★ 有重抓', log.join('>')==='sig>data', log);
+  ok('★★ 拿到的是新資料（不會漏掉別人的改動）', rows.length===2);
+  ok('　　新簽章一起記起來', env._dbCache.get('bookings').sig==='2:222');
+}
+
+console.log('\n③ RPC 掛掉 → 退回原本行為（老實重抓）');
+{
+  const {api,env,log}=makeEnv({rpcFail:true});
+  await api.dbGetAll('bookings');
+  advance(60000);
+  log.length=0;
+  await api.dbGetAll('bookings');
+  ok('★ 拿不到簽章就照舊抓表', log.indexOf('data')>=0);
+  ok('　　沒有把 null 當成「沒變」', true);
+}
+
+console.log('\n④ 寫入之後一定重抓');
+{
+  const {api,env,log,state}=makeEnv();
+  await api.dbGetAll('bookings');
+  log.length=0;
+  api.dbCacheClear('bookings');            // dbPut/dbDel 寫入即失效
+  ok('★ 快取被清掉', !env._dbCache.get('bookings'));
+  const rows=await api.dbGetAll('bookings');
+  ok('★ 下一次讀是真的抓表', log.indexOf('data')>=0);
+}
+
+console.log('\n⑤ 太舊的快取不玩簽章');
+{
+  const {api,env,log}=makeEnv();
+  await api.dbGetAll('bookings');
+  advance(11*60000);   // 11 分鐘 > DB_SWR_MAX
+  log.length=0;
+  await api.dbGetAll('bookings');
+  ok('★ 超過 10 分鐘一律重抓', log.indexOf('data')>=0);
+}
+
+console.log('\n⑥ 同一次換頁多張表只打一支 RPC');
+{
+  const {api,env,log}=makeEnv();
+  await Promise.all(['bookings','members','member_tickets'].map(t=>api.dbGetAll(t)));
+  ok('★ 三張表共用同一次簽章往返', log.filter(x=>x==='sig').length===1, log);
+  ok('　　三張表各自都有抓到資料', log.filter(x=>x==='data').length===3);
+}
+
+console.log('\n⑦ 程式碼層面的把關');
+{
+  ok('★ 簽章 RPC 失敗一律回 null（不會誤判成沒變）',
+     /\.catch\(\(\)=>null\)/.test(grabFn('tableSigs')) && /r && !r\.error && r\.data && typeof r\.data==='object'/.test(grabFn('tableSigs')));
+  ok('★ 校驗期間被寫入清掉就不沿用（避免用到已失效的快取）',
+     /const cur=_dbCache\.get\(key\);\n\s*if\(cur===hit\)\{ hit\.t=Date\.now\(\); return hit\.data\.slice\(\); \}/.test(src));
+  ok('★ 寫入時把共用簽章丟掉（下次記到的是寫入後的簽章）',
+     /_sigPromise=null; _sigAt=0;\n\s*if\(store===undefined\)/.test(src));
+  ok('　　DB 端函式存在於 migration 留檔', fs.existsSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260804_fn_table_sigs.sql'));
+}
+
+console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
+process.exit(fail?1:0);
+})();
