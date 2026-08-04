@@ -27,10 +27,17 @@ console.log('① 設定入口（會員資料的票券卡）');
 
 console.log('\n② 三條預約路徑都自動帶入（指定的使用人優先）');
 {
-  ok('★ 櫃檯單筆／連續（原路徑）', /trial_name:o\.trial_name\|\|\(tk&&tk\.family_user\)\|\|null,/.test(src));
-  ok('★ RPC 路徑：建完補寫（fn_create_booking 沒有 trial 參數）',
-     /const _fam=o\.trial_name\|\|\(tk&&tk\.family_user\)\|\|null;/.test(src)
+  ok('★ 櫃檯單筆／連續（原路徑）三態取值：null＝依票券、\'\'＝明確本人、名字＝成員',
+     /trial_name:\(o\.trial_name==null \? \(\(tk&&tk\.family_user\)\|\|null\) : \(o\.trial_name\|\|null\)\),/.test(src));
+  ok('★ RPC 路徑：建完補寫（同一套取值）',
+     /const _fam=\(o\.trial_name==null \? \(\(tk&&tk\.family_user\)\|\|null\) : \(o\.trial_name\|\|null\)\);/.test(src)
      && /update\(\{trial_name:_fam\}\)\.eq\('id',data\.booking_id\)/.test(src));
+  /* 2026-08-04 使用者指示（截圖）：「這一步可以新增選擇家庭成員，如果該會員有設定的話」 */
+  ok('★ 步驟 2 有使用人選單（會員有家庭成員才出現）',
+     /Array\.isArray\(preInfo\.family_members\)&&preInfo\.family_members\.length\)\?`<div class="form-row"><label>使用人<\/label>/.test(src)
+     && /bkFamSel\(this\.value\)/.test(src));
+  ok('★ 明確選本人可蓋過票券預設（\'\' 哨兵）',
+     /function bkFamSel\(v\)\{ window\._bkFamUser = v==='__self__' \? '' : \(v\|\|null\); \}/.test(src));
   ok('★ 會員自助：沒特別選使用人時帶票券預設',
      /s\.famOpts\[s\.pickFam\]:\(\(tk&&tk\.family_user\)\|\|null\);/.test(src));
 }

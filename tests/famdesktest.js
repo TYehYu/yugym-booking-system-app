@@ -27,8 +27,8 @@ ok('★ 選完自動重送、旗標只作用一筆',
    && /window\._bkFamUser=null;   \/\/ 使用人旗標只作用這一筆/.test(src)
    && /window\._bkFamUser=null;   \/\/ 家庭成員使用人旗標只作用單筆/.test(src));
 ok('★ 建立時把使用人寫進 trial_name（與家庭共享同一套規則）',
-   /trial_name:o\.trial_name\|\|\(tk&&tk\.family_user\)\|\|null,/.test(src)   // 2026-08-04 加了票券預設使用人
-   && /trial_name:window\._bkFamUser\|\|null,   \/\* 家庭成員使用人（2026-08-03） \*\//.test(src));
+   /trial_name:\(o\.trial_name==null \? \(\(tk&&tk\.family_user\)\|\|null\) : \(o\.trial_name\|\|null\)\),/.test(src)   // 2026-08-04 三態：null＝依票券、''＝明確本人、名字＝成員
+   && /trial_name:\(window\._bkFamUser!=null\?window\._bkFamUser:null\),/.test(src));   // '' 不能塌成 null（明確本人要蓋過票券預設）
 
 console.log('\n③ 明細姓名旁的使用人按鈕（實跑 bkFamBtn）');
 {

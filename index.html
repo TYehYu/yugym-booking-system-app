@@ -7303,8 +7303,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1357';
-const APP_VERSION_LABEL='v260804.1357';
+const APP_VERSION = '260804.1407';
+const APP_VERSION_LABEL='v260804.1407';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11993,7 +11993,7 @@ async function createBookingViaRpc(o, tk, ds, ts){
     }
     /* 家庭成員使用人（2026-08-04）：RPC 沒有 trial 參數，建完補寫。
        指定的使用人優先，其次票券的預設使用人（member_tickets.family_user）。 */
-    const _fam=o.trial_name||(tk&&tk.family_user)||null;
+    const _fam=(o.trial_name==null ? ((tk&&tk.family_user)||null) : (o.trial_name||null));
     if(_fam){ try{ await sb.from('bookings').update({trial_name:_fam}).eq('id',data.booking_id); dbCacheClear('bookings'); }catch(_){} }
     /* 首堂開通（2026-08-04 蕭育筑案例：效期一直顯示「未開通」）——
        RPC 在 DB 端扣課，前端 deductTicket 的 activateTicketIfNeeded 從沒跑到。
@@ -15556,17 +15556,25 @@ async function renderCalendar(opts){
       <span>預約模式中：課卡暫時不反應點擊，直接點時間格即可新增預約</span>
       <button class="btn btn-ghost" onclick="toggleCalBookMode()">結束預約模式</button>
     </div>`:''}
+    ${/* 右上角兩列（2026-08-04 使用者指示）：第一列 預約模式／團課課表／新增預約，
+         第二列 今天／日期列 —— 原本全部擠同一列，日期與按鈕互相搶寬度。 */''}
     ${opts.coachFilter?`<div class="cal-chips-bar cal-bar2">
       <div class="cal-chip-row">${calCourseChips()}</div>
-      ${_calNavHtml}
-      <div class="cal-head-right" style="display:flex;gap:8px;">
-        ${/* 預約模式（2026-07-30 使用者指示）：關掉課卡互動，整片時間格都能直接點來排課。
-             課多的時候要在卡與卡之間戳空格很難點，開了這個模式就不會誤點到課卡。 */''}
-        <button class="btn ${window._calBookMode?'btn-green':'btn-ghost'}" id="cal-bookmode-btn"
-                title="開啟後：課卡不再反應點擊，直接點時間格就能新增預約"
-                onclick="toggleCalBookMode()">${window._calBookMode?'✓ 預約模式':'預約模式'}</button>
-        <button class="btn" style="background:var(--course-group-soft);color:var(--course-group-accent);border:1.5px solid var(--course-group-accent);font-weight:700;" onclick="openGroupScheduleModal()">團課課表</button>
-        <button class="btn btn-green" onclick="openBookingModal()">＋ 新增預約</button>
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;margin-left:auto;">
+        <div class="cal-head-right" style="display:flex;gap:8px;">
+          ${/* 預約模式（2026-07-30 使用者指示）：關掉課卡互動，整片時間格都能直接點來排課。 */''}
+          <button class="btn ${window._calBookMode?'btn-green':'btn-ghost'}" id="cal-bookmode-btn"
+                  title="開啟後：課卡不再反應點擊，直接點時間格就能新增預約"
+                  onclick="toggleCalBookMode()">${window._calBookMode?'✓ 預約模式':'預約模式'}</button>
+          <button class="btn" style="background:var(--course-group-soft);color:var(--course-group-accent);border:1.5px solid var(--course-group-accent);font-weight:700;" onclick="openGroupScheduleModal()">團課課表</button>
+          <button class="btn btn-green" onclick="openBookingModal()">＋ 新增預約</button>
+        </div>
+        <div class="cal-nav" style="margin:0;">
+          <button class="btn btn-ghost cal-today-btn" onclick="calToToday();navTo(CUR_PAGE)">今天</button>
+          <div class="cal-arrow" onclick="${nDays===1?`calStep(-1)`:`calStepWeek(-1)`}" title="前一週">‹</div>
+          <div class="cal-title" onclick="openCalJump()" style="cursor:pointer;" title="點擊選擇日期">${title} ▾</div>
+          <div class="cal-arrow" onclick="${nDays===1?`calStep(1)`:`calStepWeek(1)`}" title="下一週">›</div>
+        </div>
       </div>
     </div>`:''}
     <div class="cal-body-wrap">
@@ -18739,6 +18747,14 @@ async function bkStep2(){
     ${hasTk
       ?`<div class="form-row"><label>會員</label>
           <div class="bk-mem-pick" style="cursor:default;"><span>${preInfo?preInfo.name:''}（${preInfo?fmtPhone(preInfo.phone):''}）· 剩 ${preSum} 堂</span></div></div>
+        ${/* 使用人（2026-08-04 使用者指示：「這一步可以新增選擇家庭成員，如果該會員有設定的話」）——
+             預設「依票券設定」：扣到的票有預設使用人就自動帶；明確選「本人」可蓋過票券預設。 */''}
+        ${(preInfo&&Array.isArray(preInfo.family_members)&&preInfo.family_members.length)?`<div class="form-row"><label>使用人</label>
+          <select id="bk-fam-user" onchange="bkFamSel(this.value)">
+            <option value="">依票券設定（未設定＝本人）</option>
+            <option value="__self__">本人（${preInfo.name}）</option>
+            ${preInfo.family_members.filter(Boolean).map(f=>`<option value="${String(f).replace(/["'<>]/g,'')}">${f}</option>`).join('')}
+          </select></div>`:''}
         <div class="form-row" style="margin-bottom:10px;"><div id="bk-ticket-info" style="font-size:12px;color:var(--t2);padding:10px 12px;background:var(--card2);border-radius:9px;"></div></div>
         ${bkTreadmillRow(t)}
         ${recurBoxHtml('bk', preSum)}`
@@ -18783,6 +18799,8 @@ async function bkStep2(){
 /* 待分期繳費保留（2026-08-04）：單堂建立與連續預約相同的保留課。
    走 runRecurringBooking —— findTicketFn 回 null、會員有未開通的分期票 → holdOnly。 */
 async function bkInstHold(){ return onceAct('bkinsthold', _bkInstHold); }
+/* 步驟 2 的使用人選單（2026-08-04）：''＝明確本人（要蓋過票券預設）、null＝依票券設定 */
+function bkFamSel(v){ window._bkFamUser = v==='__self__' ? '' : (v||null); }
 async function _bkInstHold(){
  /* 畫面回饋（2026-08-04 使用者回報：「按了什麼提示都沒有，像當機」）——
     建立期間按鈕轉「建立中…」，任何錯誤都要吐司。 */
@@ -19687,7 +19705,7 @@ async function _submitBookingInner(){
   // 單筆預約（非連續）：先預驗證場地，若溢出到次選場地→跳確認，教練同意才建立
   if(!recurring){
     const vbkChk={id:null,coach_id,category:t.category,ticket_type_id:type_id,venue_pref:_venuePref,
-      member_id, trial_name:window._bkFamUser||null};
+      member_id, trial_name:(window._bkFamUser!=null?window._bkFamUser:null)};
     const preErr=await validateBooking(vbkChk,date,time,60);
     if(preErr){
       /* 2026-08-03 使用者指示：「在同一個位子用同帳號預約第二次的時候，要跳出選擇
@@ -19704,7 +19722,7 @@ async function _submitBookingInner(){
   }
   const r=await runRecurringBooking({
     member_id, coach_id, substitute_coach_id:null,
-    trial_name:window._bkFamUser||null,   /* 家庭成員使用人（2026-08-03） */
+    trial_name:(window._bkFamUser!=null?window._bkFamUser:null),   /* 家庭成員使用人（2026-08-03）；''＝明確本人（2026-08-04） */
     category:t.category, type_id, format:fmt,
     startDate:date, time, duration:60,
     dows: recurring ? _rc.dows : [],
@@ -19860,8 +19878,9 @@ async function runRecurringBooking(opts){
     }
     const bk={id:uid('BK'), member_id:o.member_id||null, coach_id:o.coach_id||null,
       /* 家庭成員使用人（2026-08-03 櫃檯端）；2026-08-04 使用者指示：票券可指定預設使用人
-         （member_tickets.family_user）—— 沒另外指定時自動帶入，課卡直接顯示成員稱呼。 */
-      trial_name:o.trial_name||(tk&&tk.family_user)||null,
+         （member_tickets.family_user）。取值：null＝依票券設定、''＝明確本人（蓋過票券
+         預設）、名字＝指定成員。 */
+      trial_name:(o.trial_name==null ? ((tk&&tk.family_user)||null) : (o.trial_name||null)),
       substitute_coach_id:o.substitute_coach_id||null,
       /* 指定場地（2026-08-01 跑步機台數）：validateBooking 會依這個強制配置，
          配好之後把 venue_unit 寫回這個物件。 */
