@@ -1,0 +1,45 @@
+/* 2026-08-04 使用者指示：「會員票券也新增一項家庭成員，該票券預設由該成員使用，方便預約」
+
+   member_tickets.family_user：票券指定預設使用人（家庭成員稱呼）。
+   預約扣到這張票、沒另外指定使用人時，trial_name 自動帶入 → 課卡顯示「王小明（爸爸）」。 */
+const fs=require('fs');
+const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+
+let pass=0,fail=0;
+const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const grabFn=n=>{const i=src.indexOf('function '+n+'(');if(i<0)return'';let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}return'';};
+
+console.log('① 設定入口（會員資料的票券卡）');
+{
+  ok('★ 持有中票券卡有「使用人」鈕（櫃檯、該會員有家庭成員才顯示）',
+     /Array\.isArray\(r\.family_members\)&&r\.family_members\.length\)\?`<button[^`]*ppTkFamUser\('\$\{t\.id\}'\)/.test(src));
+  ok('★ 已設定的顯示「使用人：稱呼」', /使用人：'\+t\.family_user/.test(src));
+  const f=grabFn('ppTkFamUser');
+  ok('★ 選項＝本人＋家庭成員清單', /btn\('','本人（'\+\(m\?m\.name:'—'\)\+'）'\)/.test(f)
+     && /fam\.map\(f=>btn\(f,f\)\)\.join\(''\)/.test(f));
+  ok('　　沒設定家庭成員先指路', /會員資料表頭 → ＋家庭成員/.test(f));
+  ok('　　寫入走 dbPut、可改回本人', /t\.family_user=v\|\|null;/.test(grabFn('ppTkFamUserSet'))
+     && /已改回本人使用/.test(grabFn('ppTkFamUserSet')));
+}
+
+console.log('\n② 三條預約路徑都自動帶入（指定的使用人優先）');
+{
+  ok('★ 櫃檯單筆／連續（原路徑）', /trial_name:o\.trial_name\|\|\(tk&&tk\.family_user\)\|\|null,/.test(src));
+  ok('★ RPC 路徑：建完補寫（fn_create_booking 沒有 trial 參數）',
+     /const _fam=o\.trial_name\|\|\(tk&&tk\.family_user\)\|\|null;/.test(src)
+     && /update\(\{trial_name:_fam\}\)\.eq\('id',data\.booking_id\)/.test(src));
+  ok('★ 會員自助：沒特別選使用人時帶票券預設',
+     /s\.famOpts\[s\.pickFam\]:\(\(tk&&tk\.family_user\)\|\|null\);/.test(src));
+}
+
+console.log('\n③ 課卡顯示（bkName 只在自主訓練加註）');
+{
+  ok('★ 條件含課種與同名保險',
+     /b\.category==='自主訓練' && b\.trial_name!==v/.test(grabFn('bkName')));
+  ok('★ 桌機行事曆一般會員課走 bkName', /memName=bkName\(b,id=>memMap\[id\]\);/.test(src));
+  ok('★ 手機 agenda 也走 bkName', /if\(b\.member_id\) return bkName\(b,id=>memMap\[id\]\);/.test(src));
+  ok('　　migration 留檔', fs.existsSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260804_member_tickets_family_user.sql'));
+}
+
+console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
+process.exit(fail?1:0);

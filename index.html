@@ -7301,8 +7301,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1315';
-const APP_VERSION_LABEL='v260804.1315';
+const APP_VERSION = '260804.1323';
+const APP_VERSION_LABEL='v260804.1323';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11989,6 +11989,10 @@ async function createBookingViaRpc(o, tk, ds, ts){
     if(o.dows && o.dows.length){
       try{ await sb.from('bookings').update({recurring:true}).eq('id',data.booking_id); dbCacheClear('bookings'); }catch(_){}
     }
+    /* 家庭成員使用人（2026-08-04）：RPC 沒有 trial 參數，建完補寫。
+       指定的使用人優先，其次票券的預設使用人（member_tickets.family_user）。 */
+    const _fam=o.trial_name||(tk&&tk.family_user)||null;
+    if(_fam){ try{ await sb.from('bookings').update({trial_name:_fam}).eq('id',data.booking_id); dbCacheClear('bookings'); }catch(_){} }
     return { ok:true, booking_id:data.booking_id };
   }
   return { ok:false, reason:rpcBookingErrMsg(data && data.error_code) };
@@ -14810,9 +14814,11 @@ function bkName(b, nameOf){
   const v=b.member_id ? (nameOf?nameOf(b.member_id):'') : '';
   /* 家庭成員使用人（2026-08-04 使用者指示：「選到其他成員使用，課卡上的名字旁要顯示」）——
      同帳號幫家人約的格子：member_id＝帳號本人、trial_name＝使用人稱呼（爸爸/媽媽）。
-     ⚠ 排除 pending_contract：綁定會員的待簽約卡位也是 member＋trial 並存，
-       那裡的 trial 是身分軌跡不是使用人。 */
-  if(v && b.trial_name && !b.pending_contract) return `${v}（${b.trial_name}）`;
+     ⚠ 只在「自主訓練」加註：家庭名額只存在自主訓練；體驗課常是 member＋trial 同名
+       （會變成「林孟玉（林孟玉）」）、綁定會員的待簽約卡位 trial 是身分軌跡，都不能加。
+     同名再保險擋一次（就算資料奇怪也不會疊字）。 */
+  if(v && b.trial_name && !b.pending_contract && b.category==='自主訓練' && b.trial_name!==v)
+    return `${v}（${b.trial_name}）`;
   if(v) return v;
   if(b.member_id) return '—';
   if(b.trial_name) return b.trial_name;
@@ -15312,7 +15318,9 @@ async function renderCalendar(opts){
       }else if(b.pending_contract && b.member_id){
         _nameBase=bkName(b,id=>memMap[id]); _nameTag=bkTag(b); memName=bkNameFull(b,id=>memMap[id]);
       }else{
-        memName=memMap[b.member_id]||'—';
+        /* 一般會員課：走 bkName（2026-08-04）——家庭成員的自主訓練格會顯示
+           「王小明（爸爸）」，其他課種行為不變（bkName 只在自主訓練加註使用人）。 */
+        memName=bkName(b,id=>memMap[id]);
       }
       // 卡片寬度分級（Google Calendar 風格）：一律橫排、依寬度縮字/省略，不改直排
       //  ≥90px：正常（時間＋會員＋教練）
@@ -17181,7 +17189,7 @@ function cagCardName(b,memMap,coachObj){
     const lb=grpHeadLabel(b);
     return lb?`小班 ${lb}`:'小班肌力';
   }
-  if(b.member_id) return memMap[b.member_id]||'—';
+  if(b.member_id) return bkName(b,id=>memMap[id]);   // 家庭成員的自主訓練格顯示（爸爸）——2026-08-04
   if(bkIsSelf(b)) return '自主訓練';
   return b.trial_name||'—';
 }
@@ -19835,7 +19843,9 @@ async function runRecurringBooking(opts){
       }
     }
     const bk={id:uid('BK'), member_id:o.member_id||null, coach_id:o.coach_id||null,
-      trial_name:o.trial_name||null,   /* 家庭成員使用人（2026-08-03 櫃檯端；自主訓練具名名額） */
+      /* 家庭成員使用人（2026-08-03 櫃檯端）；2026-08-04 使用者指示：票券可指定預設使用人
+         （member_tickets.family_user）—— 沒另外指定時自動帶入，課卡直接顯示成員稱呼。 */
+      trial_name:o.trial_name||(tk&&tk.family_user)||null,
       substitute_coach_id:o.substitute_coach_id||null,
       /* 指定場地（2026-08-01 跑步機台數）：validateBooking 會依這個強制配置，
          配好之後把 venue_unit 寫回這個物件。 */
@@ -28290,6 +28300,38 @@ async function revRowGo(mid){
 /* 票券分頁「共享設定」（2026-07-28 使用者回報：統一版會員資料看不到共享功能）——
    重用 openTicketShare，儲存/取消後返回本彈窗的票券分頁而非舊版明細 */
 function ppShareTk(tid){ window._tkShareFromPP=true; openTicketShare(tid, PP.id); }
+/* 票券預設使用人（2026-08-04 使用者指示：「會員票券也新增一項家庭成員，
+   該票券預設由該成員使用，方便預約」）——設定存 member_tickets.family_user。
+   之後預約扣到這張票、沒另外指定使用人時，trial_name 自動帶入（櫃檯單筆／連續、
+   RPC 路徑、會員自助都接了），課卡直接顯示「王小明（爸爸）」。 */
+async function ppTkFamUser(tid){
+  const t=await dbGet('member_tickets',tid); if(!t){ showToast('找不到票券'); return; }
+  const m=await dbGet('members', t.member_id);
+  const fam=(m&&Array.isArray(m.family_members))?m.family_members.filter(Boolean):[];
+  if(!fam.length){ showToast('這位會員還沒設定家庭成員（會員資料表頭 → ＋家庭成員）'); return; }
+  const cur=t.family_user||'';
+  const btn=(v,lb)=>`<button class="btn ${cur===v?'btn-green':'btn-ghost'}" style="justify-content:flex-start;text-align:left;padding:11px 14px;" onclick="ppTkFamUserSet('${tid}','${String(v).replace(/['"<>]/g,'')}')">👤　${lb}</button>`;
+  showModal(`<div class="modal-title">這張票預設給誰使用？</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">
+      <b>${t.plan_name||'票券'}</b>　·　${m?m.name:''}<br>
+      設定後，用這張票預約會自動把使用人記成該成員，課卡上直接顯示，不用每次再選。</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${btn('','本人（'+(m?m.name:'—')+'）')}
+      ${fam.map(f=>btn(f,f)).join('')}
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
+}
+async function ppTkFamUserSet(tid, v){
+  try{
+    const t=await dbGet('member_tickets',tid); if(!t) return;
+    t.family_user=v||null;
+    await dbPut('member_tickets',t);
+    closeModal();
+    showToast(v?`此票預設使用人：${v}`:'已改回本人使用');
+    if(!(await ppRefreshIfOpen(t.member_id))) navTo(CUR_PAGE);
+    try{ ppShowRecord('tickets'); }catch(_){}
+  }catch(e){ showToast('設定失敗：'+((e&&e.message)||e)); }
+}
 async function _tkShareBack(mid){
   if(window._tkShareFromPP){ window._tkShareFromPP=false;
     await openPersonProfile('member',mid); try{ ppShowRecord('tickets'); }catch(_){} return; }
@@ -28438,6 +28480,8 @@ function ppRecordHtml(){
               <span>${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}${tkIsExtended(t)?`　·　<b style="color:var(--gold-d);">已展延（不得退費）</b>`:''}${tkMoneyHtml(t)}</span>
               <span style="display:flex;gap:6px;">
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">📄 合約</button>`:''}
+                ${/* 票券預設使用人（2026-08-04 使用者指示：票券指定家庭成員，預約自動帶使用人） */''}
+                ${(isDeskLike()&&t.status==='usable'&&Array.isArray(r.family_members)&&r.family_members.length)?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;${t.family_user?'color:var(--gold-d);border-color:var(--gold-d);':''}" onclick="ppTkFamUser('${t.id}')">👤 ${t.family_user?('使用人：'+t.family_user):'使用人'}</button>`:''}
                 ${(isDeskLike()&&t.status==='usable'&&(tab==='pt'||tab==='group')&&t.member_id===PP.id)?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="ppShareTk('${t.id}')">${_shN?'共享設定':'設為共享'}</button>`:''}
                 ${(isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger);" onclick="voidTicketAsk('${t.id}')">作廢</button>`:''}
               </span>
@@ -35676,7 +35720,8 @@ async function msbConfirm(time){
   if(!tk){ showToast('沒有可用的自主訓練點數'); return; }
   /* 使用人要在 validateBooking 之前決定（2026-08-03）：重疊防呆看的是 trial_name ——
      家人用的自主訓練可以與本人的課同時段，晚一步掛上去就會被誤擋。 */
-  const famUser=(s.pickFam>0&&Array.isArray(s.famOpts))?s.famOpts[s.pickFam]:null;   // 家庭共享使用人（2026-07-29）
+  /* 家庭共享使用人（2026-07-29）；2026-08-04：沒特別選時帶票券的預設使用人 */
+  const famUser=(s.pickFam>0&&Array.isArray(s.famOpts))?s.famOpts[s.pickFam]:((tk&&tk.family_user)||null);
   const vbk={id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',ticket_type_id:tk.ticket_type_id,
     venue_pref:s.pickVenue||null, trial_name:famUser||null};
   const verr=await validateBooking(vbk,s.date,time,60);

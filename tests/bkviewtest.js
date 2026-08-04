@@ -63,7 +63,11 @@ eq('★ 體驗', api.bkNameFull({category:'體驗',trial_name:'程凱郁'}, name
 eq('★ 待繳費（分期保留）', api.bkNameFull({member_id:'M1',pending_contract:true,note:'分期待繳費保留（收款後自動補扣）'}, nameOf), '林小明（待繳費）');
 eq('★ 純綁定 → （待簽約）', api.bkNameFull({member_id:'M1',pending_contract:true}, nameOf), '林小明（待簽約）');
 /* 2026-08-04 使用者指示：家庭成員的格子（member＋trial_name、非 pending）名字旁顯示使用人 */
-eq('★ 家庭成員使用人：名字旁顯示成員稱呼', api.bkName({member_id:'M1',trial_name:'爸爸'}, nameOf), '林小明（爸爸）');
+eq('★ 家庭成員使用人：自主訓練的名字旁顯示成員稱呼', api.bkName({member_id:'M1',trial_name:'爸爸',category:'自主訓練'}, nameOf), '林小明（爸爸）');
+/* 2026-08-04 使用者回報（截圖）：體驗課卡出現「林孟玉（林孟玉）」——體驗常是 member＋trial 同名 */
+eq('★ 體驗課不加註（會疊字）', api.bkName({member_id:'M1',trial_name:'林小明',category:'體驗'}, nameOf), '林小明');
+eq('　　非自主訓練一律不加註', api.bkName({member_id:'M1',trial_name:'爸爸',category:'私人教練'}, nameOf), '林小明');
+eq('　　同名保險：就算資料奇怪也不疊字', api.bkName({member_id:'M1',trial_name:'林小明',category:'自主訓練'}, nameOf), '林小明');
 eq('　　綁定會員的待簽約卡位不套用（trial 是身分軌跡）', api.bkName({member_id:'M1',trial_name:'林小明',pending_contract:true}, nameOf), '林小明');
 eq('　　沒有標籤時不加括號', api.bkNameFull({member_id:'M2'}, nameOf), '王大華');
 
