@@ -41,6 +41,10 @@ ok('　　搜不到人時第一個選項直接講「查無符合的會員」',
    /\$\{\(qq&&!list\.length\)\?'查無符合的會員':'— 請先選擇會員 —'\}/.test(src));
 ok('★ 點選項目會設回 select 並發 change（沿用既有 onchange）',
    /sel\.dispatchEvent\(new Event\('change',\{bubbles:true\}\)\);/.test(src));
+/* 2026-08-04 使用者回報（林孟玉案例）：步驟 1 選了人，選教練後步驟 2 變「尚未選擇會員」——
+   選定後欄位放的是標籤，重建會員下拉時被當成搜尋字、比對不到任何人。 */
+ok('★ 重建下拉時「標籤不當搜尋字」（等於選定者標籤就視為空查詢）',
+   /if\(sel && q && typeof mpkLabel==='function' && q===mpkLabel\(sel\)\) q='';/.test(src));
 ok('　　清單點選用 mousedown（一致的舊習慣，選定即關窗）',
    /row\._mpkMenu\.addEventListener\('mousedown'/.test(src));
 ok('　　鍵盤可用：上下選、Enter 確定、Esc 關閉',
