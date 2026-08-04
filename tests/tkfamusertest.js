@@ -34,8 +34,8 @@ console.log('\n② 三條預約路徑都自動帶入（指定的使用人優先�
 
 console.log('\n③ 課卡顯示（bkName 只在自主訓練加註）');
 {
-  ok('★ 條件含課種與同名保險',
-     /b\.category==='自主訓練' && b\.trial_name!==v/.test(grabFn('bkName')));
+  ok('★ 條件含課種（走 bkIsSelf 口袋）與同名保險',
+     /bkIsSelf\(b\) && b\.trial_name!==v/.test(grabFn('bkName')));
   ok('★ 桌機行事曆一般會員課走 bkName', /memName=bkName\(b,id=>memMap\[id\]\);/.test(src));
   ok('★ 手機 agenda 也走 bkName', /if\(b\.member_id\) return bkName\(b,id=>memMap\[id\]\);/.test(src));
   ok('　　migration 留檔', fs.existsSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260804_member_tickets_family_user.sql'));

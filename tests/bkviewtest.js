@@ -23,11 +23,11 @@ const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.len
 
 /* 2026-08-04「綁定會員」上線後：pending＋member 不再必然是待繳費，改由 bkIsInstHold
    （分期備註標記）判別 —— 一併注入真的 bkIsInstHold 實跑。 */
-const api=new Function('grpAllOnLeave','grpAllDone',
+const api=new Function('grpAllOnLeave','grpAllDone','bkIsSelf',
   g('function bkIsInstHold(b){','\n}\n')+'\n'
   +g('function bkTag(b){','\n}\n')+'\n'+g('function bkName(b, nameOf){','\n}\n')+'\n'
   +g('function bkNameFull(b, nameOf){','\n}\n')+'\n'+g('function bkStampKind(b){','\n}\n')
-  +'\nreturn {bkTag,bkName,bkNameFull,bkStampKind};')(b=>!!(b&&b._allLeave), b=>!!(b&&b._allDone));
+  +'\nreturn {bkTag,bkName,bkNameFull,bkStampKind};')(b=>!!(b&&b._allLeave), b=>!!(b&&b._allDone), b=>!!(b&&b.category==='自主訓練'));
 
 const NAMES={M1:'林小明', M2:'王大華'};
 const nameOf=id=>NAMES[id]||'';

@@ -45,7 +45,7 @@ console.log('① 實跑：validateBooking 的重疊判斷');
 
 console.log('\n② 手機端流程：使用人要在驗證前掛上');
 ok('★ famUser 先算、掛在 vbk.trial_name，再跑 validateBooking',
-   /const famUser=\(s\.pickFam>0&&Array\.isArray\(s\.famOpts\)\)\?s\.famOpts\[s\.pickFam\]:null;[\s\S]{0,300}trial_name:famUser\|\|null\};\n\s*const verr=await validateBooking/.test(src));
+   /const famUser=\(s\.pickFam>0&&Array\.isArray\(s\.famOpts\)\)\?s\.famOpts\[s\.pickFam\]:\(\(tk&&tk\.family_user\)\|\|null\);[\s\S]{0,300}trial_name:famUser\|\|null\};\n\s*const verr=await validateBooking/.test(src));   // 2026-08-04 票券預設使用人
 ok('　　為什麼要先掛，寫在程式裡',
    /晚一步掛上去就會被誤擋。/.test(src));
 ok('★ 案例寫在重疊防呆旁邊',
