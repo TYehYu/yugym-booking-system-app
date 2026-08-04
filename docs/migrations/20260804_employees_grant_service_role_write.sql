@@ -1,0 +1,11 @@
+-- 2026-08-04 教練 LINE 綁定實測失敗（畫面：BIND_FAILED；Postgres log：
+-- "permission denied for table employees"）
+--
+-- 原因：public.employees 只授了 service_role SELECT，沒有 INSERT/UPDATE/DELETE。
+-- service_role 雖然繞過 RLS，但表層 GRANT 仍要有，否則 Edge Function 拿 service key
+-- 一樣寫不進去。members 一直有全套授權，所以會員端 LINE 登入順手回寫 line_user_id
+-- 從沒出事，這個缺口直到員工綁定要寫 employees 才浮出來。
+--
+-- 影響面：只有以 service key 執行的 Edge Function（line-member-auth 的 staff_bind、
+-- create-staff-account 之類）；前端一律走 anon/authenticated，權限仍由 RLS 決定，不變。
+grant insert, update, delete on table public.employees to service_role;

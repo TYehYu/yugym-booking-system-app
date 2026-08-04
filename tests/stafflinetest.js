@@ -49,6 +49,9 @@ console.log('\n③ 員工掃描後：授權 → 寫入 → 結果頁');
   ok('★ 成功：清 token、清 hash、顯示完成頁', /removeItem\('_staffBindToken'\)/.test(f)
      && /history\.replaceState\(null,'',location\.pathname\)/.test(f) && /showStaffBindPage\('done'/.test(f));
   ok('★ token 失效有明講可重新產生 QR', /BIND_TOKEN_INVALID/.test(f) && /重新產生 QR/.test(f));
+  /* 2026-08-04 實測 BIND_FAILED：畫面只印錯誤碼，得翻 Postgres log 才知道是
+     service_role 少了 employees 的 UPDATE 授權（已補 migration）。錯誤要帶 detail。 */
+  ok('★ 其他錯誤帶出後端 detail（不用翻 log）', /\(d\.detail\?'（'\+d\.detail\+'）':''\)/.test(f));
   ok('★ 失敗也清待辦（重掃可重來）', /catch\(e\)\{[\s\S]*?removeItem\('_staffBindToken'\)[\s\S]*?showStaffBindPage\('err'/.test(f));
   ok('★ boot 與 hashchange 兩條路由都認 #staff-line-bind',
      (src.match(/staff-line-bind=\(\[a-zA-Z0-9\]\+\)/g)||[]).length>=2);
