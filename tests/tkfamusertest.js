@@ -47,6 +47,17 @@ console.log('\n② 三條預約路徑都自動帶入（指定的使用人優先�
      /s\.famOpts\[s\.pickFam\]:\(\(tk&&tk\.family_user\)\|\|null\);/.test(src));
 }
 
+console.log('\n②b 團課票的家庭功能（2026-08-04 使用者指示：「包含預約的地方」）');
+{
+  ok('★ 團課選會員名單：將被扣的票有預設使用人 → 名字旁標出',
+     /const _pk=tks\.find\(t=>t\.id===picked\);/.test(src) && /使用人：\$\{_pk\.fam\}/.test(src)
+     && (src.match(/fam:t\.family_user\|\|null/g)||[]).length===2);
+  ok('★ 明細名單：該名額扣到的票有預設使用人 → 標稱呼',
+     /_sl&&_sl\.t&&_sl\.t\.family_user\)\?`<span class="tag"[^`]*使用人：\$\{_sl\.t\.family_user\}/.test(src));
+  ok('★ 課卡快捷簽到名單也標（wallet 逐名額對票）',
+     /_famOf=\(mid,n\)=>\{ const W=_wc\[mid\]\|\|\(_wc\[mid\]=buildWallet\(mid,_wctx\)\);/.test(src));
+}
+
 console.log('\n③ 課卡顯示（bkName 只在自主訓練加註）');
 {
   ok('★ 條件用 bkTag 排除（體驗／場租／待簽約）＋同名保險',

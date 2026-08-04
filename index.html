@@ -7305,8 +7305,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1423';
-const APP_VERSION_LABEL='v260804.1423';
+const APP_VERSION = '260804.1428';
+const APP_VERSION_LABEL='v260804.1428';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18700,7 +18700,7 @@ async function bkStep2(){
       const sum=tks.reduce((s,tt)=>s+tkUnlockedLeft(tt),0);
       // 多張票時讓櫃檯挑要扣哪一張（2026-07-30 使用者指示）
       return {id:m.id, name:m.name||'—', sum, mine:!!(coach_id&&m.default_coach_id===coach_id),
-              tks:tks.map(t=>({id:t.id,name:t.plan_name||'團體課票券',left:tkUnlockedLeft(t),exp:t.expire_date||null}))};
+              tks:tks.map(t=>({id:t.id,name:t.plan_name||'團體課票券',left:tkUnlockedLeft(t),exp:t.expire_date||null,fam:t.family_user||null}))};
     });
     window._grpTkPick={};   // 每次開新視窗重置，指定不要跨堂殘留
     window._grpSel=(preMid&&window._grpData.some(g=>g.id===preMid))?[preMid]:[];   // 步驟 1 已選會員 → 預先加入名單（2026-07-28）
@@ -19103,6 +19103,10 @@ function renderGrpPick(){
        預設是最快到期那張（清單已按效期排序），避免快過期的優惠票被留到過期。 */
     const tks=m.tks||[];
     const picked=(window._grpTkPick||{})[m.id]||(tks[0]&&tks[0].id)||'';
+    /* 團課票的家庭功能（2026-08-04 使用者指示：「團體課的票券也要有家庭功能，包含預約的地方」）——
+       將被扣的那張票有預設使用人就直接標在名字旁，報名當下就看得到這格給誰。 */
+    const _pk=tks.find(t=>t.id===picked);
+    const famTag=(_pk&&_pk.fam)?`<span class="tag" style="font-size:10.5px;background:#eef2fa;color:#1a3a6e;">使用人：${_pk.fam}</span>`:'';
     const pick=(on&&tks.length>1)
       ? `<div style="margin:6px 0 0 26px;" onclick="event.stopPropagation();">
           <select class="grp-tk-sel" onchange="grpPickTk('${m.id}',this.value)"
@@ -19113,7 +19117,7 @@ function renderGrpPick(){
     return _div+`<button type="button" class="ms-item grp-item${on?' grp-on':''}" onclick="toggleGrpMember('${m.id}')">
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="grp-check">${on?'✓':''}</span>
-        <span class="ms-name" style="margin:0;">${m.mine?'<span class="ms-star">★</span> ':''}${m.name}</span>
+        <span class="ms-name" style="margin:0;">${m.mine?'<span class="ms-star">★</span> ':''}${m.name}</span>${famTag}
         ${n>1?`<span class="grp-mult">×${n}</span>`:''}
         ${on?`<span class="grp-step" onclick="event.stopPropagation();grpAddOne('${m.id}')" title="同名再加一位（親友同行）">＋</span>`:''}
         ${n>1?`<span class="grp-step" onclick="event.stopPropagation();grpRemoveOne('${m.id}')" title="減少一位">−</span>`:''}
@@ -20238,10 +20242,18 @@ async function bkOrbitRoster(id){
     /* 同名重複報名：2026-07-30 使用者指示改成一個名額一列（原本合併成一列標 ×N，
        兩個名額共用同一個開關，沒辦法只簽到其中一位）。 */
     const _rc={}; mids(b).forEach(mid=>{_rc[mid]=(_rc[mid]||0)+1;});
+    /* 團課票的家庭功能（2026-08-04）：該名額扣到的票有預設使用人 → 名字後標稱呼 */
+    let _famOf=()=>null;
+    try{
+      const _wctx=await walletCtx(); const _wc={};
+      _famOf=(mid,n)=>{ const W=_wc[mid]||(_wc[mid]=buildWallet(mid,_wctx));
+        const sl=W.seatOf(b.id,n)||W.ticketOf(b.id); return (sl&&sl.t&&sl.t.family_user)||null; };
+    }catch(_){}
     rows = seatKeysDisplay(b).map(sk=>{   // 同一個人的名額排在一起（2026-07-30）
       const mid=seatMid(sk);
+      const _fam=_famOf(mid,seatNo(sk));
       return {key:'att|'+b.id+'|'+sk,
-              name:nameOf(mid)+(_rc[mid]>1?`（第 ${seatNo(sk)} 位）`:''),
+              name:nameOf(mid)+(_rc[mid]>1?`（第 ${seatNo(sk)} 位）`:'')+(_fam?`（${_fam}）`:''),
               on:att[sk]==='checked_in'};
     });
   }else{                                    // 舊結構：同教練同時段的多筆單人團課
@@ -21019,7 +21031,7 @@ async function openBookingDetail(id){
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="gr-name">${(memMapD[mid]&&!(typeof isMemberView!=='undefined'&&isMemberView))
             ?`<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:13px;font-weight:700;white-space:nowrap;" onclick="openMemberDetail('${mid}')">${memMapD[mid]} ›</button>`
-            :(memMapD[mid]||'？')}${seatTag}</span>${badge}${btn}
+            :(memMapD[mid]||'？')}${seatTag}${(_sl&&_sl.t&&_sl.t.family_user)?`<span class="tag" style="font-size:10.5px;background:#eef2fa;color:#1a3a6e;">使用人：${_sl.t.family_user}</span>`:''}</span>${badge}${btn}
         </div>${tkInfo}</div>`;   /* 名字可點開會員資料（2026-07-28 使用者指示） */
     }).join('') : '<div style="color:var(--t3);font-size:12px;padding:4px 0;">尚未排名單</div>';
     memberLine=`<div><div style="display:flex;align-items:center;margin-bottom:4px;"><span style="color:var(--t2);">名單</span>　<span style="color:var(--t3);font-size:11px;">（${gIdsD.length}/5）</span>
@@ -22258,7 +22270,7 @@ async function openGroupMembers(id){
     /* 多張票時把清單帶出來讓櫃檯挑（2026-07-30 使用者指示）：
        會員同時有「12 個月 12 堂」與「四週 4 堂優惠」時，自動的最快到期優先未必是客人要的。 */
     return {id:m.id, name:m.name||'—', sum, mine:false,
-            tks:tks.map(t=>({id:t.id,name:t.plan_name||'團體課票券',left:t.sessions_remaining,exp:t.expire_date||null}))};
+            tks:tks.map(t=>({id:t.id,name:t.plan_name||'團體課票券',left:t.sessions_remaining,exp:t.expire_date||null,fam:t.family_user||null}))};
   });
   window._grpTkPick={};   // 每次開名單重置，指定不要跨堂殘留
   window._grpSel=cur.slice(); window._grpMax=Math.max(1,Number(b.max_heads)||5);
