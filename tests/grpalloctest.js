@@ -192,7 +192,7 @@ ok('　　舊的「最近那張團課票」猜法已經拿掉',
    !/_grpNewestP/.test(src) && !/_grpTkNewest/.test(src));
 /* 2026-07-31 二修：會員端「我的票券」那份反查邏輯搬進票券夾，全系統共用同一份 */
 ok('　　會員端「我的票券」也改吃票券夾',
-   /const WAL=buildWallet\(SESSION\.id,\{tickets,bookings,logs,typeMap\}\);/.test(src)
+   /const WAL=buildWallet\(SESSION\.id,\{tickets,bookings:_pool,logs,typeMap\}\);/.test(src)   /* 2026-08-04 共享池戳記標享 */
    && /原本這裡就是全系統唯一算對的一份（直連＋扣課紀錄反查），現在那份邏輯住在票券夾裡/.test(src));
 ok('　　為什麼改，寫在程式裡',
    /續約、補課券、同日買兩張都是常態，這個猜法遲早會錯/.test(src));
