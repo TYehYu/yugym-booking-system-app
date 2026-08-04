@@ -7316,8 +7316,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.2341';
-const APP_VERSION_LABEL='v260804.2341';
+const APP_VERSION = '260805.0014';
+const APP_VERSION_LABEL='v260805.0014';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21861,10 +21861,21 @@ async function doMemberScanCheckin(){
   let bookings=[];
   try{ bookings=await dbGetAll('bookings'); }catch(_){}
   // 本人、今日、狀態可簽（booked/scheduled）、已到 30 分鐘窗的課
+  /* 團課也能自己簽到（2026-08-05 使用者指示）——本人名額還沒簽到/請假的團課
+     一樣列入；實際簽到走 fn_member_group_checkin（逐名額、RPC 代寫）。 */
+  const _grpSelfLeft=b=>{
+    if(!bkIsGroup(b)) return false;
+    if(!mids(b).some(id=>String(id)===String(SESSION.id))) return false;
+    const att=attObj(b);
+    return seatKeys(b).some(k=>seatMid(k)===String(SESSION.id)&&['checked_in','leave'].indexOf(att[k]||'')<0);
+  };
   const candidates=(bookings||[]).filter(b=>{
-    if(b.member_id!==SESSION.id) return false;
+    const isMine=b.member_id===SESSION.id;
+    const isGrpMine=_grpSelfLeft(b);
+    if(!isMine&&!isGrpMine) return false;
     if(b.date!==today) return false;
-    if(b.status!=='booked'&&b.status!=='scheduled') return false;
+    if(b.status==='cancelled') return false;
+    if(isMine&&b.status!=='booked'&&b.status!=='scheduled') return false;
     const slotDt=new Date(b.date+'T'+b.start_time+':00');
     const openDt=new Date(slotDt.getTime()-30*60000);
     return now>=openDt;
@@ -21880,8 +21891,10 @@ async function doMemberScanCheckin(){
     return;
   }
   if(candidates.length===1){
-    const ok=await checkInBooking(candidates[0].id,{silent:true});  // 內含時間檢查、發點
-    showMemberScanResult(!!ok, ok?'簽到成功':'簽到失敗，請稍後再試', ok?candidates[0]:null);
+    const c0=candidates[0];
+    if(bkIsGroup(c0)){ await memberGroupCheckin(c0); return; }
+    const ok=await checkInBooking(c0.id,{silent:true});  // 內含時間檢查、發點
+    showMemberScanResult(!!ok, ok?'簽到成功':'簽到失敗，請稍後再試', ok?c0:null);
     return;
   }
   // 多堂 → 列出讓會員選
@@ -21889,7 +21902,7 @@ async function doMemberScanCheckin(){
 }
 function showMemberPickClass(list){
   const rows=list.map(b=>{
-    const cat=b.category||'課程';
+    const cat=({'小班肌力':'團體課'})[b.category]||b.category||'課程';
     return `<button class="btn btn-ghost" style="width:100%;text-align:left;padding:13px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;"
       onclick="memberPickCheckin('${b.id}')">
       <span><b>${b.start_time}</b>　${cat}</span><span style="color:var(--t3);">簽到 ›</span></button>`;
@@ -21905,8 +21918,24 @@ function showMemberPickClass(list){
 }
 async function memberPickCheckin(id){
   const b=await dbGet('bookings',id);
+  if(b&&bkIsGroup(b)){ await memberGroupCheckin(b); return; }
   const ok=await checkInBooking(id,{silent:true});
   showMemberScanResult(!!ok, ok?'簽到成功':'簽到失敗，請稍後再試', ok?b:null);
+}
+/* 團課學員自己簽到（2026-08-05）：逐名額，由 RPC 代寫 attendance */
+async function memberGroupCheckin(b){
+  try{
+    const{data,error}=await sb.rpc('fn_member_group_checkin',{p_booking_id:b.id});
+    dbCacheClear(['bookings']);
+    if(error){ showMemberScanResult(false,'簽到失敗：'+(error.message||error)); return; }
+    if(data&&data.ok){
+      showMemberScanResult(true,'簽到成功'+(Number(data.seat)>1?`（第 ${data.seat} 個名額）`:''), b);
+    }else{
+      const msg={TOO_EARLY:'尚未開放簽到（課程開始前 30 分鐘起）',ENDED:'這堂課已結束，請洽櫃檯補簽',
+        ALREADY:'這堂課已簽到過了',NOT_TODAY:'只能簽今天的課',NOT_IN_CLASS:'你不在這堂課的名單裡'}[data&&data.error_code]||'簽到失敗，請稍後再試';
+      showMemberScanResult(false,msg);
+    }
+  }catch(e){ showMemberScanResult(false,'簽到失敗：'+((e&&e.message)||e)); }
 }
 function showMemberScanResult(ok,msg,b){
   const stage=document.getElementById('scan-stage');
