@@ -7316,8 +7316,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.0014';
-const APP_VERSION_LABEL='v260805.0014';
+const APP_VERSION = '260805.0019';
+const APP_VERSION_LABEL='v260805.0019';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21922,6 +21922,20 @@ async function memberPickCheckin(id){
   const ok=await checkInBooking(id,{silent:true});
   showMemberScanResult(!!ok, ok?'簽到成功':'簽到失敗，請稍後再試', ok?b:null);
 }
+/* 課卡上的團課簽到（2026-08-05 使用者指示：會員統一點課卡簽到）——吐司回饋＋重繪 */
+async function memGrpCardCheckin(id){
+  try{
+    const{data,error}=await sb.rpc('fn_member_group_checkin',{p_booking_id:id});
+    dbCacheClear(['bookings']);
+    if(error){ showToast('簽到失敗：'+(error.message||error)); return; }
+    if(data&&data.ok){ showToast('簽到成功'+(Number(data.seat)>1?`（第 ${data.seat} 個名額）`:'')); }
+    else{
+      showToast({TOO_EARLY:'尚未開放簽到（課程開始前 30 分鐘起）',ENDED:'這堂課已結束，請洽櫃檯補簽',
+        ALREADY:'這堂課已簽到過了',NOT_TODAY:'只能簽今天的課',NOT_IN_CLASS:'你不在這堂課的名單裡'}[data&&data.error_code]||'簽到失敗，請稍後再試');
+    }
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('簽到失敗：'+((e&&e.message)||e)); }
+}
 /* 團課學員自己簽到（2026-08-05）：逐名額，由 RPC 代寫 attendance */
 async function memberGroupCheckin(b){
   try{
@@ -35168,16 +35182,28 @@ function renderMemMonthView(){
       const who=b.coach_id?(window._memCalData.coachMap[b.coach_id]||'教練'):'自主訓練';
       // 簽到/取消按鈕
       let actionBtn='';
-      if(b.status==='checked_in'){
+      const isGrp=bkIsGroup(b);
+      /* 團課逐名額（2026-08-05 使用者指示：「團課的學生也要能夠自己簽到，統一點課卡簽到」）——
+         整堂的 status 不能拿來判「我簽了沒」（別人先簽 status 就變 checked_in），
+         看自己名額的出席狀態；簽到走 fn_member_group_checkin（RPC 代寫、逐名額）。 */
+      if(isGrp && b.status!=='cancelled'){
+        const _att=attObj(b), _ks=seatKeys(b).filter(k=>seatMid(k)===String(SESSION.id));
+        const _left=_ks.some(k=>['checked_in','leave'].indexOf(_att[k]||'')<0);
+        const slotDt=new Date(b.date+'T'+b.start_time+':00');
+        const openDt=new Date(slotDt.getTime()-30*60000);
+        const endDt=new Date(slotDt.getTime()+dur*60000);
+        if(_ks.length&&!_left) actionBtn=`<span class="tag tag-ok" style="font-size:11px;">已簽到</span>`;
+        else if(_left && b.date===ymd(TODAY) && new Date()>=openDt && new Date()<=endDt)
+          actionBtn=`<button class="btn btn-green btn-sm" onclick="memGrpCardCheckin('${b.id}')">簽到</button>`;
+        else if(new Date()<slotDt) actionBtn=`<button class="btn btn-ghost btn-sm" onclick="memLeaveGroup('${b.id}')">取消</button>`;
+      }else if(b.status==='checked_in'){
         actionBtn=`<span class="tag tag-ok" style="font-size:11px;">已簽到</span>`;
       }else if(b.status==='booked'||b.status==='scheduled'){
         const slotDt=new Date(b.date+'T'+b.start_time+':00');
         const openDt=new Date(slotDt.getTime()-30*60000);
-        const isGrp=bkIsGroup(b);
-        const canCheckin=new Date()>=openDt && b.date===ymd(TODAY) && !isGrp;   // 團課由教練點名，會員不可整堂簽到
+        const canCheckin=new Date()>=openDt && b.date===ymd(TODAY);
         if(canCheckin) actionBtn=`<button class="btn btn-green btn-sm" onclick="memCheckin('${b.id}')">簽到</button>`;
         else if(isSelf) actionBtn=`<button class="btn btn-ghost btn-sm" onclick="memCancelSelf('${b.id}')">取消</button>`;
-        else if(isGrp&&new Date()<slotDt) actionBtn=`<button class="btn btn-ghost btn-sm" onclick="memLeaveGroup('${b.id}')">取消</button>`;
       }
       const cc=bkCC(b); // pt/friendly/self/group/trial
       const barCls='mc-bar-'+cc;

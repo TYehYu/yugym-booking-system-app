@@ -22,6 +22,14 @@ ok('★ 錯誤碼有人話（太早／已結束／已簽過／不在名單）',
    && /這堂課已簽到過了/.test(grabFn('memberGroupCheckin')));
 ok('　　第二個名額的訊息標名額序', /（第 \$\{data\.seat\} 個名額）/.test(src));
 ok('　　簽完清快取（行事曆與名單立即反映）', /dbCacheClear\(\['bookings'\]\);/.test(grabFn('memberGroupCheckin')));
+/* 2026-08-05 使用者補充：「目前會員統一都是點選課卡選簽到，就沒有掃碼了」——
+   課卡按鈕也接上（原本被「團課由教練點名」擋住）。 */
+ok('★ 課卡的簽到鈕也接團課（看自己名額，不看整堂 status）',
+   /memGrpCardCheckin\('\$\{b\.id\}'\)">簽到</.test(src)
+   && /const _left=_ks\.some\(k=>\['checked_in','leave'\]\.indexOf\(_att\[k\]\|\|''\)<0\);/.test(src)
+   && !/團課由教練點名，會員不可整堂簽到/.test(src));
+ok('★ 自己名額都簽了才標「已簽到」（別人先簽不誤標）',
+   /if\(_ks\.length&&!_left\) actionBtn=`<span class="tag tag-ok"/.test(src));
 ok('　　migration 留檔', fs.existsSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260805_fn_member_group_checkin.sql'));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
