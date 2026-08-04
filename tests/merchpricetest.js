@@ -13,10 +13,14 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 ok('★ 蛋白粉預設 $75、搖搖杯 $200（2026-08-04 使用者指示），仍可改',
    /card\('#8a7a5c','蛋白粉','\$75 · 點卡加入',"slGoMerch\('蛋白粉',75\)"\)/.test(src)
    && /\{n:'蛋白粉',p:75\}/.test(src) && /\{n:'搖搖杯',p:200\}/.test(src));
-ok('★ 單價欄 ＋− 一格 5 元', (src.match(/type="number" min="0" step="5"/g)||[]).length===2);
+/* 2026-08-04 使用者指示：「金額跟數量調整改成＋−」——原生上下箭頭退場，改明確步進鈕 */
+ok('★ 單價＋−鈕一格 5 元、數量一格 1（面板與結帳兩處）',
+   (src.match(/'price',-5\)">−<\/button>/g)||[]).length===2
+   && (src.match(/'qty',-1\)">−<\/button>/g)||[]).length===2
+   && /function slCartStep\(i,k,d\)\{/.test(src) && /function msCartStep\(i,k,d\)\{/.test(src));
 /* 2026-08-04 使用者指示改購物車模式（可加多品項、自訂品名），自訂價行為保留 */
 ok('★ 自訂品項仍留白必填', /\{n:'自訂',p:null\}/.test(src)
-   && /placeholder="單價" oninput="msCartSet\(\$\{i\},'price',this\.value\)"/.test(src));
+   && /placeholder="單價" oninput="msCartSet\(\$\{i\},'price',this\.value\)" style="width:64px;text-align:center;"/.test(src));
 ok('★ 留白送出被擋（防 $0 收款，逐列驗證）',
    /if\(String\(r\.price\)\.trim\(\)===''\)\{ showToast\(`請輸入「\$\{nm\}」的單價`\); return; \}/.test(src));
 /* 2026-08-04 再進一步（使用者指示：「左邊選好商品點加入，右邊視窗出現商品，再一併結帳」）——
