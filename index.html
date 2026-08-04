@@ -7313,8 +7313,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.1706';
-const APP_VERSION_LABEL='v260804.1706';
+const APP_VERSION = '260804.1708';
+const APP_VERSION_LABEL='v260804.1708';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37052,7 +37052,15 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
   const _isDoneOcc=b=>{
     if(typeof grpSeatAttCount!=='function' || !bkIsGroup(b))
       return b.status==='checked_in'||b.status==='completed';
-    if(_grpLeft[b.id]==null) _grpLeft[b.id]=grpSeatAttCount(b, memberId||t.member_id);
+    /* 請假名額也算「已使用」（2026-08-04 徐翎娟案例，使用者指示：「這兩堂超約就收在
+       那兩個打勾裡」）——請假政策是本堂照扣、另發補課券，票上的那一堂確實用掉了。
+       原本只數已簽到，請假的名額掉進「已預約」、又因為票已扣滿而畫成超約紅圈。 */
+    if(_grpLeft[b.id]==null){
+      const _mid=String(memberId||t.member_id);
+      let _lv=0;
+      try{ const _att=attObj(b); _lv=seatKeys(b).filter(k=>seatMid(k)===_mid&&_att[k]==='leave').length; }catch(_){}
+      _grpLeft[b.id]=grpSeatAttCount(b, memberId||t.member_id)+_lv;
+    }
     if(_grpLeft[b.id]>0){ _grpLeft[b.id]--; return true; }
     return false;
   };
