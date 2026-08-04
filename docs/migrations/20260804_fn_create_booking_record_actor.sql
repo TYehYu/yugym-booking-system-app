@@ -1,0 +1,7 @@
+-- 2026-08-04 稽核補強（已套用於正式庫）：fn_create_booking 補記 created_by
+--
+-- 陳蘭馨 8/7 案例：一筆走 RPC 建立的預約查不到是誰按的 —— created_by 空、
+-- 帳本 operator 寫 system、API 閘道日誌只保留近期。
+-- 補：v_actor := coalesce(current_employee_id(), current_member_id())，
+-- 寫進 bookings.created_by。員工操作記員工 id、會員自己約記會員 id，
+-- 與前端原路徑的 created_by 口徑一致。其餘邏輯不變。
