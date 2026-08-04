@@ -7306,8 +7306,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260804.0939';
-const APP_VERSION_LABEL='v260804.0939';
+const APP_VERSION = '260804.0953';
+const APP_VERSION_LABEL='v260804.0953';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7474,6 +7474,50 @@ function tableSigs(){
     .catch(()=>null);
   return _sigPromise;
 }
+/* ══ 增量補資料（2026-08-04 讀取量優化第三批）══════════════════════════
+   第二批做到「沒人改過就不抓表」。但只要有人動一筆（簽到、取消、售票），簽章就變了，
+   下一次讀取仍是整張 bookings 重抓 —— 櫃檯忙起來幾乎每次換頁都踩到。
+
+   change_log（DB 觸發器，只記「哪張表的哪一列被改了」）讓我們可以只把那幾列撈回來：
+     ① 問日誌：這張表在水位之後有哪些 row_id 被改動
+     ② 只撈那些 id 的資料（既有的 id 索引，通常幾筆到幾十筆）
+     ③ 撈得到＝新增或更新 → 併進快取；撈不到＝已刪除 → 從快取移除
+
+   任何一步不順就回傳 null，呼叫端照舊整表重抓 —— 這是預設安全方向：
+   ・沒有水位（第一次讀）、日誌讀不到（權限/RLS/會員端）、超過 400 筆（大量匯入）
+   ・撈回來的資料有缺（分頁上限）
+   水位一律取自「與簽章同一個瞬間」的 _log，且簽章先於資料，所以只會重複套用、不會漏。 */
+const DELTA_MAX=400;
+async function dbDeltaPatch(key, hit, sigs){
+  try{
+    if(!hit || !hit.data || hit.logAt==null || !sigs || sigs._log==null) return null;
+    if(sigs._log===hit.logAt) return null;                     // 日誌沒動過卻簽章不同 → 交給整表重抓
+    /* 水位是空字串＝快取填入時日誌整個是空的（例如剛清過保留期）→ 這張表的所有日誌
+       都算「之後才發生」，不能下 gt('at','')（時間欄位比空字串會直接錯）。 */
+    let q=sb.from('change_log').select('row_id,op,at').eq('tbl',key);
+    if(hit.logAt) q=q.gt('at',hit.logAt);
+    const{data:chg,error}=await q.order('at').limit(DELTA_MAX+1);
+    if(error || !chg) return null;
+    if(chg.length>DELTA_MAX) return null;                      // 動太多筆 → 整表重抓比較划算
+    /* 走到這裡代表「這張表的簽章變了」，日誌就一定要有對應的紀錄。
+       查不到任何一筆＝解釋不了這個變化（會員端被 RLS 擋掉、或已過保留期），
+       這時候絕對不能當作「沒變」沿用舊快取 —— 一律退回整表重抓。 */
+    if(!chg.length) return null;
+    const ids=[...new Set(chg.map(c=>c.row_id).filter(Boolean))];
+    const sel=_leanSel.get(key)||'*';
+    const rows=[];
+    for(let i=0;i<ids.length;i+=200){                          // in() 分段，避免 URL 過長
+      const{data,error:e2}=await sb.from(key).select(sel).in('id', ids.slice(i,i+200));
+      if(e2) return null;
+      rows.push(...(data||[]));
+    }
+    const byId=new Map(rows.map(r=>[String(r.id),r]));
+    const idSet=new Set(ids.map(String));
+    const out=hit.data.filter(r=>!idSet.has(String(r.id)));     // 先拿掉這批（刪除的就此消失）
+    ids.forEach(id=>{ const r=byId.get(String(id)); if(r) out.push(r); });
+    return {data:out, logAt:sigs._log};
+  }catch(_){ return null; }
+}
 async function dbGetAll(store,opts){
   const key=tbl(store);
   if(opts&&opts.fresh){
@@ -7483,12 +7527,23 @@ async function dbGetAll(store,opts){
     if(hit && Date.now()-hit.t < (DB_CACHE_TTL_BY[key]||DB_CACHE_TTL)) return hit.data.slice();
     const inflight=_dbInflight.get(key);
     if(inflight) return (await inflight).slice();
-    // 快取過期但還不算太舊 → 問簽章，沒人動過就直接沿用（省掉整張表）
-    if(hit && hit.sig && Date.now()-hit.t < DB_SWR_MAX){
+    /* 快取過期但還不算太舊 → 問簽章，沒人動過就直接沿用（省掉整張表）。
+       期限看的是 fullAt（上一次「整表重抓」的時間）而不是 t —— 每次校驗／增量補資料
+       都會把 t 往後推，若用 t 判斷，這份快取可以無限延壽。萬一有哪一筆因為極端狀況
+       沒補到（例如長交易的日誌時間先於提交時間），也保證 10 分鐘內會被整表重抓校正。 */
+    if(hit && hit.sig && Date.now()-(hit.fullAt||hit.t) < DB_SWR_MAX){
       const sigs=await tableSigs();
       if(sigs && sigs[key] && sigs[key]===hit.sig){
         const cur=_dbCache.get(key);
         if(cur===hit){ hit.t=Date.now(); return hit.data.slice(); }   // 校驗期間被寫入清掉就不沿用
+      }
+      // 簽章不同 → 先試「只補變動的那幾列」，補不成才整表重抓
+      if(sigs && sigs[key] && _dbCache.get(key)===hit){
+        const patched=await dbDeltaPatch(key, hit, sigs);
+        if(patched && _dbCache.get(key)===hit){
+          _dbCache.set(key,{t:Date.now(),fullAt:hit.fullAt||hit.t,data:patched.data,sig:sigs[key],logAt:patched.logAt});
+          return patched.data.slice();
+        }
       }
       const again=_dbInflight.get(key);       // 校驗時別人已經開抓 → 跟著等同一份
       if(again) return (await again).slice();
@@ -7496,16 +7551,18 @@ async function dbGetAll(store,opts){
   }
   /* 先拿簽章、再抓資料（順序不可對調，理由見上面的正確性說明） */
   const p=(async()=>{
-    let sig=null;
-    try{ const sigs=await tableSigs(); if(sigs && sigs[key]) sig=sigs[key]; }catch(_){}
+    let sig=null, logAt=null;
+    /* _log 可能是空字串（日誌剛被清空）——那也是有效水位，要記下來，
+       不能用 truthy 判斷，否則之後永遠走不到增量補資料。 */
+    try{ const sigs=await tableSigs(); if(sigs){ if(sigs[key]) sig=sigs[key]; if(sigs._log!=null) logAt=sigs._log; } }catch(_){}
     const data=await _dbGetAllFresh(store);
-    return {data,sig};
+    return {data,sig,logAt};
   })();
   const dataP=p.then(r=>r.data);
   _dbInflight.set(key,dataP);
   try{
-    const {data,sig}=await p;
-    _dbCache.set(key,{t:Date.now(),data,sig});
+    const {data,sig,logAt}=await p;
+    _dbCache.set(key,{t:Date.now(),fullAt:Date.now(),data,sig,logAt});   // fullAt＝上一次整表重抓
     return data.slice();
   }finally{
     _dbInflight.delete(key);

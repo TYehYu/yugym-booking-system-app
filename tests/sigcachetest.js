@@ -31,7 +31,12 @@ function makeEnv(o){
                         await new Promise(r=>setTimeout(r,1)); return {data:{bookings:state.sig},error:null}; } },
     _dbGetAllFresh:async()=>{ log.push('data'); await new Promise(r=>setTimeout(r,1)); return state.rows.slice(); },
   };
-  const code=[grabFn('dbCacheClear'), 'let _sigPromise=null,_sigAt=0;\n'+grabFn('tableSigs'), 'async '+grabFn('dbGetAll')].join('\n');
+  /* 2026-08-04 第三批：dbGetAll 會先試增量補資料。這支測的是「簽章校驗」本身，
+     所以這裡放一個永遠放棄的 dbDeltaPatch（＝退回整表重抓），行為與第二批相同；
+     增量補資料本身由 deltasynctest 驗。 */
+  const code=[grabFn('dbCacheClear'), 'let _sigPromise=null,_sigAt=0;\n'+grabFn('tableSigs'),
+    'async function dbDeltaPatch(){ return null; }', 'const DELTA_MAX=400;',
+    'async '+grabFn('dbGetAll')].join('\n');
   const api=new Function(...Object.keys(env), code+'\nreturn {dbGetAll,dbCacheClear,tableSigs};')(...Object.values(env));
   return {api, env, log, state};
 }
