@@ -74,7 +74,7 @@ ok('　　說明縮小放在名稱下面', /\.sl-card-sub\{font-size:12px;color:
 /* 2026-08-03 排序定版：課程銷售改 sl-cards-3（一列三張），其他收費維持 sl-cards */
 ok('★ 課程銷售與其他收費都換成新的卡片容器',
    (src.match(/<div class="sl-cards sl-cards-3">/g)||[]).length===1
-   && (src.match(/<div class="sl-cards">/g)||[]).length===1
+   && (src.match(/<div class="sl-cards" style="flex:1\.4;min-width:260px;">/g)||[]).length===1   /* 2026-08-04 其他收費卡片列與購物車並排 */
    && !/openSalesModal[\s\S]{0,1200}<div class="bk-cards">/.test(src));
 ok('　　視窗加寬，直式卡才排得開', /直式卡要寬一點才排得開/.test(src));
 ok('　　手機退成兩欄', /@media\(max-width:560px\)\{ \.sl-cards\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\}/.test(src));

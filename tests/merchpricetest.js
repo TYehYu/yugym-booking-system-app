@@ -11,8 +11,8 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
 ok('★ 蛋白粉卡改自訂金額（defPrice=null）',
-   /card\('#8a7a5c','蛋白粉','自訂金額（可散客）',"slGoMerch\('蛋白粉',null\)"\)/.test(src)
-   && !/slGoMerch\('蛋白粉',50\)/.test(src));
+   /card\('#8a7a5c','蛋白粉','自訂金額 · 點卡加入',"slGoMerch\('蛋白粉',null\)"\)/.test(src)
+   && !/slGoMerch\('蛋白粉',50\)/.test(src));   // 2026-08-04 副標改購物車說法
 /* 2026-08-04 使用者指示改購物車模式（可加多品項、自訂品名），自訂價行為保留 */
 ok('★ 單價欄：無固定價 → 留白（蛋白粉/搖搖杯/自訂 p:null）',
    /\{n:'蛋白粉',p:null\}/.test(src) && /\{n:'搖搖杯',p:null\}/.test(src)
