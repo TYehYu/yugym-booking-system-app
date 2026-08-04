@@ -31,7 +31,7 @@ ok('★ createBookingRpc 旗標開啟', /createBookingRpc: true,/.test(src));
 /* 2026-08-01：指定跑步機時也不走 RPC —— 跑步機是「一個場地兩台＋同行第 2 台不扣點」
    的獨立流程，DB 的 fn_create_booking 只處理一般區。 */
 ok('★ 只有「有票要扣」時才走 RPC（體驗課／分期保留／指定跑步機都不走）',
-   /if\(window\.FEATURE_FLAGS&&FEATURE_FLAGS\.createBookingRpc&&CLOUD&&!noDeduct&&tk&&!holdOnly&&!o\.venue_pref\)\{/.test(src));
+   /if\(window\.FEATURE_FLAGS&&FEATURE_FLAGS\.createBookingRpc&&CLOUD&&!noDeduct&&tk&&!holdOnly&&!o\.venue_pref&&!bkIsSelf\(bk\)\)\{/.test(src));   // 2026-08-04 自主訓練也不走（fn_create_booking 不寫 venue_unit，場地配置會遺失）
 ok('　　所以 tk 一定存在 → p_ticket_id 一定有值，FIFO 只在別的呼叫端才會用到',
    /p_ticket_id:\(tk&&tk\.id\)\|\|null/.test(src));
 

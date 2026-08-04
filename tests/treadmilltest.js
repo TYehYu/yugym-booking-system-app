@@ -71,7 +71,7 @@ ok('★ 兩台只扣 1 點，第 2 台是同行使用', /只扣 1 點<\/b>，第
 ok('★ 第 2 台用 sibling_of 指回主預約（行事曆才會併成一張卡）',
    /sibling_of:bk\.id,/.test(src));
 ok('★ 指定跑步機時走原路徑，不走 DB 的 fn_create_booking',
-   /&&!o\.venue_pref\)\{/.test(src)
+   /&&!o\.venue_pref&&!bkIsSelf\(bk\)\)\{/.test(src)   // 2026-08-04 自主訓練也排除
    && /跑步機是「一個場地兩台＋同行第 2 台不扣點」的獨立流程，還沒進那支 RPC/.test(src));
 ok('　　venue_pref 只是配置提示，不入庫', /delete bk\.venue_pref;                    \/\/ 只是配置提示，不入庫/.test(src));
 ok('　　建立成功的吐司講清楚開了幾台、第 2 台不扣點',
