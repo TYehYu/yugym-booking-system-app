@@ -126,7 +126,7 @@ console.log('\n③ 值班月曆：排班與打卡排在同一格');
 console.log('\n④ 入口整理：工作紀錄改成列表');
 ok('★ 改用列表（不是卡片格）', /<div class="pp-dlist">/.test(src) && /function ppDashRow\(icon, title, value, sub, go\)\{/.test(src));
 ok('★ 只剩四行：本月課堂／值班與打卡／薪資單／薪資規則',
-   (src.match(/\$\{ppDashRow\(/g)||[]).length===4
+   (src.match(/\$\{ppDashRow\(/g)||[]).length===8   /* 2026-08-04 會員活動紀錄也改列表 → 全檔 4+4 行 */
    && /ppDashRow\('calendar','本月課堂'/.test(src)
    && /ppDashRow\('clock','值班與打卡'/.test(src)
    && /ppDashRow\('money','薪資單'/.test(src)
@@ -138,8 +138,15 @@ ok('　　值班那一行的標題寫出「打卡」，不然沒人知道打卡�
    /ppDashRow\('clock','值班與打卡'/.test(src));
 ok('　　特休的數字仍在那一行的說明裡（不用點進去才知道剩多少）',
    /月曆 · 排班與打卡對照 · 特休 \$\{al\} 小時可用/.test(src));
-ok('★ 會員那側仍是卡片（那邊是四個並列的紀錄型入口，沒有要改）',
-   /<div class="pp-dash" style="grid-template-columns:repeat\(2,1fr\);">/.test(src));
+/* 2026-08-04 使用者指示：「會員資料的活動紀錄也改成列表，跟員工資料一樣」——
+   當時「會員那側不改」的假設已被使用者推翻，改驗兩側同一套列表。 */
+ok('★ 會員活動紀錄也改成列表（與工作紀錄同一套 ppDashRow）',
+   !/<div class="pp-dash" style="grid-template-columns:repeat\(2,1fr\);">/.test(src)
+   && /ppDashRow\('ticket','票券'/.test(src) && /ppDashRow\('calendar','預約紀錄'/.test(src)
+   && /ppDashRow\('money','交易'/.test(src) && /ppDashRow\('dumbbell','訓練紀錄'/.test(src));
+ok('　　票券行：數字＝可用堂數、分類統計留在說明列',
+   /\$\{c\.tkLeft\|\|0\}<small>堂可用<\/small>/.test(src)
+   && /c\.tkSplit\.map\(x=>`\$\{x\[0\]\} \$\{x\[1\]\}`\)\.join\('、'\)/.test(src));
 
 console.log('\n⑤ 舊入口不會壞');
 ok('★ ppOpenEmpPunch 保留成導向值班月曆（補登存完的返回、員工列表的鑰匙都靠它）',

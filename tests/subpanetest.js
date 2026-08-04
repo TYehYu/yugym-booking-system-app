@@ -37,7 +37,9 @@ ok('　　團課簽到名單（無 evr-up）不受影響，仍接在小卡下方
    於是跟票券分頁對不起來。改成直接跟票券夾（buildWallet）拿：
    分類走五口袋 tkClass5、有效與否走同一個 state，與分頁必然一致。 */
 console.log('\n會員名片：票券摘要改由票券夾提供');
-ok('★ 卡片值仍是分類清單', /<span class="pp-dc-split">\$\{c\.tkSplit\.map\(x=>`<span class="pp-dcs"><b>\$\{x\[1\]\}<\/b>\$\{x\[0\]\}<\/span>`\)\.join\(''\)\}<\/span>/.test(src));
+/* 2026-08-04 使用者指示「活動紀錄改成列表」：分類清單改放在列表行的說明列，數字位＝可用堂數 */
+ok('★ 分類清單仍看得到（移到列表行的說明列）',
+   /c\.tkSplit\.map\(x=>`\$\{x\[0\]\} \$\{x\[1\]\}`\)\.join\('、'\)/.test(src));
 ok('★ 分類直接用五口袋 TK5（與票券分頁同一套）',
    /c\.tkSplit=TK5\.map\(\(\[k,lb\]\)=>\[lb,_wal\.active\(k\)\.length\]\)\.filter\(x=>x\[1\]>0\);/.test(src));
 ok('★ 份數＝票券夾裡「持有中」的方案數', /c\.tkCount=_wal\.active\(\)\.length;/.test(src));
@@ -45,13 +47,9 @@ ok('★ 堂數＝票券夾算的可約堂數', /c\.tkLeft=_wal\.sessionsLeft\(\)
 ok('★ 不再自己定義「有效票券」（那是不一致的來源）',
    !/const _liveTk=myTk\.filter\(t=>t\.status==='usable'/.test(src));
 ok('★ 不再自己用 ticketCategoryOf 分類', !/\(LB\[ticketCategoryOf\(t\)\]\|\|'其他'\)/.test(src));
-ok('　　副標同時顯示方案份數與可用堂數',
-   /共 \$\{c\.tkCount\} 份方案　·　\$\{c\.tkLeft\} 堂可用/.test(src));
-ok('　　方案都排滿時講明白（不然會以為票不見了）', /（都排滿了）/.test(src));
-ok('　　沒有分類時退回總數顯示，不會變空白',
-   /: \(c\.tkCount!=null\?`\$\{c\.tkCount\}<small>份方案<\/small>`:''\)\)/.test(src));
-ok('　　樣式：數字大、分類名小，可換行', /\.pp-dc-split\{display:flex;flex-wrap:wrap;/.test(src)
-   && /\.pp-dcs b\{font-family:var\(--font-en\);font-size:22px;/.test(src));
+ok('　　數字位顯示可用堂數、說明列有方案份數',
+   /\$\{c\.tkLeft\|\|0\}<small>堂可用<\/small>/.test(src) && /共 \$\{c\.tkCount\} 份方案/.test(src));
+ok('　　方案都排滿時講明白（不然會以為票不見了）', /都排滿了/.test(src));
 ok('　　兩個成因都寫在程式裡（分類猜錯、有效定義不同）',
    /「團課 4週優惠」不含「團體」「小班」→ 掉進「其他」/.test(src)
    && /11 張早就上完的舊團課票 status 仍是 usable、餘額 0，被算成還在跑的方案/.test(src));
