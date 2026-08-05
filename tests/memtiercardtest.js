@@ -16,11 +16,17 @@ ok('★ 大標「我的票券」退場、改等級卡開頭',
    /C\.innerHTML=\n\s*memTierBlock\(tier, usable\.length\)\+/.test(src)
    && !/<h1>我的票券<\/h1>/.test(src));
 ok('★ 載入本人資料（算 tier_epoch 起點用）', /dbGet\('members',SESSION\.id\)\.catch\(\(\)=>null\)\]\);/.test(src));
-ok('★ 規則四條都列出來',
-   /每月教練課簽到滿 <b>4 堂<\/b>＝當月達標（與抽獎目標同一套）/.test(src)
+/* 2026-08-05 二修（使用者附截圖）：規則不寫「與抽獎目標同一套」、VIP 條目不顯示 */
+ok('★ 規則三條（抽獎那句與 VIP 條目退場）',
+   /每月教練課簽到滿 <b>4 堂<\/b>＝當月達標<\/div>/.test(src)
    && /「會員」連續 <b>3 個月達標<\/b> → 升「主顧客」/.test(src)
    && /「主顧客」連續 <b>3 個月未達標<\/b> → 調回「會員」/.test(src)
-   && /VIP 由門市認定，不受升降級規則影響/.test(src));
+   && !/・VIP 由門市認定/.test(src));
+ok('★ 有上課才出現圓點（不畫固定四顆空圈）',
+   /const dots=ti\.now>0\?Array\.from\(\{length:ti\.now\},\(\)=>'<i class="mtc-dot on"><\/i>'\)\.join\(''\):'';/.test(src));
+ok('★ 升級進度用進度條', /const prog=n=>`<span class="mtc-prog">/.test(src)
+   && /升級進度：\$\{prog\(ti\.ok\)\}<b>\$\{ti\.ok\} \/ 3<\/b> 個完整月/.test(src)
+   && /\.mtc-prog i\{display:block;height:100%;background:var\(--green\);/.test(src));
 ok('★ 警示色階照品牌規則（降級倒數紅、未達標金、良好綠）',
    /\.mtc-danger\{color:var\(--danger,#b5372e\);font-weight:600;\}/.test(src)
    && /\.mtc-warn\{color:var\(--gold-d,#b48a56\);\}/.test(src)
