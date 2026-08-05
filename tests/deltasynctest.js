@@ -69,6 +69,8 @@ function makeEnv(db,o){
   const code=['function cacheMarkDirty(){}', grabFn('dbCacheClear'),
     'let _sigPromise=null,_sigAt=0;\n'+grabFn('tableSigs'),
     'async '+grabFn('dbDeltaPatch'),
+    /* 2026-08-05：10 分鐘整表校正改背景做（_dbRebaseBg），一起帶進沙箱 */
+    'const _dbRebasing=new Set();\nasync '+grabFn('_dbRebaseBg'),
     'async '+grabFn('dbGetAll')].join('\n');
   return new Function(...Object.keys(env), code+'\nreturn {dbGetAll,dbCacheClear,dbDeltaPatch,_cache:_dbCache};')(...Object.values(env));
 }
@@ -147,7 +149,10 @@ console.log('\n⑨ 兩個「悄悄用到舊資料」的漏洞');
   db2.calls.full=0;
   // 連續 12 分鐘、每 90 秒改一筆並讀一次（全都走得到增量）
   for(let i=0;i<8;i++){ db2.put({id:'BK-1',note:'第'+i+'次'}); advance(90000); await api2.dbGetAll('bookings'); }
-  ok('★★ 一路增量下去，超過 10 分鐘會整表重抓校正一次', db2.calls.full===1, db2.calls);
+  /* 2026-08-05：10 分鐘校正改「背景重抓」，畫面不再當場等——所以這裡驗的是
+     「校正確實有發生」＋「其餘都走增量」，而不是剛好一次（背景與假時鐘的交錯不保證次數）。 */
+  ok('★★ 一路增量下去，超過 10 分鐘仍會整表重抓校正（背景做，不擋畫面）',
+     db2.calls.full>=1 && db2.calls.full<=2, db2.calls);
   ok('　　其餘幾次都是增量（沒有每次都重抓）', db2.calls.byId>=6, db2.calls);
 }
 

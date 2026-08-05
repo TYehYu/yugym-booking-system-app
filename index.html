@@ -7368,8 +7368,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.2118';
-const APP_VERSION_LABEL='v260805.2118';
+const APP_VERSION = '260805.2140';
+const APP_VERSION_LABEL='v260805.2140';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7674,6 +7674,22 @@ async function dbDeltaPatch(key, hit, sigs){
     return {data:out, logAt:sigs._log};
   }catch(_){ return null; }
 }
+/* 背景整表校正（2026-08-05）：10 分鐘保險不再擋畫面——簽章先於資料的順序照舊，
+   抓完直接換掉快取（fullAt 重置）。同一張表同時只跑一份；失敗靜默（下次再試）。 */
+const _dbRebasing=new Set();
+async function _dbRebaseBg(store){
+  const key=tbl(store);
+  if(_dbRebasing.has(key)) return;
+  _dbRebasing.add(key);
+  try{
+    let sig=null, logAt=null;
+    try{ const sigs=await tableSigs(); if(sigs){ if(sigs[key]) sig=sigs[key]; if(sigs._log!=null) logAt=sigs._log; } }catch(_){}
+    const data=await _dbGetAllFresh(store);
+    _dbCache.set(key,{t:Date.now(),fullAt:Date.now(),data,sig,logAt});
+    cacheMarkDirty(key);
+  }catch(_){ /* 背景校正失敗不吵使用者，下一次超時再試 */ }
+  finally{ _dbRebasing.delete(key); }
+}
 async function dbGetAll(store,opts){
   const key=tbl(store);
   if(opts&&opts.fresh){
@@ -7687,11 +7703,17 @@ async function dbGetAll(store,opts){
        期限看的是 fullAt（上一次「整表重抓」的時間）而不是 t —— 每次校驗／增量補資料
        都會把 t 往後推，若用 t 判斷，這份快取可以無限延壽。萬一有哪一筆因為極端狀況
        沒補到（例如長交易的日誌時間先於提交時間），也保證 10 分鐘內會被整表重抓校正。 */
-    if(hit && hit.sig && Date.now()-(hit.fullAt||hit.t) < DB_SWR_MAX){
+    /* 10 分鐘整表校正改「背景重抓」（2026-08-05 使用者回報：首頁切預約管理卡 10 幾秒——
+       原本 fullAt 超過 10 分鐘的第一次讀取會當場整表重載，櫃檯每 10 分鐘就撞一次）。
+       畫面永遠先用「簽章＋增量」秒回，整表校正由 _dbRebaseBg 在背景默默換新。 */
+    if(hit && hit.sig){
+      const _needRebase = Date.now()-(hit.fullAt||hit.t) >= DB_SWR_MAX;
       const sigs=await tableSigs();
       if(sigs && sigs[key] && sigs[key]===hit.sig){
         const cur=_dbCache.get(key);
-        if(cur===hit){ hit.t=Date.now(); cacheMarkDirty(key); return hit.data.slice(); }   // 校驗期間被寫入清掉就不沿用
+        if(cur===hit){ hit.t=Date.now(); cacheMarkDirty(key);
+          if(_needRebase) _dbRebaseBg(store);
+          return hit.data.slice(); }   // 校驗期間被寫入清掉就不沿用
       }
       // 簽章不同 → 先試「只補變動的那幾列」，補不成才整表重抓
       if(sigs && sigs[key] && _dbCache.get(key)===hit){
@@ -7699,6 +7721,7 @@ async function dbGetAll(store,opts){
         if(patched && _dbCache.get(key)===hit){
           _dbCache.set(key,{t:Date.now(),fullAt:hit.fullAt||hit.t,data:patched.data,sig:sigs[key],logAt:patched.logAt});
           cacheMarkDirty(key);
+          if(_needRebase) _dbRebaseBg(store);
           return patched.data.slice();
         }
       }

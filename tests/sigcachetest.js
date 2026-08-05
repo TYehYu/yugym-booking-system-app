@@ -36,6 +36,8 @@ function makeEnv(o){
      增量補資料本身由 deltasynctest 驗。 */
   const code=['function cacheMarkDirty(){}', grabFn('dbCacheClear'), 'let _sigPromise=null,_sigAt=0;\n'+grabFn('tableSigs'),
     'async function dbDeltaPatch(){ return null; }', 'const DELTA_MAX=400;',
+    /* 2026-08-05：10 分鐘整表校正改背景做（_dbRebaseBg），一起帶進沙箱 */
+    'const _dbRebasing=new Set();\nasync '+grabFn('_dbRebaseBg'),
     'async '+grabFn('dbGetAll')].join('\n');
   const api=new Function(...Object.keys(env), code+'\nreturn {dbGetAll,dbCacheClear,tableSigs};')(...Object.values(env));
   return {api, env, log, state};
@@ -98,14 +100,22 @@ console.log('\n④ 寫入之後一定重抓');
   ok('★ 下一次讀是真的抓表', log.indexOf('data')>=0);
 }
 
-console.log('\n⑤ 太舊的快取不玩簽章');
+/* 2026-08-05 使用者回報「首頁切預約管理卡 10 幾秒」：原本超過 10 分鐘的第一次讀取
+   會當場整表重載，櫃檯每 10 分鐘撞一次。改成畫面先用簽章結果秒回、整表校正丟背景。 */
+console.log('\n⑤ 超過 10 分鐘：畫面照樣秒回，整表校正在背景做');
 {
   const {api,env,log}=makeEnv();
   await api.dbGetAll('bookings');
   advance(11*60000);   // 11 分鐘 > DB_SWR_MAX
   log.length=0;
-  await api.dbGetAll('bookings');
-  ok('★ 超過 10 分鐘一律重抓', log.indexOf('data')>=0);
+  /* 讓「資料庫的新資料」與快取不同：畫面若真的等整表重抓，回來的會是新資料；
+     秒回的話拿到的是舊快取，背景換好之後才變新。 */
+  const got=await api.dbGetAll('bookings');
+  ok('★ 這一次讀秒回舊快取（沒有當場等整表重抓）', got.length===1 && got[0].id==='BK-1');
+  await new Promise(r=>setTimeout(r,30));
+  ok('★ 背景整表校正跑完（有抓表）', log.filter(x=>x==='data').length>=1, log);
+  ok('★ fullAt 重置（下一個 10 分鐘才會再排一次）',
+     Date.now()-(env._dbCache.get('bookings').fullAt||0) < 60000);
 }
 
 console.log('\n⑥ 同一次換頁多張表只打一支 RPC');
@@ -121,7 +131,8 @@ console.log('\n⑦ 程式碼層面的把關');
   ok('★ 簽章 RPC 失敗一律回 null（不會誤判成沒變）',
      /\.catch\(\(\)=>null\)/.test(grabFn('tableSigs')) && /r && !r\.error && r\.data && typeof r\.data==='object'/.test(grabFn('tableSigs')));
   ok('★ 校驗期間被寫入清掉就不沿用（避免用到已失效的快取）',
-     /const cur=_dbCache\.get\(key\);\n\s*if\(cur===hit\)\{ hit\.t=Date\.now\(\); cacheMarkDirty\(key\); return hit\.data\.slice\(\); \}/.test(src));
+     /const cur=_dbCache\.get\(key\);\n\s*if\(cur===hit\)\{ hit\.t=Date\.now\(\); cacheMarkDirty\(key\);/.test(src)
+     && /if\(_needRebase\) _dbRebaseBg\(store\);\n\s*return hit\.data\.slice\(\); \}/.test(src));
   ok('★ 寫入時把共用簽章丟掉（下次記到的是寫入後的簽章）',
      /_sigPromise=null; _sigAt=0;\n\s*if\(store===undefined\)/.test(src));
   ok('　　DB 端函式存在於 migration 留檔', fs.existsSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260804_fn_table_sigs.sql'));
