@@ -1289,6 +1289,9 @@ body.mc-mode .layout{padding-top:8px;}
 /* ── Pagination：左=每頁幾筆  右=頁碼 ── */
 .lp-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding:16px 4px 0;flex-wrap:wrap;}
+/* 表格上方也放一組翻頁（2026-08-05 使用者指示：會員列表翻頁按鈕上面也做一組，
+   翻頁不用捲到最底）。上方這組收斂間距、不帶每頁筆數選單（只有底部那組有）。 */
+.lp-pager-top .lp-pager{padding:0 4px 10px;}
 .lp-pager-size{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--t3);}
 .lp-pager-size select{padding:6px 24px 6px 9px;border:1px solid var(--bd);border-radius:8px;
   background:#fff;font-size:12.5px;color:var(--t2);cursor:pointer;font-family:inherit;}
@@ -7329,8 +7332,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1046';
-const APP_VERSION_LABEL='v260805.1046';
+const APP_VERSION = '260805.1120';
+const APP_VERSION_LABEL='v260805.1120';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23408,7 +23411,9 @@ PAGES.members=async function(){
       '試試調整搜尋關鍵字，或清除目前的篩選條件。',
       `<button class="btn btn-green btn-sm" onclick="memClearFilters()">清除篩選</button>`);
   } else {
-    body = legacyBar + tierLegend + lpTable(cols, rows, {key:_memSort, dir:_memSortDir, onclick:"memSortBy('{k}')"});
+    /* 2026-08-05 使用者指示：翻頁按鈕在表格上方也做一組（同一套 lpPager，少了每頁筆數選單） */
+    const topPager=`<div class="lp-pager-top">${lpPager({page:_memPage,size:_memSize,total:filtered.length,onpage:'memGoPage({p})'})}</div>`;
+    body = legacyBar + tierLegend + topPager + lpTable(cols, rows, {key:_memSort, dir:_memSortDir, onclick:"memSortBy('{k}')"});
   }
 
   // (5) 一次組合：Header -> Stats -> Toolbar -> Table/Empty -> Pagination
@@ -28158,7 +28163,12 @@ function ppHeaderHtml(){
   /* 權限（2026-07-27 使用者定案）：姓名/電話＝帳號設定不可改；主教練/生日＝櫃台端處理；
      會員端只能改 緊急聯絡人 與 LINE 通知開關 */
   const _canBase = isDeskLike();
-  const bdayItem = `<div class="pp-meta-i${_canBase?' pp-f-click':''}"${_canBase?` onclick="ppInlineEdit(event,'birthday')"`:''}><span class="pp-meta-l">生日</span><span class="pp-meta-v">${r.birthday||'<span style="color:var(--t3);">'+(_canBase?'選填':'未填')+'</span>'}</span></div>`;
+  /* 2026-08-05 使用者指示：會員端可自己更新 性別/生日/緊急聯絡人/載具 ——
+     性別與生日的原地編輯對「會員本人」也開放（原本僅櫃檯）；DB 端 members 守門
+     白名單放行這些欄位，等級/教練/狀態仍僅櫃檯以上。 */
+  const _canSelf = !!(SESSION&&SESSION.role==='member'&&isM&&String(r.id)===String(SESSION.id));
+  const _canBG = _canBase||_canSelf;
+  const bdayItem = `<div class="pp-meta-i${_canBG?' pp-f-click':''}"${_canBG?` onclick="ppInlineEdit(event,'birthday')"`:''}><span class="pp-meta-l">生日</span><span class="pp-meta-v">${r.birthday||'<span style="color:var(--t3);">'+(_canBG?'選填':'未填')+'</span>'}</span></div>`;
   const lineItem = (()=>{
     if(!r.line_user_id) return `<div class="pp-meta-i"><span class="pp-meta-l">LINE</span><span class="pp-meta-v" style="color:var(--t3);">未綁定</span></div>`;
     const on = r.line_notify!==false;
@@ -28182,14 +28192,16 @@ function ppHeaderHtml(){
   })() : '';
   const ecItem = isM ? (()=>{ const v=[r.emergency_name,r.emergency_relation?`（${r.emergency_relation}）`:'',r.emergency_phone?`　${fmtPhone(r.emergency_phone)}`:''].join('');
     return `<div class="pp-meta-i pp-f-click" onclick="ppEmergencyEdit(event)"><span class="pp-meta-l">緊急聯絡人</span><span class="pp-meta-v">${v||'<span style="color:var(--t3);">＋ 設定</span>'}</span></div>`; })() : '';
-  const genderItem = isM ? `<div class="pp-meta-i${_canBase?' pp-f-click':''}"${_canBase?` onclick="ppInlineEdit(event,'gender')"`:''}><span class="pp-meta-l">性別</span><span class="pp-meta-v">${({male:'男',female:'女',other:'其他'})[r.gender]||'<span style="color:var(--t3);">'+(_canBase?'＋ 設定':'未填')+'</span>'}</span></div>` : '';
+  const genderItem = isM ? `<div class="pp-meta-i${_canBG?' pp-f-click':''}"${_canBG?` onclick="ppInlineEdit(event,'gender')"`:''}><span class="pp-meta-l">性別</span><span class="pp-meta-v">${({male:'男',female:'女',other:'其他'})[r.gender]||'<span style="color:var(--t3);">'+(_canBG?'＋ 設定':'未填')+'</span>'}</span></div>` : '';
+  /* 發票載具（2026-08-05）：手機條碼，之後開立電子發票直接帶入；櫃檯與會員本人可改 */
+  const carrierItem = isM ? `<div class="pp-meta-i${_canBG?' pp-f-click':''}"${_canBG?` onclick="ppCarrierEdit(event)"`:''}><span class="pp-meta-l">載具</span><span class="pp-meta-v">${r.invoice_carrier||'<span style="color:var(--t3);">'+(_canBG?'＋ 設定':'未填')+'</span>'}</span></div>` : '';
   /* 2026-07-28 使用者指示：會員表頭固定兩列——
      第一列 姓名/電話/性別/生日；第二列 等級/教練/緊急聯絡人/LINE 開關 */
   const metaRow1 = isM ? mvA('電話',fmtPhone(r.phone),'','未填') + genderItem + bdayItem : '';
   const tierItem = isM ? `<div class="pp-meta-i"><span class="pp-meta-l">等級</span><span class="pp-meta-v">${statusBadge||'—'}</span></div>` : '';
   const meta = isM
     ? tierItem + mvA('主教練', PP.ctx.coachMap?(PP.ctx.coachMap[r.default_coach_id]||''):'',_canBase?'default_coach_id':'',_canBase?'＋ 指定':'未指定')
-      + ecItem + lineItem
+      + ecItem + lineItem + carrierItem
       /* 家庭成員（2026-08-03 使用者指示：「會員資料新增一個＋家庭成員」）——
          與會員端同一個欄位 members.family_members；櫃檯可代客維護。 */
       + (_canBase?`<div class="pp-meta-i pp-f-click" onclick="ppFamEdit('${r.id}')"><span class="pp-meta-l">家庭成員</span><span class="pp-meta-v">${(Array.isArray(r.family_members)&&r.family_members.length)?r.family_members.join('、'):'<span style="color:var(--t3);">＋ 家庭成員</span>'}</span></div>`:'')
@@ -28264,8 +28276,10 @@ function ppInlineEdit(ev,fid){
   try{ ev.stopPropagation(); }catch(_){}
   if(PP.kind!=='member' || PP.editing){ return ppEditFocus(fid); }
   if(fid==='phone'||fid==='name'){ showToast('姓名與電話為帳號設定，不可修改'); return; }
-  // 主教練/生日：櫃台端處理（會員端唯讀）
-  if((fid==='default_coach_id'||fid==='birthday'||fid==='gender') && !(isDeskLike())){ return; }
+  // 主教練：櫃台端處理；生日/性別：櫃檯或會員本人（2026-08-05 使用者指示：會員端可自己更新）
+  if(fid==='default_coach_id' && !(isDeskLike())){ return; }
+  const _selfM = SESSION&&SESSION.role==='member'&&String(PP.id)===String(SESSION.id);
+  if((fid==='birthday'||fid==='gender') && !(isDeskLike()||_selfM)){ return; }
   const item=ev.currentTarget;
   if(!item || item.querySelector('input,select')) return;   // 已在編輯中
   const v=item.querySelector('.pp-meta-v'); if(!v) return;
@@ -28324,6 +28338,30 @@ async function ppEmergencySave(){
     rec.emergency_phone=(document.getElementById('ec-phone').value||'').trim()||null;
     await dbPut('members',rec);
     PP.rec=rec; showToast('已更新');
+  }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+  closeModal(); ppRenderBody();
+}
+/* 發票載具編輯小視窗（2026-08-05 使用者指示：會員端可自行更新；櫃檯代改亦同路徑）——
+   手機條碼載具：斜線開頭共 8 碼（/ 後接 7 碼的數字、大寫英文、+ - .）。留空＝清除。 */
+function ppCarrierEdit(ev){
+  try{ ev.stopPropagation(); }catch(_){}
+  const r=PP.rec||{};
+  showModal(`<div class="modal-title">發票載具</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:10px;line-height:1.7;">手機條碼載具（斜線開頭共 8 碼，例：/ABC+123）。之後開立電子發票會自動存入此載具；留空＝不使用。</div>
+    <div class="form-row"><label>手機條碼</label><input id="pc-carrier" value="${(r.invoice_carrier||'').replace(/"/g,'&quot;')}" placeholder="/ABC1234" maxlength="8" style="text-transform:uppercase;"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="ppCarrierSave()">儲存</button>
+    </div>`);
+}
+async function ppCarrierSave(){
+  let v=(document.getElementById('pc-carrier').value||'').trim().toUpperCase();
+  if(v && !/^\/[0-9A-Z+.\-]{7}$/.test(v)){ showToast('載具格式不正確：斜線開頭共 8 碼（數字、大寫英文、+ - .）'); return; }
+  try{
+    const rec=await dbGet('members',PP.id);
+    rec.invoice_carrier=v||null;
+    await dbPut('members',rec);
+    PP.rec=rec; showToast(v?'載具已更新':'已清除載具');
   }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
   closeModal(); ppRenderBody();
 }
