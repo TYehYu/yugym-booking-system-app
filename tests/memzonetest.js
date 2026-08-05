@@ -103,7 +103,7 @@ ok('★ 只剩舊票的人教練課欄出「無有效票券」章（看 active �
 ok('★ 同課別還有幾張在用會標出來', /＋\$\{n-1\}<\/span>/.test(src) && /\.tkcat-n\{font-size:10px;/.test(src));
 ok('★ 沒有那個課別的票就留空（教練課欄改出「無有效票券」章，2026-08-05）',
    /if\(!sl\) return k==='pt' \? tkNoneChip\(m\) : '';/.test(src));
-ok('　　沿用原本那顆圓形卡（tkRowHtml），不另做一套', /return tkRowHtml\(sl, w\.leftoverIn\(k\), m\.id\)/.test(src));
+ok('　　沿用原本那顆圓形卡（tkRowHtml），不另做一套', /return tkRowHtml\(sl, w\.leftoverIn\(k\), m\.id, /.test(src));
 
 console.log('\n左緣色條＝會員等級（2026-07-31 使用者指示）');
 ok('★ 每一列帶等級色', /lc:\(TIER_DEFS\[effTier\(m\)\]\|\|\{\}\)\.color\|\|'#8a8478',/.test(src));

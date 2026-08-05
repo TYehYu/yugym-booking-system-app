@@ -227,7 +227,7 @@ ok('★ 整袋一起配一次（同一堂不會在多張票上重複冒出來）
    /const w=_mTk\(m\.id\);/.test(src));
 ok('★ 沒被任何票吸收的已預約未上 → 仍畫紅虛線圈，依課別歸戶',
    /const leftover=live\.filter\(b=>!byBooking\[b\.id\] && b\.status==='booked'/.test(src)
-   && /tkRowHtml\(sl, w\.leftoverIn\(k\), m\.id\)/.test(src));
+   && /tkRowHtml\(sl, w\.leftoverIn\(k\), m\.id, /.test(src));
 ok('　　只帶今天以後的', /&& String\(b\.date\|\|''\)\.slice\(0,10\)>=today\);/.test(src));
 ok('★ 同課別還有幾張在用會標「＋N」', /＋\$\{n-1\}<\/span>/.test(src));
 

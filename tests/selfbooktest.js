@@ -109,7 +109,7 @@ ok('　　會員資料 → 票券分頁傳 PP.id', /ticketTokens\(t,bks,typeMap,
 ok('　　會員端「我的票券」傳 SESSION.id', /ticketTokens\(t,_bksC,typeMap,usedCnt,null,SESSION\.id,_sl\.selfBk\)/.test(src));
 ok('　　團課名單逐名額傳那一列的會員（0803 起連名額序一起傳）', /ticketTokens\(_sl\.t,_sl\.stamps,st\.typeMap,_sl\.used,b\.id,mid,_sl\.selfBk,_ord\)/.test(src));
 ok('　　預約明細（單人課）傳這一堂的會員', /ticketTokens\(tkC,tkBks2,_typeMapD,doneCount,b\.id,b\.member_id,_wSlotD&&_wSlotD\.selfBk\)/.test(src));
-ok('　　會員列表的五格票券傳那一列的會員', /tkRowHtml\(sl, w\.leftoverIn\(k\), m\.id\)/.test(src));
+ok('　　會員列表的五格票券傳那一列的會員', /tkRowHtml\(sl, w\.leftoverIn\(k\), m\.id, /.test(src));
 ok('★ 有圖例說明金點是什麼（不解釋沒人看得懂）',
    /右上角金點＝會員自己從手機預約的/.test(src));
 ok('　　沒有自助預約的會員不顯示圖例（不佔版面）',
