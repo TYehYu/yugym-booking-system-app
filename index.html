@@ -7368,8 +7368,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.2210';
-const APP_VERSION_LABEL='v260805.2210';
+const APP_VERSION = '260805.2345';
+const APP_VERSION_LABEL='v260805.2345';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -27399,24 +27399,61 @@ const INS_IDENTITY_OPTS=[['employee','一般受僱者'],['owner','負責人（�
 function insIdentityLabel(v){ return (INS_IDENTITY_OPTS.find(o=>o[0]===v)||INS_IDENTITY_OPTS[0])[1]; }
 const NHI_RATE_OWNER=0.0517; // 2026 健保一般保險費率；負責人自付全額時用
 
-/* ── 勞健保管理 ── */
+/* ── 勞健保管理 ──
+   2026-08-05 使用者指示：「第一個設定投保級距跟投保日，後面顯示每種金額」——
+   級距＋加保日移到前面當「設定值」，勞保／健保／勞退三欄改成依級距算出來的金額
+   （上排＝員工自付、下排＝公司負擔），不再只寫「投保中」。
+   費率沿用薪資頁那一套（2026 官方）：勞保 12.5%（員工 20%／雇主 70%）、
+   健保 5.17%（員工 30%／雇主 60%；健保投保金額下限 29,500）、勞退雇主 6%、
+   職災 0.11%＋墊償 0.025% 由雇主負擔。負責人健保由本人全額自付。 */
+const INS_R={labor:0.125, laborEmp:0.2, laborCo:0.7, nhi:0.0517, nhiEmp:0.3, nhiCo:0.6,
+  pension:0.06, occ:0.0011, wage:0.00025, nhiFloor:29500};
+function insAmounts(c){
+  const g=Number(c&&c.insured_grade)||0;
+  if(!g) return null;
+  const on=s=>s==='enrolled';
+  const owner=(c.insurance_identity==='owner');
+  const nhiBase=Math.max(g, INS_R.nhiFloor);
+  const R=x=>Math.round(x);
+  return {
+    grade:g,
+    labor: on(c.labor_insurance_status)
+      ? {emp:R(g*INS_R.labor*INS_R.laborEmp), co:R(g*INS_R.labor*INS_R.laborCo + g*(INS_R.occ+INS_R.wage))} : null,
+    health: on(c.health_insurance_status)
+      ? (owner ? {emp:R(nhiBase*INS_R.nhi), co:0, owner:true}
+               : {emp:R(nhiBase*INS_R.nhi*INS_R.nhiEmp), co:R(nhiBase*INS_R.nhi*INS_R.nhiCo)}) : null,
+    pension: on(c.pension_status) ? {emp:0, co:R(g*INS_R.pension)} : null,
+  };
+}
+function insCell(a, key, status){
+  if(!a) return `<span style="color:var(--t3);">未設定級距</span>`;
+  const v=a[key];
+  if(!v) return `<span style="color:var(--t3);">${insStatusLabel(status)}</span>`;
+  const money=n=>'$'+Number(n||0).toLocaleString();
+  return `<div style="line-height:1.5;">
+      <div><b style="font-family:var(--num);">${v.emp?money(v.emp):'—'}</b><span style="font-size:10.5px;color:var(--t3);margin-left:4px;">${v.owner?'本人全額':'自付'}</span></div>
+      ${v.co?`<div style="font-size:11px;color:var(--t3);">公司 ${money(v.co)}</div>`:''}
+    </div>`;
+}
 async function renderStaffInsurance(){
   const list=await _hrStaffList();
   document.getElementById('staff-body').innerHTML=`<div class="card">
     <div class="card-title">勞健保管理</div>
-    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.7;">投保狀態、投保單位與級距、加退保日期，供未來申報與查詢。合作教練多為「不由公司投保」。</div>
-    <table class="rwd-card"><thead><tr><th>姓名</th><th>類型</th><th>勞保</th><th>健保</th><th>勞退</th><th>投保級距</th><th></th></tr></thead><tbody>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.7;">先設定<b>投保級距與加保日</b>，右邊三欄依級距自動算出每月金額（上＝員工自付、下＝公司負擔）。合作教練多為「不由公司投保」。</div>
+    <table class="rwd-card"><thead><tr><th>姓名</th><th>類型</th><th>投保級距 · 加保日</th><th>勞保</th><th>健保</th><th>勞退</th><th></th></tr></thead><tbody>
     ${list.length===0?'<tr><td colspan="7" style="text-align:center;color:var(--t3);padding:18px;">尚無員工</td></tr>':
-    list.map(c=>{const et=normEmp(c.employment_type||c.pay_type);return `<tr>
+    list.map(c=>{const et=normEmp(c.employment_type||c.pay_type); const a=insAmounts(c);return `<tr>
       <td data-label="姓名">${c.name||'—'}</td>
       <td data-label="類型">${EMP_RULES[et]?EMP_RULES[et].label:'—'}${c.insurance_identity==='owner'?'<span class="tag" style="margin-left:6px;font-size:10px;background:#f0e7f4;color:#6e3a86;">負責人</span>':''}</td>
-      <td data-label="勞保">${insStatusLabel(c.labor_insurance_status)}</td>
-      <td data-label="健保">${insStatusLabel(c.health_insurance_status)}</td>
-      <td data-label="勞退">${insStatusLabel(c.pension_status)}</td>
-      <td data-label="投保級距">${c.insured_grade?'$'+Number(c.insured_grade).toLocaleString():'—'}</td>
+      <td data-label="投保級距 · 加保日"><button class="btn btn-ghost btn-sm" style="padding:3px 10px;" onclick="openInsuranceEdit('${c.id}')">${c.insured_grade?'$'+Number(c.insured_grade).toLocaleString():'＋ 設定級距'}</button>
+        ${c.insured_enroll_date?`<div style="font-size:11px;color:var(--t3);margin-top:3px;">加保 ${String(c.insured_enroll_date).slice(5).replace('-','/')}${c.insured_withdraw_date?`　·　退保 ${String(c.insured_withdraw_date).slice(5).replace('-','/')}`:''}</div>`:''}</td>
+      <td data-label="勞保">${insCell(a,'labor',c.labor_insurance_status)}</td>
+      <td data-label="健保">${insCell(a,'health',c.health_insurance_status)}</td>
+      <td data-label="勞退">${insCell(a,'pension',c.pension_status)}</td>
       <td class="rwd-actions" data-label="" style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="openInsuranceEdit('${c.id}')">編輯</button></td>
     </tr>`;}).join('')}
     </tbody></table>
+    <div style="font-size:11px;color:var(--t3);margin-top:10px;line-height:1.8;">費率（2026）：勞保 ${(INS_R.labor*100).toFixed(1)}%（員工 ${INS_R.laborEmp*100}%／雇主 ${INS_R.laborCo*100}%，雇主另負擔職災 ${(INS_R.occ*100).toFixed(2)}%＋墊償 ${(INS_R.wage*100).toFixed(3)}%）　·　健保 ${(INS_R.nhi*100).toFixed(2)}%（員工 ${INS_R.nhiEmp*100}%／雇主 ${INS_R.nhiCo*100}%，投保金額下限 $${INS_R.nhiFloor.toLocaleString()}）　·　勞退雇主提繳 ${INS_R.pension*100}%。健保眷屬人數未計入。</div>
   </div>`;
 }
 async function openInsuranceEdit(id){
@@ -27428,23 +27465,41 @@ async function openInsuranceEdit(id){
   const idnSel=INS_IDENTITY_OPTS.map(o=>`<option value="${o[0]}" ${idn===o[0]?'selected':''}>${o[1]}</option>`).join('');
   showModal(`<div class="modal-title">勞健保 · ${c.name||''}</div>
     <div style="font-size:12px;color:var(--t2);background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:10px;margin-bottom:14px;line-height:1.7;">類型：<b>${rule.label}</b>　·　制度：${rule.insurance.join('、')}</div>
-    <div class="form-row"><label>投保身分</label><select id="ins-identity">${idnSel}</select>
+    <div class="form-row"><label>投保身分</label><select id="ins-identity" onchange="insPreview('${id}')">${idnSel}</select>
       <div style="font-size:11px;color:var(--t3);margin-top:4px;line-height:1.6;">「負責人」健保由本人全額自付（投保金額 × ${(NHI_RATE_OWNER*100).toFixed(2)}%）；一般受僱者依級距表員工負擔計算。</div>
     </div>
     <div class="form-2col">
-      <div class="form-row"><label>勞保狀態</label><select id="ins-labor">${sel(c.labor_insurance_status)}</select></div>
-      <div class="form-row"><label>健保狀態</label><select id="ins-health">${sel(c.health_insurance_status)}</select></div>
+      <div class="form-row"><label>勞保狀態</label><select id="ins-labor" onchange="insPreview('${id}')">${sel(c.labor_insurance_status)}</select></div>
+      <div class="form-row"><label>健保狀態</label><select id="ins-health" onchange="insPreview('${id}')">${sel(c.health_insurance_status)}</select></div>
     </div>
+    ${/* 2026-08-05 使用者指示：級距與加保日是「要設定的那兩個」→ 提到最上面、即時試算 */''}
     <div class="form-2col">
-      <div class="form-row"><label>勞退狀態</label><select id="ins-pension">${sel(c.pension_status)}</select></div>
-      <div class="form-row"><label>投保級距（金額）</label><input type="number" id="ins-grade" value="${c.insured_grade||''}" placeholder="例：30300"></div>
-    </div>
-    <div class="form-row"><label>投保單位</label><input id="ins-unit" value="${c.insured_unit||''}" placeholder="公司投保單位名稱"></div>
-    <div class="form-2col">
+      <div class="form-row"><label>投保級距（金額）*</label><input type="number" id="ins-grade" value="${c.insured_grade||''}" placeholder="例：30300" oninput="insPreview('${id}')"></div>
       <div class="form-row"><label>加保日期</label><input type="date" id="ins-enroll" value="${c.insured_enroll_date||''}"></div>
+    </div>
+    <div id="ins-preview" style="font-size:12px;color:var(--t2);background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px;margin-bottom:12px;line-height:1.9;"></div>
+    <div class="form-2col">
+      <div class="form-row"><label>勞退狀態</label><select id="ins-pension" onchange="insPreview('${id}')">${sel(c.pension_status)}</select></div>
       <div class="form-row"><label>退保日期</label><input type="date" id="ins-withdraw" value="${c.insured_withdraw_date||''}"></div>
     </div>
+    <div class="form-row"><label>投保單位</label><input id="ins-unit" value="${c.insured_unit||''}" placeholder="公司投保單位名稱"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="saveInsurance('${id}')">儲存</button></div>`);
+  insPreview(id);
+}
+/* 即時試算（2026-08-05）：改級距或狀態當下就看得到三種金額，存檔前先確認 */
+function insPreview(){
+  const box=document.getElementById('ins-preview'); if(!box) return;
+  const g=x=>{const el=document.getElementById(x); return el?el.value:'';};
+  const a=insAmounts({insured_grade:Number(g('ins-grade'))||0, insurance_identity:g('ins-identity'),
+    labor_insurance_status:g('ins-labor'), health_insurance_status:g('ins-health'), pension_status:g('ins-pension')});
+  if(!a){ box.innerHTML='<span style="color:var(--t3);">填入投保級距後，這裡會自動算出勞保／健保／勞退每月金額。</span>'; return; }
+  const money=n=>'$'+Number(n||0).toLocaleString();
+  const row=(lb,v)=>v?`<div>${lb}：員工自付 <b style="font-family:var(--num);">${money(v.emp)}</b>${v.owner?'（本人全額）':''}${v.co?`　·　公司負擔 <b style="font-family:var(--num);">${money(v.co)}</b>`:''}</div>`
+    :`<div style="color:var(--t3);">${lb}：未投保</div>`;
+  const empTot=(a.labor?a.labor.emp:0)+(a.health?a.health.emp:0);
+  const coTot=(a.labor?a.labor.co:0)+(a.health?a.health.co:0)+(a.pension?a.pension.co:0);
+  box.innerHTML=row('勞保',a.labor)+row('健保',a.health)+row('勞退',a.pension)
+    +`<div style="border-top:1px solid var(--bd);margin-top:6px;padding-top:6px;">合計：員工自付 <b style="font-family:var(--num);color:var(--danger);">${money(empTot)}</b>　·　公司負擔 <b style="font-family:var(--num);color:var(--green);">${money(coTot)}</b></div>`;
 }
 async function saveInsurance(id){
  try{
