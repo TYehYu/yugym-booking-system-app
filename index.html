@@ -7368,8 +7368,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1628';
-const APP_VERSION_LABEL='v260805.1628';
+const APP_VERSION = '260805.1650';
+const APP_VERSION_LABEL='v260805.1650';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -30614,8 +30614,10 @@ async function salesAttribSubmit(cid){
   if(window._grantSubmitting) return;   // 防連點
   if(window._grantSalesActive) window._grantSalesActive.coach_id=cid;
   const s=window._grantSalesActive;
-  // 只有教練課（私人教練，含友善方案）需要簽約；團體課／運動按摩／自訂 → 選完業績歸屬直接發放
-  const needContract = !!(s && s.cat==='私人教練' && !s.custom);
+  /* 教練課（私人教練，含友善方案）需要簽約——含自訂方案（2026-08-05 使用者回報：
+     「今天的自訂方案怎麼沒有出現合約？」原設計自訂免簽約，改成教練課類一律簽）。
+     團體課／運動按摩／團課體驗（cat 小班肌力）維持免簽約。 */
+  const needContract = !!(s && s.cat==='私人教練');
   if(needContract){ grantGoStep(4); return; }
   window._grantSubmitting=true;
   try{ await submitGrant(); }
@@ -31459,7 +31461,9 @@ async function renderContractStep(){
   const tpl=await loadContractTpl();
   const mid=(document.getElementById('gt-member')||{}).value;
   const m=(window._grantMembers||[]).find(x=>x.id===mid)||{};
-  const plan=(window._grantUsable||[]).find(p=>p.id===(document.getElementById('gt-plan')||{}).value)||{};
+  /* 自訂方案也簽約（2026-08-05）：方案內容改從自訂欄位組，不再只認 gt-plan 選單 */
+  const _custom=window._grantSalesActive&&window._grantSalesActive.custom;
+  const plan=_custom?(_grantCustomPlan()||{}):((window._grantUsable||[]).find(p=>p.id===(document.getElementById('gt-plan')||{}).value)||{});
   const total=(Number(plan.sessions_base)||0)+(Number(plan.sessions_bonus)||0);
   const deal=Number((document.getElementById('gt-amount')||{}).value)||0;
   const isInstall=!!plan.installment && (Number((document.getElementById('gt-install')||{}).value)||1)>1;
@@ -31481,7 +31485,10 @@ async function renderContractStep(){
     planName:plan.name||'', sessions:total, bonus:plan.sessions_bonus||0,
     unit:plan.unit_price||0, amount:paid, validDays:Number(plan.valid_days)||365,
     pay:(document.getElementById('gt-method')||{}).value||'cash',
-    installN:_instN, instAmts:_instN>1?splitAmount(deal,_instN):null,
+    /* 分期＋折抵券（2026-08-05 使用者回報，黃柏瑜案例）：折抵券在第 1 期收款時扣，
+       合約分期表第一期要印折抵後金額（例 7,200−300＝6,900），總額才對得上購買金額。 */
+    installN:_instN, instAmts:(()=>{ if(_instN<=1) return null;
+      const a=splitAmount(deal,_instN); if(voucherN) a[0]=Math.max(0,a[0]-voucherN*300); return a; })(),
     /* 每期開通堂數（2026-07-30）：合約每期那一列要印出來，與 unlockedByInstallment 同一套平分邏輯 */
     instSess:_instN>1?splitAmount(total,_instN):null };
   const box=document.getElementById('ct-body'); if(box) box.textContent=window._ctBody;
@@ -31802,7 +31809,7 @@ async function openGrantModal(){
     </div>
     ${sales?`<!-- 步驟3（僅銷售彈窗入口）：業績歸屬教練，點卡後進簽約；預設會員主責教練 -->
     <div class="gt-step" data-gtstep="3" style="display:none;">
-      <div style="font-size:12px;color:var(--t2);margin-bottom:10px;">${(sales&&sales.cat==='私人教練'&&!sales.custom)?'點選業績歸屬教練，接著進行簽約。':'點選業績歸屬教練即完成銷售發放（本類別免簽約）。'}</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px;">${(sales&&sales.cat==='私人教練')?'點選業績歸屬教練，接著進行簽約。':'點選業績歸屬教練即完成銷售發放（本類別免簽約）。'}</div>
       <div class="form-row"><label>業績歸屬教練</label><div class="bk-cards" id="gt-attrib"></div></div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="grantGoStep(2)">上一步</button></div>
     </div>
@@ -32382,7 +32389,7 @@ async function submitGrant(){
   // 建立購買紀錄（分期只記第1期實收金額；未收期款不列入營收）
   try{
     await dbPutPurchaseSafe({id:uid('PUR'),member_id,plan_id,ticket_id:t.id,plan_name:plan.name,
-      list_price:listPrice,deal_amount:(isInstall?firstAmount:paidAmount),payment_method:method,installment_count:installCount,
+      list_price:listPrice,deal_amount:(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount),payment_method:method,installment_count:installCount,   /* 2026-08-05：分期第 1 期記折抵後實收，與 amount_paid 同口徑 */
       invoice_type:'none',
       coach_id:(window._grantSalesActive&&window._grantSalesActive.coach_id)||null,   // 業績歸屬（2026-07-21 銷售彈窗）
       note:(note||'')+(isInstall?`（分期第1期／總額 $${(dealAmount||0).toLocaleString()}）`:'')+(voucherN?`（折抵券×${voucherN} −$${voucherAmt.toLocaleString()}）`:''),
@@ -32396,7 +32403,7 @@ async function submitGrant(){
       const _remote=(window._ctSignType==='remote');   // 手機簽名：先發放、後補簽（2026-07-28）
       const _ctId=uid('CT');
       await dbPut('contracts',{id:_ctId,member_id,member_name:(mem&&mem.name)||null,
-        plan_name:plan.name,sessions:total,amount:(isInstall?firstAmount:paidAmount),
+        plan_name:plan.name,sessions:total,amount:(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount),   /* 2026-08-05：同口徑（折抵後） */
         expire_date:t.expire_date,sign_type:(window._ctSignType||'paper'),
         signature:(window._ctSignature||null),body_snapshot:window._ctBody,
         /* 2026-07-30 使用者回報「會員端票券的合約內容太少」：原本只存合約條文，
@@ -38042,11 +38049,14 @@ function contractFillBlockHTML(d){
     const instTable=(rows)=>`<table style="width:100%;border-collapse:collapse;margin-top:6px;">
       <tr>${td('期別','width="10%"')}${td('金額','width="20%"')}${td('本期開通堂數','width="18%"')}${td('收款日','width="20%"')}${td('客戶簽名','width="32%"')}</tr>
       ${rows}</table>`;
+    /* 第一期簽約當下就收款（2026-08-05 使用者回報）：收款日直接帶簽約日、
+       簽名欄標「同本約簽名」——不用再手寫一次。 */
+    const _d1=String(d.buyDate||'').slice(5).replace('-',' / ');
     const instRow = d.installN>1
       ? `分期：□一次付清　${ck(1)}分期付款`
         + instTable((d.instAmts||[]).map((a,i)=>{
             const per=(d.instSess&&d.instSess[i]!=null)?d.instSess[i]:'';
-            return `<tr>${td('第'+(_CN[i]||i+1)+'期')}${td('＄'+v(a.toLocaleString()))}${td(per!==''?v(per+' 堂'):'＿＿＿ 堂')}${td('＿＿ / ＿＿')}${td('&nbsp;','height="34"')}</tr>`;
+            return `<tr>${td('第'+(_CN[i]||i+1)+'期')}${td('＄'+v(a.toLocaleString()))}${td(per!==''?v(per+' 堂'):'＿＿＿ 堂')}${td(i===0&&_d1?v(_d1):'＿＿ / ＿＿')}${i===0?td('<span style="color:#666;">同本約簽名</span>','height="34"'):td('&nbsp;','height="34"')}</tr>`;
           }).join(''))
       : `分期：${ck(1)}一次付清　□分期付款`
         + instTable([1,2,3].map(i=>`<tr>${td('第'+_CN[i-1]+'期')}${td('＄＿＿＿＿＿')}${td('＿＿＿ 堂')}${td('＿＿ / ＿＿')}${td('&nbsp;','height="34"')}</tr>`).join(''));
