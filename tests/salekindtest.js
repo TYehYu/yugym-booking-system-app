@@ -50,6 +50,13 @@ console.log('\n已退款／作廢的票不算續約（2026-08-02 使用者回報
   ok('　　原因寫在程式裡', /錢退了獎金卻照發，等於憑一筆不存在的成交付錢。/.test(src));
   ok('　　張數與名單走同一支，所以兩邊一起修好',
      /function renewMapOf\(month, tickets, purchases, bookings, types\)\{\n\s*const list=renewListOf\(/.test(src));
+  /* 2026-08-05 使用者回報：手機報表「員工表現」Mango 續約標 1，其實沒有——
+     同一張作廢票。8/02 只修了薪資的 renewListOf，報表的 renewMap 與今日營運的 todayRenews
+     各自散裝計數，沒排除 refunded。 */
+  ok('★ 手機報表「員工表現」的續約數也跳過 refunded',
+     /if\(!inRange\(t\.purchase_date\|\|''\) \|\| t\.sale_kind!=='renewal'\) return;\n\s*if\(t\.status==='refunded'\) return;/.test(src));
+  ok('★ 今日營運的「今日續約」也跳過 refunded',
+     /if\(t\.sale_kind!=='renewal'\) return false;[^\n]*\n\s*if\(t\.status==='refunded'\) return false;/.test(src));
 }
 
 console.log('\n樣式');
