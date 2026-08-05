@@ -1,6 +1,7 @@
 -- 2026-08-05 資安掃描修補（Supabase security advisor + RLS 盤點）
--- ⚠ 尚未套用：MCP 通道被權限層擋下，需在 Supabase Dashboard SQL Editor 貼上執行，
---    或由本機 session 放行後重跑。
+-- 已於 2026-08-05 套用（使用者放行後）。模擬身分實測五項全過：
+--   教練改自己 email ✓／改自己 role 被擋 ✓／改自己 pt_rate 被擋 ✓／
+--   匿名呼叫 benefit_consume_ticket 被拒 ✓／會員預約 RPC 內部扣課鏈仍通 ✓
 --
 -- ① employees 欄位級守門：非管理員（教練本人、櫃檯）只能改個人資料欄位
 --    （name_en/email/birthday/must_setup/LINE 綁定欄位）；
