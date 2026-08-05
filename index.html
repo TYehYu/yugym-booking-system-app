@@ -5713,15 +5713,9 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
 @media(min-width:601px){ #mem-task-pop .mtp,#bk-card-pop .mtp{transform:none;} @keyframes mtpPop{from{opacity:0;}} }
 /* ══ 行事曆／教練任務課卡的彈出面板（2026-07-29 使用者指示：環繞圓鈕 → 小卡＋下方圓鈕）══
    沿用 #mem-task-pop 的小卡樣式，按鈕改用 evo-btn 但取消環繞絕對定位、排成一列圓鈕。 */
-/* 2026-07-29 使用者指示：被選取的課卡不做暗處理 → 遮罩改透明（仍可點外面關閉），
-   彈窗自身的陰影已足以浮出，行事曆維持原本亮度 */
-#bk-card-pop .mtp-back{position:fixed;inset:0;z-index:9800;background:transparent;}
-/* 2026-07-31 使用者指示：手機點課卡時背景要淡化 —— 小螢幕上彈出的小卡片會蓋在
-   一堆課卡上，不壓暗看不出哪個是焦點（桌機維持透明，那裡有滑鼠位置當線索）。
-   條件與 isMobileLayout() 一致：寬 ≤600px，或直向且寬 ≤1024px。 */
-@media (max-width:600px),(max-width:1024px) and (orientation:portrait){
-  #bk-card-pop .mtp-back{background:rgba(20,18,14,.34);}
-}
+/* 2026-08-05 使用者指示（附截圖）：點出卡片時後面頁面一律淡化（收回 07-29 的
+   「桌機透明」——彈窗浮在滿版課卡上，不壓暗分不出焦點；07-31 手機已先改暗）。 */
+#bk-card-pop .mtp-back{position:fixed;inset:0;z-index:9800;background:rgba(20,18,14,.34);}
 #bk-card-pop .mtp{position:fixed;z-index:9801;left:50%;top:50%;transform:translate(-50%,-50%);
   width:max-content;max-width:min(360px,92vw);display:flex;flex-direction:column;align-items:center;gap:12px;
   animation:mtpPop .16s var(--soft-ease,ease-out) backwards;}
@@ -5980,6 +5974,8 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
 #bk-card-pop .evo-btn.evo-primary{background:var(--green);border-color:var(--green);color:#fff;box-shadow:0 4px 14px rgba(0,61,50,.3);}
 #bk-card-pop .evo-btn.evo-danger{color:#b5372e;border-color:#e0a8a2;}
 #bk-card-pop .evo-btn.evo-gift{color:var(--gold-d);border-color:var(--gold);}
+/* 團課「新增」用金色（2026-08-05 使用者指示：新增(金) 取消(紅) 簽到(綠)） */
+#bk-card-pop .evo-btn.evo-gold{color:var(--gold-d);border-color:var(--gold);}
 #bk-card-pop .evo-btn:active{transform:scale(.93) !important;}
 .cag-thisweek{flex:0 0 auto;font-size:12px;font-weight:700;color:var(--green);background:var(--sage-bg);border:none;padding:8px 11px;border-radius:8px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:.14s;}
 .cag-thisweek:hover{background:var(--sage-l);}
@@ -7333,8 +7329,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1149';
-const APP_VERSION_LABEL='v260805.1149';
+const APP_VERSION = '260805.1203';
+const APP_VERSION_LABEL='v260805.1203';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20082,27 +20078,28 @@ async function expandBkCard(el, id){
   /* 方位定案（2026-07-23 使用者指示，取代 07-22 卡緣方位）：「簽到」在卡片正中央，
      其餘按鈕圍繞中央排列（上2／中3／下2 格位）：上左 代課、上右 取消、
      中左 編輯（過期改明細）、中央 簽到、中右 團課「新增」。格位由 evoFanLayout 定位。 */
-  // 上左：自主訓練→「場地」（切換團課教室/跑步機，2026-07-25）；其餘→「代課」
+  /* 順序定版（2026-08-05 使用者指示，附截圖）：代課 → 明細 → 新增(金) → 取消(紅) → 簽到(綠)
+     —— 彈出面板的圓鈕依 DOM 順序排列（#bk-card-pop 內為 static），照這個順序 append。 */
+  // ① 代課（自主訓練→「場地」，2026-07-25）
   if(staff && !closed && b.date>=ymd(TODAY)){
     if(bkIsSelf(b)) btns += evoBtn('evo-t1','',`bkOrbitVenue('${id}')`,'venue','場地');
     else btns += evoBtn('evo-t1','',`bkOrbitSub('${id}')`,'swap','代課');
   }
-  // 上右：取消（教練只能取消自己的課）
-  if(canCancel && own){
-    /* 2026-07-29：直接開「取消預約」視窗——那裡才有 24 小時警示與「退回票券／扣課不退」
-       的明確選擇（使用者定案的取消政策）；原本的兩段式圓鈕會走 auto 一律退課，且改版後
-       找不到舊環繞層而完全沒反應。 */
-    btns += evoBtn('evo-r1','evo-danger',`collapseBkCard();confirmCancelBooking('${id}')`,'x','取消');
-  }
-  /* 中左：明細（2026-07-28 使用者指示：全介面課卡的「編輯」統一改成「明細」——
+  /* ② 明細（2026-07-28 使用者指示：全介面課卡的「編輯」統一改成「明細」——
      改期/時長/場地/取消都已整合在課程明細視窗；原地展開編輯（bkOrbitEdit）退場） */
   btns += evoBtn('evo-b1','',`collapseBkCard();openBookingDetail('${id}')`,'doc','明細');
-  // 中央：簽到（團課 → 開名單逐人簽；單人已簽 → 兩段式取消簽到，不用原生 confirm）
+  // ③ 團課「新增」會員進名單（金色；名單管理只給櫃檯／管理員）
+  if(staff && !closed && isGroup) btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();openGroupMembers('${id}')`,'plus','新增');
+  // ④ 取消（紅；教練只能取消自己的課）
+  if(canCancel && own){
+    /* 2026-07-29：直接開「取消預約」視窗——那裡才有 24 小時警示與「退回票券／扣課不退」
+       的明確選擇（使用者定案的取消政策）。 */
+    btns += evoBtn('evo-r1','evo-danger',`collapseBkCard();confirmCancelBooking('${id}')`,'x','取消');
+  }
+  // ⑤ 簽到（綠；團課 → 開名單逐人簽；單人已簽 → 兩段式取消簽到，不用原生 confirm）
   if((staff||coachCk) && !closed){
     if(isGroup){
       btns += evoBtn('evo-r2','evo-primary',`bkOrbitRoster('${id}')`,'check','簽到');
-      // 中右：新增會員進名單（2026-07-20 功能、2026-07-23 移位）——名單管理只給櫃檯／管理員
-      if(staff) btns += evoBtn('evo-b2','',`collapseBkCard();openGroupMembers('${id}')`,'plus','新增');
     }else{
       btns += checked
         ? evoBtn('evo-r2','',`bkOrbitUndo(this,'${id}')`,'undo','取消簽到')
