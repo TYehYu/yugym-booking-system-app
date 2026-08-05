@@ -5,3 +5,9 @@
 -- ③ handle_checkin_reward 加課種保險：只有 私人教練/體驗（或 coach_leave 補償）才發點，
 --    benefit_type 再被誤標也擋得住。完整函式定義見 Supabase migration
 --    checkin_reward_category_guard（此檔為摘要備忘）。
+--
+-- ⚠ 同日 19:0x 修正：課種保險的 b.status <> 'coach_leave' 直接比 enum，
+--    但 booking_status enum 沒有 coach_leave 值 → 每一筆簽到（會員端/櫃檯 RPC）
+--    都在這裡炸掉、整包 rollback，表現為「簽到被擋權限」。
+--    改為 b.status::text <> 'coach_leave'。已用真實課卡（自主訓練＋教練課）
+--    以會員身分實測：自主訓練簽到成功且不發點、教練課簽到成功且發點。
