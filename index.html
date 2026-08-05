@@ -1289,9 +1289,8 @@ body.mc-mode .layout{padding-top:8px;}
 /* ── Pagination：左=每頁幾筆  右=頁碼 ── */
 .lp-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding:16px 4px 0;flex-wrap:wrap;}
-/* 表格上方也放一組翻頁（2026-08-05 使用者指示：會員列表翻頁按鈕上面也做一組，
-   翻頁不用捲到最底）。上方這組收斂間距、不帶每頁筆數選單（只有底部那組有）。 */
-.lp-pager-top .lp-pager{padding:0 4px 10px;}
+/* 工具列右側的翻頁鈕（2026-08-05 二修：併入搜尋/篩選同一列，lpPager compact 模式） */
+.lp-tb-act .lp-pager-nav{margin-left:8px;}
 .lp-pager-size{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--t3);}
 .lp-pager-size select{padding:6px 24px 6px 9px;border:1px solid var(--bd);border-radius:8px;
   background:#fff;font-size:12.5px;color:var(--t2);cursor:pointer;font-family:inherit;}
@@ -7332,8 +7331,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1120';
-const APP_VERSION_LABEL='v260805.1120';
+const APP_VERSION = '260805.1135';
+const APP_VERSION_LABEL='v260805.1135';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10557,6 +10556,14 @@ function lpPager(state){
     numHtml+=`<button class="lp-pg${n===page?' active':''}" onclick="${go(n)}">${n}</button>`;
     last=n;
   });
+  const nav = `<div class="lp-pager-nav">
+      <button class="lp-pg" onclick="${go(page-1)}"${page<=1?' disabled':''}>${LP_ICON.prev}</button>
+      ${numHtml}
+      <button class="lp-pg" onclick="${go(page+1)}"${page>=pages?' disabled':''}>${LP_ICON.next}</button>
+    </div>`;
+  /* compact（2026-08-05 使用者指示）：只回翻頁鈕、不帶「顯示 X–Y / N」與每頁筆數 ——
+     併進工具列同一列用（資訊上方色票已有，重複顯示徒增高度）。 */
+  if(st.compact) return nav;
   const left = st.onsize
     ? `<div class="lp-pager-size">每頁
         <select onchange="${st.onsize}">${[20,50,100].map(n=>
@@ -10564,13 +10571,7 @@ function lpPager(state){
         <span class="lp-range">· 顯示 ${from}–${to} / ${total}</span>
       </div>`
     : `<div class="lp-pager-size"><span class="lp-range">顯示 ${from}–${to} / ${total}</span></div>`;
-  return `<div class="lp-pager">${left}
-    <div class="lp-pager-nav">
-      <button class="lp-pg" onclick="${go(page-1)}"${page<=1?' disabled':''}>${LP_ICON.prev}</button>
-      ${numHtml}
-      <button class="lp-pg" onclick="${go(page+1)}"${page>=pages?' disabled':''}>${LP_ICON.next}</button>
-    </div>
-  </div>`;
+  return `<div class="lp-pager">${left}${nav}</div>`;
 }
 
 /* ── 一次組合整頁 ── */
@@ -23274,6 +23275,8 @@ PAGES.members=async function(){
   /* 2026-07-28 使用者指示：移除 購買審核／申辦 QR；新增會員縮小 */
   const actionsHtml =
     (canManage?`<button class="btn btn-green btn-sm" style="padding:6px 13px;font-size:12.5px;" onclick="openBackofficeMember()">＋ 新增會員</button>`:'');
+  /* 2026-08-05 使用者指示（附截圖）：搜尋、篩選、翻頁鈕收成同一列減少上方高度 ——
+     翻頁鈕（compact，不帶「顯示 X–Y / N」，人數上方色票已有）掛在工具列最右。 */
   const toolbar={
     search:{ value:_memSearch, placeholder:'搜尋姓名或電話', oninput:'memSetSearch(this.value)' },
     filters:[
@@ -23281,7 +23284,7 @@ PAGES.members=async function(){
       { value:_memTkFilter, options:tkOpts,   onchange:'memTkFilter(this.value)' },
     ],
     sort:{ value:_memSort, options:sortOpts, onchange:'memSetSort(this.value)' },
-    actions: actionsHtml,
+    actions: actionsHtml + lpPager({page:_memPage,size:_memSize,total:filtered.length,onpage:'memGoPage({p})',compact:true}),
   };
 
   // (3) Table（2026-07-28 使用者指示：票券欄改「最上方那張票」的迷你圓形卡；
@@ -23411,9 +23414,8 @@ PAGES.members=async function(){
       '試試調整搜尋關鍵字，或清除目前的篩選條件。',
       `<button class="btn btn-green btn-sm" onclick="memClearFilters()">清除篩選</button>`);
   } else {
-    /* 2026-08-05 使用者指示：翻頁按鈕在表格上方也做一組（同一套 lpPager，少了每頁筆數選單） */
-    const topPager=`<div class="lp-pager-top">${lpPager({page:_memPage,size:_memSize,total:filtered.length,onpage:'memGoPage({p})'})}</div>`;
-    body = legacyBar + tierLegend + topPager + lpTable(cols, rows, {key:_memSort, dir:_memSortDir, onclick:"memSortBy('{k}')"});
+    /* 上方翻頁鈕已併入工具列（2026-08-05 二修，附截圖：獨立一列太高、範圍字樣重複） */
+    body = legacyBar + tierLegend + lpTable(cols, rows, {key:_memSort, dir:_memSortDir, onclick:"memSortBy('{k}')"});
   }
 
   // (5) 一次組合：Header -> Stats -> Toolbar -> Table/Empty -> Pagination

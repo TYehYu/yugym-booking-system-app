@@ -111,7 +111,7 @@ ok('★ 與員工列表同一種語言（那邊是聘僱類型色條）',
 /* 2026-08-02：色票說明前面再多一條「新舊系統票券核對」的進度條（有主顧客時才出現） */
 ok('★ 上方有色票說明，帶各等級人數（比照員工列表）',
    /const tierLegend=`<div class="lp-legend">/.test(src)
-   && /body = legacyBar \+ tierLegend \+ topPager \+ lpTable\(cols, rows,/.test(src)   // 2026-08-05：色票與表格之間插了上方翻頁列
+   && /body = legacyBar \+ tierLegend \+ lpTable\(cols, rows,/.test(src)   // 2026-08-05 二修：上方翻頁鈕併入工具列（compact），不再插在色票與表格之間
    && /\.lp-legend b::before\{content:"";width:10px;height:10px;border-radius:3px;background:var\(--lc\);\}/.test(src));
 {
   const cols=[{label:'A',width:'1fr'}];
