@@ -108,10 +108,13 @@ ok('★ lpTable 支援 row.lc（opt-in，其他頁不受影響）',
 ok('★ 與員工列表同一種語言（那邊是聘僱類型色條）',
    /\.lp-row\.lp-lc\{border-left:4px solid var\(--lc,#8a8478\);\}/.test(src)
    && /border-left:4px solid var\(--pc,#8a8478\);/.test(src));
-/* 2026-08-02：色票說明前面再多一條「新舊系統票券核對」的進度條（有主顧客時才出現） */
-ok('★ 上方有色票說明，帶各等級人數（比照員工列表）',
+/* 2026-08-05 三修（使用者附截圖）：色票併入工具列 lead 槽（與搜尋/篩選/翻頁同一列），
+   新舊核對進度改統計卡第五格——表格上方不再各佔一列。 */
+ok('★ 色票說明帶各等級人數，走工具列 lead 槽',
    /const tierLegend=`<div class="lp-legend">/.test(src)
-   && /body = legacyBar \+ tierLegend \+ lpTable\(cols, rows,/.test(src)   // 2026-08-05 二修：上方翻頁鈕併入工具列（compact），不再插在色票與表格之間
+   && /lead: tierLegend,/.test(src)
+   && /if\(o\.lead\) r1 \+= o\.lead;/.test(src)
+   && /body = lpTable\(cols, rows,/.test(src)
    && /\.lp-legend b::before\{content:"";width:10px;height:10px;border-radius:3px;background:var\(--lc\);\}/.test(src));
 {
   const cols=[{label:'A',width:'1fr'}];

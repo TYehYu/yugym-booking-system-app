@@ -1291,6 +1291,8 @@ body.mc-mode .layout{padding-top:8px;}
   padding:16px 4px 0;flex-wrap:wrap;}
 /* 工具列右側的翻頁鈕（2026-08-05 二修：併入搜尋/篩選同一列，lpPager compact 模式） */
 .lp-tb-act .lp-pager-nav{margin-left:8px;}
+/* 色票併入工具列 lead 槽（2026-08-05 三修）：去掉原本自帶的下緣間距 */
+.lp-tb-r1 .lp-legend{padding:0;margin-right:2px;}
 .lp-pager-size{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--t3);}
 .lp-pager-size select{padding:6px 24px 6px 9px;border:1px solid var(--bd);border-radius:8px;
   background:#fff;font-size:12.5px;color:var(--t2);cursor:pointer;font-family:inherit;}
@@ -7331,8 +7333,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1135';
-const APP_VERSION_LABEL='v260805.1135';
+const APP_VERSION = '260805.1149';
+const APP_VERSION_LABEL='v260805.1149';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10336,6 +10338,7 @@ function lpStats(stats){
 function lpToolbar(opts){
   const o = opts || {};
   let r1 = '';
+  if(o.lead) r1 += o.lead;   // 工具列最左自訂內容（2026-08-05：會員列表的等級色票併入同一列）
   if(o.search){
     r1 += `<div class="lp-search">${LP_ICON.search}
       <input type="search" value="${(o.search.value||'').replace(/"/g,'&quot;')}"
@@ -23260,11 +23263,16 @@ PAGES.members=async function(){
       __last:hits.map(x=>x[1]).sort().pop()});
   });
   window._memTierWatch={up:proIds.map(id=>_memById[id]), down:demIds.map(id=>_memById[id]), renew:renewList};
+  /* 新舊系統票券核對（2026-08-05 使用者指示，附截圖）：從表格上方的進度條列
+     改成統計卡第五格（右邊），上方少一整列。計數搬到 stats 前面算。 */
+  const _loyal=members.filter(needsLegacyVerify);   // 主顧客＋VIP（2026-08-02）
+  const _lvDone=_loyal.filter(m=>m.legacy_verified_at).length;
   const stats=[
     {label:'總人數',       value:members.length,   unit:'位'},
     {label:'本月待升級名單', value:proIds.length,   unit:'位', tone:'ok',     onclick:"memTierWatchList('up')"},
     {label:'本月待降級名單', value:demIds.length,   unit:'位', tone:'warn',   onclick:"memTierWatchList('down')"},
     {label:'本月待續約名單', value:renewList.length,unit:'位', tone:'accent', onclick:"memTierWatchList('renew')"},
+    ...(_loyal.length?[{label:'新舊系統票券核對', value:_lvDone, unit:`/ ${_loyal.length}`}]:[]),
   ];
 
   // (2) Toolbar
@@ -23275,9 +23283,15 @@ PAGES.members=async function(){
   /* 2026-07-28 使用者指示：移除 購買審核／申辦 QR；新增會員縮小 */
   const actionsHtml =
     (canManage?`<button class="btn btn-green btn-sm" style="padding:6px 13px;font-size:12.5px;" onclick="openBackofficeMember()">＋ 新增會員</button>`:'');
-  /* 2026-08-05 使用者指示（附截圖）：搜尋、篩選、翻頁鈕收成同一列減少上方高度 ——
-     翻頁鈕（compact，不帶「顯示 X–Y / N」，人數上方色票已有）掛在工具列最右。 */
+  /* 2026-08-05 使用者指示（附截圖，三修）：等級色票、搜尋、篩選、新增會員、翻頁鈕
+     全部同一列——色票走 lead 槽（最左）、翻頁鈕 compact 掛最右。 */
+  const tierLegend=`<div class="lp-legend">${
+    Object.entries(TIER_DEFS).map(([k,d])=>{
+      const n=filtered.filter(m=>effTier(m)===k).length;
+      return `<b style="--lc:${d.color};">${d.label}<i>${n}</i></b>`;
+    }).join('')}</div>`;
   const toolbar={
+    lead: tierLegend,
     search:{ value:_memSearch, placeholder:'搜尋姓名或電話', oninput:'memSetSearch(this.value)' },
     filters:[
       { value:_memTier,     options:tierOpts, onchange:'memSetTier(this.value)' },
@@ -23295,21 +23309,8 @@ PAGES.members=async function(){
      中＝五個課別各一格，下面用圓形卡
      右＝最近上課、註冊日、操作
      ⚠ 會員等級不再是獨立欄位 → 少了「依等級排序」的表頭；等級篩選仍在上方工具列。 */
-  /* 色票說明：哪個顏色是哪一級（比照員工列表上方的聘僱類型色票） */
-  /* 進度：主顧客總數與已核對數（整份掃過去時要知道還剩幾個） */
-  const _loyal=filtered.filter(needsLegacyVerify);   // 主顧客＋VIP（2026-08-02）
-  const _lvDone=_loyal.filter(m=>m.legacy_verified_at).length;
-  const legacyBar=_loyal.length
-    ? `<div class="lv-bar"><span class="lv-t">新舊系統票券核對</span>
-        <span class="lv-n"><b>${_lvDone}</b> / ${_loyal.length}</span>
-        <span class="lv-p"><i style="width:${Math.round(_lvDone/_loyal.length*100)}%;"></i></span>
-        <span class="lv-s">主顧客與 VIP＝從舊系統匯入的既有會員；核對「還可以用的票券」新舊是否一致</span></div>`
-    : '';
-  const tierLegend=`<div class="lp-legend">${
-    Object.entries(TIER_DEFS).map(([k,d])=>{
-      const n=filtered.filter(m=>effTier(m)===k).length;
-      return `<b style="--lc:${d.color};">${d.label}<i>${n}</i></b>`;
-    }).join('')}</div>`;
+  /* 色票說明與新舊核對進度已上移（2026-08-05 三修）：色票併入工具列 lead、
+     核對進度改成統計卡第五格（見 stats）——表格上方不再各佔一列。 */
   /* 新舊系統票券核對（2026-08-02 使用者指示）：
      「在主顧客新增一個完成連動的按鈕，讓櫃檯手動確認，確認新舊資料還可以用的票券是否一樣」
      —— 主顧客＝制度起點時從舊系統匯入的那批既有會員。匯入的餘額是照舊系統匯出檔設的、
@@ -23414,8 +23415,8 @@ PAGES.members=async function(){
       '試試調整搜尋關鍵字，或清除目前的篩選條件。',
       `<button class="btn btn-green btn-sm" onclick="memClearFilters()">清除篩選</button>`);
   } else {
-    /* 上方翻頁鈕已併入工具列（2026-08-05 二修，附截圖：獨立一列太高、範圍字樣重複） */
-    body = legacyBar + tierLegend + lpTable(cols, rows, {key:_memSort, dir:_memSortDir, onclick:"memSortBy('{k}')"});
+    /* 上方翻頁鈕/色票/核對進度都已併入工具列與統計卡（2026-08-05 三修） */
+    body = lpTable(cols, rows, {key:_memSort, dir:_memSortDir, onclick:"memSortBy('{k}')"});
   }
 
   // (5) 一次組合：Header -> Stats -> Toolbar -> Table/Empty -> Pagination

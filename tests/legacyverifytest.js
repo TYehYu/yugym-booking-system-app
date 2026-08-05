@@ -61,16 +61,16 @@ ok('★ 沒有任何要核對的人時不多長一欄（其他店別／篩選後
    && /\.\.\.\(_legacyCol\?\[\{label:'連動核對', width:'1fr', zone:true\}\]:\[\]\),/.test(src));
 ok('★ 每一列的格子只在有那一欄時才產出（欄數要對得上）',
    /\.\.\.\(_legacyCol\?\[legacyVerifyCell\(m\)\]:\[\]\),/.test(src));
-ok('★ 上方有進度條：已核對 N / 要核對的總數',
-   /const _loyal=filtered\.filter\(needsLegacyVerify\);/.test(src)
-   && /const _lvDone=_loyal\.filter\(m=>m\.legacy_verified_at\)\.length;/.test(src)
-   && /<span class="lv-n"><b>\$\{_lvDone\}<\/b> \/ \$\{_loyal\.length\}<\/span>/.test(src));
-ok('　　進度條講清楚是誰、要核什麼',
-   /主顧客與 VIP＝從舊系統匯入的既有會員；核對「還可以用的票券」新舊是否一致/.test(src));
-ok('　　判斷抽成一支，三個地方共用（欄位、格子、進度條）',
+ok('★ 上方有核對進度：已核對 N / 要核對的總數（2026-08-05 改統計卡）',
+   /const _loyal=members\.filter\(needsLegacyVerify\);/.test(src)
+   && /const _lvDone=_loyal\.filter\(m=>m\.legacy_verified_at\)\.length;/.test(src));
+/* 2026-08-05 使用者指示（附截圖）：進度條改成統計卡第五格（上方四大格右邊），
+   表格上方少一整列；分子分母同一套（已核對 / 主顧客+VIP 總數）。 */
+ok('　　核對進度＝統計卡第五格（有主顧客才出現）',
+   /\.\.\.\(_loyal\.length\?\[\{label:'新舊系統票券核對', value:_lvDone, unit:`\/ \$\{_loyal\.length\}`\}\]:\[\]\),/.test(src));
+ok('　　判斷抽成一支，三個地方共用（欄位、格子、統計卡）',
    /function needsLegacyVerify\(m\)\{ const t=effTier\(m\); return t==='loyal'\|\|t==='vip'; \}/.test(src)
    && (src.match(/needsLegacyVerify/g)||[]).length>=4);
-ok('　　沒有主顧客就不顯示進度條', /const legacyBar=_loyal\.length/.test(src));
 
 console.log('\n③ 核對視窗');
 ok('★ 攤開「系統認為還可以用」的票券，讓櫃檯拿去跟舊系統對',
