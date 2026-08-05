@@ -1,0 +1,5 @@
+-- 2026-08-05 使用者指示：「會員建立帳號的時候多一個性別跟生日選填」（已套用）
+-- ① fn_complete_member_registration 加 p_gender text default null（male/female/other 白名單），
+--    新客建檔一併寫入 gender；⚠ 舊 4 參數版已 DROP（避免 PostgREST 多載解析衝突）。
+-- ② 前端：LINE 申辦頁補「性別（選填）＋生日（選填）」、#member-signup 補「性別（選填）」
+--    （生日欄位原本就有，標示改為選填）。完整函式定義見 Supabase migration member_registration_gender。
