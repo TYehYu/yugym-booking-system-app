@@ -1,0 +1,7 @@
+-- 2026-08-05 使用者指示（魚媽劉媽案例）：「親友自主訓練的票券簽到就不用再贈送自主訓練點數了」
+-- （已套用）三件一起處理：
+-- ① 資料修正：46 筆匯入的自主訓練預約 benefit_type 誤標 coaching_session → 改 training_pass
+-- ② 作廢 3 張誤發的自主訓練點數券（0 使用，status→refunded 並留 note）
+-- ③ handle_checkin_reward 加課種保險：只有 私人教練/體驗（或 coach_leave 補償）才發點，
+--    benefit_type 再被誤標也擋得住。完整函式定義見 Supabase migration
+--    checkin_reward_category_guard（此檔為摘要備忘）。

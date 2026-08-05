@@ -3493,7 +3493,11 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 圓形卡的場地徽章（2026-08-03）：自主訓練約在教室/跑步機時掛在圓下緣（跑／教） */
 /* 共享對象約的堂＝縮小一號（2026-08-04 使用者指示：「享」字徽章太雜亂，用大小區分）。
    transform 縮放不改排版格位，圓點間距維持整齊；誰約的看 title。 */
-.mtk-sh{transform:scale(.72);opacity:.92;}
+/* 共享票戳記（2026-08-05 使用者指示：非自己使用的維持原本大小、自己預約的放大）——
+   取代 08-04 的「對方縮小」版：對方戳記回到原尺寸，自己的放大一號（mtk-own，
+   只在同一張票混有共享戳記時才加，避免一般票整串被放大）。 */
+.mtk-sh{opacity:.92;}
+.mtk-own{transform:scale(1.16);}
 .mtk-venue{position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);font-size:8px;font-weight:700;
   font-style:normal;padding:0 4px;border-radius:6px;background:#6a655c;color:#fff;line-height:1.5;white-space:nowrap;}
 /* 會員資料票券分頁：歷史紀錄摺疊區（2026-07-28）——過期/用完縮成單行 */
@@ -7360,8 +7364,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1420';
-const APP_VERSION_LABEL='v260805.1420';
+const APP_VERSION = '260805.1445';
+const APP_VERSION_LABEL='v260805.1445';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11910,6 +11914,10 @@ function buildWallet(memberId, ctx){
     if(t.status==='refunded') state='history';
     else if(t.expire_date && String(t.expire_date).slice(0,10)<today) state='expired';
     else if(total>0 && used<total) state='active';
+    /* 今天才用完的票先留在「持有中」，明天再進歷史（2026-08-05 使用者指示，潘詩榆案例：
+       「今天這張票今天才用完，請明天再列入歷史紀錄」）——當天剛下課就從列表消失，
+       會員和櫃檯都會以為票不見了。 */
+    else if(total>0 && used>=total && bks.some(b=>isAtt(b)&&String(b.date||'').slice(0,10)===today)) state='active';
     else if(t.status!=='usable' || (rem!=null && Number(rem)<=0)) state='history';
     else state='active';
     return {t, id:t.id, no:_noOf[t.id]||0, cls:tkClass5(t,typeMap), total, used, pending,
@@ -22702,7 +22710,10 @@ function grpSeatAttCount(b, memberId){
   if(!b || !bkIsGroup(b)) return 0;
   const mid=String(memberId||'');
   const ks=seatKeys(b).filter(k=>seatMid(k)===mid);
-  if(!ks.length) return 0;
+  /* 舊匯入的團課一人一筆：member_ids 是空的、學員在 member_id（2026-08-05 陳麗娟案例）——
+     seatKeys 看不到任何名額，已簽到的課會被當成「沒簽到」掉進待上，
+     票已扣滿時再畫成紅圈超約。這型資料退回看整筆狀態。 */
+  if(!ks.length) return (String(b.member_id||'')===mid && (b.status==='checked_in'||b.status==='completed'))?1:0;
   const att=attObj(b);
   const marked=seatKeys(b).some(k=>att[k]!=null);
   if(!marked) return (b.status==='checked_in'||b.status==='completed')?ks.length:0;
@@ -23391,7 +23402,9 @@ PAGES.members=async function(){
      五格全空看起來像「還沒載入」，要講清楚是哪一種沒票。掛在第一格（教練課）。
      ⚠ 2026-07-31 改版時這段一度隨舊的票券袋子被移除，補回來。 */
   const tkNoneChip=(m)=>{
-    if(_mTk(m.id).tickets.length) return '';
+    /* 2026-08-05：改看「有效票」——只剩用完/過期舊票的人也要出章（舊票已不顯示，
+       不出章會整列空白，反而看不出他沒票了）。 */
+    if(_mTk(m.id).active().length) return '';
     const nx=(_memBkIdx[m.id]||[]).filter(b=>b.status==='booked'&&String(b.date||'').slice(0,10)>=today)
       .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))[0];
     if(nx) return `<span class="tk-chip" style="background:#f5edf7;color:#6e3a86;">尚未儲值・${nx.category||'已排課'} ${String(nx.date||'').slice(5).replace('-','/')}</span>`;
@@ -23401,9 +23414,10 @@ PAGES.members=async function(){
     const w=_mTk(m.id);
     if(!w.tickets.length) return k==='pt' ? tkNoneChip(m) : '';
     const live=w.active(k);
-    const sl=live[0] || w.inClass(k).slice()
-      .sort((a,b)=>String(b.t.purchase_date||b.t.start_date||'').localeCompare(String(a.t.purchase_date||a.t.start_date||'')))[0];
-    if(!sl) return '';
+    /* 用完／過期的票不再退回顯示（2026-08-05 使用者指示，附截圖：整串打勾的舊票
+       擺在列表上「會以為還有票券」）——沒有效票就留白，教練課欄照舊出「無有效票券」章。 */
+    const sl=live[0];
+    if(!sl) return k==='pt' ? tkNoneChip(m) : '';
     const n=live.length;
     return tkRowHtml(sl, w.leftoverIn(k), m.id)
       + (n>1?`<span class="tkcat-n" title="這個課別還有 ${n-1} 張在用">＋${n-1}</span>`:'');
@@ -37319,6 +37333,9 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
      維持原樣（單人課同一堂只有一顆，不受影響）。 */
   let _curSeen=0;
   const _isCur=b=>{ if(!(curId&&b&&b.id===curId)) return false; _curSeen++; return seatN==null || _curSeen===Number(seatN); };
+  /* 共享票（2026-08-05）：串裡混有別人約的戳記時，自己的放大一號（mtk-own） */
+  const _hasSh=[...done,...booked].some(b=>b&&b._shBy);
+  const _ownCls=b=>(_hasSh&&!(b&&b._shBy))?' mtk-own':'';
   let s='',di=0,bi=0;
   for(let i=0;i<total;i++){
     if(i>=unlocked){ s+=`<span class="mtk mtk-lock" title="尚未開通（需繳下一期）">🔒</span>`; }
@@ -37326,7 +37343,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
       const b=di<done.length?done[di++]:null;
       const cur=_isCur(b)?' mtk-cur':'';
       const slf=selfCls(b);
-      const shc=(b&&b._shBy)?' mtk-sh':'';
+      const shc=((b&&b._shBy)?' mtk-sh':'')+_ownCls(b);
       s+=`<span class="mtk mtk-used${cur}${slf}${shc}" style="--tk-acc:${v.accent};" title="已完成${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${b?md(b):'✓'}</span>`;
     }
     else if(bi<booked.length){
@@ -37337,7 +37354,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
          要在他們首頁的圓形卡顯示場地」）——跑＝跑步機、教＝教室；預設多功能區不標。 */
       const vlb=(typeof selfVenueLabel==='function'&&bkIsSelf(b))?selfVenueLabel(b):'';
       const vch=({'跑步機':'跑','教室':'教'})[vlb]||'';
-      const shc2=(b&&b._shBy)?' mtk-sh':'';
+      const shc2=((b&&b._shBy)?' mtk-sh':'')+_ownCls(b);
       s+=`<span class="mtk mtk-booked${cur}${slf}${shc2}" style="--tk-acc:${v.accent};" title="已預約 ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}${b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}</span>`;
     }
     else s+=`<span class="mtk mtk-free" style="--tk-acc:${v.accent};" title="未使用"></span>`;
