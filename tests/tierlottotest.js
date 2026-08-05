@@ -65,8 +65,8 @@ eq('　　只連 1 個月未完成 → 還不進名單',
 eq('★ 待升級＝已連 2 個月完成', api.tierPromotionWatchIds(mk('N',{'2026-10':4,'2026-11':4})), ['N']);
 
 console.log('\n程式碼與文案');
-ok('★ 降級門檻三處狀態機都改成 3（computeMemberTiers ＋ 兩支觀察名單），舊的 2 完全不留',
-   (src.match(/[^z]low>=3\)/g)||[]).length===3     // 三支狀態機（排除 zlow）
+ok('★ 降級門檻四處狀態機都是 3（computeMemberTiers ＋ 兩支觀察名單 ＋ 會員端 memTierInfo），舊的 2 完全不留',
+   (src.match(/[^z]low>=3\)/g)||[]).length===4     // 四支狀態機（排除 zlow；2026-08-05 會員端等級卡加入第四支）
    && /zlow>=3\)/.test(src)                        // 無紀錄者的預設值
    && !/low>=2\)/.test(src));
 ok('　　完全沒有簽到紀錄的預設值也跟著改', /if\(zs==='loyal'&&zlow>=3\)/.test(src));
