@@ -121,8 +121,10 @@ ok('★ 組預約清單改用索引，含團課（學員在 member_ids、member_
 ok('★ 兩個索引各建一次，不是每位會員掃一次上萬筆',
    /const _memBkIdx=\{\};/.test(src) && /const _memPendingIdx=\{\};/.test(src)
    && /\(allBk\|\|\[\]\)\.forEach\(b=>\{/.test(src));
-ok('　　同一人佔多個名額就算多筆（團課圓點要出現多次）',
-   /ids\.forEach\(mid=>\{\s*\n\s*\(_memBkIdx\[mid\]=_memBkIdx\[mid\]\|\|\[\]\)\.push\(b\);/.test(src));
+/* 2026-08-05 游晴雅案例：一個名額塞一筆會讓票券夾把同一堂處理兩遍（戳記翻倍成假超約）——
+   名額展開是 buildWallet／grpTicketAlloc 的事，索引一堂只塞一筆。 */
+ok('　　同一人佔多個名額也只塞一筆（名額由票券夾展開，圓點照樣多顆）',
+   /if\(!_seen\[mid\]\)\{ _seen\[mid\]=1; \(_memBkIdx\[mid\]=_memBkIdx\[mid\]\|\|\[\]\)\.push\(b\); \}/.test(src));
 ok('　　只有「今天以後、已預約未簽到」才算待上',
    /if\(b\.status==='booked' && String\(b\.date\|\|''\)\.slice\(0,10\)>=today\) _memPendingIdx\[mid\]=true;/.test(src));
 ok('　　已取消的不算', /if\(!b \|\| b\.status==='cancelled'\) return;/.test(src));

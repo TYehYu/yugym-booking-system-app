@@ -45,6 +45,13 @@ ok('　　混有共享戳記的標記邏輯保留（_hasSh／mtk-own）',
    /const _hasSh=\[\.\.\.done,\.\.\.booked\]\.some\(b=>b&&b\._shBy\);/.test(src)
    && /const _ownCls=b=>\(_hasSh&&!\(b&&b\._shBy\)\)\?' mtk-own':'';/.test(src));
 
+console.log('\n③b 會員列表索引：多名額不重複塞（游晴雅二修）');
+/* 同一人佔兩個名額時 member_ids 重複同一 id，_memBkIdx 一個名額塞一筆 →
+   票券夾把同一堂處理兩遍、戳記翻倍畫成假超約紅圈。改成一堂一筆。 */
+ok('★ _memBkIdx 一堂只塞一筆（_seen 去重）',
+   /const _seen=\{\};\n\s*ids\.forEach\(mid=>\{\n\s*if\(!_seen\[mid\]\)\{ _seen\[mid\]=1; \(_memBkIdx\[mid\]=_memBkIdx\[mid\]\|\|\[\]\)\.push\(b\); \}/.test(src)
+   && /名額數由票券夾依 member_ids 自行展開/.test(src));
+
 console.log('\n④ 發點課種保險（DB 端）migration 留檔');
 ok('★ 摘要檔存在＋涵蓋三件事',
    (()=>{ try{ const m=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260805_checkin_reward_category_guard.sql','utf8');

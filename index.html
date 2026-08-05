@@ -7368,8 +7368,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1720';
-const APP_VERSION_LABEL='v260805.1720';
+const APP_VERSION = '260805.1728';
+const APP_VERSION_LABEL='v260805.1728';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23203,13 +23203,17 @@ PAGES.members=async function(){
      ② 下面組 myBk 時只比 member_id，而團課的 member_id 是 null（學員在 member_ids），
         就算走到畫圓點那一步，團課的課也一筆都撈不到。
      先建兩個索引，避免每位會員都掃一次上萬筆預約。 */
-  const _memBkIdx={};      // 會員 → 他的預約（含團課，一個名額一筆）
+  const _memBkIdx={};      // 會員 → 他的預約（一堂一筆；名額數由票券夾依 member_ids 自行展開）
   const _memPendingIdx={}; // 會員 → 是否還有「今天以後、已預約未簽到」的課
   (allBk||[]).forEach(b=>{
     if(!b || b.status==='cancelled') return;
     const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
+    /* 同一人佔兩個名額時 member_ids 會重複同一個 id（2026-08-05 游晴雅案例）——
+       這裡若一個名額塞一筆，票券夾會把同一堂處理兩遍、戳記翻倍畫成假超約紅圈。
+       一堂只塞一筆（buildWallet 的 grpTicketAlloc 自己會依名額展開）。 */
+    const _seen={};
     ids.forEach(mid=>{
-      (_memBkIdx[mid]=_memBkIdx[mid]||[]).push(b);
+      if(!_seen[mid]){ _seen[mid]=1; (_memBkIdx[mid]=_memBkIdx[mid]||[]).push(b); }
       if(b.status==='booked' && String(b.date||'').slice(0,10)>=today) _memPendingIdx[mid]=true;
     });
   });
