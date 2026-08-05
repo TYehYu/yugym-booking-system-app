@@ -7368,8 +7368,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1930';
-const APP_VERSION_LABEL='v260805.1930';
+const APP_VERSION = '260805.2118';
+const APP_VERSION_LABEL='v260805.2118';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21295,7 +21295,7 @@ async function openBookingDetail(id){
       ${isMemberView?'':`<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
         <span style="color:var(--t2);flex-shrink:0;">場地</span>
         <span style="flex-shrink:0;">${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>${_vuDots}
-        ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
+        ${(editable&&!bkIsGroup(b))?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
       </div>`}
       ${tkCircleHtml}
     </div>`:((isGroupD||isTrialD)?`
@@ -21334,7 +21334,7 @@ async function openBookingDetail(id){
       ${isMemberView?'':`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="color:var(--t2);flex-shrink:0;">場地</span>
         <span style="flex-shrink:0;">${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>${_vuDots}
-        ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
+        ${(editable&&!bkIsGroup(b))?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
       </div>`}
       ${isGroupD?memberLine:''}
       ${isTrialD?`<div><span style="color:var(--t2);">類型</span>　<span class="tag tag-${colorClass(typeOfCat(b.category))}">${b.category}${b.format?'·'+b.format:''}</span></div>`:''}
@@ -21370,7 +21370,7 @@ async function openBookingDetail(id){
       ${isMemberView?'':`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="color:var(--t2);flex-shrink:0;">場地</span>
         <span style="flex-shrink:0;">${venueName(b.venue_unit)||'—'}${venueIsNotable(b.category,b.venue_unit)?' <span class="tag" style="background:#f6ead8;color:#9a5a1e;font-size:10px;">非主場地</span>':''}</span>${_vuDots}
-        ${editable?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
+        ${(editable&&!bkIsGroup(b))?`<button class="btn btn-ghost btn-sm" style="padding:3px 12px;" onclick="openVenueChange('${b.id}')">更換場地</button>`:''}
       </div>`}
       <div><span style="color:var(--t2);">類型</span>　<span class="tag tag-${colorClass(typeOfCat(b.category))}">${b.category}${b.format?'·'+b.format:''}</span></div>
       ${tkLine}
@@ -30900,13 +30900,71 @@ PAGES.ticketing=async function(){
   const tab=TK_TABS.find(t=>t.key===_tkTab)||TK_TABS[0];
   const tabBar=`<div class="seg seg-scroll" style="margin-bottom:16px;">${TK_TABS.map(t=>
     `<button class="seg-btn ${_tkTab===t.key?'active':''}" onclick="setTkTab('${t.key}')" style="flex-shrink:0;">${t.label}</button>`).join('')}</div>`;
-  C.innerHTML=head('TICKETS','票券管理','方案設定 · 購買申請 · 會員票券')+tabBar+`<div id="tk-body"></div>`;
+  /* 團課帳務巡檢入口（2026-08-05 使用者指示：「避免魏曉微的情況再次發生，有什麼手段嗎」）——
+     一鍵對帳：名額 vs 扣課 vs 票面餘額，對不上的列出來。 */
+  C.innerHTML=head('TICKETS','票券管理','方案設定 · 購買申請 · 會員票券')
+    +`<div style="margin:-8px 0 10px;text-align:right;"><button class="btn btn-ghost btn-sm" onclick="openGrpAudit()">🔍 團課帳務巡檢</button></div>`
+    +tabBar+`<div id="tk-body"></div>`;
   // 呼叫對應子頁渲染（子頁已改為寫入 #tk-body）
   if(_tkTab==='plans') await PAGES.plans();
   else if(_tkTab==='purchase_review') await PAGES.purchase_review();
   else if(_tkTab==='tickets') await PAGES.tickets();
 };
 
+/* ── 團課帳務巡檢（2026-08-05 使用者指示：「避免魏曉微的情況再次發生」）──
+   當天發生的三案（魏曉微/游晴雅/許佳慈）都是同一型：人工重排時「名額、扣課、票面餘額」
+   三方漂移，而且要等會員看到怪畫面才發現。這支把對帳自動化：
+   ①近 7 天起的每一堂團課：每人名額數 vs 該堂的淨扣課筆數（扣−退）
+   ②有帳目紀錄的團課票：票面已用（總−餘）vs 帳目淨扣課筆數
+   對不上的列出來、點名字直接開會員資料。完全沒有帳目的舊匯入票不列（本來就靠推算）。 */
+async function openGrpAudit(){
+  showModal(`<div class="modal-title">團課帳務巡檢</div>
+    <div id="ga-body" style="font-size:13px;color:var(--t2);max-height:60vh;overflow-y:auto;">掃描中…</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+  try{
+    const[bks,tks,logs,mems,types]=await Promise.all([dbGetAll('bookings'),dbGetAll('member_tickets'),
+      dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('members'),dbGetAll('ticket_types')]);
+    const nameOf=id=>{ const m=mems.find(x=>String(x.id)===String(id)); return (m&&m.name)||id; };
+    const from=ymd(addDays(TODAY,-7));
+    // ① 名額 vs 淨扣課（依票的持有人歸戶；共享票掛持有人名下，此處以持有人比對）
+    const tkOwner=Object.fromEntries(tks.map(t=>[t.id,t.member_id]));
+    const net={};
+    (logs||[]).forEach(l=>{ if(!l||!l.booking_id||!tkOwner[l.ticket_id]) return;
+      const d=l.action==='deduct'?1:(l.action==='refund'?-1:0); if(!d) return;
+      const m=(net[l.booking_id]=net[l.booking_id]||{}); const mid=tkOwner[l.ticket_id];
+      m[mid]=(m[mid]||0)+d; });
+    const seatRows=[];
+    (bks||[]).forEach(b=>{ if(!b||!bkIsGroup(b)||b.status==='cancelled') return;
+      if(String(b.date||'').slice(0,10)<from) return;
+      const cnt={}; mids(b).forEach(x=>{ cnt[x]=(cnt[x]||0)+1; });
+      Object.keys(cnt).forEach(mid=>{
+        const paid=(net[b.id]||{})[mid]||0;
+        if(paid!==cnt[mid]) seatRows.push({mid, date:b.date, time:String(b.start_time||'').slice(0,5), seats:cnt[mid], paid});
+      });
+    });
+    seatRows.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    // ② 票面已用 vs 帳目淨扣課
+    const netTk={};
+    (logs||[]).forEach(l=>{ if(!l||!l.ticket_id) return;
+      const d=l.action==='deduct'?1:(l.action==='refund'?-1:0); if(d) netTk[l.ticket_id]=(netTk[l.ticket_id]||0)+d; });
+    const _tm=Object.fromEntries((types||[]).map(t=>[t.id,t]));
+    const tkRows=[];
+    tks.forEach(t=>{
+      if(tkClass5(t,_tm)!=='group' || t.status==='refunded' || netTk[t.id]==null) return;
+      const used=Math.max(0,(Number(t.sessions_total)||0)-(Number(t.sessions_remaining)||0));
+      if(used!==netTk[t.id]) tkRows.push({t, used, logged:netTk[t.id]});
+    });
+    const el=document.getElementById('ga-body'); if(!el) return;
+    const link=(mid,txt)=>`<span class="pp-f-click" style="font-weight:700;color:var(--green);" onclick="closeModal();openPersonProfile('member','${mid}')">${txt}</span>`;
+    el.innerHTML=(seatRows.length||tkRows.length)
+      ? (seatRows.length?`<div style="font-weight:700;color:var(--danger);margin:2px 0 6px;">① 名額與扣課對不上（近 7 天起的團課）</div>`
+          +seatRows.map(r=>`<div style="padding:7px 4px;border-bottom:1px solid var(--bd);">${link(r.mid,nameOf(r.mid))}　${String(r.date).slice(5).replace('-','/')} ${r.time}　名額 <b>${r.seats}</b>・已扣 <b style="color:${r.paid<r.seats?'var(--danger)':'var(--gold-d)'};">${r.paid}</b>${r.paid<r.seats?'（少扣，需補票或屬教練負責）':'（多扣，請檢查退回）'}</div>`).join(''):'')
+      + (tkRows.length?`<div style="font-weight:700;color:var(--danger);margin:14px 0 6px;">② 票面餘額與帳目對不上</div>`
+          +tkRows.map(r=>`<div style="padding:7px 4px;border-bottom:1px solid var(--bd);">${link(r.t.member_id,nameOf(r.t.member_id))}　${r.t.plan_name||'票券'}　票面已用 <b>${r.used}</b>・帳目 <b>${r.logged}</b> 筆</div>`).join(''):'')
+      + `<div style="font-size:11.5px;color:var(--t3);margin-top:12px;line-height:1.7;">「少扣」＝名額沒票付（教練負責的免費名額可忽略）；「多扣」＝取消時沒退乾淨。點名字進會員資料處理。</div>`
+      : '<div style="color:var(--green);font-weight:700;padding:10px 0;">✓ 全部對齊：近 7 天起的團課名額、扣課與票面餘額一致。</div>';
+  }catch(e){ const el=document.getElementById('ga-body'); if(el) el.innerHTML='掃描失敗：'+((e&&e.message)||e); }
+}
 PAGES.plans=async function(targetId){
   const[plans,types]=await Promise.all([dbGetAll('course_plans'),dbGetAll('ticket_types')]);
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
