@@ -35,8 +35,11 @@ console.log('① 圓形卡的場地徽章（實跑 ticketTokens）');
 }
 
 console.log('\n② 樣式與相容');
-ok('★ 徽章樣式（絕對定位在圓下緣、深灰底白字）',
-   /\.mtk-venue\{position:absolute;bottom:-5px;left:50%;transform:translateX\(-50%\);font-size:8px;/.test(src));
+/* 2026-08-05 使用者回報：列表裡「跑」被下緣切掉 → 徽章收進圓圈內側（不再溢出容器） */
+ok('★ 徽章收在圓圈內下緣（不溢出、任何容器都不會被切）',
+   /\.mtk-venue\{position:absolute;bottom:3px;left:50%;transform:translateX\(-50%\);font-size:7\.5px;/.test(src)
+   && /\.mtk:has\(\.mtk-venue\)\{padding-bottom:7px;\}/.test(src)
+   && !/\.mtk-venue\{[^}]*bottom:-5px/.test(src));
 ok('★ 缺票紅圈（mtk-over）也帶徽章', /class="mtk mtk-over\$\{cur\}\$\{slf\}" title="已預約 \$\{b\.date\|\|''\} \$\{b\.start_time\|\|''\}\$\{vlb\?'　·　'\+vlb:''\}/.test(src));
 ok('　　沒有 selfVenueLabel 的沙箱環境不會炸（typeof 守衛）',
    (src.match(/typeof selfVenueLabel==='function'&&bkIsSelf\(b\)/g)||[]).length===2);

@@ -10,7 +10,10 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
-ok('★ 分頁改名「課程修改紀錄」', /\{key:'refunds',    label:'課程修改紀錄'\}/.test(src)
+/* 2026-08-05 整合：分頁列只留 本月/今天/人員，課程修改紀錄改由「本月」頁快捷鈕進入 */
+ok('★ 課程修改紀錄仍可進入（快捷鈕＋路由分支）',
+   /onclick="setFinTab\('refunds'\)">課程修改紀錄<\/button>/.test(src)
+   && /else if\(_finTab==='refunds'\) await finRefunds\(\);/.test(src)
    && !/label:'退款紀錄'/.test(src));
 ok('★ 內容範圍：refund＋adjust（日常 deduct 不列）',
    /filter\(l=>l\.action==='refund'\|\|l\.action==='adjust'\)/.test(src));

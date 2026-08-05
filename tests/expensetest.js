@@ -31,7 +31,10 @@ ok('★ 填寫表格已搬走，這頁不再重複一份', /body\.innerHTML = da
 console.log('\n其他支出分頁：固定支出與其他支出分開列');
 {
   const fe=g('async function finExpenses(){','\n}\n');
-  ok('★ 財務分頁多一個「其他支出」', /\{key:'expenses',   label:'其他支出'\}/.test(src)
+  /* 2026-08-05 整合：分頁列收斂成 本月/今天/人員，支出改由「本月」頁的待處理快捷鈕進入，
+     路由分支仍在（舊連結與快捷鈕都指得到）。 */
+  ok('★ 支出頁仍可進入（快捷鈕＋路由分支）',
+     /onclick="setFinTab\('expenses'\)">支出明細<\/button>/.test(src)
      && /else if\(_finTab==='expenses'\) await finExpenses\(\);/.test(src));
   ok('★ 依 is_fixed 分成兩區', /const fixed=mine\.filter\(e=>e\.is_fixed\), other=mine\.filter\(e=>!e\.is_fixed\);/.test(fe));
   ok('★ 固定支出排前面、其他支出在後', fe.indexOf("section('固定支出'")<fe.indexOf("section('其他支出'"));
@@ -126,8 +129,8 @@ console.log('\n算進本月利潤（2026-07-31 使用者定案）');
 }
 
 console.log('\n權限與口徑');
-ok('★ 只有管理員：財務總覽掛在 g_admin（沒有 fd:true）',
-   /\{grp:'財務', label:'財務總覽', page:'finance'\}/.test(src));
+ok('★ 只有管理員：經營報表掛在 g_admin（沒有 fd:true）',
+   /\{grp:'財務', label:'經營報表', page:'finance'\}/.test(src));
 ok('★ 利潤公式的註解已同步', /利潤 ＝ 銷課金額 − 教練應發薪資 − 本月其他支出（房租水電等，記在財務頁）。/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);

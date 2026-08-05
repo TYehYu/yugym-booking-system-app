@@ -25,8 +25,10 @@ console.log('管理員手機版報表打不開');
      && dash.indexOf('let _tkLogs=[]') < dash.indexOf('(_tkLogs||[]).forEach'));
   ok('　　原因寫在程式裡（為什麼只有手機壞）', /這頁只有管理員手機版的「報表」進得來/.test(src));
   ok('　　手機底部導覽的「報表」確實指向這一頁', /\{key:'dashboard',  label:'報表', ic:'📊'\}/.test(src));
-  ok('　　桌機管理員走的是另一頁（analytics），所以桌機一直沒事',
-     /\{grp:'財務', label:'營運分析', page:'analytics'\}/.test(src));
+  /* 2026-08-05：財務總覽＋營運分析已整合成「經營報表」（analytics 頁保留，導覽入口合一） */
+  ok('　　桌機管理員走的是另一頁（analytics 的內容已併進經營報表）',
+     /\{grp:'財務', label:'經營報表', page:'finance'\}/.test(src)
+     && /PAGES\.analytics=async function\(\)/.test(src));
   // 這頁沒有其他未宣告的區域變數（同一類錯誤的通用防線）
   const used=new Set(); const declared=new Set();
   for(const m of dash.matchAll(/(?:(?:const|let|var)\s+|,\s*)(_[A-Za-z][\w$]*)\s*=/g)) declared.add(m[1]);

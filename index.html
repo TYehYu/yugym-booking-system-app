@@ -1538,6 +1538,14 @@ body.mc-mode .layout{padding-top:8px;}
   .mobile-only{display:block;}
   .desktop-only{display:none;}
 }
+/* 本月損益條（2026-08-05 整合經營報表）：四個大數字一列，手機兩欄 */
+.fin-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.fin-sum .fin-sum-l{font-size:11.5px;color:var(--t3);margin-bottom:4px;}
+.fin-sum .fin-sum-v{font-size:20px;font-weight:800;font-family:var(--num);color:var(--text);line-height:1.2;}
+.fin-sum .fin-sum-v.ok{color:var(--green);}
+.fin-sum .fin-sum-v.danger{color:var(--danger);}
+.fin-sum .fin-sum-s{font-size:10.5px;color:var(--t3);margin-top:3px;line-height:1.5;}
+@media(max-width:700px){ .fin-sum{grid-template-columns:repeat(2,1fr);} }
 /* 營運分析翻頁列（2026-07-31） */
 .dash-pager{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;}
 .dash-pg{min-width:28px;height:28px;padding:0 8px;border:1px solid var(--bd);border-radius:8px;background:#fff;
@@ -3502,8 +3510,12 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
    自己的就是基準大小（mtk-own 不再另外放大）、共享人的縮小一號。 */
 .mtk-sh{transform:scale(.8);opacity:.92;}
 .mtk-own{}
-.mtk-venue{position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);font-size:8px;font-weight:700;
-  font-style:normal;padding:0 4px;border-radius:6px;background:#6a655c;color:#fff;line-height:1.5;white-space:nowrap;}
+/* 場地徽章收進圓圈內（2026-08-05 使用者回報：列表裡「跑」被下緣切掉）——
+   原本掛在圓點外面（bottom:-5px），任何有裁切的容器都會切到；圓點放大到 35px 後
+   內部塞得下，改成日期上移、字母壓在下緣內側，所有畫面都不再溢出。 */
+.mtk-venue{position:absolute;bottom:3px;left:50%;transform:translateX(-50%);font-size:7.5px;font-weight:800;
+  font-style:normal;padding:0;background:none;color:inherit;opacity:.85;line-height:1;white-space:nowrap;}
+.mtk:has(.mtk-venue){padding-bottom:7px;}
 /* 會員資料票券分頁：歷史紀錄摺疊區（2026-07-28）——過期/用完縮成單行 */
 .pp-hist{margin-top:14px;border-top:1px dashed var(--bd);padding-top:10px;}
 .pp-hist summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--t2);user-select:none;padding:4px 0;}
@@ -7368,8 +7380,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.2345';
-const APP_VERSION_LABEL='v260805.2345';
+const APP_VERSION = '260806.0010';
+const APP_VERSION_LABEL='v260806.0010';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9352,8 +9364,7 @@ const ADMIN_NAV2=[
     {grp:'人事', label:'勞健保',   page:'staff', tab:'insurance'},
     {grp:'人事', label:'特休',     page:'staff', tab:'leave'},
     {grp:'人事', label:'權限設定', page:'settings_staff'},
-    {grp:'財務', label:'財務總覽', page:'finance'},
-    {grp:'財務', label:'營運分析', page:'analytics'},
+    {grp:'財務', label:'經營報表', page:'finance'},   // 2026-08-05：財務總覽＋營運分析整合
     {grp:'環境設定', label:'課程方案', page:'settings_ticket'},
     {grp:'環境設定', label:'場地・班別', page:'settings'},
     {grp:'環境設定', label:'合約範本', page:'settings_contract'},
@@ -38665,15 +38676,19 @@ const APP_INVOICE_LABEL={none:'免發票',cloud:'雲端發票',paper:'紙本發�
    ║  purchase_applications / ticket_logs），不新增資料結構。        ║
    ║  TODO: Design Polish（最後統一精緻化）                          ║
    ╚══════════════════════════════════════════════════════════════╝ */
+/* 2026-08-05 使用者指示：「財務總覽／營運分析的資料很零散，有辦法整合嗎」——
+   兩頁合併成「經營報表」，12 個分頁收斂成 3 個，每頁回答一個問題：
+     本月＝這個月賺不賺錢（營收/支出/毛利/淨利＋收入結構＋營運指標）
+     今天＝今天有沒有收對錢（今日營收＋今日營運）
+     人員＝誰的績效如何（教練績效＋續約歸屬）
+   待收款／其他支出／購買審核／課程修改紀錄是「要處理的事」不是報表，
+   從分頁列移除、改由「本月」頁的快捷鈕進入（路由分支保留，舊連結照舊可用）。 */
 const FIN_TABS=[
-  {key:'today',      label:'今日營收'},
-  {key:'month',      label:'本月營收'},
-  {key:'receivable', label:'待收款'},
-  {key:'expenses',   label:'其他支出'},   // 2026-07-31 使用者指示：固定支出與其他支出分開列
-  {key:'review',     label:'購買審核'},
-  {key:'refunds',    label:'課程修改紀錄'},   // 2026-08-04 使用者指示：退款紀錄改課程修改紀錄（月曆版）
+  {key:'month',      label:'本月'},
+  {key:'today',      label:'今天'},
+  {key:'people',     label:'人員'},
 ];
-let _finTab='today';
+let _finTab='month';   // 2026-08-05：預設看本月（整合後的主畫面）
 function setFinTab(k){ _finTab=k; navTo('finance','g_admin'); }
 // 付款方式顯示（未知方式原樣顯示，避免漏帳）
 const FIN_METHOD={cash:'現金',transfer:'轉帳',card:'信用卡',linepay:'Line Pay',line_pay:'Line Pay'};
@@ -39056,14 +39071,63 @@ PAGES.finance=async function(){
   const tab=FIN_TABS.find(t=>t.key===_finTab)||FIN_TABS[0];
   const tabBar=`<div class="seg seg-scroll" style="margin-bottom:16px;">${FIN_TABS.map(t=>
     `<button class="seg-btn ${_finTab===t.key?'active':''}" onclick="setFinTab('${t.key}')" style="flex-shrink:0;">${t.label}</button>`).join('')}</div>`;
-  C.innerHTML=head('FINANCE','財務','今天有沒有收對錢')+tabBar+`<div id="fin-body"></div>`;
-  if(_finTab==='today') await finToday();
-  else if(_finTab==='month') await finMonth();
+  /* 兩個容器都放好：財務側寫 #fin-body、營運側寫 #ana-body（既有子頁不必改寫） */
+  C.innerHTML=head('FINANCE','經營報表','這個月賺不賺錢 · 今天有沒有收對錢')+tabBar
+    +`<div id="fin-sum"></div><div id="fin-body"></div><div id="ana-body"></div>`;
+  if(_finTab==='month'){
+    await finProfitStrip();          // 營收／支出／毛利／淨利 四個大數字
+    await finMonth();                // 收入結構（既有）
+    await anaMonth();                // 營運指標（既有）
+    finQuickLinks();                 // 待處理事項的入口
+  }
+  else if(_finTab==='today'){ await finToday(); await anaToday(); }
+  else if(_finTab==='people'){ await anaCoach(); }
   else if(_finTab==='receivable') await finReceivable();
   else if(_finTab==='expenses') await finExpenses();
   else if(_finTab==='review'){ document.getElementById('fin-body').innerHTML=`<div id="tk-body"></div>`; await PAGES.purchase_review(); }
   else if(_finTab==='refunds') await finRefunds();
 };
+/* 本月損益條（2026-08-05）：營收−（薪資＋其他支出）＝淨利；毛利＝營收−薪資。
+   薪資走 computeMonthlyPayroll（與薪資彙總頁同一套），支出走 expenses 表。 */
+async function finProfitStrip(){
+  const box=document.getElementById('fin-sum'); if(!box) return;
+  const ym=(window._finMonth||ymd(TODAY).slice(0,7));   // 與 finMonth 同一個月份來源
+  box.innerHTML='<div class="card" style="padding:14px 16px;margin-bottom:14px;color:var(--t3);font-size:12.5px;">損益計算中…</div>';
+  try{
+    const [purAll,expAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('expenses').catch(()=>[])]);
+    /* 口徑與 finMonth 完全一致：購買看 created_at、支出看 expenses.ym（含固定支出） */
+    const revenue=(purAll||[]).filter(p=>String(p.created_at||'').slice(0,7)===ym)
+      .reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
+    const otherExp=(expAll||[]).filter(e=>e.ym===ym).reduce((s,e)=>s+(Number(e.amount)||0),0);
+    let salary=0; try{ const pr=await computeMonthlyPayroll(ym); salary=Number(pr&&pr.grandTotal)||0; }catch(_){}
+    const gross=revenue-salary, net=gross-otherExp;
+    const m=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+    const cell=(lb,v,tone,sub)=>`<div class="fin-sum-i">
+        <div class="fin-sum-l">${lb}</div>
+        <div class="fin-sum-v${tone?' '+tone:''}">${m(v)}</div>
+        ${sub?`<div class="fin-sum-s">${sub}</div>`:''}</div>`;
+    box.innerHTML=`<div class="card fin-sum" style="padding:14px 16px;margin-bottom:14px;">
+      ${cell('本月營收',revenue,'ok')}
+      ${cell('支出',salary+otherExp,'danger',`薪資 ${m(salary)}・其他 ${m(otherExp)}`)}
+      ${cell('毛利',gross,gross>=0?'':'danger','營收 − 薪資')}
+      ${cell('淨利',net,net>=0?'ok':'danger','再扣其他支出')}
+    </div>`;
+  }catch(e){ box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;color:var(--t3);font-size:12.5px;">損益暫時算不出來（${(e&&e.message)||e}）</div>`; }
+}
+/* 待處理事項入口（2026-08-05）：這些不是報表，收成一列按鈕放在最下面 */
+function finQuickLinks(){
+  const host=document.getElementById('ana-body'); if(!host) return;
+  host.insertAdjacentHTML('beforeend',`<div class="card" style="padding:14px 16px;">
+    <div class="card-title" style="margin-bottom:10px;">待處理</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      <button class="btn btn-ghost btn-sm" onclick="setFinTab('receivable')">待收款</button>
+      <button class="btn btn-ghost btn-sm" onclick="setFinTab('expenses')">支出明細</button>
+      <button class="btn btn-ghost btn-sm" onclick="setFinTab('review')">購買審核</button>
+      <button class="btn btn-ghost btn-sm" onclick="setFinTab('refunds')">課程修改紀錄</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--t3);margin-top:8px;line-height:1.7;">這幾項是「要處理的事」，處理完就會從清單消失；報表數字不受影響。</div>
+  </div>`);
+}
 
 // ── ① 今日營收：今天收了多少、有哪些付款、付款方式、有沒有退款 ──
 async function finToday(){
