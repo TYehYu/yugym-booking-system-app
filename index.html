@@ -7368,8 +7368,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1728';
-const APP_VERSION_LABEL='v260805.1728';
+const APP_VERSION = '260805.1745';
+const APP_VERSION_LABEL='v260805.1745';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19185,7 +19185,19 @@ function pickMember(mid){
 // 2026-07-21 使用者指示：同一姓名可重複報名（帶長輩/親友同行）——已選列以「＋/−」增減同名名額，
 // _grpSel 為可重複的 id 陣列（multiset），每個名額各算 1 人、各扣 1 堂。
 /* 櫃檯指定這位會員這堂課要扣哪一張團體課票（2026-07-30 使用者指示） */
-function grpPickTk(mid,tkid){ (window._grpTkPick=window._grpTkPick||{})[mid]=tkid; }
+/* 逐名額挑票（2026-08-05 使用者指示：同帳號多人要能「名額1用A票、名額2用B票」，
+   名額直接繼承票券的使用人）——_grpTkPick[mid] 由單一票號改成「名額→票號」陣列；
+   grpPickOf 兼容舊單值格式（跨畫面殘留或舊呼叫端）。 */
+function grpPickTk(mid,seatIdx,tkid){
+  const p=(window._grpTkPick=window._grpTkPick||{});
+  const a=Array.isArray(p[mid])?p[mid]:(p[mid]?[p[mid]]:[]);
+  a[Math.max(0,Number(seatIdx)||0)]=tkid; p[mid]=a;
+}
+function grpPickOf(mid,seatIdx){
+  const v=(window._grpTkPick||{})[mid];
+  if(Array.isArray(v)) return v[seatIdx]!=null ? v[seatIdx] : (v.length?v[v.length-1]:null);
+  return v||null;
+}
 function renderGrpPick(){
   const box=document.getElementById('grp-list'); if(!box)return;
   const q=(document.getElementById('grp-search')?.value||'').trim().toLowerCase();
@@ -19213,17 +19225,25 @@ function renderGrpPick(){
     /* 選了、而且有兩張以上可用票券 → 出下拉讓櫃檯指定扣哪一張（2026-07-30 使用者指示）。
        預設是最快到期那張（清單已按效期排序），避免快過期的優惠票被留到過期。 */
     const tks=m.tks||[];
-    const picked=(window._grpTkPick||{})[m.id]||(tks[0]&&tks[0].id)||'';
+    /* 逐名額挑票（2026-08-05）：一個名額一個下拉，預設「名額 i 用第 i 張票」——
+       買兩份票約兩個名額時自動各用各的。 */
+    const _defPk=i=>(tks[Math.min(i,tks.length-1)]||{}).id||'';
+    const picked=grpPickOf(m.id,0)||_defPk(0);
     /* 團課票的家庭功能（2026-08-04 使用者指示：「團體課的票券也要有家庭功能，包含預約的地方」）——
        將被扣的那張票有預設使用人就直接標在名字旁，報名當下就看得到這格給誰。 */
     const _pk=tks.find(t=>t.id===picked);
     const famTag=(_pk&&_pk.fam)?`<span class="tag" style="font-size:10.5px;background:#eef2fa;color:#1a3a6e;">使用人：${_pk.fam}</span>`:'';
+    const _seatSel=i=>{
+      const pk=grpPickOf(m.id,i)||_defPk(i);
+      return `<div style="margin:6px 0 0 26px;display:flex;align-items:center;gap:6px;" onclick="event.stopPropagation();">
+          ${n>1?`<span style="flex:none;font-size:11px;color:var(--t3);">名額 ${i+1}</span>`:''}
+          <select class="grp-tk-sel" onchange="grpPickTk('${m.id}',${i},this.value)"
+                  style="flex:1;font-family:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--bd);border-radius:8px;background:#fff;">
+            ${tks.map(t=>`<option value="${t.id}" ${t.id===pk?'selected':''}>扣：${String(t.name).replace(/</g,'&lt;')}　剩 ${t.left} 堂${t.fam?`　使用人：${String(t.fam).replace(/</g,'&lt;')}`:''}${t.exp?`　效期至 ${t.exp.slice(5).replace('-','/')}`:'　無到期日'}</option>`).join('')}
+          </select></div>`;
+    };
     const pick=(on&&tks.length>1)
-      ? `<div style="margin:6px 0 0 26px;" onclick="event.stopPropagation();">
-          <select class="grp-tk-sel" onchange="grpPickTk('${m.id}',this.value)"
-                  style="width:100%;font-family:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--bd);border-radius:8px;background:#fff;">
-            ${tks.map(t=>`<option value="${t.id}" ${t.id===picked?'selected':''}>扣：${String(t.name).replace(/</g,'&lt;')}　剩 ${t.left} 堂${t.exp?`　效期至 ${t.exp.slice(5).replace('-','/')}`:'　無到期日'}</option>`).join('')}
-          </select></div>`
+      ? Array.from({length:n},(_,i)=>_seatSel(i)).join('')
       : '';
     return _div+`<button type="button" class="ms-item grp-item${on?' grp-on':''}" onclick="toggleGrpMember('${m.id}')">
       <div style="display:flex;align-items:center;gap:8px;">
@@ -19777,11 +19797,14 @@ async function _submitBookingInner(){
         created_by:SESSION.id,created_at:new Date().toISOString()};
       await dbPut('bookings',bk);
       // 為有團體課票的會員各扣 1 堂（沒票的略過，由教練負責）
+      const _si={};   // 逐名額挑票（2026-08-05）：同一人第 N 個名額用第 N 個指定
       for(const mid of ids){
-        /* 櫃檯在名單上指定過票券就照指定的（2026-07-30 使用者指示）；指定的票在該週已不可用
-           （效期不到、或前幾週已扣光）就自動退回最快到期的那張，不要整堂建不起來。 */
+        /* 櫃檯在名單上指定過票券就照指定的（2026-07-30 使用者指示；2026-08-05 改逐名額）；
+           指定的票在該週已不可用（效期不到、或前幾週已扣光）就自動退回最快到期的那張，
+           不要整堂建不起來。 */
+        const _i=(_si[mid]=(_si[mid]==null?0:_si[mid]+1));
         let tk=null;
-        const want=(window._grpTkPick||{})[mid];
+        const want=grpPickOf(mid,_i);
         if(want){ const cand=await listUsableTickets(mid,type_id,dW,tW); tk=cand.find(x=>x.id===want)||null; }
         if(!tk) tk=await findUsableTicket(mid,type_id,dW,tW);
         if(tk){ await deductTicket(tk,bk.id,SESSION.id); charged++; }
@@ -22481,12 +22504,14 @@ async function _saveGroupMembers(id){
     for(let i=0;i<-d;i++) removed.push(k);
   }
   // 新加入的有票就扣、移除的退回（依該 booking 的票券類型）
+  const _seatIdx={};   // 逐名額挑票（2026-08-05）：新名額接在既有名額後面，索引從已有數量起算
   for(const mid of added){
-    /* 櫃檯有指定要扣哪一張就照指定的（2026-07-30 使用者指示）——
+    /* 櫃檯有指定要扣哪一張就照指定的（2026-07-30 使用者指示；2026-08-05 改逐名額）——
        同時有長期方案與快到期的優惠票時，自動的「最快到期優先」未必是客人要的。
        指定的票要重新驗一次還能不能用（可能剛被別的操作用完），不能用就回到自動挑選。 */
+    const _i=(_seatIdx[mid]=(_seatIdx[mid]==null?(pc[mid]||0):_seatIdx[mid]+1));
     let tk=null;
-    const want=(window._grpTkPick||{})[mid];
+    const want=grpPickOf(mid,_i);
     if(want){
       const cand=await listUsableTickets(mid,b.ticket_type_id,b.date,b.start_time);
       tk=cand.find(t=>t.id===want)||null;

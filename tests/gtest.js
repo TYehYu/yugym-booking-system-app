@@ -221,15 +221,20 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('★ 挑票排序：沒有效期的排最後（不再讓長期方案插到最前面）',
       /String\(a\.expire_date\|\|'9999-12-31'\)\.localeCompare\(String\(b\.expire_date\|\|'9999-12-31'\)\)/.test(src)
       && !/return \(a\.expire_date\|\|''\)\.localeCompare\(b\.expire_date\|\|''\);/.test(src));
-    chk('★ 櫃檯：名單上每人可下拉指定票券', /function grpPickTk\(mid,tkid\)\{/.test(src)
-      && /onchange="grpPickTk\('\$\{m\.id\}',this\.value\)"/.test(src));
+    /* 2026-08-05：改逐名額挑票——一個名額一個下拉，名額1用A票、名額2用B票 */
+    chk('★ 櫃檯：名單上逐名額下拉指定票券', /function grpPickTk\(mid,seatIdx,tkid\)\{/.test(src)
+      && /onchange="grpPickTk\('\$\{m\.id\}',\$\{i\},this\.value\)"/.test(src)
+      && /function grpPickOf\(mid,seatIdx\)\{/.test(src));
     chk('　　只有選了、且有兩張以上才出現下拉', /const pick=\(on&&tks\.length>1\)/.test(src));
     chk('　　下拉標明剩餘堂數與效期', /扣：\$\{String\(t\.name\)\.replace\(\/<\/g,'&lt;'\)\}　剩 \$\{t\.left\} 堂/.test(src));
-    chk('★ 管理名單存檔時照指定的扣', /const want=\(window\._grpTkPick\|\|\{\}\)\[mid\];/.test(src)
+    chk('★ 管理名單存檔時照逐名額指定的扣（新名額索引接在既有名額後）',
+      /const want=grpPickOf\(mid,_i\);/.test(src)
+      && /const _i=\(_seatIdx\[mid\]=\(_seatIdx\[mid\]==null\?\(pc\[mid\]\|\|0\):_seatIdx\[mid\]\+1\)\);/.test(src)
       && /tk=cand\.find\(t=>t\.id===want\)\|\|null;/.test(src));
     // 2026-07-30：各天可不同時間 → 挑票改用那一筆的時間 tW
-    chk('★ 新增團體課（含連續數週）也照指定的扣',
-      /if\(want\)\{ const cand=await listUsableTickets\(mid,type_id,dW,tW\); tk=cand\.find\(x=>x\.id===want\)\|\|null; \}/.test(src));
+    chk('★ 新增團體課（含連續數週）也照逐名額指定的扣',
+      /if\(want\)\{ const cand=await listUsableTickets\(mid,type_id,dW,tW\); tk=cand\.find\(x=>x\.id===want\)\|\|null; \}/.test(src)
+      && /const _i=\(_si\[mid\]=\(_si\[mid\]==null\?0:_si\[mid\]\+1\)\);/.test(src));
     chk('　　指定的票不能用時退回自動挑選，不讓整堂建不起來',
       /if\(!tk\) tk=await findUsableTicket\(mid,type_id,dW,tW\);/.test(src)
       && /指定的票券已不能用，改用最快到期的那張/.test(src));
