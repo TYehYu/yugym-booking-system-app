@@ -7366,8 +7366,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1600';
-const APP_VERSION_LABEL='v260805.1600';
+const APP_VERSION = '260805.1618';
+const APP_VERSION_LABEL='v260805.1618';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10124,6 +10124,15 @@ function isLegacyMember(m){
   if(m.tier_epoch!=null) return !!m.tier_epoch;
   return /^(MEM-|IMPM-)/.test(String(m.id||''));
 }
+/* 手動調整起點（2026-08-05 使用者指示二修：「只是這個月升級，但升降級制度還是要」）——
+   tier_manual regular/loyal＋tier_manual_at＝從設定當月起以該等級為起點，之後照規則升降；
+   VIP 仍為鎖定（effTier 直接回傳，不進重播）。 */
+function _tierBaseOf(m){
+  const v=m&&m.tier_manual;
+  if((v==='regular'||v==='loyal') && m.tier_manual_at)
+    return {ym:String(m.tier_manual_at).slice(0,7), state:v};
+  return null;
+}
 function computeMemberTiers(bookings, members){
   const counts={};                         // mid -> { 'YYYY-MM': 已簽到教練課數 }
   (bookings||[]).forEach(b=>{
@@ -10148,6 +10157,9 @@ function computeMemberTiers(bookings, members){
     const cYm=String((m&&m.created_at)||'').slice(0,7);
     let cur=(legacy||!cYm||cYm<TIER_EPOCH_YM) ? TIER_EPOCH_YM : cYm;   // 新客從建檔月起算
     let state=legacy?'loyal':'regular', ok=0, low=0;
+    /* 手動調整起點（2026-08-05）：從設定當月、以設定的等級接著走 */
+    const base=_hasM ? _tierBaseOf(m) : null;
+    if(base){ cur=base.ym; state=base.state; }
     while(cur<nowYm){                      // 只走到上個月（當月未結束）
       const n=byYm[cur]||0;                // 空月＝0 堂，計入降級判定
       ok  = n>=4 ? ok+1  : 0;
@@ -10173,7 +10185,7 @@ function _nextYm(ym){ let[y,m]=ym.split('-').map(Number); m++; if(m>12){m=1;y++;
    若本月結束仍未達即於下月 1 日降級。重播規則與 computeMemberTiers 同源。
    2026-07-30 使用者定案：降級門檻由 2 個月改為 3 個月，故觀察條件同步改成 low===2。
    注意：7 月為制度起點月（無已結束的完整月）→ 名單要 9 月起才會出現。 */
-function tierDemotionWatchIds(bookings){
+function tierDemotionWatchIds(bookings, members){
   const counts={};
   (bookings||[]).forEach(b=>{
     if(!(b.status==='checked_in'||b.status==='completed')) return;
@@ -10182,10 +10194,12 @@ function tierDemotionWatchIds(bookings){
     const ym=(b.date||'').slice(0,7); if(ym.length!==7) return;
     (counts[mid]=counts[mid]||{})[ym]=(counts[mid][ym]||0)+1;
   });
+  const _bById={}; (members||[]).forEach(m=>{ const b=_tierBaseOf(m); if(b) _bById[m.id]=b; });   // 手動調整起點（2026-08-05）
   const nowYm=ymd(TODAY).slice(0,7);
   const out=[];
   Object.entries(counts).forEach(([mid,byYm])=>{
     let cur='2026-07', state='loyal', ok=0, low=0;
+    if(_bById[mid]){ cur=_bById[mid].ym; state=_bById[mid].state; }
     while(cur<nowYm){
       const n=byYm[cur]||0;
       ok=n>=4?ok+1:0; low=n<4?low+1:0;
@@ -10199,7 +10213,7 @@ function tierDemotionWatchIds(bookings){
 }
 /* 待升級觀察名單（2026-07-28 使用者指示）：目前為「會員」、已連 2 個完整月完成抽獎目標
    （教練課 ≥4 堂）—— 本月再達 4 堂即於下月 1 日升主顧客。重播規則與 computeMemberTiers 同源。 */
-function tierPromotionWatchIds(bookings){
+function tierPromotionWatchIds(bookings, members){
   const counts={};
   (bookings||[]).forEach(b=>{
     if(!(b.status==='checked_in'||b.status==='completed')) return;
@@ -10208,10 +10222,12 @@ function tierPromotionWatchIds(bookings){
     const ym=(b.date||'').slice(0,7); if(ym.length!==7) return;
     (counts[mid]=counts[mid]||{})[ym]=(counts[mid][ym]||0)+1;
   });
+  const _bById={}; (members||[]).forEach(m=>{ const b=_tierBaseOf(m); if(b) _bById[m.id]=b; });   // 手動調整起點（2026-08-05）
   const nowYm=ymd(TODAY).slice(0,7);
   const out=[];
   Object.entries(counts).forEach(([mid,byYm])=>{
     let cur='2026-07', state='loyal', ok=0, low=0;
+    if(_bById[mid]){ cur=_bById[mid].ym; state=_bById[mid].state; }
     while(cur<nowYm){
       const n=byYm[cur]||0;
       ok=n>=4?ok+1:0; low=n<4?low+1:0;
@@ -10226,16 +10242,17 @@ function tierPromotionWatchIds(bookings){
 // 會員實際等級：VIP（手動）優先；快取就緒用自動推算值；快取未備妥時退回舊 level 欄位（避免閃跳）
 function effTier(m){
   if(!m) return 'regular';
-  /* 手動鎖定（2026-08-05 使用者指示：管理員可調整會員等級）——tier_manual 凌駕自動制 */
-  if(m.tier_manual==='regular'||m.tier_manual==='loyal'||m.tier_manual==='vip') return m.tier_manual;
+  /* 手動調整（2026-08-05 二修）：VIP＝鎖定直接回傳；regular/loyal 是「起點」，
+     由 computeMemberTiers 的重播接手（設定當月起照升降規則走）。 */
+  if(m.tier_manual==='vip') return 'vip';
   if(m.level==='vip') return 'vip';
   const c=window._memberTierCache;
-  let t=(c && c.__ready) ? (c[m.id]||c.__default||'regular') : (m.level||'regular');
+  let t=(c && c.__ready) ? (c[m.id]||c.__default||'regular') : (m.tier_manual||m.level||'regular');
   /* 2026-07-29 使用者定案（二修）：起點名單改以「是否為舊系統既有會員」判定（members.tier_epoch），
      不再用建檔日期分界——原本以 2026-07-29 為界，會把 7/25–7/28 新加入的客戶誤判成既有會員而給主顧客。
      新客的正確路徑：從『會員』開始 → 連 3 個完整月每月 ≥4 堂才升主顧客（由 computeMemberTiers 判定）。
      快取尚未就緒時（讀 m.level 的退路），新客不採用繼承來的『主顧客』。 */
-  if(!isLegacyMember(m) && t==='loyal' && !(c&&c.__ready)) t='regular';
+  if(!isLegacyMember(m) && t==='loyal' && !(c&&c.__ready) && m.tier_manual!=='loyal') t='regular';   // 手動調整值不套「新客不繼承」保險（2026-08-05）
   return t;
 }
 // 各頁載入時呼叫：抓 bookings（有 8 秒 TTL 快取）建等級快取
@@ -13416,7 +13433,7 @@ PAGES.g_dashboard=async function(){
     if((b.date||'').slice(0,7)!==_thisYm || !b.member_id) return;
     _ptCntThisMonth[b.member_id]=(_ptCntThisMonth[b.member_id]||0)+1;
   });
-  const _demoteList=tierDemotionWatchIds(bookings||[])
+  const _demoteList=tierDemotionWatchIds(bookings||[], Object.values(memMap||{}))
     .filter(id=>memMap[id])
     .map(id=>{ const n=_ptCntThisMonth[id]||0;
       return {id,name:memMap[id].name,sub:`已連 2 個月未達・本月至今 ${n} 堂・還差 ${Math.max(0,4-n)} 堂即可保住主顧客`}; });
@@ -23278,8 +23295,8 @@ PAGES.members=async function(){
   const birthdayToday = members.filter(m=>String(m.birthday||'').slice(5)===todayMd).length;
   /* 2026-07-28 使用者指示：上方三卡＝總人數／待升級名單／待降級名單（點卡看名單） */
   const _memById=Object.fromEntries(members.map(m=>[m.id,m]));
-  const proIds=tierPromotionWatchIds(allBk).filter(id=>_memById[id]&&effTier(_memById[id])==='regular');
-  const demIds=tierDemotionWatchIds(allBk).filter(id=>_memById[id]&&effTier(_memById[id])==='loyal');
+  const proIds=tierPromotionWatchIds(allBk,members).filter(id=>_memById[id]&&effTier(_memById[id])==='regular');
+  const demIds=tierDemotionWatchIds(allBk,members).filter(id=>_memById[id]&&effTier(_memById[id])==='loyal');
   /* 待續約（2026-07-28 使用者定義二修）：教練課（含友善）與團體課分開判定——
      該類剩餘 0、且該類「最後一堂」（含已上/已預約，未取消）落在本月；名單標注課程。 */
   const _lastByGrp={};   // mid -> {pt:date, grp:date}
@@ -23989,13 +24006,15 @@ async function openTierModal(member_id){
       ${d?`<span class="tag" style="background:${d.bg};color:${d.color};">${d.label}</span>`:`<span class="tag" style="background:var(--card2);color:var(--t2);">${lb}</span>`}
       <span style="font-size:11.5px;color:var(--t2);">${desc}</span>
     </label>`;
+  /* 2026-08-05 二修（使用者指示：「只是這個月升級，但升降級制度還是要」）——
+     會員/主顧客的手動調整＝設定「起點」：從本月起以該等級照規則繼續升降；VIP 才是鎖定。 */
   const opts=
     row('',null,'自動判定',`依升降級規則自動計算（目前：${(TIER_DEFS[effTierAuto(m)]||{}).label||'會員'}）`,!isAdm&&cur!=='vip')+
-    row('regular',TIER_DEFS.regular,'','手動鎖定為會員（不再自動升級）',!isAdm)+
-    row('loyal',TIER_DEFS.loyal,'','手動鎖定為主顧客（不再自動降級）',!isAdm)+
-    row('vip',TIER_DEFS.vip,'','手動鎖定為 VIP',false);
+    row('regular',TIER_DEFS.regular,'','手動調整為會員（本月起照升降級規則繼續計算）',!isAdm)+
+    row('loyal',TIER_DEFS.loyal,'','手動調整為主顧客（本月起照升降級規則繼續計算）',!isAdm)+
+    row('vip',TIER_DEFS.vip,'','鎖定 VIP（不受升降級規則影響）',false);
   showModal(`<div class="modal-title">調整等級 · ${m.name}</div>
-    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;">會員／主顧客平常由<b>自動判定</b>（當月教練課簽到滿 4 堂＝達標，連 3 個月達標升主顧客、連 3 個月未達標降回會員）。${isAdm?'管理員可<b>手動鎖定</b>任一等級，鎖定後不受自動升降影響；選「自動判定」即恢復。':'手動設定僅 <b>VIP</b> 會生效（其餘選項限管理員）。'}</div>
+    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;">會員／主顧客平常由<b>自動判定</b>（當月教練課簽到滿 4 堂＝達標，連 3 個月達標升主顧客、連 3 個月未達標降回會員）。${isAdm?'管理員可<b>手動調整目前等級</b>——調整後升降級制度照常運作（從本月起算）；選「自動判定」即回到完整重播。VIP 為鎖定、不受升降影響。':'手動設定僅 <b>VIP</b> 會生效（其餘選項限管理員）。'}</div>
     ${opts}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="${PP.id===member_id?'closeModal()':`openMemberDetail('${member_id}')`}">返回</button><button class="btn btn-green" onclick="saveTier('${member_id}')">儲存等級</button></div>`);
 }
@@ -24006,10 +24025,13 @@ async function saveTier(member_id){
   const sel=document.querySelector('.tier-radio:checked');
   if(sel){
     m.tier_manual=sel.value||null;
+    m.tier_manual_at=sel.value?ymd(TODAY):null;   // 調整起點＝設定當月（2026-08-05 二修）
     if(!sel.value && m.level==='vip') m.level='regular';   // 恢復自動時清掉舊制的 level='vip'，否則 effTier 仍回 VIP
   }
   await dbPut('members',m);
-  closeModal();showToast(sel&&sel.value?('等級已鎖定為「'+((TIER_DEFS[sel.value]||{}).label||sel.value)+'」'):'已恢復自動判定');
+  closeModal();showToast(sel&&sel.value
+    ? (sel.value==='vip' ? '已鎖定為 VIP' : '等級已調整為「'+((TIER_DEFS[sel.value]||{}).label)+'」，本月起照升降級規則繼續計算')
+    : '已恢復自動判定');
   if(await ppRefreshIfOpen(member_id)) return;
   navTo(CUR_PAGE); // 重繪列表確保即時更新
   if(_detailMemberId===member_id)setTimeout(()=>openMemberDetail(member_id),50);
@@ -37458,6 +37480,9 @@ function memTierInfo(me,bookings){
   const legacy=isLegacyMember(me), cYm=String(me.created_at||'').slice(0,7);
   let cur=(legacy||!cYm||cYm<TIER_EPOCH_YM)?TIER_EPOCH_YM:cYm;
   let state=legacy?'loyal':'regular', ok=0, low=0;
+  /* 手動調整起點（2026-08-05 二修）：從設定當月、以設定的等級接著走 */
+  const _b=(typeof _tierBaseOf==='function')?_tierBaseOf(me):null;
+  if(_b){ cur=_b.ym; state=_b.state; }
   while(cur<nowYm){
     const n=byYm[cur]||0;
     ok=n>=4?ok+1:0; low=n<4?low+1:0;
@@ -37465,8 +37490,9 @@ function memTierInfo(me,bookings){
     else if(state==='loyal'&&low>=3){ state='regular'; ok=0; low=0; }
     cur=_nextYm(cur);
   }
-  /* 手動鎖定（2026-08-05：管理員可調整等級）——鎖定時照鎖定值顯示、提醒改為門市設定 */
-  const man=(me.tier_manual==='regular'||me.tier_manual==='loyal'||me.tier_manual==='vip')?me.tier_manual:null;
+  /* VIP＝鎖定（照鎖定值顯示、提醒改為門市設定）；regular/loyal 的手動調整
+     只是重播起點（上面已代入），提醒照常顯示升降進度（2026-08-05 二修）。 */
+  const man=(me.tier_manual==='vip')?'vip':null;
   return { state:man||((me.level==='vip')?'vip':state), ok, low, now:byYm[nowYm]||0, manual:!!man };
 }
 /* 等級卡（我的票券頁最上方，取代原「我的票券」大標） */

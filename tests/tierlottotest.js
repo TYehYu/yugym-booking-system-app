@@ -11,7 +11,8 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
-const code=g('function isLegacyMember(m){','\n}\n')+'\n'+g('function computeMemberTiers(','\n}\n')+'\n'
+const code=g('function isLegacyMember(m){','\n}\n')+'\n'+g('function _tierBaseOf(m){','\n}\n')+'\n'   // 2026-08-05 手動調整起點
+  +g('function computeMemberTiers(','\n}\n')+'\n'
   +g('function _nextYm(ym)','\n')+'\n'+g('function tierDemotionWatchIds(','\n}\n')+'\n'
   +g('function tierPromotionWatchIds(','\n}\n');
 // 假設「今天」是 2026-12-01 → 會走訪 2026-07 ~ 2026-11 這 5 個完整月
