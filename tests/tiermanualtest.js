@@ -50,11 +50,15 @@ console.log('\n①b computeMemberTiers：起點接手重播（實跑，假時鐘
 }
 
 console.log('\n② 等級視窗與寫入');
-ok('★ 管理員四選項全開、其他員工只有 VIP；文案講清楚「本月起照規則繼續」',
+/* 2026-08-05 三修（使用者指示）：「會員等級的手動調整只有管理員帳號可以做」——
+   非管理員全部反灰、無儲存鈕；儲存函式再守一層；DB 端 fn_members_guard 連櫃檯的
+   等級欄位寫入都擋（實測：櫃檯改 tier_manual 被擋、其他欄位照常、管理員可調）。 */
+ok('★ 僅管理員可調（四個選項非管理員全反灰、無儲存鈕）',
    /const isAdm=SESSION&&SESSION\.role==='admin';/.test(src)
    && /row\('regular',TIER_DEFS\.regular,'','手動調整為會員（本月起照升降級規則繼續計算）',!isAdm\)/.test(src)
-   && /row\('loyal',TIER_DEFS\.loyal,'','手動調整為主顧客（本月起照升降級規則繼續計算）',!isAdm\)/.test(src)
-   && /row\('vip',TIER_DEFS\.vip,'','鎖定 VIP（不受升降級規則影響）',false\)/.test(src));
+   && /row\('vip',TIER_DEFS\.vip,'','鎖定 VIP（不受升降級規則影響）',!isAdm\)/.test(src)
+   && /\$\{isAdm\?`<button class="btn btn-green" onclick="saveTier\('\$\{member_id\}'\)">儲存等級<\/button>`:''\}/.test(src));
+ok('★ 儲存函式擋非管理員', /if\(!\(SESSION&&SESSION\.role==='admin'\)\)\{ showToast\('等級調整僅限管理員帳號'\); return; \}/.test(src));
 {
   const f=grabFn('saveTier');
   ok('★ 寫 tier_manual＋tier_manual_at（空值＝恢復自動、一併清起點）',
@@ -65,8 +69,10 @@ ok('★ 管理員四選項全開、其他員工只有 VIP；文案講清楚「�
 }
 
 console.log('\n②b 會員資料表頭的等級章可點（2026-08-05 使用者指示，附截圖）');
-ok('★ 櫃檯以上可點開調整視窗、教練與會員本人唯讀',
-   /pp-meta-i\$\{_canBase\?' pp-f-click':''\}[\s\S]{0,60}?openTierModal\('\$\{r\.id\}'\)/.test(src));
+ok('★ 只有管理員可點開調整視窗（表頭等級章＋會員明細都是）',
+   /pp-meta-i\$\{_canTier\?' pp-f-click':''\}[\s\S]{0,60}?openTierModal\('\$\{r\.id\}'\)/.test(src)
+   && /const _canTier = !!\(SESSION&&SESSION\.role==='admin'\);/.test(src)
+   && /md-title-tier \$\{\(SESSION&&SESSION\.role==='admin'\)\?'md-attr-click':''\}/.test(src));
 
 console.log('\n③ 會員端等級卡跟著反映');
 ok('★ VIP 鎖定才顯示「等級由門市設定」；手動起點照常顯示升降進度',

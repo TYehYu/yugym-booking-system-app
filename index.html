@@ -7368,8 +7368,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1900';
-const APP_VERSION_LABEL='v260805.1900';
+const APP_VERSION = '260805.1915';
+const APP_VERSION_LABEL='v260805.1915';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23864,7 +23864,8 @@ async function openMemberDetail(member_id){
     <div class="md-sec">
       <div class="md-sec-head" style="justify-content:flex-start;gap:14px;">
         <div class="md-title-inline"><span class="${isCoach?'':'md-attr-click'}" ${isCoach?'':`onclick="openFieldEdit('${member_id}','name')" title="點擊修改姓名"`}>${m.name}</span> <span style="font-size:13px;color:var(--t3);font-weight:400;">${fmtPhone(m.phone)}</span></div>
-        <div class="md-title-tier ${isCoach?'':'md-attr-click'}" ${isCoach?'':`onclick="openTierModal('${member_id}')"`}>${tierTag(effTier(m))}</div>
+        ${/* 等級調整僅限管理員（2026-08-05 使用者指示） */''}
+        <div class="md-title-tier ${(SESSION&&SESSION.role==='admin')?'md-attr-click':''}" ${(SESSION&&SESSION.role==='admin')?`onclick="openTierModal('${member_id}')"`:''}>${tierTag(effTier(m))}</div>
       </div>
       <div class="md-basic-grid">
         ${isCoach?'':`<div class="md-basic-f md-basic-click" onclick="openFieldEdit('${member_id}','email')"><span class="md-basic-l">Email</span><span class="md-basic-v">${m.email||'<span style=\"color:var(--t3);\">＋ 新增</span>'}</span></div>
@@ -24123,19 +24124,22 @@ async function openTierModal(member_id){
     </label>`;
   /* 2026-08-05 二修（使用者指示：「只是這個月升級，但升降級制度還是要」）——
      會員/主顧客的手動調整＝設定「起點」：從本月起以該等級照規則繼續升降；VIP 才是鎖定。 */
+  /* 2026-08-05 使用者指示三修：「會員等級的手動調整只有管理員帳號可以做」——
+     非管理員全部選項反灰、不給儲存鈕（入口本來就只給管理員，這裡再守一層）。 */
   const opts=
-    row('',null,'自動判定',`依升降級規則自動計算（目前：${(TIER_DEFS[effTierAuto(m)]||{}).label||'會員'}）`,!isAdm&&cur!=='vip')+
+    row('',null,'自動判定',`依升降級規則自動計算（目前：${(TIER_DEFS[effTierAuto(m)]||{}).label||'會員'}）`,!isAdm)+
     row('regular',TIER_DEFS.regular,'','手動調整為會員（本月起照升降級規則繼續計算）',!isAdm)+
     row('loyal',TIER_DEFS.loyal,'','手動調整為主顧客（本月起照升降級規則繼續計算）',!isAdm)+
-    row('vip',TIER_DEFS.vip,'','鎖定 VIP（不受升降級規則影響）',false);
+    row('vip',TIER_DEFS.vip,'','鎖定 VIP（不受升降級規則影響）',!isAdm);
   showModal(`<div class="modal-title">調整等級 · ${m.name}</div>
-    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;">會員／主顧客平常由<b>自動判定</b>（當月教練課簽到滿 4 堂＝達標，連 3 個月達標升主顧客、連 3 個月未達標降回會員）。${isAdm?'管理員可<b>手動調整目前等級</b>——調整後升降級制度照常運作（從本月起算）；選「自動判定」即回到完整重播。VIP 為鎖定、不受升降影響。':'手動設定僅 <b>VIP</b> 會生效（其餘選項限管理員）。'}</div>
+    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;">會員／主顧客平常由<b>自動判定</b>（當月教練課簽到滿 4 堂＝達標，連 3 個月達標升主顧客、連 3 個月未達標降回會員）。${isAdm?'管理員可<b>手動調整目前等級</b>——調整後升降級制度照常運作（從本月起算）；選「自動判定」即回到完整重播。VIP 為鎖定、不受升降影響。':'<b>等級的手動調整僅限管理員帳號。</b>'}</div>
     ${opts}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="${PP.id===member_id?'closeModal()':`openMemberDetail('${member_id}')`}">返回</button><button class="btn btn-green" onclick="saveTier('${member_id}')">儲存等級</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="${PP.id===member_id?'closeModal()':`openMemberDetail('${member_id}')`}">返回</button>${isAdm?`<button class="btn btn-green" onclick="saveTier('${member_id}')">儲存等級</button>`:''}</div>`);
 }
 /* 純自動判定值（跳過手動鎖定；等級視窗顯示「自動會是什麼」用） */
 function effTierAuto(m){ return effTier(Object.assign({},m,{tier_manual:null,level:(m&&m.level==='vip')?'regular':(m&&m.level)})); }
 async function saveTier(member_id){
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('等級調整僅限管理員帳號'); return; }   // 2026-08-05
   const m=await dbGet('members',member_id);
   const sel=document.querySelector('.tier-radio:checked');
   if(sel){
@@ -28407,9 +28411,10 @@ function ppHeaderHtml(){
   /* 2026-07-28 使用者指示：會員表頭固定兩列——
      第一列 姓名/電話/性別/生日；第二列 等級/教練/緊急聯絡人/LINE 開關 */
   const metaRow1 = isM ? mvA('電話',fmtPhone(r.phone),'','未填') + genderItem + bdayItem : '';
-  /* 等級章可點（2026-08-05 使用者指示：「管理員點這個會員要能夠修改會員等級」）——
-     開既有的調整視窗（openTierModal：管理員四選項全開、櫃檯僅 VIP、教練唯讀不可點）。 */
-  const tierItem = isM ? `<div class="pp-meta-i${_canBase?' pp-f-click':''}"${_canBase?` onclick="openTierModal('${r.id}')"`:''}><span class="pp-meta-l">等級</span><span class="pp-meta-v">${statusBadge||'—'}</span></div>` : '';
+  /* 等級章可點（2026-08-05 使用者指示二修：「會員等級的手動調整只有管理員帳號可以做」）——
+     只有管理員可點開調整視窗；櫃檯與教練純顯示。 */
+  const _canTier = !!(SESSION&&SESSION.role==='admin');
+  const tierItem = isM ? `<div class="pp-meta-i${_canTier?' pp-f-click':''}"${_canTier?` onclick="openTierModal('${r.id}')"`:''}><span class="pp-meta-l">等級</span><span class="pp-meta-v">${statusBadge||'—'}</span></div>` : '';
   const meta = isM
     ? tierItem + mvA('主教練', PP.ctx.coachMap?(PP.ctx.coachMap[r.default_coach_id]||''):'',_canBase?'default_coach_id':'',_canBase?'＋ 指定':'未指定')
       + ecItem + lineItem + carrierItem
