@@ -220,5 +220,21 @@ ok('★ 資料來源一次撈齊，清單頁共用（walletCtx）',
 ok('　　為什麼要有這一層，寫在程式裡',
    /同一個事實有八種答案，於是每隔幾天就有一個畫面對、另一個畫面錯/.test(src));
 
+console.log('\n同行第二台不畫戳記（2026-08-05 黃麗琴案例）');
+{
+  /* 一點約兩台跑步機＝主預約＋影子預約（sibling_of、不扣點）——
+     原本影子也被推算成戳記，2 點的券畫出 4 顆、多的變紅圈假超約。 */
+  const tk={id:'TS',member_id:ME,ticket_type_id:'tt-s',plan_name:'自主訓練點數',
+    sessions_total:2,sessions_remaining:0,purchase_date:'2026-07-30',status:'usable'};
+  const sbk=(id,date,u,sib)=>({id,date,start_time:'17:00',duration:60,status:'booked',
+    category:'自主訓練',ticket_type_id:'tt-s',member_id:ME,venue_unit:u,
+    ticket_id:sib?null:'TS',sibling_of:sib||null});
+  const w=W([tk],[sbk('M1','2026-08-07','treadmill_1'),sbk('S1','2026-08-07','treadmill_2','M1'),
+                  sbk('M2','2026-08-11','treadmill_1'),sbk('S2','2026-08-11','treadmill_2','M2')]);
+  const sl=w.of('TS');
+  eq('★ 2 點的券只畫 2 顆（影子預約不算）', sl.stamps.map(b=>b.date.slice(5)), ['08-07','08-11']);
+  ok('★ 沒有假超約（pending 2、超出 0）', sl.pending===2 && sl.stamps.length<=sl.total);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

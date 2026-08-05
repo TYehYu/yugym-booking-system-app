@@ -104,6 +104,14 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
       ok('　　票 5 堂剛好扣完', tk2===0);
     }
 
+    console.log('\n⑥ 扣不到票的名額要當面警告（2026-08-05 許佳慈案例，使用者指示「不要一直犯這個錯誤」）');
+    ok('★ 名單儲存記下扣不到票的名額數', /else \(_noTk\[mid\]=\(_noTk\[mid\]\|\|0\)\+1\);/.test(src));
+    ok('★ 有漏就擋明確視窗（列出誰、幾個名額），不再只 toast 帶過',
+       /if\(Object\.keys\(_noTk\)\.length\)\{/.test(src)
+       && /⚠ 有名額沒有扣到票/.test(src)
+       && /grpNoTkAck\(\)/.test(src));
+    ok('★ 按「知道了」接回原流程（連續預約詢問或回明細）', /async function grpNoTkAck\(\)\{/.test(src));
+
     console.log(`\n${pass} 通過 / ${fail} 失敗`);
     process.exit(fail?1:0);
   })();

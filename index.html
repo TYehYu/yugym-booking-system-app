@@ -7368,8 +7368,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1845';
-const APP_VERSION_LABEL='v260805.1845';
+const APP_VERSION = '260805.1900';
+const APP_VERSION_LABEL='v260805.1900';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11869,7 +11869,9 @@ function buildWallet(memberId, ctx){
      （2026-07-26 起支援共享票，堂數共用一個池）。 */
   const myBk=c.bookingsOf ? (c.bookingsOf(memberId)||[])
     : (c.bookings||[]).filter(b=>b && (bkHasMember(b,memberId) || (b.ticket_id&&mineIds[b.ticket_id])));
-  const live=myBk.filter(b=>b && b.status!=='cancelled');
+  /* 同行第二台（2026-08-05 黃麗琴案例：一點約兩台跑步機，圓形卡卻畫出 4 顆）——
+     第二台是影子預約（sibling_of 指到主預約、不扣點），不列入戳記與堂數。 */
+  const live=myBk.filter(b=>b && b.status!=='cancelled' && !b.sibling_of);
 
   /* 哪幾堂是會員自己從手機約的（2026-08-01 使用者指示：圓形卡旁邊做個備註）——
      兩種來源要分開看：
@@ -15539,10 +15541,9 @@ async function renderCalendar(opts){
       // 教練縮寫 tag（第三行）：代課教練優先；遮蔽卡不顯示
       const _coachObj = _coachId ? (coachObjMap[_coachId]||null) : null;
       // 自主訓練用教室/跑步機時，第三列改標場地（無教練故原本是空的；2026-07-23 使用者指示）
-      const _selfVenue = selfVenueLabel(b);
-      /* 佔兩台以上時在場地標籤後面點燈（2026-07-31 使用者指示：一張卡＋兩個綠燈） */
-      const _unitDots = (b._units>1) ? `<i class="evc-unit">${'●'.repeat(b._units)}</i>` : '';
-      const _venueTag = _selfVenue ? `<span class="evc-coach" style="background:${_cc.bg};color:${_cc.fg};">${_selfVenue}${_unitDots}</span>` : '';
+      /* 台數改文字（2026-08-05 使用者指示）：跑步機・一台／兩台，不再點燈 */
+      const _selfVenue = venueUnitsLabel(b);
+      const _venueTag = _selfVenue ? `<span class="evc-coach" style="background:${_cc.bg};color:${_cc.fg};">${_selfVenue}</span>` : '';
       const _abbrOut = (!hideMember && _coachObj)
         ? `<span class="evc-coach" style="background:${_cc.bg};color:${_cc.fg};">${coachAbbr(_coachObj)}${b.substitute_coach_id?'（代）':''}</span>`+_venueTag
         : _venueTag;   // 2026-07-27：教練課排到教室/跑步機時，教練縮寫旁並列場地標籤
@@ -15983,6 +15984,13 @@ function bkVenueTipLine(b){
   const n=Math.max(1, Number(b && b._units)||1);
   const cnt = v==='跑步機' ? `　·　${n} 台` : '';
   return `<div class="ev-tip-r" style="color:#a8642a;font-weight:600;">場地：${v}${cnt}</div>`;
+}
+/* 跑步機台數改文字（2026-08-05 使用者指示：「不要用燈號顯示了，直接顯示跑步機・一台或兩台」） */
+function venueUnitsLabel(b){
+  const v=selfVenueLabel(b);
+  if(v!=='跑步機') return v;
+  const n=Math.max(1,Number(b&&b._units)||1);
+  return '跑步機・'+(['','一台','兩台','三台'][n]||(n+' 台'));
 }
 function selfVenueLabel(b){
   /* 2026-07-27 使用者回報（劉雪珠 16:00 改團課教室沒顯示）：
@@ -17560,9 +17568,9 @@ async function renderCoachAgenda(){
     const _cid=bkCoachId(b);
     const _co=_cid?coachObj[_cid]:null;
     const _ccol=coachTagColor(_cid);
-    const _venue=selfVenueLabel(b);
+    const _venue=venueUnitsLabel(b);   // 2026-08-05：跑步機台數改文字
     // 2026-07-27 使用者指示：教練本人的課卡不放教練縮寫標籤（多餘）；只留場地標籤（自主訓練用教室/跑步機時）
-    const tag = _venue?`<span class="evc-coach" style="background:${_ccol.bg};color:${_ccol.fg};">${_venue}${(b._units>1)?`<i class="evc-unit">${'●'.repeat(b._units)}</i>`:''}</span>`:'';
+    const tag = _venue?`<span class="evc-coach" style="background:${_ccol.bg};color:${_ccol.fg};">${_venue}</span>`:'';
     /* 其他教練的課卡（2026-08-01 使用者指示定版）：「一樣正常顯示課卡內容，但移除互動功能」——
        內容照舊畫（時間／課種／人數都看得到），但完全不掛點擊，手機與桌機一致。
        沿革：0729 用 pointer-events:none（cag-noint）→ 卡片攔手指讓頁面滑不動；
@@ -22527,6 +22535,7 @@ async function _saveGroupMembers(id){
   }
   // 新加入的有票就扣、移除的退回（依該 booking 的票券類型）
   const _seatIdx={};   // 逐名額挑票（2026-08-05）：新名額接在既有名額後面，索引從已有數量起算
+  const _noTk={};      // 會員 → 這次加入但扣不到票的名額數
   for(const mid of added){
     /* 櫃檯有指定要扣哪一張就照指定的（2026-07-30 使用者指示；2026-08-05 改逐名額）——
        同時有長期方案與快到期的優惠票時，自動的「最快到期優先」未必是客人要的。
@@ -22541,6 +22550,7 @@ async function _saveGroupMembers(id){
     }
     if(!tk) tk=await findUsableTicket(mid,b.ticket_type_id,b.date,b.start_time);
     if(tk) await deductTicket(tk,b.id,SESSION.id);
+    else (_noTk[mid]=(_noTk[mid]||0)+1);   // 扣不到票的名額（2026-08-05 要當面警告，不再靜默）
   }
   for(const mid of removed){
     /* 找該會員因這堂課「還有淨扣課」的票退回（2026-08-03 修：原本抓第一筆扣課紀錄，
@@ -22566,8 +22576,29 @@ async function _saveGroupMembers(id){
   /* 多名額連續預約（2026-08-05 游晴雅案例）：把「這次各加了幾個名額」帶給連續預約，
      後續每堂補到同樣的名額數（原本已在名單就整堂跳過，第二個名額永遠約不進去）。 */
   const _addCnt={}; added.forEach(m=>{ _addCnt[m]=(_addCnt[m]||0)+1; });
+  /* 扣不到票的名額當面警告（2026-08-05 許佳慈案例，使用者指示「不要一直犯這個錯誤」）——
+     原本只在 toast 帶過一句，名額進了名單、票沒扣到，帳跟位就對不上。
+     改成擋一個明確視窗，講清楚哪幾位、幾個名額沒扣到票，按「知道了」才繼續。 */
+  if(Object.keys(_noTk).length){
+    const _mems=await dbGetAll('members').catch(()=>[]);
+    const _nm=mid=>{ const m=_mems.find(x=>String(x.id)===String(mid)); return (m&&m.name)||mid; };
+    const rows=Object.entries(_noTk).map(([mid,n])=>`<b>${_nm(mid)}</b>：${n} 個名額`).join('、');
+    window._gfaNext={id, uniq:_addUniq, cnt:_addCnt};
+    showModal(`<div class="modal-title" style="color:var(--danger,#b5372e);">⚠ 有名額沒有扣到票</div>
+      <div style="font-size:13px;color:var(--text);line-height:1.9;">名單已儲存，但下列新名額<b>找不到可扣的票券</b>（票剩 0、效期不含當日、或尚未購買）：<br>${rows}</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;">這些名額會以紅虛線「需補票」顯示。若是教練負責的免費名額可忽略；否則請先儲值，再回名單移除後重新加入，帳才對得上名額。</div>
+      <div class="modal-foot"><button class="btn btn-green" onclick="closeModal();grpNoTkAck()">知道了</button></div>`);
+    return;
+  }
   if(_addUniq.length){ try{ await grpFollowAsk(id,_addUniq,_addCnt); return; }catch(e){ console.error('連續加入詢問失敗',e); } }
   openBookingDetail(id);
+}
+/* 警告視窗按「知道了」之後接回原本的流程（連續預約詢問或回明細）（2026-08-05） */
+async function grpNoTkAck(){
+  const p=window._gfaNext; window._gfaNext=null;
+  if(!p) return;
+  if(p.uniq&&p.uniq.length){ try{ await grpFollowAsk(p.id,p.uniq,p.cnt); return; }catch(_){} }
+  openBookingDetail(p.id);
 }
 /* 團課的「同系列後續場次」：同教練＋同星期＋同時段＋未取消未完成、時間在這堂之後。
    取消側的 seriesOf 認 member_id，團課的學員在 member_ids（見 bkIsGroup 註解），

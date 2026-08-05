@@ -103,14 +103,16 @@ console.log('\n行事曆上是一張卡，不是兩張（2026-07-31 使用者回
   eq('　　三台也算得對', merge([{id:'A'},{id:'S1',sibling_of:'A'},{id:'S2',sibling_of:'A'}])[0]._units, 3);
   eq('　　空陣列／null 不會爆', [merge([]).length, merge(null).length], [0,0]);
 }
-ok('★ 場地標籤後面點燈（跑步機 ●●）',
-   /const _unitDots = \(b\._units>1\) \? `<i class="evc-unit">\$\{'●'\.repeat\(b\._units\)\}<\/i>` : '';/.test(src)
-   && /\.evc-unit\{font-style:normal;margin-left:3px;letter-spacing:1px;color:var\(--green,#1f6f54\);\}/.test(src));
+/* 2026-08-05 使用者指示：「不要用燈號顯示了，直接顯示跑步機・一台或兩台」 */
+ok('★ 台數改文字（跑步機・一台／兩台），燈號退場',
+   /function venueUnitsLabel\(b\)\{/.test(src)
+   && /return '跑步機・'\+\(\['','一台','兩台','三台'\]\[n\]\|\|\(n\+' 台'\)\);/.test(src)
+   && !/'●'\.repeat\(b\._units\)/.test(src));
 ok('★ 四個畫課卡的地方都併卡：桌機行事曆／手機週檢視／首頁任務／桌機日檢視',
    /function mergeGroupBookings\(list\)\{\s*\n\s*list=mergeSiblingUnits\(list\);/.test(src)
    && (src.match(/mergeSiblingUnits\(bookings\.filter/g)||[]).length===3);
-ok('　　手機週檢視的場地標籤也帶燈號',
-   /\$\{_venue\}\$\{\(b\._units>1\)\?`<i class="evc-unit">\$\{'●'\.repeat\(b\._units\)\}<\/i>`:''\}/.test(src));
+ok('　　兩個畫場地標籤的地方都改走 venueUnitsLabel',
+   (src.match(/venueUnitsLabel\(b\)/g)||[]).length>=2);
 ok('　　原因寫在程式裡', /一堂佔兩台跑步機是兩筆預約（venue_unit 一筆只存得下一台），但行事曆上應該是\s*\n\s*一張卡/.test(src));
 
 console.log('\n只有櫃檯能開兩台（2026-07-31 使用者定案）');
