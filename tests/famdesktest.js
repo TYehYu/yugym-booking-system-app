@@ -44,6 +44,10 @@ console.log('\n③ 明細姓名旁的使用人按鈕（實跑 bkFamBtn）');
 }
 ok('★ 更改視窗寫回 trial_name', /async function setBkFamUser\(bid, name\)\{/.test(src)
    && /b\.trial_name=name\|\|null;/.test(src));
+/* 2026-08-05 使用者回報：改了使用人課卡不即時更新，要手動重整 ——
+   寫回後只重開明細視窗，背後的行事曆沒重畫。 */
+ok('★ 寫回後先重畫當前頁再開回明細（課卡即時更新）',
+   /dbCacheClear\('bookings'\);\n\s*closeModal\(\); showToast\('使用人已改為「'\+\(name\|\|'本人'\)\+'」'\);[\s\S]{0,220}?try\{ navTo\(CUR_PAGE\); \}catch\(_\)\{\}\n\s*openBookingDetail\(bid\);/.test(src));
 
 console.log('\n④ 排列定版（姓名→時間→教練→場地）');
 ok('★ 教練課：姓名獨立第一列（旁掛使用人按鈕）',
