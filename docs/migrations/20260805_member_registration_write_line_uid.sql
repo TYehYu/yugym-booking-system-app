@@ -1,0 +1,6 @@
+-- 2026-08-05 使用者回報：LINE 申辦的新會員（林繼霖/魏曉微/陳誼涵）顯示「LINE 未綁定」（已套用）
+-- 根因：fn_complete_member_registration「新客自動建檔」路徑漏寫 line_user_id
+--（櫃檯審核路徑 fn_review_member_link_request 有寫）。
+-- 修正：①函式補上同一套抽取（LINE auth email 形如 line_{uid}@line.yugym.local）
+--       ②回填既有受影響會員（3 位）。完整函式定義見 Supabase migration
+--       member_registration_write_line_uid（此檔為摘要備忘）。

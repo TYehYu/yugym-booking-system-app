@@ -10,8 +10,9 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 console.log('整合成一張表');
 ok('★ 不再每個聘僱類型切一段、各印一次表頭',
    !/\$\{stHead\}<div class="st-list">\$\{secs\[k\]\.map\(stRow\)\.join\(''\)\}<\/div>/.test(src));
-ok('★ 整份共用一列表頭、一個 st-list',
-   /body = `<div class="st-legend">\$\{legend\}\$\{stMonthBar\(_ym,_isCurMonth\)\}<\/div>\$\{stHead\}<div class="st-list">\$\{allRows\.map\(stRow\)\.join\(''\)\}<\/div>`;/.test(src));
+ok('★ 整份共用一列表頭、一個 st-list（2026-08-05：色票/月份移進工具列，表格上方不再另佔列）',
+   /body = `\$\{stHead\}<div class="st-list">\$\{allRows\.map\(stRow\)\.join\(''\)\}<\/div>`;/.test(src)
+   && /toolbar\.lead=`<div class="st-legend">\$\{legend\}<\/div>`;/.test(src));
 ok('★ 排序仍照聘僱類型（正職→兼職→合作→工讀→未分類）',
    /const allRows=ET_ORDER\.flatMap\(\(\[k\]\)=>secs\[k\]\|\|\[\]\);/.test(src));
 ok('★ 類型改用左邊色條區分，上方給色票說明',
@@ -109,8 +110,8 @@ console.log('\n統計月份翻頁');
 ok('★ 統計月份可翻（列表顯示的是「本月表現」）',
    /function stStepMonth\(n\)\{/.test(src) && /function stSetMonth\(v\)\{/.test(src)
    && /const _ym=stMonthCur\(\);          \/\/ 可翻月/.test(src));
-ok('★ 月份列在色票同一行右邊（‹ 月份 ›＋回本月）',
-   /body = `<div class="st-legend">\$\{legend\}\$\{stMonthBar\(_ym,_isCurMonth\)\}<\/div>/.test(src)
+ok('★ 月份導覽移到工具列右側（2026-08-05：與 QR 鈕、翻頁鈕同一列）',
+   /toolbar\.actions = stMonthBar\(_ym,_isCurMonth\) \+ toolbar\.actions;/.test(src)
    && /onclick="stStepMonth\(-1\)"/.test(src) && /onclick="stStepMonth\(1\)"/.test(src));
 /* 2026-08-01：月份選擇器由 input[type=month] 改成下拉（原生月份滾輪沒有確定鈕），
    上限改由 monthOptions 的 maxYm 參數擋掉，不再是 input 的 max 屬性。 */

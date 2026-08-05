@@ -35,12 +35,14 @@ ok('★ 票券夾 state：全用完但有今天的簽到戳記 → 仍是 active
 ok('　　過期判定仍優先（規則不變）',
    src.indexOf("state='expired'") < src.indexOf("bks.some(b=>isAtt(b)&&String(b.date||'').slice(0,10)===today)"));
 
-console.log('\n③ 共享票戳記大小');
-ok('★ 對方戳記回原尺寸（不再縮小）', /\.mtk-sh\{opacity:\.92;\}/.test(src)
+console.log('\n③ 圓形卡尺寸（二修：整體放大、共享人縮小）');
+ok('★ 基準圓點放大到 35px（原共享票「自己那顆」的尺寸）',
+   /\.mtk\{position:relative;width:35px;height:35px;/.test(src));
+ok('★ 共享人的戳記縮小一號', /\.mtk-sh\{transform:scale\(\.8\);opacity:\.92;\}/.test(src)
    && !/\.mtk-sh\{transform:scale\(\.72\)/.test(src));
-ok('★ 自己的放大一號、只在混有共享戳記的票才加',
-   /\.mtk-own\{transform:scale\(1\.16\);\}/.test(src)
-   && /const _hasSh=\[\.\.\.done,\.\.\.booked\]\.some\(b=>b&&b\._shBy\);/.test(src)
+ok('★ 列表迷你卡維持 26px 不動', /\.tkm-dots \.mtk\{width:26px;height:26px;/.test(src));
+ok('　　混有共享戳記的標記邏輯保留（_hasSh／mtk-own）',
+   /const _hasSh=\[\.\.\.done,\.\.\.booked\]\.some\(b=>b&&b\._shBy\);/.test(src)
    && /const _ownCls=b=>\(_hasSh&&!\(b&&b\._shBy\)\)\?' mtk-own':'';/.test(src));
 
 console.log('\n④ 發點課種保險（DB 端）migration 留檔');

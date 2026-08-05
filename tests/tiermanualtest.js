@@ -39,6 +39,10 @@ ok('★ 管理員四選項全開、其他員工只有 VIP',
 }
 ok('　　視窗顯示「自動判定會是什麼」（跳過鎖定）', /function effTierAuto\(m\)\{/.test(src));
 
+console.log('\n②b 會員資料表頭的等級章可點（2026-08-05 使用者指示，附截圖）');
+ok('★ 櫃檯以上可點開調整視窗、教練與會員本人唯讀',
+   /pp-meta-i\$\{_canBase\?' pp-f-click':''\}[\s\S]{0,60}?openTierModal\('\$\{r\.id\}'\)/.test(src));
+
 console.log('\n③ 會員端等級卡跟著反映');
 ok('★ 鎖定時提醒改「等級由門市設定」',
    /if\(ti\.manual\)\{\n\s*status=`<div class="mtc-status">等級由門市設定，不受自動升降級規則影響。<\/div>`;/.test(src)
