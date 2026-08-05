@@ -71,12 +71,38 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
     ok('★ 回報寫明票券不足', /加入 2\/4 堂（票券不足或過期，先停在這）/.test(toasts.join('')));
 
     console.log('\n④ 流程接線');
-    ok('★ 儲存名單有新加入才追問（只移除不問）',
-       /const _addUniq=\[\.\.\.new Set\(added\)\];\n\s*if\(_addUniq\.length\)\{ try\{ await grpFollowAsk\(id,_addUniq\); return; \}/.test(src));
-    ok('★ 預設堂數＝票券剩餘（買 4 堂預設 4）', /const def=Math\.min\(left, cap\);/.test(src));
+    ok('★ 儲存名單有新加入才追問（帶名額數，2026-08-05）',
+       /if\(_addUniq\.length\)\{ try\{ await grpFollowAsk\(id,_addUniq,_addCnt\); return; \}/.test(src)
+       && /const _addCnt=\{\}; added\.forEach\(m=>\{ _addCnt\[m\]=\(_addCnt\[m\]\|\|0\)\+1; \}\);/.test(src));
+    ok('★ 預設堂數＝票券剩餘 ÷ 名額數（買 8 堂 2 名額預設 4）',
+       /const def=Math\.min\(seats>1\?Math\.floor\(left\/seats\):left, cap\);/.test(src));
     ok('★ 防連點', /async function grpFollowRun\(mids2\)\{ return onceAct\('gfrun', \(\)=>_grpFollowRun\(mids2\)\); \}/.test(src));
     ok('★ 沒後續場次照舊回明細', /const later=await grpSeriesOf\(b\);\n\s*if\(!later\.length\)\{ openBookingDetail\(id\); return; \}/.test(src));
     ok('　　使用者的例子寫在程式裡', /「先開了 10 堂 10 週，新會員只買了 4 堂 → 可以重複預約 4 堂」/.test(src));
+
+    console.log('\n⑤ 多名額（2026-08-05 游晴雅案例：買兩份票要約兩個名額）');
+    {
+      const DB2={ a:{id:'a',member_ids:['NEW'],max_heads:5,ticket_type_id:'tt',date:'2026-08-13',start_time:'19:30'},
+        b:{id:'b',member_ids:[],max_heads:5,ticket_type_id:'tt',date:'2026-08-20',start_time:'19:30'},
+        c:{id:'c',member_ids:[],max_heads:5,ticket_type_id:'tt',date:'2026-08-27',start_time:'19:30'} };
+      let tk2=5; const ded2=[], toasts2=[];
+      const env2=Object.assign({},env,{
+        window:{_gfPend:{id:'w0',laterIds:['a','b','c'],seats:{NEW:2}}},
+        document:{getElementById:id=>({value: id==='gf-n-0'?'3':'0'}), querySelector:()=>null},
+        dbGet:async(t,id)=> t==='bookings'?(DB2[id]?{...DB2[id],member_ids:DB2[id].member_ids.slice()}:null):{id,name:'新會員'},
+        dbPut:async(t,x)=>{ DB2[x.id]=x; },
+        findUsableTicket:async()=> tk2>0?{id:'tkX'}:null,
+        deductTicket:async(tk,bid)=>{ tk2--; ded2.push(bid); },
+        showToast:m=>toasts2.push(m),
+      });
+      const run2=new Function(...Object.keys(env2),'return async '+grabFn('_grpFollowRun'))(...Object.values(env2));
+      await run2(['NEW']);
+      eq('★ 已佔 1 個名額的那堂只補 1 個、其餘每堂補 2 個', ded2, ['a','b','b','c','c']);
+      eq('★ 每堂名單都補到 2 個名額',
+         ['a','b','c'].map(id=>DB2[id].member_ids.filter(m=>m==='NEW').length), [2,2,2]);
+      ok('★ 回報標明每堂名額數', /（每堂 2 個名額）/.test(toasts2.join('')));
+      ok('　　票 5 堂剛好扣完', tk2===0);
+    }
 
     console.log(`\n${pass} 通過 / ${fail} 失敗`);
     process.exit(fail?1:0);

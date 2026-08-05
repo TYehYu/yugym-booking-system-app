@@ -7368,8 +7368,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1650';
-const APP_VERSION_LABEL='v260805.1650';
+const APP_VERSION = '260805.1720';
+const APP_VERSION_LABEL='v260805.1720';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22516,7 +22516,10 @@ async function _saveGroupMembers(id){
      會員要有重複預約的能力」「先開了 10 堂 10 週，新會員只買了 4 堂 → 可以重複預約 4 堂」。
      名單有新加入、同系列還有後續場次時追問一次；只移除或沒後續就照舊回明細。 */
   const _addUniq=[...new Set(added)];
-  if(_addUniq.length){ try{ await grpFollowAsk(id,_addUniq); return; }catch(e){ console.error('連續加入詢問失敗',e); } }
+  /* 多名額連續預約（2026-08-05 游晴雅案例）：把「這次各加了幾個名額」帶給連續預約，
+     後續每堂補到同樣的名額數（原本已在名單就整堂跳過，第二個名額永遠約不進去）。 */
+  const _addCnt={}; added.forEach(m=>{ _addCnt[m]=(_addCnt[m]||0)+1; });
+  if(_addUniq.length){ try{ await grpFollowAsk(id,_addUniq,_addCnt); return; }catch(e){ console.error('連續加入詢問失敗',e); } }
   openBookingDetail(id);
 }
 /* 團課的「同系列後續場次」：同教練＋同星期＋同時段＋未取消未完成、時間在這堂之後。
@@ -22535,7 +22538,7 @@ async function grpSeriesOf(b){
       && key(x)>key(b))
     .sort((a,c)=>String(a.date).localeCompare(String(c.date)));
 }
-async function grpFollowAsk(id, addedIds){
+async function grpFollowAsk(id, addedIds, addedCnt){
   const b=await dbGet('bookings',id);
   const later=await grpSeriesOf(b);
   if(!later.length){ openBookingDetail(id); return; }
@@ -22547,12 +22550,15 @@ async function grpFollowAsk(id, addedIds){
         && t.status==='usable' && t.sessions_remaining>0)
       .reduce((sum,t)=>sum+t.sessions_remaining,0);
     /* 使用者的例子：開 10 週、新會員買 4 堂 → 預設就是 4（票剩幾堂就約幾堂，
-       不超過剩餘場次）。沒票的（教練負責）預設 0，要約再自己調。 */
+       不超過剩餘場次）。沒票的（教練負責）預設 0，要約再自己調。
+       多名額（2026-08-05）：這次加了 N 個名額 → 後續每堂也補到 N 個，
+       堂數預設＝票剩 ÷ 名額數（兩個名額約一堂要扣兩堂票）。 */
+    const seats=Math.max(1,(addedCnt||{})[mid]||1);
     const cap=later.length;
-    const def=Math.min(left, cap);
-    return {mid, left, def, cap};
+    const def=Math.min(seats>1?Math.floor(left/seats):left, cap);
+    return {mid, left, def, cap, seats};
   });
-  window._gfPend={id, laterIds:later.map(x=>x.id)};
+  window._gfPend={id, laterIds:later.map(x=>x.id), seats:Object.fromEntries(rows.map(r=>[r.mid,r.seats]))};
   const WD=['日','一','二','三','四','五','六'];
   const dowLbl=WD[(parseYmd(b.date)||new Date()).getDay()];
   showModal(`<div class="modal-title">後面的場次要一起預約嗎？</div>
@@ -22560,7 +22566,7 @@ async function grpFollowAsk(id, addedIds){
       這堂是 <b>週${dowLbl} ${String(b.start_time).slice(0,5)}</b> 的團體課，後面還有 <b>${later.length}</b> 堂
       （${String(later[0].date).replace(/-/g,'/')} 起）。剛加入的會員可以連續預約，堂數預設照票券剩餘：</div>
     ${rows.map((r,i)=>`<div class="form-row" style="display:flex;align-items:center;gap:10px;">
-      <label style="margin:0;flex:1;">${nameOf(r.mid)}<span style="font-size:11.5px;color:var(--t3);">　票剩 ${r.left} 堂</span></label>
+      <label style="margin:0;flex:1;">${nameOf(r.mid)}${r.seats>1?`<span class="tag" style="font-size:10.5px;margin-left:6px;">每堂 ${r.seats} 個名額</span>`:''}<span style="font-size:11.5px;color:var(--t3);">　票剩 ${r.left} 堂</span></label>
       <input type="number" id="gf-n-${i}" value="${r.def}" min="0" max="${r.cap}" style="width:76px;"><span style="font-size:12px;color:var(--t3);">/ ${r.cap} 堂</span>
     </div>`).join('')}
     <div style="font-size:11.5px;color:var(--t2);margin-top:6px;">滿員或已在名單的場次會自動跳過、往後遞補；有票逐堂扣，票不夠會停下來告訴你。</div>
@@ -22579,23 +22585,37 @@ async function _grpFollowRun(mids2){
   const report=[];
   for(const w of wants){
     let done=0, noTk=false;
+    const seats=Math.max(1,(p.seats||{})[w.mid]||1);   // 這次加了幾個名額，後續每堂補到幾個（2026-08-05）
     for(const bid of p.laterIds){
       if(done>=w.n) break;
       const x=await dbGet('bookings',bid); if(!x) continue;
       const cur=mids(x);
-      if(cur.some(m=>String(m)===String(w.mid))) continue;              // 已在名單 → 跳過不佔次數
-      if(cur.length>=Math.max(1,Number(x.max_heads)||5)) continue;      // 滿員 → 跳過往後遞補
+      /* 多名額（2026-08-05 游晴雅案例）：不再「已在名單就整堂跳過」——
+         算他已佔幾個名額、缺幾個補幾個；本來就足額的才跳過（不佔次數）。 */
+      const has=cur.filter(m=>String(m)===String(w.mid)).length;
+      let need=seats-has;
+      if(need<=0) continue;
+      const room=Math.max(1,Number(x.max_heads)||5)-cur.length;
+      if(room<=0) continue;                                             // 滿員 → 跳過往後遞補
+      need=Math.min(need,room);
       /* 有票就扣、沒票不加（票不夠就停）——名單視窗的單堂規則是「沒票＝教練負責照加」，
          但連續預約是照「買了幾堂」來的，票扣不到就不該繼續佔位。 */
-      const tk=await findUsableTicket(w.mid, x.ticket_type_id, x.date, x.start_time);
-      if(!tk){ noTk=true; break; }
-      await deductTicket(tk, x.id, SESSION.id);
-      x.member_ids=cur.concat([w.mid]);
-      await dbPut('bookings',x);
-      done++;
+      let addedSeats=0;
+      for(let k=0;k<need;k++){
+        const tk=await findUsableTicket(w.mid, x.ticket_type_id, x.date, x.start_time);
+        if(!tk){ noTk=true; break; }
+        await deductTicket(tk, x.id, SESSION.id);
+        addedSeats++;
+      }
+      if(addedSeats>0){
+        x.member_ids=cur.concat(Array.from({length:addedSeats},()=>w.mid));
+        await dbPut('bookings',x);
+        done++;
+      }
+      if(noTk) break;
       prog(`預約中…（${report.length+1}/${wants.length} 人）`);
     }
-    report.push(`${(await dbGet('members',w.mid).catch(()=>null)||{}).name||'會員'}：加入 ${done}/${w.n} 堂`+(noTk&&done<w.n?'（票券不足或過期，先停在這）':''));
+    report.push(`${(await dbGet('members',w.mid).catch(()=>null)||{}).name||'會員'}：加入 ${done}/${w.n} 堂`+(seats>1?`（每堂 ${seats} 個名額）`:'')+(noTk&&done<w.n?'（票券不足或過期，先停在這）':''));
   }
   window._gfPend=null;
   dbCacheClear(['bookings','member_tickets','ticket_logs']);
