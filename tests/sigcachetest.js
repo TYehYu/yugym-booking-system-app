@@ -89,15 +89,34 @@ console.log('\n③ RPC 掛掉 → 退回原本行為（老實重抓）');
   ok('　　沒有把 null 當成「沒變」', true);
 }
 
-console.log('\n④ 寫入之後一定重抓');
+/* 2026-08-05 二修（使用者回報「簽約轉正也變慢」）：dbCacheClear 改成「標記需校驗」——
+   轉正/取消/RPC 路徑跑完會清三張大表再馬上重畫，原本等於整包重新下載。
+   現在保留資料、時間戳歸零：下一次讀取一定先驗簽章（看得到自己剛做的異動），
+   簽章不同才補變動列；資料庫真的變了就一定抓得到新資料。 */
+console.log('\n④ 清快取之後：一定先校驗，而且看得到新資料');
 {
   const {api,env,log,state}=makeEnv();
   await api.dbGetAll('bookings');
   log.length=0;
-  api.dbCacheClear('bookings');            // dbPut/dbDel 寫入即失效
-  ok('★ 快取被清掉', !env._dbCache.get('bookings'));
+  api.dbCacheClear('bookings');            // dbPut/dbDel/RPC 寫入後呼叫
+  ok('★ 資料留著、但標記為需要校驗（t 歸零）',
+     !!env._dbCache.get('bookings') && env._dbCache.get('bookings').t===0);
+  // 模擬「資料庫真的被改過」：簽章換了、內容也換了
+  state.sig='2:222'; state.rows=[{id:'BK-1'},{id:'BK-2'}];
   const rows=await api.dbGetAll('bookings');
-  ok('★ 下一次讀是真的抓表', log.indexOf('data')>=0);
+  ok('★ 下一次讀一定先問簽章', log.indexOf('sig')>=0);
+  ok('★ 簽章不同 → 真的把新資料拿回來（這支沙箱的增量永遠放棄＝退回整表）',
+     rows.length===2 && log.indexOf('data')>=0);
+}
+console.log('\n④b 清快取後、資料庫沒變 → 不必整表重抓');
+{
+  const {api,env,log}=makeEnv();
+  await api.dbGetAll('bookings');
+  log.length=0;
+  api.dbCacheClear('bookings');
+  const rows=await api.dbGetAll('bookings');
+  ok('★ 簽章相同就沿用（省掉整表傳輸）', log.filter(x=>x==='data').length===0, log);
+  ok('　　資料照樣拿得到', rows.length===1);
 }
 
 /* 2026-08-05 使用者回報「首頁切預約管理卡 10 幾秒」：原本超過 10 分鐘的第一次讀取

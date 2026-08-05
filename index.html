@@ -7368,8 +7368,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.2155';
-const APP_VERSION_LABEL='v260805.2155';
+const APP_VERSION = '260805.2210';
+const APP_VERSION_LABEL='v260805.2210';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7494,7 +7494,14 @@ function dbCacheClear(store){
   _sigPromise=null; _sigAt=0;
   if(store===undefined){ _dbCache.clear(); try{ occCacheClear(); }catch(_){} return; }
   const list=Array.isArray(store)?store:[store];
-  list.forEach(s=>_dbCache.delete(tbl(s)));
+  /* 「清快取」＝標記需要校驗，不是丟掉資料（2026-08-05 使用者回報「簽約轉正也變慢」）——
+     轉正／取消／RPC 路徑跑完都會清 bookings＋member_tickets＋ticket_logs 三張大表，
+     接著馬上重畫 ⇒ 三張表整包重新下載，那就是那幾秒。
+     改成把時間戳歸零：下一次讀取「一定先校驗簽章」（保證看得到自己剛做的異動），
+     簽章不同就只補變動的那幾列。正確性與原本相同，省掉的是整表傳輸。
+     取不到簽章或補不成時，dbGetAll 本來就會退回整表重抓。 */
+  list.forEach(s=>{ const k=tbl(s); const e=_dbCache.get(k);
+    if(e && Array.isArray(e.data)) e.t=0; else _dbCache.delete(k); });
   // 會員端場地佔用快取跟著 bookings 一起失效（fetchDayOccupancy，定義在場地區塊）
   if(list.some(s=>tbl(s)==='bookings')){ try{ occCacheClear(); }catch(_){} }
 }
