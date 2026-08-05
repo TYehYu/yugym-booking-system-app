@@ -7360,8 +7360,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1233';
-const APP_VERSION_LABEL='v260805.1233';
+const APP_VERSION = '260805.1420';
+const APP_VERSION_LABEL='v260805.1420';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10220,6 +10220,8 @@ function tierPromotionWatchIds(bookings){
 // 會員實際等級：VIP（手動）優先；快取就緒用自動推算值；快取未備妥時退回舊 level 欄位（避免閃跳）
 function effTier(m){
   if(!m) return 'regular';
+  /* 手動鎖定（2026-08-05 使用者指示：管理員可調整會員等級）——tier_manual 凌駕自動制 */
+  if(m.tier_manual==='regular'||m.tier_manual==='loyal'||m.tier_manual==='vip') return m.tier_manual;
   if(m.level==='vip') return 'vip';
   const c=window._memberTierCache;
   let t=(c && c.__ready) ? (c[m.id]||c.__default||'regular') : (m.level||'regular');
@@ -23954,27 +23956,42 @@ async function ppRefreshIfOpen(id){
   ppRenderBody();
   return true;
 }
-// 調整會員等級（新朋友/會員/主顧客/VIP，手動）
+/* 調整會員等級（2026-08-05 使用者指示：「管理員帳號可以調整會員等級」）——
+   寫 members.tier_manual（手動鎖定，凌駕自動制；null＝自動判定）。
+   管理員：四個選項全開（自動／會員／主顧客／VIP）；其他員工維持原規則只有 VIP 有效。 */
 async function openTierModal(member_id){
   const m=await dbGet('members',member_id);
-  const cur=m.level||'regular';
-  const opts=Object.entries(TIER_DEFS).map(([k,d])=>`
-    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--bd);border-radius:9px;cursor:pointer;margin-bottom:8px;background:#fff;">
-      <input type="radio" name="tier-radio" class="tier-radio" value="${k}" ${cur===k?'checked':''} style="width:18px;height:18px;flex:none;">
-      <span class="tag" style="background:${d.bg};color:${d.color};">${d.label}</span>
-      <span style="font-size:11.5px;color:var(--t2);">${d.desc}</span>
-    </label>`).join('');
+  const isAdm=SESSION&&SESSION.role==='admin';
+  const cur=(m.tier_manual==='regular'||m.tier_manual==='loyal'||m.tier_manual==='vip')?m.tier_manual
+    :(m.level==='vip'?'vip':'');   // 舊資料的 level='vip' 視同手動 VIP
+  const autoLb=(TIER_DEFS[m.tier_manual?'regular':effTier(m)]||{}).label;   // 鎖定中仍顯示自動判定會是什麼
+  const row=(k,d,lb,desc,dis)=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--bd);border-radius:9px;cursor:${dis?'not-allowed':'pointer'};margin-bottom:8px;background:#fff;${dis?'opacity:.5;':''}">
+      <input type="radio" name="tier-radio" class="tier-radio" value="${k}" ${cur===k?'checked':''} ${dis?'disabled':''} style="width:18px;height:18px;flex:none;">
+      ${d?`<span class="tag" style="background:${d.bg};color:${d.color};">${d.label}</span>`:`<span class="tag" style="background:var(--card2);color:var(--t2);">${lb}</span>`}
+      <span style="font-size:11.5px;color:var(--t2);">${desc}</span>
+    </label>`;
+  const opts=
+    row('',null,'自動判定',`依升降級規則自動計算（目前：${(TIER_DEFS[effTierAuto(m)]||{}).label||'會員'}）`,!isAdm&&cur!=='vip')+
+    row('regular',TIER_DEFS.regular,'','手動鎖定為會員（不再自動升級）',!isAdm)+
+    row('loyal',TIER_DEFS.loyal,'','手動鎖定為主顧客（不再自動降級）',!isAdm)+
+    row('vip',TIER_DEFS.vip,'','手動鎖定為 VIP',false);
   showModal(`<div class="modal-title">調整等級 · ${m.name}</div>
-    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;">⚠️ 會員／主顧客已改為<b>自動判定</b>，與抽獎目標同一套：當月教練課簽到滿 4 堂＝完成該月抽獎目標，<b>連續 3 個月完成</b>升主顧客、<b>連續 3 個月未完成</b>降回會員。此處手動設定僅 <b>VIP</b> 會生效並凌駕自動制。目前自動判定：<b>${(TIER_DEFS[effTier(m)]||{}).label||'會員'}</b></div>
+    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;">會員／主顧客平常由<b>自動判定</b>（當月教練課簽到滿 4 堂＝達標，連 3 個月達標升主顧客、連 3 個月未達標降回會員）。${isAdm?'管理員可<b>手動鎖定</b>任一等級，鎖定後不受自動升降影響；選「自動判定」即恢復。':'手動設定僅 <b>VIP</b> 會生效（其餘選項限管理員）。'}</div>
     ${opts}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="${PP.id===member_id?'closeModal()':`openMemberDetail('${member_id}')`}">返回</button><button class="btn btn-green" onclick="saveTier('${member_id}')">儲存等級</button></div>`);
 }
+/* 純自動判定值（跳過手動鎖定；等級視窗顯示「自動會是什麼」用） */
+function effTierAuto(m){ return effTier(Object.assign({},m,{tier_manual:null,level:(m&&m.level==='vip')?'regular':(m&&m.level)})); }
 async function saveTier(member_id){
   const m=await dbGet('members',member_id);
   const sel=document.querySelector('.tier-radio:checked');
-  if(sel)m.level=sel.value;
+  if(sel){
+    m.tier_manual=sel.value||null;
+    if(!sel.value && m.level==='vip') m.level='regular';   // 恢復自動時清掉舊制的 level='vip'，否則 effTier 仍回 VIP
+  }
   await dbPut('members',m);
-  closeModal();showToast('等級已更新');
+  closeModal();showToast(sel&&sel.value?('等級已鎖定為「'+((TIER_DEFS[sel.value]||{}).label||sel.value)+'」'):'已恢復自動判定');
   if(await ppRefreshIfOpen(member_id)) return;
   navTo(CUR_PAGE); // 重繪列表確保即時更新
   if(_detailMemberId===member_id)setTimeout(()=>openMemberDetail(member_id),50);
@@ -37419,7 +37436,9 @@ function memTierInfo(me,bookings){
     else if(state==='loyal'&&low>=3){ state='regular'; ok=0; low=0; }
     cur=_nextYm(cur);
   }
-  return { state:(me.level==='vip')?'vip':state, ok, low, now:byYm[nowYm]||0 };
+  /* 手動鎖定（2026-08-05：管理員可調整等級）——鎖定時照鎖定值顯示、提醒改為門市設定 */
+  const man=(me.tier_manual==='regular'||me.tier_manual==='loyal'||me.tier_manual==='vip')?me.tier_manual:null;
+  return { state:man||((me.level==='vip')?'vip':state), ok, low, now:byYm[nowYm]||0, manual:!!man };
 }
 /* 等級卡（我的票券頁最上方，取代原「我的票券」大標） */
 function memTierBlock(ti, usableCount){
@@ -37429,7 +37448,9 @@ function memTierBlock(ti, usableCount){
   const dots=Array.from({length:4},(_,i)=>`<i class="mtc-dot${i<ti.now?' on':''}"></i>`).join('');
   const nowLine=`<div class="mtc-month"><span>本月教練課簽到</span>${dots}<b>${Math.min(ti.now,4)} / 4 堂</b>${ti.now>=4?'<span class="mtc-okchip">本月已達標</span>':''}</div>`;
   let status='';
-  if(ti.state==='vip'){
+  if(ti.manual){
+    status=`<div class="mtc-status">等級由門市設定，不受自動升降級規則影響。</div>`;
+  }else if(ti.state==='vip'){
     status=`<div class="mtc-status">VIP 為門市認定，不受升降級規則影響。</div>`;
   }else if(ti.state==='regular'){
     status=(ti.ok===2&&ti.now>=4)

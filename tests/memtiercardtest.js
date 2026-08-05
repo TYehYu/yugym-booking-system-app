@@ -38,15 +38,15 @@ console.log('\n② memTierInfo 實跑（假時鐘 2026-08-05）');
   const bk=(mid,ym,n)=>Array.from({length:n},(_,i)=>({member_id:mid,status:'checked_in',category:'私人教練',date:ym+'-'+String(i+1).padStart(2,'0')}));
   eq('★ 新客 7 月達標 → 會員、連續 1 個月、本月 2 堂',
      mk({id:'M1',tier_epoch:false,created_at:'2026-06-01'},[...bk('M1','2026-07',4),...bk('M1','2026-08',2)]),
-     {state:'regular',ok:1,low:0,now:2});
+     {state:'regular',ok:1,low:0,now:2,manual:false});
   eq('★ 既有會員 7 月 0 堂 → 主顧客、未達標 1 個月',
      mk({id:'M2',tier_epoch:true},bk('M2','2026-08',1)),
-     {state:'loyal',ok:0,low:1,now:1});
+     {state:'loyal',ok:0,low:1,now:1,manual:false});
   eq('★ VIP 凌駕自動制',
      mk({id:'M3',tier_epoch:true,level:'vip'},[]).state, 'vip');
   eq('　　別人的預約不計入（共享池）',
      mk({id:'M4',tier_epoch:false,created_at:'2026-07-01'},bk('OTHER','2026-07',4)),
-     {state:'regular',ok:0,low:1,now:0});
+     {state:'regular',ok:0,low:1,now:0,manual:false});
   eq('　　沒簽到的不算', mk({id:'M5',tier_epoch:true},[{member_id:'M5',status:'booked',category:'私人教練',date:'2026-08-01'}]).now, 0);
 }
 
