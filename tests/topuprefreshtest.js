@@ -35,7 +35,7 @@ ok('★ 只在「開著的就是這位會員」時接手（別人的明細不亂
    /if\(!PP\.id \|\| PP\.id!==id\) return false;/.test(src));
 ok('★ 會重載資料再重畫（dbPut 寫入時已清快取，重載拿到的是新票）',
    /await ppLoadCtx\(\);[\s\S]{0,400}ppRenderBody\(\);\n\s*return true;/.test(src)
-   && /dbCacheClear\(store\);   \/\/ 寫入即失效/.test(src));
+   && /dbCacheApply\(store, data\|\|obj\);/.test(src));   // 2026-08-05 改寫入直改快取，重載拿到的一樣是新票
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

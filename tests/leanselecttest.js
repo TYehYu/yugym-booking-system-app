@@ -71,7 +71,7 @@ console.log('\n⑤ 少變動設定表的快取拉長');
 {
   ok('★ 票種／方案／場地／動作庫 5 分鐘',
      /const DB_CACHE_TTL_BY=\{ticket_types:300000,course_plans:300000,exercises:300000,venues:300000\};/.test(src));
-  ok('　　寫入即失效仍在（自己改的立刻看得到）', /dbCacheClear\(store\);\s*\/\/ 寫入即失效/.test(src));
+  ok('　　寫入直改快取（自己改的立刻看得到、不整表重抓，2026-08-05）', /dbCacheApply\(store, data\|\|obj\);/.test(src));
   ok('　　分頁隱藏 15 秒回來全清（跨裝置補償）',
      /else if\(_hidAt && Date\.now\(\)-_hidAt>15000\)\{ dbCacheClear\(\); \}/.test(src));
 }
@@ -96,7 +96,7 @@ console.log('\n⑥ 實跑資料層（假 sb）：學欄位 → 精簡讀 → 回
     upsert(obj){ lastUpsert=obj; DB[obj.id]=Object.assign({},DB[obj.id],obj);
       return { select:()=>({ maybeSingle:()=>Promise.resolve({data:lastUpsert,error:null}) }) }; }
   })};
-  const env={sb, tbl:s=>s, dbFriendlyError:e=>new Error(String(e)), dbCacheClear:()=>{}, mchgNotify:null,
+  const env={sb, tbl:s=>s, dbFriendlyError:e=>new Error(String(e)), dbCacheClear:()=>{}, dbCacheApply:()=>{}, mchgNotify:null,
     LEAN_DROP:{bookings:DROP}, _leanSel:new Map()};
   const code=['leanLearn','_dbGetAllFresh','dbGet','dbPut'].map(n=>{
     const s=grabFn(n); return /^\s*$/.test(s)?'':(src.indexOf('async function '+n+'(')>=0?'async ':'')+s;
