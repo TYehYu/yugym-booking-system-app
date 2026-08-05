@@ -34,7 +34,11 @@ console.log('① dbCacheApply 實跑');
     const e=env._dbCache.get('bookings');
     eq('★ 既有列就地覆蓋（不整表丟棄）', e.data.map(x=>x.date), ['2026-08-09','2026-08-02']);
     ok('★ 精簡欄位不寫進快取（與列表讀取同形）', !('import_ref' in e.data[0]));
-    ok('★ t 歸 0 → 下一次讀取先做簽章校驗', e.t===0 && e.sig==='s' && e.logAt==='w');
+    /* 2026-08-05 二修（使用者回報「連續預約/取消都好慢」）：原本 t 歸 0 →
+       每寫一筆，下一次讀取就多打一支簽章 RPC；批次迴圈每輪要寫 3 筆再讀好幾張表，
+       往返疊起來就是那個慢。這一列已就地改好、跟剛讀回來的一樣新 → 照 TTL 沿用。 */
+    ok('★ 快取沿用正常有效期（不再每寫一筆就強制校驗）',
+       Math.abs(Date.now()-e.t)<3000 && e.sig==='s' && e.logAt==='w');
     ok('★ 有排程寫回 IndexedDB＋場地佔用快取失效', st.dirty.includes('bookings') && st.occ===1);
   }
   {
