@@ -7368,8 +7368,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260805.1805';
-const APP_VERSION_LABEL='v260805.1805';
+const APP_VERSION = '260805.1845';
+const APP_VERSION_LABEL='v260805.1845';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23109,8 +23109,8 @@ const ZH_NAME_COLLATOR = (function(){
 })();
 function cmpZhName(a,b){ return ZH_NAME_COLLATOR.compare(String(a||''), String(b||'')); }
 let _memSearch='';
-let _memSort='reg', _memSortDir=-1; // 預設：最新加入（註冊日）由新到舊
-let _memTkFilter=''; // 票券篩選：'' / 'pt1' / 'pt2' / 'expired'
+let _memSort='topup', _memSortDir=-1; // 預設：最新儲值在最上面（2026-08-05 使用者指示）
+let _memTkFilter=''; // 票券篩選：'' / 'pt'（有教練課票）/ 'group'（有團體課票）/ 'expired'（無有效票券）
 function memTkFilter(v){ _memTkFilter=(_memTkFilter===v?'':v); _memPage=1; navTo('members','g_member'); }
 let _memPage=1;
 let _memTier='';                 // 會員等級篩選：'' / regular / loyal / vip
@@ -23118,7 +23118,7 @@ let _memSize=20;                 // 每頁筆數：20 / 50 / 100
 function memSetTier(v){ _memTier=v; _memPage=1; navTo('members','g_member'); }
 function memSetSize(v){ _memSize=Number(v)||20; _memPage=1; navTo('members','g_member'); }
 // 下拉排序：切換欄位一律重設方向（註冊日預設由新到舊，其餘升冪）
-function memSetSort(v){ _memSort=v; _memSortDir=(v==='reg'?-1:1); _memPage=1; navTo('members','g_member'); }
+function memSetSort(v){ _memSort=v; _memSortDir=((v==='reg'||v==='topup'||v==='last')?-1:1); _memPage=1; navTo('members','g_member'); }
 function memClearFilters(){ _memSearch=''; _memTier=''; _memTkFilter=''; _memPage=1; navTo('members','g_member'); }
 function memSetSearch(v){ _memSearch=v; _memPage=1;
   clearTimeout(window._mst); window._mst=setTimeout(()=>navTo('members','g_member'),250); }
@@ -23318,11 +23318,20 @@ PAGES.members=async function(){
     const ids=[]; if(b.member_id)ids.push(b.member_id); (mids(b)||[]).forEach(x=>ids.push(x));
     ids.forEach(mid=>{ if(!lastClassMap[mid]||b.date>lastClassMap[mid])lastClassMap[mid]=b.date; });
   });
-  // 排序：id / name(姓名) / last(最近上課日) / tier(等級) / reg(註冊日)
+  /* 最新儲值（2026-08-05 使用者指示：「列表最上面顯示最新儲值的會員」）——
+     每位會員最近一次購買/發放票券的日期（贈點、補課券不算儲值）。 */
+  const lastTopupMap={};
+  allTk.forEach(t=>{
+    if(!t.member_id || t.source==='checkin_grant' || t.source==='makeup') return;
+    const d=String(t.purchase_date||t.created_at||'').slice(0,10);
+    if(d && (!lastTopupMap[t.member_id]||d>lastTopupMap[t.member_id])) lastTopupMap[t.member_id]=d;
+  });
+  // 排序：topup(最新儲值) / name(姓名) / last(最近上課日) / tier(等級) / reg(註冊日)
   const TIER_RANK={regular:0,loyal:1,vip:2};
   members.sort((a,b)=>{
     let r;
     if(_memSort==='name') r=cmpZhName(a.name, b.name);   // 台灣注音順序（含 fallback）
+    else if(_memSort==='topup') r=String(lastTopupMap[a.id]||'').localeCompare(String(lastTopupMap[b.id]||''));
     else if(_memSort==='last') r=String(lastClassMap[a.id]||'').localeCompare(String(lastClassMap[b.id]||''));
     else if(_memSort==='tier') r=(TIER_RANK[effTier(a)]??-1)-(TIER_RANK[effTier(b)]??-1);
     else if(_memSort==='reg') r=String(a.created_at||'').localeCompare(String(b.created_at||''));
@@ -23338,8 +23347,9 @@ PAGES.members=async function(){
     // 票券篩選
     if(_memTkFilter){
       const s=tkSummary[m.id]||{pt:0,friendly:0,group:0,makeup:0,anyUsable:false,everPt:false};
-      if(_memTkFilter==='pt1' && !(s.anyUsable&&s.pt===1)) return false;
-      if(_memTkFilter==='pt2' && !(s.anyUsable&&s.pt>0&&s.pt<=2)) return false;
+      /* 2026-08-05 使用者指示：改成課別篩選——有教練課票（含友善）／有團體課票 */
+      if(_memTkFilter==='pt' && !(s.anyUsable&&((s.pt||0)+(s.friendly||0))>0)) return false;
+      if(_memTkFilter==='group' && !(s.anyUsable&&(s.group||0)>0)) return false;
       if(_memTkFilter==='expired' && s.anyUsable) return false;
     }
     if(!q)return true;
@@ -23410,8 +23420,9 @@ PAGES.members=async function(){
 
   // (2) Toolbar
   const tierOpts=[['','全部等級']].concat(Object.entries(TIER_DEFS).map(([k,d])=>[k,d.label]));
-  const tkOpts=[['','全部票券'],['pt2','教練課剩 1-2 堂'],['pt1','教練課剩 1 堂'],['expired','無有效票券']];
-  const sortOpts=[['reg','依註冊日'],['name','依姓名'],['tier','依等級'],['last','依最近上課']];
+  /* 票券篩選改課別（2026-08-05 使用者指示：「全部票券改成教練課票跟團體課票」） */
+  const tkOpts=[['','全部票券'],['pt','有教練課票'],['group','有團體課票'],['expired','無有效票券']];
+  const sortOpts=[['topup','依最新儲值'],['reg','依註冊日'],['name','依姓名'],['tier','依等級'],['last','依最近上課']];
   const canManage = isDeskLike();
   /* 2026-07-28 使用者指示：移除 購買審核／申辦 QR；新增會員縮小 */
   const actionsHtml =
