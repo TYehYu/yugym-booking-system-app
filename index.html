@@ -1543,8 +1543,7 @@ body.mc-mode .layout{padding-top:8px;}
 .fm-tb{border-collapse:separate;border-spacing:0;font-size:12px;white-space:nowrap;}
 .fm-tb th,.fm-tb td{border-bottom:1px solid var(--bd);border-right:1px solid var(--bd2);padding:5px 8px;text-align:center;}
 .fm-tb thead th{position:sticky;top:0;z-index:3;background:var(--card2);font-weight:700;color:var(--t2);}
-.fm-tb thead tr:nth-child(1) th{height:28px;}
-.fm-tb thead tr:nth-child(2) th{top:28px;height:24px;font-size:10.5px;font-weight:600;color:var(--t3);}
+.fm-tb thead tr:nth-child(2) th{top:var(--fm-h1,28px);font-size:10.5px;font-weight:600;color:var(--t3);}
 .fm-tb .fm-d{position:sticky;left:0;z-index:2;background:var(--card);text-align:left;font-weight:700;color:var(--text);min-width:74px;}
 .fm-tb thead .fm-d{z-index:4;background:var(--card2);}
 .fm-tb .fm-d span{font-weight:400;color:var(--t3);font-size:10.5px;margin-left:2px;}
@@ -1563,9 +1562,10 @@ body.mc-mode .layout{padding-top:8px;}
   border-top:3px solid var(--cc,var(--bd));letter-spacing:.06em;}
 .fm-tb tbody tr:hover td,.fm-tb tbody tr:hover .fm-d{background:var(--sage-bg);}
 /* 月合計凍結在表頭下方（2026-08-06 使用者指示）：往下捲時整月數字一直看得到。
-   兩列表頭高度寫死（28＋24）才能算出這一列的 top。 */
+   ⚠ 表頭高度不寫死（同日回報：捲動時教練姓名被第二列蓋住）——
+   高度隨字體/縮放而變，改由 fmStickyFit() 量完寫進 --fm-h1/--fm-h2。 */
 .fm-tb .fm-sum td,.fm-tb .fm-sum .fm-d{background:#f7f3ea;font-weight:800;border-bottom:2px solid var(--bd);}
-.fm-tb .fm-sum td,.fm-tb .fm-sum th{position:sticky;top:52px;z-index:2;}
+.fm-tb .fm-sum td,.fm-tb .fm-sum th{position:sticky;top:calc(var(--fm-h1,28px) + var(--fm-h2,24px));z-index:2;}
 .fm-tb .fm-sum .fm-d{z-index:4;}
 .fm-tb tbody tr.fm-sum:hover td,.fm-tb tbody tr.fm-sum:hover .fm-d{background:#f7f3ea;}
 .fm-tb .fm-today .fm-d{color:var(--green);}
@@ -7412,8 +7412,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.0935';
-const APP_VERSION_LABEL='v260806.0935';
+const APP_VERSION = '260806.0945';
+const APP_VERSION_LABEL='v260806.0945';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -39266,6 +39266,25 @@ async function finMatrix(){
     </table></div>
     <div style="font-size:11.5px;color:var(--t3);margin-top:10px;line-height:1.8;">教練課＝已簽到／已完成的教練課與體驗（自主訓練不計）；團課以人次計；業績＝收款紀錄的實收金額（依業績歸屬教練）；新/續＝當日成交的票券約別（作廢退款不列）。</div>
   </div>`;
+  fmStickyFit();
+}
+/* 量出兩列表頭的實際高度寫進 CSS 變數（2026-08-06 使用者回報：捲動時教練姓名被蓋住）——
+   高度會隨字體、瀏覽器縮放而變，寫死數字一定有機會蓋到。 */
+function fmStickyFit(){
+  try{
+    const tb=document.querySelector('.fm-tb'); if(!tb) return;
+    const rows=tb.querySelectorAll('thead tr');
+    if(rows.length<2) return;
+    const fit=()=>{
+      const h1=Math.round(rows[0].getBoundingClientRect().height)||28;
+      const h2=Math.round(rows[1].getBoundingClientRect().height)||24;
+      tb.style.setProperty('--fm-h1',h1+'px');
+      tb.style.setProperty('--fm-h2',h2+'px');
+    };
+    fit();
+    requestAnimationFrame(fit);                       // 字體載入後再量一次
+    if(!window._fmFitBound){ window._fmFitBound=1; window.addEventListener('resize',()=>{ try{ fmStickyFit(); }catch(_){} }); }
+  }catch(_){}
 }
 /* 待處理事項入口（2026-08-05）：這些不是報表，收成一列按鈕放在最下面 */
 function finQuickLinks(){

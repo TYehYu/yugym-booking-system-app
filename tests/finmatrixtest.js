@@ -41,6 +41,7 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     coaches:[{id:'c1',name:'RANDY',role:'coach'},{id:'c2',name:'SANDY',role:'coach'},{id:'c3',name:'閒置',role:'coach'}],
   };
   const env={
+    fmStickyFit:()=>{},   // 版面量測（DOM 相依），由瀏覽器端負責；沙箱放空殼
     document:{getElementById:id=>({ set innerHTML(v){ html[id]=v; }, get innerHTML(){ return html[id]||''; } })},
     window:{_finMonth:'2026-08'},
     dbGetAll:async t=>(DB[t]||[]).slice(),
@@ -91,10 +92,12 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     ok('　　CSS 有畫線', /\.fm-tb \.fm-gs\{border-left:3px solid var\(--cc,var\(--bd\)\);\}/.test(src)
        && /\.fm-tb \.fm-gh\{border-left:3px solid var\(--cc/.test(src));
     /* 2026-08-06 使用者指示：月合計這一列凍結顯示 */
-    ok('★ 月合計凍結在兩列表頭下方（top 52＝28+24）',
-       /\.fm-tb \.fm-sum td,\.fm-tb \.fm-sum th\{position:sticky;top:52px;z-index:2;\}/.test(src)
-       && /\.fm-tb thead tr:nth-child\(1\) th\{height:28px;\}/.test(src)
-       && /\.fm-tb thead tr:nth-child\(2\) th\{top:28px;height:24px;/.test(src));
+    /* 2026-08-06 二修：表頭高度不寫死（會蓋住教練姓名），改量測後寫進 CSS 變數 */
+    ok('★ 月合計凍結在兩列表頭下方（高度用變數，不寫死）',
+       /\.fm-tb \.fm-sum td,\.fm-tb \.fm-sum th\{position:sticky;top:calc\(var\(--fm-h1,28px\) \+ var\(--fm-h2,24px\)\);z-index:2;\}/.test(src)
+       && /\.fm-tb thead tr:nth-child\(2\) th\{top:var\(--fm-h1,28px\);/.test(src)
+       && /function fmStickyFit\(\)\{/.test(src)
+       && /tb\.style\.setProperty\('--fm-h1',h1\+'px'\);/.test(src));
     ok('　　左上角（月合計＋日期）疊在最上層、滑過不變色',
        /\.fm-tb \.fm-sum \.fm-d\{z-index:4;\}/.test(src)
        && /tr\.fm-sum:hover td,\.fm-tb tbody tr\.fm-sum:hover \.fm-d\{background:#f7f3ea;\}/.test(src));
