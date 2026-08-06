@@ -1,0 +1,66 @@
+# 部署到 GitHub Pages（2026-08-06 改用 Actions）
+#
+# 原本用 Pages 的內建（legacy）建置：整個 repo 原樣發佈。兩個問題：
+#   ① 2026-08-06 晚上開始連續建置失敗（只回「Page build failed」，查不到原因），
+#      五個版本卡著上不了線。
+#   ② 整個 repo 都公開 —— docs/（含含有會員姓名的 migration 備查檔）、tests/、CLAUDE.md
+#      任何人知道網址就讀得到。
+#
+# 改成自己組 _site：只放實際要跑的檔案，其餘一概不上傳。
+# 要新增執行期需要的檔案時，記得加進下面的 COPY 清單。
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 組出要發佈的檔案（只有執行期需要的）
+        run: |
+          set -e
+          mkdir -p _site
+          # 執行檔本體＋雲端設定
+          cp index.html config.js _site/
+          # PWA 三件組（manifest / service worker / 圖示）
+          cp manifest.json sw.js icon-192.png icon-512.png _site/
+          # 小管家插圖（index.html 會讀 img/butler/）
+          cp -r img _site/
+          # 不要 Jekyll 再處理一次
+          touch _site/.nojekyll
+          echo "--- 將發佈的內容 ---"
+          find _site -type f | sort
+
+      - name: 確認沒有把不該公開的東西帶進去
+        run: |
+          set -e
+          for f in docs tests CLAUDE.md README.md; do
+            if [ -e "_site/$f" ]; then echo "❌ _site 裡不該有 $f"; exit 1; fi
+          done
+          test -f _site/index.html
+          test -f _site/config.js
+          echo "✓ 內容檢查通過"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
