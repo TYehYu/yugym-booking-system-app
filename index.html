@@ -6852,8 +6852,13 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .dr-late .dr-cup-track{fill:rgba(181,55,46,.06);}
 .dr-late .dr-center-wait{color:var(--danger,#b5372e);}
 .dr-late .dr-time{color:var(--danger,#b5372e);font-weight:700;}
-.dr-water{transform-box:fill-box;transform-origin:center bottom;animation:drRise .9s var(--ease-out,ease-out) both;opacity:.82;}
-@keyframes drRise{from{transform:scaleY(0);}to{transform:scaleY(1);}}
+/* 時鐘式填滿（2026-08-06 使用者指示，取代水位）：扇形由 12 點順時針長出來，
+   60 等份、每格 6°。淡淡的分刻度圈讓「等份」看得出來，不搶走扇形本身。 */
+.dr-clock{opacity:.82;transform-box:view-box;transform-origin:32px 32px;
+  animation:drSweepIn .5s var(--ease-out,ease-out) both;}
+@keyframes drSweepIn{from{opacity:0;transform:rotate(-14deg) scale(.94);}to{opacity:.82;transform:none;}}
+.dr-cup-ticks{fill:none;stroke:rgba(0,61,50,.20);stroke-width:2.6;}
+.dr-empty .dr-cup-ticks{stroke:rgba(0,61,50,.10);}
 /* 跑步小人：三格循環（每格 1/3 週期輪流顯示，像翻頁動圖）＋整體上下微彈；尺寸 22px < 圓內徑 */
 /* 值班圓環：值班中一圈流星沿著杯緣跑（2026-08-06 使用者指示；顏色跟著該班別的顏色
    —— 早班琥珀金／中班品牌綠／晚班靛藍，由 --dcc 帶進來，與水位同色）。
@@ -7525,8 +7530,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1728';
-const APP_VERSION_LABEL='v260806.1728';
+const APP_VERSION = '260806.1746';
+const APP_VERSION_LABEL='v260806.1746';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14428,6 +14433,24 @@ function dutyShiftColor(shift, att){
   if(m < 15*60) return '#1F6F54';   // 中班：品牌綠（12:00 起）
   return '#3A5BA0';                 // 晚班：靛藍（15:00 起）
 }
+/* 值班進度＝時鐘扇形（2026-08-06 使用者指示：「更換填滿的方式，改成像時鐘 ——
+   例如過了 1/4 的時間，則填滿右上角 1/4 圓，分成 60 等份」）：
+   從 12 點方向順時針填，每一格 6°（60 等份，跟時鐘的分刻度一樣）。
+   viewBox 64、圓心 (32,32)、半徑 26。 */
+const DUTY_SEGS=60;
+function dutyClockSeg(pct){
+  const p=Math.max(0,Math.min(100,Number(pct)||0));
+  // 未滿一格不填（floor）；只有真的做滿才給整圈
+  return p>=100 ? DUTY_SEGS : Math.min(DUTY_SEGS-1, Math.floor(p*DUTY_SEGS/100));
+}
+function dutyClockPath(seg){
+  const n=Math.max(0,Math.min(DUTY_SEGS,Number(seg)||0));
+  if(n<=0) return '';
+  if(n>=DUTY_SEGS) return 'M32 6 A26 26 0 1 1 31.99 6 Z';        // 整圈
+  const a=n*(360/DUTY_SEGS)*Math.PI/180;
+  const x=(32+26*Math.sin(a)).toFixed(2), y=(32-26*Math.cos(a)).toFixed(2);
+  return `M32 32 L32 6 A26 26 0 ${n*(360/DUTY_SEGS)>180?1:0} 1 ${x} ${y} Z`;
+}
 function dutyRingHTML(name, att, shift, nowMinV, isToday){
   /* 還沒打卡的也要出現在今日值班（2026-07-30 使用者指示：顯示完整名單，未打卡＝空心未注水）——
      原本只畫「有 clock_in 的人」，沒打卡的完全看不到，得另外去右邊的「今日未打卡名單」找。 */
@@ -14438,6 +14461,7 @@ function dutyRingHTML(name, att, shift, nowMinV, isToday){
       <div class="dr-wrap">
         <svg viewBox="0 0 64 64">
           <circle class="dr-cup-track" cx="32" cy="32" r="26"/>
+          <circle class="dr-cup-ticks" cx="32" cy="32" r="24.3" stroke-dasharray="0.85 1.6947" stroke-dashoffset="0.425"/>
           <circle class="dr-cup-rim" cx="32" cy="32" r="26"/>
         </svg>
         <div class="dr-center dr-center-wait">${late?'!':'—'}</div>
@@ -14462,23 +14486,26 @@ function dutyRingHTML(name, att, shift, nowMinV, isToday){
   const off=(circ*(1-pct/100)).toFixed(1);
   const done=(outMin!=null);
   const ringC=dutyShiftColor(shift, att);   // 沒排班就看實際打卡時間（2026-08-06）
-  /* 水杯式進度圓（2026-07-25 使用者指示）：圓內從底部注水到滿（水位＝值班進度）；
-     值班中中央顯示跑步小人，已下班（完成）中央顯示值班時數。圓內 y 由 6(頂)到 58(底)。 */
-  const waterH=(52*pct/100);
-  const waterTop=(58-waterH).toFixed(1);
-  const uid='dcup'+(window._dutyCupN=(window._dutyCupN||0)+1);
+  /* 2026-08-06 使用者指示：填滿方式由「水位」改成「時鐘」——
+     從 12 點順時針填，過了 1/4 的時間就填滿右上角 1/4 圓，共 60 等份（每格 6°）。
+     水位版（dr-water／drRise）與它的 clipPath 一併退場。 */
+  const seg=dutyClockSeg(pct);
+  const segPath=dutyClockPath(seg);
   /* 2026-08-06 使用者指示：「值班也改成流星，移除中間的計時器」——
      中央不再放碼錶指針（值班中就留空，水位本身已經表達進度）；
      值班中改成一圈流星沿著杯緣跑（見 .duty-ring.dr-live 的 CSS）。 */
   /* 2026-08-06 使用者指示：「值班中間顯示時間」——值班中顯示目前已值時數，
      下班後顯示當日總時數（碼錶指針已移除）。 */
   const center = `<div class="dr-center dr-center-done"><b>${dispH}</b><span>h</span></div>`;
-  return `<div class="duty-ring dr-cup${done?' dr-done':' dr-live'}" style="--dcc:${ringC};" title="${name}｜${att.clock_in}–${att.clock_out||'值班中'}｜${hrs}h／目標 ${(targetMin/60).toFixed(1)}h">
+  return `<div class="duty-ring dr-cup${done?' dr-done':' dr-live'}" style="--dcc:${ringC};" title="${name}｜${att.clock_in}–${att.clock_out||'值班中'}｜${hrs}h／目標 ${(targetMin/60).toFixed(1)}h（${seg}/60 格）">
     <div class="dr-wrap">
       <svg viewBox="0 0 64 64">
-        <defs><clipPath id="${uid}"><circle cx="32" cy="32" r="26"/></clipPath></defs>
         <circle class="dr-cup-track" cx="32" cy="32" r="26"/>
-        <g clip-path="url(#${uid})"><rect class="dr-water" x="6" y="${waterTop}" width="52" height="${waterH.toFixed(1)}" style="fill:${ringC};"/></g>
+        ${/* 60 等份的分刻度（像時鐘的分格）：一個虛線圓一次畫完 ——
+             周長 2π×24.3＝152.68，每格 2.5447；畫在扇形底下，
+             填到的地方被扇形蓋住，沒填的地方看得出還剩幾格。 */''}
+        <circle class="dr-cup-ticks" cx="32" cy="32" r="24.3" stroke-dasharray="0.85 1.6947" stroke-dashoffset="0.425"/>
+        ${segPath?`<path class="dr-clock" d="${segPath}" style="fill:${ringC};"/>`:''}
         <circle class="dr-cup-rim" cx="32" cy="32" r="26" style="stroke:${ringC};"/>
       </svg>
       ${center}
