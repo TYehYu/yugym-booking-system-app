@@ -63,6 +63,9 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     const out=html['fin-body']||'';
     ok('★ 只列出有動靜的教練（閒置的不佔欄）',
        out.includes('RANDY') && out.includes('SANDY') && !out.includes('閒置'));
+    /* 2026-08-06 使用者指示：課堂數比較多的往左邊排 */
+    ok('★ 堂數多的排左邊（SANDY 團課3＝3 堂 > RANDY 2 堂）',
+       out.indexOf('SANDY')<out.indexOf('RANDY'), [out.indexOf('SANDY'),out.indexOf('RANDY')]);
     ok('★ 有月合計列，排在每日之上', out.indexOf('月合計')>0 && out.indexOf('月合計')<out.indexOf('（六）'));
     ok('★ 表頭四欄一組：教練課／團課／業績／新+續（2026-08-06 起組首組尾帶框線 class）',
        /教練課<\/th><th class="fm-sh">團課<\/th><th class="fm-sh">業績<\/th><th class="fm-sh fm-ge"[^>]*>新\/續<\/th>/.test(out));
