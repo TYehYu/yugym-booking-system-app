@@ -69,7 +69,8 @@ ok('　　收回後清掉 reward_issued，之後重新簽到能再發',
 console.log('\n④ 教練端取消的提示');
 ok('★ 明講會動到哪一張票、剩幾堂、取消後幾堂',
    /目前 <b class="num">\$\{Number\(_tk\.sessions_remaining\)\|\|0\}<\/b>\/\$\{Number\(_tk\.sessions_total\)\|\|0\} 堂/.test(src)
-   && /（<b>退回 1 堂<\/b>）/.test(src));
+   /* 2026-08-06：「退回 1 堂」改用色標（綠＝退回、紅＝扣除） */
+   && /\$\{tkChip\('back','1 堂'\)\}/.test(src));
 ok('★ 24 小時內用紅框標明是臨時取消',
    /⚠ <b>距離開課不到 24 小時<\/b>（約 \$\{Math\.max\(0,Math\.floor\(hrs\)\)\} 小時），\s*\n\s*屬<b>臨時取消<\/b>。/.test(src));
 ok('★ 修掉「畫面說不退、程式卻退」的矛盾（auto 目前一律退課）',

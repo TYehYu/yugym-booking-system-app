@@ -143,8 +143,9 @@ console.log('\n團課「已預約未上」要含匯入的未來預約');
      /if\(String\(b\.date\|\|''\)<today && String\(b\.id\|\|''\)\.indexOf\('BK-'\)!==0\) return;/.test(src));
   ok('　　過去未簽到的仍只算新制預約（匯入舊預約當初沒扣票，扣了會重複）',
      /匯入的舊預約當初沒扣過票，餘額裡本來就沒算它，扣了會重複扣/.test(src));
-  ok('　　已簽到的一律不算待上，且改逐名額判斷（2026-07-30 名額鍵）',
-     /if\(at\[k\]==='checked_in'\) return;      \/\/ 這個名額已簽到＝真的用掉了/.test(src));
+  /* 2026-08-06 使用者定案：請假也是「用掉了」（本堂照扣不退、另發補課券），一併排除待上 */
+  ok('　　已簽到／請假都不算待上，且逐名額判斷（2026-07-30 名額鍵）',
+     /if\(at\[k\]==='checked_in' \|\| at\[k\]==='leave'\) return;/.test(src));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

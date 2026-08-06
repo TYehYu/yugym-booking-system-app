@@ -180,8 +180,11 @@ ok('★ 每一列標出票券夾裡的第幾套（#N）＋方案名，能直接�
    /<div class="gr-tkname">\$\{tkNoTag\(_sl\.no\)\}\$\{_sl\.t\.plan_name\|\|'票券'\}/.test(src));
 ok('　　補課券不參與先進先出推算（它一定有扣課紀錄；被「發它的那一堂」吃掉會顯示已用畢）',
    /const proxy=mine\.filter\(t=>t\.source!=='makeup'\)\.map\(/.test(src));
-ok('　　票券夾也蓋不到（舊系統匯入）才退回持有中／已過期／歷史',
-   /W\.active\('group'\)\[0\] \|\| W\.expired\('group'\)\[0\] \|\| W\.history\('group'\)\[0\] \|\| null;/.test(src));
+/* 2026-08-06：退路加一層 —— 同類別裡優先挑「不是補課券」的那張，
+   否則沒關係的名額會被標成補課券（使用者：「補課就只要顯示補課的這一張」）。 */
+ok('　　票券夾也蓋不到（舊系統匯入）才退回持有中／已過期／歷史，且退路不挑補課券',
+   /const fb=_fbPick\(W\.active\('group'\)\) \|\| _fbPick\(W\.expired\('group'\)\) \|\| _fbPick\(W\.history\('group'\)\) \|\| null;/.test(src)
+   && /const _fbPick=arr=>\(arr\|\|\[\]\)\.find\(x=>x&&x\.t&&x\.t\.source!=='makeup'\)/.test(src));
 ok('　　單人課的票券卡也一起改（原本另有一套「以本堂為中心取 total 堂」的視窗推估）',
    /_wSlotD = W\.ticketOf\(b\.id\) \|\| \(b\.ticket_id\?W\.of\(b\.ticket_id\):null\);/.test(src)
    && !/以本堂為中心取 total 堂的視窗推估\n/.test(src));

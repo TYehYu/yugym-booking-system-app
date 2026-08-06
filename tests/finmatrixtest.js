@@ -50,6 +50,12 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     bkCoachId:b=>b.substitute_coach_id||b.coach_id||null,
     coachTagColor:id=>({c1:{bg:'#e8eef7',fg:'#1a3a6e'},c2:{bg:'#f5ede0',fg:'#8a5e28'}}[id]||{bg:'#EAE6DE',fg:'#6a655c'}),
     bkIsGroup:b=>b.category==='小班肌力',
+    /* 2026-08-06 使用者定案：「這堂請假不能算該堂教練的人次」——人次改走 grpHeadsNoLeave */
+    grpHeadsNoLeave:b=>{ const ids=Array.isArray(b.member_ids)?b.member_ids:[];
+      const base=ids.length||(b.member_id?1:0); const att=b.attendance||{};
+      const c={}; const ks=ids.map(id=>{ c[id]=(c[id]||0)+1; return c[id]>1?id+'#'+c[id]:id; });
+      if(!ks.length) return base;
+      return Math.max(0, base-ks.filter(k=>att[k]==='leave').length); },
     bkIsSelf:b=>b.category==='自主訓練',
     mids:b=>Array.isArray(b.member_ids)?b.member_ids:[],
     isCoachable:()=>true,
@@ -75,6 +81,8 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     ok('★ 8/01 RANDY：教練課 2 堂、業績 12,800、新約 1',
        out.includes('12,800') && /新1/.test(out));
     ok('★ 團課以人次計（SANDY 8/01＝3）', /class="fm-c fm-g">3</.test(out));
+    ok('★ 請假的名額不算教練人次（2026-08-06 使用者定案）',
+       /if\(bkIsGroup\(b\)\) c\.grp\+=grpHeadsNoLeave\(b\);/.test(src));
     ok('★ 續約標記出得來（SANDY 8/03）', /續1/.test(out));
     ok('★ 整月天數都列出來（8 月 31 天）',
        (out.match(/class="fm-d">\d+<span>/g)||[]).length===31, (out.match(/class="fm-d">\d+<span>/g)||[]).length);

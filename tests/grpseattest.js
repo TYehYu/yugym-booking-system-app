@@ -52,11 +52,13 @@ console.log('\n③ 舊匯入資料的退路（整堂沒逐名額點過名）');
 }
 
 console.log('\n④ 接進兩個吃這個數字的地方');
-ok('★ 票券夾的「已上」（buildWallet isAtt）：團課改看名額點名',
-   /if\(typeof grpSeatAttCount==='function' && bkIsGroup\(b\)\) return grpSeatAttCount\(b, memberId\)>0;/.test(src));
-ok('★ 圓形卡的實心分類（ticketTokens）：逐名額消耗，簽到＋請假照扣的名額算實心',
-   /_grpLeft\[b\.id\]=grpSeatAttCount\(b, memberId\|\|t\.member_id\)\+_lv;/.test(src)   /* 2026-08-04 徐翎娟案例：請假名額收進實心 */
-   && /if\(_grpLeft\[b\.id\]>0\)\{ _grpLeft\[b\.id\]--; return true; \}/.test(src));
+/* 2026-08-06 使用者定案：「團課的請假，對會員來說算一堂簽到」→ isAtt 加計請假名額 */
+ok('★ 票券夾的「已上」（buildWallet isAtt）：團課看名額點名，簽到＋請假都算',
+   /return \(grpSeatAttCount\(b, memberId\) \+ \(\(typeof grpSeatLeaveCount==='function'\)\?grpSeatLeaveCount\(b, memberId\):0\)\) > 0;/.test(src));
+ok('★ 圓形卡的實心分類（ticketTokens）：逐名額消耗，簽到與請假分開計數（請假畫紅色）',
+   /_grpLeft\[b\.id\]=\{ok:grpSeatAttCount\(b, _mid\), lv:_lv\};/.test(src)   /* 2026-08-04 徐翎娟案例：請假名額收進實心 */
+   && /if\(_q\.ok>0\)\{ _q\.ok--; return 'att'; \}/.test(src)
+   && /if\(_q\.lv>0\)\{ _q\.lv--; return 'leave'; \}/.test(src));
 ok('　　沒被算成實心的名額仍列在已預約（不會消失）',
    /else if\(b\.status!=='cancelled'\) _bookedL\.push\(b\);/.test(src));
 ok('　　使用者的回報寫在程式裡',

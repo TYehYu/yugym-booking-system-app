@@ -205,10 +205,11 @@ console.log('\n取消沒綁票券的預約');
   const j=src.indexOf('\n}\n', src.indexOf("askSeriesCancel('${id}','auto')", i))+2;
   const run=(b)=>{ let html='';
     // 2026-07-30：取消視窗會問「這堂發過幾點贈點」→ 補上依賴（測試情境無贈點，回空字串）
+    /* 2026-08-06：取消視窗改用票券結果色標（綠＝退回、紅＝扣除）→ 沙箱補上 tkChip */
     const fn=new Function('dbGet','showToast','showModal','hoursUntilStart','isDeskLike',
-      'cancelRewardWarnHtml','dbGetAll',
+      'cancelRewardWarnHtml','dbGetAll','tkChip',
       src.slice(i,j)+'\nreturn confirmCancelBooking;')(async()=>b,()=>{},h=>{html=h;},()=>72,()=>true,
-      async()=>'', async()=>[]);
+      async()=>'', async()=>[], (k,t)=>`[${k}]${t||''}`);
     return fn('X').then(()=>html); };
   return Promise.all([
     run({id:'X',date:'2026-08-03',start_time:'16:00',category:'私人教練',pending_contract:true,ticket_id:null,trial_name:'劉雪珠'}),
@@ -223,6 +224,11 @@ console.log('\n取消沒綁票券的預約');
     ok('★ 場租：說明不涉及票券', /場地租借不涉及票券/.test(rent) && !/退回票券/.test(rent));
     ok('★ 未綁票券的匯入預約：說明不影響堂數', /沒有綁票券/.test(noTk) && !/退回票券/.test(noTk));
     ok('★ 正常有綁票券的預約 → 兩種選擇照舊', /退回票券/.test(normal) && /扣課不退/.test(normal));
+    /* 2026-08-06 使用者指示：綠色＝票券返回、紅色＝票券扣除 */
+    ok('★ 兩種結果各掛一枚色標（綠 back／紅 eat）',
+       /\[back\]/.test(normal) && /\[eat\]/.test(normal));
+    ok('　　沒有票券可動的取消掛灰標（不會誤讀成要扣票）',
+       /\[none\]/.test(pend) && /\[none\]/.test(rent) && /\[none\]/.test(noTk));
     /* 2026-08-01：團課的票券記在 ticket_logs 不是 bookings.ticket_id，
        只看 ticket_id 會把每一堂團課都判成「沒有綁票券」而以不退收掉（許佳慈 8/14）。
        判斷條件加上團課的淨扣課筆數。見 tests/grpcanceltest.js。 */

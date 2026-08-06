@@ -3533,6 +3533,16 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 空心環的邊色＝課種色（52% 混，實測下團課橘/按摩青/體驗紫皆可辨） */
 .mtk-free,.mtk-booked{background:#fff;border:2px solid color-mix(in srgb,var(--tk-acc,#1F6F54) 52%,#d8d2c6);box-shadow:none;color:var(--tk-acc,#1F6F54);}
 .mtk-lock{background:#f0ece3;border:1.5px dashed #cfc7b8;box-shadow:none;color:#a39b8f;font-size:11px;}
+/* 團課請假（2026-08-06 使用者定案：「對會員來說算一堂簽到，圓形卡要填滿用紅色標示」）——
+   這一堂票照扣不退、人沒來，另發補課券。實心紅＝用掉了但不是來上課。 */
+.mtk-used.mtk-leave{background:var(--danger,#b5372e);color:#fff;}
+/* 票券結果色標（2026-08-06 使用者指示：「確認是否扣票的地方要用顏色標示，
+   綠色票券返回、紅色票券扣除」—— 黃品華當天又被誤扣一堂）。
+   兩種結果在同一個視窗裡並列時，顏色要先於文字被讀到。 */
+.tkchip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;border-radius:999px;padding:3px 11px;line-height:1.5;white-space:nowrap;}
+.tkchip-back{background:#e8f3ec;color:#1f6f54;border:1.5px solid #bcdccb;}
+.tkchip-eat{background:#fbeceb;color:#b5372e;border:1.5px solid #f0c9c5;}
+.tkchip-none{background:#f2efe9;color:#6a655c;border:1.5px solid #ddd7cc;}
 /* 已預約、但這張票券已經沒堂數可對應（票用完或還沒買新票）→ 紅虛線圈提醒要補票
    （2026-07-30 使用者回報：8/1 團課明明有預約，三位會員的圓形卡都看不到那一堂） */
 .mtk-over{background:#fff;border:1.5px dashed var(--danger,#b5372e);box-shadow:none;color:var(--danger,#b5372e);}
@@ -7505,8 +7515,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1538';
-const APP_VERSION_LABEL='v260806.1538';
+const APP_VERSION = '260806.1604';
+const APP_VERSION_LABEL='v260806.1604';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11997,7 +12007,9 @@ function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk){
       if(!tid) return;
       // 圓點只認扣課紀錄：猜出來的不畫，否則舊系統匯入的整批課會全掛到最近那張票上
       if(logged) put(logged,b);
-      if(at[k]==='checked_in') return;      // 這個名額已簽到＝真的用掉了
+      /* 已簽到＝真的用掉了；請假也是（2026-08-06 使用者定案：本堂照扣不退、另發補課券）——
+         請假還留在「待上」的話，票券夾會少算一堂已用，那一格看起來還空著。 */
+      if(at[k]==='checked_in' || at[k]==='leave') return;
       /* 匯入的舊預約當初沒扣過票，餘額裡本來就沒算它，扣了會重複扣；未來的課例外，
          那些一定還沒上（2026-07-30 Jackie 的 8/01 匯入預約）。 */
       if(String(b.date||'')<today && String(b.id||'').indexOf('BK-')!==0) return;
@@ -12035,7 +12047,12 @@ function buildWallet(memberId, ctx){
      只看 status 就會把整堂的人全標成已上。有點過名的以名額為準；
      整堂都沒逐名額點過名（舊匯入資料）才退回看整筆狀態。 */
   const isAtt=b=>{
-    if(typeof grpSeatAttCount==='function' && bkIsGroup(b)) return grpSeatAttCount(b, memberId)>0;
+    /* 請假也算（2026-08-06 使用者定案：「團課的請假，對會員來說算一堂簽到」）——
+       本堂照扣不退、另發補課券，票上那一格確實用掉了。原本只認 checked_in，
+       請假那一格會掉回「待上」，票明明扣滿卻顯示還有一格空的
+       （李曉娟 8/8 請假、8/15 補課 → 8/15 反而被畫進原票券的第 4 格）。 */
+    if(typeof grpSeatAttCount==='function' && bkIsGroup(b))
+      return (grpSeatAttCount(b, memberId) + ((typeof grpSeatLeaveCount==='function')?grpSeatLeaveCount(b, memberId):0)) > 0;
     return b.status==='checked_in'||b.status==='completed';
   };
   const byDT=(a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||''));
@@ -12150,7 +12167,9 @@ function buildWallet(memberId, ctx){
     /* 今天才用完的票先留在「持有中」，明天再進歷史（2026-08-05 使用者指示，潘詩榆案例：
        「今天這張票今天才用完，請明天再列入歷史紀錄」）——當天剛下課就從列表消失，
        會員和櫃檯都會以為票不見了。 */
-    else if(total>0 && used>=total && bks.some(b=>isAtt(b)&&String(b.date||'').slice(0,10)===today)) state='active';
+    /* 2026-08-06 延伸：最後一堂是「今天或以後」都先留著 —— 提前登記的請假會讓票當場用畢
+       （李曉娟 8/8 的課今天就標了請假），課都還沒上就掉進歷史，櫃檯會以為票不見了。 */
+    else if(total>0 && used>=total && bks.some(b=>isAtt(b)&&String(b.date||'').slice(0,10)>=today)) state='active';
     else if(t.status!=='usable' || (rem!=null && Number(rem)<=0)) state='history';
     else state='active';
     return {t, id:t.id, no:_noOf[t.id]||0, cls:tkClass5(t,typeMap), total, used, pending,
@@ -12455,11 +12474,11 @@ async function _groupCancelSeat(bid,seatKey){
       ${m?m.name:'會員'}　·　${b.date.replace(/-/g,'/')} ${b.start_time}${seats>1?`　（共 ${seats} 個名額，本次取消<b>第 ${sno} 個</b>）`:''}</div>
     <div style="background:${within24?'#fbeceb':'#eef5f1'};border:1.5px solid ${within24?'#e0a8a2':'#cfe3d8'};border-radius:12px;padding:12px 14px;font-size:13px;color:${within24?'#b5372e':'#1f6f54'};line-height:1.9;">
       ${within24?`⚠ 距離開課不到 24 小時（約 ${Math.max(0,Math.floor(hrs))} 小時）。`:`距離開課還有 ${Math.floor(hrs)} 小時。`}
-      取消後<b>退回 1 堂團體課票券</b>、名額釋出。</div>
-    <div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:1.8;">
-      若客人是臨時有事、想保留補課權益，請改用「請假」（本堂照扣並發 14 天補課券）。</div>
+      ${tkChip('back','1 堂團體課票券')}　名額同時釋出。</div>
+    <div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:2.2;">
+      若客人是臨時有事、想保留補課權益，請改用「請假」：${tkChip('eat','本堂照扣')}　另發補課券（效期自開課日起 14 天）。</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${bid}')">返回</button>
-      <button class="btn btn-danger" onclick="doGroupCancelSeat('${bid}','${sk}')">確定取消・退回票券</button></div>`);
+      <button class="btn btn-green" onclick="doGroupCancelSeat('${bid}','${sk}')">確定取消・退回票券</button></div>`);
 }
 async function doGroupCancelSeat(bid,seatKey){
  try{
@@ -13475,7 +13494,7 @@ PAGES.g_dashboard=async function(){
   const _mPtDone=_mBkAll.filter(b=>b.category==='私人教練'&&(b.status==='checked_in'||b.status==='completed')).length;
   const _mPtSched=_mBkAll.filter(b=>b.category==='私人教練').length;
   const _mGrpDoneBk=_mBkAll.filter(b=>bkIsGroup(b)&&(b.status==='checked_in'||b.status==='completed'));
-  const _mGrpHead=_mGrpDoneBk.reduce((s,b)=>s+((Array.isArray(b.member_ids)&&b.member_ids.length)||1),0);
+  const _mGrpHead=_mGrpDoneBk.reduce((s,b)=>s+grpHeadsNoLeave(b),0);   // 請假不算人次（2026-08-06）
   /* 2026-07-20 使用者指示：營收環移除；第三環改「自己的值班時數」，本月無排班則只顯示兩環 */
   const _mMyShifts=(shifts||[]).filter(s=>s.emp_id===SESSION.id&&(s.date||'').slice(0,7)===_mYm&&(s.hours>0||s.start_time));
   const _mMyDutySched=Math.floor(_mMyShifts.reduce((a,s)=>a+(Number(s.hours)||0),0)*2)/2;
@@ -21455,9 +21474,14 @@ async function openBookingDetail(id){
            seatOf 對的是扣課紀錄（ticket_logs），不是先進先出推算。
            找不到扣課歸屬時的退路：持有中 → 已過期 → 歷史（都照購買日新的優先）。
            全部用完的人也要看得到最後那張票，不然名單上會整片空白。 */
-        const fb=W.active('group')[0] || W.expired('group')[0] || W.history('group')[0] || null;
+        /* 猜不到扣課歸屬時的退路：同一類別裡優先挑「不是補課券」的那張（2026-08-06）——
+           補課券是為某一堂發的一次性券，拿它當退路會讓沒關係的名額也標成補課券。 */
+        const _fbPick=arr=>(arr||[]).find(x=>x&&x.t&&x.t.source!=='makeup')||(arr||[])[0];
+        const fb=_fbPick(W.active('group')) || _fbPick(W.expired('group')) || _fbPick(W.history('group')) || null;
+        /* 2026-08-06 使用者回報：「客人再次用補課券補課，就只要顯示補課的這一張」——
+           原本 makeup 是「這位會員手上有沒有補課券」，於是連沒用到補課券的那一列
+           也掛上「含補課券」，看起來像這張票混了補課券。改成看這一格用的是不是補課券。 */
         _gTk[mid]={ left: W.sessionsLeft('group'),
-          makeup: W.active('group').some(x=>x.t && x.t.source==='makeup'),
           slotAt:n=>W.seatOf(b.id,n) || W.ticketOf(b.id) || fb,
           typeMap:_wctx.typeMap };
       });
@@ -21504,7 +21528,7 @@ async function openBookingDetail(id){
       if(st&&_sl&&_sl.t){ for(let _k=1;_k<seatNo(sk);_k++){ const _s2=st.slotAt(_k); if(_s2&&_s2.t&&_s2.t.id===_sl.t.id) _ord++; } }
       const tkInfo = _sl
         ? `<div class="gr-tkname">${tkNoTag(_sl.no)}${_sl.t.plan_name||'票券'}`
-          +`${st.makeup?'<span class="tag" style="font-size:10px;background:#eef6ee;color:#2f6b39;margin-left:6px;">含補課券</span>':''}</div>`
+          +`${(_sl.t&&_sl.t.source==='makeup')?'<span class="tag" style="font-size:10px;background:#eef6ee;color:#2f6b39;margin-left:6px;">補課券</span>':''}</div>`
           +`<div class="mck-dots2" style="margin:4px 0 2px;">${ticketTokens(_sl.t,_sl.stamps,st.typeMap,_sl.used,b.id,mid,_sl.selfBk,_ord)}</div>`
         : '';
       return `<div class="gr-row${onLeaveM?' gr-row-leave':''}" style="padding:6px 0;border-bottom:1px solid var(--bd);">
@@ -22668,7 +22692,7 @@ async function confirmCancelBooking(id){
       : '這筆預約沒有綁票券（舊系統匯入的課多半如此），取消不會影響任何堂數。');
     showModal(`<div class="modal-title">取消預約</div>
       <div style="font-size:13.5px;color:var(--text);padding:6px 0 4px;">確定要取消 ${b.date} ${String(b.start_time).slice(0,5)} 的${b.category}嗎？${b.trial_name?`<br><span style="color:var(--t2);font-size:12.5px;">客戶：${b.trial_name}</span>`:''}</div>
-      <div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;">${why}</div>
+      <div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:2;background:var(--card2);border-radius:9px;padding:10px 12px;">${tkChip('none')}<br>${why}</div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
         <button class="btn btn-danger" onclick="askSeriesCancel('${id}','none')">確定取消</button></div>`);
     return;
@@ -22685,15 +22709,16 @@ async function confirmCancelBooking(id){
       ${_w24}
       ${/* 團課一堂可能扣好幾堂（同一人佔多個名額、或多位會員各扣一堂）→ 講實際筆數，
            不要一律寫「1 堂」（2026-08-01）。 */''}
-      <div style="font-size:12px;color:var(--t2);margin:10px 0 14px;line-height:1.8;">請當面向會員說明後再送出，兩種結果都會寫入紀錄：<br>
-        ・<b>退回票券</b>：這堂不扣，票券加回 ${_grpNetDeduct>0?`<b>${_grpNetDeduct}</b> 堂（本堂共扣了 ${_grpNetDeduct} 堂）`:'1 堂'}。<br>
-        ・<b>扣課不退</b>：視同已使用，票券不加回（會員端會收到通知）。</div>
+      <div style="font-size:12px;color:var(--t2);margin:10px 0 14px;line-height:2.2;">請當面向會員說明後再送出，兩種結果都會寫入紀錄：<br>
+        ${tkChip('back', `加回 ${_grpNetDeduct>0?`${_grpNetDeduct} 堂（本堂共扣了 ${_grpNetDeduct} 堂）`:'1 堂'}`)}　<b>退回票券</b>：這堂不扣。<br>
+        ${tkChip('eat', '不加回')}　<b>扣課不退</b>：視同已使用（會員端會收到通知）。</div>
       ${await cancelRewardWarnHtml(b)}
       <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
         <button class="btn btn-ghost" onclick="closeModal()">返回</button>
         ${/* 2026-08-01 使用者指示：會扣課的那顆要一眼看得出來 —— 原本兩顆長得幾乎一樣，
              按錯就是直接吃掉客人的堂數。扣課那顆改成紅底實心，退課那顆維持一般樣式。 */''}
-        <button class="btn btn-ghost" onclick="askSeriesCancel('${id}','force')">取消・退回票券</button>
+        ${/* 2026-08-06：退回那顆改綠底，與色標同一個語彙（綠＝退回、紅＝扣除） */''}
+        <button class="btn btn-green" onclick="askSeriesCancel('${id}','force')">取消・退回票券</button>
         <button class="btn btn-danger cx-btn-eat" onclick="askSeriesCancel('${id}','none')">取消・<b>扣掉這一堂</b></button>
       </div>`);
     return;
@@ -22707,9 +22732,9 @@ async function confirmCancelBooking(id){
   if(!isTrial && b.ticket_id){
     try{
       const _tk=await dbGet('member_tickets', b.ticket_id);
-      if(_tk) _tkLine=`<div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:1.8;">
+      if(_tk) _tkLine=`<div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:2.2;">
         票券　<b>${_tk.plan_name||'票券'}</b>　目前 <b class="num">${Number(_tk.sessions_remaining)||0}</b>/${Number(_tk.sessions_total)||0} 堂
-        →　取消後 <b class="num" style="color:var(--green);">${(Number(_tk.sessions_remaining)||0)+1}</b> 堂（<b>退回 1 堂</b>）</div>`;
+        →　取消後 <b class="num" style="color:var(--green);">${(Number(_tk.sessions_remaining)||0)+1}</b> 堂　${tkChip('back','1 堂')}</div>`;
     }catch(_){}
   }
   try{
@@ -23152,6 +23177,34 @@ function grpSeatAttCount(b, memberId){
   const marked=seatKeys(b).some(k=>att[k]!=null);
   if(!marked) return (b.status==='checked_in'||b.status==='completed')?ks.length:0;
   return ks.filter(k=>att[k]==='checked_in').length;
+}
+/* 這位會員在這堂團課「請假」的名額數（2026-08-06 使用者定案）——
+   「團課的請假，對會員來說算一堂簽到」：本堂票券照扣不退、另發補課券，
+   所以票券夾要把它算成已用掉的一格（只是畫成紅色，見 ticketTokens）。 */
+function grpSeatLeaveCount(b, memberId){
+  if(!b || !bkIsGroup(b)) return 0;
+  const mid=String(memberId||'');
+  const ks=seatKeys(b).filter(k=>seatMid(k)===mid);
+  if(!ks.length) return 0;
+  const att=attObj(b);
+  return ks.filter(k=>att[k]==='leave').length;
+}
+/* 這堂團課算幾個「教練人次」（2026-08-06 使用者定案：「這堂請假不能算該堂教練的人次」）——
+   請假是本堂照扣票、另發補課券，錢照算，但人沒來 → 不列入教練成績。
+   沒有名額資料的舊匯入資料維持原本的算法（整堂算 1 或名單人數）。 */
+function grpHeadsNoLeave(b){
+  const ids=(typeof mids==='function')?mids(b):[];
+  const base=ids.length || (b&&b.member_id?1:0);
+  const ks=seatKeys(b); if(!ks.length) return base;
+  const att=attObj(b);
+  return Math.max(0, base - ks.filter(k=>att[k]==='leave').length);
+}
+/* 票券結果色標（2026-08-06 使用者指示）：kind 為 back＝退回（綠）／eat＝扣除（紅）／none＝不動（灰）。
+   任何「要不要扣票」的確認視窗都掛這一枚，顏色一致，按鈕才不會按錯。 */
+function tkChip(kind, text){
+  const k = kind==='back' ? 'back' : (kind==='eat' ? 'eat' : 'none');
+  const lb = k==='back' ? '＋ 票券退回' : (k==='eat' ? '－ 票券扣除' : '票券不變');
+  return `<span class="tkchip tkchip-${k}">${lb}${text?`　${text}`:''}</span>`;
 }
 /* 這堂課算不算數（2026-08-02 使用者定案）：
    「全員請假該堂課就不成立，如果該堂課有一名簽到還是要計算」
@@ -37887,18 +37940,22 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
   const _grpLeft={};
   const _isDoneOcc=b=>{
     if(typeof grpSeatAttCount!=='function' || !bkIsGroup(b))
-      return b.status==='checked_in'||b.status==='completed';
+      return (b.status==='checked_in'||b.status==='completed')?'att':'';
     /* 請假名額也算「已使用」（2026-08-04 徐翎娟案例，使用者指示：「這兩堂超約就收在
        那兩個打勾裡」）——請假政策是本堂照扣、另發補課券，票上的那一堂確實用掉了。
        原本只數已簽到，請假的名額掉進「已預約」、又因為票已扣滿而畫成超約紅圈。 */
     if(_grpLeft[b.id]==null){
       const _mid=String(memberId||t.member_id);
       let _lv=0;
-      try{ const _att=attObj(b); _lv=seatKeys(b).filter(k=>seatMid(k)===_mid&&_att[k]==='leave').length; }catch(_){}
-      _grpLeft[b.id]=grpSeatAttCount(b, memberId||t.member_id)+_lv;
+      try{ _lv=grpSeatLeaveCount(b, _mid); }catch(_){}
+      /* 已簽到的先發，請假的排後面 —— 回傳 'leave' 的那幾顆畫成紅色（2026-08-06 使用者指示：
+         「團課的請假圓形卡要填滿用紅色標示」）。 */
+      _grpLeft[b.id]={ok:grpSeatAttCount(b, _mid), lv:_lv};
     }
-    if(_grpLeft[b.id]>0){ _grpLeft[b.id]--; return true; }
-    return false;
+    const _q=_grpLeft[b.id];
+    if(_q.ok>0){ _q.ok--; return 'att'; }
+    if(_q.lv>0){ _q.lv--; return 'leave'; }
+    return '';
   };
   const _doneL=[], _bookedL=[];
   (bks||[]).forEach(b=>{
@@ -37906,7 +37963,8 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
        開通後自動補綁，未開通的堂數已經由 🔒 鎖頭格表達；畫成「超約需補票」的
        紅虛線是重複又嚇人（看起來像欠 7 堂票，其實是還沒到繳費期）。 */
     if(b.pending_contract && !b.ticket_id) return;
-    if(_isDoneOcc(b)) _doneL.push(b);
+    const _st=_isDoneOcc(b);
+    if(_st) _doneL.push(_st==='leave' ? Object.assign({},b,{_leave:1}) : b);
     else if(b.status!=='cancelled') _bookedL.push(b);
   });
   const done=expand(_doneL)
@@ -37939,7 +37997,9 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
       const cur=_isCur(b)?' mtk-cur':'';
       const slf=selfCls(b);
       const shc=((b&&b._shBy)?' mtk-sh':'')+_ownCls(b);
-      s+=`<span class="mtk mtk-used${cur}${slf}${shc}" style="--tk-acc:${v.accent};" title="已完成${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${b?md(b):'✓'}${cur?'<i class="mtk-comet"></i>':''}</span>`;
+      /* 請假那一格紅色（2026-08-06 使用者指示）：這一堂票照扣、人沒來，另發補課券。 */
+      const lvc=(b&&b._leave)?' mtk-leave':'';
+      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}${shc}" style="--tk-acc:${v.accent};" title="${(b&&b._leave)?'請假（本堂照扣，另發補課券）':'已完成'}${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${b?md(b):'✓'}${cur?'<i class="mtk-comet"></i>':''}</span>`;
     }
     else if(bi<booked.length){
       const b=booked[bi++];
@@ -39074,7 +39134,9 @@ async function anaMonth(){
   let grpHeads=0;
   const grpValue=grpDoneList.reduce((s,b)=>{
     const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
-    grpHeads+=ids.length;
+    /* 人次不含請假（2026-08-06 使用者定案），但銷課金額含 —— 請假是本堂照扣不退，
+       票用掉了、錢就實現了，只是人沒來、不算教練成績。 */
+    grpHeads+=grpHeadsNoLeave(b);
     return s+ids.reduce((a,mid)=>a+memAvg(mid,'grp'),0); },0);
   const salesValue=ptValue+grpValue;
   /* ── 教練總薪資：與薪資頁同一套 calcSalary（課時費＋團課費＋值班費＋續約/店長/主管獎金）── */
@@ -39155,7 +39217,7 @@ async function anaCoach(){
     const ptDone=done.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
     const grpAll=mine.filter(b=>bkIsGroup(b)).length;
     const grpDone=done.filter(b=>bkIsGroup(b));
-    const grpHeads=grpDone.reduce((a,b)=>a+((Array.isArray(b.member_ids)?b.member_ids.length:0)||0),0);
+    const grpHeads=grpDone.reduce((a,b)=>a+grpHeadsNoLeave(b),0);   // 請假不算人次（2026-08-06）
     let dutyH=0;
     try{ dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month,c),0):0; }catch(_){}
     return { name:coachDisp(c), renew:renewMap[c.id]||0, ptDone, ptAll, grpDone:grpDone.length, grpAll, grpHeads, dutyH, total:mine.length };
@@ -39414,7 +39476,7 @@ async function finMatrix(){
     const cid=bkCoachId(b); if(!cid) return;
     const d=String(b.date).slice(8,10);
     const c=touch(cid,d);
-    if(bkIsGroup(b)) c.grp+=Math.max(1,mids(b).length);   // 團課算人次
+    if(bkIsGroup(b)) c.grp+=grpHeadsNoLeave(b);   // 團課算人次（請假不算，2026-08-06）
     else if(!bkIsSelf(b)) c.pt+=1;                        // 自主訓練不算教練成績
   });
   // ② 業績（收款紀錄實收，歸屬教練）

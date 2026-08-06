@@ -25,6 +25,10 @@ console.log('① 實跑 ticketTokens：請假名額收進實心');
     grpSeatAttCount:(b,mid)=>{ const att=b.attendance||{}; const c={}; let n=0;
       mids(b).forEach(id=>{ c[id]=(c[id]||0)+1; const k=c[id]>1?id+'#'+c[id]:id;
         if(String(id)===String(mid)&&att[k]==='checked_in') n++; }); return n; },
+    /* 2026-08-06：請假的名額數抽成共用函式（票券夾與圓形卡吃同一支） */
+    grpSeatLeaveCount:(b,mid)=>{ const att=b.attendance||{}; const c={}; let n=0;
+      mids(b).forEach(id=>{ c[id]=(c[id]||0)+1; const k=c[id]>1?id+'#'+c[id]:id;
+        if(String(id)===String(mid)&&att[k]==='leave') n++; }); return n; },
   };
   const TT=new Function(...Object.keys(deps),'return '+grabFn('ticketTokens'))(...Object.values(deps));
   // 徐翎娟情境：4 堂票、已扣滿（used=4）；7/3、7/18 已簽到，7/24、7/31 請假
@@ -36,13 +40,19 @@ console.log('① 實跑 ticketTokens：請假名額收進實心');
   eq('★ 沒有超約紅圈', (h.match(/mtk-over/g)||[]).length, 0);
   eq('★ 四顆實心', (h.match(/mtk-used/g)||[]).length, 4);
   ok('★ 請假的兩堂帶日期（不是無名的 ✓）', /7\/24/.test(h) && /7\/31/.test(h) && !/>✓</.test(h));
+  /* 2026-08-06 使用者指示：「團課的請假，對會員來說算一堂簽到，圓形卡要填滿用紅色標示」 */
+  eq('★ 請假那兩顆是紅色（mtk-leave），已簽到的兩顆不是', (h.match(/mtk-leave/g)||[]).length, 2);
+  ok('★ 紅色那兩顆標的是請假的日期（7/24、7/31）',
+     /mtk-used mtk-leave[^>]*title="請假（本堂照扣，另發補課券） 2026-07-24/.test(h)
+     && /mtk-used mtk-leave[^>]*title="請假（本堂照扣，另發補課券） 2026-07-31/.test(h));
 }
 
 console.log('\n② 已簽到的行為不變（2026-08-03 逐名額實心）');
 {
-  ok('★ 逐名額判定仍在（簽到＋請假才算，其他名額不跟著實心）',
-     /_grpLeft\[b\.id\]=grpSeatAttCount\(b, memberId\|\|t\.member_id\)\+_lv;/.test(src)
-     && /_att\[k\]==='leave'/.test(src));
+  ok('★ 逐名額判定仍在（簽到與請假各自計數，其他名額不跟著實心）',
+     /_grpLeft\[b\.id\]=\{ok:grpSeatAttCount\(b, _mid\), lv:_lv\};/.test(src)
+     && /if\(_q\.ok>0\)\{ _q\.ok--; return 'att'; \}/.test(src)
+     && /if\(_q\.lv>0\)\{ _q\.lv--; return 'leave'; \}/.test(src));
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');

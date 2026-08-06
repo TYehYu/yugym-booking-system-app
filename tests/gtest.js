@@ -121,8 +121,16 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
   /* 2026-07-31 使用者指示：同一個會員約兩個名額，兩個名額都要顯示圓形卡
      （原本只畫第一列 —— 第二個位子看不出扣哪張票、剩幾堂）。 */
   chk('★ 每個名額都畫自己的圓形卡（三個名額＝三組）', (html.match(/mck-dots2/g)||[]).length===3);
+  /* 2026-08-06 使用者指示：「客人再次用補課券補課，就只要顯示補課的這一張」——
+     標籤改成看「這一格用的是不是補課券」，不再是「這個人手上有沒有補課券」
+     （李曉娟 8/8 請假那一列本來也被掛上「含補課券」，看起來像原票券混了補課券）。 */
   html=await render({ids:['M'],tickets:[T({id:'mk',member_id:'M',sessions_total:1,sessions_remaining:1,source:'makeup',start_date:'2026-07-24'})],bookings:[],names:{M:'徐翎娟'}});
-  chk('顯示「含補課券」', html.includes('含補課券'));
+  chk('★ 這一格用的就是補課券 → 標「補課券」', html.includes('>補課券<'));
+  html=await render({ids:['M'],tickets:[
+      T({id:'g1',member_id:'M',sessions_total:4,sessions_remaining:2,start_date:'2026-07-01'}),
+      T({id:'mk2',member_id:'M',sessions_total:1,sessions_remaining:1,source:'makeup',start_date:'2026-07-24'})],
+    bookings:[],names:{M:'徐翎娟'}});
+  chk('★ 這一格是一般團體課票 → 不因為手上另有補課券就標', !html.includes('>補課券<'));
 
   console.log('邊界：');
   html=await render({ids:['M'],tickets:[],bookings:[],names:{M:'無票會員'}});

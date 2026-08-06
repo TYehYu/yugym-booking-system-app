@@ -30,10 +30,12 @@ console.log('① 舊匯入團課的簽到判定（實跑）');
 }
 
 console.log('\n② 今天用完的票留在持有中');
-ok('★ 票券夾 state：全用完但有今天的簽到戳記 → 仍是 active',
-   /else if\(total>0 && used>=total && bks\.some\(b=>isAtt\(b\)&&String\(b\.date\|\|''\)\.slice\(0,10\)===today\)\) state='active';/.test(src));
+/* 2026-08-06 延伸（李曉娟案例）：門檻由「＝今天」放寬成「今天或以後」——
+   提前登記的請假會讓票當場用畢，課都還沒上就掉進歷史。 */
+ok('★ 票券夾 state：全用完但最後一堂是今天或以後 → 仍是 active',
+   /else if\(total>0 && used>=total && bks\.some\(b=>isAtt\(b\)&&String\(b\.date\|\|''\)\.slice\(0,10\)>=today\)\) state='active';/.test(src));
 ok('　　過期判定仍優先（規則不變）',
-   src.indexOf("state='expired'") < src.indexOf("bks.some(b=>isAtt(b)&&String(b.date||'').slice(0,10)===today)"));
+   src.indexOf("state='expired'") < src.indexOf("bks.some(b=>isAtt(b)&&String(b.date||'').slice(0,10)>=today)"));
 
 console.log('\n③ 圓形卡尺寸（二修：整體放大、共享人縮小）');
 ok('★ 基準圓點放大到 35px（原共享票「自己那顆」的尺寸）',

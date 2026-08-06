@@ -101,7 +101,7 @@ ok('★ 同一人在某堂佔多個名額 → 那一堂畫多顆圓點（票券�
 /* 2026-07-31：算式抽成共用的 grpTicketAlloc，名額鍵在那裡組（見 grpalloctest.js） */
 ok('★ 票券剩餘推算（grpTicketAlloc）也逐名額',
    /mine\.push\(seen\[id\]>1\?id\+'#'\+seen\[id\]:id\);/.test(src)
-   && /if\(at\[k\]==='checked_in'\) return;/.test(src));
+   && /if\(at\[k\]==='checked_in' \|\| at\[k\]==='leave'\) return;/.test(src));
 ok('　　整堂「有人簽到」的判斷不受影響（仍看 Object.values）',
    /const anyIn=Object\.values\(att\)\.some\(s=>s==='checked_in'\);/.test(src));
 ok('★ 存名單時清掉沒有對應名額的孤兒出席鍵',
