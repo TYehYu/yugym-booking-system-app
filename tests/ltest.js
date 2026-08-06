@@ -65,7 +65,8 @@ const mkTicket=()=>({id:'T1',member_id:'M1',ticket_type_id:'tt-g',sessions_total
     DB.member_tickets.T1=mkTicket();
     await api.groupToggleLeave('G1','M1');
     const g=Object.values(DB.member_tickets).find(t=>t.source==='makeup');
-    chk('★ 事後補發過去的課：仍從今天起算（不會一發下去就快過期）', g && g.expire_date==='2026-08-09');
+    chk('★ 事後補發過去的課：一樣從開課日 7/20 起算＝8/03（使用者：補發也是以開課當天計算）',
+        g && g.expire_date==='2026-08-03');
     DB=save;
   }
   chk('綁定本堂與本人', mk && mk.makeup_for_booking==='G1' && mk.member_id==='M1');
