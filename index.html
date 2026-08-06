@@ -7515,8 +7515,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1604';
-const APP_VERSION_LABEL='v260806.1604';
+const APP_VERSION = '260806.1621';
+const APP_VERSION_LABEL='v260806.1621';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12415,6 +12415,27 @@ async function revokeMakeupTicket(booking,memberId,seatKey){
       if((t.sessions_total||0)-(t.sessions_remaining||0)>0) continue;   // 已用過→保留
       await dbDel('member_tickets',t.id);
       try{ await logTicket(t.id,'revoke',0,booking.id,SESSION.id,'取消請假，收回未使用的補課券'); }catch(_){}
+      n++;
+    }
+  }catch(_){}
+  return n;
+}
+/* 整堂取消時收回這堂發過的補課券（2026-08-06 李曉娟案例）——
+   櫃檯先在 8/8 那堂標了請假（發券），之後把整筆預約取消、改建一筆新的再標一次請假，
+   於是同一堂課手上多了一張沒人管的補課券。取消＝這堂不成立，請假的前提也沒了。
+   與 revokeMakeupTicket 同一套保守原則：只收「完全沒用過」的，用過就留著。 */
+async function revokeMakeupOnCancel(booking){
+  if(!booking||!booking.id) return 0;
+  const pre=String(booking.id);
+  let n=0;
+  try{
+    const all=await dbGetAll('member_tickets')||[];
+    const hit=all.filter(t=>t && t.source==='makeup' && t.makeup_for_booking
+      && (String(t.makeup_for_booking)===pre || String(t.makeup_for_booking).indexOf(pre+'#')===0));
+    for(const t of hit){
+      if((t.sessions_total||0)-(t.sessions_remaining||0)>0) continue;   // 已用過→保留
+      await dbDel('member_tickets',t.id);
+      try{ await logTicket(t.id,'revoke',0,booking.id,SESSION.id,'整堂取消，收回未使用的補課券'); }catch(_){}
       n++;
     }
   }catch(_){}
@@ -23439,6 +23460,8 @@ async function cancelBooking(id, refundMode, opts){
   // 贈點回收（2026-07-30 使用者指示）：整堂取消 → 這堂發的自主訓練點數收回，
   // 已經拿去排課的自主訓練也一併取消（贈點的前提沒了）
   const _rv=await revokeRewardOnCancel(b);
+  // 這堂發過的補課券也一併收回（2026-08-06；只收沒用過的）
+  const _mkRv=await revokeMakeupOnCancel(b);
 
   /* 保留課自動遞補（2026-08-04 徐千晴案例）：分期票的已開通段有課被取消退回後，
      段內多出的額度原本不會補給後面的「分期待繳費保留」——8/1 取消了，8/20 明明
@@ -23465,10 +23488,11 @@ async function cancelBooking(id, refundMode, opts){
   if(_silent) return;
   closeModal();
   const _rt=rewardToastText(_rv);
-  if(refundedCount>0) showToast(`已取消預約，退回 ${refundedCount} 堂票券`+_rt);
-  else if(refundMissed) showToast('已取消預約，但找不到可退的票券 —— 請到會員票券手動確認堂數'+_rt);
-  else if(within24 && refundMode!=='none' && refundMode!=='force') showToast('已取消預約（24 小時內，扣課不退）'+_rt);
-  else showToast('已取消預約'+_rt);
+  const _mkt=_mkRv?`，並收回未使用的補課券 ${_mkRv} 張`:'';
+  if(refundedCount>0) showToast(`已取消預約，退回 ${refundedCount} 堂票券`+_mkt+_rt);
+  else if(refundMissed) showToast('已取消預約，但找不到可退的票券 —— 請到會員票券手動確認堂數'+_mkt+_rt);
+  else if(within24 && refundMode!=='none' && refundMode!=='force') showToast('已取消預約（24 小時內，扣課不退）'+_mkt+_rt);
+  else showToast('已取消預約'+_mkt+_rt);
   navTo(CUR_PAGE);
 }
 /* 取消前的贈點提醒（櫃檯與教練共用；沒有贈點就回空字串） */

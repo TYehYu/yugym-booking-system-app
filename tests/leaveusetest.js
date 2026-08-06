@@ -113,5 +113,16 @@ console.log('\n④ 補課券只標在真的用到它的那一格');
      /const _fbPick=arr=>\(arr\|\|\[\]\)\.find\(x=>x&&x\.t&&x\.t\.source!=='makeup'\)\|\|\(arr\|\|\[\]\)\[0\];/.test(src));
 }
 
+console.log('\n⑤ 整堂取消時收回這堂發過的補課券（李曉娟當天多出一張沒人管的券）');
+/* 櫃檯先在 8/8 標請假（發券），再把整筆預約取消、改建一筆新的又標一次請假 →
+   同一堂課手上兩張補課券。取消＝這堂不成立，請假的前提也沒了。 */
+ok('★ 取消流程會收回這堂的補課券（含第 2 個以後的名額鍵 id#N）',
+   /async function revokeMakeupOnCancel\(booking\)\{/.test(src)
+   && /String\(t\.makeup_for_booking\)===pre \|\| String\(t\.makeup_for_booking\)\.indexOf\(pre\+'#'\)===0/.test(src)
+   && /const _mkRv=await revokeMakeupOnCancel\(b\);/.test(src));
+ok('★ 用過的不收（與贈點回收同一套保守原則）',
+   /if\(\(t\.sessions_total\|\|0\)-\(t\.sessions_remaining\|\|0\)>0\) continue;   \/\/ 已用過→保留\n\s*await dbDel\('member_tickets',t\.id\);\n\s*try\{ await logTicket\(t\.id,'revoke',0,booking\.id,SESSION\.id,'整堂取消，收回未使用的補課券'\)/.test(src));
+ok('　　收了幾張會寫進 Toast（櫃檯看得到）', /const _mkt=_mkRv\?`，並收回未使用的補課券 \$\{_mkRv\} 張`:'';/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
