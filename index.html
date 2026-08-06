@@ -4435,8 +4435,35 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard:hover{transform:scale(1.05);filter:drop-shadow(0 4px 10px rgba(60,50,38,.22));}
 .tcard-time{font-size:12.5px;font-weight:800;font-family:var(--num);line-height:1.1;}
 .tcard-mem{font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+/* ══ 課卡狀態邊框（2026-08-06 使用者指示）══
+   完成＝霧化綠框、上課中＝流星繞圈（同圓形卡那組動畫）、已簽到＝綠框、逾時未簽＝金框。
+   全部只有 CSS：不多讀任何資料，只有「上課中」那一張在動（同一時間通常 0~2 張）。 */
 .tcard-live{filter:drop-shadow(0 0 6px rgba(31,111,84,.55)) drop-shadow(0 1px 2px rgba(60,50,38,.15));}
 .tcard-done{opacity:1;}   /* 2026-07-21 使用者指示：簽到完不淡化課卡（「簽」章已足以辨識） */
+/* 已簽到／完成：實綠框＋霧化外暈 */
+.tcard-std.tcard-done .tcard-body{border-color:var(--green,#1f6f54);
+  box-shadow:0 0 0 2px rgba(31,111,84,.16), 0 0 10px 2px rgba(31,111,84,.18);}
+/* 逾時未簽到：金框（提醒補簽；紅>金>綠 的「要留意」色階） */
+.tcard-std.tcard-miss .tcard-body{border-color:var(--gold,#B48A56);
+  box-shadow:0 0 0 2px rgba(180,138,86,.18);}
+/* 上課中：流星沿卡片邊緣繞圈（與本堂圓形卡同一套作法：conic 尾巴＋遮罩成細框） */
+.tcard-std.tcard-live .tcard-body{border-color:var(--green,#1f6f54);}
+.tcard-std.tcard-live::before,.tcard-std.tcard-live::after{content:'';position:absolute;inset:-2px;
+  border-radius:12px;pointer-events:none;z-index:1;}
+.tcard-std.tcard-live::before{
+  background:conic-gradient(from 0deg,
+    rgba(31,111,84,0) 0deg, rgba(31,111,84,0) 268deg,
+    rgba(31,111,84,.28) 300deg, rgba(31,111,84,.75) 340deg,
+    #2f9c74 353deg, #eafff5 359deg, rgba(31,111,84,0) 360deg);
+  -webkit-mask:linear-gradient(#000,#000) content-box, linear-gradient(#000,#000);
+          mask:linear-gradient(#000,#000) content-box, linear-gradient(#000,#000);
+  -webkit-mask-composite:xor; mask-composite:exclude; padding:2.5px;
+  animation:tcardComet 1.8s linear infinite;}
+.tcard-std.tcard-live::after{
+  background:radial-gradient(circle 5px at 50% 0,
+    #ffffff 0 34%, #d8fff0 46%, rgba(47,156,116,.95) 66%, rgba(47,156,116,0) 100%);
+  animation:tcardComet 1.8s linear infinite;}
+@keyframes tcardComet{ from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
 /* 2026-07-25 使用者指示：取消課卡不淡化（只靠右下角紅「刪」＋刪除線標示） */
 .tcard-cancel .tcard-txt{text-decoration:line-through;}
 .tcard-empty{display:flex;align-items:center;color:var(--text-muted);font-size:12.5px;padding:8px 4px;}
@@ -7425,8 +7452,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1135';
-const APP_VERSION_LABEL='v260806.1135';
+const APP_VERSION = '260806.1145';
+const APP_VERSION_LABEL='v260806.1145';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12855,7 +12882,10 @@ PAGES.g_dashboard=async function(){
             no:(window._renewNoBk&&window._renewNoBk[b.id]),
             renew:(window._renewLastBk&&window._renewLastBk[b.id]),
             pay:(window._installLastBk&&window._installLastBk[b.id])});
-          return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}${_pend?' tcard-pend':''}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${_nmFull}${_pend?'・尚未收款':''}${live?'（進行中）':''}${canceled?'（已取消）':''}">
+          /* 邊框狀態（2026-08-06 使用者指示）：完成＝霧化綠框、上課中＝流星繞圈、
+             已簽到＝綠框、時間過了還沒簽到＝金框（提醒櫃檯補簽）。 */
+          const _miss = !canceled && !done && !live && nowMin>=mn+(Number(b.duration)||60);
+          return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}${_miss?' tcard-miss':''}${_pend?' tcard-pend':''}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${_nmFull}${_pend?'・尚未收款':''}${live?'（進行中）':''}${canceled?'（已取消）':''}">
             <div class="tcard-body"></div>${_mk}
             <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-mem">${nm}</span>${_tagOut}${(b.member_id?lottoGiftIcon(_lotMap[b.member_id]):'')}${coTag}${(()=>{const k=bkStampKind(b);
               return k==='leave'?'<span class="tcard-chk tcard-chk-leave">假</span>'
