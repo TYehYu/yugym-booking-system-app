@@ -37,16 +37,14 @@ console.log('\n② 樣式接線');
 ok('★ 卡片帶上 tcard-miss（其餘旗標不變）',
    /\$\{_miss\?' tcard-miss':''\}/.test(src)
    && /const _miss = !canceled && !done && !live && nowMin>=mn\+\(Number\(b\.duration\)\|\|60\);/.test(src));
-/* 2026-08-06 定版（使用者三次回饋）：頭與尾都走同一條邊框路徑（offset-path），
-   只差出發時間 → 頭永遠在最前端；不支援的瀏覽器退回漸層掃角度的單圈光帶。 */
-ok('★ 上課中：頭與尾同一條邊框路徑、同一組動畫（頭在前、尾晚一點出發）',
-   /@supports \(offset-path: border-box\)\{/.test(src)
-   && /\.tcard-std\.tcard-live::before,\.tcard-std\.tcard-live::after\{[\s\S]{0,220}?offset-path:border-box; offset-rotate:0deg;[\s\S]{0,80}?animation:tcardHead 3\.2s linear infinite;\}/.test(src)
-   && /animation-delay:-\.12s;/.test(src)
-   && /@keyframes tcardHead\{ from\{offset-distance:0%;\} to\{offset-distance:100%;\} \}/.test(src));
-ok('　　不支援 offset-path 時仍有退路（掃角度光帶，不破圖）',
-   /@supports not \(offset-path: border-box\)\{/.test(src)
-   && /@keyframes tcardComet\{ from\{--tcAng:0deg;\} to\{--tcAng:360deg;\} \}/.test(src));
+/* 2026-08-06 定版（使用者三次回饋後撤回 offset-path 版）：框固定不動、只掃漸層角度，
+   亮帶含前端白光沿四邊與圓角走；不另加頭部圓點（加了反而對不齊）。 */
+ok('★ 上課中：框不動、只掃漸層角度（不另加頭部圓點）',
+   /@property --tcAng\{ syntax:'<angle>'; inherits:false; initial-value:0deg; \}/.test(src)
+   && /background:conic-gradient\(from var\(--tcAng\),/.test(src)
+   && /@keyframes tcardComet\{ from\{--tcAng:0deg;\} to\{--tcAng:360deg;\} \}/.test(src)
+   && !/offset-path:border-box/.test(src)
+   && !/\.tcard-std\.tcard-live::after\{/.test(src));
 ok('★ 上課中／逾時未簽仍疊在左側教練欄之上（框不被切掉）',
    /\.tcard-std\.tcard-live,\.tcard-std\.tcard-miss\{z-index:5;\}/.test(src)
    && /\.tcard-coach\{width:118px;flex-shrink:0;padding-top:4px;position:sticky;left:0;z-index:4;/.test(src));
@@ -65,12 +63,6 @@ ok('★ 逾時未簽：金框', /\.tcard-std\.tcard-miss \.tcard-body\{border-co
    改成只留沿邊框跑的尾巴，前端加白光當頭（conic 掃角度 × 方框環狀遮罩＝沿著邊緣走）。 */
 /* 2026-08-06 三修（使用者回報「還在轉圈圈」）：transform:rotate 轉的是方框本身 →
    看起來是方塊在轉。改成框不動、只動 conic 的起始角度（@property 才能對角度做動畫）。 */
-/* 2026-08-06 四修（使用者問「圓形的頭沒有顯示還是沒有設定」）：補一顆沿邊框行進的圓頭
-   （offset-path），不支援的瀏覽器維持尾巴前端的白光。 */
-ok('★ 方形卡的流星圓頭沿邊框跑（offset-path，含不支援時的退路）',
-   /@supports \(offset-path: border-box\)\{/.test(src)
-   && /offset-path:border-box; offset-rotate:0deg;/.test(src)
-   && /@keyframes tcardHead\{ from\{offset-distance:0%;\} to\{offset-distance:100%;\} \}/.test(src));
 ok('　　只有 CSS，沒有多讀資料（沒有新的 dbGetAll）',
    !/tcard-live[\s\S]{0,200}dbGetAll/.test(src));
 
