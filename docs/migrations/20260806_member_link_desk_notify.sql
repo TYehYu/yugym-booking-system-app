@@ -1,0 +1,6 @@
+-- 2026-08-06 使用者回報：「會員建立帳號審核的提示跳出的有點慢」（已套用）
+-- 原因：舊客綁定申請（kind='link'）只寫 member_link_requests，沒有寫 notifications，
+--       所以櫃檯右下角的即時提示（15 秒輪詢 notifications）看不到，只能等首頁輪詢。
+-- 修正：fn_complete_member_registration 的 link 路徑（含手機重複的 fallback）補一筆
+--       desk 通知 type='member_link'；前端加對應圖示，首頁輪詢 30s→12s。
+-- 完整函式定義見 Supabase 上的 fn_complete_member_registration（此檔為摘要備忘）。
