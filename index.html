@@ -1540,6 +1540,12 @@ body.mc-mode .layout{padding-top:8px;}
 }
 /* 月報表：日 × 教練矩陣（2026-08-06，比照 Excel 營運總表）——左欄與表頭固定、內容橫捲 */
 .fm-wrap{overflow:auto;max-height:70vh;border:1px solid var(--bd);border-radius:10px;}
+/* 月報表獨立頁（2026-08-06 使用者指示：全頁面顯示）——
+   解除 content 的 1480px 上限（同行事曆的做法），表格高度吃到視窗底。 */
+.content:has(.fm-page){max-width:none;padding:16px 24px;}
+.fm-full{padding:12px 14px!important;}
+.fm-full .fm-wrap{max-height:calc(100vh - 250px);}
+@media (max-width:900px){ .content:has(.fm-page){padding:10px 12px;} .fm-full .fm-wrap{max-height:calc(100vh - 230px);} }
 .fm-tb{border-collapse:separate;border-spacing:0;font-size:12px;white-space:nowrap;}
 .fm-tb th,.fm-tb td{border-bottom:1px solid var(--bd);border-right:1px solid var(--bd2);padding:5px 8px;text-align:center;}
 .fm-tb thead th{position:sticky;top:0;z-index:3;background:var(--card2);font-weight:700;color:var(--t2);}
@@ -7519,8 +7525,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1705';
-const APP_VERSION_LABEL='v260806.1705';
+const APP_VERSION = '260806.1728';
+const APP_VERSION_LABEL='v260806.1728';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9517,6 +9523,10 @@ const ADMIN_NAV2=[
     {grp:'人事', label:'特休',     page:'staff', tab:'leave'},
     {grp:'人事', label:'權限設定', page:'settings_staff'},
     {grp:'財務', label:'經營報表', page:'finance'},   // 2026-08-05：財務總覽＋營運分析整合
+    /* 2026-08-06 使用者指示：「月報表改到上方導覽列，然後月報表可以全頁面顯示」——
+       日 × 教練矩陣本來擠在經營報表的分頁裡，橫向欄位多、被 1480px 的內容寬度夾住。
+       獨立成一頁後 content 解除寬度限制、表格吃滿視窗高度。 */
+    {grp:'財務', label:'月報表', page:'fin_matrix'},
     {grp:'環境設定', label:'課程方案', page:'settings_ticket'},
     {grp:'環境設定', label:'場地・班別', page:'settings'},
     {grp:'環境設定', label:'合約範本', page:'settings_contract'},
@@ -39065,7 +39075,8 @@ const APP_INVOICE_LABEL={none:'免發票',cloud:'雲端發票',paper:'紙本發�
 const FIN_TABS=[
   {key:'month',      label:'本月'},
   {key:'today',      label:'今天'},
-  {key:'matrix',     label:'月報表'},   // 2026-08-06 使用者指示：比照 Excel「營運總表」的日 × 教練矩陣
+  /* 月報表（matrix）2026-08-06 起改掛導覽列「管理員 → 財務 → 月報表」（PAGES.fin_matrix），
+     不再佔一個分頁；下方的路由分支保留，舊的 _finTab='matrix' 呼叫仍走得通。 */
   {key:'people',     label:'人員'},
 ];
 let _finTab='month';   // 2026-08-05：預設看本月（整合後的主畫面）
@@ -39470,6 +39481,15 @@ PAGES.finance=async function(){
   else if(_finTab==='review'){ document.getElementById('fin-body').innerHTML=`<div id="tk-body"></div>`; await PAGES.purchase_review(); }
   else if(_finTab==='refunds') await finRefunds();
 };
+/* 月報表獨立頁（2026-08-06 使用者指示：改到導覽列、全頁面顯示）——
+   內容仍是同一支 finMatrix，差別只在容器：#fin-body 外面包 .fm-page，
+   CSS 會解除 content 的 1480px 上限、把表格高度撐到視窗底。 */
+PAGES.fin_matrix=async function(){
+  window._fmFull=true;
+  C.innerHTML=head('REPORT','月報表','每位教練每一天的成績 · 一頁看完整個月')
+    +`<div class="fm-page"><div id="fin-body"></div></div>`;
+  try{ await finMatrix(); } finally { window._fmFull=false; }
+};
 /* 本月損益條（2026-08-05）：營收−（薪資＋其他支出）＝淨利；毛利＝營收−薪資。
    薪資走 computeMonthlyPayroll（與薪資彙總頁同一套），支出走 expenses 表。 */
 async function finProfitStrip(){
@@ -39604,7 +39624,7 @@ async function finMatrix(){
     return `<th class="fm-h fm-gh" colspan="4" style="--cc:${_fmCol[c.id]};background:${k.bg};color:${k.fg};">${coachDisp(c)}</th>`; }).join('');
   const head2=cols.map(c=>{ const cc=_fmCol[c.id];
     return `<th class="fm-sh fm-gs" style="--cc:${cc};">教練課</th><th class="fm-sh">團課</th><th class="fm-sh">業績</th><th class="fm-sh fm-ge" style="--cc:${cc};">新/續</th>`; }).join('');
-  body.innerHTML=`<div class="card" style="padding:14px 16px;">
+  body.innerHTML=`<div class="card${window._fmFull?' fm-full':''}" style="padding:14px 16px;">
     <div class="card ops-datebar" style="margin:-4px 0 12px;box-shadow:none;border:none;padding:0;">
       <button class="btn btn-ghost btn-sm" onclick="finMonthMove(-1)">‹ 上個月</button>
       <div class="ops-date-mid"><div class="ops-date-main">${ym.split('-')[0]} 年 ${ym.split('-')[1]} 月</div></div>
