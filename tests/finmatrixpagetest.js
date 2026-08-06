@@ -39,6 +39,13 @@ ok('★ PAGES.fin_matrix 存在，內容仍是同一支 finMatrix（不另複製
    && /try\{ await finMatrix\(\); \} finally \{ window\._fmFull=false; \}/.test(src));
 ok('★ 容器帶 .fm-page（CSS 靠它解除寬度上限）',
    /<div class="fm-page"><div id="fin-body"><\/div><\/div>/.test(src));
+/* 2026-08-06 三修（使用者指示）：移除上方的標題「月報表」與副標 —— 導覽列已經
+   標明在哪一頁，標題只是再占掉一段表格高度。 */
+ok('★ 頁面沒有標題與副標',
+   /C\.innerHTML=`<div class="fm-page">/.test(src)
+   && !/head\('REPORT','月報表'/.test(src));
+ok('　　表格高度跟著放大（少掉標題那一段）',
+   /\.fm-full \.fm-wrap\{max-height:calc\(100vh - 186px\);\}/.test(src));
 ok('　　沿用同一個 #fin-body（finMatrix 找得到容器）',
    /const body=document\.getElementById\('fin-body'\); if\(!body\) return;\n\s*const ym=\(window\._finMonth/.test(src));
 ok('★ 全頁模式時卡片帶 fm-full（分頁裡的舊用法不受影響）',
@@ -49,10 +56,28 @@ ok('★ 解除 content 的 1480px 上限（同行事曆的做法）',
    /\.content:has\(\.fm-page\)\{max-width:none;padding:16px 24px;\}/.test(src)
    && /\.content\{flex:1;padding:28px 40px;min-width:0;max-width:1480px;/.test(src));
 ok('★ 表格高度吃到視窗底（不再固定 70vh）',
-   /\.fm-full \.fm-wrap\{max-height:calc\(100vh - 250px\);\}/.test(src)
+   /\.fm-full \.fm-wrap\{max-height:calc\(100vh - 186px\);\}/.test(src)
    && /\.fm-wrap\{overflow:auto;max-height:70vh;/.test(src));   // 分頁裡的舊版維持 70vh
-ok('　　窄畫面另給一組（手機不要被 250px 的扣抵吃光）',
-   /@media \(max-width:900px\)\{ \.content:has\(\.fm-page\)\{padding:10px 12px;\} \.fm-full \.fm-wrap\{max-height:calc\(100vh - 230px\);\} \}/.test(src));
+ok('　　窄畫面另給一組',
+   /@media \(max-width:900px\)\{ \.content:has\(\.fm-page\)\{padding:10px 12px;\} \.fm-full \.fm-wrap\{max-height:calc\(100vh - 166px\);\} \}/.test(src));
+
+console.log('\n④ 左側兩欄凍結（2026-08-06 使用者指示：「左邊總堂數這一欄也要凍結」）');
+/* 原本只有日期欄 sticky，總堂數會捲到日期欄底下，數字被切一半（使用者附圖）。 */
+ok('★ 總堂數欄黏在日期欄右邊（位移用量出來的 --fm-l1，不寫死）',
+   /\.fm-tb \.fm-t\{position:sticky;left:var\(--fm-l1,74px\);z-index:2;background:var\(--card2\);\n\s*border-right:2px solid var\(--bd\);\}/.test(src));
+ok('★ 日期欄的實際寬度由 fmStickyFit 量（字體/縮放會變）',
+   /const d0=tb\.querySelector\('thead \.fm-d'\);/.test(src)
+   && /if\(w1>0\) tb\.style\.setProperty\('--fm-l1',w1\+'px'\);/.test(src));
+ok('★ 表頭那兩格（總堂數／全店）也掛 fm-t，跟著凍結',
+   /<th class="fm-h fm-t">總堂數<\/th>/.test(src)
+   && /<th class="fm-sh fm-t">全店<\/th>/.test(src));
+ok('　　疊層：表頭 > 月合計 > 一般列（橫捲時不會被別欄蓋住）',
+   /\.fm-tb thead \.fm-t\{z-index:4;\}/.test(src)
+   && /\.fm-tb \.fm-sum \.fm-t\{z-index:3;\}/.test(src));
+ok('　　hover／今天／月合計的底色也跟著（凍結欄不會變成透明破格）',
+   /\.fm-tb tbody tr:hover \.fm-t\{background:var\(--sage-bg\);\}/.test(src)
+   && /\.fm-tb tbody tr\.fm-sum:hover \.fm-t\{background:#f7f3ea;\}/.test(src)
+   && /\.fm-tb \.fm-today \.fm-t\{background:#f2f7f4;\}/.test(src));
 ok('　　凍結表頭／月合計仍在（fmStickyFit 照跑）',
    /fmStickyFit\(\);\n\}/.test(src)
    && /\.fm-tb \.fm-sum td,\.fm-tb \.fm-sum th\{position:sticky;/.test(src));
