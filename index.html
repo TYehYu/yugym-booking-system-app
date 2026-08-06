@@ -3568,6 +3568,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tkchip-back{background:#e8f3ec;color:#1f6f54;border:1.5px solid #bcdccb;}
 .tkchip-eat{background:#fbeceb;color:#b5372e;border:1.5px solid #f0c9c5;}
 .tkchip-none{background:#f2efe9;color:#6a655c;border:1.5px solid #ddd7cc;}
+/* 票券對帳警示（2026-08-06 稽核 R2）：帳面／帳目／課卡對不上的票掛這一枚 */
+.tk-audit{display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;line-height:1.5;
+  border-radius:6px;padding:1px 7px;background:#fbeceb;color:#b5372e;border:1px solid #f0c9c5;cursor:default;}
 /* 已預約、但這張票券已經沒堂數可對應（票用完或還沒買新票）→ 紅虛線圈提醒要補票
    （2026-07-30 使用者回報：8/1 團課明明有預約，三位會員的圓形卡都看不到那一堂） */
 .mtk-over{background:#fff;border:1.5px dashed var(--danger,#b5372e);box-shadow:none;color:var(--danger,#b5372e);}
@@ -7553,8 +7556,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.2012';
-const APP_VERSION_LABEL='v260806.2012';
+const APP_VERSION = '260806.2048';
+const APP_VERSION_LABEL='v260806.2048';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12167,6 +12170,53 @@ function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk){
    ①②是事實、③是推算；依序覆蓋，同一堂課只會蓋在一張票上。
 
    ⚠ 這一層只回答「已經蓋了什麼」。「新的預約該扣哪張票」是另一件事（tkFitsBooking）。 */
+/* 票券對帳（2026-08-06 稽核 R2「兩套已用口徑長期並存」的可視化）——
+   同一張票有四個數字，理論上要一致；對不上就是有東西漂掉了，
+   由系統先講，而不是等櫃檯看到怪畫面才回報：
+     ① 帳面已用 ＝ 總堂數 − 餘額
+     ② 帳目淨扣課 ＝ ticket_logs 的 deduct − refund（沒有帳目的舊匯入票不比）
+     ③ 戳記已用 ＝ 票券夾算出來的 used（含請假／取消未退）
+     ④ 佔用格數 ＝ 有效預約數（tkBookedCountMap，含團課的淨扣課）
+   回傳 [] 代表這張票沒問題。 */
+/* 對帳基準日（2026-08-06）：這一天以前買的票是舊系統匯入 ＋ 7/26、7/29 兩次批次
+   餘額校正的產物，帳面與帳目本來就對不上（全庫 152 張），全部標出來只會變成雜訊。
+   ⚠ 只有「帳面 vs 帳目」這類軟性比對受基準日限制；餘額負數、餘額大於總堂數、
+   排課數超過總堂數這三種「數字本身不可能」的，所有票都照標。
+   實測：基準日之後買的 95 張有帳目的票，目前 0 張對不上 —— 之後只要一有漂移就看得見。 */
+const TK_AUDIT_SINCE='2026-07-30';
+function tkLedgerAuditable(t){
+  const d=String((t&&(t.purchase_date||t.start_date))||'').slice(0,10);
+  return !!d && d>=TK_AUDIT_SINCE;
+}
+function tkAuditFlags(t, o){
+  const out=[];
+  if(!t || t.status==='refunded') return out;
+  const total=Number(t.sessions_total)||0;
+  const rem=Number(t.sessions_remaining);
+  if(Number.isFinite(rem)){
+    if(rem<0) out.push({k:'neg', msg:`餘額是負數（${rem}）`});
+    else if(total>0 && rem>total) out.push({k:'over', msg:`餘額 ${rem} 大於總堂數 ${total}`});
+  }
+  if(!(total>0)) return out;
+  const bal=Math.max(0,total-(Number.isFinite(rem)?rem:0));
+  const _soft=tkLedgerAuditable(t);         // 基準日之前的舊票只做硬性檢查
+  const net=o&&o.net;                      // 帳目淨扣課（undefined＝這張票完全沒有帳目）
+  if(_soft && net!=null && net!==bal) out.push({k:'ledger', msg:`帳面已用 ${bal} 堂，帳目卻是 ${net} 堂`});
+  const used=o&&o.used;
+  if(_soft && used!=null && net==null && used!==bal) out.push({k:'stamp', msg:`帳面已用 ${bal} 堂，實際課卡有 ${used} 堂`});
+  const cnt=o&&o.cnt;
+  if(cnt!=null && cnt>total) out.push({k:'overbook', msg:`已被 ${cnt} 堂預約佔住，超過總堂數 ${total}`});
+  return out;
+}
+/* 推算切分日（2026-08-06 稽核 R4）：台北時間 2026-08-07 00:00（＝UTC 8/06 16:00）起
+   建立的預約不再參與先進先出推算。改這個常數＝改切分日；設成空字串＝退回舊行為（全部都猜）。 */
+const INFER_CUTOFF_UTC='2026-08-06T16:00:00';
+function inferAllowed(b){
+  if(!INFER_CUTOFF_UTC) return true;
+  const c=b&&b.created_at;
+  if(!c) return true;                      // 沒有建立時間的舊資料一律視為舊資料
+  return String(c) < INFER_CUTOFF_UTC;
+}
 function buildWallet(memberId, ctx){
   const c=ctx||{};
   const typeMap=c.typeMap||{};
@@ -12249,7 +12299,13 @@ function buildWallet(memberId, ctx){
   Object.keys(ga.byTicket).forEach(tid=>(ga.byTicket[tid]||[]).forEach(b=>putGrp(tid,b)));
   /* ③ 剩下的（舊系統匯入）用先進先出推算。容量要扣掉①②已經蓋掉的格子，
         否則會把課推到已經蓋滿的票上 —— 傳入容量已折算的副本，結果再依 id 對回原票。 */
-  const rest=live.filter(b=>!byBooking[b.id]);
+  /* ③ 的切分日（2026-08-06 稽核 R4：「推算每次重算」是修 A 壞 B 的主因）——
+     先進先出推算不是存下來的事實，是每次重算一次；任何新增／取消都可能把一整批
+     歷史戳記換到別張票上。從切分日起建立的預約一律要有事實可讀
+     （單人課綁 ticket_id、團課寫扣課紀錄），猜不到就讓它明白顯示「需補票」。
+     ⚠ 比的是 created_at（資料進系統的時間）不是 date（上課日）——
+     7 月匯入的 8 月未來課仍需要推算，只有切分日之後建立的才不猜。 */
+  const rest=live.filter(b=>!byBooking[b.id] && inferAllowed(b));
   if(rest.length){
     /* 團課同一個人可能佔多個名額，一個名額扣一堂 —— 推算之前要先展開成多筆，
        否則兩個位子只畫得出一顆圓點（2026-08-01；②的扣課紀錄本來就是一個名額一筆，
@@ -29545,6 +29601,12 @@ function ppRecordHtml(){
           const nm=(c.memMap||{})[b.member_id]||'';
           return Object.assign({},b,{_shBy:'享',_shName:nm||'共享對象'});
         });
+        /* 對帳警示（2026-08-06 稽核 R2）：這張票的帳面／帳目／課卡對不上就掛一個 ⚠，
+           讓系統先講，而不是等櫃檯看到怪畫面才回報。判定見 tkAuditFlags。 */
+        const _netTk={};
+        (c.myLogs||[]).forEach(l=>{ if(!l||!l.ticket_id) return;
+          const d=l.action==='deduct'?1:(l.action==='refund'?-1:0);
+          if(d) _netTk[l.ticket_id]=(_netTk[l.ticket_id]||0)+d; });
         const cardOf=t=>{
           const sl=WAL.of(t.id)||{stamps:[],used:0};
           const bks=_shMark((t.id===_loTid)?sl.stamps.concat(_lo):sl.stamps);
@@ -29564,7 +29626,9 @@ function ppRecordHtml(){
             :(_shN?`<button type="button" style="font-size:11px;color:#2f6f4f;border:1px solid #2f6b4f;border-radius:6px;padding:1px 8px;margin-left:6px;background:transparent;${_canShare?'cursor:pointer;':''}font-family:inherit;" ${_canShare?`onclick="ppShareTk('${t.id}')"`:''} title="共用同一個堂數池，任一人上課都從這張票扣${_canShare?'。點擊查看／調整共享名單':''}">共享：${_shLabel}${_canShare?' ›':''}</button>`:'');
           /* 合約鈕移到票券編號左邊（2026-08-04 使用者指示：減少底列被太多物件擠壓變形） */
           return `<div class="bkd-tkcard" style="margin-bottom:10px;">
-            <div class="bkd-tkcard-head"><span class="bkd-tkcard-name" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 9px;font-size:11px;flex:none;" onclick="openContractView('${c.ctByTicket[t.id]}')" title="查看合約">📄 合約</button>`:''}${tkNoTag(sl.no)}${t.plan_name||'票券'}${shrTag}</span>
+            <div class="bkd-tkcard-head"><span class="bkd-tkcard-name" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 9px;font-size:11px;flex:none;" onclick="openContractView('${c.ctByTicket[t.id]}')" title="查看合約">📄 合約</button>`:''}${tkNoTag(sl.no)}${t.plan_name||'票券'}${shrTag}${(()=>{
+                const f=tkAuditFlags(t,{net:_netTk[t.id], used});
+                return f.length?`<span class="tk-audit" title="對帳不一致：${f.map(x=>x.msg).join('；')}　·　數字仍以實際上課紀錄為準，請至票券管理 → 對帳巡檢處理">⚠ 對帳</span>`:''; })()}</span>
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
             <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id,WAL.selfBk)}</div>
             ${/* 2026-08-04 使用者回報：加了「使用人」後右邊四顆按鈕被擠成直條 ——
@@ -31519,7 +31583,7 @@ PAGES.ticketing=async function(){
   /* 團課帳務巡檢入口（2026-08-05 使用者指示：「避免魏曉微的情況再次發生，有什麼手段嗎」）——
      一鍵對帳：名額 vs 扣課 vs 票面餘額，對不上的列出來。 */
   C.innerHTML=head('TICKETS','票券管理','方案設定 · 購買申請 · 會員票券')
-    +`<div style="margin:-8px 0 10px;text-align:right;"><button class="btn btn-ghost btn-sm" onclick="openGrpAudit()">🔍 團課帳務巡檢</button></div>`
+    +`<div style="margin:-8px 0 10px;text-align:right;"><button class="btn btn-ghost btn-sm" onclick="openGrpAudit()">🔍 票券對帳巡檢</button></div>`
     +tabBar+`<div id="tk-body"></div>`;
   // 呼叫對應子頁渲染（子頁已改為寫入 #tk-body）
   if(_tkTab==='plans') await PAGES.plans();
@@ -31534,7 +31598,7 @@ PAGES.ticketing=async function(){
    ②有帳目紀錄的團課票：票面已用（總−餘）vs 帳目淨扣課筆數
    對不上的列出來、點名字直接開會員資料。完全沒有帳目的舊匯入票不列（本來就靠推算）。 */
 async function openGrpAudit(){
-  showModal(`<div class="modal-title">團課帳務巡檢</div>
+  showModal(`<div class="modal-title">票券對帳巡檢</div>
     <div id="ga-body" style="font-size:13px;color:var(--t2);max-height:60vh;overflow-y:auto;">掃描中…</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
   try{
@@ -31563,22 +31627,35 @@ async function openGrpAudit(){
     const netTk={};
     (logs||[]).forEach(l=>{ if(!l||!l.ticket_id) return;
       const d=l.action==='deduct'?1:(l.action==='refund'?-1:0); if(d) netTk[l.ticket_id]=(netTk[l.ticket_id]||0)+d; });
-    const _tm=Object.fromEntries((types||[]).map(t=>[t.id,t]));
-    const tkRows=[];
+    /* ②③④ 全部走同一支 tkAuditFlags（規則只有一份，卡片上的 ⚠ 與這裡永遠一致）：
+       ② 帳面 vs 帳目（受對帳基準日限制，舊匯入票不列）
+       ③ 餘額數字本身不合理（負數／大於總堂數）
+       ④ 排的課比票的堂數多（含團課的淨扣課） */
+    const _cnt=await tkBookedCountMap();
+    const tkRows=[], badRows=[], overRows=[];
     tks.forEach(t=>{
-      if(tkClass5(t,_tm)!=='group' || t.status==='refunded' || netTk[t.id]==null) return;
-      const used=Math.max(0,(Number(t.sessions_total)||0)-(Number(t.sessions_remaining)||0));
-      if(used!==netTk[t.id]) tkRows.push({t, used, logged:netTk[t.id]});
+      tkAuditFlags(t,{net:netTk[t.id], cnt:_cnt[t.id]}).forEach(x=>{
+        if(x.k==='ledger') tkRows.push({t, used:Math.max(0,(Number(t.sessions_total)||0)-(Number(t.sessions_remaining)||0)), logged:netTk[t.id]});
+        else if(x.k==='neg'||x.k==='over') badRows.push({t,msg:x.msg});
+        else if(x.k==='overbook') overRows.push({t,msg:x.msg});
+      });
     });
     const el=document.getElementById('ga-body'); if(!el) return;
     const link=(mid,txt)=>`<span class="pp-f-click" style="font-weight:700;color:var(--green);" onclick="closeModal();openPersonProfile('member','${mid}')">${txt}</span>`;
-    el.innerHTML=(seatRows.length||tkRows.length)
+    el.innerHTML=(seatRows.length||tkRows.length||badRows.length||overRows.length)
       ? (seatRows.length?`<div style="font-weight:700;color:var(--danger);margin:2px 0 6px;">① 名額與扣課對不上（近 7 天起的團課）</div>`
           +seatRows.map(r=>`<div style="padding:7px 4px;border-bottom:1px solid var(--bd);">${link(r.mid,nameOf(r.mid))}　${String(r.date).slice(5).replace('-','/')} ${r.time}　名額 <b>${r.seats}</b>・已扣 <b style="color:${r.paid<r.seats?'var(--danger)':'var(--gold-d)'};">${r.paid}</b>${r.paid<r.seats?'（少扣，需補票或屬教練負責）':'（多扣，請檢查退回）'}</div>`).join(''):'')
       + (tkRows.length?`<div style="font-weight:700;color:var(--danger);margin:14px 0 6px;">② 票面餘額與帳目對不上</div>`
           +tkRows.map(r=>`<div style="padding:7px 4px;border-bottom:1px solid var(--bd);">${link(r.t.member_id,nameOf(r.t.member_id))}　${r.t.plan_name||'票券'}　票面已用 <b>${r.used}</b>・帳目 <b>${r.logged}</b> 筆</div>`).join(''):'')
-      + `<div style="font-size:11.5px;color:var(--t3);margin-top:12px;line-height:1.7;">「少扣」＝名額沒票付（教練負責的免費名額可忽略）；「多扣」＝取消時沒退乾淨。點名字進會員資料處理。</div>`
-      : '<div style="color:var(--green);font-weight:700;padding:10px 0;">✓ 全部對齊：近 7 天起的團課名額、扣課與票面餘額一致。</div>';
+      + (badRows.length?`<div style="font-weight:700;color:var(--danger);margin:14px 0 6px;">③ 餘額數字本身不合理</div>`
+          +badRows.map(r=>`<div style="padding:7px 4px;border-bottom:1px solid var(--bd);">${link(r.t.member_id,nameOf(r.t.member_id))}　${r.t.plan_name||'票券'}　${r.msg}</div>`).join(''):'')
+      + (overRows.length?`<div style="font-weight:700;color:var(--danger);margin:14px 0 6px;">④ 排的課比票的堂數多</div>`
+          +overRows.map(r=>`<div style="padding:7px 4px;border-bottom:1px solid var(--bd);">${link(r.t.member_id,nameOf(r.t.member_id))}　${r.t.plan_name||'票券'}　${r.msg}</div>`).join(''):'')
+      + `<div style="font-size:11.5px;color:var(--t3);margin-top:12px;line-height:1.7;">
+          ①「少扣」＝名額沒票付（教練負責的免費名額可忽略）、「多扣」＝取消時沒退乾淨。<br>
+          ②③ 多半是舊系統匯入或人工校正留下的落差，改了餘額記得留備註。<br>
+          ④ 通常是先排課後才處理票券，補票或退掉多的那一堂即可。點名字進會員資料處理。</div>`
+      : '<div style="color:var(--green);font-weight:700;padding:10px 0;">✓ 全部對齊：名額、扣課、票面餘額與排課數都一致。</div>';
   }catch(e){ const el=document.getElementById('ga-body'); if(el) el.innerHTML='掃描失敗：'+((e&&e.message)||e); }
 }
 PAGES.plans=async function(targetId){

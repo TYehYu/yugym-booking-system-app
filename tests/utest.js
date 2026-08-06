@@ -8,6 +8,8 @@
 globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
 /* 2026-08-06：取消但「扣課不退」的那一堂仍算用掉（黃品華案例）—— 沙箱補上替身 */
 globalThis.bkEatenCancel=b=>!!(b&&b.status==='cancelled'&&b.refund_waived);
+/* 2026-08-06 稽核 R4：推算切分日 —— 沙箱測資沒有 created_at，一律視為舊資料（照舊推算） */
+globalThis.inferAllowed=()=>true;
 globalThis.mids=b=>(b&&Array.isArray(b.member_ids))?b.member_ids:[];
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
