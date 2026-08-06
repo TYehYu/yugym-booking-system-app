@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.2250';
-const APP_VERSION_LABEL='v260806.2250';
+const APP_VERSION = '260806.2318';
+const APP_VERSION_LABEL='v260806.2318';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12321,6 +12321,7 @@ function buildWallet(memberId, ctx){
      （單人課綁 ticket_id、團課寫扣課紀錄），猜不到就讓它明白顯示「需補票」。
      ⚠ 比的是 created_at（資料進系統的時間）不是 date（上課日）——
      7 月匯入的 8 月未來課仍需要推算，只有切分日之後建立的才不猜。 */
+  const inferred=[];                     // ③ 推算出來的（tid,bid）；固化工具會用到
   const rest=live.filter(b=>!byBooking[b.id] && inferAllowed(b));
   if(rest.length){
     /* 團課同一個人可能佔多個名額，一個名額扣一堂 —— 推算之前要先展開成多筆，
@@ -12346,7 +12347,13 @@ function buildWallet(memberId, ctx){
     if(_cap>0 && feed.length>_cap) feed=feed.slice(feed.length-_cap);   // 只留最近的幾堂
     const inf=allocBookingsToTickets(proxy, feed, typeMap);
     // 團課用 putGrp（同一堂可蓋多格），其餘維持「一堂只蓋一次」
-    Object.keys(inf.byTicket).forEach(tid=>(inf.byTicket[tid]||[]).forEach(b=>(bkIsGroup(b)?putGrp:put)(tid,b)));
+    Object.keys(inf.byTicket).forEach(tid=>(inf.byTicket[tid]||[]).forEach(b=>{
+      (bkIsGroup(b)?putGrp:put)(tid,b);
+      /* 記下這一筆是「推算」來的（2026-08-06 使用者指示：「系統會推算票券使用日，
+         才會導致錯誤的票券植入一直發生，請導正過來」）——
+         固化工具會把這些寫成真正的扣課連結，之後推算就能退場。 */
+      inferred.push({tid, bid:b.id, date:b.date||''});
+    }));
   }
   Object.keys(stamps).forEach(tid=>stamps[tid].sort(byDT));
   /* 沒有票可蓋的未來預約＝這幾堂需要補票（2026-07-30 游晴雅案例，畫成紅虛線圈） */
@@ -12392,7 +12399,7 @@ function buildWallet(memberId, ctx){
   const byBuy=(a,b)=>String(b.t.purchase_date||b.t.start_date||'')
     .localeCompare(String(a.t.purchase_date||a.t.start_date||''));
   return {
-    id:memberId, tickets:mine, slots, byId, byBooking, leftover, selfBk,
+    id:memberId, tickets:mine, slots, byId, byBooking, leftover, selfBk, inferred,
     isSelfBooked:b=>bkSelfBooked(b, memberId, selfBk),
     of:tid=>byId[tid]||null,
     noOf:tid=>_noOf[tid]||0,
@@ -29439,6 +29446,89 @@ async function revRowGo(mid){
 }
 /* 票券分頁「共享設定」（2026-07-28 使用者回報：統一版會員資料看不到共享功能）——
    重用 openTicketShare，儲存/取消後返回本彈窗的票券分頁而非舊版明細 */
+/* ══ 固化推算歸屬（2026-08-06 使用者指示）══════════════════════════
+   「體驗票券卡上的 8/12 為什麼要用『推算』？問題就在於系統會推算票券使用日，
+     才會導致有錯誤的票券植入一直發生，請導正過來。」
+
+   舊系統匯入的課沒有 ticket_id 也沒有扣課紀錄，票券夾只能用先進先出「猜」它用了哪張票。
+   猜是每次重算的 —— 任何新增／取消都可能讓一整批歷史戳記換到別張票上（修 A 壞 B 的根源）。
+   這支把猜的結果**一次性寫成事實**：每一筆推算寫一則 ticket_logs（action=deduct、delta=0，
+   只記「這堂課用這張票」，不動餘額 —— 餘額早就反映過了，動它會二次扣款）。
+   寫完之後推算就能退場，畫面不會變（同一份歸屬），但從此不再每次重算。
+
+   ・可重複執行：紀錄 id 固定為 LG-FRZ-<課卡>-<票券>，已存在就跳過
+   ・可回復：全部是 LG-FRZ- 開頭，刪掉就回到原狀（delta 0，餘額不受影響）
+   ・跑不動也不影響營運：沒寫成功的部分下次再跑 */
+async function freezeInferredLinks(){
+  if(SESSION.role!=='admin'){ showToast('只有管理員可以執行'); return; }
+  showModal(`<div class="modal-title">固化推算歸屬</div>
+    <div id="frz-body" style="font-size:13px;color:var(--t2);line-height:1.9;max-height:60vh;overflow-y:auto;">掃描中…</div>
+    <div class="modal-foot" id="frz-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+  const box=()=>document.getElementById('frz-body');
+  try{
+    const ctx=await walletCtx();
+    const mems=await dbGetAll('members');
+    /* 逐位會員算票券夾很慢（每次都要掃全表）→ 先把預約依會員建索引，只traverse一次 */
+    const idx={};
+    (ctx.bookings||[]).forEach(b=>{
+      if(!b || b.status==='cancelled') return;
+      const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
+      const seen={};
+      ids.forEach(mid=>{ if(!seen[mid]){ seen[mid]=1; (idx[mid]=idx[mid]||[]).push(b); } });
+      if(b.ticket_id){ const t=(ctx.tickets||[]).find(x=>x.id===b.ticket_id);
+        if(t && !(seen[t.member_id])) (idx[t.member_id]=idx[t.member_id]||[]).push(b); }
+    });
+    const have=new Set();
+    (ctx.logs||[]).forEach(l=>{ if(l&&l.ticket_id&&l.booking_id) have.add(l.booking_id+'|'+l.ticket_id); });
+    const rows=[]; let members=0;
+    (mems||[]).forEach(m=>{
+      if(!m||!m.id) return;
+      let W; try{ W=buildWallet(m.id, Object.assign({}, ctx, {bookingsOf:mid=>idx[mid]||[]})); }catch(_){ return; }
+      const list=(W.inferred||[]).filter(x=>x && x.tid && x.bid);
+      if(!list.length) return;
+      members++;
+      list.forEach(x=>{
+        const key=x.bid+'|'+x.tid;
+        if(have.has(key)) return;           // 已經有帳了（或同一輪已排入）
+        have.add(key);
+        rows.push({id:'LG-FRZ-'+x.bid+'-'+x.tid, ticket_id:x.tid, action:'deduct', delta:0,
+          booking_id:x.bid, operator:'freeze-20260806',
+          note:'補連結（固化先進先出推算的歸屬；不動餘額）', created_at:new Date().toISOString()});
+      });
+    });
+    if(!rows.length){ box().innerHTML='<div style="color:var(--green);font-weight:700;">✓ 沒有需要固化的推算歸屬（全部都已經有帳可查）。</div>'; return; }
+    window._frzRows=rows;
+    box().innerHTML=`掃出 <b>${rows.length}</b> 筆推算歸屬（涵蓋 <b>${members}</b> 位會員）需要寫成事實。<br>
+      <span style="color:var(--t3);font-size:12px;">只寫「這堂課用這張票」的連結，<b>不動任何餘額</b>；
+      畫面不會改變，但從此不再每次重算。可重複執行，也可以整批刪除回復。</span>`;
+    document.getElementById('frz-foot').innerHTML=
+      `<button class="btn btn-ghost" onclick="closeModal()">先不要</button>
+       <button class="btn btn-green" onclick="doFreezeInferred()">寫入 ${rows.length} 筆連結</button>`;
+  }catch(e){ const b=box(); if(b) b.innerHTML='掃描失敗：'+((e&&e.message)||e); }
+}
+async function doFreezeInferred(){
+  const rows=window._frzRows||[]; if(!rows.length) return;
+  const foot=document.getElementById('frz-foot');
+  const body=document.getElementById('frz-body');
+  if(foot) foot.innerHTML='<div style="flex:1;text-align:center;color:var(--t2);padding:8px;">寫入中…</div>';
+  let done=0, fail=0;
+  for(let i=0;i<rows.length;i+=200){
+    const chunk=rows.slice(i,i+200);
+    try{
+      const r=await sb.from(tbl('ticket_logs')).upsert(chunk,{onConflict:'id'});
+      if(r&&r.error) throw r.error;
+      done+=chunk.length;
+    }catch(e){ console.error('固化寫入失敗',e); fail+=chunk.length; }
+    if(body) body.innerHTML=`寫入中… ${done+fail} / ${rows.length}`;
+  }
+  window._frzRows=null;
+  dbCacheClear(['ticket_logs']);
+  if(body) body.innerHTML=`<div style="color:${fail?'var(--danger)':'var(--green)'};font-weight:700;">
+    已寫入 ${done} 筆${fail?`，失敗 ${fail} 筆（可再執行一次）`:''}。</div>
+    <div style="font-size:12px;color:var(--t3);margin-top:8px;">這些連結的 id 都是 LG-FRZ- 開頭、delta 為 0，
+    不影響餘額；要回復就整批刪除。</div>`;
+  if(foot) foot.innerHTML='<button class="btn btn-ghost" onclick="closeModal();navTo(CUR_PAGE)">完成</button>';
+}
 /* ── 已排但沒扣到票的未來課（2026-08-06 稽核延伸）──────────────────
    成因：排課當下沒有可用票券（櫃檯會看到「有名額沒有扣到票」的紅色警告），
    之後會員補買了票，卻沒有人回頭把那幾堂補扣。帳上那幾堂永遠是免費的，
@@ -31662,7 +31752,9 @@ PAGES.ticketing=async function(){
   /* 團課帳務巡檢入口（2026-08-05 使用者指示：「避免魏曉微的情況再次發生，有什麼手段嗎」）——
      一鍵對帳：名額 vs 扣課 vs 票面餘額，對不上的列出來。 */
   C.innerHTML=head('TICKETS','票券管理','方案設定 · 購買申請 · 會員票券')
-    +`<div style="margin:-8px 0 10px;text-align:right;"><button class="btn btn-ghost btn-sm" onclick="openGrpAudit()">🔍 票券對帳巡檢</button></div>`
+    +`<div style="margin:-8px 0 10px;text-align:right;display:flex;gap:8px;justify-content:flex-end;">`
+      +`${SESSION.role==='admin'?`<button class="btn btn-ghost btn-sm" onclick="freezeInferredLinks()" title="把先進先出推算出來的票券歸屬寫成事實，之後不再每次重算">📌 固化推算歸屬</button>`:''}`
+      +`<button class="btn btn-ghost btn-sm" onclick="openGrpAudit()">🔍 票券對帳巡檢</button></div>`
     +tabBar+`<div id="tk-body"></div>`;
   // 呼叫對應子頁渲染（子頁已改為寫入 #tk-body）
   if(_tkTab==='plans') await PAGES.plans();

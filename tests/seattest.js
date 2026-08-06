@@ -97,7 +97,8 @@ ok('★ 圓點的「已上」仍逐名額判定（名額鍵，在 grpTicketAlloc
    || /mine\.push\(seen\[id\]>1\?id\+'#'\+seen\[id\]:id\);/.test(src));
 ok('★ 同一人在某堂佔多個名額 → 那一堂畫多顆圓點（票券夾的推算也展開名額）',
    /const n=bkIsGroup\(b\)\s*\n?\s*\? Math\.max\(1,mids\(b\)\.filter\(x=>String\(x\)===String\(memberId\)\)\.length\) : 1;/.test(src)
-   && /Object\.keys\(inf\.byTicket\)\.forEach\(tid=>\(inf\.byTicket\[tid\]\|\|\[\]\)\.forEach\(b=>\(bkIsGroup\(b\)\?putGrp:put\)\(tid,b\)\)\);/.test(src));
+   /* 2026-08-06：同一段多記一筆 inferred（固化工具要知道哪些是猜的），蓋戳記的行為不變 */
+   && /\(bkIsGroup\(b\)\?putGrp:put\)\(tid,b\);\n[\s\S]{0,300}inferred\.push\(\{tid, bid:b\.id, date:b\.date\|\|''\}\);/.test(src));
 /* 2026-07-31：算式抽成共用的 grpTicketAlloc，名額鍵在那裡組（見 grpalloctest.js） */
 ok('★ 票券剩餘推算（grpTicketAlloc）也逐名額',
    /mine\.push\(seen\[id\]>1\?id\+'#'\+seen\[id\]:id\);/.test(src)
