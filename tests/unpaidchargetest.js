@@ -31,6 +31,9 @@ const BKS=[
   {id:'bPT',  date:'2026-08-15',start_time:'11:00',status:'booked',category:'私人教練',member_id:ME},
   {id:'bHold',date:'2026-08-16',start_time:'11:00',status:'booked',category:'小班肌力',member_ids:[ME],pending_contract:true},
   {id:'bOther',date:'2026-08-18',start_time:'19:30',status:'booked',category:'小班肌力',member_ids:['M-OTHER']},
+  /* 跑步機第二台：一點約兩台，第二台是影子預約、本來就不扣點（2026-08-06 黃麗琴案例） */
+  {id:'bTm1',date:'2026-08-19',start_time:'17:00',status:'booked',category:'自主訓練',member_id:ME},
+  {id:'bTm2',date:'2026-08-19',start_time:'17:00',status:'booked',category:'自主訓練',member_id:ME,sibling_of:'bTm1'},
 ];
 const LOGS=[
   {id:'l1',ticket_id:'TK-4W',booking_id:'b0820',action:'deduct'},
@@ -59,6 +62,14 @@ console.log('① 找出「已排好、但當初沒扣到票」的未來課');
   ok('　　別人的課不列', !r.some(b=>b.id==='bOther'));
   ok('★ 依日期排（先補最近的一堂）', r[0].date < r[1].date);
 }
+{
+  /* 同一支函式換成自主訓練票來問：主預約要列、第二台的影子預約不能列 */
+  const env2=Object.assign({},env,{ticketCategoryOf:()=> '自主訓練'});
+  const fn2=new Function(...Object.keys(env2), grabFn('unpaidFutureBookings')+'\nreturn unpaidFutureBookings;')(...Object.values(env2));
+  const r=await fn2(ME,{id:'TK-SELF'});
+  eq('★★ 跑步機第二台（影子預約）不算漏帳 —— 只列主預約',
+     r.map(b=>b.id), ['bTm1']);
+}
 
 console.log('\n② 接線');
 ok('★ 賣完票就問（不是靜默補扣）',
@@ -78,6 +89,9 @@ ok('★ 逐堂重讀票券、扣不到就停（沿用餘額護欄）',
 ok('　　單人課要把票綁上去，團課只留帳（沒有 ticket_id 欄位）',
    /if\(!bkIsGroup\(b\) && !b\.ticket_id\)\{ b\.ticket_id=tk\.id;/.test(src));
 ok('　　補完就地重畫會員明細', /await ppLoadCtx\(\); ppRenderBody\(\);/.test(src));
+ok('★ 影子預約不列（跑步機第二台不扣點）',
+   /&& !b\.sibling_of                                   \/\/ 跑步機第二台的影子預約不扣點/.test(src)
+   && /if\(b\.sibling_of\) return;/.test(src));
 ok('★ 體驗／場租不列（本來就不扣票）',
    /&& b\.category!=='體驗' && b\.category!=='場租'      \/\/ 這兩種本來就不扣票/.test(src));
 ok('★ 票券對帳巡檢也看得到全庫的這一類（第 ⑤ 段）',
