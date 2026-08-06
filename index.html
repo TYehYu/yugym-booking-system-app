@@ -7553,8 +7553,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1942';
-const APP_VERSION_LABEL='v260806.1942';
+const APP_VERSION = '260806.2012';
+const APP_VERSION_LABEL='v260806.2012';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11712,12 +11712,34 @@ async function listUsableTickets(member_id,type_id,bookDate,bookTime){
 }
 /* 每張票綁到幾筆「未取消」的預約（含已上與未上）—— 超約判定用。
    算的是「排了幾堂課」，不是「用掉幾堂」，所以已簽到與已預約都要算。 */
+/* 每張票「已被幾堂有效預約佔住」（超約防線 tkOverBooked 的依據）
+   ⚠ 2026-08-06 稽核 R1：原本只數 bookings.ticket_id，但**團課的預約沒有這個欄位**
+   （一堂多人，扣課只留在 ticket_logs）→ 團課完全不受超約防線保護，
+   能不能再約只剩「餘額>0」一道，而餘額正是最常被匯入批次校正、最容易脫節的欄位。
+   改成兩者相加：
+     ① 有 ticket_id 的預約（單人課）—— 一筆算一堂
+     ② 沒有 ticket_id 的預約（團課）—— 從 ticket_logs 算該堂的淨扣課（扣 +1、退 −1）；
+        取消的課不特別跳過，正常取消淨值就是 0，「扣課不退」的仍會留下 1（票真的被吃掉了）。 */
 async function tkBookedCountMap(){
   const map={};
   try{
-    (await dbGetAll('bookings')).forEach(b=>{
-      if(!b || !b.ticket_id || b.status==='cancelled') return;
+    const bks=await dbGetAll('bookings');
+    const st={};
+    (bks||[]).forEach(b=>{
+      if(!b || !b.id) return;
+      st[b.id]={hasTk:!!b.ticket_id};
+      if(!b.ticket_id || b.status==='cancelled') return;
       map[b.ticket_id]=(map[b.ticket_id]||0)+1;
+    });
+    const logs=await dbGetAll('ticket_logs').catch(()=>[]);
+    (logs||[]).forEach(l=>{
+      if(!l || !l.ticket_id || !l.booking_id) return;
+      const x=st[l.booking_id];
+      if(!x || x.hasTk) return;                  // 已由 ticket_id 計過 → 不重複算
+      /* 取消的課不能直接跳過：正常取消是「扣 1 退 1」＝淨 0，但取消時選「扣課不退」
+         那一堂票是真的被吃掉了，仍佔住一格（2026-08-06）。淨值自然算得出來。 */
+      if(l.action==='deduct') map[l.ticket_id]=(map[l.ticket_id]||0)+1;
+      else if(l.action==='refund') map[l.ticket_id]=Math.max(0,(map[l.ticket_id]||0)-1);
     });
   }catch(_){}
   return map;
@@ -11841,7 +11863,17 @@ async function activateTicketIfNeeded(ticket,booking_id){
   ticket.activated_at=new Date().toISOString();
   return ticket.expire_date;
 }
+/* 護欄（2026-08-06 稽核 R3）：餘額已經 0 就不再扣 ——
+   一般路徑有 tkFitsBooking 擋，但補綁／批次／轉正／場租折抵是直接呼叫這一支，
+   扣下去會變負數，之後每一張報表跟著錯，而且沒有任何痕跡。
+   改成不扣、寫一筆警示紀錄、當面提示櫃檯，並回傳 false 讓呼叫端知道沒扣到。 */
 async function deductTicket(ticket,booking_id,operator){
+  if(!(Number(ticket&&ticket.sessions_remaining)>0)){
+    try{ await logTicket(ticket.id,'adjust',0,booking_id,operator||'system',
+      '⚠ 已阻擋：餘額為 '+(Number(ticket&&ticket.sessions_remaining)||0)+'，未再扣課'); }catch(_){}
+    try{ if(typeof showToast==='function') showToast('⚠ '+((ticket&&ticket.plan_name)||'票券')+' 已無剩餘堂數，這一堂沒有扣到票'); }catch(_){}
+    return false;
+  }
   ticket.sessions_remaining-=1;
   // 注意：預約扣課只代表「已被預約」，不代表「已上完」。
   //  不在此設 used_up（否則約滿但還沒上的票會被誤判用畢、反灰）。
@@ -11849,6 +11881,7 @@ async function deductTicket(ticket,booking_id,operator){
   const newExpire=await activateTicketIfNeeded(ticket,booking_id);   // 首堂預約 → 開通並起算效期
   await dbPut('member_tickets',ticket);
   await logTicket(ticket.id,'deduct',-1,booking_id,operator,'預約扣課'+(newExpire?`（首堂開通，效期至 ${newExpire}）`:''));
+  return true;
 }
 // 退一堂
 /* 這筆預約裡「還有淨扣課」的票（2026-08-03 游晴雅 20:00 團課案例）——
@@ -11869,7 +11902,16 @@ async function grpNetDeductTicket(bid, mid){
 }
 async function refundTicket(ticket_id,booking_id,operator){
   const t=await dbGet('member_tickets',ticket_id);
-  if(!t)return;
+  if(!t)return false;
+  /* 護欄（2026-08-06 稽核 R3）：退不超過總堂數 —— 重複取消／重跑批次會讓餘額
+     大於總堂數，變成憑空多出來的堂數。同樣不動餘額、留下警示紀錄。 */
+  const _tot=Number(t.sessions_total)||0;
+  if(_tot>0 && (Number(t.sessions_remaining)||0) >= _tot){
+    try{ await logTicket(ticket_id,'adjust',0,booking_id,operator||'system',
+      '⚠ 已阻擋：餘額 '+(Number(t.sessions_remaining)||0)+'/'+_tot+' 已滿，未再退課'); }catch(_){}
+    try{ if(typeof showToast==='function') showToast('⚠ '+(t.plan_name||'票券')+' 的堂數已是滿的，這一筆沒有再退回'); }catch(_){}
+    return false;
+  }
   t.sessions_remaining+=1;
   if(t.status==='used_up'&&t.sessions_remaining>0) t.status='usable';
   /* 效期退回未開通（2026-07-24 使用者定案）：這張票若已無任何有效預約，
@@ -11890,6 +11932,7 @@ async function refundTicket(ticket_id,booking_id,operator){
   }
   await dbPut('member_tickets',t);
   await logTicket(ticket_id,'refund',1,booking_id,operator,'取消退課'+(reverted?'（已無有效預約，效期退回未開通）':''));
+  return true;
 }
 /* ══ 匯入預約的退堂 fallback（2026-07-25 使用者指示）══════════════════════
    舊系統匯入的預約 ticket_id 為 null（歷史上課沒有逐筆對應到票券），取消時 refundTicket
