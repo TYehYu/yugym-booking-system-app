@@ -7454,8 +7454,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1240';
-const APP_VERSION_LABEL='v260806.1240';
+const APP_VERSION = '260806.1300';
+const APP_VERSION_LABEL='v260806.1300';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12889,7 +12889,7 @@ PAGES.g_dashboard=async function(){
           /* 邊框狀態（2026-08-06 使用者指示）：完成＝霧化綠框、上課中＝流星繞圈、
              已簽到＝綠框、時間過了還沒簽到＝金框（提醒櫃檯補簽）。 */
           const _miss = !canceled && !done && !live && nowMin>=mn+(Number(b.duration)||60);
-          return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}${_miss?' tcard-miss':''}${_pend?' tcard-pend':''}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${_nmFull}${_pend?'・尚未收款':''}${live?'（進行中）':''}${canceled?'（已取消）':''}">
+          return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}${_miss?' tcard-miss':''}${_pend?' tcard-pend':''}" data-st="${mn}" data-du="${Number(b.duration)||60}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${_nmFull}${_pend?'・尚未收款':''}${live?'（進行中）':''}${canceled?'（已取消）':''}">
             <div class="tcard-body"></div>${_mk}
             <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-mem">${nm}</span>${_tagOut}${(b.member_id?lottoGiftIcon(_lotMap[b.member_id]):'')}${coTag}${(()=>{const k=bkStampKind(b);
               return k==='leave'?'<span class="tcard-chk tcard-chk-leave">假</span>'
@@ -13985,11 +13985,30 @@ function startDashNowTimer(isToday, axisStart, axisEnd){
     document.querySelectorAll('.tl-now-seg').forEach(seg=>{
       if(inRange){ seg.style.left=pct+'%'; seg.style.display=''; } else { seg.style.display='none'; }
     });
+    /* 課卡狀態跟著時間走（2026-08-06 使用者回報「首頁的流星還沒看到」）——
+       tcard-live／tcard-miss 是畫卡當下算的，時間跨過開課或下課就會過期；
+       這裡每 30 秒就地換 class，不用重畫整頁。 */
+    tcardStateTick(nm);
     // 現在線消失時（超出軸範圍）停止
     if(!inRange) stopDashNowTimer();
   };
   tick();
   _dashNowTimer=setInterval(tick,30000); // 每30秒更新
+}
+/* 課卡狀態就地更新（2026-08-06）：時間到了自動變「上課中」（流星）、下課沒簽到變金框。
+   資料完全不重抓——時間與時長寫在課卡的 data 屬性裡，只換 class。 */
+function tcardStateTick(nowMin){
+  try{
+    const nm=(nowMin!=null)?nowMin:(new Date().getHours()*60+new Date().getMinutes());
+    document.querySelectorAll('.tcard.tcard-std[data-st]').forEach(el=>{
+      if(el.classList.contains('tcard-cancel')||el.classList.contains('tcard-done')) return;
+      const st=Number(el.dataset.st)||0, du=Number(el.dataset.du)||60;
+      const live=nm>=st && nm<st+du;
+      const miss=!live && nm>=st+du;
+      el.classList.toggle('tcard-live',live);
+      el.classList.toggle('tcard-miss',miss);
+    });
+  }catch(_){}
 }
 /* ══════ 現場抽獎登記（2026-07-22 使用者定案）══════
    抽獎維持實體籤筒（長輩不一定有手機）；系統只負責：
@@ -21725,17 +21744,31 @@ async function openBkTicketChange(id){
   const b=await dbGet('bookings',id); if(!b){showToast('找不到預約');return;}
   if(b.status!=='booked'){ showToast('已簽到的預約要先取消簽到才能換票券'); return; }
   if(!b.member_id){ showToast('這筆沒有綁會員，無法換票券'); return; }
-  const cand=await listUsableTickets(b.member_id,b.ticket_type_id,b.date,b.start_time);
   const curId=b.ticket_id||null;
   const cur=curId?await dbGet('member_tickets',curId):null;
+  /* 2026-08-06 使用者回報（鄭超元 9/7）：票券 #8 明明還有 1 堂卻選不到 ——
+     這筆預約的 ticket_type_id 是空的（舊資料／某些建立路徑沒寫），
+     用 null 去比對票種等於一張都對不上。退回用「目前扣的那張票」的票種。 */
+  const _typeId=b.ticket_type_id||(cur&&cur.ticket_type_id)||null;
+  const cand=await listUsableTickets(b.member_id,_typeId,b.date,b.start_time);
   // 目前這張不在候選裡（已扣到 0 而被濾掉）也要列出來，讓人看得到現況
   const list=cand.filter(t=>t.id!==curId);
+  /* 票券編號（2026-08-06）：同一位會員可能有好幾張同名的「私人教練課 1V1」，
+     清單只寫方案名根本分不出誰是誰。編號規則與票券夾一致（依購買日／建立時間）。 */
+  const _tkNo={};
+  try{
+    const _all=(await dbGetAll('member_tickets')).filter(t=>t.member_id===b.member_id);
+    _all.sort((x,y)=>String(x.purchase_date||x.start_date||'').localeCompare(String(y.purchase_date||y.start_date||''))
+      || String(x.created_at||'').localeCompare(String(y.created_at||''))
+      || String(x.id||'').localeCompare(String(y.id||'')));
+    _all.forEach((t,i)=>{ _tkNo[t.id]=i+1; });
+  }catch(_){}
   showModal(`<div class="modal-title">更換票券</div>
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">${b.date.replace(/-/g,'/')}　${b.start_time}　${b.category}
       <br>目前扣的是：<b>${cur?(cur.plan_name||'票券').replace(/</g,'&lt;'):'（未綁票券）'}</b></div>
     ${list.length?`<div style="display:flex;flex-direction:column;gap:8px;">
       ${list.map(t=>`<button class="btn btn-ghost" style="width:100%;text-align:left;" onclick="doBkTicketChange('${id}','${t.id}')">
-        <b>${(t.plan_name||'票券').replace(/</g,'&lt;')}</b>　<span style="color:var(--t3);font-size:12px;">可約 ${tkUnlockedLeft(t)} 堂${t.expire_date?`　效期至 ${t.expire_date}`:'　無到期日'}</span></button>`).join('')}
+        <span class="tag" style="background:var(--card2);color:var(--t2);font-size:10.5px;margin-right:6px;">#${_tkNo[t.id]||'—'}</span><b>${(t.plan_name||'票券').replace(/</g,'&lt;')}</b>　<span style="color:var(--t3);font-size:12px;">可約 ${tkUnlockedLeft(t)} 堂${t.expire_date?`　效期至 ${t.expire_date}`:'　無到期日'}</span></button>`).join('')}
     </div>
     <div style="font-size:11px;color:var(--t3);margin-top:10px;">換過去會退回原本那張 1 堂、扣新的那張 1 堂，兩邊的票券紀錄都會留痕。第一張是最快到期的。</div>`
     :`<div style="font-size:13px;color:var(--t2);padding:6px 0;">沒有其他可用票券可以換。</div>`}

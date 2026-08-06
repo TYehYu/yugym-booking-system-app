@@ -53,5 +53,25 @@ ok('★ 上課中：流星尾巴（conic＋遮罩成細框）＋頭部圓點，�
 ok('　　只有 CSS，沒有多讀資料（沒有新的 dbGetAll）',
    !/tcard-live[\s\S]{0,200}dbGetAll/.test(src));
 
+console.log('\n③ 時間到了自動換狀態（2026-08-06 使用者回報「首頁的流星還沒看到」）');
+/* 課卡是畫的當下算 live/miss，時間跨過開課或下課就過期了 —— 每 30 秒就地換 class，不重抓資料 */
+{
+  const cls=new Set(['tcard','tcard-std']);
+  const el={classList:{contains:c=>cls.has(c),toggle:(c,on)=>{ on?cls.add(c):cls.delete(c); }},dataset:{st:'720',du:'60'}};
+  const fn=new Function('document',
+    src.slice(src.indexOf('function tcardStateTick('), src.indexOf('/* ══════ 現場抽獎登記'))
+    +'\nreturn tcardStateTick;')({querySelectorAll:()=>[el]});
+  fn(700); ok('★ 還沒開始：兩種狀態都不掛', !cls.has('tcard-live') && !cls.has('tcard-miss'));
+  fn(730); ok('★ 12:00 的課到了 12:10 → 掛上 tcard-live（流星開始跑）', cls.has('tcard-live') && !cls.has('tcard-miss'));
+  fn(800); ok('★ 下課後沒簽到 → 換成 tcard-miss（金框）', !cls.has('tcard-live') && cls.has('tcard-miss'));
+  const cls2=new Set(['tcard','tcard-std','tcard-done']);
+  const el2={classList:{contains:c=>cls2.has(c),toggle:(c,on)=>{ on?cls2.add(c):cls2.delete(c); }},dataset:{st:'720',du:'60'}};
+  new Function('document', src.slice(src.indexOf('function tcardStateTick('), src.indexOf('/* ══════ 現場抽獎登記'))
+    +'\nreturn tcardStateTick;')({querySelectorAll:()=>[el2]})(800);
+  ok('　　已簽到的不動它（不會被改成逾時未簽）', cls2.has('tcard-done') && !cls2.has('tcard-miss'));
+}
+ok('★ 課卡帶開始時間與時長（供 tick 使用）', /data-st="\$\{mn\}" data-du="\$\{Number\(b\.duration\)\|\|60\}"/.test(src));
+ok('★ 每 30 秒的現在線 tick 會順便更新課卡狀態', /tcardStateTick\(nm\);/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
