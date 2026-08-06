@@ -98,5 +98,22 @@ console.log('\n③ 時間到了自動換狀態（2026-08-06 使用者回報「�
 ok('★ 課卡帶開始時間與時長（供 tick 使用）', /data-st="\$\{mn\}" data-du="\$\{Number\(b\.duration\)\|\|60\}"/.test(src));
 ok('★ 每 30 秒的現在線 tick 會順便更新課卡狀態', /tcardStateTick\(nm\);/.test(src));
 
+console.log('\n④ 值班顏色與流星（2026-08-06 使用者回報：晚班顯示成綠色）');
+{
+  /* 店裡實務只有早晚兩班：早班上午進來、晚班下午進來上到打烊。
+     原本 12–17 點開始算「中班」給綠色 → 15:02、15:52 的晚班被塗成綠色。 */
+  const fn=new Function('timeToMin',
+    src.slice(src.indexOf('function dutyShiftColor('), src.indexOf('function dutyRingHTML('))
+    +'\nreturn dutyShiftColor;')(t=>{const[h,m]=String(t).split(':').map(Number);return h*60+(m||0);});
+  eq('★ 早班（08:00 進來）→ 琥珀金', fn({start_time:'08:00'}), '#D9A441');
+  eq('★ 晚班（15:00 進來）→ 靛藍（原本被歸成中班的綠）', fn({start_time:'15:00'}), '#3A5BA0');
+  eq('★ 晚班（16:00 進來）→ 靛藍', fn({start_time:'16:00'}), '#3A5BA0');
+  eq('★ 沒排班 → 退回看實際打卡時間', fn(null,{clock_in:'15:52'}), '#3A5BA0');
+  eq('　　兩者都沒有才給灰色', fn(null,null), '#8A9B8E');
+}
+ok('★ 值班流星／水位吃同一個班別色（--dcc）',
+   /style="--dcc:\$\{ringC\};"/.test(src)
+   && /const ringC=dutyShiftColor\(shift, att\);/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
