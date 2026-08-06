@@ -80,8 +80,26 @@ console.log('\n② 圓形卡：請假那一格填滿、紅色');
   eq('★ 四格全滿（沒有空心、沒有超約圈）',
      [(h.match(/mtk-used/g)||[]).length,(h.match(/mtk-free/g)||[]).length,(h.match(/mtk-over/g)||[]).length], [4,0,0]);
   eq('★ 只有請假那一格是紅的', (h.match(/mtk-leave/g)||[]).length, 1);
+  /* 2026-08-06 使用者回報：「這種先請假的票券是故意放在第一顆嗎」——
+     先請假的課可能在未來（8/22 請假、8/8 還沒上），原本「已用排前面」會把它推到第一顆。
+     改成整串照上課日期排。 */
+  eq('★ 圓點照日期排（請假那顆在它自己的位置，不會被推到第一顆）',
+     (h.match(/>(\d+\/\d+)</g)||[]).map(x=>x.slice(1,-1)),
+     ['7/18','7/27','8/2','8/8']);
   ok('★ 紅的那一格是 8/8，滑鼠提示講清楚照扣＋補課券',
      /mtk-used mtk-leave[^>]*title="請假（本堂照扣，另發補課券） 2026-08-08/.test(h) && /8\/8/.test(h));
+  /* 使用者截圖的實況：8/22 先請假（已用 1/4），8/8・8/15・8/29 都還沒上 */
+  {
+    const G2=(id,date,att)=>({id,date,start_time:'11:00',status:att?'booked':'booked',category:'小班肌力',
+      ticket_type_id:'tt-g',member_id:null,member_ids:[ME],attendance:att?{[ME]:att}:{}});
+    const st=[G2('x1','2026-08-08'),G2('x2','2026-08-15'),G2('x3','2026-08-22','leave'),G2('x4','2026-08-29')];
+    const h2=TT({id:'T-4W',member_id:ME,ticket_type_id:'tt-g',plan_name:'團課 4週優惠',sessions_total:4},
+      st, TYPES, 1, null, ME, null);
+    const seq=(h2.match(/>(\d+\/\d+)</g)||[]).map(x=>x.slice(1,-1));
+    eq('★★ 4 週票：8/22 請假、其餘未上 → 圓點仍是 8/8 8/15 8/22 8/29', seq, ['8/8','8/15','8/22','8/29']);
+    ok('★★ 紅的那顆排在第 3 顆（不是被推到第一顆）',
+       /8\/15<\/span><span class="mtk mtk-used mtk-leave/.test(h2.replace(/\s+/g,' ')), h2.slice(0,400));
+  }
   ok('　　CSS 有把它畫成實心紅（與「取消未退」共用同一條）',
      /\.mtk-used\.mtk-leave,\.mtk-used\.mtk-eaten\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src));
 }

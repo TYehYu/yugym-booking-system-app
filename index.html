@@ -7553,8 +7553,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1902';
-const APP_VERSION_LABEL='v260806.1902';
+const APP_VERSION = '260806.1920';
+const APP_VERSION_LABEL='v260806.1920';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38118,11 +38118,21 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
   /* 共享票（2026-08-05）：串裡混有別人約的戳記時，自己的放大一號（mtk-own） */
   const _hasSh=[...done,...booked].some(b=>b&&b._shBy);
   const _ownCls=b=>(_hasSh&&!(b&&b._shBy))?' mtk-own':'';
-  let s='',di=0,bi=0;
+  /* 圓點依上課日期排（2026-08-06 使用者回報：「這種先請假的票券是故意放在第一顆嗎」）——
+     原本是「已用的排前面、已預約的排後面」；過去的課本來就都在前面，所以看不出問題。
+     但請假／取消未退可以發生在**未來**（8/22 先請假，8/8、8/15 還沒上），
+     那顆就被推到第一顆，日期看起來是亂的。改成整串照日期排，狀態各自畫各自的顏色。
+     _ghost＝帳面已用、卻找不到對應課卡的格子（舊系統匯入常見），沒有日期，仍排在最前面。 */
+  const _seq=done.map(b=>({b,st:'used'})).concat(booked.map(b=>({b,st:'booked'})))
+    .sort((x,y)=>((x.b.date||'')+(x.b.start_time||'')).localeCompare((y.b.date||'')+(y.b.start_time||'')));
+  const _ghost=Math.max(0, used-done.length);
+  let s='',qi=0,gi=0;
   for(let i=0;i<total;i++){
-    if(i>=unlocked){ s+=`<span class="mtk mtk-lock" title="尚未開通（需繳下一期）">🔒</span>`; }
-    else if(i<used){
-      const b=di<done.length?done[di++]:null;
+    if(i>=unlocked){ s+=`<span class="mtk mtk-lock" title="尚未開通（需繳下一期）">🔒</span>`; continue; }
+    const _it=(gi<_ghost) ? (gi++, {b:null,st:'used'}) : (qi<_seq.length ? _seq[qi++] : null);
+    if(!_it){ s+=`<span class="mtk mtk-free" style="--tk-acc:${v.accent};" title="未使用"></span>`; continue; }
+    if(_it.st==='used'){
+      const b=_it.b;
       const cur=_isCur(b)?' mtk-cur':'';
       const slf=selfCls(b);
       const shc=((b&&b._shBy)?' mtk-sh':'')+_ownCls(b);
@@ -38131,8 +38141,8 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
       const lvc=(b&&b._leave)?' mtk-leave':((b&&b._eaten)?' mtk-eaten':'');
       s+=`<span class="mtk mtk-used${lvc}${cur}${slf}${shc}" style="--tk-acc:${v.accent};" title="${(b&&b._leave)?'請假（本堂照扣，另發補課券）':((b&&b._eaten)?'取消未退（取消時選了扣課不退）':'已完成')}${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${b?md(b):'✓'}${cur?'<i class="mtk-comet"></i>':''}</span>`;
     }
-    else if(bi<booked.length){
-      const b=booked[bi++];
+    else {
+      const b=_it.b;
       const cur=_isCur(b)?' mtk-cur':'';
       const slf=selfCls(b);
       /* 場地徽章（2026-08-03 使用者指示：「會員預約的自主訓練如果是教室或跑步機，
@@ -38142,15 +38152,21 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
       const shc2=((b&&b._shBy)?' mtk-sh':'')+_ownCls(b);
       s+=`<span class="mtk mtk-booked${cur}${slf}${shc2}" style="--tk-acc:${v.accent};" title="已預約 ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}${b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}${cur?'<i class="mtk-comet"></i>':''}</span>`;
     }
-    else s+=`<span class="mtk mtk-free" style="--tk-acc:${v.accent};" title="未使用"></span>`;
   }
   /* 票券堂數不夠放的已預約課程仍要看得到（2026-07-30 使用者回報：8/1 團課明明有預約，
      名單三個人的圓形卡都沒有那一堂）—— 票用完或新票還沒買時，這幾堂等於沒有票可扣，
      用紅虛線圈標出來，櫃檯才知道要補票。 */
-  while(bi<booked.length){
-    const b=booked[bi++];
+  while(qi<_seq.length){
+    const _o=_seq[qi++], b=_o.b;
     const cur=_isCur(b)?' mtk-cur':'';
     const slf=selfCls(b);
+    /* 已經上過（或請假／取消未退）的課溢位時仍畫成實心 —— 那堂票確實用掉了，
+       標成「需補票」的紅虛線會看起來像欠票（2026-08-06 排序改動後才可能走到這裡）。 */
+    if(_o.st==='used'){
+      const lvc=(b&&b._leave)?' mtk-leave':((b&&b._eaten)?' mtk-eaten':'');
+      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}" style="--tk-acc:${v.accent};" title="${(b&&b._leave)?'請假（本堂照扣，另發補課券）':((b&&b._eaten)?'取消未退（取消時選了扣課不退）':'已完成')} ${b.date||''}${cur?'（本堂）':''}">${md(b)}${cur?'<i class="mtk-comet"></i>':''}</span>`;
+      continue;
+    }
     const vlb=(typeof selfVenueLabel==='function'&&bkIsSelf(b))?selfVenueLabel(b):'';
     const vch=({'跑步機':'跑','教室':'教'})[vlb]||'';
     s+=`<span class="mtk mtk-over${cur}${slf}" title="已預約 ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}　·　此票券已無堂數可對應，需補票${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}${cur?'<i class="mtk-comet"></i>':''}</span>`;
