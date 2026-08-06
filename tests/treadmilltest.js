@@ -85,13 +85,15 @@ console.log('\n③ 會員自己從手機約也要能選台數');
 /* 2026-08-02 使用者指示：「只要會連動上行事曆、影響其他人預約場地的地方，
    都要補上要預約幾台」—— 會員端的自主訓練訂位同樣會佔住跑步機。 */
 ok('★ 確認視窗多一列「台數」，只在選了跑步機且真的還空著兩台以上時出現',
-   /<div id="msb-tmrow" style="\$\{\(s\.pickVenue==='treadmill'&&_tmCap-_tmUsed>1\)\?'':'display:none;'\}/.test(src)
+   /<div id="msb-tmrow" style="\$\{\(s\.pickVenue==='treadmill'&&s\.tmFree>1\)\?'':'display:none;'\}/.test(src)
+   && /\(s\.tmFree=Math\.max\(0,_tmCap-_tmUsed\), ''\)/.test(src)
    && /onclick="msbChooseUnits\(\$\{n\}\)"/.test(src));
 ok('★ 可選的台數＝該時段實際還空著的數量（不會讓人選到已被約走的）',
    /Array\.from\(\{length:Math\.max\(1,_tmCap-_tmUsed\)\},\(_,i\)=>i\+1\)/.test(src));
-ok('★ 換場地時台數重置回 1（只有跑步機有台數的概念）',
+ok('★ 換場地時台數重置回 1，且只有跑步機（且還空著兩台以上）才顯示台數列',
    /function msbChooseUnits\(n\)\{/.test(src)
-   && /s\.pickUnits=1;\s*\n\s*const row=document\.getElementById\('msb-tmrow'\);/.test(src));
+   && /s\.pickUnits=1;\n\s*const row=document\.getElementById\('msb-tmrow'\);/.test(src)
+   && /row\.style\.display = \(vid==='treadmill' && \(s\.tmFree\|\|0\)>1\) \? 'flex' : 'none';/.test(src));
 ok('★ 台數帶給 RPC（p_units），且只有真的排到跑步機才帶',
    /p_units:Math\.max\(1,Number\(units\)\|\|1\)/.test(src)
    && /const _units=\(String\(vbk\.venue_unit\|\|''\)\.split\('_'\)\[0\]==='treadmill'\)\?\(s\.pickUnits\|\|1\):1;/.test(src));
@@ -156,8 +158,9 @@ console.log('\n④ 實跑：補開第 2 台');
     console.log('\n⑦ 被約走一台之後，下一位選不到兩台（2026-08-03 使用者確認規則）');
 ok('★ 台數按鈕只長到「還空著的台數」（1 台被約走 → 只剩「1 台」可選）',
    /Array\.from\(\{length:Math\.max\(1,_tmCap-_tmUsed\)\},\(_,i\)=>i\+1\)/.test(src));
-ok('★ 只剩 1 台時整列台數選擇隱藏（沒得選就不用問）',
-   /id="msb-tmrow" style="\$\{\(s\.pickVenue==='treadmill'&&_tmCap-_tmUsed>1\)\?'':'display:none;'\}/.test(src));
+ok('★ 只剩 1 台時整列台數選擇隱藏（沒得選就不用問；切換場地後也一樣，2026-08-06）',
+   /id="msb-tmrow" style="\$\{\(s\.pickVenue==='treadmill'&&s\.tmFree>1\)\?'':'display:none;'\}/.test(src)
+   && /row\.style\.display = \(vid==='treadmill' && \(s\.tmFree\|\|0\)>1\)/.test(src));
 ok('★ 上一個時段選的 2 台不會漏到只剩 1 台的時段（pickUnits 夾回上限）',
    /s\.pickUnits=Math\.min\(s\.pickUnits\|\|1, Math\.max\(1,_tmCap-_tmUsed\)\);/.test(src));
 ok('　　為什麼要夾，寫在程式裡',
