@@ -19,12 +19,14 @@ console.log('① 狀態判定（實跑那段條件）');
      確認同一時間只會落在一種狀態（不會又是上課中又是逾時未簽）。 */
   const mk=(startMin,dur,nowMin,doneFlag,cancelFlag)=>{
     const canceled=!!cancelFlag, done=!!doneFlag;
-    const live = !canceled && nowMin>=startMin && nowMin<startMin+dur && !done;
+    const live = !canceled && nowMin>=startMin && nowMin<startMin+dur;
     const _miss = !canceled && !done && !live && nowMin>=startMin+dur;
     return [canceled?'cancel':'', live?'live':'', done?'done':'', _miss?'miss':''].filter(Boolean);
   };
   eq('★ 上課時間內、未簽到 → live', mk(600,60,610,false,false), ['live']);
-  eq('★ 上課時間內、已簽到 → done（不再閃流星）', mk(600,60,610,true,false), ['done']);
+  /* 2026-08-06 二修（使用者回報「還是沒看到流星」）：櫃檯通常一上課就簽到，
+     若要求「未簽到」才算上課中，進行中的課永遠不會亮 → 改成純看時間。 */
+  eq('★ 上課時間內、已簽到 → 仍是 live（流星照跑）', mk(600,60,610,true,false), ['live','done']);
   eq('★ 課已結束、有簽到 → done', mk(600,60,700,true,false), ['done']);
   eq('★ 課已結束、沒簽到 → miss（金框提醒補簽）', mk(600,60,700,false,false), ['miss']);
   eq('★ 還沒開始 → 沒有任何狀態框', mk(600,60,500,false,false), []);
@@ -63,6 +65,13 @@ console.log('\n③ 時間到了自動換狀態（2026-08-06 使用者回報「�
     +'\nreturn tcardStateTick;')({querySelectorAll:()=>[el]});
   fn(700); ok('★ 還沒開始：兩種狀態都不掛', !cls.has('tcard-live') && !cls.has('tcard-miss'));
   fn(730); ok('★ 12:00 的課到了 12:10 → 掛上 tcard-live（流星開始跑）', cls.has('tcard-live') && !cls.has('tcard-miss'));
+  {
+    const c3=new Set(['tcard','tcard-std','tcard-done']);
+    const e3={classList:{contains:c=>c3.has(c),toggle:(c,on)=>{ on?c3.add(c):c3.delete(c); }},dataset:{st:'720',du:'60'}};
+    new Function('document', src.slice(src.indexOf('function tcardStateTick('), src.indexOf('/* ══════ 現場抽獎登記'))
+      +'\nreturn tcardStateTick;')({querySelectorAll:()=>[e3]})(730);
+    ok('★ 已簽到但還在上課時間內 → 也要跑流星', c3.has('tcard-live'));
+  }
   fn(800); ok('★ 下課後沒簽到 → 換成 tcard-miss（金框）', !cls.has('tcard-live') && cls.has('tcard-miss'));
   const cls2=new Set(['tcard','tcard-std','tcard-done']);
   const el2={classList:{contains:c=>cls2.has(c),toggle:(c,on)=>{ on?cls2.add(c):cls2.delete(c); }},dataset:{st:'720',du:'60'}};
