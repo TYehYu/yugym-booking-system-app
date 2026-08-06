@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.2348';
-const APP_VERSION_LABEL='v260806.2348';
+const APP_VERSION = '260807.0016';
+const APP_VERSION_LABEL='v260807.0016';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12236,7 +12236,12 @@ function tkAuditFlags(t, o){
 /* 推算切分日（2026-08-06 稽核 R4）：台北時間 2026-08-07 00:00（＝UTC 8/06 16:00）起
    建立的預約不再參與先進先出推算。改這個常數＝改切分日；設成空字串＝退回舊行為（全部都猜）。 */
 const INFER_CUTOFF_UTC='2026-08-06T16:00:00';
+/* 推算總開關（2026-08-06）：固化跑完、比對確認沒有差異之後就設 true，③ 整條退場。
+   設 true 之後，沒有帳可查的課會誠實顯示成「需補票」的紅虛線，不再猜一張票給它。
+   window._inferOffProbe 是比對工具用的暫時開關（只在那支函式裡開關，不影響營運）。 */
+let INFER_OFF=false;
 function inferAllowed(b){
+  if(INFER_OFF || window._inferOffProbe) return false;
   if(!INFER_CUTOFF_UTC) return true;
   const c=b&&b.created_at;
   if(!c) return true;                      // 沒有建立時間的舊資料一律視為舊資料
@@ -29560,6 +29565,63 @@ async function doFreezeInferred(){
     不影響餘額；要回復就整批刪除。</div>`;
   if(foot) foot.innerHTML='<button class="btn btn-ghost" onclick="closeModal();navTo(CUR_PAGE)">完成</button>';
 }
+/* 關掉推算之前的比對（2026-08-06 使用者指示：「先跑比對再關」）——
+   對每一位會員各算兩次票券夾：照舊（推算開著）／推算關掉，
+   比對每一堂課蓋在哪一張票上。理論上固化之後兩邊應該完全一樣；
+   有差異就代表還有沒被固化到的推算，關掉會讓那些戳記消失 —— 要先處理完才能關。 */
+async function compareInferOff(){
+  if(SESSION.role!=='admin'){ showToast('只有管理員可以執行'); return; }
+  showModal(`<div class="modal-title">關掉推算前的比對</div>
+    <div id="cmp-body" style="font-size:13px;color:var(--t2);line-height:1.9;max-height:60vh;overflow-y:auto;">比對中…</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+  const box=()=>document.getElementById('cmp-body');
+  try{
+    const ctx=await walletCtx();
+    const mems=await dbGetAll('members');
+    const idx={};
+    (ctx.bookings||[]).forEach(b=>{
+      if(!b || b.status==='cancelled') return;
+      const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
+      const seen={};
+      ids.forEach(mid=>{ if(!seen[mid]){ seen[mid]=1; (idx[mid]=idx[mid]||[]).push(b); } });
+      if(b.ticket_id){ const t=(ctx.tickets||[]).find(x=>x.id===b.ticket_id);
+        if(t && !(seen[t.member_id])) (idx[t.member_id]=idx[t.member_id]||[]).push(b); }
+    });
+    const c2=Object.assign({}, ctx, {bookingsOf:mid=>idx[mid]||[]});
+    const diffs=[]; let checked=0;
+    const bkById={}; (ctx.bookings||[]).forEach(b=>{ if(b&&b.id) bkById[b.id]=b; });
+    (mems||[]).forEach(m=>{
+      if(!m||!m.id) return;
+      let A,B;
+      try{
+        window._inferOffProbe=false; A=buildWallet(m.id,c2);
+        window._inferOffProbe=true;  B=buildWallet(m.id,c2);
+      }catch(_){ window._inferOffProbe=false; return; }
+      finally{ window._inferOffProbe=false; }
+      checked++;
+      const ka=A.byBooking||{}, kb=B.byBooking||{};
+      Object.keys(ka).forEach(bid=>{
+        if(ka[bid]===kb[bid]) return;
+        const b=bkById[bid]||{};
+        diffs.push({mid:m.id, name:m.name||m.id, bid, date:b.date||'', was:ka[bid], now:kb[bid]||null});
+      });
+    });
+    const el=box(); if(!el) return;
+    if(!diffs.length){
+      el.innerHTML=`<div style="color:var(--green);font-weight:700;">✓ 完全一致（比對 ${checked} 位會員）。</div>
+        <div style="font-size:12px;color:var(--t3);margin-top:8px;line-height:1.8;">
+          關掉推算不會讓任何一顆圓點改變或消失 —— 目前畫面上的歸屬全部都有帳可查。</div>`;
+      return;
+    }
+    diffs.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    el.innerHTML=`<div style="color:var(--danger);font-weight:700;margin-bottom:8px;">
+        ⚠ 有 ${diffs.length} 筆會變（比對 ${checked} 位會員）—— 先處理完再關。</div>`
+      +diffs.slice(0,200).map(d=>`<div style="padding:6px 4px;border-bottom:1px solid var(--bd);">
+        <b>${d.name}</b>　${String(d.date).slice(5).replace('-','/')}　
+        ${d.now?`改掛到別張票（${d.was} → ${d.now}）`:`<span style="color:var(--danger);">會變成「需補票」（原本靠推算掛在 ${d.was}）</span>`}</div>`).join('')
+      +(diffs.length>200?`<div style="color:var(--t3);font-size:12px;margin-top:8px;">（只列前 200 筆）</div>`:'');
+  }catch(e){ const el=box(); if(el) el.innerHTML='比對失敗：'+((e&&e.message)||e); }
+}
 /* ── 已排但沒扣到票的未來課（2026-08-06 稽核延伸）──────────────────
    成因：排課當下沒有可用票券（櫃檯會看到「有名額沒有扣到票」的紅色警告），
    之後會員補買了票，卻沒有人回頭把那幾堂補扣。帳上那幾堂永遠是免費的，
@@ -31785,6 +31847,7 @@ PAGES.ticketing=async function(){
   C.innerHTML=head('TICKETS','票券管理','方案設定 · 購買申請 · 會員票券')
     +`<div style="margin:-8px 0 10px;text-align:right;display:flex;gap:8px;justify-content:flex-end;">`
       +`${SESSION.role==='admin'?`<button class="btn btn-ghost btn-sm" onclick="freezeInferredLinks()" title="把先進先出推算出來的票券歸屬寫成事實，之後不再每次重算">📌 固化推算歸屬</button>`:''}`
+      +`${SESSION.role==='admin'?`<button class="btn btn-ghost btn-sm" onclick="compareInferOff()" title="關掉推算之前先比對：每一堂課蓋在哪張票上會不會改變">⚖️ 關推算前比對</button>`:''}`
       +`<button class="btn btn-ghost btn-sm" onclick="openGrpAudit()">🔍 票券對帳巡檢</button></div>`
     +tabBar+`<div id="tk-body"></div>`;
   // 呼叫對應子頁渲染（子頁已改為寫入 #tk-body）

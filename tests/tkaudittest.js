@@ -16,7 +16,8 @@ const grabConst=n=>{const i=src.indexOf('const '+n+'=');return src.slice(i,src.i
 
 console.log('① 推算切分日（R4）');
 {
-  const fn=new Function(grabConst('INFER_CUTOFF_UTC')+'\n'+grabFn('inferAllowed')+'\nreturn inferAllowed;')();
+  /* 2026-08-06：inferAllowed 多了總開關與探針 → 沙箱補上（都關著＝照舊推算） */
+  const fn=new Function('let INFER_OFF=false; const window={};\n'+grabConst('INFER_CUTOFF_UTC')+'\n'+grabFn('inferAllowed')+'\nreturn inferAllowed;')();
   ok('★ 切分日以前建立的（7 月匯入的未來課）仍照舊推算',
      fn({created_at:'2026-07-26T08:44:21.969059+00:00'})===true);
   ok('★ 切分日之後建立的不再推算（猜不到就顯示需補票）',

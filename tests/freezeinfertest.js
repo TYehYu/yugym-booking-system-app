@@ -26,7 +26,8 @@ const FNS=['mids','bkHasMember','tkSharedIds','tkUsableBy','tkClass5','bkIsGroup
   'bkEatenCancel','grpSeatAttCount','grpSeatLeaveCount','allocBookingsToTickets','grpTicketAlloc',
   'inferAllowed','buildWallet'];
 const box=new Function('ymd','TODAY','parseYmd','attObj','bkPocketNow',
-  grabConst('INFER_CUTOFF_UTC')+'\n'+FNS.map(grabFn).join('\n')+'\nreturn {buildWallet};')(ymd,TODAY,parseYmd,attObj,()=>({}));
+  /* 2026-08-06：inferAllowed 多了總開關與探針 → 沙箱補上（都關著＝照舊推算） */
+  "let INFER_OFF=false; const window={};\n"+grabConst('INFER_CUTOFF_UTC')+'\n'+FNS.map(grabFn).join('\n')+'\nreturn {buildWallet};')(ymd,TODAY,parseYmd,attObj,()=>({}));
 
 console.log('① 票券夾會說出「哪幾筆是猜的」');
 {
@@ -74,6 +75,25 @@ ok('★ 沒有要固化的就明講',
 ok('★ 入口在票券管理頁、只給管理員看',
    /SESSION\.role==='admin'\?`<button class="btn btn-ghost btn-sm" onclick="freezeInferredLinks\(\)"/.test(src));
 ok('　　寫完清掉帳本快取（畫面立刻讀得到新連結）', /dbCacheClear\(\['ticket_logs'\]\);/.test(src));
+
+console.log('\n③ 關掉推算前的比對（使用者指示：「先跑比對再關」）');
+ok('★ 有總開關（確認沒有差異後才會設 true）',
+   /let INFER_OFF=false;/.test(src)
+   && /if\(INFER_OFF \|\| window\._inferOffProbe\) return false;/.test(src));
+ok('★ 比對工具對每位會員各算兩次（推算開／關）再比每一堂課掛在哪張票',
+   /window\._inferOffProbe=false; A=buildWallet\(m\.id,c2\);/.test(src)
+   && /window\._inferOffProbe=true;  B=buildWallet\(m\.id,c2\);/.test(src)
+   && /Object\.keys\(ka\)\.forEach\(bid=>\{\n\s*if\(ka\[bid\]===kb\[bid\]\) return;/.test(src));
+ok('　　探針一定會關回來（finally），不會影響營運',
+   /finally\{ window\._inferOffProbe=false; \}/.test(src));
+ok('★ 完全一致才敢關（畫面不會有任何一顆圓點改變）',
+   /✓ 完全一致（比對 \$\{checked\} 位會員）。/.test(src)
+   && /關掉推算不會讓任何一顆圓點改變或消失/.test(src));
+ok('★ 有差異就逐筆列出來（會變成需補票的特別標紅）',
+   /⚠ 有 \$\{diffs\.length\} 筆會變（比對 \$\{checked\} 位會員）—— 先處理完再關。/.test(src)
+   && /會變成「需補票」（原本靠推算掛在/.test(src));
+ok('　　入口在票券管理頁、只給管理員',
+   /onclick="compareInferOff\(\)" title="關掉推算之前先比對/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
