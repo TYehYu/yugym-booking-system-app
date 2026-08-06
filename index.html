@@ -1538,6 +1538,27 @@ body.mc-mode .layout{padding-top:8px;}
   .mobile-only{display:block;}
   .desktop-only{display:none;}
 }
+/* 月報表：日 × 教練矩陣（2026-08-06，比照 Excel 營運總表）——左欄與表頭固定、內容橫捲 */
+.fm-wrap{overflow:auto;max-height:70vh;border:1px solid var(--bd);border-radius:10px;}
+.fm-tb{border-collapse:separate;border-spacing:0;font-size:12px;white-space:nowrap;}
+.fm-tb th,.fm-tb td{border-bottom:1px solid var(--bd);border-right:1px solid var(--bd2);padding:5px 8px;text-align:center;}
+.fm-tb thead th{position:sticky;top:0;z-index:3;background:var(--card2);font-weight:700;color:var(--t2);}
+.fm-tb thead tr:nth-child(2) th{top:29px;font-size:10.5px;font-weight:600;color:var(--t3);}
+.fm-tb .fm-d{position:sticky;left:0;z-index:2;background:var(--card);text-align:left;font-weight:700;color:var(--text);min-width:74px;}
+.fm-tb thead .fm-d{z-index:4;background:var(--card2);}
+.fm-tb .fm-d span{font-weight:400;color:var(--t3);font-size:10.5px;margin-left:2px;}
+.fm-tb .fm-h{border-bottom:2px solid var(--bd);}
+.fm-tb .fm-c{font-family:var(--num);color:var(--text);min-width:52px;}
+.fm-tb .fm-c.fm-g{color:var(--brown);}
+.fm-tb .fm-c.fm-m{color:var(--green);font-weight:700;min-width:64px;}
+.fm-tb .fm-c.fm-t{font-weight:800;background:var(--card2);}
+.fm-tb .fm-k i{font-style:normal;font-size:10px;font-weight:700;border-radius:4px;padding:1px 4px;margin:0 1px;}
+.fm-tb .fm-k .fm-nw{background:#e8eef7;color:#1a3a6e;}
+.fm-tb .fm-k .fm-rn{background:#f5ede0;color:#8a5e28;}
+.fm-tb tbody tr:hover td,.fm-tb tbody tr:hover .fm-d{background:var(--sage-bg);}
+.fm-tb .fm-sum td,.fm-tb .fm-sum .fm-d{background:#f7f3ea;font-weight:800;border-bottom:2px solid var(--bd);}
+.fm-tb .fm-today .fm-d{color:var(--green);}
+.fm-tb .fm-today td{background:#f2f7f4;}
 /* 本月損益條（2026-08-05 整合經營報表）：四個大數字一列，手機兩欄 */
 .fin-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
 .fin-sum .fin-sum-l{font-size:11.5px;color:var(--t3);margin-bottom:4px;}
@@ -7380,8 +7401,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.0010';
-const APP_VERSION_LABEL='v260806.0010';
+const APP_VERSION = '260806.0900';
+const APP_VERSION_LABEL='v260806.0900';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38686,6 +38707,7 @@ const APP_INVOICE_LABEL={none:'免發票',cloud:'雲端發票',paper:'紙本發�
 const FIN_TABS=[
   {key:'month',      label:'本月'},
   {key:'today',      label:'今天'},
+  {key:'matrix',     label:'月報表'},   // 2026-08-06 使用者指示：比照 Excel「營運總表」的日 × 教練矩陣
   {key:'people',     label:'人員'},
 ];
 let _finTab='month';   // 2026-08-05：預設看本月（整合後的主畫面）
@@ -39081,6 +39103,7 @@ PAGES.finance=async function(){
     finQuickLinks();                 // 待處理事項的入口
   }
   else if(_finTab==='today'){ await finToday(); await anaToday(); }
+  else if(_finTab==='matrix'){ await finMatrix(); }
   else if(_finTab==='people'){ await anaCoach(); }
   else if(_finTab==='receivable') await finReceivable();
   else if(_finTab==='expenses') await finExpenses();
@@ -39113,6 +39136,113 @@ async function finProfitStrip(){
       ${cell('淨利',net,net>=0?'ok':'danger','再扣其他支出')}
     </div>`;
   }catch(e){ box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;color:var(--t3);font-size:12.5px;">損益暫時算不出來（${(e&&e.message)||e}）</div>`; }
+}
+/* ── 月報表：日 × 教練矩陣（2026-08-06 使用者指示，比照 Excel「營運總表」）──
+   「帳務可以像營運總表這樣列出來嗎，每個教練每一天做的成績，一面列出一個月」
+   縱軸＝當月每一天，橫軸＝每位教練四欄（堂數／團課／業績／新約·續約）；
+   最上面一列是整月合計，最左邊固定不捲（日期），右邊橫向捲。
+   口徑與系統其他頁一致：堂數＝已簽到/已完成、業績＝收款紀錄的實收金額（歸屬教練）、
+   新約/續約＝票券的 sale_kind（作廢退款的不算，與薪資頁同一套）。 */
+async function finMatrix(){
+  const body=document.getElementById('fin-body'); if(!body) return;
+  const ym=(window._finMonth||ymd(TODAY).slice(0,7));
+  body.innerHTML='<div class="card" style="padding:16px;color:var(--t3);font-size:12.5px;">整理中…</div>';
+  const [bks,purs,tks,types,coaches]=await Promise.all([
+    dbGetAll('bookings').catch(()=>[]), dbGetAll('purchases').catch(()=>[]),
+    dbGetAll('member_tickets').catch(()=>[]), dbGetAll('ticket_types').catch(()=>[]),
+    dbGetAll('coaches').catch(()=>[])]);
+  const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
+  const inM=d=>String(d||'').slice(0,7)===ym;
+  // 這個月有動靜的教練（有堂數或有業績）才列，避免整排空欄
+  const list=(coaches||[]).filter(c=>c.role!=='front_desk'&&isCoachable(c));
+  const cell={};   // cell[coachId][day] = {pt,grp,amt,nw,rn}
+  const touch=(cid,day)=>{ const m=(cell[cid]=cell[cid]||{}); return (m[day]=m[day]||{pt:0,grp:0,amt:0,nw:0,rn:0}); };
+  // ① 堂數（已簽到/已完成）
+  (bks||[]).forEach(b=>{
+    if(!b||!inM(b.date)) return;
+    if(!(b.status==='checked_in'||b.status==='completed')) return;
+    const cid=bkCoachId(b); if(!cid) return;
+    const d=String(b.date).slice(8,10);
+    const c=touch(cid,d);
+    if(bkIsGroup(b)) c.grp+=Math.max(1,mids(b).length);   // 團課算人次
+    else if(!bkIsSelf(b)) c.pt+=1;                        // 自主訓練不算教練成績
+  });
+  // ② 業績（收款紀錄實收，歸屬教練）
+  const purByTk={};
+  (purs||[]).forEach(p=>{ if(p&&p.ticket_id&&p.coach_id) purByTk[p.ticket_id]=p.coach_id; });
+  (purs||[]).forEach(p=>{
+    if(!p) return;
+    const day=String(p.created_at||'').slice(0,10);
+    if(!inM(day)) return;
+    const cid=p.coach_id; if(!cid) return;
+    touch(cid,day.slice(8,10)).amt+=Number(p.deal_amount)||0;
+  });
+  // ③ 新約／續約（票券 sale_kind；作廢退款不算，與薪資頁同口徑）
+  (tks||[]).forEach(t=>{
+    if(!t||t.status==='refunded'||!inM(t.purchase_date)) return;
+    if(!isCoachClassTicket(t,typeMap)) return;            // 團課等不列入新約/續約
+    const k=t.sale_kind;
+    if(k!=='new'&&k!=='renewal') return;
+    const cid=renewAttribOf(t,purByTk,bks); if(!cid) return;
+    const c=touch(cid,String(t.purchase_date).slice(8,10));
+    if(k==='renewal') c.rn+=1; else c.nw+=1;
+  });
+  const has=c=>{ const m=cell[c.id]; return m&&Object.values(m).some(v=>v.pt||v.grp||v.amt||v.nw||v.rn); };
+  const cols=list.filter(has);
+  if(!cols.length){
+    body.innerHTML=`<div class="card" style="padding:16px;"><div class="ops-datebar" style="margin-bottom:12px;">
+      <button class="btn btn-ghost btn-sm" onclick="finMonthMove(-1)">‹ 上個月</button>
+      <div class="ops-date-mid"><div class="ops-date-main">${ym.split('-')[0]} 年 ${ym.split('-')[1]} 月</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="finMonthMove(1)">下個月 ›</button></div>
+      <div class="empty" style="padding:30px 10px;"><div class="em-t">這個月還沒有紀錄</div></div></div>`;
+    return;
+  }
+  const [Y,M]=ym.split('-').map(Number);
+  const days=new Date(Y,M,0).getDate();
+  const WD=['日','一','二','三','四','五','六'];
+  const money=n=>n?Number(n).toLocaleString():'';
+  const num=n=>n?String(n):'';
+  const sum={};   // 每位教練整月合計
+  cols.forEach(c=>{ sum[c.id]={pt:0,grp:0,amt:0,nw:0,rn:0}; });
+  let dayRows='';
+  for(let d=1;d<=days;d++){
+    const dd=String(d).padStart(2,'0');
+    const wd=WD[new Date(Y,M-1,d).getDay()];
+    const isToday=(ym+'-'+dd)===ymd(TODAY);
+    let tds='', dayTotal=0;
+    cols.forEach(c=>{
+      const v=(cell[c.id]||{})[dd]||{pt:0,grp:0,amt:0,nw:0,rn:0};
+      const s=sum[c.id]; s.pt+=v.pt; s.grp+=v.grp; s.amt+=v.amt; s.nw+=v.nw; s.rn+=v.rn;
+      dayTotal+=v.pt+v.grp;
+      const kd=[v.nw?`<i class="fm-nw">新${v.nw}</i>`:'',v.rn?`<i class="fm-rn">續${v.rn}</i>`:''].join('');
+      tds+=`<td class="fm-c">${num(v.pt)}</td><td class="fm-c fm-g">${num(v.grp)}</td>`
+        +`<td class="fm-c fm-m">${money(v.amt)}</td><td class="fm-c fm-k">${kd}</td>`;
+    });
+    dayRows+=`<tr class="${isToday?'fm-today':''}"><th class="fm-d">${d}<span>（${wd}）</span></th><td class="fm-c fm-t">${num(dayTotal)}</td>${tds}</tr>`;
+  }
+  let sumTds='', sumAll=0;
+  cols.forEach(c=>{ const s=sum[c.id]; sumAll+=s.pt+s.grp;
+    sumTds+=`<td class="fm-c">${num(s.pt)}</td><td class="fm-c fm-g">${num(s.grp)}</td>`
+      +`<td class="fm-c fm-m">${money(s.amt)}</td><td class="fm-c fm-k">${[s.nw?`<i class="fm-nw">新${s.nw}</i>`:'',s.rn?`<i class="fm-rn">續${s.rn}</i>`:''].join('')}</td>`; });
+  const head1=cols.map(c=>`<th class="fm-h" colspan="4">${coachDisp(c)}</th>`).join('');
+  const head2=cols.map(()=>`<th class="fm-sh">教練課</th><th class="fm-sh">團課</th><th class="fm-sh">業績</th><th class="fm-sh">新/續</th>`).join('');
+  body.innerHTML=`<div class="card" style="padding:14px 16px;">
+    <div class="card ops-datebar" style="margin:-4px 0 12px;box-shadow:none;border:none;padding:0;">
+      <button class="btn btn-ghost btn-sm" onclick="finMonthMove(-1)">‹ 上個月</button>
+      <div class="ops-date-mid"><div class="ops-date-main">${ym.split('-')[0]} 年 ${ym.split('-')[1]} 月</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="finMonthMove(1)">下個月 ›</button></div>
+    <div class="fm-wrap"><table class="fm-tb">
+      <thead>
+        <tr><th class="fm-d fm-h">日期</th><th class="fm-h">總堂數</th>${head1}</tr>
+        <tr><th class="fm-d fm-sh"></th><th class="fm-sh">全店</th>${head2}</tr>
+      </thead>
+      <tbody>
+        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumAll)}</td>${sumTds}</tr>
+        ${dayRows}
+      </tbody>
+    </table></div>
+    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;line-height:1.8;">教練課＝已簽到／已完成的教練課與體驗（自主訓練不計）；團課以人次計；業績＝收款紀錄的實收金額（依業績歸屬教練）；新/續＝當日成交的票券約別（作廢退款不列）。</div>
+  </div>`;
 }
 /* 待處理事項入口（2026-08-05）：這些不是報表，收成一列按鈕放在最下面 */
 function finQuickLinks(){

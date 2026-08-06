@@ -1,0 +1,82 @@
+/* 2026-08-06 使用者指示（附 Excel「有肌訓練 後台-2.xlsx」的營運總表）：
+   「帳務可以像營運總表這樣列出來嗎，每個教練每一天做的成績，一面列出一個月」
+
+   Excel 的結構：縱軸＝當月每一天、橫軸＝每位教練一組欄（堂數／簽約金／新約／續約），
+   最上面一列是整月合計。這支就是把那張表做進系統（經營報表 → 月報表）。
+   口徑必須與系統其他頁一致：堂數＝已簽到/已完成、業績＝收款紀錄實收（歸屬教練）、
+   新約/續約＝票券 sale_kind（作廢退款不算、團課不列入）。 */
+const fs=require('fs');
+const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+
+let pass=0,fail=0;
+const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
+const grabFn=n=>{const i=src.indexOf('function '+n+'(');if(i<0)return'';let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}return'';};
+
+console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
+{
+  const html={};
+  const BK=(id,date,coach,st,cat,ids)=>({id,date,coach_id:coach,status:st,category:cat||'私人教練',member_ids:ids||[],member_id:'M1'});
+  const DB={
+    bookings:[
+      BK('b1','2026-08-01','c1','checked_in'),
+      BK('b2','2026-08-01','c1','completed'),
+      BK('b3','2026-08-01','c2','checked_in','小班肌力',['M1','M2','M3']),   // 團課 3 人次
+      BK('b4','2026-08-02','c1','booked'),                                    // 還沒簽到 → 不算
+      BK('b5','2026-08-02','c1','checked_in','自主訓練'),                     // 自主訓練不計
+      BK('b6','2026-07-31','c1','checked_in'),                                // 上個月 → 不算
+    ],
+    purchases:[
+      {id:'p1',ticket_id:'t1',coach_id:'c1',deal_amount:12800,created_at:'2026-08-01T10:00:00Z'},
+      {id:'p2',ticket_id:'t2',coach_id:'c2',deal_amount:6400,created_at:'2026-08-03T10:00:00Z'},
+      {id:'p3',ticket_id:'t3',coach_id:null,deal_amount:100,created_at:'2026-08-03T10:00:00Z'},   // 無歸屬 → 不進矩陣
+    ],
+    member_tickets:[
+      {id:'t1',member_id:'M1',ticket_type_id:'tt-pt',purchase_date:'2026-08-01',sale_kind:'new',status:'usable'},
+      {id:'t2',member_id:'M2',ticket_type_id:'tt-pt',purchase_date:'2026-08-03',sale_kind:'renewal',status:'usable'},
+      {id:'t4',member_id:'M3',ticket_type_id:'tt-pt',purchase_date:'2026-08-04',sale_kind:'renewal',status:'refunded',sold_by:'c1'}, // 作廢 → 不算
+      {id:'t5',member_id:'M4',ticket_type_id:'tt-grp',purchase_date:'2026-08-04',sale_kind:'renewal',status:'usable',sold_by:'c1'},  // 團課票 → 不列入新/續
+    ],
+    ticket_types:[{id:'tt-pt',category:'私人教練',name:'教練課'},{id:'tt-grp',category:'小班肌力',name:'團體課'}],
+    coaches:[{id:'c1',name:'RANDY',role:'coach'},{id:'c2',name:'SANDY',role:'coach'},{id:'c3',name:'閒置',role:'coach'}],
+  };
+  const env={
+    document:{getElementById:id=>({ set innerHTML(v){ html[id]=v; }, get innerHTML(){ return html[id]||''; } })},
+    window:{_finMonth:'2026-08'},
+    dbGetAll:async t=>(DB[t]||[]).slice(),
+    ymd:()=> '2026-08-06',
+    TODAY:new Date(2026,7,6),
+    bkCoachId:b=>b.substitute_coach_id||b.coach_id||null,
+    bkIsGroup:b=>b.category==='小班肌力',
+    bkIsSelf:b=>b.category==='自主訓練',
+    mids:b=>Array.isArray(b.member_ids)?b.member_ids:[],
+    isCoachable:()=>true,
+    coachDisp:c=>c.name,
+    isCoachClassTicket:(t,tm)=>((tm[t.ticket_type_id]||{}).category)==='私人教練',
+    renewAttribOf:(t,purByTk)=> t.sold_by || purByTk[t.id] || null,
+    addDays:(d,n)=>d, parseYmd:x=>new Date(x),
+  };
+  const run=new Function(...Object.keys(env),'return async '+grabFn('finMatrix'))(...Object.values(env));
+  (async()=>{
+    await run();
+    const out=html['fin-body']||'';
+    ok('★ 只列出有動靜的教練（閒置的不佔欄）',
+       out.includes('RANDY') && out.includes('SANDY') && !out.includes('閒置'));
+    ok('★ 有月合計列，排在每日之上', out.indexOf('月合計')>0 && out.indexOf('月合計')<out.indexOf('（六）'));
+    ok('★ 表頭四欄一組：教練課／團課／業績／新+續',
+       /<th class="fm-sh">教練課<\/th><th class="fm-sh">團課<\/th><th class="fm-sh">業績<\/th><th class="fm-sh">新\/續<\/th>/.test(out));
+    ok('★ 8/01 RANDY：教練課 2 堂、業績 12,800、新約 1',
+       out.includes('12,800') && /新1/.test(out));
+    ok('★ 團課以人次計（SANDY 8/01＝3）', /class="fm-c fm-g">3</.test(out));
+    ok('★ 續約標記出得來（SANDY 8/03）', /續1/.test(out));
+    ok('★ 整月天數都列出來（8 月 31 天）',
+       (out.match(/class="fm-d">\d+<span>/g)||[]).length===31, (out.match(/class="fm-d">\d+<span>/g)||[]).length);
+    ok('★ 還沒簽到／自主訓練／上個月的都不計入',
+       !out.includes('>3</td><td class="fm-c fm-g"></td>'), '（RANDY 教練課應為 2）');
+    ok('★ 作廢的票不算續約、團課票不列入新/續（合計只有 1 新 1 續）',
+       (out.match(/新1/g)||[]).length===2 && (out.match(/續1/g)||[]).length===2);   // 當日列＋月合計列各一次
+    ok('★ 有月份切換（沿用財務頁的上/下個月）', /finMonthMove\(-1\)/.test(out) && /2026 年 08 月/.test(out));
+    console.log("\n"+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
+    process.exit(fail?1:0);
+  })();
+}
