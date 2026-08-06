@@ -7505,8 +7505,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1512';
-const APP_VERSION_LABEL='v260806.1512';
+const APP_VERSION = '260806.1538';
+const APP_VERSION_LABEL='v260806.1538';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15521,8 +15521,20 @@ async function renderCalendar(opts){
        原本只有「翻頁」吃得到快取，換頁進來一律等 5 張表（含 bookings／member_tickets 兩張大表）。
        手上有 10 分鐘內的整組資料就立刻畫，背景再校驗（_calRevalidate 有異動才悄悄重繪）。 */
     const _entryCache = window._calDataCache && (Date.now()-(window._calDataCache._t||0) < 600000);
+    /* 冷開機（重新開系統）也先畫再說（2026-08-06 使用者回報「每一次重新開系統，
+       從首頁換到預約管理都會讀取」）—— _calDataCache 只活在記憶體裡，重開就沒了，
+       所以第一次進來一定走網路。首頁本來就是用 dbPeek 讀跨工作階段快取（IndexedDB，
+       開場 cacheHydrate 載回來）先畫，行事曆沿用同一套：五張表都拿得到就直接畫，
+       背景再走 _calRevalidate 校驗。拿不到（真的第一次用這台裝置）才等網路。 */
+    const _pk = _entryCache ? null : ['bookings','coaches','members','ticket_types','member_tickets'].map(t=>dbPeek(t));
+    const _peekAll = _pk && _pk.every(Boolean);
     if(_entryCache){
       ({bookings,coaches,members,types,allTickets}=window._calDataCache);
+      _calRevalidate();
+    }else if(_peekAll){
+      [bookings,coaches,members,types,allTickets]=_pk.map(p=>p.data);
+      // 先落快取再校驗 —— _calRevalidate 是拿 _calDataCache 去比對的，沒有它會直接跳出
+      window._calDataCache={bookings,coaches,members,types,allTickets,_t:Date.now()};
       _calRevalidate();
     }else{
       // 效能優化：coaches / members / ticket_types 很少變動 → 首次抓取後快取（60 秒內），切週時沿用，
@@ -16395,9 +16407,19 @@ async function _calRevalidate(){
   try{
     const cached=window._calDataCache; if(!cached) return;
     const sigB=_calSigBk(cached.bookings), sigT=_calSigTk(cached.allTickets);
-    const [bks,tks]=await Promise.all([dbGetAll('bookings'),dbGetAll('member_tickets')]);
-    const changed = _calSigBk(bks)!==sigB || _calSigTk(tks)!==sigT;
-    window._calDataCache={...cached, bookings:bks, allTickets:tks, _t:Date.now()};
+    /* 名單三張表（教練/會員/票種）也一起帶 —— 進入時吃快取的路徑變多之後，
+       只校驗 bookings/member_tickets 會讓「剛新增的會員在行事曆上沒有名字」。
+       這三張表沒動過時 dbGetAll 直接回快取、不會多打網路。 */
+    const [bks,tks,cos,mems,tys]=await Promise.all([
+      dbGetAll('bookings'),dbGetAll('member_tickets'),
+      dbGetAll('coaches').catch(()=>cached.coaches),
+      dbGetAll('members').catch(()=>cached.members),
+      dbGetAll('ticket_types').catch(()=>cached.types)]);
+    const changed = _calSigBk(bks)!==sigB || _calSigTk(tks)!==sigT
+      || (cos||[]).length!==(cached.coaches||[]).length
+      || (mems||[]).length!==(cached.members||[]).length;
+    window._calDataCache={...cached, bookings:bks, allTickets:tks,
+      coaches:cos||cached.coaches, members:mems||cached.members, types:tys||cached.types, _t:Date.now()};
     /* 有異動才重繪；使用者互動中（展開快捷鈕/拖曳/彈窗開著）不打斷——
        資料已更新進快取，下一次翻頁或操作自然帶到。 */
     if(changed && (CUR_PAGE==='calendar'||CUR_PAGE==='coach_calendar')
@@ -17699,6 +17721,20 @@ function cagBackToday(){
   window._cagMonthPop=false;
   renderCoachAgenda();
 }
+/* 手機行事曆的背景校驗（2026-08-06）：畫完才比對 bookings 簽章，有變才重畫一次。
+   重畫時 dbGetAll 已把快取更新成最新，dbPeek 回來就不是 stale → 不會再觸發，無循環。 */
+async function _cagRevalidate(sigBefore){
+  if(window._cagRevalidating) return;
+  window._cagRevalidating=true;
+  try{
+    const bks=await dbGetAll('bookings');
+    if(_calSigBk(bks)===sigBefore) return;                 // 沒人動過 → 不打擾畫面
+    if(!document.getElementById('wtl-page')) return;        // 已經離開這一頁
+    if(document.getElementById('modal-bg')) return;         // 使用者正在操作彈窗
+    await renderCoachAgenda();
+  }catch(_){}
+  finally{ window._cagRevalidating=false; }
+}
 async function renderCoachAgenda(){
   const host=document.getElementById('wtl-page'); if(!host) return;
   const myId=SESSION.id;
@@ -17706,11 +17742,26 @@ async function renderCoachAgenda(){
   if(!window._cagSelDate) window._cagSelDate=ymd(TODAY);
   if(!window._cagMonth){ const t=parseYmd(window._cagSelDate)||new Date(TODAY); window._cagMonth={y:t.getFullYear(),m:t.getMonth()}; }
 
-  const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
-  if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
+  /* 冷開機（重新開系統）先畫再說（2026-08-06 使用者回報「每一次重新開系統，
+     從首頁換到預約都會讀取」）—— 與桌機同一套：跨工作階段快取（IndexedDB，
+     開場 cacheHydrate 載回來）拿得到就直接畫，畫完背景校驗，有變才重畫一次。 */
+  let bookings,members,coaches;
+  const _cagPk=['bookings','members','coaches'].map(t=>dbPeek(t));
+  if(_cagPk.every(Boolean)){
+    [bookings,members,coaches]=_cagPk.map(p=>p.data);
+    if(_cagPk.some(p=>p.stale)) _cagRevalidate(_calSigBk(bookings));
+  }else{
+    [bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
+  }
+  if(!window._ttCache){
+    const _tt=dbPeek('ticket_types');
+    if(_tt) window._ttCache=_tt.data;
+    else try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
+  }
   /* 課卡右上角的繳費／續約提醒（2026-07-29 使用者指示：手機端也要有，判準與桌機同一支） */
   try{
-    const _tkAll=await dbGetAll('member_tickets');
+    const _tkPk=dbPeek('member_tickets');
+    const _tkAll=_tkPk ? _tkPk.data : await dbGetAll('member_tickets');
     computeLastBkMarks(_tkAll, bookings, Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t])));
   }catch(_){ window._installLastBk=window._installLastBk||{}; window._renewLastBk=window._renewLastBk||{}; }
   const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));

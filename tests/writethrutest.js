@@ -105,5 +105,29 @@ ok('　　沒有 return 掉後續渲染（整段流程照走完）',
 ok('　　切週的靜態表快取（coaches/members/ticket_types 60 秒）仍保留',
    /const cacheFresh = window\._calStaticCache && \(Date\.now\(\)-window\._calStaticCache\._t < 60000\);/.test(src));
 
+console.log('\n④ 冷開機（重新開系統）第一次進預約管理也不等網路（2026-08-06 使用者回報）');
+/* _calDataCache 只活在記憶體，重開就沒了 → 第一次進來一定走網路。
+   首頁本來就用 dbPeek 讀跨工作階段快取（IndexedDB，開場 cacheHydrate 載回來）先畫，
+   行事曆（桌機 renderCalendar／手機 renderCoachAgenda）改成沿用同一套。 */
+ok('★ 桌機：五張表都 peek 得到就直接畫',
+   /const _pk = _entryCache \? null : \['bookings','coaches','members','ticket_types','member_tickets'\]\.map\(t=>dbPeek\(t\)\);/.test(src)
+   && /\}else if\(_peekAll\)\{\n\s*\[bookings,coaches,members,types,allTickets\]=_pk\.map\(p=>p\.data\);/.test(src));
+ok('★ 先落 _calDataCache 再校驗（_calRevalidate 沒有它會直接跳出）',
+   /window\._calDataCache=\{bookings,coaches,members,types,allTickets,_t:Date\.now\(\)\};\n\s*_calRevalidate\(\);/.test(src));
+ok('★ 背景校驗連名單三張表一起帶（否則剛新增的會員在行事曆上沒有名字）',
+   /dbGetAll\('coaches'\)\.catch\(\(\)=>cached\.coaches\),/.test(src)
+   && /coaches:cos\|\|cached\.coaches, members:mems\|\|cached\.members, types:tys\|\|cached\.types, _t:Date\.now\(\)\}/.test(src));
+ok('★ 手機 agenda 也 peek 先畫，stale 才背景校驗',
+   /const _cagPk=\['bookings','members','coaches'\]\.map\(t=>dbPeek\(t\)\);/.test(src)
+   && /if\(_cagPk\.some\(p=>p\.stale\)\) _cagRevalidate\(_calSigBk\(bookings\)\);/.test(src));
+ok('　　手機的大表（member_tickets／ticket_types）也走 peek',
+   /const _tkPk=dbPeek\('member_tickets'\);/.test(src)
+   && /const _tt=dbPeek\('ticket_types'\);/.test(src));
+ok('★ 背景校驗不會無限重畫（簽章相同就收手、離開頁面／彈窗開著不打擾）',
+   /if\(_calSigBk\(bks\)===sigBefore\) return;/.test(src)
+   && /if\(!document\.getElementById\('wtl-page'\)\) return;/.test(src)
+   && /if\(document\.getElementById\('modal-bg'\)\) return;/.test(src)
+   && /if\(window\._cagRevalidating\) return;/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
