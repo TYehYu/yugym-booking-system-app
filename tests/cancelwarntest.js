@@ -28,12 +28,19 @@ ok('★ 剛約完 10 分鐘內取消不算遲到取消（不嚇人）',
 ok('　　會退回的維持低調綠框', /<div class="cx-note cx-note-ok"><b>會退回 1 堂票券<\/b>/.test(src));
 
 console.log('\n櫃檯端：兩顆按鈕分得開');
-ok('★ 「扣掉這一堂」改成紅底實心並加底線', /<button class="btn btn-danger cx-btn-eat" onclick="askSeriesCancel\('\$\{id\}','none'\)">取消・<b>扣掉這一堂<\/b><\/button>/.test(src));
+ok('★ 「扣掉這一堂」是紅底實心並加底線（2026-08-06 三修：btn-danger 淡粉底 → btn-red 實心紅）',
+   /<button class="btn btn-red cx-btn-eat" onclick="askSeriesCancel\('\$\{id\}','none'\)">取消・<b>扣掉這一堂<\/b><\/button>/.test(src)
+   && /\.cx-btn-eat b\{text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:2px;\}/.test(src));
 /* 2026-08-06 二修（使用者：「確認是否扣票的地方要用顏色標示，綠色票券返回、紅色票券扣除」）
    —— 退回那顆改綠底，與色標同一個語彙；扣課那顆維持紅底實心。 */
-ok('★ 「退回票券」＝綠底、「扣掉這一堂」＝紅底（一眼分得出結果）',
+/* 2026-08-06 三修（使用者指示：「會扣票券的這個改成紅底按鈕」）——
+   退回是實心綠、扣除卻只有淡粉底＋紅字，最該停下來看的那顆反而輕。 */
+ok('★ 「退回票券」＝實心綠、「扣掉這一堂」＝實心紅（份量對等）',
    /<button class="btn btn-green" onclick="askSeriesCancel\('\$\{id\}','force'\)">取消・退回票券<\/button>/.test(src)
-   && /<button class="btn btn-danger cx-btn-eat" onclick="askSeriesCancel\('\$\{id\}','none'\)">取消・<b>扣掉這一堂<\/b><\/button>/.test(src));
+   && /<button class="btn btn-red cx-btn-eat" onclick="askSeriesCancel\('\$\{id\}','none'\)">取消・<b>扣掉這一堂<\/b><\/button>/.test(src)
+   && /\.btn-red\{background:var\(--danger,#b5372e\);color:#fff;box-shadow:var\(--shadow-xs\);\}/.test(src));
+ok('★ 會員端 24 小時內取消（會扣課）也是紅底，會退回的是綠底',
+   /<button class="btn \$\{\(within24&&!_justBooked\)\?'btn-red':'btn-green'\}" onclick="doMemCancelBooking/.test(src));
 ok('★ 兩種結果各掛一枚色標（綠＝退回／紅＝扣除）',
    /\$\{tkChip\('back', `加回 \$\{_grpNetDeduct>0\?`\$\{_grpNetDeduct\} 堂/.test(src)
    && /\$\{tkChip\('eat', '不加回'\)\}/.test(src));
