@@ -1,0 +1,22 @@
+-- 2026-08-06 資料修正：黃品華（MEM-DE364D4E3A11）8/6 誤取消的堂數補退
+--
+-- 使用者指示：「今天 8/6 這堂是櫃檯錯誤取消的，幫我移除這個紀錄，這張圓形卡要補回給客人。」
+--
+-- 狀況：IMPB-B2026071417575951（8/06 15:00 私人教練課）於 05:53(UTC) 被取消，
+--   且取消時選了「扣課不退」→ 票券 MTK-39E8A7BF9373 扣了 1 堂沒有退回，
+--   票券卡上出現一顆紅色的 8/6（取消未退）。
+--
+-- 已於正式庫執行（等同櫃台功能「特例補退」deskRefundCancelled）：
+--   insert into ticket_logs ... ('LG-FIX-HPH-0806-REF', MTK-39E8A7BF9373, refund, +1, IMPB-B2026071417575951)
+--   update member_tickets set sessions_remaining=sessions_remaining+1, status='usable' where id='MTK-39E8A7BF9373';  -- 0 → 1
+--   update bookings set refund_waived=false where id='IMPB-B2026071417575951';
+--
+-- 結果：
+--   票券 8 堂：已上 4（6/18・6/25・7/16・7/30）＋ 已預約 3（8/13・8/20・8/27）＋ 可用 1
+--   紅色的 8/6 消失（bkEatenCancel 需要 refund_waived 且帳本仍淨扣，兩個條件都不成立了）
+--
+-- 預約本身維持 cancelled：那堂課實際上沒有發生，取消紀錄留著才看得出「誰在什麼時候取消的」；
+-- 補退的動作也留在 ticket_logs，兩邊都查得到。
+--
+-- 備註：這個情境系統本來就有現成入口 —— 預約明細的「特例補退」（櫃檯／店長可按），
+-- 之後再遇到同型狀況不必再改資料庫。
