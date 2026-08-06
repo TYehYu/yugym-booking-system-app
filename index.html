@@ -7553,8 +7553,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1920';
-const APP_VERSION_LABEL='v260806.1920';
+const APP_VERSION = '260806.1942';
+const APP_VERSION_LABEL='v260806.1942';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11740,6 +11740,31 @@ function tkNeedsConfirm(t){
   if(t.source_ref) return false;                       // 有訂單編號＝對得上舊系統
   if(t.source && t.source!=='purchase') return false;  // 贈點／補課券／系統發放不算
   return /待確認/.test(String(t.note||''));
+}
+/* 取消後重約同一堂 → 回到原本扣的那張票（2026-08-06 林紫錡案例）——
+   櫃檯把 8/8 那堂整筆取消再重建，退回的是 6/26 的四週票，重扣時卻依先進先出
+   扣到 5/23 的舊票：四週票空了一格、舊票被多扣一堂，兩張卡的日期都對不上了。
+   同一位會員、同一天、同一種課，只要有「剛被退回」的那張票就優先用它。
+   找不到就照常走一般的自動挑票（listUsableTickets 的排序不變）。 */
+async function rebookSameDayTicket(member_id, b){
+  try{
+    if(!b || !b.date) return null;
+    const [bks,logs]=await Promise.all([dbGetAll('bookings'),dbGetAll('ticket_logs')]);
+    const same=new Set((bks||[]).filter(x=>x && x.id!==b.id && x.status==='cancelled'
+      && String(x.date||'')===String(b.date||'') && x.category===b.category
+      && bkHasMember(x,member_id)).map(x=>x.id));
+    if(!same.size) return null;
+    /* 「曾經為這堂扣過、而且已經退回」＝ 有退回紀錄且目前沒有還掛著的扣課。
+       ⚠ 不能只看淨值>0：取消重約的正常情況是「扣 1 退 1」＝淨 0。 */
+    const net={}, ref={};
+    (logs||[]).forEach(l=>{ if(!l || !l.ticket_id || !same.has(l.booking_id)) return;
+      if(l.action==='refund'){ ref[l.ticket_id]=(ref[l.ticket_id]||0)+1; net[l.ticket_id]=(net[l.ticket_id]||0)+1; }
+      else if(l.action==='deduct'){ net[l.ticket_id]=(net[l.ticket_id]||0)-1; } });
+    const back=Object.keys(ref).filter(k=>ref[k]>0 && (net[k]||0)>=0);
+    if(!back.length) return null;
+    const cand=await listUsableTickets(member_id,b.ticket_type_id,b.date,b.start_time);
+    return cand.find(t=>back.indexOf(t.id)>=0) || null;
+  }catch(_){ return null; }
 }
 async function findUsableTicket(member_id,type_id,bookDate,bookTime){
   const cand=await listUsableTickets(member_id,type_id,bookDate,bookTime);
@@ -23006,6 +23031,8 @@ async function _saveGroupMembers(id){
       tk=cand.find(t=>t.id===want)||null;
       if(!tk) showToast('指定的票券已不能用，改用最快到期的那張');
     }
+    // 取消後重約同一堂 → 先回到原本那張票（2026-08-06 林紫錡案例，見 rebookSameDayTicket）
+    if(!tk) tk=await rebookSameDayTicket(mid,b);
     if(!tk) tk=await findUsableTicket(mid,b.ticket_type_id,b.date,b.start_time);
     if(tk) await deductTicket(tk,b.id,SESSION.id);
     else (_noTk[mid]=(_noTk[mid]||0)+1);   // 扣不到票的名額（2026-08-05 要當面警告，不再靜默）
