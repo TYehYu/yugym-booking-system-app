@@ -46,6 +46,13 @@ ok('★ 上課中／逾時未簽仍疊在左側教練欄之上（框不被切掉
    && /\.tcard-coach\{width:118px;flex-shrink:0;padding-top:4px;position:sticky;left:0;z-index:4;/.test(src));
 ok('　　卡片容器留出光暈空間（padding 10 ／ margin -10）',
    /\.tcard-list\{padding:10px;margin:-10px;\}/.test(src));
+/* 2026-08-06 使用者指示：完成（有簽到、時間也過了）→ 流星停下來、整圈保持全亮 */
+ok('★ 完成的課卡：整圈全亮（同一圈遮罩、不動、整圈同色）',
+   /\.tcard-std\.tcard-done:not\(\.tcard-live\)::before\{content:'';position:absolute;inset:-2px;/.test(src)
+   && /background:linear-gradient\(#2f9c74,#2f9c74\);/.test(src)
+   && /mask-composite:exclude; padding:3px;\n\s*filter:drop-shadow\(0 0 3px rgba\(47,156,116,\.55\)\);\}/.test(src));
+ok('　　上課中優先（同時 done＋live 時跑流星，不是全亮）',
+   /\.tcard-std\.tcard-done:not\(\.tcard-live\)::before/.test(src));
 ok('★ 逾時未簽：金框', /\.tcard-std\.tcard-miss \.tcard-body\{border-color:var\(--gold,#B48A56\);/.test(src));
 /* 2026-08-06 二修（使用者回報：「流星繞著圓形了，可是課卡是方形」）——
    方形卡不能用「旋轉的圓點」當頭（那顆走圓形軌跡會切過角落）；
