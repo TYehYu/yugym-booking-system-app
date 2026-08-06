@@ -19,6 +19,7 @@ console.log('① 超約防線：團課也算得到（R1）');
 {
   /* 團課預約沒有 ticket_id，扣課只在 ticket_logs；單人課有 ticket_id 走另一條，不能重複計。 */
   const BKS=[
+    {id:'G9',status:'checked_in'},                       // 舊課，只有補連結（delta 0）
     {id:'G1',status:'checked_in'},                       // 團課：無 ticket_id
     {id:'G2',status:'booked'},
     {id:'G3',status:'cancelled'},                        // 取消＋退回 → 淨 0
@@ -27,6 +28,8 @@ console.log('① 超約防線：團課也算得到（R1）');
     {id:'P2',status:'cancelled',ticket_id:'T1'},         // 已取消 → 不計
   ];
   const LOGS=[
+    /* delta 0 ＝「補連結」：只記歸屬、堂數當初就扣過了 → 不能算成佔用（2026-08-06） */
+    {ticket_id:'T1',booking_id:'G9',action:'deduct',delta:0},
     {ticket_id:'T1',booking_id:'G1',action:'deduct'},
     {ticket_id:'T1',booking_id:'G2',action:'deduct'},
     {ticket_id:'T1',booking_id:'G3',action:'deduct'},
@@ -39,6 +42,8 @@ console.log('① 超約防線：團課也算得到（R1）');
     async t=>(t==='bookings'?BKS:(t==='ticket_logs'?LOGS:[])));
   const map=await fn();
   eq('★ 團課 G1・G2 各一格＋G4（扣課不退）一格＋單人課 P1 一格＝4',map['T1'],4);
+  ok('★★ 補連結（delta 0）不算佔用 —— 否則固化推算之後，有餘額的票會被防線誤擋',
+     /if\(Number\(l\.delta\)===0\) return;/.test(src));
 
   const over=new Function(grabFn('tkOverBooked')+'\nreturn tkOverBooked;')();
   ok('★ 4 堂票已被佔滿 4 格 → 擋下（團課現在也擋得住）', over({id:'T1',sessions_total:4},map)===true);
