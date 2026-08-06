@@ -221,6 +221,9 @@ console.log('\n取消沒綁票券的預約');
        !/退回票券/.test(pend) && /這是<b>待簽約卡位<\/b>，還沒收款也沒有票券/.test(pend));
     ok('　　卡位上填的客戶姓名會帶出來', /劉雪珠/.test(pend));
     ok('　　只留一顆「確定取消」', (pend.match(/<button/g)||[]).length===2 && /確定取消/.test(pend));
+    /* 2026-08-06：綠／紅專指票券退回／扣除 —— 不動票券的確定鍵改中性色 */
+    ok('★ 不動票券的確定鍵不用紅色（btn-dark）',
+       /btn btn-dark" onclick="askSeriesCancel\('X','none'\)/.test(pend) && !/btn-danger/.test(pend));
     ok('★ 場租：說明不涉及票券', /場地租借不涉及票券/.test(rent) && !/退回票券/.test(rent));
     ok('★ 未綁票券的匯入預約：說明不影響堂數', /沒有綁票券/.test(noTk) && !/退回票券/.test(noTk));
     ok('★ 正常有綁票券的預約 → 兩種選擇照舊', /退回票券/.test(normal) && /扣課不退/.test(normal));

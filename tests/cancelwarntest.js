@@ -37,6 +37,8 @@ ok('★ 「退回票券」＝綠底、「扣掉這一堂」＝紅底（一眼分
 ok('★ 兩種結果各掛一枚色標（綠＝退回／紅＝扣除）',
    /\$\{tkChip\('back', `加回 \$\{_grpNetDeduct>0\?`\$\{_grpNetDeduct\} 堂/.test(src)
    && /\$\{tkChip\('eat', '不加回'\)\}/.test(src));
+ok('★ 教練端只有一種結果（一律退回票券）→ 按鈕也是綠的',
+   /<button class="btn \$\{isTrial\?'btn-danger':'btn-green'\}" onclick="askSeriesCancel\('\$\{id\}','auto'\)">確定取消<\/button>/.test(src));
 ok('　　色標本身有顏色（綠底綠字／紅底紅字）',
    /\.tkchip-back\{background:#e8f3ec;color:#1f6f54;/.test(src)
    && /\.tkchip-eat\{background:#fbeceb;color:#b5372e;/.test(src));
