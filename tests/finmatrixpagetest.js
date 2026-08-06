@@ -12,16 +12,33 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 
 console.log('① 導覽列入口（2026-08-06 二修：改成頂欄自己的群組，放在「班表」左邊）');
 ok('★ 頂欄多一個「月報表」群組，只掛一個頁面',
-   /\{key:'g_report', icon:'📊', label:'月報表', sub:\[\n\s*\{label:'月報表', page:'fin_matrix'\},\n\s*\]\},/.test(src));
+   /\{key:'g_report', icon:'📊', label:'月報表', fd:true, sub:\[\n\s*\{label:'月報表', page:'fin_matrix', fd:true\},\n\s*\]\},/.test(src));
 ok('★ 排在「班表」左邊',
    src.indexOf("{key:'g_report'") < src.indexOf("{key:'g_supervisor'"));
 ok('★ 已從「管理員 → 財務」底下移走（不會兩個地方都出現）',
    !/\{grp:'財務', label:'月報表', page:'fin_matrix'\}/.test(src));
-ok('★ 目前只有管理員看得到（群組與子項目都沒有 fd:true）',
-   /\{key:'g_report', icon:'📊', label:'月報表', sub:\[/.test(src)
-   && !/\{key:'g_report'[^\]]*fd:true/.test(src));
-ok('　　之後要開放櫃檯的做法寫在程式裡',
-   /之後要開放櫃檯時：本群組與子項目各加一個 fd:true/.test(src));
+/* 2026-08-06 三修（使用者指示）：「月報表可以開放權限給櫃檯帳號了，反正只能查看都不能更改」 */
+ok('★ 櫃檯也看得到（群組與子項目都掛 fd:true）',
+   /\{key:'g_report', icon:'📊', label:'月報表', fd:true, sub:\[\n\s*\{label:'月報表', page:'fin_matrix', fd:true\},\n\s*\]\},/.test(src));
+{
+  /* 實跑 visibleGroups 的過濾：櫃檯只留 fd 的群組與 fd 的子項目 */
+  const NAV=[{key:'g_dashboard',fd:true,sub:[{label:'首頁',page:'dashboard',fd:true}]},
+    {key:'g_admin',sub:[{label:'員工管理',page:'staff'}]},
+    {key:'g_report',fd:true,sub:[{label:'月報表',page:'fin_matrix',fd:true}]},
+    {key:'g_supervisor',sup:true,fd:true,sub:[{label:'排班表',page:'coach_shifts',fd:true}]}];
+  const i=src.indexOf('function visibleGroups()');
+  const j=src.indexOf('\n}',i)+2;
+  const run=role=>new Function('SESSION','ADMIN_NAV2', src.slice(i,j)+'\nreturn visibleGroups();')(
+    {role, is_manager:false}, NAV).map(g=>g.key);
+  ok('★ 櫃檯的頂欄有月報表', run('front_desk').includes('g_report'), run('front_desk'));
+  ok('　　櫃檯仍然看不到管理員', !run('front_desk').includes('g_admin'), run('front_desk'));
+  ok('　　管理員照舊兩個都看得到',
+     run('admin').includes('g_report') && run('admin').includes('g_admin'), run('admin'));
+}
+ok('★ 這一頁只有讀取（沒有任何寫入動作，開放查看即可）',
+   /這一頁本來就只有讀取（表格＋上\/下個月），沒有任何寫入動作/.test(src));
+ok('★ 上/下個月要留在原頁（寫死跳 finance 會把櫃檯丟到沒有權限的頁面）',
+   /if\(CUR_PAGE==='fin_matrix'\)\{ navTo\('fin_matrix','g_report'\); return; \}/.test(src));
 ok('　　單一子項目 → 不會多長一層左側次選單（點頂欄直接進頁）',
    /const realSubs=visibleSubs\.filter\(s=>s\.page \|\| s\.soon\);\n\s*if\(realSubs\.length<=1\) return '';/.test(src));
 ok('　　手機「更多」也有這個群組的標籤',
