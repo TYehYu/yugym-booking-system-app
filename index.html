@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.2116';
-const APP_VERSION_LABEL='v260806.2116';
+const APP_VERSION = '260806.2138';
+const APP_VERSION_LABEL='v260806.2138';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8184,7 +8184,28 @@ async function cloudCreateAuth(role,acct,pw,viaServer){
 }
 
 /* ── 日期工具 ── */
-const TODAY=(function(){const n=new Date();return new Date(n.getFullYear(),n.getMonth(),n.getDate());})(); // 真實今天的本地零點
+let TODAY=(function(){const n=new Date();return new Date(n.getFullYear(),n.getMonth(),n.getDate());})(); // 真實今天的本地零點
+/* 跨日自動更新（2026-08-06 施佳靜案例：「電腦看得到她 8/6 有預約，手機首頁卻沒有今日的圓形卡，
+   所以她不能自己簽到」）——
+   TODAY 原本是「載入當下」算好的常數，永遠不會變。手機把 App／PWA 開著過夜（很常見），
+   隔天整個系統仍以為是昨天：今天的課不會被標成今天（實心／可簽到），
+   預約明細的自簽按鈕條件是 b.date===ymd(TODAY)，也就不會出現。
+   每分鐘檢查一次，另外回到前景時立刻檢查；日期真的變了才更新，並重畫目前這一頁。
+   ⚠ 有彈窗開著（可能正在編輯）就只更新日期、不打斷畫面，下一次換頁自然帶到。 */
+function dateRollCheck(){
+  try{
+    const n=new Date(), d=new Date(n.getFullYear(),n.getMonth(),n.getDate());
+    if(d.getTime()===TODAY.getTime()) return false;
+    TODAY=d;
+    if(typeof navTo==='function' && typeof CUR_PAGE!=='undefined' && CUR_PAGE
+       && !document.getElementById('modal-bg')){
+      navTo(CUR_PAGE, (typeof CUR_GROUP!=='undefined')?CUR_GROUP:undefined);
+    }
+    return true;
+  }catch(_){ return false; }
+}
+setInterval(dateRollCheck, 60000);
+try{ document.addEventListener('visibilitychange',()=>{ if(!document.hidden) dateRollCheck(); }); }catch(_){}
 function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function parseYmd(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);}
 function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
@@ -36053,8 +36074,13 @@ PAGES.mem_bookings=async function(){
   const _nowMin3=(new Date()).getHours()*60+(new Date()).getMinutes();
   const _notPast=b=>(b.date>_mToday || (b.date===_mToday && timeToMin(b.start_time||'0:0')+(Number(b.duration)||60)>_nowMin3));
   const _upcoming=mine.filter(b=>b.status==='booked' && _notPast(b));
-  /* 任務卡另含「今日已簽到」的課（課程結束前）：自簽完卡片不消失、改顯示勾章（2026-07-20） */
-  const _dotList=mine.filter(b=>(b.status==='booked'||(b.status==='checked_in'&&b.date===_mToday)) && _notPast(b));
+  /* 任務卡另含「今日已簽到」的課：自簽完卡片不消失、改顯示勾章（2026-07-20）。
+     2026-08-06（施佳靜案例）：今天的課改成「整天都留著」，不再因為時間過了就消失 ——
+     原本用 _notPast（結束時間過了就不算），遲到、漏簽、或手機時區差一點的人
+     就會在需要簽到的當下找不到卡片。未來的課仍照舊。 */
+  const _dotList=mine.filter(b=>
+    (b.status==='booked' && (b.date===_mToday || _notPast(b))) ||
+    (b.status==='checked_in' && b.date===_mToday));
   const _schedN=_upcoming.length;
   const _tkMine=(mtickets||[]).filter(t=>tkUsableBy(t,SESSION.id)   // 含共享票（2026-07-26）
     && (!t.status||t.status==='usable') && (Number(t.sessions_remaining)||0)>0
