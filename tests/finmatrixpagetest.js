@@ -10,11 +10,22 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
-console.log('① 導覽列入口');
-ok('★ 管理員 → 財務底下多一個「月報表」',
-   /\{grp:'財務', label:'月報表', page:'fin_matrix'\},/.test(src));
-ok('★ 只有管理員看得到（g_admin 群組沒有 fd:true，櫃檯看不到）',
-   /\{key:'g_admin', icon:'🛠️', label:'管理員', sub:\[/.test(src));
+console.log('① 導覽列入口（2026-08-06 二修：改成頂欄自己的群組，放在「班表」左邊）');
+ok('★ 頂欄多一個「月報表」群組，只掛一個頁面',
+   /\{key:'g_report', icon:'📊', label:'月報表', sub:\[\n\s*\{label:'月報表', page:'fin_matrix'\},\n\s*\]\},/.test(src));
+ok('★ 排在「班表」左邊',
+   src.indexOf("{key:'g_report'") < src.indexOf("{key:'g_supervisor'"));
+ok('★ 已從「管理員 → 財務」底下移走（不會兩個地方都出現）',
+   !/\{grp:'財務', label:'月報表', page:'fin_matrix'\}/.test(src));
+ok('★ 目前只有管理員看得到（群組與子項目都沒有 fd:true）',
+   /\{key:'g_report', icon:'📊', label:'月報表', sub:\[/.test(src)
+   && !/\{key:'g_report'[^\]]*fd:true/.test(src));
+ok('　　之後要開放櫃檯的做法寫在程式裡',
+   /之後要開放櫃檯時：本群組與子項目各加一個 fd:true/.test(src));
+ok('　　單一子項目 → 不會多長一層左側次選單（點頂欄直接進頁）',
+   /const realSubs=visibleSubs\.filter\(s=>s\.page \|\| s\.soon\);\n\s*if\(realSubs\.length<=1\) return '';/.test(src));
+ok('　　手機「更多」也有這個群組的標籤',
+   /g_admin:'管理員',g_report:'月報表',g_supervisor:'班表'/.test(src));
 ok('★ 經營報表的分頁列不再有「月報表」',
    !/\{key:'matrix',\s*label:'月報表'\}/.test(src)
    && /\{key:'today',\s*label:'今天'\},/.test(src)
