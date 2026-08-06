@@ -52,6 +52,33 @@ console.log('① 票券夾會說出「哪幾筆是猜的」');
   ok('　　畫面歸屬不變（推算仍照常蓋戳記）', (W.ticketOf('b0812')||{}).id==='TK-EXP');
 }
 
+console.log('\n①b 非團課也讀帳本（2026-08-06 比對發現 218 筆會變的成因）');
+{
+  /* 自主訓練／教練課的舊匯入預約沒有 bookings.ticket_id，歸屬只存在 ticket_logs，
+     但原本只有團課會讀帳本 → 固化寫進去也沒人讀，關掉推算那些戳記就會消失。 */
+  const ME='M-SELF', TT='tt-self';
+  const TYPES={[TT]:{id:TT,name:'自主訓練',category:'自主訓練'}};
+  const TKS=[{id:'TK-S',member_id:ME,ticket_type_id:TT,plan_name:'自主訓練點數',source:'purchase',
+    purchase_date:'2026-06-01',start_date:'2026-06-01',sessions_total:2,sessions_remaining:0,status:'usable'}];
+  const S=(id,date,o)=>Object.assign({id,date,start_time:'17:00',status:'checked_in',category:'自主訓練',
+    ticket_type_id:TT,member_id:ME,member_ids:[],attendance:{},duration:60,
+    created_at:'2026-06-01T00:00:00+00:00'},o||{});
+  const BKS=[S('bA','2026-06-10'),S('bB','2026-06-17'),S('bC','2026-06-24')];
+  const LOGS=[
+    {id:'x1',ticket_id:'TK-S',booking_id:'bA',action:'deduct',delta:0},   // 固化寫的補連結
+    {id:'x2',ticket_id:'TK-S',booking_id:'bB',action:'deduct',delta:-1},  // 真的扣過
+    {id:'x3',ticket_id:'TK-S',booking_id:'bC',action:'deduct',delta:-1},  // 扣了又退 → 不算
+    {id:'x4',ticket_id:'TK-S',booking_id:'bC',action:'refund',delta:1},
+  ];
+  const W=box.buildWallet(ME,{tickets:TKS,bookings:BKS,logs:LOGS,typeMap:TYPES});
+  eq('★ 補連結（delta 0）也讀得到 → bA 掛在 TK-S', (W.ticketOf('bA')||{}).id, 'TK-S');
+  eq('★ 真的扣過的照樣讀得到 → bB 掛在 TK-S', (W.ticketOf('bB')||{}).id, 'TK-S');
+  ok('★ 扣了又退的不算（bC 不掛在這張票上，除非推算另外決定）',
+     (W.inferred||[]).some(x=>x.bid==='bC') || (W.ticketOf('bC')||{}).id!=='TK-S');
+  ok('★ 這兩堂不再需要推算（inferred 裡沒有它們）',
+     !(W.inferred||[]).some(x=>x.bid==='bA'||x.bid==='bB'));
+}
+
 console.log('\n② 固化工具');
 ok('★ 只有管理員能執行', /if\(SESSION\.role!=='admin'\)\{ showToast\('只有管理員可以執行'\); return; \}/.test(src));
 ok('★ 寫的是「連結」不是扣款（delta 0，不動餘額）',
@@ -94,6 +121,9 @@ ok('★ 有差異就逐筆列出來（會變成需補票的特別標紅）',
    && /會變成「需補票」（原本靠推算掛在/.test(src));
 ok('　　入口在票券管理頁、只給管理員',
    /onclick="compareInferOff\(\)" title="關掉推算之前先比對/.test(src));
+ok('★ 非團課的帳本歸屬有讀（①b）',
+   /const tid=ks\.find\(x=>m\[x\]\.net>0\) \|\| ks\.find\(x=>m\[x\]\.link && m\[x\]\.net>=0\);/.test(src)
+   && /if\(byBooking\[b\.id\] \|\| bkIsGroup\(b\)\) return;      \/\/ 團課逐名額，走 ②/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

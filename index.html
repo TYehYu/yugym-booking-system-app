@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.0052';
-const APP_VERSION_LABEL='v260807.0052';
+const APP_VERSION = '260807.0118';
+const APP_VERSION_LABEL='v260807.0118';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12329,6 +12329,27 @@ function buildWallet(memberId, ctx){
 
   // ① 直連（單人課預約當下就綁）
   live.forEach(b=>{ if(b.ticket_id && has[b.ticket_id]) put(b.ticket_id,b); });
+  /* ①b 帳本上的歸屬（2026-08-06）——
+     非團課的舊匯入預約沒有 bookings.ticket_id，歸屬只存在 ticket_logs；
+     但原本只有團課會讀帳本（②走 grpTicketAlloc），所以這些課一直只能靠推算。
+     固化把 216 筆非團課的歸屬寫進帳本之後也沒人讀（比對顯示 218 筆會變就是這個）。
+     改成一起讀：帳本上還掛著扣課的（net>0），或有補連結（delta 0）且沒被退過的，
+     就是這堂課的票 —— 事實優先於推算。 */
+  const _bkTk={};
+  (c.logs||[]).forEach(l=>{
+    if(!l || !l.booking_id || !l.ticket_id || !has[l.ticket_id]) return;
+    const m=(_bkTk[l.booking_id]=_bkTk[l.booking_id]||{});
+    const e=(m[l.ticket_id]=m[l.ticket_id]||{net:0,link:0});
+    if(l.action==='deduct'){ e.net++; if(Number(l.delta)===0) e.link=1; }
+    else if(l.action==='refund') e.net--;
+  });
+  live.forEach(b=>{
+    if(byBooking[b.id] || bkIsGroup(b)) return;      // 團課逐名額，走 ②
+    const m=_bkTk[b.id]; if(!m) return;
+    const ks=Object.keys(m);
+    const tid=ks.find(x=>m[x].net>0) || ks.find(x=>m[x].link && m[x].net>=0);
+    if(tid) put(tid,b);
+  });
   // ② 團課的扣課紀錄
   const ga=grpTicketAlloc(mine, live, c.logs||[], memberId, ()=>true);
   Object.keys(ga.byTicket).forEach(tid=>(ga.byTicket[tid]||[]).forEach(b=>putGrp(tid,b)));
