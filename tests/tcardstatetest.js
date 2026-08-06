@@ -59,12 +59,18 @@ ok('★ 逾時未簽：金框', /\.tcard-std\.tcard-miss \.tcard-body\{border-co
    改成只留沿邊框跑的尾巴，前端加白光當頭（conic 掃角度 × 方框環狀遮罩＝沿著邊緣走）。 */
 /* 2026-08-06 三修（使用者回報「還在轉圈圈」）：transform:rotate 轉的是方框本身 →
    看起來是方塊在轉。改成框不動、只動 conic 的起始角度（@property 才能對角度做動畫）。 */
+/* 2026-08-06 四修（使用者問「圓形的頭沒有顯示還是沒有設定」）：補一顆沿邊框行進的圓頭
+   （offset-path），不支援的瀏覽器維持尾巴前端的白光。 */
+ok('★ 方形卡的流星圓頭沿邊框跑（offset-path，含不支援時的退路）',
+   /@supports \(offset-path: border-box\)\{/.test(src)
+   && /offset-path:border-box; offset-rotate:0deg;/.test(src)
+   && /@keyframes tcardHead\{ from\{offset-distance:0%;\} to\{offset-distance:100%;\} \}/.test(src));
 ok('★ 上課中：框不動、只轉漸層角度 → 亮點沿著方形邊緣跑',
    /@property --tcAng\{ syntax:'<angle>'; inherits:false; initial-value:0deg; \}/.test(src)
    && /background:conic-gradient\(from var\(--tcAng\),/.test(src)
    && /@keyframes tcardComet\{ from\{--tcAng:0deg;\} to\{--tcAng:360deg;\} \}/.test(src)
    && !/@keyframes tcardComet\{ from\{transform:rotate/.test(src)
-   && !/\.tcard-std\.tcard-live::after\{/.test(src));
+   && /animation:tcardComet 3\.2s linear infinite;\}/.test(src));
 ok('　　只有 CSS，沒有多讀資料（沒有新的 dbGetAll）',
    !/tcard-live[\s\S]{0,200}dbGetAll/.test(src));
 
