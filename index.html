@@ -3615,9 +3615,10 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
           mask:radial-gradient(closest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
   animation:mtkCurComet 1.6s linear infinite;}
 /* 流星頭的圓點（2026-08-06 使用者指示：「新增流星前面的圓點」）——
-   與尾巴同一組 keyframes、同秒數 → 永遠對齊在尾巴前端。
-   ::after 若已被 mtk-self 的金點占用（會員自行預約）就讓給它，只留尾巴。 */
-.mtk.mtk-cur:not(.mtk-self)::after{content:'';position:absolute;inset:-3px;border-radius:50%;pointer-events:none;
+   2026-08-06 二修（使用者回報：自主訓練的流星沒有前端圓點）：原本畫在 ::after，
+   但那一層已被 mtk-self 的金點（會員自行預約）占用，自主訓練幾乎都是會員自約 → 永遠看不到。
+   改成獨立元素 <i class="mtk-comet">，與金點並存；動畫與尾巴同一組 keyframes、同秒數。 */
+.mtk .mtk-comet{position:absolute;inset:-3px;border-radius:50%;pointer-events:none;
   background:radial-gradient(circle 5px at 50% 0,
     #ffffff 0 34%, #d8fff0 46%, rgba(47,156,116,.95) 66%, rgba(47,156,116,0) 100%);
   animation:mtkCurComet 1.6s linear infinite;}
@@ -4440,12 +4441,10 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
    全部只有 CSS：不多讀任何資料，只有「上課中」那一張在動（同一時間通常 0~2 張）。 */
 .tcard-live{filter:drop-shadow(0 0 6px rgba(31,111,84,.55)) drop-shadow(0 1px 2px rgba(60,50,38,.15));}
 .tcard-done{opacity:1;}   /* 2026-07-21 使用者指示：簽到完不淡化課卡（「簽」章已足以辨識） */
-/* 已簽到／完成：實綠框＋霧化外暈（2026-08-06 三修：光暈再放大，並解決被左側教練欄蓋住）——
-   教練欄是 sticky（z-index:4，白底），光暈畫在卡片上但層級較低就被切掉；
-   有光暈的卡拉到 z-index:5 蓋過去，卡片本體不會位移。 */
-.tcard-std.tcard-done .tcard-body{border:2px solid var(--green,#1f6f54);
-  box-shadow:0 0 0 3px rgba(31,111,84,.32), 0 0 24px 8px rgba(31,111,84,.38);}
-.tcard-std.tcard-done,.tcard-std.tcard-live,.tcard-std.tcard-miss{z-index:5;}
+/* 完成課卡的霧化綠框已移除（2026-08-06 使用者指示）——「簽」章本來就標得出來，
+   綠光暈在一排卡片裡反而吵。上課中（流星）與逾時未簽（金框）保留。
+   有狀態框的卡仍要疊在左側 sticky 教練欄（z-index:4）之上，否則框會被切掉。 */
+.tcard-std.tcard-live,.tcard-std.tcard-miss{z-index:5;}
 /* 逾時未簽到：金框（提醒補簽；紅>金>綠 的「要留意」色階） */
 .tcard-std.tcard-miss .tcard-body{border-color:var(--gold,#B48A56);
   box-shadow:0 0 0 2px rgba(180,138,86,.18);}
@@ -7455,8 +7454,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1205';
-const APP_VERSION_LABEL='v260806.1205';
+const APP_VERSION = '260806.1225';
+const APP_VERSION_LABEL='v260806.1225';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37752,7 +37751,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
       const cur=_isCur(b)?' mtk-cur':'';
       const slf=selfCls(b);
       const shc=((b&&b._shBy)?' mtk-sh':'')+_ownCls(b);
-      s+=`<span class="mtk mtk-used${cur}${slf}${shc}" style="--tk-acc:${v.accent};" title="已完成${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${b?md(b):'✓'}</span>`;
+      s+=`<span class="mtk mtk-used${cur}${slf}${shc}" style="--tk-acc:${v.accent};" title="已完成${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${b?md(b):'✓'}${cur?'<i class="mtk-comet"></i>':''}</span>`;
     }
     else if(bi<booked.length){
       const b=booked[bi++];
@@ -37763,7 +37762,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
       const vlb=(typeof selfVenueLabel==='function'&&bkIsSelf(b))?selfVenueLabel(b):'';
       const vch=({'跑步機':'跑','教室':'教'})[vlb]||'';
       const shc2=((b&&b._shBy)?' mtk-sh':'')+_ownCls(b);
-      s+=`<span class="mtk mtk-booked${cur}${slf}${shc2}" style="--tk-acc:${v.accent};" title="已預約 ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}${b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}</span>`;
+      s+=`<span class="mtk mtk-booked${cur}${slf}${shc2}" style="--tk-acc:${v.accent};" title="已預約 ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}${b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}${cur?'<i class="mtk-comet"></i>':''}</span>`;
     }
     else s+=`<span class="mtk mtk-free" style="--tk-acc:${v.accent};" title="未使用"></span>`;
   }
@@ -37776,7 +37775,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
     const slf=selfCls(b);
     const vlb=(typeof selfVenueLabel==='function'&&bkIsSelf(b))?selfVenueLabel(b):'';
     const vch=({'跑步機':'跑','教室':'教'})[vlb]||'';
-    s+=`<span class="mtk mtk-over${cur}${slf}" title="已預約 ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}　·　此票券已無堂數可對應，需補票${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}</span>`;
+    s+=`<span class="mtk mtk-over${cur}${slf}" title="已預約 ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}　·　此票券已無堂數可對應，需補票${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}${cur?'<i class="mtk-comet"></i>':''}</span>`;
   }
   return s||`<span class="mtk mtk-free" style="--tk-acc:${v.accent};"></span>`;
 }

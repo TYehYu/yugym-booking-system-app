@@ -35,14 +35,12 @@ console.log('\n② 樣式接線');
 ok('★ 卡片帶上 tcard-miss（其餘旗標不變）',
    /\$\{_miss\?' tcard-miss':''\}/.test(src)
    && /const _miss = !canceled && !done && !live && nowMin>=mn\+\(Number\(b\.duration\)\|\|60\);/.test(src));
-/* 2026-08-06 二修（使用者指示）：霧化框要更明顯 → 2px 實框＋更濃更大的光暈 */
-ok('★ 完成／已簽到：加粗綠框＋明顯霧化外暈',
-   /\.tcard-std\.tcard-done \.tcard-body\{border:2px solid var\(--green,#1f6f54\);/.test(src)
-   && /box-shadow:0 0 0 3px rgba\(31,111,84,\.32\), 0 0 24px 8px rgba\(31,111,84,\.38\);\}/.test(src));
-/* 2026-08-06 三修（使用者回報：邱怡頻的卡被左側教練欄蓋住）——
-   教練欄 sticky z-index:4，有狀態框的卡要疊上去；容器也要留出光暈的空間 */
-ok('★ 有狀態框的卡疊在教練欄之上（不被切掉）',
-   /\.tcard-std\.tcard-done,\.tcard-std\.tcard-live,\.tcard-std\.tcard-miss\{z-index:5;\}/.test(src)
+/* 2026-08-06 四修（使用者指示）：完成課卡的霧化綠框移除（「簽」章已足夠、一排看起來太吵） */
+ok('★ 完成課卡不再加綠框光暈',
+   !/\.tcard-std\.tcard-done \.tcard-body\{/.test(src)
+   && /完成課卡的霧化綠框已移除/.test(src));
+ok('★ 上課中／逾時未簽仍疊在左側教練欄之上（框不被切掉）',
+   /\.tcard-std\.tcard-live,\.tcard-std\.tcard-miss\{z-index:5;\}/.test(src)
    && /\.tcard-coach\{width:118px;flex-shrink:0;padding-top:4px;position:sticky;left:0;z-index:4;/.test(src));
 ok('　　卡片容器留出光暈空間（padding 10 ／ margin -10）',
    /\.tcard-list\{padding:10px;margin:-10px;\}/.test(src));

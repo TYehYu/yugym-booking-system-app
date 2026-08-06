@@ -50,7 +50,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
   console.log('無綁票券時的推估卡：');
   chk('有產生票券卡', r.tkCircleHtml.length>0);
   chk('票券夾蓋到了這一堂（不是退回挑票法）', !!r._wSlotD);
-  chk('圓點數 = 票券總堂數 4', (r.tkCircleHtml.match(/class="mtk/g)||[]).length===4);
+  chk('圓點數 = 票券總堂數 4', (r.tkCircleHtml.match(/class="mtk mtk-/g)||[]).length===4);
   chk('已用 3 堂取最近的 6/16', r.tkCircleHtml.includes('>6/16<'));
   chk('已用 3 堂取最近的 7/7', r.tkCircleHtml.includes('>7/7<'));
   chk('已用 3 堂取最近的 7/21', r.tkCircleHtml.includes('>7/21<'));
@@ -79,7 +79,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
   const bhist=[Object.assign(BK('p1','2026-07-01','completed'),{ticket_id:'t1'}),bound];
   r=await render({b:bound,tickets:[T({id:'t1'})],bookings:bhist,tk:T({id:'t1'})});
   chk('本堂直接綁在這張票上（票券夾的直連戳記）', !!r._wSlotD);
-  chk('仍正常顯示圓點', (r.tkCircleHtml.match(/class="mtk/g)||[]).length===4);
+  chk('仍正常顯示圓點', (r.tkCircleHtml.match(/class="mtk mtk-/g)||[]).length===4);
 
   console.log('邊界：');
   r=await render({b:cur,tickets:[],bookings:hist});
@@ -94,7 +94,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     const bks=ds.map((d,i)=>BK('a'+i,d,'checked_in'));
     const cur=bks[bks.length-1];
     const r=await render({b:cur,tickets:[T({id:'t',sessions_total:4,sessions_remaining:4})],bookings:bks});
-    chk('圓點數 = 4', (r.tkCircleHtml.match(/class="mtk/g)||[]).length===4);
+    chk('圓點數 = 4', (r.tkCircleHtml.match(/class="mtk mtk-/g)||[]).length===4);
     chk('不再整排空心', !/mtk-free/.test(r.tkCircleHtml));
     chk('本堂 7/22 有出現且有日期', r.tkCircleHtml.includes('>7/22<'));
     chk('本堂標金框', /mtk-cur[^>]*>7\/22</.test(r.tkCircleHtml));
@@ -112,7 +112,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
        帳面已用 12（12−0），所以 12 格全滿；放不下的 7/27 那一顆用紅虛線圈標「需補票」，
        不再默默消失（那正是 7/30 加紅圈的用意）。 */
     chk('圓點數 = 12 格全滿 ＋ 兩個 7/27 名額放不下的紅圈',
-      (r.tkCircleHtml.match(/class="mtk/g)||[]).length===14
+      (r.tkCircleHtml.match(/class="mtk mtk-/g)||[]).length===14
       && (r.tkCircleHtml.match(/mtk-used/g)||[]).length===12
       && (r.tkCircleHtml.match(/mtk-over/g)||[]).length===2);
     chk('★ 本堂 7/27 出現在圓點裡', r.tkCircleHtml.includes('>7/27<'));
@@ -130,7 +130,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
               '2026-07-13','2026-07-13','2026-07-20','2026-07-20'].map((d,i)=>BK('L'+i,d,'completed'));
     const bo=[BK('m1','2026-07-27','booked'),BK('m2','2026-07-27','booked'),BK('m3','2026-08-03','booked')];
     const r=await render({b:bo[1],tickets:[T({id:'t',sessions_total:10,sessions_remaining:3})],bookings:[...at,...bo]});
-    chk('圓點數 = 10', (r.tkCircleHtml.match(/class="mtk/g)||[]).length===10);
+    chk('圓點數 = 10', (r.tkCircleHtml.match(/class="mtk mtk-/g)||[]).length===10);
     chk('★ 8/3 納入視窗（票面已用 7＜視窗內 8，往後滑 1）', r.tkCircleHtml.includes('>8/3<'));
     chk('本堂 7/27 第 9 / 10 堂（原本誤標 10/10）', r.tkCircleHtml.includes('第 <b>9</b> / 10 堂'));
     chk('已上課恰 7 堂實心', (r.tkCircleHtml.match(/mtk-used/g)||[]).length===7);
@@ -144,7 +144,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     // prod 清單只有 7/08 已上＋7/29 預約 → 應顯示 3 實心＋本堂第 4/4，不是第 2/4
     const bks=[BK('L1','2026-07-08','completed'),BK('L2','2026-07-29','booked')];
     const r=await render({b:bks[1],tickets:[T({id:'t',sessions_total:4,sessions_remaining:1})],bookings:bks});
-    chk('圓點 4 個', (r.tkCircleHtml.match(/class="mtk/g)||[]).length===4);
+    chk('圓點 4 個', (r.tkCircleHtml.match(/class="mtk mtk-/g)||[]).length===4);
     chk('★ 3 顆實心（7/8 有日期＋2 顆 ✓）', (r.tkCircleHtml.match(/mtk-used/g)||[]).length===3);
     chk('★ 本堂第 4 / 4 堂（原本誤標 2/4）', r.tkCircleHtml.includes('第 <b>4</b> / 4 堂'));
     chk('本堂 7/29 空心＋金框', /mtk-booked mtk-cur[^>]*>7\/29</.test(r.tkCircleHtml));
@@ -155,7 +155,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     const bks=[BK('p1','2026-07-01','completed'),BK('p2','2026-07-08','completed'),
                BK('f1','2026-07-29','booked'),BK('f2','2026-08-05','booked')];
     const r=await render({b:bks[2],tickets:[T({id:'t',sessions_total:4,sessions_remaining:2})],bookings:bks,thisId:'f1'});
-    chk('圓點 4 個', (r.tkCircleHtml.match(/class="mtk/g)||[]).length===4);
+    chk('圓點 4 個', (r.tkCircleHtml.match(/class="mtk mtk-/g)||[]).length===4);
     chk('已上的 7/1、7/8 實心', /mtk-used[^>]*>7\/1</.test(r.tkCircleHtml) && /mtk-used[^>]*>7\/8</.test(r.tkCircleHtml));
     chk('本堂 7/29 為已預約且標金框', /mtk-booked mtk-cur[^>]*>7\/29</.test(r.tkCircleHtml));
     chk('後續 8/5 也顯示', r.tkCircleHtml.includes('>8/5<'));

@@ -58,7 +58,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     .map((d,i)=>BK('h'+i,d,'checked_in',['M']));
   let html=await render({ids:['M'],tickets:[...many,live],bookings:[...hist,BK('B-NOW','2026-07-27','booked',['M'])],names:{M:'鍾明潔'}});
   console.log('挑「目前在用」的那張票：');
-  chk('圓點數 = 該票總堂數 4', (html.match(/class="mtk/g)||[]).length===4);
+  chk('圓點數 = 該票總堂數 4', (html.match(/class="mtk mtk-/g)||[]).length===4);
   chk('★ 舊票還有容量時，舊出席歸舊票（與票券頁同一套分配）',
     !html.includes('>7/17<') && !html.includes('>7/25<'));
   chk('不會取到最早的 5/9', !html.includes('>5/9<'));
@@ -75,7 +75,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     bkG[0].id='B-NOW';
     const lg=bkG.map(x=>({ticket_id:'t4w',booking_id:x.id,action:'deduct'}));
     let h2=await render({ids:['M'],tickets:[t4w,tmk],bookings:bkG,logs:lg,names:{M:'陳暐濰'},thisDate:'2026-08-06'});
-    chk('★ 顯示扣課的那張四週票（4 格），不是剩 1 堂的補課券', (h2.match(/class="mtk/g)||[]).length===4);
+    chk('★ 顯示扣課的那張四週票（4 格），不是剩 1 堂的補課券', (h2.match(/class="mtk mtk-/g)||[]).length===4);
     chk('★ 本堂 8/6 有圓點且標金框', /mtk-booked mtk-cur[^>]*>8\/6</.test(h2));
     chk('★ 四堂日期都在（沒有多出來的空圈）',
       ['8/6','8/13','8/20','8/27'].every(d=>h2.includes('>'+d+'<')) && !/mtk-free/.test(h2));
@@ -85,7 +85,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
        所以這裡推算到的是那張四週票，四堂都對得上 —— 比原本挑到剩 1 堂的補課券合理。 */
     h2=await render({ids:['M'],tickets:[t4w,tmk],bookings:bkG,logs:[],names:{M:'陳暐濰'},thisDate:'2026-08-06'});
     chk('　　沒有扣課紀錄時推算到那張四週票（補課券不參與推算）',
-      (h2.match(/class="mtk/g)||[]).length===4 && h2.includes('>8/6<'));
+      (h2.match(/class="mtk mtk-/g)||[]).length===4 && h2.includes('>8/6<'));
   }
 
   console.log('不再顯示文字標籤：');
@@ -97,7 +97,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
   html=await render({ids:['M'],tickets:[T({id:'a',member_id:'M',sessions_total:2,sessions_remaining:0,start_date:'2026-05-01'}),
     T({id:'b',member_id:'M',sessions_total:4,sessions_remaining:0,start_date:'2026-07-01'})],
     bookings:hist.map(x=>({...x,member_ids:['M']})),names:{M:'許建助'}});
-  chk('取最近一張（4 格）', (html.match(/class="mtk/g)||[]).length===4);
+  chk('取最近一張（4 格）', (html.match(/class="mtk mtk-/g)||[]).length===4);
   /* 2026-07-30 二修：改用 allocBookingsToTickets 後，5 月的課歸 5/01 那張（2 堂）、
      7 月的兩堂歸 7/01 這張。
      2026-08-01 三修：改由票券夾供應之後，已用堂數不再只數清單裡的出席筆數，
@@ -138,7 +138,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     /* 兩列 × 每列兩顆（這張票共 2 堂，兩個位子各扣一堂）＝ 4 顆 */
     chk('★ 兩列都有圓形卡（2026-07-31）', (html.match(/mck-dots2/g)||[]).length===2);
     chk('每列兩個圓點都顯示 7/26', (html.match(/>7\/26</g)||[]).length===4);
-    chk('圓點總數 = 2 顆 × 2 列', (html.match(/class="mtk/g)||[]).length===4);
+    chk('圓點總數 = 2 顆 × 2 列', (html.match(/class="mtk mtk-/g)||[]).length===4);
     /* 2026-08-03 使用者指示「第一名額跟第二名額圓課卡要分開來圈」：
        原本 4 顆全圈（兩列各兩顆）；現在每列只圈自己的那顆 → 共 2。 */
     chk('本堂金框每列各一顆（分開來圈）', (html.match(/mtk-cur/g)||[]).length===2);
