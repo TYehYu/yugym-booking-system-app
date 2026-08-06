@@ -15,8 +15,9 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
 console.log('① 儲值完成後就地重畫會員明細');
+/* 2026-08-06：收尾之後多一步「問要不要補扣未付款的未來課」，所以不再是函式的最後一行 */
 ok('★ submitGrant 完成後先試 ppRefreshIfOpen，明細沒開才 navTo',
-   /else if\(!\(await ppRefreshIfOpen\(member_id\)\)\) navTo\(CUR_PAGE\);\n\}/.test(src));
+   /else if\(!\(await ppRefreshIfOpen\(member_id\)\)\) navTo\(CUR_PAGE\);/.test(src));
 ok('　　原因寫在程式裡（覆層不會被 navTo 重畫）',
    /明細是蓋在頁面上的覆層，navTo 只重畫底下那頁，覆層不會動；/.test(src));
 ok('　　舊的「會員詳情」路徑保留（_grantFromDetail 那條）',

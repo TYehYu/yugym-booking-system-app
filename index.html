@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.2138';
-const APP_VERSION_LABEL='v260806.2138';
+const APP_VERSION = '260806.2206';
+const APP_VERSION_LABEL='v260806.2206';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29439,6 +29439,65 @@ async function revRowGo(mid){
 }
 /* 票券分頁「共享設定」（2026-07-28 使用者回報：統一版會員資料看不到共享功能）——
    重用 openTicketShare，儲存/取消後返回本彈窗的票券分頁而非舊版明細 */
+/* ── 已排但沒扣到票的未來課（2026-08-06 稽核延伸）──────────────────
+   成因：排課當下沒有可用票券（櫃檯會看到「有名額沒有扣到票」的紅色警告），
+   之後會員補買了票，卻沒有人回頭把那幾堂補扣。帳上那幾堂永遠是免費的，
+   票券則空著格子，票券卡靠先進先出推算把它們畫上去 —— 看起來對、帳其實不對。
+   ⚠ 不自動扣：有些名額本來就是教練負責的免費名額。列出來讓櫃檯自己決定。 */
+async function unpaidFutureBookings(memberId, tk){
+  const [bks,logs,tks]=await Promise.all([dbGetAll('bookings'),
+    dbGetAll('ticket_logs').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[])]);
+  const mineTk=new Set((tks||[]).filter(t=>String(t.member_id)===String(memberId)).map(t=>t.id));
+  const net={};                       // 這位會員在某一堂課上的淨扣課
+  (logs||[]).forEach(l=>{ if(!l||!l.booking_id||!mineTk.has(l.ticket_id)) return;
+    const d=l.action==='deduct'?1:(l.action==='refund'?-1:0); if(!d) return;
+    net[l.booking_id]=(net[l.booking_id]||0)+d; });
+  const today=ymd(TODAY);
+  const cat=ticketCategoryOf(tk);
+  return (bks||[]).filter(b=> b && b.status==='booked' && String(b.date||'')>=today
+      && !b.ticket_id && !b.pending_contract && bkHasMember(b,memberId)
+      && (b.category===cat || categoryOfTypeId(b.ticket_type_id)===cat)
+      && !((net[b.id]||0)>0))
+    .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
+}
+async function askChargeUnpaid(memberId, ticketId){
+  const tk=await dbGet('member_tickets',ticketId); if(!tk) return;
+  const left=Number(tk.sessions_remaining)||0; if(left<=0) return;
+  const list=(await unpaidFutureBookings(memberId,tk)).slice(0,left);
+  if(!list.length) return;
+  window._chgUnpaid={mid:memberId, tid:ticketId, ids:list.map(b=>b.id)};
+  showModal(`<div class="modal-title">這幾堂還沒扣到票</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-bottom:10px;">
+      這位會員有 <b>${list.length}</b> 堂已排好、但當初沒有票可扣的課。要用剛買的
+      <b>${tk.plan_name||'票券'}</b>（剩 ${left} 堂）補扣嗎？<br>
+      <span style="color:var(--t3);">教練負責的免費名額請選「先不補扣」。</span></div>
+    <div style="background:var(--card2);border-radius:9px;padding:8px 12px;font-size:13px;line-height:2;">
+      ${list.map(b=>`<div>${String(b.date).slice(5).replace('-','/')} ${String(b.start_time||'').slice(0,5)}　${b.category||''}</div>`).join('')}
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">先不補扣</button>
+      <button class="btn btn-red" onclick="doChargeUnpaid()">確認補扣 ${list.length} 堂</button></div>`);
+}
+async function doChargeUnpaid(){
+  const p=window._chgUnpaid; if(!p) return;
+  let n=0;
+  try{
+    for(const bid of p.ids){
+      const tk=await dbGet('member_tickets',p.tid);
+      if(!tk || !(Number(tk.sessions_remaining)>0)) break;
+      const b=await dbGet('bookings',bid);
+      if(!b || b.status!=='booked') continue;
+      if(!(await deductTicket(tk,bid,SESSION.id))) break;
+      /* 單人課要把票綁上去（團課不寫 ticket_id，帳留在 ticket_logs） */
+      if(!bkIsGroup(b) && !b.ticket_id){ b.ticket_id=tk.id;
+        b.ticket_type_id=tk.ticket_type_id||b.ticket_type_id; await dbPut('bookings',b); }
+      n++;
+    }
+  }catch(e){ console.error('補扣失敗',e); }
+  window._chgUnpaid=null;
+  dbCacheClear(['bookings','member_tickets','ticket_logs']);
+  closeModal(); showToast(n?`已補扣 ${n} 堂`:'沒有補扣任何一堂');
+  try{ if(typeof PP!=='undefined'&&PP.id){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }catch(_){ navTo(CUR_PAGE); }
+}
 function ppShareTk(tid){ window._tkShareFromPP=true; openTicketShare(tid, PP.id); }
 /* 票券預設使用人（2026-08-04 使用者指示：「會員票券也新增一項家庭成員，
    該票券預設由該成員使用，方便預約」）——設定存 member_tickets.family_user。
@@ -33313,12 +33372,17 @@ async function submitGrant(){
   window._ctBody=null; window._ctSignature=null;   // 一次性，避免下一筆沿用
   // 新朋友購買「私人教練」課程 → 自動升級為「會員」
   closeModal();showToast('票券已發放：'+plan.name+(voucherN?`（折抵券×${voucherN}，實收 $${paidAmount.toLocaleString()}）`:''));
-  if(_grantFromDetail){_grantFromDetail=false;openMemberDetail(member_id);}
   /* 會員明細開著時就地重畫（2026-08-03 使用者回報：「按了＋儲值加了票券，
      但視窗沒有即時更新，以為沒有儲進去」）——
      明細是蓋在頁面上的覆層，navTo 只重畫底下那頁，覆層不會動；
      新票要等關掉重開才看得到，看起來就像沒存進去。 */
+  if(_grantFromDetail){_grantFromDetail=false;openMemberDetail(member_id);}
   else if(!(await ppRefreshIfOpen(member_id))) navTo(CUR_PAGE);
+  /* 賣完票就問：這位會員有沒有「已排但沒扣到票」的未來課（2026-08-06 胡珺涵案例）——
+     她 8/01 排了 8/13、8/27 時手上沒票（系統當場有警告），今天買了四週票卻沒有人回頭補扣，
+     於是兩堂課沒付費、票券空著兩格，票券卡只好靠推算把它們畫上去（看起來對、帳其實不對）。
+     ⚠ 放在畫面收尾之後：它會再開一個確認視窗，先讓前面的關窗/重畫跑完。 */
+  try{ await askChargeUnpaid(member_id, t.id); }catch(e){ console.error('補扣未付款預約失敗',e); }
 }
 // ── 分期：開通下一期（收款即解鎖）──
 /* ══ 票券共享設定（2026-07-26 使用者指示）════════════════════════════════
