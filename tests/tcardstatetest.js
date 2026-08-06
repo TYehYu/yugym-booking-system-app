@@ -35,9 +35,10 @@ console.log('\n② 樣式接線');
 ok('★ 卡片帶上 tcard-miss（其餘旗標不變）',
    /\$\{_miss\?' tcard-miss':''\}/.test(src)
    && /const _miss = !canceled && !done && !live && nowMin>=mn\+\(Number\(b\.duration\)\|\|60\);/.test(src));
-ok('★ 完成／已簽到：綠框＋霧化外暈',
-   /\.tcard-std\.tcard-done \.tcard-body\{border-color:var\(--green,#1f6f54\);/.test(src)
-   && /box-shadow:0 0 0 2px rgba\(31,111,84,\.16\), 0 0 10px 2px rgba\(31,111,84,\.18\);\}/.test(src));
+/* 2026-08-06 二修（使用者指示）：霧化框要更明顯 → 2px 實框＋更濃更大的光暈 */
+ok('★ 完成／已簽到：加粗綠框＋明顯霧化外暈',
+   /\.tcard-std\.tcard-done \.tcard-body\{border:2px solid var\(--green,#1f6f54\);/.test(src)
+   && /box-shadow:0 0 0 3px rgba\(31,111,84,\.30\), 0 0 16px 5px rgba\(31,111,84,\.34\);\}/.test(src));
 ok('★ 逾時未簽：金框', /\.tcard-std\.tcard-miss \.tcard-body\{border-color:var\(--gold,#B48A56\);/.test(src));
 ok('★ 上課中：流星尾巴（conic＋遮罩成細框）＋頭部圓點，兩層同一組動畫',
    /\.tcard-std\.tcard-live::before,\.tcard-std\.tcard-live::after\{content:'';position:absolute;inset:-2px;/.test(src)
