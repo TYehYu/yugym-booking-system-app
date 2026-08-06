@@ -47,10 +47,14 @@ ok('★ 上課中／逾時未簽仍疊在左側教練欄之上（框不被切掉
 ok('　　卡片容器留出光暈空間（padding 10 ／ margin -10）',
    /\.tcard-list\{padding:10px;margin:-10px;\}/.test(src));
 ok('★ 逾時未簽：金框', /\.tcard-std\.tcard-miss \.tcard-body\{border-color:var\(--gold,#B48A56\);/.test(src));
-ok('★ 上課中：流星尾巴（conic＋遮罩成細框）＋頭部圓點，兩層同一組動畫',
-   /\.tcard-std\.tcard-live::before,\.tcard-std\.tcard-live::after\{content:'';position:absolute;inset:-2px;/.test(src)
-   && /mask-composite:exclude; padding:2\.5px;\n\s*animation:tcardComet 1\.8s linear infinite;\}/.test(src)
-   && /radial-gradient\(circle 5px at 50% 0,[\s\S]{0,160}?animation:tcardComet 1\.8s linear infinite;\}/.test(src)
+/* 2026-08-06 二修（使用者回報：「流星繞著圓形了，可是課卡是方形」）——
+   方形卡不能用「旋轉的圓點」當頭（那顆走圓形軌跡會切過角落）；
+   改成只留沿邊框跑的尾巴，前端加白光當頭（conic 掃角度 × 方框環狀遮罩＝沿著邊緣走）。 */
+ok('★ 上課中：流星沿方框邊緣跑，前端加白光（不用會走圓形軌跡的頭部圓點）',
+   /\.tcard-std\.tcard-live::before\{content:'';position:absolute;inset:-2px;/.test(src)
+   && /#baffe4 355deg, #ffffff 358\.5deg, #ffffff 360deg\);/.test(src)
+   && /mask-composite:exclude; padding:3px;/.test(src)
+   && !/\.tcard-std\.tcard-live::after\{/.test(src)
    && /@keyframes tcardComet\{ from\{transform:rotate\(0deg\);\} to\{transform:rotate\(360deg\);\} \}/.test(src));
 ok('　　只有 CSS，沒有多讀資料（沒有新的 dbGetAll）',
    !/tcard-live[\s\S]{0,200}dbGetAll/.test(src));
