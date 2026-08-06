@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.2318';
-const APP_VERSION_LABEL='v260806.2318';
+const APP_VERSION = '260806.2348';
+const APP_VERSION_LABEL='v260806.2348';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9572,6 +9572,10 @@ const ADMIN_NAV2=[
     {grp:'人事', label:'特休',     page:'staff', tab:'leave'},
     {grp:'人事', label:'權限設定', page:'settings_staff'},
     {grp:'財務', label:'經營報表', page:'finance'},   // 2026-08-05：財務總覽＋營運分析整合
+    /* 2026-08-06 使用者問「票券管理在哪？」——這一頁（方案設定／購買申請／會員票券，
+       以及對帳巡檢、固化推算歸屬兩個維護工具）自 2026-07-25 起就沒有導覽入口，
+       只能從賣票流程間接到達。補回一個入口。 */
+    {grp:'財務', label:'票券管理', page:'ticketing'},
     /* 月報表（fin_matrix）2026-08-06 二修：從這裡再移到頂欄自己的群組（g_report），
        見下方 —— 使用者要把它放在「班表」左邊，之後開放給櫃檯看。 */
     {grp:'環境設定', label:'課程方案', page:'settings_ticket'},
@@ -12150,8 +12154,13 @@ function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk){
     Object.keys(m).filter(k=>m[k]>0)
       .sort((x,y)=>String((tkById[y]||{}).purchase_date||'').localeCompare(String((tkById[x]||{}).purchase_date||'')))
       .forEach(tid=>{ for(let i=0;i<m[tid];i++) slots.push(tid); });
+    const _seatTk=(b.seat_tickets&&typeof b.seat_tickets==='object')?b.seat_tickets:null;
     mine.forEach((k,i)=>{
-      const logged=slots[i]||null;
+      /* 這個名額用哪張票：先看課卡上逐名額記下的事實（bookings.seat_tickets，2026-08-06 起寫入），
+         沒有才退回「依扣課紀錄照購買日排序分配」的近似法 ——
+         同一人多個名額扣在不同票上時，近似法會分錯格子。 */
+      const _fact=(_seatTk && _seatTk[k] && (m[_seatTk[k]]||0)>0) ? _seatTk[k] : null;
+      const logged=_fact||slots[i]||null;
       const tid=logged||(newest?newest.id:null);
       if(!tid) return;
       // 圓點只認扣課紀錄：猜出來的不畫，否則舊系統匯入的整批課會全掛到最近那張票上
@@ -12733,6 +12742,7 @@ async function doGroupCancelSeat(bid,seatKey){
   /* 先重編這位會員剩下的名額狀態，再從名單移除 ——
      不能留下 id#3 卻沒有 id#2，否則第二列會讀不到自己的狀態。 */
   const att=seatReindexAfterRemove(b, i);
+  b.seat_tickets=seatTkReindexAfterRemove(b, i);   // 票券歸屬跟著重編（2026-08-06）
   ids.splice(i,1);                       // 只移除一個名額
   b.member_ids=ids;
   b.attendance=att;
@@ -23161,6 +23171,11 @@ async function _saveGroupMembers(id){
        這時要跟「找不到票」一樣算進警告，不能讓名額靜靜地沒付錢。 */
     const _ded = tk ? await deductTicket(tk,b.id,SESSION.id) : false;
     if(!_ded) (_noTk[mid]=(_noTk[mid]||0)+1);   // 扣不到票的名額（2026-08-05 要當面警告，不再靜默）
+    /* 逐名額記下用了哪張票（2026-08-06 使用者指示：「團課的預約沒有地方可以紀錄，
+       不能新增一個地方給他紀錄嗎？」）—— bookings.seat_tickets 是名額鍵 → 票券 id。
+       有了這個事實，票券夾就不必再靠先進先出推算。 */
+    if(_ded){ const _sk=(_i>0)?(mid+'#'+(_i+1)):mid;
+      b.seat_tickets=Object.assign({}, b.seat_tickets||{}, {[_sk]:tk.id}); }
   }
   for(const mid of removed){
     /* 找該會員因這堂課「還有淨扣課」的票退回（2026-08-03 修：原本抓第一筆扣課紀錄，
@@ -23168,6 +23183,10 @@ async function _saveGroupMembers(id){
        refundTicket 內的 dbPut 會清快取，迴圈下一輪能看到剛寫入的退回紀錄。 */
     const tkid=await grpNetDeductTicket(b.id, mid);
     if(tkid) await refundTicket(tkid,b.id,SESSION.id);
+    /* 名額歸屬也要跟著移除（2026-08-06）：退掉的是這個人最後一個名額 */
+    if(b.seat_tickets){ const _st=Object.assign({},b.seat_tickets);
+      const _ks=Object.keys(_st).filter(k=>seatMid(k)===String(mid));
+      if(_ks.length){ delete _st[_ks[_ks.length-1]]; b.seat_tickets=_st; } }
   }
   b.member_ids=next;
   /* 名額變動後清掉沒有對應名額的出席狀態（2026-07-30 發現）——
@@ -23506,6 +23525,18 @@ function seatAnyState(b,mid,state){
   return seatKeys(b).some(k=>seatMid(k)===String(mid) && att[k]===state);
 }
 // 移除第 idx 個名額後，把這位會員剩下的名額狀態重新編號（不能留下 id#3 卻沒有 id#2）
+/* 名額票券歸屬的重編（2026-08-06）：與 seatReindexAfterRemove 同一套規則 ——
+   移掉某個名額後，同一個人剩下的名額鍵會往前遞補（id#3 變 id#2），歸屬要跟著搬。 */
+function seatTkReindexAfterRemove(b, idx){
+  const st=(b&&b.seat_tickets&&typeof b.seat_tickets==='object')?Object.assign({},b.seat_tickets):null;
+  if(!st) return null;
+  const keys=seatKeys(b);
+  const mid=seatMid(keys[idx]);
+  const kept=keys.filter((k,i)=>i!==idx && seatMid(k)===mid).map(k=>st[k]);
+  keys.forEach(k=>{ if(seatMid(k)===mid) delete st[k]; });
+  kept.forEach((tid,i)=>{ if(tid) st[i>0?mid+'#'+(i+1):mid]=tid; });
+  return st;
+}
 function seatReindexAfterRemove(b, idx){
   const keys=seatKeys(b), att=attObj(b);
   const mid=seatMid(keys[idx]);
