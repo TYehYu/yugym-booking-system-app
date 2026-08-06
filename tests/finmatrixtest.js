@@ -87,6 +87,14 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
        && /<th class="fm-sh fm-ge" style="--cc:#1a3a6e;">新\/續<\/th>/.test(out));
     ok('　　CSS 有畫線', /\.fm-tb \.fm-gs\{border-left:3px solid var\(--cc,var\(--bd\)\);\}/.test(src)
        && /\.fm-tb \.fm-gh\{border-left:3px solid var\(--cc/.test(src));
+    /* 2026-08-06 使用者指示：月合計這一列凍結顯示 */
+    ok('★ 月合計凍結在兩列表頭下方（top 52＝28+24）',
+       /\.fm-tb \.fm-sum td,\.fm-tb \.fm-sum th\{position:sticky;top:52px;z-index:2;\}/.test(src)
+       && /\.fm-tb thead tr:nth-child\(1\) th\{height:28px;\}/.test(src)
+       && /\.fm-tb thead tr:nth-child\(2\) th\{top:28px;height:24px;/.test(src));
+    ok('　　左上角（月合計＋日期）疊在最上層、滑過不變色',
+       /\.fm-tb \.fm-sum \.fm-d\{z-index:4;\}/.test(src)
+       && /tr\.fm-sum:hover td,\.fm-tb tbody tr\.fm-sum:hover \.fm-d\{background:#f7f3ea;\}/.test(src));
     console.log("\n"+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
     process.exit(fail?1:0);
   })();
