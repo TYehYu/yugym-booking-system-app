@@ -78,6 +78,12 @@ ok('★ 逐堂重讀票券、扣不到就停（沿用餘額護欄）',
 ok('　　單人課要把票綁上去，團課只留帳（沒有 ticket_id 欄位）',
    /if\(!bkIsGroup\(b\) && !b\.ticket_id\)\{ b\.ticket_id=tk\.id;/.test(src));
 ok('　　補完就地重畫會員明細', /await ppLoadCtx\(\); ppRenderBody\(\);/.test(src));
+ok('★ 體驗／場租不列（本來就不扣票）',
+   /&& b\.category!=='體驗' && b\.category!=='場租'      \/\/ 這兩種本來就不扣票/.test(src));
+ok('★ 票券對帳巡檢也看得到全庫的這一類（第 ⑤ 段）',
+   /⑤ 未來已排、但沒扣到票<\/div>/.test(src)
+   && /if\(b\.category==='體驗' \|\| b\.category==='場租'\) return;/.test(src)
+   && /if\(cnt\[mid\]>paid\) unpaidRows\.push\(/.test(src));
 ok('　　放在畫面收尾之後（不會打斷原本的關窗/重畫）',
    /if\(_grantFromDetail\)\{_grantFromDetail=false;openMemberDetail\(member_id\);\}\n\s*else if\(!\(await ppRefreshIfOpen\(member_id\)\)\) navTo\(CUR_PAGE\);\n[\s\S]{0,400}await askChargeUnpaid/.test(src));
 

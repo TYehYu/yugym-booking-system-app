@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.2206';
-const APP_VERSION_LABEL='v260806.2206';
+const APP_VERSION = '260806.2232';
+const APP_VERSION_LABEL='v260806.2232';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29456,6 +29456,7 @@ async function unpaidFutureBookings(memberId, tk){
   const cat=ticketCategoryOf(tk);
   return (bks||[]).filter(b=> b && b.status==='booked' && String(b.date||'')>=today
       && !b.ticket_id && !b.pending_contract && bkHasMember(b,memberId)
+      && b.category!=='體驗' && b.category!=='場租'      // 這兩種本來就不扣票
       && (b.category===cat || categoryOfTypeId(b.ticket_type_id)===cat)
       && !((net[b.id]||0)>0))
     .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
@@ -31709,6 +31710,31 @@ async function openGrpAudit(){
        ② 帳面 vs 帳目（受對帳基準日限制，舊匯入票不列）
        ③ 餘額數字本身不合理（負數／大於總堂數）
        ④ 排的課比票的堂數多（含團課的淨扣課） */
+    /* ⑤ 未來已排、但沒扣到票的名額（2026-08-06 胡珺涵案例）——
+       排課當下沒票（櫃檯會看到紅色警告），之後也沒有人回頭補扣，
+       那幾堂就永遠是免費的。逐名額比對：名額數 vs 這位會員在這堂的淨扣課。
+       體驗／場租不比（本來就不扣票）；教練本人的免費名額請自行忽略。 */
+    const _todayA=ymd(TODAY);
+    const _paidBy={};   // 課卡 → 會員 → 淨扣課
+    (logs||[]).forEach(l=>{ if(!l||!l.booking_id||!tkOwner[l.ticket_id]) return;
+      const d=l.action==='deduct'?1:(l.action==='refund'?-1:0); if(!d) return;
+      const m=(_paidBy[l.booking_id]=_paidBy[l.booking_id]||{}); const mid=tkOwner[l.ticket_id];
+      m[mid]=(m[mid]||0)+d; });
+    const unpaidRows=[];
+    (bks||[]).forEach(b=>{
+      if(!b || b.status!=='booked' || String(b.date||'')<_todayA) return;
+      if(b.ticket_id || b.pending_contract) return;
+      if(b.category==='體驗' || b.category==='場租') return;
+      const cnt={};
+      const _ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
+      _ids.forEach(x=>{ cnt[x]=(cnt[x]||0)+1; });
+      Object.keys(cnt).forEach(mid=>{
+        const paid=(_paidBy[b.id]||{})[mid]||0;
+        if(cnt[mid]>paid) unpaidRows.push({mid, date:b.date, time:String(b.start_time||'').slice(0,5),
+          cat:b.category||'', n:cnt[mid]-paid});
+      });
+    });
+    unpaidRows.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
     const _cnt=await tkBookedCountMap();
     const tkRows=[], badRows=[], overRows=[];
     tks.forEach(t=>{
@@ -31720,7 +31746,7 @@ async function openGrpAudit(){
     });
     const el=document.getElementById('ga-body'); if(!el) return;
     const link=(mid,txt)=>`<span class="pp-f-click" style="font-weight:700;color:var(--green);" onclick="closeModal();openPersonProfile('member','${mid}')">${txt}</span>`;
-    el.innerHTML=(seatRows.length||tkRows.length||badRows.length||overRows.length)
+    el.innerHTML=(seatRows.length||tkRows.length||badRows.length||overRows.length||unpaidRows.length)
       ? (seatRows.length?`<div style="font-weight:700;color:var(--danger);margin:2px 0 6px;">① 名額與扣課對不上（近 7 天起的團課）</div>`
           +seatRows.map(r=>`<div style="padding:7px 4px;border-bottom:1px solid var(--bd);">${link(r.mid,nameOf(r.mid))}　${String(r.date).slice(5).replace('-','/')} ${r.time}　名額 <b>${r.seats}</b>・已扣 <b style="color:${r.paid<r.seats?'var(--danger)':'var(--gold-d)'};">${r.paid}</b>${r.paid<r.seats?'（少扣，需補票或屬教練負責）':'（多扣，請檢查退回）'}</div>`).join(''):'')
       + (tkRows.length?`<div style="font-weight:700;color:var(--danger);margin:14px 0 6px;">② 票面餘額與帳目對不上</div>`
@@ -31729,8 +31755,12 @@ async function openGrpAudit(){
           +badRows.map(r=>`<div style="padding:7px 4px;border-bottom:1px solid var(--bd);">${link(r.t.member_id,nameOf(r.t.member_id))}　${r.t.plan_name||'票券'}　${r.msg}</div>`).join(''):'')
       + (overRows.length?`<div style="font-weight:700;color:var(--danger);margin:14px 0 6px;">④ 排的課比票的堂數多</div>`
           +overRows.map(r=>`<div style="padding:7px 4px;border-bottom:1px solid var(--bd);">${link(r.t.member_id,nameOf(r.t.member_id))}　${r.t.plan_name||'票券'}　${r.msg}</div>`).join(''):'')
+      + (unpaidRows.length?`<div style="font-weight:700;color:var(--danger);margin:14px 0 6px;">⑤ 未來已排、但沒扣到票</div>`
+          +unpaidRows.map(r=>`<div style="padding:7px 4px;border-bottom:1px solid var(--bd);">${link(r.mid,nameOf(r.mid))}　${String(r.date).slice(5).replace('-','/')} ${r.time}　${r.cat}${r.n>1?`　<b>${r.n}</b> 個名額`:''}</div>`).join(''):'')
       + `<div style="font-size:11.5px;color:var(--t3);margin-top:12px;line-height:1.7;">
           ①「少扣」＝名額沒票付（教練負責的免費名額可忽略）、「多扣」＝取消時沒退乾淨。<br>
+          ⑤ 排課當時沒票可扣、之後也沒補：會員買票時系統會主動問要不要補扣；
+             教練本人的免費名額可忽略。<br>
           ②③ 多半是舊系統匯入或人工校正留下的落差，改了餘額記得留備註。<br>
           ④ 通常是先排課後才處理票券，補票或退掉多的那一堂即可。點名字進會員資料處理。</div>`
       : '<div style="color:var(--green);font-weight:700;padding:10px 0;">✓ 全部對齊：名額、扣課、票面餘額與排課數都一致。</div>';
