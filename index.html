@@ -6902,13 +6902,8 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
     #ffffff 0 32%, color-mix(in srgb, var(--dcc,#1F6F54) 55%, #fff) 48%,
     var(--dcc,#1F6F54) 70%, transparent 100%);
   filter:drop-shadow(0 0 3px color-mix(in srgb, var(--dcc,#1F6F54) 70%, transparent));}
-/* 計時器指針（2026-07-25 使用者指示，取代跑步小人）：指針從圓心繞轉，像碼錶秒針 */
-.dr-center-run .dr-timer{width:26px;height:26px;filter:drop-shadow(0 0 1.1px rgba(255,255,255,.9));}
-.dr-timer .dr-tk-ring{fill:none;stroke:#2E2A24;stroke-width:1.1;opacity:.45;}
-.dr-timer line{stroke:#2E2A24;stroke-width:1.8;stroke-linecap:round;}
-.dr-timer .dr-pivot{fill:#2E2A24;}
-.dr-timer .dr-hand-g{transform-origin:12px 12px;animation:drSpin 2.6s linear infinite;}
-@keyframes drSpin{to{transform:rotate(360deg);}}
+/* 計時器指針的樣式已隨「值班中改流星、中央顯示時數」退場（2026-08-06），
+   規則一併移除，避免下次找不到它是誰在用。 */
 .dr-center-done b{text-shadow:0 0 3px rgba(255,255,255,.9),0 0 3px rgba(255,255,255,.9);}
 .dr-name{font-size:12.5px;font-weight:600;color:var(--text);max-width:96px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .dr-time{font-size:10.5px;color:var(--t3);font-family:var(--num);white-space:nowrap;}
@@ -7556,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.2048';
-const APP_VERSION_LABEL='v260806.2048';
+const APP_VERSION = '260806.2116';
+const APP_VERSION_LABEL='v260806.2116';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20249,9 +20244,8 @@ async function _doConvertPending(memberId, tkId, mode){
     if(avail>0){
       hb.member_id=memberId; hb.ticket_id=tk.id; hb.ticket_type_id=tk.ticket_type_id||hb.ticket_type_id||null;
       hb.pending_contract=false; hb.trial_name=null; hb.trial_phone=null;
-      await dbPut('bookings',hb);
-      await deductTicket(tk,hb.id,SESSION.id);
-      avail--; bound++;
+      if(await deductTicket(tk,hb.id,SESSION.id)){ await dbPut('bookings',hb); avail--; bound++; }
+      else { break; }   // 餘額護欄擋下＝沒扣到，停止轉正（2026-08-06）
     }else if(lockedLeft>0){
       hb.member_id=memberId; hb.ticket_type_id=tk.ticket_type_id||hb.ticket_type_id||null;
       hb.trial_name=null; hb.trial_phone=null;
@@ -20388,7 +20382,7 @@ async function _submitBookingInner(){
         const want=grpPickOf(mid,_i);
         if(want){ const cand=await listUsableTickets(mid,type_id,dW,tW); tk=cand.find(x=>x.id===want)||null; }
         if(!tk) tk=await findUsableTicket(mid,type_id,dW,tW);
-        if(tk){ await deductTicket(tk,bk.id,SESSION.id); charged++; }
+        if(tk && await deductTicket(tk,bk.id,SESSION.id)) charged++;   // 沒扣到就當作沒票（2026-08-06）
         else skipped++;
       }
       made++;
@@ -22203,7 +22197,8 @@ async function _doBkTicketChange(id,newTkId){
   const old=b.ticket_id;
   if(old===tk.id){ closeModal(); openBookingDetail(id); return; }
   // 先扣新的再退舊的：中途失敗時寧可重複扣（看得到、可人工退），也不要憑空少扣
-  await deductTicket(tk,b.id,SESSION.id);
+  // 2026-08-06：新票沒扣到（餘額護欄擋下）就整筆放棄 —— 否則舊票退了、新票沒扣，客人平白少一堂
+  if(!(await deductTicket(tk,b.id,SESSION.id))){ showToast('這張票券已無剩餘堂數，未更換'); return; }
   b.ticket_id=tk.id; b.ticket_type_id=tk.ticket_type_id||b.ticket_type_id;
   await dbPut('bookings',b);
   if(old){ try{ await refundTicket(old,b.id,SESSION.id); }catch(e){ showToast('新票已扣，但原票退回失敗，請手動調整：'+((e&&e.message)||e)); } }
@@ -23059,7 +23054,8 @@ async function _saveBookingTime(id){
     const diff=Math.max(1,Math.round((Number(ndur)||60)/60)) - Math.max(1,Math.round(_oldDur/60));
     if(diff!==0){
       try{
-        if(diff>0){ for(let k=0;k<diff;k++){ const tk=await dbGet('member_tickets',b.ticket_id); if(tk) await deductTicket(tk,b.id,SESSION.id); } }
+        if(diff>0){ for(let k=0;k<diff;k++){ const tk=await dbGet('member_tickets',b.ticket_id);
+            if(!tk || !(await deductTicket(tk,b.id,SESSION.id))) break; } }   // 扣不到就停（2026-08-06）
         else { for(let k=0;k<-diff;k++) await refundTicket(b.ticket_id,b.id,SESSION.id); }
         showToast(diff>0?`時長增加，已加扣 ${diff} 點`:`時長縮短，已退回 ${-diff} 點`);
       }catch(e){ console.error('時長點數調整失敗:',e); showToast('點數調整失敗，請至會員票券手動處理'); }
@@ -23133,8 +23129,10 @@ async function _saveGroupMembers(id){
     // 取消後重約同一堂 → 先回到原本那張票（2026-08-06 林紫錡案例，見 rebookSameDayTicket）
     if(!tk) tk=await rebookSameDayTicket(mid,b);
     if(!tk) tk=await findUsableTicket(mid,b.ticket_type_id,b.date,b.start_time);
-    if(tk) await deductTicket(tk,b.id,SESSION.id);
-    else (_noTk[mid]=(_noTk[mid]||0)+1);   // 扣不到票的名額（2026-08-05 要當面警告，不再靜默）
+    /* 2026-08-06：deductTicket 的餘額護欄會回 false（沒扣到）——
+       這時要跟「找不到票」一樣算進警告，不能讓名額靜靜地沒付錢。 */
+    const _ded = tk ? await deductTicket(tk,b.id,SESSION.id) : false;
+    if(!_ded) (_noTk[mid]=(_noTk[mid]||0)+1);   // 扣不到票的名額（2026-08-05 要當面警告，不再靜默）
   }
   for(const mid of removed){
     /* 找該會員因這堂課「還有淨扣課」的票退回（2026-08-03 修：原本抓第一筆扣課紀錄，
@@ -23266,7 +23264,7 @@ async function _grpFollowRun(mids2){
       for(let k=0;k<need;k++){
         const tk=await findUsableTicket(w.mid, x.ticket_type_id, x.date, x.start_time);
         if(!tk){ noTk=true; break; }
-        await deductTicket(tk, x.id, SESSION.id);
+        if(!(await deductTicket(tk, x.id, SESSION.id))){ noTk=true; break; }   // 護欄擋下＝沒扣到（2026-08-06）
         addedSeats++;
       }
       if(addedSeats>0){
@@ -23669,12 +23667,11 @@ async function cancelBooking(id, refundMode, opts){
       refunded.forEach(l=>{refundCntByTk[l.ticket_id]=(refundCntByTk[l.ticket_id]||0)+1;});
       for(const log of logs){
         if((refundCntByTk[log.ticket_id]||0)>0){ refundCntByTk[log.ticket_id]--; continue; }
-        await refundTicket(log.ticket_id,b.id,SESSION.id);
-        refundedCount++;
+        // 2026-08-06：護欄擋下（餘額已滿）時不算退成功，Toast 才不會說退了幾堂其實沒退
+        if(await refundTicket(log.ticket_id,b.id,SESSION.id)) refundedCount++;
       }
     }else if(b.ticket_id){
-      await refundTicket(b.ticket_id,b.id,SESSION.id);
-      refundedCount=1;
+      refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
     }
     /* 匯入的舊預約沒有 ticket_id（團課則連 deduct 帳本都沒有）→ 用票種回頭找票退。
        體驗課與找不到對應票券的情況會回 0，維持原本「不退」的行為。 */
@@ -31602,8 +31599,9 @@ async function openGrpAudit(){
     <div id="ga-body" style="font-size:13px;color:var(--t2);max-height:60vh;overflow-y:auto;">掃描中…</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
   try{
-    const[bks,tks,logs,mems,types]=await Promise.all([dbGetAll('bookings'),dbGetAll('member_tickets'),
-      dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('members'),dbGetAll('ticket_types')]);
+    // 2026-08-06：②擴大到所有課別後就不需要票種表了（少抓一張）
+    const[bks,tks,logs,mems]=await Promise.all([dbGetAll('bookings'),dbGetAll('member_tickets'),
+      dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('members')]);
     const nameOf=id=>{ const m=mems.find(x=>String(x.id)===String(id)); return (m&&m.name)||id; };
     const from=ymd(addDays(TODAY,-7));
     // ① 名額 vs 淨扣課（依票的持有人歸戶；共享票掛持有人名下，此處以持有人比對）
@@ -33460,12 +33458,14 @@ async function bindHeldBookings(ticket_id, maxN){
     if(done>=maxN) break;
     const tk=await dbGet('member_tickets',ticket_id);
     if(!tk || tkUnlockedLeft(tk)<=0) break;
+    /* 2026-08-06：先扣再改預約 —— 護欄擋下（餘額 0）時不能把保留課標成已綁，
+       否則這一堂會變成沒扣到票的正式預約。 */
+    if(!(await deductTicket(tk,b.id,SESSION.id))) break;
     b.ticket_id=tk.id;
     b.ticket_type_id=tk.ticket_type_id||b.ticket_type_id;
     b.pending_contract=false;
     b.note=bkNoteJoin('', bkNoteSplit(b.note).user)||null;   // 拿掉待繳費標記，保留員工寫的備註
     await dbPut('bookings',b);
-    await deductTicket(tk,b.id,SESSION.id);
     done++;
   }
   if(done) dbCacheClear(['bookings','member_tickets','ticket_logs']);

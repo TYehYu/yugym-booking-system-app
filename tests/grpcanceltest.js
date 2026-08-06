@@ -25,8 +25,9 @@ ok('　　整段包 try（讀不到帳本不能讓取消視窗開不起來）',
 ok('　　成因寫在程式裡', /每一堂團課都被判成「沒有綁票券」/.test(src));
 
 console.log('\n退票流程本身沒被動到（它一直是對的，問題在走不到）');
+/* 2026-08-06：只算真的退成功的（餘額已滿時護欄會擋下），Toast 才不會報錯數字 */
 ok('★ 團課退票是逐筆 deduct 各退一次', /for\(const log of logs\)\{/.test(src)
-   && /await refundTicket\(log\.ticket_id,b\.id,SESSION\.id\);/.test(src));
+   && /if\(await refundTicket\(log\.ticket_id,b\.id,SESSION\.id\)\) refundedCount\+\+;/.test(src));
 ok('★ 已退過的不重退', /if\(\(refundCntByTk\[log\.ticket_id\]\|\|0\)>0\)\{ refundCntByTk\[log\.ticket_id\]--; continue; \}/.test(src));
 
 console.log('\n實跑：哪一種課會跳哪一個視窗');

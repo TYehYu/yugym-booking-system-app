@@ -49,7 +49,8 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
       dbPut:async(t,x)=>{ DB[x.id]=x; puts.push(x.id); },
       mids:b=>Array.isArray(b.member_ids)?b.member_ids:[],
       findUsableTicket:async()=> tkLeft>0?{id:'tk1'}:null,
-      deductTicket:async(tk,bid)=>{ tkLeft--; deducts.push(bid); },
+      /* 2026-08-06：deductTicket 改回傳布林（餘額護欄），替身跟著回 true */
+      deductTicket:async(tk,bid)=>{ tkLeft--; deducts.push(bid); return true; },
       dbCacheClear:()=>{}, closeModal:()=>{}, showToast:m=>toasts.push(m), openBookingDetail:()=>{},
       SESSION:{id:'desk'},
     };
@@ -92,7 +93,7 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
         dbGet:async(t,id)=> t==='bookings'?(DB2[id]?{...DB2[id],member_ids:DB2[id].member_ids.slice()}:null):{id,name:'新會員'},
         dbPut:async(t,x)=>{ DB2[x.id]=x; },
         findUsableTicket:async()=> tk2>0?{id:'tkX'}:null,
-        deductTicket:async(tk,bid)=>{ tk2--; ded2.push(bid); },
+        deductTicket:async(tk,bid)=>{ tk2--; ded2.push(bid); return true; },
         showToast:m=>toasts2.push(m),
       });
       const run2=new Function(...Object.keys(env2),'return async '+grabFn('_grpFollowRun'))(...Object.values(env2));
@@ -105,7 +106,10 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
     }
 
     console.log('\n⑥ 扣不到票的名額要當面警告（2026-08-05 許佳慈案例，使用者指示「不要一直犯這個錯誤」）');
-    ok('★ 名單儲存記下扣不到票的名額數', /else \(_noTk\[mid\]=\(_noTk\[mid\]\|\|0\)\+1\);/.test(src));
+    /* 2026-08-06：「找不到票」與「找到票但餘額護欄擋下沒扣到」都要算進警告 */
+    ok('★ 名單儲存記下扣不到票的名額數（含護欄擋下沒扣到的）',
+       /const _ded = tk \? await deductTicket\(tk,b\.id,SESSION\.id\) : false;/.test(src)
+       && /if\(!_ded\) \(_noTk\[mid\]=\(_noTk\[mid\]\|\|0\)\+1\);/.test(src));
     ok('★ 有漏就擋明確視窗（列出誰、幾個名額），不再只 toast 帶過',
        /if\(Object\.keys\(_noTk\)\.length\)\{/.test(src)
        && /⚠ 有名額沒有扣到票/.test(src)

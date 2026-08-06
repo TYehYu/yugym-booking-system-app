@@ -133,8 +133,9 @@ ok('★ 既有預約可事後更換票券', /async function openBkTicketChange\(
 ok('　　只給櫃檯／管理員、且限還沒簽到的預約',
    /已簽到的預約要先取消簽到才能換票券/.test(src)
    && /b\.status==='booked'&&b\.category!=='小班肌力'&&isDeskLike\(\)/.test(src));
-ok('　　換票＝退舊扣新，兩邊都留票券紀錄',
-   /await deductTicket\(tk,b\.id,SESSION\.id\);[\s\S]{0,300}refundTicket\(old,b\.id,SESSION\.id\)/.test(src));
+/* 2026-08-06：新票沒扣到（餘額護欄擋下）就整筆放棄，否則舊票退了、新票沒扣 */
+ok('　　換票＝退舊扣新，兩邊都留票券紀錄；新票扣不到就整筆放棄',
+   /if\(!\(await deductTicket\(tk,b\.id,SESSION\.id\)\)\)\{ showToast\('這張票券已無剩餘堂數，未更換'\); return; \}[\s\S]{0,400}refundTicket\(old,b\.id,SESSION\.id\)/.test(src));
 ok('　　先扣新再退舊：中途失敗寧可重複扣也不憑空少扣，並提示人工處理',
    /先扣新的再退舊的/.test(src) && /新票已扣，但原票退回失敗，請手動調整/.test(src));
 ok('　　沒有其他可用票券時明講', /沒有其他可用票券可以換。/.test(src));

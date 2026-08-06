@@ -59,7 +59,9 @@ console.log('\n④ 既有行為沒被動到');
      && /String\(x\.trial_phone\|\|''\)===String\(b\.trial_phone\|\|''\)/.test(F)
      && /\(x\.ticket_type_id\|\|null\)===\(b\.ticket_type_id\|\|null\)/.test(F)
      && /x\.date>=ymd\(TODAY\)/.test(F));
-  ok('★ 扣課仍寫 ticket_logs（deductTicket）', /await deductTicket\(tk,hb\.id,SESSION\.id\);/.test(F));
+  /* 2026-08-06：扣不到（餘額護欄）就停止轉正，不會把保留課變成沒付錢的正式預約 */
+  ok('★ 扣課仍寫 ticket_logs（deductTicket），扣不到就停',
+     /if\(await deductTicket\(tk,hb\.id,SESSION\.id\)\)\{ await dbPut\('bookings',hb\); avail--; bound\+\+; \}/.test(F));
   ok('★ 保留課的備註不變（開通下一期會照這個備註自動補綁）',
      /hb\.note='分期待繳費保留（收款後自動補扣）';/.test(F));
   ok('　　取消的那些有寫原因', /'簽約堂數不含此堂，轉正時自動取消'/.test(F));
