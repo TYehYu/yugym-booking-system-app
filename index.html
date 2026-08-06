@@ -7458,8 +7458,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1235';
-const APP_VERSION_LABEL='v260806.1235';
+const APP_VERSION = '260806.1255';
+const APP_VERSION_LABEL='v260806.1255';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7631,10 +7631,21 @@ async function _dbGetAllFresh(store){
 function dbPeek(store,maxAge){
   const key=tbl(store);
   const hit=_dbCache.get(key);
-  if(!hit) return null;
+  if(!hit || !Array.isArray(hit.data)) return null;
   const age=Date.now()-hit.t;
-  if(age >= (maxAge||120000)) return null;
-  return { data:hit.data.slice(), stale: age >= (DB_CACHE_TTL_BY[key]||DB_CACHE_TTL) };
+  /* 2026-08-06 使用者回報「首頁教練任務區翻頁很常出現讀取中」——
+     原本超過 maxAge（預設 2 分鐘）就回 null，呼叫端只好 await 網路才畫得出第一屏；
+     而 08-05 起「寫入／清快取」會把時間戳歸零（代表要重新校驗），等於每次操作完
+     回首頁都必然落在這個分支 → 每翻一頁都在等。
+     這裡是 SWR 的「先畫再說」路徑：只要手上有資料就先畫，過期與否交給 stale 旗標，
+     呼叫端本來就會在畫完後背景重抓（dashRevalidate）並比對簽章才重繪。
+     真的很舊（超過 IndexedDB 的保存期限）才放棄，避免畫出過期太久的內容。 */
+  /* t=0 是「需要重新校驗」的標記（寫入／清快取後設的），不是真的時間戳 ——
+     不能拿它算年齡（會算成 1970 年）。有資料就先畫、標成 stale。 */
+  const invalidated=!hit.t;
+  if(!invalidated && age >= 86400000) return null;   // 真的超過一天才放棄（與 IndexedDB 保存期限同）
+  const fresh=!invalidated && age < (maxAge||120000) && age < (DB_CACHE_TTL_BY[key]||DB_CACHE_TTL);
+  return { data:hit.data.slice(), stale: !fresh };
 }
 /* ══ 簽章校驗：沒人改過就不要重抓（2026-08-04 讀取量優化第二批）══════════
    盤點發現 40 個頁面裡有 25 頁在抓 bookings（6.4MB）與 member_tickets（2.4MB），

@@ -59,6 +59,26 @@ console.log('① dbCacheApply 實跑');
   }
 }
 
+console.log('\n①b dbPeek：先畫再說（2026-08-06 使用者回報「首頁翻頁很常出現讀取中」）');
+{
+  /* 寫入／清快取會把時間戳歸零（代表要重新校驗），原本 dbPeek 直接回 null →
+     首頁 11 張表全部要 await 網路才畫得出第一屏。改成有資料就先畫、標記 stale，
+     呼叫端畫完再背景重抓。 */
+  const env={ tbl:s=>s, _dbCache:new Map(), DB_CACHE_TTL:20000, DB_CACHE_TTL_BY:{} };
+  const peek=new Function(...Object.keys(env), grabFn('dbPeek')+'\nreturn dbPeek;')(...Object.values(env));
+  env._dbCache.set('bookings',{t:Date.now(),data:[{id:'B1'}],sig:'s'});
+  const a=peek('bookings');
+  ok('★ 剛抓過 → 直接用、不算過期', a && a.data.length===1 && a.stale===false);
+  env._dbCache.set('bookings',{t:0,data:[{id:'B1'}],sig:'s'});   // 寫入後標記需校驗
+  const b=peek('bookings');
+  ok('★★ 標記需校驗（t=0）也先畫得出來，只是標成 stale（呼叫端會背景重抓）',
+     !!b && b.data.length===1 && b.stale===true);
+  env._dbCache.set('bookings',{t:Date.now()-90000000,data:[{id:'B1'}],sig:'s'});
+  ok('　　超過一天的舊資料才放棄（寧可等網路也不畫太舊的）', peek('bookings')===null);
+  env._dbCache.delete('bookings');
+  ok('　　根本沒有快取 → 回 null（照常 await）', peek('bookings')===null);
+}
+
 console.log('\n② 接線');
 ok('★ dbPut 寫入改走直改快取', /dbCacheApply\(store, data\|\|obj\);/.test(src)
    && !/dbCacheClear\(store\);   \/\/ 寫入即失效/.test(src));
