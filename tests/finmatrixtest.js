@@ -58,7 +58,9 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     renewAttribOf:(t,purByTk)=> t.sold_by || purByTk[t.id] || null,
     addDays:(d,n)=>d, parseYmd:x=>new Date(x),
   };
-  const run=new Function(...Object.keys(env),'return async '+grabFn('finMatrix'))(...Object.values(env));
+  /* fmWhoTip 是 finMatrix 的相依（新約/續約的滑鼠提示），一起帶進沙箱實跑 */
+  const run=new Function(...Object.keys(env),
+    grabFn('fmWhoTip')+'\nreturn async '+grabFn('finMatrix'))(...Object.values(env));
   (async()=>{
     await run();
     const out=html['fin-body']||'';
@@ -98,6 +100,12 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
        && /\.fm-tb thead tr:nth-child\(2\) th\{top:var\(--fm-h1,28px\);/.test(src)
        && /function fmStickyFit\(\)\{/.test(src)
        && /tb\.style\.setProperty\('--fm-h1',h1\+'px'\);/.test(src));
+    /* 2026-08-06 使用者指示：新約/續約要有滑鼠提示，說明這張是哪個會員 */
+    ok('★ 新/續那一格帶 title：約別・姓名・方案・金額',
+       /title="新約・M1（教練課） \$0"/.test(out) || /新約・M1/.test(out), out.match(/title="[^"]*約[^"]*"/g));
+    ok('★ 月合計那格列出整月每一筆（帶日期）', /title="[^"]*01日 新約・M1[^"]*"/.test(out));
+    ok('　　游標樣式走 CSS（td 已有 style，不能再塞一個）',
+       /\.fm-tb \.fm-k\[title\]\{cursor:help;\}/.test(src) && !/style="cursor:help;"/.test(src));
     ok('　　左上角（月合計＋日期）疊在最上層、滑過不變色',
        /\.fm-tb \.fm-sum \.fm-d\{z-index:4;\}/.test(src)
        && /tr\.fm-sum:hover td,\.fm-tb tbody tr\.fm-sum:hover \.fm-d\{background:#f7f3ea;\}/.test(src));
