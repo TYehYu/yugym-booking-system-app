@@ -8,7 +8,8 @@ const grab=n=>{
 };
 /* 2026-07-31：補課券改用「名額鍵」防重複（同一人兩個名額要兩張），一併抽進來 */
 /* 2026-08-01：groupToggleLeave 包了防連點鎖（onceAct），實作改名為 _groupToggleLeave */
-const src=[grab('seatNo'),grab('makeupKey'),grab('grantMakeupTicket'),grab('revokeMakeupTicket'),grab('_groupToggleLeave')].join('\n');
+/* 2026-08-06：補課券效期改從「那堂課的日期」起算（makeupTerm），一併抽進來 */
+const src=[grab('seatNo'),grab('makeupKey'),grab('makeupTerm'),grab('grantMakeupTicket'),grab('revokeMakeupTicket'),grab('_groupToggleLeave')].join('\n');
 
 let DB={bookings:{},member_tickets:{}}, LOGS=[], TOASTS=[], REOPENED=[];
 const reset=()=>{DB={bookings:{},member_tickets:{}};LOGS=[];TOASTS=[];REOPENED=[];};
@@ -25,6 +26,7 @@ const env={
   uid:p=>p+'-'+(Object.keys(DB.member_tickets).length+1),
   ymd:d=>d.toISOString().slice(0,10),
   addDays:(d,n)=>new Date(d.getTime()+n*86400000),
+  parseYmd:x=>new Date(x+'T00:00:00Z'),
   TODAY:new Date('2026-07-26T00:00:00Z'),
   SESSION:{id:'staff1'},
   window:{_ttCache:[{id:'tt-g',name:'團體課',category:'小班肌力'}]},
@@ -46,6 +48,26 @@ const mkTicket=()=>({id:'T1',member_id:'M1',ticket_type_id:'tt-g',sessions_total
   chk('有發補課券', !!mk);
   chk('補課券 1 堂', mk && mk.sessions_total===1 && mk.sessions_remaining===1);
   chk('效期 14 天（8/09）', mk && mk.expire_date==='2026-08-09');
+
+  /* 2026-08-06 使用者指示：「補課券的期限要從（請假的）那天開始計算」——
+     提前幫還沒到的那堂課登記請假時，效期從課日起算，不是從按下去的當天。 */
+  {
+    const save=JSON.parse(JSON.stringify(DB));
+    reset();
+    DB.bookings.G1=Object.assign(mkBooking(),{date:'2026-08-01'});   // 今天 7/26，課在 8/01
+    DB.member_tickets.T1=mkTicket();
+    await api.groupToggleLeave('G1','M1');
+    const f=Object.values(DB.member_tickets).find(t=>t.source==='makeup');
+    chk('★ 提前請假：效期自課日 8/01 起算 14 天（8/15，不是 8/09）', f && f.expire_date==='2026-08-15');
+    chk('　　仍可立刻使用（start_date 是今天）', f && f.start_date==='2026-07-26');
+    reset();
+    DB.bookings.G1=Object.assign(mkBooking(),{date:'2026-07-20'});   // 已經過去的課
+    DB.member_tickets.T1=mkTicket();
+    await api.groupToggleLeave('G1','M1');
+    const g=Object.values(DB.member_tickets).find(t=>t.source==='makeup');
+    chk('★ 事後補發過去的課：仍從今天起算（不會一發下去就快過期）', g && g.expire_date==='2026-08-09');
+    DB=save;
+  }
   chk('綁定本堂與本人', mk && mk.makeup_for_booking==='G1' && mk.member_id==='M1');
   chk('★ 原票券餘額不變（不重複扣課）', DB.member_tickets.T1.sessions_remaining===2);
   chk('不設整堂的 makeup_granted', !DB.bookings.G1.makeup_granted);

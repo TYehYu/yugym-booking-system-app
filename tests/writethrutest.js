@@ -88,5 +88,22 @@ ok('★ 簽章一樣重新校驗（與 dbCacheClear 同步丟共用簽章）',
 ok('　　其他呼叫端的 dbCacheClear 不受影響（RPC 路徑照舊全清）',
    /function dbCacheClear\(store\)\{/.test(src));
 
+console.log('\n③ 桌機行事曆：從別頁進來也先畫再說（2026-08-06 使用者回報「導覽列從首頁回預約管理會出現長時間讀取」）');
+/* 原本只有「左右翻頁」吃得到 _calDataCache，從首頁切回預約管理走 else 分支＝
+   await 5 張表（含 bookings／member_tickets 兩張大表）才畫得出第一屏。
+   改成手上有 10 分鐘內的整組資料就先畫，背景走既有 _calRevalidate 校驗。 */
+ok('★ 進入時先吃 10 分鐘內的整組快取',
+   /const _entryCache = window\._calDataCache && \(Date\.now\(\)-\(window\._calDataCache\._t\|\|0\) < 600000\);/.test(src)
+   && /if\(_entryCache\)\{\n\s*\(\{bookings,coaches,members,types,allTickets\}=window\._calDataCache\);\n\s*_calRevalidate\(\);/.test(src));
+ok('★ 用快取時不再 await 那 5 張表（現抓只留在 else 分支）',
+   (src.match(/\[bookings,coaches,members,types,allTickets\]=await Promise\.all\(/g)||[]).length===1);
+ok('★ 走的是既有背景校驗（有異動才悄悄重繪），不是另開一套',
+   /async function _calRevalidate\(\)\{/.test(src)
+   && (src.match(/_calRevalidate\(\);/g)||[]).length>=3);
+ok('　　沒有 return 掉後續渲染（整段流程照走完）',
+   !/_calRevalidate\(\);\n\s*return _calRender\(\);/.test(src));
+ok('　　切週的靜態表快取（coaches/members/ticket_types 60 秒）仍保留',
+   /const cacheFresh = window\._calStaticCache && \(Date\.now\(\)-window\._calStaticCache\._t < 60000\);/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

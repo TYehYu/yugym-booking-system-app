@@ -7505,8 +7505,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1442';
-const APP_VERSION_LABEL='v260806.1442';
+const APP_VERSION = '260806.1450';
+const APP_VERSION_LABEL='v260806.1450';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12329,6 +12329,19 @@ function makeupKey(bookingId, seatKey){
   const n=(typeof seatNo==='function')?seatNo(seatKey||''):1;
   return (n>1) ? `${bookingId}#${n}` : String(bookingId||'');
 }
+/* 補課券效期（2026-08-06 使用者指示：「補課券的期限要從（請假的）那天開始計算」）——
+   櫃檯常常提前登記請假（今天先幫週六的課請假），效期若從「按下去的當天」起算，
+   會員等於平白少掉還沒到的那幾天。基準日改成「那堂課的日期」。
+   已經過去的課仍以今天起算 —— 事後補發不該一發下去就快過期／已過期。
+   天數規則不變：自主訓練類 7 天、其他 14 天。 */
+function makeupTerm(booking){
+  const today=ymd(TODAY);
+  const catName=(booking&&booking.category)||'';
+  const days=(catName.includes('自主')) ? 7 : 14;
+  const clsDate=String((booking&&booking.date)||'').slice(0,10);
+  const base=(clsDate && clsDate>today) ? clsDate : today;
+  return { base, days, expire: ymd(addDays(parseYmd(base),days)) };
+}
 async function grantMakeupTicket(booking, memberIdOverride, seatKey){
   const _mid = memberIdOverride || (booking&&booking.member_id);
   if(!booking||!_mid){ showToast('此預約無綁定會員，無法補發'); return; }
@@ -12352,11 +12365,11 @@ async function grantMakeupTicket(booking, memberIdOverride, seatKey){
     }
   }catch(_){}
   const today=ymd(TODAY);
-  // 自主訓練類補課券效期 7 天，其他 14 天
-  const catName=booking.category||'';
-  const isSelf=catName.includes('自主')||(planName&&planName.includes('自主'));
-  const makeupDays=isSelf?7:14;
-  const expire=ymd(addDays(TODAY,makeupDays));
+  /* 效期：自主訓練類 7 天、其他 14 天，且從「請假那堂課的日期」起算（見 makeupTerm）。
+     start_date 維持今天 —— 只是把期限往後延，不擋會員提早拿去補別堂。 */
+  const _term=makeupTerm(booking);
+  const makeupDays=(_term.days===7 || (planName&&planName.includes('自主'))) ? 7 : 14;
+  const expire=(makeupDays===_term.days) ? _term.expire : ymd(addDays(parseYmd(_term.base),makeupDays));
   const tk={ id:uid('TK'), member_id:_mid, ticket_type_id:type_id,
     source_plan_id:null, plan_name:planName, format:booking.format||null,
     source:'makeup', purchase_date:today, start_date:today, expire_date:expire,
@@ -12411,7 +12424,7 @@ async function _groupToggleLeave(bid,seatKey){
     }else{
       att[sk]='leave';
       const tk=await grantMakeupTicket(b,mid,sk);
-      showToast(tk?'已標記請假：本堂照扣，已發 14 天補課券':'已標記請假（補課券發放失敗，請手動處理）');
+      showToast(tk?`已標記請假：本堂照扣，已發補課券（效期至 ${String(tk.expire_date||'').slice(5).replace('-','/')}）`:'已標記請假（補課券發放失敗，請手動處理）');
     }
     b.attendance=att;
     const anyIn=Object.values(att).some(s=>s==='checked_in');
@@ -15504,16 +15517,25 @@ async function renderCalendar(opts){
     ({bookings,coaches,members,types,allTickets}=window._calDataCache);
     _calRevalidate();
   }else{
-    // 效能優化：coaches / members / ticket_types 很少變動 → 首次抓取後快取（60 秒內），切週時沿用，
-    // 只有 bookings / member_tickets 每次重抓（會新增/異動）。大幅減少切週的等待時間。
-    const cacheFresh = window._calStaticCache && (Date.now()-window._calStaticCache._t < 60000);
-    const useCache = (opts&&opts.stepping||window._calStepping) && cacheFresh;
-    if(useCache){
-      ({coaches,members,types}=window._calStaticCache);
-      [bookings,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('member_tickets')]);
+    /* 從別頁進來也先畫再說（2026-08-06 使用者回報「首頁切回預約管理會出現長時間讀取」）——
+       原本只有「翻頁」吃得到快取，換頁進來一律等 5 張表（含 bookings／member_tickets 兩張大表）。
+       手上有 10 分鐘內的整組資料就立刻畫，背景再校驗（_calRevalidate 有異動才悄悄重繪）。 */
+    const _entryCache = window._calDataCache && (Date.now()-(window._calDataCache._t||0) < 600000);
+    if(_entryCache){
+      ({bookings,coaches,members,types,allTickets}=window._calDataCache);
+      _calRevalidate();
     }else{
-      [bookings,coaches,members,types,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('members'),dbGetAll('ticket_types'),dbGetAll('member_tickets')]);
-      window._calStaticCache={coaches,members,types,_t:Date.now()};
+      // 效能優化：coaches / members / ticket_types 很少變動 → 首次抓取後快取（60 秒內），切週時沿用，
+      // 只有 bookings / member_tickets 每次重抓（會新增/異動）。大幅減少切週的等待時間。
+      const cacheFresh = window._calStaticCache && (Date.now()-window._calStaticCache._t < 60000);
+      const useCache = (opts&&opts.stepping||window._calStepping) && cacheFresh;
+      if(useCache){
+        ({coaches,members,types}=window._calStaticCache);
+        [bookings,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('member_tickets')]);
+      }else{
+        [bookings,coaches,members,types,allTickets]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('members'),dbGetAll('ticket_types'),dbGetAll('member_tickets')]);
+        window._calStaticCache={coaches,members,types,_t:Date.now()};
+      }
     }
     // 翻頁快取：每次「現抓」都更新整組（本機寫入後的重繪也走這裡，快取必為最新）
     window._calDataCache={bookings,coaches,members,types,allTickets,_t:Date.now()};
@@ -22010,10 +22032,12 @@ async function doVenueChange(id,vid){
 // 確認補發補課券
 async function confirmMakeup(id){
   const b=await dbGet('bookings',id); if(!b)return;
+  const _tm=makeupTerm(b);
   showModal(`<div class="modal-title">補發補課券</div>
     <div style="font-size:13px;color:var(--text);padding:4px 0;">將為此會員補發 1 張補課券：</div>
     <div style="font-size:12.5px;color:var(--t2);margin:8px 0 14px;line-height:1.8;background:var(--card2);padding:10px 12px;border-radius:9px;">
-      課程類型：${b.category}（同類型可用）<br>堂數：1 堂<br>效期：自今日起 14 天</div>
+      課程類型：${b.category}（同類型可用）<br>堂數：1 堂<br>
+      效期：自 ${_tm.base===ymd(TODAY)?'今日':_tm.base.slice(5).replace('-','/')+'（該堂課日）'} 起 ${_tm.days} 天（至 ${_tm.expire.slice(5).replace('-','/')}）</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-gold" onclick="doGrantMakeup('${id}')">確認補發</button></div>`);
 }
 async function doGrantMakeup(id){
@@ -22021,7 +22045,7 @@ async function doGrantMakeup(id){
     const b=await dbGet('bookings',id);
     const tk=await grantMakeupTicket(b);
     closeModal();
-    showToast(tk?'已補發補課券（效期 14 天）':'補發失敗');
+    showToast(tk?`已補發補課券（效期至 ${String(tk.expire_date||'').slice(5).replace('-','/')}）`:'補發失敗');
     navTo(CUR_PAGE);
   }catch(e){ showToast('補發失敗：'+(e&&e.message?e.message:e)); }
 }
