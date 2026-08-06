@@ -4453,13 +4453,14 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   box-shadow:0 0 0 2px rgba(180,138,86,.18);}
 /* 上課中：流星沿卡片邊緣繞圈（與本堂圓形卡同一套作法：conic 尾巴＋遮罩成細框） */
 .tcard-std.tcard-live .tcard-body{border-color:var(--green,#1f6f54);}
-/* ⚠ 課卡是方形，頭部圓點不能用「旋轉方塊」那招（2026-08-06 使用者回報：
-   「流星繞著圓形了，可是課卡是方形」）—— 旋轉的點走的是圓形軌跡，會切過角落。
-   方形卡改成：只留沿著邊框跑的尾巴，把前端加亮成一段白光當作流星頭；
-   conic 掃角度＋方框環狀遮罩＝光點確實沿著卡片邊緣走。 */
+/* ⚠ 方形卡不能用「旋轉整個框」（2026-08-06 使用者兩次回報：先是頭部圓點走圓形軌跡切過角落，
+   接著整圈框在轉圈圈）—— transform:rotate 轉的是那個方框本身，看起來就是方塊在轉。
+   正解：框固定不動，只讓 conic 漸層的「起始角度」動（@property 讓角度可以做動畫）。
+   角度掃過去 × 方框環狀遮罩 ⇒ 亮點確實沿著卡片邊緣（含圓角）跑。 */
+@property --tcAng{ syntax:'<angle>'; inherits:false; initial-value:0deg; }
 .tcard-std.tcard-live::before{content:'';position:absolute;inset:-2px;
-  border-radius:12px;pointer-events:none;z-index:1;
-  background:conic-gradient(from 0deg,
+  border-radius:12px;pointer-events:none;z-index:1;--tcAng:0deg;
+  background:conic-gradient(from var(--tcAng),
     rgba(31,111,84,0) 0deg, rgba(31,111,84,0) 262deg,
     rgba(31,111,84,.22) 292deg, rgba(31,111,84,.62) 330deg,
     #2f9c74 348deg, #baffe4 355deg, #ffffff 358.5deg, #ffffff 360deg);
@@ -4468,7 +4469,7 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   -webkit-mask-composite:xor; mask-composite:exclude; padding:3px;
   filter:drop-shadow(0 0 3px rgba(47,156,116,.85));
   animation:tcardComet 1.8s linear infinite;}
-@keyframes tcardComet{ from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+@keyframes tcardComet{ from{--tcAng:0deg;} to{--tcAng:360deg;} }
 /* 2026-07-25 使用者指示：取消課卡不淡化（只靠右下角紅「刪」＋刪除線標示） */
 .tcard-cancel .tcard-txt{text-decoration:line-through;}
 .tcard-empty{display:flex;align-items:center;color:var(--text-muted);font-size:12.5px;padding:8px 4px;}
@@ -7457,8 +7458,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1220';
-const APP_VERSION_LABEL='v260806.1220';
+const APP_VERSION = '260806.1235';
+const APP_VERSION_LABEL='v260806.1235';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22381,7 +22382,12 @@ async function grantCheckinReward(b){  if(b.reward_issued) return true;         
   }catch(_){}
   const friendly = b.ticket_type_id==='pt_friendly' || ttColor==='friendly'
     || cat.indexOf('友善')>=0 || ttName.indexOf('友善')>=0 || tkPlanName.indexOf('友善')>=0;
-  const coachClass = cat==='私人教練' || cat==='體驗' || b.ticket_type_id==='pt' || b.ticket_type_id==='trial' || b.ticket_type_id==='pt_friendly' || ttName.indexOf('教練課')>=0 || ttName.indexOf('體驗')>=0 || tkPlanName.indexOf('教練課')>=0 || ttColor==='friendly' || ttColor==='pt';
+  /* 2026-08-06 使用者定案：「體驗課不發自主訓練」，但「轉正的教練課或友善教練課也是教練課，所以要發」——
+     判定改看「這堂是不是教練課」：課種是私人教練（含待簽約轉正後的教練課）、或扣的是教練課類的票；
+     體驗（cat==='體驗' / 票名含體驗 / trial 票種）一律不發。DB 端 handle_checkin_reward 同一套。 */
+  const isTrialClass = cat==='體驗' || b.ticket_type_id==='trial' || ttName.indexOf('體驗')>=0;
+  const coachClass = !isTrialClass && (cat==='私人教練' || b.ticket_type_id==='pt' || b.ticket_type_id==='pt_friendly'
+    || ttName.indexOf('教練課')>=0 || tkPlanName.indexOf('教練課')>=0 || ttColor==='friendly' || ttColor==='pt');
   if(coachClass){ doGrant=true; isFriendly=friendly; }
   /* 教練請假的課（2026-07-31 使用者定案）：課種已被改成自主訓練，但會員到場簽到
      一樣要發點 —— 這是替他被取消的那堂課補償，不是自主訓練本身的規則。
