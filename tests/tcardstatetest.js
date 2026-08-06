@@ -38,7 +38,14 @@ ok('★ 卡片帶上 tcard-miss（其餘旗標不變）',
 /* 2026-08-06 二修（使用者指示）：霧化框要更明顯 → 2px 實框＋更濃更大的光暈 */
 ok('★ 完成／已簽到：加粗綠框＋明顯霧化外暈',
    /\.tcard-std\.tcard-done \.tcard-body\{border:2px solid var\(--green,#1f6f54\);/.test(src)
-   && /box-shadow:0 0 0 3px rgba\(31,111,84,\.30\), 0 0 16px 5px rgba\(31,111,84,\.34\);\}/.test(src));
+   && /box-shadow:0 0 0 3px rgba\(31,111,84,\.32\), 0 0 24px 8px rgba\(31,111,84,\.38\);\}/.test(src));
+/* 2026-08-06 三修（使用者回報：邱怡頻的卡被左側教練欄蓋住）——
+   教練欄 sticky z-index:4，有狀態框的卡要疊上去；容器也要留出光暈的空間 */
+ok('★ 有狀態框的卡疊在教練欄之上（不被切掉）',
+   /\.tcard-std\.tcard-done,\.tcard-std\.tcard-live,\.tcard-std\.tcard-miss\{z-index:5;\}/.test(src)
+   && /\.tcard-coach\{width:118px;flex-shrink:0;padding-top:4px;position:sticky;left:0;z-index:4;/.test(src));
+ok('　　卡片容器留出光暈空間（padding 10 ／ margin -10）',
+   /\.tcard-list\{padding:10px;margin:-10px;\}/.test(src));
 ok('★ 逾時未簽：金框', /\.tcard-std\.tcard-miss \.tcard-body\{border-color:var\(--gold,#B48A56\);/.test(src));
 ok('★ 上課中：流星尾巴（conic＋遮罩成細框）＋頭部圓點，兩層同一組動畫',
    /\.tcard-std\.tcard-live::before,\.tcard-std\.tcard-live::after\{content:'';position:absolute;inset:-2px;/.test(src)
