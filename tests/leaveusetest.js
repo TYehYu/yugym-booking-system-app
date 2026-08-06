@@ -23,9 +23,10 @@ const attObj=b=>{const v=b&&b.attendance;return (v&&typeof v==='object'&&!Array.
 globalThis.attObj=attObj;
 
 const FNS=['mids','bkHasMember','tkSharedIds','tkUsableBy','tkClass5','bkIsGroup','seatKeys','seatMid','seatNo',
-  'grpSeatAttCount','grpSeatLeaveCount','grpHeadsNoLeave','allocBookingsToTickets','grpTicketAlloc','buildWallet'];
-const box=new Function('ymd','TODAY','parseYmd','attObj',
-  FNS.map(grabFn).join('\n')+'\nreturn {buildWallet,grpHeadsNoLeave,grpSeatLeaveCount};')(ymd,TODAY,parseYmd,attObj);
+  'bkEatenCancel','grpSeatAttCount','grpSeatLeaveCount','grpHeadsNoLeave','allocBookingsToTickets','grpTicketAlloc','buildWallet'];
+/* bkIsGroup 會問「這個口袋是不是共用預約」（bkPocketNow）—— 測試資料都是舊制課別，替身回空 */
+const box=new Function('ymd','TODAY','parseYmd','attObj','bkPocketNow',
+  FNS.map(grabFn).join('\n')+'\nreturn {buildWallet,grpHeadsNoLeave,grpSeatLeaveCount,bkEatenCancel};')(ymd,TODAY,parseYmd,attObj,()=>({}));
 
 const ME='M-LXJ';
 const TYPES={'tt-g':{id:'tt-g',name:'團體課',category:'小班肌力'}};
@@ -71,7 +72,7 @@ console.log('\n② 圓形卡：請假那一格填滿、紅色');
     seatKeys:b=>{const c={};return (b.member_ids||[]).map(id=>{c[id]=(c[id]||0)+1;return c[id]>1?id+'#'+c[id]:id;});},
     seatMid:k=>{const s=String(k),i=s.indexOf('#');return i<0?s:s.slice(0,i);},
     grpSeatAttCount:box.buildWallet && ((b,mid)=>{const a=attObj(b);return (b.member_ids||[]).filter((x,i)=>String(x)===String(mid)&&a[x]==='checked_in').length;}),
-    grpSeatLeaveCount:box.grpSeatLeaveCount,
+    grpSeatLeaveCount:box.grpSeatLeaveCount, bkEatenCancel:box.bkEatenCancel,
   };
   const TT=new Function(...Object.keys(deps),'return '+grabFn('ticketTokens'))(...Object.values(deps));
   const t4=of('T4');
@@ -81,7 +82,8 @@ console.log('\n② 圓形卡：請假那一格填滿、紅色');
   eq('★ 只有請假那一格是紅的', (h.match(/mtk-leave/g)||[]).length, 1);
   ok('★ 紅的那一格是 8/8，滑鼠提示講清楚照扣＋補課券',
      /mtk-used mtk-leave[^>]*title="請假（本堂照扣，另發補課券） 2026-08-08/.test(h) && /8\/8/.test(h));
-  ok('　　CSS 有把它畫成實心紅', /\.mtk-used\.mtk-leave\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src));
+  ok('　　CSS 有把它畫成實心紅（與「取消未退」共用同一條）',
+     /\.mtk-used\.mtk-leave,\.mtk-used\.mtk-eaten\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src));
 }
 
 console.log('\n③ 教練人次：請假不算');
@@ -123,6 +125,41 @@ ok('★ 取消流程會收回這堂的補課券（含第 2 個以後的名額鍵
 ok('★ 用過的不收（與贈點回收同一套保守原則）',
    /if\(\(t\.sessions_total\|\|0\)-\(t\.sessions_remaining\|\|0\)>0\) continue;   \/\/ 已用過→保留\n\s*await dbDel\('member_tickets',t\.id\);\n\s*try\{ await logTicket\(t\.id,'revoke',0,booking\.id,SESSION\.id,'整堂取消，收回未使用的補課券'\)/.test(src));
 ok('　　收了幾張會寫進 Toast（櫃檯看得到）', /const _mkt=_mkRv\?`，並收回未使用的補課券 \$\{_mkRv\} 張`:'';/.test(src));
+
+console.log('\n⑥ 取消但「扣課不退」的那一堂要看得到（2026-08-06 黃品華案例）');
+/* 使用者：「這一個勾是今天 8/6 請假取消的，教練最後選到扣課，所以才出現的」——
+   票被吃掉了但預約已取消 → 原本不進戳記，圓形卡就多出一顆沒有日期的「✓」。 */
+{
+  const ME2='M-HPH';
+  const T8={id:'T8',member_id:ME2,ticket_type_id:'tt-g',plan_name:'私人教練課 1V1',source:'purchase',
+    purchase_date:'2026-06-18',start_date:'2026-06-18',sessions_total:8,sessions_remaining:0,status:'usable'};
+  const P=(id,date,status,o)=>Object.assign({id,date,start_time:'15:00',status,category:'私人教練',
+    ticket_type_id:'tt-g',member_id:ME2,member_ids:[],attendance:{},ticket_id:'T8'},o||{});
+  const bks=[P('a','2026-06-18','completed'),P('b','2026-06-25','completed'),
+    P('c','2026-07-16','checked_in'),
+    P('d','2026-07-23','cancelled',{ticket_id:null,refund_waived:true}),   // 事後補退：不算用掉
+    P('e','2026-07-30','checked_in'),
+    P('f','2026-08-06','cancelled',{refund_waived:true}),                   // 取消時選了扣課不退
+    P('g','2026-08-13','booked'),P('h','2026-08-20','booked'),P('i','2026-08-27','booked')];
+  const lg=[{id:'x1',ticket_id:'T8',booking_id:'d',action:'refund'},
+    {id:'x2',ticket_id:'T8',booking_id:'e',action:'deduct'},{id:'x3',ticket_id:'T8',booking_id:'f',action:'deduct'},
+    {id:'x4',ticket_id:'T8',booking_id:'g',action:'deduct'},{id:'x5',ticket_id:'T8',booking_id:'h',action:'deduct'},
+    {id:'x6',ticket_id:'T8',booking_id:'i',action:'deduct'}];
+  const W2=box.buildWallet(ME2,{tickets:[T8],bookings:bks,logs:lg,typeMap:TYPES});
+  const s8=W2.slots.find(x=>x.id==='T8');
+  eq('★ 8 堂票：已用 5（含 8/6 取消未退）、待上 3', [s8.used,s8.pending], [5,3]);
+  ok('★ 8/6 那一堂有戳記（不再是沒有日期的 ✓）', s8.stamps.some(b=>b.date==='2026-08-06'));
+  ok('★ 7/23 事後被補退的不算用掉（refund_waived 旗標還在，但帳本已退）',
+     !s8.stamps.some(b=>b.date==='2026-07-23'));
+  ok('★ 判定看帳本淨扣，不只看旗標',
+     /const _eaten=b=>bkEatenCancel\(b\) && \(_netChg\[b\.id\]\|\|0\)>0;/.test(src));
+  ok('★ 圓形卡把它畫成紅色（與請假同一個語彙）',
+     /const lvc=\(b&&b\._leave\)\?' mtk-leave':\(\(b&&b\._eaten\)\?' mtk-eaten':''\);/.test(src)
+     && /\.mtk-used\.mtk-leave,\.mtk-used\.mtk-eaten\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src));
+  ok('　　滑鼠提示說得出原因', /取消未退（取消時選了扣課不退）/.test(src));
+  ok('　　會員列表的預約索引也收進來（否則列表頁的圓點又會少一顆）',
+     /if\(!b \|\| \(b\.status==='cancelled' && !bkEatenCancel\(b\)\)\) return;/.test(src));
+}
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

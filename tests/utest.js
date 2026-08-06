@@ -6,6 +6,8 @@
                案例維持原樣（陳蘭馨混合票、朱庭箴、全會員比對守則）。 */
 /* 2026-08-01：buildWallet 的推算改為「團課依名額展開」，用到共用的 bkIsGroup／mids —— 沙箱補上替身 */
 globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
+/* 2026-08-06：取消但「扣課不退」的那一堂仍算用掉（黃品華案例）—— 沙箱補上替身 */
+globalThis.bkEatenCancel=b=>!!(b&&b.status==='cancelled'&&b.refund_waived);
 globalThis.mids=b=>(b&&Array.isArray(b.member_ids))?b.member_ids:[];
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');

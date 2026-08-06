@@ -3535,7 +3535,7 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .mtk-lock{background:#f0ece3;border:1.5px dashed #cfc7b8;box-shadow:none;color:#a39b8f;font-size:11px;}
 /* 團課請假（2026-08-06 使用者定案：「對會員來說算一堂簽到，圓形卡要填滿用紅色標示」）——
    這一堂票照扣不退、人沒來，另發補課券。實心紅＝用掉了但不是來上課。 */
-.mtk-used.mtk-leave{background:var(--danger,#b5372e);color:#fff;}
+.mtk-used.mtk-leave,.mtk-used.mtk-eaten{background:var(--danger,#b5372e);color:#fff;}
 /* 票券結果色標（2026-08-06 使用者指示：「確認是否扣票的地方要用顏色標示，
    綠色票券返回、紅色票券扣除」—— 黃品華當天又被誤扣一堂）。
    兩種結果在同一個視窗裡並列時，顏色要先於文字被讀到。 */
@@ -7515,8 +7515,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.1621';
-const APP_VERSION_LABEL='v260806.1621';
+const APP_VERSION = '260806.1650';
+const APP_VERSION_LABEL='v260806.1650';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11986,7 +11986,8 @@ function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk){
      改成一個名額一個圓點（同一堂課會出現同樣的日期兩三次，那正是事實）。 */
   const put=(tid,b)=>{ (byTicket[tid]=byTicket[tid]||[]).push(b); };
   (myBk||[]).forEach(b=>{
-    if(!b || b.category!=='小班肌力' || b.status==='cancelled') return;
+    // 取消未退（扣課不退）的仍要蓋戳記 —— 票已經吃掉了（2026-08-06）
+    if(!b || b.category!=='小班肌力' || (b.status==='cancelled' && !bkEatenCancel(b))) return;
     /* 逐名額（2026-07-30 名額鍵）：同一人兩個名額，只到一個時另一個仍是待上 */
     const mine=[], seen={};
     (mids(b)||[]).forEach(id=>{
@@ -12051,6 +12052,7 @@ function buildWallet(memberId, ctx){
        本堂照扣不退、另發補課券，票上那一格確實用掉了。原本只認 checked_in，
        請假那一格會掉回「待上」，票明明扣滿卻顯示還有一格空的
        （李曉娟 8/8 請假、8/15 補課 → 8/15 反而被畫進原票券的第 4 格）。 */
+    if(_eaten(b)) return true;                     // 取消未退＝票已吃掉，算已用
     if(typeof grpSeatAttCount==='function' && bkIsGroup(b))
       return (grpSeatAttCount(b, memberId) + ((typeof grpSeatLeaveCount==='function')?grpSeatLeaveCount(b, memberId):0)) > 0;
     return b.status==='checked_in'||b.status==='completed';
@@ -12076,7 +12078,16 @@ function buildWallet(memberId, ctx){
     : (c.bookings||[]).filter(b=>b && (bkHasMember(b,memberId) || (b.ticket_id&&mineIds[b.ticket_id])));
   /* 同行第二台（2026-08-05 黃麗琴案例：一點約兩台跑步機，圓形卡卻畫出 4 顆）——
      第二台是影子預約（sibling_of 指到主預約、不扣點），不列入戳記與堂數。 */
-  const live=myBk.filter(b=>b && b.status!=='cancelled' && !b.sibling_of);
+  /* 取消但扣課不退的那幾堂也要蓋戳記（2026-08-06 黃品華案例）——
+     票被吃掉了卻不畫出來，圓形卡就會出現一顆沒有日期的「✓」。
+     ⚠ 只認「帳本上真的還扣著」的：refund_waived 這個旗標留得住、事後補退的
+     （7/23 那筆「取消未退堂回補」）旗標仍是 true，只看旗標會多畫一顆。 */
+  const _netChg={};
+  (c.logs||[]).forEach(l=>{ if(!l||!l.booking_id||!l.ticket_id) return;
+    const d=l.action==='deduct'?1:(l.action==='refund'?-1:0); if(!d) return;
+    _netChg[l.booking_id]=(_netChg[l.booking_id]||0)+d; });
+  const _eaten=b=>bkEatenCancel(b) && (_netChg[b.id]||0)>0;
+  const live=myBk.filter(b=>b && (b.status!=='cancelled' || _eaten(b)) && !b.sibling_of);
 
   /* 哪幾堂是會員自己從手機約的（2026-08-01 使用者指示：圓形卡旁邊做個備註）——
      兩種來源要分開看：
@@ -23199,6 +23210,11 @@ function grpSeatAttCount(b, memberId){
   if(!marked) return (b.status==='checked_in'||b.status==='completed')?ks.length:0;
   return ks.filter(k=>att[k]==='checked_in').length;
 }
+/* 取消但「扣課不退」的那一堂（2026-08-06 黃品華案例，使用者：「這一個勾是今天 8/6 請假取消的，
+   教練最後選到扣課，所以才出現的」）——票確實被吃掉了，但預約已取消，
+   原本不進戳記，於是圓形卡多出一顆沒有日期的「✓」，誰也看不出那一格用在哪。
+   收進戳記、畫成紅色（與請假同一個語彙：票用掉了，人沒上到課）。 */
+function bkEatenCancel(b){ return !!(b && b.status==='cancelled' && b.refund_waived); }
 /* 這位會員在這堂團課「請假」的名額數（2026-08-06 使用者定案）——
    「團課的請假，對會員來說算一堂簽到」：本堂票券照扣不退、另發補課券，
    所以票券夾要把它算成已用掉的一格（只是畫成紅色，見 ticketTokens）。 */
@@ -23676,7 +23692,8 @@ PAGES.members=async function(){
   const _memBkIdx={};      // 會員 → 他的預約（一堂一筆；名額數由票券夾依 member_ids 自行展開）
   const _memPendingIdx={}; // 會員 → 是否還有「今天以後、已預約未簽到」的課
   (allBk||[]).forEach(b=>{
-    if(!b || b.status==='cancelled') return;
+    // 取消未退（扣課不退）的仍要進索引 —— 票被吃掉了，圓形卡要畫得出那一格（2026-08-06）
+    if(!b || (b.status==='cancelled' && !bkEatenCancel(b))) return;
     const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
     /* 同一人佔兩個名額時 member_ids 會重複同一個 id（2026-08-05 游晴雅案例）——
        這裡若一個名額塞一筆，票券夾會把同一堂處理兩遍、戳記翻倍畫成假超約紅圈。
@@ -37963,6 +37980,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
      stamps 裡同一堂團課每個名額出現一次；這位會員簽到幾個名額，就只有幾顆實心。 */
   const _grpLeft={};
   const _isDoneOcc=b=>{
+    if(typeof bkEatenCancel==='function' && bkEatenCancel(b)) return 'eaten';   // 取消未退（2026-08-06）
     if(typeof grpSeatAttCount!=='function' || !bkIsGroup(b))
       return (b.status==='checked_in'||b.status==='completed')?'att':'';
     /* 請假名額也算「已使用」（2026-08-04 徐翎娟案例，使用者指示：「這兩堂超約就收在
@@ -37988,7 +38006,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
        紅虛線是重複又嚇人（看起來像欠 7 堂票，其實是還沒到繳費期）。 */
     if(b.pending_contract && !b.ticket_id) return;
     const _st=_isDoneOcc(b);
-    if(_st) _doneL.push(_st==='leave' ? Object.assign({},b,{_leave:1}) : b);
+    if(_st) _doneL.push(_st==='att' ? b : Object.assign({},b,{[_st==='leave'?'_leave':'_eaten']:1}));
     else if(b.status!=='cancelled') _bookedL.push(b);
   });
   const done=expand(_doneL)
@@ -38021,9 +38039,10 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
       const cur=_isCur(b)?' mtk-cur':'';
       const slf=selfCls(b);
       const shc=((b&&b._shBy)?' mtk-sh':'')+_ownCls(b);
-      /* 請假那一格紅色（2026-08-06 使用者指示）：這一堂票照扣、人沒來，另發補課券。 */
-      const lvc=(b&&b._leave)?' mtk-leave':'';
-      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}${shc}" style="--tk-acc:${v.accent};" title="${(b&&b._leave)?'請假（本堂照扣，另發補課券）':'已完成'}${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${b?md(b):'✓'}${cur?'<i class="mtk-comet"></i>':''}</span>`;
+      /* 紅色的兩種「票用掉了但人沒上到課」（2026-08-06）：
+         請假＝本堂照扣、另發補課券；取消未退＝取消時選了扣課不退。 */
+      const lvc=(b&&b._leave)?' mtk-leave':((b&&b._eaten)?' mtk-eaten':'');
+      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}${shc}" style="--tk-acc:${v.accent};" title="${(b&&b._leave)?'請假（本堂照扣，另發補課券）':((b&&b._eaten)?'取消未退（取消時選了扣課不退）':'已完成')}${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${b?md(b):'✓'}${cur?'<i class="mtk-comet"></i>':''}</span>`;
     }
     else if(bi<booked.length){
       const b=booked[bi++];

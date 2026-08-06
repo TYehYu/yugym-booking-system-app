@@ -1,5 +1,7 @@
 /* 從 index.html 抽出真正的票券分區程式碼（tkCategoryOf + _isExpiredTk/_isHistoryTk/tkListHtml），
    用正式庫真實資料驗證：課程票券可重新啟用、自主訓練不可。 */
+/* 2026-08-06：取消但「扣課不退」的那一堂仍算用掉（黃品華案例）—— 沙箱補上替身 */
+globalThis.bkEatenCancel=b=>!!(b&&b.status==='cancelled'&&b.refund_waived);
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 

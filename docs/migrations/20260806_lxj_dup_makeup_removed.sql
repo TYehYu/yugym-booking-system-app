@@ -1,0 +1,21 @@
+-- 2026-08-06 資料修正：移除李曉娟重複的補課券（使用者指示：「李曉娟這筆多出來的補課券 #21 移除」）
+--
+-- 成因：櫃檯先在 8/8 那堂團課（IMPB-B2026062717282663）標請假 → 發券 TK-msh2l9l50unx；
+--       之後把整筆預約取消、改建一筆新的（BK-msh6w1kvh299）又標一次請假 → 再發一張
+--       TK-msh6xcr35ads（8/15 補課已用掉）。同一堂課於是留下兩張補課券。
+--       當時的取消流程不會收回已發的補課券 → 已於 v260806.1621 修掉
+--       （revokeMakeupOnCancel：整堂取消時收回這堂發過、還沒用的補課券）。
+--
+-- 執行內容（已於正式庫執行）：
+--   delete from member_tickets
+--   where id='TK-msh2l9l50unx' and member_id='MEM-1F69912AAECC'
+--     and source='makeup' and sessions_remaining=1;
+--
+-- 被刪除的那一張：團體課・補課券，1 堂未使用，效期至 2026-08-22，
+--   makeup_for_booking = IMPB-B2026062717282663（該筆預約已 cancelled）。
+--   ticket_logs 有 ON DELETE CASCADE，該券的 grant 紀錄一併移除，故留此檔備查。
+--
+-- 保留的那一張：TK-msh6xcr35ads（makeup_for_booking = BK-msh6w1kvh299），
+--   已於 8/15 那堂（BK-msh6sgkhiowu）扣用，餘額 0。
+--
+-- 全庫掃描（同日）：source='makeup' 且未使用、但所屬預約已取消的，僅此一張。

@@ -2,6 +2,8 @@ const fs=require('fs');
 /* 2026-07-31：課種判斷抽成共用的 bkIsGroup／bkIsSelf／bkIsMassage（見 TK_POCKETS）——
    沙箱裡給等價替身，測資只有 category 可判。 */
 globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
+/* 2026-08-06：取消但「扣課不退」的那一堂仍算用掉（黃品華案例）—— 沙箱補上替身 */
+globalThis.bkEatenCancel=b=>!!(b&&b.status==='cancelled'&&b.refund_waived);
 globalThis.bkIsSelf=b=>!!(b&&b.category==='自主訓練');
 globalThis.bkIsMassage=b=>!!(b&&b.category==='運動按摩');
 const h=fs.readFileSync('index.html','utf8');

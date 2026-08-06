@@ -9,6 +9,8 @@
    四堂待上全跑到那張票頭上 → 四週票待上 0、帳面餘額也 0（預約即扣）→ 標成「已用畢」收進歷史。
 
    改讀 ticket_logs：預約當下扣哪張票就記哪張票（deduct 帶 booking_id，取消寫 refund 加回）。 */
+/* 2026-08-06：取消但「扣課不退」的那一堂仍算用掉（黃品華案例）—— 沙箱補上替身 */
+globalThis.bkEatenCancel=b=>!!(b&&b.status==='cancelled'&&b.refund_waived);
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 

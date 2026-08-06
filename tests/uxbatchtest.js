@@ -127,7 +127,10 @@ ok('　　同一人佔多個名額也只塞一筆（名額由票券夾展開，�
    /if\(!_seen\[mid\]\)\{ _seen\[mid\]=1; \(_memBkIdx\[mid\]=_memBkIdx\[mid\]\|\|\[\]\)\.push\(b\); \}/.test(src));
 ok('　　只有「今天以後、已預約未簽到」才算待上',
    /if\(b\.status==='booked' && String\(b\.date\|\|''\)\.slice\(0,10\)>=today\) _memPendingIdx\[mid\]=true;/.test(src));
-ok('　　已取消的不算', /if\(!b \|\| b\.status==='cancelled'\) return;/.test(src));
+/* 2026-08-06 黃品華案例：取消時選了「扣課不退」的那一堂，票被吃掉了，
+   索引若把它濾掉，圓形卡就會出現一顆沒有日期的「✓」。 */
+ok('　　已取消的不算，但「取消未退（扣課不退）」要算',
+   /if\(!b \|\| \(b\.status==='cancelled' && !bkEatenCancel\(b\)\)\) return;/.test(src));
 ok('★ 原因寫在程式裡（兩個成因都記下來）',
    /她今天還有一堂團課，會員列表的票券欄卻是空的/.test(src)
    && /團課的 member_id 是 null（學員在 member_ids）/.test(src));
