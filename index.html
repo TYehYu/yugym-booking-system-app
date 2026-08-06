@@ -1555,6 +1555,11 @@ body.mc-mode .layout{padding-top:8px;}
 .fm-tb .fm-k i{font-style:normal;font-size:10px;font-weight:700;border-radius:4px;padding:1px 4px;margin:0 1px;}
 .fm-tb .fm-k .fm-nw{background:#e8eef7;color:#1a3a6e;}
 .fm-tb .fm-k .fm-rn{background:#f5ede0;color:#8a5e28;}
+/* 每位教練一組四欄的粗框（2026-08-06 使用者指示：用顏色區分、粗線框出來） */
+.fm-tb .fm-gs{border-left:3px solid var(--cc,var(--bd));}
+.fm-tb .fm-ge{border-right:3px solid var(--cc,var(--bd));}
+.fm-tb .fm-gh{border-left:3px solid var(--cc,var(--bd));border-right:3px solid var(--cc,var(--bd));
+  border-top:3px solid var(--cc,var(--bd));letter-spacing:.06em;}
 .fm-tb tbody tr:hover td,.fm-tb tbody tr:hover .fm-d{background:var(--sage-bg);}
 .fm-tb .fm-sum td,.fm-tb .fm-sum .fm-d{background:#f7f3ea;font-weight:800;border-bottom:2px solid var(--bd);}
 .fm-tb .fm-today .fm-d{color:var(--green);}
@@ -7401,8 +7406,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260806.0900';
-const APP_VERSION_LABEL='v260806.0900';
+const APP_VERSION = '260806.0915';
+const APP_VERSION_LABEL='v260806.0915';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -39197,6 +39202,7 @@ async function finMatrix(){
       <div class="empty" style="padding:30px 10px;"><div class="em-t">這個月還沒有紀錄</div></div></div>`;
     return;
   }
+  const _fmCol={}; cols.forEach(c=>{ _fmCol[c.id]=(coachTagColor(c.id)||{}).fg||'#6a655c'; });
   const [Y,M]=ym.split('-').map(Number);
   const days=new Date(Y,M,0).getDate();
   const WD=['日','一','二','三','四','五','六'];
@@ -39215,17 +39221,23 @@ async function finMatrix(){
       const s=sum[c.id]; s.pt+=v.pt; s.grp+=v.grp; s.amt+=v.amt; s.nw+=v.nw; s.rn+=v.rn;
       dayTotal+=v.pt+v.grp;
       const kd=[v.nw?`<i class="fm-nw">新${v.nw}</i>`:'',v.rn?`<i class="fm-rn">續${v.rn}</i>`:''].join('');
-      tds+=`<td class="fm-c">${num(v.pt)}</td><td class="fm-c fm-g">${num(v.grp)}</td>`
-        +`<td class="fm-c fm-m">${money(v.amt)}</td><td class="fm-c fm-k">${kd}</td>`;
+      /* 每位教練一組四欄，用粗線框起來（2026-08-06 使用者指示）：組首粗左線、組尾粗右線，
+         顏色＝該教練的識別色（與行事曆課卡標籤同一組色）。 */
+      const cc=_fmCol[c.id];
+      tds+=`<td class="fm-c fm-gs" style="--cc:${cc};">${num(v.pt)}</td><td class="fm-c fm-g">${num(v.grp)}</td>`
+        +`<td class="fm-c fm-m">${money(v.amt)}</td><td class="fm-c fm-k fm-ge" style="--cc:${cc};">${kd}</td>`;
     });
     dayRows+=`<tr class="${isToday?'fm-today':''}"><th class="fm-d">${d}<span>（${wd}）</span></th><td class="fm-c fm-t">${num(dayTotal)}</td>${tds}</tr>`;
   }
   let sumTds='', sumAll=0;
-  cols.forEach(c=>{ const s=sum[c.id]; sumAll+=s.pt+s.grp;
-    sumTds+=`<td class="fm-c">${num(s.pt)}</td><td class="fm-c fm-g">${num(s.grp)}</td>`
-      +`<td class="fm-c fm-m">${money(s.amt)}</td><td class="fm-c fm-k">${[s.nw?`<i class="fm-nw">新${s.nw}</i>`:'',s.rn?`<i class="fm-rn">續${s.rn}</i>`:''].join('')}</td>`; });
-  const head1=cols.map(c=>`<th class="fm-h" colspan="4">${coachDisp(c)}</th>`).join('');
-  const head2=cols.map(()=>`<th class="fm-sh">教練課</th><th class="fm-sh">團課</th><th class="fm-sh">業績</th><th class="fm-sh">新/續</th>`).join('');
+  cols.forEach(c=>{ const s=sum[c.id]; sumAll+=s.pt+s.grp; const cc=_fmCol[c.id];
+    sumTds+=`<td class="fm-c fm-gs" style="--cc:${cc};">${num(s.pt)}</td><td class="fm-c fm-g">${num(s.grp)}</td>`
+      +`<td class="fm-c fm-m">${money(s.amt)}</td><td class="fm-c fm-k fm-ge" style="--cc:${cc};">${[s.nw?`<i class="fm-nw">新${s.nw}</i>`:'',s.rn?`<i class="fm-rn">續${s.rn}</i>`:''].join('')}</td>`; });
+  /* 教練用顏色區分（2026-08-06 使用者指示）：表頭染該教練色、整組用粗線框住 */
+  const head1=cols.map(c=>{ const k=coachTagColor(c.id);
+    return `<th class="fm-h fm-gh" colspan="4" style="--cc:${_fmCol[c.id]};background:${k.bg};color:${k.fg};">${coachDisp(c)}</th>`; }).join('');
+  const head2=cols.map(c=>{ const cc=_fmCol[c.id];
+    return `<th class="fm-sh fm-gs" style="--cc:${cc};">教練課</th><th class="fm-sh">團課</th><th class="fm-sh">業績</th><th class="fm-sh fm-ge" style="--cc:${cc};">新/續</th>`; }).join('');
   body.innerHTML=`<div class="card" style="padding:14px 16px;">
     <div class="card ops-datebar" style="margin:-4px 0 12px;box-shadow:none;border:none;padding:0;">
       <button class="btn btn-ghost btn-sm" onclick="finMonthMove(-1)">‹ 上個月</button>

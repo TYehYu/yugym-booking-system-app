@@ -47,6 +47,7 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     ymd:()=> '2026-08-06',
     TODAY:new Date(2026,7,6),
     bkCoachId:b=>b.substitute_coach_id||b.coach_id||null,
+    coachTagColor:id=>({c1:{bg:'#e8eef7',fg:'#1a3a6e'},c2:{bg:'#f5ede0',fg:'#8a5e28'}}[id]||{bg:'#EAE6DE',fg:'#6a655c'}),
     bkIsGroup:b=>b.category==='小班肌力',
     bkIsSelf:b=>b.category==='自主訓練',
     mids:b=>Array.isArray(b.member_ids)?b.member_ids:[],
@@ -63,8 +64,8 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     ok('★ 只列出有動靜的教練（閒置的不佔欄）',
        out.includes('RANDY') && out.includes('SANDY') && !out.includes('閒置'));
     ok('★ 有月合計列，排在每日之上', out.indexOf('月合計')>0 && out.indexOf('月合計')<out.indexOf('（六）'));
-    ok('★ 表頭四欄一組：教練課／團課／業績／新+續',
-       /<th class="fm-sh">教練課<\/th><th class="fm-sh">團課<\/th><th class="fm-sh">業績<\/th><th class="fm-sh">新\/續<\/th>/.test(out));
+    ok('★ 表頭四欄一組：教練課／團課／業績／新+續（2026-08-06 起組首組尾帶框線 class）',
+       /教練課<\/th><th class="fm-sh">團課<\/th><th class="fm-sh">業績<\/th><th class="fm-sh fm-ge"[^>]*>新\/續<\/th>/.test(out));
     ok('★ 8/01 RANDY：教練課 2 堂、業績 12,800、新約 1',
        out.includes('12,800') && /新1/.test(out));
     ok('★ 團課以人次計（SANDY 8/01＝3）', /class="fm-c fm-g">3</.test(out));
@@ -76,6 +77,16 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     ok('★ 作廢的票不算續約、團課票不列入新/續（合計只有 1 新 1 續）',
        (out.match(/新1/g)||[]).length===2 && (out.match(/續1/g)||[]).length===2);   // 當日列＋月合計列各一次
     ok('★ 有月份切換（沿用財務頁的上/下個月）', /finMonthMove\(-1\)/.test(out) && /2026 年 08 月/.test(out));
+    /* 2026-08-06 使用者指示：教練用顏色區分、每位教練的資料用粗線框出來 */
+    ok('★ 表頭染教練識別色', /<th class="fm-h fm-gh" colspan="4" style="--cc:#1a3a6e;background:#e8eef7;color:#1a3a6e;">RANDY<\/th>/.test(out));
+    ok('★ 每組四欄用粗線框（組首 fm-gs／組尾 fm-ge，顏色跟著教練）',
+       /<td class="fm-c fm-gs" style="--cc:#8a5e28;">/.test(out)
+       && /<td class="fm-c fm-k fm-ge" style="--cc:#8a5e28;">/.test(out));
+    ok('　　次表頭也框住（教練課…新\/續）',
+       /<th class="fm-sh fm-gs" style="--cc:#1a3a6e;">教練課<\/th>/.test(out)
+       && /<th class="fm-sh fm-ge" style="--cc:#1a3a6e;">新\/續<\/th>/.test(out));
+    ok('　　CSS 有畫線', /\.fm-tb \.fm-gs\{border-left:3px solid var\(--cc,var\(--bd\)\);\}/.test(src)
+       && /\.fm-tb \.fm-gh\{border-left:3px solid var\(--cc/.test(src));
     console.log("\n"+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
     process.exit(fail?1:0);
   })();
