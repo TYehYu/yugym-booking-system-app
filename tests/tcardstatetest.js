@@ -39,12 +39,17 @@ ok('★ 卡片帶上 tcard-miss（其餘旗標不變）',
    && /const _miss = !canceled && !done && !live && nowMin>=mn\+\(Number\(b\.duration\)\|\|60\);/.test(src));
 /* 2026-08-06 定版（使用者三次回饋後撤回 offset-path 版）：框固定不動、只掃漸層角度，
    亮帶含前端白光沿四邊與圓角走；不另加頭部圓點（加了反而對不齊）。 */
-ok('★ 上課中：框不動、只掃漸層角度（不另加頭部圓點）',
+ok('★ 上課中：框不動、只掃漸層角度',
    /@property --tcAng\{ syntax:'<angle>'; inherits:false; initial-value:0deg; \}/.test(src)
    && /background:conic-gradient\(from var\(--tcAng\),/.test(src)
    && /@keyframes tcardComet\{ from\{--tcAng:0deg;\} to\{--tcAng:360deg;\} \}/.test(src)
-   && !/offset-path:border-box/.test(src)
-   && !/\.tcard-std\.tcard-live::after\{/.test(src));
+   && !/offset-path:border-box/.test(src));   // 註解裡提到 offset-path 沒關係，只要沒真的套用
+/* 2026-08-06：課卡補流星頭 —— 同一支角度動畫的第二層「較粗一小段亮弧」，永遠在尾巴最前端 */
+ok('★ 課卡有流星頭（較粗的亮弧、與尾巴同一支動畫）',
+   /\.tcard-std\.tcard-live::after\{content:'';position:absolute;inset:-3px;/.test(src)
+   && /transparent 0deg, transparent 349deg,/.test(src)
+   && /mask-composite:exclude; padding:5px;/.test(src)
+   && (src.match(/animation:tcardComet 3\.2s linear infinite;/g)||[]).length===2);
 ok('★ 上課中／逾時未簽仍疊在左側教練欄之上（框不被切掉）',
    /\.tcard-std\.tcard-live,\.tcard-std\.tcard-miss\{z-index:5;\}/.test(src)
    && /\.tcard-coach\{width:118px;flex-shrink:0;padding-top:4px;position:sticky;left:0;z-index:4;/.test(src));
