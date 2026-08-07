@@ -152,6 +152,19 @@ console.log('\n7/30 現場資料迴歸（張正怡 IMP-00034）');
   }
 }
 
+console.log('\n忙碌回饋與即時更新（2026-08-07 使用者回報：「場地變更也沒有即時更新」）');
+ok('★ 換場地時顯示忙碌狀態（要重跑一次容量檢查，會停一下）',
+   /const done=cxBusy\('更換中…'\);/.test(src));
+ok('★ 換完之後底下那一頁也重畫（原本只重開明細，行事曆還是舊場地）',
+   /await openBookingDetail\(id\);/.test(src)
+   && /window\._calStepping=true; navTo\(CUR_PAGE, CUR_GROUP\);/.test(src));
+ok('　　重畫吃快取、0 網路等待（寫入時已就地更新）',
+   /寫入時 dbCacheApply 已就地更新快取，所以是 0 網路等待/.test(src));
+ok('　　每一條失敗路徑都會收掉忙碌狀態',
+   /if\(!b\)\{done\(\);showToast\('找不到預約'\);return;\}/.test(src)
+   && /if\(err\)\{ done\(\); showToast\('無法更換：'\+err\); return; \}/.test(src)
+   && /\}catch\(e\)\{ done\(\); showToast\('更換失敗：/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
 }

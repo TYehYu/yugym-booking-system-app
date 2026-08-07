@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.1101';
-const APP_VERSION_LABEL='v260807.1101';
+const APP_VERSION = '260807.1105';
+const APP_VERSION_LABEL='v260807.1105';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22410,17 +22410,24 @@ async function openVenueChange(id){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button></div>`);
 }
 async function doVenueChange(id,vid){
+ /* 忙碌回饋＋畫面即時更新（2026-08-07 使用者回報：「場地變更也沒有即時更新」）——
+    ① 換場地要重跑一次 validateBooking（逐場地檢查該時段容量），按下去會停一下
+    ② 換完只重開了明細視窗，**底下的行事曆還是舊場地**，要換頁回來才看得到 */
+ const done=cxBusy('更換中…');
  try{
-  const b=await dbGet('bookings',id); if(!b){showToast('找不到預約');return;}
+  const b=await dbGet('bookings',id); if(!b){done();showToast('找不到預約');return;}
   const probe={...b, venue_pref:vid};
   const err=await validateBooking(probe,b.date,b.start_time,b.duration||60);
-  if(err){ showToast('無法更換：'+err); return; }
+  if(err){ done(); showToast('無法更換：'+err); return; }
   b.venue_unit=probe.venue_unit;
   await dbPut('bookings',b);
   try{ occCacheClear(); }catch(_){}
   showToast('已更換場地：'+venueName(b.venue_unit));
-  openBookingDetail(id);
- }catch(e){ showToast('更換失敗：'+(e&&e.message?e.message:e)); }
+  await openBookingDetail(id);
+  /* 底下那一頁也重畫（寫入時 dbCacheApply 已就地更新快取，所以是 0 網路等待）。
+     _calStepping 讓行事曆吃快取重繪、不跑翻頁動畫；明細視窗是獨立覆層，不會被關掉。 */
+  try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
+ }catch(e){ done(); showToast('更換失敗：'+(e&&e.message?e.message:e)); }
 }
 // 確認補發補課券
 async function confirmMakeup(id){
