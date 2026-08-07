@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.1651';
-const APP_VERSION_LABEL='v260807.1651';
+const APP_VERSION = '260807.1732';
+const APP_VERSION_LABEL='v260807.1732';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21897,8 +21897,15 @@ async function openBookingDetail(id){
             :(memMapD[mid]||'？')}${seatTag}${(_sl&&_sl.t&&_sl.t.family_user)?`<span class="tag" style="font-size:10.5px;background:#eef2fa;color:#1a3a6e;">使用人：${_sl.t.family_user}</span>`:''}</span>${badge}${btn}
         </div>${tkInfo}</div>`;   /* 名字可點開會員資料（2026-07-28 使用者指示） */
     }).join('') : '<div style="color:var(--t3);font-size:12px;padding:4px 0;">尚未排名單</div>';
-    memberLine=`<div><div style="display:flex;align-items:center;margin-bottom:4px;"><span style="color:var(--t2);">名單</span>　<span style="color:var(--t3);font-size:11px;">（${gIdsD.length}/5）</span>
-      ${editable?`<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="openGroupMembers('${b.id}')">管理名單</button>`:''}</div>
+    /* 人數上限跟著課卡走（2026-08-07 使用者指示：「團課明細要新增更改人數的功能，
+       有時候當天教練可以接受更多人一起上課」）—— 原本這裡寫死 5，改上限也看不出來。
+       滿員時把數字標紅，並在旁邊給一個直接改人數的入口。 */
+    const _gmaxD=Math.max(1,Number(b.max_heads)||5);
+    const _gfullD=gIdsD.length>=_gmaxD;
+    memberLine=`<div><div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="color:var(--t2);">名單</span>
+      <span style="font-size:11px;color:${_gfullD?'var(--danger,#b5372e)':'var(--t3)'};font-weight:${_gfullD?'700':'400'};font-family:var(--num);">（${gIdsD.length}/${_gmaxD}${_gfullD?'・已滿':''}）</span>
+      ${editable?`<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="openGrpMaxEdit('${b.id}')" title="場地有餘裕時可放寬本堂人數">改人數</button>
+      <button class="btn btn-ghost btn-sm" onclick="openGroupMembers('${b.id}')">管理名單</button>`:''}</div>
       ${(isPastD&&groupCkOK)?`<div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:8px;padding:7px 10px;font-size:11.5px;line-height:1.6;margin-bottom:6px;">⚠ 此課已過期，逐人簽到為<b>逾期補登</b>；名單與時間已鎖定不可更動。</div>`:''}
       <div style="background:var(--card2);border-radius:9px;padding:4px 10px;">${rows}</div></div>`;
   }else if(b.category==='場租'){
@@ -23196,6 +23203,48 @@ async function _saveBookingTime(id){
   }
   closeModal();showToast('已更新預約');navTo(CUR_PAGE);
   return true;
+}
+/* 只改本堂人數上限（2026-08-07 使用者指示：「有時候當天教練可以接受更多人一起上課」）——
+   原本只能從「管理名單」視窗裡順便調，但那個視窗一進去就要重挑名單、按儲存才生效；
+   教練當場說「今天可以多收一個」時，要的只是把上限 +1。這裡做成獨立入口，不動名單也不動票。 */
+async function openGrpMaxEdit(id){
+  const b=await dbGet('bookings',id); if(!b) return;
+  const cur=Math.max(1,Number(b.max_heads)||5);
+  const now=mids(b).length;
+  showModal(`<div class="modal-title">本堂人數上限</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">
+      ${String(b.date).replace(/-/g,'/')}（${WD[(parseYmd(b.date)||new Date()).getDay()]}）${String(b.start_time).slice(0,5)} 的團體課，
+      目前名單 <b>${now}</b> 人、上限 <b>${cur}</b> 人。<br>場地有餘裕、教練當天願意多收時可以放寬；<b>不會動到名單與票券</b>。</div>
+    <div class="form-row" style="display:flex;align-items:center;gap:10px;">
+      <label style="margin:0;flex:none;">人數上限</label>
+      <input type="number" id="gmx-n" value="${cur}" min="${Math.max(1,now)}" max="12" style="width:96px;font-family:var(--num);font-size:16px;font-weight:700;">
+      <span style="font-size:11.5px;color:var(--t3);">預設 5 人・最多 12 人${now>0?`・不可低於名單人數 ${now}`:''}</span></div>
+    <div id="gmx-err" style="display:none;color:var(--danger,#b5372e);font-size:12.5px;margin:6px 0;"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();openBookingDetail('${id}')">取消</button>
+      <button class="btn btn-green" onclick="saveGrpMax('${id}')">儲存</button></div>`);
+}
+async function saveGrpMax(id){ return onceAct('grpmax:'+id, ()=>_saveGrpMax(id)); }
+async function _saveGrpMax(id){
+  const el=document.getElementById('gmx-n'); if(!el) return;
+  const err=document.getElementById('gmx-err');
+  const show=m=>{ if(err){ err.textContent=m; err.style.display='block'; } };
+  const b=await dbGet('bookings',id); if(!b) return;
+  const now=mids(b).length;
+  const n=Math.floor(Number(el.value)||0);
+  if(!(n>=1&&n<=12)){ show('請填 1–12 之間的人數'); return false; }
+  if(n<now){ show(`名單上已經有 ${now} 人，上限不能低於這個數字（要先移除名額）`); return false; }
+  const cur=Math.max(1,Number(b.max_heads)||5);
+  if(n===cur){ closeModal(); openBookingDetail(id); return true; }
+  const _clr=cxBusy('儲存中…');
+  try{
+    b.max_heads=n;
+    await dbPut('bookings',b);
+    showToast(`本堂人數上限已改為 ${n} 人（原 ${cur} 人）`);
+    await openBookingDetail(id);
+    /* 底下那一頁也重畫（寫入時快取已就地更新，0 網路等待）；明細是獨立覆層不會被關掉 */
+    try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
+    return true;
+  }catch(e){ _clr(); show('儲存失敗：'+(e&&e.message?e.message:e)); return false; }
 }
 // 團體課：管理名單（加 / 移除會員，上限 5）
 /* keepSel（2026-08-07）：被「票不夠」擋下來之後按「回名單修改」用的 ——
