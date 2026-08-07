@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.0912';
-const APP_VERSION_LABEL='v260807.0912';
+const APP_VERSION = '260807.1057';
+const APP_VERSION_LABEL='v260807.1057';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20162,6 +20162,9 @@ async function bpConfirm(memberId){
 }
 async function bpGo(memberId){ return onceAct('bindpend:'+(window._bpBid||''), ()=>_bpGo(memberId)); }
 async function _bpGo(memberId){
+ /* 忙碌回饋（2026-08-07 使用者回報：「綁定的時候沒有讀取中的動畫，看起來像當機」）——
+    整串卡位要逐筆讀寫 bookings，堂數多、網路慢的時候會停好幾秒。 */
+ const done=cxBusy('綁定中…');
  try{
   const id=window._bpBid; const b=await dbGet('bookings',id);
   if(!b||!b.pending_contract||b.member_id){ showToast('這筆卡位已被處理過'); return; }
@@ -20175,7 +20178,7 @@ async function _bpGo(memberId){
   closeModal();
   showToast(`已綁定 ${m.name||'會員'}：${series.length} 堂（仍為待簽約，收款後再轉正）`);
   navTo(CUR_PAGE);
- }catch(e){ showToast('綁定失敗：'+((e&&e.message)||e)); }
+ }catch(e){ done(); showToast('綁定失敗：'+((e&&e.message)||e)); }
 }
 async function openConvertPending(id){
   const b=await dbGet('bookings',id);
@@ -20221,9 +20224,14 @@ async function doConvertPending(memberId, tkId, mode){
   return onceAct('convert:'+(window._cpBid||'')+':'+(tkId||'')+':'+(mode||''), ()=>_doConvertPending(memberId,tkId,mode));
 }
 async function _doConvertPending(memberId, tkId, mode){
+ /* 忙碌回饋（2026-08-07 使用者回報：「轉正的時候也是」）——
+    轉正要挑票、逐堂扣課、寫回預約，整串下來好幾秒；沒有回饋按下去就像當掉。
+    ⚠ 這支中途可能改開「要扣哪一張票券？」的選擇視窗，那時要先把忙碌狀態收掉。 */
+ let done=cxBusy('轉正中…');
+ const _clr=()=>{ try{ done(); }catch(_){} done=()=>{}; };
  try{
   const id=window._cpBid; const b=await dbGet('bookings',id);
-  if(!b||!b.pending_contract){ showToast('這筆不是待簽約卡位'); return; }
+  if(!b||!b.pending_contract){ _clr(); showToast('這筆不是待簽約卡位'); return; }
   let cand=await listUsableTickets(memberId,b.ticket_type_id,b.date,b.start_time);
   /* 分期票已開通的堂數用完時（2026-08-04 使用者提問：教練們早就用待簽約卡了位，
      這些卡位轉正會怎樣？）—— listUsableTickets 會把「未開通堂數不可預約」的分期票
@@ -20241,8 +20249,9 @@ async function _doConvertPending(memberId, tkId, mode){
       if(hold.length){ cand=hold; _instOnly=true; }
     }catch(_){}
   }
-  if(!cand.length){ showToast('該會員沒有此課程的可用票券，請先完成銷售'); return; }
+  if(!cand.length){ _clr(); showToast('該會員沒有此課程的可用票券，請先完成銷售'); return; }
   if(!tkId && cand.length>1){
+    _clr();                       // 要再問一次「扣哪一張票」→ 先收掉忙碌狀態
     const m=(window._cpMembers||[]).find(x=>x.id===memberId)||{};
     showModal(`<div class="modal-title">要扣哪一張票券？</div>
       <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">${m.name||''}　${b.date.replace(/-/g,'/')} ${b.start_time}　${b.category}</div>
@@ -20257,7 +20266,7 @@ async function _doConvertPending(memberId, tkId, mode){
     return;
   }
   const tk=(tkId&&cand.find(t=>t.id===tkId))||cand[0];
-  if(!tk){ showToast('選的票券已不能用，請重新選一次'); return; }
+  if(!tk){ _clr(); showToast('選的票券已不能用，請重新選一次'); return; }
   /* 整串卡位一起轉（2026-08-04 使用者指示）：
      「待簽約先約了 12 堂、先繳 4 堂 → 後面 8 堂直接轉分期繳費保留」
      「只簽約 8 堂 → 直接取消後面佔位子的 4 堂」
@@ -20288,6 +20297,7 @@ async function _doConvertPending(memberId, tkId, mode){
      其中「取消」是把教練排好的時段還出去，按下去之前一定要先看到數字。
      只有一堂的卡位不會多這一步。 */
   if(series.length>1 && mode!=='one' && mode!=='series'){
+    _clr();                       // 要再問一次「整串怎麼轉」→ 先收掉忙碌狀態
     let a=avail, l=lockedLeft, nB=0, nH=0, drop=[];
     series.forEach(x=>{ if(a>0){a--;nB++;} else if(l>0){l--;nH++;} else drop.push(x); });
     const m=(window._cpMembers||[]).find(x=>x.id===memberId)||{};
@@ -20339,7 +20349,7 @@ async function _doConvertPending(memberId, tkId, mode){
     +(held?`、轉分期保留 ${held} 堂`:'')
     +(dropped?`、取消多出的 ${dropped} 堂`:''));
   navTo(CUR_PAGE);
- }catch(e){ showToast('轉換失敗：'+(e&&e.message?e.message:e)); }
+ }catch(e){ _clr(); showToast('轉換失敗：'+(e&&e.message?e.message:e)); }
 }
 /* 家庭成員選擇視窗（2026-08-03 使用者指示）：櫃檯幫同帳號在同一時段約第二個
    自主訓練名額時，先選這格是哪位家人使用（寫進 trial_name，與會員端同一套規則）。 */

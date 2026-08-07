@@ -21,7 +21,7 @@ console.log('① 分期票沒有已開通堂數時，仍要能整串轉成保留
      /const hold=_tks\.filter\(t=>tkUsableBy\(t,memberId\) && t\.status==='usable'/.test(F)
      && /\(\(Number\(t\.sessions_total\)\|\|0\)-\(Number\(t\.unlocked_sessions\)\|\|0\)\)>0\);/.test(F));
   ok('★ 找到就讓它進候選（avail=0 → 整串走分期保留）', /if\(hold\.length\)\{ cand=hold; _instOnly=true; \}/.test(F));
-  ok('　　仍然找不到才說「請先完成銷售」', /if\(!cand\.length\)\{ showToast\('該會員沒有此課程的可用票券，請先完成銷售'\); return; \}/.test(F));
+  ok('　　仍然找不到才說「請先完成銷售」', /if\(!cand\.length\)\{ _clr\(\); showToast\('該會員沒有此課程的可用票券，請先完成銷售'\); return; \}/.test(F));
   ok('　　票券選單標示分期未開通堂數（選之前就看得到）', /分期未開通 \$\{_lk\} 堂/.test(F));
 }
 
@@ -59,6 +59,20 @@ console.log('\n④ 既有行為沒被動到');
      && /String\(x\.trial_phone\|\|''\)===String\(b\.trial_phone\|\|''\)/.test(F)
      && /\(x\.ticket_type_id\|\|null\)===\(b\.ticket_type_id\|\|null\)/.test(F)
      && /x\.date>=ymd\(TODAY\)/.test(F));
+  /* 2026-08-07 使用者回報：「綁定會員、轉正的時候沒有讀取中的動畫，看起來像當機」——
+     兩支都要逐筆讀寫整串卡位，網路一慢就是好幾秒。沿用既有的 cxBusy（取消預約那套）。 */
+  ok('★ 轉正時顯示忙碌狀態（按鈕停用＋轉圈）', /let done=cxBusy\('轉正中…'\);/.test(src));
+  ok('★ 中途要再問一次（選票券／整串怎麼轉）時先收掉忙碌狀態',
+     /_clr\(\);                       \/\/ 要再問一次「扣哪一張票」→ 先收掉忙碌狀態/.test(src)
+     && /_clr\(\);                       \/\/ 要再問一次「整串怎麼轉」→ 先收掉忙碌狀態/.test(src));
+  ok('★ 每一條提早結束的路徑都會收掉（不會卡在轉圈）',
+     /if\(!b\|\|!b\.pending_contract\)\{ _clr\(\); showToast/.test(src)
+     && /if\(!cand\.length\)\{ _clr\(\); showToast/.test(src)
+     && /if\(!tk\)\{ _clr\(\); showToast/.test(src)
+     && /\}catch\(e\)\{ _clr\(\); showToast\('轉換失敗：/.test(src));
+  ok('★ 綁定會員也有忙碌狀態',
+     /const done=cxBusy\('綁定中…'\);/.test(src)
+     && /\}catch\(e\)\{ done\(\); showToast\('綁定失敗：/.test(src));
   /* 2026-08-06：扣不到（餘額護欄）就停止轉正，不會把保留課變成沒付錢的正式預約 */
   ok('★ 扣課仍寫 ticket_logs（deductTicket），扣不到就停',
      /if\(await deductTicket\(tk,hb\.id,SESSION\.id\)\)\{ await dbPut\('bookings',hb\); avail--; bound\+\+; \}/.test(F));
