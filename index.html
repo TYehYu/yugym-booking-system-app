@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.2114';
-const APP_VERSION_LABEL='v260807.2114';
+const APP_VERSION = '260807.2121';
+const APP_VERSION_LABEL='v260807.2121';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20521,9 +20521,17 @@ async function _submitBookingInner(){
         const want=grpPickOf(mid,_i);
         if(want){ const cand=await listUsableTickets(mid,type_id,dW,tW); tk=cand.find(x=>x.id===want)||null; }
         if(!tk) tk=await findUsableTicket(mid,type_id,dW,tW);
-        if(tk && await deductTicket(tk,bk.id,SESSION.id)) charged++;   // 沒扣到就當作沒票（2026-08-06）
+        if(tk && await deductTicket(tk,bk.id,SESSION.id)){ charged++;
+          /* 逐名額記下用了哪張票（2026-08-07 許佳慈案例：「今天只是新儲值一堂，
+             為什麼會打亂之前的票券」）—— 沒記下來的名額只能靠「把扣課紀錄依購買日
+             排序、第 i 個名額配第 i 張」的近似法，於是新買一張票就插到最前面、
+             既有名額的圓點整排位移。建立當下就寫進課卡，之後誰都不會被重算。 */
+          const _sk=(_i>0)?(mid+'#'+(_i+1)):mid;
+          bk.seat_tickets=Object.assign({}, bk.seat_tickets||{}, {[_sk]:tk.id});
+        }
         else skipped++;
       }
+      if(bk.seat_tickets) await dbPut('bookings',bk);   // 名額歸屬寫回課卡
       made++;
     }
     closeModal();
@@ -23527,14 +23535,20 @@ async function _grpFollowRun(mids2){
       /* 有票就扣、沒票不加（票不夠就停）——名單視窗的單堂規則是「沒票＝教練負責照加」，
          但連續預約是照「買了幾堂」來的，票扣不到就不該繼續佔位。 */
       let addedSeats=0;
+      const _newSeatTk={};
       for(let k=0;k<need;k++){
         const tk=await findUsableTicket(w.mid, x.ticket_type_id, x.date, x.start_time);
         if(!tk){ noTk=true; break; }
         if(!(await deductTicket(tk, x.id, SESSION.id))){ noTk=true; break; }   // 護欄擋下＝沒扣到（2026-08-06）
+        /* 逐名額記下用了哪張票（2026-08-07）—— 連續預約補位原本只寫 member_ids，
+           歸屬要靠近似法重算，之後只要這位會員新買一張票，圓點就會整排位移。 */
+        const _n=has+addedSeats;                       // 這是他在這堂的第幾個名額（0 起算）
+        _newSeatTk[(_n>0)?(w.mid+'#'+(_n+1)):w.mid]=tk.id;
         addedSeats++;
       }
       if(addedSeats>0){
         x.member_ids=cur.concat(Array.from({length:addedSeats},()=>w.mid));
+        x.seat_tickets=Object.assign({}, x.seat_tickets||{}, _newSeatTk);
         await dbPut('bookings',x);
         done++;
       }
