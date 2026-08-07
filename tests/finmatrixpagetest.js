@@ -99,5 +99,24 @@ ok('　　凍結表頭／月合計仍在（fmStickyFit 照跑）',
    /fmStickyFit\(\);\n\}/.test(src)
    && /\.fm-tb \.fm-sum td,\.fm-tb \.fm-sum th\{position:sticky;/.test(src));
 
+console.log('\n⑤ 先畫再說（2026-08-07 使用者回報：櫃檯點月報表會 lag、跳讀取中）');
+/* 月報表要六張表，含 bookings／member_tickets／purchases 三張大表；
+   櫃檯日常不會開到 purchases，所以進這一頁常常是第一次抓，只能乾等。 */
+ok('★ 有快取就直接畫，不先丟「整理中…」',
+   /const _pk=FM_TABLES\.map\(t=>dbPeek\(t\)\);/.test(src)
+   && /if\(_pk\.every\(Boolean\)\)\{\n\s*\[bks,purs,tks,types,coaches,mems\]=_pk\.map\(p=>p\.data\);/.test(src));
+ok('★ 快取是舊的才背景校驗', /if\(_pk\.some\(p=>p\.stale\)\) _fmRevalidate\(ym\);/.test(src));
+ok('★ 完全沒有快取才走原本的等網路（並顯示整理中）',
+   /body\.innerHTML='<div class="card" style="padding:16px;color:var\(--t3\);font-size:12\.5px;">整理中…<\/div>';\n\s*\[bks,purs,tks,types,coaches,mems\]=await Promise\.all/.test(src));
+ok('★ 背景校驗只在真的有變時重畫（比對六張表的筆數）',
+   /if\(before===after\) return;/.test(src));
+ok('　　換月份、離開頁面、彈窗開著都不打擾',
+   /if\(\(window\._finMonth\|\|ymd\(TODAY\)\.slice\(0,7\)\)!==ym\) return;/.test(src)
+   && /if\(CUR_PAGE!=='fin_matrix' && !\(CUR_PAGE==='finance' && _finTab==='matrix'\)\) return;/.test(src)
+   && /if\(document\.getElementById\('modal-bg'\)\) return;/.test(src));
+ok('　　有重入保護（不會自己重畫到停不下來）',
+   /if\(window\._fmRevalidating\) return;/.test(src)
+   && /finally\{ window\._fmRevalidating=false; \}/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

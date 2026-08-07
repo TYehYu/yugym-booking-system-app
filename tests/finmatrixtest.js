@@ -41,6 +41,11 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     coaches:[{id:'c1',name:'RANDY',role:'coach'},{id:'c2',name:'SANDY',role:'coach'},{id:'c3',name:'閒置',role:'coach'}],
   };
   const env={
+    /* 2026-08-07：finMatrix 改成「有快取就先畫」→ 沙箱補上 FM_TABLES 與 dbPeek 的替身。
+       這裡讓 dbPeek 一律回 null（等同沒有快取），才會走 dbGetAll 那條、驗算得對不對。 */
+    FM_TABLES:['bookings','purchases','member_tickets','ticket_types','coaches','members'],
+    dbPeek:()=>null,
+    _fmRevalidate:async()=>{},
     fmStickyFit:()=>{},   // 版面量測（DOM 相依），由瀏覽器端負責；沙箱放空殼
     document:{getElementById:id=>({ set innerHTML(v){ html[id]=v; }, get innerHTML(){ return html[id]||''; } })},
     window:{_finMonth:'2026-08'},

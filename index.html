@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.1057';
-const APP_VERSION_LABEL='v260807.1057';
+const APP_VERSION = '260807.1101';
+const APP_VERSION_LABEL='v260807.1101';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40108,14 +40108,42 @@ async function finProfitStrip(){
    最上面一列是整月合計，最左邊固定不捲（日期），右邊橫向捲。
    口徑與系統其他頁一致：堂數＝已簽到/已完成、業績＝收款紀錄的實收金額（歸屬教練）、
    新約/續約＝票券的 sale_kind（作廢退款的不算，與薪資頁同一套）。 */
+/* 月報表要六張表（含 bookings／member_tickets／purchases 三張大表）。
+   2026-08-07 使用者回報：「櫃檯帳號點月報表會 lag、會跳讀取中」——
+   櫃檯日常不會開到 purchases，所以進這一頁常常是第一次抓，只能乾等。
+   改成先畫再說（與首頁、行事曆同一套）：手上有快取就立刻畫，背景校驗有變才重畫一次。 */
+const FM_TABLES=['bookings','purchases','member_tickets','ticket_types','coaches','members'];
+async function _fmRevalidate(ym){
+  if(window._fmRevalidating) return;
+  window._fmRevalidating=true;
+  try{
+    const before=FM_TABLES.map(t=>{ const p=dbPeek(t,86400000); return p?p.data.length:0; }).join(',');
+    await Promise.all(FM_TABLES.map(t=>dbGetAll(t).catch(()=>null)));
+    const after=FM_TABLES.map(t=>{ const p=dbPeek(t,86400000); return p?p.data.length:0; }).join(',');
+    // 內容沒變就不打擾；換月份或離開這一頁也不要硬重畫
+    if(before===after) return;
+    if(CUR_PAGE!=='fin_matrix' && !(CUR_PAGE==='finance' && _finTab==='matrix')) return;
+    if((window._finMonth||ymd(TODAY).slice(0,7))!==ym) return;
+    if(document.getElementById('modal-bg')) return;
+    await finMatrix();
+  }catch(_){}
+  finally{ window._fmRevalidating=false; }
+}
 async function finMatrix(){
   const body=document.getElementById('fin-body'); if(!body) return;
   const ym=(window._finMonth||ymd(TODAY).slice(0,7));
-  body.innerHTML='<div class="card" style="padding:16px;color:var(--t3);font-size:12.5px;">整理中…</div>';
-  const [bks,purs,tks,types,coaches,mems]=await Promise.all([
-    dbGetAll('bookings').catch(()=>[]), dbGetAll('purchases').catch(()=>[]),
-    dbGetAll('member_tickets').catch(()=>[]), dbGetAll('ticket_types').catch(()=>[]),
-    dbGetAll('coaches').catch(()=>[]), dbGetAll('members').catch(()=>[])]);
+  let bks,purs,tks,types,coaches,mems;
+  const _pk=FM_TABLES.map(t=>dbPeek(t));
+  if(_pk.every(Boolean)){
+    [bks,purs,tks,types,coaches,mems]=_pk.map(p=>p.data);
+    if(_pk.some(p=>p.stale)) _fmRevalidate(ym);
+  }else{
+    body.innerHTML='<div class="card" style="padding:16px;color:var(--t3);font-size:12.5px;">整理中…</div>';
+    [bks,purs,tks,types,coaches,mems]=await Promise.all([
+      dbGetAll('bookings').catch(()=>[]), dbGetAll('purchases').catch(()=>[]),
+      dbGetAll('member_tickets').catch(()=>[]), dbGetAll('ticket_types').catch(()=>[]),
+      dbGetAll('coaches').catch(()=>[]), dbGetAll('members').catch(()=>[])]);
+  }
   const memName=Object.fromEntries((mems||[]).map(m=>[m.id,m.name||'—']));
   const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
   const inM=d=>String(d||'').slice(0,7)===ym;
