@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.1149';
-const APP_VERSION_LABEL='v260807.1149';
+const APP_VERSION = '260807.1154';
+const APP_VERSION_LABEL='v260807.1154';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23327,23 +23327,45 @@ async function grpNoTkAck(){
 /* 團課的「同系列後續場次」：同教練＋同星期＋同時段＋未取消未完成、時間在這堂之後。
    取消側的 seriesOf 認 member_id，團課的學員在 member_ids（見 bkIsGroup 註解），
    所以另立這支；口徑對齊使用者的開課習慣（每週同時段連開 N 週）。 */
+/* 「單獨建立的課卡不算在連續系列裡」（2026-08-07 使用者定案）——
+   同教練同星期同時段只是「長得像同一系列」，真正的系列是開課時用連續預約一次開出來的
+   （那批 recurring=true）。櫃檯另外單獨補開的一堂，即使剛好落在同一個時段，
+   也不該被算進客人的連續預約名單裡（8/06 週六 11:00：手動補的 9/05 就是這一型）。
+   ⚠ 只用在「後面的場次要一起預約嗎」這個名單，取消側的 seriesOf 不受影響。 */
+function grpSeriesMember(x){ return x && x.recurring===true; }
 async function grpSeriesOf(b){
-  if(!b) return [];
+  if(!b) return grpSeriesSplit(b,[]).series;
   const all=await dbGetAll('bookings');
+  return grpSeriesSplit(b,all).series;
+}
+/* 同時段的後續場次拆成兩堆：series＝連續預約開的（可一起約）、solo＝單獨建立的（忽略）。
+   solo 只拿來在視窗上說一句「另有 N 堂是單獨建立的」，不會被自動約進去 —— 少了那幾堂
+   如果沒人講，櫃檯會以為系統漏約（這正是 8/06 的情況）。 */
+function grpSeriesSplit(b, all){
+  const out={series:[],solo:[]};
+  if(!b) return out;
   const dow=(parseYmd(b.date)||new Date()).getDay();
   const key=x=>String(x.date)+String(x.start_time||'');
-  return all.filter(x=> x && x.id!==b.id && bkIsGroup(x)
+  (all||[]).filter(x=> x && x.id!==b.id && bkIsGroup(x)
       && x.status!=='cancelled' && x.status!=='completed'
       && (x.coach_id||'')===(b.coach_id||'')
       && String(x.start_time).slice(0,5)===String(b.start_time).slice(0,5)
       && (parseYmd(x.date)||new Date()).getDay()===dow
       && key(x)>key(b))
-    .sort((a,c)=>String(a.date).localeCompare(String(c.date)));
+    .sort((a,c)=>String(a.date).localeCompare(String(c.date)))
+    .forEach(x=>{ (grpSeriesMember(x)?out.series:out.solo).push(x); });
+  return out;
 }
 async function grpFollowAsk(id, addedIds, addedCnt){
   const b=await dbGet('bookings',id);
-  const later=await grpSeriesOf(b);
-  if(!later.length){ openBookingDetail(id); return; }
+  const _sp=grpSeriesSplit(b, await dbGetAll('bookings'));
+  const later=_sp.series, solo=_sp.solo;
+  if(!later.length){
+    /* 同時段後面只剩單獨建立的課卡 —— 沒有連續系列可約，但要講一聲，
+       不然櫃檯會以為系統沒問（2026-08-07）。 */
+    if(solo.length) showToast(`後面 ${solo.length} 堂是單獨建立的課，不在連續系列裡，請到該堂名單各自加入`);
+    openBookingDetail(id); return;
+  }
   const allTk=await dbGetAll('member_tickets');
   const members=await dbGetAll('members');
   const nameOf=mid=>{ const m=members.find(x=>String(x.id)===String(mid)); return (m&&m.name)||'—'; };
@@ -23372,6 +23394,10 @@ async function grpFollowAsk(id, addedIds, addedCnt){
       <input type="number" id="gf-n-${i}" value="${r.def}" min="0" max="${r.cap}" style="width:76px;"><span style="font-size:12px;color:var(--t3);">/ ${r.cap} 堂</span>
     </div>`).join('')}
     <div style="font-size:11.5px;color:var(--t2);margin-top:6px;">滿員或已在名單的場次會自動跳過、往後遞補；有票逐堂扣，票不夠會停下來告訴你。</div>
+    ${/* 單獨建立的那幾堂講清楚（2026-08-07 使用者定案：不算在連續系列裡）——
+         不講的話櫃檯會以為系統漏約了那幾週。金色＝次要提示。 */''}
+    ${solo.length?`<div style="font-size:11.5px;color:var(--gold-d);background:#f7f1e4;border-radius:8px;padding:8px 10px;margin-top:6px;line-height:1.8;">
+      另有 <b>${solo.length}</b> 堂（${solo.slice(0,3).map(x=>String(x.date).slice(5).replace('-','/')).join('、')}${solo.length>3?'…':''}）是<b>單獨建立</b>的課，不在這個連續系列裡，要加請到那一堂的名單。</div>`:''}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();openBookingDetail('${id}')">不用</button>
       <button class="btn btn-green" onclick="grpFollowRun(${JSON.stringify(rows.map(r=>r.mid)).replace(/"/g,'&quot;')})">連續預約</button></div>`);
 }

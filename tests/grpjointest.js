@@ -16,22 +16,28 @@ const parseYmd=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(x||''));return
 
 console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
 {
-  const G=(id,date,t,coach,st)=>({id,date,start_time:t||'19:00',coach_id:coach||'c1',category:'小班肌力',status:st||'booked'});
-  // 8/5 起每週三 19:00 開 10 週；b＝8/12 那堂（開課後第二週）
-  const wk=n=>`2026-08-${String(5+n*7).padStart(2,'0')}`;   // 8/5,12,19,26 → 之後跨月手動列
+  /* 2026-08-07 使用者定案：「如果那一張課卡是獨立建立預約的話，它就不在『連續』預約的
+     名單裡面」—— 系列＝開課時用連續預約一次開出來的那批（recurring=true）。 */
+  const G=(id,date,t,coach,st,rec)=>({id,date,start_time:t||'19:00',coach_id:coach||'c1',
+    category:'小班肌力',status:st||'booked',recurring:rec!==false});
   const all=[G('g0','2026-08-05'),G('g1','2026-08-12'),G('g2','2026-08-19'),G('g3','2026-08-26'),
              G('g4','2026-09-02'),G('g5','2026-09-09',null,null,'cancelled'),
+             G('s1','2026-09-16',null,null,null,false),     // 櫃檯單獨補開的一堂 → 不算同系列
              G('x1','2026-08-19','20:00'),                 // 同天不同時段 → 不同系列
              G('x2','2026-08-19',null,'c2'),               // 不同教練 → 不同系列
              G('x3','2026-08-20'),                          // 週四 → 不同系列
              {id:'p1',date:'2026-08-19',start_time:'19:00',coach_id:'c1',category:'私人教練',status:'booked',member_id:'M'}];
-  const fn=new Function('dbGetAll','bkIsGroup','parseYmd',
-    'return async '+grabFn('grpSeriesOf'))(async()=>all, b=>b.category==='小班肌力', parseYmd);
+  const _mk=tail=>new Function('dbGetAll','bkIsGroup','parseYmd',
+    grabFn('grpSeriesMember')+'\n'+grabFn('grpSeriesSplit')+'\nconst _f=async '+grabFn('grpSeriesOf')
+    +'\nreturn '+tail+';')(async()=>all, b=>b.category==='小班肌力', parseYmd);
+  const fn=_mk('_f'), split=_mk('grpSeriesSplit');
   (async()=>{
     const r=(await fn(G('g1','2026-08-12'))).map(x=>x.id);
     eq('★ 只抓同教練＋同星期＋同時段、在這堂之後的團課（照日期排）', r, ['g2','g3','g4']);
     const r0=(await fn(G('g0','2026-08-05'))).map(x=>x.id);
     eq('　　從第一堂看＝後面整串（取消的那堂不列）', r0, ['g1','g2','g3','g4']);
+    ok('★★ 單獨建立的課卡不在連續名單裡（2026-08-07 使用者定案）', !r0.includes('s1'));
+    eq('★ 但要另外列出來告訴櫃檯（solo）', split(G('g0','2026-08-05'),all).solo.map(x=>x.id), ['s1']);
 
     console.log('\n② 使用者的例子：開 10 週、新會員買 4 堂 → 連續預約 4 堂（_grpFollowRun 實跑）');
     const later=['w1','w2','w3','w4','w5','w6'];
@@ -78,7 +84,11 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
     ok('★ 預設堂數＝票券剩餘 ÷ 名額數（買 8 堂 2 名額預設 4）',
        /const def=Math\.min\(seats>1\?Math\.floor\(left\/seats\):left, cap\);/.test(src));
     ok('★ 防連點', /async function grpFollowRun\(mids2\)\{ return onceAct\('gfrun', \(\)=>_grpFollowRun\(mids2\)\); \}/.test(src));
-    ok('★ 沒後續場次照舊回明細', /const later=await grpSeriesOf\(b\);\n\s*if\(!later\.length\)\{ openBookingDetail\(id\); return; \}/.test(src));
+    ok('★ 沒後續場次照舊回明細（順便講一聲後面那幾堂是單獨建立的）',
+       /const _sp=grpSeriesSplit\(b, await dbGetAll\('bookings'\)\);/.test(src)
+       && /if\(solo\.length\) showToast\(`後面 \$\{solo\.length\} 堂是單獨建立的課，不在連續系列裡/.test(src));
+    ok('★ 視窗上把單獨建立的那幾堂列出來（金色次要提示）',
+       /另有 <b>\$\{solo\.length\}<\/b> 堂/.test(src) && /是<b>單獨建立<\/b>的課，不在這個連續系列裡/.test(src));
     ok('　　使用者的例子寫在程式裡', /「先開了 10 堂 10 週，新會員只買了 4 堂 → 可以重複預約 4 堂」/.test(src));
 
     console.log('\n⑤ 多名額（2026-08-05 游晴雅案例：買兩份票要約兩個名額）');
