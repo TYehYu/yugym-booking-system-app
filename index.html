@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.1130';
-const APP_VERSION_LABEL='v260807.1130';
+const APP_VERSION = '260807.1149';
+const APP_VERSION_LABEL='v260807.1149';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17413,20 +17413,57 @@ function venueMoveNote(b){
       <div style="line-height:1.8;">${fromName}該時段已額滿，將改用 <b>${toName}</b>。</div>
     </div>`;
 }
+/* 這是誰的哪一堂課（2026-08-07 使用者指示：「調整課卡時間的視窗 內容要清楚一點」）——
+   確認框原本只有兩行日期時間，拖錯卡也看不出來。名字走 dbPeek（同步、讀快取），
+   快取還沒有就只顯示課別，不為了一行字讓確認框變成非同步。 */
+function calMoveWho(b){
+  if(!b) return '';
+  const cat=b.category||'預約';
+  const _mem=(dbPeek('members')||{}).data||[];
+  const _co=(dbPeek('coaches')||{}).data||[];
+  const nm=id=>{ const m=_mem.find(x=>String(x.id)===String(id)); return (m&&m.name)||''; };
+  const co=(()=>{ const c=_co.find(x=>String(x.id)===String(bkCoachId(b))); return c?coachDisp(c):''; })();
+  let who='';
+  if(bkIsGroup(b)){ const n=mids(b).length; who=n?`${n} 人`:'尚無名單'; }
+  else who=nm(b.member_id)||b.trial_name||'';
+  return [cat, who, co?co+'教練':''].filter(Boolean).join('　·　');
+}
+/* 差在哪（2026-08-07）：日期差幾天／時間提前或延後幾分，用一句話講白，
+   不必自己比對兩行數字。 */
+function calMoveDiff(od,ot,nd,nt){
+  const d1=parseYmd(od), d2=parseYmd(nd);
+  const days=(d1&&d2)?Math.round((d2-d1)/86400000):0;
+  const mins=timeToMin(nt)-timeToMin(ot);
+  const out=[];
+  if(days){ const a=Math.abs(days);
+    out.push((days>0?'往後 ':'往前 ')+(a%7===0?`${a/7} 週`:`${a} 天`)); }
+  if(mins){ const a=Math.abs(mins), h=Math.floor(a/60), m=a%60;
+    out.push((mins>0?'延後 ':'提前 ')+[h?`${h} 小時`:'', m?`${m} 分`:''].filter(Boolean).join(' ')); }
+  return out.join('、')||'時間不變';
+}
 function confirmCalMove(b,od,ot,odur, nd,nt,ndur, onYes){
   window._calYes=onYes||(()=>{}); window._calNo=()=>navTo(CUR_PAGE);
+  const who=calMoveWho(b);
+  /* 前後用顏色標明（2026-08-07 使用者指示）——品牌色強度 紅>金>綠：
+     原時間＝紅（這個時段要空出來，錯了最傷）、新時間＝綠（改成的正式時間）、
+     中間的差異說明＝金（次要提示）。 */
   showModal(`<div class="modal-title">是否修改預約時間？</div>
-    <div style="display:flex;flex-direction:column;gap:10px;padding:4px 0 6px;font-size:13px;">
-      <div style="background:var(--card2);border-radius:9px;padding:10px 12px;">
-        <div style="color:var(--t3);font-size:11px;margin-bottom:3px;">原時間</div>${fmtRange(od,ot,odur)}</div>
-      <div style="text-align:center;color:var(--gold-d);">↓</div>
-      <div style="background:#f3efe2;border-radius:9px;padding:10px 12px;border:1px solid var(--gold);">
-        <div style="color:var(--gold-d);font-size:11px;margin-bottom:3px;">新時間</div>${fmtRange(nd,nt,ndur)}</div>
+    ${who?`<div style="font-size:12.5px;color:var(--t2);margin:-2px 0 10px;">${who}</div>`:''}
+    <div style="display:flex;flex-direction:column;gap:8px;padding:0 0 6px;font-size:13px;">
+      <div style="background:rgba(181,55,46,.08);border:1px solid rgba(181,55,46,.35);border-radius:9px;padding:10px 12px;">
+        <div style="color:var(--danger,#b5372e);font-size:11px;font-weight:700;margin-bottom:3px;">原時間（將空出）</div>
+        <div style="color:var(--t2);text-decoration:line-through;text-decoration-color:rgba(181,55,46,.55);font-family:var(--num);">${fmtRange(od,ot,odur)}</div></div>
+      <div style="display:flex;align-items:center;gap:8px;color:var(--gold-d);font-size:12px;font-weight:700;">
+        <span style="font-size:15px;line-height:1;">↓</span><span>${calMoveDiff(od,ot,nd,nt)}</span>
+      </div>
+      <div style="background:rgba(31,111,84,.09);border:1.5px solid var(--green);border-radius:9px;padding:10px 12px;">
+        <div style="color:var(--green);font-size:11px;font-weight:700;margin-bottom:3px;">新時間（改成這個）</div>
+        <div style="font-size:15px;font-weight:800;color:var(--text);font-family:var(--num);">${fmtRange(nd,nt,ndur)}</div></div>
       ${venueMoveNote(b)}
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal();window._calNo()">取消</button>
-      <button class="btn btn-green" onclick="closeModal();window._calYes()">確認</button>
+      <button class="btn btn-green" onclick="closeModal();window._calYes()">確認修改</button>
     </div>`);
 }
 
