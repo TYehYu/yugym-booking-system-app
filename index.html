@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.1105';
-const APP_VERSION_LABEL='v260807.1105';
+const APP_VERSION = '260807.1130';
+const APP_VERSION_LABEL='v260807.1130';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12169,7 +12169,12 @@ function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk){
       const tid=logged||(newest?newest.id:null);
       if(!tid) return;
       // 圓點只認扣課紀錄：猜出來的不畫，否則舊系統匯入的整批課會全掛到最近那張票上
-      if(logged) put(logged,b);
+      /* 戳記帶上「這是第幾個名額」（2026-08-07 張家華案例：8/03 第 1 個名額已簽到、
+         第 2 個名額請假，兩個名額扣在不同張票上，第 2 張的圓點卻沒有變紅）——
+         票卡是一張一張畫的，只知道「這位會員在這堂課簽到幾個、請假幾個」，
+         畫到第二張票時又從頭數一次，於是兩張都拿到「已簽到」。
+         把名額鍵一起蓋進戳記，圓點就能直接讀那個名額自己的出缺席。 */
+      if(logged) put(logged, Object.assign({}, b, {_seat:k}));
       /* 已簽到＝真的用掉了；請假也是（2026-08-06 使用者定案：本堂照扣不退、另發補課券）——
          請假還留在「待上」的話，票券夾會少算一堂已用，那一格看起來還空著。 */
       if(at[k]==='checked_in' || at[k]==='leave') return;
@@ -38575,6 +38580,17 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
     if(typeof bkEatenCancel==='function' && bkEatenCancel(b)) return 'eaten';   // 取消未退（2026-08-06）
     if(typeof grpSeatAttCount!=='function' || !bkIsGroup(b))
       return (b.status==='checked_in'||b.status==='completed')?'att':'';
+    /* 逐名額直接讀（2026-08-07）：戳記上有名額鍵就照那個名額自己的出缺席畫，
+       不要再用「簽到幾個、請假幾個」去湊 —— 同一堂的兩個名額扣在不同票上時，
+       每張票都會從頭數，第二張永遠拿到「已簽到」（張家華 8/03 請假沒有變紅）。
+       完全沒標出缺席的舊資料（匯入的團課）維持看整筆狀態。 */
+    const _sk=b&&b._seat;
+    if(_sk && typeof seatMid==='function' && String(seatMid(_sk))===String(memberId||t.member_id)){
+      const _at=(typeof attObj==='function'?attObj(b):(b.attendance||{}))||{};
+      const _marked=Object.keys(_at).some(k=>_at[k]!=null);
+      if(!_marked) return (b.status==='checked_in'||b.status==='completed')?'att':'';
+      return _at[_sk]==='leave' ? 'leave' : (_at[_sk]==='checked_in' ? 'att' : '');
+    }
     /* 請假名額也算「已使用」（2026-08-04 徐翎娟案例，使用者指示：「這兩堂超約就收在
        那兩個打勾裡」）——請假政策是本堂照扣、另發補課券，票上的那一堂確實用掉了。
        原本只數已簽到，請假的名額掉進「已預約」、又因為票已扣滿而畫成超約紅圈。 */
