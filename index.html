@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.1154';
-const APP_VERSION_LABEL='v260807.1154';
+const APP_VERSION = '260807.1642';
+const APP_VERSION_LABEL='v260807.1642';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24060,9 +24060,37 @@ function tkBagToggle(id,btn){
   const n=more.children.length;
   btn.textContent = open ? '－ 收合' : `＋ 還有 ${n} 組`;
 }
+/* 會員管理要六張表，其中 bookings／member_tickets／ticket_logs 都是大表。
+   2026-08-07 使用者回報：「重新開預約系統，點進會員管理會有好幾秒的讀取中」——
+   重開時快取雖然從 IndexedDB 載回來了，但一律標成「待校驗」，原本這裡是 await 六張表，
+   等於每次重開都要乾等一輪校驗＋補資料。
+   改成先畫再說（與首頁、行事曆、月報表同一套）：手上有資料就立刻畫，
+   背景校驗完有變才重畫一次；真的一筆快取都沒有（第一次登入）才走等待。 */
+const MEM_TABLES=['members','coaches','bookings','member_tickets','ticket_types','ticket_logs'];
+async function _memRevalidate(){
+  if(window._memRevalidating) return;
+  window._memRevalidating=true;
+  try{
+    const sig=()=>MEM_TABLES.map(t=>{ const p=dbPeek(t,86400000); return p?p.data.length:0; }).join(',');
+    const before=sig();
+    await Promise.all(MEM_TABLES.map(t=>dbGetAll(t).catch(()=>null)));
+    if(before===sig()) return;                       // 內容沒變就不打擾
+    if(CUR_PAGE!=='members') return;                 // 已經離開這一頁
+    if(document.getElementById('modal-bg')) return;  // 有視窗開著不要抽掉底下的畫面
+    await PAGES.members();
+  }catch(_){}
+  finally{ window._memRevalidating=false; }
+}
 PAGES.members=async function(){
-  const[members,coaches,allBk,allTk,types,allLg]=await Promise.all([dbGetAll('members'),dbGetAll('coaches'),dbGetAll('bookings'),dbGetAll('member_tickets'),dbGetAll('ticket_types'),
-    dbGetAll('ticket_logs').catch(()=>[])]);   // 票券夾要用扣課紀錄（2026-07-31，見 buildWallet）
+  let members,coaches,allBk,allTk,types,allLg;
+  const _pk=MEM_TABLES.map(t=>dbPeek(t));
+  if(_pk.every(Boolean)){
+    [members,coaches,allBk,allTk,types,allLg]=_pk.map(p=>p.data);
+    if(_pk.some(p=>p.stale)) _memRevalidate();
+  }else{
+    [members,coaches,allBk,allTk,types,allLg]=await Promise.all([dbGetAll('members'),dbGetAll('coaches'),dbGetAll('bookings'),dbGetAll('member_tickets'),dbGetAll('ticket_types'),
+      dbGetAll('ticket_logs').catch(()=>[])]);   // 票券夾要用扣課紀錄（2026-07-31，見 buildWallet）
+  }
   // 會員升降級（自動制）：以完整簽到史重播出目前等級
   window._memberTierCache=Object.assign(computeMemberTiers(allBk,members),{__ready:true});
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));

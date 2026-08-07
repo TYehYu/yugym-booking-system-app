@@ -32,8 +32,12 @@ ok('★ 手機＋密碼登入也會擋（只擋一條等於沒擋）',
 ok('★ 兩條路徑都會先登出，不留半殘 session',
    (src.match(/try\{ await sb\.auth\.signOut\(\); \}catch\(_\)\{\}\s*\n\s*(showErr|err\.textContent)='?此帳號已停用/g)||[]).length>=1
    || /await sb\.auth\.signOut\(\); \}catch\(_\)\{\}\s*\n\s*showErr\('此帳號已停用/.test(src));
+/* 2026-08-07：這一頁改成先畫再說（SWR）之後，資料來源改由 MEM_TABLES 統一列出，
+   不再是一行 await Promise.all —— 這裡驗的是「來源含 members 且沒有依 status 過濾」。 */
 ok('★ 會員列表不篩 status（停用後仍找得到人，才啟用得回來）',
-   /PAGES\.members=async function\(\)\{\s*\n\s*const\[members,coaches,allBk,allTk,types,allLg\]=await Promise\.all\(\[dbGetAll\('members'\)/.test(src));
+   /const MEM_TABLES=\['members',/.test(src)
+   && /\[members,coaches,allBk,allTk,types,allLg\]=_pk\.map\(p=>p\.data\);/.test(src)
+   && !/PAGES\.members=async function\(\)[\s\S]{0,4000}members\.filter\(m=>m\.status==='active'\)/.test(src));
 ok('★ 列表上看得出已停用', /已停用<\/span>　'\:''\}\$\{tierLabel/.test(src)
    || /已停用<\/span>/.test(src));
 ok('　　停用＝關掉登入不是刪除，理由寫在程式裡', /這是「關掉登入」不是刪除，隨時可以再啟用/.test(src));

@@ -159,7 +159,7 @@ ok('★ 票券燈號：沒餘額但還有未上的課 → 黃燈，不是紅燈'
 ok('★ 原因寫在程式裡（施佳靜 8 堂全排完：已上 3、已約 5）',
    /她 7\/09 買的 8 堂 1V2 全排完了（已上 3、已約 5）/.test(src));
 ok('★ 索引建在 PAGES.members 裡（tkLevel 與票券欄共用）',
-   /PAGES\.members=async function\(\)\{[\s\S]{0,1200}const _memBkIdx=\{\};/.test(src));
+   /PAGES\.members=async function\(\)\{[\s\S]{0,2400}const _memBkIdx=\{\};/.test(src));
 ok('★ 沒有誤植到別的函式（refreshCoachNotifBadge 不該有它）',
    !/async function refreshCoachNotifBadge\(\)\{[\s\S]{0,600}_memBkIdx/.test(src));
 {
