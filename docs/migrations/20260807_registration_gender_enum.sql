@@ -1,0 +1,28 @@
+-- 2026-08-07　新會員用 LINE 自行申辦一律失敗（使用者回報：「新會員按 line 加入辦理帳號失敗」）
+--
+-- 症狀：LINE 驗證通過、填完姓名手機按「送出申辦」→ 送出失敗。
+--       既有會員的「綁定申請」（kind='link'）不受影響，一直都正常。
+--
+-- 原因：2026-08-05 在申辦表單加了「性別（選填）」，RPC 多收一個 p_gender。
+--       函式裡宣告 v_gender text，卻寫進 members.gender（enum member_gender）——
+--       PostgreSQL 沒有 text→enum 的隱性轉型，plpgsql 在編譯那句 INSERT 時就報
+--         column "gender" is of type member_gender but expression is of type text
+--       型別是編譯期決定的，所以連「沒有選性別（NULL）」也照樣失敗。
+--
+-- 影響範圍：2026-08-05 06:04（最後一筆成功：林繼霖）之後，所有新客的自行申辦都建不了檔。
+--           8/07 12:31、12:32、12:32 三次失敗留在 postgres 日誌裡。
+--
+-- 修法：v_gender 直接宣告成 member_gender；沒選就用欄位預設的 'unspecified'
+--       （與既有會員資料一致，不寫 NULL）。
+--
+-- 已透過 Supabase migration `fix_member_registration_gender_enum` 套用到正式庫。
+-- 驗證：DO 區塊以 member_gender 變數 insert members 成功（再 raise 回滾，沒有留下測試資料）。
+--
+-- 完整函式內容見資料庫；這裡只留關鍵差異備查：
+--
+--   - v_gender text := case when p_gender in ('male','female','other') then p_gender else null end;
+--   + v_gender member_gender := case when p_gender in ('male','female','other')
+--   +                                then p_gender::member_gender else 'unspecified'::member_gender end;
+--
+-- 教訓：enum 欄位不要用 text 變數餵。同一支函式裡的 status/level 之所以沒事，
+--       是因為它們寫的是字面值（'active' / 'regular'），字面值是 unknown 型別、會被解析成欄位型別。
