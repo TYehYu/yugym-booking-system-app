@@ -18,6 +18,16 @@ console.log('① 推算切分日（R4）');
 {
   /* 2026-08-06：inferAllowed 多了總開關與探針 → 沙箱補上（都關著＝照舊推算） */
   const fn=new Function('let INFER_OFF=false; const window={};\n'+grabConst('INFER_CUTOFF_UTC')+'\n'+grabFn('inferAllowed')+'\nreturn inferAllowed;')();
+  /* 2026-08-07：總開關已經關掉（③ 退場）。上面的沙箱把它設回 false 是為了驗切分日的邏輯本身；
+     下面這一項驗的是「線上真的關了」。 */
+  ok('★★ 推算已正式關閉（INFER_OFF=true）',
+     /let INFER_OFF=true;/.test(src)
+     && /③ 先進先出推算正式退場/.test(src));
+  ok('　　關閉前的三道前置作業寫在程式裡（固化／補讀／比對）',
+     /① 固化：把當時推算出來的歸屬寫成 532 筆連結/.test(src)
+     && /② 補讀：非團課的預約也改從 ticket_logs 讀歸屬/.test(src)
+     && /③ 比對：對 461 位會員各算兩次票券夾/.test(src));
+  ok('　　要退回舊行為的方法也寫著', /要臨時退回舊行為就把這裡改回 false/.test(src));
   ok('★ 切分日以前建立的（7 月匯入的未來課）仍照舊推算',
      fn({created_at:'2026-07-26T08:44:21.969059+00:00'})===true);
   ok('★ 切分日之後建立的不再推算（猜不到就顯示需補票）',

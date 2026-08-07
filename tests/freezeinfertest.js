@@ -104,8 +104,9 @@ ok('★ 入口在票券管理頁、只給管理員看',
 ok('　　寫完清掉帳本快取（畫面立刻讀得到新連結）', /dbCacheClear\(\['ticket_logs'\]\);/.test(src));
 
 console.log('\n③ 關掉推算前的比對（使用者指示：「先跑比對再關」）');
-ok('★ 有總開關（確認沒有差異後才會設 true）',
-   /let INFER_OFF=false;/.test(src)
+/* 2026-08-07：比對確認一致後已正式關閉 */
+ok('★ 總開關已關閉（③ 推算退場）',
+   /let INFER_OFF=true;/.test(src)
    && /if\(INFER_OFF \|\| window\._inferOffProbe\) return false;/.test(src));
 ok('★ 比對工具對每位會員各算兩次（推算開／關）再比每一堂課掛在哪張票',
    /window\._inferOffProbe=false; A=buildWallet\(m\.id,c2\);/.test(src)
