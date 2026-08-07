@@ -26,9 +26,15 @@ const i=src.indexOf('.sort((a,b)=>{', src.indexOf('async function listUsableTick
 const j=src.indexOf('});', i);
 const cmpSrc='return '+src.slice(i+6, j+1).replace(/^\(/,'(');
 const TODAY=new Date(2026,7,3);   // 2026-08-03
-const mk=(restricted)=>new Function('tkIsTimeRestricted','parseYmd','TODAY',
+/* 2026-08-07：排序多了「同一天買的付費票優先」→ 沙箱補上 tkIsGift 替身
+   （本檔的案例都不是加贈票，行為不變；加贈規則本身由 tkpickgifttest 驗）。 */
+const grabFn=n=>{let k=src.indexOf('function '+n+'(');if(src.slice(k-6,k)==='async ')k-=6;
+  let d=0;for(let z=src.indexOf('{',k);z<src.length;z++){if(src[z]==='{')d++;else if(src[z]==='}'){d--;if(!d)return src.slice(k,z+1);}}};
+const _tkIsGift=new Function(grabFn('tkIsGift')+'\nreturn tkIsGift;')();
+const mk=(restricted)=>new Function('tkIsTimeRestricted','tkIsGift','parseYmd','TODAY',
   'const cmp='+src.slice(i+6, j+1)+'; return cmp;')(
   t=>!!(restricted||new Set()).has(t.id),
+  _tkIsGift,
   x=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(x||''));return m?new Date(+m[1],+m[2]-1,+m[3]):null;},
   TODAY);
 const sortWith=(list,restricted)=>list.slice().sort(mk(restricted)).map(t=>t.id);

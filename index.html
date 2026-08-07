@@ -7555,8 +7555,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.2329';
-const APP_VERSION_LABEL='v260807.2329';
+const APP_VERSION = '260807.2354';
+const APP_VERSION_LABEL='v260807.2354';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11732,6 +11732,12 @@ async function listUsableTickets(member_id,type_id,bookDate,bookTime){
       if(sa===1) {   // 兩張都不急（soon 旗標 0=急、1=不急）→ 購買順序
         const pa=String(a.purchase_date||a.created_at||'9999'), pb=String(b.purchase_date||b.created_at||'9999');
         if(pa!==pb) return pa.localeCompare(pb);
+        /* ④ 同一天買的：付費的先用、$0 加贈的留最後（2026-08-07 使用者指示，
+           楊采妮案例：24 堂 $38,400 與 3 堂加贈同一天建立，系統卻先吃了加贈那張）。
+           只在購買日相同時比 —— 跨日期仍照「編號順序」先進先出（2026-08-03 定案），
+           而且快到期的票在上一關（30 天內）就已經被排到前面，不會因此放到過期。 */
+        const ga=tkIsGift(a)?1:0, gb=tkIsGift(b)?1:0;
+        if(ga!==gb) return ga-gb;
         return String(a.created_at||'').localeCompare(String(b.created_at||''));
       }
       return String(a.expire_date||'9999-12-31').localeCompare(String(b.expire_date||'9999-12-31'));
@@ -11779,6 +11785,16 @@ async function tkBookedCountMap(){
 function tkIsTimeRestricted(t){
   const tt=(window._ttCache||[]).find(x=>x.id===(t&&t.ticket_type_id));
   return !!(tt && tt.time_restricted);
+}
+/* 「這張是隨方案加贈的（$0）嗎」（2026-08-07 使用者指示：挑票要付費票優先）——
+   ⚠ 不能只看金額 0：全庫還有堂數的 $0 教練課票有 35 張，其中「舊系統匯入，未帶收款金額」
+   與「金額待確認（購買當日查無收款紀錄）」都不是加贈，只是金額不明；
+   把它們當加贈延後使用會挑錯票。判準沿用票券卡上「$0・加贈」那一套（見 tkMoneyHtml）：
+   金額 0 **而且**備註寫著加贈（賣票時自動寫「隨 ⋯ 加贈」）。 */
+function tkIsGift(t){
+  if(!t) return false;
+  if(Number(t.amount_paid||0)>0) return false;
+  return /加贈/.test(String(t.note||''));
 }
 /* 「這張票還沒確認過」的判定（2026-08-01 使用者問「連今天儲值的票券一直出錯，怎麼避免」）——
    今天李晏如那張 7/04 的票在舊系統早就註銷了，但在這裡是 usable，於是每次自動挑票都被挑走，
@@ -22355,7 +22371,12 @@ async function _doBkTicketChange(id,newTkId){
  try{
   const b=await dbGet('bookings',id); if(!b){showToast('找不到預約');return;}
   if(b.status!=='booked'){ showToast('已簽到的預約要先取消簽到才能換票券'); return; }
-  const cand=await listUsableTickets(b.member_id,b.ticket_type_id,b.date,b.start_time);
+  /* 2026-08-07 使用者回報（又是鄭超元 9/7）：清單裡選得到 #8，按下去卻說「已不能用」——
+     08-06 只修了上面 openBkTicketChange 列清單那一半，執行這一半還在用可能是空的
+     b.ticket_type_id 去比對票種，於是一張都對不上。兩邊要用同一個退回邏輯。 */
+  const _curTk=b.ticket_id?await dbGet('member_tickets',b.ticket_id).catch(()=>null):null;
+  const _typeId=b.ticket_type_id||(_curTk&&_curTk.ticket_type_id)||null;
+  const cand=await listUsableTickets(b.member_id,_typeId,b.date,b.start_time);
   const tk=cand.find(t=>t.id===newTkId);
   if(!tk){ showToast('這張票券已不能用於這堂課，請重新選'); return; }
   const old=b.ticket_id;
