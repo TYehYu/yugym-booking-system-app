@@ -71,9 +71,9 @@ ok('★ 加名單扣課成功才記歸屬（逐名額鍵）',
 ok('★ 移除名額時歸屬跟著移除／重編',
    /b\.seat_tickets=seatTkReindexAfterRemove\(b, i\);/.test(src)
    && /const _ks=Object\.keys\(_st\)\.filter\(k=>seatMid\(k\)===String\(mid\)\);/.test(src));
-ok('★ 分配時先看事實、沒有才用近似法',
-   /const _fact=\(_seatTk && _seatTk\[k\] && \(m\[_seatTk\[k\]\]\|\|0\)>0\) \? _seatTk\[k\] : null;/.test(src)
-   && /const logged=_fact\|\|slots\[i\]\|\|null;/.test(src));
+ok('★ 分配時先看事實、沒有才用近似法（2026-08-07 改兩段式，見 ⑤）',
+   /const w=_seatTk && _seatTk\[k\];\n\s*if\(w && \(_left\[w\]\|\|0\)>0\)\{ _fix\[i\]=w; _left\[w\]--; \}/.test(src)
+   && /const logged=_fix\[i\]\|\|slots\[_si\+\+\]\|\|null;/.test(src));
 ok('★ 欄位不在精簡清單裡（列表讀取會帶回來）',
    !/LEAN_DROP[\s\S]{0,200}seat_tickets/.test(src));
 ok('　　為什麼需要這個欄位，寫在程式裡',
@@ -84,6 +84,30 @@ ok('★ 管理員 → 財務 底下看得到「票券管理」',
    /\{grp:'財務', label:'票券管理', page:'ticketing'\},/.test(src));
 ok('　　原因寫清楚（工具都在那一頁，先前沒有入口）',
    /這一頁（方案設定／購買申請／會員票券，\n\s*以及對帳巡檢、固化推算歸屬兩個維護工具）自 2026-07-25 起就沒有導覽入口/.test(src));
+
+console.log('\n⑤ 兩段式分配：明寫的名額先配、剩下的才近似（2026-08-07 許佳慈案例）');
+{
+  /* 8/07 那堂她佔 4 個名額，扣課紀錄是「A 兩堂、B 一堂、C（當天買的 $400 體驗）一堂」，
+     課卡上只明寫了第 4 個名額用 C。
+     舊寫法：第 1 個名額沒明寫 → 拿 slots[0]＝C（購買日最新排最前），
+             第 4 個名額明寫 → 又指到 C ⇒ C 被畫兩顆、B 一顆都沒有。 */
+  const deps={ mids:env.mids, seatKeys:env.seatKeys, seatMid:env.seatMid, attObj,
+    ymd:env.ymd, TODAY:env.TODAY };
+  const fn=new Function(...Object.keys(deps), grabFn('grpTicketAlloc')+'\nreturn grpTicketAlloc;')(...Object.values(deps));
+  const TKS=[{id:'A',purchase_date:'2026-08-01',status:'usable'},
+             {id:'B',purchase_date:'2026-08-01',status:'usable'},
+             {id:'C',purchase_date:'2026-08-07',status:'usable'}];
+  const b={id:'B7',category:'小班肌力',member_ids:[ME,ME,ME,ME],attendance:{},date:'2026-08-07',
+    seat_tickets:{[ME+'#4']:'C'}};
+  const L=[{ticket_id:'A',booking_id:'B7',action:'deduct'},{ticket_id:'A',booking_id:'B7',action:'deduct'},
+           {ticket_id:'B',booking_id:'B7',action:'deduct'},{ticket_id:'C',booking_id:'B7',action:'deduct'}];
+  const r=fn(TKS,[b],L,ME,()=>true);
+  const cnt=k=>(r.byTicket[k]||[]).length;
+  eq('★★ 每張票拿到的圓點數＝它真正扣了幾堂（A2・B1・C1）', [cnt('A'),cnt('B'),cnt('C')], [2,1,1]);
+  eq('★ 課卡明寫的第 4 個名額確實落在 C', (r.byTicket['C']||[]).map(x=>x._seat), [ME+'#4']);
+  ok('★ C 只被用一次（不會又被近似法配走一格）', cnt('C')===1);
+  ok('　　沒有任何一格落空（四個名額都配到票）', cnt('A')+cnt('B')+cnt('C')===4);
+}
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

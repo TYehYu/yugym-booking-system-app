@@ -7551,8 +7551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.1801';
-const APP_VERSION_LABEL='v260807.1801';
+const APP_VERSION = '260807.2114';
+const APP_VERSION_LABEL='v260807.2114';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12155,17 +12155,30 @@ function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk){
     if(!mine.length) return;
     const at=attObj(b);
     const m=charged[b.id]||{};
-    const slots=[];
-    Object.keys(m).filter(k=>m[k]>0)
-      .sort((x,y)=>String((tkById[y]||{}).purchase_date||'').localeCompare(String((tkById[x]||{}).purchase_date||'')))
-      .forEach(tid=>{ for(let i=0;i<m[tid];i++) slots.push(tid); });
     const _seatTk=(b.seat_tickets&&typeof b.seat_tickets==='object')?b.seat_tickets:null;
+    /* 兩段式分配（2026-08-07 許佳慈案例：8/07 那堂四個名額，$400 的體驗票被畫成兩顆、
+       另一張反而少一顆）——
+       原本是「有 seat_tickets 就用它，沒有就用 slots[i]」，但 slots 是把所有扣課紀錄
+       攤平後照順序取的，**沒有把已被 seat_tickets 佔走的配額扣掉**：
+       第 1 個名額（沒記錄）拿到 slots[0]＝剛買的那張，第 4 個名額（有記錄）又指到同一張，
+       同一張票就被用了兩次，別張則少掉一格。
+       改成：① 先把「課卡上明寫的名額」配掉並從配額扣除 ② 剩下的名額才用近似法分剩下的。 */
+    const _left=Object.assign({}, m);                 // 還沒被配走的扣課配額
+    const _fix=new Array(mine.length).fill(null);     // 名額 → 票（第一輪先配明寫的）
+    mine.forEach((k,i)=>{
+      const w=_seatTk && _seatTk[k];
+      if(w && (_left[w]||0)>0){ _fix[i]=w; _left[w]--; }
+    });
+    const slots=[];
+    Object.keys(_left).filter(k=>_left[k]>0)
+      .sort((x,y)=>String((tkById[y]||{}).purchase_date||'').localeCompare(String((tkById[x]||{}).purchase_date||'')))
+      .forEach(tid=>{ for(let i=0;i<_left[tid];i++) slots.push(tid); });
+    let _si=0;                                        // 近似法的取用游標（跳過已明寫的名額）
     mine.forEach((k,i)=>{
       /* 這個名額用哪張票：先看課卡上逐名額記下的事實（bookings.seat_tickets，2026-08-06 起寫入），
          沒有才退回「依扣課紀錄照購買日排序分配」的近似法 ——
          同一人多個名額扣在不同票上時，近似法會分錯格子。 */
-      const _fact=(_seatTk && _seatTk[k] && (m[_seatTk[k]]||0)>0) ? _seatTk[k] : null;
-      const logged=_fact||slots[i]||null;
+      const logged=_fix[i]||slots[_si++]||null;
       const tid=logged||(newest?newest.id:null);
       if(!tid) return;
       // 圓點只認扣課紀錄：猜出來的不畫，否則舊系統匯入的整批課會全掛到最近那張票上
