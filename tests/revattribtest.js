@@ -29,13 +29,16 @@ console.log('① tag 的顯示');
 }
 
 console.log('\n② 名單資料帶了歸屬');
-ok('★ 票券列帶 sold_by', /att:t\.sold_by\|\|null, attKind:'tk', attRef:t\.id,/.test(src));
-ok('★ 收款列帶 coach_id', /att:p\.coach_id\|\|null, attKind:'pur', attRef:p\.id,/.test(src));
+/* 2026-08-07：歸屬只對教練課系有意義（使用者指示「團課不需要設定歸屬」）——
+   票券列改成要標才給 attKind；純收款（場租／商品／重啟）一律不標。 */
+ok('★ 票券列帶 sold_by（教練課系才給 attKind）',
+   /att:t\.sold_by\|\|null, attKind:_attNeed\(t\)\?'tk':null, attRef:t\.id,/.test(src));
+ok('★ 純收款列不標歸屬', /att:p\.coach_id\|\|null, attKind:null, attRef:p\.id,/.test(src));
 ok('★ 同一筆銷售不重複列（票券與其收款紀錄只列票券那筆）',
    /_dayPur\.filter\(p=>!\(p\.ticket_id&&_dayTk\.some\(t=>t\.id===p\.ticket_id\)\)\)/.test(src));
-ok('★ 右欄名單卡與彈窗都掛同一支 revAttribChip',
+ok('★ 右欄名單卡與彈窗都掛同一支 revAttribChip（2026-08-07 起放在姓名上方）',
    (src.match(/\$\{revAttribChip\(r\)\}/g)||[]).length===2
-   && (src.match(/\$\{esc\(r\.nm\)\}\$\{revAttribChip\(r\)\}/g)||[]).length===1);
+   && (src.match(/<div class="mc-rev-b">\$\{revAttribChip\(r\)\}<span class="mc-rev-nm">/g)||[]).length===2);
 
 console.log('\n③ 更改流程');
 ok('★ 只有櫃檯／管理員能開', /async function openRevAttribPick\(kind, ref\)\{\n\s*if\(!isDeskLike\(\)\) return;/.test(src));

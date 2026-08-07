@@ -7256,8 +7256,12 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 .mc-rev-inv{font-size:9px;font-weight:700;color:#2e6b4f;background:#e3efe7;border-radius:999px;padding:2px 6px;flex-shrink:0;}
 /* 教練課約別標籤（2026-08-01）：續約用品牌金（要看得見，它牽動獎金）、分期用暖棕、新約低調 */
 /* 業績歸屬 tag（2026-08-03）：會員名右邊的小教練名；可點的浮出手感、未歸屬用金色提醒 */
-.rev-att{display:inline-block;margin-left:6px;font-size:9.5px;font-weight:800;border-radius:999px;
-  padding:2px 7px;background:#eef1ec;color:#4c6457;vertical-align:1px;border:none;font-family:inherit;}
+/* 2026-08-07 使用者指示：「歸屬教練放在會員姓名上方」——
+   原本貼在名字右邊，長姓名（含家庭成員稱呼）會把標籤擠掉或撐出省略號。
+   改成自成一列、靠左，名字那一行就完整留給姓名。 */
+.rev-att{display:inline-block;align-self:flex-start;margin:0 0 1px;font-size:9.5px;font-weight:800;
+  border-radius:999px;padding:1px 7px;background:#eef1ec;color:#4c6457;border:none;font-family:inherit;
+  line-height:1.6;}
 .rev-att-tap{cursor:pointer;transition:filter .12s;}
 .rev-att-tap:hover{filter:brightness(.94);}
 .rev-att-none{background:#f7efe0;color:#8a5e28;}
@@ -7551,8 +7555,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.2121';
-const APP_VERSION_LABEL='v260807.2121';
+const APP_VERSION = '260807.2329';
+const APP_VERSION_LABEL='v260807.2329';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13718,6 +13722,11 @@ PAGES.g_dashboard=async function(){
      業績歸屬，可以後續修改，如果不小心選錯人」）——
      票券的歸屬在 sold_by（同一筆收款的 purchases.coach_id 也要跟著改，續約獎金認的
      是那邊）；純收款（場租／商品／重啟）在 purchases.coach_id。 */
+  /* 只有教練課系要標歸屬（2026-08-07 使用者指示：「團課不需要設定歸屬，
+     只有教練課跟友善教練課」）—— 團課／團課體驗／自訂方案（都掛在小班肌力底下）
+     本來就不進續約獎金，掛一個「未歸屬」金色標籤只會讓櫃檯以為漏設定。
+     判斷與約別標籤（_saleKindOf）同一條：票種的 category 是不是「私人教練」。 */
+  const _attNeed=t=>((((types||[]).find(x=>x.id===t.ticket_type_id)||{}).category)||'')==='私人教練';
   const _coachTag={}; (coaches||[]).forEach(c=>{ _coachTag[c.id]=coachDisp(c); });
   window._revCoachTag=_coachTag;
   const _purByTk={}; (_dayPur||[]).forEach(p=>{ if(p.ticket_id) _purByTk[p.ticket_id]=p.id; });
@@ -13731,14 +13740,15 @@ PAGES.g_dashboard=async function(){
     ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—', mid:t.member_id||null,
       it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
       amt:Number(t.amount_paid)||0, tk:t.id, kind:_saleKindOf(t),
-      att:t.sold_by||null, attKind:'tk', attRef:t.id,
+      att:t.sold_by||null, attKind:_attNeed(t)?'tk':null, attRef:t.id,
       pay:_payLb((_payByTk[t.id]||{}).m), payRef:(_payByTk[t.id]||{}).pid||null,
       inv:(t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued')})),
     ..._dayPur.filter(p=>!(p.ticket_id&&_dayTk.some(t=>t.id===p.ticket_id)))
       .map(p=>({nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客', mid:p.member_id||null,
       it:p.plan_name||({reactivate:'票券重啟',facility_rental:'場地租借',merchandise:'商品'}[p.source]||'收款'),
       amt:Number(p.deal_amount)||0,
-      att:p.coach_id||null, attKind:'pur', attRef:p.id, pay:_payLb(p.payment_method), payRef:p.id,
+      /* 場租／商品／票券重啟不是教練課，一樣不標歸屬（2026-08-07 同一條規則） */
+      att:p.coach_id||null, attKind:null, attRef:p.id, pay:_payLb(p.payment_method), payRef:p.id,
       inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')})),
   ];
   /* 給「今日營收」彈窗用（2026-08-01）：與上方 KPI、右欄名單卡完全同源，不另外算一份，
@@ -13763,7 +13773,7 @@ PAGES.g_dashboard=async function(){
   const revListCard=`<div class="card mc-card mc-revlist-card">
     ${_revRows.length?`<div class="mc-revlist">${_revShown.map(r=>`
       <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
-        <div class="mc-rev-b"><span class="mc-rev-nm">${r.nm}${revAttribChip(r)}</span><span class="mc-rev-it">${r.it}</span></div>
+        <div class="mc-rev-b">${revAttribChip(r)}<span class="mc-rev-nm">${r.nm}</span><span class="mc-rev-it">${r.it}</span></div>
         ${r.kind?saleKindChip(r.tk,r.kind):''}
         <span class="mc-rev-r">${revPayChip(r)}<span class="mc-rev-amt">$${_fm(r.amt)}</span></span>
         ${r.mid?'<span class="mc-td-arrow">›</span>':''}
@@ -26254,7 +26264,7 @@ function openTodayRevList(){
   const body = rows.length
     ? `<div class="mc-revlist">${rows.map(r=>`
         <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="closeModal();revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
-          <div class="mc-rev-b"><span class="mc-rev-nm">${esc(r.nm)}${revAttribChip(r)}</span><span class="mc-rev-it">${esc(r.it)}</span></div>
+          <div class="mc-rev-b">${revAttribChip(r)}<span class="mc-rev-nm">${esc(r.nm)}</span><span class="mc-rev-it">${esc(r.it)}</span></div>
           ${r.kind?saleKindChip(r.tk,r.kind):''}
           <span class="mc-rev-r">${revPayChip(r)}<span class="mc-rev-amt">${money(r.amt)}</span></span>
           ${r.mid?'<span class="mc-td-arrow">›</span>':''}

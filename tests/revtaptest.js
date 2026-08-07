@@ -29,8 +29,9 @@ console.log('\n彈窗內容');
 ok('★ 有這支函式', /function openTodayRevList\(\)\{/.test(src));
 /* 2026-08-03：姓名右邊多了業績歸屬 tag（revattribtest.js）；同日再指示發票標籤移除、
    付款方式可修正（revpaytest.js）。 */
-ok('★ 每一列：姓名／歸屬 tag／品項／付款方式／金額（發票標籤已移除）',
-   /<span class="mc-rev-nm">\$\{esc\(r\.nm\)\}\$\{revAttribChip\(r\)\}<\/span><span class="mc-rev-it">\$\{esc\(r\.it\)\}<\/span>/.test(src)
+/* 2026-08-07：歸屬 tag 移到姓名上方（使用者指示），姓名那一行只剩姓名 */
+ok('★ 每一列：歸屬 tag（上）／姓名／品項／付款方式／金額（發票標籤已移除）',
+   /<div class="mc-rev-b">\$\{revAttribChip\(r\)\}<span class="mc-rev-nm">\$\{esc\(r\.nm\)\}<\/span><span class="mc-rev-it">\$\{esc\(r\.it\)\}<\/span>/.test(src)
    && !/mc-rev-inv">發票/.test(src));
 ok('★ 有綁會員的列點下去跳到他的票券頁', /onclick="closeModal\(\);revRowGo\('\$\{r\.mid\}'\)"/.test(src));
 ok('　　revRowGo 就是開會員資料並切到票券分頁', /async function revRowGo\(mid\)\{[\s\S]{0,160}ppShowRecord\('tickets'\)/.test(src));
