@@ -25,8 +25,12 @@ ok('　　滿版閱讀器裡的購買內容表回到一般排版（cr-body 是 p
    /#contract-reader \.ct-fill-view\{white-space:normal;margin-bottom:14px;\}/.test(src));
 
 console.log('\n② A 櫃檯簽約步驟：條款上方補上購買內容表');
-ok('★★ 步驟 4 有白底的購買內容容器，且在條款之前',
-   /<div class="ct-fill-view" id="ct-fill-preview" style="display:none;"><\/div>\n\s*<div class="ct-body" id="ct-body">/.test(src));
+/* 2026-08-08 追加：兩者之間多了「合約條款＋放大閱讀」那一列，改驗前後順序而不是緊鄰 */
+ok('★★ 步驟 4 有白底的購買內容容器，且排在條款之前', (()=>{
+  const a=src.indexOf('<div class="ct-fill-view" id="ct-fill-preview"');
+  const b=src.indexOf('<div class="ct-body" id="ct-body">');
+  return a>0 && b>a && (b-a)<900;
+})());
 ok('★ 用與檢視／列印同一支 contractFillBlockHTML（不另做一份版型）',
    /fbox\.innerHTML=contractFillBlockHTML\(window\._ctFill\); fbox\.style\.display='';/.test(src));
 ok('★ 產不出來就整塊藏起來（不留一個空白框）',
@@ -55,6 +59,26 @@ console.log('\n⑤ C／D 沒被動到');
 ok('　　合約檢視仍用 .ct-fill-view 包快照', /const fill=c\.fill_snapshot\?`<div class="ct-fill-view">\$\{c\.fill_snapshot\}<\/div>`:'';/.test(src));
 ok('　　列印版仍直接輸出快照', /\$\{c\.fill_snapshot\|\|''\}/.test(src));
 ok('　　紙本預覽本來就是白底', /id="ct-paper-preview"[^>]*background:#fff;/.test(src));
+
+console.log('\n⑥ 承上追加：櫃檯不必在小框裡讀、手機不必左右滑');
+{
+  ok('★★ 簽約步驟有「放大閱讀」，走與會員手機同一個滿版殼',
+     /onclick="ctOpenFullRead\(\)">🔍 放大閱讀<\/button>/.test(src)
+     && /function ctOpenFullRead\(\)\{/.test(src)
+     && /openContractReaderWith\('合約內容確認', fill\+body, '看完了，回簽約'\);/.test(src));
+  ok('★ 放大讀的是同一組來源（不會與底下的內容不一致）',
+     /if\(window\._ctFill\) fill=`<div class="ct-fill-view">\$\{contractFillBlockHTML\(window\._ctFill\)\}<\/div>`/.test(src)
+     && /const body=String\(window\._ctBody\|\|''\)\.replace/.test(src));
+  ok('　　條款區上方標了「合約條款」，與購買內容分得開',
+     /<span style="font-size:11\.5px;color:var\(--t3\);">合約條款<\/span>/.test(src));
+
+  ok('★★ 手機放掉 520px 最小寬度，購買內容表不必左右滑',
+     /@media \(max-width:600px\)\{\n\s*\.ct-fill-view\{padding:10px 12px;\}\n\s*\.ct-fill-view table\{min-width:0;width:100%;table-layout:fixed;\}/.test(src));
+  ok('★ 分期表（巢狀）再縮一級，五欄塞得下',
+     /\.ct-fill-view td table td\{font-size:10px;padding:3px 3px !important;\}/.test(src));
+  ok('　　長字會斷行，不會把欄位撐開', /\.ct-fill-view td\{padding:4px 5px !important;font-size:11px;line-height:1\.7;word-break:break-word;\}/.test(src));
+  ok('　　桌機維持原本的 520px 最小寬度（欄位不會擠在一起）', /\.ct-fill-view table\{min-width:520px;\}/.test(src));
+}
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
