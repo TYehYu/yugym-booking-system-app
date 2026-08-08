@@ -7658,8 +7658,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.1814';
-const APP_VERSION_LABEL='v260808.1814';
+const APP_VERSION = '260808.1821';
+const APP_VERSION_LABEL='v260808.1821';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8052,6 +8052,14 @@ async function dbGetAll(store,opts){
     return {data,sig,logAt};
   })();
   const dataP=p.then(r=>r.data);
+  /* 2026-08-08 使用者回報：「櫃檯帳號在切換導覽列的時候都會跳權限不足的提示」「管理員帳號也是」——
+     直接成因是新表 ticket_grant_requests 少了 grant（已補），但這裡有個更根本的問題：
+     dataP 是 p 的衍生 promise。p 的拒絕由下面的 await 接手了，dataP 卻沒有人接 ——
+     於是**任何一次讀取失敗**都會多產生一個 unhandledrejection，
+     被全域處理器抓去跳一次 Toast。呼叫端明明自己 catch 了，畫面還是會跳。
+     ⚠ 這裡只是「消音」，不改變行為：等在 _dbInflight 上的呼叫端 await 的是同一個 dataP，
+       仍然會照常拿到拒絕。 */
+  dataP.catch(()=>{});
   _dbInflight.set(key,dataP);
   try{
     const {data,sig,logAt}=await p;
@@ -34609,11 +34617,20 @@ async function _grantIssue(P){
      確認後才能發票券」＋「打開視窗要明顯顯示應該要收到的款項再按發放票券，
      這邊要用顏色標明，避免櫃檯看錯」。
    只有電子合約走這條（紙本當場就完成了，見 submitGrant）。 */
+/* 讀不到就靜靜當作沒有（2026-08-08）：這是每次換頁都會跑的背景查詢，
+   失敗一次就記下來、整個工作階段不再重試 —— 不然一個設定問題會變成每換一頁跳一次提示。 */
+let _grantReqOff=false;
 async function grantReqPending(){
-  try{ return (await dbGetAll('ticket_grant_requests').catch(()=>[]))
-    .filter(r=>r && r.status==='pending')
-    .sort((a,b)=>String(a.requested_at||'').localeCompare(String(b.requested_at||''))); }
-  catch(_){ return []; }
+  if(_grantReqOff) return [];
+  try{
+    const all=await dbGetAll('ticket_grant_requests');
+    return (all||[]).filter(r=>r && r.status==='pending')
+      .sort((a,b)=>String(a.requested_at||'').localeCompare(String(b.requested_at||'')));
+  }catch(e){
+    _grantReqOff=true;
+    console.error('待審核發放讀取失敗（本次工作階段不再重試）：', e);
+    return [];
+  }
 }
 /* 左上角的待審核提示（桌機）——放在頂欄左側，櫃檯一進系統就看得到。
    有幾筆就寫幾筆；沒有就整顆不畫，不佔位置。 */

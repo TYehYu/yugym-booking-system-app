@@ -66,3 +66,9 @@ begin
                   '''staff_applications'',''reward_rules'',''ticket_grant_requests''');
   execute d;
 end $do$;
+
+-- ⚠ 2026-08-08 補：光有 RLS policy 不夠，還要 grant。
+-- policy 管的是「這一列給不給看」，grant 管的是「這個角色能不能碰這張表」——
+-- 少了 grant，authenticated 連 SELECT 都會被擋成 42501（使用者回報：切導覽列一直跳權限不足）。
+grant select, insert, update, delete on public.ticket_grant_requests to authenticated;
+grant select, insert, update, delete on public.ticket_grant_requests to service_role;
