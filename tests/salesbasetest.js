@@ -57,8 +57,8 @@ console.log('① 銷課怎麼算（實跑）');
     const P=grabFn('finPnl');
     ok('★★ 營收＝銷課', /const SV=await monthSalesValue\(ym\);/.test(P)
        && /const revenue=Math\.round\(SV\.salesValue\);/.test(P));
-    ok('★★ 淨利＝銷課 − 稅 − 薪資 − 固定 − 其他（＝銷課扣掉所有支出）',
-       /const net=revenue-tax-salary-fixedTotal-otherTotal;/.test(P));
+    ok('★★ 淨利＝銷課 − 稅 − 人事 − 固定 − 其他（＝銷課扣掉所有支出）',
+       /const net=revenue-tax-staffCost-fixedTotal-otherTotal;/.test(P));
     ok('★★ 稅的基礎仍是收款（不是銷課）',
        /const taxBase=Math\.round\(cash\/1\.05\);/.test(P) && /const tax=cash-taxBase;/.test(P));
     ok('★ 為什麼稅不能用銷課算，寫在原地',

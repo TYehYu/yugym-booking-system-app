@@ -7689,8 +7689,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.2124';
-const APP_VERSION_LABEL='v260808.2124';
+const APP_VERSION = '260808.2132';
+const APP_VERSION_LABEL='v260808.2132';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -27157,7 +27157,11 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const insLaborCo  = lvl?(Number(lvl.labor_co)||0):0;
   const insHealthCo = lvl?(Number(lvl.health_co)||0):0;
   // 公司三合一負擔：優先用 co_total（勞保雇主總額+健保雇主+勞退）；無則退回舊欄位加總
-  const insCoCost   = lvl ? (Number(lvl.co_total)>0 ? Number(lvl.co_total) : (insLaborCo+insHealthCo)) : 0;
+  /* 2026-08-08：公司負擔要看「有沒有投保」，不是「填了級距」——
+     原本只要查得到級距就算全額，於是把「填了級距但沒投保」的人也算進人事成本。
+     兩種都沒投保 → 0。（只投保其中一種的情況見下方註解） */
+  const insCoCost   = (lvl && (laborOn||healthOn))
+    ? (Number(lvl.co_total)>0 ? Number(lvl.co_total) : (insLaborCo+insHealthCo)) : 0;
 
   const grossPay = ptIncome + bonus + groupPay + dutyPay + renewPay + mgmtPay + bdayPay; // 應發
   /* 請假扣薪在「算完本月總薪資後」才扣（2026-08-01 使用者指示）——
@@ -28241,7 +28245,8 @@ async function renderPayrollSummary(){
         <span style="font-size:14px;font-weight:600;color:var(--text);">實發薪資總額</span>
         <span style="font-family:var(--display);font-size:28px;font-weight:700;color:var(--green);">$${grandNet.toLocaleString()}</span>
       </div>
-      ${grandCoCost>0?`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--t3);margin-top:6px;"><span>公司負擔勞健保（人事成本）</span><span>$${grandCoCost.toLocaleString()}</span></div>`:''}
+      ${grandCoCost>0?`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--t3);margin-top:6px;"><span>公司負擔勞健保（勞保雇主＋健保雇主＋勞退）</span><span>$${grandCoCost.toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--t2);margin-top:6px;padding-top:6px;border-top:1px dashed var(--bd);"><span>公司實際人事成本（應發＋公司負擔）</span><span style="font-weight:700;">$${(grandTotal+grandCoCost).toLocaleString()}</span></div>`:''}
     </div>
   </div>
   <div style="font-size:11.5px;color:var(--t3);padding:0 4px;line-height:1.7;">＊ 此為依薪資模板的試算金額，供月結參考。實際發放請以公司最終結算為準。完成課程、打卡工時會即時反映。</div>`;
@@ -41884,12 +41889,17 @@ async function finPnl(){
       return Object.entries(g).map(([k,v])=>({name:k,amt:Math.round(v.amt),n:v.n})).sort((x,y)=>y.amt-x.amt); };
     const fixedRows=groupBy(fixed), otherRows=groupBy(other);
     const fixedTotal=Math.round(sumOf(fixed)), otherTotal=Math.round(sumOf(other));
-    const net=revenue-tax-salary-fixedTotal-otherTotal;
+    /* 2026-08-08 使用者提問：「人事成本還沒扣掉勞健保嗎」——
+       原本人事成本只算「應發薪資」，公司負擔的勞健保（勞保雇主＋健保雇主＋勞退）
+       只在註腳揭露、沒有進淨利。那是實實在在要付出去的錢，該算。
+       ⚠ 員工自付的那一份不必另外扣：它是從應發裡代扣的，已經含在應發裡了。 */
+    const staffCost=salary+coIns;
+    const net=revenue-tax-staffCost-fixedTotal-otherTotal;
     const m=n=>'$'+Math.round(Number(n)||0).toLocaleString();
     const neg=n=>'−$'+Math.round(Math.abs(Number(n)||0)).toLocaleString();
     const sub=(nm,v,extra)=>`<tr class="pnl-sub"><td>${nm}${extra?`<span style="color:var(--t3);"> ${extra}</span>`:''}</td><td>${neg(v)}</td></tr>`;
     const [Y,M]=ym.split('-');
-    const spend=tax+salary+fixedTotal+otherTotal;
+    const spend=tax+staffCost+fixedTotal+otherTotal;
     const _isNow=ym===ymd(TODAY).slice(0,7);
     box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;">
       <div class="card-title" style="margin-bottom:8px;">${Y} 年 ${M} 月　損益表</div>
@@ -41909,7 +41919,7 @@ async function finPnl(){
             <span class="pnl-top-s">教練課 ${SV.ptCount} 堂・團課 ${SV.grpCount} 堂 ${SV.grpHeads} 人次</span></div>
           <div class="pnl-top-i"><span class="pnl-top-l">支出合計</span>
             <span class="pnl-top-v bad">${m(spend)}</span>
-            <span class="pnl-top-s">薪資 ${m(salary)}・稅 ${m(tax)}・固定 ${m(fixedTotal)}・其他 ${m(otherTotal)}</span></div>
+            <span class="pnl-top-s">人事 ${m(staffCost)}・稅 ${m(tax)}・固定 ${m(fixedTotal)}・其他 ${m(otherTotal)}</span></div>
         </div>
       </div>
       <table class="pnl">
@@ -41917,8 +41927,9 @@ async function finPnl(){
         ${sub('教練課',-Math.round(SV.ptValue),`${SV.ptCount} 堂`).replace('−$','$')}
         ${sub('團體課',-Math.round(SV.grpValue),`${SV.grpCount} 堂 ${SV.grpHeads} 人次`).replace('−$','$')}
         <tr class="pnl-out"><td>營業稅 5%<span style="color:var(--t3);font-weight:400;"> 　依<b>收款</b> ${m(cash)} 內含計：÷ 1.05 × 5%</span></td><td>${neg(tax)}</td></tr>
-        <tr class="pnl-h pnl-out pnl-hr"><td>人事成本（各員工薪資）<span style="color:var(--t3);font-weight:400;"> 　${payRows.length} 位</span></td><td>${neg(salary)}</td></tr>
+        <tr class="pnl-h pnl-out pnl-hr"><td>人事成本（薪資＋公司負擔勞健保）<span style="color:var(--t3);font-weight:400;"> 　${payRows.length} 位</span></td><td>${neg(staffCost)}</td></tr>
         ${payRows.map(r=>sub(r.name,r.amt)).join('')}
+        ${coIns>0?sub('公司負擔勞健保',coIns,'勞保雇主＋健保雇主＋勞退'):''}
         <tr class="pnl-h pnl-out"><td>固定支出</td><td>${neg(fixedTotal)}</td></tr>
         ${fixedRows.length?fixedRows.map(r=>sub(r.name,r.amt,r.n>1?`×${r.n}`:'')).join('')
           :'<tr class="pnl-sub"><td>（本月沒有固定支出）</td><td>—</td></tr>'}
@@ -41932,7 +41943,8 @@ async function finPnl(){
           客人一次買、分好幾個月上，用「上掉多少」看經營才準；賣票那個月的收款是另一回事。<br>
         ・本月實際<b>收款</b> ${m(cash)}（${pur.length} 筆）—— 與銷課是兩件事，只用來算營業稅。<br>
         ・營業稅按<b>內含</b>計：銷售額＝收款 ÷ 1.05，稅額＝銷售額 × 5%。若貴店報價是稅外加，跟我說改成收款 × 5%。<br>
-        ・人事成本＝各員工當月<b>應發</b>薪資（與薪資頁同一支計算）；${coIns>0?`另有公司負擔勞健保 <b>${m(coIns)}</b>，<b>未</b>計入淨利。`:'公司負擔勞健保為 0。'}<br>
+        ・人事成本＝各員工當月<b>應發</b>薪資 ${m(salary)}${coIns>0?` ＋ <b>公司負擔勞健保</b> ${m(coIns)}（勞保雇主＋健保雇主＋勞退）`:''}，與薪資頁同一支計算。
+          員工自付的勞健保不必另外扣 —— 那是從應發裡代扣的，已經含在應發裡。<br>
         ・這是這一頁<b>唯一</b>的淨利數字，下方營運卡的銷課與這裡同一份計算。
       </div>
     </div>`;

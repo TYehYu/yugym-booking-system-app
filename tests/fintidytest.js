@@ -59,17 +59,17 @@ console.log('\n③ 老闆要看的重點標示出來');
   ok('★★ 營業額與支出退成旁邊兩格小的（它們是淨利怎麼來的）',
      /<div class="pnl-hero-side">/.test(F)
      && /\.pnl-hero\{display:grid;grid-template-columns:minmax\(0,1\.35fr\) minmax\(0,1fr\);/.test(src));
-  ok('★ 支出那格直接拆給你看（薪資排最前 —— 那是最大一筆）',
-     /薪資 \$\{m\(salary\)\}・稅 \$\{m\(tax\)\}・固定 \$\{m\(fixedTotal\)\}・其他 \$\{m\(otherTotal\)\}/.test(F));
+  ok('★ 支出那格直接拆給你看（人事排最前 —— 那是最大一筆）',
+     /人事 \$\{m\(staffCost\)\}・稅 \$\{m\(tax\)\}・固定 \$\{m\(fixedTotal\)\}・其他 \$\{m\(otherTotal\)\}/.test(F));
   ok('★★ 各教練薪水那一列加重（老闆要找的第三件事）',
-     /<tr class="pnl-h pnl-out pnl-hr"><td>人事成本（各員工薪資）/.test(F)
+     /<tr class="pnl-h pnl-out pnl-hr"><td>人事成本（薪資＋公司負擔勞健保）/.test(F)
      && /\.pnl tr\.pnl-hr td\{background:rgba\(180,138,86,\.07\);\}/.test(src));
   ok('★ 逐位教練仍逐列列出、金額由大到小',
      /\.filter\(r=>r\.countSalary&&Number\(r\.sal&&r\.sal\.grossPay\)>0\)/.test(F)
      && /\.sort\(\(a,b\)=>b\.amt-a\.amt\)/.test(F));
-  ok('★ 支出合計＝稅＋薪資＋固定＋其他，與淨利同一份計算',
-     /const spend=tax\+salary\+fixedTotal\+otherTotal;/.test(F)
-     && /const net=revenue-tax-salary-fixedTotal-otherTotal;/.test(F));
+  ok('★ 支出合計＝稅＋人事＋固定＋其他，與淨利同一份計算',
+     /const spend=tax\+staffCost\+fixedTotal\+otherTotal;/.test(F)
+     && /const net=revenue-tax-staffCost-fixedTotal-otherTotal;/.test(F));
   ok('　　手機版縮成一欄', /@media\(max-width:760px\)\{ \.pnl-hero\{grid-template-columns:1fr;\} \.pnl-hero-v\{font-size:34px;\} \}/.test(src));
   ok('　　使用者的原話寫在程式裡', /「要重點標示身為老闆該看到的內容喔」/.test(src));
 }
