@@ -25,41 +25,66 @@ console.log('① 上個月是哪個月');
   eq('　　補零', F('2026-11'), '2026-10');
 }
 
-console.log('\n② 沒設定過就帶上個月的當草稿');
+console.log('\n② 沒設定過就帶上個月的當草稿（只有固定支出會帶）');
 {
-  const F=grabFn('openFixedExpenses');
-  ok('★★ 本月有資料就用本月的', /mine=all\.filter\(e=>e&&e\.ym===month&&e\.is_fixed===true\)/.test(F));
-  ok('★★ 本月沒有 → 抓上個月的項目與金額',
-     /if\(!mine\.length\)\{\n\s*const pm=prevYm\(month\);/.test(F)
+  /* 2026-08-08 追加：「其他支出也要可以新增，但就不用延續到下個月」
+     → 同一支 openExpenseEditor(ym, isFixed) 兩用，固定／其他各一個薄包裝。 */
+  const F=grabFn('openExpenseEditor');
+  ok('★★ 一支兩用，固定／其他各一個入口',
+     /async function openFixedExpenses\(ym\)\{ return openExpenseEditor\(ym, true\); \}/.test(src)
+     && /async function openOtherExpenses\(ym\)\{ return openExpenseEditor\(ym, false\); \}/.test(src));
+  ok('★★ 依 isFixed 撈對應的那一種', /mine=all\.filter\(e=>e&&e\.ym===month&&\(e\.is_fixed===true\)===fx\)/.test(F));
+  ok('★★ 只有固定支出會沿用上個月',
+     /if\(fx && !mine\.length\)\{\n\s*const pm=prevYm\(month\);/.test(F)
      && /const prev=all\.filter\(e=>e&&e\.ym===pm&&e\.is_fixed===true\);/.test(F));
+  ok('★★ 其他支出不帶入（一次性的，帶過來就是重複入帳）',
+     /只有固定支出會沿用上個月；其他支出是一次性的，帶過來只會變成重複入帳/.test(F));
   ok('★★ 帶進來的是草稿：id 留空，按儲存才會真的建立',
-     /mine=prev\.map\(e=>\(\{id:'', category:e\.category\|\|'', amount:Number\(e\.amount\)\|\|0, note:e\.note\|\|''\}\)\);/.test(F)
+     /mine=prev\.map\(e=>\(\{id:'', category:e\.category\|\|'', amount:Number\(e\.amount\)\|\|0,/.test(F)
      && /\/\/ 只是草稿：id 留空，按下儲存才會真的建立/.test(F));
   ok('★ 畫面上標明「本月還沒設定過，已帶入 X 月」',
      /本月還沒設定過，已帶入 <b>\$\{d\.from\.replace\('-','\/'\)\}<\/b> 的項目與金額。/.test(src));
-  ok('★ 空的月份至少給一列可以打字', /rows:mine\.length\?mine:\[\{id:'',category:'',amount:0,note:''\}\]/.test(F));
+  ok('★ 空的月份至少給一列可以打字', /rows:mine\.length\?mine:\[\{\.\.\.blank\}\]/.test(F));
   ok('★ 只有櫃檯／管理員能設定',
      /if\(!isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可設定'\); return; \}/.test(F));
   ok('　　為什麼不全自動寫入，寫在原地',
      /確認金額後按儲存才真的寫進去 —— 沒有人按過就不會憑空生出一筆支出。/.test(src));
 }
 
+console.log('\n②-2 其他支出：多一個日期欄、不延續');
+{
+  const F=grabFn('openExpenseEditor');
+  ok('★★ 其他支出要記是哪一天花的（清單本來就照日期排）',
+     /note:e\.note\|\|'', date:String\(e\.date\|\|''\)\.slice\(0,10\)\|\|defDate/.test(F));
+  ok('★ 預設日期：這個月就用今天，不然用月初',
+     /const defDate=\(String\(_today\)\.slice\(0,7\)===month\)\?_today:\(month\+'-01'\);   \/\/ 這個月就用今天，不然用月初/.test(F));
+  ok('★★ 畫面上多一欄日期（固定支出沒有）',
+     /\$\{fx\?'':`<input class="fx-in" type="date" min="\$\{d\.month\}-01" value="\$\{escH\(r\.date\|\|''\)\}" oninput="fxSet\(\$\{i\},'date',this\.value\)">`\}/.test(src)
+     && /\$\{fx\?'':'<span>日期<\/span>'\}/.test(src));
+  ok('★ 標題與說明跟著換，並講明「不會帶到下個月」',
+     /\$\{fx\?'固定支出設定':'其他支出'\}/.test(src)
+     && /耗材、設備、修繕這種一次性的開銷。<b>不會<\/b>帶到下個月 —— 每個月各自登記各自的。/.test(src));
+  ok('★ 版面：其他支出四欄、固定支出三欄',
+     /\.fx-3 \.fx-head,\.fx-3 \.fx-row\{grid-template-columns:140px 1fr 120px 34px;\}/.test(src)
+     && /<div class="fx-list\$\{fx\?'':' fx-3'\}">/.test(src));
+}
+
 console.log('\n③ 改數字／加項目／減項目');
 {
   ok('★★ 一列一項，直接在格子裡改（項目名稱＋金額＋刪除）',
-     /<input class="fx-in" value="\$\{escH\(r\.category\)\}" placeholder="例：房租" oninput="fxSet\(\$\{i\},'category',this\.value\)">/.test(src)
+     /<input class="fx-in" value="\$\{escH\(r\.category\)\}" placeholder="\$\{fx\?'例：房租':'例：清潔用品'\}" oninput="fxSet\(\$\{i\},'category',this\.value\)">/.test(src)
      && /<input class="fx-in num" type="number" min="0" step="1" value="\$\{Number\(r\.amount\)\|\|0\}" oninput="fxSet\(\$\{i\},'amount',this\.value\)">/.test(src)
      && /<button class="fx-del" title="刪除這一項" onclick="fxDel\(\$\{i\}\)">✕<\/button>/.test(src));
   ok('★ ＋新增一項', /onclick="fxAdd\(\)">＋ 新增一項<\/button>/.test(src));
-  ok('★ 最上面一列是欄名', /<div class="fx-head"><span>項目<\/span><span>每月金額<\/span><span><\/span><\/div>/.test(src));
+  ok('★ 最上面一列是欄名', /<div class="fx-head">\$\{fx\?'':'<span>日期<\/span>'\}<span>項目<\/span><span>金額<\/span><span><\/span><\/div>/.test(src));
   const SET=grabFn('fxSet');
   ok('★★ 打字時只更新合計，不重畫整張表（不然游標會跳掉）',
      /const el=document\.querySelector\('\.fx-sum b'\); if\(el\) el\.textContent=/.test(SET)
      && /只更新合計，不重畫整張表 —— 重畫會讓正在打字的欄位失焦/.test(SET));
   const DEL=grabFn('fxDel');
   ok('★ 刪到一列不剩時自動補一列空的（不會變成沒得打字）',
-     /if\(!d\.rows\.length\) d\.rows\.push\(\{id:'',category:'',amount:0,note:''\}\);/.test(DEL));
-  ok('★ 合計即時看得到', /<div class="fx-sum"><span>本月固定支出合計<\/span><b>\$\$\{Math\.round\(total\)\.toLocaleString\(\)\}<\/b><\/div>/.test(src));
+     /if\(!d\.rows\.length\) d\.rows\.push\(\{\.\.\.d\.blank\}\);/.test(DEL));
+  ok('★ 合計即時看得到', /<div class="fx-sum"><span>本月\$\{fx\?'固定':'其他'\}支出合計<\/span><b>\$\$\{Math\.round\(total\)\.toLocaleString\(\)\}<\/b><\/div>/.test(src));
 }
 
 console.log('\n④ 儲存：新增／修改／刪除一次到位');
@@ -72,7 +97,11 @@ console.log('\n④ 儲存：新增／修改／刪除一次到位');
      && /for\(const id of \(d\.orig\|\|\[\]\)\) if\(!keep\.has\(id\)\) await dbDel\('expenses',id\);/.test(F));
   ok('★★ 原本就有的用原 id 更新、草稿的才給新 id',
      /id:r\.id\|\|uid\('EXP'\)/.test(F));
-  ok('★ 一律寫成本月的固定支出', /ym:d\.month, date:d\.month\+'-01',[\s\S]{0,120}is_fixed:true,/.test(F));
+  ok('★★ 固定支出記月初、其他支出記實際那一天',
+     /const _date=d\.fx \? \(d\.month\+'-01'\) : \(String\(r\.date\|\|''\)\.slice\(0,10\)\|\|\(d\.month\+'-01'\)\);/.test(F)
+     && /is_fixed:!!d\.fx,/.test(F));
+  ok('　　為什麼固定支出不記日期，寫在原地',
+     /固定支出一律記月初（它講的是「這個月」不是「哪一天」）；/.test(F));
   ok('★ 寫完清快取並重畫', /dbCacheClear\('expenses'\);/.test(F) && /navTo\(CUR_PAGE\);/.test(F));
   ok('　　防連點', /async function fxSave\(\)\{ return onceAct\('fxsave', _fxSave\); \}/.test(src));
 }
@@ -82,6 +111,9 @@ ok('★★ 損益表的「固定支出」那一列點得動',
    /<button class="pnl-link" onclick="openFixedExpenses\('\$\{ym\}'\)">固定支出<span style="color:var\(--t3\);font-weight:400;"> 　點我設定<\/span><\/button>/.test(src));
 ok('★ 支出頁也有一顆設定鈕（講明可加減項目、下月自動帶入）',
    /onclick="openFixedExpenses\('\$\{month\}'\)">⚙ 固定支出設定（可加減項目・下月自動帶入）<\/button>/.test(src));
+ok('★★ 其他支出也有入口，並講明不延續',
+   /<tr class="pnl-h pnl-out"><td><button class="pnl-link" onclick="openOtherExpenses\('\$\{ym\}'\)">其他支出<span style="color:var\(--t3\);font-weight:400;"> 　點我登記<\/span><\/button><\/td>/.test(src)
+   && /onclick="openOtherExpenses\('\$\{month\}'\)">⚙ 其他支出（一次登記多筆・不延續到下個月）<\/button>/.test(src));
 ok('★ 原本的一鍵沿用沒被拿掉（習慣那條路的人照舊）',
    /async function finExpenseCopyPrev\(\)\{/.test(src));
 ok('　　使用者的原話寫在程式裡',
