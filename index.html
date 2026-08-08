@@ -7589,8 +7589,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.1417';
-const APP_VERSION_LABEL='v260808.1417';
+const APP_VERSION = '260808.1714';
+const APP_VERSION_LABEL='v260808.1714';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9683,6 +9683,26 @@ function isTeachable(c){ return isCoachable(c) && c.can_teach!==false; }
 /* 對外顯示名（教練名），未填則用本名。
    英文名一律全大寫（2026-07-22 使用者指示）：只動拉丁字母，中文名不受影響。 */
 function coachDisp(c){ const n=c ? (c.name_en||c.name||'') : ''; return /[A-Za-z]/.test(n)?n.toUpperCase():n; }
+/* 會員端的教練名字（2026-08-08 使用者指示：「會員端看團體課，要看得到是哪個教練上課
+   跟上課人數，但是不能看上課會員名單」）——
+   會員讀不到 employees（RLS 只給櫃檯／本人／教練），所以 dbGetAll('coaches') 對會員一律是
+   空陣列，畫面上每一堂課的教練都顯示成「教練」。
+   沒有放寬 employees 的 RLS（那是整列開放，薪資／電話／身分證都會跟著過去），
+   改用只回「id + 名字」的 fn_coach_directory（security definer）。
+   一個工作階段抓一次就夠：教練名字不會在使用中改。 */
+let _coachDirCache=null;
+async function coachDirectory(){
+  if(_coachDirCache) return _coachDirCache;
+  const map={};
+  try{
+    if(CLOUD && sb){
+      const {data,error}=await sb.rpc('fn_coach_directory');
+      if(!error && Array.isArray(data)) data.forEach(c=>{ if(c&&c.id) map[c.id]=coachDisp(c); });
+    }
+  }catch(_){}
+  _coachDirCache=map;
+  return map;
+}
 /* 教練代表色（行事曆 Token 底色 / 名字色籤用）：依 emp_id 固定配色，未列出者用雜湊備援。
    ══ Calm Play V3（2026-07-18）：全部改為低彩度淡色系 ══
    規範要求「所有教練皆使用低彩度淡色系（薄荷綠、天空藍、鼠尾草綠、奶茶、淡紫等），維持一致風格」。
@@ -21897,6 +21917,14 @@ async function openBookingDetail(id){
   // 教練只能改自己負責（主責或代課）的課；管理員 / 櫃台 / 店長（2026-08-03）全權
   const ownByCoach = SESSION.role!=='coach' || !!SESSION.is_manager || bkIsCoach(b,SESSION.id);
   const isMemberView = SESSION.role==='member';   // 會員視角：唯讀明細＋自簽，不出現員工編輯欄位
+  /* 教練名字（2026-08-08 使用者指示：「會員端看團體課，要看得到是哪個教練上課」）——
+     會員讀不到 employees，上面的 coaches 是空的，三個分支的教練欄都會變成「—」。
+     補一份只有名字的名冊；有代課就顯示代課那位（會員關心的是「今天誰帶」）。 */
+  const _cdir = isMemberView ? await coachDirectory() : {};
+  const _coachNm = (coach&&coach.name) || _cdir[b.coach_id] || '—';
+  const _subNm   = (subCoach&&subCoach.name) || (b.substitute_coach_id?(_cdir[b.substitute_coach_id]||'代課教練'):'');
+  const _hasSub  = !!b.substitute_coach_id;
+  const _teachNm = _subNm || _coachNm;   // 實際站在場上的那一位
   const editable=!window._coachReadonly && !isMemberView && ownByCoach && b.status!=='cancelled'&&b.status!=='completed'&&b.date>=ymd(TODAY);
   // 簽到僅後台（管理員/櫃台）可代為操作；教練端不能幫簽（會員自行簽到）
   // 2026-07-27 使用者指示：簽到開放教練操作（限自己主帶/代課的課）；櫃台/管理員不變
@@ -22029,6 +22057,23 @@ async function openBookingDetail(id){
   let memberLine;
   if(isTrialD){
     memberLine=`<div><span style="color:var(--t2);">體驗客戶</span>　${b.trial_name||'—'}${b.trial_phone?`　<span style="color:var(--t3);font-size:12px;">${b.trial_phone}</span>`:''}</div>`;
+  }else if(isGroupD && isMemberView){
+    /* 會員視角的團課（2026-08-08 使用者指示：「要看得到是哪個教練上課跟上課人數，
+       但是不能看上課會員名單」）—— 整份名單不畫。
+       ⚠ 名單本來就不會漏出別人的姓名（members 的 RLS 只讓會員讀自己那一列，
+         其他人會是空白），但一整排空白列本身就是在告訴他「這堂有誰、坐第幾個位子」，
+         而且逐名額的簽到／請假狀態也跟著露出去。整塊換成一行人數最乾淨。
+       順帶：底下那一整套票券夾運算（每位學員各建一份 wallet）是給櫃檯看的，
+       會員頁不需要，跳過也省一輪計算。 */
+    const _gmaxM=Math.max(1,Number(b.max_heads)||5);
+    const _gfullM=gIdsD.length>=_gmaxM;
+    const _mySeats=gIdsD.filter(x=>String(x)===String(SESSION.id)).length;
+    memberLine=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="color:var(--t2);">上課人數</span>
+      <span style="font-family:var(--num);font-weight:700;">${gIdsD.length}<span style="color:var(--t3);font-weight:400;">/${_gmaxM}</span></span>
+      ${_gfullM?'<span class="tag tag-warn" style="font-size:10.5px;">已額滿</span>':''}
+      ${_mySeats>1?`<span class="tag" style="font-size:10.5px;background:#f7efe0;color:#8a5e28;">您報名 ${_mySeats} 個名額</span>`:''}
+      <span style="color:var(--t3);font-size:11.5px;">同學名單不公開</span></div>`;
   }else if(isGroupD){
     const att=attObj(b);
     /* 團課名單顯示票券狀態（2026-07-26 使用者要求）：單人課的明細早就有票券卡，
@@ -22189,8 +22234,8 @@ async function openBookingDetail(id){
             ${coachableList.filter(c=>c.id!==b.coach_id).map(c=>`<option value="${c.id}" ${b.substitute_coach_id===c.id?'selected':''}>改由 ${coachDisp(c)} 代課</option>`).join('')}
           </select>`
         :`
-          <span style="color:var(--t2);flex-shrink:0;">教練</span><span style="flex-shrink:0;">${subCoach?subCoach.name:(coach?coach.name:'—')}</span>
-          ${subCoach?`<span class="tag" style="background:#f5ede0;color:#8A5E28;font-size:10px;flex-shrink:0;">代課（原 ${coach?coach.name:'—'}）</span>`:''}`}
+          <span style="color:var(--t2);flex-shrink:0;">教練</span><span style="flex-shrink:0;">${_teachNm}</span>
+          ${_hasSub?`<span class="tag" style="background:#f5ede0;color:#8A5E28;font-size:10px;flex-shrink:0;">代課（原 ${_coachNm}）</span>`:''}`}
         ${/* 教練請假（2026-08-03 使用者回報「按鈕不見了」）——0801 加按鈕時放進了
              團課/通用分支，但 canCoachLeave 只對教練課系成立，真正會用到的教練課
              分支反而沒有；補在這裡，條件與其他分支同一套（2026-08-08 起三處共用 bkCoachLeaveBtn）。 */''}
@@ -22223,11 +22268,11 @@ async function openBookingDetail(id){
           : `<span style="font-family:var(--num);font-size:15px;font-weight:700;color:var(--text);">${b.date.replace(/-/g,'/')}（${WD[d.getDay()]}）${b.start_time}　<span style="font-size:12px;color:var(--t3);font-weight:400;">${b.duration}分</span></span>`}
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <span style="color:var(--t2);flex-shrink:0;">教練</span><span style="flex-shrink:0;">${coach?coach.name:'—'}</span>
+        <span style="color:var(--t2);flex-shrink:0;">教練</span><span style="flex-shrink:0;">${_coachNm}</span>
         ${editable?`<select id="ed-subcoach" style="font-size:12.5px;padding:4px 8px;border:1px solid var(--bd);border-radius:7px;background:#fff;max-width:170px;">
           <option value="">無代課</option>
           ${coachableList.filter(c=>c.id!==b.coach_id).map(c=>`<option value="${c.id}" ${b.substitute_coach_id===c.id?'selected':''}>代課：${coachDisp(c)}</option>`).join('')}</select>`
-          :(subCoach?`<span class="tag" style="background:#f5ede0;color:#8A5E28;">代課：${subCoach.name}</span>`:'')}
+          :(_hasSub?`<span class="tag" style="background:#f5ede0;color:#8A5E28;">代課：${_subNm}</span>`:'')}
         ${/* 2026-08-01 使用者指示：明細裡的教練這一列也要有「教練請假」——
              原本只有課卡圓形按鈕的代課選單裡才有，從明細進來的人找不到。
              同一支 bkCoachLeave，規則也同一條（適用範圍與做法見 TK_POCKETS.*.coachLeave）。 */''}
@@ -22257,11 +22302,11 @@ async function openBookingDetail(id){
              </span>`
           : `<span style="font-family:var(--num);font-size:15px;font-weight:700;color:var(--text);">${b.date.replace(/-/g,'/')}（${WD[d.getDay()]}）${b.start_time}　<span style="font-size:12px;color:var(--t3);font-weight:400;">${b.duration}分</span></span>`}
       </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">教練</span><span>${coach?coach.name:'—'}</span>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">教練</span><span>${_coachNm}</span>
         ${editable?`<select id="ed-subcoach" style="font-size:12.5px;padding:4px 8px;border:1px solid var(--bd);border-radius:7px;background:#fff;max-width:170px;">
           <option value="">無代課</option>
           ${coachableList.filter(c=>c.id!==b.coach_id).map(c=>`<option value="${c.id}" ${b.substitute_coach_id===c.id?'selected':''}>代課：${coachDisp(c)}</option>`).join('')}</select>`
-          :(subCoach?`<span class="tag" style="background:#f5ede0;color:#8A5E28;">代課：${subCoach.name}</span>`:'')}
+          :(_hasSub?`<span class="tag" style="background:#f5ede0;color:#8A5E28;">代課：${_subNm}</span>`:'')}
         ${/* 2026-08-01 使用者指示：明細裡的教練這一列也要有「教練請假」——
              原本只有課卡圓形按鈕的代課選單裡才有，從明細進來的人找不到。
              同一支 bkCoachLeave，規則也同一條（適用範圍與做法見 TK_POCKETS.*.coachLeave）。 */''}
@@ -36898,6 +36943,9 @@ PAGES.mem_bookings=async function(){
   window._memTypeMap=Object.fromEntries((ttypes||[]).map(t=>[t.id,t]));
   try{ window._meMember=await dbGet('members',SESSION.id); }catch(_){}
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
+  /* 會員讀不到 employees → 上面那份對會員一律是空的，教練欄會全變成「教練」。
+     補一份只有名字的名冊（2026-08-08 使用者指示，見 coachDirectory）。 */
+  if(!Object.keys(coachMap).length) Object.assign(coachMap, await coachDirectory());
   /* 團體課（member_id 為空、會員在 member_ids 名單裡）也算自己的課（2026-07-28 團課自主報名） */
   const mine=bookings.filter(b=>bkHasMember(b,SESSION.id)&&b.status!=='cancelled')
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
@@ -37082,7 +37130,12 @@ function renderMemMonthView(){
       const isSelf=bkIsSelf(b);
       const dur=b.duration||60;
       const end=minToTime(timeToMin(b.start_time)+dur);
-      const who=b.coach_id?(window._memCalData.coachMap[b.coach_id]||'教練'):'自主訓練';
+      /* 2026-08-08 使用者指示：會員要看得到「哪個教練上課」與「上課人數」。
+         有代課就顯示代課那位（會員關心的是今天誰帶），團課再補上人數 N/M。 */
+      const _cmD=(window._memCalData||{}).coachMap||{};
+      const _whoId=b.substitute_coach_id||b.coach_id;
+      const who=b.coach_id?((_cmD[_whoId]||'教練')+(b.substitute_coach_id?'（代課）':'')):'自主訓練';
+      const _grpHeads=bkIsGroup(b)?`${mids(b).length}/${Math.max(1,Number(b.max_heads)||5)} 人`:'';
       // 簽到/取消按鈕
       let actionBtn='';
       const isGrp=bkIsGroup(b);
@@ -37115,7 +37168,7 @@ function renderMemMonthView(){
         <div class="mc-ev-time"><span class="mc-ev-t1">${b.start_time}</span><span class="mc-ev-t2">${end}</span></div>
         <div class="mc-ev-bar ${barCls}"></div>
         <div class="mc-ev-body"><div class="mc-ev-name">${evName}</div>
-          <div class="mc-ev-cat">${who} · ${dur}分鐘 · ${statusLabel(b.status)}</div></div>
+          <div class="mc-ev-cat">${who}${_grpHeads?` · ${_grpHeads}`:''} · ${dur}分鐘 · ${statusLabel(b.status)}</div></div>
         <div style="display:flex;align-items:center;">${actionBtn}</div>
       </div>`;
     }).join('');
@@ -37322,8 +37375,12 @@ async function memTaskTap(id,el){
   const nm=bookingTypeName(b,window._memTypeMap);
   const wd='日一二三四五六'[slotDt.getDay()];
   const end=minToTime(timeToMin(b.start_time)+(Number(b.duration)||60));
-  const who=b.coach_id?(((window._memCalData||{}).coachMap||{})[b.coach_id]||'教練')
+  /* 有代課就顯示代課那位；團課再補人數（2026-08-08 使用者指示） */
+  const _cmT=((window._memCalData||{}).coachMap)||{};
+  const _whoIdT=b.substitute_coach_id||b.coach_id;
+  const who=b.coach_id?((_cmT[_whoIdT]||'教練')+(b.substitute_coach_id?'（代課）':''))
     :(bkIsSelf(b)?(selfVenueLabel(b)||'自主訓練'):'');
+  const whoHeads=isGrp?`${mids(b).length}/${Math.max(1,Number(b.max_heads)||5)} 人`:'';
   const orb=(cls,ic,label,onclick,title)=>onclick
     ? `<button class="mtp-orb ${cls}" onclick="${onclick}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></button>`
     : `<div class="mtp-orb ${cls}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></div>`;
@@ -37341,7 +37398,7 @@ async function memTaskTap(id,el){
         <span class="mtp-bar" style="background:${col};"></span>
         <span class="mtp-body">
           <span class="mtp-t1">${nm}</span>
-          <span class="mtp-t2">${b.date.slice(5).replace('-','/')}（${wd}）　${b.start_time}–${end}${who?`　·　${who}`:''}</span>
+          <span class="mtp-t2">${b.date.slice(5).replace('-','/')}（${wd}）　${b.start_time}–${end}${who?`　·　${who}`:''}${whoHeads?`　·　${whoHeads}`:''}</span>
         </span>
         ${done?'<span class="mtp-tag">已簽到</span>':''}
       </div>
@@ -37664,6 +37721,8 @@ function msbRenderGrpList(){
   box.innerHTML='<div style="padding:4px 14px 12px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;">'+list.map(c=>{
     const n=Array.isArray(c.member_ids)?c.member_ids.length:0;
     const mx=Math.max(1,Number(c.max_heads)||5);
+    // 有代課就顯示代課那位（2026-08-08：會員關心的是「今天誰帶」，不是誰掛名）
+    const _who=(cm[c.substitute_coach_id||c.coach_id]||'教練')+(c.substitute_coach_id?'（代課）':'');
     const joined=mids(c).includes(SESSION.id);
     const full=n>=mx;
     const end=minToTime(timeToMin(c.start_time)+(Number(c.duration)||60));
@@ -37675,7 +37734,7 @@ function msbRenderGrpList(){
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#F1E4D2;border-radius:12px;padding:11px 14px;">
       <span style="display:flex;flex-direction:column;gap:2px;min-width:0;">
         <b style="font-size:14.5px;color:#5a3410;font-family:var(--num);">${c.start_time}–${end}</b>
-        <span style="font-size:11.5px;color:#9a5a1e;">${cm[c.coach_id]||'教練'} · 名額 ${n}/${mx}</span></span>
+        <span style="font-size:11.5px;color:#9a5a1e;">${_who} · 名額 ${n}/${mx}</span></span>
       ${btn}</div>`;
   }).join('')
   + (canJoin?'':`<div style="background:var(--card2);border:1px dashed var(--bd);border-radius:12px;padding:12px 14px;font-size:12.5px;color:var(--t2);line-height:1.9;">
@@ -37714,7 +37773,8 @@ async function msbGrpJoin(bid){
     <div style="background:#F1E4D2;border-radius:10px;padding:14px;font-size:13.5px;line-height:2;color:#5a3410;">
       <div><span style="opacity:.7;">日期</span>　${c.date.replace(/-/g,'/')}（週${WD[d.getDay()]}）</div>
       <div><span style="opacity:.7;">時間</span>　${c.start_time}（${Number(c.duration)||60} 分鐘）</div>
-      <div><span style="opacity:.7;">教練</span>　${cm[c.coach_id]||'教練'}</div>
+      <div><span style="opacity:.7;">教練</span>　${(cm[c.substitute_coach_id||c.coach_id]||'教練')+(c.substitute_coach_id?'（代課）':'')}</div>
+      <div><span style="opacity:.7;">上課人數</span>　${(Array.isArray(c.member_ids)?c.member_ids.length:0)}/${Math.max(1,Number(c.max_heads)||5)} 人</div>
       ${tkLine}
     </div>
     <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">${cand.length>1?'有多套票卡可用，預設扣最快到期的那一套，可自行改選。':''}確認後扣 1 堂；開課前可在「我的預約」取消退堂。</div>
