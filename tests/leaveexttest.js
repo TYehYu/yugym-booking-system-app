@@ -122,43 +122,49 @@ ok('　　重複發放的防線沒動（同一筆 booking 只發一次）',
    原本只有課卡圓形按鈕的代課選單裡才有，從明細進來的人找不到。 */
 console.log('\n明細的教練列也有教練請假');
 /* 2026-08-03：教練課分支補上第三顆（0801 放錯分支，真正適用的教練課反而沒有） */
+/* 2026-08-08：三處原本各寫一份兩行三元式，團課加進來之後說明文字會分岔 → 抽成 bkCoachLeaveBtn */
 ok('★ 明細裡有按鈕（教練課／團課體驗／通用三個分支都有）',
-   (src.match(/onclick="bkCoachLeave\('\$\{b\.id\}'\)"/g)||[]).length===3);
+   (src.match(/\$\{bkCoachLeaveBtn\(b, editable\)\}/g)||[]).length===3);
+ok('★★ 三處共用同一支（改一次三處都跟著改）', /function bkCoachLeaveBtn\(b, editable\)\{/.test(src));
 ok('★ 走同一支 bkCoachLeave（規則不會再分岔）',
-   /class="btn btn-ghost btn-sm bkd-cleave" onclick="bkCoachLeave/.test(src));
-ok('★ 只有可編輯、且是教練課才出現', /editable&&canCoachLeave\(b\)&&b\.status!=='coach_leave'/.test(src));
+   /class="btn btn-ghost btn-sm bkd-cleave" onclick="bkCoachLeave\('\$\{b\.id\}'\)"/.test(src));
+ok('★ 只有可編輯、且這種課適用才出現', /if\(!\(editable && canCoachLeave\(b\)\)\) return '';/.test(src));
 ok('★ 已簽到／已完成／已取消的課不給按',
-   /b\.status!=='cancelled'&&b\.status!=='checked_in'&&b\.status!=='completed'/.test(src));
+   /if\(b\.status==='cancelled'\|\|b\.status==='checked_in'\|\|b\.status==='completed'\) return '';/.test(src));
 ok('★ 已標記過就顯示紅色標籤，不會重複按',
-   /b\.status==='coach_leave'\?'<span class="tag" style="background:#fbe9e7;color:#b5372e;">教練請假<\/span>':''/.test(src));
+   /if\(bkIsCoachLeave\(b\)\) return '<span class="tag" style="background:#fbe9e7;color:#b5372e;">教練請假<\/span>';/.test(src));
+ok('★★ 團課是整堂取消（status 變 cancelled）→ 靠 coach_leave 旗標才認得出來',
+   /function bkIsCoachLeave\(b\)\{ return !!b && \(b\.status==='coach_leave' \|\| b\.coach_leave===true\); \}/.test(src));
 ok('　　按鈕做成紅字外框（不可逆的動作，要跟代課下拉區隔）',
    /\.bkd-cleave\{color:var\(--danger,#b5372e\);border-color:var\(--danger,#b5372e\);/.test(src));
-ok('　　滑過看得到會發生什麼', /title="退票、效期＋7 天、課種改自主訓練"/.test(src));
+ok('　　滑過看得到會發生什麼（兩種做法不同文案）',
+   /const tip=bkCoachLeaveMode\(b\)==='cancel'\?'整堂取消、逐名額退票、效期＋7 天':'退票、效期＋7 天、課種改自主訓練';/.test(src));
 
-console.log('\n只有教練課與友善教練課適用（2026-07-31 使用者定案）');
+console.log('\n適用範圍（2026-07-31 定案；2026-08-08 使用者補上團課）');
 {
   /* 2026-07-31：canCoachLeave 改問票卡口袋（TK_POCKETS.*.coachLeave），一併抽進來 */
   const _pi2=src.indexOf('const TK_POCKETS={');
-  const can=new Function('window',
+  const mode=new Function('window',
     src.slice(_pi2, src.indexOf('\nfunction tkClass5(',_pi2))+'\n'
     +g('function tkClass5(t, typeMap){','\n}\n')+'\n'
-    +g('function canCoachLeave(b){','\n')+'\nreturn canCoachLeave;')({_ttCache:[]});
-  eq('★ 教練課 → 可以', can({category:'私人教練'}), true);
-  eq('★ 友善教練課 → 可以（category 也是私人教練，靠票券區分）', can({category:'私人教練'}), true);
-  eq('★ 團體課 → 不行', can({category:'小班肌力'}), false);
-  eq('★ 自主訓練 → 不行', can({category:'自主訓練'}), false);
-  eq('　　體驗 → 不行（本來就不扣票）', can({category:'體驗'}), false);
+    +g('function bkCoachLeaveMode(b){','\n')+'\nreturn bkCoachLeaveMode;')({_ttCache:[]});
+  const can=b=>!!b && !!mode(b);
+  eq('★ 教練課 → 退票＋展延＋改自主訓練', mode({category:'私人教練'}), 'self');
+  eq('★ 友善教練課 → 同上（category 也是私人教練，靠票券區分）', mode({category:'私人教練'}), 'self');
+  eq('★★ 團體課 → 整堂取消＋逐名額退票展延（2026-08-08 使用者補充）',
+     mode({category:'小班肌力'}), 'cancel');
+  eq('★ 自主訓練 → 不適用', mode({category:'自主訓練'}), null);
+  eq('　　體驗 → 不適用（本來就不扣票）', mode({category:'體驗'}), null);
   /* 2026-07-31 使用者定案：運動按摩是跟老師另外約時間，直接取消重約就好 */
-  eq('★ 運動按摩 → 不行（直接取消重約，不走這一套）', can({category:'運動按摩'}), false);
+  eq('★ 運動按摩 → 不適用（直接取消重約，不走這一套）', mode({category:'運動按摩'}), null);
   eq('　　null 不會爆', can(null), false);
   ok('★ 不適用的課根本不畫那顆按鈕', /\+ \(!canCoachLeave\(b\) \? ''/.test(src));
   ok('★ 函式本身也擋一次（深連結／程式呼叫繞不過去）',
-     /if\(!canCoachLeave\(b\)\)\{\s*\n\s*showToast\(bkIsGroup\(b\)/.test(src));
-  ok('★ 團體課給的訊息指向正確的做法（代課或補課券）',
-     /'團體課不適用教練請假：請改派代課，或取消後補發補課券'/.test(src));
-  ok('　　為什麼團課不適用，原因寫在程式裡',
-     /一堂團課有好幾個人，改成「自主訓練」講不通/.test(src)
-     && /團課本來就有自己的補償機制 —— 取消後補發補課券/.test(src)
+     /if\(!canCoachLeave\(b\)\)\{\s*\n\s*showToast\(`\$\{b\.category\|\|'這種課'\}不適用教練請假/.test(src));
+  ok('★★ 團課走自己那一套，不會被改成「自主訓練」',
+     /if\(bkCoachLeaveMode\(b\)==='cancel'\) return grpCoachLeave\(id\);/.test(src));
+  ok('　　為什麼團課不改成自主訓練，原因寫在程式裡',
+     /一堂好幾個人，改成「自主訓練」講不通（自主訓練是一個人的事）/.test(src)
      && /按摩是跟老師另外約時間，\s*\n\s*臨時不能來就直接取消重約/.test(src));
 }
 
@@ -168,8 +174,11 @@ ok('★ 移到代課教練名單「後面」', (()=>{
   const blk=src.slice(i, src.indexOf('</div>`;',i));
   return blk.indexOf('bkOrbitSubSet') < blk.indexOf('bkCoachLeave');
 })());
-ok('★ 按鈕講清楚會發生什麼', /找不到代課 → 教練請假<i>退票・效期＋7 天・改成自主訓練<\/i>/.test(src));
-ok('　　已標記過就不能再按', /<button class="evr-row on" disabled>已標記教練請假<\/button>/.test(src));
+ok('★ 按鈕講清楚會發生什麼（副標跟著做法換）',
+   /找不到代課 → 教練請假<i>\$\{bkCoachLeaveSub\(b\)\}<\/i>/.test(src)
+   && /\? '整堂取消・退票・效期＋7 天' : '退票・效期＋7 天・改成自主訓練'/.test(src));
+ok('　　已標記過就不能再按', /<button class="evr-row on" disabled>已標記教練請假<\/button>/.test(src)
+   && /: !bkIsCoachLeave\(b\)/.test(src));
 ok('　　樣式：紅字＋副標', /\.evr-row\.evr-leave\{color:#a8433f;flex-direction:column;/.test(src));
 ok('　　原因寫在程式裡', /它也是這個面板裡唯一破壞性的動作，\s*\n\s*放最後比較不會誤點/.test(src));
 

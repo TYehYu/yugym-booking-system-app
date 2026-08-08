@@ -7589,8 +7589,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.1341';
-const APP_VERSION_LABEL='v260808.1341';
+const APP_VERSION = '260808.1417';
+const APP_VERSION_LABEL='v260808.1417';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10818,16 +10818,16 @@ function lpPrimary(name, sub){
    規則寫在這裡，只寫一遍。畫面與流程一律問 tkPocket(票) / bkPocket(課卡)，
    不要再自己寫課別字串比較 —— tests/pockettest.js 有一道棘輪擋住新增的散裝比較。
 
-   ⚠ 口袋不是互不相干的：教練課簽到會發自主訓練點數、團課請假會發補課券、
-     教練請假會展延並把課改成自主訓練。跨口袋的動作寫在 grants／leave 欄位裡，
-     不要在各自的口袋裡再實作一次。 */
+   ⚠ 口袋不是互不相干的：教練課簽到會發自主訓練點數、團課的「會員請假」會發補課券、
+     「教練請假」則一律展延效期（教練課再改成自主訓練、團課則整堂取消）。
+     跨口袋的動作寫在 grants／leave 欄位裡，不要在各自的口袋裡再實作一次。 */
 const TK_POCKETS={
   pt:{ key:'pt', label:'教練課', unit:'堂', isCourse:true,
     /* 預約當下就把 ticket_id 寫在課卡上 —— 這是帳本事實，最可信 */
     stampFrom:['direct','infer'],
     perSeat:false, sharedBooking:false,
     canShare:true, canExtend:true, canInstall:true,
-    coachLeave:true,          // 教練請假 → 展延效期＋改成自主訓練（canCoachLeave）
+    coachLeave:'self',        // 教練請假 → 退票＋展延效期＋改成自主訓練（bkCoachLeaveMode）
     memberLeave:false,        // 沒有逐人請假的機制，客人不能來就取消
     grantsOnCheckin:'self',   // 簽到發自主訓練點數（grantCheckinReward）
   },
@@ -10837,7 +10837,10 @@ const TK_POCKETS={
     perSeat:true,             // 同一人可佔多個名額（名額鍵 M / M#2）
     sharedBooking:true,       // 一張課卡多位學員（member_ids）
     canShare:true, canExtend:true, canInstall:false,
-    coachLeave:false,         // 團課請改派代課，或取消後補發補課券
+    /* 2026-08-08 使用者定案：「課程如果是因為教練請假，該堂課該方案期限延長一週；
+       如果是會員請假才給補課券」—— 團課原本沒有教練請假這條路，櫃檯只能整堂取消
+       再手動補發補課券，等於讓會員自己的補課額度替教練沒來買單。 */
+    coachLeave:'cancel',      // 教練請假 → 整堂取消、逐名額退票＋效期＋7 天（grpCoachLeave，不發補課券）
     memberLeave:'makeup',     // 逐人請假 → 本堂照扣、另發補課券（groupToggleLeave）
     grantsOnCheckin:null,
   },
@@ -12784,6 +12787,20 @@ async function revokeMakeupOnCancel(booking){
   }catch(_){}
   return n;
 }
+/* 這個名額用的是哪一張票（2026-08-08）——
+   補課券有兩條特別規則（不得退費、不能再請假）要先認得出它。
+   先看課卡上逐名額記下的事實（seat_tickets），沒有才退回「還有淨扣課的那張」。 */
+async function seatTicketOf(b, seatKey){
+  try{
+    const st=(b&&b.seat_tickets&&typeof b.seat_tickets==='object')?b.seat_tickets:null;
+    const id=st&&st[String(seatKey)];
+    if(id) return await dbGet('member_tickets',id).catch(()=>null);
+    const mid=seatMid(String(seatKey));
+    const tid=await grpNetDeductTicket(b.id, mid);
+    return tid?await dbGet('member_tickets',tid).catch(()=>null):null;
+  }catch(_){ return null; }
+}
+function tkIsMakeup(t){ return !!t && t.source==='makeup'; }
 /* 團課請假（2026-07-26 使用者說明的制度）：四週優惠方案有補課機制 —— 當天請假，
    該堂票券「照扣不退」，另發一張 14 天補課券。
    ⚠️ 這裡刻意不動票券餘額：團課的扣課發生在「管理名單」加入名額時（見 openGroupMembers），
@@ -12805,6 +12822,13 @@ async function _groupToggleLeave(bid,seatKey){
       const n=await revokeMakeupTicket(b,mid,sk);
       showToast(n?'已取消請假，並收回未使用的補課券':'已取消請假（補課券已使用，保留不收回）');
     }else{
+      /* 補課券不能再請假（2026-08-08 使用者定案）——
+         補課券本來就是「請假換來的一次補課機會」，再請假等於無限展延。 */
+      const _seatTk=await seatTicketOf(b, sk);
+      if(tkIsMakeup(_seatTk)){
+        showToast('這一格是用補課券補的課，不能再請假（補課券只補一次）');
+        return;
+      }
       att[sk]='leave';
       const tk=await grantMakeupTicket(b,mid,sk);
       showToast(tk?`已標記請假：本堂照扣，已發補課券（效期至 ${String(tk.expire_date||'').slice(5).replace('-','/')}）`:'已標記請假（補課券發放失敗，請手動處理）');
@@ -12833,14 +12857,20 @@ async function _groupCancelSeat(bid,seatKey){
   if(!seats){ showToast('此會員不在名單中'); return; }
   let m=null; try{ m=await dbGet('members',mid); }catch(_){}
   const hrs=hoursUntilStart(b), within24=hrs<24;
+  /* 補課券的課取消不退（2026-08-08 使用者定案）——視窗要先講清楚，
+     不能等按下去才發現票沒退回來。 */
+  const _seatTk=await seatTicketOf(b, sk);
+  const _isMk=tkIsMakeup(_seatTk);
   showModal(`<div class="modal-title">取消團體課預約</div>
     <div style="font-size:13.5px;color:var(--text);padding:2px 0 10px;">
       ${m?m.name:'會員'}　·　${b.date.replace(/-/g,'/')} ${b.start_time}${seats>1?`　（共 ${seats} 個名額，本次取消<b>第 ${sno} 個</b>）`:''}</div>
-    <div style="background:${within24?'#fbeceb':'#eef5f1'};border:1.5px solid ${within24?'#e0a8a2':'#cfe3d8'};border-radius:12px;padding:12px 14px;font-size:13px;color:${within24?'#b5372e':'#1f6f54'};line-height:1.9;">
-      ${within24?`⚠ 距離開課不到 24 小時（約 ${Math.max(0,Math.floor(hrs))} 小時）。`:`距離開課還有 ${Math.floor(hrs)} 小時。`}
-      ${tkChip('back','1 堂團體課票券')}　名額同時釋出。</div>
-    <div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:2.2;">
-      若客人是臨時有事、想保留補課權益，請改用「請假」：${tkChip('eat','本堂照扣')}　另發補課券（效期自開課日起 14 天）。</div>
+    <div style="background:${(_isMk||within24)?'#fbeceb':'#eef5f1'};border:1.5px solid ${(_isMk||within24)?'#e0a8a2':'#cfe3d8'};border-radius:12px;padding:12px 14px;font-size:13px;color:${(_isMk||within24)?'#b5372e':'#1f6f54'};line-height:1.9;">
+      ${_isMk
+        ? `⚠ 這一格是用<b>補課券</b>補的課。${tkChip('eat','補課券不退回')}　取消後名額釋出，但補課機會就用掉了，也不會再發新的券。`
+        : `${within24?`⚠ 距離開課不到 24 小時（約 ${Math.max(0,Math.floor(hrs))} 小時）。`:`距離開課還有 ${Math.floor(hrs)} 小時。`}
+      ${tkChip('back','1 堂團體課票券')}　名額同時釋出。`}</div>
+    ${_isMk?'':`<div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:2.2;">
+      若客人是臨時有事、想保留補課權益，請改用「請假」：${tkChip('eat','本堂照扣')}　另發補課券（效期自開課日起 14 天）。</div>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${bid}')">返回</button>
       <button class="btn btn-green" onclick="doGroupCancelSeat('${bid}','${sk}')">確定取消・退回票券</button></div>`);
 }
@@ -12878,7 +12908,12 @@ async function doGroupCancelSeat(bid,seatKey){
     }
     if(tkId){
       const tk=await dbGet('member_tickets',tkId);
-      if(tk){
+      /* 補課券不得退費（2026-08-08 使用者定案）——它是請假換來的補課機會，
+         補課那堂再取消就是放棄，不退回也不再發新的券。留下紀錄讓櫃檯查得到。 */
+      if(tkIsMakeup(tk)){
+        try{ await logTicket(tkId,'adjust',0,bid,SESSION.id,'補課券的課取消：依規定不退回'); }catch(_){}
+        tkId=null;
+      }else if(tk){
         tk.sessions_remaining=(Number(tk.sessions_remaining)||0)+1;
         if(tk.status==='used_up') tk.status='usable';
         await dbPut('member_tickets',tk);
@@ -21321,10 +21356,11 @@ async function bkOrbitSub(id){
     /* 教練請假（2026-07-21 商業規則二；2026-07-31 使用者指示移到教練名單後面）——
        找不到代課才會走這條，所以排在名單最後；它也是這個面板裡唯一破壞性的動作，
        放最後比較不會誤點。
-       ⚠ 只有教練課（含友善，category 都是「私人教練」）適用 —— 見 canCoachLeave。 */
+       ⚠ 教練課是「退票＋展延＋改自主訓練」、團課是「整堂取消＋逐名額退票展延」，
+         副標會跟著換 —— 見 bkCoachLeaveMode。 */
     + (!canCoachLeave(b) ? ''
-      : b.status!=='coach_leave'
-        ? `<button class="evr-row evr-leave" onclick="event.stopPropagation();bkCoachLeave('${id}')">找不到代課 → 教練請假<i>退票・效期＋7 天・改成自主訓練</i></button>`
+      : !bkIsCoachLeave(b)
+        ? `<button class="evr-row evr-leave" onclick="event.stopPropagation();bkCoachLeave('${id}')">找不到代課 → 教練請假<i>${bkCoachLeaveSub(b)}</i></button>`
         : `<button class="evr-row on" disabled>已標記教練請假</button>`)
     + `</div>`;
   const old = host.querySelector('.evc-roster'); if(old) old.remove();
@@ -21370,32 +21406,56 @@ async function extendForCoachLeave(ticket_id, booking, operator){
    ⚠ 課種改成自主訓練之後，原本靠 category 判斷「這堂是教練課才發點」的
      grantCheckinReward 會判成不發 → 那邊補了一條 status==='coach_leave' 就發。
    ⚠ ticket_type_id 刻意保留：那是「本來是哪一種課」的唯一線索，對帳與發點都用得到。 */
-/* 哪些課適用「教練請假」（2026-07-31 使用者定案：只有教練課與友善教練課）——
-   友善教練課的 category 也是「私人教練」，靠票券區分，所以這一條就涵蓋兩者。
-   為什麼團體課不適用：
-   ・一堂團課有好幾個人，改成「自主訓練」講不通（自主訓練是一個人的事）
-   ・團課本來就有自己的補償機制 —— 取消後補發補課券（2026-07-26 定案：補課券只屬團課）
+/* 哪些課適用「教練請假」，以及各自怎麼做（2026-07-31 定案，2026-08-08 使用者補充團課）——
+   使用者的原話：「課程如果是因為"教練請假"該堂課該方案期限延長一週，
+                 如果是會員請假才給補課券」。
+   兩種做法，差別只在「這堂課還能不能留給會員用」：
+   ・'self'   教練課／友善教練課（category 都是「私人教練」，靠票券區分）——
+              退票＋效期＋7 天，並把這堂改成會員的自主訓練：教練沒來，
+              但場地與時段還在，會員可以自己來練。
+   ・'cancel' 團體課 —— 一堂好幾個人，改成「自主訓練」講不通（自主訓練是一個人的事），
+              所以整堂取消，每個名額各自退票、票券效期各延 7 天。
+   兩種都**不發補課券**：補課券是「會員自己請假」換來的一次補課機會（2026-07-26 定案），
+   教練沒來是店家的事，該還的是一週的使用期限，不是消耗會員的補課額度。
    體驗課不適用：本來就不扣票，沒有堂數可退、也沒有效期可延。
    運動按摩不適用（2026-07-31 使用者定案）：按摩是跟老師另外約時間，
-   臨時不能來就直接取消重約，不需要「退票＋展延＋改自主訓練」這一整套。 */
-/* 只有教練課有「教練請假 → 展延效期＋改成自主訓練」（2026-07-31 使用者定案）。
-   規則寫在口袋裡（TK_POCKETS.*.coachLeave），這裡只負責問。 */
-function canCoachLeave(b){ return !!b && !!bkPocketNow(b).coachLeave; }
+   臨時不能來就直接取消重約，不需要「退票＋展延」這一整套。 */
+/* 規則寫在口袋裡（TK_POCKETS.*.coachLeave），這裡只負責問是哪一種做法。
+   舊值 true 等同 'self'（教練課），保留相容。 */
+function bkCoachLeaveMode(b){ const v=b?bkPocketNow(b).coachLeave:null; return v===true?'self':(v||null); }
+function canCoachLeave(b){ return !!b && !!bkCoachLeaveMode(b); }
+/* 已經標記過教練請假了嗎 —— 教練課看狀態（coach_leave），團課是整堂取消、
+   狀態會變 cancelled，所以另外立了 bookings.coach_leave 這個旗標記錄「為什麼取消」。 */
+function bkIsCoachLeave(b){ return !!b && (b.status==='coach_leave' || b.coach_leave===true); }
+/* 按下去會發生什麼 —— 兩種做法的結果不一樣，按鈕上要照實寫（2026-08-08） */
+function bkCoachLeaveSub(b){ return bkCoachLeaveMode(b)==='cancel'
+  ? '整堂取消・退票・效期＋7 天' : '退票・效期＋7 天・改成自主訓練'; }
+/* 明細裡的「教練請假」按鈕（教練課／團課體驗／通用三個分支共用一份，2026-08-08）——
+   原本三處各寫一份兩行的三元式；團課加進來之後說明文字會分岔，抽成一支才不會只改到其中一處。 */
+function bkCoachLeaveBtn(b, editable){
+  if(bkIsCoachLeave(b)) return '<span class="tag" style="background:#fbe9e7;color:#b5372e;">教練請假</span>';
+  if(!(editable && canCoachLeave(b))) return '';
+  if(b.status==='cancelled'||b.status==='checked_in'||b.status==='completed') return '';
+  const tip=bkCoachLeaveMode(b)==='cancel'?'整堂取消、逐名額退票、效期＋7 天':'退票、效期＋7 天、課種改自主訓練';
+  return `<button class="btn btn-ghost btn-sm bkd-cleave" onclick="bkCoachLeave('${b.id}')" title="${tip}">教練請假</button>`;
+}
 async function bkCoachLeave(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+  if(bkIsCoachLeave(b)){ showToast('這堂已經標記過教練請假'); return; }
   if(b.status==='cancelled'||b.status==='checked_in'||b.status==='completed'){ showToast('此狀態不可標記請假'); return; }
   if(!canCoachLeave(b)){
-    showToast(bkIsGroup(b)
-      ? '團體課不適用教練請假：請改派代課，或取消後補發補課券'
-      : `${b.category||'這種課'}不適用教練請假（只有教練課與友善教練課）`);
+    showToast(`${b.category||'這種課'}不適用教練請假（只有教練課、友善教練課與團體課）`);
     return;
   }
+  // 團課走自己的一套（整堂取消＋逐名額退票展延），不改成自主訓練
+  if(bkCoachLeaveMode(b)==='cancel') return grpCoachLeave(id);
   const _tkId=b.ticket_id;   // 先留著：下面要用它退票，但欄位本身會被清掉
   const _wasCat=b.category||'';
   try{
     /* 順序（2026-07-21）：先寫狀態、成功才退票——正式庫若尚未套 20260721_05（enum 缺
        coach_leave），狀態寫入會先失敗、乾淨中止，不會發生「票退了狀態沒改」的不一致。 */
     b.status='coach_leave';
+    b.coach_leave=true;      // 為什麼變成自主訓練／為什麼取消 —— 兩種做法共用這個旗標（2026-08-08）
     b.category='自主訓練';
     b.ticket_id=null;        // 票已退回，掛著會讓圓形卡多算一堂
     b.note=String(b.note||'').trim()
@@ -21427,6 +21487,85 @@ async function bkCoachLeave(id){
       : '已標記教練請假：改為自主訓練（未退票券，請確認堂數）');
     navTo(CUR_PAGE);
   }catch(e){ showToast('標記請假失敗：'+(e&&e.message?e.message:e)); }
+}
+/* ── 團體課的教練請假（2026-08-08 使用者定案）─────────────────────────────
+   「課程如果是因為"教練請假"該堂課該方案期限延長一週，如果是會員請假才給補課券」
+
+   團課沒辦法像教練課那樣改成「自主訓練」（一堂好幾個人），所以做法是：
+     ① 整堂取消，每個名額扣掉的那一堂都退回去（走既有的 cancelBooking(force)，
+        連帶收回這堂發過的補課券與贈點，那些補償的前提都沒了）
+     ② 這堂扣到的每一張票，效期各往後推 7 天 —— 教練沒來等於白白吃掉會員一週的名額
+     ③ **不發補課券**：補課券是「會員自己請假」的補償，教練沒來不該由它買單
+   哪幾張票要延：拿「這次取消新增的 refund 帳本」回推，所以連舊的匯入預約
+   （沒有 deduct 紀錄、靠 refundLegacyBooking 退的）也延得到；先前就已經退過的
+   名額不會被誤延。 */
+async function grpCoachLeave(id){
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+  const ids=(Array.isArray(b.member_ids)?b.member_ids:[]).map(String);
+  if(!ids.length){ showToast('這堂還沒有人報名，直接取消即可'); return; }
+  const rows=[];
+  for(const k of seatKeys(b)){
+    let m=null; try{ m=await dbGet('members',seatMid(k)); }catch(_){}
+    let t=null; try{ t=await seatTicketOf(b,k); }catch(_){}
+    const from=t&&t.expire_date?String(t.expire_date).slice(0,10):'';
+    let to=''; if(from){ const d=parseYmd(from); if(d){ d.setDate(d.getDate()+COACH_LEAVE_EXTEND_DAYS); to=ymd(d); } }
+    rows.push({name:(m&&m.name)||'會員', plan:(t&&t.plan_name)||'（查不到票券，取消時會再找一次）', from, to});
+  }
+  const fmt=x=>String(x||'').slice(5).replace('-','/');
+  showModal(`<div class="modal-title">教練請假・整堂取消</div>
+    <div style="font-size:13.5px;color:var(--text);padding:2px 0 10px;">
+      ${b.date.replace(/-/g,'/')} ${String(b.start_time).slice(0,5)}　小班肌力　共 ${ids.length} 個名額</div>
+    <div style="background:#eef5f1;border:1.5px solid #cfe3d8;border-radius:12px;padding:12px 14px;font-size:13px;color:#1f6f54;line-height:1.9;">
+      ${tkChip('back','每個名額退回 1 堂')}　並將票券<b>使用期限各延長 ${COACH_LEAVE_EXTEND_DAYS} 天</b>。<br>
+      <span style="color:var(--t2);">教練沒來，等於吃掉會員一週的名額 —— 時間要還給他。<b>不發補課券</b>（補課券是會員自己請假的補償）。</span></div>
+    <div style="margin-top:10px;max-height:200px;overflow:auto;font-size:12.5px;line-height:2;">
+      ${rows.map(r=>`<div style="display:flex;gap:8px;align-items:baseline;border-bottom:1px solid var(--bd);padding:4px 0;">
+        <b style="flex-shrink:0;">${r.name}</b>
+        <span style="color:var(--t2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.plan}</span>
+        <span class="num" style="flex-shrink:0;color:${r.to?'#1f6f54':'var(--t3)'};">${r.to?`${fmt(r.from)} → ${fmt(r.to)}`:'無到期日'}</span></div>`).join('')}
+    </div>
+    <div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:1.9;">
+      找得到代課教練的話請改用「代課」，這堂就照常上。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
+      <button class="btn btn-green" onclick="doGrpCoachLeave('${b.id}')">確定・退票並延長 ${COACH_LEAVE_EXTEND_DAYS} 天</button></div>`);
+}
+async function doGrpCoachLeave(id){ return onceAct('grpcleave:'+id, ()=>_doGrpCoachLeave(id)); }
+async function _doGrpCoachLeave(id){
+ try{
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+  if(bkIsCoachLeave(b)){ showToast('這堂已經標記過教練請假'); return; }
+  const mids=[...new Set((Array.isArray(b.member_ids)?b.member_ids:[]).map(String))];
+  const _when=`${b.date} ${String(b.start_time).slice(0,5)}`;
+  /* 取消前先記下已經存在的 refund 帳本 —— 取消後多出來的那幾筆才是「這次退的」。
+     先前個別取消過的名額不能跟著延（那是會員自己取消的，不是教練請假）。 */
+  const before=new Set();
+  try{ (await dbGetAll('ticket_logs')).forEach(l=>{ if(l&&l.booking_id===b.id&&l.action==='refund') before.add(l.id); }); }catch(_){}
+  // 旗標與備註先寫進去：cancelBooking 會重讀這一筆，寫在前面才帶得過去
+  b.coach_leave=true;
+  const _line=`${ymd(TODAY)} 教練請假，整堂取消（票券已退回、效期各延長 ${COACH_LEAVE_EXTEND_DAYS} 天）`;
+  b.note=String(b.note||'').trim() ? String(b.note).trim()+'\n'+_line : _line;
+  await dbPut('bookings',b);
+  // 退票走既有那一套（逐筆 deduct 帳本退回，並收回這堂發過的補課券與贈點）
+  await cancelBooking(id,'force',{silent:true});
+  // 這次退到哪幾張票，就延哪幾張
+  let tkIds=[];
+  try{
+    tkIds=[...new Set((await dbGetAll('ticket_logs'))
+      .filter(l=>l&&l.booking_id===b.id&&l.action==='refund'&&!before.has(l.id))
+      .map(l=>l.ticket_id).filter(Boolean))];
+  }catch(_){}
+  let extN=0;
+  for(const tid of tkIds){ if(await extendForCoachLeave(tid,b,SESSION.id)) extN++; }
+  // 逐位通知（團課沒有 member_id，cancelBooking 的通知發不出去）
+  for(const mid of mids){
+    try{ await pushNotification(mid,'cancel','教練請假通知',
+      `您 ${_when} 的小班肌力課因教練請假取消，票券已退回，使用期限延長 ${COACH_LEAVE_EXTEND_DAYS} 天。造成不便敬請見諒。`); }catch(_){}
+  }
+  dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
+  closeModal();
+  showToast(`已標記教練請假：整堂取消、票券退回${extN?`，${extN} 張票效期各延長 ${COACH_LEAVE_EXTEND_DAYS} 天`:'（沒有可延長效期的票券）'}`);
+  navTo(CUR_PAGE);
+ }catch(e){ showToast('標記請假失敗：'+((e&&e.message)||e)); }
 }
 // 改派代課：先做輕量衝突檢查（該教練同時段已有課 → 擋下），再寫入並重繪
 async function bkOrbitSubSet(id, cid){
@@ -22054,10 +22193,8 @@ async function openBookingDetail(id){
           ${subCoach?`<span class="tag" style="background:#f5ede0;color:#8A5E28;font-size:10px;flex-shrink:0;">代課（原 ${coach?coach.name:'—'}）</span>`:''}`}
         ${/* 教練請假（2026-08-03 使用者回報「按鈕不見了」）——0801 加按鈕時放進了
              團課/通用分支，但 canCoachLeave 只對教練課系成立，真正會用到的教練課
-             分支反而沒有；補在這裡，條件與其他分支同一套。 */''}
-        ${(editable&&canCoachLeave(b)&&b.status!=='coach_leave'&&b.status!=='cancelled'&&b.status!=='checked_in'&&b.status!=='completed')
-          ?`<button class="btn btn-ghost btn-sm bkd-cleave" onclick="bkCoachLeave('${b.id}')" title="退票、效期＋7 天、課種改自主訓練">教練請假</button>`
-          :(b.status==='coach_leave'?'<span class="tag" style="background:#fbe9e7;color:#b5372e;">教練請假</span>':'')}
+             分支反而沒有；補在這裡，條件與其他分支同一套（2026-08-08 起三處共用 bkCoachLeaveBtn）。 */''}
+        ${bkCoachLeaveBtn(b, editable)}
       </div>
       ${isMemberView?'':`<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
         <span style="color:var(--t2);flex-shrink:0;">場地</span>
@@ -22093,10 +22230,8 @@ async function openBookingDetail(id){
           :(subCoach?`<span class="tag" style="background:#f5ede0;color:#8A5E28;">代課：${subCoach.name}</span>`:'')}
         ${/* 2026-08-01 使用者指示：明細裡的教練這一列也要有「教練請假」——
              原本只有課卡圓形按鈕的代課選單裡才有，從明細進來的人找不到。
-             同一支 bkCoachLeave，規則也同一條（只有教練課與友善教練課，見 TK_POCKETS.pt.coachLeave）。 */''}
-        ${(editable&&canCoachLeave(b)&&b.status!=='coach_leave'&&b.status!=='cancelled'&&b.status!=='checked_in'&&b.status!=='completed')
-          ?`<button class="btn btn-ghost btn-sm bkd-cleave" onclick="bkCoachLeave('${b.id}')" title="退票、效期＋7 天、課種改自主訓練">教練請假</button>`
-          :(b.status==='coach_leave'?'<span class="tag" style="background:#fbe9e7;color:#b5372e;">教練請假</span>':'')}
+             同一支 bkCoachLeave，規則也同一條（適用範圍與做法見 TK_POCKETS.*.coachLeave）。 */''}
+        ${bkCoachLeaveBtn(b, editable)}
       </div>
       ${isMemberView?'':`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="color:var(--t2);flex-shrink:0;">場地</span>
@@ -22129,10 +22264,8 @@ async function openBookingDetail(id){
           :(subCoach?`<span class="tag" style="background:#f5ede0;color:#8A5E28;">代課：${subCoach.name}</span>`:'')}
         ${/* 2026-08-01 使用者指示：明細裡的教練這一列也要有「教練請假」——
              原本只有課卡圓形按鈕的代課選單裡才有，從明細進來的人找不到。
-             同一支 bkCoachLeave，規則也同一條（只有教練課與友善教練課，見 TK_POCKETS.pt.coachLeave）。 */''}
-        ${(editable&&canCoachLeave(b)&&b.status!=='coach_leave'&&b.status!=='cancelled'&&b.status!=='checked_in'&&b.status!=='completed')
-          ?`<button class="btn btn-ghost btn-sm bkd-cleave" onclick="bkCoachLeave('${b.id}')" title="退票、效期＋7 天、課種改自主訓練">教練請假</button>`
-          :(b.status==='coach_leave'?'<span class="tag" style="background:#fbe9e7;color:#b5372e;">教練請假</span>':'')}
+             同一支 bkCoachLeave，規則也同一條（適用範圍與做法見 TK_POCKETS.*.coachLeave）。 */''}
+        ${bkCoachLeaveBtn(b, editable)}
       </div>
       ${isMemberView?'':`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="color:var(--t2);flex-shrink:0;">場地</span>
@@ -22144,13 +22277,16 @@ async function openBookingDetail(id){
     </div>`)}
     ${/* 時間列已統一為各分支的第二列（2026-08-03 排列定版），下方的「調整時間」
          與重複的場地區塊退場 —— ed-date/ed-time/ed-dur 同一組 id，saveBookingTime 照讀。 */''}
+    ${b.coach_leave&&b.status==='cancelled'?`<div style="margin-top:12px;padding:10px;background:#fbe9e7;border-radius:8px;font-size:12px;color:#b5372e;line-height:1.8;">因<b>教練請假</b>整堂取消：票券已退回，使用期限各延長 ${COACH_LEAVE_EXTEND_DAYS} 天。依規定<b>不補發補課券</b>（補課券是會員自己請假的補償）。</div>`:''}
     ${b.status==='cancelled'&&b.refund_waived?`<div style="margin-top:12px;padding:10px;background:#f7efe0;border-radius:8px;font-size:12px;color:#8a5e28;">此預約於開課 24 小時內取消，未退回票券。${b.makeup_granted?'（已補發補課券）':''}</div>`:''}
     ${bkNoteBlock(b, isMemberView, ownByCoach)}
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
       ${editable?`<button class="btn btn-ghost" onclick="saveBookingTime('${b.id}')">儲存變更</button>`:''}
-      ${/* 補課券只屬於團課的四週方案（2026-07-26 使用者指示：教練課沒有補課機制，取消的教練課不出現此鈕） */''}
-      ${(isDeskLike())&&b.status==='cancelled'&&b.member_id&&bkIsGroup(b)&&!b.makeup_granted?`<button class="btn btn-gold" onclick="confirmMakeup('${b.id}')">補發補課券</button>`:''}
+      ${/* 補課券只屬於團課的四週方案（2026-07-26 使用者指示：教練課沒有補課機制，取消的教練課不出現此鈕）。
+           2026-08-08 使用者定案再加一條：因「教練請假」取消的那堂也不補發 —— 那邊改成延長效期，
+           兩種補償同時給等於補兩次。 */''}
+      ${(isDeskLike())&&b.status==='cancelled'&&b.member_id&&bkIsGroup(b)&&!b.makeup_granted&&!b.coach_leave?`<button class="btn btn-gold" onclick="confirmMakeup('${b.id}')">補發補課券</button>`:''}
       ${canCancel&&ownByCoach?(isMemberView
         ? (isGroupD&&Array.isArray(b.member_ids)&&b.member_ids.includes(SESSION.id)&&!isPastD
             ? `<button class="btn btn-danger" onclick="memLeaveGroup('${b.id}')">取消報名</button>`
@@ -22574,6 +22710,9 @@ async function doVenueChange(id,vid){
 // 確認補發補課券
 async function confirmMakeup(id){
   const b=await dbGet('bookings',id); if(!b)return;
+  /* 2026-08-08 使用者定案：教練請假那條已經改成「延長效期一週」，補課券只給會員自己請假的。
+     按鈕本來就不會出現，這裡再擋一次（深連結／程式呼叫繞不過去）。 */
+  if(b.coach_leave){ showToast('這堂是教練請假取消：已退票並延長效期，依規定不補發補課券'); return; }
   const _tm=makeupTerm(b);
   showModal(`<div class="modal-title">補發補課券</div>
     <div style="font-size:13px;color:var(--text);padding:4px 0;">將為此會員補發 1 張補課券：</div>
@@ -26424,7 +26563,9 @@ function leaderBonusOf(emp, extras, G, month){
   const hitRows=inList.filter(r=>each(r)>0);
   const pay=inList.reduce((s,r)=>s+each(r),0);
   const listed=inList.reduce((s,r)=>s+(Number(r.classes)||0),0);
-  return { pay, total:listed, units:hitRows.length, rows:inList, hitRows, t1, b1, t2, b2,
+  /* scoped：rows 是不是「這位店長負責的教練」（2026-08-08）——
+     舊制與「名單未設定」那兩條回的是全店名單，拿去當負責名單列出來會是錯的。 */
+  return { pay, total:listed, units:hitRows.length, rows:inList, hitRows, t1, b1, t2, b2, scoped:true,
     detail: hitRows.length
       ? `${hitRows.length} / ${inList.length} 位達標　·　${hitRows.map(r=>`${r.name} ${r.classes} 堂 $${each(r).toLocaleString()}`).join('、')}`
       : `名單 ${inList.length} 位，無人達到 ${t1} 堂` };
@@ -26569,6 +26710,17 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const _ld=leaderBonusOf(emp,extras,G,extras.month);
   const leaderPay=_ld.pay, leaderTotal=_ld.total, leaderUnits=_ld.units;
   const leaderDetail=_ld.detail;
+  /* 店長獎金的計算名單（2026-08-08 使用者指示：「店長薪資單列出負責的教練」）——
+     原本只有一行 detail 把達標的人名擠在一起，沒達標的完全看不到，
+     店長無從知道「還差誰、差幾堂」。帶出整份名單（含未達標）與每位帶來的金額。 */
+  const _ldT1=Number(_ld.t1)||0, _ldT2=Number(_ld.t2)||0, _ldB1=Number(_ld.b1)||0, _ldB2=Number(_ld.b2)||0;
+  const leaderList=(_ld.scoped && Array.isArray(_ld.rows)?_ld.rows:[]).map(r=>{
+    const n=Number(r.classes)||0;
+    const pay=(_ldT1>0&&n>=_ldT1?_ldB1:0)+((_ldT2>0&&n>=_ldT2)?_ldB2:0);
+    return { id:r.id, name:r.name, classes:n, pay, hit:pay>0,
+             /* 還差幾堂才到下一個門檻（達標的就不用再標） */
+             need:(_ldT1>0&&n<_ldT1)?(_ldT1-n):((_ldT2>0&&n>=_ldT1&&n<_ldT2)?(_ldT2-n):0) };
+  }).sort((a,b)=>b.classes-a.classes);
   const mgmtPay=supPay+leaderPay; // 管理職津貼合計
   /* ⑦-2 生日禮金（2026-08-02 使用者指示：「還有生日禮金 1000 元」）
      二修（同日）：「如果員工 9 月生日，那生日禮金會跟著 8 月的薪水一起發放，
@@ -26618,6 +26770,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
     dutyGross, dutyLeaveDeduct, dutyClassDeduct, classOverlap:co, dutyPay, dutyDetail,
     renewCount, renewPay, renewDetail,
     isSupervisor:isSup, supPay, isLeader, leaderPay, leaderDetail, leaderTotal, leaderUnits, mgmtPay,
+    leaderList, leaderT1:_ldT1, leaderT2:_ldT2, leaderB1:_ldB1, leaderB2:_ldB2,
     isBday, bdayPay, bdayDetail,
     insGrade:grade||null, insGradeMissing, insLaborEmp, insHealthEmp, insEmpDeduct, insLaborCo, insHealthCo, insCoCost,
     leave:L, leaveDeduct, divisor:_divisor,
@@ -27358,7 +27511,23 @@ async function openPerfDetail(empId, month){
     if(sal.renewPay>0) rows+=row('續約獎金', sal.renewDetail||`${renewCount} 張`, money(sal.renewPay));
     /* 2026-08-02：改成只要是店長就列 —— 新制沒設名單時金額是 0，
        但那行「尚未設定計算名單」正是最需要被看到的訊息。 */
-    if(sal.isLeader)rows+=row('店長獎金', sal.leaderDetail||'', money(sal.leaderPay));
+    if(sal.isLeader){
+      rows+=row('店長獎金', sal.leaderDetail||'', money(sal.leaderPay));
+      /* 負責的教練逐位列出（2026-08-08 使用者指示）——達標的標綠、沒達標的標出還差幾堂，
+         店長才知道月底要盯誰。名單本身在「員工資料 → 薪資規則 → 店長獎金」設定。 */
+      if((sal.leaderList||[]).length){
+        /* .pfd-nl 預設是收合的（要靠 .open 才顯示，見續約名單的 pfdToggleRenew）——
+           這份名單沒有展開的按鈕，所以直接帶 open，不然會整塊看不見。 */
+        rows+=`<div class="pfd-nl open" style="margin:2px 0 8px;">
+          ${sal.leaderList.map(r=>`<div class="nl-row">
+            <span class="nl-nm">${_esc(r.name||'—')}</span>
+            <span class="nl-plan">${r.classes} 堂${r.hit?'':(r.need>0?`<span style="color:var(--t3);">　還差 ${r.need} 堂</span>`:'')}</span>
+            <span class="nl-amt" style="${r.hit?'color:var(--green);':'color:var(--t3);'}">${r.hit?'$'+r.pay.toLocaleString():'—'}</span>
+          </div>`).join('')}
+          <div class="nl-sum"><span>${sal.leaderList.filter(r=>r.hit).length} / ${sal.leaderList.length} 位達標${sal.leaderT1?`　·　門檻 ${sal.leaderT1} 堂 $${sal.leaderB1.toLocaleString()}${sal.leaderT2>0?`　·　${sal.leaderT2} 堂再加 $${sal.leaderB2.toLocaleString()}`:''}`:''}</span><b>${money(sal.leaderPay)}</b></div>
+        </div>`;
+      }
+    }
     if(sal.supPay>0)   rows+=row('主管津貼', '固定津貼', money(sal.supPay));
     rows+=row('應發合計','', money(sal.grossPay), {sum:true});
     /* 請假扣薪移到應發合計之後（2026-08-01 使用者指示：算完本月總薪資後再扣除） */
@@ -27509,6 +27678,7 @@ async function computeMonthlyPayroll(month){
     dutyGross:0, dutyLeaveDeduct:0, dutyClassDeduct:0, classOverlap:0, dutyPay:0, dutyDetail:'',
     renewCount:0, renewPay:0, renewDetail:'', isBday:false, bdayPay:0, bdayDetail:'',
     isSupervisor:false, supPay:0, isLeader:false, leaderPay:0, leaderDetail:'', leaderTotal:0, leaderUnits:0, mgmtPay:0,
+    leaderList:[], leaderT1:0, leaderT2:0, leaderB1:0, leaderB2:0,
     insGrade:null, insLaborEmp:0, insHealthEmp:0, insEmpDeduct:0, insLaborCo:0, insHealthCo:0, insCoCost:0,
     insGradeMissing:'', leave:{特休:0,病假:0,事假:0,其他:0}, leaveDeduct:0,
     grossPay:n, netPay:n, total:n });
@@ -37406,7 +37576,12 @@ function msbRenderSheet(){
   const s=window._msb; if(!s) return;
   let host=document.getElementById('msb-sheet');
   if(!host){ host=document.createElement('div'); host.id='msb-sheet'; document.body.appendChild(host); }
-  if(!s.hasPoints && !s.hasGrp && !(s.futureSelf||[]).length && !s.resched){
+  /* 2026-08-08 使用者指示：「會員端的快速預約裡面的團課，開放會員就算沒有票券
+     也可以看得到團課開課狀況，以便會員知道是否要買課程來上課」——
+     原本這道門把沒票券的人整個擋在外面，連「有沒有課、什麼時間、還有沒有位子」
+     都看不到，等於要先買了才知道買不買得到想上的時段。
+     只要近期有開課，就照常打開面板（團體課分頁改成唯讀的開課表）。 */
+  if(!s.hasPoints && !s.hasGrp && !(s.grpClasses||[]).length && !(s.futureSelf||[]).length && !s.resched){
     const fb=(s.futureSelf||[]).map(b=>`<div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-top:8px;">
       <span style="font-size:13.5px;"><b style="font-family:var(--num);">${b.date.slice(5).replace('-','/')}</b>　${b.start_time}</span>
       <span style="display:flex;gap:6px;">
@@ -37432,7 +37607,9 @@ function msbRenderSheet(){
      已排好的自主訓練想調時間也進不去。友善點是另一個口袋，不該擋到這裡。 */
   else if((s.futureSelf||[]).length) btns.push(`<button class="${s.type==='self'?'on':''}" onclick="msbSetType('self')">自主訓練（換時段）</button>`);
   if(s.groups.friendly.length) btns.push(`<button class="${s.type==='friendly'?'on':''}" onclick="msbSetType('friendly')">友善（${sum(s.groups.friendly)} 點）</button>`);
-  btns.push(`<button class="msb-tg ${isGrpType?'on':''}" onclick="msbSetType('group')">團體課（${sum(s.grpTks||[])} 堂）</button>`);
+  /* 沒有團體課票券時仍然列出這個分頁（2026-08-08）——標「開課表」而不是「0 堂」，
+     講的是「這裡有東西可以看」，不是「你沒有東西」。 */
+  btns.push(`<button class="msb-tg ${isGrpType?'on':''}" onclick="msbSetType('group')">團體課${s.hasGrp?`（${sum(s.grpTks||[])} 堂）`:'（開課表）'}</button>`);
   /* 友善點限平日 18:00 前（2026-07-30 使用者指示）：規則本來就有生效（週末不可選、
      18:00 後時段不出現），但畫面沒說原因，會員會以為系統壞了。這裡明講。 */
   const typeRow=`<div class="msb-types">${btns.join('')}</div>`
@@ -37466,17 +37643,23 @@ function msbRenderSheet(){
     ${s.resched?'':typeRow}
     <div class="msb-sub">${s.date.slice(5).replace('-','/')}（週${WD[d.getDay()]}）</div>
     <div id="msb-slots"><div class="msb-empty" style="padding:18px;">載入時段中…</div></div>
-    <div class="msb-hint">${s.resched?'改期不另扣點；開課 24 小時前可改。':(isGrpType?'點「報名」加入該堂團體課，確認後扣 1 堂；開課前可在「我的預約」取消退堂。':(_msbSwapMode()?'點數已用於現有預約——點選新時段，選擇要把哪一筆換過來（原時段開課 24 小時前可換，不另扣點）。':'點選時段即可預約（60 分鐘）；系統自動使用最快到期的點數，確認後扣 1 點。'))}</div>
+    <div class="msb-hint">${s.resched?'改期不另扣點；開課 24 小時前可改。':(isGrpType?(s.hasGrp?'點「報名」加入該堂團體課，確認後扣 1 堂；開課前可在「我的預約」取消退堂。'
+        :'這裡看得到近期團體課的時間與剩餘名額。購買團體課方案後，就能直接在這裡報名。'):(_msbSwapMode()?'點數已用於現有預約——點選新時段，選擇要把哪一筆換過來（原時段開課 24 小時前可換，不另扣點）。':'點選時段即可預約（60 分鐘）；系統自動使用最快到期的點數，確認後扣 1 點。'))}</div>
   </div>`;
   if(isGrpType && !s.resched) msbRenderGrpList(); else msbLoadSlots();
 }
 /* 團體課場次列表（2026-07-28）：當日場次卡＝團課橘；已滿/已報名不可按 */
+/* 2026-08-08 使用者指示：沒有團體課票券的會員也要看得到開課狀況（時間、教練、剩幾個位子），
+   才知道值不值得買。原本這裡直接回一句「尚未有團體課票券」，一堂課也看不到。
+   改成照樣列出場次，只是「報名」換成「需購票」—— 資訊開放，動作仍然要有票才做得了。 */
 function msbRenderGrpList(){
   const s=window._msb; if(!s) return;
   const box=document.getElementById('msb-slots'); if(!box) return;
-  if(!(s.grpTks||[]).length){ box.innerHTML='<div class="msb-empty">尚未有團體課票券<br><span class="em-s">團體課方案請洽櫃檯開通，之後即可在這裡報名。</span></div>'; return; }
+  const canJoin=!!(s.grpTks||[]).length;
   const list=(s.grpClasses||[]).filter(c=>c.date===s.date);
-  if(!list.length){ box.innerHTML='<div class="msb-empty">這天沒有團體課<br><span class="em-s">換一天試試</span></div>'; return; }
+  if(!list.length){ box.innerHTML=canJoin
+    ? '<div class="msb-empty">這天沒有團體課<br><span class="em-s">換一天試試</span></div>'
+    : '<div class="msb-empty">這天沒有團體課<br><span class="em-s">換一天看看；購買團體課方案後即可直接報名。</span></div>'; return; }
   const cm=(window._memCalData||{}).coachMap||{};
   box.innerHTML='<div style="padding:4px 14px 12px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;">'+list.map(c=>{
     const n=Array.isArray(c.member_ids)?c.member_ids.length:0;
@@ -37486,13 +37669,21 @@ function msbRenderGrpList(){
     const end=minToTime(timeToMin(c.start_time)+(Number(c.duration)||60));
     const btn=joined?'<span class="tag tag-ok" style="font-size:11px;flex:none;">已報名</span>'
       :(full?'<span style="font-size:12px;color:#9a5a1e;opacity:.6;flex:none;">已滿</span>'
-      :`<button class="btn btn-sm" style="background:#9a5a1e;color:#fff;border:none;flex:none;" onclick="msbGrpJoin('${c.id}')">報名</button>`);
+      /* 沒票券：按鈕留著位置但不給按，明說原因（2026-08-08） */
+      :(!canJoin?'<span style="font-size:11.5px;color:#9a5a1e;opacity:.65;flex:none;">需購票</span>'
+      :`<button class="btn btn-sm" style="background:#9a5a1e;color:#fff;border:none;flex:none;" onclick="msbGrpJoin('${c.id}')">報名</button>`));
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#F1E4D2;border-radius:12px;padding:11px 14px;">
       <span style="display:flex;flex-direction:column;gap:2px;min-width:0;">
         <b style="font-size:14.5px;color:#5a3410;font-family:var(--num);">${c.start_time}–${end}</b>
         <span style="font-size:11.5px;color:#9a5a1e;">${cm[c.coach_id]||'教練'} · 名額 ${n}/${mx}</span></span>
       ${btn}</div>`;
-  }).join('')+'</div>';
+  }).join('')
+  + (canJoin?'':`<div style="background:var(--card2);border:1px dashed var(--bd);border-radius:12px;padding:12px 14px;font-size:12.5px;color:var(--t2);line-height:1.9;">
+      您目前沒有團體課票券，所以只能看不能報名。<br>想上課請洽櫃檯開通團體課方案，開通後回到這裡就能直接報名。
+      ${/* 不放「去購買」按鈕：會員端自行購買在 2026-07-28 被使用者關掉了（見側邊導覽的註解），
+           這裡導過去只會走進一條沒開的路。 */''}
+    </div>`)
+  +'</div>';
 }
 const GRP_JOIN_ERR={'AUTH.FORBIDDEN':'僅限本人操作','BOOKING.NOT_FOUND':'找不到這堂課，可能已取消',
   'BOOKING.PAST_DATE':'這堂課已開始或結束','BOOKING.DUP':'您已報名這堂課',

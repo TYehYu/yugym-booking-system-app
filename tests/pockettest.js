@@ -68,8 +68,12 @@ eq('★ 團體課是逐名額的（同一人可佔多個名額）', TK_POCKETS.g
 eq('★ 團體課一張課卡多位學員（member_ids）', TK_POCKETS.group.sharedBooking, true);
 eq('★ 團體課的課卡不綁 ticket_id → 只能靠扣課紀錄', TK_POCKETS.group.stampFrom.indexOf('direct'), -1);
 eq('★ 教練課預約當下就綁 ticket_id', TK_POCKETS.pt.stampFrom.indexOf('direct')>=0, true);
-eq('★ 教練請假（展延＋改自主訓練）只有教練課有',
-   Object.keys(TK_POCKETS).filter(k=>TK_POCKETS[k].coachLeave), ['pt']);
+/* 2026-08-08 使用者定案：「課程如果是因為"教練請假"該堂課該方案期限延長一週，
+   如果是會員請假才給補課券」→ 團課也有教練請假了，但做法不同（整堂取消，不是改自主訓練）。 */
+eq('★ 教練請假只有教練課與團體課有（按摩／自主訓練／體驗都沒有）',
+   Object.keys(TK_POCKETS).filter(k=>TK_POCKETS[k].coachLeave), ['pt','group']);
+eq('★★ 兩種做法分得清楚：教練課改自主訓練、團課整堂取消',
+   [TK_POCKETS.pt.coachLeave, TK_POCKETS.group.coachLeave], ['self','cancel']);
 eq('★ 逐人請假發補課券只有團體課有',
    Object.keys(TK_POCKETS).filter(k=>TK_POCKETS[k].memberLeave), ['group']);
 eq('★ 運動按摩不設請假（跟教練另約時間、直接取消）',
@@ -86,7 +90,7 @@ eq('★ 分期只有教練課', Object.keys(TK_POCKETS).filter(k=>TK_POCKETS[k].
 eq('★ 簽到發自主訓練點數的只有教練課',
    Object.keys(TK_POCKETS).filter(k=>TK_POCKETS[k].grantsOnCheckin), ['pt']);
 ok('　　跨口袋的動作寫在規則裡，不在各自口袋重做一次',
-   /口袋不是互不相干的：教練課簽到會發自主訓練點數、團課請假會發補課券/.test(src));
+   /口袋不是互不相干的：教練課簽到會發自主訓練點數、團課的「會員請假」會發補課券、\n\s*「教練請假」則一律展延效期/.test(src));
 
 console.log('\n補課券逐名額（2026-07-31 使用者回報：兩個名額都請假只發一張）');
 eq('★ 第 1 個名額沿用課卡 id（舊資料不動）', makeupKey('IMP-00015','MEM-A'), 'IMP-00015');
@@ -120,7 +124,8 @@ ok('★ 九個呼叫點都改吃共用（不再各自拼 member_id / member_ids�
 ok('　　為什麼要抽，寫在程式裡',
    /這個判斷原本被抄在九個地方，\s*\n\s*每次有人只改其中幾處就出事/.test(src));
 ok('★ 教練請假改問口袋（不再自己比 category）',
-   /function canCoachLeave\(b\)\{ return !!b && !!bkPocketNow\(b\)\.coachLeave; \}/.test(src));
+   /function bkCoachLeaveMode\(b\)\{ const v=b\?bkPocketNow\(b\)\.coachLeave:null; return v===true\?'self':\(v\|\|null\); \}/.test(src)
+   && /function canCoachLeave\(b\)\{ return !!b && !!bkCoachLeaveMode\(b\); \}/.test(src));
 ok('★ 展延改問口袋 —— 自主訓練點數過期不能展延（2026-07-31 使用者指示）',
    /if\(!tkPocketNow\(t\)\.canExtend\) return false;/.test(src)
    && /自主訓練點數過期不能展延（效期本來就只有 7 天、簽到贈送，/.test(src));

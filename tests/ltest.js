@@ -9,7 +9,10 @@ const grab=n=>{
 /* 2026-07-31：補課券改用「名額鍵」防重複（同一人兩個名額要兩張），一併抽進來 */
 /* 2026-08-01：groupToggleLeave 包了防連點鎖（onceAct），實作改名為 _groupToggleLeave */
 /* 2026-08-06：補課券效期改從「那堂課的日期」起算（makeupTerm），一併抽進來 */
-const src=[grab('seatNo'),grab('makeupKey'),grab('makeupTerm'),grab('grantMakeupTicket'),grab('revokeMakeupTicket'),grab('_groupToggleLeave')].join('\n');
+/* 2026-08-08：請假前要先認出「這一格用的是不是補課券」（補課券不能再請假），
+   _groupToggleLeave 因此多依賴 seatTicketOf／tkIsMakeup，一併抽進來 */
+const src=[grab('seatNo'),grab('makeupKey'),grab('makeupTerm'),grab('grantMakeupTicket'),grab('revokeMakeupTicket'),
+  grab('seatTicketOf'),grab('tkIsMakeup'),grab('_groupToggleLeave')].join('\n');
 
 let DB={bookings:{},member_tickets:{}}, LOGS=[], TOASTS=[], REOPENED=[];
 const reset=()=>{DB={bookings:{},member_tickets:{}};LOGS=[];TOASTS=[];REOPENED=[];};
@@ -23,6 +26,7 @@ const env={
   openBookingDetail:id=>REOPENED.push(id),
   attObj:b=>b.attendance||{},
   seatMid:k=>{const x=String(k),i=x.indexOf('#');return i<0?x:x.slice(0,i);},
+  grpNetDeductTicket:async()=>null,   // 2026-08-08：seatTicketOf 找不到 seat_tickets 時的第二條路
   uid:p=>p+'-'+(Object.keys(DB.member_tickets).length+1),
   ymd:d=>d.toISOString().slice(0,10),
   addDays:(d,n)=>new Date(d.getTime()+n*86400000),

@@ -32,8 +32,10 @@ ok('★ 提示文字講清楚玩法（點新時段 → 選要換哪一筆）',
    /點數已用於現有預約——點選新時段，選擇要把哪一筆換過來/.test(src));
 ok('★ 換過去走改期 RPC（不扣不退，DB 驗 24 小時與衝突）',
    /sb\.rpc\('fn_member_self_reschedule',\{p_booking_id:bid,p_date:s\.date,p_start_time:t,p_venue_unit:vbk\.venue_unit\|\|null\}\)/.test(src));
-ok('★ 完全沒有點數也沒有預約時，才顯示「尚未有點數」的空狀態',
-   /if\(!s\.hasPoints && !s\.hasGrp && !\(s\.futureSelf\|\|\[\]\)\.length && !s\.resched\)\{/.test(src));
+/* 2026-08-08：使用者要求「沒票券也要看得到團課開課狀況」→ 早退條件再加一條
+   「近期沒有開課」，有課可看時面板照常展開（見 grpopentest.js）。 */
+ok('★ 完全沒有點數、沒有預約、也沒有課可看時，才顯示「尚未有點數」的空狀態',
+   /if\(!s\.hasPoints && !s\.hasGrp && !\(s\.grpClasses\|\|\[\]\)\.length && !\(s\.futureSelf\|\|\[\]\)\.length && !s\.resched\)\{/.test(src));
 ok('　　空狀態若有未來預約，列出改期／取消入口',
    /<button class="btn btn-ghost btn-sm" onclick="msbStart\('\$\{b\.id\}'\)">改期<\/button>/.test(src));
 
