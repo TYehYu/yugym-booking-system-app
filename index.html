@@ -7589,8 +7589,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.1330';
-const APP_VERSION_LABEL='v260808.1330';
+const APP_VERSION = '260808.1341';
+const APP_VERSION_LABEL='v260808.1341';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12346,8 +12346,13 @@ function buildWallet(memberId, ctx){
        請假那一格會掉回「待上」，票明明扣滿卻顯示還有一格空的
        （李曉娟 8/8 請假、8/15 補課 → 8/15 反而被畫進原票券的第 4 格）。 */
     if(_eaten(b)) return true;                     // 取消未退＝票已吃掉，算已用
-    if(typeof grpSeatAttCount==='function' && bkIsGroup(b))
+    if(typeof grpSeatAttCount==='function' && bkIsGroup(b)){
+      /* 逐名額優先（2026-08-08 林紫錡 9/05）——戳記帶著名額鍵就看那一格自己的出缺席，
+         不要因為「同一堂裡我另一個名額請假」就把這一格也算成用掉了。 */
+      const mk=(typeof grpSeatMark==='function')?grpSeatMark(b, memberId):null;
+      if(mk!==null) return mk!=='';
       return (grpSeatAttCount(b, memberId) + ((typeof grpSeatLeaveCount==='function')?grpSeatLeaveCount(b, memberId):0)) > 0;
+    }
     return b.status==='checked_in'||b.status==='completed';
   };
   const byDT=(a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||''));
@@ -23775,6 +23780,22 @@ function bkEatenCancel(b){ return !!(b && b.status==='cancelled' && b.refund_wai
 /* 這位會員在這堂團課「請假」的名額數（2026-08-06 使用者定案）——
    「團課的請假，對會員來說算一堂簽到」：本堂票券照扣不退、另發補課券，
    所以票券夾要把它算成已用掉的一格（只是畫成紅色，見 ticketTokens）。 */
+/* 「這個戳記（名額）自己用掉了沒」（2026-08-08 林紫錡 9/05 案例）——
+   團課同一個人可能在一堂課佔多個名額，各自扣不同張票；戳記上帶著名額鍵
+   （grpTicketAlloc 蓋的 _seat）。回 'att'／'leave'／''；
+   沒有名額鍵、或整堂根本沒標出缺席（舊匯入資料）時回 null ＝ 請呼叫端用整堂的口徑判。
+   ⚠ 這句話原本被寫在兩個地方（票券夾的 isAtt 只看整堂、圓點的 _isDoneOcc 看名額），
+     於是「同一堂裡我另一個名額請假」會被算成「這一格也用掉了」——
+     林紫錡 9/05 佔兩個名額，第 1 個請假、第 2 個用補課券還沒上，
+     補課券那張就被畫成「✓ 一格 ＋ 需補票紅圈」。抽成一支，兩邊都問它。 */
+function grpSeatMark(b, memberId){
+  const k=b&&b._seat;
+  if(!k) return null;
+  if(typeof seatMid!=='function' || String(seatMid(k))!==String(memberId||'')) return null;
+  const at=(typeof attObj==='function'?attObj(b):((b&&b.attendance)||{}))||{};
+  if(!Object.keys(at).some(x=>at[x]!=null)) return null;   // 整堂都沒標 → 看整筆狀態
+  return at[k]==='leave' ? 'leave' : (at[k]==='checked_in' ? 'att' : '');
+}
 function grpSeatLeaveCount(b, memberId){
   if(!b || !bkIsGroup(b)) return 0;
   const mid=String(memberId||'');
@@ -38897,13 +38918,8 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
        不要再用「簽到幾個、請假幾個」去湊 —— 同一堂的兩個名額扣在不同票上時，
        每張票都會從頭數，第二張永遠拿到「已簽到」（張家華 8/03 請假沒有變紅）。
        完全沒標出缺席的舊資料（匯入的團課）維持看整筆狀態。 */
-    const _sk=b&&b._seat;
-    if(_sk && typeof seatMid==='function' && String(seatMid(_sk))===String(memberId||t.member_id)){
-      const _at=(typeof attObj==='function'?attObj(b):(b.attendance||{}))||{};
-      const _marked=Object.keys(_at).some(k=>_at[k]!=null);
-      if(!_marked) return (b.status==='checked_in'||b.status==='completed')?'att':'';
-      return _at[_sk]==='leave' ? 'leave' : (_at[_sk]==='checked_in' ? 'att' : '');
-    }
+    const _mk=(typeof grpSeatMark==='function')?grpSeatMark(b, memberId||t.member_id):null;
+    if(_mk!==null) return _mk;   // 'att' / 'leave' / ''（同一支規則，見 grpSeatMark）
     /* 請假名額也算「已使用」（2026-08-04 徐翎娟案例，使用者指示：「這兩堂超約就收在
        那兩個打勾裡」）——請假政策是本堂照扣、另發補課券，票上的那一堂確實用掉了。
        原本只數已簽到，請假的名額掉進「已預約」、又因為票已扣滿而畫成超約紅圈。 */

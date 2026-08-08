@@ -23,7 +23,8 @@ const ymd=d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(
 const parseYmd=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(x||''));return m?new Date(+m[1],+m[2]-1,+m[3]):null;};
 const attObj=b=>{const v=b&&b.attendance;return (v&&typeof v==='object'&&!Array.isArray(v))?v:{};};
 
-const FNS=['mids','seatKeys','seatMid','bkIsGroup','bkEatenCancel','grpSeatAttCount','grpSeatLeaveCount',
+/* 2026-08-08：逐名額的判定抽成 grpSeatMark（見 seatmarktest），沙箱要一起帶進來 */
+const FNS=['mids','seatKeys','seatMid','bkIsGroup','bkEatenCancel','grpSeatMark','grpSeatAttCount','grpSeatLeaveCount',
   'grpTicketAlloc','ticketTokens'];
 const box=new Function('ymd','TODAY','parseYmd','attObj','bkPocketNow','bkIsSelf','bkSelfBooked','selfVenueLabel','tkVisual',
   FNS.map(grabFn).join('\n')+'\nreturn {ticketTokens,grpTicketAlloc};')(
