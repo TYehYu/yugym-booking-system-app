@@ -13,7 +13,10 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.in
 
 console.log('① tag 的顯示');
 {
-  const mk=(desk,map)=>new Function('window','isDeskLike', grabFn('revAttribChip')+'\nreturn revAttribChip;')({_revCoachTag:map||{}},()=>desk);
+  /* 2026-08-08 使用者指示：「教練 tag 要上教練的顏色」→ 多依賴 coachTagColor */
+  const mk=(desk,map)=>new Function('window','isDeskLike','coachTagColor',
+    grabFn('revAttribChip')+'\nreturn revAttribChip;')({_revCoachTag:map||{}},()=>desk,
+    id=>({bg:'#CFE0EF',fg:'#35617F'}));
   const f=mk(true,{c1:'MANGO'});
   ok('★ 顯示歸屬教練的名字', /MANGO/.test(f({attKind:'tk',attRef:'T1',att:'c1'})));
   ok('★ 點一下開更改視窗（stopPropagation，不會連帶開會員票券）',

@@ -18,27 +18,30 @@ const TODAY=new Date(2026,7,6);
 const ymd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x;};
 const parseYmd=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);};
-const makeupTerm=new Function('TODAY','ymd','addDays','parseYmd',
-  grabFn('makeupTerm')+'\nreturn makeupTerm;')(TODAY,ymd,addDays,parseYmd);
+/* 2026-08-08 使用者更正：期限含首日（見 termdaytest.js）→ 14 天 ＝ 開課日 +13 */
+const termExpire=(base,days)=>{const d=(base instanceof Date)?base:parseYmd(String(base||'').slice(0,10));
+  if(!d||isNaN(d.getTime()))return null; return ymd(addDays(d,Math.max(1,Number(days)||1)-1));};
+const makeupTerm=new Function('TODAY','ymd','addDays','parseYmd','termExpire',
+  grabFn('makeupTerm')+'\nreturn makeupTerm;')(TODAY,ymd,addDays,parseYmd,termExpire);
 
 console.log('① 效期起算日（實跑 makeupTerm，今天＝2026-08-06 週四）');
-eq('★ 週六(08-08)的課、今天先登記請假 → 從 08-08 起算 14 天＝08-22',
-   makeupTerm({category:'小班肌力',date:'2026-08-08'}), {base:'2026-08-08',days:14,expire:'2026-08-22'});
+eq('★ 週六(08-08)的課、今天先登記請假 → 從 08-08 起算 14 天＝08-21（含開課當天）',
+   makeupTerm({category:'小班肌力',date:'2026-08-08'}), {base:'2026-08-08',days:14,expire:'2026-08-21'});
 eq('★ 就是今天的課 → 從今天起算（規則不變）',
-   makeupTerm({category:'小班肌力',date:'2026-08-06'}), {base:'2026-08-06',days:14,expire:'2026-08-20'});
-eq('★ 上週的課事後補發 → 一樣從開課日 07-28 起算＝08-11（不是今天）',
-   makeupTerm({category:'小班肌力',date:'2026-07-28'}), {base:'2026-07-28',days:14,expire:'2026-08-11'});
+   makeupTerm({category:'小班肌力',date:'2026-08-06'}), {base:'2026-08-06',days:14,expire:'2026-08-19'});
+eq('★ 上週的課事後補發 → 一樣從開課日 07-28 起算＝08-10（不是今天）',
+   makeupTerm({category:'小班肌力',date:'2026-07-28'}), {base:'2026-07-28',days:14,expire:'2026-08-10'});
 eq('　　開課日久遠 → 算出來就是已過期（規則本身的結果，補發視窗會警示）',
-   makeupTerm({category:'小班肌力',date:'2026-05-01'}), {base:'2026-05-01',days:14,expire:'2026-05-15'});
+   makeupTerm({category:'小班肌力',date:'2026-05-01'}), {base:'2026-05-01',days:14,expire:'2026-05-14'});
 eq('　　沒有課日期（會員頁手動補發） → 今天起算',
-   makeupTerm({category:'小班肌力'}), {base:'2026-08-06',days:14,expire:'2026-08-20'});
+   makeupTerm({category:'小班肌力'}), {base:'2026-08-06',days:14,expire:'2026-08-19'});
 eq('★ 自主訓練類仍是 7 天，起算日規則相同',
-   makeupTerm({category:'自主訓練',date:'2026-08-08'}), {base:'2026-08-08',days:7,expire:'2026-08-15'});
+   makeupTerm({category:'自主訓練',date:'2026-08-08'}), {base:'2026-08-08',days:7,expire:'2026-08-14'});
 
 console.log('\n② 接線');
 ok('★ grantMakeupTicket 走 makeupTerm（不再寫死 addDays(TODAY,14)）',
    /const _term=makeupTerm\(booking\);/.test(src)
-   && /const expire=\(makeupDays===_term\.days\) \? _term\.expire : ymd\(addDays\(parseYmd\(_term\.base\),makeupDays\)\);/.test(src)
+   && /const expire=\(makeupDays===_term\.days\) \? _term\.expire : termExpire\(_term\.base,makeupDays\);/.test(src)
    && !/const expire=ymd\(addDays\(TODAY,makeupDays\)\);/.test(src));
 ok('★ 票種名稱含「自主」的也吃 7 天（原本的 planName 判斷保留）',
    /const makeupDays=\(_term\.days===7 \|\| \(planName&&planName\.includes\('自主'\)\)\) \? 7 : 14;/.test(src));

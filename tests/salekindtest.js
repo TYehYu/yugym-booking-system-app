@@ -60,9 +60,11 @@ console.log('\n已退款／作廢的票不算續約（2026-08-02 使用者回報
 }
 
 console.log('\n樣式');
-ok('★ 續約用品牌金（要看得見，它牽動獎金）', /\.rev-kind-renewal\{background:#f7efe0;color:#8a5e28;/.test(src));
-ok('　　新約低調、分期另一色', /\.rev-kind-new\{background:var\(--card2,#F2EEE4\);/.test(src)
-   && /\.rev-kind-installment\{background:#efe7f3;/.test(src));
+/* 2026-08-08 使用者指示：「新約跟續約要用金色跟綠色區分」——
+   新約＝金（新客人，值得注意）、續約＝綠（既有客人回頭）。原本新約是灰、續約是金。 */
+ok('★★ 新約用品牌金', /\.rev-kind-new\{background:#f7efe0;color:#8a5e28;/.test(src));
+ok('★★ 續約用綠', /\.rev-kind-renewal\{background:#eef5f1;color:#1f6f54;/.test(src));
+ok('　　分期另一色（與前兩者分得開）', /\.rev-kind-installment\{background:#efe7f3;/.test(src));
 ok('　　可點的才有 hover 與手指游標', /button\.rev-kind\{cursor:pointer;\}/.test(src));
 
 console.log('\n獎金口徑沒有被動到');

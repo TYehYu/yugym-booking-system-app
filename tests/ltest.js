@@ -27,6 +27,10 @@ const env={
   attObj:b=>b.attendance||{},
   seatMid:k=>{const x=String(k),i=x.indexOf('#');return i<0?x:x.slice(0,i);},
   grpNetDeductTicket:async()=>null,   // 2026-08-08：seatTicketOf 找不到 seat_tickets 時的第二條路
+  /* 2026-08-08 使用者更正：期限含首日（見 termdaytest.js）→ 14 天 ＝ 開課日 +13 */
+  termExpire:(base,days)=>{const d=(base instanceof Date)?base:new Date(String(base||'').slice(0,10)+'T00:00:00Z');
+    if(!d||isNaN(d.getTime()))return null;
+    return new Date(d.getTime()+(Math.max(1,Number(days)||1)-1)*86400000).toISOString().slice(0,10);},
   uid:p=>p+'-'+(Object.keys(DB.member_tickets).length+1),
   ymd:d=>d.toISOString().slice(0,10),
   addDays:(d,n)=>new Date(d.getTime()+n*86400000),
@@ -51,7 +55,7 @@ const mkTicket=()=>({id:'T1',member_id:'M1',ticket_type_id:'tt-g',sessions_total
   const mk=Object.values(DB.member_tickets).find(t=>t.source==='makeup');
   chk('有發補課券', !!mk);
   chk('補課券 1 堂', mk && mk.sessions_total===1 && mk.sessions_remaining===1);
-  chk('效期 14 天（8/09）', mk && mk.expire_date==='2026-08-09');
+  chk('效期 14 天含開課當天（7/26 起 → 8/08）', mk && mk.expire_date==='2026-08-08');
 
   /* 2026-08-06 使用者指示：「補課券的期限要從（請假的）那天開始計算」——
      提前幫還沒到的那堂課登記請假時，效期從課日起算，不是從按下去的當天。 */
@@ -62,15 +66,15 @@ const mkTicket=()=>({id:'T1',member_id:'M1',ticket_type_id:'tt-g',sessions_total
     DB.member_tickets.T1=mkTicket();
     await api.groupToggleLeave('G1','M1');
     const f=Object.values(DB.member_tickets).find(t=>t.source==='makeup');
-    chk('★ 提前請假：效期自課日 8/01 起算 14 天（8/15，不是 8/09）', f && f.expire_date==='2026-08-15');
+    chk('★ 提前請假：效期自課日 8/01 起算 14 天含當天（8/14，不是 8/08）', f && f.expire_date==='2026-08-14');
     chk('　　仍可立刻使用（start_date 是今天）', f && f.start_date==='2026-07-26');
     reset();
     DB.bookings.G1=Object.assign(mkBooking(),{date:'2026-07-20'});   // 已經過去的課
     DB.member_tickets.T1=mkTicket();
     await api.groupToggleLeave('G1','M1');
     const g=Object.values(DB.member_tickets).find(t=>t.source==='makeup');
-    chk('★ 事後補發過去的課：一樣從開課日 7/20 起算＝8/03（使用者：補發也是以開課當天計算）',
-        g && g.expire_date==='2026-08-03');
+    chk('★ 事後補發過去的課：一樣從開課日 7/20 起算＝8/02（使用者：補發也是以開課當天計算）',
+        g && g.expire_date==='2026-08-02');
     DB=save;
   }
   chk('綁定本堂與本人', mk && mk.makeup_for_booking==='G1' && mk.member_id==='M1');
