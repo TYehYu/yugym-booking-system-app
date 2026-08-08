@@ -17,7 +17,12 @@ ok('★ 重複防護：先重抓、本月已有固定支出就不再複製',
    /dbGetAll\('expenses',\{fresh:true\}\)/.test(src)
    && /if\(all\.some\(e=>e&&e\.ym===month&&e\.is_fixed\)\)\{ showToast\('本月已有固定支出，不重複沿用'\)/.test(src));
 ok('★ 防連點', /async function finExpenseCopyPrev\(\)\{ return onceAct\('expcopy', _finExpenseCopyPrev\); \}/.test(src));
-ok('★ 跨年正確（1 月的上月是去年 12 月）', (src.match(/m===1\?`\$\{y-1\}-12`/g)||[]).length===2);
+/* 2026-08-08：新增 prevYm() 之後，「上個月」的算法多了一處（固定支出設定用），
+   三處都要跨年正確 —— 1 月的上月是去年 12 月。 */
+ok('★ 跨年正確（1 月的上月是去年 12 月）', (src.match(/m===1\?`\$\{y-1\}-12`/g)||[]).length===3);
+ok('★★ 抽成 prevYm()，固定支出設定沿用同一份',
+   /function prevYm\(ym\)\{ const\[y,m\]=String\(ym\)\.split\('-'\)\.map\(Number\); return m===1\?`\$\{y-1\}-12`:`\$\{y\}-\$\{String\(m-1\)\.padStart\(2,'0'\)\}`; \}/.test(src)
+   && /const pm=prevYm\(month\);/.test(src));
 ok('　　為什麼用按鈕不全自動，寫在程式裡', /水電這類金額\n\s*每月會變，複製過來後逐筆改比默默出現一批數字可控。/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);

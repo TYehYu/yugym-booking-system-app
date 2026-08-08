@@ -1638,6 +1638,10 @@ body.mc-mode .layout{padding-top:8px;}
 .pnl .pnl-net.ok td:last-child{color:var(--green);}
 .pnl .pnl-net.bad td:last-child{color:var(--danger,#b5372e);}
 .pnl .pnl-h td{font-weight:800;}
+/* 可點的損益表項目（固定支出 → 設定視窗）：看起來像文字，滑過才顯現可點 */
+.pnl-link{background:none;border:none;padding:0;font:inherit;color:inherit;cursor:pointer;
+  border-bottom:1px dashed transparent;}
+.pnl-link:hover{border-bottom-color:var(--gold);}
 /* 員工薪資明細表（2026-08-08 使用者指示二修：「直接列出來吧，在員工這邊最上方
    新增一列標示每一個金額代表什麼：教練課、團體課、達標獎金、續約等等的，還有勞保、健保，
    另外公司負擔的勞健保勞退職保也要列為一項」）——
@@ -1659,6 +1663,22 @@ body.mc-mode .layout{padding-top:8px;}
 .sal-mx .sx-zero{color:var(--t3);font-weight:400;}
 .sal-mx tr.sx-total td{border-top:2px solid var(--text);border-bottom:none;font-weight:800;padding-top:9px;}
 .sal-mx-note{font-size:11px;color:var(--t3);line-height:1.8;margin-top:6px;}
+/* 固定支出設定（2026-08-08 使用者指示：可以改數字、加減項目，下個月自動帶入）——
+   一列一項，直接在格子裡改；不做「編輯／儲存」兩段式，改完一起存。 */
+.fx-list{border:1px solid var(--bd);border-radius:10px;overflow:hidden;}
+.fx-head,.fx-row{display:grid;grid-template-columns:1fr 130px 34px;gap:8px;align-items:center;
+  padding:7px 10px;border-bottom:1px solid var(--bd);}
+.fx-head{background:var(--card2);font-size:11.5px;color:var(--t2);font-weight:700;}
+.fx-head span:nth-child(2){text-align:right;}
+.fx-row:last-child{border-bottom:none;}
+.fx-in{width:100%;padding:6px 9px;border:1px solid var(--bd);border-radius:7px;background:#fff;font-size:13px;}
+.fx-in:focus{outline:none;border-color:var(--green);}
+.fx-in.num{text-align:right;font-family:var(--num),inherit;font-weight:700;}
+.fx-del{border:none;background:none;color:var(--t3);font-size:15px;cursor:pointer;line-height:1;padding:4px;}
+.fx-del:hover{color:var(--danger,#b5372e);}
+.fx-sum{display:flex;justify-content:space-between;align-items:baseline;margin-top:12px;padding-top:10px;
+  border-top:2px solid var(--text);font-size:13px;}
+.fx-sum b{font-family:var(--num),inherit;font-size:20px;font-weight:800;color:var(--danger,#b5372e);}
 .pnl-note{font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:10px;}
 /* 本月損益條（2026-08-05 整合經營報表）：四個大數字一列，手機兩欄 */
 .fin-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
@@ -7710,8 +7730,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.2206';
-const APP_VERSION_LABEL='v260808.2206';
+const APP_VERSION = '260808.2216';
+const APP_VERSION_LABEL='v260808.2216';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -42022,7 +42042,8 @@ async function finPnl(){
         <tr class="pnl-out"><td>營業稅 5%<span style="color:var(--t3);font-weight:400;"> 　依<b>收款</b> ${m(cash)} 內含計：÷ 1.05 × 5%</span></td><td>${neg(tax)}</td></tr>
         <tr class="pnl-h pnl-out pnl-hr"><td>員工薪資（應發）<span style="color:var(--t3);font-weight:400;"> 　${payRows.length} 位・明細見下方</span></td><td>${neg(salary)}</td></tr>
         <tr class="pnl-h pnl-out"><td>公司負擔勞健保<span style="color:var(--t3);font-weight:400;"> 　勞保雇主＋健保雇主＋勞退＋職災</span></td><td>${neg(coIns)}</td></tr>
-        <tr class="pnl-h pnl-out"><td>固定支出</td><td>${neg(fixedTotal)}</td></tr>
+        ${/* 2026-08-08 使用者指示：固定支出要能直接改數字、加減項目 → 這一列點得動 */''}
+        <tr class="pnl-h pnl-out"><td><button class="pnl-link" onclick="openFixedExpenses('${ym}')">固定支出<span style="color:var(--t3);font-weight:400;"> 　點我設定</span></button></td><td>${neg(fixedTotal)}</td></tr>
         ${fixedRows.length?fixedRows.map(r=>sub(r.name,r.amt,r.n>1?`×${r.n}`:'')).join('')
           :'<tr class="pnl-sub"><td>（本月沒有固定支出）</td><td>—</td></tr>'}
         <tr class="pnl-h pnl-out"><td>其他支出</td><td>${neg(otherTotal)}</td></tr>
@@ -42104,6 +42125,90 @@ async function finMonth(){
    分類只影響「列在哪一區」，兩區都會被營運分析的本月利潤扣掉。 */
 const EXPENSE_CATS=['房租','水電','網路','清潔','耗材','設備','稅務規費','其他'];
 const EXPENSE_FIXED_CATS=['房租','水電','網路','清潔'];   // 新增時的預設分類，仍可自己改
+/* ══ 固定支出設定（2026-08-08 使用者指示）══════════════════════════════════
+   「固定支出的部分設計成讓我可以調整數字、新增或減少項目，
+     然後每個月會抓前一個月設定的數字」
+
+   房租、水電、網路這些每個月都有，只是金額會變一點 —— 所以做成一張可以直接改的表：
+   一列一項、改數字、＋新增、✕刪除，一次存好。
+   開一個還沒設定過的月份時，自動帶入上個月的項目與金額當草稿（畫面會標「沿用上個月」），
+   確認金額後按儲存才真的寫進去 —— 沒有人按過就不會憑空生出一筆支出。 */
+function prevYm(ym){ const[y,m]=String(ym).split('-').map(Number); return m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`; }
+async function openFixedExpenses(ym){
+  if(!isDeskLike()){ showToast('僅管理員／櫃台可設定'); return; }
+  const month=ym||(window._finMonth||ymd(TODAY).slice(0,7));
+  const _busy=uiBusy('讀取固定支出…');
+  let mine=[], from='';
+  try{
+    const all=(await dbGetAll('expenses').catch(()=>[]))||[];
+    mine=all.filter(e=>e&&e.ym===month&&e.is_fixed===true)
+      .map(e=>({id:e.id, category:e.category||'', amount:Number(e.amount)||0, note:e.note||''}));
+    if(!mine.length){
+      const pm=prevYm(month);
+      const prev=all.filter(e=>e&&e.ym===pm&&e.is_fixed===true);
+      if(prev.length){
+        // 只是草稿：id 留空，按下儲存才會真的建立
+        mine=prev.map(e=>({id:'', category:e.category||'', amount:Number(e.amount)||0, note:e.note||''}));
+        from=pm;
+      }
+    }
+  }finally{ _busy(); }
+  window._fxDraft={month, rows:mine.length?mine:[{id:'',category:'',amount:0,note:''}], from,
+                   orig:mine.filter(r=>r.id).map(r=>r.id)};
+  fxRender();
+}
+function fxRender(){
+  const d=window._fxDraft; if(!d) return;
+  const [Y,M]=d.month.split('-');
+  const total=d.rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
+  showModal(`<div class="modal-title">固定支出設定　<span style="font-size:13px;color:var(--t3);font-weight:500;">${Y} 年 ${M} 月</span></div>
+    ${d.from?`<div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:10px;padding:9px 12px;font-size:12px;line-height:1.8;margin-bottom:10px;">
+      本月還沒設定過，已帶入 <b>${d.from.replace('-','/')}</b> 的項目與金額。<br>金額有變的先改一改，按<b>儲存</b>才會寫進本月。</div>`
+     :`<div style="font-size:12px;color:var(--t2);line-height:1.8;margin-bottom:10px;">
+      房租、水電、網路這種每月都有的開銷。改完按儲存；下個月會自動帶入這一份當草稿。</div>`}
+    <div class="fx-list">
+      <div class="fx-head"><span>項目</span><span>每月金額</span><span></span></div>
+      ${d.rows.map((r,i)=>`<div class="fx-row">
+        <input class="fx-in" value="${escH(r.category)}" placeholder="例：房租" oninput="fxSet(${i},'category',this.value)">
+        <input class="fx-in num" type="number" min="0" step="1" value="${Number(r.amount)||0}" oninput="fxSet(${i},'amount',this.value)">
+        <button class="fx-del" title="刪除這一項" onclick="fxDel(${i})">✕</button>
+      </div>`).join('')}
+    </div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="fxAdd()">＋ 新增一項</button>
+    <div class="fx-sum"><span>本月固定支出合計</span><b>$${Math.round(total).toLocaleString()}</b></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="fxSave()">儲存</button></div>`);
+}
+function fxSet(i,k,v){ const d=window._fxDraft; if(!d||!d.rows[i]) return;
+  d.rows[i][k] = k==='amount' ? (Number(v)||0) : v;
+  /* 只更新合計，不重畫整張表 —— 重畫會讓正在打字的欄位失焦 */
+  const t=d.rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
+  const el=document.querySelector('.fx-sum b'); if(el) el.textContent='$'+Math.round(t).toLocaleString();
+}
+function fxAdd(){ const d=window._fxDraft; if(!d) return; d.rows.push({id:'',category:'',amount:0,note:''}); fxRender(); }
+function fxDel(i){ const d=window._fxDraft; if(!d) return; d.rows.splice(i,1);
+  if(!d.rows.length) d.rows.push({id:'',category:'',amount:0,note:''}); fxRender(); }
+async function fxSave(){ return onceAct('fxsave', _fxSave); }
+async function _fxSave(){
+  const d=window._fxDraft; if(!d) return;
+  const done=cxBusy('儲存中…');
+  try{
+    const rows=d.rows.map(r=>({...r, category:String(r.category||'').trim(), amount:Number(r.amount)||0}))
+      .filter(r=>r.category && r.amount>0);   // 沒填名稱或金額 0 的當作沒這一項
+    const keep=new Set(rows.filter(r=>r.id).map(r=>r.id));
+    for(const id of (d.orig||[])) if(!keep.has(id)) await dbDel('expenses',id);   // 被刪掉的
+    for(const r of rows){
+      await dbPut('expenses',{ id:r.id||uid('EXP'), ym:d.month, date:d.month+'-01',
+        category:r.category, amount:r.amount, note:r.note||null, is_fixed:true,
+        created_at:new Date().toISOString() });
+    }
+    dbCacheClear('expenses');
+    window._fxDraft=null;
+    closeModal();
+    showToast(`已儲存 ${rows.length} 項固定支出`);
+    navTo(CUR_PAGE);
+  }catch(e){ done(); showToast('儲存失敗：'+((e&&e.message)||e)); }
+}
 async function finExpenses(){
   const body=document.getElementById('fin-body'); if(!body) return;
   const month=(window._finMonth||ymd(TODAY).slice(0,7));
@@ -42158,6 +42263,7 @@ async function finExpenses(){
     }
   }
   body.innerHTML = dateBar + stats + copyBar
+    + `<div style="text-align:right;margin:-6px 0 8px;"><button class="btn btn-ghost btn-sm" onclick="openFixedExpenses('${month}')">⚙ 固定支出設定（可加減項目・下月自動帶入）</button></div>`
     + section('固定支出','房租・水電・網路・清潔等每月都有的開銷', fixed, true)
     + section('其他支出','耗材・設備・稅務規費等一次性開銷', other, false)
     + `<div style="font-size:11px;color:var(--t3);line-height:1.8;padding:0 2px;">
