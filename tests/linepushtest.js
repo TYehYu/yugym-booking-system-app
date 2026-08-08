@@ -25,10 +25,13 @@ console.log('① 會員資料頁：綁了 LINE 但送不到要看得出來');
   ok('★ 綁了 → 通知開關照舊', /onchange="ppToggleLineNotify\('\$\{r\.id\}'\)"/.test(box));
   ok('★★ 有失敗紀錄 → 紅色「⚠ 提醒送不到」', /⚠ 提醒送不到/.test(box)
      && /color:var\(--danger,#b5372e\)/.test(box));
-  ok('★ 滑過去看得到原因與日期（title）',
-     /title="\$\{String\(r\.line_push_error\|\|'推播失敗'\)\.replace\(\/"\/g,'&quot;'\)\}（\$\{_pf\}）"/.test(box));
+  /* 2026-08-08 使用者回報（陳玟淂「提醒不到」）：只有紅標＋滑鼠提示，櫃檯不知道要做什麼
+     → 改成點得動，跳視窗講原因與下一步（見 linefailtest.js） */
+  ok('★★ 點得動：跳出原因與處理方式',
+     /onclick="event\.stopPropagation\(\);openLinePushFail\('\$\{r\.id\}'\)"/.test(box)
+     && /title="點一下看原因與處理方式"/.test(box));
   ok('★ 沒失敗就完全不顯示（不要每個人都掛一個標）',
-     /const failTag = _pf\n\s*\? `<span class="tag"/.test(box) && /: '';/.test(box));
+     /const failTag = _pf\n\s*\? `<button class="tag"/.test(box) && /: '';/.test(box));
   ok('　　日期只留月/日（表頭空間有限）', /String\(r\.line_push_failed_at\)\.slice\(5,10\)\.replace\('-','\/'\)/.test(box));
 }
 

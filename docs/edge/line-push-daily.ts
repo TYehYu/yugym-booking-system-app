@@ -74,19 +74,41 @@ Deno.serve(async (req) => {
     )
 
     const { data: allBks, error: bkErr } = await admin
-      .from('bookings').select('id,date,start_time,category,coach_id,substitute_coach_id,member_id,member_ids,ticket_id')
+      .from('bookings').select('id,date,start_time,category,coach_id,substitute_coach_id,member_id,member_ids,ticket_id,trial_name')
       .eq('date', target).neq('status', 'cancelled')
     if (bkErr) return J({ error: 'BOOKINGS_QUERY', detail: bkErr.message }, 500)
     const bks = (allBks || []).filter(b => { const m = toMin(String(b.start_time).slice(0, 5)); return m >= winStart && m < winEnd })
     if (!bks.length) return J({ ok: true, target, window: [winStart, winEnd], bookings: 0, sent: 0 })
 
-    const memIds = new Set<string>(); const coachIds = new Set<string>(); const tkIds = new Set<string>()
+    const memIds = new Set<string>(); const coachIds = new Set<string>()
+    const tkIds = new Set<string>()      // v11：所有有票的課都要（不只教練課）—— 要拿共享名單找上課的人
+    const ptTkIds = new Set<string>()    // 收款提醒只看教練課
     for (const b of bks) {
       if (b.member_id) memIds.add(b.member_id)
       if (Array.isArray(b.member_ids)) for (const m of b.member_ids) if (m) memIds.add(m)
       const c = b.substitute_coach_id || b.coach_id
       if (c) coachIds.add(c)
-      if (b.category === '私人教練' && b.ticket_id) tkIds.add(b.ticket_id)
+      if (b.ticket_id) tkIds.add(b.ticket_id)
+      if (b.category === '私人教練' && b.ticket_id) ptTkIds.add(b.ticket_id)
+    }
+
+    /* ── 共享票：這張票可以給哪些人用（持有人＋共享者）（v11）──
+       2026-08-08 使用者指示：「line 通知上課應該是通知上課的會員，而不是通知擁有票券的
+       會員，如果是票券共享」「自主訓練也是發給上課的會員而不是票券本人」。
+       共享票有一種寫法是「預約掛在持有人名下、使用人（trial_name）寫上課者」——
+       那種情況下提醒會發給持有人，上課的人反而收不到。
+       （與簽到贈點的歸屬規則一致：handle_checkin_reward / grantCheckinReward） */
+    const tkOwners: Record<string, string[]> = {}
+    if (tkIds.size) {
+      const { data: owns } = await admin.from('member_tickets').select('id,member_id,shared_with').in('id', [...tkIds])
+      for (const t of (owns || [])) {
+        const arr: string[] = []
+        if (t.member_id) arr.push(t.member_id)
+        const sw = (t as any).shared_with
+        if (Array.isArray(sw)) for (const x of sw) if (x) arr.push(String(x))
+        tkOwners[t.id] = arr
+        for (const x of arr) memIds.add(x)
+      }
     }
     const { data: mems } = await admin.from('members').select('id,name,line_user_id,line_notify').in('id', [...memIds])
     const { data: emps } = coachIds.size ? await admin.from('employees').select('id,name,name_en,line_user_id').in('id', [...coachIds]) : { data: [] }
@@ -99,6 +121,20 @@ Deno.serve(async (req) => {
       if ((e as any).line_user_id) coachLine[e.id] = (e as any).line_user_id
     }
 
+    /* 上課的人是誰（v11）：預約掛在持有人名下、使用人寫在 trial_name 時，
+       若 trial_name 對得上這張票的持有人／共享者裡的真實會員 → 推給那一位。
+       對不上（「爸爸」「媽媽」這種家庭稱呼）→ 維持發給帳號本人，
+       因為他們本來就沒有自己的帳號可以收。 */
+    const attendeeOf = (b: any): string | null => {
+      const nm = String(b.trial_name || '').trim()
+      if (!nm || !b.ticket_id) return b.member_id || null
+      for (const cand of (tkOwners[b.ticket_id] || [])) {
+        const m = memMap[cand]
+        if (m && String(m.name || '').trim() === nm) return cand
+      }
+      return b.member_id || null
+    }
+
     /* ── 每張票算出「哪一筆預約是該收款的那一堂」（v9）──
        與前端 computeLastBkMarks 同一套：
          A 連結法：總堂數 − 已核銷 − 已預約未上　（票上每一堂都連得上預約時才準）
@@ -106,11 +142,11 @@ Deno.serve(async (req) => {
        任何一邊說「沒得再約了」，那就是最後一堂 —— 取兩者較小的。
        分期票另外算：已開通區的最後一堂＝該收下一期，那是「繳費」不是「續約」。 */
     const tkInfo: Record<string, { total: number; seq: any[]; renewLastId: string | null; instLastId: string | null; linkFull: boolean }> = {}
-    if (tkIds.size) {
+    if (ptTkIds.size) {
       const { data: tks } = await admin.from('member_tickets')
-        .select('id,sessions_total,sessions_remaining,unlocked_sessions,installment,status').in('id', [...tkIds])
+        .select('id,sessions_total,sessions_remaining,unlocked_sessions,installment,status').in('id', [...ptTkIds])
       const { data: tbks } = await admin.from('bookings').select('id,ticket_id,date,start_time,status')
-        .in('ticket_id', [...tkIds]).neq('status', 'cancelled')
+        .in('ticket_id', [...ptTkIds]).neq('status', 'cancelled')
       const by: Record<string, any[]> = {}
       for (const x of (tbks || [])) (by[x.ticket_id] = by[x.ticket_id] || []).push(x)
       for (const k of Object.keys(by)) {
@@ -143,7 +179,7 @@ Deno.serve(async (req) => {
     }
 
     let sent = 0; let skipNoLine = 0; let skipOptOut = 0; let failed = 0
-    let coachSent = 0; let coachSkip = 0
+    let coachSent = 0; let coachSkip = 0; let redirected = 0
     const failDetail: Array<{ member: string; reason: string }> = []
     const okMembers = new Set<string>()
     const push = async (to: string, text: string) => {
@@ -187,9 +223,13 @@ Deno.serve(async (req) => {
       }
       const line3 = coachName ? `🏋️ ${catName}･教練：${coachName}${seqStr}` : `🏋️ ${catName}${seqStr}`
       const text = `【YUGYM 有肌訓練】\n提醒您明天這個時間有課 💪\n📅 ${dateLabel} ${String(b.start_time).slice(0, 5)}\n${line3}${renewLine}\n如需請假或調整，請盡早告知教練 🙏\n期待見到您！`
+      /* v11：單人課推給「上課的人」（共享票時可能不是預約名下的那位）；
+         團課的 member_ids 本來就是一人一個名額，照舊。 */
       const ids: string[] = []
       const seen = new Set<string>()
-      if (b.member_id && !seen.has(b.member_id)) { seen.add(b.member_id); ids.push(b.member_id) }
+      const att = attendeeOf(b)
+      if (att && att !== b.member_id) redirected++
+      if (att && !seen.has(att)) { seen.add(att); ids.push(att) }
       if (Array.isArray(b.member_ids)) for (const m of b.member_ids) if (m && !seen.has(m)) { seen.add(m); ids.push(m) }
       for (const mid of ids) {
         const mem = memMap[mid]
@@ -230,7 +270,7 @@ Deno.serve(async (req) => {
     if (okMembers.size) {
       try { await admin.from('members').update({ line_push_failed_at: null, line_push_error: null }).in('id', [...okMembers]).not('line_push_failed_at', 'is', null) } catch (_) { /* 清旗標失敗不影響推播 */ }
     }
-    return J({ ok: true, target, window: [winStart, winEnd], bookings: bks.length, sent, coach_sent: coachSent, coach_skip_no_line: coachSkip, skip_no_line: skipNoLine, skip_opt_out: skipOptOut, failed, fail_detail: failDetail })
+    return J({ ok: true, target, window: [winStart, winEnd], bookings: bks.length, sent, redirected_to_attendee: redirected, coach_sent: coachSent, coach_skip_no_line: coachSkip, skip_no_line: skipNoLine, skip_opt_out: skipOptOut, failed, fail_detail: failDetail })
   } catch (e) {
     return J({ error: String((e && (e as any).message) || e) }, 500)
   }

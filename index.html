@@ -3038,6 +3038,10 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .pp-head-main{flex:1;min-width:0;}
 .pp-name-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;}
 .pp-name{font-size:22px;font-weight:700;color:var(--text);letter-spacing:-0.01em;}
+/* 管理員才看得到的可點姓名（2026-08-08）：平常看不出差別，滑過才浮現底線提示 */
+button.pp-name-edit{background:none;border:none;padding:0;font-family:inherit;cursor:pointer;
+  border-bottom:1px dashed transparent;transition:border-color .12s;}
+button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 .pp-code{font-size:12px;color:var(--t3);font-family:var(--font-en);letter-spacing:.04em;}
 .pp-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;letter-spacing:.02em;white-space:nowrap;}
 .pp-badge-type{background:var(--sage-bg);color:var(--green);}
@@ -7658,8 +7662,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.1821';
-const APP_VERSION_LABEL='v260808.1821';
+const APP_VERSION = '260808.2038';
+const APP_VERSION_LABEL='v260808.2038';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -30022,8 +30026,12 @@ function ppHeaderHtml(){
        推播失敗時 line-push-daily 會把時間與原因寫回會員身上（成功一次就自己清掉），
        這裡標成紅字，櫃檯看到就能當場請客人加好友。 */
     const _pf = r.line_push_failed_at ? String(r.line_push_failed_at).slice(5,10).replace('-','/') : '';
+    /* 2026-08-08 使用者回報（陳瀚竣「提醒不到」）：原本只有一個紅標＋滑鼠提示 ——
+       櫃檯看到了也不知道要做什麼，而原因其實有好幾種、處理方式各不相同。
+       改成點得動：跳出視窗講清楚是哪一種、下一步怎麼做，並提供「解除綁定請會員重新登入」。 */
     const failTag = _pf
-      ? `<span class="tag" style="background:rgba(181,55,46,.10);color:var(--danger,#b5372e);font-size:10.5px;font-weight:700;margin-left:6px;" title="${String(r.line_push_error||'推播失敗').replace(/"/g,'&quot;')}（${_pf}）">⚠ 提醒送不到</span>`
+      ? `<button class="tag" style="background:rgba(181,55,46,.10);color:var(--danger,#b5372e);font-size:10.5px;font-weight:700;margin-left:6px;border:none;font-family:inherit;cursor:pointer;"
+           title="點一下看原因與處理方式" onclick="event.stopPropagation();openLinePushFail('${r.id}')">⚠ 提醒送不到</button>`
       : '';
     return `<div class="pp-meta-i" style="align-items:center;gap:8px;"><span class="pp-meta-l">LINE 通知</span>`
       + `<label class="switch" style="transform:scale(.66);transform-origin:left center;margin:-6px 0;" onclick="event.stopPropagation();"><input type="checkbox" ${on?'checked':''} onchange="ppToggleLineNotify('${r.id}')"><span class="switch-slider"></span></label>${failTag}</div>`;
@@ -30086,7 +30094,13 @@ function ppHeaderHtml(){
     <div class="pp-avatar${avatarGenderClass(r.gender)}">${av}</div>
     <div class="pp-head-main">
       <div class="pp-name-row" style="${isM?'display:flex;align-items:baseline;gap:6px 24px;flex-wrap:wrap;':''}">
-        <span class="pp-name">${r.name||'—'}</span>${code}${typeBadge}${isM?`<div class="pp-meta" style="margin-top:0;">${metaRow1}</div>`:statusBadge}
+        ${/* 2026-08-08 使用者指示：「幫我新增管理員權限修改會員名字」——
+             姓名原本一律鎖住（與電話一起被歸類成「帳號設定」）。但電話是登入帳號、
+             姓名只是顯示用的資料，改名不會動到任何登入或關聯。
+             只開給管理員：櫃檯改名的風險是「改錯人」，那是查帳時最難回溯的一種錯。 */''}
+        ${(isM && SESSION && SESSION.role==='admin')
+          ? `<button class="pp-name pp-name-edit" title="點一下改名（僅管理員）" onclick="ppEditName()">${escH(r.name||'—')}</button>`
+          : `<span class="pp-name">${r.name||'—'}</span>`}${code}${typeBadge}${isM?`<div class="pp-meta" style="margin-top:0;">${metaRow1}</div>`:statusBadge}
       </div>
       <div class="pp-meta">${meta}</div>
     </div>
@@ -30131,7 +30145,9 @@ function ppFieldView(f){
 function ppInlineEdit(ev,fid){
   try{ ev.stopPropagation(); }catch(_){}
   if(PP.kind!=='member' || PP.editing){ return ppEditFocus(fid); }
-  if(fid==='phone'||fid==='name'){ showToast('姓名與電話為帳號設定，不可修改'); return; }
+  /* 電話＝登入帳號，不能在這裡改；姓名 2026-08-08 起開放給管理員（見 ppEditName） */
+  if(fid==='phone'){ showToast('電話是登入帳號，不可在此修改'); return; }
+  if(fid==='name'){ if(SESSION&&SESSION.role==='admin') return ppEditName(); showToast('姓名只有管理員可以修改'); return; }
   // 主教練：櫃台端處理；生日/性別：櫃檯或會員本人（2026-08-05 使用者指示：會員端可自己更新）
   if(fid==='default_coach_id' && !(isDeskLike())){ return; }
   const _selfM = SESSION&&SESSION.role==='member'&&String(PP.id)===String(SESSION.id);
@@ -30170,6 +30186,39 @@ function ppInlineEdit(ev,fid){
   el.addEventListener('keydown',e=>{ if(e.key==='Enter') save(); if(e.key==='Escape'){ saved=true; ppRenderBody(); } });
   v.replaceWith(el);
   el.focus();
+}
+/* 會員改名（2026-08-08 使用者指示：「幫我新增管理員權限修改會員名字」）——
+   只開給管理員。姓名只是顯示資料，不動登入（電話才是帳號）也不動任何關聯。
+   改動寫進備註留痕：日後查帳看到「這個人怎麼換名字了」時找得到原因。 */
+function ppEditName(){
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以修改姓名'); return; }
+  const r=PP.rec||{};
+  showModal(`<div class="modal-title">修改姓名</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-bottom:12px;">
+      改的只是顯示用的姓名 —— 登入帳號（電話）、票券、預約、合約都不受影響。<br>
+      <span style="color:var(--t3);">改動會記在這位會員的備註裡。</span></div>
+    <div class="form-row"><label>姓名 *</label><input id="pn-name" value="${escH(r.name||'')}" placeholder="輸入正確的姓名" autocomplete="off"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="doEditName()">儲存</button></div>`);
+  setTimeout(()=>{ const el=document.getElementById('pn-name'); if(el){ el.focus(); el.select(); } },60);
+}
+async function doEditName(){ return onceAct('pname:'+PP.id, ()=>_doEditName()); }
+async function _doEditName(){
+  const nv=((document.getElementById('pn-name')||{}).value||'').trim();
+  if(!nv){ showToast('請輸入姓名'); return; }
+  try{
+    const rec=await dbGet('members',PP.id); if(!rec){ showToast('找不到會員'); return; }
+    const old=String(rec.name||'');
+    if(old===nv){ closeModal(); return; }
+    rec.name=nv;
+    const line=`${ymd(TODAY)} 姓名由「${old||'（空白）'}」改為「${nv}」（管理員修改）`;
+    rec.note=String(rec.note||'').trim() ? String(rec.note).trim()+'\n'+line : line;
+    await dbPut('members',rec);
+    PP.rec=rec;
+    dbCacheClear(['members']);
+    closeModal(); showToast('已更新姓名');
+    if(!(await ppRefreshIfOpen(PP.id))) navTo(CUR_PAGE);
+  }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
 }
 /* 緊急聯絡人編輯小視窗（2026-07-27 使用者指示：會員端可自行更新；員工幫改亦同路徑） */
 function ppEmergencyEdit(ev){
@@ -34620,6 +34669,86 @@ async function _grantIssue(P){
 /* 讀不到就靜靜當作沒有（2026-08-08）：這是每次換頁都會跑的背景查詢，
    失敗一次就記下來、整個工作階段不再重試 —— 不然一個設定問題會變成每換一頁跳一次提示。 */
 let _grantReqOff=false;
+/* ══ LINE 提醒送不到：原因與處理方式（2026-08-08）══════════════════════════
+   使用者回報陳瀚竣「提醒不到」。查下來 LINE 回的是
+     400 The property, 'to', in the request body is invalid
+   —— 不是「沒加好友」（那是 403），而是「這組使用者代碼，官方帳號不認得」。
+   他的代碼格式完全正確（U + 32 位十六進位、與 Auth 帳號一致），140 位綁定者裡只有他一個
+   失敗，所以不是設定壞掉，而是這一組代碼對不上官方帳號 ——
+   實務上最常見的是「用另一個 LINE 帳號登入過」或「當初綁到的代碼已失效」。
+   解法是解除綁定、請他重新用 LINE 登入一次，重新抓一組代碼。
+
+   這裡把錯誤分類成櫃檯看得懂的三種，各給各的下一步。 */
+function linePushFailKind(err){
+  const s=String(err||'');
+  if(/未把官方帳號加為好友|已封鎖|not.*friend|blocked|403/i.test(s)) return 'friend';
+  if(/'to'.*invalid|代碼無效|invalid.*to/i.test(s)) return 'badid';
+  if(/金鑰失效|401/.test(s)) return 'token';
+  if(/次數已達上限|429/.test(s)) return 'quota';
+  return 'other';
+}
+const LINE_FAIL_HOW={
+  friend:{ t:'會員沒有把官方帳號加為好友',
+    d:'LINE 規定：官方帳號只能推播給「已加好友」的人。請當面請會員搜尋並加入 YUGYM 官方帳號，加完之後下一次提醒就會正常送出。',
+    fix:false },
+  badid:{ t:'這組 LINE 代碼，官方帳號不認得',
+    d:'代碼本身格式沒問題，但官方帳號查不到這個人。最常見的原因是<b>會員用了另一個 LINE 帳號登入</b>，或當初綁到的代碼已經失效。<br>處理方式：解除綁定，請會員<b>用平常會用的那個 LINE 帳號</b>重新登入一次會員系統，系統會重新抓一組代碼。',
+    fix:true },
+  token:{ t:'官方帳號金鑰失效', d:'這不是會員的問題，是系統設定。請管理員重新設定 LINE 官方帳號的存取金鑰。', fix:false },
+  quota:{ t:'LINE 推播次數已達上限', d:'這個月的免費推播額度用完了。等下個月重置，或升級 LINE 官方帳號方案。', fix:false },
+  other:{ t:'推播失敗', d:'下方是 LINE 回覆的原始訊息。若看不出原因，可以先解除綁定請會員重新登入試試。', fix:true },
+};
+async function openLinePushFail(mid){
+  const m=await dbGet('members',mid); if(!m){ showToast('找不到會員'); return; }
+  const kind=linePushFailKind(m.line_push_error);
+  const how=LINE_FAIL_HOW[kind]||LINE_FAIL_HOW.other;
+  const when=String(m.line_push_failed_at||'').slice(0,16).replace('T',' ');
+  showModal(`<div class="modal-title">LINE 提醒送不到</div>
+    <div style="font-size:13.5px;color:var(--text);padding:2px 0 10px;">${escH(m.name||'會員')}　·　最後一次失敗 ${when||'—'}</div>
+    <div style="background:#fbeceb;border:1.5px solid #e0a8a2;border-radius:12px;padding:12px 14px;font-size:13px;color:#b5372e;line-height:1.9;">
+      <b>${how.t}</b><br><span style="color:#8a5e28;">${how.d}</span></div>
+    <div style="margin-top:10px;font-size:11.5px;color:var(--t3);line-height:1.7;word-break:break-all;background:var(--card2);border-radius:8px;padding:8px 10px;">
+      LINE 原始訊息：${escH(m.line_push_error||'—')}</div>
+    <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      <button class="btn btn-ghost" onclick="lineFailClear('${mid}')" title="只清掉這個紅標，不動綁定">清除警示</button>
+      ${how.fix?`<button class="btn btn-red" onclick="lineUnbindMember('${mid}')">解除綁定・請會員重新登入</button>`:''}
+    </div>`);
+}
+async function lineFailClear(mid){
+  try{
+    const m=await dbGet('members',mid); if(!m) return;
+    m.line_push_failed_at=null; m.line_push_error=null;
+    await dbPut('members',m);
+    dbCacheClear(['members']);
+    closeModal(); showToast('已清除警示（下一次推播失敗還是會再出現）');
+    if(!(await ppRefreshIfOpen(mid))) navTo(CUR_PAGE);
+  }catch(e){ showToast('清除失敗：'+((e&&e.message)||e)); }
+}
+function lineUnbindMember(mid){
+  showModal(`<div class="modal-title">解除 LINE 綁定</div>
+    <div style="font-size:13.5px;color:var(--text);padding:4px 0 8px;">解除後這位會員<b>暫時收不到任何 LINE 通知</b>，也<b>無法用 LINE 登入</b>，
+      直到他重新用 LINE 登入一次為止。</div>
+    <div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.8;">
+      請當面告訴會員：解除後打開會員系統、按「LINE 登入」重新登入一次就會自動重新綁定 ——
+      記得用<b>平常在用的那個 LINE 帳號</b>。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openLinePushFail('${mid}')">返回</button>
+      <button class="btn btn-red" onclick="doLineUnbind('${mid}')">確定解除綁定</button></div>`);
+}
+async function doLineUnbind(mid){ return onceAct('lineunbind:'+mid, ()=>_doLineUnbind(mid)); }
+async function _doLineUnbind(mid){
+  try{
+    const m=await dbGet('members',mid); if(!m){ showToast('找不到會員'); return; }
+    m.line_user_id=null; m.line_push_failed_at=null; m.line_push_error=null;
+    m.note=String(m.note||'').trim()
+      ? String(m.note).trim()+`\n${ymd(TODAY)} 解除 LINE 綁定（推播送不到，請會員重新登入）`
+      : `${ymd(TODAY)} 解除 LINE 綁定（推播送不到，請會員重新登入）`;
+    await dbPut('members',m);
+    dbCacheClear(['members']);
+    closeModal(); showToast('已解除綁定 —— 請會員重新用 LINE 登入一次');
+    if(!(await ppRefreshIfOpen(mid))) navTo(CUR_PAGE);
+  }catch(e){ showToast('解除失敗：'+((e&&e.message)||e)); }
+}
 async function grantReqPending(){
   if(_grantReqOff) return [];
   try{
