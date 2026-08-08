@@ -1561,8 +1561,13 @@ body.mc-mode .layout{padding-top:8px;}
 .fm-tb .fm-c.fm-t{font-weight:800;background:var(--card2);}
 /* 總堂數欄也凍結（2026-08-06 使用者指示）：黏在日期欄右邊，位移由 fmStickyFit 量出來寫進 --fm-l1。
    凍結區的右緣加一條較粗的線，橫捲時看得出「這兩欄是固定的」。 */
+/* 2026-08-08 使用者指示：「這邊要把教練課跟團課人數分開」——
+   總堂數拆成兩欄，兩欄都要跟著凍結：教練課黏在日期欄右邊（--fm-l1）、
+   團課再黏在教練課右邊（--fm-l2，同樣由 fmStickyFit 量出來寫進去）。
+   粗右線只留在凍結區最右邊那一欄，中間用細線分隔。 */
 .fm-tb .fm-t{position:sticky;left:var(--fm-l1,74px);z-index:2;background:var(--card2);
-  border-right:2px solid var(--bd);}
+  border-right:1px solid var(--bd);}
+.fm-tb .fm-t.fm-t2{left:var(--fm-l2,126px);border-right:2px solid var(--bd);color:var(--brown);}
 .fm-tb thead .fm-t{z-index:4;}
 .fm-tb .fm-sum .fm-t{z-index:3;}
 .fm-tb tbody tr:hover .fm-t{background:var(--sage-bg);}
@@ -7555,8 +7560,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260807.2354';
-const APP_VERSION_LABEL='v260807.2354';
+const APP_VERSION = '260808.1222';
+const APP_VERSION_LABEL='v260808.1222';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40479,11 +40484,11 @@ async function finMatrix(){
     const dd=String(d).padStart(2,'0');
     const wd=WD[new Date(Y,M-1,d).getDay()];
     const isToday=(ym+'-'+dd)===ymd(TODAY);
-    let tds='', dayTotal=0;
+    let tds='', dayPt=0, dayGrp=0;
     cols.forEach(c=>{
       const v=(cell[c.id]||{})[dd]||{pt:0,grp:0,amt:0,nw:0,rn:0};
       const s=sum[c.id]; s.pt+=v.pt; s.grp+=v.grp; s.amt+=v.amt; s.nw+=v.nw; s.rn+=v.rn;
-      dayTotal+=v.pt+v.grp;
+      dayPt+=v.pt; dayGrp+=v.grp;
       const kd=[v.nw?`<i class="fm-nw">新${v.nw}</i>`:'',v.rn?`<i class="fm-rn">續${v.rn}</i>`:''].join('');
       /* 每位教練一組四欄，用粗線框起來（2026-08-06 使用者指示）：組首粗左線、組尾粗右線，
          顏色＝該教練的識別色（與行事曆課卡標籤同一組色）。 */
@@ -40491,10 +40496,11 @@ async function finMatrix(){
       tds+=`<td class="fm-c fm-gs" style="--cc:${cc};">${num(v.pt)}</td><td class="fm-c fm-g">${num(v.grp)}</td>`
         +`<td class="fm-c fm-m">${money(v.amt)}</td><td class="fm-c fm-k fm-ge" style="--cc:${cc};"${fmWhoTip(v.who)}>${kd}</td>`;
     });
-    dayRows+=`<tr class="${isToday?'fm-today':''}"><th class="fm-d">${d}<span>（${wd}）</span></th><td class="fm-c fm-t">${num(dayTotal)}</td>${tds}</tr>`;
+    dayRows+=`<tr class="${isToday?'fm-today':''}"><th class="fm-d">${d}<span>（${wd}）</span></th>`
+      +`<td class="fm-c fm-t">${num(dayPt)}</td><td class="fm-c fm-t fm-t2">${num(dayGrp)}</td>${tds}</tr>`;
   }
-  let sumTds='', sumAll=0;
-  cols.forEach(c=>{ const s=sum[c.id]; sumAll+=s.pt+s.grp; const cc=_fmCol[c.id];
+  let sumTds='', sumPt=0, sumGrp=0;
+  cols.forEach(c=>{ const s=sum[c.id]; sumPt+=s.pt; sumGrp+=s.grp; const cc=_fmCol[c.id];
     const whoAll=Object.keys(cell[c.id]||{}).sort().reduce((a,d)=>a.concat(((cell[c.id][d]||{}).who||[]).map(w=>Object.assign({d},w))),[]);
     sumTds+=`<td class="fm-c fm-gs" style="--cc:${cc};">${num(s.pt)}</td><td class="fm-c fm-g">${num(s.grp)}</td>`
       +`<td class="fm-c fm-m">${money(s.amt)}</td><td class="fm-c fm-k fm-ge" style="--cc:${cc};"${fmWhoTip(whoAll)}>${[s.nw?`<i class="fm-nw">新${s.nw}</i>`:'',s.rn?`<i class="fm-rn">續${s.rn}</i>`:''].join('')}</td>`; });
@@ -40510,11 +40516,11 @@ async function finMatrix(){
       <button class="btn btn-ghost btn-sm" onclick="finMonthMove(1)">下個月 ›</button></div>
     <div class="fm-wrap"><table class="fm-tb">
       <thead>
-        <tr><th class="fm-d fm-h">日期</th><th class="fm-h fm-t">總堂數</th>${head1}</tr>
-        <tr><th class="fm-d fm-sh"></th><th class="fm-sh fm-t">全店</th>${head2}</tr>
+        <tr><th class="fm-d fm-h">日期</th><th class="fm-h fm-t" colspan="2">全店總堂數</th>${head1}</tr>
+        <tr><th class="fm-d fm-sh"></th><th class="fm-sh fm-t">教練課</th><th class="fm-sh fm-t fm-t2">團課</th>${head2}</tr>
       </thead>
       <tbody>
-        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumAll)}</td>${sumTds}</tr>
+        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumPt)}</td><td class="fm-c fm-t fm-t2">${num(sumGrp)}</td>${sumTds}</tr>
         ${dayRows}
       </tbody>
     </table></div>
@@ -40547,6 +40553,11 @@ function fmStickyFit(){
       const d0=tb.querySelector('thead .fm-d');
       const w1=d0?Math.round(d0.getBoundingClientRect().width):0;
       if(w1>0) tb.style.setProperty('--fm-l1',w1+'px');
+      /* 2026-08-08：總堂數拆成教練課／團課兩欄後，第三欄要黏在第二欄右邊 ——
+         位移＝日期欄寬 ＋ 教練課欄寬（同樣要量，字體與縮放都會影響）。 */
+      const t1=tb.querySelector('thead tr:nth-child(2) .fm-t:not(.fm-t2)');
+      const w2=t1?Math.round(t1.getBoundingClientRect().width):0;
+      if(w1>0&&w2>0) tb.style.setProperty('--fm-l2',(w1+w2)+'px');
     };
     fit();
     requestAnimationFrame(fit);                       // 字體載入後再量一次

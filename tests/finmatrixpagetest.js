@@ -80,14 +80,17 @@ ok('　　窄畫面另給一組',
 
 console.log('\n④ 左側兩欄凍結（2026-08-06 使用者指示：「左邊總堂數這一欄也要凍結」）');
 /* 原本只有日期欄 sticky，總堂數會捲到日期欄底下，數字被切一半（使用者附圖）。 */
+/* 2026-08-08：總堂數拆成教練課／團課兩欄（見 fmsplittest），兩欄都凍結；
+   粗右線移到最右邊那一欄，中間改細線。 */
 ok('★ 總堂數欄黏在日期欄右邊（位移用量出來的 --fm-l1，不寫死）',
-   /\.fm-tb \.fm-t\{position:sticky;left:var\(--fm-l1,74px\);z-index:2;background:var\(--card2\);\n\s*border-right:2px solid var\(--bd\);\}/.test(src));
+   /\.fm-tb \.fm-t\{position:sticky;left:var\(--fm-l1,74px\);z-index:2;background:var\(--card2\);\n\s*border-right:1px solid var\(--bd\);\}/.test(src)
+   && /\.fm-tb \.fm-t\.fm-t2\{left:var\(--fm-l2,126px\);border-right:2px solid var\(--bd\)/.test(src));
 ok('★ 日期欄的實際寬度由 fmStickyFit 量（字體/縮放會變）',
    /const d0=tb\.querySelector\('thead \.fm-d'\);/.test(src)
    && /if\(w1>0\) tb\.style\.setProperty\('--fm-l1',w1\+'px'\);/.test(src));
-ok('★ 表頭那兩格（總堂數／全店）也掛 fm-t，跟著凍結',
-   /<th class="fm-h fm-t">總堂數<\/th>/.test(src)
-   && /<th class="fm-sh fm-t">全店<\/th>/.test(src));
+ok('★ 表頭那幾格也掛 fm-t，跟著凍結（2026-08-08 起是「全店總堂數」橫跨教練課／團課）',
+   /<th class="fm-h fm-t" colspan="2">全店總堂數<\/th>/.test(src)
+   && /<th class="fm-sh fm-t">教練課<\/th><th class="fm-sh fm-t fm-t2">團課<\/th>/.test(src));
 ok('　　疊層：表頭 > 月合計 > 一般列（橫捲時不會被別欄蓋住）',
    /\.fm-tb thead \.fm-t\{z-index:4;\}/.test(src)
    && /\.fm-tb \.fm-sum \.fm-t\{z-index:3;\}/.test(src));
