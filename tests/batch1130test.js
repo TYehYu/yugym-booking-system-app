@@ -205,19 +205,21 @@ console.log('\n員工管理：卡片改回列表');
   ok('　　窄畫面（<900px）收起表頭、數字自己一排並補回欄名',
      /@media\(max-width:900px\)\{\s*\n\s*\.st-lhead\{display:none;\}/.test(src)
      && /\.st-l-n1::before\{content:'教練課';\}/.test(src));   // 三修：nth-of-type 本來就沒生效，改類別
-  ok('★ 列表顯示本月教練課／團體課／續約數／工作時數（欄名在表頭）',
+  /* 2026-08-08 使用者指示：體驗獨立一欄、團課拆成堂數與人次
+     → 數字欄變成 總堂數｜教練課｜團課堂數｜團課人次｜體驗｜續約｜工時 */
+  ok('★ 列表顯示本月各項數字（欄名在表頭）',
      [...h.matchAll(/<span class="st-l-n st-l-n\d">([\s\S]*?)<\/span>/g)].map(m=>m[1].replace(/<[^>]+>/g,'')).join('|')
-       ==='12/14|4|2|58.5h');
+       ==='12/14|4|0|0|2|58.5h');
   ok('　　排定堂數與已上不同時附註（12 /14）', /<span class="st-l-n st-l-n1">12<u>\/14<\/u><\/span>/.test(h));
   /* 2026-08-01 使用者回報：51.5 被進位成 52 → 改成不進位，半小時照實顯示 */
   ok('　　工時不進位、半小時照實顯示', /58\.5<u>h<\/u>/.test(h));
   ok('★ 每一格不再重複印欄名（改由表頭統一）', !/<i>教練課<\/i>/.test(h) && !/st-l-stats/.test(src));
   // 三／四修：加入「工作規則／休假日／實領薪資」，數字欄名在翻月時會附月份標記
   /* 2026-07-31 使用者指示改版：總堂數在教練課前面、實領薪資移到工作時數後面、整列分三區 */
-  ok('★ 表頭：姓名／總堂數／教練課／團體課／續約／工作時數／實領薪資／工作規則／休假日／權限開關',
-     /<span>姓名<\/span>\s*\n\s*<span class="st-zb">總堂數\$\{_mTag\}<\/span><span>教練課\$\{_mTag\}<\/span><span>團體課\$\{_mTag\}<\/span><span>續約\$\{_mTag\}<\/span><span>工作時數\$\{_mTag\}<\/span>\s*\n\s*<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">工作規則<\/span><span>休假日<\/span>\s*\n\s*<span>權限開關<\/span>/.test(src));
+  ok('★ 表頭：姓名／總堂數／教練課／團課堂數／團課人次／體驗／續約／工作時數／實領薪資／工作規則／休假日／權限開關',
+     /<span>姓名<\/span>\s*\n\s*<span class="st-zb">總堂數\$\{_mTag\}<\/span><span>教練課\$\{_mTag\}<\/span><span>團課堂數\$\{_mTag\}<\/span><span>團課人次\$\{_mTag\}<\/span><span>體驗\$\{_mTag\}<\/span><span>續約\$\{_mTag\}<\/span><span>工作時數\$\{_mTag\}<\/span>\s*\n\s*<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">工作規則<\/span><span>休假日<\/span>\s*\n\s*<span>權限開關<\/span>/.test(src));
   ok('★ 固定欄位的 grid（最後一欄不再用 max-content；四修：開關欄改固定寬以對齊標題）',
-     /\.st-lhead,\.st-lrow\{display:grid;\s*\n\s*grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 48px 58px 100px 1fr 92px 78px 372px 30px;/.test(src));
+     /\.st-lhead,\.st-lrow\{display:grid;\s*\n\s*grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 1fr 92px 78px 372px 30px;/.test(src));
   ok('★ 舊的 flex 版樣式已移除（它排在後面會蓋掉 grid）',
      /〔已移除〕舊的 flex 版員工列樣式/.test(src) && !/\.st-lrow\{position:relative;display:flex/.test(src));
   ok('　　0 用灰字，不會跟有數字的搶注意',

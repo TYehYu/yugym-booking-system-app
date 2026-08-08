@@ -18,7 +18,7 @@ console.log('欄位順序');
   const cols=[...head.matchAll(/<span(?: class="st-zb")?>([^<$]+?)(?:\$\{_mTag\})?<\/span>/g)]
     .map(m=>m[1]).filter(x=>x && !/^\s*$/.test(x));
   eq('★ 姓名 → 總堂數 → 教練課 → 團體課 → 續約 → 工作時數 → 實領薪資 → 工作規則 → 休假日 → 權限開關',
-     cols, ['姓名','總堂數','教練課','團體課','續約','工作時數','實領薪資','工作規則','休假日','權限開關']);
+     cols, ['姓名','總堂數','教練課','團課堂數','團課人次','體驗','續約','工作時數','實領薪資','工作規則','休假日','權限開關']);
   ok('★ 總堂數排在教練課前面', head.indexOf('總堂數')<head.indexOf('教練課'));
   ok('★ 實領薪資排在工作時數後面、工作規則前面',
      head.indexOf('工作時數')<head.indexOf('實領薪資') && head.indexOf('實領薪資')<head.indexOf('工作規則'));
@@ -81,14 +81,15 @@ ok('　　工作規則／休假日也吃同一個行高，整排一條基線',
 ok('　　手機版數字也放大', /\.st-l-n\{grid-column:span 1;position:relative;padding-top:12px;font-size:18px;\}/.test(src));
 
 console.log('\n軌道與其他欄位');
-ok('★ 14 欄：姓名欄有上限，剩餘寬度落在兩區中間（姓名區靠左、權限管理區靠右）',
-   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 48px 58px 100px 1fr 92px 78px 372px 30px;/.test(src)
+/* 2026-08-08：多了「團課人次」「體驗」兩欄 → 14 → 16 欄 */
+ok('★ 16 欄：姓名欄有上限，剩餘寬度落在兩區中間（姓名區靠左、權限管理區靠右）',
+   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 1fr 92px 78px 372px 30px;/.test(src)
    && /空白落在兩區中間/.test(src));
-ok('★ 三個斷點的軌道欄數一致（14 欄）', (()=>{
+ok('★ 三個斷點的軌道欄數一致（16 欄）', (()=>{
    const all=[...src.matchAll(/grid-template-columns:10px (?:34|32|28)px minmax\([^)]*\)([^;]*);/g)];
-   return all.length===3 && all.every(m=>m[1].trim().split(/\s+/).length===11);
+   return all.length===3 && all.every(m=>m[1].trim().split(/\s+/).length===13);
 })());
-ok('★ 「待接受邀請」橫跨到權限開關之前', /\.st-l-pend\{grid-column:4 \/ 14;justify-self:start;\}/.test(src));
+ok('★ 「待接受邀請」橫跨到權限開關之前', /\.st-l-pend\{grid-column:4 \/ 16;justify-self:start;\}/.test(src));
 ok('★ 權限開關欄撐滿自己的格子', /\.st-l-sw\{justify-self:stretch;\}/.test(src)
    && /\.st-l-sw \.st-sw\{display:flex;flex-wrap:nowrap;gap:4px;width:auto;margin:0;justify-content:flex-start;\}/.test(src));
 ok('　　手機版補上「總堂數」欄名', /\.st-l-n0::before\{content:'總堂數';\}/.test(src));
