@@ -21,7 +21,11 @@ console.log('① 分期票沒有已開通堂數時，仍要能整串轉成保留
      /const hold=_tks\.filter\(t=>tkUsableBy\(t,memberId\) && t\.status==='usable'/.test(F)
      && /\(\(Number\(t\.sessions_total\)\|\|0\)-\(Number\(t\.unlocked_sessions\)\|\|0\)\)>0\);/.test(F));
   ok('★ 找到就讓它進候選（avail=0 → 整串走分期保留）', /if\(hold\.length\)\{ cand=hold; _instOnly=true; \}/.test(F));
-  ok('　　仍然找不到才說「請先完成銷售」', /if\(!cand\.length\)\{ _clr\(\); showToast\('該會員沒有此課程的可用票券，請先完成銷售'\); return; \}/.test(F));
+  /* 2026-08-08：這一句改成先分辨「是沒票，還是時段不合」（友善課限平日 18:00 前）——
+     見 pendtimetest.js。分辨不出來時仍是原本那句。 */
+  ok('　　仍然找不到才說「請先完成銷售」',
+     /let _why='該會員沒有此課程的可用票券，請先完成銷售';/.test(F)
+     && /_clr\(\); showToast\(_why\); return;/.test(F));
   ok('　　票券選單標示分期未開通堂數（選之前就看得到）', /分期未開通 \$\{_lk\} 堂/.test(F));
 }
 
@@ -67,7 +71,7 @@ console.log('\n④ 既有行為沒被動到');
      && /_clr\(\);                       \/\/ 要再問一次「整串怎麼轉」→ 先收掉忙碌狀態/.test(src));
   ok('★ 每一條提早結束的路徑都會收掉（不會卡在轉圈）',
      /if\(!b\|\|!b\.pending_contract\)\{ _clr\(\); showToast/.test(src)
-     && /if\(!cand\.length\)\{ _clr\(\); showToast/.test(src)
+     && /_clr\(\); showToast\(_why\); return;/.test(src)   /* 2026-08-08：沒票券那條改帶原因 */
      && /if\(!tk\)\{ _clr\(\); showToast/.test(src)
      && /\}catch\(e\)\{ _clr\(\); showToast\('轉換失敗：/.test(src));
   ok('★ 綁定會員也有忙碌狀態',

@@ -7589,8 +7589,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.1714';
-const APP_VERSION_LABEL='v260808.1714';
+const APP_VERSION = '260808.1720';
+const APP_VERSION_LABEL='v260808.1720';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20222,6 +20222,10 @@ function openPendingHold(){
   showModal(`<div class="modal-title">待簽約</div>
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">
       ${w.date}　${w.time}　${w.t.name||w.t.category}<br>先佔住時段與場地；簽約付款後轉正式預約。</div>
+    ${/* 限時段票種（友善）先講在前面（2026-08-08 使用者回報「平日晚上跟假日都有出現」）——
+         卡位當下擋得住，但櫃檯是在排連續預約，早點知道規則才不會整串被跳過。 */''}
+    ${w.t.time_restricted?`<div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.8;margin-bottom:12px;">
+      ⚠ <b>${w.t.name||'此課程'}</b>僅限<b>平日 18:00 前</b>開始。假日或 18:00 之後的時段不會建立（連續預約會自動跳過並列出）。</div>`:''}
     ${pre
       ?`<div class="form-row"><label>客戶</label>
           <div class="bk-mem-pick" style="cursor:default;"><span>${pre.name}（${fmtPhone(pre.phone)}）</span></div>
@@ -20260,7 +20264,13 @@ async function submitPendingHold(){
   let made=0, skipped=[];
   for(const sl of slots){
     const d=sl.date, tv=sl.time;
-    const vbk={id:null,coach_id,category:t.category,ticket_type_id:null};   // 無票 → 不做限時票檢查
+    /* 2026-08-08 使用者回報：「友善課程待簽約的課卡，我看的平日晚上跟假日都有出現，
+       是忘記設定阻擋了嗎」—— 是。這裡原本刻意把 ticket_type_id 清成 null，理由寫「無票 →
+       不做限時票檢查」；但卡位「卡的就是某一種票券的課」（type_id 會寫進課卡），
+       友善教練課限平日 18:00 前，卡在平日晚上或假日的位子，之後根本轉不了正 ——
+       listUsableTickets 會把不合時段的票濾掉，櫃檯只會看到「該會員沒有此課程的可用票券」，
+       完全看不出真正的原因是時段。時段規則跟著票種走，這裡照樣要檢查。 */
+    const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id};
     const verr=await validateBooking(vbk,d,tv,60);
     if(verr){ skipped.push(`${String(d).slice(5).replace('-','/')} ${tv}（${verr}）`); continue; }
     const bk={id:uid('BK'),member_id:null,trial_name:name,trial_phone:phone,
@@ -20426,7 +20436,20 @@ async function _doConvertPending(memberId, tkId, mode){
       if(hold.length){ cand=hold; _instOnly=true; }
     }catch(_){}
   }
-  if(!cand.length){ _clr(); showToast('該會員沒有此課程的可用票券，請先完成銷售'); return; }
+  if(!cand.length){
+    /* 2026-08-08：真正卡住的常常不是「沒有票」而是「時段不合」（友善課限平日 18:00 前）——
+       原本一律說「沒有可用票券，請先完成銷售」，櫃檯會去找一張其實已經在手上的票。 */
+    let _why='該會員沒有此課程的可用票券，請先完成銷售';
+    try{
+      const _tt=((await dbGetAll('ticket_types').catch(()=>[]))||[]).find(x=>x.id===b.ticket_type_id);
+      if(_tt && _tt.time_restricted){
+        const _dow=parseYmd(b.date).getDay();
+        const _bad=!(_dow>=1&&_dow<=5) || timeToMin(b.start_time)>=1080;
+        if(_bad) _why=`${_tt.name||'此票券'}僅限平日 18:00 前使用 —— 這堂是 ${b.date.slice(5).replace('-','/')} ${b.start_time}，請先改時段再轉正`;
+      }
+    }catch(_){}
+    _clr(); showToast(_why); return;
+  }
   if(!tkId && cand.length>1){
     _clr();                       // 要再問一次「扣哪一張票」→ 先收掉忙碌狀態
     const m=(window._cpMembers||[]).find(x=>x.id===memberId)||{};
