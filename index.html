@@ -1638,6 +1638,19 @@ body.mc-mode .layout{padding-top:8px;}
 .pnl .pnl-net.ok td:last-child{color:var(--green);}
 .pnl .pnl-net.bad td:last-child{color:var(--danger,#b5372e);}
 .pnl .pnl-h td{font-weight:800;}
+/* 每位教練的薪資明細（2026-08-08 使用者指示：「把每個教練的課堂獎金、值班獎金、
+   達標獎金等等都分別列出來，該加該減的都列在教練這一列明細，用顏色區分」）——
+   點教練那一列展開；加項綠、減項紅，一眼分得出哪些是給出去的、哪些是扣回來的。 */
+.pnl tr.pnl-emp td:first-child{cursor:pointer;user-select:none;}
+.pnl tr.pnl-emp td:first-child::before{content:'▸';display:inline-block;width:13px;color:var(--t3);
+  transition:transform .12s;}
+.pnl tr.pnl-emp.open td:first-child::before{transform:rotate(90deg);}
+.pnl tr.pnl-part td{border-bottom:1px dashed var(--bd);font-size:11.5px;padding:4px 2px;color:var(--t2);}
+.pnl tr.pnl-part td:first-child{padding-left:34px;font-weight:400;}
+.pnl tr.pnl-part td:last-child{font-weight:600;}
+.pnl tr.pnl-part.add td:last-child{color:var(--green);}
+.pnl tr.pnl-part.cut td:last-child{color:var(--danger,#b5372e);}
+.pnl tr.pnl-part .pnl-part-d{color:var(--t3);font-weight:400;}
 .pnl-note{font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:10px;}
 /* 本月損益條（2026-08-05 整合經營報表）：四個大數字一列，手機兩欄 */
 .fin-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
@@ -7689,8 +7702,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.2132';
-const APP_VERSION_LABEL='v260808.2132';
+const APP_VERSION = '260808.2153';
+const APP_VERSION_LABEL='v260808.2153';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -41854,6 +41867,36 @@ async function monthSalesValue(ym, pre){
   return { salesValue:ptValue+grpValue, ptValue, ptCount:ptList.length,
            grpValue, grpCount:grpList.length, grpHeads, doneCount:done.length };
 }
+/* 一位員工這個月的薪資是怎麼組出來的（2026-08-08 使用者指示）——
+   與薪資單（openSalarySheet）同一組欄位，只是收成一個陣列讓損益表也能列。
+   sign：'add' 給出去的、'cut' 扣回來的 —— 畫面用綠／紅分。
+   ⚠ 只列「應發」這一段：員工自付的勞健保是從應發裡代扣的，
+     對公司來說錢一樣要付出去，列在這裡會讓人以為公司少付了。 */
+/* 展開／收合一位員工的薪資明細（2026-08-08）——
+   同一列再點一次收回去；不重繪整張表，免得剛看的地方跳掉。 */
+function pnlToggleEmp(tr, pid){
+  if(!tr) return;
+  const open=tr.classList.toggle('open');
+  const tb=tr.closest('table'); if(!tb) return;
+  tb.querySelectorAll(`tr.pnl-part[data-emp="${pid}"]`).forEach(x=>{ x.style.display=open?'':'none'; });
+}
+function salaryParts(sal, ctx){
+  if(!sal) return [];
+  const P=[]; const c=ctx||{};
+  const add=(k,v,d)=>{ if(Number(v)>0) P.push({k,v:Math.round(Number(v)),d:d||'',sign:'add'}); };
+  const cut=(k,v,d)=>{ if(Number(v)>0) P.push({k,v:Math.round(Number(v)),d:d||'',sign:'cut'}); };
+  if(sal.base>0 && sal.ptIsFloor) add('保障底薪', sal.base, sal.schedHours>0?`排班 ${sal.schedHours} 小時`:'月薪制');
+  else add('教練課費', sal.ptPay, sal.ptDetail||(c.ptDone!=null?`${c.ptDone} 堂`:''));
+  add('達標獎金',  sal.bonus,     sal.bonusDetail);
+  add('團體課費',  sal.groupPay,  sal.groupDetail||(c.groupHeads!=null?`${c.groupHeads} 人次`:''));
+  add('值班費',    sal.dutyPay,   sal.dutyDetail);
+  add('續約獎金',  sal.renewPay,  sal.renewDetail);
+  add('店長獎金',  sal.leaderPay, sal.leaderDetail);
+  add('主管津貼',  sal.supPay,    '固定津貼');
+  add('生日禮金',  sal.bdayPay,   sal.bdayDetail);
+  cut('請假扣薪',  sal.leaveDeduct, sal.leaveDeductDetail||'事假全扣・病假半薪');
+  return P;
+}
 async function finPnl(){
   const box=document.getElementById('fin-pnl'); if(!box) return;
   const ym=(window._finMonth||ymd(TODAY).slice(0,7));
@@ -41875,8 +41918,11 @@ async function finPnl(){
     const taxBase=Math.round(cash/1.05);
     const tax=cash-taxBase;
     let pr=null; try{ pr=await computeMonthlyPayroll(ym); }catch(_){}
+    /* 每位員工帶上薪資組成（2026-08-08 使用者指示：課堂／值班／達標…都要分別列出來） */
     const payRows=((pr&&pr.rows)||[]).filter(r=>r.countSalary&&Number(r.sal&&r.sal.grossPay)>0)
-      .map(r=>({name:(r.emp&&(r.emp.name||r.emp.name_en))||'—', amt:Math.round(Number(r.sal.grossPay)||0)}))
+      .map(r=>({name:(r.emp&&(r.emp.name||r.emp.name_en))||'—',
+                amt:Math.round(Number(r.sal.grossPay)||0),
+                parts:salaryParts(r.sal,{ptDone:r.ptDone,groupHeads:r.groupHeads})}))
       .sort((a,b)=>b.amt-a.amt);
     const salary=payRows.reduce((s,r)=>s+r.amt,0);
     const coIns=Math.round(Number(pr&&pr.grandCoCost)||0);
@@ -41893,13 +41939,16 @@ async function finPnl(){
        原本人事成本只算「應發薪資」，公司負擔的勞健保（勞保雇主＋健保雇主＋勞退）
        只在註腳揭露、沒有進淨利。那是實實在在要付出去的錢，該算。
        ⚠ 員工自付的那一份不必另外扣：它是從應發裡代扣的，已經含在應發裡了。 */
-    const staffCost=salary+coIns;
-    const net=revenue-tax-staffCost-fixedTotal-otherTotal;
+    /* 2026-08-08 使用者指示：「公司負擔的勞健保也獨立出來在每月支出」——
+       它不再塞在人事成本裡當子項，改成與固定支出、其他支出並列的一個大項。
+       ⚠ 員工自付的那一份不必另外扣：從應發裡代扣的，已經含在應發裡。 */
+    const staffCost=salary+coIns;   // 公司實際的人事總支出（大數字那格用）
+    const net=revenue-tax-salary-coIns-fixedTotal-otherTotal;
     const m=n=>'$'+Math.round(Number(n)||0).toLocaleString();
     const neg=n=>'−$'+Math.round(Math.abs(Number(n)||0)).toLocaleString();
     const sub=(nm,v,extra)=>`<tr class="pnl-sub"><td>${nm}${extra?`<span style="color:var(--t3);"> ${extra}</span>`:''}</td><td>${neg(v)}</td></tr>`;
     const [Y,M]=ym.split('-');
-    const spend=tax+staffCost+fixedTotal+otherTotal;
+    const spend=tax+salary+coIns+fixedTotal+otherTotal;
     const _isNow=ym===ymd(TODAY).slice(0,7);
     box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;">
       <div class="card-title" style="margin-bottom:8px;">${Y} 年 ${M} 月　損益表</div>
@@ -41927,9 +41976,15 @@ async function finPnl(){
         ${sub('教練課',-Math.round(SV.ptValue),`${SV.ptCount} 堂`).replace('−$','$')}
         ${sub('團體課',-Math.round(SV.grpValue),`${SV.grpCount} 堂 ${SV.grpHeads} 人次`).replace('−$','$')}
         <tr class="pnl-out"><td>營業稅 5%<span style="color:var(--t3);font-weight:400;"> 　依<b>收款</b> ${m(cash)} 內含計：÷ 1.05 × 5%</span></td><td>${neg(tax)}</td></tr>
-        <tr class="pnl-h pnl-out pnl-hr"><td>人事成本（薪資＋公司負擔勞健保）<span style="color:var(--t3);font-weight:400;"> 　${payRows.length} 位</span></td><td>${neg(staffCost)}</td></tr>
-        ${payRows.map(r=>sub(r.name,r.amt)).join('')}
-        ${coIns>0?sub('公司負擔勞健保',coIns,'勞保雇主＋健保雇主＋勞退'):''}
+        <tr class="pnl-h pnl-out pnl-hr"><td>員工薪資（應發）<span style="color:var(--t3);font-weight:400;"> 　${payRows.length} 位・點姓名看明細</span></td><td>${neg(salary)}</td></tr>
+        ${payRows.map((r,i)=>{
+          const pid='pnlp-'+i;
+          return `<tr class="pnl-sub pnl-emp" onclick="pnlToggleEmp(this,'${pid}')"><td>${escH(r.name)}</td><td>${neg(r.amt)}</td></tr>`
+            + r.parts.map(pt=>`<tr class="pnl-part ${pt.sign}" data-emp="${pid}" style="display:none;">
+                <td>${pt.sign==='add'?'＋':'−'} ${escH(pt.k)}${pt.d?`<span class="pnl-part-d"> 　${escH(pt.d)}</span>`:''}</td>
+                <td>${pt.sign==='add'?'':'−'}${m(pt.v)}</td></tr>`).join('');
+        }).join('')}
+        <tr class="pnl-h pnl-out"><td>公司負擔勞健保<span style="color:var(--t3);font-weight:400;"> 　勞保雇主＋健保雇主＋勞退</span></td><td>${neg(coIns)}</td></tr>
         <tr class="pnl-h pnl-out"><td>固定支出</td><td>${neg(fixedTotal)}</td></tr>
         ${fixedRows.length?fixedRows.map(r=>sub(r.name,r.amt,r.n>1?`×${r.n}`:'')).join('')
           :'<tr class="pnl-sub"><td>（本月沒有固定支出）</td><td>—</td></tr>'}
@@ -41943,8 +41998,10 @@ async function finPnl(){
           客人一次買、分好幾個月上，用「上掉多少」看經營才準；賣票那個月的收款是另一回事。<br>
         ・本月實際<b>收款</b> ${m(cash)}（${pur.length} 筆）—— 與銷課是兩件事，只用來算營業稅。<br>
         ・營業稅按<b>內含</b>計：銷售額＝收款 ÷ 1.05，稅額＝銷售額 × 5%。若貴店報價是稅外加，跟我說改成收款 × 5%。<br>
-        ・人事成本＝各員工當月<b>應發</b>薪資 ${m(salary)}${coIns>0?` ＋ <b>公司負擔勞健保</b> ${m(coIns)}（勞保雇主＋健保雇主＋勞退）`:''}，與薪資頁同一支計算。
-          員工自付的勞健保不必另外扣 —— 那是從應發裡代扣的，已經含在應發裡。<br>
+        ・<b>員工薪資</b>＝各員工當月應發（與薪資頁同一支計算）；點姓名可以展開，看課堂／值班／達標等等各是多少，加項綠、減項紅。<br>
+        ・<b>公司負擔勞健保</b> ${m(coIns)} 獨立列一項（勞保雇主＋健保雇主＋勞退）。
+          員工自付的那一份不必另外扣 —— 那是從應發裡代扣的，已經含在應發裡。
+          公司實際人事總支出＝${m(salary)} ＋ ${m(coIns)} ＝ <b>${m(staffCost)}</b>。<br>
         ・這是這一頁<b>唯一</b>的淨利數字，下方營運卡的銷課與這裡同一份計算。
       </div>
     </div>`;
