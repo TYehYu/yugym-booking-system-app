@@ -7735,8 +7735,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.2222';
-const APP_VERSION_LABEL='v260808.2222';
+const APP_VERSION = '260808.2230';
+const APP_VERSION_LABEL='v260808.2230';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -27203,11 +27203,17 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const insLaborCo  = lvl?(Number(lvl.labor_co)||0):0;
   const insHealthCo = lvl?(Number(lvl.health_co)||0):0;
   // 公司三合一負擔：優先用 co_total（勞保雇主總額+健保雇主+勞退）；無則退回舊欄位加總
-  /* 2026-08-08：公司負擔要看「有沒有投保」，不是「填了級距」——
-     原本只要查得到級距就算全額，於是把「填了級距但沒投保」的人也算進人事成本。
-     兩種都沒投保 → 0。（只投保其中一種的情況見下方註解） */
-  const insCoCost   = (lvl && (laborOn||healthOn))
-    ? (Number(lvl.co_total)>0 ? Number(lvl.co_total) : (insLaborCo+insHealthCo)) : 0;
+  /* 公司負擔（2026-08-08）：
+     ① 要看「有沒有投保」，不是「填了級距」—— 原本只要查得到級距就算全額，
+        於是把「填了級距但沒投保」的人也算進人事成本。
+     ② 負責人（雇主本人）一律 0（使用者指正：「余東曄是雇主，這邊應該沒有金額，
+        健保 2,171 是雇主自負額」）——
+        負責人的健保是以投保金額<b>全額自付</b>（上面 insHealthEmp 已用 NHI_RATE_OWNER 算），
+        勞保雇主本人也不在受僱者的投保範圍裡，公司沒有替他負擔的部分。
+        級距表的 co_total 是「受僱者」的雇主分擔，套在負責人身上會憑空多出一筆成本。 */
+  const insCoCost   = (insIdentity==='owner') ? 0
+    : ((lvl && (laborOn||healthOn))
+        ? (Number(lvl.co_total)>0 ? Number(lvl.co_total) : (insLaborCo+insHealthCo)) : 0);
 
   const grossPay = ptIncome + bonus + groupPay + dutyPay + renewPay + mgmtPay + bdayPay; // 應發
   /* 請假扣薪在「算完本月總薪資後」才扣（2026-08-01 使用者指示）——
@@ -27224,6 +27230,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
     leaderList, leaderT1:_ldT1, leaderT2:_ldT2, leaderB1:_ldB1, leaderB2:_ldB2,
     isBday, bdayPay, bdayDetail,
     insGrade:grade||null, insGradeMissing, insLaborEmp, insHealthEmp, insEmpDeduct, insLaborCo, insHealthCo, insCoCost,
+    insIdentity,   /* 'owner'＝負責人：健保全額自付、公司不負擔（畫面上的說法要跟著改，2026-08-08） */
     leave:L, leaveDeduct, divisor:_divisor,
     grossPay, netPay,
     total: grossPay }; // total 維持＝應發，相容既有顯示
@@ -27986,7 +27993,9 @@ async function openPerfDetail(empId, month){
     if(sal.insGradeMissing) rows+=row('⚠ 勞健保未扣', `投保級距 ${Number(sal.insGradeMissing).toLocaleString()} 不在級距表裡，請到「全域薪資制度」補上這一級`, '$0', {neg:true});
     if(sal.insEmpDeduct>0){
       if(sal.insLaborEmp>0)  rows+=row('勞保（員工負擔）', sal.insGrade?`投保級距 ${Number(sal.insGrade).toLocaleString()}`:'', '−'+money(sal.insLaborEmp), {neg:true});
-      if(sal.insHealthEmp>0) rows+=row('健保（員工負擔）', '', '−'+money(sal.insHealthEmp), {neg:true});
+      if(sal.insHealthEmp>0) rows+=row(sal.insIdentity==='owner'?'健保（雇主自負額）':'健保（員工負擔）',
+        sal.insIdentity==='owner'?`投保金額 ${Number(sal.insGrade||0).toLocaleString()} × 5.17%（負責人全額自付）`:'',
+        '−'+money(sal.insHealthEmp), {neg:true});
     }
     rows+=row('實領薪資','', money(sal.netPay), {sum:true});
     const [yy,mm]=ym.split('-');
@@ -28275,7 +28284,7 @@ async function renderPayrollSummary(){
           ${(r.countSalary && s.leaveDeduct>0)?`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;font-size:12.5px;"><span style="color:var(--t3);">請假扣薪</span><span style="color:#c0392b;font-weight:600;">−$${s.leaveDeduct.toLocaleString()}</span></div>`:''}
           ${(r.countSalary && s.insEmpDeduct>0)?`${s.insGrade?`<div style="padding:4px 0 2px 16px;font-size:11px;color:var(--t3);">投保級距 $${Number(s.insGrade).toLocaleString()}</div>`:''}
           ${s.insLaborEmp>0?`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;font-size:12.5px;"><span style="color:var(--t3);">勞保（員工負擔）</span><span style="color:#c0392b;font-weight:600;">−$${s.insLaborEmp.toLocaleString()}</span></div>`:''}
-          ${s.insHealthEmp>0?`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;font-size:12.5px;"><span style="color:var(--t3);">健保（員工負擔）</span><span style="color:#c0392b;font-weight:600;">−$${s.insHealthEmp.toLocaleString()}</span></div>`:''}
+          ${s.insHealthEmp>0?`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;font-size:12.5px;"><span style="color:var(--t3);">${s.insIdentity==='owner'?'健保（雇主自負額）':'健保（員工負擔）'}</span><span style="color:#c0392b;font-weight:600;">−$${s.insHealthEmp.toLocaleString()}</span></div>`:''}
           <div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;font-size:12.5px;border-top:1px dashed var(--bd);"><span style="color:var(--t2);">勞健保扣款合計</span><span style="color:#c0392b;font-weight:700;">−$${s.insEmpDeduct.toLocaleString()}</span></div>
           <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:15px;border-top:1px solid var(--bd);margin-top:4px;"><span style="font-weight:800;color:var(--green);">實發薪資</span><span style="font-weight:800;color:var(--green);">$${s.netPay.toLocaleString()}</span></div>
           ${s.insCoCost>0?`<div style="font-size:11px;color:var(--t3);margin-top:6px;">公司負擔勞健保 $${s.insCoCost.toLocaleString()}（計入人事成本，不影響實發）</div>`:''}`:''}
@@ -41916,8 +41925,10 @@ const SAL_MX_COLS=[
   {k:'bday',  t:'生日禮金', s:'',               kind:'add'},
   {k:'leave', t:'請假扣薪', s:'事假全扣・病假半薪', kind:'cut'},
   {k:'gross', t:'應發合計', s:'公司要付的薪資', kind:'sum'},
-  {k:'labor', t:'勞保',     s:'員工自付',       kind:'cut'},
-  {k:'health',t:'健保',     s:'員工自付',       kind:'cut'},
+  {k:'labor', t:'勞保',     s:'自付・非公司負擔', kind:'cut'},
+  /* 負責人的健保是「雇主自負額」（全額自付），受僱者是「員工負擔」——
+     兩者都不是公司的額外成本，欄名用共通的說法（2026-08-08 使用者指正）。 */
+  {k:'health',t:'健保',     s:'自付・非公司負擔', kind:'cut'},
   {k:'net',   t:'實領',     s:'匯給員工的錢',   kind:'sum'},
   {k:'co',    t:'公司負擔', s:'勞健保・勞退・職保', kind:'co'},
 ];
@@ -41961,8 +41972,8 @@ function salaryMatrixHTML(rows){
       <tr class="sx-total"><td>合計</td>${SAL_MX_COLS.map(c=>cell(c,tot[c.k])).join('')}</tr>
     </tbody></table></div>
     <div class="sal-mx-note">
-      綠＝給出去的、紅＝扣的。<b>勞保／健保</b>是員工自付、從應發裡代扣，<b>不是</b>公司的額外成本；
-      公司的額外成本是最後一欄<b>公司負擔</b>（勞保雇主＋健保雇主＋勞退＋職災）。<br>
+      綠＝給出去的、紅＝扣的。<b>勞保／健保</b>是本人自付、從應發裡代扣（負責人的健保是雇主自負額，全額自付），<b>不是</b>公司的額外成本；
+      公司的額外成本是最後一欄<b>公司負擔</b>（勞保雇主＋健保雇主＋勞退＋職災）——<b>負責人為 0</b>，公司沒有替雇主本人負擔的部分。<br>
       公司這個月實際的人事支出＝應發合計 ${m(tot.gross)} ＋ 公司負擔 ${m(tot.co)} ＝ <b>${m(tot.gross+tot.co)}</b>。
     </div>`;
 }
