@@ -69,7 +69,7 @@ console.log('\n⑤ 兩處淨利不一致要先講');
 ok('★★ 明講這是這一頁唯一的淨利，且下方營運卡同源',
    /這是這一頁<b>唯一<\/b>的淨利數字，下方營運卡的銷課與這裡同一份計算。/.test(F));
 ok('★★ 公司負擔勞健保是獨立的支出大項（不是薪資的子項）',
-   /<tr class="pnl-h pnl-out"><td>公司負擔勞健保<span style="color:var\(--t3\);font-weight:400;"> 　勞保雇主＋健保雇主＋勞退<\/span><\/td><td>\$\{neg\(coIns\)\}<\/td><\/tr>/.test(F));
+   /<tr class="pnl-h pnl-out"><td>公司負擔勞健保<span style="color:var\(--t3\);font-weight:400;"> 　勞保雇主＋健保雇主＋勞退＋職災<\/span><\/td><td>\$\{neg\(coIns\)\}<\/td><\/tr>/.test(F));
 ok('★ 明說員工自付的那一份不必再扣（已含在應發裡）',
    /員工自付的那一份不必另外扣 —— 那是從應發裡代扣的，已經含在應發裡。/.test(F));
 ok('　　員工薪資標明是「應發」', /<b>員工薪資<\/b>＝各員工當月應發（與薪資頁同一支計算）/.test(F));

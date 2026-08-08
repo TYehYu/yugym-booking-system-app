@@ -1638,19 +1638,27 @@ body.mc-mode .layout{padding-top:8px;}
 .pnl .pnl-net.ok td:last-child{color:var(--green);}
 .pnl .pnl-net.bad td:last-child{color:var(--danger,#b5372e);}
 .pnl .pnl-h td{font-weight:800;}
-/* 每位教練的薪資明細（2026-08-08 使用者指示：「把每個教練的課堂獎金、值班獎金、
-   達標獎金等等都分別列出來，該加該減的都列在教練這一列明細，用顏色區分」）——
-   點教練那一列展開；加項綠、減項紅，一眼分得出哪些是給出去的、哪些是扣回來的。 */
-.pnl tr.pnl-emp td:first-child{cursor:pointer;user-select:none;}
-.pnl tr.pnl-emp td:first-child::before{content:'▸';display:inline-block;width:13px;color:var(--t3);
-  transition:transform .12s;}
-.pnl tr.pnl-emp.open td:first-child::before{transform:rotate(90deg);}
-.pnl tr.pnl-part td{border-bottom:1px dashed var(--bd);font-size:11.5px;padding:4px 2px;color:var(--t2);}
-.pnl tr.pnl-part td:first-child{padding-left:34px;font-weight:400;}
-.pnl tr.pnl-part td:last-child{font-weight:600;}
-.pnl tr.pnl-part.add td:last-child{color:var(--green);}
-.pnl tr.pnl-part.cut td:last-child{color:var(--danger,#b5372e);}
-.pnl tr.pnl-part .pnl-part-d{color:var(--t3);font-weight:400;}
+/* 員工薪資明細表（2026-08-08 使用者指示二修：「直接列出來吧，在員工這邊最上方
+   新增一列標示每一個金額代表什麼：教練課、團體課、達標獎金、續約等等的，還有勞保、健保，
+   另外公司負擔的勞健保勞退職保也要列為一項」）——
+   原本是點姓名展開，改成攤平的表：一位一列、一欄一個名目，最上面一列就是欄名。
+   加項綠、減項紅、合計加粗；欄多，用橫向捲動而不是縮字。 */
+.sal-mx-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:2px 0 4px;}
+.sal-mx{border-collapse:collapse;font-size:12px;min-width:900px;width:100%;}
+.sal-mx th,.sal-mx td{padding:6px 8px;border-bottom:1px solid var(--bd);text-align:right;white-space:nowrap;}
+.sal-mx th{font-size:11px;color:var(--t2);font-weight:700;background:var(--card2);
+  position:sticky;top:0;border-bottom:1.5px solid var(--bd);}
+.sal-mx th small{display:block;font-weight:400;color:var(--t3);font-size:10px;margin-top:1px;}
+.sal-mx th:first-child,.sal-mx td:first-child{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;}
+.sal-mx th:first-child{background:var(--card2);z-index:2;}
+.sal-mx td{font-family:var(--num),inherit;}
+.sal-mx td:first-child{font-family:inherit;font-weight:700;}
+.sal-mx .sx-add{color:var(--green);}
+.sal-mx .sx-cut{color:var(--danger,#b5372e);}
+.sal-mx .sx-sum{font-weight:800;color:var(--text);background:rgba(180,138,86,.06);}
+.sal-mx .sx-zero{color:var(--t3);font-weight:400;}
+.sal-mx tr.sx-total td{border-top:2px solid var(--text);border-bottom:none;font-weight:800;padding-top:9px;}
+.sal-mx-note{font-size:11px;color:var(--t3);line-height:1.8;margin-top:6px;}
 .pnl-note{font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:10px;}
 /* 本月損益條（2026-08-05 整合經營報表）：四個大數字一列，手機兩欄 */
 .fin-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
@@ -7702,8 +7710,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.2153';
-const APP_VERSION_LABEL='v260808.2153';
+const APP_VERSION = '260808.2206';
+const APP_VERSION_LABEL='v260808.2206';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -41867,35 +41875,71 @@ async function monthSalesValue(ym, pre){
   return { salesValue:ptValue+grpValue, ptValue, ptCount:ptList.length,
            grpValue, grpCount:grpList.length, grpHeads, doneCount:done.length };
 }
-/* 一位員工這個月的薪資是怎麼組出來的（2026-08-08 使用者指示）——
-   與薪資單（openSalarySheet）同一組欄位，只是收成一個陣列讓損益表也能列。
-   sign：'add' 給出去的、'cut' 扣回來的 —— 畫面用綠／紅分。
-   ⚠ 只列「應發」這一段：員工自付的勞健保是從應發裡代扣的，
-     對公司來說錢一樣要付出去，列在這裡會讓人以為公司少付了。 */
-/* 展開／收合一位員工的薪資明細（2026-08-08）——
-   同一列再點一次收回去；不重繪整張表，免得剛看的地方跳掉。 */
-function pnlToggleEmp(tr, pid){
-  if(!tr) return;
-  const open=tr.classList.toggle('open');
-  const tb=tr.closest('table'); if(!tb) return;
-  tb.querySelectorAll(`tr.pnl-part[data-emp="${pid}"]`).forEach(x=>{ x.style.display=open?'':'none'; });
+/* 員工薪資明細表的欄位定義（2026-08-08 使用者指示二修：「直接列出來吧，在員工這邊
+   最上方新增一列標示每一個金額代表什麼」）——
+   欄名與薪資單（openSalarySheet）用同一組說法，兩邊對得起來。
+   kind：'add' 給出去的（綠）、'cut' 從薪水扣的（紅）、'sum' 合計（加粗）、'co' 公司額外負擔。
+   ⚠ 勞保／健保那兩欄是**員工自付**、從應發裡代扣的 —— 它們不是公司的額外成本；
+     公司的額外成本是最後一欄「公司負擔」。這件事寫在表下方的說明裡。 */
+const SAL_MX_COLS=[
+  {k:'pt',    t:'教練課',   s:'課費／保障底薪', kind:'add'},
+  {k:'group', t:'團體課',   s:'人次計費',       kind:'add'},
+  {k:'duty',  t:'值班',     s:'值班時數',       kind:'add'},
+  {k:'bonus', t:'達標獎金', s:'堂數達標',       kind:'add'},
+  {k:'renew', t:'續約獎金', s:'續約張數',       kind:'add'},
+  {k:'mgmt',  t:'管理職',   s:'店長／主管津貼', kind:'add'},
+  {k:'bday',  t:'生日禮金', s:'',               kind:'add'},
+  {k:'leave', t:'請假扣薪', s:'事假全扣・病假半薪', kind:'cut'},
+  {k:'gross', t:'應發合計', s:'公司要付的薪資', kind:'sum'},
+  {k:'labor', t:'勞保',     s:'員工自付',       kind:'cut'},
+  {k:'health',t:'健保',     s:'員工自付',       kind:'cut'},
+  {k:'net',   t:'實領',     s:'匯給員工的錢',   kind:'sum'},
+  {k:'co',    t:'公司負擔', s:'勞健保・勞退・職保', kind:'co'},
+];
+/* 一位員工這個月的每一格金額。與薪資單同一組欄位，只是攤平成一列。 */
+function salaryRow(sal){
+  if(!sal) return null;
+  return {
+    /* 月薪制取保障底薪時放底薪、取課費時放課費 —— 兩個都放會讓應發看起來對不上 */
+    pt:    Math.round(Number((sal.base>0&&sal.ptIsFloor)?sal.base:sal.ptPay)||0),
+    ptIsFloor: !!(sal.base>0&&sal.ptIsFloor),
+    group: Math.round(Number(sal.groupPay)||0),
+    duty:  Math.round(Number(sal.dutyPay)||0),
+    bonus: Math.round(Number(sal.bonus)||0),
+    renew: Math.round(Number(sal.renewPay)||0),
+    mgmt:  Math.round((Number(sal.leaderPay)||0)+(Number(sal.supPay)||0)),
+    bday:  Math.round(Number(sal.bdayPay)||0),
+    leave: Math.round(Number(sal.leaveDeduct)||0),
+    gross: Math.round(Number(sal.grossPay)||0),
+    labor: Math.round(Number(sal.insLaborEmp)||0),
+    health:Math.round(Number(sal.insHealthEmp)||0),
+    net:   Math.round(Number(sal.netPay)||0),
+    co:    Math.round(Number(sal.insCoCost)||0),
+  };
 }
-function salaryParts(sal, ctx){
-  if(!sal) return [];
-  const P=[]; const c=ctx||{};
-  const add=(k,v,d)=>{ if(Number(v)>0) P.push({k,v:Math.round(Number(v)),d:d||'',sign:'add'}); };
-  const cut=(k,v,d)=>{ if(Number(v)>0) P.push({k,v:Math.round(Number(v)),d:d||'',sign:'cut'}); };
-  if(sal.base>0 && sal.ptIsFloor) add('保障底薪', sal.base, sal.schedHours>0?`排班 ${sal.schedHours} 小時`:'月薪制');
-  else add('教練課費', sal.ptPay, sal.ptDetail||(c.ptDone!=null?`${c.ptDone} 堂`:''));
-  add('達標獎金',  sal.bonus,     sal.bonusDetail);
-  add('團體課費',  sal.groupPay,  sal.groupDetail||(c.groupHeads!=null?`${c.groupHeads} 人次`:''));
-  add('值班費',    sal.dutyPay,   sal.dutyDetail);
-  add('續約獎金',  sal.renewPay,  sal.renewDetail);
-  add('店長獎金',  sal.leaderPay, sal.leaderDetail);
-  add('主管津貼',  sal.supPay,    '固定津貼');
-  add('生日禮金',  sal.bdayPay,   sal.bdayDetail);
-  cut('請假扣薪',  sal.leaveDeduct, sal.leaveDeductDetail||'事假全扣・病假半薪');
-  return P;
+/* 攤平的薪資明細表：一位一列、一欄一個名目，最上面一列就是欄名。 */
+function salaryMatrixHTML(rows){
+  if(!rows || !rows.length) return '';
+  const m=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+  const tot={}; SAL_MX_COLS.forEach(c=>{ tot[c.k]=rows.reduce((s,r)=>s+(Number(r.v[c.k])||0),0); });
+  const cell=(c,v)=>{
+    if(!v) return '<td class="sx-zero">—</td>';
+    const cls=(c.kind==='sum')?'sx-sum':((c.kind==='cut'||c.kind==='co')?'sx-cut':'sx-add');
+    return `<td class="${cls}">${c.kind==='cut'?'−':''}${m(v)}</td>`;
+  };
+  return `<div class="sal-mx-wrap"><table class="sal-mx">
+    <thead><tr><th>員工<small>${rows.length} 位</small></th>
+      ${SAL_MX_COLS.map(c=>`<th>${c.t}${c.s?`<small>${c.s}</small>`:''}</th>`).join('')}</tr></thead>
+    <tbody>
+      ${rows.map(r=>`<tr><td>${escH(r.name)}${r.v.ptIsFloor?'<small style="display:block;font-weight:400;color:var(--t3);font-size:10px;">月薪制</small>':''}</td>
+        ${SAL_MX_COLS.map(c=>cell(c,r.v[c.k])).join('')}</tr>`).join('')}
+      <tr class="sx-total"><td>合計</td>${SAL_MX_COLS.map(c=>cell(c,tot[c.k])).join('')}</tr>
+    </tbody></table></div>
+    <div class="sal-mx-note">
+      綠＝給出去的、紅＝扣的。<b>勞保／健保</b>是員工自付、從應發裡代扣，<b>不是</b>公司的額外成本；
+      公司的額外成本是最後一欄<b>公司負擔</b>（勞保雇主＋健保雇主＋勞退＋職災）。<br>
+      公司這個月實際的人事支出＝應發合計 ${m(tot.gross)} ＋ 公司負擔 ${m(tot.co)} ＝ <b>${m(tot.gross+tot.co)}</b>。
+    </div>`;
 }
 async function finPnl(){
   const box=document.getElementById('fin-pnl'); if(!box) return;
@@ -41918,11 +41962,11 @@ async function finPnl(){
     const taxBase=Math.round(cash/1.05);
     const tax=cash-taxBase;
     let pr=null; try{ pr=await computeMonthlyPayroll(ym); }catch(_){}
-    /* 每位員工帶上薪資組成（2026-08-08 使用者指示：課堂／值班／達標…都要分別列出來） */
+    /* 每位員工攤平成一列（2026-08-08 使用者指示：直接列出來，最上面一列標示每一欄是什麼） */
     const payRows=((pr&&pr.rows)||[]).filter(r=>r.countSalary&&Number(r.sal&&r.sal.grossPay)>0)
       .map(r=>({name:(r.emp&&(r.emp.name||r.emp.name_en))||'—',
                 amt:Math.round(Number(r.sal.grossPay)||0),
-                parts:salaryParts(r.sal,{ptDone:r.ptDone,groupHeads:r.groupHeads})}))
+                v:salaryRow(r.sal)}))
       .sort((a,b)=>b.amt-a.amt);
     const salary=payRows.reduce((s,r)=>s+r.amt,0);
     const coIns=Math.round(Number(pr&&pr.grandCoCost)||0);
@@ -41976,15 +42020,8 @@ async function finPnl(){
         ${sub('教練課',-Math.round(SV.ptValue),`${SV.ptCount} 堂`).replace('−$','$')}
         ${sub('團體課',-Math.round(SV.grpValue),`${SV.grpCount} 堂 ${SV.grpHeads} 人次`).replace('−$','$')}
         <tr class="pnl-out"><td>營業稅 5%<span style="color:var(--t3);font-weight:400;"> 　依<b>收款</b> ${m(cash)} 內含計：÷ 1.05 × 5%</span></td><td>${neg(tax)}</td></tr>
-        <tr class="pnl-h pnl-out pnl-hr"><td>員工薪資（應發）<span style="color:var(--t3);font-weight:400;"> 　${payRows.length} 位・點姓名看明細</span></td><td>${neg(salary)}</td></tr>
-        ${payRows.map((r,i)=>{
-          const pid='pnlp-'+i;
-          return `<tr class="pnl-sub pnl-emp" onclick="pnlToggleEmp(this,'${pid}')"><td>${escH(r.name)}</td><td>${neg(r.amt)}</td></tr>`
-            + r.parts.map(pt=>`<tr class="pnl-part ${pt.sign}" data-emp="${pid}" style="display:none;">
-                <td>${pt.sign==='add'?'＋':'−'} ${escH(pt.k)}${pt.d?`<span class="pnl-part-d"> 　${escH(pt.d)}</span>`:''}</td>
-                <td>${pt.sign==='add'?'':'−'}${m(pt.v)}</td></tr>`).join('');
-        }).join('')}
-        <tr class="pnl-h pnl-out"><td>公司負擔勞健保<span style="color:var(--t3);font-weight:400;"> 　勞保雇主＋健保雇主＋勞退</span></td><td>${neg(coIns)}</td></tr>
+        <tr class="pnl-h pnl-out pnl-hr"><td>員工薪資（應發）<span style="color:var(--t3);font-weight:400;"> 　${payRows.length} 位・明細見下方</span></td><td>${neg(salary)}</td></tr>
+        <tr class="pnl-h pnl-out"><td>公司負擔勞健保<span style="color:var(--t3);font-weight:400;"> 　勞保雇主＋健保雇主＋勞退＋職災</span></td><td>${neg(coIns)}</td></tr>
         <tr class="pnl-h pnl-out"><td>固定支出</td><td>${neg(fixedTotal)}</td></tr>
         ${fixedRows.length?fixedRows.map(r=>sub(r.name,r.amt,r.n>1?`×${r.n}`:'')).join('')
           :'<tr class="pnl-sub"><td>（本月沒有固定支出）</td><td>—</td></tr>'}
@@ -41993,12 +42030,15 @@ async function finPnl(){
           :'<tr class="pnl-sub"><td>（本月沒有其他支出）</td><td>—</td></tr>'}
         <tr class="pnl-net ${net>=0?'ok':'bad'}"><td>當月淨利</td><td>${net>=0?m(net):neg(net)}</td></tr>
       </table>
+      ${/* 員工薪資明細（2026-08-08 使用者指示二修）：一位一列、一欄一個名目，
+           最上面一列就是欄名 —— 不用點也不用展開。 */''}
+      ${payRows.length?`<div class="card-title" style="margin:16px 0 6px;">員工薪資明細</div>${salaryMatrixHTML(payRows)}`:''}
       <div class="pnl-note">
         ・<b>銷課金額</b>＝這個月已簽到／已完成的課 × 那堂用的票的單價（自主訓練贈點與體驗課不計）。
           客人一次買、分好幾個月上，用「上掉多少」看經營才準；賣票那個月的收款是另一回事。<br>
         ・本月實際<b>收款</b> ${m(cash)}（${pur.length} 筆）—— 與銷課是兩件事，只用來算營業稅。<br>
         ・營業稅按<b>內含</b>計：銷售額＝收款 ÷ 1.05，稅額＝銷售額 × 5%。若貴店報價是稅外加，跟我說改成收款 × 5%。<br>
-        ・<b>員工薪資</b>＝各員工當月應發（與薪資頁同一支計算）；點姓名可以展開，看課堂／值班／達標等等各是多少，加項綠、減項紅。<br>
+        ・<b>員工薪資</b>＝各員工當月應發（與薪資頁同一支計算）；下方「員工薪資明細」把課堂／團體課／值班／達標／續約等等逐欄列出來。<br>
         ・<b>公司負擔勞健保</b> ${m(coIns)} 獨立列一項（勞保雇主＋健保雇主＋勞退）。
           員工自付的那一份不必另外扣 —— 那是從應發裡代扣的，已經含在應發裡。
           公司實際人事總支出＝${m(salary)} ＋ ${m(coIns)} ＝ <b>${m(staffCost)}</b>。<br>
