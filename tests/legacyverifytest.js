@@ -43,9 +43,10 @@ console.log('① 只有主顧客那一列出現按鈕');
 console.log('\n①-2 會員資料視窗的右上角也有同一顆');
 /* 2026-08-02 使用者指示：「完成連動的按鈕也放在會員資料的視窗上，個人資料的右上」
    —— 核對票券的時候本來就開著這位會員的資料在對，跑回列表按那一格很繞。 */
+/* 2026-08-08：管理員多了一顆「刪除會員」，並排在同一列（見 delmembertest.js） */
 ok('★ 表頭右上放的是同一顆（共用 legacyVerifyCell，狀態與權限只有一份）',
    /const lvBtn = isM \? legacyVerifyCell\(r\) : '';/.test(src)
-   && /: \(isM \? lvBtn : pwBtn\+`<button class="btn btn-ghost btn-sm" onclick="ppEdit\(\)">編輯<\/button>`\);/.test(src));
+   && /: \(isM \? lvBtn\+delBtn : pwBtn\+`<button class="btn btn-ghost btn-sm" onclick="ppEdit\(\)">編輯<\/button>`\);/.test(src));
 ok('　　員工的表頭不受影響（重設密碼與編輯照舊）',
    /const pwBtn = \(!isM && r\.phone && SESSION && SESSION\.role==='admin'\)/.test(src));
 ok('　　編輯模式時讓位給取消／儲存（不會三顆擠在一起）',

@@ -195,7 +195,7 @@ console.log('\n員工重設密碼');
      /\? `<button class="btn btn-ghost btn-sm" onclick="openResetStaffPw\('\$\{r\.id\}'\)">重設密碼<\/button>` : ''/.test(src));
   ok2('   會員的明細不會出現這顆鈕', /\(!isM && r\.phone &&/.test(src));
   /* 2026-08-02：會員那一側改成放「完成連動」（原本是空字串），員工這一側不變 */
-  ok2('   編輯模式下讓位給取消／儲存', /PP\.editing[\s\S]{0,200}: \(isM \? lvBtn : pwBtn\+/.test(src));
+  ok2('   編輯模式下讓位給取消／儲存', /PP\.editing[\s\S]{0,200}: \(isM \? lvBtn\+delBtn : pwBtn\+/.test(src));
   ok2('   沒有手機帳號的員工擋掉', /if\(!c\.phone\)\{showToast\('此員工沒有手機帳號，無法重設'\);return;\}/.test(src));
 }
 
