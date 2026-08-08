@@ -7580,8 +7580,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.1247';
-const APP_VERSION_LABEL='v260808.1247';
+const APP_VERSION = '260808.1256';
+const APP_VERSION_LABEL='v260808.1256';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9601,10 +9601,11 @@ const ADMIN_NAV2=[
     {grp:'人事', label:'特休',     page:'staff', tab:'leave'},
     {grp:'人事', label:'權限設定', page:'settings_staff'},
     {grp:'財務', label:'經營報表', page:'finance'},   // 2026-08-05：財務總覽＋營運分析整合
-    /* 2026-08-06 使用者問「票券管理在哪？」——這一頁（方案設定／購買申請／會員票券，
-       以及對帳巡檢、固化推算歸屬兩個維護工具）自 2026-07-25 起就沒有導覽入口，
-       只能從賣票流程間接到達。補回一個入口。 */
-    {grp:'財務', label:'票券管理', page:'ticketing'},
+    /* 2026-08-06 補回「票券管理」入口；2026-08-08 使用者定案再移除 ——
+       那一頁剩下的東西都搬進經營報表了（會員票券＝「票券」分頁、對帳巡檢＝待處理那一排），
+       固化推算／關推算前比對兩個一次性工具任務已結束（8/06 跑完 532 筆、8/07 推算關閉）。
+       ⚠ PAGES.ticketing 與路由保留：櫃檯在中間尺寸裝置仍走 NAV.front_desk 的那個入口，
+         賣票流程與舊的深連結也還會叫到它。 */
     /* 月報表（fin_matrix）2026-08-06 二修：從這裡再移到頂欄自己的群組（g_report），
        見下方 —— 使用者要把它放在「班表」左邊，之後開放給櫃檯看。 */
     {grp:'環境設定', label:'課程方案', page:'settings_ticket'},
@@ -9637,7 +9638,8 @@ const NAV={
     {key:'members',label:'會員管理'},
     {key:'staff',label:'員工管理'},
     {key:'attendance',label:'出勤管理'},
-    {key:'ticketing',label:'票券管理'},
+    /* 2026-08-08：票券管理併進經營報表 → 這裡改掛經營報表（原本這組沒有它） */
+    {key:'finance',label:'經營報表'},
     {key:'exercise_db',label:'動作資料庫'},
     {key:'settings',label:'系統設定'},
   ],
@@ -32178,8 +32180,10 @@ PAGES.ticketing=async function(){
      一鍵對帳：名額 vs 扣課 vs 票面餘額，對不上的列出來。 */
   C.innerHTML=head('TICKETS','票券管理','方案設定 · 購買申請 · 會員票券')
     +`<div style="margin:-8px 0 10px;text-align:right;display:flex;gap:8px;justify-content:flex-end;">`
-      +`${SESSION.role==='admin'?`<button class="btn btn-ghost btn-sm" onclick="freezeInferredLinks()" title="把先進先出推算出來的票券歸屬寫成事實，之後不再每次重算">📌 固化推算歸屬</button>`:''}`
-      +`${SESSION.role==='admin'?`<button class="btn btn-ghost btn-sm" onclick="compareInferOff()" title="關掉推算之前先比對：每一堂課蓋在哪張票上會不會改變">⚖️ 關推算前比對</button>`:''}`
+      /* 2026-08-08：「固化推算歸屬」「關推算前比對」兩顆按鈕收起來 ——
+         8/06 已固化 532 筆、8/07 先進先出推算正式關閉（INFER_OFF），任務結束；
+         留著只會被誤按。函式本身保留（freezeInferredLinks／compareInferOff），
+         哪天要重跑從主控台叫得到。 */
       +`<button class="btn btn-ghost btn-sm" onclick="openGrpAudit()">🔍 票券對帳巡檢</button></div>`
     +tabBar+`<div id="tk-body"></div>`;
   // 呼叫對應子頁渲染（子頁已改為寫入 #tk-body）
@@ -39961,6 +39965,10 @@ const APP_INVOICE_LABEL={none:'免發票',cloud:'雲端發票',paper:'紙本發�
 const FIN_TABS=[
   {key:'month',      label:'本月'},
   {key:'today',      label:'今天'},
+  /* 2026-08-08 使用者定案：票券管理那一頁的導覽入口移除，內容併進來 ——
+     「會員票券」全店列表變成這裡的一個分頁，「票券對帳巡檢」放到下方待處理那一排。
+     （購買審核本來就有入口；方案設定 2026-07-25 起就在系統設定頁。） */
+  {key:'tickets',    label:'票券'},
   /* 月報表（matrix）2026-08-06 起改掛導覽列「管理員 → 財務 → 月報表」（PAGES.fin_matrix），
      不再佔一個分頁；下方的路由分支保留，舊的 _finTab='matrix' 呼叫仍走得通。 */
   {key:'people',     label:'人員'},
@@ -40361,6 +40369,13 @@ PAGES.finance=async function(){
     finQuickLinks();                 // 待處理事項的入口
   }
   else if(_finTab==='today'){ await finToday(); await anaToday(); }
+  else if(_finTab==='tickets'){
+    /* 全店票券列表（原票券管理 → 會員票券）。子頁寫進 #tk-body，這裡先備好容器，
+       並把巡檢按鈕放在列表上方，維護入口跟著資料走。 */
+    document.getElementById('fin-body').innerHTML=
+      `<div style="margin:-4px 0 10px;text-align:right;"><button class="btn btn-ghost btn-sm" onclick="openGrpAudit()">🔍 票券對帳巡檢</button></div><div id="tk-body"></div>`;
+    await PAGES.tickets();
+  }
   else if(_finTab==='matrix'){ await finMatrix(); }
   else if(_finTab==='people'){ await anaCoach(); }
   else if(_finTab==='receivable') await finReceivable();
@@ -40607,6 +40622,7 @@ function finQuickLinks(){
       <button class="btn btn-ghost btn-sm" onclick="setFinTab('expenses')">支出明細</button>
       <button class="btn btn-ghost btn-sm" onclick="setFinTab('review')">購買審核</button>
       <button class="btn btn-ghost btn-sm" onclick="setFinTab('refunds')">課程修改紀錄</button>
+      <button class="btn btn-ghost btn-sm" onclick="openGrpAudit()">🔍 票券對帳巡檢</button>
     </div>
     <div style="font-size:11.5px;color:var(--t3);margin-top:8px;line-height:1.7;">這幾項是「要處理的事」，處理完就會從清單消失；報表數字不受影響。</div>
   </div>`);

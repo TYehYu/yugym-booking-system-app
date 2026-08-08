@@ -99,8 +99,11 @@ ok('★ 逐位會員算票券夾時用預約索引（不要每個人都掃全表
    /buildWallet\(m\.id, Object\.assign\(\{\}, ctx, \{bookingsOf:mid=>idx\[mid\]\|\|\[\]\}\)\)/.test(src));
 ok('★ 沒有要固化的就明講',
    /✓ 沒有需要固化的推算歸屬（全部都已經有帳可查）。/.test(src));
-ok('★ 入口在票券管理頁、只給管理員看',
-   /SESSION\.role==='admin'\?`<button class="btn btn-ghost btn-sm" onclick="freezeInferredLinks\(\)"/.test(src));
+/* 2026-08-08：固化已完成（8/06 跑完 532 筆）、推算 8/07 關閉 → 畫面上的按鈕收起來，
+   函式保留給日後真的要重跑時從主控台叫。 */
+ok('★ 畫面上的按鈕已收起（避免誤按），函式保留',
+   !/onclick="freezeInferredLinks\(\)"/.test(src)
+   && /async function freezeInferredLinks\(\)/.test(src));
 ok('　　寫完清掉帳本快取（畫面立刻讀得到新連結）', /dbCacheClear\(\['ticket_logs'\]\);/.test(src));
 
 console.log('\n③ 關掉推算前的比對（使用者指示：「先跑比對再關」）');
@@ -120,8 +123,8 @@ ok('★ 完全一致才敢關（畫面不會有任何一顆圓點改變）',
 ok('★ 有差異就逐筆列出來（會變成需補票的特別標紅）',
    /⚠ 有 \$\{diffs\.length\} 筆會變（比對 \$\{checked\} 位會員）—— 先處理完再關。/.test(src)
    && /會變成「需補票」（原本靠推算掛在/.test(src));
-ok('　　入口在票券管理頁、只給管理員',
-   /onclick="compareInferOff\(\)" title="關掉推算之前先比對/.test(src));
+ok('　　比對工具同樣收起按鈕、保留函式',
+   !/onclick="compareInferOff\(\)"/.test(src) && /async function compareInferOff\(\)/.test(src));
 ok('★ 非團課的帳本歸屬有讀（①b）',
    /const tid=ks\.find\(x=>m\[x\]\.net>0\) \|\| ks\.find\(x=>m\[x\]\.link && m\[x\]\.net>=0\);/.test(src)
    && /if\(byBooking\[b\.id\] \|\| bkIsGroup\(b\)\) return;      \/\/ 團課逐名額，走 ②/.test(src));
