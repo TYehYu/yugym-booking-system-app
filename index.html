@@ -1594,6 +1594,24 @@ body.mc-mode .layout{padding-top:8px;}
 .fm-tb tbody tr.fm-sum:hover td,.fm-tb tbody tr.fm-sum:hover .fm-d{background:#f7f3ea;}
 .fm-tb .fm-today .fm-d{color:var(--green);}
 .fm-tb .fm-today td{background:#f2f7f4;}
+/* 當月損益表（2026-08-08 使用者指示：「經營報表幫我列出當月淨利，包含每個教練的薪資、
+   固定支出、其他支出、營業額、營業稅 5% 等等，用列表顯示」）——
+   四個大數字回答「賺不賺錢」，這張表回答「錢從哪來、花到哪去」。
+   一列一項、金額右對齊等寬數字；小項（逐位教練、逐筆支出）縮排並用小字。 */
+.pnl{width:100%;border-collapse:collapse;font-size:13px;}
+.pnl td{padding:7px 2px;border-bottom:1px solid var(--bd);vertical-align:baseline;}
+.pnl td:last-child{text-align:right;font-family:var(--num);white-space:nowrap;font-weight:700;}
+.pnl .pnl-sub td{border-bottom:1px dashed var(--bd);color:var(--t2);font-size:12px;padding:5px 2px;}
+.pnl .pnl-sub td:first-child{padding-left:18px;font-weight:400;}
+.pnl .pnl-sub td:last-child{font-weight:400;}
+.pnl .pnl-in td:last-child{color:var(--green);}
+.pnl .pnl-out td:last-child{color:var(--danger,#b5372e);}
+.pnl .pnl-net td{border-top:2px solid var(--text);border-bottom:none;padding-top:11px;font-size:15px;font-weight:800;}
+.pnl .pnl-net td:last-child{font-size:19px;}
+.pnl .pnl-net.ok td:last-child{color:var(--green);}
+.pnl .pnl-net.bad td:last-child{color:var(--danger,#b5372e);}
+.pnl .pnl-h td{font-weight:800;}
+.pnl-note{font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:10px;}
 /* 本月損益條（2026-08-05 整合經營報表）：四個大數字一列，手機兩欄 */
 .fin-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
 .fin-sum .fin-sum-l{font-size:11.5px;color:var(--t3);margin-bottom:4px;}
@@ -7562,8 +7580,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.1232';
-const APP_VERSION_LABEL='v260808.1232';
+const APP_VERSION = '260808.1247';
+const APP_VERSION_LABEL='v260808.1247';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40334,9 +40352,10 @@ PAGES.finance=async function(){
     `<button class="seg-btn ${_finTab===t.key?'active':''}" onclick="setFinTab('${t.key}')" style="flex-shrink:0;">${t.label}</button>`).join('')}</div>`;
   /* 兩個容器都放好：財務側寫 #fin-body、營運側寫 #ana-body（既有子頁不必改寫） */
   C.innerHTML=head('FINANCE','經營報表','這個月賺不賺錢 · 今天有沒有收對錢')+tabBar
-    +`<div id="fin-sum"></div><div id="fin-body"></div><div id="ana-body"></div>`;
+    +`<div id="fin-sum"></div><div id="fin-pnl"></div><div id="fin-body"></div><div id="ana-body"></div>`;
   if(_finTab==='month'){
     await finProfitStrip();          // 營收／支出／毛利／淨利 四個大數字
+    await finPnl();                  // 當月損益表（2026-08-08：逐項列出，含營業稅與各教練薪資）
     await finMonth();                // 收入結構（既有）
     await anaMonth();                // 營運指標（既有）
     finQuickLinks();                 // 待處理事項的入口
@@ -40634,6 +40653,67 @@ async function finToday(){
 }
 
 // ── ② 本月營收：營收 / 退款 / 待收款 / 實收 / 付款方式比例 ──
+/* 當月損益表（2026-08-08 使用者指示：「經營報表幫我列出當月淨利，包含每個教練的薪資、
+   固定支出、其他支出、營業額、營業稅 5% 等等，用列表顯示」）——
+   口徑與上方四個大數字（finProfitStrip）同源：營業額看 purchases.created_at、
+   薪資走 computeMonthlyPayroll（與薪資頁同一支）、支出看 expenses.ym。
+   差別只有營業稅：四格沒扣稅，這張表有（下方註明，免得兩個淨利對不起來時以為算錯）。 */
+async function finPnl(){
+  const box=document.getElementById('fin-pnl'); if(!box) return;
+  const ym=(window._finMonth||ymd(TODAY).slice(0,7));
+  box.innerHTML='<div class="card" style="padding:14px 16px;margin-bottom:14px;color:var(--t3);font-size:12.5px;">損益表計算中…</div>';
+  try{
+    const [purAll,expAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('expenses').catch(()=>[])]);
+    const pur=(purAll||[]).filter(p=>String(p.created_at||'').slice(0,7)===ym);
+    const revenue=pur.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
+    /* 營業稅（台灣統一發票為**內含**）：銷售額＝營業額 ÷ 1.05，應納稅額＝銷售額 × 5%。
+       若貴店的報價是稅外加，這裡要改成 revenue*0.05 —— 算式直接寫在畫面上，看得到才好改。 */
+    const taxBase=Math.round(revenue/1.05);
+    const tax=revenue-taxBase;
+    let pr=null; try{ pr=await computeMonthlyPayroll(ym); }catch(_){}
+    const payRows=((pr&&pr.rows)||[]).filter(r=>r.countSalary&&Number(r.sal&&r.sal.grossPay)>0)
+      .map(r=>({name:(r.emp&&(r.emp.name||r.emp.name_en))||'—', amt:Math.round(Number(r.sal.grossPay)||0)}))
+      .sort((a,b)=>b.amt-a.amt);
+    const salary=payRows.reduce((s,r)=>s+r.amt,0);
+    const coIns=Math.round(Number(pr&&pr.grandCoCost)||0);
+    const exp=(expAll||[]).filter(e=>e.ym===ym);
+    const fixed=exp.filter(e=>e.is_fixed===true);
+    const other=exp.filter(e=>e.is_fixed!==true);
+    const sumOf=a=>a.reduce((s,e)=>s+(Number(e.amount)||0),0);
+    /* 同名目合併（房租、水電…逐筆列會很長）；同一類多筆時標筆數 */
+    const groupBy=a=>{ const g={}; a.forEach(e=>{ const k=e.category||'其他'; (g[k]=g[k]||{amt:0,n:0}); g[k].amt+=Number(e.amount)||0; g[k].n++; });
+      return Object.entries(g).map(([k,v])=>({name:k,amt:Math.round(v.amt),n:v.n})).sort((x,y)=>y.amt-x.amt); };
+    const fixedRows=groupBy(fixed), otherRows=groupBy(other);
+    const fixedTotal=Math.round(sumOf(fixed)), otherTotal=Math.round(sumOf(other));
+    const net=revenue-tax-salary-fixedTotal-otherTotal;
+    const m=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+    const neg=n=>'−$'+Math.round(Math.abs(Number(n)||0)).toLocaleString();
+    const sub=(nm,v,extra)=>`<tr class="pnl-sub"><td>${nm}${extra?`<span style="color:var(--t3);"> ${extra}</span>`:''}</td><td>${neg(v)}</td></tr>`;
+    const [Y,M]=ym.split('-');
+    box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;">
+      <div class="card-title" style="margin-bottom:8px;">${Y} 年 ${M} 月　損益表</div>
+      <table class="pnl">
+        <tr class="pnl-h pnl-in"><td>營業額<span style="color:var(--t3);font-weight:400;"> 　收款 ${pur.length} 筆</span></td><td>${m(revenue)}</td></tr>
+        <tr class="pnl-out"><td>營業稅 5%<span style="color:var(--t3);font-weight:400;"> 　內含：${m(revenue)} ÷ 1.05 × 5%</span></td><td>${neg(tax)}</td></tr>
+        <tr class="pnl-h pnl-out"><td>人事成本<span style="color:var(--t3);font-weight:400;"> 　${payRows.length} 位</span></td><td>${neg(salary)}</td></tr>
+        ${payRows.map(r=>sub(r.name,r.amt)).join('')}
+        <tr class="pnl-h pnl-out"><td>固定支出</td><td>${neg(fixedTotal)}</td></tr>
+        ${fixedRows.length?fixedRows.map(r=>sub(r.name,r.amt,r.n>1?`×${r.n}`:'')).join('')
+          :'<tr class="pnl-sub"><td>（本月沒有固定支出）</td><td>—</td></tr>'}
+        <tr class="pnl-h pnl-out"><td>其他支出</td><td>${neg(otherTotal)}</td></tr>
+        ${otherRows.length?otherRows.map(r=>sub(r.name,r.amt,r.n>1?`×${r.n}`:'')).join('')
+          :'<tr class="pnl-sub"><td>（本月沒有其他支出）</td><td>—</td></tr>'}
+        <tr class="pnl-net ${net>=0?'ok':'bad'}"><td>當月淨利</td><td>${net>=0?m(net):neg(net)}</td></tr>
+      </table>
+      <div class="pnl-note">
+        ・營業額＝本月收款紀錄的實收金額（與上方「本月營收」同源）。<br>
+        ・營業稅按<b>內含</b>計：銷售額＝營業額 ÷ 1.05，稅額＝銷售額 × 5%。若貴店報價是稅外加，跟我說改成營業額 × 5%。<br>
+        ・人事成本＝各員工當月<b>應發</b>薪資（與薪資頁同一支計算）；${coIns>0?`另有公司負擔勞健保 <b>${m(coIns)}</b>，<b>未</b>計入淨利。`:'公司負擔勞健保為 0。'}<br>
+        ・上方四個大數字的「淨利」<b>沒有扣營業稅</b>，所以會比這裡多 ${m(tax)}。
+      </div>
+    </div>`;
+  }catch(e){ box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;color:var(--t3);font-size:12.5px;">損益表暫時算不出來（${(e&&e.message)||e}）</div>`; }
+}
 async function finMonth(){
   const body=document.getElementById('fin-body'); if(!body) return;
   const month=(window._finMonth||ymd(TODAY).slice(0,7));
