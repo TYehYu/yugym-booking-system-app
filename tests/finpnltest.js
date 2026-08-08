@@ -15,8 +15,10 @@ const F=grabFn('finPnl');
 
 console.log('① 掛在「本月」分頁、四個大數字下面');
 ok('★ 有自己的容器', /<div id="fin-sum"><\/div><div id="fin-pnl"><\/div><div id="fin-body">/.test(src));
-ok('★ 順序：四個大數字 → 損益表 → 收入結構',
-   /await finProfitStrip\(\);[\s\S]{0,80}await finPnl\(\);[\s\S]{0,60}await finMonth\(\);/.test(src));
+/* 2026-08-08 使用者回報「經營報表資料好亂、好多重複」→ 四個大數字（finProfitStrip）退場，
+   摘要改做在損益表頂端；#fin-sum 改放唯一的月份切換器。見 fintidytest.js */
+ok('★ 順序：月份切換器 → 損益表 → 收款方式 → 營運',
+   /finMonthBar\(\);[\s\S]{0,200}await finPnl\(\);[\s\S]{0,120}await finMonth\(\);[\s\S]{0,120}await anaMonth\(\);/.test(src));
 
 console.log('\n② 口徑與既有數字同源');
 ok('★ 營業額看 purchases.created_at 的實收金額（與 finProfitStrip 一致）',
@@ -53,8 +55,9 @@ ok('★ 淨利＝營業額 − 稅 − 薪資 − 固定 − 其他',
 ok('　　淨利正負用綠／紅', /class="pnl-net \$\{net>=0\?'ok':'bad'\}"/.test(F));
 
 console.log('\n⑤ 兩處淨利不一致要先講');
-ok('★★ 明講四個大數字沒扣營業稅、差額多少',
-   /上方四個大數字的「淨利」<b>沒有扣營業稅<\/b>，所以會比這裡多 \$\{m\(tax\)\}/.test(F));
+/* 2026-08-08：四個大數字已退場，不再有兩個對不起來的淨利 → 改成明說「這是唯一的淨利」 */
+ok('★★ 明講這是這一頁唯一的淨利，並點出「銷課」是另一件事',
+   /這是這一頁<b>唯一<\/b>的淨利數字；下面的「銷課」講的是另一件事（課上掉多少錢），不是收現。/.test(F));
 ok('★ 公司負擔勞健保有揭露、且明說未計入',
    /另有公司負擔勞健保 <b>\$\{m\(coIns\)\}<\/b>，<b>未<\/b>計入淨利/.test(F));
 ok('　　人事成本標明是「應發」', /人事成本＝各員工當月<b>應發<\/b>薪資/.test(F));
