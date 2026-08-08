@@ -7689,8 +7689,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.2108';
-const APP_VERSION_LABEL='v260808.2108';
+const APP_VERSION = '260808.2124';
+const APP_VERSION_LABEL='v260808.2124';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -41178,33 +41178,13 @@ async function anaMonth(){
     .reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
   const revenue=tkRev+purRev;
   const newMembers=members.filter(m=>String(m.created_at||'').slice(0,7)===month).length;
-  /* ── 銷課金額：已上課堂 × 該堂使用票券的單價 ──
-     單價取得順序：綁定票券 unit_price → 票券 總額/總堂 → 該會員同類票平均 → 全店同類平均。
-     自主訓練點數（$0 贈點）與體驗課不列入銷課。 */
-  const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
-  const tkById=Object.fromEntries((mtks||[]).map(t=>[t.id,t]));
-  const tkClass=t=>{ const tt=typeMap[t.ticket_type_id]||{}; const c=tt.category||'';
-    if(c==='自主訓練') return 'self'; if(c==='團體課'||(t.plan_name||'').includes('團')) return 'grp'; return 'pt'; };
-  const unitOf=t=>{ if(!t) return 0; const u=Number(t.unit_price)||0; if(u>0) return u;
-    const a=Number(t.amount_paid)||0, n=Number(t.sessions_total)||0; return (a>0&&n>0)?a/n:0; };
-  const bucket={pt:{a:0,n:0},grp:{a:0,n:0}}; const memUnit={};
-  (mtks||[]).forEach(t=>{ const cl=tkClass(t); if(cl==='self') return;
-    const a=Number(t.amount_paid)||0, n=Number(t.sessions_total)||0;
-    if(a>0&&n>0){ bucket[cl].a+=a; bucket[cl].n+=n;
-      const k=t.member_id+'|'+cl; (memUnit[k]=memUnit[k]||{a:0,n:0}); memUnit[k].a+=a; memUnit[k].n+=n; } });
-  const avgUnit=cl=>bucket[cl].n>0?bucket[cl].a/bucket[cl].n:0;
-  const memAvg=(mid,cl)=>{ const k=memUnit[mid+'|'+cl]; return (k&&k.n>0)?k.a/k.n:avgUnit(cl); };
-  const ptDoneList=done.filter(b=>b.category==='私人教練');
-  const ptValue=ptDoneList.reduce((s,b)=>{ const u=unitOf(tkById[b.ticket_id]); return s+(u>0?u:memAvg(b.member_id,'pt')); },0);
-  const grpDoneList=done.filter(b=>bkIsGroup(b));
-  let grpHeads=0;
-  const grpValue=grpDoneList.reduce((s,b)=>{
-    const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
-    /* 人次不含請假（2026-08-06 使用者定案），但銷課金額含 —— 請假是本堂照扣不退，
-       票用掉了、錢就實現了，只是人沒來、不算教練成績。 */
-    grpHeads+=grpHeadsNoLeave(b);
-    return s+ids.reduce((a,mid)=>a+memAvg(mid,'grp'),0); },0);
-  const salesValue=ptValue+grpValue;
+  /* 銷課金額改吃共用的 monthSalesValue（2026-08-08）——
+     它現在是損益表的營收基礎（使用者定案：淨利＝銷課−所有支出），
+     兩邊各算一遍就會又出現對不起來的數字。 */
+  const SV=await monthSalesValue(month,[bookings,mtks,types]);
+  const salesValue=SV.salesValue, ptValue=SV.ptValue, grpValue=SV.grpValue;
+  const ptDoneList={length:SV.ptCount}, grpDoneList={length:SV.grpCount};
+  const grpHeads=SV.grpHeads;
   /* ── 教練總薪資：與薪資頁同一套 calcSalary（課時費＋團課費＋值班費＋續約/店長/主管獎金）── */
   const renewMap=renewMapOf(month, mtks, purchases, bookings, types);   // 2026-07-29：統一計數（只算教練課類）
   let totalSalary=0;
@@ -41239,20 +41219,22 @@ async function anaMonth(){
     {label:'銷課總金額', value:anaMoney(Math.round(salesValue)), unit:''},
   ]);
   const rowStyle='display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--bd);';
-  const breakdown=`<div class="card" style="padding:14px 16px;${_one?'margin-top:14px;':''}">
-    <div style="font-size:13px;font-weight:700;margin-bottom:6px;">本月銷課${_one?`<span style="font-weight:400;color:var(--t3);font-size:11.5px;"> 　這是「課上掉多少錢」，不是收現 —— 與上方的營業額／淨利是兩件事</span>`:'與人事'}</div>
+  /* 整合頁：銷課與薪資已經在上方損益表逐項拆開了，這裡不再重複一次（2026-08-08）——
+     只留損益表沒有的營運面：這個月上了幾堂、來了幾位新會員。 */
+  const breakdown=(_one?'':`<div class="card" style="padding:14px 16px;">
+    <div style="font-size:13px;font-weight:700;margin-bottom:6px;">本月銷課與人事</div>
     <div style="${rowStyle}"><span>教練課（已上）</span><span><b style="font-family:var(--font-en);">${ptDoneList.length}</b> 堂 ／ <b style="font-family:var(--font-en);">${anaMoney(Math.round(ptValue))}</b></span></div>
     <div style="${rowStyle}"><span>團體課（已上）</span><span><b style="font-family:var(--font-en);">${grpDoneList.length}</b> 堂 ${grpHeads}人次 ／ <b style="font-family:var(--font-en);">${anaMoney(Math.round(grpValue))}</b></span></div>
     <div style="${rowStyle}border-bottom:none;"><span>教練總薪資（估）</span><span><b style="font-family:var(--font-en);color:#b5372e;">−${anaMoney(Math.round(totalSalary))}</b></span></div>
-  </div>
-  <div class="card" style="padding:12px 16px;margin-top:10px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;">
+  </div>`)
+  +`<div class="card" style="padding:12px 16px;margin-top:${_one?'14px':'10px'};display:flex;gap:20px;flex-wrap:wrap;font-size:13px;">
     <span>本月課程（已上） <b style="font-family:var(--font-en);">${done.length}</b> 堂</span>
     <span>新會員 <b style="font-family:var(--font-en);">${newMembers}</b> 位</span>
-  </div>
-  <div style="font-size:11.5px;color:var(--t3);margin-top:8px;padding:0 4px;line-height:1.7;">
+  </div>`
+  +(_one?'':`<div style="font-size:11.5px;color:var(--t3);margin-top:8px;padding:0 4px;line-height:1.7;">
     銷課金額＝已上課堂 × 該會員票券單價（未綁票券的舊資料以同類平均單價估算）；自主訓練贈點與體驗課不計。
     教練總薪資與薪資頁同一套算法（課時＋團課＋值班＋獎金，含當月即時累計），不含櫃台人事與其他營運成本。
-  </div>`;
+  </div>`);
   body.innerHTML = dateBar + stats + breakdown;
 }
 function anaMonthMove(delta){
@@ -41821,6 +41803,52 @@ async function finToday(){
    口徑與上方四個大數字（finProfitStrip）同源：營業額看 purchases.created_at、
    薪資走 computeMonthlyPayroll（與薪資頁同一支）、支出看 expenses.ym。
    差別只有營業稅：四格沒扣稅，這張表有（下方註明，免得兩個淨利對不起來時以為算錯）。 */
+/* ══ 銷課金額（2026-08-08 使用者定案）═══════════════════════════════════════
+   「我們的淨利應該是教練們的銷課金額扣掉所有支出」
+
+   銷課＝這個月「上掉了多少錢的課」：已簽到／已完成的課 × 那一堂用的票的單價。
+   為什麼不是收款：客人一次買 20 堂、錢在一月收，課上到六月 ——
+   用收款當營收，賣票的那個月暴賺、之後每個月都在虧，看不出真實經營狀況。
+   （7 月就是這樣：舊系統轉入的票沒有收款紀錄，營業額只認得到三分之一，
+     但薪資與房租是整月的，於是算出來是負的。）
+
+   單價順序：綁定票券的 unit_price → 票券 總額÷總堂 → 該會員同類票平均 → 全店同類平均。
+   自主訓練贈點（$0）與體驗課不算 —— 那不是賣出去的課。
+
+   ⚠ 這是損益表與下方營運卡共用的**唯一一份**計算。兩邊各算一次，
+     就會又長出兩個對不起來的數字（這一頁剛清掉的毛病）。 */
+async function monthSalesValue(ym, pre){
+  const [bookings,mtks,types] = pre || await Promise.all([
+    dbGetAll('bookings').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[]),
+    dbGetAll('ticket_types').catch(()=>[])]);
+  const monthBk=(bookings||[]).filter(b=>(b.date||'').slice(0,7)===ym && bkCounts(b));   // 全員請假不成課
+  const done=monthBk.filter(b=>b.status==='completed'||b.status==='checked_in');
+  const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
+  const tkById=Object.fromEntries((mtks||[]).map(t=>[t.id,t]));
+  const tkClass=t=>{ const tt=typeMap[t.ticket_type_id]||{}; const c=tt.category||'';
+    if(c==='自主訓練') return 'self'; if(c==='團體課'||(t.plan_name||'').includes('團')) return 'grp'; return 'pt'; };
+  const unitOf=t=>{ if(!t) return 0; const u=Number(t.unit_price)||0; if(u>0) return u;
+    const a=Number(t.amount_paid)||0, n=Number(t.sessions_total)||0; return (a>0&&n>0)?a/n:0; };
+  const bucket={pt:{a:0,n:0},grp:{a:0,n:0}}; const memUnit={};
+  (mtks||[]).forEach(t=>{ const cl=tkClass(t); if(cl==='self') return;
+    const a=Number(t.amount_paid)||0, n=Number(t.sessions_total)||0;
+    if(a>0&&n>0){ bucket[cl].a+=a; bucket[cl].n+=n;
+      const k=t.member_id+'|'+cl; (memUnit[k]=memUnit[k]||{a:0,n:0}); memUnit[k].a+=a; memUnit[k].n+=n; } });
+  const avgUnit=cl=>bucket[cl].n>0?bucket[cl].a/bucket[cl].n:0;
+  const memAvg=(mid,cl)=>{ const k=memUnit[mid+'|'+cl]; return (k&&k.n>0)?k.a/k.n:avgUnit(cl); };
+  const ptList=done.filter(b=>b.category==='私人教練');
+  const ptValue=ptList.reduce((s,b)=>{ const u=unitOf(tkById[b.ticket_id]); return s+(u>0?u:memAvg(b.member_id,'pt')); },0);
+  const grpList=done.filter(b=>bkIsGroup(b));
+  let grpHeads=0;
+  const grpValue=grpList.reduce((s,b)=>{
+    const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
+    /* 人次不含請假（2026-08-06 使用者定案），但銷課金額含 —— 請假是本堂照扣不退，
+       票用掉了、錢就實現了，只是人沒來、不算教練成績。 */
+    grpHeads+=grpHeadsNoLeave(b);
+    return s+ids.reduce((a,mid)=>a+memAvg(mid,'grp'),0); },0);
+  return { salesValue:ptValue+grpValue, ptValue, ptCount:ptList.length,
+           grpValue, grpCount:grpList.length, grpHeads, doneCount:done.length };
+}
 async function finPnl(){
   const box=document.getElementById('fin-pnl'); if(!box) return;
   const ym=(window._finMonth||ymd(TODAY).slice(0,7));
@@ -41828,11 +41856,19 @@ async function finPnl(){
   try{
     const [purAll,expAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('expenses').catch(()=>[])]);
     const pur=(purAll||[]).filter(p=>String(p.created_at||'').slice(0,7)===ym);
-    const revenue=pur.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
-    /* 營業稅（台灣統一發票為**內含**）：銷售額＝營業額 ÷ 1.05，應納稅額＝銷售額 × 5%。
-       若貴店的報價是稅外加，這裡要改成 revenue*0.05 —— 算式直接寫在畫面上，看得到才好改。 */
-    const taxBase=Math.round(revenue/1.05);
-    const tax=revenue-taxBase;
+    const cash=pur.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);   // 這個月實際收到的錢
+    /* 2026-08-08 使用者定案：「我們的淨利應該是教練們的銷課金額扣掉所有支出」——
+       營收改認**銷課**（這個月上掉了多少錢的課），不是收款。
+       客人一次買 20 堂、錢在一月收、課上到六月 —— 用收款當營收，
+       賣票那個月暴賺、之後每個月都在虧，看不出真實經營狀況。 */
+    const SV=await monthSalesValue(ym);
+    const revenue=Math.round(SV.salesValue);
+    /* 營業稅（台灣統一發票為**內含**）：稅是對「實際開出去的銷售額」課的，
+       所以基礎仍是**收款**，不是銷課 —— 兩者混用會算出一個不存在的稅額。
+       銷售額＝收款 ÷ 1.05，應納稅額＝銷售額 × 5%。
+       若貴店的報價是稅外加，這裡要改成 cash*0.05 —— 算式直接寫在畫面上，看得到才好改。 */
+    const taxBase=Math.round(cash/1.05);
+    const tax=cash-taxBase;
     let pr=null; try{ pr=await computeMonthlyPayroll(ym); }catch(_){}
     const payRows=((pr&&pr.rows)||[]).filter(r=>r.countSalary&&Number(r.sal&&r.sal.grossPay)>0)
       .map(r=>({name:(r.emp&&(r.emp.name||r.emp.name_en))||'—', amt:Math.round(Number(r.sal.grossPay)||0)}))
@@ -41865,20 +41901,22 @@ async function finPnl(){
         <div class="pnl-hero-net ${net>=0?'':'bad'}">
           <span class="pnl-hero-k">${_isNow?'本月到目前為止':'當月'}${net>=0?'賺':'虧'}</span>
           <span class="pnl-hero-v">${net>=0?m(net):neg(net)}</span>
-          <span class="pnl-hero-say">營業額 ${m(revenue)} − 支出 ${m(spend)}${_isNow?'　·　這個月還沒過完，數字會繼續變':''}</span>
+          <span class="pnl-hero-say">銷課 ${m(revenue)} − 支出 ${m(spend)}${_isNow?'　·　這個月還沒過完，數字會繼續變':''}</span>
         </div>
         <div class="pnl-hero-side">
-          <div class="pnl-top-i"><span class="pnl-top-l">營業額</span>
+          <div class="pnl-top-i"><span class="pnl-top-l">銷課金額</span>
             <span class="pnl-top-v">${m(revenue)}</span>
-            <span class="pnl-top-s">收款 ${pur.length} 筆</span></div>
+            <span class="pnl-top-s">教練課 ${SV.ptCount} 堂・團課 ${SV.grpCount} 堂 ${SV.grpHeads} 人次</span></div>
           <div class="pnl-top-i"><span class="pnl-top-l">支出合計</span>
             <span class="pnl-top-v bad">${m(spend)}</span>
             <span class="pnl-top-s">薪資 ${m(salary)}・稅 ${m(tax)}・固定 ${m(fixedTotal)}・其他 ${m(otherTotal)}</span></div>
         </div>
       </div>
       <table class="pnl">
-        <tr class="pnl-h pnl-in"><td>營業額<span style="color:var(--t3);font-weight:400;"> 　收款 ${pur.length} 筆</span></td><td>${m(revenue)}</td></tr>
-        <tr class="pnl-out"><td>營業稅 5%<span style="color:var(--t3);font-weight:400;"> 　內含：${m(revenue)} ÷ 1.05 × 5%</span></td><td>${neg(tax)}</td></tr>
+        <tr class="pnl-h pnl-in"><td>銷課金額<span style="color:var(--t3);font-weight:400;"> 　教練上掉的課</span></td><td>${m(revenue)}</td></tr>
+        ${sub('教練課',-Math.round(SV.ptValue),`${SV.ptCount} 堂`).replace('−$','$')}
+        ${sub('團體課',-Math.round(SV.grpValue),`${SV.grpCount} 堂 ${SV.grpHeads} 人次`).replace('−$','$')}
+        <tr class="pnl-out"><td>營業稅 5%<span style="color:var(--t3);font-weight:400;"> 　依<b>收款</b> ${m(cash)} 內含計：÷ 1.05 × 5%</span></td><td>${neg(tax)}</td></tr>
         <tr class="pnl-h pnl-out pnl-hr"><td>人事成本（各員工薪資）<span style="color:var(--t3);font-weight:400;"> 　${payRows.length} 位</span></td><td>${neg(salary)}</td></tr>
         ${payRows.map(r=>sub(r.name,r.amt)).join('')}
         <tr class="pnl-h pnl-out"><td>固定支出</td><td>${neg(fixedTotal)}</td></tr>
@@ -41890,10 +41928,12 @@ async function finPnl(){
         <tr class="pnl-net ${net>=0?'ok':'bad'}"><td>當月淨利</td><td>${net>=0?m(net):neg(net)}</td></tr>
       </table>
       <div class="pnl-note">
-        ・營業額＝本月收款紀錄的實收金額（與上方「本月營收」同源）。<br>
-        ・營業稅按<b>內含</b>計：銷售額＝營業額 ÷ 1.05，稅額＝銷售額 × 5%。若貴店報價是稅外加，跟我說改成營業額 × 5%。<br>
+        ・<b>銷課金額</b>＝這個月已簽到／已完成的課 × 那堂用的票的單價（自主訓練贈點與體驗課不計）。
+          客人一次買、分好幾個月上，用「上掉多少」看經營才準；賣票那個月的收款是另一回事。<br>
+        ・本月實際<b>收款</b> ${m(cash)}（${pur.length} 筆）—— 與銷課是兩件事，只用來算營業稅。<br>
+        ・營業稅按<b>內含</b>計：銷售額＝收款 ÷ 1.05，稅額＝銷售額 × 5%。若貴店報價是稅外加，跟我說改成收款 × 5%。<br>
         ・人事成本＝各員工當月<b>應發</b>薪資（與薪資頁同一支計算）；${coIns>0?`另有公司負擔勞健保 <b>${m(coIns)}</b>，<b>未</b>計入淨利。`:'公司負擔勞健保為 0。'}<br>
-        ・這是這一頁<b>唯一</b>的淨利數字；下面的「銷課」講的是另一件事（課上掉多少錢），不是收現。
+        ・這是這一頁<b>唯一</b>的淨利數字，下方營運卡的銷課與這裡同一份計算。
       </div>
     </div>`;
   }catch(e){ box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;color:var(--t3);font-size:12.5px;">損益表暫時算不出來（${(e&&e.message)||e}）</div>`; }

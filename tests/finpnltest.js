@@ -21,9 +21,13 @@ ok('★ 順序：月份切換器 → 損益表 → 收款方式 → 營運',
    /finMonthBar\(\);[\s\S]{0,200}await finPnl\(\);[\s\S]{0,120}await finMonth\(\);[\s\S]{0,120}await anaMonth\(\);/.test(src));
 
 console.log('\n② 口徑與既有數字同源');
-ok('★ 營業額看 purchases.created_at 的實收金額（與 finProfitStrip 一致）',
-   /const pur=\(purAll\|\|\[\]\)\.filter\(p=>String\(p\.created_at\|\|''\)\.slice\(0,7\)===ym\);/.test(F)
-   && /const revenue=pur\.reduce\(\(s,p\)=>s\+\(Number\(p\.deal_amount\)\|\|0\),0\);/.test(F));
+/* 2026-08-08 使用者定案：「我們的淨利應該是教練們的銷課金額扣掉所有支出」——
+   營收改認銷課（這個月上掉多少錢的課），收款只留著算營業稅。見 salesbasetest.js */
+ok('★★ 營收改認銷課金額（不是收款）',
+   /const SV=await monthSalesValue\(ym\);/.test(F)
+   && /const revenue=Math\.round\(SV\.salesValue\);/.test(F));
+ok('★ 收款仍算出來（營業稅的基礎、且要讓老闆看得到）',
+   /const cash=pur\.reduce\(\(s,p\)=>s\+\(Number\(p\.deal_amount\)\|\|0\),0\);   \/\/ 這個月實際收到的錢/.test(F));
 ok('★ 薪資走 computeMonthlyPayroll（與薪資頁同一支，不另算一套）',
    /pr=await computeMonthlyPayroll\(ym\)/.test(F));
 ok('★ 支出看 expenses.ym，用 is_fixed 分固定／其他',
@@ -32,13 +36,14 @@ ok('★ 支出看 expenses.ym，用 is_fixed 分固定／其他',
 
 console.log('\n③ 營業稅：內含，算式寫在畫面上');
 {
-  const box=new Function('revenue','return (function(){'+
-    /const taxBase=[\s\S]*?const tax=revenue-taxBase;/.exec(F)[0]+' return {taxBase,tax}; })();');
-  eq('★★ 105,000 → 銷售額 100,000、稅額 5,000', box(105000), {taxBase:100000, tax:5000});
+  const box=new Function('cash','return (function(){'+
+    /const taxBase=[\s\S]*?const tax=cash-taxBase;/.exec(F)[0]+' return {taxBase,tax}; })();');
+  eq('★★ 收款 105,000 → 銷售額 100,000、稅額 5,000', box(105000), {taxBase:100000, tax:5000});
   eq('　　0 元不會爆', box(0), {taxBase:0, tax:0});
-  ok('★ 畫面上寫出算式（要改成外加才看得出差在哪）',
-     /內含：\$\{m\(revenue\)\} ÷ 1\.05 × 5%/.test(F));
-  ok('★ 註明可改成外加', /若貴店報價是稅外加，跟我說改成營業額 × 5%/.test(F));
+  ok('★★ 稅的基礎是收款不是銷課（混用會算出不存在的稅額）',
+     /依<b>收款<\/b> \$\{m\(cash\)\} 內含計：÷ 1\.05 × 5%/.test(F)
+     && /稅是對「實際開出去的銷售額」課的，\s*\n\s*所以基礎仍是\*\*收款\*\*，不是銷課/.test(F));
+  ok('★ 註明可改成外加', /若貴店報價是稅外加，跟我說改成收款 × 5%/.test(F));
 }
 
 console.log('\n④ 逐項列出');
@@ -55,9 +60,10 @@ ok('★ 淨利＝營業額 − 稅 − 薪資 − 固定 − 其他',
 ok('　　淨利正負用綠／紅', /class="pnl-net \$\{net>=0\?'ok':'bad'\}"/.test(F));
 
 console.log('\n⑤ 兩處淨利不一致要先講');
-/* 2026-08-08：四個大數字已退場，不再有兩個對不起來的淨利 → 改成明說「這是唯一的淨利」 */
-ok('★★ 明講這是這一頁唯一的淨利，並點出「銷課」是另一件事',
-   /這是這一頁<b>唯一<\/b>的淨利數字；下面的「銷課」講的是另一件事（課上掉多少錢），不是收現。/.test(F));
+/* 2026-08-08：四個大數字已退場，不再有兩個對不起來的淨利 → 改成明說「這是唯一的淨利」；
+   同日再定案「淨利＝銷課−所有支出」後，下方營運卡的銷課與這裡改成同一份計算。 */
+ok('★★ 明講這是這一頁唯一的淨利，且下方營運卡同源',
+   /這是這一頁<b>唯一<\/b>的淨利數字，下方營運卡的銷課與這裡同一份計算。/.test(F));
 ok('★ 公司負擔勞健保有揭露、且明說未計入',
    /另有公司負擔勞健保 <b>\$\{m\(coIns\)\}<\/b>，<b>未<\/b>計入淨利/.test(F));
 ok('　　人事成本標明是「應發」', /人事成本＝各員工當月<b>應發<\/b>薪資/.test(F));
