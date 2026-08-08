@@ -71,8 +71,17 @@ ok('　　三顆鈕改成直式卡片（加寬加高、圖示放大），寬度�
    && /\.mc-kpistrip \.mc-quick3 \.mc-q3 svg\{width:26px;height:26px;\}/.test(src));
 /* 2026-08-01 使用者回報：「我用 mac 上方會被切成兩列 用一般桌機就沒有」——
    筆電螢幕窄，固定 52px 間距＋三顆 96px 卡片擠不下，flex-wrap 一換行就變兩列。 */
+/* 2026-08-08 使用者再回報（附截圖）：Mac 上 KPI 被壓成「18／堂／教練課」三行、
+   「團體課」還斷成兩行 → 最小間距再收到 12px，並且數字與標籤一律不換行。 */
 ok('★ 不換行，空間不夠時先縮間距（clamp）而不是折行',
-   /\.mc-kpistrip\{display:flex;align-items:center;justify-content:flex-end;\s*\n\s*gap:clamp\(16px,2\.4vw,52px\);min-width:0;padding-right:14px;flex-wrap:nowrap;\}/.test(src));
+   /\.mc-kpistrip\{display:flex;align-items:center;justify-content:flex-end;\s*\n\s*gap:clamp\(12px,2\.4vw,52px\);min-width:0;padding-right:14px;flex-wrap:nowrap;\}/.test(src));
+ok('★★ 數字與標籤一律不換行（該縮的是字級，不是折行）',
+   /\.kpi-n\{font-size:clamp\(30px,3\.4vw,44px\);[\s\S]{0,120}white-space:nowrap;\}/.test(src)
+   && /\.kpi-l\{display:inline-flex;[\s\S]{0,120}white-space:nowrap;\}/.test(src));
+ok('★★ 寬螢幕（≥1294px）字級維持原本的 44px，只有更窄才縮',
+   /1294px 以上維持原本的 44px（寬螢幕完全沒變），/.test(src));
+ok('★ 很窄時先讓副標與圖示讓位，數字本身不動',
+   /@media\(max-width:1150px\)\{\n\s*\.mc-kpistrip \.kpi-sub\{display:none;\}\n\s*\.mc-kpistrip \.kpi-l svg\{display:none;\}/.test(src));
 ok('　　數字群可壓縮（flex 預設 min-width:auto 會寧可溢出也不縮）',
    /\.mc-kpistrip \.kpi-it\{min-width:0;\}/.test(src));
 ok('　　發票拆分那行過長時截斷，不把整條撐開',
