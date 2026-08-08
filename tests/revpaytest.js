@@ -34,8 +34,9 @@ console.log('\n② 標籤（實跑 revPayChip）');
 console.log('\n③ 發票標籤移除＋修正流程');
 ok('★ 兩個畫面都不再出現發票標籤（列上）', !/mc-rev-inv">發票/.test(src));
 ok('★ 兩個畫面共用 revPayChip', (src.match(/\$\{revPayChip\(r\)\}/g)||[]).length===2);
+/* 2026-08-08：同一格前面多了「30 分鐘退回」鈕（revUndoChip），順序是 退回 → 付款方式 → 金額 */
 ok('★ 付款方式疊在金額上方（2026-08-03 使用者指示：並排會把品項擠掉）',
-   (src.match(/<span class="mc-rev-r">\$\{revPayChip\(r\)\}<span class="mc-rev-amt">/g)||[]).length===2
+   (src.match(/<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}<span class="mc-rev-amt">/g)||[]).length===2
    && /\.mc-rev-r\{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;\}/.test(src));
 /* 2026-08-03 使用者指示：「不要列出刷卡，我們沒提供刷卡功能」——修正視窗二選一 */
 ok('★ 修正視窗：現金／匯款二選一（不列刷卡）、講清楚影響財務報表',

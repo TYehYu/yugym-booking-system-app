@@ -129,7 +129,9 @@ Deno.serve(async (req) => {
         if (isInst && unlocked < total && seq[unlocked - 1]) info.instLastId = seq[unlocked - 1].id
         // 續約：整張票已經排光（分期票要等開通到最後一段才算續約情境）
         if (isInst && unlocked < total) continue
-        if (tk.status && tk.status !== 'usable') continue
+        /* 2026-08-08：used_up 不能擋掉 —— 「票已經用完」正是最後一堂的定義本身
+           （與前端 computeLastBkMarks 同一個修正）。只有已退費的不用提醒。 */
+        if (tk.status === 'refunded') continue
         const done = seq.filter((x: any) => x.status === 'checked_in' || x.status === 'completed').length
         const ahead = seq.length - done
         const byLink = total - done - ahead
