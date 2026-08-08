@@ -3406,7 +3406,7 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 2026-07-20 使用者回報「今天欄底色沒有整天」：flex stretch 把欄高鎖在可視高度（~18:00），
    格子內容其實更長 → 欄背景/直向框線在中途被截斷。改 flex-start 讓欄高跟隨內容。 */
 .cal-body>.cal-timecol,.cal-body>.cal-daycol{flex-shrink:0;}
-/* 友善教練課可預約時段（平日 18:00 前開始、不設下限）：友善課色極淡底提示（今天欄疊在米白上） */
+/* 友善教練課可預約時段（平日、18:00 前上完；不設下限）：友善課色極淡底提示（今天欄疊在米白上） */
 .cal-half.fw-win{background:rgba(35,80,138,.05);}
 .cal-half.fw-win:hover{background:rgba(31,111,84,0.09);}
 /* 營業前新增入口（每日 09:00 上方）：平常淡，Hover 顯現 */
@@ -7589,8 +7589,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.1720';
-const APP_VERSION_LABEL='v260808.1720';
+const APP_VERSION = '260808.1739';
+const APP_VERSION_LABEL='v260808.1739';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10873,7 +10873,7 @@ const TK_POCKETS={
     coachLeave:false, memberLeave:false, grantsOnCheckin:null,
     expiryDays:7,
     multiPerBooking:true,     // 120 分鐘＝扣 2 點（圓形卡畫 2 顆同日期）
-    timeRestricted:true,      // 友善點限平日 18:00 前（tkTimeOk）
+    timeRestricted:true,      // 友善點限平日、18:00 前上完（tkTimeOk）
     businessHoursOnly:true,   // 會員自助預約限營業時間內
   },
   massage:{ key:'massage', label:'運動按摩', unit:'堂', isCourse:true,
@@ -11720,16 +11720,19 @@ function tkUnlockedLeft(t){
 }
 function tkIsInstall(t){ return !!(t && t.installment && typeof t.installment==='object'); }
 /* 該票券在「這個日期＋時段」是否可用（2026-07-30）：
-   票種設 time_restricted（友善自主訓練、友善教練課）＝僅限平日 18:00 前。
-   沒帶時間就只檢查星期，時段留給 validateBooking 最後把關。 */
-function tkTimeOk(t,bookDate,bookTime){
+   票種設 time_restricted（友善自主訓練、友善教練課）＝僅限平日、且要在 18:00 前上完。
+   沒帶時間就只檢查星期，時段留給 validateBooking 最後把關。
+   2026-08-08：改看下課時間（見 validateBooking 的 0b 段）。這裡多半拿不到真正的時長，
+   用 60 分鐘當預設 —— 真正的時長由 validateBooking 帶進去把關，這裡只是先濾掉明顯不行的。 */
+const TK_TIME_END_MIN=1080;   // 18:00
+function tkTimeOk(t,bookDate,bookTime,dur){
   const tt=(window._ttCache||[]).find(x=>x.id===t.ticket_type_id);
   if(!tt || !tt.time_restricted) return true;
   if(!bookDate) return true;
   const d=parseYmd(bookDate); if(!d) return true;
   const dow=d.getDay();
   if(dow===0||dow===6) return false;                 // 週末不可用
-  if(bookTime && timeToMin(bookTime)>=1080) return false;  // 18:00 之後不可用
+  if(bookTime && timeToMin(bookTime)+(Number(dur)||60) > TK_TIME_END_MIN) return false;  // 18:00 之後才下課 → 不可用
   return true;
 }
 /* 「這張票能不能用在這筆預約」的唯一判定（2026-07-30）——
@@ -16085,12 +16088,15 @@ async function renderCalendar(opts){
     const ds=ymd(d), isToday=ds===ymd(TODAY), isPast=ds<ymd(TODAY);
     // 半小時格(可點擊新增)
     let halves='';
-    const _fwDay=d.getDay()>=1&&d.getDay()<=5;   // 友善課時段提示：平日 18:00 前開始（不設下限——有客人 8:00 上課；2026-07-20 使用者更正）
+    /* 友善課時段提示：平日、且 60 分鐘的課要在 18:00 前上完 → 最晚 17:00 那一格
+       （2026-08-08 使用者更正：17:30 開始會上到 18:30，不算 18:00 前的時段）。
+       下限不設 —— 有客人 8:00 上課（2026-07-20 使用者更正）。 */
+    const _fwDay=d.getDay()>=1&&d.getDay()<=5;
     for(let s=0;s<totalSlots;s++){
       const min=_startMin+s*SLOT_MIN;
       const t=minToTime(min);
       const hourline=((min+SLOT_MIN)%60===0)?'hourline':'';
-      const fw=(_fwDay&&min<1080)?' fw-win':'';
+      const fw=(_fwDay&&(min+60)<=1080)?' fw-win':'';
       // 只有今天(含)以後、且有 onSlot 才可點；日期時間為字面值寫進 onclick → 無全域競態
       const _canAdd=opts.onSlot && ds>=ymd(TODAY);
       const click=_canAdd?`onclick="${opts.onSlot}('${ds}','${t}')"`:'';
@@ -17457,15 +17463,23 @@ async function validateBooking(bk,date,time,duration){
   //     今天即使某時段已過仍可操作（教練忙碌時常來不及即時更新今天的課）
   if(date < ymd(TODAY)) return '不可預約已過去的日期';
 
-  // 0b) 限時段檢查：該票券種類 time_restricted=true → 僅平日 18:00 前
+  /* 0b) 限時段檢查：該票券種類 time_restricted=true → 僅平日，且課要在 18:00 前「上完」
+     2026-08-08 使用者更正：「平日 17:30 也是不能預約友善教練課的時間」——
+     原本比的是「開始時間 < 18:00」，於是 17:30 開始的 60 分鐘課排得進去，實際上到 18:30。
+     規則本來就是「18:00 之前的時段」，看的應該是下課時間。
+     ⚠ 改這一條之前查過正式庫：既有的友善課最晚就是 17:00 開始（18:00 下課，98 筆），
+       沒有任何一筆 17:30，所以這個改動不會讓既有預約變成違規。
+     下限一樣不設（有客人 8:00 上課，2026-07-20 使用者更正）。 */
   if(bk.ticket_type_id){
     /* dbGet 無快取，會員端掃 24 個時段會打 24 次網路 → 改走表級快取（20s TTL） */
     const tt=(((await dbGetAll('ticket_types').catch(()=>[]))||[]).find(x=>x.id===bk.ticket_type_id));
     if(tt && tt.time_restricted){
       const dow=parseYmd(date).getDay(); // 0=日,6=六
       const isWeekday = dow>=1 && dow<=5;
-      const before18 = ns < 1080; // 開始時間早於 18:00（不限下限，不受場館營業時間影響）
-      if(!isWeekday || !before18) return '此票券僅限平日 18:00 前使用';
+      const endsBy18 = ne <= 1080;   // 下課時間不晚於 18:00（ne＝開始＋時長）
+      if(!isWeekday || !endsBy18) return isWeekday
+        ? `此票券僅限平日 18:00 前上完（${dur} 分鐘的課最晚 ${minToTime(1080-dur)} 開始）`
+        : '此票券僅限平日使用（假日不可預約）';
     }
   }
 
@@ -20225,7 +20239,7 @@ function openPendingHold(){
     ${/* 限時段票種（友善）先講在前面（2026-08-08 使用者回報「平日晚上跟假日都有出現」）——
          卡位當下擋得住，但櫃檯是在排連續預約，早點知道規則才不會整串被跳過。 */''}
     ${w.t.time_restricted?`<div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.8;margin-bottom:12px;">
-      ⚠ <b>${w.t.name||'此課程'}</b>僅限<b>平日 18:00 前</b>開始。假日或 18:00 之後的時段不會建立（連續預約會自動跳過並列出）。</div>`:''}
+      ⚠ <b>${w.t.name||'此課程'}</b>僅限<b>平日、且要在 18:00 前上完</b>（60 分鐘的課最晚 17:00 開始）。不符的時段不會建立（連續預約會自動跳過並列出）。</div>`:''}
     ${pre
       ?`<div class="form-row"><label>客戶</label>
           <div class="bk-mem-pick" style="cursor:default;"><span>${pre.name}（${fmtPhone(pre.phone)}）</span></div>
@@ -20444,8 +20458,8 @@ async function _doConvertPending(memberId, tkId, mode){
       const _tt=((await dbGetAll('ticket_types').catch(()=>[]))||[]).find(x=>x.id===b.ticket_type_id);
       if(_tt && _tt.time_restricted){
         const _dow=parseYmd(b.date).getDay();
-        const _bad=!(_dow>=1&&_dow<=5) || timeToMin(b.start_time)>=1080;
-        if(_bad) _why=`${_tt.name||'此票券'}僅限平日 18:00 前使用 —— 這堂是 ${b.date.slice(5).replace('-','/')} ${b.start_time}，請先改時段再轉正`;
+        const _bad=!(_dow>=1&&_dow<=5) || (timeToMin(b.start_time)+(Number(b.duration)||60))>1080;
+        if(_bad) _why=`${_tt.name||'此票券'}僅限平日、且要在 18:00 前上完 —— 這堂是 ${b.date.slice(5).replace('-','/')} ${b.start_time}，請先改時段再轉正`;
       }
     }catch(_){}
     _clr(); showToast(_why); return;
@@ -37253,7 +37267,7 @@ function renderSelfBookSheet(){
          <button class="qb-period ${s.type==='self_training'?'active':''}" onclick="sbSetType('self_training')">自主訓練（${s.selfSum}）</button>
          <button class="qb-period ${s.type==='self_friendly'?'active':''}" onclick="sbSetType('self_friendly')">友善（${s.friendlySum}）</button>
        </div>`
-    : `<div class="qb-f-static" style="margin:0 18px 6px;">${s.type==='self_friendly'?`友善自主訓練（剩 ${s.friendlySum} 點，限平日 18:00 前）`:`自主訓練（剩 ${s.selfSum} 點）`}</div>`;
+    : `<div class="qb-f-static" style="margin:0 18px 6px;">${s.type==='self_friendly'?`友善自主訓練（剩 ${s.friendlySum} 點，限平日 18:00 前上完）`:`自主訓練（剩 ${s.selfSum} 點）`}</div>`;
   // 未來 7 天
   const days=qbDays().map(d=>`<button class="qb-day ${s.date===d.ds?'active':''}" onclick="sbSetDate('${d.ds}')">
       <div class="qb-day-l">${d.label}</div><div class="qb-day-w">${d.wd}</div></button>`).join('');
@@ -37693,7 +37707,7 @@ function msbRenderSheet(){
   /* 友善點限平日 18:00 前（2026-07-30 使用者指示）：規則本來就有生效（週末不可選、
      18:00 後時段不出現），但畫面沒說原因，會員會以為系統壞了。這裡明講。 */
   const typeRow=`<div class="msb-types">${btns.join('')}</div>`
-    + (s.type==='friendly'?`<div class="msb-note">友善自主訓練點數僅限<b>平日 18:00 前</b>使用；假日或晚間時段請改用一般自主訓練點數。</div>`:'');
+    + (s.type==='friendly'?`<div class="msb-note">友善自主訓練點數僅限<b>平日、且要在 18:00 前上完</b>（60 分鐘的時段最晚 17:00 開始）；假日或晚間時段請改用一般自主訓練點數。</div>`:'');
   /* 可預約日期按鈕列（2026-07-26 使用者指示）：往後掃 14 天、效期內的日子做成按鈕，
      不用回月曆挑日（月曆此時已收合）。團體課模式改列「有開課的日子」。 */
   let _dateBtns='';
@@ -37996,7 +38010,7 @@ const SELF_BOOK_ERR={
   'POINT.EMPTY':'沒有可用的自主訓練點數','TICKET.WRONG_TYPE':'此票券不能預約自主訓練',
   'TICKET.INSTALLMENT_LOCKED':'分期尚未繳費的堂數不可預約，請洽櫃檯',
   'BOOKING.CLOSED_HOURS':'此時段非營業時間，請洽櫃檯協助安排',
-  'TICKET.TIME_RESTRICTED':'此票券僅限平日 18:00 前使用','BOOKING.DUP':'您於該時段已有預約',
+  'TICKET.TIME_RESTRICTED':'此票券僅限平日、且要在 18:00 前上完（60 分鐘的課最晚 17:00 開始）','BOOKING.DUP':'您於該時段已有預約',
   'BOOKING.RESOURCE_BUSY':'該場地剛被約走了，請重新選擇'};
 async function memberSelfBookRpc(tk,date,time,venueUnit,famUser,units){
   /* units＝跑步機要開幾台（2026-08-02 使用者指示：會影響別人訂場地的地方都要能選台數）。
@@ -39631,7 +39645,7 @@ function openSelfPtsModal(){
   const empty=`<div class="empty" style="padding:22px 8px;"><div class="em-t">目前沒有可用點數</div>
     <div style="font-size:11.5px;color:var(--t2);margin-top:6px;">完成教練課簽到後會獲得 2 點（效期 7 天）。</div></div>`;
   showModal(`<div class="modal-title">自主訓練點數</div>
-    <div style="font-size:11.5px;color:var(--t2);margin:-2px 0 6px;">教練課簽到後發放，每次 2 點、效期 7 天；可用來預約自主訓練時段（友善點數限平日 18:00 前）。</div>
+    <div style="font-size:11.5px;color:var(--t2);margin:-2px 0 6px;">教練課簽到後發放，每次 2 點、效期 7 天；可用來預約自主訓練時段（友善點數限平日、18:00 前上完）。</div>
     ${s.live.length?s.live.map(t=>row(t,false)).join(''):empty}
     ${s.dead.length?`<div class="spt-sec">已用完 / 已過期（${s.dead.length}）</div>${s.dead.slice(0,20).map(t=>row(t,true)).join('')}`:''}
     <div class="modal-foot">
