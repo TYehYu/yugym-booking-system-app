@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260809.0910';
-const APP_VERSION_LABEL='v260809.0910';
+const APP_VERSION = '260809.1004';
+const APP_VERSION_LABEL='v260809.1004';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24363,8 +24363,131 @@ function hoursUntilStart(b){
   try{ const dt=new Date(b.date+'T'+(b.start_time||'00:00')+':00'); return (dt.getTime()-Date.now())/3600000; }
   catch(_){ return 999; }
 }
+/* ══ 更換方案（不退費）2026-08-08 使用者定案 ══════════════════════════════
+   「發票開出去但課程選錯，這時候不退費、只更改課程票券 —— 會註銷整筆但是不退費，
+     所以發票還是存在，然後重新開一筆不開發票的正確票券給客人。
+     但如果是金額錯誤必須要整筆修正，就要作廢或開折讓。
+     所以差別在於註銷時金額是 0 還是有數字的。」
+
+   判別點是「這次註銷有沒有錢退回去」：
+     ・沒退錢（賣錯方案）→ 收款與發票原封不動，只把票券換成正確的 ← 就是這一支
+     ・有退錢（金額錯了）→ 走既有的「作廢」（收款金額歸零），接發票後還要作廢／折讓
+
+   ⚠ 錢要跟著新票走，不能留在作廢的舊票上 ——
+     今日營收的票券口徑會排除 status='refunded' 的票（見 _dayTk），
+     金額留在舊票上，當天營收就會平白少一筆。
+     所以：金額整筆搬到新票、舊票歸零，**收款紀錄（purchases）改指向新票但金額不動** ——
+     發票是掛在收款紀錄上的，這樣它完全不用動，帳也不會多一筆少一筆。 */
+async function openSwapTicket(id){
+  if(!isDeskLike()){ showToast('僅管理員／櫃台可更換方案'); return; }
+  const _busy=uiBusy('檢查中…');
+  let tk=null, blocked='', plans=[], amt=0;
+  try{
+    tk=await dbGet('member_tickets',id);
+    if(!tk){ blocked='找不到票券'; }
+    else if(tk.status!=='usable'){ blocked='這張票不是使用中的狀態，不能更換'; }
+    else if(tk.source!=='purchase'){ blocked='只有購買的票券可以更換方案（贈點、補課券請走原本的處理方式）'; }
+    else if(tk.installment && typeof tk.installment==='object'){
+      blocked='分期票券不適用更換方案 —— 分期的期數與已開通堂數會對不上，請走退費後重開'; }
+    else{
+      const used=(Number(tk.sessions_total)||0)-(Number(tk.sessions_remaining)||0);
+      const bks=(await dbGetAll('bookings').catch(()=>[])).filter(b=>b&&b.ticket_id===id&&b.status!=='cancelled');
+      if(used>0||bks.length){
+        blocked=`這張票已經在用了（扣 ${used} 堂、綁定預約 ${bks.length} 筆）—— 更換方案只適用「還沒開始用」的票，請先取消那些預約`;
+      }else{
+        const purs=(await dbGetAll('purchases').catch(()=>[])).filter(pc=>pc&&pc.ticket_id===id);
+        amt=purs.reduce((s2,pc)=>s2+(Number(pc.deal_amount)||0),0);
+        plans=((await dbGetAll('course_plans').catch(()=>[]))||[])
+          .filter(pl=>pl && pl.active!==false && !pl.archived && pl.id!==tk.source_plan_id)
+          .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+      }
+    }
+  }catch(e){ blocked='讀取失敗：'+((e&&e.message)||e); }
+  finally{ _busy(); }
+  if(blocked){
+    showModal(`<div class="modal-title">不能更換方案</div>
+      <div style="background:#f7efe0;border:1.5px solid #e8d9b8;color:#8a5e28;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.9;">${escH(blocked)}</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+    return;
+  }
+  window._swapTk={id, amt, name:tk.plan_name||'票券'};
+  showModal(`<div class="modal-title">更換方案（不退費）</div>
+    <div style="font-size:13px;color:var(--text);padding:2px 0 10px;">
+      目前：<b>${escH(tk.plan_name||'票券')}</b>　${Number(tk.sessions_total)||0} 堂${amt?`　·　已收 $${amt.toLocaleString()}`:''}</div>
+    <div style="background:#eef5f1;border:1.5px solid #cfe3d8;border-radius:12px;padding:12px 14px;font-size:13px;color:#1f6f54;line-height:1.9;">
+      這是給「<b>賣錯方案、但錢不退</b>」用的：${tkChip('none','不退錢')}<br>
+      ・已收的 ${amt?`<b>$${amt.toLocaleString()}</b>`:'款項'}原封不動，<b>發票不受影響</b><br>
+      ・舊票註銷、新票以正確方案建立，<b>不會再多一筆營收</b><br>
+      <span style="color:#8a5e28;">如果是<b>金額算錯</b>要退錢給客人，請改用「作廢」——那條路才會沖掉收款，接上發票後也才會走作廢／折讓。</span></div>
+    <div class="form-row" style="margin-top:12px;"><label>換成哪一個方案 *</label>
+      <select id="swap-plan">${plans.map(pl=>{
+        const tot=(Number(pl.sessions_base)||0)+(Number(pl.sessions_bonus)||0);
+        return `<option value="${pl.id}">${escH(pl.name||'')}（${tot} 堂・效期 ${pl.valid_days||365} 天）</option>`;
+      }).join('')}</select></div>
+    <div class="form-row"><label>原因（會記在兩張票的紀錄上）</label><input id="swap-why" placeholder="例：櫃檯選錯方案"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="doSwapTicket('${id}')">確認更換</button></div>`);
+}
+async function doSwapTicket(id){ return onceAct('swaptk:'+id, ()=>_doSwapTicket(id)); }
+async function _doSwapTicket(id){
+  const done=cxBusy('更換中…');
+  try{
+    const planId=((document.getElementById('swap-plan')||{}).value||'');
+    const why=((document.getElementById('swap-why')||{}).value||'').trim();
+    if(!planId){ done(); showToast('請選擇要換成哪一個方案'); return; }
+    const tk=await dbGet('member_tickets',id);
+    if(!tk||tk.status!=='usable'){ done(); showToast('這張票已經不是使用中的狀態'); return; }
+    const plan=await dbGet('course_plans',planId);
+    if(!plan){ done(); showToast('找不到方案'); return; }
+    const total=(Number(plan.sessions_base)||0)+(Number(plan.sessions_bonus)||0);
+    const oldAmt=Number(tk.amount_paid)||0;
+    const _note=`更換方案：${tk.plan_name||'原方案'} → ${plan.name||'新方案'}${why?`（${why}）`:''}`;
+    /* ① 新票：沿用這一筆交易的所有身分（購買日、業績歸屬、約別、金額）——
+       它就是同一筆買賣，只是方案挑錯了。購買日不能改成今天，不然營收會跳到今天。 */
+    const nt={id:uid('TK'), member_id:tk.member_id, ticket_type_id:plan.ticket_type_id,
+      source_plan_id:plan.id, plan_name:plan.name, format:plan.format||null, source:'purchase',
+      unit_price:Number(plan.unit_price)||0, amount_paid:oldAmt,
+      purchase_date:tk.purchase_date, start_date:null, expire_date:null,
+      valid_days:plan.valid_days||null,
+      sessions_total:total, sessions_remaining:total, unlocked_sessions:total, installment:null,
+      sale_kind:tk.sale_kind||null, sold_by:tk.sold_by||null,
+      shared_with:tk.shared_with||null, family_user:tk.family_user||null,
+      status:'usable', payment_status:tk.payment_status||'paid', invoice_status:'none',
+      note:_note, created_at:new Date().toISOString()};
+    await dbPut('member_tickets',nt);
+    await logTicket(nt.id,'grant',total,null,SESSION.id,_note+'（承接原票券的收款，未另行收費）');
+    /* ② 舊票：註銷並歸零 —— 金額必須搬走，不能留在 refunded 的票上（今日營收會漏算） */
+    tk.status='refunded'; tk.sessions_remaining=0; tk.amount_paid=0;
+    tk.note=String(tk.note||'').trim() ? String(tk.note).trim()+'\n'+_note : _note;
+    await dbPut('member_tickets',tk);
+    await logTicket(id,'adjust',-(Number(tk.sessions_total)||0),null,SESSION.id,_note+'（本票券註銷，不退費）');
+    /* ③ 收款紀錄：金額一毛不動，只改指向新票並註記 ——
+       發票是掛在收款紀錄上的，這樣它完全不用處理。 */
+    let moved=0;
+    try{
+      const purs=(await dbGetAll('purchases').catch(()=>[])).filter(pc=>pc&&pc.ticket_id===id);
+      for(const pc of purs){
+        pc.ticket_id=nt.id; pc.plan_id=plan.id; pc.plan_name=plan.name;
+        pc.note=((pc.note||'')+`【${_note}｜金額與發票不變】`).trim();
+        await dbPut('purchases',pc); moved++;
+      }
+    }catch(e){ console.error('收款紀錄改指向失敗',e); showToast('收款紀錄沒有跟著換，請手動確認'); }
+    /* ④ 合約若掛在舊票上，一併指向新票（會員票券卡的「合約」按鈕靠它） */
+    try{
+      const cs=(await dbGetAll('contracts').catch(()=>[])).filter(c=>c&&c.ticket_id===id);
+      for(const c of cs){ const full=await dbGet('contracts',c.id); if(full){ full.ticket_id=nt.id; await dbPut('contracts',full); } }
+    }catch(_){}
+    dbCacheClear(['member_tickets','ticket_logs','purchases','contracts']);
+    closeModal();
+    showToast(`已換成「${plan.name}」${moved?'，收款與發票不變':''}`);
+    try{ if(typeof PP!=='undefined'&&PP.id===tk.member_id){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }
+    catch(_){ navTo(CUR_PAGE); }
+  }catch(e){ done(); console.error('doSwapTicket',e); showToast('更換失敗：'+((e&&e.message)||e)); }
+}
 // refundMode：'auto'(依24h自動)、'force'(強制退)、'none'(強制不退)
 /* 票券作廢（2026-07-28 使用者指示：儲值錯誤要能取消）——
+   ⚠ 這一條是「有退錢」那一種：收款金額會歸零、營收跟著減少。
+     賣錯方案但**不退錢**的情況請走 openSwapTicket（更換方案），那條路收款與發票都不動。
    限「完全未使用」的票：已扣堂或已綁未取消預約 → 擋下並提示。
    作廢＝status refunded、剩餘歸零、寫 ticket_logs、購買紀錄金額歸零（營收同步修正）。 */
 async function voidTicketAsk(id){
@@ -31044,7 +31167,10 @@ function ppRecordHtml(){
                      整個票券分頁點不開） */''}
                 ${(isDeskLike()&&t.status==='usable'&&PP.rec&&Array.isArray(PP.rec.family_members)&&PP.rec.family_members.length)?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;${t.family_user?'color:var(--gold-d);border-color:var(--gold-d);':''}" onclick="ppTkFamUser('${t.id}')">👤 ${t.family_user?('使用人：'+t.family_user):'使用人'}</button>`:''}
                 ${(_canShare&&!_shN)?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="ppShareTk('${t.id}')">設為共享</button>`:''}
-                ${(isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger);" onclick="voidTicketAsk('${t.id}')">作廢</button>`:''}
+                ${/* 2026-08-08 使用者定案：賣錯方案但不退錢 → 更換方案（收款與發票不動）；
+                     金額算錯要退錢 → 作廢（收款歸零）。兩條路分開放，按鈕上就講清楚差別。 */''}
+                ${(isDeskLike()&&t.status==='usable'&&t.source==='purchase')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="賣錯方案但錢不退：換一張正確的票，收款與發票不動" onclick="openSwapTicket('${t.id}')">更換方案</button>`:''}
+                ${(isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger);" title="金額錯了要退錢：收款金額歸零，營收同步減少" onclick="voidTicketAsk('${t.id}')">作廢</button>`:''}
               </span>
             </div>
           </div>`; };
