@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260808.2258';
-const APP_VERSION_LABEL='v260808.2258';
+const APP_VERSION = '260809.0910';
+const APP_VERSION_LABEL='v260809.0910';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -7835,8 +7835,19 @@ const DB_CACHE_TTL_BY={ticket_types:300000,course_plans:300000,exercises:300000,
    ② 單筆讀取 dbGet 維持 select('*') —— 所有編輯流程都是從 dbGet 開始拿完整資料。
    ③ 寫入護欄（見 dbPut）：萬一有人拿「列表裡的物件」直接回寫，缺的欄位會先補回來，
       不可能把沒抓的欄位寫成 null。 */
+/* 精簡欄位（2026-08-04 讀取量優化）——
+   bookings 的九欄是「全程式碼都沒人用」，所以列表不搬它們。
+
+   2026-08-09 追加 contracts：這一組的理由不一樣，要分清楚 ——
+   body_snapshot（合約全文）、fill_snapshot（購買內容表）、signature（簽名圖，base64）
+   **是有人用的**，但只在「打開某一份合約」時用，而那條路徑走的是 dbGet 單筆（全欄位）。
+   問題是這三欄佔了整張表的 96%（24 份合約 677 kB，其中 652 kB 是它們），
+   而櫃檯每點開一位會員的資料就會 dbGetAll('contracts') 整張表搬一次 ——
+   合約愈簽愈多，這個成本是線性長的。清單用不到全文，就別搬。
+   ⚠ 寫入不受影響：dbPut 的護欄看到物件缺了被精簡的欄位，會先撈單筆補齊再寫。 */
 const LEAN_DROP={ bookings:['is_substitute','original_coach_id','space_id','resource_id',
-  'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref'] };
+  'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref'],
+  contracts:['body_snapshot','fill_snapshot','signature'] };
 const _leanSel=new Map();          // 實體表名 → 精簡 select 字串（本 session 學到才有）
 function leanLearn(store,row){     // 從任何一筆完整資料學欄位（dbGetAll 首抓／dbGet 都會餵）
   const key=tbl(store), drop=LEAN_DROP[key];
