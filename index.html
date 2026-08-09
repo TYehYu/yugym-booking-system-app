@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260809.1004';
-const APP_VERSION_LABEL='v260809.1004';
+const APP_VERSION = '260809.1605';
+const APP_VERSION_LABEL='v260809.1605';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38156,7 +38156,11 @@ function renderMemMonthView(){
         const openDt=new Date(slotDt.getTime()-30*60000);
         const canCheckin=new Date()>=openDt && b.date===ymd(TODAY);
         if(canCheckin) actionBtn=`<button class="btn btn-green btn-sm" onclick="memCheckin('${b.id}')">簽到</button>`;
-        else if(isSelf) actionBtn=`<button class="btn btn-ghost btn-sm" onclick="memCancelSelf('${b.id}')">取消</button>`;
+        /* 2026-08-09 使用者回報：「會員說他不能自己修改預約的時間，想把今天早上的自主訓練
+           改到晚上」—— 功能一直都有（msbStart），但入口只出現在「點數用完」的空面板裡，
+           還有點數的人根本看不到，只看得到「取消」。放到他真的會點的地方。 */
+        else if(isSelf) actionBtn=`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();msbStart('${b.id}')">改時間</button>`
+          +`<button class="btn btn-ghost btn-sm" style="margin-left:6px;" onclick="event.stopPropagation();memCancelSelf('${b.id}')">取消</button>`;
       }
       const cc=bkCC(b); // pt/friendly/self/group/trial
       const barCls='mc-bar-'+cc;
@@ -38387,6 +38391,10 @@ async function memTaskTap(id,el){
               : orb('off','🕒',isGrp?'教練點名':'尚未開放',null,isGrp?'團體課由教練點名':'開課前 30 分鐘開放簽到'));
   const cxBtn=(done||past) ? orb('off','✕','不可取消',null)
     : orb('cx','✕','取消',`memCancelTap('${b.id}')`);
+  /* 自主訓練可以自己改時間（2026-08-09）——與「取消」同一條界線：還沒開始就可以改。
+     改期比「取消再重約」好：時段直接換過去，不會在中間被別人搶走。 */
+  const rsBtn=(!done && !past && bkIsSelf(b) && b.member_id===SESSION.id)
+    ? orb('go','🕒','改時間',`memTaskClose();msbStart('${b.id}')`) : '';
   const host=document.createElement('div');
   host.id='mem-task-pop';
   host.innerHTML=`<div class="mtp-back" onclick="memTaskClose()"></div>
@@ -38399,7 +38407,7 @@ async function memTaskTap(id,el){
         </span>
         ${done?'<span class="mtp-tag">已簽到</span>':''}
       </div>
-      <div class="mtp-orbs">${ckBtn}${cxBtn}</div>
+      <div class="mtp-orbs">${ckBtn}${rsBtn}${cxBtn}</div>
     </div>`;
   document.body.appendChild(host);
   /* 桌機：貼在被點的課卡下方（超出畫面自動夾回）；手機：畫面正中間（CSS 處理） */
