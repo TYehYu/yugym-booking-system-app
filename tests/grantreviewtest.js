@@ -170,5 +170,38 @@ console.log('\n⑥ 資料表');
   ok('　　payload 存整包發放內容', /payload       jsonb,            -- 賣票當下算好的完整發放內容/.test(sql));
 }
 
+console.log('\n⑦ 會員資料票券頁的「待審核」卡（2026-08-09 使用者指示）');
+/* 「教練課跟友善教練課櫃檯銷售之後，無法看到這一筆單是不是有成功送出或者有沒有錯誤，
+    都要等客戶那邊回傳才能知道。能夠把這筆銷售記錄在會員資料的票券嗎？待審核。」
+   卡在票券頁＝單有送出去；審核通過卡換成真票券、取消就消失。 */
+{
+  const L=grabFn('ppLoadCtx');
+  ok('★★ ppLoadCtx 帶入本會員 pending 的發放申請',
+     /c\.myGR=\(await grantReqPending\(\)\)\.filter\(r=>r\.member_id===PP\.id\)/.test(L));
+  ok('★ 合約簽回與否一併帶上（ctSigned）',
+     /c\.ctSigned=\{\}; \(contractsAll\|\|\[\]\)\.forEach\(x=>\{ if\(x&&x\.id\) c\.ctSigned\[x\.id\]=!!x\.signed_at; \}\)/.test(L));
+  const R=grabFn('ppRecordHtml');
+  ok('★★ 票券頁畫「待審核」卡（紅色系＝要櫃檯動作）',
+     /const grCard=r=>\{/.test(R) && /待審核<\/span>/.test(R));
+  ok('★ 用申請的方案反查分頁（與票券同一支 tkClass5 分類器）',
+     /tkClass5\(\{ticket_type_id:pl\.ticket_type_id, plan_name:r\.plan_name\|\|pl\.name\}, typeMap\)/.test(R));
+  ok('★ 卡上有簽回狀態、送出時間與應收金額',
+     /signed\?'✓ 合約已簽回':'⏳ 合約未簽回'/.test(R)
+     && /送出 \$\{String\(r\.requested_at\|\|''\)\.slice\(5,16\)/.test(R)
+     && /應收 <b style="color:#b5372e;/.test(R));
+  ok('★ 「前往審核」開既有審核視窗，不另做一套',
+     /onclick="openGrantReview\(\)">前往審核<\/button>/.test(R));
+  ok('　　分頁章上加紅色待審數（跟可用張數分開兩顆）',
+     /\$\{_grCnt\[k\]\?`<i class="tkf-n" style="background:#c8453a;/.test(R));
+  ok('★ 有待審卡時不顯示「此分類尚無票券」的空狀態',
+     /\(hist\.length\|\|expd\.length\|\|_grHere\.length\)\?'':'<div class="pp-card-tip">此分類尚無票券<\/div>'/.test(R)
+     && /!act\.length&&!_grHere\.length&&\(hist\.length\|\|expd\.length\)/.test(R));
+  const A=grabFn('_grantReqApprove'), C=grabFn('doGrantReqCancel');
+  ok('★★ 審核通過：會員資料開著就就地重讀（待審卡當場換成真票券）',
+     /if\(!\(await ppRefreshIfOpen\(r\.member_id\)\)\) navTo\(CUR_PAGE\);/.test(A));
+  ok('★ 取消發放：同樣就地重讀（待審卡當場消失）',
+     /if\(!\(await ppRefreshIfOpen\(r\.member_id\)\)\) navTo\(CUR_PAGE\);/.test(C));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260809.1605';
-const APP_VERSION_LABEL='v260809.1605';
+const APP_VERSION = '260810.1250';
+const APP_VERSION_LABEL='v260810.1250';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31187,9 +31187,39 @@ function ppRecordHtml(){
         const _tkTabs=TK5;   // 2026-07-31：與會員列表共用同一組分類
         const _liveCnt={};
         WAL.active().forEach(s=>{ _liveCnt[s.cls]=(_liveCnt[s.cls]||0)+1; });
+        /* 待審核發放（2026-08-09 使用者指示）：電子合約的單審核通過前沒有票券，
+           櫃檯賣完後在會員資料看不到任何痕跡。用申請的方案反查它屬於哪個分頁，
+           畫成「待審核」卡 —— 卡在、就代表單有送出去；簽回與收款進度也直接看得到。 */
+        const _grOf=r=>{ const pl=(r.payload||{}).plan||{};
+          return tkClass5({ticket_type_id:pl.ticket_type_id, plan_name:r.plan_name||pl.name}, typeMap); };
+        const _grCnt={};
+        (c.myGR||[]).forEach(r=>{ const k=_grOf(r); _grCnt[k]=(_grCnt[k]||0)+1; });
+        const _grHere=(c.myGR||[]).filter(r=>_grOf(r)===tab);
+        /* 待審核卡：紅色系＝「還要櫃檯動作」等級（與左上角提示同一套色）。
+           點「前往審核」開既有的待審核發放視窗，不另做一套審核流程。 */
+        const grCard=r=>{
+          const signed=!!(c.ctSigned||{})[r.contract_id];
+          const amt=Number(r.amount)||0;
+          return `<div class="bkd-tkcard" style="margin-bottom:10px;border:1.5px dashed #e0a8a2;background:#fdf6f5;">
+            <div class="bkd-tkcard-head"><span class="bkd-tkcard-name" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="font-size:10.5px;font-weight:800;color:#b5372e;background:#fbeceb;border:1px solid #e8b6b0;border-radius:999px;padding:2px 8px;flex:none;">待審核</span>
+              ${escH(r.plan_name||'票券')}</span>
+              <span class="bkd-tkcard-prog"><b class="num">${Number(r.sessions)||0}</b> 堂</span></div>
+            <div class="gr-item-mid" style="margin-top:8px;">
+              <span class="gr-sign ${signed?'ok':'wait'}">${signed?'✓ 合約已簽回':'⏳ 合約未簽回'}</span>
+              <span class="gr-item-when">送出 ${String(r.requested_at||'').slice(5,16).replace('T',' ').replace('-','/')}</span>
+            </div>
+            <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 10px;">
+              <span>應收 <b style="color:#b5372e;font-family:var(--num),inherit;font-size:14px;">$${amt.toLocaleString()}</b>　·　簽回合約並確認收款後才發放票券</span>
+              <span style="display:flex;gap:6px;flex:none;margin-left:auto;white-space:nowrap;">
+                ${r.contract_id?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${r.contract_id}')">📄 合約</button>`:''}
+                ${isDeskLike()?`<button class="btn btn-green btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openGrantReview()">前往審核</button>`:''}
+              </span>
+            </div>
+          </div>`; };
         const tabs=_tkTabs.map(([k,l])=>{
           const n=_liveCnt[k]||0;
-          return `<button class="tkf-btn${tab===k?' active':''}" onclick="ppTkTab('${k}')">${l}${n?`<i class="tkf-n">${n}</i>`:''}</button>`;
+          return `<button class="tkf-btn${tab===k?' active':''}" onclick="ppTkTab('${k}')">${l}${n?`<i class="tkf-n">${n}</i>`:''}${_grCnt[k]?`<i class="tkf-n" style="background:#c8453a;color:#fff;" title="待審核發放">${_grCnt[k]}</i>`:''}</button>`;
         }).join('');
         /* 2026-07-30 使用者回報「邱美珠過期的票券還沒有設定展延按鈕」：
            過期但還沒用完的票會被 isHist 收進「歷史紀錄」摺疊區，展延開關只做在管理端的
@@ -31232,8 +31262,9 @@ function ppRecordHtml(){
           ${/* 圖例（2026-08-01）：金點是「會員自己從手機約的」，不解釋沒人看得懂 */''}
           ${act.some(t=>((WAL.of(t.id)||{stamps:[]}).stamps||[]).some(x=>bkSelfBooked(x,PP.id,WAL.selfBk)))
             ?'<div class="mtk-self-lg" style="margin:-4px 0 10px;"><i></i>右上角金點＝會員自己從手機預約的</div>':''}
-          ${act.length?act.map(cardOf).join(''):((hist.length||expd.length)?'':'<div class="pp-card-tip">此分類尚無票券</div>')}
-          ${!act.length&&(hist.length||expd.length)?'<div class="pp-card-tip">目前沒有可用票券</div>':''}
+          ${_grHere.map(grCard).join('')}
+          ${act.length?act.map(cardOf).join(''):((hist.length||expd.length||_grHere.length)?'':'<div class="pp-card-tip">此分類尚無票券</div>')}
+          ${!act.length&&!_grHere.length&&(hist.length||expd.length)?'<div class="pp-card-tip">目前沒有可用票券</div>':''}
           ${expdSec}${histSec}</div>`;
       }
       if(PP.recView==='bookings'){
@@ -31881,6 +31912,12 @@ async function ppLoadCtx(){
       dbGetAll('ticket_types').catch(()=>[]), dbGetAll('contracts').catch(()=>[]),
       dbGetAll('ticket_logs').catch(()=>[])]);   // 團課扣課紀錄（2026-07-31，見 grpTicketAlloc）
     c.ctByTicket=Object.fromEntries((contractsAll||[]).filter(x=>x.ticket_id&&x.member_id===PP.id).map(x=>[x.ticket_id,x.id]));   // 合約綁票券（2026-07-28）
+    /* 待審核發放也要在票券頁看得到（2026-08-09 使用者指示：「教練課跟友善教練課櫃檯銷售之後，
+       無法看到這一筆單是不是有成功送出或者有沒有錯誤，都要等客戶那邊回傳才能知道」）——
+       電子合約的單在審核通過前還沒有票券，原本只有左上角的紅色提示，會員資料完全沒痕跡。
+       把這位會員 pending 的發放申請帶進來，票券頁畫成「待審核」卡；合約簽回與否一併帶上。 */
+    try{ c.myGR=(await grantReqPending()).filter(r=>r.member_id===PP.id); }catch(_){ c.myGR=[]; }
+    c.ctSigned={}; (contractsAll||[]).forEach(x=>{ if(x&&x.id) c.ctSigned[x.id]=!!x.signed_at; });
     c.typeMap=Object.fromEntries((ttypes||[]).map(t=>[t.id,t]));
     c.coachMap=Object.fromEntries(coaches.map(x=>[x.id,coachDisp(x)]));
     c.coachOpts=[['','—']].concat(coaches.filter(isCoachable).map(x=>[x.id,coachDisp(x)]));
@@ -35178,7 +35215,8 @@ async function _grantReqApprove(id){
     closeModal();
     showToast(`已發放：${r.plan_name||'票券'}　·　30 分鐘內可在首頁今日營收整筆退回`);
     try{ refreshGrantReviewPill(); }catch(_){}
-    navTo(CUR_PAGE);
+    /* 會員資料開著時就地重讀（2026-08-09）：票券頁的「待審核」卡要當場換成真票券 */
+    if(!(await ppRefreshIfOpen(r.member_id))) navTo(CUR_PAGE);
   }catch(e){ done(); showToast('發放失敗：'+((e&&e.message)||e)); }
 }
 function grantReqCancel(id){
@@ -35200,7 +35238,8 @@ async function doGrantReqCancel(id){
     dbCacheClear(['ticket_grant_requests','contracts']);
     closeModal(); showToast('已取消這筆發放');
     try{ refreshGrantReviewPill(); }catch(_){}
-    navTo(CUR_PAGE);
+    /* 會員資料開著時就地重讀（2026-08-09）：票券頁的「待審核」卡要當場消失 */
+    if(!(await ppRefreshIfOpen(r.member_id))) navTo(CUR_PAGE);
   }catch(e){ showToast('取消失敗：'+((e&&e.message)||e)); }
 }
 // ── 分期：開通下一期（收款即解鎖）──
