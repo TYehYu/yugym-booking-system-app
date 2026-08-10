@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260810.1250';
-const APP_VERSION_LABEL='v260810.1250';
+const APP_VERSION = '260810.1304';
+const APP_VERSION_LABEL='v260810.1304';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -33868,6 +33868,12 @@ function memSignBannerCheck(){
     const cs=(await dbGetAll('contracts').catch(()=>[])).filter(c=>c.sign_type==='remote'&&!c.signed_at);
     const old=document.getElementById('mem-sign-banner'); if(old) old.remove();
     if(!cs.length) return;
+    /* 蓋版只跳一次（2026-08-10 使用者指示：「會員端只要跳出一次提醒，
+       之後在我的票券顯示就好」）—— 同一批待簽合約整個登入期間只提醒一次，
+       之後靠「我的票券」頁常駐的待簽卡；有新的待簽合約（沒提醒過的 id）才會再跳。 */
+    window._signRemindedIds=window._signRemindedIds||{};
+    if(cs.every(c=>window._signRemindedIds[c.id])) return;
+    cs.forEach(c=>{ window._signRemindedIds[c.id]=1; });
     /* 2026-07-28 使用者指示：提示改到畫面正中間、加遮罩更醒目 */
     const div=document.createElement('div'); div.id='mem-sign-banner';
     div.style.cssText='position:fixed;inset:0;z-index:180;background:rgba(20,24,20,.5);'
@@ -33879,6 +33885,7 @@ function memSignBannerCheck(){
       <div style="font-size:12.5px;color:#8a7350;margin-bottom:16px;">請完成簽署以啟用您的課程</div>
       <button class="btn btn-green" style="width:100%;margin-bottom:8px;" onclick="memSignContract('${cs[0].id}')">立即簽署</button>
       <button class="btn btn-ghost" style="width:100%;" onclick="document.getElementById('mem-sign-banner')?.remove()">稍後再簽</button>
+      <div style="font-size:11px;color:#a89468;margin-top:10px;">之後可隨時在「我的票券」找到這份合約簽署</div>
     </div>`;
     document.body.appendChild(div);
   }catch(_){} },600);
@@ -40532,6 +40539,24 @@ function renderMemTickets(){
   // 續課提醒卡已移除（2026-07-26 使用者指示：我的票券不放小管家式提示）
   const renewHint='';
 
+  /* 待簽／待開通的合約卡（2026-08-10 使用者指示：「會員端只要跳出一次提醒，
+     之後在我的票券顯示就好」）—— 蓋版提醒只跳一次，這裡是之後的常駐入口：
+     還沒簽的給「立即簽署」（金色＝要會員動作）；簽回但櫃檯還沒確認收款的顯示進度
+     （綠色＝只是在等，不用做事）；發放後 contracts.ticket_id 補上，卡自動換成下方真票券。 */
+  const pendCt=(window._memContracts||[]).filter(c=>c.sign_type==='remote'&&!c.ticket_id);
+  const pendCards=pendCt.map(c=>{
+    const signed=!!c.signed_at;
+    return `<div class="card" style="border:1.5px dashed ${signed?'#cfe3d8':'#d9b96a'};background:${signed?'#f4f9f6':'#fdf9f0'};padding:14px 16px;margin-bottom:10px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <b style="font-size:14.5px;color:var(--text);">${c.plan_name||'課程合約'}</b>
+        <span style="font-size:12px;color:var(--t2);">${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</span></div>
+      ${signed
+        ? `<div style="font-size:12.5px;color:#1f6f54;margin-top:8px;line-height:1.7;">✓ 合約已簽署 —— 櫃檯確認收款後，票券就會出現在下方。</div>`
+        : `<div style="font-size:12.5px;color:#8a5e28;margin-top:8px;line-height:1.7;">📝 這份合約還沒簽名 —— 完成簽署、櫃檯確認收款後才會發放票券。</div>
+           <button class="btn btn-green" style="width:100%;margin-top:10px;padding:11px;" onclick="memSignContract('${c.id}')">立即簽署</button>`}
+    </div>`;
+  }).join('');
+
   /* 2026-08-05 使用者指示：移除「我的票券」大標，上方改成等級卡——
      目前等級、本月達標進度、升級進度／降級提醒、升降級規則。 */
   C.innerHTML=
@@ -40539,7 +40564,8 @@ function renderMemTickets(){
   `<div class="mtk-entry-row">${selfPtEntryHTML()}${voucherEntryHTML()}</div>`+
   memContractEntryHTML()+
   renewHint+
-  `${usable.length===0&&inactive.length===0
+  pendCards+
+  `${usable.length===0&&inactive.length===0&&pendCt.length===0
     ? '<div class="card"><div class="empty" style="padding:40px 16px;"><div class="em-t">目前沒有票券</div><div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:1.8;">購課請洽櫃檯或您的教練，<br>完成後票券會自動出現在這裡。</div></div></div>'
     : ''}
   ${usable.map(t=>card(t,false)).join('')}

@@ -203,5 +203,30 @@ console.log('\n⑦ 會員資料票券頁的「待審核」卡（2026-08-09 使�
      /if\(!\(await ppRefreshIfOpen\(r\.member_id\)\)\) navTo\(CUR_PAGE\);/.test(C));
 }
 
+console.log('\n⑧ 會員端：蓋版提醒只跳一次，之後在「我的票券」常駐（2026-08-10 使用者指示）');
+/* 「會員端只要跳出一次提醒，之後在我的票券顯示就好。」 */
+{
+  const B=grabFn('memSignBannerCheck');
+  ok('★★ 同一批待簽合約整個登入期間只蓋版一次（記過的 id 不再跳）',
+     /window\._signRemindedIds=window\._signRemindedIds\|\|\{\}/.test(B)
+     && /if\(cs\.every\(c=>window\._signRemindedIds\[c\.id\]\)\) return;/.test(B)
+     && /cs\.forEach\(c=>\{ window\._signRemindedIds\[c\.id\]=1; \}\)/.test(B));
+  ok('★ 有新的待簽合約（沒提醒過的 id）才會再跳 —— 判斷用 every 而不是旗標',
+     !/_signBannerShown/.test(B));
+  ok('　　蓋版上告訴會員之後去哪裡找',
+     /之後可隨時在「我的票券」找到這份合約簽署/.test(B));
+  const R=grabFn('renderMemTickets');
+  ok('★★ 我的票券頁畫待簽／待開通合約卡（sign_type=remote 且還沒綁票券）',
+     /const pendCt=\(window\._memContracts\|\|\[\]\)\.filter\(c=>c\.sign_type==='remote'&&!c\.ticket_id\)/.test(R));
+  ok('★ 還沒簽的給「立即簽署」鈕（金色）、簽回的顯示等收款進度（綠色）',
+     /onclick="memSignContract\('\$\{c\.id\}'\)">立即簽署<\/button>/.test(R)
+     && /✓ 合約已簽署 —— 櫃檯確認收款後，票券就會出現在下方。/.test(R)
+     && /這份合約還沒簽名 —— 完成簽署、櫃檯確認收款後才會發放票券。/.test(R));
+  ok('★ 有待簽卡時不顯示「目前沒有票券」空狀態',
+     /usable\.length===0&&inactive\.length===0&&pendCt\.length===0/.test(R));
+  ok('　　卡插在等級卡與票券清單之間（pendCards 有進 innerHTML）',
+     /renewHint\+\s*\n\s*pendCards\+/.test(R));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
