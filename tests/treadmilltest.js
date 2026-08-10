@@ -59,14 +59,14 @@ ok('★ 掛在步驟 2 的票券資訊與連續預約之間', /\$\{bkTreadmillRo
 ok('★ 台數選項依場地設定的容量產生（不寫死 2）',
    /const cap=\(\(window\.VENUES\|\|\[\]\)\.find\(v=>v\.id==='treadmill'\)\|\|\{\}\)\.capacity\|\|2;/.test(src));
 ok('★ 有「自動配置」這一項（預設不指定場地，行為與改版前一致）',
-   /<option value="0">自動配置（多功能訓練區優先）<\/option>/.test(src));
+   /<option value="0">自動配置（\$\{venueName\('multi'\)\}優先）<\/option>/.test(src));   // 2026-08-10 場地名稱改吃設定值
 /* 2026-08-04：選單多了「團課教室」，讀值收斂到 bkVenueChoice（'treadmill'＋台數／'group'／null） */
 ok('★ 選了台數＝指定用跑步機、選團課教室＝指定 group（venue_pref）',
    /if\(el\.value==='g'\) return \{pref:'group', units:0\};/.test(src)
    && /return \{pref:n>0\?'treadmill':null, units:n\};/.test(src)
    && /const _venuePref=_vc\.pref;/.test(src)
    && /venue_pref:o\.venue_pref\|\|null,/.test(src));
-ok('★ 選單有「團課教室」選項', /<option value="g">團課教室<\/option>/.test(src));
+ok('★ 選單有「團課教室」選項', /<option value="g">\$\{venueName\('group'\)\}<\/option>/.test(src));   // 2026-08-10 場地名稱改吃設定值
 /* 2026-08-03 家庭成員：vbkChk 多帶 member_id 與使用人 */
 ok('★ 單筆預約的場地預驗證也帶上指定（否則會先被判成多功能區可用）',
    /const vbkChk=\{id:null,coach_id,category:t\.category,ticket_type_id:type_id,venue_pref:_venuePref,\n\s*member_id, trial_name:\(window\._bkFamUser!=null\?window\._bkFamUser:null\)\};/.test(src));   // 2026-08-04 '' 哨兵不塌成 null
@@ -85,7 +85,7 @@ console.log('\n③ 會員自己從手機約也要能選台數');
 /* 2026-08-02 使用者指示：「只要會連動上行事曆、影響其他人預約場地的地方，
    都要補上要預約幾台」—— 會員端的自主訓練訂位同樣會佔住跑步機。 */
 ok('★ 確認視窗多一列「台數」，只在選了跑步機且真的還空著兩台以上時出現',
-   /<div id="msb-tmrow" style="\$\{\(s\.pickVenue==='treadmill'&&s\.tmFree>1\)\?'':'display:none;'\}/.test(src)
+   /<div id="msb-tmrow" style="display:\$\{\(s\.pickVenue==='treadmill'&&s\.tmFree>1\)\?'flex':'none'\}/.test(src)
    && /\(s\.tmFree=Math\.max\(0,_tmCap-_tmUsed\), ''\)/.test(src)
    && /onclick="msbChooseUnits\(\$\{n\}\)"/.test(src));
 ok('★ 可選的台數＝該時段實際還空著的數量（不會讓人選到已被約走的）',
@@ -159,10 +159,12 @@ console.log('\n④ 實跑：補開第 2 台');
 ok('★ 台數按鈕只長到「還空著的台數」（1 台被約走 → 只剩「1 台」可選）',
    /Array\.from\(\{length:Math\.max\(1,_tmCap-_tmUsed\)\},\(_,i\)=>i\+1\)/.test(src));
 ok('★ 只剩 1 台時整列台數選擇隱藏（沒得選就不用問；切換場地後也一樣，2026-08-06）',
-   /id="msb-tmrow" style="\$\{\(s\.pickVenue==='treadmill'&&s\.tmFree>1\)\?'':'display:none;'\}/.test(src)
+   /id="msb-tmrow" style="display:\$\{\(s\.pickVenue==='treadmill'&&s\.tmFree>1\)\?'flex':'none'\}/.test(src)
    && /row\.style\.display = \(vid==='treadmill' && \(s\.tmFree\|\|0\)>1\)/.test(src));
 ok('★ 上一個時段選的 2 台不會漏到只剩 1 台的時段（pickUnits 夾回上限）',
    /s\.pickUnits=Math\.min\(s\.pickUnits\|\|1, Math\.max\(1,_tmCap-_tmUsed\)\);/.test(src));
+ok('★ 台數列不得疊寫 display（2026-08-10 使用者回報：選教室/多功能仍看到 1台2台——display:none;display:flex 後者蓋前者，初始永遠顯示）',
+   !/style="display:none;display:flex/.test(src) && !/'display:none;'\}display:flex/.test(src));
 ok('　　為什麼要夾，寫在程式裡',
    /但 s\.pickUnits 還留著 2 —— 送出時就會带 2。/.test(src));
 ok('★ 佔用數用「筆數」算並以容量封頂（舊資料有不帶編號的 treadmill）',
