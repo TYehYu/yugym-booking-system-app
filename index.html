@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260811.0927';
-const APP_VERSION_LABEL='v260811.0927';
+const APP_VERSION = '260811.0950';
+const APP_VERSION_LABEL='v260811.0950';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23860,6 +23860,13 @@ async function saveGroupMembers(id){ return onceAct('grpmem:'+id, ()=>_saveGroup
 async function grpSaveNoTk(id){ window._grpNoTkOK=1; return onceAct('grpmem-force:'+id, ()=>_saveGroupMembers(id)); }
 async function _saveGroupMembers(id){
   const b=await dbGet('bookings',id);
+  /* 舊匯入的團課沒有 ticket_type_id（2026-08-11 張傅凱 8/17 案例：挑票拿空票種去比對，
+     誰的票都算 0 堂、加誰都跳「票不夠」）—— 存名單前先補上團課票種；
+     b 後面本來就會寫回，這堂課從此自癒。正式庫既有 9 筆已直接補齊，這裡防的是日後重匯。 */
+  if(b && !b.ticket_type_id && b.category==='小班肌力'){
+    if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
+    b.ticket_type_id=((window._ttCache||[]).find(t=>t.category==='小班肌力'&&t.active!==false)||{}).id||null;
+  }
   const next=(window._grpSel||[]).slice();
   const gmax=grpMax();
   if(next.length>gmax){showToast(`已達本堂人數上限（${gmax} 人）`);return;}
