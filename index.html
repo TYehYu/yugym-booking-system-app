@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260811.1801';
-const APP_VERSION_LABEL='v260811.1801';
+const APP_VERSION = '260811.2238';
+const APP_VERSION_LABEL='v260811.2238';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10701,10 +10701,16 @@ function _tierBaseOf(m){
 }
 function computeMemberTiers(bookings, members){
   const counts={};                         // mid -> { 'YYYY-MM': 已簽到教練課數 }
+  /* 共享票的等級歸屬（2026-08-11 使用者定案：「分享票券給其他人使用，等級累積應該
+     還是算在原會員那邊；被分享的會員不會累積會員等級，除非他自己購買」）——
+     有綁票的課記在「票券持有人」名下（自己的票＝自己，共享票＝原持有人）；
+     沒綁票的舊課維持記在上課者名下。票券快取沒載到時退回舊行為。 */
+  const _tkOwn={};
+  ((window._allTkCache)||[]).forEach(t=>{ if(t&&t.id&&t.member_id) _tkOwn[t.id]=String(t.member_id); });
   (bookings||[]).forEach(b=>{
     if(!(b.status==='checked_in'||b.status==='completed')) return;
     if(b.category!=='私人教練') return;    // 教練課（含友善）；團課/自主/體驗/按摩不計
-    const mid=b.member_id; if(!mid) return;
+    const mid=(b.ticket_id&&_tkOwn[b.ticket_id])||b.member_id; if(!mid) return;
     const ym=(b.date||'').slice(0,7); if(ym.length!==7) return;
     (counts[mid]=counts[mid]||{})[ym]=(counts[mid][ym]||0)+1;
   });
@@ -10823,7 +10829,9 @@ function effTier(m){
 }
 // 各頁載入時呼叫：抓 bookings（有 8 秒 TTL 快取）建等級快取
 async function ensureMemberTiers(){
-  const[bks,mems]=await Promise.all([dbGetAll('bookings'),dbGetAll('members').catch(()=>[])]);
+  const[bks,mems,tks]=await Promise.all([dbGetAll('bookings'),dbGetAll('members').catch(()=>[]),
+    dbGetAll('member_tickets').catch(()=>null)]);
+  if(tks) window._allTkCache=tks;   // 共享票等級歸屬要查持有人（2026-08-11）
   window._memberTierCache=Object.assign(computeMemberTiers(bks,mems),{__ready:true});
   return window._memberTierCache;
 }
@@ -24907,6 +24915,7 @@ PAGES.members=async function(){
       dbGetAll('ticket_logs').catch(()=>[])]);   // 票券夾要用扣課紀錄（2026-07-31，見 buildWallet）
   }
   // 會員升降級（自動制）：以完整簽到史重播出目前等級
+  window._allTkCache=allTk;   // 共享票等級歸屬要查持有人（2026-08-11）
   window._memberTierCache=Object.assign(computeMemberTiers(allBk,members),{__ready:true});
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   window._coachNameMap=coachMap;   // 核對記號要顯示「誰按的」（2026-08-02，legacyVerifyCell 用）
@@ -30509,7 +30518,7 @@ function ppHeaderHtml(){
   /* 2026-08-02 使用者指示：「完成連動的按鈕也放在會員資料的視窗上，個人資料的右上」——
      核對票券的時候本來就會開著這位會員的資料在對，跑回列表去按那一格很繞。
      跟列表共用 legacyVerifyCell，狀態與權限判斷只有一份（只有主顧客會長出東西）。 */
-  const lvBtn = isM ? legacyVerifyCell(r) : '';
+  const lvBtn = '';   // 新舊系統票券核對已退場（2026-08-11 使用者指示，舊系統核對完成）
   /* 刪除會員（2026-08-08 使用者指示：「我要管理員有能力可以刪除註冊錯誤或輸入錯誤的會員，
      包含用 line 申請錯誤的」）—— 只有管理員看得到；名下有資料的會在視窗裡被擋下。 */
   const delBtn = (isM && SESSION && SESSION.role==='admin')
@@ -31739,7 +31748,9 @@ function tkCountTriple(sl, noLegend){
 /* 哪些人需要核對（2026-08-02 使用者：「VIP 也要有連動確認按鈕」）——
    主顧客與 VIP 都是制度起點就在的既有會員，兩邊都有舊系統的票要對；
    原本只列主顧客，VIP 就整批漏掉了。 */
-function needsLegacyVerify(m){ const t=effTier(m); return t==='loyal'||t==='vip'; }
+/* 2026-08-11 使用者指示：「舊系統已經核對完成，可以把核對的功能移除了」——
+   入口全部收起（回傳 false／空字串）；members.legacy_verified_at/by 留在資料庫當歷史紀錄。 */
+function needsLegacyVerify(m){ return false; }
 function legacyVerifyCell(m){
   if(!needsLegacyVerify(m)) return '';
   if(!isDeskLike()) return m.legacy_verified_at
@@ -34057,7 +34068,9 @@ function signFullOpen(){
   const BAR=56;                              // 右側直欄放按鈕，簽名區讓開這條
   const cw=vh, ch=Math.max(120,vw-BAR);      // 畫布邏輯尺寸（橫向：長邊＝螢幕高）
   const host=document.createElement('div'); host.id='sign-full';
-  host.style.cssText='position:fixed;inset:0;z-index:460;background:#f4f1ea;touch-action:none;overscroll-behavior:none;';
+  host.style.cssText='position:fixed;inset:0;z-index:10060;background:#f4f1ea;touch-action:none;overscroll-behavior:none;';
+  /* z-index 要壓過合約閱讀器的 10050（2026-08-11 陳芷亘案例：簽名板開在合約「後面」，
+     點簽名欄看似沒反應、按了稍後再簽關掉閱讀器才露出來） */
   const btn=(label,fn,color)=>`<button type="button" onclick="${fn}" style="transform:rotate(90deg);white-space:nowrap;border:1px solid ${color==='green'?'#1f6f54':'var(--bd,#d8d2c4)'};background:${color==='green'?'#1f6f54':'#fff'};color:${color==='green'?'#fff':'#5c554a'};border-radius:9px;padding:9px 16px;font-size:14px;font-family:inherit;">${label}</button>`;
   host.innerHTML=`
     <canvas id="ct-sign-full" style="position:absolute;left:calc(50% - ${BAR/2}px);top:50%;width:${cw}px;height:${ch}px;transform:translate(-50%,-50%) rotate(90deg);background:#fff;border-radius:12px;box-shadow:0 4px 18px rgba(60,50,38,.15);"></canvas>
@@ -38249,7 +38262,11 @@ PAGES.mem_bookings=async function(){
      補一份只有名字的名冊（2026-08-08 使用者指示，見 coachDirectory）。 */
   if(!Object.keys(coachMap).length) Object.assign(coachMap, await coachDirectory());
   /* 團體課（member_id 為空、會員在 member_ids 名單裡）也算自己的課（2026-07-28 團課自主報名） */
-  const mine=bookings.filter(b=>bkHasMember(b,SESSION.id)&&b.status!=='cancelled')
+  /* 分期保留（pending_contract、還沒綁票）不給會員看（2026-08-11 黃柏瑜案例，使用者指示：
+     「分期的合約照理說應該只出現付費的 4 堂」）——那些是櫃檯先佔的時段，繳了下一期
+     才會綁票變成真預約；出現在首頁會讓會員以為 12 堂都排好了。 */
+  const mine=bookings.filter(b=>bkHasMember(b,SESSION.id)&&b.status!=='cancelled'
+      &&!(b.pending_contract&&!b.ticket_id))
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   window._memCalData={mine,coachMap};
   if(!window._memCalKeep){ _memCalMonth=null; _memCalSel=null; }   // 選日/換週時保留（2026-07-29）
@@ -40651,8 +40668,11 @@ function memTierInfo(me,bookings){
   if(!me) return null;
   const nowYm=ymd(TODAY).slice(0,7);
   const byYm={};
+  /* 共享票記在持有人名下（2026-08-11，與 computeMemberTiers 同一條規則） */
+  const _tkOwn2={};
+  ((window._allTkCache)||[]).forEach(t=>{ if(t&&t.id&&t.member_id) _tkOwn2[t.id]=String(t.member_id); });
   (bookings||[]).forEach(b=>{
-    if(b.member_id!==me.id) return;
+    if(((b.ticket_id&&_tkOwn2[b.ticket_id])||b.member_id)!==me.id) return;
     if(!(b.status==='checked_in'||b.status==='completed')) return;
     if(b.category!=='私人教練') return;
     const ym=(b.date||'').slice(0,7); if(ym.length===7) byYm[ym]=(byYm[ym]||0)+1;
