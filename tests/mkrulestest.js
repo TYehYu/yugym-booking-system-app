@@ -61,31 +61,28 @@ console.log('  不能再請假');
      /const tk=await grantMakeupTicket\(b,mid,sk\);/.test(F));
 }
 
-console.log('  不得退費');
+console.log('  取消退回（2026-08-11 使用者定案：「補課券有期限，所以補課券退課還是要退回票券」，推翻 8/8 不退規則）');
 {
   const F=grabFn('doGroupCancelSeat');
-  ok('★★ 退票前先認出補課券', /const tk=await dbGet\('member_tickets',tkId\);[\s\S]{0,400}if\(tkIsMakeup\(tk\)\)\{/.test(F));
-  ok('★★ 不加回堂數，但留下紀錄（櫃檯查得到為什麼沒退）',
-     /await logTicket\(tkId,'adjust',0,bid,SESSION\.id,'補課券的課取消：依規定不退回'\);/.test(F));
-  ok('★ tkId 清成 null → 後面的通知與 Toast 不會謊稱「已退回 1 堂」',
-     /'補課券的課取消：依規定不退回'\);[\s\S]{0,40}tkId=null;/.test(F));
-  ok('★ 一般票券仍照舊退回 1 堂',
+  ok('★★ 補課券取消照一般票券退回 1 堂（不再有 tkIsMakeup 沒收分支）',
      /tk\.sessions_remaining=\(Number\(tk\.sessions_remaining\)\|\|0\)\+1;/.test(F)
-     && /await logTicket\(tkId,'refund',1,bid,SESSION\.id,'團體課取消預約退回'\);/.test(F));
-  ok('　　為什麼不退，寫在原地',
-     /它是請假換來的補課機會，\s*\n\s*補課那堂再取消就是放棄，不退回也不再發新的券。/.test(F));
+     && !/依規定不退回/.test(F));
+  ok('★ 帳本備註分得出補課券（對帳可辨識）',
+     /tkIsMakeup\(tk\)\?'團體課取消預約退回（補課券，效期不變）':'團體課取消預約退回'/.test(F));
+  ok('　　為什麼改退，寫在原地（效期防線移到「不能再請假」）',
+     /效期不重算，過期防線在「不能再請假」/.test(F));
 }
 
 console.log('  取消視窗要先講清楚（不能按下去才發現）');
 {
   const F=grabFn('_groupCancelSeat');
   ok('★★ 視窗開之前先查這一格的票', /const _seatTk=await seatTicketOf\(b, sk\);\n\s*const _isMk=tkIsMakeup\(_seatTk\);/.test(F));
-  ok('★★ 補課券用紅底警示（紅＝票券會被扣掉，與既有色標一致）',
-     /background:\$\{\(_isMk\|\|within24\)\?'#fbeceb':'#eef5f1'\}/.test(F));
-  ok('★ 明講「補課券不退回」與「不會再發新的券」',
-     /\$\{tkChip\('eat','補課券不退回'\)\}/.test(F)
-     && /取消後名額釋出，但補課機會就用掉了，也不會再發新的券。/.test(F));
-  ok('★ 補課券的情況不再建議「改用請假」（那條路已經走不通了）',
+  ok('★★ 紅底警示只跟 24 小時內有關（補課券取消會退回，不再紅底）',
+     /background:\$\{within24\?'#fbeceb':'#eef5f1'\}/.test(F));
+  ok('★ 明講「補課券退回」與「效期不變」',
+     /\$\{tkChip\('back','補課券退回'\)\}/.test(F)
+     && /效期不變<\/b>（仍以券上原效期為準，請在效期內重新預約）/.test(F));
+  ok('★ 補課券的情況不建議「改用請假」（補課券不能再請假）',
      /\$\{_isMk\?'':`<div style="font-size:12px;color:var\(--t2\);margin-top:10px;line-height:2\.2;">/.test(F));
 }
 
