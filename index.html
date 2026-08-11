@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260811.1412';
-const APP_VERSION_LABEL='v260811.1412';
+const APP_VERSION = '260811.1738';
+const APP_VERSION_LABEL='v260811.1738';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14112,7 +14112,7 @@ PAGES.g_dashboard=async function(){
       <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
         <div class="mc-rev-b">${revAttribChip(r)}<span class="mc-rev-nm">${r.nm}</span><span class="mc-rev-it">${r.it}</span></div>
         ${r.kind?saleKindChip(r.tk,r.kind):''}
-        <span class="mc-rev-r">${revUndoChip(r)}${revPayChip(r)}<span class="mc-rev-amt">$${_fm(r.amt)}</span></span>
+        <span class="mc-rev-r">${revInvChip(r)}${revUndoChip(r)}${revPayChip(r)}<span class="mc-rev-amt">$${_fm(r.amt)}</span></span>
         ${r.mid?'<span class="mc-td-arrow">›</span>':''}
       </div>`).join('')}</div>
       ${_revMore>0?`<button class="mc-rev-more" onclick="openTodayRevList()">還有 ${_revMore} 筆　·　看全部 ›</button>`:''}`
@@ -26904,6 +26904,153 @@ async function setSaleKind(tkId, kind){
 /* 業績歸屬 tag（2026-08-03 使用者指示）：顯示這筆收入算誰的業績，點一下可改 ——
    賣票當下選錯人，續約獎金與營運分析就整筆算錯邊，要能當場修。
    教練／會員看得到 tag 但點不動（金額歸屬只有櫃檯能動）。 */
+/* ══ 電子發票（ezPay）══════════════════════════════════════════════════════
+   2026-08-11 起建置（商店 344990117；Edge Function ezpay-invoice v2）。
+   ⚠ INVOICE_LIVE=false 期間入口隱藏；就算用 localStorage.YUGYM_INV_TEST='1' 打開
+     測試入口，也只會打「測試站 cinv」（env:'test'），不可能開出真發票 ——
+     07-08 期字軌由舊系統（連宇）使用中，2026-09-01 切換日才改 true（同日舊系統停開）。
+   流程：營收列 🧾 → 開立視窗（紙本／手機條碼載具／捐贈／統編）→ Edge Function 開立
+   → 寫 invoices 表＋回填 purchases 與票券的 invoice 欄位；30 分鐘退回會自動作廢。 */
+const INVOICE_LIVE=false;   // ← 2026-09-01 切換日改 true
+function invEnabled(){ return isDeskLike() && (INVOICE_LIVE || localStorage.getItem('YUGYM_INV_TEST')==='1'); }
+function invEnv(){ return INVOICE_LIVE?'prod':'test'; }
+async function invCall(payload){
+  let jwt=null;
+  try{ const st=await sb.auth.getSession(); if(st&&st.data&&st.data.session) jwt=st.data.session.access_token; }catch(_){}
+  if(!jwt) throw new Error('登入狀態已過期，請重新登入');
+  const res=await fetch(window.YUGYM_CONFIG.url+'/functions/v1/ezpay-invoice',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+jwt,'apikey':window.YUGYM_CONFIG.anonKey},
+    body:JSON.stringify(Object.assign({env:invEnv()},payload))});
+  const out=await res.json().catch(()=>({}));
+  if(!res.ok||out.error) throw new Error(String((out&&out.error)||('伺服器回應 '+res.status)));
+  return out;
+}
+/* 營收列的發票鈕（開立／查看共用一顆；invEnabled 才畫） */
+function revInvChip(r){
+  if(!r || !invEnabled()) return '';
+  const ref=r.tk?('tk:'+r.tk):(r.pur?('pur:'+r.pur):'');
+  if(!ref) return '';
+  return `<button class="rev-undo" style="color:#2e6b4f;border-color:#cfe3d8;" title="開立／查看電子發票${INVOICE_LIVE?'':'（測試站）'}"
+    onclick="event.stopPropagation();openInvoiceDialog('${ref}')">🧾</button>`;
+}
+async function openInvoiceDialog(ref){
+  if(!invEnabled()){ showToast('發票功能尚未開放'); return; }
+  const [kind,id]=String(ref||'').split(':');
+  const _busy=uiBusy('讀取中…');
+  let pur=null, invs=[];
+  try{
+    if(kind==='pur') pur=await dbGet('purchases',id);
+    else{ const purs=(await dbGetAll('purchases').catch(()=>[]))||[]; pur=purs.find(p=>p&&p.ticket_id===id)||null; }
+    invs=(await dbGetAll('invoices').catch(()=>[]))||[];
+  }finally{ _busy(); }
+  if(!pur){ showToast('找不到對應的收款紀錄，無法開立發票'); return; }
+  const mem=pur.member_id?await dbGet('members',pur.member_id).catch(()=>null):null;
+  const mine=invs.filter(v=>v&&v.purchase_id===pur.id&&v.env===invEnv())
+    .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  const live=mine.find(v=>v.status==='issued');
+  window._invCtx={pur, mem, seq:mine.length};
+  const amt=Math.round(Number(pur.deal_amount)||0);
+  const _envTag=INVOICE_LIVE?'':'<span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;margin-left:8px;">測試站</span>';
+  if(live){
+    showModal(`<div class="modal-title">電子發票${_envTag}</div>
+      <div style="background:#eef5f1;border:1.5px solid #cfe3d8;border-radius:12px;padding:14px 16px;font-size:13.5px;line-height:2;">
+        <div>發票號碼　<b class="num" style="font-size:17px;">${live.invoice_number||'—'}</b>　隨機碼 <b class="num">${live.random_num||''}</b></div>
+        <div style="color:var(--t2);">${(live.invoice_time||'').slice(0,16).replace('T',' ')}　·　$${amt.toLocaleString()}　·　${
+          live.buyer_ubn?('統編 '+live.buyer_ubn):(live.love_code?('捐贈 '+live.love_code):(live.carrier_type==='0'?'手機條碼載具':'紙本'))}</div></div>
+      <div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:1.8;">開錯（金額／統編／載具）要先作廢再重開一張。作廢後這個視窗會回到開立表單。</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+        <button class="btn btn-red" onclick="invVoidAsk('${live.invoice_number}','${ref}')">作廢重開</button></div>`);
+    return;
+  }
+  showModal(`<div class="modal-title">開立電子發票${_envTag}</div>
+    <div style="background:var(--card2);border-radius:10px;padding:12px 14px;font-size:13.5px;line-height:2;margin-bottom:12px;">
+      <div><span style="color:var(--t2);">品項</span>　${pur.plan_name||'課程服務'}</div>
+      <div><span style="color:var(--t2);">買受人</span>　${(mem&&mem.name)||'散客'}　<span style="color:var(--t2);margin-left:12px;">金額</span>　<b class="num" style="font-size:17px;color:#1f6f54;">$${amt.toLocaleString()}</b></div></div>
+    <div class="form-row"><label>開立方式</label>
+      <select id="inv-mode" onchange="invModeSwap()">
+        <option value="paper">紙本（列印證明聯給客人）</option>
+        <option value="mobile">手機條碼載具</option>
+        <option value="donate">捐贈</option>
+        <option value="b2b">公司統編（開三聯）</option>
+      </select></div>
+    <div class="form-row" id="inv-f-mobile" style="display:none;"><label>手機條碼（/ 開頭共 8 碼）</label><input id="inv-carrier" placeholder="/ABC+123" style="text-transform:uppercase;" autocomplete="off"></div>
+    <div class="form-row" id="inv-f-donate" style="display:none;"><label>捐贈碼（3～7 碼數字）</label><input id="inv-love" inputmode="numeric" placeholder="例：919" autocomplete="off"></div>
+    <div id="inv-f-b2b" style="display:none;">
+      <div class="form-row"><label>買受人統編（8 碼）</label><input id="inv-ubn" inputmode="numeric" maxlength="8" autocomplete="off"></div>
+      <div class="form-row"><label>買受人名稱（公司抬頭）</label><input id="inv-title" autocomplete="off"></div></div>
+    <div class="form-row"><label>備註（選填，印在發票上）</label><input id="inv-note" autocomplete="off"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="invIssueDo()">開立 $${amt.toLocaleString()}</button></div>`);
+}
+function invModeSwap(){
+  const m=(document.getElementById('inv-mode')||{}).value||'paper';
+  const set=(id,on)=>{ const el=document.getElementById(id); if(el) el.style.display=on?'':'none'; };
+  set('inv-f-mobile',m==='mobile'); set('inv-f-donate',m==='donate'); set('inv-f-b2b',m==='b2b');
+}
+async function invIssueDo(){ return onceAct('invissue', ()=>_invIssueDo()); }
+async function _invIssueDo(){
+  const c=window._invCtx; if(!c||!c.pur) return;
+  const m=(document.getElementById('inv-mode')||{}).value||'paper';
+  const amt=Math.round(Number(c.pur.deal_amount)||0);
+  const p={action:'issue', purchase_id:c.pur.id, member_id:c.pur.member_id||null,
+    order_no:('P'+String(c.pur.id).replace(/[^A-Za-z0-9]/g,'')+(c.seq?('R'+c.seq):'')).slice(0,20),
+    total_amt:amt, buyer_name:(c.mem&&c.mem.name)||'消費者', buyer_email:(c.mem&&c.mem.email)||'',
+    items:[{name:c.pur.plan_name||'課程服務', count:1, unit:'式', price:amt}],
+    comment:((document.getElementById('inv-note')||{}).value||'').trim()};
+  if(m==='mobile'){
+    const cn=((document.getElementById('inv-carrier')||{}).value||'').trim().toUpperCase();
+    if(!/^\/[0-9A-Z+.\-]{7}$/.test(cn)){ showToast('手機條碼格式不對（/ 開頭共 8 碼）'); return; }
+    p.carrier_type='0'; p.carrier_num=cn; p.print_flag='N';
+  }else if(m==='donate'){
+    const lc=((document.getElementById('inv-love')||{}).value||'').trim();
+    if(!/^\d{3,7}$/.test(lc)){ showToast('捐贈碼須為 3～7 碼數字'); return; }
+    p.love_code=lc; p.print_flag='N';
+  }else if(m==='b2b'){
+    const ubn=((document.getElementById('inv-ubn')||{}).value||'').trim();
+    const title=((document.getElementById('inv-title')||{}).value||'').trim();
+    if(!/^\d{8}$/.test(ubn)){ showToast('統編須為 8 碼數字'); return; }
+    if(!title){ showToast('請填公司抬頭'); return; }
+    p.buyer_ubn=ubn; p.buyer_name=title; p.print_flag='Y';
+  }else{ p.print_flag='Y'; }
+  const done=cxBusy('開立中…');
+  try{
+    const out=await invCall(p);
+    /* 回填收款與票券的發票欄位（營收列的發票章、對帳都吃這裡） */
+    try{ const fresh=await dbGet('purchases',c.pur.id);
+      if(fresh){ fresh.invoice_number=out.invoice_number; fresh.invoice_status='issued';
+        fresh.invoice_type=(m==='b2b'||m==='paper')?'paper':'cloud'; await dbPut('purchases',fresh); } }catch(_){}
+    try{ if(c.pur.ticket_id){ const tk=await dbGet('member_tickets',c.pur.ticket_id);
+      if(tk){ tk.invoice_status='issued'; tk.invoice_number=out.invoice_number; await dbPut('member_tickets',tk); } } }catch(_){}
+    dbCacheClear(['invoices','purchases','member_tickets']);
+    done(); closeModal();
+    showToast('發票已開立：'+out.invoice_number+(INVOICE_LIVE?'':'（測試站）'));
+    navTo(CUR_PAGE);
+  }catch(e){ done(); showToast('開立失敗：'+((e&&e.message)||e)); }
+}
+function invVoidAsk(invoice_number, ref){
+  showModal(`<div class="modal-title">作廢發票 ${invoice_number}</div>
+    <div class="form-row"><label>作廢原因（限 6 個中文字）</label><input id="inv-void-why" value="開立錯誤" maxlength="6" autocomplete="off"></div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.8;">作廢會上傳財政部；已列印的證明聯請收回。作廢後可重新開立。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openInvoiceDialog('${ref}')">返回</button>
+      <button class="btn btn-red" onclick="invVoidDo('${invoice_number}','${ref}')">確定作廢</button></div>`);
+}
+async function invVoidDo(invoice_number, ref){ return onceAct('invvoid:'+invoice_number, ()=>_invVoidDo(invoice_number,ref)); }
+async function _invVoidDo(invoice_number, ref){
+  const done=cxBusy('作廢中…');
+  try{
+    await invCall({action:'invalid', invoice_number, reason:((document.getElementById('inv-void-why')||{}).value||'開立錯誤').trim()||'開立錯誤'});
+    /* 收款與票券的發票欄位復原（可重開） */
+    try{ const c=window._invCtx;
+      if(c&&c.pur){ const fresh=await dbGet('purchases',c.pur.id);
+        if(fresh){ fresh.invoice_status='none'; fresh.invoice_number=null; await dbPut('purchases',fresh); }
+        if(c.pur.ticket_id){ const tk=await dbGet('member_tickets',c.pur.ticket_id);
+          if(tk){ tk.invoice_status='none'; tk.invoice_number=null; await dbPut('member_tickets',tk); } } } }catch(_){}
+    dbCacheClear(['invoices','purchases','member_tickets']);
+    done(); showToast('發票 '+invoice_number+' 已作廢');
+    openInvoiceDialog(ref);
+  }catch(e){ done(); showToast('作廢失敗：'+((e&&e.message)||e)); }
+}
 /* ══ 30 分鐘完整退回（2026-08-08 使用者指示）════════════════════════════════
    「為了避免有輸入錯誤的情況發生，幫我設計一個 30 分鐘內可以完整退回的按鈕」
    「所有銷售的產品都可以在 30 分鐘內有退回的機制，按鈕放在首頁今日營收這列表裡面」
@@ -26980,6 +27127,7 @@ async function openSaleUndo(ref){
 async function doSaleUndo(kind,id){ return onceAct('undo:'+kind+':'+id, ()=>_doSaleUndo(kind,id)); }
 async function _doSaleUndo(kind,id){
   const done=cxBusy('退回中…');
+  const _undoPurIds=(kind==='pur')?[id]:[];   // 有開發票的話，退回時要跟著作廢（2026-08-11）
   try{
     if(kind==='tk'){
       const tk=await dbGet('member_tickets',id);
@@ -27002,7 +27150,7 @@ async function _doSaleUndo(kind,id){
       // ② 購買紀錄刪掉（誤植不該留在營收裡）
       try{
         const purs=(await dbGetAll('purchases').catch(()=>[]))||[];
-        for(const pp of purs) if(pp && pp.ticket_id===id) await dbDel('purchases',pp.id);
+        for(const pp of purs) if(pp && pp.ticket_id===id){ _undoPurIds.push(pp.id); await dbDel('purchases',pp.id); }
       }catch(e){ console.error('刪購買紀錄失敗',e); }
       // ③ 合約作廢
       try{
@@ -27033,6 +27181,20 @@ async function _doSaleUndo(kind,id){
       await dbDel('purchases',id);
       dbCacheClear(['purchases']);
     }
+    /* ⑥ 已開立的電子發票跟著作廢（2026-08-11）——退回＝這筆交易不存在，發票不能留 */
+    try{
+      if(typeof invEnabled==='function' && invEnabled() && _undoPurIds.length){
+        const invs=(await dbGetAll('invoices').catch(()=>[]))||[];
+        for(const v of invs){
+          if(!v || v.status!=='issued' || v.env!==invEnv()) continue;
+          if(!_undoPurIds.includes(v.purchase_id)) continue;
+          try{ await invCall({action:'invalid', invoice_number:v.invoice_number, reason:'銷售退回'});
+               showToast('發票 '+v.invoice_number+' 已一併作廢'); }
+          catch(e){ console.error('發票作廢失敗',e); showToast('⚠ 發票 '+v.invoice_number+' 作廢失敗，請至發票紀錄手動作廢'); }
+        }
+        dbCacheClear(['invoices']);
+      }
+    }catch(_){}
     closeModal();
     showToast('已整筆退回');
     try{ refreshGrantReviewPill(); }catch(_){}

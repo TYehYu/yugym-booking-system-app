@@ -1,0 +1,5 @@
+-- 2026-08-11 電子發票（已於當日套用正式庫）：invoices 表 + RLS + GRANT + change_log 觸發器
+-- + fn_table_sigs 清單加入 'invoices'。開立走 Edge Function ezpay-invoice（service_role 寫入）。
+-- 完整定義見當日 migration（apply_migration: invoices_table）；此檔為版控備份。
+-- 欄位重點：merchant_order_no unique（ezPay 自訂編號）、env prod/test（測試站開的不算真發票）、
+-- status issued/invalid/failed、qrcode_l/qrcode_r/barcode（列印證明聯用）、raw_result（對帳除錯）。
