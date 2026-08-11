@@ -33880,6 +33880,73 @@ function signPadClear(){
   cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
   window._signInk=false;
 }
+/* ══ 全螢幕橫向簽名板（2026-08-11 使用者回報：客戶端簽約簽名欄太小）══════════
+   點會員簽約的簽名欄 → 蓋版全螢幕、內容旋轉 90°：客人把手機轉橫就是一張滿版簽名板。
+   ・座標換算：canvas 以 rotate(90deg) 置中，視覺點 (x,y) → 畫布邏輯點
+     u = y - rect.top、v = rect.right - x（幾何推導，筆跡永遠跟著手指）
+   ・簽完把筆跡縮繪回原本的 #ct-sign（等比例、置中），後端與送出流程完全不動。
+   ・LIFF 的 touch-action:none 支援不齊全 —— touchmove 一律 preventDefault（passive:false），
+     與 signPadInit 同一課（2026-08-03）。 */
+function signFullOpen(){
+  const old=document.getElementById('sign-full'); if(old) old.remove();
+  const vw=window.innerWidth, vh=window.innerHeight, ratio=window.devicePixelRatio||1;
+  const BAR=56;                              // 右側直欄放按鈕，簽名區讓開這條
+  const cw=vh, ch=Math.max(120,vw-BAR);      // 畫布邏輯尺寸（橫向：長邊＝螢幕高）
+  const host=document.createElement('div'); host.id='sign-full';
+  host.style.cssText='position:fixed;inset:0;z-index:460;background:#f4f1ea;touch-action:none;overscroll-behavior:none;';
+  const btn=(label,fn,color)=>`<button type="button" onclick="${fn}" style="transform:rotate(90deg);white-space:nowrap;border:1px solid ${color==='green'?'#1f6f54':'var(--bd,#d8d2c4)'};background:${color==='green'?'#1f6f54':'#fff'};color:${color==='green'?'#fff':'#5c554a'};border-radius:9px;padding:9px 16px;font-size:14px;font-family:inherit;">${label}</button>`;
+  host.innerHTML=`
+    <canvas id="ct-sign-full" style="position:absolute;left:calc(50% - ${BAR/2}px);top:50%;width:${cw}px;height:${ch}px;transform:translate(-50%,-50%) rotate(90deg);background:#fff;border-radius:12px;box-shadow:0 4px 18px rgba(60,50,38,.15);"></canvas>
+    <div style="position:absolute;left:10px;top:50%;transform:translate(0,-50%) rotate(90deg);transform-origin:center;font-size:12.5px;color:#a89468;white-space:nowrap;pointer-events:none;">請把手機轉橫，在框內簽名</div>
+    <div style="position:absolute;right:0;top:0;bottom:0;width:${BAR}px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;padding:34px 0;">
+      ${btn('✕ 取消','signFullCancel()','')}
+      ${btn('清除重簽','signFullClear()','')}
+      ${btn('完成','signFullDone()','green')}
+    </div>`;
+  document.body.appendChild(host);
+  const cv=document.getElementById('ct-sign-full');
+  cv.width=cw*ratio; cv.height=ch*ratio;
+  const ctx=cv.getContext('2d'); ctx.scale(ratio,ratio);
+  ctx.lineWidth=3; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#1a1a1a';
+  window._signFullInk=false;
+  let drawing=false;
+  const pos=e=>{ const r=cv.getBoundingClientRect();
+    return [e.clientY-r.top, r.right-e.clientX]; };   // 旋轉 90° 的視覺→邏輯座標
+  cv.addEventListener('pointerdown',e=>{ drawing=true; try{cv.setPointerCapture(e.pointerId);}catch(_){}
+    const[x,y]=pos(e); ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+0.1,y); ctx.stroke(); window._signFullInk=true; e.preventDefault(); });
+  cv.addEventListener('pointermove',e=>{ if(!drawing)return; const[x,y]=pos(e); ctx.lineTo(x,y); ctx.stroke(); e.preventDefault(); });
+  const end=()=>{ drawing=false; };
+  cv.addEventListener('pointerup',end); cv.addEventListener('pointercancel',end); cv.addEventListener('pointerleave',end);
+  host.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+}
+function signFullClear(){
+  const cv=document.getElementById('ct-sign-full'); if(!cv) return;
+  cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
+  window._signFullInk=false;
+}
+function signFullCancel(){ document.getElementById('sign-full')?.remove(); }
+function signFullDone(){
+  if(!window._signFullInk){ showToast('請先在框內簽名'); return; }
+  const full=document.getElementById('ct-sign-full');
+  const small=document.getElementById('ct-sign');
+  if(full && small){
+    const sctx=small.getContext('2d');
+    const W=small.clientWidth||300, H=small.clientHeight||130;
+    sctx.clearRect(0,0,small.width,small.height);
+    /* 等比例縮放置中：橫向長條縮進小框，簽名不變形 */
+    const s=Math.min(W/full.width, H/full.height);
+    const dw=full.width*s, dh=full.height*s;
+    sctx.drawImage(full, 0,0,full.width,full.height, (W-dw)/2,(H-dh)/2, dw, dh);
+    window._signInk=true;
+    const hint=document.getElementById('ct-sign-hint'); if(hint) hint.style.display='none';
+  }
+  document.getElementById('sign-full')?.remove();
+}
+/* 會員簽約的小框清除：連放大簽名的提示一起復原 */
+function memSignClear(){
+  signPadClear();
+  const hint=document.getElementById('ct-sign-hint'); if(hint) hint.style.display='flex';
+}
 /* 待簽合約浮動橫幅（2026-07-28）：固定蓋在畫面上方、不受頁面重繪影響；
    首頁與我的票券頁都會觸發檢查；簽完或無待簽自動消失。 */
 function memSignBannerCheck(){
@@ -33932,8 +33999,15 @@ async function memSignContract(id){
         : `<div style="white-space:normal;font-size:12.5px;color:var(--t2);margin-bottom:10px;">${c.plan_name||''}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</div>`
         }${(c.body_snapshot||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
       <div class="cr-signfoot">
-        <div class="ct-sign-wrap"><canvas class="ct-sign" id="ct-sign"></canvas></div>
-        <div class="ct-sign-bar"><span>請在上方框內簽名</span><button type="button" class="ct-sign-clear" onclick="signPadClear()">清除重簽</button></div>
+        ${/* 點簽名欄放大簽（2026-08-11 使用者回報：「有人反應簽名欄太小，可以讓客戶點
+             簽名欄以後放大變成橫向佔滿畫面嗎」）——小框只當預覽（pointer-events:none，
+             不直接手寫），點整塊開全螢幕橫向簽名板（signFullOpen），簽完縮繪回 #ct-sign，
+             memSignContractDo 讀的還是同一顆 canvas，送出流程不變。 */''}
+        <div class="ct-sign-wrap" onclick="signFullOpen()" style="position:relative;cursor:pointer;">
+          <canvas class="ct-sign" id="ct-sign" style="pointer-events:none;"></canvas>
+          <div id="ct-sign-hint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:7px;font-size:13.5px;color:#8a7350;pointer-events:none;">✍️ 點一下，放大成整個畫面簽名</div>
+        </div>
+        <div class="ct-sign-bar"><span>點簽名區可放大簽署</span><button type="button" class="ct-sign-clear" onclick="memSignClear()">清除重簽</button></div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn btn-ghost" style="flex:1;padding:12px;" onclick="closeContractReader()">稍後再簽</button>
           <button class="btn btn-green" style="flex:1.6;padding:12px;font-size:15px;" onclick="memSignContractDo('${id}')">完成簽署</button>
