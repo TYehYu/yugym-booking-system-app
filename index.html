@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260811.1738';
-const APP_VERSION_LABEL='v260811.1738';
+const APP_VERSION = '260811.1801';
+const APP_VERSION_LABEL='v260811.1801';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17095,11 +17095,13 @@ function startCalPoll(){
   window._calPollTimer=setInterval(async()=>{
     if(CUR_PAGE!==_k){ clearInterval(window._calPollTimer); window._calPollTimer=null; return; }
     try{
+      if(document.hidden) return;               // 分頁在背景就不打（回前景 visibilitychange 會補）
       if(!(await remoteSigChanged())) return;   // 簽章變了才重抓（省流量）
       await Promise.all(['bookings','member_tickets'].map(t=>dbGetAll(t,{fresh:true}).catch(()=>null)));
       _calRevalidate();
     }catch(_){}
-  },30000);
+  },10000);   /* 2026-08-11 使用者回報「會員上課簽到畫面沒那麼即時」：30s→10s
+                 （會員掃碼簽到後，櫃檯/教練的課卡要快點變）；簽章沒變時一輪只有幾十 bytes */
 }
 async function _calRevalidate(){
   if(window._calRevalidating) return;
@@ -37431,6 +37433,7 @@ async function saveFixPunchOut(recId){
 
 /* ════════ 教練端:預約行事曆 ════════ */
 PAGES.coach_calendar=async function(){
+  startCalPoll();   // 簽到即時性（2026-08-11）：教練端行事曆同樣背景校驗，會員掃碼簽到 10 秒內反映
   const _stepping=!!window._calStepping; window._calStepping=false;   // 同 PAGES.calendar：先取值再清（2026-07-23）
   window._coachReadonly=true; // 教練端行事曆：純檢視，不開放排課/改期
   const myId=SESSION.id;
