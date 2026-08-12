@@ -58,8 +58,8 @@ ok('★ 只有自主訓練會出現這個欄位', /function bkTreadmillRow\(t\)\
 ok('★ 掛在步驟 2 的票券資訊與連續預約之間', /\$\{bkTreadmillRow\(t\)\}\s*\n\s*\$\{recurBoxHtml\('bk', preSum\)\}/.test(src));
 ok('★ 台數選項依場地設定的容量產生（不寫死 2）',
    /const cap=\(\(window\.VENUES\|\|\[\]\)\.find\(v=>v\.id==='treadmill'\)\|\|\{\}\)\.capacity\|\|2;/.test(src));
-ok('★ 有「自動配置」這一項（預設不指定場地，行為與改版前一致）',
-   /<option value="0">自動配置（\$\{venueName\('multi'\)\}優先）<\/option>/.test(src));   // 2026-08-10 場地名稱改吃設定值
+ok('★ 預設選項＝多功能訓練架（value 0，行為仍是自動配置、多功能優先；2026-08-12 使用者指示改名）',
+   /<option value="0">\$\{venueName\('multi'\)\}<\/option>/.test(src));
 /* 2026-08-04：選單多了「團課教室」，讀值收斂到 bkVenueChoice（'treadmill'＋台數／'group'／null） */
 ok('★ 選了台數＝指定用跑步機、選團課教室＝指定 group（venue_pref）',
    /if\(el\.value==='g'\) return \{pref:'group', units:0\};/.test(src)
