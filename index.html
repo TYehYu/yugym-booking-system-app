@@ -7770,8 +7770,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260812.2036';
-const APP_VERSION_LABEL='v260812.2036';
+const APP_VERSION = '260812.2104';
+const APP_VERSION_LABEL='v260812.2104';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -8354,7 +8354,7 @@ async function dbPutPurchaseSafe(obj){
   try{ return await dbPut('purchases',obj); }
   catch(e){
     // 選配欄位（正式庫可能尚未套 migration）：拔掉後重寫一次，收款紀錄不因此漏記
-    const opt=['invoice_type','coach_id'].filter(k=>obj && k in obj);
+    const opt=['invoice_type','coach_id','pay_split'].filter(k=>obj && k in obj);
     if(opt.length){
       const o2=Object.assign({},obj); opt.forEach(k=>delete o2[k]);
       return await dbPut('purchases',o2);
@@ -13380,7 +13380,7 @@ PAGES.g_dashboard=async function(){
       name:nm[p.member_id]||p.member_name||'—',
       plan:p.plan_name||'方案',
       amount:Number(p.deal_amount)||0,
-      pay:({cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統'}[p.payment_method])||p.payment_method||'',
+      pay:({cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統',split:'現金+匯款'}[p.payment_method])||p.payment_method||'',
       date:puLocalDate(p) }));
     window._revDate=date;
   })();
@@ -13981,11 +13981,15 @@ PAGES.g_dashboard=async function(){
      對不到收款紀錄的（舊資料、匯入票）歸「其他」，不硬塞進現金或匯款 —— 櫃檯數現金時
      多算一筆比少算一筆更麻煩。 */
   const _payOfTk={};
-  (purchases||[]).forEach(p=>{ if(p && p.ticket_id && puLocalDate(p)===date) _payOfTk[p.ticket_id]=p.payment_method||''; });
+  (purchases||[]).forEach(p=>{ if(p && p.ticket_id && puLocalDate(p)===date) _payOfTk[p.ticket_id]=p; });
   let _revCash=0,_revBank=0,_revOther=0;
   const _bump=(m,amt)=>{ if(m==='cash') _revCash+=amt; else if(m==='transfer') _revBank+=amt; else _revOther+=amt; };
-  _dayTk.forEach(t=>_bump(_payOfTk[t.id], Number(t.amount_paid)||0));
-  _dayPur.forEach(p=>_bump(p.payment_method, Number(p.deal_amount)||0));
+  /* 拆帳（2026-08-12）：split 展開成現金/匯款兩段（金額以 pay_split 為準）；
+     票券那筆非拆帳時金額仍用 amount_paid（與原本口徑一致）。 */
+  _dayTk.forEach(t=>{ const pu=_payOfTk[t.id];
+    if(pu&&pu.payment_method==='split') purPayParts(pu).forEach(([m,a])=>_bump(m,a));
+    else _bump(pu?(pu.payment_method||''):'', Number(t.amount_paid)||0); });
+  _dayPur.forEach(p=>purPayParts(p).forEach(([m,a])=>_bump(m,a)));
   const _ptN=dayBk.filter(b=>{const c=bkCC(b);return c==='pt'||c==='friendly';}).length;
   const _grpN=dayBk.filter(b=>bkCC(b)==='group').length;
   /* 「今日營收」卡點下去可以看名單（2026-08-01 使用者指示）——
@@ -14105,7 +14109,7 @@ PAGES.g_dashboard=async function(){
   /* 付款方式標籤（2026-08-03 使用者指示：「今日營收要顯示這一筆是現金還是匯款」）——
      票券本身不存付款方式，在同日的收款紀錄（purchases.payment_method）上；
      分期票同一天只會有一筆，取當日那筆即可。 */
-  const _payLb=m=>({cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統'}[m]||m||'');
+  const _payLb=m=>({cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統',split:'現金+匯款'}[m]||m||'');
   const _payByTk={}; (purchases||[]).forEach(p=>{
     if(p.ticket_id&&puLocalDate(p)===date) _payByTk[p.ticket_id]={m:p.payment_method||'',pid:p.id}; });
   const _revRows=[
@@ -25780,7 +25784,7 @@ function openMemberRecords(member_id){
     ? '<div class="empty"><div class="em-t">尚無付款紀錄</div></div>'
     : `<table class="mtk-table"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right;">金額</th><th>方式</th></tr></thead><tbody>
       ${myPurchases.map(p=>{
-        const payLabel={cash:'現金',transfer:'匯款',card:'刷卡'}[p.payment_method]||p.payment_method||'—';
+        const payLabel={cash:'現金',transfer:'匯款',card:'刷卡',split:'現金+匯款'}[p.payment_method]||p.payment_method||'—';
         const dt=p.date||((p.created_at)?new Date(new Date(p.created_at).getTime()+8*3600000).toISOString().slice(0,10):'—');
         const note=p.note?`<div style="font-size:11px;color:var(--t3);">${p.note}</div>`:'';
         return `<tr><td style="white-space:nowrap;">${dt}</td><td>${p.plan_name||'—'}${note}</td>
@@ -27040,7 +27044,17 @@ function openRevList(){
 /* 付款方式標籤（2026-08-03 使用者兩連指示：「要顯示這一筆是現金還是匯款」
    「發票移除，然後付款方式改成可以修正」）——發票欄位還沒串（銷售端已先移除），
    名單上不再出現；付款方式櫃檯可點開修正，寫回該筆收款的 payment_method。 */
-const REV_PAY_LB={cash:'現金', transfer:'匯款', card:'刷卡'};
+const REV_PAY_LB={cash:'現金', transfer:'匯款', card:'刷卡', split:'現金+匯款'};
+/* 拆帳付款（2026-08-12 使用者需求：一筆 $14,400＝現金 7,200＋匯款 7,200）——
+   payment_method='split'，拆分金額記在 purchases.pay_split（{cash,transfer}）。
+   統計（首頁現金/匯款 KPI、財務報表付款方式）一律經過這個 helper 展開成兩段，
+   其他付款方式原樣回傳一段，呼叫端不用分辨。 */
+function purPayParts(p){
+  if(p && p.payment_method==='split' && p.pay_split && typeof p.pay_split==='object'){
+    return [['cash',Number(p.pay_split.cash)||0],['transfer',Number(p.pay_split.transfer)||0]];
+  }
+  return [[(p&&p.payment_method)||'', Number(p&&p.deal_amount)||0]];
+}
 function revPayChip(r){
   const can=(typeof isDeskLike==='function')&&isDeskLike()&&r.payRef;
   const lb=r.pay||(can?'—':'');
@@ -27061,15 +27075,47 @@ async function openRevPayPick(pid){
       ${String(p.plan_name||'收款').replace(/</g,'&lt;')}　$${Number(p.deal_amount||0).toLocaleString()}<br>
       改的是這一筆收款的付款方式，財務報表會跟著更新。</div>
     ${/* 刷卡不列（2026-08-03 使用者指示：沒提供刷卡功能）；REV_PAY_LB 保留 card 供舊資料顯示 */''}
-    <div style="display:flex;gap:8px;">${btn('cash')}${btn('transfer')}</div>
+    <div style="display:flex;gap:8px;">${btn('cash')}${btn('transfer')}
+      <button type="button" class="btn ${cur==='split'?'btn-green':'btn-ghost'}" style="flex:1.2;" onclick="openRevPaySplit('${pid}')">現金+匯款</button></div>
+    ${cur==='split'&&p.pay_split?`<div style="margin-top:8px;font-size:12px;color:var(--t2);">目前拆帳：現金 $${(Number(p.pay_split.cash)||0).toLocaleString()}　匯款 $${(Number(p.pay_split.transfer)||0).toLocaleString()}</div>`:''}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
+}
+/* 拆帳輸入（2026-08-12）：填現金收多少，其餘自動記匯款 */
+async function openRevPaySplit(pid){
+  const p=await dbGet('purchases',pid); if(!p){ showToast('找不到收款紀錄'); return; }
+  const total=Number(p.deal_amount)||0;
+  const curCash=(p.pay_split&&Number(p.pay_split.cash))||'';
+  showModal(`<div class="modal-title">現金＋匯款 拆帳</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">
+      ${String(p.plan_name||'收款').replace(/</g,'&lt;')}　總額 $${total.toLocaleString()}<br>
+      輸入其中「現金」收了多少，其餘自動記為匯款。</div>
+    <div class="form-row"><label>現金金額</label>
+      <input type="number" id="rvp-cash" min="0" max="${total}" value="${curCash}" placeholder="例如 ${Math.round(total/2)}"
+        oninput="var c=Number(this.value)||0;var t=${total};document.getElementById('rvp-hint').textContent=(c<0||c>t)?'金額要在 0 ～ '+t.toLocaleString()+' 之間':'匯款：$'+(t-c).toLocaleString();"></div>
+    <div id="rvp-hint" style="font-size:12.5px;color:var(--gold-d,#b48a56);font-weight:700;">匯款：$${curCash===''?'—':(total-Number(curCash)).toLocaleString()}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openRevPayPick('${pid}')">← 返回</button>
+      <button class="btn btn-green" onclick="setRevPaySplit('${pid}')">確定</button></div>`);
+}
+async function setRevPaySplit(pid){ return onceAct('revpaysp:'+pid, ()=>_setRevPaySplit(pid)); }
+async function _setRevPaySplit(pid){
+  try{
+    const p=await dbGet('purchases',pid); if(!p) return;
+    const total=Number(p.deal_amount)||0;
+    const cash=Number((document.getElementById('rvp-cash')||{}).value);
+    if(!Number.isFinite(cash)||cash<0||cash>total){ showToast('現金金額要在 0 ～ '+total.toLocaleString()+' 之間'); return; }
+    p.payment_method='split'; p.pay_split={cash:cash, transfer:total-cash};
+    await dbPut('purchases',p);
+    dbCacheClear('purchases');
+    closeModal(); showToast(`已拆帳：現金 $${cash.toLocaleString()}＋匯款 $${(total-cash).toLocaleString()}`);
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('修改失敗：'+((e&&e.message)||e)); }
 }
 async function setRevPay(pid, m){ return onceAct('revpay:'+pid, ()=>_setRevPay(pid,m)); }
 async function _setRevPay(pid, m){
   try{
     const p=await dbGet('purchases',pid); if(!p) return;
     if(p.payment_method===m){ closeModal(); return; }
-    p.payment_method=m;
+    p.payment_method=m; p.pay_split=null;   // 從拆帳改回單一方式要清掉拆分（2026-08-12）
     await dbPut('purchases',p);
     dbCacheClear('purchases');
     closeModal(); showToast('付款方式已改為「'+(REV_PAY_LB[m]||m)+'」');
@@ -31715,7 +31761,7 @@ function ppRecordHtml(){
         const txAll=(c.myPc||[]).concat(c.myImpTx||[]).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
         const txSum=txAll.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
         const rows=txAll
-          .map(p=>{ const payLabel={cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統'}[p.payment_method]||p.payment_method||'—';
+          .map(p=>{ const payLabel={cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統',split:'現金+匯款'}[p.payment_method]||p.payment_method||'—';
             const dt=(p.created_at)?new Date(new Date(p.created_at).getTime()+8*3600000).toISOString().slice(0,10):'—';
             return `<tr><td style="white-space:nowrap;">${dt}</td><td>${p.plan_name||'—'}</td><td style="text-align:right;font-weight:700;color:var(--green);">$${(Number(p.deal_amount)||0).toLocaleString()}</td><td>${payLabel}</td></tr>`; }).join('');
         const sumBar=rows?`<div style="display:flex;justify-content:space-between;align-items:baseline;background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:12px 16px;margin:2px 0 12px;">
@@ -34140,7 +34186,7 @@ PAGES.m_payments=async function(){
   let purchases=[];
   try{ purchases=(await dbGetAll('purchases')).filter(p=>p.member_id===mid); }catch(_){}
   purchases.sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
-  const methodLabel=m=>({cash:'現金',transfer:'匯款',card:'刷卡'}[m]||m||'—');
+  const methodLabel=m=>({cash:'現金',transfer:'匯款',card:'刷卡',split:'現金+匯款'}[m]||m||'—');
   const total=purchases.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
   const stats=lpStats([
     {label:'付款筆數', value:purchases.length, unit:'筆'},
@@ -34805,8 +34851,10 @@ async function openGrantModal(){
       <div style="margin:14px 0 8px;font-size:12.5px;color:var(--t3);letter-spacing:0.04em;">購買資訊</div>
       <div class="form-2col">
         <div class="form-row"><label>總金額</label><input type="number" id="gt-amount" placeholder="課程總價"></div>
-        <div class="form-row"><label>付款方式</label><select id="gt-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
+        <div class="form-row"><label>付款方式</label><select id="gt-method" onchange="var w=document.getElementById('gt-splitcash-wrap');if(w)w.style.display=this.value==='split'?'':'none';"><option value="cash">現金</option><option value="transfer">匯款</option><option value="split">現金＋匯款</option></select></div>
       </div>
+      ${/* 拆帳（2026-08-12 使用者需求：一筆 14400＝現金 7200＋匯款 7200）：填現金收多少，其餘記匯款 */''}
+      <div class="form-row" id="gt-splitcash-wrap" style="display:none;"><label>其中現金收多少（其餘記匯款）</label><input type="number" id="gt-splitcash" min="0" placeholder="例如 7200"></div>
       <div class="form-2col">
         <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>
         <div class="form-row"><label>付款狀態</label><select id="gt-pay"><option value="paid">已付款</option><option value="unpaid">未付款</option></select></div>
@@ -35347,6 +35395,10 @@ async function submitGrant(){
   const listPrice=unitPrice*plan.sessions_base;
   const dealAmount=Number(document.getElementById('gt-amount').value)||listPrice; // 實際成交金額
   const method=document.getElementById('gt-method').value;
+  /* 拆帳（2026-08-12）：現金部分必填、不可超過成交金額；匯款＝實收−現金，寫購買紀錄時才算（要扣掉折抵券） */
+  const splitCash=method==='split'?Number((document.getElementById('gt-splitcash')||{}).value):null;
+  if(method==='split' && (!Number.isFinite(splitCash)||splitCash<0||splitCash>dealAmount)){
+    showToast('請輸入拆帳的現金金額（0 ～ 成交金額之間）'); return; }
   const installCount=plan.installment?(Number(document.getElementById('gt-install').value)||1):1;
   const note=document.getElementById('gt-note').value.trim()||null;
   // ── 分期（分段解鎖）計算 ──
@@ -35381,7 +35433,7 @@ async function submitGrant(){
            format:plan.format||null, valid_days:plan.valid_days||null,
            sessions_base:plan.sessions_base, sessions_bonus:plan.sessions_bonus,
            unit_price:unitPrice },
-    total, unitPrice, listPrice, dealAmount, method, installCount, note,
+    total, unitPrice, listPrice, dealAmount, method, splitCash, installCount, note,
     isInstall, unlocked, firstAmount, installment,
     voucherN, voucherAmt, paidAmount,
     /* 折抵券審核當下要重新讀一次餘額（可能被別筆用掉了）→ 只存 id 順序 */
@@ -35523,9 +35575,13 @@ async function _grantIssue(P){
   }
   // 建立購買紀錄（分期只記第1期實收金額；未收期款不列入營收）
   try{
+    const _dealRec=(isInstall?Math.max(0,P.firstAmount-P.voucherAmt):P.paidAmount);
+    /* 拆帳（2026-08-12）：現金以填的為準（夾在 0～實收），匯款＝實收−現金 */
+    const _paySplit=(P.method==='split')?{cash:Math.max(0,Math.min(Number(P.splitCash)||0,_dealRec)),
+      transfer:_dealRec-Math.max(0,Math.min(Number(P.splitCash)||0,_dealRec))}:null;
     await dbPutPurchaseSafe({id:uid('PUR'),member_id:P.member_id,plan_id:P.plan_id,ticket_id:t.id,plan_name:plan.name,
-      list_price:P.listPrice,deal_amount:(isInstall?Math.max(0,P.firstAmount-P.voucherAmt):P.paidAmount),
-      payment_method:P.method,installment_count:P.installCount,   /* 2026-08-05：分期第 1 期記折抵後實收，與 amount_paid 同口徑 */
+      list_price:P.listPrice,deal_amount:_dealRec,
+      payment_method:P.method,pay_split:_paySplit,installment_count:P.installCount,   /* 2026-08-05：分期第 1 期記折抵後實收，與 amount_paid 同口徑 */
       invoice_type:'none',
       coach_id:P.sold_by||null,   // 業績歸屬（2026-07-21 銷售彈窗）
       note:(P.note||'')+(isInstall?`（分期第1期／總額 $${(P.dealAmount||0).toLocaleString()}）`:'')+(P.voucherN?`（折抵券×${P.voucherN} −$${(P.voucherAmt||0).toLocaleString()}）`:''),
@@ -35692,7 +35748,7 @@ async function openGrantApprove(id){
   const signed=!!(c&&c.signed_at);
   const amt=Number(r.amount)||0;
   const P=r.payload||{};
-  const _pay={cash:'現金',transfer:'匯款',card:'刷卡'}[P.method]||P.method||'—';
+  const _pay={cash:'現金',transfer:'匯款',card:'刷卡',split:'現金+匯款'}[P.method]||P.method||'—';
   showModal(`<div class="modal-title">確認收款・發放票券</div>
     <div style="font-size:13px;color:var(--text);padding:2px 0 10px;">
       ${escH(r.member_name||'—')}　·　${escH(r.plan_name||'')}　·　${Number(r.sessions)||0} 堂</div>
@@ -41897,7 +41953,7 @@ const FIN_TABS=[
 let _finTab='month';   // 2026-08-05：預設看本月（整合後的主畫面）
 function setFinTab(k){ _finTab=k; navTo('finance','g_admin'); }
 // 付款方式顯示（未知方式原樣顯示，避免漏帳）
-const FIN_METHOD={cash:'現金',transfer:'轉帳',card:'信用卡',linepay:'Line Pay',line_pay:'Line Pay'};
+const FIN_METHOD={cash:'現金',transfer:'轉帳',card:'信用卡',linepay:'Line Pay',line_pay:'Line Pay',split:'現金+匯款'};
 function finMethod(m){ return FIN_METHOD[m]||m||'—'; }
 function finMoney(n){ return '$'+Number(n||0).toLocaleString(); }
 
@@ -42578,7 +42634,7 @@ async function finToday(){
   const total=todayPur.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
   // 付款方式分組
   const byMethod={};
-  todayPur.forEach(p=>{ const m=p.payment_method||'其他'; byMethod[m]=(byMethod[m]||0)+(Number(p.deal_amount)||0); });
+  todayPur.forEach(p=>purPayParts(p).forEach(([m,amt])=>{ const k=m||'其他'; byMethod[k]=(byMethod[k]||0)+amt; }));   /* 拆帳展開（2026-08-12） */
   const methodChips=Object.entries(byMethod).map(([m,amt])=>
     `<span class="tag tag-ok" style="margin-right:6px;">${finMethod(m)} ${finMoney(amt)}</span>`).join('');
 
@@ -42862,7 +42918,7 @@ async function finMonth(){
   }});
   // 付款方式比例
   const byMethod={};
-  monthPur.forEach(p=>{ const m=p.payment_method||'其他'; byMethod[m]=(byMethod[m]||0)+(Number(p.deal_amount)||0); });
+  monthPur.forEach(p=>purPayParts(p).forEach(([m,amt])=>{ const k=m||'其他'; byMethod[k]=(byMethod[k]||0)+amt; }));   /* 拆帳展開（2026-08-12） */
 
   const [my,mm]=month.split('-');
   /* 2026-08-08 整理：整合頁上面已經有月份切換器與損益表了 ——
