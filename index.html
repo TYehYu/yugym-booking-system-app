@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260812.1533';
-const APP_VERSION_LABEL='v260812.1533';
+const APP_VERSION = '260812.1545';
+const APP_VERSION_LABEL='v260812.1545';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13052,6 +13052,10 @@ async function _groupToggleLeave(bid,seatKey){
   const wasLeave = att[sk]==='leave';
   try{
     if(wasLeave){
+      /* 請假已釋出名額（2026-08-12）：若位子已被別人補走，取消請假會超收 —— 擋下 */
+      if(grpLiveHeads(b)+1 > Math.max(1,Number(b.max_heads)||5)){
+        showToast('無法取消請假：釋出的名額已被其他會員補走（本堂已滿）'); return;
+      }
       att[sk]='booked';
       const n=await revokeMakeupTicket(b,mid,sk);
       showToast(n?'已取消請假，並收回未使用的補課券':'已取消請假（補課券已使用，保留不收回）');
@@ -20372,17 +20376,25 @@ function renderGrpPick(){
 }
 // 團課本堂人數上限（2026-07-27 使用者指示）：預設 5，場地有餘裕時可放寬（開課/名單視窗皆可調）
 function grpMax(){ return Math.max(1, Number(window._grpMax)||5); }
+/* 請假釋出名額（2026-08-12 使用者定案：「請假要釋出名額」）——
+   請假的票照扣、補課券照發（規則不變），但位子開放別人補：
+   所有「滿了沒」的計算改用有效名額＝總名額−請假名額。 */
+function grpLeaveSeats(b){
+  const att=(b&&b.attendance&&typeof b.attendance==='object')?b.attendance:{};
+  return Object.values(att).filter(v=>v==='leave').length;
+}
+function grpLiveHeads(b){ return Math.max(0, mids(b).length - grpLeaveSeats(b)); }
 // 點列切換：未選→選 1 位；已選→整組移除（含同名加開的名額）
 function toggleGrpMember(id){
   const sel=window._grpSel||(window._grpSel=[]);
   if(sel.includes(id)){ window._grpSel=sel.filter(x=>x!==id); }
-  else{ if(sel.length>=grpMax()){ showToast(`已達本堂人數上限（${grpMax()} 人）`); return; } sel.push(id); }
+  else{ if(sel.length>=grpMax()+(Number(window._grpLeaveN)||0)){ showToast(`已達本堂人數上限（${grpMax()} 人，請假不佔位）`); return; } sel.push(id); }
   renderGrpPick();
 }
 // 同名名額 +1 / −1（帶長輩同行）
 function grpAddOne(id){
   const sel=window._grpSel||(window._grpSel=[]);
-  if(sel.length>=grpMax()){ showToast(`已達本堂人數上限（${grpMax()} 人）`); return; }
+  if(sel.length>=grpMax()+(Number(window._grpLeaveN)||0)){ showToast(`已達本堂人數上限（${grpMax()} 人，請假不佔位）`); return; }
   sel.push(id); renderGrpPick();
 }
 function grpRemoveOne(id){
@@ -23867,6 +23879,7 @@ async function openGroupMembers(id, keepSel){
   if(!keepSel) window._grpTkPick={};   // 每次開名單重置，指定不要跨堂殘留
   if(!keepSel || !Array.isArray(window._grpSel)) window._grpSel=cur.slice();
   window._grpMax=Math.max(1,Number(b.max_heads)||5);
+  window._grpLeaveN=grpLeaveSeats(b);   // 請假名額不佔位（2026-08-12）
   showModal(`<div class="modal-title">團體課名單</div>
     <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">有團體課票券的會員會在加入時扣 1 堂、移除時退回；沒票的由教練負責（不扣）。帶親友同行可按已選會員的「＋」重複報名，每個名額各算 1 人、各扣 1 堂。</div>
     <div class="form-row" style="display:flex;align-items:center;gap:10px;"><label style="margin:0;flex:none;">本堂人數上限</label><input type="number" id="grp-max" value="${Math.max(1,Number(b.max_heads)||5)}" min="1" max="12" style="width:76px;" oninput="window._grpMax=Math.max(1,Number(this.value)||5);renderGrpPick()"><span style="font-size:11.5px;color:var(--t3);">預設 5 人，場地有餘裕可放寬</span></div>
@@ -23893,7 +23906,7 @@ async function _saveGroupMembers(id){
   }
   const next=(window._grpSel||[]).slice();
   const gmax=grpMax();
-  if(next.length>gmax){showToast(`已達本堂人數上限（${gmax} 人）`);return;}
+  if(next.length>gmax+grpLeaveSeats(b)){showToast(`已達本堂人數上限（${gmax} 人，請假不佔位）`);return;}
   b.max_heads=gmax;   // 名單視窗可調整本堂上限，一併保存
   const prev=mids(b);
   // 同名可重複報名（2026-07-21）：以「名額數量差」計算加入/移除（multiset diff），
@@ -24115,7 +24128,7 @@ async function _grpFollowRun(mids2){
       const has=cur.filter(m=>String(m)===String(w.mid)).length;
       let need=seats-has;
       if(need<=0) continue;
-      const room=Math.max(1,Number(x.max_heads)||5)-cur.length;
+      const room=Math.max(1,Number(x.max_heads)||5)-(cur.length-grpLeaveSeats(x));   // 請假不佔位（2026-08-12）
       if(room<=0) continue;                                             // 滿員 → 跳過往後遞補
       need=Math.min(need,room);
       /* 有票就扣、沒票不加（票不夠就停）——名單視窗的單堂規則是「沒票＝教練負責照加」，
@@ -38472,7 +38485,7 @@ function renderMemMonthView(){
       const _cmD=(window._memCalData||{}).coachMap||{};
       const _whoId=b.substitute_coach_id||b.coach_id;
       const who=b.coach_id?((_cmD[_whoId]||'教練')+(b.substitute_coach_id?'（代課）':'')):'自主訓練';
-      const _grpHeads=bkIsGroup(b)?`${mids(b).length}/${Math.max(1,Number(b.max_heads)||5)} 人`:'';
+      const _grpHeads=bkIsGroup(b)?`${grpLiveHeads(b)}/${Math.max(1,Number(b.max_heads)||5)} 人${grpLeaveSeats(b)?`（${grpLeaveSeats(b)} 請假）`:''}`:'';
       // 簽到/取消按鈕
       let actionBtn='';
       const isGrp=bkIsGroup(b);
@@ -38721,7 +38734,7 @@ async function memTaskTap(id,el){
   const _whoIdT=b.substitute_coach_id||b.coach_id;
   const who=b.coach_id?((_cmT[_whoIdT]||'教練')+(b.substitute_coach_id?'（代課）':''))
     :(bkIsSelf(b)?(selfVenueLabel(b)||'自主訓練'):'');
-  const whoHeads=isGrp?`${mids(b).length}/${Math.max(1,Number(b.max_heads)||5)} 人`:'';
+  const whoHeads=isGrp?`${grpLiveHeads(b)}/${Math.max(1,Number(b.max_heads)||5)} 人${grpLeaveSeats(b)?`（${grpLeaveSeats(b)} 請假）`:''}`:'';
   const orb=(cls,ic,label,onclick,title)=>onclick
     ? `<button class="mtp-orb ${cls}" onclick="${onclick}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></button>`
     : `<div class="mtp-orb ${cls}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></div>`;
@@ -39064,7 +39077,7 @@ function msbRenderGrpList(){
     : '<div class="msb-empty">這天沒有團體課<br><span class="em-s">換一天看看；購買團體課方案後即可直接報名。</span></div>'; return; }
   const cm=(window._memCalData||{}).coachMap||{};
   box.innerHTML='<div style="padding:4px 14px 12px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;">'+list.map(c=>{
-    const n=Array.isArray(c.member_ids)?c.member_ids.length:0;
+    const n=grpLiveHeads(c);   // 請假不佔位（2026-08-12）
     const mx=Math.max(1,Number(c.max_heads)||5);
     // 有代課就顯示代課那位（2026-08-08：會員關心的是「今天誰帶」，不是誰掛名）
     const _who=(cm[c.substitute_coach_id||c.coach_id]||'教練')+(c.substitute_coach_id?'（代課）':'');

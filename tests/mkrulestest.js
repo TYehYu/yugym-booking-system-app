@@ -167,5 +167,18 @@ ok('　　教練課的教練請假仍是「退票＋展延＋改自主訓練」'
    /b\.category='自主訓練';/.test(src) && /const COACH_LEAVE_EXTEND_DAYS=7;/.test(src));
 ok('　　補課券仍只屬團課（教練課沒有補課機制）', /補課券只屬於團課的四週方案（2026-07-26 使用者指示/.test(src));
 
+console.log('  請假釋出名額（2026-08-12 使用者定案：「請假要釋出名額」）');
+{
+  ok('★★ 有效名額 helper：總名額−請假名額',
+     /function grpLeaveSeats\(b\)\{/.test(src) && /function grpLiveHeads\(b\)\{ return Math\.max\(0, mids\(b\)\.length - grpLeaveSeats\(b\)\); \}/.test(src));
+  ok('★★ 名單視窗與儲存的上限都放寬請假數（請假不佔位）',
+     (src.match(/grpMax\(\)\+\(Number\(window\._grpLeaveN\)\|\|0\)/g)||[]).length===2
+     && /next\.length>gmax\+grpLeaveSeats\(b\)/.test(src));
+  ok('★ 連續預約遞補與會員端「已滿」都改有效名額',
+     /-\(cur\.length-grpLeaveSeats\(x\)\)/.test(src) && /const n=grpLiveHeads\(c\);/.test(src));
+  ok('★★ 取消請假防線：釋出的位子被補走就不能取消請假',
+     /無法取消請假：釋出的名額已被其他會員補走/.test(src));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
