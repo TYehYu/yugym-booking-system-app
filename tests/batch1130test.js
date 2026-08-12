@@ -164,8 +164,10 @@ console.log('\n員工管理：卡片改回列表');
 {
   const i=src.indexOf('    const stRow=c=>{'); const j=src.indexOf('\n    };\n', i)+8;
   const k=src.indexOf('function stSwitchRow(c){'); const l=src.indexOf('\n}\n',k)+2;
-  const ST_SWITCHES=[{key:'admin',label:'管理員'},{key:'manager',label:'店長'},{key:'supervisor',label:'主管'},
-                     {key:'punch',label:'打卡'},{key:'teach',label:'開課'},{key:'disabled',label:'停用'}];
+  /* 2026-08-12：新增 LINE 開關並分成 role／func／danger 三群（stSwitchRow 依 grp 分組渲染） */
+  const ST_SWITCHES=[{key:'admin',label:'管理員',grp:'role'},{key:'manager',label:'店長',grp:'role'},{key:'supervisor',label:'主管',grp:'role'},
+                     {key:'punch',label:'打卡',grp:'func'},{key:'teach',label:'開課',grp:'func'},{key:'line',label:'LINE',grp:'func'},
+                     {key:'disabled',label:'停用',grp:'danger'}];
   const env={ST_SWITCHES, ppEmpSwitchOn:(c,kk)=>kk==='teach'||(kk==='disabled'&&c.status==='inactive'),
     ET_COLOR:{full_time:'#1f6f54'}, normEmp:x=>x||'full_time', typeLabel:()=>'正職',
     genderAvatarSVG:()=>'<svg/>', stateOf:c=>c.status||'active', statusBadge:()=>'<span class="tag">停用</span>',
@@ -187,8 +189,8 @@ console.log('\n員工管理：卡片改回列表');
   const h=fn({id:'E1',name:'王教練',name_en:'wang',gender:'male',employment_type:'full_time',
               job_title:'資深教練',emp_no:'A01',phone:'0912345678',status:'active'});
   ok('★ 一列一人的列表（不再是直式卡）', /class="st-lrow/.test(h) && !/class="st-card/.test(h));
-  ok('★ 權限開關全部保留（6 顆）',
-     (h.match(/class="st-swb/g)||[]).length===6, (h.match(/class="st-swb/g)||[]).length);
+  ok('★ 權限開關全部保留（7 顆，2026-08-12 新增 LINE）',
+     (h.match(/class="st-swb/g)||[]).length===7, (h.match(/class="st-swb/g)||[]).length);
   ok('★ 右上角齒輪保留（點開員工明細）', /st-gear st-gear-row/.test(h) && /openPersonProfile\('employee','E1'\)/.test(h));
   ok('　　點整列也能開明細', /<div class="st-lrow[^"]*"[^>]*onclick="openPersonProfile\('employee','E1'\)"/.test(h));
   ok('　　沒有打卡問題就不掛驚嘆號', !/st-punch-x/.test(h));
@@ -217,10 +219,10 @@ console.log('\n員工管理：卡片改回列表');
   ok('★ 每一格不再重複印欄名（改由表頭統一）', !/<i>教練課<\/i>/.test(h) && !/st-l-stats/.test(src));
   // 三／四修：加入「工作規則／休假日／實領薪資」，數字欄名在翻月時會附月份標記
   /* 2026-07-31 使用者指示改版：總堂數在教練課前面、實領薪資移到工作時數後面、整列分三區 */
-  ok('★ 表頭：姓名／總堂數／教練課／團課堂數／團課人次／體驗／續約／工作時數／實領薪資／工作規則／休假日／權限開關',
-     /<span>姓名<\/span>\s*\n\s*<span class="st-zb">總堂數\$\{_mTag\}<\/span><span>教練課\$\{_mTag\}<\/span><span>團課堂數\$\{_mTag\}<\/span><span>團課人次\$\{_mTag\}<\/span><span>體驗\$\{_mTag\}<\/span><span>續約\$\{_mTag\}<\/span><span>工作時數\$\{_mTag\}<\/span>\s*\n\s*<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">工作規則<\/span><span>休假日<\/span>\s*\n\s*<span>權限開關<\/span>/.test(src));
-  ok('★ 固定欄位的 grid（最後一欄不再用 max-content；四修：開關欄改固定寬以對齊標題）',
-     /\.st-lhead,\.st-lrow\{display:grid;\s*\n\s*grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 1fr 92px 78px 372px 30px;/.test(src));
+  ok('★ 表頭：姓名／總堂數／教練課／團課堂數／團課人次／體驗／續約／工作時數／實領薪資／休假日／權限開關（2026-08-12 工作規則欄移除）',
+     /<span>姓名<\/span>\s*\n\s*<span class="st-zb">總堂數\$\{_mTag\}<\/span><span>教練課\$\{_mTag\}<\/span><span>團課堂數\$\{_mTag\}<\/span><span>團課人次\$\{_mTag\}<\/span><span>體驗\$\{_mTag\}<\/span><span>續約\$\{_mTag\}<\/span><span>工作時數\$\{_mTag\}<\/span>\s*\n\s*<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">休假日<\/span>\s*\n\s*<span>權限開關<\/span>/.test(src));
+  ok('★ 固定欄位的 grid（2026-08-12：開關欄改吃剩餘寬度 minmax 1fr）',
+     /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 24px 78px minmax\(360px,1fr\) 30px;/.test(src));
   ok('★ 舊的 flex 版樣式已移除（它排在後面會蓋掉 grid）',
      /〔已移除〕舊的 flex 版員工列樣式/.test(src) && !/\.st-lrow\{position:relative;display:flex/.test(src));
   ok('　　0 用灰字，不會跟有數字的搶注意',

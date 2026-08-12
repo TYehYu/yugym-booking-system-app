@@ -40,9 +40,9 @@ ok('★ 團課人次排在團課堂數後面、體驗再後面',
 
 console.log('\n③ 版面跟著加欄');
 ok('★ 桌機格線多兩欄（中段 62/62/62/62/56）',
-   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 1fr 92px 78px 372px 30px;/.test(src));
-ok('★ 權限開關的靠左對齊往後移兩格（nth-child 13→15）',
-   /\.st-lhead span:nth-child\(15\)\{text-align:left;\}/.test(src)
+   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 24px 78px minmax\(360px,1fr\) 30px;/.test(src));
+ok('★ 權限開關的靠左對齊（2026-08-12 工作規則欄移除 → nth-child 14）',
+   /\.st-lhead span:nth-child\(14\)\{text-align:left;\}/.test(src)
    && !/\.st-lhead span:nth-child\(13\)\{text-align:left;\}/.test(src));
 ok('　　姓名那格沒被動到', /\.st-lhead span:nth-child\(3\)\{text-align:left;\}/.test(src));
 ok('★ 手機版的欄名補齊到 n6',

@@ -17,11 +17,11 @@ console.log('欄位順序');
 {
   const cols=[...head.matchAll(/<span(?: class="st-zb")?>([^<$]+?)(?:\$\{_mTag\})?<\/span>/g)]
     .map(m=>m[1]).filter(x=>x && !/^\s*$/.test(x));
-  eq('★ 姓名 → 總堂數 → 教練課 → 團體課 → 續約 → 工作時數 → 實領薪資 → 工作規則 → 休假日 → 權限開關',
-     cols, ['姓名','總堂數','教練課','團課堂數','團課人次','體驗','續約','工作時數','實領薪資','工作規則','休假日','權限開關']);
+  eq('★ 姓名 → 總堂數 → 教練課 → 團體課 → 續約 → 工作時數 → 實領薪資 → 休假日 → 權限開關',
+     cols, ['姓名','總堂數','教練課','團課堂數','團課人次','體驗','續約','工作時數','實領薪資','休假日','權限開關']);   /* 2026-08-12 工作規則欄移除 */
   ok('★ 總堂數排在教練課前面', head.indexOf('總堂數')<head.indexOf('教練課'));
-  ok('★ 實領薪資排在工作時數後面、工作規則前面',
-     head.indexOf('工作時數')<head.indexOf('實領薪資') && head.indexOf('實領薪資')<head.indexOf('工作規則'));
+  ok('★ 實領薪資排在工作時數後面、休假日前面',
+     head.indexOf('工作時數')<head.indexOf('實領薪資') && head.indexOf('實領薪資')<head.indexOf('休假日'));
   ok('　　新欄位一樣會跟著月份翻頁', /<span class="st-zb">總堂數\$\{_mTag\}<\/span>/.test(head));
 }
 
@@ -45,13 +45,13 @@ console.log('\n三個區域（只用分隔線表達，不放標題列）');
 ok('★ 區塊標題那一列已移除', !/st-hz/.test(src));
 ok('★ 表頭回到單列（沒有第二列的 grid-template-rows）',
    /border:1px solid var\(--bd\);border-radius:10px;margin-bottom:2px;\}/.test(src));
-ok('★ 分區改由兩條線表達：員工表現從「總堂數」起、權限管理從「工作規則」起',
+ok('★ 分區改由兩條線表達：員工表現從「總堂數」起、權限管理從「休假日」起（2026-08-12 工作規則欄移除）',
    /num\(st\.all, [^)]*, 0, 'st-zb'\)/.test(src)
-   && /<span class="st-l-tags st-zb">/.test(src)
+   && /<span class="st-l-off st-zb">/.test(src)   /* 2026-08-12 工作規則欄移除，分隔線移到休假日格 */
    && /<span class="st-zb">總堂數\$\{_mTag\}<\/span>/.test(src)
-   && /<span class="st-zb">工作規則<\/span>/.test(src));
-ok('★ 工作規則／休假日歸在權限管理那一側（不在員工表現裡）',
-   /<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">工作規則<\/span><span>休假日<\/span>/.test(src)
+   && /<span class="st-zb">休假日<\/span>/.test(src));
+ok('★ 休假日歸在權限管理那一側（不在員工表現裡）',
+   /<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">休假日<\/span>/.test(src)
    && /工作規則與休假日屬於權限管理，不是員工表現/.test(src));
 /* 2026-07-31 使用者回報「總堂數的數字比較高」：原本 align-self:stretch 讓那一格被拉成整列高、
    內容從頂端排，只有它偏高 → 改用絕對定位的細線，格子不再 stretch */
@@ -81,13 +81,13 @@ ok('　　工作規則／休假日也吃同一個行高，整排一條基線',
 ok('　　手機版數字也放大', /\.st-l-n\{grid-column:span 1;position:relative;padding-top:12px;font-size:18px;\}/.test(src));
 
 console.log('\n軌道與其他欄位');
-/* 2026-08-08：多了「團課人次」「體驗」兩欄 → 14 → 16 欄 */
-ok('★ 16 欄：姓名欄有上限，剩餘寬度落在兩區中間（姓名區靠左、權限管理區靠右）',
-   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 1fr 92px 78px 372px 30px;/.test(src)
+/* 2026-08-12 工作規則欄移除 → 15 欄；權限開關改吃剩餘寬度（minmax 1fr） */
+ok('★ 15 欄：姓名欄有上限，權限開關吃剩餘寬度',
+   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 24px 78px minmax\(360px,1fr\) 30px;/.test(src)
    && /空白落在兩區中間/.test(src));
-ok('★ 三個斷點的軌道欄數一致（16 欄）', (()=>{
+ok('★ 三個斷點的軌道欄數一致（15 欄）', (()=>{
    const all=[...src.matchAll(/grid-template-columns:10px (?:34|32|28)px minmax\([^)]*\)([^;]*);/g)];
-   return all.length===3 && all.every(m=>m[1].trim().split(/\s+/).length===13);
+   return all.length===3 && all.every(m=>m[1].trim().split(/\s+/).length===12);
 })());
 ok('★ 「待接受邀請」橫跨到權限開關之前', /\.st-l-pend\{grid-column:4 \/ 16;justify-self:start;\}/.test(src));
 ok('★ 權限開關欄撐滿自己的格子', /\.st-l-sw\{justify-self:stretch;\}/.test(src)
