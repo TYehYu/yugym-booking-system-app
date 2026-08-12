@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260811.2253';
-const APP_VERSION_LABEL='v260811.2253';
+const APP_VERSION = '260812.0901';
+const APP_VERSION_LABEL='v260812.0901';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -42508,7 +42508,12 @@ async function finPnl(){
        若貴店的報價是稅外加，這裡要改成 cash*0.05 —— 算式直接寫在畫面上，看得到才好改。 */
     const taxBase=Math.round(cash/1.05);
     const tax=cash-taxBase;
-    let pr=null; try{ pr=await computeMonthlyPayroll(ym); }catch(_){}
+    /* 薪資讀不到不能靜默當 0（2026-08-12 使用者回報：手機看 -830、電腦看 -33,040——
+       差的就是人事成本 32,210。薪資設定表只有管理員讀得到，讀取失敗時整份損益
+       少掉最大一筆支出，看起來像另一份報表）。失敗就在表上明講。 */
+    let pr=null, _prFail=false;
+    try{ pr=await computeMonthlyPayroll(ym); }catch(_){ _prFail=true; }
+    if(!pr) _prFail=true;
     /* 每位員工攤平成一列（2026-08-08 使用者指示：直接列出來，最上面一列標示每一欄是什麼） */
     const payRows=((pr&&pr.rows)||[]).filter(r=>r.countSalary&&Number(r.sal&&r.sal.grossPay)>0)
       .map(r=>({name:(r.emp&&(r.emp.name||r.emp.name_en))||'—',
@@ -42543,6 +42548,7 @@ async function finPnl(){
     const _isNow=ym===ymd(TODAY).slice(0,7);
     box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;">
       <div class="card-title" style="margin-bottom:8px;">${Y} 年 ${M} 月　損益表</div>
+      ${_prFail?`<div style="background:#fbeceb;border:1px solid #e8b6b0;color:#b5372e;border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.7;margin-bottom:10px;">⚠ 薪資資料讀取失敗，<b>本表未含人事成本</b>，淨利不可信 —— 請用管理員帳號查看，或重新整理再試。</div>`:''}
       ${/* 三個大數字：使用者要的「當月利潤／支出」放最上面，薪水在下面逐位列。
            與底下那張表是同一份計算，不會再出現兩個對不起來的淨利（2026-08-08）。 */''}
       ${/* 老闆要看的就這一句：這個月賺不賺、賺多少（2026-08-08 使用者指示：
