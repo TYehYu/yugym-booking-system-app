@@ -11,7 +11,7 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('改名（2026-07-30 二修：定名為「今日收款提醒」）');
-ok('★ 首頁待辦列改成「今日收款提醒」', /'今日收款提醒',_l,_signByTime\.length,'ok',"openTodoList\('sign'\)"/.test(src)
+ok('★ 首頁待辦列改成「今日收款提醒」（2026-08-12 起金色，與降級名單統一）', /'今日收款提醒',_l,_signByTime\.length,'gold',"openTodoList\('sign'\)"/.test(src)
    && !/'今日待簽約名單',_l,/.test(src));
 ok('★ 展開的視窗標題也改了', /sign:\{title:'今日收款提醒'/.test(src));
 ok('　　空狀態文案一致（兩處都是「今日無人待收款」）',

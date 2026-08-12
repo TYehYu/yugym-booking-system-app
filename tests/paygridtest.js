@@ -35,7 +35,7 @@ const grid=run('sign',{title:'今日收款提醒',grid:true,empty:'今日無人�
 const plain=run('nopunch',{title:'今日未打卡名單',empty:'今日打卡皆正常',note:'',items:[{id:'M1',name:'甲',sub:'x'}]});
 
 console.log('名稱');
-ok('★ 首頁待辦列叫「今日收款提醒」', /'今日收款提醒',_l,_signByTime\.length,'ok'/.test(src));
+ok('★ 首頁待辦列叫「今日收款提醒」（2026-08-12 起金色，與降級名單統一）', /'今日收款提醒',_l,_signByTime\.length,'gold'/.test(src));
 ok('★ 視窗標題也是「今日收款提醒」', /sign:\{title:'今日收款提醒'/.test(src));
 ok('　　畫面上不再出現「付款名單」／「待簽約名單」（註解裡的沿革不算）',
    !/'今日付款名單'/.test(src) && !/title:'今日待簽約名單'/.test(src)
