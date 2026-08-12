@@ -7712,6 +7712,7 @@ body.mc-mode .mc-lotto-fab,body.mc-mode .mc-req-fab{left:calc(232px + 20px);}
               <button class="tb-acct-item" id="acct-salary" onclick="openSalarySheet()" style="display:none;"><span class="ai-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M7 9h10M7 13h6M7 16.5h4"/></svg></span>薪資單</button>
               <button class="tb-acct-item" id="acct-profile" onclick="closeAcctMenu();openProfileByRole()" style="display:none;"><span class="ai-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5"/></svg></span>個人資料</button>
               <button class="tb-acct-item" id="acct-punchfix" onclick="closeAcctMenu();openPunchRequest()" style="display:none;"><span class="ai-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>申請補打卡<span class="acct-dot" id="acct-punchfix-dot" style="display:none;"></span></button>
+              <button class="tb-acct-item" onclick="closeAcctMenu();acctPhotoPick()"><span class="ai-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="6" width="17" height="13" rx="2.5"/><circle cx="12" cy="12.5" r="3.2"/><path d="M8.5 6l1.2-2h4.6l1.2 2"/></svg></span>更換照片</button>
               <button class="tb-acct-item" onclick="closeAcctMenu();openChangePassword()"><span class="ai-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="9" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 14.5v2"/></svg></span>修改密碼</button>
               <div class="tb-acct-sep"></div>
               <button class="tb-acct-item tb-acct-fortune" onclick="drawFortuneInline()"><span class="ai-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="9" r="1.1" fill="currentColor" stroke="none"/><circle cx="9" cy="15" r="1.1" fill="currentColor" stroke="none"/></svg></span>每日抽籤</button>
@@ -7756,8 +7757,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260812.1634';
-const APP_VERSION_LABEL='v260812.1634';
+const APP_VERSION = '260812.1643';
+const APP_VERSION_LABEL='v260812.1643';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10286,6 +10287,7 @@ function openMoreMenu(){
   }
   if(role==='coach') items+=`<button class="more-item" onclick="closeModal();openCoachProfile()">👤　個人資料</button>`;
   if(role==='member') items+=`<button class="more-item" onclick="closeModal();openFamilyShare()">👪　家庭成員</button>`;   // 家庭共享（2026-07-29）
+  items+=`<button class="more-item" onclick="closeModal();acctPhotoPick()">📷　更換照片</button>`;   // 本人大頭貼（2026-08-12）
   items+=`<button class="more-item" onclick="closeModal();openChangePassword()">🔑　修改密碼</button>`;
   items+=`<div class="more-sep"></div>`;
   items+=`<button class="more-item more-logout" onclick="doLogout()">↩　登出</button>`;
@@ -17257,11 +17259,26 @@ async function avatarPick(kind, id){
   };
   inp.click();
 }
+/* 本人更換照片（2026-08-12 使用者指示：「放在右上角漢堡裡面」）——
+   會員傳 members/<id>.jpg、員工（教練/管理員/櫃檯）傳 employees/<id>.jpg。 */
+function acctPhotoPick(){
+  if(!SESSION||!SESSION.id){ showToast('請先登入'); return; }
+  avatarPick(SESSION.role==='member'?'members':'employees', SESSION.id);
+}
 function setAcctHead(name, role, gender){
   const un=document.getElementById('tb-acct-uname'); if(un) un.textContent=name||'—';
   const ur=document.getElementById('tb-acct-urole'); if(ur) ur.textContent=role||'';
   const av=document.getElementById('tb-acct-avatar');
   if(av){ av.innerHTML=genderAvatarSVG(gender||(SESSION&&SESSION.gender)); }
+  /* 有上傳過照片就換成照片（背景補上，載入失敗維持剪影） */
+  try{
+    if(SESSION&&SESSION.id){
+      dbGet(SESSION.role==='member'?'members':'coaches', SESSION.id).then(r=>{
+        const av2=document.getElementById('tb-acct-avatar');
+        if(av2&&r&&r.avatar_url) av2.innerHTML=avatarImgHTML(r.avatar_url);
+      }).catch(()=>{});
+    }
+  }catch(_){}
 }
 function toggleAcctMenu(e){
   e.stopPropagation();
