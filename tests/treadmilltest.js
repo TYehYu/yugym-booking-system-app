@@ -70,7 +70,7 @@ ok('★ 選單有「團課教室」選項', /<option value="g">\$\{venueName\('g
 /* 2026-08-03 家庭成員：vbkChk 多帶 member_id 與使用人 */
 ok('★ 單筆預約的場地預驗證也帶上指定（否則會先被判成多功能區可用）',
    /const vbkChk=\{id:null,coach_id,category:t\.category,ticket_type_id:type_id,venue_pref:_venuePref,\n\s*member_id, trial_name:\(window\._bkFamUser!=null\?window\._bkFamUser:null\)\};/.test(src));   // 2026-08-04 '' 哨兵不塌成 null
-ok('★ 兩台只扣 1 點，第 2 台是同行使用', /只扣 1 點<\/b>，第 2 台不另外扣/.test(src)
+ok('★ 兩台只扣 1 點，第 2 台是同行使用', /兩台＝同行使用，<b>只扣 1 點<\/b>/.test(src)   // 2026-08-12 改一台/兩台按鈕後的文案
    && /note:'同行使用（跑步機）・不另外扣點'/.test(src));
 ok('★ 第 2 台用 sibling_of 指回主預約（行事曆才會併成一張卡）',
    /sibling_of:bk\.id,/.test(src));

@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260812.1618';
-const APP_VERSION_LABEL='v260812.1618';
+const APP_VERSION = '260812.1620';
+const APP_VERSION_LABEL='v260812.1620';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16895,27 +16895,49 @@ function assignLanes(evs){
 function bkTreadmillRow(t){
   if(!t || t.category!=='自主訓練') return '';
   const cap=((window.VENUES||[]).find(v=>v.id==='treadmill')||{}).capacity||2;
-  /* 2026-08-04 使用者回報：「這邊沒有團課教室的選項」——allocateVenue 本來就支援
-     forceVid='group'，只是選單沒放。值用 'g' 區隔台數數字。 */
-  const opts=[`<option value="0">自動配置（${venueName('multi')}優先）</option>`]
-    .concat(Array.from({length:cap},(_,i)=>`<option value="${i+1}">${venueName('treadmill')} ${i+1} 台</option>`))
-    .concat([`<option value="g">${venueName('group')}</option>`]).join('');
-  return `<div class="form-row"><label>場地／跑步機台數</label>
-    <select id="bk-treadmill">${opts}</select>
-    <div style="font-size:11px;color:var(--t3);margin-top:5px;line-height:1.7;">
-      選了台數就指定用跑步機。兩台＝同行使用，<b>只扣 1 點</b>，第 2 台不另外扣。</div></div>`;
+  /* 2026-08-12 使用者指示：「跑步機選完後，下方跳出一台兩台的選項」——
+     選單收斂成三個場地（自動配置／跑步機／團課教室），台數改成選了跑步機才出現的
+     一台／兩台按鈕（value 't'＋window._bkTmN），語意與舊版數字值相同。 */
+  window._bkTmN=1;
+  const NUM=['','一','兩','三','四','五','六'];
+  return `<div class="form-row"><label>場地</label>
+    <select id="bk-treadmill" onchange="bkTmSwap()">
+      <option value="0">自動配置（${venueName('multi')}優先）</option>
+      <option value="t">${venueName('treadmill')}</option>
+      <option value="g">${venueName('group')}</option>
+    </select>
+    <div id="bk-tm-units" style="display:none;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--t2);">台數</span>
+      ${Array.from({length:cap},(_,i)=>i+1).map(n=>`<button type="button" class="btn btn-ghost btn-sm bk-tmn" data-n="${n}" style="padding:4px 16px;" onclick="bkTmPick(${n})">${NUM[n]||n}台</button>`).join('')}
+      <span style="font-size:11px;color:var(--t3);">兩台＝同行使用，<b>只扣 1 點</b></span>
+    </div></div>`;
+}
+function bkTmSwap(){
+  const el=document.getElementById('bk-treadmill'), row=document.getElementById('bk-tm-units');
+  if(row) row.style.display=(el&&el.value==='t')?'flex':'none';
+  window._bkTmN=1; bkTmPaint();
+}
+function bkTmPick(n){ window._bkTmN=Math.max(1,Number(n)||1); bkTmPaint(); }
+function bkTmPaint(){
+  document.querySelectorAll('.bk-tmn').forEach(b=>{
+    const on=Number(b.dataset.n)===(Number(window._bkTmN)||1);
+    b.style.background=on?'var(--green)':''; b.style.borderColor=on?'var(--green)':''; b.style.color=on?'#fff':'';
+  });
 }
 function bkTreadmillN(){
   const el=document.getElementById('bk-treadmill');
-  if(el && el.value==='g') return 0;             // 團課教室：不是台數（見 bkVenueChoice）
-  return el ? Math.max(0, Number(el.value)||0) : 0;
+  if(!el) return 0;
+  if(el.value==='t') return Math.max(1,Number(window._bkTmN)||1);
+  if(el.value==='g') return 0;                   // 團課教室：不是台數（見 bkVenueChoice）
+  return Math.max(0, Number(el.value)||0);       // 舊值相容（'0'＝自動）
 }
 /* 場地選擇（2026-08-04）：'treadmill'＋台數／'group' 團課教室／null 自動配置 */
 function bkVenueChoice(){
   const el=document.getElementById('bk-treadmill');
   if(!el) return {pref:null, units:0};
   if(el.value==='g') return {pref:'group', units:0};
-  const n=Math.max(0, Number(el.value)||0);
+  if(el.value==='t') return {pref:'treadmill', units:Math.max(1,Number(window._bkTmN)||1)};
+  const n=Math.max(0, Number(el.value)||0);      // 舊值相容
   return {pref:n>0?'treadmill':null, units:n};
 }
 /* 幫一筆已建立的預約補開第 2、3 台（同行使用、不扣點）。
