@@ -59,8 +59,10 @@ console.log('\n版面');
    2026-08-01 三修（使用者指示，附截圖）：左欄順序改成「值班人員 → 班表 → 月曆」。
    2026-08-02（使用者：「移除首頁左邊的 8月班表」）：中間那個班表鈕拿掉，
    剩「插畫 → 今日值班 → 月曆」。 */
-ok('★ 放在左欄最上方（下面接今日值班、再接月曆）',
-   /\$\{butlerArtHtml\(\)\}\s*\n[\s\S]{0,320}<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>\s*\n\s*<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>/.test(src));
+/* 2026-08-12 使用者指示：插畫移除，位置讓給「今日收款提醒」卡；插畫程式保留備援不渲染。 */
+ok('★ 插畫已退場：左欄最上改為收款提醒卡（下面接今日值班、再接月曆）',
+   !/\$\{butlerArtHtml\(\)\}/.test(src)
+   && /<div class="mc-payremind">\$\{payRemindCard\}<\/div>\s*\n[\s\S]{0,320}<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>\s*\n\s*<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>/.test(src));
 ok('★ 班表鈕已移除（頂欄本來就有「班表」分頁，同一件事不用出現兩次）',
    !/\$\{schedBtnCard\}/.test(src) && /「N 月班表」鈕已移除（2026-08-02 使用者指示）/.test(src));
 ok('　　月排班視窗本身保留（別的地方還有入口）',
@@ -70,8 +72,8 @@ ok('　　月排班視窗本身保留（別的地方還有入口）',
 ok('★ 不在中間那欄（KPI 條裡沒有插畫）',
    !/<div class="mc-kpistrip">[\s\S]{0,400}mc-art/.test(src)
    && /<div class="mc-kpistrip">\s*\n\s*\$\{\[\[ICONS\.cal,'教練課'/.test(src));
-ok('★ 貼著頂欄下方：左欄的齊頭 padding 歸零，插畫自己抵掉 .content 的 10px 上內距',
-   /\.mc-g5-left>\.mc-art-top\{margin:-10px 0 16px !important;\}/.test(src)
+ok('★ 貼著頂欄下方：左欄的齊頭 padding 歸零，第一格自己抵掉 .content 的 10px 上內距（2026-08-12 起是收款提醒卡）',
+   /\.mc-g5-left>\.mc-art-top,\.mc-g5-left>\.mc-payremind\{margin:-10px 0 16px !important;\}/.test(src)
    && /padding-top:0;\}  \/\* 2026-07-21 使用者指示：左欄與「今日教練任務」齊頭/.test(src)
    && /body\.mc-mode \.content\{max-width:none;padding:10px 32px 10px;\}/.test(src));
 ok('★ 下一格（月班表）的位置與原本一致：−10 ＋ 116 ＋ 16 ＝ 122',
@@ -86,8 +88,9 @@ ok('★ 寬度吃滿左欄、高度 150px（與右上角知識卡同高，左右
    && /\.mc-know-top \.know-card\{min-height:150px;height:150px;/.test(src));
 ok('　　裁切幅度寫在程式裡（上下各約 9%，不會切到角色）',
    /這個高度會裁掉原圖上下各約 9%/.test(src));
-ok('★ 只在桌機版面渲染（左欄三格是 isMobileLayout() 的 else 分支）',
-   /\$\{isMobileLayout\(\)\?`[\s\S]{0,4000}\$\{butlerArtHtml\(\)\}/.test(src));
+ok('★ 收款提醒卡只在桌機版面渲染（左欄三格是 isMobileLayout() 的 else 分支；手機版待辦卡兩列不變）',
+   /\$\{isMobileLayout\(\)\?`[\s\S]{0,4000}\$\{payRemindCard\}/.test(src)
+   && /monthCard\+todoCard\+knowCardHTML\(\)/.test(src));
 ok('★ 兩層 <img> 交叉淡入（換圖不閃白）',
    /<img class="mc-art-img" id="mc-art-a" alt=""><img class="mc-art-img" id="mc-art-b" alt="">/.test(src)
    && /\.mc-art-img\{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity \.7s ease;\}/.test(src));
@@ -122,8 +125,8 @@ console.log('\n初始');
   ok('★ 進首頁先隨機給一張', /a\.src=butlerArtNext\(\); a\.style\.opacity='1'; b\.style\.opacity='0';/.test(st));
   ok('★ 沒有元素就直接返回（手機版面沒有這一塊）', /if\(!a\|\|!b\) return;/.test(st));
   ok('　　重進首頁時把狀態歸零', /_artTop=false; _artBusy=false;/.test(st));
-  ok('　　首頁渲染完才啟動，且不讓它拖垮整頁',
-     /try\{ startButlerArt\(\); \}catch\(_\)\{\}/.test(src));
+  ok('　　輪播不再啟動（插畫退場），程式保留備援',
+     !/try\{ startButlerArt\(\); \}catch\(_\)\{\}/.test(src) && /startButlerArt 保留備援/.test(src));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

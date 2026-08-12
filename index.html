@@ -4494,7 +4494,10 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
    插畫連框高 116px，−10 ＋ 116 ＝ 106，剛好與中欄 KPI 條的下緣切齊，
    再接 16px（與其他卡片同一個間距）＝ 122，月班表以下位置仍與原本一致。
    特異度與 !important 都要壓過 .mc-g5-left>* 那條。 */
-.mc-g5-left>.mc-art-top{margin:-10px 0 16px !important;}
+.mc-g5-left>.mc-art-top,.mc-g5-left>.mc-payremind{margin:-10px 0 16px !important;}
+/* 2026-08-12 使用者指示：插畫退場，左欄頂改放「今日收款提醒」卡（沿用待辦列樣式）。
+   名單行數不定，多的時候讓它自己在卡內捲，別把值班與月曆擠出視窗。 */
+.mc-payremind .mc-td-list{max-height:min(38vh,340px);overflow-y:auto;scrollbar-width:thin;}
 /* 2026-08-01 三修（使用者：「健身小知識因為縮得太小了 看不到完整訊息 要放大一點
    （左邊縮圖也放大一點）」）：114 → 150px。兩張一起改，左右仍然對稱。 */
 .mc-art{position:relative;width:100%;height:150px;border-radius:14px;overflow:hidden;
@@ -7767,8 +7770,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260812.1918';
-const APP_VERSION_LABEL='v260812.1918';
+const APP_VERSION = '260812.2036';
+const APP_VERSION_LABEL='v260812.2036';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14136,10 +14139,10 @@ PAGES.g_dashboard=async function(){
     ?`<button class="mc-lotto-fab${reqFab?' mc-fab-up':''}" onclick="openLottoModal()">${LNI.gift}<span><b>${_lotEls.length}</b> 位會員可抽獎</span></button>`:'';
 
   /* 2026-07-23 使用者指示：標題與總額都不顯示（上方 KPI 已有今日營收）—— 只留收款名單 */
-  /* 名單最多列 10 筆（2026-08-02 使用者指示：「右側今日營收最多顯示 10 名」）——
-     用筆數而不是 max-height 擋：欄位改成撐滿視窗後，用高度擋會隨螢幕大小忽多忽少。
-     超過的用一行提示帶到彈窗看全部（點上方的今日營收 KPI）。 */
-  const _revShown=_revRows.slice(0,10), _revMore=_revRows.length-_revShown.length;
+  /* 2026-08-12 使用者指示「今天營收延伸到視窗底」：10 筆上限退場（0802 設限是因為
+     當時下方還擠著待辦卡）——現在營收卡是右欄最後一格、伸縮墊到欄底，
+     名單全列、超出的部分在卡內捲動（.mc-revlist 本來就 overflow-y:auto）。 */
+  const _revShown=_revRows, _revMore=0;
   const revListCard=`<div class="card mc-card mc-revlist-card">
     ${_revRows.length?`<div class="mc-revlist">${_revShown.map(r=>`
       <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
@@ -14358,7 +14361,9 @@ PAGES.g_dashboard=async function(){
       +(_signByTime.length>6?`<span class="mc-td-line mc-td-more">還有 ${_signByTime.length-6} 位…</span>`:'')
       +`</span>`
     : '今日無人待收款';
-  _todoItems.push(_todoRow(OPS_TODO_IC.money,'今日收款提醒',_l,_signByTime.length,'ok',"openTodoList('sign')"));
+  /* 2026-08-12 使用者指示：收款提醒列桌機要獨立成卡（放左欄原插畫位置），先存變數兩處共用 */
+  const _rowSign=_todoRow(OPS_TODO_IC.money,'今日收款提醒',_l,_signByTime.length,'ok',"openTodoList('sign')");
+  _todoItems.push(_rowSign);
   // 即將降級：附上本月至今的教練課簽到堂數，櫃台一眼知道還差幾堂
   const _thisYm=date.slice(0,7);
   const _ptCntThisMonth={};
@@ -14376,7 +14381,8 @@ PAGES.g_dashboard=async function(){
   const _l2=_demoteNames.length
     ? _demoteNames.slice(0,6).join('、')+(_demoteNames.length>6?` 等 ${_demoteNames.length} 人`:'')
     : '本月尚無即將降級的會員';
-  _todoItems.push(_todoRow(OPS_TODO_IC.ticket,'本月即將降級名單',_l2,_demoteNames.length,'gold',"openTodoList('demote')"));
+  const _rowDemote=_todoRow(OPS_TODO_IC.ticket,'本月即將降級名單',_l2,_demoteNames.length,'gold',"openTodoList('demote')");
+  _todoItems.push(_rowDemote);
   /* 今日未打卡名單（2026-07-21 使用者指示）：含上班未打卡＋下班未打卡。
      對象＝當日有排班（非請假）且需打卡（need_punch）的在職員工：
      班已開始仍無 clock_in＝上班未打卡；有 clock_in 無 clock_out 且班已結束＝下班未打卡。
@@ -14408,6 +14414,11 @@ PAGES.g_dashboard=async function(){
     ${_todoItems.length?`<div class="mc-td-list">${_todoItems.join('')}</div>`
       :'<div class="mc-remind-empty">目前沒有待辦事項</div>'}
   </div>`;
+  /* 2026-08-12 使用者指示：「移除首頁插圖，把今日收款提醒移到原本插圖的位子，
+     讓今天營收可以延伸到視窗底」——桌機版拆兩張：收款提醒卡（左欄頂）、
+     待辦卡只剩降級名單（右欄、營收上方）。手機版維持 todoCard 兩列不變。 */
+  const payRemindCard=`<div class="card mc-card mc-payremind-card"><div class="mc-td-list">${_rowSign}</div></div>`;
+  const todoDeskCard=`<div class="card mc-card mc-todo-card"><div class="mc-card-h mc-hide-h">今日待辦事項</div><div class="mc-td-list">${_rowDemote}</div></div>`;
 
   /* quickCard 的定義已上移到 kpiStrip 之前（2026-08-01）——
      三顆鈕改掛在 KPI 條右邊，宣告要在被引用之前，否則 const 落在 TDZ 直接爆。 */
@@ -14465,9 +14476,9 @@ PAGES.g_dashboard=async function(){
       <div class="mc-grid5"><!-- v5.1（2026-07-21 使用者指示）：月曆左下、快捷右下 -->
         <div class="mc-g5-left"><!-- 2026-07-23 使用者指示：月曆上移、知識卡下移（原知識卡在上）；
              同日再指示：今日值班移到左欄行事曆下方（原在右欄快捷之下） -->
-          ${/* 2026-07-31 五修（使用者定版）：插畫放在「當月排班」按鈕上方、貼著頂欄下方，
-               留在左欄不要跑到中間那欄。 */''}
-          ${butlerArtHtml()}
+          ${/* 2026-08-12 使用者指示：插畫移除，「今日收款提醒」搬到原插畫位置（左欄最上）。
+               插畫程式（butlerArtHtml/startButlerArt）保留備援不渲染。 */''}
+          <div class="mc-payremind">${payRemindCard}</div>
           ${/* 2026-08-01 三修（使用者指示，附截圖）：「順序重新排列由上至下 值班人員 班表 月曆」——
                值班是「現在誰在店裡」，每天都要看；班表是入口按鈕；月曆最大、翻月才用，放最下面。
                （原順序：月曆 → 班表 → 值班） */''}
@@ -14485,8 +14496,8 @@ PAGES.g_dashboard=async function(){
         <div class="mc-g5-right"><!-- 2026-08-01 使用者指示：右上角擺健身小知識，與左上插畫對稱；
              三顆快捷鈕改掛在 KPI 條右邊（見 kpiStrip） -->
           <div class="mc-know-top">${knowCardHTML()}</div>
-          ${revListCard}<!-- 2026-07-22 使用者指示：今日收款名單（原在值班下方，值班已移左欄） -->
-          <div class="mc-b4-todo">${todoCard}</div>
+          <div class="mc-b4-todo">${todoDeskCard}</div>
+          ${revListCard}<!-- 2026-08-12 使用者指示：營收名單移到最下、伸縮墊到視窗底（收款提醒已搬左欄，桌機待辦只剩降級名單） -->
         </div>
       </div>
       </div>`}
@@ -14495,7 +14506,7 @@ PAGES.g_dashboard=async function(){
   `;
   // 現在線每分鐘自動更新（只在檢視今天時）
   startDashNowTimer(isTodayView, AXIS_START, AXIS_END);
-  try{ startButlerArt(); }catch(_){}   // 左上角插畫輪播（桌機版面才有這個元素）
+  /* 插畫輪播已移除（2026-08-12 使用者指示：位置讓給今日收款提醒卡）；startButlerArt 保留備援 */
   /* 教練任務卡收進剩下的視窗高度、課卡按比例縮小（2026-08-01）。
      排在 innerHTML 之後：要量得到實際位置與內容高度。 */
   try{ fitCoachCards(); }catch(_){}

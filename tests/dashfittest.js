@@ -22,8 +22,8 @@ ok('★ 高度與插畫一致（兩張都是 150px）',
    && /\.mc-know-top \.know-card\{min-height:150px;height:150px;/.test(src));
 ok('★ 說明放到四行、字級回到 12.5px（原本兩行會把話截掉）',
    /-webkit-line-clamp:4;/.test(src) && /\.mc-know-top \.know-s\{font-size:12\.5px;/.test(src));
-ok('★ 貼齊頂欄的負上邊距也一致（-10 / 下 16）',
-   /\.mc-g5-left>\.mc-art-top\{margin:-10px 0 16px !important;\}/.test(src)
+ok('★ 貼齊頂欄的負上邊距也一致（-10 / 下 16；2026-08-12 起左欄頂是收款提醒卡）',
+   /\.mc-g5-left>\.mc-art-top,\.mc-g5-left>\.mc-payremind\{margin:-10px 0 16px !important;\}/.test(src)
    && /\.mc-g5-right>\.mc-know-top\{margin:-10px 0 16px !important;\}/.test(src));
 ok('★ 右欄原本用 padding-top:43px 撐的齊頭留白要拿掉，否則空白跑到知識卡上面',
    /\.mc-g5-right\{flex:0 0 300px;min-width:0;display:flex;flex-direction:column;\s*\n\s*padding-top:0;\}/.test(src));
@@ -218,7 +218,8 @@ ok('　　兩欄都不設 overflow（第一格用負上邊距貼齊頂欄，變�
    /兩邊都不設 overflow：第一格用負上邊距貼齊頂欄，變成捲動容器會被裁掉。/.test(src));
 ok('　　手機版把 --g5h 也清掉', /const g=mid\.closest\('\.mc-grid5'\); if\(g\) g\.style\.removeProperty\('--g5h'\);/.test(src));
 
-ok('★ 今日營收名單最多列 10 筆', /const _revShown=_revRows\.slice\(0,10\), _revMore=_revRows\.length-_revShown\.length;/.test(src)
+/* 2026-08-12 使用者指示「今天營收延伸到視窗底」：10 筆上限退場（當時設限是因為下方擠著待辦卡）。 */
+ok('★ 今日營收名單全列、卡內捲（不再設 10 筆上限）', /const _revShown=_revRows, _revMore=0;/.test(src)
    && /\$\{_revShown\.map\(r=>`/.test(src));
 ok('★ 超過的用一行帶到彈窗看全部（不是默默截掉）',
    /<button class="mc-rev-more" onclick="openTodayRevList\(\)">還有 \$\{_revMore\} 筆　·　看全部 ›<\/button>/.test(src));

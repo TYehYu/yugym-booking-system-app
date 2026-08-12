@@ -49,9 +49,10 @@ ok('★ 唯讀卡不可拖', /if\(ev\.classList\.contains\('cal-ev-view'\)\) ret
 console.log('\n首頁今日營收名單：最多五列其餘捲動（2026-08-01 使用者指示）');
 /* 2026-08-02：右欄改成撐滿視窗高度後，這張卡的長度不再用 max-height 擋，
    改成「最多列 10 筆」＋名單在自己的框裡捲（見 dashfittest.js）。 */
-ok('★ 名單卡可捲，且最多列 10 筆',
+/* 2026-08-12 使用者指示「今天營收延伸到視窗底」：10 筆上限退場，名單全列、卡內捲。 */
+ok('★ 名單卡可捲，全列不設筆數上限（2026-08-12）',
    /\.mc-revlist-card \.mc-revlist\{overflow-y:auto;/.test(src)
-   && /const _revShown=_revRows\.slice\(0,10\)/.test(src));
+   && /const _revShown=_revRows, _revMore=0;/.test(src));
 ok('★ 只限首頁那張卡，彈窗版不受限（它本來就會捲）',
    /\.mc-revlist-card \.mc-revlist\{/.test(src) && !/^\.mc-revlist\{max-height/m.test(src));
 ok('　　原因寫在程式裡', /用高度擋會隨螢幕大小忽多忽少/.test(src));
