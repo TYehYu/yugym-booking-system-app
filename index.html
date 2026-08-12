@@ -7756,8 +7756,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260812.1624';
-const APP_VERSION_LABEL='v260812.1624';
+const APP_VERSION = '260812.1630';
+const APP_VERSION_LABEL='v260812.1630';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22456,7 +22456,14 @@ async function openBookingDetail(id){
           typeMap:_wctx.typeMap };
       });
     }catch(e){ console.error('團課名單票券圓點失敗:',e); }
-    const rows = _seatKeys.length ? _seatKeys.map(sk=>{
+    /* 請假另外歸類（2026-08-12 使用者指示：「把請假名單另外歸類，讓今日上課名單顯示 3/5」）——
+       請假已釋出名額（同日定案），不該混在上課名單裡：上課的排前面，
+       請假的收到最後、前面加一條「請假（N）・名額已釋出」分隔。 */
+    const _ordKeys=_seatKeys.filter(k=>att[k]!=='leave').concat(_seatKeys.filter(k=>att[k]==='leave'));
+    const _leaveCntD=_seatKeys.filter(k=>att[k]==='leave').length;
+    const _firstLeave=_ordKeys.findIndex(k=>att[k]==='leave');
+    const rows = _ordKeys.length ? _ordKeys.map((sk,_ri)=>{
+      const _leaveHdr=(_ri===_firstLeave&&_leaveCntD)?`<div style="display:flex;align-items:center;gap:8px;margin:8px 0 2px;padding-top:8px;border-top:1px dashed var(--bd);font-size:11px;color:#8a5e28;font-weight:700;">請假（${_leaveCntD}）<span style="font-weight:400;color:var(--t3);">名額已釋出，可再收 ${_leaveCntD} 位</span></div>`:'';
       const mid = seatMid(sk);
       const inHere = att[sk]==='checked_in';
       const onLeaveM = att[sk]==='leave';   // 請假：本堂照扣、另發補課券（見 groupToggleLeave）
@@ -22501,7 +22508,7 @@ async function openBookingDetail(id){
           +`${(_sl.t&&_sl.t.source==='makeup')?'<span class="tag" style="font-size:10px;background:#eef6ee;color:#2f6b39;margin-left:6px;">補課券</span>':''}</div>`
           +`<div class="mck-dots2" style="margin:4px 0 2px;">${ticketTokens(_sl.t,_sl.stamps,st.typeMap,_sl.used,b.id,mid,_sl.selfBk,_ord)}</div>`
         : '';
-      return `<div class="gr-row${onLeaveM?' gr-row-leave':''}" style="padding:6px 0;border-bottom:1px solid var(--bd);">
+      return _leaveHdr+`<div class="gr-row${onLeaveM?' gr-row-leave':''}" style="padding:6px 0;border-bottom:1px solid var(--bd);">
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="gr-name">${(memMapD[mid]&&!(typeof isMemberView!=='undefined'&&isMemberView))
             ?`<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:13px;font-weight:700;white-space:nowrap;" onclick="openMemberDetail('${mid}')">${memMapD[mid]} ›</button>`
@@ -22512,9 +22519,11 @@ async function openBookingDetail(id){
        有時候當天教練可以接受更多人一起上課」）—— 原本這裡寫死 5，改上限也看不出來。
        滿員時把數字標紅，並在旁邊給一個直接改人數的入口。 */
     const _gmaxD=Math.max(1,Number(b.max_heads)||5);
-    const _gfullD=gIdsD.length>=_gmaxD;
+    /* 有效名額口徑（2026-08-12 使用者指示：「讓今日上課名單顯示 3/5」）——請假已釋出名額 */
+    const _liveD=grpLiveHeads(b);
+    const _gfullD=_liveD>=_gmaxD;
     memberLine=`<div><div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="color:var(--t2);">名單</span>
-      <span style="font-size:11px;color:${_gfullD?'var(--danger,#b5372e)':'var(--t3)'};font-weight:${_gfullD?'700':'400'};font-family:var(--num);">（${gIdsD.length}/${_gmaxD}${_gfullD?'・已滿':''}）</span>
+      <span style="font-size:11px;color:${_gfullD?'var(--danger,#b5372e)':'var(--t3)'};font-weight:${_gfullD?'700':'400'};font-family:var(--num);">（${_liveD}/${_gmaxD}${_gfullD?'・已滿':''}${_leaveCntD?`・請假 ${_leaveCntD}`:''}）</span>
       ${editable?`<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="openGrpMaxEdit('${b.id}')" title="場地有餘裕時可放寬本堂人數">改人數</button>
       <button class="btn btn-ghost btn-sm" onclick="openGroupMembers('${b.id}')">管理名單</button>`:''}</div>
       ${(isPastD&&groupCkOK)?`<div style="background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;border-radius:8px;padding:7px 10px;font-size:11.5px;line-height:1.6;margin-bottom:6px;">⚠ 此課已過期，逐人簽到為<b>逾期補登</b>；名單與時間已鎖定不可更動。</div>`:''}

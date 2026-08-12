@@ -12,7 +12,8 @@ const grab=n=>{
 /* 2026-08-08：請假前要先認出「這一格用的是不是補課券」（補課券不能再請假），
    _groupToggleLeave 因此多依賴 seatTicketOf／tkIsMakeup，一併抽進來 */
 const src=[grab('seatNo'),grab('makeupKey'),grab('makeupTerm'),grab('grantMakeupTicket'),grab('revokeMakeupTicket'),
-  grab('seatTicketOf'),grab('tkIsMakeup'),grab('_groupToggleLeave')].join('\n');
+  grab('seatTicketOf'),grab('tkIsMakeup'),grab('_groupToggleLeave'),
+  grab('grpLeaveSeats'),grab('grpLiveHeads'),grab('mids')].join('\n');   // 2026-08-12 取消請假防線用到有效名額
 
 let DB={bookings:{},member_tickets:{}}, LOGS=[], TOASTS=[], REOPENED=[];
 const reset=()=>{DB={bookings:{},member_tickets:{}};LOGS=[];TOASTS=[];REOPENED=[];};
