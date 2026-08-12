@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260812.0926';
-const APP_VERSION_LABEL='v260812.0926';
+const APP_VERSION = '260812.0929';
+const APP_VERSION_LABEL='v260812.0929';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -42441,6 +42441,9 @@ async function monthSalesValue(ym, pre){
    ⚠ 勞保／健保那兩欄是**員工自付**、從應發裡代扣的 —— 它們不是公司的額外成本；
      公司的額外成本是最後一欄「公司負擔」。這件事寫在表下方的說明裡。 */
 const SAL_MX_COLS=[
+  /* 2026-08-12 使用者指示：「實領移到第一欄、移除應發合計」——
+     櫃檯發薪時要看的就是實領，掃第一欄就好；應發是中間值，各項目本來就攤在後面。 */
+  {k:'net',   t:'實領',     s:'匯給員工的錢',   kind:'sum'},
   {k:'pt',    t:'教練課',   s:'課費／保障底薪', kind:'add'},
   {k:'group', t:'團體課',   s:'人次計費',       kind:'add'},
   {k:'duty',  t:'值班',     s:'值班時數',       kind:'add'},
@@ -42449,12 +42452,10 @@ const SAL_MX_COLS=[
   {k:'mgmt',  t:'管理職',   s:'店長／主管津貼', kind:'add'},
   {k:'bday',  t:'生日禮金', s:'',               kind:'add'},
   {k:'leave', t:'請假扣薪', s:'事假全扣・病假半薪', kind:'cut'},
-  {k:'gross', t:'應發合計', s:'公司要付的薪資', kind:'sum'},
   {k:'labor', t:'勞保',     s:'自付・非公司負擔', kind:'cut'},
   /* 負責人的健保是「雇主自負額」（全額自付），受僱者是「員工負擔」——
      兩者都不是公司的額外成本，欄名用共通的說法（2026-08-08 使用者指正）。 */
   {k:'health',t:'健保',     s:'自付・非公司負擔', kind:'cut'},
-  {k:'net',   t:'實領',     s:'匯給員工的錢',   kind:'sum'},
   {k:'co',    t:'公司負擔', s:'勞健保・勞退・職保', kind:'co'},
 ];
 /* 一位員工這個月的每一格金額。與薪資單同一組欄位，只是攤平成一列。 */
@@ -42483,6 +42484,7 @@ function salaryMatrixHTML(rows){
   if(!rows || !rows.length) return '';
   const m=n=>'$'+Math.round(Number(n)||0).toLocaleString();
   const tot={}; SAL_MX_COLS.forEach(c=>{ tot[c.k]=rows.reduce((s,r)=>s+(Number(r.v[c.k])||0),0); });
+  const _grossTot=rows.reduce((s,r)=>s+(Number(r.v.gross)||0),0);   // 應發欄已移除（2026-08-12），註腳仍要用
   const cell=(c,v)=>{
     if(!v) return '<td class="sx-zero">—</td>';
     const cls=(c.kind==='sum')?'sx-sum':((c.kind==='cut'||c.kind==='co')?'sx-cut':'sx-add');
@@ -42499,7 +42501,7 @@ function salaryMatrixHTML(rows){
     <div class="sal-mx-note">
       綠＝給出去的、紅＝扣的。<b>勞保／健保</b>是本人自付、從應發裡代扣（負責人的健保是雇主自負額，全額自付），<b>不是</b>公司的額外成本；
       公司的額外成本是最後一欄<b>公司負擔</b>（勞保雇主＋健保雇主＋勞退＋職災）——<b>負責人為 0</b>，公司沒有替雇主本人負擔的部分。<br>
-      公司這個月實際的人事支出＝應發合計 ${m(tot.gross)} ＋ 公司負擔 ${m(tot.co)} ＝ <b>${m(tot.gross+tot.co)}</b>。
+      公司這個月實際的人事支出＝應發合計 ${m(_grossTot)} ＋ 公司負擔 ${m(tot.co)} ＝ <b>${m(_grossTot+tot.co)}</b>（應發＝各項給付−扣薪，欄位已省略、各項目攤在表上）。
     </div>`;
 }
 async function finPnl(){
