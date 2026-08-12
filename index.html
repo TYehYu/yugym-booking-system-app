@@ -7767,8 +7767,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260812.1906';
-const APP_VERSION_LABEL='v260812.1906';
+const APP_VERSION = '260812.1918';
+const APP_VERSION_LABEL='v260812.1918';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14512,7 +14512,10 @@ PAGES.g_dashboard=async function(){
     const _pollKey=CUR_PAGE;
     window._dashPollTimer=setInterval(async()=>{
       if(CUR_PAGE!==_pollKey){ clearInterval(window._dashPollTimer); window._dashPollTimer=null; return; }
-      if(await remoteSigChanged()) dashRevalidate(_dashTabs.map(x=>x.t));   // 簽章變了才重抓（省流量）
+      /* 2026-08-12 使用者回報「櫃檯抽完獎，Mac 首頁沒即時更新」：remoteSigChanged 是一次性的
+         （比對完就記下新簽章），若那一輪 dashRevalidate 因彈窗／課卡展開被擋掉，
+         下一輪簽章已「沒變」→ 這次更新永遠漏掉。被擋時掛 _dashDirty，之後每輪補追。 */
+      if(await remoteSigChanged() || window._dashDirty) dashRevalidate(_dashTabs.map(x=>x.t));   // 簽章變了才重抓（省流量）
     },12000);
   }
 };
@@ -14734,12 +14737,15 @@ async function dashRevalidate(tabs){
   try{
     await Promise.all((tabs||[]).map(t=>dbGetAll(t,{fresh:true}).catch(()=>null)));
     if(CUR_PAGE!==key) return;                            // 已切到別頁
-    if(document.getElementById('modal-bg')) return;       // 彈窗開著不打斷
-    if(document.querySelector('.cal-ev-active')) return;  // 課卡快捷鈕/團課名單展開中
+    /* 被彈窗／展開的課卡擋掉時掛 _dashDirty：輪詢下一輪會再試，收合後補重繪（2026-08-12） */
+    if(document.getElementById('modal-bg')){ window._dashDirty=true; return; }       // 彈窗開著不打斷
+    if(document.querySelector('.cal-ev-active')){ window._dashDirty=true; return; }  // 課卡快捷鈕/團課名單展開中
     const[bk,att,pu,mt,ap,pr,mlr]=await Promise.all(
       ['bookings','attendance','purchases','member_tickets','purchase_applications','punch_requests','member_link_requests']
       .map(t=>dbGetAll(t).catch(()=>[])));
+    window._dashDirty=false;
     if(dashDataSig(viewDate,bk,att,pu,mt,ap,pr,mlr)===window._dashSig) return;   // 沒變 → 不重繪
+    window._lottoMapCache=null;   // 資料真的變了 → 抽獎資格快取一併作廢（60 秒 TTL 會蓋住別台的抽獎）
     navTo(CUR_PAGE);
   }catch(_){ }
   finally{ window._dashRevalidating=false; }
