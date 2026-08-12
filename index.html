@@ -7751,8 +7751,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260812.1616';
-const APP_VERSION_LABEL='v260812.1616';
+const APP_VERSION = '260812.1618';
+const APP_VERSION_LABEL='v260812.1618';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31288,9 +31288,37 @@ async function ppFamRemove(mid,i){
   try{
     const m=await dbGet('members',mid); if(!m) return;
     const list=Array.isArray(m.family_members)?m.family_members.filter(Boolean):[];
+    const gone=list[i];
     list.splice(i,1);
     m.family_members=list.length?list:null;
     await dbPut('members',m);
+    /* 移除成員時自動清掉標記（2026-08-12 使用者指示，林繼霖（爸爸）案例）——
+       未來預約的使用人、票券的預設使用人若還掛著這個稱呼，課卡會一直顯示
+       「會員名（爸爸）」。歷史課保留（當時確實是他上的）；體驗/場租的 trial_name
+       是客戶名不是使用人，不動。 */
+    if(gone){
+      let nBk=0, nTk=0;
+      try{
+        const today=ymd(TODAY);
+        const bks=(await dbGetAll('bookings').catch(()=>[]))||[];
+        for(const b of bks){
+          if(!b||b.member_id!==mid||b.status==='cancelled') continue;
+          if(b.trial_name!==gone) continue;
+          if(String(b.date||'')<today) continue;
+          if(b.category==='體驗'||b.category==='場租') continue;
+          const fresh=await dbGet('bookings',b.id); if(!fresh) continue;
+          fresh.trial_name=null; await dbPut('bookings',fresh); nBk++;
+        }
+        const tks=(await dbGetAll('member_tickets').catch(()=>[]))||[];
+        for(const t of tks){
+          if(!t||t.member_id!==mid||t.family_user!==gone) continue;
+          const ft=await dbGet('member_tickets',t.id); if(!ft) continue;
+          ft.family_user=null; await dbPut('member_tickets',ft); nTk++;
+        }
+        dbCacheClear(['bookings','member_tickets']);
+      }catch(e){ console.error('清使用人標記失敗',e); showToast('⚠ 部分使用人標記沒清到，請檢查該會員的未來預約'); }
+      showToast(`已移除「${gone}」${(nBk||nTk)?`，並清掉 ${nBk?nBk+' 筆未來預約':''}${nBk&&nTk?'、':''}${nTk?nTk+' 張票券':''}的使用人標記`:''}`);
+    }
     ppFamEdit(mid);
   }catch(e){ showToast('移除失敗：'+((e&&e.message)||e)); }
 }
