@@ -441,10 +441,10 @@ select option{color:var(--text);}
    第一列 管理員/店長/主管、第二列 打卡/開課/停用；直接點即改 */
 .st-sw{display:flex;flex-wrap:wrap;gap:4px 0;width:100%;margin:8px 0 6px;align-items:stretch;}
 /* 分區（2026-08-12）：身分｜功能＋LINE｜停用，區間虛線分隔 */
-.st-swg{display:flex;gap:4px;padding:0 8px;border-right:1px dashed var(--bd);}
+.st-swg{display:flex;gap:3px;padding:0 5px;border-right:1px dashed var(--bd);}   /* 2026-08-12 Mac 超出畫面：縮間距 */
 .st-swg:first-child{padding-left:0;}
 .st-swg-last,.st-swg:last-child{border-right:none;}
-.st-swb{min-width:44px;}
+.st-swb{min-width:38px;}
 .st-swb{border:1px solid var(--bd);background:#fff;border-radius:8px;padding:5px 2px;cursor:pointer;
   font-family:inherit;font-size:10px;font-weight:700;color:var(--t3);line-height:1.35;transition:.12s;
   display:flex;flex-direction:column;align-items:center;gap:2px;}
@@ -7756,8 +7756,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260812.1630';
-const APP_VERSION_LABEL='v260812.1630';
+const APP_VERSION = '260812.1634';
+const APP_VERSION_LABEL='v260812.1634';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11142,8 +11142,8 @@ function tkClass5(t, typeMap){
   if((tt.category||'')==='運動按摩'||/按摩/.test((t&&t.plan_name)||'')) return 'massage';
   return 'pt';
 }
-function lpPerson(gender, name, sub, badge){
-  return `<div class="lp-person"><span class="lp-avatar${avatarGenderClass(gender)}">${genderAvatarSVG(gender)}</span>
+function lpPerson(gender, name, sub, badge, photo){
+  return `<div class="lp-person"><span class="lp-avatar${avatarGenderClass(gender)}" style="overflow:hidden;">${photo?avatarImgHTML(photo):genderAvatarSVG(gender)}</span>
     <div class="lp-primary"><span class="lp-name">${name||'—'}${badge||''}</span>${
       sub?`<span class="lp-sub">${sub}</span>`:''}</div></div>`;
 }
@@ -17220,6 +17220,43 @@ function genderAvatarSVG(gender){
 }
 // 頭像容器的性別底色 class（男=淡藍、女=淡粉、未設定=原鼠尾草綠）
 function avatarGenderClass(gender){ return gender==='male'?' av-male':(gender==='female'?' av-female':''); }
+/* ══ 大頭貼（2026-08-12 使用者指示：員工端／會員端開放上傳照片）══
+   Storage bucket 'avatars'（公開讀）；路徑 members/<id>.jpg、employees/<id>.jpg。
+   前端縮成 384px 正方形（置中裁切）JPEG 85%、upsert 覆蓋；URL 存回
+   members/employees.avatar_url（帶 ?t= 破快取）。權限：櫃檯可傳任何人、本人可傳自己
+   （storage 政策鎖路徑）。 */
+function avatarImgHTML(url){ return url?`<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;">`:''; }
+async function avatarPick(kind, id){
+  if(!(kind==='members'||kind==='employees')||!id) return;
+  const self=!!(SESSION&&SESSION.id===id&&((SESSION.role==='member'&&kind==='members')||(SESSION.role==='coach'&&kind==='employees')));
+  if(!self && !isDeskLike()){ showToast('只有本人或櫃檯可以更換照片'); return; }
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+  inp.onchange=async()=>{
+    const f=inp.files&&inp.files[0]; if(!f) return;
+    const done=cxBusy('照片上傳中…');
+    try{
+      const img=await new Promise((res,rej)=>{ const im=new Image();
+        im.onload=()=>res(im); im.onerror=()=>rej(new Error('讀不到這張圖片')); im.src=URL.createObjectURL(f); });
+      const S=384, cv=document.createElement('canvas'); cv.width=S; cv.height=S;
+      const ctx=cv.getContext('2d');
+      const r=Math.max(S/img.width, S/img.height);
+      ctx.drawImage(img,(S-img.width*r)/2,(S-img.height*r)/2,img.width*r,img.height*r);
+      const blob=await new Promise(res=>cv.toBlob(res,'image/jpeg',0.85));
+      if(!blob) throw new Error('圖片處理失敗');
+      const path=`${kind}/${id}.jpg`;
+      const up=await sb.storage.from('avatars').upload(path, blob, {upsert:true, contentType:'image/jpeg', cacheControl:'3600'});
+      if(up&&up.error) throw up.error;
+      const pub=sb.storage.from('avatars').getPublicUrl(path);
+      const url=((pub&&pub.data&&pub.data.publicUrl)||'')+'?t='+Date.now();
+      const table=kind==='members'?'members':'coaches';
+      const rec=await dbGet(table,id); if(!rec) throw new Error('找不到資料');
+      rec.avatar_url=url; await dbPut(table,rec);
+      done(); showToast('照片已更新');
+      try{ if(typeof PP!=='undefined'&&PP.id===id){ await ppRefreshIfOpen(id); } else navTo(CUR_PAGE); }catch(_){ navTo(CUR_PAGE); }
+    }catch(e){ done(); showToast('上傳失敗：'+((e&&e.message)||e)); }
+  };
+  inp.click();
+}
 function setAcctHead(name, role, gender){
   const un=document.getElementById('tb-acct-uname'); if(un) un.textContent=name||'—';
   const ur=document.getElementById('tb-acct-urole'); if(ur) ur.textContent=role||'';
@@ -25330,7 +25367,8 @@ PAGES.members=async function(){
       lpPerson(m.gender, m.name||'—',
         `${((m.status||'active')!=='active')?'<span class="tag tag-danger" style="font-size:10px;padding:0 5px;">已停用</span>　':''}${tierLabel(effTier(m))}${m.phone?'　'+fmtPhone(m.phone):''}`,
         m.default_coach_id ? (()=>{const cl=coachTagColor(m.default_coach_id);   // 2026-07-28：主教練用教練 tag 色
-          return `<i class="lp-coach" style="background:${cl.bg};color:${cl.fg};">${coachMap[m.default_coach_id]||''}</i>`;})() : ''),
+          return `<i class="lp-coach" style="background:${cl.bg};color:${cl.fg};">${coachMap[m.default_coach_id]||''}</i>`;})() : '',
+        m.avatar_url),   // 大頭貼（2026-08-12）
       ...TK5.map(([k])=>tkCatCell(m,k)),
       /* 2026-07-31 使用者指示：最近上課與註冊日都用日期顯示（原本是「3 天前」那種相對日期）——
          櫃檯要的是「哪一天」，相對日期還要自己回推。Hover 仍給完整年月日。 */
@@ -29357,7 +29395,7 @@ async function renderStaffList(){
         .map(d=>WD_FULL[Number(d)]).filter(Boolean);
       return `<div class="st-lrow${_off?' st-off':''}" style="--pc:${etc};" onclick="${click}">
         <span class="st-led${_off?' off':''}" title="${_off?'已停用':'啟用中'}"></span>
-        <span class="st-l-ava">${genderAvatarSVG(c.gender)}</span>
+        <span class="st-l-ava" style="overflow:hidden;">${c.avatar_url?avatarImgHTML(c.avatar_url):genderAvatarSVG(c.gender)}</span>
         <span class="st-l-who">
           <span class="st-l-nm">${c.name||'（待填寫）'}${c.name_en?`<i>${c.name_en.toUpperCase()}</i>`:''}${stateOf(c)!=='active'?statusBadge(c):''}${(_punch[c.id]||0)?`<button class="st-punch-x" title="打卡異常／補卡申請 ${_punch[c.id]} 筆，點一下查看修改" onclick="event.stopPropagation();openPunchFixModal('${c.id}')">!</button>`:''}</span>
           <span class="st-l-sub">${tl!=='—'?`<b style="color:${etc};">${tl}</b>`:''}${(tl!=='—'&&c.job_title)?'・':''}${c.job_title||''}${nameSub(c)?`　${nameSub(c)}`:''}${stBdayTag(c,_ym)}</span>
@@ -30538,7 +30576,7 @@ function ppSysValue(kind, r){
 // ══════ Header ══════
 function ppHeaderHtml(){
   const r=PP.rec, isM=PP.kind==='member';
-  const av = genderAvatarSVG(r.gender);  // 2026-07-21 使用者指示：頭像分男女（簡單線條），方便區分性別
+  const av = r.avatar_url?avatarImgHTML(r.avatar_url):genderAvatarSVG(r.gender);  // 2026-08-12：有照片放照片；點頭像可上傳
   // 身分類型 Badge
   let typeBadge, statusBadge='';
   if(isM){
@@ -30645,7 +30683,8 @@ function ppHeaderHtml(){
        <button class="btn btn-green btn-sm" onclick="ppSave()">儲存</button>`
     : (isM ? lvBtn+delBtn : pwBtn+`<button class="btn btn-ghost btn-sm" onclick="ppEdit()">編輯</button>`);
   return `<div class="pp-head">
-    <div class="pp-avatar${avatarGenderClass(r.gender)}">${av}</div>
+    <div class="pp-avatar${avatarGenderClass(r.gender)}" style="overflow:hidden;cursor:pointer;" title="點一下上傳／更換照片"
+      onclick="avatarPick('${isM?'members':'employees'}','${r.id}')">${av}</div>
     <div class="pp-head-main">
       <div class="pp-name-row" style="${isM?'display:flex;align-items:baseline;gap:6px 24px;flex-wrap:wrap;':''}">
         ${/* 2026-08-08 使用者指示：「幫我新增管理員權限修改會員名字」——
