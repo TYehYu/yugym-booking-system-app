@@ -33,4 +33,25 @@ ok('★ 自己名額都簽了才標「已簽到」（別人先簽不誤標）',
 ok('　　migration 留檔', fs.existsSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260805_fn_member_group_checkin.sql'));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
+
+
+/* 2026-08-13 使用者指示：「會員端已移除掃碼，改在首頁圓形課卡簽到」——
+   圓卡彈出的簽到鈕接上團課（同一支 RPC，回饋改 toast＋重繪）。 */
+{
+  const fs3=require('fs');
+  const src3=fs3.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const okx=(n,c)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n);} };
+  console.log('\n圓形課卡自簽（2026-08-13）');
+  okx('★★ 團課點簽到走 memGrpCheckin（RPC fn_member_group_checkin）',
+     /memTaskClose\(\);memGrpCheckin\('\$\{b\.id\}'\)/.test(src3)
+     && /async function _memGrpCheckin\(id\)\{/.test(src3)
+     && /_memGrpCheckin[\s\S]{0,200}fn_member_group_checkin/.test(src3));
+  okx('★★ 逐名額判斷：我的名額全簽完/請假＝完成、還有名額＝開窗內可簽',
+     /const _mySeats=isGrp\?seatKeys\(b\)\.filter\(k=>seatMid\(k\)===String\(SESSION\.id\)\):\[\];/.test(src3)
+     && /const _myLeft=isGrp\?_mySeats\.some\(k=>\['checked_in','leave'\]\.indexOf\(_att\[k\]\|\|''\)<0\):false;/.test(src3));
+  okx('★ 全請假顯示「已請假」不誤標已簽到', /_myAllLeave\?'已請假':'已簽到'/.test(src3));
+  okx('★ 「教練點名」提示退場（會員可自簽了）', !/團體課由教練點名/.test(src3));
+  okx('　　防連點（onceAct）', /memGrpCheckin\(id\)\{ return onceAct\('grpck:'\+id/.test(src3));
+}
+console.log((fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗（含圓卡自簽追加）');
 process.exit(fail?1:0);

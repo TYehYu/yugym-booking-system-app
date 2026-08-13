@@ -7803,8 +7803,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260813.1052';
-const APP_VERSION_LABEL='v260813.1052';
+const APP_VERSION = '260813.1105';
+const APP_VERSION_LABEL='v260813.1105';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23611,6 +23611,22 @@ async function memGrpCardCheckin(id){
   }catch(e){ showToast('簽到失敗：'+((e&&e.message)||e)); }
 }
 /* 團課學員自己簽到（2026-08-05）：逐名額，由 RPC 代寫 attendance */
+/* 首頁圓形課卡的團課自簽（2026-08-13 使用者指示）：同一支 RPC，回饋用 toast＋重繪首頁 */
+async function memGrpCheckin(id){ return onceAct('grpck:'+id, ()=>_memGrpCheckin(id)); }
+async function _memGrpCheckin(id){
+  try{
+    const{data,error}=await sb.rpc('fn_member_group_checkin',{p_booking_id:id});
+    dbCacheClear(['bookings']);
+    if(error){ showToast('簽到失敗：'+(error.message||error)); return; }
+    if(data&&data.ok){
+      showToast('簽到成功'+(Number(data.seat)>1?`（第 ${data.seat} 個名額）`:''));
+      navTo(CUR_PAGE);
+    }else{
+      showToast({TOO_EARLY:'尚未開放簽到（課程開始前 30 分鐘起）',ENDED:'這堂課已結束，請洽櫃檯補簽',
+        ALREADY:'這堂課已簽到過了',NOT_TODAY:'只能簽今天的課',NOT_IN_CLASS:'你不在這堂課的名單裡'}[data&&data.error_code]||'簽到失敗，請稍後再試');
+    }
+  }catch(e){ showToast('簽到失敗：'+((e&&e.message)||e)); }
+}
 async function memberGroupCheckin(b){
   try{
     const{data,error}=await sb.rpc('fn_member_group_checkin',{p_booking_id:b.id});
@@ -38725,7 +38741,7 @@ PAGES.mem_bookings=async function(){
   const _legend=_MEM_LEGEND.map(([k,l])=>
     `<span class="mem-lg"><i style="background:${_colMap3[k]}"></i>${l}</span>`).join('');
   const taskHint=_cardDots?`<div class="mem-hint">
-      <div class="mem-hint-t">${LNI.clock||'🕒'} 課程開始前 <b>30 分鐘</b>開放簽到（團體課由教練點名）</div>
+      <div class="mem-hint-t">${LNI.clock||'🕒'} 課程開始前 <b>30 分鐘</b>開放簽到（點課卡即可簽到）</div>
       <div class="mem-lgs">${_legend}</div>
     </div>`:'';
   const taskCard=`<div class="dcard"><div class="dcard-title">${_cardTitle}${_selDay?`<button class="tl-daynav tl-daynav-today" onclick="memPickDay('${_mToday}')">回到今天</button>`:''}</div>
@@ -39070,10 +39086,15 @@ async function memTaskTap(id,el){
   const b=await dbGet('bookings',id);
   if(!b){ showToast('找不到預約'); return; }
   memTaskClose();
-  const done=b.status==='checked_in'||b.status==='completed';
   const slotDt=new Date(b.date+'T'+b.start_time+':00');
   const isGrp=bkIsGroup(b);
-  const ckOpen=!done && !isGrp && b.date===ymd(TODAY) && Date.now()>=slotDt.getTime()-30*60000;
+  /* 團課自簽（2026-08-13 使用者指示：掃碼已移除，改在首頁圓形課卡簽到）——
+     逐名額判斷：我的名額全簽完/請假＝完成；還有名額沒簽＝開窗內可簽（RPC 與掃碼同一支）。 */
+  const _att=isGrp?attObj(b):null;
+  const _mySeats=isGrp?seatKeys(b).filter(k=>seatMid(k)===String(SESSION.id)):[];
+  const _myLeft=isGrp?_mySeats.some(k=>['checked_in','leave'].indexOf(_att[k]||'')<0):false;
+  const done=isGrp?(_mySeats.length>0&&!_myLeft):(b.status==='checked_in'||b.status==='completed');
+  const ckOpen=!done && (isGrp?_mySeats.length>0:true) && b.date===ymd(TODAY) && Date.now()>=slotDt.getTime()-30*60000;
   const past=slotDt.getTime()<Date.now();
   const cc=bkCC(b);
   const col={pt:'#1f6f54',friendly:'#23508a',group:'#9a5a1e',self:'#6a655c',trial:'#6e3a86',massage:'#2f8f83'}[cc]||'#1f6f54';
@@ -39089,10 +39110,11 @@ async function memTaskTap(id,el){
   const orb=(cls,ic,label,onclick,title)=>onclick
     ? `<button class="mtp-orb ${cls}" onclick="${onclick}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></button>`
     : `<div class="mtp-orb ${cls}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></div>`;
+  const _myAllLeave=isGrp&&done&&_mySeats.every(k=>(_att[k]||'')==='leave');
   const ckBtn=done
-    ? orb('done','✓','已簽到',null)
-    : (ckOpen ? orb('go','✓','簽到',`memTaskClose();memCheckin('${b.id}')`)
-              : orb('off','🕒',isGrp?'教練點名':'尚未開放',null,isGrp?'團體課由教練點名':'開課前 30 分鐘開放簽到'));
+    ? orb('done','✓',_myAllLeave?'已請假':'已簽到',null)
+    : (ckOpen ? orb('go','✓','簽到',isGrp?`memTaskClose();memGrpCheckin('${b.id}')`:`memTaskClose();memCheckin('${b.id}')`)
+              : orb('off','🕒','尚未開放',null,'開課前 30 分鐘開放簽到'));
   const cxBtn=(done||past) ? orb('off','✕','不可取消',null)
     : orb('cx','✕','取消',`memCancelTap('${b.id}')`);
   /* 自主訓練可以自己改時間（2026-08-09）——與「取消」同一條界線：還沒開始就可以改。
