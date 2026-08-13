@@ -60,5 +60,11 @@ ok('★★ 財務報表（今日／本月）付款方式統計展開',
    (src.match(/purPayParts\(p\)\.forEach\(\(\[m,amt\]\)=>\{ const k=m\|\|'其他'; byMethod\[k\]=\(byMethod\[k\]\|\|0\)\+amt; \}\)/g)||[]).length===2);
 ok('★ 標籤各處補上 split=現金+匯款（列表/報表/確認頁）',
    (src.match(/split:'現金\+匯款'/g)||[]).length>=6);
+
+console.log('\n⑤ 會員票券卡：拆帳兩顆標籤各帶金額（2026-08-13 使用者回報「看不出來多少現金多少匯款」）');
+ok('★★ _tkPayMap 帶 pay_split', /window\._tkPayMap\[p\.ticket_id\]=\{m:p\.payment_method, sp:p\.pay_split\|\|null\};/.test(src));
+ok('★★ 拆帳顯示「現金 $N」＋「匯款 $N」兩顆標籤',
+   /現金 \$\$\{\(Number\(_pe\.sp\.cash\)\|\|0\)\.toLocaleString\(\)\}/.test(src)
+   && /匯款 \$\$\{\(Number\(_pe\.sp\.transfer\)\|\|0\)\.toLocaleString\(\)\}/.test(src));
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

@@ -94,3 +94,23 @@ console.log('\n④ 作廢那一條沒被動到');
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
+
+/* 2026-08-13 使用者回報：「更換方案沒辦法選 4 堂／自訂，只好作廢重開多出一張票」 */
+console.log('\n自訂方案（2026-08-13）');
+{
+  const fs2=require('fs');
+  const src2=fs2.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const okx=(n,c)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n);} };
+  okx('★★ 選單多「自訂方案」選項，選了才展開自訂欄位',
+     /<option value="__custom__">自訂方案（自填票種／堂數／效期）<\/option>/.test(src2)
+     && /id="swap-custom" style="display:none;"/.test(src2));
+  okx('★★ 自訂欄位：票種（預設帶原票券的）／堂數／效期',
+     /id="swap-c-type"/.test(src2) && /t\.id===tk\.ticket_type_id\?' selected':''/.test(src2)
+     && /id="swap-c-sessions"/.test(src2) && /id="swap-c-valid"/.test(src2));
+  okx('★★ 送出時 __custom__ 組出方案物件（金額沿用舊票、不動錢）',
+     /if\(planId==='__custom__'\)\{/.test(src2)
+     && /plan=\{ id:null, name:'自訂方案', ticket_type_id:_ttid, format:null,/.test(src2)
+     && /unit_price:Math\.round\(\(Number\(tk\.amount_paid\)\|\|0\)\/_sess\)\|\|0,/.test(src2));
+  okx('★ 票種或堂數沒填要擋', /if\(!_ttid\|\|!_sess\)\{ done\(\); showToast\('自訂方案要選票種並填堂數'\); return; \}/.test(src2));
+}
+console.log((fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗（含自訂方案追加）');
