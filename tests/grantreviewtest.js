@@ -48,7 +48,7 @@ console.log('\n② 賣票當下算好的一整包（審核時照著發）');
 {
   const F=grabFn('submitGrant');
   ok('★★ payload 帶齊金額／分期／折抵券／業績歸屬',
-     /const P=\{/.test(F) && /total, unitPrice, listPrice, dealAmount, method, installCount, note,/.test(F)
+     /const P=\{/.test(F) && /total, unitPrice, listPrice, dealAmount, method, splitCash, installCount, note,/.test(F)   /* 2026-08-12 拆帳加 splitCash */
      && /isInstall, unlocked, firstAmount, installment,/.test(F)
      && /voucherN, voucherAmt, paidAmount,/.test(F)
      && /sale_kind:\(document\.getElementById\('gt-salekind'\)\|\|\{\}\)\.value\|\|null,/.test(F));
@@ -106,8 +106,10 @@ console.log('\n④ 審核視窗：應收金額要大、要有顏色');
   ok('★★ 合約簽回沒簽回，兩種狀態分色',
      /<div class="gr-sign-box \$\{signed\?'ok':'wait'\}">/.test(F)
      && /\.gr-sign-box\.ok\{background:#eef5f1;/.test(src) && /\.gr-sign-box\.wait\{background:#f7efe0;/.test(src));
-  ok('★ 沒簽回仍可發，但要明說是刻意為之',
-     /⏳ <b>合約尚未簽回<\/b> —— 會員還沒在手機上完成簽名。仍可發放，但請確認是刻意為之。/.test(F));
+  /* 2026-08-13 使用者指示：改成未簽回一律不能發放（按鈕反灰＋入口擋），0808 警告放行退場 */
+  ok('★★ 沒簽回不能發：清單按鈕反灰、確認視窗入口直接擋',
+     /title="合約簽回後才能發放"/.test(src)
+     && /if\(r\.contract_id && !signed\)\{ showToast\('合約尚未簽回，等會員在手機上簽完才能發放'\); return; \}/.test(src));
   ok('★★ 按鈕上再寫一次金額（避免櫃檯看錯）',
      /已收到 \$\$\{amt\.toLocaleString\(\)\}・發放票券/.test(F));
   ok('　　先講清楚按下去會發生什麼，包含 30 分鐘可退回',
