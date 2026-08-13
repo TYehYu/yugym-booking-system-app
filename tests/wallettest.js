@@ -136,8 +136,12 @@ console.log('\n票券狀態：持有中／已過期／歷史');
   eq('★ 已退費 → 歷史', st({status:'refunded'}), 'history');
   eq('★ 有效期且已過 → 已過期（不看還剩不剩堂數，2026-07-31）',
      st({expire_date:'2026-07-01',sessions_remaining:3}), 'expired');
-  eq('　　用完了但過期 → 仍歸已過期（限定方案才找得到）',
-     st({expire_date:'2026-07-01',sessions_remaining:0}), 'expired');
+  /* 2026-08-13 使用者指示：用完的票＝已完成 → 歷史，就算效期也到了；
+     只有「沒用完就到期」才進已過期方案（那一區是給展延／重新啟用用的）。 */
+  eq('　　用完了但過期 → 歷史（已完成；2026-08-13 規則）',
+     st({expire_date:'2026-07-01',sessions_remaining:0}), 'history');
+  eq('　　沒用完而過期 → 已過期方案',
+     st({expire_date:'2026-07-01',sessions_total:4,sessions_remaining:2}), 'expired');
   eq('★ 還沒上完 → 持有中', st({sessions_total:4,sessions_remaining:4}), 'active');
   eq('★ 帳面用完且沒有待上 → 歷史', st({sessions_total:4,sessions_remaining:0}), 'history');
   eq('　　效期未到不算過期', st({expire_date:'2026-08-31'}), 'active');

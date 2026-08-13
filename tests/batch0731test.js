@@ -125,7 +125,7 @@ ok('★ 已過期方案排在歷史紀錄前面', /\$\{expdSec\}\$\{histSec\}<\/
 ok('★ 展延按鈕跟著搬到已過期方案那一區（展延只對過期票有意義）',
    /const _extable=expd\.filter\(t=>isDeskLike\(\)&&tkCanExtend\(t,_tYmd\)\);/.test(src));
 ok('　　有可展延的票時預設展開', /<details class="pp-hist"\$\{_extable\.length\?' open':''\}><summary>已過期方案/.test(src));
-ok('　　「目前沒有可用票券」要把兩區都算進去', /\$\{!act\.length&&\(hist\.length\|\|expd\.length\)\?/.test(src));
+ok('　　「目前沒有可用票券」要把兩區都算進去（0809 起也看待審核卡）', /\$\{!act\.length&&!_grHere\.length&&\(hist\.length\|\|expd\.length\)\?/.test(src));
 ok('★ 教練端簡易名片同一套語意：過期就歸已過期，不看剩不剩堂數',
    /const _isExpiredTk=t=>\(\(WAL\.of\(t\.id\)\|\|\{\}\)\.state\)==='expired';/.test(src)
    && /const _canReactTk=t=>_isExpiredTk\(t\)&&\(Number\(t\.sessions_remaining\)\|\|0\)>0;/.test(src));

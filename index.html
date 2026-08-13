@@ -7803,8 +7803,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260813.1117';
-const APP_VERSION_LABEL='v260813.1117';
+const APP_VERSION = '260813.1657';
+const APP_VERSION_LABEL='v260813.1657';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12792,18 +12792,19 @@ function buildWallet(memberId, ctx){
     let used = (rem==null) ? Math.max(dAtt, attIn)
                            : Math.max(dAtt, attIn, Math.max(0, total-(Number(rem)||0)-pending));
     used=Math.min(used, total);
-    /* 票券狀態：已退費→歷史；有效期且過期→已過期（不看還剩不剩堂數，2026-07-31）；
-       還沒上完→持有中（只完成預約、還沒簽到銷課不算用掉，2026-07-29）。 */
+    /* 票券狀態（2026-08-13 使用者指示重排優先序）：
+       ・已退費 → 歷史
+       ・「用完的票」→ 歷史（已完成）—— 就算效期也到了，全上完不該掛「已過期」
+         （蔡票阿嬤 #3 案例；0731「過期不看堂數」的舊規則讓位給這一條）
+       ・沒用完而到期 → 已過期方案（可展延／重新啟用的就是這一區）
+       ・還沒上完 → 持有中（只預約還沒簽到不算用掉，2026-07-29）。 */
     let state;
     if(t.status==='refunded') state='history';
+    /* 今天（或未來）才用完的先留「持有中」，明天再進歷史（0805 潘詩榆、0806 李曉娟規則不變） */
+    else if(total>0 && used>=total && bks.some(b=>isAtt(b)&&String(b.date||'').slice(0,10)>=today)) state='active';
+    else if(total>0 && used>=total) state='history';
     else if(t.expire_date && String(t.expire_date).slice(0,10)<today) state='expired';
     else if(total>0 && used<total) state='active';
-    /* 今天才用完的票先留在「持有中」，明天再進歷史（2026-08-05 使用者指示，潘詩榆案例：
-       「今天這張票今天才用完，請明天再列入歷史紀錄」）——當天剛下課就從列表消失，
-       會員和櫃檯都會以為票不見了。 */
-    /* 2026-08-06 延伸：最後一堂是「今天或以後」都先留著 —— 提前登記的請假會讓票當場用畢
-       （李曉娟 8/8 的課今天就標了請假），課都還沒上就掉進歷史，櫃檯會以為票不見了。 */
-    else if(total>0 && used>=total && bks.some(b=>isAtt(b)&&String(b.date||'').slice(0,10)>=today)) state='active';
     else if(t.status!=='usable' || (rem!=null && Number(rem)<=0)) state='history';
     else state='active';
     return {t, id:t.id, no:_noOf[t.id]||0, cls:tkClass5(t,typeMap), total, used, pending,
@@ -31816,7 +31817,8 @@ function ppRecordHtml(){
           const total=Number(t.sessions_total)||0;
           const used=usedOf(t);
           const st=tkStBadge(t.status)
-            || tkStBadge((t.expire_date&&String(t.expire_date).slice(0,10)<_tYmd)?'expired':'used_up');
+            || tkStBadge((total>0&&used>=total)?'used_up'
+                 :(t.expire_date&&String(t.expire_date).slice(0,10)<_tYmd)?'expired':'used_up');   /* 用完優先標已完成（2026-08-13） */
           const canExt=isDeskLike()&&tkCanExtend(t,_tYmd);
           const _shN=tkSharedIds(t).length;
           const shrTag=(t.member_id!==PP.id)?`<span style="font-size:11px;color:var(--gold-d);border:1px solid var(--gold-d);border-radius:6px;padding:1px 6px;margin-left:6px;">共享</span>`
