@@ -16,3 +16,18 @@ select cron.schedule('line-daily-report','0 14 * * *', $$
       'apikey','sb_publishable_HXJH0NSDKBYaiFamrN_mpw_U6gH_MdX'),
     body := '{}'::jsonb)
 $$);
+
+-- 2026-08-13 追加（同日）：
+-- ① 全部 LINE 推播訊息抬頭 YUGYM → 有肌訓練（line-push-daily v17、line-member-auth v15、line-daily-report v2）
+-- ② 每天 22:30 忘記下班打卡提醒（Edge Function line-punch-remind）：
+--    今天有 clock_in 沒 clock_out 的員工 → LINE 提醒補打卡＋「👀 老闆在盯著你」；
+--    未綁定 LINE 的漏打卡者寫櫃檯通知。body {debug:true, date} 試算模式。
+select cron.schedule('line-punch-remind','30 14 * * *', $$
+  select net.http_post(
+    url := 'https://rlpiomzplckzqnqrvrwc.supabase.co/functions/v1/line-punch-remind',
+    headers := jsonb_build_object(
+      'Content-Type','application/json',
+      'Authorization','Bearer sb_publishable_HXJH0NSDKBYaiFamrN_mpw_U6gH_MdX',
+      'apikey','sb_publishable_HXJH0NSDKBYaiFamrN_mpw_U6gH_MdX'),
+    body := '{}'::jsonb)
+$$);
