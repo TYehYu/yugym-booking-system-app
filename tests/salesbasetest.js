@@ -28,7 +28,8 @@ console.log('① 銷課怎麼算（實跑）');
     grpHeadsNoLeave:b=>(b.member_ids||[]).length,
     dbGetAll:async()=>[],
   };
-  const F=new Function(...Object.keys(env), grabFn('monthSalesValue')+'\nreturn monthSalesValue;')(...Object.values(env));
+  /* 2026-08-13 銷課分類：monthSalesValue 內用到 tkRevClass，一併抽真的進沙箱 */
+  const F=new Function(...Object.keys(env), grabFn('tkRevClass')+'\n'+grabFn('monthSalesValue')+'\nreturn monthSalesValue;')(...Object.values(env));
   const types=[{id:'tt-pt',category:'私人教練'},{id:'tt-grp',category:'團體課'},{id:'tt-self',category:'自主訓練'}];
   const tks=[
     {id:'T1',member_id:'M1',ticket_type_id:'tt-pt', unit_price:1600, amount_paid:16000, sessions_total:10},
@@ -66,8 +67,8 @@ console.log('① 銷課怎麼算（實跑）');
     ok('★★ 大數字那一塊改講「銷課 − 支出」',
        /<span class="pnl-hero-say">銷課 \$\{m\(revenue\)\} − 支出 \$\{m\(spend\)\}/.test(P)
        && /<span class="pnl-top-l">銷課金額<\/span>/.test(P));
-    ok('★ 表上把銷課拆成教練課／團課兩列（看得出錢從哪來）',
-       /\$\{sub\('教練課',-Math\.round\(SV\.ptValue\),`\$\{SV\.ptCount\} 堂`\)\.replace\('−\$','\$'\)\}/.test(P)
+    ok('★ 表上把銷課拆成課種分類列（2026-08-13：教練課/友善 × 1V1/1V2、團體課）',
+       /REV_CLS_ORDER\.filter\(k=>k!=='grp'&&\(SV\.byCls\[k\]\|\|\{\}\)\.n>0\)\.map\(k=>/.test(P)
        && /\$\{sub\('團體課',-Math\.round\(SV\.grpValue\),`\$\{SV\.grpCount\} 堂 \$\{SV\.grpHeads\} 人次`\)\.replace\('−\$','\$'\)\}/.test(P));
     ok('★★ 收款仍看得到（與銷課並列，不會以為錢不見了）',
        /本月實際<b>收款<\/b> \$\{m\(cash\)\}（\$\{pur\.length\} 筆）—— 與銷課是兩件事，只用來算營業稅。/.test(P));
@@ -95,6 +96,22 @@ console.log('① 銷課怎麼算（實跑）');
        /客人一次買 20 堂、錢在一月收，課上到六月 ——\s*\n\s*用收款當營收，賣票的那個月暴賺、之後每個月都在虧，看不出真實經營狀況。/.test(src));
 
     console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
+    /* 2026-08-13：課種分類實跑（教練課/友善 × 1V1/1V2、團體課、其他） */
+    {
+      const C=new Function(grabFn('tkRevClass')+'\nreturn tkRevClass;')();
+      const tm={pt:{id:'pt',category:'私人教練',name:'一般教練課 1V1'},
+                pt2:{id:'pt2',category:'私人教練',name:'一般教練課 1V2'},
+                fr:{id:'fr',category:'私人教練',name:'友善教練課',color:'friendly'},
+                g:{id:'g',category:'團體課',name:'一般團體課'},
+                ms:{id:'ms',category:'運動按摩',name:'運動按摩'}};
+      eq('★ 教練課 1V1', C({ticket_type_id:'pt',plan_name:'一般教練課 1V1'},tm), 'pt1');
+      eq('★ 教練課 1V2（票種名認得出）', C({ticket_type_id:'pt2',plan_name:'自訂方案'},tm), 'pt2');
+      eq('★ 友善 1V2（format 認得出）', C({ticket_type_id:'fr',plan_name:'友善一般',format:'1V2'},tm), 'fr2');
+      eq('★ 團體課', C({ticket_type_id:'g',plan_name:'團課 4週優惠'},tm), 'grp');
+      eq('★ 按摩／其他', C({ticket_type_id:'ms',plan_name:'運動按摩'},tm), 'other');
+      eq('★ 對不到票 → 其他', C(null,tm), 'other');
+      console.log((fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗（含課種分類）');
+    }
     process.exit(fail?1:0);
   })();
 }

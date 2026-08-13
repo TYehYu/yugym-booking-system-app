@@ -1609,7 +1609,9 @@ body.mc-mode .layout{padding-top:8px;}
    粗右線只留在凍結區最右邊那一欄，中間用細線分隔。 */
 .fm-tb .fm-t{position:sticky;left:var(--fm-l1,74px);z-index:2;background:var(--card2);
   border-right:1px solid var(--bd);}
-.fm-tb .fm-t.fm-t2{left:var(--fm-l2,126px);border-right:2px solid var(--bd);color:var(--brown);}
+.fm-tb .fm-t.fm-t2{left:var(--fm-l2,126px);color:var(--brown);}
+/* 全店營業額欄（2026-08-13）：黏在團課欄右邊、承接原本的粗分隔線 */
+.fm-tb .fm-t.fm-t3{left:var(--fm-l3,190px);border-right:2px solid var(--bd);color:var(--green);min-width:70px;}
 .fm-tb thead .fm-t{z-index:4;}
 .fm-tb .fm-sum .fm-t{z-index:3;}
 .fm-tb tbody tr:hover .fm-t{background:var(--sage-bg);}
@@ -7803,8 +7805,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260813.1657';
-const APP_VERSION_LABEL='v260813.1657';
+const APP_VERSION = '260813.1725';
+const APP_VERSION_LABEL='v260813.1725';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -42645,6 +42647,12 @@ async function finMatrix(){
   const num=n=>n?String(n):'';
   const sum={};   // 每位教練整月合計
   cols.forEach(c=>{ sum[c.id]={pt:0,grp:0,amt:0,nw:0,rn:0}; });
+  /* 全店營業額（2026-08-13 使用者指示：「月報表左邊要有營業額的加總」）——
+     所有收款都算（含未歸屬教練的場租/商品/重啟），與教練業績欄同用 created_at 的日期口徑。 */
+  const dayAmtAll={}; let sumAmtAll=0;
+  (purs||[]).forEach(p=>{ if(!p) return; const d10=String(p.created_at||'').slice(0,10);
+    if(!inM(d10)) return; const v=Number(p.deal_amount)||0;
+    dayAmtAll[d10.slice(8,10)]=(dayAmtAll[d10.slice(8,10)]||0)+v; sumAmtAll+=v; });
   let dayRows='';
   for(let d=1;d<=days;d++){
     const dd=String(d).padStart(2,'0');
@@ -42663,7 +42671,8 @@ async function finMatrix(){
         +`<td class="fm-c fm-m">${money(v.amt)}</td><td class="fm-c fm-k fm-ge" style="--cc:${cc};"${fmWhoTip(v.who)}>${kd}</td>`;
     });
     dayRows+=`<tr class="${isToday?'fm-today':''}"><th class="fm-d">${d}<span>（${wd}）</span></th>`
-      +`<td class="fm-c fm-t">${num(dayPt)}</td><td class="fm-c fm-t fm-t2">${num(dayGrp)}</td>${tds}</tr>`;
+      +`<td class="fm-c fm-t">${num(dayPt)}</td><td class="fm-c fm-t fm-t2">${num(dayGrp)}</td>`
+      +`<td class="fm-c fm-t fm-t3">${money(dayAmtAll[dd]||0)}</td>${tds}</tr>`;
   }
   let sumTds='', sumPt=0, sumGrp=0;
   cols.forEach(c=>{ const s=sum[c.id]; sumPt+=s.pt; sumGrp+=s.grp; const cc=_fmCol[c.id];
@@ -42682,11 +42691,11 @@ async function finMatrix(){
       <button class="btn btn-ghost btn-sm" onclick="finMonthMove(1)">下個月 ›</button></div>
     <div class="fm-wrap"><table class="fm-tb">
       <thead>
-        <tr><th class="fm-d fm-h">日期</th><th class="fm-h fm-t" colspan="2">全店總堂數</th>${head1}</tr>
-        <tr><th class="fm-d fm-sh"></th><th class="fm-sh fm-t">教練課</th><th class="fm-sh fm-t fm-t2">團課</th>${head2}</tr>
+        <tr><th class="fm-d fm-h">日期</th><th class="fm-h fm-t" colspan="3">全店合計</th>${head1}</tr>
+        <tr><th class="fm-d fm-sh"></th><th class="fm-sh fm-t">教練課</th><th class="fm-sh fm-t fm-t2">團課</th><th class="fm-sh fm-t fm-t3">營業額</th>${head2}</tr>
       </thead>
       <tbody>
-        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumPt)}</td><td class="fm-c fm-t fm-t2">${num(sumGrp)}</td>${sumTds}</tr>
+        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumPt)}</td><td class="fm-c fm-t fm-t2">${num(sumGrp)}</td><td class="fm-c fm-t fm-t3">${money(sumAmtAll)}</td>${sumTds}</tr>
         ${dayRows}
       </tbody>
     </table></div>
@@ -42721,9 +42730,13 @@ function fmStickyFit(){
       if(w1>0) tb.style.setProperty('--fm-l1',w1+'px');
       /* 2026-08-08：總堂數拆成教練課／團課兩欄後，第三欄要黏在第二欄右邊 ——
          位移＝日期欄寬 ＋ 教練課欄寬（同樣要量，字體與縮放都會影響）。 */
-      const t1=tb.querySelector('thead tr:nth-child(2) .fm-t:not(.fm-t2)');
+      const t1=tb.querySelector('thead tr:nth-child(2) .fm-t:not(.fm-t2):not(.fm-t3)');
       const w2=t1?Math.round(t1.getBoundingClientRect().width):0;
       if(w1>0&&w2>0) tb.style.setProperty('--fm-l2',(w1+w2)+'px');
+      /* 2026-08-13：營業額欄要黏在團課欄右邊——位移＝前三欄實際寬度合計 */
+      const t2=tb.querySelector('thead tr:nth-child(2) .fm-t.fm-t2');
+      const w3=t2?Math.round(t2.getBoundingClientRect().width):0;
+      if(w1>0&&w2>0&&w3>0) tb.style.setProperty('--fm-l3',(w1+w2+w3)+'px');
     };
     fit();
     requestAnimationFrame(fit);                       // 字體載入後再量一次
@@ -42806,6 +42819,21 @@ async function finToday(){
 
    ⚠ 這是損益表與下方營運卡共用的**唯一一份**計算。兩邊各算一次，
      就會又長出兩個對不起來的數字（這一頁剛清掉的毛病）。 */
+/* 營收/銷課的課種分類（2026-08-13 使用者指示：「分類 教練課 友善教練課 1v1 1v2 團體課 其他金額」）——
+   教練課/友善 × 1V1/1V2、團體課、其他（按摩/自主/場租/商品/對不到票的收款）。
+   友善認票種 color 或名稱含「友善」；1V2 認 format 或方案/票種名稱。 */
+const REV_CLS_LB={pt1:'教練課 1V1',pt2:'教練課 1V2',fr1:'友善教練課 1V1',fr2:'友善教練課 1V2',grp:'團體課',other:'其他金額'};
+const REV_CLS_ORDER=['pt1','pt2','fr1','fr2','grp','other'];
+function tkRevClass(t, typeMap){
+  if(!t) return 'other';
+  const tt=(typeMap||{})[t.ticket_type_id]||{};
+  const cat=tt.category||'';
+  if(cat==='團體課'||cat==='小班肌力'||(!cat&&(t.plan_name||'').includes('團'))) return 'grp';
+  if(cat!=='私人教練') return 'other';
+  const friendly=(tt.color==='friendly')||((t.plan_name||'').indexOf('友善')>=0)||((tt.name||'').indexOf('友善')>=0);
+  const v2=/1\s*v\s*2/i.test(String(t.format||''))||/1\s*v\s*2/i.test(String(t.plan_name||''))||/1\s*v\s*2/i.test(String(tt.name||''));
+  return (friendly?'fr':'pt')+(v2?'2':'1');
+}
 async function monthSalesValue(ym, pre){
   const [bookings,mtks,types] = pre || await Promise.all([
     dbGetAll('bookings').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[]),
@@ -42826,7 +42854,14 @@ async function monthSalesValue(ym, pre){
   const avgUnit=cl=>bucket[cl].n>0?bucket[cl].a/bucket[cl].n:0;
   const memAvg=(mid,cl)=>{ const k=memUnit[mid+'|'+cl]; return (k&&k.n>0)?k.a/k.n:avgUnit(cl); };
   const ptList=done.filter(b=>b.category==='私人教練');
-  const ptValue=ptList.reduce((s,b)=>{ const u=unitOf(tkById[b.ticket_id]); return s+(u>0?u:memAvg(b.member_id,'pt')); },0);
+  /* 分類銷課（2026-08-13）：逐堂看那張票的課種；對不到票的堂數歸「其他」不硬猜 */
+  const byCls={pt1:{v:0,n:0},pt2:{v:0,n:0},fr1:{v:0,n:0},fr2:{v:0,n:0},grp:{v:0,n:0},other:{v:0,n:0}};
+  const ptValue=ptList.reduce((s,b)=>{
+    const t=tkById[b.ticket_id];
+    const u=unitOf(t); const val=(u>0?u:memAvg(b.member_id,'pt'));
+    const cls=t?tkRevClass(t,typeMap):'other';
+    const slot=byCls[cls]||byCls.other; slot.v+=val; slot.n+=1;
+    return s+val; },0);
   const grpList=done.filter(b=>bkIsGroup(b));
   let grpHeads=0;
   const grpValue=grpList.reduce((s,b)=>{
@@ -42834,9 +42869,11 @@ async function monthSalesValue(ym, pre){
     /* 人次不含請假（2026-08-06 使用者定案），但銷課金額含 —— 請假是本堂照扣不退，
        票用掉了、錢就實現了，只是人沒來、不算教練成績。 */
     grpHeads+=grpHeadsNoLeave(b);
-    return s+ids.reduce((a,mid)=>a+memAvg(mid,'grp'),0); },0);
+    const gv=ids.reduce((a,mid)=>a+memAvg(mid,'grp'),0);
+    byCls.grp.v+=gv; byCls.grp.n+=1;
+    return s+gv; },0);
   return { salesValue:ptValue+grpValue, ptValue, ptCount:ptList.length,
-           grpValue, grpCount:grpList.length, grpHeads, doneCount:done.length };
+           grpValue, grpCount:grpList.length, grpHeads, doneCount:done.length, byCls };
 }
 /* 員工薪資明細表的欄位定義（2026-08-08 使用者指示二修：「直接列出來吧，在員工這邊
    最上方新增一列標示每一個金額代表什麼」）——
@@ -42993,7 +43030,9 @@ async function finPnl(){
       </div>
       <table class="pnl">
         <tr class="pnl-h pnl-in"><td>銷課金額<span style="color:var(--t3);font-weight:400;"> 　教練上掉的課</span></td><td>${m(revenue)}</td></tr>
-        ${sub('教練課',-Math.round(SV.ptValue),`${SV.ptCount} 堂`).replace('−$','$')}
+        ${/* 銷課分類（2026-08-13 使用者指示）：教練課/友善 × 1V1/1V2、團體課、其他 */''}
+        ${REV_CLS_ORDER.filter(k=>k!=='grp'&&(SV.byCls[k]||{}).n>0).map(k=>
+          sub(REV_CLS_LB[k],-Math.round(SV.byCls[k].v),`${SV.byCls[k].n} 堂`).replace('−$','$')).join('')}
         ${sub('團體課',-Math.round(SV.grpValue),`${SV.grpCount} 堂 ${SV.grpHeads} 人次`).replace('−$','$')}
         <tr class="pnl-out"><td>營業稅 5%<span style="color:var(--t3);font-weight:400;"> 　依<b>收款</b> ${m(cash)} 內含計：÷ 1.05 × 5%</span></td><td>${neg(tax)}</td></tr>
         <tr class="pnl-h pnl-out pnl-hr"><td>員工薪資（應發）<span style="color:var(--t3);font-weight:400;"> 　${payRows.length} 位・明細見下方</span></td><td>${neg(salary)}</td></tr>
@@ -43027,8 +43066,13 @@ async function finPnl(){
 async function finMonth(){
   const body=document.getElementById('fin-body'); if(!body) return;
   const month=(window._finMonth||ymd(TODAY).slice(0,7));
-  const [purchases,tickets,expAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[]),dbGetAll('expenses').catch(()=>[])]);
+  const [purchases,tickets,expAll,_types]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[]),dbGetAll('expenses').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[])]);
   const monthPur=(purchases||[]).filter(p=>(p.created_at||'').slice(0,7)===month);
+  /* 本月營業額分類（2026-08-13 使用者指示）：每筆收款對回票券歸課種；場租/商品/對不到票的＝其他金額 */
+  const _tkById=Object.fromEntries((tickets||[]).map(t=>[t.id,t]));
+  const _tyMap=Object.fromEntries((_types||[]).map(t=>[t.id,t]));
+  const revCls={}; monthPur.forEach(p=>{ const cls=p.ticket_id?tkRevClass(_tkById[p.ticket_id],_tyMap):'other';
+    revCls[cls]=(revCls[cls]||0)+(Number(p.deal_amount)||0); });
   /* 本月其他支出（2026-07-31 使用者指示）：房租、水電等額外開銷 */
   const monthExp=(expAll||[]).filter(e=>e.ym===month)
     .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.created_at||'').localeCompare(String(b.created_at||'')));
@@ -43068,12 +43112,22 @@ async function finMonth(){
       <span style="width:110px;text-align:right;font-family:var(--font-en);font-size:13px;">${finMoney(amt)}<span style="color:var(--t3);"> ${pct}%</span></span>
     </div>`;
   }).join('');
+  const clsRows=REV_CLS_ORDER.filter(k=>revCls[k]).map(k=>{
+    const amt=revCls[k]; const pct=revenue>0?Math.round(amt/revenue*100):0;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--bd);">
+      <span style="width:120px;font-size:13px;">${REV_CLS_LB[k]}</span>
+      <div style="flex:1;height:8px;background:var(--card2);border-radius:4px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:var(--gold-d,#b48a56);"></div></div>
+      <span style="width:110px;text-align:right;font-family:var(--font-en);font-size:13px;">${finMoney(amt)}<span style="color:var(--t3);"> ${pct}%</span></span>
+    </div>`; }).join('');
+  const clsCard = monthPur.length
+    ? `<div class="card" style="padding:14px 16px;margin-bottom:14px;"><div style="font-size:13px;font-weight:700;margin-bottom:4px;">本月營業額（收款）<span style="font-weight:800;color:var(--green);font-family:var(--num),inherit;"> ${finMoney(revenue)}</span><span style="font-weight:400;color:var(--t3);font-size:11.5px;"> 　依課種分類；「其他金額」含場租、商品與對不到票券的收款</span></div>${clsRows}</div>`
+    : '';
   const methodCard = monthPur.length
     ? `<div class="card" style="padding:14px 16px;"><div style="font-size:13px;font-weight:700;margin-bottom:4px;">收款方式${_one?`<span style="font-weight:400;color:var(--t3);font-size:11.5px;"> 　合計 ${finMoney(revenue)}，與上方營業額同一筆錢</span>`:''}</div>${methodRows}</div>`
     : (_one?'':lpEmpty('本月還沒有收款','',''));
   /* 支出的填寫表格已搬到「其他支出」分頁（2026-07-31 二修：固定支出與其他支出要分開列）。
      這裡只留一格可點的統計，點了就跳過去。 */
-  body.innerHTML = dateBar + stats + methodCard;
+  body.innerHTML = dateBar + stats + clsCard + methodCard;
 }
 /* ── 其他支出分頁：固定支出與其他支出分開列（2026-07-31 使用者指示）──
    只有管理員進得來（財務總覽在 g_admin 群組），資料表 RLS 也只放行 is_admin()。

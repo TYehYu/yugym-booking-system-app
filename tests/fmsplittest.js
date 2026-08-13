@@ -11,8 +11,8 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('① 表頭：一個大標、兩個子標');
-ok('★ 上排「全店總堂數」橫跨兩欄',
-   /<th class="fm-d fm-h">日期<\/th><th class="fm-h fm-t" colspan="2">全店總堂數<\/th>/.test(src));
+ok('★ 上排「全店合計」橫跨三欄（2026-08-13 加營業額欄）',
+   /<th class="fm-d fm-h">日期<\/th><th class="fm-h fm-t" colspan="3">全店合計<\/th>/.test(src));
 ok('★ 下排拆成「教練課」與「團課」',
    /<th class="fm-sh fm-t">教練課<\/th><th class="fm-sh fm-t fm-t2">團課<\/th>/.test(src));
 
@@ -29,12 +29,14 @@ console.log('\n③ 兩欄都要凍結');
 ok('★ 教練課黏日期欄右邊、團課再黏教練課右邊',
    /\.fm-tb \.fm-t\{position:sticky;left:var\(--fm-l1,74px\)/.test(src)
    && /\.fm-tb \.fm-t\.fm-t2\{left:var\(--fm-l2,126px\)/.test(src));
-ok('★ 位移用量的、不寫死（字體與縮放都會變）',
-   /const t1=tb\.querySelector\('thead tr:nth-child\(2\) \.fm-t:not\(\.fm-t2\)'\);/.test(src)
-   && /if\(w1>0&&w2>0\) tb\.style\.setProperty\('--fm-l2',\(w1\+w2\)\+'px'\);/.test(src));
-ok('★ 粗右線只留在凍結區最右邊（中間用細線）',
+ok('★ 位移用量的、不寫死（字體與縮放都會變；2026-08-13 起第四欄 --fm-l3 一樣用量的）',
+   /const t1=tb\.querySelector\('thead tr:nth-child\(2\) \.fm-t:not\(\.fm-t2\):not\(\.fm-t3\)'\);/.test(src)
+   && /if\(w1>0&&w2>0\) tb\.style\.setProperty\('--fm-l2',\(w1\+w2\)\+'px'\);/.test(src)
+   && /if\(w1>0&&w2>0&&w3>0\) tb\.style\.setProperty\('--fm-l3',\(w1\+w2\+w3\)\+'px'\);/.test(src));
+ok('★ 粗右線只留在凍結區最右邊（2026-08-13 起最右是營業額欄）',
    /\.fm-tb \.fm-t\{[^}]*border-right:1px solid var\(--bd\);\}/.test(src)
-   && /\.fm-tb \.fm-t\.fm-t2\{[^}]*border-right:2px solid var\(--bd\)/.test(src));
+   && /\.fm-tb \.fm-t\.fm-t3\{[^}]*border-right:2px solid var\(--bd\)/.test(src)
+   && !/\.fm-tb \.fm-t\.fm-t2\{[^}]*border-right:2px/.test(src));
 ok('　　團課那一欄用棕色（與教練欄裡的團課同色）',
    /\.fm-tb \.fm-t\.fm-t2\{[^}]*color:var\(--brown\)/.test(src));
 
