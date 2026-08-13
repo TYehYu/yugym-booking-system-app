@@ -16,8 +16,11 @@ const code=g('function isLegacyMember(m){','\n}\n')+'\n'+g('function _tierBaseOf
   +g('function _nextYm(ym)','\n')+'\n'+g('function tierDemotionWatchIds(','\n}\n')+'\n'
   +g('function tierPromotionWatchIds(','\n}\n');
 // 假設「今天」是 2026-12-01 → 會走訪 2026-07 ~ 2026-11 這 5 個完整月
-const api=new Function('ymd','TODAY',code+'\nreturn {computeMemberTiers,tierDemotionWatchIds,tierPromotionWatchIds};')
-  (()=>'2026-12', new Date(2026,11,1));
+/* 2026-08-13 更新：2026-08-11 共享票等級歸屬改版後，computeMemberTiers 內部改查
+   window._allTkCache（共享票記在持有人名下）—— 沙箱補 window stub，
+   空快取＝退回舊行為（記在上課者名下），以下情境判定不變。 */
+const api=new Function('ymd','TODAY','window',code+'\nreturn {computeMemberTiers,tierDemotionWatchIds,tierPromotionWatchIds};')
+  (()=>'2026-12', new Date(2026,11,1), {});
 const BK=(mid,ym,n)=>Array.from({length:n},(_,i)=>({member_id:mid,category:'私人教練',status:'checked_in',date:`${ym}-0${(i%9)+1}`}));
 const mk=(id,plan)=>Object.entries(plan).flatMap(([ym,n])=>BK(id,ym,n));
 const OLD={id:'O',created_at:'2025-01-01',tier_epoch:1};   // 舊系統既有會員 → 從主顧客起算

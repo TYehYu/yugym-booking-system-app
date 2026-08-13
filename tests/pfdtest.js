@@ -83,11 +83,15 @@ ok('★ 就地展開，不疊第二層彈窗', /function pfdToggleRenew\(\)\{/.t
    && /<div class="pfd-nl" id="pfd-renew">/.test(src));
 ok('　　為什麼不另開視窗，寫在程式裡',
    /這個視窗本身就是彈窗，再疊一層就得做返回，\n\s*而且看名單的當下多半還想對照上面的薪資列。/.test(src));
+/* 2026-08-12 SANDY 案例：店長名單在區域 _esc 宣告「之前」就用到它 → TDZ 錯誤，
+   整支 openPerfDetail 改用全域 escH，區域版移除 —— 跳脫行為不變，只是換名字。 */
 ok('★ 名單列出會員、方案、日期、金額，並給合計',
-   /<span class="nl-nm">\$\{_esc\(_memNm\[r\.member_id\]\|\|'—'\)\}<\/span>/.test(src)
+   /<span class="nl-nm">\$\{escH\(_memNm\[r\.member_id\]\|\|'—'\)\}<\/span>/.test(src)
    && /<span class="nl-amt">/.test(src)
    && /<div class="nl-sum"><span>合計<\/span>/.test(src));
-ok('　　會員名字有跳脫（名字裡有 < 不會壞版）', /const _esc=t=>String\(t\|\|''\)\.replace\(\/&\/g,'&amp;'\)/.test(src));
+ok('　　會員名字有跳脫（2026-08-12 改用全域 escH，區域 _esc 因 TDZ 移除）',
+   /function escH\(t\)\{ return String\(t==null\?'':t\)\.replace\(\/&\/g,'&amp;'\)/.test(src)
+   && !/const _esc=t=>String\(t\|\|''\)\.replace/.test(src));
 ok('　　預設收著，點了才開', /\.pfd-nl\{display:none;/.test(src) && /\.pfd-nl\.open\{display:flex;\}/.test(src));
 ok('　　可點那格平常跟其他三格一樣（滑過去才浮出來）',
    /\.pfd-stats span,\.pfd-stats \.pfd-tap\{min-width:0;background:var\(--card2\)/.test(src)

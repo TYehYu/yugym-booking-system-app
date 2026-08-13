@@ -25,26 +25,30 @@ const mk=(BK)=>new Function('dbGetAll','timeToMin','venueCap','venuePriorityFor'
 
 const SELF=(o)=>Object.assign({id:'B0',category:'自主訓練',date:'2026-07-31',start_time:'17:00',duration:60,venue_unit:'treadmill_1'},o);
 const T=(u,t,o)=>Object.assign({id:u+t,date:'2026-07-31',status:'booked',venue_unit:u,start_time:t,duration:60},o||{});
-/* ⚠ 外層是 class="vu-dots"，要用邊界避免把它也抓進來 */
-const dots=h=>[...String(h).matchAll(/class="vu-dot( [^"]*)?"/g)].map(m=>(m[1]||'').trim());
+/* 2026-08-12 使用者指示：「這邊改成兩個按鈕 一台 兩台」——逐台燈號（vu-dot）退場，
+   改成「一台／兩台」台數按鈕（bkSetVenueUnits）。斷言改讀按鈕狀態：
+   on＝綠底（目前台數）、dis＝不可按（另一台被別人佔走）、''＝可點。 */
+const btns=h=>[...String(h).matchAll(/<button type="button" class="btn btn-ghost btn-sm"[\s\S]*?<\/button>/g)]
+  .map(m=>m[0]).map(s=>(/ disabled/.test(s)?'dis':(/background:var\(--green\)/.test(s)?'on':'')));
 
 (async()=>{
-console.log('畫幾顆、什麼顏色');
+console.log('畫幾顆按鈕、什麼狀態（2026-08-12 改成「一台／兩台」按鈕）');
 {
   let h=await mk([])(SELF(),true);
-  eq('★ 跑步機畫兩顆', dots(h), ['cur','']);
-  ok('　　本堂那顆帶金框（cur）、另一顆是可點的開關',
-     /<button type="button" class="vu-dot" title="再開一台（同行使用，不另外扣點）"/.test(h));
-  /* 2026-07-31 使用者指示：燈上不標 1、2 —— 點哪一顆都只是「多開／少開一台」 */
-  ok('★ 燈上不標號碼（點哪一顆都只是多開／少開一台）',
-     !/>[12]<\/(span|button)>/.test(h) && /><\/button>/.test(h));
+  eq('★ 跑步機畫兩顆', btns(h), ['on','']);   // 2026-08-12：燈號→台數按鈕；目前 1 台＝「一台」綠底
+  ok('　　本堂台數綠底（on）、另一顆是可點的開關',
+     /onclick="bkSetVenueUnits\('B0',2\)"/.test(h)
+     && /同行使用，第 2 台不另外扣點/.test(h));   // 2026-08-12：開第 2 台改走 bkSetVenueUnits
+  /* 2026-08-12 使用者指示：按鈕寫「一台／兩台」（要的是結果台數，不是機台編號） */
+  ok('★ 按鈕標台數不標機台編號（一台／兩台）',
+     />一台<\/button>/.test(h) && />兩台<\/button>/.test(h) && !/>[12]<\/(span|button)>/.test(h));
 
   h=await mk([T('treadmill_2','17:00')])(SELF(),true);
-  eq('★ 另一台被別人約走 → 綠燈、不可點', dots(h), ['cur','taken']);
-  ok('　　被佔的那顆不是按鈕（點不下去）', !/<button[^>]*class="vu-dot taken"/.test(h));
+  eq('★ 另一台被別人約走 → 「兩台」不可按', btns(h), ['on','dis']);   // 2026-08-12：taken 燈→disabled 按鈕
+  ok('　　不可按的那顆有講原因', /另一台已被其他預約佔用/.test(h));
 
   h=await mk([])(SELF({venue_unit:'treadmill_2'}),true);
-  eq('　　本堂在 2 號 → 金框跟著跑到第二顆', dots(h), ['','cur']);
+  eq('　　本堂在 2 號 → 台數不變仍是「一台」綠底（按鈕不分機台）', btns(h), ['on','']);   // 2026-08-12：金框跟台跑的概念退場
 }
 
 /* 2026-08-01 使用者指示：「更換場地的燈號按鈕只要出現在選擇跑步機的時候，
@@ -52,7 +56,7 @@ console.log('畫幾顆、什麼顏色');
    多功能訓練區的 3 個位子是「同時容納 3 個人」，不是同一張預約佔 3 個 —— 在那裡畫燈號是誤導。 */
 console.log('\n只在跑步機畫（2026-08-01 收斂）');
 {
-  ok('★ 跑步機 → 畫兩顆', dots(await mk([])(SELF({venue_unit:'treadmill_1'}),true)).length===2);
+  ok('★ 跑步機 → 畫兩顆', btns(await mk([])(SELF({venue_unit:'treadmill_1'}),true)).length===2);   // 2026-08-12：改數按鈕
   eq('★ 多功能訓練區 → 不畫（3 個位子是 3 個人，不是一張預約佔 3 個）',
      await mk([])(SELF({venue_unit:'multi_2'}),true), '');
   eq('★ 團課教室只有一間 → 不畫', await mk([])(SELF({venue_unit:'group_1'}),true), '');
@@ -61,19 +65,19 @@ console.log('\n只在跑步機畫（2026-08-01 收斂）');
   eq('　　沒有日期／時間不畫', await mk([])(SELF({start_time:null}),true), '');
 }
 
-console.log('\n佔用的判定');
+console.log('\n佔用的判定');   /* 2026-08-12：斷言改讀「一台／兩台」按鈕狀態（on/dis/可點） */
 {
-  eq('　　別的時段不算', dots(await mk([T('treadmill_2','15:00')])(SELF(),true)), ['cur','']);
+  eq('　　別的時段不算', btns(await mk([T('treadmill_2','15:00')])(SELF(),true)), ['on','']);
   eq('　　跨時段重疊要算（16:30 的 60 分課壓到 17:00）',
-     dots(await mk([T('treadmill_2','16:30')])(SELF(),true)), ['cur','taken']);
-  eq('　　已取消的不算', dots(await mk([T('treadmill_2','17:00',{status:'cancelled'})])(SELF(),true)), ['cur','']);
-  eq('　　別的場地不算', dots(await mk([T('multi_1','17:00')])(SELF(),true)), ['cur','']);
-  eq('★ 舊資料沒編號（venue_unit=treadmill）→ 先佔住最前面沒被用到的號碼',
-     dots(await mk([T('treadmill','17:00')])(SELF({venue_unit:'treadmill_1'}),true)), ['cur','taken']);
-  eq('　　自己那筆不會算成佔用', dots(await mk([SELF()])(SELF(),true)), ['cur','']);
-  eq('★ 同一組的第二台也算「自己的」（金框，可以關）',
-     dots(await mk([{id:'B9',date:'2026-07-31',status:'booked',venue_unit:'treadmill_2',
-                     start_time:'17:00',duration:60,sibling_of:'B0'}])(SELF(),true)), ['cur','cur']);
+     btns(await mk([T('treadmill_2','16:30')])(SELF(),true)), ['on','dis']);
+  eq('　　已取消的不算', btns(await mk([T('treadmill_2','17:00',{status:'cancelled'})])(SELF(),true)), ['on','']);
+  eq('　　別的場地不算', btns(await mk([T('multi_1','17:00')])(SELF(),true)), ['on','']);
+  eq('★ 舊資料沒編號（venue_unit=treadmill）→ 仍算佔走一台（「兩台」不可按）',
+     btns(await mk([T('treadmill','17:00')])(SELF({venue_unit:'treadmill_1'}),true)), ['on','dis']);
+  eq('　　自己那筆不會算成佔用', btns(await mk([SELF()])(SELF(),true)), ['on','']);
+  eq('★ 同一組的第二台也算「自己的」（目前台數＝2，「兩台」綠底）',
+     btns(await mk([{id:'B9',date:'2026-07-31',status:'booked',venue_unit:'treadmill_2',
+                     start_time:'17:00',duration:60,sibling_of:'B0'}])(SELF(),true)), ['','on']);
 }
 
 console.log('\n名額：亮幾個燈就佔幾台（2026-07-31 使用者確認）');
@@ -132,8 +136,12 @@ ok('　　點遮罩仍可關閉', /<div class="mtp-back" onclick="collapseBkCard
 
 console.log('\n權限');
 {
-  const h=await mk([])(SELF(),false);
-  ok('★ 不可編輯時只顯示、不給點', !/<button/.test(h) && dots(h).length===2);
+  /* 2026-08-12 改按鈕後：不可編輯時不畫按鈕——1 台什麼都不顯示、2 台只顯示「使用 2 台」文字 */
+  const h1=await mk([])(SELF(),false);
+  const h2=await mk([{id:'B9',date:'2026-07-31',status:'booked',venue_unit:'treadmill_2',
+                      start_time:'17:00',duration:60,sibling_of:'B0'}])(SELF(),false);
+  ok('★ 不可編輯時只顯示、不給點', !/<button/.test(h1) && !/<button/.test(h2)
+     && h1==='' && /使用 2 台/.test(h2));
 }
 
 console.log('\n接到明細裡');

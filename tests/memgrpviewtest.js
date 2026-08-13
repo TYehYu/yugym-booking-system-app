@@ -64,11 +64,13 @@ console.log('\n② 上課人數：三個會員端畫面都看得到');
   ok('★ 開課表：名額 N/M（本來就有）', /· 名額 \$\{n\}\/\$\{mx\}/.test(F));
   ok('★ 開課表也顯示代課', /const _who=\(cm\[c\.substitute_coach_id\|\|c\.coach_id\]\|\|'教練'\)\+\(c\.substitute_coach_id\?'（代課）':''\);/.test(F));
 }
+/* 2026-08-12 請假釋出名額：人數改用有效人數 grpLiveHeads(b)，請假數另外標（N 請假） */
 ok('★★ 我的預約・當日清單：教練 · N/M 人 · 時長 · 狀態',
-   /const _grpHeads=bkIsGroup\(b\)\?`\$\{mids\(b\)\.length\}\/\$\{Math\.max\(1,Number\(b\.max_heads\)\|\|5\)\} 人`:'';/.test(src)
+   /const _grpHeads=bkIsGroup\(b\)\?`\$\{grpLiveHeads\(b\)\}\/\$\{Math\.max\(1,Number\(b\.max_heads\)\|\|5\)\} 人\$\{grpLeaveSeats\(b\)\?`（\$\{grpLeaveSeats\(b\)\} 請假）`:''\}`:'';/.test(src)
    && /<div class="mc-ev-cat">\$\{who\}\$\{_grpHeads\?` · \$\{_grpHeads\}`:''\} · \$\{dur\}分鐘/.test(src));
+/* 2026-08-12 請假釋出名額：彈窗同步改吃 grpLiveHeads／grpLeaveSeats */
 ok('★★ 我的預約・課卡彈窗：時間 · 教練 · N/M 人',
-   /const whoHeads=isGrp\?`\$\{mids\(b\)\.length\}\/\$\{Math\.max\(1,Number\(b\.max_heads\)\|\|5\)\} 人`:'';/.test(src)
+   /const whoHeads=isGrp\?`\$\{grpLiveHeads\(b\)\}\/\$\{Math\.max\(1,Number\(b\.max_heads\)\|\|5\)\} 人\$\{grpLeaveSeats\(b\)\?`（\$\{grpLeaveSeats\(b\)\} 請假）`:''\}`:'';/.test(src)
    && /\$\{whoHeads\?`　·　\$\{whoHeads\}`:''\}/.test(src));
 ok('★ 報名確認視窗也列出教練與人數（報名前就看得到這堂多滿）',
    /<div><span style="opacity:\.7;">上課人數<\/span>　\$\{\(Array\.isArray\(c\.member_ids\)\?c\.member_ids\.length:0\)\}\/\$\{Math\.max\(1,Number\(c\.max_heads\)\|\|5\)\} 人<\/div>/.test(src));

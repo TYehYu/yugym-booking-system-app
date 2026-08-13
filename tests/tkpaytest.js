@@ -13,18 +13,23 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.in
 console.log('① 實跑 tkMoneyHtml');
 {
   const mk=(desk,payMap)=>new Function('isDeskLike','window','return '+grabFn('tkMoneyHtml'))(()=>desk,{_tkPayMap:payMap||{}});
-  const f=mk(true,{T1:'cash',T2:'transfer',T3:'imported'});
+  /* 2026-08-13 拆帳改版：_tkPayMap 每筆改存 {m,sp}（付款方式＋pay_split），fixture 跟著改 */
+  const f=mk(true,{T1:{m:'cash',sp:null},T2:{m:'transfer',sp:null},T3:{m:'imported',sp:null},T4:{m:'split',sp:{cash:2000,transfer:1000}}});
   ok('★ 現金：金額後掛綠標', /\$3,000<\/b><span class="tk-pay">現金<\/span>/.test(f({id:'T1',amount_paid:3000})));
   ok('★ 匯款：金色（同今日營收色階）', /<span class="tk-pay tk-pay-tr">匯款<\/span>/.test(f({id:'T2',amount_paid:5000})));
+  /* 2026-08-13 使用者回報「看不出來多少現金多少匯款」：拆帳畫兩顆標籤各帶金額 */
+  ok('★ 拆帳：兩顆標籤各帶金額（現金綠＋匯款金）',
+     /<span class="tk-pay">現金 \$2,000<\/span><span class="tk-pay tk-pay-tr">匯款 \$1,000<\/span>/.test(f({id:'T4',amount_paid:3000})));
   ok('★ 舊系統匯入不標', !/tk-pay/.test(f({id:'T3',amount_paid:8000})));
   ok('★ 沒對照到的票不標（不掛空標籤）', !/tk-pay/.test(f({id:'T9',amount_paid:1000})));
-  ok('★ 會員端／教練端整段不顯示（金額本來就只給櫃檯）', mk(false,{T1:'cash'})({id:'T1',amount_paid:3000})==='');
+  ok('★ 會員端／教練端整段不顯示（金額本來就只給櫃檯）', mk(false,{T1:{m:'cash',sp:null}})({id:'T1',amount_paid:3000})==='');
   ok('　　$0 的票照舊顯示原因標籤，不掛付款方式', /tk-amt-zero/.test(f({id:'T9',amount_paid:0,note:''})));
 }
 
 console.log('\n② 對照表的建法');
-ok('★ 開會員資料時就地建表（分期多筆取最新：依 created_at 排序後覆寫）',
-   /window\._tkPayMap=\{\};\n\s*c\.myPc\.slice\(\)\.sort\(\(a,b\)=>String\(a\.created_at\|\|''\)\.localeCompare\(String\(b\.created_at\|\|''\)\)\)\n\s*\.forEach\(p=>\{ if\(p\.ticket_id&&p\.payment_method\) window\._tkPayMap\[p\.ticket_id\]=p\.payment_method; \}\);/.test(src));
+/* 2026-08-13 拆帳改版：對照表每筆改存 {m:付款方式, sp:pay_split}，拆帳標籤才能帶金額 */
+ok('★ 開會員資料時就地建表（分期多筆取最新：依 created_at 排序後覆寫；存 {m,sp}）',
+   /window\._tkPayMap=\{\};\n\s*c\.myPc\.slice\(\)\.sort\(\(a,b\)=>String\(a\.created_at\|\|''\)\.localeCompare\(String\(b\.created_at\|\|''\)\)\)\n\s*\.forEach\(p=>\{ if\(p\.ticket_id&&p\.payment_method\) window\._tkPayMap\[p\.ticket_id\]=\{m:p\.payment_method, sp:p\.pay_split\|\|null\}; \}\);/.test(src));
 ok('　　為什麼掛 window，寫在程式裡', /掛在 window 給 tkMoneyHtml 用（它是無資料存取的純顯示 helper）。/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);

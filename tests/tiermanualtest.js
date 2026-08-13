@@ -30,13 +30,16 @@ console.log('① effTier：VIP 鎖定、regular/loyal 是起點（實跑）');
 
 console.log('\n①b computeMemberTiers：起點接手重播（實跑，假時鐘 2026-08-05）');
 {
-  const fn=new Function(`
+  /* 2026-08-13 更新：2026-08-11 共享票等級歸屬改版後，computeMemberTiers 內部改查
+     window._allTkCache（共享票記在持有人名下）—— 沙箱補 window stub，
+     空快取＝退回舊行為（記在上課者名下），以下情境判定不變。 */
+  const fn=new Function('window',`
     const TODAY=null; const ymd=()=>'2026-08-05';
     const isLegacyMember=m=>!!m.tier_epoch;
     ${grabFn('_tierBaseOf')}
     ${grabFn('_nextYm')}
     ${grabFn('computeMemberTiers')}
-    return computeMemberTiers;`)();
+    return computeMemberTiers;`)({});
   // 新客本來是 regular；6 月手動調成主顧客 → 6、7 月都 0 堂 → low=2 仍是主顧客（差 1 個月才降）
   const r1=fn([], [{id:'M1',tier_epoch:false,created_at:'2026-05-01',tier_manual:'loyal',tier_manual_at:'2026-06-03'}]);
   eq('★ 手動調主顧客後 2 個月未達標 → 還是主顧客（制度照走、尚未到 3 個月）', r1.M1, 'loyal');

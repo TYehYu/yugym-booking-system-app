@@ -15,9 +15,12 @@ const grabFn=n=>{let i=src.indexOf('function '+n+'(');if(src.slice(i-6,i)==='asy
   let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 
 console.log('① 明細顯示真正的上限（不再寫死 5）');
+/* 2026-08-12 使用者定案「請假要釋出名額」：分子改成有效人數 grpLiveHeads(b)（總名額−請假） */
 ok('★ 分母改用課卡的 max_heads', /const _gmaxD=Math\.max\(1,Number\(b\.max_heads\)\|\|5\);/.test(src)
-   && /（\$\{gIdsD\.length\}\/\$\{_gmaxD\}/.test(src));
-ok('★ 滿員時數字標紅並寫「已滿」', /const _gfullD=gIdsD\.length>=_gmaxD;/.test(src)
+   && /const _liveD=grpLiveHeads\(b\);/.test(src)
+   && /（\$\{_liveD\}\/\$\{_gmaxD\}/.test(src));
+/* 2026-08-12：滿員判斷也改看有效人數（請假不佔位） */
+ok('★ 滿員時數字標紅並寫「已滿」', /const _gfullD=_liveD>=_gmaxD;/.test(src)
    && /\$\{_gfullD\?'・已滿':''\}/.test(src)
    && /color:\$\{_gfullD\?'var\(--danger,#b5372e\)':'var\(--t3\)'\}/.test(src));
 ok('★ 明細上有「改人數」入口（可編輯時才出現）',
@@ -57,8 +60,9 @@ console.log('\n④ 與既有規則相容');
 ok('★ 名單視窗的上限欄位照舊（兩邊寫的是同一個欄位）',
    /本堂人數上限<\/label><input type="number" id="grp-max"/.test(src)
    && /b\.max_heads=gmax;   \/\/ 名單視窗可調整本堂上限，一併保存/.test(src));
+/* 2026-08-12：補位的剩餘名額也扣掉請假數（請假不佔位） */
 ok('★ 連續預約補位仍看 max_heads 判斷滿員',
-   /const room=Math\.max\(1,Number\(x\.max_heads\)\|\|5\)-cur\.length;/.test(src));
+   /const room=Math\.max\(1,Number\(x\.max_heads\)\|\|5\)-\(cur\.length-grpLeaveSeats\(x\)\);/.test(src));
 ok('　　使用者的原話寫在程式裡',
    /有時候當天教練可以接受更多人一起上課/.test(src));
 

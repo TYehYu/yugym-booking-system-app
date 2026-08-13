@@ -22,8 +22,12 @@ console.log('① 簽署改滿版');
 ok('★ memSignContract 用滿版殼（cr-panel），不再是彈窗',
    /async function memSignContract\(id\)\{[\s\S]{0,1200}host\.id='contract-reader'/.test(src)
    && !/showModal\(`<div class="modal-title">合約簽署<\/div>/.test(src));
-ok('★ 簽名區固定底部（cr-signfoot，不會被捲走）',
-   /<div class="cr-signfoot">\n\s*<div class="ct-sign-wrap"><canvas class="ct-sign" id="ct-sign"><\/canvas><\/div>/.test(src)
+/* 2026-08-11 使用者回報「簽名欄太小」：小框改成純預覽（canvas pointer-events:none），
+   點整塊開全螢幕橫向簽名板（signFullOpen），簽完縮繪回同一顆 #ct-sign ——
+   cr-signfoot 固定底部的結構與 CSS 不變，只是 ct-sign-wrap 多了 onclick 與提示層。 */
+ok('★ 簽名區固定底部（cr-signfoot），小框改點開全螢幕簽名板（2026-08-11）',
+   /<div class="cr-signfoot">/.test(src)
+   && /<div class="ct-sign-wrap" onclick="signFullOpen\(\)"[^>]*>\s*<canvas class="ct-sign" id="ct-sign" style="pointer-events:none;"><\/canvas>/.test(src)
    && /\.cr-signfoot\{flex-shrink:0;padding:10px 14px calc\(12px \+ env\(safe-area-inset-bottom,0px\)\);/.test(src));
 ok('★ 全文有跳脫', /\$\{\(c\.body_snapshot\|\|''\)\.replace\(\/&\/g,'&amp;'\)\.replace\(\/<\/g,'&lt;'\)\}/.test(src));
 ok('★ 簽署成功把滿版殼收掉', /closeContractReader\(\); closeModal\(\); showToast\('合約已完成簽署，謝謝！'\);/.test(src));

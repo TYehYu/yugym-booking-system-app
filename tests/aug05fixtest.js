@@ -34,8 +34,11 @@ console.log('\n② 今天用完的票留在持有中');
    提前登記的請假會讓票當場用畢，課都還沒上就掉進歷史。 */
 ok('★ 票券夾 state：全用完但最後一堂是今天或以後 → 仍是 active',
    /else if\(total>0 && used>=total && bks\.some\(b=>isAtt\(b\)&&String\(b\.date\|\|''\)\.slice\(0,10\)>=today\)\) state='active';/.test(src));
-ok('　　過期判定仍優先（規則不變）',
-   src.indexOf("state='expired'") < src.indexOf("bks.some(b=>isAtt(b)&&String(b.date||'').slice(0,10)>=today)"));
+/* 2026-08-13 使用者指示重排優先序（蔡票阿嬤 #3）：「用完的票」→ 歷史（已完成）
+   排在過期判定之前 —— 全上完的票就算效期也到了，不該掛「已過期」；
+   0731「過期不看堂數」的舊規則讓位。「今天用完先留持有中」這條仍在最前，規則不變。 */
+ok('　　用完→歷史的判定排在過期之前（2026-08-13 重排；當天保留持有中仍在最前）',
+   /else if\(total>0 && used>=total\) state='history';\n\s*else if\(t\.expire_date && String\(t\.expire_date\)\.slice\(0,10\)<today\) state='expired';/.test(src));
 
 console.log('\n③ 圓形卡尺寸（二修：整體放大、共享人縮小）');
 ok('★ 基準圓點放大到 35px（原共享票「自己那顆」的尺寸）',

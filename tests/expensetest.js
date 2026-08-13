@@ -16,8 +16,9 @@ const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.len
 const fm=g('async function finMonth(){','\n}\n');
 
 console.log('資料來源');
-ok('★ 與營收同一次載入（不多打一輪來回）',
-   /const \[purchases,tickets,expAll\]=await Promise\.all\(\[dbGetAll\('purchases'\)\.catch\(\(\)=>\[\]\),dbGetAll\('member_tickets'\)\.catch\(\(\)=>\[\]\),dbGetAll\('expenses'\)\.catch\(\(\)=>\[\]\)\]\);/.test(fm));
+/* 2026-08-13 課種分類：finMonth 多載 ticket_types（tkRevClass 歸課種要用），同一輪 Promise.all */
+ok('★ 與營收同一次載入（不多打一輪來回；0813 起含 ticket_types）',
+   /const \[purchases,tickets,expAll,_types\]=await Promise\.all\(\[dbGetAll\('purchases'\)\.catch\(\(\)=>\[\]\),dbGetAll\('member_tickets'\)\.catch\(\(\)=>\[\]\),dbGetAll\('expenses'\)\.catch\(\(\)=>\[\]\),dbGetAll\('ticket_types'\)\.catch\(\(\)=>\[\]\)\]\);/.test(fm));
 ok('★ 只取這一頁在看的月份（ym 欄位）', /\(expAll\|\|\[\]\)\.filter\(e=>e\.ym===month\)/.test(fm));
 ok('★ 依日期排序，同日看建立時間', /String\(a\.date\|\|''\)\.localeCompare\(String\(b\.date\|\|''\)\)\|\|String\(a\.created_at\|\|''\)\.localeCompare\(String\(b\.created_at\|\|''\)\)/.test(fm));
 ok('　　讀不到（沒權限／表不存在）不會整頁壞掉', /dbGetAll\('expenses'\)\.catch\(\(\)=>\[\]\)/.test(fm));
@@ -26,7 +27,8 @@ console.log('\n本月營收那頁只留一格可點的統計');
 ok('★ 統計格點了跳到「其他支出」分頁',
    /\{label:'其他支出', value:finMoney\(expTotal\), unit:'', tone:'danger', onclick:"setFinTab\('expenses'\)"\}/.test(fm));
 ok('　　danger 這個色調有定義（紅字，但不是警告）', /\.lp-stat\.danger \.lp-stat-v\{color:var\(--danger\);\}/.test(src));
-ok('★ 填寫表格已搬走，這頁不再重複一份', /body\.innerHTML = dateBar \+ stats \+ methodCard;/.test(fm));
+/* 2026-08-13 課種分類：本月營收頁多一張課種分類卡（clsCard），填寫表格仍不在這頁 */
+ok('★ 填寫表格已搬走，這頁不再重複一份', /body\.innerHTML = dateBar \+ stats \+ clsCard \+ methodCard;/.test(fm));
 
 console.log('\n其他支出分頁：固定支出與其他支出分開列');
 {
@@ -104,17 +106,22 @@ console.log('\n新增／編輯');
 console.log('\n算進本月利潤（2026-07-31 使用者定案）');
 {
   const dash=g('PAGES.dashboard=async function(){','\n};\n');
-  ok('★ 利潤扣掉其他支出', /profit=coachedFee-salaryTotal-otherExp;/.test(dash));
+  /* 2026-08-12 使用者回報「手機報表 -1,680、桌機損益表 -33,890 對不起來」：
+     利潤改吃與損益表同一套組成 —— 銷課(monthSalesValue) − 營業稅 − 人事(薪資＋公司勞健保) − 其他支出 */
+  ok('★ 利潤扣掉其他支出（0812 起與損益表同式：再扣營業稅與公司勞健保）',
+     /profit=_ovRev-_ovTax-salaryTotal-_ovCoIns-otherExp;/.test(dash));
   ok('★ 只取該月的支出', /\.filter\(e=>e&&e\.ym===ym\)\.reduce\(\(a,e\)=>a\+\(Number\(e\.amount\)\|\|0\),0\)/.test(dash));
   ok('★ 只在本月模式扣（支出以月記帳，切到「今日」沒有分攤方式）',
      /if\(_dashRange==='month'\)\{\s*\n\s*try\{ otherExp=/.test(dash));
   ok('　　讀不到支出不會讓整頁壞掉', /dbGetAll\('expenses'\)\.catch\(\(\)=>\[\]\)/.test(dash));
-  ok('★ 拆解那行把其他支出也列出來',
-     /<b class="ovh-exp"><i>其他支出<\/i>\$\{fmtNT\(otherExp\)\}<\/b>/.test(dash));
-  /* 2026-07-31 使用者指示：三個組成各自上色 */
-  ok('★ 銷課金色、薪資綠色、其他支出紅色',
-     /<b class="ovh-in"><i>銷課<\/i>\$\{fmtNT\(coachedFee\)\}<\/b>/.test(dash)
-     && /<b class="ovh-pay"><i>薪資<\/i>\$\{fmtNT\(salaryTotal\)\}<\/b>/.test(dash)
+  /* 2026-08-12 對齊損益表：其他支出併進「稅＋支出」一格（營業稅＋其他支出） */
+  ok('★ 拆解那行把其他支出也列出來（併在「稅＋支出」格）',
+     /<b class="ovh-exp"><i>稅＋支出<\/i>\$\{fmtNT\(_ovTax\+otherExp\)\}<\/b>/.test(dash));
+  /* 2026-07-31 使用者指示：三個組成各自上色。
+     2026-08-12：銷課改用 _ovRev（monthSalesValue）、「薪資」改名「人事」（薪資＋公司勞健保） */
+  ok('★ 銷課金色、人事綠色、稅＋支出紅色',
+     /<b class="ovh-in"><i>銷課<\/i>\$\{fmtNT\(_ovRev!=null\?_ovRev:coachedFee\)\}<\/b>/.test(dash)
+     && /<b class="ovh-pay"><i>人事<\/i>\$\{fmtNT\(\(salaryTotal\|\|0\)\+_ovCoIns\)\}<\/b>/.test(dash)
      && /\.ovh-in\{color:var\(--gold-d,#b48a56\);\}/.test(src)
      && /\.ovh-pay\{color:var\(--green,#1f6f54\);\}/.test(src)
      && /\.ovh-exp\{color:var\(--danger,#b5372e\);\}/.test(src));
@@ -122,9 +129,12 @@ console.log('\n算進本月利潤（2026-07-31 使用者定案）');
      /\.ov-hero-s b\{display:flex;flex-direction:column;align-items:flex-end;gap:1px;/.test(src)
      && /\.ov-hero-s b i\{font-style:normal;font-size:10\.5px;/.test(src));
   ok('　　減號自己一格，不跟著換行', /\.ovh-op\{color:var\(--t3\);padding-bottom:1px;\}/.test(src));
-  ok('★ 沒登錄支出時講清楚去哪裡填，不是默默當成 0',
-     /其他支出尚未登錄（財務→本月營收）/.test(dash));
-  ok('　　登錄了就標明已扣', /已扣房租水電等其他支出/.test(dash));
+  /* 2026-08-12 對齊損益表：說明改成一行小字（與經營報表同一套算法），
+     沒登錄支出顯示「；其他支出尚未登錄」、登錄了顯示「、房租水電等支出」 */
+  ok('★ 沒登錄支出時講清楚（不是默默當成 0）',
+     /\$\{otherExp>0\?'、房租水電等支出':'；其他支出尚未登錄'\}/.test(dash));
+  ok('　　登錄了就標明已含在算式裡',
+     /與經營報表損益表同一套算法（含營業稅、公司負擔勞健保/.test(dash));
   ok('　　舊的「不含房租水電」字樣已移除', !/不含房租水電・不計自主訓練/.test(src));
 }
 

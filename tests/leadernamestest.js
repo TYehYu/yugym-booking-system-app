@@ -68,8 +68,9 @@ console.log('\n② 薪資單帶出的名單');
 }
 
 console.log('\n③ 畫面：達標標綠、沒達標標出還差幾堂');
+/* 2026-08-13 更新：跳脫函式 _esc 已統一改名 escH（全檔已無 _esc），斷言跟上新名字 */
 ok('★★ 逐位一列（姓名／堂數／金額）',
-   /<span class="nl-nm">\$\{_esc\(r\.name\|\|'—'\)\}<\/span>/.test(src)
+   /<span class="nl-nm">\$\{escH\(r\.name\|\|'—'\)\}<\/span>/.test(src)
    && /<span class="nl-plan">\$\{r\.classes\} 堂\$\{r\.hit\?'':\(r\.need>0\?`<span style="color:var\(--t3\);">　還差 \$\{r\.need\} 堂<\/span>`:''\)\}<\/span>/.test(src));
 ok('★ 達標綠色、未達標灰色破折號（一眼分得出來）',
    /\$\{r\.hit\?'color:var\(--green\);':'color:var\(--t3\);'\}">\$\{r\.hit\?'\$'\+r\.pay\.toLocaleString\(\):'—'\}/.test(src));

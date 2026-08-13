@@ -68,8 +68,11 @@ console.log('\n取消其中一個名額後重新編號');
 }
 
 console.log('\n接線');
-ok('★ 名單改成逐名額一列', /const rows = _seatKeys\.length \? _seatKeys\.map\(sk=>\{/.test(src)
-   && /const _seatKeys=seatKeysDisplay\(b\);/.test(src));
+/* 2026-08-12 使用者指示：「把請假名單另外歸類」——名單改吃排好序的 _ordKeys
+   （上課的在前、請假的收到最後），來源仍是 seatKeysDisplay(b)。 */
+ok('★ 名單改成逐名額一列', /const rows = _ordKeys\.length \? _ordKeys\.map\(\(sk,_ri\)=>\{/.test(src)
+   && /const _seatKeys=seatKeysDisplay\(b\);/.test(src)
+   && /const _ordKeys=_seatKeys\.filter\(k=>att\[k\]!=='leave'\)\.concat\(_seatKeys\.filter\(k=>att\[k\]==='leave'\)\);/.test(src));
 ok('★ 每列的簽到／請假／取消都帶名額鍵',
    /toggleGroupAttend\('\$\{b\.id\}','\$\{sk\}'\)/.test(src)
    && /groupToggleLeave\('\$\{b\.id\}','\$\{sk\}'\)/.test(src)

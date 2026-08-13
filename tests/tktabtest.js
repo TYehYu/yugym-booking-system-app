@@ -24,7 +24,10 @@ ok('★ 會員票券分頁與會員列表用同一支分類器', /cls:tkClass5\(
 ok('　　原因寫在程式裡', /運動按摩折抵券的 category 也是「運動按摩」，\s*\n\s*不先攔下來就會被歸進按摩分頁/.test(src));
 
 console.log('\n可用張數');
-ok('★ 每個分頁後面帶可用張數', /return `<button class="tkf-btn\$\{tab===k\?' active':''\}" onclick="ppTkTab\('\$\{k\}'\)">\$\{l\}\$\{n\?`<i class="tkf-n">\$\{n\}<\/i>`:''\}<\/button>`;/.test(src));
+/* 2026-08-13 電子合約審核：分頁上多一顆紅底的「待審核發放」數字（_grCnt），
+   接在可用張數後面 —— 可用張數的樣式與判準不變，只是按鈕字串多了一段。 */
+ok('★ 每個分頁後面帶可用張數（後面可再接紅色待審核數，2026-08-13）',
+   /return `<button class="tkf-btn\$\{tab===k\?' active':''\}" onclick="ppTkTab\('\$\{k\}'\)">\$\{l\}\$\{n\?`<i class="tkf-n">\$\{n\}<\/i>`:''\}\$\{_grCnt\[k\]\?`<i class="tkf-n" style="background:#c8453a;color:#fff;" title="待審核發放">\$\{_grCnt\[k\]\}<\/i>`:''\}<\/button>`;/.test(src));
 ok('★ 「可用」＝票券夾裡持有中的那些（與畫面同一個判準）',
    /WAL\.active\(\)\.forEach\(s=>\{ _liveCnt\[s\.cls\]=\(_liveCnt\[s\.cls\]\|\|0\)\+1; \}\);/.test(src));
 ok('★ 分頁字串搬到票券夾之後才組（不然算不到）',

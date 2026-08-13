@@ -35,12 +35,15 @@ ok('★ 警示色階照品牌規則（降級倒數紅、未達標金、良好綠
 console.log('\n② memTierInfo 實跑（假時鐘 2026-08-05）');
 {
   const body=grabFn('memTierInfo');
-  const mk=new Function(`
+  /* 2026-08-13 更新：2026-08-11 共享票等級歸屬改版後，memTierInfo 內部改查
+     window._allTkCache（共享票記在持有人名下）—— 沙箱補 window stub，
+     空快取＝退回舊行為（記在上課者名下），以下情境判定不變。 */
+  const mk=new Function('window',`
     const TODAY=null; const ymd=()=>'2026-08-05';
     const isLegacyMember=m=>!!m.tier_epoch;
     const _nextYm=ym=>{let[y,m]=ym.split('-').map(Number);m++;if(m>12){m=1;y++;}return y+'-'+String(m).padStart(2,'0');};
     ${body}
-    return memTierInfo;`)();
+    return memTierInfo;`)({});
   const bk=(mid,ym,n)=>Array.from({length:n},(_,i)=>({member_id:mid,status:'checked_in',category:'私人教練',date:ym+'-'+String(i+1).padStart(2,'0')}));
   eq('★ 新客 7 月達標 → 會員、連續 1 個月、本月 2 堂',
      mk({id:'M1',tier_epoch:false,created_at:'2026-06-01'},[...bk('M1','2026-07',4),...bk('M1','2026-08',2)]),

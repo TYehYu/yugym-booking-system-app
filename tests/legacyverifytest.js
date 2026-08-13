@@ -4,7 +4,11 @@
 
    匯入的餘額是照舊系統匯出檔設的，逐堂的扣課連結多半不存在，所以「帳面對不對」
    只能靠人看。這一欄就是那個人工核對的印章：誰、什麼時候按的「完成連動」。
-   純記錄，不影響任何計算。 */
+   純記錄，不影響任何計算。
+
+   2026-08-11 使用者指示：「舊系統已經核對完成，可以把核對的功能移除了」——
+   入口全收（needsLegacyVerify 一律 false、表頭 lvBtn 空字串），視窗與存檔邏輯保留，
+   legacy_verified_at/by 留在資料庫當歷史紀錄。①／①-2／② 的斷言已改驗退場後的行為。 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
@@ -13,39 +17,41 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 
-console.log('① 只有主顧客那一列出現按鈕');
+console.log('① 入口已全面收起（2026-08-11 核對功能退場）');
 {
   const f=new Function('effTier','isDeskLike','window','tkNoTag',
     grabFn('needsLegacyVerify')+'\n'+grabFn('legacyVerifyCell')+'\nreturn legacyVerifyCell;');
   const run=(m, tier, desk)=>f((x)=>tier, ()=>desk!==false, {_coachNameMap:{c1:'小曾'}}, n=>'#'+n)(m);
 
-  ok('★ 主顧客未核對 → 出現「完成連動」', /完成連動/.test(run({id:'M1'},'loyal')));
-  /* 2026-08-02 使用者：「VIP 也要有連動確認按鈕」—— VIP 同樣是制度起點就在的既有會員，
-     原本只列主顧客，VIP 整批漏掉。 */
-  ok('★ VIP 也要有（同樣是從舊系統來的既有會員）', /完成連動/.test(run({id:'M3'},'vip')));
-  eq('★ 一般會員 → 留白（新客沒有舊資料要核）', run({id:'M2'},'regular'), '');
-  ok('★ 已核對 → 變成「✓ 已核對 MM/DD」的記號',
-     /✓ 已核對 08\/02/.test(run({id:'M1',legacy_verified_at:'2026-08-02T03:00:00Z'},'loyal')));
-  ok('★ 已核對的記號還能點（要取消核對時）',
-     /lv-tap/.test(run({id:'M1',legacy_verified_at:'2026-08-02T03:00:00Z'},'loyal'))
-     && /openLegacyVerify\('M1'\)/.test(run({id:'M1',legacy_verified_at:'2026-08-02T03:00:00Z'},'loyal')));
-  ok('　　滑過去看得到是誰按的、幾點按的',
-     /小曾/.test(run({id:'M1',legacy_verified_at:'2026-08-02T03:00:00Z',legacy_verified_by:'c1'},'loyal')));
-  eq('★ 教練／會員看得到結果但按不動（未核對時什麼都不顯示）',
-     run({id:'M1'},'loyal',false), '');
-  ok('　　教練看已核對的仍看得到記號（唯讀）',
-     /已核對/.test(run({id:'M1',legacy_verified_at:'2026-08-02T03:00:00Z'},'loyal',false))
-     && !/onclick/.test(run({id:'M1',legacy_verified_at:'2026-08-02T03:00:00Z'},'loyal',false)));
-  ok('　　點按鈕不會順便開啟會員明細（整列本來就可點）',
-     /event\.stopPropagation\(\);openLegacyVerify/.test(run({id:'M1'},'loyal')));
+  /* 2026-08-11 使用者指示：「舊系統已經核對完成，可以把核對的功能移除了」——
+     needsLegacyVerify 一律回傳 false，按鈕與記號全部收起；
+     以下從「會長出什麼」改驗「無論身分／狀態都不再長出東西」。 */
+  eq('★ 主顧客未核對 → 不再出現「完成連動」（2026-08-11 退場）', run({id:'M1'},'loyal'), '');
+  eq('★ VIP 也一併收起（2026-08-11 退場，原本與主顧客同批）', run({id:'M3'},'vip'), '');
+  eq('★ 一般會員 → 照舊留白', run({id:'M2'},'regular'), '');
+  eq('★ 已核對過的也不再顯示記號（紀錄留在 members 欄位當歷史）',
+     run({id:'M1',legacy_verified_at:'2026-08-02T03:00:00Z'},'loyal'), '');
+  eq('　　誰按的、幾點按的也不再浮出（同上，欄位只當歷史紀錄）',
+     run({id:'M1',legacy_verified_at:'2026-08-02T03:00:00Z',legacy_verified_by:'c1'},'loyal'), '');
+  eq('★ 教練／會員視角同樣全收（唯讀記號也不再顯示）',
+     run({id:'M1',legacy_verified_at:'2026-08-02T03:00:00Z'},'loyal',false), '');
+  eq('　　教練看未核對的照舊什麼都沒有', run({id:'M1'},'loyal',false), '');
+  ok('　　退場原因寫在程式裡（欄位留在資料庫當歷史紀錄）',
+     /2026-08-11 使用者指示：「舊系統已經核對完成，可以把核對的功能移除了」/.test(src)
+     && /legacy_verified_at\/by 留在資料庫當歷史紀錄/.test(src));
+  ok('　　繪製邏輯保留在 needsLegacyVerify 閘門之後（含 stopPropagation，日後復用不用重寫）',
+     /if\(!needsLegacyVerify\(m\)\) return '';/.test(src)
+     && /event\.stopPropagation\(\);openLegacyVerify/.test(src));
 }
 
 console.log('\n①-2 會員資料視窗的右上角也有同一顆');
 /* 2026-08-02 使用者指示：「完成連動的按鈕也放在會員資料的視窗上，個人資料的右上」
    —— 核對票券的時候本來就開著這位會員的資料在對，跑回列表按那一格很繞。 */
 /* 2026-08-08：管理員多了一顆「刪除會員」，並排在同一列（見 delmembertest.js） */
-ok('★ 表頭右上放的是同一顆（共用 legacyVerifyCell，狀態與權限只有一份）',
-   /const lvBtn = isM \? legacyVerifyCell\(r\) : '';/.test(src)
+/* 2026-08-11 退場：lvBtn 改固定空字串（原因寫在同一行註解），並排結構不動 ——
+   delBtn 等鄰居不受影響。 */
+ok('★ 表頭右上那顆也收起（lvBtn 固定空字串，並排結構保留，2026-08-11 退場）',
+   /const lvBtn = '';\s*\/\/ 新舊系統票券核對已退場（2026-08-11 使用者指示，舊系統核對完成）/.test(src)
    && /: \(isM \? lvBtn\+delBtn : pwBtn\+`<button class="btn btn-ghost btn-sm" onclick="ppEdit\(\)">編輯<\/button>`\);/.test(src));
 ok('　　員工的表頭不受影響（重設密碼與編輯照舊）',
    /const pwBtn = \(!isM && r\.phone && SESSION && SESSION\.role==='admin'\)/.test(src));
@@ -69,8 +75,10 @@ ok('★ 上方有核對進度：已核對 N / 要核對的總數（2026-08-05 �
    表格上方少一整列；分子分母同一套（已核對 / 主顧客+VIP 總數）。 */
 ok('　　核對進度＝統計卡第五格（有主顧客才出現）',
    /\.\.\.\(_loyal\.length\?\[\{label:'新舊系統票券核對', value:_lvDone, unit:`\/ \$\{_loyal\.length\}`\}\]:\[\]\),/.test(src));
-ok('　　判斷抽成一支，三個地方共用（欄位、格子、統計卡）',
-   /function needsLegacyVerify\(m\)\{ const t=effTier\(m\); return t==='loyal'\|\|t==='vip'; \}/.test(src)
+/* 2026-08-11 退場：閘門本體改成一律 false（欄位、格子、統計卡因此自然消失），
+   三個呼叫點一個都沒動 —— 收掉整個功能只要改這一支，正是當初抽出來的價值。 */
+ok('　　判斷抽成一支，三個地方共用（退場只改閘門本體，2026-08-11）',
+   /function needsLegacyVerify\(m\)\{ return false; \}/.test(src)
    && (src.match(/needsLegacyVerify/g)||[]).length>=4);
 
 console.log('\n③ 核對視窗');

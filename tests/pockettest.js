@@ -134,10 +134,14 @@ ok('　　按不到時說得出原因（不是只說「不符合條件」）',
 
 console.log('\n「是不是團課」收成一支（82 處 → 1 處）');
 /* 剩下的 .category==='小班肌力' 是在判「票種」的類別（t=ticket_type），那是另一回事；
-   課卡（b）上的判斷只剩 bkIsGroup 定義裡那一句。 */
-ok('★ 課卡上只剩定義那一句在比字串',
-   (src.match(/\bb\.category==='小班肌力'/g)||[]).length===1
-   && /if\(b && b\.category==='小班肌力'\) return true;/.test(src));
+   課卡（b）上的判斷只剩 bkIsGroup 定義裡那一句。
+   2026-08-13 更新：2026-08-11 張傅凱案（舊匯入團課沒 ticket_type_id）在 _saveGroupMembers
+   加了一句自癒補票種的判斷 —— 語境是「已知團課且缺票種才動手」，與定義同格式、原地有註解，
+   放行為第 2 句；除這兩句外不得再增。 */
+ok('★ 課卡上只剩定義與自癒補票種那兩句在比字串',
+   (src.match(/\bb\.category==='小班肌力'/g)||[]).length===2
+   && /if\(b && b\.category==='小班肌力'\) return true;/.test(src)
+   && /if\(b && !b\.ticket_type_id && b\.category==='小班肌力'\)\{/.test(src));
 ok('★ 定義本身仍問口袋（票種帶進來時也認得）',
    /return !!bkPocketNow\(b\)\.sharedBooking;/.test(src));
 ok('★ 對照表有快取（每一筆課卡都會呼叫，重建會拖垮清單頁）',
@@ -156,8 +160,14 @@ ok('　　為什麼自主訓練差最多，寫在程式裡',
 
 console.log('\n棘輪：散裝的課別比較不得增加');
 /* 2026-07-31 立基準 210 → 第一批（團體課 bkIsGroup）129 → 第二批（自主訓練／運動按摩）95。
-   之後每搬一批就把這個數字調低，只能往下。 */
-const SCATTER_BASELINE=95;
+   之後每搬一批就把這個數字調低，只能往下。
+   2026-08-13 調整 95 → 99（+4，皆屬「非散不可」並在原地有註解）：
+   ・2026-08-11 _saveGroupMembers 自癒補票種 2 處 —— 一處判課卡缺票種（上面已放行）、
+     一處在 window._ttCache 裡找團課「票種」（t.category，本來就是口袋管不到的票種類別）；
+   ・2026-08-13 營收分類 tkRevClass／monthSalesValue 的 tkClass 2 處 —— 看的是票種類別
+     （tt.category），分的是「營收科目」不是課卡口袋，tkClass5 的五口袋粒度不合用。
+   下一批搬遷時仍只能往下調。 */
+const SCATTER_BASELINE=99;
 const scattered=(src.match(/(===|!==)\s*'(小班肌力|自主訓練|運動按摩)'/g)||[]).length;
 ok(`★ 散裝課別比較 ${scattered} 處（基準 ${SCATTER_BASELINE}，只能減不能增）`,
    scattered<=SCATTER_BASELINE, scattered);

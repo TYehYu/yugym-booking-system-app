@@ -69,8 +69,9 @@ console.log('\n④ 真的退回時做了哪些事');
   ok('★★ 折抵券照當初扣的那幾筆回沖',
      /String\(l\.note\|\|''\)\.indexOf\('折抵 \$300'\)===0/.test(F)
      && /await logTicket\(vid,'refund',back\[vid\],null,SESSION\.id,'售票整筆退回，折抵券還回'\);/.test(F));
-  ok('★★ 購買紀錄刪掉（誤植不該留在營收裡）',
-     /for\(const pp of purs\) if\(pp && pp\.ticket_id===id\) await dbDel\('purchases',pp\.id\);/.test(F));
+  /* 2026-08-11 發票串接：刪掉的 purchase id 先收進 _undoPurIds，有開發票的話退回時要跟著作廢 */
+  ok('★★ 購買紀錄刪掉（誤植不該留在營收裡；id 收進 _undoPurIds 供發票作廢）',
+     /for\(const pp of purs\) if\(pp && pp\.ticket_id===id\)\{ _undoPurIds\.push\(pp\.id\); await dbDel\('purchases',pp\.id\); \}/.test(F));
   ok('★ 合約一併作廢', /for\(const c of cs\) if\(c && c\.ticket_id===id\) await dbDel\('contracts',c\.id\);/.test(F));
   ok('★ 走過審核的那筆也標回去（狀態不會停在「已發放」）',
      /r\.status='cancelled'; r\.cancel_reason='30 分鐘內整筆退回（輸入錯誤）';/.test(F));

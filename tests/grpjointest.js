@@ -59,6 +59,9 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
       deductTicket:async(tk,bid)=>{ tkLeft--; deducts.push(bid); return true; },
       dbCacheClear:()=>{}, closeModal:()=>{}, showToast:m=>toasts.push(m), openBookingDetail:()=>{},
       SESSION:{id:'desk'},
+      /* 2026-08-12 請假釋出名額：補位的 room 改扣掉請假數，_grpFollowRun 用到 grpLeaveSeats
+         → 沙箱抽真函式進來（不是 stub，滿員判斷要照實跑） */
+      grpLeaveSeats:new Function('return '+grabFn('grpLeaveSeats'))(),
     };
     const run=new Function(...Object.keys(env),'return async '+grabFn('_grpFollowRun'))(...Object.values(env));
     await run(['NEW','OTHER']);

@@ -16,17 +16,21 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
+const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 
 console.log('① 今日營收拆現金／匯款');
-ok('★★ 付款方式一律從「今天的收款紀錄」回推（票券本身不存）',
+/* 2026-08-12 拆帳改版：_payOfTk 改存整個 purchase 物件（split 要看 pay_split 的金額） */
+ok('★★ 付款方式一律從「今天的收款紀錄」回推（票券本身不存；存整筆 purchase）',
    /const _payOfTk=\{\};/.test(src)
-   && /\(purchases\|\|\[\]\)\.forEach\(p=>\{ if\(p && p\.ticket_id && puLocalDate\(p\)===date\) _payOfTk\[p\.ticket_id\]=p\.payment_method\|\|''; \}\);/.test(src));
+   && /\(purchases\|\|\[\]\)\.forEach\(p=>\{ if\(p && p\.ticket_id && puLocalDate\(p\)===date\) _payOfTk\[p\.ticket_id\]=p; \}\);/.test(src));
 ok('★★ 三桶：現金／匯款／其他',
    /let _revCash=0,_revBank=0,_revOther=0;/.test(src)
    && /const _bump=\(m,amt\)=>\{ if\(m==='cash'\) _revCash\+=amt; else if\(m==='transfer'\) _revBank\+=amt; else _revOther\+=amt; \};/.test(src));
-ok('★ 票券與純收款（場租／商品／重啟）都算進去',
-   /_dayTk\.forEach\(t=>_bump\(_payOfTk\[t\.id\], Number\(t\.amount_paid\)\|\|0\)\);/.test(src)
-   && /_dayPur\.forEach\(p=>_bump\(p\.payment_method, Number\(p\.deal_amount\)\|\|0\)\);/.test(src));
+/* 2026-08-12 拆帳改版：一律經 purPayParts 展開（split 拆成現金/匯款兩段，金額以 pay_split 為準）；
+   票券非拆帳時金額仍用 amount_paid（與原本口徑一致） */
+ok('★ 票券與純收款（場租／商品／重啟）都算進去（經 purPayParts 展開拆帳）',
+   /_dayTk\.forEach\(t=>\{ const pu=_payOfTk\[t\.id\];\n\s*if\(pu&&pu\.payment_method==='split'\) purPayParts\(pu\)\.forEach\(\(\[m,a\]\)=>_bump\(m,a\)\);\n\s*else _bump\(pu\?\(pu\.payment_method\|\|''\):'', Number\(t\.amount_paid\)\|\|0\); \}\);/.test(src)
+   && /_dayPur\.forEach\(p=>purPayParts\(p\)\.forEach\(\(\[m,a\]\)=>_bump\(m,a\)\)\);/.test(src));
 ok('★★ 桌機 KPI 卡列出來，0 的那一種不列（版面不被稀釋）',
    /\$\{_revCash\?`<span class="kpay kpay-cash">現金 \$\$\{_fm\(_revCash\)\}<\/span>`:''\}/.test(src)
    && /\$\{_revBank\?`<span class="kpay kpay-bank">匯款 \$\$\{_fm\(_revBank\)\}<\/span>`:''\}/.test(src));
@@ -42,14 +46,21 @@ ok('　　為什麼對不到的要另外一桶，寫在原地',
    /對不到收款紀錄的（舊資料、匯入票）歸「其他」，不硬塞進現金或匯款 —— 櫃檯數現金時\s*\n\s*多算一筆比少算一筆更麻煩。/.test(src));
 // 三桶分流實跑一次
 {
-  const seg=/let _revCash=0,_revBank=0,_revOther=0;[\s\S]*?_dayPur\.forEach\(p=>_bump\(p\.payment_method, Number\(p\.deal_amount\)\|\|0\)\);/.exec(src)[0];
-  const run=new Function('_dayTk','_dayPur','_payOfTk',
+  /* 2026-08-12 拆帳改版：沙箱段落改抓到 purPayParts 版的 _dayPur 迴圈，
+     並把 index.html 裡真的 purPayParts 抽進來（split 展開靠它） */
+  const seg=/let _revCash=0,_revBank=0,_revOther=0;[\s\S]*?_dayPur\.forEach\(p=>purPayParts\(p\)\.forEach\(\(\[m,a\]\)=>_bump\(m,a\)\)\);/.exec(src)[0];
+  const purPayParts=new Function('return '+grabFn('purPayParts'))();
+  const run=new Function('_dayTk','_dayPur','_payOfTk','purPayParts',
     seg+'\nreturn {cash:_revCash,bank:_revBank,other:_revOther};');
   const r=run(
     [{id:'T1',amount_paid:12000},{id:'T2',amount_paid:8000},{id:'T3',amount_paid:5000}],
-    [{payment_method:'cash',deal_amount:300},{payment_method:'transfer',deal_amount:1200}],
-    {T1:'cash',T2:'transfer'});   // T3 對不到收款紀錄
-  eq('★★ 現金 12,000+300、匯款 8,000+1,200、其他 5,000', r, {cash:12300,bank:9200,other:5000});
+    /* 2026-08-12 拆帳改版：fixture 的 _payOfTk 改放整筆 purchase；T2 改成拆帳票驗證 pay_split 金額口徑 */
+    [{payment_method:'cash',deal_amount:300},{payment_method:'transfer',deal_amount:1200},
+     {payment_method:'split',deal_amount:1000,pay_split:{cash:600,transfer:400}}],
+    {T1:{payment_method:'cash'},T2:{payment_method:'split',pay_split:{cash:5000,transfer:3000}}},   // T3 對不到收款紀錄
+    purPayParts);
+  eq('★★ 現金 12,000+300+600+拆帳5,000、匯款 1,200+400+拆帳3,000、其他 5,000',
+     r, {cash:17900,bank:4600,other:5000});
 }
 
 console.log('\n② 票用完了才是「最後一堂」');
