@@ -51,8 +51,10 @@ console.log('\n實跑：彈窗組裝');
   let shown=null;
   /* 2026-08-03：列上多了 revAttribChip（業績歸屬 tag），沙箱給替身
      2026-08-08：又多了 revUndoChip（30 分鐘完整退回），一併給替身 */
-  const fn=new Function('showModal','window','revAttribChip','revPayChip','saleKindChip','revUndoChip',
-    g('function openTodayRevList(){','\n}\n')+'\nreturn openTodayRevList;')(h=>{shown=h;}, globalThis, ()=>'', r=>r.pay?`<span class="mc-rev-pay">${r.pay}</span>`:'', ()=>'', ()=>'');
+  /* 2026-08-13：粗體金額只在付款標籤已帶金額時隱藏 —— 沙箱用真的 revAmtDup */
+  const _revAmtDup=new Function('return '+g('function revAmtDup(r){','}'))();
+  const fn=new Function('showModal','window','revAttribChip','revPayChip','saleKindChip','revUndoChip','revAmtDup',
+    g('function openTodayRevList(){','\n}\n')+'\nreturn openTodayRevList;')(h=>{shown=h;}, globalThis, ()=>'', r=>r.pay?`<span class="mc-rev-pay">${r.pay}</span>`:'', ()=>'', ()=>'', _revAmtDup);
 
   globalThis._gdRev={date:'2026-08-01',total:12000,inv:9000,noInv:3000,rows:[
     {nm:'王小明',mid:'m1',it:'私人教練課 1V1',amt:9000,inv:true,pay:'現金'},
