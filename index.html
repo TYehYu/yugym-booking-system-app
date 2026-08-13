@@ -3741,6 +3741,11 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   border-color:var(--gold,#c9a227);}
 .pp-hist-tag{font-size:10px;font-weight:700;color:var(--gold-d,#b48a56);background:#f7efe0;
   border-radius:999px;padding:2px 7px;margin-left:6px;}
+/* 票券狀態膠囊（2026-08-13 使用者指示：已退費紅底、已用畢改「已完成」綠底；已過期維持金） */
+.tk-stb{display:inline-block;font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 8px;vertical-align:1px;}
+.tk-stb-refund{background:#f3ded9;color:#8a2e26;}
+.tk-stb-done{background:#e2eee5;color:#1f6f54;}
+.tk-stb-exp{background:#f7efe0;color:#8a5e28;}
 .pp-hist-sum{font-size:11px;font-weight:700;color:var(--gold-d,#b48a56);background:#f7efe0;
   border-radius:999px;padding:2px 9px;margin-left:8px;}
 /* 會員列表迷你圓形卡（2026-07-28 二修）：只放點點、不放名稱——課種由顏色表示，點點放大 */
@@ -7782,8 +7787,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260813.1015';
-const APP_VERSION_LABEL='v260813.1015';
+const APP_VERSION = '260813.1024';
+const APP_VERSION_LABEL='v260813.1024';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14123,21 +14128,21 @@ PAGES.g_dashboard=async function(){
      分期票同一天只會有一筆，取當日那筆即可。 */
   const _payLb=m=>({cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統',split:'現金+匯款'}[m]||m||'');
   const _payByTk={}; (purchases||[]).forEach(p=>{
-    if(p.ticket_id&&puLocalDate(p)===date) _payByTk[p.ticket_id]={m:p.payment_method||'',pid:p.id}; });
+    if(p.ticket_id&&puLocalDate(p)===date) _payByTk[p.ticket_id]={m:p.payment_method||'',pid:p.id,sp:p.pay_split||null}; });
   const _revRows=[
     ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—', mid:t.member_id||null,
       it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
       amt:Number(t.amount_paid)||0, tk:t.id, kind:_saleKindOf(t),
       at:t.created_at||null,   // 30 分鐘完整退回用（2026-08-08）
       att:t.sold_by||null, attKind:_attNeed(t)?'tk':null, attRef:t.id,
-      pay:_payLb((_payByTk[t.id]||{}).m), payRef:(_payByTk[t.id]||{}).pid||null,
+      pay:_payLb((_payByTk[t.id]||{}).m), paySp:(_payByTk[t.id]||{}).sp||null, payRef:(_payByTk[t.id]||{}).pid||null,
       inv:(t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued')})),
     ..._dayPur.filter(p=>!(p.ticket_id&&_dayTk.some(t=>t.id===p.ticket_id)))
       .map(p=>({nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客', mid:p.member_id||null,
       it:p.plan_name||({reactivate:'票券重啟',facility_rental:'場地租借',merchandise:'商品'}[p.source]||'收款'),
       amt:Number(p.deal_amount)||0, pur:p.id, at:p.created_at||null,   // 30 分鐘完整退回用（2026-08-08）
       /* 場租／商品／票券重啟不是教練課，一樣不標歸屬（2026-08-07 同一條規則） */
-      att:p.coach_id||null, attKind:null, attRef:p.id, pay:_payLb(p.payment_method), payRef:p.id,
+      att:p.coach_id||null, attKind:null, attRef:p.id, pay:_payLb(p.payment_method), paySp:p.pay_split||null, payRef:p.id,
       inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')})),
   ];
   /* 給「今日營收」彈窗用（2026-08-01）：與上方 KPI、右欄名單卡完全同源，不另外算一份，
@@ -27106,6 +27111,14 @@ function purPayParts(p){
 }
 function revPayChip(r){
   const can=(typeof isDeskLike==='function')&&isDeskLike()&&r.payRef;
+  /* 拆帳（2026-08-13 使用者指示「現金跟匯款也要分開顯示」）：兩顆標籤各帶金額 */
+  if(r.pay==='現金+匯款'&&r.paySp){
+    const c=(Number(r.paySp.cash)||0).toLocaleString(), t=(Number(r.paySp.transfer)||0).toLocaleString();
+    const tag=(cls,txt)=>can
+      ? `<button class="${cls} mc-rev-pay-btn" onclick="event.stopPropagation();openRevPayPick('${r.payRef}')" title="點一下修正付款方式">${txt}</button>`
+      : `<span class="${cls}">${txt}</span>`;
+    return tag('mc-rev-pay',`現金 $${c}`)+tag('mc-rev-pay mc-rev-pay-tr',`匯款 $${t}`);
+  }
   const lb=r.pay||(can?'—':'');
   if(!lb) return '';
   const cls='mc-rev-pay'+(r.pay==='匯款'?' mc-rev-pay-tr':'');
@@ -31626,7 +31639,7 @@ function ppRecordHtml(){
     /* 行內展開（2026-07-27 使用者指示）：點卡片直接在本區展開內容＋左上返回，不另開視窗 */
     if(PP.recView){
       const back=`<div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" onclick="ppRecordBack()">‹ 返回</button></div>`;
-      const _st={usable:'可用',used_up:'已用畢',expired:'已過期',refunded:'已退費'};
+      const _st={usable:'可用',used_up:'已完成',expired:'已過期',refunded:'已退費'};   /* 2026-08-13 使用者指示改名 */
       if(PP.recView==='tickets'){
         /* 2026-07-27 使用者指示：跟會員端一樣的圓形卡＋上方 教練課/團體課/自主訓練/折抵券 分頁 */
         const typeMap=c.typeMap||{};
@@ -31667,7 +31680,7 @@ function ppRecordHtml(){
           const bks=_shMark((t.id===_loTid)?sl.stamps.concat(_lo):sl.stamps);
           const total=Number(t.sessions_total)||0;
           const used=sl.used;
-          const stTag={used_up:'已用畢',expired:'已過期',refunded:'已退費'}[t.status]||'';
+          const stTag=tkStBadge(t.status);
           /* 共享標籤（2026-07-28 使用者回報補齊）：共享給我的票標「共享」；我是持有人且有共享者標「共享中」 */
           const _shN=tkSharedIds(t).length;
           /* 共享設定移到共享章旁（2026-08-04 使用者指示：「共享設定放在共享人旁邊，方便查看」）——
@@ -31764,15 +31777,15 @@ function ppRecordHtml(){
           const bks=_shMark((t.id===_loTid)?WAL.stampsOf(t.id).concat(_lo):WAL.stampsOf(t.id));
           const total=Number(t.sessions_total)||0;
           const used=usedOf(t);
-          const st={used_up:'已用畢',expired:'已過期',refunded:'已退費'}[t.status]
-            || ((t.expire_date&&String(t.expire_date).slice(0,10)<_tYmd)?'已過期':'已用畢');
+          const st=tkStBadge(t.status)
+            || tkStBadge((t.expire_date&&String(t.expire_date).slice(0,10)<_tYmd)?'expired':'used_up');
           const canExt=isDeskLike()&&tkCanExtend(t,_tYmd);
           const _shN=tkSharedIds(t).length;
           const shrTag=(t.member_id!==PP.id)?`<span style="font-size:11px;color:var(--gold-d);border:1px solid var(--gold-d);border-radius:6px;padding:1px 6px;margin-left:6px;">共享</span>`
             :(_shN?`<span style="font-size:11px;color:#2f6b4f;border:1px solid #2f6b4f;border-radius:6px;padding:1px 6px;margin-left:6px;">共享中・${_shN}人</span>`:'');
           return `<div class="bkd-tkcard bkd-tkcard-hist${canExt?' bkd-tkcard-ext':''}">
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${tkNoTag(WAL.noOf(t.id))}${t.plan_name||'票券'}${shrTag}${tkIsExtended(t)?'<span class="pp-hist-tag">已展延</span>':''}</span>
-              <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}　·　${st}</span></div>
+              <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}　${st}</span></div>
             <div class="mck-dots2" style="margin:8px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id,WAL.selfBk)}</div>
             <div style="font-size:11px;color:var(--t3);margin-top:7px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
               <span>${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${tkMoneyHtml(t)}</span>
@@ -40775,6 +40788,11 @@ function ticketCopy(t){
 // 票券 → 課程視覺（形狀 + 主色）；判定順序同 evColorClass（color 欄 → 名稱含友善 → category）
 /* 票券金額與備註（2026-07-30 使用者指示：每張票旁邊顯示金額；0 元且能辨認就標原因）。
    金額只給櫃檯／管理員看，會員端與教練端不顯示。 */
+/* 票券狀態膠囊（2026-08-13 使用者指示）：已退費＝紅底、已完成（原「已用畢」）＝綠底、已過期＝金底 */
+function tkStBadge(status){
+  const e={used_up:['已完成','tk-stb-done'],expired:['已過期','tk-stb-exp'],refunded:['已退費','tk-stb-refund']}[status];
+  return e?`<span class="tk-stb ${e[1]}">${e[0]}</span>`:'';
+}
 function tkMoneyHtml(t){
   if(!t || !isDeskLike()) return '';
   const amt=Number(t.amount_paid);
