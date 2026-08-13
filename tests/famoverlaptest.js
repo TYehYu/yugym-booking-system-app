@@ -14,34 +14,40 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('① 實跑：validateBooking 的重疊判斷');
-{
+const _p1=(async()=>{
   const i=src.indexOf('  if(bk.member_id){');
   const j=src.indexOf('\n  }\n', src.indexOf('const selfOK', i))+4;
   const seg=src.slice(i,j);
-  const run=(bk,dup)=>new Function('bk','sameDay','ns','ne','timeToMin','overlaps','bkIsSelf',
+  /* 2026-08-13：段內用 await dbGet 取本人姓名（具名使用人＝別人才放行）→ 沙箱改 async */
+  const AsyncFn=Object.getPrototypeOf(async function(){}).constructor;
+  const run=(bk,dup)=>new AsyncFn('bk','sameDay','ns','ne','timeToMin','overlaps','bkIsSelf','dbGet',
       seg+'\nreturn null;')(bk,[dup],660,720,
     t=>{const[h,m]=String(t||'0:0').split(':').map(Number);return h*60+(m||0);},
     (a,b,c,d)=>a<d&&c<b,
-    x=>!!(x&&x.category==='自主訓練'));
+    x=>!!(x&&x.category==='自主訓練'),
+    async()=>({name:'本人'}));
   const PT={member_id:'M',category:'私人教練',start_time:'11:00',duration:60};
   const GRP={member_id:'M',category:'小班肌力',start_time:'11:00',duration:60};
   const SELF=n=>({member_id:'M',category:'自主訓練',start_time:'11:00',duration:60,trial_name:n||null});
 
   eq('★ 使用者的例子：媽媽 11:00 教練課、爸爸（具名使用人）約同時段自主 → 放行',
-     run(SELF('爸爸'),PT), null);
+     await run(SELF('爸爸'),PT), null);
   eq('★ 本人（沒指定使用人）約自主撞自己的教練課 → 仍擋（防分身的原意）',
-     run(SELF(null),PT), '會員於該時段已有預約');
+     await run(SELF(null),PT), '會員於該時段已有預約');
   eq('★ 反向也通：先有爸爸的自主，櫃檯再幫本人排教練課 → 放行',
-     run(PT,SELF('爸爸')), null);
-  eq('　　教練課撞本人的自主 → 仍擋', run(PT,SELF(null)), '會員於該時段已有預約');
-  eq('　　自主 vs 自主照舊放行（多名額）', run(SELF(null),SELF(null)), null);
+     await run(PT,SELF('爸爸')), null);
+  eq('　　教練課撞本人的自主 → 仍擋', await run(PT,SELF(null)), '會員於該時段已有預約');
+  eq('　　自主 vs 自主照舊放行（多名額）', await run(SELF(null),SELF(null)), null);
   eq('　　團課撞家人的自主 → 放行（規則不分課種，看的是那格自主是誰在用）',
-     run(GRP,SELF('爸爸')), null);
-  eq('　　trial_name 是空白字串不算具名', run(SELF('  '),PT), '會員於該時段已有預約');
-  eq('　　具名的限自主訓練（體驗課的 trial_name 是別的意思，不套這條）',
-     run(Object.assign({},PT,{trial_name:'王體驗'}),PT.member_id?{...PT}:PT)===null?null:'擋',
-     '擋');
-}
+     await run(GRP,SELF('爸爸')), null);
+  eq('　　trial_name 是空白字串不算具名', await run(SELF('  '),PT), '會員於該時段已有預約');
+  /* 2026-08-13 吳宸維案例（使用者說明：自主是自己用、教練課給阿姨上）——
+     具名使用人不再限自主訓練：教練課具名給家人也放行；具名寫本人名字仍擋。 */
+  eq('★ 教練課具名「阿姨」撞本人的自主 → 放行（2026-08-13 起）',
+     await run(Object.assign({},PT,{trial_name:'阿姨'}),SELF(null)), null);
+  eq('★ 教練課使用人寫本人名字 → 仍擋（不是別人代用）',
+     await run(Object.assign({},PT,{trial_name:'本人'}),SELF(null)), '會員於該時段已有預約');
+})();
 
 console.log('\n② 手機端流程：使用人要在驗證前掛上');
 ok('★ famUser 先算、掛在 vbk.trial_name，再跑 validateBooking',
@@ -81,5 +87,4 @@ console.log('\n④ 手機端撞到重疊時要指路，不是死路');
   ok('　　為什麼補提示，寫在程式裡', /只會得到一句「該時段已有預約」的死路，看不出下一步。/.test(src));
 }
 
-console.log(`\n${pass} 通過 / ${fail} 失敗`);
-process.exit(fail?1:0);
+_p1.then(()=>{ console.log(`\n${pass} 通過 / ${fail} 失敗`); process.exit(fail?1:0); });

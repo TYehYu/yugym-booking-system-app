@@ -85,7 +85,7 @@ ok('　　只抓今天以後、仍為已預約的課',
 ok('★ 退課／扣課在前一步就選定並明講',
    /askSeriesCancel\('\$\{id\}','none'\)/.test(src) && /askSeriesCancel\('\$\{id\}','force'\)/.test(src));
 ok('　　批次取消用 silent，不逐筆關視窗重繪',
-   /cancelBooking\(id, p\.mode, \{silent:true\}\)/.test(src) && /const _silent=!!\(opts&&opts\.silent\);/.test(src));
+   /cancelBooking\(id, useMode, \{silent:true\}\)/.test(src) && /const _silent=!!\(opts&&opts\.silent\);/.test(src));   /* 2026-08-13 起逐筆算 useMode（>24h 強制退回） */
 ok('　　RPC 建立的連續預約會補標 recurring（否則認不出同系列）',
    /update\(\{recurring:true\}\)/.test(src));
 
