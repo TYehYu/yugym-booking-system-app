@@ -20,6 +20,8 @@ console.log('① 復原教練請假');
   ok('★★ 效期回調：只有帳本有「教練請假展延」那筆才 −7 天',
      /l\.action==='adjust' && \/教練請假展延\/\.test\(l\.note\|\|''\)/.test(F)
      && /d0\.setDate\(d0\.getDate\(\)-COACH_LEAVE_EXTEND_DAYS\)/.test(F));
+  ok('★★ 重綁票券時清掉待簽約標記（2026-08-14 林韋綺案例：留著會紅框標待簽約）',
+     /if\(tid\) b\.pending_contract=false;/.test(F));
   ok('★ 課種從 note 的「原：X」還原、狀態回 booked、重綁票券',
      /const _m=String\(b\.note\|\|''\)\.match\(\/（原：（?\[\^）\]\+）?\/g\)\.length?/.test(F) || /（原：/.test(F)
      && /b\.status='booked'; b\.coach_leave=false; b\.category=orig; b\.ticket_id=tid\|\|null;/.test(F));
