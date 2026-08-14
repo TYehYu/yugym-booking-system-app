@@ -72,5 +72,11 @@ ok('★★ canCoachLeave 要求有票（團課例外——票在帳本不在 tic
    /function canCoachLeave\(b\)\{ return !!b && !!bkCoachLeaveMode\(b\) && \(bkIsGroup\(b\) \|\| !!b\.ticket_id\); \}/.test(src));
 ok('★ 擋下時講清楚改用取消', /這堂沒有綁票券（待簽約或舊匯入），沒有票可退——請改用「取消」釋出時段/.test(src));
 
+console.log('\n⑥ 圓形卡：教練請假＝紅圈空心（2026-08-14 使用者指示）');
+ok('★★ booked 圓點掛 mtk-cleave、提示講清楚時段保留與退堂時點',
+   /const clv=\(b&&typeof bkIsCoachLeave==='function'&&bkIsCoachLeave\(b\)\)\?' mtk-cleave':'';/.test(src)
+   && /教練請假（時段保留；會員簽到或取消時退堂）/.test(src)
+   && /\.mtk-booked\.mtk-cleave\{border:2px solid var\(--danger,#b5372e\);color:var\(--danger,#b5372e\);\}/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
