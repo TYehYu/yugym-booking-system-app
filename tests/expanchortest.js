@@ -24,5 +24,12 @@ ok('★★ 用帳本淨扣課回推剩餘堂的日期、取消首堂時重錨',
    && /if\(ds\.length && ds\[0\]>String\(fresh\.start_date\)\.slice\(0,10\)\)/.test(src));
 ok('★ 補課券不套（效期不變的既有規則）', /tk\.valid_days && tk\.start_date && !tkIsMakeup\(tk\)/.test(src));
 ok('★ 全取消退回未開通', /fresh\.activated_at=null; fresh\.start_date=null; fresh\.expire_date=null;/.test(src));
+console.log('\n③ 反向：改約更早的課（2026-08-14 魏婉倫「可用 0 堂」案例）');
+ok('★★ 已開通的票不套「起始日前不能用」防線（那條只擋談好未來開課日的票）',
+   /String\(t\.start_date\)\.slice\(0,10\)>bookDate && !t\.activated_at\) return false;/.test(src));
+ok('★★ 扣課時預約日早於起算日 → 錨點往前挪、效期重算',
+   /if\(b && b\.date && String\(b\.date\)\.slice\(0,10\)<String\(ticket\.start_date\)\.slice\(0,10\)\)/.test(src)
+   && /ticket\.start_date=ymd\(d\); ticket\.expire_date=termExpire\(d,ticket\.valid_days\);/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

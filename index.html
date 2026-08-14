@@ -3694,6 +3694,8 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 教練請假（2026-08-14 使用者指示：「紅圈空心＝有預約但教練請假」）——
    實線紅環空心；與「需補票」的紅【虛線】區分（那個是票不夠）。 */
 .mtk-booked.mtk-cleave{border:2px solid var(--danger,#b5372e);color:var(--danger,#b5372e);}
+/* 教練請假＋會員已簽到（2026-08-14 使用者指示）：課種色填滿、紅圈保留 —— 補償堂的紀錄，不佔票面格數 */
+.mtk-used.mtk-clvatt{background:var(--tk-acc,#1F6F54);border:2px solid var(--danger,#b5372e);color:#fff;}
 /* 票券結果色標（2026-08-06 使用者指示：「確認是否扣票的地方要用顏色標示，
    綠色票券返回、紅色票券扣除」—— 黃品華當天又被誤扣一堂）。
    兩種結果在同一個視窗裡並列時，顏色要先於文字被讀到。 */
@@ -7808,8 +7810,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.2152';
-const APP_VERSION_LABEL='v260814.2152';
+const APP_VERSION = '260814.2215';
+const APP_VERSION_LABEL='v260814.2215';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12029,8 +12031,11 @@ function tkFitsBooking(t, member_id, type_id, bookDate, bookTime, bkCntByTicket)
   if(!(tkUnlockedLeft(t)>0)) return false;     // 分期：未繳期數的堂數不可預約（2026-07-29）
   if(bookDate && t.expire_date && t.expire_date<bookDate) return false; // 已過期
   /* 還沒到起始日的票不能用（2026-08-03 李約儒案例：主顧友善票 9/4 才開始，
-     7/31 的課卻扣了它）—— 起始日是賣票時談好的開課日，之前的課本來就該用舊票。 */
-  if(bookDate && t.start_date && String(t.start_date).slice(0,10)>bookDate) return false;
+     7/31 的課卻扣了它）—— 起始日是賣票時談好的開課日，之前的課本來就該用舊票。
+     2026-08-14 魏婉倫案例補充：**已開通**的票（activated_at 有值＝起算日是從首堂
+     自動推出來的，不是談好的未來開課日）不套這條 —— 首堂取消改約更早的課時，
+     錨點會由 activateTicketIfNeeded 往前挪，不該整張被擋成「可用 0 堂」。 */
+  if(bookDate && t.start_date && String(t.start_date).slice(0,10)>bookDate && !t.activated_at) return false;
   if(!tkTimeOk(t,bookDate,bookTime)) return false;   // 限時段票券：星期／18:00 前
   const wantCat=categoryOfTypeId(type_id);
   if(wantCat==='小班肌力') return ticketCategoryOf(t)==='小班肌力'; // 團課：同類別即可（不分方案）
@@ -12183,6 +12188,7 @@ function usedSessionsMap(bookings){
   const map={};
   (bookings||[]).forEach(b=>{
     if(!b||!b.ticket_id) return;
+    if(b.coach_leave===true && (b.status==='checked_in'||b.status==='completed')) return;   /* 教練請假簽到＝淨額 0（2026-08-14） */
     if(b.status==='checked_in'||b.status==='completed'){
       map[b.ticket_id]=(map[b.ticket_id]||0)+1;
     }
@@ -12234,7 +12240,22 @@ async function markTicketUsedIfDone(ticket_id){
    因為那個值在既有資料代表「永久有效」（正式庫 2,129 張舊票靠它）。
    既有票券 valid_days 為 null，完全不受影響。 */
 async function activateTicketIfNeeded(ticket,booking_id){
-  if(!ticket || !ticket.valid_days || ticket.activated_at) return null;
+  if(!ticket || !ticket.valid_days) return null;
+  /* 已開通、但這次預約的日期比目前起算日更早（2026-08-14 魏婉倫案例：首堂取消後
+     改約更早的課）→ 錨點往前挪、效期照 valid_days 重算。 */
+  if(ticket.activated_at){
+    try{
+      if(booking_id && ticket.start_date){
+        const b=await dbGet('bookings',booking_id);
+        if(b && b.date && String(b.date).slice(0,10)<String(ticket.start_date).slice(0,10)){
+          const d=parseYmd(String(b.date).slice(0,10));
+          if(d){ ticket.start_date=ymd(d); ticket.expire_date=termExpire(d,ticket.valid_days);
+            return ticket.expire_date; }
+        }
+      }
+    }catch(_){}
+    return null;
+  }
   let d=null;
   if(booking_id){ try{ const b=await dbGet('bookings',booking_id); if(b&&b.date) d=parseYmd(b.date); }catch(_){} }
   if(!d) d=TODAY;                       // 查不到預約日就退回今天，不讓開通失敗
@@ -12652,6 +12673,9 @@ function buildWallet(memberId, ctx){
      只看 status 就會把整堂的人全標成已上。有點過名的以名額為準；
      整堂都沒逐名額點過名（舊匯入資料）才退回看整筆狀態。 */
   const isAtt=b=>{
+    /* 教練請假後簽到（2026-08-14）：那格的扣課已在簽到當下退回（淨額 0），
+       不算「用掉」——圓點另以「課種色填滿＋紅圈」呈現、不佔票面已用數。 */
+    if(b && b.coach_leave===true && (b.status==='checked_in'||b.status==='completed')) return false;
     /* 請假也算（2026-08-06 使用者定案：「團課的請假，對會員來說算一堂簽到」）——
        本堂照扣不退、另發補課券，票上那一格確實用掉了。原本只認 checked_in，
        請假那一格會掉回「待上」，票明明扣滿卻顯示還有一格空的
@@ -23680,7 +23704,8 @@ async function _checkInBooking(id, opts){  opts=opts||{};
   const _clvTk=(b.coach_leave===true && b.ticket_id) ? b.ticket_id : null;   /* 教練請假：簽到才釋出堂數（2026-08-14） */
   b.status='checked_in';
   b.checked_in_at=new Date().toISOString();
-  if(_clvTk) b.ticket_id=null;   // 釋出：這格是補償的自主訓練，不佔票
+  /* 票券連結保留（2026-08-14 二修：圓形卡要顯示「課種色填滿＋紅圈」的紀錄）——
+     堂數靠 refund 歸零釋出，錢包的已用計算會排除這種淨額 0 的堂。 */
   await dbPut('bookings',b);
   if(_clvTk){ try{ await refundTicket(_clvTk,b.id,SESSION.id); }catch(e){ console.error('請假堂簽到退課失敗',e); } }
   await markTicketUsedIfDone(b.ticket_id);   // 若這張票所有堂都已簽到完 → 設 used_up
@@ -41230,8 +41255,11 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
     if(_q.lv>0){ _q.lv--; return 'leave'; }
     return '';
   };
-  const _doneL=[], _bookedL=[];
+  const _doneL=[], _bookedL=[], _clvAttL=[];
   (bks||[]).forEach(b=>{
+    /* 教練請假後簽到（2026-08-14 使用者指示：「中間用課種色填滿、旁邊保持紅圈」）——
+       淨額 0 不佔格，獨立畫成加值圓點。 */
+    if(b && b.coach_leave===true && (b.status==='checked_in'||b.status==='completed')){ _clvAttL.push(b); return; }
     /* 分期待繳費保留（2026-08-04 徐千晴案例）不畫進圓點——這些課本來就等下一期
        開通後自動補綁，未開通的堂數已經由 🔒 鎖頭格表達；畫成「超約需補票」的
        紅虛線是重複又嚇人（看起來像欠 7 堂票，其實是還沒到繳費期）。 */
@@ -41268,11 +41296,15 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
      那顆就被推到第一顆，日期看起來是亂的。改成整串照日期排，狀態各自畫各自的顏色。
      _ghost＝帳面已用、卻找不到對應課卡的格子（舊系統匯入常見），沒有日期，仍排在最前面。 */
   const _seq=done.map(b=>({b,st:'used'})).concat(booked.map(b=>({b,st:'booked'})))
+    .concat(_clvAttL.map(b=>({b,st:'clx'})))
     .sort((x,y)=>((x.b.date||'')+(x.b.start_time||'')).localeCompare((y.b.date||'')+(y.b.start_time||'')));
+  const _clxDot=b=>`<span class="mtk mtk-used mtk-clvatt" style="--tk-acc:${v.accent};" title="教練請假・會員已到場簽到（堂數已退回票券）${b&&b.date?' '+b.date:''}">${b?md(b):'✓'}</span>`;
   const _ghost=Math.max(0, used-done.length);
   let s='',qi=0,gi=0;
   for(let i=0;i<total;i++){
     if(i>=unlocked){ s+=`<span class="mtk mtk-lock" title="尚未開通（需繳下一期）">🔒</span>`; continue; }
+    /* 教練請假已簽到的加值圓點：輪到它的日期就吐出來，不佔格（2026-08-14） */
+    while(gi>=_ghost && qi<_seq.length && _seq[qi].st==='clx'){ s+=_clxDot(_seq[qi++].b); }
     const _it=(gi<_ghost) ? (gi++, {b:null,st:'used'}) : (qi<_seq.length ? _seq[qi++] : null);
     if(!_it){ s+=`<span class="mtk mtk-free" style="--tk-acc:${v.accent};" title="未使用"></span>`; continue; }
     if(_it.st==='used'){
@@ -41303,6 +41335,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
      用紅虛線圈標出來，櫃檯才知道要補票。 */
   while(qi<_seq.length){
     const _o=_seq[qi++], b=_o.b;
+    if(_o.st==='clx'){ s+=_clxDot(b); continue; }   /* 加值圓點溢位也照畫（2026-08-14） */
     const cur=_isCur(b)?' mtk-cur':'';
     const slf=selfCls(b);
     /* 已經上過（或請假／取消未退）的課溢位時仍畫成實心 —— 那堂票確實用掉了，
