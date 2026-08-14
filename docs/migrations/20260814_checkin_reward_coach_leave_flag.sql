@@ -1,0 +1,7 @@
+-- 2026-08-14（已於當日套用正式庫）
+-- 使用者指示：「教練請假的課卡 會員來上課的時候也要簽到」——簽到路徑本身通（RPC 只擋 cancelled、
+-- 課卡簽到鈕會出現），但發點引擎 handle_checkin_reward 的 coach_leave 例外只看 status：
+-- fn_checkin_booking 先把 status 蓋成 checked_in 才呼叫發點 → 例外永遠踩不到，請假課簽到會漏發點。
+-- 修正：例外同時認 bookings.coach_leave 布林旗標（bkCoachLeave 有寫、簽到不會蓋掉）。
+-- 同日前端同步：grantCheckinReward 特例加 b.coach_leave===true；明細會員自簽鈕開放 coach_leave 狀態。
+-- （完整函式定義見 git 內本檔案的 commit 訊息與 Supabase 上的 handle_checkin_reward）
