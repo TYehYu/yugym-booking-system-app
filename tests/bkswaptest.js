@@ -30,8 +30,9 @@ console.log('\n② 候選名單（2026-08-14 二修抽成 bkSwapCandidates，步
      && /!tkTimeOk\(t,P\.date,P\.time\)/.test(F));
   ok('★ 同一格（同日同時）不列', /if\(d===P\.date && String\(b\.start_time\)\.slice\(0,5\)===String\(P\.time\)\.slice\(0,5\)\) return false;/.test(F));
   ok('★ 最遠的排最上（最可能讓出）', /\.sort\(\(a,b\)=>\(b\.date\+String\(b\.start_time\)\)\.localeCompare\(a\.date\+String\(a\.start_time\)\)\)/.test(F));
-  ok('★ 沒候選就照舊（回 false 顯示原本的票券不足）', /if\(!cands\.length\) return false;/.test(F));
-  ok('　　視窗講清楚會發生什麼（取消退回 1 堂 → 轉到新時段）', /取消並退回 1 堂<\/b>，馬上轉到這次要約的/.test(F));
+  const OF=grabFn('bkOfferSwap');
+  ok('★ 沒候選就照舊（回 false 顯示原本的票券不足）', /if\(!cands\.length\) return false;/.test(OF));
+  ok('　　視窗講清楚會發生什麼（取消退回 1 堂 → 轉到新時段）', /取消並退回 1 堂<\/b>，馬上轉到這次要約的/.test(OF));
 }
 
 console.log('\n②-b 步驟 2 無票畫面的調課入口（2026-08-14 使用者指示）');
