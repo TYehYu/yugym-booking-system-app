@@ -62,8 +62,8 @@ console.log('\n③ 員工掃描後：授權 → 寫入 → 結果頁');
 console.log('\n④ 步驟 2：待分期／待簽約兩顆並排');
 {
   const seg=src.slice(src.indexOf('window._bkInstMax=_instMax;'), src.indexOf('/* 待分期繳費保留（2026-08-04）'));
-  ok('★ 兩顆同一列（flex 各佔一半）', /display:flex;gap:10px;/.test(seg)
-     && (seg.match(/style="flex:1;padding:13px 8px;/g)||[]).length===2);
+  ok('★ 同一列（flex 均分；2026-08-14 加入第三顆「調課」後共 3 顆）', /display:flex;gap:10px;/.test(seg)
+     && (seg.match(/style="flex:1;padding:13px 8px;/g)||[]).length===3);
   const row=seg.slice(seg.indexOf('display:flex;gap:10px;'));
   ok('★ 左＝待分期、右＝待簽約', row.indexOf('待分期繳費保留')<row.indexOf('待簽約卡位'));
   ok('★ 沒有分期票 → 淡化且不能按', /\$\{_instOk\?'':'opacity:\.4;filter:grayscale\(\.5\);cursor:not-allowed;'\}/.test(seg)

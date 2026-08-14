@@ -7810,8 +7810,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.1721';
-const APP_VERSION_LABEL='v260814.1721';
+const APP_VERSION = '260814.1743';
+const APP_VERSION_LABEL='v260814.1743';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12815,8 +12815,12 @@ function buildWallet(memberId, ctx){
     }));
   }
   Object.keys(stamps).forEach(tid=>stamps[tid].sort(byDT));
-  /* 沒有票可蓋的未來預約＝這幾堂需要補票（2026-07-30 游晴雅案例，畫成紅虛線圈） */
+  /* 沒有票可蓋的未來預約＝這幾堂需要補票（2026-07-30 游晴雅案例，畫成紅虛線圈）。
+     待簽約課除外（2026-08-14 使用者指示：「每次預約都要分開——除非連續預約跟分期
+     保留才顯示在一起，下一張新的續約不應該牽扯舊票」）：它們不是欠票異常，
+     是等簽約收款後綁「下一張」票的課，畫在舊票上像超約；行事曆課卡已有待簽約標示。 */
   const leftover=live.filter(b=>!byBooking[b.id] && b.status==='booked'
+    && !b.pending_contract
     && String(b.date||'').slice(0,10)>=today);
 
   const slotOf=t=>{
@@ -22741,6 +22745,14 @@ async function openBookingDetail(id){
         _tkCard=findRefundTargetTicket(_wctxD.tickets,b.member_id,b.ticket_type_id,b.category,b.format);
         if(_tkCard){ try{ _wSlotD=W.of(_tkCard.id)||null; }catch(_){} }
       }
+      /* 待簽約課（2026-08-14 使用者指示，林韋綺 8/20 案例）：沒綁票的待簽約課，
+         只有會員手上還有「沒用完」的票（剩餘 > 0，或分期票還有未開通額度）才畫票券卡；
+         拿已排滿的舊票來畫會出現「第 9 / 8 堂」還錯掛分期保留說明。 */
+      if(_tkCard && b.pending_contract && !b.ticket_id){
+        const _iH=_tkCard.installment&&typeof _tkCard.installment==='object'
+          && (_tkCard.unlocked_sessions!=null?_tkCard.unlocked_sessions:_tkCard.sessions_total)<(_tkCard.sessions_total||0);
+        if(!((Number(_tkCard.sessions_remaining)||0)>0 || _iH)){ _tkCard=null; _wSlotD=null; }
+      }
     }catch(e){ console.error('預約明細票券卡失敗:',e); }
   }
   const isPersonalPT = _tkCard && b.category!=='小班肌力' && b.category!=='體驗';
@@ -22783,7 +22795,9 @@ async function openBookingDetail(id){
         <span class="bkd-tkcard-prog">本堂 ${curLabel}${((total>0&&(total-doneCount)<=2)&&!/自主訓練|體驗|折抵/.test(tkC.plan_name||''))?'　<span class="tag tag-warn" style="font-size:10px;">建議續約</span>':''}</span>
       </div>
       <div class="mck-dots2" style="margin:10px 0 2px;">${dots}</div>
-      ${_isHoldCard?`<div style="font-size:11px;color:#8a5e28;background:#f7efe0;border-radius:8px;padding:6px 10px;margin-top:8px;">⏳ 本堂為<b>分期繳費保留</b>（上方 🔒 未開通額度）——收款開通下一期後自動補綁扣課。</div>`:''}
+      ${_isHoldCard?(isInstall2&&unlocked2<total
+        ?`<div style="font-size:11px;color:#8a5e28;background:#f7efe0;border-radius:8px;padding:6px 10px;margin-top:8px;">⏳ 本堂為<b>分期繳費保留</b>（上方 🔒 未開通額度）——收款開通下一期後自動補綁扣課。</div>`
+        :`<div style="font-size:11px;color:#8a5e28;background:#f7efe0;border-radius:8px;padding:6px 10px;margin-top:8px;">✍️ 本堂為<b>待簽約保留</b>——合約簽回收款後由這張票補綁扣課。</div>`):''}
       <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span>${tkBuyDateHtml(tkC)}　·　效期至 ${fmtExpire(tkC.expire_date,tkC)}${isInstall2?`　·　分期開通 ${unlocked2}/${total}`:''}</span>
         ${/* 2026-07-30 使用者指示：所有預約都要能改用別張票券。只開放給櫃檯／管理員，
@@ -25249,13 +25263,12 @@ async function cancelBooking(id, refundMode, opts){
     }else if(b.ticket_id){
       refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
     }
-    /* 匯入的舊預約沒有 ticket_id（團課則連 deduct 帳本都沒有）→ 用票種回頭找票退。
-       體驗課與找不到對應票券的情況會回 0，維持原本「不退」的行為。 */
-    if(refundedCount===0){
-      refundedCount=await refundLegacyBooking(b,SESSION.id);
-      // 該退卻連一張同型票券都找不到 → 明確告訴櫃台，別再變成一筆靜默的「取消未退堂」
-      refundMissed = refundedCount===0 && b.category!=='體驗' && !!(b.member_id||(b.member_ids||[]).length);
-    }
+    /* 「沒綁票就回頭找一張票退」的備援（refundLegacyBooking）2026-08-14 退場——
+       使用者指示（陳秀蘭案例：取消 6 筆無票預約、票憑空多 6 堂）：
+       「待簽約取消就應該只取消，不應該還有退回票券的功能」。
+       它是「匯入票面已預扣」時代的產物；7/26 基線改成「預約中不預扣」後，
+       沒扣過課的預約取消時退課＝憑空加堂數（0810 修的那批溢退全是這條造成的）。
+       團課有 deduct 帳本的仍在上面正常退；沒扣過的取消就只是取消。 */
   }else if(b.ticket_id){
     /* 扣課不退要留紀錄（2026-08-13 使用者案例：吳宸維 10/23 誤按扣課，追查只能靠
        「有扣無退」反推）——寫一筆 delta 0 的紀錄標明是刻意扣課，以後一眼分得出

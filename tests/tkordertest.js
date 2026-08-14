@@ -73,8 +73,8 @@ console.log('\n③ 其他原有規則');
 }
 
 console.log('\n④ 起始日還沒到的票不能用');
-ok('★ tkFitsBooking 擋掉 start_date > 預約日的票',
-   /if\(bookDate && t\.start_date && String\(t\.start_date\)\.slice\(0,10\)>bookDate\) return false;/.test(src));
+ok('★ tkFitsBooking 擋掉 start_date > 預約日的票（2026-08-14 魏婉倫案例補例外：已開通的票不擋——那條只防「談好未來開課日」的票）',
+   /if\(bookDate && t\.start_date && String\(t\.start_date\)\.slice\(0,10\)>bookDate && !t\.activated_at\) return false;/.test(src));
 ok('　　案例寫在程式裡（主顧友善票 9/4 才開始，7/31 的課卻扣了它）',
    /主顧友善票 9\/4 才開始，\n\s*7\/31 的課卻扣了它/.test(src));
 ok('★ 規則的三層順序寫在排序旁邊',

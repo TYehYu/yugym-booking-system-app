@@ -125,7 +125,7 @@ ok('　　為什麼要抽，寫在程式裡',
    /這個判斷原本被抄在九個地方，\s*\n\s*每次有人只改其中幾處就出事/.test(src));
 ok('★ 教練請假改問口袋（不再自己比 category）',
    /function bkCoachLeaveMode\(b\)\{ const v=b\?bkPocketNow\(b\)\.coachLeave:null; return v===true\?'self':\(v\|\|null\); \}/.test(src)
-   && /function canCoachLeave\(b\)\{ return !!b && !!bkCoachLeaveMode\(b\); \}/.test(src));
+   && /function canCoachLeave\(b\)\{ return !!b && !!bkCoachLeaveMode\(b\) && \(bkIsGroup\(b\) \|\| !!b\.ticket_id\); \}/.test(src));   /* 2026-08-14：無票卡位不能請假 */
 ok('★ 展延改問口袋 —— 自主訓練點數過期不能展延（2026-07-31 使用者指示）',
    /if\(!tkPocketNow\(t\)\.canExtend\) return false;/.test(src)
    && /自主訓練點數過期不能展延（效期本來就只有 7 天、簽到贈送，/.test(src));

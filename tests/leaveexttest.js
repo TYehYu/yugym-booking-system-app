@@ -76,43 +76,36 @@ console.log('\n留下紀錄');
   ok('　　用 adjust（ticket_log_action 既有的值，不必動 enum）', /logTicket\(ticket_id,'adjust',0,/.test(src));
 }
 
-console.log('\n接進教練請假流程');
-ok('★ 排在退票之後（退票可能把效期退回未開通）',
-   src.indexOf('leaveRefunded = (await refundLegacyBooking(b,SESSION.id))>0;')
-   < src.indexOf('for(const tid of ids){ const to=await extendForCoachLeave(tid,b,SESSION.id); if(to) extendTo=to; }'));
-ok('★ 沒退成票就不延', /if\(leaveRefunded\)\{\s*\n\s*let ids=_tkId\?\[_tkId\]:\[\];/.test(src));
-ok('★ 有 ticket_id 就延那張（用清掉前先留的 _tkId）', /let ids=_tkId\?\[_tkId\]:\[\];/.test(src));
-ok('★ 舊預約走 fallback 退的，從剛寫進去的 refund 帳本回查（團課可能一次退好幾人）',
-   /sb\.from\('ticket_logs'\)\.select\('ticket_id'\)\.eq\('booking_id',b\.id\)\.eq\('action','refund'\)/.test(src)
-   && /ids=\[\.\.\.new Set\(\(q\.data\|\|\[\]\)\.map\(r=>r\.ticket_id\)\.filter\(Boolean\)\)\]/.test(src));
-ok('★ 通知會員時講出新的期限', /，使用期限延長至 \$\{extendTo\.replace\(\/-\/g,'\/'\)\}/.test(src));
-ok('★ 櫃檯的提示也講出新的期限', /效期延至 \$\{extendTo\.replace\(\/-\/g,'\/'\)\}/.test(src));
+console.log('\n接進教練請假流程（2026-08-14 改版：延後釋出堂數——請假當下不退票，簽到或取消時才退）');
+const _CLV=g('async function bkCoachLeave(id){','\n}\n');
+ok('★ 請假當下不退堂：整個 bkCoachLeave 裡沒有 refundTicket ／ refundLegacyBooking',
+   !!_CLV && !/refundTicket|refundLegacyBooking/.test(_CLV));
+ok('★ 有 ticket_id 就延那張（效期展延照舊在請假當下給）',
+   /if\(_tkId\)\{ extendTo=await extendForCoachLeave\(_tkId,b,SESSION\.id\); \}/.test(src));
+ok('★ 櫃檯的提示講出新的期限與延後釋出規則',
+   /效期延至 \$\{extendTo\.replace\(\/-\/g,'\/'\)\}/.test(src)
+   && /堂數會在會員簽到或取消這堂時退回/.test(src));
 ok('　　展延失敗不會拖垮整個請假流程（整段包 try）', /\}catch\(_\)\{ return null; \}/.test(src));
 ok('　　原因寫在程式裡', /教練請假等於白白吃掉會員一週的名額，時間要還給他/.test(src));
 
-console.log('\n這堂課改成會員自主訓練（2026-07-31 使用者定案）');
+console.log('\n這堂課改成會員自主訓練（2026-07-31 定案；2026-08-14 起票繼續掛著）');
 ok('★ 課種改成自主訓練', /b\.category='自主訓練';/.test(src));
-ok('★ 票券欄位清掉（票已退回，掛著會讓圓形卡多算一堂）', /b\.ticket_id=null;        \/\/ 票已退回/.test(src));
-ok('★ 退票用的是清掉之前先留的那個 id', /const _tkId=b\.ticket_id;/.test(src)
-   && /if\(_tkId\)\{ await refundTicket\(_tkId,b\.id,SESSION\.id\); leaveRefunded=true; \}/.test(src)
-   && /let ids=_tkId\?\[_tkId\]:\[\];/.test(src));
+ok('★ 票券欄位保留（圓點靠它畫紅圈；退堂等簽到或取消）', !!_CLV && !/b\.ticket_id=null/.test(_CLV));
 ok('★ ticket_type_id 刻意保留（那是「本來是哪一種課」的唯一線索）',
    !/b\.ticket_type_id=null/.test(src)
    && /ticket_type_id 刻意保留：那是「本來是哪一種課」的唯一線索/.test(src));
-ok('★ 預約備註記下原本的課種', /教練請假，本堂改為自主訓練（原：\$\{_wasCat\}）/.test(src));
-ok('　　通知與提示都講「已改為自主訓練」',
-   /本堂已改為自主訓練，時段與場地保留；若您仍到場並簽到，將照常發放自主訓練點數。/.test(src)
-   && /已標記教練請假：票券已退回、改為自主訓練/.test(src));
-ok('　　通知裡的課種用原本的（已經被改掉了，不能讀 b.category）',
-   /`您的\$\{_wasCat\|\|'課程'\}（\$\{b\.date\} \$\{b\.start_time\}）因教練請假/.test(src));
+ok('★ 預約備註記下原本的課種與釋出規則',
+   /教練請假，本堂改為自主訓練（原：\$\{_wasCat\}）（堂數待簽到或取消時退回）/.test(src));
+ok('　　課程變動不通知會員（2026-08-14 使用者指示：只留開課前 24h 提醒）',
+   !!_CLV && !/notifications|notifyMember|pushLine/.test(_CLV));
 
 console.log('\n到場簽到照發自主訓練點數');
-ok('★ grantCheckinReward 補一條：教練請假的課就發',
-   /if\(b\.status==='coach_leave'\)\{ doGrant=true; isFriendly=friendly; \}/.test(src));
+ok('★ grantCheckinReward 補一條：教練請假的課就發（簽到會把 status 蓋掉，旗標才可靠）',
+   /if\(b\.status==='coach_leave'\|\|b\.coach_leave===true\)\{ doGrant=true; isFriendly=friendly; \}/.test(src));
 ok('★ 排在 coachClass 判斷之後、return false 之前（不然課種改掉就判成不發）',
    src.indexOf("if(coachClass){ doGrant=true; isFriendly=friendly; }")
-   < src.indexOf("if(b.status==='coach_leave'){ doGrant=true; isFriendly=friendly; }")
-   && src.indexOf("if(b.status==='coach_leave'){ doGrant=true; isFriendly=friendly; }")
+   < src.indexOf("if(b.status==='coach_leave'||b.coach_leave===true){ doGrant=true; isFriendly=friendly; }")
+   && src.indexOf("if(b.status==='coach_leave'||b.coach_leave===true){ doGrant=true; isFriendly=friendly; }")
    < src.indexOf("if(!doGrant) return false;"));
 ok('★ 友善與否仍看原本那張票', /友善與否仍看原本那張票（ttName／tkPlanName／ttColor，上面已經算過）/.test(src));
 ok('　　重複發放的防線沒動（同一筆 booking 只發一次）',
@@ -131,8 +124,9 @@ ok('★ 走同一支 bkCoachLeave（規則不會再分岔）',
 ok('★ 只有可編輯、且這種課適用才出現', /if\(!\(editable && canCoachLeave\(b\)\)\) return '';/.test(src));
 ok('★ 已簽到／已完成／已取消的課不給按',
    /if\(b\.status==='cancelled'\|\|b\.status==='checked_in'\|\|b\.status==='completed'\) return '';/.test(src));
-ok('★ 已標記過就顯示紅色標籤，不會重複按',
-   /if\(bkIsCoachLeave\(b\)\) return '<span class="tag" style="background:#fbe9e7;color:#b5372e;">教練請假<\/span>';/.test(src));
+ok('★ 已標記過就顯示紅色標籤＋復原鈕，不會重複按（2026-08-14 加復原）',
+   /return '<span class="tag" style="background:#fbe9e7;color:#b5372e;">教練請假<\/span>'\+undoBtn;/.test(src)
+   && /onclick="bkCoachLeaveUndo\('\$\{b\.id\}'\)"/.test(src));
 ok('★★ 團課是整堂取消（status 變 cancelled）→ 靠 coach_leave 旗標才認得出來',
    /function bkIsCoachLeave\(b\)\{ return !!b && \(b\.status==='coach_leave' \|\| b\.coach_leave===true\); \}/.test(src));
 ok('　　按鈕做成紅字外框（不可逆的動作，要跟代課下拉區隔）',
@@ -159,8 +153,10 @@ console.log('\n適用範圍（2026-07-31 定案；2026-08-08 使用者補上團�
   eq('★ 運動按摩 → 不適用（直接取消重約，不走這一套）', mode({category:'運動按摩'}), null);
   eq('　　null 不會爆', can(null), false);
   ok('★ 不適用的課根本不畫那顆按鈕', /\+ \(!canCoachLeave\(b\) \? ''/.test(src));
-  ok('★ 函式本身也擋一次（深連結／程式呼叫繞不過去）',
-     /if\(!canCoachLeave\(b\)\)\{\s*\n\s*showToast\(`\$\{b\.category\|\|'這種課'\}不適用教練請假/.test(src));
+  ok('★ 函式本身也擋一次（深連結／程式呼叫繞不過去；2026-08-14 無票卡位另給引導文案）',
+     /if\(!canCoachLeave\(b\)\)\{/.test(src)
+     && /這堂沒有綁票券（待簽約或舊匯入），沒有票可退——請改用「取消」釋出時段/.test(src)
+     && /\$\{b\.category\|\|'這種課'\}不適用教練請假/.test(src));
   ok('★★ 團課走自己那一套，不會被改成「自主訓練」',
      /if\(bkCoachLeaveMode\(b\)==='cancel'\) return grpCoachLeave\(id\);/.test(src));
   ok('　　為什麼團課不改成自主訓練，原因寫在程式裡',
