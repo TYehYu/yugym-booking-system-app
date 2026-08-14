@@ -23,7 +23,8 @@ console.log('① 復原教練請假');
   ok('★ 課種從 note 的「原：X」還原、狀態回 booked、重綁票券',
      /const _m=String\(b\.note\|\|''\)\.match\(\/（原：（?\[\^）\]\+）?\/g\)\.length?/.test(F) || /（原：/.test(F)
      && /b\.status='booked'; b\.coach_leave=false; b\.category=orig; b\.ticket_id=tid\|\|null;/.test(F));
-  ok('★ 通知會員課程照常', /課程照常進行/.test(F));
+  ok('★ 復原不再通知會員（2026-08-14 使用者指示：課程變動不通知，只留開課通知）',
+     !/課程照常進行/.test(F) && /課程變動不通知會員/.test(F));
   ok('　　防連點', /bkCoachLeaveUndo\(id\)\{ return onceAct\('cleaveundo:'\+id/.test(src));
   ok('★ 明細標籤旁有復原鈕、代課面板的「已標記」也能點復原',
      /onclick="bkCoachLeaveUndo\('\$\{b\.id\}'\)"/.test(src)

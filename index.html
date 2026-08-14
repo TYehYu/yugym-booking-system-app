@@ -7805,8 +7805,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.1102';
-const APP_VERSION_LABEL='v260814.1102';
+const APP_VERSION = '260814.1118';
+const APP_VERSION_LABEL='v260814.1118';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13217,8 +13217,7 @@ async function doGroupCancelSeat(bid,seatKey){
       }
     }
   }catch(e){ console.error('團課取消退票失敗',e); }
-  try{ if(mid) await pushNotification(mid,'cancel','團體課已取消',
-    `您 ${b.date} ${b.start_time} 的團體課已由櫃檯取消${tkId?'，已退回 1 堂票券':''}。`); }catch(_){}
+/* 課程變動不通知會員（2026-08-14 使用者指示：只留上課前的開課通知） */
   dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
   closeModal();
   showToast(tkId?'已取消並退回 1 堂':'已取消（找不到可退的票券，請手動確認）');
@@ -22073,8 +22072,7 @@ async function bkCoachLeave(id){
       }
       for(const tid of ids){ const to=await extendForCoachLeave(tid,b,SESSION.id); if(to) extendTo=to; }
     }
-    try{ if(b.member_id) await pushNotification(b.member_id,'cancel','教練請假通知',
-      `您的${_wasCat||'課程'}（${b.date} ${b.start_time}）因教練請假${leaveRefunded?'，票券已退回':''}${extendTo?`，使用期限延長至 ${extendTo.replace(/-/g,'/')}`:''}。本堂已改為自主訓練，時段與場地保留；若您仍到場並簽到，將照常發放自主訓練點數。`); }catch(_){}
+/* 課程變動不通知會員（2026-08-14 使用者指示：只留上課前的開課通知） */
     collapseBkCard();
     showToast(leaveRefunded
       ? `已標記教練請假：票券已退回、改為自主訓練${extendTo?`，效期延至 ${extendTo.replace(/-/g,'/')}`:''}`
@@ -22121,8 +22119,7 @@ async function _bkCoachLeaveUndo(id){
     const line=`${ymd(TODAY)} 復原教練請假（誤按），本堂恢復為${orig}`;
     b.note=String(b.note||'').trim()?String(b.note).trim()+'\n'+line:line;
     await dbPut('bookings',b);
-    try{ if(b.member_id) await pushNotification(b.member_id,'booking','課程照常進行',
-      `您的${orig}（${b.date} ${b.start_time}）恢復原狀、照常上課——先前的教練請假通知請忽略，造成困擾敬請見諒。`); }catch(_){}
+/* 課程變動不通知會員（2026-08-14 使用者指示：只留上課前的開課通知） */
     dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
     collapseBkCard();
     closeModal();
@@ -22199,10 +22196,7 @@ async function _doGrpCoachLeave(id){
   let extN=0;
   for(const tid of tkIds){ if(await extendForCoachLeave(tid,b,SESSION.id)) extN++; }
   // 逐位通知（團課沒有 member_id，cancelBooking 的通知發不出去）
-  for(const mid of mids){
-    try{ await pushNotification(mid,'cancel','教練請假通知',
-      `您 ${_when} 的小班肌力課因教練請假取消，票券已退回，使用期限延長 ${COACH_LEAVE_EXTEND_DAYS} 天。造成不便敬請見諒。`); }catch(_){}
-  }
+/* 課程變動不通知會員（2026-08-14 使用者指示：只留上課前的開課通知） */
   dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
   closeModal();
   showToast(`已標記教練請假：整堂取消、票券退回${extN?`，${extN} 張票效期各延長 ${COACH_LEAVE_EXTEND_DAYS} 天`:'（沒有可延長效期的票券）'}`);
@@ -24090,7 +24084,7 @@ async function confirmCancelBooking(id){
            不要一律寫「1 堂」（2026-08-01）。 */''}
       <div style="font-size:12px;color:var(--t2);margin:10px 0 14px;line-height:2.2;">請當面向會員說明後再送出，兩種結果都會寫入紀錄：<br>
         ${tkChip('back', `加回 ${_grpNetDeduct>0?`${_grpNetDeduct} 堂（本堂共扣了 ${_grpNetDeduct} 堂）`:'1 堂'}`)}　<b>退回票券</b>：這堂不扣。<br>
-        ${tkChip('eat', '不加回')}　<b>扣課不退</b>：視同已使用（會員端會收到通知）。</div>
+        ${tkChip('eat', '不加回')}　<b>扣課不退</b>：視同已使用。</div>
       ${await cancelRewardWarnHtml(b)}
       <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
         <button class="btn btn-ghost" onclick="closeModal()">返回</button>
@@ -25022,7 +25016,7 @@ async function deskRefundCancelled(id){
   await dbPut('ticket_logs',{id:uid('LG'),ticket_id:tk.id,action:'refund',delta:1,booking_id:b.id,
     operator:SESSION.id,note:'櫃台特例補退（24 小時內取消）',created_at:new Date().toISOString()});
   b.refund_waived=false; await dbPut('bookings',b);
-  try{ if(b.member_id) await pushNotification(b.member_id,'cancel','票券已補退',`您 ${b.date} ${b.start_time} 取消的${b.category}，經櫃台核可已退回 1 堂票券。`); }catch(_){}
+/* 課程變動不通知會員（2026-08-14 使用者指示：只留上課前的開課通知） */
   dbCacheClear(['bookings','member_tickets','ticket_logs']);
   closeModal(); showToast('已補退 1 堂票券'); navTo(CUR_PAGE);
 }
@@ -25076,14 +25070,7 @@ async function cancelBooking(id, refundMode, opts){
       // 贈點回收（2026-07-30 使用者指示）：RPC 只處理票券與狀態，贈點在前端收
       const _rv=await revokeRewardOnCancel(await dbGet('bookings',id)||b);
       if(_rv.removed) dbCacheClear(['member_tickets','bookings','ticket_logs']);
-      try{
-        const when=`（${b.date} ${b.start_time}）`;
-        const body = refunded
-          ? `您的${b.category}${when}已取消，票券已退回 1 堂。`
-          : `您的${b.category}${when}已取消。因開課 24 小時內取消，本次恕不退回票券。`;
-        if(b.member_id) await pushNotification(b.member_id,'cancel','預約已取消',
-          body+rewardNoteText(_rv));
-      }catch(_){}
+      /* 課程變動不通知會員（2026-08-14 使用者指示：只留上課前的開課通知） */
       if(!_silent){
         closeModal();
         showToast((refunded?'已取消預約，退回 1 堂票券':'已取消預約（24 小時內，扣課不退）')+rewardToastText(_rv));
@@ -25163,7 +25150,7 @@ async function cancelBooking(id, refundMode, opts){
   }else{
     body=`您的${b.category}${when}已取消${refundedCount>0?'，票券已退回 1 堂':'，本次未退回票券'}。`;
   }
-  if(b.member_id) await pushNotification(b.member_id,'cancel','預約已取消',body+rewardNoteText(_rv));
+/* 課程變動不通知會員（2026-08-14 使用者指示：只留上課前的開課通知） */
 
   if(_silent) return;
   closeModal();

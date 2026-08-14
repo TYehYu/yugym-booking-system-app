@@ -116,10 +116,11 @@ console.log('  團課：整堂取消 → 逐名額退票 → 效期各 +7 天');
     const a=F.indexOf('b.coach_leave=true;'), b=F.indexOf("await dbPut('bookings',b);"), c=F.indexOf("cancelBooking(id,'force'");
     return a>0 && b>a && c>b;
   })());
-  ok('★★ 逐位通知（團課沒有 member_id，cancelBooking 的通知發不出去）',
-     /for\(const mid of mids\)\{[\s\S]{0,260}await pushNotification\(mid,'cancel','教練請假通知',/.test(F));
-  ok('★ 通知講的是「退回＋延長一週」，不是補課券',
-     /因教練請假取消，票券已退回，使用期限延長 \$\{COACH_LEAVE_EXTEND_DAYS\} 天。/.test(F));
+  ok('★★ 逐位通知已退場（2026-08-14 使用者指示：課程變動不通知會員，只留開課通知）',
+   !/pushNotification\(mid,'cancel','教練請假通知'/.test(src)
+   && /課程變動不通知會員（2026-08-14 使用者指示/.test(src))
+  ok('★ 教練請假通知已退場（同上，退票＋展延照做、只是不再推播）',
+   !/因教練請假取消，票券已退回/.test(src))
   ok('　　延不到效期時照實說（不宣稱延了）',
      /extN\?`，\$\{extN\} 張票效期各延長 \$\{COACH_LEAVE_EXTEND_DAYS\} 天`:'（沒有可延長效期的票券）'/.test(F));
   ok('　　寫入後清快取（bookings / 票券 / 帳本 / 通知）',
