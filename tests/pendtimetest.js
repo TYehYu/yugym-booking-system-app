@@ -99,4 +99,10 @@ console.log('\n④ 轉正時說得出真正的原因');
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
+/* 2026-08-14 使用者指示：步驟 1 已選會員的待簽約卡位要直接綁 member_id */
+ok('★★ 已選會員直接綁定（ph-mid 隱藏欄位 → member_id；散客照走 trial_name）',
+   /<input type="hidden" id="ph-mid" value="\$\{w\.member_id\|\|''\}">/.test(src)
+   && /const _mid=\(\(document\.getElementById\('ph-mid'\)\|\|\{\}\)\.value\|\|''\)\.trim\(\)\|\|null;/.test(src)
+   && /member_id:_mid,trial_name:_mid\?null:name,trial_phone:_mid\?null:phone,/.test(src));
+ok('★ 衝堂驗證帶會員（同會員同時段的防呆也吃得到）', /ticket_type_id:type_id,member_id:_mid\};/.test(src));
 process.exit(fail?1:0);
