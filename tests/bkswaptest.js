@@ -17,9 +17,9 @@ ok('★★ 在「結果出爐後」才判斷（分期保留 held>0 就不會進�
    /if\(!results\[0\]\.ok && \/票券不足\/\.test\(results\[0\]\.reason\|\|''\) && t\.category==='私人教練'\)\{/.test(src)
    && /const opened=await bkOfferSwap\(\{member_id, type_id, date, time, opts:_rrOpts\}\);\n\s*if\(opened\) return;/.test(src));
 
-console.log('\n② 候選名單');
+console.log('\n② 候選名單（2026-08-14 二修抽成 bkSwapCandidates，步驟 2 無票畫面共用）');
 {
-  const F=grabFn('bkOfferSwap');
+  const F=grabFn('bkSwapCandidates');
   ok('★★ 只列：本人、已排未上、有綁票、非保留、未來時段', /b\.status!=='booked'\|\|!b\.ticket_id\|\|b\.pending_contract/.test(F)
      && /if\(d<today\) return false;/.test(F)
      && /if\(d===today && timeToMin\(b\.start_time\)<=nowMin\) return false;/.test(F));
@@ -32,6 +32,14 @@ console.log('\n② 候選名單');
   ok('★ 最遠的排最上（最可能讓出）', /\.sort\(\(a,b\)=>\(b\.date\+String\(b\.start_time\)\)\.localeCompare\(a\.date\+String\(a\.start_time\)\)\)/.test(F));
   ok('★ 沒候選就照舊（回 false 顯示原本的票券不足）', /if\(!cands\.length\) return false;/.test(F));
   ok('　　視窗講清楚會發生什麼（取消退回 1 堂 → 轉到新時段）', /取消並退回 1 堂<\/b>，馬上轉到這次要約的/.test(F));
+}
+
+console.log('\n②-b 步驟 2 無票畫面的調課入口（2026-08-14 使用者指示）');
+{
+  const G=grabFn('bkStep2Swap');
+  ok('★★ 有可讓的課就多一顆「調課」鈕、說明講堂數', /onclick="bkStep2Swap\(\)">🔁 調課（\$\{_swapN\} 堂可讓）/.test(src)
+     && /不過他之後還有 <b>\$\{_swapN\}<\/b> 堂已排課/.test(src));
+  ok('★★ 入口組單堂參數、開同一個調課視窗', /const opened=await bkOfferSwap\(\{member_id:C\.member_id, type_id:C\.type_id, date:C\.date, time:C\.time, opts\}\);/.test(G));
 }
 
 console.log('\n③ 執行：取消退回＋原參數重送');

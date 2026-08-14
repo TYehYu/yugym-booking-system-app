@@ -7805,8 +7805,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.1435';
-const APP_VERSION_LABEL='v260814.1435';
+const APP_VERSION = '260814.1452';
+const APP_VERSION_LABEL='v260814.1452';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18311,7 +18311,20 @@ function cancelBookingModal(){
    再回來重新預約。現在「新增預約」遇到票券不足時，直接列出這位會員之後的已排課，
    點一堂＝那堂取消退回（一律退，與 24 小時規則無關——是調課不是臨時取消），
    退回的堂數立刻轉到這次要約的時段。 */
-async function bkOfferSwap(P){
+/* 步驟 2 無票畫面的調課入口（2026-08-14 使用者指示：「會員後面有課約在 9/3，
+   這邊預約的時候不是應該要觸發調課嗎」）——組好單堂參數，開同一個調課視窗。 */
+async function bkStep2Swap(){
+  const C=window._bkSwapCtx; if(!C){ showToast('沒有可調的課'); return; }
+  const opts={ member_id:C.member_id, coach_id:C.coach_id, substitute_coach_id:null, trial_name:null,
+    category:C.category, type_id:C.type_id, format:C.fmt||null,
+    startDate:C.date, time:C.time, duration:60,
+    dows:[], times:null, venue_pref:null, units:1, count:1, until:null,
+    findTicketFn:async(mid,d,tsv)=>await findUsableTicket(mid,C.type_id,d,tsv||C.time) };
+  const opened=await bkOfferSwap({member_id:C.member_id, type_id:C.type_id, date:C.date, time:C.time, opts});
+  if(!opened) showToast('這位會員之後沒有可讓出的已排課');
+}
+/* 候選抽成一支（2026-08-14 二修）：新增預約的「步驟 2 無票畫面」也要判斷能不能調課 */
+async function bkSwapCandidates(P){
   try{
     const today=ymd(TODAY);
     const _now=new Date(); const nowMin=_now.getHours()*60+_now.getMinutes();
@@ -18333,6 +18346,12 @@ async function bkOfferSwap(P){
       try{ if(typeof tkTimeOk==='function' && !tkTimeOk(t,P.date,P.time)) return false; }catch(_){}
       return true;
     }).sort((a,b)=>(b.date+String(b.start_time)).localeCompare(a.date+String(a.start_time)));   // 最遠的排最上（最可能讓）
+    return {cands, tkMap};
+  }catch(e){ console.error('bkSwapCandidates',e); return {cands:[], tkMap:{}}; }
+}
+async function bkOfferSwap(P){
+  try{
+    const {cands, tkMap}=await bkSwapCandidates(P);
     if(!cands.length) return false;
     window._bkSwapPend={opts:P.opts};
     const wd=['日','一','二','三','四','五','六'];
@@ -19776,7 +19795,7 @@ function bkCcOfType(t){
   return c;
 }
 /* 步驟 2 白底摘要卡（2026-07-20 使用者指示：步驟 1 的選擇明顯提示在視窗上方） */
-function bkSummaryCard(t,date,time,coachNm){
+function bkSummaryCard(t,date,time,coachNm,memberNm){
   const cc=bkCcOfType(t);
   const d=parseYmd(date);
   const wd=d?['日','一','二','三','四','五','六'][d.getDay()]:'';
@@ -19785,6 +19804,7 @@ function bkSummaryCard(t,date,time,coachNm){
     <span class="bk-sum-i">${LNI.calendar} ${String(date).replace(/-/g,'/')}${wd?`（${wd}）`:''}</span>
     <span class="bk-sum-i">${LNI.clock} ${time}</span>
     ${coachNm?`<span class="bk-sum-i">${LNI.user} ${coachNm}</span>`:''}
+    ${memberNm?`<span class="bk-sum-i" style="font-weight:700;color:var(--text);">👤 ${memberNm}</span>`:''}
   </div>`;
 }
 // 課程類型卡片
@@ -20214,7 +20234,7 @@ async function _bkStep2(){
   const preSum=preMid?(window._bkTicketSum[preMid]||0):0;
   const hasTk=!!(preMid&&preSum>0);
   showModal(`<div class="modal-title">新增預約 · 步驟 2 / 2</div>
-    ${bkSummaryCard(t,date,time,coach_id?await coachName(coach_id):'')}
+    ${bkSummaryCard(t,date,time,coach_id?await coachName(coach_id):'', preInfo?preInfo.name:'')}
     <input type="hidden" id="bk-member" value="${hasTk?preMid:''}">
     ${hasTk
       ?`<div class="form-row"><label>會員</label>
@@ -20247,18 +20267,25 @@ async function _bkStep2(){
             }});
         }catch(_){}}
         window._bkInstMax=_instMax;   // 給 bkInstHold 夾上限用（最多約剩下的未開通堂數）
+        /* 調課（2026-08-14 使用者指示）：會員之後有已排課、讓一堂出來就約得進 → 直接給調課鈕 */
+        let _swapN=0;
+        if(preMid && t.category==='私人教練'){ try{
+          _swapN=((await bkSwapCandidates({member_id:preMid, type_id, date, time})).cands||[]).length;
+        }catch(_){}}
+        window._bkSwapCtx=_swapN?{member_id:preMid, type_id, category:t.category, coach_id, date, time, fmt:t.format||null}:null;
         /* 2026-08-04 使用者指示：「待分期跟待簽約改成兩個明顯的按鈕一左一右；
            該會員本身有分期的票券才顯示待分期可按，不然淡化且不能按」——
            兩顆並排（分期左、簽約右），沒有分期票時左鈕 disabled＋降透明度。 */
         return `<div class="form-row"><div style="font-size:12.5px;color:var(--t2);line-height:1.8;padding:12px 14px;background:var(--card2);border-radius:10px;">
-          ${preMid?`<b>${preInfo?preInfo.name:'該會員'}</b> 沒有此課程的可用票券。${_instOk?'這位會員有分期方案（尚有未開通堂數），可用「待分期」先保留、收款後自動接上；也':'可回上一步改選會員或先完成儲值，或'}用「待簽約卡位」先佔住時段。`
+          ${preMid?`<b>${preInfo?preInfo.name:'該會員'}</b> 沒有此課程的可用票券。${_swapN?`不過他之後還有 <b>${_swapN}</b> 堂已排課——可用「調課」讓一堂出來改到這裡；也`:''}${_instOk?'這位會員有分期方案（尚有未開通堂數），可用「待分期」先保留、收款後自動接上；也':'可回上一步改選會員或先完成儲值，或'}用「待簽約卡位」先佔住時段。`
                   :'尚未選擇會員。請回上一步選擇會員，或用「待簽約卡位」先佔住時段。'}</div></div>
         ${_instOk?`${/* 連續預約（2026-08-04 使用者指示：「這種待分期繳費的也要能重複預約」）——
                同一套 recurBox；上限＝分期票未開通的堂數。只作用在左邊的待分期。 */''}
           <div class="form-row" style="margin-bottom:8px;">${recurBoxHtml('bk', _instMax||12)}</div>`:''}
         <div class="form-row" style="margin-bottom:10px;">
           <div style="display:flex;gap:10px;">
-            <button type="button" class="btn btn-green" style="flex:1;padding:13px 8px;${_instOk?'':'opacity:.4;filter:grayscale(.5);cursor:not-allowed;'}" ${_instOk?'onclick="bkInstHold()"':'disabled'}>⏳ 待分期繳費保留</button>
+            ${_swapN?`<button type="button" class="btn btn-green" style="flex:1;padding:13px 8px;" onclick="bkStep2Swap()">🔁 調課（${_swapN} 堂可讓）</button>`:''}
+            <button type="button" class="btn ${_swapN?'btn-ghost':'btn-green'}" style="flex:1;padding:13px 8px;${_instOk?'':'opacity:.4;filter:grayscale(.5);cursor:not-allowed;'}" ${_instOk?'onclick="bkInstHold()"':'disabled'}>⏳ 待分期繳費保留</button>
             <button type="button" class="btn btn-gold" style="flex:1;padding:13px 8px;" onclick="openPendingHold()">🕒 待簽約卡位</button>
           </div>
           <div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.7;">${_instOk
