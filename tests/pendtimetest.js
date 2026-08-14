@@ -51,7 +51,7 @@ console.log('\n② 待簽約卡位不再繞過這條規則');
 {
   const F=grabFn('submitPendingHold');
   ok('★★ 驗證時帶上票種（原本刻意清成 null）',
-     /const vbk=\{id:null,coach_id,category:t\.category,ticket_type_id:type_id\};/.test(F)
+     /const vbk=\{id:null,coach_id,category:t\.category,ticket_type_id:type_id,member_id:_mid\};/.test(F)   /* 2026-08-14 起再帶會員 */
      && !/ticket_type_id:null\};   \/\/ 無票 → 不做限時票檢查/.test(F));
   ok('★ 課卡本來就會寫進票種（所以「無票」那個前提本來就不成立）',
      /coach_id,ticket_id:null,ticket_type_id:type_id,category:t\.category/.test(F));
@@ -63,8 +63,8 @@ console.log('\n② 待簽約卡位不再繞過這條規則');
      /但卡位「卡的就是某一種票券的課」（type_id 會寫進課卡），/.test(F)
      && /友善教練課限平日 18:00 前，卡在平日晚上或假日的位子，之後根本轉不了正/.test(F));
 }
-ok('★ 一般預約路徑本來就有帶票種（這次只補待簽約這一條）',
-   (src.match(/const vbk=\{id:null,coach_id,category:t\.category,ticket_type_id:type_id\}/g)||[]).length>=3);
+ok('★ 一般預約路徑本來就有帶票種（待簽約那條 2026-08-14 起另帶 member_id）',
+   (src.match(/const vbk=\{id:null,coach_id,category:t\.category,ticket_type_id:type_id/g)||[]).length>=3);
 
 console.log('\n③ 建立之前就先講規則');
 {
