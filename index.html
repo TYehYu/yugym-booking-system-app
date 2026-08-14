@@ -7810,8 +7810,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.1800';
-const APP_VERSION_LABEL='v260814.1800';
+const APP_VERSION = '260814.2009';
+const APP_VERSION_LABEL='v260814.2009';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22198,6 +22198,30 @@ async function bkCoachLeave(id){
     navTo(CUR_PAGE);
   }catch(e){ showToast('標記請假失敗：'+(e&&e.message?e.message:e)); }
 }
+/* 教練請假堂・未到場結課（2026-08-14 使用者指示）：
+   「如果那天學生沒到場 櫃檯要用未到場簽到 主要區分有沒有給自主訓練點數 有到場才有給」
+   —— 到場＝櫃檯按「簽到」（RPC 退堂＋發點）；沒到場＝這支：結課（completed）＋退堂、
+   不發點。堂數照退是因為教練請假本來就不該吃掉會員的堂。
+   不寫 checked_in_at —— 圓形卡靠「有沒有簽到時間」分辨到場（實心紅圈點）與未到場（不畫點）。 */
+async function bkCoachLeaveNoShow(id){ return onceAct('clvnoshow:'+id, async()=>{
+  try{
+    const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+    if(b.status!=='coach_leave'){ showToast('只有「教練請假中」的課才能未到場結課'); return; }
+    const slotDt=new Date(b.date+'T'+b.start_time+':00');
+    if(new Date()<slotDt){ showToast('課程時間還沒到，還不能結課'); return; }
+    const _tk=b.ticket_id;
+    b.status='completed';
+    b.note=String(b.note||'').trim()
+      ? String(b.note).trim()+`\n${ymd(TODAY)} 教練請假堂未到場結課（堂數退回、不發點數）`
+      : `${ymd(TODAY)} 教練請假堂未到場結課（堂數退回、不發點數）`;
+    await dbPut('bookings',b);
+    let refunded=false;
+    if(_tk){ refunded=!!(await refundTicket(_tk,b.id,SESSION.id)); }
+    collapseBkCard();
+    showToast(`已結課：學生未到場${refunded?'、堂數已退回票券':''}（不發自主訓練點數）`);
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('結課失敗：'+(e&&e.message?e.message:e)); }
+}); }
 /* 復原教練請假（2026-08-14 使用者需求）——把 bkCoachLeave 做的事全部倒轉：
    ①課種恢復（原課種記在 note 的「原：X」）②狀態回 booked ③當時退回的那張票扣回 1 堂
    ④當時展延的 7 天效期回調（帳本有「教練請假展延」那筆才調）⑤通知會員課程照常。
@@ -22692,8 +22716,12 @@ async function openBookingDetail(id){
      自己的課＋當日＋status=booked。這裡只決定按鈕顯示；checkInBooking 內有同一道
      30 分鐘閘、RPC 端（fn_checkin_booking, member_app）驗證本人，三層一致。 */
   let memberCkBtn='';
-  if(isMemberView && b.member_id===SESSION.id && (b.status==='booked'||b.status==='coach_leave') && b.date===ymd(TODAY)){   /* 教練請假的堂會員到場也要簽到（2026-08-14 使用者指示） */
-    memberCkBtn = (new Date()>=new Date(slotDt.getTime()-30*60000))
+  if(isMemberView && b.member_id===SESSION.id && (b.status==='booked'||b.status==='coach_leave') && b.date===ymd(TODAY)){
+    /* 教練請假的堂（2026-08-14 使用者指示二修）：簽到一律由櫃檯負責——這堂簽到會退堂＋發點，
+       開放自簽等於會員在家按一下就能拿，根本沒到場。 */
+    memberCkBtn = (b.status==='coach_leave'||b.coach_leave===true)
+      ? `<span class="tag" style="font-size:11px;">教練請假堂：到場後請洽櫃檯簽到</span>`
+      : (new Date()>=new Date(slotDt.getTime()-30*60000))
       ? `<button class="btn btn-green btn-sm" onclick="checkInBooking('${b.id}')">簽到</button>`
       : `<span class="tag" style="font-size:11px;">開課前 30 分鐘開放簽到</span>`;
   }
@@ -22977,6 +23005,8 @@ async function openBookingDetail(id){
         ? ((function(){const nd=(parseYmd(b.date)?ymd(parseYmd(b.date)):b.date);return nd<ymd(TODAY);})()
             ? `<button class="btn btn-gold btn-sm" onclick="openMakeupModal('${b.id}')">補簽</button>`
             : `<button class="btn btn-green btn-sm" onclick="checkInBooking('${b.id}')">簽到</button>`)
+        : (b.status==='coach_leave'&&!isGroupD&&staffCanCheckin)
+        ? `<span style="display:flex;align-items:center;gap:8px;"><button class="btn btn-green btn-sm" title="學生有到場：退堂＋發自主訓練點數" onclick="checkInBooking('${b.id}')">簽到</button><button class="btn btn-ghost btn-sm" title="學生沒到場：結課退堂、不發點數" onclick="bkCoachLeaveNoShow('${b.id}')">未到場結課</button></span>`
         : memberCkBtn ? memberCkBtn
         : (b.status==='checked_in'&&!isGroupD&&staffCanCheckin
             ? `<span style="display:flex;align-items:center;gap:8px;"><span class="tag tag-ok" style="font-size:12px;">已簽到</span><button class="btn btn-ghost btn-sm" onclick="undoCheckin('${b.id}')">取消簽到</button></span>`
@@ -23690,6 +23720,11 @@ async function _checkInBooking(id, opts){  opts=opts||{};
   const b=await dbGet('bookings',id);
   if(!b){showToast('找不到預約');return false;}
   if(b.status==='checked_in'){showToast('此預約已簽到');return false;}
+  /* 教練請假堂限櫃檯簽（2026-08-14 使用者指示）：這堂簽到＝退堂＋發點，
+     會員在家按一下就能拿 —— 函式本身也擋，深連結繞不過按鈕層。 */
+  if((b.status==='coach_leave'||b.coach_leave===true) && SESSION && SESSION.role==='member'){
+    showToast('教練請假堂：到場後請洽櫃檯簽到'); return false;
+  }
   // 簽到開放時間：課程開始前 30 分鐘起。太早不可簽（維持時段公平、避免提前領點數）
   const slotDt=new Date(b.date+'T'+b.start_time+':00');
   const openDt=new Date(slotDt.getTime()-30*60000);
@@ -41277,8 +41312,13 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
   const _doneL=[], _bookedL=[], _clvAttL=[];
   (bks||[]).forEach(b=>{
     /* 教練請假後簽到（2026-08-14 使用者指示：「中間用課種色填滿、旁邊保持紅圈」）——
-       淨額 0 不佔格，獨立畫成加值圓點。 */
-    if(b && b.coach_leave===true && (b.status==='checked_in'||b.status==='completed')){ _clvAttL.push(b); return; }
+       淨額 0 不佔格，獨立畫成加值圓點。
+       未到場結課（同日二修）：completed 但沒有 checked_in_at ＝櫃檯按「未到場結課」——
+       堂數已退、人也沒來，不畫點也不佔格。 */
+    if(b && b.coach_leave===true && (b.status==='checked_in'||b.status==='completed')){
+      if(b.status==='checked_in'||b.checked_in_at) _clvAttL.push(b);
+      return;
+    }
     /* 分期待繳費保留（2026-08-04 徐千晴案例）不畫進圓點——這些課本來就等下一期
        開通後自動補綁，未開通的堂數已經由 🔒 鎖頭格表達；畫成「超約需補票」的
        紅虛線是重複又嚇人（看起來像欠 7 堂票，其實是還沒到繳費期）。 */

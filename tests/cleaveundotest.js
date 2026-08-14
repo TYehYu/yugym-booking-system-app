@@ -82,5 +82,21 @@ console.log('\n票券夾：請假中的堂算「待上」（2026-08-14 吳宜玲
 ok('★★ slotOf 的 pending 含 coach_leave 狀態（已扣待退不是已用）',
    /const pending=bks\.filter\(b=>b\.ticket_id===t\.id && \(b\.status==='booked'\|\|b\.status==='coach_leave'\)\)\.length \+ \(ga\.pend\[t\.id\]\|\|0\);/.test(src));
 
+console.log('\n簽到一律櫃檯負責＋未到場結課（2026-08-14 使用者指示）');
+ok('★★ 會員端明細不給自簽鈕、改顯示「請洽櫃檯」', /教練請假堂：到場後請洽櫃檯簽到/.test(src));
+ok('★★ checkInBooking 函式層也擋會員（深連結繞不過）',
+   /if\(\(b\.status==='coach_leave'\|\|b\.coach_leave===true\) && SESSION && SESSION\.role==='member'\)\{/.test(src));
+ok('★★ 櫃檯明細有兩顆：簽到（發點）＋未到場結課（不發點）',
+   /onclick="bkCoachLeaveNoShow\('\$\{b\.id\}'\)">未到場結課<\/button>/.test(src)
+   && /學生有到場：退堂＋發自主訓練點數/.test(src));
+ok('★★ 未到場結課＝completed＋退堂、不發點、不寫 checked_in_at',
+   (()=>{ const i2=src.indexOf('async function bkCoachLeaveNoShow');
+     const F=src.slice(i2, src.indexOf('\n/* 復原教練請假', i2));
+     return i2>=0 && /b\.status='completed';/.test(F) && /refundTicket\(_tk,b\.id,SESSION\.id\)/.test(F)
+       && !/checked_in_at=/.test(F) && !/grantCheckinReward|handle_checkin_reward|fn_checkin_booking/.test(F); })());
+ok('★ 課程時間未到不能結課', /課程時間還沒到，還不能結課/.test(src));
+ok('★★ 圓點：未到場結課（無 checked_in_at）不畫點不佔格；到場（checked_in 或有簽到時間）畫實心紅圈',
+   /if\(b\.status==='checked_in'\|\|b\.checked_in_at\) _clvAttL\.push\(b\);/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

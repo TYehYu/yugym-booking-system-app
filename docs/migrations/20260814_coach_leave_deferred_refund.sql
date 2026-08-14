@@ -26,3 +26,9 @@
 --   與收回互相抵消，效期展延（請假當下已給）不動。
 -- ③黃雅菁 8/21 19:00 櫃檯漏標 → 補標新制請假＋效期展延 +7（2027-07-30 → 2027-08-06，
 --   LG-FIX-clv-BK-19ffeda0a42786a-ext）。
+-- ④會員端不得自簽教練請假堂（同日三修，使用者指示「簽到一律由櫃檯負責，
+--   以免會員在家就簽到根本沒到場」）：fn_checkin_booking 開頭新增
+--   IF coalesce(b.coach_leave,false) AND p_checkin_source='member_app'
+--     THEN RETURN error_code='BOOKING.DESK_ONLY'；前端按鈕與 checkInBooking 也各擋一層。
+--   另新增「未到場結課」（前端 bkCoachLeaveNoShow，不經 RPC）：completed＋退堂＋不發點、
+--   不寫 checked_in_at —— 圓形卡靠簽到時間分辨到場（實心紅圈點）／未到場（不畫點）。
