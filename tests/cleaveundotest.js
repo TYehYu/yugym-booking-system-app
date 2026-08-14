@@ -78,5 +78,9 @@ ok('★★ booked 圓點掛 mtk-cleave、提示講清楚時段保留與退堂時
    && /教練請假（時段保留；會員簽到或取消時退堂）/.test(src)
    && /\.mtk-booked\.mtk-cleave\{border:2px solid var\(--danger,#b5372e\);color:var\(--danger,#b5372e\);\}/.test(src));
 
+console.log('\n票券夾：請假中的堂算「待上」（2026-08-14 吳宜玲 ✓ 鬼點＋9/11 被擠出開通區案例）');
+ok('★★ slotOf 的 pending 含 coach_leave 狀態（已扣待退不是已用）',
+   /const pending=bks\.filter\(b=>b\.ticket_id===t\.id && \(b\.status==='booked'\|\|b\.status==='coach_leave'\)\)\.length \+ \(ga\.pend\[t\.id\]\|\|0\);/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
