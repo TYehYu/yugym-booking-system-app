@@ -106,5 +106,20 @@ ok('★★ 請假堂不顯示代課（復原入口在明細）',
    && /教練請假的堂不顯示代課/.test(src));
 ok('★ noshow 圖示已註冊', /noshow:`<svg viewBox="0 0 24 24"/.test(src));
 
+console.log('\n自主訓練未到課（2026-08-14 使用者指示：金色圓鈕＋課卡右下角金色「未」章）');
+ok('★★ 自主訓練預約中有金色「未到課」圓鈕 → bkSelfNoShow',
+   /else if\(\(staff\|\|coachCk\) && bkIsSelf\(b\) && !bkIsCoachLeave\(b\) && !isGroup && b\.status==='booked'\) btns \+= evoBtn\('evo-b2','evo-gold',`collapseBkCard\(\);bkSelfNoShow\('\$\{id\}'\)`,'noshow','未到課'\);/.test(src));
+ok('★★ bkSelfNoShow＝completed＋no_show 旗標、點數照扣不退',
+   (()=>{ const i2=src.indexOf('async function bkSelfNoShow');
+     const F=src.slice(i2, src.indexOf('\n/* 復原教練請假', i2));
+     return i2>=0 && /b\.status='completed';/.test(F) && /b\.no_show=true;/.test(F)
+       && !/refundTicket/.test(F) && /點數照扣/.test(F); })());
+ok('★★ 教練請假未到場結課也記 no_show 旗標', (()=>{ const i2=src.indexOf('async function bkCoachLeaveNoShow');
+     const F=src.slice(i2, src.indexOf('\n/* 自主訓練・未到課', i2));
+     return i2>=0 && /b\.no_show=true;/.test(F); })());
+ok('★★ 課卡右下角金色「未」章（優先於綠色簽章）',
+   /b\.no_show===true && b\.status!=='cancelled' && !hideMember\)\n\s*\? `<span class="evc-check evc-noshow" title="未到課">未<\/span>`/.test(src)
+   && /\.evc-check\.evc-noshow,\.cal-ev\.cal-ev-std \.evc-check\.evc-noshow\{background:var\(--gold-d,#9a6a1e\);\}/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

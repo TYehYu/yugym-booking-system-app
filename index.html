@@ -3968,6 +3968,8 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-ev.cal-ev-std .evc-check{position:absolute;top:auto;left:auto;bottom:0;right:0;width:30px;height:30px;border-radius:100% 0 10px 0;background:var(--green,#1f6f54);border:none;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:flex-end;justify-content:flex-end;padding:0 4px 3px 0;line-height:1;z-index:3;transform:none;}
 /* 全員請假（2026-07-31 使用者指示）：同一顆角章改紅色、字改「假」 */
 .evc-check.evc-leave,.cal-ev.cal-ev-std .evc-check.evc-leave{background:var(--danger,#b5372e);}
+/* 未到課（2026-08-14 使用者指示）：同一顆角章改金色、字改「未」 */
+.evc-check.evc-noshow,.cal-ev.cal-ev-std .evc-check.evc-noshow{background:var(--gold-d,#9a6a1e);}
 /* 簽到：標準卡不整卡填色（保留教練色底），只留右上角勾章；覆蓋舊 .cal-ev-checked 填色 */
 .cal-ev.cal-ev-std.cal-ev-checked{background:transparent !important;}
 /* 7 日窄卡：字級再收一點；極窄卡省略教練 tag */
@@ -7810,8 +7812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.2124';
-const APP_VERSION_LABEL='v260814.2124';
+const APP_VERSION = '260814.2129';
+const APP_VERSION_LABEL='v260814.2129';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16706,6 +16708,8 @@ async function renderCalendar(opts){
       const _allLeave = !hideMember && grpAllOnLeave(b);
       const _stampOut = _allLeave
         ? `<span class="evc-check evc-leave" title="全員請假">假</span>`
+        : (b.no_show===true && b.status!=='cancelled' && !hideMember)
+        ? `<span class="evc-check evc-noshow" title="未到課">未</span>`   /* 2026-08-14 使用者指示：金色「未」章 */
         : ((_isCheckedIn||_isMakeup) && b.status!=='cancelled' && !hideMember)
         ? `<span class="evc-check" title="${(_isMakeup&&!_isCheckedIn)?'補簽':'已完成'}">簽</span>` : '';
       // Focus Mode：過去的課（日期已過、或今天但已結束）自動淡化，焦點集中到現在與未來
@@ -21715,9 +21719,12 @@ async function expandBkCard(el, id){
   btns += evoBtn('evo-b1','',`collapseBkCard();openBookingDetail('${id}')`,'doc','明細');
   // ③ 團課「新增」會員進名單（金色；名單管理只給櫃檯／管理員）
   if(staff && !closed && isGroup) btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();openGroupMembers('${id}')`,'plus','新增');
-  /* ③-b 教練請假堂「未到課」（金；2026-08-14 使用者指示）：學生沒到場 → 結課退堂、
-     不發自主訓練點數（有到場走綠色簽到才發點）。時間未到的防線在 bkCoachLeaveNoShow 裡。 */
+  /* ③-b 「未到課」（金；2026-08-14 使用者指示）：
+     ・教練請假堂 → 結課退堂、不發點（bkCoachLeaveNoShow）
+     ・一般自主訓練 → 結課蓋「未」章、點數照扣（bkSelfNoShow）
+     時間未到的防線在各自函式裡。 */
   if((staff||coachCk) && b.status==='coach_leave') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkCoachLeaveNoShow('${id}')`,'noshow','未到課');
+  else if((staff||coachCk) && bkIsSelf(b) && !bkIsCoachLeave(b) && !isGroup && b.status==='booked') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkSelfNoShow('${id}')`,'noshow','未到課');
   // ④ 取消（紅；教練只能取消自己的課）
   if(canCancel && own){
     /* 2026-07-29：直接開「取消預約」視窗——那裡才有 24 小時警示與「退回票券／扣課不退」
@@ -22216,6 +22223,7 @@ async function bkCoachLeaveNoShow(id){ return onceAct('clvnoshow:'+id, async()=>
     if(new Date()<slotDt){ showToast('課程時間還沒到，還不能結課'); return; }
     const _tk=b.ticket_id;
     b.status='completed';
+    b.no_show=true;   /* 課卡右下角金色「未」章靠這個旗標（2026-08-14） */
     b.note=String(b.note||'').trim()
       ? String(b.note).trim()+`\n${ymd(TODAY)} 教練請假堂未到場結課（堂數退回、不發點數）`
       : `${ymd(TODAY)} 教練請假堂未到場結課（堂數退回、不發點數）`;
@@ -22226,6 +22234,27 @@ async function bkCoachLeaveNoShow(id){ return onceAct('clvnoshow:'+id, async()=>
     showToast(`已結課：學生未到場${refunded?'、堂數已退回票券':''}（不發自主訓練點數）`);
     navTo(CUR_PAGE);
   }catch(e){ showToast('結課失敗：'+(e&&e.message?e.message:e)); }
+}); }
+/* 自主訓練・未到課（2026-08-14 使用者指示：「自主訓練的課堂也幫我新增未到課
+   然後標示金色在課卡右下角[未]」）—— 結課並蓋金色「未」章。
+   與教練請假的未到課不同：這裡「不退點」——會員自己約了沒來，點數照用
+   （教練請假那邊退堂是因為課上不成是館方的事）。 */
+async function bkSelfNoShow(id){ return onceAct('selfnoshow:'+id, async()=>{
+  try{
+    const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+    if(!(bkIsSelf(b)&&!bkIsCoachLeave(b))||b.status!=='booked'){ showToast('只有預約中的自主訓練可以標未到課'); return; }
+    const slotDt=new Date(b.date+'T'+b.start_time+':00');
+    if(new Date()<slotDt){ showToast('課程時間還沒到，還不能標未到課'); return; }
+    b.status='completed';
+    b.no_show=true;
+    b.note=String(b.note||'').trim()
+      ? String(b.note).trim()+`\n${ymd(TODAY)} 自主訓練未到課（點數照扣）`
+      : `${ymd(TODAY)} 自主訓練未到課（點數照扣）`;
+    await dbPut('bookings',b);
+    collapseBkCard();
+    showToast('已標記未到課（點數照扣，不退回）');
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('標記失敗：'+(e&&e.message?e.message:e)); }
 }); }
 /* 復原教練請假（2026-08-14 使用者需求）——把 bkCoachLeave 做的事全部倒轉：
    ①課種恢復（原課種記在 note 的「原：X」）②狀態回 booked ③當時退回的那張票扣回 1 堂

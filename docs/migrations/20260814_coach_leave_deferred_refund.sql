@@ -32,3 +32,6 @@
 --     THEN RETURN error_code='BOOKING.DESK_ONLY'；前端按鈕與 checkInBooking 也各擋一層。
 --   另新增「未到場結課」（前端 bkCoachLeaveNoShow，不經 RPC）：completed＋退堂＋不發點、
 --   不寫 checked_in_at —— 圓形卡靠簽到時間分辨到場（實心紅圈點）／未到場（不畫點）。
+-- ⑤bookings 新增 no_show boolean（2026-08-14 晚間）：課卡右下角金色「未」章的依據。
+--   alter table bookings add column if not exists no_show boolean;
+--   未到課兩種：教練請假堂（退堂不發點）、一般自主訓練（點數照扣）。
