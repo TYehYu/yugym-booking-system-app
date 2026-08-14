@@ -7805,8 +7805,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.2018';
-const APP_VERSION_LABEL='v260814.2018';
+const APP_VERSION = '260814.2140';
+const APP_VERSION_LABEL='v260814.2140';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12300,10 +12300,25 @@ async function refundTicket(ticket_id,booking_id,operator){
        拉下來（每取消一筆就拉一次，正式庫預約量大時明顯卡頓），改成帶條件、limit(1)
        的單筆查詢。查詢失敗時不動開通狀態 —— 寧可保守不退，也不要誤清效期。 */
     try{
-      const q=await sb.from('bookings').select('id')
-        .eq('ticket_id',ticket_id).neq('status','cancelled').neq('id',booking_id||'').limit(1);
+      const q=await sb.from('bookings').select('id,date')
+        .eq('ticket_id',ticket_id).neq('status','cancelled').neq('id',booking_id||'')
+        .order('date',{ascending:true}).limit(1);
       if(q && !q.error && (q.data||[]).length===0){
         t.activated_at=null; t.start_date=null; t.expire_date=null; reverted=true;
+      }else if(q && !q.error && q.data && q.data[0] && t.start_date){
+        /* 取消的是首堂（2026-08-14 魏婉倫案例：8/18 取消後到期日仍是 8/18+28）——
+           效期錨點跟著挪到最早的剩餘預約重算，會員不會平白少掉幾天。 */
+        try{
+          const cb=booking_id?await dbGet('bookings',booking_id):null;
+          const ns=String(q.data[0].date).slice(0,10);
+          if(cb && String(cb.date).slice(0,10)===String(t.start_date).slice(0,10) && ns>String(t.start_date).slice(0,10)){
+            const d0=parseYmd(ns);
+            if(d0){ const de=new Date(d0); de.setDate(de.getDate()+(Number(t.valid_days)||0)-1);
+              t.start_date=ns; t.expire_date=ymd(de);
+              const line=`${ymd(TODAY)} 首堂取消，效期改依新首堂 ${ns.replace(/-/g,'/')} 起算（→ ${ymd(de).replace(/-/g,'/')}）`;
+              t.note=String(t.note||'').trim()?String(t.note).trim()+'\n'+line:line; }
+          }
+        }catch(_){}
       }
     }catch(_){}
   }
@@ -13214,6 +13229,32 @@ async function doGroupCancelSeat(bid,seatKey){
         await dbPut('member_tickets',tk);
         await logTicket(tkId,'refund',1,bid,SESSION.id,
           tkIsMakeup(tk)?'團體課取消預約退回（補課券，效期不變）':'團體課取消預約退回');
+        /* 取消的是首堂 → 效期跟著新首堂重算（2026-08-14 魏婉倫案例）。
+           團課的票不在 bookings.ticket_id，用帳本淨扣課回推剩餘的堂在哪幾天。 */
+        try{
+          if(tk.valid_days && tk.start_date && !tkIsMakeup(tk)
+             && String(b.date).slice(0,10)===String(tk.start_date).slice(0,10)){
+            const lgs=(await dbGetAll('ticket_logs')).filter(l=>l&&l.ticket_id===tkId&&l.booking_id);
+            const dcnt={}; lgs.forEach(l=>{ dcnt[l.booking_id]=(dcnt[l.booking_id]||0)+(l.action==='deduct'?1:l.action==='refund'?-1:0); });
+            const liveIds=Object.keys(dcnt).filter(k=>dcnt[k]>0);
+            const allB=await dbGetAll('bookings');
+            const ds=allB.filter(x=>liveIds.includes(x.id)&&x.status!=='cancelled').map(x=>String(x.date).slice(0,10)).sort();
+            const fresh=await dbGet('member_tickets',tkId);
+            if(fresh){
+              if(ds.length && ds[0]>String(fresh.start_date).slice(0,10)){
+                const d0=parseYmd(ds[0]);
+                if(d0){ const de=new Date(d0); de.setDate(de.getDate()+(Number(fresh.valid_days)||0)-1);
+                  fresh.start_date=ds[0]; fresh.expire_date=ymd(de);
+                  const line=`${ymd(TODAY)} 首堂取消，效期改依新首堂 ${ds[0].replace(/-/g,'/')} 起算（→ ${ymd(de).replace(/-/g,'/')}）`;
+                  fresh.note=String(fresh.note||'').trim()?String(fresh.note).trim()+'\n'+line:line;
+                  await dbPut('member_tickets',fresh); }
+              }else if(!ds.length){
+                fresh.activated_at=null; fresh.start_date=null; fresh.expire_date=null;
+                await dbPut('member_tickets',fresh);
+              }
+            }
+          }
+        }catch(e){ console.error('首堂取消效期重算失敗',e); }
       }
     }
   }catch(e){ console.error('團課取消退票失敗',e); }
