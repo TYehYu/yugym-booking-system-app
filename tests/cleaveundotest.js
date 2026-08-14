@@ -98,5 +98,13 @@ ok('★ 課程時間未到不能結課', /課程時間還沒到，還不能結�
 ok('★★ 圓點：未到場結課（無 checked_in_at）不畫點不佔格；到場（checked_in 或有簽到時間）畫實心紅圈',
    /if\(b\.status==='checked_in'\|\|b\.checked_in_at\) _clvAttL\.push\(b\);/.test(src));
 
+console.log('\n課卡環繞按鈕（2026-08-14 使用者指示：加金色「未到課」、拿掉代課）');
+ok('★★ 請假堂有金色「未到課」圓鈕 → bkCoachLeaveNoShow',
+   /if\(\(staff\|\|coachCk\) && b\.status==='coach_leave'\) btns \+= evoBtn\('evo-b2','evo-gold',`collapseBkCard\(\);bkCoachLeaveNoShow\('\$\{id\}'\)`,'noshow','未到課'\);/.test(src));
+ok('★★ 請假堂不顯示代課（復原入口在明細）',
+   /b\.date>=ymd\(TODAY\) && !bkIsCoachLeave\(b\)\)\{/.test(src)
+   && /教練請假的堂不顯示代課/.test(src));
+ok('★ noshow 圖示已註冊', /noshow:`<svg viewBox="0 0 24 24"/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
