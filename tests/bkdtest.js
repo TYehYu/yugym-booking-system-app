@@ -86,8 +86,8 @@ ok('★ 歷史判定先看已上堂數', /else if\(total>0 && used<total\) state
 ok('★ 團課待上堂數只算一次（票券夾裡），不再各畫面各算各的',
    (src.match(/grpTicketAlloc\(/g)||[]).length===2
    && /const ga=grpTicketAlloc\(mine, live, c\.logs\|\|\[\], memberId, \(\)=>true\);/.test(src));
-ok('　　兩個後台畫面都吃同一支',
-   /const pending=bks\.filter\(b=>b\.ticket_id===t\.id && b\.status==='booked'\)\.length \+ \(ga\.pend\[t\.id\]\|\|0\);/.test(src));
+ok('　　兩個後台畫面都吃同一支（2026-08-14 起 coach_leave 也算待上）',
+   /const pending=bks\.filter\(b=>b\.ticket_id===t\.id && \(b\.status==='booked'\|\|b\.status==='coach_leave'\)\)\.length \+ \(ga\.pend\[t\.id\]\|\|0\);/.test(src));
 /* 2026-07-31 二修：「這位會員的課卡」抽成共用的 bkHasMember／bkOfMember，
    原本這個判斷被抄在九個地方，漏改其中幾處就會整批漏掉團課 */
 ok('★ 後台檔案頁的預約清單要含團課（學員在 member_ids、member_id 是 null）',
