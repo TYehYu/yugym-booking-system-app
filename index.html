@@ -7805,8 +7805,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.1145';
-const APP_VERSION_LABEL='v260814.1145';
+const APP_VERSION = '260814.1158';
+const APP_VERSION_LABEL='v260814.1158';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22573,10 +22573,16 @@ async function openBookingDetail(id){
   }
   // 分期繳費 / 續約提醒：判斷這筆是否為臨界堂
   let _payAlertLine='';
+  /* 建議續約改看「未上堂數」（2026-08-14 使用者回報「第 14/20 堂就掛建議續約，太早」）——
+     預扣型票券的帳面剩餘早早歸 0，用 sessions_remaining 判斷會從第 1 堂就掛 tag。
+     改成：總堂數 − 已上（已簽到/完成）≤ 2 才標，真的快上完才提醒。 */
+  let _nearEnd=false;
   if(tk){
     const allBk=await dbGetAll('bookings').catch(()=>[]);
     const tkBks=allBk.filter(x=>x.ticket_id===tk.id && x.status!=='cancelled')
       .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
+    const _doneForRenew=tkBks.filter(x=>x.status==='checked_in'||x.status==='completed').length;
+    _nearEnd=(Number(tk.sessions_total)||0)>0 && ((Number(tk.sessions_total)||0)-_doneForRenew)<=2;
     const remainCnt = tk.sessions_remaining!=null ? tk.sessions_remaining : (tk.sessions_total||0);
     const isInstall = tk.installment && typeof tk.installment==='object';
     const unlocked = isInstall ? (tk.unlocked_sessions!=null?tk.unlocked_sessions:tk.sessions_total) : tk.sessions_total;
@@ -22591,7 +22597,7 @@ async function openBookingDetail(id){
       _payAlertLine=`<div style="background:#fbf0e2;border:1px solid #e8d3b3;border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13px;color:#8a5e28;font-weight:600;">💰 本期最後一堂　·　下次上課前需向會員收取下一期費用並開通</div>`;
     }
   }
-  const tkLine = tk ? `<div><span style="color:var(--t2);">票券</span>　${tk.plan_name||'票券'}　<b class="num">${tk.sessions_remaining}/${tk.sessions_total}</b>${(tk.sessions_remaining<=2&&!/自主訓練|體驗|折抵/.test(tk.plan_name||''))?' <span class="tag tag-warn">建議續約</span>':''}${(tk.installment&&typeof tk.installment==='object')?` <span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;">分期・開通 ${tk.unlocked_sessions||tk.installment.current||0}/${tk.sessions_total}</span>`:''}　<span style="color:var(--t3);font-size:11px;">效期至 ${fmtExpire(tk.expire_date,tk)}</span></div>`+_payAlertLine : '';
+  const tkLine = tk ? `<div><span style="color:var(--t2);">票券</span>　${tk.plan_name||'票券'}　<b class="num">${tk.sessions_remaining}/${tk.sessions_total}</b>${(_nearEnd&&!/自主訓練|體驗|折抵/.test(tk.plan_name||''))?' <span class="tag tag-warn">建議續約</span>':''}${(tk.installment&&typeof tk.installment==='object')?` <span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;">分期・開通 ${tk.unlocked_sessions||tk.installment.current||0}/${tk.sessions_total}</span>`:''}　<span style="color:var(--t3);font-size:11px;">效期至 ${fmtExpire(tk.expire_date,tk)}</span></div>`+_payAlertLine : '';
   /* 個人課：票券圓圈進度卡（高亮本堂是第幾堂）
      舊系統匯入的預約 ticket_id 多半是 null（1,393 筆私人教練只有 11 筆有綁），
      那些課要靠推算才知道歸哪張票 —— 那件事現在由票券夾（buildWallet 的第 ③ 步）處理。 */
@@ -22658,7 +22664,7 @@ async function openBookingDetail(id){
     tkCircleHtml=`<div class="bkd-tkcard">
       <div class="bkd-tkcard-head">
         <span class="bkd-tkcard-name">${tkC.plan_name||'票券'}</span>
-        <span class="bkd-tkcard-prog">本堂 ${curLabel}${(tkC.sessions_remaining<=2&&!/自主訓練|體驗|折抵/.test(tkC.plan_name||''))?'　<span class="tag tag-warn" style="font-size:10px;">建議續約</span>':''}</span>
+        <span class="bkd-tkcard-prog">本堂 ${curLabel}${((total>0&&(total-doneCount)<=2)&&!/自主訓練|體驗|折抵/.test(tkC.plan_name||''))?'　<span class="tag tag-warn" style="font-size:10px;">建議續約</span>':''}</span>
       </div>
       <div class="mck-dots2" style="margin:10px 0 2px;">${dots}</div>
       ${_isHoldCard?`<div style="font-size:11px;color:#8a5e28;background:#f7efe0;border-radius:8px;padding:6px 10px;margin-top:8px;">⏳ 本堂為<b>分期繳費保留</b>（上方 🔒 未開通額度）——收款開通下一期後自動補綁扣課。</div>`:''}
