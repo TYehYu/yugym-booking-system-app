@@ -31,3 +31,8 @@ select cron.schedule('line-punch-remind','30 14 * * *', $$
       'apikey','sb_publishable_HXJH0NSDKBYaiFamrN_mpw_U6gH_MdX'),
     body := '{}'::jsonb)
 $$);
+
+-- 2026-08-14 追加：line-push-daily v18 —— 自主訓練的開課提醒加「📍 場地：X」
+--   （venue_unit 為主：treadmill→跑步機、group→教室、multi→多功能區；
+--    舊匯入資料從 note 的「教室:」段撈，與前端 selfVenueLabel 同一套判讀，
+--    差別是預設多功能區也明白寫出來）。已用 debug 模式對 8/15–8/17 三種場地實測。
