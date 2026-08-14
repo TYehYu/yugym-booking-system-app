@@ -7805,8 +7805,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.1330';
-const APP_VERSION_LABEL='v260814.1330';
+const APP_VERSION = '260814.1338';
+const APP_VERSION_LABEL='v260814.1338';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22020,7 +22020,10 @@ async function extendForCoachLeave(ticket_id, booking, operator){
 /* 規則寫在口袋裡（TK_POCKETS.*.coachLeave），這裡只負責問是哪一種做法。
    舊值 true 等同 'self'（教練課），保留相容。 */
 function bkCoachLeaveMode(b){ const v=b?bkPocketNow(b).coachLeave:null; return v===true?'self':(v||null); }
-function canCoachLeave(b){ return !!b && !!bkCoachLeaveMode(b); }
+/* 2026-08-14 使用者定案：沒綁票券的堂（待簽約卡位、舊匯入）不能教練請假——
+   沒有票可退、之後還可能被轉正誤綁（吳宜玲 8/21 案例）；這種堂請用「取消」釋出時段。
+   團課例外：團課的票本來就不在 ticket_id、記在 ticket_logs 帳本。 */
+function canCoachLeave(b){ return !!b && !!bkCoachLeaveMode(b) && (bkIsGroup(b) || !!b.ticket_id); }
 /* 已經標記過教練請假了嗎 —— 教練課看狀態（coach_leave），團課是整堂取消、
    狀態會變 cancelled，所以另外立了 bookings.coach_leave 這個旗標記錄「為什麼取消」。 */
 function bkIsCoachLeave(b){ return !!b && (b.status==='coach_leave' || b.coach_leave===true); }
@@ -22047,7 +22050,9 @@ async function bkCoachLeave(id){
   if(bkIsCoachLeave(b)){ showToast('這堂已經標記過教練請假'); return; }
   if(b.status==='cancelled'||b.status==='checked_in'||b.status==='completed'){ showToast('此狀態不可標記請假'); return; }
   if(!canCoachLeave(b)){
-    showToast(`${b.category||'這種課'}不適用教練請假（只有教練課、友善教練課與團體課）`);
+    showToast(!bkIsGroup(b)&&!b.ticket_id
+      ? '這堂沒有綁票券（待簽約或舊匯入），沒有票可退——請改用「取消」釋出時段'
+      : `${b.category||'這種課'}不適用教練請假（只有教練課、友善教練課與團體課）`);
     return;
   }
   // 團課走自己的一套（整堂取消＋逐名額退票展延），不改成自主訓練

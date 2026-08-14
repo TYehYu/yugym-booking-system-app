@@ -51,5 +51,10 @@ ok('★★ 轉正入口擋非 booked 狀態、卡上轉正鈕也不顯示',
    /if\(b\.status!=='booked'\)\{ _clr\(\); showToast\('這筆卡位已'/.test(src)
    && /if\(staff && !closed && b\.status==='booked'\) btns \+= evoBtn\('evo-r2','evo-primary',`collapseBkCard\(\);openConvertPending/.test(src));
 
+console.log('\n⑤ 沒綁票券的堂不能教練請假（2026-08-14 使用者定案）');
+ok('★★ canCoachLeave 要求有票（團課例外——票在帳本不在 ticket_id）',
+   /function canCoachLeave\(b\)\{ return !!b && !!bkCoachLeaveMode\(b\) && \(bkIsGroup\(b\) \|\| !!b\.ticket_id\); \}/.test(src));
+ok('★ 擋下時講清楚改用取消', /這堂沒有綁票券（待簽約或舊匯入），沒有票可退——請改用「取消」釋出時段/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
