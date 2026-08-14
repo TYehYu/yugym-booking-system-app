@@ -24,6 +24,10 @@ console.log('\n② 候選名單');
      && /if\(d<today\) return false;/.test(F)
      && /if\(d===today && timeToMin\(b\.start_time\)<=nowMin\) return false;/.test(F));
   ok('★ 讓出來的票要能上這次要約的課（票種比對）', /if\(P\.type_id && !bkTicketTypeOk\(t,P\.type_id\)\) return false;/.test(F));
+  ok('★★ 退回後要真的約得進新時段（票有效、效期蓋到新日期、限定時段相符）——取消了約不進去＝白取消',
+     /if\(t\.status!=='usable'\) return false;/.test(F)
+     && /if\(t\.expire_date && String\(t\.expire_date\)\.slice\(0,10\)<String\(P\.date\)\) return false;/.test(F)
+     && /!tkTimeOk\(t,P\.date,P\.time\)/.test(F));
   ok('★ 同一格（同日同時）不列', /if\(d===P\.date && String\(b\.start_time\)\.slice\(0,5\)===String\(P\.time\)\.slice\(0,5\)\) return false;/.test(F));
   ok('★ 最遠的排最上（最可能讓出）', /\.sort\(\(a,b\)=>\(b\.date\+String\(b\.start_time\)\)\.localeCompare\(a\.date\+String\(a\.start_time\)\)\)/.test(F));
   ok('★ 沒候選就照舊（回 false 顯示原本的票券不足）', /if\(!cands\.length\) return false;/.test(F));
