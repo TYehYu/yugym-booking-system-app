@@ -141,5 +141,9 @@ ok('　　三次修改的來由都寫在程式裡（透明 → 淡粉／淡米 �
    && /二修改成不透明的 color-mix 混白 → 變成一片淡粉／淡米色，把課程色蓋掉/.test(src))
 ok('　　手機端共用同一組 class，一併生效', /const _mkAlert = _unpaidM \? ' cal-ev-renew'/.test(src));
 
+console.log('\n折抵券不算續約（2026-08-14 陳秀蘭 8/18 案例）');
+ok('★★ tkRenewGroup 先攔 voucher（$300 折抵券不是新約，不能觸發已續約綠勾）',
+   /if\(tkClass5\(t,typeMap\)==='voucher'\) return '';/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
