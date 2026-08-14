@@ -7805,8 +7805,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.1013';
-const APP_VERSION_LABEL='v260814.1013';
+const APP_VERSION = '260814.1035';
+const APP_VERSION_LABEL='v260814.1035';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18300,6 +18300,67 @@ function cancelBookingModal(){
   window._bkFromFull=null;
 }
 // 新增預約成功後的收尾：來源是滿版層時，留在滿版層並重整；否則回上一頁
+/* ══ 調課（2026-08-14 使用者需求）══════════════════════════════════════
+   情境：學生臨時要加課，但票券堂數已被預先排好的課佔滿 —— 原本櫃檯要先手動取消一堂
+   再回來重新預約。現在「新增預約」遇到票券不足時，直接列出這位會員之後的已排課，
+   點一堂＝那堂取消退回（一律退，與 24 小時規則無關——是調課不是臨時取消），
+   退回的堂數立刻轉到這次要約的時段。 */
+async function bkOfferSwap(P){
+  try{
+    const today=ymd(TODAY);
+    const _now=new Date(); const nowMin=_now.getHours()*60+_now.getMinutes();
+    const [bks,tks]=await Promise.all([dbGetAll('bookings'),dbGetAll('member_tickets')]);
+    const tkMap=Object.fromEntries((tks||[]).map(t=>[t.id,t]));
+    const cands=(bks||[]).filter(b=>{
+      if(!b||b.status!=='booked'||!b.ticket_id||b.pending_contract) return false;
+      if(b.member_id!==P.member_id||b.category!=='私人教練') return false;
+      const d=String(b.date||'');
+      if(d<today) return false;
+      if(d===today && timeToMin(b.start_time)<=nowMin) return false;
+      if(d===P.date && String(b.start_time).slice(0,5)===String(P.time).slice(0,5)) return false;
+      const t=tkMap[b.ticket_id]; if(!t) return false;
+      if(P.type_id && !bkTicketTypeOk(t,P.type_id)) return false;   // 讓出來的票要能上這次要約的課
+      return true;
+    }).sort((a,b)=>(b.date+String(b.start_time)).localeCompare(a.date+String(a.start_time)));   // 最遠的排最上（最可能讓）
+    if(!cands.length) return false;
+    window._bkSwapPend={opts:P.opts};
+    const wd=['日','一','二','三','四','五','六'];
+    const rows=cands.slice(0,10).map(b=>{
+      const dt=parseYmd(b.date); const t=tkMap[b.ticket_id];
+      return `<button class="evr-row" style="width:100%;text-align:left;display:block;margin-bottom:6px;" onclick="bkSwapPick('${b.id}')">
+        ${String(b.date).replace(/-/g,'/')}（${dt?wd[dt.getDay()]:''}）${String(b.start_time).slice(0,5)}　<span style="color:var(--t3);font-size:11.5px;">${escH((t&&t.plan_name)||'票券')}</span></button>`;
+    }).join('');
+    showModal(`<div class="modal-title">堂數已排滿 — 要調課嗎？</div>
+      <div style="font-size:12.5px;color:var(--t2);line-height:1.9;background:var(--card2);border-radius:9px;padding:10px 12px;margin-bottom:12px;">
+        這位會員的票券堂數已被之後的預約排滿。<br>
+        選一堂「讓出來」：那堂<b>取消並退回 1 堂</b>，馬上轉到這次要約的
+        <b>${String(P.date).replace(/-/g,'/')} ${String(P.time).slice(0,5)}</b>。</div>
+      <div style="max-height:min(46vh,380px);overflow-y:auto;">${rows}</div>
+      ${cands.length>10?`<div style="font-size:11.5px;color:var(--t3);margin-top:6px;">只列最遠的 10 堂；要讓別堂請先自行取消再重約。</div>`:''}
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="window._bkSwapPend=null;closeModal();">不調課</button></div>`);
+    return true;
+  }catch(e){ console.error('bkOfferSwap',e); return false; }
+}
+async function bkSwapPick(bkId){ return onceAct('bkswap:'+bkId, ()=>_bkSwapPick(bkId)); }
+async function _bkSwapPick(bkId){
+  const P=window._bkSwapPend; if(!P) return;
+  const done=cxBusy('調課中…');
+  try{
+    const old=await dbGet('bookings',bkId);
+    if(!old||old.status!=='booked'){ done(); showToast('那一堂剛剛已變動，請重新整理後再試'); return; }
+    await cancelBooking(bkId,'force',{silent:true});   // 一律退回（調課不是臨時取消，不套 24 小時扣課）
+    const r=await runRecurringBooking(P.opts);
+    window._bkSwapPend=null;
+    dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
+    closeModal();
+    if(r&&r.ok>0){
+      showToast(`調課完成：${String(old.date).replace(/-/g,'/')} ${String(old.start_time).slice(0,5)} 已取消退回，改約 ${String(P.opts.startDate).replace(/-/g,'/')} ${P.opts.time}`);
+    }else{
+      showToast('原堂已取消退回，但新預約未成立：'+((((r||{}).results||[])[0]||{}).reason||'請重試')+'　·　堂數已退回票券，請重新預約');
+    }
+    try{ bkAfterSubmit(); }catch(_){ navTo(CUR_PAGE); }
+  }catch(e){ done(); showToast('調課失敗：'+((e&&e.message)||e)); }
+}
 function bkAfterSubmit(){
   const from=window._bkFromFull; window._bkFromFull=null;
   if(from==='day'){ if(typeof renderDayTimeline==='function') renderDayTimeline(); return; }
@@ -21212,7 +21273,8 @@ async function _submitBookingInner(){
     }
     if(!(await confirmVenueOverflow(vbkChk))) return; // 教練取消
   }
-  const r=await runRecurringBooking({
+  /* 參數抽成一包（2026-08-14 調課功能）：票券不足時的「調課重送」要原封不動再跑一次 */
+  const _rrOpts={
     member_id, coach_id, substitute_coach_id:null,
     trial_name:(window._bkFamUser!=null?window._bkFamUser:null),   /* 家庭成員使用人（2026-08-03）；''＝明確本人（2026-08-04） */
     category:t.category, type_id, format:fmt,
@@ -21227,13 +21289,20 @@ async function _submitBookingInner(){
       const btn=[...document.querySelectorAll('#modal-bg .btn.btn-green')].pop();
       if(btn){ btn.disabled=true; btn.textContent=`建立中 ${cur} / ${total}…`; }
     },
-  });
+  };
+  const r=await runRecurringBooking(_rrOpts);
   const created=r.ok, skipped=r.skipped, noTicket=r.noTicket, results=r.results;
   /* 「預約成立」通知退場（2026-08-14 使用者指示：會員不用收到）——
      上課前 24 小時本來就會收到上課提醒，成立通知是重複打擾。 */
 
   // 單筆預約：直接吐司；連續預約或有跳過：跳結果摘要視窗
   if(!recurring && results.length===1){
+    /* 調課（2026-08-14 使用者需求：「臨時加課但堂數被預先約滿，要先取消一堂才能排」）——
+       票券不足且會員有之後的已排課 → 直接開調課視窗：選一堂讓出來，退回的堂數馬上轉到這次加課。 */
+    if(!results[0].ok && /票券不足/.test(results[0].reason||'') && t.category==='私人教練'){
+      const opened=await bkOfferSwap({member_id, type_id, date, time, opts:_rrOpts});
+      if(opened) return;   // 調課視窗接手（選擇後在視窗內完成取消＋重約）
+    }
     closeModal();
     if(results[0].ok){ showToast('預約成功，已扣抵 1 堂票券'+(_tmN>1?`（跑步機 ${_tmN} 台，第 2 台不扣點）`:'')+(window._bkFamUser?`（使用人：${window._bkFamUser}）`:'')); }
     else { showToast(results[0].reason); }
