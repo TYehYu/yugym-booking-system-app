@@ -7805,8 +7805,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.1352';
-const APP_VERSION_LABEL='v260814.1352';
+const APP_VERSION = '260814.1420';
+const APP_VERSION_LABEL='v260814.1420';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22057,41 +22057,24 @@ async function bkCoachLeave(id){
   }
   // 團課走自己的一套（整堂取消＋逐名額退票展延），不改成自主訓練
   if(bkCoachLeaveMode(b)==='cancel') return grpCoachLeave(id);
-  const _tkId=b.ticket_id;   // 先留著：下面要用它退票，但欄位本身會被清掉
+  const _tkId=b.ticket_id;
   const _wasCat=b.category||'';
   try{
-    /* 順序（2026-07-21）：先寫狀態、成功才退票——正式庫若尚未套 20260721_05（enum 缺
-       coach_leave），狀態寫入會先失敗、乾淨中止，不會發生「票退了狀態沒改」的不一致。 */
+    /* 2026-08-14 使用者定案改版：請假當下「堂數先不退、票繼續掛著」——
+       原本立刻退堂，堂數馬上能被挪去約後面的課，但請假這格自主訓練還在，
+       會員來上等於同一堂用兩次。改成：等會員簽到（fn_checkin_booking 內退）
+       或這堂被取消（取消時退）才釋出堂數；效期展延照舊在請假當下給。 */
     b.status='coach_leave';
     b.coach_leave=true;      // 為什麼變成自主訓練／為什麼取消 —— 兩種做法共用這個旗標（2026-08-08）
     b.category='自主訓練';
-    b.ticket_id=null;        // 票已退回，掛著會讓圓形卡多算一堂
     b.note=String(b.note||'').trim()
-      ? String(b.note).trim()+`\n${ymd(TODAY)} 教練請假，本堂改為自主訓練（原：${_wasCat}）`
-      : `${ymd(TODAY)} 教練請假，本堂改為自主訓練（原：${_wasCat}）`;
+      ? String(b.note).trim()+`\n${ymd(TODAY)} 教練請假，本堂改為自主訓練（原：${_wasCat}；堂數待簽到或取消時退回）`
+      : `${ymd(TODAY)} 教練請假，本堂改為自主訓練（原：${_wasCat}；堂數待簽到或取消時退回）`;
     await dbPut('bookings',b);
-    let leaveRefunded=false;
-    if(_tkId){ await refundTicket(_tkId,b.id,SESSION.id); leaveRefunded=true; }
-    // 匯入的舊預約沒有 ticket_id，用票種回頭找票退；找不到就據實不宣稱已退
-    else{ leaveRefunded = (await refundLegacyBooking(b,SESSION.id))>0; }
-    /* 效期展延（2026-07-31 使用者定案）：退票之後才做 —— refundTicket 有可能把效期
-       退回未開通（expire_date 變 null），那種情況沒有效期可延。
-       退到哪幾張票就延哪幾張：有 ticket_id 就是那張；舊預約走 fallback 退的，
-       從剛寫進去的 refund 帳本回查（團課可能一次退好幾個人）。 */
     let extendTo=null;
-    if(leaveRefunded){
-      let ids=_tkId?[_tkId]:[];
-      if(!ids.length && CLOUD && sb){
-        try{ const q=await sb.from('ticket_logs').select('ticket_id').eq('booking_id',b.id).eq('action','refund');
-          if(q && !q.error) ids=[...new Set((q.data||[]).map(r=>r.ticket_id).filter(Boolean))]; }catch(_){}
-      }
-      for(const tid of ids){ const to=await extendForCoachLeave(tid,b,SESSION.id); if(to) extendTo=to; }
-    }
-/* 課程變動不通知會員（2026-08-14 使用者指示：只留上課前的開課通知） */
+    if(_tkId){ extendTo=await extendForCoachLeave(_tkId,b,SESSION.id); }
     collapseBkCard();
-    showToast(leaveRefunded
-      ? `已標記教練請假：票券已退回、改為自主訓練${extendTo?`，效期延至 ${extendTo.replace(/-/g,'/')}`:''}`
-      : '已標記教練請假：改為自主訓練（未退票券，請確認堂數）');
+    showToast(`已標記教練請假：改為自主訓練${extendTo?`、效期延至 ${extendTo.replace(/-/g,'/')}`:''}；堂數會在會員簽到或取消這堂時退回`);
     navTo(CUR_PAGE);
   }catch(e){ showToast('標記請假失敗：'+(e&&e.message?e.message:e)); }
 }
@@ -22109,8 +22092,22 @@ async function _bkCoachLeaveUndo(id){
     const rf=logs.filter(l=>l.action==='refund')
       .sort((a,c)=>String(a.created_at||'').localeCompare(String(c.created_at||''))).pop();
     const tid=rf&&rf.ticket_id;
+    /* 新制（2026-08-14）：請假當下不退堂、票還掛在預約上 → 沒有 refund 帳可回沖，
+       復原只需還原課種/狀態＋效期回調，票券完全不用動。 */
+    const _keepTk=!tid && !!b.ticket_id;
     let revertTo=null;
-    if(tid){
+    if(_keepTk){
+      const t=await dbGet('member_tickets',b.ticket_id);
+      const ext=logs.find(l=>l.action==='adjust' && /教練請假展延/.test(l.note||''));
+      if(t && ext && t.expire_date){
+        const d0=parseYmd(String(t.expire_date).slice(0,10));
+        if(d0){ d0.setDate(d0.getDate()-COACH_LEAVE_EXTEND_DAYS); revertTo=ymd(d0); t.expire_date=revertTo;
+          const line=`${ymd(TODAY)} 復原教練請假：效期回調 −${COACH_LEAVE_EXTEND_DAYS} 天（→ ${revertTo.replace(/-/g,'/')}）`;
+          t.note=String(t.note||'').trim()?String(t.note).trim()+'\n'+line:line;
+          await dbPut('member_tickets',t); }
+      }
+    }
+    else if(tid){
       const t=await dbGet('member_tickets',tid);
       if(!t){ done(); showToast('當時退回的票券已不存在，無法自動復原，請手動處理'); return; }
       if(t.status==='refunded' || (Number(t.sessions_remaining)||0)<1){
@@ -22130,7 +22127,7 @@ async function _bkCoachLeaveUndo(id){
     }
     const _m=String(b.note||'').match(/（原：([^）]+)）/g);
     const orig=_m?_m[_m.length-1].replace(/（原：|）/g,''):'私人教練';
-    b.status='booked'; b.coach_leave=false; b.category=orig; b.ticket_id=tid||null;
+    b.status='booked'; b.coach_leave=false; b.category=orig; b.ticket_id=tid||b.ticket_id||null;   /* 新制票沒動過就保留 */
     if(tid) b.pending_contract=false;   /* 票綁回來就不是待簽約（2026-08-14 林韋綺 8/23 案例：留著會讓課卡紅框標「待簽約」） */
     const line=`${ymd(TODAY)} 復原教練請假（誤按），本堂恢復為${orig}`;
     b.note=String(b.note||'').trim()?String(b.note).trim()+'\n'+line:line;
@@ -22139,7 +22136,7 @@ async function _bkCoachLeaveUndo(id){
     dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
     collapseBkCard();
     closeModal();
-    showToast(`已復原：本堂恢復為${orig}${tid?'、票券已扣回 1 堂':''}${revertTo?`、效期回調至 ${revertTo.replace(/-/g,'/')}`:''}`);
+    showToast(`已復原：本堂恢復為${orig}${tid?'、票券已扣回 1 堂':''}${revertTo?`、效期回調至 ${revertTo.replace(/-/g,'/')}`:''}`);   /* 新制沒退過堂＝不用扣回 */
     navTo(CUR_PAGE);
   }catch(e){ done(); showToast('復原失敗：'+((e&&e.message)||e)); }
 }
@@ -23591,9 +23588,12 @@ async function _checkInBooking(id, opts){  opts=opts||{};
     console.error('RPC 簽到未成功，回退前端舊邏輯：', res && (res.error || res.data));
   }
 
+  const _clvTk=(b.coach_leave===true && b.ticket_id) ? b.ticket_id : null;   /* 教練請假：簽到才釋出堂數（2026-08-14） */
   b.status='checked_in';
   b.checked_in_at=new Date().toISOString();
+  if(_clvTk) b.ticket_id=null;   // 釋出：這格是補償的自主訓練，不佔票
   await dbPut('bookings',b);
+  if(_clvTk){ try{ await refundTicket(_clvTk,b.id,SESSION.id); }catch(e){ console.error('請假堂簽到退課失敗',e); } }
   await markTicketUsedIfDone(b.ticket_id);   // 若這張票所有堂都已簽到完 → 設 used_up
   const granted=await grantCheckinReward(b);     // 回傳是否發點
   if(opts.silent) return true;                   // 掃碼簽到：畫面由呼叫端自行處理
@@ -24065,11 +24065,14 @@ async function confirmCancelBooking(id){
   /* 教練請假的堂（2026-08-14）：票當時已退回、課已改自主訓練，會員最後不來的話
      取消只是把時段與場地釋出，不涉及任何票券 —— 走下面的簡易確認，不問退不退。 */
   if(b.status==='coach_leave'){
+    /* 2026-08-14 定案：請假當下不退堂 → 取消這堂時才退（票還掛著 mode=force）；
+       更早的舊資料（請假時已退、票已解綁）維持只釋出時段。 */
+    const _hasTk=!!b.ticket_id;
     showModal(`<div class="modal-title">取消預約</div>
       <div style="font-size:13.5px;color:var(--text);padding:6px 0 4px;">確定要取消 ${b.date} ${String(b.start_time).slice(0,5)} 的自主訓練（教練請假保留時段）嗎？</div>
-      <div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:2;background:var(--card2);border-radius:9px;padding:10px 12px;">${tkChip('none')}<br>教練請假時票券已退回、效期已展延 —— 會員不來的話，取消只會釋出時段與場地，不影響任何堂數。</div>
+      <div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:2;background:var(--card2);border-radius:9px;padding:10px 12px;">${tkChip(_hasTk?'back':'none')}<br>${_hasTk?'教練請假的堂數尚未退回 —— 取消後退回 1 堂票券、釋出時段與場地。':'教練請假時票券已退回、效期已展延 —— 取消只會釋出時段與場地，不影響任何堂數。'}</div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
-        <button class="btn btn-dark" onclick="askSeriesCancel('${id}','none')">確定取消</button></div>`);
+        <button class="btn ${_hasTk?'btn-green':'btn-dark'}" onclick="askSeriesCancel('${id}','${_hasTk?'force':'none'}')">確定取消${_hasTk?'・退回票券':''}</button></div>`);
     return;
   }
   let _grpNetDeduct=0;

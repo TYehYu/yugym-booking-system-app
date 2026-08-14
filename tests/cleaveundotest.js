@@ -13,9 +13,10 @@ console.log('① 復原教練請假');
   const F=grabFn('_bkCoachLeaveUndo');
   ok('★★ 只復原教練課的 coach_leave（團課是整堂取消，明講請重新建課）',
      /if\(b\.status!=='coach_leave'\)\{ showToast\('這堂不是可復原的教練請假（團課請假是整堂取消，請重新建課）'\)/.test(F));
-  ok('★★ 從 refund 帳本回查當時退到哪張票、扣回 1 堂＋寫帳',
+  ok('★★ 舊制（已退堂）從 refund 帳本回查扣回；新制（票還掛著）不動票、只回調效期',
      /logs\.filter\(l=>l\.action==='refund'\)/.test(F)
-     && /await logTicket\(tid,'deduct',-1,b\.id,SESSION\.id,'復原教練請假：扣回 1 堂'/.test(F));   /* delta −1 對齊慣例（2026-08-14） */
+     && /await logTicket\(tid,'deduct',-1,b\.id,SESSION\.id,'復原教練請假：扣回 1 堂'/.test(F)
+     && /const _keepTk=!tid && !!b\.ticket_id;/.test(F));
   ok('★★ 那 1 堂已被用掉／票已作廢 → 擋下不硬扣', /退回的那 1 堂已被用掉或票已作廢，請先處理票券/.test(F));
   ok('★★ 效期回調：只有帳本有「教練請假展延」那筆才 −7 天',
      /l\.action==='adjust' && \/教練請假展延\/\.test\(l\.note\|\|''\)/.test(F)
@@ -24,7 +25,7 @@ console.log('① 復原教練請假');
      /if\(tid\) b\.pending_contract=false;/.test(F));
   ok('★ 課種從 note 的「原：X」還原、狀態回 booked、重綁票券',
      /const _m=String\(b\.note\|\|''\)\.match\(\/（原：（?\[\^）\]\+）?\/g\)\.length?/.test(F) || /（原：/.test(F)
-     && /b\.status='booked'; b\.coach_leave=false; b\.category=orig; b\.ticket_id=tid\|\|null;/.test(F));
+     && /b\.status='booked'; b\.coach_leave=false; b\.category=orig; b\.ticket_id=tid\|\|b\.ticket_id\|\|null;/.test(F));   /* 新制票沒動過就保留（2026-08-14） */
   ok('★ 復原不再通知會員（2026-08-14 使用者指示：課程變動不通知，只留開課通知）',
      !/課程照常進行/.test(F) && /課程變動不通知會員/.test(F));
   ok('　　防連點', /bkCoachLeaveUndo\(id\)\{ return onceAct\('cleaveundo:'\+id/.test(src));
@@ -33,14 +34,27 @@ console.log('① 復原教練請假');
      && /已標記教練請假<i>按錯了？點我復原<\/i>/.test(src));
 }
 
+console.log('\n①-b 新制：請假當下不退堂（2026-08-14 使用者定案：先釋出會被挪用，等簽到/取消才退）');
+{
+  const L=grabFn('bkCoachLeave');
+  ok('★★ 請假不再立刻退堂、票繼續掛著（無 refundTicket 呼叫、不清 ticket_id）',
+     !/refundTicket\(_tkId/.test(L) && !/b\.ticket_id=null/.test(L)
+     && /堂數待簽到或取消時退回/.test(L));
+  ok('★★ 簽到時釋出：前端 fallback 退堂＋解綁、RPC 端同步（migration 留檔）',
+     /const _clvTk=\(b\.coach_leave===true && b\.ticket_id\) \? b\.ticket_id : null;/.test(src)
+     && /await refundTicket\(_clvTk,b\.id,SESSION\.id\)/.test(src));
+  const fs4=require('fs');
+  ok('　　migration 留檔', fs4.existsSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260814_coach_leave_deferred_refund.sql'));
+}
+
 console.log('\n② 教練請假的堂可以取消（會員不來時不卡死）');
 ok('★★ canCancel 兩處都放行 coach_leave',
    (src.match(/b\.status==='booked' \|\| b\.status==='checked_in' \|\| b\.status==='coach_leave'/g)||[]).length
    +(src.match(/b\.status==='booked'\|\|b\.status==='checked_in'\|\|b\.status==='coach_leave'/g)||[]).length>=2);
-ok('★★ 取消視窗走無票簡易確認（票已退過、不再問退不退）',
-   /if\(b\.status==='coach_leave'\)\{\n    showModal\(`<div class="modal-title">取消預約<\/div>/.test(src)
-   && /教練請假時票券已退回、效期已展延/.test(src)
-   && /onclick="askSeriesCancel\('\$\{id\}','none'\)">確定取消<\/button>/.test(src));
+ok('★★ 取消視窗依票況分流：票還掛著（新制）→ force 退回；已退過（舊制）→ none 只釋出',
+   /const _hasTk=!!b\.ticket_id;/.test(src)
+   && /教練請假的堂數尚未退回 —— 取消後退回 1 堂票券、釋出時段與場地/.test(src)
+   && /askSeriesCancel\('\$\{id\}','\$\{_hasTk\?'force':'none'\}'\)/.test(src));
 console.log('\n③ 請假課卡的視覺區分（2026-08-14 使用者指示：教練 tag 改紅底「教練請假」）');
 ok('★★ 三處課卡（行事曆 ev 卡／標準卡／首頁今日課表）都換紅底標記',
    (src.match(/background:#7A2E28;color:#F4F1E8;">教練請假<\/span>/g)||[]).length>=3

@@ -1,0 +1,17 @@
+-- 2026-08-14（已於當日套用正式庫）
+-- 使用者定案：「教練請假這堂先釋出的話，教練把釋出的堂數往後面預約了，這堂課就會變得奇怪
+-- —— 要等會員來上課簽到才能釋出這堂課」
+-- 改版：教練請假當下「堂數不退、票繼續掛在預約上」（防止堂數被挪去約別的課），
+-- 效期展延照舊在請假當下給；堂數改在兩個時點釋出：
+--   ①會員到場簽到 → fn_checkin_booking 內退回 1 堂＋解綁（本檔重建整支函式，新增 1.5 節）
+--   ②這堂被取消 → 取消視窗改走「退回票券」（前端 confirmCancelBooking coach_leave 分支）
+-- 復原教練請假：新制沒退過堂 → 不需扣回，只還原課種/狀態＋效期回調（前端 _bkCoachLeaveUndo）。
+-- 舊制資料（請假時已退、票已解綁）兩條路都向下相容。
+-- 函式全文見 Supabase fn_checkin_booking（新增段落）：
+--   IF coalesce(b.coach_leave,false) AND b.ticket_id IS NOT NULL THEN
+--     UPDATE member_tickets SET sessions_remaining=sessions_remaining+1,
+--       status=CASE WHEN status='used_up' THEN 'usable' ELSE status END WHERE id=b.ticket_id;
+--     INSERT INTO ticket_logs (...) VALUES (gen_short_id('LG-'), b.ticket_id,'refund',1,b.id,'system',
+--       '教練請假：會員到場簽到，堂數退回（請假當下不退的新制）');
+--     UPDATE bookings SET ticket_id=NULL WHERE id=b.id;
+--   END IF;
