@@ -15,7 +15,7 @@ console.log('① 復原教練請假');
      /if\(b\.status!=='coach_leave'\)\{ showToast\('這堂不是可復原的教練請假（團課請假是整堂取消，請重新建課）'\)/.test(F));
   ok('★★ 從 refund 帳本回查當時退到哪張票、扣回 1 堂＋寫帳',
      /logs\.filter\(l=>l\.action==='refund'\)/.test(F)
-     && /await logTicket\(tid,'deduct',1,b\.id,SESSION\.id,'復原教練請假：扣回 1 堂'/.test(F));
+     && /await logTicket\(tid,'deduct',-1,b\.id,SESSION\.id,'復原教練請假：扣回 1 堂'/.test(F));   /* delta −1 對齊慣例（2026-08-14） */
   ok('★★ 那 1 堂已被用掉／票已作廢 → 擋下不硬扣', /退回的那 1 堂已被用掉或票已作廢，請先處理票券/.test(F));
   ok('★★ 效期回調：只有帳本有「教練請假展延」那筆才 −7 天',
      /l\.action==='adjust' && \/教練請假展延\/\.test\(l\.note\|\|''\)/.test(F)
