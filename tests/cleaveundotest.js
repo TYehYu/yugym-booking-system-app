@@ -46,5 +46,10 @@ ok('★★ 三處課卡（行事曆 ev 卡／標準卡／首頁今日課表）�
    && /const _abbrOut = bkIsCoachLeave\(b\)/.test(src)
    && /const coTag=bkIsCoachLeave\(b\)/.test(src));
 
+console.log('\n④ 已請假的卡位不能轉正（2026-08-14 吳宜玲 8/21 案例：轉正把請假堂綁票扣課、吃掉分期額度）');
+ok('★★ 轉正入口擋非 booked 狀態、卡上轉正鈕也不顯示',
+   /if\(b\.status!=='booked'\)\{ _clr\(\); showToast\('這筆卡位已'/.test(src)
+   && /if\(staff && !closed && b\.status==='booked'\) btns \+= evoBtn\('evo-r2','evo-primary',`collapseBkCard\(\);openConvertPending/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

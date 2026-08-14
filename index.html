@@ -7805,8 +7805,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.1226';
-const APP_VERSION_LABEL='v260814.1226';
+const APP_VERSION = '260814.1330';
+const APP_VERSION_LABEL='v260814.1330';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20959,6 +20959,9 @@ async function _doConvertPending(memberId, tkId, mode){
  try{
   const id=window._cpBid; const b=await dbGet('bookings',id);
   if(!b||!b.pending_contract){ _clr(); showToast('這筆不是待簽約卡位'); return; }
+  /* 2026-08-14 吳宜玲 8/21 案例：已教練請假（或已取消）的卡位不能轉正 ——
+     照轉會把請假堂綁票扣課、吃掉分期開通額度，後面的堂全部錯位。 */
+  if(b.status!=='booked'){ _clr(); showToast('這筆卡位已'+(b.status==='coach_leave'?'教練請假':'非可轉正狀態')+'，不能轉正 —— 請從其他堂操作'); return; }
   let cand=await listUsableTickets(memberId,b.ticket_type_id,b.date,b.start_time);
   /* 分期票已開通的堂數用完時（2026-08-04 使用者提問：教練們早就用待簽約卡了位，
      這些卡位轉正會怎樣？）—— listUsableTickets 會把「未開通堂數不可預約」的分期票
@@ -21569,7 +21572,7 @@ async function expandBkCard(el, id){
   if(b.pending_contract && !b.ticket_id){
     if(canCancel && own) btns += evoBtn('evo-r1','evo-danger',`collapseBkCard();confirmCancelBooking('${id}')`,'x','取消');
     btns += evoBtn('evo-b1','',`collapseBkCard();openBookingDetail('${id}')`,'doc','明細');
-    if(staff && !closed) btns += evoBtn('evo-r2','evo-primary',`collapseBkCard();openConvertPending('${id}')`,'check','轉正');
+    if(staff && !closed && b.status==='booked') btns += evoBtn('evo-r2','evo-primary',`collapseBkCard();openConvertPending('${id}')`,'check','轉正');   /* 請假/異常狀態不給轉正（2026-08-14） */
     el.style.marginLeft=''; el.style.marginTop='';
     el.classList.add('cal-ev-active');
     await bkCardPop(el, b, btns);
