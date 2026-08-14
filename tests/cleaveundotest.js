@@ -39,5 +39,12 @@ ok('★★ 取消視窗走無票簡易確認（票已退過、不再問退不退
    /if\(b\.status==='coach_leave'\)\{\n    showModal\(`<div class="modal-title">取消預約<\/div>/.test(src)
    && /教練請假時票券已退回、效期已展延/.test(src)
    && /onclick="askSeriesCancel\('\$\{id\}','none'\)">確定取消<\/button>/.test(src));
+console.log('\n③ 請假課卡的視覺區分（2026-08-14 使用者指示：教練 tag 改紅底「教練請假」）');
+ok('★★ 三處課卡（行事曆 ev 卡／標準卡／首頁今日課表）都換紅底標記',
+   (src.match(/background:#7A2E28;color:#F4F1E8;">教練請假<\/span>/g)||[]).length>=3
+   && /if\(bkIsCoachLeave\(b\)\) return `<span class="ev-coach-tag"/.test(src)
+   && /const _abbrOut = bkIsCoachLeave\(b\)/.test(src)
+   && /const coTag=bkIsCoachLeave\(b\)/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
