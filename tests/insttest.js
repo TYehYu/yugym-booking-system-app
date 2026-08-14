@@ -57,8 +57,8 @@ ok('★ 找不到票且有未繳期數 → 保留而不是跳過', /if\(canHold\
 ok('　　保留課不扣票（pending_contract、無 ticket_id）',
    /pending_contract:holdOnly\|\|false,/.test(src));
 ok('　　保留課不可走會扣票的 RPC', /&&tk&&!holdOnly&&!o\.venue_pref&&!bkIsSelf\(bk\)\)/.test(src));   // 2026-08-04 自主訓練也排除
-ok('★ 收下一期時自動補綁並扣課', /function bindHeldBookings\(/.test(src)
-   && /bound=await bindHeldBookings\(t\.id, seg\)/.test(src));
+ok('★ 收款開通時自動補綁並扣課（2026-08-14 起堂數改吃畫面輸入 n）', /function bindHeldBookings\(/.test(src)
+   && /bound=await bindHeldBookings\(t\.id, n\)/.test(src));
 ok('　　補綁時每筆重讀票券，開通堂數用完就停',
    /const tk=await dbGet\('member_tickets',ticket_id\);[\s\S]{0,120}tkUnlockedLeft\(tk\)<=0\) break;/.test(src));
 ok('　　卡片與明細看得出是待繳費', /（待繳費）/.test(src) && /分期待繳費保留/.test(src));

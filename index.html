@@ -7805,8 +7805,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.1158';
-const APP_VERSION_LABEL='v260814.1158';
+const APP_VERSION = '260814.1214';
+const APP_VERSION_LABEL='v260814.1214';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31916,7 +31916,7 @@ function ppRecordHtml(){
                 ${(isDeskLike()&&t.status==='usable'&&t.installment&&typeof t.installment==='object'&&(t.installment.current||1)<t.installment.count)?(()=>{
                   const _cur=t.installment.current||1;
                   const _amt=Number((t.installment.amounts||[])[_cur])||0;
-                  return `<button class="btn btn-gold btn-sm" style="padding:2px 10px;font-size:11px;" title="收到下一期款項後開通接下來的堂數（鎖頭解開、保留課自動補綁）" onclick="openInstallNext('${t.id}')">💰 繳第 ${_cur+1} 期${_amt?`・$${_amt.toLocaleString()}`:''}</button>`;
+                  return `<button class="btn btn-gold btn-sm" style="padding:2px 10px;font-size:11px;" title="收款開通堂數：可收下一期、剩餘全繳或自訂堂數金額（鎖頭解開、保留課自動補綁）" onclick="openInstallNext('${t.id}')">💰 分期繳費</button>`;
                 })():''}
                 ${(_canShare&&!_shN)?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="ppShareTk('${t.id}')">設為共享</button>`:''}
                 ${/* 2026-08-08 使用者定案：賣錯方案但不退錢 → 更換方案（收款與發票不動）；
@@ -36180,60 +36180,81 @@ async function openInstallNext(ticket_id){
   const inst=t.installment;
   const cur=inst.current||1;                         // 已開通到第幾段
   if(cur>=inst.count){ showToast('已全部開通'); return; }
-  const nextIdx=cur;                                 // 下一段的索引（0-based：cur 即下一段）
-  const seg=(inst.segments||[])[nextIdx]||0;         // 下一段堂數
-  const amt=(inst.amounts||[])[nextIdx]||0;          // 下一段金額
-  const fromN=(t.unlocked_sessions||0)+1, toN=(t.unlocked_sessions||0)+seg;
+  /* 彈性收法（2026-08-14 使用者指示：「不要預設期數——有時一次把後面全繳清、
+     特殊情況也有只繳兩堂的」）：堂數與金額都可改，附「下一期」「剩餘全繳」兩顆快速鍵。 */
+  const seg=(inst.segments||[])[cur]||0;             // 下一段堂數（快速鍵預設）
+  const amt=(inst.amounts||[])[cur]||0;              // 下一段金額
+  const total=Number(t.sessions_total)||0;
+  const unlocked=Number(t.unlocked_sessions)||0;
+  const leftN=Math.max(0,total-unlocked);
+  const restAmt=(inst.amounts||[]).slice(cur).reduce((a,x)=>a+(Number(x)||0),0);
   const m=await dbGet('members',t.member_id).catch(()=>null);
-  showModal(`<div class="modal-title">開通下一期</div>
+  showModal(`<div class="modal-title">分期繳費・開通堂數</div>
     <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:1.9;margin-bottom:12px;">
       <div><span style="color:var(--t2);">會員</span>　${m?m.name:'—'}</div>
-      <div><span style="color:var(--t2);">方案</span>　${t.plan_name||'分期票券'}</div>
-      <div><span style="color:var(--t2);">本期</span>　第 ${cur+1} 期（共 ${inst.count} 期）</div>
-      <div><span style="color:var(--t2);">開通堂數</span>　第 ${fromN}–${toN} 堂（${seg} 堂）</div>
-      <div style="margin-top:6px;font-size:16px;">本期應收 <b style="color:var(--green);font-size:22px;">$${amt.toLocaleString()}</b></div>
+      <div><span style="color:var(--t2);">方案</span>　${t.plan_name||'分期票券'}　·　已開通 ${unlocked}/${total} 堂</div>
+      <div><span style="color:var(--t2);">進度</span>　已收到第 ${cur} 期（共 ${inst.count} 期）・未開通 ${leftN} 堂</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <button type="button" class="btn btn-ghost btn-sm" style="flex:1;" onclick="inxFill(${seg},${amt})">下一期（${seg} 堂・$${amt.toLocaleString()}）</button>
+      <button type="button" class="btn btn-ghost btn-sm" style="flex:1;" onclick="inxFill(${leftN},${restAmt})">剩餘全繳（${leftN} 堂・$${restAmt.toLocaleString()}）</button>
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>開通堂數 *（1–${leftN}）</label><input type="number" id="inx-n" min="1" max="${leftN}" value="${seg||leftN}"></div>
+      <div class="form-row"><label>實收金額 *</label><input type="number" id="inx-amt" min="0" value="${amt}"></div>
     </div>
     <div class="form-row"><label>付款方式</label>
       <select id="inx-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
-    <div style="font-size:11.5px;color:var(--t3);margin:4px 0 10px;">確認收款後，將立即開通第 ${fromN}–${toN} 堂，會員端對應堂數同步解鎖，並記入本期營收。</div>
+    <div style="font-size:11.5px;color:var(--t3);margin:4px 0 10px;">確認後立即開通填入的堂數（會員端同步解鎖）、記入本期營收；分期保留的課由早到晚自動補綁扣課。</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="confirmInstallNext('${ticket_id}')">確認收款並開通</button>
     </div>`);
 }
+function inxFill(n,amt){ const a=document.getElementById('inx-n'), b=document.getElementById('inx-amt');
+  if(a) a.value=n; if(b) b.value=amt; }
 /* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
 async function confirmInstallNext(ticket_id){ return onceAct('instnext:'+ticket_id, ()=>_confirmInstallNext(ticket_id)); }
 async function _confirmInstallNext(ticket_id){
   const t=await dbGet('member_tickets',ticket_id);
   if(!t||!t.installment){ showToast('票券資料異常'); return; }
   const inst=t.installment;
-  const cur=inst.current||1;
-  if(cur>=inst.count){ showToast('已全部開通'); closeModal(); return; }
-  const nextIdx=cur;
-  const seg=(inst.segments||[])[nextIdx]||0;
-  const amt=(inst.amounts||[])[nextIdx]||0;
+  const total=Number(t.sessions_total)||0;
+  const unlocked0=Number(t.unlocked_sessions)||0;
+  const leftN=Math.max(0,total-unlocked0);
+  if(leftN<=0){ showToast('已全部開通'); closeModal(); return; }
+  /* 彈性收法（2026-08-14）：堂數與金額吃畫面輸入——一次全繳、只繳兩堂都行 */
+  const n=Math.floor(Number((document.getElementById('inx-n')||{}).value));
+  const amt=Math.round(Number((document.getElementById('inx-amt')||{}).value));
+  if(!Number.isFinite(n)||n<1||n>leftN){ showToast(`開通堂數要在 1–${leftN} 之間`); return; }
+  if(!Number.isFinite(amt)||amt<0){ showToast('請輸入實收金額'); return; }
   const method=(document.getElementById('inx-method')||{}).value||'cash';
-  // 解鎖：unlocked 增加該段堂數、current+1、paid 標記
-  t.unlocked_sessions=(t.unlocked_sessions||0)+seg;
-  inst.current=cur+1;
-  if(Array.isArray(inst.paid)) inst.paid[nextIdx]=true;
+  t.unlocked_sessions=unlocked0+n;
+  /* 期數進度依「累計開通堂數」重算：蓋滿哪一段就算收到哪一期；全開通＝最後一期。
+     自訂堂數跨段一半時，那一段的 paid 先不標——帳以購買紀錄的實收為準。 */
+  let cum=0, curNew=0;
+  (inst.segments||[]).forEach((sg,i)=>{ cum+=(Number(sg)||0);
+    if(t.unlocked_sessions>=cum){ curNew=i+1; if(Array.isArray(inst.paid)) inst.paid[i]=true; } });
+  inst.current=Math.max(inst.current||1, curNew);
+  if(t.unlocked_sessions>=total){ t.unlocked_sessions=total; inst.current=inst.count; }
   t.installment=inst;
   t.amount_paid=(t.amount_paid||0)+amt;              // 累計實收
   await dbPut('member_tickets',t);
+  const _full=t.unlocked_sessions>=total;
   // 記營收（購買紀錄新增一筆本期收款）
   try{
     await dbPut('purchases',{id:uid('PUR'),member_id:t.member_id,plan_id:t.source_plan_id||null,ticket_id:t.id,
       plan_name:t.plan_name,list_price:null,deal_amount:amt,payment_method:method,
       installment_count:inst.count,
-      note:`分期第 ${cur+1} 期收款・開通 ${seg} 堂`,operator:SESSION.id,source:'installment',
+      note:`分期收款・開通 ${n} 堂${_full?'（已全數開通）':`（累計 ${t.unlocked_sessions}/${total}）`}`,operator:SESSION.id,source:'installment',
       created_at:new Date().toISOString()});
   }catch(e){ console.error('install purchase log fail',e); showToast('付款紀錄寫入失敗：'+(e.message||e)); }
-  try{ await logTicket(t.id,'installment_unlock',seg,null,SESSION.id,`開通第 ${cur+1} 期（${seg} 堂），實收 $${amt.toLocaleString()}`); }catch(_){}
-  // 把先前以「待繳費」保留的課補綁票券並扣課（由早到晚，最多本期開通的堂數）
+  try{ await logTicket(t.id,'installment_unlock',n,null,SESSION.id,`分期收款開通 ${n} 堂（累計 ${t.unlocked_sessions}/${total}），實收 $${amt.toLocaleString()}`); }catch(_){}
+  // 把先前以「待繳費」保留的課補綁票券並扣課（由早到晚，最多本次開通的堂數）
   let bound=0;
-  try{ bound=await bindHeldBookings(t.id, seg); }catch(e){ console.error('補綁待繳費預約失敗',e); }
+  try{ bound=await bindHeldBookings(t.id, n); }catch(e){ console.error('補綁待繳費預約失敗',e); }
   closeModal();
-  showToast(`已收款並開通第 ${cur+1} 期（${seg} 堂）`+(bound?`，並補扣 ${bound} 筆待繳費預約`:''));
+  showToast(`已收款並開通 ${n} 堂${_full?'（分期已全數開通）':''}`+(bound?`，並補扣 ${bound} 筆待繳費預約`:''));
   openMemberDetail(t.member_id);
 }
 /* 待繳費保留 → 正式預約（2026-07-29）：分期收到下一期時呼叫。
