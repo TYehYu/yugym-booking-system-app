@@ -7812,8 +7812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260815.1352';
-const APP_VERSION_LABEL='v260815.1352';
+const APP_VERSION = '260815.1715';
+const APP_VERSION_LABEL='v260815.1715';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16899,6 +16899,20 @@ async function openGroupScheduleModal(){
       time:b.start_time, name:(typeof bookingTypeName==='function'?bookingTypeName(b,typeMap):'團體課'),
       coach:cMap[bkCoachId(b)]||'', heads, max, tag:gsTagOf(heads,max)});
   });
+  /* 停課也要上課表（2026-08-15 使用者回報：「停課的課程沒有跟著顯示停課」）——
+     取消的團課照排進格子、掛深紅「停課」章，會員才知道那一班沒了；
+     同一時段若已另開新班（改期/換教練重建）只畫新班，不重複；同時段多筆取消只畫一次。 */
+  const _gsSeen=new Set();
+  bookings.filter(b=>bkIsGroup(b)&&b.status==='cancelled'&&b.date>=from&&b.date<=to)
+    .sort((a,b)=>((a.date+a.start_time).localeCompare(b.date+b.start_time)))
+    .forEach(b=>{
+      const t5=String(b.start_time||'').slice(0,5), key=b.date+' '+t5;
+      if(_gsSeen.has(key)) return; _gsSeen.add(key);
+      if(list.some(a=>a.date===b.date&&String(a.start_time||'').slice(0,5)===t5)) return;
+      (byDay[b.date]=byDay[b.date]||[]).push({
+        time:b.start_time, name:(typeof bookingTypeName==='function'?bookingTypeName(b,typeMap):'團體課'),
+        coach:cMap[bkCoachId(b)]||'', heads:0, max:1, closed:true});
+    });
   window._gsData={byDay, from, to};
   const _cv=gsRenderCanvas();
   showModal(`<div class="modal-title">團課課表</div>
@@ -16985,22 +16999,24 @@ function gsRenderCanvas(){
       const it=slots[r];
       if(!it){ x.fillStyle='#d8d5cf'; x.fillRect(cx0+1,cy0+1,colW-2,rowH-2); continue; }
       const cx=cx0+colW/2;
-      x.fillStyle='#1c1a17'; x.font=`600 46px ${FONT}`;
+      x.fillStyle=it.closed?'#8f8b84':'#1c1a17'; x.font=`600 46px ${FONT}`;   /* 停課的整格轉灰（2026-08-15） */
       x.fillText(it.time, cx, cy0+rowH*0.23);
       x.font=`500 40px ${FONT}`;
       const nm=(it.coach||it.name||'').slice(0,6);
+      x.fillStyle=it.closed?'#8f8b84':'#1c1a17';
       x.fillText(nm, cx, cy0+rowH*0.52);
-      const tag = it.heads>=it.max ? {t:'滿班',chip:false}
+      const tag = it.closed ? {t:'停課',chip:true,bg:'#8a2b20',fg:'#ffffff'}
+        : it.heads>=it.max ? {t:'滿班',chip:false}
         : it.heads>0 ? {t:'即將滿班',chip:true} : {t:'歡迎報名',chip:true};
       const ty=cy0+rowH*0.8;
       if(tag.chip){
         let f=30, tw;
         do{ x.font=`700 ${f}px ${FONT}`; tw=x.measureText(tag.t).width+30; if(tw<=colW-12) break; f-=2; }while(f>=20);
         const th2=f+24;
-        x.fillStyle='#f08a3c';
+        x.fillStyle=tag.bg||'#f08a3c';
         if(x.roundRect){ x.beginPath(); x.roundRect(cx-tw/2,ty-th2/2,tw,th2,10); x.fill(); }
         else x.fillRect(cx-tw/2,ty-th2/2,tw,th2);
-        x.fillStyle='#4a1607';
+        x.fillStyle=tag.fg||'#4a1607';
         x.fillText(tag.t, cx, ty+2);
       }else{
         x.fillStyle='#3c3934'; x.font=`500 32px ${FONT}`;
