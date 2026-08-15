@@ -7812,8 +7812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260815.1350';
-const APP_VERSION_LABEL='v260815.1350';
+const APP_VERSION = '260815.1352';
+const APP_VERSION_LABEL='v260815.1352';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14214,9 +14214,9 @@ PAGES.g_dashboard=async function(){
   const _saleKindOf=t=>{
     const cat=(((types||[]).find(x=>x.id===t.ticket_type_id)||{}).category)||'';
     if(cat!=='私人教練') return null;                      // 只有教練課系要標
-    /* 2026-08-15 使用者定義：「分期繳費的方案＝分期約；續約只留給一次購足的新方案」——
-       有分期設定的票不管標了什麼，約別一律視為分期（蔡宜芬案例：分期續買被標成續約）。 */
-    if(t.installment&&typeof t.installment==='object') return 'installment';
+    /* 2026-08-15 使用者定義二修：「有分期的話，第一期屬於續約、後面的期數都算分期」——
+       票券本身的約別照登記（新約/續約），首期（購買日那列）就顯示它；
+       「分期」只標在後續各期的收款列上（見 _revRows 的 installment 列）。 */
     const k=String(t.sale_kind||'');
     return (k==='new'||k==='renewal'||k==='installment') ? k : 'new';   // 沒標過的當新約（與獎金口徑一致）
   };
@@ -14255,7 +14255,7 @@ PAGES.g_dashboard=async function(){
       return {nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客', mid:p.member_id||null,
       it:p.source==='installment'?((p.plan_name||'票券')+'（分期收款）'):(p.plan_name||({reactivate:'票券重啟',facility_rental:'場地租借',merchandise:'商品'}[p.source]||'收款')),
       amt:Number(p.deal_amount)||0, pur:p.id, at:p.created_at||null,   // 30 分鐘完整退回用（2026-08-08）
-      tk:_t?_t.id:undefined, kind:_t?_saleKindOf(_t):undefined,
+      tk:_t?_t.id:undefined, kind:_t?'installment':undefined,   /* 後續各期一律標「分期」（首期＝票券列，照票券約別） */
       /* 場租／商品／票券重啟不是教練課，一樣不標歸屬（2026-08-07 同一條規則） */
       att:(_t?( p.coach_id||_t.sold_by||null):(p.coach_id||null)), attKind:(_t&&_attNeed(_t))?'tk':null, attRef:_t?_t.id:p.id,
       pay:_payLb(p.payment_method), paySp:p.pay_split||null, payRef:p.id,
@@ -27487,9 +27487,9 @@ function renewListOf(month, tickets, purchases, bookings, types){
   const out={};
   (tickets||[]).forEach(t=>{
     if(t.sale_kind!=='renewal') return;
-    /* 分期票不算續約獎金（2026-08-15 使用者定義：「續約是新的方案才屬於續約」——
-       分期繳費的方案是分期約，就算被手動標成續約也不計）。 */
-    if(t.installment&&typeof t.installment==='object') return;
+    /* 分期續約照算續約獎金（2026-08-15 使用者定義二修：「第一期屬於續約、
+       後面的期數都算分期」）——獎金在購買月成立一次，後續各期不再計。
+       renewListOf 本來就以「票」為單位、掛購買月，天然只算一次。 */
     /* 已退款／作廢的票不算續約（2026-08-02 使用者回報：「mango 那筆巫雅雯是新約，不是續約」）——
        那筆是 8/01 05:25 建的 $0 票、標了續約，15 分鐘後才建正確的 $12,000 新約，
        第一張隨即退掉。錢退了獎金卻照發，等於憑一筆不存在的成交付錢。 */

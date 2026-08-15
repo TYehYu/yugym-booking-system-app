@@ -93,18 +93,22 @@ console.log('\n實跑分類');
 console.log('\n分期後續收款列的章與歸屬（2026-08-15 使用者回報：蔡宜芬那筆沒有分期章跟業績歸屬）');
 ok('★★ 分期收款列帶那張票的約別章與歸屬（attKind=tk：點了改票券、各期收款一起跟）',
    /const _t=p\.source==='installment'&&p\.ticket_id \? \(mtickets\|\|\[\]\)\.find\(x=>x\.id===p\.ticket_id\) : null;/.test(src)
-   && /tk:_t\?_t\.id:undefined, kind:_t\?_saleKindOf\(_t\):undefined,/.test(src)
+   && /tk:_t\?_t\.id:undefined, kind:_t\?'installment':undefined,/.test(src)
    && /att:\(_t\?\( p\.coach_id\|\|_t\.sold_by\|\|null\):\(p\.coach_id\|\|null\)\), attKind:\(_t&&_attNeed\(_t\)\)\?'tk':null, attRef:_t\?_t\.id:p\.id,/.test(src));
 ok('★ 分期收款寫入時直接蓋教練歸屬（票券的 sold_by）',
    /coach_id:t\.sold_by\|\|null,   \/\* 業績歸屬跟著票券（2026-08-15 蔡宜芬案例） \*\//.test(src));
 
-console.log('\n約別定義（2026-08-15 使用者定義：方案用完再購買一張新方案才是續約；分期繳費＝分期約）');
-ok('★★ 有分期設定的票，約別一律視為分期（手動標了續約也蓋過去）',
-   /if\(t\.installment&&typeof t\.installment==='object'\) return 'installment';/.test(src));
-ok('★★ 分期票不算續約獎金（renewListOf 直接跳過）',
+console.log('\n約別定義二修（2026-08-15 使用者：「第一期屬於續約、後面的期數都算分期」）');
+ok('★★ 票券約別照登記（新約/續約），首期列顯示它——沒有分期蓋台',
+   !/if\(t\.installment&&typeof t\.installment==='object'\) return 'installment';/.test(src)
+   && /第一期屬於續約、後面的期數都算分期/.test(src));
+ok('★★ 後續各期收款列一律標「分期」（固定，不讀票券約別）',
+   /kind:_t\?'installment':undefined,/.test(src));
+ok('★★ 分期續約的續約獎金照算一次（renewListOf 不排除分期票、以票掛購買月）',
    (()=>{ const i2=src.indexOf('function renewListOf');
      const F=src.slice(i2, src.indexOf('\n}\n', i2));
-     return /if\(t\.installment&&typeof t\.installment==='object'\) return;/.test(F); })());
+     return !/if\(t\.installment&&typeof t\.installment==='object'\) return;/.test(F)
+       && /獎金在購買月成立一次，後續各期不再計/.test(F); })());
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
