@@ -90,5 +90,13 @@ console.log('\n實跑分類');
   eq('　　票種認不出來 → 不標（寧可少標也不要標錯）', fn({ticket_type_id:'zzz',sale_kind:'renewal'}), null);
 }
 
+console.log('\n分期後續收款列的章與歸屬（2026-08-15 使用者回報：蔡宜芬那筆沒有分期章跟業績歸屬）');
+ok('★★ 分期收款列帶那張票的約別章與歸屬（attKind=tk：點了改票券、各期收款一起跟）',
+   /const _t=p\.source==='installment'&&p\.ticket_id \? \(mtickets\|\|\[\]\)\.find\(x=>x\.id===p\.ticket_id\) : null;/.test(src)
+   && /tk:_t\?_t\.id:undefined, kind:_t\?_saleKindOf\(_t\):undefined,/.test(src)
+   && /att:\(_t\?\( p\.coach_id\|\|_t\.sold_by\|\|null\):\(p\.coach_id\|\|null\)\), attKind:\(_t&&_attNeed\(_t\)\)\?'tk':null, attRef:_t\?_t\.id:p\.id,/.test(src));
+ok('★ 分期收款寫入時直接蓋教練歸屬（票券的 sold_by）',
+   /coach_id:t\.sold_by\|\|null,   \/\* 業績歸屬跟著票券（2026-08-15 蔡宜芬案例） \*\//.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

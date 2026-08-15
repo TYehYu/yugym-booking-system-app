@@ -37,7 +37,7 @@ console.log('① 只有教練課系要標歸屬');
 
 console.log('\n② 接到列表上');
 ok('★ 票券列：要標才給 attKind', /attKind:_attNeed\(t\)\?'tk':null,/.test(src));
-ok('★ 純收款列（場租／商品／票券重啟）一律不標', /att:p\.coach_id\|\|null, attKind:null, attRef:p\.id,/.test(src));
+ok('★ 純收款列（場租／商品／票券重啟）一律不標（2026-08-15 起分期收款例外：章與歸屬跟票券走）', /att:\(_t\?\( p\.coach_id\|\|_t\.sold_by\|\|null\):\(p\.coach_id\|\|null\)\), attKind:\(_t&&_attNeed\(_t\)\)\?'tk':null, attRef:_t\?_t\.id:p\.id,/.test(src));
 ok('　　沒有 attKind 就不畫標籤（既有防線）', /if\(!r \|\| !r\.attKind\) return '';/.test(src));
 
 console.log('\n③ 標籤放在會員姓名上方');

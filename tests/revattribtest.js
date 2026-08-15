@@ -36,7 +36,7 @@ console.log('\n② 名單資料帶了歸屬');
    票券列改成要標才給 attKind；純收款（場租／商品／重啟）一律不標。 */
 ok('★ 票券列帶 sold_by（教練課系才給 attKind）',
    /att:t\.sold_by\|\|null, attKind:_attNeed\(t\)\?'tk':null, attRef:t\.id,/.test(src));
-ok('★ 純收款列不標歸屬', /att:p\.coach_id\|\|null, attKind:null, attRef:p\.id,/.test(src));
+ok('★ 純收款列不標歸屬（2026-08-15 起分期收款例外：章與歸屬跟票券走）', /att:\(_t\?\( p\.coach_id\|\|_t\.sold_by\|\|null\):\(p\.coach_id\|\|null\)\), attKind:\(_t&&_attNeed\(_t\)\)\?'tk':null, attRef:_t\?_t\.id:p\.id,/.test(src));
 ok('★ 同一筆銷售不重複列（票券與其收款紀錄只列票券那筆）',
    /_dayPur\.filter\(p=>!\(p\.ticket_id&&_dayTk\.some\(t=>t\.id===p\.ticket_id\)\)\)/.test(src));
 ok('★ 右欄名單卡與彈窗都掛同一支 revAttribChip（2026-08-07 起放在姓名上方）',

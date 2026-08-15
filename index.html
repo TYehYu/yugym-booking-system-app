@@ -7812,8 +7812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260815.1011';
-const APP_VERSION_LABEL='v260815.1011';
+const APP_VERSION = '260815.1346';
+const APP_VERSION_LABEL='v260815.1346';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14244,12 +14244,19 @@ PAGES.g_dashboard=async function(){
       pay:_payLb((_payByTk[t.id]||{}).m), paySp:(_payByTk[t.id]||{}).sp||null, payRef:(_payByTk[t.id]||{}).pid||null,
       inv:(t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued')})),
     ..._dayPur.filter(p=>!(p.ticket_id&&_dayTk.some(t=>t.id===p.ticket_id)))
-      .map(p=>({nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客', mid:p.member_id||null,
+      .map(p=>{
+      /* 分期後續收款（2026-08-15 使用者回報：蔡宜芬那筆沒有分期章跟業績歸屬）——
+         章與歸屬都跟著「那張票」走：約別章開的是票券的約別、歸屬點了改的是票券歸屬
+         （'tk' 路徑會連同各期收款的 purchases 一起改，續約獎金才對得上）。 */
+      const _t=p.source==='installment'&&p.ticket_id ? (mtickets||[]).find(x=>x.id===p.ticket_id) : null;
+      return {nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客', mid:p.member_id||null,
       it:p.source==='installment'?((p.plan_name||'票券')+'（分期收款）'):(p.plan_name||({reactivate:'票券重啟',facility_rental:'場地租借',merchandise:'商品'}[p.source]||'收款')),
       amt:Number(p.deal_amount)||0, pur:p.id, at:p.created_at||null,   // 30 分鐘完整退回用（2026-08-08）
+      tk:_t?_t.id:undefined, kind:_t?_saleKindOf(_t):undefined,
       /* 場租／商品／票券重啟不是教練課，一樣不標歸屬（2026-08-07 同一條規則） */
-      att:p.coach_id||null, attKind:null, attRef:p.id, pay:_payLb(p.payment_method), paySp:p.pay_split||null, payRef:p.id,
-      inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')})),
+      att:(_t?( p.coach_id||_t.sold_by||null):(p.coach_id||null)), attKind:(_t&&_attNeed(_t))?'tk':null, attRef:_t?_t.id:p.id,
+      pay:_payLb(p.payment_method), paySp:p.pay_split||null, payRef:p.id,
+      inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')};}),
   ];
   /* 給「今日營收」彈窗用（2026-08-01）：與上方 KPI、右欄名單卡完全同源，不另外算一份，
      免得三個地方各自算出不同的數字 —— 這個系統踩過太多次那種坑。 */
@@ -36469,6 +36476,7 @@ async function _confirmInstallNext(ticket_id){
   try{
     await dbPut('purchases',{id:uid('PUR'),member_id:t.member_id,plan_id:t.source_plan_id||null,ticket_id:t.id,
       plan_name:t.plan_name,list_price:null,deal_amount:amt,payment_method:method,
+      coach_id:t.sold_by||null,   /* 業績歸屬跟著票券（2026-08-15 蔡宜芬案例） */
       installment_count:inst.count,
       note:`分期收款・開通 ${n} 堂${_full?'（已全數開通）':`（累計 ${t.unlocked_sessions}/${total}）`}`,operator:SESSION.id,source:'installment',
       created_at:new Date().toISOString()});
