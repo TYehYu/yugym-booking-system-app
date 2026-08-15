@@ -66,5 +66,17 @@ ok('★★ _tkPayMap 帶 pay_split', /window\._tkPayMap\[p\.ticket_id\]=\{m:p\.p
 ok('★★ 拆帳顯示「現金 $N」＋「匯款 $N」兩顆標籤',
    /現金 \$\$\{\(Number\(_pe\.sp\.cash\)\|\|0\)\.toLocaleString\(\)\}/.test(src)
    && /匯款 \$\$\{\(Number\(_pe\.sp\.transfer\)\|\|0\)\.toLocaleString\(\)\}/.test(src));
+console.log('\n分期後續收款入帳（2026-08-15 使用者回報：蔡宜芬繳第二期、今日營收沒出現）');
+ok('★★ 今日營收的收款清單納入 source=installment（同日購票的排除防雙算）',
+   /\|\|\(p\.source==='installment'&&!\(p\.ticket_id&&_dayTk\.some\(t=>t\.id===p\.ticket_id\)\)\)\)/.test(src));
+ok('★★ 票券當日實收優先用當日收款紀錄（amount_paid 是累計，回看歷史日會虛胖）',
+   /const _tkDayAmt=t=>\(_puOfTk\[t\.id\]!=null\?_puOfTk\[t\.id\]:\(Number\(t\.amount_paid\)\|\|0\)\);/.test(src)
+   && !/amt:Number\(t\.amount_paid\)\|\|0, tk:t\.id/.test(src));
+ok('★★ 經營報表：本月買票用本月收款合計、外加非本月票的分期收款（instRev）',
+   /const instRev=\(purchases\|\|\[\]\)\.filter\(p=>p\.source==='installment'&&\(\(p\.created_at\|\|''\)\.slice\(0,7\)===month\)&&!_mNewTk\.has\(p\.ticket_id\)\)/.test(src)
+   && /const revenue=tkRev\+instRev\+purRev;/.test(src));
+ok('★ 名單列分期收款有名目（品名＋「分期收款」）',
+   /p\.source==='installment'\?\(\(p\.plan_name\|\|'票券'\)\+'（分期收款）'\)/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

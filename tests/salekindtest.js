@@ -27,7 +27,7 @@ ok('★ 首頁右欄名單卡（約別標籤在列最左、直式）',
    /\$\{r\.kind\?`<span class="mc-rev-kv">\$\{saleKindChip\(r\.tk,r\.kind\)\}<\/span>`:''\}/.test(src)
    && /<span class="mc-rev-r">\$\{revInvChip\(r\)\}\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{revAmtDup\(r\)\?'':`<span class="mc-rev-amt">\$\$\{_fm\(r\.amt\)\}/.test(src));
 ok('★ 營收彈窗', /\$\{r\.kind\?saleKindChip\(r\.tk,r\.kind\):''\}\s*\n\s*<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{revAmtDup\(r\)\?'':`<span class="mc-rev-amt">\$\{money\(r\.amt\)\}/.test(src));
-ok('　　列上帶了票券 id，改的時候才知道改哪一張', /amt:Number\(t\.amount_paid\)\|\|0, tk:t\.id, kind:_saleKindOf\(t\),/.test(src));
+ok('　　列上帶了票券 id，改的時候才知道改哪一張', /amt:_tkDayAmt\(t\), tk:t\.id, kind:_saleKindOf\(t\),/.test(src));   /* 2026-08-15 起金額改用當日實收 */
 
 console.log('\n可以就地更改');
 ok('★ 有選擇視窗與寫入函式', /async function openSaleKindPick\(tkId\)\{/.test(src) && /async function setSaleKind\(tkId, kind\)\{/.test(src));

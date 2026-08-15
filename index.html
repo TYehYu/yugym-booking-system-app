@@ -7812,8 +7812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260814.2129';
-const APP_VERSION_LABEL='v260814.2129';
+const APP_VERSION = '260815.1011';
+const APP_VERSION_LABEL='v260815.1011';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14068,9 +14068,15 @@ PAGES.g_dashboard=async function(){
   const _dayTk=(mtickets||[]).filter(t=>t.source==='purchase'&&t.purchase_date===date
     &&t.status!=='refunded'   /* 已作廢不列今日營收/收款名單（2026-07-28） */
     &&!((((types||[]).find(x=>x.id===t.ticket_type_id)||{}).category==='自主訓練')||(t.plan_name||'').includes('自主訓練')));
+  /* 票券的「當日實收」優先用當日收款紀錄的金額（2026-08-15）：
+     分期票的 amount_paid 是累計實收，事後回看購買日會把後續各期一起算進去。 */
+  const _puOfTk={};
+  (purchases||[]).forEach(p=>{ if(p && p.ticket_id && puLocalDate(p)===date
+    && p.source!=='reactivate' && p.source!=='facility_rental' && p.source!=='merchandise') _puOfTk[p.ticket_id]=(_puOfTk[p.ticket_id]||0)+(Number(p.deal_amount)||0); });
+  const _tkDayAmt=t=>(_puOfTk[t.id]!=null?_puOfTk[t.id]:(Number(t.amount_paid)||0));
   let _revNew=0,_revRenew=0,_revInst=0;
   _dayTk.forEach(t=>{
-    const amt=Number(t.amount_paid)||0;
+    const amt=_tkDayAmt(t);
     if(t.installment&&typeof t.installment==='object'){ _revInst+=amt; return; }
     const hadBefore=(mtickets||[]).some(o=>o.member_id===t.member_id&&o.id!==t.id&&o.source==='purchase'&&(o.purchase_date||'')<(t.purchase_date||''));
     if(hadBefore) _revRenew+=amt; else _revNew+=amt;
@@ -14079,11 +14085,15 @@ PAGES.g_dashboard=async function(){
   const _fm=n=>n.toLocaleString('en-US');
   /* 2026-07-21 A3：場租/重啟收款併入今日營收；營收拆「有無發票」——
      票券看 invoice_status（cloud/paper=有）、purchases 看 invoice_type（null/none=無，含舊資料）。 */
-  const _dayPur=(purchases||[]).filter(p=>puLocalDate(p)===date&&(p.source==='reactivate'||p.source==='facility_rental'||p.source==='merchandise'));
+  /* 分期後續收款（2026-08-15 使用者回報：蔡宜芬繳第二期、今日營收沒出現）——
+     票券那邊只認「今天購買」的票，收款這邊只認場租/重啟/商品，分期收款兩邊都漏。
+     納入 source='installment'；當天購票又當天分期的（票券列已含在 amount_paid）排除防雙算。 */
+  const _dayPur=(purchases||[]).filter(p=>puLocalDate(p)===date&&(p.source==='reactivate'||p.source==='facility_rental'||p.source==='merchandise'
+    ||(p.source==='installment'&&!(p.ticket_id&&_dayTk.some(t=>t.id===p.ticket_id)))));
   const _dayPurSum=_dayPur.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
   const _revTotal=_revTotal0+_dayPurSum;
   const _revInv=_dayTk.filter(t=>t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued')
-      .reduce((s,t)=>s+(Number(t.amount_paid)||0),0)
+      .reduce((s,t)=>s+_tkDayAmt(t),0)
     + _dayPur.filter(p=>p.invoice_type==='cloud'||p.invoice_type==='paper')
       .reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
   const _revNoInv=Math.max(0,_revTotal-_revInv);
@@ -14101,7 +14111,7 @@ PAGES.g_dashboard=async function(){
      票券那筆非拆帳時金額仍用 amount_paid（與原本口徑一致）。 */
   _dayTk.forEach(t=>{ const pu=_payOfTk[t.id];
     if(pu&&pu.payment_method==='split') purPayParts(pu).forEach(([m,a])=>_bump(m,a));
-    else _bump(pu?(pu.payment_method||''):'', Number(t.amount_paid)||0); });
+    else _bump(pu?(pu.payment_method||''):'', _tkDayAmt(t)); });
   _dayPur.forEach(p=>purPayParts(p).forEach(([m,a])=>_bump(m,a)));
   const _ptN=dayBk.filter(b=>{const c=bkCC(b);return c==='pt'||c==='friendly';}).length;
   const _grpN=dayBk.filter(b=>bkCC(b)==='group').length;
@@ -14228,14 +14238,14 @@ PAGES.g_dashboard=async function(){
   const _revRows=[
     ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—', mid:t.member_id||null,
       it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
-      amt:Number(t.amount_paid)||0, tk:t.id, kind:_saleKindOf(t),
+      amt:_tkDayAmt(t), tk:t.id, kind:_saleKindOf(t),
       at:t.created_at||null,   // 30 分鐘完整退回用（2026-08-08）
       att:t.sold_by||null, attKind:_attNeed(t)?'tk':null, attRef:t.id,
       pay:_payLb((_payByTk[t.id]||{}).m), paySp:(_payByTk[t.id]||{}).sp||null, payRef:(_payByTk[t.id]||{}).pid||null,
       inv:(t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued')})),
     ..._dayPur.filter(p=>!(p.ticket_id&&_dayTk.some(t=>t.id===p.ticket_id)))
       .map(p=>({nm:p.member_id?((memMap[p.member_id]&&memMap[p.member_id].name)||'—'):'散客', mid:p.member_id||null,
-      it:p.plan_name||({reactivate:'票券重啟',facility_rental:'場地租借',merchandise:'商品'}[p.source]||'收款'),
+      it:p.source==='installment'?((p.plan_name||'票券')+'（分期收款）'):(p.plan_name||({reactivate:'票券重啟',facility_rental:'場地租借',merchandise:'商品'}[p.source]||'收款')),
       amt:Number(p.deal_amount)||0, pur:p.id, at:p.created_at||null,   // 30 分鐘完整退回用（2026-08-08）
       /* 場租／商品／票券重啟不是教練課，一樣不標歸屬（2026-08-07 同一條規則） */
       att:p.coach_id||null, attKind:null, attRef:p.id, pay:_payLb(p.payment_method), paySp:p.pay_split||null, payRef:p.id,
@@ -42580,11 +42590,23 @@ async function anaMonth(){
   const monthBk=bookings.filter(b=>(b.date||'').slice(0,7)===month && bkCounts(b));   // 全員請假不成課（2026-08-02）
   const done=monthBk.filter(b=>b.status==='completed'||b.status==='checked_in');
   /* 本月營收＝當月售出票券金額＋場租/重啟/商品收款（與首頁 KPI 同口徑；
-     purchases 的售票列不重複計，避免與 member_tickets 雙算） */
-  const tkRev=(mtks||[]).filter(t=>(t.purchase_date||'').slice(0,7)===month).reduce((s,t)=>s+(Number(t.amount_paid)||0),0);
+     purchases 的售票列不重複計，避免與 member_tickets 雙算）。
+     分期修正（2026-08-15 蔡宜芬案例）：amount_paid 是「累計」實收——
+     掛在購買月會把之後各期都算進購買月、收款當月卻是 0。改成：
+     本月買的票，實收優先用本月收款紀錄合計（沒有紀錄的舊票才退回 amount_paid）；
+     再加「非本月購買票券」的本月分期收款。 */
+  const _mTkPu={};
+  (purchases||[]).forEach(p=>{ if(p && p.ticket_id && (p.created_at||'').slice(0,7)===month
+    && p.source!=='reactivate' && p.source!=='facility_rental' && p.source!=='merchandise')
+    _mTkPu[p.ticket_id]=(_mTkPu[p.ticket_id]||0)+(Number(p.deal_amount)||0); });
+  const _mNewTk=new Set((mtks||[]).filter(t=>(t.purchase_date||'').slice(0,7)===month).map(t=>t.id));
+  const tkRev=(mtks||[]).filter(t=>_mNewTk.has(t.id))
+    .reduce((s,t)=>s+(_mTkPu[t.id]!=null?_mTkPu[t.id]:(Number(t.amount_paid)||0)),0);
+  const instRev=(purchases||[]).filter(p=>p.source==='installment'&&((p.created_at||'').slice(0,7)===month)&&!_mNewTk.has(p.ticket_id))
+    .reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
   const purRev=(purchases||[]).filter(p=>((p.created_at||'').slice(0,7)===month)&&(p.source==='reactivate'||p.source==='facility_rental'||p.source==='merchandise'))
     .reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
-  const revenue=tkRev+purRev;
+  const revenue=tkRev+instRev+purRev;
   const newMembers=members.filter(m=>String(m.created_at||'').slice(0,7)===month).length;
   /* 銷課金額改吃共用的 monthSalesValue（2026-08-08）——
      它現在是損益表的營收基礎（使用者定案：淨利＝銷課−所有支出），

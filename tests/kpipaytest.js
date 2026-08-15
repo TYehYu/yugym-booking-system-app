@@ -29,7 +29,7 @@ ok('★★ 三桶：現金／匯款／其他',
 /* 2026-08-12 拆帳改版：一律經 purPayParts 展開（split 拆成現金/匯款兩段，金額以 pay_split 為準）；
    票券非拆帳時金額仍用 amount_paid（與原本口徑一致） */
 ok('★ 票券與純收款（場租／商品／重啟）都算進去（經 purPayParts 展開拆帳）',
-   /_dayTk\.forEach\(t=>\{ const pu=_payOfTk\[t\.id\];\n\s*if\(pu&&pu\.payment_method==='split'\) purPayParts\(pu\)\.forEach\(\(\[m,a\]\)=>_bump\(m,a\)\);\n\s*else _bump\(pu\?\(pu\.payment_method\|\|''\):'', Number\(t\.amount_paid\)\|\|0\); \}\);/.test(src)
+   /_dayTk\.forEach\(t=>\{ const pu=_payOfTk\[t\.id\];\n\s*if\(pu&&pu\.payment_method==='split'\) purPayParts\(pu\)\.forEach\(\(\[m,a\]\)=>_bump\(m,a\)\);\n\s*else _bump\(pu\?\(pu\.payment_method\|\|''\):'', _tkDayAmt\(t\)\); \}\);/.test(src)
    && /_dayPur\.forEach\(p=>purPayParts\(p\)\.forEach\(\(\[m,a\]\)=>_bump\(m,a\)\)\);/.test(src));
 ok('★★ 桌機 KPI 卡列出來，0 的那一種不列（版面不被稀釋）',
    /\$\{_revCash\?`<span class="kpay kpay-cash">現金 \$\$\{_fm\(_revCash\)\}<\/span>`:''\}/.test(src)
@@ -50,9 +50,12 @@ ok('　　為什麼對不到的要另外一桶，寫在原地',
      並把 index.html 裡真的 purPayParts 抽進來（split 展開靠它） */
   const seg=/let _revCash=0,_revBank=0,_revOther=0;[\s\S]*?_dayPur\.forEach\(p=>purPayParts\(p\)\.forEach\(\(\[m,a\]\)=>_bump\(m,a\)\)\);/.exec(src)[0];
   const purPayParts=new Function('return '+grabFn('purPayParts'))();
-  const run=new Function('_dayTk','_dayPur','_payOfTk','purPayParts',
+  /* 2026-08-15 分期入帳改版：金額改經 _tkDayAmt（當日實收優先）——fixture 沒有當日收款金額表，
+     給等價替身（退回 amount_paid） */
+  const run=new Function('_dayTk','_dayPur','_payOfTk','purPayParts','_tkDayAmt',
     seg+'\nreturn {cash:_revCash,bank:_revBank,other:_revOther};');
-  const r=run(
+  const _runWrap=(a,b,c,d)=>run(a,b,c,d,t=>Number(t.amount_paid)||0);
+  const r=_runWrap(
     [{id:'T1',amount_paid:12000},{id:'T2',amount_paid:8000},{id:'T3',amount_paid:5000}],
     /* 2026-08-12 拆帳改版：fixture 的 _payOfTk 改放整筆 purchase；T2 改成拆帳票驗證 pay_split 金額口徑 */
     [{payment_method:'cash',deal_amount:300},{payment_method:'transfer',deal_amount:1200},
