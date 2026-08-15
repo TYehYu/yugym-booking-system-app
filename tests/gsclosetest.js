@@ -19,5 +19,8 @@ ok('★★ 章配色（2026-08-15 使用者指定）：停課紅底白字、滿�
    && /x\.fillStyle=it\.closed\?'#8f8b84':'#1c1a17';/.test(src)
    && /x\.fillStyle=tag\.bg\|\|'#f08a3c';/.test(src) && /x\.fillStyle=tag\.fg\|\|'#4a1607';/.test(src));
 
+ok('★ 無人報名的章改「招生中」（2026-08-15 使用者指示，原「歡迎報名」）',
+   /: \{t:'招生中',chip:true\};/.test(src) && !/\{t:'歡迎報名'/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
