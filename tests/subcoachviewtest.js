@@ -21,9 +21,10 @@ console.log('教練端不再只看主責教練');
   const now=(src.match(/bkCoachId\(b\)===SESSION\.id/g)||[]).length;
   ok('★ 全部改成 bkCoachId(b)===SESSION.id（＝這堂實際由誰上）', now>=15, `共 ${now} 處`);
 }
-ok('★ 手機端行事曆本來就含代課（bkIsCoach）', /const isMineBk=\(b\)=> \(bkIsCoach\(b,myId\)\);/.test(src));
+ok('★ 手機端行事曆「自己的課」＝實際授課教練（2026-08-15 二修：代課交出去的課不佔原教練的欄）',
+   /const isMineBk=\(b\)=> \(bkCoachId\(b\)===myId\);/.test(src));
 ok('★ 教練端行事曆頁的月曆也含代課', /return bkIsCoach\(b,myId\); \/\/ 月曆\/週量只看我的課/.test(src));
-ok('　　查證結論寫在程式裡', /真正漏掉的是教練端另外 15 處/.test(src));
+ok('　　查證結論寫在程式裡', /教練端 15 處已改成 bkCoachId\(b\)===SESSION\.id/.test(src));
 
 console.log('\n兩支判斷的語意沒有被混用');
 ok('★ bkCoachId＝實際上課的教練（代課優先）',
