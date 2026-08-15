@@ -1,0 +1,8 @@
+-- 2026-08-15（已於當日套用正式庫）
+-- 使用者案例：「代課的教練 該時段應該還可以接其他課程吧？下週一 13:00 Mango 的團課
+-- 請代課了 因為他要安排其他教練課」——
+-- space_check 的教練衝堂原本只比 coach_id：
+--   ①原教練把課交給代課後，本人仍被自己的課卡住（Mango 案例）
+--   ②代課教練反而不被擋，同時段可能被重複排課（反向破口）
+-- 改成 coalesce(substitute_coach_id, coach_id) ＝「實際授課教練」，與前端 validateBooking 同口徑。
+-- （函式全文見 Supabase space_check；僅改教練衝堂那一行的 WHERE。）
