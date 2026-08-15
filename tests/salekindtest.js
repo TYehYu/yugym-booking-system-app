@@ -98,5 +98,13 @@ ok('★★ 分期收款列帶那張票的約別章與歸屬（attKind=tk：點�
 ok('★ 分期收款寫入時直接蓋教練歸屬（票券的 sold_by）',
    /coach_id:t\.sold_by\|\|null,   \/\* 業績歸屬跟著票券（2026-08-15 蔡宜芬案例） \*\//.test(src));
 
+console.log('\n約別定義（2026-08-15 使用者定義：方案用完再購買一張新方案才是續約；分期繳費＝分期約）');
+ok('★★ 有分期設定的票，約別一律視為分期（手動標了續約也蓋過去）',
+   /if\(t\.installment&&typeof t\.installment==='object'\) return 'installment';/.test(src));
+ok('★★ 分期票不算續約獎金（renewListOf 直接跳過）',
+   (()=>{ const i2=src.indexOf('function renewListOf');
+     const F=src.slice(i2, src.indexOf('\n}\n', i2));
+     return /if\(t\.installment&&typeof t\.installment==='object'\) return;/.test(F); })());
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
