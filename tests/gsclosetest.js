@@ -12,8 +12,10 @@ ok('★★ 取消的團課也組進 byDay（closed:true）',
 ok('★★ 同時段已另開新班就只畫新班（不重複）',
    /if\(list\.some\(a=>a\.date===b\.date&&String\(a\.start_time\|\|''\)\.slice\(0,5\)===t5\)\) return;/.test(src));
 ok('★ 同時段多筆取消只畫一次', /if\(_gsSeen\.has\(key\)\) return; _gsSeen\.add\(key\);/.test(src));
-ok('★★ 停課章＝深紅底白字、整格轉灰',
-   /const tag = it\.closed \? \{t:'停課',chip:true,bg:'#8a2b20',fg:'#ffffff'\}/.test(src)
+ok('★★ 章配色（2026-08-15 使用者指定）：停課紅底白字、滿班金底、即將滿班綠底、整格轉灰',
+   /const tag = it\.closed \? \{t:'停課',chip:true,bg:'#b5372e',fg:'#ffffff'\}/.test(src)
+   && /it\.heads>=it\.max \? \{t:'滿班',chip:true,bg:'#b48a56',fg:'#3d2b12'\}/.test(src)
+   && /it\.heads>0 \? \{t:'即將滿班',chip:true,bg:'#2e7d5b',fg:'#ffffff'\}/.test(src)
    && /x\.fillStyle=it\.closed\?'#8f8b84':'#1c1a17';/.test(src)
    && /x\.fillStyle=tag\.bg\|\|'#f08a3c';/.test(src) && /x\.fillStyle=tag\.fg\|\|'#4a1607';/.test(src));
 
