@@ -14,7 +14,7 @@ console.log('程式碼');
 ok('★ 過去課卡不再一律套 cal-ev-past',
    !/const _pastCls = _isPastCard \? 'cal-ev-past' : '';/.test(src));
 ok('★ 改成結案→cal-ev-past、未結案→cal-ev-todo',
-   /const _pastCls = !_isPastCard \? '' : \(_settled \? 'cal-ev-past' : 'cal-ev-todo'\);/.test(src));
+   /: !_isPastCard \? '' : \(_settled \? 'cal-ev-past' : 'cal-ev-todo'\);/.test(src));   /* 2026-08-17 前面多了 bkShowsCancelled 分支（保留顯示的取消卡一律淡化） */
 ok('★ 結案的定義與簽到章同源（_isCheckedIn / _isMakeup / grpAllOnLeave）',
    /const _settled = b\.status==='cancelled' \|\| b\.status==='no_show' \|\| hideMember\s*\n\s*\|\| _isCheckedIn \|\| _isMakeup \|\| grpAllOnLeave\(b\);/.test(src));
 ok('　　團課的「完成」＝每個名額都處理完（grpAllDone），不是整堂 status',

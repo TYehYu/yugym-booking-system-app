@@ -7812,8 +7812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260815.2006';
-const APP_VERSION_LABEL='v260815.2006';
+const APP_VERSION = '260817.1438';
+const APP_VERSION_LABEL='v260817.1438';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16482,7 +16482,7 @@ async function renderCalendar(opts){
   const _dayset=new Set(days.map(d=>ymd(d)));
   let _earliestMin = CAL_START_H*60;
   bookings.forEach(b=>{
-    if(b.status==='cancelled') return;
+    if(b.status==='cancelled' && !bkShowsCancelled(b)) return;   // 保留顯示的取消課卡也要撐開時間軸（2026-08-17）
     if(!_dayset.has(b.date)) return;
     const m=timeToMin(b.start_time||'9:0');
     if(m < _earliestMin) _earliestMin = Math.floor(m/30)*30; // 向下取整 30 分
@@ -16491,7 +16491,7 @@ async function renderCalendar(opts){
   let filterCoach=window._calFilter||'all';
 
   const visible=mergeGroupBookings(bookings.filter(b=>{
-    if(b.status==='cancelled') return false; // 已取消的課不顯示
+    if(b.status==='cancelled' && !bkShowsCancelled(b)) return false; // 已取消的課不顯示（教練請假整堂取消的團課除外：課卡保留，2026-08-17）
     // allMode（全部預約總覽）：不依登入教練過濾，顯示全館佔用狀況
     // maskOthers（教練端「我的預約」）：別人的課保留作遮蔽佔位（顯示「已預約」、不可點），不濾掉
     if(opts.me && !opts.allMode && !opts.maskOthers && (bkCoachId(b))!==opts.me) return false;
@@ -16752,7 +16752,8 @@ async function renderCalendar(opts){
          遮蔽卡（教練看別人的課）沒有簽到章可判讀，維持原本一律淡化，不製造假警訊。 */
       const _settled = b.status==='cancelled' || b.status==='no_show' || hideMember
         || _isCheckedIn || _isMakeup || grpAllOnLeave(b);
-      const _pastCls = !_isPastCard ? '' : (_settled ? 'cal-ev-past' : 'cal-ev-todo');
+      const _pastCls = bkShowsCancelled(b) ? 'cal-ev-past'   /* 教練請假整堂取消：課卡保留但淡化（2026-08-17） */
+        : !_isPastCard ? '' : (_settled ? 'cal-ev-past' : 'cal-ev-todo');
       // hover 跟游標提示內容（2026-07-25 使用者指示）：時間 / 會員（團課逐人分行）/ 教練；白底黑字浮框由 initCalCursorTip 顯示
       const _tipEsc = s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
       let _tipMem;
@@ -18948,7 +18949,7 @@ async function renderCoachAgenda(){
      代課後這堂只出現在代課教練那邊；原教練看得到它（別人課的圖層），但不佔自己的欄位與堂數。 */
   const isMineBk=(b)=> (bkCoachId(b)===myId);
   const isGroupBk=(b)=> bkIsGroup(b) || (Array.isArray(b.member_ids)&&b.member_ids.length>0);
-  const allBk=mergeSiblingUnits(bookings.filter(b=>b.status!=='cancelled'));   // 同行第二台併回主卡（2026-07-31）
+  const allBk=mergeSiblingUnits(bookings.filter(b=>b.status!=='cancelled'||bkShowsCancelled(b)));   // 同行第二台併回主卡（2026-07-31）；教練請假整堂取消的團課保留課卡（2026-08-17）
   const mine=allBk.filter(isMineBk);
 
   /* 圖層（2026-07-21 使用者定案）：篩選列移除、當日預約永遠全部顯示
@@ -18960,7 +18961,7 @@ async function renderCoachAgenda(){
   /* 每日計數（2026-07-23 使用者指示）：一律「本人」當日課堂數——教練＝自己的課；
      管理員在預約行事曆也只看自己的（全店總數看首頁月曆）。 */
   const cntSrc = mine;
-  const cntByDate={}; cntSrc.forEach(b=>{ cntByDate[b.date]=(cntByDate[b.date]||0)+1; });
+  const cntByDate={}; cntSrc.forEach(b=>{ if(b.status==='cancelled')return; cntByDate[b.date]=(cntByDate[b.date]||0)+1; });   // 保留顯示的取消課卡不列入堂數（2026-08-17）
   /* 月曆日期下方＝課堂數數字（2026-07-23 使用者指示：形狀點退場、改回數字）——
      教練＝該教練當日總課堂（cntSrc=mine）、管理員＝全店（cntSrc=allBk）。 */
 
@@ -19035,7 +19036,9 @@ async function renderCoachAgenda(){
     const _ccol=coachTagColor(_cid);
     const _venue=venueUnitsLabel(b);   // 2026-08-05：跑步機台數改文字
     // 2026-07-27 使用者指示：教練本人的課卡不放教練縮寫標籤（多餘）；只留場地標籤（自主訓練用教室/跑步機時）
-    const tag = _venue?`<span class="evc-coach" style="background:${_ccol.bg};color:${_ccol.fg};">${_venue}</span>`:'';
+    /* 教練請假的卡要一眼分得出來（2026-08-14 使用者指示，與桌機行事曆同款紅標；含整堂取消的團課） */
+    const tag = bkIsCoachLeave(b) ? `<span class="evc-coach" style="background:#7A2E28;color:#F4F1E8;">教練請假</span>`
+      : (_venue?`<span class="evc-coach" style="background:${_ccol.bg};color:${_ccol.fg};">${_venue}</span>`:'');
     /* 其他教練的課卡（2026-08-01 使用者指示定版）：「一樣正常顯示課卡內容，但移除互動功能」——
        內容照舊畫（時間／課種／人數都看得到），但完全不掛點擊，手機與桌機一致。
        沿革：0729 用 pointer-events:none（cag-noint）→ 卡片攔手指讓頁面滑不動；
@@ -19053,7 +19056,7 @@ async function renderCoachAgenda(){
     const _unpaidM=_vis && !!b.pending_contract;
     const _newM=_vis && String(b.created_at||'').slice(0,10)===ymd(TODAY);
     const _mkAlert = _unpaidM ? ' cal-ev-renew' : (_newM ? ' cal-ev-newtoday' : '');
-    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${canClick?'':' cag-view'}${_mkAlert}" ${canClick?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:''}>
+    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${(dim||bkShowsCancelled(b))?' dim':''}${canClick?'':' cag-view'}${_mkAlert}" ${canClick?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:''}>
       ${_mk}
       ${(()=>{const k=bkStampKind(b);
         return k==='leave'?'<span class="evc-check evc-leave" title="全員請假">假</span>'
@@ -19141,7 +19144,7 @@ async function renderCoachAgenda(){
      整點靠左、半點靠右交錯）。可約＝未過時＋自己無衝堂＋場地容量（私人教練/自主/體驗 <3 組）。 */
   let addLayer='';
   if(window._cagSlotOpen){
-    const dayAll2=allBk.filter(b=>b.date===selDate);
+    const dayAll2=allBk.filter(b=>b.date===selDate && b.status!=='cancelled');   // 保留顯示的取消課卡不佔時段（2026-08-17）
     const myDay2=dayAll2.filter(isMineBk);
     const capDay2=dayAll2.filter(b=>CAP_CATS.includes(b.category));
     const _ov=(list,s,e)=>list.filter(b=>{const bs=timeToMin(b.start_time),be=bs+(b.duration||60);return s<be&&e>bs;});
@@ -22198,6 +22201,9 @@ function canCoachLeave(b){ return !!b && !!bkCoachLeaveMode(b) && (bkIsGroup(b) 
 /* 已經標記過教練請假了嗎 —— 教練課看狀態（coach_leave），團課是整堂取消、
    狀態會變 cancelled，所以另外立了 bookings.coach_leave 這個旗標記錄「為什麼取消」。 */
 function bkIsCoachLeave(b){ return !!b && (b.status==='coach_leave' || b.coach_leave===true); }
+/* 教練請假整堂取消的團課，課卡要留在課表上（2026-08-17 使用者指示「課卡請假不應該從畫面上消失」）——
+   只是畫出來給人看（帶紅色「教練請假」標），堂數統計、佔位、衝堂判定一律照舊不計（status 仍是 cancelled）。 */
+function bkShowsCancelled(b){ return !!b && b.status==='cancelled' && b.coach_leave===true && bkIsGroup(b); }
 /* 按下去會發生什麼 —— 兩種做法的結果不一樣，按鈕上要照實寫（2026-08-08） */
 function bkCoachLeaveSub(b){ return bkCoachLeaveMode(b)==='cancel'
   ? '整堂取消・退票・效期＋7 天' : '退票・效期＋7 天・改成自主訓練'; }
