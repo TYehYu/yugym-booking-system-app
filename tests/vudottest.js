@@ -110,7 +110,7 @@ console.log('\n行事曆上是一張卡，不是兩張（2026-07-31 使用者回
 /* 2026-08-05 使用者指示：「不要用燈號顯示了，直接顯示跑步機・一台或兩台」 */
 ok('★ 台數改文字（跑步機・一台／兩台），燈號退場',
    /function venueUnitsLabel\(b\)\{/.test(src)
-   && /return '跑步機・'\+\(\['','一台','兩台','三台'\]\[n\]\|\|\(n\+' 台'\)\);/.test(src)
+   && /return '跑步機・'\+\(NUM\[n\]\|\|\(n\+' 台'\)\);/.test(src)   /* 2026-08-18 抽出 NUM（訓練架多台共用） */
    && !/'●'\.repeat\(b\._units\)/.test(src));
 ok('★ 四個畫課卡的地方都併卡：桌機行事曆／手機週檢視／首頁任務／桌機日檢視',
    /function mergeGroupBookings\(list\)\{\s*\n\s*list=mergeSiblingUnits\(list\);/.test(src)

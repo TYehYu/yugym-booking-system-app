@@ -167,7 +167,9 @@ console.log('\n棘輪：散裝的課別比較不得增加');
    ・2026-08-13 營收分類 tkRevClass／monthSalesValue 的 tkClass 2 處 —— 看的是票種類別
      （tt.category），分的是「營收科目」不是課卡口袋，tkClass5 的五口袋粒度不合用。
    下一批搬遷時仍只能往下調。 */
-const SCATTER_BASELINE=99;
+/* 2026-08-18 調整 99 → 100（+1，非散不可）：venueUnitDots 的「訓練架多台只給自主訓練」——
+   判的是場地台數開關的適用課別（多台同行是自主訓練專屬），不是票券口袋歸屬。 */
+const SCATTER_BASELINE=100;
 const scattered=(src.match(/(===|!==)\s*'(小班肌力|自主訓練|運動按摩)'/g)||[]).length;
 ok(`★ 散裝課別比較 ${scattered} 處（基準 ${SCATTER_BASELINE}，只能減不能增）`,
    scattered<=SCATTER_BASELINE, scattered);

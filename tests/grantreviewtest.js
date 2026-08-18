@@ -221,7 +221,7 @@ console.log('\n⑧ 會員端：蓋版提醒只跳一次，之後在「我的票�
   ok('★★ 我的票券頁畫待簽／待開通合約卡（sign_type=remote 且還沒綁票券）',
      /const pendCt=\(window\._memContracts\|\|\[\]\)\.filter\(c=>c\.sign_type==='remote'&&!c\.ticket_id\)/.test(R));
   ok('★ 還沒簽的給「立即簽署」鈕（金色）、簽回的顯示等收款進度（綠色）',
-     /onclick="memSignContract\('\$\{c\.id\}'\)">立即簽署<\/button>/.test(R)
+     /onclick="event\.stopPropagation\(\);memSignContract\('\$\{c\.id\}'\)">立即簽署<\/button>/.test(R)   /* 2026-08-18 整卡可點後按鈕要擋事件冒泡 */
      && /✓ 合約已簽署 —— 櫃檯確認收款後，票券就會出現在下方。/.test(R)
      && /這份合約還沒簽名 —— 完成簽署、櫃檯確認收款後才會發放票券。/.test(R));
   ok('★ 有待簽卡時不顯示「目前沒有票券」空狀態',

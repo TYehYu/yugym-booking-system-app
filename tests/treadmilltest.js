@@ -56,8 +56,8 @@ ok('　　台數來源是合併卡的 _units（一堂佔兩台是兩筆預約）
 console.log('\n② 新增預約多一個「幾台」的選項');
 ok('★ 只有自主訓練會出現這個欄位', /function bkTreadmillRow\(t\)\{\s*\n\s*if\(!t \|\| t\.category!=='自主訓練'\) return '';/.test(src));
 ok('★ 掛在步驟 2 的票券資訊與連續預約之間', /\$\{bkTreadmillRow\(t\)\}\s*\n\s*\$\{recurBoxHtml\('bk', preSum\)\}/.test(src));
-ok('★ 台數選項依場地設定的容量產生（不寫死 2）',
-   /const cap=\(\(window\.VENUES\|\|\[\]\)\.find\(v=>v\.id==='treadmill'\)\|\|\{\}\)\.capacity\|\|2;/.test(src));
+ok('★ 台數選項依場地設定的容量產生（不寫死 2）',   /* 2026-08-18 多功能也開放多台：按鈕畫到各多台場地的最大容量 */
+   /const maxCap=Math\.max\(\.\.\.\(window\.VENUES\|\|\[\{capacity:2\}\]\)\.filter\(v=>venueAllowsMultiUnit\(v\.id\)\)\.map\(v=>v\.capacity\|\|2\), 2\);/.test(src));
 ok('★ 預設選項＝多功能訓練架（value 0，行為仍是自動配置、多功能優先；2026-08-12 使用者指示改名）',
    /<option value="0">\$\{venueName\('multi'\)\}<\/option>/.test(src));
 /* 2026-08-04：選單多了「團課教室」，讀值收斂到 bkVenueChoice（'treadmill'＋台數／'group'／null） */
@@ -70,8 +70,8 @@ ok('★ 選單有「團課教室」選項', /<option value="g">\$\{venueName\('g
 /* 2026-08-03 家庭成員：vbkChk 多帶 member_id 與使用人 */
 ok('★ 單筆預約的場地預驗證也帶上指定（否則會先被判成多功能區可用）',
    /const vbkChk=\{id:null,coach_id,category:t\.category,ticket_type_id:type_id,venue_pref:_venuePref,\n\s*member_id, trial_name:\(window\._bkFamUser!=null\?window\._bkFamUser:null\)\};/.test(src));   // 2026-08-04 '' 哨兵不塌成 null
-ok('★ 兩台只扣 1 點，第 2 台是同行使用', /兩台＝同行使用，<b>只扣 1 點<\/b>/.test(src)   // 2026-08-12 改一台/兩台按鈕後的文案
-   && /note:'同行使用（跑步機）・不另外扣點'/.test(src));
+ok('★ 兩台只扣 1 點，第 2 台是同行使用', /兩台以上＝同行使用，<b>只扣 1 點<\/b>/.test(src)   // 2026-08-18 多功能也開放多台後的文案
+   && /note:`同行使用（\$\{venueName\(vid\)\}）・不另外扣點`/.test(src));
 ok('★ 第 2 台用 sibling_of 指回主預約（行事曆才會併成一張卡）',
    /sibling_of:bk\.id,/.test(src));
 ok('★ 指定跑步機時走原路徑，不走 DB 的 fn_create_booking',
@@ -79,7 +79,7 @@ ok('★ 指定跑步機時走原路徑，不走 DB 的 fn_create_booking',
    && /跑步機是「一個場地兩台＋同行第 2 台不扣點」的獨立流程，還沒進那支 RPC/.test(src));
 ok('　　venue_pref 只是配置提示，不入庫', /delete bk\.venue_pref;                    \/\/ 只是配置提示，不入庫/.test(src));
 ok('　　建立成功的吐司講清楚開了幾台、第 2 台不扣點',
-   /（跑步機 \$\{_tmN\} 台，第 2 台不扣點）/.test(src));
+   /（\$\{venueName\(_venuePref\)\|\|'場地'\} \$\{_tmN\} 台，第 2 台起不扣點）/.test(src));   /* 2026-08-18 場地名稱跟著指定場地 */
 
 console.log('\n③ 會員自己從手機約也要能選台數');
 /* 2026-08-02 使用者指示：「只要會連動上行事曆、影響其他人預約場地的地方，
@@ -113,6 +113,8 @@ console.log('\n④ 實跑：補開第 2 台');
     const put=[];
     const env={ dbGetAll:async()=>existing, dbPut:async(_t,o)=>{put.push(o);},
       timeToMin, uid:p=>p+'-'+(put.length+1), SESSION:{id:'E1'},
+      venueAllowsMultiUnit:v=>['treadmill','multi'].indexOf(String(v||''))>=0,   /* 2026-08-18 多功能也開放多台 */
+      venueName:v=>({treadmill:'跑步機',multi:'多功能訓練架'})[v]||v,
       window:{VENUES:[{id:'treadmill',name:'跑步機',capacity:2,active:true}]} };
     const f=new Function(...Object.keys(env), body+'\nreturn bkAddTreadmillUnits;')(...Object.values(env));
     const bk={id:'BK-1',member_id:'M1',category:'自主訓練',ticket_type_id:'tt-self',
@@ -147,10 +149,14 @@ console.log('\n④ 實跑：補開第 2 台');
     {
       const put=[];
       const env={ dbGetAll:async()=>[], dbPut:async(_t,o)=>{put.push(o);}, timeToMin,
-        uid:p=>p+'-1', SESSION:{id:'E1'}, window:{VENUES:[{id:'treadmill',capacity:2}]} };
+        uid:p=>p+'-1', SESSION:{id:'E1'},
+        venueAllowsMultiUnit:v=>['treadmill','multi'].indexOf(String(v||''))>=0,   /* 2026-08-18 多功能也開放多台 */
+        venueName:v=>({treadmill:'跑步機',multi:'多功能訓練架',group:'團課教室'})[v]||v,
+        window:{VENUES:[{id:'treadmill',capacity:2}]} };
       const f=new Function(...Object.keys(env), body+'\nreturn bkAddTreadmillUnits;')(...Object.values(env));
-      const n=await f({id:'BK-2',date:'2026-08-05',start_time:'10:00',duration:60,venue_unit:'multi_1'},2);
-      eq('★ 主預約沒配到跑步機 → 不補開（不會憑空多出一筆跑步機）', [n, put.length], [1,0]);
+      /* 2026-08-18 規則更新：multi 也可多台（見 multiunittest）；「不可多台」的案例改用團課教室 */
+      const n=await f({id:'BK-2',date:'2026-08-05',start_time:'10:00',duration:60,venue_unit:'group_1'},2);
+      eq('★ 主預約在不可多台的場地（教室）→ 不補開', [n, put.length], [1,0]);
       const n2=await f({id:'BK-3',date:'2026-08-05',start_time:'10:00',duration:60,venue_unit:null},2);
       eq('　　沒有場地資訊也不會爆', [n2, put.length], [1,0]);
     }

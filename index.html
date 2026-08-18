@@ -7812,8 +7812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260818.1603';
-const APP_VERSION_LABEL='v260818.1603';
+const APP_VERSION = '260818.1610';
+const APP_VERSION_LABEL='v260818.1610';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17108,11 +17108,13 @@ function assignLanes(evs){
    選了台數＝明確指定要跑步機（venue_pref），不再讓系統自動配到多功能訓練區。 */
 function bkTreadmillRow(t){
   if(!t || t.category!=='自主訓練') return '';
-  const cap=((window.VENUES||[]).find(v=>v.id==='treadmill')||{}).capacity||2;
   /* 2026-08-12 使用者指示：「跑步機選完後，下方跳出一台兩台的選項」——
      選單收斂成三個場地（自動配置／跑步機／團課教室），台數改成選了跑步機才出現的
-     一台／兩台按鈕（value 't'＋window._bkTmN），語意與舊版數字值相同。 */
+     一台／兩台按鈕（value 't'＋window._bkTmN），語意與舊版數字值相同。
+     2026-08-18 使用者定案：多功能訓練架也開放多台（1v2 兩人各佔一架、只扣 1 點）——
+     按鈕一次畫到最大容量（3），bkTmSwap 依所選場地的容量顯示前幾顆。 */
   window._bkTmN=1;
+  const maxCap=Math.max(...(window.VENUES||[{capacity:2}]).filter(v=>venueAllowsMultiUnit(v.id)).map(v=>v.capacity||2), 2);
   const NUM=['','一','兩','三','四','五','六'];
   return `<div class="form-row"><label>場地</label>
     <select id="bk-treadmill" onchange="bkTmSwap()">
@@ -17120,15 +17122,20 @@ function bkTreadmillRow(t){
       <option value="t">${venueName('treadmill')}</option>
       <option value="g">${venueName('group')}</option>
     </select>
-    <div id="bk-tm-units" style="display:none;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap;">
+    <div id="bk-tm-units" style="display:flex;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap;">
       <span style="font-size:12px;color:var(--t2);">台數</span>
-      ${Array.from({length:cap},(_,i)=>i+1).map(n=>`<button type="button" class="btn btn-ghost btn-sm bk-tmn" data-n="${n}" style="padding:4px 16px;" onclick="bkTmPick(${n})">${NUM[n]||n}台</button>`).join('')}
-      <span style="font-size:11px;color:var(--t3);">兩台＝同行使用，<b>只扣 1 點</b></span>
+      ${Array.from({length:maxCap},(_,i)=>i+1).map(n=>`<button type="button" class="btn btn-ghost btn-sm bk-tmn" data-n="${n}" style="padding:4px 16px;${n===1?'background:var(--green);border-color:var(--green);color:#fff;':''}" onclick="bkTmPick(${n})">${NUM[n]||n}台</button>`).join('')}
+      <span style="font-size:11px;color:var(--t3);">兩台以上＝同行使用，<b>只扣 1 點</b></span>
     </div></div>`;
 }
+function bkTmVid(){ const el=document.getElementById('bk-treadmill');
+  return (el&&el.value==='t')?'treadmill':(el&&el.value==='0')?'multi':null; }
 function bkTmSwap(){
   const el=document.getElementById('bk-treadmill'), row=document.getElementById('bk-tm-units');
-  if(row) row.style.display=(el&&el.value==='t')?'flex':'none';
+  const vid=bkTmVid();
+  if(row) row.style.display=(vid&&venueAllowsMultiUnit(vid))?'flex':'none';
+  const cap=vid?(((window.VENUES||[]).find(v=>v.id===vid)||{}).capacity||2):0;
+  document.querySelectorAll('.bk-tmn').forEach(b=>{ b.style.display=(Number(b.dataset.n)<=cap)?'':'none'; });
   window._bkTmN=1; bkTmPaint();
 }
 function bkTmPick(n){ window._bkTmN=Math.max(1,Number(n)||1); bkTmPaint(); }
@@ -17145,12 +17152,17 @@ function bkTreadmillN(){
   if(el.value==='g') return 0;                   // 團課教室：不是台數（見 bkVenueChoice）
   return Math.max(0, Number(el.value)||0);       // 舊值相容（'0'＝自動）
 }
-/* 場地選擇（2026-08-04）：'treadmill'＋台數／'group' 團課教室／null 自動配置 */
+/* 場地選擇（2026-08-04）：'treadmill'＋台數／'group' 團課教室／null 自動配置
+   2026-08-18：多功能訓練架選 2 台以上 → 明確指定 multi＋台數（1 台維持自動配置不變）。 */
 function bkVenueChoice(){
   const el=document.getElementById('bk-treadmill');
   if(!el) return {pref:null, units:0};
   if(el.value==='g') return {pref:'group', units:0};
   if(el.value==='t') return {pref:'treadmill', units:Math.max(1,Number(window._bkTmN)||1)};
+  if(el.value==='0'){
+    const n=Math.max(1,Number(window._bkTmN)||1);
+    return n>1 ? {pref:'multi', units:n} : {pref:null, units:0};
+  }
   const n=Math.max(0, Number(el.value)||0);      // 舊值相容
   return {pref:n>0?'treadmill':null, units:n};
 }
@@ -17160,8 +17172,8 @@ async function bkAddTreadmillUnits(bk, want){
   const n=Math.max(1, Number(want)||1);
   if(n<=1 || !bk || !bk.venue_unit) return 1;
   const vid=String(bk.venue_unit).split('_')[0];
-  if(vid!=='treadmill') return 1;
-  const cap=((window.VENUES||[]).find(v=>v.id==='treadmill')||{}).capacity||2;
+  if(!venueAllowsMultiUnit(vid)) return 1;   /* 2026-08-18：多功能訓練架也開放同行多台 */
+  const cap=((window.VENUES||[]).find(v=>v.id===vid)||{}).capacity||2;
   const all=await dbGetAll('bookings').catch(()=>[]);
   const ns=timeToMin(bk.start_time), ne=ns+(Number(bk.duration)||60);
   const ov=x=>{ const s0=timeToMin(x.start_time), e0=s0+(Number(x.duration)||60); return s0<ne && ns<e0; };
@@ -17169,7 +17181,7 @@ async function bkAddTreadmillUnits(bk, want){
   (all||[]).forEach(x=>{ if(x && x.date===bk.date && x.status!=='cancelled' && x.venue_unit && ov(x)) taken[x.venue_unit]=1; });
   let made=1;
   for(let i=1;i<=cap && made<n;i++){
-    const unit=`treadmill_${i}`;
+    const unit=`${vid}_${i}`;
     if(taken[unit]) continue;
     try{
       await dbPut('bookings',{ id:uid('BK'), member_id:bk.member_id||null, coach_id:null,
@@ -17177,7 +17189,7 @@ async function bkAddTreadmillUnits(bk, want){
         date:bk.date, start_time:bk.start_time, duration:Number(bk.duration)||60,
         status:'booked', venue_unit:unit, sibling_of:bk.id,
         trial_name:bk.trial_name||null, created_by:(SESSION&&SESSION.id)||null,
-        note:'同行使用（跑步機）・不另外扣點', created_at:new Date().toISOString() });
+        note:`同行使用（${venueName(vid)}）・不另外扣點`, created_at:new Date().toISOString() });
       taken[unit]=1; made++;
     }catch(_){ }
   }
@@ -17200,9 +17212,12 @@ function bkVenueTipLine(b){
 /* 跑步機台數改文字（2026-08-05 使用者指示：「不要用燈號顯示了，直接顯示跑步機・一台或兩台」） */
 function venueUnitsLabel(b){
   const v=selfVenueLabel(b);
-  if(v!=='跑步機') return v;
   const n=Math.max(1,Number(b&&b._units)||1);
-  return '跑步機・'+(['','一台','兩台','三台'][n]||(n+' 台'));
+  const NUM=['','一台','兩台','三台'];
+  if(v==='跑步機') return '跑步機・'+(NUM[n]||(n+' 台'));
+  /* 多功能訓練架平常不標（預設場地）；佔多架時要標出來（2026-08-18 同行多台開放到訓練架） */
+  if(n>1 && String((b&&b.venue_unit)||'').startsWith('multi')) return '訓練架・'+(NUM[n]||(n+' 台'));
+  return v;
 }
 function selfVenueLabel(b){
   /* 2026-07-27 使用者回報（劉雪珠 16:00 改團課教室沒顯示）：
@@ -21608,7 +21623,7 @@ async function _submitBookingInner(){
       if(opened) return;   // 調課視窗接手（選擇後在視窗內完成取消＋重約）
     }
     closeModal();
-    if(results[0].ok){ showToast('預約成功，已扣抵 1 堂票券'+(_tmN>1?`（跑步機 ${_tmN} 台，第 2 台不扣點）`:'')+(window._bkFamUser?`（使用人：${window._bkFamUser}）`:'')); }
+    if(results[0].ok){ showToast('預約成功，已扣抵 1 堂票券'+(_tmN>1?`（${venueName(_venuePref)||'場地'} ${_tmN} 台，第 2 台起不扣點）`:'')+(window._bkFamUser?`（使用人：${window._bkFamUser}）`:'')); }
     else { showToast(results[0].reason); }
     window._bkFamUser=null;   // 使用人旗標只作用這一筆（2026-08-03 家庭成員）
     bkAfterSubmit();
@@ -23664,7 +23679,7 @@ async function _doBkTicketChange(id,newTkId){
    在那裡畫燈號會讓櫃檯以為可以一次占滿，是誤導。
    ⚠ 用常數而不是 venues 表的欄位：window.VENUES 會被資料庫的 venues 覆寫（見 enterApp），
      DB 那份沒有這個欄位的話，功能會無聲消失。 */
-const VENUE_MULTI_UNIT=['treadmill'];
+const VENUE_MULTI_UNIT=['treadmill','multi'];   /* 2026-08-18 使用者定案：多功能訓練架也開放同行多台（1v2 兩人可各佔一架） */
 function venueAllowsMultiUnit(vid){ return VENUE_MULTI_UNIT.indexOf(String(vid||''))>=0; }
 /* ── 場地單位燈號開關（2026-07-31 使用者指示：明細的場地旁邊要有燈號讓我選）──
    跑步機是「一個場地兩台」，一對二的客人可能一張票就佔掉兩台。
@@ -23676,7 +23691,8 @@ async function venueUnitDots(b, editable){
     if(!b || !b.date || !b.start_time) return '';
     const vid=String(b.venue_unit||'').split('_')[0]
       || ((typeof venuePriorityFor==='function'?venuePriorityFor(b.category):[])||[])[0];
-    if(!venueAllowsMultiUnit(vid)) return '';     // 2026-08-01：只有跑步機才有這個燈號
+    if(!venueAllowsMultiUnit(vid)) return '';     // 2026-08-01：跑步機；2026-08-18 起多功能訓練架也開放
+    if(vid==='multi' && b.category!=='自主訓練') return '';   // 訓練架多台只給自主訓練（教練課一人一架照舊）
     const cap=(typeof venueCap==='function')?(venueCap(vid)||0):0;
     if(cap<2) return '';
     const all=await dbGetAll('bookings').catch(()=>[]);
