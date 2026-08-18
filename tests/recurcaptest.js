@@ -98,8 +98,8 @@ ok('★ 改用 tkUsableBy（持有人或共享者皆可用），不再比 member
 ok('★ 堂數改用 tkUnlockedLeft（分期未開通的不能先約走）', /&& tkUnlockedLeft\(sel\)>0/.test(src));
 ok('　　效期與限時段的判斷保留', /\(!sel\.expire_date\|\|sel\.expire_date>=d\) && tkTimeOk\(sel,d,tsv\|\|time\)/.test(src));
 ok('　　真實案例寫在程式裡', /票掛在葉隆震名下、鄭雅芳是共享者/.test(src));
-ok('★ 每一堂實際扣哪張票要記下來', /results\.push\(\{date:ds,ok:true,held:holdOnly,tkId:tk\?tk\.id:null,tkName:tk\?\(tk\.plan_name\|\|'票券'\):''\}\);/.test(src));
-ok('　　走 RPC 那條也記', /results\.push\(\{date:ds,ok:true,tkId:tk\?tk\.id:null,tkName:tk\?\(tk\.plan_name\|\|'票券'\):''\}\); \}/.test(src));
+ok('★ 每一堂實際扣哪張票要記下來', /results\.push\(\{date:ds,ok:true,held:holdOnly,bkId:bk\.id,tkId:tk\?tk\.id:null,tkName:tk\?\(tk\.plan_name\|\|'票券'\):''\}\);/   /* 2026-08-18 起多帶 bkId（扣課順序挪移用） */.test(src));
+ok('　　走 RPC 那條也記', /results\.push\(\{date:ds,ok:true,bkId:rr\.booking_id\|\|null,tkId:tk\?tk\.id:null,tkName:tk\?\(tk\.plan_name\|\|'票券'\):''\}\); \}/.test(src));
 ok('★ 換到別張票時在結果視窗明講（不能默默換票）',
    /const _swap=results\.filter\(x=>x\.ok&&!x\.held&&x\.tkId&&selTicketId&&x\.tkId!==selTicketId\);/.test(src)
    && /其中 <b>\$\{_swap\.length\}<\/b> 堂不是扣您指定的那張票/.test(src));

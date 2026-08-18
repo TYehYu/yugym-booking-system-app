@@ -7812,8 +7812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260817.1438';
-const APP_VERSION_LABEL='v260817.1438';
+const APP_VERSION = '260818.1542';
+const APP_VERSION_LABEL='v260818.1542';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18164,7 +18164,13 @@ function calMoveDiff(od,ot,nd,nt){
   return out.join('、')||'時間不變';
 }
 function confirmCalMove(b,od,ot,odur, nd,nt,ndur, onYes){
-  window._calYes=onYes||(()=>{}); window._calNo=()=>navTo(CUR_PAGE);
+  /* 連續預約改時間（2026-08-18 使用者需求：「19:00 修改到 14:00 要跳出選項是否將
+     後續課程統一修改」，教練先前只能在手機一堂一堂調）——單堂改完後，
+     若是「同日期、只改時間」，再問要不要把後續同系列（同會員/教練/課種/星期/原時間）
+     一起改過去。 */
+  const _apply=onYes||(()=>{});
+  window._calYes=async()=>{ await _apply(); if(od===nd && ot!==nt){ try{ await bkOfferSeriesMove(b, ot, nt); }catch(_){} } };
+  window._calNo=()=>navTo(CUR_PAGE);
   const who=calMoveWho(b);
   /* 前後用顏色標明（2026-08-07 使用者指示）——品牌色強度 紅>金>綠：
      原時間＝紅（這個時段要空出來，錯了最傷）、新時間＝綠（改成的正式時間）、
@@ -18187,6 +18193,57 @@ function confirmCalMove(b,od,ot,odur, nd,nt,ndur, onYes){
       <button class="btn btn-ghost" onclick="closeModal();window._calNo()">取消</button>
       <button class="btn btn-green" onclick="closeModal();window._calYes()">確認修改</button>
     </div>`);
+}
+
+/* 後續同系列一起改時間（2026-08-18）：同會員（單人課比 member_id、團課比整份名單）、
+   同教練、同課種、同星期、原時間相同、日期在這堂之後、還沒上（booked）的課。
+   逐堂跑 validateBooking，衝堂/場地滿的那幾堂跳過並列出來，不整批失敗。 */
+async function bkOfferSeriesMove(b, ot, nt){
+  const memKey=x=> (Array.isArray(x.member_ids)&&x.member_ids.length)
+    ? 'g:'+x.member_ids.slice().sort().join(',') : 'm:'+(x.member_id||'');
+  if(memKey(b)==='m:') return;   // 無主的卡（純體驗未留檔）不處理
+  const wd=parseYmd(b.date).getDay();
+  const all=await dbGetAll('bookings');
+  const t5=s=>String(s||'').slice(0,5);
+  const series=all.filter(x=>x&&x.id!==b.id&&x.status==='booked'&&!x.sibling_of
+    &&x.category===b.category&&(x.coach_id||'')===(b.coach_id||'')
+    &&memKey(x)===memKey(b)&&x.date>b.date
+    &&parseYmd(x.date).getDay()===wd&&t5(x.start_time)===t5(ot))
+    .sort((a,c)=>a.date.localeCompare(c.date));
+  if(!series.length) return;
+  const wdn=['日','一','二','三','四','五','六'][wd];
+  const list=series.map(x=>{const p=parseYmd(x.date);return `${p.getMonth()+1}/${p.getDate()}`;}).join('、');
+  window._smSeries={ids:series.map(x=>x.id), nt};
+  showModal(`<div class="modal-title">後續課程要一起改嗎？</div>
+    <div style="font-size:13px;line-height:1.9;color:var(--text);">
+      這位的後續還有 <b>${series.length}</b> 堂同系列（每週${wdn} ${ot}）：<br>
+      <span style="font-family:var(--num);color:var(--t2);">${list}</span><br>
+      要一起改到 <b>${nt}</b> 嗎？衝堂或場地已滿的會自動跳過並列出。
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">只改這一堂</button>
+      <button class="btn btn-green" onclick="closeModal();bkDoSeriesMove()">後續 ${series.length} 堂一起改</button>
+    </div>`);
+}
+async function bkDoSeriesMove(){ return onceAct('seriesmove', _bkDoSeriesMove); }
+async function _bkDoSeriesMove(){
+  const P=window._smSeries; window._smSeries=null;
+  if(!P||!P.ids||!P.ids.length) return;
+  let okN=0; const fails=[];
+  for(const id of P.ids){
+    try{
+      const x=await dbGet('bookings',id);
+      if(!x||x.status!=='booked'){ continue; }
+      const verr=await validateBooking(x, x.date, P.nt, x.duration||60);
+      if(verr){ fails.push(x.date.slice(5).replace('-','/')+'（'+verr+'）'); continue; }
+      x.start_time=P.nt;
+      await dbPut('bookings',x);
+      okN++;
+    }catch(_){ fails.push(id); }
+  }
+  try{ occCacheClear(); }catch(_){}
+  showToast(`已改 ${okN} 堂到 ${P.nt}`+(fails.length?`；${fails.length} 堂未改：${fails.join('、')}`:''));
+  try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
 }
 
 /* 行事曆填滿視窗剩餘高度。
@@ -18469,6 +18526,74 @@ async function bkSwapCandidates(P){
     }).sort((a,b)=>(b.date+String(b.start_time)).localeCompare(a.date+String(a.start_time)));   // 最遠的排最上（最可能讓）
     return {cands, tkMap};
   }catch(e){ console.error('bkSwapCandidates',e); return {cands:[], tkMap:{}}; }
+}
+/* ── 臨時加課的扣課順序（2026-08-18 使用者定案，江念恩案例）──
+   「購買 12 堂票券會有一個使用順序 1~12 堂按順序扣課，臨時安插的課程也應該要照順序扣課，
+     如果後面有預先安排的則要把最後一堂課扣過來使用。」
+   情境：順位較前的票（通常是付費票）被未來預約整張排滿 → 臨時課只能扣到後面的票
+   （常見 $0 加贈票）。這裡在建立成功後偵測，提示櫃檯把順位票「最晚的一堂未上預約」
+   挪到後面那張票、本堂改扣順位票 —— 純換 ticket_id 指向＋成對帳目，
+   兩張票的餘額、效期、起始日一律不動（0817 效期重算事故的教訓）。
+   守則：只對單堂單人課；分期票（🔒 有自己的順序）不參與；兩張票都要通過
+   tkFitsBooking 的效期/起始日/限時段檢核才提；櫃檯選「維持現狀」則什麼都不動。 */
+async function bkOfferOrderSwap(ctx){
+  try{
+    const {member_id,type_id,date,time,bkId,tkId}=ctx||{};
+    if(!bkId||!tkId||!member_id) return false;
+    const all=await dbGetAll('member_tickets');
+    const B=all.find(t=>t&&t.id===tkId); if(!B||B.installment) return false;
+    const cnt=await tkBookedCountMap();
+    const fit=(t,d,tm)=>{ try{ return tkFitsBooking(Object.assign({},t,{sessions_remaining:1,status:'usable'}),member_id,type_id,d,tm,{}); }catch(_){ return false; } };
+    const pd=t=>String(t.purchase_date||t.created_at||'9999');
+    const cands=all.filter(a=>a&&a.id!==B.id&&!a.installment&&a.status==='usable'
+      &&tkUsableBy(a,member_id)&&pd(a)<pd(B)
+      &&((Number(a.sessions_remaining)||0)<=0||tkOverBooked(a,cnt))
+      &&fit(a,date,time)).sort((a,b)=>pd(a).localeCompare(pd(b)));
+    if(!cands.length) return false;
+    const bks=await dbGetAll('bookings');
+    for(const A of cands){
+      const L=bks.filter(x=>x&&x.ticket_id===A.id&&x.status==='booked'&&!x.pending_contract&&!x.sibling_of
+          &&((x.date>date)||(x.date===date&&String(x.start_time)>String(time))))
+        .sort((a,b)=>(b.date+String(b.start_time)).localeCompare(a.date+String(a.start_time)))[0];
+      if(!L) continue;
+      if(!fit(B,L.date,L.start_time)) continue;   // 後面那張票要罩得住被挪過去的那一堂
+      const wd=['日','一','二','三','四','五','六'];
+      const _lbl=d=>{ const p=parseYmd(d); return p?`${p.getMonth()+1}/${p.getDate()}（${wd[p.getDay()]}）`:d; };
+      window._ordSwap={bkId, L:L.id, A:A.id, B:B.id, An:A.plan_name||'票券', Bn:B.plan_name||'票券', Ld:L.date, Lt:L.start_time};
+      showModal(`<div class="modal-title">扣課順序提醒</div>
+        <div style="font-size:13px;line-height:1.9;color:var(--text);">
+          依購買順序，本堂應優先扣「<b>${A.plan_name||'較早購買的票券'}</b>」，但它已被之後的預約排滿。<br>
+          要把它<b>最晚的一堂（${_lbl(L.date)} ${L.start_time}）</b>挪到「${B.plan_name||'本次扣的票券'}」，本堂改扣回「${A.plan_name||''}」嗎？<br>
+          <span style="font-size:12px;color:var(--t2);">兩張票的餘額與效期都不會改變，只調整各堂課掛在哪張票上。</span>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" onclick="closeModal()">維持現狀</button>
+          <button class="btn btn-green" onclick="closeModal();bkDoOrderSwap()">照順序挪移</button>
+        </div>`);
+      return true;
+    }
+    return false;
+  }catch(e){ console.error('bkOfferOrderSwap',e); return false; }
+}
+async function bkDoOrderSwap(){ return onceAct('ordswap', _bkDoOrderSwap); }
+async function _bkDoOrderSwap(){
+  const P=window._ordSwap; window._ordSwap=null;
+  if(!P) return;
+  const done=cxBusy('挪移中…');
+  try{
+    const bk=await dbGet('bookings',P.bkId), L=await dbGet('bookings',P.L);
+    if(!bk||!L||bk.ticket_id!==P.B||L.ticket_id!==P.A){ done(); showToast('資料已變動，未執行挪移'); return; }
+    bk.ticket_id=P.A; L.ticket_id=P.B;
+    await dbPut('bookings',bk); await dbPut('bookings',L);
+    const op=(SESSION&&SESSION.id)||'system';
+    await logTicket(P.B,'refund',1,bk.id,op,`挪移退回：臨時課改依購買順序扣「${P.An}」`);
+    await logTicket(P.A,'refund',1,L.id,op,`挪移退回：${P.Ld} 讓位給臨時課`);
+    await logTicket(P.A,'deduct',-1,bk.id,op,`挪移扣課：臨時課依購買順序改扣本票（與 ${P.Ld} 對調）`);
+    await logTicket(P.B,'deduct',-1,L.id,op,`挪移扣課：${P.Ld} 改扣本票（與臨時課對調；兩票餘額效期均不變）`);
+    done();
+    showToast(`已照順序挪移：本堂改扣「${P.An}」，${P.Ld} 那堂改扣「${P.Bn}」`);
+    try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
+  }catch(e){ done(); showToast('挪移失敗：'+(e&&e.message?e.message:e)); }
 }
 async function bkOfferSwap(P){
   try{
@@ -21487,6 +21612,11 @@ async function _submitBookingInner(){
     else { showToast(results[0].reason); }
     window._bkFamUser=null;   // 使用人旗標只作用這一筆（2026-08-03 家庭成員）
     bkAfterSubmit();
+    /* 扣課順序提醒（2026-08-18 江念恩案例）：臨時單堂扣到順位較後的票時，
+       提示把順位票最晚的一堂挪過來 —— 只對教練課、建立成功且有扣票的那一筆。 */
+    if(results[0].ok && !results[0].held && results[0].bkId && results[0].tkId && t.category==='私人教練'){
+      try{ bkOfferOrderSwap({member_id, type_id, date, time, bkId:results[0].bkId, tkId:results[0].tkId}); }catch(_){}
+    }
     return;
   }
   // 結果摘要視窗
@@ -21643,7 +21773,7 @@ async function runRecurringBooking(opts){
       if(window.FEATURE_FLAGS&&FEATURE_FLAGS.createBookingRpc&&CLOUD&&!noDeduct&&tk&&!holdOnly&&!o.venue_pref&&!bkIsSelf(bk)){
         // ── Sprint 3：改由後端 RPC 單一交易建立＋扣票（旗標開啟時）──
         const rr=await createBookingViaRpc(o, tk, ds, ts);
-        if(rr.ok){ ok++; results.push({date:ds,ok:true,tkId:tk?tk.id:null,tkName:tk?(tk.plan_name||'票券'):''}); }
+        if(rr.ok){ ok++; results.push({date:ds,ok:true,bkId:rr.booking_id||null,tkId:tk?tk.id:null,tkName:tk?(tk.plan_name||'票券'):''}); }
         else { skipped++; results.push({date:ds,ok:false,reason:rr.reason}); }
       } else {
         // ── 原路徑（旗標關閉，維持與過往完全一致）──
@@ -21654,7 +21784,7 @@ async function runRecurringBooking(opts){
         if(o.units>1){ try{ await bkAddTreadmillUnits(bk, o.units); }catch(_){} }
         if(holdOnly) held++; else ok++;
         // 實際扣了哪張票要記下來（2026-08-01）：跟指定的不一樣時要講，不能默默換票
-        results.push({date:ds,ok:true,held:holdOnly,tkId:tk?tk.id:null,tkName:tk?(tk.plan_name||'票券'):''});
+        results.push({date:ds,ok:true,held:holdOnly,bkId:bk.id,tkId:tk?tk.id:null,tkName:tk?(tk.plan_name||'票券'):''});
       }
     }catch(e){ skipped++; results.push({date:ds,ok:false,reason:'寫入失敗'}); }
   }
@@ -23700,11 +23830,51 @@ async function doVenueChange(id,vid){
   await dbPut('bookings',b);
   try{ occCacheClear(); }catch(_){}
   showToast('已更換場地：'+venueName(b.venue_unit));
+  /* 換場地後的同行第二台（2026-08-18 蘇美帆案例：兩台跑步機改成訓練架，
+     跑步機的同行影子預約還掛著、卻因主卡不是跑步機而沒有任何入口可取消）——
+     主卡換到不同場地類型時，把還掛著的同行卡點出來問，別讓它變成看不見的佔位。 */
+  try{
+    const nvid=String(b.venue_unit||'').split('_')[0];
+    const sibs=(await dbGetAll('bookings')).filter(x=>x&&x.sibling_of===b.id&&x.status!=='cancelled'
+      &&String(x.venue_unit||'').split('_')[0]!==nvid);
+    if(sibs.length){
+      window._vcSibs=sibs.map(x=>x.id);
+      const names=[...new Set(sibs.map(x=>venueName(x.venue_unit)||'第二台'))].join('、');
+      done();
+      showModal(`<div class="modal-title">同行第二台還掛著</div>
+        <div style="font-size:13px;line-height:1.9;color:var(--text);">
+          這筆預約原本有同行使用的 <b>${names}</b>（不扣點）。主卡已改到 ${venueName(b.venue_unit)||'新場地'}，
+          ${names}仍佔用該時段。要一併取消嗎？
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" onclick="closeModal();vcKeepSibs('${id}')">保留（同行者仍要用）</button>
+          <button class="btn btn-green" onclick="closeModal();vcCancelSibs('${id}')">一併取消</button>
+        </div>`);
+      return;
+    }
+  }catch(_){}
   await openBookingDetail(id);
   /* 底下那一頁也重畫（寫入時 dbCacheApply 已就地更新快取，所以是 0 網路等待）。
      _calStepping 讓行事曆吃快取重繪、不跑翻頁動畫；明細視窗是獨立覆層，不會被關掉。 */
   try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
  }catch(e){ done(); showToast('更換失敗：'+(e&&e.message?e.message:e)); }
+}
+/* 換場地後的同行第二台：保留＝只刷新畫面；一併取消＝影子卡取消（本來就不扣點，無票務） */
+function vcKeepSibs(id){ try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}; openBookingDetail(id); }
+async function vcCancelSibs(id){
+  const ids=window._vcSibs||[]; window._vcSibs=null;
+  for(const sid of ids){
+    try{
+      const s=await dbGet('bookings',sid); if(!s||s.status==='cancelled') continue;
+      s.status='cancelled'; s.cancelled_at=new Date().toISOString();
+      s.note=(s.note?s.note+'\n':'')+ymd(TODAY)+' 主卡更換場地，同行第二台一併取消';
+      await dbPut('bookings',s);
+    }catch(_){}
+  }
+  try{ occCacheClear(); }catch(_){}
+  showToast('同行第二台已取消');
+  try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
+  openBookingDetail(id);
 }
 // 確認補發補課券
 async function confirmMakeup(id){
@@ -35024,6 +35194,19 @@ async function memSignContractDo(id){
     dbCacheClear(['contracts']);
     document.getElementById('mem-sign-banner')?.remove();
     closeContractReader(); closeModal(); showToast('合約已完成簽署，謝謝！'); navTo(CUR_PAGE);
+    /* 連簽（2026-08-18 陳秀蘭案例：一次簽兩張，第二張找不到簽名入口）——
+       簽完一份，還有待簽的就直接問要不要接著簽，不必回頁面自己找。 */
+    try{
+      const rest=(await dbGetAll('contracts').catch(()=>[])).filter(c=>c&&c.sign_type==='remote'&&!c.signed_at&&c.id!==id&&c.member_id===SESSION.id);
+      if(rest.length){
+        showModal(`<div class="modal-title">還有 ${rest.length} 份合約待簽名</div>
+          <div style="font-size:13px;color:var(--t2);line-height:1.8;">剛才那份已完成。要接著簽下一份（${rest[0].plan_name||'課程合約'}）嗎？</div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" onclick="closeModal()">稍後再簽</button>
+            <button class="btn btn-green" onclick="closeModal();memSignContract('${rest[0].id}')">繼續簽署</button>
+          </div>`);
+      }
+    }catch(_){}
   }catch(e){ showToast('簽署失敗：'+(e&&e.message?e.message:e)); }
 }
 function ctSetType(v){
@@ -41757,9 +41940,11 @@ function memContractEntryHTML(){
 function openMemContracts(){
   const list=(window._memContracts||[]).slice().sort((a,b)=>(b.signed_at||'').localeCompare(a.signed_at||''));
   showModal(`<div class="modal-title">我的合約</div>
-    ${list.length?list.map(c=>`<div class="ctl-row" onclick="openContractView('${c.id}')">
+    ${/* 未簽的遠端合約點下去要進「簽署」而不是唯讀檢視（2026-08-18 陳秀蘭案例：
+         連簽兩張，第二張從這裡點進去是唯讀畫面、沒有簽名區，被迫重新登入等蓋版提醒）。 */''}
+    ${list.length?list.map(c=>`<div class="ctl-row" onclick="${(c.sign_type==='remote'&&!c.signed_at)?'closeModal();memSignContract':'openContractView'}('${c.id}')">
       <div class="ctl-row-b"><div class="ctl-row-t">${c.plan_name||'課程合約'}</div>
-        <span class="ctl-row-s">${c.signed_at?`簽約日 ${c.signed_at.slice(0,10)}`:'尚未簽名'}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</span></div>
+        <span class="ctl-row-s">${c.signed_at?`簽約日 ${c.signed_at.slice(0,10)}`:'尚未簽名・點此簽署'}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</span></div>
       <span class="ctl-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}" ${(c.sign_type==='remote'&&!c.signed_at)?'style="background:#fbe4e2;color:#b5372e;"':''}>${ctSignLabel(c,true)}</span>
     </div>`).join(''):'<div class="empty" style="padding:22px;"><div class="em-t">尚無合約紀錄</div></div>'}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
