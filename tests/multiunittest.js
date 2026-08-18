@@ -57,6 +57,20 @@ console.log('同行卡建立');
     eq('　訓練架×2 → 訓練架・兩台', lbl({category:'自主訓練',venue_unit:'multi_1',_units:2}), '訓練架・兩台');
     eq('　訓練架×1 → 不標（照舊）', lbl({category:'自主訓練',venue_unit:'multi_1'}), '');
     eq('　跑步機×2 照舊', lbl({category:'自主訓練',venue_unit:'treadmill_1',_units:2}), '跑步機・兩台');
+
+    /* ── mergeSiblingUnits：同場地併卡、跨場地拆卡（2026-08-18 蘇美帆 10:00 案例） ── */
+    console.log('同行卡合併規則');
+    const merge=new Function(g('function mergeSiblingUnits(list){','\n}\n')+'\nreturn mergeSiblingUnits;')();
+    const same=merge([
+      {id:'A',venue_unit:'treadmill_1',sibling_of:null},
+      {id:'B',venue_unit:'treadmill_2',sibling_of:'A'}]);
+    eq('　兩台跑步機＝一張卡（_units 2）', same.map(x=>x.id+':'+(x._units||1)), ['A:2']);
+    const mixed=merge([
+      {id:'A',venue_unit:'multi_3',sibling_of:null},
+      {id:'B',venue_unit:'treadmill_1',sibling_of:'A'}]);
+    eq('　訓練架＋跑步機＝兩張卡', mixed.map(x=>x.id).sort(), ['A','B']);
+    const orphan=merge([{id:'B',venue_unit:'treadmill_1',sibling_of:'GONE'}]);
+    eq('　主卡不在清單（被濾掉）→ 同行卡自己成卡，不再無聲消失', orphan.map(x=>x.id), ['B']);
     console.log(`\n${pass} 過 / ${fail} 敗`);
     process.exit(fail?1:0);
   });

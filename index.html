@@ -7812,8 +7812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260818.1610';
-const APP_VERSION_LABEL='v260818.1610';
+const APP_VERSION = '260818.1617';
+const APP_VERSION_LABEL='v260818.1617';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16175,9 +16175,19 @@ let _calOpts=null;
    一張卡。這裡把 sibling_of 指到別人的那幾筆濾掉，並把台數記在主預約的 _units 上，
    課卡的場地標籤就畫成「跑步機 ●●」。 */
 function mergeSiblingUnits(list){
-  const n={};
-  (list||[]).forEach(b=>{ if(b&&b.sibling_of) n[b.sibling_of]=(n[b.sibling_of]||0)+1; });
-  return (list||[]).filter(b=>!(b&&b.sibling_of))
+  /* 同行第二台只在「同場地類型」時併回主卡（跑步機×2＝一張卡）。
+     跨場地的同行卡（2026-08-18 蘇美帆案例：兩台跑步機改一台＋訓練架）要各自成卡——
+     原本一律併卡，主卡換成訓練架後跑步機變成看不見又點不到的影子。
+     主卡不在清單裡（被濾掉）時，同行卡也自己成卡，不再無聲消失。 */
+  const byId={}; (list||[]).forEach(b=>{ if(b&&b.id) byId[b.id]=b; });
+  const vt=b=>String((b&&b.venue_unit)||'').split('_')[0];
+  const n={}, loose=new Set();
+  (list||[]).forEach(b=>{ if(b&&b.sibling_of){
+    const root=byId[b.sibling_of];
+    if(root && vt(root)===vt(b)) n[b.sibling_of]=(n[b.sibling_of]||0)+1;
+    else loose.add(b.id);
+  }});
+  return (list||[]).filter(b=>!(b&&b.sibling_of) || loose.has(b.id))
     .map(b=>n[b.id] ? Object.assign({}, b, {_units:n[b.id]+1}) : b);
 }
 function mergeGroupBookings(list){
