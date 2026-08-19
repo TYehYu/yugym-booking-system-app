@@ -7741,6 +7741,13 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .admh-st-leave{background:#b5372e;color:#fff;}
 .admh-card{padding-right:88px;}   /* 讓右下角的教練名/章有自己的空間，不與左側文字重疊 */
 .admh-empty{text-align:center;color:var(--t3);font-size:13px;padding:26px 0;background:var(--card2);border-radius:14px;}
+/* 管理員手機自製下拉更新的轉圈指示器（頂欄不動） */
+#adm-ptr{position:fixed;left:50%;transform:translateX(-50%);top:-46px;z-index:9700;width:42px;height:42px;border-radius:50%;
+  background:#fff;box-shadow:0 4px 14px rgba(50,42,30,.28);display:flex;align-items:center;justify-content:center;opacity:0;}
+.adm-ptr-spin{width:20px;height:20px;border-radius:50%;border:2.5px solid var(--bd);border-top-color:var(--green);}
+#adm-ptr.ready .adm-ptr-spin{border-top-color:var(--gold,#B48A56);}
+#adm-ptr.spin .adm-ptr-spin{animation:admspin .8s linear infinite;}
+@keyframes admspin{to{transform:rotate(360deg)}}
 /* 點大日期 → 品牌綠半透明月曆（只有日期＋今日提示）。
    2026-08-19 修：不滿版——面板貼齊畫面頂部、高度只包內容，其餘區域淡遮罩點了關閉。 */
 #admh-mcal{position:fixed;inset:0;z-index:9600;background:rgba(20,24,20,.35);
@@ -7920,8 +7927,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1222';
-const APP_VERSION_LABEL='v260819.1222';
+const APP_VERSION = '260819.1225';
+const APP_VERSION_LABEL='v260819.1225';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9786,6 +9793,7 @@ function enterApp(){
      非店長教練不吃 desktop-wide（那是櫃檯／管理員的左側側欄版面），另給一個 class。 */
   app.classList.toggle('coach-wide', !!(SESSION&&SESSION.role==='coach'&&!SESSION.is_manager) && !isMobileLayout());
   app.classList.toggle('role-member', SESSION.role==='member'); app.classList.toggle('role-coach', SESSION.role==='coach'); app.classList.toggle('role-admin', SESSION.role==='admin'); // 會員端：手機頂部顯示姓名取代天氣
+  if(SESSION.role==='admin'&&isMobileLayout()&&typeof admPtrInit==='function') admPtrInit();   /* 管理員手機：自製下拉更新（頂欄不動） */
   document.getElementById('tb-role').textContent=ROLE_LABEL[SESSION.role];
   const tv=document.getElementById('tb-ver'); if(tv) tv.textContent=APP_VERSION;
   setAcctHead(SESSION.name, ROLE_LABEL[SESSION.role], SESSION.gender);
@@ -37641,6 +37649,34 @@ function admhOpenMonthCal(ym){
     <div class="amc-grid">${cells}</div>
   </div>`;
   document.body.appendChild(host);
+}
+/* 管理員手機：自製下拉更新（2026-08-19 使用者指示「不要把頂欄也一起拖動」）——
+   關掉瀏覽器原生的整頁下拉重整（會連頂欄一起拖），改成內容區下拉出轉圈指示器、
+   拉滿放手才重新整理；頂欄全程不動。只在 admin＋手機掛上。 */
+function admPtrInit(){
+  if(window._admPtrOn) return; window._admPtrOn=true;
+  try{ document.documentElement.style.overscrollBehaviorY='none'; document.body.style.overscrollBehaviorY='none'; }catch(_){}
+  let y0=null, dist=0, pulling=false;
+  const IND=()=>{ let el=document.getElementById('adm-ptr');
+    if(!el){ el=document.createElement('div'); el.id='adm-ptr'; el.innerHTML='<span class="adm-ptr-spin"></span>'; document.body.appendChild(el); }
+    return el; };
+  window.addEventListener('touchstart',e=>{
+    if((window.scrollY||document.documentElement.scrollTop||0)<=0){ y0=e.touches[0].clientY; dist=0; pulling=false; }
+    else y0=null;
+  },{passive:true});
+  window.addEventListener('touchmove',e=>{
+    if(y0==null) return;
+    dist=e.touches[0].clientY-y0;
+    if(dist>12){ pulling=true; const el=IND(); const d=Math.min(dist,130);
+      el.style.top=(d-46)+'px'; el.style.opacity=String(Math.min(1,d/80));
+      el.classList.toggle('ready', d>=95); }
+  },{passive:true});
+  window.addEventListener('touchend',()=>{
+    const el=document.getElementById('adm-ptr');
+    if(pulling && dist>=95){ if(el){ el.classList.add('spin'); el.style.top='14px'; } setTimeout(()=>location.reload(),180); }
+    else if(el) el.remove();
+    y0=null; dist=0; pulling=false;
+  },{passive:true});
 }
 /* 首頁課卡點擊（2026-08-19 使用者指示）：先彈置中小卡＋下方圓形按鈕（同行事曆 Calm Play，
    背景遮罩、簽到/取消/明細等動作齊全），按「明細」才進預約詳細視窗。 */
