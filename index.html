@@ -8015,8 +8015,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1825';
-const APP_VERSION_LABEL='v260819.1825';
+const APP_VERSION = '260819.1828';
+const APP_VERSION_LABEL='v260819.1828';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14553,33 +14553,43 @@ PAGES.g_dashboard=async function(){
           stroke-dasharray="${g.c.toFixed(1)}" stroke-dashoffset="${g.off.toFixed(1)}" transform="rotate(-90 65 65)"/>
       </svg><div class="mstat-center"><div class="mstat-num">${center}</div><div class="mstat-unit">${unit}</div></div></div>
       <div class="mstat-sub">${sub}</div></div>`;};
-  /* 本月成績卡改版（2026-08-19 使用者指示）：
-     ・教練課/團體課環下方顯示銷課金額（monthSalesValue，同財務頁口徑）
-     ・右上角顯示本月總營收（同財務頁「本月營收」口徑：本月售票實收＋跨月分期收款＋場租/重啟/商品）
-     ・團體課環改「銷課堂數/總堂數」進度，中間維持人次 */
-  let _msv=null; try{ _msv=await monthSalesValue(_mYm,[bookings,mtickets,types]); }catch(_){}
+  /* 本月成績卡（2026-08-19）：新版（銷課金額＋月總營收＋團課環比例）**只給管理員手機**；
+     其他角色與桌機維持原版卡（使用者指示：不要影響到其他人）。 */
+  const _admMob=(SESSION&&SESSION.role==='admin'&&isMobileLayout());
+  let _msv=null, _mRevTotal=0;
   const _mGrpSched=_mBkAll.filter(b=>bkIsGroup(b)).length;
-  let _mRevTotal=0;
-  try{
-    const _mTkPu={};
-    (purchases||[]).forEach(p=>{ if(p && p.ticket_id && (p.created_at||'').slice(0,7)===_mYm
-      && p.source!=='reactivate' && p.source!=='facility_rental' && p.source!=='merchandise')
-      _mTkPu[p.ticket_id]=(_mTkPu[p.ticket_id]||0)+(Number(p.deal_amount)||0); });
-    const _mNewTk=new Set((mtickets||[]).filter(t=>(t.purchase_date||'').slice(0,7)===_mYm).map(t=>t.id));
-    const _tkRev=(mtickets||[]).filter(t=>_mNewTk.has(t.id))
-      .reduce((s2,t)=>s2+(_mTkPu[t.id]!=null?_mTkPu[t.id]:(Number(t.amount_paid)||0)),0);
-    const _instRev=(purchases||[]).filter(p=>p.source==='installment'&&((p.created_at||'').slice(0,7)===_mYm)&&!_mNewTk.has(p.ticket_id))
-      .reduce((s2,p)=>s2+(Number(p.deal_amount)||0),0);
-    const _purRev=(purchases||[]).filter(p=>((p.created_at||'').slice(0,7)===_mYm)&&(p.source==='reactivate'||p.source==='facility_rental'||p.source==='merchandise'))
-      .reduce((s2,p)=>s2+(Number(p.deal_amount)||0),0);
-    _mRevTotal=_tkRev+_instRev+_purRev;
-  }catch(_){}
-  const monthCard=`<div class="card mc-card">
+  if(_admMob){
+    try{ _msv=await monthSalesValue(_mYm,[bookings,mtickets,types]); }catch(_){}
+    try{
+      const _mTkPu={};
+      (purchases||[]).forEach(p=>{ if(p && p.ticket_id && (p.created_at||'').slice(0,7)===_mYm
+        && p.source!=='reactivate' && p.source!=='facility_rental' && p.source!=='merchandise')
+        _mTkPu[p.ticket_id]=(_mTkPu[p.ticket_id]||0)+(Number(p.deal_amount)||0); });
+      const _mNewTk=new Set((mtickets||[]).filter(t=>(t.purchase_date||'').slice(0,7)===_mYm).map(t=>t.id));
+      const _tkRev=(mtickets||[]).filter(t=>_mNewTk.has(t.id))
+        .reduce((s2,t)=>s2+(_mTkPu[t.id]!=null?_mTkPu[t.id]:(Number(t.amount_paid)||0)),0);
+      const _instRev=(purchases||[]).filter(p=>p.source==='installment'&&((p.created_at||'').slice(0,7)===_mYm)&&!_mNewTk.has(p.ticket_id))
+        .reduce((s2,p)=>s2+(Number(p.deal_amount)||0),0);
+      const _purRev=(purchases||[]).filter(p=>((p.created_at||'').slice(0,7)===_mYm)&&(p.source==='reactivate'||p.source==='facility_rental'||p.source==='merchandise'))
+        .reduce((s2,p)=>s2+(Number(p.deal_amount)||0),0);
+      _mRevTotal=_tkRev+_instRev+_purRev;
+    }catch(_){}
+  }
+  const monthCard=_admMob
+    ? `<div class="card mc-card">
     <div class="mc-card-h" style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;">本月成績
       <span style="font-size:12px;font-weight:600;color:var(--t2);">本月總營收 <b style="font-size:14.5px;color:var(--gold-d,#9a7344);font-family:var(--num);">$${_fm(_mRevTotal)}</b></span></div>
     <div class="mstat-row${_hasMyDuty?'':' mstat-row-2'}">
       ${_ring2('教練課', `${_mPtDone} / ${_mPtSched}`, _mPtDone,'堂', `<b class="mstat-gold">銷課 $${_fm(Math.round((_msv&&_msv.ptValue)||0))}</b>`, '#1f6f54', _mPtSched>0?_mPtDone/_mPtSched*100:0)}
       ${_ring2('團體課', `${_mGrpDoneBk.length} / ${_mGrpSched}`, _mGrpHead,'人次', `<b class="mstat-gold">銷課 $${_fm(Math.round((_msv&&_msv.grpValue)||0))}</b>`, '#9a5a1e', _mGrpSched>0?_mGrpDoneBk.length/_mGrpSched*100:0)}
+      ${_hasMyDuty?_ring2('值班時數', '', _mMyDutyDone,'h', `${_mMyDutyDone} / ${_mMyDutySched}`, 'var(--gold)', _mMyDutySched>0?_mMyDutyDone/_mMyDutySched*100:0):''}
+    </div>
+  </div>`
+    : `<div class="card mc-card">
+    <div class="mc-card-h">本月成績</div>
+    <div class="mstat-row${_hasMyDuty?'':' mstat-row-2'}">
+      ${_ring2('教練課', '', _mPtDone,'堂', `${_mPtDone} / ${_mPtSched}`, '#1f6f54', _mPtSched>0?_mPtDone/_mPtSched*100:0)}
+      ${_ring2('團體課', '', _mGrpHead,'人次', `${_mGrpDoneBk.length} 堂團課`, '#9a5a1e', _mGrpHead>0?100:0)}
       ${_hasMyDuty?_ring2('值班時數', '', _mMyDutyDone,'h', `${_mMyDutyDone} / ${_mMyDutySched}`, 'var(--gold)', _mMyDutySched>0?_mMyDutyDone/_mMyDutySched*100:0):''}
     </div>
   </div>`;
