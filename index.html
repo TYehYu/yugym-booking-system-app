@@ -7770,6 +7770,25 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 #adm-ptr.ready .adm-ptr-spin{border-top-color:var(--gold,#B48A56);}
 #adm-ptr.spin .adm-ptr-spin{animation:admspin .8s linear infinite;}
 @keyframes admspin{to{transform:rotate(360deg)}}
+/* 管理員行事曆・三日/七日欄狀檢視（一日同款米色背景） */
+.amcv{padding:2px 0 90px;}
+.amcv-grid{display:flex;gap:4px;}
+.amcv-axis{flex:0 0 30px;position:relative;}
+.amcv-hr{position:absolute;left:0;font-size:10px;color:var(--t3);font-family:var(--num);transform:translateY(-5px);}
+.amcv-col{flex:1 1 0;min-width:0;}
+.amcv-colh{display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 0 6px;height:34px;box-sizing:border-box;}
+.amcv-colh b{font-size:12px;color:var(--text);line-height:1.1;}
+.amcv-colh span{font-size:10.5px;color:var(--t2);font-family:var(--num);}
+.amcv-colh.amcv-today b,.amcv-colh.amcv-today span{color:var(--green);font-weight:800;}
+.amcv-body{position:relative;background:repeating-linear-gradient(to bottom, rgba(120,110,95,.10) 0, rgba(120,110,95,.10) 1px, transparent 1px, transparent var(--amcv-hh,46px));border-radius:8px;}
+.amcv-card{position:absolute;background:#fff;border-radius:7px;border-left:3px solid var(--amc,#1f6f54);
+  box-shadow:0 1px 4px rgba(50,42,30,.15);padding:3px 4px 2px 5px;overflow:hidden;cursor:pointer;
+  display:flex;flex-direction:column;box-sizing:border-box;}
+.amcv-card .amcv-nm{font-size:10.5px;font-weight:700;color:var(--text);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.amcv-card .amcv-t{position:absolute;top:2px;right:4px;font-size:9.5px;font-weight:700;color:var(--t2);font-family:var(--num);}
+.amcv-card .amcv-nm{padding-right:30px;}
+.amcv-tiny{padding:2px;}
+.amcv-tiny .amcv-t{position:static;font-size:10px;text-align:center;width:100%;color:var(--text);}
 /* 點大日期 → 品牌綠半透明月曆（只有日期＋今日提示）。
    2026-08-19 修：不滿版——面板貼齊畫面頂部、高度只包內容，其餘區域淡遮罩點了關閉。 */
 #admh-mcal{position:fixed;inset:0;z-index:9600;background:rgba(20,24,20,.35);
@@ -7949,8 +7968,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1658';
-const APP_VERSION_LABEL='v260819.1658';
+const APP_VERSION = '260819.1709';
+const APP_VERSION_LABEL='v260819.1709';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18626,12 +18645,9 @@ PAGES.calendar=async function(){
         const _nD=Number(window._admCalDays)||1;
         const _hdr=await admCalHeaderHTML();
         if(_nD>1){
-          _calDays=_nD;
-          if(!calWeekStart) initCalWeek();
-          C.innerHTML=_hdr+(await renderCalendar({coachFilter:false,onSlot:'quickBookAt',editable:true,stepping:_stepping}));
-          try{ initCalDrag(); }catch(_){}
-          try{ initCalSwipe(document.querySelector('.cal-body')); }catch(_){}
-          try{ fitCalWrapHeight(); }catch(_){}
+          /* 自製欄狀檢視（2026-08-19 使用者回饋：桌機渲染在手機太亂）——
+             一日同款背景、只顯示教練課系列、卡片精簡。 */
+          C.innerHTML=_hdr+(await admCalMultiHTML(_nD));
           return;
         }
         _calDays=null;
@@ -37829,6 +37845,56 @@ function admPtrInit(){
 async function admhCardTap(e,id){
   const el=e&&e.currentTarget;
   try{ await expandBkCard(el,id); }catch(_){ openBookingDetail(id); }
+}
+/* 管理員手機行事曆・三日/七日欄狀檢視（2026-08-19 使用者定版）：
+   與一日同款米色背景；只顯示教練課系列（私教/團課/體驗/按摩，排除自主訓練與場租）；
+   卡片＝第一列課名、右上 24 小時制時間；欄太窄（重疊分欄）只顯示小時數（例：20）。 */
+async function admCalMultiHTML(nDays){
+  const today=ymd(TODAY);
+  const sel=window._cagSelDate||today;
+  const start=(nDays===7)?heroWeekMonday(sel):(parseYmd(sel)||new Date(TODAY));
+  const days=[]; for(let i=0;i<nDays;i++){ const d=new Date(start); d.setDate(start.getDate()+i); days.push(d); }
+  let bks=[]; try{ bks=await dbGetAll('bookings'); }catch(_){}
+  const tm=Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t]));
+  const COACH_CATS={'私人教練':1,'小班肌力':1,'體驗':1,'運動按摩':1};
+  const CCOL={'ev-pt':'#1f6f54','ev-friendly':'#23508a','ev-group':'#9a5a1e','ev-trial':'#6e3a86','ev-self':'#6a655c','ev-massage':'#2f8f83'};
+  const S=8*60,E=22*60,HH=(nDays===7)?46:58,GH=(E-S)/60*HH;
+  const wdz=['日','一','二','三','四','五','六'];
+  let axis='';
+  for(let h=8;h<=22;h++) axis+=`<div class="amcv-hr" style="top:${(h*60-S)/60*HH}px;">${String(h).padStart(2,'0')}</div>`;
+  const colsHtml=days.map(d=>{
+    const ds=ymd(d);
+    const list=(bks||[]).filter(b=>b&&b.date===ds&&b.status!=='cancelled'&&!b.sibling_of&&COACH_CATS[b.category]);
+    const evs=list.map(b=>{const s0=timeToMin(b.start_time),e0=s0+(Number(b.duration)||60);return{b,s:s0,e:e0};})
+      .sort((a,b2)=>a.s-b2.s||String(a.b.id).localeCompare(String(b2.b.id)));
+    const clusters=[]; let cur=[],curEnd=-1;
+    evs.forEach(it=>{ if(cur.length&&it.s>=curEnd){clusters.push(cur);cur=[];curEnd=-1;} curEnd=cur.length?Math.max(curEnd,it.e):it.e; cur.push(it); });
+    if(cur.length) clusters.push(cur);
+    let cards='';
+    clusters.forEach(cl=>{
+      const ln=[]; const asg=new Map();
+      cl.forEach(({b,s,e})=>{ let i=ln.findIndex(l=>!l.some(iv=>s<iv.e&&e>iv.s)); if(i<0){i=ln.length;ln.push([]);} ln[i].push({s,e}); asg.set(b.id,i); });
+      const unit=ln.length||1, w=100/unit;
+      cl.forEach(({b,s,e})=>{
+        const tiny=(nDays===7&&unit>1)||(nDays===3&&unit>2);
+        const nm=(typeof bookingTypeName==='function')?bookingTypeName(b,tm):(b.category||'');
+        const col=CCOL[(typeof evColorClass==='function')?evColorClass(b,tm):'ev-pt']||'#1f6f54';
+        cards+=`<div class="amcv-card${tiny?' amcv-tiny':''}" style="top:${((s-S)/60*HH+1).toFixed(1)}px;height:${Math.max((e-s)/60*HH-4,18).toFixed(1)}px;left:calc(${(asg.get(b.id)*w).toFixed(2)}% + 2px);width:calc(${w.toFixed(2)}% - 4px);--amc:${col};" onclick="admhCardTap(event,'${b.id}')">
+          ${tiny?`<span class="amcv-t">${String(b.start_time).slice(0,2)}</span>`
+               :`<span class="amcv-nm">${nm}</span><span class="amcv-t">${b.start_time}</span>`}
+        </div>`;
+      });
+    });
+    const isT=ds===today;
+    return `<div class="amcv-col">
+      <div class="amcv-colh${isT?' amcv-today':''}"><b>週${wdz[d.getDay()]}</b><span>${d.getMonth()+1}/${d.getDate()}</span></div>
+      <div class="amcv-body" style="height:${GH}px;">${cards}</div>
+    </div>`;
+  }).join('');
+  return `<div class="amcv"><div class="amcv-grid">
+    <div class="amcv-axis" style="height:${GH}px;margin-top:34px;">${axis}</div>
+    ${colsHtml}
+  </div></div>`;
 }
 /* 管理員手機行事曆表頭（2026-08-19）：首頁同款週列＋一日/三日/七日模式切換（僅 admin） */
 async function admCalHeaderHTML(){
