@@ -7949,8 +7949,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1607';
-const APP_VERSION_LABEL='v260819.1607';
+const APP_VERSION = '260819.1640';
+const APP_VERSION_LABEL='v260819.1640';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18613,6 +18613,25 @@ PAGES.calendar=async function(){
       window._cagLayerMine=true; window._cagLayerOthers=true; window._cagLayerGroup=true;
     }
     try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
+    /* 管理員手機行事曆（2026-08-19 使用者定版；僅 admin，教練/櫃檯照舊）——
+       表頭改首頁同款週列＋「一日/三日/七日」模式：一日＝原 agenda、三日/七日＝renderCalendar。 */
+    if(SESSION.role==='admin'){
+      const _nD=Number(window._admCalDays)||1;
+      const _hdr=await admCalHeaderHTML();
+      if(_nD>1){
+        _calDays=_nD;
+        if(!calWeekStart) initCalWeek();
+        C.innerHTML=_hdr+(await renderCalendar({coachFilter:false,onSlot:'quickBookAt',editable:true,stepping:_stepping}));
+        try{ initCalDrag(); }catch(_){}
+        try{ initCalSwipe(document.querySelector('.cal-body')); }catch(_){}
+        try{ fitCalWrapHeight(); }catch(_){}
+        return;
+      }
+      _calDays=null;
+      C.innerHTML=_hdr+`<div id="wtl-page"></div>`;
+      await renderCoachAgenda();
+      return;
+    }
     C.innerHTML=`<div id="wtl-page"></div>`;
     await renderCoachAgenda();
     return;
@@ -19420,7 +19439,9 @@ async function renderCoachAgenda(){
 
   /* ── 上方：固定一週（週一為第一天）的日期卡（2026-07-29 使用者指示，與三角色首頁統一）——
      ‹ › 換週、卡片顯示當日課堂數。 ── */
-  const monthRow=`<div class="cag-mcal" style="padding-bottom:10px;">
+  /* 管理員手機（2026-08-19）：週列改由 PAGES.calendar 的 admCalHeaderHTML 提供（首頁同款），
+     這裡不再畫綠色週列；教練照舊。 */
+  const monthRow=(SESSION&&SESSION.role==='admin')?'':`<div class="cag-mcal" style="padding-bottom:10px;">
     ${heroWeekBarHTML({anchor:selDate,sel:selDate,today:todayStr,
       pickFn:'cagSelectDate',prevFn:'cagWeekShift(-1)',nextFn:'cagWeekShift(1)',id:'cag-days',
       metaOf:ds=>{const n=cntByDate[ds]||0;return n?n+' 堂':'';}})}
@@ -37785,6 +37806,42 @@ function admPtrInit(){
 async function admhCardTap(e,id){
   const el=e&&e.currentTarget;
   try{ await expandBkCard(el,id); }catch(_){ openBookingDetail(id); }
+}
+/* 管理員手機行事曆表頭（2026-08-19）：首頁同款週列＋一日/三日/七日模式切換（僅 admin） */
+async function admCalHeaderHTML(){
+  const today=ymd(TODAY);
+  const sel=window._cagSelDate||today; window._cagSelDate=sel;
+  let bks=[]; try{ bks=await dbGetAll('bookings'); }catch(_){}
+  const cnt={}; (bks||[]).forEach(b=>{ if(!b||b.status==='cancelled'||b.sibling_of)return;
+    if(bkIsSelf(b)||b.category==='場租')return; cnt[b.date]=(cnt[b.date]||0)+1; });
+  const mon=heroWeekMonday(sel);
+  let btns='';
+  for(let i=0;i<7;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i); const ds=ymd(d); const n=cnt[ds]||0;
+    btns+=`<button class="msb-date${ds===sel&&ds!==today?' on':''}${ds===today?' hero-today':''}" onclick="admCalPick('${ds}')">
+      <span class="cag-dn">${n?n+' 堂':'－'}</span><b>${d.getMonth()+1}/${d.getDate()}</b><span>${ds===today?'今天':'週'+HERO_WD[d.getDay()]}</span></button>`;
+  }
+  const nD=Number(window._admCalDays)||1;
+  const seg=[1,3,7].map(n=>`<button class="admh-chip${nD===n?' on':''}" onclick="admCalMode(${n})">${n===1?'一日':n===3?'三日':'七日'}</button>`).join('');
+  return `<div class="admh" style="margin:0 0 8px;">
+    <div class="admh-week">
+      <button class="admh-wknav" onclick="admCalShift(-1)">‹</button>
+      <div class="admh-wkdays">${btns}</div>
+      <button class="admh-wknav" onclick="admCalShift(1)">›</button>
+    </div>
+    <div class="admh-coach" style="margin-top:8px;padding-bottom:2px;">${seg}</div>
+  </div>`;
+}
+function admCalPick(ds){
+  window._cagSelDate=ds;
+  try{ calWeekStart=(Number(window._admCalDays)||1)===3?parseYmd(ds):heroWeekMonday(ds); }catch(_){}
+  window._calStepping=true; navTo('calendar');
+}
+function admCalShift(dir){ admCalPick(heroWeekStep(window._cagSelDate||ymd(TODAY),dir)); }
+function admCalMode(n){
+  window._admCalDays=Math.max(1,Number(n)||1);
+  const sel=window._cagSelDate||ymd(TODAY);
+  try{ calWeekStart=(window._admCalDays===3)?parseYmd(sel):heroWeekMonday(sel); }catch(_){}
+  window._calStepping=true; navTo('calendar');
 }
 /* 管理員手機首頁的教練篩選 chips（2026-08-19）：只濾今日課卡清單 */
 function admhPickCoach(id){
