@@ -6885,13 +6885,13 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
      整卡吃課程色、白字，左側色條隱藏；已簽到標籤改半透明白。其他角色/桌機維持白底小卡。 */
   /* ⚠ 基底是 #bk-card-pop .mtp-card（含 ID）——這裡要帶同一顆 ID 才蓋得過（2026-08-19）。
      三修：改底部滑出面板——面板貼底、圓形按鈕排在卡片上方（column-reverse）。 */
-  #bk-card-pop.admh-pop .mtp{left:0;right:0;top:auto;bottom:0;transform:none;width:100%;max-width:none;
-    flex-direction:column-reverse;gap:16px;padding:0 12px calc(16px + env(safe-area-inset-bottom,0px));
-    animation:admhSheetUp .22s ease-out backwards;}
-  @keyframes admhSheetUp{from{transform:translateY(30%);opacity:0;}}
+  #bk-card-pop.admh-pop .mtp{left:12px;right:12px;top:50%;bottom:auto;transform:translateY(-50%);width:auto;max-width:none;
+    flex-direction:column;gap:18px;padding:0;
+    animation:admhSheetUp .2s ease-out backwards;}
+  @keyframes admhSheetUp{from{transform:translateY(-46%) scale(.97);opacity:0;}}
   /* 白底＋左側課程色條（2026-08-19 使用者指示，取代整卡上色） */
   #bk-card-pop.admh-pop .mtp-card.admh-sheet{display:block;position:relative;width:100%;background:#fff;color:var(--text);
-    border:none;border-radius:20px;padding:18px 18px 18px 26px;box-shadow:0 -6px 24px rgba(30,25,15,.28);}
+    border:none;border-radius:20px;padding:18px 18px 18px 26px;box-shadow:0 10px 30px rgba(30,25,15,.3);}
   .ash-bar{position:absolute;left:12px;top:16px;bottom:16px;width:5px;border-radius:999px;background:var(--mtp-c,#1f6f54);}
   .ash-r1{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:600;color:var(--t2);}
   .ash-right{display:flex;align-items:center;gap:7px;font-family:var(--num);font-weight:700;font-size:14.5px;color:var(--text);}
@@ -7946,8 +7946,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1545';
-const APP_VERSION_LABEL='v260819.1545';
+const APP_VERSION = '260819.1550';
+const APP_VERSION_LABEL='v260819.1550';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14756,6 +14756,9 @@ PAGES.g_dashboard=async function(){
     const _cSel=window._admhCoach||null;
     const _hSrc=_cSel?dayBk.filter(b=>bkCoachId(b)===_cSel):dayBk;
     const _cm={}; (coaches||[]).forEach(c=>{ _cm[c.id]=(typeof coachDisp==='function'?coachDisp(c):c.name)||''; });
+    /* 「本堂是第幾堂」（2026-08-19 使用者定版：蔡佳音今天第 3 堂要顯示 3/8）——
+       第N＝帳面已用（總−剩餘）−「排在本堂之後」的有效預約數；舊帳的幽靈堂自然算在前面。 */
+    const _tkBkMap={}; (bookings||[]).forEach(x=>{ if(x&&x.ticket_id&&x.status!=='cancelled'&&!x.sibling_of){ (_tkBkMap[x.ticket_id]=_tkBkMap[x.ticket_id]||[]).push(x); } });
     const _hCards=_hSrc.slice().sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time))).map(b=>{
       const col=catColor[evColorClass(b,typeMap)]||'#1f6f54';
       const cname=bookingTypeName(b,typeMap);
@@ -14781,7 +14784,10 @@ PAGES.g_dashboard=async function(){
         <span class="admh-time">${b.start_time}${_st?`<span class="admh-stamp ${_st[1]}">${_st[0]}</span>`:''}</span>
         <div class="admh-cname">${cname}${_vlb?'・'+_vlb:''}</div>
         <div class="admh-mname">${mname}</div>
-        ${tk?`<div class="admh-tk">票券 ${Math.max(0,(Number(tk.sessions_total)||0)-(Number(tk.sessions_remaining)||0))}/${tk.sessions_total}</div>`:''}
+        ${tk?(()=>{const _lt=(_tkBkMap[tk.id]||[]).filter(x=>x.date>b.date||(x.date===b.date&&String(x.start_time)>String(b.start_time))).length;
+          const _ud=Math.max(0,(Number(tk.sessions_total)||0)-(Number(tk.sessions_remaining)||0));
+          const _nth=Math.min(Math.max(1,_ud-_lt), Number(tk.sessions_total)||_ud||1);
+          return `<div class="admh-tk">票券 ${_nth}/${tk.sessions_total}</div>`;})():''}
         ${_foot}
       </div>`;
     }).join('')||`<div class="admh-empty">這一天沒有課程</div>`;
