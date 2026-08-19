@@ -7715,14 +7715,15 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .admh-mname{font-size:19px;font-weight:800;margin-top:3px;line-height:1.3;}
 .admh-tk{font-size:12px;opacity:.85;margin-top:6px;font-family:var(--num);}
 .admh-done{opacity:.55;}
-/* 九修：右下角教練名＋出席章（簽/未/假）；名字在左、章在右，互不遮擋 */
+/* 九修：右下角教練名。十修：出席章移到右上時間左邊，固定配色 簽=綠/未=金/假=紅 */
 .admh-foot{position:absolute;right:14px;bottom:11px;display:flex;align-items:center;gap:7px;}
-.admh-coachnm{font-size:12px;font-weight:700;opacity:.92;}
-.admh-stamp{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  font-size:11.5px;font-weight:800;flex:none;}
-.admh-st-done{background:#fff;color:var(--admh-c,#1f6f54);}
-.admh-st-ns{background:var(--gold,#B48A56);color:#fff;box-shadow:0 0 0 1.5px rgba(255,255,255,.7);}
-.admh-st-leave{background:#b5372e;color:#fff;box-shadow:0 0 0 1.5px rgba(255,255,255,.7);}
+.admh-coachnm{font-size:12.5px;font-weight:700;opacity:.92;}
+.admh-time{display:flex;align-items:center;gap:6px;}
+.admh-stamp{width:21px;height:21px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:800;flex:none;box-shadow:0 0 0 1.5px rgba(255,255,255,.65);}
+.admh-st-done{background:var(--green);color:#fff;}
+.admh-st-ns{background:var(--gold,#B48A56);color:#fff;}
+.admh-st-leave{background:#b5372e;color:#fff;}
 .admh-card{padding-right:88px;}   /* 讓右下角的教練名/章有自己的空間，不與左側文字重疊 */
 .admh-empty{text-align:center;color:var(--t3);font-size:13px;padding:26px 0;background:var(--card2);border-radius:14px;}
 </style>
@@ -7881,8 +7882,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1133';
-const APP_VERSION_LABEL='v260819.1133';
+const APP_VERSION = '260819.1144';
+const APP_VERSION_LABEL='v260819.1144';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14692,15 +14693,19 @@ PAGES.g_dashboard=async function(){
       } else mname=b.trial_name||_mm[b.member_id]||(bkIsSelf(b)?'自主訓練':'—');
       const tk=b.ticket_id?_tkById[b.ticket_id]:null;
       const done=b.status==='checked_in'||b.status==='completed';
-      /* 九修（2026-08-19）：右下角＝教練名（自主訓練不顯示）＋出席章（假＞未＞簽，同課卡語彙） */
-      const _cid=bkCoachId(b);
-      const _cnm=(!bkIsSelf(b)&&_cid&&_cm[_cid])?_cm[_cid]:'';
+      /* 九修：右下角教練名（自主訓練不顯示）。十修（2026-08-19）：出席章移到右上
+         時間左邊、固定配色 簽=綠/未=金/假=紅；課名旁加「・使用場地」（跑步機帶台數）。 */
+      const _cid=(b.substitute_coach_id||b.coach_id||null);
+      const _cnm=(b.category!=='自主訓練'&&_cid&&_cm[_cid])?_cm[_cid]:'';
       const _st=grpAllOnLeave(b)?['假','admh-st-leave']
         :(b.no_show===true?['未','admh-st-ns']:(done?['簽','admh-st-done']:null));
-      const _foot=(_cnm||_st)?`<div class="admh-foot">${_cnm?`<span class="admh-coachnm">${_cnm}</span>`:''}${_st?`<span class="admh-stamp ${_st[1]}">${_st[0]}</span>`:''}</div>`:'';
+      const _vid=String(b.venue_unit||'').split('_')[0];
+      const _vn=(typeof venueName==='function')?(venueName(_vid)||''):'';
+      const _vlb=_vid==='treadmill'?`${_vn||'跑步機'} ${Math.max(1,Number(b._units)||1)}台`:(_vn||'');
+      const _foot=_cnm?`<div class="admh-foot"><span class="admh-coachnm">${_cnm}</span></div>`:'';
       return `<div class="admh-card${done?' admh-done':''}" style="--admh-c:${col};" onclick="openBookingDetail('${b.id}')">
-        <span class="admh-time">${b.start_time}</span>
-        <div class="admh-cname">${cname}</div>
+        <span class="admh-time">${_st?`<span class="admh-stamp ${_st[1]}">${_st[0]}</span>`:''}${b.start_time}</span>
+        <div class="admh-cname">${cname}${_vlb?'・'+_vlb:''}</div>
         <div class="admh-mname">${mname}</div>
         ${tk?`<div class="admh-tk">票券 ${tk.sessions_remaining}/${tk.sessions_total}</div>`:''}
         ${_foot}
