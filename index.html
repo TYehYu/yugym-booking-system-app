@@ -7660,14 +7660,18 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 /* ══ 管理員手機首頁新面板（2026-08-19 日曆 App 風格試點）——只有 .admh 底下生效，其他角色/桌機不吃 ══ */
 .admh{margin:2px 0 14px;}
 /* 週列在米白底上要看得見（.msb-date 原生是深色 Hero 底的半透明白樣式，2026-08-19 二修）
-   五修：日期數字品牌綠、當日外框、選取品牌金底；整列加大一號（原本縮太多）。 */
-.admh .msb-date{background:var(--card2);border:1px solid var(--bd);color:var(--t2);}
+   五修：選取品牌金底；六修：整顆鈕品牌綠底（不是只有文字綠）、當日改外框款、
+   堂數在上／日期中／星期在下，貼頂（.stuck）時堂數列收起。 */
+.admh .msb-date{background:var(--green);border:1px solid var(--green);color:rgba(255,255,255,.82);}
 .admh .msb-date span{font-size:11px;}
-.admh .msb-date b{color:var(--green);font-size:15.5px;}
-.admh .msb-date .cag-dn{color:var(--t2);font-size:10px;}
+.admh .msb-date b{color:#fff;font-size:15.5px;}
+.admh .msb-date .cag-dn{color:rgba(255,255,255,.78);font-size:10px;}
+.admh .msb-date.hero-today{background:var(--card2);border:1.5px solid var(--green);color:var(--green);}
+.admh .msb-date.hero-today b,.admh .msb-date.hero-today .cag-dn{color:var(--green);}
 .admh .msb-date.on{background:var(--gold,#b48a56);border-color:var(--gold,#b48a56);color:#fff;}
 .admh .msb-date.on b,.admh .msb-date.on .cag-dn{color:#fff;}
-.admh .msb-date.hero-today{box-shadow:inset 0 0 0 1.5px var(--green);}
+.admh-sticky.stuck .msb-date .cag-dn{display:none;}
+.admh-sticky.stuck .admh-wkdays .msb-date{padding:8px 0 7px;}
 /* 三修（2026-08-19）：週列 ‹ › 併到日期兩側、大日期列與週列交換、中間分隔線 */
 .admh-div{height:1px;background:var(--bd);margin:12px 2px;}
 /* 四修（2026-08-19）：下滑時週列＋教練 chips 固定在視窗頂（手機 topbar 是 relative 會捲走） */
@@ -7858,8 +7862,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1051';
-const APP_VERSION_LABEL='v260819.1051';
+const APP_VERSION = '260819.1056';
+const APP_VERSION_LABEL='v260819.1056';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14689,8 +14693,9 @@ PAGES.g_dashboard=async function(){
     let _wkBtns='';
     for(let i=0;i<7;i++){ const d=new Date(_mon); d.setDate(_mon.getDate()+i); const ds=ymd(d);
       const n=_cnt[ds]||0;
+      /* 六修（2026-08-19）：堂數在上、日期中間、星期在下；貼頂時堂數列會被藏起來（.stuck） */
       _wkBtns+=`<button class="msb-date${ds===date?' on':''}${ds===today&&ds!==date?' hero-today':''}" onclick="dashPickDate('${ds}')">
-        <span>${ds===today?'今天':'週'+HERO_WD[d.getDay()]}</span><b>${d.getMonth()+1}/${d.getDate()}</b><span class="cag-dn">${n?n+' 堂':'－'}</span></button>`;
+        <span class="cag-dn">${n?n+' 堂':'－'}</span><b>${d.getMonth()+1}/${d.getDate()}</b><span>${ds===today?'今天':'週'+HERO_WD[d.getDay()]}</span></button>`;
     }
     admMobHero=`<div class="admh">
       <div class="admh-bigrow">
@@ -14703,7 +14708,9 @@ PAGES.g_dashboard=async function(){
         </div>
       </div>
       <div class="admh-div"></div>
-      ${/* 下滑時兩個篩選列固定在上方（2026-08-19 四修）：週列＋教練 chips 包成 sticky 一組 */''}
+      ${/* 下滑時兩個篩選列固定在上方（2026-08-19 四修）：週列＋教練 chips 包成 sticky 一組。
+           sentinel 捲出畫面＝已貼頂 → .stuck（六修：貼頂時藏堂數列） */''}
+      <div id="admh-sentinel"></div>
       <div class="admh-sticky">
         <div class="admh-week">
           <button class="admh-wknav" onclick="admWeekShift(-1)">‹</button>
@@ -14714,6 +14721,12 @@ PAGES.g_dashboard=async function(){
       </div>
       <div class="admh-cards">${_hCards}</div>
     </div>`;
+    /* 貼頂偵測（六修）：innerHTML 塞好後掛 IntersectionObserver，sentinel 捲出畫面＝貼頂 */
+    setTimeout(()=>{ try{
+      const st=document.querySelector('.admh-sticky'), sen=document.getElementById('admh-sentinel');
+      if(st&&sen&&window.IntersectionObserver)
+        new IntersectionObserver(es=>{ st.classList.toggle('stuck', !es[0].isIntersecting); },{threshold:0}).observe(sen);
+    }catch(_){} },0);
   }
   C.innerHTML=`
     ${isMobileLayout()?(admMobHero||adminCalCard):''}<!-- 2026-07-21 使用者指示：桌機置中日期列移除（左下行事曆已有今日提示） -->
