@@ -8011,8 +8011,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1823';
-const APP_VERSION_LABEL='v260819.1823';
+const APP_VERSION = '260819.1824';
+const APP_VERSION_LABEL='v260819.1824';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19704,12 +19704,30 @@ async function renderCoachAgenda(){
     let vlabs='';
     try{
       const _vAll=allBk.filter(b=>b.date===ds && b.status!=='cancelled');
-      for(let mm=AG_START; mm<=21*60; mm+=30){
-        if(ds<todayStr || (ds===todayStr && mm<nowMin)) continue;
-        const a=allocateVenue('私人教練', _vAll, mm, mm+60, null);
-        const lab = a.error ? '額滿' : (a.toVid==='group' ? '教室' : '');
-        if(lab) vlabs+=`<div class="cag-vrow" style="top:${yOf(mm)+1}px;height:${HOUR_H/2-2}px;"></div>`
-          +`<div class="cag-vlab${lab==='額滿'?' full':''}" style="top:${yOf(mm)+1}px;height:${HOUR_H/2-2}px;">${lab}</div>`;
+      if(SESSION&&SESSION.role==='admin'){
+        /* 連續同型帶合併（2026-08-19 使用者指示，與一週同款；教練端維持原樣） */
+        const runs=[]; let cur=null;
+        for(let mm=AG_START; mm<=21*60; mm+=30){
+          let lab='';
+          if(!(ds<todayStr || (ds===todayStr && mm<nowMin))){
+            const a=allocateVenue('私人教練', _vAll, mm, mm+60, null);
+            lab = a.error ? '額滿' : (a.toVid==='group' ? '教室' : '');
+          }
+          if(cur&&cur.lab===lab&&cur.end===mm){ cur.end=mm+30; }
+          else{ if(cur&&cur.lab) runs.push(cur); cur={lab,start:mm,end:mm+30}; }
+        }
+        if(cur&&cur.lab) runs.push(cur);
+        runs.forEach(r=>{ const h=(r.end-r.start)/60*HOUR_H-2;
+          vlabs+=`<div class="cag-vrow" style="top:${yOf(r.start)+1}px;height:${h}px;"></div>`
+            +`<div class="cag-vlab${r.lab==='額滿'?' full':''}" style="top:${yOf(r.start)+1}px;height:${h}px;">${r.lab}</div>`; });
+      }else{
+        for(let mm=AG_START; mm<=21*60; mm+=30){
+          if(ds<todayStr || (ds===todayStr && mm<nowMin)) continue;
+          const a=allocateVenue('私人教練', _vAll, mm, mm+60, null);
+          const lab = a.error ? '額滿' : (a.toVid==='group' ? '教室' : '');
+          if(lab) vlabs+=`<div class="cag-vrow" style="top:${yOf(mm)+1}px;height:${HOUR_H/2-2}px;"></div>`
+            +`<div class="cag-vlab${lab==='額滿'?' full':''}" style="top:${yOf(mm)+1}px;height:${HOUR_H/2-2}px;">${lab}</div>`;
+        }
       }
     }catch(_){}
     /* 背景一體化（2026-07-22 使用者指示：移除「背景跟著分欄」的多欄格）——
