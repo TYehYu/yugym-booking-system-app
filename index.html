@@ -7659,14 +7659,26 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 
 /* ══ 管理員手機首頁新面板（2026-08-19 日曆 App 風格試點）——只有 .admh 底下生效，其他角色/桌機不吃 ══ */
 .admh{margin:2px 0 14px;}
-.admh-head{display:flex;align-items:center;gap:12px;margin:2px 2px 12px;}
-.admh-hi{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
-.admh-hi b{font-size:21px;font-weight:800;letter-spacing:.02em;color:var(--text);line-height:1.25;}
-.admh-sub{font-size:12.5px;color:var(--t2);}
-.admh-ava{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--bd);background:var(--card2);
-  font-size:17px;font-weight:800;color:var(--green);display:flex;align-items:center;justify-content:center;
-  cursor:pointer;flex:none;font-family:inherit;}
-.admh-bigdate{display:flex;align-items:flex-end;gap:12px;margin:16px 4px 12px;}
+/* 週列在米白底上要看得見（.msb-date 原生是深色 Hero 底的半透明白樣式，2026-08-19 二修） */
+.admh .msb-date{background:var(--card2);border:1px solid var(--bd);color:var(--t2);}
+.admh .msb-date b{color:var(--text);}
+.admh .msb-date .cag-dn{color:var(--t2);}
+.admh .msb-date.on{background:var(--green);border-color:var(--green);color:#fff;}
+.admh .msb-date.on b,.admh .msb-date.on .cag-dn{color:#fff;}
+.admh .msb-date.hero-today{box-shadow:inset 0 0 0 1.5px var(--gold,#b48a56);}
+.admh .mcal-t{color:var(--t2);}
+.admh .mcal-btn{color:var(--text);background:var(--card2);border:1px solid var(--bd);}
+.admh .cag-thisweek{color:var(--green);}
+.admh-bigrow{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:16px 4px 10px;}
+.admh-kpis{display:flex;flex-direction:column;gap:4px;align-items:flex-end;padding-bottom:4px;}
+.admh-kpi{display:flex;align-items:baseline;gap:8px;}
+.admh-kpi span{font-size:11.5px;color:var(--t2);}
+.admh-kpi b{font-size:14px;font-weight:800;color:var(--text);font-family:var(--num);min-width:52px;text-align:right;}
+.admh-coach{display:flex;gap:7px;overflow-x:auto;padding:2px 2px 10px;-webkit-overflow-scrolling:touch;}
+.admh-chip{flex:none;border:1.5px solid var(--bd);background:#fff;color:var(--text);border-radius:999px;
+  padding:6px 15px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;}
+.admh-chip.on{background:#2b2926;border-color:#2b2926;color:#F4F1E8;}
+.admh-bigdate{display:flex;align-items:flex-end;gap:12px;}
 .admh-dnum{font-size:64px;font-weight:800;line-height:.85;letter-spacing:-.02em;color:var(--text);font-family:var(--num);}
 .admh-dside{display:flex;flex-direction:column;gap:2px;padding-bottom:5px;}
 .admh-dside b{font-size:16px;font-weight:800;color:var(--text);}
@@ -7837,8 +7849,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1005';
-const APP_VERSION_LABEL='v260819.1005';
+const APP_VERSION = '260819.1023';
+const APP_VERSION_LABEL='v260819.1023';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14634,7 +14646,11 @@ PAGES.g_dashboard=async function(){
     const _dv=parseYmd(date)||TODAY;
     const _cnt={}; (bookings||[]).forEach(b=>{ if(!b||b.status==='cancelled'||b.sibling_of)return;
       if(bkIsSelf(b)||b.category==='場租')return; _cnt[b.date]=(_cnt[b.date]||0)+1; });
-    const _hCards=dayBk.slice().sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time))).map(b=>{
+    /* 教練篩選（2026-08-19 二修：大日期下方 [All][教練…] 依序排列）——
+       只濾課卡清單；KPI 維持全店口徑。自主訓練沒有教練，選了教練自然不會出現。 */
+    const _cSel=window._admhCoach||null;
+    const _hSrc=_cSel?dayBk.filter(b=>bkCoachId(b)===_cSel):dayBk;
+    const _hCards=_hSrc.slice().sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time))).map(b=>{
       const col=catColor[evColorClass(b,typeMap)]||'#1f6f54';
       const cname=bookingTypeName(b,typeMap);
       let mname;
@@ -14650,15 +14666,23 @@ PAGES.g_dashboard=async function(){
         ${tk?`<div class="admh-tk">票券 ${tk.sessions_remaining}/${tk.sessions_total}</div>`:''}
       </div>`;
     }).join('')||`<div class="admh-empty">這一天沒有課程</div>`;
+    /* 2026-08-19 二修：問候列收掉（頂欄本來就有帳號資訊）；KPI 三列放大日期右邊；
+       大日期下方加教練篩選 [All][教練…]。 */
+    const _chips=[`<button class="admh-chip${_cSel?'':' on'}" onclick="admhPickCoach('all')">All</button>`]
+      .concat((coaches||[]).filter(c=>typeof isTeachable!=='function'||isTeachable(c)).map(c=>
+        `<button class="admh-chip${_cSel===c.id?' on':''}" onclick="admhPickCoach('${c.id}')">${(typeof coachDisp==='function'?coachDisp(c):c.name)||''}</button>`)).join('');
     admMobHero=`<div class="admh">
-      <div class="admh-head">
-        <div class="admh-hi"><b>${_greet}，${SESSION.name||'管理員'}</b>
-          <span class="admh-sub">今日 ${classCount} 堂課・已完成 ${doneCount} 堂</span></div>
-        <button class="admh-ava" onclick="toggleAcctMenu(event)">${String(SESSION.name||'Y').slice(0,1)}</button>
-      </div>
       ${heroWeekBarHTML({anchor:date,sel:date,today,pickFn:'dashPickDate',prevFn:'admWeekShift(-1)',nextFn:'admWeekShift(1)',id:'admh-days',metaOf:ds=>{const n=_cnt[ds]||0;return n?n+' 堂':'';}})}
-      <div class="admh-bigdate"><span class="admh-dnum">${_dv.getDate()}</span>
-        <span class="admh-dside"><b>${_dv.getMonth()+1} 月</b><span>週${_wdz[_dv.getDay()]}${date===today?'・今天':''}</span></span></div>
+      <div class="admh-bigrow">
+        <div class="admh-bigdate"><span class="admh-dnum">${_dv.getDate()}</span>
+          <span class="admh-dside"><b>${_dv.getMonth()+1} 月</b><span>週${_wdz[_dv.getDay()]}${date===today?'・今天':''}</span></span></div>
+        <div class="admh-kpis">
+          <div class="admh-kpi"><span>教練課</span><b>${_ptN} 堂</b></div>
+          <div class="admh-kpi"><span>團體課</span><b>${_grpN} 堂</b></div>
+          <div class="admh-kpi"><span>今日營收</span><b>$${_fm(_revTotal)}</b></div>
+        </div>
+      </div>
+      <div class="admh-coach">${_chips}</div>
       <div class="admh-cards">${_hCards}</div>
     </div>`;
   }
@@ -37432,6 +37456,12 @@ function heroWeekStep(cur,dir){
   const d=parseYmd(cur)||new Date(TODAY);
   d.setDate(d.getDate()+dir*7);
   return ymd(d);
+}
+/* 管理員手機首頁的教練篩選 chips（2026-08-19）：只濾今日課卡清單 */
+function admhPickCoach(id){
+  window._admhCoach=(id==='all')?null:id;
+  window._admCalKeep=true;
+  navTo('g_dashboard');
 }
 // 管理員首頁月曆點日期（2026-07-20）：切換 _dashViewDate，下方「今日」各卡改顯示該日
 function dashPickDate(ds){
