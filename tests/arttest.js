@@ -89,7 +89,7 @@ ok('★ 寬度吃滿左欄、高度 150px（與右上角知識卡同高，左右
 ok('　　裁切幅度寫在程式裡（上下各約 9%，不會切到角色）',
    /這個高度會裁掉原圖上下各約 9%/.test(src));
 ok('★ 收款提醒卡只在桌機版面渲染（左欄三格是 isMobileLayout() 的 else 分支；手機版待辦卡兩列不變）',
-   /\$\{isMobileLayout\(\)\?`[\s\S]{0,4000}\$\{payRemindCard\}/.test(src)
+   /\$\{isMobileLayout\(\)\?[\s\S]{0,5200}\$\{payRemindCard\}/.test(src)   /* 2026-08-19 手機分支多了管理員新版面（值班＋本月成績），窗放寬 */
    && /monthCard\+todoCard\+knowCardHTML\(\)/.test(src));
 ok('★ 兩層 <img> 交叉淡入（換圖不閃白）',
    /<img class="mc-art-img" id="mc-art-a" alt=""><img class="mc-art-img" id="mc-art-b" alt="">/.test(src)
