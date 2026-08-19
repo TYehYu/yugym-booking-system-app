@@ -6883,15 +6883,19 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   .role-admin .topbar #tb-refresh{display:none !important;}
   /* 管理員手機：Calm Play 彈出小卡改「大色塊」版（與首頁課卡同款，2026-08-19 使用者指示）——
      整卡吃課程色、白字，左側色條隱藏；已簽到標籤改半透明白。其他角色/桌機維持白底小卡。 */
-  /* ⚠ 基底是 #bk-card-pop .mtp-card（含 ID）——這裡要帶同一顆 ID 才蓋得過（2026-08-19 二修） */
-  #bk-card-pop.admh-pop .mtp{width:calc(100vw - 28px);}   /* 與首頁課卡同寬（content 左右各 14px） */
-  #bk-card-pop.admh-pop .mtp-card{background:var(--mtp-c,#1f6f54);color:#fff;border:none;border-radius:18px;
-    padding:16px 18px;box-shadow:0 6px 20px rgba(30,25,15,.3);}
-  #bk-card-pop.admh-pop .mtp-bar{display:none;}
-  #bk-card-pop.admh-pop .mtp-t1{color:#fff;font-size:19px;font-weight:800;}
-  #bk-card-pop.admh-pop .mtp-t2{color:rgba(255,255,255,.85);}
-  #bk-card-pop.admh-pop .mtp-note{color:rgba(255,255,255,.8);}
-  #bk-card-pop.admh-pop .mtp-tag{background:rgba(255,255,255,.92);color:var(--mtp-c,#1f6f54);}
+  /* ⚠ 基底是 #bk-card-pop .mtp-card（含 ID）——這裡要帶同一顆 ID 才蓋得過（2026-08-19）。
+     三修：改底部滑出面板——面板貼底、圓形按鈕排在卡片上方（column-reverse）。 */
+  #bk-card-pop.admh-pop .mtp{left:0;right:0;top:auto;bottom:0;transform:none;width:100%;max-width:none;
+    flex-direction:column-reverse;gap:16px;padding:0 12px calc(16px + env(safe-area-inset-bottom,0px));
+    animation:admhSheetUp .22s ease-out backwards;}
+  @keyframes admhSheetUp{from{transform:translateY(30%);opacity:0;}}
+  #bk-card-pop.admh-pop .mtp-card.admh-sheet{display:block;width:100%;background:var(--mtp-c,#1f6f54);color:#fff;
+    border:none;border-radius:20px;padding:18px;box-shadow:0 -6px 24px rgba(30,25,15,.28);}
+  .ash-r1{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:600;opacity:.92;}
+  .ash-right{display:flex;align-items:center;gap:7px;font-family:var(--num);font-weight:700;font-size:14.5px;}
+  .ash-name{font-size:25px;font-weight:800;margin-top:7px;line-height:1.25;}
+  .ash-tk{background:rgba(255,255,255,.95);border-radius:13px;padding:10px 12px;margin-top:13px;
+    display:flex;flex-wrap:wrap;gap:5px;color:var(--text);}
   /* 管理員底部導覽改品牌綠底（2026-08-19 十一修；只影響 admin） */
   .role-admin .bottom-nav{background:var(--green);border-top:1px solid var(--green);}
   .role-admin .bn-item{color:rgba(244,241,232,.55);}
@@ -7938,8 +7942,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1235';
-const APP_VERSION_LABEL='v260819.1235';
+const APP_VERSION = '260819.1240';
+const APP_VERSION_LABEL='v260819.1240';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22276,10 +22280,35 @@ async function bkCardPop(el, b, btns){
   const host=document.createElement('div');
   host.id='bk-card-pop';
   /* 彈出層掛在 body（#app-screen 外），.role-admin 選擇器吃不到——管理員手機直接掛 class（2026-08-19） */
-  if(SESSION&&SESSION.role==='admin'&&isMobileLayout()) host.classList.add('admh-pop');
-  host.innerHTML=`<div class="mtp-back" onclick="collapseBkCard()"></div>
-    <div class="mtp" id="bkp-box">
-      <div class="mtp-card" style="--mtp-c:${col};">
+  const _admSheet=!!(SESSION&&SESSION.role==='admin'&&isMobileLayout());
+  if(_admSheet) host.classList.add('admh-pop');
+  let _cardHtml;
+  if(_admSheet){
+    /* 管理員手機改底部滑出面板（2026-08-19 使用者指示）：
+       圓形按鈕在卡片上方；卡片＝①課程・場地＋右側時間/出席章 ②會員名放大 ③票券圓形卡。
+       票券圓點重用票券夾 ticketTokens（含「本堂」圈選）。 */
+    const _v=(typeof venueDisplay==='function')?(venueDisplay(b)||''):'';
+    const _st=(typeof grpAllOnLeave==='function'&&grpAllOnLeave(b))?['假','admh-st-leave']
+      :(b.no_show===true?['未','admh-st-ns']:(done?['簽','admh-st-done']:null));
+    let _tkRow='';
+    if(b.ticket_id){ try{
+      const [_tks,_bksAll,_logs]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('bookings'),dbGetAll('ticket_logs').catch(()=>[])]);
+      const _t=_tks.find(x=>x&&x.id===b.ticket_id);
+      if(_t&&typeof buildWallet==='function'&&typeof ticketTokens==='function'){
+        const _tm2=window._ttMapCache||window._memTypeMap||{};
+        const WAL=buildWallet(_t.member_id||b.member_id,{tickets:_tks,bookings:_bksAll,logs:_logs,typeMap:_tm2});
+        const _slot=WAL.of(_t.id)||{};
+        _tkRow=ticketTokens(_t,WAL.stampsOf(_t.id),_tm2,_slot.used||0,b.id,b.member_id,WAL.selfBk);
+      }
+    }catch(_){} }
+    _cardHtml=`<div class="mtp-card admh-sheet" style="--mtp-c:${col};">
+        <div class="ash-r1"><span class="ash-course">${nm}${_v?'・'+_v:''}</span>
+          <span class="ash-right">${b.start_time}–${endT}${_st?`<span class="admh-stamp ${_st[1]}">${_st[0]}</span>`:''}</span></div>
+        <div class="ash-name">${who}</div>
+        ${_tkRow?`<div class="ash-tk">${_tkRow}</div>`:''}
+      </div>`;
+  }else{
+    _cardHtml=`<div class="mtp-card" style="--mtp-c:${col};">
         <span class="mtp-bar" style="background:${col};"></span>
         <span class="mtp-body">
           <span class="mtp-t1">${who}</span>
@@ -22287,7 +22316,11 @@ async function bkCardPop(el, b, btns){
           ${(SESSION&&SESSION.role!=='member'&&bkNoteSplit(b.note).user)?`<span class="mtp-note">✎ ${bkNoteSplit(b.note).user.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span>`:''}
         </span>
         ${done?'<span class="mtp-tag">已簽到</span>':''}
-      </div>
+      </div>`;
+  }
+  host.innerHTML=`<div class="mtp-back" onclick="collapseBkCard()"></div>
+    <div class="mtp" id="bkp-box">
+      ${_cardHtml}
       <div class="mtp-orbs">${btns}</div>
     </div>`;
   document.body.appendChild(host);
