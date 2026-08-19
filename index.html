@@ -7901,8 +7901,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1201';
-const APP_VERSION_LABEL='v260819.1201';
+const APP_VERSION = '260819.1204';
+const APP_VERSION_LABEL='v260819.1204';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -25729,10 +25729,22 @@ async function cancelBooking(id, refundMode, opts){
       && b.ticket_id && b.category!=='小班肌力'
       && refundMode!=='force' && refundMode!=='none';
   if(cancelRpcEligible){
+    /* 連線抖動防半套（2026-08-19 黃柏桓案例：RPC 失敗→備援「先取消再退課」，
+       退課那步又斷線 → 取消成功、退課消失）——
+       傳輸層失敗（fetch 掛掉/HTTP 錯誤）自動重試一次，仍失敗就整個不做、請櫃檯重按：
+       RPC 是 DB 端單一交易，全成或全不成，絕不半套。備援只接「RPC 回業務錯誤」的情況。 */
     let res;
-    try{ res=await sb.rpc('fn_cancel_booking',{p_booking_id:id,p_reason:null}); }
-    catch(e){ res={error:e}; }
+    for(let _try=0;_try<2;_try++){
+      try{ res=await sb.rpc('fn_cancel_booking',{p_booking_id:id,p_reason:null}); }
+      catch(e){ res={error:e}; }
+      if(!(res&&res.error)) break;
+      await new Promise(r=>setTimeout(r,900));
+    }
     dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);  // 只清 RPC 動到的表（LAG 對策）
+    if(res && res.error){
+      if(!_silent) showToast('⚠ 連線不穩，取消未執行——請再按一次');
+      return;
+    }
     if(res && !res.error && res.data && res.data.ok){
       const refunded = res.data.cancellation_result==='refunded';
       // 贈點回收（2026-07-30 使用者指示）：RPC 只處理票券與狀態，贈點在前端收
@@ -25747,6 +25759,16 @@ async function cancelBooking(id, refundMode, opts){
       return;
     }
     console.error('RPC 取消未成功，回退前端舊邏輯：', res && (res.error || res.data));
+  }
+
+  /* 備援路徑先讀後寫（2026-08-19）：會退課的單人課，先確認票券讀得到才動手取消；
+     讀不到＝連線不穩，整個中止請重試，不再「先取消、退課再說」留下半套。 */
+  if(b.ticket_id && !bkIsGroup(b) && refundMode!=='none'){
+    const _preTk=await dbGet('member_tickets',b.ticket_id).catch(()=>null);
+    if(!_preTk){
+      if(!_silent) showToast('⚠ 連線不穩，取消未執行——請再按一次');
+      return;
+    }
   }
 
   b.status='cancelled';
