@@ -7784,10 +7784,15 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .amcv-card{position:absolute;background:var(--amc,#1f6f54);color:#fff;border-radius:8px;
   box-shadow:0 1px 4px rgba(50,42,30,.2);padding:4px 5px;overflow:hidden;cursor:pointer;
   display:flex;flex-direction:column;gap:1px;box-sizing:border-box;z-index:2;}
+.amcv-slot{position:absolute;left:1px;right:1px;pointer-events:none;border-radius:6px;z-index:1;
+  display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;}
+.amcv-full{background:rgba(181,55,46,.16);color:#b5372e;}
+.amcv-grp{background:rgba(180,138,86,.18);color:#8a5e28;}
+.amcv-tm{background:rgba(35,80,138,.14);color:#23508a;}
 .amcv-card .amcv-t{font-size:10px;font-weight:700;opacity:.9;font-family:var(--num);line-height:1.2;}
 .amcv-card .amcv-nm{font-size:11px;font-weight:700;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-/* 管理員一日課卡（課程色底白字） */
-.cag-std.admcag{background:var(--amc,#1f6f54);border:none;color:#fff;}
+/* 管理員一日課卡（課程色底白字）——選擇器帶 .cal-ev 壓過標準卡底色；overflow 鎖住不爆版 */
+.cal-ev.cag-std.admcag{background:var(--amc,#1f6f54) !important;border:none;color:#fff;overflow:hidden;}
 .admcag .acg-in{position:relative;height:100%;display:flex;flex-direction:column;gap:2px;padding:2px 3px;box-sizing:border-box;}
 .admcag .acg-r1{display:flex;justify-content:space-between;align-items:baseline;gap:6px;font-size:10.5px;font-weight:600;opacity:.92;}
 .admcag .acg-course{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
@@ -7974,8 +7979,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1717';
-const APP_VERSION_LABEL='v260819.1717';
+const APP_VERSION = '260819.1723';
+const APP_VERSION_LABEL='v260819.1723';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37853,13 +37858,13 @@ function admPtrInit(){
   window.addEventListener('touchmove',e=>{
     if(y0==null) return;
     dist=e.touches[0].clientY-y0;
-    if(dist>12){ pulling=true; const el=IND(); const d=Math.min(dist,130);
-      el.style.top=(d-46)+'px'; el.style.opacity=String(Math.min(1,d/80));
-      el.classList.toggle('ready', d>=95); }
+    if(dist>12){ pulling=true; const el=IND(); const d=Math.min(dist,170);
+      el.style.top=(d-46)+'px'; el.style.opacity=String(Math.min(1,d/110));
+      el.classList.toggle('ready', d>=150); }
   },{passive:true});
   window.addEventListener('touchend',()=>{
     const el=document.getElementById('adm-ptr');
-    if(pulling && dist>=95){ if(el){ el.classList.add('spin'); el.style.top='14px'; }
+    if(pulling && dist>=150){ if(el){ el.classList.add('spin'); el.style.top='14px'; }
       try{ sessionStorage.setItem('_admPtrBack', CUR_PAGE||''); }catch(_){}   /* 重整後回到同一分頁（2026-08-19） */
       setTimeout(()=>location.reload(),180); }
     else if(el) el.remove();
@@ -37876,62 +37881,78 @@ async function admhCardTap(e,id){
    與一日同款米色背景；只顯示教練課系列（私教/團課/體驗/按摩，排除自主訓練與場租）；
    卡片＝第一列課名、右上 24 小時制時間；欄太窄（重疊分欄）只顯示小時數（例：20）。 */
 async function admCalMultiHTML(nDays){
+  /* 一週檢視（2026-08-19 使用者定版）：只顯示「選定教練」自己的課卡（卡片只放會員名），
+     每日每 30 分的背景用顏色標場地狀態——滿（全滿紅）/ 教（只剩教室金）/ 跑（只剩跑步機藍）。 */
   const today=ymd(TODAY);
   const sel=window._cagSelDate||today;
-  const start=(nDays===7)?heroWeekMonday(sel):(parseYmd(sel)||new Date(TODAY));
-  const days=[]; for(let i=0;i<nDays;i++){ const d=new Date(start); d.setDate(start.getDate()+i); days.push(d); }
-  let bks=[],mems=[]; try{ [bks,mems]=await Promise.all([dbGetAll('bookings'),dbGetAll('members')]); }catch(_){}
+  const start=heroWeekMonday(sel);
+  const days=[]; for(let i=0;i<7;i++){ const d=new Date(start); d.setDate(start.getDate()+i); days.push(d); }
+  let bks=[],mems=[],cos=[];
+  try{ [bks,mems,cos]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]); }catch(_){}
   const mm={}; (mems||[]).forEach(m=>{ mm[m.id]=m.name; });
-  const tm=Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t]));
-  const COACH_CATS={'私人教練':1,'小班肌力':1,'體驗':1,'運動按摩':1};
+  const teach=(cos||[]).filter(c=>typeof isTeachable!=='function'||isTeachable(c));
+  if(!window._admCalCoach||!teach.some(c=>c.id===window._admCalCoach)) window._admCalCoach=(teach[0]||{}).id||null;
+  const cSel=window._admCalCoach;
+  const chips=teach.map(c=>{
+    const on=cSel===c.id;
+    const cc=(typeof coachTagColor==='function')?coachTagColor(c.id):{bg:'#2b2926',fg:'#F4F1E8'};
+    return `<button class="admh-chip" style="background:${cc.bg};border-color:${on?'#1a1a1a':cc.bg};color:${cc.fg};" onclick="admCalCoach('${c.id}')">${(typeof coachDisp==='function'?coachDisp(c):c.name)||''}</button>`;
+  }).join('');
   const CCOL={'ev-pt':'#1f6f54','ev-friendly':'#23508a','ev-group':'#9a5a1e','ev-trial':'#6e3a86','ev-self':'#6a655c','ev-massage':'#2f8f83'};
-  const S=8*60,E=22*60,HH=(nDays===7)?46:58,GH=(E-S)/60*HH;
+  const tm=Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t]));
+  const S=8*60,E=22*60,HH=46,GH=(E-S)/60*HH;
   const wdz=['日','一','二','三','四','五','六'];
-  /* 背景層：cag 同款灰整點槽＋置中時間標（不佔左欄，橫向空間全給卡片） */
   let bg='';
   for(let h=8;h<22;h++){ const top=(h*60-S)/60*HH;
     bg+=`<div class="cag-hourbg" style="top:${top+2}px;height:${HH-4}px;"></div>`
       +`<div class="cag-gline-label" style="top:${top+HH/2}px;">${String(h).padStart(2,'0')}:00</div>`;
   }
-  const _nameOf=b=>{
-    if(bkIsGroup(b)||(Array.isArray(b.member_ids)&&b.member_ids.length)){
-      const names=(b.member_ids||[]).map(x=>mm[x]).filter(Boolean);
-      return names.length===0?'團體課':(names.length===1?names[0]:`${names[0]} 等${names.length}人`);
-    }
-    return b.trial_name||mm[b.member_id]||'—';
-  };
+  const nowMin=(new Date()).getHours()*60+(new Date()).getMinutes();
   const colsHtml=days.map(d=>{
     const ds=ymd(d);
-    const list=(bks||[]).filter(b=>b&&b.date===ds&&b.status!=='cancelled'&&!b.sibling_of&&COACH_CATS[b.category]);
-    const evs=list.map(b=>{const s0=timeToMin(b.start_time),e0=s0+(Number(b.duration)||60);return{b,s:s0,e:e0};})
-      .sort((a,b2)=>a.s-b2.s||String(a.b.id).localeCompare(String(b2.b.id)));
-    const clusters=[]; let cur=[],curEnd=-1;
-    evs.forEach(it=>{ if(cur.length&&it.s>=curEnd){clusters.push(cur);cur=[];curEnd=-1;} curEnd=cur.length?Math.max(curEnd,it.e):it.e; cur.push(it); });
-    if(cur.length) clusters.push(cur);
+    const dayAll=(bks||[]).filter(b=>b&&b.date===ds&&b.status!=='cancelled');
+    /* 場地狀態帶（同一日檢視的額滿邏輯，加上「跑」）：教練課配不到→看教室→看跑步機 */
+    let bands='';
+    try{
+      for(let mmn=S;mmn<21*60;mmn+=30){
+        if(ds<today||(ds===today&&mmn<nowMin)) continue;
+        const a=allocateVenue('私人教練', dayAll, mmn, mmn+60, null);
+        let cls='',lb='';
+        if(a&&!a.error){ if(a.toVid==='group'){ cls='amcv-grp'; lb='教'; } }
+        else{
+          const a2=allocateVenue('自主訓練', dayAll, mmn, mmn+60, null);
+          if(a2&&!a2.error&&String(a2.venue_unit||'').indexOf('treadmill')===0){ cls='amcv-tm'; lb='跑'; }
+          else{ cls='amcv-full'; lb='滿'; }
+        }
+        if(cls) bands+=`<div class="amcv-slot ${cls}" style="top:${((mmn-S)/60*HH+1).toFixed(1)}px;height:${(HH/2-2).toFixed(1)}px;">${lb}</div>`;
+      }
+    }catch(_){}
+    /* 只畫選定教練自己的課卡（代課優先歸屬） */
+    const mine=dayAll.filter(b=>!b.sibling_of&&(b.substitute_coach_id||b.coach_id)===cSel);
+    const evs=mine.map(b=>{const s0=timeToMin(b.start_time),e0=s0+(Number(b.duration)||60);return{b,s:s0,e:e0};})
+      .sort((a,b2)=>a.s-b2.s);
     let cards='';
-    clusters.forEach(cl=>{
-      const ln=[]; const asg=new Map();
-      cl.forEach(({b,s,e})=>{ let i=ln.findIndex(l=>!l.some(iv=>s<iv.e&&e>iv.s)); if(i<0){i=ln.length;ln.push([]);} ln[i].push({s,e}); asg.set(b.id,i); });
-      const unit=ln.length||1, w=100/unit;
-      cl.forEach(({b,s,e})=>{
-        const col=CCOL[(typeof evColorClass==='function')?evColorClass(b,tm):'ev-pt']||'#1f6f54';
-        const nm=_nameOf(b);
-        const inner=(nDays===7)
-          ? `<span class="amcv-nm">${nm}</span>`
-          : `<span class="amcv-t">${b.start_time}</span><span class="amcv-nm">${nm}</span>`;
-        cards+=`<div class="amcv-card" style="top:${((s-S)/60*HH+1).toFixed(1)}px;height:${Math.max((e-s)/60*HH-4,18).toFixed(1)}px;left:calc(${(asg.get(b.id)*w).toFixed(2)}% + 1px);width:calc(${w.toFixed(2)}% - 2px);--amc:${col};" onclick="admhCardTap(event,'${b.id}')">${inner}</div>`;
-      });
+    evs.forEach(({b,s,e})=>{
+      const col=CCOL[(typeof evColorClass==='function')?evColorClass(b,tm):'ev-pt']||'#1f6f54';
+      let nm;
+      if(bkIsGroup(b)||(Array.isArray(b.member_ids)&&b.member_ids.length)){
+        const names=(b.member_ids||[]).map(x=>mm[x]).filter(Boolean);
+        nm=names.length===0?'團體課':(names.length===1?names[0]:`${names[0]} 等${names.length}人`);
+      } else nm=b.trial_name||mm[b.member_id]||'—';
+      cards+=`<div class="amcv-card" style="top:${((s-S)/60*HH+1).toFixed(1)}px;height:${Math.max((e-s)/60*HH-4,18).toFixed(1)}px;left:1px;right:1px;--amc:${col};" onclick="admhCardTap(event,'${b.id}')"><span class="amcv-nm">${nm}</span></div>`;
     });
     const isT=ds===today;
     return `<div class="amcv-col">
       <div class="amcv-colh${isT?' amcv-today':''}"><b>週${wdz[d.getDay()]}</b><span>${d.getMonth()+1}/${d.getDate()}</span></div>
-      <div class="amcv-body" style="height:${GH}px;">${cards}</div>
+      <div class="amcv-body" style="height:${GH}px;">${bands}${cards}</div>
     </div>`;
   }).join('');
-  return `<div class="amcv"><div class="amcv-grid" style="position:relative;">
-    <div class="amcv-bglayer" style="top:34px;height:${GH}px;">${bg}</div>
-    ${colsHtml}
-  </div></div>`;
+  return `<div class="amcv">
+    <div class="admh-coach" style="margin:0 0 8px;">${chips}</div>
+    <div class="amcv-grid" style="position:relative;">
+      <div class="amcv-bglayer" style="top:34px;height:${GH}px;">${bg}</div>
+      ${colsHtml}
+    </div></div>`;
 }
 /* 管理員手機行事曆表頭（2026-08-19）：首頁同款週列＋一日/三日/七日模式切換（僅 admin） */
 async function admCalHeaderHTML(){
@@ -37946,8 +37967,8 @@ async function admCalHeaderHTML(){
     btns+=`<button class="msb-date${ds===sel&&ds!==today?' on':''}${ds===today?' hero-today':''}" onclick="admCalPick('${ds}')">
       <span class="cag-dn">${n?n+' 堂':'－'}</span><b>${d.getMonth()+1}/${d.getDate()}</b><span>${ds===today?'今天':'週'+HERO_WD[d.getDay()]}</span></button>`;
   }
-  const nD=Number(window._admCalDays)||1;
-  const seg=[1,3,7].map(n=>`<button class="admh-chip${nD===n?' on':''}" onclick="admCalMode(${n})">${n===1?'一日':n===3?'三日':'七日'}</button>`).join('');
+  const nD=(Number(window._admCalDays)||1)===1?1:7;   /* 三日退場（2026-08-19 使用者指示） */
+  const seg=[1,7].map(n=>`<button class="admh-chip${nD===n?' on':''}" onclick="admCalMode(${n})">${n===1?'一日':'一週'}</button>`).join('');
   return `<div class="admh" style="margin:0 0 8px;">
     <div class="admh-week">
       <button class="admh-wknav" onclick="admCalShift(-1)">‹</button>
@@ -37959,14 +37980,15 @@ async function admCalHeaderHTML(){
 }
 function admCalPick(ds){
   window._cagSelDate=ds;
-  try{ calWeekStart=(Number(window._admCalDays)||1)===3?parseYmd(ds):heroWeekMonday(ds); }catch(_){}
+  try{ calWeekStart=heroWeekMonday(ds); }catch(_){}
   window._calStepping=true; navTo('calendar');
 }
+/* 一週檢視的教練選取（2026-08-19：一週只看單一教練） */
+function admCalCoach(id){ window._admCalCoach=id; window._calStepping=true; navTo('calendar'); }
 function admCalShift(dir){ admCalPick(heroWeekStep(window._cagSelDate||ymd(TODAY),dir)); }
 function admCalMode(n){
-  window._admCalDays=Math.max(1,Number(n)||1);
-  const sel=window._cagSelDate||ymd(TODAY);
-  try{ calWeekStart=(window._admCalDays===3)?parseYmd(sel):heroWeekMonday(sel); }catch(_){}
+  window._admCalDays=(Number(n)===7)?7:1;   /* 三日退場：只有一日/一週 */
+  try{ calWeekStart=heroWeekMonday(window._cagSelDate||ymd(TODAY)); }catch(_){}
   window._calStepping=true; navTo('calendar');
 }
 /* 管理員手機首頁的教練篩選 chips（2026-08-19）：只濾今日課卡清單 */
