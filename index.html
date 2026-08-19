@@ -7656,6 +7656,31 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .cag-mcal .mc-cell.mc-sel .mc-d{
   border:0;border-radius:0;width:auto;height:auto;padding:0 2px 2px;
   border-bottom:2px solid var(--red);background:transparent;color:#fff;font-weight:700;}
+
+/* ══ 管理員手機首頁新面板（2026-08-19 日曆 App 風格試點）——只有 .admh 底下生效，其他角色/桌機不吃 ══ */
+.admh{margin:2px 0 14px;}
+.admh-head{display:flex;align-items:center;gap:12px;margin:2px 2px 12px;}
+.admh-hi{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
+.admh-hi b{font-size:21px;font-weight:800;letter-spacing:.02em;color:var(--text);line-height:1.25;}
+.admh-sub{font-size:12.5px;color:var(--t2);}
+.admh-ava{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--bd);background:var(--card2);
+  font-size:17px;font-weight:800;color:var(--green);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;flex:none;font-family:inherit;}
+.admh-bigdate{display:flex;align-items:flex-end;gap:12px;margin:16px 4px 12px;}
+.admh-dnum{font-size:64px;font-weight:800;line-height:.85;letter-spacing:-.02em;color:var(--text);font-family:var(--num);}
+.admh-dside{display:flex;flex-direction:column;gap:2px;padding-bottom:5px;}
+.admh-dside b{font-size:16px;font-weight:800;color:var(--text);}
+.admh-dside span{font-size:12px;color:var(--t2);}
+.admh-cards{display:flex;flex-direction:column;gap:10px;}
+.admh-card{position:relative;background:var(--admh-c,#1f6f54);border-radius:18px;padding:16px 18px 14px;
+  color:#fff;cursor:pointer;box-shadow:0 3px 12px rgba(50,42,30,.12);}
+.admh-card:active{transform:scale(.985);}
+.admh-time{position:absolute;top:14px;right:16px;font-size:13.5px;font-weight:700;font-family:var(--num);opacity:.92;}
+.admh-cname{font-size:12.5px;font-weight:600;opacity:.8;letter-spacing:.04em;}
+.admh-mname{font-size:19px;font-weight:800;margin-top:3px;line-height:1.3;}
+.admh-tk{font-size:12px;opacity:.85;margin-top:6px;font-family:var(--num);}
+.admh-done{opacity:.55;}
+.admh-empty{text-align:center;color:var(--t3);font-size:13px;padding:26px 0;background:var(--card2);border-radius:14px;}
 </style>
 </head>
 <body>
@@ -7812,8 +7837,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260818.1617';
-const APP_VERSION_LABEL='v260818.1617';
+const APP_VERSION = '260819.1005';
+const APP_VERSION_LABEL='v260819.1005';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14596,8 +14621,49 @@ PAGES.g_dashboard=async function(){
      │ 待辦事項        │ 行事曆    │ 今日教練中心（值班上·任務下）│
      └────────────────┴──────────┴───────────────────────┘
      手機版維持：月曆 Hero → KPI＋值班 → 任務 →（右欄）本月成績 → 待辦 → 知識卡 */
+  /* ══ 管理員手機首頁新面板（2026-08-19 使用者定版，參考日曆 App 風格試點）══
+     結構：粗體問候＋今日工作副標＋頭像（點開帳號選單）→ 一週日期列（週一起、今天高亮）
+     → 超大日期 → 當日課卡（課程色滿版卡：右上時間、左側課名／會員／票券 n/n）。
+     只在「管理員＋手機版」出現，取代原本頂部週曆卡；桌機與其他角色完全不變。
+     v1 先掛在最上方，下方原有內容照舊，看過再決定收哪些。 */
+  let admMobHero='';
+  if(SESSION.role==='admin' && isMobileLayout()){
+    const _mm={}; (members||[]).forEach(m=>{ _mm[m.id]=m.name; });
+    const _tkById={}; (mtickets||[]).forEach(t=>{ if(t&&t.id) _tkById[t.id]=t; });
+    const _wdz=['日','一','二','三','四','五','六'];
+    const _dv=parseYmd(date)||TODAY;
+    const _cnt={}; (bookings||[]).forEach(b=>{ if(!b||b.status==='cancelled'||b.sibling_of)return;
+      if(bkIsSelf(b)||b.category==='場租')return; _cnt[b.date]=(_cnt[b.date]||0)+1; });
+    const _hCards=dayBk.slice().sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time))).map(b=>{
+      const col=catColor[evColorClass(b,typeMap)]||'#1f6f54';
+      const cname=bookingTypeName(b,typeMap);
+      let mname;
+      if(bkIsGroup(b)){ const names=mids(b).map(x=>_mm[x]).filter(Boolean);
+        mname=names.length===0?'未排名單':(names.length<=2?names.join('、'):`${names[0]} 等 ${names.length} 人`);
+      } else mname=b.trial_name||_mm[b.member_id]||(bkIsSelf(b)?'自主訓練':'—');
+      const tk=b.ticket_id?_tkById[b.ticket_id]:null;
+      const done=b.status==='checked_in'||b.status==='completed';
+      return `<div class="admh-card${done?' admh-done':''}" style="--admh-c:${col};" onclick="openBookingDetail('${b.id}')">
+        <span class="admh-time">${b.start_time}${done?' ✓':''}</span>
+        <div class="admh-cname">${cname}</div>
+        <div class="admh-mname">${mname}</div>
+        ${tk?`<div class="admh-tk">票券 ${tk.sessions_remaining}/${tk.sessions_total}</div>`:''}
+      </div>`;
+    }).join('')||`<div class="admh-empty">這一天沒有課程</div>`;
+    admMobHero=`<div class="admh">
+      <div class="admh-head">
+        <div class="admh-hi"><b>${_greet}，${SESSION.name||'管理員'}</b>
+          <span class="admh-sub">今日 ${classCount} 堂課・已完成 ${doneCount} 堂</span></div>
+        <button class="admh-ava" onclick="toggleAcctMenu(event)">${String(SESSION.name||'Y').slice(0,1)}</button>
+      </div>
+      ${heroWeekBarHTML({anchor:date,sel:date,today,pickFn:'dashPickDate',prevFn:'admWeekShift(-1)',nextFn:'admWeekShift(1)',id:'admh-days',metaOf:ds=>{const n=_cnt[ds]||0;return n?n+' 堂':'';}})}
+      <div class="admh-bigdate"><span class="admh-dnum">${_dv.getDate()}</span>
+        <span class="admh-dside"><b>${_dv.getMonth()+1} 月</b><span>週${_wdz[_dv.getDay()]}${date===today?'・今天':''}</span></span></div>
+      <div class="admh-cards">${_hCards}</div>
+    </div>`;
+  }
   C.innerHTML=`
-    ${isMobileLayout()?adminCalCard:''}<!-- 2026-07-21 使用者指示：桌機置中日期列移除（左下行事曆已有今日提示） -->
+    ${isMobileLayout()?(admMobHero||adminCalCard):''}<!-- 2026-07-21 使用者指示：桌機置中日期列移除（左下行事曆已有今日提示） -->
 
     <div class="mc-dash-wrap hero-sheet">
       ${isMobileLayout()?`
