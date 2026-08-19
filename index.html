@@ -8016,7 +8016,7 @@ let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
 const APP_VERSION = '260819.1844';
-const APP_VERSION_LABEL='v260819.1844';
+const APP_VERSION_LABEL='v260819.1858';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22342,6 +22342,7 @@ function onEvClick(e,id){
    簽到/取消/取消簽到重用既有 checkInBooking / cancelBooking / undoCheckin（它們會自行重繪行事曆）。
    「編輯」轉入原地展開編輯表單（Phase 3b bkInlineEdit，不開 Modal）。函式名沿用 expandBkCard（多處呼叫）。 */
 async function expandBkCard(el, id){
+  const _calCtxFlag=!!window._admCalCtx; window._admCalCtx=false;   /* 進場即取用並清掉（await 之前，避免時序洞） */
   collapseBkCard();
   const b = await dbGet('bookings', id);
   if(!b){ openBookingDetail(id); return; }
@@ -22360,6 +22361,10 @@ async function expandBkCard(el, id){
      教練點別人的課卡也能取消 —— 開放桌機行事曆後這個破口一定要補。
      own＝主責或代課是自己（非教練角色與店長一律 true）。 */
   const own = SESSION.role!=='coach' || !!SESSION.is_manager || bkIsCoach(b,SESSION.id);
+  /* 行事曆情境（2026-08-19 使用者定案）：行事曆的圓鈕只做「預約與調整」——
+     不放簽到/取消簽到/未到課（簽到只能在首頁課卡做）；「明細」改開會員明細（查票券方案）。
+     旗標由 openCourseCard（行事曆路徑）設定，首頁課卡不受影響。 */
+  const _calCtx=_calCtxFlag && SESSION.role==='admin' && isMobileLayout();
   // 教練簽到：限自己主帶／代課的課（口徑與 openBookingDetail 的 staffCanCheckin 一致）
   const coachCk = SESSION.role==='coach' && own;
   const closed = b.status==='cancelled' || b.status==='completed';
@@ -22370,7 +22375,9 @@ async function expandBkCard(el, id){
      「轉正」開轉正簽約流程（分期保留按下去＝手動補綁，與開通下一期同一條路）。 */
   if(b.pending_contract && !b.ticket_id){
     if(canCancel && own) btns += evoBtn('evo-r1','evo-danger',`collapseBkCard();confirmCancelBooking('${id}')`,'x','取消');
-    btns += evoBtn('evo-b1','',`collapseBkCard();openBookingDetail('${id}')`,'doc','明細');
+    btns += (_calCtx&&b.member_id)
+      ? evoBtn('evo-b1','',`collapseBkCard();openMemberDetail('${b.member_id}')`,'doc','明細')
+      : evoBtn('evo-b1','',`collapseBkCard();openBookingDetail('${id}')`,'doc','明細');
     if(staff && !closed && b.status==='booked') btns += evoBtn('evo-r2','evo-primary',`collapseBkCard();openConvertPending('${id}')`,'check','轉正');   /* 請假/異常狀態不給轉正（2026-08-14） */
     el.style.marginLeft=''; el.style.marginTop='';
     el.classList.add('cal-ev-active');
@@ -22392,15 +22399,17 @@ async function expandBkCard(el, id){
   }
   /* ② 明細（2026-07-28 使用者指示：全介面課卡的「編輯」統一改成「明細」——
      改期/時長/場地/取消都已整合在課程明細視窗；原地展開編輯（bkOrbitEdit）退場） */
-  btns += evoBtn('evo-b1','',`collapseBkCard();openBookingDetail('${id}')`,'doc','明細');
+  btns += (_calCtx&&b.member_id)
+    ? evoBtn('evo-b1','',`collapseBkCard();openMemberDetail('${b.member_id}')`,'doc','明細')
+    : evoBtn('evo-b1','',`collapseBkCard();openBookingDetail('${id}')`,'doc','明細');
   // ③ 團課「新增」會員進名單（金色；名單管理只給櫃檯／管理員）
   if(staff && !closed && isGroup) btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();openGroupMembers('${id}')`,'plus','新增');
   /* ③-b 「未到課」（金；2026-08-14 使用者指示）：
      ・教練請假堂 → 結課退堂、不發點（bkCoachLeaveNoShow）
      ・一般自主訓練 → 結課蓋「未」章、點數照扣（bkSelfNoShow）
      時間未到的防線在各自函式裡。 */
-  if((staff||coachCk) && b.status==='coach_leave') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkCoachLeaveNoShow('${id}')`,'noshow','未到課');
-  else if((staff||coachCk) && bkIsSelf(b) && !bkIsCoachLeave(b) && !isGroup && b.status==='booked') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkSelfNoShow('${id}')`,'noshow','未到課');
+  if(!_calCtx && (staff||coachCk) && b.status==='coach_leave') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkCoachLeaveNoShow('${id}')`,'noshow','未到課');
+  else if(!_calCtx && (staff||coachCk) && bkIsSelf(b) && !bkIsCoachLeave(b) && !isGroup && b.status==='booked') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkSelfNoShow('${id}')`,'noshow','未到課');
   // ④ 取消（紅；教練只能取消自己的課）
   if(canCancel && own){
     /* 2026-07-29：直接開「取消預約」視窗——那裡才有 24 小時警示與「退回票券／扣課不退」
@@ -22408,7 +22417,7 @@ async function expandBkCard(el, id){
     btns += evoBtn('evo-r1','evo-danger',`collapseBkCard();confirmCancelBooking('${id}')`,'x','取消');
   }
   // ⑤ 簽到（綠；團課 → 開名單逐人簽；單人已簽 → 兩段式取消簽到，不用原生 confirm）
-  if((staff||coachCk) && !closed){
+  if(!_calCtx && (staff||coachCk) && !closed){
     if(isGroup){
       btns += evoBtn('evo-r2','evo-primary',`bkOrbitRoster('${id}')`,'check','簽到');
     }else{
@@ -23339,6 +23348,7 @@ async function openCourseCard(id, el){
      expandBkCard 自己會擋「不是自己的課」（coachOwnsBk）並退回唯讀明細。 */
   if(el && typeof expandBkCard==='function'){
     if(el.classList && el.classList.contains('cal-ev-active')){ collapseBkCard(); return; }
+    window._admCalCtx=true;   /* 行事曆情境旗標——expandBkCard 進場即消化 */
     expandBkCard(el, id); return;
   }
   openBookingDetail(id);
@@ -37977,6 +37987,12 @@ async function admhCardTap(e,id){
   const el=e&&e.currentTarget;
   try{ await expandBkCard(el,id); }catch(_){ openBookingDetail(id); }
 }
+/* 行事曆一週檢視的課卡入口（2026-08-19 使用者定案）：跟一日一樣屬行事曆情境——
+   圓鈕只做預約/調整（無簽到）、明細開會員明細；首頁課卡仍走 admhCardTap 保留簽到。 */
+async function admwkCardTap(e,id){
+  window._admCalCtx=true;
+  return admhCardTap(e,id);
+}
 /* 管理員手機行事曆・三日/七日欄狀檢視（2026-08-19 使用者定版）：
    與一日同款米色背景；只顯示教練課系列（私教/團課/體驗/按摩，排除自主訓練與場租）；
    卡片＝第一列課名、右上 24 小時制時間；欄太窄（重疊分欄）只顯示小時數（例：20）。 */
@@ -38042,7 +38058,7 @@ async function admCalMultiHTML(nDays){
         const names=(b.member_ids||[]).map(x=>mm[x]).filter(Boolean);
         nm=names.length===0?'團體課':(names.length===1?names[0]:`${names[0]} 等${names.length}人`);
       } else nm=b.trial_name||mm[b.member_id]||'—';
-      cards+=`<div class="amcv-card" style="top:${((s-S)/60*HH+1).toFixed(1)}px;min-height:${Math.max((e-s)/60*HH-2,14).toFixed(1)}px;left:2px;right:2px;--amc:${col};" onclick="admhCardTap(event,'${b.id}')"><span class="amcv-nm">${nm}</span></div>`;
+      cards+=`<div class="amcv-card" style="top:${((s-S)/60*HH+1).toFixed(1)}px;min-height:${Math.max((e-s)/60*HH-2,14).toFixed(1)}px;left:2px;right:2px;--amc:${col};" onclick="admwkCardTap(event,'${b.id}')"><span class="amcv-nm">${nm}</span></div>`;
     });
     return `<div class="amcv-col">
       <div class="amcv-body" style="height:${GH}px;" onclick="admwkSlot(event,'${ds}')">${bands}${cards}</div>

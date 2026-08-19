@@ -100,7 +100,7 @@ ok('★★ 圓點：未到場結課（無 checked_in_at）不畫點不佔格；�
 
 console.log('\n課卡環繞按鈕（2026-08-14 使用者指示：加金色「未到課」、拿掉代課）');
 ok('★★ 請假堂有金色「未到課」圓鈕 → bkCoachLeaveNoShow',
-   /if\(\(staff\|\|coachCk\) && b\.status==='coach_leave'\) btns \+= evoBtn\('evo-b2','evo-gold',`collapseBkCard\(\);bkCoachLeaveNoShow\('\$\{id\}'\)`,'noshow','未到課'\);/.test(src));
+   /if\(!_calCtx && \(staff\|\|coachCk\) && b\.status==='coach_leave'\) btns \+= evoBtn\('evo-b2','evo-gold',`collapseBkCard\(\);bkCoachLeaveNoShow\('\$\{id\}'\)`,'noshow','未到課'\);/.test(src));   // 2026-08-19 行事曆情境不放
 ok('★★ 請假堂不顯示代課（復原入口在明細）',
    /b\.date>=ymd\(TODAY\) && !bkIsCoachLeave\(b\)\)\{/.test(src)
    && /教練請假的堂不顯示代課/.test(src));
@@ -108,7 +108,7 @@ ok('★ noshow 圖示已註冊', /noshow:`<svg viewBox="0 0 24 24"/.test(src));
 
 console.log('\n自主訓練未到課（2026-08-14 使用者指示：金色圓鈕＋課卡右下角金色「未」章）');
 ok('★★ 自主訓練預約中有金色「未到課」圓鈕 → bkSelfNoShow',
-   /else if\(\(staff\|\|coachCk\) && bkIsSelf\(b\) && !bkIsCoachLeave\(b\) && !isGroup && b\.status==='booked'\) btns \+= evoBtn\('evo-b2','evo-gold',`collapseBkCard\(\);bkSelfNoShow\('\$\{id\}'\)`,'noshow','未到課'\);/.test(src));
+   /else if\(!_calCtx && \(staff\|\|coachCk\) && bkIsSelf\(b\) && !bkIsCoachLeave\(b\) && !isGroup && b\.status==='booked'\) btns \+= evoBtn\('evo-b2','evo-gold',`collapseBkCard\(\);bkSelfNoShow\('\$\{id\}'\)`,'noshow','未到課'\);/.test(src));   // 2026-08-19 行事曆情境不放
 ok('★★ bkSelfNoShow＝completed＋no_show 旗標、點數照扣不退',
    (()=>{ const i2=src.indexOf('async function bkSelfNoShow');
      const F=src.slice(i2, src.indexOf('\n/* 復原教練請假', i2));

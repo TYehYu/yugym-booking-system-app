@@ -22,9 +22,9 @@ ok('★ 只能動自己的課卡：own＝主責或代課是自己（店長除外
    /const own = SESSION\.role!=='coach' \|\| !!SESSION\.is_manager \|\| bkIsCoach\(b,SESSION\.id\);/.test(src));
 ok('★ 「取消」補上 own 判定（原本只看 canCancel，教練點別人的課也能取消）',
    /\/\/ ④ 取消（紅；教練只能取消自己的課）\s*\n\s*if\(canCancel && own\)\{/.test(src));   // 2026-08-05 順序定版改了註解
-ok('★ 簽到開放給教練自己的課（口徑同 openBookingDetail 的 staffCanCheckin）',
+ok('★ 簽到開放給教練自己的課（口徑同 openBookingDetail 的 staffCanCheckin）',   // 2026-08-19 行事曆情境加 !_calCtx（行事曆圓鈕無簽到）
    /const coachCk = SESSION\.role==='coach' && own;/.test(src)
-   && /if\(\(staff\|\|coachCk\) && !closed\)\{/.test(src));
+   && /if\(!_calCtx && \(staff\|\|coachCk\) && !closed\)\{/.test(src));
 ok('　　團課名單管理仍只給櫃檯／管理員',   // 2026-08-05 順序定版：條件合併成 staff && !closed && isGroup
    /if\(staff && !closed && isGroup\) btns \+= evoBtn\('evo-b2','evo-gold'/.test(src));
 ok('　　整頁不鎖死（_coachReadonly 維持 false），逐張卡判權限',
