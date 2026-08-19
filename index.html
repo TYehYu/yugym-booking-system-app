@@ -12394,7 +12394,14 @@ async function grpNetDeductTicket(bid, mid){
 }
 async function refundTicket(ticket_id,booking_id,operator){
   const t=await dbGet('member_tickets',ticket_id);
-  if(!t)return false;
+  if(!t){
+    /* 讀不到票（連線抖動等）＝退不了課。以前這裡默默 return（2026-08-19 黃柏桓案例：
+       取消兩堂、退課消失、無任何紀錄，圓形卡多出兩顆幽靈 ✓）——
+       現在留一筆 delta 0 警示帳＋跳警告，櫃檯當下就知道要補退。 */
+    try{ await logTicket(ticket_id,'adjust',0,booking_id,operator||'system','⚠ 退課失敗：讀不到票券資料，未退回（請人工補退）'); }catch(_){}
+    try{ if(typeof showToast==='function') showToast('⚠ 退課沒有成功（讀不到票券），請到會員票券頁確認補退'); }catch(_){}
+    return false;
+  }
   /* 護欄（2026-08-06 稽核 R3）：退不超過總堂數 —— 重複取消／重跑批次會讓餘額
      大於總堂數，變成憑空多出來的堂數。同樣不動餘額、留下警示紀錄。 */
   const _tot=Number(t.sessions_total)||0;
