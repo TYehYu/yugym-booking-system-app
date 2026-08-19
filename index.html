@@ -7949,8 +7949,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1640';
-const APP_VERSION_LABEL='v260819.1640';
+const APP_VERSION = '260819.1648';
+const APP_VERSION_LABEL='v260819.1648';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18616,21 +18616,33 @@ PAGES.calendar=async function(){
     /* 管理員手機行事曆（2026-08-19 使用者定版；僅 admin，教練/櫃檯照舊）——
        表頭改首頁同款週列＋「一日/三日/七日」模式：一日＝原 agenda、三日/七日＝renderCalendar。 */
     if(SESSION.role==='admin'){
-      const _nD=Number(window._admCalDays)||1;
-      const _hdr=await admCalHeaderHTML();
-      if(_nD>1){
-        _calDays=_nD;
-        if(!calWeekStart) initCalWeek();
-        C.innerHTML=_hdr+(await renderCalendar({coachFilter:false,onSlot:'quickBookAt',editable:true,stepping:_stepping}));
-        try{ initCalDrag(); }catch(_){}
-        try{ initCalSwipe(document.querySelector('.cal-body')); }catch(_){}
-        try{ fitCalWrapHeight(); }catch(_){}
+      try{
+        const _nD=Number(window._admCalDays)||1;
+        const _hdr=await admCalHeaderHTML();
+        if(_nD>1){
+          _calDays=_nD;
+          if(!calWeekStart) initCalWeek();
+          C.innerHTML=_hdr+(await renderCalendar({coachFilter:false,onSlot:'quickBookAt',editable:true,stepping:_stepping}));
+          try{ initCalDrag(); }catch(_){}
+          try{ initCalSwipe(document.querySelector('.cal-body')); }catch(_){}
+          try{ fitCalWrapHeight(); }catch(_){}
+          return;
+        }
+        _calDays=null;
+        C.innerHTML=_hdr+`<div id="wtl-page"></div>`;
+        await renderCoachAgenda();
+        return;
+      }catch(e){
+        /* 新版表頭/多日檢視任何一步出錯：不讓頁面卡在上一頁——退回原版 agenda（含綠週列），
+           並把錯誤講出來（2026-08-19 診斷：使用者回報行事曆整頁沒渲染）。 */
+        console.error('admCal 新版行事曆失敗，退回原版', e);
+        try{ showToast('⚠ 新版行事曆載入失敗，已退回原版：'+((e&&e.message)||e)); }catch(_){}
+        window._admCalHdrOff=true;
+        C.innerHTML=`<div id="wtl-page"></div>`;
+        await renderCoachAgenda();
+        window._admCalHdrOff=false;
         return;
       }
-      _calDays=null;
-      C.innerHTML=_hdr+`<div id="wtl-page"></div>`;
-      await renderCoachAgenda();
-      return;
     }
     C.innerHTML=`<div id="wtl-page"></div>`;
     await renderCoachAgenda();
@@ -19441,7 +19453,7 @@ async function renderCoachAgenda(){
      ‹ › 換週、卡片顯示當日課堂數。 ── */
   /* 管理員手機（2026-08-19）：週列改由 PAGES.calendar 的 admCalHeaderHTML 提供（首頁同款），
      這裡不再畫綠色週列；教練照舊。 */
-  const monthRow=(SESSION&&SESSION.role==='admin')?'':`<div class="cag-mcal" style="padding-bottom:10px;">
+  const monthRow=(SESSION&&SESSION.role==='admin'&&!window._admCalHdrOff)?'':`<div class="cag-mcal" style="padding-bottom:10px;">
     ${heroWeekBarHTML({anchor:selDate,sel:selDate,today:todayStr,
       pickFn:'cagSelectDate',prevFn:'cagWeekShift(-1)',nextFn:'cagWeekShift(1)',id:'cag-days',
       metaOf:ds=>{const n=cntByDate[ds]||0;return n?n+' 堂':'';}})}
