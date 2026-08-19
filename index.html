@@ -7793,6 +7793,9 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .amcv-slot{position:absolute;left:1px;right:1px;pointer-events:none;border-radius:6px;z-index:1;
   display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;}
 .amcv-full{background:rgba(181,55,46,.16);color:#b5372e;}
+.amcv-past{position:absolute;left:0;right:0;background:rgba(90,85,75,.14);z-index:1;pointer-events:none;border-radius:8px;}
+.amcv-pick{position:absolute;left:1px;right:1px;border:2px dashed var(--gold,#B48A56);background:rgba(180,138,86,.12);
+  border-radius:6px;z-index:3;pointer-events:none;}
 .amcv-grp{background:rgba(180,138,86,.18);color:#8a5e28;}
 .amcv-tm{background:rgba(35,80,138,.14);color:#23508a;}
 .amcv-card .amcv-t{font-size:10px;font-weight:700;opacity:.9;font-family:var(--num);line-height:1.2;}
@@ -8005,8 +8008,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260819.1814';
-const APP_VERSION_LABEL='v260819.1814';
+const APP_VERSION = '260819.1818';
+const APP_VERSION_LABEL='v260819.1818';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37945,18 +37948,27 @@ async function admCalMultiHTML(nDays){
     /* 場地狀態帶（同一日檢視的額滿邏輯，加上「跑」）：教練課配不到→看教室→看跑步機 */
     let bands='';
     try{
+      /* 連續同型帶合併成一塊（2026-08-19 使用者指示） */
+      const runs=[]; let cur=null;
       for(let mmn=S;mmn<21*60;mmn+=30){
-        if(ds<today||(ds===today&&mmn<nowMin)) continue;
-        const a=allocateVenue('私人教練', dayAll, mmn, mmn+60, null);
-        let cls='',lb='';
-        if(a&&!a.error){ if(a.toVid==='group'){ cls='amcv-grp'; lb='教'; } }
-        else{
-          const a2=allocateVenue('自主訓練', dayAll, mmn, mmn+60, null);
-          if(a2&&!a2.error&&String(a2.venue_unit||'').indexOf('treadmill')===0){ cls='amcv-tm'; lb='跑'; }
-          else{ cls='amcv-full'; lb='滿'; }
+        let key='',lb='';
+        if(!(ds<today||(ds===today&&mmn<nowMin))){
+          const a=allocateVenue('私人教練', dayAll, mmn, mmn+60, null);
+          if(a&&!a.error){ if(a.toVid==='group'){ key='amcv-grp'; lb='教'; } }
+          else{
+            const a2=allocateVenue('自主訓練', dayAll, mmn, mmn+60, null);
+            if(a2&&!a2.error&&String(a2.venue_unit||'').indexOf('treadmill')===0){ key='amcv-tm'; lb='跑'; }
+            else{ key='amcv-full'; lb='滿'; }
+          }
         }
-        if(cls) bands+=`<div class="amcv-slot ${cls}" style="top:${((mmn-S)/60*HH+1).toFixed(1)}px;height:${(HH/2-2).toFixed(1)}px;">${lb}</div>`;
+        if(cur&&cur.key===key&&cur.end===mmn){ cur.end=mmn+30; }
+        else{ if(cur&&cur.key) runs.push(cur); cur={key,lb,start:mmn,end:mmn+30}; }
       }
+      if(cur&&cur.key) runs.push(cur);
+      runs.forEach(r=>{ bands+=`<div class="amcv-slot ${r.key}" style="top:${((r.start-S)/60*HH+1).toFixed(1)}px;height:${((r.end-r.start)/60*HH-2).toFixed(1)}px;">${r.lb}</div>`; });
+      /* 過去時段暗化 */
+      if(ds<today) bands+=`<div class="amcv-past" style="top:0;height:${GH}px;"></div>`;
+      else if(ds===today&&nowMin>S) bands+=`<div class="amcv-past" style="top:0;height:${Math.min((nowMin-S)/60*HH,GH).toFixed(1)}px;"></div>`;
     }catch(_){}
     /* 只畫選定教練自己的課卡（代課優先歸屬） */
     const mine=dayAll.filter(b=>!b.sibling_of&&(b.substitute_coach_id||b.coach_id)===cSel);
@@ -38021,7 +38033,16 @@ function admwkSlot(e,ds){
   const HH=46,S=8*60;
   let mm=S+Math.floor((e.clientY-r.top)/(HH/2))*30;
   mm=Math.max(S,Math.min(21*60,mm));
+  if(ds===ymd(TODAY)){ const n=new Date(); if(mm<n.getHours()*60+n.getMinutes()){ showToast('過去的時段不能新增預約'); return; } }
   const t=String(Math.floor(mm/60)).padStart(2,'0')+':'+(mm%60?'30':'00');
+  /* 點位方框（2026-08-19 使用者指示：要看得到點到哪個時段）——60 分預設長度的金色虛線框 */
+  try{
+    document.querySelectorAll('.amcv-pick').forEach(x=>x.remove());
+    const box=document.createElement('div'); box.className='amcv-pick';
+    box.style.top=((mm-S)/60*HH+1)+'px'; box.style.height=(HH-4)+'px';
+    e.currentTarget.appendChild(box);
+    setTimeout(()=>{ try{ box.remove(); }catch(_){} },6000);
+  }catch(_){}
   try{ quickBookAt(ds,t); }catch(_){ showToast('無法開啟新增預約'); }
 }
 function admCalShift(dir){ admCalPick(heroWeekStep(window._cagSelDate||ymd(TODAY),dir)); }
