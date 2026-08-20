@@ -26,10 +26,16 @@ const sheet=g('_cardHtml=`<div class="mtp-card admh-sheet ash-crs"','\n  }else{'
 if(!sheet) { console.log('  ✗ 取不到課程卡原始碼（結束標記對不上）'); process.exit(1); }
 ok('★ 調整時間鈕只顯示開始時間、去掉開頭的 0', sheet.includes("${String(b.start_time||'').replace(/^0/,'')}"));
 ok('★ 不再顯示 –結束時間', !sheet.includes('${b.start_time}–${endT}'));
-ok('★ 第一列靠左＝課名・場地', /class="ash-course">\$\{nm\}\$\{_vTxt\}\$\{bkIsCoachLeave/.test(sheet));
+ok('★ 第一列靠左＝課名・場地（教練請假標已移到第二列）',
+   /class="ash-course">\$\{nm\}\$\{_vTxt\}<\/span>/.test(sheet) && !/class="ash-course">[^<]*admh-lvtag/.test(sheet));
+ok('★ 教練請假標在第二列、靠右且在教練名左邊（與首頁課卡一致）',
+   /\$\{_dur\} 分<\/span>\$\{bkIsCoachLeave\(b\)\?'<span class="admh-lvtag ash-lvtag">教練請假<\/span>':''\}\$\{_coachTxt\}/.test(sheet)
+   && /\.ash-meta \.ash-lvtag\{margin-left:auto/.test(src)
+   && /\.ash-meta:has\(\.ash-lvtag\) \.ash-coachtxt\{margin-left:0;\}/.test(src));
 ok('★ 第一列靠右＝時間（純文字，編輯走視窗）', /class="ash-right">\$\{String\(b\.start_time\|\|''\)\.replace\(\/\^0\/,''\)\}<\/span>/.test(sheet));
 ok('★ 第二列＝日期・時長靠左、教練靠右',
-   /class="ash-meta"><span class="ash-mdate">[\s\S]*<span class="ash-dot">・<\/span><span>\$\{_dur\} 分<\/span>\$\{_coachTxt\}<\/div>/.test(sheet)
+   /class="ash-meta"><span class="ash-mdate">[\s\S]*<span class="ash-dot">・<\/span><span>\$\{_dur\} 分<\/span>/.test(sheet)
+   && sheet.includes('${_coachTxt}</div>')
    && /\.ash-coachtxt\{margin-left:auto/.test(src));
 ok('　　日期去掉開頭的 0', sheet.includes(".slice(5).replace('-','/').replace(/^0/,'')"));
 ok('★ 出席章從課程卡拿掉（狀態改標在會員名字旁）', !sheet.includes('admh-stamp') && !src.includes('const _st=((typeof grpAllOnLeave'));
@@ -152,16 +158,26 @@ ok('　　填滿時字色一併轉白', /\.admh-done \.admh-mname,\.admh-done \.
 ok('★ 教練請假標移到右下角、教練名左邊', /const _foot=\(_cnm\|\|_lvTag\)\?`<div class="admh-foot">\$\{_lvTag\}/.test(src)
    && !/class="admh-cname">\$\{cname\}[^<]*\$\{_lv\?/.test(src));
 ok('　　右下角多一個標，卡片右側再讓一點（避免壓到票券那行）', /\.admh-card:has\(\.admh-lvtag\)\{padding-right:152px;\}/.test(src));
+ok('★ 請假的堂照樣標教練名（使用者回報只看到「教練請假」、沒有教練名）',
+   /const _cnm=\(\(!bkIsSelf\(b\)\|\|bkIsCoachLeave\(b\)\)&&_cid&&_cm\[_cid\]\)\?_cm\[_cid\]:'';/.test(src));
 
 console.log('會員資料頁（管理員手機）');
 const ph=g('function ppHeaderHtml(){','\n// ══════ Tabs ══════');
-ok('★ 只有管理員手機走新版面', /if\(isM && SESSION && SESSION\.role==='admin' && isMobileLayout\(\)\)\{\s*\n\s*return `<div class="pp-head pp-head-m2">/.test(ph));
-ok('★ 左欄：大頭照／姓名／電話／性別／生日／LINE 通知',
-   /<div class="pp-idcol">\s*\n\s*\$\{_avatar\}\s*\n\s*<div class="pp-name-row">\$\{_nameHtml\}\$\{code\}\$\{typeBadge\}<\/div>\s*\n\s*<div class="pp-meta pp-idfields">\$\{phoneItem\}\$\{genderItem\}\$\{bdayItem\}\$\{lineItem\}<\/div>/.test(ph));
-ok('★ 右欄：等級／主教練／緊急聯絡人／載具／家庭成員',
-   ph.includes('<div class="pp-meta pp-fields">${tierItem}${coachItem}${ecItem}${carrierItem}${famItem}</div>')
-   && /\.pp-head-m2 \.pp-idfields,\.pp-head-m2 \.pp-fields\{display:flex;flex-direction:column/.test(src));
-ok('★ 大頭照放大', /\.pp-head-m2 \.pp-avatar\{width:84px;height:84px;\}/.test(src));
+ok('★ 只有管理員手機走新版面', /if\(isM && SESSION && SESSION\.role==='admin' && isMobileLayout\(\)\)\{[\s\S]{0,400}return `<div class="pp-head pp-head-m2">/.test(ph));
+ok('★ 大頭照＋姓名獨立一列、橫跨兩欄（使用者回報左右失衡）',
+   /<div class="pp-idtop">\s*\n\s*\$\{_avatar\}[\s\S]{0,260}<div class="pp-meta pp-idtier">\$\{tierItem\}<\/div>/.test(ph)
+   && /\.pp-head-m2 \.pp-idtop\{grid-column:1\/-1/.test(src));
+ok('★ 底下左右各四列：電話/性別/生日/LINE ｜ 主教練/緊急聯絡人/載具/家庭成員',
+   ph.includes('<div class="pp-meta pp-idfields">${phoneItem}${genderItem}${bdayItem}${lineItem}</div>')
+   && ph.includes('<div class="pp-meta pp-fields">${coachItem}${ecItem}${carrierItem}${famItem}</div>')
+   && /\.pp-head\.pp-head-m2\{display:grid;grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/.test(src));
+ok('★ 大頭照放大', /\.pp-head-m2 \.pp-avatar\{width:76px;height:76px;\}/.test(src));
+ok('★ 視窗裡的卡片改新語彙：去細框、加大圓角與柔和陰影',
+   /\.pp-sheet-win \.pp-head,\.pp-sheet-win \.pp-card\{border:none;border-radius:20px;\s*\n\s*box-shadow:0 6px 18px/.test(src)
+   && /\.pp-sheet-win \.pp-card-t\{border-bottom:none/.test(src));
+ok('　　標題列與視窗同底、不畫分隔線', /\.pp-sheet\.pp-sheet-win \.pp-sheet-bar\{[^}]*background:var\(--bg\);border-bottom:none;\}/.test(src));
+ok('　　只吃 .pp-sheet-win，桌機與員工資料的卡片不動',
+   /^\.pp-card\{background:var\(--card\);border:1px solid var\(--bd\);border-radius:14px;/m.test(src));
 ok('　　主教練／家庭成員抽成具名變數，兩種版面共用同一份', /const coachItem = isM \? mvA\('主教練'/.test(src)
    && /const famItem = \(isM&&_canBase\)\?/.test(src)
    && /const meta = isM\s*\n\s*\? tierItem \+ coachItem \+ ecItem \+ lineItem \+ carrierItem \+ famItem/.test(src));
