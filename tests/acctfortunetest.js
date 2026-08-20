@@ -22,24 +22,40 @@ ok('　　抽屜確實會被搬到 body（本 bug 的前提沒變）',
    g('function toggleAcctMenu(e){','function closeAcctMenu').includes('document.body.appendChild(menu)'));
 
 console.log('簡易課卡（admh-sheet）課程卡');
-const sheet=g('_cardHtml=`<div class="mtp-card admh-sheet"','\n  }else{');
+const sheet=g('_cardHtml=`<div class="mtp-card admh-sheet ash-crs"','\n  }else{');
 if(!sheet) { console.log('  ✗ 取不到課程卡原始碼（結束標記對不上）'); process.exit(1); }
 ok('★ 調整時間鈕只顯示開始時間、去掉開頭的 0', sheet.includes("${String(b.start_time||'').replace(/^0/,'')}"));
 ok('★ 不再顯示 –結束時間', !sheet.includes('${b.start_time}–${endT}'));
 ok('★ 第一列靠左＝課名・場地・時長', /class="ash-course">\$\{nm\}\$\{_vTxt\}<span class="ash-dot">・<\/span>\$\{_dur\} 分/.test(sheet));
-ok('★ 第一列靠右＝可編輯的時間', /class="ash-right"><button type="button" class="ash-timebtn" onclick="admhMoveAsk/.test(sheet));
+ok('★ 第一列靠右＝時間（純文字，編輯走視窗）', /class="ash-right">\$\{String\(b\.start_time\|\|''\)\.replace\(\/\^0\/,''\)\}<\/span>/.test(sheet));
 ok('★ 第二列＝教練靠左、日期靠右', /class="ash-meta">\$\{_coachTxt\}<span class="ash-mdate">/.test(sheet)
    && /\.ash-mdate\{margin-left:auto/.test(src));
 ok('　　日期去掉開頭的 0', sheet.includes(".slice(5).replace('-','/').replace(/^0/,'')"));
-ok('　　教練名不再靠右（改成第二列的最左）', !/\.ash-coachbtn,\.ash-coachtxt\{margin-left:auto/.test(src));
 ok('★ 出席章從課程卡拿掉（狀態改標在會員名字旁）', !sheet.includes('admh-stamp') && !src.includes('const _st=((typeof grpAllOnLeave'));
-ok('★ 代課鈕退場，改成點教練名字開代課面板', !src.includes('ash-subbtn') && /_coachTxt[\s\S]{0,300}bkOrbitSub\('\$\{b\.id\}'\)/.test(src));
+ok('　　會員不再擠在課程卡上（.ash-name 退場）', !sheet.includes('class="ash-name"') && !src.includes('.ash-name{'));
+ok('　　課名不折行（右邊還有時間要放）', /\.ash-course\{[^}]*white-space:nowrap/.test(src));
+
+console.log('標題卡＝點一下跳「調整課程」視窗（卡面不放虛線與按鈕）');
+ok('★ 卡面上的按鈕全數退場（時間鈕／場地虛線／代課鈕）',
+   !src.includes('ash-timebtn') && !src.includes('ash-linkbtn') && !src.includes('ash-coachbtn') && !src.includes('ash-subbtn'));
+ok('★ 整張標題卡可點，開 ashEditAsk', /class="mtp-card admh-sheet ash-crs"[^>]*onclick="ashEditAsk\('\$\{b\.id\}'\)"/.test(sheet)
+   && /\.ash-crs\{cursor:pointer;\}/.test(src));
+ok('　　acts 掛上 window 讓視窗拿得到（同 _expandedBkEl 的做法）', src.includes('window._ashActs=A;'));
+const ei=g('async function ashEditAsk(id){','\n/* 復原前先問一次');
+ok('★ 視窗集合：調整日期／時間', ei.includes("closeModal();admhMoveAsk('${b.id}')") && ei.includes("'調整日期／時間'"));
+ok('★ 視窗集合：更改場地（只有自主訓練）', /A\.sub==='venue'\) rows\+=row\(`closeModal\(\);bkOrbitVenue/.test(ei));
+ok('★ 視窗集合：指派代課教練', /A\.sub==='sub'\) rows\+=row\(`closeModal\(\);bkOrbitSub/.test(ei));
 ok('　　bkOrbitSub 本來就同時提供教練請假（所以不用另做選單）',
    /async function bkOrbitSub\(id\)\{[\s\S]{0,1600}canCoachLeave\(b\)/.test(src));
-ok('★ 場地鈕退場，改成直接點課名右邊的場地字樣', !/'場地'\$\{EVO_IC/.test(src) && /_vTxt[\s\S]{0,200}bkOrbitVenue\('\$\{b\.id\}'\)/.test(src));
-ok('　　只有自主訓練能換場地（A.sub===\'venue\'），其他就只是文字', /A\.sub==='venue'\s*\?\s*`・<button/.test(src));
-ok('　　會員不再擠在課程卡上（.ash-name 退場）', !sheet.includes('class="ash-name"') && !src.includes('.ash-name{'));
-ok('　　課名讓位、右上角不折行', /\.ash-course\{[^}]*white-space:nowrap/.test(src) && /\.ash-timebtn\{[^}]*white-space:nowrap/.test(src));
+ok('★ 視窗集合：本堂人數上限（改人數搬進標題卡）',
+   ei.includes("openGrpMaxEdit('${b.id}')") && ei.includes('A.isGroup && A.staff && !A.closed'));
+ok('　　改人數做完要回課卡（它的取消與儲存都會 openBookingDetail）', ei.includes("ashBackArm('${b.id}');closeModal();openGrpMaxEdit"));
+ok('★ 教練請假：未請假給「教練請假」、已請假給「復原」', /if\(_leave\)\{[\s\S]*'取消教練請假（復原）'[\s\S]*\}else if\([\s\S]*'教練請假',bkCoachLeaveSub\(b\)/.test(ei));
+ok('　　已請假的堂不再列出調整時間／代課／改人數', (ei.match(/!_leave &&/g)||[]).length===4);
+ok('　　團課請假＝整堂取消、救不回來，照實說明', ei.includes('這堂的教練請假是<b>整堂取消</b>，無法復原'));
+ok('★ 復原前先跳視窗確認（使用者指示）',
+   /async function ashCoachLeaveUndoAsk\(id\)[\s\S]*取消教練請假？[\s\S]*bkCoachLeaveUndo\('\$\{b\.id\}'\)/.test(src));
+ok('　　不是 coach_leave 就擋下（團課請假不可復原）', /if\(b\.status!=='coach_leave'\)\{ showToast\('這堂不是可復原的教練請假/.test(src));
 
 console.log('簡易課卡：每位會員一張卡');
 ok('★ 團課逐名額一張卡、單人課一張', /_seatKs\.length \? _seatKs\.map\(sk=>\(\{sk, mid:seatMid\(sk\), n:seatNo\(sk\)\}\)\)/.test(src)
