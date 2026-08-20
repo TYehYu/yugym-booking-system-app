@@ -207,6 +207,9 @@ ok('★ 交易分頁：四欄表格改成一筆一列的卡片（桌機仍是表
 ok('★ 票券卡：購買・效期提到第二列（緊接編號那一列）',
    /\$\{_m2\?`<div class="tkc-meta">\$\{tkBuyDateHtml\(t\)\}　·　效期至/.test(src)
    && /\.tkc-meta\{font-size:11px/.test(src));
+ok('★ 票券卡：狀態章（已完成／已過期／已退費）移到課程方案名稱右邊',
+   src.includes("${tkNoTag(sl.no)}${t.plan_name||'票券'}${_m2?stTag:''}")
+   && !/tkc-meta">\$\{tkBuyDateHtml\(t\)\}[^`]*\$\{stTag/.test(src));
 ok('★ 票券卡：金額改放右下角、就在作廢按鈕上方',
    /<span class="tkc-money">\$\{tkMoneyHtml\(t\)\.replace\(\/\^　·　\/,''\)\}<\/span>/.test(src)
    && /\.tkc-foot\{flex-direction:column;align-items:flex-end/.test(src));
