@@ -33,8 +33,10 @@ ok('　　滑鼠提示也標明待簽約', /\$\{_nmFull\}\$\{_pend\?'・尚未�
 
 console.log('\n體驗／待簽約放在姓名下面一列（2026-07-31 使用者指示）');
 ok('★ 卡片主行只放純姓名', /: \(b\.trial_name\|\|'—'\)\);/.test(src));
+/* 2026-08-21：出席章移進姓名列（.tcard-nmrow）後，標籤接在那一列之後——
+   仍然是獨立一列，只是不再與姓名 span 直接相鄰。 */
 ok('★ 標籤另起一列', /const _tagOut = _tag \? `<span class="tcard-sub">\$\{_tag\}<\/span>` : '';/.test(src)
-   && /<span class="tcard-mem">\$\{nm\}<\/span>\$\{_tagOut\}/.test(src));
+   && /<span class="tcard-nmrow"><span class="tcard-mem">\$\{nm\}<\/span>[\s\S]{0,400}?<\/span>\$\{_tagOut\}/.test(src));
 /* 2026-07-31 重構：標籤走共用的 bkTag（待簽約／待繳費由有沒有綁會員決定） */
 ok('★ 待簽約／待繳費分得開（有沒有綁會員）',
    /if\(b\.pending_contract\) return bkIsInstHold\(b\) \? '待繳費' : '待簽約';/.test(src)   // 2026-08-04 純綁定仍是待簽約
