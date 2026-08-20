@@ -8321,7 +8321,7 @@ let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
 const APP_VERSION = '260819.1844';
-const APP_VERSION_LABEL='v260820.1841';
+const APP_VERSION_LABEL='v260820.1848';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18930,7 +18930,11 @@ async function admhMoveAsk(id){
   if(b.status==='cancelled'){ showToast('已取消的課無法調整時間'); return; }
   if(b.status==='checked_in'||b.status==='completed'){ showToast('已簽到／已完成的課不能改時間（請先取消簽到）'); return; }
   if(b.date<ymd(TODAY)){ showToast('已過期的預約無法調整'); return; }
-  try{ collapseBkCard(); }catch(_){}
+  /* 2026-08-20 使用者回報「返回鈕會關掉整個視窗、不會回到上一個視窗」——
+     原本這裡先 collapseBkCard()（當初是為了避開視窗被課卡蓋住），
+     於是按返回只是 closeModal()、後面已經什麼都不剩。
+     層級問題已由 #bk-card-pop.admh-pop 的 z-index 修掉，這行不再需要：
+     課卡留著，返回才能退回上一層。 */
   const dur=Number(b.duration)||60;
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">調整預約時間</div>
     <div class="ash-eihead">${calMoveWho(b)}</div>
@@ -18944,7 +18948,8 @@ async function admhMoveAsk(id){
            只給 text-align 在部分瀏覽器對收合狀態不生效 */''}
       <select id="amv-t" style="flex:1;font-family:inherit;font-size:14px;background:#fff;color:var(--text);text-align:center;text-align-last:center;">${bkTimeOptions(b.start_time,{noEmpty:1})}</select></label>
     <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeModal()">返回</button>
+      ${''/* 返回＝退回「調整課程」那一層（這頁就是從那裡點進來的），不是關掉全部 */}
+      <button class="btn btn-ghost" onclick="closeModal();ashEditAsk('${b.id}')">返回</button>
       <button class="btn btn-green" onclick="admhMoveDo('${b.id}')">下一步</button>
     </div>`);
 }
@@ -18957,6 +18962,9 @@ async function admhMoveDo(id){
   const verr=await validateBooking(b,nd,nt,b.duration);
   if(verr){ showToast(verr); return; }
   closeModal();
+  /* 真的要送出了才收課卡：confirmCalMove 之後會 navTo 重繪整頁，
+     課卡是掛在 body 的浮層、不會被重繪帶走，留著會變成孤兒。 */
+  try{ collapseBkCard(); }catch(_){}
   confirmCalMove(b, b.date, b.start_time, b.duration||60, nd, nt, b.duration||60, async()=>{
     try{
       b.date=nd; b.start_time=nt; await dbPut('bookings',b);

@@ -50,6 +50,12 @@ ok('★ 整張標題卡可點，開 ashEditAsk', /class="mtp-card admh-sheet ash
 ok('　　acts 掛上 window 讓視窗拿得到（同 _expandedBkEl 的做法）', src.includes('window._ashActs=A;'));
 const ei=g('async function ashEditAsk(id){','\n/* 復原前先問一次');
 ok('★ 視窗集合：調整日期／時間', ei.includes("closeModal();admhMoveAsk('${b.id}')") && ei.includes("'調整日期／時間'"));
+ok('★ 調整預約時間的「返回」退回上一層，不是關掉全部（使用者回報）',
+   /onclick="closeModal\(\);ashEditAsk\('\$\{b\.id\}'\)">返回<\/button>/.test(src));
+ok('　　開這張時不再先收課卡（原本先收掉，返回就什麼都不剩）',
+   !/if\(b\.date<ymd\(TODAY\)\)\{ showToast\('已過期的預約無法調整'\); return; \}\s*\n\s*try\{ collapseBkCard\(\); \}catch\(_\)\{\}/.test(src));
+ok('　　真的送出時才收課卡（confirmCalMove 之後會 navTo 重繪，浮層會變孤兒）',
+   /closeModal\(\);\s*\n\s*\/\* 真的要送出了才收課卡[\s\S]{0,140}try\{ collapseBkCard\(\); \}catch\(_\)\{\}\s*\n\s*confirmCalMove\(/.test(src));
 ok('★ 視窗集合：更改場地（只有自主訓練）', /A\.sub==='venue'\) rows\+=row\(`closeModal\(\);bkOrbitVenue/.test(ei));
 ok('★ 視窗集合：指派代課教練', /A\.sub==='sub'\) rows\+=row\(`ashSubAsk\('\$\{b\.id\}'\)`,'指派代課教練'/.test(ei));
 ok('★ 代課不會再跳回預約明細（使用者回報）——面板不在就先把課卡叫回來',
