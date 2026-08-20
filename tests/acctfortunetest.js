@@ -257,6 +257,32 @@ ok('★ 已簽到才填滿課程色（原本是整張淡化）',
 ok('★ 簽到章拿掉、請假章保留', /return k==='leave'\?'<span class="evc-check evc-leave" title="全員請假">假<\/span>':'';\}\)\(\)\}/.test(src));
 ok('　　文字讓開左邊色條', /\.cal-ev\.cag-std\.admcag \.acg-in\{padding-left:7px/.test(src));
 
+console.log('登入頁改版（使用者參考圖）');
+ok('★ logo 改中文大字、英文小字在下', /<div class="login-logo login-logo-main">\s*\n\s*<div class="lg-zh">有肌訓練<\/div>\s*\n\s*<div class="lg-en">YUGYM<\/div>/.test(src)
+   && /\.login-logo-main \.lg-zh\{[^}]*font-size:34px/.test(src)
+   && /\.login-logo-main \.lg-en\{[^}]*font-size:14px/.test(src));
+ok('★ 版本編號移除（JS 那行有 if(lv) 防呆，不會報錯）',
+   !/id="login-ver"/.test(src) && /const lv=document\.getElementById\('login-ver'\); if\(lv\)/.test(src));
+ok('★ 員工入口從會員頁移除，但 #staff 網址仍直達員工表單',
+   !/員工 \/ 管理後台登入 →/.test(src)
+   && /<div id="login-staff-view" class="hidden">/.test(src)
+   && /switchLoginMode\(\/staff\/i\.test\(hash\) \? 'staff' : 'member'\)/.test(src));
+ok('★ 說明在上、LINE 按鈕在下', /<div class="login-lnhint">一鍵登入[\s\S]{0,120}<\/div>\s*\n\s*<button id="line-login-btn"/.test(src));
+ok('★ LINE 按鈕維持官方配色', /id="line-login-btn"[^>]*background:#06C755;color:#fff/.test(src));
+ok('★ 品牌綠底＋米色框，只吃登入頁與註冊卡（其他頁維持白卡）',
+   /#login-screen \.login-card,\.login-card-dark\{background:var\(--green,#003d32\);\s*\n\s*border:1\.5px solid #E4DAC2/.test(src)
+   && /^\.login-card\{background:#fff;/m.test(src));
+ok('　　填寫區白底黑字', /#login-screen input,#login-screen select,\.login-card-dark input,\.login-card-dark select\{\s*\n\s*background:#fff;color:#111;/.test(src));
+ok('★ 註冊頁同一套風格（同一個入口、導向不同）',
+   /<div class="login-card login-card-dark"[^>]*>\s*\n\s*\$\{[\s\S]{0,120}\}\s*\n\s*<div class="login-logo login-logo-main"><div class="lg-zh">有肌訓練/.test(src));
+ok('　　深底上的表單看得見：欄位標題／說明／次要按鈕都改亮色',
+   /\.login-card-dark \.form-row label,\.login-card-dark \.field label\{color:rgba\(255,255,255,\.68\)/.test(src)
+   && /\.login-card-dark \.btn-ghost\{background:rgba\(255,255,255,\.10\)/.test(src));
+ok('　　主要按鈕改品牌金（原本的品牌綠壓在深綠卡上看不見）',
+   /\.login-card-dark \.btn-primary\{background:var\(--gold,#B48A56\);color:#14291f;\}/.test(src));
+ok('　　登入／註冊的欄位 id 與送出函式都沒動', ['login-acct','login-pw','reg-surname','reg-given','reg-phone','reg-pw','reg-pw2','reg-submit']
+   .every(id=>src.includes(`id="${id}"`)) && /onclick="submitRegister\(\)"/.test(src) && /onclick="lineLoginStart\(\)"/.test(src));
+
 console.log('首頁大日期格線');
 const hero=g('admMobHero=`<div class="admh">','<div class="admh-div"></div>');
 ok('★ 格線移出 .admh-bigdate', !/admh-bigdate[\s\S]*admh-dsep[\s\S]*admh-dside/.test(hero));
