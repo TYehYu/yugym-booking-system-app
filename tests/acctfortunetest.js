@@ -26,10 +26,12 @@ const sheet=g('_cardHtml=`<div class="mtp-card admh-sheet"','\n  }else{');
 if(!sheet) { console.log('  ✗ 取不到課程卡原始碼（結束標記對不上）'); process.exit(1); }
 ok('★ 調整時間鈕只顯示開始時間、去掉開頭的 0', sheet.includes("${String(b.start_time||'').replace(/^0/,'')}"));
 ok('★ 不再顯示 –結束時間', !sheet.includes('${b.start_time}–${endT}'));
-ok('★ 課程卡第二行＝日期・時長，教練靠右下角',
-   /class="ash-meta">[\s\S]*b\.date[\s\S]*\$\{_dur\} 分<\/span>\$\{_coachTxt\}<\/div>/.test(sheet));
+ok('★ 第一列靠左＝課名・場地・時長', /class="ash-course">\$\{nm\}\$\{_vTxt\}<span class="ash-dot">・<\/span>\$\{_dur\} 分/.test(sheet));
+ok('★ 第一列靠右＝可編輯的時間', /class="ash-right"><button type="button" class="ash-timebtn" onclick="admhMoveAsk/.test(sheet));
+ok('★ 第二列＝教練靠左、日期靠右', /class="ash-meta">\$\{_coachTxt\}<span class="ash-mdate">/.test(sheet)
+   && /\.ash-mdate\{margin-left:auto/.test(src));
 ok('　　日期去掉開頭的 0', sheet.includes(".slice(5).replace('-','/').replace(/^0/,'')"));
-ok('　　教練名靠右（margin-left:auto）', /\.ash-coachbtn,\.ash-coachtxt\{margin-left:auto/.test(src));
+ok('　　教練名不再靠右（改成第二列的最左）', !/\.ash-coachbtn,\.ash-coachtxt\{margin-left:auto/.test(src));
 ok('★ 出席章從課程卡拿掉（狀態改標在會員名字旁）', !sheet.includes('admh-stamp') && !src.includes('const _st=((typeof grpAllOnLeave'));
 ok('★ 代課鈕退場，改成點教練名字開代課面板', !src.includes('ash-subbtn') && /_coachTxt[\s\S]{0,300}bkOrbitSub\('\$\{b\.id\}'\)/.test(src));
 ok('　　bkOrbitSub 本來就同時提供教練請假（所以不用另做選單）',
