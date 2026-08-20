@@ -283,6 +283,10 @@ ok('　　登入後 body 回到原本的米色（用 :not(.hidden) 綁在登入�
 console.log('會員資料視窗變窄後冒出來的兩處');
 ok('★ LINE 通知的開關靠右（縮放原點原本是 left center，畫出來會往左縮）',
    /\.pp-head-m2 \.pp-idfields \.switch\{transform-origin:right center !important;\}/.test(src));
+ok('★ 底部不再掛一塊空米色：浮動視窗取消 #pp-body 的 400px 保底',
+   /\.pp-sheet-win #pp-body\{min-height:0;\}/.test(src) && /^#pp-body\{min-height:400px;\}/m.test(src));
+ok('　　只有浮動視窗取消，滿版模式仍保留原規則（切分頁不縮）',
+   src.indexOf('#pp-body{min-height:400px;}') < src.indexOf('.pp-sheet-win #pp-body{min-height:0;}'));
 ok('★ 票券種類放不下就換行、按鈕本身不折字（原本擠成直的）',
    /\.pp-sheet-win \.tkfilter\{flex-wrap:wrap;\}/.test(src)
    && /\.pp-sheet-win \.tkfilter \.tkf-btn\{flex:0 0 auto;white-space:nowrap;\}/.test(src));
