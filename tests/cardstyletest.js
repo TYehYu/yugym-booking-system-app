@@ -152,5 +152,19 @@ ok('★ 排在姓名之後、體驗／待簽約標籤之前',
 ok('　　只有教室／跑步機會有值（多功能是預設場地、不標）',
    /selfVenueLabel 本來就只在教室／跑步機才有值/.test(src));
 
+console.log('\n會員資料的新表頭要給櫃檯（使用者：櫃檯端的會員資料頁面還沒修改）');
+ok('★ 版面判斷從 role===admin 放寬到櫃檯以上（含店長）',
+   /if\(isM && \(typeof isDeskLike==='function' \? isDeskLike\(\) : \(SESSION && SESSION\.role==='admin'\)\)\)\{/.test(src)
+   && !/if\(isM && SESSION && SESSION\.role==='admin'\)\{\s*\n\s*\/\* 三修/.test(src));
+ok('★ 權限沒有跟著放寬：改名／刪除／看密碼／改等級仍限管理員',
+   /const delBtn = \(isM && SESSION && SESSION\.role==='admin'\)/.test(src)
+   && /const _nameHtml=\(isM && SESSION && SESSION\.role==='admin'\)/.test(src)
+   && /const _canTier = !!\(SESSION&&SESSION\.role==='admin'\);/.test(src)
+   && /if\(!\(SESSION&&SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以刪除會員'\); return; \}/.test(src));
+ok('　　櫃檯沒有可按的動作時整列不畫（不留一條空白）',
+   /\$\{act\?`<div class="pp-head-act">\$\{act\}<\/div>`:''\}/.test(src));
+ok('　　為什麼放寬，寫在程式裡',
+   /版面本身跟權限無關/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
