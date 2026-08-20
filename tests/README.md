@@ -17,6 +17,10 @@
 | reacttest.js | 票券分區／重新啟用／折抵券分頁 | 24 |
 | synctest.js | allocBookingsToTickets（FIFO、容量、教練課系相容） | 29 |
 | sharetest.js | 票券共享（tkUsableBy、挑票、退堂） | 26 |
-| fullcompare.js | 全會員卡面 vs 舊系統比對（需 tickets2.json／bookings2.json／old_map.json，見遷移備忘） | — |
+| fullcompare.js | 全會員卡面 vs 舊系統比對（一次性，任務已結束；需匯出檔，缺檔會自己跳過） | — |
 
-共 211 項。8 月總整理時 fullcompare 可拿新匯出檔重跑。
+共 211 項。
+
+**fullcompare 已功成身退**（2026-08-20）：舊系統的帳由櫃檯手動對齊完成，不再做總整理對帳。
+腳本保留當參考——它需要 tickets2.json／bookings2.json／old_map.json（真實會員資料，不進版控），
+缺檔時會印一行「跳過」並正常結束，所以跑全套時它不會算失敗。

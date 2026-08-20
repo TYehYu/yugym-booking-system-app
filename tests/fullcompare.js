@@ -1,7 +1,22 @@
 /* 全會員票券卡顯示值 vs 舊系統已核銷 —— 一次性比對腳本。
    從 index.html 抽出真正的顯示邏輯（alloc/usedMap/usedCount），
-   對每位會員模擬會員詳細頁的計算，逐張票與 old_map.json（舊系統已核銷）比對。 */
+   對每位會員模擬會員詳細頁的計算，逐張票與 old_map.json（舊系統已核銷）比對。
+
+   ⚠ 2026-08-20 使用者確認：舊系統的帳已由櫃檯手動對齊，8 月總整理對帳不再進行。
+   這支保留當參考（日後若又要跟外部資料對帳，這裡有現成的取值路徑），
+   但它需要三個匯出檔，而那是真實會員資料、故意不進版控（見 .gitignore）。
+   缺檔時明確「跳過」並正常結束 —— 不要用未攔截的 ENOENT 假裝成測試失敗，
+   否則每次跑全套都會多一支紅的，久了就沒人看紅字了。 */
 const fs=require('fs');
+const NEED=['tickets2.json','bookings2.json','old_map.json'];
+{
+  const miss=NEED.filter(f=>!fs.existsSync(f));
+  if(miss.length){
+    console.log('跳過：一次性對帳腳本，需要舊系統匯出檔 '+miss.join('、'));
+    console.log('（2026-08-20 起舊系統帳務已由櫃檯手動對齊，此腳本平時不需執行）');
+    process.exit(0);
+  }
+}
 const h=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 const grabFn=n=>{let i=h.indexOf('function '+n+'(');if(i<0)throw new Error('no '+n);
   if(h.slice(i-6,i)==='async ')i-=6;let d=0;
