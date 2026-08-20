@@ -63,6 +63,13 @@ ok('★ 視窗要蓋在課卡之上（使用者回報「沒有出現在最前面
    && /\.modal-bg\{[^}]*z-index:9750/.test(src));
 ok('　　只壓管理員手機那張面板，共用的 #bk-card-pop 維持原層級',
    /#bk-card-pop \.mtp\{position:fixed;z-index:9801/.test(src));
+ok('★ 視窗風格對齊課卡（使用者回報「跟我們剛剛調整的差太多」）',
+   /\.modal:has\(\.ash-sheetmk\)\{background:var\(--bg\);border-radius:22px/.test(src)
+   && /\.ash-eirow\{[\s\S]{0,220}background:#fff;border:none;[\s\S]{0,120}box-shadow:0 6px 18px/.test(src)
+   && /\.modal:has\(\.ash-sheetmk\) \.modal-foot \.btn\{border-radius:999px/.test(src));
+ok('　　三張視窗都掛上標記（調整課程／取消教練請假／調整預約時間）',
+   (src.match(/<div class="ash-sheetmk"><\/div>/g)||[]).length===3);
+ok('　　只吃帶標記的視窗，其他彈窗不受影響', /\.modal\{background:var\(--surface-3\)/.test(src) && /\.ash-sheetmk\{display:none;\}/.test(src));
 
 console.log('簡易課卡：每位會員一張卡');
 ok('★ 團課逐名額一張卡、單人課一張', /_seatKs\.length \? _seatKs\.map\(sk=>\(\{sk, mid:seatMid\(sk\), n:seatNo\(sk\)\}\)\)/.test(src)
