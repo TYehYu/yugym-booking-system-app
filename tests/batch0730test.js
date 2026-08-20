@@ -20,11 +20,13 @@ ok('★ 教練導覽列加「預約行事曆」（導覽仍在上方，不走左
 /* 2026-08-03 使用者定案：店長（is_manager）視同後台，own 加了豁免（見 staffcardtest.js） */
 ok('★ 只能動自己的課卡：own＝主責或代課是自己（店長除外）',
    /const own = SESSION\.role!=='coach' \|\| !!SESSION\.is_manager \|\| bkIsCoach\(b,SESSION\.id\);/.test(src));
+/* 2026-08-20：管理員手機的簡易課卡改成「課程卡＋每位會員一張卡」，取消與簽到搬到會員卡上，
+   所以這兩行多了 !_ashMode 的前置守衛（見 acctfortunetest.js）；own／coachCk 的口徑本身沒變。 */
 ok('★ 「取消」補上 own 判定（原本只看 canCancel，教練點別人的課也能取消）',
-   /\/\/ ④ 取消（紅；教練只能取消自己的課）\s*\n\s*if\(canCancel && own\)\{/.test(src));   // 2026-08-05 順序定版改了註解
+   /\/\/ ④ 取消（紅；教練只能取消自己的課[^\n]*\n\s*if\(!_ashMode && canCancel && own\)\{/.test(src));
 ok('★ 簽到開放給教練自己的課（口徑同 openBookingDetail 的 staffCanCheckin）',   // 2026-08-19 行事曆情境加 !_calCtx（行事曆圓鈕無簽到）
    /const coachCk = SESSION\.role==='coach' && own;/.test(src)
-   && /if\(!_calCtx && \(staff\|\|coachCk\) && !closed\)\{/.test(src));
+   && /if\(!_ashMode && !_calCtx && \(staff\|\|coachCk\) && !closed\)\{/.test(src));
 ok('　　團課名單管理仍只給櫃檯／管理員',   // 2026-08-05 順序定版：條件合併成 staff && !closed && isGroup
    /if\(staff && !closed && isGroup\) btns \+= evoBtn\('evo-b2','evo-gold'/.test(src));
 ok('　　整頁不鎖死（_coachReadonly 維持 false），逐張卡判權限',
