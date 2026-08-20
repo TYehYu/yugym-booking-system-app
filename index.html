@@ -8027,7 +8027,7 @@ let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
 const APP_VERSION = '260819.1844';
-const APP_VERSION_LABEL='v260820.0927';
+const APP_VERSION_LABEL='v260820.0939';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16245,7 +16245,12 @@ PAGES.dashboard=async function(){
      桌機損益表 -33,890 對不起來 —— 這張卡漏了營業稅與公司負擔勞健保，銷課也自己
      另算一套。全部對齊：銷課(monthSalesValue) − 營業稅 − 人事(薪資＋公司勞健保) − 支出。
      營業稅基礎＝當月收款（發票內含 5%），與 finPnl 同式。兩邊從此同一個數字。 */
+  /* 2026-08-20 使用者定案「三處也一起對齊」：今日檢視傳單日、月檢視傳整月——
+     教練課/團課列、總額列、業績排行、課程營收明細全部吃同一份 salesValue 計算。 */
+  let _SVD=null;
+  try{ _SVD=await monthSalesValue(_dashRange==='today'?today:ym,[bookings,tickets,types,_tkLogs]); }catch(_){}
   let salaryTotal=null, profit=null, otherExp=0, _ovTax=0, _ovCoIns=0, _ovRev=null, _svPt=null, _svGrp=null;
+  if(_SVD){ _ovRev=Math.round(_SVD.salesValue); _svPt=Math.round(_SVD.ptValue); _svGrp=Math.round(_SVD.grpValue); }
   if(_dashRange==='month'){
     try{ otherExp=((await dbGetAll('expenses').catch(()=>[]))||[])
       .filter(e=>e&&e.ym===ym).reduce((a,e)=>a+(Number(e.amount)||0),0); }catch(_){ otherExp=0; }
@@ -16254,14 +16259,10 @@ PAGES.dashboard=async function(){
         .filter(p=>String(p.created_at||'').slice(0,7)===ym)
         .reduce((s2,p)=>s2+(Number(p.deal_amount)||0),0);
       _ovTax=_cash-Math.round(_cash/1.05);
-      const SV=await monthSalesValue(ym);
-      _ovRev=Math.round(SV.salesValue);
-      /* 2026-08-20 對帳：月檢視的教練課/團課銷課金額改吃共用計算，跟首頁本月成績同一個數字 */
-      _svPt=Math.round(SV.ptValue); _svGrp=Math.round(SV.grpValue);
       const pr=await computeMonthlyPayroll(ym);
       salaryTotal=Math.round(Number(pr.grandTotal)||0);
       _ovCoIns=Math.round(Number(pr.grandCoCost)||0);
-      profit=_ovRev-_ovTax-salaryTotal-_ovCoIns-otherExp;
+      profit=(_ovRev!=null)?(_ovRev-_ovTax-salaryTotal-_ovCoIns-otherExp):null;
     }catch(_){ salaryTotal=null; profit=null; }
   }
 
@@ -16273,7 +16274,11 @@ PAGES.dashboard=async function(){
 
   // ── 課程營收：本期銷課（已完成/簽到的課）依方案分組，算銷課堂數與銷課金額 ──
   const byPlan={};
-  usedBk.forEach(b=>{
+  if(_SVD&&_SVD.byPlan){
+    /* 2026-08-20 對齊：明細吃共用計算（教練課逐堂、團課逐人次記在該人實扣票券的方案上）。
+       口徑同總額列＝只含教練課與團課；自主贈點/體驗/按摩不在銷課口徑，不再列出。 */
+    Object.entries(_SVD.byPlan).forEach(([name,d])=>{ byPlan[name]={amount:d.v,used:d.n}; });
+  }else usedBk.forEach(b=>{
     const tk=tickets.find(t=>t.id===b.ticket_id);
     const name=(tk&&tk.plan_name)||b.category||'—';
     const fee=_bkFee(b,tk);
@@ -16334,9 +16339,10 @@ PAGES.dashboard=async function(){
     const ptDone=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
     const groupCount=myBk.filter(b=>bkIsGroup(b)).length;
     const groupDone=myDone.filter(b=>bkIsGroup(b)).length;
-    // 業績營收：該教練負責、已銷課的單堂金額加總
-    let rev=0;
-    myDone.forEach(b=>{ rev+=_feeOf(b); });
+    /* 業績營收（2026-08-20 對齊）：吃共用 salesValue 的教練維度（教練課＋團課，
+       同總額列口徑）；共用計算失敗才退回逐堂票價法。 */
+    let rev=(_SVD&&_SVD.byCoach&&_SVD.byCoach[c.id])?_SVD.byCoach[c.id].v:0;
+    if(!_SVD){ myDone.forEach(b=>{ rev+=_feeOf(b); }); }
     /* 值班時數：本月模式＝與薪資頁同口徑（打卡封頂−上課重疊）；今日模式＝當日打卡時數 */
     let hours=0;
     if(_dashRange==='month'){
@@ -44344,7 +44350,12 @@ async function monthSalesValue(ym, pre){
      併進這份「唯一」計算 —— ① 教練課 session_fee（匯入課逐堂實價）優先（0726 定案）
      ② 團課每人頭優先用「這堂實際扣的那張票」單價，補課券 $0 不重複認列（0730 定案）。 */
   const logs=(pre&&pre[3])||await dbGetAll('ticket_logs').catch(()=>[]);
-  const monthBk=(bookings||[]).filter(b=>(b.date||'').slice(0,7)===ym && bkCounts(b));   // 全員請假不成課
+  /* 期間參數（2026-08-20 使用者定案「三處也一起對齊、支援日期區間」）：
+     'YYYY-MM'＝整月、'YYYY-MM-DD'＝單日、{from,to}＝含頭尾區間。 */
+  const _inRange=d=>{ if(!d) return false;
+    if(typeof ym==='string') return ym.length===7 ? d.slice(0,7)===ym : String(d)===ym;
+    return (!ym.from||d>=ym.from)&&(!ym.to||d<=ym.to); };
+  const monthBk=(bookings||[]).filter(b=>_inRange(b.date) && bkCounts(b));   // 全員請假不成課
   const done=monthBk.filter(b=>b.status==='completed'||b.status==='checked_in');
   const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
   const tkById=Object.fromEntries((mtks||[]).map(t=>[t.id,t]));
@@ -44362,12 +44373,18 @@ async function monthSalesValue(ym, pre){
   const ptList=done.filter(b=>b.category==='私人教練');
   /* 分類銷課（2026-08-13）：逐堂看那張票的課種；對不到票的堂數歸「其他」不硬猜 */
   const byCls={pt1:{v:0,n:0},pt2:{v:0,n:0},fr1:{v:0,n:0},fr2:{v:0,n:0},grp:{v:0,n:0},other:{v:0,n:0}};
+  /* 教練/方案維度（2026-08-20）：業績排行與課程營收明細也吃這一份，不再各算一套 */
+  const byCoachD={}, byPlanD={};
+  const _addCo=(b,v)=>{ const k=(typeof bkCoachId==='function'?bkCoachId(b):b.coach_id)||'_none';
+    (byCoachD[k]=byCoachD[k]||{v:0,n:0}); byCoachD[k].v+=v; byCoachD[k].n+=1; };
+  const _addPlan=(name,v,n)=>{ const k=name||'—'; (byPlanD[k]=byPlanD[k]||{v:0,n:0}); byPlanD[k].v+=v; byPlanD[k].n+=n; };
   const ptValue=ptList.reduce((s,b)=>{
     const t=tkById[b.ticket_id];
     const _sf=(b.session_fee!=null&&b.session_fee!=='')?Number(b.session_fee):NaN;
     const u=unitOf(t); const val=(!isNaN(_sf)?_sf:(u>0?u:memAvg(b.member_id,'pt')));
     const cls=t?tkRevClass(t,typeMap):'other';
     const slot=byCls[cls]||byCls.other; slot.v+=val; slot.n+=1;
+    _addCo(b,val); _addPlan((t&&t.plan_name)||b.category||'—',val,1);
     return s+val; },0);
   const grpList=done.filter(b=>bkIsGroup(b));
   let grpHeads=0;
@@ -44383,13 +44400,18 @@ async function monthSalesValue(ym, pre){
     const gv=ids.reduce((a,mid)=>{
       const i=pool.findIndex(tid=>{ const t=tkById[tid];
         return t && (String(t.member_id)===String(mid) || (typeof tkSharedIds==='function' && tkSharedIds(t).includes(mid))); });
-      if(i>=0){ const t=tkById[pool[i]]; pool.splice(i,1); return a+_tkAvgOf(t); }
-      return a+memAvg(mid,'grp');
+      let hv, pn;
+      if(i>=0){ const t=tkById[pool[i]]; pool.splice(i,1); hv=_tkAvgOf(t); pn=(t&&t.plan_name)||'團體課'; }
+      else { hv=memAvg(mid,'grp'); pn='團體課'; }
+      _addPlan(pn,hv,1);   /* 團課明細以人次計，記在該人實際扣的那張票的方案上 */
+      return a+hv;
     },0);
+    _addCo(b,gv);
     byCls.grp.v+=gv; byCls.grp.n+=1;
     return s+gv; },0);
   return { salesValue:ptValue+grpValue, ptValue, ptCount:ptList.length,
-           grpValue, grpCount:grpList.length, grpHeads, doneCount:done.length, byCls };
+           grpValue, grpCount:grpList.length, grpHeads, doneCount:done.length, byCls,
+           byCoach:byCoachD, byPlan:byPlanD };
 }
 /* 員工薪資明細表的欄位定義（2026-08-08 使用者指示二修：「直接列出來吧，在員工這邊
    最上方新增一列標示每一個金額代表什麼」）——

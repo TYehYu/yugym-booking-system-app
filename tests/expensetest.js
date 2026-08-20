@@ -109,7 +109,7 @@ console.log('\n算進本月利潤（2026-07-31 使用者定案）');
   /* 2026-08-12 使用者回報「手機報表 -1,680、桌機損益表 -33,890 對不起來」：
      利潤改吃與損益表同一套組成 —— 銷課(monthSalesValue) − 營業稅 − 人事(薪資＋公司勞健保) − 其他支出 */
   ok('★ 利潤扣掉其他支出（0812 起與損益表同式：再扣營業稅與公司勞健保）',
-     /profit=_ovRev-_ovTax-salaryTotal-_ovCoIns-otherExp;/.test(dash));
+     /profit=\(_ovRev!=null\)\?\(_ovRev-_ovTax-salaryTotal-_ovCoIns-otherExp\):null;/.test(dash));   // 2026-08-20：_ovRev 移到共用計算，失敗時利潤顯示不出來而不是 NaN
   ok('★ 只取該月的支出', /\.filter\(e=>e&&e\.ym===ym\)\.reduce\(\(a,e\)=>a\+\(Number\(e\.amount\)\|\|0\),0\)/.test(dash));
   ok('★ 只在本月模式扣（支出以月記帳，切到「今日」沒有分攤方式）',
      /if\(_dashRange==='month'\)\{\s*\n\s*try\{ otherExp=/.test(dash));
