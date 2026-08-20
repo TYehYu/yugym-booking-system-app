@@ -51,7 +51,11 @@ ok('　　acts 掛上 window 讓視窗拿得到（同 _expandedBkEl 的做法）
 const ei=g('async function ashEditAsk(id){','\n/* 復原前先問一次');
 ok('★ 視窗集合：調整日期／時間', ei.includes("closeModal();admhMoveAsk('${b.id}')") && ei.includes("'調整日期／時間'"));
 ok('★ 視窗集合：更改場地（只有自主訓練）', /A\.sub==='venue'\) rows\+=row\(`closeModal\(\);bkOrbitVenue/.test(ei));
-ok('★ 視窗集合：指派代課教練', /A\.sub==='sub'\) rows\+=row\(`closeModal\(\);bkOrbitSub/.test(ei));
+ok('★ 視窗集合：指派代課教練', /A\.sub==='sub'\) rows\+=row\(`ashSubAsk\('\$\{b\.id\}'\)`,'指派代課教練'/.test(ei));
+ok('★ 代課不會再跳回預約明細（使用者回報）——面板不在就先把課卡叫回來',
+   /async function ashSubAsk\(id\)\{\s*\n\s*ashBackArm\(id\);\s*\n\s*closeModal\(\);\s*\n\s*if\(!document\.querySelector\('#bk-card-pop \.mtp'\)\)\{[\s\S]{0,160}expandBkCard\(/.test(src));
+ok('★ 沒有錨點課卡也能重開面板（首頁那條路本來就沒有 el，原本會丟例外）',
+   (src.match(/if\(el\)\{ el\.style\.marginLeft=''; el\.style\.marginTop=''; el\.classList\.add\('cal-ev-active'\); \}/g)||[]).length===2);
 ok('　　bkOrbitSub 本來就同時提供教練請假（所以不用另做選單）',
    /async function bkOrbitSub\(id\)\{[\s\S]{0,1600}canCoachLeave\(b\)/.test(src));
 ok('★ 視窗集合：本堂人數上限（改人數搬進標題卡）',
@@ -189,6 +193,10 @@ ok('　　桌機／其他角色維持原本的橫向表頭', ph.includes('return
 ok('★ 活動紀錄改成一列按鈕，點了下方換內容',
    /const _m2=!!\(SESSION && SESSION\.role==='admin' && isMobileLayout\(\)\);/.test(src)
    && /const back=_m2\s*\n\s*\? `<div class="pp-rectabs">/.test(src));
+ok('★ 四顆平分整列，最右邊的訓練紀錄不會被切掉（使用者回報）',
+   /\.pp-rectabs\{display:flex;gap:5px;margin-bottom:14px;\}/.test(src)
+   && /\.pp-rectab\{flex:1 1 0;min-width:0;/.test(src)
+   && !/\.pp-rectabs\{[^}]*overflow-x:auto/.test(src));
 ok('　　四顆：票券／預約紀錄／交易／訓練紀錄',
    /\[\['tickets','票券'\],\['bookings','預約紀錄'\],\['pay','交易'\],\['training','訓練紀錄'\]\]/.test(src));
 ok('　　預設顯示票券（原本 recView 是 null＝顯示入口清單）', src.includes("if(_m2 && !PP.recView) PP.recView='tickets';"));
