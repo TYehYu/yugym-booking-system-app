@@ -226,12 +226,9 @@ ok('★ 四顆平分整列，最右邊的訓練紀錄不會被切掉（使用者
    /\.pp-rectabs\{display:flex;gap:5px;margin-bottom:14px;\}/.test(src)
    && /\.pp-rectab\{flex:1 1 0;min-width:0;/.test(src)
    && !/\.pp-rectabs\{[^}]*overflow-x:auto/.test(src));
-ok('★ 按鈕帶筆數（改成按鈕列後，原本清單上的數字要留住）',
-   /\[\['tickets','票券',c\.tkCount\],\['bookings','預約紀錄',c\.bkCount\],\['pay','交易',c\.pcCount\],\['training','訓練紀錄',null\]\]/.test(src)
-   && /<i class="pp-rectab-n">\$\{n\}<\/i>/.test(src)
-   && /\.pp-rectab-n\{font-style:normal;/.test(src));
-ok('　　訓練紀錄沒有資料來源就不標', /\['training','訓練紀錄',null\]/.test(src)
-   && /\$\{\(n!=null&&n!==''\)\?/.test(src));
+/* 按鈕上的筆數 2026-08-20 加、同日移除（使用者看過實機後決定不要）——
+   數字仍在分頁標題上（例：預約紀錄（49）），按鈕列保持乾淨。 */
+ok('★ 按鈕不帶筆數', !/pp-rectab-n/.test(src) && !/'票券',c\.tkCount/.test(src));
 ok('　　四顆：票券／預約紀錄／交易／訓練紀錄',
    /'tickets','票券'/.test(src) && /'bookings','預約紀錄'/.test(src)
    && /'pay','交易'/.test(src) && /'training','訓練紀錄'/.test(src));
