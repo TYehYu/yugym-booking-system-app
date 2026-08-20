@@ -275,6 +275,17 @@ ok('★ 綠底米卡（使用者「綠色跟米色換過來」）：整頁品牌
 ok('　　只吃登入頁與註冊卡，其他頁維持白卡', /^\.login-card\{background:#fff;/m.test(src)
    && !/login-card-dark/.test(src));   /* 舊的深卡 class 已全面改名，不該有殘留 */
 ok('　　填寫區白底黑字', /#login-screen input,#login-screen select,\.login-card-brand input,\.login-card-brand select\{\s*\n\s*background:#fff;color:#111;/.test(src));
+ok('★ 綠底鋪到 body（內容超出畫面或下拉回彈時不會露出米色）',
+   /body:has\(#login-screen:not\(\.hidden\)\)\{background:#003d32;\}/.test(src));
+ok('　　登入後 body 回到原本的米色（用 :not(.hidden) 綁在登入頁還在畫面上時）',
+   /body\{background:linear-gradient\(155deg,#F7F4EC/.test(src));
+
+console.log('會員資料視窗變窄後冒出來的兩處');
+ok('★ LINE 通知的開關靠右（縮放原點原本是 left center，畫出來會往左縮）',
+   /\.pp-head-m2 \.pp-idfields \.switch\{transform-origin:right center !important;\}/.test(src));
+ok('★ 票券種類放不下就換行、按鈕本身不折字（原本擠成直的）',
+   /\.pp-sheet-win \.tkfilter\{flex-wrap:wrap;\}/.test(src)
+   && /\.pp-sheet-win \.tkfilter \.tkf-btn\{flex:0 0 auto;white-space:nowrap;\}/.test(src));
 ok('　　卡片變淺底後，文字一律回到深色（不再反白）',
    /\.login-logo-main \.lg-zh\{[^}]*color:var\(--green,#003d32\)/.test(src)
    && !/rgba\(255,255,255,\.6[68]\)/.test(src.slice(src.indexOf('登入頁／註冊頁改版'), src.indexOf('.role-tabs{'))));
