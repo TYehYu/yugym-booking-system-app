@@ -13,8 +13,10 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 
 console.log('購買日');
 ok('★ 抽成共用的一支', /function tkBuyDateHtml\(t\)\{/.test(src));
+/* 2026-08-20：管理員手機的票券卡把「購買・效期」提到第二列，那條分支多用了一次
+   （同一張卡上不會同時出現，是 _m2 三元式的兩邊），所以是 5 而不是 4。 */
 ok('★ 五個票券卡都列出來（會員名片可用／歷史、管理端、會員詳細、預約明細）',
-   (src.match(/\$\{tkBuyDateHtml\(t\)\}/g)||[]).length===4
+   (src.match(/\$\{tkBuyDateHtml\(t\)\}/g)||[]).length===5
    && /\$\{tkBuyDateHtml\(tkC\)\}/.test(src));
 ok('　　沒有購買日就用起始日，並標示出來（不假裝有資料）',
    /if\(sd\) return `購買 <b class="num" title="這張票沒有購買日，顯示的是舊系統的起始日">/.test(src)

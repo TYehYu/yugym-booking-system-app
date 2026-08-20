@@ -26,7 +26,9 @@ console.log('① RPC 路徑的首堂開通');
 
 console.log('\n② 票券卡底列不再擠壓');
 {
-  ok('★ 整列允許換行', /flex-wrap:wrap;gap:6px 10px;">\n\s*<span style="min-width:0;">\$\{tkBuyDateHtml\(t\)\}/.test(src));
+  /* 2026-08-20：管理員手機那條分支把購買日提到第二列、底列左邊改放金額，
+     所以第一個 span 的內容變成三元式；「整列可換行」這件事本身沒變。 */
+  ok('★ 整列允許換行', /flex-wrap:wrap;gap:6px 10px;">\n\s*<span style="min-width:0;">/.test(src));
   ok('★ 按鈕列不縮不折字', /style="display:flex;gap:6px;flex:none;margin-left:auto;white-space:nowrap;">/.test(src));
 }
 

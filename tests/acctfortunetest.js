@@ -204,6 +204,14 @@ ok('　　其他角色與桌機維持清單＋返回鈕', /: `<div style="margin
 ok('★ 交易分頁：四欄表格改成一筆一列的卡片（桌機仍是表格）',
    /if\(_m2\)\{[\s\S]{0,700}<div class="pp-txrow">[\s\S]{0,400}<b class="pp-txamt">/.test(src)
    && src.includes('<table class="mtk-table"><thead><tr><th>日期</th>'));
+ok('★ 票券卡：購買・效期提到第二列（緊接編號那一列）',
+   /\$\{_m2\?`<div class="tkc-meta">\$\{tkBuyDateHtml\(t\)\}　·　效期至/.test(src)
+   && /\.tkc-meta\{font-size:11px/.test(src));
+ok('★ 票券卡：金額改放右下角、就在作廢按鈕上方',
+   /<span class="tkc-money">\$\{tkMoneyHtml\(t\)\.replace\(\/\^　·　\/,''\)\}<\/span>/.test(src)
+   && /\.tkc-foot\{flex-direction:column;align-items:flex-end/.test(src));
+ok('　　桌機與其他角色維持原本的單行底列',
+   src.includes(": `${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}"));
 ok('★ 預約紀錄：520px 月曆改成按月分段的清單（桌機仍是月曆）',
    /if\(_m2\)\{[\s\S]{0,900}<div class="pp-bkmon">[\s\S]{0,900}<div class="pp-bkrow"/.test(src)
    && src.includes('renderMemberWeek(); }catch(_){} },0);'));
