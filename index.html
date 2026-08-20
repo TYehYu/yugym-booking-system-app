@@ -7077,6 +7077,13 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   .role-admin .topbar .tb-butler{color:var(--text);}
   /* 管理員手機已有下拉更新（admPtrInit），頂欄的重整鈕退場（2026-08-19 使用者指示） */
   .role-admin .topbar #tb-refresh{display:none !important;}
+  }   /* ← 手機專屬區塊在這裡先收掉（2026-08-20） */
+
+  /* ══ 簡易課卡：全體員工、不分寬度共用（2026-08-20 使用者定案：桌機「取代」詳細預約視窗）══
+     這一整段原本包在 @media(max-width:600px) 裡（當時只有管理員手機在用），
+     桌機一條都吃不到 —— 29 個 .ash-* 選擇器在桌機完全沒有定義。
+     直接把 JS 的開關打開、CSS 留在手機區塊裡的話，桌機會畫出一張沒有樣式的卡。
+     所以整段搬出來；手機的版面完全不變，桌機另以 min-width:601px 收成置中對話框。 */
   /* 管理員手機：Calm Play 彈出小卡改「大色塊」版（與首頁課卡同款，2026-08-19 使用者指示）——
      整卡吃課程色、白字，左側色條隱藏；已簽到標籤改半透明白。其他角色/桌機維持白底小卡。 */
   /* ⚠ 基底是 #bk-card-pop .mtp-card（含 ID）——這裡要帶同一顆 ID 才蓋得過（2026-08-19）。
@@ -7161,6 +7168,16 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   .ash-mlv-on{color:var(--t2);background:#fff;}
   .ash-tk{background:var(--card2);border-radius:13px;padding:10px 12px;margin-top:13px;
     display:flex;flex-wrap:wrap;gap:5px;color:var(--text);}
+
+  /* 桌機：手機是左右貼邊的面板，桌機要收成置中對話框（寬度跟著視窗縮，不要撐滿 27 吋） */
+  @media(min-width:601px){
+    #bk-card-pop.admh-pop .mtp{left:50%;right:auto;width:min(560px,92vw);max-width:none;
+      transform:translate(-50%,-50%);max-height:86vh;
+      animation:admhSheetPop .18s ease-out backwards;}
+  }
+  @keyframes admhSheetPop{from{transform:translate(-50%,-46%) scale(.97);opacity:0;}}
+
+  @media(max-width:600px){   /* ← 手機專屬區塊接回來 */
   /* 管理員底部導覽改品牌綠底（2026-08-19 十一修；只影響 admin） */
   .role-admin .bottom-nav{background:var(--green);border-top:1px solid var(--green);}
   .role-admin .bn-item{color:rgba(244,241,232,.55);}
@@ -8316,8 +8333,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260820.2347';
-const APP_VERSION_LABEL='v260820.2347';
+const APP_VERSION = '260820.2356';
+const APP_VERSION_LABEL='v260820.2356';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18971,6 +18988,13 @@ async function admhMoveDo(id){
    openBookingDetail 開頭看到就改成重開課卡。用完即丟，另加兩分鐘保險：
    萬一使用者中途把確認視窗關掉、旗標沒被消化，也不會一直攔截之後的「明細」。 */
 function ashBackArm(bid){ window._ashBack={id:String(bid), el:window._expandedBkEl||null, ts:Date.now()}; }
+/* 「這堂的日期已經過了」——補簽只對過去的課提供（今天以後的是「簽到」）。
+   日期字串直接比會被 2026-8-5 這種沒補零的舊資料咬到，一律先過 parseYmd。 */
+function bkDatePast(b){
+  if(!b||!b.date) return false;
+  const d=parseYmd(b.date);
+  return (d?ymd(d):String(b.date)) < ymd(TODAY);
+}
 async function ashSeatAct(bid, act, seatKey){
   ashBackArm(bid);
   try{
@@ -18998,6 +19022,15 @@ async function ashEditAsk(id){
   if(!_leave && A.venue==='self') rows+=row(`closeModal();bkOrbitVenue('${b.id}')`,'更改場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
   else if(!_leave && A.venue==='any') rows+=row(`ashBackArm('${b.id}');closeModal();openVenueChange('${b.id}')`,'更改場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
   if(!_leave && A.sub==='sub') rows+=row(`closeModal();ashSubPick('${b.id}')`,'指派代課教練','從教練名單挑一位，或清除代課');
+  /* 更換票券／補簽（2026-08-20）：桌機的詳細預約視窗要退役，這兩顆只在那裡有，
+     不搬過來的話櫃檯會直接失去這兩個功能。條件與原本那兩顆完全一致：
+     ・更換票券 = 還沒簽到、非團課（團課的票在 ticket_logs、不在 ticket_id）、櫃檯以上
+     ・補簽     = 還沒簽到、非團課、課程日已過（今天以後的走「簽到」）
+     兩支的返回鈕都是 openBookingDetail，先立旗標讓它回到課卡。 */
+  if(!_leave && b.status==='booked' && !A.isGroup && isDeskLike())
+    rows+=row(`ashBackArm('${b.id}');closeModal();openBkTicketChange('${b.id}')`,'更換票券','這堂改扣同一位會員的另一張票（依效期排序）');
+  if(!_leave && b.status==='booked' && !A.isGroup && (A.staff||A.coachCk) && bkDatePast(b))
+    rows+=row(`ashBackArm('${b.id}');closeModal();openMakeupModal('${b.id}')`,'補簽','補登這堂未簽到的課；自主訓練點數的效期自課程當天起算');
   /* 團課「改人數」（2026-08-07 既有功能）搬進標題卡（2026-08-20 使用者指示） */
   if(!_leave && A.isGroup && A.staff && !A.closed)
     rows+=row(`ashBackArm('${b.id}');closeModal();openGrpMaxEdit('${b.id}')`,'本堂人數上限',
@@ -23066,6 +23099,15 @@ function onEvClick(e,id){
    點擊卡片 → 周邊滑出三按鈕：上＝簽到（已簽到→取消簽到）、右＝編輯（過期→明細）、下＝取消。
    簽到/取消/取消簽到重用既有 checkInBooking / cancelBooking / undoCheckin（它們會自行重繪行事曆）。
    「編輯」轉入原地展開編輯表單（Phase 3b bkInlineEdit，不開 Modal）。函式名沿用 expandBkCard（多處呼叫）。 */
+/* 簡易課卡的適用範圍（2026-08-20 使用者定案：桌機「取代」詳細預約視窗）——
+   原本只有管理員手機端用簡易課卡，桌機仍走詳細預約視窗；現在全體員工、
+   不分寬度都用同一張。每一顆按鈕的權限仍由 acts（staff／own／coachCk）各自判斷，
+   這支只決定「用哪一套版面」，不放寬任何權限。
+   會員端不走這條路（他們有自己的預約頁），列舉角色而不是用 !== 'member'，
+   免得日後多一種角色時默默把課卡開給對方。 */
+function ashCardMode(){
+  return !!(SESSION && ['admin','front_desk','coach'].includes(SESSION.role));
+}
 async function expandBkCard(el, id){
   const _calCtxFlag=!!window._admCalCtx; window._admCalCtx=false;   /* 進場即取用並清掉（await 之前，避免時序洞） */
   collapseBkCard();
@@ -23098,7 +23140,7 @@ async function expandBkCard(el, id){
      逐人的請假／取消／簽到搬到會員卡上、代課搬到課程卡右上角，下方那一列只留明細與新增。
      這裡照樣把所有條件算完，只是把搬家的那幾顆改交給 bkCardPop（用 acts 帶過去），
      權限與情境判斷仍然只有這一個地方在算。 */
-  const _ashMode = SESSION.role==='admin' && isMobileLayout();
+  const _ashMode = ashCardMode();
   /* 2026-08-20 使用者指示：教練課／友善教練課也要能調整場地 —— 場地與代課拆成兩個旗標。
      venue 對所有課別開放（自主訓練走 bkOrbitVenue，因為它才有跑步機台數；
      其他課別走 openVenueChange，那支會逐場地跑衝突檢查、標出該時段已滿的）。 */
@@ -23266,7 +23308,7 @@ async function bkCardPop(el, b, btns, acts){
   const host=document.createElement('div');
   host.id='bk-card-pop';
   /* 彈出層掛在 body（#app-screen 外），.role-admin 選擇器吃不到——管理員手機直接掛 class（2026-08-19） */
-  const _admSheet=!!(SESSION&&SESSION.role==='admin'&&isMobileLayout());
+  const _admSheet=ashCardMode();
   if(_admSheet) host.classList.add('admh-pop');
   let _cardHtml;
   if(_admSheet){

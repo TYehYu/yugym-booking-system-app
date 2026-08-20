@@ -161,5 +161,67 @@ ok('★ 空堂不再承諾「開課前 24 小時會提醒教練」（使用者�
    !/開課前 24 小時會提醒教練/.test(srcNC)
    && /'先卡位，之後再安排會員','時段與場地先留著，名單稍後補'/.test(src));
 
+/* 2026-08-20 使用者定案：桌機的詳細預約視窗「取代」成簡易課卡。
+   先把缺的兩個功能補進來，再切換適用範圍——順序反過來的話，
+   櫃檯會在切換的當下直接失去「更換票券」和「補簽」。 */
+console.log('\n桌機取代：先補功能');
+ok('★ 更換票券進了調整課程（條件與原本那顆一致：未簽到／非團課／櫃檯以上）',
+   /if\(!_leave && b\.status==='booked' && !A\.isGroup && isDeskLike\(\)\)\s*\n\s*rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openBkTicketChange\('\$\{b\.id\}'\)`,'更換票券'/.test(src));
+ok('★ 補簽進了調整課程（只對過去的課；今天以後的走簽到）',
+   /if\(!_leave && b\.status==='booked' && !A\.isGroup && \(A\.staff\|\|A\.coachCk\) && bkDatePast\(b\)\)\s*\n\s*rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openMakeupModal\('\$\{b\.id\}'\)`,'補簽'/.test(src));
+ok('★ 兩支的返回都先立旗標回課卡（它們原本的返回是 openBookingDetail）',
+   /ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openBkTicketChange/.test(src)
+   && /ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openMakeupModal/.test(src));
+ok('　　補簽的說明講明效期基準（使用者：不管哪天補簽都從上課那天算）',
+   /補登這堂未簽到的課；自主訓練點數的效期自課程當天起算/.test(src));
+{
+  const lib2=new Function(grabFn('bkDatePast')+';return {bkDatePast};');
+  ok('★ bkDatePast 先過 parseYmd（舊資料有 2026-8-5 這種沒補零的）',
+     /const d=parseYmd\(b\.date\);\s*\n\s*return \(d\?ymd\(d\):String\(b\.date\)\) < ymd\(TODAY\);/.test(src));
+  ok('　　沒有日期不會爆', /if\(!b\|\|!b\.date\) return false;/.test(src));
+}
+
+console.log('\n桌機取代：再切換適用範圍');
+ok('★ 一支 ashCardMode 決定版面，兩個判斷點共用',
+   /function ashCardMode\(\)\{\s*\n\s*return !!\(SESSION && \['admin','front_desk','coach'\]\.includes\(SESSION\.role\)\);\s*\n\}/.test(src)
+   && /const _ashMode = ashCardMode\(\);/.test(src)
+   && /const _admSheet=ashCardMode\(\);/.test(src));
+ok('★ 原本的 admin＋手機限制已經拿掉',
+   !/const _ashMode = SESSION\.role==='admin' && isMobileLayout\(\);/.test(src)
+   && !/const _admSheet=!!\(SESSION&&SESSION\.role==='admin'&&isMobileLayout\(\)\);/.test(src));
+ok('★ 列舉角色而不是 !== member（日後多一種角色不會默默開放）',
+   !/SESSION\.role!=='member'/.test(src.slice(src.indexOf('function ashCardMode'), src.indexOf('function ashCardMode')+400)));
+ok('　　權限沒有放寬——按鈕仍由 acts 各自判斷',
+   /這支只決定「用哪一套版面」，不放寬任何權限/.test(src));
+
+console.log('\n桌機取代：CSS 必須跟著搬出手機專屬區塊');
+{
+  /* 這一段是整個「取代」最容易漏的地方：JS 開關打開、CSS 還鎖在
+     @media(max-width:600px) 裡的話，桌機會畫出一張完全沒有樣式的卡。 */
+  const css=src.slice(src.indexOf('<style>'), src.indexOf('</style>'));
+  // 把所有 @media 區塊挖掉，剩下的就是「不分寬度都生效」的規則
+  let bare='', depth=0, i=0;
+  while(i<css.length){
+    if(css.startsWith('@media',i)){
+      let j=css.indexOf('{',i); depth=1; j++;
+      while(j<css.length && depth>0){ if(css[j]==='{')depth++; else if(css[j]==='}')depth--; j++; }
+      i=j; continue;
+    }
+    bare+=css[i++];
+  }
+  const need=['.ash-mcard','.ash-mrow','.ash-mems','.ash-mname','.ash-mtag','.ash-bar','.ash-meta',
+              '.ash-course','.ash-tk','.ash-morbs','.mtp-card.admh-sheet'];
+  const missing=need.filter(s=>!bare.includes(s));
+  ok('★ 課卡樣式在「不分寬度」的區塊裡（桌機吃得到）', missing.length===0, missing);
+  ok('★ 桌機另收成置中對話框（不要在 27 吋上撐滿）',
+     /@media\(min-width:601px\)\{[\s\S]{0,400}?#bk-card-pop\.admh-pop \.mtp\{left:50%;right:auto;width:min\(560px,92vw\)/.test(css));
+  ok('　　置中之後動畫的 transform 不能打架（另給一組 keyframes）',
+     /@keyframes admhSheetPop\{from\{transform:translate\(-50%,-46%\) scale\(\.97\);opacity:0;\}\}/.test(css));
+  ok('　　手機仍是左右貼邊的面板（原樣式沒被改掉）',
+     /#bk-card-pop\.admh-pop \.mtp\{left:12px;right:12px;/.test(css));
+  ok('　　為什麼要搬，寫在程式裡',
+     /29 個 \.ash-\* 選擇器在桌機完全沒有定義/.test(css));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
