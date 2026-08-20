@@ -8027,7 +8027,7 @@ let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
 const APP_VERSION = '260819.1844';
-const APP_VERSION_LABEL='v260820.1020';
+const APP_VERSION_LABEL='v260820.1033';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13430,7 +13430,7 @@ async function _groupToggleLeave(bid,seatKey){
       }else{
         showModal(`<div class="modal-title" style="color:var(--danger,#b5372e);">已標請假，但沒有發補課券</div>
           <div style="font-size:13px;color:var(--text);line-height:1.9;">這個名額<b>查不到扣課紀錄</b>（名單上是「需補票」的紅虛線）。<br>補課券是「本堂照扣」的補償——這格沒有扣到票，發券會變成多送一堂。</div>
-          <div style="font-size:12px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;">若這格其實有收費：請先補扣票券（名單移除後重新加入即會扣課），再回來按請假就會正常發券。教練招待的免費名額則不發券、到此即可。</div>
+          <div style="font-size:12px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;">若這格其實有收費：請先補扣票券（名單移除後重新加入即會扣課），再回來按請假就會正常發券。</div>
           <div class="modal-foot"><button class="btn btn-green" onclick="closeModal()">知道了</button></div>`);
       }
     }
@@ -21003,7 +21003,7 @@ async function _bkStep2(){
     window._grpMax=5;
     showModal(`<div class="modal-title">新增團體課 · 步驟 2 / 2</div>
       ${bkSummaryCard(t,date,time,coach_id?await coachName(coach_id):'')}
-      <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;background:var(--card2);padding:10px 12px;border-radius:9px;">名單可現在選或之後在明細再加。有團體課票券的會員會扣 1 堂，沒票的由教練負責。帶親友同行可按已選會員的「＋」重複報名，每個名額各算 1 人、各扣 1 堂。</div>
+      <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;background:var(--card2);padding:10px 12px;border-radius:9px;">名單可現在選或之後在明細再加。有團體課票券的會員會扣 1 堂；沒票的無法加入，請先儲值。帶親友同行可按已選會員的「＋」重複報名，每個名額各算 1 人、各扣 1 堂。</div>
       <div class="form-row" style="display:flex;align-items:center;gap:10px;"><label style="margin:0;flex:none;">本堂人數上限</label><input type="number" id="grp-max" value="5" min="1" max="12" style="width:76px;" oninput="window._grpMax=Math.max(1,Number(this.value)||5);renderGrpPick()"><span style="font-size:11.5px;color:var(--t3);">預設 5 人，場地有餘裕可放寬</span></div>
       <div style="margin-top:4px;">${recurBoxHtml('grp')}</div>
       <div class="form-row"><label>加入會員（點選即可複選）</label>
@@ -21426,7 +21426,7 @@ function renderGrpPick(){
     const _div=(_i===firstUnsel&&firstUnsel>0)?'<div class="grp-div">其他會員</div>':'';
     const n=sel.filter(x=>x===m.id).length;
     const on=n>0;
-    const tag=m.sum>0?`團體課票 剩 ${m.sum} 堂`:'無票（教練負責）';
+    const tag=m.sum>0?`團體課票 剩 ${m.sum} 堂`:'無票（無法加入，請先儲值）';
     /* 選了、而且有兩張以上可用票券 → 出下拉讓櫃檯指定扣哪一張（2026-07-30 使用者指示）。
        預設是最快到期那張（清單已按效期排序），避免快過期的優惠票被留到過期。 */
     const tks=m.tks||[];
@@ -22017,7 +22017,7 @@ async function _submitBookingInner(){
     return;
   }
 
-  // ── 團體課：建立一張多會員預約（上限 5；有票者扣票，無票由教練負責）──
+  // ── 團體課：建立一張多會員預約（上限 5；2026-08-20 取消教練招待：無票的不加入名單）──
   if(isGroup){
     const ids=(window._grpSel||[]).filter(Boolean);
     const gmax=grpMax();
@@ -22043,38 +22043,43 @@ async function _submitBookingInner(){
       const verr=await validateBooking(vbk,dW,tW,60);
       if(verr){ if(repeatN===1){showToast(verr);return;} skippedWeeks.push(dW.slice(5).replace('-','/')+' '+tW); continue; }
       if(w===0 && !(await confirmVenueOverflow(vbk))) return; // 首堂場地溢出→教練取消（後續週沿用）
-      const bk={id:uid('BK'),member_id:null,member_ids:ids,trial_name:null,trial_phone:null,
+      const bk={id:uid('BK'),member_id:null,member_ids:[],trial_name:null,trial_phone:null,
         coach_id,ticket_id:null,ticket_type_id:type_id,category:t.category,format:t.format||null,
         max_heads:gmax,
         date:dW,start_time:tW,duration:60,status:'booked',recurring:repeatN>1,venue_unit:vbk.venue_unit||null,
         created_by:SESSION.id,created_at:new Date().toISOString()};
-      await dbPut('bookings',bk);
-      // 為有團體課票的會員各扣 1 堂（沒票的略過，由教練負責）
+      /* 先扣票再寫名單（2026-08-20 取消教練招待）：扣到票的名額才進 member_ids，
+         沒票的整格不加入（原本是照加、由教練負責——0820 林婉華案例的洞就從這種
+         無票名額開始）。班可以先開著空位，之後儲值完再從名單加入。 */
       const _si={};   // 逐名額挑票（2026-08-05）：同一人第 N 個名額用第 N 個指定
+      const _okCnt={}, _failedW=new Set();
       for(const mid of ids){
+        const _i=(_si[mid]=(_si[mid]==null?0:_si[mid]+1));
+        if(_failedW.has(String(mid))){ skipped++; continue; }   // 同人前一格已失敗，後續格不跳號
         /* 櫃檯在名單上指定過票券就照指定的（2026-07-30 使用者指示；2026-08-05 改逐名額）；
            指定的票在該週已不可用（效期不到、或前幾週已扣光）就自動退回最快到期的那張，
            不要整堂建不起來。 */
-        const _i=(_si[mid]=(_si[mid]==null?0:_si[mid]+1));
         let tk=null;
         const want=grpPickOf(mid,_i);
         if(want){ const cand=await listUsableTickets(mid,type_id,dW,tW); tk=cand.find(x=>x.id===want)||null; }
         if(!tk) tk=await findUsableTicket(mid,type_id,dW,tW);
         if(tk && await deductTicket(tk,bk.id,SESSION.id)){ charged++;
+          bk.member_ids.push(mid);
           /* 逐名額記下用了哪張票（2026-08-07 許佳慈案例：「今天只是新儲值一堂，
              為什麼會打亂之前的票券」）—— 沒記下來的名額只能靠「把扣課紀錄依購買日
              排序、第 i 個名額配第 i 張」的近似法，於是新買一張票就插到最前面、
              既有名額的圓點整排位移。建立當下就寫進課卡，之後誰都不會被重算。 */
-          const _sk=(_i>0)?(mid+'#'+(_i+1)):mid;
+          const _c=(_okCnt[mid]=(_okCnt[mid]||0)+1);
+          const _sk=(_c>1)?(mid+'#'+_c):mid;
           bk.seat_tickets=Object.assign({}, bk.seat_tickets||{}, {[_sk]:tk.id});
         }
-        else skipped++;
+        else { skipped++; _failedW.add(String(mid)); }
       }
-      if(bk.seat_tickets) await dbPut('bookings',bk);   // 名額歸屬寫回課卡
+      await dbPut('bookings',bk);
       made++;
     }
     closeModal();
-    showToast(`團體課已建立 ${made} 堂（${ids.length} 人${charged?`，扣票 ${charged} 人次`:''}${skipped?`，${skipped} 人次無票由教練負責`:''}${skippedWeeks.length?`；${skippedWeeks.join('、')} 因衝突略過`:''}）`);
+    showToast(`團體課已建立 ${made} 堂（${charged?`扣票 ${charged} 人次`:'名單空白'}${skipped?`，${skipped} 人次無票未加入（請先儲值再從名單加入）`:''}${skippedWeeks.length?`；${skippedWeeks.join('、')} 因衝突略過`:''}）`);
     bkAfterSubmit();
     return;
   }
@@ -25322,7 +25327,7 @@ async function openGroupMembers(id, keepSel){
   window._grpMax=Math.max(1,Number(b.max_heads)||5);
   window._grpLeaveN=grpLeaveSeats(b);   // 請假名額不佔位（2026-08-12）
   showModal(`<div class="modal-title">團體課名單</div>
-    <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">有團體課票券的會員會在加入時扣 1 堂、移除時退回；沒票的由教練負責（不扣）。帶親友同行可按已選會員的「＋」重複報名，每個名額各算 1 人、各扣 1 堂。</div>
+    <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">有團體課票券的會員會在加入時扣 1 堂、移除時退回；沒票的無法加入，請先儲值。帶親友同行可按已選會員的「＋」重複報名，每個名額各算 1 人、各扣 1 堂。</div>
     <div class="form-row" style="display:flex;align-items:center;gap:10px;"><label style="margin:0;flex:none;">本堂人數上限</label><input type="number" id="grp-max" value="${Math.max(1,Number(b.max_heads)||5)}" min="1" max="12" style="width:76px;" oninput="window._grpMax=Math.max(1,Number(this.value)||5);renderGrpPick()"><span style="font-size:11.5px;color:var(--t3);">預設 5 人，場地有餘裕可放寬</span></div>
     <div class="form-row"><label>選擇會員（點選即可複選）</label>
       <input id="grp-search" class="ms-search" style="margin:0 0 8px;width:100%;box-sizing:border-box;" placeholder="搜尋姓名…" oninput="renderGrpPick()" autocomplete="off">
@@ -25333,9 +25338,9 @@ async function openGroupMembers(id, keepSel){
 }
 /* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
 async function saveGroupMembers(id){ return onceAct('grpmem:'+id, ()=>_saveGroupMembers(id)); }
-/* 「仍以教練負責加入」（2026-08-07）：用另一個防連點鍵 —— 跟剛剛被擋下的那次存檔
-   共用同一個鍵的話，400 毫秒內按下去會拿到上一次已經結束的結果，等於按了沒反應。 */
-async function grpSaveNoTk(id){ window._grpNoTkOK=1; return onceAct('grpmem-force:'+id, ()=>_saveGroupMembers(id)); }
+/* 「仍以教練負責加入」已移除（2026-08-20 使用者定案：取消教練招待功能）——
+   0820 林婉華案例：硬加出來的無票名額後續請假又發補課券，變成雙重補償。
+   現在票不夠一律擋下，要加名額請先儲值。 */
 async function _saveGroupMembers(id){
   const b=await dbGet('bookings',id);
   /* 舊匯入的團課沒有 ticket_type_id（2026-08-11 張傅凱 8/17 案例：挑票拿空票種去比對，
@@ -25363,9 +25368,9 @@ async function _saveGroupMembers(id){
   /* 沒票先擋（2026-08-07 使用者回報：「許佳慈明明就沒票券，但是按新增還是可以預約一個名額上去」）——
      原本的規則是「沒票＝教練負責，照加，事後跳⚠」，名額已經寫進去了櫃檯才知道。
      改成存檔前先算一次：這次要加的名額 vs 這位會員這堂課真正能扣的堂數，
-     不夠就擋下來、講清楚差幾個名額；教練招待／體驗名額仍走得通，按「仍以教練負責加入」就繼續。
+     不夠就擋下來、講清楚差幾個名額。2026-08-20 起沒有硬加的路（取消教練招待）：要加名額先儲值。
      ⚠ 算的是「這次新增的名額」，不是整份名單 —— 只改上限或移除名額不會被擋。 */
-  if(added.length && !window._grpNoTkOK){
+  if(added.length){
     const _need={}; added.forEach(m=>{ _need[m]=(_need[m]||0)+1; });
     const short=[];
     for(const mid of Object.keys(_need)){
@@ -25381,19 +25386,19 @@ async function _saveGroupMembers(id){
       showModal(`<div class="modal-title" style="color:var(--danger,#b5372e);">⚠ 票不夠，這些名額扣不到票</div>
         <div style="font-size:13px;color:var(--text);line-height:1.9;">${rows}</div>
         <div style="font-size:12px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;">
-          名單<b>還沒有存</b>。要先儲值再加，或確認這是教練負責的免費名額，才按下面的按鈕繼續。</div>
+          名單<b>還沒有存</b>。請先儲值（或把這幾位移出名單）再存檔——沒有扣到票的名額不能加入。</div>
         <div class="modal-foot">
           <button class="btn btn-ghost" onclick="closeModal();openGroupMembers('${id}',true)">回名單修改</button>
-          <button class="btn btn-red" onclick="closeModal();grpSaveNoTk('${id}')">仍以教練負責加入</button>
         </div>`);
       return false;
     }
   }
-  window._grpNoTkOK=0;   // 放行只對這一次有效，不留到下一堂
   // 新加入的有票就扣、移除的退回（依該 booking 的票券類型）
   const _seatIdx={};   // 逐名額挑票（2026-08-05）：新名額接在既有名額後面，索引從已有數量起算
   const _noTk={};      // 會員 → 這次加入但扣不到票的名額數
+  const _failed=new Set();   // 扣不到票的會員：後續名額直接跳過，名額鍵才不會跳號（2026-08-20）
   for(const mid of added){
+    if(_failed.has(String(mid))){ (_noTk[mid]=(_noTk[mid]||0)+1); continue; }
     /* 櫃檯有指定要扣哪一張就照指定的（2026-07-30 使用者指示；2026-08-05 改逐名額）——
        同時有長期方案與快到期的優惠票時，自動的「最快到期優先」未必是客人要的。
        指定的票要重新驗一次還能不能用（可能剛被別的操作用完），不能用就回到自動挑選。 */
@@ -25411,7 +25416,9 @@ async function _saveGroupMembers(id){
     /* 2026-08-06：deductTicket 的餘額護欄會回 false（沒扣到）——
        這時要跟「找不到票」一樣算進警告，不能讓名額靜靜地沒付錢。 */
     const _ded = tk ? await deductTicket(tk,b.id,SESSION.id) : false;
-    if(!_ded) (_noTk[mid]=(_noTk[mid]||0)+1);   // 扣不到票的名額（2026-08-05 要當面警告，不再靜默）
+    /* 取消教練招待（2026-08-20 使用者定案）：扣不到票的名額不再寫入名單——
+       前面已先擋過一次，走到這裡是「驗票後、扣票前」被別的操作用掉的競態。 */
+    if(!_ded){ (_noTk[mid]=(_noTk[mid]||0)+1); _failed.add(String(mid)); continue; }
     /* 逐名額記下用了哪張票（2026-08-06 使用者指示：「團課的預約沒有地方可以紀錄，
        不能新增一個地方給他紀錄嗎？」）—— bookings.seat_tickets 是名額鍵 → 票券 id。
        有了這個事實，票券夾就不必再靠先進先出推算。 */
@@ -25429,6 +25436,9 @@ async function _saveGroupMembers(id){
       const _ks=Object.keys(_st).filter(k=>seatMid(k)===String(mid));
       if(_ks.length){ delete _st[_ks[_ks.length-1]]; b.seat_tickets=_st; } }
   }
+  /* 沒扣到票的名額從名單移除（2026-08-20 取消教練招待：名額＝一定有票） */
+  Object.entries(_noTk).forEach(([mid,n])=>{ for(let i=0;i<n;i++){
+    const j=next.map(String).lastIndexOf(String(mid)); if(j>=0) next.splice(j,1); } });
   b.member_ids=next;
   /* 名額變動後清掉沒有對應名額的出席狀態（2026-07-30 發現）——
      原本只更新 member_ids，被移出名單的人狀態會留在 attendance 變成孤兒鍵
@@ -25442,10 +25452,11 @@ async function _saveGroupMembers(id){
   /* 開課後補位的連續預約（2026-08-03 使用者指示）：「團體課已經開課後，新加入的
      會員要有重複預約的能力」「先開了 10 堂 10 週，新會員只買了 4 堂 → 可以重複預約 4 堂」。
      名單有新加入、同系列還有後續場次時追問一次；只移除或沒後續就照舊回明細。 */
-  const _addUniq=[...new Set(added)];
   /* 多名額連續預約（2026-08-05 游晴雅案例）：把「這次各加了幾個名額」帶給連續預約，
-     後續每堂補到同樣的名額數（原本已在名單就整堂跳過，第二個名額永遠約不進去）。 */
+     後續每堂補到同樣的名額數。2026-08-20 起只帶「真的扣到票、進了名單」的名額。 */
   const _addCnt={}; added.forEach(m=>{ _addCnt[m]=(_addCnt[m]||0)+1; });
+  Object.keys(_noTk).forEach(m=>{ _addCnt[m]=Math.max(0,(_addCnt[m]||0)-_noTk[m]); if(!_addCnt[m]) delete _addCnt[m]; });
+  const _addUniq=Object.keys(_addCnt);
   /* 扣不到票的名額當面警告（2026-08-05 許佳慈案例，使用者指示「不要一直犯這個錯誤」）——
      原本只在 toast 帶過一句，名額進了名單、票沒扣到，帳跟位就對不上。
      改成擋一個明確視窗，講清楚哪幾位、幾個名額沒扣到票，按「知道了」才繼續。 */
@@ -25454,9 +25465,9 @@ async function _saveGroupMembers(id){
     const _nm=mid=>{ const m=_mems.find(x=>String(x.id)===String(mid)); return (m&&m.name)||mid; };
     const rows=Object.entries(_noTk).map(([mid,n])=>`<b>${_nm(mid)}</b>：${n} 個名額`).join('、');
     window._gfaNext={id, uniq:_addUniq, cnt:_addCnt};
-    showModal(`<div class="modal-title" style="color:var(--danger,#b5372e);">⚠ 有名額沒有扣到票</div>
-      <div style="font-size:13px;color:var(--text);line-height:1.9;">名單已儲存，但下列新名額<b>找不到可扣的票券</b>（票剩 0、效期不含當日、或尚未購買）：<br>${rows}</div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;">這些名額會以紅虛線「需補票」顯示。若是教練負責的免費名額可忽略；否則請先儲值，再回名單移除後重新加入，帳才對得上名額。</div>
+    showModal(`<div class="modal-title" style="color:var(--danger,#b5372e);">⚠ 有名額沒有加入</div>
+      <div style="font-size:13px;color:var(--text);line-height:1.9;">下列名額在存檔時<b>扣不到票券</b>（可能剛被別的預約用掉），<b>沒有寫入名單</b>：<br>${rows}</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;">其餘名額已正常加入。請確認票券餘額（必要時先儲值），再回名單把這幾位加回來。</div>
       <div class="modal-foot"><button class="btn btn-green" onclick="closeModal();grpNoTkAck()">知道了</button></div>`);
     return;
   }

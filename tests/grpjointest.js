@@ -120,12 +120,12 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
 
     console.log('\n⑥ 扣不到票的名額要當面警告（2026-08-05 許佳慈案例，使用者指示「不要一直犯這個錯誤」）');
     /* 2026-08-06：「找不到票」與「找到票但餘額護欄擋下沒扣到」都要算進警告 */
-    ok('★ 名單儲存記下扣不到票的名額數（含護欄擋下沒扣到的）',
+    ok('★ 名單儲存記下扣不到票的名額數（含護欄擋下沒扣到的）',   // 2026-08-20 取消教練招待：扣不到票改為不寫入名單
        /const _ded = tk \? await deductTicket\(tk,b\.id,SESSION\.id\) : false;/.test(src)
-       && /if\(!_ded\) \(_noTk\[mid\]=\(_noTk\[mid\]\|\|0\)\+1\);/.test(src));
+       && /if\(!_ded\)\{ \(_noTk\[mid\]=\(_noTk\[mid\]\|\|0\)\+1\); _failed\.add\(String\(mid\)\); continue; \}/.test(src));
     ok('★ 有漏就擋明確視窗（列出誰、幾個名額），不再只 toast 帶過',
        /if\(Object\.keys\(_noTk\)\.length\)\{/.test(src)
-       && /⚠ 有名額沒有扣到票/.test(src)
+       && /⚠ 有名額沒有加入/.test(src)
        && /grpNoTkAck\(\)/.test(src));
     ok('★ 按「知道了」接回原流程（連續預約詢問或回明細）', /async function grpNoTkAck\(\)\{/.test(src));
 

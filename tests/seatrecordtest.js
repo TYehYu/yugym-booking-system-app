@@ -28,10 +28,10 @@ console.log('\n② 建立團課（含連續預約開課）');
   ok('★ 扣課成功才記，記在剛建立的那張課卡上',
      /if\(tk && await deductTicket\(tk,bk\.id,SESSION\.id\)\)\{ charged\+\+;/.test(src)
      && /bk\.seat_tickets=Object\.assign\(\{\}, bk\.seat_tickets\|\|\{\}, \{\[_sk\]:tk\.id\}\);/.test(src));
-  ok('★ 名額鍵沿用既有規則（第 1 個是 id、第 2 個起是 id#N）',
-     /const _sk=\(_i>0\)\?\(mid\+'#'\+\(_i\+1\)\):mid;\n\s*bk\.seat_tickets=/.test(src));
-  ok('★ 有記到東西才回寫（沒人扣到票就不多打一次資料庫）',
-     /if\(bk\.seat_tickets\) await dbPut\('bookings',bk\);   \/\/ 名額歸屬寫回課卡/.test(src));
+  ok('★ 名額鍵沿用既有規則（第 1 個是 id、第 2 個起是 id#N）',   // 2026-08-20 取消教練招待：鍵改依「實際加入」的格數編號
+     /const _sk=\(_c>1\)\?\(mid\+'#'\+_c\):mid;\n\s*bk\.seat_tickets=/.test(src));
+  ok('★ 名單與名額歸屬一次寫回課卡（扣到票的才進名單）',
+     /else \{ skipped\+\+; _failedW\.add\(String\(mid\)\); \}\n\s*\}\n\s*await dbPut\('bookings',bk\);/.test(src));
 }
 
 console.log('\n③ 連續預約補位（後續場次一起約）');
