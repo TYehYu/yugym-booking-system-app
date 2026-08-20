@@ -8221,7 +8221,7 @@ let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
 const APP_VERSION = '260819.1844';
-const APP_VERSION_LABEL='v260820.1608';
+const APP_VERSION_LABEL='v260820.1618';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -33428,7 +33428,9 @@ function ppRecordHtml(){
           const bks=_shMark((t.id===_loTid)?sl.stamps.concat(_lo):sl.stamps);
           const total=Number(t.sessions_total)||0;
           const used=sl.used;
-          const stTag=tkStBadge(t.status);
+          /* 已完成要以實際銷課數為準（見 tkStBadgeUsed）——這一區是「持有中」的票，
+             出現「已完成」就代表口徑打架了。 */
+          const stTag=tkStBadgeUsed(t, used, total);
           /* 共享標籤（2026-07-28 使用者回報補齊）：共享給我的票標「共享」；我是持有人且有共享者標「共享中」 */
           const _shN=tkSharedIds(t).length;
           /* 共享設定移到共享章旁（2026-08-04 使用者指示：「共享設定放在共享人旁邊，方便查看」）——
@@ -42875,6 +42877,17 @@ function ticketCopy(t){
 function tkStBadge(status){
   const e={used_up:['已完成','tk-stb-done'],expired:['已過期','tk-stb-exp'],refunded:['已退費','tk-stb-refund']}[status];
   return e?`<span class="tk-stb ${e[1]}">${e[0]}</span>`:'';
+}
+/* 「已完成」＝課真的銷完，不是「排完」（2026-08-20 使用者定案）——
+   member_tickets.status 的 used_up 是「餘額歸零」，而餘額在**預約當下**就扣了，
+   於是把整張票的課一次排完的人會被標成已完成：胡連山 20 堂票（14 堂上完、
+   6 堂 8/21–9/25 還沒上）卡片上同時出現「14 / 20」與「已完成」，自相矛盾。
+   票券夾算出來的 used 才是實際銷課數，這裡以它為準；還有沒上的堂就不標已完成。
+   ⚠ 只擋「已完成」——已過期／已退費與銷課數無關，照舊顯示。 */
+function tkStBadgeUsed(t, used, total){
+  if(!t) return '';
+  if(t.status==='used_up' && Number(total)>0 && Number(used)<Number(total)) return '';
+  return tkStBadge(t.status);
 }
 function tkMoneyHtml(t){
   if(!t || !isDeskLike()) return '';

@@ -207,6 +207,19 @@ ok('★ 交易分頁：四欄表格改成一筆一列的卡片（桌機仍是表
 ok('★ 票券卡：購買・效期提到第二列（緊接編號那一列）',
    /\$\{_m2\?`<div class="tkc-meta">\$\{tkBuyDateHtml\(t\)\}　·　效期至/.test(src)
    && /\.tkc-meta\{font-size:11px/.test(src));
+console.log('「已完成」＝課真的銷完，不是排完');
+ok('★ 判定抽成 tkStBadgeUsed：只有實際銷課數達標才標已完成',
+   /function tkStBadgeUsed\(t, used, total\)\{[\s\S]{0,220}if\(t\.status==='used_up' && Number\(total\)>0 && Number\(used\)<Number\(total\)\) return '';/.test(src));
+ok('★ 持有中的票券卡吃這個判定（原本直接讀 DB 的 status）',
+   src.includes('const stTag=tkStBadgeUsed(t, used, total);') && !/const stTag=tkStBadge\(t\.status\);/.test(src));
+ok('　　used／total 在 stTag 之前就算好', (()=>{const i=src.indexOf('const cardOf=t=>{');
+   const seg=src.slice(i, i+900);
+   return seg.indexOf('const used=sl.used;') < seg.indexOf('tkStBadgeUsed(t, used, total)');})());
+ok('　　只擋已完成，已過期／已退費照舊（與銷課數無關）',
+   /只擋「已完成」——已過期／已退費與銷課數無關，照舊顯示/.test(src)
+   && /return tkStBadge\(t\.status\);\s*\n\}/.test(src));
+ok('　　歷史／過期區那張卡不動（那裡的已完成本來就成立）', /const st=tkStBadge\(t\.status\)\s*\n\s*\|\| tkStBadge\(\(total>0&&used>=total\)\?'used_up'/.test(src));
+
 ok('★ 票券卡：狀態章（已完成／已過期／已退費）移到課程方案名稱右邊',
    src.includes("${tkNoTag(sl.no)}${t.plan_name||'票券'}${_m2?stTag:''}")
    && !/tkc-meta">\$\{tkBuyDateHtml\(t\)\}[^`]*\$\{stTag/.test(src));
