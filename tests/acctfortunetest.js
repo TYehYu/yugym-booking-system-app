@@ -259,7 +259,19 @@ ok('　　文字讓開左邊色條', /\.cal-ev\.cag-std\.admcag \.acg-in\{paddin
 
 console.log('登入頁改版（使用者參考圖）');
 ok('★ 字標照參考圖：Training／YUGYM／有肌訓練／分隔線／標語',
-   /<div class="login-logo login-mark">\s*\n\s*<div class="lgm-script">Training<\/div>\s*\n\s*<div class="lgm-en">YUGYM<\/div>\s*\n\s*<div class="lgm-zh">有 肌 訓 練<\/div>\s*\n\s*<div class="lgm-rule"><\/div>\s*\n\s*<div class="lgm-tag">TRAIN BETTER, LIVE BETTER<\/div>/.test(src));
+   /<div class="lgm-word"><span class="lgm-script">Training<\/span><span class="lgm-en">YUGYM<\/span><\/div>/.test(src)
+   && /<div class="lgm-zh">有 肌 訓 練<\/div>/.test(src)
+   && /<div class="lgm-rule"><\/div>/.test(src)
+   && /<div class="lgm-tag">TRAIN BETTER, LIVE BETTER<\/div>/.test(src));
+ok('★ Training 用草寫字體（Yellowtail，另備系統手寫體後備）',
+   /family=Yellowtail/.test(src)
+   && /font-family:"Yellowtail","Snell Roundhand","Apple Chancery","Brush Script MT",cursive/.test(src));
+ok('　　併進既有那一條 Google Fonts，不多開請求',
+   (src.match(/fonts\.googleapis\.com\/css2\?family=/g)||[]).length===1);
+ok('★ Training 靠右壓在 GYM 上（靠齊字寬右緣，不是版面右緣）',
+   /\.login-mark \.lgm-word\{display:inline-block;\}/.test(src)
+   && /\.login-mark \.lgm-script\{display:block;text-align:right;margin:0 2px -18px 0;/.test(src));
+ok('　　行高留 1.3，草寫的上伸部不會被行框切掉', /font-size:30px;font-weight:400;line-height:1\.3;/.test(src));
 ok('　　不畫那圈金色圓框（只有一條細分隔線）',
    !/\.login-mark\{[^}]*border-radius:50%/.test(src) && /\.login-mark \.lgm-rule\{width:74px;height:1px/.test(src));
 ok('★ 米色卡框拿掉，整頁就是品牌綠（不要像一頁式網站）',
