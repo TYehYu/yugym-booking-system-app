@@ -26,10 +26,11 @@ const sheet=g('_cardHtml=`<div class="mtp-card admh-sheet ash-crs"','\n  }else{'
 if(!sheet) { console.log('  ✗ 取不到課程卡原始碼（結束標記對不上）'); process.exit(1); }
 ok('★ 調整時間鈕只顯示開始時間、去掉開頭的 0', sheet.includes("${String(b.start_time||'').replace(/^0/,'')}"));
 ok('★ 不再顯示 –結束時間', !sheet.includes('${b.start_time}–${endT}'));
-ok('★ 第一列靠左＝課名・場地・時長', /class="ash-course">\$\{nm\}\$\{_vTxt\}<span class="ash-dot">・<\/span>\$\{_dur\} 分/.test(sheet));
+ok('★ 第一列靠左＝課名・場地', /class="ash-course">\$\{nm\}\$\{_vTxt\}\$\{bkIsCoachLeave/.test(sheet));
 ok('★ 第一列靠右＝時間（純文字，編輯走視窗）', /class="ash-right">\$\{String\(b\.start_time\|\|''\)\.replace\(\/\^0\/,''\)\}<\/span>/.test(sheet));
-ok('★ 第二列＝教練靠左、日期靠右', /class="ash-meta">\$\{_coachTxt\}<span class="ash-mdate">/.test(sheet)
-   && /\.ash-mdate\{margin-left:auto/.test(src));
+ok('★ 第二列＝日期・時長靠左、教練靠右',
+   /class="ash-meta"><span class="ash-mdate">[\s\S]*<span class="ash-dot">・<\/span><span>\$\{_dur\} 分<\/span>\$\{_coachTxt\}<\/div>/.test(sheet)
+   && /\.ash-coachtxt\{margin-left:auto/.test(src));
 ok('　　日期去掉開頭的 0', sheet.includes(".slice(5).replace('-','/').replace(/^0/,'')"));
 ok('★ 出席章從課程卡拿掉（狀態改標在會員名字旁）', !sheet.includes('admh-stamp') && !src.includes('const _st=((typeof grpAllOnLeave'));
 ok('　　會員不再擠在課程卡上（.ash-name 退場）', !sheet.includes('class="ash-name"') && !src.includes('.ash-name{'));
@@ -116,6 +117,23 @@ ok('　　旗標用完即丟', /window\._ashBack=null; return s;/.test(src));
 ok('　　兩分鐘保險：沒被消化也不會一直攔截明細', /\(Date\.now\(\)-s\.ts\)>120000/.test(src));
 ok('　　只攔同一筆預約', /s\.id!==String\(id\)/.test(src));
 ok('　　失敗時清掉旗標', src.includes("}catch(e){ window._ashBack=null; showToast('操作失敗：'"));
+
+console.log('首頁課卡：白底＋左色條，只有已簽到填滿');
+ok('★ 只在管理員手機產生（範圍沒有外溢）', /if\(SESSION\.role==='admin' && isMobileLayout\(\)\)\{/.test(src)
+   && src.indexOf("if(SESSION.role==='admin' && isMobileLayout()){") < src.indexOf('class="admh-card${done?'));
+ok('★ 白底＋左側課程色條', /\.admh-card\{[^}]*background:#fff/.test(src)
+   && /\.admh-card::before\{content:'';position:absolute;left:0[^}]*background:var\(--admh-c/.test(src));
+ok('★ 已簽到才填滿課程色（原本是整張淡化）', /\.admh-done\{background:var\(--admh-c,#1f6f54\);color:#fff;\}/.test(src)
+   && !/\.admh-done\{opacity:\.55;\}/.test(src));
+ok('★ 出席章移到第二列會員姓名旁邊', /<div class="admh-mname">\$\{mname\}\$\{_st\?`<span class="admh-stamp/.test(src)
+   && !/class="admh-time">\$\{b\.start_time\}\$\{_st/.test(src));
+ok('★ 章的顏色：未出席金／已簽到綠／請假紅',
+   /\.admh-st-done\{background:var\(--green\)/.test(src)
+   && /\.admh-st-ns\{background:var\(--gold,#B48A56\)/.test(src)
+   && /\.admh-st-leave\{background:#b5372e/.test(src));
+ok('　　白底上的章改用陰影（原本的白圈在白底看不見）', /\.admh-stamp\{[^}]*box-shadow:0 1px 3px/.test(src)
+   && /\.admh-done \.admh-stamp\{box-shadow:0 0 0 1\.5px/.test(src));
+ok('　　填滿時字色一併轉白', /\.admh-done \.admh-mname,\.admh-done \.admh-time\{color:#fff;\}/.test(src));
 
 console.log('首頁大日期格線');
 const hero=g('admMobHero=`<div class="admh">','<div class="admh-div"></div>');
