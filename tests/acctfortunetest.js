@@ -57,6 +57,12 @@ ok('　　團課請假＝整堂取消、救不回來，照實說明', ei.include
 ok('★ 復原前先跳視窗確認（使用者指示）',
    /async function ashCoachLeaveUndoAsk\(id\)[\s\S]*取消教練請假？[\s\S]*bkCoachLeaveUndo\('\$\{b\.id\}'\)/.test(src));
 ok('　　不是 coach_leave 就擋下（團課請假不可復原）', /if\(b\.status!=='coach_leave'\)\{ showToast\('這堂不是可復原的教練請假/.test(src));
+ok('★ 視窗要蓋在課卡之上（使用者回報「沒有出現在最前面」）',
+   /#bk-card-pop\.admh-pop \.mtp-back\{z-index:9740/.test(src)
+   && /#bk-card-pop\.admh-pop \.mtp\{z-index:9741;\}/.test(src)
+   && /\.modal-bg\{[^}]*z-index:9750/.test(src));
+ok('　　只壓管理員手機那張面板，共用的 #bk-card-pop 維持原層級',
+   /#bk-card-pop \.mtp\{position:fixed;z-index:9801/.test(src));
 
 console.log('簡易課卡：每位會員一張卡');
 ok('★ 團課逐名額一張卡、單人課一張', /_seatKs\.length \? _seatKs\.map\(sk=>\(\{sk, mid:seatMid\(sk\), n:seatNo\(sk\)\}\)\)/.test(src)
@@ -80,7 +86,8 @@ ok('　　已簽到就不給請假／取消（同名單視窗）',
 console.log('請假只給有補課機制的票');
 ok('★ 判定集中在 tkHasMakeup（口袋＋方案＋不是補課券三個條件）',
    /function tkHasMakeup\(t, typeMap\)\{[\s\S]*t\.source==='makeup'[\s\S]*memberLeave!=='makeup'[\s\S]*planHasMakeup\(t\.plan_name\)/.test(src));
-ok('★ 目前只有「團課 4週優惠」有補課機制', /const MAKEUP_PLANS=\['團課 4週優惠'\];/.test(src));
+ok('★ 有補課機制的方案：團課 4週優惠＋團課【4堂優惠】（0820 使用者確認是同一檔的舊寫法）',
+   /const MAKEUP_PLANS=\['團課 4週優惠','團課【4堂優惠】'\]/.test(src));
 ok('★ 補課券不能再請假（避免請假又送一張，無限展延）', /if\(!t \|\| t\.source==='makeup'\) return false;/.test(src));
 ok('　　會員卡的請假鈕吃這個判定', src.includes('_canLeave = !!(_slot && tkHasMakeup(_slot.t,'));
 ok('　　查不到這一格扣在哪張票就不給（會標到請假卻發不出券）', src.includes('let _canLeave=false;'));
