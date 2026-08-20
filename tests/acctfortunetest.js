@@ -77,8 +77,8 @@ ok('★ 視窗風格對齊課卡（使用者回報「跟我們剛剛調整的差
    /\.modal:has\(\.ash-sheetmk\)\{background:var\(--bg\);border-radius:22px/.test(src)
    && /\.ash-eirow\{[\s\S]{0,220}background:#fff;border:none;[\s\S]{0,120}box-shadow:0 6px 18px/.test(src)
    && /\.modal:has\(\.ash-sheetmk\) \.modal-foot \.btn\{border-radius:999px/.test(src));
-ok('　　三張視窗都掛上標記（調整課程／取消教練請假／調整預約時間）',
-   (src.match(/<div class="ash-sheetmk"><\/div>/g)||[]).length===3);
+ok('　　從課卡開的視窗都掛上標記（調整課程／取消教練請假／調整預約時間／會員備註）',
+   (src.match(/<div class="ash-sheetmk"><\/div>/g)||[]).length===4);
 ok('　　只吃帶標記的視窗，其他彈窗不受影響', /\.modal\{background:var\(--surface-3\)/.test(src) && /\.ash-sheetmk\{display:none;\}/.test(src));
 
 console.log('簡易課卡：每位會員一張卡');
@@ -99,6 +99,25 @@ ok('　　請假中換成「取消請假」（且傳會員 id，與名單視窗�
 ok('　　已簽到就不給請假／取消（同名單視窗）',
    src.includes('if(_ck && _canLeave && !inHere && !A.closed)')
    && src.includes("if(A.staff && !inHere && !A.closed) _outOrbs += evoBtn('','evo-danger'"));
+
+ok('★ 未到要排在已簽到前面（使用者回報蕭育筑 8/20 被標成已簽到）',
+   /const _noShow=\(!r\.sk && b\.no_show===true\);/.test(src)
+   && /const _badge=onLeave\?[^\n]*\n\s*:\(_noShow\?[^\n]*未到[^\n]*\n\s*:\(inHere\?[^\n]*已簽到/.test(src));
+ok('　　根因寫在註解裡：標記未到課的收尾是 completed＋no_show，done 也會是 true',
+   /標記未到課的收尾是「結課蓋未章」：status 會變 completed、no_show=true/.test(src));
+
+console.log('會員卡的備註（2026-08-20）');
+ok('★ 右上角一顆備註鈕，有內容就直接顯示、靠右截斷',
+   /<button type="button" class="ash-mnote\$\{_noteTxt\?' on':''\}"/.test(src)
+   && /\.ash-mnote\{margin-left:auto;[^}]*text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\}/.test(src));
+ok('　　沒有備註顯示「＋ 備註」', /\$\{_noteTxt\?escH\(_noteTxt\):'＋ 備註'\}/.test(src));
+ok('★ 用的是會員列表同一個欄位（members.note），不另建資料',
+   /note:Object\.fromEntries\(\(ms\|\|\[\]\)\.map\(m=>\[m\.id,m\.note\|\|''\]\)\)/.test(src)
+   && /m\.note=String\(el\.value\|\|''\)\.trim\(\);/.test(src));
+ok('★ 存完回課卡，不會被帶去會員列表（既有那支存完會 navTo(\'members\')）',
+   /async function ashMemNoteSave\(bid, mid\)\{[\s\S]{0,600}ashBackArm\(bid\); openBookingDetail\(bid\);/.test(src)
+   && /async function saveMemberNote\(member_id\)\{[\s\S]{0,400}navTo\('members'\)/.test(src));
+ok('　　改完清掉對照表快取，卡片才會顯示新備註', /window\._bkNameMapC=null;\s*\/\* 對照表帶著備註/.test(src));
 
 console.log('請假只給有補課機制的票');
 ok('★ 判定集中在 tkHasMakeup（口袋＋方案＋不是補課券三個條件）',
@@ -201,8 +220,15 @@ ok('★ 四顆平分整列，最右邊的訓練紀錄不會被切掉（使用者
    /\.pp-rectabs\{display:flex;gap:5px;margin-bottom:14px;\}/.test(src)
    && /\.pp-rectab\{flex:1 1 0;min-width:0;/.test(src)
    && !/\.pp-rectabs\{[^}]*overflow-x:auto/.test(src));
+ok('★ 按鈕帶筆數（改成按鈕列後，原本清單上的數字要留住）',
+   /\[\['tickets','票券',c\.tkCount\],\['bookings','預約紀錄',c\.bkCount\],\['pay','交易',c\.pcCount\],\['training','訓練紀錄',null\]\]/.test(src)
+   && /<i class="pp-rectab-n">\$\{n\}<\/i>/.test(src)
+   && /\.pp-rectab-n\{font-style:normal;/.test(src));
+ok('　　訓練紀錄沒有資料來源就不標', /\['training','訓練紀錄',null\]/.test(src)
+   && /\$\{\(n!=null&&n!==''\)\?/.test(src));
 ok('　　四顆：票券／預約紀錄／交易／訓練紀錄',
-   /\[\['tickets','票券'\],\['bookings','預約紀錄'\],\['pay','交易'\],\['training','訓練紀錄'\]\]/.test(src));
+   /'tickets','票券'/.test(src) && /'bookings','預約紀錄'/.test(src)
+   && /'pay','交易'/.test(src) && /'training','訓練紀錄'/.test(src));
 ok('　　預設顯示票券（原本 recView 是 null＝顯示入口清單）', src.includes("if(_m2 && !PP.recView) PP.recView='tickets';"));
 ok('　　其他角色與桌機維持清單＋返回鈕', /: `<div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" onclick="ppRecordBack\(\)">‹ 返回/.test(src));
 ok('★ 交易分頁：四欄表格改成一筆一列的卡片（桌機仍是表格）',

@@ -3232,6 +3232,10 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
   text-align:center;white-space:nowrap;}
 .pp-rectab.active{background:var(--green);border-color:var(--green);color:#fff;}
 .pp-rectab:active{transform:scale(.96);}
+/* 按鈕上的筆數（2026-08-20 使用者指示） */
+.pp-rectab-n{font-style:normal;font-family:var(--num);font-size:11px;font-weight:800;
+  margin-left:5px;opacity:.75;}
+.pp-rectab.active .pp-rectab-n{opacity:.9;}
 /* 2026-08-20 使用者回報兩處（會員資料改成浮動視窗後，容器變窄冒出來的）：
    ① LINE 通知的開關沒有靠右 —— 開關縮到 .66 倍且 transform-origin 是 left center，
       版面上它已經在最右邊，但畫出來的滑塊往左邊縮，右側就空了一截。改成靠右縮。
@@ -7145,6 +7149,14 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   /* 卡片外的圓鈕改直排：取消在上、簽到在下（2026-08-20 三修） */
   .ash-morbs{flex:none;display:flex;flex-direction:column;gap:6px;}
   /* 請假＝卡片內、姓名列最右邊的小按鈕（只有有補課機制的票才會出現） */
+  /* 會員備註：靠右、單行截斷（有內容才顯示金色，沒有就是灰色的「＋ 備註」） */
+  .ash-mnote{margin-left:auto;flex:0 1 auto;min-width:0;max-width:52%;
+    font:inherit;font-size:11.5px;font-weight:600;color:var(--t3);background:none;border:none;
+    padding:2px 0;cursor:pointer;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ash-mnote.on{color:var(--gold-d,#9a7344);}
+  .ash-mnote:active{opacity:.6;}
+  /* 兩顆同時在時，備註去頂右邊、請假接在它後面 */
+  .ash-mname:has(.ash-mnote) .ash-mlv{margin-left:6px;}
   .ash-mlv{margin-left:auto;flex:none;font:inherit;font-size:11.5px;font-weight:700;
     background:var(--card2);color:var(--gold-d,#9a7344);border:1px solid var(--bd);
     border-radius:999px;padding:3px 10px;cursor:pointer;white-space:nowrap;}
@@ -8309,7 +8321,7 @@ let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
 const APP_VERSION = '260819.1844';
-const APP_VERSION_LABEL='v260820.1830';
+const APP_VERSION_LABEL='v260820.1841';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18999,6 +19011,31 @@ async function ashEditAsk(id){
     ${rows||'<div class="ash-einote">這堂目前沒有可以調整的項目。</div>'}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
+/* 會員卡右上角的備註（2026-08-20 使用者指示）——寫的是 members.note，
+   跟會員列表「備註」欄同一個欄位，所以兩邊看到的一定是同一份。
+   ⚠ 不直接用既有的 openMemberNote／saveMemberNote：那一支存完會 navTo('members')
+   跳回會員列表，從課卡按下去不該把人帶離現在的畫面。這裡自己收尾＝回到課卡。 */
+async function ashMemNoteAsk(bid, mid){
+  const m=await dbGet('members',mid); if(!m){ showToast('找不到會員'); return; }
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">備註</div>
+    <div class="ash-eihead">${escH(m.name||'')}</div>
+    <textarea id="ash-mn" rows="4" placeholder="輸入備註…"
+      style="width:100%;box-sizing:border-box;font-family:inherit;font-size:14px;resize:vertical;">${escH(m.note||'')}</textarea>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal();ashBackArm('${bid}');openBookingDetail('${bid}')">返回</button>
+      <button class="btn btn-green" onclick="ashMemNoteSave('${bid}','${mid}')">儲存</button>
+    </div>`);
+}
+async function ashMemNoteSave(bid, mid){
+  const el=document.getElementById('ash-mn'); if(!el) return;
+  const m=await dbGet('members',mid); if(!m){ showToast('找不到會員'); return; }
+  m.note=String(el.value||'').trim();
+  try{ await dbPut('members',m); }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); return; }
+  window._bkNameMapC=null;   /* 對照表帶著備註，改完要重建，卡片才會顯示新內容 */
+  showToast(m.note?'已更新備註':'已清除備註');
+  closeModal();
+  ashBackArm(bid); openBookingDetail(bid);   /* 一次性旗標 → 回到課卡（見 ashSeatAct） */
+}
 /* 「指派代課教練」（2026-08-20 使用者回報：點下去會跳回原本的詳細預約視窗）——
    代課名單是掛在課卡面板上的，bkOrbitSub 找不到面板就會退回預約明細。
    關掉視窗後面板理應還在，但保險起見這裡確認一次，不在就先把課卡叫回來；
@@ -22989,6 +23026,9 @@ async function bkNameMaps(){
   const [ms,cs]=await Promise.all([dbGetAll('members').catch(()=>[]),dbGetAll('coaches').catch(()=>[])]);
   const r={ts:Date.now(),
     mem:Object.fromEntries((ms||[]).map(m=>[m.id,m.name])),
+    /* 會員備註（2026-08-20 使用者指示：會員卡右上角顯示／編輯）——
+       同一份 members 已經撈回來了，順手帶出來，不另外查一次。 */
+    note:Object.fromEntries((ms||[]).map(m=>[m.id,m.note||''])),
     coach:Object.fromEntries((cs||[]).map(x=>[x.id,(typeof coachDisp==='function')?coachDisp(x):x.name]))};
   window._bkNameMapC=r; return r;
 }
@@ -23105,14 +23145,26 @@ async function bkCardPop(el, b, btns, acts){
         }
       }
       const _seatTag=(r.mid&&_seatCnt[r.mid]>1)?`<span class="ash-mseat">第 ${r.n} 個名額</span>`:'';
+      /* 會員備註（2026-08-20 使用者指示）：右上角一顆，有備註就直接顯示內容、靠右截斷；
+         沒有就顯示「＋ 備註」。用的是會員列表那一欄同一個欄位（members.note）。 */
+      const _noteTxt=r.mid?String((_maps.note||{})[r.mid]||'').trim():'';
+      const _noteBtn=r.mid
+        ? `<button type="button" class="ash-mnote${_noteTxt?' on':''}" title="${_noteTxt?'編輯備註':'新增備註'}"
+             onclick="event.stopPropagation();ashMemNoteAsk('${b.id}','${r.mid}')">${_noteTxt?escH(_noteTxt):'＋ 備註'}</button>`
+        : '';
       /* 出席狀態改標在名字旁邊（2026-08-20 二修：課程卡的出席章拿掉，不重複顯示）。
-         「未到」是整堂的旗標，只有單人課標得出來；團課的逐名額狀態走 attendance。 */
+         「未到」是整堂的旗標，只有單人課標得出來；團課的逐名額狀態走 attendance。
+         ⚠ 未到要排在已簽到前面（2026-08-20 使用者回報蕭育筑 8/20 自主訓練）——
+         標記未到課的收尾是「結課蓋未章」：status 會變 completed、no_show=true，
+         所以 done／inHere 也是 true，先問 inHere 就會誤標成已簽到。
+         首頁課卡的出席章本來就是這個順序（假→未→簽），這裡對齊。 */
+      const _noShow=(!r.sk && b.no_show===true);
       const _badge=onLeave?'<span class="ash-mtag ash-mtag-leave">請假</span>'
-        :(inHere?'<span class="ash-mtag ash-mtag-ok">已簽到</span>'
-        :((!r.sk && b.no_show===true)?'<span class="ash-mtag ash-mtag-ns">未到</span>':''));
+        :(_noShow?'<span class="ash-mtag ash-mtag-ns">未到</span>'
+        :(inHere?'<span class="ash-mtag ash-mtag-ok">已簽到</span>':''));
       return `<div class="ash-mrow">
           <div class="ash-mcard${onLeave?' ash-mleave':''}"${r.mid?` onclick="collapseBkCard();openMemberDetail('${r.mid}')"`:''}>
-            <div class="ash-mmain"><div class="ash-mname"><span>${nm2}</span>${_seatTag}${_badge}${_leaveBtn}</div>${_tk}</div>
+            <div class="ash-mmain"><div class="ash-mname"><span>${nm2}</span>${_seatTag}${_badge}${_noteBtn}${_leaveBtn}</div>${_tk}</div>
           </div>
           ${_outOrbs?`<div class="ash-morbs">${_outOrbs}</div>`:''}
         </div>`;
@@ -33474,9 +33526,12 @@ function ppRecordHtml(){
     const _m2=!!(SESSION && SESSION.role==='admin');   /* 2026-08-20 四修：桌機版一併採用 */
     if(_m2 && !PP.recView) PP.recView='tickets';
     if(PP.recView){
+      /* 按鈕帶數字（2026-08-20 使用者指示）：改成按鈕列之後，原本清單上的
+         「共 5 份方案／49 筆／13 筆」看不到了，把筆數直接標在按鈕上。
+         訓練紀錄還沒有資料來源，不標。 */
       const back=_m2
-        ? `<div class="pp-rectabs">${[['tickets','票券'],['bookings','預約紀錄'],['pay','交易'],['training','訓練紀錄']]
-            .map(([k,l])=>`<button class="pp-rectab${PP.recView===k?' active':''}" onclick="ppShowRecord('${k}')">${l}</button>`).join('')}</div>`
+        ? `<div class="pp-rectabs">${[['tickets','票券',c.tkCount],['bookings','預約紀錄',c.bkCount],['pay','交易',c.pcCount],['training','訓練紀錄',null]]
+            .map(([k,l,n])=>`<button class="pp-rectab${PP.recView===k?' active':''}" onclick="ppShowRecord('${k}')">${l}${(n!=null&&n!=='')?`<i class="pp-rectab-n">${n}</i>`:''}</button>`).join('')}</div>`
         : `<div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" onclick="ppRecordBack()">‹ 返回</button></div>`;
       const _st={usable:'可用',used_up:'已完成',expired:'已過期',refunded:'已退費'};   /* 2026-08-13 使用者指示改名 */
       if(PP.recView==='tickets'){
