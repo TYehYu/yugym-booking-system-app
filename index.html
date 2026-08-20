@@ -8432,8 +8432,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.0112';
-const APP_VERSION_LABEL='v260821.0112';
+const APP_VERSION = '260821.0126';
+const APP_VERSION_LABEL='v260821.0126';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19163,7 +19163,7 @@ async function ashEditAsk(id){
     <span class="ash-eilb">${label}</span>${sub?`<span class="ash-eisub">${sub}</span>`:''}</button>`;
   let rows='';
   const _leave=bkIsCoachLeave(b);
-  if(!_leave && A.staff && !A.closed) rows+=row(`closeModal();admhMoveAsk('${b.id}')`,'調整日期／時間',fmtRange(b.date,b.start_time,Number(b.duration)||60));
+  if(!_leave && A.editable) rows+=row(`closeModal();admhMoveAsk('${b.id}')`,'調整日期／時間',fmtRange(b.date,b.start_time,Number(b.duration)||60));
   /* 更改場地（2026-08-20 使用者指示：教練課／友善教練課也要有）——
      自主訓練走 bkOrbitVenue（只有它有跑步機台數）；其他課別走 openVenueChange
      （列出所有啟用場地、逐一跑衝突檢查，該時段滿的會標出來）。
@@ -19181,7 +19181,7 @@ async function ashEditAsk(id){
   if(!_leave && b.status==='booked' && !A.isGroup && (A.staff||A.coachCk) && bkDatePast(b))
     rows+=row(`ashBackArm('${b.id}');closeModal();openMakeupModal('${b.id}')`,'補簽','補登這堂未簽到的課；自主訓練點數的效期自課程當天起算');
   /* 團課「改人數」（2026-08-07 既有功能）搬進標題卡（2026-08-20 使用者指示） */
-  if(!_leave && A.isGroup && A.staff && !A.closed)
+  if(!_leave && A.isGroup && A.editable)
     rows+=row(`ashBackArm('${b.id}');closeModal();openGrpMaxEdit('${b.id}')`,'本堂人數上限',
       `目前 ${mids(b).length} / ${Math.max(1,Number(b.max_heads)||5)} 人・場地有餘裕時可放寬`);
   /* 教練請假／復原（使用者指示：「復原鈕就按教練請假這個地方，跳出視窗確認是否取消」）——
@@ -19190,9 +19190,16 @@ async function ashEditAsk(id){
     rows += (b.status==='coach_leave')
       ? row(`ashCoachLeaveUndoAsk('${b.id}')`,'取消教練請假（復原）','本堂恢復原本的課、票券與效期一併回復','ash-ei-danger')
       : `<div class="ash-einote">這堂的教練請假是<b>整堂取消</b>，無法復原——需要的話請重新建課。</div>`;
-  }else if(A.staff && !A.closed && canCoachLeave(b)){
+  }else if(A.editable && canCoachLeave(b)){
     rows+=row(`closeModal();bkCoachLeave('${b.id}')`,'教練請假',bkCoachLeaveSub(b),'ash-ei-danger');
   }
+  /* 取消整堂課程（2026-08-21 使用者回報：「是不是沒有課程取消的按鈕？」）——
+     單人課的取消一直都在（會員卡右邊那顆紅色圓鈕），但團課的圓鈕是「取消這個名額」，
+     整堂要收掉在簡易課卡裡完全沒有入口（原本在已退役的詳細預約視窗）。
+     所以只在團課補這一列；單人課不重複給，免得同一件事有兩個按鈕。 */
+  if(A.isGroup && A.staff && A.canCancel && !A.closed)
+    rows+=row(`collapseBkCard();confirmCancelBooking('${b.id}')`,'取消整堂課程',
+      `整堂取消、名單上的 ${mids(b).length} 個名額一起退`,'ash-ei-danger');
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">調整課程</div>
     <div class="ash-eihead">${(typeof bookingTypeName==='function')?bookingTypeName(b,window._ttMapCache||window._memTypeMap):(b.category||'課程')}　·　${String(b.date).replace(/-/g,'/')} ${String(b.start_time).slice(0,5)}</div>
     ${rows||'<div class="ash-einote">這堂目前沒有可以調整的項目。</div>'}
@@ -23295,6 +23302,11 @@ async function expandBkCard(el, id){
      其他課別走 openVenueChange，那支會逐場地跑衝突檢查、標出該時段已滿的）。 */
   const _editable = staff && !closed && b.date>=ymd(TODAY) && !bkIsCoachLeave(b);
   const acts = {staff, own, coachCk, closed, canCancel, checked, isGroup, calCtx:_calCtx,
+    /* 2026-08-21 使用者回報：「這種過去的課程就不應該有課程可以修改的選項」——
+       _editable 已經含「課程日 >= 今天」，但調整課程那張清單裡的「調整日期／時間」
+       與「教練請假」各自只看 staff／canCoachLeave，都沒帶到日期，
+       所以 8/18 這種已經上完的課還給得出改期與請假。統一吃這一個旗標。 */
+    editable: _editable,
     venue: _editable ? (bkIsSelf(b)?'self':'any') : null,
     sub: (_editable && !bkIsSelf(b)) ? 'sub' : null};
   let btns='';
@@ -34004,7 +34016,10 @@ function ppRecordHtml(){
     /* 管理員手機（2026-08-20 使用者指示）：活動紀錄改成一列按鈕，點了下方直接換內容 ——
        不再是「一行一個入口 → 點進去 → 按返回」那條來回的路。
        其他角色與桌機維持原本的清單＋返回鈕。 */
-    const _m2=!!(SESSION && SESSION.role==='admin');   /* 2026-08-20 四修：桌機版一併採用 */
+    /* 2026-08-21 五修（使用者回報「下方卡沒有更新」）——與表頭同一個問題：
+       這裡也卡在 role==='admin'，所以櫃檯的活動紀錄還是舊的「一行一個入口→點進去→按返回」。
+       分頁列跟權限無關（每個分頁裡能做什麼各自判斷），比照表頭放寬到櫃檯以上。 */
+    const _m2=(typeof isDeskLike==='function') ? isDeskLike() : !!(SESSION && SESSION.role==='admin');
     if(_m2 && !PP.recView) PP.recView='tickets';
     if(PP.recView){
       /* 按鈕上的筆數（2026-08-20 加、同日移除）：使用者看過實機後決定不要，

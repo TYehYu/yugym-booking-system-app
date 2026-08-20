@@ -166,5 +166,29 @@ ok('　　櫃檯沒有可按的動作時整列不畫（不留一條空白）',
 ok('　　為什麼放寬，寫在程式裡',
    /版面本身跟權限無關/.test(src));
 
+console.log('\n過去的課不該有修改選項（2026-08-21 使用者回報 8/18 那筆）');
+ok('★ 三個修改項統一吃 acts.editable（含「課程日 >= 今天」）',
+   /editable: _editable,/.test(src)
+   && /if\(!_leave && A\.editable\) rows\+=row\(`closeModal\(\);admhMoveAsk/.test(src)
+   && /\}else if\(A\.editable && canCoachLeave\(b\)\)\{/.test(src)
+   && /if\(!_leave && A\.isGroup && A\.editable\)/.test(src));
+ok('★ 舊的判斷（只看 staff／closed，沒帶日期）已經拿掉',
+   !/if\(!_leave && A\.staff && !A\.closed\) rows\+=row\(`closeModal\(\);admhMoveAsk/.test(src)
+   && !/\}else if\(A\.staff && !A\.closed && canCoachLeave\(b\)\)\{/.test(src));
+ok('　　成因寫在程式裡（canCoachLeave 本身沒有日期條件）',
+   /都沒帶到日期，\s*\n\s*所以 8\/18 這種已經上完的課還給得出改期與請假/.test(src));
+
+console.log('\n團課要有「取消整堂課程」（使用者：是不是沒有課程取消的按鈕？）');
+ok('★ 只補在團課（單人課的取消一直都在會員卡的紅色圓鈕上）',
+   /if\(A\.isGroup && A\.staff && A\.canCancel && !A\.closed\)/.test(src)
+   && /'取消整堂課程',/.test(src));
+ok('　　說清楚會退幾個名額', /整堂取消、名單上的 \$\{mids\(b\)\.length\} 個名額一起退/.test(src));
+ok('　　為什麼單人課不重複給', /單人課不重複給，免得同一件事有兩個按鈕/.test(src));
+
+console.log('\n會員資料的活動紀錄也要給櫃檯（使用者：下方卡沒有更新）');
+ok('★ 分頁列的判斷同樣放寬到櫃檯以上',
+   /const _m2=\(typeof isDeskLike==='function'\) \? isDeskLike\(\) : !!\(SESSION && SESSION\.role==='admin'\);/.test(src)
+   && !/const _m2=!!\(SESSION && SESSION\.role==='admin'\);/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
