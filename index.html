@@ -6897,6 +6897,11 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   .ash-bar{position:absolute;left:12px;top:16px;bottom:16px;width:5px;border-radius:999px;background:var(--mtp-c,#1f6f54);}
   .ash-r1{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:600;color:var(--t2);}
   .ash-right{display:flex;align-items:center;gap:7px;font-family:var(--num);font-weight:700;font-size:14.5px;color:var(--text);}
+  /* 右上角時間＝調整日期/時間的按鈕（2026-08-20 使用者指示） */
+  .ash-timebtn{display:inline-flex;align-items:center;gap:5px;font:inherit;color:inherit;background:var(--card2);
+    border:1px solid var(--bd);border-radius:999px;padding:4px 10px;cursor:pointer;}
+  .ash-timebtn svg{color:var(--gold-d,#9a7344);}
+  .ash-timebtn:active{transform:scale(.96);}
   .ash-name{font-size:25px;font-weight:800;margin-top:7px;line-height:1.25;color:var(--text);}
   .ash-tk{background:var(--card2);border-radius:13px;padding:10px 12px;margin-top:13px;
     display:flex;flex-wrap:wrap;gap:5px;color:var(--text);}
@@ -8027,7 +8032,7 @@ let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
 const APP_VERSION = '260819.1844';
-const APP_VERSION_LABEL='v260820.1033';
+const APP_VERSION_LABEL='v260820.1037';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18597,6 +18602,49 @@ function venueMoveNote(b){
 /* 這是誰的哪一堂課（2026-08-07 使用者指示：「調整課卡時間的視窗 內容要清楚一點」）——
    確認框原本只有兩行日期時間，拖錯卡也看不出來。名字走 dbPeek（同步、讀快取），
    快取還沒有就只顯示課別，不為了一行字讓確認框變成非同步。 */
+/* 簡易課卡右上角「調整日期／時間」（2026-08-20 使用者指示）——
+   小視窗選新日期與時間 → validateBooking 驗過 → 走 confirmCalMove（原/新時間確認卡、
+   場地備註、同日改時間會追問「後續系列一起改」），與拖曳改時間同一條路。 */
+async function admhMoveAsk(id){
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+  if(b.status==='cancelled'){ showToast('已取消的課無法調整時間'); return; }
+  if(b.status==='checked_in'||b.status==='completed'){ showToast('已簽到／已完成的課不能改時間（請先取消簽到）'); return; }
+  if(b.date<ymd(TODAY)){ showToast('已過期的預約無法調整'); return; }
+  try{ collapseBkCard(); }catch(_){}
+  const dur=Number(b.duration)||60;
+  showModal(`<div class="modal-title">調整預約時間</div>
+    <div style="font-size:12.5px;color:var(--t2);margin:-2px 0 10px;">${calMoveWho(b)}</div>
+    <div style="font-size:12.5px;color:var(--t2);margin-bottom:10px;">目前：<b style="font-family:var(--num);color:var(--text);">${fmtRange(b.date,b.start_time,dur)}</b></div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--t2);">日期
+        <input type="date" id="amv-d" value="${b.date}" min="${ymd(TODAY)}"
+          style="flex:1;font-family:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--bd);border-radius:9px;background:#fff;color:var(--text);"></label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--t2);">時間
+        ${''/* 0801 定案：時間欄不用 input[type=time]（iOS 滾輪沒有確定鈕），一律下拉 */}
+        <select id="amv-t" style="flex:1;font-family:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--bd);border-radius:9px;background:#fff;color:var(--text);">${bkTimeOptions(b.start_time,{noEmpty:1})}</select></label>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">返回</button>
+      <button class="btn btn-green" onclick="admhMoveDo('${b.id}')">下一步</button>
+    </div>`);
+}
+async function admhMoveDo(id){
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+  const nd=(document.getElementById('amv-d')||{}).value||b.date;
+  const nt=((document.getElementById('amv-t')||{}).value||b.start_time).slice(0,5);
+  if(nd===b.date && nt===b.start_time){ showToast('時間沒有變動'); return; }
+  if(nd<ymd(TODAY)){ showToast('不能改到過去的日期'); return; }
+  const verr=await validateBooking(b,nd,nt,b.duration);
+  if(verr){ showToast(verr); return; }
+  closeModal();
+  confirmCalMove(b, b.date, b.start_time, b.duration||60, nd, nt, b.duration||60, async()=>{
+    try{
+      b.date=nd; b.start_time=nt; await dbPut('bookings',b);
+      showToast('已更新預約時間');
+    }catch(err){ showToast('修改失敗：'+(err&&err.message?err.message:err)); }
+    navTo(CUR_PAGE);
+  });
+}
 function calMoveWho(b){
   if(!b) return '';
   const cat=b.category||'預約';
@@ -22604,7 +22652,7 @@ async function bkCardPop(el, b, btns){
     _cardHtml=`<div class="mtp-card admh-sheet" style="--mtp-c:${col};">
         <span class="ash-bar"></span>
         <div class="ash-r1"><span class="ash-course">${nm}${_v?'・'+_v:''}${bkIsCoachLeave(b)?'<span class="admh-lvtag">教練請假</span>':''}</span>
-          <span class="ash-right">${b.start_time}–${endT}${_st?`<span class="admh-stamp ${_st[1]}">${_st[0]}</span>`:''}</span></div>
+          <span class="ash-right"><button type="button" class="ash-timebtn" onclick="admhMoveAsk('${b.id}')" title="調整日期／時間">${b.start_time}–${endT}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;flex:none;"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${_st?`<span class="admh-stamp ${_st[1]}">${_st[0]}</span>`:''}</span></div>
         <div class="ash-name">${who}${(b.trial_name&&b.member_id&&String(who).indexOf(b.trial_name)<0)?'・'+b.trial_name:''}</div>
         ${_tkRow?`<div class="ash-tk">${_tkRow}</div>`:''}
       </div>`;
