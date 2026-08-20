@@ -268,7 +268,7 @@ console.log('\n手機版營運分析：銷課金額與堂數');
 /* 2026-07-31 使用者改口徑：銷課堂數只記教練課與團體課；順序改成
    營收／教練課／團體課／銷課金額／銷課堂數。細節見 ovlisttest.js。 */
 ok('★ 銷課金額仍排在銷課堂數前面',
-   /ovRow\(OV_IC\.rev,'銷課金額',fmtNT\(usedFee\),'','',\{gold:true\}\)\}\s*\n\s*\$\{ovRow\(OV_IC\.done,'銷課堂數'/.test(src));
+   /ovRow\(OV_IC\.rev,'銷課金額',fmtNT\(_ovRev!=null\?_ovRev:usedFee\),'','',\{gold:true\}\)\}\s*\n\s*\$\{ovRow\(OV_IC\.done,'銷課堂數'/.test(src));   // 2026-08-20 對帳
 ok('★ 銷課堂數附上組成（回答「726 怎麼算的」）',
    /const _doneMix=\(\(\)=>\{/.test(src) && /ovRow\(OV_IC\.done,'銷課堂數',`\$\{doneMainCount\} 堂`,'',_doneMix\)/.test(src));
 ok('★ 組成只剩教練課與團體課（2026-07-31 使用者定案）',

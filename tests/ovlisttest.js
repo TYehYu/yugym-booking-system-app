@@ -32,7 +32,7 @@ ok('　　主數值仍是大字、副數值仍是小字（只換內容不換版�
 
 console.log('\n顏色：金額金色、堂數深色');
 ok('★ 營收上金色', /ovRow\(OV_IC\.rev,'營收',fmtNT\(revenue\),'','',\{gold:true\}\)/.test(src));
-ok('★ 銷課金額上金色', /ovRow\(OV_IC\.rev,'銷課金額',fmtNT\(usedFee\),'','',\{gold:true\}\)/.test(src));
+ok('★ 銷課金額上金色', /ovRow\(OV_IC\.rev,'銷課金額',fmtNT\(_ovRev!=null\?_ovRev:usedFee\),'','',\{gold:true\}\)/.test(src));   // 2026-08-20 對帳：月檢視改吃 monthSalesValue
 ok('★ 銷課堂數維持深色（沒帶 gold）',
    /ovRow\(OV_IC\.done,'銷課堂數',`\$\{doneMainCount\} 堂`,'',_doneMix\)/.test(src));
 ok('★ 兩個修飾樣式都有定義',
