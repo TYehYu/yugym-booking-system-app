@@ -258,9 +258,18 @@ ok('★ 簽到章拿掉、請假章保留', /return k==='leave'\?'<span class="e
 ok('　　文字讓開左邊色條', /\.cal-ev\.cag-std\.admcag \.acg-in\{padding-left:7px/.test(src));
 
 console.log('登入頁改版（使用者參考圖）');
-ok('★ logo 改中文大字、英文小字在下', /<div class="login-logo login-logo-main">\s*\n\s*<div class="lg-zh">有肌訓練<\/div>\s*\n\s*<div class="lg-en">YUGYM<\/div>/.test(src)
-   && /\.login-logo-main \.lg-zh\{[^}]*font-size:34px/.test(src)
-   && /\.login-logo-main \.lg-en\{[^}]*font-size:14px/.test(src));
+ok('★ 字標照參考圖：Training／YUGYM／有肌訓練／分隔線／標語',
+   /<div class="login-logo login-mark">\s*\n\s*<div class="lgm-script">Training<\/div>\s*\n\s*<div class="lgm-en">YUGYM<\/div>\s*\n\s*<div class="lgm-zh">有 肌 訓 練<\/div>\s*\n\s*<div class="lgm-rule"><\/div>\s*\n\s*<div class="lgm-tag">TRAIN BETTER, LIVE BETTER<\/div>/.test(src));
+ok('　　不畫那圈金色圓框（只有一條細分隔線）',
+   !/\.login-mark\{[^}]*border-radius:50%/.test(src) && /\.login-mark \.lgm-rule\{width:74px;height:1px/.test(src));
+ok('★ 米色卡框拿掉，整頁就是品牌綠（不要像一頁式網站）',
+   /#login-screen \.login-card\{background:none;border:none;box-shadow:none;/.test(src));
+ok('　　註冊頁仍保留米色卡（整頁表單需要承載面）', /^\.login-card-brand\{background:#F1EADA;/m.test(src));
+ok('　　「會員登入」小標移除（這頁只有一條登入路徑）',
+   !/<div class="login-tag">會員登入<\/div>/.test(src));
+ok('　　沒有卡片後，這一頁的文字改亮色（註冊頁仍是米卡深字）',
+   /#login-screen \.login-lnhint\{color:rgba\(255,255,255,\.62\)\}/.test(src)
+   || /#login-screen \.login-lnhint\{color:rgba\(255,255,255,\.62\);\}/.test(src));
 ok('★ 版本編號移除（JS 那行有 if(lv) 防呆，不會報錯）',
    !/id="login-ver"/.test(src) && /const lv=document\.getElementById\('login-ver'\); if\(lv\)/.test(src));
 ok('★ 員工入口從會員頁移除，但 #staff 網址仍直達員工表單',
@@ -269,9 +278,8 @@ ok('★ 員工入口從會員頁移除，但 #staff 網址仍直達員工表單'
    && /switchLoginMode\(\/staff\/i\.test\(hash\) \? 'staff' : 'member'\)/.test(src));
 ok('★ 說明在上、LINE 按鈕在下', /<div class="login-lnhint">一鍵登入[\s\S]{0,120}<\/div>\s*\n\s*<button id="line-login-btn"/.test(src));
 ok('★ LINE 按鈕維持官方配色', /id="line-login-btn"[^>]*background:#06C755;color:#fff/.test(src));
-ok('★ 綠底米卡（使用者「綠色跟米色換過來」）：整頁品牌綠、卡片米色配綠框',
-   /#login-screen\{background:linear-gradient\(165deg,#0a4438/.test(src)
-   && /#login-screen \.login-card,\.login-card-brand\{background:#F1EADA;\s*\n\s*border:1\.5px solid rgba\(0,61,50,\.28\)/.test(src));
+ok('★ 整頁品牌綠（登入頁二版起不再有米色卡）',
+   /#login-screen\{background:linear-gradient\(165deg,#0a4438/.test(src));
 ok('　　只吃登入頁與註冊卡，其他頁維持白卡', /^\.login-card\{background:#fff;/m.test(src)
    && !/login-card-dark/.test(src));   /* 舊的深卡 class 已全面改名，不該有殘留 */
 ok('　　填寫區白底黑字', /#login-screen input,#login-screen select,\.login-card-brand input,\.login-card-brand select\{\s*\n\s*background:#fff;color:#111;/.test(src));
@@ -290,9 +298,12 @@ ok('　　只有浮動視窗取消，滿版模式仍保留原規則（切分頁�
 ok('★ 票券種類放不下就換行、按鈕本身不折字（原本擠成直的）',
    /\.pp-sheet-win \.tkfilter\{flex-wrap:wrap;\}/.test(src)
    && /\.pp-sheet-win \.tkfilter \.tkf-btn\{flex:0 0 auto;white-space:nowrap;\}/.test(src));
-ok('　　卡片變淺底後，文字一律回到深色（不再反白）',
-   /\.login-logo-main \.lg-zh\{[^}]*color:var\(--green,#003d32\)/.test(src)
-   && !/rgba\(255,255,255,\.6[68]\)/.test(src.slice(src.indexOf('登入頁／註冊頁改版'), src.indexOf('.role-tabs{'))));
+/* 兩頁的底色不同，文字色也各自對應：登入頁沒有卡、字直接落在綠底 → 亮色；
+   註冊頁是米色卡 → 深色。這條守住兩者沒有互相汙染。 */
+ok('　　登入頁亮字、註冊頁深字，各自對應自己的底色',
+   /#login-screen \.login-lnhint\{color:rgba\(255,255,255/.test(src)
+   && /\.login-logo-main \.lg-zh\{[^}]*color:var\(--green,#003d32\)/.test(src)
+   && !/\.login-card-brand[^{]*\{[^}]*color:rgba\(255,255,255/.test(src));
 ok('★ 註冊頁同一套風格（同一個入口、導向不同）',
    /<div class="login-card login-card-brand"[^>]*>\s*\n\s*\$\{[\s\S]{0,120}\}\s*\n\s*<div class="login-logo login-logo-main"><div class="lg-zh">有肌訓練/.test(src));
 /* 卡片翻成米色之後，先前為了深底加的反白覆寫全部撤掉 —— 表單回到全站預設的深色文字、
