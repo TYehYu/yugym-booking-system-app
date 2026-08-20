@@ -8316,8 +8316,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260820.2100';
-const APP_VERSION_LABEL='v260820.2100';
+const APP_VERSION = '260820.2147';
+const APP_VERSION_LABEL='v260820.2147';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16809,6 +16809,9 @@ function bkIsMasked(b){
      這裡只負責「非團課」的姓名與標籤，那才是重複出錯的地方。 */
 function bkTag(b){
   if(!b) return '';
+  /* 空堂（2026-08-20）：待簽約是「人有了、錢還沒到」，空堂是「連人都還沒排」，
+     兩者都不該被算進任何統計，但櫃檯要一眼分得出來，標籤不能共用。 */
+  if(bkIsOpenHold(b)) return '待安排';
   if(b.pending_contract) return bkIsInstHold(b) ? '待繳費' : '待簽約';
   if(b.category==='場租') return '場租';
   if(b.category==='體驗') return '體驗';
@@ -16830,7 +16833,7 @@ function bkName(b, nameOf){
   if(b.member_id) return '—';
   if(b.trial_name) return b.trial_name;
   const t=bkTag(b);
-  return t==='體驗'?'體驗客戶' : t==='場租'?'場地租借' : t==='待簽約'?'客戶' : '—';
+  return t==='體驗'?'體驗客戶' : t==='場租'?'場地租借' : t==='待安排'?'尚未安排' : t==='待簽約'?'客戶' : '—';
 }
 /* 含標籤的完整字串（Hover 提示、無處放第二行時用） */
 function bkNameFull(b, nameOf){
@@ -21495,6 +21498,15 @@ async function _bkStep2(){
     return;
   }
 
+  return bkStep2PT(preMid);
+}
+/* 抽成獨立函式（2026-08-20）：管理員手機要「先開課卡、再決定誰來上」——
+   換會員或改成空堂時得重算這一頁，但原本整段綁在 _bkStep2 裡、只能從步驟 1 的
+   DOM 讀值進來，於是換個人就只能退回上一步重走一次。改成吃 _bkWizard 的暫存值，
+   同一頁可以自己重畫。桌機行為完全不變（_bkStep2 照樣呼叫它）。 */
+async function bkStep2PT(preMid){
+  const {type_id,t,coach_id,date,time}=_bkWizard;
+  const members=await dbGetAll('members');
   // ── 一般課程（私教/友善/自主）：單選會員 + 票券 + 連續預約 ──
   // 只顯示有可用票券的會員，標籤改為票券張數
   const allTkG=await dbGetAll('member_tickets');
@@ -21522,6 +21534,13 @@ async function _bkStep2(){
   if(preInfo) Object.assign(_bkWizard,{member_name:preInfo.name||'', member_phone:preInfo.phone||''});
   const preSum=preMid?(window._bkTicketSum[preMid]||0):0;
   const hasTk=!!(preMid&&preSum>0);
+  /* 先開課卡、再決定誰來上（2026-08-20 使用者想法）——只作用在管理員手機端。
+     原本沒選會員時這一頁是死路：文案只寫「請回上一步選擇會員」，櫃檯從行事曆
+     空格點進來想先把時段卡住，得先倒回去挑一個人才走得下去。
+     改成標題卡＋「新增」，三條路各自明確（有票的會員／待簽約／先空著）。 */
+  if(_ashSlotMode() && !preMid){
+    return ashSlotSheet(withTicket);
+  }
   showModal(`<div class="modal-title">新增預約 · 步驟 2 / 2</div>
     ${bkSummaryCard(t,date,time,coach_id?await coachName(coach_id):'', preInfo?preInfo.name:'')}
     <input type="hidden" id="bk-member" value="${hasTk?preMid:''}">
@@ -21581,8 +21600,92 @@ async function _bkStep2(){
             ?'<b>待分期</b>：接上這位會員的分期票，收到下一期款項、開通後自動補綁扣課；可搭配上方連續預約一次保留多堂。<br>'
             :'<b>待分期</b>：這位會員沒有分期中的票券，故不可選。<br>'}<b>待簽約</b>：客人尚未購票，先佔住時段與場地；簽約付款後在課卡明細按「轉正式預約」。</div>
         </div>`; })()}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button>${hasTk?'<button class="btn btn-green" onclick="submitBooking()">確認預約</button>':''}</div>`);
+    ${/* 從「安排這一堂」那張課卡挑人進來的，上一步要回課卡（回步驟 1 等於整張表單重填一次） */''}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="${_bkWizard.viaSlot?'ashSlotBack()':'openBookingModalBack()'}">← 上一步</button>${hasTk?'<button class="btn btn-green" onclick="submitBooking()">確認預約</button>':''}</div>`);
   if(hasTk) refreshBkTicket();
+}
+/* ══ 先開課卡、再決定誰來上（2026-08-20 使用者想法）════════════════════
+   使用者原話：「預約行事曆的時候可以先開課卡 只顯示標題卡 下面有個新增＋
+   有三種情境 1 有票券的會員直接預約 2 待簽約的會員卡位 3 沒有安排會員但是先卡位」
+   目前只做管理員手機端；桌機的步驟 2 一個字都沒動。
+
+   情境 3 的「空堂」**不新增欄位**，用既有的資料形狀表示：
+     pending_contract=true ＋ 沒有 member_id ＋ 沒有 trial_name
+   正式庫查過這個組合原本是 0 筆，跟舊資料不會混淆。這樣做的好處是
+   程式裡 48 處針對 pending_contract 的排除（教練堂數、銷課金額、營收、扣課）
+   全部自動涵蓋空堂 —— 如果另開一個旗標，那 48 處要重新盤一遍才敢上線。
+   之後把人補上去，走的也是既有的 openBindPending（它本來就吃「待簽約＋沒綁會員」）。 */
+function _ashSlotMode(){ return SESSION.role==='admin' && isMobileLayout(); }
+function bkIsOpenHold(b){
+  return !!(b && b.pending_contract && !b.member_id && !String(b.trial_name||'').trim());
+}
+async function ashSlotSheet(withTicket){
+  const {t,date,time,coach_id}=_bkWizard||{};
+  if(!t||!date||!time){ showToast('課程資料不完整，請重新操作'); return; }
+  const cn=coach_id?await coachName(coach_id):'';
+  const cands=(withTicket||[]).map(x=>({id:x.m.id,name:x.m.name||'',phone:x.m.phone||'',sum:x.sum}));
+  window._ashSlotCands=cands;
+  const row=(onclick,label,sub,cls)=>`<button class="ash-eirow${cls?' '+cls:''}" onclick="${onclick}">
+    <span class="ash-eilb">${label}</span>${sub?`<span class="ash-eisub">${sub}</span>`:''}</button>`;
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  /* 情境 1 的挑人沿用統一挑選視窗（mpk-sheet）——0801 定案：行內浮動下拉整套退場 */
+  const memRow=cands.length
+    ? `<div class="form-row" style="margin:2px 0 10px;"><label>選擇會員（有可用票券 ${cands.length} 位）</label>
+        <div class="mem-pick-row">
+          <input class="gt-search" id="ash-slot-q" placeholder="輸入姓名或手機搜尋" oninput="ashSlotFilter(this.value)" autocomplete="off">
+          <select id="ash-slot-mem" onchange="ashSlotPickMember(this.value)">
+            <option value="">請選擇…</option>
+            ${cands.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}（${esc(fmtPhone(c.phone))}）· 剩 ${c.sum} 堂</option>`).join('')}
+          </select>
+        </div></div>`
+    : `<div class="ash-einote">目前沒有任何會員持有這個課程的可用票券——請改用「待簽約」或先把時段空著。</div>`;
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">安排這一堂</div>
+    ${bkSummaryCard(t,date,time,cn)}
+    ${memRow}
+    ${row(`ashSlotPending()`,'待簽約卡位','客人還沒購票——填姓名先佔住時段，簽約付款後轉正式預約')}
+    ${row(`ashSlotHoldOpen()`,'先卡位，之後再安排會員','時段與場地先留著，名單稍後補；開課前 24 小時會提醒教練')}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button></div>`);
+}
+function ashSlotFilter(q){
+  const sel=document.getElementById('ash-slot-mem'); if(!sel) return;
+  const s=String(q||'').trim().toLowerCase();
+  const cands=window._ashSlotCands||[];
+  const esc=x=>String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const hit=cands.filter(c=>!s||String(c.name).toLowerCase().includes(s)||String(c.phone).includes(s));
+  sel.innerHTML='<option value="">請選擇…</option>'+hit.map(c=>
+    `<option value="${esc(c.id)}">${esc(c.name)}（${esc(fmtPhone(c.phone))}）· 剩 ${c.sum} 堂</option>`).join('');
+  try{ mpkRender(sel.closest('.mem-pick-row')); }catch(_){}
+}
+/* 情境 1：選好人就回到原本那一頁（票券／使用人／連續預約全是既有邏輯，不另寫一份） */
+async function ashSlotPickMember(mid){
+  if(!mid) return;
+  try{ mpkSheetClose(); }catch(_){}
+  _bkWizard.member_id=mid; _bkWizard.viaSlot=true;
+  await bkStep2PT(mid);
+}
+/* 回到「安排這一堂」：preMid 傳空字串就會再落回 ashSlotSheet，候選名單順便重算 */
+async function ashSlotBack(){ _bkWizard.member_id=''; await bkStep2PT(''); }
+/* 情境 2：沿用既有的待簽約卡位（含連續卡位、限時票種檢查） */
+function ashSlotPending(){ _bkWizard.member_id=''; openPendingHold(); }
+/* 情境 3：空堂 —— 只佔時段與場地，沒有人、沒有票、不進任何統計 */
+async function ashSlotHoldOpen(){ return onceAct('ashslotopen', _ashSlotHoldOpen); }
+async function _ashSlotHoldOpen(){
+ try{
+  const {type_id,t,coach_id,date,time}=_bkWizard||{};
+  if(!t||!date||!time){ showToast('課程資料不完整，請重新操作'); return; }
+  const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id,member_id:null};
+  const verr=await validateBooking(vbk,date,time,60);
+  if(verr){ showToast(verr); return; }
+  const bk={id:uid('BK'),member_id:null,trial_name:null,trial_phone:null,
+    coach_id,ticket_id:null,ticket_type_id:type_id,category:t.category,format:t.format||null,
+    date,start_time:time,duration:60,status:'booked',recurring:false,
+    pending_contract:true, venue_unit:vbk.venue_unit||null,
+    created_by:SESSION.id,created_at:new Date().toISOString()};
+  await dbPut('bookings',bk);
+  closeModal();
+  showToast('已卡位，尚未安排會員');
+  navTo(CUR_PAGE);
+ }catch(e){ showToast('卡位失敗：'+((e&&e.message)||e)); }
 }
 /* 待分期繳費保留（2026-08-04）：單堂建立與連續預約相同的保留課。
    走 runRecurringBooking —— findTicketFn 回 null、會員有未開通的分期票 → holdOnly。 */
@@ -22931,7 +23034,11 @@ async function expandBkCard(el, id){
     btns += (_calCtx&&b.member_id)
       ? evoBtn('evo-b1','',`collapseBkCard();openMemberDetail('${b.member_id}')`,'doc','明細')
       : evoBtn('evo-b1','',`collapseBkCard();openBookingDetail('${id}')`,'doc','明細');
-    if(staff && !closed && b.status==='booked') btns += evoBtn('evo-r2','evo-primary',`collapseBkCard();openConvertPending('${id}')`,'check','轉正');   /* 請假/異常狀態不給轉正（2026-08-14） */
+    /* 2026-08-20：沒綁會員的卡位（含新的空堂）要先把人排進來才談得上轉正——
+       openBindPending 本來只在詳細預約視窗裡，管理員手機端撤掉明細鈕之後就沒有入口了。 */
+    if(staff && !closed && b.status==='booked' && !b.member_id)
+      btns += evoBtn('evo-r2','evo-gold',`collapseBkCard();openBindPending('${id}')`,'plus',bkIsOpenHold(b)?'安排會員':'綁定會員');
+    else if(staff && !closed && b.status==='booked') btns += evoBtn('evo-r2','evo-primary',`collapseBkCard();openConvertPending('${id}')`,'check','轉正');   /* 請假/異常狀態不給轉正（2026-08-14） */
     if(el){ el.style.marginLeft=''; el.style.marginTop=''; el.classList.add('cal-ev-active'); }
     /* 待簽約／待分期保留：取消還在下方那一列，會員卡不重複給圓鈕（2026-08-20） */
     await bkCardPop(el, b, btns, {pending:true});
