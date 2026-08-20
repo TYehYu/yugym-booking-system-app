@@ -75,8 +75,10 @@ console.log('\n③ 管理員可以改會員姓名');
   const F=grabFn('ppEditName');
   ok('★★ 只有管理員（櫃檯不行 —— 改錯人是查帳時最難回溯的錯）',
      /if\(!\(SESSION&&SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以修改姓名'\); return; \}/.test(F));
+  /* 2026-08-20：管理員手機的基本資料改成左右兩欄，姓名抽成 _nameHtml 給兩種版面共用；
+     條件（只有管理員可點改名）與產出的按鈕完全沒變。 */
   ok('★★ 姓名變成可點的按鈕，也只有管理員看得到',
-     /\$\{\(isM && SESSION && SESSION\.role==='admin'\)\n\s*\? `<button class="pp-name pp-name-edit"/.test(src));
+     /const _nameHtml=\(isM && SESSION && SESSION\.role==='admin'\)\n\s*\? `<button class="pp-name pp-name-edit"/.test(src));
   ok('★ 電話仍然鎖著（那是登入帳號）',
      /if\(fid==='phone'\)\{ showToast\('電話是登入帳號，不可在此修改'\); return; \}/.test(src));
   ok('★ 原本那條「姓名不可修改」改成導向改名視窗',

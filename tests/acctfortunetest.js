@@ -142,6 +142,28 @@ ok('　　白底上的章改用陰影（原本的白圈在白底看不見）', /
    && /\.admh-done \.admh-stamp\{box-shadow:0 0 0 1\.5px/.test(src));
 ok('　　填滿時字色一併轉白', /\.admh-done \.admh-mname,\.admh-done \.admh-time\{color:#fff;\}/.test(src));
 
+ok('★ 教練請假標移到右下角、教練名左邊', /const _foot=\(_cnm\|\|_lvTag\)\?`<div class="admh-foot">\$\{_lvTag\}/.test(src)
+   && !/class="admh-cname">\$\{cname\}[^<]*\$\{_lv\?/.test(src));
+ok('　　右下角多一個標，卡片右側再讓一點（避免壓到票券那行）', /\.admh-card:has\(\.admh-lvtag\)\{padding-right:152px;\}/.test(src));
+
+console.log('會員資料頁（管理員手機）');
+const ph=g('function ppHeaderHtml(){','\n// ══════ Tabs ══════');
+ok('★ 只有管理員手機走新版面', /if\(isM && SESSION && SESSION\.role==='admin' && isMobileLayout\(\)\)\{\s*\n\s*return `<div class="pp-head pp-head-m2">/.test(ph));
+ok('★ 左欄：一列大頭照、二列姓名、三列電話',
+   /<div class="pp-idcol">\s*\n\s*\$\{_avatar\}\s*\n\s*<div class="pp-name-row">\$\{_nameHtml\}\$\{code\}\$\{typeBadge\}<\/div>\s*\n\s*<div class="pp-meta pp-idphone">\$\{phoneItem\}<\/div>/.test(ph));
+ok('★ 右欄：其他欄位一列一列（性別／生日＋原本的 meta）', ph.includes('<div class="pp-meta pp-fields">${genderItem}${bdayItem}${meta}</div>')
+   && /\.pp-head-m2 \.pp-fields\{display:flex;flex-direction:column/.test(src));
+ok('　　姓名與大頭照抽成共用變數，兩種版面各用一次（沒有複製兩份）',
+   (ph.match(/\$\{_avatar\}/g)||[]).length===2 && (ph.match(/\$\{_nameHtml\}/g)||[]).length===2);
+ok('　　桌機／其他角色維持原本的橫向表頭', ph.includes('return `<div class="pp-head">'));
+ok('★ 活動紀錄改成一列按鈕，點了下方換內容',
+   /const _m2=!!\(SESSION && SESSION\.role==='admin' && isMobileLayout\(\)\);/.test(src)
+   && /const back=_m2\s*\n\s*\? `<div class="pp-rectabs">/.test(src));
+ok('　　四顆：票券／預約紀錄／交易／訓練紀錄',
+   /\[\['tickets','票券'\],\['bookings','預約紀錄'\],\['pay','交易'\],\['training','訓練紀錄'\]\]/.test(src));
+ok('　　預設顯示票券（原本 recView 是 null＝顯示入口清單）', src.includes("if(_m2 && !PP.recView) PP.recView='tickets';"));
+ok('　　其他角色與桌機維持清單＋返回鈕', /: `<div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" onclick="ppRecordBack\(\)">‹ 返回/.test(src));
+
 console.log('首頁大日期格線');
 const hero=g('admMobHero=`<div class="admh">','<div class="admh-div"></div>');
 ok('★ 格線移出 .admh-bigdate', !/admh-bigdate[\s\S]*admh-dsep[\s\S]*admh-dside/.test(hero));
