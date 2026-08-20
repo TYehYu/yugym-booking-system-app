@@ -8027,7 +8027,7 @@ let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
 const APP_VERSION = '260819.1844';
-const APP_VERSION_LABEL='v260819.2238';
+const APP_VERSION_LABEL='v260820.0920';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10704,6 +10704,7 @@ function _pglWrap(fn){
 window._navSeqNo=window._navSeqNo||0;
 function navTo(key, gkey){
   if(key==='more_menu'){ openMoreMenu(); return; }
+  try{ document.querySelectorAll('body>.admh-todaybk').forEach(x=>x.remove()); }catch(_){}   /* 行事曆 Today 鈕掛在 body（cagPositionWrap 搬的），換頁要清 */
   if(gkey && NAV2_GROUP_ALIAS[gkey]) gkey=NAV2_GROUP_ALIAS[gkey];  // 舊群組 key 相容（導覽分流 2026-07-19）
   // 重繪目前頁（簽到、取消、行事曆篩選等 30 處都用 navTo(CUR_PAGE)）時保留捲動位置。
   // C.innerHTML 置換會讓頁面高度瞬間歸零，瀏覽器把捲動夾回頂端 —— 連續簽到會一直跳回上方。
@@ -16244,7 +16245,7 @@ PAGES.dashboard=async function(){
      桌機損益表 -33,890 對不起來 —— 這張卡漏了營業稅與公司負擔勞健保，銷課也自己
      另算一套。全部對齊：銷課(monthSalesValue) − 營業稅 − 人事(薪資＋公司勞健保) − 支出。
      營業稅基礎＝當月收款（發票內含 5%），與 finPnl 同式。兩邊從此同一個數字。 */
-  let salaryTotal=null, profit=null, otherExp=0, _ovTax=0, _ovCoIns=0, _ovRev=null;
+  let salaryTotal=null, profit=null, otherExp=0, _ovTax=0, _ovCoIns=0, _ovRev=null, _svPt=null, _svGrp=null;
   if(_dashRange==='month'){
     try{ otherExp=((await dbGetAll('expenses').catch(()=>[]))||[])
       .filter(e=>e&&e.ym===ym).reduce((a,e)=>a+(Number(e.amount)||0),0); }catch(_){ otherExp=0; }
@@ -16255,6 +16256,8 @@ PAGES.dashboard=async function(){
       _ovTax=_cash-Math.round(_cash/1.05);
       const SV=await monthSalesValue(ym);
       _ovRev=Math.round(SV.salesValue);
+      /* 2026-08-20 對帳：月檢視的教練課/團課銷課金額改吃共用計算，跟首頁本月成績同一個數字 */
+      _svPt=Math.round(SV.ptValue); _svGrp=Math.round(SV.grpValue);
       const pr=await computeMonthlyPayroll(ym);
       salaryTotal=Math.round(Number(pr.grandTotal)||0);
       _ovCoIns=Math.round(Number(pr.grandCoCost)||0);
@@ -16384,8 +16387,8 @@ PAGES.dashboard=async function(){
         ${/* 2026-07-31 使用者指示：營收放第一列，接著教練課／團體課／銷課金額／銷課堂數；
              教練課與團體課改成「金額在左、堂數在右」，金額一律金色。 */''}
         ${ovRow(OV_IC.rev,'營收',fmtNT(revenue),'','',{gold:true})}
-        ${ovRow(OV_IC.pt,'教練課',fmtNT(Math.round(ptFee)),`${ptDoneBk.length}/${ptClassCount} 堂`,'',{gold:true,subPlain:true})}
-        ${ovRow(OV_IC.grp,'團體課',fmtNT(Math.round(grpFee)),`${grpDoneBk.length}/${groupClassCount} 堂`,'',{gold:true,subPlain:true})}
+        ${ovRow(OV_IC.pt,'教練課',fmtNT(_svPt!=null?_svPt:Math.round(ptFee)),`${ptDoneBk.length}/${ptClassCount} 堂`,'',{gold:true,subPlain:true})}
+        ${ovRow(OV_IC.grp,'團體課',fmtNT(_svGrp!=null?_svGrp:Math.round(grpFee)),`${grpDoneBk.length}/${groupClassCount} 堂`,'',{gold:true,subPlain:true})}
         ${ovRow(OV_IC.rev,'銷課金額',fmtNT(usedFee),'','',{gold:true})}
         ${ovRow(OV_IC.done,'銷課堂數',`${doneMainCount} 堂`,'',_doneMix)}
       </div>
@@ -19973,6 +19976,14 @@ function cagPositionWrap(){
   wrap.style.top=top+'px';
   wrap.style.bottom=bh+'px';
   wrap.style.height='auto';
+  /* Today 鈕逃出 fixed 容器（2026-08-20 使用者回報行事曆的 Today 不見了）：
+     iOS 的 position:fixed 容器自成堆疊脈絡，鈕的 z-index 再高也壓不過頂欄
+     → 搬到 body 直下；navTo 換頁時會清掉。 */
+  try{
+    const tb=wrap.querySelector('.admh-todaybk');
+    document.querySelectorAll('body>.admh-todaybk').forEach(x=>x.remove());
+    if(tb) document.body.appendChild(tb);
+  }catch(_){}
 }
 window.addEventListener('resize',()=>{ if(document.getElementById('cag-wrap')) cagPositionWrap(); });
 
@@ -44329,6 +44340,10 @@ async function monthSalesValue(ym, pre){
   const [bookings,mtks,types] = pre || await Promise.all([
     dbGetAll('bookings').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[]),
     dbGetAll('ticket_types').catch(()=>[])]);
+  /* 2026-08-20 對帳（使用者回報首頁與報表的銷課金額對不起來）：把報表頁的兩個精準規則
+     併進這份「唯一」計算 —— ① 教練課 session_fee（匯入課逐堂實價）優先（0726 定案）
+     ② 團課每人頭優先用「這堂實際扣的那張票」單價，補課券 $0 不重複認列（0730 定案）。 */
+  const logs=(pre&&pre[3])||await dbGetAll('ticket_logs').catch(()=>[]);
   const monthBk=(bookings||[]).filter(b=>(b.date||'').slice(0,7)===ym && bkCounts(b));   // 全員請假不成課
   const done=monthBk.filter(b=>b.status==='completed'||b.status==='checked_in');
   const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
@@ -44349,18 +44364,28 @@ async function monthSalesValue(ym, pre){
   const byCls={pt1:{v:0,n:0},pt2:{v:0,n:0},fr1:{v:0,n:0},fr2:{v:0,n:0},grp:{v:0,n:0},other:{v:0,n:0}};
   const ptValue=ptList.reduce((s,b)=>{
     const t=tkById[b.ticket_id];
-    const u=unitOf(t); const val=(u>0?u:memAvg(b.member_id,'pt'));
+    const _sf=(b.session_fee!=null&&b.session_fee!=='')?Number(b.session_fee):NaN;
+    const u=unitOf(t); const val=(!isNaN(_sf)?_sf:(u>0?u:memAvg(b.member_id,'pt')));
     const cls=t?tkRevClass(t,typeMap):'other';
     const slot=byCls[cls]||byCls.other; slot.v+=val; slot.n+=1;
     return s+val; },0);
   const grpList=done.filter(b=>bkIsGroup(b));
   let grpHeads=0;
+  const _dedByBk={};
+  (logs||[]).forEach(l=>{ if(l&&l.booking_id&&l.action==='deduct'){ (_dedByBk[l.booking_id]=_dedByBk[l.booking_id]||[]).push(l.ticket_id); } });
+  const _tkAvgOf=t=>{ const a=Number(t&&t.amount_paid)||0, n=Number(t&&t.sessions_total)||0; return n>0?a/n:0; };
   const grpValue=grpList.reduce((s,b)=>{
     const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids:(b.member_id?[b.member_id]:[]);
     /* 人次不含請假（2026-08-06 使用者定案），但銷課金額含 —— 請假是本堂照扣不退，
        票用掉了、錢就實現了，只是人沒來、不算教練成績。 */
     grpHeads+=grpHeadsNoLeave(b);
-    const gv=ids.reduce((a,mid)=>a+memAvg(mid,'grp'),0);
+    const pool=(_dedByBk[b.id]||[]).slice();
+    const gv=ids.reduce((a,mid)=>{
+      const i=pool.findIndex(tid=>{ const t=tkById[tid];
+        return t && (String(t.member_id)===String(mid) || (typeof tkSharedIds==='function' && tkSharedIds(t).includes(mid))); });
+      if(i>=0){ const t=tkById[pool[i]]; pool.splice(i,1); return a+_tkAvgOf(t); }
+      return a+memAvg(mid,'grp');
+    },0);
     byCls.grp.v+=gv; byCls.grp.n+=1;
     return s+gv; },0);
   return { salesValue:ptValue+grpValue, ptValue, ptCount:ptList.length,

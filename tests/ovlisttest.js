@@ -23,9 +23,9 @@ console.log('列的順序');
 
 console.log('\n教練課與團體課：金額在左、堂數在右');
 ok('★ 教練課主數值＝金額、副數值＝堂數',
-   /ovRow\(OV_IC\.pt,'教練課',fmtNT\(Math\.round\(ptFee\)\),`\$\{ptDoneBk\.length\}\/\$\{ptClassCount\} 堂`,'',\{gold:true,subPlain:true\}\)/.test(src));
+   /ovRow\(OV_IC\.pt,'教練課',fmtNT\(_svPt!=null\?_svPt:Math\.round\(ptFee\)\),`\$\{ptDoneBk\.length\}\/\$\{ptClassCount\} 堂`,'',\{gold:true,subPlain:true\}\)/.test(src));   // 2026-08-20 對帳：月檢視金額改吃 monthSalesValue
 ok('★ 團體課主數值＝金額、副數值＝堂數',
-   /ovRow\(OV_IC\.grp,'團體課',fmtNT\(Math\.round\(grpFee\)\),`\$\{grpDoneBk\.length\}\/\$\{groupClassCount\} 堂`,'',\{gold:true,subPlain:true\}\)/.test(src));
+   /ovRow\(OV_IC\.grp,'團體課',fmtNT\(_svGrp!=null\?_svGrp:Math\.round\(grpFee\)\),`\$\{grpDoneBk\.length\}\/\$\{groupClassCount\} 堂`,'',\{gold:true,subPlain:true\}\)/.test(src));   // 2026-08-20 對帳：月檢視金額改吃 monthSalesValue
 ok('　　主數值仍是大字、副數值仍是小字（只換內容不換版面）',
    /\.ov-i-v\{font-size:17px;font-weight:800;/.test(src)
    && /\.ov-i-v2\{font-size:12\.5px;font-weight:700;/.test(src));
