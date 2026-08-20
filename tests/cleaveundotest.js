@@ -56,8 +56,10 @@ ok('★★ 取消視窗依票況分流：票還掛著（新制）→ force 退�
    && /教練請假的堂數尚未退回 —— 取消後退回 1 堂票券、釋出時段與場地/.test(src)
    && /askSeriesCancel\('\$\{id\}','\$\{_hasTk\?'force':'none'\}'\)/.test(src));
 console.log('\n③ 請假課卡的視覺區分（2026-08-14 使用者指示：教練 tag 改紅底「教練請假」）');
+/* 2026-08-21：標準卡與首頁卡的標籤字縮成「請假」（使用者：「其實改成請假就好」）——
+   紅底不變，三處都還在標，只是字短了（原本在窄卡會被切成「教練…」）。 */
 ok('★★ 三處課卡（行事曆 ev 卡／標準卡／首頁今日課表）都換紅底標記',
-   (src.match(/background:#7A2E28;color:#F4F1E8;">教練請假<\/span>/g)||[]).length>=3
+   (src.match(/background:#7A2E28;color:#F4F1E8;">(教練請假|請假)<\/span>/g)||[]).length>=3
    && /if\(bkIsCoachLeave\(b\)\) return `<span class="ev-coach-tag"/.test(src)
    && /const _abbrOut = bkIsCoachLeave\(b\)/.test(src)
    && /const coTag=bkIsCoachLeave\(b\)/.test(src));

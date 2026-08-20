@@ -59,7 +59,7 @@ ok('　　空堂也吃得到（bkIsOpenHold 的前提就是 pending_contract）'
 
 console.log('\n出席章的 DOM 只放一份');
 ok('★ 行事曆：章排在姓名之後、自成一列，外層不再重複輸出',
-   /<span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}\$\{_stdTag\}/.test(src)
+   /<span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}\$\{_venueSub\}\$\{_stdTag\}/.test(src)
    && /出席章已移進 _bodyOut 的姓名列（2026-08-21），這裡不再重複輸出一份/.test(src));
 ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    src.indexOf('const _stampOut =') < src.indexOf('const _bodyOut ='),
@@ -129,6 +129,28 @@ ok('★ 大頭照 92→64、內距與行距一起收',
 ok('★ 刪除會員從整列大按鈕收成右側小按鈕',
    /\.pp-head-m2 \.pp-head-act\{justify-content:flex-end;margin-top:2px;\}/.test(css));
 ok('　　欄位一個都沒拿掉，只是不再那麼鬆', /欄位本身一個都沒拿掉，只是不再那麼鬆/.test(css));
+
+console.log('\n教練標籤改回全名（2026-08-21 使用者指示：太小才簡寫）');
+ok('★ 兩種都畫出來，由 CSS 依卡片寬度挑一個',
+   /const _coSw=\(f,a\)=>`<span class="co-fl">\$\{f\}<\/span><span class="co-ab">\$\{a\}<\/span>`;/.test(src)
+   && /\$\{_coSw\(_coFull,_coAbbr\)\}/.test(src));
+ok('★ 首頁卡也是同一套（固定 84px，比照窄卡用縮寫）',
+   /<span class="co-fl">\$\{coachDisp\(c\)\}<\/span><span class="co-ab">\$\{coachAbbr\(c\)\}<\/span>/.test(src));
+ok('★ 門檻沿用既有的 ev-w-narrow／ev-w-tiny，不另立一套寬度判斷',
+   /\.cal-ev\.cal-ev-std\.ev-w-narrow \.co-fl,\s*\n\s*\.cal-ev\.cal-ev-std\.ev-w-tiny \.co-fl,\s*\n\s*\.tcard\.tcard-std \.co-fl\{display:none;\}/.test(css)
+   && /\.co-ab\{display:none;\}/.test(css));
+ok('★ 請假標籤縮成「請假」（使用者：其實改成請假就好）',
+   /color:#F4F1E8;">請假<\/span>`\+_venueTag/.test(src)
+   && /<span class="tcard-co" style="background:#7A2E28;color:#F4F1E8;">請假<\/span>/.test(src));
+
+console.log('\n場地移到會員姓名下方（教室／跑步機）');
+ok('★ 不再是右下角跟教練並列的膠囊',
+   /const _venueTag = '';/.test(src)
+   && /const _venueSub = _selfVenue \? `<span class="evc-sub evc-vsub">\$\{_selfVenue\}<\/span>` : '';/.test(src));
+ok('★ 排在姓名之後、體驗／待簽約標籤之前',
+   /<span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}\$\{_venueSub\}\$\{_stdTag\}/.test(src));
+ok('　　只有教室／跑步機會有值（多功能是預設場地、不標）',
+   /selfVenueLabel 本來就只在教室／跑步機才有值/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
