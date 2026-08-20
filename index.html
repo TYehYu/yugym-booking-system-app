@@ -8027,7 +8027,7 @@ let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
 const APP_VERSION = '260819.1844';
-const APP_VERSION_LABEL='v260820.0939';
+const APP_VERSION_LABEL='v260820.1020';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13411,9 +13411,28 @@ async function _groupToggleLeave(bid,seatKey){
         showToast('這一格是用補課券補的課，不能再請假（補課券只補一次）');
         return;
       }
+      /* 補課券只發給「有扣課」的名額（2026-08-20 林婉華案例）：
+         誤按取消（已退堂）→ 加回名單時漏扣 → 再按請假，會變成「退 1 堂＋又拿補課券」雙重補償。
+         補課券是「本堂照扣」的交換，這格查不到扣課（需補票紅虛線）就只標請假、不發券。
+         例外：舊系統匯入、整堂完全沒有扣課帳的課照舊發（那個年代本來就沒帳可查）。 */
+      let _paidOk=!!_seatTk;
+      if(!_paidOk){
+        try{
+          const _lgs=await dbGetAll('ticket_logs').catch(()=>[]);
+          const _hasAny=(_lgs||[]).some(l=>l&&l.booking_id===b.id&&l.action==='deduct');
+          if(!_hasAny && !(b.seat_tickets&&Object.keys(b.seat_tickets).length)) _paidOk=true;   // 舊匯入無帳 → 放行
+        }catch(_){}
+      }
       att[sk]='leave';
-      const tk=await grantMakeupTicket(b,mid,sk);
-      showToast(tk?`已標記請假：本堂照扣，已發補課券（效期至 ${String(tk.expire_date||'').slice(5).replace('-','/')}）`:'已標記請假（補課券發放失敗，請手動處理）');
+      if(_paidOk){
+        const tk=await grantMakeupTicket(b,mid,sk);
+        showToast(tk?`已標記請假：本堂照扣，已發補課券（效期至 ${String(tk.expire_date||'').slice(5).replace('-','/')}）`:'已標記請假（補課券發放失敗，請手動處理）');
+      }else{
+        showModal(`<div class="modal-title" style="color:var(--danger,#b5372e);">已標請假，但沒有發補課券</div>
+          <div style="font-size:13px;color:var(--text);line-height:1.9;">這個名額<b>查不到扣課紀錄</b>（名單上是「需補票」的紅虛線）。<br>補課券是「本堂照扣」的補償——這格沒有扣到票，發券會變成多送一堂。</div>
+          <div style="font-size:12px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;">若這格其實有收費：請先補扣票券（名單移除後重新加入即會扣課），再回來按請假就會正常發券。教練招待的免費名額則不發券、到此即可。</div>
+          <div class="modal-foot"><button class="btn btn-green" onclick="closeModal()">知道了</button></div>`);
+      }
     }
     b.attendance=att;
     const anyIn=Object.values(att).some(s=>s==='checked_in');
