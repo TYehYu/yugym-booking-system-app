@@ -167,7 +167,11 @@ ok('★ 請假的堂照樣標教練名（使用者回報只看到「教練請假
 
 console.log('會員資料頁（管理員手機）');
 const ph=g('function ppHeaderHtml(){','\n// ══════ Tabs ══════');
-ok('★ 只有管理員手機走新版面', /if\(isM && SESSION && SESSION\.role==='admin' && isMobileLayout\(\)\)\{[\s\S]{0,400}return `<div class="pp-head pp-head-m2">/.test(ph));
+/* 2026-08-20 四修：桌機版也走同一套版面 → 條件不再看 isMobileLayout()。
+   仍限「管理員」與「會員」——員工資料與其他角色維持原本的橫向表頭。 */
+ok('★ 管理員看會員資料一律走新版面（手機與桌機同一套）',
+   /if\(isM && SESSION && SESSION\.role==='admin'\)\{[\s\S]{0,400}return `<div class="pp-head pp-head-m2">/.test(ph)
+   && !/if\(isM && SESSION && SESSION\.role==='admin' && isMobileLayout\(\)\)/.test(ph));
 ok('★ 大頭照＋姓名獨立一列、橫跨兩欄（使用者回報左右失衡）',
    /<div class="pp-idtop">\s*\n\s*\$\{_avatar\}[\s\S]{0,260}<div class="pp-meta pp-idtier">\$\{tierItem\}<\/div>/.test(ph)
    && /\.pp-head-m2 \.pp-idtop\{grid-column:1\/-1/.test(src));
@@ -178,20 +182,20 @@ ok('★ 底下左右各四列：電話/性別/生日/LINE ｜ 主教練/緊急�
 ok('★ 大頭照放大', /\.pp-head-m2 \.pp-avatar\{width:76px;height:76px;\}/.test(src));
 ok('★ 姓名與等級靠右（大頭照留在左邊）',
    /\.pp-head-m2 \.pp-idname\{[^}]*margin-left:auto;[\s\S]{0,80}align-items:flex-end;text-align:right/.test(src));
-ok('★ 視窗裡的卡片改新語彙：去細框、加大圓角與柔和陰影',
-   /\.pp-sheet-win \.pp-head,\.pp-sheet-win \.pp-card\{border:none;border-radius:20px;\s*\n\s*box-shadow:0 6px 18px/.test(src)
-   && /\.pp-sheet-win \.pp-card-t\{border-bottom:none/.test(src));
+ok('★ 視窗裡的卡片改新語彙：去細框、加大圓角與柔和陰影（手機與桌機同一套）',
+   /\.pp-sheet-win \.pp-head,\.pp-sheet-win \.pp-card,\s*\n\s*\.pp-sheet-desk \.pp-head,\.pp-sheet-desk \.pp-card\{border:none;border-radius:20px;/.test(src)
+   && /\.pp-sheet-win \.pp-card-t,\.pp-sheet-desk \.pp-card-t\{border-bottom:none/.test(src));
 ok('　　標題列與視窗同底、不畫分隔線', /\.pp-sheet\.pp-sheet-win \.pp-sheet-bar\{[^}]*background:var\(--bg\);border-bottom:none;\}/.test(src));
-ok('　　只吃 .pp-sheet-win，桌機與員工資料的卡片不動',
+ok('　　只吃這兩種視窗，其他地方的 .pp-card 基底規則沒被動到',
    /^\.pp-card\{background:var\(--card\);border:1px solid var\(--bd\);border-radius:14px;/m.test(src));
 ok('　　主教練／家庭成員抽成具名變數，兩種版面共用同一份', /const coachItem = isM \? mvA\('主教練'/.test(src)
    && /const famItem = \(isM&&_canBase\)\?/.test(src)
    && /const meta = isM\s*\n\s*\? tierItem \+ coachItem \+ ecItem \+ lineItem \+ carrierItem \+ famItem/.test(src));
 ok('　　姓名與大頭照抽成共用變數，兩種版面各用一次（沒有複製兩份）',
    (ph.match(/\$\{_avatar\}/g)||[]).length===2 && (ph.match(/\$\{_nameHtml\}/g)||[]).length===2);
-ok('　　桌機／其他角色維持原本的橫向表頭', ph.includes('return `<div class="pp-head">'));
-ok('★ 活動紀錄改成一列按鈕，點了下方換內容',
-   /const _m2=!!\(SESSION && SESSION\.role==='admin' && isMobileLayout\(\)\);/.test(src)
+ok('　　員工資料／其他角色維持原本的橫向表頭', ph.includes('return `<div class="pp-head">'));
+ok('★ 活動紀錄改成一列按鈕，點了下方換內容（手機與桌機同一套）',
+   /const _m2=!!\(SESSION && SESSION\.role==='admin'\);/.test(src)
    && /const back=_m2\s*\n\s*\? `<div class="pp-rectabs">/.test(src));
 ok('★ 四顆平分整列，最右邊的訓練紀錄不會被切掉（使用者回報）',
    /\.pp-rectabs\{display:flex;gap:5px;margin-bottom:14px;\}/.test(src)
@@ -308,8 +312,11 @@ ok('★ 底部不再掛一塊空米色：浮動視窗取消 #pp-body 的 400px �
 ok('　　只有浮動視窗取消，滿版模式仍保留原規則（切分頁不縮）',
    src.indexOf('#pp-body{min-height:400px;}') < src.indexOf('.pp-sheet-win #pp-body{min-height:0;}'));
 ok('★ 票券種類放不下就換行、按鈕本身不折字（原本擠成直的）',
-   /\.pp-sheet-win \.tkfilter\{flex-wrap:wrap;\}/.test(src)
-   && /\.pp-sheet-win \.tkfilter \.tkf-btn\{flex:0 0 auto;white-space:nowrap;\}/.test(src));
+   /\.pp-sheet-win \.tkfilter,\.pp-sheet-desk \.tkfilter\{flex-wrap:wrap;\}/.test(src)
+   && /\.pp-sheet-win \.tkfilter \.tkf-btn,\.pp-sheet-desk \.tkfilter \.tkf-btn\{flex:0 0 auto;white-space:nowrap;\}/.test(src));
+ok('　　桌機尺寸另外給（同一套版面、空間寬鬆一點）',
+   /@media\(min-width:601px\)\{\s*\n\s*\.pp-head\.pp-head-m2\{gap:14px 32px/.test(src)
+   && /\.pp-head-m2 \.pp-avatar\{width:92px;height:92px;\}/.test(src));
 /* 兩頁的底色不同，文字色也各自對應：登入頁沒有卡、字直接落在綠底 → 亮色；
    註冊頁是米色卡 → 深色。這條守住兩者沒有互相汙染。 */
 ok('　　登入頁亮字、註冊頁深字，各自對應自己的底色',
