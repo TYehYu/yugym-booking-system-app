@@ -71,8 +71,9 @@ console.log('\n④ 步驟 2：待分期／待簽約兩顆並排');
   ok('★ 有分期票才綁 onclick（_instOk 由分期票判定）',
      /x\.installment && typeof x\.installment==='object'/.test(src) && /_instOk=true/.test(src));
   ok('★ 停用時說明為什麼', /這位會員沒有分期中的票券，故不可選/.test(seg));
-  ok('　　連續預約只跟著待分期出現（上限＝未開通堂數）',
-     /_instOk\?`\$\{\/\*[\s\S]*?recurBoxHtml\('bk', _instMax\|\|12\)/.test(seg));
+  /* 2026-08-20：連續預約的開關移到步驟 1，這裡只在有分期票時覆述，上限仍是未開通堂數 */
+  ok('　　連續預約的覆述只跟著待分期出現（上限＝未開通堂數）',
+     /_instOk\?`\$\{\/\*[\s\S]*?bkRecurRecap\(_instMax\|\|0\)/.test(seg));
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');

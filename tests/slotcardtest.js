@@ -9,6 +9,10 @@
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
+/* 檢查「某段舊文案已經不見了」時要先把註解拿掉 —— 否則「在註解裡解釋為什麼拿掉」
+   會讓斷言自己失敗，等於逼人把變更理由從程式裡刪掉。 */
+const srcNC=src.replace(/\/\*[\s\S]*?\*\//g,'');
+
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
@@ -98,6 +102,64 @@ ok('★ 已綁會員的才給轉正（原本的行為不變）',
    /else if\(staff && !closed && b\.status==='booked'\) btns \+= evoBtn\('evo-r2','evo-primary',`collapseBkCard\(\);openConvertPending\('\$\{id\}'\)`,'check','轉正'\);/.test(src));
 ok('　　openBindPending 本來就吃「待簽約＋沒綁會員」',
    /if\(!b\|\|!b\.pending_contract\|\|b\.member_id\)\{ showToast\('這筆不是未綁定的待簽約卡位'\); return; \}/.test(src));
+
+/* 2026-08-20 使用者指示：「幫我把建立預約的步驟調整
+   建立預約 設定課程 日期 時間 教練 會員(選填) 是否連續預約(選填)」 */
+console.log('\n建立預約的欄位順序（步驟 1）');
+{
+  const i=src.indexOf('<div class="modal-title">新增預約 · 步驟 1 / 2</div>');
+  const j=src.indexOf('onclick="bkStep2()"', i);
+  ok('★ 抽得到步驟 1 的表單', i>0 && j>i);
+  const form=src.slice(i,j);
+  const at=s=>form.indexOf(s);
+  const 課程=at('<label>課程類型</label>'), 日期=at('<label>日期</label>'), 時間=at('<label>時間</label>'),
+        教練=at('>授課教練<'), 會員=at('<label>會員<'), 連續=at('id="bk-recur-row"');
+  ok('★ 六個欄位都在', [課程,日期,時間,教練,會員,連續].every(x=>x>0), {課程,日期,時間,教練,會員,連續});
+  ok('★ 順序＝課程 → 日期 → 時間 → 教練 → 會員 → 連續預約',
+     課程<日期 && 日期<時間 && 時間<教練 && 教練<會員 && 會員<連續,
+     {課程,日期,時間,教練,會員,連續});
+  ok('★ 會員標「選填」（原本寫「體驗課／待簽約卡位可不選」）',
+     /<label>會員<span style="font-weight:400;color:var\(--t3\);">（選填）<\/span><\/label>/.test(form)
+     && !/體驗課／待簽約卡位可不選/.test(srcNC));
+  ok('★ 連續預約在步驟 1（不帶上限，票券的上限在步驟 2 才夾）',
+     /<div class="form-row" id="bk-recur-row" style="margin-bottom:0;">\$\{recurBoxHtml\('bk'\)\}<\/div>/.test(form));
+}
+
+console.log('\n連續預約搬家之後不能無聲失效');
+ok('★ 全檔只剩一個 bk 的連續預約控制項（同 id 兩份會讀錯）',
+   (src.match(/recurBoxHtml\('bk'/g)||[]).length===1);
+ok('★ 步驟 1 的設定在換頁前就收進 _bkWizard.rc',
+   /Object\.assign\(_bkWizard,\{type_id,t,coach_id,date,time,member_id:preMid,rc:readRecur\('bk'\)\}\);/.test(src));
+ok('★ 送出時一律讀收起來的那份，不再直接讀已被換掉的 DOM',
+   /const rc=bkReadRecurBk\(window\._bkInstMax\);/.test(src)
+   && /const _rc=bkReadRecurBk\(window\._bkRecurMax\);/.test(src)
+   && !/const rc=readRecur\('bk'\);/.test(src)
+   && !/const _rc=readRecur\('bk'\);/.test(src));
+ok('★ 票券只剩 N 堂時把堂數夾住（不要建立了才一堂堂失敗）',
+   /return Object\.assign\(\{\},rc,\{count:Math\.max\(1,Math\.min\(Number\(rc\.count\)\|\|1,m\)\),max:m\}\);/.test(src));
+ok('★ 步驟 2 改成唯讀覆述，不再畫第二個開關',
+   /\$\{bkRecurRecap\(preSum\)\}/.test(src) && /\$\{bkRecurRecap\(_instMax\|\|0\)\}/.test(src));
+ok('★ 團課收起步驟 1 的開關（它的連續預約在步驟 2、prefix grp）',
+   /const isGrp = !!t && bkIsGroup\(\{category:t\.category\}\);/.test(src)
+   && /rrow\.style\.display = isGrp \? 'none' : '';/.test(src)
+   && /if\(sw && sw\.checked\)\{ sw\.checked=false;/.test(src));
+
+console.log('\n回上一步的還原（原本整個壞掉）');
+ok('★ 先拷貝暫存再開視窗——openBookingModal 會把 _bkWizard 整個換掉',
+   /const W=Object\.assign\(\{\},_bkWizard\|\|\{\}\);\s*\n\s*_prefill=\{date:W\.date,time:W\.time\};\s*\n\s*await openBookingModal\(\);/.test(src));
+ok('★ 還原後續讀的是拷貝 W，不是被清空的 _bkWizard',
+   /ty\.value=W\.type_id\|\|'';/.test(src) && /co&&W\.coach_id/.test(src) && /mp&&W\.member_id/.test(src)
+   && !/ty\.value=_bkWizard\.type_id;/.test(src));
+ok('★ 連續預約也還原（不然回上一步等於清空設定）',
+   /try\{ bkRestoreRecur\(W\.rc\); \}catch\(_\)\{\}/.test(src)
+   && /function bkRestoreRecur\(rc\)\{/.test(src));
+ok('　　成因寫在程式裡（2026-08-14 只補了寫回文字框，值早就沒了）',
+   /其實一路讀到 undefined/.test(src));
+
+console.log('\nLINE 通知已收回');
+ok('★ 空堂不再承諾「開課前 24 小時會提醒教練」（使用者：line通知先不要好了）',
+   !/開課前 24 小時會提醒教練/.test(srcNC)
+   && /'先卡位，之後再安排會員','時段與場地先留著，名單稍後補'/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

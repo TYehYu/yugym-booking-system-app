@@ -55,7 +55,9 @@ ok('　　台數來源是合併卡的 _units（一堂佔兩台是兩筆預約）
 
 console.log('\n② 新增預約多一個「幾台」的選項');
 ok('★ 只有自主訓練會出現這個欄位', /function bkTreadmillRow\(t\)\{\s*\n\s*if\(!t \|\| t\.category!=='自主訓練'\) return '';/.test(src));
-ok('★ 掛在步驟 2 的票券資訊與連續預約之間', /\$\{bkTreadmillRow\(t\)\}\s*\n\s*\$\{recurBoxHtml\('bk', preSum\)\}/.test(src));
+/* 2026-08-20：連續預約的開關搬到步驟 1，步驟 2 這個位置改成唯讀覆述；
+   「幾台」仍在票券資訊之後、連續預約覆述之前，相對位置沒變。 */
+ok('★ 掛在步驟 2 的票券資訊與連續預約之間', /\$\{bkTreadmillRow\(t\)\}\s*\n\s*\$\{\/\*[\s\S]*?\*\/''\}\s*\n\s*\$\{bkRecurRecap\(preSum\)\}/.test(src));
 ok('★ 台數選項依場地設定的容量產生（不寫死 2）',   /* 2026-08-18 多功能也開放多台：按鈕畫到各多台場地的最大容量 */
    /const maxCap=Math\.max\(\.\.\.\(window\.VENUES\|\|\[\{capacity:2\}\]\)\.filter\(v=>venueAllowsMultiUnit\(v\.id\)\)\.map\(v=>v\.capacity\|\|2\), 2\);/.test(src));
 ok('★ 預設選項＝多功能訓練架（value 0，行為仍是自動配置、多功能優先；2026-08-12 使用者指示改名）',

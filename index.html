@@ -8316,8 +8316,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260820.2147';
-const APP_VERSION_LABEL='v260820.2147';
+const APP_VERSION = '260820.2347';
+const APP_VERSION_LABEL='v260820.2347';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21047,12 +21047,23 @@ async function openBookingModal(){
   // 30 分鐘時段選項（08:00～22:00）
   const timeOpts=bkTimeOptions(pf.time);
   /* 2026-07-20 使用者指示：日期/時間放最上方（並排）、課程排序固定、教練名單直接顯示 */
-  /* 2026-07-29 使用者指示：欄位順序改為 課程類型 → 教練 → 會員 → 日期／時間。
-     教練與會員都用下拉；選完教練後，該教練的會員會被分組排到會員下拉最上面。 */
+  /* 2026-07-29 使用者指示：欄位順序改為 課程類型 → 教練 → 會員 → 日期／時間。 */
+  /* 2026-08-20 使用者指示：改成「課程 → 日期 → 時間 → 教練 → 會員（選填）→ 連續預約（選填）」
+     —— 照實際決定的先後：先知道要排哪一種課、什麼時候，才輪到誰來上。
+     會員改標「選填」（原本寫「體驗課／待簽約卡位可不選」，但空堂也可以不選，
+     而且從行事曆空格進來時本來就常常還沒決定人）。
+     連續預約從步驟 2 搬上來 —— 它是「這次要建幾堂」的設定，跟票券無關；
+     留在步驟 2 的話，想連續卡位還得先挑到一個有票的人才看得到那個開關。
+     ⚠ 搬上來之後步驟 1 的 DOM 會被步驟 2 蓋掉，所以 _bkStep2 會把設定收進
+     _bkWizard.rc，送出時讀那份（見 bkReadRecurBk）。 */
   showModal(`<div class="modal-title">新增預約 · 步驟 1 / 2</div>
     <div class="form-row"><label>課程類型</label>
       <div id="bk-type-cards" class="bk-cards"></div>
       <input type="hidden" id="bk-type" value="" onchange="onBkTypeChange()"></div>
+    <div class="form-2col">
+      <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}" onchange="bkRefreshPlanFilter()"></div>
+      <div class="form-row"><label>時間</label><select id="bk-time" onchange="bkRefreshPlanFilter()">${timeOpts}</select></div>
+    </div>
     ${isCoach
       ? `<input type="hidden" id="bk-coach" value="${SESSION.id}">`
       : `<div class="form-row" id="bk-coach-row"><label>授課教練<span id="bk-coach-opt" style="font-weight:400;color:var(--t3);display:none;">（自主訓練可不指定）</span></label>
@@ -21060,16 +21071,14 @@ async function openBookingModal(){
             <input class="gt-search" id="bk-coach-q" placeholder="輸入教練姓名搜尋（共 ${window._bkCoaches.length} 位）" oninput="bkFilterCoaches(this.value)" autocomplete="off">
             <select id="bk-coach" onchange="bkCoachChange()">${bkCoachOptsHTML('')}</select>
           </div></div>`}
-    <div class="form-row"><label>會員<span style="font-weight:400;color:var(--t3);">（體驗課／待簽約卡位可不選）</span></label>
+    <div class="form-row"><label>會員<span style="font-weight:400;color:var(--t3);">（選填）</span></label>
       <div class="mem-pick-row">
         <input class="gt-search" id="bk-mem-q" placeholder="輸入姓名或手機搜尋（共 ${window._bkAllMembers.length} 位）" oninput="bkFilterMembers(this.value)" autocomplete="off">
         <select id="bk-mem-pre">${bkMemberOptsHTML('')}</select>
       </div>
     </div>
-    <div class="form-2col">
-      <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}" onchange="bkRefreshPlanFilter()"></div>
-      <div class="form-row"><label>時間</label><select id="bk-time" onchange="bkRefreshPlanFilter()">${timeOpts}</select></div>
-    </div>
+    ${/* 團課的連續預約在步驟 2（prefix grp，跟名單一起設定），這裡不重複給一個開關 */''}
+    <div class="form-row" id="bk-recur-row" style="margin-bottom:0;">${recurBoxHtml('bk')}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="cancelBookingModal()">取消</button><button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`);
   // 渲染課程類型卡（場地租借＝銷售流程，不再列於此）
   window._bkTypes=activeTypes;
@@ -21414,6 +21423,18 @@ async function onBkTypeChange(){
      只是不強制；其餘課種一律必填。（教練端無此 row，已固定為自己） */
   const hint=document.getElementById('bk-coach-opt');
   if(hint) hint.style.display=needCoach?'none':'inline';
+  /* 團課的連續預約跟名單一起設定在步驟 2（prefix grp）——這裡收起來，
+     否則同一次建立會出現兩個「連續預約」開關，櫃檯不知道該信哪一個。
+     收起來時順便把開關關掉，免得留著一個看不見卻是勾選狀態的設定。 */
+  const rrow=document.getElementById('bk-recur-row');
+  if(rrow){
+    const isGrp = !!t && bkIsGroup({category:t.category});   // 課別比較只寫在 bkIsGroup 裡（口袋棘輪）
+    rrow.style.display = isGrp ? 'none' : '';
+    if(isGrp){
+      const sw=document.getElementById('bk-recurring');
+      if(sw && sw.checked){ sw.checked=false; try{ toggleRecurBox('bk'); }catch(_){} }
+    }
+  }
 }
 // 第1頁 → 第2頁
 /* 2026-08-06 使用者回報：自主訓練按「下一步」完全沒反應（沒有畫面、也沒有提示）——
@@ -21436,7 +21457,9 @@ async function _bkStep2(){
   const time=document.getElementById('bk-time').value.slice(0,5);
   if(!date||!time){showToast('請選擇日期與時間');return;}
   const preMid=(document.getElementById('bk-mem-pre')||{}).value||'';   // 步驟 1 選的會員（2026-07-28）
-  Object.assign(_bkWizard,{type_id,t,coach_id,date,time,member_id:preMid});
+  /* 連續預約搬到步驟 1 之後（2026-08-20），這裡是最後一次讀得到那些欄位的時機——
+     步驟 2 一 showModal 就把整張表單換掉了。收進 _bkWizard，送出時讀這一份。 */
+  Object.assign(_bkWizard,{type_id,t,coach_id,date,time,member_id:preMid,rc:readRecur('bk')});
   // 票種表：tkFitsBooking 要靠它判類別與限時段，先確保有快取
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
   // 載入會員清單；若步驟一有選教練，該教練的會員排前面
@@ -21557,7 +21580,9 @@ async function bkStep2PT(preMid){
           </select></div>`:''}
         <div class="form-row" style="margin-bottom:10px;"><div id="bk-ticket-info" style="font-size:12px;color:var(--t2);padding:10px 12px;background:var(--card2);border-radius:9px;"></div></div>
         ${bkTreadmillRow(t)}
-        ${recurBoxHtml('bk', preSum)}`
+        ${/* 連續預約已移到步驟 1（2026-08-20）；這裡只把可用堂數留給送出時夾上限，
+             不再畫第二個開關（同 id 會有兩份，readRecur 讀到的是哪一個沒人說得準）。 */''}
+        ${bkRecurRecap(preSum)}`
       :await (async()=>{
         /* 待分期選項（2026-08-04 使用者指示，徐千晴案例：「後面第五堂同一時間點預約，
            應該除了待簽約還有待分期的選項，這樣才可以接上原本前面四堂課的票券」）——
@@ -21588,8 +21613,8 @@ async function bkStep2PT(preMid){
           ${preMid?`<b>${preInfo?preInfo.name:'該會員'}</b> 沒有此課程的可用票券。${_swapN?`不過他之後還有 <b>${_swapN}</b> 堂已排課——可用「調課」讓一堂出來改到這裡；也`:''}${_instOk?'這位會員有分期方案（尚有未開通堂數），可用「待分期」先保留、收款後自動接上；也':'可回上一步改選會員或先完成儲值，或'}用「待簽約卡位」先佔住時段。`
                   :'尚未選擇會員。請回上一步選擇會員，或用「待簽約卡位」先佔住時段。'}</div></div>
         ${_instOk?`${/* 連續預約（2026-08-04 使用者指示：「這種待分期繳費的也要能重複預約」）——
-               同一套 recurBox；上限＝分期票未開通的堂數。只作用在左邊的待分期。 */''}
-          <div class="form-row" style="margin-bottom:8px;">${recurBoxHtml('bk', _instMax||12)}</div>`:''}
+               2026-08-20 起開關在步驟 1，這裡只覆述、上限仍是分期票未開通的堂數。 */''}
+          <div class="form-row" style="margin-bottom:8px;">${bkRecurRecap(_instMax||0)}</div>`:''}
         <div class="form-row" style="margin-bottom:10px;">
           <div style="display:flex;gap:10px;">
             ${_swapN?`<button type="button" class="btn btn-green" style="flex:1;padding:13px 8px;" onclick="bkStep2Swap()">🔁 調課（${_swapN} 堂可讓）</button>`:''}
@@ -21643,7 +21668,9 @@ async function ashSlotSheet(withTicket){
     ${bkSummaryCard(t,date,time,cn)}
     ${memRow}
     ${row(`ashSlotPending()`,'待簽約卡位','客人還沒購票——填姓名先佔住時段，簽約付款後轉正式預約')}
-    ${row(`ashSlotHoldOpen()`,'先卡位，之後再安排會員','時段與場地先留著，名單稍後補；開課前 24 小時會提醒教練')}
+    ${/* 2026-08-20 使用者：「line通知先不要好了」——原本這行寫「開課前 24 小時會提醒教練」，
+         那個通知不做了，字就不能留著，否則變成系統承諾了做不到的事。 */''}
+    ${row(`ashSlotHoldOpen()`,'先卡位，之後再安排會員','時段與場地先留著，名單稍後補')}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button></div>`);
 }
 function ashSlotFilter(q){
@@ -21703,7 +21730,7 @@ async function _bkInstHold(){
   if(!w.member_id||!w.t){ showToast('資料不完整，請回上一步'); return; }
   /* 連續預約（2026-08-04 使用者指示）：同一套 readRecur；保留課不扣票，
      runRecurringBooking 的 canHold 會放行整串。 */
-  const rc=readRecur('bk');
+  const rc=bkReadRecurBk(window._bkInstMax);
   if(rc.on){
     if(!rc.dows.length){ showToast('請勾選至少一個星期'); return; }
     if(!(rc.count>0)){ showToast('請填寫預約次數'); return; }
@@ -21730,17 +21757,27 @@ async function _bkInstHold(){
 }
 // 上一步：回第1頁並保留選擇
 async function openBookingModalBack(){
-  _prefill={date:_bkWizard.date,time:_bkWizard.time};
+  /* ⚠ 先把整份暫存拷貝下來再開視窗（2026-08-20）——openBookingModal() 會執行
+     `_bkWizard={fromSlot:...}` 把它整個換掉，底下那些 `_bkWizard.type_id`
+     其實一路讀到 undefined，所以「上一步」還原不了課程／教練／會員
+     （2026-08-14 只補了「把標籤寫回文字框」，值的來源早就被清掉了，
+      文字框自然也寫不出東西）。連續預約搬到步驟 1 之後這條路更常走，一併修掉。 */
+  const W=Object.assign({},_bkWizard||{});
+  _prefill={date:W.date,time:W.time};
   await openBookingModal();
+  Object.assign(_bkWizard,W,{fromSlot:_bkWizard.fromSlot});   // 還原暫存（fromSlot 以新的為準）
   // 還原第1頁選擇
-  const ty=document.getElementById('bk-type'); if(ty){ty.value=_bkWizard.type_id;renderBkTypeCards();await onBkTypeChange();}
-  const co=document.getElementById('bk-coach'); if(co&&_bkWizard.coach_id){co.value=_bkWizard.coach_id;bkCoachChange();}
+  const ty=document.getElementById('bk-type'); if(ty){ty.value=W.type_id||'';renderBkTypeCards();await onBkTypeChange();}
+  const co=document.getElementById('bk-coach'); if(co&&W.coach_id){co.value=W.coach_id;bkCoachChange();}
   /* 還原步驟 1 的會員（2026-07-28）：名單有截斷，要先把這位塞進清單再選，否則選不回來 */
   const mp=document.getElementById('bk-mem-pre');
-  if(mp&&_bkWizard.member_id){
-    mp.innerHTML=bkMemberOptsHTML('', _bkWizard.member_id);
-    mp.value=_bkWizard.member_id;
+  if(mp&&W.member_id){
+    mp.innerHTML=bkMemberOptsHTML('', W.member_id);
+    mp.value=W.member_id;
   }
+  /* 連續預約也要還原（2026-08-20）——不然回上一步等於把設定清空，
+     使用者以為還勾著，建立出來卻只有一堂。 */
+  try{ bkRestoreRecur(W.rc); }catch(_){}
   /* 2026-08-14 使用者回報「回上一步教練跟會員沒填上去」：欄位早改成挑選視窗型
      （看得見的是 #bk-coach-q／#bk-mem-q 文字框，select 藏在後面）——
      只設 select.value 畫面仍是空的，要把標籤寫回文字框。 */
@@ -21887,6 +21924,50 @@ function toggleRecurBox(prefix){
       if(cb.checked && !tm.value && _bkWizard&&_bkWizard.time) tm.value=String(_bkWizard.time).slice(0,5);
     });
   }
+}
+/* 建立預約的連續設定（2026-08-20）：欄位在步驟 1，送出卻在步驟 2 —— 那時原本的
+   DOM 已經被換掉，直接 readRecur('bk') 只會拿到「沒有勾」，連續預約會無聲失效。
+   一律讀步驟 1 收起來的那份；真的還在畫面上（未來若有單頁流程）才退回讀 DOM。
+   maxN＝票券可用堂數，超過的部分約不到票，這裡先夾住，不要建立了才一堂堂失敗。 */
+/* 步驟 2 只「覆述」步驟 1 設定的連續預約（唯讀），並記下這次的堂數上限給送出時夾。
+   不再畫第二個開關：同一組 id 出現兩次，readRecur 讀到哪一個全看 DOM 順序。 */
+function bkRecurRecap(maxN){
+  window._bkRecurMax = Number(maxN)>0 ? Number(maxN) : 0;
+  const rc=(_bkWizard&&_bkWizard.rc)||{on:false};
+  if(!rc.on) return '';
+  const WD=['日','一','二','三','四','五','六'];
+  const m=Number(maxN)>0 ? Math.min(Number(maxN),RECUR_MAX) : RECUR_MAX;
+  const want=Math.max(1,Number(rc.count)||1);
+  const n=Math.min(want,m);
+  const dows=(rc.dows||[]).slice().sort((a,b)=>a-b).map(d=>'週'+WD[d]).join('、');
+  return `<div style="font-size:12.5px;color:var(--t2);line-height:1.8;padding:10px 12px;background:var(--card2);border-radius:9px;margin-bottom:10px;">
+    🔁 連續預約：<b>${dows||'（未選星期）'}</b>，共 <b>${n}</b> 堂
+    ${want>n?`<br><span style="color:var(--danger,#b5372e);">可用堂數只有 ${m} 堂，已從 ${want} 堂調降。</span>`:''}
+    <br><span style="font-size:11.5px;color:var(--t3);">要改請按下方「← 上一步」。</span></div>`;
+}
+/* 回上一步時把連續預約的勾選、星期、各天時間、堂數放回畫面 */
+function bkRestoreRecur(rc){
+  if(!rc||!rc.on) return;
+  const sw=document.getElementById('bk-recurring');
+  if(!sw) return;
+  sw.checked=true; toggleRecurBox('bk');
+  (rc.dows||[]).forEach(d=>{
+    const c=document.querySelector('.bk-dow[value="'+d+'"]');
+    if(c && !c.checked){ c.checked=true; try{ recurDowToggle('bk',d); }catch(_){} }
+  });
+  Object.keys(rc.times||{}).forEach(d=>{
+    const s=document.querySelector('.bk-dowt[data-dow="'+d+'"]');
+    if(s) s.value=rc.times[d];
+  });
+  const cnt=document.getElementById('bk-count');
+  if(cnt && Number(rc.count)>0) cnt.value=rc.count;
+}
+function bkReadRecurBk(maxN){
+  const live=document.getElementById('bk-recurring');
+  const rc=live ? readRecur('bk') : ((_bkWizard&&_bkWizard.rc) || {on:false});
+  if(!rc.on) return rc;
+  const m=Number(maxN)>0 ? Math.min(Number(maxN), RECUR_MAX) : RECUR_MAX;
+  return Object.assign({},rc,{count:Math.max(1,Math.min(Number(rc.count)||1,m)),max:m});
 }
 function readRecur(prefix){
   const on=document.getElementById(prefix+'-recurring')?.checked;
@@ -22669,7 +22750,7 @@ async function _submitBookingInner(){
   // ── 一般課程（私教/友善/自主）──
   const member_id=document.getElementById('bk-member').value;
   if(!member_id){showToast('請選擇會員');return;}
-  const _rc=readRecur('bk');
+  const _rc=bkReadRecurBk(window._bkRecurMax);
   if(_rc.on){
     if(!_rc.dows.length){showToast('請勾選至少一個星期');return;}
     if(!(_rc.count>0)){showToast('請填寫預約次數');return;}
