@@ -57,13 +57,22 @@ ok('　　開這張時不再先收課卡（原本先收掉，返回就什麼都�
 ok('　　真的送出時才收課卡（confirmCalMove 之後會 navTo 重繪，浮層會變孤兒）',
    /closeModal\(\);\s*\n\s*\/\* 真的要送出了才收課卡[\s\S]{0,140}try\{ collapseBkCard\(\); \}catch\(_\)\{\}\s*\n\s*confirmCalMove\(/.test(src));
 ok('★ 視窗集合：更改場地（只有自主訓練）', /A\.sub==='venue'\) rows\+=row\(`closeModal\(\);bkOrbitVenue/.test(ei));
-ok('★ 視窗集合：指派代課教練', /A\.sub==='sub'\) rows\+=row\(`ashSubAsk\('\$\{b\.id\}'\)`,'指派代課教練'/.test(ei));
-ok('★ 代課不會再跳回預約明細（使用者回報）——面板不在就先把課卡叫回來',
-   /async function ashSubAsk\(id\)\{\s*\n\s*ashBackArm\(id\);\s*\n\s*closeModal\(\);\s*\n\s*if\(!document\.querySelector\('#bk-card-pop \.mtp'\)\)\{[\s\S]{0,160}expandBkCard\(/.test(src));
+ok('★ 視窗集合：指派代課教練', /A\.sub==='sub'\) rows\+=row\(`closeModal\(\);ashSubPick\('\$\{b\.id\}'\)`,'指派代課教練'/.test(ei));
+/* 2026-08-20 二修（使用者回報：團課的會員卡一疊很長，代課名單吊在課卡上方沒空間）——
+   改成獨立視窗，不再用 bkOrbitSub 那個掛在課卡上的面板。 */
+ok('★ 代課改成獨立視窗（不再吊在課卡上）',
+   /async function ashSubPick\(bid\)\{/.test(src)
+   && /showModal\(`<div class="ash-sheetmk"><\/div><div class="modal-title">指派代課教練<\/div>/.test(src)
+   && !/ashSubAsk/.test(src));
+ok('　　挑到人仍走既有的 bkOrbitSubSet（含衝堂驗證與寫入）',
+   /closeModal\(\);bkOrbitSubSet\('\$\{bid\}','\$\{c\.id\}'\)/.test(src)
+   && /if\(clash\)\{ showToast\('該教練此時段已有課程，無法代課'\); return; \}/.test(src));
+ok('　　有代課時多一列「清除代課」', /closeModal\(\);bkOrbitSubSet\('\$\{bid\}',''\)`,'清除代課'/.test(src));
+ok('　　教練請假不重複列進來（調整課程已經是獨立一項）',
+   !g('async function ashSubPick(bid){','\n/* 復原前先問一次').includes('canCoachLeave'));
+ok('　　返回退回「調整課程」那一層', /onclick="closeModal\(\);ashEditAsk\('\$\{bid\}'\)">返回/.test(src));
 ok('★ 沒有錨點課卡也能重開面板（首頁那條路本來就沒有 el，原本會丟例外）',
    (src.match(/if\(el\)\{ el\.style\.marginLeft=''; el\.style\.marginTop=''; el\.classList\.add\('cal-ev-active'\); \}/g)||[]).length===2);
-ok('　　bkOrbitSub 本來就同時提供教練請假（所以不用另做選單）',
-   /async function bkOrbitSub\(id\)\{[\s\S]{0,1600}canCoachLeave\(b\)/.test(src));
 ok('★ 視窗集合：本堂人數上限（改人數搬進標題卡）',
    ei.includes("openGrpMaxEdit('${b.id}')") && ei.includes('A.isGroup && A.staff && !A.closed'));
 ok('　　改人數做完要回課卡（它的取消與儲存都會 openBookingDetail）', ei.includes("ashBackArm('${b.id}');closeModal();openGrpMaxEdit"));
@@ -83,8 +92,8 @@ ok('★ 視窗風格對齊課卡（使用者回報「跟我們剛剛調整的差
    /\.modal:has\(\.ash-sheetmk\)\{background:var\(--bg\);border-radius:22px/.test(src)
    && /\.ash-eirow\{[\s\S]{0,220}background:#fff;border:none;[\s\S]{0,120}box-shadow:0 6px 18px/.test(src)
    && /\.modal:has\(\.ash-sheetmk\) \.modal-foot \.btn\{border-radius:999px/.test(src));
-ok('　　從課卡開的視窗都掛上標記（調整課程／取消教練請假／調整預約時間／會員備註）',
-   (src.match(/<div class="ash-sheetmk"><\/div>/g)||[]).length===4);
+ok('　　從課卡開的視窗都掛上標記（調整課程／指派代課／取消教練請假／調整預約時間／會員備註）',
+   (src.match(/<div class="ash-sheetmk"><\/div>/g)||[]).length===5);
 ok('　　只吃帶標記的視窗，其他彈窗不受影響', /\.modal\{background:var\(--surface-3\)/.test(src) && /\.ash-sheetmk\{display:none;\}/.test(src));
 
 console.log('簡易課卡：每位會員一張卡');

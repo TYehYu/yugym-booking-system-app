@@ -8317,7 +8317,7 @@ let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
 const APP_VERSION = '260819.1844';
-const APP_VERSION_LABEL='v260820.1858';
+const APP_VERSION_LABEL='v260820.1902';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18996,7 +18996,7 @@ async function ashEditAsk(id){
   const _leave=bkIsCoachLeave(b);
   if(!_leave && A.staff && !A.closed) rows+=row(`closeModal();admhMoveAsk('${b.id}')`,'調整日期／時間',fmtRange(b.date,b.start_time,Number(b.duration)||60));
   if(!_leave && A.sub==='venue') rows+=row(`closeModal();bkOrbitVenue('${b.id}')`,'更改場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
-  if(!_leave && A.sub==='sub') rows+=row(`ashSubAsk('${b.id}')`,'指派代課教練','從教練名單挑一位，或清除代課');
+  if(!_leave && A.sub==='sub') rows+=row(`closeModal();ashSubPick('${b.id}')`,'指派代課教練','從教練名單挑一位，或清除代課');
   /* 團課「改人數」（2026-08-07 既有功能）搬進標題卡（2026-08-20 使用者指示） */
   if(!_leave && A.isGroup && A.staff && !A.closed)
     rows+=row(`ashBackArm('${b.id}');closeModal();openGrpMaxEdit('${b.id}')`,'本堂人數上限',
@@ -19040,17 +19040,25 @@ async function ashMemNoteSave(bid, mid){
   closeModal();
   ashBackArm(bid); openBookingDetail(bid);   /* 一次性旗標 → 回到課卡（見 ashSeatAct） */
 }
-/* 「指派代課教練」（2026-08-20 使用者回報：點下去會跳回原本的詳細預約視窗）——
-   代課名單是掛在課卡面板上的，bkOrbitSub 找不到面板就會退回預約明細。
-   關掉視窗後面板理應還在，但保險起見這裡確認一次，不在就先把課卡叫回來；
-   再立一次性旗標，萬一還是退回明細，也會被導回課卡（見 ashSeatAct 的說明）。 */
-async function ashSubAsk(id){
-  ashBackArm(id);
-  closeModal();
-  if(!document.querySelector('#bk-card-pop .mtp')){
-    try{ await expandBkCard((window._ashBack&&window._ashBack.el)||null, id); }catch(_){}
-  }
-  return bkOrbitSub(id);
+/* 「指派代課教練」（2026-08-20 二修，使用者回報：團課的會員卡一疊很長，
+   代課名單吊在課卡上方沒有空間展示）—— 改成獨立視窗，不再用 bkOrbitSub 那個
+   掛在課卡上的面板。挑到人之後仍走既有的 bkOrbitSubSet（含衝堂驗證與寫入）。
+   ⚠ 教練請假不放進這張清單：它在「調整課程」已經是獨立一項，重複會誤點。 */
+async function ashSubPick(bid){
+  const b=await dbGet('bookings',bid); if(!b){ showToast('找不到預約'); return; }
+  const coaches=await dbGetAll('coaches').catch(()=>[]);
+  const list=(coaches||[]).filter(c=>c && isTeachable(c) && c.invite_status!=='pending' && c.id!==b.coach_id);
+  const _nm=c=>(typeof coachDisp==='function')?coachDisp(c):(c.name||'');
+  const row=(onclick,label,sub)=>`<button class="ash-eirow" onclick="${onclick}">
+    <span class="ash-eilb">${label}</span>${sub?`<span class="ash-eisub">${sub}</span>`:''}</button>`;
+  let rows='';
+  if(b.substitute_coach_id) rows+=row(`closeModal();bkOrbitSubSet('${bid}','')`,'清除代課','改回由主責教練上課');
+  rows+=list.map(c=>row(`closeModal();bkOrbitSubSet('${bid}','${c.id}')`, escH(_nm(c)),
+    b.substitute_coach_id===c.id?'目前的代課教練':'')).join('');
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">指派代課教練</div>
+    <div class="ash-eihead">${calMoveWho(b)}</div>
+    ${rows||'<div class="ash-einote">目前沒有其他可代課的教練。</div>'}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();ashEditAsk('${bid}')">返回</button></div>`);
 }
 /* 復原前先問一次（使用者指示）——這是把已經退掉的票與效期整組回沖，不該點一下就發生 */
 async function ashCoachLeaveUndoAsk(id){
