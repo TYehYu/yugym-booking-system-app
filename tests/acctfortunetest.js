@@ -269,17 +269,25 @@ ok('★ 員工入口從會員頁移除，但 #staff 網址仍直達員工表單'
    && /switchLoginMode\(\/staff\/i\.test\(hash\) \? 'staff' : 'member'\)/.test(src));
 ok('★ 說明在上、LINE 按鈕在下', /<div class="login-lnhint">一鍵登入[\s\S]{0,120}<\/div>\s*\n\s*<button id="line-login-btn"/.test(src));
 ok('★ LINE 按鈕維持官方配色', /id="line-login-btn"[^>]*background:#06C755;color:#fff/.test(src));
-ok('★ 品牌綠底＋米色框，只吃登入頁與註冊卡（其他頁維持白卡）',
-   /#login-screen \.login-card,\.login-card-dark\{background:var\(--green,#003d32\);\s*\n\s*border:1\.5px solid #E4DAC2/.test(src)
-   && /^\.login-card\{background:#fff;/m.test(src));
-ok('　　填寫區白底黑字', /#login-screen input,#login-screen select,\.login-card-dark input,\.login-card-dark select\{\s*\n\s*background:#fff;color:#111;/.test(src));
+ok('★ 綠底米卡（使用者「綠色跟米色換過來」）：整頁品牌綠、卡片米色配綠框',
+   /#login-screen\{background:linear-gradient\(165deg,#0a4438/.test(src)
+   && /#login-screen \.login-card,\.login-card-brand\{background:#F1EADA;\s*\n\s*border:1\.5px solid rgba\(0,61,50,\.28\)/.test(src));
+ok('　　只吃登入頁與註冊卡，其他頁維持白卡', /^\.login-card\{background:#fff;/m.test(src)
+   && !/login-card-dark/.test(src));   /* 舊的深卡 class 已全面改名，不該有殘留 */
+ok('　　填寫區白底黑字', /#login-screen input,#login-screen select,\.login-card-brand input,\.login-card-brand select\{\s*\n\s*background:#fff;color:#111;/.test(src));
+ok('　　卡片變淺底後，文字一律回到深色（不再反白）',
+   /\.login-logo-main \.lg-zh\{[^}]*color:var\(--green,#003d32\)/.test(src)
+   && !/rgba\(255,255,255,\.6[68]\)/.test(src.slice(src.indexOf('登入頁／註冊頁改版'), src.indexOf('.role-tabs{'))));
 ok('★ 註冊頁同一套風格（同一個入口、導向不同）',
-   /<div class="login-card login-card-dark"[^>]*>\s*\n\s*\$\{[\s\S]{0,120}\}\s*\n\s*<div class="login-logo login-logo-main"><div class="lg-zh">有肌訓練/.test(src));
-ok('　　深底上的表單看得見：欄位標題／說明／次要按鈕都改亮色',
-   /\.login-card-dark \.form-row label,\.login-card-dark \.field label\{color:rgba\(255,255,255,\.68\)/.test(src)
-   && /\.login-card-dark \.btn-ghost\{background:rgba\(255,255,255,\.10\)/.test(src));
-ok('　　主要按鈕改品牌金（原本的品牌綠壓在深綠卡上看不見）',
-   /\.login-card-dark \.btn-primary\{background:var\(--gold,#B48A56\);color:#14291f;\}/.test(src));
+   /<div class="login-card login-card-brand"[^>]*>\s*\n\s*\$\{[\s\S]{0,120}\}\s*\n\s*<div class="login-logo login-logo-main"><div class="lg-zh">有肌訓練/.test(src));
+/* 卡片翻成米色之後，先前為了深底加的反白覆寫全部撤掉 —— 表單回到全站預設的深色文字、
+   主要按鈕也回到品牌綠（在米色卡上對比本來就夠）。這裡守住「沒有殘留的反白規則」。 */
+ok('　　為深底加的反白覆寫已撤除（表單回到全站預設）',
+   !/\.login-card-\w+ \.form-row label/.test(src)
+   && !/\.login-card-\w+ \.btn-ghost\{/.test(src)
+   && !/\.login-card-\w+ \.btn-primary\{/.test(src));
+ok('　　說明文字用 class 帶次要灰（原本是行內色，翻配色時改不到）',
+   /\.login-note\{color:var\(--t3\);\}/.test(src) && /<div class="login-note"/.test(src));
 ok('　　登入／註冊的欄位 id 與送出函式都沒動', ['login-acct','login-pw','reg-surname','reg-given','reg-phone','reg-pw','reg-pw2','reg-submit']
    .every(id=>src.includes(`id="${id}"`)) && /onclick="submitRegister\(\)"/.test(src) && /onclick="lineLoginStart\(\)"/.test(src));
 
