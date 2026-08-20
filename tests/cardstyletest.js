@@ -30,19 +30,21 @@ ok('★ ① 時間＋姓名靠左上（兩張卡成對）',
 ok('★ ② 教練放底部靠右（margin-top:auto 推到底＋align-self 靠右）',
    /\.cal-ev\.cal-ev-std \.evc-coach,\s*\n\s*\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(blk));
 
-ok('★ ③ 出席章自己一列（第三列），不再是 absolute 角標',
-   /\.cal-ev\.cal-ev-std \.evc-check,\s*\n\s*\.tcard\.tcard-std \.tcard-chk\{\s*\n\s*position:static !important;/.test(blk)
-   && /align-self:flex-start !important; margin-top:3px !important;/.test(blk));
-ok('　　姓名列的包裝已移除（章跟名字擠同一行會把名字壓成「陳…」）',
-   !/nmrow/.test(src));
+/* 三修（使用者指示）：「桌機版課卡 移除出席章好了，在簡易課卡這邊的會員卡姓名右邊
+   可以看到就好」——行事曆一格塞不下四樣東西，到課狀態改成點開課卡再看。 */
+ok('★ ③ 桌機課卡不畫出席章',
+   /\.cal-ev\.cal-ev-std \.evc-check,\s*\n\s*\.tcard\.tcard-std \.tcard-chk\{ display:none !important; \}/.test(blk));
+ok('　　只在桌機隱藏，手機的角落章與 DOM 都沒動',
+   /手機仍是原本的角落章，所以只在桌機隱藏，DOM 與手機樣式都不動/.test(blk)
+   && /<span class="evc-check"/.test(src));
+ok('　　到課狀態改在簡易課卡的會員卡上看（那三個標籤仍在）',
+   /ash-mtag-leave">請假/.test(src) && /ash-mtag-ns">未到/.test(src) && /ash-mtag-ok">已簽到/.test(src));
 
 ok('★ ④ 已簽到 → 整卡填課程色（原本標準卡刻意不填，這次改回填滿）',
    /\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body,\s*\n\s*\.tcard\.tcard-std\.tcard-done \.tcard-body\{\s*\n\s*background:var\(--course-accent,#3D7039\) !important;/.test(blk));
 ok('　　運動按摩有自己的色（沒有 --course-accent，會退回預設綠）',
    /\.tcard\.tcard-std\.tcard-done\.course-massage \.tcard-body\{\s*\n\s*background:#2f8f83 !important;/.test(blk));
-ok('　　填色後文字轉白、章改半透明白（綠底綠章看不見）',
-   /\.tcard\.tcard-std\.tcard-done \.tcard-mem\{ color:#fff !important; \}/.test(blk)
-   && /\.tcard\.tcard-std\.tcard-done \.tcard-chk\{ background:rgba\(255,255,255,\.25\) !important; color:#fff !important; \}/.test(blk));
+ok('　　填色後文字轉白', /\.tcard\.tcard-std\.tcard-done \.tcard-mem\{ color:#fff !important; \}/.test(blk));
 
 ok('★ ⑤ 待簽約與空堂 → 淡化＋紅框',
    /\.cal-ev\.cal-ev-std\.cal-ev-pend \.evc-body,\s*\n\s*\.tcard\.tcard-std\.tcard-pend \.tcard-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;/.test(blk)
@@ -66,11 +68,15 @@ ok('　　順序要求寫在程式裡（免得日後有人搬回去）',
    /這一段要在 _bodyOut 之前算完/.test(src));
 ok('★ 首頁：章也排在姓名之後',
    /<span class="tcard-mem">\$\{nm\}<\/span>\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src));
-ok('★ 首頁補上「未到」章（原本只畫簽／假，櫃檯在首頁看不出誰沒來）',
-   /\(!canceled&&b\.no_show===true\)\?'<span class="tcard-chk tcard-chk-ns">未<\/span>'/.test(src)
-   && /\.tcard\.tcard-std \.tcard-chk-ns\{ background:#f7efe0 !important; color:#8a5e28 !important; \}/.test(blk));
-ok('　　色階沒破：未到＝金（次要）、請假＝紅（警示）、已簽到＝綠',
-   /未到課＝金（次要提醒）、請假＝紅（重要警示）、已簽到＝綠/.test(blk));
+
+console.log('\n過期的課卡也要開簡易課卡');
+ok('★ 不再依 editable 分流到舊的預約明細',
+   /\$\{_viewOnly \|\| opts\.allMode \|\| bkIsMasked\(b\) \? '' : `onclick="onEvClick\(event,'\$\{b\.id\}'\)"`\}/.test(src)
+   && !/editable\?`onclick="onEvClick\(event,'\$\{b\.id\}'\)"`:\(opts\.allMode/.test(src));
+ok('　　全店模式與遮蔽卡仍然不可點、view-only 也不變',
+   /全店模式與遮蔽卡維持不可點，view-only（教練看別人的課）也不變/.test(src));
+ok('　　成因寫在程式裡（editable 在課程日已過時是 false）',
+   /editable 在課程日已過／已完成／已取消時是 false/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

@@ -15,12 +15,14 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('桌機行事曆');
-ok('★ 別人的課卡不掛任何點擊', /\$\{_viewOnly\?''/.test(src));
+/* 2026-08-21：三元式收成一條（過期卡也走 onEvClick），_viewOnly 仍是第一個排除條件 */
+ok('★ 別人的課卡不掛任何點擊',
+   /\$\{_viewOnly \|\| opts\.allMode \|\| bkIsMasked\(b\) \? '' : `onclick="onEvClick/.test(src));
 ok('★ 不再開唯讀明細', !/\$\{_viewOnly\?`onclick="openBookingDetail/.test(src));
 ok('★ 判定沒動（教練、非店長、自己的課表、不是自己的課）',
    /const _viewOnly = SESSION\.role==='coach' && !SESSION\.is_manager && opts\.me && !isMine;/.test(src));
 ok('★ 自己的課照舊可點（onEvClick 才有圓形按鈕）',
-   /:\(editable\?`onclick="onEvClick\(event,'\$\{b\.id\}'\)"`/.test(src));
+   /: `onclick="onEvClick\(event,'\$\{b\.id\}'\)"`\}/.test(src));
 ok('★ 櫃檯／管理員看全店時不受影響（_viewOnly 只在 opts\.me 時成立）',
    /opts\.me && !isMine;/.test(src));
 

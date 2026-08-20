@@ -4268,19 +4268,13 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   /* ② 教練放底部靠右 */
   .cal-ev.cal-ev-std .evc-coach,
   .tcard.tcard-std .tcard-co{ margin-top:auto !important; align-self:flex-end !important; }
-  /* ③ 出席章自己一列（第三列：時間 → 姓名 → 章），靠左對齊。
-        二修前是掛在姓名右邊，窄欄位會把名字擠成「陳…」。 */
+  /* ③ 出席章：桌機課卡不畫（2026-08-21 三修，使用者指示「桌機版課卡 移除出席章好了，
+        在簡易課卡這邊的會員卡姓名右邊可以看到就好」）——
+        行事曆一格就那麼小，時間／姓名／章／教練四樣塞進去太擠；到課狀態改成
+        點開課卡、在會員卡姓名右邊看（[未出席]／[已簽到]／[請假]）。
+        手機仍是原本的角落章，所以只在桌機隱藏，DOM 與手機樣式都不動。 */
   .cal-ev.cal-ev-std .evc-check,
-  .tcard.tcard-std .tcard-chk{
-    position:static !important; inset:auto !important; width:auto !important; height:auto !important;
-    border-radius:999px !important; flex:none; transform:none !important;
-    align-self:flex-start !important; margin-top:3px !important;
-    font-size:10px !important; font-weight:800 !important; line-height:1 !important;
-    padding:3px 6px !important; display:inline-flex !important;
-    align-items:center !important; justify-content:center !important; }
-  /* 未到課＝金（次要提醒）、請假＝紅（重要警示）、已簽到＝綠。色階同全站規則 */
-  .cal-ev.cal-ev-std .evc-noshow,
-  .tcard.tcard-std .tcard-chk-ns{ background:#f7efe0 !important; color:#8a5e28 !important; }
+  .tcard.tcard-std .tcard-chk{ display:none !important; }
   /* ④ 已簽到 → 整卡填滿課程色（原本標準卡刻意不填、只留角章，使用者要求改回填滿） */
   .cal-ev.cal-ev-std.cal-ev-checked .evc-body,
   .tcard.tcard-std.tcard-done .tcard-body{
@@ -4297,9 +4291,7 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   .tcard.tcard-std.tcard-done .tcard-mem{ color:#fff !important; }
   .cal-ev.cal-ev-std.cal-ev-checked .tcard-sub,
   .tcard.tcard-std.tcard-done .tcard-sub{ color:rgba(255,255,255,.85) !important; }
-  /* 填色之後綠底綠章看不見 → 章改半透明白 */
-  .cal-ev.cal-ev-std.cal-ev-checked .evc-check,
-  .tcard.tcard-std.tcard-done .tcard-chk{ background:rgba(255,255,255,.25) !important; color:#fff !important; }
+  /* （原本這裡有「填色後章改半透明白」的規則，三修把桌機的章整個隱藏後就不需要了） */
   /* ⑤ 待簽約（還沒收款）與空堂（還沒排人）→ 淡化＋紅框。
         兩者都還沒定案，用同一種視覺；差別看卡面文字（「客戶」vs「尚未安排」）。 */
   .cal-ev.cal-ev-std.cal-ev-pend .evc-body,
@@ -8392,8 +8384,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.0010';
-const APP_VERSION_LABEL='v260821.0010';
+const APP_VERSION = '260821.0019';
+const APP_VERSION_LABEL='v260821.0019';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17630,8 +17622,12 @@ async function renderCalendar(opts){
         ${/* 2026-08-01 使用者指示：「教練的行事曆，非本人的課卡一樣正常顯示課卡內容，
              但是要移除互動的功能，手機跟桌機都是」——內容照舊畫，只是不掛任何點擊。
              （0731 曾改成「點得開唯讀明細」，現在收回：別人的課連看明細都不需要。） */''}
-        ${_viewOnly?''
-          :(editable?`onclick="onEvClick(event,'${b.id}')"`:(opts.allMode||bkIsMasked(b)?'':`onclick="openBookingDetail('${b.id}')"`))}>
+        ${/* 2026-08-21 使用者回報：「過期的課卡點開還是會跑出舊的預約明細」——
+             editable 在課程日已過／已完成／已取消時是 false，於是這裡走 openBookingDetail。
+             詳細預約視窗已經退役（桌機改用簡易課卡），過去的課也一律走 onEvClick；
+             expandBkCard 本來就會依 closed／date 把不能做的動作關掉，不必另外防。
+             全店模式與遮蔽卡維持不可點，view-only（教練看別人的課）也不變。 */''}
+        ${_viewOnly || opts.allMode || bkIsMasked(b) ? '' : `onclick="onEvClick(event,'${b.id}')"`}>
         ${bkRenewBadge({done:_renewDone,no:_renewNo,renew:_renewAlert,pay:_payAlert})}
         ${/* 出席章已移進 _bodyOut 的姓名列（2026-08-21），這裡不再重複輸出一份 */''}
         ${_bodyOut}

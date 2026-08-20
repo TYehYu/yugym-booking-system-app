@@ -46,7 +46,10 @@ ok('★ 桌機別人的課卡改標 cal-ev-view（不再 cal-ev-noint 整張不�
    && !/\$\{_noInt\?' cal-ev-noint':''\}/.test(src));
 /* 2026-08-01 使用者指示定版：「非本人的課卡一樣正常顯示課卡內容，但要移除互動的功能，
    手機跟桌機都是」→ 0731 的「點得開唯讀明細」收回成純顯示。見 tests/coachviewtest.js。 */
-ok('★ 別人的課卡完全不掛點擊（桌機）', /\$\{_viewOnly\?''/.test(src)
+/* 2026-08-21：過期的課卡改走 onEvClick（詳細預約視窗退役），三元式收成一條，
+   但 _viewOnly 仍是第一個排除條件 —— 別人的課卡照樣不掛任何點擊。 */
+ok('★ 別人的課卡完全不掛點擊（桌機）',
+   /\$\{_viewOnly \|\| opts\.allMode \|\| bkIsMasked\(b\) \? '' : `onclick="onEvClick/.test(src)
    && !/\$\{_viewOnly\?`onclick="openBookingDetail\('\$\{b\.id\}'\)"`/.test(src));
 ok('★ 手機 agenda 同樣完全不掛點擊', /\$\{canClick\?'':' cag-view'\}/.test(src)
    && /\$\{canClick\?` onclick="wtlCardClick\('\$\{b\.id\}',this\)"`:''\}>/.test(src));
