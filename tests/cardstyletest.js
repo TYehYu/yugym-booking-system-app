@@ -104,5 +104,31 @@ ok('　　寬度怎麼算的寫在程式裡（8×34＋7×5＝307，外框 82，�
    /8 顆 ＝ 8×34 \+ 7×5 ＝ 307px/.test(css)
    && /面板自己還有一條捲軸約 12px/.test(css));
 
+console.log('\n從課卡的位置放大／縮小（2026-08-21 使用者指示）');
+ok('★ 縮放原點設在被點課卡的中心（換算成面板內座標）',
+   /const ox=Math\.max\(0,Math\.min\(bx\.width,  r\.left\+r\.width\/2  - bx\.left\)\);/.test(src)
+   && /box\.style\.transformOrigin=`\$\{Math\.round\(ox\)\}px \$\{Math\.round\(oy\)\}px`;/.test(src));
+ok('★ 先關掉 CSS 彈出動畫再量位置（不然量到動畫途中被縮放的框）',
+   /box\.style\.animation='none';\s*\n\s*const bx=box\.getBoundingClientRect\(\);/.test(src));
+ok('★ 收起來播反向縮放，跑完才移除 DOM',
+   /a\.onfinish=\(\)=>h\.remove\(\);/.test(src) && /a\.oncancel=\(\)=>h\.remove\(\);/.test(src));
+ok('★ 有保險：動畫沒跑或跑不完，逾時也一定移除',
+   /if\(document\.getElementById\('bk-card-pop'\)===h\) h\.remove\(\);/.test(src));
+ok('★ 只有「收卡」那條路播動畫，開新卡一律立即移除舊的',
+   /function bkCardPopClose\(animate\)\{/.test(src)
+   && /bkCardPopClose\(true\);/.test(src));
+
+console.log('\n面板底部的按鈕不能被裁掉');
+ok('★ 捲動容器留下內距（使用者：「下面新增＋被切一半了」）', /padding:2px 0 14px;/.test(css));
+ok('　　成因寫在程式裡', /最後那顆圓形按鈕正好貼在 overflow 的裁切邊上/.test(css));
+
+console.log('\n會員資料上方卡收緊（使用者：佔比太大了）');
+ok('★ 大頭照 92→64、內距與行距一起收',
+   /\.pp-head-m2 \.pp-avatar\{width:64px;height:64px;\}/.test(css)
+   && /\.pp-head\.pp-head-m2\{gap:10px 32px;padding:14px 20px;\}/.test(css));
+ok('★ 刪除會員從整列大按鈕收成右側小按鈕',
+   /\.pp-head-m2 \.pp-head-act\{justify-content:flex-end;margin-top:2px;\}/.test(css));
+ok('　　欄位一個都沒拿掉，只是不再那麼鬆', /欄位本身一個都沒拿掉，只是不再那麼鬆/.test(css));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
