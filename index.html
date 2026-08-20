@@ -8384,8 +8384,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.0019';
-const APP_VERSION_LABEL='v260821.0019';
+const APP_VERSION = '260821.0023';
+const APP_VERSION_LABEL='v260821.0023';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18773,6 +18773,26 @@ function venueName(unit){
    多功能訓練區」）—— 舊匯入的預約沒存 venue_unit，但它們不是沒有場地，
    是在「預設場地」上課。與佔位回推（capCheck ②）同一套預設：
    團課＝團課教室、教練課/體驗/自主訓練＝多功能訓練區；場租沒有預設，維持 —。 */
+/* 這一堂實際佔了幾個場地單位（2026-08-21）——
+   跑步機一堂可以佔兩台，但 venue_unit 一筆只存得下一台，第二台是另一筆
+   sibling_of 指回主預約的影子預約（不扣點、不算堂數）。
+   行事曆走 mergeSiblingUnits 事先算好 _units；用 dbGet 單筆撈出來的課卡沒有，
+   要自己數一次。傳進來的可能是主預約，也可能是影子那一筆，先找到 root 再數。
+   只認「同一種場地」的同行筆（跨場地的同行卡各自成卡，規則同 mergeSiblingUnits）。 */
+async function bkUnitCount(b){
+  try{
+    if(!b) return 1;
+    if(Number(b._units)>0) return Number(b._units);          // 行事曆已經算過
+    if(!b.venue_unit) return 1;
+    const root=b.sibling_of||b.id;
+    const vt=x=>String((x&&x.venue_unit)||'').split('_')[0];
+    const all=await dbGetAll('bookings');
+    const rootBk=(b.id===root)?b:(all.find(x=>x&&x.id===root)||b);
+    const n=(all||[]).filter(x=>x && x.status!=='cancelled'
+      && (x.id===root || x.sibling_of===root) && vt(x)===vt(rootBk)).length;
+    return Math.max(1,n);
+  }catch(_){ return 1; }
+}
 function venueDisplay(b){
   const n=venueName(b&&b.venue_unit); if(n) return n;
   const c=(b&&b.category)||'';
@@ -23396,7 +23416,13 @@ async function bkCardPop(el, b, btns, acts){
       const _live=grpLiveHeads(b), _max=Math.max(1,Number(b.max_heads)||5);
       return `<span class="ash-seats${_live>=_max?' ash-seats-full':''}">${_live}/${_max}</span>`;
     })() : '';
-    const _vTxt = (_v ? '・'+_v : '') + _seatTxt;
+    /* 一堂佔兩台跑步機（2026-08-21 使用者回報 8/21 嚴晴）——
+       台數存不進一筆 venue_unit，第二台是 sibling_of 指回主預約的影子預約。
+       行事曆的卡有 mergeSiblingUnits 幫忙算好 _units，但簡易課卡是用
+       dbGet 單筆撈的，身上沒有 _units，所以標題卡只寫「跑步機」看不出是兩台。 */
+    const _units = (typeof bkUnitCount==='function') ? await bkUnitCount(b) : 1;
+    const _unitTxt = _units>1 ? ` ×${_units}` : '';
+    const _vTxt = (_v ? '・'+_v+_unitTxt : '') + _seatTxt;
     const _coachTxt = coachNm ? `<span class="ash-coachtxt">${coachNm}</span>` : '';
     /* 名單：團課逐名額一張卡，單人課一張；體驗／場租沒有會員記錄，只顯示名字不給圓鈕 */
     const _att=(typeof attObj==='function')?attObj(b):{};
@@ -23664,8 +23690,14 @@ async function bkOrbitVenue(id){
   collapseBkCard();
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   const cur=selfVenueLabel(b);   // '教室' | '跑步機' | ''
+  /* ⚠ 2026-08-21 使用者回報（8/21 嚴晴，兩台跑步機被當成一台）——
+     這裡原本讀 b._units，但那是 mergeSiblingUnits 畫行事曆時才掛上去的欄位，
+     用 dbGet 單筆撈出來的預約身上沒有，於是永遠算成 1 台。
+     不只是顯示錯：台數停在 1 的狀態按下「確認」，setSelfVenue 會把同行的
+     第 2 台當成「要收掉」而取消掉，客人的位子就這樣少一台。
+     改用 bkUnitCount 實際去數同行的 sibling。 */
   window._svPick={id, unit:cur==='教室'?'group':(cur==='跑步機'?'treadmill':'multi'),
-    units:Math.max(1,Number(b._units)||1)};
+    units:await bkUnitCount(b)};
   const opt=(unit,label)=>`<button class="btn btn-ghost sv-opt" data-unit="${unit}" style="width:100%;padding:13px;margin-bottom:8px;text-align:left;" onclick="svPickVenue('${unit}')">${label}</button>`;
   showModal(`<div class="modal-title">自主訓練場地</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.7;margin-bottom:14px;">選擇這堂自主訓練使用的場地（會顯示在課卡上），按「確認」才會套用。</div>
