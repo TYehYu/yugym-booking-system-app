@@ -8317,7 +8317,7 @@ let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
 const APP_VERSION = '260819.1844';
-const APP_VERSION_LABEL='v260820.1902';
+const APP_VERSION_LABEL='v260820.2027';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18995,7 +18995,12 @@ async function ashEditAsk(id){
   let rows='';
   const _leave=bkIsCoachLeave(b);
   if(!_leave && A.staff && !A.closed) rows+=row(`closeModal();admhMoveAsk('${b.id}')`,'調整日期／時間',fmtRange(b.date,b.start_time,Number(b.duration)||60));
-  if(!_leave && A.sub==='venue') rows+=row(`closeModal();bkOrbitVenue('${b.id}')`,'更改場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
+  /* 更改場地（2026-08-20 使用者指示：教練課／友善教練課也要有）——
+     自主訓練走 bkOrbitVenue（只有它有跑步機台數）；其他課別走 openVenueChange
+     （列出所有啟用場地、逐一跑衝突檢查，該時段滿的會標出來）。
+     openVenueChange 的返回鈕是 openBookingDetail，先立旗標讓它回到課卡。 */
+  if(!_leave && A.venue==='self') rows+=row(`closeModal();bkOrbitVenue('${b.id}')`,'更改場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
+  else if(!_leave && A.venue==='any') rows+=row(`ashBackArm('${b.id}');closeModal();openVenueChange('${b.id}')`,'更改場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
   if(!_leave && A.sub==='sub') rows+=row(`closeModal();ashSubPick('${b.id}')`,'指派代課教練','從教練名單挑一位，或清除代課');
   /* 團課「改人數」（2026-08-07 既有功能）搬進標題卡（2026-08-20 使用者指示） */
   if(!_leave && A.isGroup && A.staff && !A.closed)
@@ -22917,8 +22922,13 @@ async function expandBkCard(el, id){
      這裡照樣把所有條件算完，只是把搬家的那幾顆改交給 bkCardPop（用 acts 帶過去），
      權限與情境判斷仍然只有這一個地方在算。 */
   const _ashMode = SESSION.role==='admin' && isMobileLayout();
+  /* 2026-08-20 使用者指示：教練課／友善教練課也要能調整場地 —— 場地與代課拆成兩個旗標。
+     venue 對所有課別開放（自主訓練走 bkOrbitVenue，因為它才有跑步機台數；
+     其他課別走 openVenueChange，那支會逐場地跑衝突檢查、標出該時段已滿的）。 */
+  const _editable = staff && !closed && b.date>=ymd(TODAY) && !bkIsCoachLeave(b);
   const acts = {staff, own, coachCk, closed, canCancel, checked, isGroup, calCtx:_calCtx,
-    sub:(staff && !closed && b.date>=ymd(TODAY) && !bkIsCoachLeave(b)) ? (bkIsSelf(b)?'venue':'sub') : null};
+    venue: _editable ? (bkIsSelf(b)?'self':'any') : null,
+    sub: (_editable && !bkIsSelf(b)) ? 'sub' : null};
   let btns='';
   /* 待簽約／待分期保留（2026-08-04 使用者指示：「這種待簽約或待分期，只要顯示
      取消、明細、轉正」）——還沒收款的卡位談不上簽到、代課、場地，按鈕減到三顆；

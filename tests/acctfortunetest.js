@@ -56,7 +56,16 @@ ok('　　開這張時不再先收課卡（原本先收掉，返回就什麼都�
    !/if\(b\.date<ymd\(TODAY\)\)\{ showToast\('已過期的預約無法調整'\); return; \}\s*\n\s*try\{ collapseBkCard\(\); \}catch\(_\)\{\}/.test(src));
 ok('　　真的送出時才收課卡（confirmCalMove 之後會 navTo 重繪，浮層會變孤兒）',
    /closeModal\(\);\s*\n\s*\/\* 真的要送出了才收課卡[\s\S]{0,140}try\{ collapseBkCard\(\); \}catch\(_\)\{\}\s*\n\s*confirmCalMove\(/.test(src));
-ok('★ 視窗集合：更改場地（只有自主訓練）', /A\.sub==='venue'\) rows\+=row\(`closeModal\(\);bkOrbitVenue/.test(ei));
+/* 2026-08-20 使用者指示：教練課／友善教練課也要能調整場地 → venue 與 sub 拆成兩個旗標。
+   自主訓練走 bkOrbitVenue（只有它有跑步機台數），其他課別走 openVenueChange（逐場地檢查衝突）。 */
+ok('★ 視窗集合：更改場地（所有課別，不再只有自主訓練）',
+   /A\.venue==='self'\) rows\+=row\(`closeModal\(\);bkOrbitVenue/.test(ei)
+   && /A\.venue==='any'\) rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openVenueChange/.test(ei));
+ok('　　venue 對所有課別開放、sub 只給非自主訓練',
+   /venue: _editable \? \(bkIsSelf\(b\)\?'self':'any'\) : null,/.test(src)
+   && /sub: \(_editable && !bkIsSelf\(b\)\) \? 'sub' : null/.test(src));
+ok('　　openVenueChange 的返回是 openBookingDetail，先立旗標才不會被丟進明細',
+   /ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openVenueChange/.test(ei));
 ok('★ 視窗集合：指派代課教練', /A\.sub==='sub'\) rows\+=row\(`closeModal\(\);ashSubPick\('\$\{b\.id\}'\)`,'指派代課教練'/.test(ei));
 /* 2026-08-20 二修（使用者回報：團課的會員卡一疊很長，代課名單吊在課卡上方沒空間）——
    改成獨立視窗，不再用 bkOrbitSub 那個掛在課卡上的面板。 */
@@ -77,7 +86,8 @@ ok('★ 視窗集合：本堂人數上限（改人數搬進標題卡）',
    ei.includes("openGrpMaxEdit('${b.id}')") && ei.includes('A.isGroup && A.staff && !A.closed'));
 ok('　　改人數做完要回課卡（它的取消與儲存都會 openBookingDetail）', ei.includes("ashBackArm('${b.id}');closeModal();openGrpMaxEdit"));
 ok('★ 教練請假：未請假給「教練請假」、已請假給「復原」', /if\(_leave\)\{[\s\S]*'取消教練請假（復原）'[\s\S]*\}else if\([\s\S]*'教練請假',bkCoachLeaveSub\(b\)/.test(ei));
-ok('　　已請假的堂不再列出調整時間／代課／改人數', (ei.match(/!_leave &&/g)||[]).length===4);
+/* 5 條：調整時間、更改場地（自主訓練）、更改場地（其他課別）、指派代課、本堂人數上限 */
+ok('　　已請假的堂不再列出調整時間／場地／代課／改人數', (ei.match(/!_leave &&/g)||[]).length===5);
 ok('　　團課請假＝整堂取消、救不回來，照實說明', ei.includes('這堂的教練請假是<b>整堂取消</b>，無法復原'));
 ok('★ 復原前先跳視窗確認（使用者指示）',
    /async function ashCoachLeaveUndoAsk\(id\)[\s\S]*取消教練請假？[\s\S]*bkCoachLeaveUndo\('\$\{b\.id\}'\)/.test(src));
