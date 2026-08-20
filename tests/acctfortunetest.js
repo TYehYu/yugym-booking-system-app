@@ -232,6 +232,15 @@ ok('★ 場地旁邊標人數', /const _seatTxt = \(A\.isGroup && typeof grpLive
 ok('　　口徑同名單視窗：有效名額＝總名額−請假', /const _live=grpLiveHeads\(b\), _max=Math\.max\(1,Number\(b\.max_heads\)\|\|5\);/.test(src));
 ok('　　滿了標紅', /_live>=_max\?' ash-seats-full':''/.test(src) && /\.ash-seats-full\{color:var\(--danger/.test(src));
 
+console.log('行事曆課卡（管理員一日卡）');
+ok('★ 白底＋左側課程色條', /\.cal-ev\.cag-std\.admcag\{background:#fff !important/.test(src)
+   && /\.cal-ev\.cag-std\.admcag::before\{content:'';position:absolute;left:0[\s\S]{0,80}background:var\(--amc/.test(src));
+ok('★ 已簽到才填滿課程色（原本是整張淡化）',
+   /\.cal-ev\.cag-std\.admcag\.admcag-done\{background:var\(--amc,#1f6f54\) !important;color:#fff;\}/.test(src)
+   && !/\.admcag\.admcag-done\{opacity:\.62;\}/.test(src));
+ok('★ 簽到章拿掉、請假章保留', /return k==='leave'\?'<span class="evc-check evc-leave" title="全員請假">假<\/span>':'';\}\)\(\)\}/.test(src));
+ok('　　文字讓開左邊色條', /\.cal-ev\.cag-std\.admcag \.acg-in\{padding-left:7px/.test(src));
+
 console.log('首頁大日期格線');
 const hero=g('admMobHero=`<div class="admh">','<div class="admh-div"></div>');
 ok('★ 格線移出 .admh-bigdate', !/admh-bigdate[\s\S]*admh-dsep[\s\S]*admh-dside/.test(hero));
