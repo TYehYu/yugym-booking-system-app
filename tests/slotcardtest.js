@@ -214,7 +214,7 @@ console.log('\n桌機取代：CSS 必須跟著搬出手機專屬區塊');
   const missing=need.filter(s=>!bare.includes(s));
   ok('★ 課卡樣式在「不分寬度」的區塊裡（桌機吃得到）', missing.length===0, missing);
   ok('★ 桌機另收成置中對話框（不要在 27 吋上撐滿）',
-     /@media\(min-width:601px\)\{[\s\S]{0,400}?#bk-card-pop\.admh-pop \.mtp\{left:50%;right:auto;width:min\(560px,92vw\)/.test(css));
+     /@media\(min-width:601px\)\{[\s\S]{0,400}?#bk-card-pop\.admh-pop \.mtp\{left:50%;right:auto;width:min\(408px,92vw\)/.test(css));
   ok('　　置中之後動畫的 transform 不能打架（另給一組 keyframes）',
      /@keyframes admhSheetPop\{from\{transform:translate\(-50%,-46%\) scale\(\.97\);opacity:0;\}\}/.test(css));
   ok('　　手機仍是左右貼邊的面板（原樣式沒被改掉）',

@@ -4245,7 +4245,14 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard.tcard-std .tcard-mem{
   color:#2A2620 !important; text-align:left; font-weight:500 !important; align-self:stretch;
   white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-  overflow:hidden;text-overflow:ellipsis;word-break:break-all;}
+  overflow:hidden;text-overflow:ellipsis;
+  /* 姓名斷行（2026-08-21 使用者回報「蕭育筑跟蔡美芬 這樣都斷得很醜」）——
+     原本是 word-break:break-all，中文會在任意兩字之間斷開：
+     「蔡美芬 吳吉琇」斷成「蔡美芬 吳／吉琇」、「蕭育筑（媽媽）」斷成「蕭育筑（／媽媽）」。
+     keep-all＝中文詞內不斷，只在空白處斷（一格兩個人的名字正好用空白隔開）；
+     line-break:strict＝不在「（」之後、「）」之前斷，括號不會落單；
+     overflow-wrap:anywhere 留作保險：單一個名字本身就超過一行時仍斷得掉，不會爆出卡外。 */
+  word-break:keep-all; line-break:strict; overflow-wrap:anywhere;}
 /* 名字字級上限壓到 18px（原 clamp 會隨寬卡放大到 35px → 長名被切／爆大）。
    仍隨卡片微幅縮放，但不再爆大；配合折兩行，各種欄寬都讀得完整。 */
 .cal-ev.cal-ev-std .evc-name{ font-size:clamp(12px,min(30cqh,16cqw),18px) !important; line-height:1.2 !important; }
@@ -4268,6 +4275,14 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   /* ② 教練放底部靠右 */
   .cal-ev.cal-ev-std .evc-coach,
   .tcard.tcard-std .tcard-co{ margin-top:auto !important; align-self:flex-end !important; }
+  /* 標籤太長就換行，不要用省略號（2026-08-21 使用者回報「mango 的教練請假也變成…」）——
+     卡片只有 84px 寬、扣掉內距剩 66px，「教練請假」四個中文字加膠囊內距在字體較寬的
+     環境下就頂到上限，於是被切成「教練…」，看不出是請假還是別的。
+     教練縮寫（RA／ZO）本來就一行，不受影響；長標籤斷成兩行仍讀得懂。 */
+  .cal-ev.cal-ev-std .evc-coach,
+  .tcard.tcard-std .tcard-co{
+    white-space:normal !important; word-break:keep-all; line-break:strict;
+    text-align:center; line-height:1.25; text-overflow:clip !important; }
   /* ③ 出席章：桌機課卡不畫（2026-08-21 三修，使用者指示「桌機版課卡 移除出席章好了，
         在簡易課卡這邊的會員卡姓名右邊可以看到就好」）——
         行事曆一格就那麼小，時間／姓名／章／教練四樣塞進去太擠；到課狀態改成
@@ -7220,11 +7235,19 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   .ash-tk{background:var(--card2);border-radius:13px;padding:10px 12px;margin-top:13px;
     display:flex;flex-wrap:wrap;gap:5px;color:var(--text);}
 
-  /* 桌機：手機是左右貼邊的面板，桌機要收成置中對話框（寬度跟著視窗縮，不要撐滿 27 吋） */
+  /* 桌機：手機是左右貼邊的面板，桌機要收成置中對話框（寬度跟著視窗縮，不要撐滿 27 吋）
+     寬度以票券圓點為基準（2026-08-21 使用者指示：「一列可以顯示 8 個圓形卡就好」）——
+     圓點 34px、間距 5px → 8 顆 ＝ 8×34 + 7×5 ＝ 307px；
+     外框開銷 82px（會員卡左右內距 29 ＋ 圓鈕欄 46 ＋ 兩者間距 9），
+     面板自己還有一條捲軸約 12px（名單長時要捲）→ 307＋82＋12 ≒ 408px。
+     從卡片開出來的視窗（調整課程／安排這一堂）也收到同一個寬度，見 .ash-sheetmk。 */
   @media(min-width:601px){
-    #bk-card-pop.admh-pop .mtp{left:50%;right:auto;width:min(560px,92vw);max-width:none;
+    #bk-card-pop.admh-pop .mtp{left:50%;right:auto;width:min(408px,92vw);max-width:none;
       transform:translate(-50%,-50%);max-height:86vh;
       animation:admhSheetPop .18s ease-out backwards;}
+    /* 其他介面跟著收斂（使用者指示）：從課卡開出來的視窗與課卡同寬，
+       不然點一下「調整課程」畫面就從 389px 跳成一個大對話框，看起來像換了個地方。 */
+    .modal:has(.ash-sheetmk){width:min(408px,92vw) !important; max-width:min(408px,92vw) !important;}
   }
   @keyframes admhSheetPop{from{transform:translate(-50%,-46%) scale(.97);opacity:0;}}
 
@@ -8384,8 +8407,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.0023';
-const APP_VERSION_LABEL='v260821.0023';
+const APP_VERSION = '260821.0031';
+const APP_VERSION_LABEL='v260821.0031';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 

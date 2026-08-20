@@ -78,5 +78,31 @@ ok('　　全店模式與遮蔽卡仍然不可點、view-only 也不變',
 ok('　　成因寫在程式裡（editable 在課程日已過時是 false）',
    /editable 在課程日已過／已完成／已取消時是 false/.test(src));
 
+console.log('\n姓名斷行（2026-08-21 使用者回報「蕭育筑跟蔡美芬 這樣都斷得很醜」）');
+ok('★ 不再用 word-break:break-all（中文會在任意兩字之間斷開）',
+   !/overflow:hidden;text-overflow:ellipsis;word-break:break-all;\}/.test(css));
+ok('★ keep-all：中文詞內不斷，只在空白處斷（一格兩個人名正好用空白隔開）',
+   /word-break:keep-all; line-break:strict; overflow-wrap:anywhere;\}/.test(css));
+ok('　　line-break:strict → 「（」不會落在行尾、「）」不會落在行首',
+   /line-break:strict＝不在「（」之後、「）」之前斷，括號不會落單/.test(css));
+ok('　　overflow-wrap:anywhere 留作保險（單一個名字就超過一行時仍斷得掉）',
+   /單一個名字本身就超過一行時仍斷得掉，不會爆出卡外/.test(css));
+
+console.log('\n教練標籤不要被切成「教練…」');
+ok('★ 長標籤改成換行，不用省略號',
+   /white-space:normal !important; word-break:keep-all; line-break:strict;/.test(blk)
+   && /text-overflow:clip !important;/.test(blk));
+ok('　　成因寫在程式裡（84px 卡扣掉內距只剩 66px）',
+   /卡片只有 84px 寬、扣掉內距剩 66px/.test(blk));
+
+console.log('\n桌機課卡寬度以圓點為基準（使用者：一列顯示 8 個圓形卡）');
+ok('★ 面板收到 408px',
+   /#bk-card-pop\.admh-pop \.mtp\{left:50%;right:auto;width:min\(408px,92vw\);/.test(css));
+ok('★ 從卡片開出來的視窗跟著收斂到同寬',
+   /\.modal:has\(\.ash-sheetmk\)\{width:min\(408px,92vw\) !important; max-width:min\(408px,92vw\) !important;\}/.test(css));
+ok('　　寬度怎麼算的寫在程式裡（8×34＋7×5＝307，外框 82，捲軸 12）',
+   /8 顆 ＝ 8×34 \+ 7×5 ＝ 307px/.test(css)
+   && /面板自己還有一條捲軸約 12px/.test(css));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
