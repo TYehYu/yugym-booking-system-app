@@ -172,6 +172,8 @@ ok('★ 底下左右各四列：電話/性別/生日/LINE ｜ 主教練/緊急�
    && ph.includes('<div class="pp-meta pp-fields">${coachItem}${ecItem}${carrierItem}${famItem}</div>')
    && /\.pp-head\.pp-head-m2\{display:grid;grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/.test(src));
 ok('★ 大頭照放大', /\.pp-head-m2 \.pp-avatar\{width:76px;height:76px;\}/.test(src));
+ok('★ 姓名與等級靠右（大頭照留在左邊）',
+   /\.pp-head-m2 \.pp-idname\{[^}]*margin-left:auto;[\s\S]{0,80}align-items:flex-end;text-align:right/.test(src));
 ok('★ 視窗裡的卡片改新語彙：去細框、加大圓角與柔和陰影',
    /\.pp-sheet-win \.pp-head,\.pp-sheet-win \.pp-card\{border:none;border-radius:20px;\s*\n\s*box-shadow:0 6px 18px/.test(src)
    && /\.pp-sheet-win \.pp-card-t\{border-bottom:none/.test(src));
