@@ -26,26 +26,45 @@ const sheet=g('_cardHtml=`<div class="mtp-card admh-sheet"','\n  }else{');
 if(!sheet) { console.log('  ✗ 取不到課程卡原始碼（結束標記對不上）'); process.exit(1); }
 ok('★ 調整時間鈕只顯示開始時間、去掉開頭的 0', sheet.includes("${String(b.start_time||'').replace(/^0/,'')}"));
 ok('★ 不再顯示 –結束時間', !sheet.includes('${b.start_time}–${endT}'));
-ok('★ 課程卡第二行＝日期・時長・教練', /class="ash-meta"[\s\S]*b\.date[\s\S]*\$\{_dur\} 分[\s\S]*\$\{coachNm\}/.test(sheet));
+ok('★ 課程卡第二行＝日期・時長，教練靠右下角',
+   /class="ash-meta">[\s\S]*b\.date[\s\S]*\$\{_dur\} 分<\/span>\$\{_coachTxt\}<\/div>/.test(sheet));
 ok('　　日期去掉開頭的 0', sheet.includes(".slice(5).replace('-','/').replace(/^0/,'')"));
-ok('★ 代課／場地移到課程卡右上角', sheet.includes('${_subBtn}') && /_subBtn = A\.sub/.test(src));
-ok('　　自主訓練給「場地」、其他給「代課」', /A\.sub==='venue'\?`bkOrbitVenue/.test(src) && /:`bkOrbitSub/.test(src));
+ok('　　教練名靠右（margin-left:auto）', /\.ash-coachbtn,\.ash-coachtxt\{margin-left:auto/.test(src));
+ok('★ 出席章從課程卡拿掉（狀態改標在會員名字旁）', !sheet.includes('admh-stamp') && !src.includes('const _st=((typeof grpAllOnLeave'));
+ok('★ 代課鈕退場，改成點教練名字開代課面板', !src.includes('ash-subbtn') && /_coachTxt[\s\S]{0,300}bkOrbitSub\('\$\{b\.id\}'\)/.test(src));
+ok('　　bkOrbitSub 本來就同時提供教練請假（所以不用另做選單）',
+   /async function bkOrbitSub\(id\)\{[\s\S]{0,1600}canCoachLeave\(b\)/.test(src));
+ok('★ 場地鈕退場，改成直接點課名右邊的場地字樣', !/'場地'\$\{EVO_IC/.test(src) && /_vTxt[\s\S]{0,200}bkOrbitVenue\('\$\{b\.id\}'\)/.test(src));
+ok('　　只有自主訓練能換場地（A.sub===\'venue\'），其他就只是文字', /A\.sub==='venue'\s*\?\s*`・<button/.test(src));
 ok('　　會員不再擠在課程卡上（.ash-name 退場）', !sheet.includes('class="ash-name"') && !src.includes('.ash-name{'));
-ok('　　課名讓位、代課不折行', /\.ash-course\{[^}]*white-space:nowrap/.test(src) && /\.ash-timebtn\{[^}]*white-space:nowrap/.test(src));
+ok('　　課名讓位、右上角不折行', /\.ash-course\{[^}]*white-space:nowrap/.test(src) && /\.ash-timebtn\{[^}]*white-space:nowrap/.test(src));
 
 console.log('簡易課卡：每位會員一張卡');
 ok('★ 團課逐名額一張卡、單人課一張', /_seatKs\.length \? _seatKs\.map\(sk=>\(\{sk, mid:seatMid\(sk\), n:seatNo\(sk\)\}\)\)/.test(src)
    && src.includes("(b.member_id ? [{sk:null, mid:b.member_id, n:1}]"));
 ok('★ 點會員卡進會員資料', src.includes('onclick="collapseBkCard();openMemberDetail(\'${r.mid}\')"'));
 ok('　　沒有會員記錄（體驗／場租）就不掛點擊', src.includes('${r.mid?` onclick='));
-ok('★ 三顆圓鈕＝請假／取消／簽到', /evoBtn\('','',`ashSeatAct\('\$\{b\.id\}','leave','\$\{r\.sk\}'\)`,'noshow','請假'\)/.test(src)
-   && /evoBtn\('','evo-danger',`ashSeatAct\('\$\{b\.id\}','cancel','\$\{r\.sk\}'\)`,'x','取消'\)/.test(src)
-   && /ashSeatAct\('\$\{b\.id\}','attend','\$\{r\.sk\}'\)/.test(src));
-ok('　　請假中只給「取消請假」（且傳會員 id，與名單視窗一致）',
-   /if\(onLeave\)\{\s*_orbs \+= evoBtn\('','',`ashSeatAct\('\$\{b\.id\}','leave','\$\{r\.mid\}'\)`,'undo','取消請假'\)/.test(src));
+ok('★ 取消（上）／簽到（下）獨立在卡片外面',
+   /<div class="ash-mrow">[\s\S]*<div class="ash-mcard[\s\S]*<\/div>\s*\$\{_outOrbs\?`<div class="ash-morbs">/.test(src)
+   && /\.ash-morbs\{[^}]*flex-direction:column/.test(src));
+ok('　　取消排在簽到前面（DOM 順序＝上下順序）',
+   src.indexOf("`ashSeatAct('${b.id}','cancel','${r.sk}')`") < src.indexOf("`ashSeatAct('${b.id}','attend','${r.sk}')`"));
+ok('★ 請假改成卡片內、姓名列最右邊的小按鈕',
+   /_leaveBtn=`<button type="button" class="ash-mlv"[^`]*ashSeatAct\('\$\{b\.id\}','leave','\$\{r\.sk\}'\)/.test(src)
+   && /\.ash-mlv\{margin-left:auto/.test(src));
+ok('　　請假中換成「取消請假」（且傳會員 id，與名單視窗一致）',
+   /class="ash-mlv ash-mlv-on"[^`]*ashSeatAct\('\$\{b\.id\}','leave','\$\{r\.mid\}'\)[^`]*>取消請假</.test(src));
 ok('　　已簽到就不給請假／取消（同名單視窗）',
-   src.includes("if(_ck && !inHere && !A.closed) _orbs += evoBtn('','',`ashSeatAct")
-   && src.includes("if(A.staff && !inHere && !A.closed) _orbs += evoBtn('','evo-danger'"));
+   src.includes('if(_ck && _canLeave && !inHere && !A.closed)')
+   && src.includes("if(A.staff && !inHere && !A.closed) _outOrbs += evoBtn('','evo-danger'"));
+
+console.log('請假只給有補課機制的票');
+ok('★ 判定集中在 tkHasMakeup（口袋＋方案＋不是補課券三個條件）',
+   /function tkHasMakeup\(t, typeMap\)\{[\s\S]*t\.source==='makeup'[\s\S]*memberLeave!=='makeup'[\s\S]*planHasMakeup\(t\.plan_name\)/.test(src));
+ok('★ 目前只有「團課 4週優惠」有補課機制', /const MAKEUP_PLANS=\['團課 4週優惠'\];/.test(src));
+ok('★ 補課券不能再請假（避免請假又送一張，無限展延）', /if\(!t \|\| t\.source==='makeup'\) return false;/.test(src));
+ok('　　會員卡的請假鈕吃這個判定', src.includes('_canLeave = !!(_slot && tkHasMakeup(_slot.t,'));
+ok('　　查不到這一格扣在哪張票就不給（會標到請假卻發不出券）', src.includes('let _canLeave=false;'));
 ok('★ 行事曆情境仍然不給簽到（0819 定案：簽到只在首頁）',
    (src.match(/if\(_ck && !A\.calCtx && !A\.closed\)/g)||[]).length===2);
 ok('　　單人課走 confirmCancelBooking／checkInBooking（沒有逐人請假的機制）',
@@ -55,12 +74,14 @@ ok('　　票券圓點保留（使用者定案）＋逐名額各取自己那張'
    src.includes('r.sk?(W.seatOf(b.id,r.n)||W.ticketOf(b.id)):W.ticketOf(b.id)') && src.includes('ticketTokens(sl.t,sl.stamps,'));
 ok('　　跨票時用票內序圈本堂（全體序會圈不到）', src.includes('if(s2&&s2.t&&s2.t.id===sl.t.id) _ord++;'));
 
-console.log('搬家後下方那一列只留明細與新增');
+console.log('搬家後下方那一列只剩新增');
 const exp=g('async function expandBkCard(el, id){','async function bkCardPopClose');
-ok('★ 代課改由課程卡負責（下方不再產生）', exp.includes('if(!_ashMode && staff && !closed && b.date>=ymd(TODAY)'));
+ok('★ 代課改由課程卡的教練名負責（下方不再產生）', exp.includes('if(!_ashMode && staff && !closed && b.date>=ymd(TODAY)'));
 ok('★ 取消改由會員卡負責', exp.includes('if(!_ashMode && canCancel && own){'));
 ok('★ 簽到改由會員卡負責', exp.includes('if(!_ashMode && !_calCtx && (staff||coachCk) && !closed){'));
+ok('★ 明細鈕撤掉（簡易課卡已涵蓋這些操作）', /2026-08-20 使用者指示：管理員手機的簡易課卡已經涵蓋這些操作，明細鈕撤掉。 \*\/\s*\n\s*if\(!_ashMode\) btns \+=/.test(exp));
 ok('　　新增仍在下方（沒被搬走）', exp.includes("evoBtn('evo-b2','evo-gold',`collapseBkCard();openGroupMembers('${id}')`,'plus','新增')"));
+ok('　　一顆都沒有時不畫空的圓鈕列', src.includes('${btns?`<div class="mtp-orbs">${btns}</div>`:\'\'}'));
 ok('　　條件仍然只有 expandBkCard 在算（用 acts 帶給課卡）',
    /const acts = \{staff, own, coachCk, closed, canCancel, checked, isGroup, calCtx:_calCtx,/.test(exp)
    && exp.includes('await bkCardPop(el, b, btns, acts);'));
