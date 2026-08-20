@@ -156,10 +156,15 @@ ok('　　右下角多一個標，卡片右側再讓一點（避免壓到票券�
 console.log('會員資料頁（管理員手機）');
 const ph=g('function ppHeaderHtml(){','\n// ══════ Tabs ══════');
 ok('★ 只有管理員手機走新版面', /if\(isM && SESSION && SESSION\.role==='admin' && isMobileLayout\(\)\)\{\s*\n\s*return `<div class="pp-head pp-head-m2">/.test(ph));
-ok('★ 左欄：一列大頭照、二列姓名、三列電話',
-   /<div class="pp-idcol">\s*\n\s*\$\{_avatar\}\s*\n\s*<div class="pp-name-row">\$\{_nameHtml\}\$\{code\}\$\{typeBadge\}<\/div>\s*\n\s*<div class="pp-meta pp-idphone">\$\{phoneItem\}<\/div>/.test(ph));
-ok('★ 右欄：其他欄位一列一列（性別／生日＋原本的 meta）', ph.includes('<div class="pp-meta pp-fields">${genderItem}${bdayItem}${meta}</div>')
-   && /\.pp-head-m2 \.pp-fields\{display:flex;flex-direction:column/.test(src));
+ok('★ 左欄：大頭照／姓名／電話／性別／生日／LINE 通知',
+   /<div class="pp-idcol">\s*\n\s*\$\{_avatar\}\s*\n\s*<div class="pp-name-row">\$\{_nameHtml\}\$\{code\}\$\{typeBadge\}<\/div>\s*\n\s*<div class="pp-meta pp-idfields">\$\{phoneItem\}\$\{genderItem\}\$\{bdayItem\}\$\{lineItem\}<\/div>/.test(ph));
+ok('★ 右欄：等級／主教練／緊急聯絡人／載具／家庭成員',
+   ph.includes('<div class="pp-meta pp-fields">${tierItem}${coachItem}${ecItem}${carrierItem}${famItem}</div>')
+   && /\.pp-head-m2 \.pp-idfields,\.pp-head-m2 \.pp-fields\{display:flex;flex-direction:column/.test(src));
+ok('★ 大頭照放大', /\.pp-head-m2 \.pp-avatar\{width:84px;height:84px;\}/.test(src));
+ok('　　主教練／家庭成員抽成具名變數，兩種版面共用同一份', /const coachItem = isM \? mvA\('主教練'/.test(src)
+   && /const famItem = \(isM&&_canBase\)\?/.test(src)
+   && /const meta = isM\s*\n\s*\? tierItem \+ coachItem \+ ecItem \+ lineItem \+ carrierItem \+ famItem/.test(src));
 ok('　　姓名與大頭照抽成共用變數，兩種版面各用一次（沒有複製兩份）',
    (ph.match(/\$\{_avatar\}/g)||[]).length===2 && (ph.match(/\$\{_nameHtml\}/g)||[]).length===2);
 ok('　　桌機／其他角色維持原本的橫向表頭', ph.includes('return `<div class="pp-head">'));
@@ -170,6 +175,28 @@ ok('　　四顆：票券／預約紀錄／交易／訓練紀錄',
    /\[\['tickets','票券'\],\['bookings','預約紀錄'\],\['pay','交易'\],\['training','訓練紀錄'\]\]/.test(src));
 ok('　　預設顯示票券（原本 recView 是 null＝顯示入口清單）', src.includes("if(_m2 && !PP.recView) PP.recView='tickets';"));
 ok('　　其他角色與桌機維持清單＋返回鈕', /: `<div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" onclick="ppRecordBack\(\)">‹ 返回/.test(src));
+ok('★ 交易分頁：四欄表格改成一筆一列的卡片（桌機仍是表格）',
+   /if\(_m2\)\{[\s\S]{0,700}<div class="pp-txrow">[\s\S]{0,400}<b class="pp-txamt">/.test(src)
+   && src.includes('<table class="mtk-table"><thead><tr><th>日期</th>'));
+ok('★ 預約紀錄：520px 月曆改成按月分段的清單（桌機仍是月曆）',
+   /if\(_m2\)\{[\s\S]{0,900}<div class="pp-bkmon">[\s\S]{0,900}<div class="pp-bkrow"/.test(src)
+   && src.includes('renderMemberWeek(); }catch(_){} },0);'));
+ok('　　清單一列一堂：日期／課名（帶課程色）／時間／教練／狀態',
+   /\.pp-bkrow::before\{[^}]*background:var\(--bkc/.test(src) && /class="pp-bktag \$\{st\[1\]\}"/.test(src));
+ok('★ 會員資料改用浮動視窗、不再滿版（使用者指示：用視窗比較有彈性感）',
+   /const _winM = !!\(SESSION && SESSION\.role==='admin' && kind==='member' && isMobileLayout\(\)\);/.test(src)
+   && /if\(isMobileLayout\(\)\) ppOpenSheet\(false, _winM\); else ppOpenPage\(\);/.test(src)
+   && /\.pp-sheet\.pp-sheet-win\{background:rgba\(18,26,22,\.48\)/.test(src));
+ok('　　點背景可關閉（兩種浮動模式共用）', /if\(desk\|\|win\) sh\.addEventListener\('click'/.test(src));
+ok('　　編輯的底部操作列改貼在視窗內（原本 fixed 會飄在視窗外）',
+   /\.pp-sheet\.pp-sheet-win \.pp-footbar\{position:sticky/.test(src));
+ok('　　員工資料與其他角色維持滿版', /sh\.className='pp-sheet'\+\(desk\?' pp-sheet-desk':''\)\+\(win\?' pp-sheet-win':''\)/.test(src));
+
+console.log('團課標題卡的場地人數');
+ok('★ 場地旁邊標人數', /const _seatTxt = \(A\.isGroup && typeof grpLiveHeads==='function'\)/.test(src)
+   && src.includes("const _vTxt = (_v ? '・'+_v : '') + _seatTxt;"));
+ok('　　口徑同名單視窗：有效名額＝總名額−請假', /const _live=grpLiveHeads\(b\), _max=Math\.max\(1,Number\(b\.max_heads\)\|\|5\);/.test(src));
+ok('　　滿了標紅', /_live>=_max\?' ash-seats-full':''/.test(src) && /\.ash-seats-full\{color:var\(--danger/.test(src));
 
 console.log('首頁大日期格線');
 const hero=g('admMobHero=`<div class="admh">','<div class="admh-div"></div>');
