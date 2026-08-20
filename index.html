@@ -4260,21 +4260,21 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
    只作用在桌機 —— 手機的管理員首頁有自己的 admMobHero，課卡版面不動；
    出席章的 DOM 只有一份，手機那邊維持原本的角落章（下面不覆蓋它的 position）。 */
 @media(min-width:601px){
-  /* ① 時間＋姓名靠左、整組垂直置中（教練靠 margin-top:auto 被推到底） */
+  /* ① 時間＋姓名靠左上（2026-08-21 二修，使用者附截圖：「課卡左邊時間跟會員姓名
+        改到左上角」）——一修的垂直置中在窄欄位裡讓每張卡的文字高度都不一樣，
+        一整排看過去對不齊；改回貼齊上緣，教練仍由 margin-top:auto 推到底。 */
   .cal-ev.cal-ev-std .evc-txt,
-  .tcard.tcard-std .tcard-txt{ justify-content:center !important; }
+  .tcard.tcard-std .tcard-txt{ justify-content:flex-start !important; }
   /* ② 教練放底部靠右 */
   .cal-ev.cal-ev-std .evc-coach,
   .tcard.tcard-std .tcard-co{ margin-top:auto !important; align-self:flex-end !important; }
-  /* ③ 出席章移到姓名右邊：從角標（absolute）改成行內小圓標 */
-  .cal-ev.cal-ev-std .evc-nmrow,
-  .tcard.tcard-std .tcard-nmrow{ display:flex; align-items:center; gap:5px; align-self:stretch; min-width:0; }
-  .cal-ev.cal-ev-std .evc-nmrow .evc-name,
-  .tcard.tcard-std .tcard-nmrow .tcard-mem{ min-width:0; flex:0 1 auto; }
+  /* ③ 出席章自己一列（第三列：時間 → 姓名 → 章），靠左對齊。
+        二修前是掛在姓名右邊，窄欄位會把名字擠成「陳…」。 */
   .cal-ev.cal-ev-std .evc-check,
   .tcard.tcard-std .tcard-chk{
     position:static !important; inset:auto !important; width:auto !important; height:auto !important;
     border-radius:999px !important; flex:none; transform:none !important;
+    align-self:flex-start !important; margin-top:3px !important;
     font-size:10px !important; font-weight:800 !important; line-height:1 !important;
     padding:3px 6px !important; display:inline-flex !important;
     align-items:center !important; justify-content:center !important; }
@@ -8392,8 +8392,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.0004';
-const APP_VERSION_LABEL='v260821.0004';
+const APP_VERSION = '260821.0010';
+const APP_VERSION_LABEL='v260821.0010';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14392,12 +14392,12 @@ PAGES.g_dashboard=async function(){
           const _miss = !canceled && !done && !live && nowMin>=mn+(Number(b.duration)||60);
           return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}${_miss?' tcard-miss':''}${_pend?' tcard-pend':''}" data-st="${mn}" data-du="${Number(b.duration)||60}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${_nmFull}${_pend?'・尚未收款':''}${live?'（進行中）':''}${canceled?'（已取消）':''}">
             <div class="tcard-body"></div>${_mk}
-            ${/* 出席章放在會員姓名右邊（2026-08-21 使用者指示）——與行事曆課卡同一套。
+            ${/* 出席章自己一列（第三列：時間 → 姓名 → 章），與行事曆課卡同一套。
                  未到課也補上金色「未」章：原本首頁只畫「簽」「假」，櫃檯在首頁看不出誰沒來。 */''}
-            <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-nmrow"><span class="tcard-mem">${nm}</span>${(()=>{const k=bkStampKind(b);
+            <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-mem">${nm}</span>${(()=>{const k=bkStampKind(b);
               return k==='leave'?'<span class="tcard-chk tcard-chk-leave">假</span>'
                    :(!canceled&&b.no_show===true)?'<span class="tcard-chk tcard-chk-ns">未</span>'
-                   :(k==='done'||k==='makeup')?'<span class="tcard-chk">簽</span>':'';})()}</span>${_tagOut}${(b.member_id?lottoGiftIcon(_lotMap[b.member_id]):'')}${coTag}</div>${canceled?'<span class="tcard-del">刪</span>':''}
+                   :(k==='done'||k==='makeup')?'<span class="tcard-chk">簽</span>':'';})()}${_tagOut}${(b.member_id?lottoGiftIcon(_lotMap[b.member_id]):'')}${coTag}</div>${canceled?'<span class="tcard-del">刪</span>':''}
           </div>`;
         }).join('');
         const emptyC = (!drawBk.length)
@@ -17569,9 +17569,10 @@ async function renderCalendar(opts){
         ? `<span class="evc-check evc-noshow" title="未到課">未</span>`   /* 2026-08-14 使用者指示：金色「未」章 */
         : ((_isCheckedIn||_isMakeup) && b.status!=='cancelled' && !hideMember)
         ? `<span class="evc-check" title="${(_isMakeup&&!_isCheckedIn)?'補簽':'已完成'}">簽</span>` : '';
-      /* 2026-08-21 使用者指示：出席章改放在會員姓名右邊（原本是卡片角落的角標）。
-         章跟著名字走，一眼就看得出是「誰」到了；DOM 只放一份，手機仍由 CSS 定回角標。 */
-      const _bodyOut = `<div class="evc-body"></div><div class="evc-txt"><span class="evc-time">${b.start_time}</span><span class="evc-nmrow"><span class="evc-name">${_stdName}</span>${_stampOut}</span>${_stdTag}${_abbrOut}${_moreHtml}</div>`;
+      /* 出席章從卡片角標改成內文的一列（2026-08-21）。
+         二修（使用者附截圖）：不掛在姓名右邊、自己佔第三列 —— 窄欄位裡跟名字擠同一行
+         會把名字壓成「陳…」。DOM 只放一份，手機仍由 CSS 定回角標。 */
+      const _bodyOut = `<div class="evc-body"></div><div class="evc-txt"><span class="evc-time">${b.start_time}</span><span class="evc-name">${_stdName}</span>${_stampOut}${_stdTag}${_abbrOut}${_moreHtml}</div>`;
       // Focus Mode：過去的課（日期已過、或今天但已結束）自動淡化，焦點集中到現在與未來
       const _cardDate = ds;
       const _todayYmd = ymd(TODAY);

@@ -159,11 +159,11 @@ console.log('\n課卡：體驗／待簽約另起一列放在姓名下面（2026-
 /* 2026-08-01：人數改用共用的 grpHeadLabel（有人請假就標「會來的/報名的」） */
   ok('★ 標準卡主行只放純姓名',
      /const _stdName = hideMember \? typeName : \(_grpCard \? \(gHeadsN>0\?grpHeadLabel\(b\):'團課'\) : \(_nameBase\|\|memName\)\);/.test(src));
-  /* 2026-08-21：出席章移進姓名列（.evc-nmrow）後，標籤改成接在那一列之後——
-     仍然是「姓名下面獨立一列」，只是不再與姓名 span 直接相鄰。 */
+  /* 2026-08-21：出席章改成姓名之後自己一列，標籤順延到章後面——
+     仍然是「姓名下面獨立一列」，只是中間多了出席章那一列。 */
   ok('★ 標籤畫成姓名下面那一列',
      /const _stdTag = \(!hideMember && !_grpCard && _nameTag\) \? `<span class="evc-sub">\$\{_nameTag\}<\/span>` : '';/.test(src)
-     && /<span class="evc-nmrow"><span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_stdTag\}/.test(src));
+     && /<span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}\$\{_stdTag\}/.test(src));
   ok('　　遮蔽卡與團課卡不掛（那兩種主行不是姓名）',
      /!hideMember && !_grpCard && _nameTag/.test(src));
   ok('　　小字樣式有定義，窄卡再縮一級',
