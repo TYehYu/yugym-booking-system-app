@@ -144,11 +144,13 @@ ok('★ 存完回課卡，不會被帶去會員列表（既有那支存完會 na
    && /async function saveMemberNote\(member_id\)\{[\s\S]{0,400}navTo\('members'\)/.test(src));
 ok('　　改完清掉對照表快取，卡片才會顯示新備註', /window\._bkNameMapC=null;\s*\/\* 對照表帶著備註/.test(src));
 
-console.log('請假只給有補課機制的票');
-ok('★ 判定集中在 tkHasMakeup（口袋＋方案＋不是補課券三個條件）',
-   /function tkHasMakeup\(t, typeMap\)\{[\s\S]*t\.source==='makeup'[\s\S]*memberLeave!=='makeup'[\s\S]*planHasMakeup\(t\.plan_name\)/.test(src));
-ok('★ 有補課機制的方案：團課 4週優惠＋團課【4堂優惠】（0820 使用者確認是同一檔的舊寫法）',
-   /const MAKEUP_PLANS=\['團課 4週優惠','團課【4堂優惠】'\]/.test(src));
+console.log('團課的請假／補課券規則');
+/* 2026-08-20 定版：團體課一律都有請假發補課券，不再分方案（當天稍早曾限定 4週優惠，
+   使用者改口統一：「以免櫃檯跟會員介紹的時候出現混亂」）。 */
+ok('★ 判定集中在 tkHasMakeup（口袋＋不是補課券兩個條件）',
+   /function tkHasMakeup\(t, typeMap\)\{\s*\n\s*if\(!t \|\| t\.source==='makeup'\) return false;\s*\n\s*return \(tkPocket\(t,typeMap\)\|\|\{\}\)\.memberLeave==='makeup';\s*\n\}/.test(src));
+ok('★ 不再有方案白名單（團體課一律都有補課機制）',
+   !/MAKEUP_PLANS/.test(src) && !/planHasMakeup/.test(src));
 ok('★ 補課券不能再請假（避免請假又送一張，無限展延）', /if\(!t \|\| t\.source==='makeup'\) return false;/.test(src));
 ok('　　會員卡的請假鈕吃這個判定', src.includes('_canLeave = !!(_slot && tkHasMakeup(_slot.t,'));
 ok('　　查不到這一格扣在哪張票就不給（會標到請假卻發不出券）', src.includes('let _canLeave=false;'));
