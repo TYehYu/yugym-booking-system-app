@@ -71,5 +71,19 @@ console.log('\n⑤ 顯示：純綁定不能被標成「待繳費」');
   ok('　　名字後綴也分開', /bkIsInstHold\(b\)\?'（待繳費）':'（待簽約）'/.test(src));
 }
 
+/* ═══ 2026-08-21：轉正視窗的「返回」不要回到已退役的預約明細 ═══
+   使用者回報：「這裡的返回又會回到預約明細視窗」（劉忠緯 14 堂卡位那張）。
+   做法沿用 0820 ashSeatAct 那套一次性旗標：從簡易課卡按轉正時先 ashBackArm，
+   收尾的 openBookingDetail 會被 ashBackTake 接走、把課卡重新展開。 */
+console.log('\n轉正視窗的返回');
+ok('★ 課卡的「轉正」先 ashBackArm 再 collapseBkCard（順序不能反：collapse 之後就抓不到那張卡）',
+   /ashBackArm\('\$\{id\}'\);collapseBkCard\(\);openConvertPending\('\$\{id\}'\)/.test(src));
+ok('　　順序的理由寫在原地', /ashBackArm 要在 collapseBkCard 之前/.test(src));
+ok('★ 旗標由 openBookingDetail 消化 → 回課卡（既有機制，沒有另立一套）',
+   /const _back=\(typeof ashBackTake==='function'\)\?ashBackTake\(id\):null;/.test(src)
+   && /await expandBkCard\(_back\.el, id\); return;/.test(src));
+ok('　　「整串卡位要怎麼轉」那一顆返回仍走 openBookingDetail（被旗標接走）',
+   /<button class="btn btn-ghost" onclick="openBookingDetail\('\$\{id\}'\)">返回<\/button>/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

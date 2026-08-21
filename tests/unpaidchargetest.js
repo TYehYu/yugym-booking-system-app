@@ -29,7 +29,13 @@ const BKS=[
   {id:'b0910',date:'2026-09-10',start_time:'19:30',status:'booked',category:'小班肌力',member_ids:[ME]},
   {id:'bPast',date:'2026-07-30',start_time:'19:30',status:'checked_in',category:'小班肌力',member_ids:[ME]},
   {id:'bPT',  date:'2026-08-15',start_time:'11:00',status:'booked',category:'私人教練',member_id:ME},
-  {id:'bHold',date:'2026-08-16',start_time:'11:00',status:'booked',category:'小班肌力',member_ids:[ME],pending_contract:true},
+  /* 分期待繳費保留：靠 note 的標記分辨（不是只看 pending_contract）——那套由開通下一期接手 */
+  {id:'bHold',date:'2026-08-16',start_time:'11:00',status:'booked',category:'小班肌力',member_id:ME,member_ids:[ME],
+   pending_contract:true,note:'分期待繳費保留（收款後自動補扣）'},
+  /* 待簽約卡位（2026-08-21 楊慧淳 8/25 案例）：買了票就該問要不要補扣，原本被整批排除 */
+  {id:'bPend',date:'2026-08-22',start_time:'19:30',status:'booked',category:'小班肌力',member_ids:[ME],pending_contract:true},
+  /* 0820 空堂（待安排）＝待簽約＋沒會員＋沒姓名：不屬於任何人，不能掃進來 */
+  {id:'bOpen',date:'2026-08-23',start_time:'19:30',status:'booked',category:'小班肌力',member_ids:[],pending_contract:true},
   {id:'bOther',date:'2026-08-18',start_time:'19:30',status:'booked',category:'小班肌力',member_ids:['M-OTHER']},
   /* 跑步機第二台：一點約兩台，第二台是影子預約、本來就不扣點（2026-08-06 黃麗琴案例） */
   {id:'bTm1',date:'2026-08-19',start_time:'17:00',status:'booked',category:'自主訓練',member_id:ME},
@@ -45,6 +51,8 @@ const TKS=[{id:'TK-4W',member_id:ME,ticket_type_id:'tt-g',sessions_total:4,sessi
 const env={
   dbGetAll:async t=>(t==='bookings'?BKS:(t==='ticket_logs'?LOGS:(t==='member_tickets'?TKS:[]))),
   bkHasMember:(b,mid)=>String(b.member_id||'')===String(mid)||(b.member_ids||[]).some(x=>String(x)===String(mid)),
+  bkIsInstHold:b=>!!(b && b.pending_contract && b.member_id && !b.ticket_id
+    && String(b.note||'').indexOf('分期待繳費保留')>=0),
   ymd, TODAY,
   ticketCategoryOf:()=> '小班肌力',
   categoryOfTypeId:()=> null,
@@ -55,10 +63,14 @@ const fn=new Function(...Object.keys(env), grabFn('unpaidFutureBookings')+'\nret
 console.log('① 找出「已排好、但當初沒扣到票」的未來課');
 {
   const r=await fn(ME,{id:'TK-4W'});
-  eq('★ 只列 8/13、8/27（8/20、9/10 已經有扣課紀錄）', r.map(b=>b.id), ['b0813','b0827']);
+  eq('★ 只列 8/13、8/27、8/22 待簽約（8/20、9/10 已經有扣課紀錄）', r.map(b=>b.id), ['b0813','bPend','b0827']);
+  ok('★★ 待簽約卡位也要列（2026-08-21 楊慧淳 8/25）—— 原本 !b.pending_contract 把它整批排除，'
+     +'她續約時系統不會問，那堂就永遠沒付', r.some(b=>b.id==='bPend'));
+  ok('★★ 但 0820 的空堂（待安排：沒綁會員）不能列', !r.some(b=>b.id==='bOpen'));
   ok('　　已經上過的不列（只補未來的）', !r.some(b=>b.id==='bPast'));
   ok('　　別的課別不列（教練課不能用團課票補扣）', !r.some(b=>b.id==='bPT'));
-  ok('　　分期待繳費保留的不列（那是另一套流程）', !r.some(b=>b.id==='bHold'));
+  ok('　　分期待繳費保留的不列（那是另一套流程，開通下一期由 bindHeldBookings 補綁；'
+     +'這裡若插手會扣兩次）', !r.some(b=>b.id==='bHold'));
   ok('　　別人的課不列', !r.some(b=>b.id==='bOther'));
   ok('★ 依日期排（先補最近的一堂）', r[0].date < r[1].date);
 }
@@ -88,6 +100,9 @@ ok('★ 逐堂重讀票券、扣不到就停（沿用餘額護欄）',
    && /if\(!\(await deductTicket\(tk,bid,SESSION\.id\)\)\) break;/.test(src));
 ok('　　單人課要把票綁上去，團課只留帳（沒有 ticket_id 欄位）',
    /if\(!bkIsGroup\(b\) && !b\.ticket_id\)\{ b\.ticket_id=tk\.id;/.test(src));
+ok('★★ 補扣完要清掉「待簽約」標記（同 0814 林韋綺：票綁回來卻留著標記，課卡會一直紅框寫待簽約）',
+   /if\(b\.pending_contract\)\{ b\.pending_contract=false; _dirty=true; \}/.test(src)
+   && /if\(_dirty\) await dbPut\('bookings',b\);/.test(src));
 ok('　　補完就地重畫會員明細', /await ppLoadCtx\(\); ppRenderBody\(\);/.test(src));
 ok('★ 影子預約不列（跑步機第二台不扣點）',
    /&& !b\.sibling_of                                   \/\/ 跑步機第二台的影子預約不扣點/.test(src)

@@ -370,7 +370,7 @@ ok('★ 有人沒票 → 儲值（開銷售視窗，會員已預選）',
    /: evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ppTopUp\('\$\{b\.member_id\}'\)`,'plus','儲值'\)\);/.test(src)
    && /function ppTopUp\(mid\)\{\s*\n\s*window\._salesPreMember=mid;/.test(src));
 ok('★ 有票沒綁 → 轉正',
-   /_hasTk\s*\n?\s*\? evoBtn\('evo-r2','evo-primary',`collapseBkCard\(\);openConvertPending/.test(src));
+   /_hasTk\s*\n?\s*\? evoBtn\('evo-r2','evo-primary',`ashBackArm\('\$\{id\}'\);collapseBkCard\(\);openConvertPending/.test(src));
 ok('★ 有無票券用既有的 listUsableTickets 判（與步驟 2 挑票同一支）',
    /_hasTk=\(\(await listUsableTickets\(b\.member_id, b\.ticket_type_id, b\.date, b\.start_time\)\)\|\|\[\]\)\.length>0;/.test(src));
 ok('　　綁完就走一般卡，簽到本來就在會員卡上，第三段不必重畫',

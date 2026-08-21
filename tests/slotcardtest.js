@@ -100,7 +100,7 @@ console.log('\n把人補上去：綁定待簽約回到簡易課卡');
 ok('★ 沒綁會員的卡位給「安排會員／綁定會員」，不是「轉正」',
    /if\(!b\.member_id\)\{\s*\n\s*btns \+= evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);openBindPending\('\$\{id\}'\)`,'plus',bkIsOpenHold\(b\)\?'安排會員':'綁定會員'\);/.test(src));
 ok('★ 已綁會員且有票才給轉正（沒票先給儲值）',
-   /evoBtn\('evo-r2','evo-primary',`collapseBkCard\(\);openConvertPending\('\$\{id\}'\)`,'check','轉正'\)/.test(src)
+   /evoBtn\('evo-r2','evo-primary',`ashBackArm\('\$\{id\}'\);collapseBkCard\(\);openConvertPending\('\$\{id\}'\)`,'check','轉正'\)/.test(src)
    && /evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ppTopUp\('\$\{b\.member_id\}'\)`,'plus','儲值'\)/.test(src));
 ok('　　openBindPending 本來就吃「待簽約＋沒綁會員」',
    /if\(!b\|\|!b\.pending_contract\|\|b\.member_id\)\{ showToast\('這筆不是未綁定的待簽約卡位'\); return; \}/.test(src));

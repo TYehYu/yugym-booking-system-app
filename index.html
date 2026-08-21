@@ -8726,8 +8726,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.2156';
-const APP_VERSION_LABEL='v260821.2156';
+const APP_VERSION = '260821.2209';
+const APP_VERSION_LABEL='v260821.2209';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23835,8 +23835,11 @@ async function expandBkCard(el, id){
            那位客人已經買了方案、錢也收過第一期，再叫櫃檯去開銷售視窗是錯的路。
            bkIsInstHold 靠 note 的「分期待繳費保留」標記分辨（建立保留時寫的）。 */
         const _isInst=(typeof bkIsInstHold==='function') && bkIsInstHold(b);
+        /* ashBackArm 要在 collapseBkCard 之前（它記的是目前展開的那張卡的 DOM 參照，
+           收起來就抓不到了）——有它，轉正視窗的「返回」才會回到課卡，而不是已經退役的
+           預約明細（2026-08-21 使用者回報：「這裡的返回又會回到預約明細視窗」）。 */
         btns += _hasTk
-          ? evoBtn('evo-r2','evo-primary',`collapseBkCard();openConvertPending('${id}')`,'check','轉正')   /* 請假/異常狀態不給轉正（2026-08-14） */
+          ? evoBtn('evo-r2','evo-primary',`ashBackArm('${id}');collapseBkCard();openConvertPending('${id}')`,'check','轉正')   /* 請假/異常狀態不給轉正（2026-08-14） */
           : (_isInst
              ? evoBtn('evo-r2','evo-gold',`collapseBkCard();ashInstNext('${id}')`,'plus','分期')
              : evoBtn('evo-r2','evo-gold',`collapseBkCard();ppTopUp('${b.member_id}')`,'plus','儲值'));
@@ -34893,8 +34896,19 @@ async function unpaidFutureBookings(memberId, tk){
     net[l.booking_id]=(net[l.booking_id]||0)+d; });
   const today=ymd(TODAY);
   const cat=ticketCategoryOf(tk);
+  /* 待簽約也要列進來（2026-08-21 使用者案例：楊慧淳 8/25 16:30）——
+     原本 `!b.pending_contract` 把「先卡位等簽約」的課整批排除，可是那正是買了票之後
+     最該補扣的一批：她那張 1V2 的 4 堂被 9/1、9/15 佔滿，8/25 只能掛待簽約，
+     等她續約時系統又不會問 → 這堂永遠沒付。
+     ⚠ 只放行「有綁會員」的待簽約：0820 的空堂（待安排＝待簽約＋沒會員＋沒姓名）
+       由下面的 bkHasMember 擋掉，不會被掃進來。
+     ⚠ 分期待繳費保留仍然排除（改用 bkIsInstHold 精準判斷，而不是整批看 pending_contract）——
+       那些已經屬於某張分期票，開通下一期時由 bindHeldBookings 補綁，這裡插手會扣兩次。
+     ⚠ 補扣仍要櫃檯按確認（askChargeUnpaid 是問句不是自動扣），教練負責的免費名額
+       照樣可以選「先不補扣」。 */
   return (bks||[]).filter(b=> b && b.status==='booked' && String(b.date||'')>=today
-      && !b.ticket_id && !b.pending_contract && bkHasMember(b,memberId)
+      && !b.ticket_id && !bkIsInstHold(b)                // 分期待繳費保留走另一套（開通下一期時 bindHeldBookings 接手）
+      && bkHasMember(b,memberId)
       && b.category!=='體驗' && b.category!=='場租'      // 這兩種本來就不扣票
       && !b.sibling_of                                   // 跑步機第二台的影子預約不扣點（2026-08-06 黃麗琴案例）
       && (b.category===cat || categoryOfTypeId(b.ticket_type_id)===cat)
@@ -34929,8 +34943,13 @@ async function doChargeUnpaid(){
       if(!b || b.status!=='booked') continue;
       if(!(await deductTicket(tk,bid,SESSION.id))) break;
       /* 單人課要把票綁上去（團課不寫 ticket_id，帳留在 ticket_logs） */
+      let _dirty=false;
       if(!bkIsGroup(b) && !b.ticket_id){ b.ticket_id=tk.id;
-        b.ticket_type_id=tk.ticket_type_id||b.ticket_type_id; await dbPut('bookings',b); }
+        b.ticket_type_id=tk.ticket_type_id||b.ticket_type_id; _dirty=true; }
+      /* 待簽約的卡位補扣完就不是待簽約了（2026-08-21，同 24707 林韋綺 8/23 的教訓：
+         票綁回來卻留著標記，課卡會繼續紅框寫「待簽約」，櫃檯以為還沒收到錢）。 */
+      if(b.pending_contract){ b.pending_contract=false; _dirty=true; }
+      if(_dirty) await dbPut('bookings',b);
       n++;
     }
   }catch(e){ console.error('補扣失敗',e); }
