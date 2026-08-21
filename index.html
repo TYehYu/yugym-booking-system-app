@@ -5058,13 +5058,29 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .chv2-cls-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;}
 .chv2-cls-h{font-size:14px;font-weight:800;color:var(--text);}
 .chv2-cls-n{font-family:var(--num);font-size:12px;color:var(--t3);}
-/* 今日值班：KPI 那一格裡的三顆小班別籤（早／中／晚），有排到的才上色 */
+/* ── 教練首頁 V2 的外框（只在 body.chv2-shell 成立時；見 navTo 的 toggle）── */
+/* ① 頂列改米色（2026-08-21 使用者指示） */
+body.chv2-shell .topbar{background:var(--card2,#F4F0E8);}
+body.chv2-shell .topbar-fixed{background:var(--card2,#F4F0E8);box-shadow:0 1px 0 var(--bd);}
+/* ② 小管家收進帳號資訊（帳號選單裡本來就有一顆 .tb-acct-butler，管理員手機在用） */
+body.chv2-shell .tb-butler,body.chv2-shell .tb-greet-inline{display:none !important;}
+body.chv2-shell .tb-acct-butler{display:flex !important;}
+/* ④ 底部導覽改品牌綠（文字與圖示跟著翻成淺色，否則綠底深字看不見） */
+body.chv2-shell .bottom-nav{background:var(--green) !important;border-top-color:rgba(255,255,255,.14);}
+body.chv2-shell .bottom-nav .bn-item{color:rgba(255,255,255,.72);}
+body.chv2-shell .bottom-nav .bn-item.on,
+body.chv2-shell .bottom-nav .bn-item.active{color:#fff;}
+body.chv2-shell .bottom-nav .bn-lb{color:inherit;}
+/* 日期列與課卡之間的分隔線（2026-08-21 使用者指示） */
+.chv2-div2{margin:10px 0 12px;}
+/* 今日值班：只畫「今天這一班」，沒排班就一顆灰的「未排班」 */
 .chv2-dutytap{cursor:pointer;}
 .chv2-bands{display:inline-flex;gap:4px;margin-right:6px;}
-.chv2-band{width:20px;height:20px;border-radius:7px;display:inline-flex;align-items:center;
-  justify-content:center;font-size:11px;font-weight:800;line-height:1;
+.chv2-band{padding:3px 10px;border-radius:999px;display:inline-flex;align-items:center;
+  justify-content:center;font-size:12px;font-weight:800;line-height:1.3;
   border:1.5px solid var(--bd);background:var(--card2);color:var(--t3);}
 .chv2-band.on{background:var(--bc);border-color:var(--bc);color:#fff;}
+.chv2-band-off{border-style:dashed;}   /* 未排班／請假：虛線淡框，不要看起來像「有班」 */
 .chv2-punch{font-family:var(--num);font-size:12.5px;font-weight:800;color:var(--t3);}
 .chv2-punch.on{color:var(--green);}
 .chv2-score{margin-top:12px;}
@@ -8603,8 +8619,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1713';
-const APP_VERSION_LABEL='v260821.1713';
+const APP_VERSION = '260821.1724';
+const APP_VERSION_LABEL='v260821.1724';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11281,6 +11297,13 @@ function _pglWrap(fn){
 window._navSeqNo=window._navSeqNo||0;
 function navTo(key, gkey){
   if(key==='more_menu'){ openMoreMenu(); return; }
+  /* 教練首頁 V2 的外框樣式（2026-08-21）：頂列米色、底部導覽品牌綠、小管家收進帳號選單。
+     這三樣都在頁面之外的外框上，改 CSS 會連教練本人一起改到 —— 所以掛一個 body class，
+     只有「管理員預覽教練視角 ＋ 停在教練首頁」時才成立。放在 navTo 開頭：每次換頁都會
+     重新算一次，離開這一頁自然就拿掉，不需要各處記得清。 */
+  try{ document.body.classList.toggle('chv2-shell',
+    key==='coach_today' && typeof isRealAdmin==='function' && isRealAdmin()
+    && SESSION && SESSION.role==='coach'); }catch(_){}
   try{ document.querySelectorAll('body>.admh-todaybk').forEach(x=>x.remove()); }catch(_){}   /* 行事曆 Today 鈕掛在 body（cagPositionWrap 搬的），換頁要清 */
   if(gkey && NAV2_GROUP_ALIAS[gkey]) gkey=NAV2_GROUP_ALIAS[gkey];  // 舊群組 key 相容（導覽分流 2026-07-19）
   // 重繪目前頁（簽到、取消、行事曆篩選等 30 處都用 navTo(CUR_PAGE)）時保留捲動位置。
@@ -40449,9 +40472,9 @@ async function coachHomeV2(){
 
   /* ── ① 大日期＋KPI（KPI 的「今日營收」換成「今日值班」）── */
   const bandOf=t=>{ const m=timeToMin(t||'0:0'); return m<12*60?'am':(m<15*60?'mid':'pm'); };
-  const BANDS=[{k:'am',label:'早',col:'#D9A441'},
-               {k:'mid',label:'中',col:'#1F6F54'},
-               {k:'pm',label:'晚',col:'#3A5BA0'}];
+  const BANDS=[{k:'am',label:'早班',col:'#D9A441'},
+               {k:'mid',label:'中班',col:'#1F6F54'},
+               {k:'pm',label:'晚班',col:'#3A5BA0'}];
   const myShifts=(shifts||[]).filter(x=>x&&x.emp_id===SESSION.id&&x.date===today);
   const att=(attendance||[]).find(a=>a&&a.emp_id===SESSION.id&&a.date===today)||null;
   const onLeave=myShifts.find(x=>x.leave_type);
@@ -40459,8 +40482,16 @@ async function coachHomeV2(){
   myShifts.filter(x=>!x.leave_type&&x.start_time).forEach(x=>{ hit[bandOf(x.start_time)]=x; });
   /* 沒排班就看實際打卡時間歸班 —— 漏排班不該讓整條變灰（沿用 dutyShiftColor 的做法） */
   if(!Object.keys(hit).length && att&&att.clock_in) hit[bandOf(att.clock_in)]={start_time:att.clock_in};
-  const bandChips=BANDS.map(b=>`<span class="chv2-band${hit[b.k]?' on':''}" style="--bc:${b.col};">${b.label}</span>`).join('');
-  const dutyTxt = onLeave ? '請假'
+  /* 2026-08-21 二修（使用者：「今日值班只要顯示當天值班就好 如果是早班就顯示[早班]
+     如果沒有排班就顯示[未排班]」）—— 原本三顆籤一起排、只把有排到的上色，
+     等於天天有兩顆是灰的雜訊。改成只畫「今天這一班」，沒排班就一顆灰的「未排班」。 */
+  const _bandKey=Object.keys(hit)[0]||null;
+  const _band=BANDS.find(x=>x.k===_bandKey)||null;
+  const bandChip=onLeave
+    ? `<span class="chv2-band chv2-band-off">請假</span>`
+    : (_band ? `<span class="chv2-band on" style="--bc:${_band.col};">${_band.label}</span>`
+             : `<span class="chv2-band chv2-band-off">未排班</span>`);
+  const dutyTxt = onLeave ? ''
     : (att&&att.clock_in&&att.clock_out) ? `${att.clock_in}–${att.clock_out}`
     : (att&&att.clock_in) ? `${att.clock_in} 上班中` : '尚未打卡';
 
@@ -40538,8 +40569,29 @@ async function coachHomeV2(){
     return {done:a.filter(x=>x.status==='checked_in'||x.status==='completed').length, all:a.length}; };
   const _mPt=tally(b=>{ const c=evColorClass(b,typeMap); return c==='ev-pt'||c==='ev-friendly'; });
   const _mGp=tally(b=>bkIsGroup(b));
-  const scoreRow=(lb,o)=>`<div class="chv2-score-row"><span class="chv2-score-l">${lb}</span>
-    <span class="chv2-score-v"><b>${o.done}</b><i>/${o.all} 堂</i></span></div>`;
+  /* 2026-08-21 二修（使用者：「本月成績要用回進度環的形式」）——
+     沿用教練端舊版那組 .mstat 環（同樣的 130 視框、r=44、寬 9），只是這裡不放金額。 */
+  const mkRing=(pct,r,sw)=>{ const c=2*Math.PI*r; return {c, off:c*(1-Math.min(100,Math.max(0,pct))/100)}; };
+  const RR=44, RSW=9;
+  const ringCardOf=(title,o,color)=>{
+    const pct=o.all>0?(o.done/o.all*100):0, g=mkRing(pct,RR,RSW);
+    return `<div class="mstat">
+      <div class="mstat-title">${title}</div>
+      <div class="mstat-ring">
+        <svg viewBox="0 0 130 130">
+          <circle cx="65" cy="65" r="${RR}" fill="none" stroke="var(--sage-bg)" stroke-width="${RSW}"/>
+          <circle cx="65" cy="65" r="${RR}" fill="none" stroke="${color}" stroke-width="${RSW}" stroke-linecap="round"
+            stroke-dasharray="${g.c.toFixed(1)}" stroke-dashoffset="${g.off.toFixed(1)}" transform="rotate(-90 65 65)"/>
+        </svg>
+        <div class="mstat-center"><div class="mstat-num">${o.done}</div><div class="mstat-unit">堂</div></div>
+      </div>
+      <div class="mstat-sub">${o.done} / ${o.all}</div>
+    </div>`;
+  };
+  const scoreCard=`<div class="dcard chv2-score">
+    <div class="dcard-title">本月成績</div>
+    <div class="mstat-row mstat-row-2">${ringCardOf('教練課',_mPt,'#1f6f54')}${ringCardOf('團體課',_mGp,'#9a5a1e')}</div>
+  </div>`;
 
   C.innerHTML=`<div class="admh chv2">
     ${date!==today?`<button class="admh-todaybk" onclick="ctBackToday()">Today</button>`:''}
@@ -40555,7 +40607,7 @@ async function coachHomeV2(){
              onclick="openStaffScanModal()"
              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openStaffScanModal();}"><span>今日值班</span></div>
         <div class="admh-kpi admh-rev chv2-dutytap" onclick="openStaffScanModal()">
-          <span class="chv2-bands">${bandChips}</span><b class="chv2-punch${(att&&att.clock_in)?' on':''}">${dutyTxt}</b></div>
+          <span class="chv2-bands">${bandChip}</span>${dutyTxt?`<b class="chv2-punch${(att&&att.clock_in)?' on':''}">${dutyTxt}</b>`:''}</div>
       </div>
     </div>
     <div class="admh-div"></div>
@@ -40568,13 +40620,16 @@ async function coachHomeV2(){
         <button class="admh-wknav" onclick="coachWeekShift(1)">›</button>
       </div>
     </div>
+    ${/* 日期列與課卡之間一條分隔線（2026-08-21 使用者指示）——
+         兩區都是淺色卡片，沒有界線時捲動起來會分不出「上面是選日、下面是內容」 */''}
+    <div class="admh-div chv2-div2"></div>
     <div class="admh-cards">${_cards}</div>
-    <div class="card chv2-score">
-      <div class="chv2-cls-top"><span class="chv2-cls-h">本月成績</span>
-        <span class="chv2-cls-n">${ym.replace('-','/')}</span></div>
-      ${scoreRow('教練課',_mPt)}${scoreRow('團體課',_mGp)}
-    </div>
+    ${scoreCard}
   </div>`;
+  /* 下拉更新（2026-08-21 使用者：「下拉會有更新頁面的功能 不要讓頂列一起被拉動」）——
+     管理員手機首頁早就有一支自製的 admPtrInit，它的做法就是「頂欄不動、只在內容上方
+     露出轉圈」。直接沿用，不要靠瀏覽器原生的整頁回彈（那一定會把頂欄一起拉走）。 */
+  try{ if(typeof admPtrInit==='function') admPtrInit(); }catch(_){}
   /* 貼頂偵測：與管理員手機首頁同一套（sentinel 捲出畫面＝日期列貼頂） */
   setTimeout(()=>{ try{
     const st=document.querySelector('.admh-sticky'), sen=document.getElementById('admh-sentinel');
