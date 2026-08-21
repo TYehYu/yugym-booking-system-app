@@ -573,5 +573,13 @@ ok('★ 教練端的簡易名片也一致',
 ok('　　「已過期方案」原本就會在有可展延的票時展開，行為不變',
    /<details class="pp-hist"\$\{_extable\.length\?' open':''\}><summary>已過期方案/.test(src));
 
+console.log('\n調整課程視窗的間距（2026-08-21 使用者回報「視窗內容連在一起了」）');
+ok('★ 說明塊與清單列的下間距一致，不然兩張白卡會黏成一片',
+   /\.ash-einote\{font-size:12\.5px;color:var\(--t2\);line-height:1\.9;background:#fff;\s*\n\s*border-radius:18px;padding:14px 16px;margin-bottom:9px;box-shadow:0 6px 18px rgba\(30,25,15,\.13\);\}/.test(src));
+ok('　　跟 .ash-eirow 同一個數字（9px）',
+   /border-radius:18px;padding:14px 16px;margin-bottom:9px;cursor:pointer;/.test(src));
+ok('　　會撞到的實際情境寫在程式裡（教練請假：說明＋刪除預約）',
+   /說明塊原本沒有下間距，後面接著一列（教練請假那張：說明＋「刪除預約」）時/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
