@@ -5052,26 +5052,22 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard{width:88px;min-width:0;min-height:56px;padding:0;flex-shrink:0;}
 .tcard-empty{position:absolute;left:0;top:24px;}
 /* .dcal-*（一日行事曆）樣式於 2026-08-21 當天隨版面一起移除 */
-/* ══ 教練首頁 V2（2026-08-21，僅管理員預覽看得到；見 coachHomeV2）══ */
-.chv2{display:flex;flex-direction:column;gap:12px;}
-.chv2-duty{cursor:pointer;transition:box-shadow .14s,transform .14s;}
-.chv2-duty:hover{box-shadow:0 6px 18px rgba(30,25,15,.13);}
-.chv2-duty:active{transform:scale(.995);}
-.chv2-duty-top,.chv2-cls-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;}
-.chv2-duty-h,.chv2-cls-h{font-size:14px;font-weight:800;color:var(--text);}
-.chv2-scan{font-size:11.5px;font-weight:700;color:var(--green);}
+/* ══ 教練首頁 V2（2026-08-21，僅管理員預覽看得到；見 coachHomeV2）══
+   版面直接沿用管理員手機首頁的 .admh（大日期＋KPI → 日期列 → 課卡列表），
+   這裡只補「今日值班」那一格自己的樣式。 */
+.chv2-cls-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.chv2-cls-h{font-size:14px;font-weight:800;color:var(--text);}
 .chv2-cls-n{font-family:var(--num);font-size:12px;color:var(--t3);}
-.chv2-bands{display:flex;gap:8px;}
-.chv2-band{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
-  padding:9px 6px;border-radius:12px;border:1.5px solid var(--bd);background:var(--card2);
-  color:var(--t3);line-height:1.2;}
-.chv2-band b{font-size:13px;font-weight:800;}
-.chv2-band i{font-family:var(--num);font-size:10.5px;font-style:normal;opacity:.85;}
-/* 有排到班的那一格才上色（早金／中綠／晚藍，與值班圓環同一組顏色） */
+/* 今日值班：KPI 那一格裡的三顆小班別籤（早／中／晚），有排到的才上色 */
+.chv2-dutytap{cursor:pointer;}
+.chv2-bands{display:inline-flex;gap:4px;margin-right:6px;}
+.chv2-band{width:20px;height:20px;border-radius:7px;display:inline-flex;align-items:center;
+  justify-content:center;font-size:11px;font-weight:800;line-height:1;
+  border:1.5px solid var(--bd);background:var(--card2);color:var(--t3);}
 .chv2-band.on{background:var(--bc);border-color:var(--bc);color:#fff;}
-.chv2-punch{margin-top:10px;font-size:12px;font-weight:700;color:var(--t3);}
+.chv2-punch{font-family:var(--num);font-size:12.5px;font-weight:800;color:var(--t3);}
 .chv2-punch.on{color:var(--green);}
-.chv2-list{flex-wrap:wrap;}
+.chv2-score{margin-top:12px;}
 /* 本月成績：只有堂數，沒有任何金額（2026-08-21 使用者指示） */
 .chv2-score-row{display:flex;align-items:baseline;justify-content:space-between;
   padding:9px 2px;border-bottom:1px dashed var(--bd);}
@@ -8607,8 +8603,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1657';
-const APP_VERSION_LABEL='v260821.1657';
+const APP_VERSION = '260821.1710';
+const APP_VERSION_LABEL='v260821.1710';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40439,115 +40435,153 @@ function coachAttnShift(dir){
    ⚠ 課卡的產生器目前是複寫一份、不是共用管理員首頁那支 —— 刻意的：
      這樣改這一頁不會動到教練與櫃檯正在用的畫面。旗標拿掉時要把兩邊合成一支。 */
 async function coachHomeV2(){
-  const [bookings,members,attendance,shifts,types,mtickets]=await Promise.all([
-    dbGetAll('bookings'), dbGetAll('members'),
+  const [bookings,members,coaches,attendance,shifts,types,mtickets]=await Promise.all([
+    dbGetAll('bookings'), dbGetAll('members'), dbGetAll('coaches').catch(()=>[]),
     dbGetAll('attendance').catch(()=>[]), dbGetAll('shifts').catch(()=>[]),
     dbGetAll('ticket_types').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[])]);
   const today=ymd(TODAY);
   const date=(typeof _coachViewDate!=='undefined' && _coachViewDate) || today;
   const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
-  const memMap=Object.fromEntries((members||[]).map(m=>[m.id,m]));
-  try{ computeLastBkMarks(mtickets||[], bookings||[], typeMap||{}); }catch(_){}
+  const _mm={}; (members||[]).forEach(m=>{ if(m) _mm[m.id]=m.name; });
+  const _tkById={}; (mtickets||[]).forEach(t=>{ if(t&&t.id) _tkById[t.id]=t; });
+  const _wdz=['日','一','二','三','四','五','六'];
+  const _dv=parseYmd(date)||TODAY;
 
-  /* ── 今日值班 ── */
+  /* ── ① 大日期＋KPI（KPI 的「今日營收」換成「今日值班」）── */
   const bandOf=t=>{ const m=timeToMin(t||'0:0'); return m<12*60?'am':(m<15*60?'mid':'pm'); };
-  const BANDS=[{k:'am',label:'早班',col:'#D9A441'},
-               {k:'mid',label:'中班',col:'#1F6F54'},
-               {k:'pm',label:'晚班',col:'#3A5BA0'}];
-  const myShifts=(shifts||[]).filter(s=>s&&s.emp_id===SESSION.id&&s.date===today);
+  const BANDS=[{k:'am',label:'早',col:'#D9A441'},
+               {k:'mid',label:'中',col:'#1F6F54'},
+               {k:'pm',label:'晚',col:'#3A5BA0'}];
+  const myShifts=(shifts||[]).filter(x=>x&&x.emp_id===SESSION.id&&x.date===today);
   const att=(attendance||[]).find(a=>a&&a.emp_id===SESSION.id&&a.date===today)||null;
-  const onLeave=myShifts.find(s=>s.leave_type);
+  const onLeave=myShifts.find(x=>x.leave_type);
   const hit={};
-  myShifts.filter(s=>!s.leave_type&&s.start_time).forEach(s=>{ hit[bandOf(s.start_time)]=s; });
+  myShifts.filter(x=>!x.leave_type&&x.start_time).forEach(x=>{ hit[bandOf(x.start_time)]=x; });
   /* 沒排班就看實際打卡時間歸班 —— 漏排班不該讓整條變灰（沿用 dutyShiftColor 的做法） */
-  if(!Object.keys(hit).length && att&&att.clock_in) hit[bandOf(att.clock_in)]={start_time:att.clock_in,end_time:att.clock_out||''};
-  const bands=BANDS.map(b=>{
-    const s=hit[b.k];
-    const rng=s?`${String(s.start_time||'').slice(0,5)}${s.end_time?'–'+String(s.end_time).slice(0,5):''}`:'';
-    return `<span class="chv2-band${s?' on':''}" style="--bc:${b.col};">
-      <b>${b.label}</b>${rng?`<i>${rng}</i>`:''}</span>`;
-  }).join('');
-  const punchTxt = onLeave ? `今天請假（${escH(onLeave.leave_type)}）`
-    : (att&&att.clock_in&&att.clock_out) ? `已下班　${att.clock_in}–${att.clock_out}`
-    : (att&&att.clock_in) ? `上班中　${att.clock_in} 打卡`
-    : '尚未打卡';
-  const dutyCard=`<div class="card chv2-duty" role="button" tabindex="0"
-      onclick="openStaffScanModal()"
-      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openStaffScanModal();}">
-    <div class="chv2-duty-top"><span class="chv2-duty-h">今日值班</span>
-      <span class="chv2-scan">📷 掃碼打卡</span></div>
-    <div class="chv2-bands">${bands}</div>
-    <div class="chv2-punch${(att&&att.clock_in)?' on':''}">${punchTxt}</div>
-  </div>`;
+  if(!Object.keys(hit).length && att&&att.clock_in) hit[bandOf(att.clock_in)]={start_time:att.clock_in};
+  const bandChips=BANDS.map(b=>`<span class="chv2-band${hit[b.k]?' on':''}" style="--bc:${b.col};">${b.label}</span>`).join('');
+  const dutyTxt = onLeave ? '請假'
+    : (att&&att.clock_in&&att.clock_out) ? `${att.clock_in}–${att.clock_out}`
+    : (att&&att.clock_in) ? `${att.clock_in} 上班中` : '尚未打卡';
 
-  /* ── 自己的課卡 ── */
-  const my=(bookings||[]).filter(b=>b&&bkCoachId(b)===SESSION.id&&b.date===date&&b.status!=='cancelled')
-    .sort((a,b)=>String(a.start_time||'').localeCompare(String(b.start_time||'')));
-  const nowMin=(date===today)?(new Date().getHours()*60+new Date().getMinutes()):-1;
-  const _clsMap={'ev-pt':'course-pt','ev-friendly':'course-friendly','ev-group':'course-group',
-                 'ev-self':'course-self','ev-trial':'course-trial','ev-massage':'course-massage'};
-  const _mt=Object.fromEntries((mtickets||[]).map(t=>[t.id,t]));
-  const cards=my.map(b=>{
-    const cc=evColorClass(b,typeMap,b.ticket_id?_mt[b.ticket_id]:null);
-    const isGrp=bkIsGroup(b)||(Array.isArray(b.member_ids)&&b.member_ids.length>0);
-    const nm=isGrp?grpHeadLabel(b):bkName(b,id=>memMap[id]?memMap[id].name:'');
-    const mn=timeToMin(b.start_time||'0:0');
-    const done=(b.status==='checked_in'||b.status==='completed');
-    const live=nowMin>=mn && nowMin<mn+(Number(b.duration)||60);
-    const q=(window._bkSeq||{})[b.id];
-    const stamp=(()=>{ const k=bkStampKind(b);
-      return k==='leave'?'<span class="tcard-chk tcard-chk-leave">假</span>'
-           :(b.no_show===true)?'<span class="tcard-chk tcard-chk-ns">未</span>'
-           :(k==='done'||k==='makeup')?'<span class="tcard-chk">簽</span>':''; })();
-    /* 教練標籤那一格改放課種 —— 這一頁的課全是自己的，再標一次教練名沒有資訊量 */
-    const tag=bkIsCoachLeave(b)
-      ? '<span class="tcard-co" style="background:#7A2E28;color:#F4F1E8;">請假</span>'
-      : `<span class="tcard-co">${escH((typeMap[b.ticket_type_id]||{}).name||b.category||'課程')}</span>`;
-    return `<div class="tcard tcard-std ${_clsMap[cc]||'course-pt'}${done?' tcard-done':''}${live?' tcard-live':''}"
-        data-st="${mn}" data-du="${Number(b.duration)||60}" onclick="onTcardClick(event,'${b.id}')"
-        title="${b.start_time}｜${escH(nm)}">
-      <div class="tcard-body"></div>
-      <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span>
-        <span class="tcard-nmrow"><span class="tcard-mem">${nm}</span>${stamp}</span>
-        ${q?`<span class="tcard-seq">${q.n>=999?('第 '+q.i+' 堂'):(q.i+'/'+q.n+' 堂')}</span>`:''}
-        ${tag}</div></div>`;
-  }).join('');
-  const doneN=my.filter(b=>b.status==='checked_in'||b.status==='completed').length;
-  const dLbl=(()=>{ const d=parseYmd(date)||new Date(TODAY);
-    return `${d.getMonth()+1}/${d.getDate()}（${'日一二三四五六'[d.getDay()]}）`; })();
+  /* 我的當日課（代課算在代課教練身上）—— 這一頁只有自己，所以不需要教練篩選列 */
+  const dayBk=(bookings||[]).filter(b=>b&&bkCoachId(b)===SESSION.id&&b.date===date
+    && b.status!=='cancelled' && !b.sibling_of);
+  const _ptN=dayBk.filter(b=>{ const c=evColorClass(b,typeMap); return c==='ev-pt'||c==='ev-friendly'; }).length;
+  const _grpN=dayBk.filter(b=>bkIsGroup(b)).length;
 
-  /* ── 本月成績（2026-08-21 使用者指示：「只要顯示教練課 團體課 已銷課堂/總課堂
-     不用顯示任何銷課金額跟總營收」）——
+  /* ── ② 日期列（沿用教練端既有的 _coachWeekOffset／ctPickDay，不另立一套狀態）── */
+  const _cnt={}; (bookings||[]).forEach(b=>{ if(!b||b.status==='cancelled'||b.sibling_of) return;
+    if(bkCoachId(b)!==SESSION.id) return; _cnt[b.date]=(_cnt[b.date]||0)+1; });
+  const HERO_WD2=['日','一','二','三','四','五','六'];
+  let _wkBtns='';
+  {
+    const base=parseYmd(date)||new Date(TODAY);
+    const sun=new Date(base); sun.setDate(base.getDate()-base.getDay()+((typeof _coachWeekOffset!=='undefined'?_coachWeekOffset:0)*7));
+    for(let i=0;i<7;i++){
+      const d=new Date(sun); d.setDate(sun.getDate()+i);
+      const ds=ymd(d), n=_cnt[ds]||0;
+      _wkBtns+=`<button class="msb-date${ds===date&&ds!==today?' on':''}${ds===today?' hero-today':''}" onclick="ctPickDay('${ds}')">
+        <span class="cag-dn">${n?n+' 堂':'－'}</span><b>${d.getMonth()+1}/${d.getDate()}</b><span>${ds===today?'今天':'週'+HERO_WD2[d.getDay()]}</span></button>`;
+    }
+  }
+
+  /* ── ③ 今日課卡列表（沿用管理員手機首頁的 .admh-card）── */
+  const _tkBkMap={}; (bookings||[]).forEach(x=>{ if(x&&x.ticket_id&&x.status!=='cancelled'&&!x.sibling_of){ (_tkBkMap[x.ticket_id]=_tkBkMap[x.ticket_id]||[]).push(x); } });
+  const _cards=dayBk.slice().sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time))).map(b=>{
+    const col=(typeof catColorOf==='function')?catColorOf(b):null;
+    const _cc=evColorClass(b,typeMap);
+    const _col=col||({'ev-pt':'#1f6f54','ev-friendly':'#23508a','ev-group':'#9a5a1e','ev-trial':'#6e3a86','ev-self':'#6a655c','ev-massage':'#2f8f83'}[_cc]||'#1f6f54');
+    const cname=bookingTypeName(b,typeMap);
+    let mname;
+    if(bkIsGroup(b)){ const names=mids(b).map(x=>_mm[x]).filter(Boolean);
+      mname=names.length===0?'未排名單':(names.length<=2?names.join('、'):`${names[0]} 等 ${names.length} 人`);
+    }else{
+      const _own=_mm[b.member_id]||'';
+      mname=(_own&&b.trial_name&&_own!==b.trial_name)?`${_own}・${b.trial_name}`
+           :(_own||b.trial_name||(bkIsSelf(b)?'自主訓練':'—'));
+    }
+    const tk=b.ticket_id?_tkById[b.ticket_id]:null;
+    const done=b.status==='checked_in'||b.status==='completed';
+    const _st=(grpAllOnLeave(b)||b.status==='coach_leave')?['假','admh-st-leave']
+      :(b.no_show===true?['未','admh-st-ns']:(done?['簽','admh-st-done']:null));
+    const _vn=(typeof venueDisplay==='function')?(venueDisplay(b)||''):'';
+    const _vid=String(b.venue_unit||'').split('_')[0];
+    const _vlb=_vid==='treadmill'?`${_vn||'跑步機'} ${Math.max(1,Number(b._units)||1)}台`:(_vn||'');
+    /* 右下角不標教練名 —— 這一頁的課全是自己的（管理員首頁要標是因為那裡混著所有人）。
+       教練請假的標記仍要留：那是「這堂今天沒有我」的訊息。 */
+    const _lvTag=(typeof bkIsCoachLeave==='function'&&bkIsCoachLeave(b))?'<div class="admh-foot"><span class="admh-lvtag">教練請假</span></div>':'';
+    return `<div class="admh-card${done?' admh-done':''}" style="--admh-c:${_col};" onclick="admhCardTap(event,'${b.id}')">
+      <span class="admh-time">${b.start_time}</span>
+      <div class="admh-cname">${cname}${_vlb?'・'+_vlb:''}</div>
+      <div class="admh-mname">${mname}${_st?`<span class="admh-stamp ${_st[1]}">${_st[0]}</span>`:''}</div>
+      ${tk?(()=>{const _lt=(_tkBkMap[tk.id]||[]).filter(x=>x.date>b.date||(x.date===b.date&&String(x.start_time)>String(b.start_time))).length;
+        const _ud=Math.max(0,(Number(tk.sessions_total)||0)-(Number(tk.sessions_remaining)||0));
+        const _nth=Math.min(Math.max(1,_ud-_lt), Number(tk.sessions_total)||_ud||1);
+        /* 無限次卡（9999 堂）寫「票券 3/9999」沒有意義，只標第幾堂（同 0821 課卡的處理） */
+        return `<div class="admh-tk">${(Number(tk.sessions_total)||0)>=999?`第 ${_nth} 堂`:`票券 ${_nth}/${tk.sessions_total}`}</div>`;})():''}
+      ${_lvTag}
+    </div>`;
+  }).join('')||`<div class="admh-empty">這一天沒有課程</div>`;
+
+  /* ── ④ 本月成績：只有堂數（2026-08-21 使用者指示：不用顯示任何銷課金額跟總營收）──
      刻意只有堂數：教練端不出現金額，避免把「這堂值多少錢」帶進上課現場。
      已銷課＝已簽到／已完成；總課堂＝本月排給自己、未取消的全部。
      ⚠ 友善教練課併進「教練課」（課卡顏色分得開，但對教練來說是同一件事）。 */
   const ym=today.slice(0,7);
   const mine=(bookings||[]).filter(b=>b&&bkCoachId(b)===SESSION.id
-    && String(b.date||'').slice(0,7)===ym && b.status!=='cancelled');
-  const tally=(pick)=>{
-    const a=mine.filter(pick);
-    return {done:a.filter(b=>b.status==='checked_in'||b.status==='completed').length, all:a.length};
-  };
-  const _pt=tally(b=>{ const c=evColorClass(b,typeMap); return c==='ev-pt'||c==='ev-friendly'; });
-  const _gp=tally(b=>bkIsGroup(b));
+    && String(b.date||'').slice(0,7)===ym && b.status!=='cancelled' && !b.sibling_of);
+  const tally=pick=>{ const a=mine.filter(pick);
+    return {done:a.filter(x=>x.status==='checked_in'||x.status==='completed').length, all:a.length}; };
+  const _mPt=tally(b=>{ const c=evColorClass(b,typeMap); return c==='ev-pt'||c==='ev-friendly'; });
+  const _mGp=tally(b=>bkIsGroup(b));
   const scoreRow=(lb,o)=>`<div class="chv2-score-row"><span class="chv2-score-l">${lb}</span>
     <span class="chv2-score-v"><b>${o.done}</b><i>/${o.all} 堂</i></span></div>`;
-  const scoreCard=`<div class="card chv2-score">
-    <div class="chv2-cls-top"><span class="chv2-cls-h">本月成績</span>
-      <span class="chv2-cls-n">${ym.replace('-','/')}</span></div>
-    ${scoreRow('教練課',_pt)}${scoreRow('團體課',_gp)}
-  </div>`;
 
-  C.innerHTML=`<div class="chv2">
-    ${dutyCard}
-    <div class="card chv2-cls">
-      <div class="chv2-cls-top"><span class="chv2-cls-h">${dLbl}　我的課</span>
-        <span class="chv2-cls-n">${doneN}/${my.length} 堂</span></div>
-      ${my.length?`<div class="tcard-list chv2-list">${cards}</div>`
-                 :`<div class="tcard-empty">今日無課</div>`}
+  C.innerHTML=`<div class="admh chv2">
+    ${date!==today?`<button class="admh-todaybk" onclick="ctBackToday()">Today</button>`:''}
+    <div class="admh-bigrow">
+      <div class="admh-bigdate"><span class="admh-dnum">${_dv.getDate()}</span>
+        <span class="admh-dside"><b>${_dv.getMonth()+1} 月</b><span>週${_wdz[_dv.getDay()]}${date===today?'・今天':''}</span></span></div>
+      <span class="admh-dsep"></span>
+      ${/* KPI：教練課／團體課維持；「今日營收」整組換成「今日值班」＋三個班別，點了開掃碼打卡 */''}
+      <div class="admh-kpis">
+        <div class="admh-kpi"><span>教練課</span><b>${_ptN} 堂</b></div>
+        <div class="admh-kpi"><span>團體課</span><b>${_grpN} 堂</b></div>
+        <div class="admh-kpi admh-rev admh-rev-lb chv2-dutytap" role="button" tabindex="0"
+             onclick="openStaffScanModal()"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openStaffScanModal();}"><span>今日值班</span></div>
+        <div class="admh-kpi admh-rev chv2-dutytap" onclick="openStaffScanModal()">
+          <span class="chv2-bands">${bandChips}</span><b class="chv2-punch${(att&&att.clock_in)?' on':''}">${dutyTxt}</b></div>
+      </div>
     </div>
-    ${scoreCard}
+    <div class="admh-div"></div>
+    <div id="admh-sentinel"></div>
+    ${/* 教練篩選列拿掉（使用者：只要顯示該教練自己的課卡就好），只留日期列 */''}
+    <div class="admh-sticky">
+      <div class="admh-week">
+        <button class="admh-wknav" onclick="ctWeekStep(-1)">‹</button>
+        <div class="admh-wkdays">${_wkBtns}</div>
+        <button class="admh-wknav" onclick="ctWeekStep(1)">›</button>
+      </div>
+    </div>
+    <div class="admh-cards">${_cards}</div>
+    <div class="card chv2-score">
+      <div class="chv2-cls-top"><span class="chv2-cls-h">本月成績</span>
+        <span class="chv2-cls-n">${ym.replace('-','/')}</span></div>
+      ${scoreRow('教練課',_mPt)}${scoreRow('團體課',_mGp)}
+    </div>
   </div>`;
+  /* 貼頂偵測：與管理員手機首頁同一套（sentinel 捲出畫面＝日期列貼頂） */
+  setTimeout(()=>{ try{
+    const st=document.querySelector('.admh-sticky'), sen=document.getElementById('admh-sentinel');
+    if(!st||!sen||!window.IntersectionObserver) return;
+    const tb=document.querySelector('.topbar-fixed');
+    const th=Math.round((tb&&tb.getBoundingClientRect().height)||54);
+    st.style.top=th+'px';
+    new IntersectionObserver(es=>{ st.classList.toggle('stuck', !es[0].isIntersecting); },
+      {threshold:0, rootMargin:`-${th}px 0px 0px 0px`}).observe(sen);
+  }catch(_){} },0);
 }
 PAGES.coach_notifications=async function(){
   const today=ymd(TODAY); const month=today.slice(0,7);

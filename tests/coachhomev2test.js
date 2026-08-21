@@ -8,6 +8,14 @@
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
+/* 負向比對要限定在 coachHomeV2 的函式本體內 —— 對整份原始碼比對會掃到別的頁面 */
+const V2=(()=>{ const i=src.indexOf('async function coachHomeV2(){');
+  const j=src.indexOf('\nPAGES.coach_notifications', i);
+  return src.slice(i, j>i?j:src.length); })();
+/* 註解裡會引用使用者的原話（「今日營收」「銷課金額」…），負向比對要先把註解拿掉，
+   否則驗的是「有沒有提到」而不是「有沒有做」。 */
+const V2CODE=V2.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
+
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
@@ -22,47 +30,63 @@ ok('★ 判斷用「真實身分」而不是目前角色（預覽只換 SESSION.
 ok('★ 標明這是暫時分岔，定案後要收掉（兩份版面長期並存會漏改一邊）',
    /這是\*\*暫時\*\*的分岔。定案後要把舊版整段刪掉、旗標一起拿掉/.test(src));
 
-console.log('\n上方：今日值班（取代今日營收）');
-ok('★ 三個班別膠囊', /const BANDS=\[\{k:'am',label:'早班'/.test(src)
-   && /\{k:'mid',label:'中班',col:'#1F6F54'\}/.test(src)
-   && /\{k:'pm',label:'晚班',col:'#3A5BA0'\}/.test(src));
-ok('★ 點整塊 → 既有的掃碼打卡視窗（沒有另外寫一套相機）',
-   /onclick="openStaffScanModal\(\)"/.test(src)
+console.log('\n版面：直接沿用管理員手機首頁的 .admh（使用者：「上方大日期＋kpi 再來是日期列 再來是今日課卡列表」）');
+ok('★ 大日期＋KPI 一列（.admh-bigrow）',
+   /<div class="admh chv2">[\s\S]{0,400}?<div class="admh-bigrow">/.test(src)
+   && /<div class="admh-bigdate"><span class="admh-dnum">\$\{_dv\.getDate\(\)\}<\/span>/.test(src));
+ok('★ 再來是日期列（.admh-sticky > .admh-week），最後是課卡列表（.admh-cards）',
+   /<div class="admh-sticky">\s*\n\s*<div class="admh-week">[\s\S]{0,300}?<\/div>\s*\n\s*<div class="admh-cards">/.test(src));
+ok('★ 課卡沿用 .admh-card（不是自己另做一種卡）',
+   /<div class="admh-card\$\{done\?' admh-done':''\}" style="--admh-c:\$\{_col\};" onclick="admhCardTap\(event,'\$\{b\.id\}'\)">/.test(src));
+ok('★ 教練篩選列拿掉（只有自己的課）',
+   /教練篩選列拿掉（使用者：只要顯示該教練自己的課卡就好），只留日期列/.test(src)
+   && !/admh-chip/.test(V2CODE));
+ok('　　日期列沿用教練端既有的狀態，不另立一套',
+   /onclick="ctWeekStep\(-1\)"/.test(src) && /onclick="ctPickDay\('\$\{ds\}'\)"/.test(src)
+   && /onclick="ctBackToday\(\)"/.test(src));
+ok('　　日期列上的堂數只算自己的',
+   /if\(bkCoachId\(b\)!==SESSION\.id\) return; _cnt\[b\.date\]=\(_cnt\[b\.date\]\|\|0\)\+1;/.test(src));
+ok('　　貼頂偵測與管理員首頁同一套（sentinel）',
+   /<div id="admh-sentinel"><\/div>/.test(src)
+   && /st\.classList\.toggle\('stuck', !es\[0\]\.isIntersecting\);/.test(src));
+
+console.log('\nKPI：今日營收整組換成今日值班');
+ok('★ 教練課／團體課兩格維持，第三四格換成今日值班',
+   /<div class="admh-kpi"><span>教練課<\/span><b>\$\{_ptN\} 堂<\/b><\/div>/.test(src)
+   && /<span>今日值班<\/span>/.test(src)
+   && !/今日營收/.test(V2CODE));
+ok('★ 三個班別籤（早／中／晚），有排到的才上色',
+   /const BANDS=\[\{k:'am',label:'早',col:'#D9A441'\}/.test(src)
+   && /\{k:'mid',label:'中',col:'#1F6F54'\}/.test(src)
+   && /\{k:'pm',label:'晚',col:'#3A5BA0'\}/.test(src)
+   && /\.chv2-band\.on\{background:var\(--bc\);border-color:var\(--bc\);color:#fff;\}/.test(src));
+ok('★ 點這一格 → 既有的掃碼打卡視窗（沒有另外寫一套相機）',
+   /class="admh-kpi admh-rev admh-rev-lb chv2-dutytap"[\s\S]{0,120}?onclick="openStaffScanModal\(\)"/.test(src)
    && /function openStaffScanModal\(\)\{/.test(src));
 ok('　　鍵盤也能開（role=button 要能按 Enter／空白）',
    /onkeydown="if\(event\.key==='Enter'\|\|event\.key===' '\)\{event\.preventDefault\(\);openStaffScanModal\(\);\}"/.test(src));
-ok('★ 班別界線沿用既有的 dutyShiftColor（12 點前早班、12–15 中班、15 點後晚班）',
+ok('★ 班別界線沿用 0806 定案（12 點前早、12–15 中、15 點後晚）',
    /const bandOf=t=>\{ const m=timeToMin\(t\|\|'0:0'\); return m<12\*60\?'am':\(m<15\*60\?'mid':'pm'\); \};/.test(src)
    && /if\(m < 12\*60\) return '#D9A441';   \/\/ 早班：琥珀金/.test(src));
 ok('　　沒排班就看實際打卡時間歸班（漏排班不該讓整條變灰）',
    /if\(!Object\.keys\(hit\)\.length && att&&att\.clock_in\) hit\[bandOf\(att\.clock_in\)\]/.test(src));
 ok('　　請假／上班中／已下班各有對應文字',
-   /const punchTxt = onLeave \? `今天請假/.test(src)
-   && /`上班中　\$\{att\.clock_in\} 打卡`/.test(src)
-   && /`已下班　\$\{att\.clock_in\}–\$\{att\.clock_out\}`/.test(src));
+   /const dutyTxt = onLeave \? '請假'/.test(src)
+   && /`\$\{att\.clock_in\} 上班中`/.test(src));
 
-console.log('\n中間：只有自己的課卡');
-ok('★ 只取自己的（教練篩選列不需要存在）',
-   /\.filter\(b=>b&&bkCoachId\(b\)===SESSION\.id&&b\.date===date&&b\.status!=='cancelled'\)/.test(src));
-ok('　　代課的課算在代課教練身上（bkCoachId 而不是 coach_id）',
-   /bkCoachId\(b\)===SESSION\.id&&b\.date===date/.test(src));
-ok('★ 沿用管理員首頁那套課卡（.tcard-std：時間／姓名＋出席章／第幾堂）',
-   /<div class="tcard tcard-std \$\{_clsMap\[cc\]\|\|'course-pt'\}/.test(src)
-   && /<span class="tcard-nmrow"><span class="tcard-mem">\$\{nm\}<\/span>\$\{stamp\}<\/span>/.test(src));
-ok('　　教練標籤那一格改放課種（這頁的課全是自己的，再標教練名沒有資訊量）',
-   /這一頁的課全是自己的，再標一次教練名沒有資訊量/.test(src));
-ok('　　點擊沿用 onTcardClick（與首頁同一套課卡視窗）',
-   /onclick="onTcardClick\(event,'\$\{b\.id\}'\)"/.test(src));
-ok('★ 課卡產生器目前是複寫一份，理由寫在原地（旗標拿掉時要合併）',
-   /課卡的產生器目前是複寫一份、不是共用管理員首頁那支 —— 刻意的/.test(src));
-
-console.log('\n下方：本月成績只有堂數');
-ok('★ 只有教練課與團體課兩列',
-   /\$\{scoreRow\('教練課',_pt\)\}\$\{scoreRow\('團體課',_gp\)\}/.test(src));
-ok('★ 已銷課堂／總課堂（已簽到或已完成 ÷ 本月未取消）',
-   /return \{done:a\.filter\(b=>b\.status==='checked_in'\|\|b\.status==='completed'\)\.length, all:a\.length\};/.test(src));
-ok('★ 沒有任何金額（使用者：不用顯示任何銷課金額跟總營收）',
-   !/chv2-score[\s\S]{0,900}?(monthSalesValue|銷課金額|營收|toLocaleString)/.test(src));
+console.log('\n課卡與本月成績');
+ok('★ 只取自己的（代課算在代課教練身上）',
+   /\.filter\(b=>b&&bkCoachId\(b\)===SESSION\.id&&b\.date===date\s*\n?\s*&& b\.status!=='cancelled' && !b\.sibling_of\)/.test(src));
+ok('　　右下角不標教練名（這頁的課全是自己的），但教練請假仍要標',
+   /右下角不標教練名 —— 這一頁的課全是自己的/.test(src)
+   && /admh-lvtag">教練請假/.test(src));
+ok('　　無限次卡不寫「票券 3/9999」，只標第幾堂',
+   /\(Number\(tk\.sessions_total\)\|\|0\)>=999\?`第 \$\{_nth\} 堂`:`票券 \$\{_nth\}\/\$\{tk\.sessions_total\}`/.test(src));
+ok('★ 本月成績只有教練課與團體課兩列、已銷課堂／總課堂',
+   /\$\{scoreRow\('教練課',_mPt\)\}\$\{scoreRow\('團體課',_mGp\)\}/.test(src)
+   && /return \{done:a\.filter\(x=>x\.status==='checked_in'\|\|x\.status==='completed'\)\.length, all:a\.length\};/.test(src));
+ok('★ 整頁沒有任何金額（使用者：不用顯示任何銷課金額跟總營收）',
+   !/monthSalesValue|銷課金額|總營收|admh-rev-amt|toLocaleString/.test(V2CODE));
 ok('　　友善教練課併進「教練課」',
    /const c=evColorClass\(b,typeMap\); return c==='ev-pt'\|\|c==='ev-friendly';/.test(src));
 ok('　　為什麼教練端不出現金額，寫在原地',
