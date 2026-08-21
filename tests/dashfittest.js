@@ -102,10 +102,10 @@ ok('★ 視窗改變大小要重算', /window\.addEventListener\('resize',\(\)=>
 ok('★ 高度量法與行事曆同一套（innerHeight − 元素 top − 留白）',
    /Math\.round\(window\.innerHeight - midTop - 14\)/.test(src)
    && /Math\.round\(window\.innerHeight - top - 14\)/.test(src));
-ok('★ 縮放用 zoom（會參與版面計算），不是 transform:scale',
-   /\.mc-coachcenter \.tcard-zoom\{zoom:var\(--tcz,1\);\}/.test(src));
-ok('　　為什麼不用 transform，寫在程式裡',
-   /transform 只改繪製，寬度不變會在右邊留一大塊空白/.test(src));
+/* 2026-08-21：課卡縮放整套退場（見下面第 ⑤ 區與 tests/dashdaycaltest.js）；
+   「zoom 而不是 transform」那條斷言連同 zoom 一起收掉。 */
+ok('★ 面板高度仍然是量出來的，不是寫死',
+   /cc\.style\.maxHeight=Math\.max\(320, Math\.round\(window\.innerHeight - top - 14\)\)\+'px';/.test(src));
 ok('★ 高度鏈一路傳到課卡群（卡→wrap→card→panel→body）',
    /\.mc-coachcenter\{display:flex;flex-direction:column;overflow:hidden;\}/.test(src)
    && /\.mc-coachcenter>\.mc-timeline-wrap\{flex:1;min-height:0;/.test(src)
@@ -116,7 +116,7 @@ ok('★ 縮到下限仍放不下 → 保留內捲，不默默切掉整列教練'
 ok('　　左右兩欄刻意不設 overflow（第一格用負上邊距貼齊頂欄，變捲動容器會被裁掉）',
    /一旦變成捲動容器就會被裁掉/.test(src));
 ok('　　手機版不套（走另一套版面）',
-   /if\(isMobileLayout\(\) \|\| !body \|\| !zoomEl\)\{/.test(src));
+   /if\(isMobileLayout\(\)\)\{\s*\n\s*if\(mid\)\{\s*\n\s*mid\.style\.removeProperty\('height'\);/.test(src));
 
 console.log('\n⑤ 展延到視窗底＋課卡依教練數縮放（2026-08-02 使用者指示）');
 /* 前兩次做法都讓整張卡在實機上變成一條空白（使用者回報「教練任務不見了」）：
@@ -125,64 +125,42 @@ console.log('\n⑤ 展延到視窗底＋課卡依教練數縮放（2026-08-02 �
    ② 在 .mc-coachcenter 上直接設 height —— 它的 flex 是 1.45（flex-basis:0%），
       主軸尺寸由 flex 決定，height 根本不會生效。
    這一版改成「高度給欄、zoom 給新包的內層」，而且是在瀏覽器上量過才上線的。 */
-ok('★ 課卡群外包一層 .tcard-zoom（zoom 不能套在捲動容器本身）',
-   /<div class="tcard-zoom">\$\{rows\.map\(r=>r\.cardHtml\)\.join\(''\)\}<\/div>/.test(src));
-ok('★ zoom 從 .tcard-body 移到 .tcard-zoom',
-   /\.mc-coachcenter \.tcard-zoom\{zoom:var\(--tcz,1\);\}/.test(src)
-   && !/\.mc-coachcenter \.tcard-body\{[^}]*zoom:var/.test(src));
-ok('★ 高度給「中間那一欄」，教練卡靠 flex-grow 自己撐滿',
-   /const colH=Math\.max\(260, Math\.round\(window\.innerHeight - midTop - 14\)\);/.test(src)
+/* 2026-08-21：課卡縮放整套退場（橫排課卡 → 一日行事曆，見 tests/dashdaycaltest.js）。
+   ①② 兩條死路的紀錄留在程式裡，因為「height 給欄不給卡」這一條仍然成立。 */
+ok('★ 縮放那套已完全移除（沒有殘留的死程式）',
+   !/tcard-zoom">/.test(src) && !/TCARD_ZOOM_MIN/.test(src) && !/--tcz/.test(src));
+ok('★ 高度仍然給「中間那一欄」，教練卡靠 flex-grow 自己撐滿',
+   /const colH=Math\.max\(320, Math\.round\(window\.innerHeight - midTop - 14\)\);/.test(src)
    && /mid\.style\.height=colH\+'px';/.test(src));
-ok('　　兩條走不通的路寫在程式裡，不要再走一次',
-   /主軸尺寸由 flex 決定，height 根本不會生效。/.test(src)
-   && /量到的 clientHeight 本身就被 zoom 除過，放大時測量與版面互相餵食。/.test(src));
-ok('★ 縮放用二分逼近實際量到的結果（課卡會換行，需要的高度不是等比例變化）',
-   /const fits=v=>\{ zoomEl\.style\.setProperty\('--tcz', String\(v\)\); return body\.scrollHeight<=body\.clientHeight\+1; \};/.test(src)
-   && /for\(let i=0;i<7;i\+\+\)\{ const m=\(lo\+hi\)\/2; if\(fits\(m\)\) lo=m; else hi=m; \}/.test(src));
-ok('　　為什麼不能用 box\/need 一次算，寫在程式裡',
-   /放大之後一列塞不下就多一排，\n\s*需要的高度不是等比例變化，一次算會過頭。/.test(src));
-ok('　　resize 併到下一個影格只跑一次（一次要量 7~9 遍版面）',
+ok('　　「height 不能給 .mc-coachcenter」那條教訓留著（flex-basis:0% 會蓋掉）',
+   /主軸尺寸由 flex 決定，height 根本不會生效。/.test(src));
+ok('　　為什麼 zoom 那條路作廢，寫在原地',
+   /行事曆靠時間軸定位，縮放只會把課卡壓扁/.test(src));
+ok('　　resize 仍然併到下一個影格只跑一次',
    /let _fitTick=false;/.test(src) && /requestAnimationFrame\(\(\)=>\{ _fitTick=false; try\{ fitCoachCards\(\); \}catch\(_\)\{\} \}\);/.test(src));
 
 {
-  const i2=src.indexOf('const TCARD_ZOOM_MIN=0.62, TCARD_ZOOM_MAX=1.45;');
-  const j2=src.indexOf('/* 縮放要量 7~9 次版面', i2);
+  const i2=src.indexOf('function fitCoachCards(){');
+  const j2=src.indexOf('/* resize 期間每個事件都重算版面會卡', i2);
   const code=src.slice(i2,j2);
-
-  /* 沙箱：內容需要的高度隨 zoom 等比變化（真實情況會因換行更複雜，
-     但足以驗證二分法有沒有收斂到「放得下的最大值」）。 */
-  const run=(winH, midTop, ccTop, boxH, need1, mobile)=>{
-    let z=null, midH=null, ccMax=null, cleared=0, g5h=null;
+  const run=(winH, midTop, ccTop, mobile)=>{
+    let midH=null, ccMax=null, cleared=0, g5h=null;
     const grid={ style:{ setProperty(k,v){ if(k==='--g5h') g5h=v; }, removeProperty(){ cleared++; } } };
-    const zoomEl={ style:{ setProperty(k,v){ if(k==='--tcz') z=v; }, removeProperty(){ cleared++; } } };
-    const body={ clientHeight:boxH, get scrollHeight(){ return Math.max(boxH, need1*Number(z||1)); },
-      querySelector:()=>zoomEl, querySelectorAll:()=>[] };
     const mid={ getBoundingClientRect:()=>({top:midTop}), closest:()=>grid,
       style:{ set height(v){ midH=v; }, removeProperty(){ cleared++; } } };
     const cc={ getBoundingClientRect:()=>({top:ccTop}), closest:()=>mid,
-      querySelector:()=>body,
       style:{ set maxHeight(v){ ccMax=v; }, removeProperty(){ cleared++; } } };
-    new Function('document','window','isMobileLayout','requestAnimationFrame',
-      code+'\nfitCoachCards();')({querySelector:()=>cc},{innerHeight:winH},()=>!!mobile,()=>{});
-    return {z:z==null?null:Number(z), midH, ccMax, g5h, cleared};
+    new Function('document','window','isMobileLayout',
+      code+'\nfitCoachCards();')({querySelector:()=>cc},{innerHeight:winH},()=>!!mobile);
+    return {midH, ccMax, g5h, cleared};
   };
-
-  eq('★ 中間欄撐到視窗底（900−106−14）', run(900,106,300,586,400).midH, '780px');
-  eq('★ 同一個高度傳給左右兩欄（--g5h）', run(900,106,300,586,400).g5h, '780px');
-  eq('　　教練卡自己的上限也跟著量（900−300−14）', run(900,106,300,586,400).ccMax, '586px');
-  ok('★ 教練少、空間有剩 → 放大到上限 1.45', run(900,106,300,586,300).z===1.45);
-  ok('★ 剛好放得下 → 不縮不放（收斂到 1 附近）',
-     Math.abs(run(900,106,300,586,586).z-1)<0.02, run(900,106,300,586,586).z);
-  ok('★ 內容超出 → 收斂到放得下的最大值（586/780≈0.751）',
-     Math.abs(run(900,106,300,586,780).z-0.751)<0.02, run(900,106,300,586,780).z);
-  eq('★ 縮到下限仍放不下 → 停在 0.62，讓它內捲（不默默切掉整列教練）',
-     run(900,106,300,586,5000).z, 0.62);
-  eq('　　視窗很矮時中間欄仍給 260px 下限', run(300,200,260,200,200).midH, '260px');
-  eq('　　手機版把三個尺寸都還原、不套縮放',
-     [run(900,106,300,586,400,true).z, run(900,106,300,586,400,true).midH, run(900,106,300,586,400,true).cleared>=3],
-     [null,null,true]);
+  eq('★ 中間欄撐到視窗底（900−106−14）', run(900,106,300).midH, '780px');
+  eq('★ 同一個高度傳給左右兩欄（--g5h）', run(900,106,300).g5h, '780px');
+  eq('　　教練卡自己的上限也跟著量（900−300−14）', run(900,106,300).ccMax, '586px');
+  eq('　　視窗很矮時仍給下限（行事曆要放得下時間軸，320px）', run(300,200,260).midH, '320px');
+  eq('　　手機版把尺寸還原、不設高度',
+     [run(900,106,300,true).midH, run(900,106,300,true).cleared>=3], [null,true]);
 }
-
 console.log('\n⑥ 左右兩欄也疊到視窗底＋今日營收最多 10 名（2026-08-02 使用者指示）');
 /* 「首頁左右兩邊的欄位也從視窗底部往上疊加，最高疊加到頂欄為止」
    「右側今日營收最多顯示 10 名」 */
