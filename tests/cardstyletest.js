@@ -354,8 +354,9 @@ ok('★ 「會員」鈕拿掉（點會員卡本來就會進會員資料）',
    && /onclick="collapseBkCard\(\);openMemberDetail\('\$\{r\.mid\}'\)"/.test(src));
 ok('★ 沒排人 → 安排會員',
    /if\(!b\.member_id\)\{\s*\n\s*btns \+= evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);openBindPending/.test(src));
+/* 2026-08-21：分期保留走「分期」，一般待簽約才走「儲值」 */
 ok('★ 有人沒票 → 儲值（開銷售視窗，會員已預選）',
-   /: evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ppTopUp\('\$\{b\.member_id\}'\)`,'plus','儲值'\);/.test(src)
+   /: evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ppTopUp\('\$\{b\.member_id\}'\)`,'plus','儲值'\)\);/.test(src)
    && /function ppTopUp\(mid\)\{\s*\n\s*window\._salesPreMember=mid;/.test(src));
 ok('★ 有票沒綁 → 轉正',
    /_hasTk\s*\n?\s*\? evoBtn\('evo-r2','evo-primary',`collapseBkCard\(\);openConvertPending/.test(src));
@@ -372,11 +373,47 @@ ok('★ 沒有圓鈕的卡不撐高（待簽約／空堂，免得一片空白）
 ok('★ 補一行這張卡真正該有的資訊，不是留白',
    /if\(b\.category==='體驗'\) _noTkSub=`體驗課・不扣票券/.test(src)
    && /else if\(b\.category==='場租'\) _noTkSub=`場地租借/.test(src)
-   && /else if\(b\.pending_contract\) _noTkSub='待簽約・尚未綁定票券';/.test(src));
+   && /\? '分期待繳費・尚未綁定票券' : '待簽約・尚未綁定票券';/.test(src));
 ok('★ 有票券圓點的卡不受影響（只在 !_tk 時才補）',
    /if\(!_tk && !r\.sk\)\{/.test(src));
 ok('　　體驗帶聯絡電話（櫃檯真的會用到）',
    /const _ph=String\(b\.trial_phone\|\|''\)\.trim\(\);/.test(src));
+
+console.log('\n改使用人：要先確認，改完不能跑到左上角');
+ok('★ 選了之後先跳確認（講清楚從誰改成誰）',
+   /async function ashFamConfirm\(bid, name, backTo\)\{/.test(src)
+   && /這一堂的使用人從「<b>\$\{escH\(_from\)\}<\/b>」改成「<b>\$\{escH\(_to\)\}<\/b>」/.test(src));
+ok('★ 目前那位不給按（按了也是同一個結果）', /\$\{cur===v\?'　（目前）':''\}/.test(src));
+ok('★ 確認文案講明只改「誰來上」，不動票券',
+   /只改「這堂是誰來上」，扣的還是同一張票券、堂數不變/.test(src));
+ok('★ 錨點脫離 DOM 時退回置中（改完 navTo 重畫，原本那張課卡已經不在）',
+   /const _elOk = !!\(el && el\.isConnected && el\.getBoundingClientRect/.test(src)
+   && /if\(!isMobileLayout\(\) && _elOk\)\{/.test(src));
+ok('　　成因寫在程式裡（拿脫離 DOM 的元素量會全拿到 0）',
+   /拿一個已脫離 DOM 的元素去 getBoundingClientRect\(\) 會全部拿到 0/.test(src));
+
+console.log('\n分期保留要走「開通下一期」而不是「儲值」（使用者：這堂其實是分期）');
+ok('★ 用 bkIsInstHold 分辨（靠建立保留時寫的 note 標記）',
+   /const _isInst=\(typeof bkIsInstHold==='function'\) && bkIsInstHold\(b\);/.test(src)
+   && /_isInst\s*\n?\s*\? evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ashInstNext\('\$\{id\}'\)`,'plus','分期'\)/.test(src));
+ok('★ 副標也分得出來（分期待繳費 vs 待簽約）',
+   /\? '分期待繳費・尚未綁定票券' : '待簽約・尚未綁定票券';/.test(src));
+ok('★ openInstallNext 吃票券 id，所以要先從預約找出那張分期票',
+   /async function ashInstNext\(bid\)\{/.test(src)
+   && /&& \(\(Number\(x\.sessions_total\)\|\|0\)-\(Number\(x\.unlocked_sessions\)\|\|0\)\)>0\)/.test(src));
+ok('　　找不到分期票就退回儲值，不留死路',
+   /showToast\('找不到還有未開通堂數的分期票券，改用儲值'\);\s*\n\s*return ppTopUp\(b\.member_id\);/.test(src));
+
+console.log('\n團課名單：5 人要完整顯示、請假卡不突兀');
+ok('★ 取消請假搬到右邊圓鈕（卡片內不再塞長按鈕）',
+   /_outOrbs \+= evoBtn\('','',`ashSeatAct\('\$\{b\.id\}','leave','\$\{r\.mid\}'\)`,'undo','取消請假'\);/.test(src)
+   && !/_leaveBtn=`<button type="button" class="ash-mlv ash-mlv-on"/.test(src));
+ok('　　動作參數仍用 r.mid（取消請假是按人找回名額，用 sk 會取消錯人）',
+   /動作參數沿用原本的 r\.mid（不是 r\.sk）/.test(src));
+ok('★ 卡片瘦身讓 5 張塞得下（內距 11→9、名單間距 8→7、面板間距 18→13）',
+   /padding:9px 14px 9px 15px;/.test(css)
+   && /\.ash-mems\{display:flex;flex-direction:column;gap:7px;/.test(css)
+   && /flex-direction:column;gap:13px;padding:2px 0 12px;/.test(css));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
