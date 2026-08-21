@@ -3802,6 +3802,10 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 整列反白提示「此時段可新增」；點擊直接走 .cal-half 自身 onclick（日期時間為字面值，無全域競態） */
 .cal-half:hover{background:rgba(31,111,84,0.07);}
 .cal-half.cal-half-noadd{cursor:default;}
+/* 打烊後的時段：灰底斜線、不可點（2026-08-21「週六週日不要顯示非營業時間的預約時段」） */
+.cal-half.cal-half-closed{cursor:default;background:rgba(0,0,0,0.045);}
+.cal-half.cal-half-closed:hover{background:rgba(0,0,0,0.045);}
+.cal-half.cal-half-closed.fw-win{background:rgba(0,0,0,0.045);}
 .cal-half.cal-half-noadd:hover{background:transparent;}
 /* ── 預約模式（2026-07-30 使用者指示）──
    課卡整層不吃點擊與拖曳，整片時間格都能直接點來排課；課卡降低透明度表示現在只是背景。 */
@@ -5170,10 +5174,9 @@ body.chv2-shell .bottom-nav .bn-lb{color:inherit;}
 /* 本月成績與上方課卡之間的距離（2026-08-21 使用者連問四次）——
    ⚠ 前三次都沒改到：全站有三份「本月成績」（管理員首頁、教練舊版首頁、教練預覽版），
    我只改了預覽版那一份，而使用者看的是另一份。現在三份都掛 .mstat-card，這條寫一次就好。
-   做法不只靠間距，前面補一條分隔線 —— 兩區都是白卡，只靠空白很難看出是兩區。 */
+   2026-08-21 追加：分隔線拿掉 —— 使用者回報「最後一張課卡多了一條線」（那條線貼在課卡列
+   下緣，看起來像課卡自己長出來的）。留白已經夠了，管理員首頁還多一層今日值班，呼吸感照舊。 */
 .mstat-card{margin-top:34px;position:relative;}
-.mstat-card::before{content:'';position:absolute;left:0;right:0;top:-18px;
-  height:1px;background:var(--bd);}
 /* 本月成績：只有堂數，沒有任何金額（2026-08-21 使用者指示） */
 .chv2-score-row{display:flex;align-items:baseline;justify-content:space-between;
   padding:9px 2px;border-bottom:1px dashed var(--bd);}
@@ -8723,8 +8726,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.2112';
-const APP_VERSION_LABEL='v260821.2112';
+const APP_VERSION = '260821.2126';
+const APP_VERSION_LABEL='v260821.2126';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11417,8 +11420,8 @@ function navTo(key, gkey){
      重新算一次，離開這一頁自然就拿掉，不需要各處記得清。 */
   try{
     const _chv=(key==='coach_today'||key==='coach_calendar')
-      && typeof isRealAdmin==='function' && isRealAdmin()
-      && SESSION && SESSION.role==='coach';
+      && SESSION && SESSION.role==='coach'
+      && typeof isMobileLayout==='function' && isMobileLayout();
     document.body.classList.toggle('chv2-shell', _chv);
     /* 離開行事曆就把「別人的課純檢視」的旗標關掉，免得別頁的課卡也被鎖成唯讀 */
     if(!(_chv && key==='coach_calendar')){ window._chvCal=false; window._coachReadonly=false; }
@@ -17795,15 +17798,19 @@ async function renderCalendar(opts){
        （2026-08-08 使用者更正：17:30 開始會上到 18:30，不算 18:00 前的時段）。
        下限不設 —— 有客人 8:00 上課（2026-07-20 使用者更正）。 */
     const _fwDay=d.getDay()>=1&&d.getDay()<=5;
+    const _closeMin=(typeof bizCloseMin==='function')?bizCloseMin(ds):22*60;  // 週六 21:00、週日 15:00、平日 22:00
     for(let s=0;s<totalSlots;s++){
       const min=_startMin+s*SLOT_MIN;
       const t=minToTime(min);
       const hourline=((min+SLOT_MIN)%60===0)?'hourline':'';
       const fw=(_fwDay&&(min+60)<=1080)?' fw-win':'';
+      /* 打烊後不顯示成可約時段（2026-08-21 使用者指示）——七欄共用一條時間軸沒辦法只剪短某一欄，
+         所以改成把那些格子畫成「已打烊」並拿掉點擊；該時段若已經有課，卡片照樣蓋在上面。 */
+      const _closed=min>=_closeMin;
       // 只有今天(含)以後、且有 onSlot 才可點；日期時間為字面值寫進 onclick → 無全域競態
-      const _canAdd=opts.onSlot && ds>=ymd(TODAY);
+      const _canAdd=opts.onSlot && ds>=ymd(TODAY) && !_closed;
       const click=_canAdd?`onclick="${opts.onSlot}('${ds}','${t}')"`:'';
-      halves+=`<div class="cal-half ${hourline}${fw}${_canAdd?'':' cal-half-noadd'}" ${click}></div>`;
+      halves+=`<div class="cal-half ${hourline}${fw}${_closed?' cal-half-closed':''}${_canAdd?'':' cal-half-noadd'}" ${click}></div>`;
     }
     // 該天事件,絕對定位
     const dayEvs=visible.filter(b=>b.date===ds);
@@ -20724,7 +20731,15 @@ async function renderCoachAgenda(){
   const _agEar=allBk.filter(b=>b.date===selDate).reduce((m,b)=>{const t=timeToMin(b.start_time);return isNaN(t)?m:Math.min(m,t);},9*60);
   const AG_START=Math.min(9*60, Math.floor(_agEar/60)*60);
   window._agStart=AG_START;              // cagColClick（全域函式）換算用
-  const startH=Math.floor(AG_START/60), endH=Math.floor(WTL_END/60);
+  /* 週末不顯示打烊後的空時段（2026-08-21 使用者指示：「週六週日不要顯示非營業時間的預約時段」）——
+     週六 21:00、週日 15:00 打烊（見 bizCloseMin），平日仍是 22:00＝原本的 WTL_END。
+     ⚠ 已經排在打烊後的課還是要看得到，否則等於把課藏起來、櫃檯以為那堂消失了。
+       所以軸的下緣取「打烊時間」與「當天最後一堂課的結束時間」較大的那個。 */
+  const _agLate=allBk.filter(b=>b&&b.date===selDate&&b.status!=='cancelled')
+    .reduce((m,b)=>{const t=timeToMin(b.start_time); return isNaN(t)?m:Math.max(m,t+(Number(b.duration)||60));},0);
+  const AG_END=Math.min(WTL_END, Math.max(bizCloseMin(selDate), Math.ceil(_agLate/60)*60));
+  window._agEnd=AG_END;                  // 拖曳換算要用（見 SLOT_H／maxSlot）
+  const startH=Math.floor(AG_START/60), endH=Math.ceil(AG_END/60);
   const HOUR_H=64;                       // 每小時高度(px)：加大使卡片呈直向
   const gridH=(endH-startH)*HOUR_H;      // 時間軸總高
   const yOf=(min)=> (min-AG_START)/60*HOUR_H;
@@ -20737,7 +20752,7 @@ async function renderCoachAgenda(){
     if(h<endH) gbg+=`<div class="cag-gline-label" style="top:${top+HOUR_H/2}px;">${String(h).padStart(2,'0')}:00</div>`;
   }
   const weekHasToday = selDate===todayStr;   // 單日檢視（2026-07-21）：只在檢視今天時顯示現在線/聚焦
-  const showNow = weekHasToday && nowMin>=AG_START && nowMin<=WTL_END;
+  const showNow = weekHasToday && nowMin>=AG_START && nowMin<=AG_END;
 
   // 課卡渲染（layer: mine/other/group 決定樣式與可否點）
   /* 2026-08-03 使用者指示：「櫃檯帳號、管理員帳號、店長帳號要能夠調整課卡功能」——
@@ -20836,7 +20851,7 @@ async function renderCoachAgenda(){
     let pastMask='';
     if(ds<todayStr) pastMask=`<div class="cag-past" style="top:0;height:${gridH}px;"></div>`;
     else if(ds===todayStr && nowMin>AG_START){
-      const ph=Math.min(yOf(Math.min(nowMin,WTL_END)),gridH);
+      const ph=Math.min(yOf(Math.min(nowMin,AG_END)),gridH);
       if(ph>0) pastMask=`<div class="cag-past" style="top:0;height:${ph}px;"></div>`;
     }
     const nowLine=(ds===todayStr && showNow)?`<div class="cag-gline-now" style="top:${yOf(nowMin)}px;"><span class="dot"></span></div>`:'';
@@ -20971,7 +20986,7 @@ async function renderCoachAgenda(){
       /* 切換可約時段層：回到原本捲動位置，不跳回現在時刻（2026-08-19） */
       body.scrollTop=window._cagHoldScroll; window._cagHoldScroll=null;
     }else{
-      const focusMin = (weekHasToday && nowMin>=AG_START && nowMin<=WTL_END) ? nowMin : 9*60;
+      const focusMin = (weekHasToday && nowMin>=AG_START && nowMin<=(window._agEnd||WTL_END)) ? nowMin : 9*60;
       const y=yOf(focusMin)-60; if(y>0){ window._cagSkipScroll=true; body.scrollTop=y; }
     }
   }
@@ -20986,7 +21001,7 @@ async function renderCoachAgenda(){
       const rect=col.getBoundingClientRect();
       const yy=e.clientY-rect.top;
       let slot=Math.floor(yy/SLOT_H);           // 第幾個半小時格
-      const maxSlot=(WTL_END-AG_START)/30-1;
+      const maxSlot=((window._agEnd||WTL_END)-AG_START)/30-1;
       if(slot<0)slot=0; if(slot>maxSlot)slot=maxSlot;
       const mm=AG_START+slot*30;
       const hh=String(Math.floor(mm/60)).padStart(2,'0'), mi=String(mm%60).padStart(2,'0');
@@ -21027,7 +21042,7 @@ async function renderCoachAgenda(){
       if(targetCol && tag){
         const rect=targetCol.getBoundingClientRect();
         let slot=Math.floor((cy-rect.top)/SLOT_H2);
-        const maxSlot=(WTL_END-AG_START)/30-1;
+        const maxSlot=((window._agEnd||WTL_END)-AG_START)/30-1;
         if(slot<0)slot=0; if(slot>maxSlot)slot=maxSlot;
         const mm=AG_START+slot*30;
         const ds=targetCol.getAttribute('data-date');
@@ -21065,7 +21080,7 @@ function cagColClick(ds,ev){
   if(col){
     const rect=col.getBoundingClientRect();
     const AGS=(window._agStart!=null?window._agStart:WTL_START);   // 動態起點（09:00 或更早）
-    const SLOT_H=(rect.height)/((WTL_END-AGS)/30);
+    const SLOT_H=(rect.height)/(((window._agEnd||WTL_END)-AGS)/30);   /* 軸縮短時（週末）要跟著換算，否則拖曳會落錯時間 */
     let slot=Math.floor((ev.clientY-rect.top)/SLOT_H);
     const maxSlot=(WTL_END-AGS)/30-1;
     if(slot<0)slot=0; if(slot>maxSlot)slot=maxSlot;
@@ -39804,9 +39819,10 @@ PAGES.coach_today=async function(){
      教練們在使用的頁面可以嗎?」→ 選了 A（加旗標）。
      角色預覽只是把 SESSION.role 換成 coach，跑的是同一份程式碼；所以用「真實身分是不是
      管理員」分岔：管理員預覽時看新版，教練本人仍走下面整段舊版。
-     ⚠ 這是**暫時**的分岔。定案後要把舊版整段刪掉、旗標一起拿掉 ——
-     兩份版面長期並存的話，之後每個修正都要改兩遍，遲早會漏一邊。 */
-  if(typeof isRealAdmin==='function' && isRealAdmin() && SESSION && SESSION.role==='coach'){
+     2026-08-21 上線（使用者：「教練手機版新版可以上線了」）：旗標從「管理員預覽」換成
+     「手機版面」—— 教練本人在手機上就是看新版。V2 是手機版面（大日期＋KPI＋日期列），
+     桌機仍走下面整段舊版，所以舊版先留著當桌機的路。 */
+  if(typeof isMobileLayout==='function' && isMobileLayout()){
     return coachHomeV2();
   }
   const[bookings,members,allStaff,attendance,shifts,types]=await Promise.all([
@@ -40509,8 +40525,11 @@ async function admCalHeaderHTML(){
 /* 分日打烊時間（2026-08-21 使用者定案：週六 21:00、週日 15:00，其餘平日 22:00）——
    起因：使用者回報「教練快速預約按鈕 週六怎麼可以約20:30跟21:00 這樣會讓櫃檯陪他加班」。
    原本快速預約一律排到 21:00（讓 60 分課在 22:00 打烊前結束），沒有分平日與週末。
-   ⚠ 只管快速預約按鈕（使用者指定）——行事曆時間軸的顯示範圍、手動新增預約都不受影響，
-     櫃檯真的要排打烊後的課仍然排得進去，這裡只是不要主動「建議」那些時段。
+   2026-08-21 追加（「週六週日不要顯示非營業時間的預約時段」）：打烊後的空時段也不再顯示成
+   可約格 —— 桌機行事曆那些格子畫成「已打烊」且不可點（.cal-half-closed），手機一日行事曆
+   直接把時間軸收到打烊那一小時（見 AG_END）。
+   ⚠ 兩處都只藏「空的」時段：已經排在打烊後的課照畫（手機版軸會自動往下延伸到最後一堂課），
+     否則等於把課藏起來。櫃檯真要加排打烊後的課，改時間或從會員頁仍排得進去。
    ⚠ 系統裡沒有營業時間設定表，所以先寫在這裡；日後要讓使用者自己設定再搬進資料庫。 */
 const BIZ_CLOSE_H={0:15, 6:21};   // 0=週日、6=週六；其餘用 22
 function bizCloseMin(ds){
@@ -41952,10 +41971,9 @@ async function coachCalV2(){
 PAGES.coach_calendar=async function(){
   /* 教練行事曆 V2（2026-08-21 使用者指示：「下方導覽列行事曆就把管理員手機端的行事曆
      搬過來用 只是教練只能調整自己的課卡 其他課卡只能看簡易課卡 不能互動」）——
-     與首頁 V2 同一道旗標：只有管理員預覽教練視角時走這條，教練本人維持原本的
-     「我的預約」agenda。定案後兩邊一起收。 */
-  if(typeof isRealAdmin==='function' && isRealAdmin() && SESSION && SESSION.role==='coach'
-     && isMobileLayout()){
+     與首頁 V2 同一道旗標：2026-08-21 起手機版一律走這條（含教練本人），桌機維持原本的
+     「我的預約」agenda。 */
+  if(typeof isMobileLayout==='function' && isMobileLayout()){
     try{ return await coachCalV2(); }
     catch(e){ console.error('coachCalV2 失敗，退回教練原本的行事曆', e);
       try{ showToast('⚠ 新版行事曆載入失敗，已退回原版：'+((e&&e.message)||e)); }catch(_){} }
@@ -44999,9 +45017,11 @@ function bkSelfBooked(b, memberId, selfSet){
 /* 圓形卡一次最多畫幾顆（2026-08-21 使用者定案：「一列 8 張最多兩列」）——
    起因是「無限次卡」：親友自主訓練那張的 sessions_total 是 9999，
    逐堂畫圓點就是近萬個節點，點開課卡整個分頁凍住（魚媽劉媽 18:00）。
-   截斷時最後一格改放收尾籤，不能默默少畫。 */
-const TK_DOT_MAX=16;
+   截斷時最後一格改放收尾籤，不能默默少畫。
+   ⚠ 這個上限宣告在函式**裡面**（兩支各一份）：測試是把函式原始碼抓出去單獨 eval 的，
+     放在模組層會讓 9 支測試整包 ReferenceError —— 數字要改記得兩支一起改。 */
 function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
+  const TK_DOT_MAX=16;
   const total=Math.max(Number(t.sessions_total)||0,0);
   const v=tkVisual(t,typeMap);
   /* 自主訓練依時長展開（2026-07-27 楊慧淳案例：120 分鐘＝扣 2 點 → 圓形卡畫 2 顆同日期） */
@@ -45171,7 +45191,9 @@ function ticketDots(used,total,tk){
   const isInstall = tk && tk.installment && tk.unlocked_sessions!=null && tk.unlocked_sessions<t;
   const unlocked = isInstall ? tk.unlocked_sessions : t;
   /* 同樣受 TK_DOT_MAX 限制（2026-08-21）——這支也是逐堂畫，9999 堂的票一樣會卡死。
-     這裡沒有「本堂」可以對齊，就顯示最後一段（已用的都在前面，尾端才是還沒上的）。 */
+     這裡沒有「本堂」可以對齊，就顯示最後一段（已用的都在前面，尾端才是還沒上的）。
+     數字與 ticketTokens 那支同步（理由見那裡的註解）。 */
+  const TK_DOT_MAX=16;
   let s='';
   const _cap=Math.min(t, TK_DOT_MAX);
   const _st=Math.max(0, Math.min(u, t-_cap));      // 讓「已用／未用」的交界落在視窗裡

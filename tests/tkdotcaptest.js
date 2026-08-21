@@ -13,7 +13,8 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('上限本身');
-ok('★ 一次最多 16 顆（一列 8 顆、最多兩列）', /const TK_DOT_MAX=16;/.test(src));
+ok('★ 一次最多 16 顆（一列 8 顆、最多兩列）',
+   (src.match(/const TK_DOT_MAX=16;/g)||[]).length===2);   /* 兩支各宣告一份：見 index.html 的註解 */
 ok('　　成因與案例寫在原地',
    /sessions_total 是 9999/.test(src) && /魚媽劉媽/.test(src));
 ok('★ 截斷時最後一格放收尾籤，不默默少畫',

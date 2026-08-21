@@ -21,14 +21,15 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('旗標：只有「管理員預覽教練視角」看得到');
-ok('★ 分岔在 PAGES.coach_today 的第一行，教練本人走原本整段',
-   /if\(typeof isRealAdmin==='function' && isRealAdmin\(\) && SESSION && SESSION\.role==='coach'\)\{\s*\n\s*return coachHomeV2\(\);\s*\n\s*\}/.test(src));
+ok('★ 分岔在 PAGES.coach_today 的第一行；2026-08-21 上線後看的是「手機版面」',
+   /if\(typeof isMobileLayout==='function' && isMobileLayout\(\)\)\{\s*\n\s*return coachHomeV2\(\);\s*\n\s*\}/.test(src));
 ok('★ 判斷用「真實身分」而不是目前角色（預覽只換 SESSION.role，不動 _realRole）',
    /function isRealAdmin\(\)\{ return SESSION && SESSION\._realRole==='admin'; \}/.test(src)
    /* 預覽切換確實只改 role */
    && /function switchPreviewRole\(role\)\{\s*\n\s*if\(!isRealAdmin\(\)\) return;[\s\S]{0,40}?SESSION\.role=role;/.test(src));
-ok('★ 標明這是暫時分岔，定案後要收掉（兩份版面長期並存會漏改一邊）',
-   /這是\*\*暫時\*\*的分岔。定案後要把舊版整段刪掉、旗標一起拿掉/.test(src));
+ok('★ 上線的理由與桌機仍走舊版的原因寫在原地',
+   /使用者：「教練手機版新版可以上線了」/.test(src)
+   && /桌機仍走下面整段舊版/.test(src));
 
 console.log('\n版面：直接沿用管理員手機首頁的 .admh（使用者：「上方大日期＋kpi 再來是日期列 再來是今日課卡列表」）');
 ok('★ 大日期＋KPI 一列（.admh-bigrow）',
@@ -124,7 +125,7 @@ console.log('\n班別歸屬的算術（與 dutyShiftColor 同一組界線）');
 console.log('\n二修（2026-08-21）：外框、值班籤、分隔線、進度環、下拉更新');
 ok('★ 外框樣式掛在 body.chv2-shell，由 navTo 每次換頁重算（離開自然拿掉）',
    /document\.body\.classList\.toggle\('chv2-shell', _chv\);/.test(src)
-   && /typeof isRealAdmin==='function' && isRealAdmin\(\)\s*\n\s*&& SESSION && SESSION\.role==='coach';/.test(src));
+   && /&& SESSION && SESSION\.role==='coach'\s*\n\s*&& typeof isMobileLayout==='function' && isMobileLayout\(\);/.test(src));
 ok('　　⚠ 這三樣都在頁面之外，直接改 CSS 會連教練本人一起改到 —— 理由寫在原地',
    /這三樣都在頁面之外的外框上，改 CSS 會連教練本人一起改到/.test(src));
 ok('★ ① 頂列米色', /body\.chv2-shell \.topbar\{background:var\(--card2,#F4F0E8\);\}/.test(src));
@@ -173,10 +174,12 @@ ok('★ 「尚未打卡」不顯示（還沒打卡是常態，天天掛一行等
    && !/尚未打卡/.test(V2CODE));
 /* 四問之後才發現：全站有三份「本月成績」，我一直只改預覽版那一份。
    現在三份都掛 .mstat-card，間距與分隔線寫一次。 */
-ok('★ 本月成績與課卡之間留距離（間距＋分隔線，三份共用）',
+ok('★ 本月成績與課卡之間留距離（三份共用一條間距）',
    /\.mstat-card\{margin-top:34px;position:relative;\}/.test(src)
-   && /\.mstat-card::before\{content:'';position:absolute;left:0;right:0;top:-18px;/.test(src)
    && /全站有三份「本月成績」（管理員首頁、教練舊版首頁、教練預覽版）/.test(src));
+ok('★ 分隔線退場：使用者回報「最後一張課卡多了一條線」（線貼在課卡列下緣像課卡長出來的）',
+   !/\.mstat-card::before\{/.test(src)
+   && /最後一張課卡多了一條線/.test(src));
 ok('★ 三份都掛上標記（管理員首頁兩種版面＋教練舊版＋預覽版）',
    (src.match(/class="card mc-card mstat-card"/g)||[]).length===2
    && /const ringCard=`<div class="dcard mstat-card">/.test(src)
@@ -195,8 +198,8 @@ ok('★ 本月成績的間距改由 .mstat-card 統一提供',
    /\.mstat-card\{margin-top:34px;position:relative;\}/.test(src));
 
 console.log('\n教練行事曆 V2（使用者：搬管理員手機端的行事曆，別人的課只能看）');
-ok('★ 同一道旗標：只有管理員預覽教練視角＋手機才走 V2',
-   /if\(typeof isRealAdmin==='function' && isRealAdmin\(\) && SESSION && SESSION\.role==='coach'\s*\n\s*&& isMobileLayout\(\)\)\{\s*\n\s*try\{ return await coachCalV2\(\); \}/.test(src));
+ok('★ 同一道旗標：手機版面走 V2（2026-08-21 起含教練本人），桌機維持舊 agenda',
+   /if\(typeof isMobileLayout==='function' && isMobileLayout\(\)\)\{\s*\n\s*try\{ return await coachCalV2\(\); \}/.test(src));
 ok('　　出錯就退回教練原本的行事曆，不讓頁面卡住',
    /catch\(e\)\{ console\.error\('coachCalV2 失敗，退回教練原本的行事曆', e\);/.test(src));
 ok('★ 直接走管理員手機行事曆那條路（表頭＋一日 agenda／多日欄狀）',

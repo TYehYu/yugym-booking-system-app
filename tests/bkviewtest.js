@@ -24,7 +24,8 @@ const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.len
 /* 2026-08-04「綁定會員」上線後：pending＋member 不再必然是待繳費，改由 bkIsInstHold
    （分期備註標記）判別 —— 一併注入真的 bkIsInstHold 實跑。 */
 const api=new Function('grpAllOnLeave','grpAllDone','bkIsSelf',
-  g('function bkIsInstHold(b){','\n}\n')+'\n'
+  g('function bkIsOpenHold(b){','\n}\n')+'\n'   /* 0820 空堂（待安排）：bkTag 第一行就會呼叫它 */
+  +g('function bkIsInstHold(b){','\n}\n')+'\n'
   +g('function bkTag(b){','\n}\n')+'\n'+g('function bkName(b, nameOf){','\n}\n')+'\n'
   +g('function bkNameFull(b, nameOf){','\n}\n')+'\n'+g('function bkStampKind(b){','\n}\n')
   +'\nreturn {bkTag,bkName,bkNameFull,bkStampKind};')(b=>!!(b&&b._allLeave), b=>!!(b&&b._allDone), b=>!!(b&&b.category==='自主訓練'));
@@ -33,7 +34,11 @@ const NAMES={M1:'林小明', M2:'王大華'};
 const nameOf=id=>NAMES[id]||'';
 
 console.log('標籤 bkTag');
-eq('★ 待簽約（沒綁會員）', api.bkTag({pending_contract:true}), '待簽約');
+/* 0820 空堂上線後：待簽約＋沒會員＋沒姓名＝先卡位的空堂（標籤「待安排」），
+   所以「待簽約」的案例一定要有人（trial_name 或 member_id）—— 這幾條之前沒跑到，
+   因為 bkIsOpenHold 沒注進沙箱，整支測試在這一行就掛掉。 */
+eq('★ 待簽約（沒綁會員，但有留姓名）', api.bkTag({pending_contract:true,trial_name:'王小姐'}), '待簽約');
+eq('★ 待簽約＋沒會員＋沒姓名＝空堂（0820）', api.bkTag({pending_contract:true}), '待安排');
 eq('★ 待繳費（分期保留：有會員＋分期標記）', api.bkTag({pending_contract:true,member_id:'M1',note:'分期待繳費保留（收款後自動補扣）'}), '待繳費');
 eq('★ 純綁定會員（無分期標記）仍是待簽約', api.bkTag({pending_contract:true,member_id:'M1'}), '待簽約');
 eq('★ 體驗', api.bkTag({category:'體驗'}), '體驗');
@@ -42,7 +47,7 @@ eq('　　一般教練課沒有標籤', api.bkTag({category:'私人教練',membe
 eq('　　自主訓練沒有標籤', api.bkTag({category:'自主訓練',member_id:'M1'}), '');
 eq('　　null 不會爆', api.bkTag(null), '');
 ok('★ 待簽約的判斷排在體驗前面（體驗課也可能待簽約）',
-   api.bkTag({category:'體驗',pending_contract:true})==='待簽約');
+   api.bkTag({category:'體驗',pending_contract:true,trial_name:'王小姐'})==='待簽約');
 
 console.log('\n姓名 bkName');
 eq('★ 有會員 → 會員名', api.bkName({member_id:'M1'}, nameOf), '林小明');
@@ -51,7 +56,7 @@ eq('★ 待簽約 → 客戶名', api.bkName({pending_contract:true,trial_name:'
 eq('★ 場租 → 使用人', api.bkName({category:'場租',trial_name:'魚大東'}, nameOf), '魚大東');
 eq('　　體驗沒填名字 → 體驗客戶', api.bkName({category:'體驗'}, nameOf), '體驗客戶');
 eq('　　場租沒填名字 → 場地租借', api.bkName({category:'場租'}, nameOf), '場地租借');
-eq('　　待簽約沒填名字 → 客戶', api.bkName({pending_contract:true}, nameOf), '客戶');
+eq('　　待簽約沒填名字 → 尚未安排（0820 空堂）', api.bkName({pending_contract:true}, nameOf), '尚未安排');
 eq('　　會員查不到名字 → —', api.bkName({member_id:'ZZ'}, nameOf), '—');
 eq('　　什麼都沒有 → —', api.bkName({category:'自主訓練'}, nameOf), '—');
 eq('　　null 不會爆', api.bkName(null, nameOf), '—');
