@@ -457,24 +457,19 @@ ok('★ onchange 掛在隱藏 input 上，原本的 bkRefreshPlanFilter 照樣�
    && /onchange 掛在隱藏 input 上/.test(src));
 /* 2026-08-21 二修：月曆換成捲動清單，下限改用「清單從下限開始長」實作 —— 過去的日子根本不列 */
 ok('★ 有下限的欄位（調整預約時間）根本不列出過去的日子',
-   /const from = c\.min \? \(parseYmd\(c\.min\)\|\|TODAY\) : addDays\(TODAY,-30\);/.test(src));
-ok('　　今天／明天標金色小籤，選中的整列填品牌綠（沿用全站色階）',
-   /\.adp-rtag\{flex:none;font-size:10\.5px;font-weight:700;background:#f7efe0;color:#8a5e28;/.test(css)
-   && /\.adp-row\.adp-rsel\{background:var\(--green\);color:#fff;\}/.test(css));
+   /const from=c\.min\?\(parseYmd\(c\.min\)\|\|TODAY\):addDays\(TODAY,-30\);/.test(src));
+ok('　　今天／明天直接寫在那一列（滾輪沒有多餘空間放色籤）',
+   /const tag = ds===t\?'　今天' : \(ds===tm\?'　明天' : ''\);/.test(src));
 
 console.log('\n時間也用自家挑選器（使用者：這邊也是）');
 ok('★ 兩處時間欄都換掉原生 select',
    /\$\{ashTimeField\('bk-time', pf\.time\|\|'', 'bkRefreshPlanFilter\(\)'\)\}/.test(src)
    && /\$\{ashTimeField\('amv-t', b\.start_time\)\}/.test(src)
    && !/<select id="bk-time"/.test(src) && !/<select id="amv-t"/.test(src));
-ok('★ 與月曆共用同一層浮層（不會再蓋掉底下的表單）',
-   /function ashTimeOpen\(id\)\{[\s\S]{0,400}?host\.id='adp-sheet'/.test(src)
-   && /onclick="ashDateClose\(\)"><\/div>\s*\n\s*<div class="adp-box"><div class="modal-title">選擇時間/.test(src));
-ok('★ 30 分一格、四欄九宮格，選中填品牌綠',
-   /\.adp-tgrid\{display:grid;grid-template-columns:repeat\(4,1fr\);/.test(css)
-   && /\.adp-t\.adp-sel\{background:var\(--green\);color:#fff;\}/.test(css));
-ok('　　開窗時捲到目前選的那一格（清單有 29 格）',
-   /if\(on\) on\.scrollIntoView\(\{block:'center'\}\);/.test(src));
+ok('★ 與日期共用同一層浮層（不會再蓋掉底下的表單）',
+   /function ashTimeOpen\(id\)\{[\s\S]{0,600}?host\.id='adp-sheet'/.test(src));
+ok('★ 時間 30 分一格（08:00–22:00 共 29 格）',
+   /function ashTimeList\(cur\)\{/.test(src) && /for\(let h=8;h<=22;h\+\+\)/.test(src));
 ok('　　bkTimeOptions 保留（會員快速預約與班表還在用）',
    /function bkTimeOptions\(selected, opts\)\{/.test(src)
    && /bkTimeOptions 其他流程還在用（會員快速預約、班表），所以函式保留/.test(src));
@@ -489,12 +484,27 @@ ok('★ 課程欄不再是原生 select', (()=>{
 })());
 ok('　　每一列帶課種色塊（與課卡的顏色語彙一致）',
    /<span class="adp-sw" style="background:\$\{col\};"><\/span>/.test(src));
-ok('★ 日期改成上下捲動的清單，月曆整套退場（使用者：不要用月曆）',
-   /<div class="adp-list" id="adp-list">/.test(src)
-   && !/adp-grid/.test(src) && !/function ashDateMove/.test(src));
+/* 2026-08-21 三修（使用者附圖 iOS 滾輪＋「只要一列就可以完成」）：
+   月曆 → 捲動清單 → 滾輪。日期與時間各一欄，捲到哪一格就是哪一個。 */
+ok('★ 滾輪：中央高亮帶＋scroll-snap＋上下遮罩淡出',
+   /<div class="wh-wrap wh-1"><div class="wh-band"><\/div>/.test(src)
+   && /scroll-snap-type:y mandatory/.test(css)
+   && /-webkit-mask-image:linear-gradient\(180deg,transparent 0,#000 26%,#000 74%,transparent 100%\)/.test(css));
+ok('★ 日期與時間都只有一欄（使用者：只要一列就可以完成）',
+   /\$\{ashWheelCol\('d1',items,items\[idx\]\.v\)\}/.test(src)
+   && /\$\{ashWheelCol\('t1',items,items\[idx\]\.v\)\}/.test(src)
+   && !/ashDateFixDays/.test(src));
+ok('★ 上下留半屏內距，第一格與最後一格才捲得到中央',
+   /padding:88px 0;/.test(css)
+   && /一定要留上下內距（容器高的一半減半格）/.test(src));
+ok('★ 捲停後 Math.round\(scrollTop\/格高\) 就是選到第幾格（不自己算慣性）',
+   /const i=Math\.round\(col\.scrollTop\/ASH_WH_ITEM\);/.test(src)
+   && /交給瀏覽器原生捲動，手感才對/.test(src));
+ok('★ 月曆與清單都已退場', !/adp-grid/.test(src) && !/function ashDateMove/.test(src)
+   && !/<div class="adp-list"/.test(src));
 ok('★ 有下限就從下限起算；沒有下限往前留 30 天（櫃檯偶爾要補登昨天）',
-   /const from = c\.min \? \(parseYmd\(c\.min\)\|\|TODAY\) : addDays\(TODAY,-30\);/.test(src));
-ok('　　開窗捲到目前選的那一天', /if\(on\) on\.scrollIntoView\(\{block:'center'\}\);/.test(src));
+   /const from=c\.min\?\(parseYmd\(c\.min\)\|\|TODAY\):addDays\(TODAY,-30\);/.test(src));
+ok('　　開窗捲到目前選的那一天', /ashWheelGo\('d1', idx\);/.test(src) && /ashWheelGo\('t1', idx\);/.test(src));
 ok('★ 日期顯示 2026/08/21，不帶星期（使用者定版）',
    /return `\$\{d\.getFullYear\(\)\}\/\$\{String\(d\.getMonth\(\)\+1\)\.padStart\(2,'0'\)\}\/\$\{String\(d\.getDate\(\)\)\.padStart\(2,'0'\)\}`;/.test(src));
 ok('★ 連續預約：七顆星期膠囊一列，時間在下一列',
