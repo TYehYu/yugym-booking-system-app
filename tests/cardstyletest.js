@@ -688,12 +688,16 @@ console.log('\n管理員手機行事曆的課卡補上簽章（2026-08-21 使用
    但填色同時也用在別的狀態上，光看顏色分不出「這堂到底簽了沒」。 */
 ok('★ 三種章補齊（簽到／未到／請假）',
    /:\(b\.no_show===true && b\.status!=='cancelled'\)\?'<span class="evc-check evc-noshow" title="未到課">未<\/span>'\s*\n\s*:\(k==='done'\|\|k==='makeup'\)\?`<span class="evc-check" title="\$\{k==='makeup'\?'補簽':'已完成'\}">簽<\/span>`:'';/.test(src));
-ok('★ 章放右下角（左上是付款提醒、右上是時間）',
-   /\.admcag\.cal-ev-std \.evc-check\{position:absolute;bottom:3px;right:3px;top:auto;left:auto;/.test(src));
+ok('★ 章＝右下角的 1/4 圓色塊、字在色塊中間（2026-08-21 使用者定版）',
+   /\.admcag\.cal-ev-std \.evc-check\{position:absolute;bottom:0;right:0;top:auto;left:auto;\s*\n\s*width:26px;height:26px;border-radius:100% 0 10px 0;/.test(src));
+ok('　　右下兩邊貼齊卡片邊界（像從角落切出來的，不是浮在上面的貼紙）',
+   /右下兩邊貼齊卡片邊界，\s*\n\s*看起來像從卡片角落切出來的一塊/.test(src));
 ok('★ ⚠ 一定要自己寫 position:absolute（桌機那組把 .evc-check 改成 static）',
    /桌機那組（min-width:601px）把 \.evc-check 改成\s*\n\s*static（章改排進姓名列），而直向平板 601–1024 兩組會同時命中/.test(src));
-ok('　　白底＋課種色字，在填滿的卡上也看得清楚',
-   /background:#fff;color:var\(--amc,#1f6f54\);/.test(src));
+ok('　　白底＋課種色字，在填滿的卡上也看得清楚；請假紅、未到金',
+   /background:#fff;color:var\(--amc,#1f6f54\);/.test(src)
+   && /\.admcag\.cal-ev-std \.evc-check\.evc-leave\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src)
+   && /\.admcag\.cal-ev-std \.evc-check\.evc-noshow\{background:var\(--gold,#B48A56\);color:#fff;\}/.test(src));
 ok('　　0820 那個決定為什麼被推翻，寫在原地',
    /0820 曾以「填滿課程色就是已簽到」為由把簽章拿掉，但填色同時也用在別的狀態上/.test(src));
 
