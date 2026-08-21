@@ -8574,8 +8574,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1448';
-const APP_VERSION_LABEL='v260821.1448';
+const APP_VERSION = '260821.1454';
+const APP_VERSION_LABEL='v260821.1454';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14677,13 +14677,19 @@ PAGES.g_dashboard=async function(){
     return { order:ORDER[stKey], isLive:!!inClass, isSelf:(c.id===SESSION.id), rank:_rank, hireDate:(c.hire_date||'9999-12-31'),
       total:total,   // 當日課堂數（2026-07-23 使用者指示：桌機/手機統一以此由多到少排序）
       coach:c, done:done, cardsArr:_cardsArr, bkList:_dcalBk,   // 一日行事曆用（2026-08-21）
-      /* 待會還有沒有課（2026-08-21 使用者：「待會有要上課的教練往左邊排」）——
-         nextBk 是「還沒開始、也還沒簽到」的下一堂，本來就算好了，這裡只是帶出去排序用。
-         正在上課中的也算前段班 —— 他明明還在場上，只因為「沒有下一堂」就被擠到最右邊
-         很奇怪（原本 isLive 這個條件排在課堂數後面，擋不住這種情況）。
-         ⚠ 只在檢視今天才有意義：看別天時 nowMin 是 -1，每個人都會被算成「待會有課」，
-         那條規則等於沒作用（順序退回原本的課堂數優先），這正是我們要的。 */
-      hasNext: (isTodayView && (nextBk || inClass)) ? 1 : 0,
+      /* 下一堂在幾點（2026-08-21 使用者：「待會有要上課的教練往左邊排」，
+         追加「zoe 應該要排到第二個來」）——
+         先做的版本只把「還有課」與「已上完」分成兩群、群內仍照課堂數排，
+         但使用者要的是「越快上課的越左」：ZOE 0/5 堂、15:00 就要上課，
+         該排在第二個（第一個是正在上課的 RANDY），而不是被課堂數比較多的人壓在後面。
+         ・正在上課中 → 用「現在」當排序值，他就是最即時的那一位。
+         ・還有下一堂 → 用那一堂的開始時間。
+         ・今天上完了 → Infinity，整群落到最後，群內退回課堂數優先（0723 的規則）。
+         ⚠ 只在檢視今天才算：看別天沒有「現在」可比，nowMin 是 -1 會讓每個人都取到
+         當天第一堂，順序變成「誰最早開工」——不是我們要的，所以直接給 Infinity。 */
+      nextMin: !isTodayView ? Infinity
+             : (inClass ? nowMin
+             : (nextBk ? timeToMin(nextBk.start_time||'0:0') : Infinity)),
       cardHtml: (function(){
         const cards=_cardsArr.join('');
         const emptyC = (!drawBk.length)
@@ -14757,12 +14763,12 @@ PAGES.g_dashboard=async function(){
      同堂數再看 進行中 → 本人 → 職等 → 到職日。原本的「進行中/本人置頂」退居次要條件。 */
   /* 排序（桌機欄位與手機列表共用）——
      2026-07-23：課堂最多的排最前。
-     2026-08-21 追加（使用者：「待會有要上課的教練往左邊排」）：先分成「今天還有課要上」
-     與「今天已經上完」兩群，還有課的整群排前面；群內維持原本的課堂數優先。
-     ⚠ 放在最前面是刻意的：下午三點看首頁，早上排滿、現在已經下班的教練不該還佔著最左邊；
-     但「哪一位更左」在同一群裡仍然是課堂數說了算，不另外用「誰比較快上課」再排一次
-     （那會讓欄位順序整天一直跳）。 */
-  const _taskSort=(a,b)=> (b.hasNext-a.hasNext) || (b.total-a.total) || (b.isLive-a.isLive) || (b.isSelf-a.isSelf) || (a.rank-b.rank) || ((a.hireDate>b.hireDate)?1:(a.hireDate<b.hireDate?-1:0));
+     2026-08-21：改成「越快上課的越左」（見 nextMin 的註解）—— 下一堂越早的排越前面，
+     正在上課的算「現在」、今天上完的是 Infinity 落到最後。
+     課堂數退成第二順位：同一個時間開課、或都已經上完時才由它決定。
+     ⚠ 順序會隨時間往前推移（上完一堂就往後退一位）——這是使用者要的即時感，
+     不是穩定排序；欄位位置會變，別再把它改回「整天固定」。 */
+  const _taskSort=(a,b)=> (a.nextMin-b.nextMin) || (b.total-a.total) || (b.isLive-a.isLive) || (b.isSelf-a.isSelf) || (a.rank-b.rank) || ((a.hireDate>b.hireDate)?1:(a.hireDate<b.hireDate?-1:0));
   rows.sort(_taskSort);
 
   const legend=`<div class="tl-legend">

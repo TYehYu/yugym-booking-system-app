@@ -15,26 +15,35 @@ ok('★ 桌機面板改吃 dashDayCalHTML（橫排課卡退場）',
 ok('★ 一欄一位教練，欄頭有頭像／姓名／N／M 堂',
    /<div class="dcal-col\$\{r\.isLive\?' dcal-col-live':''\}">/.test(src)
    && /<span class="dcal-ctask\$\{\(r\.total>0&&r\.done>=r\.total\)\?' done':''\}">\$\{r\.done\}\/\$\{r\.total\} 堂/.test(src));
-ok('★ 排序：待會還有課的整群在前，群內課堂最多的最左（與手機列表同一個順序）',
+ok('★ 排序：下一堂越早的越左（與手機列表同一個順序）',
    /rows\.sort\(_taskSort\);/.test(src)
-   && /const _taskSort=\(a,b\)=> \(b\.hasNext-a\.hasNext\) \|\| \(b\.total-a\.total\)/.test(src));
-ok('　　「待會有課」＝還有沒開始的下一堂，或現在正在上課',
-   /hasNext: \(isTodayView && \(nextBk \|\| inClass\)\) \? 1 : 0,/.test(src));
-ok('　　看別天時這條規則自動失效（nowMin 是 -1，每個人都會被算成待會有課）',
-   /只在檢視今天才有意義：看別天時 nowMin 是 -1/.test(src));
+   && /const _taskSort=\(a,b\)=> \(a\.nextMin-b\.nextMin\) \|\| \(b\.total-a\.total\)/.test(src));
+ok('　　正在上課＝「現在」、還有下一堂＝那一堂的時間、今天上完＝Infinity',
+   /nextMin: !isTodayView \? Infinity\s*\n\s*: \(inClass \? nowMin\s*\n\s*: \(nextBk \? timeToMin\(nextBk\.start_time\|\|'0:0'\) : Infinity\)\),/.test(src));
+ok('　　看別天不套這條（沒有「現在」可比，會變成「誰最早開工」）',
+   /只在檢視今天才算：看別天沒有「現在」可比/.test(src));
+ok('　　順序會隨時間推移，這是刻意的（別再改回整天固定）',
+   /這是使用者要的即時感，\s*\n\s*不是穩定排序；欄位位置會變，別再把它改回「整天固定」/.test(src));
 {
   /* 排序行為（與 index.html 的 _taskSort 同一條式子） */
-  const sort=(a,b)=> (b.hasNext-a.hasNext) || (b.total-a.total) || (b.isLive-a.isLive)
+  const sort=(a,b)=> (a.nextMin-b.nextMin) || (b.total-a.total) || (b.isLive-a.isLive)
     || (b.isSelf-a.isSelf) || (a.rank-b.rank) || ((a.hireDate>b.hireDate)?1:(a.hireDate<b.hireDate?-1:0));
-  const mk=(n,hasNext,total)=>({n,hasNext,total,isLive:0,isSelf:0,rank:5,hireDate:'2020-01-01'});
-  eq('★ 下午三點：早上排滿但已下班的教練，讓位給待會還有課的',
-     [mk('上完了',0,6), mk('還有課',1,2)].sort(sort).map(x=>x.n), ['還有課','上完了']);
-  eq('★ 同一群裡仍然是課堂數說了算',
-     [mk('A',1,2), mk('B',1,5), mk('C',1,3)].sort(sort).map(x=>x.n), ['B','C','A']);
-  eq('　　都上完了 → 退回原本的課堂數優先',
-     [mk('A',0,1), mk('B',0,4)].sort(sort).map(x=>x.n), ['B','A']);
-  eq('　　正在上課但沒有下一堂的人算前段班（hasNext 已把 inClass 算進去）',
-     [mk('上完了',0,9), mk('上課中',1,1)].sort(sort).map(x=>x.n), ['上課中','上完了']);
+  const mk=(n,nextMin,total,isLive)=>({n,nextMin,total,isLive:isLive?1:0,isSelf:0,rank:5,hireDate:'2020-01-01'});
+  /* 使用者附圖（8/21 約 14:57）：RANDY 正在上 14:00 那堂、ZOE 0/5 堂但 15:00 就要上課，
+     MANGO 下一堂 16:00。使用者：「zoe 應該要排到第二個來」。 */
+  const now=14*60+57;
+  eq('★ 附圖情境：上課中的 RANDY 第一、15:00 的 ZOE 第二、16:00 的 MANGO 第三',
+     [mk('MANGO',16*60,2), mk('RANDY',now,3,true), mk('ZOE',15*60,0)]
+       .sort(sort).map(x=>x.n), ['RANDY','ZOE','MANGO']);
+  eq('★ 課堂數退成第二順位：同一時間開課才由它決定',
+     [mk('少課',15*60,1), mk('多課',15*60,6)].sort(sort).map(x=>x.n), ['多課','少課']);
+  eq('★ 今天上完的整群落到最後，群內退回課堂數優先',
+     [mk('上完了A',Infinity,1), mk('待會有課',20*60,1), mk('上完了B',Infinity,7)]
+       .sort(sort).map(x=>x.n), ['待會有課','上完了B','上完了A']);
+  eq('　　正在上課的贏過待會才上課的（用「現在」當排序值）',
+     [mk('待會',15*60,9), mk('上課中',now,1,true)].sort(sort).map(x=>x.n), ['上課中','待會']);
+  eq('　　看別天：全部 Infinity → 退回課堂數優先',
+     [mk('A',Infinity,2), mk('B',Infinity,5)].sort(sort).map(x=>x.n), ['B','A']);
 }
 ok('★ 課卡 HTML 一個字都沒改，兩種版面共用同一批字串',
    /const _cardsArr=_dcalBk\.map\(b=>\{/.test(src)
