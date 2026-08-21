@@ -5052,6 +5052,34 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard{width:88px;min-width:0;min-height:56px;padding:0;flex-shrink:0;}
 .tcard-empty{position:absolute;left:0;top:24px;}
 /* .dcal-*（一日行事曆）樣式於 2026-08-21 當天隨版面一起移除 */
+/* ══ 教練首頁 V2（2026-08-21，僅管理員預覽看得到；見 coachHomeV2）══ */
+.chv2{display:flex;flex-direction:column;gap:12px;}
+.chv2-duty{cursor:pointer;transition:box-shadow .14s,transform .14s;}
+.chv2-duty:hover{box-shadow:0 6px 18px rgba(30,25,15,.13);}
+.chv2-duty:active{transform:scale(.995);}
+.chv2-duty-top,.chv2-cls-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.chv2-duty-h,.chv2-cls-h{font-size:14px;font-weight:800;color:var(--text);}
+.chv2-scan{font-size:11.5px;font-weight:700;color:var(--green);}
+.chv2-cls-n{font-family:var(--num);font-size:12px;color:var(--t3);}
+.chv2-bands{display:flex;gap:8px;}
+.chv2-band{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:9px 6px;border-radius:12px;border:1.5px solid var(--bd);background:var(--card2);
+  color:var(--t3);line-height:1.2;}
+.chv2-band b{font-size:13px;font-weight:800;}
+.chv2-band i{font-family:var(--num);font-size:10.5px;font-style:normal;opacity:.85;}
+/* 有排到班的那一格才上色（早金／中綠／晚藍，與值班圓環同一組顏色） */
+.chv2-band.on{background:var(--bc);border-color:var(--bc);color:#fff;}
+.chv2-punch{margin-top:10px;font-size:12px;font-weight:700;color:var(--t3);}
+.chv2-punch.on{color:var(--green);}
+.chv2-list{flex-wrap:wrap;}
+/* 本月成績：只有堂數，沒有任何金額（2026-08-21 使用者指示） */
+.chv2-score-row{display:flex;align-items:baseline;justify-content:space-between;
+  padding:9px 2px;border-bottom:1px dashed var(--bd);}
+.chv2-score-row:last-child{border-bottom:none;}
+.chv2-score-l{font-size:13.5px;font-weight:700;color:var(--t2);}
+.chv2-score-v{font-family:var(--num);color:var(--t3);}
+.chv2-score-v b{font-size:19px;font-weight:800;color:var(--green);}
+.chv2-score-v i{font-size:12px;font-style:normal;margin-left:2px;}
 /* 教練任務課卡：早/午/晚時段分隔線（垂直細線） */
 
 /* .mc-grid-dr（值班+圓餅兩卡列）整組已移除：HTML 中無任何元素使用，為死樣式。 */
@@ -8579,8 +8607,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1648';
-const APP_VERSION_LABEL='v260821.1648';
+const APP_VERSION = '260821.1657';
+const APP_VERSION_LABEL='v260821.1657';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -39575,6 +39603,15 @@ function ctWeekStep(delta){ _coachWeekOffset+=delta; navTo('coach_today'); }
 function ctPickDay(ds){ _coachViewDate=ds; navTo('coach_today'); }
 function ctBackToday(){ _coachViewDate=null; _coachWeekOffset=0; navTo('coach_today'); }
 PAGES.coach_today=async function(){
+  /* 教練首頁改版（2026-08-21）——使用者：「我們來修改這個頁面的版面 但先不要影響到
+     教練們在使用的頁面可以嗎?」→ 選了 A（加旗標）。
+     角色預覽只是把 SESSION.role 換成 coach，跑的是同一份程式碼；所以用「真實身分是不是
+     管理員」分岔：管理員預覽時看新版，教練本人仍走下面整段舊版。
+     ⚠ 這是**暫時**的分岔。定案後要把舊版整段刪掉、旗標一起拿掉 ——
+     兩份版面長期並存的話，之後每個修正都要改兩遍，遲早會漏一邊。 */
+  if(typeof isRealAdmin==='function' && isRealAdmin() && SESSION && SESSION.role==='coach'){
+    return coachHomeV2();
+  }
   const[bookings,members,allStaff,attendance,shifts,types]=await Promise.all([
     dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches'),
     dbGetAll('attendance').catch(()=>[]),dbGetAll('shifts').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[])]);
@@ -40391,6 +40428,127 @@ function coachAttnShift(dir){
   navTo('coach_today');
 }
 // ══════ 教練：通知（集中待辦）══════
+
+/* ══ 教練首頁 V2（2026-08-21，僅「管理員預覽教練視角」看得到，見 PAGES.coach_today 的旗標）══
+   使用者指示：「要參考這個首頁（管理員首頁的課卡）只是上方的今日營收要改成
+   今日值班[早班][中班][晚班] 點選這邊顯示照相機掃描QRcode簽到
+   教練篩選列移除 因為只要顯示該教練自己的課卡就好」。
+   ・上方＝今日值班：三個班別膠囊，有排到的那一格亮起（顏色沿用 dutyShiftColor 的
+     早金／中綠／晚藍），整塊可點 → 既有的 openStaffScanModal() 掃碼打卡。
+   ・下方＝自己的課卡，沿用管理員首頁那套 .tcard-std（時間／姓名＋出席章／第幾堂）。
+   ⚠ 課卡的產生器目前是複寫一份、不是共用管理員首頁那支 —— 刻意的：
+     這樣改這一頁不會動到教練與櫃檯正在用的畫面。旗標拿掉時要把兩邊合成一支。 */
+async function coachHomeV2(){
+  const [bookings,members,attendance,shifts,types,mtickets]=await Promise.all([
+    dbGetAll('bookings'), dbGetAll('members'),
+    dbGetAll('attendance').catch(()=>[]), dbGetAll('shifts').catch(()=>[]),
+    dbGetAll('ticket_types').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[])]);
+  const today=ymd(TODAY);
+  const date=(typeof _coachViewDate!=='undefined' && _coachViewDate) || today;
+  const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
+  const memMap=Object.fromEntries((members||[]).map(m=>[m.id,m]));
+  try{ computeLastBkMarks(mtickets||[], bookings||[], typeMap||{}); }catch(_){}
+
+  /* ── 今日值班 ── */
+  const bandOf=t=>{ const m=timeToMin(t||'0:0'); return m<12*60?'am':(m<15*60?'mid':'pm'); };
+  const BANDS=[{k:'am',label:'早班',col:'#D9A441'},
+               {k:'mid',label:'中班',col:'#1F6F54'},
+               {k:'pm',label:'晚班',col:'#3A5BA0'}];
+  const myShifts=(shifts||[]).filter(s=>s&&s.emp_id===SESSION.id&&s.date===today);
+  const att=(attendance||[]).find(a=>a&&a.emp_id===SESSION.id&&a.date===today)||null;
+  const onLeave=myShifts.find(s=>s.leave_type);
+  const hit={};
+  myShifts.filter(s=>!s.leave_type&&s.start_time).forEach(s=>{ hit[bandOf(s.start_time)]=s; });
+  /* 沒排班就看實際打卡時間歸班 —— 漏排班不該讓整條變灰（沿用 dutyShiftColor 的做法） */
+  if(!Object.keys(hit).length && att&&att.clock_in) hit[bandOf(att.clock_in)]={start_time:att.clock_in,end_time:att.clock_out||''};
+  const bands=BANDS.map(b=>{
+    const s=hit[b.k];
+    const rng=s?`${String(s.start_time||'').slice(0,5)}${s.end_time?'–'+String(s.end_time).slice(0,5):''}`:'';
+    return `<span class="chv2-band${s?' on':''}" style="--bc:${b.col};">
+      <b>${b.label}</b>${rng?`<i>${rng}</i>`:''}</span>`;
+  }).join('');
+  const punchTxt = onLeave ? `今天請假（${escH(onLeave.leave_type)}）`
+    : (att&&att.clock_in&&att.clock_out) ? `已下班　${att.clock_in}–${att.clock_out}`
+    : (att&&att.clock_in) ? `上班中　${att.clock_in} 打卡`
+    : '尚未打卡';
+  const dutyCard=`<div class="card chv2-duty" role="button" tabindex="0"
+      onclick="openStaffScanModal()"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openStaffScanModal();}">
+    <div class="chv2-duty-top"><span class="chv2-duty-h">今日值班</span>
+      <span class="chv2-scan">📷 掃碼打卡</span></div>
+    <div class="chv2-bands">${bands}</div>
+    <div class="chv2-punch${(att&&att.clock_in)?' on':''}">${punchTxt}</div>
+  </div>`;
+
+  /* ── 自己的課卡 ── */
+  const my=(bookings||[]).filter(b=>b&&bkCoachId(b)===SESSION.id&&b.date===date&&b.status!=='cancelled')
+    .sort((a,b)=>String(a.start_time||'').localeCompare(String(b.start_time||'')));
+  const nowMin=(date===today)?(new Date().getHours()*60+new Date().getMinutes()):-1;
+  const _clsMap={'ev-pt':'course-pt','ev-friendly':'course-friendly','ev-group':'course-group',
+                 'ev-self':'course-self','ev-trial':'course-trial','ev-massage':'course-massage'};
+  const _mt=Object.fromEntries((mtickets||[]).map(t=>[t.id,t]));
+  const cards=my.map(b=>{
+    const cc=evColorClass(b,typeMap,b.ticket_id?_mt[b.ticket_id]:null);
+    const isGrp=bkIsGroup(b)||(Array.isArray(b.member_ids)&&b.member_ids.length>0);
+    const nm=isGrp?grpHeadLabel(b):bkName(b,id=>memMap[id]?memMap[id].name:'');
+    const mn=timeToMin(b.start_time||'0:0');
+    const done=(b.status==='checked_in'||b.status==='completed');
+    const live=nowMin>=mn && nowMin<mn+(Number(b.duration)||60);
+    const q=(window._bkSeq||{})[b.id];
+    const stamp=(()=>{ const k=bkStampKind(b);
+      return k==='leave'?'<span class="tcard-chk tcard-chk-leave">假</span>'
+           :(b.no_show===true)?'<span class="tcard-chk tcard-chk-ns">未</span>'
+           :(k==='done'||k==='makeup')?'<span class="tcard-chk">簽</span>':''; })();
+    /* 教練標籤那一格改放課種 —— 這一頁的課全是自己的，再標一次教練名沒有資訊量 */
+    const tag=bkIsCoachLeave(b)
+      ? '<span class="tcard-co" style="background:#7A2E28;color:#F4F1E8;">請假</span>'
+      : `<span class="tcard-co">${escH((typeMap[b.ticket_type_id]||{}).name||b.category||'課程')}</span>`;
+    return `<div class="tcard tcard-std ${_clsMap[cc]||'course-pt'}${done?' tcard-done':''}${live?' tcard-live':''}"
+        data-st="${mn}" data-du="${Number(b.duration)||60}" onclick="onTcardClick(event,'${b.id}')"
+        title="${b.start_time}｜${escH(nm)}">
+      <div class="tcard-body"></div>
+      <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span>
+        <span class="tcard-nmrow"><span class="tcard-mem">${nm}</span>${stamp}</span>
+        ${q?`<span class="tcard-seq">${q.n>=999?('第 '+q.i+' 堂'):(q.i+'/'+q.n+' 堂')}</span>`:''}
+        ${tag}</div></div>`;
+  }).join('');
+  const doneN=my.filter(b=>b.status==='checked_in'||b.status==='completed').length;
+  const dLbl=(()=>{ const d=parseYmd(date)||new Date(TODAY);
+    return `${d.getMonth()+1}/${d.getDate()}（${'日一二三四五六'[d.getDay()]}）`; })();
+
+  /* ── 本月成績（2026-08-21 使用者指示：「只要顯示教練課 團體課 已銷課堂/總課堂
+     不用顯示任何銷課金額跟總營收」）——
+     刻意只有堂數：教練端不出現金額，避免把「這堂值多少錢」帶進上課現場。
+     已銷課＝已簽到／已完成；總課堂＝本月排給自己、未取消的全部。
+     ⚠ 友善教練課併進「教練課」（課卡顏色分得開，但對教練來說是同一件事）。 */
+  const ym=today.slice(0,7);
+  const mine=(bookings||[]).filter(b=>b&&bkCoachId(b)===SESSION.id
+    && String(b.date||'').slice(0,7)===ym && b.status!=='cancelled');
+  const tally=(pick)=>{
+    const a=mine.filter(pick);
+    return {done:a.filter(b=>b.status==='checked_in'||b.status==='completed').length, all:a.length};
+  };
+  const _pt=tally(b=>{ const c=evColorClass(b,typeMap); return c==='ev-pt'||c==='ev-friendly'; });
+  const _gp=tally(b=>bkIsGroup(b));
+  const scoreRow=(lb,o)=>`<div class="chv2-score-row"><span class="chv2-score-l">${lb}</span>
+    <span class="chv2-score-v"><b>${o.done}</b><i>/${o.all} 堂</i></span></div>`;
+  const scoreCard=`<div class="card chv2-score">
+    <div class="chv2-cls-top"><span class="chv2-cls-h">本月成績</span>
+      <span class="chv2-cls-n">${ym.replace('-','/')}</span></div>
+    ${scoreRow('教練課',_pt)}${scoreRow('團體課',_gp)}
+  </div>`;
+
+  C.innerHTML=`<div class="chv2">
+    ${dutyCard}
+    <div class="card chv2-cls">
+      <div class="chv2-cls-top"><span class="chv2-cls-h">${dLbl}　我的課</span>
+        <span class="chv2-cls-n">${doneN}/${my.length} 堂</span></div>
+      ${my.length?`<div class="tcard-list chv2-list">${cards}</div>`
+                 :`<div class="tcard-empty">今日無課</div>`}
+    </div>
+    ${scoreCard}
+  </div>`;
+}
 PAGES.coach_notifications=async function(){
   const today=ymd(TODAY); const month=today.slice(0,7);
   const[reqs,bookings,att]=await Promise.all([
