@@ -692,26 +692,33 @@ ok('　　滑過去仍然恢復原狀（不是把資訊藏起來）',
 ok('　　未完成的過去課卡仍不淡化（0801 定案：那是待辦，不能一起壓暗）',
    /\.cal-ev\.cal-ev-todo,\s*\n\.cal-daycol\.col-past \.cal-ev\.cal-ev-todo\{opacity:1;filter:none;\}/.test(src));
 
-console.log('\n管理員手機行事曆的課卡補上簽章（2026-08-21 使用者指示）');
-/* 0820 曾以「填滿課程色就是已簽到」為由把簽章拿掉，只留請假章；
-   但填色同時也用在別的狀態上，光看顏色分不出「這堂到底簽了沒」。 */
-ok('★ 三種章補齊（簽到／未到／請假）',
-   /:\(b\.no_show===true && b\.status!=='cancelled'\)\?'<span class="evc-check evc-noshow" title="未到課">未<\/span>'\s*\n\s*:\(k==='done'\|\|k==='makeup'\)\?`<span class="evc-check" title="\$\{k==='makeup'\?'補簽':'已完成'\}">簽<\/span>`:'';/.test(src));
-ok('★ 章＝右下角的 1/4 圓色塊、字在色塊中間（2026-08-21 使用者定版）',
-   /\.admcag\.cal-ev-std \.evc-check\{position:absolute;bottom:0;right:0;top:auto;left:auto;\s*\n\s*width:26px;height:26px;border-radius:100% 0 10px 0;/.test(src));
-ok('　　右下兩邊貼齊卡片邊界（像從角落切出來的，不是浮在上面的貼紙）',
-   /右下兩邊貼齊卡片邊界，\s*\n\s*看起來像從卡片角落切出來的一塊/.test(src));
-ok('★ ⚠ 一定要自己寫 position:absolute（桌機那組把 .evc-check 改成 static）',
-   /桌機那組（min-width:601px）把 \.evc-check 改成\s*\n\s*static（章改排進姓名列），而直向平板 601–1024 兩組會同時命中/.test(src));
-/* 2026-08-21 再修（使用者：「管理員的怎麼是白色底 請把兩邊統一給成有顏色的」） */
-ok('★ 兩邊的章統一用實色（簽綠／未金／假紅、白字）',
-   /\.admcag\.cal-ev-std \.evc-check\{[\s\S]{0,200}?background:var\(--green,#1f6f54\);color:#fff;/.test(src)
-   && /\.admcag\.cal-ev-std \.evc-check\.evc-leave\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src)
-   && /\.admcag\.cal-ev-std \.evc-check\.evc-noshow\{background:var\(--gold,#B48A56\);color:#fff;\}/.test(src));
-ok('　　同色卡上靠一圈白描邊把章切出來（卡片本身就是滿版課種色）',
-   /box-shadow:-1px -1px 0 1\.5px rgba\(255,255,255,\.9\);/.test(src));
-ok('　　0820 那個決定為什麼被推翻，寫在原地',
-   /0820 曾以「填滿課程色就是已簽到」為由把簽章拿掉，但填色同時也用在別的狀態上/.test(src));
+console.log('\n管理員手機行事曆的課卡：2026-08-21 統一走教練版那一份');
+/* 當天先在 .admcag（管理員專屬的滿版實色卡）上補了簽章、改成 1/4 圓、再改成實色；
+   最後使用者直接定案「統一改成圖2的版本」——兩邊差在課卡大小與配色，不只字級。
+   .admcag 分支整段移除，管理員與教練共用同一份課卡（連帶簽章也只剩一套）。 */
+ok('★ renderCard 不再依角色分兩種課卡',
+   !/if\(SESSION&&SESSION\.role==='admin'\)\{\s*\n\s*const _tmA=/.test(src)
+   && /2026-08-21 使用者定案取消：「手機端 教練版跟管理員版 自己的課卡的比例是不是不一樣/.test(src));
+ok('★ 共用的那一份本來就有簽章（假／簽），所以沒有漏掉',
+   /return k==='leave'\?'<span class="evc-check evc-leave" title="全員請假">假<\/span>'\s*\n\s*:\(k==='done'\|\|k==='makeup'\)\?`<span class="evc-check" title="\$\{k==='makeup'\?'補簽':'已完成'\}">簽<\/span>`:'';/.test(src));
+ok('　　.admcag 樣式暫留備查，理由寫在原地',
+   /以下 \.admcag \/ \.acg-\* 於 2026-08-21 起沒有呼叫端/.test(src));
+
+console.log('\n過去的課卡淡化加重（2026-08-21 使用者：「淡化的課卡不夠強」）');
+/* 四修（同日）：opacity .5 → .32（太強）→ 灰遮罩（還是偏淡）→ 直接壓亮度。
+   使用者：「桌機行事曆過期課卡用暗化表示 不要透明化」。 */
+ok('★ 用暗化（brightness），不是透明化（opacity）',
+   /\.cal-ev\.cal-ev-past\{opacity:1;filter:brightness\(0\.9\) saturate\(0\.72\);transition:filter \.18s;\}/.test(src)
+   && !/\.cal-ev\.cal-ev-past::after\{/.test(src));
+ok('★ 整欄再暗一階（與單卡疊加，效果相乘）',
+   /\.cal-daycol\.col-past \.cal-ev\{filter:brightness\(0\.88\) saturate\(0\.5\);\}/.test(src));
+ok('　　兩者差別寫在原地（透明會連字一起糊掉，暗化保持對比度）',
+   /透明化與暗化不是同一件事：透明會讓卡片和背景混在一起、字也跟著糊掉；/.test(src));
+ok('　　滑過去仍然恢復原狀（不是把資訊藏起來）',
+   /\.cal-ev\.cal-ev-past:hover\{filter:none;\}/.test(src)
+   && /\.cal-daycol\.col-past \.cal-ev:hover\{filter:none;\}/.test(src));
+ok('　　未完成的過去課卡仍不淡化（0801 定案：那是待辦，不能一起壓暗）',
+   /\.cal-ev\.cal-ev-todo,\s*\n\.cal-daycol\.col-past \.cal-ev\.cal-ev-todo\{opacity:1;filter:none;\}/.test(src));
 
 console.log('\n滾輪可以點（2026-08-21 使用者：「這邊時間不能按」「日期也是」）');
 ok('★ 每一格都掛 onclick，點了捲到中央',

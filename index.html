@@ -8486,6 +8486,8 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .cal-ev.cag-std.admcag::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;
   background:var(--amc,#1f6f54);z-index:1;}
 .cal-ev.cag-std.admcag .acg-in{padding-left:7px;z-index:2;}
+/* ⚠ 以下 .admcag / .acg-* 於 2026-08-21 起沒有呼叫端 —— 管理員手機行事曆的課卡
+   已統一走教練版那一份（見 renderCard 的註解）。暫留備查，確定不用了再清。 */
 .admcag .acg-in{position:relative;height:100%;display:flex;flex-direction:column;gap:2px;padding:2px 3px;box-sizing:border-box;justify-content:center;text-align:center;align-items:center;}
 .admcag .acg-mem-s{font-size:11.5px;font-weight:800;line-height:1.2;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
 .admcag .acg-r1c{font-size:10.5px;font-weight:700;font-family:var(--num);opacity:.92;}
@@ -8721,8 +8723,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1846';
-const APP_VERSION_LABEL='v260821.1846';
+const APP_VERSION = '260821.1852';
+const APP_VERSION_LABEL='v260821.1852';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20797,30 +20799,13 @@ async function renderCoachAgenda(){
     const _unpaidM=_vis && !!b.pending_contract;
     const _newM=_vis && String(b.created_at||'').slice(0,10)===ymd(TODAY);
     const _mkAlert = _unpaidM ? ' cal-ev-renew' : (_newM ? ' cal-ev-newtoday' : '');
-    /* 管理員一日課卡改版（2026-08-19 使用者定版）：課程色滿版底白字——
-       第一列課名＋右上時間、第二列會員名（大）、右下教練名（自主訓練不標）；教練端卡片照舊。 */
-    if(SESSION&&SESSION.role==='admin'){
-      const _tmA=window._admCagTm||(window._admCagTm=Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t])));
-      const _cnA=(typeof bookingTypeName==='function')?bookingTypeName(b,_tmA):(b.category||'');
-      const _colA=({pt:'#1f6f54',friendly:'#23508a',group:'#9a5a1e',self:'#6a655c',trial:'#6e3a86',massage:'#2f8f83'})[_cc]||'#1f6f54';
-      const _cid2=bkCoachId(b);
-      const _coA=(!bkIsSelf(b)&&_cid2&&coachObj[_cid2])?((typeof coachDisp==='function')?coachDisp(coachObj[_cid2]):(coachObj[_cid2].name||'')):'';
-      /* 五修（2026-08-19 使用者定版）：內容統一＝時間＋會員姓名（置中）。
-         家庭成員卡只顯示本人姓名（使用人在點開的簡易卡才看得到）；教練名也收進簡易卡。 */
-      const _dispA=(bkIsGroup(b)||!b.member_id)?disp:((memMap[b.member_id])||disp);
-      const _inA=`${showTime?`<div class="acg-r1c">${b.start_time}</div>`:''}<div class="acg-mem">${_dispA}</div>`;
-      return `<div class="cal-ev cal-ev-std cag-std admcag${done?' admcag-done':''}${(dim||bkShowsCancelled(b))?' dim':''}${canClick?'':' cag-view'}${_mkAlert}" ${canClick?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}--amc:${_colA};"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:''}>
-        ${_mk}
-        ${/* 出席章（2026-08-21 使用者指示：「管理員手機版行事曆的課卡沒有簽章 補在那組卡上」）——
-             0820 曾以「填滿課程色就是已簽到」為由把簽章拿掉，但填色同時也用在別的狀態上，
-             光看顏色分不出「這堂到底簽了沒」。三種章補齊：簽到／未到／請假。 */''}
-        ${(()=>{const k=bkStampKind(b);
-          return k==='leave'?'<span class="evc-check evc-leave" title="全員請假">假</span>'
-               :(b.no_show===true && b.status!=='cancelled')?'<span class="evc-check evc-noshow" title="未到課">未</span>'
-               :(k==='done'||k==='makeup')?`<span class="evc-check" title="${k==='makeup'?'補簽':'已完成'}">簽</span>`:'';})()}
-        <div class="acg-in">${_inA}</div>
-      </div>`;
-    }
+    /* 管理員一日課卡（2026-08-19 曾改成「課程色滿版底白字」的 .admcag 專屬版）——
+       2026-08-21 使用者定案取消：「手機端 教練版跟管理員版 自己的課卡的比例是不是不一樣
+       幫我統一改成教練版的比例」→「課卡大小 顏色」→「幫我統一改成圖2的版本」。
+       兩邊差在卡片大小與配色（滿版實色 vs 淡底＋課種色條），不是只有字級 ——
+       與其兩份各調各的，直接讓管理員也走下面這一份，之後只要維護一種課卡。
+       ⚠ .admcag / .acg-* 那組樣式因此沒有呼叫端了；沒有一併刪除是因為
+         「管理員手機行事曆改版」還可能回頭用，若確定不用了再清。 */
     return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${(dim||bkShowsCancelled(b))?' dim':''}${canClick?'':' cag-view'}${_mkAlert}" ${canClick?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:''}>
       ${_mk}
       ${(()=>{const k=bkStampKind(b);
