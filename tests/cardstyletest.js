@@ -736,5 +736,18 @@ ok('　　滑過去恢復原狀', /\.tcard\.tcard-std\.tcard-pend:hover\{ filter
 ok('　　與過期課卡同一套邏輯（透明會讓字糊掉，暗化保持對比度）',
    /原本是把文字 opacity 壓到 \.62（透明化），字會跟背景糊在一起；/.test(src));
 
+console.log('\n快速預約改回右下角浮動圓鈕（2026-08-21 使用者指示）');
+ok('★ 模式列右邊的＋移除（連樣式一起）',
+   !/class="admcal-add"/.test(src)
+   && !/\.admcal-add\{/.test(src)
+   && /\.admcal-add（模式列上的＋）於 2026-08-21 隨按鈕一起移除/.test(src));
+ok('★ 既有的右下角浮動＋回來（0819 為了模式列的＋把它藏起來）',
+   !/\.role-admin \.cag-fab\{display:none !important;\}/.test(src)
+   && /<button type="button" class="cag-fab\$\{window\._cagSlotOpen\?' on':''\}" onclick="cagToggleSlots\(\)"/.test(src));
+ok('　　沒有做出第二顆（沿用既有的 .cag-fab，不另立一套）',
+   (src.match(/class="cag-fab/g)||[]).length===1);
+ok('　　一週檢視沒有這顆的理由寫在原地',
+   /一週檢視沒有這顆：那邊點空白時段本來就會直接開新增預約/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
