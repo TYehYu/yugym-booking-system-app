@@ -5033,14 +5033,7 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* ══ 首頁一日行事曆（2026-08-21 使用者指示：教練任務 → 一日行事曆＋教練篩選列）══
    教練當欄位、左邊時間軸；課卡沿用 .tcard.tcard-std，只是改成絕對定位、
    高度由課程長度決定（30 分一格 48px ⇒ 60 分課＝96px，跟原本 98px 的卡幾乎一樣高）。 */
-.dcal-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 2px 10px;}
-.dcal-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;
-  border:1.5px solid var(--bd);background:var(--card2);color:var(--t2);
-  font-family:inherit;font-size:12px;font-weight:700;line-height:1.4;cursor:pointer;
-  transition:opacity .12s,background .12s,color .12s;}
-.dcal-chip .dcal-chip-n{font-family:var(--num);font-size:11px;opacity:.75;}
-.dcal-chip.off{opacity:.4;}                      /* 關掉的教練：淡化但留在原位，順序不跳動 */
-.dcal-chip-all.on{background:var(--green);color:#fff;border-color:var(--green);}
+/* .dcal-chip*（教練篩選列）於 2026-08-21 當天移除，見 dashDayCalHTML 的註解 */
 .dcal-body{overflow:auto;position:relative;flex:1;min-height:0;}
 .dcal-grid{display:flex;align-items:flex-start;min-width:100%;width:max-content;}
 .dcal-timecol{position:sticky;left:0;z-index:6;flex:none;width:50px;background:var(--card,#fff);}
@@ -8581,8 +8574,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1405';
-const APP_VERSION_LABEL='v260821.1405';
+const APP_VERSION = '260821.1409';
+const APP_VERSION_LABEL='v260821.1409';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14180,6 +14173,7 @@ function butlerArtNext(){
 /* ══ 首頁一日行事曆（2026-08-21 使用者指示）══════════════════════════
    原話：「首頁這邊教練任務 改成一日行事曆 最上方一排教練篩選列 課堂最多的往左邊排序
    所以桌機版首頁是一日行事曆 預約管理是七日行事曆」，追加「有空白沒有關係 也加入時間紅線」。
+   同日再指示「移除上方篩選列」—— 篩選列做完就拿掉了（見下方註解）。
 
    ・教練當欄位（預約管理是日期當欄位），左邊一條時間軸，課卡落在真實時間上。
    ・欄位順序＝當日課堂最多的排最左（沿用 _taskSort，與手機列表同一個順序）。
@@ -14187,13 +14181,9 @@ function butlerArtNext(){
    ・課卡 HTML 沿用教練任務那批（見 _cardsArr），一個字都沒改：
      同一張卡在橫排版與行事曆版看起來一樣，點擊也還是 onTcardClick。 */
 const DCAL_SLOT=48, DCAL_STEP=30, DCAL_HEAD=46;
-function dashCoachOff(){ return window._dashCoachOff||(window._dashCoachOff={}); }
-function dashToggleCoach(id){
-  const o=dashCoachOff();
-  if(o[id]) delete o[id]; else o[id]=1;
-  navTo('g_dashboard');
-}
-function dashCoachAll(){ window._dashCoachOff={}; navTo('g_dashboard'); }
+/* 教練篩選列於 2026-08-21 當天移除（使用者：「移除上方篩選列」）——
+   欄位本來就照課堂數由多到少排，六七位教練一次看得完，篩選列反而多佔一列高度。
+   相關的 dashCoachOff／dashToggleCoach／dashCoachAll 與 .dcal-chip* 樣式一併刪除。 */
 /* 同一位教練同一個時段撞課（雙開／代課重疊）就左右分欄。
    ⚠ 分欄數要「逐群」算，不能整欄共用：整欄共用的話，早上一次撞課會害這位教練
    一整天的課卡全部縮成半寬。所以先切出互相重疊的群，群內才分欄、群外維持整寬。 */
@@ -14219,20 +14209,8 @@ function dcalLanes(bks){
   return ev.map((e,k)=>({st:e.st, en:e.en, lane:out[k].lane, lanes:out[k].lanes}));
 }
 function dashDayCalHTML(rows, o){
-  const off=dashCoachOff();
-  const shown=rows.filter(r=>!off[r.coach.id]);
-  const chips=`<button type="button" class="dcal-chip dcal-chip-all${Object.keys(off).length?'':' on'}"
-      onclick="dashCoachAll()">全部</button>`
-    + rows.map(r=>{
-        const cc=coachTagColor(r.coach.id), hide=!!off[r.coach.id];
-        return `<button type="button" class="dcal-chip${hide?' off':' on'}"
-          style="${hide?'':`background:${cc.bg};color:${cc.fg};border-color:${cc.bg};`}"
-          onclick="dashToggleCoach('${r.coach.id}')">${coachDisp(r.coach)}<span class="dcal-chip-n">${r.total}</span></button>`;
-      }).join('');
-  if(!shown.length){
-    return `<div class="dcal-chips">${chips}</div>
-      <div class="empty" style="padding:34px;text-align:center;color:var(--t3);">篩選後沒有要顯示的教練</div>`;
-  }
+  const shown=rows;
+  if(!shown.length) return `<div class="empty" style="padding:34px;text-align:center;color:var(--t3);">今日沒有課程安排</div>`;
   /* 時間範圍：預設 09:00–22:00，有更早／更晚的課就往外撐（與預約管理同一套做法）。 */
   let s0=9*60, s1=22*60;
   shown.forEach(r=>(r.bkList||[]).forEach(b=>{
@@ -14275,8 +14253,7 @@ function dashDayCalHTML(rows, o){
   const nowLine=(o.isTodayView && o.nowMin>=s0 && o.nowMin<=s1)
     ? `<div class="cal-now dcal-now" style="top:calc(${DCAL_HEAD}px + ${yOf(o.nowMin)}px);"><span class="cal-now-dot"></span></div>`
     : '';
-  return `<div class="dcal-chips">${chips}</div>
-    <div class="tcard-body dcal-body">
+  return `<div class="tcard-body dcal-body">
       <div class="dcal-grid" style="--dcal-slot:${DCAL_SLOT}px;--dcal-head:${DCAL_HEAD}px;">
         <div class="dcal-timecol"><div class="dcal-headsp"></div>${ticks}</div>
         <div class="dcal-cols">${cols}${nowLine}</div>

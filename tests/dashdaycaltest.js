@@ -43,20 +43,16 @@ ok('　　一條橫跨所有欄位，不是每欄一條（每欄一條會有一�
 ok('　　沿用行事曆既有的 .cal-now 樣式，不另立一套',
    /\.cal-now\{position:absolute;left:0;right:0;height:0;border-top:2\.5px solid #e0533a;/.test(src));
 
-console.log('\n教練篩選列');
-ok('★ 最上方一排膠囊，含「全部」',
-   /<div class="dcal-chips">\$\{chips\}<\/div>/.test(src)
-   && /class="dcal-chip dcal-chip-all\$\{Object\.keys\(off\)\.length\?'':' on'\}"/.test(src)
-   && /onclick="dashCoachAll\(\)"/.test(src));
-ok('★ 逐位切換（不是單選）—— 關掉的淡化留在原位，順序不跳動',
-   /function dashToggleCoach\(id\)\{/.test(src)
-   && /if\(o\[id\]\) delete o\[id\]; else o\[id\]=1;/.test(src)
-   && /\.dcal-chip\.off\{opacity:\.4;\}/.test(src));
-ok('　　膠囊帶該教練的顏色與課堂數',
-   /const cc=coachTagColor\(r\.coach\.id\), hide=!!off\[r\.coach\.id\];/.test(src)
-   && /<span class="dcal-chip-n">\$\{r\.total\}<\/span>/.test(src));
-ok('　　全部關掉時給說明，不是一片空白',
-   /篩選後沒有要顯示的教練/.test(src));
+console.log('\n教練篩選列（做完當天使用者又說移除）');
+/* 只驗「程式」不在了 —— 註解裡還留著這些名字，說明它們為什麼被拿掉 */
+ok('★ 篩選列整組移除：膠囊、切換函式、樣式都不留',
+   !/class="dcal-chip/.test(src) && !/\.dcal-chip\{/.test(src)
+   && !/function dashToggleCoach/.test(src) && !/function dashCoachAll/.test(src)
+   && !/window\._dashCoachOff=/.test(src));
+ok('　　移除的理由留在原地（欄位本來就照課堂數排，篩選列多佔一列）',
+   /欄位本來就照課堂數由多到少排，六七位教練一次看得完，篩選列反而多佔一列高度/.test(src));
+ok('　　沒課可畫時給說明，不是一片空白',
+   /今日沒有課程安排/.test(src));
 
 console.log('\n撞課分欄');
 {
