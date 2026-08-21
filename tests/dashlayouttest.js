@@ -113,8 +113,10 @@ ok('　　滑過看得到那天有幾堂', /title="\$\{ds\}\$\{n\?`　\$\{n\} �
 }
 
 console.log('\n課卡加一列「第幾堂／共幾堂」（使用者：「這第幾堂/總堂數在名字下面」）');
-ok('★ 接在姓名後面（.tcard-txt 是直排，等於名字下面一列）',
-   /<span class="tcard-mem">\$\{nm\}<\/span>\$\{\(\(\)=>\{\s*\n\s*const q=\(window\._bkSeq\|\|\{\}\)\[b\.id\];\s*\n\s*return q\?`<span class="tcard-seq">\$\{q\.i\}\/\$\{q\.n\} 堂<\/span>`:'';\}\)\(\)\}/.test(src));
+/* 2026-08-21 四修：姓名與出席章包成 .tcard-nmrow 一列，這一行接在那一列後面
+   （.tcard-txt 是直排 → 等於名字下面一列） */
+ok('★ 接在姓名那一列的下面',
+   /<\/span>\$\{\(\(\)=>\{\s*\n\s*const q=\(window\._bkSeq\|\|\{\}\)\[b\.id\];\s*\n\s*return q\?`<span class="tcard-seq">\$\{q\.i\}\/\$\{q\.n\} 堂<\/span>`:'';\}\)\(\)\}/.test(src));
 ok('★ 沿用 computeLastBkMarks 已建好的索引，不另外掃一次 bookings',
    /window\._bkSeq=\{\};/.test(src)
    && /const arr=_bkByTk\[t\.id\]; if\(!arr\|\|!arr\.length\) return;/.test(src)

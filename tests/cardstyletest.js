@@ -30,21 +30,20 @@ ok('★ ① 時間＋姓名靠左上（兩張卡成對）',
 ok('★ ② 教練放底部靠右（margin-top:auto 推到底＋align-self 靠右）',
    /\.cal-ev\.cal-ev-std \.evc-coach,\s*\n\s*\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(blk));
 
-/* 三修（使用者指示）：「桌機版課卡 移除出席章好了，在簡易課卡這邊的會員卡姓名右邊
-   可以看到就好」——行事曆一格塞不下四樣東西，到課狀態改成點開課卡再看。 */
-ok('★ ③ 桌機課卡不畫出席章',
-   /\.cal-ev\.cal-ev-std \.evc-check,\s*\n\s*\.tcard\.tcard-std \.tcard-chk\{ display:none !important; \}/.test(blk));
-ok('　　只在桌機隱藏，手機的角落章與 DOM 都沒動',
-   /手機仍是原本的角落章，所以只在桌機隱藏，DOM 與手機樣式都不動/.test(blk)
+/* 三修：「桌機版課卡 移除出席章好了」→ 四修（同日）：「不要用填滿的 只要在會員姓名
+   右邊顯示出席章」。首頁課卡的最終樣子驗在下面「簽到的課卡不填滿」那一段；
+   這裡只留「行事曆那半邊沒被動到」。 */
+ok('★ ③ 行事曆課卡仍不畫出席章（一格塞不下四樣東西）',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ display:none !important; \}/.test(blk)
    && /<span class="evc-check"/.test(src));
-ok('　　到課狀態改在簡易課卡的會員卡上看（那三個標籤仍在）',
+ok('　　到課狀態也還看得到（簡易課卡的會員卡上那三個標籤仍在）',
    /ash-mtag-leave">請假/.test(src) && /ash-mtag-ns">未到/.test(src) && /ash-mtag-ok">已簽到/.test(src));
 
-ok('★ ④ 已簽到 → 整卡填課程色（原本標準卡刻意不填，這次改回填滿）',
-   /\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body,\s*\n\s*\.tcard\.tcard-std\.tcard-done \.tcard-body\{\s*\n\s*background:var\(--course-accent,#3D7039\) !important;/.test(blk));
+ok('★ ④ 行事曆已簽到 → 整卡填課程色（首頁 2026-08-21 起不填，見下方）',
+   /\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{\s*\n\s*background:var\(--course-accent,#3D7039\) !important;/.test(blk));
 ok('　　運動按摩有自己的色（沒有 --course-accent，會退回預設綠）',
-   /\.tcard\.tcard-std\.tcard-done\.course-massage \.tcard-body\{\s*\n\s*background:#2f8f83 !important;/.test(blk));
-ok('　　填色後文字轉白', /\.tcard\.tcard-std\.tcard-done \.tcard-mem\{ color:#fff !important; \}/.test(blk));
+   /\.cal-ev\.cal-ev-std\.cal-ev-checked\.ev-massage \.evc-body\{\s*\n\s*background:#2f8f83 !important;/.test(blk));
+ok('　　填色後文字轉白', /\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-name\{ color:#fff !important; \}/.test(blk));
 
 ok('★ ⑤ 待簽約與空堂 → 淡化＋紅框',
    /\.cal-ev\.cal-ev-std\.cal-ev-pend \.evc-body,\s*\n\s*\.tcard\.tcard-std\.tcard-pend \.tcard-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;/.test(blk)
@@ -66,10 +65,10 @@ ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    {stamp:src.indexOf('const _stampOut ='), body:src.indexOf('const _bodyOut =')});
 ok('　　順序要求寫在程式裡（免得日後有人搬回去）',
    /這一段要在 _bodyOut 之前算完/.test(src));
-/* 2026-08-21：姓名與章之間插進「第幾堂／共幾堂」那一列（見 tests/dashlayouttest.js），
-   章仍然排在姓名之後，只是中間多了一段。 */
-ok('★ 首頁：章也排在姓名之後',
-   /<span class="tcard-mem">\$\{nm\}<\/span>\$\{[\s\S]{0,220}?tcard-seq[\s\S]{0,80}?\}\)\(\)\}\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src));
+/* 2026-08-21 四修：章移到姓名同一列（.tcard-nmrow 包住兩者），
+   「第幾堂／共幾堂」則排在那一列的下面。 */
+ok('★ 首頁：章緊接在姓名右邊',
+   /<span class="tcard-nmrow"><span class="tcard-mem">\$\{nm\}<\/span>\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src));
 
 console.log('\n過期的課卡也要開簡易課卡');
 ok('★ 不再依 editable 分流到舊的預約明細',
@@ -582,6 +581,33 @@ ok('　　跟 .ash-eirow 同一個數字（9px）',
    /border-radius:18px;padding:14px 16px;margin-bottom:9px;cursor:pointer;/.test(src));
 ok('　　會撞到的實際情境寫在程式裡（教練請假：說明＋刪除預約）',
    /說明塊原本沒有下間距，後面接著一列（教練請假那張：說明＋「刪除預約」）時/.test(src));
+
+console.log('\n簽到的課卡不填滿、章回到姓名右邊（2026-08-21 四修）');
+/* 使用者：「首頁簽到的課卡 不要用填滿的 只要在會員姓名右邊顯示出席章
+   然後簽到的課卡為什麼第幾堂/總堂數的標示不見了」。
+   ⚠ 後半段其實是前半段造成的：填滿只把 time／mem／sub 三個改成白字，
+   當天稍早才加的 .tcard-seq 不在那份清單裡 → 深色底上的深色字，看不見。 */
+ok('★ 首頁課卡（.tcard-std）簽到後不再填滿',
+   !/\.tcard\.tcard-std\.tcard-done \.tcard-body\{/.test(src)
+   && !/\.tcard\.tcard-std\.tcard-done \.tcard-mem\{ color:#fff/.test(src));
+ok('★ 行事曆（.cal-ev-std）維持填滿，只有首頁改',
+   /\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{\s*\n\s*background:var\(--course-accent,#3D7039\) !important;/.test(src));
+ok('★ 出席章改回顯示，且在姓名右邊（同一列）',
+   !/\.tcard\.tcard-std \.tcard-chk\{ display:none !important; \}/.test(src)
+   && /<span class="tcard-nmrow"><span class="tcard-mem">\$\{nm\}<\/span>\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src)
+   && /\.tcard-nmrow\{display:flex;align-items:center;justify-content:center;gap:4px;/.test(src));
+ok('　　章從右下角的三角形角章改成小圓章（角章會壓到教練標籤）',
+   /\.tcard-chk\{flex:none;width:16px;height:16px;border-radius:50%;/.test(src)
+   && /角章壓在教練標籤那一角，卡片一窄就互相疊/.test(src));
+ok('　　三種章各有顏色：簽到綠、請假紅、未到金',
+   /\.tcard-chk\.tcard-chk-leave\{background:var\(--danger,#b5372e\);\}/.test(src)
+   && /\.tcard-chk\.tcard-chk-ns\{background:var\(--gold-d,#b48a56\);\}/.test(src));
+ok('★ 「第幾堂／共幾堂」仍在姓名列的下面（不是被塞進姓名那一列）',
+   /<\/span>\$\{\(\(\)=>\{\s*\n\s*const q=\(window\._bkSeq\|\|\{\}\)\[b\.id\];/.test(src));
+ok('　　簽到的辨識改靠既有的綠環（0806 就有，不必再靠填色）',
+   /\.tcard-std\.tcard-done:not\(\.tcard-live\)::before\{content:'';position:absolute;inset:-2px;/.test(src));
+ok('　　「看不見」的成因寫在原地，避免日後又把填滿加回來',
+   /於是深色底上是深色字 —— 使用者回報「簽到的課卡為什麼第幾堂\/總堂數的標示不見了」/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
