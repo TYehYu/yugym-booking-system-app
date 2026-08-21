@@ -15,9 +15,27 @@ ok('★ 桌機面板改吃 dashDayCalHTML（橫排課卡退場）',
 ok('★ 一欄一位教練，欄頭有頭像／姓名／N／M 堂',
    /<div class="dcal-col\$\{r\.isLive\?' dcal-col-live':''\}">/.test(src)
    && /<span class="dcal-ctask\$\{\(r\.total>0&&r\.done>=r\.total\)\?' done':''\}">\$\{r\.done\}\/\$\{r\.total\} 堂/.test(src));
-ok('★ 課堂最多的排最左（沿用 _taskSort，與手機列表同一個順序）',
+ok('★ 排序：待會還有課的整群在前，群內課堂最多的最左（與手機列表同一個順序）',
    /rows\.sort\(_taskSort\);/.test(src)
-   && /const _taskSort=\(a,b\)=> \(b\.total-a\.total\)/.test(src));
+   && /const _taskSort=\(a,b\)=> \(b\.hasNext-a\.hasNext\) \|\| \(b\.total-a\.total\)/.test(src));
+ok('　　「待會有課」＝還有沒開始的下一堂，或現在正在上課',
+   /hasNext: \(isTodayView && \(nextBk \|\| inClass\)\) \? 1 : 0,/.test(src));
+ok('　　看別天時這條規則自動失效（nowMin 是 -1，每個人都會被算成待會有課）',
+   /只在檢視今天才有意義：看別天時 nowMin 是 -1/.test(src));
+{
+  /* 排序行為（與 index.html 的 _taskSort 同一條式子） */
+  const sort=(a,b)=> (b.hasNext-a.hasNext) || (b.total-a.total) || (b.isLive-a.isLive)
+    || (b.isSelf-a.isSelf) || (a.rank-b.rank) || ((a.hireDate>b.hireDate)?1:(a.hireDate<b.hireDate?-1:0));
+  const mk=(n,hasNext,total)=>({n,hasNext,total,isLive:0,isSelf:0,rank:5,hireDate:'2020-01-01'});
+  eq('★ 下午三點：早上排滿但已下班的教練，讓位給待會還有課的',
+     [mk('上完了',0,6), mk('還有課',1,2)].sort(sort).map(x=>x.n), ['還有課','上完了']);
+  eq('★ 同一群裡仍然是課堂數說了算',
+     [mk('A',1,2), mk('B',1,5), mk('C',1,3)].sort(sort).map(x=>x.n), ['B','C','A']);
+  eq('　　都上完了 → 退回原本的課堂數優先',
+     [mk('A',0,1), mk('B',0,4)].sort(sort).map(x=>x.n), ['B','A']);
+  eq('　　正在上課但沒有下一堂的人算前段班（hasNext 已把 inClass 算進去）',
+     [mk('上完了',0,9), mk('上課中',1,1)].sort(sort).map(x=>x.n), ['上課中','上完了']);
+}
 ok('★ 課卡 HTML 一個字都沒改，兩種版面共用同一批字串',
    /const _cardsArr=_dcalBk\.map\(b=>\{/.test(src)
    && /coach:c, done:done, cardsArr:_cardsArr, bkList:_dcalBk,/.test(src)

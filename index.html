@@ -8574,8 +8574,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1428';
-const APP_VERSION_LABEL='v260821.1428';
+const APP_VERSION = '260821.1448';
+const APP_VERSION_LABEL='v260821.1448';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14677,6 +14677,13 @@ PAGES.g_dashboard=async function(){
     return { order:ORDER[stKey], isLive:!!inClass, isSelf:(c.id===SESSION.id), rank:_rank, hireDate:(c.hire_date||'9999-12-31'),
       total:total,   // 當日課堂數（2026-07-23 使用者指示：桌機/手機統一以此由多到少排序）
       coach:c, done:done, cardsArr:_cardsArr, bkList:_dcalBk,   // 一日行事曆用（2026-08-21）
+      /* 待會還有沒有課（2026-08-21 使用者：「待會有要上課的教練往左邊排」）——
+         nextBk 是「還沒開始、也還沒簽到」的下一堂，本來就算好了，這裡只是帶出去排序用。
+         正在上課中的也算前段班 —— 他明明還在場上，只因為「沒有下一堂」就被擠到最右邊
+         很奇怪（原本 isLive 這個條件排在課堂數後面，擋不住這種情況）。
+         ⚠ 只在檢視今天才有意義：看別天時 nowMin 是 -1，每個人都會被算成「待會有課」，
+         那條規則等於沒作用（順序退回原本的課堂數優先），這正是我們要的。 */
+      hasNext: (isTodayView && (nextBk || inClass)) ? 1 : 0,
       cardHtml: (function(){
         const cards=_cardsArr.join('');
         const emptyC = (!drawBk.length)
@@ -14748,7 +14755,14 @@ PAGES.g_dashboard=async function(){
   }).filter(Boolean);
   /* 排序（2026-07-23 使用者指示，桌機／手機統一）：**當日課堂數多的排最前**，依序往下；
      同堂數再看 進行中 → 本人 → 職等 → 到職日。原本的「進行中/本人置頂」退居次要條件。 */
-  const _taskSort=(a,b)=> (b.total-a.total) || (b.isLive-a.isLive) || (b.isSelf-a.isSelf) || (a.rank-b.rank) || ((a.hireDate>b.hireDate)?1:(a.hireDate<b.hireDate?-1:0));
+  /* 排序（桌機欄位與手機列表共用）——
+     2026-07-23：課堂最多的排最前。
+     2026-08-21 追加（使用者：「待會有要上課的教練往左邊排」）：先分成「今天還有課要上」
+     與「今天已經上完」兩群，還有課的整群排前面；群內維持原本的課堂數優先。
+     ⚠ 放在最前面是刻意的：下午三點看首頁，早上排滿、現在已經下班的教練不該還佔著最左邊；
+     但「哪一位更左」在同一群裡仍然是課堂數說了算，不另外用「誰比較快上課」再排一次
+     （那會讓欄位順序整天一直跳）。 */
+  const _taskSort=(a,b)=> (b.hasNext-a.hasNext) || (b.total-a.total) || (b.isLive-a.isLive) || (b.isSelf-a.isSelf) || (a.rank-b.rank) || ((a.hireDate>b.hireDate)?1:(a.hireDate<b.hireDate?-1:0));
   rows.sort(_taskSort);
 
   const legend=`<div class="tl-legend">
