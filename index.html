@@ -8550,8 +8550,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1318';
-const APP_VERSION_LABEL='v260821.1318';
+const APP_VERSION = '260821.1325';
+const APP_VERSION_LABEL='v260821.1325';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -36635,21 +36635,13 @@ async function openSalesModal(){
         <select id="sl-member">${memOpts}</select>
       </div>
     </div>
-    ${/* 排序定版（2026-08-03 使用者指示）：第一列 教練課/團體課/運動按摩、
-         第二列 自主訓練/團課體驗/自訂 —— 課程銷售區固定一列三張（sl-cards-3）。 */''}
-    <div class="form-row"><label>課程銷售</label><div class="sl-cards sl-cards-3">
-      ${card('var(--course-pt-accent,#1f6f54)','教練課','簽約 → 業績歸屬',"slGo('pt')")}
-      ${card('var(--course-group-accent,#9a5a1e)','團體課','售課 → 業績歸屬',"slGo('group')")}
-      ${card('#2f8f83','運動按摩','售課 → 業績歸屬',"slGo('massage')")}
-      ${/* 2026-08-01 使用者指示：「這邊方案卡場地租借改成自主訓練」——
-             這張卡的副標本來就寫著「單次自主訓練」，兩個名字指的是同一件事，
-             留兩個名字只會讓人以為是兩種商品。 */''}
-      ${card('#6a655c','自主訓練','單次 · 效期 7 天',"slGo('facility')")}
-      ${/* 團課體驗（2026-08-03 使用者指示：「團體課的預約體驗，幫我新增在銷售，團課體驗600」）
-           —— 走自訂銷售的殼、預填 1 堂 $600，欄位到了下一步仍可改。 */''}
-      ${card('var(--course-trial-accent,#7a4d8c)','團課體驗','1 堂 · $600',"slGo('grptrial')")}
-      ${card('#6a655c','自訂','自填堂數／價格 → 業績歸屬',"slGo('custom')")}
-    </div></div>
+    ${/* 2026-08-21 使用者指示：「六張卡也收成課程欄位 點了跳視窗選」——
+         六張直式卡（0730 做、0803 定序）收成一個欄位，與建立預約的課程挑選同一套。
+         卡片牆佔掉整張視窗上半部，而它其實只是「選一個要賣什麼」；
+         清單本身沒有改（順序、名稱、副標、顏色、slGo 的參數全部照舊，見 SL_COURSES）。 */''}
+    <div class="form-row"><label>課程銷售</label>
+      <button type="button" class="adp-field" id="sl-course-btn" onclick="slCourseOpen()">
+        <span class="adp-ph">選擇課程</span><span class="adp-ic">▾</span></button></div>
     ${/* 商品購物車（2026-08-04 使用者指示：「客戶可能會買蛋白粉又買搖搖杯——
          左邊選好商品點加入，右邊視窗出現商品，再一併結帳」）——
          點卡片＝加入右側購物車（同品項數量+1），湊齊後一顆「結帳」一併收款。 */''}
@@ -36685,6 +36677,34 @@ function slFilterMembers(q){
   else if(qq&&list.length===1) sel.value=list[0].id;
 }
 function slMember(){ return (document.getElementById('sl-member')||{}).value||''; }
+/* 課程銷售清單（2026-08-21 從卡片牆搬進挑選視窗；順序沿用 0803 定版）。
+   0801「場地租借 → 自主訓練」與 0803「團課體驗 $600」的說明留在這裡，
+   否則名稱背後的決定會跟著卡片一起消失。 */
+const SL_COURSES=[
+  {k:'pt',       name:'教練課',   sub:'簽約 → 業績歸屬',        col:'var(--course-pt-accent,#1f6f54)'},
+  {k:'group',    name:'團體課',   sub:'售課 → 業績歸屬',        col:'var(--course-group-accent,#9a5a1e)'},
+  {k:'massage',  name:'運動按摩', sub:'售課 → 業績歸屬',        col:'#2f8f83'},
+  /* 0801 使用者指示：「這邊方案卡場地租借改成自主訓練」——副標本來就寫著單次自主訓練，
+     兩個名字指的是同一件事，留兩個只會讓人以為是兩種商品。 */
+  {k:'facility', name:'自主訓練', sub:'單次 · 效期 7 天',       col:'#6a655c'},
+  /* 0803 使用者指示：「團體課的預約體驗，幫我新增在銷售，團課體驗600」——
+     走自訂銷售的殼、預填 1 堂 $600，欄位到了下一步仍可改。 */
+  {k:'grptrial', name:'團課體驗', sub:'1 堂 · $600',            col:'var(--course-trial-accent,#7a4d8c)'},
+  {k:'custom',   name:'自訂',     sub:'自填堂數／價格 → 業績歸屬', col:'#6a655c'},
+];
+function slCourseOpen(){
+  let host=document.getElementById('adp-sheet');
+  if(!host){ host=document.createElement('div'); host.id='adp-sheet'; document.body.appendChild(host); }
+  host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
+    <div class="adp-box" style="max-height:86vh;overflow-y:auto;"><div class="modal-title">選擇課程</div>
+      ${SL_COURSES.map(c=>`<button type="button" class="ash-eirow" onclick="slCoursePick('${c.k}')">
+        <span class="ash-eilb"><span class="adp-sw" style="background:${c.col};"></span>${c.name}</span>
+        <span class="ash-eisub">${c.sub}</span></button>`).join('')}
+      <div class="adp-foot"><button class="btn btn-ghost" onclick="ashDateClose()">取消</button></div></div>`;
+}
+/* ⚠ 先關掉這一層再走 slGo —— 後面每條路都是 showModal，它只清 .modal-bg，
+   不會動到 #adp-sheet，留著就會浮在新視窗上面擋住整個畫面。 */
+function slCoursePick(k){ ashDateClose(); slGo(k); }
 function slGo(kind){
   const mid=slMember();
   if(!mid||mid==='__walkin__'){ showToast('請先選擇會員'); return; }

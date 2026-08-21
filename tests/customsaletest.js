@@ -59,5 +59,30 @@ ok('★ 預設值要自己補（原生 select 會自動選第一項，換掉後�
 ok('　　讀值端一行都不用改（隱藏 input 也有 .value）',
    /ticket_type_id:\(v\('gt-c-type'\)\.value\|\|null\)/.test(src));
 
+console.log('\n六張課程卡收成一個欄位（2026-08-21 使用者：「六張卡也收成課程欄位 點了跳視窗選」）');
+ok('★ 卡片牆退場，改成一個 adp-field 欄位',
+   !/<div class="sl-cards sl-cards-3">/.test(src)
+   && /<button type="button" class="adp-field" id="sl-course-btn" onclick="slCourseOpen\(\)">/.test(src));
+ok('★ 清單本身沒有改：六項、順序與 0803 定版一致',
+   /const SL_COURSES=\[/.test(src)
+   && /\{k:'pt',       name:'教練課'/.test(src)
+   && /\{k:'custom',   name:'自訂'/.test(src)
+   /* 只數 SL_COURSES 那一塊 —— 薪資那邊也有一個 {k:'pt'} 的表，會誤計（實測 8） */
+   && ((src.match(/const SL_COURSES=\[[\s\S]*?\n\];/)||[''])[0]
+        .match(/\{k:'(pt|group|massage|facility|grptrial|custom)',/g)||[]).length===6);
+ok('　　副標與課種色一起搬過來（顏色語彙不變）',
+   /col:'var\(--course-pt-accent,#1f6f54\)'/.test(src)
+   && /col:'var\(--course-trial-accent,#7a4d8c\)'/.test(src)
+   && /<span class="adp-sw" style="background:\$\{c\.col\};"><\/span>\$\{c\.name\}/.test(src));
+ok('★ 選定要先關掉這一層再走 slGo（後面每條路都是 showModal，它不會清掉 #adp-sheet）',
+   /function slCoursePick\(k\)\{ ashDateClose\(\); slGo\(k\); \}/.test(src));
+ok('　　「先選會員」的守門沒有被繞過（slGo 開頭那一段原封不動）',
+   /function slGo\(kind\)\{\n\s*const mid=slMember\(\);\n\s*if\(!mid\|\|mid==='__walkin__'\)\{ showToast\('請先選擇會員'\); return; \}/.test(src));
+ok('　　0801 場地租借→自主訓練、0803 團課體驗 $600 的說明跟著搬（不隨卡片消失）',
+   /這邊方案卡場地租借改成自主訓練/.test(src)
+   && /團體課的預約體驗，幫我新增在銷售，團課體驗600/.test(src));
+ok('　　其他收費仍是卡片列（只收課程那六張）',
+   /card\('#8a7a5c','蛋白粉'/.test(src) && /<div id="sl-cart-box"/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

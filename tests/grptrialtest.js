@@ -10,8 +10,9 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
 console.log('① 銷售視窗有這張卡');
-ok('★ 課程銷售區多了「團課體驗」，副標寫明 1 堂 · $600',
-   /card\('var\(--course-trial-accent,#7a4d8c\)','團課體驗','1 堂 · \$600',"slGo\('grptrial'\)"\)/.test(src));
+/* 2026-08-21：六張卡收成挑選視窗，這一項改由 SL_COURSES 帶（副標與顏色不變） */
+ok('★ 課程清單裡有「團課體驗」，副標寫明 1 堂 · $600',
+   /\{k:'grptrial', name:'團課體驗', sub:'1 堂 · \$600',            col:'var\(--course-trial-accent,#7a4d8c\)'\}/.test(src));
 ok('★ slGo 有分流', /if\(kind==='grptrial'\) return salesGrpTrial\(\);/.test(src));
 ok('★ 一樣要先選會員才進得去（slGo 開頭的守門沒被繞過）',
    /function slGo\(kind\)\{\n\s*const mid=slMember\(\);\n\s*if\(!mid\|\|mid==='__walkin__'\)\{ showToast\('請先選擇會員'\); return; \}/.test(src));
