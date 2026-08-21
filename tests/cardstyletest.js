@@ -330,9 +330,11 @@ ok('★ 換課別要重跑衝堂與場地檢查（教練課換團課可能就擠
    /const verr=await validateBooking\(vbk, b\.date, b\.start_time, Number\(b\.duration\)\|\|60\);/.test(src));
 ok('★ 換成團課要補人數上限（否則名單視窗抓不到預設值）',
    /&& !\(Number\(b\.max_heads\)>0\)\) b\.max_heads=5;/.test(src));
-ok('　　課別清單與建立預約同一套過濾（停售／VIP 限定／場租／友善自主訓練不列）',
+/* 2026-08-21：原本只濾掉「友善自主訓練」（與自主訓練同行為、不重複列）；
+   後來使用者確認空堂不能是自主訓練，於是整個課別都不列，這條併進下面那一項。 */
+ok('　　課別清單與建立預約同一套過濾（停售／VIP 限定／場租不列）',
    /if\(typeof bkIsMergedPT==='function' && bkIsMergedPT\(t\)\) return false;/.test(src)
-   && /if\(bkIsSelf\(\{category:t\.category\}\) && \/友善\/\.test\(t\.name\|\|''\)\) return false;/.test(src));
+   && /if\(t\.category==='場租'\) return false;/.test(src));
 ok('　　課別判斷走口袋分類器，不散裝比字串（pockettest 的棘輪）',
    /if\(bkIsGroup\(\{category:t\.category\}\) && !\(Number\(b\.max_heads\)>0\)\) b\.max_heads=5;/.test(src));
 
