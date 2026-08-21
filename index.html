@@ -7283,6 +7283,11 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   .ash-morbs{flex:none;display:flex;flex-direction:column;gap:6px;}
   /* 請假＝卡片內、姓名列最右邊的小按鈕（只有有補課機制的票才會出現） */
   /* 會員備註：靠右、單行截斷（有內容才顯示金色，沒有就是灰色的「＋ 備註」） */
+  /* 使用人按鈕（2026-08-21）：跟在姓名後面，語彙同名額標籤但可點 */
+  .ash-mfam{flex:none;font:inherit;font-size:10.5px;font-weight:700;
+    background:#eef4ee;color:#2f6b39;border:none;border-radius:999px;
+    padding:2px 8px;cursor:pointer;white-space:nowrap;}
+  .ash-mfam:active{transform:scale(.95);}
   .ash-mnote{margin-left:auto;flex:0 1 auto;min-width:0;max-width:52%;
     font:inherit;font-size:11.5px;font-weight:600;color:var(--t3);background:none;border:none;
     padding:2px 0;cursor:pointer;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -8471,8 +8476,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.0850';
-const APP_VERSION_LABEL='v260821.0850';
+const APP_VERSION = '260821.0858';
+const APP_VERSION_LABEL='v260821.0858';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23599,6 +23604,15 @@ async function bkCardPop(el, b, btns, acts){
     const _seatCnt={}; _rows.forEach(r=>{ if(r.mid) _seatCnt[r.mid]=(_seatCnt[r.mid]||0)+1; });
     let _wctx=null; const _walCache={};
     try{ _wctx=await walletCtx(); }catch(_){}
+    /* 家庭成員使用人（2026-08-21 使用者指示：「這堂蘭馨是爸爸來用的，
+       在會員卡會員姓名右邊新增一個按鈕方便調整家庭成員」）——
+       按鈕與挑選視窗早就有（bkFamBtn／openBkFamChange，2026-08-03 做在詳細預約視窗裡），
+       簡易課卡沒接上而已。這裡只取「有設定家庭名單」的會員，沒設定的不畫按鈕。 */
+    const _famMap={};
+    try{ (await dbGetAll('members')).forEach(m=>{
+      const f=(m&&Array.isArray(m.family_members))?m.family_members.filter(Boolean):[];
+      if(f.length) _famMap[m.id]=f;
+    }); }catch(_){}
     const _walOf=mid=>{ if(!mid||!_wctx) return null;
       try{ return _walCache[mid]||(_walCache[mid]=buildWallet(mid,_wctx)); }catch(_){ return null; } };
     const _memCards=_rows.map(r=>{
@@ -23653,6 +23667,12 @@ async function bkCardPop(el, b, btns, acts){
             : evoBtn('','evo-primary',`collapseBkCard();checkInBooking('${b.id}')`,'check','簽到');
         }
       }
+      /* 使用人只對單人課有意義：trial_name 是整筆預約的欄位，
+         團課一筆多個名額共用它，逐名額指定不了（r.sk 就是名額）。 */
+      const _famBtn=(!r.sk && r.mid && _famMap[r.mid])
+        ? `<button type="button" class="ash-mfam" title="更改使用人"
+             onclick="event.stopPropagation();ashFamAsk('${b.id}')">👤 ${escH(String(b.trial_name||'').trim()||'本人')} ▾</button>`
+        : '';
       const _seatTag=(r.mid&&_seatCnt[r.mid]>1)?`<span class="ash-mseat">第 ${r.n} 個名額</span>`:'';
       /* 會員備註（2026-08-20 使用者指示）：右上角一顆，有備註就直接顯示內容、靠右截斷；
          沒有就顯示「＋ 備註」。用的是會員列表那一欄同一個欄位（members.note）。 */
@@ -23673,7 +23693,7 @@ async function bkCardPop(el, b, btns, acts){
         :(inHere?'<span class="ash-mtag ash-mtag-ok">已簽到</span>':''));
       return `<div class="ash-mrow">
           <div class="ash-mcard${onLeave?' ash-mleave':''}"${r.mid?` onclick="collapseBkCard();openMemberDetail('${r.mid}')"`:''}>
-            <div class="ash-mmain"><div class="ash-mname"><span>${nm2}</span>${_seatTag}${_badge}${_noteBtn}${_leaveBtn}</div>${_tk}</div>
+            <div class="ash-mmain"><div class="ash-mname"><span>${nm2}</span>${_famBtn}${_seatTag}${_badge}${_noteBtn}${_leaveBtn}</div>${_tk}</div>
           </div>
           ${_outOrbs?`<div class="ash-morbs">${_outOrbs}</div>`:''}
         </div>`;
@@ -24555,7 +24575,10 @@ function bkFamBtn(b, mem, editable){
     ? `<button class="tag" style="font-size:11px;background:#eef4ee;color:#2f6b39;border:none;cursor:pointer;" onclick="openBkFamChange('${b.id}')" title="點一下更改使用人">👤 ${cur} ▾</button>`
     : `<span class="tag" style="font-size:11px;background:#eef4ee;color:#2f6b39;">👤 ${cur}</span>`;
 }
-async function openBkFamChange(bid){
+/* 從簡易課卡開（2026-08-21）：立一次性旗標，setBkFamUser 收尾的 openBookingDetail
+   會被 ashBackTake 接走、回到課卡，而不是打開已經退役的預約明細。 */
+function ashFamAsk(bid){ ashBackArm(bid); openBkFamChange(bid, 'ash'); }
+async function openBkFamChange(bid, backTo){
   const b=await dbGet('bookings',bid); if(!b) return;
   const m=b.member_id?await dbGet('members',b.member_id).catch(()=>null):null;
   const fam=(m&&Array.isArray(m.family_members))?m.family_members.filter(Boolean):[];
@@ -24566,7 +24589,7 @@ async function openBkFamChange(bid){
       ${btn('','本人（'+(m?m.name:'—')+'）').replace("setBkFamUser('"+bid+"','')","setBkFamUser('"+bid+"','')")}
       ${fam.map(f=>btn(f,f)).join('')}
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();openBookingDetail('${bid}')">取消</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="${backTo==='ash'?`closeModal();expandBkCard(window._expandedBkEl||null,'${bid}')`:`closeModal();openBookingDetail('${bid}')`}">取消</button></div>`);
 }
 async function setBkFamUser(bid, name){
   try{

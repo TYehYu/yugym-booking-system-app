@@ -301,5 +301,21 @@ ok('★ 掛上 ash-sheetmk，吃簡易課卡那一套視窗風格',
 ok('★ 返回退回課卡，不再跳已退役的預約明細',
    /onclick="closeModal\(\);expandBkCard\(window\._expandedBkEl\|\|null,'\$\{id\}'\)">返回/.test(src));
 
+console.log('\n會員姓名右邊的使用人按鈕（使用者：蘭馨這堂是爸爸來用的）');
+ok('★ 按鈕接進會員卡的姓名列',
+   /<div class="ash-mname"><span>\$\{nm2\}<\/span>\$\{_famBtn\}/.test(src)
+   && /class="ash-mfam" title="更改使用人"/.test(src));
+ok('★ 只有設定過家庭名單的會員才畫（沒設定的不出現）',
+   /const f=\(m&&Array\.isArray\(m\.family_members\)\)\?m\.family_members\.filter\(Boolean\):\[\];\s*\n\s*if\(f\.length\) _famMap\[m\.id\]=f;/.test(src)
+   && /_famMap\[r\.mid\]/.test(src));
+ok('★ 團課不畫（trial_name 是整筆預約的欄位，逐名額指定不了）',
+   /const _famBtn=\(!r\.sk && r\.mid && _famMap\[r\.mid\]\)/.test(src));
+ok('★ 沿用既有的挑選視窗與寫入（openBkFamChange／setBkFamUser，不另寫一份）',
+   /function ashFamAsk\(bid\)\{ ashBackArm\(bid\); openBkFamChange\(bid, 'ash'\); \}/.test(src)
+   && /async function openBkFamChange\(bid, backTo\)\{/.test(src));
+ok('　　取消與改完都回課卡，不跳已退役的預約明細',
+   /backTo==='ash'\?`closeModal\(\);expandBkCard\(window\._expandedBkEl\|\|null,'\$\{bid\}'\)`/.test(src)
+   && /setBkFamUser 收尾的 openBookingDetail\s*\n\s*會被 ashBackTake 接走/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
