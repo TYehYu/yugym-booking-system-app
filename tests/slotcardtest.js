@@ -131,8 +131,9 @@ console.log('\n建立預約的欄位順序（步驟 1）');
   ok('★ 課程改成下拉（六張方案卡退場）',
      /<select id="bk-type" onchange="pickBkType\(this\.value\)">/.test(form)
      && !/<div id="bk-type-cards" class="bk-cards"><\/div>/.test(form));
+  /* 2026-08-21：日期欄改成自家月曆（ashDateField），不再是原生 input[type=date] */
   ok('★ 日期與時間各自一列（原本並排在 form-2col）',
-     /<div class="form-row"><label>日期<\/label><input type="date" id="bk-date"/.test(form)
+     /<div class="form-row"><label>日期<\/label>\$\{ashDateField\('bk-date'/.test(form)
      && /<div class="form-row"><label>時間<\/label><select id="bk-time"/.test(form));
   ok('★ 教練與會員並排在同一個 form-2col', 教練>0 && 會員>教練
      && /<div class="form-2col">[\s\S]{0,900}?id="bk-coach-row"[\s\S]{0,900}?id="bk-mem-pre"/.test(form));

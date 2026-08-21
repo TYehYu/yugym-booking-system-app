@@ -17,8 +17,10 @@ ok('★ 共享票的共享者也要算得到',
    /const cands=\[tk\.member_id\]\.concat\(tkSharedIds\(tk\)\|\|\[\]\);/.test(src));
 ok('★ 體驗課不綁票券 → 不篩（篩了會變空名單）',
    /t\.category!=='體驗'/.test(src) && /tid!=='__facility'/.test(src));
+/* 2026-08-21：日期欄改成自家月曆（ashDateField 產生「按鈕＋隱藏 input」），
+   onchange 掛在那個隱藏 input 上，挑完由 ashDatePick 派送 change 事件。 */
 ok('★ 日期／時間改了要重算（限時段票與效期會變）',
-   /id="bk-date"[^>]*onchange="bkRefreshPlanFilter\(\)"/.test(src)
+   /ashDateField\('bk-date', pf\.date\|\|'', '', 'bkRefreshPlanFilter\(\)'\)/.test(src)
    && /id="bk-time" onchange="bkRefreshPlanFilter\(\)"/.test(src));
 ok('★ 每次開窗歸零，不留上一次的名單',
    /window\._bkPlanIds=null; window\._bkPlanName='';   \/\/ 每次開窗/.test(src));

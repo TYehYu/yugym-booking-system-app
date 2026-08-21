@@ -439,5 +439,28 @@ ok('★ 空堂建立本身也擋（不倚賴建立預約那邊的手機過濾）
 ok('　　為什麼要各自擋一次，寫在程式裡（原本只是「剛好擋住」，不是規則）',
    /但那是「剛好擋住」，不是規則本身。規則寫在這裡，日後桌機開放也守得住/.test(src));
 
+console.log('\n自家日期挑選器（使用者：這邊的按鈕 有更符合我們風格的方式嗎）');
+ok('★ 欄位換成自家按鈕＋隱藏 input（讀值的程式一行都不用改）',
+   /function ashDateField\(id, value, min, onchange\)\{/.test(src)
+   && /<input type="hidden" id="\$\{id\}"/.test(src)
+   && /\$\{ashDateField\('bk-date', pf\.date\|\|'', '', 'bkRefreshPlanFilter\(\)'\)\}/.test(src)
+   && /\$\{ashDateField\('amv-d', b\.date, ymd\(TODAY\)\)\}/.test(src));
+ok('★ 兩個原生 input[type=date] 都換掉了',
+   !/<input type="date" id="bk-date"/.test(src) && !/<input type="date" id="amv-d"/.test(src));
+ok('★★ 不能用 showModal —— 日期欄長在「建立預約」那張視窗裡，一開日曆整張表單就沒了',
+   /function ashDateClose\(\)\{ const h=document\.getElementById\('adp-sheet'\); if\(h\) h\.remove\(\); \}/.test(src)
+   && /host\.id='adp-sheet'/.test(src)
+   && /它會先清掉現有的 \.modal-bg，/.test(src));
+ok('★ 浮層疊在 modal 之上（modal-bg 是 9750）', /#adp-sheet\{position:fixed;inset:0;z-index:10090;\}/.test(css));
+ok('★ onchange 掛在隱藏 input 上，原本的 bkRefreshPlanFilter 照樣會跑',
+   /try\{ inp\.dispatchEvent\(new Event\('change',\{bubbles:true\}\)\); \}catch\(_\)\{\}/.test(src)
+   && /onchange 掛在隱藏 input 上/.test(src));
+ok('★ 有下限的欄位（調整預約時間）過去的日子不可點',
+   /const off=c\.min && ds<c\.min;/.test(src)
+   && /\$\{off\?' disabled':/.test(src));
+ok('　　今天標金框、選中的填品牌綠（沿用全站色階）',
+   /\.adp-d\.adp-today\{box-shadow:inset 0 0 0 1\.6px var\(--gold,#C9A227\);\}/.test(css)
+   && /\.adp-d\.adp-sel\{background:var\(--green\);color:#fff;\}/.test(css));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
