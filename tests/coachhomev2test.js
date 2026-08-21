@@ -171,10 +171,16 @@ ok('★ KPI 欄要能縮（flex 的 min-width:auto 會讓它撐出畫面）',
 ok('★ 「尚未打卡」不顯示（還沒打卡是常態，天天掛一行等於噪音）',
    /: \(att&&att\.clock_in\) \? `\$\{att\.clock_in\} 上班中` : '';/.test(src)
    && !/尚未打卡/.test(V2CODE));
-ok('★ 本月成績與課卡之間留距離（連說三次太近 → 改成間距＋分隔線）',
-   /\.chv2-score\{margin-top:34px;position:relative;\}/.test(src)
-   && /\.chv2-score::before\{content:'';position:absolute;left:0;right:0;top:-18px;/.test(src)
-   && /不再只靠間距，前面補一條分隔線/.test(src));
+/* 四問之後才發現：全站有三份「本月成績」，我一直只改預覽版那一份。
+   現在三份都掛 .mstat-card，間距與分隔線寫一次。 */
+ok('★ 本月成績與課卡之間留距離（間距＋分隔線，三份共用）',
+   /\.mstat-card\{margin-top:34px;position:relative;\}/.test(src)
+   && /\.mstat-card::before\{content:'';position:absolute;left:0;right:0;top:-18px;/.test(src)
+   && /全站有三份「本月成績」（管理員首頁、教練舊版首頁、教練預覽版）/.test(src));
+ok('★ 三份都掛上標記（管理員首頁兩種版面＋教練舊版＋預覽版）',
+   (src.match(/class="card mc-card mstat-card"/g)||[]).length===2
+   && /const ringCard=`<div class="dcard mstat-card">/.test(src)
+   && /const scoreCard=`<div class="dcard chv2-score mstat-card">/.test(src));
 ok('★ 頂欄重整鈕退場（這一頁已經有下拉更新）',
    /body\.chv2-shell \.topbar \.tb-right \.rf-btn\{display:none !important;\}/.test(src));
 
@@ -185,9 +191,8 @@ ok('★ KPI 每列自己左右分（教練課／團體課：名稱靠左、堂�
 ok('★ 第三列「今日值班」整條靠左、第四列（打卡鈕）整條靠右',
    /body\.chv2-shell \.admh-kpi\.admh-rev-lb\{justify-content:flex-start;\}/.test(src)
    && /body\.chv2-shell \.admh-kpi\.chv2-dutytap:not\(\.admh-rev-lb\)\{justify-content:flex-end;\}/.test(src));
-ok('★ 本月成績與課卡的間距一路拉開（12 → 18 → 28 → 34＋分隔線）',
-   /\.chv2-score\{margin-top:34px;position:relative;\}/.test(src)
-   && /12 → 18 → 28 都還是被說太近/.test(src));
+ok('★ 本月成績的間距改由 .mstat-card 統一提供',
+   /\.mstat-card\{margin-top:34px;position:relative;\}/.test(src));
 
 console.log('\n教練行事曆 V2（使用者：搬管理員手機端的行事曆，別人的課只能看）');
 ok('★ 同一道旗標：只有管理員預覽教練視角＋手機才走 V2',

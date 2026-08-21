@@ -596,9 +596,10 @@ console.log('\n簽到的課卡不填滿、章回到姓名右邊（2026-08-21 四
 ok('★ 首頁課卡（.tcard-std）簽到後不再填滿',
    !/\.tcard\.tcard-std\.tcard-done \.tcard-body\{/.test(src)
    && !/\.tcard\.tcard-std\.tcard-done \.tcard-mem\{ color:#fff/.test(src));
-/* 五修（同日）：行事曆也跟著不填滿了，兩邊統一 —— 驗在下方「桌機行事曆也不填滿了」 */
-ok('★ 行事曆的填滿規則也已移除',
-   !/\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{\s*\n\s*background:var\(--course-accent,#3D7039\) !important;/.test(src));
+/* 五修（同日）：桌機行事曆不填滿、手機維持填滿 —— 驗在下方「桌機行事曆也不填滿了」。
+   這裡只驗「桌機那一塊（min-width:601px）裡沒有填滿規則」。 */
+ok('★ 桌機的填滿規則已移除（手機那份在別的 media 區塊）',
+   !/\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{/.test(blk));
 ok('★ 出席章改回顯示，且在姓名右邊（同一列）',
    !/\.tcard\.tcard-std \.tcard-chk\{ display:none !important; \}/.test(src)
    && /<span class="tcard-nmrow"><span class="tcard-mem">\$\{nm\}<\/span>\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src)
@@ -638,6 +639,14 @@ ok('　　章改成小圓章、不再是右下角的角標（手機的角標基�
    && /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;/.test(src));
 ok('　　窄欄位時名字自己截斷，不會把章擠掉',
    /\.cal-ev\.cal-ev-std \.evc-nmrow \.evc-name\{min-width:0;\}/.test(src));
+/* 同日追加：「手機版行事曆就用填滿的方式呈現 不然畫面太亂」——兩邊刻意不同。 */
+ok('★ 手機維持填滿（桌機不填、手機填，是兩個不同的決定）',
+   /@media\(max-width:600px\),\(orientation:portrait\) and \(max-width:1024px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{\s*\n\s*background:var\(--course-accent,#3D7039\) !important;/.test(src));
+ok('　　填色之後角落的章與教練標籤要翻成半透明白，不然深底上看不見',
+   /\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-check\{\s*\n\s*background:rgba\(255,255,255,\.28\) !important; color:#fff !important; \}/.test(src)
+   && /\.cal-ev\.cal-ev-std\.cal-ev-checked \.ev-coach-tag\{\s*\n\s*background:rgba\(255,255,255,\.25\) !important;/.test(src));
+ok('　　為什麼兩邊不同寫在原地（避免日後為了「統一」又改掉一邊）',
+   /手機一格更小，姓名旁邊再塞一顆章會擠成一團；填色是最省空間的辨識方式。\s*\n\s*兩邊刻意不同，不要為了「統一」再把其中一邊改掉。/.test(src));
 
 console.log('\n首頁課卡一列到底＋翻頁（2026-08-21 使用者指示）');
 ok('★ 不換行（原本 flex-wrap:wrap，課多就佔兩列高度）',
