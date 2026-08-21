@@ -33,17 +33,15 @@ ok('★ ② 教練放底部靠右（margin-top:auto 推到底＋align-self 靠�
 /* 三修：「桌機版課卡 移除出席章好了」→ 四修（同日）：「不要用填滿的 只要在會員姓名
    右邊顯示出席章」。首頁課卡的最終樣子驗在下面「簽到的課卡不填滿」那一段；
    這裡只留「行事曆那半邊沒被動到」。 */
-ok('★ ③ 行事曆課卡仍不畫出席章（一格塞不下四樣東西）',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ display:none !important; \}/.test(blk)
+/* 2026-08-21 五修：行事曆也改成「不填滿＋姓名右邊的章」，與首頁統一。
+   這一段原本驗的是「行事曆維持角標隱藏＋整卡填滿」，整組換掉；
+   現在的行為驗在下方「桌機行事曆也不填滿了」。 */
+ok('★ ③ 行事曆課卡改成畫出席章（不再隱藏）',
+   !/\.cal-ev\.cal-ev-std \.evc-check\{ display:none !important; \}/.test(blk)
    && /<span class="evc-check"/.test(src));
-ok('　　到課狀態也還看得到（簡易課卡的會員卡上那三個標籤仍在）',
-   /ash-mtag-leave">請假/.test(src) && /ash-mtag-ns">未到/.test(src) && /ash-mtag-ok">已簽到/.test(src));
-
-ok('★ ④ 行事曆已簽到 → 整卡填課程色（首頁 2026-08-21 起不填，見下方）',
-   /\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{\s*\n\s*background:var\(--course-accent,#3D7039\) !important;/.test(blk));
-ok('　　運動按摩有自己的色（沒有 --course-accent，會退回預設綠）',
-   /\.cal-ev\.cal-ev-std\.cal-ev-checked\.ev-massage \.evc-body\{\s*\n\s*background:#2f8f83 !important;/.test(blk));
-ok('　　填色後文字轉白', /\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-name\{ color:#fff !important; \}/.test(blk));
+ok('★ ④ 行事曆已簽到 → 不填滿了（那一組規則已刪除）',
+   !/\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{/.test(blk)
+   && /已簽到不再填滿 —— 那一組規則直接刪掉了/.test(blk));
 
 ok('★ ⑤ 待簽約與空堂 → 淡化＋紅框',
    /\.cal-ev\.cal-ev-std\.cal-ev-pend \.evc-body,\s*\n\s*\.tcard\.tcard-std\.tcard-pend \.tcard-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;/.test(blk)
@@ -58,7 +56,7 @@ ok('　　空堂也吃得到（bkIsOpenHold 的前提就是 pending_contract）'
 
 console.log('\n出席章的 DOM 只放一份');
 ok('★ 行事曆：章排在姓名之後、自成一列，外層不再重複輸出',
-   /<span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}\$\{_venueSub\}\$\{_stdTag\}/.test(src)
+   /<span class="evc-nmrow"><span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_venueSub\}\$\{_stdTag\}/.test(src)
    && /出席章已移進 _bodyOut 的姓名列（2026-08-21），這裡不再重複輸出一份/.test(src));
 ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    src.indexOf('const _stampOut =') < src.indexOf('const _bodyOut ='),
@@ -171,7 +169,7 @@ ok('★ 不再是右下角跟教練並列的膠囊',
    /const _venueTag = '';/.test(src)
    && /const _venueSub = _selfVenue \? `<span class="evc-sub evc-vsub">\$\{_selfVenue\}<\/span>` : '';/.test(src));
 ok('★ 排在姓名之後、體驗／待簽約標籤之前',
-   /<span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}\$\{_venueSub\}\$\{_stdTag\}/.test(src));
+   /<span class="evc-nmrow"><span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_venueSub\}\$\{_stdTag\}/.test(src));
 ok('　　只有教室／跑步機會有值（多功能是預設場地、不標）',
    /selfVenueLabel 本來就只在教室／跑步機才有值/.test(src));
 
@@ -598,8 +596,9 @@ console.log('\n簽到的課卡不填滿、章回到姓名右邊（2026-08-21 四
 ok('★ 首頁課卡（.tcard-std）簽到後不再填滿',
    !/\.tcard\.tcard-std\.tcard-done \.tcard-body\{/.test(src)
    && !/\.tcard\.tcard-std\.tcard-done \.tcard-mem\{ color:#fff/.test(src));
-ok('★ 行事曆（.cal-ev-std）維持填滿，只有首頁改',
-   /\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{\s*\n\s*background:var\(--course-accent,#3D7039\) !important;/.test(src));
+/* 五修（同日）：行事曆也跟著不填滿了，兩邊統一 —— 驗在下方「桌機行事曆也不填滿了」 */
+ok('★ 行事曆的填滿規則也已移除',
+   !/\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{\s*\n\s*background:var\(--course-accent,#3D7039\) !important;/.test(src));
 ok('★ 出席章改回顯示，且在姓名右邊（同一列）',
    !/\.tcard\.tcard-std \.tcard-chk\{ display:none !important; \}/.test(src)
    && /<span class="tcard-nmrow"><span class="tcard-mem">\$\{nm\}<\/span>\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src)
@@ -623,6 +622,41 @@ ok('★ 不再排在文字流裡（會把「第幾堂」那一列往下擠），
    && /<\/div>\$\{\(b\.member_id\?`<span class="tcard-giftpos">\$\{lottoGiftIcon\(_lotMap\[b\.member_id\]\)\}<\/span>`:''\)\}/.test(src));
 ok('　　與右下角的教練標籤左右對稱', /與右下角的教練標籤左右對稱/.test(src));
 ok('　　不吃點擊（純標示，點下去仍是開課卡）', /\.tcard-giftpos\{[^}]*pointer-events:none;\}/.test(src));
+
+console.log('\n桌機行事曆也不填滿了（2026-08-21 五修）');
+/* 使用者：「桌機版行事曆 不要用填滿的方式簽到 用會員姓名旁邊顯示出席章」——
+   四修時我刻意只改首頁、留著行事曆；這次兩邊統一。 */
+ok('★ 填滿那一組規則整組刪掉（不是用覆蓋蓋掉）',
+   !/\.cal-ev\.cal-ev-day\.cal-ev-checked\{background:color-mix/.test(src)
+   && !/\.cal-ev\.cal-ev-day\.cal-ev-checked \.evd-name\{color:#fff;\}/.test(src)
+   && /用覆蓋的方式蓋不乾淨（底色、邊框、左色條、三種文字色各有 !important/.test(src));
+ok('★ 章移到姓名右邊（與首頁課卡同一套）',
+   /<span class="evc-nmrow"><span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>/.test(src)
+   && /\.cal-ev\.cal-ev-std \.evc-nmrow\{display:flex;align-items:center;justify-content:center;/.test(src));
+ok('　　章改成小圓章、不再是右下角的角標（手機的角標基底規則不動）',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:static; flex:none; width:15px; height:15px;/.test(src)
+   && /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;/.test(src));
+ok('　　窄欄位時名字自己截斷，不會把章擠掉',
+   /\.cal-ev\.cal-ev-std \.evc-nmrow \.evc-name\{min-width:0;\}/.test(src));
+
+console.log('\n首頁課卡一列到底＋翻頁（2026-08-21 使用者指示）');
+ok('★ 不換行（原本 flex-wrap:wrap，課多就佔兩列高度）',
+   /\.tcard-list\{flex:1;display:flex;gap:8px;align-items:stretch;min-width:0;overflow-x:auto;\s*\n\s*padding-bottom:2px;flex-wrap:nowrap;/.test(src));
+ok('★ 左右各一顆翻頁鈕，放不下才出現',
+   /<button type="button" class="tcard-pg tcard-pg-l" onclick="tcardPage\(event,-1\)"/.test(src)
+   && /<button type="button" class="tcard-pg tcard-pg-r" onclick="tcardPage\(event,1\)"/.test(src)
+   && /\.tcard-row\.has-pg \.tcard-pg\{display:flex;\}/.test(src));
+ok('★ 到頭／到底那一顆淡化並停用',
+   /\.tcard-row\.pg-atstart \.tcard-pg-l\{opacity:\.25;pointer-events:none;\}/.test(src)
+   && /\.tcard-row\.pg-atend \.tcard-pg-r\{opacity:\.25;pointer-events:none;\}/.test(src));
+ok('　　一次捲一個可視寬度，留 15% 重疊（翻過去還看得到前一張）',
+   /list\.scrollBy\(\{left:dir\*Math\.max\(160, Math\.round\(list\.clientWidth\*0\.85\)\), behavior:'smooth'\}\);/.test(src));
+ok('　　狀態在畫完與捲動時各算一次（要等版面算完才量得到 scrollWidth）',
+   /function tcardPagerSync\(\)\{/.test(src)
+   && /row\.classList\.toggle\('has-pg', l\.scrollWidth > l\.clientWidth\+2\);/.test(src)
+   && /try\{ tcardPagerSync\(\); \}catch\(_\)\{\}/.test(src)
+   && /l\.addEventListener\('scroll',\(\)=>tcardPagerSync\(\),\{passive:true\}\)/.test(src));
+ok('　　捲軸藏起來（改用翻頁鈕）', /\.tcard-list::-webkit-scrollbar\{display:none;\}/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
