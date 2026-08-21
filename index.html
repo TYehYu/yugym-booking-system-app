@@ -8550,8 +8550,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1056';
-const APP_VERSION_LABEL='v260821.1056';
+const APP_VERSION = '260821.1318';
+const APP_VERSION_LABEL='v260821.1318';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -27391,6 +27391,43 @@ function ashTypePick(tid){
   ashDateClose();
   pickBkType(tid);
 }
+/* 通用挑選欄位（2026-08-21 使用者：「課程點選跳視窗選擇」）——
+   跟課程挑選同一個殼，差別只在清單由呼叫端給。用在「選項不多、但原生 <select>
+   一展開就是系統樣式」的欄位（自訂銷售的票種是第一個）。
+   ⚠ 同樣不能用 showModal —— 這些欄位長在別張 showModal 開出來的表單裡（見 ashDateClose）。
+   onchange 一樣掛在隱藏 input 上，呼叫端原本寫在 <select onchange> 的程式碼不用動。 */
+window._ashOpt={};
+function ashOptField(id, list, cur, ph, onchange){
+  window._ashOpt[id]={list:list||[], ph:ph||'請選擇'};
+  const hit=(list||[]).find(o=>String(o.v)===String(cur==null?'':cur));
+  return `<input type="hidden" id="${id}" value="${cur==null?'':escH(String(cur))}"${onchange?` onchange="${onchange}"`:''}>
+    <button type="button" class="adp-field" id="${id}-btn" onclick="ashOptOpen('${id}')">
+      <span${hit?'':' class="adp-ph"'}>${escH(hit?hit.label:(ph||'請選擇'))}</span><span class="adp-ic">▾</span></button>`;
+}
+function ashOptOpen(id){
+  const cfg=window._ashOpt[id]||{list:[]};
+  const cur=String((document.getElementById(id)||{}).value||'');
+  let host=document.getElementById('adp-sheet');
+  if(!host){ host=document.createElement('div'); host.id='adp-sheet'; document.body.appendChild(host); }
+  const rows=(cfg.list||[]).map(o=>`<button type="button" class="ash-eirow${String(o.v)===cur?' ash-ei-co':''}"
+      style="${String(o.v)===cur?'--ash-co-fg:var(--green);':''}" onclick="ashOptPick('${id}','${String(o.v).replace(/['"<>]/g,'')}')">
+      <span class="ash-eilb">${o.color?`<span class="adp-sw" style="background:${o.color};"></span>`:''}${escH(o.label)}</span>
+      ${o.sub?`<span class="ash-eisub">${escH(o.sub)}</span>`:''}</button>`).join('');
+  host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
+    <div class="adp-box" style="max-height:86vh;overflow-y:auto;"><div class="modal-title">${escH(cfg.ph||'請選擇')}</div>
+      ${rows||'<div class="ash-einote">沒有可選的項目。</div>'}
+      <div class="adp-foot"><button class="btn btn-ghost" onclick="ashDateClose()">取消</button></div></div>`;
+}
+function ashOptPick(id, v){
+  const inp=document.getElementById(id); if(!inp) return;
+  const cfg=window._ashOpt[id]||{list:[]};
+  const hit=(cfg.list||[]).find(o=>String(o.v)===String(v));
+  inp.value=v;
+  const btn=document.getElementById(id+'-btn');
+  if(btn){ const lb=btn.firstElementChild; lb.textContent=hit?hit.label:v; lb.className=''; }
+  ashDateClose();
+  try{ inp.dispatchEvent(new Event('change',{bubbles:true})); }catch(_){}
+}
 /* 時間也用同一套（2026-08-21 使用者：「這邊也是」）——原生 <select> 展開後
    同樣是系統樣式。做成 30 分一格的九宮格，跟月曆共用 #adp-sheet 那層浮層。
    一樣是「按鈕＋隱藏 input」，讀值與 change 事件全部照舊。 */
@@ -38074,8 +38111,16 @@ async function openGrantModal(){
      （銷售頁那張「場地租借」卡仍在，賣的還是場租票，供 $200 場地租借流程使用。） */
   const _CUSTOM_TT=['教練課','友善教練課','團體課','自主訓練'];
   const _pre=(sales&&sales.preset)||null;   // 固定商品的預填值（團課體驗等，2026-08-03）
-  const _ttOpts=(types||[]).filter(t=>t.active!==false&&_CUSTOM_TT.includes(t.name))
-    .map(t=>`<option value="${t.id}"${(_pre&&_pre.type===t.name)?' selected':''}>${t.name}</option>`).join('');
+  /* 2026-08-21 使用者指示：「課程點選跳視窗選擇」——原生 <select> 換成自家挑選視窗。
+     色塊沿用課種色，與建立預約的課程挑選同一套語彙。 */
+  const _ttList=(types||[]).filter(t=>t.active!==false&&_CUSTOM_TT.includes(t.name))
+    .map(t=>({v:t.id, label:t.name,
+      color:(typeof bkCcOfType==='function'&&typeof BK_ACCENT!=='undefined')
+        ? (BK_ACCENT[bkCcOfType(t)]||'') : ''}));
+  /* 原本是原生 select，第一個選項預設就選起來（畫面上是「教練課」）——
+     換成挑選視窗後預設值要自己補，否則「下一步」一開始是鎖的、櫃檯以為壞了。 */
+  const _ttCur=(_pre&&_pre.type&&(_ttList.find(o=>o.label===_pre.type)||{}).v)
+    || ((_ttList[0]||{}).v||'');
   showModal(`<!-- 誘餌欄位：吸走 Chrome 密碼管理員的「儲存／更新密碼」判定，避免自訂銷售打字後跳提示（2026-07-25） -->
     <input type="text" autocomplete="username" tabindex="-1" aria-hidden="true" style="position:absolute;opacity:0;height:0;width:0;border:0;padding:0;pointer-events:none;">
     <input type="password" autocomplete="new-password" tabindex="-1" aria-hidden="true" style="position:absolute;opacity:0;height:0;width:0;border:0;padding:0;pointer-events:none;">
@@ -38112,12 +38157,12 @@ async function openGrantModal(){
       <div id="gt-custom">
         <div style="background:var(--card2);border-radius:9px;padding:10px 12px;font-size:11.5px;color:var(--t2);line-height:1.7;margin-bottom:12px;">自訂銷售：自填票種、堂數、價格、效期，之後一樣選業績歸屬與簽約。</div>
         <div class="form-2col">
-          <div class="form-row"><label>票種 *（決定可約課程）</label><select id="gt-c-type" onchange="grantCustomValidate()">${_ttOpts}</select></div>
+          <div class="form-row"><label>票種 *（決定可約課程）</label>${ashOptField('gt-c-type', _ttList, _ttCur, '選擇票種', 'grantCustomValidate()')}</div>
           <input type="hidden" id="gt-c-name" value="${(_pre&&_pre.name)||'自訂方案'}">   <!-- 2026-07-28 使用者指示：方案名稱統一「自訂方案」；固定商品帶自己的名字 -->
         </div>
         <div class="form-2col">
           <div class="form-row"><label>堂數 *</label><input type="number" id="gt-c-sessions" min="1" value="${(_pre&&_pre.sessions)||10}" oninput="grantCustomValidate()"></div>
-          <div class="form-row"><label>單價 *</label><input type="number" id="gt-c-price" min="0" value="${(_pre&&_pre.price!=null)?_pre.price:0}" oninput="grantCustomValidate()"></div>
+          <div class="form-row"><label>總價 *</label><input type="number" id="gt-c-price" min="0" value="${(_pre&&_pre.price!=null)?_pre.price:0}" oninput="grantCustomValidate()"><div class="gt-hint" id="gt-c-unit"></div></div>
         </div>
         <div class="form-row"><label>效期天數 *</label><input type="number" id="gt-c-valid" min="1" value="${(_pre&&_pre.valid)||365}"></div>
       </div>`:''}
@@ -38274,14 +38319,26 @@ function _grantCustomPlan(){
   const v=id=>document.getElementById(id);
   if(!v('gt-c-name')) return null;
   const sessions=Math.max(1,Number(v('gt-c-sessions').value)||0);
+  /* 2026-08-21 使用者指示：這一格由「單價」改成「總價」——櫃檯談的是整包多少錢，
+     單價是回推出來的。unit_price 仍然照舊寫進票券（很多顯示與獎金都吃它），
+     但整包價另外用 list_price 原封不動帶著走：10000÷3 回推成 3333，
+     再乘回去只有 9999，會憑空少 1 元。凡是要「整包多少錢」的地方一律讀 list_price。 */
+  const totalPrice=Math.max(0,Number(v('gt-c-price').value)||0);
   return { id:'__custom__', name:(v('gt-c-name').value||'').trim(), ticket_type_id:(v('gt-c-type').value||null),
-    format:null, unit_price:Math.max(0,Number(v('gt-c-price').value)||0),
+    format:null, unit_price:sessions>0?Math.round(totalPrice/sessions):0, list_price:totalPrice,
     sessions_base:sessions, sessions_bonus:0, valid_days:Math.max(1,Number(v('gt-c-valid').value)||365),
     plan_type:'general', installment:false, __custom:true };
+}
+/* 總價底下即時標出回推的單價（櫃檯要對帳，看得到才不會以為填錯格） */
+function grantCustomUnitHint(p){
+  const el=document.getElementById('gt-c-unit'); if(!el) return;
+  const n=p?p.sessions_base:0, t=p?(Number(p.list_price)||0):0;
+  el.textContent=(n>0&&t>0)?`平均單堂 $${(Math.round(t/n)).toLocaleString()}　·　${n} 堂共 $${t.toLocaleString()}`:'';
 }
 // 自訂欄位齊全才允許「下一步」
 function grantCustomValidate(){
   const p=_grantCustomPlan();
+  grantCustomUnitHint(p);
   const ok=!!(p && p.name && p.ticket_type_id && p.sessions_base>0);
   const btn=document.getElementById('gt-next');
   if(btn){ btn.disabled=!ok; btn.style.opacity=ok?'1':'.4'; }
@@ -38482,7 +38539,8 @@ async function refreshGrantInfo(){
   }
   window._grantPlanCache=plan;
   const total=plan.sessions_base+plan.sessions_bonus;
-  const listPrice=(plan.unit_price||0)*plan.sessions_base; // 模板定價
+  /* 自訂銷售填的是整包總價（2026-08-21），直接用它；模板方案照舊由單價乘堂數推 */
+  const listPrice=(plan.list_price!=null)?(Number(plan.list_price)||0):((plan.unit_price||0)*plan.sessions_base);
   const expire=termExpire(TODAY,plan.valid_days);
   const PT={general:'一般',promo:'優惠',friendly:'友善',friendly_promo:'友善優惠',loyal:'主顧客',vip:'VIP'};
   // 課程色（與選擇卡片一致）
@@ -38670,7 +38728,8 @@ async function submitGrant(){
   }catch(_){}
   const total=plan.sessions_base+plan.sessions_bonus;
   const unitPrice=plan.unit_price||0;
-  const listPrice=unitPrice*plan.sessions_base;
+  /* 自訂銷售填的是整包總價（2026-08-21）；模板方案照舊由單價乘堂數推 */
+  const listPrice=(plan.list_price!=null)?(Number(plan.list_price)||0):(unitPrice*plan.sessions_base);
   const dealAmount=Number(document.getElementById('gt-amount').value)||listPrice; // 實際成交金額
   const method=document.getElementById('gt-method').value;
   /* 拆帳（2026-08-12）：現金部分必填、不可超過成交金額；匯款＝實收−現金，寫購買紀錄時才算（要扣掉折抵券） */

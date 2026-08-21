@@ -19,10 +19,13 @@ ok('★ 一樣要先選會員才進得去（slGo 開頭的守門沒被繞過）'
 console.log('\n② 預填值');
 ok('★ 固定商品：團體課票種、1 堂、$600、效期 30 天',
    /preset:\{name:'團課體驗', type:'團體課', sessions:1, price:600, valid:30\}/.test(src));
-ok('★ 票種下拉預選團體課', /\$\{\(_pre&&_pre\.type===t\.name\)\?' selected':''\}/.test(src));
+/* 2026-08-21：票種從原生 select 換成挑選視窗，預選改成算出 _ttCur 帶進欄位 */
+ok('★ 票種預選團體課',
+   /const _ttCur=\(_pre&&_pre\.type&&\(_ttList\.find\(o=>o\.label===_pre\.type\)\|\|\{\}\)\.v\)/.test(src)
+   && /ashOptField\('gt-c-type', _ttList, _ttCur, '選擇票種'/.test(src));
 ok('★ 方案名稱帶「團課體驗」（不是自訂方案）',
    /id="gt-c-name" value="\$\{\(_pre&&_pre\.name\)\|\|'自訂方案'\}"/.test(src));
-ok('★ 堂數／單價／效期吃預設值',
+ok('★ 堂數／總價／效期吃預設值',
    /id="gt-c-sessions" min="1" value="\$\{\(_pre&&_pre\.sessions\)\|\|10\}"/.test(src)
    && /id="gt-c-price" min="0" value="\$\{\(_pre&&_pre\.price!=null\)\?_pre\.price:0\}"/.test(src)
    && /id="gt-c-valid" min="1" value="\$\{\(_pre&&_pre\.valid\)\|\|365\}"/.test(src));
