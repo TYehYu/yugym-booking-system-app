@@ -149,11 +149,19 @@ console.log('\n教練標籤改回全名（2026-08-21 使用者指示：太小才
 ok('★ 兩種都畫出來，由 CSS 依卡片寬度挑一個',
    /const _coSw=\(f,a\)=>`<span class="co-fl">\$\{f\}<\/span><span class="co-ab">\$\{a\}<\/span>`;/.test(src)
    && /\$\{_coSw\(_coFull,_coAbbr\)\}/.test(src));
-ok('★ 首頁卡也是同一套（固定 84px，比照窄卡用縮寫）',
+ok('★ 首頁卡也是同一套（兩種都畫，由 CSS 挑）',
    /<span class="co-fl">\$\{coachDisp\(c\)\}<\/span><span class="co-ab">\$\{coachAbbr\(c\)\}<\/span>/.test(src));
-ok('★ 門檻沿用既有的 ev-w-narrow／ev-w-tiny，不另立一套寬度判斷',
-   /\.cal-ev\.cal-ev-std\.ev-w-narrow \.co-fl,\s*\n\s*\.cal-ev\.cal-ev-std\.ev-w-tiny \.co-fl,\s*\n\s*\.tcard\.tcard-std \.co-fl\{display:none;\}/.test(css)
+/* 2026-08-21 二修（使用者：「首頁課卡右下角應該可以顯示完整教練標籤」）——
+   首頁卡當天從 84px 加寬到 120px，「比照窄卡用縮寫」的理由消失了。 */
+ok('★ 首頁卡改回顯示全名（不再跟著窄卡用縮寫）',
+   !/\.tcard\.tcard-std \.co-fl\{display:none;\}/.test(css)
+   && !/\.tcard\.tcard-std \.co-ab\{display:inline;\}/.test(css)
+   && /首頁卡當天從 84px 加寬到 120px，原本「比照窄卡用縮寫」的理由消失了/.test(css));
+ok('★ 行事曆的窄卡規則不動（那邊真的窄）',
+   /\.cal-ev\.cal-ev-std\.ev-w-narrow \.co-fl,\s*\n\s*\.cal-ev\.cal-ev-std\.ev-w-tiny \.co-fl\{display:none;\}/.test(css)
    && /\.co-ab\{display:none;\}/.test(css));
+ok('　　太長的名字折行、不切成「…」（0821 已有的規則接手）',
+   /white-space:normal !important; word-break:keep-all/.test(css));
 ok('★ 請假標籤縮成「請假」（使用者：其實改成請假就好）',
    /color:#F4F1E8;">請假<\/span>`\+_venueTag/.test(src)
    && /<span class="tcard-co" style="background:#7A2E28;color:#F4F1E8;">請假<\/span>/.test(src));
