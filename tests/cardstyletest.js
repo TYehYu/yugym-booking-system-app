@@ -311,8 +311,9 @@ ok('★ 按鈕接進會員卡的姓名列',
 ok('★ 只有設定過家庭名單的會員才畫（沒設定的不出現）',
    /const f=\(m&&Array\.isArray\(m\.family_members\)\)\?m\.family_members\.filter\(Boolean\):\[\];\s*\n\s*if\(f\.length\) _famMap\[m\.id\]=f;/.test(src)
    && /_famMap\[r\.mid\]/.test(src));
-ok('★ 團課不畫（trial_name 是整筆預約的欄位，逐名額指定不了）',
-   /const _famBtn=\(!r\.sk && r\.mid && _famMap\[r\.mid\]\)/.test(src));
+/* 2026-08-21 二修：團課從「不畫」改成「改票券」——見下方「團課名額的使用人按鈕」。 */
+ok('★ 單人課走 r.sk 為空那一支',
+   /if\(!r\.sk\)\{\s*\n\s*_famBtn=`<button type="button" class="ash-mfam" title="更改使用人"/.test(src));
 ok('★ 沿用既有的挑選視窗與寫入（openBkFamChange／setBkFamUser，不另寫一份）',
    /function ashFamAsk\(bid\)\{ ashBackArm\(bid\); openBkFamChange\(bid, 'ash'\); \}/.test(src)
    && /async function openBkFamChange\(bid, backTo\)\{/.test(src));
@@ -539,6 +540,38 @@ ok('★ 勾了哪天、那天的時間才出現（沒勾的清空值）',
 ok('　　readRecur 一行都不用改（仍讀 .{prefix}-dow 與 .{prefix}-dowt[data-dow]）',
    /class="\$\{prefix\}-dowt" data-dow="\$\{v\}"/.test(src)
    && /所以那支一行都不用改 —— 只是換了排法/.test(src));
+
+
+console.log('\n團課名額的使用人按鈕（2026-08-21 使用者：「團課是不是沒有家庭成員按鈕」）');
+ok('★ 團課名額也有按鈕了，但改的是「票」不是「這一堂」',
+   /}else if\(_slot && _slot\.t\)\{/.test(src)
+   && /onclick="event\.stopPropagation\(\);ashTkFamAsk\('\$\{_slot\.t\.id\}','\$\{b\.id\}'\)">👤 \$\{escH\(String\(_slot\.t\.family_user\|\|''\)\.trim\(\)\|\|'本人'\)\} ▾<\/button>/.test(src));
+ok('　　單人課仍走 booking.trial_name（兩者欄位不同）',
+   /onclick="event\.stopPropagation\(\);ashFamAsk\('\$\{b\.id\}'\)">👤 \$\{escH\(String\(b\.trial_name\|\|''\)\.trim\(\)\|\|'本人'\)\} ▾/.test(src));
+ok('　　查不到這一格扣在哪張票就不畫（沒有可以改的對象）',
+   /let _famBtn='';\s*\n\s*if\(r\.mid && _famMap\[r\.mid\]\)\{/.test(src));
+ok('★ 一定要跳確認，而且講明會連同這張票的其他格一起改',
+   /async function ashTkFamConfirm\(tid, bid, name\)\{/.test(src)
+   && /團課只能整張票設定/.test(src)
+   && /用它約掉的\$\{_n>1\?` \$\{_n\} 格（含已上過的）`:'每一格'\}都會跟著改/.test(src));
+ok('　　堂數與效期不變要寫出來（0810 的教訓：不寫櫃檯會以為整組回沖）',
+   /堂數、效期、扣的是哪一張票都不變。/.test(src));
+ok('　　目前這位不給按（與單人課同一套）',
+   /\$\{cur===v\s*\n?\s*\? 'disabled style="justify-content:flex-start;text-align:left;padding:11px 14px;opacity:\.7;cursor:default;"'/.test(src));
+ok('　　寫回票券要清快取，然後回到那張課卡（ashBackArm 已設）',
+   /function ashTkFamAsk\(tid, bid\)\{ ashBackArm\(bid\); ashTkFamPick\(tid, bid\); \}/.test(src)
+   && /t\.family_user=name\|\|null;[\s\S]{0,80}?dbCacheClear\('member_tickets'\);/.test(src)
+   && /openBookingDetail\(bid\);   \/\/ ashBackArm 已設/.test(src));
+ok('　　格數要數 stamps 裡的預約本身（slotOf 的 stamps 就是 bookings，沒有 booking_id 欄）',
+   /_n=\(\(_sl&&_sl\.stamps\)\|\|\[\]\)\.filter\(x=>x&&x\.id\)\.length;/.test(src));
+
+console.log('\n會員資料的歷史紀錄預設展開（2026-08-21 使用者指示）');
+ok('★ 櫃檯端（會員資料 → 票券）',
+   /<details class="pp-hist" open><summary>歷史紀錄（\$\{hist\.length\}）<\/summary>/.test(src));
+ok('★ 教練端的簡易名片也一致',
+   /<details class="md-tk-hist" open><summary>歷史紀錄（\$\{history\.length\}）<\/summary>/.test(src));
+ok('　　「已過期方案」原本就會在有可展延的票時展開，行為不變',
+   /<details class="pp-hist"\$\{_extable\.length\?' open':''\}><summary>已過期方案/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

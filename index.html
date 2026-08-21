@@ -8550,8 +8550,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1236';
-const APP_VERSION_LABEL='v260821.1236';
+const APP_VERSION = '260821.1039';
+const APP_VERSION_LABEL='v260821.1039';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23818,12 +23818,25 @@ async function bkCardPop(el, b, btns, acts){
             : evoBtn('','evo-primary',`collapseBkCard();checkInBooking('${b.id}')`,'check','簽到');
         }
       }
-      /* 使用人只對單人課有意義：trial_name 是整筆預約的欄位，
-         團課一筆多個名額共用它，逐名額指定不了（r.sk 就是名額）。 */
-      const _famBtn=(!r.sk && r.mid && _famMap[r.mid])
-        ? `<button type="button" class="ash-mfam" title="更改使用人"
-             onclick="event.stopPropagation();ashFamAsk('${b.id}')">👤 ${escH(String(b.trial_name||'').trim()||'本人')} ▾</button>`
-        : '';
+      /* 使用人：單人課與團課名額走的是兩個不同的欄位（2026-08-21 使用者回報「團課是不是
+         沒有家庭成員按鈕」）——
+         ・單人課＝booking.trial_name，改的是「這一堂誰來上」。
+         ・團課名額＝該名額扣到那張票的 member_tickets.family_user（0804 上線的票券預設
+           使用人，團課名單一直是這樣顯示的）。trial_name 是整筆預約的欄位，一筆團課裡
+           多個名額共用它，逐名額指定不了，所以團課只能從票那一端改。
+         ⚠ 兩者影響範圍不同：改票會連同這張票的其他格（含已上過的）一起變，
+           確認視窗必須講清楚，否則櫃檯會以為只改這一堂。 */
+      let _famBtn='';
+      if(r.mid && _famMap[r.mid]){
+        if(!r.sk){
+          _famBtn=`<button type="button" class="ash-mfam" title="更改使用人"
+             onclick="event.stopPropagation();ashFamAsk('${b.id}')">👤 ${escH(String(b.trial_name||'').trim()||'本人')} ▾</button>`;
+        }else if(_slot && _slot.t){
+          /* 查不到這一格扣在哪張票就不給按（沒有可以改的對象） */
+          _famBtn=`<button type="button" class="ash-mfam" title="更改這張票的使用人"
+             onclick="event.stopPropagation();ashTkFamAsk('${_slot.t.id}','${b.id}')">👤 ${escH(String(_slot.t.family_user||'').trim()||'本人')} ▾</button>`;
+        }
+      }
       /* 沒有票券圓點的卡（體驗／場租）只剩一行姓名，旁邊卻是兩顆疊起來的圓鈕，
          看起來輕重失衡（2026-08-21 使用者回報）。補一行這張卡真正該有的資訊：
          體驗＝聯絡電話與「不扣票券」，場租＝場地租借。有票券圓點的卡不受影響。 */
@@ -24836,6 +24849,67 @@ async function _ashCourseSet(bid, tid){
 /* 從簡易課卡開（2026-08-21）：立一次性旗標，setBkFamUser 收尾的 openBookingDetail
    會被 ashBackTake 接走、回到課卡，而不是打開已經退役的預約明細。 */
 function ashFamAsk(bid){ ashBackArm(bid); openBkFamChange(bid, 'ash'); }
+/* 團課名額的使用人（2026-08-21 使用者回報「團課是不是沒有家庭成員按鈕」）——
+   團課不能逐名額寫 trial_name（一筆多個名額共用同一欄），名單上顯示的稱呼一直是來自
+   該名額扣到那張票的 member_tickets.family_user。所以這顆鈕改的是「票」，
+   不是「這一堂」；影響範圍要在確認視窗寫明。設定本身沿用 0804 的 ppTkFamUser 那套。 */
+function ashTkFamAsk(tid, bid){ ashBackArm(bid); ashTkFamPick(tid, bid); }
+async function ashTkFamPick(tid, bid){
+  const t=await dbGet('member_tickets',tid); if(!t){ showToast('找不到票券'); return; }
+  const m=await dbGet('members', t.member_id).catch(()=>null);
+  const fam=(m&&Array.isArray(m.family_members))?m.family_members.filter(Boolean):[];
+  if(!fam.length){ showToast('這位會員還沒設定家庭成員（會員資料表頭 → 家庭成員）'); return; }
+  const cur=t.family_user||'';
+  const _q=v=>String(v).replace(/['"<>]/g,'');
+  const btn=(v,lb)=>`<button class="btn ${cur===v?'btn-green':'btn-ghost'}" ${cur===v
+      ? 'disabled style="justify-content:flex-start;text-align:left;padding:11px 14px;opacity:.7;cursor:default;"'
+      : `style="justify-content:flex-start;text-align:left;padding:11px 14px;" onclick="ashTkFamConfirm('${tid}','${bid}','${_q(v)}')"`
+    }>👤　${escH(lb)}${cur===v?'　（目前）':''}</button>`;
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">這張票給誰使用？</div>
+    <div class="ash-eihead">${escH(t.plan_name||'票券')}　·　${escH(m?m.name:'—')}</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${btn('','本人（'+(m?m.name:'—')+'）')}
+      ${fam.map(f=>btn(f,f)).join('')}
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();expandBkCard(window._expandedBkEl||null,'${bid}')">取消</button></div>`);
+}
+async function ashTkFamConfirm(tid, bid, name){
+  const t=await dbGet('member_tickets',tid); if(!t){ showToast('找不到票券'); return; }
+  const m=await dbGet('members', t.member_id).catch(()=>null);
+  const _self='本人'+(m?`（${m.name}）`:'');
+  const _to=name||_self, _from=String(t.family_user||'').trim()||_self;
+  /* 用這張票約掉的其他格會一起改（含已上過的）——團課的名單就是即時讀票券欄位。
+     不寫清楚，櫃檯會以為只動這一堂。 */
+  let _n=0;
+  try{
+    const _w=await walletCtx();
+    const _sl=buildWallet(t.member_id,_w).of(tid);
+    _n=((_sl&&_sl.stamps)||[]).filter(x=>x&&x.id).length;   /* stamps 就是預約本身（見 slotOf 的 stamps:bks） */
+  }catch(_){}
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">更改這張票的使用人？</div>
+    <div class="ash-eihead">${escH(t.plan_name||'票券')}　·　${escH(m?m.name:'—')}</div>
+    <div class="ash-eibox" style="line-height:1.9;">
+      這張票的使用人從「<b>${escH(_from)}</b>」改成「<b>${escH(_to)}</b>」。<br>
+      <span style="color:var(--danger,#b5372e);font-weight:700;">團課只能整張票設定</span>
+      <span style="color:var(--t3);font-size:12px;">——名單上的稱呼是即時讀這張票，
+      用它約掉的${_n>1?` ${_n} 格（含已上過的）`:'每一格'}都會跟著改。</span><br>
+      <span style="color:var(--t3);font-size:12px;">堂數、效期、扣的是哪一張票都不變。</span>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal();ashTkFamPick('${tid}','${bid}')">返回</button>
+      <button class="btn btn-green" onclick="ashTkFamSet('${tid}','${bid}','${String(name||'').replace(/['"<>]/g,'')}')">確定更改</button></div>`);
+}
+async function ashTkFamSet(tid, bid, name){
+  try{
+    const t=await dbGet('member_tickets',tid); if(!t) return;
+    t.family_user=name||null;
+    await dbPut('member_tickets',t);
+    dbCacheClear('member_tickets');
+    closeModal(); showToast('這張票的使用人已改為「'+(name||'本人')+'」');
+    try{ navTo(CUR_PAGE); }catch(_){}
+    openBookingDetail(bid);   // ashBackArm 已設，會回到那張簡易課卡
+  }catch(e){ showToast('更改失敗：'+((e&&e.message)||e)); }
+}
 async function openBkFamChange(bid, backTo){
   const b=await dbGet('bookings',bid); if(!b) return;
   const m=b.member_id?await dbGet('members',b.member_id).catch(()=>null):null;
@@ -28754,7 +28828,7 @@ async function openMemberDetail(member_id){
         expired.map(t=>renderTkCard(t,(_canReact&&_canReactTk(t))?`<button class="btn btn-gold btn-sm" onclick="openReactivateTicket('${t.id}')">重新啟用</button>`:'')).join('')}</div>`;
     }
     if(history.length){
-      html+=`<details class="md-tk-hist"><summary>歷史紀錄（${history.length}）</summary><div class="md-tklist">${
+      html+=`<details class="md-tk-hist" open><summary>歷史紀錄（${history.length}）</summary><div class="md-tklist">${
         history.map(t=>renderTkCard(t)).join('')}</div></details>`;
     }
     return html;
@@ -34856,7 +34930,10 @@ function ppRecordHtml(){
           </div>`; };
         const expdSec=expd.length?`<details class="pp-hist"${_extable.length?' open':''}><summary>已過期方案（${expd.length}）${_extable.length?`<span class="pp-hist-sum">${_extable.length} 張可展延</span>`:''}</summary>
           ${expd.map(histRow).join('')}</details>`:'';
-        const histSec=hist.length?`<details class="pp-hist"><summary>歷史紀錄（${hist.length}）</summary>
+        /* 歷史紀錄預設展開（2026-08-21 使用者指示）——摺起來看不到「這位以前買過什麼」，
+           而櫃檯點開會員第一件事常常就是找上一張票。上面的「已過期方案」本來就會在有可展延
+           的票時自動展開，這裡改成一律展開，兩區行為一致。 */
+        const histSec=hist.length?`<details class="pp-hist" open><summary>歷史紀錄（${hist.length}）</summary>
           ${hist.map(histRow).join('')}</details>`:'';
         return `<div class="pp-card">${back}<div class="pp-card-t" style="display:flex;justify-content:space-between;align-items:center;">票券
           ${isDeskLike()?`<button class="btn btn-green btn-sm" style="padding:5px 14px;font-size:12.5px;" onclick="ppTopUp('${PP.id}')">＋ 儲值</button>`:''}</div>
