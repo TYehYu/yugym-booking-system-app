@@ -8550,8 +8550,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1039';
-const APP_VERSION_LABEL='v260821.1039';
+const APP_VERSION = '260821.1056';
+const APP_VERSION_LABEL='v260821.1056';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26633,6 +26633,24 @@ function cancelTooLateModal(){
       沒有通知櫃檯又沒到場，票券會視同已使用扣除。</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">我知道了</button></div>`);
 }
+/* 會員自助的界線（2026-08-21 使用者定案：「會員只能自行調整團課跟自主訓練，
+   其他課程留下訊息，一律透過櫃檯處理」）——
+   起因：陳苓汶 8/21 10:39 自行取消了 9/16 20:00 的私人教練（26 天前，24 小時規則管不到，
+   票券也正常退回，但那不是使用者要的行為）。8/20 的 24 小時規則只管「多久以前」，
+   這一條管的是「哪些課」，兩條各管一段，不互相取代。
+   ⚠ 前端只是提示，真正的把關在 fn_cancel_booking（migration 20260821_member_cancel_desk_only）。 */
+function memSelfServe(b){ return !!(b && (bkIsGroup(b) || bkIsSelf(b) || b.benefit_type==='training_pass')); }
+function cancelDeskOnlyModal(){
+  showModal(`<div class="modal-title">無法自行取消</div>
+    <div class="cx-warn">
+      <div class="cx-warn-t">請聯繫櫃檯</div>
+      <div class="cx-warn-s">這類課程的取消與改期，一律由櫃檯協助處理。</div>
+    </div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-top:12px;">
+      教練課的時段要跟教練重新安排，櫃檯才看得到大家的班表。<br>
+      自主訓練與團體課可以在這裡自己調整。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">我知道了</button></div>`);
+}
 /* 與 DB 端同一組例外：剛約完 10 分鐘內（按錯要改）、自主訓練（不佔教練時間） */
 function cancelIsExempt(b){
   if(!b) return false;
@@ -27948,6 +27966,8 @@ async function cancelBooking(id, refundMode, opts){
        只有「RPC 自己壞了」才值得回退，規則說不行就是不行。 */
     const _code = res && res.data && res.data.error_code;
     if(_code==='CANCEL.TOO_LATE'){ if(!_silent) cancelTooLateModal(); return; }
+    /* 2026-08-21：會員只能自行調整團課與自主訓練，其餘一律櫃檯（見 memSelfServe） */
+    if(_code==='CANCEL.DESK_ONLY'){ if(!_silent) cancelDeskOnlyModal(); return; }
     if(_code==='AUTH.FORBIDDEN'){ if(!_silent) showToast('沒有權限取消這筆預約'); return; }
     console.error('RPC 取消未成功，回退前端舊邏輯：', res && (res.error || res.data));
   }
@@ -42528,8 +42548,11 @@ async function memTaskTap(id,el){
     ? orb('done','✓',_myAllLeave?'已請假':'已簽到',null)
     : (ckOpen ? orb('go','✓','簽到',isGrp?`memTaskClose();memGrpCheckin('${b.id}')`:`memTaskClose();memCheckin('${b.id}')`)
               : orb('off','🕒','尚未開放',null,'開課前 30 分鐘開放簽到'));
+  /* 2026-08-21 使用者定案：只有團課與自主訓練會員能自己動，其他課程按鈕直說「洽櫃檯」
+     （還是點得下去，點了會看到完整說明——使用者要的是「留下訊息」，不是把鈕藏掉）。 */
   const cxBtn=(done||past) ? orb('off','✕','不可取消',null)
-    : orb('cx','✕','取消',`memCancelTap('${b.id}')`);
+    : (memSelfServe(b) ? orb('cx','✕','取消',`memCancelTap('${b.id}')`)
+                       : orb('off','✕','洽櫃檯',`memCancelTap('${b.id}')`,'這類課程由櫃檯協助取消'));
   /* 自主訓練可以自己改時間（2026-08-09）——與「取消」同一條界線：還沒開始就可以改。
      改期比「取消再重約」好：時段直接換過去，不會在中間被別人搶走。 */
   const rsBtn=(!done && !past && bkIsSelf(b) && b.member_id===SESSION.id)
@@ -42568,42 +42591,16 @@ async function memCancelTap(id){
   if(!b){ showToast('找不到預約'); return; }
   if(bkIsGroup(b)) return memLeaveGroup(id);
   if(bkIsSelf(b)) return memCancelSelf(id);
-  return memCancelBooking(id);
+  /* 2026-08-21 使用者定案：教練課／體驗／按摩／場租一律由櫃檯處理，這裡只留訊息 */
+  return cancelDeskOnlyModal();
 }
-/* 會員自行取消教練課（2026-07-29 使用者定案）：
-   2026-08-20 起：開課 24 小時內會員不能自己取消，一律請櫃檯協助（cancelTooLateModal）；
-   24 小時前取消則退回票券。 */
-async function memCancelBooking(id){
-  const b=await dbGet('bookings',id);
-  if(!b||b.member_id!==SESSION.id){ showToast('找不到預約'); return; }
-  const hrs=hoursUntilStart(b);
-  const within24=hrs<24;
-  const _justBooked = b.created_at && (Date.now()-new Date(b.created_at).getTime()) <= 10*60*1000;
-  /* 2026-08-20 使用者定案：24 小時內不再是「警告一下、扣課放行」，而是不讓會員自己取消。
-     （2026-08-01 那版的紅底橫幅與「確定取消並扣掉這一堂」按鈕已隨之退場——
-      警示做得再明顯，會員按掉之後還是會回來問堂數為什麼不見了。見 cancelTooLateModal） */
-  if(within24 && !cancelIsExempt(b)){ cancelTooLateModal(); return; }
-  const box=`<div class="cx-note cx-note-ok"><b>會退回 1 堂票券</b>　${_justBooked?'剛預約完 10 分鐘內取消不扣堂數。':`距離開課還有 ${Math.floor(hrs)} 小時。`}</div>
-       <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-top:12px;">
-         提醒：開課前 24 小時內就不能自己取消了，需要請櫃檯協助。</div>`;
-  showModal(`<div class="modal-title">取消預約</div>
-    <div style="font-size:13.5px;color:var(--text);padding:2px 0 12px;">${b.date.replace(/-/g,'/')}　${b.start_time}　${bookingTypeName(b,window._memTypeMap)}</div>
-    ${box}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
-      <button class="btn btn-green" onclick="doMemCancelBooking('${id}')">確定取消</button></div>`);
-}
-async function doMemCancelBooking(id){
- try{
-  const {data,error}=await sb.rpc('fn_cancel_booking',{p_booking_id:id,p_reason:null});
-  dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
-  /* DB 才是真正的把關（前端擋不住改時間、放著不動再按的情況），這裡把它的拒絕翻成同一個提示 */
-  if(data && data.error_code==='CANCEL.TOO_LATE'){ cancelTooLateModal(); return; }
-  if(error||!data||!data.ok){ showToast('取消失敗'+((data&&data.error_code)?'：'+data.error_code:'')); return; }
-  closeModal();
-  showToast('已取消，票券退回 1 堂');
-  navTo('mem_bookings');
- }catch(e){ showToast('取消失敗：'+(e&&e.message?e.message:e)); }
-}
+/* 會員自行取消教練課 —— 2026-08-21 整段退場（使用者定案：「會員只能自行調整團課跟
+   自主訓練，其他課程留下訊息，一律透過櫃檯處理」）。
+   原本是 2026-07-29 定案的功能，8/20 又在上面疊了 24 小時規則；但那條只管「多久以前」，
+   26 天前照樣過得去（陳苓汶 8/21 案例）。現在整條路收掉，只留訊息。
+   memCancelBooking 保留成一道防線：任何還沒改到的呼叫端點進來，看到的是同一張說明，
+   不會落到已經沒有的 doMemCancelBooking 上。 */
+async function memCancelBooking(id){ return cancelDeskOnlyModal(); }
 /* 取消團體課報名（2026-07-28）：只退自己的名額＋退 1 堂，整堂課不動 */
 async function memLeaveGroup(id){
   const b=await dbGet('bookings',id);

@@ -27,8 +27,11 @@ ok('★ 舊的「扣課放行」設計已完全退場',
    !/<div class="cx-warn-t">這一堂會被扣掉<\/div>/.test(src)
    && !/>確定取消並扣掉這一堂</.test(src)
    && !/const box=\(within24 && !_justBooked\)/.test(src));
-ok('★ 會員端 24 小時內直接擋下、不再給取消按鈕',
-   /if\(within24 && !cancelIsExempt\(b\)\)\{ cancelTooLateModal\(\); return; \}/.test(src));
+/* 2026-08-21：會員端連「24 小時以外」都不給取消教練課了（見下方「會員自助的界線」），
+   這條 24 小時檢查在會員端已無用武之地，只剩教練端那一份。
+   會員端剩下的兩條自助路徑各自有自己的 24 小時界線（團課、自主訓練）。 */
+ok('★ 會員端的團課退出仍走同一條 24 小時界線',
+   /if\(hoursUntilStart\(b\) < 24\)\{ cancelTooLateModal\(\); return; \}/.test(src));
 ok('★ 教練端一樣擋（櫃檯／管理員／店長走 isAdmin 不受限）',
    /if\(!isAdmin && within24 && !cancelIsExempt\(b\)\)\{ cancelTooLateModal\(\); return; \}/.test(src));
 ok('★ 提示簡單清楚：一句找櫃檯＋一句不講會扣票',
@@ -44,7 +47,9 @@ ok('★ DB 擋下時前端不得回退舊的直寫路徑（否則規則等於沒
 ok('★ 團課退出也用同一條 24 小時界線（原本只擋開課當天）',
    /if\(hoursUntilStart\(b\) < 24\)\{ cancelTooLateModal\(\); return; \}/.test(src)
    && !/開課當天無法自行取消報名/.test(src));
-ok('　　會退回的維持低調綠框', /<div class="cx-note cx-note-ok"><b>會退回 1 堂票券<\/b>/.test(src));
+ok('　　會退回的維持低調綠框（自主訓練那張仍在，教練課那張隨流程退場）',
+   /<div class="cx-note cx-note-ok"><b>會退回 1 點<\/b>/.test(src)
+   && !/<div class="cx-note cx-note-ok"><b>會退回 1 堂票券<\/b>/.test(src));
 
 console.log('\n櫃檯端：兩顆按鈕分得開');
 ok('★ 「扣掉這一堂」是紅底實心並加底線（2026-08-06 三修：btn-danger 淡粉底 → btn-red 實心紅）',
@@ -58,9 +63,11 @@ ok('★ 「退回票券」＝實心綠、「扣掉這一堂」＝實心紅（份
    /<button class="btn btn-green" onclick="askSeriesCancel\('\$\{id\}','force'\)">取消・退回票券<\/button>/.test(src)
    && /<button class="btn btn-red cx-btn-eat" onclick="askSeriesCancel\('\$\{id\}','none'\)">取消・<b>扣掉這一堂<\/b><\/button>/.test(src)
    && /\.btn-red\{background:var\(--danger,#b5372e\);color:#fff;box-shadow:var\(--shadow-xs\);\}/.test(src));
-/* 2026-08-20：會員端只剩「會退回」一種結果（24 小時內已經按不到了），按鈕固定綠底。 */
-ok('★ 會員端只剩一種結果 → 按鈕固定綠底',
-   /<button class="btn btn-green" onclick="doMemCancelBooking\('\$\{id\}'\)">確定取消<\/button>/.test(src));
+/* 2026-08-21：會員端教練課的取消流程整段退場（只能團課與自主訓練），
+   所以「會員端的確定取消按鈕」這條斷言連同 doMemCancelBooking 一起收掉，
+   改由下方「會員自助的界線」那一段把關。 */
+ok('★ 會員端教練課的取消流程已無殘留路徑',
+   !/doMemCancelBooking/.test(src.replace(/不會落到已經沒有的 doMemCancelBooking 上。/,'')));
 ok('★ 兩種結果各掛一枚色標（綠＝退回／紅＝扣除）',
    /\$\{tkChip\('back', `加回 \$\{_grpNetDeduct>0\?`\$\{_grpNetDeduct\} 堂/.test(src)
    && /\$\{tkChip\('eat', '不加回'\)\}/.test(src));
@@ -80,33 +87,88 @@ ok('　　重點字用金色在紅底上仍看得清楚', /\.cx-warn-s b\{color:
    非櫃檯只要過得了 24 小時這關就一律退，過不了就根本不讓取消。
    對應 migration 20260820_cancel_24h_desk_only 的 fn_cancel_booking。
    actor：desk＝管理員／櫃檯／店長教練（is_staff_desk）；coach＝一般教練；member＝會員 */
+console.log('\n會員自助的界線（2026-08-21 使用者定案）');
+/* 使用者原話：「會員只能自行調整團課跟自主訓練 其他課程留下訊息 一律透過櫃檯處理」。
+   起因是陳苓汶 8/21 10:39 自行取消了 9/16 20:00 的私人教練 —— 26 天前，
+   8/20 的 24 小時規則管不到。那條管「多久以前」，這條管「哪些課」。 */
+ok('★ 分流只留兩條自助路徑，其餘只給訊息',
+   /if\(bkIsGroup\(b\)\) return memLeaveGroup\(id\);\s*\n\s*if\(bkIsSelf\(b\)\) return memCancelSelf\(id\);[\s\S]{0,120}?return cancelDeskOnlyModal\(\);/.test(src));
+ok('★ 會員端教練課的取消流程整段退場（不是藏起來按鈕而已）',
+   /async function memCancelBooking\(id\)\{ return cancelDeskOnlyModal\(\); \}/.test(src)
+   && !/確定取消<\/button>`\);\n\}\nasync function doMemCancelBooking/.test(src));
+ok('★ 訊息講清楚為什麼與去哪裡',
+   /<div class="cx-warn-t">請聯繫櫃檯<\/div>\s*\n\s*<div class="cx-warn-s">這類課程的取消與改期，一律由櫃檯協助處理。<\/div>/.test(src)
+   && /自主訓練與團體課可以在這裡自己調整。/.test(src));
+ok('　　按鈕直說「洽櫃檯」，但還是點得下去（使用者要的是留訊息，不是把鈕藏掉）',
+   /orb\('off','✕','洽櫃檯',`memCancelTap\('\$\{b\.id\}'\)`,'這類課程由櫃檯協助取消'\)/.test(src));
+ok('★ DB 擋下時前端不得回退舊路徑（與 CANCEL.TOO_LATE 同一套）',
+   /if\(_code==='CANCEL\.DESK_ONLY'\)\{ if\(!_silent\) cancelDeskOnlyModal\(\); return; \}/.test(src));
+ok('　　自助範圍寫成一支共用判斷（團課／自主訓練／點數）',
+   /function memSelfServe\(b\)\{ return !!\(b && \(bkIsGroup\(b\) \|\| bkIsSelf\(b\) \|\| b\.benefit_type==='training_pass'\)\); \}/.test(src));
+ok('　　起因與 migration 寫在程式裡',
+   /20260821_member_cancel_desk_only/.test(src)
+   && /陳苓汶 8\/21 10:39 自行取消了 9\/16 20:00 的私人教練/.test(src));
+
+console.log('\nSQL 三值邏輯：benefit_type 為 NULL 會讓整條規則失效（2026-08-21 驗證時挖到）');
+{
+  /* plpgsql：`NULL = 'training_pass'` → NULL，`NULL or false` → NULL，
+     `not NULL` → NULL，而 `if <NULL> then` 等於 false ⇒ 規則不會觸發。
+     全庫 6,323/6,926 筆 benefit_type 是 NULL，等於 0820 的 24 小時規則在 DB 端一直沒真正擋過。
+     （前端 cancelIsExempt 是 JS，=== 比較不會變 NULL，所以畫面上一直是擋的。） */
+  const sqlNot = v => (v===null ? null : !v);
+  const sqlAnd = (...xs) => xs.some(x=>x===false) ? false : (xs.some(x=>x===null) ? null : true);
+  const sqlEq  = (a,b) => (a===null||b===null) ? null : a===b;
+  const ifFires = v => v===true;   // plpgsql 的 if：只有 true 才進去
+
+  const selfTrainingOld = (bt,cat)=>{ const l=sqlEq(bt,'training_pass'), r=sqlEq(cat,'自主訓練');
+    return l===true||r===true ? true : (l===null||r===null ? null : false); };
+  const selfTrainingNew = (bt,cat)=>(sqlEq(bt,'training_pass')===true)||(sqlEq(cat,'自主訓練')===true);
+
+  eq('★ 舊寫法：benefit_type 為 NULL 的私人教練 → v_self_training 是 NULL',
+     selfTrainingOld(null,'私人教練'), null);
+  eq('★ 舊寫法：24 小時規則整條變 NULL → if 不觸發 ⇒ 沒擋到',
+     ifFires(sqlAnd(true, true, true, sqlNot(selfTrainingOld(null,'私人教練')))), false);
+  eq('★ 新寫法（coalesce）：同一筆 → false，規則正常觸發',
+     ifFires(sqlAnd(true, true, true, sqlNot(selfTrainingNew(null,'私人教練')))), true);
+  eq('　　自主訓練仍然是例外，不會被 coalesce 誤傷',
+     selfTrainingNew(null,'自主訓練'), true);
+  eq('　　benefit_type 有值時新舊一致',
+     [selfTrainingOld('training_pass','自主訓練'), selfTrainingNew('training_pass','自主訓練')], [true,true]);
+}
+
 console.log('\n擋不擋、退不退（與 20260820_cancel_24h_desk_only 同一套規則）');
 {
   const decide=(o)=>{
     const grace = o.minutesSinceBooked!=null && o.minutesSinceBooked<=10;
     const selfTraining = o.category==='自主訓練';
+    /* 2026-08-21 使用者定案：會員只能自行調整團課與自主訓練，其他一律櫃檯。
+       這一關在 24 小時之前——不管多早，教練課就是不讓會員自己取消。 */
+    const legacyGroup = o.category==='小班肌力' && !o.hasSeats;
+    if(o.actor==='member' && !selfTraining && !legacyGroup) return 'desk_only';
     if(o.actor!=='desk' && o.hoursBefore<24 && !grace && !selfTraining) return 'blocked';
     if(o.actor==='desk') return o.staffChoice===false ? 'forfeited' : 'refunded';
     return 'refunded';
   };
-  eq('★ 會員・教練課・不到 24 小時 → 擋下，請聯繫櫃檯',
-     decide({actor:'member',category:'私人教練',hoursBefore:5,minutesSinceBooked:600}), 'blocked');
+  eq('★ 會員・教練課 → 一律請櫃檯（2026-08-21 起連 24 小時以外也不給）',
+     decide({actor:'member',category:'私人教練',hoursBefore:5,minutesSinceBooked:600}), 'desk_only');
   eq('★ 教練・自己的課・不到 24 小時 → 一樣擋（使用者：教練連自己的課也不行）',
      decide({actor:'coach',category:'私人教練',hoursBefore:5,minutesSinceBooked:600}), 'blocked');
   eq('★ 櫃檯・不到 24 小時 → 可取消（預設退回票券）',
      decide({actor:'desk',category:'私人教練',hoursBefore:1,minutesSinceBooked:600}), 'refunded');
   eq('★ 櫃檯・當天也能取消並選擇扣課不退',
      decide({actor:'desk',staffChoice:false,category:'私人教練',hoursBefore:1}), 'forfeited');
-  eq('★ 會員・教練課・24 小時以上 → 可自行取消並退回',
-     decide({actor:'member',category:'私人教練',hoursBefore:30,minutesSinceBooked:600}), 'refunded');
+  eq('★ 陳苓汶案例：會員・教練課・26 天前 → 現在也擋（8/21 之前這裡是 refunded）',
+     decide({actor:'member',category:'私人教練',hoursBefore:24*26,minutesSinceBooked:600}), 'desk_only');
   eq('★ 教練・自己的課・24 小時以上 → 可自行取消並退回',
      decide({actor:'coach',category:'私人教練',hoursBefore:30,minutesSinceBooked:600}), 'refunded');
-  eq('★ 例外一：剛約完 3 分鐘（按錯要改）→ 放行並退回',
-     decide({actor:'member',category:'私人教練',hoursBefore:5,minutesSinceBooked:3}), 'refunded');
+  /* 10 分鐘補救期是為了「按錯要改」，而會員本來就約不到教練課（只能約自主訓練），
+     所以這組例外現在只在教練身上有意義。 */
+  eq('★ 例外一：教練剛約完 3 分鐘（按錯要改）→ 放行並退回',
+     decide({actor:'coach',category:'私人教練',hoursBefore:5,minutesSinceBooked:3}), 'refunded');
   eq('　　剛好 10 分鐘 → 還在補救期內',
-     decide({actor:'member',category:'私人教練',hoursBefore:5,minutesSinceBooked:10}), 'refunded');
+     decide({actor:'coach',category:'私人教練',hoursBefore:5,minutesSinceBooked:10}), 'refunded');
   eq('　　11 分鐘 → 回到 24 小時規則，擋下',
-     decide({actor:'member',category:'私人教練',hoursBefore:5,minutesSinceBooked:11}), 'blocked');
+     decide({actor:'coach',category:'私人教練',hoursBefore:5,minutesSinceBooked:11}), 'blocked');
   eq('★ 例外二：自主訓練不佔教練時間，1 小時前取消照樣退（江俊輝案例的結論不變）',
      decide({actor:'member',category:'自主訓練',hoursBefore:1,minutesSinceBooked:600}), 'refunded');
   eq('　　江俊輝案例：自主訓練、19 小時前、18 秒後取消 → 退',
