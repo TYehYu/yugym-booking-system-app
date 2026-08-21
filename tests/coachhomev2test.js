@@ -76,11 +76,11 @@ ok('★ 班別定義（早班／中班／晚班，各自顏色）',
    && /\{k:'mid',label:'中班',col:'#1F6F54'\}/.test(src)
    && /\{k:'pm',label:'晚班',col:'#3A5BA0'\}/.test(src)
    && /\.chv2-band\.on\{background:var\(--bc\);border-color:var\(--bc\);color:#fff;\}/.test(src));
-ok('★ 點這一格 → 既有的掃碼打卡視窗（沒有另外寫一套相機）',
-   /class="admh-kpi admh-rev admh-rev-lb chv2-dutytap"[\s\S]{0,120}?onclick="openStaffScanModal\(\)"/.test(src)
+ok('★ 點這一格 → chv2DutyTap（0821 二修：依打卡狀態分流，見 dutytaptest）',
+   /class="admh-kpi admh-rev admh-rev-lb chv2-dutytap"[\s\S]{0,120}?onclick="chv2DutyTap\(\)"/.test(src)
    && /function openStaffScanModal\(\)\{/.test(src));
 ok('　　鍵盤也能開（role=button 要能按 Enter／空白）',
-   /onkeydown="if\(event\.key==='Enter'\|\|event\.key===' '\)\{event\.preventDefault\(\);openStaffScanModal\(\);\}"/.test(src));
+   /onkeydown="if\(event\.key==='Enter'\|\|event\.key===' '\)\{event\.preventDefault\(\);chv2DutyTap\(\);\}"/.test(src));
 ok('★ 班別界線沿用 0806 定案（12 點前早、12–15 中、15 點後晚）',
    /const bandOf=t=>\{ const m=timeToMin\(t\|\|'0:0'\); return m<12\*60\?'am':\(m<15\*60\?'mid':'pm'\); \};/.test(src)
    && /if\(m < 12\*60\) return '#D9A441';   \/\/ 早班：琥珀金/.test(src));
@@ -146,7 +146,7 @@ ok('　　三顆一起排的舊做法退場（天天有兩顆是灰的雜訊）'
    && !/const bandChips=/.test(V2CODE));
 ok('　　未排班／請假用虛線框，不要看起來像「有班」',
    /\.chv2-band-off\{border-style:dashed;\}/.test(src));
-ok('　　點下去仍是掃碼打卡', /class="admh-kpi admh-rev chv2-dutytap" onclick="openStaffScanModal\(\)"/.test(src));
+ok('　　點下去走 chv2DutyTap（還沒上班才是掃碼）', /class="admh-kpi admh-rev chv2-dutytap" onclick="chv2DutyTap\(\)"/.test(src));
 
 ok('★ 日期列與課卡之間補一條分隔線',
    /<div class="admh-div chv2-div2"><\/div>\s*\n\s*<div class="admh-cards">/.test(src));

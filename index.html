@@ -8726,8 +8726,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.2126';
-const APP_VERSION_LABEL='v260821.2126';
+const APP_VERSION = '260821.2156';
+const APP_VERSION_LABEL='v260821.2156';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40820,9 +40820,9 @@ async function coachHomeV2(){
         <div class="admh-kpi"><span>教練課</span><b>${_ptN} 堂</b></div>
         <div class="admh-kpi"><span>團體課</span><b>${_grpN} 堂</b></div>
         <div class="admh-kpi admh-rev admh-rev-lb chv2-dutytap" role="button" tabindex="0"
-             onclick="openStaffScanModal()"
-             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openStaffScanModal();}"><span>今日值班</span></div>
-        <div class="admh-kpi admh-rev chv2-dutytap" onclick="openStaffScanModal()">
+             onclick="chv2DutyTap()"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();chv2DutyTap();}"><span>今日值班</span></div>
+        <div class="admh-kpi admh-rev chv2-dutytap" onclick="chv2DutyTap()">
           <span class="chv2-bands">${bandChip}</span>${dutyTxt?`<b class="chv2-punch${(att&&att.clock_in)?' on':''}">${dutyTxt}</b>`:''}</div>
       </div>
     </div>
@@ -41273,6 +41273,18 @@ const MEMBER_QR_CODE='YUGYM-MEMBER-CHECKIN'; // 店內會員上課簽到碼（�
 let _scanMode='staff'; // 'staff'=員工打卡 / 'member'=會員上課簽到
 let _scanStream=null, _scanRAF=null, _scanBusy=false;
 // 員工掃碼打卡 Modal 版（跳視窗，不切頁）
+/* 今日值班那一格：點下去要看目前的打卡狀態（2026-08-21 使用者回報：
+   「教練上班打卡的按鈕 目前只能上班 不能下班」）——
+   原本一律開掃碼視窗。掃碼那條路其實也做得到下班（doScanPunch 掃到碼會問要不要下班），
+   但教練人已經在店裡，還要再走去找店內 QR 才能下班，等於逼他走最長的一條路；
+   舊版教練首頁的值班卡本來就有一顆「下班打卡」可以直接按。
+   分工照舊版：**上班一定要掃碼**（這是防代打卡的那道門），下班與取消下班走確認視窗。 */
+async function chv2DutyTap(){
+  let rec=null; try{ rec=await getAttendance(SESSION.id, ymd(TODAY)); }catch(_){}
+  if(!rec || !rec.clock_in){ openStaffScanModal(); return; }   // 還沒上班 → 掃碼
+  if(!rec.clock_out){ confirmPunchOut(); return; }             // 上班中 → 下班（含提早下班警示）
+  confirmUndoPunchOut();                                       // 已下班 → 誤觸補救：取消下班
+}
 function openStaffScanModal(){
   _scanMode='staff'; _scanBusy=false; window._scanInModal=true;
   showModal(`<div style="text-align:center;padding:4px 2px;">
