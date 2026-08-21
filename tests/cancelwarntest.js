@@ -32,8 +32,16 @@ ok('★ 舊的「扣課放行」設計已完全退場',
    會員端剩下的兩條自助路徑各自有自己的 24 小時界線（團課、自主訓練）。 */
 ok('★ 會員端的團課退出仍走同一條 24 小時界線',
    /if\(hoursUntilStart\(b\) < 24\)\{ cancelTooLateModal\(\); return; \}/.test(src));
-ok('★ 教練端一樣擋（櫃檯／管理員／店長走 isAdmin 不受限）',
-   /if\(!isAdmin && within24 && !cancelIsExempt\(b\)\)\{ cancelTooLateModal\(\); return; \}/.test(src));
+/* 2026-08-21 使用者定案推翻此條：「所以其實讓教練可以自行取消 24 小時內的課程其實比較實務」。
+   理由是他自己想通的 —— 教練本來就能改時間、而且改時間不受 24 小時限制，
+   「挪到 24 小時之後再取消」兩步就繞過去了，擋牆只擋得住老實人。
+   會員端不變（會員不能改時間，沒有同樣的漏洞）。 */
+ok('★ 教練端的 24 小時擋牆已拿掉',
+   !/if\(!isAdmin && within24 && !cancelIsExempt\(b\)\)\{ cancelTooLateModal\(\); return; \}/.test(src)
+   && /教練本來就能改時間，而且改時間不受 24 小時限制/.test(src));
+ok('★ 會員端仍然擋（memCancelTap 只放行團課與自主訓練，其餘一律櫃檯）',
+   /return cancelDeskOnlyModal\(\);/.test(src)
+   && /if\(hoursUntilStart\(b\) < 24\)\{ cancelTooLateModal\(\); return; \}/.test(src));
 ok('★ 提示簡單清楚：一句找櫃檯＋一句不講會扣票',
    /<div class="cx-warn-t">請聯繫櫃檯<\/div>/.test(src)
    && /距離開課不到 24 小時，這堂課要由櫃檯協助取消。/.test(src)
@@ -145,14 +153,15 @@ console.log('\n擋不擋、退不退（與 20260820_cancel_24h_desk_only 同一�
        這一關在 24 小時之前——不管多早，教練課就是不讓會員自己取消。 */
     const legacyGroup = o.category==='小班肌力' && !o.hasSeats;
     if(o.actor==='member' && !selfTraining && !legacyGroup) return 'desk_only';
-    if(o.actor!=='desk' && o.hoursBefore<24 && !grace && !selfTraining) return 'blocked';
+    /* 2026-08-21：24 小時只擋會員（教練可改時間，擋了也繞得過） */
+    if(o.actor==='member' && o.hoursBefore<24 && !grace && !selfTraining) return 'blocked';
     if(o.actor==='desk') return o.staffChoice===false ? 'forfeited' : 'refunded';
     return 'refunded';
   };
   eq('★ 會員・教練課 → 一律請櫃檯（2026-08-21 起連 24 小時以外也不給）',
      decide({actor:'member',category:'私人教練',hoursBefore:5,minutesSinceBooked:600}), 'desk_only');
-  eq('★ 教練・自己的課・不到 24 小時 → 一樣擋（使用者：教練連自己的課也不行）',
-     decide({actor:'coach',category:'私人教練',hoursBefore:5,minutesSinceBooked:600}), 'blocked');
+  eq('★ 教練・自己的課・不到 24 小時 → 2026-08-21 起放行（擋了也能靠改時間繞過）',
+     decide({actor:'coach',category:'私人教練',hoursBefore:5,minutesSinceBooked:600}), 'refunded');
   eq('★ 櫃檯・不到 24 小時 → 可取消（預設退回票券）',
      decide({actor:'desk',category:'私人教練',hoursBefore:1,minutesSinceBooked:600}), 'refunded');
   eq('★ 櫃檯・當天也能取消並選擇扣課不退',
@@ -167,8 +176,8 @@ console.log('\n擋不擋、退不退（與 20260820_cancel_24h_desk_only 同一�
      decide({actor:'coach',category:'私人教練',hoursBefore:5,minutesSinceBooked:3}), 'refunded');
   eq('　　剛好 10 分鐘 → 還在補救期內',
      decide({actor:'coach',category:'私人教練',hoursBefore:5,minutesSinceBooked:10}), 'refunded');
-  eq('　　11 分鐘 → 回到 24 小時規則，擋下',
-     decide({actor:'coach',category:'私人教練',hoursBefore:5,minutesSinceBooked:11}), 'blocked');
+  eq('　　11 分鐘 → 教練仍然放行（24 小時只擋會員）',
+     decide({actor:'coach',category:'私人教練',hoursBefore:5,minutesSinceBooked:11}), 'refunded');
   eq('★ 例外二：自主訓練不佔教練時間，1 小時前取消照樣退（江俊輝案例的結論不變）',
      decide({actor:'member',category:'自主訓練',hoursBefore:1,minutesSinceBooked:600}), 'refunded');
   eq('　　江俊輝案例：自主訓練、19 小時前、18 秒後取消 → 退',

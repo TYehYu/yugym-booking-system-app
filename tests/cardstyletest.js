@@ -668,14 +668,17 @@ ok('　　狀態在畫完與捲動時各算一次（要等版面算完才量得�
 ok('　　捲軸藏起來（改用翻頁鈕）', /\.tcard-list::-webkit-scrollbar\{display:none;\}/.test(src));
 
 console.log('\n過去的課卡淡化加重（2026-08-21 使用者：「淡化的課卡不夠強」）');
-ok('★ 單卡（今天已結束的那幾堂）：opacity .5→.32、saturate .65→.35',
-   /\.cal-ev\.cal-ev-past\{opacity:0\.32;filter:saturate\(0\.35\) brightness\(1\.04\);/.test(src));
-ok('★ 整欄（已過去的日子）：grayscale \.55→\.82、opacity \.78→\.5',
-   /\.cal-daycol\.col-past \.cal-ev\{filter:grayscale\(0\.82\) opacity\(0\.5\);\}/.test(src));
-ok('　　兩層會疊加，註解寫明（單看數字會以為改很小）',
-   /這一層與上面的 \.cal-ev-past 會疊加，所以單獨看數字不大，實際效果是相乘的/.test(src));
+/* 四修（同日）：opacity .5 → .32（太強）→ 灰遮罩（還是偏淡）→ 直接壓亮度。
+   使用者：「桌機行事曆過期課卡用暗化表示 不要透明化」。 */
+ok('★ 用暗化（brightness），不是透明化（opacity）',
+   /\.cal-ev\.cal-ev-past\{opacity:1;filter:brightness\(0\.9\) saturate\(0\.72\);transition:filter \.18s;\}/.test(src)
+   && !/\.cal-ev\.cal-ev-past::after\{/.test(src));
+ok('★ 整欄再暗一階（與單卡疊加，效果相乘）',
+   /\.cal-daycol\.col-past \.cal-ev\{filter:brightness\(0\.88\) saturate\(0\.5\);\}/.test(src));
+ok('　　兩者差別寫在原地（透明會連字一起糊掉，暗化保持對比度）',
+   /透明化與暗化不是同一件事：透明會讓卡片和背景混在一起、字也跟著糊掉；/.test(src));
 ok('　　滑過去仍然恢復原狀（不是把資訊藏起來）',
-   /\.cal-ev\.cal-ev-past:hover\{opacity:1;filter:none;\}/.test(src)
+   /\.cal-ev\.cal-ev-past:hover\{filter:none;\}/.test(src)
    && /\.cal-daycol\.col-past \.cal-ev:hover\{filter:none;\}/.test(src));
 ok('　　未完成的過去課卡仍不淡化（0801 定案：那是待辦，不能一起壓暗）',
    /\.cal-ev\.cal-ev-todo,\s*\n\.cal-daycol\.col-past \.cal-ev\.cal-ev-todo\{opacity:1;filter:none;\}/.test(src));
@@ -693,6 +696,19 @@ ok('　　白底＋課種色字，在填滿的卡上也看得清楚',
    /background:#fff;color:var\(--amc,#1f6f54\);/.test(src));
 ok('　　0820 那個決定為什麼被推翻，寫在原地',
    /0820 曾以「填滿課程色就是已簽到」為由把簽章拿掉，但填色同時也用在別的狀態上/.test(src));
+
+console.log('\n滾輪可以點（2026-08-21 使用者：「這邊時間不能按」「日期也是」）');
+ok('★ 每一格都掛 onclick，點了捲到中央',
+   /onclick="ashWheelGo\('\$\{key\}',\$\{i\},1\)"/.test(src)
+   && /function ashWheelGo\(key, idx, byTap\)\{/.test(src));
+ok('　　選取仍由 ashWheelSync 依中央位置判定（只有一套真相）',
+   /點擊＝把那一格捲到中央，選取仍然由 ashWheelSync 依中央位置判定，只有一套真相/.test(src));
+ok('　　點年／月要立刻重算日數（平滑捲動要等動畫結束才觸發捲動事件）',
+   /if\(byTap && window\._adpCtx && window\._adpCtx\.mode==='date' && \(key==='y'\|\|key==='m'\)\)\{/.test(src));
+ok('　　開窗定位維持瞬間到位（不要平滑）',
+   /if\(byTap && col\.scrollTo\) col\.scrollTo\(\{top:idx\*ASH_WH_ITEM, behavior:'smooth'\}\);/.test(src));
+ok('　　點得動要看得出來（cursor:pointer）',
+   /cursor:pointer;-webkit-tap-highlight-color:transparent;\}   \/\* 點得動要看得出來/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

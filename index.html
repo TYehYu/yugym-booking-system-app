@@ -2802,7 +2802,8 @@ tr:hover td{background:var(--card2);}
   mask-image:linear-gradient(180deg,transparent 0,#000 26%,#000 74%,transparent 100%);}
 .wh-col::-webkit-scrollbar{width:0;display:none;}
 .wh-item{height:44px;line-height:44px;scroll-snap-align:center;font-family:var(--num);
-  font-size:17px;font-weight:700;color:var(--t3);transition:color .12s,transform .12s;}
+  font-size:17px;font-weight:700;color:var(--t3);transition:color .12s,transform .12s;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;}   /* 點得動要看得出來（2026-08-21） */
 .wh-item.on{color:var(--text);transform:scale(1.06);}
 .wh-3 .wh-col:first-child{flex:1.3;}
 .wh-2{justify-content:center;}
@@ -3783,15 +3784,19 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-now{position:absolute;left:0;right:0;height:0;border-top:2.5px solid #e0533a;z-index:30;pointer-events:none;box-shadow:0 0 4px rgba(224,83,58,0.35);}
 .cal-now .cal-now-dot{position:absolute;left:-2px;top:-6px;width:11px;height:11px;border-radius:50%;background:#e0533a;box-shadow:0 0 0 2px rgba(224,83,58,0.2);}
 /* Focus Mode：過去的課淡化（降 opacity+降飽和+提亮），焦點集中現在與未來 */
-/* 2026-08-21 使用者回報「淡化的課卡不夠強」——原本 opacity .5＋saturate .65，
-   在滿滿一週的畫面裡，過去與未來的卡片份量差不多，眼睛還是會被舊的抓走。
-   壓到 .32＋saturate .35：看得出來那裡有課、但完全不搶視線；滑過去仍然恢復原狀。 */
-.cal-ev.cal-ev-past{opacity:0.32;filter:saturate(0.35) brightness(1.04);transition:opacity .18s, filter .18s;}
-.cal-ev.cal-ev-past:hover{opacity:1;filter:none;}
+/* 過去的課卡：用「暗化」表示，不要透明化（2026-08-21 使用者定案）——
+   歷程：opacity .5（不夠強）→ .32（太強，字幾乎看不見）→ 灰色半透明遮罩（還是偏「淡」）
+   → 現在直接壓亮度。
+   ⚠ 透明化與暗化不是同一件事：透明會讓卡片和背景混在一起、字也跟著糊掉；
+   暗化是整張卡連字一起變沉，對比度不變，所以讀得到、但視覺重量明顯比未來的課低。
+   滑過去恢復原狀。 */
+.cal-ev.cal-ev-past{opacity:1;filter:brightness(0.9) saturate(0.72);transition:filter .18s;}
+.cal-ev.cal-ev-past:hover{filter:none;}
 /* 未完成的過去課卡不淡化（2026-08-01 使用者指示）——
    .col-past 會把整欄的舊卡再壓一層灰，這裡要一起讓開，否則週檢視的舊日期還是會把它壓暗。 */
 .cal-ev.cal-ev-todo,
 .cal-daycol.col-past .cal-ev.cal-ev-todo{opacity:1;filter:none;}
+
 .cal-half{height:var(--slot-px,34px);border-bottom:1px dashed rgba(0,0,0,0.09);cursor:pointer;transition:background .12s;}
 .cal-half.hourline{border-bottom:1px solid rgba(0,0,0,0.18);}
 /* 整列反白提示「此時段可新增」；點擊直接走 .cal-half 自身 onclick（日期時間為字面值，無全域競態） */
@@ -4553,7 +4558,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-daycol.col-past .cal-half{background:transparent;}
 /* 整欄過去的日子再壓一層（2026-08-21 加重：grayscale .55→.82、opacity .78→.5）——
    這一層與上面的 .cal-ev-past 會疊加，所以單獨看數字不大，實際效果是相乘的。 */
-.cal-daycol.col-past .cal-ev{filter:grayscale(0.82) opacity(0.5);}
+/* 整欄過去的日子：再暗一階（與單卡的 brightness 疊加，效果相乘）。
+   ⚠ 不用 opacity —— 那是「透明化」，使用者明確不要。 */
+.cal-daycol.col-past .cal-ev{filter:brightness(0.88) saturate(0.5);}
 .cal-daycol.col-past .cal-ev:hover{filter:none;}
 /* 拖曳落點預覽 */
 .cal-drop-preview{position:absolute;left:2px;right:2px;border:2px dashed var(--gold);border-radius:6px;
@@ -8693,8 +8700,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1821';
-const APP_VERSION_LABEL='v260821.1821';
+const APP_VERSION = '260821.1832';
+const APP_VERSION_LABEL='v260821.1832';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26932,8 +26939,13 @@ async function confirmCancelBooking(id){
   const within24 = hrs < 24;
   const isAdmin = isDeskLike();   // 2026-07-28：店長同櫃台，取消時保留扣票/退票選擇
   const isTrial = b.category==='體驗';
-  /* 教練端擋在這裡（櫃檯／管理員／店長走 isAdmin 不受影響） */
-  if(!isAdmin && within24 && !cancelIsExempt(b)){ cancelTooLateModal(); return; }
+  /* 2026-08-21 使用者定案：教練可以取消 24 小時內的課，這一道擋牆拿掉。
+     推導過程（使用者自己想通的）：教練本來就能改時間，而且改時間不受 24 小時限制 ——
+     「把課挪到 24 小時之後再取消」兩步就繞過去了，擋牆等於只是多兩個動作。
+     與其做一個擋得住老實人、擋不住繞路的規則，不如承認實務：
+     「所以其實讓教練可以自行取消 24 小時內的課程其實比較實務」。
+     ⚠ 會員端**不變**：會員仍然不能自行取消 24 小時內的課（也不能改時間，所以沒有同樣的漏洞），
+     那條規則在 memCancelTap／fn_cancel_booking 裡，不要一起拆掉。 */
   /* 2026-07-30 使用者回報：刪除「待簽約卡位」時跳出「是否退回票券」——那種卡位本來就沒有票券
      （pending_contract=true、ticket_id=null），問退票沒有意義。凡是沒綁票券的預約
      （待簽約卡位、場租、未綁票的匯入預約）都不該出現退票/扣課的選擇，直接確認取消即可。 */
@@ -27535,7 +27547,10 @@ const ASH_WH_ITEM=44, ASH_WH_H=220;
 function ashWheelCol(key, items, cur){
   const idx=Math.max(0, items.findIndex(x=>String(x.v)===String(cur)));
   return `<div class="wh-col" id="wh-${key}" data-key="${key}" onscroll="ashWheelScroll('${key}')">
-    ${items.map((x,i)=>`<div class="wh-item${i===idx?' on':''}" data-v="${x.v}">${x.label}</div>`).join('')}
+    ${/* 點一下就選那一格（2026-08-21 使用者回報：「這邊時間不能按」「日期也是」）——
+         滾輪只吃捲動，手指滑得動、但用滑鼠或想直接點「10」的人會以為壞了。
+         點擊＝把那一格捲到中央，選取仍然由 ashWheelSync 依中央位置判定，只有一套真相。 */''}
+    ${items.map((x,i)=>`<div class="wh-item${i===idx?' on':''}" data-v="${x.v}" onclick="ashWheelGo('${key}',${i},1)">${x.label}</div>`).join('')}
   </div>`;
 }
 function ashWheelSync(key){
@@ -27555,10 +27570,17 @@ function ashWheelScroll(key){
   }, 90);
   ashWheelSync(key);   // 捲動中就即時標中央那一格，不用等停下來
 }
-function ashWheelGo(key, idx){
+function ashWheelGo(key, idx, byTap){
   const col=document.getElementById('wh-'+key); if(!col) return;
-  col.scrollTop=idx*ASH_WH_ITEM;
+  /* byTap＝使用者點的：平滑捲過去比較看得出「它動了」；開窗時的定位則要瞬間到位。 */
+  if(byTap && col.scrollTo) col.scrollTo({top:idx*ASH_WH_ITEM, behavior:'smooth'});
+  else col.scrollTop=idx*ASH_WH_ITEM;
   ashWheelSync(key);
+  /* 點年／月要立刻重算日數（2 月 28、4 月 30）——捲動事件那條路也會做，
+     但平滑捲動要等動畫結束才觸發，先做一次比較跟手。開窗定位不做（見上）。 */
+  if(byTap && window._adpCtx && window._adpCtx.mode==='date' && (key==='y'||key==='m')){
+    try{ ashDateFixDays(); }catch(_){}
+  }
 }
 function ashWheelVal(key){
   const col=document.getElementById('wh-'+key); if(!col) return '';
