@@ -116,7 +116,10 @@ console.log('\n課卡加一列「第幾堂／共幾堂」（使用者：「這�
 /* 2026-08-21 四修：姓名與出席章包成 .tcard-nmrow 一列，這一行接在那一列後面
    （.tcard-txt 是直排 → 等於名字下面一列） */
 ok('★ 接在姓名那一列的下面',
-   /<\/span>\$\{\(\(\)=>\{\s*\n\s*const q=\(window\._bkSeq\|\|\{\}\)\[b\.id\];\s*\n\s*return q\?`<span class="tcard-seq">\$\{q\.i\}\/\$\{q\.n\} 堂<\/span>`:'';\}\)\(\)\}/.test(src));
+   /<\/span>\$\{\(\(\)=>\{\s*\n\s*const q=\(window\._bkSeq\|\|\{\}\)\[b\.id\];/.test(src)
+   && /return q\?`<span class="tcard-seq">\$\{q\.n>=999\?\('第 '\+q\.i\+' 堂'\):\(q\.i\+'\/'\+q\.n\+' 堂'\)\}<\/span>`:'';/.test(src));
+ok('　　無限次卡只標「第 N 堂」（9999 堂的票寫成 45/9999 沒有意義）',
+   /無限次卡（親友自主訓練 sessions_total=9999）寫「45\/9999 堂」沒有意義，只標第幾堂/.test(src));
 ok('★ 沿用 computeLastBkMarks 已建好的索引，不另外掃一次 bookings',
    /window\._bkSeq=\{\};/.test(src)
    && /const arr=_bkByTk\[t\.id\]; if\(!arr\|\|!arr\.length\) return;/.test(src)
