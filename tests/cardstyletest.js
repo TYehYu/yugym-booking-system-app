@@ -415,5 +415,27 @@ ok('★ 卡片瘦身讓 5 張塞得下（內距 11→9、名單間距 8→7、�
    && /\.ash-mems\{display:flex;flex-direction:column;gap:7px;/.test(css)
    && /flex-direction:column;gap:13px;padding:2px 0 12px;/.test(css));
 
+console.log('\n非團課的簽到／取消擺回下方（使用者指示）');
+ok('★ 單人課走下方那一排，團課仍逐名額掛在自己那一列',
+   /if\(\(!_ashMode \|\| !isGroup\) && canCancel && own\)\{/.test(src)
+   && /if\(\(!_ashMode \|\| !isGroup\) && !_calCtx && \(staff\|\|coachCk\) && !closed\)\{/.test(src));
+ok('★ 會員卡右側不再重複畫同一組按鈕（只留團課的舊資料分支）',
+   /\}else if\(A\.isGroup\)\{/.test(src)
+   && /一般單人課走下方那一排（2026-08-21），這裡不再重複畫/.test(src));
+ok('★ 標題卡再縮短（內距 18→13、色條跟著收、第二列間距 9→6）',
+   /padding:13px 18px 13px 26px;box-shadow:0 10px 30px rgba\(30,25,15,\.3\);\}/.test(css)
+   && /\.ash-bar\{position:absolute;left:12px;top:12px;bottom:12px;/.test(css)
+   && /\.ash-meta\{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:6px;/.test(css));
+ok('　　為什麼搬（為了兩顆按鈕把卡撐到 100px 高）',
+   /右邊掛兩顆圓鈕等於為了兩顆按鈕把卡撐到 100px 高/.test(css.length?src:src));
+
+console.log('\n空堂不能是自主訓練（使用者：自主訓練必須要有票券才能建立）');
+ok('★ 更換課程的清單整個不列自主訓練（那張卡沒有人＝沒有點數可扣）',
+   /if\(bkIsSelf\(\{category:t\.category\}\)\)\{[\s\S]{0,260}?return false;\s*\n\s*\}/.test(src));
+ok('★ 空堂建立本身也擋（不倚賴建立預約那邊的手機過濾）',
+   /if\(bkIsSelf\(\{category:t\.category\}\)\)\{\s*\n\s*showToast\('自主訓練要有票券才能建立，請改用「選擇會員」'\);\s*\n\s*return;\s*\n\s*\}/.test(src));
+ok('　　為什麼要各自擋一次，寫在程式裡（原本只是「剛好擋住」，不是規則）',
+   /但那是「剛好擋住」，不是規則本身。規則寫在這裡，日後桌機開放也守得住/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

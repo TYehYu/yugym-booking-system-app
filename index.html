@@ -7222,9 +7222,10 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
     animation:admhSheetUp .2s ease-out backwards;}
   @keyframes admhSheetUp{from{transform:translateY(-46%) scale(.97);opacity:0;}}
   /* 白底＋左側課程色條（2026-08-19 使用者指示，取代整卡上色） */
+  /* 標題卡再矮一點（2026-08-21 使用者指示）：它只是資訊抬頭，不需要跟會員卡一樣厚 */
   #bk-card-pop.admh-pop .mtp-card.admh-sheet{flex:none;display:block;position:relative;width:100%;background:#fff;color:var(--text);
-    border:none;border-radius:20px;padding:18px 18px 18px 26px;box-shadow:0 10px 30px rgba(30,25,15,.3);}
-  .ash-bar{position:absolute;left:12px;top:16px;bottom:16px;width:5px;border-radius:999px;background:var(--mtp-c,#1f6f54);}
+    border:none;border-radius:20px;padding:13px 18px 13px 26px;box-shadow:0 10px 30px rgba(30,25,15,.3);}
+  .ash-bar{position:absolute;left:12px;top:12px;bottom:12px;width:5px;border-radius:999px;background:var(--mtp-c,#1f6f54);}
   .ash-r1{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:600;color:var(--t2);}
   .ash-right{display:flex;align-items:center;gap:7px;flex:none;font-family:var(--num);font-weight:700;font-size:14.5px;color:var(--text);}
   /* 課名讓位給右邊的時間／代課鈕（2026-08-20：代課進來後這一列擠到把「代課」折成兩行） */
@@ -7233,7 +7234,7 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   .ash-crs{cursor:pointer;}
   .ash-crs:active{transform:scale(.995);}
   /* 課程卡第二行：日期・時長・教練（2026-08-20 使用者指示，會員已改成下方獨立卡片） */
-  .ash-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:9px;
+  .ash-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:6px;
     font-size:13px;font-weight:600;color:var(--t2);}
   .ash-meta b{font-family:var(--num);font-size:15px;font-weight:800;color:var(--text);}
   .ash-dot{color:var(--t3);}
@@ -8485,8 +8486,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1020';
-const APP_VERSION_LABEL='v260821.1020';
+const APP_VERSION = '260821.1044';
+const APP_VERSION_LABEL='v260821.1044';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22002,6 +22003,13 @@ async function _ashSlotHoldOpen(){
  try{
   const {type_id,t,coach_id,date,time}=_bkWizard||{};
   if(!t||!date||!time){ showToast('課程資料不完整，請重新操作'); return; }
+  /* 自主訓練不能開空堂（2026-08-21 使用者確認：它必須有票券才能建立）——
+     目前建立預約在手機端本來就把自主訓練濾掉了，所以走不到這裡；
+     但那是「剛好擋住」，不是規則本身。規則寫在這裡，日後桌機開放也守得住。 */
+  if(bkIsSelf({category:t.category})){
+    showToast('自主訓練要有票券才能建立，請改用「選擇會員」');
+    return;
+  }
   const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id,member_id:null};
   const verr=await validateBooking(vbk,date,time,60);
   if(verr){ showToast(verr); return; }
@@ -23492,14 +23500,18 @@ async function expandBkCard(el, id){
   if(!_calCtx && (staff||coachCk) && b.status==='coach_leave') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkCoachLeaveNoShow('${id}')`,'noshow','未到課');
   else if(!_calCtx && (staff||coachCk) && bkIsSelf(b) && !bkIsCoachLeave(b) && !isGroup && b.status==='booked') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkSelfNoShow('${id}')`,'noshow','未到課');
   // ④ 取消（紅；教練只能取消自己的課；2026-08-20 起管理員手機改掛在會員卡上）
-  if(!_ashMode && canCancel && own){
+  /* 非團課的取消／簽到擺回下方那一排（2026-08-21 使用者指示）——
+     單人課只有一張會員卡，右邊掛兩顆圓鈕等於為了兩顆按鈕把卡撐到 100px 高；
+     移到下方之後會員卡可以貼著內容縮短，整張面板也跟著矮一截。
+     團課維持逐名額掛在自己那一列（每個名額要各自簽到／取消，不能共用一組）。 */
+  if((!_ashMode || !isGroup) && canCancel && own){
     /* 2026-07-29：直接開「取消預約」視窗——那裡才有 24 小時警示與「退回票券／扣課不退」
        的明確選擇（使用者定案的取消政策）。 */
     btns += evoBtn('evo-r1','evo-danger',`collapseBkCard();confirmCancelBooking('${id}')`,'x','取消');
   }
   // ⑤ 簽到（綠；團課 → 開名單逐人簽；單人已簽 → 兩段式取消簽到，不用原生 confirm）
   //    2026-08-20 起管理員手機改成每位會員卡上各自一顆，不再是整堂一顆
-  if(!_ashMode && !_calCtx && (staff||coachCk) && !closed){
+  if((!_ashMode || !isGroup) && !_calCtx && (staff||coachCk) && !closed){
     if(isGroup){
       btns += evoBtn('evo-r2','evo-primary',`bkOrbitRoster('${id}')`,'check','簽到');
     }else{
@@ -23705,7 +23717,9 @@ async function bkCardPop(el, b, btns, acts){
             if(A.staff && !inHere && !A.closed) _outOrbs += evoBtn('','evo-danger',`ashSeatAct('${b.id}','cancel','${r.sk}')`,'x','取消');
             if(_ck && !A.calCtx && !A.closed) _outOrbs += evoBtn('','evo-primary',`ashSeatAct('${b.id}','attend','${r.sk}')`,'check',inHere?'取消簽到':'簽到');
           }
-        }else{
+        }else if(A.isGroup){
+          /* 沒有名額鍵、但仍是團課（舊資料只有 member_id 的那種）—— 保留原本的右側圓鈕。
+             一般單人課走下方那一排（2026-08-21），這裡不再重複畫。 */
           if(A.canCancel && A.own) _outOrbs += evoBtn('','evo-danger',`collapseBkCard();confirmCancelBooking('${b.id}')`,'x','取消');
           if(_ck && !A.calCtx && !A.closed) _outOrbs += A.checked
             ? evoBtn('','',`bkOrbitUndo(this,'${b.id}')`,'undo','取消簽到')
@@ -24684,7 +24698,12 @@ async function ashCourseAsk(bid){
     if(typeof bkIsMergedPT==='function' && bkIsMergedPT(t)) return false;
     if(t.category==='場租') return false;
     /* 課別判斷走口袋分類器（bkIsSelf／bkIsGroup），不再散裝比字串 —— 見 tests/pockettest 的棘輪 */
-    if(bkIsSelf({category:t.category}) && /友善/.test(t.name||'')) return false;
+    if(bkIsSelf({category:t.category})){
+      /* 自主訓練不能是空堂（2026-08-21 使用者確認）——它必須有票券（點數）才能建立，
+         沒有人就沒有點數可扣，建出來的空堂之後也接不上任何人。
+         「更換課程」只出現在完全沒有人的卡上，所以這裡整個不列。 */
+      return false;
+    }
     return true;
   });
   const cur=String(b.ticket_type_id||'');

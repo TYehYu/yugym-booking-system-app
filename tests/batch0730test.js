@@ -22,11 +22,12 @@ ok('★ 只能動自己的課卡：own＝主責或代課是自己（店長除外
    /const own = SESSION\.role!=='coach' \|\| !!SESSION\.is_manager \|\| bkIsCoach\(b,SESSION\.id\);/.test(src));
 /* 2026-08-20：管理員手機的簡易課卡改成「課程卡＋每位會員一張卡」，取消與簽到搬到會員卡上，
    所以這兩行多了 !_ashMode 的前置守衛（見 acctfortunetest.js）；own／coachCk 的口徑本身沒變。 */
+/* 2026-08-21：非團課的取消／簽到擺回下方那一排，條件多了 || !isGroup —— own 判定不變 */
 ok('★ 「取消」補上 own 判定（原本只看 canCancel，教練點別人的課也能取消）',
-   /\/\/ ④ 取消（紅；教練只能取消自己的課[^\n]*\n\s*if\(!_ashMode && canCancel && own\)\{/.test(src));
+   /if\(\(!_ashMode \|\| !isGroup\) && canCancel && own\)\{/.test(src));
 ok('★ 簽到開放給教練自己的課（口徑同 openBookingDetail 的 staffCanCheckin）',   // 2026-08-19 行事曆情境加 !_calCtx（行事曆圓鈕無簽到）
    /const coachCk = SESSION\.role==='coach' && own;/.test(src)
-   && /if\(!_ashMode && !_calCtx && \(staff\|\|coachCk\) && !closed\)\{/.test(src));
+   && /if\(\(!_ashMode \|\| !isGroup\) && !_calCtx && \(staff\|\|coachCk\) && !closed\)\{/.test(src));
 /* 2026-08-21：條件併進 _editable（staff && !closed && 課程日>=今天）——
    過期的團課不再給「新增」，事後加人會在課後扣掉一堂票。權限沒放寬（_editable 含 staff）。 */
 ok('　　團課名單管理仍只給櫃檯／管理員，且過期不給',
