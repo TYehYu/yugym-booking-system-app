@@ -123,7 +123,8 @@ console.log('\n班別歸屬的算術（與 dutyShiftColor 同一組界線）');
 
 console.log('\n二修（2026-08-21）：外框、值班籤、分隔線、進度環、下拉更新');
 ok('★ 外框樣式掛在 body.chv2-shell，由 navTo 每次換頁重算（離開自然拿掉）',
-   /document\.body\.classList\.toggle\('chv2-shell',\s*\n\s*key==='coach_today' && typeof isRealAdmin==='function' && isRealAdmin\(\)\s*\n\s*&& SESSION && SESSION\.role==='coach'\)/.test(src));
+   /document\.body\.classList\.toggle\('chv2-shell', _chv\);/.test(src)
+   && /typeof isRealAdmin==='function' && isRealAdmin\(\)\s*\n\s*&& SESSION && SESSION\.role==='coach';/.test(src));
 ok('　　⚠ 這三樣都在頁面之外，直接改 CSS 會連教練本人一起改到 —— 理由寫在原地',
    /這三樣都在頁面之外的外框上，改 CSS 會連教練本人一起改到/.test(src));
 ok('★ ① 頂列米色', /body\.chv2-shell \.topbar\{background:var\(--card2,#F4F0E8\);\}/.test(src));
@@ -164,15 +165,47 @@ ok('★ ⚠ 頂欄底色與字色要成對改（手機原本是綠底米白字 �
    && /body\.chv2-shell \.topbar \.tb-ver\{color:var\(--t3\) !important;\}/.test(src)
    && /只換背景的話字還是米白的，變成米底米字＝整排字不見/.test(src));
 ok('★ KPI 欄要能縮（flex 的 min-width:auto 會讓它撐出畫面）',
-   /body\.chv2-shell \.admh-kpis\{min-width:0;flex-shrink:1;\}/.test(src)
+   /body\.chv2-shell \.admh-bigrow\{min-width:0;\}/.test(src)
    && /body\.chv2-shell \.admh-kpi\{min-width:0;max-width:100%;/.test(src)
    && /\.admh-bigrow 是 flex row，KPI 欄預設 min-width:auto/.test(src));
 ok('★ 「尚未打卡」不顯示（還沒打卡是常態，天天掛一行等於噪音）',
    /: \(att&&att\.clock_in\) \? `\$\{att\.clock_in\} 上班中` : '';/.test(src)
    && !/尚未打卡/.test(V2CODE));
-ok('★ 本月成績與課卡之間留距離', /\.chv2-score\{margin-top:18px;\}/.test(src));
+ok('★ 本月成績與課卡之間留距離', /\.chv2-score\{margin-top:28px;\}/.test(src));
 ok('★ 頂欄重整鈕退場（這一頁已經有下拉更新）',
    /body\.chv2-shell \.topbar \.tb-right \.rf-btn\{display:none !important;\}/.test(src));
+
+console.log('\n四修（2026-08-21）：KPI 四列左右分、成績間距、行事曆搬管理員版');
+ok('★ KPI 每列自己左右分（教練課／團體課：名稱靠左、堂數靠右）',
+   /body\.chv2-shell \.admh-kpis\{min-width:0;flex:1;align-items:stretch;gap:5px;\}/.test(src)
+   && /body\.chv2-shell \.admh-kpi\{min-width:0;max-width:100%;width:100%;justify-content:space-between;/.test(src));
+ok('★ 第三列「今日值班」整條靠左、第四列（打卡鈕）整條靠右',
+   /body\.chv2-shell \.admh-kpi\.admh-rev-lb\{justify-content:flex-start;\}/.test(src)
+   && /body\.chv2-shell \.admh-kpi\.chv2-dutytap:not\(\.admh-rev-lb\)\{justify-content:flex-end;\}/.test(src));
+ok('★ 本月成績與課卡的間距再拉開（18 → 28px）',
+   /\.chv2-score\{margin-top:28px;\}/.test(src)
+   && /18px 仍然不夠：課卡本身是白卡、成績也是白卡/.test(src));
+
+console.log('\n教練行事曆 V2（使用者：搬管理員手機端的行事曆，別人的課只能看）');
+ok('★ 同一道旗標：只有管理員預覽教練視角＋手機才走 V2',
+   /if\(typeof isRealAdmin==='function' && isRealAdmin\(\) && SESSION && SESSION\.role==='coach'\s*\n\s*&& isMobileLayout\(\)\)\{\s*\n\s*try\{ return await coachCalV2\(\); \}/.test(src));
+ok('　　出錯就退回教練原本的行事曆，不讓頁面卡住',
+   /catch\(e\)\{ console\.error\('coachCalV2 失敗，退回教練原本的行事曆', e\);/.test(src));
+ok('★ 直接走管理員手機行事曆那條路（表頭＋一日 agenda／多日欄狀）',
+   /const _hdr=await admCalHeaderHTML\(\);/.test(src)
+   && /await admCalMultiHTML\(_nD\)/.test(src)
+   && /await renderCoachAgenda\(\);/.test(src));
+ok('★ 圖層全開、範圍全店（教練要看得到別人的佔用，不然排課會撞到）',
+   /window\._coachScope='all';              \/\/ 看得到全店（別人的課只能看）/.test(src));
+ok('★ 別人的課純檢視：開卡前依「這堂是不是我帶的」現算 _coachReadonly',
+   /if\(window\._chvCal\)\{\s*\n\s*try\{ window\._coachReadonly = !bkIsCoach\(b, SESSION\.id\); \}catch\(_\)\{ window\._coachReadonly=true; \}\s*\n\s*\}/.test(src));
+ok('　　兩個課卡入口都要設（admh 卡走 expandBkCard、agenda 走 openCourseCard）',
+   (src.match(/window\._coachReadonly = !bkIsCoach\(b, SESSION\.id\)/g)||[]).length===2);
+ok('　　代課的課算自己的（bkIsCoach 含代課）', /return bkIsCoach\(b,myId\); \/\/ 月曆\/週量只看我的課/.test(src));
+ok('★ 離開行事曆就把旗標關掉，別頁的課卡不會被鎖成唯讀',
+   /if\(!\(_chv && key==='coach_calendar'\)\)\{ window\._chvCal=false; window\._coachReadonly=false; \}/.test(src));
+ok('　　外框樣式也套用在行事曆頁',
+   /const _chv=\(key==='coach_today'\|\|key==='coach_calendar'\)/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

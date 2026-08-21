@@ -5074,8 +5074,16 @@ body.chv2-shell .topbar .tb-right{color:var(--text) !important;}
 /* ⚠ KPI 那一欄要能縮（使用者回報「kpi 也跑出畫面外」）——
    .admh-bigrow 是 flex row，KPI 欄預設 min-width:auto，內容多寬就撐多寬、直接頂出畫面。 */
 body.chv2-shell .admh-bigrow{min-width:0;}
-body.chv2-shell .admh-kpis{min-width:0;flex-shrink:1;}
-body.chv2-shell .admh-kpi{min-width:0;max-width:100%;flex-wrap:wrap;justify-content:flex-end;}
+/* KPI 四列（2026-08-21 使用者定版：「教練課跟團體課靠左 堂數靠右 用兩列顯示
+   第三列是今日值班靠左 第四列是打卡鈕靠右」）——
+   管理員版是整欄靠右對齊的四小列，這裡改成整欄撐開、每列自己左右分。 */
+body.chv2-shell .admh-kpis{min-width:0;flex:1;align-items:stretch;gap:5px;}
+body.chv2-shell .admh-kpi{min-width:0;max-width:100%;width:100%;justify-content:space-between;gap:10px;}
+body.chv2-shell .admh-kpi>span{flex:0 0 auto;}
+body.chv2-shell .admh-kpi>b{flex:0 0 auto;font-family:var(--num);}
+/* 第三列「今日值班」整條靠左；第四列（打卡鈕）整條靠右 */
+body.chv2-shell .admh-kpi.admh-rev-lb{justify-content:flex-start;}
+body.chv2-shell .admh-kpi.chv2-dutytap:not(.admh-rev-lb){justify-content:flex-end;}
 /* 頂欄的重整鈕退場（2026-08-21 使用者指示）——這一頁已經有下拉更新（admPtrInit），
    同一件事留兩個入口只是佔位；與管理員手機首頁 0819 的處理一致。 */
 body.chv2-shell .topbar .tb-right .rf-btn{display:none !important;}
@@ -5100,8 +5108,9 @@ body.chv2-shell .bottom-nav .bn-lb{color:inherit;}
 .chv2-band-off{border-style:dashed;}   /* 未排班／請假：虛線淡框，不要看起來像「有班」 */
 .chv2-punch{font-family:var(--num);font-size:12.5px;font-weight:800;color:var(--t3);}
 .chv2-punch.on{color:var(--green);}
-/* 本月成績與課卡之間留距離（2026-08-21 使用者：「太貼了」） */
-.chv2-score{margin-top:18px;}
+/* 本月成績與課卡之間留距離（2026-08-21 使用者：「太貼了」→ 二修「還是靠太近」）——
+   18px 仍然不夠：課卡本身是白卡、成績也是白卡，只有間距在分隔，要拉到看得出是兩區。 */
+.chv2-score{margin-top:28px;}
 /* 本月成績：只有堂數，沒有任何金額（2026-08-21 使用者指示） */
 .chv2-score-row{display:flex;align-items:baseline;justify-content:space-between;
   padding:9px 2px;border-bottom:1px dashed var(--bd);}
@@ -8637,8 +8646,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1732';
-const APP_VERSION_LABEL='v260821.1732';
+const APP_VERSION = '260821.1740';
+const APP_VERSION_LABEL='v260821.1740';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11319,9 +11328,14 @@ function navTo(key, gkey){
      這三樣都在頁面之外的外框上，改 CSS 會連教練本人一起改到 —— 所以掛一個 body class，
      只有「管理員預覽教練視角 ＋ 停在教練首頁」時才成立。放在 navTo 開頭：每次換頁都會
      重新算一次，離開這一頁自然就拿掉，不需要各處記得清。 */
-  try{ document.body.classList.toggle('chv2-shell',
-    key==='coach_today' && typeof isRealAdmin==='function' && isRealAdmin()
-    && SESSION && SESSION.role==='coach'); }catch(_){}
+  try{
+    const _chv=(key==='coach_today'||key==='coach_calendar')
+      && typeof isRealAdmin==='function' && isRealAdmin()
+      && SESSION && SESSION.role==='coach';
+    document.body.classList.toggle('chv2-shell', _chv);
+    /* 離開行事曆就把「別人的課純檢視」的旗標關掉，免得別頁的課卡也被鎖成唯讀 */
+    if(!(_chv && key==='coach_calendar')){ window._chvCal=false; window._coachReadonly=false; }
+  }catch(_){}
   try{ document.querySelectorAll('body>.admh-todaybk').forEach(x=>x.remove()); }catch(_){}   /* 行事曆 Today 鈕掛在 body（cagPositionWrap 搬的），換頁要清 */
   if(gkey && NAV2_GROUP_ALIAS[gkey]) gkey=NAV2_GROUP_ALIAS[gkey];  // 舊群組 key 相容（導覽分流 2026-07-19）
   // 重繪目前頁（簽到、取消、行事曆篩選等 30 處都用 navTo(CUR_PAGE)）時保留捲動位置。
@@ -23620,6 +23634,14 @@ async function expandBkCard(el, id){
   collapseBkCard();
   const b = await dbGet('bookings', id);
   if(!b){ openBookingDetail(id); return; }
+  /* 教練預覽版行事曆（2026-08-21 使用者指示：「教練只能調整自己的課卡
+     其他課卡只能看簡易課卡 不能互動」）——
+     _coachReadonly 是既有的「純檢視」開關（明細與簡易卡的 editable／簽到／改期都吃它），
+     這裡在開卡前依「這堂是不是我帶的」現算一次。兩個入口都要設：
+     admh 課卡走 expandBkCard、agenda 走 openCourseCard。 */
+  if(window._chvCal){
+    try{ window._coachReadonly = !bkIsCoach(b, SESSION.id); }catch(_){ window._coachReadonly=true; }
+  }
   /* 2026-07-31 使用者指示：別人的課「互動開啟、但不要圓形按鈕，只能看明細」——
      原本這裡是 showToast 擋掉，現在改成直接開明細（明細內所有修改動作仍由
      ownByCoach／staffCanCheckin 關掉）。 */
@@ -24864,6 +24886,14 @@ async function bkInlineEditSave(id){
 async function openCourseCard(id, el){
   const b=await dbGet('bookings',id);
   if(!b){showToast('找不到課程');return;}
+  /* 教練預覽版行事曆（2026-08-21 使用者指示：「教練只能調整自己的課卡
+     其他課卡只能看簡易課卡 不能互動」）——
+     _coachReadonly 是既有的「純檢視」開關（明細與簡易卡的 editable／簽到／改期都吃它），
+     這裡在開卡前依「這堂是不是我帶的」現算一次。兩個入口都要設：
+     admh 課卡走 expandBkCard、agenda 走 openCourseCard。 */
+  if(window._chvCal){
+    try{ window._coachReadonly = !bkIsCoach(b, SESSION.id); }catch(_){ window._coachReadonly=true; }
+  }
   // 別人的課 → 維持精簡時段資訊
   if(bkIsMasked(b)){ openBookingDetail(id); return; }
   /* 管理員手機行事曆（2026-08-19 使用者定案二修）：圓形快捷按鈕只給「自己的課」；
@@ -41735,8 +41765,54 @@ async function saveFixPunchOut(recId){
  }catch(e){ console.error('saveFixPunchOut 失敗:',e); showToast('補登失敗：'+(e&&e.message?e.message:e)); }
 }
 
+
+/* ══ 教練行事曆 V2（2026-08-21，僅管理員預覽教練視角）══
+   直接走管理員手機行事曆那條路（admCalHeaderHTML ＋ 一日 agenda／多日欄狀），
+   差別只有兩點：
+   ① 圖層全開 —— 教練要看得到全店佔用，不然排課會撞到別人。
+   ② window._chvCal 打開 —— 開任何一張課卡時，依「這堂是不是我帶的」決定純檢視與否
+      （見 expandBkCard／openCourseCard 開頭那一段）。 */
+async function coachCalV2(){
+  startCalPoll();
+  window._chvCal=true;
+  window._coachReadonly=false;
+  window._calMineOnly=true;              // 自己按「＋」排課時預設帶自己
+  window._coachScope='all';              // 看得到全店（別人的課只能看）
+  if(window._cagAdminInit===undefined){
+    window._cagAdminInit=1;
+    window._cagLayerMine=true; window._cagLayerOthers=true; window._cagLayerGroup=true;
+  }
+  try{ window._meStaff=await dbGet('coaches',SESSION.id); }catch(_){}
+  try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
+  try{ window._allTkCache=await dbGetAll('member_tickets'); }catch(_){ window._allTkCache=[]; }
+  if(!window._cagSelDate) window._cagSelDate=ymd(TODAY);
+  const _nD=Number(window._admCalDays)||1;
+  const _hdr=await admCalHeaderHTML();
+  if(_nD>1){
+    C.innerHTML=`<div class="cag-wrap" id="cag-wrap">
+      <div class="admh-sticky admcal-sticky" style="position:static;">${_hdr}</div>
+      <div class="cag-body" id="cag-body" style="padding:0 10px;">${await admCalMultiHTML(_nD)}</div>
+    </div>`;
+    try{ cagPositionWrap(); }catch(_){}
+    return;
+  }
+  _calDays=null;
+  window._admCalHdr=_hdr;               // cag 是滿版覆蓋層，表頭要塞進去（0819 真機驗出）
+  C.innerHTML=`<div id="wtl-page"></div>`;
+  await renderCoachAgenda();
+}
 /* ════════ 教練端:預約行事曆 ════════ */
 PAGES.coach_calendar=async function(){
+  /* 教練行事曆 V2（2026-08-21 使用者指示：「下方導覽列行事曆就把管理員手機端的行事曆
+     搬過來用 只是教練只能調整自己的課卡 其他課卡只能看簡易課卡 不能互動」）——
+     與首頁 V2 同一道旗標：只有管理員預覽教練視角時走這條，教練本人維持原本的
+     「我的預約」agenda。定案後兩邊一起收。 */
+  if(typeof isRealAdmin==='function' && isRealAdmin() && SESSION && SESSION.role==='coach'
+     && isMobileLayout()){
+    try{ return await coachCalV2(); }
+    catch(e){ console.error('coachCalV2 失敗，退回教練原本的行事曆', e);
+      try{ showToast('⚠ 新版行事曆載入失敗，已退回原版：'+((e&&e.message)||e)); }catch(_){} }
+  }
   startCalPoll();   // 簽到即時性（2026-08-11）：教練端行事曆同樣背景校驗，會員掃碼簽到 10 秒內反映
   const _stepping=!!window._calStepping; window._calStepping=false;   // 同 PAGES.calendar：先取值再清（2026-07-23）
   window._coachReadonly=true; // 教練端行事曆：純檢視，不開放排課/改期
