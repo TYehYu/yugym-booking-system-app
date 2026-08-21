@@ -617,5 +617,12 @@ ok('　　簽到的辨識改靠既有的綠環（0806 就有，不必再靠填�
 ok('　　「看不見」的成因寫在原地，避免日後又把填滿加回來',
    /於是深色底上是深色字 —— 使用者回報「簽到的課卡為什麼第幾堂\/總堂數的標示不見了」/.test(src));
 
+console.log('\n禮物箱移到課卡左下（2026-08-21 使用者指示）');
+ok('★ 不再排在文字流裡（會把「第幾堂」那一列往下擠），改成絕對定位貼左下',
+   /\.tcard-giftpos\{position:absolute;left:5px;bottom:4px;/.test(src)
+   && /<\/div>\$\{\(b\.member_id\?`<span class="tcard-giftpos">\$\{lottoGiftIcon\(_lotMap\[b\.member_id\]\)\}<\/span>`:''\)\}/.test(src));
+ok('　　與右下角的教練標籤左右對稱', /與右下角的教練標籤左右對稱/.test(src));
+ok('　　不吃點擊（純標示，點下去仍是開課卡）', /\.tcard-giftpos\{[^}]*pointer-events:none;\}/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

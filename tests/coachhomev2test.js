@@ -171,7 +171,10 @@ ok('★ KPI 欄要能縮（flex 的 min-width:auto 會讓它撐出畫面）',
 ok('★ 「尚未打卡」不顯示（還沒打卡是常態，天天掛一行等於噪音）',
    /: \(att&&att\.clock_in\) \? `\$\{att\.clock_in\} 上班中` : '';/.test(src)
    && !/尚未打卡/.test(V2CODE));
-ok('★ 本月成績與課卡之間留距離', /\.chv2-score\{margin-top:28px;\}/.test(src));
+ok('★ 本月成績與課卡之間留距離（連說三次太近 → 改成間距＋分隔線）',
+   /\.chv2-score\{margin-top:34px;position:relative;\}/.test(src)
+   && /\.chv2-score::before\{content:'';position:absolute;left:0;right:0;top:-18px;/.test(src)
+   && /不再只靠間距，前面補一條分隔線/.test(src));
 ok('★ 頂欄重整鈕退場（這一頁已經有下拉更新）',
    /body\.chv2-shell \.topbar \.tb-right \.rf-btn\{display:none !important;\}/.test(src));
 
@@ -182,9 +185,9 @@ ok('★ KPI 每列自己左右分（教練課／團體課：名稱靠左、堂�
 ok('★ 第三列「今日值班」整條靠左、第四列（打卡鈕）整條靠右',
    /body\.chv2-shell \.admh-kpi\.admh-rev-lb\{justify-content:flex-start;\}/.test(src)
    && /body\.chv2-shell \.admh-kpi\.chv2-dutytap:not\(\.admh-rev-lb\)\{justify-content:flex-end;\}/.test(src));
-ok('★ 本月成績與課卡的間距再拉開（18 → 28px）',
-   /\.chv2-score\{margin-top:28px;\}/.test(src)
-   && /18px 仍然不夠：課卡本身是白卡、成績也是白卡/.test(src));
+ok('★ 本月成績與課卡的間距一路拉開（12 → 18 → 28 → 34＋分隔線）',
+   /\.chv2-score\{margin-top:34px;position:relative;\}/.test(src)
+   && /12 → 18 → 28 都還是被說太近/.test(src));
 
 console.log('\n教練行事曆 V2（使用者：搬管理員手機端的行事曆，別人的課只能看）');
 ok('★ 同一道旗標：只有管理員預覽教練視角＋手機才走 V2',
@@ -206,6 +209,16 @@ ok('★ 離開行事曆就把旗標關掉，別頁的課卡不會被鎖成唯讀
    /if\(!\(_chv && key==='coach_calendar'\)\)\{ window\._chvCal=false; window\._coachReadonly=false; \}/.test(src));
 ok('　　外框樣式也套用在行事曆頁',
    /const _chv=\(key==='coach_today'\|\|key==='coach_calendar'\)/.test(src));
+
+console.log('\n行事曆 V2 補完（2026-08-21 使用者：日期列／一日一週／浮動鈕）');
+ok('★ agenda 的表頭條件原本只認 admin —— 預覽版也要吃',
+   /const monthRow=\(\(\(SESSION&&SESSION\.role==='admin'\)\|\|window\._chvCal\)&&!window\._admCalHdrOff\)\?/.test(src)
+   && /使用者回報\s*\n\s*「上方日期列跟一日一週篩選列都沒進來」，就是這個條件只認 admin/.test(src));
+ok('★ 表頭的動作要回到目前這一頁（寫死 calendar 會把人踢到管理員的預約管理頁）',
+   /function admCalPage\(\)\{ return window\._chvCal \? 'coach_calendar' : 'calendar'; \}/.test(src)
+   && (src.match(/navTo\(admCalPage\(\)\)/g)||[]).length>=3);
+ok('★ 右下角浮動打卡鈕退場（值班那格就能掃碼，浮動鈕還會蓋住課卡）',
+   /body\.chv2-shell #punch-fab\{display:none !important;\}/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
