@@ -8723,8 +8723,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1852';
-const APP_VERSION_LABEL='v260821.1852';
+const APP_VERSION = '260821.2112';
+const APP_VERSION_LABEL='v260821.2112';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20923,7 +20923,9 @@ async function renderCoachAgenda(){
        ② 容量改看「瞬時併行數」——原本算整個 60 分窗口的重疊筆數，19:00×2＋20:00×2
          會被誤算成 4 而擋掉 19:30；實際每個瞬間最多 2 組。逐半小時取峰值。
          （團課/場租本就不佔容量——CAP_CATS 只含 私人教練/自主/體驗。） */
-    for(let mm=AG_START; mm<=21*60; mm+=30){
+    /* 上限改成「當天打烊前 60 分」（2026-08-21）——週六 20:00、週日 14:00、平日 21:00。
+       上面兩圈是場地標籤（額滿／教室），使用者指定不動。 */
+    for(let mm=AG_START; mm<=quickBookLastMin(selDate); mm+=30){
       if(_isPast(mm)) continue;
       /* 自己該時段有課 → 不提示（2026-08-19 使用者定案：管理員自己也授課，同一條規則） */
       if(_ov(myDay2,mm,mm+60).length) continue;
@@ -40504,6 +40506,20 @@ async function admCalHeaderHTML(){
     <div class="admcal-modes">${seg}</div>
   </div>`;
 }
+/* 分日打烊時間（2026-08-21 使用者定案：週六 21:00、週日 15:00，其餘平日 22:00）——
+   起因：使用者回報「教練快速預約按鈕 週六怎麼可以約20:30跟21:00 這樣會讓櫃檯陪他加班」。
+   原本快速預約一律排到 21:00（讓 60 分課在 22:00 打烊前結束），沒有分平日與週末。
+   ⚠ 只管快速預約按鈕（使用者指定）——行事曆時間軸的顯示範圍、手動新增預約都不受影響，
+     櫃檯真的要排打烊後的課仍然排得進去，這裡只是不要主動「建議」那些時段。
+   ⚠ 系統裡沒有營業時間設定表，所以先寫在這裡；日後要讓使用者自己設定再搬進資料庫。 */
+const BIZ_CLOSE_H={0:15, 6:21};   // 0=週日、6=週六；其餘用 22
+function bizCloseMin(ds){
+  const d=(typeof parseYmd==='function'&&parseYmd(ds))||new Date(TODAY);
+  const h=BIZ_CLOSE_H[d.getDay()];
+  return (h==null?22:h)*60;
+}
+/* 快速預約的最後一格＝打烊前 60 分（一堂課的長度） */
+function quickBookLastMin(ds){ return bizCloseMin(ds)-60; }
 /* 表頭＋鈕（0819 收進模式列 → 2026-08-21 改回右下角浮動圓鈕）——一日＝展開可約時段層、一週＝開新增預約 */
 function admCalQuickAdd(){
   const nD=(Number(window._admCalDays)||1)===1?1:7;
