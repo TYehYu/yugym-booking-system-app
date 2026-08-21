@@ -8574,8 +8574,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1409';
-const APP_VERSION_LABEL='v260821.1409';
+const APP_VERSION = '260821.1428';
+const APP_VERSION_LABEL='v260821.1428';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14248,10 +14248,18 @@ function dashDayCalHTML(rows, o){
       <div class="dcal-track" style="height:${trackH}px;">${halves}${cards}</div>
     </div>`;
   }).join('');
-  /* 現在線：只在檢視今天、而且現在落在時間軸範圍內才畫（沿用行事曆的 .cal-now 樣式）。
-     畫一條橫跨所有欄位，不是每欄一條 —— 每欄一條會有一排紅點，很吵。 */
-  const nowLine=(o.isTodayView && o.nowMin>=s0 && o.nowMin<=s1)
-    ? `<div class="cal-now dcal-now" style="top:calc(${DCAL_HEAD}px + ${yOf(o.nowMin)}px);"><span class="cal-now-dot"></span></div>`
+  /* 現在線：橫跨所有欄位一條，不是每欄一條 —— 每欄一條會有一排紅點，很吵。
+     沿用行事曆的 .cal-now 樣式。
+     ⚠ 只在畫面產生的當下定位是不夠的（2026-08-21 使用者回報「紅線沒對到時間」）——
+     首頁常常開著不動，線會停在「當初畫的那一刻」，時間卻一直往前走。
+     每 30 秒的 startDashNowTimer 原本只認得舊甘特圖的 .tl-nowline，
+     所以這裡把定位需要的參數寫進 data-*，讓那支計時器也能就地把這條線移到正確位置。
+     另外：不管現在在不在軸內都先畫出來（超出範圍時 display:none）——
+     早上 9 點前開的頁面，等時間進入軸內時計時器才有東西可移。 */
+  const nowIn=(o.nowMin>=s0 && o.nowMin<=s1);
+  const nowLine=o.isTodayView
+    ? `<div class="cal-now dcal-now" data-s0="${s0}" data-s1="${s1}" data-step="${DCAL_STEP}" data-slot="${DCAL_SLOT}" data-head="${DCAL_HEAD}"
+         style="top:${DCAL_HEAD+yOf(o.nowMin)}px;${nowIn?'':'display:none;'}"><span class="cal-now-dot"></span></div>`
     : '';
   return `<div class="tcard-body dcal-body">
       <div class="dcal-grid" style="--dcal-slot:${DCAL_SLOT}px;--dcal-head:${DCAL_HEAD}px;">
@@ -16015,6 +16023,16 @@ function startDashNowTimer(isToday, axisStart, axisEnd){
     // 各列 track 的貫穿紅線段
     document.querySelectorAll('.tl-now-seg').forEach(seg=>{
       if(inRange){ seg.style.left=pct+'%'; seg.style.display=''; } else { seg.style.display='none'; }
+    });
+    /* 一日行事曆的現在線（2026-08-21）——它是縱向時間軸，換算方式與甘特圖的百分比不同，
+       定位參數由畫面產生時寫在 data-* 上（軸起訖、格高、欄頭高度）。
+       沒有這一段的話，線會停在頁面「當初畫的那一刻」（使用者回報「紅線沒對到時間」）。 */
+    document.querySelectorAll('.dcal-now').forEach(el=>{
+      const d=el.dataset;
+      const a0=Number(d.s0), a1=Number(d.s1), st=Number(d.step)||30, sp=Number(d.slot)||48, hd=Number(d.head)||46;
+      if(!isFinite(a0)||!isFinite(a1)) return;
+      if(nm>=a0 && nm<=a1){ el.style.top=(hd+((nm-a0)/st)*sp)+'px'; el.style.display=''; }
+      else el.style.display='none';
     });
     /* 課卡狀態跟著時間走（2026-08-06 使用者回報「首頁的流星還沒看到」）——
        tcard-live／tcard-miss 是畫卡當下算的，時間跨過開課或下課就會過期；

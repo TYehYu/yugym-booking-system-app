@@ -35,11 +35,33 @@ ok('★ 預設 09:00–22:00，有更早／更晚的課就往外撐',
    /let s0=9\*60, s1=22\*60;/.test(src)
    && /if\(st<s0\) s0=Math\.floor\(st\/DCAL_STEP\)\*DCAL_STEP;/.test(src)
    && /if\(en>s1\) s1=Math\.ceil\(en\/DCAL_STEP\)\*DCAL_STEP;/.test(src));
-ok('★ 時間紅線（使用者：「也加入時間紅線」）：只在檢視今天且落在軸內才畫',
-   /const nowLine=\(o\.isTodayView && o\.nowMin>=s0 && o\.nowMin<=s1\)/.test(src)
-   && /<div class="cal-now dcal-now" style="top:calc\(\$\{DCAL_HEAD\}px \+ \$\{yOf\(o\.nowMin\)\}px\);">/.test(src));
+ok('★ 時間紅線（使用者：「也加入時間紅線」）：只在檢視今天才有',
+   /const nowLine=o\.isTodayView\s*\n\s*\? `<div class="cal-now dcal-now"/.test(src)
+   && /const nowIn=\(o\.nowMin>=s0 && o\.nowMin<=s1\);/.test(src)
+   && /style="top:\$\{DCAL_HEAD\+yOf\(o\.nowMin\)\}px;/.test(src));
 ok('　　一條橫跨所有欄位，不是每欄一條（每欄一條會有一排紅點）',
-   /畫一條橫跨所有欄位，不是每欄一條/.test(src));
+   /橫跨所有欄位一條，不是每欄一條/.test(src));
+/* 2026-08-21 使用者回報「紅線沒對到時間」——位置算得對，但只在畫面產生的當下算一次。
+   首頁常常開著不動，線停在當初那一刻，時間卻一直往前走。
+   每 30 秒的 startDashNowTimer 原本只認得舊甘特圖的 .tl-nowline。 */
+ok('★ 線會跟著時鐘走（不是只在畫面產生時定位一次）',
+   /document\.querySelectorAll\('\.dcal-now'\)\.forEach\(el=>\{/.test(src)
+   && /el\.style\.top=\(hd\+\(\(nm-a0\)\/st\)\*sp\)\+'px'; el\.style\.display='';/.test(src));
+ok('　　定位參數寫在 data-*（縱向時間軸的換算與甘特圖的百分比不同）',
+   /data-s0="\$\{s0\}" data-s1="\$\{s1\}" data-step="\$\{DCAL_STEP\}" data-slot="\$\{DCAL_SLOT\}" data-head="\$\{DCAL_HEAD\}"/.test(src));
+ok('　　軸外也先畫出來（早上 9 點前開的頁面，時間進來時計時器才有東西可移）',
+   /const nowLine=o\.isTodayView/.test(src)
+   && /\$\{nowIn\?'':'display:none;'\}/.test(src));
+{
+  /* 對齊：線的 top ＝ 欄頭高度 ＋ 距軸起點的分鐘數換算，與刻度用同一條公式。 */
+  const HEAD=46, SLOT=48, STEP=30, s0=9*60;
+  const yOf=m=>HEAD+((m-s0)/STEP)*SLOT;
+  eq('★ 09:00 落在時間軸最上緣', yOf(9*60), HEAD);
+  eq('★ 12:00 的刻度＝46＋(180/30)*48', yOf(12*60), 334);
+  eq('★ 12:21 在 12:00 下方 33.6px（21/60 小時）', Number((yOf(12*60+21)-yOf(12*60)).toFixed(1)), 33.6);
+  eq('★ 14:09 在 14:00 下方 14.4px', Number((yOf(14*60+9)-yOf(14*60)).toFixed(1)), 14.4);
+  eq('　　整點間距固定 96px（30 分 48px）', yOf(15*60)-yOf(14*60), 96);
+}
 ok('　　沿用行事曆既有的 .cal-now 樣式，不另立一套',
    /\.cal-now\{position:absolute;left:0;right:0;height:0;border-top:2\.5px solid #e0533a;/.test(src));
 
