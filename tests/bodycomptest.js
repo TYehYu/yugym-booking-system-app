@@ -9,8 +9,9 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
 /* 2026-08-04 購物車模式：卡片副標改「點卡加入」，slGoMerch＝加入購物車 */
-ok('★ 其他收費區有「測量身體組成」卡，帶 $150 預設價',
-   /card\('#8a7a5c','測量身體組成','\$150 · 點卡加入',"slGoMerch\('測量身體組成',150\)"\)/.test(src));
+/* 2026-08-21：商品卡片牆收成挑選視窗，品項改由 SL_MERCH 帶（價格不變） */
+ok('★ 其他收費清單有「測量身體組成」，帶 $150 預設價',
+   /\{name:'測量身體組成', price:150\}/.test(src));
 ok('★ 走商品收款的殼（slGoMerch 加入購物車 → openMerchSale 結帳）',
    /function slGoMerch\(name,price\)\{/.test(src) && /async function openMerchSale\(name,defPrice,cart\)\{/.test(src));
 /* 2026-08-03 蛋白粉改自訂金額後，單價欄支援留白（defPrice=null），見 merchpricetest.js */

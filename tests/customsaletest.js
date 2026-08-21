@@ -81,8 +81,46 @@ ok('　　「先選會員」的守門沒有被繞過（slGo 開頭那一段原�
 ok('　　0801 場地租借→自主訓練、0803 團課體驗 $600 的說明跟著搬（不隨卡片消失）',
    /這邊方案卡場地租借改成自主訓練/.test(src)
    && /團體課的預約體驗，幫我新增在銷售，團課體驗600/.test(src));
-ok('　　其他收費仍是卡片列（只收課程那六張）',
-   /card\('#8a7a5c','蛋白粉'/.test(src) && /<div id="sl-cart-box"/.test(src));
+/* 2026-08-21 二修：其他收費也收成挑選視窗了（見下一段），這條改驗購物車還在 */
+ok('　　購物車仍在（結帳流程沒被動到）', /<div id="sl-cart-box"/.test(src));
+
+console.log('\n其他收費也收成挑選視窗＋視窗收窄（2026-08-21 使用者指示）');
+ok('★ 商品卡片牆退場，改成一個欄位',
+   /<button type="button" class="adp-field" id="sl-merch-btn" onclick="slMerchOpen\(\)">/.test(src)
+   && !/class="sl-card"/.test(src));
+ok('★ 品項與價格照舊（蛋白粉 75／筋膜球 200／測量 150／搖搖杯 200／自訂）',
+   /const SL_MERCH=\[/.test(src)
+   && /\{name:'蛋白粉',       price:75\}/.test(src)
+   && /\{name:'筋膜球',       price:200\}/.test(src)
+   && /\{name:'測量身體組成', price:150\}/.test(src)
+   && /\{name:'搖搖杯',       price:200\}/.test(src)
+   && /\{name:'自訂', label:'其他商品', sub:'自訂品名／金額', price:null\}/.test(src));
+ok('★ 一次買好幾樣是常態 → 加完不關視窗，只把數量更新上去',
+   /function slMerchPick\(name, price\)\{\s*\n\s*slGoMerch\(name, price\);\s*\n\s*if\(name==='自訂'\)\{ ashDateClose\(\); return; \}\s*\n\s*slMerchOpen\(\);/.test(src));
+ok('　　已加幾個標在列上（不關視窗，看得到數字才不會重複加）',
+   /const n=cart\.filter\(r=>r\.name===m\.name\)\.reduce\(\(a,r\)=>a\+Math\.max\(1,Number\(r\.qty\)\|\|1\),0\);/.test(src)
+   && /已加 \$\{n\}/.test(src));
+ok('　　自訂品項要回購物車那一列填品名金額 → 關掉視窗',
+   /自訂品項要回到購物車那一列填品名與金額，所以關掉/.test(src));
+ok('★ 購物車搬到欄位正下方（收窄後排不下兩欄）',
+   /<div id="sl-cart-box" style="margin-top:10px;/.test(src)
+   && !/<div id="sl-cart-box" style="flex:1;min-width:230px;/.test(src));
+ok('★ 視窗收窄成與建立預約同規格（拿掉 modal-wide＝回到 .modal 預設 460px）',
+   (()=>{ const body=src.slice(src.indexOf('async function openSalesModal(){'),
+                              src.indexOf('function slFilterMembers'));
+          return !/classList\.add\('modal-wide'\)/.test(body); })()
+   && /\.modal\{background:var\(--surface-3\)[^}]*max-width:460px/.test(src)
+   && /拿掉 modal-wide＝回到 \.modal 預設的 460px，與建立預約同一個規格/.test(src));
+ok('　　0728 那條「與簽約視窗統一 720px」為什麼不再成立，寫在原地',
+   /那條「與簽約視窗統一 720px」是為了排四張卡，卡沒了就不成立/.test(src));
+
+console.log('\n建立預約的課程欄：選完不能還是灰字（使用者：「教練課文字好像被淡化了」）');
+ok('★ 回填時一併拿掉 adp-ph（那是「還沒選」的灰字樣式）',
+   /if\(btn&&t\)\{ const lb=btn\.firstElementChild; lb\.textContent=t\.name\|\|t\.category\|\|'課程'; lb\.className=''; \}/.test(src));
+ok('　　通用挑選欄位早就這樣做（兩支行為一致）',
+   /if\(btn\)\{ const lb=btn\.firstElementChild; lb\.textContent=hit\?hit\.label:v; lb\.className=''; \}/.test(src));
+ok('　　日期／時間欄沒這個問題的原因寫在旁邊',
+   /日期／時間欄沒這個問題（它們的初始\s*\n\s*span 本來就不帶 adp-ph）/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

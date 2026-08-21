@@ -10,8 +10,9 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
+/* 2026-08-21：商品卡片牆收成挑選視窗，品項改由 SL_MERCH 帶（價格不變） */
 ok('★ 蛋白粉預設 $75、搖搖杯 $200（2026-08-04 使用者指示），仍可改',
-   /card\('#8a7a5c','蛋白粉','\$75 · 點卡加入',"slGoMerch\('蛋白粉',75\)"\)/.test(src)
+   /\{name:'蛋白粉',       price:75\}/.test(src)
    && /\{n:'蛋白粉',p:75\}/.test(src) && /\{n:'搖搖杯',p:200\}/.test(src));
 /* 2026-08-04 使用者指示：「金額跟數量調整改成＋−」——原生上下箭頭退場，改明確步進鈕 */
 ok('★ 單價＋−鈕一格 5 元、數量一格 1（面板與結帳兩處）',
@@ -37,7 +38,7 @@ ok('★ 購物車：可加品項、自訂品名、一列一筆收款紀錄',
    /function msCartAdd\(\)\{/.test(src) && /自訂品項請填品名/.test(src)
    && /一列一筆收款紀錄/.test(src));
 ok('　　筋膜球與測量身體組成維持預填價',
-   /slGoMerch\('筋膜球',200\)/.test(src) && /slGoMerch\('測量身體組成',150\)/.test(src));
+   /\{name:'筋膜球',       price:200\}/.test(src) && /\{name:'測量身體組成', price:150\}/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
