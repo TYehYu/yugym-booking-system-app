@@ -43,9 +43,10 @@ ok('★ ④ 行事曆已簽到 → 不填滿了（那一組規則已刪除）',
    !/\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{/.test(blk)
    && /已簽到不再填滿 —— 那一組規則直接刪掉了/.test(blk));
 
-ok('★ ⑤ 待簽約與空堂 → 淡化＋紅框',
+/* 2026-08-21：淡化改暗化（驗在下方「待簽約／待付款的課卡也改暗化」） */
+ok('★ ⑤ 待簽約與空堂 → 暗化＋紅框',
    /\.cal-ev\.cal-ev-std\.cal-ev-pend \.evc-body,\s*\n\s*\.tcard\.tcard-std\.tcard-pend \.tcard-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;/.test(blk)
-   && /\.tcard\.tcard-std\.tcard-pend \.tcard-txt\{ opacity:\.62; \}/.test(blk));
+   && /\.tcard\.tcard-std\.tcard-pend\{ filter:brightness\(0\.92\) saturate\(0\.7\); \}/.test(blk));
 
 console.log('\n行事曆課卡要有對應的 class（原本只有首頁標得出待簽約）');
 ok('★ 新增 cal-ev-pend，掛在課卡上',
@@ -600,7 +601,8 @@ ok('★ 首頁課卡（.tcard-std）簽到後不再填滿',
    這裡只驗「桌機那一塊（min-width:601px）裡沒有填滿規則」。 */
 ok('★ 桌機的填滿規則已移除（手機那份在別的 media 區塊）',
    !/\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{/.test(blk));
-ok('★ 出席章改回顯示，且在姓名右邊（同一列）',
+/* 2026-08-21 再修：章從姓名右邊移到卡片左下角（見下方「章移到左下角」） */
+ok('★ 出席章改回顯示（首頁卡仍在姓名右邊）',
    !/\.tcard\.tcard-std \.tcard-chk\{ display:none !important; \}/.test(src)
    && /<span class="tcard-nmrow"><span class="tcard-mem">\$\{nm\}<\/span>\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src)
    && /\.tcard-nmrow\{display:flex;align-items:center;justify-content:center;gap:4px;/.test(src));
@@ -631,12 +633,16 @@ ok('★ 填滿那一組規則整組刪掉（不是用覆蓋蓋掉）',
    !/\.cal-ev\.cal-ev-day\.cal-ev-checked\{background:color-mix/.test(src)
    && !/\.cal-ev\.cal-ev-day\.cal-ev-checked \.evd-name\{color:#fff;\}/.test(src)
    && /用覆蓋的方式蓋不乾淨（底色、邊框、左色條、三種文字色各有 !important/.test(src));
-ok('★ 章移到姓名右邊（與首頁課卡同一套）',
+ok('★ DOM 仍在姓名列裡（絕對定位是相對整張卡，擺哪裡都不影響姓名列寬度）',
    /<span class="evc-nmrow"><span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>/.test(src)
    && /\.cal-ev\.cal-ev-std \.evc-nmrow\{display:flex;align-items:center;justify-content:center;/.test(src));
-ok('　　章改成小圓章、不再是右下角的角標（手機的角標基底規則不動）',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ position:static; flex:none; width:15px; height:15px;/.test(src)
-   && /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;/.test(src));
+ok('★ 章移到卡片左下角的 1/4 圓（使用者：「桌機行事曆的出席章顯示在課卡左下角」）',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:0; bottom:0; right:auto; top:auto;\s*\n\s*width:24px; height:24px; border-radius:0 100% 0 10px;/.test(src));
+ok('　　右下角讓給教練標籤，左下角本來是空的（理由寫在原地）',
+   /右下角讓給教練標籤（\.evc-abbr），左下角本來是空的；用與手機同一種 1\/4 圓/.test(src));
+ok('　　桌機是左下角 1/4 圓，手機的角標基底規則不動',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:0; bottom:0;/.test(src)
+   && /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;top:auto;left:auto;bottom:0;right:0;/.test(src));
 ok('　　窄欄位時名字自己截斷，不會把章擠掉',
    /\.cal-ev\.cal-ev-std \.evc-nmrow \.evc-name\{min-width:0;\}/.test(src));
 /* 同日追加：「手機版行事曆就用填滿的方式呈現 不然畫面太亂」——兩邊刻意不同。 */
@@ -713,6 +719,16 @@ ok('　　開窗定位維持瞬間到位（不要平滑）',
    /if\(byTap && col\.scrollTo\) col\.scrollTo\(\{top:idx\*ASH_WH_ITEM, behavior:'smooth'\}\);/.test(src));
 ok('　　點得動要看得出來（cursor:pointer）',
    /cursor:pointer;-webkit-tap-highlight-color:transparent;\}   \/\* 點得動要看得出來/.test(src));
+
+console.log('\n待簽約／待付款的課卡也改暗化（2026-08-21 使用者指示）');
+ok('★ 不再壓文字透明度，改成整張卡壓亮度',
+   /\.cal-ev\.cal-ev-std\.cal-ev-pend,\s*\n\s*\.tcard\.tcard-std\.tcard-pend\{ filter:brightness\(0\.92\) saturate\(0\.7\); \}/.test(src)
+   && !/\.tcard\.tcard-std\.tcard-pend \.tcard-txt\{ opacity:\.62; \}/.test(src));
+ok('　　紅框維持滿的（那是「還沒收款」的警示，不能一起變淡）',
+   /\.tcard\.tcard-std\.tcard-pend \.tcard-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;/.test(src));
+ok('　　滑過去恢復原狀', /\.tcard\.tcard-std\.tcard-pend:hover\{ filter:none; \}/.test(src));
+ok('　　與過期課卡同一套邏輯（透明會讓字糊掉，暗化保持對比度）',
+   /原本是把文字 opacity 壓到 \.62（透明化），字會跟背景糊在一起；/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
