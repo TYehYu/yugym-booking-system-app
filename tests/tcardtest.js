@@ -36,7 +36,8 @@ ok('★ 卡片主行只放純姓名', /: \(b\.trial_name\|\|'—'\)\);/.test(src
 /* 2026-08-21：出席章改成姓名之後自己一列，標籤順延到章後面——
    仍然是獨立一列，只是中間多了出席章那一列。 */
 ok('★ 標籤另起一列', /const _tagOut = _tag \? `<span class="tcard-sub">\$\{_tag\}<\/span>` : '';/.test(src)
-   && /<span class="tcard-mem">\$\{nm\}<\/span>\$\{\(\(\)=>\{const k=bkStampKind\(b\);[\s\S]{0,400}?\}\)\(\)\}\$\{_tagOut\}/.test(src));
+   /* 2026-08-21：姓名與章之間插進「第幾堂／共幾堂」，標籤仍在最後 */
+   && /<span class="tcard-mem">\$\{nm\}<\/span>\$\{[\s\S]{0,700}?\}\)\(\)\}\$\{_tagOut\}/.test(src));
 /* 2026-07-31 重構：標籤走共用的 bkTag（待簽約／待繳費由有沒有綁會員決定） */
 ok('★ 待簽約／待繳費分得開（有沒有綁會員）',
    /if\(b\.pending_contract\) return bkIsInstHold\(b\) \? '待繳費' : '待簽約';/.test(src)   // 2026-08-04 純綁定仍是待簽約

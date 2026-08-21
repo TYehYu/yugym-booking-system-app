@@ -4949,6 +4949,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard:hover{transform:scale(1.05);filter:drop-shadow(0 4px 10px rgba(60,50,38,.22));}
 .tcard-time{font-size:12.5px;font-weight:800;font-family:var(--num);line-height:1.1;}
 .tcard-mem{font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+/* 第幾堂／共幾堂（2026-08-21）：接在姓名下面一列，比姓名小一階、淡一點，
+   不要跟姓名搶視線 —— 它是輔助資訊，櫃檯掃過去時先看到的仍該是人名。 */
+.tcard-seq{font-family:var(--num);font-size:10.5px;font-weight:700;opacity:.7;line-height:1.15;}
 /* ══ 課卡狀態邊框（2026-08-06 使用者指示）══
    完成＝霧化綠框、上課中＝流星繞圈（同圓形卡那組動畫）、已簽到＝綠框、逾時未簽＝金框。
    全部只有 CSS：不多讀任何資料，只有「上課中」那一張在動（同一時間通常 0~2 張）。 */
@@ -6333,6 +6336,19 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
 .tl-panel-top .rf-btn:hover{background:rgba(255,255,255,.26);}
 .tl-title-date{display:flex;align-items:center;gap:0;flex-wrap:nowrap;white-space:nowrap;}
 .tl-title-date .tl-date{font-variant-numeric:tabular-nums;}
+/* 一週日期列（2026-08-21 使用者指示：日期改成整週，週一起算到週日） */
+.tl-title-week{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.twk-strip{display:flex;gap:5px;}
+.twk-day{display:flex;flex-direction:column;align-items:center;gap:1px;
+  padding:5px 9px;border-radius:11px;border:1.5px solid transparent;background:var(--card2);
+  font-family:inherit;color:var(--t2);cursor:pointer;line-height:1.15;
+  transition:background .12s,color .12s,border-color .12s;}
+.twk-day .twk-md{font-family:var(--num);font-size:12.5px;font-weight:800;}
+.twk-day .twk-w{font-size:10px;font-weight:700;opacity:.7;}
+.twk-day:hover{border-color:var(--bd);}
+.twk-day.today{color:var(--green);}                      /* 今天：字變綠，但不搶「選中」的份量 */
+.twk-day.on{background:var(--green);color:#fff;border-color:var(--green);}
+.twk-day.on .twk-w{opacity:.85;}
 /* 教練任務標題的日期翻頁鈕（2026-07-29） */
 .tl-daynav{background:rgba(127,127,127,.14);border:none;border-radius:7px;color:inherit;
   width:24px;height:24px;font-size:13px;line-height:1;cursor:pointer;font-family:inherit;
@@ -8542,8 +8558,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1617';
-const APP_VERSION_LABEL='v260821.1617';
+const APP_VERSION = '260821.1627';
+const APP_VERSION_LABEL='v260821.1627';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14543,7 +14559,12 @@ PAGES.g_dashboard=async function(){
             <div class="tcard-body"></div>${_mk}
             ${/* 出席章自己一列（第三列：時間 → 姓名 → 章），與行事曆課卡同一套。
                  未到課也補上金色「未」章：原本首頁只畫「簽」「假」，櫃檯在首頁看不出誰沒來。 */''}
-            <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-mem">${nm}</span>${(()=>{const k=bkStampKind(b);
+            ${/* 第幾堂／共幾堂（2026-08-21 使用者指示：「這第幾堂/總堂數在名字下面」）——
+                 只有扣到票的課才有（體驗／場租／待簽約沒有票，就不畫這一列）。
+                 團課的票掛在名額上、不在 booking 上，所以團課卡自然也不會出現。 */''}
+            <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-mem">${nm}</span>${(()=>{
+              const q=(window._bkSeq||{})[b.id];
+              return q?`<span class="tcard-seq">${q.i}/${q.n} 堂</span>`:'';})()}${(()=>{const k=bkStampKind(b);
               return k==='leave'?'<span class="tcard-chk tcard-chk-leave">假</span>'
                    :(!canceled&&b.no_show===true)?'<span class="tcard-chk tcard-chk-ns">未</span>'
                    :(k==='done'||k==='makeup')?'<span class="tcard-chk">簽</span>':'';})()}${_tagOut}${(b.member_id?lottoGiftIcon(_lotMap[b.member_id]):'')}${coTag}</div>${canceled?'<span class="tcard-del">刪</span>':''}
@@ -14661,9 +14682,28 @@ PAGES.g_dashboard=async function(){
      非今天時仍以檢視日呈現，不再只寫「今日」。 */
   const _tdD=parseYmd(date)||new Date(TODAY);
   const _taskDateLbl=`${_tdD.getMonth()+1}/${_tdD.getDate()}（${'日一二三四五六'[_tdD.getDay()]}）`;
+  /* 日期列改成一整週（2026-08-21 使用者指示：「改成一週 [8/17一][8/18二] 依序下去排到週日」）——
+     原本只有「‹ 8/21（五） ›」，要看別天得一天一天按。
+     ⚠ 週一起算（不是週日）：健身房的排班與課表都以週一為一週的開始。
+     ⚠ 這一週是「跟著目前選的那天走」，不是固定本週 —— 所以左右鍵直接 ±7 天，
+       不另外維護一個週偏移狀態（那會和 _dashViewDate 兩份狀態互相打架）。 */
+  const _wkDays=(()=>{
+    const mon=new Date(_tdD); mon.setDate(_tdD.getDate()-((_tdD.getDay()+6)%7));
+    const W='一二三四五六日';
+    let out='';
+    for(let i=0;i<7;i++){
+      const d=new Date(mon); d.setDate(mon.getDate()+i);
+      const ds=ymd(d), sel=(ds===date), isT=(ds===today);
+      const n=(bookings||[]).filter(x=>x.date===ds && !isCancelled(x)).length;
+      out+=`<button type="button" class="twk-day${sel?' on':''}${isT?' today':''}"
+        onclick="dashPickDay('${ds}')" title="${ds}${n?`　${n} 堂`:'　沒有課'}">
+        <span class="twk-md">${d.getMonth()+1}/${d.getDate()}</span><span class="twk-w">${W[i]}</span></button>`;
+    }
+    return out;
+  })();
   const coachSection = rows.length
     ? `<div class="tl-panel tl-desktop-only">
-        <div class="tl-panel-top"><div class="tl-title tl-title-date"><button class="tl-daynav" onclick="dashDayShift(-1)" title="前一天">‹</button><span class="tl-date">${_taskDateLbl}</span><button class="tl-daynav" onclick="dashDayShift(1)" title="後一天">›</button>${!isTodayView?`<button class="tl-daynav tl-daynav-today" onclick="dashPickDate('${today}')">回到今天</button>`:''}${_liveCount?`<span class="tl-live-badge">${_liveCount} 人上課中</span>`:''}</div><div class="tl-top-right">${legend}</div></div>
+        <div class="tl-panel-top"><div class="tl-title tl-title-week"><button class="tl-daynav" onclick="dashDayShift(-7)" title="上一週">‹</button><div class="twk-strip">${_wkDays}</div><button class="tl-daynav" onclick="dashDayShift(7)" title="下一週">›</button>${!isTodayView?`<button class="tl-daynav tl-daynav-today" onclick="dashPickDate('${today}')">回到今天</button>`:''}${_liveCount?`<span class="tl-live-badge">${_liveCount} 人上課中</span>`:''}</div><div class="tl-top-right">${legend}</div></div>
         ${/* 2026-08-21 使用者指示（同日兩次改動）：
              ① 先改成一日行事曆（教練當欄位、時間軸、現在線）
              ② 當天又說「首頁改回原本的樣式 只是課卡要維持現在這個版本的大小」
@@ -17293,6 +17333,15 @@ function computeLastBkMarks(allTickets, bookings, typeMap){
   const _bkByTk={};
   (bookings||[]).forEach(b=>{ if(b&&b.ticket_id&&b.status!=='cancelled'){ (_bkByTk[b.ticket_id]=_bkByTk[b.ticket_id]||[]).push(b); } });
   Object.values(_bkByTk).forEach(a=>a.sort((x,y)=>((x.date||'')+(x.start_time||'')).localeCompare((y.date||'')+(y.start_time||''))));
+  /* 這張票的第幾堂／共幾堂（2026-08-21 使用者指示：首頁課卡姓名下面顯示）——
+     索引上面已經建好了（未取消、依日期時間排序），順手標上去，不另外掃一次 bookings。
+     總堂數用票上的 sessions_total；沒有就退回「目前排了幾堂」，至少分母不會是空的。 */
+  window._bkSeq={};
+  (allTickets||[]).forEach(t=>{
+    const arr=_bkByTk[t.id]; if(!arr||!arr.length) return;
+    const n=Number(t.sessions_total)||arr.length;
+    arr.forEach((b,i)=>{ window._bkSeq[b.id]={i:i+1,n}; });
+  });
   const _newestBuy={};
   (allTickets||[]).forEach(t2=>{
     if(t2.status==='refunded') return;
@@ -36649,7 +36698,7 @@ async function openSalesModal(){
          與課程銷售同一套。購物車從右邊搬到欄位正下方（視窗收窄後排不下兩欄，
          而且加完商品本來就該在同一條視線上看到結果）。
          0804 的用途不變：點一次＝加入（同品項數量+1），湊齊後一顆「結帳」一併收款。 */''}
-    <div class="form-row"><label>其他收費</label>
+    <div class="form-row"><label>其他產品</label>
       <button type="button" class="adp-field" id="sl-merch-btn" onclick="slMerchOpen()">
         <span class="adp-ph">選擇商品</span><span class="adp-ic">▾</span></button>
       <div id="sl-cart-box" style="margin-top:10px;background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:12px;"></div>
@@ -36692,7 +36741,12 @@ const SL_COURSES=[
 /* 其他收費清單（2026-08-21 從卡片牆搬進挑選視窗；品項與價格照舊）。
    「其他商品」是自訂品名／金額 —— 加進購物車後在那一列直接改，所以選它要關掉視窗。 */
 const SL_MERCH=[
-  {name:'蛋白粉',       price:75},
+  /* 蛋白粉三種價格（2026-08-21 使用者指示：「蛋白粉改成三個按鈕 價錢分別是50 60 75」）——
+     ⚠ 品名都叫「蛋白粉」，靠價格區分。購物車的合併規則本來就是「同品項＋同價格」才 +1
+     （0804 使用者：「蛋白粉要能一筆 75 一筆 60」），所以三種會各自成列，不會被併掉。 */
+  {name:'蛋白粉', label:'蛋白粉 $50', price:50},
+  {name:'蛋白粉', label:'蛋白粉 $60', price:60},
+  {name:'蛋白粉', label:'蛋白粉 $75', price:75},
   {name:'筋膜球',       price:200},
   {name:'測量身體組成', price:150},
   {name:'搖搖杯',       price:200},
@@ -36705,11 +36759,16 @@ function slMerchOpen(){
   host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
     <div class="adp-box" style="max-height:86vh;overflow-y:auto;"><div class="modal-title">選擇商品</div>
       ${SL_MERCH.map(m=>{
-        /* 已經加了幾個就標在右邊 —— 視窗不關，連點兩下就是兩個，看得到數字才不會重複加 */
-        const n=cart.filter(r=>r.name===m.name).reduce((a,r)=>a+Math.max(1,Number(r.qty)||1),0);
+        /* 已經加了幾個就標在右邊 —— 視窗不關，連點兩下就是兩個，看得到數字才不會重複加。
+           ⚠ 要連價格一起比：蛋白粉有 50／60／75 三列同名（2026-08-21），
+           只比品名的話三列會顯示同一個數字。 */
+        const n=cart.filter(r=>r.name===m.name && String(r.price)===String(m.price==null?'':m.price))
+                    .reduce((a,r)=>a+Math.max(1,Number(r.qty)||1),0);
+        /* 有自己的標題（例如「蛋白粉 $50」）就不要在副標再寫一次價格 */
+        const sub=m.sub || (m.label ? '點一下加入' : ('$'+m.price+' · 點一下加入'));
         return `<button type="button" class="ash-eirow" onclick="slMerchPick('${m.name}',${m.price==null?'null':m.price})">
           <span class="ash-eilb"><span class="adp-sw" style="background:#8a7a5c;"></span>${m.label||m.name}${n?`　<span class="ash-eisub" style="color:var(--green);">已加 ${n}</span>`:''}</span>
-          <span class="ash-eisub">${m.sub||('$'+m.price+' · 點一下加入')}</span></button>`;
+          <span class="ash-eisub">${sub}</span></button>`;
       }).join('')}
       <div class="adp-foot"><button class="btn btn-ghost" onclick="ashDateClose()">完成</button></div></div>`;
 }
@@ -36747,7 +36806,9 @@ function slGo(kind){
 function slCartRender(){
   const host=document.getElementById('sl-cart-box'); if(!host) return;
   const cart=window._slCart||[];
-  if(!cart.length){ host.innerHTML='<div style="font-size:12.5px;color:var(--t3);">🛒 尚未加入商品<br>點左邊的卡片加入，可一併結帳。</div>'; return; }
+  /* 2026-08-21 使用者指示：「現在不是在左邊了」—— 商品從左邊的卡片牆改成上面的挑選欄位，
+     這句提示沒跟著改，會叫人去看一個已經不存在的東西。 */
+  if(!cart.length){ host.innerHTML='<div style="font-size:12.5px;color:var(--t3);">🛒 尚未加入商品<br>點上面的「其他產品」挑選，可一併結帳。</div>'; return; }
   const sum=cart.reduce((a,r)=>a+(Math.max(1,Number(r.qty)||1))*(Number(r.price)||0),0);
   host.innerHTML=`<div style="font-size:12.5px;font-weight:700;margin-bottom:8px;">🛒 已選商品</div>
     ${cart.map((r,i)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">

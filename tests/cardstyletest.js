@@ -66,8 +66,10 @@ ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    {stamp:src.indexOf('const _stampOut ='), body:src.indexOf('const _bodyOut =')});
 ok('　　順序要求寫在程式裡（免得日後有人搬回去）',
    /這一段要在 _bodyOut 之前算完/.test(src));
+/* 2026-08-21：姓名與章之間插進「第幾堂／共幾堂」那一列（見 tests/dashlayouttest.js），
+   章仍然排在姓名之後，只是中間多了一段。 */
 ok('★ 首頁：章也排在姓名之後',
-   /<span class="tcard-mem">\$\{nm\}<\/span>\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src));
+   /<span class="tcard-mem">\$\{nm\}<\/span>\$\{[\s\S]{0,220}?tcard-seq[\s\S]{0,80}?\}\)\(\)\}\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src));
 
 console.log('\n過期的課卡也要開簡易課卡');
 ok('★ 不再依 editable 分流到舊的預約明細',

@@ -90,7 +90,10 @@ ok('★ 商品卡片牆退場，改成一個欄位',
    && !/class="sl-card"/.test(src));
 ok('★ 品項與價格照舊（蛋白粉 75／筋膜球 200／測量 150／搖搖杯 200／自訂）',
    /const SL_MERCH=\[/.test(src)
-   && /\{name:'蛋白粉',       price:75\}/.test(src)
+   /* 2026-08-21：蛋白粉拆成 50／60／75 三列（同名、靠價格區分） */
+   && /\{name:'蛋白粉', label:'蛋白粉 \$50', price:50\}/.test(src)
+   && /\{name:'蛋白粉', label:'蛋白粉 \$60', price:60\}/.test(src)
+   && /\{name:'蛋白粉', label:'蛋白粉 \$75', price:75\}/.test(src)
    && /\{name:'筋膜球',       price:200\}/.test(src)
    && /\{name:'測量身體組成', price:150\}/.test(src)
    && /\{name:'搖搖杯',       price:200\}/.test(src)
@@ -98,8 +101,10 @@ ok('★ 品項與價格照舊（蛋白粉 75／筋膜球 200／測量 150／搖�
 ok('★ 一次買好幾樣是常態 → 加完不關視窗，只把數量更新上去',
    /function slMerchPick\(name, price\)\{\s*\n\s*slGoMerch\(name, price\);\s*\n\s*if\(name==='自訂'\)\{ ashDateClose\(\); return; \}\s*\n\s*slMerchOpen\(\);/.test(src));
 ok('　　已加幾個標在列上（不關視窗，看得到數字才不會重複加）',
-   /const n=cart\.filter\(r=>r\.name===m\.name\)\.reduce\(\(a,r\)=>a\+Math\.max\(1,Number\(r\.qty\)\|\|1\),0\);/.test(src)
+   /const n=cart\.filter\(r=>r\.name===m\.name && String\(r\.price\)===String\(m\.price==null\?'':m\.price\)\)/.test(src)
    && /已加 \$\{n\}/.test(src));
+ok('　　⚠ 計數要連價格一起比（蛋白粉三列同名，只比品名會三列顯示同一個數字）',
+   /蛋白粉有 50／60／75 三列同名（2026-08-21），\s*\n\s*只比品名的話三列會顯示同一個數字/.test(src));
 ok('　　自訂品項要回購物車那一列填品名金額 → 關掉視窗',
    /自訂品項要回到購物車那一列填品名與金額，所以關掉/.test(src));
 ok('★ 購物車搬到欄位正下方（收窄後排不下兩欄）',

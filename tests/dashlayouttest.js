@@ -75,5 +75,81 @@ ok('★ 預約管理仍是七日行事曆（_calDays 預設 7）', /let _calDays
 ok('★ 日期翻頁與「N 人上課中」照舊',
    /onclick="dashDayShift\(-1\)"/.test(src) && /\$\{_liveCount\} 人上課中/.test(src));
 
+console.log('\n日期列改成一整週（2026-08-21 使用者：「改成一週 [8/17一][8/18二] 依序下去排到週日」）');
+ok('★ 桌機面板的「‹ 8/21（五） ›」換成七個日期鈕',
+   /<div class="tl-title tl-title-week">/.test(src)
+   && /<div class="twk-strip">\$\{_wkDays\}<\/div>/.test(src)
+   /* 桌機面板的抬頭就是週列（負向比對整份原始碼會掃到 CSS，所以直接比對那一段markup） */
+   && /<div class="tl-panel tl-desktop-only">\s*\n\s*<div class="tl-panel-top"><div class="tl-title tl-title-week">/.test(src));
+ok('　　手機版維持一天一天翻（螢幕放不下七個鈕）',
+   /<div class="mtc-wrap-top"><div class="tl-title tl-title-date">[\s\S]{0,200}?<span class="tl-date">\$\{_taskDateLbl\}<\/span>/.test(src));
+ok('★ 週一起算（健身房的排班與課表都以週一為一週的開始）',
+   /mon\.setDate\(_tdD\.getDate\(\)-\(\(_tdD\.getDay\(\)\+6\)%7\)\);/.test(src)
+   && /const W='一二三四五六日';/.test(src));
+ok('★ 顯示 M/D＋星期（8/17 一）',
+   /<span class="twk-md">\$\{d\.getMonth\(\)\+1\}\/\$\{d\.getDate\(\)\}<\/span><span class="twk-w">\$\{W\[i\]\}<\/span>/.test(src));
+ok('　　點一下換那天（沿用既有的 dashPickDay）', /onclick="dashPickDay\('\$\{ds\}'\)"/.test(src));
+ok('★ 左右鍵直接 ±7 天，不另外維護週偏移狀態（會和 _dashViewDate 打架）',
+   /onclick="dashDayShift\(-7\)" title="上一週"/.test(src)
+   && /onclick="dashDayShift\(7\)" title="下一週"/.test(src)
+   && /不另外維護一個週偏移狀態（那會和 _dashViewDate 兩份狀態互相打架）/.test(src));
+ok('　　選中的那天與今天分得開（選中＝實心綠、今天＝綠字）',
+   /\.twk-day\.today\{color:var\(--green\);\}/.test(src)
+   && /\.twk-day\.on\{background:var\(--green\);color:#fff;/.test(src));
+ok('　　滑過看得到那天有幾堂', /title="\$\{ds\}\$\{n\?`　\$\{n\} 堂`:'　沒有課'\}"/.test(src));
+{
+  /* 週一起算的算法（與 index.html 同一條式子） */
+  const monOf=d=>{ const x=new Date(d); x.setDate(d.getDate()-((d.getDay()+6)%7)); return x; };
+  const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
+  const week=d=>{ const m=monOf(d); return Array.from({length:7},(_,i)=>{
+    const x=new Date(m); x.setDate(m.getDate()+i); return fmt(x); }); };
+  eq('★ 8/21（五）那一週＝8/17 一 … 8/23 日',
+     week(new Date(2026,7,21)), ['8/17','8/18','8/19','8/20','8/21','8/22','8/23']);
+  eq('　　週日看到的是同一週（不會跳到下一週）',
+     week(new Date(2026,7,23))[0], '8/17');
+  eq('　　週一看到的也是同一週', week(new Date(2026,7,17))[0], '8/17');
+  eq('　　跨月照樣連續（8/31 一 → 9/6 日）',
+     week(new Date(2026,7,31)), ['8/31','9/1','9/2','9/3','9/4','9/5','9/6']);
+}
+
+console.log('\n課卡加一列「第幾堂／共幾堂」（使用者：「這第幾堂/總堂數在名字下面」）');
+ok('★ 接在姓名後面（.tcard-txt 是直排，等於名字下面一列）',
+   /<span class="tcard-mem">\$\{nm\}<\/span>\$\{\(\(\)=>\{\s*\n\s*const q=\(window\._bkSeq\|\|\{\}\)\[b\.id\];\s*\n\s*return q\?`<span class="tcard-seq">\$\{q\.i\}\/\$\{q\.n\} 堂<\/span>`:'';\}\)\(\)\}/.test(src));
+ok('★ 沿用 computeLastBkMarks 已建好的索引，不另外掃一次 bookings',
+   /window\._bkSeq=\{\};/.test(src)
+   && /const arr=_bkByTk\[t\.id\]; if\(!arr\|\|!arr\.length\) return;/.test(src)
+   && /arr\.forEach\(\(b,i\)=>\{ window\._bkSeq\[b\.id\]=\{i:i\+1,n\}; \}\);/.test(src));
+ok('　　分母沒有 sessions_total 就退回「目前排了幾堂」',
+   /const n=Number\(t\.sessions_total\)\|\|arr\.length;/.test(src));
+ok('　　樣式比姓名小一階、淡一點（不跟人名搶視線）',
+   /\.tcard-seq\{font-family:var\(--num\);font-size:10\.5px;font-weight:700;opacity:\.7;/.test(src));
+ok('　　沒扣到票的課不畫這一列（體驗／場租／待簽約／團課）',
+   /只有扣到票的課才有（體驗／場租／待簽約沒有票，就不畫這一列）/.test(src));
+{
+  /* 序號算法（與 computeLastBkMarks 同一套）：取消的不佔序號、依日期時間排序 */
+  const seqOf=(tickets,bookings)=>{
+    const by={};
+    bookings.forEach(b=>{ if(b.ticket_id&&b.status!=='cancelled'){ (by[b.ticket_id]=by[b.ticket_id]||[]).push(b); } });
+    Object.values(by).forEach(a=>a.sort((x,y)=>((x.date||'')+(x.start_time||'')).localeCompare((y.date||'')+(y.start_time||''))));
+    const out={};
+    tickets.forEach(t=>{ const arr=by[t.id]; if(!arr||!arr.length) return;
+      const n=Number(t.sessions_total)||arr.length;
+      arr.forEach((b,i)=>{ out[b.id]={i:i+1,n}; }); });
+    return out;
+  };
+  const tk=[{id:'T1',sessions_total:12}];
+  const bk=[{id:'B3',ticket_id:'T1',date:'2026-08-21',start_time:'12:00',status:'booked'},
+            {id:'B1',ticket_id:'T1',date:'2026-08-10',start_time:'10:00',status:'checked_in'},
+            {id:'B2',ticket_id:'T1',date:'2026-08-15',start_time:'09:00',status:'checked_in'},
+            {id:'BX',ticket_id:'T1',date:'2026-08-12',start_time:'09:00',status:'cancelled'},
+            {id:'N1',ticket_id:null,date:'2026-08-21',start_time:'13:00',status:'booked'}];
+  const r=seqOf(tk,bk);
+  eq('★ 依日期時間排序，8/21 那堂是第 3 堂 / 共 12 堂', [r.B3.i, r.B3.n], [3,12]);
+  eq('★ 取消的那堂不佔序號（8/12 被取消，8/15 仍是第 2 堂）', r.B2.i, 2);
+  eq('　　沒有票的課不列入', r.N1===undefined, true);
+  eq('　　沒有 sessions_total → 分母＝目前排了幾堂',
+     seqOf([{id:'T1'}],[{id:'A',ticket_id:'T1',date:'2026-08-01',start_time:'09:00',status:'booked'}]).A, {i:1,n:1});
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
