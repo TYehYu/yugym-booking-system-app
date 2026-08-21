@@ -60,7 +60,8 @@ console.log('\n② memTierInfo 實跑（假時鐘 2026-08-05）');
 }
 
 console.log('\n③ 課卡彈窗圓鈕（同日追加，附截圖）');
-ok('★ 五顆一列不折行＋容器放寬', /#bk-card-pop \.mtp-orbs\{display:flex;justify-content:center;flex-wrap:nowrap;gap:12px;\}/.test(src)
+/* 2026-08-21 多了 flex:none（標題卡與按鈕列釘住、只捲名單） */
+ok('★ 五顆一列不折行＋容器放寬', /#bk-card-pop \.mtp-orbs\{display:flex;justify-content:center;flex-wrap:nowrap;gap:12px;flex:none;\}/.test(src)
    && /max-width:min\(440px,96vw\)/.test(src));
 ok('★ 取消／新增改實心底色（跟簽到一樣）',
    /#bk-card-pop \.evo-btn\.evo-danger\{background:var\(--danger,#b5372e\);border-color:var\(--danger,#b5372e\);color:#fff;/.test(src)

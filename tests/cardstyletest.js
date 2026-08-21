@@ -119,8 +119,17 @@ ok('★ 只有「收卡」那條路播動畫，開新卡一律立即移除舊的
    && /bkCardPopClose\(true\);/.test(src));
 
 console.log('\n面板底部的按鈕不能被裁掉');
-ok('★ 捲動容器留下內距（使用者：「下面新增＋被切一半了」）', /padding:2px 0 14px;/.test(css));
-ok('　　成因寫在程式裡', /最後那顆圓形按鈕正好貼在 overflow 的裁切邊上/.test(css));
+/* 2026-08-21 二修（使用者：「下面新增還是會被遮住切割」）——
+   加內距治不了根本（要捲到底才看得到，而人不會知道要捲）。
+   改成面板自己不捲：標題卡與按鈕列釘住，中間名單自己捲。 */
+ok('★ 面板自己不捲，標題卡與按鈕列釘住', /max-height:88vh;overflow:hidden;/.test(css)
+   && /#bk-card-pop\.admh-pop \.mtp-card\.admh-sheet\{flex:none;/.test(css)
+   && /flex-wrap:nowrap;gap:12px;flex:none;\}/.test(css));
+ok('★ 只有名單捲，且每一列不准被壓縮',
+   /flex:1 1 auto;min-height:0;overflow-y:auto;/.test(css)
+   && /\.ash-mems > \.ash-mrow\{flex:none;\}/.test(css));
+ok('　　成因寫在程式裡（實測 12 張卡被壓成 47px，捲軸根本沒出現）',
+   /實測 12 張卡在 900px 高的畫面上被壓成 47px 一張，捲軸根本沒出現/.test(css));
 
 console.log('\n會員資料上方卡收緊（使用者：佔比太大了）');
 ok('★ 大頭照 92→64、內距與行距一起收',
@@ -282,6 +291,12 @@ console.log('\n正式定名（2026-08-21 使用者：更換場地／刪除預約
 ok('★ 「更改場地」→「更換場地」（與更換票券同一組動詞）',
    (src.match(/'更換場地',\(typeof venueDisplay/g)||[]).length===2
    && !/'更改場地',\(typeof venueDisplay/.test(src));
+
+console.log('\n團課名單視窗（使用者：風格要更新、返回會跑回詳細預約）');
+ok('★ 掛上 ash-sheetmk，吃簡易課卡那一套視窗風格',
+   /showModal\(`<div class="ash-sheetmk"><\/div><div class="modal-title">團體課名單<\/div>/.test(src));
+ok('★ 返回退回課卡，不再跳已退役的預約明細',
+   /onclick="closeModal\(\);expandBkCard\(window\._expandedBkEl\|\|null,'\$\{id\}'\)">返回/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

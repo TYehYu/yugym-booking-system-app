@@ -27,8 +27,11 @@ ok('★ 「取消」補上 own 判定（原本只看 canCancel，教練點別人
 ok('★ 簽到開放給教練自己的課（口徑同 openBookingDetail 的 staffCanCheckin）',   // 2026-08-19 行事曆情境加 !_calCtx（行事曆圓鈕無簽到）
    /const coachCk = SESSION\.role==='coach' && own;/.test(src)
    && /if\(!_ashMode && !_calCtx && \(staff\|\|coachCk\) && !closed\)\{/.test(src));
-ok('　　團課名單管理仍只給櫃檯／管理員',   // 2026-08-05 順序定版：條件合併成 staff && !closed && isGroup
-   /if\(staff && !closed && isGroup\) btns \+= evoBtn\('evo-b2','evo-gold'/.test(src));
+/* 2026-08-21：條件併進 _editable（staff && !closed && 課程日>=今天）——
+   過期的團課不再給「新增」，事後加人會在課後扣掉一堂票。權限沒放寬（_editable 含 staff）。 */
+ok('　　團課名單管理仍只給櫃檯／管理員，且過期不給',
+   /if\(_editable && isGroup\) btns \+= evoBtn\('evo-b2','evo-gold'/.test(src)
+   && /const _editable = staff && !closed && b\.date>=ymd\(TODAY\)/.test(src));
 ok('　　整頁不鎖死（_coachReadonly 維持 false），逐張卡判權限',
    /教練仍要能操作「自己的」課（簽到／取消／備註），逐張卡的權限由 own 判定/.test(src));
 ok('　　手機端維持 agenda，不把桌機週曆塞進小螢幕', /手機端維持原本的 agenda（MOBILE_COACH_NAV）/.test(src));
