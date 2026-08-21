@@ -7267,7 +7267,12 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   /* 一列＝卡片＋卡片外的直排圓鈕（2026-08-20 三修：取消在上、簽到在下，獨立在卡外） */
   .ash-mrow{display:flex;align-items:center;gap:9px;}
   .ash-mcard{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:#fff;border-radius:18px;
-    padding:11px 14px 11px 15px;box-shadow:0 8px 22px rgba(30,25,15,.22);cursor:pointer;}
+    padding:11px 14px 11px 15px;box-shadow:0 8px 22px rgba(30,25,15,.22);cursor:pointer;
+    /* 與旁邊的圓鈕欄等高（兩顆 47px＋間距 6＝100）——沒有票券圓點的卡不再細成一條 */
+    min-height:100px;box-sizing:border-box;}
+  /* 沒有名額圓鈕的卡（待簽約／空堂）不需要撐到 100，免得一片空白 */
+  .ash-mrow:not(:has(.ash-morbs)) .ash-mcard{min-height:0;}
+  .ash-mnotk{margin-top:6px;font-size:11.5px;font-weight:600;color:var(--t3);}
   .ash-mcard:active{transform:scale(.99);}
   /* 請假：整張淡化＋左緣紅線（與名單視窗同一套語彙，紅＞金＞綠） */
   .ash-mleave{opacity:.72;box-shadow:inset 3px 0 0 var(--danger,#b5372e),0 8px 22px rgba(30,25,15,.18);}
@@ -8480,8 +8485,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.0941';
-const APP_VERSION_LABEL='v260821.0941';
+const APP_VERSION = '260821.0952';
+const APP_VERSION_LABEL='v260821.0952';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23703,6 +23708,17 @@ async function bkCardPop(el, b, btns, acts){
         ? `<button type="button" class="ash-mfam" title="更改使用人"
              onclick="event.stopPropagation();ashFamAsk('${b.id}')">👤 ${escH(String(b.trial_name||'').trim()||'本人')} ▾</button>`
         : '';
+      /* 沒有票券圓點的卡（體驗／場租）只剩一行姓名，旁邊卻是兩顆疊起來的圓鈕，
+         看起來輕重失衡（2026-08-21 使用者回報）。補一行這張卡真正該有的資訊：
+         體驗＝聯絡電話與「不扣票券」，場租＝場地租借。有票券圓點的卡不受影響。 */
+      let _noTkSub='';
+      if(!_tk && !r.sk){
+        const _ph=String(b.trial_phone||'').trim();
+        if(b.category==='體驗') _noTkSub=`體驗課・不扣票券${_ph?`　·　${escH(fmtPhone(_ph))}`:''}`;
+        else if(b.category==='場租') _noTkSub=`場地租借${_ph?`　·　${escH(fmtPhone(_ph))}`:''}`;
+        else if(b.pending_contract) _noTkSub='待簽約・尚未綁定票券';
+      }
+      const _subLine=_noTkSub?`<div class="ash-mnotk">${_noTkSub}</div>`:'';
       const _seatTag=(r.mid&&_seatCnt[r.mid]>1)?`<span class="ash-mseat">第 ${r.n} 個名額</span>`:'';
       /* 會員備註（2026-08-20 使用者指示）：右上角一顆，有備註就直接顯示內容、靠右截斷；
          沒有就顯示「＋ 備註」。用的是會員列表那一欄同一個欄位（members.note）。 */
@@ -23723,7 +23739,7 @@ async function bkCardPop(el, b, btns, acts){
         :(inHere?'<span class="ash-mtag ash-mtag-ok">已簽到</span>':''));
       return `<div class="ash-mrow">
           <div class="ash-mcard${onLeave?' ash-mleave':''}"${r.mid?` onclick="collapseBkCard();openMemberDetail('${r.mid}')"`:''}>
-            <div class="ash-mmain"><div class="ash-mname"><span>${nm2}</span>${_famBtn}${_seatTag}${_badge}${_noteBtn}${_leaveBtn}</div>${_tk}</div>
+            <div class="ash-mmain"><div class="ash-mname"><span>${nm2}</span>${_famBtn}${_seatTag}${_badge}${_noteBtn}${_leaveBtn}</div>${_tk}${_subLine}</div>
           </div>
           ${_outOrbs?`<div class="ash-morbs">${_outOrbs}</div>`:''}
         </div>`;

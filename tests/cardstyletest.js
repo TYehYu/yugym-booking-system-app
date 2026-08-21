@@ -364,5 +364,19 @@ ok('★ 有無票券用既有的 listUsableTickets 判（與步驟 2 挑票同�
 ok('　　綁完就走一般卡，簽到本來就在會員卡上，第三段不必重畫',
    /綁完之後這張卡就走一般路徑，簽到鈕本來就在會員卡上，所以第三段不必在這裡畫/.test(src));
 
+console.log('\n沒有票券圓點的卡不要細成一條（使用者：會員卡太細了 畫面重量失衡）');
+ok('★ 卡片與旁邊的圓鈕欄等高（兩顆 47＋間距 6＝100）',
+   /min-height:100px;box-sizing:border-box;\}/.test(css));
+ok('★ 沒有圓鈕的卡不撐高（待簽約／空堂，免得一片空白）',
+   /\.ash-mrow:not\(:has\(\.ash-morbs\)\) \.ash-mcard\{min-height:0;\}/.test(css));
+ok('★ 補一行這張卡真正該有的資訊，不是留白',
+   /if\(b\.category==='體驗'\) _noTkSub=`體驗課・不扣票券/.test(src)
+   && /else if\(b\.category==='場租'\) _noTkSub=`場地租借/.test(src)
+   && /else if\(b\.pending_contract\) _noTkSub='待簽約・尚未綁定票券';/.test(src));
+ok('★ 有票券圓點的卡不受影響（只在 !_tk 時才補）',
+   /if\(!_tk && !r\.sk\)\{/.test(src));
+ok('　　體驗帶聯絡電話（櫃檯真的會用到）',
+   /const _ph=String\(b\.trial_phone\|\|''\)\.trim\(\);/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
