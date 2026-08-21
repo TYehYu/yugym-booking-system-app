@@ -166,9 +166,9 @@ ok('★ 空堂不再承諾「開課前 24 小時會提醒教練」（使用者�
    櫃檯會在切換的當下直接失去「更換票券」和「補簽」。 */
 console.log('\n桌機取代：先補功能');
 ok('★ 更換票券進了調整課程（條件與原本那顆一致：未簽到／非團課／櫃檯以上）',
-   /if\(!_leave && b\.status==='booked' && !A\.isGroup && isDeskLike\(\)\)\s*\n\s*rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openBkTicketChange\('\$\{b\.id\}'\)`,'更換票券'/.test(src));
+   /if\(!_leave && b\.status==='booked' && !A\.isGroup && isDeskLike\(\)\)\s*\n\s*rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openBkTicketChange\('\$\{b\.id\}','ash'\)`,'更換票券'/.test(src));
 ok('★ 補簽進了調整課程（只對過去的課；今天以後的走簽到）',
-   /if\(!_leave && b\.status==='booked' && !A\.isGroup && \(A\.staff\|\|A\.coachCk\) && bkDatePast\(b\)\)\s*\n\s*rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openMakeupModal\('\$\{b\.id\}'\)`,'補簽'/.test(src));
+   /if\(!_leave && b\.status==='booked' && !A\.isGroup && \(A\.staff\|\|A\.coachCk\) && bkDatePast\(b\)\)\s*\n\s*rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openMakeupModal\('\$\{b\.id\}','ash'\)`,'補簽'/.test(src));
 ok('★ 兩支的返回都先立旗標回課卡（它們原本的返回是 openBookingDetail）',
    /ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openBkTicketChange/.test(src)
    && /ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openMakeupModal/.test(src));

@@ -128,7 +128,8 @@ ok('　　換時段會重挑（候選會變）', /s\.pickTk=null;\s+\/\/ 換時�
 ok('★ 轉正簽約：兩張以上先問要扣哪一張',
    /async function doConvertPending\(memberId, tkId, mode\)\{/.test(src)   // 2026-08-04 多了整串轉正的模式
    && /if\(!tkId && cand\.length>1\)\{/.test(src));
-ok('★ 既有預約可事後更換票券', /async function openBkTicketChange\(id\)\{/.test(src)
+/* 2026-08-21：多收一個 backTo（從簡易課卡進來時返回要退回「調整課程」） */
+ok('★ 既有預約可事後更換票券', /async function openBkTicketChange\(id, backTo\)\{/.test(src)
    && /onclick="openBkTicketChange\('\$\{b\.id\}'\)"/.test(src));
 ok('　　只給櫃檯／管理員、且限還沒簽到的預約',
    /已簽到的預約要先取消簽到才能換票券/.test(src)

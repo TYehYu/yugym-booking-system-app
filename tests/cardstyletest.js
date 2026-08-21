@@ -167,14 +167,18 @@ ok('　　為什麼放寬，寫在程式裡',
    /版面本身跟權限無關/.test(src));
 
 console.log('\n過去的課不該有修改選項（2026-08-21 使用者回報 8/18 那筆）');
-ok('★ 三個修改項統一吃 acts.editable（含「課程日 >= 今天」）',
+/* 教練請假後來搬進「指派代課教練」，那一層的日期判斷改由 acts.sub 把關
+   （sub 本來就要 _editable），所以這裡只剩兩項直接吃 A.editable。 */
+ok('★ 修改項統一吃 acts.editable（含「課程日 >= 今天」）',
    /editable: _editable,/.test(src)
    && /if\(!_leave && A\.editable\) rows\+=row\(`closeModal\(\);admhMoveAsk/.test(src)
-   && /\}else if\(A\.editable && canCoachLeave\(b\)\)\{/.test(src)
    && /if\(!_leave && A\.isGroup && A\.editable\)/.test(src));
+ok('　　請假那條路也擋得住過去的課（代課視窗本身要 _editable 才進得去）',
+   /sub: \(_editable && !bkIsSelf\(b\)\) \? 'sub' : null/.test(src));
 ok('★ 舊的判斷（只看 staff／closed，沒帶日期）已經拿掉',
    !/if\(!_leave && A\.staff && !A\.closed\) rows\+=row\(`closeModal\(\);admhMoveAsk/.test(src)
-   && !/\}else if\(A\.staff && !A\.closed && canCoachLeave\(b\)\)\{/.test(src));
+   && !/\}else if\(A\.staff && !A\.closed && canCoachLeave\(b\)\)\{/.test(src)
+   && !/if\(!_leave && A\.isGroup && A\.staff && !A\.closed\)/.test(src));
 ok('　　成因寫在程式裡（canCoachLeave 本身沒有日期條件）',
    /都沒帶到日期，\s*\n\s*所以 8\/18 這種已經上完的課還給得出改期與請假/.test(src));
 
@@ -196,6 +200,42 @@ console.log('\n會員資料的活動紀錄也要給櫃檯（使用者：下方�
 ok('★ 分頁列的判斷同樣放寬到櫃檯以上',
    /const _m2=\(typeof isDeskLike==='function'\) \? isDeskLike\(\) : !!\(SESSION && SESSION\.role==='admin'\);/.test(src)
    && !/const _m2=!!\(SESSION && SESSION\.role==='admin'\);/.test(src));
+
+console.log('\n教練請假搬進「指派代課教練」（2026-08-21 使用者指示）');
+ok('★ 代課清單裡有請假這一列', /row\(`closeModal\(\);bkCoachLeave\('\$\{bid\}'\)`,'教練請假',/.test(src));
+ok('★ 調整課程那一層不再給請假', !/rows\+=row\(`closeModal\(\);bkCoachLeave\('\$\{b\.id\}'\)`,'教練請假'/.test(src));
+ok('★ 已經請假的不重複給（只在還沒請假時出現）', /canCoachLeave\(b\) && !bkIsCoachLeave\(b\)/.test(src));
+ok('　　復原留在上一層（請假後變自主訓練，代課視窗根本進不去）',
+   /acts\.sub 的條件不成立、代課視窗進不去，放那裡等於藏起來/.test(src));
+
+console.log('\n代課清單用教練自己的顏色（使用者：教練們的白框 用該教練的顏色）');
+ok('★ 每列吃 coachTagColor（與課卡標籤同一組色）',
+   /const cc=\(typeof coachTagColor==='function'\)\?coachTagColor\(c\.id\):/.test(src)
+   && /background:\$\{cc\.bg\};--ash-co-fg:\$\{cc\.fg\};/.test(src));
+ok('★ 文字色跟著換，淡底上才讀得清楚',
+   /\.ash-eirow\.ash-ei-co \.ash-eilb\{color:var\(--ash-co-fg,var\(--text\)\);\}/.test(css));
+
+console.log('\n子視窗的返回要回到「調整課程」');
+ok('★ 三支都收 backTo 參數',
+   /async function openVenueChange\(id, backTo\)\{/.test(src)
+   && /async function openBkTicketChange\(id, backTo\)\{/.test(src)
+   && /async function openMakeupModal\(id, backTo\)\{/.test(src));
+ok('★ 從調整課程進去的都帶 ash',
+   (src.match(/openVenueChange\('\$\{b\.id\}','ash'\)|openBkTicketChange\('\$\{b\.id\}','ash'\)|openMakeupModal\('\$\{b\.id\}','ash'\)/g)||[]).length===3);
+ok('★ 其餘呼叫端不帶參數、行為不變（仍走 openBookingDetail）',
+   /backTo==='ash'\?`closeModal\(\);ashEditAsk\('\$\{id\}'\)`:`openBookingDetail\('\$\{id\}'\)`/.test(src));
+
+console.log('\n更換場地：目前場地不淡化（使用者指示）');
+ok('★ 目前場地用正常字色＋綠框，不再跟「已滿」一樣灰',
+   /o\.cur\s*\n?\s*\?`<button class="btn btn-ghost" disabled style="color:var\(--text\);border-color:var\(--green\)/.test(src)
+   && !/o\.cur\s*\n?\s*\?`<button class="btn btn-ghost" disabled style="opacity:\.55;"/.test(src));
+ok('　　「已滿」仍然是淡的（那才是真的不能選）',
+   /disabled style="opacity:\.4;">\$\{o\.name\}（該時段已滿）/.test(src));
+
+console.log('\n調整預約時間：日期也要置中');
+ok('★ 日期欄的內部元件撐滿並置中（只給外層 text-align 不生效）',
+   /\.ash-eilabel input\[type=date\]::-webkit-datetime-edit\{width:100%;text-align:center;\}/.test(css)
+   && /\.ash-eilabel input\[type=date\]::-webkit-datetime-edit-fields-wrapper\{display:flex;justify-content:center;width:100%;\}/.test(css));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
