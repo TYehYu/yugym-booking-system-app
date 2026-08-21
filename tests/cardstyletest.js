@@ -125,6 +125,9 @@ console.log('\n面板底部的按鈕不能被裁掉');
 ok('★ 面板自己不捲，標題卡與按鈕列釘住', /max-height:88vh;overflow:hidden;/.test(css)
    && /#bk-card-pop\.admh-pop \.mtp-card\.admh-sheet\{flex:none;/.test(css)
    && /flex-wrap:nowrap;gap:12px;flex:none;\}/.test(css));
+ok('★ 名單可捲但不畫捲軸（2026-08-21 使用者指示）',
+   /scrollbar-width:none;-ms-overflow-style:none;\}/.test(css)
+   && /#bk-card-pop\.admh-pop \.ash-mems::-webkit-scrollbar\{width:0;height:0;display:none;\}/.test(css));
 ok('★ 只有名單捲，且每一列不准被壓縮',
    /flex:1 1 auto;min-height:0;overflow-y:auto;/.test(css)
    && /\.ash-mems > \.ash-mrow\{flex:none;\}/.test(css));
