@@ -189,8 +189,12 @@ console.log('\n兩種課別都要有取消（使用者要求兩次）');
 ok('★ 不再只給團課',
    /if\(A\.staff && A\.canCancel && !A\.closed\)/.test(src)
    && !/if\(A\.isGroup && A\.staff && A\.canCancel && !A\.closed\)/.test(src));
-ok('★ 標題各自講清楚範圍（團課＝整堂／單人＝這一筆）',
-   /A\.isGroup\?'取消整堂課程':'取消預約',/.test(src));
+/* 2026-08-21 三修（使用者：「還是統一改成刪除課卡 比較直覺」） */
+ok('★ 統一叫「刪除預約」（使用者正式定名），範圍寫在副標',
+   /rows\+=row\(`collapseBkCard\(\);confirmCancelBooking\('\$\{b\.id\}'\)`,'刪除預約',/.test(src)
+   && !/A\.isGroup\?'取消整堂課程':'取消預約',/.test(src));
+ok('　　會員卡上那顆圓鈕仍叫「取消」（範圍是這個人／這個名額，不是整張卡）',
+   /跟整張課卡不是同一件事，同名反而會讓人以為按哪個都一樣/.test(src));
 ok('　　團課說清楚會退幾個名額', /整堂取消、名單上的 \$\{mids\(b\)\.length\} 個名額一起退/.test(src));
 ok('　　單人課說明下一步還能選退不退', /下一步可以選擇退回票券或扣課不退/.test(src));
 ok('　　過去的課照樣給（誤建要刪得掉，與「修改」不同）',
@@ -249,6 +253,35 @@ ok('★ 越窄越少東西：窄卡先讓場地，極窄卡連教練也讓',
    && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-vsub,\s*\n\s*\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-coach\{display:none;\}/.test(css));
 ok('　　原則寫在程式裡（寧可少一項，也不要每一項都殘缺）',
    /寧可少一項，也不要每一項都殘缺/.test(css));
+
+console.log('\n體驗課也要有簽到與取消（使用者指示）');
+ok('★ 圓鈕不再被 r.mid 擋住（體驗課不綁會員，只有 trial_name）',
+   /const _canAct = !!r\.mid \|\| b\.category==='體驗';/.test(src)
+   && /if\(!A\.pending && _canAct\)\{/.test(src));
+ok('　　場租維持原樣（沒有人要簽到一間場地）',
+   /場租維持原樣（沒有人要簽到一間場地）/.test(src));
+
+console.log('\n待簽約卡：明細退場、刪除課卡補上（使用者回報）');
+/* 只查「待簽約」那一段 —— 檔案裡另一處 openBookingDetail 在 !_ashMode 分支下，
+   而 ashCardMode() 涵蓋全體員工，那條實際上走不到（留著當備援）。 */
+{
+  const i=src.indexOf("if(b.pending_contract && !b.ticket_id){");
+  const seg=src.slice(i, src.indexOf('window._expandedBkEl = el;', i));
+  ok('★ 不再開已退役的預約明細；有綁會員就直接進會員資料',
+     /if\(b\.member_id\) btns \+= evoBtn\('evo-b1','',`collapseBkCard\(\);openMemberDetail\('\$\{b\.member_id\}'\)`,'doc','會員'\);/.test(seg)
+     && !/openBookingDetail/.test(seg));
+}
+ok('★ acts 補齊，標題卡的調整課程給得出刪除課卡',
+   /await bkCardPop\(el, b, btns, \{pending:true, staff, own, canCancel, closed, isGroup, editable:false\}\);/.test(src));
+ok('★ 待簽約沒有票券 → 不列「更換票券」（否則是死路）',
+   /if\(!_leave && !A\.pending && b\.status==='booked' && !A\.isGroup && isDeskLike\(\)\)/.test(src));
+ok('　　pending 仍為 true，會員卡照舊不畫圓鈕（不會變成兩顆按鈕做同一件事）',
+   /pending 仍為 true，\s*\n\s*所以會員卡照舊不畫圓鈕/.test(src));
+
+console.log('\n正式定名（2026-08-21 使用者：更換場地／刪除預約）');
+ok('★ 「更改場地」→「更換場地」（與更換票券同一組動詞）',
+   (src.match(/'更換場地',\(typeof venueDisplay/g)||[]).length===2
+   && !/'更改場地',\(typeof venueDisplay/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

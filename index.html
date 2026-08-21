@@ -8459,8 +8459,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.0216';
-const APP_VERSION_LABEL='v260821.0216';
+const APP_VERSION = '260821.0251';
+const APP_VERSION_LABEL='v260821.0251';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19195,15 +19195,17 @@ async function ashEditAsk(id){
      自主訓練走 bkOrbitVenue（只有它有跑步機台數）；其他課別走 openVenueChange
      （列出所有啟用場地、逐一跑衝突檢查，該時段滿的會標出來）。
      openVenueChange 的返回鈕是 openBookingDetail，先立旗標讓它回到課卡。 */
-  if(!_leave && A.venue==='self') rows+=row(`closeModal();bkOrbitVenue('${b.id}')`,'更改場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
-  else if(!_leave && A.venue==='any') rows+=row(`ashBackArm('${b.id}');closeModal();openVenueChange('${b.id}','ash')`,'更改場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
+  if(!_leave && A.venue==='self') rows+=row(`closeModal();bkOrbitVenue('${b.id}')`,'更換場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
+  else if(!_leave && A.venue==='any') rows+=row(`ashBackArm('${b.id}');closeModal();openVenueChange('${b.id}','ash')`,'更換場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
   if(!_leave && A.sub==='sub') rows+=row(`closeModal();ashSubPick('${b.id}')`,'指派代課教練','從教練名單挑一位，或清除代課');
   /* 更換票券／補簽（2026-08-20）：桌機的詳細預約視窗要退役，這兩顆只在那裡有，
      不搬過來的話櫃檯會直接失去這兩個功能。條件與原本那兩顆完全一致：
      ・更換票券 = 還沒簽到、非團課（團課的票在 ticket_logs、不在 ticket_id）、櫃檯以上
      ・補簽     = 還沒簽到、非團課、課程日已過（今天以後的走「簽到」）
      兩支的返回鈕都是 openBookingDetail，先立旗標讓它回到課卡。 */
-  if(!_leave && b.status==='booked' && !A.isGroup && isDeskLike())
+  /* !A.pending：待簽約／空堂本來就沒有綁票券（那正是它們的定義），
+     列出來只會走進「沒有其他可用票券可以換」的死路（2026-08-21）。 */
+  if(!_leave && !A.pending && b.status==='booked' && !A.isGroup && isDeskLike())
     rows+=row(`ashBackArm('${b.id}');closeModal();openBkTicketChange('${b.id}','ash')`,'更換票券','這堂改扣同一位會員的另一張票（依效期排序）');
   if(!_leave && b.status==='booked' && !A.isGroup && (A.staff||A.coachCk) && bkDatePast(b))
     rows+=row(`ashBackArm('${b.id}');closeModal();openMakeupModal('${b.id}','ash')`,'補簽','補登這堂未簽到的課；自主訓練點數的效期自課程當天起算');
@@ -19229,9 +19231,14 @@ async function ashEditAsk(id){
      找不到就等於沒有。兩種課別都給，標題各自講清楚範圍：
      　團課＝整堂取消（名單上的名額一起退）；單人課＝取消這一筆預約。
      過去的課照樣給（誤建要刪得掉，那與「修改」不同，見上面 A.editable 的判斷）。 */
+  /* 2026-08-21 三修（使用者：「還是統一改成刪除課卡 比較直覺」）——
+     「取消預約／取消整堂課程」在櫃檯眼裡就是「把這張課卡拿掉」，
+     兩種課別各叫一個名字反而要想一下。統一叫「刪除預約」（2026-08-21 使用者正式定名，
+     先前一版寫「刪除課卡」），範圍寫在副標。
+     （會員卡上那顆紅色圓鈕仍叫「取消」—— 它的範圍是「這個人／這個名額」，
+      跟整張課卡不是同一件事，同名反而會讓人以為按哪個都一樣。） */
   if(A.staff && A.canCancel && !A.closed)
-    rows+=row(`collapseBkCard();confirmCancelBooking('${b.id}')`,
-      A.isGroup?'取消整堂課程':'取消預約',
+    rows+=row(`collapseBkCard();confirmCancelBooking('${b.id}')`,'刪除預約',
       A.isGroup?`整堂取消、名單上的 ${mids(b).length} 個名額一起退`
                :'下一步可以選擇退回票券或扣課不退','ash-ei-danger');
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">調整課程</div>
@@ -23380,17 +23387,21 @@ async function expandBkCard(el, id){
      「轉正」開轉正簽約流程（分期保留按下去＝手動補綁，與開通下一期同一條路）。 */
   if(b.pending_contract && !b.ticket_id){
     if(canCancel && own) btns += evoBtn('evo-r1','evo-danger',`collapseBkCard();confirmCancelBooking('${id}')`,'x','取消');
-    btns += (_calCtx&&b.member_id)
-      ? evoBtn('evo-b1','',`collapseBkCard();openMemberDetail('${b.member_id}')`,'doc','明細')
-      : evoBtn('evo-b1','',`collapseBkCard();openBookingDetail('${id}')`,'doc','明細');
+    /* 2026-08-21 使用者回報「這種待簽約的又出現明細了」——詳細預約視窗已經退役，
+       這條路是最後一個還在開它的地方。有綁會員就直接進會員資料（那才是櫃檯要看的），
+       沒綁會員的卡位本來就沒有明細可看，那顆鈕整個拿掉。 */
+    if(b.member_id) btns += evoBtn('evo-b1','',`collapseBkCard();openMemberDetail('${b.member_id}')`,'doc','會員');
     /* 2026-08-20：沒綁會員的卡位（含新的空堂）要先把人排進來才談得上轉正——
        openBindPending 本來只在詳細預約視窗裡，管理員手機端撤掉明細鈕之後就沒有入口了。 */
     if(staff && !closed && b.status==='booked' && !b.member_id)
       btns += evoBtn('evo-r2','evo-gold',`collapseBkCard();openBindPending('${id}')`,'plus',bkIsOpenHold(b)?'安排會員':'綁定會員');
     else if(staff && !closed && b.status==='booked') btns += evoBtn('evo-r2','evo-primary',`collapseBkCard();openConvertPending('${id}')`,'check','轉正');   /* 請假/異常狀態不給轉正（2026-08-14） */
     if(el){ el.style.marginLeft=''; el.style.marginTop=''; el.classList.add('cal-ev-active'); }
-    /* 待簽約／待分期保留：取消還在下方那一列，會員卡不重複給圓鈕（2026-08-20） */
-    await bkCardPop(el, b, btns, {pending:true});
+    /* 待簽約／待分期保留：取消還在下方那一列，會員卡不重複給圓鈕（2026-08-20）。
+       2026-08-21：acts 補齊，讓標題卡的「調整課程」也給得出刪除課卡
+       （使用者回報「標題卡裡面又沒有取消預約」）—— pending 仍為 true，
+       所以會員卡照舊不畫圓鈕，不會變成同一件事兩顆按鈕。 */
+    await bkCardPop(el, b, btns, {pending:true, staff, own, canCancel, closed, isGroup, editable:false});
     window._expandedBkEl = el;
     return;
   }
@@ -23604,7 +23615,14 @@ async function bkCardPop(el, b, btns, acts){
       let _canLeave=false;
       try{ _canLeave = !!(_slot && tkHasMakeup(_slot.t, (_wctx&&_wctx.typeMap)||{})); }catch(_){}
       let _leaveBtn='', _outOrbs='';
-      if(!A.pending && r.mid){
+      /* 體驗課也要有簽到與取消（2026-08-21 使用者指示）——
+         這一整段原本被 r.mid 擋住，但體驗課不綁會員（只有 trial_name），
+         於是那張卡只剩一個名字、什麼都不能做。
+         下面兩顆鈕吃的是 booking id，本來就不需要 member_id；
+         真正需要 r.mid 的是團課的逐名額動作（走 r.sk 那條）與會員備註。
+         場租維持原樣（沒有人要簽到一間場地）。 */
+      const _canAct = !!r.mid || b.category==='體驗';
+      if(!A.pending && _canAct){
         if(r.sk){
           if(onLeave){
             _leaveBtn=`<button type="button" class="ash-mlv ash-mlv-on" onclick="event.stopPropagation();ashSeatAct('${b.id}','leave','${r.mid}')">取消請假</button>`;
