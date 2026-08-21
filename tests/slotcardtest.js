@@ -128,13 +128,14 @@ console.log('\n建立預約的欄位順序（步驟 1）');
      && !/體驗課／待簽約卡位可不選/.test(srcNC));
   ok('★ 連續預約在步驟 1（不帶上限，票券的上限在步驟 2 才夾）',
      /<div class="form-row" id="bk-recur-row" style="margin-bottom:0;">\$\{recurBoxHtml\('bk'\)\}<\/div>/.test(form));
-  ok('★ 課程改成下拉（六張方案卡退場）',
-     /<select id="bk-type" onchange="pickBkType\(this\.value\)">/.test(form)
+  /* 2026-08-21 二修：下拉再換成自家挑選器（原生 select 展開後是系統樣式） */
+  ok('★ 課程改成自家挑選器（六張方案卡退場）',
+     /<button type="button" class="adp-field" id="bk-type-btn" onclick="ashTypeOpen\(\)">/.test(form)
      && !/<div id="bk-type-cards" class="bk-cards"><\/div>/.test(form));
   /* 2026-08-21：日期欄改成自家月曆（ashDateField），不再是原生 input[type=date] */
   ok('★ 日期與時間各自一列（原本並排在 form-2col）',
      /<div class="form-row"><label>日期<\/label>\$\{ashDateField\('bk-date'/.test(form)
-     && /<div class="form-row"><label>時間<\/label><select id="bk-time"/.test(form));
+     && /<div class="form-row"><label>時間<\/label>\$\{ashTimeField\('bk-time'/.test(form));
   ok('★ 教練與會員並排在同一個 form-2col', 教練>0 && 會員>教練
      && /<div class="form-2col">[\s\S]{0,900}?id="bk-coach-row"[\s\S]{0,900}?id="bk-mem-pre"/.test(form));
   ok('　　renderBkTypeCards 還被回上一步呼叫，但找不到容器就直接 return（不會爆）',

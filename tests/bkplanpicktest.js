@@ -21,7 +21,7 @@ ok('★ 體驗課不綁票券 → 不篩（篩了會變空名單）',
    onchange 掛在那個隱藏 input 上，挑完由 ashDatePick 派送 change 事件。 */
 ok('★ 日期／時間改了要重算（限時段票與效期會變）',
    /ashDateField\('bk-date', pf\.date\|\|'', '', 'bkRefreshPlanFilter\(\)'\)/.test(src)
-   && /id="bk-time" onchange="bkRefreshPlanFilter\(\)"/.test(src));
+   && /ashTimeField\('bk-time', pf\.time\|\|'', 'bkRefreshPlanFilter\(\)'\)/.test(src));
 ok('★ 每次開窗歸零，不留上一次的名單',
    /window\._bkPlanIds=null; window\._bkPlanName='';   \/\/ 每次開窗/.test(src));
 ok('　　超約／分期未開通／過期／限時段都算進去（因為走 tkFitsBooking）',

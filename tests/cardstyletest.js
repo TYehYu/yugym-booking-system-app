@@ -455,12 +455,57 @@ ok('★ 浮層疊在 modal 之上（modal-bg 是 9750）', /#adp-sheet\{position
 ok('★ onchange 掛在隱藏 input 上，原本的 bkRefreshPlanFilter 照樣會跑',
    /try\{ inp\.dispatchEvent\(new Event\('change',\{bubbles:true\}\)\); \}catch\(_\)\{\}/.test(src)
    && /onchange 掛在隱藏 input 上/.test(src));
-ok('★ 有下限的欄位（調整預約時間）過去的日子不可點',
-   /const off=c\.min && ds<c\.min;/.test(src)
-   && /\$\{off\?' disabled':/.test(src));
-ok('　　今天標金框、選中的填品牌綠（沿用全站色階）',
-   /\.adp-d\.adp-today\{box-shadow:inset 0 0 0 1\.6px var\(--gold,#C9A227\);\}/.test(css)
-   && /\.adp-d\.adp-sel\{background:var\(--green\);color:#fff;\}/.test(css));
+/* 2026-08-21 二修：月曆換成捲動清單，下限改用「清單從下限開始長」實作 —— 過去的日子根本不列 */
+ok('★ 有下限的欄位（調整預約時間）根本不列出過去的日子',
+   /const from = c\.min \? \(parseYmd\(c\.min\)\|\|TODAY\) : addDays\(TODAY,-30\);/.test(src));
+ok('　　今天／明天標金色小籤，選中的整列填品牌綠（沿用全站色階）',
+   /\.adp-rtag\{flex:none;font-size:10\.5px;font-weight:700;background:#f7efe0;color:#8a5e28;/.test(css)
+   && /\.adp-row\.adp-rsel\{background:var\(--green\);color:#fff;\}/.test(css));
+
+console.log('\n時間也用自家挑選器（使用者：這邊也是）');
+ok('★ 兩處時間欄都換掉原生 select',
+   /\$\{ashTimeField\('bk-time', pf\.time\|\|'', 'bkRefreshPlanFilter\(\)'\)\}/.test(src)
+   && /\$\{ashTimeField\('amv-t', b\.start_time\)\}/.test(src)
+   && !/<select id="bk-time"/.test(src) && !/<select id="amv-t"/.test(src));
+ok('★ 與月曆共用同一層浮層（不會再蓋掉底下的表單）',
+   /function ashTimeOpen\(id\)\{[\s\S]{0,400}?host\.id='adp-sheet'/.test(src)
+   && /onclick="ashDateClose\(\)"><\/div>\s*\n\s*<div class="adp-box"><div class="modal-title">選擇時間/.test(src));
+ok('★ 30 分一格、四欄九宮格，選中填品牌綠',
+   /\.adp-tgrid\{display:grid;grid-template-columns:repeat\(4,1fr\);/.test(css)
+   && /\.adp-t\.adp-sel\{background:var\(--green\);color:#fff;\}/.test(css));
+ok('　　開窗時捲到目前選的那一格（清單有 29 格）',
+   /if\(on\) on\.scrollIntoView\(\{block:'center'\}\);/.test(src));
+ok('　　bkTimeOptions 保留（會員快速預約與班表還在用）',
+   /function bkTimeOptions\(selected, opts\)\{/.test(src)
+   && /bkTimeOptions 其他流程還在用（會員快速預約、班表），所以函式保留/.test(src));
+
+console.log('\n課程也換自家挑選器；日期改成捲動清單；連續預約星期一列');
+/* 只查建立預約那張表單 —— 別處還有一個同 id 的暫時 select（tkFitsBooking 的沙箱用） */
+ok('★ 課程欄不再是原生 select', (()=>{
+  const i=src.indexOf('<div class="modal-title">建立預約</div>');
+  const form=src.slice(i, src.indexOf('onclick="bkStep2()"', i));
+  return !/<select id="bk-type"/.test(form)
+    && /<button type="button" class="adp-field" id="bk-type-btn" onclick="ashTypeOpen\(\)">/.test(form);
+})());
+ok('　　每一列帶課種色塊（與課卡的顏色語彙一致）',
+   /<span class="adp-sw" style="background:\$\{col\};"><\/span>/.test(src));
+ok('★ 日期改成上下捲動的清單，月曆整套退場（使用者：不要用月曆）',
+   /<div class="adp-list" id="adp-list">/.test(src)
+   && !/adp-grid/.test(src) && !/function ashDateMove/.test(src));
+ok('★ 有下限就從下限起算；沒有下限往前留 30 天（櫃檯偶爾要補登昨天）',
+   /const from = c\.min \? \(parseYmd\(c\.min\)\|\|TODAY\) : addDays\(TODAY,-30\);/.test(src));
+ok('　　開窗捲到目前選的那一天', /if\(on\) on\.scrollIntoView\(\{block:'center'\}\);/.test(src));
+ok('★ 日期顯示 2026/08/21，不帶星期（使用者定版）',
+   /return `\$\{d\.getFullYear\(\)\}\/\$\{String\(d\.getMonth\(\)\+1\)\.padStart\(2,'0'\)\}\/\$\{String\(d\.getDate\(\)\)\.padStart\(2,'0'\)\}`;/.test(src));
+ok('★ 連續預約：七顆星期膠囊一列，時間在下一列',
+   /<div class="rc-chips">/.test(src) && /<div class="rc-times" id="\$\{prefix\}-dowtimes">/.test(src)
+   && /\.rc-chip input:checked \+ span\{background:var\(--green\)/.test(css));
+ok('★ 勾了哪天、那天的時間才出現（沒勾的清空值）',
+   /if\(row\) row\.style\.display=on\?'':'none';/.test(src)
+   && /if\(tm && !on\)\{\s*\n\s*tm\.value='';/.test(src));
+ok('　　readRecur 一行都不用改（仍讀 .{prefix}-dow 與 .{prefix}-dowt[data-dow]）',
+   /class="\$\{prefix\}-dowt" data-dow="\$\{v\}"/.test(src)
+   && /所以那支一行都不用改 —— 只是換了排法/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

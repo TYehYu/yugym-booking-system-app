@@ -135,13 +135,16 @@ console.log('\n實跑：指定票券的採用判斷');
 
 /* 2026-08-01 使用者回報：「重複預約 右邊選完時間沒有確定的按鈕可以點」 */
 console.log('\n每天的時間欄改成下拉（原生時間滾輪沒有確定鈕）');
-ok('★ 改用 select 不是 input[type=time]',
-   /<select class="\$\{prefix\}-dowt" data-dow="\$\{v\}" disabled>\$\{recurTimeOpts\(\)\}<\/select>/.test(src)
-   && !/<input type="time" class="\$\{prefix\}-dowt"/.test(src));
-ok('★ 有時段選項函式，第一個是「同第一堂」', /function recurTimeOpts\(\)\{[\s\S]{0,120}<option value="">同第一堂<\/option>/.test(src));
-ok('★ 樣式也給 select（原本只掛在 input[type=time]）', /\.rc-dow input\[type=time\],\.rc-dow select\{/.test(src));
+/* 2026-08-21：逐日時間改用自家挑選器（ashTimeField 產生「按鈕＋隱藏 input」），
+   原本的 <select>／input[type=time] 都退場；沿革見 tests/cardstyletest.js。 */
+ok('★ 不再用原生 input[type=time] 或 select',
+   /ashTimeField\(`\$\{prefix\}-dowt-\$\{v\}`, '', '', `class="\$\{prefix\}-dowt" data-dow="\$\{v\}"`\)/.test(src)
+   && !/<input type="time" class="\$\{prefix\}-dowt"/.test(src)
+   && !/<select class="\$\{prefix\}-dowt"/.test(src));
 ok('　　停用狀態的樣式一併補上', /\.rc-dow input\[type=time\]:disabled,\.rc-dow select:disabled\{/.test(src));
-ok('　　原因寫在程式裡', /iOS 會叫出滾輪但沒有確定鈕，只能點空白處關掉/.test(src));
+/* 2026-08-21：那段 iOS 說明隨著 <select> 一起退場（現在是自家挑選器，
+   本來就有明確的「取消」與點格即選）。改查新的排法說明。 */
+ok('　　原因寫在程式裡', /勾了誰、誰的時間才出現在下面那一區/.test(src));
 {
   const g3=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
   const fn=new Function(g3('function recurTimeOpts(){','\n}\n')+'\nreturn recurTimeOpts;')();

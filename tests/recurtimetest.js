@@ -31,10 +31,14 @@ ok('　　超過上限的提示分兩種（票券上限／方案上限）',
 console.log('\n各天不同時間');
 /* 2026-08-01 使用者回報「選完時間沒有確定的按鈕」→ 時間欄由 input[type=time] 改為 select
    （iOS 的時間滾輪沒有確定鈕）。詳見 tests/recurcaptest.js。 */
-ok('★ 每個星期一列，右邊一個時間欄',
-   /<select class="\$\{prefix\}-dowt" data-dow="\$\{v\}" disabled>\$\{recurTimeOpts\(\)\}<\/select>/.test(src));
-ok('★ 沒勾的星期時間欄不可填', /function recurDowToggle\(prefix,dow\)\{/.test(src)
-   && /if\(tm\) tm\.disabled=!\(cb&&cb\.checked\);/.test(src));
+/* 2026-08-21 使用者指示：「週一～週日 改成一列 時間改在下一列」——
+   星期收成七顆膠囊，勾了哪天、那天的時間才出現在下面那一區。 */
+ok('★ 星期一列、時間在下一列（勾了才出現）',
+   /<div class="rc-chips">/.test(src)
+   && /ashTimeField\(`\$\{prefix\}-dowt-\$\{v\}`/.test(src));
+ok('★ 沒勾的星期不顯示時間欄，且值會清掉', /function recurDowToggle\(prefix,dow\)\{/.test(src)
+   && /if\(row\) row\.style\.display=on\?'':'none';/.test(src)
+   && /if\(tm && !on\)\{\s*\n\s*tm\.value='';/.test(src));
 ok('★ 打開連續預約時，起始日那天先帶入步驟 1 的時間',
    /if\(cb\.checked && !tm\.value && _bkWizard&&_bkWizard\.time\) tm\.value=String\(_bkWizard\.time\)\.slice\(0,5\);/.test(src));
 ok('★ readRecur 帶回 times（只收有勾又有填的）',
