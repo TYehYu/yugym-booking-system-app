@@ -237,5 +237,18 @@ ok('★ 日期欄的內部元件撐滿並置中（只給外層 text-align 不生
    /\.ash-eilabel input\[type=date\]::-webkit-datetime-edit\{width:100%;text-align:center;\}/.test(css)
    && /\.ash-eilabel input\[type=date\]::-webkit-datetime-edit-fields-wrapper\{display:flex;justify-content:center;width:100%;\}/.test(css));
 
+console.log('\n窄欄位的取捨（使用者：Mac 桌機 7 日檢視「課卡內容被壓縮」）');
+ok('★ 時間永遠不換行（「19:0／0」是最刺眼的一種壞法）',
+   /\.cal-ev\.cal-ev-std \.evc-time\{white-space:nowrap;\}/.test(css));
+ok('★ 標準卡終於有窄卡專屬字級（原本只有舊卡 .ev-time／.evd-\* 有）',
+   /\.cal-ev\.cal-ev-std\.ev-w-narrow \.evc-time\{font-size:11px;\}/.test(css)
+   && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-time\{font-size:10px;\}/.test(css)
+   && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-name\{font-size:11\.5px !important;/.test(css));
+ok('★ 越窄越少東西：窄卡先讓場地，極窄卡連教練也讓',
+   /\.cal-ev\.cal-ev-std\.ev-w-narrow \.evc-vsub\{display:none;\}/.test(css)
+   && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-vsub,\s*\n\s*\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-coach\{display:none;\}/.test(css));
+ok('　　原則寫在程式裡（寧可少一項，也不要每一項都殘缺）',
+   /寧可少一項，也不要每一項都殘缺/.test(css));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

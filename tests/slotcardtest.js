@@ -105,14 +105,17 @@ ok('　　openBindPending 本來就吃「待簽約＋沒綁會員」',
 
 /* 2026-08-20 使用者指示：「幫我把建立預約的步驟調整
    建立預約 設定課程 日期 時間 教練 會員(選填) 是否連續預約(選填)」 */
+/* 2026-08-21 二修（使用者附截圖）：「改成建立預約 第一列課程用下拉式選單
+   第二列日期 第三列時間 第四列教練＋會員」——六張方案卡改成下拉，日期與時間拆成兩列，
+   教練與會員並排（它們是一組決定：挑了教練，會員名單就跟著重排）。 */
 console.log('\n建立預約的欄位順序（步驟 1）');
 {
-  const i=src.indexOf('<div class="modal-title">新增預約 · 步驟 1 / 2</div>');
+  const i=src.indexOf('<div class="modal-title">建立預約</div>');
   const j=src.indexOf('onclick="bkStep2()"', i);
   ok('★ 抽得到步驟 1 的表單', i>0 && j>i);
   const form=src.slice(i,j);
   const at=s=>form.indexOf(s);
-  const 課程=at('<label>課程類型</label>'), 日期=at('<label>日期</label>'), 時間=at('<label>時間</label>'),
+  const 課程=at('<label>課程</label>'), 日期=at('<label>日期</label>'), 時間=at('<label>時間</label>'),
         教練=at('>授課教練<'), 會員=at('<label>會員<'), 連續=at('id="bk-recur-row"');
   ok('★ 六個欄位都在', [課程,日期,時間,教練,會員,連續].every(x=>x>0), {課程,日期,時間,教練,會員,連續});
   ok('★ 順序＝課程 → 日期 → 時間 → 教練 → 會員 → 連續預約',
@@ -123,6 +126,19 @@ console.log('\n建立預約的欄位順序（步驟 1）');
      && !/體驗課／待簽約卡位可不選/.test(srcNC));
   ok('★ 連續預約在步驟 1（不帶上限，票券的上限在步驟 2 才夾）',
      /<div class="form-row" id="bk-recur-row" style="margin-bottom:0;">\$\{recurBoxHtml\('bk'\)\}<\/div>/.test(form));
+  ok('★ 課程改成下拉（六張方案卡退場）',
+     /<select id="bk-type" onchange="pickBkType\(this\.value\)">/.test(form)
+     && !/<div id="bk-type-cards" class="bk-cards"><\/div>/.test(form));
+  ok('★ 日期與時間各自一列（原本並排在 form-2col）',
+     /<div class="form-row"><label>日期<\/label><input type="date" id="bk-date"/.test(form)
+     && /<div class="form-row"><label>時間<\/label><select id="bk-time"/.test(form));
+  ok('★ 教練與會員並排在同一個 form-2col', 教練>0 && 會員>教練
+     && /<div class="form-2col">[\s\S]{0,900}?id="bk-coach-row"[\s\S]{0,900}?id="bk-mem-pre"/.test(form));
+  ok('　　renderBkTypeCards 還被回上一步呼叫，但找不到容器就直接 return（不會爆）',
+     /const box=document\.getElementById\('bk-type-cards'\); if\(!box\)return;/.test(src));
+  ok('　　會員下拉本來就把該教練的會員排在最上面＋可搜尋（這次只是換位置）',
+     /optgroup label="\$\{label\}的會員（\$\{mine\.length\}）"/.test(src)
+     && /oninput="bkFilterMembers\(this\.value\)"/.test(form));
 }
 
 console.log('\n連續預約搬家之後不能無聲失效');

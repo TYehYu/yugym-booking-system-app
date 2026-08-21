@@ -121,8 +121,11 @@ ok('　　搜尋框自動聚焦（開窗即可打字）',
 
 /* 2026-08-01 使用者指示：「新增預約的授課教練 也改成有篩選功能的下拉選單」 */
 console.log('\n④ 授課教練也改成可搜尋的下拉');
+/* 2026-08-21：建立預約改版時提示字縮短（教練與會員並排一列，位置變窄）——
+   元件與行為沒變，仍是 .mem-pick-row ＋ bkFilterCoaches。 */
 ok('★ 教練欄改用同一個元件（.mem-pick-row → mpkUpgrade）',
-   /<input class="gt-search" id="bk-coach-q" placeholder="輸入教練姓名搜尋（共 \$\{window\._bkCoaches\.length\} 位）" oninput="bkFilterCoaches\(this\.value\)"/.test(src));
+   /<input class="gt-search" id="bk-coach-q" placeholder="搜尋教練（共 \$\{window\._bkCoaches\.length\} 位）" oninput="bkFilterCoaches\(this\.value\)"/.test(src)
+   && /<div class="mem-pick-row">[\s\S]{0,300}?id="bk-coach-q"/.test(src));
 ok('★ 選項改由 bkCoachOptsHTML 產生（原本的 coachOpts 靜態字串已移除）',
    /<select id="bk-coach" onchange="bkCoachChange\(\)">\$\{bkCoachOptsHTML\(''\)\}<\/select>/.test(src));
 ok('★ 可搜尋顯示名／本名／name_en／縮寫',

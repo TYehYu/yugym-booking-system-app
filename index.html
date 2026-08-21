@@ -4295,6 +4295,23 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   .tcard.tcard-std .co-ab{display:inline;}
   /* 場地（教室／跑步機）改放姓名下方那一列，與體驗／待簽約標籤同一種樣式 */
   .cal-ev.cal-ev-std .evc-vsub{color:var(--course-accent,#3D7039);opacity:.9;}
+  /* ══ 窄欄位的取捨（2026-08-21 使用者回報：Mac 桌機 7 日檢視「課卡內容被壓縮」）══
+     標準卡一直沒有窄卡專屬的尺寸規則，同時段三四堂並排時每張只剩 ~55px，
+     卻還是硬塞時間＋姓名＋場地＋教練四樣，結果是「19:0／0」換行、姓名被切成「陳玉·」。
+     原則：越窄越少東西，但留下來的要完整 —— 寧可少一項，也不要每一項都殘缺。
+     細節本來就看得到（滑鼠提示卡與點開的課卡），這裡只負責一眼掃描。 */
+  .cal-ev.cal-ev-std .evc-time{white-space:nowrap;}            /* 時間永遠不換行 */
+  .cal-ev.cal-ev-std.ev-w-narrow .evc-txt{padding:4px 4px 4px 9px !important;}
+  .cal-ev.cal-ev-std.ev-w-tiny   .evc-txt{padding:3px 3px 3px 8px !important;}
+  .cal-ev.cal-ev-std.ev-w-narrow .evc-time{font-size:11px;}
+  .cal-ev.cal-ev-std.ev-w-tiny   .evc-time{font-size:10px;}
+  .cal-ev.cal-ev-std.ev-w-narrow .evc-name{font-size:12px !important;}
+  .cal-ev.cal-ev-std.ev-w-tiny   .evc-name{font-size:11.5px !important;line-height:1.15 !important;}
+  /* 極窄：場地與教練讓位給姓名（原本 ev-w-tiny 的規格就寫著「只顯示時間＋會員」，
+     但那是舊卡的規則，標準卡從來沒跟上）。窄卡先讓場地，教練縮寫還留得住。 */
+  .cal-ev.cal-ev-std.ev-w-narrow .evc-vsub{display:none;}
+  .cal-ev.cal-ev-std.ev-w-tiny   .evc-vsub,
+  .cal-ev.cal-ev-std.ev-w-tiny   .evc-coach{display:none;}
   /* 標籤太長就換行，不要用省略號（2026-08-21 使用者回報「mango 的教練請假也變成…」）——
      卡片只有 84px 寬、扣掉內距剩 66px，「教練請假」四個中文字加膠囊內距在字體較寬的
      環境下就頂到上限，於是被切成「教練…」，看不出是請假還是別的。
@@ -8442,8 +8459,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.0157';
-const APP_VERSION_LABEL='v260821.0157';
+const APP_VERSION = '260821.0216';
+const APP_VERSION_LABEL='v260821.0216';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21281,25 +21298,37 @@ async function openBookingModal(){
      留在步驟 2 的話，想連續卡位還得先挑到一個有票的人才看得到那個開關。
      ⚠ 搬上來之後步驟 1 的 DOM 會被步驟 2 蓋掉，所以 _bkStep2 會把設定收進
      _bkWizard.rc，送出時讀那份（見 bkReadRecurBk）。 */
-  showModal(`<div class="modal-title">新增預約 · 步驟 1 / 2</div>
-    <div class="form-row"><label>課程類型</label>
-      <div id="bk-type-cards" class="bk-cards"></div>
-      <input type="hidden" id="bk-type" value="" onchange="onBkTypeChange()"></div>
+  /* 2026-08-21 使用者指示（附截圖）：「改成建立預約 第一列課程用下拉式選單
+     第二列日期 第三列時間 第四列教練＋會員」——
+     六張方案卡佔掉大半個畫面，選完就用不到了；改成下拉之後，
+     日期／時間／教練／會員全部進得了第一屏，不用捲。
+     教練與會員並排是因為它們是一組決定（挑了教練，會員名單就跟著重排）。
+     標題也從「新增預約・步驟 1 / 2」改成「建立預約」。 */
+  showModal(`<div class="modal-title">建立預約</div>
+    <div class="form-row"><label>課程</label>
+      ${/* 卡片版退場，但 renderBkTypeCards 仍被 openBookingModalBack 呼叫 ——
+           那支開頭就找不到 #bk-type-cards、直接 return，不會爆。 */''}
+      <select id="bk-type" onchange="pickBkType(this.value)">
+        <option value="">— 選擇課程 —</option>
+        ${activeTypes.map(t=>`<option value="${t.id}">${t.name}${t.category&&t.category!==t.name?`（${t.category}）`:''}</option>`).join('')}
+      </select></div>
+    <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}" onchange="bkRefreshPlanFilter()"></div>
+    <div class="form-row"><label>時間</label><select id="bk-time" onchange="bkRefreshPlanFilter()">${timeOpts}</select></div>
     <div class="form-2col">
-      <div class="form-row"><label>日期</label><input type="date" id="bk-date" value="${pf.date||''}" onchange="bkRefreshPlanFilter()"></div>
-      <div class="form-row"><label>時間</label><select id="bk-time" onchange="bkRefreshPlanFilter()">${timeOpts}</select></div>
-    </div>
-    ${isCoach
-      ? `<input type="hidden" id="bk-coach" value="${SESSION.id}">`
-      : `<div class="form-row" id="bk-coach-row"><label>授課教練<span id="bk-coach-opt" style="font-weight:400;color:var(--t3);display:none;">（自主訓練可不指定）</span></label>
-          <div class="mem-pick-row">
-            <input class="gt-search" id="bk-coach-q" placeholder="輸入教練姓名搜尋（共 ${window._bkCoaches.length} 位）" oninput="bkFilterCoaches(this.value)" autocomplete="off">
-            <select id="bk-coach" onchange="bkCoachChange()">${bkCoachOptsHTML('')}</select>
-          </div></div>`}
-    <div class="form-row"><label>會員<span style="font-weight:400;color:var(--t3);">（選填）</span></label>
-      <div class="mem-pick-row">
-        <input class="gt-search" id="bk-mem-q" placeholder="輸入姓名或手機搜尋（共 ${window._bkAllMembers.length} 位）" oninput="bkFilterMembers(this.value)" autocomplete="off">
-        <select id="bk-mem-pre">${bkMemberOptsHTML('')}</select>
+      ${isCoach
+        ? `<input type="hidden" id="bk-coach" value="${SESSION.id}">`
+        : `<div class="form-row" id="bk-coach-row"><label>授課教練<span id="bk-coach-opt" style="font-weight:400;color:var(--t3);display:none;">（可不指定）</span></label>
+            <div class="mem-pick-row">
+              <input class="gt-search" id="bk-coach-q" placeholder="搜尋教練（共 ${window._bkCoaches.length} 位）" oninput="bkFilterCoaches(this.value)" autocomplete="off">
+              <select id="bk-coach" onchange="bkCoachChange()">${bkCoachOptsHTML('')}</select>
+            </div></div>`}
+      ${/* 會員下拉本來就把「該教練的會員」分組排在最上面（bkMemberOptsHTML 的 optgroup），
+           搜尋框也早就有（bkFilterMembers）—— 使用者要的這兩件事都已經在了，這裡只是換位置。 */''}
+      <div class="form-row"><label>會員<span style="font-weight:400;color:var(--t3);">（選填）</span></label>
+        <div class="mem-pick-row">
+          <input class="gt-search" id="bk-mem-q" placeholder="搜尋姓名或手機（共 ${window._bkAllMembers.length} 位）" oninput="bkFilterMembers(this.value)" autocomplete="off">
+          <select id="bk-mem-pre">${bkMemberOptsHTML('')}</select>
+        </div>
       </div>
     </div>
     ${/* 團課的連續預約在步驟 2（prefix grp，跟名單一起設定），這裡不重複給一個開關 */''}
