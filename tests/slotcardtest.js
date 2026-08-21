@@ -96,10 +96,12 @@ ok('　　為什麼用既有形狀而不加欄位，寫在程式裡',
    && /正式庫查過這個組合原本是 0 筆/.test(src));
 
 console.log('\n把人補上去：綁定待簽約回到簡易課卡');
+/* 2026-08-21：改成三段式（安排會員 → 儲值 → 轉正），詳見 tests/cardstyletest.js */
 ok('★ 沒綁會員的卡位給「安排會員／綁定會員」，不是「轉正」',
-   /if\(staff && !closed && b\.status==='booked' && !b\.member_id\)\s*\n\s*btns \+= evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);openBindPending\('\$\{id\}'\)`,'plus',bkIsOpenHold\(b\)\?'安排會員':'綁定會員'\);/.test(src));
-ok('★ 已綁會員的才給轉正（原本的行為不變）',
-   /else if\(staff && !closed && b\.status==='booked'\) btns \+= evoBtn\('evo-r2','evo-primary',`collapseBkCard\(\);openConvertPending\('\$\{id\}'\)`,'check','轉正'\);/.test(src));
+   /if\(!b\.member_id\)\{\s*\n\s*btns \+= evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);openBindPending\('\$\{id\}'\)`,'plus',bkIsOpenHold\(b\)\?'安排會員':'綁定會員'\);/.test(src));
+ok('★ 已綁會員且有票才給轉正（沒票先給儲值）',
+   /evoBtn\('evo-r2','evo-primary',`collapseBkCard\(\);openConvertPending\('\$\{id\}'\)`,'check','轉正'\)/.test(src)
+   && /evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ppTopUp\('\$\{b\.member_id\}'\)`,'plus','儲值'\)/.test(src));
 ok('　　openBindPending 本來就吃「待簽約＋沒綁會員」',
    /if\(!b\|\|!b\.pending_contract\|\|b\.member_id\)\{ showToast\('這筆不是未綁定的待簽約卡位'\); return; \}/.test(src));
 

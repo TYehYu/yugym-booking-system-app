@@ -8476,8 +8476,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.0925';
-const APP_VERSION_LABEL='v260821.0925';
+const APP_VERSION = '260821.0934';
+const APP_VERSION_LABEL='v260821.0934';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23419,15 +23419,26 @@ async function expandBkCard(el, id){
      「轉正」開轉正簽約流程（分期保留按下去＝手動補綁，與開通下一期同一條路）。 */
   if(b.pending_contract && !b.ticket_id){
     if(canCancel && own) btns += evoBtn('evo-r1','evo-danger',`collapseBkCard();confirmCancelBooking('${id}')`,'x','取消');
-    /* 2026-08-21 使用者回報「這種待簽約的又出現明細了」——詳細預約視窗已經退役，
-       這條路是最後一個還在開它的地方。有綁會員就直接進會員資料（那才是櫃檯要看的），
-       沒綁會員的卡位本來就沒有明細可看，那顆鈕整個拿掉。 */
-    if(b.member_id) btns += evoBtn('evo-b1','',`collapseBkCard();openMemberDetail('${b.member_id}')`,'doc','會員');
-    /* 2026-08-20：沒綁會員的卡位（含新的空堂）要先把人排進來才談得上轉正——
-       openBindPending 本來只在詳細預約視窗裡，管理員手機端撤掉明細鈕之後就沒有入口了。 */
-    if(staff && !closed && b.status==='booked' && !b.member_id)
-      btns += evoBtn('evo-r2','evo-gold',`collapseBkCard();openBindPending('${id}')`,'plus',bkIsOpenHold(b)?'安排會員':'綁定會員');
-    else if(staff && !closed && b.status==='booked') btns += evoBtn('evo-r2','evo-primary',`collapseBkCard();openConvertPending('${id}')`,'check','轉正');   /* 請假/異常狀態不給轉正（2026-08-14） */
+    /* 「會員」鈕拿掉（2026-08-21 使用者指示：「這邊不用會員按鈕，點會員卡就會進入會員資料了」）
+       —— 會員卡本身已經掛了 openMemberDetail，同一件事不需要兩個入口。 */
+    /* 待簽約卡的下一步：儲值（分期）→ 轉正 → 簽到（2026-08-21 使用者想法）——
+       櫃檯面對這張卡時真正想知道的是「現在該做什麼」，而不是一顆固定寫著「轉正」
+       但按下去說沒票的按鈕。三段各自的判斷：
+         ・還沒排人      → 安排會員（沒有人就談不上票）
+         ・排了人但沒有票 → 儲值（開銷售視窗、會員已預選）
+         ・有票還沒綁    → 轉正（把票綁上，這一步做完卡就不再是待簽約）
+       綁完之後這張卡就走一般路徑，簽到鈕本來就在會員卡上，所以第三段不必在這裡畫。 */
+    if(staff && !closed && b.status==='booked'){
+      if(!b.member_id){
+        btns += evoBtn('evo-r2','evo-gold',`collapseBkCard();openBindPending('${id}')`,'plus',bkIsOpenHold(b)?'安排會員':'綁定會員');
+      }else{
+        let _hasTk=false;
+        try{ _hasTk=((await listUsableTickets(b.member_id, b.ticket_type_id, b.date, b.start_time))||[]).length>0; }catch(_){}
+        btns += _hasTk
+          ? evoBtn('evo-r2','evo-primary',`collapseBkCard();openConvertPending('${id}')`,'check','轉正')   /* 請假/異常狀態不給轉正（2026-08-14） */
+          : evoBtn('evo-r2','evo-gold',`collapseBkCard();ppTopUp('${b.member_id}')`,'plus','儲值');
+      }
+    }
     if(el){ el.style.marginLeft=''; el.style.marginTop=''; el.classList.add('cal-ev-active'); }
     /* 待簽約／待分期保留：取消還在下方那一列，會員卡不重複給圓鈕（2026-08-20）。
        2026-08-21：acts 補齊，讓標題卡的「調整課程」也給得出刪除課卡

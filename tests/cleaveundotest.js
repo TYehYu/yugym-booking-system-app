@@ -65,9 +65,12 @@ ok('★★ 三處課卡（行事曆 ev 卡／標準卡／首頁今日課表）�
    && /const coTag=bkIsCoachLeave\(b\)/.test(src));
 
 console.log('\n④ 已請假的卡位不能轉正（2026-08-14 吳宜玲 8/21 案例：轉正把請假堂綁票扣課、吃掉分期額度）');
+/* 2026-08-21：待簽約卡的按鈕改成三段（安排會員→儲值→轉正），
+   b.status==='booked' 的守衛移到外層 if 包住整組，轉正本身多一個「有票才給」。 */
 ok('★★ 轉正入口擋非 booked 狀態、卡上轉正鈕也不顯示',
    /if\(b\.status!=='booked'\)\{ _clr\(\); showToast\('這筆卡位已'/.test(src)
-   && /if\(staff && !closed && b\.status==='booked'\) btns \+= evoBtn\('evo-r2','evo-primary',`collapseBkCard\(\);openConvertPending/.test(src));
+   && /if\(staff && !closed && b\.status==='booked'\)\{/.test(src)
+   && /evoBtn\('evo-r2','evo-primary',`collapseBkCard\(\);openConvertPending/.test(src));
 
 console.log('\n⑤ 沒綁票券的堂不能教練請假（2026-08-14 使用者定案）');
 ok('★★ canCoachLeave 要求有票（團課例外——票在帳本不在 ticket_id）',

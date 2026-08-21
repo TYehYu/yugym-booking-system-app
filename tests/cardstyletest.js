@@ -279,9 +279,10 @@ console.log('\n待簽約卡：明細退場、刪除課卡補上（使用者回�
 {
   const i=src.indexOf("if(b.pending_contract && !b.ticket_id){");
   const seg=src.slice(i, src.indexOf('window._expandedBkEl = el;', i));
-  ok('★ 不再開已退役的預約明細；有綁會員就直接進會員資料',
-     /if\(b\.member_id\) btns \+= evoBtn\('evo-b1','',`collapseBkCard\(\);openMemberDetail\('\$\{b\.member_id\}'\)`,'doc','會員'\);/.test(seg)
-     && !/openBookingDetail/.test(seg));
+  /* 2026-08-21 二修：連「會員」鈕也拿掉了（點會員卡就會進會員資料）——
+     這一段現在完全不開任何舊視窗。 */
+  ok('★ 不再開已退役的預約明細，也不重複給會員入口',
+     !/openBookingDetail/.test(seg) && !/'doc','會員'/.test(seg));
 }
 ok('★ acts 補齊，標題卡的調整課程給得出刪除課卡',
    /await bkCardPop\(el, b, btns, \{pending:true, staff, own, canCancel, closed, isGroup, editable:false\}\);/.test(src));
@@ -344,6 +345,22 @@ ok('★ 確認視窗講明已退的堂數與已延長的效期不會收回',
    && /使用期限也各延長 \$\{_d\} 天/.test(src));
 ok('　　為什麼要講，寫在程式裡（否則櫃檯會以為按了就整組回沖）',
    /否則櫃檯會以為按了就整組回沖/.test(src));
+
+console.log('\n待簽約卡的下一步：安排會員 → 儲值 → 轉正 →（簽到）');
+ok('★ 「會員」鈕拿掉（點會員卡本來就會進會員資料）',
+   !/evoBtn\('evo-b1','',`collapseBkCard\(\);openMemberDetail\('\$\{b\.member_id\}'\)`,'doc','會員'\)/.test(src)
+   && /onclick="collapseBkCard\(\);openMemberDetail\('\$\{r\.mid\}'\)"/.test(src));
+ok('★ 沒排人 → 安排會員',
+   /if\(!b\.member_id\)\{\s*\n\s*btns \+= evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);openBindPending/.test(src));
+ok('★ 有人沒票 → 儲值（開銷售視窗，會員已預選）',
+   /: evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ppTopUp\('\$\{b\.member_id\}'\)`,'plus','儲值'\);/.test(src)
+   && /function ppTopUp\(mid\)\{\s*\n\s*window\._salesPreMember=mid;/.test(src));
+ok('★ 有票沒綁 → 轉正',
+   /_hasTk\s*\n?\s*\? evoBtn\('evo-r2','evo-primary',`collapseBkCard\(\);openConvertPending/.test(src));
+ok('★ 有無票券用既有的 listUsableTickets 判（與步驟 2 挑票同一支）',
+   /_hasTk=\(\(await listUsableTickets\(b\.member_id, b\.ticket_type_id, b\.date, b\.start_time\)\)\|\|\[\]\)\.length>0;/.test(src));
+ok('　　綁完就走一般卡，簽到本來就在會員卡上，第三段不必重畫',
+   /綁完之後這張卡就走一般路徑，簽到鈕本來就在會員卡上，所以第三段不必在這裡畫/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
