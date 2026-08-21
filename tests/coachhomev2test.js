@@ -41,9 +41,23 @@ ok('★ 課卡沿用 .admh-card（不是自己另做一種卡）',
 ok('★ 教練篩選列拿掉（只有自己的課）',
    /教練篩選列拿掉（使用者：只要顯示該教練自己的課卡就好），只留日期列/.test(src)
    && !/admh-chip/.test(V2CODE));
-ok('　　日期列沿用教練端既有的狀態，不另立一套',
-   /onclick="ctWeekStep\(-1\)"/.test(src) && /onclick="ctPickDay\('\$\{ds\}'\)"/.test(src)
-   && /onclick="ctBackToday\(\)"/.test(src));
+ok('★ 週一起算，而且用共用的 heroWeekMonday（與管理員手機首頁同一支）',
+   /const _mon=heroWeekMonday\(date\);/.test(src)
+   && /function heroWeekMonday\(ds\)\{          \/\/ 取該日期所屬週的週一（週一為一週之始）/.test(src));
+ok('　　⚠ 不要再多一個 _coachWeekOffset（那是舊版教練首頁的狀態，兩份會打架）',
+   /onclick="coachWeekShift\(-1\)"/.test(src) && /onclick="coachWeekShift\(1\)"/.test(src)
+   && !/coachWeekOffset/.test(V2CODE));
+ok('　　選日與回今天沿用教練端既有的函式',
+   /onclick="ctPickDay\('\$\{ds\}'\)"/.test(src) && /onclick="ctBackToday\(\)"/.test(src));
+{
+  /* 週一起算的算法（與 heroWeekMonday 同一條式子） */
+  const mondayOf=d=>{ const x=new Date(d); const dow=x.getDay(); x.setDate(x.getDate()-(dow===0?6:dow-1)); return x; };
+  const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
+  eq('★ 8/21（五）→ 該週從 8/17（一）開始', fmt(mondayOf(new Date(2026,7,21))), '8/17');
+  eq('★ 8/23（日）仍屬同一週，不會跳到下一週', fmt(mondayOf(new Date(2026,7,23))), '8/17');
+  eq('　　8/17（一）本身就是週一', fmt(mondayOf(new Date(2026,7,17))), '8/17');
+  eq('　　跨月：8/31（一）自己就是週一', fmt(mondayOf(new Date(2026,7,31))), '8/31');
+}
 ok('　　日期列上的堂數只算自己的',
    /if\(bkCoachId\(b\)!==SESSION\.id\) return; _cnt\[b\.date\]=\(_cnt\[b\.date\]\|\|0\)\+1;/.test(src));
 ok('　　貼頂偵測與管理員首頁同一套（sentinel）',

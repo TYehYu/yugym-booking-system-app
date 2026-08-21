@@ -8603,8 +8603,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1710';
-const APP_VERSION_LABEL='v260821.1710';
+const APP_VERSION = '260821.1713';
+const APP_VERSION_LABEL='v260821.1713';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40473,16 +40473,19 @@ async function coachHomeV2(){
   /* ── ② 日期列（沿用教練端既有的 _coachWeekOffset／ctPickDay，不另立一套狀態）── */
   const _cnt={}; (bookings||[]).forEach(b=>{ if(!b||b.status==='cancelled'||b.sibling_of) return;
     if(bkCoachId(b)!==SESSION.id) return; _cnt[b.date]=(_cnt[b.date]||0)+1; });
-  const HERO_WD2=['日','一','二','三','四','五','六'];
+  /* ⚠ 週一起算，而且要用共用的 heroWeekMonday（2026-08-21 使用者：「是週一開始算
+     管理員手機首頁也是週一開始啊」）—— 第一版我自己用 getDay() 往回推成週日起算，
+     跟參照的管理員手機首頁不一致。這裡跟它走同一支。
+     翻頁也改用既有的 coachWeekShift（把檢視日 ±7 天），不要再多一個 _coachWeekOffset ——
+     兩份狀態會互相打架（那是舊版教練首頁在用的）。 */
   let _wkBtns='';
   {
-    const base=parseYmd(date)||new Date(TODAY);
-    const sun=new Date(base); sun.setDate(base.getDate()-base.getDay()+((typeof _coachWeekOffset!=='undefined'?_coachWeekOffset:0)*7));
+    const _mon=heroWeekMonday(date);
     for(let i=0;i<7;i++){
-      const d=new Date(sun); d.setDate(sun.getDate()+i);
+      const d=new Date(_mon); d.setDate(_mon.getDate()+i);
       const ds=ymd(d), n=_cnt[ds]||0;
       _wkBtns+=`<button class="msb-date${ds===date&&ds!==today?' on':''}${ds===today?' hero-today':''}" onclick="ctPickDay('${ds}')">
-        <span class="cag-dn">${n?n+' 堂':'－'}</span><b>${d.getMonth()+1}/${d.getDate()}</b><span>${ds===today?'今天':'週'+HERO_WD2[d.getDay()]}</span></button>`;
+        <span class="cag-dn">${n?n+' 堂':'－'}</span><b>${d.getMonth()+1}/${d.getDate()}</b><span>${ds===today?'今天':'週'+HERO_WD[d.getDay()]}</span></button>`;
     }
   }
 
@@ -40560,9 +40563,9 @@ async function coachHomeV2(){
     ${/* 教練篩選列拿掉（使用者：只要顯示該教練自己的課卡就好），只留日期列 */''}
     <div class="admh-sticky">
       <div class="admh-week">
-        <button class="admh-wknav" onclick="ctWeekStep(-1)">‹</button>
+        <button class="admh-wknav" onclick="coachWeekShift(-1)">‹</button>
         <div class="admh-wkdays">${_wkBtns}</div>
-        <button class="admh-wknav" onclick="ctWeekStep(1)">›</button>
+        <button class="admh-wknav" onclick="coachWeekShift(1)">›</button>
       </div>
     </div>
     <div class="admh-cards">${_cards}</div>
