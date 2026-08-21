@@ -57,8 +57,15 @@ ok('★ 明細頁 ownByCoach 含店長（不再唯讀）',
    /const ownByCoach = SESSION\.role!=='coach' \|\| !!SESSION\.is_manager \|\| bkIsCoach\(b,SESSION\.id\);/.test(src));
 ok('★ 簽到權限含店長',
    /const staffCanCheckin = SESSION\.role==='admin' \|\| SESSION\.role==='front_desk' \|\| !!SESSION\.is_manager/.test(src));
-ok('★ 店長桌機「教學」頁不再以 me 鎖卡（與管理員同權；一般教練照舊）',
-   /\.\.\.\(SESSION\.is_manager\?\{\}:\{me:myId,maskOthers:true\}\)/.test(src));
+/* 2026-08-21 使用者定案：「所有教練都可以看到簡易課卡 但是只有管理員能夠全課卡互動
+   非管理員的教練只能互動自己的課卡」—— me＋maskOthers 那一組（別人的課匿名遮蔽）整個退場，
+   改成「都看得到、只有自己的能動」（_coachReadonly 在開卡時現算）。
+   店長仍然同權，只是判斷從「渲染時鎖卡」移到「開卡時算權限」。 */
+ok('★ 教練桌機行事曆不再匿名遮蔽別人的課',
+   !/\.\.\.\(SESSION\.is_manager\?\{\}:\{me:myId,maskOthers:true\}\)/.test(src)
+   && /\+\(await renderCalendar\(\{onSlot:'quickBookAt',editable:true,stepping:_stepping\}\)\);/.test(src));
+ok('★ 店長仍不受限（判斷改在開卡時：role==coach 且非店長才鎖）',
+   /if\(SESSION && SESSION\.role==='coach' && !SESSION\.is_manager\)\{/.test(src));
 ok('　　定案原話寫在程式裡',
    /店長帳號原本是教練帳號，教練本來就不該動別人的課卡；\n\s*但升為店長後就要有調整全部課卡的能力/.test(src));
 

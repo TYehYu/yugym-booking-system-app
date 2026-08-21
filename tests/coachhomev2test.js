@@ -205,8 +205,10 @@ ok('★ 直接走管理員手機行事曆那條路（表頭＋一日 agenda／�
    && /await renderCoachAgenda\(\);/.test(src));
 ok('★ 圖層全開、範圍全店（教練要看得到別人的佔用，不然排課會撞到）',
    /window\._coachScope='all';              \/\/ 看得到全店（別人的課只能看）/.test(src));
+/* 2026-08-21 後續定案：這條不再只在預覽版生效，改成「所有非店長教練」通用
+   （見 tests/staffpermtest.js）。 */
 ok('★ 別人的課純檢視：開卡前依「這堂是不是我帶的」現算 _coachReadonly',
-   /if\(window\._chvCal\)\{\s*\n\s*try\{ window\._coachReadonly = !bkIsCoach\(b, SESSION\.id\); \}catch\(_\)\{ window\._coachReadonly=true; \}\s*\n\s*\}/.test(src));
+   /if\(SESSION && SESSION\.role==='coach' && !SESSION\.is_manager\)\{\s*\n\s*try\{ window\._coachReadonly = !bkIsCoach\(b, SESSION\.id\); \}/.test(src));
 ok('　　兩個課卡入口都要設（admh 卡走 expandBkCard、agenda 走 openCourseCard）',
    (src.match(/window\._coachReadonly = !bkIsCoach\(b, SESSION\.id\)/g)||[]).length===2);
 ok('　　代課的課算自己的（bkIsCoach 含代課）', /return bkIsCoach\(b,myId\); \/\/ 月曆\/週量只看我的課/.test(src));

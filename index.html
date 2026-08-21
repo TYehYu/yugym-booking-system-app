@@ -8684,8 +8684,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1804';
-const APP_VERSION_LABEL='v260821.1804';
+const APP_VERSION = '260821.1810';
+const APP_VERSION_LABEL='v260821.1810';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9920,12 +9920,12 @@ async function doLoginStaff(){
   if(c.status!=='active'){err.textContent='帳號尚未啟用，請聯繫管理員';err.style.display='block';return;}
   // 首次登入：須改密碼+完善資料
   if(c.must_setup){
-    SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager};
+    SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager,can_teach:(c.can_teach!==false)};
     showStaffSetup(c);
     return;
   }
   // 員工實際角色以資料庫為準（admin / coach / front_desk）
-  SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager};
+  SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager,can_teach:(c.can_teach!==false)};
   enterApp();
 }
 // 首次登入強制設定：改密碼 + 完善資料
@@ -9979,7 +9979,7 @@ async function submitStaffSetup(id){
   catch(e){ err.textContent='資料儲存失敗：'+(e.message||e);err.style.display='block';return; }
   Object.assign(c,upd);
   // 進入系統
-  SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager};
+  SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager,can_teach:(c.can_teach!==false)};
   const host=document.getElementById('invite-screen'); if(host) host.remove();
   enterApp();
 }
@@ -11193,6 +11193,16 @@ const COACH_BOTTOM_NAV=[
      新位置待使用者指定；refreshPunchFab／punchFabTap 與掃描頁程式保留）。 */
   {key:'coach_calendar',label:'行事曆'},
 ];
+/* 員工手機端的導覽權限（2026-08-21 使用者指示：「有[開課]才可以看到行事曆
+   不然一律只能看到首頁」）——「開課」＝員工設定裡的可開課開關（employees.can_teach，
+   預設開；isTeachable 讀的就是它）。不能開課的員工沒有自己的課表，
+   行事曆對他們只是一頁別人的課。
+   ⚠ 讀 SESSION.can_teach 而不是回資料庫問 —— 導覽列每次換頁都會重畫。
+   （「報表」本來就只在 ADMIN_BOTTOM_NAV，也就是 role='admin' 才有，不必另外擋。） */
+function coachBottomNavItems(){
+  const canTeach = !SESSION || SESSION.can_teach!==false;
+  return canTeach ? COACH_BOTTOM_NAV : COACH_BOTTOM_NAV.filter(n=>n.key!=='coach_calendar');
+}
 // ── 會員端：底部固定導覽列（我的預約｜簽到｜我的票券）──
 const MEMBER_BOTTOM_NAV=[
   {key:'mem_bookings', label:'首頁'},
@@ -11253,7 +11263,7 @@ async function refreshMoreNotifDot(){
 function buildBottomNav(){
   const bn=document.getElementById('bottom-nav'); if(!bn) return;
   let navItems=null;
-  if(SESSION && SESSION.role==='coach') navItems=COACH_BOTTOM_NAV;
+  if(SESSION && SESSION.role==='coach') navItems=coachBottomNavItems();   /* 沒有開課權限就只剩首頁（2026-08-21） */
   else if(SESSION && SESSION.role==='admin') navItems=ADMIN_BOTTOM_NAV;
   else if(SESSION && SESSION.role==='member') navItems=MEMBER_BOTTOM_NAV;
   if(!navItems){ bn.style.display='none'; bn.innerHTML=''; return; }
@@ -11511,7 +11521,7 @@ function bootYugym(){
       let c=(await sb.from('employees').select('*').eq('auth_id',uid).maybeSingle()).data;
       /* 重新整理／重開 App：先把上一輪的快取載回來（2026-08-04 第三批第二段）——
          這是使用者說的「開首頁會 lag」的那一下。載回來的快取一律先校驗簽章才會被採用。 */
-      if(c){ SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager};
+      if(c){ SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager,can_teach:(c.can_teach!==false)};
         try{ await cacheHydrate(uid); }catch(_){}
         enterApp(); return; }
       let mm=(await sb.from('members').select('*').eq('auth_id',uid).maybeSingle()).data;
@@ -23708,12 +23718,14 @@ async function expandBkCard(el, id){
   collapseBkCard();
   const b = await dbGet('bookings', id);
   if(!b){ openBookingDetail(id); return; }
-  /* 教練預覽版行事曆（2026-08-21 使用者指示：「教練只能調整自己的課卡
-     其他課卡只能看簡易課卡 不能互動」）——
+  /* 課卡互動權限（2026-08-21 使用者定案：「所有教練都可以看到簡易課卡 但是只有管理員
+     能夠全課卡互動 非管理員的教練只能互動自己的課卡」）——
      _coachReadonly 是既有的「純檢視」開關（明細與簡易卡的 editable／簽到／改期都吃它），
-     這裡在開卡前依「這堂是不是我帶的」現算一次。兩個入口都要設：
-     admh 課卡走 expandBkCard、agenda 走 openCourseCard。 */
-  if(window._chvCal){
+     開卡前依「這堂是不是我帶的」現算一次。兩個入口都要設：
+     admh 課卡走 expandBkCard、agenda 走 openCourseCard。
+     ⚠ 店長（is_manager）不受限 —— 0803 已定案「升店長後要能調整全部課卡」，那條沒有被推翻。
+     ⚠ 代課的課算自己的（bkIsCoach 含 substitute_coach_id）。 */
+  if(SESSION && SESSION.role==='coach' && !SESSION.is_manager){
     try{ window._coachReadonly = !bkIsCoach(b, SESSION.id); }catch(_){ window._coachReadonly=true; }
   }
   /* 2026-07-31 使用者指示：別人的課「互動開啟、但不要圓形按鈕，只能看明細」——
@@ -24960,12 +24972,14 @@ async function bkInlineEditSave(id){
 async function openCourseCard(id, el){
   const b=await dbGet('bookings',id);
   if(!b){showToast('找不到課程');return;}
-  /* 教練預覽版行事曆（2026-08-21 使用者指示：「教練只能調整自己的課卡
-     其他課卡只能看簡易課卡 不能互動」）——
+  /* 課卡互動權限（2026-08-21 使用者定案：「所有教練都可以看到簡易課卡 但是只有管理員
+     能夠全課卡互動 非管理員的教練只能互動自己的課卡」）——
      _coachReadonly 是既有的「純檢視」開關（明細與簡易卡的 editable／簽到／改期都吃它），
-     這裡在開卡前依「這堂是不是我帶的」現算一次。兩個入口都要設：
-     admh 課卡走 expandBkCard、agenda 走 openCourseCard。 */
-  if(window._chvCal){
+     開卡前依「這堂是不是我帶的」現算一次。兩個入口都要設：
+     admh 課卡走 expandBkCard、agenda 走 openCourseCard。
+     ⚠ 店長（is_manager）不受限 —— 0803 已定案「升店長後要能調整全部課卡」，那條沒有被推翻。
+     ⚠ 代課的課算自己的（bkIsCoach 含 substitute_coach_id）。 */
+  if(SESSION && SESSION.role==='coach' && !SESSION.is_manager){
     try{ window._coachReadonly = !bkIsCoach(b, SESSION.id); }catch(_){ window._coachReadonly=true; }
   }
   // 別人的課 → 維持精簡時段資訊
@@ -41927,10 +41941,13 @@ PAGES.coach_calendar=async function(){
     /* 店長（2026-08-03 使用者定案）：帳號雖是教練，升店長後要能調整全部課卡 ——
        不帶 me/maskOthers，整張行事曆與管理員同權（拖曳、點編輯都開）。
        一般教練照舊：me＝只能動自己的課，別人的課匿名佔位。 */
+    /* 2026-08-21 使用者定案：「所有教練都可以看到簡易課卡」——
+       原本一般教練是 me＋maskOthers（別人的課匿名成「已預約」、點不開），
+       現在改成整張課表都看得到；能不能動由開卡時的 _coachReadonly 決定
+       （見 expandBkCard／openCourseCard 開頭）。店長本來就同權，維持不變。 */
     C.innerHTML=head('SCHEDULE','預約','週時間軸 · 點空格排課 · 拖曳改期 · 點課卡看明細')
       +`<div id="coach-punch"></div>`
-      +(await renderCalendar({onSlot:'quickBookAt',editable:true,stepping:_stepping,
-          ...(SESSION.is_manager?{}:{me:myId,maskOthers:true})}));
+      +(await renderCalendar({onSlot:'quickBookAt',editable:true,stepping:_stepping}));
     renderPunchPanel();
     initCalDrag();
     initCalSwipe(document.querySelector('.cal-body'));
@@ -41939,8 +41956,10 @@ PAGES.coach_calendar=async function(){
 
   // ── 手機版：月曆選週 ＋ 週日期導覽 ＋ 單日直向時間軸 ──
   window._coachReadonly=false;
-  window._calMineOnly=true;
-  window._coachScope='mine';
+  window._calMineOnly=true;              // 自己按「＋」排課時預設帶自己
+  /* 2026-08-21：手機端也改成看得到全店（「所有教練都可以看到簡易課卡」）；
+     能不能動一樣由開卡時的 _coachReadonly 決定。 */
+  window._coachScope='all';
   if(!window._cagSelDate) window._cagSelDate=ymd(TODAY);
   C.innerHTML=`<div id="wtl-page"></div>`;
   await renderCoachAgenda();
