@@ -122,7 +122,9 @@ console.log('\n面板底部的按鈕不能被裁掉');
 /* 2026-08-21 二修（使用者：「下面新增還是會被遮住切割」）——
    加內距治不了根本（要捲到底才看得到，而人不會知道要捲）。
    改成面板自己不捲：標題卡與按鈕列釘住，中間名單自己捲。 */
-ok('★ 面板自己不捲，標題卡與按鈕列釘住', /max-height:88vh;overflow:hidden;/.test(css)
+/* 2026-08-21 二修（使用者：「下面應該要切齊視窗底部」）：88vh→96vh。
+   實測 415×740：1 張卡 252px 置中、3 張 504px 置中、5 張以上撐到 710px（上下各 15px）並自己捲。 */
+ok('★ 面板自己不捲，標題卡與按鈕列釘住', /max-height:96vh;overflow:hidden;/.test(css)
    && /#bk-card-pop\.admh-pop \.mtp-card\.admh-sheet\{flex:none;/.test(css)
    && /flex-wrap:nowrap;gap:12px;flex:none;\}/.test(css));
 ok('★ 名單可捲但不畫捲軸（2026-08-21 使用者指示）',
