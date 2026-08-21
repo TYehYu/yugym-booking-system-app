@@ -680,5 +680,19 @@ ok('　　滑過去仍然恢復原狀（不是把資訊藏起來）',
 ok('　　未完成的過去課卡仍不淡化（0801 定案：那是待辦，不能一起壓暗）',
    /\.cal-ev\.cal-ev-todo,\s*\n\.cal-daycol\.col-past \.cal-ev\.cal-ev-todo\{opacity:1;filter:none;\}/.test(src));
 
+console.log('\n管理員手機行事曆的課卡補上簽章（2026-08-21 使用者指示）');
+/* 0820 曾以「填滿課程色就是已簽到」為由把簽章拿掉，只留請假章；
+   但填色同時也用在別的狀態上，光看顏色分不出「這堂到底簽了沒」。 */
+ok('★ 三種章補齊（簽到／未到／請假）',
+   /:\(b\.no_show===true && b\.status!=='cancelled'\)\?'<span class="evc-check evc-noshow" title="未到課">未<\/span>'\s*\n\s*:\(k==='done'\|\|k==='makeup'\)\?`<span class="evc-check" title="\$\{k==='makeup'\?'補簽':'已完成'\}">簽<\/span>`:'';/.test(src));
+ok('★ 章放右下角（左上是付款提醒、右上是時間）',
+   /\.admcag\.cal-ev-std \.evc-check\{position:absolute;bottom:3px;right:3px;top:auto;left:auto;/.test(src));
+ok('★ ⚠ 一定要自己寫 position:absolute（桌機那組把 .evc-check 改成 static）',
+   /桌機那組（min-width:601px）把 \.evc-check 改成\s*\n\s*static（章改排進姓名列），而直向平板 601–1024 兩組會同時命中/.test(src));
+ok('　　白底＋課種色字，在填滿的卡上也看得清楚',
+   /background:#fff;color:var\(--amc,#1f6f54\);/.test(src));
+ok('　　0820 那個決定為什麼被推翻，寫在原地',
+   /0820 曾以「填滿課程色就是已簽到」為由把簽章拿掉，但填色同時也用在別的狀態上/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
