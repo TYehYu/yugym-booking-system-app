@@ -158,5 +158,21 @@ ok('★ 下拉更新沿用 admPtrInit（它的做法就是「頂欄不動」）'
    /try\{ if\(typeof admPtrInit==='function'\) admPtrInit\(\); \}catch\(_\)\{\}/.test(src)
    && /不要靠瀏覽器原生的整頁回彈（那一定會把頂欄一起拉走）/.test(src));
 
+console.log('\n三修（2026-08-21）：頂欄字色、KPI 溢出、尚未打卡、間距、重整鈕');
+ok('★ ⚠ 頂欄底色與字色要成對改（手機原本是綠底米白字 → 只換底色就整排字不見）',
+   /body\.chv2-shell \.topbar \.tb-mark span\{color:var\(--green\) !important;\}/.test(src)
+   && /body\.chv2-shell \.topbar \.tb-ver\{color:var\(--t3\) !important;\}/.test(src)
+   && /只換背景的話字還是米白的，變成米底米字＝整排字不見/.test(src));
+ok('★ KPI 欄要能縮（flex 的 min-width:auto 會讓它撐出畫面）',
+   /body\.chv2-shell \.admh-kpis\{min-width:0;flex-shrink:1;\}/.test(src)
+   && /body\.chv2-shell \.admh-kpi\{min-width:0;max-width:100%;/.test(src)
+   && /\.admh-bigrow 是 flex row，KPI 欄預設 min-width:auto/.test(src));
+ok('★ 「尚未打卡」不顯示（還沒打卡是常態，天天掛一行等於噪音）',
+   /: \(att&&att\.clock_in\) \? `\$\{att\.clock_in\} 上班中` : '';/.test(src)
+   && !/尚未打卡/.test(V2CODE));
+ok('★ 本月成績與課卡之間留距離', /\.chv2-score\{margin-top:18px;\}/.test(src));
+ok('★ 頂欄重整鈕退場（這一頁已經有下拉更新）',
+   /body\.chv2-shell \.topbar \.tb-right \.rf-btn\{display:none !important;\}/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
