@@ -636,12 +636,15 @@ ok('★ 填滿那一組規則整組刪掉（不是用覆蓋蓋掉）',
 ok('★ DOM 仍在姓名列裡（絕對定位是相對整張卡，擺哪裡都不影響姓名列寬度）',
    /<span class="evc-nmrow"><span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>/.test(src)
    && /\.cal-ev\.cal-ev-std \.evc-nmrow\{display:flex;align-items:center;justify-content:center;/.test(src));
-ok('★ 章移到卡片左下角的 1/4 圓（使用者：「桌機行事曆的出席章顯示在課卡左下角」）',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:0; bottom:0; right:auto; top:auto;\s*\n\s*width:24px; height:24px; border-radius:0 100% 0 10px;/.test(src));
+ok('★ 章在卡片左下角，桌機用小圓章（1/4 圓在淺底卡上太搶）',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:4px; bottom:4px; right:auto; top:auto;\s*\n\s*width:16px; height:16px; border-radius:50%;/.test(src));
+ok('　　手機（.admcag）維持 1/4 圓 —— 深色滿版卡上圓章反而糊',
+   /手機那邊維持 1\/4 圓（\.admcag 那組，深色滿版卡上圓章反而糊）/.test(src)
+   && /\.admcag\.cal-ev-std \.evc-check\{position:absolute;bottom:0;right:0;top:auto;left:auto;\s*\n\s*width:26px;height:26px;border-radius:100% 0 10px 0;/.test(src));
 ok('　　右下角讓給教練標籤，左下角本來是空的（理由寫在原地）',
    /右下角讓給教練標籤（\.evc-abbr），左下角本來是空的；用與手機同一種 1\/4 圓/.test(src));
-ok('　　桌機是左下角 1/4 圓，手機的角標基底規則不動',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:0; bottom:0;/.test(src)
+ok('　　桌機是左下角小圓章，手機的角標基底規則不動',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:4px; bottom:4px;/.test(src)
    && /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;top:auto;left:auto;bottom:0;right:0;/.test(src));
 ok('　　窄欄位時名字自己截斷，不會把章擠掉',
    /\.cal-ev\.cal-ev-std \.evc-nmrow \.evc-name\{min-width:0;\}/.test(src));
@@ -700,10 +703,13 @@ ok('　　右下兩邊貼齊卡片邊界（像從角落切出來的，不是浮�
    /右下兩邊貼齊卡片邊界，\s*\n\s*看起來像從卡片角落切出來的一塊/.test(src));
 ok('★ ⚠ 一定要自己寫 position:absolute（桌機那組把 .evc-check 改成 static）',
    /桌機那組（min-width:601px）把 \.evc-check 改成\s*\n\s*static（章改排進姓名列），而直向平板 601–1024 兩組會同時命中/.test(src));
-ok('　　白底＋課種色字，在填滿的卡上也看得清楚；請假紅、未到金',
-   /background:#fff;color:var\(--amc,#1f6f54\);/.test(src)
+/* 2026-08-21 再修（使用者：「管理員的怎麼是白色底 請把兩邊統一給成有顏色的」） */
+ok('★ 兩邊的章統一用實色（簽綠／未金／假紅、白字）',
+   /\.admcag\.cal-ev-std \.evc-check\{[\s\S]{0,200}?background:var\(--green,#1f6f54\);color:#fff;/.test(src)
    && /\.admcag\.cal-ev-std \.evc-check\.evc-leave\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src)
    && /\.admcag\.cal-ev-std \.evc-check\.evc-noshow\{background:var\(--gold,#B48A56\);color:#fff;\}/.test(src));
+ok('　　同色卡上靠一圈白描邊把章切出來（卡片本身就是滿版課種色）',
+   /box-shadow:-1px -1px 0 1\.5px rgba\(255,255,255,\.9\);/.test(src));
 ok('　　0820 那個決定為什麼被推翻，寫在原地',
    /0820 曾以「填滿課程色就是已簽到」為由把簽章拿掉，但填色同時也用在別的狀態上/.test(src));
 
