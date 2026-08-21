@@ -115,5 +115,14 @@ ok('★ 關窗時洗掉代填的字、回填選定的人',
    && /inp\.value=mpkLabel\(sel\);/.test(src));
 ok('　　彈窗關閉時挑選視窗跟著收', /if\(typeof mpkSheetClose==='function'\) mpkSheetClose\(\);/.test(src));
 
+console.log('\n挑選視窗：打完字要把清單捲回最上面（2026-08-21 使用者回報）');
+/* 「搜尋會員的時候如果會員只有一名 會顯示在下面 這樣要滑畫面才看得到」——
+   清單會重畫，但捲動位置是留著的：先往下捲過一段再打字，篩到只剩一位時
+   那一位其實排在最上面，只是停在看不到的地方。 */
+ok('★ mpkSheetType 重畫後把清單捲回頂端',
+   /try\{ if\(row\._mpkMenu\) row\._mpkMenu\.scrollTop=0; \}catch\(_\)\{\}/.test(src));
+ok('　　成因寫在原地（清單重畫但捲動位置留著）',
+   /清單重畫但捲動位置是留著的：先往下捲過一段再開始打字/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
