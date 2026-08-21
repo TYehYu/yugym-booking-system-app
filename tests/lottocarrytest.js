@@ -106,5 +106,21 @@ console.log('\n⑦ 課卡的禮物圖示與說明文字');
   ok('　　空狀態不再寫「本月」', /<div class="em-t">目前沒有待抽獎的會員<\/div>/.test(src));
 }
 
+console.log('\n名單版面（2026-08-21 使用者：「會員名單也改成一列 白色底」）');
+ok('★ 卡片牆改成一列一位（直向排列，不再是自動填滿的格子）',
+   /\.lot-btns\{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;/.test(src)
+   && !/\.lot-btns\{[^}]*grid-template-columns/.test(src));
+ok('★ 白底（原本是米底 var(--card2)）',
+   /\.lot-btn\{display:flex;flex-direction:row;[\s\S]{0,160}?background:#fff;/.test(src));
+ok('　　整列橫向：姓名靠左撐開，可抽次數與簽到堂數靠右',
+   /\.lot-btn-nm\{font-size:14\.5px;font-weight:800;color:var\(--text\);flex:1;min-width:0;/.test(src)
+   && /\.lot-btn-n\{[^}]*flex:none;\}/.test(src)
+   && /\.lot-btn-sub\{[^}]*flex:none;\}/.test(src));
+ok('　　長姓名截斷不換行（一列的高度要固定）',
+   /overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}\n\.lot-btn-n\{/.test(src));
+ok('　　選中仍是綠框綠底（沒有被白底蓋掉）',
+   /\.lot-btn\.sel\{border-color:var\(--green\);background:#eaf3ee;/.test(src));
+ok('　　改的原因寫在原地', /一位會員時會孤零零一張卡佔掉一大格/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
