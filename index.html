@@ -8542,8 +8542,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.1611';
-const APP_VERSION_LABEL='v260821.1611';
+const APP_VERSION = '260821.1617';
+const APP_VERSION_LABEL='v260821.1617';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14141,7 +14141,8 @@ function butlerArtNext(){
 /* 首頁一日行事曆（教練當欄位＋時間軸＋現在線）於 2026-08-21 當天移除 ——
    使用者：「首頁改回原本的樣式 只是課卡要維持現在這個版本的大小」。
    dashDayCalHTML／dcalLanes／DCAL_* 與 .dcal-* 樣式一併刪除，沒有留下死程式。
-   留下來的兩樣：課卡放大後的尺寸，以及「下一堂越早的越左」那條排序（見 _taskSort）。 */
+   留下來的：課卡放大後的尺寸。當天中途那條「下一堂越早的越左」排序也已退場
+   （使用者：「因為現在沒有紅跟時段了 所以只要維持課堂最多的在最上方」）。 */
 /* 首頁教練面板的高度（2026-08-02 使用者指示：「版面維持在不用滑動視窗就看得到」）。
    ⚠ 高度要給「中間那一欄」，不能給 .mc-coachcenter —— 它的 flex 是 1.45（flex-basis:0%），
      主軸尺寸由 flex 決定，height 根本不會生效（2026-08-02 踩過一次）。
@@ -14550,19 +14551,6 @@ PAGES.g_dashboard=async function(){
     });
     return { order:ORDER[stKey], isLive:!!inClass, isSelf:(c.id===SESSION.id), rank:_rank, hireDate:(c.hire_date||'9999-12-31'),
       total:total,   // 當日課堂數（2026-07-23 使用者指示：桌機/手機統一以此由多到少排序）
-      /* 下一堂在幾點（2026-08-21 使用者：「待會有要上課的教練往左邊排」，
-         追加「zoe 應該要排到第二個來」）——
-         先做的版本只把「還有課」與「已上完」分成兩群、群內仍照課堂數排，
-         但使用者要的是「越快上課的越左」：ZOE 0/5 堂、15:00 就要上課，
-         該排在第二個（第一個是正在上課的 RANDY），而不是被課堂數比較多的人壓在後面。
-         ・正在上課中 → 用「現在」當排序值，他就是最即時的那一位。
-         ・還有下一堂 → 用那一堂的開始時間。
-         ・今天上完了 → Infinity，整群落到最後，群內退回課堂數優先（0723 的規則）。
-         ⚠ 只在檢視今天才算：看別天沒有「現在」可比，nowMin 是 -1 會讓每個人都取到
-         當天第一堂，順序變成「誰最早開工」——不是我們要的，所以直接給 Infinity。 */
-      nextMin: !isTodayView ? Infinity
-             : (inClass ? nowMin
-             : (nextBk ? timeToMin(nextBk.start_time||'0:0') : Infinity)),
       cardHtml: (function(){
         const cards=_cardsArr.join('');
         const emptyC = (!drawBk.length)
@@ -14634,14 +14622,13 @@ PAGES.g_dashboard=async function(){
   }).filter(Boolean);
   /* 排序（2026-07-23 使用者指示，桌機／手機統一）：**當日課堂數多的排最前**，依序往下；
      同堂數再看 進行中 → 本人 → 職等 → 到職日。原本的「進行中/本人置頂」退居次要條件。 */
-  /* 排序（桌機欄位與手機列表共用）——
-     2026-07-23：課堂最多的排最前。
-     2026-08-21：改成「越快上課的越左」（見 nextMin 的註解）—— 下一堂越早的排越前面，
-     正在上課的算「現在」、今天上完的是 Infinity 落到最後。
-     課堂數退成第二順位：同一個時間開課、或都已經上完時才由它決定。
-     ⚠ 順序會隨時間往前推移（上完一堂就往後退一位）——這是使用者要的即時感，
-     不是穩定排序；欄位位置會變，別再把它改回「整天固定」。 */
-  const _taskSort=(a,b)=> (a.nextMin-b.nextMin) || (b.total-a.total) || (b.isLive-a.isLive) || (b.isSelf-a.isSelf) || (a.rank-b.rank) || ((a.hireDate>b.hireDate)?1:(a.hireDate<b.hireDate?-1:0));
+  /* 排序（桌機列與手機列表共用）——2026-07-23 定案：課堂最多的排最上面。
+     2026-08-21 中途改過一版「下一堂越早的越左」（nextMin），是為了搭配當天那個
+     一日行事曆版面（有時間軸與現在線）。版面改回課卡橫排之後，使用者定案：
+     「因為現在沒有紅跟時段了 所以只要維持課堂最多的在最上方」—— 那條規則整個退場。
+     ⚠ 不要再加「誰比較快上課」之類的即時條件：沒有時間軸的版面上，
+     順序整天變動只會讓人找不到教練在哪一列。 */
+  const _taskSort=(a,b)=> (b.total-a.total) || (b.isLive-a.isLive) || (b.isSelf-a.isSelf) || (a.rank-b.rank) || ((a.hireDate>b.hireDate)?1:(a.hireDate<b.hireDate?-1:0));
   rows.sort(_taskSort);
 
   const legend=`<div class="tl-legend">
