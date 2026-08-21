@@ -667,5 +667,18 @@ ok('　　狀態在畫完與捲動時各算一次（要等版面算完才量得�
    && /l\.addEventListener\('scroll',\(\)=>tcardPagerSync\(\),\{passive:true\}\)/.test(src));
 ok('　　捲軸藏起來（改用翻頁鈕）', /\.tcard-list::-webkit-scrollbar\{display:none;\}/.test(src));
 
+console.log('\n過去的課卡淡化加重（2026-08-21 使用者：「淡化的課卡不夠強」）');
+ok('★ 單卡（今天已結束的那幾堂）：opacity .5→.32、saturate .65→.35',
+   /\.cal-ev\.cal-ev-past\{opacity:0\.32;filter:saturate\(0\.35\) brightness\(1\.04\);/.test(src));
+ok('★ 整欄（已過去的日子）：grayscale \.55→\.82、opacity \.78→\.5',
+   /\.cal-daycol\.col-past \.cal-ev\{filter:grayscale\(0\.82\) opacity\(0\.5\);\}/.test(src));
+ok('　　兩層會疊加，註解寫明（單看數字會以為改很小）',
+   /這一層與上面的 \.cal-ev-past 會疊加，所以單獨看數字不大，實際效果是相乘的/.test(src));
+ok('　　滑過去仍然恢復原狀（不是把資訊藏起來）',
+   /\.cal-ev\.cal-ev-past:hover\{opacity:1;filter:none;\}/.test(src)
+   && /\.cal-daycol\.col-past \.cal-ev:hover\{filter:none;\}/.test(src));
+ok('　　未完成的過去課卡仍不淡化（0801 定案：那是待辦，不能一起壓暗）',
+   /\.cal-ev\.cal-ev-todo,\s*\n\.cal-daycol\.col-past \.cal-ev\.cal-ev-todo\{opacity:1;filter:none;\}/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
