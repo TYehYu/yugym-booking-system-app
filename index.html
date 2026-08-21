@@ -8476,8 +8476,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.0858';
-const APP_VERSION_LABEL='v260821.0858';
+const APP_VERSION = '260821.0925';
+const APP_VERSION_LABEL='v260821.0925';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19220,6 +19220,17 @@ async function ashEditAsk(id){
      ・更換票券 = 還沒簽到、非團課（團課的票在 ticket_logs、不在 ticket_id）、櫃檯以上
      ・補簽     = 還沒簽到、非團課、課程日已過（今天以後的走「簽到」）
      兩支的返回鈕都是 openBookingDetail，先立旗標讓它回到課卡。 */
+  /* 更換課程（2026-08-21 使用者說明：「這張課卡還沒有會員預約的時候方便調整的」）——
+     只在「完全沒有人」的課卡上給：沒綁會員、沒有團課名單、也沒有散客姓名。
+     有人的課換課別要連帶換票、退補堂數，那是另一件事（請用刪除預約重建）。 */
+  /* ⚠ 不能用 A.editable：待簽約／空堂那條路刻意把它設成 false（不給改期／場地／代課），
+     但「更換課程」正好就是要給那種卡用的。這裡自己判日期。 */
+  const _nobody = !b.member_id && (typeof mids==='function'?mids(b).length===0:true)
+                  && !String(b.trial_name||'').trim();
+  const _futureOk = A.staff && !A.closed && String(b.date)>=ymd(TODAY);
+  if(!_leave && _nobody && _futureOk)
+    rows+=row(`closeModal();ashCourseAsk('${b.id}')`,'更換課程',
+      `目前是${(typeof bookingTypeName==='function')?bookingTypeName(b,window._ttMapCache||window._memTypeMap):(b.category||'課程')}・這張卡還沒有人，可以直接換`);
   /* !A.pending：待簽約／空堂本來就沒有綁票券（那正是它們的定義），
      列出來只會走進「沒有其他可用票券可以換」的死路（2026-08-21）。 */
   if(!_leave && !A.pending && b.status==='booked' && !A.isGroup && isDeskLike())
@@ -19235,7 +19246,11 @@ async function ashEditAsk(id){
   if(_leave){
     rows += (b.status==='coach_leave')
       ? row(`ashCoachLeaveUndoAsk('${b.id}')`,'取消教練請假（復原）','本堂恢復原本的課、票券與效期一併回復','ash-ei-danger')
-      : `<div class="ash-einote">這堂的教練請假是<b>整堂取消</b>，無法復原——需要的話請重新建課。</div>`;
+      : `<div class="ash-einote">這堂的教練請假是<b>整堂取消</b>，無法復原——需要的話請重新建課。</div>`
+        + ((A.staff && !b.card_hidden)
+           ? row(`closeModal();ashHideLeftAsk('${b.id}')`,'刪除預約',
+                 '這堂已經取消了，這裡只是把課卡從課表上收起來','ash-ei-danger')
+           : '');
   }
   /* 「教練請假」已搬進「指派代課教練」那張清單（2026-08-21 使用者指示）——
      兩件事是同一個問題的兩種答案：這位教練這堂來不了，要嘛找人代、要嘛請假。
@@ -24083,7 +24098,10 @@ function canCoachLeave(b){ return !!b && !!bkCoachLeaveMode(b) && (bkIsGroup(b) 
 function bkIsCoachLeave(b){ return !!b && (b.status==='coach_leave' || b.coach_leave===true); }
 /* 教練請假整堂取消的團課，課卡要留在課表上（2026-08-17 使用者指示「課卡請假不應該從畫面上消失」）——
    只是畫出來給人看（帶紅色「教練請假」標），堂數統計、佔位、衝堂判定一律照舊不計（status 仍是 cancelled）。 */
-function bkShowsCancelled(b){ return !!b && b.status==='cancelled' && b.coach_leave===true && bkIsGroup(b); }
+/* card_hidden（2026-08-21）：櫃檯處理完之後把這張已取消的卡從課表收起來。
+   純顯示旗標，不動 status／票券／效期 —— 退回的堂數與延長的效期是教練請假的補償，
+   本來就不該因為「卡片不想看到了」而收回。 */
+function bkShowsCancelled(b){ return !!b && b.status==='cancelled' && b.coach_leave===true && bkIsGroup(b) && !b.card_hidden; }
 /* 按下去會發生什麼 —— 兩種做法的結果不一樣，按鈕上要照實寫（2026-08-08） */
 function bkCoachLeaveSub(b){ return bkCoachLeaveMode(b)==='cancel'
   ? '整堂取消・退票・效期＋7 天' : '退票・效期＋7 天・改成自主訓練'; }
@@ -24574,6 +24592,87 @@ function bkFamBtn(b, mem, editable){
   return can
     ? `<button class="tag" style="font-size:11px;background:#eef4ee;color:#2f6b39;border:none;cursor:pointer;" onclick="openBkFamChange('${b.id}')" title="點一下更改使用人">👤 ${cur} ▾</button>`
     : `<span class="tag" style="font-size:11px;background:#eef4ee;color:#2f6b39;">👤 ${cur}</span>`;
+}
+/* 把已取消的教練請假課卡從課表收起來（2026-08-21 使用者說明）——
+   使用者原話：「這堂課有三名會員因為教練請假已經延長課程效期 所以沒有辦法再刪除預約
+   所以要顯示刪除預約的按鈕但是要顯示解釋」。
+   關鍵是講清楚「這個動作不做什麼」：已退回的堂數與已延長的效期都不會被收回，
+   否則櫃檯會以為按了就整組回沖。 */
+async function ashHideLeftAsk(bid){
+  const b=await dbGet('bookings',bid); if(!b){ showToast('找不到預約'); return; }
+  const n=(typeof mids==='function')?mids(b).length:0;
+  const _d=(typeof COACH_LEAVE_EXTEND_DAYS!=='undefined')?COACH_LEAVE_EXTEND_DAYS:7;
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">從課表收起這張卡？</div>
+    <div class="ash-eihead">${calMoveWho(b)}　·　${String(b.date).replace(/-/g,'/')} ${String(b.start_time).slice(0,5)}</div>
+    <div class="ash-eibox" style="line-height:1.9;">
+      這堂在教練請假時就<b>整堂取消</b>了${n?`，名單上 ${n} 位的票券當時已退回、使用期限也各延長 ${_d} 天`:''}。<br>
+      收起來只是<b>不再畫在課表上</b> —— 已退的堂數與已延長的效期<b>不會收回</b>，
+      預約紀錄與帳本也都留著查得到。
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();ashEditAsk('${bid}')">返回</button>
+      <button class="btn btn-red" onclick="ashHideLeftDo('${bid}')">收起這張卡</button></div>`);
+}
+async function ashHideLeftDo(bid){ return onceAct('ashhide:'+bid, ()=>_ashHideLeftDo(bid)); }
+async function _ashHideLeftDo(bid){
+ try{
+  const b=await dbGet('bookings',bid); if(!b){ showToast('找不到預約'); return; }
+  b.card_hidden=true;
+  await dbPut('bookings',b);
+  dbCacheClear(['bookings']);
+  closeModal(); collapseBkCard();
+  showToast('已從課表收起（紀錄與票券都沒有變動）');
+  try{ navTo(CUR_PAGE); }catch(_){}
+ }catch(e){ showToast('操作失敗：'+((e&&e.message)||e)); }
+}
+/* 更換課程（2026-08-21）——只換「這張卡是哪一種課」，不碰票券也不碰人，
+   因為只在沒有任何人的卡上才給得出來（見 ashEditAsk 的 _nobody）。
+   課別清單與建立預約同一套過濾：停售的、VIP／限定（已併入教練課）、場租、
+   友善自主訓練（與自主訓練同行為、不重複列）都不列。 */
+async function ashCourseAsk(bid){
+  const b=await dbGet('bookings',bid); if(!b){ showToast('找不到預約'); return; }
+  const types=(await dbGetAll('ticket_types').catch(()=>[]))||[];
+  const list=types.filter(t=>{
+    if(!t || t.active===false) return false;
+    if(typeof bkIsMergedPT==='function' && bkIsMergedPT(t)) return false;
+    if(t.category==='場租') return false;
+    /* 課別判斷走口袋分類器（bkIsSelf／bkIsGroup），不再散裝比字串 —— 見 tests/pockettest 的棘輪 */
+    if(bkIsSelf({category:t.category}) && /友善/.test(t.name||'')) return false;
+    return true;
+  });
+  const cur=String(b.ticket_type_id||'');
+  const row=(onclick,label,sub,cls)=>`<button class="ash-eirow${cls?' '+cls:''}" onclick="${onclick}">
+    <span class="ash-eilb">${label}</span>${sub?`<span class="ash-eisub">${sub}</span>`:''}</button>`;
+  const rows=list.map(t=>row(
+    t.id===cur?'':`closeModal();ashCourseSet('${bid}','${t.id}')`,
+    escH(t.name||t.category||'課程'),
+    t.id===cur?'目前的課程':(t.category&&t.category!==t.name?escH(t.category):''),
+    t.id===cur?'ash-ei-co':'')).join('');
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">更換課程</div>
+    <div class="ash-eihead">${String(b.date).replace(/-/g,'/')} ${String(b.start_time).slice(0,5)}　·　這張卡目前沒有安排任何人</div>
+    ${rows||'<div class="ash-einote">沒有可選的課程。</div>'}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();ashEditAsk('${bid}')">返回</button></div>`);
+}
+async function ashCourseSet(bid, tid){ return onceAct('ashcourse:'+bid, ()=>_ashCourseSet(bid, tid)); }
+async function _ashCourseSet(bid, tid){
+ try{
+  const b=await dbGet('bookings',bid); if(!b){ showToast('找不到預約'); return; }
+  const t=((await dbGetAll('ticket_types').catch(()=>[]))||[]).find(x=>x&&x.id===tid);
+  if(!t){ showToast('找不到這個課程'); return; }
+  /* 換課別要重跑衝堂與場地檢查 —— 團課教室與跑步機的容量不同，
+     教練課換成團課可能就擠不下了。用一份複本去驗，過了才寫。 */
+  const vbk=Object.assign({}, b, {category:t.category, ticket_type_id:t.id, format:t.format||null});
+  const verr=await validateBooking(vbk, b.date, b.start_time, Number(b.duration)||60);
+  if(verr){ showToast(verr); return; }
+  b.category=t.category; b.ticket_type_id=t.id; b.format=t.format||null;
+  if(vbk.venue_unit) b.venue_unit=vbk.venue_unit;
+  /* 換成團課要有人數上限（沒有的話名單視窗會抓不到預設值） */
+  if(bkIsGroup({category:t.category}) && !(Number(b.max_heads)>0)) b.max_heads=5;
+  await dbPut('bookings',b);
+  dbCacheClear(['bookings']);
+  showToast('已改成「'+(t.name||t.category)+'」');
+  try{ navTo(CUR_PAGE); }catch(_){}
+  await expandBkCard(window._expandedBkEl||null, bid);
+ }catch(e){ showToast('更換失敗：'+((e&&e.message)||e)); }
 }
 /* 從簡易課卡開（2026-08-21）：立一次性旗標，setBkFamUser 收尾的 openBookingDetail
    會被 ashBackTake 接走、回到課卡，而不是打開已經退役的預約明細。 */

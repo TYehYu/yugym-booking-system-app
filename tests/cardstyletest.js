@@ -317,5 +317,33 @@ ok('　　取消與改完都回課卡，不跳已退役的預約明細',
    /backTo==='ash'\?`closeModal\(\);expandBkCard\(window\._expandedBkEl\|\|null,'\$\{bid\}'\)`/.test(src)
    && /setBkFamUser 收尾的 openBookingDetail\s*\n\s*會被 ashBackTake 接走/.test(src));
 
+console.log('\n更換課程（使用者：這張課卡還沒有會員預約的時候方便調整）');
+ok('★ 只在「完全沒有人」的卡上給：沒會員、沒名單、也沒散客姓名',
+   /const _nobody = !b\.member_id && \(typeof mids==='function'\?mids\(b\)\.length===0:true\)\s*\n\s*&& !String\(b\.trial_name\|\|''\)\.trim\(\);/.test(src));
+ok('★ 不能用 A.editable（待簽約那條路刻意設成 false），自己判日期',
+   /const _futureOk = A\.staff && !A\.closed && String\(b\.date\)>=ymd\(TODAY\);/.test(src)
+   && /不能用 A\.editable：待簽約／空堂那條路刻意把它設成 false/.test(src));
+ok('★ 換課別要重跑衝堂與場地檢查（教練課換團課可能就擠不下）',
+   /const verr=await validateBooking\(vbk, b\.date, b\.start_time, Number\(b\.duration\)\|\|60\);/.test(src));
+ok('★ 換成團課要補人數上限（否則名單視窗抓不到預設值）',
+   /&& !\(Number\(b\.max_heads\)>0\)\) b\.max_heads=5;/.test(src));
+ok('　　課別清單與建立預約同一套過濾（停售／VIP 限定／場租／友善自主訓練不列）',
+   /if\(typeof bkIsMergedPT==='function' && bkIsMergedPT\(t\)\) return false;/.test(src)
+   && /if\(bkIsSelf\(\{category:t\.category\}\) && \/友善\/\.test\(t\.name\|\|''\)\) return false;/.test(src));
+ok('　　課別判斷走口袋分類器，不散裝比字串（pockettest 的棘輪）',
+   /if\(bkIsGroup\(\{category:t\.category\}\) && !\(Number\(b\.max_heads\)>0\)\) b\.max_heads=5;/.test(src));
+
+console.log('\n教練請假的團課：可以把課卡收起來，但要講清楚不做什麼');
+ok('★ 新增純顯示旗標 card_hidden，不動 status／票券／效期',
+   /function bkShowsCancelled\(b\)\{ return !!b && b\.status==='cancelled' && b\.coach_leave===true && bkIsGroup\(b\) && !b\.card_hidden; \}/.test(src)
+   && /b\.card_hidden=true;/.test(src));
+ok('★ 按鈕出現在「無法復原」那段說明底下',
+   /closeModal\(\);ashHideLeftAsk\('\$\{b\.id\}'\)`,'刪除預約',/.test(src));
+ok('★ 確認視窗講明已退的堂數與已延長的效期不會收回',
+   /已退的堂數與已延長的效期<b>不會收回<\/b>/.test(src)
+   && /使用期限也各延長 \$\{_d\} 天/.test(src));
+ok('　　為什麼要講，寫在程式裡（否則櫃檯會以為按了就整組回沖）',
+   /否則櫃檯會以為按了就整組回沖/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
