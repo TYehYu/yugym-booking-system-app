@@ -41,16 +41,17 @@ console.log('管理員手機版報表打不開');
 
 console.log('\n教練端課卡：互動開啟，只能看明細');
 ok('★ 桌機別人的課卡改標 cal-ev-view（不再 cal-ev-noint 整張不吃事件）',
-   /const _viewOnly = SESSION\.role==='coach' && !SESSION\.is_manager && opts\.me && !isMine;/.test(src)
+   /const _viewOnly = SESSION\.role==='coach' && !SESSION\.is_manager\s*\n\s*&& !\(typeof bkIsCoach==='function' \? bkIsCoach\(b, SESSION\.id\) : isMine\);/.test(src)
    && /\$\{_viewOnly\?' cal-ev-view':''\}/.test(src)
    && !/\$\{_noInt\?' cal-ev-noint':''\}/.test(src));
 /* 2026-08-01 使用者指示定版：「非本人的課卡一樣正常顯示課卡內容，但要移除互動的功能，
    手機跟桌機都是」→ 0731 的「點得開唯讀明細」收回成純顯示。見 tests/coachviewtest.js。 */
 /* 2026-08-21：過期的課卡改走 onEvClick（詳細預約視窗退役），三元式收成一條，
    但 _viewOnly 仍是第一個排除條件 —— 別人的課卡照樣不掛任何點擊。 */
-ok('★ 別人的課卡完全不掛點擊（桌機）',
-   /\$\{_viewOnly \|\| opts\.allMode \|\| bkIsMasked\(b\) \? '' : `onclick="onEvClick/.test(src)
-   && !/\$\{_viewOnly\?`onclick="openBookingDetail\('\$\{b\.id\}'\)"`/.test(src));
+/* 0822 使用者：「其他課卡只能點開來看」→ 回到 0731 的唯讀明細（0801 曾收回，
+   當時別人的課是匿名佔位、點開沒東西可看；0821 起顯示真實內容，前提變了）。 */
+ok('★ 別人的課卡點得開，但只到唯讀明細（桌機）',
+   /_viewOnly \? `onclick="event\.stopPropagation\(\);openBookingDetail\('\$\{b\.id\}'\)"/.test(src));
 ok('★ 手機 agenda 同樣完全不掛點擊', /\$\{canClick\?'':' cag-view'\}/.test(src)
    && /\$\{canClick\?` onclick="wtlCardClick\('\$\{b\.id\}',this\)"`:''\}>/.test(src));
 ok('★ 唯讀卡不能拖（互動放開後 pointer-events 回來了，不擋就拖得動別人的課改期）',

@@ -54,7 +54,8 @@ ok('★ 教練進來時帶 me＋maskOthers（看得到時段被佔住，但別�
 /* 2026-07-31 使用者改口：「教練端的預約課卡互動開啟，但是不要有圓形按鈕，
    只能看明細不能修改」→ cal-ev-noint 退場，改標 cal-ev-view。細節見 coachviewtest.js。 */
 ok('★ 別人的課卡改標 cal-ev-view（可點開明細、不彈圓形按鈕）',
-   /const _viewOnly = SESSION\.role==='coach' && !SESSION\.is_manager && opts\.me && !isMine;/.test(src)
+   /* 0822：判定不再依賴 opts.me（0821 把教練桌機的 opts.me 拿掉後那條整個失效） */
+   /const _viewOnly = SESSION\.role==='coach' && !SESSION\.is_manager\s*\n\s*&& !\(typeof bkIsCoach==='function' \? bkIsCoach\(b, SESSION\.id\) : isMine\);/.test(src)
    && /\$\{_viewOnly\?' cal-ev-view':''\}/.test(src));
 ok('★ 另有一層把關：修改路徑仍由 coachOwnsBk 擋下（2026-07-31 起明細本身放行）',
    /function coachOwnsBk\(b\)\{/.test(src)

@@ -9367,8 +9367,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.2250';
-const APP_VERSION_LABEL='v260822.2250';
+const APP_VERSION = '260822.2259';
+const APP_VERSION_LABEL='v260822.2259';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18893,7 +18893,13 @@ async function renderCalendar(opts){
          0730 是整張不吃事件（cal-ev-noint），教練連看都看不到內容；
          現在改成點得開「課程明細」，但不彈出那組圓形按鈕（簽到／代課／取消／編輯），
          明細裡的所有修改動作也照舊由 ownByCoach 關掉 —— 只能看，不能改。 */
-      const _viewOnly = SESSION.role==='coach' && !SESSION.is_manager && opts.me && !isMine;
+      /* ⚠ 不能只看 opts.me（2026-08-22 使用者：「教練不論桌機端還是手機端應該只能修改
+         自己的課卡」）—— 0821 為了「所有教練都看得到課卡」把教練桌機行事曆的 opts.me
+         拿掉了，這一行的 `opts.me &&` 就整條失效：別人的課不再標成唯讀，於是拖得動、
+         也吃得到 onEvClick 的圓形按鈕。改成直接問「這堂是不是我帶的」，與 opts.me 無關。
+         （店長不受限，0803 定案；代課的課算自己的，bkIsCoach 含 substitute_coach_id。） */
+      const _viewOnly = SESSION.role==='coach' && !SESSION.is_manager
+        && !(typeof bkIsCoach==='function' ? bkIsCoach(b, SESSION.id) : isMine);
       const _isCheckedIn = bkIsGroup(b) ? grpAllDone(b)
         : (b.status==='checked_in'||b.status==='completed');
       const _isMakeup = !!b.makeup_granted;
@@ -19046,8 +19052,22 @@ async function renderCalendar(opts){
              editable 在課程日已過／已完成／已取消時是 false，於是這裡走 openBookingDetail。
              詳細預約視窗已經退役（桌機改用簡易課卡），過去的課也一律走 onEvClick；
              expandBkCard 本來就會依 closed／date 把不能做的動作關掉，不必另外防。
-             全店模式與遮蔽卡維持不可點，view-only（教練看別人的課）也不變。 */''}
-        ${_viewOnly || opts.allMode || bkIsMasked(b) ? '' : `onclick="onEvClick(event,'${b.id}')"`}>
+             全店模式與遮蔽卡維持不可點。
+             view-only（教練看別人的課）改成點得開唯讀明細（2026-08-22 使用者：
+             「其他課卡只能點開來看 但不能進一步互動」）—— 不接 onEvClick（那條會彈出
+             簽到／代課／取消／編輯那組圓鈕），直接開 openBookingDetail：
+             那支視窗裡每一個修改元件都綁 ownByCoach／staffCanCheckin，對別人的課一律 false。
+             ⚠ 這一條來回過三次，別再自己改回去：
+               0729 pointer-events:none → 卡片攔手指，頁面滑不動
+               0731 點得開唯讀明細
+               0801 收回成「純顯示、完全不掛點擊」——當時別人的課是匿名佔位（opts.me＋
+                    maskOthers），點開也沒東西可看，所以拿掉才合理
+               0821 「所有教練都可以看到簡易課卡」，別人的課開始顯示真實內容
+               0822 使用者：「其他課卡只能點開來看」→ 回到 0731 的作法。
+                    前提變了（有內容可看）才改回來的，不是繞圈。 */''}
+        ${opts.allMode || bkIsMasked(b) ? ''
+          : (_viewOnly ? `onclick="event.stopPropagation();openBookingDetail('${b.id}')"`
+                       : `onclick="onEvClick(event,'${b.id}')"`)}>
         ${bkRenewBadge({done:_renewDone,no:_renewNo,renew:_renewAlert,pay:_payAlert})}
         ${/* 出席章已移進 _bodyOut 的姓名列（2026-08-21），這裡不再重複輸出一份 */''}
         ${_bodyOut}
