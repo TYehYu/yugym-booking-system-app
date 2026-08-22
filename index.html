@@ -8658,6 +8658,12 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
   opacity:.3;transition:opacity .15s,transform .15s;}
 .a2-arw-up{border-bottom:6px solid var(--t3);}
 .a2-arw-dn{border-top:6px solid var(--t3);}
+/* 橫向版的箭頭（日期列兩端；2026-08-22）——與首頁直欄那組同一支 .a2-arw，只是換方向 */
+.a2-arw-l{border-left:0;border-right:6px solid var(--t3);border-top:5px solid transparent;border-bottom:5px solid transparent;margin:0 4px;}
+.a2-arw-r{border-right:0;border-left:6px solid var(--t3);border-top:5px solid transparent;border-bottom:5px solid transparent;margin:0 4px;}
+.mcal-head.hwk-armprev .a2-arw-l{opacity:1;transform:scale(1.35);border-right-color:var(--green);}
+.mcal-head.hwk-armnext .a2-arw-r{opacity:1;transform:scale(1.35);border-left-color:var(--green);}
+.hwk-wrap{overflow:hidden;}
 .admh2-rail.a2-armprev .a2-arw-up{opacity:1;transform:scale(1.35);border-bottom-color:var(--green);}
 .admh2-rail.a2-armnext .a2-arw-dn{opacity:1;transform:scale(1.35);border-top-color:var(--green);}
 /* 右欄是這一頁唯一會捲的地方。捲到底之後手指要放開、再滑一次才會帶動整頁
@@ -9048,8 +9054,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1652';
-const APP_VERSION_LABEL='v260822.1652';
+const APP_VERSION = '260822.1722';
+const APP_VERSION_LABEL='v260822.1722';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22259,6 +22265,9 @@ async function openBookingModal(){
     if(t.active===false) return false;
     if(bkIsMergedPT(t)) return false;   // VIP/限定＝停售活動價舊票種，不再列選項（舊票由「教練課」配對承接）
     if(isCoach && !coachAllowed.includes(t.category)) return false; // 教練：只留教練課/體驗
+    /* 從「快速預約」進來的一律只給教練課類（2026-08-22 使用者指示）——
+       那顆鈕的語意就是「幫我排一堂課」，自主訓練是會員自約、團課從後台開。 */
+    if(window._bkCoachCourseOnly && t.category!=='私人教練') return false;
     if(isMobileBk && t.category==='小班肌力') return false;          // 手機：不建團體課
     if(isMobileBk && t.category==='自主訓練') return false;          // 手機：自主訓練由會員自約
     /* 場租與友善自主訓練都等同「自主訓練」，不重複列（2026-07-29 使用者指示）：
@@ -22350,6 +22359,7 @@ async function openBookingModal(){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="cancelBookingModal()">取消</button><button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`);
   // 渲染課程類型卡（場地租借＝銷售流程，不再列於此）
   window._bkTypes=activeTypes;
+  window._bkCoachCourseOnly=false;   /* 一次性旗標：這一輪已經用來過濾了，別留到下一次開窗 */
   window._bkPlanIds=null; window._bkPlanName='';   // 每次開窗都從「未選方案」開始，不留上一次的名單
   window._bkPrefillCoachId=prefillCoach||null;
   renderBkTypeCards();
@@ -41012,14 +41022,58 @@ function heroWeekBarHTML(o){
   }).join('');
   const a=days[0], b=days[6];
   const range=`${a.getMonth()+1}/${a.getDate()}–${b.getMonth()+1}/${b.getDate()}`;
+  /* 兩端的箭頭與拖曳換週（2026-08-22 使用者指示：「上方的日期列也做成左右拖拉翻頁，
+     跟首頁日期列一樣，只是首頁是上下拖拉；兩端的箭頭也仿照首頁的箭頭；
+     拖拉也是停留 0.5 秒就換頁」）——箭頭改用首頁那組 CSS 三角形（橫向版），
+     拖曳邏輯與 admh2Mount 裡那套同一個手感（門檻 44px、位移打四五折、停 500ms）。 */
+  try{ heroWeekDragInit(); }catch(_){}
+  const _sh=String(prevFn||'').replace(/\s*\(.*$/,'');   // 'admWeekShift(-1)' → 'admWeekShift'
   return `<div class="mcal-head cal-hero-nav" style="margin:4px 0 6px;">
       <span class="mcal-t">${range}</span>
       ${(sel&&today&&sel!==today)?`<button class="cag-thisweek" onclick="${pickFn}('${today}')">回到今天</button>`:''}
       <span class="mcal-sp"></span>
-      <button class="mcal-btn" onclick="${prevFn}">‹</button>
-      <button class="mcal-btn" onclick="${nextFn}">›</button>
+      <span class="a2-arw a2-arw-l" role="button" tabindex="0" title="上一週" onclick="${prevFn}"></span>
+      <span class="a2-arw a2-arw-r" role="button" tabindex="0" title="下一週" onclick="${nextFn}"></span>
     </div>
-    <div class="msb-dates cag-days hero-week" id="${id}">${cards}</div>`;
+    <div class="hwk-wrap"><div class="msb-dates cag-days hero-week" id="${id}" data-shift="${_sh}">${cards}</div></div>`;
+}
+/* 日期列的左右拖曳換週（2026-08-22）——用事件委派掛一次就好：這一列在三個頁面各自
+   重繪（管理員首頁／教練首頁／手機行事曆），每次重繪都重綁很容易漏。
+   ⚠ .cag-days.hero-week 是 overflow-x:visible、七格剛好塞滿，不會跟橫向捲動打架；
+     若日後改成可橫捲，這裡要補「捲到邊緣才接手」的判斷。 */
+function heroWeekDragInit(){
+  if(window._hwDragOn) return; window._hwDragOn=true;
+  const TH=44, HOLD=500, MAXOFF=26;
+  let row=null, head=null, x0=null, dir=0, armT=null, fired=false;
+  const clearArm=()=>{ if(armT){ clearTimeout(armT); armT=null; } dir=0;
+    if(head){ head.classList.remove('hwk-armprev','hwk-armnext'); } };
+  const snap=()=>{ if(!row) return; const r=row;
+    r.style.transition='transform .18s'; r.style.transform='';
+    setTimeout(()=>{ r.style.transition=''; },200); };
+  document.addEventListener('touchstart',e=>{
+    const t=e.target;
+    row=(t && t.closest) ? t.closest('.msb-dates[data-shift]') : null;
+    if(!row) return;
+    head=row.parentElement&&row.parentElement.previousElementSibling;
+    x0=e.touches[0].clientX; fired=false; clearArm(); row.style.transition='';
+  },{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!row || x0==null || fired) return;
+    const dx=e.touches[0].clientX-x0;
+    row.style.transform='translateX('+Math.max(-MAXOFF,Math.min(MAXOFF, dx*0.45))+'px)';
+    const d=(dx<=-TH)?1:((dx>=TH)?-1:0);      // 往左拖＝下一週、往右拖＝上一週
+    if(d===dir) return;
+    clearArm(); dir=d;
+    if(!d) return;
+    if(head) head.classList.add(d>0?'hwk-armnext':'hwk-armprev');
+    const fn=row.getAttribute('data-shift');
+    armT=setTimeout(()=>{ fired=true; clearArm(); snap();
+      try{ if(fn && typeof window[fn]==='function') window[fn](d); }catch(_){}
+    },HOLD);
+  },{passive:true});
+  const end=()=>{ if(row && !fired){ clearArm(); snap(); } x0=null; };
+  document.addEventListener('touchend',end,{passive:true});
+  document.addEventListener('touchcancel',end,{passive:true});
 }
 /* 週導覽：把檢視日往前/後移 7 天（跨月時同步換月，資料才會重載） */
 /* 上一週／下一週：換到「那一週的週一」，不是同一個星期幾（2026-08-22 使用者指示：
@@ -42114,11 +42168,27 @@ async function chvQuickSlots(ds, coachId){
   const busy=mine.map(b=>{ const st=timeToMin(b.start_time); return [st, st+(Number(b.duration)||60)]; });
   const last=(typeof quickBookLastMin==='function')?quickBookLastMin(date):(21*60);
   const nowMin=(date===ymd(TODAY))?nowMinOfDay():-1;
+  /* 場地也要算（2026-08-22 使用者回報：「18:00 應該只能約團體教室才對」）——
+     原本只擋「自己有課」，於是那些其實排不進場地的時段照樣列出來。
+     這裡用行事曆同一支 allocateVenue 以「私人教練、60 分」試排：
+       ・排不進去（error）＝整點都滿了 → 不列
+       ・排到團課教室／跑步機 → 照列，但在格子上標出來（那是「還有位子，但只剩這個」）
+     ⚠ 判斷用**當天全部**未取消的預約，不是只有這位教練的（場地是全店共用的）。 */
+  const dayAll=(bks||[]).filter(b=>b && b.date===date && b.status!=='cancelled');
+  const venueOf=mm=>{
+    if(typeof allocateVenue!=='function') return {ok:true,tag:''};
+    let a=null; try{ a=allocateVenue('私人教練', dayAll, mm, mm+60, null); }catch(_){ return {ok:true,tag:''}; }
+    if(!a || a.error) return {ok:false,tag:''};
+    const vid=String(a.toVid||a.venue_unit||'').split('_')[0];
+    return {ok:true, tag: vid==='group'?'教室' : (vid==='treadmill'?'跑步機':'')};
+  };
   const slots=[];
   for(let mm=9*60; mm<=last; mm+=30){
     if(nowMin>=0 && mm<nowMin) continue;
     if(busy.some(iv=>mm<iv[1] && (mm+60)>iv[0])) continue;
-    slots.push(mm);
+    const v=venueOf(mm);
+    if(!v.ok) continue;
+    slots.push({mm, tag:v.tag});
   }
   const _d=parseYmd(date)||new Date(TODAY);
   const _wd='日一二三四五六'[_d.getDay()];
@@ -42131,18 +42201,27 @@ async function chvQuickSlots(ds, coachId){
      不可預約的時段了」）—— 前一版沿用行事曆那套訂位面板，會把已排課／已過去的也畫出來再
      暗化；這一頁的用途只是「挑一個空檔」，不可約的放著只是雜訊。
      所以不走 slotPanelHTML（那支的職責是「整天的時段狀態」），改成純粹的可約清單。 */
-  const cells=slots.map(mm=>`<button type="button" class="cag-slot" onclick="chvQuickPick('${minToTime(mm)}')">${minToTime(mm)}</button>`).join('');
+  const cells=slots.map(o=>`<button type="button" class="cag-slot" onclick="chvQuickPick('${minToTime(o.mm)}')">${minToTime(o.mm)}${
+    o.tag?`<span class="cag-slot-tag">${o.tag}</span>`:''}</button>`).join('');
   showModal(`<div class="modal-title">快速預約</div>
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">
       ${date.replace(/-/g,'/')}（${_wd}）　還能安排 <b style="color:var(--text);">${slots.length}</b> 個時段
-      <br><span style="color:var(--t3);">已排課、已過去與打烊後的時段不會列出來（每格以 60 分鐘計）。</span></div>
+      <br><span style="color:var(--t3);">已排課、場地已滿、已過去與打烊後的時段不會列出來（每格以 60 分鐘計・教練課）。
+      標「教室／跑步機」的代表那個時段只剩該場地。</span></div>
     ${slots.length
       ? `<div class="cag-slots chvqs2">${cells}</div>`
       : `<div style="padding:18px 4px;color:var(--t3);font-size:13px;text-align:center;">這一天已經沒有可安排的時段了。</div>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
 /* 點時段 → 帶日期時間開建立預約（與 cagSlotBook 同一條路，只是這裡要先關掉視窗） */
-function chvQuickPick(t){ const d=window._chvQsDate||ymd(TODAY); closeModal(); dtlAddAt(d,t); }
+/* 快速預約只建教練課（2026-08-22 使用者指示：「只能建立教練課，不能建立自主訓練跟團體課」）——
+   立一支旗標給建立預約的課別清單看；手機版本來就會濾掉團課與自主訓練，但管理員在桌機
+   預覽或日後放寬時，這道限制要跟著快速預約走，不能只靠裝置判斷。 */
+function chvQuickPick(t){
+  const d=window._chvQsDate||ymd(TODAY);
+  window._bkCoachCourseOnly=true;
+  closeModal(); dtlAddAt(d,t);
+}
 /* 今日值班那一格：點下去要看目前的打卡狀態（2026-08-21 使用者回報：
    「教練上班打卡的按鈕 目前只能上班 不能下班」）——
    原本一律開掃碼視窗。掃碼那條路其實也做得到下班（doScanPunch 掃到碼會問要不要下班），

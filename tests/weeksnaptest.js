@@ -42,5 +42,28 @@ ok('　　行事曆那兩支本來就以週為單位（calStepWeek 走 calWeekSt
    /calWeekStart = addDays\(calWeekStart, dir\*7\);/.test(src)
    && /const m=parseYmd\(window\._wtlMonday\); m\.setDate\(m\.getDate\(\)\+delta\*7\);/.test(src));
 
+
+/* 2026-08-22 使用者指示：「上方的日期列也做成左右拖拉翻頁，跟首頁日期列一樣，
+   只是首頁是上下拖拉；兩端的箭頭也仿照首頁的箭頭；拖拉也是停留 0.5 秒就換頁」 */
+console.log('\n日期列的左右拖曳換週');
+ok('★ 兩端箭頭改用首頁那組 CSS 三角形（橫向版）',
+   /<span class="a2-arw a2-arw-l" role="button" tabindex="0" title="上一週" onclick="\$\{prevFn\}"><\/span>/.test(src)
+   && /\.a2-arw-l\{border-left:0;border-right:6px solid var\(--t3\);/.test(src));
+ok('★★ 手感與首頁直欄同一套：位移打四五折、門檻 44px、停 500ms 才換',
+   /const TH=44, HOLD=500, MAXOFF=26;\s*\n\s*let row=null, head=null/.test(src)
+   && /row\.style\.transform='translateX\('\+Math\.max\(-MAXOFF,Math\.min\(MAXOFF, dx\*0\.45\)\)\+'px\)';/.test(src));
+ok('★ 往左拖＝下一週、往右拖＝上一週；待命時亮起對應那顆箭頭',
+   /const d=\(dx<=-TH\)\?1:\(\(dx>=TH\)\?-1:0\);/.test(src)
+   && /head\.classList\.add\(d>0\?'hwk-armnext':'hwk-armprev'\)/.test(src));
+ok('★★ 用事件委派掛一次 —— 這一列在三個頁面各自重繪，每次重綁很容易漏',
+   /if\(window\._hwDragOn\) return; window\._hwDragOn=true;/.test(src)
+   && /這一列在三個頁面各自\s*\n?\s*重繪（管理員首頁／教練首頁／手機行事曆），每次重繪都重綁很容易漏/.test(src));
+ok('　　換週函式由 data-shift 帶（三處各自不同：admWeekShift／coachWeekShift／cagWeekShift）',
+   /data-shift="\$\{_sh\}"/.test(src)
+   && /const _sh=String\(prevFn\|\|''\)\.replace\(\/\\s\*\\\(\.\*\$\/,''\);/.test(src));
+ok('　　⚠ 這一列不橫捲（hero-week 是 overflow-x:visible、七格剛好塞滿），不會跟捲動打架',
+   /\.cag-days\.hero-week\{overflow-x:visible;/.test(src)
+   && /若日後改成可橫捲，這裡要補「捲到邊緣才接手」的判斷/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

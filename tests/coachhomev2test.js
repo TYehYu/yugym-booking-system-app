@@ -237,8 +237,6 @@ ok('★ 表頭的動作要回到目前這一頁（寫死 calendar 會把人踢�
 ok('★ 右下角浮動打卡鈕退場（值班那格就能掃碼，浮動鈕還會蓋住課卡）',
    /body\.chv2-shell #punch-fab\{display:none !important;\}/.test(src));
 
-console.log(`\n${pass} 通過 / ${fail} 失敗`);
-process.exit(fail?1:0);
 
 /* ═══ 2026-08-22：把管理員手機首頁今天做的內容同步過來（使用者指示）═══════════════
    「幫我把今天做的管理員手機首頁內容 也更新到教練版手機首頁」 */
@@ -267,21 +265,22 @@ ok('　　貼頂偵測退場（日期列已經不是 sticky，它就在左邊不
 /* 2026-08-22 使用者指示：「在右邊課卡下方新增一個快速預約＋，點了以後跳出視窗顯示
    今天還可以安排的時段」 */
 console.log('\n快速預約');
-ok('★ 按鈕放在課卡列的最後一張（跟著一起捲）',
-   /<div class="admh2-cards">\$\{_cards\}[\s\S]{0,320}?<button class="a2-quickadd" onclick="chvQuickSlots\('\$\{date\}'\)">＋ 快速預約<\/button>/.test(src)
-   && /\.a2-quickadd\{flex:0 0 auto;width:100%;[\s\S]{0,120}?border:1\.5px dashed var\(--bd\);/.test(src));
+ok('★ 按鈕放在課卡列的最後一張（跟著一起捲；0822 二修改成圓形品牌綠）',
+   /<div class="admh2-cards">\$\{_cards\}[\s\S]{0,320}?<button class="a2-quickadd" title="快速預約" onclick="chvQuickSlots\('\$\{date\}'\)">＋<\/button>/.test(src)
+   && /\.a2-quickadd\{flex:0 0 auto;align-self:center;width:52px;height:52px;border-radius:50%;/.test(src));
 ok('★ 只列「還能安排」的時段：打烊前、已過去的不列、自己有課的不列',
    /const last=\(typeof quickBookLastMin==='function'\)\?quickBookLastMin\(date\):\(21\*60\);/.test(src)
    && /if\(nowMin>=0 && mm<nowMin\) continue;/.test(src)
    && /if\(busy\.some\(iv=>mm<iv\[1\] && \(mm\+60\)>iv\[0\]\)\) continue;/.test(src));
 ok('　　取消的課不算佔用（status!=cancelled 才進 busy）',
    /b\.date===date && b\.status!=='cancelled'/.test(src)
-   && /String\(bkCoachId\(b\)\)===String\(SESSION\.id\)/.test(src));
-ok('★★ ⚠ 只擋自己的衝堂、不擋場地 —— 場地由建立預約那一步的既有驗證負責，'
-   +'這裡多做一次會變成兩套規則',
-   /只擋「自己」的衝堂，不擋場地/.test(src));
+   && /String\(bkCoachId\(b\)\)===String\(who\)/.test(src));
+/* 0822 四修（使用者：「18:00 應該只能約團體教室才對」）：場地改成也要算，
+   原本那條「不擋場地」的取捨被推翻 —— 排不進場地的時段本來就不該出現在「還能安排」裡。 */
+ok('★★ 場地也要算（見下方 allocateVenue 那幾條）', /const dayAll=\(bks\|\|\[\]\)\.filter/.test(src));
 ok('★ 點一格直接進既有的建立預約流程（日期時間帶進去）',
-   /onclick="closeModal\(\);dtlAddAt\('\$\{date\}','\$\{minToTime\(mm\)\}'\)"/.test(src));
+   /function chvQuickPick\(t\)\{[\s\S]{0,200}?closeModal\(\); dtlAddAt\(d,t\);/.test(src)
+   && /onclick="chvQuickPick\('\$\{minToTime\(o\.mm\)\}'\)"/.test(src));
 /* 0822 三修（使用者）：「幫我統一改成管理員的風格 左右兩張平均的卡片 背景暗化」 */
 /* 0822 二修（使用者）：「快速預約就不要顯示不可預約的時段了」——
    版型維持兩欄等寬，但內容只留可約的；不走 slotPanelHTML（那支的職責是「整天的時段狀態」）。 */
@@ -302,3 +301,24 @@ ok('★ 管理員手機首頁也有同一顆（帶目前篩選的教練；All �
    && /先在這裡假設一位反而會擋掉可用時段/.test(src));
 ok('　　一格都沒有時講清楚，不要給一個空格子',
    /這一天已經沒有可安排的時段了。/.test(src));
+
+/* 2026-08-22 使用者回報：「這個快速預約有問題，18:00 應該只能約團體教室才對；
+   然後教練跟管理員的首頁快速預約，只能建立教練課，不能建立自主訓練跟團體課」 */
+console.log('\n快速預約：場地與課別');
+ok('★★ 場地也要算 —— 用行事曆同一支 allocateVenue 以「私人教練 60 分」試排，排不進去就不列',
+   /let a=null; try\{ a=allocateVenue\('私人教練', dayAll, mm, mm\+60, null\); \}catch\(_\)\{ return \{ok:true,tag:''\}; \}/.test(src)
+   && /if\(!a \|\| a\.error\) return \{ok:false,tag:''\};/.test(src));
+ok('★ 只剩團課教室／跑步機時照列，但標出來（那是「還有位子，但只剩這個」）',
+   /return \{ok:true, tag: vid==='group'\?'教室' : \(vid==='treadmill'\?'跑步機':''\)\};/.test(src)
+   && /標「教室／跑步機」的代表那個時段只剩該場地/.test(src));
+ok('★★ ⚠ 場地是全店共用的 → 判斷要用當天全部未取消的預約，不是只有這位教練的',
+   /const dayAll=\(bks\|\|\[\]\)\.filter\(b=>b && b\.date===date && b\.status!=='cancelled'\);/.test(src)
+   && /判斷用\*\*當天全部\*\*未取消的預約/.test(src));
+ok('★ 快速預約只建教練課（自主訓練是會員自約、團課從後台開）',
+   /window\._bkCoachCourseOnly=true;/.test(src)
+   && /if\(window\._bkCoachCourseOnly && t\.category!=='私人教練'\) return false;/.test(src));
+ok('　　一次性旗標：開窗過濾完就清掉，不影響下一次一般的新增預約',
+   /window\._bkCoachCourseOnly=false;   \/\* 一次性旗標/.test(src));
+
+console.log(`\n${pass} 通過 / ${fail} 失敗`);
+process.exit(fail?1:0);
