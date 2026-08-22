@@ -20,7 +20,7 @@ t('確認鈕跟著選取狀態開關', /ok\.disabled=!window\._chvQsPick/.test(s
 t('確認鈕顯示選到的時間', /確認 \$\{window\._chvQsPick\}/.test(sel));
 
 const go=s.slice(s.indexOf('function chvQuickGo('), s.indexOf('function chvQuickGo(')+400);
-t('沒選時段按確認不前進', /if\(!t\)\{ toast\('請先選一個時段'\); return; \}/.test(go));
+t('沒選時段按確認不前進', /if\(!t\)\{ showToast\('請先選一個時段'\); return; \}/.test(go));
 t('確認才走 chvQuickPick', /chvQuickPick\(t\);/.test(go));
 
 t('選取態 CSS 在 :hover 之後（壓得過）',
