@@ -77,17 +77,24 @@ ok('　　挑到人仍走既有的 bkOrbitSubSet（含衝堂驗證與寫入）',
    /closeModal\(\);bkOrbitSubSet\('\$\{bid\}','\$\{c\.id\}'\)/.test(src)
    && /if\(clash\)\{ showToast\('該教練此時段已有課程，無法代課'\); return; \}/.test(src));
 ok('　　有代課時多一列「清除代課」', /closeModal\(\);bkOrbitSubSet\('\$\{bid\}',''\)`,'清除代課'/.test(src));
-ok('　　教練請假不重複列進來（調整課程已經是獨立一項）',
-   !g('async function ashSubPick(bid){','\n/* 復原前先問一次').includes('canCoachLeave'));
+/* 0821 反過來了：使用者指示把「教練請假」搬進這張清單 —— 兩件事是同一個問題的
+   兩種答案（這位教練這堂來不了：找人代，或請假），放一起才不用退回去再選一次。 */
+ok('★ 教練請假就掛在代課清單裡（同一個問題的兩種答案）',
+   /const _lvRow=\(typeof canCoachLeave==='function' && canCoachLeave\(b\) && !bkIsCoachLeave\(b\)\)\s*\n\s*\? row\(`closeModal\(\);bkCoachLeave\('\$\{bid\}'\)`,'教練請假',/.test(src));
+ok('　　⚠ 復原留在上一層（請假後課會變成自主訓練，這張視窗根本進不來，放這裡等於藏起來）',
+   /把復原放這裡等於藏起來/.test(src));
 ok('　　返回退回「調整課程」那一層', /onclick="closeModal\(\);ashEditAsk\('\$\{bid\}'\)">返回/.test(src));
 ok('★ 沒有錨點課卡也能重開面板（首頁那條路本來就沒有 el，原本會丟例外）',
    (src.match(/if\(el\)\{ el\.style\.marginLeft=''; el\.style\.marginTop=''; el\.classList\.add\('cal-ev-active'\); \}/g)||[]).length===2);
 ok('★ 視窗集合：本堂人數上限（改人數搬進標題卡）',
-   ei.includes("openGrpMaxEdit('${b.id}')") && ei.includes('A.isGroup && A.staff && !A.closed'));
+   ei.includes("openGrpMaxEdit('${b.id}')") && ei.includes('if(!_leave && A.isGroup && A.editable)'));
 ok('　　改人數做完要回課卡（它的取消與儲存都會 openBookingDetail）', ei.includes("ashBackArm('${b.id}');closeModal();openGrpMaxEdit"));
-ok('★ 教練請假：未請假給「教練請假」、已請假給「復原」', /if\(_leave\)\{[\s\S]*'取消教練請假（復原）'[\s\S]*\}else if\([\s\S]*'教練請假',bkCoachLeaveSub\(b\)/.test(ei));
-/* 5 條：調整時間、更改場地（自主訓練）、更改場地（其他課別）、指派代課、本堂人數上限 */
-ok('　　已請假的堂不再列出調整時間／場地／代課／改人數', (ei.match(/!_leave &&/g)||[]).length===5);
+/* 0821 起這一層只留復原：請假的入口搬到「指派代課教練」那張清單（見上面） */
+ok('★ 已請假的堂：這一層只留復原', /if\(_leave\)\{\s*\n\s*rows \+= \(b\.status==='coach_leave'\)\s*\n\s*\? row\(`ashCoachLeaveUndoAsk\('\$\{b\.id\}'\)`,'取消教練請假（復原）'/.test(ei)
+   && !/'教練請假',bkCoachLeaveSub\(b\)/.test(ei));
+/* 8 條：調整日期／時間、更改場地（自主訓練）、更改場地（其他課別）、指派代課、
+   更換課程、更換票券、補簽、本堂人數上限（0821 之後陸續加的都跟著掛 !_leave）。 */
+ok('　　已請假的堂，其他修改一律不列（每一條都掛 !_leave）', (ei.match(/!_leave &&/g)||[]).length===8);
 ok('　　團課請假＝整堂取消、救不回來，照實說明', ei.includes('這堂的教練請假是<b>整堂取消</b>，無法復原'));
 ok('★ 復原前先跳視窗確認（使用者指示）',
    /async function ashCoachLeaveUndoAsk\(id\)[\s\S]*取消教練請假？[\s\S]*bkCoachLeaveUndo\('\$\{b\.id\}'\)/.test(src));
@@ -102,8 +109,11 @@ ok('★ 視窗風格對齊課卡（使用者回報「跟我們剛剛調整的差
    /\.modal:has\(\.ash-sheetmk\)\{background:var\(--bg\);border-radius:22px/.test(src)
    && /\.ash-eirow\{[\s\S]{0,220}background:#fff;border:none;[\s\S]{0,120}box-shadow:0 6px 18px/.test(src)
    && /\.modal:has\(\.ash-sheetmk\) \.modal-foot \.btn\{border-radius:999px/.test(src));
-ok('　　從課卡開的視窗都掛上標記（調整課程／指派代課／取消教練請假／調整預約時間／會員備註）',
-   (src.match(/<div class="ash-sheetmk"><\/div>/g)||[]).length===5);
+/* 標記本來只有 5 個視窗，之後每加一張從課卡開的視窗就跟著加一個，數死會一直壞；
+   改成點名幾張一定要有的，數量只要求「至少這些」。 */
+ok('　　從課卡開的視窗都掛上標記',
+   ['調整課程','指派代課教練','取消教練請假？','調整預約時間','備註','更換課程','安排這一堂']
+     .every(t=>src.includes(`<div class="ash-sheetmk"></div><div class="modal-title">${t}</div>`)));
 ok('　　只吃帶標記的視窗，其他彈窗不受影響', /\.modal\{background:var\(--surface-3\)/.test(src) && /\.ash-sheetmk\{display:none;\}/.test(src));
 
 console.log('簡易課卡：每位會員一張卡');
@@ -119,8 +129,12 @@ ok('　　取消排在簽到前面（DOM 順序＝上下順序）',
 ok('★ 請假改成卡片內、姓名列最右邊的小按鈕',
    /_leaveBtn=`<button type="button" class="ash-mlv"[^`]*ashSeatAct\('\$\{b\.id\}','leave','\$\{r\.sk\}'\)/.test(src)
    && /\.ash-mlv\{margin-left:auto/.test(src));
-ok('　　請假中換成「取消請假」（且傳會員 id，與名單視窗一致）',
-   /class="ash-mlv ash-mlv-on"[^`]*ashSeatAct\('\$\{b\.id\}','leave','\$\{r\.mid\}'\)[^`]*>取消請假</.test(src));
+/* 0821 使用者回報「請假的會員卡特別突兀」→ 取消請假搬到右邊的圓鈕，
+   不再是卡片裡那顆長按鈕（別人的卡右邊都是圓鈕，只有它凸出來）。 */
+ok('　　請假中：右側圓鈕「取消請假」',
+   /_outOrbs \+= evoBtn\('','',`ashSeatAct\('\$\{b\.id\}','leave','\$\{r\.mid\}'\)`,'undo','取消請假'\);/.test(src));
+ok('　　⚠ 取消請假傳的是 r.mid 不是 r.sk（groupToggleLeave 按「人」找回名額，用 sk 會取消錯人）',
+   /動作參數沿用原本的 r\.mid（不是 r\.sk）/.test(src));
 ok('　　已簽到就不給請假／取消（同名單視窗）',
    src.includes('if(_ck && _canLeave && !inHere && !A.closed)')
    && src.includes("if(A.staff && !inHere && !A.closed) _outOrbs += evoBtn('','evo-danger'"));
@@ -158,7 +172,12 @@ ok('★ 行事曆情境仍然不給簽到（0819 定案：簽到只在首頁）'
    (src.match(/if\(_ck && !A\.calCtx && !A\.closed\)/g)||[]).length===2);
 ok('　　單人課走 confirmCancelBooking／checkInBooking（沒有逐人請假的機制）',
    src.includes("collapseBkCard();confirmCancelBooking('${b.id}')") && src.includes("collapseBkCard();checkInBooking('${b.id}')"));
-ok('　　待簽約／待分期不重複給圓鈕', src.includes('if(!A.pending && r.mid){') && src.includes('await bkCardPop(el, b, btns, {pending:true});'));
+/* 0821 追加：體驗課沒有 member_id，但那兩顆鈕吃的是 booking id，本來就不需要會員 */
+ok('　　待簽約／待分期不重複給圓鈕（體驗課例外，它本來就沒有 member_id）',
+   src.includes("const _canAct = !!r.mid || b.category==='體驗';")
+   && src.includes('if(!A.pending && _canAct){')
+   /* 待簽約那條路自己帶一組 acts（editable:false＝不給改期／場地／代課） */
+   && src.includes('await bkCardPop(el, b, btns, {pending:true, staff, own, canCancel, closed, isGroup, editable:false});'));
 ok('　　票券圓點保留（使用者定案）＋逐名額各取自己那張',
    src.includes('r.sk?(W.seatOf(b.id,r.n)||W.ticketOf(b.id)):W.ticketOf(b.id)') && src.includes('ticketTokens(sl.t,sl.stamps,'));
 ok('　　跨票時用票內序圈本堂（全體序會圈不到）', src.includes('if(s2&&s2.t&&s2.t.id===sl.t.id) _ord++;'));
@@ -166,8 +185,10 @@ ok('　　跨票時用票內序圈本堂（全體序會圈不到）', src.includ
 console.log('搬家後下方那一列只剩新增');
 const exp=g('async function expandBkCard(el, id){','async function bkCardPopClose');
 ok('★ 代課改由課程卡的教練名負責（下方不再產生）', exp.includes('if(!_ashMode && staff && !closed && b.date>=ymd(TODAY)'));
-ok('★ 取消改由會員卡負責', exp.includes('if(!_ashMode && canCancel && own){'));
-ok('★ 簽到改由會員卡負責', exp.includes('if(!_ashMode && !_calCtx && (staff||coachCk) && !closed){'));
+/* 0821 使用者指示收回一半：只有團課的取消／簽到留在會員卡上（每個名額要各自操作），
+   單人課只有一張卡，為了兩顆圓鈕把卡撐到 100px 高不划算 → 擺回下方那一排。 */
+ok('★ 團課的取消由會員卡負責，單人課回到下方那一排', exp.includes('if((!_ashMode || !isGroup) && canCancel && own){'));
+ok('★ 簽到同一條規則', exp.includes('if((!_ashMode || !isGroup) && !_calCtx && (staff||coachCk) && !closed){'));
 ok('★ 明細鈕撤掉（簡易課卡已涵蓋這些操作）', /2026-08-20 使用者指示：管理員手機的簡易課卡已經涵蓋這些操作，明細鈕撤掉。 \*\/\s*\n\s*if\(!_ashMode\) btns \+=/.test(exp));
 ok('　　新增仍在下方（沒被搬走）', exp.includes("evoBtn('evo-b2','evo-gold',`collapseBkCard();openGroupMembers('${id}')`,'plus','新增')"));
 ok('　　一顆都沒有時不畫空的圓鈕列', src.includes('${btns?`<div class="mtp-orbs">${btns}</div>`:\'\'}'));
@@ -215,9 +236,10 @@ console.log('會員資料頁（管理員手機）');
 const ph=g('function ppHeaderHtml(){','\n// ══════ Tabs ══════');
 /* 2026-08-20 四修：桌機版也走同一套版面 → 條件不再看 isMobileLayout()。
    仍限「管理員」與「會員」——員工資料與其他角色維持原本的橫向表頭。 */
-ok('★ 管理員看會員資料一律走新版面（手機與桌機同一套）',
-   /if\(isM && SESSION && SESSION\.role==='admin'\)\{[\s\S]{0,400}return `<div class="pp-head pp-head-m2">/.test(ph)
-   && !/if\(isM && SESSION && SESSION\.role==='admin' && isMobileLayout\(\)\)/.test(ph));
+/* 0821 放寬到櫃檯以上（含店長）：版面本身跟權限無關，能不能改名／刪除各自另有判斷 */
+ok('★ 櫃檯以上看會員資料一律走新版面（手機與桌機同一套）',
+   /if\(isM && \(typeof isDeskLike==='function' \? isDeskLike\(\) : \(SESSION && SESSION\.role==='admin'\)\)\)\{[\s\S]{0,500}return `<div class="pp-head pp-head-m2">/.test(ph)
+   && !/isMobileLayout\(\)\)\{[\s\S]{0,80}pp-head-m2/.test(ph));
 ok('★ 大頭照＋姓名獨立一列、橫跨兩欄（使用者回報左右失衡）',
    /<div class="pp-idtop">\s*\n\s*\$\{_avatar\}[\s\S]{0,260}<div class="pp-meta pp-idtier">\$\{tierItem\}<\/div>/.test(ph)
    && /\.pp-head-m2 \.pp-idtop\{grid-column:1\/-1/.test(src));
@@ -240,8 +262,8 @@ ok('　　主教練／家庭成員抽成具名變數，兩種版面共用同一�
 ok('　　姓名與大頭照抽成共用變數，兩種版面各用一次（沒有複製兩份）',
    (ph.match(/\$\{_avatar\}/g)||[]).length===2 && (ph.match(/\$\{_nameHtml\}/g)||[]).length===2);
 ok('　　員工資料／其他角色維持原本的橫向表頭', ph.includes('return `<div class="pp-head">'));
-ok('★ 活動紀錄改成一列按鈕，點了下方換內容（手機與桌機同一套）',
-   /const _m2=!!\(SESSION && SESSION\.role==='admin'\);/.test(src)
+ok('★ 活動紀錄改成一列按鈕，點了下方換內容（同表頭，0821 一併放寬到櫃檯以上）',
+   /const _m2=\(typeof isDeskLike==='function'\) \? isDeskLike\(\) : !!\(SESSION && SESSION\.role==='admin'\);/.test(src)
    && /const back=_m2\s*\n\s*\? `<div class="pp-rectabs">/.test(src));
 ok('★ 四顆平分整列，最右邊的訓練紀錄不會被切掉（使用者回報）',
    /\.pp-rectabs\{display:flex;gap:5px;margin-bottom:14px;\}/.test(src)
@@ -298,7 +320,7 @@ ok('　　員工資料與其他角色維持滿版', /sh\.className='pp-sheet'\+\
 
 console.log('團課標題卡的場地人數');
 ok('★ 場地旁邊標人數', /const _seatTxt = \(A\.isGroup && typeof grpLiveHeads==='function'\)/.test(src)
-   && src.includes("const _vTxt = (_v ? '・'+_v : '') + _seatTxt;"));
+   && src.includes("const _vTxt = (_v ? '・'+_v+_unitTxt : '') + _seatTxt;"));   /* _unitTxt＝跑步機第幾台 */
 ok('　　口徑同名單視窗：有效名額＝總名額−請假', /const _live=grpLiveHeads\(b\), _max=Math\.max\(1,Number\(b\.max_heads\)\|\|5\);/.test(src));
 ok('　　滿了標紅', /_live>=_max\?' ash-seats-full':''/.test(src) && /\.ash-seats-full\{color:var\(--danger/.test(src));
 
@@ -308,7 +330,10 @@ ok('★ 白底＋左側課程色條', /\.cal-ev\.cag-std\.admcag\{background:#ff
 ok('★ 已簽到才填滿課程色（原本是整張淡化）',
    /\.cal-ev\.cag-std\.admcag\.admcag-done\{background:var\(--amc,#1f6f54\) !important;color:#fff;\}/.test(src)
    && !/\.admcag\.admcag-done\{opacity:\.62;\}/.test(src));
-ok('★ 簽到章拿掉、請假章保留', /return k==='leave'\?'<span class="evc-check evc-leave" title="全員請假">假<\/span>':'';\}\)\(\)\}/.test(src));
+/* 0814 之後多了金色「未」章、0821 出席章搬進姓名列，整段改寫成 _stampOut 三選一 */
+ok('★ 全員請假的紅「假」章排在最前面（全員請假時不會有人簽到，兩者不會同時成立）',
+   /const _stampOut = _allLeave\s*\n\s*\? `<span class="evc-check evc-leave" title="全員請假">假<\/span>`/.test(src)
+   && /排在簽到章前面判斷/.test(src));
 ok('　　文字讓開左邊色條', /\.cal-ev\.cag-std\.admcag \.acg-in\{padding-left:7px/.test(src));
 
 console.log('登入頁改版（使用者參考圖）');
@@ -364,9 +389,10 @@ ok('　　只有浮動視窗取消，滿版模式仍保留原規則（切分頁�
 ok('★ 票券種類放不下就換行、按鈕本身不折字（原本擠成直的）',
    /\.pp-sheet-win \.tkfilter,\.pp-sheet-desk \.tkfilter\{flex-wrap:wrap;\}/.test(src)
    && /\.pp-sheet-win \.tkfilter \.tkf-btn,\.pp-sheet-desk \.tkfilter \.tkf-btn\{flex:0 0 auto;white-space:nowrap;\}/.test(src));
-ok('　　桌機尺寸另外給（同一套版面、空間寬鬆一點）',
-   /@media\(min-width:601px\)\{\s*\n\s*\.pp-head\.pp-head-m2\{gap:14px 32px/.test(src)
-   && /\.pp-head-m2 \.pp-avatar\{width:92px;height:92px;\}/.test(src));
+/* 0821 五修（使用者：「會員資料的上方卡 佔比太大了」）：大頭照 92→64、內距行距一起收 */
+ok('　　桌機尺寸另外給（同一套版面，0821 起收窄）',
+   /@media\(min-width:601px\)\{\s*\n\s*\.pp-head\.pp-head-m2\{gap:10px 32px;padding:14px 20px;\}/.test(src)
+   && /@media\(min-width:601px\)\{[\s\S]{0,300}?\.pp-head-m2 \.pp-avatar\{width:64px;height:64px;\}/.test(src));
 /* 兩頁的底色不同，文字色也各自對應：登入頁沒有卡、字直接落在綠底 → 亮色；
    註冊頁是米色卡 → 深色。這條守住兩者沒有互相汙染。 */
 ok('　　登入頁亮字、註冊頁深字，各自對應自己的底色',
