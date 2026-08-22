@@ -266,7 +266,8 @@ ok('　　只吃這兩種視窗，其他地方的 .pp-card 基底規則沒被動
    /^\.pp-card\{background:var\(--card\);border:1px solid var\(--bd\);border-radius:14px;/m.test(src));
 ok('　　主教練／家庭成員抽成具名變數，兩種版面共用同一份', /const coachItem = isM \? mvA\('主教練'/.test(src)
    && /const famItem = \(isM&&_canBase\)\?/.test(src)
-   && /const meta = isM\s*\n\s*\? tierItem \+ coachItem \+ ecItem \+ lineItem \+ carrierItem \+ famItem/.test(src));
+   /* 2026-08-22：會員看自己時 tierItem/coachItem 收起來（ppSelfView），組法不變 */
+   && /const meta = isM\s*\n\s*\? \(ppSelfView\(\)\?'':tierItem \+ coachItem\) \+ ecItem \+ lineItem \+ carrierItem \+ famItem/.test(src));
 ok('　　姓名與大頭照抽成共用變數，兩種版面各用一次（沒有複製兩份）',
    (ph.match(/\$\{_avatar\}/g)||[]).length===2 && (ph.match(/\$\{_nameHtml\}/g)||[]).length===2);
 ok('　　員工資料／其他角色維持原本的橫向表頭', ph.includes('return `<div class="pp-head">'));

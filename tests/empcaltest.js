@@ -126,7 +126,10 @@ console.log('\n③ 值班月曆：排班與打卡排在同一格');
 console.log('\n④ 入口整理：工作紀錄改成列表');
 ok('★ 改用列表（不是卡片格）', /<div class="pp-dlist">/.test(src) && /function ppDashRow\(icon, title, value, sub, go\)\{/.test(src));
 ok('★ 只剩四行：本月課堂／值班與打卡／薪資單／薪資規則',
-   (src.match(/\$\{ppDashRow\(/g)||[]).length===8   /* 2026-08-04 會員活動紀錄也改列表 → 全檔 4+4 行 */
+   /* 2026-08-04 會員活動紀錄也改列表 → 全檔 4+4 行。
+      2026-08-22：會員的「訓練紀錄」那行改成 ${ppSelfView()?'':ppDashRow(...)}，
+      所以直接接在 ${ 後面的只剩 7 個，總數仍是 8。 */
+   (src.match(/ppDashRow\(/g)||[]).length===9   /* 8 個呼叫點＋1 個函式定義 */
    && /ppDashRow\('calendar','本月課堂'/.test(src)
    && /ppDashRow\('clock','值班與打卡'/.test(src)
    && /ppDashRow\('money','薪資單'/.test(src)
