@@ -3987,6 +3987,18 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .mck-dots6{display:grid !important;grid-template-columns:repeat(6,1fr);gap:9px;align-items:center;}
 .mck-dots6 .mtk{width:100%;height:auto;aspect-ratio:1;font-size:12.5px;}
 .mck-dots6 .mtk-more{width:100%;min-width:0;aspect-ratio:1;padding:0;border-radius:50%;font-size:11px;}
+/* 待簽名的合約：圓形卡上方一條虛線簽名區（2026-08-22 使用者指示）。
+   金色＝需要會員動手（與紅＝警示、綠＝一般提示分開，見品牌色階）。 */
+.mck-signpad{width:100%;display:flex;align-items:center;gap:10px;margin:0 0 12px;
+  padding:11px 13px;border:1.5px dashed var(--gold,#B48A56);border-radius:12px;
+  background:rgba(180,138,86,.08);font-family:inherit;text-align:left;cursor:pointer;}
+.mck-signpad:active{transform:scale(.99);}
+.mck-signpad-ic{width:30px;height:30px;border-radius:50%;flex:none;display:flex;align-items:center;
+  justify-content:center;background:var(--gold,#B48A56);color:#fff;font-size:15px;line-height:1;}
+.mck-signpad-tx{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1;}
+.mck-signpad-tx b{font-size:12.5px;font-weight:800;color:var(--gold-d,#8a6a30);}
+.mck-signpad-tx i{font-style:normal;font-size:10.5px;color:var(--t3);}
+.mck-signpad-go{flex:none;font-size:11.5px;font-weight:800;color:var(--gold-d,#8a6a30);white-space:nowrap;}
 /* 課堂使用狀況移到右上角、縮小（已銷／總） */
 .mck-v2 .mck-top{align-items:flex-start;}
 .mck-v2-use{flex:0 0 auto;font-family:var(--num);white-space:nowrap;line-height:1;}
@@ -9327,8 +9339,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.2107';
-const APP_VERSION_LABEL='v260822.2107';
+const APP_VERSION = '260822.2110';
+const APP_VERSION_LABEL='v260822.2110';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -47055,6 +47067,11 @@ PAGES.mem_tickets=async function(){
   const[tickets,types,logs,bookings,contracts,_me]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types'),dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('bookings').catch(()=>[]),dbGetAll('contracts').catch(()=>[]),dbGet('members',SESSION.id).catch(()=>null)]);
   window._memContracts=(contracts||[]).filter(c=>c.member_id===SESSION.id);   // 我的合約（RLS 已限本人，這裡再過濾一次）
   window._ctByTicket=Object.fromEntries(window._memContracts.filter(c=>c.ticket_id).map(c=>[c.ticket_id,c.id]));   // 合約綁票券圓形卡（2026-07-28）
+  /* 這張票的合約還沒簽（2026-08-22 使用者指示：「要簽約的票券，在圓形卡上方放一張簽名區，
+     點了進入合約」）—— _ctByTicket 不分簽沒簽，所以另外記一份待簽的。
+     只認 sign_type='remote'（會員自己在手機上簽的那種）；紙本與現場電子簽不是會員的事。 */
+  window._ctSignByTicket=Object.fromEntries(window._memContracts
+    .filter(c=>c.ticket_id && c.sign_type==='remote' && !c.signed_at).map(c=>[c.ticket_id,c.id]));
   window._ttCache=types;
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   /* 2026-07-31 使用者定案：這一頁不再自己算票券，全部從票券夾拿（見 buildWallet）。
@@ -47334,6 +47351,11 @@ function renderMemTickets(){
             <div class="mck-name">${tkNoTag(_sl.no)}${name}${fmt}${t.member_id!==SESSION.id?`<span class="mck-badge" style="background:#f5ede0;color:#8a5e28;margin-left:6px;" title="共享票券：這張票掛在對方名下，你們共用同一個堂數池">享</span>`:''}</div>
             <div class="mck-v2-use" title="已銷課堂數／總堂數"><b>${usedCnt}</b><span>/${total}</span></div>
           </div>
+          ${(()=>{ const _cid=(window._ctSignByTicket||{})[t.id];
+             return _cid?`<button class="mck-signpad" onclick="event.stopPropagation();memSignContract('${_cid}')">
+               <span class="mck-signpad-ic">✎</span>
+               <span class="mck-signpad-tx"><b>這張票券的合約還沒簽名</b><i>點一下開啟合約並簽名</i></span>
+               <span class="mck-signpad-go">簽名 ›</span></button>`:''; })()}
           <div class="mck-dots2 mck-dots6">${ticketTokens(t,_bksC,typeMap,usedCnt,null,SESSION.id,_sl.selfBk)}</div>
           ${(t.installment && t.unlocked_sessions!=null && t.unlocked_sessions<total)?`<div class="mck-install">分期方案・目前開通 <b>${t.unlocked_sessions}</b> / ${total} 堂　·　🔒 部分堂數需繳下一期後開通</div>`:''}
           <div class="mck-v2-foot">

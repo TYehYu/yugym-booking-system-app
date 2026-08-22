@@ -80,5 +80,17 @@ t('時段視窗說明改成條列（不再是一整段）',
   /<ul class="qs-note">/.test(s) && /\.qs-note li\{position:relative;padding-left:12px/.test(s)
   && (s.match(/<ul class="qs-note">/g)||[]).length===2);
 
+/* 待簽合約：在那張票券的圓形卡「上方」放一條簽名區（2026-08-22 使用者指示） */
+t('★ 只有「這張票的合約還沒簽」才畫簽名區',
+  /window\._ctSignByTicket=Object\.fromEntries\(window\._memContracts\s*\n\s*\.filter\(c=>c\.ticket_id && c\.sign_type==='remote' && !c\.signed_at\)/.test(s));
+t('★ 簽名區排在圓形卡之前',
+  s.indexOf('mck-signpad') < s.indexOf('<div class="mck-dots2 mck-dots6">'));
+t('★ 點了進合約簽名（並擋掉整卡展開）',
+  /onclick="event\.stopPropagation\(\);memSignContract\('\$\{_cid\}'\)"/.test(s));
+t('　只認會員自己簽的遠端合約（紙本／現場電子簽不是會員的事）',
+  /c\.sign_type==='remote' && !c\.signed_at/.test(s));
+t('　金色＝需要會員動手（品牌色階：紅警示、金待辦、綠一般）',
+  /\.mck-signpad\{[^}]*border:1\.5px dashed var\(--gold/.test(s.replace(/\n\s*/g,'')));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
