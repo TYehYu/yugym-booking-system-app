@@ -11,8 +11,11 @@ const cut=(a,b)=>s.slice(s.indexOf(a), s.indexOf(b));
 const on=cut('function memh2On(){','function mh2S(){');
 t('只吃手機版面', /isMobileLayout\(\) && !isMobileLayout\(\)|!isMobileLayout\(\)\) return false/.test(on));
 t('只吃會員視角', /SESSION\.role!=='member'\) return false/.test(on));
-t('預設只有真實管理員看得到（真會員碰不到）', /isRealAdmin\(\)\);\s*\/\/ 預覽限定/.test(on));
-t('留一個 localStorage 開關可強制開/關', /localStorage\.getItem\('memh2'\)/.test(on));
+/* 2026-08-22：預覽期結束，正式對所有會員開放 */
+t('已對所有會員開放（不再是 isRealAdmin 預覽限定）',
+  /\n  return true;\n\}/.test(on) && !/return !!\(typeof isRealAdmin/.test(on));
+t('留一個 localStorage 開關可即時退回舊版（memh2=0）', /localStorage\.getItem\('memh2'\)/.test(on)
+  && /if\(v==='0'\) return false;/.test(on));
 t('會員首頁有掛進去且早於舊版渲染', s.indexOf('if(memh2On()){')>0
   && s.indexOf('if(memh2On()){') < s.indexOf("C.innerHTML=`<div class=\"cal-hero\""));
 
@@ -174,7 +177,7 @@ const css=cut('/* ══ 會員手機首頁 V2','/* 2026-08-20 使用者指示�
    .tb-acct-item .acct-nsw 是帳號選單那顆開關 —— 兩者都各自有自己的範圍限定。 */
 t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot / .pp-head / .pp-sheet-self / .tb-acct-item 之下',
   css.split('\n').filter(l=>/^\.[a-z]/.test(l.trim()))
-     .every(l=>/^\.(memh2|mh2-|modal-foot\.mh2-foot|pp-head|pp-sheet(\.|-)|tb-acct-item)/.test(l.trim())));
+     .every(l=>/^\.(memh2|mh2-|modal-foot\.mh2-foot|pp-head|pp-sheet(\.|-)|tb-acct-item|lp-)/.test(l.trim())));
 t('頂列米色', /\.memh2\{background:var\(--card2\)/.test(css));
 
 // ── 外框（2026-08-22 二修）：頂欄米色、收掉重置鈕、底部導覽品牌綠、下拉更新 ──

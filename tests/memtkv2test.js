@@ -48,9 +48,17 @@ t('刻度數與現行規則同源（4 堂／月、3 個月）',
 // ── 主顧客優惠按鈕 ──
 t('等級卡上有「主顧客優惠」按鈕（不分目前等級）',
   /const perkBtn=`<button class="mtc-perk" onclick="openLoyalPerks\(\)">主顧客優惠 ›<\/button>`;/.test(blk));
-t('點開是視窗', /function openLoyalPerks\(\)\{\s*\n\s*showModal\(/.test(s));
-t('方案內容還沒拿到，先留骨架（LOYAL_PERKS 空陣列）',
-  /const LOYAL_PERKS=\[\];/.test(s) && /優惠內容整理中/.test(s));
+t('點開是視窗', /function openLoyalPerks\(\)\{[\s\S]{0,1200}showModal\(/.test(s));
+/* 0822 使用者提供價目表：主顧教練課／主顧友善課，1V1 與 1V2 兩種單價 */
+t('★ 價目表已填入（12 堂・12 個月，1V1／1V2 兩價）',
+  /\{tag:'主顧教練課', tone:'green', spec:'12 堂・12 個月'[\s\S]{0,80}p1:1500, p2:1800\}/.test(s)
+  && /\{tag:'主顧友善課', tone:'gold'[\s\S]{0,120}p1:1300, p2:1600\}/.test(s));
+t('★ 只有主顧客／VIP 看得到金額（使用者：要會員升級才可以看到內容）',
+  /const unlocked=!!\(ti && \(ti\.state==='loyal' \|\| ti\.state==='vip'\)\);/.test(s));
+t('★ 還沒升級：只講規則與鼓勵，不露金額',
+  /升級主顧客後就看得到/.test(s) && /再撐一下，就快到了/.test(s));
+t('★ tier 讀的是腳本裡的 _memTkData，不是 window（0822 實測抓到主顧客也被鎖住）',
+  /const ti=\(typeof _memTkData!=='undefined' && _memTkData && _memTkData\.tier\)\|\|null;/.test(s));
 
 // ── 分頁 ──
 t('四個分頁：教練課／團體課／自主訓練／折扣券',
@@ -66,6 +74,11 @@ t('自主訓練／折扣券的獨立入口在 V2 收起（改由分頁承接）'
   /\(mtkV2\?tabRow:`<div class="mtk-entry-row">/.test(s));
 
 /* 底部導覽的 iOS 問題改成全域處理了，斷言移到 tests/navfixedtest.js */
+
+/* 時段視窗的說明改成一行一句（2026-08-22 使用者：「處理一下上方的斷句 方便閱讀」） */
+t('時段視窗說明改成條列（不再是一整段）',
+  /<ul class="qs-note">/.test(s) && /\.qs-note li\{position:relative;padding-left:12px/.test(s)
+  && (s.match(/<ul class="qs-note">/g)||[]).length===2);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
