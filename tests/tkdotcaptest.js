@@ -13,8 +13,13 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('上限本身');
-ok('★ 一次最多 16 顆（一列 8 顆、最多兩列）',
-   (src.match(/const TK_DOT_MAX=16;/g)||[]).length===2);   /* 兩支各宣告一份：見 index.html 的註解 */
+/* 0822 使用者回報「會員資料的票券要完整顯示，怎麼會有一個虛線的圈寫 5」——
+   16 顆是當初為了擋 9999 順手訂的，但 20／24／34 堂的一般票都會被切掉。
+   正式庫實測：2,977 張票裡 61–998 堂的有 0 張、只有 1 張 9999，所以上限拉到 60：
+   真實票券 100% 完整顯示，那張無限次卡仍然有收尾籤擋住（凍結防線還在）。 */
+ok('★ 上限 60（真實票券全畫得完，只有 9999 那張會被截）',
+   (src.match(/const TK_DOT_MAX=60;/g)||[]).length===2   /* 兩支各宣告一份：見 index.html 的註解 */
+   && /正式庫實測：2,977 張票裡，61–998 堂的有 0 張/.test(src));
 ok('　　成因與案例寫在原地',
    /sessions_total 是 9999/.test(src) && /魚媽劉媽/.test(src));
 ok('★ 截斷時最後一格放收尾籤，不默默少畫',
@@ -64,5 +69,17 @@ console.log('\n視窗的算術');
      (()=>{ const r=win(20,0,20,19); return r.to<=20 && r.from>=0; })(), true);
 }
 
+
+console.log('\n「已使用完」的判斷');
+ok('★★ 不能只看 sessions_remaining —— 預約當下就扣課，「約滿但還沒上」的票餘額就是 0',
+   /const _s=\(typeof WAL!=='undefined' && WAL && typeof WAL\.of==='function'\) \? WAL\.of\(t\.id\) : null;/.test(src)
+   && /if\(_s && _s\.state\) return _s\.state==='active' \? 0 : \(_s\.state==='expired' \? 2 : 1\);/.test(src));
+ok('　　與會員資料那一頁同一個來源（票券夾 buildWallet 的 state＝看真的上過幾堂）',
+   /會員資料那一頁看的是票券夾（buildWallet）\s*\n?\s*的狀態，它用的是「真的上過幾堂」/.test(src));
+ok('　　票券夾拿不到時才退回舊判斷（不硬性依賴）',
+   /if\(isExpired\(t\)\) return 2;\s*\n\s*if\(t\.status==='usable' && \(Number\(t\.sessions_remaining\)\|\|0\)>0\) return 0;/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
+
+/* 2026-08-22 使用者回報：「胡連山應該是把票券預約完 但還沒使用完，手機端怎麼出現用畢」 */

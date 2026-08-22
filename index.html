@@ -9030,8 +9030,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1556';
-const APP_VERSION_LABEL='v260822.1556';
+const APP_VERSION = '260822.1610';
+const APP_VERSION_LABEL='v260822.1610';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38342,8 +38342,15 @@ PAGES.m_tickets=async function(){
   // 排序：可使用（未過期且有剩餘）→ 已使用完 → 已過期 → 已退款/作廢
   const isExpired=t=>t.status==='expired' || (t.expire_date && String(t.expire_date).slice(0,10)<today);
   const isRefunded=t=>t.status==='refunded'||t.status==='void'||t.status==='cancelled';
+  /* 2026-08-22 使用者回報：「胡連山應該是把票券預約完 但還沒使用完，怎麼出現用畢」——
+     這裡原本看 sessions_remaining，而**預約當下就會扣課**，所以「約滿但還沒上」的票
+     餘額就是 0，被判成已使用完（還跟著淡化）。會員資料那一頁看的是票券夾（buildWallet）
+     的狀態，它用的是「真的上過幾堂」，兩邊因此對不起來。
+     改成同一個來源：有票券夾就吃它的 state，沒有才退回舊判斷。 */
   const rankOf=t=>{
     if(isRefunded(t)) return 3;
+    const _s=(typeof WAL!=='undefined' && WAL && typeof WAL.of==='function') ? WAL.of(t.id) : null;
+    if(_s && _s.state) return _s.state==='active' ? 0 : (_s.state==='expired' ? 2 : 1);
     if(isExpired(t)) return 2;
     if(t.status==='usable' && (Number(t.sessions_remaining)||0)>0) return 0; // 可使用
     return 1; // 已使用完（usable 但剩 0，或 used_up）
@@ -45849,9 +45856,14 @@ function bkSelfBooked(b, memberId, selfSet){
    逐堂畫圓點就是近萬個節點，點開課卡整個分頁凍住（魚媽劉媽 18:00）。
    截斷時最後一格改放收尾籤，不能默默少畫。
    ⚠ 這個上限宣告在函式**裡面**（兩支各一份）：測試是把函式原始碼抓出去單獨 eval 的，
-     放在模組層會讓 9 支測試整包 ReferenceError —— 數字要改記得兩支一起改。 */
+     放在模組層會讓 9 支測試整包 ReferenceError —— 數字要改記得兩支一起改。
+   2026-08-22 使用者回報「會員資料的票券要完整顯示啦，怎麼會有一個虛線的圈寫 5，
+     這樣我怎麼知道他約到什麼時候」——16 顆是當初為了擋 9999 順手訂的，但一般的票
+     20／24／34 堂都會被切掉，等於為了一張特例犧牲全部。
+     正式庫實測：2,977 張票裡，61–998 堂的有 0 張，只有 1 張 9999（魚媽劉媽的無限次卡）。
+     所以上限拉到 60 —— 真實票券 100% 完整顯示，那張 9999 仍然有收尾籤擋住。 */
 function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
-  const TK_DOT_MAX=16;
+  const TK_DOT_MAX=60;
   const total=Math.max(Number(t.sessions_total)||0,0);
   const v=tkVisual(t,typeMap);
   /* 自主訓練依時長展開（2026-07-27 楊慧淳案例：120 分鐘＝扣 2 點 → 圓形卡畫 2 顆同日期） */
@@ -46028,8 +46040,8 @@ function ticketDots(used,total,tk){
   const unlocked = isInstall ? tk.unlocked_sessions : t;
   /* 同樣受 TK_DOT_MAX 限制（2026-08-21）——這支也是逐堂畫，9999 堂的票一樣會卡死。
      這裡沒有「本堂」可以對齊，就顯示最後一段（已用的都在前面，尾端才是還沒上的）。
-     數字與 ticketTokens 那支同步（理由見那裡的註解）。 */
-  const TK_DOT_MAX=16;
+     數字與 ticketTokens 那支同步（理由見那裡的註解；2026-08-22 由 16 拉到 60）。 */
+  const TK_DOT_MAX=60;
   let s='';
   const _cap=Math.min(t, TK_DOT_MAX);
   const _st=Math.max(0, Math.min(u, t-_cap));      // 讓「已用／未用」的交界落在視窗裡
