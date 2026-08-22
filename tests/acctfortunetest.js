@@ -247,7 +247,9 @@ ok('★ 底下左右各四列：電話/性別/生日/LINE ｜ 主教練/緊急�
    ph.includes('<div class="pp-meta pp-idfields">${phoneItem}${genderItem}${bdayItem}${lineItem}</div>')
    && ph.includes('<div class="pp-meta pp-fields">${coachItem}${ecItem}${carrierItem}${famItem}</div>')
    && /\.pp-head\.pp-head-m2\{display:grid;grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/.test(src));
-ok('★ 大頭照放大', /\.pp-head-m2 \.pp-avatar\{width:76px;height:76px;\}/.test(src));
+/* 0820 放大到 76 → 0822 收回 58：表頭改成固定不捲之後，它佔的高度是永久少掉的可讀區
+   （使用者：「把上方底部米色視窗縮短一點」）。見 tests/ppstickytest.js。 */
+ok('★ 大頭照仍比預設大，但已為固定表頭收短', /\.pp-head-m2 \.pp-avatar\{width:58px;height:58px;\}/.test(src));
 ok('★ 姓名與等級靠右（大頭照留在左邊）',
    /\.pp-head-m2 \.pp-idname\{[^}]*margin-left:auto;[\s\S]{0,80}align-items:flex-end;text-align:right/.test(src));
 ok('★ 視窗裡的卡片改新語彙：去細框、加大圓角與柔和陰影（手機與桌機同一套）',
