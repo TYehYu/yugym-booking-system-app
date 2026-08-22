@@ -52,7 +52,7 @@ ok('★ 課卡有流星頭（較粗的亮弧、與尾巴同一支動畫）',
    && (src.match(/animation:tcardComet 3\.2s linear infinite;/g)||[]).length===2);
 ok('★ 上課中／逾時未簽仍疊在左側教練欄之上（框不被切掉）',
    /\.tcard-std\.tcard-live,\.tcard-std\.tcard-miss\{z-index:5;\}/.test(src)
-   && /\.tcard-coach\{width:118px;flex-shrink:0;padding-top:4px;position:sticky;left:0;z-index:4;/.test(src));
+   && /\.tcard-coach\{width:84px;flex-shrink:0;padding-top:4px;position:sticky;left:0;z-index:4;/.test(src));   /* 0822 欄寬 118→84 */
 ok('　　卡片容器留出光暈空間（padding 10 ／ margin -10）',
    /\.tcard-list\{padding:10px;margin:-10px;\}/.test(src));
 /* 2026-08-06 使用者指示：完成（有簽到、時間也過了）→ 流星停下來、整圈保持全亮 */

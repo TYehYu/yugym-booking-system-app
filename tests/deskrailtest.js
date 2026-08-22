@@ -46,7 +46,17 @@ ok('★ 移除不必要的內容：灰底縮寫圓與「上課中」那一行退
    !/<span class="tcard-av">\$\{coachAbbr\(c\)\}<\/span>/.test(src)
    && !/tcard-cstate-live"><i class="tl-cstate-dot live"><\/i>上課中/.test(src)
    && /「上課中」那一行拿掉 —— 該列本來就有流星邊框在表示/.test(src));
-ok('　　正圓不被名字撐成橢圓（固定 74×74＋長名字先縮字再截斷）',
-   /\.tcard-cball\{width:74px;height:74px;border-radius:50%;flex:0 0 auto;/.test(src)
-   && /\.tcard-cball \.tcard-cbn\.long\{font-size:11px;/.test(src)
+ok('　　正圓不被名字撐成橢圓（固定 72×72＋長名字先縮字再截斷）',
+   /\.tcard-cball\{width:72px;height:72px;border-radius:50%;flex:0 0 auto;/.test(src)
+   && /\.tcard-cball \.tcard-cbn\.long\{font-size:10\.5px;/.test(src)
    && /\.tcard-cball \.tcard-cbn\{[^}]*text-overflow:ellipsis;/.test(src));
+/* 0822 二修（使用者）：不要「我」那顆咖啡色標籤、堂數放大、欄寬收斂 */
+ok('★ 「我」的標記拿掉（管理員看這頁是看全店，自己那一列不需要特別指認）',
+   !/<i class="tl-me">我<\/i>/.test(src)
+   && /「我」那顆標記拿掉/.test(src));
+ok('★ 堂數放大、名字降一階（這一欄要一眼讀到的是幾堂）',
+   /\.tcard-cball \.tcard-cbt\{font-family:var\(--num\);font-size:17px;font-weight:800;line-height:1;\}/.test(src)
+   && /\.tcard-cball \.tcard-cbn\{font-size:11\.5px;/.test(src));
+ok('★ 欄寬從 118 收到 84（原本是給「縮寫圓＋三行文字」的寬度）',
+   /\.tcard-coach\{display:flex;align-items:center;justify-content:center;gap:0;width:84px;/.test(src)
+   && /\.tcard-coach\{width:84px;flex-shrink:0;padding-top:4px;position:sticky;/.test(src));
