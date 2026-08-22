@@ -24,9 +24,9 @@ t('家庭成員仍只有櫃檯以上維護', /const famItem = \(isM&&_canBase\)\
 
 /* 2026-08-22 二修（使用者）：「會員本人只需要看到上方的基本資料」——整張活動紀錄不畫 */
 t('會員看自己時整張「活動紀錄」不畫', /if\(ppSelfView\(\)\) return '';\n    return `<div class="pp-card">/.test(s));
-t('櫃檯以上照舊看得到票券／預約紀錄／交易／訓練紀錄',
+t('櫃檯以上照舊看得到票券／預約紀錄／交易',
   /ppDashRow\('ticket','票券'/.test(s) && /ppDashRow\('calendar','預約紀錄'/.test(s)
-  && /ppDashRow\('money','交易'/.test(s) && /ppDashRow\('dumbbell','訓練紀錄'/.test(s));
+  && /ppDashRow\('money','交易'/.test(s));
 
 t('交易頁只列自己的日期／項目／金額／付款方式，沒有業績或成本欄位',
   (()=>{ const pay=cut("if(PP.recView==='pay'){","return `<div class=\"pp-card\">${back}<div class=\"pp-card-t\">訓練紀錄");

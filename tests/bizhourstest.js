@@ -9,9 +9,16 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('設定');
-ok('★ 週日 15:00、週六 21:00，其餘平日 22:00',
-   /const BIZ_CLOSE_H=\{0:15, 6:21\};/.test(src)
-   && /return \(h==null\?22:h\)\*60;/.test(src));
+/* 2026-08-22 收成一份：BIZ_CLOSE_H 退場，打烊時間一律問 BUSINESS_HOURS */
+ok('★ 週日 15:00、週六 21:00，其餘平日 22:00（唯一來源 BUSINESS_HOURS）',
+   /const BUSINESS_HOURS=\{ 0:\['09:00','15:00'\][\s\S]{0,220}6:\['09:00','21:00'\] \};/.test(src)
+   && /return timeToMin\(bh\[1\]\);/.test(src)
+   && /return 22\*60;/.test(src));
+/* 只剩註解裡提到（說明當初為什麼要合併），程式碼裡不可以再有 */
+ok('★★ 全站只有一份營業時間（舊的 BIZ_CLOSE_H 已移除）',
+   !/BIZ_CLOSE_H/.test(src.replace(/\/\*[\s\S]*?\*\//g,'')));
+ok('　　開店時間也走同一份', /function bizOpenMin\(ds\)\{/.test(src)
+   && /return timeToMin\(bh\[0\]\);/.test(src));
 ok('★ 快速預約的最後一格＝打烊前 60 分（一堂課的長度）',
    /function quickBookLastMin\(ds\)\{ return bizCloseMin\(ds\)-60; \}/.test(src));
 ok('★ 只套在快速預約那一圈（另外兩圈是場地標籤，使用者指定不動）',
@@ -21,7 +28,7 @@ ok('　　範圍後來擴到行事曆的空時段（2026-08-21 第二輪），�
    /週六週日不要顯示非營業時間的預約時段/.test(src)
    && /兩處都只藏「空的」時段/.test(src));
 ok('　　沒有營業時間設定表，先寫在程式裡並註明日後要搬進資料庫',
-   /系統裡沒有營業時間設定表，所以先寫在這裡；日後要讓使用者自己設定再搬進資料庫/.test(src));
+   /系統裡沒有營業時間設定表，所以先寫在程式裡；日後要讓使用者自己設定再搬進資料庫/.test(src));
 
 console.log('\n各天的最後一格');
 {

@@ -129,7 +129,8 @@ ok('★ 只剩四行：本月課堂／值班與打卡／薪資單／薪資規則
    /* 2026-08-04 會員活動紀錄也改列表 → 全檔 4+4 行。
       2026-08-22：會員的「訓練紀錄」那行改成 ${ppSelfView()?'':ppDashRow(...)}，
       所以直接接在 ${ 後面的只剩 7 個，總數仍是 8。 */
-   (src.match(/ppDashRow\(/g)||[]).length===9   /* 8 個呼叫點＋1 個函式定義 */
+   /* 2026-08-22：「訓練紀錄」是開發中的空頁，入口收起來 → 呼叫點 8→7 */
+   (src.match(/ppDashRow\(/g)||[]).length===8   /* 7 個呼叫點＋1 個函式定義 */
    && /ppDashRow\('calendar','本月課堂'/.test(src)
    && /ppDashRow\('clock','值班與打卡'/.test(src)
    && /ppDashRow\('money','薪資單'/.test(src)
@@ -146,7 +147,9 @@ ok('　　特休的數字仍在那一行的說明裡（不用點進去才知道�
 ok('★ 會員活動紀錄也改成列表（與工作紀錄同一套 ppDashRow）',
    !/<div class="pp-dash" style="grid-template-columns:repeat\(2,1fr\);">/.test(src)
    && /ppDashRow\('ticket','票券'/.test(src) && /ppDashRow\('calendar','預約紀錄'/.test(src)
-   && /ppDashRow\('money','交易'/.test(src) && /ppDashRow\('dumbbell','訓練紀錄'/.test(src));
+   && /ppDashRow\('money','交易'/.test(src));
+ok('　　訓練紀錄那一行已收起（開發中的空頁，點進去是死路）',
+   !/ppDashRow\('dumbbell','訓練紀錄'/.test(src) && /功能開發中，敬請期待/.test(src));
 ok('　　票券行：數字＝可用堂數、分類統計留在說明列',
    /\$\{c\.tkLeft\|\|0\}<small>堂可用<\/small>/.test(src)
    && /c\.tkSplit\.map\(x=>`\$\{x\[0\]\} \$\{x\[1\]\}`\)\.join\('、'\)/.test(src));

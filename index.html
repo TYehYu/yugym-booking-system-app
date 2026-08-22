@@ -9339,8 +9339,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.2110';
-const APP_VERSION_LABEL='v260822.2110';
+const APP_VERSION = '260822.2220';
+const APP_VERSION_LABEL='v260822.2220';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -32481,6 +32481,9 @@ function shiftCode(start,end,dateStr){
 function shiftCodeDisp(c){ return ({'A':'早','A1':'早','C':'晚','C1':'晚','午':'中','B':'中','B1':'中'})[c]||c; }
 // 營業時間（依星期；0=日）：週一~五 9-22（2026-08-04 起，原 10 點開門）、週六 9-21、週日 9-15
 // DB 端 fn_biz_hours（會員自助預約/改期的守門）同步改，見 20260804_biz_hours_weekday_0900
+/* ★ 全站唯一的營業時間（2026-08-22 起）：自主訓練訂位、快速預約的最後一格、
+   行事曆的「已打烊」灰格，全部問這一份（見 bizOpenMin／bizCloseMin）。
+   要改門市時間就只改這一行。0＝週日 … 6＝週六。 */
 const BUSINESS_HOURS={ 0:['09:00','15:00'], 1:['09:00','22:00'], 2:['09:00','22:00'], 3:['09:00','22:00'], 4:['09:00','22:00'], 5:['09:00','22:00'], 6:['09:00','21:00'] };
 // 檢查某天排班是否覆蓋全營業時段，回傳沒人的時段陣列 [[startMin,endMin],...]
 // 註：有登記請假(leave_type)的班次，整段視為「沒人」（與出勤月曆判定一致）
@@ -36426,7 +36429,9 @@ function ppRecordHtml(){
           (c.bkCount!=null?`${c.bkCount}<small>筆</small>`:''), '歷史與未來預約', `ppShowRecord('bookings')`)}
         ${ppDashRow('money','交易',
           (c.pcCount!=null?`${c.pcCount}<small>筆</small>`:''), '付款／退款／發票', `ppShowRecord('pay')`)}
-        ${ppDashRow('dumbbell','訓練紀錄','', '課堂訓練紀錄', `ppShowRecord('training')`)}
+        ${/* 「訓練紀錄」還是「功能開發中」的空頁（2026-08-22 收起入口）——
+             點進去只會看到一句敬請期待，等於一條死路。ppShowRecord('training') 與那一頁
+             的程式碼都留著，功能做好後把這一行放回來就可以。 */''}
       </div>
     </div>`;
   }
@@ -41804,12 +41809,22 @@ async function admCalHeaderHTML(){
    直接把時間軸收到打烊那一小時（見 AG_END）。
    ⚠ 兩處都只藏「空的」時段：已經排在打烊後的課照畫（手機版軸會自動往下延伸到最後一堂課），
      否則等於把課藏起來。櫃檯真要加排打烊後的課，改時間或從會員頁仍排得進去。
-   ⚠ 系統裡沒有營業時間設定表，所以先寫在這裡；日後要讓使用者自己設定再搬進資料庫。 */
-const BIZ_CLOSE_H={0:15, 6:21};   // 0=週日、6=週六；其餘用 22
+   ⚠ 系統裡沒有營業時間設定表，所以先寫在程式裡；日後要讓使用者自己設定再搬進資料庫。
+   ⚠ 2026-08-22 收成一份：原本這裡另有一個 BIZ_CLOSE_H={0:15,6:21}，與上面自主訓練訂位
+     用的 BUSINESS_HOURS 是兩份各自維護的營業時間 —— 改門市時間只改到一邊，就會變成
+     「這裡約得到、那裡約不到」。現在一律問 BUSINESS_HOURS，全站只有那一個地方要改。 */
 function bizCloseMin(ds){
   const d=(typeof parseYmd==='function'&&parseYmd(ds))||new Date(TODAY);
-  const h=BIZ_CLOSE_H[d.getDay()];
-  return (h==null?22:h)*60;
+  const bh=(typeof BUSINESS_HOURS==='object'&&BUSINESS_HOURS)?BUSINESS_HOURS[d.getDay()]:null;
+  if(Array.isArray(bh)&&bh[1]){ try{ return timeToMin(bh[1]); }catch(_){} }
+  return 22*60;   // 查不到就用最寬鬆的平日打烊時間，寧可讓櫃檯自己擋，也不要無故藏掉時段
+}
+/* 開店時間（同一份來源）—— 目前只有訂位面板在用，寫在這裡是為了日後要用時不必再找 */
+function bizOpenMin(ds){
+  const d=(typeof parseYmd==='function'&&parseYmd(ds))||new Date(TODAY);
+  const bh=(typeof BUSINESS_HOURS==='object'&&BUSINESS_HOURS)?BUSINESS_HOURS[d.getDay()]:null;
+  if(Array.isArray(bh)&&bh[0]){ try{ return timeToMin(bh[0]); }catch(_){} }
+  return 9*60;
 }
 /* 快速預約的最後一格＝打烊前 60 分（一堂課的長度） */
 function quickBookLastMin(ds){ return bizCloseMin(ds)-60; }
