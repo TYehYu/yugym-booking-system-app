@@ -61,11 +61,34 @@ ok('★ 捲軸不顯示（左欄已經不捲了，只剩右欄要藏）',
    && /\.admh2-cards\{[\s\S]{0,200}?scrollbar-width:none;-ms-overflow-style:none;\}/.test(src));
 ok('　　底部留一點，不要讓人以為頁面到底了（下面還有今日值班／本月成績）',
    /讓下面的「今日值班／本月成績」露出一角，不會讓人以為頁面到底了/.test(src));
-ok('★ 左右滑換週：往左＝下一週，沿用既有的 admWeekShift',
-   /try\{ admWeekShift\(dx<0\?1:-1\); \}catch\(_\)\{\}/.test(src));
-ok('★★ ⚠ 軸鎖：左欄本身是上下捲的，水平位移要 >48px 且大於垂直 1.5 倍才算換週',
-   /if\(Math\.abs\(dx\)>48 && Math\.abs\(dx\)>Math\.abs\(dy\)\*1\.5\)\{/.test(src)
-   && /不鎖軸的話手指稍微斜一點就會誤觸換週/.test(src));
+/* 2026-08-22 三修（使用者）：改成上下拖曳、拉住 0.5 秒才換週、上下畫箭頭提示 */
+ok('★ 每一天一個白框（與右欄課卡同語彙）',
+   /\.a2-day\{[\s\S]{0,220}?border:1px solid var\(--bd\);background:#fff;/.test(src));
+ok('★ 上下箭頭提示可換週，也可以直接點',
+   /<span class="a2-arw a2-arw-up" onclick="admWeekShift\(-1\)"><\/span>/.test(src)
+   && /<span class="a2-arw a2-arw-dn" onclick="admWeekShift\(1\)"><\/span>/.test(src)
+   && /\.a2-arw-up\{border-bottom:6px solid var\(--t3\);\}/.test(src));
+ok('　　純 CSS 三角形，不吃字型（跨機一致）',
+   /\.a2-arw\{[\s\S]{0,160}?border-left:5px solid transparent;border-right:5px solid transparent;/.test(src));
+ok('★★ 上下拖曳換週：欄位跟著手指走一點點（打四五折、最多 26px）',
+   /const TH=44, HOLD=500, MAXOFF=26;/.test(src)
+   && /inner\.style\.transform='translateY\('\+Math\.max\(-MAXOFF,Math\.min\(MAXOFF, dy\*0\.45\)\)\+'px\)';/.test(src));
+ok('★★ 拉過門檻要「停住 0.5 秒」才真的換週（隨手一滑不會換掉整週）',
+   /armT=setTimeout\(\(\)=>\{ fired=true; clearArm\(\); snap\(\);/.test(src)
+   && /\},HOLD\);/.test(src)
+   && /和下拉更新同一套「拉到位再停一下」的手感/.test(src));
+ok('　　手縮回門檻內或放開就取消，並且彈回原位',
+   /if\(d===dir\) return;\s*\n\s*clearArm\(\); dir=d;/.test(src)
+   && /const snap=\(\)=>\{ inner\.style\.transition='transform \.18s'; inner\.style\.transform='';/.test(src)
+   && /const end=\(\)=>\{ if\(!fired\)\{ clearArm\(\); snap\(\); \} y0=null; \};/.test(src));
+ok('★ 上推＝下一週、下拉＝上一週（跟月曆一樣，往回拉就是往回看）',
+   /const d=\(dy<=-TH\)\?1:\(\(dy>=TH\)\?-1:0\);/.test(src)
+   && /rail\.classList\.add\(d>0\?'a2-armnext':'a2-armprev'\);/.test(src));
+ok('　　待命時亮起「會換到哪一週」那一顆箭頭',
+   /\.admh2-rail\.a2-armprev \.a2-arw-up\{opacity:1;transform:scale\(1\.35\);border-bottom-color:var\(--green\);\}/.test(src)
+   && /\.admh2-rail\.a2-armnext \.a2-arw-dn\{opacity:1;transform:scale\(1\.35\);border-top-color:var\(--green\);\}/.test(src));
+ok('　　左欄自己不捲，所以垂直手勢全歸換週用（不需要軸鎖）',
+   /左欄自己不捲（overflow:hidden），所以這裡不需要軸鎖/.test(src));
 
 console.log('\n④ 下拉更新只從頂列觸發（使用者指示）');
 ok('★★ 手指要落在頂欄上才起算（雙欄各自有捲軸，落在欄位裡往下滑是要捲內容）',
