@@ -49,8 +49,10 @@ t('「更換照片」改名「上傳大頭照」', !/更換照片<\/button>/.tes
   && /上傳大頭照<\/button>/.test(s) && /📷　上傳大頭照/.test(s));
 
 // ── 2026-08-22 四修：白底可點的一列一列、LINE 移到通知設定、通知開關進選單 ──
+/* ⚠ 特異度：要 .pp-head.pp-head-self 才壓得過 .pp-head.pp-head-m2 的兩欄 grid
+   （0822 第一版只寫 .pp-head-self，欄位還是左右兩欄、緊急聯絡人被擠成三行） */
 t('可修改欄位是一列一張白卡、點了就改',
-  /\.pp-head-self\{grid-template-columns:1fr;\}/.test(s)
+  /\.pp-head\.pp-head-self\{grid-template-columns:1fr;max-width:340px;margin:0 auto;\}/.test(s)
   && /\.pp-head-self \.pp-idfields,\.pp-head-self \.pp-fields\{display:flex;flex-direction:column;\}/.test(s)
   && /\.pp-head-self \.pp-meta-i\{background:#fff/.test(s));
 t('可點的那幾列有 › 指示', /\.pp-head-self \.pp-meta-i\.pp-f-click::after\{content:'›'/.test(s));
@@ -74,6 +76,12 @@ t('★ 教練請假改記成自主訓練的教練課不算（本質仍是教練�
 t('★ 場地租借也不算會員自助範圍', /&& b\.category!=='場租';/.test(s));
 t('★ 教練課只有簽到（沒有其他按鈕）',
   /const acts=\[\];/.test(s) && /acts\.length\?`<div style="display:flex;gap:8px;margin-top:10px;">/.test(s));
+
+t('★ 視窗縮到內容高度並置中（不再撐滿整個畫面）',
+  /\.pp-sheet\.pp-sheet-win\.pp-sheet-self \.pp-root\{height:auto;max-height:calc\(100dvh - 24px\);/.test(s));
+t('會員本人的視窗才掛 pp-sheet-self（櫃檯端不受影響）',
+  /\+\(\(typeof ppSelfView==='function'&&ppSelfView\(\)\)\?' pp-sheet-self':''\)/.test(s));
+t('欄位不換行（緊急聯絡人不會被擠成三行）', /white-space:nowrap;box-shadow:0 1px 4px rgba\(50,42,30,\.06\);\}/.test(s));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

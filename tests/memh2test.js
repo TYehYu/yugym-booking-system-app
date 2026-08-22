@@ -172,9 +172,9 @@ const css=cut('/* ══ 會員手機首頁 V2','/* 2026-08-20 使用者指示�
    一樣只有帶 mh2-foot 的那幾張視窗吃得到。 */
 /* .pp-head-self 是會員本人的個人資料（不在 .memh2 裡）、
    .tb-acct-item .acct-nsw 是帳號選單那顆開關 —— 兩者都各自有自己的範圍限定。 */
-t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot / .pp-head-self / .tb-acct-item 之下',
+t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot / .pp-head / .pp-sheet-self / .tb-acct-item 之下',
   css.split('\n').filter(l=>/^\.[a-z]/.test(l.trim()))
-     .every(l=>/^\.(memh2|mh2-|modal-foot\.mh2-foot|pp-head-self|tb-acct-item)/.test(l.trim())));
+     .every(l=>/^\.(memh2|mh2-|modal-foot\.mh2-foot|pp-head|pp-sheet(\.|-)|tb-acct-item)/.test(l.trim())));
 t('頂列米色', /\.memh2\{background:var\(--card2\)/.test(css));
 
 // ── 外框（2026-08-22 二修）：頂欄米色、收掉重置鈕、底部導覽品牌綠、下拉更新 ──
