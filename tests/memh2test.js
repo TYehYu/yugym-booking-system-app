@@ -34,15 +34,20 @@ t('篩選列不共用 .admh-coach（避免被管理員教練列的位置推走�
   !/class="admh-coach mh2-chips/.test(s));
 
 // ── 左邊日期欄 ──
-t('自主訓練＝今天起七天，其他＝該週週一起', /selfMode\?new Date\(TODAY\.getFullYear\(\),TODAY\.getMonth\(\),TODAY\.getDate\(\)\):heroWeekMonday\(s\.date\)/.test(html));
-t('超出票券效期的那幾天暗化且點不下去', /const off=selfMode && selfLim && ds>selfLim/.test(html)
+/* 0822 二修（使用者）：「自主訓練的日期列七天 還是幫我改回跟教練課顯示的一樣 週一～週日
+   只是不能預約的日期要暗化 保持上下拖拉會換頁」 */
+t('日期列一律週一～週日（自主訓練不再特例）', /const base=heroWeekMonday\(s\.date\);/.test(html)
+  && !/selfMode\?new Date\(TODAY/.test(html));
+t('自主訓練分頁：已過去與超出效期的那幾天暗化且點不下去',
+  /const off=selfMode && \(ds<today \|\| \(selfLim && ds>selfLim\)\)/.test(html)
   && /off\?' disabled':/.test(html));
-t('自主訓練不畫上下箭頭', /\$\{selfMode\?'':'<span class="a2-arw a2-arw-up"/.test(html));
-t('自主訓練不綁換週拖曳（傳空函式給 admh2Mount）', /admh2Mount\(selfMode\?function\(\)\{\}:memh2WeekShift\)/.test(html));
+t('上下箭頭一律畫（自主訓練也能翻頁）',
+  /<span class="a2-arw a2-arw-up" onclick="memh2WeekShift\(-1\)"><\/span>/.test(html)
+  && !/\$\{selfMode\?'':'<span class="a2-arw/.test(html));
+t('拖曳換週一律綁 memh2WeekShift', /admh2Mount\(memh2WeekShift\)/.test(html));
 const shift=cut('function memh2WeekShift(d){','function memh2PickFilter(k){');
 t('換週落在該週週一', /heroWeekMonday\(s\.date\)/.test(shift) && /setDate\(mon\.getDate\(\)\+d\*7\)/.test(shift));
-t('自主訓練模式直接擋掉換週', /if\(s\.filter==='self'\) return;/.test(shift));
-t('切到自主訓練時把日期夾回七天內', /if\(s\.date<ymd\(TODAY\)\|\|s\.date>lim\) s\.date=ymd\(TODAY\)/.test(s));
+t('換週不再因為自主訓練而被擋掉', !/if\(s\.filter==='self'\) return;/.test(shift));
 
 // ── 課卡 ──
 t('課卡點下去走 memh2Tap（簽到），不是編輯', /onclick="memh2Tap\('\$\{b\.id\}'\)/.test(html));
@@ -54,7 +59,18 @@ t('可簽到的卡加金框', /st\.open\?' mh2-ck':''/.test(html));
 
 // ── 簽到視窗 ──
 const tap=cut('async function memh2Tap(id){','/* ［＋］預約自主訓練');
-t('可簽到時才出現「確認簽到」', /st\.open[\s\S]{0,200}確認簽到/.test(tap));
+/* 0822 二修（使用者）：「確認簽到跟關閉也改左右」——那顆從內文移到底部與關閉並排 */
+t('可簽到時「確認簽到」出現在底部、與關閉並排',
+  /class="modal-foot mh2-foot\$\{st\.open\?'':' one'\}"/.test(tap)
+  && /st\.open\?`<button class="btn btn-green"[\s\S]{0,160}確認簽到<\/button>`:''/.test(tap));
+t('內文只留狀態字，不再放整寬的簽到鈕', /現在可以簽到了/.test(tap));
+t('底部兩顆固定左右各半、等高',
+  /\.modal-foot\.mh2-foot\{display:grid;grid-template-columns:1fr 1fr/.test(s)
+  && /\.modal-foot\.mh2-foot \.btn\{[^}]*height:44px/.test(s)
+  && /\.modal-foot\.mh2-foot\.one\{grid-template-columns:1fr;\}/.test(s));
+t('自主訓練訂位視窗與教練快速預約也吃同一組底部',
+  /class="modal-foot mh2-foot\$\{mms\.length\?'':' one'\}"/.test(s)
+  && /class="modal-foot mh2-foot\$\{slots\.length\?'':' one'\}"/.test(s));
 t('還沒到時間顯示簽到規則', /簽到規則/.test(tap) && /開放簽到/.test(tap));
 t('團課走 memGrpCheckin、其餘走 memCheckin', /memGrpCheckin\('\$\{b\.id\}'\)/.test(tap) && /memCheckin\('\$\{b\.id\}'\)/.test(tap));
 t('只有團課與自主訓練給取消（教練課只做簽到）',
@@ -78,15 +94,36 @@ t('要按確認才前進（與快速預約同一套）',
   /id="mh2qs-ok" disabled onclick="memh2GoSlot\(\)"/.test(add)
   && /closeModal\(\); msbPickSlot\(t\);/.test(cut('function memh2GoSlot(){','/* ══')||s));
 
+// ── 月曆（2026-08-22 使用者指示）──
+const mon=cut('function memh2MonthHTML(mine){','/* 點課卡 → 簽到確認視窗');
+t('月曆掛在頁面最下面（雙欄之後）', /<\/div>\s*\$\{memh2MonthHTML\(mine\)\}/.test(html));
+t('週一為一週之始', /const lead=\(first\.getDay\(\)\+6\)%7/.test(mon)
+  && /\['一','二','三','四','五','六','日'\]/.test(mon));
+t('圓點顏色照課別，與課卡同一份 MEMH2_COL', /MEMH2_COL\[bkCC\(b\)\]\|\|MEMH2_COL\.pt/.test(mon));
+t('一天多堂依時間排序後左右排列', /sort\(\(a,b\)=>String\(a\.start_time\|\|''\)\.localeCompare/.test(mon)
+  && /\.memh2-mon-dots\{display:flex;flex-wrap:wrap/.test(s));
+t('圓點不被壓縮（flex:0 0 auto）', /\.memh2-mon-dots i\{[^}]*flex:0 0 auto/.test(s));
+t('月曆不吃上方的篩選列（要看整月全貌）', !/s\.filter/.test(mon));
+t('點某一天＝把上面的日期欄跳過去', /onclick="memh2PickDay\('\$\{ds\}'\)"/.test(mon));
+t('今天綠底、選取金框（與日期欄同語彙）',
+  /\$\{ds===today\?' today':''\}\$\{\(ds===s\.date&&ds!==today\)\?' on':''\}/.test(mon));
+t('換月只重繪、不改選取的那一天',
+  /memh2MonthShift\(d\)\{[\s\S]{0,320}?memh2PickDay\(s\.date\);\s+\/\/ 只重繪/.test(s));
+t('月曆卡用白底（外框本來就是 card2，同色會整張消失）',
+  /\.memh2-mon\{background:#fff/.test(s));
+t('下方有四色圖例', /MEMH2_FILTERS\.map\(\(\[k,l\]\)=>`<span><i style="background:\$\{MEMH2_COL\[k\]\}"/.test(mon));
+
 // ── 底部導覽 ──
 t('底部導覽「首頁」改成「我的預約」',
   /\{key:'mem_bookings', label:'我的預約'\}/.test(s));
 
 // ── 樣式隔離 ──
 const css=cut('/* ══ 會員手機首頁 V2','/* 2026-08-20 使用者指示：改白底＋左側課程色條');
-t('所有新樣式都掛在 .memh2 或 .mh2- 之下',
+/* .modal-foot.mh2-foot 是彈窗底部的修飾 class（彈窗不在 .memh2 裡面，掛不進去），
+   一樣只有帶 mh2-foot 的那幾張視窗吃得到。 */
+t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot 之下',
   css.split('\n').filter(l=>/^\.[a-z]/.test(l.trim()))
-     .every(l=>/^\.(memh2|mh2-)/.test(l.trim())));
+     .every(l=>/^\.(memh2|mh2-|modal-foot\.mh2-foot)/.test(l.trim())));
 t('頂列米色', /\.memh2\{background:var\(--card2\)/.test(css));
 
 // ── 外框（2026-08-22 二修）：頂欄米色、收掉重置鈕、底部導覽品牌綠、下拉更新 ──
@@ -104,6 +141,9 @@ t('下拉更新後會員也回到原分頁', /_ptrBack && \(SESSION\.role==='adm
 
 // ── 今日運勢（2026-08-22 使用者回報「會員跟教練點了沒反應」）──
 t('抽籤結果框不再被手機版整個藏掉', !/\.tb-acct-fortune,#tb-fortune-inline\{display:none;\}/.test(s));
+t('頂欄左邊的燈泡小管家收掉（入口留在帳號選單）',
+  /body\.memh2-shell \.tb-bulb,\s*\n?body\.memh2-shell \.tb-butler,/.test(s)
+  && /body\.memh2-shell \.tb-acct-butler\{display:flex !important;\}/.test(s));
 t('三種角色的手機版都看得到「今日運勢」入口',
   /\.role-admin \.tb-acct-butler,\.role-coach \.tb-acct-butler,\.role-member \.tb-acct-butler\{display:flex;\}/.test(s));
 
