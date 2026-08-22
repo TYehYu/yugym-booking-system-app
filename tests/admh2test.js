@@ -88,19 +88,22 @@ ok('★ 上下箭頭提示可換週，也可以直接點',
 ok('　　純 CSS 三角形，不吃字型（跨機一致）',
    /\.a2-arw\{[\s\S]{0,160}?border-left:5px solid transparent;border-right:5px solid transparent;/.test(src));
 ok('★★ 上下拖曳換週：欄位跟著手指走一點點（打四五折、最多 26px）',
-   /* 停留門檻 0.5→0.25 秒（2026-08-22 使用者指示） */
-   /const TH=44, HOLD=250, MAXOFF=26;/.test(src)
+   /const TH=44, MAXOFF=26;/.test(src)
    && /inner\.style\.transform='translateY\('\+Math\.max\(-MAXOFF,Math\.min\(MAXOFF, dy\*0\.45\)\)\+'px\)';/.test(src));
-ok('★★ 拉過門檻要「停住 0.5 秒」才真的換週（隨手一滑不會換掉整週）',
-   /armT=setTimeout\(\(\)=>\{ fired=true; clearArm\(\); snap\(\);/.test(src)
-   && /\},HOLD\);/.test(src)
-   && /和下拉更新同一套「拉到位再停一下」的手感/.test(src));
-ok('　　手縮回門檻內或放開就取消，並且彈回原位',
+/* 2026-08-23 使用者指示：「拉著還沒放就先不要換頁，等到放開才換頁」——
+   0822 的「停 250ms 就換」整組退場（手還按著畫面就整片重繪）。 */
+ok('★★ 拉著不換頁：HOLD 計時器與 fired 旗標整組退場',
+   !/HOLD/.test(src.slice(src.indexOf('admh2RailSwipe'), src.indexOf('admh2RailSwipe')+2600))
+   && !/armT/.test(src.slice(src.indexOf('admh2RailSwipe'), src.indexOf('admh2RailSwipe')+2600)));
+ok('★★ 放開才換週：touchend 才呼叫 _shift；touchcancel 視同取消',
+   /const end=\(commit\)=>\{\s*\n\s*const d=commit\?dir:0;/.test(src)
+   && /rail\.addEventListener\('touchend',\(\)=>end\(true\),\{passive:true\}\);/.test(src)
+   && /rail\.addEventListener\('touchcancel',\(\)=>end\(false\),\{passive:true\}\);/.test(src));
+ok('　　手縮回門檻內就取消，放開一律彈回原位',
    /if\(d===dir\) return;\s*\n\s*clearArm\(\); dir=d;/.test(src)
-   && /const snap=\(\)=>\{ inner\.style\.transition='transform \.18s'; inner\.style\.transform='';/.test(src)
-   && /const end=\(\)=>\{ if\(!fired\)\{ clearArm\(\); snap\(\); \} y0=null; \};/.test(src));
-ok('★ 上推＝下一週、下拉＝上一週（跟月曆一樣，往回拉就是往回看）',
-   /const d=\(dy<=-TH\)\?1:\(\(dy>=TH\)\?-1:0\);/.test(src)
+   && /const snap=\(\)=>\{ inner\.style\.transition='transform \.18s'; inner\.style\.transform='';/.test(src));
+ok('★ 上推＝下一週、下拉＝上一週（跟月曆一樣，往回拉就是往回看）＋橫向拖得多就不算',
+   /const d=\(Math\.abs\(dy\)<=Math\.abs\(dx\)\) \? 0 : \(\(dy<=-TH\)\?1:\(\(dy>=TH\)\?-1:0\)\);/.test(src)
    && /rail\.classList\.add\(d>0\?'a2-armnext':'a2-armprev'\);/.test(src));
 ok('　　待命時亮起「會換到哪一週」那一顆箭頭',
    /\.admh2-rail\.a2-armprev \.a2-arw-up\{opacity:1;transform:scale\(1\.35\);border-bottom-color:var\(--green\);\}/.test(src)

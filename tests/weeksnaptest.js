@@ -49,12 +49,24 @@ console.log('\n日期列的左右拖曳換週');
 ok('★ 兩端箭頭改用首頁那組 CSS 三角形（橫向版）',
    /<span class="a2-arw a2-arw-l" role="button" tabindex="0" title="上一週" onclick="\$\{prevFn\}"><\/span>/.test(src)
    && /\.a2-arw-l\{border-left:0;border-right:6px solid var\(--t3\);/.test(src));
-ok('★★ 手感與首頁直欄同一套：位移打四五折、門檻 44px、停 250ms 才換',
-   /const TH=44, HOLD=250, MAXOFF=26;[^\n]*\n\s*let row=null, head=null/.test(src)
+ok('★★ 手感與首頁直欄同一套：位移打四五折、門檻 44px',
+   /const TH=44, MAXOFF=26;[^\n]*\n\s*let row=null, head=null/.test(src)
    && /row\.style\.transform='translateX\('\+Math\.max\(-MAXOFF,Math\.min\(MAXOFF, dx\*0\.45\)\)\+'px\)';/.test(src));
+/* 2026-08-23 使用者指示：「改成拉動就換頁，但是如果拉著還沒放就先不要換頁，等到放開才換頁」
+   —— 原本是「拉過門檻停 250ms 就換」，手還按著畫面就整片重繪。HOLD 計時器整組退場。 */
+ok('★★ 拉著不換頁：HOLD 計時器整組退場，touchmove 只負責跟手＋亮箭頭',
+   !/HOLD/.test(src.slice(src.indexOf('function heroWeekDragInit'), src.indexOf('function heroWeekDragInit')+2200))
+   && !/armT/.test(src.slice(src.indexOf('function heroWeekDragInit'), src.indexOf('function heroWeekDragInit')+2200)));
+ok('★★ 放開才換頁：touchend 才呼叫 data-shift 那支；touchcancel 不換',
+   /const end=\(commit\)=>\{/.test(src)
+   && /const d=commit\?dir:0, fn=row\.getAttribute\('data-shift'\), r=row;/.test(src)
+   && /document\.addEventListener\('touchend',\(\)=>end\(true\),\{passive:true\}\);/.test(src)
+   && /document\.addEventListener\('touchcancel',\(\)=>end\(false\),\{passive:true\}\);/.test(src));
 ok('★ 往左拖＝下一週、往右拖＝上一週；待命時亮起對應那顆箭頭',
-   /const d=\(dx<=-TH\)\?1:\(\(dx>=TH\)\?-1:0\);/.test(src)
+   /const d=\(Math\.abs\(dx\)<=Math\.abs\(dy\)\) \? 0 : \(\(dx<=-TH\)\?1:\(\(dx>=TH\)\?-1:0\)\);/.test(src)
    && /head\.classList\.add\(d>0\?'hwk-armnext':'hwk-armprev'\)/.test(src));
+ok('★★ 沒有計時器擋著就得補軸判斷：縱向拖得比橫向多不算，直向捲頁面不會誤換週',
+   /橫向位移要大於縱向才算數，\s*\n?\s*直向捲頁面時不會順手把週換掉/.test(src));
 ok('★★ 用事件委派掛一次 —— 這一列在三個頁面各自重繪，每次重綁很容易漏',
    /if\(window\._hwDragOn\) return; window\._hwDragOn=true;/.test(src)
    && /這一列在三個頁面各自\s*\n?\s*重繪（管理員首頁／教練首頁／手機行事曆），每次重繪都重綁很容易漏/.test(src));

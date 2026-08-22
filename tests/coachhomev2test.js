@@ -165,7 +165,7 @@ ok('★ 下拉更新沿用 admPtrInit（它的做法就是「頂欄不動」）'
 
 console.log('\n三修（2026-08-21）：頂欄字色、KPI 溢出、尚未打卡、間距、重整鈕');
 ok('★ ⚠ 頂欄底色與字色要成對改（手機原本是綠底米白字 → 只換底色就整排字不見）',
-   /body\.chv2-shell \.topbar \.tb-mark span\{color:var\(--green\) !important;\}/.test(src)
+   /body\.chv2-shell \.topbar \.tb-mark span\{color:var\(--lgc,var\(--gold\)\) !important;\}/.test(src)   /* 2026-08-23：字標顏色改吃 --lgc（教練＝品牌金），見 aug23batchtest ③ */
    && /body\.chv2-shell \.topbar \.tb-ver\{color:var\(--t3\) !important;\}/.test(src)
    && /只換背景的話字還是米白的，變成米底米字＝整排字不見/.test(src));
 ok('★ KPI 欄要能縮（flex 的 min-width:auto 會讓它撐出畫面）',

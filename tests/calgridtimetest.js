@@ -29,7 +29,7 @@ ok('★★ 線上的文字不能有底色（使用者：「週四有安排的課
 
 console.log('\n桌機七日維持原狀（使用者更正：「桌機幫我恢復」）');
 ok('★★ 桌機那一版整組退場：.cal-timecol 仍是左邊 42px 的 sticky 欄位',
-   /\.cal-timecol\{flex-shrink:0;width:42px;padding-top:56px;position:sticky;left:0;z-index:25;background:var\(--card\);\}/.test(src)
+   /\.cal-timecol\{flex-shrink:0;width:42px;padding-top:56px;position:sticky;left:0;z-index:25;background:var\(--bg\);\}/.test(src)   /* 底色 2026-08-23 隨整片行事曆改米色；這裡守的是「還是左邊 42px 的 sticky 欄位」 */
    && !/\.cal-body\.cal-7d>\.cal-timecol\{position:absolute/.test(src));
 ok('　　桌機欄內的實線整點線也沒被藏起來',
    !/\.cal-body\.cal-7d \.cal-half\.hourline\{border-bottom-color:transparent;\}/.test(src)

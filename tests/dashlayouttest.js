@@ -36,8 +36,9 @@ ok('　　教練多到放不下就內捲（.tcard-body 本來就是捲動容器�
 
 console.log('\n這一天唯一留下來的：課卡維持行事曆版的大小');
 /* 0822：改成三欄排法後再加寬到 190px（120 放不下「章＋三列＋時間／教練」） */
-ok('★ .tcard-std 加寬到 190px（高度維持 98px）',
-   /\.tcard\.tcard-std\{width:190px;min-height:98px;\}/.test(src));
+/* 2026-08-23 使用者指示：「是不是可以再改窄一點」→ 190px 收到 165px（高度不變） */
+ok('★ .tcard-std 收窄到 165px（高度維持 98px）',
+   /\.tcard\.tcard-std\{width:165px;min-height:98px;\}/.test(src));
 ok('　　原因寫在原地', /一日行事曆版的課卡寬度是欄寬（實測約 120px），改回橫排後沿用那個尺寸/.test(src));
 ok('　　課卡 HTML 本身仍然沒被動過（產生器與版面分開）',
    /const _cardsArr=_bkSorted\.map\(b=>\{/.test(src)

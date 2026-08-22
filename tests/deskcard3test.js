@@ -23,9 +23,12 @@ ok('★ 右上時間、右下教練標籤（含待簽約等課別標）',
 ok('★★ ⚠ 舊規則把時間釘在左上（.tcard-std .tcard-time{align-self:flex-start}），三欄版要覆蓋掉',
    /\.tcard-3c \.tcard-time\{align-self:flex-end !important;\}/.test(src)
    && /三欄版要靠右，否則時間會停在右欄的左緣、跟教練標籤對不齊/.test(src));
-ok('★ 卡片加寬到 190px（120 放不下章＋三列＋時間／教練）',
-   /\.tcard\.tcard-std\{width:190px;min-height:98px;\}/.test(src)
-   && /190px 是「課程名不必馬上截斷、一列仍放得下 4～5 張」的折衷/.test(src));
+/* 120→190（0822 三欄排法）→165（0823 使用者要求再窄一點）。
+   收窄的底線：中欄要留 ~76px 給場地「多功能訓練架」，再窄就會先切到那一列。 */
+ok('★ 卡片 165px（120 放不下章＋三列＋時間／教練；190 是使用者嫌太寬的那一版）',
+   /\.tcard\.tcard-std\{width:165px;min-height:98px;\}/.test(src)
+   && /190px 是「課程名不必馬上截斷、一列仍放得下 4～5 張」的折衷/.test(src)
+   && /再往下收就會先切到場地那一列/.test(src));
 ok('　　長文字截斷而不是撐爆卡片',
    /\.tcard-3c \.t3-l1\{[^}]*text-overflow:ellipsis;\}/.test(src)
    && /\.tcard-3c \.t3-l2\{[^}]*text-overflow:ellipsis;\}/.test(src));
