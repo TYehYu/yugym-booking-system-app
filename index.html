@@ -3291,9 +3291,16 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 /* 四顆平分整列（2026-08-20 使用者回報最右邊的「訓練紀錄」被切掉）——
    原本是固定寬度＋橫向捲動，四顆加起來比卡片內寬還長，最後一顆就露不出來。 */
 .pp-rectabs{display:flex;gap:5px;margin-bottom:14px;}
+/* ⚠ nowrap 但沒有 overflow 處理＝文字直接溢出格子、跟隔壁疊在一起（2026-08-22 使用者回報
+   「中間三個按鈕的文字被擠壓了」）。補 overflow/ellipsis，窄機型再降一級字與內距：
+   寧可縮字，也不要讓四個字的分頁名互相壓到。 */
 .pp-rectab{flex:1 1 0;min-width:0;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--t2);
   background:var(--card2);border:1px solid var(--bd);border-radius:999px;padding:8px 4px;cursor:pointer;
-  text-align:center;white-space:nowrap;}
+  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@media(max-width:400px){
+  .pp-rectabs{gap:4px;}
+  .pp-rectab{font-size:11.5px;padding:8px 2px;letter-spacing:-.02em;}
+}
 .pp-rectab.active{background:var(--green);border-color:var(--green);color:#fff;}
 .pp-rectab:active{transform:scale(.96);}
 /* 2026-08-20 使用者回報兩處（會員資料改成浮動視窗後，容器變窄冒出來的）：
@@ -5051,6 +5058,19 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard-row:last-child{border-bottom:none;}
 .tcard-row-live{background:linear-gradient(90deg,rgba(31,111,84,0.05),transparent);border-radius:10px;}
 .tcard-coach{display:flex;align-items:center;gap:9px;width:118px;flex-shrink:0;padding-top:4px;}
+/* 教練欄的圓形色塊（2026-08-22 使用者指示）——底色＝該教練的顏色（同 coachTagColor，
+   與課卡右下角那顆標籤同一組），名字在上、n/n 在下，其餘資訊移除。
+   ⚠ 名字長度差很多（ZOE 到 MANGO 到中文名），字級用 clamp 之外再加截斷，
+     圓不能被名字撐成橢圓。 */
+.tcard-cball{width:74px;height:74px;border-radius:50%;flex:0 0 auto;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  padding:0 7px;box-sizing:border-box;overflow:hidden;}
+.tcard-cball .tcard-cbn{font-size:12.5px;font-weight:800;letter-spacing:.01em;line-height:1.1;
+  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;}
+.tcard-cball .tcard-cbn.long{font-size:11px;letter-spacing:-.01em;}   /* 長名字（中文全名）先縮字再截斷 */
+.tcard-cball .tcard-cbt{font-family:var(--num);font-size:12px;font-weight:700;opacity:.78;line-height:1.1;}
+.tcard-cball .tcard-cbt.done{opacity:1;}
+.tcard-cball .tl-me{font-style:normal;font-size:9.5px;font-weight:800;margin-left:3px;opacity:.75;}
 .tcard-av{width:36px;height:36px;border-radius:50%;background:var(--sage-soft,#e6ece0);color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;}
 .tcard-cinfo{display:flex;flex-direction:column;gap:2px;min-width:0;}
 .tcard-cname{font-size:14px;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -8962,8 +8982,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1422';
-const APP_VERSION_LABEL='v260822.1422';
+const APP_VERSION = '260822.1438';
+const APP_VERSION_LABEL='v260822.1438';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15159,13 +15179,17 @@ PAGES.g_dashboard=async function(){
         const cards=_cardsArr.join('');
         const emptyC = (!drawBk.length)
           ? `<div class="tcard-empty">${onLeave?'請假（全天）':(hasDuty?'值班中 · 今日無課':'今日無課')}</div>` : '';
+        /* 教練欄改成一顆圓形色塊（2026-08-22 使用者指示：「用圓形色塊顯示，教練的名稱在上、
+           下面是課堂數 n/n，移除不必要的內容，色塊用該教練的顏色」）——
+           原本是「灰底縮寫圓 ＋ 右邊三行文字（姓名／堂數／上課中）」，資訊分散在四個元素上。
+           收成一顆：色塊本身就是教練的識別（同一組 coachTagColor，與課卡右下角的教練標同色），
+           上面名字、下面 n/n。「上課中」那一行拿掉 —— 該列本來就有流星邊框在表示。 */
+        const _cc=(typeof coachTagColor==='function')?coachTagColor(c.id):{bg:'#EAE6DE',fg:'#6a655c'};
         return `<div class="tcard-row${inClass?' tcard-row-live':''}">
           <div class="tcard-coach">
-            <span class="tcard-av">${coachAbbr(c)}</span>
-            <span class="tcard-cinfo">
-              <span class="tcard-cname">${coachDisp(c)}${c.id===SESSION.id?'<span class="tl-me">我</span>':''}</span>
-              <span class="tcard-ctask${(total>0&&done>=total)?' done':''}">${done}/${total} 堂</span>
-              ${inClass?'<span class="tcard-cstate tcard-cstate-live"><i class="tl-cstate-dot live"></i>上課中</span>':''}
+            <span class="tcard-cball" style="background:${_cc.bg};color:${_cc.fg};" title="${coachDisp(c)}　${done}/${total} 堂">
+              <b class="tcard-cbn${String(coachDisp(c)||'').length>4?' long':''}">${coachDisp(c)}${c.id===SESSION.id?'<i class="tl-me">我</i>':''}</b>
+              <span class="tcard-cbt${(total>0&&done>=total)?' done':''}">${done}/${total}</span>
             </span>
           </div>
           <div class="tcard-list">${cards}${emptyC}</div>

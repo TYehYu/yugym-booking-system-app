@@ -46,3 +46,10 @@ ok('　　理由寫在原地（固定不捲的那一塊，佔多少就少多少�
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
+
+/* 2026-08-22 使用者回報：「中間三個按鈕的文字被擠壓了」 */
+ok('★ 分頁鈕的文字不會互相壓到（nowrap 之外要有 overflow/ellipsis）',
+   /\.pp-rectab\{[^}]*white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\}/.test(src)
+   && /寧可縮字，也不要讓四個字的分頁名互相壓到/.test(src));
+ok('　　窄機型（≤400）再降一級字與內距',
+   /@media\(max-width:400px\)\{\s*\n\s*\.pp-rectabs\{gap:4px;\}\s*\n\s*\.pp-rectab\{font-size:11\.5px;padding:8px 2px;letter-spacing:-\.02em;\}/.test(src));

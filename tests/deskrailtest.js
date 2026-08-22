@@ -32,3 +32,21 @@ ok('　　第二欄（教練姓名＋今日銷課\/總堂）沿用既有的課�
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
+
+/* 2026-08-22 使用者指示：「桌機首頁的教練欄 用圓形色塊顯示，教練的名稱在上、下面是
+   課堂數 n/n，移除不必要的內容，色塊用該教練的顏色」 */
+console.log('\n教練欄：一顆圓形色塊');
+ok('★ 名字在上、n/n 在下，包在同一顆圓裡',
+   /<span class="tcard-cball" style="background:\$\{_cc\.bg\};color:\$\{_cc\.fg\};"/.test(src)
+   && /<b class="tcard-cbn\$\{String\(coachDisp\(c\)\|\|''\)\.length>4\?' long':''\}">\$\{coachDisp\(c\)\}/.test(src)
+   && /<span class="tcard-cbt\$\{\(total>0&&done>=total\)\?' done':''\}">\$\{done\}\/\$\{total\}<\/span>/.test(src));
+ok('★ 色塊用該教練的顏色（同 coachTagColor，與課卡右下角那顆標籤同一組）',
+   /const _cc=\(typeof coachTagColor==='function'\)\?coachTagColor\(c\.id\):\{bg:'#EAE6DE',fg:'#6a655c'\};/.test(src));
+ok('★ 移除不必要的內容：灰底縮寫圓與「上課中」那一行退場',
+   !/<span class="tcard-av">\$\{coachAbbr\(c\)\}<\/span>/.test(src)
+   && !/tcard-cstate-live"><i class="tl-cstate-dot live"><\/i>上課中/.test(src)
+   && /「上課中」那一行拿掉 —— 該列本來就有流星邊框在表示/.test(src));
+ok('　　正圓不被名字撐成橢圓（固定 74×74＋長名字先縮字再截斷）',
+   /\.tcard-cball\{width:74px;height:74px;border-radius:50%;flex:0 0 auto;/.test(src)
+   && /\.tcard-cball \.tcard-cbn\.long\{font-size:11px;/.test(src)
+   && /\.tcard-cball \.tcard-cbn\{[^}]*text-overflow:ellipsis;/.test(src));
