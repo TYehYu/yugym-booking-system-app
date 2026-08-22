@@ -84,9 +84,10 @@ t('自主訓練訂位視窗與教練快速預約也吃同一組底部',
   && /class="modal-foot mh2-foot\$\{slots\.length\?'':' one'\}"/.test(s));
 t('還沒到時間顯示簽到規則', /簽到規則/.test(tap) && /開放簽到/.test(tap));
 t('團課走 memGrpCheckin、其餘走 memCheckin', /memGrpCheckin\('\$\{b\.id\}'\)/.test(tap) && /memCheckin\('\$\{b\.id\}'\)/.test(tap));
+/* 0822 覆查：教練請假改記成自主訓練的教練課、以及場租，都不算會員自助 */
 t('只有團課與自主訓練給取消（教練課只做簽到）',
-  /const selfServe=\(!st\.done && !st\.past\) && \(st\.isGrp \|\| bkIsSelf\(b\)\)/.test(tap));
-t('改時間只給自主訓練', /selfServe && bkIsSelf\(b\) && b\.member_id===SESSION\.id[\s\S]{0,120}改時間/.test(tap));
+  /const selfServe=\(!st\.done && !st\.past\) && \(st\.isGrp \|\| _isSelfBk\)/.test(tap));
+t('改時間只給自主訓練', /selfServe && _isSelfBk && b\.member_id===SESSION\.id[\s\S]{0,120}改時間/.test(tap));
 
 // ── ［＋］沿用現有引擎 ──
 t('時段探測已抽成共用的 msbProbeFree', /async function msbProbeFree\(\)\{/.test(s));
@@ -128,6 +129,22 @@ t('［＋］的時段也是點了就選它，誤觸第二下不會洗掉狀態',
   /window\._mh2Pick=t;/.test(cut('function memh2SelSlot(t){','function memh2GoSlot(){'))
   && !/_mh2Pick===t\)\?'':t/.test(s));
 
+// ── 快速預約與團體課報名（2026-08-22 使用者指示）──
+t('［＋］在每個分頁都出現，只看有沒有自主訓練點數',
+  /const addBtn=\(pk\.self>0\)/.test(html) && !/const addBtn=selfMode\?/.test(html));
+t('點［＋］先把篩選列切到自主訓練（日期欄才會連動）',
+  /if\(_s\.filter!=='self'\)\{ _s\.filter='self'; try\{ memh2PickDay\(date\); \}catch\(_\)\{\} \}/.test(s));
+t('當天有開、自己還沒報名的團體課會列出來',
+  /bkIsGroup\(b\)\s*\n\s*&& !\(typeof bkHasMember==='function' && bkHasMember\(b,SESSION\.id\)\)/.test(html));
+t('只在「全部」與「團體課」分頁出現', /\(s\.filter==='all'\|\|s\.filter==='group'\)/.test(html));
+t('已經開始的不列（報不了名）', /\(_nowM<0 \|\| timeToMin\(b\.start_time\|\|'0:0'\)>=_nowM\)/.test(html));
+t('額滿的畫出來但點不下去', /const full=heads>=cap;/.test(html)
+  && /full\?'':` onclick="memh2GrpJoin\('\$\{b\.id\}'\)"`/.test(html));
+t('可報名的卡用虛線框，與自己的課分得開',
+  /\.memh2 \.admh2-card\.mh2-grpopen\{[^}]*border:1\.5px dashed/.test(s.replace(/\n\s*/g,'')));
+t('報名沿用既有的 msbGrpJoin（只是先把 _msb 狀態建起來）',
+  /async function memh2GrpJoin\(bid\)\{[\s\S]{0,320}msbGrpJoin\(bid\);/.test(s));
+
 // ── 底部導覽 ──
 t('底部導覽「首頁」改成「我的預約」',
   /\{key:'mem_bookings', label:'我的預約'\}/.test(s));
@@ -136,9 +153,11 @@ t('底部導覽「首頁」改成「我的預約」',
 const css=cut('/* ══ 會員手機首頁 V2','/* 2026-08-20 使用者指示：改白底＋左側課程色條');
 /* .modal-foot.mh2-foot 是彈窗底部的修飾 class（彈窗不在 .memh2 裡面，掛不進去），
    一樣只有帶 mh2-foot 的那幾張視窗吃得到。 */
-t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot 之下',
+/* .pp-head-self 是會員本人的個人資料（不在 .memh2 裡）、
+   .tb-acct-item .acct-nsw 是帳號選單那顆開關 —— 兩者都各自有自己的範圍限定。 */
+t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot / .pp-head-self / .tb-acct-item 之下',
   css.split('\n').filter(l=>/^\.[a-z]/.test(l.trim()))
-     .every(l=>/^\.(memh2|mh2-|modal-foot\.mh2-foot)/.test(l.trim())));
+     .every(l=>/^\.(memh2|mh2-|modal-foot\.mh2-foot|pp-head-self|tb-acct-item)/.test(l.trim())));
 t('頂列米色', /\.memh2\{background:var\(--card2\)/.test(css));
 
 // ── 外框（2026-08-22 二修）：頂欄米色、收掉重置鈕、底部導覽品牌綠、下拉更新 ──

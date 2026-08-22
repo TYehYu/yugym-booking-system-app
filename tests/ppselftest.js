@@ -48,5 +48,32 @@ t('員工仍看得到修改密碼（帳號密碼登入）', /id="acct-changepw"/
 t('「更換照片」改名「上傳大頭照」', !/更換照片<\/button>/.test(s)
   && /上傳大頭照<\/button>/.test(s) && /📷　上傳大頭照/.test(s));
 
+// ── 2026-08-22 四修：白底可點的一列一列、LINE 移到通知設定、通知開關進選單 ──
+t('可修改欄位是一列一張白卡、點了就改',
+  /\.pp-head-self\{grid-template-columns:1fr;\}/.test(s)
+  && /\.pp-head-self \.pp-idfields,\.pp-head-self \.pp-fields\{display:flex;flex-direction:column;\}/.test(s)
+  && /\.pp-head-self \.pp-meta-i\{background:#fff/.test(s));
+t('可點的那幾列有 › 指示', /\.pp-head-self \.pp-meta-i\.pp-f-click::after\{content:'›'/.test(s));
+t('LINE 那一列不在個人資料裡（已在通知設定）',
+  /pp-idfields">\$\{phoneItem\}\$\{genderItem\}\$\{bdayItem\}\$\{_selfPP\?'':lineItem\}/.test(s));
+t('「通知設定」右邊直接放 LINE 提醒開關（不用再開視窗）',
+  /if\(notif && role==='member'\)\{/.test(s)
+  && /sw\.onclick=e=>\{ e\.stopPropagation\(\); memQuickNotifToggle\(sw\); \};/.test(s));
+t('開關即時寫回 members.line_notify，失敗會扳回去',
+  /async function memQuickNotifToggle\(sw\)\{/.test(s)
+  && /update\(\{line_notify:next\}\)/.test(s)
+  && /sw\.classList\.toggle\('on', !next\)/.test(s));
+t('開關靠右且不吃整列的點擊', /\.tb-acct-item \.acct-nsw\{margin-left:auto;flex:none;\}/.test(s));
+
+// ── 課卡互動規則覆查（2026-08-22 使用者要求）──
+t('★ 只有自主訓練能改時間', /if\(selfServe && _isSelfBk && b\.member_id===SESSION\.id\)[\s\S]{0,120}改時間/.test(s));
+t('★ 只有團課與自主訓練能自行取消',
+  /const selfServe=\(!st\.done && !st\.past\) && \(st\.isGrp \|\| _isSelfBk\);/.test(s));
+t('★ 教練請假改記成自主訓練的教練課不算（本質仍是教練課）',
+  /!\(typeof bkIsCoachLeave==='function' && bkIsCoachLeave\(b\)\)/.test(s));
+t('★ 場地租借也不算會員自助範圍', /&& b\.category!=='場租';/.test(s));
+t('★ 教練課只有簽到（沒有其他按鈕）',
+  /const acts=\[\];/.test(s) && /acts\.length\?`<div style="display:flex;gap:8px;margin-top:10px;">/.test(s));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
