@@ -6,27 +6,36 @@ const src=fs.readFileSync(__dirname+'/../index.html','utf8');
 let pass=0, fail=0;
 const t=(n,ok)=>{ ok?pass++:fail++; console.log((ok?'  ok  ':'  FAIL')+'  '+n); };
 
-t('★★ 兩個判斷式都存在且都只認 admin',
-  /function canEditMemberData\(\)\{ return !!\(SESSION && SESSION\.role==='admin'\); \}/.test(src)
-  && /function canSeeReports\(\)\{ return !!\(SESSION && SESSION\.role==='admin'\); \}/.test(src));
-t('　店長不算（is_manager 只在 isDeskLike 那邊成立）',
-  !/canEditMemberData\(\)\{[^}]*is_manager/.test(src));
+/* 0823 一修把「修改會員資料」整組收成管理員限定，使用者當天指正 ——
+   櫃檯要能幫客人補生日／性別／緊急聯絡人／載具／主教練，還要能改姓名。
+   真正該鎖的只有電話（登入帳號）與刪除會員。 */
+t('★★ 報表只認 admin；修改會員資料放寬到櫃檯以上',
+  /function canSeeReports\(\)\{ return !!\(SESSION && SESSION\.role==='admin'\); \}/.test(src)
+  && /function canEditMemberData\(\)\{ return isDeskLike\(\); \}/.test(src));
 
-// ── 修改會員資料：只有管理員 ──
-t('★★ 會員資料表頭的可編輯欄位改吃 canEditMemberData（原本是 isDeskLike）',
-  /const _canBase = canEditMemberData\(\);/.test(src) && !/const _canBase = isDeskLike\(\);/.test(src));
-t('★ 主教練／生日／性別的原地編輯也擋',
+// ── 修改會員資料：櫃檯以上 ──
+t('★★ 會員資料表頭的可編輯欄位吃 canEditMemberData',
+  /const _canBase = canEditMemberData\(\);/.test(src));
+t('★ 主教練／生日／性別的原地編輯走同一支',
   /if\(fid==='default_coach_id' && !canEditMemberData\(\)\)/.test(src)
   && /if\(\(fid==='birthday'\|\|fid==='gender'\) && !\(canEditMemberData\(\)\|\|_selfM\)\)/.test(src));
 t('★ 緊急聯絡人／載具／家庭成員三個入口各自守門',
   (src.match(/canEditMemberData\(\)\|\|ppSelfView\(\)/g)||[]).length===2
   && /async function ppFamEdit\(mid\)\{\s*\n\s*if\(!canEditMemberData\(\)\)/.test(src));
+t('★★ 姓名也開放給櫃檯（原本只有管理員）',
+  /function ppEditName\(\)\{[\s\S]{0,220}if\(!canEditMemberData\(\)\)/.test(src)
+  && /const _nameHtml=\(isM && canEditMemberData\(\)\)/.test(src)
+  && !/只有管理員可以修改姓名/.test(src));
+t('★★ 電話誰都不能就地改（那是登入帳號）',
+  /if\(fid==='phone'\)\{ showToast\('電話是登入帳號，不可在此修改'\); return; \}/.test(src));
+t('★★ 刪除會員只有管理員（按鈕與函式各一道）',
+  /const delBtn = \(isM && SESSION && SESSION\.role==='admin'\)/.test(src)
+  && /if\(!\(SESSION&&SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以刪除會員'\); return; \}/.test(src));
+t('★ 會員等級仍只有管理員（0805 定案，沒被動到）',
+  /const _canTier = !!\(SESSION&&SESSION\.role==='admin'\);/.test(src));
 t('★★ 會員本人改自己的聯絡資料不受影響',
   /canEditMemberData\(\)\|\|ppSelfView\(\)/.test(src)
   && /!\(canEditMemberData\(\)\|\|_selfM\)/.test(src));
-t('　姓名與等級本來就只有管理員（沒被動到）',
-  /const _canTier = !!\(SESSION&&SESSION\.role==='admin'\);/.test(src)
-  && /姓名只有管理員可以修改/.test(src));
 
 // ── 銷售／票券發放：櫃檯以上，且函式自己也擋 ──
 t('★★ 銷售／發放／儲值／票券頁四個入口都有 isDeskLike 守門',

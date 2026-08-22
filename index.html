@@ -9368,8 +9368,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.0008';
-const APP_VERSION_LABEL='v260823.0008';
+const APP_VERSION = '260823.0021';
+const APP_VERSION_LABEL='v260823.0021';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26324,12 +26324,18 @@ async function setBkFamUser(bid, name){
     openBookingDetail(bid);
   }catch(e){ showToast('更改失敗：'+((e&&e.message)||e)); }
 }
-/* ══ 權限分級（2026-08-23 使用者定案）══════════════════════════════════════════
+/* ══ 權限分級（2026-08-23 使用者定案，同日二修收窄範圍）══════════════════════
    ・銷售／收款／票券發放 → 管理員・店長・櫃檯（isDeskLike）
-   ・報表／修改會員資料   → 只有管理員
-   會員自己改自己的聯絡資料不受影響（那條走 ppSelfView／_canSelf，見 ppHeaderHtml）。
-   ⚠ 這支只管「改既有會員的資料」，不管「新增會員」—— 兩件事，使用者只點名了修改。 */
-function canEditMemberData(){ return !!(SESSION && SESSION.role==='admin'); }
+   ・報表                 → 只有管理員
+   ・修改會員資料         → 管理員・店長・櫃檯都可以（生日／性別／緊急聯絡人／載具／
+                            主教練／**姓名**）—— 櫃檯就是面對客人的人，補資料是他的日常。
+   ・電話                 → 誰都不能就地改：那是登入帳號（見 ppInlineEdit 的 phone 分支）
+   ・刪除會員             → 只有管理員
+   ・會員等級             → 只有管理員（_canTier，2026-08-05 定案，未變）
+   會員自己改自己的聯絡資料不受影響（走 ppSelfView／_canSelf）。
+   ⚠ 一修時把「修改會員資料」整組收成管理員限定，使用者當天就指正：櫃檯要能幫客人補
+     生日／性別／緊急聯絡人／載具／主教練，還要能改姓名。真正該鎖的只有電話與刪除。 */
+function canEditMemberData(){ return isDeskLike(); }
 function canSeeReports(){ return !!(SESSION && SESSION.role==='admin'); }
 function coachOwnsBk(b){
   if(!b) return false;
@@ -35373,8 +35379,8 @@ function ppHeaderHtml(){
     : (isM ? lvBtn+delBtn : pwBtn+`<button class="btn btn-ghost btn-sm" onclick="ppEdit()">編輯</button>`);
   const _avatar=`<div class="pp-avatar${avatarGenderClass(r.gender)}" style="overflow:hidden;cursor:pointer;" title="點一下上傳／更換照片"
       onclick="avatarPick('${isM?'members':'employees'}','${r.id}')">${av}</div>`;
-  const _nameHtml=(isM && SESSION && SESSION.role==='admin')
-    ? `<button class="pp-name pp-name-edit" title="點一下改名（僅管理員）" onclick="ppEditName()">${escH(r.name||'—')}</button>`
+  const _nameHtml=(isM && canEditMemberData())
+    ? `<button class="pp-name pp-name-edit" title="點一下改名（櫃檯以上；電話是帳號不能改）" onclick="ppEditName()">${escH(r.name||'—')}</button>`
     : `<span class="pp-name">${r.name||'—'}</span>`;
   /* 管理員手機（2026-08-20 使用者指示；二修調整欄位分配）：
      左欄＝大頭照／姓名／電話／性別／生日／LINE 通知（都是「這個人是誰、怎麼聯絡」）；
@@ -35469,9 +35475,9 @@ function ppInlineEdit(ev,fid){
   if(fid==='name'){ if(SESSION&&SESSION.role==='admin') return ppEditName(); showToast('姓名只有管理員可以修改'); return; }
   // 主教練：櫃台端處理；生日/性別：櫃檯或會員本人（2026-08-05 使用者指示：會員端可自己更新）
   /* 2026-08-23 使用者定案：修改會員資料只有管理員（會員本人改自己的仍然可以） */
-  if(fid==='default_coach_id' && !canEditMemberData()){ showToast('指定主教練需要管理員權限'); return; }
+  if(fid==='default_coach_id' && !canEditMemberData()){ showToast('指定主教練需要櫃檯以上權限'); return; }
   const _selfM = SESSION&&SESSION.role==='member'&&String(PP.id)===String(SESSION.id);
-  if((fid==='birthday'||fid==='gender') && !(canEditMemberData()||_selfM)){ showToast('修改會員資料需要管理員權限'); return; }
+  if((fid==='birthday'||fid==='gender') && !(canEditMemberData()||_selfM)){ showToast('修改會員資料需要櫃檯以上權限'); return; }
   const item=ev.currentTarget;
   if(!item || item.querySelector('input,select')) return;   // 已在編輯中
   const v=item.querySelector('.pp-meta-v'); if(!v) return;
@@ -35580,7 +35586,9 @@ async function _doDeleteMember(mid){
    只開給管理員。姓名只是顯示資料，不動登入（電話才是帳號）也不動任何關聯。
    改動寫進備註留痕：日後查帳看到「這個人怎麼換名字了」時找得到原因。 */
 function ppEditName(){
-  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以修改姓名'); return; }
+  /* 2026-08-23 使用者指示：櫃檯也要能改姓名（原本只有管理員）——
+     改的只是顯示用的姓名，登入帳號是電話，不受影響；改動會記在備註裡留痕。 */
+  if(!canEditMemberData()){ showToast('修改會員資料需要櫃檯以上權限'); return; }
   const r=PP.rec||{};
   showModal(`<div class="modal-title">修改姓名</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-bottom:12px;">
@@ -35611,7 +35619,7 @@ async function _doEditName(){
 }
 /* 緊急聯絡人編輯小視窗（2026-07-27 使用者指示：會員端可自行更新；員工幫改亦同路徑） */
 function ppEmergencyEdit(ev){
-  if(!(canEditMemberData()||ppSelfView())){ showToast('修改會員資料需要管理員權限'); return; }
+  if(!(canEditMemberData()||ppSelfView())){ showToast('修改會員資料需要櫃檯以上權限'); return; }
   try{ ev.stopPropagation(); }catch(_){}
   const r=PP.rec||{};
   showModal(`<div class="modal-title">緊急聯絡人</div>
@@ -35639,7 +35647,7 @@ async function ppEmergencySave(){
 /* 發票載具編輯小視窗（2026-08-05 使用者指示：會員端可自行更新；櫃檯代改亦同路徑）——
    手機條碼載具：斜線開頭共 8 碼（/ 後接 7 碼的數字、大寫英文、+ - .）。留空＝清除。 */
 function ppCarrierEdit(ev){
-  if(!(canEditMemberData()||ppSelfView())){ showToast('修改會員資料需要管理員權限'); return; }
+  if(!(canEditMemberData()||ppSelfView())){ showToast('修改會員資料需要櫃檯以上權限'); return; }
   try{ ev.stopPropagation(); }catch(_){}
   const r=PP.rec||{};
   showModal(`<div class="modal-title">發票載具</div>
@@ -36082,7 +36090,7 @@ async function _tkShareBack(mid){
 /* 家庭成員（櫃檯版，2026-08-03 使用者指示）：與會員端 openFamilyShare 同一個欄位
    members.family_members，櫃檯代客新增/移除稱呼（例：爸爸、媽媽）。 */
 async function ppFamEdit(mid){
-  if(!canEditMemberData()){ showToast('修改會員資料需要管理員權限'); return; }
+  if(!canEditMemberData()){ showToast('修改會員資料需要櫃檯以上權限'); return; }
   const m=await dbGet('members',mid); if(!m){ showToast('找不到會員'); return; }
   const list=Array.isArray(m.family_members)?m.family_members.filter(Boolean):[];
   showModal(`<div class="modal-title">家庭成員　<span style="font-size:12px;color:var(--t3);font-weight:400;">${m.name}</span></div>

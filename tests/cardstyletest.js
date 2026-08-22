@@ -181,9 +181,11 @@ console.log('\n會員資料的新表頭要給櫃檯（使用者：櫃檯端的�
 ok('★ 版面判斷從 role===admin 放寬到櫃檯以上（含店長）',
    /if\(isM && \(_selfPP \|\| \(typeof isDeskLike==='function' \? isDeskLike\(\) : \(SESSION && SESSION\.role==='admin'\)\)\)\)\{/.test(src)
    && !/if\(isM && SESSION && SESSION\.role==='admin'\)\{\s*\n\s*\/\* 三修/.test(src));
-ok('★ 權限沒有跟著放寬：改名／刪除／看密碼／改等級仍限管理員',
+/* 0823 使用者定案：改名放寬到櫃檯（改的只是顯示名，帳號是電話）；
+   刪除、看密碼、改等級仍限管理員。 */
+ok('★ 刪除／改等級仍限管理員；改名放寬到櫃檯以上',
    /const delBtn = \(isM && SESSION && SESSION\.role==='admin'\)/.test(src)
-   && /const _nameHtml=\(isM && SESSION && SESSION\.role==='admin'\)/.test(src)
+   && /const _nameHtml=\(isM && canEditMemberData\(\)\)/.test(src)
    && /const _canTier = !!\(SESSION&&SESSION\.role==='admin'\);/.test(src)
    && /if\(!\(SESSION&&SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以刪除會員'\); return; \}/.test(src));
 ok('　　櫃檯沒有可按的動作時整列不畫（不留一條空白）',
