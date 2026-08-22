@@ -9030,8 +9030,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1544';
-const APP_VERSION_LABEL='v260822.1544';
+const APP_VERSION = '260822.1556';
+const APP_VERSION_LABEL='v260822.1556';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40983,10 +40983,16 @@ function heroWeekBarHTML(o){
     <div class="msb-dates cag-days hero-week" id="${id}">${cards}</div>`;
 }
 /* 週導覽：把檢視日往前/後移 7 天（跨月時同步換月，資料才會重載） */
+/* 上一週／下一週：換到「那一週的週一」，不是同一個星期幾（2026-08-22 使用者指示：
+   「全頁面的下一週跟上一週的按鈕 每次按完頁面內容都要從該週的第一天也就是週一開始」）——
+   原本是 cur ±7 天，週六按下一週會停在下週六，看到的還是半週。
+   ⚠ 這一支同時給管理員手機首頁、教練手機首頁、手機行事曆用（admWeekShift／
+     coachWeekShift／cagWeekShift 都走它），改這裡三處一起生效。 */
 function heroWeekStep(cur,dir){
   const d=parseYmd(cur)||new Date(TODAY);
   d.setDate(d.getDate()+dir*7);
-  return ymd(d);
+  const mon=(typeof heroWeekMonday==='function')?heroWeekMonday(ymd(d)):null;
+  return mon?ymd(mon):ymd(d);
 }
 /* 管理員手機首頁：點大日期 → 品牌綠半透明月曆（2026-08-19 使用者指示）——
    只有日期與今日提示、不放課堂數；點日期跳到該天，點空白處關閉。 */
@@ -41353,7 +41359,12 @@ function coachPickDay2(ds){
 function dashDayShift(dir){
   const cur=(typeof _dashViewDate!=='undefined'&&_dashViewDate)||ymd(TODAY);
   const d=parseYmd(cur)||new Date(TODAY); d.setDate(d.getDate()+dir);
-  const ds=ymd(d);
+  /* 整週翻頁（桌機日期直欄的 ‹ ›，dir=±7）落在該週的週一；
+     一天一天翻（手機的 ±1）維持原樣（2026-08-22 使用者指示）。 */
+  let ds=ymd(d);
+  if(Math.abs(dir)>=7 && typeof heroWeekMonday==='function'){
+    const mon=heroWeekMonday(ds); if(mon) ds=ymd(mon);
+  }
   _dashViewDate=(ds===ymd(TODAY))?null:ds;
   window._admCalYm=ds.slice(0,7);
   window._admCalKeep=true;
