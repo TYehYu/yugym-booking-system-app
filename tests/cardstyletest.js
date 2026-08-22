@@ -372,7 +372,8 @@ ok('★ 沒排人 → 安排會員',
 /* 2026-08-21：分期保留走「分期」，一般待簽約才走「儲值」 */
 ok('★ 有人沒票 → 儲值（開銷售視窗，會員已預選）',
    /: evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ppTopUp\('\$\{b\.member_id\}'\)`,'plus','儲值'\)\);/.test(src)
-   && /function ppTopUp\(mid\)\{\s*\n\s*window\._salesPreMember=mid;/.test(src));
+   /* 0823：ppTopUp 前面多了 isDeskLike 守門 */
+   && /function ppTopUp\(mid\)\{\s*\n\s*if\(!isDeskLike\(\)\)[\s\S]{0,90}window\._salesPreMember=mid;/.test(src));
 ok('★ 有票沒綁 → 轉正',
    /_hasTk\s*\n?\s*\? evoBtn\('evo-r2','evo-primary',`ashBackArm\('\$\{id\}'\);collapseBkCard\(\);openConvertPending/.test(src));
 ok('★ 有無票券用既有的 listUsableTickets 判（與步驟 2 挑票同一支）',

@@ -79,9 +79,10 @@ ok('★ 日期翻頁照舊；「N 人上課中」標籤已移除',
 
 console.log('\n日期列改成一整週（2026-08-21 使用者：「改成一週 [8/17一][8/18二] 依序下去排到週日」）');
 /* 0822：七個日期鈕從上方橫排搬到左側直欄（見 tests/deskrailtest.js） */
-ok('★ 桌機面板的日期鈕改成左側直欄（原本的橫排週列退場）',
-   /<div class="twk-railin">\$\{_wkDays\}<\/div>/.test(src)
-   && !/<div class="twk-strip">\$\{_wkDays\}<\/div>/.test(src)
+/* 0822 改成左側直欄 → 0823 使用者指示搬回上方橫列 */
+ok('★ 桌機面板的日期鈕在上方、橫向一列',
+   /<div class="twk-barin">\$\{_wkDays\}<\/div>/.test(src)
+   && !/<div class="twk-railin">/.test(src)
    && /<div class="tl-panel tl-desktop-only">[\s\S]{0,220}?<div class="tl-panel-top"><div class="tl-title tl-title-week">/.test(src));
 ok('　　手機版維持一天一天翻（螢幕放不下七個鈕）',
    /<div class="mtc-wrap-top"><div class="tl-title tl-title-date">[\s\S]{0,200}?<span class="tl-date">\$\{_taskDateLbl\}<\/span>/.test(src));

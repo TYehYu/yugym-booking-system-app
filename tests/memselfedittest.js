@@ -18,9 +18,10 @@ ok('★ 生日與性別用 _canBG（櫃檯或本人）',
    /const _canBG = _canBase\|\|_canSelf;/.test(src)
    && /pp-meta-i\$\{_canBG\?' pp-f-click':''\}[\s\S]{0,60}?ppInlineEdit\(event,'birthday'\)/.test(src)
    && /pp-meta-i\$\{_canBG\?' pp-f-click':''\}[\s\S]{0,60}?ppInlineEdit\(event,'gender'\)/.test(src));
-ok('★ ppInlineEdit 放行會員本人（主教練仍限櫃檯）',
-   /if\(fid==='default_coach_id' && !\(isDeskLike\(\)\)\)\{ return; \}/.test(src)
-   && /if\(\(fid==='birthday'\|\|fid==='gender'\) && !\(isDeskLike\(\)\|\|_selfM\)\)\{ return; \}/.test(src));
+/* 0823 使用者定案：修改會員資料收成只有管理員；會員本人改自己的照舊 */
+ok('★ ppInlineEdit 放行會員本人（主教練與生日性別改為管理員限定）',
+   /if\(fid==='default_coach_id' && !canEditMemberData\(\)\)/.test(src)
+   && /if\(\(fid==='birthday'\|\|fid==='gender'\) && !\(canEditMemberData\(\)\|\|_selfM\)\)/.test(src));
 ok('　　緊急聯絡人維持開放（2026-07-27 既有）', /onclick="ppEmergencyEdit\(event\)"/.test(src));
 
 console.log('\n② 載具');

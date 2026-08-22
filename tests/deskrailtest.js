@@ -1,26 +1,29 @@
-/* 桌機首頁「今日教練任務」：日期列從上方橫排改成左側直欄（2026-08-22 使用者指示）
-   「上方日期列也改到左邊，像手機版首頁一欄的日期，但左右翻頁的箭頭放在最上面用按的；
-     第二欄顯示用兩列 教練／今日目前銷課數/今日總課堂數；第三欄起才是今天的課卡。
-     這個日期列也是上下填滿頁面，根據視窗大小要自己調整。」 */
+/* 桌機首頁「今日教練任務」的日期列
+   0822 使用者：「改到左邊，像手機版首頁一欄的日期，翻頁箭頭放最上面」→ 左側直欄
+   0823 使用者：「日期列改到上方 變橫向一列」→ 搬回上方橫列（本檔案改測這一版）
+   ⚠ 選日／翻週的行為與樣式語彙（今天綠底、選取黑框、金底底色）兩版共用，沒有跟著改。
+   教練欄（圓形色塊）與課卡欄的部分不受影響，下半段的斷言原封不動。 */
 const fs=require('fs'), path=require('path');
 const src=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
 let pass=0,fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n);} };
 
-console.log('三欄：日期直欄 → 教練 → 課卡');
-ok('★ 日期直欄在最左，課卡區在右（同一列 flex）',
-   /<div class="tl-3col">\s*\n\s*<div class="twk-rail">/.test(src)
-   && /<div class="twk-railin">\$\{_wkDays\}<\/div>/.test(src)
+console.log('日期列在上方橫排 → 底下是 教練 ｜ 課卡 兩欄');
+ok('★ 日期列獨立一列、排在課卡區之上',
+   /<div class="twk-bar">[\s\S]{0,300}<div class="twk-barin">\$\{_wkDays\}<\/div>[\s\S]{0,140}<div class="tl-3col">/.test(src)
    && /<div class="tcard-body">\$\{rows\.map/.test(src)
    && /\.tl-3col\{display:flex;gap:12px;flex:1;min-height:0;\}/.test(src));
-ok('★ 左右翻頁的箭頭放在直欄最上面（不再夾在日期兩側）',
-   /<div class="twk-rail-nav">\s*\n\s*<button class="tl-daynav" onclick="dashDayShift\(-7\)" title="上一週">‹<\/button>\s*\n\s*<button class="tl-daynav" onclick="dashDayShift\(7\)" title="下一週">›<\/button>/.test(src)
-   && !/<div class="twk-strip">\$\{_wkDays\}<\/div>/.test(src));
-ok('★★ 七天平分整欄高度（不是固定高度）—— 視窗變矮時一起縮，不會有人被擠出畫面',
-   /\.twk-railin \.twk-day\{flex:1 1 0;min-height:0;/.test(src)
-   && /\.twk-railin\{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:5px;\}/.test(src));
-ok('　　直欄本身不捲（overflow:hidden），只有課卡區會捲',
-   /\.twk-rail\{flex:0 0 62px;display:flex;flex-direction:column;gap:6px;overflow:hidden;/.test(src)
+ok('★ 左右翻頁的箭頭回到日期列兩端',
+   /<div class="twk-bar">\s*\n\s*<button class="tl-daynav" onclick="dashDayShift\(-7\)" title="上一週">‹<\/button>/.test(src)
+   && /<button class="tl-daynav" onclick="dashDayShift\(7\)" title="下一週">›<\/button>\s*\n\s*<\/div>/.test(src));
+ok('★★ 七天平分整列寬度（不是固定寬）—— 視窗變窄時一起縮，不出現橫向捲軸',
+   /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;/.test(src)
+   && /\.twk-barin\{flex:1 1 auto;min-width:0;display:flex;gap:5px;\}/.test(src));
+/* 註解裡還提得到舊 class（說明它為什麼被移除），所以先把註解剝掉再檢查 */
+const _noComment = src.replace(/\/\*[\s\S]*?\*\//g,'');
+ok('　　舊的直欄樣式已清乾淨（不留死 CSS）',
+   !/\.twk-rail\{/.test(_noComment) && !/\.twk-railin/.test(_noComment)
+   && !/\.twk-rail-nav/.test(_noComment)
    && /\.mc-coachcenter \.tcard-body\{flex:1;min-height:0;overflow-y:auto/.test(src));
 ok('　　日期鈕沿用既有的 .twk-day（選中／今天的語彙不變）',
    /out\+=`<button type="button" class="twk-day\$\{sel\?' on':''\}\$\{isT\?' today':''\}"/.test(src)
@@ -64,15 +67,15 @@ ok('★ 欄寬從 118 收到 84（原本是給「縮寫圓＋三行文字」的�
 /* 2026-08-22 使用者定版：日期欄金底＋三欄之間各一條分隔線；今天＝品牌綠、選取＝黑框；
    「N 人上課中」標籤移除。 */
 console.log('\n日期欄的底色與狀態語彙');
-ok('★ 日期欄用品牌金淡底，右側一條分隔線',
-   /\.twk-rail\{[\s\S]{0,200}?background:rgba\(180,138,86,\.13\);border-radius:12px;padding:6px 5px;\s*\n\s*border-right:1px solid var\(--bd\);\}/.test(src));
-ok('★ 教練欄與課卡欄之間也一條', /\.tl-3col \.tcard-coach\{border-right:1px solid var\(--bd\);\}/.test(src));
+ok('★ 日期列用品牌金淡底（0823 搬到上方後仍是同一個底色）',
+   /\.twk-bar\{[\s\S]{0,160}?background:rgba\(180,138,86,\.13\);border-radius:12px;padding:6px;\}/.test(src));
+ok('★ 教練欄與課卡欄之間一條分隔線', /\.tl-3col \.tcard-coach\{border-right:1px solid var\(--bd\);\}/.test(src));
 ok('★★ 今天＝品牌綠底、選取＝黑框（兩個維度分開，可以同時成立）',
    /\.twk-day\.today\{background:var\(--green\);color:#fff;border-color:var\(--green\);\}/.test(src)
    && /\.twk-day\.on\{border-color:#1a1a1a;border-width:2px;\}/.test(src)
    && /\.twk-day\.on:not\(\.today\)\{background:#fff;color:var\(--text-primary\);\}/.test(src));
 ok('　　金底上的日期改白卡（原本是 --card2，疊在金底上會糊成一片）',
-   /\.twk-railin \.twk-day\{flex:1 1 0;min-height:0;justify-content:center;padding:4px 2px;background:#fff;\}/.test(src));
+   /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;justify-content:center;padding:5px 2px;background:#fff;\}/.test(src));
 ok('★ 「N 人上課中」標籤移除（那一列本來就有流星邊框）',
    !/\$\{_liveCount\?`<span class="tl-live-badge">/.test(src)
    && /頂上再掛一顆數字標是同一件事講兩次/.test(src));
@@ -80,8 +83,8 @@ ok('★ 「N 人上課中」標籤移除（那一列本來就有流星邊框）'
 /* 2026-08-22 使用者指示：回到今天＝紅底、日期列翻頁鈕＝金底、教練＋課卡整列＝米底 */
 ok('★ 「回到今天」用品牌紅（紅>金>綠：它是「你現在不在今天」的最高等級提示）',
    /\.tl-daynav\.tl-daynav-today\{width:auto;padding:0 12px;font-size:11\.5px;font-weight:700;\s*\n\s*color:#fff;background:var\(--danger,#7F0303\);/.test(src));
-ok('★ 日期列的翻頁鈕金底（跟金色的日期欄收在一起）',
-   /\.twk-rail-nav \.tl-daynav\{background:var\(--gold,#B48A56\);color:#fff;\}/.test(src));
+ok('★ 日期列的翻頁鈕金底（跟金色的日期列收在一起）',
+   /\.twk-bar>\.tl-daynav\{[\s\S]{0,90}background:var\(--gold,#B48A56\);color:#fff;\}/.test(src));
 ok('★ 教練＋課卡整列米底（左金右米，兩區的界線不只靠那條線）',
    /\.tl-3col \.tcard-row\{background:var\(--card2,#FAF7F0\);border-radius:12px;/.test(src));
 ok('　　⚠ sticky 的教練欄底色要一起換，否則橫捲時會露出一塊白',
