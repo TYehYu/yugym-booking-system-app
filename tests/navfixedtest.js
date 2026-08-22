@@ -9,6 +9,15 @@ let pass=0, fail=0;
 const t=(n,ok)=>{ ok?pass++:fail++; console.log((ok?'  ok  ':'  FAIL')+'  '+n); };
 
 const base=s.slice(s.indexOf('.bottom-nav{'), s.indexOf('\n', s.indexOf('.bottom-nav{')));
+/* ★★ 真正的成因（2026-08-22 三次回報後找到）：<body> 只要有非 visible 的 overflow，
+   iOS Safari 就把 position:fixed 的子元素當成相對「文件」定位 —— 導覽列被畫在文件座標上，
+   捲多遠就往上偏多遠。Chrome 不吃這一套，所以本機完全重現不出來。
+   水平裁切一律掛 <html>，body 必須保持 visible。 */
+const bodyRule=s.slice(s.indexOf('\nbody{font-family:var(--font-zh)'), s.indexOf('}', s.indexOf('\nbody{font-family:var(--font-zh)')));
+t('★★ <body> 沒有 overflow（否則 iOS 的 position:fixed 會退化成 absolute）',
+  !/overflow/.test(bodyRule));
+t('★★ <body> 也不要 max-width（同樣會讓 body 變成裁切容器）', !/max-width/.test(bodyRule));
+t('★★ 水平裁切改掛 <html>', /\nhtml\{overflow-x:hidden;max-width:100vw;\}/.test(s));
 t('底部導覽是 position:fixed 貼底', /position:fixed;left:0;right:0;bottom:0/.test(base));
 t('★ 不使用 backdrop-filter（iOS 上 fixed＋backdrop-filter 捲動會停在舊位置）',
   !/backdrop-filter/.test(base));
