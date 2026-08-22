@@ -8427,11 +8427,13 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
    .admh 是教練手機首頁共用的，沒有這個 class 的頁面一行都吃不到。 */
 .admh2-body{display:flex;gap:8px;margin-top:10px;min-height:240px;}
 .admh2-rail{flex:0 0 66px;overflow-y:auto;overscroll-behavior-y:contain;
-  display:flex;flex-direction:column;gap:6px;padding:2px 2px 12px;scrollbar-width:none;}
-.admh2-rail::-webkit-scrollbar{display:none;}
+  display:flex;flex-direction:column;gap:6px;padding:2px 2px 12px;
+  scrollbar-width:none;-ms-overflow-style:none;}
+.admh2-rail::-webkit-scrollbar{display:none;width:0;height:0;}
 .admh2-cards{flex:1 1 auto;min-width:0;overflow-y:auto;
-  display:flex;flex-direction:column;gap:9px;padding:2px 2px 12px;scrollbar-width:none;}
-.admh2-cards::-webkit-scrollbar{display:none;}
+  display:flex;flex-direction:column;gap:9px;padding:2px 2px 12px;
+  scrollbar-width:none;-ms-overflow-style:none;}
+.admh2-cards::-webkit-scrollbar{display:none;width:0;height:0;}
 /* 左欄的一天：日期大、月份與星期小，最下面是當天堂數 */
 .a2-day{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:1px;
   border:none;background:transparent;font-family:inherit;cursor:pointer;
@@ -8446,6 +8448,10 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .a2-day.a2-today{background:var(--green);}
 .a2-day.a2-today .a2-dn,.a2-day.a2-today .a2-dm,.a2-day.a2-today .a2-dw,.a2-day.a2-today .a2-dc{color:#fff;opacity:1;}
 /* 右欄課卡：左＝出席章獨立一欄、中＝三列、右＝上時間下教練（2026-08-22 使用者定版） */
+/* ⚠ flex 直排＋固定高度時，子項預設 flex-shrink:1 會被壓扁到重疊（2026-08-22 使用者回報
+   「右邊課卡全部重疊在一起了」）——課卡與左欄的每一天都要 flex:0 0 auto，維持自己的高度、
+   多出來的交給捲軸。 */
+.admh2-cards>*{flex:0 0 auto;}
 .admh2-card{position:relative;overflow:hidden;background:#fff;border-radius:14px;
   padding:10px 11px 10px 14px;color:var(--text);cursor:pointer;box-shadow:0 3px 12px rgba(50,42,30,.12);
   display:grid;grid-template-columns:auto 1fr auto;gap:0 9px;align-items:center;}
@@ -8777,8 +8783,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1018';
-const APP_VERSION_LABEL='v260822.1018';
+const APP_VERSION = '260822.1024';
+const APP_VERSION_LABEL='v260822.1024';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40658,8 +40664,15 @@ function admh2Mount(){
   const body=document.querySelector('.admh2-body'); if(!body) return;
   const fit=()=>{
     const r=body.getBoundingClientRect();
-    /* 底部留一點，讓下面的「今日值班／本月成績」露出一角 —— 全部吃滿會讓人以為頁面到底了 */
-    const h=Math.max(240, Math.round(window.innerHeight - r.top - 24));
+    /* ⚠ 要扣掉底部導覽列（2026-08-22 使用者回報「左邊日期欄週日會被下方導覽列擋住」）——
+       .bottom-nav 是 position:fixed、不佔文件高度，只用 innerHeight 算就會把最後一天塞到它底下。
+       另外再留一點空隙，讓下面的「今日值班／本月成績」露出一角，不會讓人以為頁面到底了。 */
+    /* 取「量得到高度的那一個」：DOM 裡可能同時存在隱藏的導覽列（height 0），
+       用 querySelector 抓第一個會拿到 0，最後一天照樣被壓到導覽列底下。 */
+    let navH=0;
+    document.querySelectorAll('.bottom-nav').forEach(n=>{
+      const h=n.getBoundingClientRect().height; if(h>navH) navH=Math.round(h); });
+    const h=Math.max(240, Math.round(window.innerHeight - r.top - navH - 16));
     body.style.height=h+'px';
   };
   fit();

@@ -34,10 +34,23 @@ ok('★ 左欄七天、週一第一個（沿用既有的 heroWeekMonday，不另
 ok('★ 兩欄各自 overflow-y:auto',
    /\.admh2-rail\{[^}]*overflow-y:auto/.test(src) && /\.admh2-cards\{[^}]*overflow-y:auto/.test(src));
 ok('★★ 內層要捲得動就得有明確高度 → 掛載時依剩餘視窗高度算，resize／轉向重算',
-   /const h=Math\.max\(240, Math\.round\(window\.innerHeight - r\.top - 24\)\);/.test(src)
+   /const h=Math\.max\(240, Math\.round\(window\.innerHeight - r\.top - navH - 16\)\);/.test(src)
    && /window\.addEventListener\('resize', \(\)=>\{ try\{ admh2Mount\(\); \}catch\(_\)\{\} \}\);/.test(src));
+/* 2026-08-22 使用者回報三件事，這三條各守一件 */
+ok('★★ 高度要扣掉底部導覽列（「左邊日期欄週日會被下方導覽列擋住」）—— 它是 fixed、不佔文件高度',
+   /\.bottom-nav 是 position:fixed、不佔文件高度/.test(src)
+   && /document\.querySelectorAll\('\.bottom-nav'\)\.forEach\(n=>\{/.test(src));
+ok('　　⚠ 取「量得到高度的那一個」：DOM 裡有隱藏的導覽列，抓第一個會拿到 0',
+   /用 querySelector 抓第一個會拿到 0，最後一天照樣被壓到導覽列底下/.test(src));
+ok('★★ 課卡不能被壓扁（「右邊課卡全部重疊在一起了」）—— flex 直排＋固定高度時預設會 shrink',
+   /\.admh2-cards>\*\{flex:0 0 auto;\}/.test(src)
+   && /子項預設 flex-shrink:1 會被壓扁到重疊/.test(src));
+ok('★ 兩欄的捲軸都不顯示（使用者指示）',
+   /\.admh2-rail::-webkit-scrollbar\{display:none;width:0;height:0;\}/.test(src)
+   && /\.admh2-cards::-webkit-scrollbar\{display:none;width:0;height:0;\}/.test(src)
+   && (src.match(/scrollbar-width:none;-ms-overflow-style:none;/g)||[]).length>=2);
 ok('　　底部留一點，不要讓人以為頁面到底了（下面還有今日值班／本月成績）',
-   /全部吃滿會讓人以為頁面到底了/.test(src));
+   /讓下面的「今日值班／本月成績」露出一角，不會讓人以為頁面到底了/.test(src));
 ok('★ 左右滑換週：往左＝下一週，沿用既有的 admWeekShift',
    /try\{ admWeekShift\(dx<0\?1:-1\); \}catch\(_\)\{\}/.test(src));
 ok('★★ ⚠ 軸鎖：左欄本身是上下捲的，水平位移要 >48px 且大於垂直 1.5 倍才算換週',
