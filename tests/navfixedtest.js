@@ -25,13 +25,20 @@ t('★ 不使用 backdrop-filter（iOS 上 fixed＋backdrop-filter 捲動會停�
    導覽列會停在 scrollY=0 的位置（捲多遠就偏多遠）。 */
 t('★ 不提升合成層（沒有 transform、沒有 will-change）',
   !/transform:/.test(base) && !/will-change/.test(base));
-t('★ 捲動停下來後強制重新定位（iOS 保險）',
+/* 保險（四修）：不再猜成因，改成量測＋補償。正常瀏覽器量到的 off 永遠是 0，
+   一行 style 都不會寫；被當成 absolute 排版時，差多少就補多少。 */
+t('★ 保險是量測＋補償，不是盲目重繪',
   /function navStickInit\(\)\{/.test(s)
-  && /window\.addEventListener\('scroll'/.test(s));
-t('★ 保險寫的是會真的改變的值（translateZ(0)↔translate3d(0,0,0) 是同一個矩陣、不會重繪）',
-  /n\.style\.bottom=flip\?'0\.01px':'0px';/.test(s)
-  && !/n\.style\.transform='translate3d\(0,0,0\)'/.test(s));
-t('　放開手指也補一次（慣性捲動結束）', /window\.addEventListener\('touchend'/.test(s));
+  && /const off=Math\.round\(window\.innerHeight - r\.bottom\);/.test(s)
+  && /if\(Math\.abs\(off\)<1\) return;/.test(s));
+t('★ 差值累加回去（transform 是疊加在目前位置上，一次收斂）',
+  /const next=\(n\._navOff\|\|0\)\+off;/.test(s)
+  && /n\.style\.transform=next\?\('translateY\('\+next\+'px\)'\):'';/.test(s));
+t('　position 不是 fixed（或隱藏）時完全不動手', /cs\.position!=='fixed'/.test(s));
+t('　scroll／touchmove 都掛，用 rAF 收斂成每幀最多一次',
+  /window\.addEventListener\('scroll',kick/.test(s)
+  && /window\.addEventListener\('touchmove',kick/.test(s)
+  && /if\(!raf\) raf=requestAnimationFrame\(sync\)/.test(s));
 t('　只在觸控裝置掛，桌機不多一個 scroll 監聽',
   /if\(!\('ontouchstart' in window\)\) return;/.test(s));
 t('底色改成不透明（原本 rgba .96，模糊拿掉後不要留半透明）', /background:rgb\(244,240,232\)/.test(base));

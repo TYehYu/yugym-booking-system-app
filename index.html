@@ -9291,8 +9291,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.2015';
-const APP_VERSION_LABEL='v260822.2015';
+const APP_VERSION = '260822.2019';
+const APP_VERSION_LABEL='v260822.2019';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -41519,32 +41519,45 @@ function admh2Mount(shiftFn){
   rail.addEventListener('touchend',end,{passive:true});
   rail.addEventListener('touchcancel',end,{passive:true});
 }
-/* ══ 底部導覽列的「捲動後回位」保險（2026-08-22 三修）══════════════════════════
-   幾何本身是對的（Chrome 捲到 1400px 仍精準貼底，祖先也沒有任何 transform／filter／
-   contain 之類會攔截 position:fixed 的東西）。iOS 上會停在畫面中間，是因為那一層
-   被當成獨立合成層之後就不再隨捲動更新 —— 主要修法是「不要提升圖層」（見 .bottom-nav
-   的註記），這裡是第二道保險。
+/* ══ 底部導覽列：自己校正回視窗底部（2026-08-22 四修）══════════════════════════
+   前三次都在猜成因（backdrop-filter → 合成層 → body 的 overflow-x），第三次確實把
+   幅度改小了（body 的 overflow-x:hidden 讓 iOS 把 position:fixed 當成相對文件定位，
+   已移到 html），但**還有殘留**：偏移量仍等於捲動距離。
 
-   ⚠ 二修那版的保險是無效的：把 transform 從 translateZ(0) 設成 translate3d(0,0,0)，
-     兩者計算出來是**同一個矩陣**，瀏覽器視為沒有變化、根本不會重繪。
-     改成寫 bottom（會影響版面位置，一定觸發重新定位），且只在真的偏掉時才動手。 */
+   所以不再賭成因，改成量測＋補償：
+   ・position:fixed 若真的正常，getBoundingClientRect().bottom 永遠等於 innerHeight，
+     `off` 一直是 0 → 不會寫任何 style，桌機與正常瀏覽器等於沒有這段程式。
+   ・若它被當成 absolute 排在文件上，量到的就是偏掉之後的位置 → 差多少補多少。
+     transform 是疊加在目前位置上的，所以把差值累加回去，一次就收斂。
+   ・掛在 scroll／touchmove，用 rAF 收斂成每幀最多一次。 */
 function navStickInit(){
   if(window._navStick) return;
-  if(!('ontouchstart' in window)) return;
+  if(!('ontouchstart' in window)) return;   // 桌機沒有這個問題，也不想多一個監聽
   window._navStick=true;
-  let t=null, flip=false;
-  const kick=()=>{
+  let raf=0;
+  const sync=()=>{
+    raf=0;
     const n=document.getElementById('bottom-nav');
-    if(!n || getComputedStyle(n).display==='none') return;
-    flip=!flip;
-    n.style.bottom=flip?'0.01px':'0px';   // 每次都是不同的值 → 一定重新定位
+    if(!n) return;
+    const cs=getComputedStyle(n);
+    if(cs.display==='none' || cs.position!=='fixed'){
+      if(n.style.transform){ n.style.transform=''; n._navOff=0; }
+      return;
+    }
+    const r=n.getBoundingClientRect();
+    const off=Math.round(window.innerHeight - r.bottom);   // >0＝畫得太高
+    if(Math.abs(off)<1) return;                            // 正常瀏覽器永遠走到這裡
+    const next=(n._navOff||0)+off;
+    n._navOff=next;
+    n.style.transform=next?('translateY('+next+'px)'):'';
   };
-  window.addEventListener('scroll',()=>{
-    if(t) clearTimeout(t);
-    t=setTimeout(kick,100);
-  },{passive:true});
-  window.addEventListener('touchend',()=>{ setTimeout(kick,60); },{passive:true});
+  const kick=()=>{ if(!raf) raf=requestAnimationFrame(sync); };
+  window.addEventListener('scroll',kick,{passive:true});
+  window.addEventListener('touchmove',kick,{passive:true});
+  window.addEventListener('touchend',kick,{passive:true});
+  window.addEventListener('resize',kick,{passive:true});
   window.addEventListener('orientationchange',()=>setTimeout(kick,250),{passive:true});
+  kick();
 }
 function admPtrInit(){
   if(window._admPtrOn) return; window._admPtrOn=true;
