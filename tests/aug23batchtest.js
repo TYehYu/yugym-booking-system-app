@@ -75,6 +75,14 @@ ok('　　線上的字不能有底色（會變成擋住課卡的白板）→ 用
    && /text-shadow:0 0 3px #fff,0 0 3px #fff,1px 1px 0 #fff/.test(src));
 ok('　　pointer-events:none：點擊照樣落在底下的課卡',
    /\.cag-gtop\{[^}]*pointer-events:none/.test(src));
+ok('★★ 刻度落在「自己的課／其他人的課」中間那條分隔線上，不是整條線的正中央'
+   +'（使用者：「時間線改到左邊課卡分隔線這一欄」）',
+   /\.cag-gtop \.cag-gline-label\{left:calc\(\(100% - 5px\)\/3 \+ 2\.5px\);\}/.test(src));
+ok('★★ 位置用 calc 從 flex 2:4＋gap 5px 算出來，不寫死 33%（欄寬會隨螢幕變）',
+   /兩欄是 flex 2:4、中間 gap 5px/.test(src)
+   && /\.cag-wk-col\.cag-col-mine\{flex:2 1 0;\}/.test(src)
+   && /\.cag-wk-col\.cag-col-rest\{flex:4 1 0;\}/.test(src)
+   && /\.cag-weekgrid\{position:relative;display:flex;gap:5px;padding:0 10px;\}/.test(src));
 /* showTime 這個名字別處（.wkx-* 那組週檢視）也有，只查一日檢視 renderCard 那一段 */
 const _dayCard=src.slice(src.indexOf("  const renderCard=(b,layer,dim,pos)=>{"),
                          src.indexOf("  // 每欄整點槽背景（淡化方塊，標示每個整點時段範圍）"));
