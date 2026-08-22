@@ -48,10 +48,11 @@ ok('★ 桌機別人的課卡改標 cal-ev-view（不再 cal-ev-noint 整張不�
    手機跟桌機都是」→ 0731 的「點得開唯讀明細」收回成純顯示。見 tests/coachviewtest.js。 */
 /* 2026-08-21：過期的課卡改走 onEvClick（詳細預約視窗退役），三元式收成一條，
    但 _viewOnly 仍是第一個排除條件 —— 別人的課卡照樣不掛任何點擊。 */
-/* 0822 使用者：「其他課卡只能點開來看」→ 回到 0731 的唯讀明細（0801 曾收回，
-   當時別人的課是匿名佔位、點開沒東西可看；0821 起顯示真實內容，前提變了）。 */
-ok('★ 別人的課卡點得開，但只到唯讀明細（桌機）',
-   /_viewOnly \? `onclick="event\.stopPropagation\(\);openBookingDetail\('\$\{b\.id\}'\)"/.test(src));
+/* 0822 使用者：「可以點開其他人的課卡 可以看簡易課卡的內容 但僅此而已」
+   → 照樣走 onEvClick 開簡易課卡，動作鈕靠 staff／own 自然消失。 */
+ok('★ 別人的課卡點得開（簡易課卡），動作鈕由 own 關掉',
+   /\$\{opts\.allMode \|\| bkIsMasked\(b\) \? '' : `onclick="onEvClick\(event,'\$\{b\.id\}'\)"`\}/.test(src)
+   && /const own = SESSION\.role!=='coach' \|\| !!SESSION\.is_manager \|\| bkIsCoach\(b,SESSION\.id\);/.test(src));
 ok('★ 手機 agenda 同樣完全不掛點擊', /\$\{canClick\?'':' cag-view'\}/.test(src)
    && /\$\{canClick\?` onclick="wtlCardClick\('\$\{b\.id\}',this\)"`:''\}>/.test(src));
 ok('★ 唯讀卡不能拖（互動放開後 pointer-events 回來了，不擋就拖得動別人的課改期）',
@@ -59,8 +60,9 @@ ok('★ 唯讀卡不能拖（互動放開後 pointer-events 回來了，不擋�
 ok('★ 手動 tap 路徑（pointer capture 那條）也不彈圓形按鈕',
    (src.match(/&& !_card\.classList\.contains\('bk-masked'\) && !_card\.classList\.contains\('cal-ev-view'\)\)\{/g)||[]).length===1
    && /&& !el\.classList\.contains\('bk-masked'\) && !el\.classList\.contains\('cal-ev-view'\)\)\{/.test(src));
-ok('★ 圓形按鈕面板本身：不是自己的課就改開明細（不再只跳 toast）',
-   /if\(!coachOwnsBk\(b\)\)\{ openBookingDetail\(id\); return; \}/.test(src));
+ok('★ 圓形按鈕面板本身：不是自己的課就一顆動作鈕都不畫（0822 起不再退回明細）',
+   !/if\(!coachOwnsBk\(b\)\)\{ openBookingDetail\(id\); return; \}/.test(src)
+   && /if\(\(!_ashMode \|\| !isGroup\) && canCancel && \(isGroup \? staff : own\)\)\{/.test(src));
 ok('★ 明細不再擋在門口（唯讀放行）',
    !/if\(b && !coachOwnsBk\(b\)\)\{ showToast\('這不是你的課，只能查看自己的課程明細'\); return; \}/.test(src));
 ok('★ 但每個修改元件仍然關著：editable 綁 ownByCoach',

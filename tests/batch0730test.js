@@ -57,9 +57,11 @@ ok('★ 別人的課卡改標 cal-ev-view（可點開明細、不彈圓形按鈕
    /* 0822：判定不再依賴 opts.me（0821 把教練桌機的 opts.me 拿掉後那條整個失效） */
    /const _viewOnly = SESSION\.role==='coach' && !SESSION\.is_manager\s*\n\s*&& !\(typeof bkIsCoach==='function' \? bkIsCoach\(b, SESSION\.id\) : isMine\);/.test(src)
    && /\$\{_viewOnly\?' cal-ev-view':''\}/.test(src));
-ok('★ 另有一層把關：修改路徑仍由 coachOwnsBk 擋下（2026-07-31 起明細本身放行）',
+/* 0822 二修：expandBkCard 不再退回明細，改開簡易課卡；把關改由 staff／own 負責
+   （每一顆動作鈕都吃那兩個旗標，別人的課全是 false）。 */
+ok('★ 另有一層把關：修改路徑由 own 擋下（明細與簡易課卡本身放行）',
    /function coachOwnsBk\(b\)\{/.test(src)
-   && /if\(!coachOwnsBk\(b\)\)\{ openBookingDetail\(id\); return; \}/.test(src));
+   && /const own = SESSION\.role!=='coach' \|\| !!SESSION\.is_manager \|\| bkIsCoach\(b,SESSION\.id\);/.test(src));
 ok('　　代課也算自己的課', /if\(bkIsCoach\(b,SESSION\.id\)\) return true;/.test(src));
 ok('　　店長／管理員／櫃檯不受限', /if\(!SESSION \|\| SESSION\.role!=='coach' \|\| SESSION\.is_manager\) return true;/.test(src));
 ok('　　沒有教練欄位的課（舊團課）不誤鎖', /return !b\.coach_id && !b\.substitute_coach_id;/.test(src));

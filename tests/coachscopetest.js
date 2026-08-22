@@ -24,9 +24,17 @@ t('　CSS 也不給它 touch-action（觸控裝置一併擋）',
 
 // ── 點擊：點得開，但只到唯讀明細 ──
 const ck=src.slice(src.indexOf('${opts.allMode || bkIsMasked(b) ?'), src.indexOf('${bkRenewBadge('));
-t('★★ 唯讀卡點得開，但走 openBookingDetail（不是 onEvClick 那組圓鈕）',
-  /_viewOnly \? `onclick="event\.stopPropagation\(\);openBookingDetail\('\$\{b\.id\}'\)"/.test(ck)
-  && /: `onclick="onEvClick\(event,'\$\{b\.id\}'\)"`/.test(ck));
+/* 0822 二修（使用者）：「可以點開其他人的課卡 可以看簡易課卡的內容 但僅此而已」 */
+t('★★ 唯讀卡照樣走 onEvClick（開簡易課卡，不是明細視窗）',
+  /onclick="onEvClick\(event,'\$\{b\.id\}'\)"/.test(ck)
+  && !/openBookingDetail/.test(ck));
+t('★★ expandBkCard 不再把別人的課退回明細視窗',
+  !/if\(!coachOwnsBk\(b\)\)\{ openBookingDetail\(id\); return; \}/.test(src));
+t('★ 簡易課卡裡每一顆動作鈕都綁 staff／own／_editable／coachCk',
+  /if\(\(!_ashMode \|\| !isGroup\) && canCancel && \(isGroup \? staff : own\)\)\{/.test(src)
+  && /if\(!_ashMode && staff && !closed && b\.date>=ymd\(TODAY\)/.test(src)
+  && /if\(staff && _editable && isGroup\)/.test(src)
+  && /const coachCk = SESSION\.role==='coach' && own;/.test(src));
 t('　全店模式與遮蔽卡仍然不可點', /opts\.allMode \|\| bkIsMasked\(b\) \? ''/.test(ck));
 
 // ── 明細視窗內：所有修改元件對別人的課一律關閉 ──
@@ -43,6 +51,17 @@ t('★★ 手機兩個入口都在開卡前算 _coachReadonly',
   (src.match(/try\{ window\._coachReadonly = !bkIsCoach\(b, SESSION\.id\); \}catch\(_\)\{ window\._coachReadonly=true; \}/g)||[]).length===2);
 t('　簡易課卡的動作也吃 own（別人的課 own 為 false）',
   /const own = SESSION\.role!=='coach' \|\| !!SESSION\.is_manager \|\| bkIsCoach\(b,SESSION\.id\);/.test(src));
+
+// ── 會員端：只能動自己的自主訓練與團課；團課只取消自己的名額 ──
+t('★★ 只有自主訓練能改時間', /if\(selfServe && _isSelfBk && b\.member_id===SESSION\.id\)[\s\S]{0,140}改時間/.test(src));
+t('★★ 團課的按鈕寫「取消我的名額」（不是整堂）',
+  /\$\{st\.isGrp\?'取消我的名額':'取消預約'\}/.test(src));
+t('★ 團課取消只退自己那一堂，整堂課照常開',
+  /只取消您的名額，這堂課照常開課/.test(src));
+t('★ 教練課只看得到簽到（沒有取消／改時間）',
+  /const selfServe=\(!st\.done && !st\.past\) && \(st\.isGrp \|\| _isSelfBk\);/.test(src));
+t('★ 會員端從來沒有「刪除整堂團課」或「改團課時間」的入口',
+  !/memh2[A-Za-z]*\(['"]?deleteClass/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

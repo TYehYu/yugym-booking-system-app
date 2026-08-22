@@ -8,7 +8,8 @@
      0801 收回成「純顯示」：完全不掛點擊 —— 當時別人的課是匿名佔位
           （opts.me ＋ maskOthers），點開也沒東西可看，拿掉才合理
      0821 「所有教練都可以看到簡易課卡」→ 別人的課開始顯示真實內容
-     0822 回到「點得開唯讀明細」：前提變了（有內容可看），不是繞圈
+     0822 「可以點開其他人的課卡 可以看簡易課卡的內容 但僅此而已」→ 開簡易課卡，
+          動作鈕靠 staff／own 自然消失（前提變了：有內容可看，不是繞圈）
    ⚠ 不要再回頭用 pointer-events:none —— 那會攔住觸控捲動。
    ⚠ 0822 同時修掉一個洞：_viewOnly 原本要 opts.me 才成立，而 0821 把教練桌機
      行事曆的 opts.me 拿掉了，於是別人的課卡不再是唯讀 —— 拖得動、也吃得到圓鈕。 */
@@ -20,12 +21,13 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('桌機行事曆');
-ok('★ 別人的課卡點得開，但只到唯讀明細（不接 onEvClick 那組圓鈕）',
-   /_viewOnly \? `onclick="event\.stopPropagation\(\);openBookingDetail\('\$\{b\.id\}'\)"/.test(src));
+ok('★ 別人的課卡點得開（簡易課卡），但一顆動作鈕都沒有',
+   /\$\{opts\.allMode \|\| bkIsMasked\(b\) \? '' : `onclick="onEvClick\(event,'\$\{b\.id\}'\)"`\}/.test(src)
+   && !/if\(!coachOwnsBk\(b\)\)\{ openBookingDetail\(id\); return; \}/.test(src));
 ok('★★ 判定直接問「這堂是不是我帶的」，不再依賴 opts.me',
    /const _viewOnly = SESSION\.role==='coach' && !SESSION\.is_manager\s*\n\s*&& !\(typeof bkIsCoach==='function' \? bkIsCoach\(b, SESSION\.id\) : isMine\);/.test(src));
 ok('★ 自己的課照舊可點（onEvClick 才有圓形按鈕）',
-   /: `onclick="onEvClick\(event,'\$\{b\.id\}'\)"`\)\}/.test(src));
+   /`onclick="onEvClick\(event,'\$\{b\.id\}'\)"`\}/.test(src));
 ok('★ 櫃檯／管理員／店長不受影響（判定只在 role==coach 且非店長時成立）',
    /SESSION\.role==='coach' && !SESSION\.is_manager/.test(src));
 ok('★★ 唯讀卡拖不動（不然拖得動別人的課改期）',
@@ -42,7 +44,7 @@ ok('★ hover 也不再浮起', /\.cal-ev\.cal-ev-view:hover,\.cag-std\.cag-view
 ok('★ 沒有回頭用 pointer-events:none（那會攔手指）',
    !/\.cag-std\.cag-view\{pointer-events:none/.test(src) && !/\.cal-ev-view\{pointer-events:none/.test(src));
 ok('　　來回的沿革寫在程式裡', /0801 收回成「純顯示、完全不掛點擊」/.test(src)
-   && /前提變了（有內容可看）才改回來的，不是繞圈/.test(src));
+   && /可以看簡易課卡的內容 但僅此而已/.test(src));
 
 console.log('\n內容照舊（「一樣正常顯示課卡內容」）');
 ok('★ 卡片內容的組法沒有因為唯讀而被砍掉（時間／名稱／標籤照畫）',

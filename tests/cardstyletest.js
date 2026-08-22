@@ -73,11 +73,11 @@ ok('★ 首頁：出席章自己一欄（0822 起不再貼在姓名右邊）',
 
 console.log('\n過期的課卡也要開簡易課卡');
 ok('★ 不再依 editable 分流到舊的預約明細',
-   /: `onclick="onEvClick\(event,'\$\{b\.id\}'\)"`\)\}/.test(src)
+   /\$\{opts\.allMode \|\| bkIsMasked\(b\) \? '' : `onclick="onEvClick\(event,'\$\{b\.id\}'\)"`\}/.test(src)
    && !/editable\?`onclick="onEvClick\(event,'\$\{b\.id\}'\)"`:\(opts\.allMode/.test(src));
-ok('　　全店模式與遮蔽卡仍然不可點；view-only 改成開唯讀明細（0822）',
+ok('　　全店模式與遮蔽卡仍然不可點；view-only 也走 onEvClick（0822 二修）',
    /全店模式與遮蔽卡維持不可點。/.test(src)
-   && /_viewOnly \? `onclick="event\.stopPropagation\(\);openBookingDetail/.test(src));
+   && /view-only（教練看別人的課）照樣走 onEvClick/.test(src));
 ok('　　成因寫在程式裡（editable 在課程日已過時是 false）',
    /editable 在課程日已過／已完成／已取消時是 false/.test(src));
 

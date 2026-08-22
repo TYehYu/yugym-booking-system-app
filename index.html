@@ -9367,8 +9367,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.2259';
-const APP_VERSION_LABEL='v260822.2259';
+const APP_VERSION = '260822.2307';
+const APP_VERSION_LABEL='v260822.2307';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19053,21 +19053,19 @@ async function renderCalendar(opts){
              詳細預約視窗已經退役（桌機改用簡易課卡），過去的課也一律走 onEvClick；
              expandBkCard 本來就會依 closed／date 把不能做的動作關掉，不必另外防。
              全店模式與遮蔽卡維持不可點。
-             view-only（教練看別人的課）改成點得開唯讀明細（2026-08-22 使用者：
-             「其他課卡只能點開來看 但不能進一步互動」）—— 不接 onEvClick（那條會彈出
-             簽到／代課／取消／編輯那組圓鈕），直接開 openBookingDetail：
-             那支視窗裡每一個修改元件都綁 ownByCoach／staffCanCheckin，對別人的課一律 false。
-             ⚠ 這一條來回過三次，別再自己改回去：
+             view-only（教練看別人的課）照樣走 onEvClick —— 使用者要的是「可以點開其他人的
+             課卡、看簡易課卡的內容，但僅此而已」（2026-08-22 二修）。
+             簡易課卡裡每一顆動作鈕都綁 staff／own／_editable／coachCk，別人的課一律 false，
+             所以開得起來、動不了；能不能拖則由 .cal-ev-view 在 pointerdown 那道閘門擋。
+             ⚠ 這一條來回過幾次，別再自己改回去：
                0729 pointer-events:none → 卡片攔手指，頁面滑不動
                0731 點得開唯讀明細
                0801 收回成「純顯示、完全不掛點擊」——當時別人的課是匿名佔位（opts.me＋
                     maskOthers），點開也沒東西可看，所以拿掉才合理
                0821 「所有教練都可以看到簡易課卡」，別人的課開始顯示真實內容
-               0822 使用者：「其他課卡只能點開來看」→ 回到 0731 的作法。
-                    前提變了（有內容可看）才改回來的，不是繞圈。 */''}
-        ${opts.allMode || bkIsMasked(b) ? ''
-          : (_viewOnly ? `onclick="event.stopPropagation();openBookingDetail('${b.id}')"`
-                       : `onclick="onEvClick(event,'${b.id}')"`)}>
+               0822 使用者：「可以點開其他人的課卡 可以看簡易課卡的內容 但僅此而已」
+                    → 開簡易課卡（不是明細視窗），動作鈕靠既有的 own 判斷自然消失。 */''}
+        ${opts.allMode || bkIsMasked(b) ? '' : `onclick="onEvClick(event,'${b.id}')"`}>
         ${bkRenewBadge({done:_renewDone,no:_renewNo,renew:_renewAlert,pay:_payAlert})}
         ${/* 出席章已移進 _bodyOut 的姓名列（2026-08-21），這裡不再重複輸出一份 */''}
         ${_bodyOut}
@@ -24791,7 +24789,10 @@ async function expandBkCard(el, id){
   /* 2026-07-31 使用者指示：別人的課「互動開啟、但不要圓形按鈕，只能看明細」——
      原本這裡是 showToast 擋掉，現在改成直接開明細（明細內所有修改動作仍由
      ownByCoach／staffCanCheckin 關掉）。 */
-  if(!coachOwnsBk(b)){ openBookingDetail(id); return; }
+  /* 2026-08-22 二修（使用者：「教練可以點開其他人的課卡 可以看簡易課卡的內容 但僅此而已」）——
+     原本這裡把別人的課導去明細視窗（0731 的作法）。現在照樣開簡易課卡：
+     下面算出來的 staff／own／_editable／coachCk 對別人的課全是 false，
+     所有動作鈕自然不會畫出來，只剩內容與「明細」。 */
   const checked = b.status==='checked_in' || b.status==='completed';
   const canCancel = b.status==='booked' || b.status==='checked_in' || b.status==='coach_leave';   /* 教練請假的堂也能取消（2026-08-14：會員最後不來，不能卡住） */
   /* 2026-08-03 使用者定案：店長帳號原本是教練帳號，教練本來就不該動別人的課卡；
@@ -26079,7 +26080,8 @@ async function openCourseCard(id, el){
     return;
   }
   /* 有錨點就開「小卡片＋圓形按鈕」（2026-07-31 使用者指示：手機版統一成桌機那套）。
-     expandBkCard 自己會擋「不是自己的課」（coachOwnsBk）並退回唯讀明細。 */
+     2026-08-22 二修：expandBkCard 不再把別人的課退回明細視窗，一律開簡易課卡；
+     動作鈕由 staff／own 自然關掉（使用者：「可以看簡易課卡的內容 但僅此而已」）。 */
   if(el && typeof expandBkCard==='function'){
     if(el.classList && el.classList.contains('cal-ev-active')){ collapseBkCard(); return; }
     window._admCalCtx=true;   /* 行事曆情境旗標——expandBkCard 進場即消化 */
@@ -44589,7 +44591,11 @@ async function memh2Tap(id){
   const acts=[];
   if(selfServe && _isSelfBk && b.member_id===SESSION.id)
     acts.push(`<button class="btn btn-ghost" onclick="closeModal();msbStart('${b.id}')">改時間</button>`);
-  if(selfServe) acts.push(`<button class="btn btn-ghost" style="color:#b5372e;" onclick="closeModal();memCancelTap('${b.id}')">取消預約</button>`);
+  /* 團課寫「取消我的名額」（2026-08-22 使用者：「團課不能刪除課程或調整課程時間」）——
+     會員取消的一直都只是自己的名額（memLeaveGroup 只退自己那一堂、整堂課照常開），
+     但按鈕寫「取消預約」讀起來像是把整堂課取消掉，措辭要跟權限對得起來。
+     整堂刪除與改時間是櫃檯的事，會員端從來沒有那兩個入口。 */
+  if(selfServe) acts.push(`<button class="btn btn-ghost" style="color:#b5372e;" onclick="closeModal();memCancelTap('${b.id}')">${st.isGrp?'取消我的名額':'取消預約'}</button>`);
   showModal(`<div class="modal-title">${nm}</div>
     <div style="display:flex;align-items:center;gap:10px;background:var(--card2);border-radius:12px;padding:12px 14px;margin-bottom:12px;">
       <span style="width:5px;align-self:stretch;border-radius:3px;background:${col};"></span>
