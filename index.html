@@ -9054,8 +9054,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1722';
-const APP_VERSION_LABEL='v260822.1722';
+const APP_VERSION = '260822.1736';
+const APP_VERSION_LABEL='v260822.1736';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -42170,9 +42170,12 @@ async function chvQuickSlots(ds, coachId){
   const nowMin=(date===ymd(TODAY))?nowMinOfDay():-1;
   /* 場地也要算（2026-08-22 使用者回報：「18:00 應該只能約團體教室才對」）——
      原本只擋「自己有課」，於是那些其實排不進場地的時段照樣列出來。
-     這裡用行事曆同一支 allocateVenue 以「私人教練、60 分」試排：
-       ・排不進去（error）＝整點都滿了 → 不列
-       ・排到團課教室／跑步機 → 照列，但在格子上標出來（那是「還有位子，但只剩這個」）
+     這裡用行事曆同一支 allocateVenue 以「私人教練、60 分」試排。
+     教練課只會用兩種場地（2026-08-22 二修使用者指示）：
+       ・多功能訓練架 → 一般情況，不標（沒標就是它）
+       ・團課教室     → 訓練架滿了才會排到，標「團課教室」讓教練知道會上到哪
+       ・跑步機       → 教練課不會用，排到它等於沒有訓練架也沒有教室 → 當作不可約
+       ・排不進去     → 不可約
      ⚠ 判斷用**當天全部**未取消的預約，不是只有這位教練的（場地是全店共用的）。 */
   const dayAll=(bks||[]).filter(b=>b && b.date===date && b.status!=='cancelled');
   const venueOf=mm=>{
@@ -42180,7 +42183,8 @@ async function chvQuickSlots(ds, coachId){
     let a=null; try{ a=allocateVenue('私人教練', dayAll, mm, mm+60, null); }catch(_){ return {ok:true,tag:''}; }
     if(!a || a.error) return {ok:false,tag:''};
     const vid=String(a.toVid||a.venue_unit||'').split('_')[0];
-    return {ok:true, tag: vid==='group'?'教室' : (vid==='treadmill'?'跑步機':'')};
+    if(vid==='treadmill') return {ok:false,tag:''};
+    return {ok:true, tag: vid==='group'?'團課教室':''};
   };
   const slots=[];
   for(let mm=9*60; mm<=last; mm+=30){
@@ -42207,7 +42211,7 @@ async function chvQuickSlots(ds, coachId){
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">
       ${date.replace(/-/g,'/')}（${_wd}）　還能安排 <b style="color:var(--text);">${slots.length}</b> 個時段
       <br><span style="color:var(--t3);">已排課、場地已滿、已過去與打烊後的時段不會列出來（每格以 60 分鐘計・教練課）。
-      標「教室／跑步機」的代表那個時段只剩該場地。</span></div>
+      沒標的就是多功能訓練架；標「團課教室」代表訓練架已滿、那一堂會上在教室。</span></div>
     ${slots.length
       ? `<div class="cag-slots chvqs2">${cells}</div>`
       : `<div style="padding:18px 4px;color:var(--t3);font-size:13px;text-align:center;">這一天已經沒有可安排的時段了。</div>`}

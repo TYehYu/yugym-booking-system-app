@@ -308,9 +308,15 @@ console.log('\n快速預約：場地與課別');
 ok('★★ 場地也要算 —— 用行事曆同一支 allocateVenue 以「私人教練 60 分」試排，排不進去就不列',
    /let a=null; try\{ a=allocateVenue\('私人教練', dayAll, mm, mm\+60, null\); \}catch\(_\)\{ return \{ok:true,tag:''\}; \}/.test(src)
    && /if\(!a \|\| a\.error\) return \{ok:false,tag:''\};/.test(src));
-ok('★ 只剩團課教室／跑步機時照列，但標出來（那是「還有位子，但只剩這個」）',
-   /return \{ok:true, tag: vid==='group'\?'教室' : \(vid==='treadmill'\?'跑步機':''\)\};/.test(src)
-   && /標「教室／跑步機」的代表那個時段只剩該場地/.test(src));
+/* 0822 二修（使用者）：「教練會建立教練課，所以跑步機的選項就不用進來了，
+   只有多功能訓練架跟團課教室；一般沒有顯示就是多功能訓練架，訓練架沒了才顯示團課教室，
+   都沒了就不要顯示」 */
+ok('★★ 教練課只用兩種場地：不標＝多功能訓練架、標「團課教室」＝訓練架滿了',
+   /return \{ok:true, tag: vid==='group'\?'團課教室':''\};/.test(src)
+   && /沒標的就是多功能訓練架；標「團課教室」代表訓練架已滿/.test(src));
+ok('★★ 只剩跑步機＝教練課用不到 → 當作不可約（不是標出來）',
+   /if\(vid==='treadmill'\) return \{ok:false,tag:''\};/.test(src)
+   && /跑步機       → 教練課不會用，排到它等於沒有訓練架也沒有教室 → 當作不可約/.test(src));
 ok('★★ ⚠ 場地是全店共用的 → 判斷要用當天全部未取消的預約，不是只有這位教練的',
    /const dayAll=\(bks\|\|\[\]\)\.filter\(b=>b && b\.date===date && b\.status!=='cancelled'\);/.test(src)
    && /判斷用\*\*當天全部\*\*未取消的預約/.test(src));
