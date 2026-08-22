@@ -159,5 +159,56 @@ ok('★★ 兩個 sticky 圖層要一起改，否則捲動時露出白柱／白�
 ok('　　今天那一欄的欄頭仍是自己的淡金底（不被統一底色蓋掉）',
    /\.cal-daycol-head\.today\{background:#f3efe2;\}/.test(src));
 
+console.log('\n⑧ 桌機行事曆「營業前」列收斂成一顆金色 [+]');
+ok('★★ 每欄不再重複寫「營業前 ＋」，只留一顆置中的金色加號',
+   /\.cal-early-add\{display:flex;align-items:center;justify-content:center;gap:0;padding:0;\s*\n\s*font-size:11px;color:var\(--gold,#B48A56\);/.test(src));
+ok('★★ 文字用 CSS 藏（不是從 HTML 拿掉）—— 讀屏還要念得出這顆加號是什麼',
+   /\.cal-early-add \.cea-label\{position:absolute;width:1px;height:1px;overflow:hidden;/.test(src)
+   && /<span class="cea-label">營業前<\/span><span class="cea-plus">＋<\/span>/.test(src));
+ok('　　點擊行為沒變（照樣開 08:30、可改 08:00）',
+   /onclick="quickBookAt\('\$\{ds\}','08:30'\)"/.test(src));
+
+console.log('\n⑨ 營運分析');
+ok('★★ 移除頁面標題（使用者：「太佔畫面空間了」）',
+   /移除上方標題 營運分析，太佔畫面空間了/.test(src)
+   && !/C\.innerHTML=head\('ANALYTICS','營運分析',''\)\+\s*\n\s*`<div class="filter-row"/.test(src));
+ok('　　非管理員那一頁的標題保留（那頁只有一句話，沒標題會變沒頭沒尾）',
+   /if\(!canSeeReports\(\)\)\{ C\.innerHTML=head\('ANALYTICS','營運分析',''\)\+/.test(src));
+ok('★★ 下方列表每列一個白框（外圈米底、每列白底圓角）',
+   /\.ov-list\{display:flex;flex-direction:column;gap:6px;background:var\(--card2\);/.test(src)
+   && /\.ov-i\{display:flex;align-items:center;gap:10px;padding:10px 11px;\s*\n\s*background:#fff;border:1px solid var\(--bd\);border-radius:10px;\}/.test(src));
+
+console.log('\n⑩ 支出登記入口');
+ok('★★ 報表頁翻頁列右邊一顆 [支出]，月份跟著翻頁走',
+   /<button class="btn btn-ghost btn-sm dash-exp" onclick="openExpensePick\('\$\{ym\}'\)">支出<\/button>/.test(src));
+ok('★★ 跳一個視窗先挑固定／其他，再進既有的 openExpenseEditor（不另開一份資料）',
+   /function openExpensePick\(ym\)\{/.test(src)
+   && /openExpenseEditor\('\$\{month\}',true\)/.test(src)
+   && /openExpenseEditor\('\$\{month\}',false\)/.test(src));
+ok('　　權限與既有編輯器一致（櫃檯以上）',
+   /if\(!isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可登記支出'\); return; \}/.test(src));
+ok('　　兩顆按鈕是整列可點的大區塊（手機拇指按得準）',
+   /\.exp-pick\{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;/.test(src));
+
+console.log('\n⑪ 手機行事曆課卡');
+ok('★★ 不再標示簽到；「假」留著（那是課的狀態，不是簽到與否）',
+   /return k==='leave'\?'<span class="evc-check evc-leave" title="全員請假">假<\/span>':'';/.test(src));
+ok('★★ 會員姓名靠左置中、教練名稱靠右靠下',
+   /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-txt\{align-items:flex-start;justify-content:center;\s*\n\s*text-align:left;padding:2px 4px 13px 6px;\}/.test(src)
+   && /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-coach\{position:absolute;right:4px;bottom:3px;/.test(src));
+ok('★★ 教練名要脫離文字流才能「姓名置中」＋「教練靠下」並存 —— 理由寫在原地',
+   /要嘛用 margin-top:auto\s*\n\s*把姓名擠到頂端（就不是「置中」了），要嘛姓名置中就壓不到底部/.test(src));
+ok('　　只作用在手機行事曆課卡（.cag-wk-col 底下），不牽動桌機與手機首頁',
+   /只作用在手機一日／週檢視的課卡（\.cag-wk-col 底下）/.test(src));
+
+console.log('\n⑫ 教練端快速預約比照管理員');
+ok('★★ 背景暗化與兩欄寬度不再限管理員',
+   /\.cag-addlayer\{background:rgba\(30,27,22,\.24\);\}/.test(src)
+   && /\.cag-addbtn\{width:45%;\}/.test(src)
+   && !/\.role-admin \.cag-addlayer\{/.test(src)
+   && !/\.role-admin \.cag-addbtn\{/.test(src));
+ok('　　左整點／右 30 分交錯本來就是共用的（由 mm%60 決定），不必再寫一份',
+   /\$\{mm%60===0\?'left:5%;':'left:51%;'\}/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

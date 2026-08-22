@@ -708,8 +708,11 @@ console.log('\n管理員手機行事曆的課卡：2026-08-21 統一走教練版
 ok('★ renderCard 不再依角色分兩種課卡',
    !/if\(SESSION&&SESSION\.role==='admin'\)\{\s*\n\s*const _tmA=/.test(src)
    && /2026-08-21 使用者定案取消：「手機端 教練版跟管理員版 自己的課卡的比例是不是不一樣/.test(src));
-ok('★ 共用的那一份本來就有簽章（假／簽），所以沒有漏掉',
-   /return k==='leave'\?'<span class="evc-check evc-leave" title="全員請假">假<\/span>'\s*\n\s*:\(k==='done'\|\|k==='makeup'\)\?`<span class="evc-check" title="\$\{k==='makeup'\?'補簽':'已完成'\}">簽<\/span>`:'';/.test(src));
+/* 2026-08-23 使用者指示：「手機行事曆 管理員跟教練統一，課卡不再標示簽到」——
+   右下角那顆「簽」角章拿掉；「假」（全員請假）留著，那是課的狀態不是簽到與否。 */
+ok('★ 共用的那一份不再標簽到，但「假」留著',
+   /return k==='leave'\?'<span class="evc-check evc-leave" title="全員請假">假<\/span>':'';/.test(src)
+   && /課卡不再標示簽到」—— 右下角那顆「簽」角章拿掉/.test(src));
 ok('　　.admcag 樣式暫留備查，理由寫在原地',
    /以下 \.admcag \/ \.acg-\* 於 2026-08-21 起沒有呼叫端/.test(src));
 
