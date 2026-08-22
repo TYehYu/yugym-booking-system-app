@@ -7336,7 +7336,12 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
      月曆本身還是浮在上緣，看起來仍然沒有靠到底。
    ・整欄靠底（justify-content:flex-end），多出來的空白就全部留在最上面 ——
      試過把空白夾在插畫與值班之間（插畫留在頂欄下），使用者要的是留在上方。 */
-.mc-g5-left{min-height:var(--g5h,0);justify-content:flex-end;}
+/* 2026-08-22 使用者指示：「左邊欄改從上方往下延展，所以月曆要貼在上方頂欄」——
+   0801 那版是整欄靠底（多出來的空白全留在最上面），現在改回從上往下排：
+   月曆貼齊頂欄，空白留在最下面。上方那條 −10px 的負邊距沿用（同插畫／收款卡的作法），
+   讓第一格自己抵掉 .content 的 10px 上內距、真的貼到頂欄。 */
+.mc-g5-left{min-height:var(--g5h,0);justify-content:flex-start;}
+.mc-g5-left>.mc-b4-cal:first-child{margin:-10px 0 16px !important;}
 /* .mc-b4-cal 在另一個版面（.mc-bot4）是 flex:1 —— 在這一欄會讓「外框」長高、
    月曆本身還是浮在框的上緣（使用者看到的「月曆沒有靠到底」就是這個）。
    這一欄改成不長高，位置交給上面那個 margin-top:auto 決定。 */
@@ -8460,6 +8465,19 @@ button.rev-kind:hover{filter:brightness(.96);box-shadow:0 1px 4px rgba(60,50,38,
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .lot-btn-n{font-size:12.5px;font-weight:800;color:var(--gold-d);flex:none;}
 .lot-btn-sub{font-size:10.5px;color:var(--t3);flex:none;}
+/* 收款提醒：與抽獎名單同一套白卡（2026-08-22 使用者指示「格式參考抽獎提醒」） */
+.tdl2-row{width:100%;box-sizing:border-box;padding:11px 14px;border-radius:12px;background:#fff;
+  border:1.5px solid var(--bd);cursor:pointer;transition:.14s;display:flex;flex-direction:column;gap:7px;}
+.tdl2-row.tdl-static{cursor:default;}
+.tdl2-row:hover{border-color:var(--green);box-shadow:0 3px 10px rgba(0,61,50,.1);}
+.tdl2-row.tdl2-pay{border-color:rgba(127,3,3,.35);}   /* 待付費（卡位／分期）用紅框，紅>金 */
+.tdl2-top{display:flex;align-items:center;gap:10px;}
+.tdl2-nm{font-size:14.5px;font-weight:800;color:var(--text);flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tdl2-tm{font-family:var(--num);font-size:12.5px;font-weight:800;color:var(--gold-d);flex:none;}
+.tdl2-tm-pay{color:var(--danger,#7F0303);}
+.tdl2-sub{font-size:10.5px;color:var(--t3);flex:none;}
+.tdl2-acts{display:flex;gap:6px;}
 .lot-sec{font-size:12px;font-weight:700;color:var(--text);margin:12px 0 6px;}
 .lot-prizes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .lot-prize{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border:1px solid var(--bd);
@@ -9030,8 +9048,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1610';
-const APP_VERSION_LABEL='v260822.1610';
+const APP_VERSION = '260822.1624';
+const APP_VERSION_LABEL='v260822.1624';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16522,34 +16540,43 @@ function openTodoList(kind){
       : `<div class="${cls}">${inner}</div>`;
   };
   const useGrid=!!L.grid;
-  /* 依上課時間分組：時間標在左邊，同一時間的人四個一列、超過就換行（2026-07-30 使用者指示）。
-     同一人今天有兩堂時以第一堂的時間分組，其餘時間在格子裡另外標。 */
-  const gridHtml=()=>{
-    const groups=new Map();
-    (L.items||[]).forEach(it=>{
-      const k=String(it.time||'').split('、')[0]||'';
-      if(!groups.has(k)) groups.set(k,[]);
-      groups.get(k).push(it);
-    });
-    return [...groups.keys()]
-      .sort((a,b)=>String(a||'99:99').localeCompare(String(b||'99:99')))
-      .map(k=>`<div class="tdl-tg">
-        <span class="tdl-tg-t">${k||'未定'}</span>
-        <div class="tdl-tg-cells">${groups.get(k)
-          .sort((a,b)=>{ const w=x=>x.rs==='renewed'?2:(x.rs==='declined'?3:(x.rs==='considering'?1:0));
-            return w(a)-w(b) || String(a.name).localeCompare(String(b.name)); })
-          .map(it=>cell(it,k)).join('')}</div>
-      </div>`).join('');
-  };
+  /* 版型改成與「現場抽獎登記」同一套（2026-08-22 使用者指示：「收款提醒的格式參考抽獎提醒」）——
+     一列一張滿寬白卡：左邊姓名（粗體）、右邊時間（金）＋事由（灰）；續約三顆按在第二行。
+     原本是「左邊一欄時間、右邊四格一列」的格狀版（0730），時間浮在卡片外面、一列塞四個人，
+     跟抽獎那張的節奏對不起來。
+     ⚠ class 仍沿用 .tdl-cell／.tdl-cell-nm：就地篩選（tdlFilter）是靠這兩個選出來的。 */
+  const gridHtml=()=>(L.items||[])
+    .slice()
+    .sort((a,b)=>{ const w=x=>x.rs==='renewed'?2:(x.rs==='declined'?3:(x.rs==='considering'?1:0));
+      return String(a.time||'99:99').localeCompare(String(b.time||'99:99'))
+             || w(a)-w(b) || String(a.name).localeCompare(String(b.name)); })
+    .map(it=>{
+      const clickable=!!it.id;
+      const _acts=acts(it);
+      const inner=`<span class="tdl2-top">
+          <span class="tdl-cell-nm tdl2-nm">${it.name||'—'}</span>
+          ${it.time?`<span class="tdl2-tm${it.pay?' tdl2-tm-pay':''}">${it.time}</span>`:''}
+          ${it.sub?`<span class="tdl2-sub">${it.sub}</span>`:''}
+          ${RS[it.rs]?tag(it):''}
+        </span>`
+        + (_acts?`<span class="tdl2-acts" onclick="event.stopPropagation();">${
+            _acts.replace(/^<span class="tdl-acts">/,'').replace(/<\/span>\s*$/,'')}</span>`:'');
+      const cls=`tdl-cell tdl2-row${it.pay?' tdl2-pay':''}${clickable?'':' tdl-static'}`;
+      /* ⚠ 外層不能用 <button>（裡面還有三顆真按鈕，button 不能巢狀） */
+      return clickable
+        ? `<div class="${cls}" role="button" tabindex="0" onclick="openMemberDetail('${it.id}')"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openMemberDetail('${it.id}');}">${inner}</div>`
+        : `<div class="${cls}">${inner}</div>`;
+    }).join('');
   const rows=useGrid
     ? gridHtml()
     : (L.items||[]).map(it=> it.id
         ? `<div class="tdl-row tdl-row2"><button class="tdl-main" onclick="openMemberDetail('${it.id}')">${body(it)}<span class="tdl-ar">›</span></button>${acts(it)}</div>`
         : `<div class="tdl-row tdl-static">${body(it)}</div>`).join('');
   showModal(`<div class="modal-title">${L.title}　<span style="font-size:12.5px;color:var(--t3);font-weight:500;">${(L.items||[]).length} 位</span></div>
-    ${L.note?`<div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:12px;">${L.note}</div>`:''}
+    ${L.note?`<div class="lot-hint">${L.note}</div>`:''}
     ${(L.items||[]).length>=8?`<input class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:10px;" placeholder="輸入姓名篩選…" oninput="tdlFilter(this.value)" autocomplete="off">`:''}
-    ${rows?`<div class="${useGrid?'tdl-grid':'tdl-list'}">${rows}</div>`:`<div class="empty"><div class="em-t">${L.empty||'沒有資料'}</div></div>`}
+    ${rows?`<div class="${useGrid?'lot-btns':'tdl-list'}">${rows}</div>`:`<div class="empty"><div class="em-t">${L.empty||'沒有資料'}</div></div>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
   // 一列四個要寬一點才放得下（2026-07-30）
   if(useGrid){ const m=document.querySelector('#modal-bg .modal'); if(m) m.classList.add('modal-wide'); }

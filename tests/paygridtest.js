@@ -42,7 +42,10 @@ ok('　　畫面上不再出現「付款名單」／「待簽約名單」（註�
    && !/OPS_TODO_IC\.money,'今日待簽約名單'/.test(src));
 
 console.log('\n版面：時間在左、同一時間四個一列');
-ok('★ 收款提醒走格狀容器', /class="tdl-grid"/.test(grid) && !/class="tdl-list"/.test(grid));
+/* 0822 使用者：「收款提醒的格式參考抽獎提醒」——格狀（左欄時間＋一列四格）退場，
+   改成與抽獎名單同一套：一列一張滿寬白卡，時間與事由收進卡片右側。 */
+ok('★ 收款提醒走抽獎名單那個容器（.lot-btns），不再是格狀',
+   /class="lot-btns"/.test(grid) && !/class="tdl-grid"/.test(grid) && !/class="tdl-list"/.test(grid));
 ok('★ CSS 一列四格（超過自動換到第二列）',
    /\.tdl-tg-cells\{[\s\S]{0,140}grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/.test(src));
 ok('★ 時間標在左邊獨立一欄、右對齊、等寬數字',
@@ -59,21 +62,24 @@ ok('　　整疊可捲動', /\.tdl-grid\{[\s\S]{0,160}overflow-y:auto;/.test(src
 ok('★ 其他名單不受影響，維持清單', /class="tdl-list"/.test(plain) && !/class="tdl-grid"/.test(plain));
 
 console.log('\n按鈕內容');
-ok('★ 時間已在左欄 → 格子裡不再重複標同一個時間',
-   /<span class="tdl-cell-nm">陳蘭馨<\/span><\/span>/.test(grid));
-ok('★ 課別與原因在下一行', /<span class="tdl-cell-sub">教練課・續課<\/span>/.test(grid));
-ok('★ 待付費那格用紅框＋紅左帶（2026-07-30：底色改白，不再整格反紅）',
-   /class="tdl-cell tdl-cc-[a-z]+ tdl-cell-pay tdl-static"/.test(grid)
-   && /\.tdl-cell\.tdl-cell-pay\{--cc:var\(--danger,#b5372e\);border-color:var\(--danger,#b5372e\);\}/.test(src));
-ok('　　沒綁會員的那格不可點（沒有 role=button）',
-   /<div class="tdl-cell tdl-cc-[a-z]+ tdl-cell-pay tdl-static">/.test(grid));
+ok('★ 時間收進卡片裡（金色；待付費用紅）',
+   /<span class="tdl-cell-nm tdl2-nm">陳蘭馨<\/span>\s*\n?\s*<span class="tdl2-tm">10:00<\/span>/.test(grid)
+   && /<span class="tdl2-tm tdl2-tm-pay">20:30<\/span>/.test(grid));
+ok('★ 課別與原因跟在時間後面（灰字）', /<span class="tdl2-sub">教練課・續課<\/span>/.test(grid));
+ok('★ 待付費那列用紅框（紅>金：那是「還沒收到錢」的最高提示）',
+   /class="tdl-cell tdl2-row tdl2-pay tdl-static"/.test(grid)
+   && /\.tdl2-row\.tdl2-pay\{border-color:rgba\(127,3,3,\.35\);\}/.test(src));
+ok('　　沒綁會員的那列不可點（沒有 role=button）',
+   /<div class="tdl-cell tdl2-row tdl2-pay tdl-static">/.test(grid));
 ok('★ 已續約標綠勾', /tdl-rs-ok/.test(grid));
 ok('　　考慮中標金色', /tdl-rs-gold/.test(grid));
-ok('★ 考慮中／不續約兩顆鈕放在格子裡', /class="tdl-cell-acts"/.test(grid)
+ok('★ 續約三顆鈕放在卡片第二行', /class="tdl2-acts"/.test(grid)
    && /setRenewStatus\('T1','considering'\)/.test(grid) && /setRenewStatus\('T1','declined'\)/.test(grid));
-ok('　　已續約者不再出現手動鈕（談完了不用再催）',
-   !(grid.split('王小明')[1]||'').split('tdl-cell')[0].includes('tdl-cell-acts'));
-ok('　　點那兩顆鈕不會連帶開會員資料', /class="tdl-cell-acts" onclick="event\.stopPropagation\(\);"/.test(grid));
+/* 0803 起三顆都手動（含「續約」），已續約者照樣看得到三顆、按同一顆＝取消標記；
+   這一條改成守住「有 tkid 才給按鈕」（沒綁票券的卡位不會出現） */
+ok('　　沒綁票券的（待簽約卡位）不給續約鈕',
+   !(grid.split('新客人')[1]||'').split('tdl-cell')[0].includes('tdl2-acts'));
+ok('　　點那幾顆鈕不會連帶開會員資料', /class="tdl2-acts" onclick="event\.stopPropagation\(\);"/.test(grid));
 ok('　　沒有殘留的舊 tdl-acts 外殼', !/class="tdl-acts"/.test(grid));
 
 console.log('\nHTML 合法性與鍵盤操作');
@@ -114,25 +120,18 @@ ok('　　名字太長會截斷，不撐破卡片', /\.mc-td-line\{[\s\S]{0,160}
 }
 
 
-console.log('\n依時間分組');
+console.log('\n排序（0822 起不再依時間分組，改一列一張卡）');
 {
   const T=(n,t,extra)=>Object.assign({id:n,name:n,sub:'x',tkid:'',rs:'',time:t},extra||{});
   const g=run('sign',{title:'今日收款提醒',grid:true,empty:'x',note:'n',items:[
-    T('戊','10:00'),T('甲','10:00'),T('乙','10:00'),T('丙','10:00'),T('丁','10:00'),
-    T('蘭馨','10:00、11:00'), T('晚客','20:30',{pay:true}), T('沒時間',''),
+    T('晚客','20:30',{pay:true}), T('甲','10:00'), T('沒時間',''), T('蘭馨','10:00、11:00'),
   ]});
-  const groups=[...g.matchAll(/<span class="tdl-tg-t">([^<]*)<\/span>/g)].map(m=>m[1]);
-  eq('★ 分組後依時間排序，沒有時間的排最後', groups, ['10:00','20:30','未定']);
-  const per=[...g.matchAll(/<div class="tdl-tg-cells">([\s\S]*?)<\/div>\s*<\/div>/g)]
-    .map(m=>(m[1].match(/<div class="tdl-cell[ "]/g)||[]).length);
-  eq('★ 同一時間 6 個人放在同一組（四個一列 → 自動換第二列）', per, [6,1,1]);
-  ok('★ 同一人今天有兩堂 → 以第一堂分組，第二堂在格子裡補標',
-     /蘭馨<\/span><span class="tdl-tm">11:00<\/span>/.test(g));
-  ok('　　組內依姓名排序（待處理仍在前）', g.indexOf('>乙<')<g.indexOf('>戊<'));
-  ok('　　沒有時間的那組標「未定」', /<span class="tdl-tg-t">未定<\/span>/.test(g));
-  ok('　　待收款那格照樣反紅', /tdl-cell-pay/.test(g));
+  const order=[...g.matchAll(/<span class="tdl-cell-nm tdl2-nm">([^<]+)</g)].map(m=>m[1]);
+  eq('★ 依上課時間排序，沒有時間的排最後', order, ['甲','蘭馨','晚客','沒時間']);
+  ok('　　同一人兩堂就整串顯示（不再拆成「分組時間＋補標」）', /<span class="tdl2-tm">10:00、11:00<\/span>/.test(g));
+  ok('　　左欄時間分組整組退場（沒有 .tdl-tg）', !/tdl-tg/.test(g));
+  ok('　　待收款那列照樣紅框', /tdl2-pay/.test(g));
 }
-
 
 console.log('\n卡片改白底＋依課別上色（2026-07-30 使用者指示）');
 ok('★ 卡片底色改白（原本米色底不好讀）',

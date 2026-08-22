@@ -187,10 +187,10 @@ ok('★ 左欄用 min-height（月曆是固定格高的表格，硬壓會切掉�
    /\.mc-g5-left\{min-height:var\(--g5h,0\);/.test(src));
 /* 三修（使用者：「左側空白留白在上方」）：空白不是夾在插畫與值班之間，是整欄靠底、
    多出來的全部留在最上面。 */
-ok('★ 左欄整欄靠底，空白留在最上方',
-   /\.mc-g5-left\{min-height:var\(--g5h,0\);justify-content:flex-end;\}/.test(src)
-   && !/\.mc-g5-left>\.mc-dutyplain\{margin-top:auto/.test(src)
-   && !/\.mc-g5-left>\*:last-child\{flex:1 1 auto/.test(src));
+/* 0822 使用者：「左邊欄改從上方往下延展，所以月曆要貼在上方頂欄」——0801 的靠底退場 */
+ok('★ 左欄從上往下排，月曆貼齊頂欄（空白留在最下面）',
+   /\.mc-g5-left\{min-height:var\(--g5h,0\);justify-content:flex-start;\}/.test(src)
+   && /\.mc-g5-left>\.mc-b4-cal:first-child\{margin:-10px 0 16px !important;\}/.test(src));
 ok('★ 月曆那格不再被拉長（.mc-b4-cal 在另一個版面是 flex:1，會撐高外框）',
    /\.mc-g5-left>\.mc-b4-cal\{flex:0 0 auto;\}/.test(src));
 ok('　　為什麼拉長卡片沒用，寫在程式裡',
