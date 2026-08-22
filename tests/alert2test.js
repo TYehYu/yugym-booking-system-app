@@ -17,15 +17,27 @@ ok('★ 放在 KPI 左邊（插在 .mc-kpistrip 的最前面）',
 ok('　　數字要等名單算完才知道，所以先留插點、算完再塞回來',
    /這裡先留插點，算完再塞回來/.test(src));
 ok('★ 外型與右邊三顆快捷鈕同一套直式卡片（同高 96、同圓角）',
-   /\.mc-alert2 \.mc-a2\{flex:0 0 auto;width:clamp\(96px,7\.6vw,124px\);min-height:96px;/.test(src)
-   && /\.mc-kpistrip \.mc-quick3 \.mc-q3\{flex:0 0 auto;width:clamp\(76px,6\.4vw,96px\);min-height:96px;/.test(src));
+   /\.mc-kpistrip \.mc-alert2 \.mc-a2\{flex:0 1 auto;width:clamp\(84px,6\.2vw,108px\);min-width:66px;min-height:96px;/.test(src)
+   && /\.mc-kpistrip \.mc-quick3 \.mc-q3\{flex:0 1 auto;width:clamp\(76px,6\.4vw,96px\);min-width:62px;min-height:96px;/.test(src));
 ok('★ 底色維持品牌紅（--danger #7F0303 那支深紅）',
    /background:linear-gradient\(160deg,#7F0303 0%,#5E0303 100%\);/.test(src));
+ok('★★ ⚠ 選擇器要壓過 .card/.mc-card（使用者回報「紅色不見了」：兩個 class 同分，誰後面誰贏）',
+   /\.mc-kpistrip \.mc-alert2 \.mc-a2\{/.test(src)
+   && !/^\.mc-alert2 \.mc-a2\{/m.test(src)
+   && /就不必跟載入順序賭/.test(src));
 ok('★ 數字用品牌金放大',
-   /\.mc-alert2 \.mc-a2-n\{font-family:var\(--font-en\),var\(--num\);font-size:clamp\(26px,2\.4vw,34px\);/.test(src)
+   /\.mc-kpistrip \.mc-alert2 \.mc-a2-n\{font-family:var\(--font-en\),var\(--num\);font-size:clamp\(24px,2\.2vw,32px\);/.test(src)
    && /font-weight:800;line-height:1;color:#D9A441;\}/.test(src));
-ok('　　窄螢幕跟著縮（與 KPI 同一組斷點）',
-   /@media\(max-width:1150px\)\{[\s\S]{0,600}?\.mc-alert2 \.mc-a2\{width:86px;min-height:80px;/.test(src));
+ok('★★ KPI 不能被壓到疊在一起（使用者回報「用 mac 看 kpi 被壓縮了」）——'
+   +'數字群守住內容寬度，要讓位的是兩側的固定寬卡片',
+   /\.mc-kpistrip \.kpi-it\{min-width:max-content;\}/.test(src)
+   && /min-width:0 會讓格子縮到比文字還窄，nowrap 的數字就溢出來、三組疊在一起看不清楚/.test(src));
+ok('　　1400 以下先收兩側卡片、1150 再收一次',
+   /@media\(max-width:1400px\)\{[\s\S]{0,300}?\.mc-kpistrip \.mc-alert2 \.mc-a2\{width:92px;padding:12px 5px;\}/.test(src)
+   && /@media\(max-width:1150px\)\{[\s\S]{0,700}?\.mc-kpistrip \.mc-alert2 \.mc-a2\{width:82px;min-height:80px;/.test(src));
+ok('★ 兩張卡在最左邊（0822 三修：整條改成靠左排、KPI 數字群用 margin-left:auto 推到最右）',
+   /\.mc-kpistrip \.mc-alert2\{display:flex;gap:10px;flex:0 1 auto;min-width:0;\}/.test(src)
+   && /\.mc-kpinums\{[\s\S]{0,120}?margin-left:auto;/.test(src));
 
 console.log('\n點進去＝既有的視窗條列');
 ok('★★ 沿用 openTodoList（那支本來就是視窗條列，名單資料同一份）',

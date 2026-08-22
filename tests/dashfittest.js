@@ -44,7 +44,9 @@ ok('　　手機版知識卡不受影響（走另一條分支）',
    /\$\{monthCard\+todoCard\+knowCardHTML\(\)\}/.test(src));
 
 console.log('\n② 三顆按鈕移到 KPI 右邊');
-ok('★ quickCard 併進 KPI 條', /\.join\(''\)\}\s*\n\s*\$\{quickCard\}\s*\n\s*<\/div>`;/.test(src));
+/* 0822 三修：順序改成 兩張紅卡 → 三顆白鈕 → KPI 數字群（數字群靠最右） */
+ok('★ quickCard 併進 KPI 條，且排在紅卡之後、數字群之前',
+   /<div class="mc-kpistrip"><!--ALERTS-->\$\{quickCard\}\s*\n\s*<div class="mc-kpinums">/.test(src));
 ok('★ 右欄已不再放 quickCard',
    !/<div class="mc-g5-right">[\s\S]{0,300}\$\{quickCard\}/.test(src));
 ok('★ 三顆鈕的內容不變（新增會員／銷售／查看合約）',
@@ -63,18 +65,18 @@ ok('★ 三顆鈕的內容不變（新增會員／銷售／查看合約）',
 ok('★ 整條靠右，數字與按鈕成為同一群',
    /\.mc-g5-mid \.mc-kpistrip\{margin-bottom:14px;padding:6px 14px 0;justify-content:flex-end;gap:clamp\(16px,2\.4vw,52px\);\}/.test(src)
    && !/\.mc-g5-mid \.mc-kpistrip \.mc-quick3\{margin-left:auto;\}/.test(src));
-ok('　　按鈕群自己的間距比數字之間近', /\.mc-kpistrip \.mc-quick3\{gap:10px;flex:0 0 auto;\}/.test(src));
+ok('　　按鈕群自己的間距比數字之間近', /\.mc-kpistrip \.mc-quick3\{gap:10px;flex:0 1 auto;min-width:0;\}/.test(src));
 /* 2026-08-01 二修（使用者：「首頁 KPI 右邊的三個按鈕可以放大一點 改成直式卡片」）——
    原本壓扁的小方塊跟旁邊 44px 的大數字擺一起太小。 */
 ok('　　三顆鈕改成直式卡片（加寬加高、圖示放大），寬度可隨螢幕伸縮',
-   /\.mc-kpistrip \.mc-quick3 \.mc-q3\{flex:0 0 auto;width:clamp\(76px,6\.4vw,96px\);min-height:96px;/.test(src)
+   /\.mc-kpistrip \.mc-quick3 \.mc-q3\{flex:0 1 auto;width:clamp\(76px,6\.4vw,96px\);min-width:62px;min-height:96px;/.test(src)
    && /\.mc-kpistrip \.mc-quick3 \.mc-q3 svg\{width:26px;height:26px;\}/.test(src));
 /* 2026-08-01 使用者回報：「我用 mac 上方會被切成兩列 用一般桌機就沒有」——
    筆電螢幕窄，固定 52px 間距＋三顆 96px 卡片擠不下，flex-wrap 一換行就變兩列。 */
 /* 2026-08-08 使用者再回報（附截圖）：Mac 上 KPI 被壓成「18／堂／教練課」三行、
    「團體課」還斷成兩行 → 最小間距再收到 12px，並且數字與標籤一律不換行。 */
 ok('★ 不換行，空間不夠時先縮間距（clamp）而不是折行',
-   /\.mc-kpistrip\{display:flex;align-items:center;justify-content:flex-end;\s*\n\s*gap:clamp\(12px,2\.4vw,52px\);min-width:0;padding-right:14px;flex-wrap:nowrap;\}/.test(src));
+   /\.mc-kpistrip\{display:flex;align-items:center;justify-content:flex-start;\s*\n\s*gap:clamp\(10px,1\.6vw,28px\);min-width:0;padding-right:14px;flex-wrap:nowrap;\}/.test(src));
 ok('★★ 數字與標籤一律不換行（該縮的是字級，不是折行）',
    /\.kpi-n\{font-size:clamp\(30px,3\.4vw,44px\);[\s\S]{0,120}white-space:nowrap;\}/.test(src)
    && /\.kpi-l\{display:inline-flex;[\s\S]{0,120}white-space:nowrap;\}/.test(src));
@@ -82,8 +84,14 @@ ok('★★ 寬螢幕（≥1294px）字級維持原本的 44px，只有更窄才�
    /1294px 以上維持原本的 44px（寬螢幕完全沒變），/.test(src));
 ok('★ 很窄時先讓副標與圖示讓位，數字本身不動',
    /@media\(max-width:1150px\)\{\n\s*\.mc-kpistrip \.kpi-sub\{display:none;\}\n\s*\.mc-kpistrip \.kpi-l svg\{display:none;\}/.test(src));
-ok('　　數字群可壓縮（flex 預設 min-width:auto 會寧可溢出也不縮）',
-   /\.mc-kpistrip \.kpi-it\{min-width:0;\}/.test(src));
+/* 0822 三修：改成「五張卡片靠左、數字群靠最右」，讓位順序也跟著反過來 ——
+   先縮卡片（.mc-a2／.mc-q3 都給了 flex:0 1 auto＋min-width），數字群守住內容寬度。 */
+ok('★★ 數字群守住內容寬度，要讓位的是兩側的固定寬卡片',
+   /\.mc-kpistrip \.kpi-it\{min-width:max-content;\}/.test(src)
+   && /\.mc-kpinums\{display:flex;align-items:center;gap:clamp\(12px,2\.4vw,44px\);\s*\n\s*margin-left:auto;flex:0 0 auto;min-width:max-content;\}/.test(src));
+ok('★ 五張卡片可壓縮（頁面不夠寬時先縮卡片）',
+   /\.mc-kpistrip \.mc-alert2 \.mc-a2\{flex:0 1 auto;width:clamp\(84px,6\.2vw,108px\);min-width:66px;/.test(src)
+   && /\.mc-kpistrip \.mc-quick3 \.mc-q3\{flex:0 1 auto;width:clamp\(76px,6\.4vw,96px\);min-width:62px;/.test(src));
 ok('　　發票拆分那行過長時截斷，不把整條撐開',
    /\.mc-kpistrip \.kpi-sub\{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;\}/.test(src));
 
