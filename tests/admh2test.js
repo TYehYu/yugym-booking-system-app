@@ -44,8 +44,13 @@ ok('★★ 捲到底要放開再滑一次才帶動整頁 —— 這是原生行�
    && /設了會變成永遠帶不動頁面/.test(src));
 ok('　　左欄不捲了，就不需要把選取那天捲進視線',
    !/if\(on && on\.scrollIntoView\)/.test(src));
+ok('★★ ⚠ 高度只能依版面位置算，不能依當下捲動位置（使用者：「連續點下方的首頁 畫面會變成這樣」）'
+   +' —— navTo 保留捲動位置，捲下去之後 r.top 變小甚至變負，再算一次就把兩欄撐得比視窗還高',
+   /const docTop=r\.top\+\(window\.scrollY\|\|document\.documentElement\.scrollTop\|\|0\);/.test(src)
+   && /window\.innerHeight - docTop - navH - 16/.test(src)
+   && /改成先換回「文件座標」再算，重算幾次都是同一個值/.test(src));
 ok('★★ 內層要捲得動就得有明確高度 → 掛載時依剩餘視窗高度算，resize／轉向重算',
-   /const h=Math\.max\(240, Math\.round\(window\.innerHeight - r\.top - navH - 16\)\);/.test(src)
+   /const h=Math\.max\(240, Math\.round\(window\.innerHeight - docTop - navH - 16\)\);/.test(src)
    && /window\.addEventListener\('resize', \(\)=>\{ try\{ admh2Mount\(\); \}catch\(_\)\{\} \}\);/.test(src));
 /* 2026-08-22 使用者回報三件事，這三條各守一件 */
 ok('★★ 高度要扣掉底部導覽列（「左邊日期欄週日會被下方導覽列擋住」）—— 它是 fixed、不佔文件高度',

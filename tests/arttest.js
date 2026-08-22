@@ -60,18 +60,21 @@ console.log('\n版面');
    2026-08-02（使用者：「移除首頁左邊的 8月班表」）：中間那個班表鈕拿掉，
    剩「插畫 → 今日值班 → 月曆」。 */
 /* 2026-08-12 使用者指示：插畫移除，位置讓給「今日收款提醒」卡；插畫程式保留備援不渲染。 */
-ok('★ 插畫已退場：左欄最上改為收款提醒卡（下面接今日值班、再接月曆）',
+/* 0822：收款提醒與降級名單拆成兩張紅卡搬到 KPI 左邊（見 tests/alert2test.js），
+   左欄最上那格連同 payRemindCard 一起退場，剩下今日值班 → 月曆。 */
+ok('★ 插畫已退場；左欄最上現在是今日值班（收款提醒已搬到 KPI 左邊）',
    !/\$\{butlerArtHtml\(\)\}/.test(src)
-   && /<div class="mc-payremind">\$\{payRemindCard\}<\/div>\s*\n[\s\S]{0,320}<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>\s*\n\s*<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>/.test(src));
+   && !/<div class="mc-payremind">/.test(src)
+   && /<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>\s*\n\s*<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>/.test(src));
 ok('★ 班表鈕已移除（頂欄本來就有「班表」分頁，同一件事不用出現兩次）',
    !/\$\{schedBtnCard\}/.test(src) && /「N 月班表」鈕已移除（2026-08-02 使用者指示）/.test(src));
 ok('　　月排班視窗本身保留（別的地方還有入口）',
    /function openMonthScheduleModal\(/.test(src));
 /* 2026-08-01：KPI 條裡的問候（kpi-greet）已移除，改成三個數字＋右側三顆快捷鈕。
    這一項要驗的是「插畫沒有跑進中間那欄」，改成直接檢查 KPI 條的組成。 */
-ok('★ 不在中間那欄（KPI 條裡沒有插畫）',
+ok('★ 不在中間那欄（KPI 條裡沒有插畫；0822 起最前面是兩張紅色提醒卡）',
    !/<div class="mc-kpistrip">[\s\S]{0,400}mc-art/.test(src)
-   && /<div class="mc-kpistrip">\s*\n\s*\$\{\[\[ICONS\.cal,'教練課'/.test(src));
+   && /<div class="mc-kpistrip"><!--ALERTS-->\s*\n\s*\$\{\[\[ICONS\.cal,'教練課'/.test(src));
 ok('★ 貼著頂欄下方：左欄的齊頭 padding 歸零，第一格自己抵掉 .content 的 10px 上內距（2026-08-12 起是收款提醒卡）',
    /\.mc-g5-left>\.mc-art-top,\.mc-g5-left>\.mc-payremind\{margin:-10px 0 16px !important;\}/.test(src)
    && /padding-top:0;\}  \/\* 2026-07-21 使用者指示：左欄與「今日教練任務」齊頭/.test(src)
@@ -88,8 +91,8 @@ ok('★ 寬度吃滿左欄、高度 150px（與右上角知識卡同高，左右
    && /\.mc-know-top \.know-card\{min-height:150px;height:150px;/.test(src));
 ok('　　裁切幅度寫在程式裡（上下各約 9%，不會切到角色）',
    /這個高度會裁掉原圖上下各約 9%/.test(src));
-ok('★ 收款提醒卡只在桌機版面渲染（左欄三格是 isMobileLayout() 的 else 分支；手機版待辦卡兩列不變）',
-   /\$\{isMobileLayout\(\)\?[\s\S]{0,5200}\$\{payRemindCard\}/.test(src)   /* 2026-08-19 手機分支多了管理員新版面（值班＋本月成績），窗放寬 */
+ok('★ 手機版待辦卡兩列不變（收款提醒與降級名單仍在 _todoItems 裡）',
+   /_todoItems\.push\(_rowSign\);/.test(src) && /_todoItems\.push\(_rowDemote\);/.test(src)
    && /monthCard\+todoCard\+knowCardHTML\(\)/.test(src));
 ok('★ 兩層 <img> 交叉淡入（換圖不閃白）',
    /<img class="mc-art-img" id="mc-art-a" alt=""><img class="mc-art-img" id="mc-art-b" alt="">/.test(src)

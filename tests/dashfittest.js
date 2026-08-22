@@ -54,7 +54,7 @@ ok('★ 三顆鈕的內容不變（新增會員／銷售／查看合約）',
 {
   /* quickCard 是 const，被 kpiStrip 的樣板字串引用 → 宣告一定要在前面，否則落在 TDZ 直接爆 */
   const q=src.indexOf('const quickCard=`<div class="mc-quick3">');
-  const k=src.indexOf('const kpiStrip=`<div class="mc-kpistrip">');
+  const k=src.indexOf('let kpiStrip=`<div class="mc-kpistrip">');   /* 0822 改成 let：兩張紅卡算完數字才塞進插點 */
   ok('★ quickCard 宣告在 kpiStrip 之前（const 的 TDZ）', q>0 && k>0 && q<k, {q,k});
   ok('　　原處只留說明，沒有第二份定義',
      (src.match(/const quickCard=/g)||[]).length===1);
