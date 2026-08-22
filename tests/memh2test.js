@@ -163,7 +163,11 @@ t('額滿的畫出來但點不下去', /const full=heads>=cap;/.test(html)
 t('可報名的卡用虛線框，與自己的課分得開',
   /\.memh2 \.admh2-card\.mh2-grpopen\{[^}]*border:1\.5px dashed/.test(s.replace(/\n\s*/g,'')));
 t('報名沿用既有的 msbGrpJoin（只是先把 _msb 狀態建起來）',
-  /async function memh2GrpJoin\(bid\)\{[\s\S]{0,900}msbGrpJoin\(bid\);/.test(s));
+  /async function memh2GrpJoin\(bid\)\{[\s\S]{0,2000}msbGrpJoin\(bid\);/.test(s));
+/* 2026-08-22 使用者回報：8/24 13:00 教練請假的團課，張寶繡卻進了名單 */
+t('★ 教練請假的團課不列進「可報名」', /&& !\(typeof bkIsCoachLeave==='function' && bkIsCoachLeave\(b\)\)/.test(html));
+t('★ 報名那一步再擋一次（扣課的動作不能只靠畫面沒畫出來當防線）',
+  /if\(_b && typeof bkIsCoachLeave==='function' && bkIsCoachLeave\(_b\)\)\{[\s\S]{0,300}這堂課教練請假/.test(s));
 
 // ── 底部導覽 ──
 t('底部導覽「首頁」改成「我的預約」',

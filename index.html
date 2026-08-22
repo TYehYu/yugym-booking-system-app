@@ -5335,6 +5335,28 @@ body.chv2-shell .bottom-nav .bn-item{color:rgba(255,255,255,.72);}
 body.chv2-shell .bottom-nav .bn-item.on,
 body.chv2-shell .bottom-nav .bn-item.active{color:#fff;}
 body.chv2-shell .bottom-nav .bn-lb{color:inherit;}
+/* ══ 會員端 V2 的 App 外殼（2026-08-22 四修，使用者：「用力上下滑動的時候下方的導覽列
+   會脫離」）══════════════════════════════════════════════════════════════════════
+   前面幾版都在修 position:fixed 本身（backdrop-filter、合成層、body 的 overflow-x），
+   幅度一次比一次小，但只要「整份文件在捲」，iOS 的橡皮筋回彈那幾幀就一定會把 fixed
+   元素帶著跑 —— 那是平台行為，改成浮動膠囊也一樣。
+   根治只能讓頁面本身不捲：外殼固定滿版、只有內容區捲，導覽列在正常流程裡排在外殼底部，
+   物理上就待在畫面下方，沒有東西可以把它帶走。
+   ⚠ 只套會員端兩頁（memh2-shell），管理員／教練維持原本的整頁捲動，不動他們的手感。
+   ⚠ 連帶要處理三處吃「整頁捲動」的程式：admh2Mount 的高度計算、下拉更新的起手判斷、
+     navTo 的捲動位置還原 —— 都在各自的地方判 memh2-shell（見那三處註記）。 */
+body.memh2-shell{height:100dvh;overflow:hidden;}
+body.memh2-shell #app-screen{height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+body.memh2-shell .topbar-fixed{flex:0 0 auto;position:static;}
+/* ⚠ .content 不是 #app-screen 的直接子層 —— 中間隔著 div.layout（側欄版面用的）。
+   要把中間那一層也做成撐滿的欄，flex 才會一路傳到 .content（2026-08-22 實測抓到：
+   少了這一行，.content 的 clientHeight 是 1692px、外殼等於沒有作用）。 */
+body.memh2-shell #app-screen>.layout{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+body.memh2-shell .content{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;
+  -webkit-overflow-scrolling:touch;padding-bottom:16px;}
+body.memh2-shell #bottom-nav{position:static;flex:0 0 auto;box-shadow:0 -2px 16px rgba(0,0,0,.05);}
+/* 導覽列已經在流程裡，不必再替它預留 98px（那是 fixed 時代的補償） */
+body.memh2-shell.memh2-shell .content{padding-bottom:16px;}
 /* ── 會員首頁 V2 的外框（2026-08-22 使用者指示，只在 body.memh2-shell 成立時）──
    與教練 V2 同一套作法：外框（頂欄、底部導覽）不屬於任何一頁，直接改 CSS 會連
    真實會員一起改到，所以掛 body class，只有「管理員預覽會員視角 ＋ 停在我的預約」才成立。 */
@@ -9339,8 +9361,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.2220';
-const APP_VERSION_LABEL='v260822.2220';
+const APP_VERSION = '260822.2232';
+const APP_VERSION_LABEL='v260822.2232';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12175,7 +12197,11 @@ function navTo(key, gkey){
   // C.innerHTML 置換會讓頁面高度瞬間歸零，瀏覽器把捲動夾回頂端 —— 連續簽到會一直跳回上方。
   // 真正切換頁面時不還原，維持從頂端開始閱讀。
   const _keepScroll = (CUR_PAGE===key);
-  const _scrollY = _keepScroll ? (window.scrollY || document.documentElement.scrollTop || 0) : 0;
+  /* 外殼模式（會員端 V2）捲的是 .content，window.scrollY 永遠 0 —— 重繪同一頁時
+     （簽到、換日期、換分頁）要記的是內容區的捲動位置，否則每次都跳回頂端。 */
+  const _shellSc = document.body.classList.contains('memh2-shell') ? document.querySelector('.content') : null;
+  const _scrollY = _keepScroll ? (_shellSc ? _shellSc.scrollTop
+    : (window.scrollY || document.documentElement.scrollTop || 0)) : 0;
   // 行事曆的內容捲動發生在 .cal-body 內部（該頁已填滿視窗，window 本身不捲），
   // 故 window.scrollY 一律為 0，救不到它。沿用 PAGES.calendar 既有的 _calScrollTop
   // 還原機制（原本只有拖曳排課會設定，簽到/取消不會，因而每次操作都跳回頂端）。
@@ -12231,7 +12257,10 @@ function navTo(key, gkey){
   Promise.resolve(PAGES[key]()).then(()=>{
     if(_navSeq!==window._navSeqNo) return;   // 已被更新的切頁取代 → 不再收尾
     if(isNav2) wrapNav2(gkey, key); // 頁面渲染到 C 後，包進左側次選單版面
-    if(_keepScroll && _scrollY) window.scrollTo({top:_scrollY}); // 內容就位後才還原，否則會被夾回頂端
+    if(_keepScroll && _scrollY){                                  // 內容就位後才還原，否則會被夾回頂端
+      const sc=document.body.classList.contains('memh2-shell')?document.querySelector('.content'):null;
+      if(sc) sc.scrollTop=_scrollY; else window.scrollTo({top:_scrollY});
+    }
     if(_keepScroll && _calSaved!=null){   // 行事曆內部捲動：wrapNav2 搬移後補還原（簽到/取消不再跳回頂端）
       const _cb2=document.querySelector('.cal-body');
       if(_cb2) _cb2.scrollTop=_calSaved;
@@ -41524,6 +41553,14 @@ function admh2Mount(shiftFn){
        「我連續點了下方的首頁 畫面會變成這樣」）——navTo 會保留捲動位置，
        頁面捲下去之後 r.top 會變小甚至變負，那時再算一次就會把兩欄撐得比視窗還高；
        連按幾次首頁就越撐越怪。改成先換回「文件座標」再算，重算幾次都是同一個值。 */
+    /* 外殼模式（會員端 V2）：捲的是 .content 不是文件，window.scrollY 永遠 0，
+       而 r.top 會隨 .content 捲動改變 —— 要改用「在捲動容器內的位置」來算。 */
+    const _sc=document.body.classList.contains('memh2-shell')?document.querySelector('.content'):null;
+    if(_sc){
+      const top=r.top-_sc.getBoundingClientRect().top+_sc.scrollTop;
+      body.style.height=Math.max(240,Math.round(_sc.clientHeight-top-16))+'px';
+      return;
+    }
     const docTop=r.top+(window.scrollY||document.documentElement.scrollTop||0);
     /* ⚠ 要扣掉底部導覽列（2026-08-22 使用者回報「左邊日期欄週日會被下方導覽列擋住」）——
        .bottom-nav 是 position:fixed、不佔文件高度，只用 innerHeight 算就會把最後一天塞到它底下。
@@ -41648,8 +41685,16 @@ function admPtrInit(){
      再讓它同時觸發整頁重載會打架。改成手指必須落在頂欄上才起算。 */
   const fromTop=t=>{ try{ const el=document.elementFromPoint(t.clientX,t.clientY);
       return !!(el && el.closest && el.closest('.topbar,.topbar-fixed')); }catch(_){ return false; } };
+  /* 外殼模式下捲的是 .content，window.scrollY 永遠 0 —— 不看它的話，捲到一半也會被
+     判成「在最上面」而觸發下拉更新（2026-08-22 外殼化時一併處理）。 */
+  const atTop=()=>{
+    if(document.body.classList.contains('memh2-shell')){
+      const sc=document.querySelector('.content'); return !sc || sc.scrollTop<=0;
+    }
+    return (window.scrollY||document.documentElement.scrollTop||0)<=0;
+  };
   window.addEventListener('touchstart',e=>{
-    if((window.scrollY||document.documentElement.scrollTop||0)<=0 && fromTop(e.touches[0])){
+    if(atTop() && fromTop(e.touches[0])){
       y0=e.touches[0].clientY; dist=0; pulling=false;
     }else y0=null;
   },{passive:true});
@@ -44370,6 +44415,10 @@ function memh2HTML(o){
   const _nowM=(s.date===today)?(new Date().getHours()*60+new Date().getMinutes()):-1;
   const grpOpen=(s.filter==='all')
     ? allBk.filter(b=>b && b.date===s.date && b.status!=='cancelled'
+        /* 教練請假的整堂不開，不能讓會員報進去（2026-08-22 使用者回報 8/24 13:00 那一堂）——
+           請假的團課有兩種寫法：status='cancelled'（上一行擋掉）與 coach_leave=true 而
+           status 還留著，後者要靠 bkIsCoachLeave 才擋得住。 */
+        && !(typeof bkIsCoachLeave==='function' && bkIsCoachLeave(b))
         && typeof bkIsGroup==='function' && bkIsGroup(b)
         && !(typeof bkHasMember==='function' && bkHasMember(b,SESSION.id))
         && (_nowM<0 || timeToMin(b.start_time||'0:0')>=_nowM))
@@ -44578,6 +44627,19 @@ async function memh2GrpJoin(bid){
   if(!window._msb){ try{ await msbStart(); }catch(_){} }
   try{ const sh=document.getElementById('msb-sheet'); if(sh) sh.remove(); }catch(_){}
   if(!window._msb){ showToast('無法讀取團體課資料'); return; }
+  /* 教練請假的整堂不開放報名（2026-08-22）——卡片那邊已經濾掉，這裡再擋一次：
+     報名是會扣課的動作，不該只靠畫面沒畫出來當防線。 */
+  try{
+    const _b=(window._msb.grpClasses||[]).find(x=>x.id===bid)
+      || (window._memCalData&&(window._memCalData.mine||[]).find(x=>x.id===bid));
+    if(_b && typeof bkIsCoachLeave==='function' && bkIsCoachLeave(_b)){
+      showModal(`<div class="modal-title">這堂課教練請假</div>
+        <div class="mh2-rule">這一堂因為教練請假不開課，沒辦法報名。<br>
+          其他時段的團體課仍可報名；有需要請洽櫃檯。</div>
+        <div class="modal-foot mh2-foot one"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+      return;
+    }
+  }catch(_){}
   /* 沒有團體課票券的人也看得到課卡（2026-08-22 使用者指示）——
      點下去給一張說明卡，而不是一句吐司就沒了：他要知道「怎麼才能上」。 */
   if(!(window._msb.grpTks||[]).length){

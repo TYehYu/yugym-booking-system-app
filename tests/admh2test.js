@@ -111,7 +111,9 @@ ok('　　左欄自己不捲，所以垂直手勢全歸換週用（不需要軸�
 console.log('\n④ 下拉更新只從頂列觸發（使用者指示）');
 ok('★★ 手指要落在頂欄上才起算（雙欄各自有捲軸，落在欄位裡往下滑是要捲內容）',
    /return !!\(el && el\.closest && el\.closest\('\.topbar,\.topbar-fixed'\)\);/.test(src)
-   && /if\(\(window\.scrollY\|\|document\.documentElement\.scrollTop\|\|0\)<=0 && fromTop\(e\.touches\[0\]\)\)\{/.test(src));
+   /* 2026-08-22 外殼化：起手的「在最上面」判斷抽成 atTop()，外殼模式看內容區的 scrollTop */
+   && /if\(atTop\(\) && fromTop\(e\.touches\[0\]\)\)\{/.test(src)
+   && /return \(window\.scrollY\|\|document\.documentElement\.scrollTop\|\|0\)<=0;/.test(src));
 ok('　　理由寫在原地', /再讓它同時觸發整頁重載會打架/.test(src));
 
 console.log('\n⑤ 課卡欄位（使用者定版）');

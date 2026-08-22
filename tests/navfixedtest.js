@@ -57,5 +57,27 @@ t('　（掃到的 .bottom-nav 規則數量合理）', navRules.length>=4);
 t('memh2-shell 只覆寫顏色', /body\.memh2-shell \.bottom-nav\{background:var\(--green\) !important;border-top-color:rgba\(255,255,255,\.14\);\}/.test(s));
 t('chv2-shell 只覆寫顏色', /body\.chv2-shell \.bottom-nav\{background:var\(--green\) !important;border-top-color:rgba\(255,255,255,\.14\);\}/.test(s));
 
+// ── 會員端 V2：App 外殼（2026-08-22 四修）──
+/* 使用者：「用力上下滑動的時候下方的導覽列會脫離」。只要整份文件在捲，iOS 的橡皮筋
+   回彈那幾幀就會把 position:fixed 帶著跑 —— 那是平台行為，改成浮動膠囊也一樣。
+   根治：外殼固定滿版、只有內容區捲，導覽列在正常流程裡排在底部。 */
+t('★★ 外殼固定滿版、整頁不捲', /body\.memh2-shell\{height:100dvh;overflow:hidden;\}/.test(s)
+  && /body\.memh2-shell #app-screen\{height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;\}/.test(s));
+t('★★ .content 不是 #app-screen 的直接子層 —— 中間的 .layout 也要撐滿',
+  /body\.memh2-shell #app-screen>\.layout\{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;\}/.test(s));
+t('★★ 只有內容區可以捲', /body\.memh2-shell \.content\{flex:1 1 auto;min-height:0;overflow-y:auto/.test(s));
+t('★★ 導覽列改成正常流程排在外殼底部（不再是 fixed）',
+  /body\.memh2-shell #bottom-nav\{position:static;flex:0 0 auto/.test(s));
+t('　只套會員端兩頁，管理員／教練維持整頁捲動', !/body\.chv2-shell\{height:100dvh/.test(s));
+/* 連帶要處理三處吃「整頁捲動」的程式 */
+t('★ 雙欄高度改量內容區（window.scrollY 在外殼模式永遠 0）',
+  /const _sc=document\.body\.classList\.contains\('memh2-shell'\)\?document\.querySelector\('\.content'\):null;/.test(s)
+  && /_sc\.clientHeight-top-16/.test(s));
+t('★ 下拉更新的起手判斷改看內容區的 scrollTop',
+  /const atTop=\(\)=>\{[\s\S]{0,260}sc\.scrollTop<=0;/.test(s));
+t('★ 重繪同一頁時還原的是內容區的捲動位置',
+  /_shellSc \? _shellSc\.scrollTop/.test(s)
+  && /if\(sc\) sc\.scrollTop=_scrollY; else window\.scrollTo\(\{top:_scrollY\}\);/.test(s));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
