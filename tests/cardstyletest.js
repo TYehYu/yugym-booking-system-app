@@ -66,8 +66,10 @@ ok('　　順序要求寫在程式裡（免得日後有人搬回去）',
    /這一段要在 _bodyOut 之前算完/.test(src));
 /* 2026-08-21 四修：章移到姓名同一列（.tcard-nmrow 包住兩者），
    「第幾堂／共幾堂」則排在那一列的下面。 */
-ok('★ 首頁：章緊接在姓名右邊',
-   /<span class="tcard-nmrow"><span class="tcard-mem">\$\{nm\}<\/span>\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src));
+/* 0822 三欄改版：章在第一欄、中間三列、右上時間右下教練（見 tests/deskcard3test.js） */
+ok('★ 首頁：出席章自己一欄（0822 起不再貼在姓名右邊）',
+   /<span class="t3-stamp">\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src)
+   && /\.tcard-3c \.t3-stamp\{display:flex;align-items:flex-start;/.test(src));
 
 console.log('\n過期的課卡也要開簡易課卡');
 ok('★ 不再依 editable 分流到舊的預約明細',
@@ -602,18 +604,17 @@ ok('★ 首頁課卡（.tcard-std）簽到後不再填滿',
 ok('★ 桌機的填滿規則已移除（手機那份在別的 media 區塊）',
    !/\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{/.test(blk));
 /* 2026-08-21 再修：章從姓名右邊移到卡片左下角（見下方「章移到左下角」） */
-ok('★ 出席章改回顯示（首頁卡仍在姓名右邊）',
+ok('★ 出席章仍然顯示（0822 起自己一欄）',
    !/\.tcard\.tcard-std \.tcard-chk\{ display:none !important; \}/.test(src)
-   && /<span class="tcard-nmrow"><span class="tcard-mem">\$\{nm\}<\/span>\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src)
-   && /\.tcard-nmrow\{display:flex;align-items:center;justify-content:center;gap:4px;/.test(src));
+   && /<span class="t3-stamp">/.test(src));
 ok('　　章從右下角的三角形角章改成小圓章（角章會壓到教練標籤）',
    /\.tcard-chk\{flex:none;width:16px;height:16px;border-radius:50%;/.test(src)
    && /角章壓在教練標籤那一角，卡片一窄就互相疊/.test(src));
 ok('　　三種章各有顏色：簽到綠、請假紅、未到金',
    /\.tcard-chk\.tcard-chk-leave\{background:var\(--danger,#b5372e\);\}/.test(src)
    && /\.tcard-chk\.tcard-chk-ns\{background:var\(--gold-d,#b48a56\);\}/.test(src));
-ok('★ 「第幾堂／共幾堂」仍在姓名列的下面（不是被塞進姓名那一列）',
-   /<\/span>\$\{\(\(\)=>\{\s*\n\s*const q=\(window\._bkSeq\|\|\{\}\)\[b\.id\];/.test(src));
+ok('★ 「第幾堂／共幾堂」在姓名下面那一列（第二欄的第三列）',
+   /<span class="t3-l3">\$\{\(\(\)=>\{\s*\n\s*const q=\(window\._bkSeq\|\|\{\}\)\[b\.id\];/.test(src));
 ok('　　簽到的辨識改靠既有的綠環（0806 就有，不必再靠填色）',
    /\.tcard-std\.tcard-done:not\(\.tcard-live\)::before\{content:'';position:absolute;inset:-2px;/.test(src));
 ok('　　「看不見」的成因寫在原地，避免日後又把填滿加回來',

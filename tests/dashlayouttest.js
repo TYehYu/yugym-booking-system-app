@@ -35,8 +35,9 @@ ok('　　教練多到放不下就內捲（.tcard-body 本來就是捲動容器�
    /\.mc-coachcenter \.tcard-body\{flex:1;min-height:0;overflow-y:auto;/.test(src));
 
 console.log('\n這一天唯一留下來的：課卡維持行事曆版的大小');
-ok('★ .tcard-std 由 84px 加寬到 120px（高度維持 98px）',
-   /\.tcard\.tcard-std\{width:120px;min-height:98px;\}/.test(src));
+/* 0822：改成三欄排法後再加寬到 190px（120 放不下「章＋三列＋時間／教練」） */
+ok('★ .tcard-std 加寬到 190px（高度維持 98px）',
+   /\.tcard\.tcard-std\{width:190px;min-height:98px;\}/.test(src));
 ok('　　原因寫在原地', /一日行事曆版的課卡寬度是欄寬（實測約 120px），改回橫排後沿用那個尺寸/.test(src));
 ok('　　課卡 HTML 本身仍然沒被動過（產生器與版面分開）',
    /const _cardsArr=_bkSorted\.map\(b=>\{/.test(src)
@@ -117,9 +118,9 @@ ok('　　滑過看得到那天有幾堂', /title="\$\{ds\}\$\{n\?`　\$\{n\} �
 console.log('\n課卡加一列「第幾堂／共幾堂」（使用者：「這第幾堂/總堂數在名字下面」）');
 /* 2026-08-21 四修：姓名與出席章包成 .tcard-nmrow 一列，這一行接在那一列後面
    （.tcard-txt 是直排 → 等於名字下面一列） */
-ok('★ 接在姓名那一列的下面',
-   /<\/span>\$\{\(\(\)=>\{\s*\n\s*const q=\(window\._bkSeq\|\|\{\}\)\[b\.id\];/.test(src)
-   && /return q\?`<span class="tcard-seq">\$\{q\.n>=999\?\('第 '\+q\.i\+' 堂'\):\(q\.i\+'\/'\+q\.n\+' 堂'\)\}<\/span>`:'';/.test(src));
+ok('★ 接在姓名那一列的下面（0822 起是第二欄的第三列）',
+   /<span class="t3-l3">\$\{\(\(\)=>\{\s*\n\s*const q=\(window\._bkSeq\|\|\{\}\)\[b\.id\];/.test(src)
+   && /return q\?\(q\.n>=999\?\('第 '\+q\.i\+' 堂'\):\(q\.i\+'\/'\+q\.n\+' 堂'\)\):'';/.test(src));
 ok('　　無限次卡只標「第 N 堂」（9999 堂的票寫成 45/9999 沒有意義）',
    /無限次卡（親友自主訓練 sessions_total=9999）寫「45\/9999 堂」沒有意義，只標第幾堂/.test(src));
 ok('★ 沿用 computeLastBkMarks 已建好的索引，不另外掃一次 bookings',

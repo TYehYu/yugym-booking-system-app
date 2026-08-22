@@ -4333,7 +4333,26 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 2026-08-21 使用者指示：「課卡要維持現在這個版本的大小」——
    一日行事曆版的課卡寬度是欄寬（實測約 120px），改回橫排後沿用那個尺寸，
    不回到原本的 84px。 */
-.tcard.tcard-std{width:120px;min-height:98px;}
+/* 三欄排法之後卡片要加寬（2026-08-22）：120px 放不下「章＋三列＋時間／教練」，
+   190px 是「課程名不必馬上截斷、一列仍放得下 4～5 張」的折衷。 */
+.tcard.tcard-std{width:190px;min-height:98px;}
+/* 首頁課卡的三欄排法（與手機雙欄版 .admh2-card 同一種資訊順序，但那組 class 綁在
+   .admh2-card 底下，這裡自成一套，避免兩邊互相牽動） */
+.tcard-std .tcard-txt.tcard-3c{display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+  gap:0 7px;align-items:center;padding:10px 9px 10px 11px;}
+.tcard-3c .t3-stamp{display:flex;align-items:flex-start;align-self:stretch;padding-top:1px;}
+.tcard-3c .t3-main{min-width:0;display:flex;flex-direction:column;gap:1px;}
+.tcard-3c .t3-l1{font-size:11px;font-weight:600;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tcard-3c .t3-l2{font-size:14.5px;font-weight:800;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tcard-3c .t3-l3{font-size:10.5px;font-family:var(--num);opacity:.72;}
+.tcard-3c .t3-side{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;
+  align-self:stretch;gap:6px;white-space:nowrap;max-width:84px;min-width:0;}
+.tcard-3c .t3-co{display:flex;flex-direction:column;align-items:flex-end;gap:2px;max-width:84px;}
+.tcard-3c .tcard-chk{position:static;margin:0;}
+/* ⚠ 舊版把時間釘在左上（.tcard.tcard-std .tcard-time{align-self:flex-start}），
+   三欄版要靠右，否則時間會停在右欄的左緣、跟教練標籤對不齊。 */
+.tcard-3c .tcard-time{align-self:flex-end !important;}
+.tcard-3c .tcard-co{margin-top:0 !important;align-self:flex-end !important;}
 .tcard-std .tcard-txt{min-height:98px;gap:3px;}
 .tcard-std .tcard-body{position:absolute;inset:0;z-index:0;border-radius:10px;border:1px solid #33302A;background:var(--tk-soft,#EAF3EF);}
 /* 待簽約（還沒收款）→ 紅框；與行事曆課卡同一套做法：只加粗外框，不覆蓋課程底色
@@ -8997,8 +9016,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1505';
-const APP_VERSION_LABEL='v260822.1505';
+const APP_VERSION = '260822.1518';
+const APP_VERSION_LABEL='v260822.1518';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15179,13 +15198,24 @@ PAGES.g_dashboard=async function(){
             ${/* 第幾堂／共幾堂（2026-08-21 使用者指示：「這第幾堂/總堂數在名字下面」）——
                  只有扣到票的課才有（體驗／場租／待簽約沒有票，就不畫這一列）。
                  團課的票掛在名額上、不在 booking 上，所以團課卡自然也不會出現。 */''}
-            <div class="tcard-txt"><span class="tcard-time">${b.start_time}</span><span class="tcard-nmrow"><span class="tcard-mem">${nm}</span>${(()=>{const k=bkStampKind(b);
-              return k==='leave'?'<span class="tcard-chk tcard-chk-leave">假</span>'
-                   :(!canceled&&b.no_show===true)?'<span class="tcard-chk tcard-chk-ns">未</span>'
-                   :(k==='done'||k==='makeup')?'<span class="tcard-chk">簽</span>':'';})()}</span>${(()=>{
-              const q=(window._bkSeq||{})[b.id];
-              /* 無限次卡（親友自主訓練 sessions_total=9999）寫「45/9999 堂」沒有意義，只標第幾堂 */
-              return q?`<span class="tcard-seq">${q.n>=999?('第 '+q.i+' 堂'):(q.i+'/'+q.n+' 堂')}</span>`:'';})()}${_tagOut}${coTag}</div>${(b.member_id?`<span class="tcard-giftpos">${lottoGiftIcon(_lotMap[b.member_id])}</span>`:'')}${canceled?'<span class="tcard-del">刪</span>':''}
+            ${/* 2026-08-22 使用者指示：首頁課卡改成與手機雙欄版同一種排法 ——
+                 第一欄出席章、第二欄三列（課程・場地／會員姓名粗體／第幾堂），
+                 右上角時間、右下角教練標籤。原本是「時間→姓名→堂數」直排。 */''}
+            <div class="tcard-txt tcard-3c">
+              <span class="t3-stamp">${(()=>{const k=bkStampKind(b);
+                return k==='leave'?'<span class="tcard-chk tcard-chk-leave">假</span>'
+                     :(!canceled&&b.no_show===true)?'<span class="tcard-chk tcard-chk-ns">未</span>'
+                     :(k==='done'||k==='makeup')?'<span class="tcard-chk">簽</span>':'';})()}</span>
+              <span class="t3-main">
+                <span class="t3-l1">${catName[cc]||'課程'}${(()=>{const _v=(typeof venueDisplay==='function')?(venueDisplay(b)||''):''; return _v?'・'+_v:'';})()}</span>
+                <span class="t3-l2 tcard-mem">${nm}</span>
+                <span class="t3-l3">${(()=>{
+                  const q=(window._bkSeq||{})[b.id];
+                  /* 無限次卡（親友自主訓練 sessions_total=9999）寫「45/9999 堂」沒有意義，只標第幾堂 */
+                  return q?(q.n>=999?('第 '+q.i+' 堂'):(q.i+'/'+q.n+' 堂')):'';})()}</span>
+              </span>
+              <span class="t3-side"><span class="tcard-time">${b.start_time}</span><span class="t3-co">${_tagOut}${coTag}</span></span>
+            </div>${(b.member_id?`<span class="tcard-giftpos">${lottoGiftIcon(_lotMap[b.member_id])}</span>`:'')}${canceled?'<span class="tcard-del">刪</span>':''}
           </div>`;
     });
     return { order:ORDER[stKey], isLive:!!inClass, isSelf:(c.id===SESSION.id), rank:_rank, hireDate:(c.hire_date||'9999-12-31'),
