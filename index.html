@@ -9273,8 +9273,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.2001';
-const APP_VERSION_LABEL='v260822.2001';
+const APP_VERSION = '260822.2006';
+const APP_VERSION_LABEL='v260822.2006';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -44102,7 +44102,12 @@ let _memCalSel=null;    // 選中日期 ymd
    ══════════════════════════════════════════════════════════════════════════════ */
 const MEMH2_TAPIC='<svg class="mh2-tapic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M12 11V9.5a1.5 1.5 0 0 1 3 0V11"/><path d="M15 11v-.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7l-2-3a1.6 1.6 0 0 1 2.5-2L9 15"/></svg>';
 const MEMH2_COL={pt:'#1f6f54',friendly:'#23508a',group:'#9a5a1e',self:'#6a655c',trial:'#6e3a86',massage:'#2f8f83'};
-const MEMH2_FILTERS=[['pt','教練課'],['friendly','友善教練課'],['group','團體課'],['self','自主訓練']];
+/* 課別配色（月曆圖例與課卡共用） */
+const MEMH2_LEGEND=[['pt','教練課'],['friendly','友善教練課'],['group','團體課'],['self','自主訓練']];
+/* 篩選列只留 All 與自主訓練（2026-08-22 使用者指示）——
+   「課程會員不必獨立出來看，只有自主訓練需要知道哪些日期可以約」，
+   而那正是左邊日期列要跟著暗化的唯一情境。 */
+const MEMH2_FILTERS=[['self','自主訓練']];
 function memh2On(){
   if(typeof isMobileLayout==='function' && !isMobileLayout()) return false;
   if(!SESSION || SESSION.role!=='member') return false;
@@ -44158,11 +44163,19 @@ function memh2HTML(o){
   const usable=(mtickets||[]).filter(t=>tkUsableBy(t,SESSION.id) && (!t.status||t.status==='usable')
     && (Number(t.sessions_remaining)||0)>0
     && (!t.expire_date||String(t.expire_date).slice(0,10)>=today));
-  const pk={pt:0,friendly:0,group:0,self:0}; let selfLim='';
+  /* 自主訓練可能同時有兩張效期不同的票（2026-08-22 使用者：1/1–1/7 與 1/3–1/9）——
+     日期列要點亮的是**聯集**（1/1–1/9），不是任何單一張的區間。
+     所以這裡收集每一張的 [起,訖]，判斷某一天能不能約時只問「有沒有任何一張蓋得到」。 */
+  const pk={pt:0,friendly:0,group:0,self:0}; let selfLim=''; const selfRanges=[];
   usable.forEach(t=>{ const k=memh2TkKind(t,typeMap); if(!(k in pk)) return;
     pk[k]+=Number(t.sessions_remaining)||0;
-    if(k==='self'){ const e=t.expire_date?String(t.expire_date).slice(0,10):'9999-12-31';
+    if(k==='self'){
+      const st=t.start_date?String(t.start_date).slice(0,10):'';
+      const e=t.expire_date?String(t.expire_date).slice(0,10):'9999-12-31';
+      selfRanges.push([st,e]);
       if(e>selfLim) selfLim=e; } });
+  /* 這一天約不約得到自主訓練：今天以後，且落在任何一張票的效期內 */
+  const selfOk=ds=>ds>=today && selfRanges.some(([st,ex])=>(!st||ds>=st)&&(!ex||ds<=ex));
   const _dv=parseYmd(s.date)||new Date(TODAY);
   const _wdz='日一二三四五六';
   const kpis=[['教練課',pk.pt+pk.friendly],['團體課',pk.group],['自主訓練',pk.self]]
@@ -44180,8 +44193,8 @@ function memh2HTML(o){
   const base=heroWeekMonday(s.date);
   for(let i=0;i<7;i++){
     const d=new Date(base); d.setDate(base.getDate()+i); const ds=ymd(d);
-    /* 自主訓練分頁：不能預約的那幾天暗化、點不下去 —— 已經過去的，以及超過點數效期的 */
-    const off=selfMode && (ds<today || (selfLim && ds>selfLim));
+    /* 自主訓練分頁：不能預約的那幾天暗化、點不下去 —— 已經過去的，以及沒有任何一張票蓋到的 */
+    const off=selfMode && !selfOk(ds);
     rail.push(`<button class="a2-day${ds===s.date&&ds!==today?' on':''}${ds===today?' a2-today':''}${off?' a2-off':''}"${
       off?' disabled':` onclick="memh2PickDay('${ds}')"`}>
       <b class="a2-dn">${d.getDate()}</b><span class="a2-dm">${d.getMonth()+1} 月</span>
@@ -44226,7 +44239,7 @@ function memh2HTML(o){
      方便會員自行點選參加」）—— 只在「全部」與「團體課」分頁出現；已經開始的不列
      （報不了名）。點下去走既有的 msbGrpJoin（選票券 → 確認報名）。 */
   const _nowM=(s.date===today)?(new Date().getHours()*60+new Date().getMinutes()):-1;
-  const grpOpen=(s.filter==='all'||s.filter==='group')
+  const grpOpen=(s.filter==='all')
     ? allBk.filter(b=>b && b.date===s.date && b.status!=='cancelled'
         && typeof bkIsGroup==='function' && bkIsGroup(b)
         && !(typeof bkHasMember==='function' && bkHasMember(b,SESSION.id))
@@ -44311,7 +44324,7 @@ function memh2MonthHTML(mine){
     cells+=`<button class="memh2-mon-d${ds===today?' today':''}${(ds===s.date&&ds!==today)?' on':''}"
       onclick="memh2PickDay('${ds}')"><b>${d}</b><span class="memh2-mon-dots">${dots}</span></button>`;
   }
-  const lg=MEMH2_FILTERS.map(([k,l])=>`<span><i style="background:${MEMH2_COL[k]}"></i>${l}</span>`).join('');
+  const lg=MEMH2_LEGEND.map(([k,l])=>`<span><i style="background:${MEMH2_COL[k]}"></i>${l}</span>`).join('');
   return `<div class="memh2-mon">
     <div class="memh2-mon-h">
       <button class="memh2-mon-nav" onclick="memh2MonthShift(-1)">‹</button>
@@ -44430,6 +44443,16 @@ async function memh2GrpJoin(bid){
   if(!window._msb){ try{ await msbStart(); }catch(_){} }
   try{ const sh=document.getElementById('msb-sheet'); if(sh) sh.remove(); }catch(_){}
   if(!window._msb){ showToast('無法讀取團體課資料'); return; }
+  /* 沒有團體課票券的人也看得到課卡（2026-08-22 使用者指示）——
+     點下去給一張說明卡，而不是一句吐司就沒了：他要知道「怎麼才能上」。 */
+  if(!(window._msb.grpTks||[]).length){
+    showModal(`<div class="modal-title">團體課</div>
+      <div class="mh2-rule">你目前沒有團體課票券，所以還不能報名。<br>
+        團體課採票券制，購課後就能直接在這裡挑時段報名。<br>
+        購課請洽櫃檯或你的教練。</div>
+      <div class="modal-foot mh2-foot one"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+    return;
+  }
   try{ msbGrpJoin(bid); }catch(e){ showToast('開啟報名失敗'); }
 }
 function memh2SelSlot(t){
@@ -45033,6 +45056,10 @@ function msbTkCand(time){
   const s=window._msb; if(!s) return [];
   return msbGroupTks()
     .filter(t=>!t.expire_date||String(t.expire_date).slice(0,10)>=s.date)
+    /* 起始日也要看（2026-08-22 使用者：兩張效期不同的自主訓練票）——
+       1/3 才生效的那張，1/1 不能拿來用。只在「兩個日期都有」時判斷：
+       還沒開通的票（有 valid_days、沒有 expire_date）本來就是排了第一堂才起算。 */
+    .filter(t=>!(t.start_date&&t.expire_date) || String(t.start_date).slice(0,10)<=s.date)
     .filter(t=>!time || tkTimeOk(t,s.date,time))   // 友善點限平日 18:00 前
     .sort((a,b)=>{
       const ra=tkIsTimeRestricted(a)?0:1, rb=tkIsTimeRestricted(b)?0:1;

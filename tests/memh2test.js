@@ -26,7 +26,12 @@ t('票券分類靠 tkClass5＋友善字樣', /tkClass5/.test(kind) && /友善/.t
 t('按摩券／折抵券不進三格', /if\(c!=='pt'\) return '';/.test(kind));
 
 // ── 篩選列 ──
-t('篩選列有票才列出該分頁', /MEMH2_FILTERS\.filter\(\(\[k\]\)=>pk\[k\]>0\)/.test(html));
+/* 0822 收斂（使用者）：「課程會員不必獨立出來看，只有自主訓練需要知道哪些日期可以約」 */
+t('篩選列只有 All 與自主訓練', /const MEMH2_FILTERS=\[\['self','自主訓練'\]\];/.test(s));
+t('自主訓練也是有票才出現', /MEMH2_FILTERS\.filter\(\(\[k\]\)=>pk\[k\]>0\)/.test(html));
+t('月曆圖例仍是四色（用另一份 MEMH2_LEGEND，不跟篩選列綁在一起）',
+  /const MEMH2_LEGEND=\[\['pt','教練課'\],\['friendly','友善教練課'\],\['group','團體課'\],\['self','自主訓練'\]\];/.test(s)
+  && /MEMH2_LEGEND\.map\(\(\[k,l\]\)=>`<span><i style="background:\$\{MEMH2_COL\[k\]\}"/.test(s));
 t('All 永遠在最前面', /mh2-chip[^`]*onclick="memh2PickFilter\('all'\)">All/.test(html));
 t('篩選列滑到哪停到哪（同步還原、不閃）',
   /window\._mh2Chip=r\.scrollLeft/.test(s) && /memh2RestoreChips\(\);\s+\/\/ 要同步做/.test(s));
@@ -38,9 +43,17 @@ t('篩選列不共用 .admh-coach（避免被管理員教練列的位置推走�
    只是不能預約的日期要暗化 保持上下拖拉會換頁」 */
 t('日期列一律週一～週日（自主訓練不再特例）', /const base=heroWeekMonday\(s\.date\);/.test(html)
   && !/selfMode\?new Date\(TODAY/.test(html));
-t('自主訓練分頁：已過去與超出效期的那幾天暗化且點不下去',
-  /const off=selfMode && \(ds<today \|\| \(selfLim && ds>selfLim\)\)/.test(html)
-  && /off\?' disabled':/.test(html));
+/* 0822（使用者）：兩張效期不同的自主訓練票 → 日期列要點亮的是聯集 */
+t('多張自主訓練票取聯集：任何一張蓋得到就點亮',
+  /const selfOk=ds=>ds>=today && selfRanges\.some\(\(\[st,ex\]\)=>\(!st\|\|ds>=st\)&&\(!ex\|\|ds<=ex\)\);/.test(html));
+t('每張票各自記 [起,訖]，不是只看最晚到期日',
+  /selfRanges\.push\(\[st,e\]\);/.test(html));
+t('自主訓練分頁：蓋不到的那幾天暗化且點不下去',
+  /const off=selfMode && !selfOk\(ds\);/.test(html) && /off\?' disabled':/.test(html));
+t('訂位挑票優先用效期較短的那張（照到期日由近而遠排）',
+  /String\(a\.expire_date\|\|'9999-12-31'\)\.localeCompare\(String\(b\.expire_date\|\|'9999-12-31'\)\)/.test(s));
+t('還沒生效的票不會被挑走（起始日也要看）',
+  /\.filter\(t=>!\(t\.start_date&&t\.expire_date\) \|\| String\(t\.start_date\)\.slice\(0,10\)<=s\.date\)/.test(s));
 t('上下箭頭一律畫（自主訓練也能翻頁）',
   /<span class="a2-arw a2-arw-up" onclick="memh2WeekShift\(-1\)"><\/span>/.test(html)
   && !/\$\{selfMode\?'':'<span class="a2-arw/.test(html));
@@ -123,7 +136,7 @@ t('換月只重繪、不改選取的那一天',
   /memh2MonthShift\(d\)\{[\s\S]{0,320}?memh2PickDay\(s\.date\);\s+\/\/ 只重繪/.test(s));
 t('月曆卡用白底（外框本來就是 card2，同色會整張消失）',
   /\.memh2-mon\{background:#fff/.test(s));
-t('下方有四色圖例', /MEMH2_FILTERS\.map\(\(\[k,l\]\)=>`<span><i style="background:\$\{MEMH2_COL\[k\]\}"/.test(mon));
+t('下方有四色圖例', /MEMH2_LEGEND\.map\(\(\[k,l\]\)=>`<span><i style="background:\$\{MEMH2_COL\[k\]\}"/.test(mon));
 
 t('［＋］的時段也是點了就選它，誤觸第二下不會洗掉狀態',
   /window\._mh2Pick=t;/.test(cut('function memh2SelSlot(t){','function memh2GoSlot(){'))
@@ -136,14 +149,18 @@ t('點［＋］先把篩選列切到自主訓練（日期欄才會連動）',
   /if\(_s\.filter!=='self'\)\{ _s\.filter='self'; try\{ memh2PickDay\(date\); \}catch\(_\)\{\} \}/.test(s));
 t('當天有開、自己還沒報名的團體課會列出來',
   /bkIsGroup\(b\)\s*\n\s*&& !\(typeof bkHasMember==='function' && bkHasMember\(b,SESSION\.id\)\)/.test(html));
-t('只在「全部」與「團體課」分頁出現', /\(s\.filter==='all'\|\|s\.filter==='group'\)/.test(html));
+t('只在「全部」分頁出現（團體課分頁已收掉）', /const grpOpen=\(s\.filter==='all'\)/.test(html));
+t('★ 沒有團體課票券的人也看得到課卡（列出來不看票券）',
+  !/grpTks[\s\S]{0,60}grpOpen/.test(html));
+t('★ 沒票的人點下去給說明卡，不是一句吐司',
+  /if\(!\(window\._msb\.grpTks\|\|\[\]\)\.length\)\{[\s\S]{0,400}購課請洽櫃檯或你的教練/.test(s));
 t('已經開始的不列（報不了名）', /\(_nowM<0 \|\| timeToMin\(b\.start_time\|\|'0:0'\)>=_nowM\)/.test(html));
 t('額滿的畫出來但點不下去', /const full=heads>=cap;/.test(html)
   && /full\?'':` onclick="memh2GrpJoin\('\$\{b\.id\}'\)"`/.test(html));
 t('可報名的卡用虛線框，與自己的課分得開',
   /\.memh2 \.admh2-card\.mh2-grpopen\{[^}]*border:1\.5px dashed/.test(s.replace(/\n\s*/g,'')));
 t('報名沿用既有的 msbGrpJoin（只是先把 _msb 狀態建起來）',
-  /async function memh2GrpJoin\(bid\)\{[\s\S]{0,320}msbGrpJoin\(bid\);/.test(s));
+  /async function memh2GrpJoin\(bid\)\{[\s\S]{0,900}msbGrpJoin\(bid\);/.test(s));
 
 // ── 底部導覽 ──
 t('底部導覽「首頁」改成「我的預約」',
