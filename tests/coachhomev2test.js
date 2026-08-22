@@ -282,8 +282,23 @@ ok('★★ ⚠ 只擋自己的衝堂、不擋場地 —— 場地由建立預約
    /只擋「自己」的衝堂，不擋場地/.test(src));
 ok('★ 點一格直接進既有的建立預約流程（日期時間帶進去）',
    /onclick="closeModal\(\);dtlAddAt\('\$\{date\}','\$\{minToTime\(mm\)\}'\)"/.test(src));
-ok('★ 時段按鈕用白底＋細框（使用者指示；與日期欄白框、課卡同一套語彙）',
-   /\.chvqs-slot\{padding:11px 6px;border-radius:11px;border:1px solid var\(--bd\);background:#fff;/.test(src)
-   && /原本是米色底，跟視窗底色黏在一起/.test(src));
+/* 0822 三修（使用者）：「幫我統一改成管理員的風格 左右兩張平均的卡片 背景暗化」 */
+ok('★★ 版型統一成管理員行事曆那套訂位面板（slotPanelHTML：左欄整點、右欄半點、兩欄等寬）',
+   /const panel=slotPanelHTML\(\{/.test(src)
+   && /pickFn:'chvQuickPick'/.test(src)
+   && /function slotPanelHTML\(o\)\{/.test(src));
+ok('★★ 不可約的照樣列出但暗化（不是直接消失）—— 暗化看得出「這個時段是滿的」，'
+   +'隱藏只會讓人覺得在跳號',
+   /不可約的那些\*\*照樣列出但暗化\*\*/.test(src)
+   && /\.modal \.cag-slots \.cag-slot-off\{background:rgba\(0,0,0,\.06\);/.test(src));
+ok('★★ ⚠ .cag-slot 原本畫在深色圖層上（白字、半透明白底），搬進白色視窗要整組重新上色',
+   /\.modal \.cag-slots \.cag-slot\{background:#fff;border:1px solid var\(--bd\);color:var\(--green\);/.test(src)
+   && /直接搬進白色視窗會看不見/.test(src));
+ok('★ 快速預約鈕改成圓形品牌綠（使用者二修）',
+   /\.a2-quickadd\{flex:0 0 auto;align-self:center;width:52px;height:52px;border-radius:50%;[\s\S]{0,80}?background:var\(--green\);color:#fff;/.test(src));
+ok('★ 管理員手機首頁也有同一顆（帶目前篩選的教練；All 時不判教練衝堂）',
+   /<button class="a2-quickadd" title="快速預約" onclick="chvQuickSlots\('\$\{date\}','\$\{_cSel\|\|''\}'\)">＋<\/button>/.test(src)
+   && /const who=\(coachId===undefined\)\?String\(SESSION\.id\|\|''\):String\(coachId\|\|''\);/.test(src)
+   && /先在這裡假設一位反而會擋掉可用時段/.test(src));
 ok('　　一格都沒有時講清楚，不要給一個空格子',
    /這一天已經沒有可安排的時段了。/.test(src));
