@@ -3949,6 +3949,10 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 已預約、但這張票券已經沒堂數可對應（票用完或還沒買新票）→ 紅虛線圈提醒要補票
    （2026-07-30 使用者回報：8/1 團課明明有預約，三位會員的圓形卡都看不到那一堂） */
 .mtk-over{background:#fff;border:1.5px dashed var(--danger,#b5372e);box-shadow:none;color:var(--danger,#b5372e);}
+/* 點得開的紅虛線點（2026-08-22 櫃檯以上）：看得出來可以按，按下去說明為什麼沒票 */
+.mtk-over.mtk-tap{cursor:pointer;}
+.mtk-over.mtk-tap:hover{background:#fbeceb;}
+.mtk-over.mtk-tap:active{transform:scale(.93);}
 /* 圓形卡的場地徽章（2026-08-03）：自主訓練約在教室/跑步機時掛在圓下緣（跑／教） */
 /* 共享對象約的堂＝縮小一號（2026-08-04 使用者指示：「享」字徽章太雜亂，用大小區分）。
    transform 縮放不改排版格位，圓點間距維持整齊；誰約的看 title。 */
@@ -8726,8 +8730,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260821.2209';
-const APP_VERSION_LABEL='v260821.2209';
+const APP_VERSION = '260822.0932';
+const APP_VERSION_LABEL='v260822.0932';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9628,6 +9632,108 @@ async function doUndoTicketExtend(id){
   showToast('已撤銷展延');
   navTo(CUR_PAGE);
  }catch(e){ showToast('撤銷失敗：'+((e&&e.message)||e)); }
+}
+/* ══ 沒票可扣的那一堂：原因說明＋校正堂數（2026-08-22）═══════════════════════
+   起因：羅秋菊 9/1 冒出第 13 顆紅虛線點，使用者問「多一堂出來」。查下去有三種原因，
+   而且處理方式完全不同 ——
+     ① 票真的用完了 → 等續約（買票時系統會問要不要補扣）
+     ② 票面還有餘額，只是這堂沒綁上去 → 用「更換票券」綁回去
+     ③ 帳被多退過（例如取消時 RPC 與前端各退一次）→ 餘額比實際多，要校正
+   ⚠ 判斷 ③ 不能只看帳本淨額：匯入的票（IMPV-*）基線用量根本沒進 ticket_logs，
+     林韋綺那張看起來「退兩次」，實際餘額是對的，照帳本去改反而會扣錯她一堂。
+     所以這裡一律用「票面餘額 vs 實際佔用的預約數」對照，帳本只當佐證。 */
+async function mtkOverAsk(tkId, bkId){
+  if(!(typeof isDeskLike==='function'&&isDeskLike())) return;
+  let t=null,b=null,bks=[],logs=[];
+  try{
+    t=await dbGet('member_tickets',tkId); b=await dbGet('bookings',bkId);
+    bks=await dbGetAll('bookings'); logs=await dbGetAll('ticket_logs').catch(()=>[]);
+  }catch(e){ showToast('讀取失敗：'+((e&&e.message)||e)); return; }
+  if(!t||!b){ showToast('找不到票券或預約'); return; }
+  const total=Number(t.sessions_total)||0, rem=Number(t.sessions_remaining)||0;
+  /* 實際佔用＝這張票身上「還算數」的預約：已上的、已預約未上的都算，取消的不算。
+     單人課看 ticket_id，團課的帳只在 ticket_logs（淨扣 >0）。 */
+  const net={};
+  (logs||[]).forEach(l=>{ if(!l||l.ticket_id!==tkId||!l.booking_id) return;
+    const d=l.action==='deduct'?1:(l.action==='refund'?-1:0); if(!d) return;
+    net[l.booking_id]=(net[l.booking_id]||0)+d; });
+  const hold=(bks||[]).filter(x=>x&&x.status!=='cancelled'
+      && (String(x.ticket_id||'')===String(tkId) || (net[x.id]||0)>0))
+    .sort((x,y)=>String(x.date+x.start_time).localeCompare(String(y.date+y.start_time)));
+  const _d=x=>String(x.date||'').slice(5).replace('-','/')+' '+String(x.start_time||'').slice(0,5);
+  const _isAdmin=!!(SESSION&&SESSION.role==='admin');
+  /* 三選一的判讀（順序有意義：先講「還有餘額」，那是一鍵就能解決的） */
+  let why, fix;
+  if(rem>0){
+    why=`這張票<b>還有 ${rem} 堂</b>，只是這一堂沒有綁上去 —— 多半是排課當下選錯票，或建立時票還沒發。`;
+    fix=`按「更換票券」把它綁回這張票就好。`;
+  }else if(hold.length>total){
+    why=`這張票 <b>${total}</b> 堂，實際卻掛著 <b>${hold.length}</b> 筆預約 —— <b>帳被多退過</b>，`
+       +`餘額憑空多出來，才讓這一堂也扣得動。`;
+    fix=_isAdmin?`用下面的「校正堂數」把多出來的收回。`:`請管理員用「校正堂數」處理。`;
+  }else{
+    why=`這張票 <b>${total}</b> 堂已經全部有主（見下方清單），這一堂是排在票用完之後的。`;
+    fix=`會員續約時系統會主動問要不要補扣這一堂，<b>不用現在處理</b>；若這堂不上了就直接取消。`;
+  }
+  showModal(`<div class="modal-title">這一堂沒有票可扣</div>
+    <div style="font-size:13px;color:var(--t2);line-height:1.9;margin-bottom:10px;">
+      <b style="color:var(--text);">${_d(b)}　${(b.category||'').replace(/</g,'&lt;')}</b><br>
+      票券：${(t.plan_name||'票券').replace(/</g,'&lt;')}　·　${total} 堂　·　票面餘額 <b class="num">${rem}</b></div>
+    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:11px;padding:11px 13px;font-size:12.5px;line-height:1.9;">
+      ${why}<br><span style="color:var(--green);">${fix}</span></div>
+    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">這張票目前掛著的 ${hold.length} 筆：</div>
+    <div style="background:var(--card2);border-radius:9px;padding:8px 12px;margin-top:4px;font-size:12.5px;line-height:1.9;max-height:180px;overflow:auto;">
+      ${hold.length?hold.map(x=>`<div${x.id===bkId?' style="color:var(--danger,#b5372e);font-weight:700;"':''}>${_d(x)}　<span style="${
+        x.id===bkId?'':'color:var(--t3);'}">${x.status==='booked'?'已預約':'已上'}${x.id===bkId?'　← 這一堂':''}</span></div>`).join(''):'<span style="color:var(--t3);">（沒有）</span>'}</div>
+    <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      ${rem>0?`<button class="btn btn-ghost" onclick="closeModal();openBkTicketChange('${bkId}')">更換票券</button>`:''}
+      ${_isAdmin?`<button class="btn btn-red" onclick="tkFixSessions('${tkId}','${bkId}')">校正堂數</button>`:''}
+    </div>`);
+}
+/* 校正堂數（管理員限定，2026-08-22）——系統原本沒有任何調整餘額的入口：
+   作廢是整張歸零、更換方案只適用沒用過的票、展延只動效期，所以每次差一堂都得下 SQL。
+   ⚠ 一定要寫進票券紀錄：餘額自己會動、卻沒有一行說明為什麼，是最難查的一種帳。 */
+async function tkFixSessions(tkId, bkId){
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以校正堂數'); return; }
+  const t=await dbGet('member_tickets',tkId); if(!t){ showToast('找不到票券'); return; }
+  const total=Number(t.sessions_total)||0, rem=Number(t.sessions_remaining)||0;
+  showModal(`<div class="modal-title">校正堂數</div>
+    <div style="font-size:13px;color:var(--t2);line-height:1.9;margin-bottom:10px;">
+      ${(t.plan_name||'票券').replace(/</g,'&lt;')}　·　共 ${total} 堂<br>
+      目前票面餘額 <b class="num" style="color:var(--text);">${rem}</b> 堂</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <span style="font-size:13px;">改為</span>
+      <input id="tkfix-n" type="number" inputmode="numeric" min="0" max="${total}" value="${rem}"
+        style="width:88px;padding:8px 10px;border:1px solid var(--bd);border-radius:9px;font-family:var(--num);font-size:15px;">
+      <span style="font-size:13px;color:var(--t3);">堂（0–${total}）</span></div>
+    <input id="tkfix-why" type="text" placeholder="原因（必填，會寫進票券紀錄）"
+      style="width:100%;padding:9px 11px;border:1px solid var(--bd);border-radius:9px;font-size:13px;">
+    <div style="font-size:11.5px;color:var(--t3);line-height:1.8;margin-top:10px;">
+      這裡只改票面餘額，不會動到任何預約。若是「這一堂該綁到票上」，請改用「更換票券」。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="${bkId?`mtkOverAsk('${tkId}','${bkId}')`:'closeModal()'}">返回</button>
+      <button class="btn btn-red" onclick="doTkFixSessions('${tkId}')">確認校正</button></div>`);
+}
+async function doTkFixSessions(tkId){
+ try{
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以校正堂數'); return; }
+  const t=await dbGet('member_tickets',tkId); if(!t){ showToast('找不到票券'); return; }
+  const total=Number(t.sessions_total)||0, rem=Number(t.sessions_remaining)||0;
+  const el=document.getElementById('tkfix-n'), elw=document.getElementById('tkfix-why');
+  const why=String((elw&&elw.value)||'').trim();
+  if(!why){ showToast('請填原因'); if(elw)elw.focus(); return; }
+  const n=Number(el&&el.value);
+  if(!Number.isFinite(n)||n<0||n>total||!Number.isInteger(n)){ showToast(`請填 0–${total} 的整數`); return; }
+  const delta=n-rem;
+  if(!delta){ showToast('餘額沒有變，不用校正'); return; }
+  t.sessions_remaining=n;
+  await dbPut('member_tickets',t);
+  /* delta 對齊帳本慣例：+ 是還回票券、− 是收回 */
+  await logTicket(tkId,'adjust',delta,null,SESSION&&SESSION.id,`校正堂數：${rem} → ${n}（${delta>0?'+':''}${delta}）；${why}`);
+  dbCacheClear(['member_tickets','ticket_logs']);
+  closeModal(); showToast(`已校正：${rem} → ${n} 堂`);
+  try{ if(typeof PP!=='undefined'&&PP.id){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }catch(_){ navTo(CUR_PAGE); }
+ }catch(e){ showToast('校正失敗：'+((e&&e.message)||e)); }
 }
 // 展延後的新到期日（原到期日 ＋ 原方案期限）
 function tkExtendTo(t){
@@ -45206,7 +45312,13 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
     }
     const vlb=(typeof selfVenueLabel==='function'&&bkIsSelf(b))?selfVenueLabel(b):'';
     const vch=({'跑步機':'跑','教室':'教'})[vlb]||'';
-    s+=`<span class="mtk mtk-over${cur}${slf}" title="已預約 ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}　·　此票券已無堂數可對應，需補票${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}${cur?'<i class="mtk-comet"></i>':''}</span>`;
+    /* 紅虛線圓點點得開（2026-08-22 使用者指示：「校正堂數放在出現虛線紅色圓形卡上
+       讓管理員可點取查看是什麼原因」）—— 這顆點只說「沒票」，但沒票有三種完全不同的原因
+       （票用完等續約／票還有餘額只是沒綁上去／帳被多退過），櫃檯光看顏色分不出來該做什麼。
+       ⚠ stopPropagation：這些點常常畫在課卡／票券卡裡面，不擋住外層就會連帶開錯視窗。 */
+    const _canTap=!!(typeof isDeskLike==='function'&&isDeskLike()&&t&&t.id&&b&&b.id);
+    const _tapAttr=_canTap?` onclick="event.stopPropagation();mtkOverAsk('${t.id}','${b.id}')"`:'';
+    s+=`<span class="mtk mtk-over${cur}${slf}${_canTap?' mtk-tap':''}"${_tapAttr} title="已預約 ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}　·　此票券已無堂數可對應，需補票${_canTap?'（點一下看原因）':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}${cur?'<i class="mtk-comet"></i>':''}</span>`;
   }
   if(_trunc){
     const _hidden=total-(_to-_from);
