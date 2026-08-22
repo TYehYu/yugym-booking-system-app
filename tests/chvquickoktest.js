@@ -14,7 +14,10 @@ t('沒有可約時段時不畫確認鈕', /slots\.length\?`<button class="btn bt
 t('開面板時清掉上一次的選取', /window\._chvQsPick='';/.test(fn));
 
 const sel=s.slice(s.indexOf('function chvQuickSel('), s.indexOf('function chvQuickGo('));
-t('再點同一格＝取消選取', /_chvQsPick===t\)\?'':t/.test(sel));
+/* 0822 二修（使用者：「不小心點到就留下標記…看起來已經選了 17:30 但點確認卻沒反應」）：
+   拿掉「再點同一格取消選取」——誤觸第二下會把狀態洗掉，但觸控螢幕的 :hover 綠底還留著。 */
+t('點同一格兩次仍維持選取（不會被洗掉）', /window\._chvQsPick=t;/.test(sel)
+  && !/_chvQsPick===t\)\?'':t/.test(sel));
 t('只有選到的那格加 cag-slot-on', /classList\.toggle\('cag-slot-on'/.test(sel));
 t('確認鈕跟著選取狀態開關', /ok\.disabled=!window\._chvQsPick/.test(sel));
 t('確認鈕顯示選到的時間', /確認 \$\{window\._chvQsPick\}/.test(sel));
@@ -25,6 +28,11 @@ t('確認才走 chvQuickPick', /chvQuickPick\(t\);/.test(go));
 
 t('選取態 CSS 在 :hover 之後（壓得過）',
   s.indexOf('.modal .cag-slots .cag-slot.cag-slot-on{') > s.indexOf('.modal .cag-slots .cag-slot:hover{'));
+/* 觸控螢幕上 :hover 會黏住 —— 手指點過的那一格一直是綠的，看起來選了但狀態是空的 */
+t('時段的 :hover 只給有游標的裝置',
+  /@media \(hover:hover\) and \(pointer:fine\)\{\s*\n\s*\.modal \.cag-slots \.cag-slot:hover\{/.test(s));
+t('全檔沒有沒包 media 的 .cag-slot:hover',
+  (s.match(/\.cag-slot:hover/g)||[]).length===1);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

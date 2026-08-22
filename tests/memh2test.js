@@ -124,6 +124,10 @@ t('月曆卡用白底（外框本來就是 card2，同色會整張消失）',
   /\.memh2-mon\{background:#fff/.test(s));
 t('下方有四色圖例', /MEMH2_FILTERS\.map\(\(\[k,l\]\)=>`<span><i style="background:\$\{MEMH2_COL\[k\]\}"/.test(mon));
 
+t('［＋］的時段也是點了就選它，誤觸第二下不會洗掉狀態',
+  /window\._mh2Pick=t;/.test(cut('function memh2SelSlot(t){','function memh2GoSlot(){'))
+  && !/_mh2Pick===t\)\?'':t/.test(s));
+
 // ── 底部導覽 ──
 t('底部導覽「首頁」改成「我的預約」',
   /\{key:'mem_bookings', label:'我的預約'\}/.test(s));
