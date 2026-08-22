@@ -83,5 +83,15 @@ t('會員本人的視窗才掛 pp-sheet-self（櫃檯端不受影響）',
   /\+\(\(typeof ppSelfView==='function'&&ppSelfView\(\)\)\?' pp-sheet-self':''\)/.test(s));
 t('欄位不換行（緊急聯絡人不會被擠成三行）', /white-space:nowrap;box-shadow:0 1px 4px rgba\(50,42,30,\.06\);\}/.test(s));
 
+// ── 會員自己改資料不通知櫃檯（2026-08-22 使用者附截圖指正）──
+/* 來源是 dbPut → mchgNotify（走 fn_mobile_change_alert，沿用 self_move/self_cancel 兩種
+   既有型別，所以在 notifications.type 裡看不到獨立的名字 —— 我第一次查就是因此漏掉。 */
+t('★ 會員本人寫自己那一筆 members 時不發桌機通知',
+  /if\(store==='members' && SESSION && SESSION\.role==='member'\s*\n\s*&& obj && String\(obj\.id\)===String\(SESSION\.id\)\) return;/.test(s));
+t('★ 只擋這一種：櫃檯／教練在手機改別人的會員資料照舊通知',
+  /SESSION\.role==='member'/.test(s.slice(s.indexOf('async function mchgNotify'), s.indexOf('async function dbPut'))));
+t('★ 預約與補卡申請不受影響（MCHG_LABEL 沒動）',
+  /const MCHG_LABEL=\{ bookings:'預約', punch_requests:'補卡申請',\s*\n\s*members:'會員資料' \};/.test(s));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
