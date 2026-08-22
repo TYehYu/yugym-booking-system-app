@@ -13,23 +13,26 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('① 健身小知識移到右上角，與左上插畫對稱');
-ok('★ 右欄第一格＝知識卡', /<div class="mc-g5-right">[\s\S]{0,240}<div class="mc-know-top">\$\{knowCardHTML\(\)\}<\/div>/.test(src));
-ok('★ 左欄已不再放知識卡', !/<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>\s*\n\s*\$\{knowCardHTML\(\)\}/.test(src));
+/* 0822 四修（使用者指示，附全頁截圖）：左欄由上至下＝月曆 → 今日值班 → 健身小卡；
+   右欄＝三張快捷卡 → 今日收款；中間只剩兩張紅卡＋KPI。 */
+ok('★ 右欄第一格＝三張快捷卡', /<div class="mc-g5-right">[\s\S]{0,240}<div class="mc-quick-top">\$\{quickCard\}<\/div>/.test(src));
+ok('★ 左欄由上至下：月曆 → 今日值班 → 健身小卡',
+   /<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>\s*\n\s*<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>\s*\n\s*<div class="mc-know-left">\$\{knowCardHTML\(\)\}<\/div>/.test(src));
 /* 2026-08-01 三修（使用者：「健身小知識因為縮得太小了 看不到完整訊息 要放大一點
    （左邊縮圖也放大一點）」）：兩張一起 114 → 150px，仍然對稱。 */
-ok('★ 高度與插畫一致（兩張都是 150px）',
+ok('★ 知識卡高度 150px（左右兩處共用同一組壓縮尺寸）',
    /\.mc-art\{position:relative;width:100%;height:150px;/.test(src)
-   && /\.mc-know-top \.know-card\{min-height:150px;height:150px;/.test(src));
+   && /\.mc-know-top \.know-card,\.mc-know-left \.know-card\{min-height:150px;height:150px;/.test(src));
 ok('★ 說明放到四行、字級回到 12.5px（原本兩行會把話截掉）',
-   /-webkit-line-clamp:4;/.test(src) && /\.mc-know-top \.know-s\{font-size:12\.5px;/.test(src));
+   /-webkit-line-clamp:4;/.test(src) && /\.mc-know-top \.know-s,\.mc-know-left \.know-s\{font-size:12\.5px;/.test(src));
 ok('★ 貼齊頂欄的負上邊距也一致（-10 / 下 16；2026-08-12 起左欄頂是收款提醒卡）',
    /\.mc-g5-left>\.mc-art-top,\.mc-g5-left>\.mc-payremind\{margin:-10px 0 16px !important;\}/.test(src)
    && /\.mc-g5-right>\.mc-know-top\{margin:-10px 0 16px !important;\}/.test(src));
 ok('★ 右欄原本用 padding-top:43px 撐的齊頭留白要拿掉，否則空白跑到知識卡上面',
    /\.mc-g5-right\{flex:0 0 300px;min-width:0;display:flex;flex-direction:column;\s*\n\s*padding-top:0;\}/.test(src));
 ok('　　壓成矮卡後內文改緊湊版（不再有 190px 直式卡的 52px 上留白）',
-   /\.mc-know-top \.know-body\{margin-top:0;/.test(src));
-ok('　　右側留給插圖，字不壓上去', /\.mc-know-top \.know-body\{margin-top:0;padding-right:62px;\}/.test(src));
+   /\.mc-know-top \.know-body,\.mc-know-left \.know-body\{margin-top:0;/.test(src));
+ok('　　右側留給插圖，字不壓上去', /\.mc-know-top \.know-body,\.mc-know-left \.know-body\{margin-top:0;padding-right:62px;\}/.test(src));
 /* 2026-08-01 使用者指示：「全系統的健身知識卡 背景色幫我參考首頁插圖的背景色套用」 */
 ok('★ 知識卡底色與插圖卡一致（--card2 ＋ --bd 細框），不再是三個漸層',
    /\.know-card\{position:relative;min-height:190px;padding:16px 18px;overflow:hidden;cursor:pointer;\s*\n\s*background:var\(--card2,#FAF7F0\);border:1px solid var\(--bd\);/.test(src)
@@ -45,10 +48,12 @@ ok('　　手機版知識卡不受影響（走另一條分支）',
 
 console.log('\n② 三顆按鈕移到 KPI 右邊');
 /* 0822 三修：順序改成 兩張紅卡 → 三顆白鈕 → KPI 數字群（數字群靠最右） */
-ok('★ quickCard 併進 KPI 條，且排在紅卡之後、數字群之前',
-   /<div class="mc-kpistrip"><!--ALERTS-->\$\{quickCard\}\s*\n\s*<div class="mc-kpinums">/.test(src));
-ok('★ 右欄已不再放 quickCard',
-   !/<div class="mc-g5-right">[\s\S]{0,300}\$\{quickCard\}/.test(src));
+/* 0822 四修：三顆鈕又搬回右欄最上（KPI 條只留兩張紅卡＋數字群） */
+ok('★ KPI 條只剩兩張紅卡＋數字群',
+   /<div class="mc-kpistrip"><!--ALERTS-->\s*\n\s*<div class="mc-kpinums">/.test(src)
+   && !/mc-kpistrip[\s\S]{0,80}\$\{quickCard\}/.test(src));
+ok('★ quickCard 在右欄最上',
+   /<div class="mc-g5-right">[\s\S]{0,240}<div class="mc-quick-top">\$\{quickCard\}<\/div>/.test(src));
 ok('★ 三顆鈕的內容不變（新增會員／銷售／查看合約）',
    /openBackofficeMember\(\)">\$\{ICONS\.people\}<span>新增會員<\/span>/.test(src)
    && /openSalesModal\(\)">\$\{OPS_TODO_IC\.ticket\}<span>銷售<\/span>/.test(src)

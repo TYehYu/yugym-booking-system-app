@@ -62,10 +62,10 @@ console.log('\n版面');
 /* 2026-08-12 使用者指示：插畫移除，位置讓給「今日收款提醒」卡；插畫程式保留備援不渲染。 */
 /* 0822：收款提醒與降級名單拆成兩張紅卡搬到 KPI 左邊（見 tests/alert2test.js），
    左欄最上那格連同 payRemindCard 一起退場，剩下今日值班 → 月曆。 */
-ok('★ 插畫已退場；左欄最上現在是今日值班（收款提醒已搬到 KPI 左邊）',
+ok('★ 插畫已退場；0822 起左欄最上是月曆（值班在中、健身小卡在下）',
    !/\$\{butlerArtHtml\(\)\}/.test(src)
    && !/<div class="mc-payremind">/.test(src)
-   && /<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>\s*\n\s*<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>/.test(src));
+   && /<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>\s*\n\s*<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>/.test(src));
 ok('★ 班表鈕已移除（頂欄本來就有「班表」分頁，同一件事不用出現兩次）',
    !/\$\{schedBtnCard\}/.test(src) && /「N 月班表」鈕已移除（2026-08-02 使用者指示）/.test(src));
 ok('　　月排班視窗本身保留（別的地方還有入口）',
@@ -74,7 +74,7 @@ ok('　　月排班視窗本身保留（別的地方還有入口）',
    這一項要驗的是「插畫沒有跑進中間那欄」，改成直接檢查 KPI 條的組成。 */
 ok('★ 不在中間那欄（KPI 條裡沒有插畫；0822 起最前面是兩張紅色提醒卡）',
    !/<div class="mc-kpistrip">[\s\S]{0,400}mc-art/.test(src)
-   && /<div class="mc-kpistrip"><!--ALERTS-->\$\{quickCard\}\s*\n\s*<div class="mc-kpinums">\$\{\[\[ICONS\.cal,'教練課'/.test(src));
+   && /<div class="mc-kpistrip"><!--ALERTS-->\s*\n\s*<div class="mc-kpinums">\$\{\[\[ICONS\.cal,'教練課'/.test(src));
 ok('★ 貼著頂欄下方：左欄的齊頭 padding 歸零，第一格自己抵掉 .content 的 10px 上內距（2026-08-12 起是收款提醒卡）',
    /\.mc-g5-left>\.mc-art-top,\.mc-g5-left>\.mc-payremind\{margin:-10px 0 16px !important;\}/.test(src)
    && /padding-top:0;\}  \/\* 2026-07-21 使用者指示：左欄與「今日教練任務」齊頭/.test(src)
@@ -86,9 +86,9 @@ ok('　　真兇寫在程式裡（不是 margin 不夠，是左欄的 padding-to
    /真兇是 \.mc-g5-left 的 padding-top:122px（左欄齊頭用）/.test(src));
 /* 使用者回報「太高了 跟旁邊的 KPI 一樣高就好」→ 114px
    2026-08-01 三修（使用者：「左邊縮圖也放大一點」，配合右上角知識卡放大）→ 150px */
-ok('★ 寬度吃滿左欄、高度 150px（與右上角知識卡同高，左右對稱）',
+ok('★ 寬度吃滿左欄、高度 150px（與知識卡同高）',
    /\.mc-art\{position:relative;width:100%;height:150px;/.test(src)
-   && /\.mc-know-top \.know-card\{min-height:150px;height:150px;/.test(src));
+   && /\.mc-know-top \.know-card,\.mc-know-left \.know-card\{min-height:150px;height:150px;/.test(src));
 ok('　　裁切幅度寫在程式裡（上下各約 9%，不會切到角色）',
    /這個高度會裁掉原圖上下各約 9%/.test(src));
 ok('★ 手機版待辦卡兩列不變（收款提醒與降級名單仍在 _todoItems 裡）',
