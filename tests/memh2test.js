@@ -147,9 +147,9 @@ t('外框樣式掛在 body.memh2-shell（不影響真實會員）',
 t('頂欄的「更新畫面」圓鈕收掉', /body\.memh2-shell \.topbar \.tb-right \.rf-btn\{display:none/.test(s));
 t('底部導覽改品牌綠', /body\.memh2-shell \.bottom-nav\{background:var\(--green\)/.test(s));
 t('綠底導覽的文字翻淺色', /body\.memh2-shell \.bottom-nav \.bn-item\{color:rgba\(255,255,255/.test(s));
-t('navTo 只在「我的預約」且 memh2On 時掛 shell',
+t('navTo 只在「我的預約」／「我的票券」且 memh2On 時掛 shell',
   /classList\.toggle\('memh2-shell', _mv\)/.test(s)
-  && /key==='mem_bookings' && typeof memh2On==='function' && memh2On\(\)/.test(s));
+  && /\(key==='mem_bookings'\|\|key==='mem_tickets'\)\s*\n?\s*&& typeof memh2On==='function' && memh2On\(\)/.test(s));
 t('會員手機也啟用下拉更新', /SESSION\.role==='member'&&typeof memh2On==='function'&&memh2On\(\)\)\)\) admPtrInit\(\)/.test(s));
 t('切預覽視角時補掛一次下拉更新', /if\(_mv && typeof admPtrInit==='function'\) admPtrInit\(\)/.test(s));
 t('下拉更新後會員也回到原分頁', /_ptrBack && \(SESSION\.role==='admin'\|\|SESSION\.role==='member'\)/.test(s));
