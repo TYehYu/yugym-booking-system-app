@@ -16,8 +16,14 @@ const sync=g('function syncAcctMenuItems(){','\ndocument.addEventListener(\'clic
 ok('★ 開啟前把 role-admin 補到 #tb-acct-menu 本身', /getElementById\('tb-acct-menu'\)[\s\S]*classList\.toggle\('role-admin', *role==='admin'\)/.test(sync));
 ok('　　補 class 排在 renderFortuneInline 之前（否則同一輪還是量到 none）',
    sync.indexOf("classList.toggle('role-admin'") < sync.indexOf('renderFortuneInline'));
-ok('　　CSS 兩條規則仍靠 .role-admin 祖先（所以上面那行是必要的）',
-   src.includes('.role-admin .tb-acct-butler{display:flex;}') && src.includes('.role-admin #tb-fortune-inline{display:block;}'));
+/* 2026-08-22：結果框（#tb-fortune-inline）已不再被手機版藏起來，所以不需要祖先放行；
+   入口（.tb-acct-butler）仍靠角色祖先，而且教練／會員也要能看到。 */
+ok('　　入口仍靠角色祖先，三個角色都放行（所以上面補 class 那行是必要的）',
+   src.includes('.role-admin .tb-acct-butler,.role-coach .tb-acct-butler,.role-member .tb-acct-butler{display:flex;}'));
+ok('　　結果框不再被手機版整個藏掉', !src.includes('.tb-acct-fortune,#tb-fortune-inline{display:none;}'));
+ok('　　教練與會員的角色 class 也補到抽屜本身',
+   /_m\.classList\.toggle\('role-coach', role==='coach'\)/.test(src)
+   && /_m\.classList\.toggle\('role-member', role==='member'\)/.test(src));
 ok('　　抽屜確實會被搬到 body（本 bug 的前提沒變）',
    g('function toggleAcctMenu(e){','function closeAcctMenu').includes('document.body.appendChild(menu)'));
 

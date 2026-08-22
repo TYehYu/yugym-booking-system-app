@@ -86,5 +86,26 @@ t('所有新樣式都掛在 .memh2 或 .mh2- 之下',
      .every(l=>/^\.(memh2|mh2-)/.test(l.trim())));
 t('頂列米色', /\.memh2\{background:var\(--card2\)/.test(css));
 
+// ── 外框（2026-08-22 二修）：頂欄米色、收掉重置鈕、底部導覽品牌綠、下拉更新 ──
+t('外框樣式掛在 body.memh2-shell（不影響真實會員）',
+  /body\.memh2-shell \.topbar-fixed\{background:var\(--card2/.test(s));
+t('頂欄的「更新畫面」圓鈕收掉', /body\.memh2-shell \.topbar \.tb-right \.rf-btn\{display:none/.test(s));
+t('底部導覽改品牌綠', /body\.memh2-shell \.bottom-nav\{background:var\(--green\)/.test(s));
+t('綠底導覽的文字翻淺色', /body\.memh2-shell \.bottom-nav \.bn-item\{color:rgba\(255,255,255/.test(s));
+t('navTo 只在「我的預約」且 memh2On 時掛 shell',
+  /classList\.toggle\('memh2-shell', _mv\)/.test(s)
+  && /key==='mem_bookings' && typeof memh2On==='function' && memh2On\(\)/.test(s));
+t('會員手機也啟用下拉更新', /SESSION\.role==='member'&&typeof memh2On==='function'&&memh2On\(\)\)\)\) admPtrInit\(\)/.test(s));
+t('切預覽視角時補掛一次下拉更新', /if\(_mv && typeof admPtrInit==='function'\) admPtrInit\(\)/.test(s));
+t('下拉更新後會員也回到原分頁', /_ptrBack && \(SESSION\.role==='admin'\|\|SESSION\.role==='member'\)/.test(s));
+
+// ── 今日運勢（2026-08-22 使用者回報「會員跟教練點了沒反應」）──
+t('抽籤結果框不再被手機版整個藏掉', !/\.tb-acct-fortune,#tb-fortune-inline\{display:none;\}/.test(s));
+t('三種角色的手機版都看得到「今日運勢」入口',
+  /\.role-admin \.tb-acct-butler,\.role-coach \.tb-acct-butler,\.role-member \.tb-acct-butler\{display:flex;\}/.test(s));
+
+// ── LINE 圖文選單的深層連結 ──
+t('?go=bookings 進「我的預約」', /if\(go==='bookings'\|\|go==='home'\)\{ navTo\('mem_bookings'\); return true; \}/.test(s));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
