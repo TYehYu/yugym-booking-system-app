@@ -18,8 +18,13 @@ ok('★ 表頭與分頁列不跟著捲',
 /* 2026-08-22 二修（使用者：「會員資料的這一列獨立出來凍結 不要跟著下方頁面滑動」）——
    上一輪只固定住表頭，四顆分頁鈕還是跟著捲，因為它是 ppRecordHtml 產出、塞在 #pp-body 裡面。 */
 ok('★★ 四顆分頁鈕要搬出 #pp-body 才吃得到「不跟著捲」那條規則',
-   /const tabsEl=bodyEl&&bodyEl\.querySelector\(':scope > \.pp-rectabs'\);/.test(src)
+   /const tabsEl=bodyEl&&bodyEl\.querySelector\('\.pp-rectabs'\);/.test(src)
    && /if\(tabsEl\) host\.insertBefore\(tabsEl, bodyEl\);/.test(src));
+ok('★★ ⚠ 它不是 #pp-body 的直接子層（ppRecordHtml 把它包在 .pp-card 裡）——'
+   +'第一版寫 :scope > .pp-rectabs 選不到，搬移靜靜失敗，使用者回報「還是跟著捲」',
+   /它不是 #pp-body 的直接子層 —— ppRecordHtml 把它包在 \.pp-card 裡面/.test(src)
+   && !/querySelector\(':scope > \.pp-rectabs'\)/.test(src)
+   && /return `<div class="pp-card">\$\{back\}/.test(src));
 ok('　　選擇在 DOM 上搬，而不是改 ppRecordHtml 的回傳結構（那支四個分頁與員工頁共用）',
    /在 DOM 上搬、而不是改 ppRecordHtml 的回傳結構/.test(src));
 ok('★ 三種模式統一：手機全頁、管理員手機視窗、桌機視窗都吃同一套',

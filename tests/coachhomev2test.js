@@ -37,10 +37,11 @@ ok('★ 大日期＋KPI 一列（.admh-bigrow）',
    && /<div class="admh-bigdate"><span class="admh-dnum">\$\{_dv\.getDate\(\)\}<\/span>/.test(src));
 ok('★ 再來是日期列（.admh-sticky > .admh-week），最後是課卡列表（.admh-cards）',
    /<div class="admh-sticky">\s*\n\s*<div class="admh-week">[\s\S]{0,300}?<\/div>\s*\n\s*<div class="admh-cards">/.test(src));
-ok('★ 課卡沿用 .admh-card（不是自己另做一種卡）',
-   /<div class="admh-card\$\{done\?' admh-done':''\}" style="--admh-c:\$\{_col\};" onclick="admhCardTap\(event,'\$\{b\.id\}'\)">/.test(src));
+/* 0822：與管理員手機首頁同步，改用雙欄版型的 .admh2-card（同一組 class，不是另做一種） */
+ok('★ 課卡沿用管理員那套（.admh2-card，不是自己另做一種卡）',
+   /<div class="admh2-card\$\{done\?' admh-done':''\}" style="--admh-c:\$\{_col\};" onclick="admhCardTap\(event,'\$\{b\.id\}'\)">/.test(src));
 ok('★ 教練篩選列拿掉（只有自己的課）',
-   /教練篩選列拿掉（使用者：只要顯示該教練自己的課卡就好），只留日期列/.test(src)
+   /教練篩選列拿掉（使用者：只要顯示該教練自己的課卡就好）/.test(src)
    && !/admh-chip/.test(V2CODE));
 ok('★ 週一起算，而且用共用的 heroWeekMonday（與管理員手機首頁同一支）',
    /const _mon=heroWeekMonday\(date\);/.test(src)
@@ -94,8 +95,8 @@ ok('　　上班中／已下班各有對應文字（請假改由班別籤本身�
 console.log('\n課卡與本月成績');
 ok('★ 只取自己的（代課算在代課教練身上）',
    /\.filter\(b=>b&&bkCoachId\(b\)===SESSION\.id&&b\.date===date\s*\n?\s*&& b\.status!=='cancelled' && !b\.sibling_of\)/.test(src));
-ok('　　右下角不標教練名（這頁的課全是自己的），但教練請假仍要標',
-   /右下角不標教練名 —— 這一頁的課全是自己的/.test(src)
+ok('　　0822 起右下角只標「代課」那種（不是自己帶的），教練請假仍要標',
+   /右下角原本一律不標教練名/.test(src)
    && /admh-lvtag">教練請假/.test(src));
 ok('　　無限次卡不寫「票券 3/9999」，只標第幾堂',
    /\(Number\(tk\.sessions_total\)\|\|0\)>=999\?`第 \$\{_nth\} 堂`:`票券 \$\{_nth\}\/\$\{tk\.sessions_total\}`/.test(src));
@@ -148,8 +149,10 @@ ok('　　未排班／請假用虛線框，不要看起來像「有班」',
    /\.chv2-band-off\{border-style:dashed;\}/.test(src));
 ok('　　點下去走 chv2DutyTap（還沒上班才是掃碼）', /class="admh-kpi admh-rev chv2-dutytap" onclick="chv2DutyTap\(\)"/.test(src));
 
-ok('★ 日期列與課卡之間補一條分隔線',
-   /<div class="admh-div chv2-div2"><\/div>\s*\n\s*<div class="admh-cards">/.test(src));
+/* 0822 雙欄之後不需要那條分隔線：日期列在左邊、課卡在右邊，本來就分得開 */
+ok('★ 日期列與課卡改成左右並排（原本的分隔線退場）',
+   /<div class="admh2-body">\s*\n\s*<div class="admh2-rail">/.test(src)
+   && !/<div class="admh-div chv2-div2"><\/div>/.test(src));
 ok('★ 本月成績改回進度環（沿用教練端舊版那組 .mstat）',
    /const ringCardOf=\(title,o,color\)=>\{/.test(src)
    && /<div class="mstat-row mstat-row-2">\$\{ringCardOf\('教練課',_mPt,'#1f6f54'\)\}\$\{ringCardOf\('團體課',_mGp,'#9a5a1e'\)\}<\/div>/.test(src)
@@ -236,3 +239,27 @@ ok('★ 右下角浮動打卡鈕退場（值班那格就能掃碼，浮動鈕還
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
+
+/* ═══ 2026-08-22：把管理員手機首頁今天做的內容同步過來（使用者指示）═══════════════
+   「幫我把今天做的管理員手機首頁內容 也更新到教練版手機首頁」 */
+console.log('\n雙欄版面同步到教練首頁');
+ok('★ 日期列從上方橫排改成左側直欄（與管理員同一組 class）',
+   /_a2Rail\+=`<button class="a2-day\$\{ds===date&&ds!==today\?' on':''\}\$\{ds===today\?' a2-today':''\}" onclick="ctPickDay\('\$\{ds\}'\)">/.test(src)
+   && /<div class="admh2-body">\s*\n\s*<div class="admh2-rail">/.test(src));
+ok('★ 上下箭頭換週走教練自己的 coachWeekShift',
+   /<span class="a2-arw a2-arw-up" onclick="coachWeekShift\(-1\)"><\/span>/.test(src)
+   && /<span class="a2-arw a2-arw-dn" onclick="coachWeekShift\(1\)"><\/span>/.test(src));
+ok('★★ 掛載沿用 admh2Mount，換週函式用參數帶進去（兩頁唯一的差別）',
+   /function admh2Mount\(shiftFn\)\{/.test(src)
+   && /admh2Mount\(coachWeekShift\)/.test(src)
+   && /try\{ _shift\(d\); \}catch\(_\)\{\}/.test(src));
+ok('　　⚠ resize／轉向重掛要帶回同一支，否則教練頁轉向後換週會跳到別的週',
+   /window\._admh2Shift=_shift;/.test(src)
+   && /admh2Mount\(window\._admh2Shift\)/.test(src));
+ok('★ 課卡換成雙欄版型（出席章左上、中間三列、右上時間、右下教練）',
+   /return `<div class="admh2-card\$\{done\?' admh-done':''\}" style="--admh-c:\$\{_col\};"/.test(src));
+ok('★★ 教練名只在「不是自己帶的」才標 —— 也就是代課，這一頁唯一會出現別人的情況',
+   /const _cnm=\(_cid && String\(_cid\)!==String\(SESSION\.id\) && _cm2\[_cid\]\)\?_cm2\[_cid\]:'';/.test(src)
+   && /改成「只有不是自己帶的才標」/.test(src));
+ok('　　貼頂偵測退場（日期列已經不是 sticky，它就在左邊不動）',
+   !/const st=document\.querySelector\('\.admh-sticky'\), sen=document\.getElementById\('admh-sentinel'\);[\s\S]{0,400}?coachWeekShift/.test(src));

@@ -8920,8 +8920,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1300';
-const APP_VERSION_LABEL='v260822.1300';
+const APP_VERSION = '260822.1315';
+const APP_VERSION_LABEL='v260822.1315';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -36363,7 +36363,10 @@ function ppRenderBody(){
      動它的形狀要牽動的地方太多。 */
   try{
     const bodyEl=document.getElementById('pp-body');
-    const tabsEl=bodyEl&&bodyEl.querySelector(':scope > .pp-rectabs');
+    /* ⚠ 它不是 #pp-body 的直接子層 —— ppRecordHtml 把它包在 .pp-card 裡面（見 35776 等處），
+       所以不能用 ':scope > .pp-rectabs'（2026-08-22 第一版就是這樣寫，選不到、搬移靜靜失敗，
+       使用者回報「還是跟著捲」）。全域找那一個就好，整頁只會有一列。 */
+    const tabsEl=bodyEl&&bodyEl.querySelector('.pp-rectabs');
     if(tabsEl) host.insertBefore(tabsEl, bodyEl);
   }catch(_){}
 }
@@ -40863,8 +40866,12 @@ function admh2On(){
 }
 /* 雙欄版掛載：①兩欄各自撐滿剩下的視窗高度（要有明確高度，內層才捲得動）
    ②左欄左右滑切換上下週 ③捲到選取的那一天。 */
-function admh2Mount(){
+/* shiftFn：換週要呼叫誰（管理員是 admWeekShift、教練是 coachWeekShift）——
+   2026-08-22 教練首頁也改成雙欄之後，這一支變成兩頁共用，唯一的差別就是這個函式。 */
+function admh2Mount(shiftFn){
   const body=document.querySelector('.admh2-body'); if(!body) return;
+  const _shift=(typeof shiftFn==='function')?shiftFn
+    :(typeof admWeekShift==='function'?admWeekShift:function(){});
   const fit=()=>{
     const r=body.getBoundingClientRect();
     /* ⚠ 高度只能依「版面位置」算，不能依當下的捲動位置（2026-08-22 使用者回報
@@ -40884,9 +40891,12 @@ function admh2Mount(){
     body.style.height=h+'px';
   };
   fit();
+  /* ⚠ resize／轉向重掛時要帶回同一支 shiftFn，否則教練頁轉個向之後換週會變成呼叫
+     管理員那支（兩頁的選日狀態不同，會跳到別的週）。 */
+  window._admh2Shift=_shift;
   if(!window._admh2Fit){ window._admh2Fit=true;
-    window.addEventListener('resize', ()=>{ try{ admh2Mount(); }catch(_){} });
-    window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ try{ admh2Mount(); }catch(_){} },200); });
+    window.addEventListener('resize', ()=>{ try{ admh2Mount(window._admh2Shift); }catch(_){} });
+    window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ try{ admh2Mount(window._admh2Shift); }catch(_){} },200); });
   }
   /* 左欄固定顯示七天、不捲，所以不需要把選取那天捲進視線（2026-08-22 二修） */
   /* 上下拖曳換週（2026-08-22 三修使用者指示：「改成上下滑動日期欄，做一點小小的拖移動畫，
@@ -40919,7 +40929,7 @@ function admh2Mount(){
     if(!d) return;
     rail.classList.add(d>0?'a2-armnext':'a2-armprev');
     armT=setTimeout(()=>{ fired=true; clearArm(); snap();
-      try{ admWeekShift(d); }catch(_){}
+      try{ _shift(d); }catch(_){}
     },HOLD);
   },{passive:true});
   const end=()=>{ if(!fired){ clearArm(); snap(); } y0=null; };
@@ -41292,19 +41302,26 @@ async function coachHomeV2(){
      跟參照的管理員手機首頁不一致。這裡跟它走同一支。
      翻頁也改用既有的 coachWeekShift（把檢視日 ±7 天），不要再多一個 _coachWeekOffset ——
      兩份狀態會互相打架（那是舊版教練首頁在用的）。 */
-  let _wkBtns='';
+  /* 2026-08-22 使用者指示：「把今天做的管理員手機首頁內容 也更新到教練版手機首頁」——
+     日期列從上方橫排改成左側直欄（七天固定、白框、上下拖曳換週），與管理員版同一套
+     class（.admh2-rail/.a2-day），只是選日走教練自己的 ctPickDay、換週走 coachWeekShift。 */
+  let _a2Rail='';
   {
     const _mon=heroWeekMonday(date);
     for(let i=0;i<7;i++){
       const d=new Date(_mon); d.setDate(_mon.getDate()+i);
-      const ds=ymd(d), n=_cnt[ds]||0;
-      _wkBtns+=`<button class="msb-date${ds===date&&ds!==today?' on':''}${ds===today?' hero-today':''}" onclick="ctPickDay('${ds}')">
-        <span class="cag-dn">${n?n+' 堂':'－'}</span><b>${d.getMonth()+1}/${d.getDate()}</b><span>${ds===today?'今天':'週'+HERO_WD[d.getDay()]}</span></button>`;
+      const ds=ymd(d);
+      _a2Rail+=`<button class="a2-day${ds===date&&ds!==today?' on':''}${ds===today?' a2-today':''}" onclick="ctPickDay('${ds}')">
+        <b class="a2-dn">${d.getDate()}</b>
+        <span class="a2-dm">${d.getMonth()+1} 月</span>
+        <span class="a2-dw">${ds===today?'今天':'週'+HERO_WD[d.getDay()]}</span></button>`;
     }
   }
 
   /* ── ③ 今日課卡列表（沿用管理員手機首頁的 .admh-card）── */
   const _tkBkMap={}; (bookings||[]).forEach(x=>{ if(x&&x.ticket_id&&x.status!=='cancelled'&&!x.sibling_of){ (_tkBkMap[x.ticket_id]=_tkBkMap[x.ticket_id]||[]).push(x); } });
+  /* 代課才用得到：只有「不是自己帶的那堂」會標名字（見下面 _cnm） */
+  const _cm2={}; (coaches||[]).forEach(c=>{ if(c&&c.id) _cm2[c.id]=(typeof coachDisp==='function'?coachDisp(c):c.name)||''; });
   const _cards=dayBk.slice().sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time))).map(b=>{
     const col=(typeof catColorOf==='function')?catColorOf(b):null;
     const _cc=evColorClass(b,typeMap);
@@ -41325,19 +41342,28 @@ async function coachHomeV2(){
     const _vn=(typeof venueDisplay==='function')?(venueDisplay(b)||''):'';
     const _vid=String(b.venue_unit||'').split('_')[0];
     const _vlb=_vid==='treadmill'?`${_vn||'跑步機'} ${Math.max(1,Number(b._units)||1)}台`:(_vn||'');
-    /* 右下角不標教練名 —— 這一頁的課全是自己的（管理員首頁要標是因為那裡混著所有人）。
-       教練請假的標記仍要留：那是「這堂今天沒有我」的訊息。 */
-    const _lvTag=(typeof bkIsCoachLeave==='function'&&bkIsCoachLeave(b))?'<div class="admh-foot"><span class="admh-lvtag">教練請假</span></div>':'';
-    return `<div class="admh-card${done?' admh-done':''}" style="--admh-c:${_col};" onclick="admhCardTap(event,'${b.id}')">
-      <span class="admh-time">${b.start_time}</span>
-      <div class="admh-cname">${cname}${_vlb?'・'+_vlb:''}</div>
-      <div class="admh-mname">${mname}${_st?`<span class="admh-stamp ${_st[1]}">${_st[0]}</span>`:''}</div>
-      ${tk?(()=>{const _lt=(_tkBkMap[tk.id]||[]).filter(x=>x.date>b.date||(x.date===b.date&&String(x.start_time)>String(b.start_time))).length;
-        const _ud=Math.max(0,(Number(tk.sessions_total)||0)-(Number(tk.sessions_remaining)||0));
-        const _nth=Math.min(Math.max(1,_ud-_lt), Number(tk.sessions_total)||_ud||1);
-        /* 無限次卡（9999 堂）寫「票券 3/9999」沒有意義，只標第幾堂（同 0821 課卡的處理） */
-        return `<div class="admh-tk">${(Number(tk.sessions_total)||0)>=999?`第 ${_nth} 堂`:`票券 ${_nth}/${tk.sessions_total}`}</div>`;})():''}
-      ${_lvTag}
+    const _lvTag=(typeof bkIsCoachLeave==='function'&&bkIsCoachLeave(b))?'<span class="admh-lvtag">教練請假</span>':'';
+    /* 右下角原本一律不標教練名（這一頁的課本來就都是自己的）。改用雙欄版型之後那一格
+       空著也是空著，改成「只有不是自己帶的才標」—— 也就是代課：這一頁唯一會出現別人的
+       情況，標出來才知道那堂今天是誰上。 */
+    const _cid=(b.substitute_coach_id||b.coach_id||null);
+    const _cnm=(_cid && String(_cid)!==String(SESSION.id) && _cm2[_cid])?_cm2[_cid]:'';
+    const _tkTxt=tk?(()=>{const _lt=(_tkBkMap[tk.id]||[]).filter(x=>x.date>b.date||(x.date===b.date&&String(x.start_time)>String(b.start_time))).length;
+      const _ud=Math.max(0,(Number(tk.sessions_total)||0)-(Number(tk.sessions_remaining)||0));
+      const _nth=Math.min(Math.max(1,_ud-_lt), Number(tk.sessions_total)||_ud||1);
+      /* 無限次卡（9999 堂）寫「票券 3/9999」沒有意義，只標第幾堂（同 0821 課卡的處理） */
+      return (Number(tk.sessions_total)||0)>=999?`第 ${_nth} 堂`:`票券 ${_nth}/${tk.sessions_total}`;})():'';
+    return `<div class="admh2-card${done?' admh-done':''}" style="--admh-c:${_col};" onclick="admhCardTap(event,'${b.id}')">
+      <div class="a2-stampcol">${_st?`<span class="admh-stamp ${_st[1]}">${_st[0]}</span>`:''}</div>
+      <div class="a2-main">
+        <div class="a2-l1">${cname}${_vlb?'・'+_vlb:''}</div>
+        <div class="a2-l2">${mname}</div>
+        <div class="a2-l3">${_tkTxt}</div>
+      </div>
+      <div class="a2-side">
+        <span class="a2-time">${b.start_time}</span>
+        <span class="a2-coach">${_lvTag}${_cnm?`<span class="a2-cnm">${_cnm}</span>`:''}</span>
+      </div>
     </div>`;
   }).join('')||`<div class="admh-empty">這一天沒有課程</div>`;
 
@@ -41397,35 +41423,25 @@ async function coachHomeV2(){
       </div>
     </div>
     <div class="admh-div"></div>
-    <div id="admh-sentinel"></div>
-    ${/* 教練篩選列拿掉（使用者：只要顯示該教練自己的課卡就好），只留日期列 */''}
-    <div class="admh-sticky">
-      <div class="admh-week">
-        <button class="admh-wknav" onclick="coachWeekShift(-1)">‹</button>
-        <div class="admh-wkdays">${_wkBtns}</div>
-        <button class="admh-wknav" onclick="coachWeekShift(1)">›</button>
+    ${/* 教練篩選列拿掉（使用者：只要顯示該教練自己的課卡就好）；
+         日期列改成左側直欄，與課卡並排（2026-08-22，同管理員手機首頁） */''}
+    <div class="admh2-body">
+      <div class="admh2-rail">
+        <span class="a2-arw a2-arw-up" onclick="coachWeekShift(-1)"></span>
+        <div class="a2-railin">${_a2Rail}</div>
+        <span class="a2-arw a2-arw-dn" onclick="coachWeekShift(1)"></span>
       </div>
+      <div class="admh2-cards">${_cards}</div>
     </div>
-    ${/* 日期列與課卡之間一條分隔線（2026-08-21 使用者指示）——
-         兩區都是淺色卡片，沒有界線時捲動起來會分不出「上面是選日、下面是內容」 */''}
-    <div class="admh-div chv2-div2"></div>
-    <div class="admh-cards">${_cards}</div>
     ${scoreCard}
   </div>`;
   /* 下拉更新（2026-08-21 使用者：「下拉會有更新頁面的功能 不要讓頂列一起被拉動」）——
      管理員手機首頁早就有一支自製的 admPtrInit，它的做法就是「頂欄不動、只在內容上方
      露出轉圈」。直接沿用，不要靠瀏覽器原生的整頁回彈（那一定會把頂欄一起拉走）。 */
   try{ if(typeof admPtrInit==='function') admPtrInit(); }catch(_){}
-  /* 貼頂偵測：與管理員手機首頁同一套（sentinel 捲出畫面＝日期列貼頂） */
-  setTimeout(()=>{ try{
-    const st=document.querySelector('.admh-sticky'), sen=document.getElementById('admh-sentinel');
-    if(!st||!sen||!window.IntersectionObserver) return;
-    const tb=document.querySelector('.topbar-fixed');
-    const th=Math.round((tb&&tb.getBoundingClientRect().height)||54);
-    st.style.top=th+'px';
-    new IntersectionObserver(es=>{ st.classList.toggle('stuck', !es[0].isIntersecting); },
-      {threshold:0, rootMargin:`-${th}px 0px 0px 0px`}).observe(sen);
-  }catch(_){} },0);
+  /* 雙欄掛載（高度、上下拖曳換週）沿用管理員手機首頁那一支；換週函式用教練自己的
+     coachWeekShift（貼頂偵測那一段不再需要：日期列已經不是 sticky，它就在左邊不動）。 */
+  setTimeout(()=>{ try{ admh2Mount(coachWeekShift); }catch(_){} },0);
 }
 PAGES.coach_notifications=async function(){
   const today=ymd(TODAY); const month=today.slice(0,7);
