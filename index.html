@@ -8567,9 +8567,14 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .admh2-card .a2-side{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;
   align-self:stretch;gap:6px;white-space:nowrap;min-width:0;}
 .admh2-card .a2-time{font-family:var(--num);font-size:13.5px;font-weight:700;}
-.admh2-card .a2-coach{font-size:10.5px;color:var(--t2);display:block;max-width:88px;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;}
-.admh2-card .a2-coach .admh-lvtag{margin-right:4px;}
+/* 教練請假標與教練名改成上下兩行、都靠右（2026-08-22 使用者：「[教練請假] 這個會壓縮掉
+   教練的名稱 是不是應該讓這個請假標籤跟教練名稱靠下靠右顯示 就不會被壓縮了」）——
+   同一行時兩者共用 88px 的封頂，標籤先吃掉一半，名字只剩幾個字；改成各佔一行，
+   兩行都靠右，名字就拿得到完整寬度。整欄仍然封頂（96px），不會回頭去擠中間三列。 */
+.admh2-card .a2-coach{font-size:10.5px;color:var(--t2);max-width:96px;
+  display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right;}
+.admh2-card .a2-coach>span,.admh2-card .a2-coach{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.admh2-card .a2-coach .admh-lvtag{margin:0;max-width:100%;}
 /* 很窄的機型（≤380）再讓課程那一列縮一級字，先縮字再截斷 */
 @media(max-width:380px){ .admh2-card .a2-l1{font-size:11px;} }
 /* 出席章沿用單欄版那三顆的配色（.admh-stamp），只把位置改成獨立一欄 */
@@ -8899,8 +8904,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1232';
-const APP_VERSION_LABEL='v260822.1232';
+const APP_VERSION = '260822.1248';
+const APP_VERSION_LABEL='v260822.1248';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16088,7 +16093,7 @@ PAGES.g_dashboard=async function(){
         </div>
         <div class="a2-side">
           <span class="a2-time">${b.start_time}</span>
-          <span class="a2-coach">${_lvTag}${_cnm||''}</span>
+          <span class="a2-coach">${_lvTag}${_cnm?`<span class="a2-cnm">${_cnm}</span>`:''}</span>
         </div>
       </div>`;
       return `<div class="admh-card${done?' admh-done':''}" style="--admh-c:${col};" onclick="admhCardTap(event,'${b.id}')">
@@ -17890,18 +17895,28 @@ function calCoachChips(coaches, filterCoach){
 // 課程 Filter Chips：讀集中設定 CALENDAR_COURSE_FILTERS。
 // 2026-07-19 使用者指示：移除形狀 glyph、加回課程色（淡底＋accent 字，與課卡同源；選中=accent 實色白字）
 /* 課卡字體試調工具已拆除（2026-07-22 定案：思源黑體＋110%，寫死於 CSS .evc-* 規則） */
-/* 2026-07-28 使用者指示：課種 chips 改「開關」邏輯——預設全開，點一下＝關掉該課種（半透明），
-   再點＝恢復；「全部」＝全部打開。 */
+/* 課種 chips 的邏輯（2026-08-22 使用者指示：「這邊的邏輯統一改成跟教練篩選一樣，
+   課程點選哪一種 就只顯示哪一種」）——
+   從「多選開關」（0728：預設全開、點一下關掉那一種）改成「單選」，與上面那排教練 chips
+   同一套心智模型：點一種＝只看那一種，再點同一顆或按「全部」＝回到全部。
+   ⚠ 舊的 window._calCourseOff（一組被關掉的課種）不再使用，改成 window._calCourse
+     存「目前只看哪一種」；兩者語意相反，別把舊變數留著兩邊各判一次。 */
 function calCourseChips(){
-  const off=window._calCourseOff||{};
-  const anyOff=CALENDAR_COURSE_FILTERS.some(f=>off[f.cls]);
-  let html = `<button class="cal-chip ${!anyOff?'on':''}" onclick="calCourseAll()">全部</button>`;
-  html += CALENDAR_COURSE_FILTERS.map(f=>`<button class="cal-chip cal-chip-course ${f.cls} ${off[f.cls]?'':'on'}" style="${off[f.cls]?'opacity:.35;filter:grayscale(.5);':''}" title="${off[f.cls]?'點擊顯示':'點擊隱藏'}" onclick="calSetCourse('${f.cls}')">${f.label}</button>`).join('');
+  const sel=window._calCourse||'all';
+  let html = `<button class="cal-chip ${sel==='all'?'on':''}" onclick="calSetCourse('all')">全部</button>`;
+  html += CALENDAR_COURSE_FILTERS.map(f=>{
+    const on = sel===f.cls;
+    return `<button class="cal-chip cal-chip-course ${f.cls} ${on?'on':''}" style="${(sel!=='all'&&!on)?'opacity:.42;filter:grayscale(.45);':''}" title="${on?'再點一次看全部':'只看'+f.label}" onclick="calSetCourse('${f.cls}')">${f.label}</button>`;
+  }).join('');
   return html;
 }
-function calCourseAll(){ window._calCourseOff={}; navTo(CUR_PAGE); }
+function calCourseAll(){ window._calCourse='all'; navTo(CUR_PAGE); }   /* 舊呼叫端相容 */
 function calSetCoach(id){ window._calFilter = (id==='all'?undefined:id); navTo(CUR_PAGE); }
-function calSetCourse(cls){ const o=window._calCourseOff=window._calCourseOff||{}; o[cls]=!o[cls]; navTo(CUR_PAGE); }
+/* 單選：點同一顆＝取消（回到全部），與教練 chips 的手感一致（那排點「全部」也是回到全部） */
+function calSetCourse(cls){
+  window._calCourse = (!cls || cls==='all' || window._calCourse===cls) ? 'all' : cls;
+  navTo(CUR_PAGE);
+}
 
 /* 課卡右上角徽章（2026-07-29 使用者定案，四態）：
    已續約 → 綠勾｜不續約 → 紅叉｜待續約／待分期繳費 → 紅字驚嘆（課卡同時反紅） */
@@ -18155,7 +18170,9 @@ async function renderCalendar(opts){
     // 有代課要算代課教練（2026-07-31 使用者回報：小曾代的那堂篩不出來）
     if(opts.coachFilter && filterCoach!=='all' && bkCoachId(b)!==filterCoach) return false;
     // 課程 Filter Chip（2026-07-28 開關制）：被關掉的課種隱藏
-    if(window._calCourseOff && window._calCourseOff[evColorClass(b,typeMap,b.ticket_id?ticketMap[b.ticket_id]:null)]) return false;
+    /* 課種單選（2026-08-22）：選了某一種就只留那一種；'all' 不過濾 */
+    if(window._calCourse && window._calCourse!=='all'
+       && evColorClass(b,typeMap,b.ticket_id?ticketMap[b.ticket_id]:null)!==window._calCourse) return false;
     return true;
   }));
 
@@ -18438,7 +18455,7 @@ async function renderCalendar(opts){
       /* 教練請假整堂取消的團課：課卡保留但暗化（2026-08-17 保留、2026-08-22 改用語意明確的
          class）—— 與「過期」共用同一組數值，但它不是過期，掛 cal-ev-past 會讓之後看程式的人
          誤以為是日期判斷的結果。 */
-      const _pastCls = bkShowsCancelled(b) ? 'cal-ev-dark'
+      const _pastCls = bkDarkNoTicket(b) ? 'cal-ev-dark'
         : !_isPastCard ? '' : (_settled ? 'cal-ev-past' : 'cal-ev-todo');
       // hover 跟游標提示內容（2026-07-25 使用者指示）：時間 / 會員（團課逐人分行）/ 教練；白底黑字浮框由 initCalCursorTip 顯示
       const _tipEsc = s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
@@ -21219,7 +21236,7 @@ async function renderCoachAgenda(){
     /* 教練請假整堂取消的團課：0817 是跟遮蔽卡共用 .dim（opacity .4＝透明化），
        2026-08-22 使用者定義「暗化＝沒有有效票券」，改用 .cal-ev-dark（壓亮度、字不糊）。
        .dim 留給「教練看別人的課」那種遮蔽卡 —— 那是看不到內容，不是沒有票。 */
-    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${bkShowsCancelled(b)?' cal-ev-dark':''}${canClick?'':' cag-view'}${_mkAlert}" ${canClick?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:''}>
+    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${bkDarkNoTicket(b)?' cal-ev-dark':''}${canClick?'':' cag-view'}${_mkAlert}" ${canClick?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:''}>
       ${_mk}
       ${(()=>{const k=bkStampKind(b);
         return k==='leave'?'<span class="evc-check evc-leave" title="全員請假">假</span>'
@@ -24958,6 +24975,20 @@ function bkIsCoachLeave(b){ return !!b && (b.status==='coach_leave' || b.coach_l
    純顯示旗標，不動 status／票券／效期 —— 退回的堂數與延長的效期是教練請假的補償，
    本來就不該因為「卡片不想看到了」而收回。 */
 function bkShowsCancelled(b){ return !!b && b.status==='cancelled' && b.coach_leave===true && bkIsGroup(b) && !b.card_hidden; }
+/* 這一堂要不要暗化＝它還會不會產生扣課（2026-08-22 使用者定義「暗化＝沒有有效票券」）——
+   這支只判「團課因請假整堂不會發生」那一種；過期與待付款各自有既有判斷（cal-ev-past／cal-ev-pend）。
+   收三種：①團課＋教練請假＋已取消（bkShowsCancelled）②團課＋教練請假但還沒轉成取消
+   ③團課全員請假（0/N 人，沒有人會來）。
+   ⚠ 1v1 的教練請假**不算**：那堂會變成自主訓練，會員照樣可以自己來練（0817 定的規則），
+     票也還在，暗化會讓櫃檯以為這堂不用管。 */
+function bkDarkNoTicket(b){
+  if(!b) return false;
+  if(bkShowsCancelled(b)) return true;
+  if(typeof bkIsGroup!=='function' || !bkIsGroup(b)) return false;
+  if(typeof bkIsCoachLeave==='function' && bkIsCoachLeave(b)) return true;
+  if(typeof grpAllOnLeave==='function' && grpAllOnLeave(b)) return true;
+  return false;
+}
 /* 按下去會發生什麼 —— 兩種做法的結果不一樣，按鈕上要照實寫（2026-08-08） */
 function bkCoachLeaveSub(b){ return bkCoachLeaveMode(b)==='cancel'
   ? '整堂取消・退票・效期＋7 天' : '退票・效期＋7 天・改成自主訓練'; }

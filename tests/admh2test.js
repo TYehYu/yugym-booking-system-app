@@ -113,10 +113,14 @@ ok('★★ ⚠ 別在 .a2-side 寫 max-width:34% —— 它是 grid item，百�
    +'欄寬又由內容決定，等於自己乘自己，整欄會塌成 13px（時間與教練被擠到卡片中間）',
    !/\.admh2-card \.a2-side\{[^}]*max-width:34%/.test(src)
    && /百分比是對「那一欄的寬度」算的/.test(src));
-ok('★ 改成把「教練名」那一行封頂（88px），欄寬自然跟著封頂',
-   /\.admh2-card \.a2-coach\{font-size:10\.5px;color:var\(--t2\);display:block;max-width:88px;/.test(src));
-ok('★ 右上時間、右下教練名（請假標貼著教練名）',
-   /<span class="a2-time">\$\{b\.start_time\}<\/span>\s*\n\s*<span class="a2-coach">\$\{_lvTag\}\$\{_cnm\|\|''\}<\/span>/.test(src)
+ok('★★ 請假標與教練名改成上下兩行、都靠右（使用者：「[教練請假] 這個會壓縮掉教練的名稱」）'
+   +' —— 同一行時兩者共用封頂，標籤先吃掉一半，名字只剩幾個字',
+   /\.admh2-card \.a2-coach\{font-size:10\.5px;color:var\(--t2\);max-width:96px;\s*\n\s*display:flex;flex-direction:column;align-items:flex-end;/.test(src)
+   && /標籤先吃掉一半，名字只剩幾個字；改成各佔一行/.test(src));
+ok('　　整欄仍然封頂（96px），不會回頭去擠中間三列',
+   /整欄仍然封頂（96px），不會回頭去擠中間三列/.test(src));
+ok('★ 右上時間、右下教練名（請假標與教練名各佔一行、都靠右）',
+   /<span class="a2-time">\$\{b\.start_time\}<\/span>\s*\n\s*<span class="a2-coach">\$\{_lvTag\}\$\{_cnm\?`<span class="a2-cnm">\$\{_cnm\}<\/span>`:''\}<\/span>/.test(src)
    && /\.admh2-card \.a2-side\{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;/.test(src));
 ok('　　窄欄放不下就截斷，不要把卡撐爆',
    /\.admh2-card \.a2-l1\{[^}]*text-overflow:ellipsis;\}/.test(src)

@@ -39,10 +39,20 @@ ok('renderCoachAgenda ＋新增時段不被取消卡佔住',
   src.includes("allBk.filter(b=>b.date===selDate && b.status!=='cancelled')"));
 /* 0822 使用者定義「暗化＝這張課卡沒有有效票券」（過期／未付款／教練請假整堂取消的團課），
    三者共用同一組數值；教練請假這條改掛語意明確的 cal-ev-dark，不再借用 cal-ev-past。 */
-ok('桌機課卡：保留的取消卡走 cal-ev-dark 暗化（不再借用 cal-ev-past）',
-  src.includes("bkShowsCancelled(b) ? 'cal-ev-dark'"));
+/* 0822 使用者回報「今天這張請假的團課課卡 怎麼沒有暗化」：原本只判 bkShowsCancelled
+   （團課＋教練請假＋**已取消**），還沒轉成取消的、以及全員請假的（0/N 人）都漏掉。
+   抽成 bkDarkNoTicket 統一判「這堂還會不會產生扣課」。 */
+ok('桌機課卡：走 bkDarkNoTicket → cal-ev-dark 暗化（不再借用 cal-ev-past）',
+  src.includes("bkDarkNoTicket(b) ? 'cal-ev-dark'"));
+ok('★★ 三種都算：已取消的／還沒轉取消的／全員請假的團課',
+  /if\(bkShowsCancelled\(b\)\) return true;/.test(src)
+  && /if\(typeof bkIsCoachLeave==='function' && bkIsCoachLeave\(b\)\) return true;/.test(src)
+  && /if\(typeof grpAllOnLeave==='function' && grpAllOnLeave\(b\)\) return true;/.test(src));
+ok('★★ ⚠ 1v1 的教練請假不算 —— 那堂會變成自主訓練，會員照樣可以自己來練（0817 規則）',
+  /if\(typeof bkIsGroup!=='function' \|\| !bkIsGroup\(b\)\) return false;/.test(src)
+  && /暗化會讓櫃檯以為這堂不用管/.test(src));
 ok('★★ 手機課卡：從 .dim（opacity .4＝透明化）改成 .cal-ev-dark（暗化）',
-  src.includes("${dim?' dim':''}${bkShowsCancelled(b)?' cal-ev-dark':''}")
+  src.includes("${dim?' dim':''}${bkDarkNoTicket(b)?' cal-ev-dark':''}")
   && src.includes('.dim 留給「教練看別人的課」那種遮蔽卡'));
 ok('★ 三種情況同一組數值（過期／教練請假團課共用一條規則）',
   /\.cal-ev\.cal-ev-past,\s*\n\.cal-ev\.cal-ev-dark\{opacity:1;filter:brightness\(0\.9\) saturate\(0\.72\);/.test(src)
