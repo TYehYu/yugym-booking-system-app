@@ -21,8 +21,11 @@ ok('★★ 標籤要另開一層蓋在課卡之上 —— 背景層是 z-index:0
 ok('★ pointer-events:none：文字蓋在課卡上，點擊照樣落在下面的格子／課卡',
    /\.amcv-toplayer\{[^}]*pointer-events:none/.test(src)
    && /點擊照樣落在下面的格子／課卡上/.test(src));
-ok('　　線上的文字墊半透明白底才讀得清楚',
-   /\.amcv-toplayer \.cag-gline-label\{opacity:1;background:rgba\(255,255,255,\.86\);/.test(src));
+ok('★★ 線上的文字不能有底色（使用者：「週四有安排的課程都會被白色遮住」）——'
+   +'標籤釘在整條線正中央，剛好落在第四欄上，有底色就是一塊擋板；改用白色描邊撐可讀性',
+   /\.amcv-toplayer \.cag-gline-label\{opacity:1;background:transparent;padding:0;/.test(src)
+   && /text-shadow:0 0 3px #fff,0 0 3px #fff,1px 1px 0 #fff/.test(src)
+   && /但不佔任何面積，\s*\n?\s*底下的課卡照樣看得到/.test(src));
 
 console.log('\n桌機七日維持原狀（使用者更正：「桌機幫我恢復」）');
 ok('★★ 桌機那一版整組退場：.cal-timecol 仍是左邊 42px 的 sticky 欄位',

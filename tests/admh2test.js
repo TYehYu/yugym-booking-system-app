@@ -109,6 +109,12 @@ ok('★ 中間三列：課程・場地／會員姓名（粗體）／第幾張票
    && /<div class="a2-l2">\$\{mname\}<\/div>/.test(src)
    && /<div class="a2-l3">\$\{_tkTxt\?'票券 '\+_tkTxt:''\}<\/div>/.test(src)
    && /\.admh2-card \.a2-l2\{font-size:15px;font-weight:800;/.test(src));
+ok('★★ ⚠ 別在 .a2-side 寫 max-width:34% —— 它是 grid item，百分比是對「那一欄」算的，'
+   +'欄寬又由內容決定，等於自己乘自己，整欄會塌成 13px（時間與教練被擠到卡片中間）',
+   !/\.admh2-card \.a2-side\{[^}]*max-width:34%/.test(src)
+   && /百分比是對「那一欄的寬度」算的/.test(src));
+ok('★ 改成把「教練名」那一行封頂（88px），欄寬自然跟著封頂',
+   /\.admh2-card \.a2-coach\{font-size:10\.5px;color:var\(--t2\);display:block;max-width:88px;/.test(src));
 ok('★ 右上時間、右下教練名（請假標貼著教練名）',
    /<span class="a2-time">\$\{b\.start_time\}<\/span>\s*\n\s*<span class="a2-coach">\$\{_lvTag\}\$\{_cnm\|\|''\}<\/span>/.test(src)
    && /\.admh2-card \.a2-side\{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;/.test(src));
