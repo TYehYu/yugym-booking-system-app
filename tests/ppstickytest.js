@@ -15,6 +15,13 @@ ok('★★ ⚠ 中間那層 #pp-host 也要是 flex 容器並帶 min-height:0，
    && /flex 子項的預設 min-height:auto 會被內容撐開，捲軸就跑回最外層/.test(src));
 ok('★ 表頭與分頁列不跟著捲',
    /\.pp-sheet #pp-host>\.pp-head,\.pp-sheet #pp-host>\.pp-rectabs,\.pp-sheet #pp-host>\.pp-tabs\{flex:0 0 auto;\}/.test(src));
+/* 2026-08-22 二修（使用者：「會員資料的這一列獨立出來凍結 不要跟著下方頁面滑動」）——
+   上一輪只固定住表頭，四顆分頁鈕還是跟著捲，因為它是 ppRecordHtml 產出、塞在 #pp-body 裡面。 */
+ok('★★ 四顆分頁鈕要搬出 #pp-body 才吃得到「不跟著捲」那條規則',
+   /const tabsEl=bodyEl&&bodyEl\.querySelector\(':scope > \.pp-rectabs'\);/.test(src)
+   && /if\(tabsEl\) host\.insertBefore\(tabsEl, bodyEl\);/.test(src));
+ok('　　選擇在 DOM 上搬，而不是改 ppRecordHtml 的回傳結構（那支四個分頁與員工頁共用）',
+   /在 DOM 上搬、而不是改 ppRecordHtml 的回傳結構/.test(src));
 ok('★ 三種模式統一：手機全頁、管理員手機視窗、桌機視窗都吃同一套',
    /\.pp-sheet\.pp-sheet-desk \.pp-root\{[\s\S]{0,240}?overflow:hidden;\s*\n\s*height:calc\(100vh - 48px\);/.test(src)
    && /\.pp-sheet\.pp-sheet-win \.pp-root\{[\s\S]{0,240}?overflow:hidden;\s*\n\s*height:calc\(100dvh - 24px\);/.test(src));
