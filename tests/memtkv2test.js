@@ -65,10 +65,7 @@ t('V2 的清單吃「這個分頁的票」，不再固定排除自主訓練與�
 t('自主訓練／折扣券的獨立入口在 V2 收起（改由分頁承接）',
   /\(mtkV2\?tabRow:`<div class="mtk-entry-row">/.test(s));
 
-// ── 底部導覽（同批修的 iOS 問題）──
-t('綠底導覽關掉 backdrop-filter 並自成合成層（iOS 慣性捲動會把它留在舊位置）',
-  /body\.memh2-shell \.bottom-nav\{[^}]*backdrop-filter:none;-webkit-backdrop-filter:none;transform:translateZ\(0\)/.test(s.replace(/\n/g,''))
-  && /body\.chv2-shell \.bottom-nav\{[^}]*backdrop-filter:none/.test(s.replace(/\n/g,'')));
+/* 底部導覽的 iOS 問題改成全域處理了，斷言移到 tests/navfixedtest.js */
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
