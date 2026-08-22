@@ -210,9 +210,10 @@ ok('　　成因寫在程式裡（canCoachLeave 本身沒有日期條件）',
    不然建立預約以後都不能刪除了」。第一次我只補團課（單人課本來就有紅色圓鈕），
    但使用者要的是「課程層級的動作都在這張清單裡找得到」—— 找不到就等於沒有。 */
 console.log('\n兩種課別都要有取消（使用者要求兩次）');
-ok('★ 不再只給團課（0822 起也給「教練＋自己的課」）',
-   /if\(\(A\.staff\|\|A\.own\) && A\.canCancel && !A\.closed\)/.test(src)
-   && !/if\(A\.isGroup && A\.staff && A\.canCancel && !A\.closed\)/.test(src));
+/* 0822 同日再修：單人課給「教練＋自己的課」，團課的整堂取消收回櫃檯以上 */
+ok('★ 單人課給「教練＋自己的課」，團課整堂取消只給櫃檯以上',
+   /const _canDelBk = A\.canCancel && !A\.closed && \(A\.staff \|\| \(A\.own && !A\.isGroup\)\);/.test(src)
+   && /整堂取消請洽櫃檯/.test(src));
 /* 2026-08-21 三修（使用者：「還是統一改成刪除課卡 比較直覺」） */
 ok('★ 統一叫「刪除預約」（使用者正式定名），範圍寫在副標',
    /rows\+=row\(`collapseBkCard\(\);confirmCancelBooking\('\$\{b\.id\}'\)`,'刪除預約',/.test(src)
@@ -430,7 +431,7 @@ ok('★ 卡片瘦身讓 5 張塞得下（內距 11→9、名單間距 8→7、�
 
 console.log('\n非團課的簽到／取消擺回下方（使用者指示）');
 ok('★ 單人課走下方那一排，團課仍逐名額掛在自己那一列',
-   /if\(\(!_ashMode \|\| !isGroup\) && canCancel && own\)\{/.test(src)
+   /if\(\(!_ashMode \|\| !isGroup\) && canCancel && \(isGroup \? staff : own\)\)\{/.test(src)
    && /if\(\(!_ashMode \|\| !isGroup\) && !_calCtx && \(staff\|\|coachCk\) && !closed\)\{/.test(src));
 ok('★ 會員卡右側不再重複畫同一組按鈕（只留團課的舊資料分支）',
    /\}else if\(A\.isGroup\)\{/.test(src)

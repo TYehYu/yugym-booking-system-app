@@ -193,7 +193,9 @@ const exp=g('async function expandBkCard(el, id){','async function bkCardPopClos
 ok('★ 代課改由課程卡的教練名負責（下方不再產生）', exp.includes('if(!_ashMode && staff && !closed && b.date>=ymd(TODAY)'));
 /* 0821 使用者指示收回一半：只有團課的取消／簽到留在會員卡上（每個名額要各自操作），
    單人課只有一張卡，為了兩顆圓鈕把卡撐到 100px 高不划算 → 擺回下方那一排。 */
-ok('★ 團課的取消由會員卡負責，單人課回到下方那一排', exp.includes('if((!_ashMode || !isGroup) && canCancel && own){'));
+/* 2026-08-22：團課的整堂取消收成櫃檯以上，單人課仍看 own */
+ok('★ 團課的取消由會員卡負責，單人課回到下方那一排',
+   exp.includes('if((!_ashMode || !isGroup) && canCancel && (isGroup ? staff : own)){'));
 ok('★ 簽到同一條規則', exp.includes('if((!_ashMode || !isGroup) && !_calCtx && (staff||coachCk) && !closed){'));
 ok('★ 明細鈕撤掉（簡易課卡已涵蓋這些操作）', /2026-08-20 使用者指示：管理員手機的簡易課卡已經涵蓋這些操作，明細鈕撤掉。 \*\/\s*\n\s*if\(!_ashMode\) btns \+=/.test(exp));
 ok('　　新增仍在下方（沒被搬走）', exp.includes("evoBtn('evo-b2','evo-gold',`collapseBkCard();openGroupMembers('${id}')`,'plus','新增')"));

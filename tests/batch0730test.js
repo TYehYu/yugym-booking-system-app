@@ -24,7 +24,8 @@ ok('★ 只能動自己的課卡：own＝主責或代課是自己（店長除外
    所以這兩行多了 !_ashMode 的前置守衛（見 acctfortunetest.js）；own／coachCk 的口徑本身沒變。 */
 /* 2026-08-21：非團課的取消／簽到擺回下方那一排，條件多了 || !isGroup —— own 判定不變 */
 ok('★ 「取消」補上 own 判定（原本只看 canCancel，教練點別人的課也能取消）',
-   /if\(\(!_ashMode \|\| !isGroup\) && canCancel && own\)\{/.test(src));
+   /* 0822：團課改看 staff（整班解散只給櫃檯以上），單人課仍看 own */
+   /if\(\(!_ashMode \|\| !isGroup\) && canCancel && \(isGroup \? staff : own\)\)\{/.test(src));
 ok('★ 簽到開放給教練自己的課（口徑同 openBookingDetail 的 staffCanCheckin）',   // 2026-08-19 行事曆情境加 !_calCtx（行事曆圓鈕無簽到）
    /const coachCk = SESSION\.role==='coach' && own;/.test(src)
    && /if\(\(!_ashMode \|\| !isGroup\) && !_calCtx && \(staff\|\|coachCk\) && !closed\)\{/.test(src));
@@ -38,7 +39,8 @@ ok('　　團課名單管理仍只給櫃檯／管理員，且過期不給',
 ok('★★ 教練可以調整自己的課（含 24 小時內）—— own 只多開「教練＋自己的課」這一格',
    /const _editable = \(staff \|\| own\) && !closed/.test(src)
    && /別人的課仍然動不了（0730 補的那個破口不變）/.test(src)
-   && /if\(\(A\.staff\|\|A\.own\) && A\.canCancel && !A\.closed\)/.test(src));
+   /* 0822：刪除預約抽成 _canDelBk，團課排除 own */
+   && /const _canDelBk = A\.canCancel && !A\.closed && \(A\.staff \|\| \(A\.own && !A\.isGroup\)\);/.test(src));
 ok('　　整頁不鎖死（_coachReadonly 維持 false），逐張卡判權限',
    /教練仍要能操作「自己的」課（簽到／取消／備註），逐張卡的權限由 own 判定/.test(src));
 ok('　　手機端維持 agenda，不把桌機週曆塞進小螢幕', /手機端維持原本的 agenda（MOBILE_COACH_NAV）/.test(src));

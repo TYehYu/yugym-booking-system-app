@@ -7122,6 +7122,12 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
   border-radius:18px;padding:14px 16px;margin-bottom:9px;cursor:pointer;
   box-shadow:0 6px 18px rgba(30,25,15,.13);}
 .ash-eirow:active{transform:scale(.99);}
+/* 不可操作的說明列（2026-08-22）：告訴使用者「這件事這裡做不到、該去哪裡做」，
+   而不是把按鈕整個藏起來讓人以為系統壞了。看起來就不像按鈕，也按不動。 */
+.ash-eirow.ash-ei-off{background:var(--card2);box-shadow:none;cursor:default;
+  border:1px dashed var(--bd);}
+.ash-eirow.ash-ei-off:active{transform:none;}
+.ash-eirow.ash-ei-off .ash-eilb{font-size:14px;color:var(--t2);}
 .ash-eilb{font-size:16px;font-weight:800;color:var(--text);}
 /* 代課教練清單：整列吃該教練的顏色（2026-08-21 使用者指示） */
 .ash-eirow.ash-ei-co .ash-eilb{color:var(--ash-co-fg,var(--text));}
@@ -9361,8 +9367,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.2232';
-const APP_VERSION_LABEL='v260822.2232';
+const APP_VERSION = '260822.2250';
+const APP_VERSION_LABEL='v260822.2250';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20604,10 +20610,20 @@ async function ashEditAsk(id){
      先前一版寫「刪除課卡」），範圍寫在副標。
      （會員卡上那顆紅色圓鈕仍叫「取消」—— 它的範圍是「這個人／這個名額」，
       跟整張課卡不是同一件事，同名反而會讓人以為按哪個都一樣。） */
-  if((A.staff||A.own) && A.canCancel && !A.closed)
+  /* 團課的「刪除預約」只給櫃檯以上（2026-08-22 使用者定案）——
+     這一按是「整班解散」：名單上每個名額都會退課。0822 稍早我照「教練端要可以調整
+     自己的課卡 包含取消」把 A.own 也放進來，當時只想到單人課，團課跟著被開放了。
+     教練要處理自己來不了的團課，正確的工具是「教練請假」（會退課＋發補課券＋留紀錄），
+     不是把整班刪掉。單人課不變，教練照樣刪得掉自己的。 */
+  const _canDelBk = A.canCancel && !A.closed && (A.staff || (A.own && !A.isGroup));
+  if(_canDelBk)
     rows+=row(`collapseBkCard();confirmCancelBooking('${b.id}')`,'刪除預約',
       A.isGroup?`整堂取消、名單上的 ${mids(b).length} 個名額一起退`
                :'下一步可以選擇退回票券或扣課不退','ash-ei-danger');
+  /* 教練看自己的團課時，把「為什麼沒有刪除」與「該用什麼」講清楚 —— 找不到按鈕又沒有
+     說明，下一步就是打電話問櫃檯。 */
+  else if(A.isGroup && A.own && A.canCancel && !A.closed)
+    rows+=row('return false;','整堂取消請洽櫃檯','教練請假會退課並發補課券；整班取消由櫃檯處理','ash-ei-off');
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">調整課程</div>
     <div class="ash-eihead">${(typeof bookingTypeName==='function')?bookingTypeName(b,window._ttMapCache||window._memTypeMap):(b.category||'課程')}　·　${String(b.date).replace(/-/g,'/')} ${String(b.start_time).slice(0,5)}</div>
     ${rows||'<div class="ash-einote">這堂目前沒有可以調整的項目。</div>'}
@@ -24878,7 +24894,8 @@ async function expandBkCard(el, id){
      單人課只有一張會員卡，右邊掛兩顆圓鈕等於為了兩顆按鈕把卡撐到 100px 高；
      移到下方之後會員卡可以貼著內容縮短，整張面板也跟著矮一截。
      團課維持逐名額掛在自己那一列（每個名額要各自簽到／取消，不能共用一組）。 */
-  if((!_ashMode || !isGroup) && canCancel && own){
+  /* 團課整堂取消只給櫃檯以上（2026-08-22 使用者定案，見 ashEditAsk 的說明） */
+  if((!_ashMode || !isGroup) && canCancel && (isGroup ? staff : own)){
     /* 2026-07-29：直接開「取消預約」視窗——那裡才有 24 小時警示與「退回票券／扣課不退」
        的明確選擇（使用者定案的取消政策）。 */
     btns += evoBtn('evo-r1','evo-danger',`collapseBkCard();confirmCancelBooking('${id}')`,'x','取消');
@@ -25094,7 +25111,8 @@ async function bkCardPop(el, b, btns, acts){
         }else if(A.isGroup){
           /* 沒有名額鍵、但仍是團課（舊資料只有 member_id 的那種）—— 保留原本的右側圓鈕。
              一般單人課走下方那一排（2026-08-21），這裡不再重複畫。 */
-          if(A.canCancel && A.own) _outOrbs += evoBtn('','evo-danger',`collapseBkCard();confirmCancelBooking('${b.id}')`,'x','取消');
+          /* 同上：團課整堂取消只給櫃檯以上（2026-08-22） */
+          if(A.canCancel && A.staff) _outOrbs += evoBtn('','evo-danger',`collapseBkCard();confirmCancelBooking('${b.id}')`,'x','取消');
           if(_ck && !A.calCtx && !A.closed) _outOrbs += A.checked
             ? evoBtn('','',`bkOrbitUndo(this,'${b.id}')`,'undo','取消簽到')
             : evoBtn('','evo-primary',`collapseBkCard();checkInBooking('${b.id}')`,'check','簽到');
