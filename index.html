@@ -8661,8 +8661,11 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 /* 橫向版的箭頭（日期列兩端；2026-08-22）——與首頁直欄那組同一支 .a2-arw，只是換方向 */
 .a2-arw-l{border-left:0;border-right:6px solid var(--t3);border-top:5px solid transparent;border-bottom:5px solid transparent;margin:0 4px;}
 .a2-arw-r{border-right:0;border-left:6px solid var(--t3);border-top:5px solid transparent;border-bottom:5px solid transparent;margin:0 4px;}
-.mcal-head.hwk-armprev .a2-arw-l{opacity:1;transform:scale(1.35);border-right-color:var(--green);}
-.mcal-head.hwk-armnext .a2-arw-r{opacity:1;transform:scale(1.35);border-left-color:var(--green);}
+.hwk-armprev .a2-arw-l{opacity:1;transform:scale(1.35);border-right-color:var(--green);}
+.hwk-armnext .a2-arw-r{opacity:1;transform:scale(1.35);border-left-color:var(--green);}
+/* 行事曆表頭那一列：箭頭與日期同一排，拖曳時位移不要溢出去 */
+.admh-week{overflow:hidden;}
+.admh-wkdays{will-change:transform;}
 .hwk-wrap{overflow:hidden;}
 .admh2-rail.a2-armprev .a2-arw-up{opacity:1;transform:scale(1.35);border-bottom-color:var(--green);}
 .admh2-rail.a2-armnext .a2-arw-dn{opacity:1;transform:scale(1.35);border-top-color:var(--green);}
@@ -9054,8 +9057,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1736';
-const APP_VERSION_LABEL='v260822.1736';
+const APP_VERSION = '260822.1748';
+const APP_VERSION_LABEL='v260822.1748';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -41052,9 +41055,12 @@ function heroWeekDragInit(){
     setTimeout(()=>{ r.style.transition=''; },200); };
   document.addEventListener('touchstart',e=>{
     const t=e.target;
-    row=(t && t.closest) ? t.closest('.msb-dates[data-shift]') : null;
+    /* 兩種日期列都吃：heroWeekBarHTML 的 .msb-dates、行事曆表頭自組的 .admh-wkdays */
+    row=(t && t.closest) ? t.closest('.msb-dates[data-shift],.admh-wkdays[data-shift]') : null;
     if(!row) return;
-    head=row.parentElement&&row.parentElement.previousElementSibling;
+    /* 箭頭所在的那一層：行事曆表頭是同一個 .admh-week 裡的兄弟，
+       heroWeekBarHTML 則是包在 .hwk-wrap 外面的 .mcal-head */
+    head=row.closest('.admh-week') || (row.parentElement&&row.parentElement.previousElementSibling);
     x0=e.touches[0].clientX; fired=false; clearArm(); row.style.transition='';
   },{passive:true});
   document.addEventListener('touchmove',e=>{
@@ -41368,12 +41374,16 @@ async function admCalHeaderHTML(){
   const nD=(Number(window._admCalDays)||1)===1?1:7;   /* 三日退場（2026-08-19 使用者指示） */
   const seg=[1,7].map(n=>`<button class="admh-chip${nD===n?' on':''}" onclick="admCalMode(${n})">${n===1?'一日':'一週'}</button>`).join('');
   const todayBtn=(sel!==today)?`<button class="admh-todaybk" onclick="admCalPick('${today}')">Today</button>`:'';
+  /* 這一列是行事曆自己組的（不走 heroWeekBarHTML），所以拖曳換週要在這裡也掛一次
+     （2026-08-22 使用者回報「這個日期列沒有更新到拖曳換週，管理員版跟教練版都沒有」——
+     我上一版只改到 heroWeekBarHTML 那三處，行事曆表頭是另一份 markup）。 */
+  try{ heroWeekDragInit(); }catch(_){}
   return `<div class="admh" style="margin:0 0 8px;">
     ${todayBtn}
     <div class="admh-week">
-      <button class="admh-wknav" onclick="admCalHdrShift(-1)">‹</button>
-      <div class="admh-wkdays">${btns}</div>
-      <button class="admh-wknav" onclick="admCalHdrShift(1)">›</button>
+      <span class="a2-arw a2-arw-l" role="button" tabindex="0" title="上一週" onclick="admCalHdrShift(-1)"></span>
+      <div class="admh-wkdays" data-shift="admCalHdrShift">${btns}</div>
+      <span class="a2-arw a2-arw-r" role="button" tabindex="0" title="下一週" onclick="admCalHdrShift(1)"></span>
     </div>
     <div class="admcal-modes">${seg}</div>
   </div>`;
