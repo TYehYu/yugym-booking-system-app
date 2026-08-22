@@ -75,5 +75,18 @@ t('★ 字串沒對上就 raise，不會靜靜地什麼都沒改', /raise except
 t('　舊資料的一列一人團課不受影響（member_id 有值，身分那道本來就過得了）',
   /member_id 有值的一列一人團課.*照舊放行|照舊放行/.test(mig));
 
+// ── 2026-08-22 使用者逐格確認後定案（別再「順手收緊」）──
+/* 「教練可以自己取消掛自己名字的待簽約沒問題　取消自己的體驗課 也沒問題」
+   刪除的判斷是 (A.staff || (A.own && !A.isGroup))：
+   ・待簽約與體驗課都不是團課 → own 成立就給，符合使用者定案
+   ・改期／場地／代課對待簽約仍然關著（那條是刻意的，見 pending_contract 分支）
+   ・團課仍然只有 staff 能整堂刪 */
+t('★ 教練刪自己的課只排除團課（待簽約、體驗課照給）',
+  /const _canDelBk = A\.canCancel && !A\.closed && \(A\.staff \|\| \(A\.own && !A\.isGroup\)\);/.test(src)
+  && !/pending_contract[^\n]{0,80}_canDelBk/.test(src)
+  && !/體驗[^\n]{0,40}_canDelBk/.test(src));
+t('★ 待簽約仍然不給改期／場地／代課（與「可刪除」是兩件事）',
+  /還沒收款的卡位談不上簽到、代課、場地/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
