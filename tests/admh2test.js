@@ -144,5 +144,16 @@ ok('★★ 票券「第幾張／共幾張」兩種版面共用同一份算法（
 ok('　　已簽到仍是整張填滿課程色（與單欄版同語彙）',
    /\.admh2-card\.admh-done\{background:var\(--admh-c,#1f6f54\);color:#fff;\}/.test(src));
 
+/* 矮螢幕收斂（2026-08-22 使用者：從 LINE 圖文選單開啟，上方多一條 LINE 標題列，
+   webview 變矮 → 左欄七格分下來每格放不下三行，文字被壓縮） */
+ok('★ fit() 依實際格高掛 a2-tight / a2-tighter',
+   /_rail\.classList\.toggle\('a2-tight',  cell<58\);/.test(src)
+   && /_rail\.classList\.toggle\('a2-tighter',cell<46\);/.test(src));
+ok('　格高算法有扣掉六個 gap', /\(_in\.getBoundingClientRect\(\)\.height-6\*5\)\/7/.test(src));
+ok('★ 先收「N 月」，再矮才縮字級（日期與星期是選日子真正在看的）',
+   /\.admh2-rail\.a2-tight \.a2-dm\{display:none;\}/.test(src)
+   && /\.admh2-rail\.a2-tighter \.a2-dn\{font-size:19px;\}/.test(src)
+   && !/a2-tight[a-z]* \.a2-dw\{display:none/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
