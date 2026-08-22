@@ -63,5 +63,17 @@ t('★ 教練課只看得到簽到（沒有取消／改時間）',
 t('★ 會員端從來沒有「刪除整堂團課」或「改團課時間」的入口',
   !/memh2[A-Za-z]*\(['"]?deleteClass/.test(src));
 
+// ── 資料庫層：會員動不到「後台開課的團課」（2026-08-22 使用者確認後補的洞）──
+const mig=fs.existsSync(__dirname+'/../docs/migrations/20260822_cancel_booking_member_guard.sql')
+  ? fs.readFileSync(__dirname+'/../docs/migrations/20260822_cancel_booking_member_guard.sql','utf8') : '';
+t('★★ migration 存檔（fn_cancel_booking 的身分把關改 NULL-safe）',
+  /b\.member_id is null or current_member_id\(\) is distinct from b\.member_id/.test(mig));
+t('★ 成因寫清楚：<> 對 NULL 得到 NULL，if 不成立 → 團課整條靜默跳過',
+  /得到的是 NULL，不是 true/.test(mig) && /整條把關被靜默跳過/.test(mig));
+t('★ 影響範圍寫清楚（套用當下 57 堂空名單團課）', /57 堂符合/.test(mig));
+t('★ 字串沒對上就 raise，不會靜靜地什麼都沒改', /raise exception '把關字串沒對上/.test(mig));
+t('　舊資料的一列一人團課不受影響（member_id 有值，身分那道本來就過得了）',
+  /member_id 有值的一列一人團課.*照舊放行|照舊放行/.test(mig));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
