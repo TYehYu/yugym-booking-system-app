@@ -263,3 +263,24 @@ ok('★★ 教練名只在「不是自己帶的」才標 —— 也就是代課�
    && /改成「只有不是自己帶的才標」/.test(src));
 ok('　　貼頂偵測退場（日期列已經不是 sticky，它就在左邊不動）',
    !/const st=document\.querySelector\('\.admh-sticky'\), sen=document\.getElementById\('admh-sentinel'\);[\s\S]{0,400}?coachWeekShift/.test(src));
+
+/* 2026-08-22 使用者指示：「在右邊課卡下方新增一個快速預約＋，點了以後跳出視窗顯示
+   今天還可以安排的時段」 */
+console.log('\n快速預約');
+ok('★ 按鈕放在課卡列的最後一張（跟著一起捲）',
+   /<div class="admh2-cards">\$\{_cards\}[\s\S]{0,320}?<button class="a2-quickadd" onclick="chvQuickSlots\('\$\{date\}'\)">＋ 快速預約<\/button>/.test(src)
+   && /\.a2-quickadd\{flex:0 0 auto;width:100%;[\s\S]{0,120}?border:1\.5px dashed var\(--bd\);/.test(src));
+ok('★ 只列「還能安排」的時段：打烊前、已過去的不列、自己有課的不列',
+   /const last=\(typeof quickBookLastMin==='function'\)\?quickBookLastMin\(date\):\(21\*60\);/.test(src)
+   && /if\(nowMin>=0 && mm<nowMin\) continue;/.test(src)
+   && /if\(busy\.some\(iv=>mm<iv\[1\] && \(mm\+60\)>iv\[0\]\)\) continue;/.test(src));
+ok('　　取消的課不算佔用（status!=cancelled 才進 busy）',
+   /b\.date===date && b\.status!=='cancelled'/.test(src)
+   && /String\(bkCoachId\(b\)\)===String\(SESSION\.id\)/.test(src));
+ok('★★ ⚠ 只擋自己的衝堂、不擋場地 —— 場地由建立預約那一步的既有驗證負責，'
+   +'這裡多做一次會變成兩套規則',
+   /只擋「自己」的衝堂，不擋場地/.test(src));
+ok('★ 點一格直接進既有的建立預約流程（日期時間帶進去）',
+   /onclick="closeModal\(\);dtlAddAt\('\$\{date\}','\$\{minToTime\(mm\)\}'\)"/.test(src));
+ok('　　一格都沒有時講清楚，不要給一個空格子',
+   /這一天已經沒有可安排的時段了。/.test(src));

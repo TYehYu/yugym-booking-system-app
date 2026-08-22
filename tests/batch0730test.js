@@ -30,9 +30,15 @@ ok('★ 簽到開放給教練自己的課（口徑同 openBookingDetail 的 staf
    && /if\(\(!_ashMode \|\| !isGroup\) && !_calCtx && \(staff\|\|coachCk\) && !closed\)\{/.test(src));
 /* 2026-08-21：條件併進 _editable（staff && !closed && 課程日>=今天）——
    過期的團課不再給「新增」，事後加人會在課後扣掉一堂票。權限沒放寬（_editable 含 staff）。 */
+/* 0822：_editable 放寬成「staff 或 這堂是自己的」（教練要能調整自己的課），
+   所以「新增名單」得自己補回 staff —— 加名單會扣別人的票，不在教練的範圍內。 */
 ok('　　團課名單管理仍只給櫃檯／管理員，且過期不給',
-   /if\(_editable && isGroup\) btns \+= evoBtn\('evo-b2','evo-gold'/.test(src)
-   && /const _editable = staff && !closed && b\.date>=ymd\(TODAY\)/.test(src));
+   /if\(staff && _editable && isGroup\) btns \+= evoBtn\('evo-b2','evo-gold'/.test(src)
+   && /const _editable = \(staff \|\| own\) && !closed && b\.date>=ymd\(TODAY\)/.test(src));
+ok('★★ 教練可以調整自己的課（含 24 小時內）—— own 只多開「教練＋自己的課」這一格',
+   /const _editable = \(staff \|\| own\) && !closed/.test(src)
+   && /別人的課仍然動不了（0730 補的那個破口不變）/.test(src)
+   && /if\(\(A\.staff\|\|A\.own\) && A\.canCancel && !A\.closed\)/.test(src));
 ok('　　整頁不鎖死（_coachReadonly 維持 false），逐張卡判權限',
    /教練仍要能操作「自己的」課（簽到／取消／備註），逐張卡的權限由 own 判定/.test(src));
 ok('　　手機端維持 agenda，不把桌機週曆塞進小螢幕', /手機端維持原本的 agenda（MOBILE_COACH_NAV）/.test(src));

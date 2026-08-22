@@ -76,10 +76,10 @@ ok('★ 日期翻頁與「N 人上課中」照舊',
    /onclick="dashDayShift\(-1\)"/.test(src) && /\$\{_liveCount\} 人上課中/.test(src));
 
 console.log('\n日期列改成一整週（2026-08-21 使用者：「改成一週 [8/17一][8/18二] 依序下去排到週日」）');
-ok('★ 桌機面板的「‹ 8/21（五） ›」換成七個日期鈕',
-   /<div class="tl-title tl-title-week">/.test(src)
-   && /<div class="twk-strip">\$\{_wkDays\}<\/div>/.test(src)
-   /* 桌機面板的抬頭就是週列（負向比對整份原始碼會掃到 CSS，所以直接比對那一段markup） */
+/* 0822：七個日期鈕從上方橫排搬到左側直欄（見 tests/deskrailtest.js） */
+ok('★ 桌機面板的日期鈕改成左側直欄（原本的橫排週列退場）',
+   /<div class="twk-railin">\$\{_wkDays\}<\/div>/.test(src)
+   && !/<div class="twk-strip">\$\{_wkDays\}<\/div>/.test(src)
    && /<div class="tl-panel tl-desktop-only">\s*\n\s*<div class="tl-panel-top"><div class="tl-title tl-title-week">/.test(src));
 ok('　　手機版維持一天一天翻（螢幕放不下七個鈕）',
    /<div class="mtc-wrap-top"><div class="tl-title tl-title-date">[\s\S]{0,200}?<span class="tl-date">\$\{_taskDateLbl\}<\/span>/.test(src));

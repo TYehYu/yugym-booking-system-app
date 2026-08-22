@@ -168,3 +168,16 @@ ok('　　這個系統把暱稱放在 name_en，有寫在程式裡', /這個系�
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
+
+/* 2026-08-22 使用者回報：「手機端建立預約搜尋會員的時候，如果該名單不夠長，
+   搜尋頁面會只留在頁面下方，這樣會被輸入法的鍵盤遮住 —— 是因為名單是從頁面下方
+   長上來的嗎？」 使用者的判斷是對的。 */
+console.log('\n挑選視窗的位置（鍵盤遮擋）');
+ok('★★ 手機改成貼上緣、內容往下長（原本是 bottom sheet，bottom:0 相對版面視窗算，'
+   +'鍵盤升起不會改變它，搜尋框正好落在鍵盤底下）',
+   /\.ms-panel\{position:absolute;left:0;right:0;top:0;bottom:auto;max-height:82vh;/.test(src)
+   && /border-radius:0 0 18px 18px;/.test(src)
+   && /鍵盤升起來不會改變它，於是搜尋框正好落在鍵盤底下/.test(src));
+ok('　　瀏海機型讓開安全區', /padding-top:env\(safe-area-inset-top,0px\);/.test(src));
+ok('　　桌機／橫向仍是置中浮動視窗（它本來就沒有鍵盤問題）',
+   /@media \(min-width:601px\) and \(orientation:landscape\),\(min-width:1025px\)\{\.ms-panel\{left:50%;right:auto;bottom:auto;top:50%;transform:translate\(-50%,-50%\)/.test(src));
