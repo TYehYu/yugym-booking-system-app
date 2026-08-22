@@ -183,7 +183,11 @@ ok('★ 分隔線退場：使用者回報「最後一張課卡多了一條線」
 ok('★ 三份都掛上標記（管理員首頁兩種版面＋教練舊版＋預覽版）',
    (src.match(/class="card mc-card mstat-card"/g)||[]).length===2
    && /const ringCard=`<div class="dcard mstat-card">/.test(src)
-   && /const scoreCard=`<div class="dcard chv2-score mstat-card">/.test(src));
+   && /const scoreCard=`<div class="chv2-scorewrap mstat-card"><div class="dcard chv2-score">/.test(src));
+/* 0822 使用者：「下方的本月成績 外面再幫我加一層米色視窗」 */
+ok('★ 本月成績外面多一層米色視窗（間距仍由外層的 .mstat-card 提供）',
+   /\.chv2-scorewrap\{background:var\(--card2,#FAF7F0\);border:1px solid var\(--bd\);\s*\n\s*border-radius:20px;padding:10px;\}/.test(src)
+   && /\.chv2-scorewrap \.dcard\{border:none;box-shadow:none;border-radius:14px;\}/.test(src));
 ok('★ 頂欄重整鈕退場（這一頁已經有下拉更新）',
    /body\.chv2-shell \.topbar \.tb-right \.rf-btn\{display:none !important;\}/.test(src));
 

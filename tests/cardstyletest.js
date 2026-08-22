@@ -681,6 +681,9 @@ console.log('\n過去的課卡淡化加重（2026-08-21 使用者：「淡化的
    使用者：「桌機行事曆過期課卡用暗化表示 不要透明化」。 */
 ok('★ 用暗化（brightness），不是透明化（opacity）',
    /\.cal-ev\.cal-ev-past,\s*\n\.cal-ev\.cal-ev-dark\{opacity:1;filter:brightness\(0\.9\) saturate\(0\.72\);transition:filter \.18s;\}/.test(src)
+   /* 0822：.cal-ev-std 的投影（同樣兩個 class、又寫在後面）會把整條 filter 蓋掉，
+      所以要用三個 class 再寫一次，並且把投影一起寫進來 */
+   && /\.cal-ev\.cal-ev-std\.cal-ev-past,\s*\n\.cal-ev\.cal-ev-std\.cal-ev-dark\{filter:drop-shadow\(0 1px 2px rgba\(60,50,38,\.12\)\) brightness\(0\.9\) saturate\(0\.72\);\}/.test(src)
    && !/\.cal-ev\.cal-ev-past::after\{/.test(src));
 ok('★ 整欄再暗一階（與單卡疊加，效果相乘）',
    /\.cal-daycol\.col-past \.cal-ev\{filter:brightness\(0\.88\) saturate\(0\.5\);\}/.test(src));
@@ -709,6 +712,9 @@ console.log('\n過去的課卡淡化加重（2026-08-21 使用者：「淡化的
    使用者：「桌機行事曆過期課卡用暗化表示 不要透明化」。 */
 ok('★ 用暗化（brightness），不是透明化（opacity）',
    /\.cal-ev\.cal-ev-past,\s*\n\.cal-ev\.cal-ev-dark\{opacity:1;filter:brightness\(0\.9\) saturate\(0\.72\);transition:filter \.18s;\}/.test(src)
+   /* 0822：.cal-ev-std 的投影（同樣兩個 class、又寫在後面）會把整條 filter 蓋掉，
+      所以要用三個 class 再寫一次，並且把投影一起寫進來 */
+   && /\.cal-ev\.cal-ev-std\.cal-ev-past,\s*\n\.cal-ev\.cal-ev-std\.cal-ev-dark\{filter:drop-shadow\(0 1px 2px rgba\(60,50,38,\.12\)\) brightness\(0\.9\) saturate\(0\.72\);\}/.test(src)
    && !/\.cal-ev\.cal-ev-past::after\{/.test(src));
 ok('★ 整欄再暗一階（與單卡疊加，效果相乘）',
    /\.cal-daycol\.col-past \.cal-ev\{filter:brightness\(0\.88\) saturate\(0\.5\);\}/.test(src));
