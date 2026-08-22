@@ -20,11 +20,11 @@ ok('★★ 七天平分整欄高度（不是固定高度）—— 視窗變矮�
    /\.twk-railin \.twk-day\{flex:1 1 0;min-height:0;/.test(src)
    && /\.twk-railin\{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:5px;\}/.test(src));
 ok('　　直欄本身不捲（overflow:hidden），只有課卡區會捲',
-   /\.twk-rail\{flex:0 0 62px;display:flex;flex-direction:column;gap:6px;overflow:hidden;\}/.test(src)
+   /\.twk-rail\{flex:0 0 62px;display:flex;flex-direction:column;gap:6px;overflow:hidden;/.test(src)
    && /\.mc-coachcenter \.tcard-body\{flex:1;min-height:0;overflow-y:auto/.test(src));
 ok('　　日期鈕沿用既有的 .twk-day（選中／今天的語彙不變）',
    /out\+=`<button type="button" class="twk-day\$\{sel\?' on':''\}\$\{isT\?' today':''\}"/.test(src)
-   && /\.twk-day\.on\{background:var\(--green\);color:#fff;border-color:var\(--green\);\}/.test(src));
+   && /out\+=`<button type="button" class="twk-day/.test(src));   /* 選中／今天的配色 0822 改版，見下方 */
 ok('　　「回到今天」與「N 人上課中」留在標題列（只有日期列搬走）',
    /<div class="tl-title tl-title-week">\$\{!isTodayView\?`<button class="tl-daynav tl-daynav-today"/.test(src));
 ok('　　第二欄（教練姓名＋今日銷課\/總堂）沿用既有的課卡列，不另做一套',
@@ -60,3 +60,19 @@ ok('★ 堂數放大、名字降一階（這一欄要一眼讀到的是幾堂）
 ok('★ 欄寬從 118 收到 84（原本是給「縮寫圓＋三行文字」的寬度）',
    /\.tcard-coach\{display:flex;align-items:center;justify-content:center;gap:0;width:84px;/.test(src)
    && /\.tcard-coach\{width:84px;flex-shrink:0;padding-top:4px;position:sticky;/.test(src));
+
+/* 2026-08-22 使用者定版：日期欄金底＋三欄之間各一條分隔線；今天＝品牌綠、選取＝黑框；
+   「N 人上課中」標籤移除。 */
+console.log('\n日期欄的底色與狀態語彙');
+ok('★ 日期欄用品牌金淡底，右側一條分隔線',
+   /\.twk-rail\{[\s\S]{0,200}?background:rgba\(180,138,86,\.13\);border-radius:12px;padding:6px 5px;\s*\n\s*border-right:1px solid var\(--bd\);\}/.test(src));
+ok('★ 教練欄與課卡欄之間也一條', /\.tl-3col \.tcard-coach\{border-right:1px solid var\(--bd\);\}/.test(src));
+ok('★★ 今天＝品牌綠底、選取＝黑框（兩個維度分開，可以同時成立）',
+   /\.twk-day\.today\{background:var\(--green\);color:#fff;border-color:var\(--green\);\}/.test(src)
+   && /\.twk-day\.on\{border-color:#1a1a1a;border-width:2px;\}/.test(src)
+   && /\.twk-day\.on:not\(\.today\)\{background:#fff;color:var\(--text-primary\);\}/.test(src));
+ok('　　金底上的日期改白卡（原本是 --card2，疊在金底上會糊成一片）',
+   /\.twk-railin \.twk-day\{flex:1 1 0;min-height:0;justify-content:center;padding:4px 2px;background:#fff;\}/.test(src));
+ok('★ 「N 人上課中」標籤移除（那一列本來就有流星邊框）',
+   !/\$\{_liveCount\?`<span class="tl-live-badge">/.test(src)
+   && /頂上再掛一顆數字標是同一件事講兩次/.test(src));

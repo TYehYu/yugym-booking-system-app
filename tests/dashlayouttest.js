@@ -72,15 +72,16 @@ ok('　　為什麼不要再加即時條件，寫在原地',
 console.log('\n沒有動到的地方');
 ok('★ 手機版維持原本的圓點列表', /r\.mobileHtml/.test(src));
 ok('★ 預約管理仍是七日行事曆（_calDays 預設 7）', /let _calDays=7;/.test(src));
-ok('★ 日期翻頁與「N 人上課中」照舊',
-   /onclick="dashDayShift\(-1\)"/.test(src) && /\$\{_liveCount\} 人上課中/.test(src));
+/* 0822：「N 人上課中」標籤移除（那一列本來就有流星邊框），只留日期翻頁 */
+ok('★ 日期翻頁照舊；「N 人上課中」標籤已移除',
+   /onclick="dashDayShift\(-1\)"/.test(src) && !/\$\{_liveCount\} 人上課中/.test(src));
 
 console.log('\n日期列改成一整週（2026-08-21 使用者：「改成一週 [8/17一][8/18二] 依序下去排到週日」）');
 /* 0822：七個日期鈕從上方橫排搬到左側直欄（見 tests/deskrailtest.js） */
 ok('★ 桌機面板的日期鈕改成左側直欄（原本的橫排週列退場）',
    /<div class="twk-railin">\$\{_wkDays\}<\/div>/.test(src)
    && !/<div class="twk-strip">\$\{_wkDays\}<\/div>/.test(src)
-   && /<div class="tl-panel tl-desktop-only">\s*\n\s*<div class="tl-panel-top"><div class="tl-title tl-title-week">/.test(src));
+   && /<div class="tl-panel tl-desktop-only">[\s\S]{0,220}?<div class="tl-panel-top"><div class="tl-title tl-title-week">/.test(src));
 ok('　　手機版維持一天一天翻（螢幕放不下七個鈕）',
    /<div class="mtc-wrap-top"><div class="tl-title tl-title-date">[\s\S]{0,200}?<span class="tl-date">\$\{_taskDateLbl\}<\/span>/.test(src));
 ok('★ 週一起算（健身房的排班與課表都以週一為一週的開始）',
@@ -93,9 +94,10 @@ ok('★ 左右鍵直接 ±7 天，不另外維護週偏移狀態（會和 _dashV
    /onclick="dashDayShift\(-7\)" title="上一週"/.test(src)
    && /onclick="dashDayShift\(7\)" title="下一週"/.test(src)
    && /不另外維護一個週偏移狀態（那會和 _dashViewDate 兩份狀態互相打架）/.test(src));
-ok('　　選中的那天與今天分得開（選中＝實心綠、今天＝綠字）',
-   /\.twk-day\.today\{color:var\(--green\);\}/.test(src)
-   && /\.twk-day\.on\{background:var\(--green\);color:#fff;/.test(src));
+/* 0822 使用者定版：兩個維度交換 —— 今天＝品牌綠底、選取＝黑框（可以同時成立） */
+ok('　　選中的那天與今天分得開（今天＝綠底、選中＝黑框）',
+   /\.twk-day\.today\{background:var\(--green\);color:#fff;border-color:var\(--green\);\}/.test(src)
+   && /\.twk-day\.on\{border-color:#1a1a1a;border-width:2px;\}/.test(src));
 ok('　　滑過看得到那天有幾堂', /title="\$\{ds\}\$\{n\?`　\$\{n\} 堂`:'　沒有課'\}"/.test(src));
 {
   /* 週一起算的算法（與 index.html 同一條式子） */
