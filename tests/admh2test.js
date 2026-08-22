@@ -48,8 +48,14 @@ ok('　　左欄不捲了，就不需要把選取那天捲進視線',
    又被重置，又要重新滑」 */
 ok('★★ 教練篩選列的捲動位置要還原 —— admhPickCoach 早就記了，但還原那一行只寫在'
    +'舊版單欄的貼頂偵測裡，雙欄版沒有 .admh-sticky、整段沒搬過來',
-   /const cr=document\.querySelector\('\.admh-coach'\);\s*\n\s*if\(cr && window\._admhChipScroll\) cr\.scrollLeft=window\._admhChipScroll;/.test(src)
+   /function admhRestoreChips\(\)\{/.test(src)
    && /window\._admhChipScroll=row\?row\.scrollLeft:0;/.test(src));
+ok('★★ 還原要在 C.innerHTML 之後的**同一個同步任務**做（使用者：「會左右閃一下，'
+   +'很像瞬間回去左邊又回來」＝先畫了 scrollLeft:0 那一格再跳回來）',
+   /try\{ admhRestoreChips\(\); \}catch\(_\)\{\}\s*\n\s*document\.querySelectorAll\('body>\.mc-lotto-fab/.test(src)
+   && /緊接在 C\.innerHTML 之後設定，畫面只會出現最終位置/.test(src));
+ok('　　順手把 scroll-behavior 鎖成 auto（日後若加了 smooth，這裡會變成看得見的滑動）',
+   /const _sb=cr\.style\.scrollBehavior; cr\.style\.scrollBehavior='auto';/.test(src));
 ok('★★ ⚠ 高度只能依版面位置算，不能依當下捲動位置（使用者：「連續點下方的首頁 畫面會變成這樣」）'
    +' —— navTo 保留捲動位置，捲下去之後 r.top 變小甚至變負，再算一次就把兩欄撐得比視窗還高',
    /const docTop=r\.top\+\(window\.scrollY\|\|document\.documentElement\.scrollTop\|\|0\);/.test(src)

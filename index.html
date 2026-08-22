@@ -9048,8 +9048,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1638';
-const APP_VERSION_LABEL='v260822.1638';
+const APP_VERSION = '260822.1652';
+const APP_VERSION_LABEL='v260822.1652';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16461,6 +16461,11 @@ PAGES.g_dashboard=async function(){
      （管理員鈕之後、中央導覽之前），版面自己讓位，永遠不重疊。
      頂列只在切換身分時重繪（renderLeftSidebar），這裡每次首頁重繪先清舊的再插新的；
      沒有頂列（保險）退回掛 body 的浮動版。 */
+  /* 教練篩選列的捲動位置：一定要在**這一個同步任務裡**還原（2026-08-22 使用者回報
+     「不會回到左邊了，但是都會左右閃一下，很像瞬間回去左邊又回來」）——
+     原本放在 setTimeout(...,0) 的掛載函式裡，那時候瀏覽器已經把 scrollLeft=0 的狀態畫出來，
+     下一格才跳回去，看起來就是閃一下。緊接在 C.innerHTML 之後設定，畫面只會出現最終位置。 */
+  try{ admhRestoreChips(); }catch(_){}
   document.querySelectorAll('body>.mc-lotto-fab,body>.mc-req-fab,#mc-sidebar .mc-lotto-fab,#mc-sidebar .mc-req-fab').forEach(el=>el.remove());
   const _rail=document.getElementById('mc-sidebar');
   const _railNav=_rail&&_rail.querySelector('.mc-nav');
@@ -41075,15 +41080,20 @@ function admh2On(){
    ②左欄左右滑切換上下週 ③捲到選取的那一天。 */
 /* shiftFn：換週要呼叫誰（管理員是 admWeekShift、教練是 coachWeekShift）——
    2026-08-22 教練首頁也改成雙欄之後，這一支變成兩頁共用，唯一的差別就是這個函式。 */
+/* 教練篩選列的捲動位置（2026-08-22）——admhPickCoach 選人前先記 _admhChipScroll，
+   重繪後在**同一個同步任務**裡還原，畫面才不會先畫到最左邊再跳回來。
+   scroll-behavior 先鎖成 auto：萬一日後給那條列加了 smooth，這裡會變成看得見的滑動。 */
+function admhRestoreChips(){
+  const cr=document.querySelector('.admh-coach');
+  if(!cr || !window._admhChipScroll) return;
+  const _sb=cr.style.scrollBehavior; cr.style.scrollBehavior='auto';
+  cr.scrollLeft=window._admhChipScroll;
+  cr.style.scrollBehavior=_sb||'';
+}
 function admh2Mount(shiftFn){
-  /* 教練篩選列的捲動位置（2026-08-22 使用者回報：「每次選取後就會跳回最左邊，
-     滑到右邊點別的教練又被重置」）——admhPickCoach 早就記了 _admhChipScroll，
-     但還原那一行只寫在**舊版單欄**那條路的貼頂偵測裡；雙欄版沒有 .admh-sticky，
-     整段沒被搬過來，於是每次重繪都回到最左。放在這裡兩件事一起做完。 */
-  try{
-    const cr=document.querySelector('.admh-coach');
-    if(cr && window._admhChipScroll) cr.scrollLeft=window._admhChipScroll;
-  }catch(_){}
+  /* 保險再還原一次（主要那次在 C.innerHTML 之後同步做，見 admhRestoreChips 的說明）：
+     這一支也會在 resize／轉向時被呼叫，順手把位置守住。 */
+  try{ admhRestoreChips(); }catch(_){}
   const body=document.querySelector('.admh2-body'); if(!body) return;
   const _shift=(typeof shiftFn==='function')?shiftFn
     :(typeof admWeekShift==='function'?admWeekShift:function(){});
