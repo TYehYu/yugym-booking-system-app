@@ -205,18 +205,15 @@ console.log('\n⑦ 會員資料票券頁的「待審核」卡（2026-08-09 使�
      /if\(!\(await ppRefreshIfOpen\(r\.member_id\)\)\) navTo\(CUR_PAGE\);/.test(C));
 }
 
-console.log('\n⑧ 會員端：蓋版提醒只跳一次，之後在「我的票券」常駐（2026-08-10 使用者指示）');
-/* 「會員端只要跳出一次提醒，之後在我的票券顯示就好。」 */
+console.log('\n⑧ 會員端：待簽合約只在「我的票券」常駐（蓋版提醒 2026-08-22 移除）');
+/* 0810：「會員端只要跳出一次提醒，之後在我的票券顯示就好。」
+   0822 使用者指示再收一步：「這個簽約提示一直出現 可以移除了」——蓋版整組拿掉，
+   只留「我的票券」那張待簽卡。 */
 {
   const B=grabFn('memSignBannerCheck');
-  ok('★★ 同一批待簽合約整個登入期間只蓋版一次（記過的 id 不再跳）',
-     /window\._signRemindedIds=window\._signRemindedIds\|\|\{\}/.test(B)
-     && /if\(cs\.every\(c=>window\._signRemindedIds\[c\.id\]\)\) return;/.test(B)
-     && /cs\.forEach\(c=>\{ window\._signRemindedIds\[c\.id\]=1; \}\)/.test(B));
-  ok('★ 有新的待簽合約（沒提醒過的 id）才會再跳 —— 判斷用 every 而不是旗標',
-     !/_signBannerShown/.test(B));
-  ok('　　蓋版上告訴會員之後去哪裡找',
-     /之後可隨時在「我的票券」找到這份合約簽署/.test(B));
+  ok('★★ 蓋版提醒已整組移除（memSignBannerCheck 成空函式）',
+     /已移除/.test(B) && !/mem-sign-banner/.test(B) && !/appendChild/.test(B));
+  ok('★ 全檔已無蓋版元素的殘留', !/mem-sign-banner/.test(src));
   const R=grabFn('renderMemTickets');
   ok('★★ 我的票券頁畫待簽／待開通合約卡（sign_type=remote 且還沒綁票券）',
      /const pendCt=\(window\._memContracts\|\|\[\]\)\.filter\(c=>c\.sign_type==='remote'&&!c\.ticket_id\)/.test(R));

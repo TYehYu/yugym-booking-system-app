@@ -278,9 +278,12 @@ ok('　　取消的課不算佔用（status!=cancelled 才進 busy）',
 /* 0822 四修（使用者：「18:00 應該只能約團體教室才對」）：場地改成也要算，
    原本那條「不擋場地」的取捨被推翻 —— 排不進場地的時段本來就不該出現在「還能安排」裡。 */
 ok('★★ 場地也要算（見下方 allocateVenue 那幾條）', /const dayAll=\(bks\|\|\[\]\)\.filter/.test(src));
-ok('★ 點一格直接進既有的建立預約流程（日期時間帶進去）',
+/* 0822（使用者：「時段不小心點到兩次就直接進入下一步了」）：點時段只選取，
+   要按底部的「確認」才走 chvQuickPick 進既有的建立預約流程。 */
+ok('★ 點一格只選取，按確認才進既有的建立預約流程（日期時間帶進去）',
    /function chvQuickPick\(t\)\{[\s\S]{0,200}?closeModal\(\); dtlAddAt\(d,t\);/.test(src)
-   && /onclick="chvQuickPick\('\$\{minToTime\(o\.mm\)\}'\)"/.test(src));
+   && /onclick="chvQuickSel\('\$\{minToTime\(o\.mm\)\}'\)"/.test(src)
+   && /function chvQuickGo\(\)\{[\s\S]{0,200}?chvQuickPick\(t\);/.test(src));
 /* 0822 三修（使用者）：「幫我統一改成管理員的風格 左右兩張平均的卡片 背景暗化」 */
 /* 0822 二修（使用者）：「快速預約就不要顯示不可預約的時段了」——
    版型維持兩欄等寬，但內容只留可約的；不走 slotPanelHTML（那支的職責是「整天的時段狀態」）。 */

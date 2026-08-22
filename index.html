@@ -9131,8 +9131,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1847';
-const APP_VERSION_LABEL='v260822.1847';
+const APP_VERSION = '260822.1853';
+const APP_VERSION_LABEL='v260822.1853';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38879,34 +38879,19 @@ function memSignClear(){
 }
 /* 待簽合約浮動橫幅（2026-07-28）：固定蓋在畫面上方、不受頁面重繪影響；
    首頁與我的票券頁都會觸發檢查；簽完或無待簽自動消失。 */
-function memSignBannerCheck(){
-  setTimeout(async()=>{ try{
-    if(!SESSION||SESSION.role!=='member') return;
-    const cs=(await dbGetAll('contracts').catch(()=>[])).filter(c=>c.sign_type==='remote'&&!c.signed_at);
-    const old=document.getElementById('mem-sign-banner'); if(old) old.remove();
-    if(!cs.length) return;
-    /* 蓋版只跳一次（2026-08-10 使用者指示：「會員端只要跳出一次提醒，
-       之後在我的票券顯示就好」）—— 同一批待簽合約整個登入期間只提醒一次，
-       之後靠「我的票券」頁常駐的待簽卡；有新的待簽合約（沒提醒過的 id）才會再跳。 */
-    window._signRemindedIds=window._signRemindedIds||{};
-    if(cs.every(c=>window._signRemindedIds[c.id])) return;
-    cs.forEach(c=>{ window._signRemindedIds[c.id]=1; });
-    /* 2026-07-28 使用者指示：提示改到畫面正中間、加遮罩更醒目 */
-    const div=document.createElement('div'); div.id='mem-sign-banner';
-    div.style.cssText='position:fixed;inset:0;z-index:180;background:rgba(20,24,20,.5);'
-      +'display:flex;align-items:center;justify-content:center;padding:24px;';
-    div.innerHTML=`<div style="background:#fdf9f0;border:1.5px solid #d9b96a;border-radius:18px;max-width:320px;width:100%;
-        padding:26px 22px 20px;text-align:center;box-shadow:0 12px 36px rgba(0,0,0,.3);">
-      <div style="font-size:38px;line-height:1;margin-bottom:10px;">📝</div>
-      <div style="font-size:16px;font-weight:800;color:#5c4a1e;margin-bottom:6px;">您有 ${cs.length} 份合約待簽名</div>
-      <div style="font-size:12.5px;color:#8a7350;margin-bottom:16px;">請完成簽署以啟用您的課程</div>
-      <button class="btn btn-green" style="width:100%;margin-bottom:8px;" onclick="memSignContract('${cs[0].id}')">立即簽署</button>
-      <button class="btn btn-ghost" style="width:100%;" onclick="document.getElementById('mem-sign-banner')?.remove()">稍後再簽</button>
-      <div style="font-size:11px;color:#a89468;margin-top:10px;">之後可隨時在「我的票券」找到這份合約簽署</div>
-    </div>`;
-    document.body.appendChild(div);
-  }catch(_){} },600);
-}
+/* 待簽合約的蓋版提醒（2026-07-28 上線）—— 2026-08-22 使用者指示整組移除：
+   「這個簽約提示一直出現 可以移除了」。
+
+   為什麼會一直跳（兩個原因疊在一起）：
+   ① 這裡漏了 member_id 過濾（同一支的 memSignContract 有）。會員自己看只讀得到自己的
+      合約還好，但管理員預覽會員視角時 RLS 是管理員的，全店未簽的遠端合約通通撈進來，
+      於是每次進「我的預約」都跳。
+   ② 「只提醒一次」的旗標 _signRemindedIds 只活在記憶體裡，重整或下拉更新就歸零。
+
+   功能不會不見：0810 就定案「之後在我的票券顯示就好」，「我的票券」頁常駐的待簽卡
+   （pendCt）與紅色「待簽」標籤都還在，點下去一樣進 memSignContract 簽署。
+   這支保留成空函式：兩個呼叫端（我的預約、我的票券）不必各自記得刪。 */
+function memSignBannerCheck(){ /* 已移除，見上方說明 */ }
 /* 會員手機端簽名（2026-07-28）：讀自己的待簽合約 → 全文＋簽名板 → RPC 寫回 */
 async function memSignContract(id){
   const c=await dbGet('contracts',id).catch(()=>null);
@@ -38953,7 +38938,6 @@ async function memSignContractDo(id){
     const {data,error}=await sb.rpc('fn_member_sign_contract',{p_contract_id:id,p_signature:sig});
     if(error||!(data&&data.ok)){ showToast('簽署失敗：'+((data&&data.error_code)||error&&error.message||'請稍後再試')); return; }
     dbCacheClear(['contracts']);
-    document.getElementById('mem-sign-banner')?.remove();
     closeContractReader(); closeModal(); showToast('合約已完成簽署，謝謝！'); navTo(CUR_PAGE);
     /* 連簽（2026-08-18 陳秀蘭案例：一次簽兩張，第二張找不到簽名入口）——
        簽完一份，還有待簽的就直接問要不要接著簽，不必回頁面自己找。 */
@@ -44092,19 +44076,27 @@ async function memh2SelfSlots(ds){
     return;
   }
   s.free=r.free; s.vids=r.vids;
-  const VN={multi:'多功能訓練架',group:'團課教室',treadmill:'跑步機'};
-  const mms=Array.from(r.free).sort((a,b)=>a-b);
+  /* 多功能訓練架不標（2026-08-22 使用者指示）——它是第一順位，沒標就是它；
+     只有排到教室或跑步機才需要讓客人知道會上在哪。 */
+  const VN={multi:'',group:'團課教室',treadmill:'跑步機'};
+  /* ⚠ 已經過去的時段要濾掉（2026-08-22 使用者回報「8/22 9:00 也過期了 自主應該也不能預約」）——
+     msbProbeFree 只回「排不排得進去」，「現在幾點」本來是舊版 slotPanelHTML 在管的
+     （它拿 todayStr/nowMin 把過去的格子畫成不可選）。這個視窗不走那支，所以要自己擋。 */
+  const _nowMin=(date===ymd(TODAY))?(new Date().getHours()*60+new Date().getMinutes()):-1;
+  const mms=Array.from(r.free).filter(m=>_nowMin<0||m>=_nowMin).sort((a,b)=>a-b);
   window._mh2Pick='';
-  const cells=mms.map(m=>`<button type="button" class="cag-slot" data-t="${minToTime(m)}" onclick="memh2SelSlot('${minToTime(m)}')">${
-    minToTime(m)}<span class="cag-slot-tag">${VN[r.vids[m]]||''}</span></button>`).join('');
+  const cells=mms.map(m=>{ const tag=VN[r.vids[m]]||'';
+    return `<button type="button" class="cag-slot" data-t="${minToTime(m)}" onclick="memh2SelSlot('${minToTime(m)}')">${
+      minToTime(m)}${tag?`<span class="cag-slot-tag">${tag}</span>`:''}</button>`; }).join('');
   const _d=parseYmd(date)||new Date(TODAY);
   showModal(`<div class="modal-title">預約自主訓練</div>
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">
       ${date.replace(/-/g,'/')}（${'日一二三四五六'[_d.getDay()]}）　還能預約 <b style="color:var(--text);">${mms.length}</b> 個時段
-      <br><span style="color:var(--t3);">每格 60 分鐘・扣 1 點。時段後面是會用到的場地；跑步機可在下一步選 1 或 2 台。</span></div>
+      <br><span style="color:var(--t3);">每格 60 分鐘・扣 1 點。已過去、已滿與打烊後的時段不會列出來。
+      沒標的就是多功能訓練架；標「團課教室」或「跑步機」代表訓練架已滿，跑步機可在下一步選 1 或 2 台。</span></div>
     ${mms.length
       ? `<div class="cag-slots chvqs2">${cells}</div>`
-      : `<div style="padding:18px 4px;color:var(--t3);font-size:13px;text-align:center;">這天沒有可預約的時段了<br><span style="font-size:11.5px;">本日營業 ${r.bh[0]}–${r.bh[1]}；換一天試試</span></div>`}
+      : `<div style="padding:18px 4px;color:var(--t3);font-size:13px;text-align:center;">這天沒有可預約的時段了<br><span style="font-size:11.5px;">本日營業 ${r.bh[0]}–${r.bh[1]}${_nowMin>=0?'（今天剩下的時段都排滿了）':''}；換一天試試</span></div>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>${
       mms.length?`<button class="btn btn-primary" id="mh2qs-ok" disabled onclick="memh2GoSlot()">確認</button>`:''}</div>`);
 }

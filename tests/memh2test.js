@@ -68,9 +68,12 @@ t('msbLoadSlots 改呼叫 msbProbeFree（沒有兩份探測邏輯）',
 const add=cut('async function memh2SelfSlots(ds){','function memh2SelSlot(t){');
 t('［＋］沿用 msbStart 建狀態', /await msbStart\(\)/.test(add));
 t('［＋］收掉舊版下方訂位表但保留狀態', /getElementById\('msb-sheet'\); if\(sh\) sh\.remove\(\)/.test(add));
-t('場地標三種：多功能訓練架／團課教室／跑步機',
-  /multi:'多功能訓練架',group:'團課教室',treadmill:'跑步機'/.test(add));
-t('只列可約時段', /Array\.from\(r\.free\)\.sort/.test(add));
+/* 0822 二修（使用者）：「多功能訓練架不用顯示」「8/22 9:00 也過期了 自主應該也不能預約」 */
+t('多功能訓練架不標（沒標就是它），只標教室與跑步機',
+  /VN=\{multi:'',group:'團課教室',treadmill:'跑步機'\}/.test(add));
+t('沒有標籤就不畫空的 tag', /tag\?`<span class="cag-slot-tag">/.test(add));
+t('今天已經過去的時段要濾掉', /const _nowMin=\(date===ymd\(TODAY\)\)\?/.test(add)
+  && /\.filter\(m=>_nowMin<0\|\|m>=_nowMin\)/.test(add));
 t('要按確認才前進（與快速預約同一套）',
   /id="mh2qs-ok" disabled onclick="memh2GoSlot\(\)"/.test(add)
   && /closeModal\(\); msbPickSlot\(t\);/.test(cut('function memh2GoSlot(){','/* ══')||s));
