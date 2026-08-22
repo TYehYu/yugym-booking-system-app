@@ -46,7 +46,7 @@ ok('★ ④ 行事曆已簽到 → 不填滿了（那一組規則已刪除）',
 /* 2026-08-21：淡化改暗化（驗在下方「待簽約／待付款的課卡也改暗化」） */
 ok('★ ⑤ 待簽約與空堂 → 暗化＋紅框',
    /\.cal-ev\.cal-ev-std\.cal-ev-pend \.evc-body,\s*\n\s*\.tcard\.tcard-std\.tcard-pend \.tcard-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;/.test(blk)
-   && /\.tcard\.tcard-std\.tcard-pend\{ filter:brightness\(0\.92\) saturate\(0\.7\); \}/.test(blk));
+   && /\.tcard\.tcard-std\.tcard-pend\{ filter:brightness\(0\.9\) saturate\(0\.72\); \}/.test(blk));   /* 0822 與過期／教練請假團課統一數值 */
 
 console.log('\n行事曆課卡要有對應的 class（原本只有首頁標得出待簽約）');
 ok('★ 新增 cal-ev-pend，掛在課卡上',
@@ -680,14 +680,14 @@ console.log('\n過去的課卡淡化加重（2026-08-21 使用者：「淡化的
 /* 四修（同日）：opacity .5 → .32（太強）→ 灰遮罩（還是偏淡）→ 直接壓亮度。
    使用者：「桌機行事曆過期課卡用暗化表示 不要透明化」。 */
 ok('★ 用暗化（brightness），不是透明化（opacity）',
-   /\.cal-ev\.cal-ev-past\{opacity:1;filter:brightness\(0\.9\) saturate\(0\.72\);transition:filter \.18s;\}/.test(src)
+   /\.cal-ev\.cal-ev-past,\s*\n\.cal-ev\.cal-ev-dark\{opacity:1;filter:brightness\(0\.9\) saturate\(0\.72\);transition:filter \.18s;\}/.test(src)
    && !/\.cal-ev\.cal-ev-past::after\{/.test(src));
 ok('★ 整欄再暗一階（與單卡疊加，效果相乘）',
    /\.cal-daycol\.col-past \.cal-ev\{filter:brightness\(0\.88\) saturate\(0\.5\);\}/.test(src));
 ok('　　兩者差別寫在原地（透明會連字一起糊掉，暗化保持對比度）',
    /透明化與暗化不是同一件事：透明會讓卡片和背景混在一起、字也跟著糊掉；/.test(src));
 ok('　　滑過去仍然恢復原狀（不是把資訊藏起來）',
-   /\.cal-ev\.cal-ev-past:hover\{filter:none;\}/.test(src)
+   /\.cal-ev\.cal-ev-past:hover,\s*\n\.cal-ev\.cal-ev-dark:hover\{filter:none;\}/.test(src)
    && /\.cal-daycol\.col-past \.cal-ev:hover\{filter:none;\}/.test(src));
 ok('　　未完成的過去課卡仍不淡化（0801 定案：那是待辦，不能一起壓暗）',
    /\.cal-ev\.cal-ev-todo,\s*\n\.cal-daycol\.col-past \.cal-ev\.cal-ev-todo\{opacity:1;filter:none;\}/.test(src));
@@ -708,14 +708,14 @@ console.log('\n過去的課卡淡化加重（2026-08-21 使用者：「淡化的
 /* 四修（同日）：opacity .5 → .32（太強）→ 灰遮罩（還是偏淡）→ 直接壓亮度。
    使用者：「桌機行事曆過期課卡用暗化表示 不要透明化」。 */
 ok('★ 用暗化（brightness），不是透明化（opacity）',
-   /\.cal-ev\.cal-ev-past\{opacity:1;filter:brightness\(0\.9\) saturate\(0\.72\);transition:filter \.18s;\}/.test(src)
+   /\.cal-ev\.cal-ev-past,\s*\n\.cal-ev\.cal-ev-dark\{opacity:1;filter:brightness\(0\.9\) saturate\(0\.72\);transition:filter \.18s;\}/.test(src)
    && !/\.cal-ev\.cal-ev-past::after\{/.test(src));
 ok('★ 整欄再暗一階（與單卡疊加，效果相乘）',
    /\.cal-daycol\.col-past \.cal-ev\{filter:brightness\(0\.88\) saturate\(0\.5\);\}/.test(src));
 ok('　　兩者差別寫在原地（透明會連字一起糊掉，暗化保持對比度）',
    /透明化與暗化不是同一件事：透明會讓卡片和背景混在一起、字也跟著糊掉；/.test(src));
 ok('　　滑過去仍然恢復原狀（不是把資訊藏起來）',
-   /\.cal-ev\.cal-ev-past:hover\{filter:none;\}/.test(src)
+   /\.cal-ev\.cal-ev-past:hover,\s*\n\.cal-ev\.cal-ev-dark:hover\{filter:none;\}/.test(src)
    && /\.cal-daycol\.col-past \.cal-ev:hover\{filter:none;\}/.test(src));
 ok('　　未完成的過去課卡仍不淡化（0801 定案：那是待辦，不能一起壓暗）',
    /\.cal-ev\.cal-ev-todo,\s*\n\.cal-daycol\.col-past \.cal-ev\.cal-ev-todo\{opacity:1;filter:none;\}/.test(src));
@@ -735,7 +735,7 @@ ok('　　點得動要看得出來（cursor:pointer）',
 
 console.log('\n待簽約／待付款的課卡也改暗化（2026-08-21 使用者指示）');
 ok('★ 不再壓文字透明度，改成整張卡壓亮度',
-   /\.cal-ev\.cal-ev-std\.cal-ev-pend,\s*\n\s*\.tcard\.tcard-std\.tcard-pend\{ filter:brightness\(0\.92\) saturate\(0\.7\); \}/.test(src)
+   /\.cal-ev\.cal-ev-std\.cal-ev-pend,\s*\n\s*\.tcard\.tcard-std\.tcard-pend\{ filter:brightness\(0\.9\) saturate\(0\.72\); \}/.test(src)
    && !/\.tcard\.tcard-std\.tcard-pend \.tcard-txt\{ opacity:\.62; \}/.test(src));
 ok('　　紅框維持滿的（那是「還沒收款」的警示，不能一起變淡）',
    /\.tcard\.tcard-std\.tcard-pend \.tcard-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;/.test(src));

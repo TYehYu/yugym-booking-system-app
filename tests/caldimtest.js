@@ -27,8 +27,8 @@ ok('★ cal-ev-todo 取消淡化', /\.cal-ev\.cal-ev-todo,/.test(src));
 ok('★ 整欄灰化（.col-past）也要讓開，否則週檢視還是會被壓暗',
    /\.cal-daycol\.col-past \.cal-ev\.cal-ev-todo\{opacity:1;filter:none;\}/.test(src));
 /* 2026-08-21 使用者定案：改用「暗化」而不是透明化（見 cardstyletest 的四修） */
-ok('　　cal-ev-past 仍然會被壓暗（只是改用 brightness）',
-   /\.cal-ev\.cal-ev-past\{opacity:1;filter:brightness\(0\.9\)/.test(src));
+ok('　　cal-ev-past 仍然會被壓暗（只是改用 brightness；0822 起與 cal-ev-dark 共用同一條）',
+   /\.cal-ev\.cal-ev-past,\s*\n\.cal-ev\.cal-ev-dark\{opacity:1;filter:brightness\(0\.9\)/.test(src));
 {
   // 特異度：.cal-daycol.col-past .cal-ev.cal-ev-todo (4 類) 必須贏過 .cal-daycol.col-past .cal-ev (3 類)
   const spec=sel=>(sel.match(/\./g)||[]).length;

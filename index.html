@@ -3786,28 +3786,6 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-body.cal-7d{overflow-x:hidden;overflow-y:auto;}
 .cal-body.cal-7d .cal-daycol{min-width:0;flex:1 1 0;}
 .cal-timecol{flex-shrink:0;width:42px;padding-top:56px;position:sticky;left:0;z-index:25;background:var(--card);}
-/* ══ 七日檢視：時間改成畫在整點虛線上（2026-08-22 使用者指示）═══════════════════
-   「在每個整點畫出橫向的虛線，然後把時間文字放在虛線上，文字可以蓋過課卡，方便閱讀」。
-   做法：時間軸那一欄從「左邊佔 42px 的欄位」改成「蓋在整片格線上的透明圖層」——
-   ・整點列畫 border-top 虛線，橫貫所有欄位；
-   ・時間文字絕對定位在那條線上（往上位移半個字高），底下墊半透明白底才讀得清楚；
-   ・pointer-events:none，點擊照樣落在下面的格子/課卡上。
-   ⚠ 只套 7 日（含 5 日，同一個 class）：那個檢視的欄寬是 flex:1、不會橫向捲動，
-     圖層用 left:0/right:0 才對得齊。1 日／3 日可以橫捲，套上去線會只畫半截。
-   ⚠ 欄位內原本的實線整點線要讓位，否則同一個 y 會有實線＋虛線兩條。 */
-@media(min-width:601px){
-  .cal-body.cal-7d{position:relative;}
-  .cal-body.cal-7d>.cal-timecol{position:absolute;left:0;right:0;top:0;width:auto;
-    padding-top:56px;z-index:40;pointer-events:none;background:transparent;}
-  .cal-body.cal-7d>.cal-timecol .tc-row{height:var(--slot-px,34px);position:relative;
-    text-align:left;padding:0;color:transparent;}
-  .cal-body.cal-7d>.cal-timecol .tc-row:not(.half){border-top:1px dashed rgba(0,0,0,.24);}
-  .cal-body.cal-7d>.cal-timecol .tc-row span{position:absolute;left:6px;top:0;
-    transform:translateY(-50%);font-size:11.5px;font-weight:700;color:var(--t2);
-    background:rgba(255,255,255,.86);padding:0 6px;border-radius:7px;line-height:1.55;
-    letter-spacing:.02em;}
-  .cal-body.cal-7d .cal-half.hourline{border-bottom-color:transparent;}
-}
 .cal-timecol .tc-row{height:var(--slot-px,34px);font-size:11px;color:var(--t2);text-align:right;padding-right:6px;font-family:var(--sans);font-weight:500;position:relative;}
 .cal-timecol .tc-row.half{color:transparent;}
 .cal-timecol .tc-row span{position:relative;top:-6px;}
@@ -3831,8 +3809,17 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
    ⚠ 透明化與暗化不是同一件事：透明會讓卡片和背景混在一起、字也跟著糊掉；
    暗化是整張卡連字一起變沉，對比度不變，所以讀得到、但視覺重量明顯比未來的課低。
    滑過去恢復原狀。 */
-.cal-ev.cal-ev-past{opacity:1;filter:brightness(0.9) saturate(0.72);transition:filter .18s;}
-.cal-ev.cal-ev-past:hover{filter:none;}
+/* ══ 暗化＝這張課卡沒有「有效票券」（2026-08-22 使用者定義）════════════════════
+   三種情況共用同一種視覺，因為對櫃檯來說是同一件事——這張課現在不會產生（或已經不會再
+   產生）任何扣課：
+     ① 已經過去的課卡
+     ② 未來的課卡但還沒付款（待簽約／待收款）
+     ③ 教練請假整堂取消的團課 —— 會員也不會自己來訓練（使用者定義）
+   數值統一成 brightness(.9) saturate(.72)，滑過去恢復原狀。 */
+.cal-ev.cal-ev-past,
+.cal-ev.cal-ev-dark{opacity:1;filter:brightness(0.9) saturate(0.72);transition:filter .18s;}
+.cal-ev.cal-ev-past:hover,
+.cal-ev.cal-ev-dark:hover{filter:none;}
 /* 未完成的過去課卡不淡化（2026-08-01 使用者指示）——
    .col-past 會把整欄的舊卡再壓一層灰，這裡要一起讓開，否則週檢視的舊日期還是會把它壓暗。 */
 .cal-ev.cal-ev-todo,
@@ -4503,8 +4490,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   .tcard.tcard-std.tcard-pend .tcard-body{
     border:2px solid var(--danger,#b5372e) !important;
     box-shadow:inset 0 0 0 1px rgba(181,55,46,.35) !important; }
+  /* 2026-08-22：數值與過期／教練請假團課對齊（使用者把三者定義成同一件事：沒有有效票券） */
   .cal-ev.cal-ev-std.cal-ev-pend,
-  .tcard.tcard-std.tcard-pend{ filter:brightness(0.92) saturate(0.7); }
+  .tcard.tcard-std.tcard-pend{ filter:brightness(0.9) saturate(0.72); }
   .cal-ev.cal-ev-std.cal-ev-pend:hover,
   .tcard.tcard-std.tcard-pend:hover{ filter:none; }
   .cal-ev.cal-ev-std.cal-ev-pend .evc-body::before,
@@ -7584,7 +7572,12 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   .ash-mnotk{margin-top:6px;font-size:11.5px;font-weight:600;color:var(--t3);}
   .ash-mcard:active{transform:scale(.99);}
   /* 請假：整張淡化＋左緣紅線（與名單視窗同一套語彙，紅＞金＞綠） */
-  .ash-mleave{opacity:.72;box-shadow:inset 3px 0 0 var(--danger,#b5372e),0 8px 22px rgba(30,25,15,.18);}
+  /* 請假的會員卡：2026-08-22 使用者回報「課卡內容顯示變得更糟糕了」——
+     原本用 opacity:.72，這張面板後面是模糊的行事曆，卡片一透明就把背景吃進來、字全糊掉。
+     改成與全站一致的暗化（壓亮度、卡片本身仍是不透明的白底），字的對比度不變。
+     這條 0821 就定過：「用暗化表示 不要透明化」。 */
+  .ash-mleave{opacity:1;filter:brightness(0.9) saturate(0.72);
+    box-shadow:inset 3px 0 0 var(--danger,#b5372e),0 8px 22px rgba(30,25,15,.18);}
   .ash-mmain{flex:1;min-width:0;}
   .ash-mname{display:flex;align-items:center;flex-wrap:wrap;gap:6px;
     font-size:20px;font-weight:800;line-height:1.25;color:var(--text);}
@@ -8625,6 +8618,13 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .amcv-grid{display:flex;gap:4px;}
 .amcv-bglayer{position:absolute;left:0;right:0;pointer-events:none;z-index:0;}
 .amcv-bglayer .cag-gline-label{z-index:1;}
+/* 整點虛線＋壓在線上的時間（2026-08-22 使用者指示，手機七日）——
+   標籤層蓋在欄位之上（欄位是 z-index:1），所以讀得到；pointer-events:none，
+   點擊照樣落在下面的格子／課卡上。 */
+.amcv-gline{position:absolute;left:0;right:0;border-top:1px dashed rgba(0,0,0,.2);}
+.amcv-toplayer{position:absolute;left:0;right:0;pointer-events:none;z-index:5;}
+.amcv-toplayer .cag-gline-label{opacity:1;background:rgba(255,255,255,.86);
+  border-radius:7px;padding:0 7px;font-size:11.5px;font-weight:700;color:var(--t2);}
 .amcv-col{flex:1 1 0;min-width:0;position:relative;z-index:1;}
 .amcv-colh{display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 0 6px;height:34px;box-sizing:border-box;}
 .amcv-colh b{font-size:12px;color:var(--text);line-height:1.1;}
@@ -8890,8 +8890,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1156';
-const APP_VERSION_LABEL='v260822.1156';
+const APP_VERSION = '260822.1219';
+const APP_VERSION_LABEL='v260822.1219';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18426,7 +18426,10 @@ async function renderCalendar(opts){
          遮蔽卡（教練看別人的課）沒有簽到章可判讀，維持原本一律淡化，不製造假警訊。 */
       const _settled = b.status==='cancelled' || b.status==='no_show' || hideMember
         || _isCheckedIn || _isMakeup || grpAllOnLeave(b);
-      const _pastCls = bkShowsCancelled(b) ? 'cal-ev-past'   /* 教練請假整堂取消：課卡保留但淡化（2026-08-17） */
+      /* 教練請假整堂取消的團課：課卡保留但暗化（2026-08-17 保留、2026-08-22 改用語意明確的
+         class）—— 與「過期」共用同一組數值，但它不是過期，掛 cal-ev-past 會讓之後看程式的人
+         誤以為是日期判斷的結果。 */
+      const _pastCls = bkShowsCancelled(b) ? 'cal-ev-dark'
         : !_isPastCard ? '' : (_settled ? 'cal-ev-past' : 'cal-ev-todo');
       // hover 跟游標提示內容（2026-07-25 使用者指示）：時間 / 會員（團課逐人分行）/ 教練；白底黑字浮框由 initCalCursorTip 顯示
       const _tipEsc = s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
@@ -21204,7 +21207,10 @@ async function renderCoachAgenda(){
        與其兩份各調各的，直接讓管理員也走下面這一份，之後只要維護一種課卡。
        ⚠ .admcag / .acg-* 那組樣式因此沒有呼叫端了；沒有一併刪除是因為
          「管理員手機行事曆改版」還可能回頭用，若確定不用了再清。 */
-    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${(dim||bkShowsCancelled(b))?' dim':''}${canClick?'':' cag-view'}${_mkAlert}" ${canClick?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:''}>
+    /* 教練請假整堂取消的團課：0817 是跟遮蔽卡共用 .dim（opacity .4＝透明化），
+       2026-08-22 使用者定義「暗化＝沒有有效票券」，改用 .cal-ev-dark（壓亮度、字不糊）。
+       .dim 留給「教練看別人的課」那種遮蔽卡 —— 那是看不到內容，不是沒有票。 */
+    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${bkShowsCancelled(b)?' cal-ev-dark':''}${canClick?'':' cag-view'}${_mkAlert}" ${canClick?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:''}>
       ${_mk}
       ${(()=>{const k=bkStampKind(b);
         return k==='leave'?'<span class="evc-check evc-leave" title="全員請假">假</span>'
@@ -40935,10 +40941,17 @@ async function admCalMultiHTML(nDays){
   const tm=Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t]));
   const S=8*60,E=22*60,HH=46,GH=(E-S)/60*HH;
   const wdz=['日','一','二','三','四','五','六'];
-  let bg='';
+  /* 2026-08-22 使用者指示（手機七日）：「在每個整點畫出橫向的虛線，然後把時間文字放在
+     虛線上，文字可以蓋過課卡」＋「本來時間是在格子內 要改成在格線上」——
+     原本標籤放在 top+HH/2（整點格的正中央），改成放在 top（整點那條線上），
+     並在同一個 y 畫一條貫穿七欄的虛線。
+     ⚠ 標籤要另外開一層蓋在課卡之上：背景層 .amcv-bglayer 是 z-index:0、欄位是 1，
+       標籤留在背景層會被課卡蓋掉，看不到的就是最需要讀的那個時間。 */
+  let bg='', hrLabels='';
   for(let h=8;h<22;h++){ const top=(h*60-S)/60*HH;
     bg+=`<div class="cag-hourbg" style="top:${top+2}px;height:${HH-4}px;"></div>`
-      +`<div class="cag-gline-label" style="top:${top+HH/2}px;">${String(h).padStart(2,'0')}:00</div>`;
+      +`<div class="amcv-gline" style="top:${top}px;"></div>`;
+    hrLabels+=`<div class="cag-gline-label" style="top:${top}px;">${String(h).padStart(2,'0')}:00</div>`;
   }
   const nowMin=(new Date()).getHours()*60+(new Date()).getMinutes();
   const colsHtml=days.map(d=>{
@@ -40991,6 +41004,7 @@ async function admCalMultiHTML(nDays){
     <div class="amcv-grid" style="position:relative;">
       <div class="amcv-bglayer" style="top:0;height:${GH}px;">${bg}</div>
       ${colsHtml}
+      <div class="amcv-toplayer" style="top:0;height:${GH}px;">${hrLabels}</div>
     </div></div>`;
 }
 /* 管理員手機行事曆表頭（2026-08-19）：首頁同款週列＋一日/三日/七日模式切換（僅 admin） */

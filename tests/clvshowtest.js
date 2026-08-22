@@ -37,10 +37,19 @@ ok('renderCoachAgenda 堂數統計不計取消卡',
   src.includes("cntSrc.forEach(b=>{ if(b.status==='cancelled')return;"));
 ok('renderCoachAgenda ＋新增時段不被取消卡佔住',
   src.includes("allBk.filter(b=>b.date===selDate && b.status!=='cancelled')"));
-ok('桌機課卡：保留的取消卡走 cal-ev-past 淡化',
-  src.includes("bkShowsCancelled(b) ? 'cal-ev-past'"));
-ok('手機課卡：保留的取消卡走 dim 淡化',
-  src.includes("(dim||bkShowsCancelled(b))?' dim'"));
+/* 0822 使用者定義「暗化＝這張課卡沒有有效票券」（過期／未付款／教練請假整堂取消的團課），
+   三者共用同一組數值；教練請假這條改掛語意明確的 cal-ev-dark，不再借用 cal-ev-past。 */
+ok('桌機課卡：保留的取消卡走 cal-ev-dark 暗化（不再借用 cal-ev-past）',
+  src.includes("bkShowsCancelled(b) ? 'cal-ev-dark'"));
+ok('★★ 手機課卡：從 .dim（opacity .4＝透明化）改成 .cal-ev-dark（暗化）',
+  src.includes("${dim?' dim':''}${bkShowsCancelled(b)?' cal-ev-dark':''}")
+  && src.includes('.dim 留給「教練看別人的課」那種遮蔽卡'));
+ok('★ 三種情況同一組數值（過期／教練請假團課共用一條規則）',
+  /\.cal-ev\.cal-ev-past,\s*\n\.cal-ev\.cal-ev-dark\{opacity:1;filter:brightness\(0\.9\) saturate\(0\.72\);/.test(src)
+  && /\.tcard\.tcard-std\.tcard-pend\{ filter:brightness\(0\.9\) saturate\(0\.72\); \}/.test(src));
+ok('★★ 請假的會員卡也改暗化（原本 opacity:.72，面板後面是模糊行事曆，一透明字就糊掉）',
+  /\.ash-mleave\{opacity:1;filter:brightness\(0\.9\) saturate\(0\.72\);/.test(src)
+  && /這條 0821 就定過：「用暗化表示 不要透明化」/.test(src));
 ok('手機課卡：教練請假紅標（與桌機同款）',
   /const tag = bkIsCoachLeave\(b\) \? `<span class="evc-coach" style="background:#7A2E28/.test(src));
 
