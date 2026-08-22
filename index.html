@@ -5299,6 +5299,11 @@ body.chv2-shell .bottom-nav .bn-lb{color:inherit;}
 .modal .cag-slots .cag-slot:hover{background:var(--green);color:#fff;border-color:var(--green);}
 .modal .cag-slots .cag-slot-off{background:rgba(0,0,0,.06);border-color:transparent;
   color:var(--t3);box-shadow:none;}
+/* 選取態（2026-08-22 使用者回報：「時段不小心點到兩次就直接進入下一步了」）——
+   點時段只是選起來，要再按下方的「確認」才會走到建立預約。放在 :hover 後面才壓得過它。 */
+.modal .cag-slots .cag-slot.cag-slot-on{background:var(--green);color:#fff;border-color:var(--green);
+  box-shadow:0 2px 8px rgba(45,90,61,.28);}
+.modal .cag-slots .cag-slot.cag-slot-on::after{content:'✓';margin-left:6px;font-weight:700;}
 .chv2-score-row{display:flex;align-items:baseline;justify-content:space-between;
   padding:9px 2px;border-bottom:1px dashed var(--bd);}
 .chv2-score-row:last-child{border-bottom:none;}
@@ -9057,8 +9062,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260822.1748';
-const APP_VERSION_LABEL='v260822.1748';
+const APP_VERSION = '260822.1804';
+const APP_VERSION_LABEL='v260822.1804';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -42215,8 +42220,9 @@ async function chvQuickSlots(ds, coachId){
      不可預約的時段了」）—— 前一版沿用行事曆那套訂位面板，會把已排課／已過去的也畫出來再
      暗化；這一頁的用途只是「挑一個空檔」，不可約的放著只是雜訊。
      所以不走 slotPanelHTML（那支的職責是「整天的時段狀態」），改成純粹的可約清單。 */
-  const cells=slots.map(o=>`<button type="button" class="cag-slot" onclick="chvQuickPick('${minToTime(o.mm)}')">${minToTime(o.mm)}${
+  const cells=slots.map(o=>`<button type="button" class="cag-slot" data-t="${minToTime(o.mm)}" onclick="chvQuickSel('${minToTime(o.mm)}')">${minToTime(o.mm)}${
     o.tag?`<span class="cag-slot-tag">${o.tag}</span>`:''}</button>`).join('');
+  window._chvQsPick='';
   showModal(`<div class="modal-title">快速預約</div>
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">
       ${date.replace(/-/g,'/')}（${_wd}）　還能安排 <b style="color:var(--text);">${slots.length}</b> 個時段
@@ -42225,7 +42231,24 @@ async function chvQuickSlots(ds, coachId){
     ${slots.length
       ? `<div class="cag-slots chvqs2">${cells}</div>`
       : `<div style="padding:18px 4px;color:var(--t3);font-size:13px;text-align:center;">這一天已經沒有可安排的時段了。</div>`}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>${
+      slots.length?`<button class="btn btn-primary" id="chvqs-ok" disabled onclick="chvQuickGo()">確認</button>`:''}</div>`);
+}
+/* 選時段：只標記，不前進（誤觸兩下也只是換一格） */
+function chvQuickSel(t){
+  window._chvQsPick=(window._chvQsPick===t)?'':t;   // 再點同一格＝取消選取
+  document.querySelectorAll('.modal .cag-slots .cag-slot[data-t]').forEach(el=>{
+    el.classList.toggle('cag-slot-on', el.getAttribute('data-t')===window._chvQsPick);
+  });
+  const ok=document.getElementById('chvqs-ok');
+  if(ok){ ok.disabled=!window._chvQsPick;
+    ok.textContent=window._chvQsPick?`確認 ${window._chvQsPick}`:'確認'; }
+}
+/* 按確認才真的往下走 */
+function chvQuickGo(){
+  const t=window._chvQsPick;
+  if(!t){ toast('請先選一個時段'); return; }
+  chvQuickPick(t);
 }
 /* 點時段 → 帶日期時間開建立預約（與 cagSlotBook 同一條路，只是這裡要先關掉視窗） */
 /* 快速預約只建教練課（2026-08-22 使用者指示：「只能建立教練課，不能建立自主訓練跟團體課」）——
