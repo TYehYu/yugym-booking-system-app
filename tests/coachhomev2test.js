@@ -282,5 +282,8 @@ ok('★★ ⚠ 只擋自己的衝堂、不擋場地 —— 場地由建立預約
    /只擋「自己」的衝堂，不擋場地/.test(src));
 ok('★ 點一格直接進既有的建立預約流程（日期時間帶進去）',
    /onclick="closeModal\(\);dtlAddAt\('\$\{date\}','\$\{minToTime\(mm\)\}'\)"/.test(src));
+ok('★ 時段按鈕用白底＋細框（使用者指示；與日期欄白框、課卡同一套語彙）',
+   /\.chvqs-slot\{padding:11px 6px;border-radius:11px;border:1px solid var\(--bd\);background:#fff;/.test(src)
+   && /原本是米色底，跟視窗底色黏在一起/.test(src));
 ok('　　一格都沒有時講清楚，不要給一個空格子',
    /這一天已經沒有可安排的時段了。/.test(src));
