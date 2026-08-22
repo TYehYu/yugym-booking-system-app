@@ -178,7 +178,7 @@ ok('　　只有教室／跑步機會有值（多功能是預設場地、不標�
 
 console.log('\n會員資料的新表頭要給櫃檯（使用者：櫃檯端的會員資料頁面還沒修改）');
 ok('★ 版面判斷從 role===admin 放寬到櫃檯以上（含店長）',
-   /if\(isM && \(typeof isDeskLike==='function' \? isDeskLike\(\) : \(SESSION && SESSION\.role==='admin'\)\)\)\{/.test(src)
+   /if\(isM && \(_selfPP \|\| \(typeof isDeskLike==='function' \? isDeskLike\(\) : \(SESSION && SESSION\.role==='admin'\)\)\)\)\{/.test(src)
    && !/if\(isM && SESSION && SESSION\.role==='admin'\)\{\s*\n\s*\/\* 三修/.test(src));
 ok('★ 權限沒有跟著放寬：改名／刪除／看密碼／改等級仍限管理員',
    /const delBtn = \(isM && SESSION && SESSION\.role==='admin'\)/.test(src)

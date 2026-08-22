@@ -243,15 +243,16 @@ const ph=g('function ppHeaderHtml(){','\n// ══════ Tabs ════
 /* 2026-08-20 四修：桌機版也走同一套版面 → 條件不再看 isMobileLayout()。
    仍限「管理員」與「會員」——員工資料與其他角色維持原本的橫向表頭。 */
 /* 0821 放寬到櫃檯以上（含店長）：版面本身跟權限無關，能不能改名／刪除各自另有判斷 */
-ok('★ 櫃檯以上看會員資料一律走新版面（手機與桌機同一套）',
-   /if\(isM && \(typeof isDeskLike==='function' \? isDeskLike\(\) : \(SESSION && SESSION\.role==='admin'\)\)\)\{[\s\S]{0,500}return `<div class="pp-head pp-head-m2">/.test(ph)
+/* 2026-08-22：會員本人（_selfPP）也走同一套版面，所以條件多了一個分支 */
+ok('★ 櫃檯以上（與會員本人）看會員資料一律走新版面（手機與桌機同一套）',
+   /if\(isM && \(_selfPP \|\| \(typeof isDeskLike==='function' \? isDeskLike\(\) : \(SESSION && SESSION\.role==='admin'\)\)\)\)\{[\s\S]{0,600}return `<div class="pp-head pp-head-m2/.test(ph)
    && !/isMobileLayout\(\)\)\{[\s\S]{0,80}pp-head-m2/.test(ph));
 ok('★ 大頭照＋姓名獨立一列、橫跨兩欄（使用者回報左右失衡）',
-   /<div class="pp-idtop">\s*\n\s*\$\{_avatar\}[\s\S]{0,260}<div class="pp-meta pp-idtier">\$\{tierItem\}<\/div>/.test(ph)
+   /<div class="pp-idtop">\s*\n\s*\$\{_avatar\}[\s\S]{0,260}<div class="pp-meta pp-idtier">\$\{_selfPP\?'':tierItem\}<\/div>/.test(ph)
    && /\.pp-head-m2 \.pp-idtop\{grid-column:1\/-1/.test(src));
 ok('★ 底下左右各四列：電話/性別/生日/LINE ｜ 主教練/緊急聯絡人/載具/家庭成員',
    ph.includes('<div class="pp-meta pp-idfields">${phoneItem}${genderItem}${bdayItem}${lineItem}</div>')
-   && ph.includes('<div class="pp-meta pp-fields">${coachItem}${ecItem}${carrierItem}${famItem}</div>')
+   && ph.includes('<div class="pp-meta pp-fields">${_selfPP?\'\':coachItem}${ecItem}${carrierItem}${famItem}</div>')
    && /\.pp-head\.pp-head-m2\{display:grid;grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/.test(src));
 /* 0820 放大到 76 → 0822 收回 58：表頭改成固定不捲之後，它佔的高度是永久少掉的可讀區
    （使用者：「把上方底部米色視窗縮短一點」）。見 tests/ppstickytest.js。 */
@@ -319,7 +320,7 @@ ok('★ 預約紀錄：520px 月曆改成按月分段的清單（桌機仍是月
 ok('　　清單一列一堂：日期／課名（帶課程色）／時間／教練／狀態',
    /\.pp-bkrow::before\{[^}]*background:var\(--bkc/.test(src) && /class="pp-bktag \$\{st\[1\]\}"/.test(src));
 ok('★ 會員資料改用浮動視窗、不再滿版（使用者指示：用視窗比較有彈性感）',
-   /const _winM = !!\(SESSION && SESSION\.role==='admin' && kind==='member' && isMobileLayout\(\)\);/.test(src)
+   /const _winM = !!\(kind==='member' && isMobileLayout\(\)\s*\n\s*&& \(\(SESSION && SESSION\.role==='admin'\) \|\| ppSelfView\(\)\)\);/.test(src)
    && /if\(isMobileLayout\(\)\) ppOpenSheet\(false, _winM\); else ppOpenPage\(\);/.test(src)
    && /\.pp-sheet\.pp-sheet-win\{background:rgba\(18,26,22,\.48\)/.test(src));
 ok('　　點背景可關閉（兩種浮動模式共用）', /if\(desk\|\|win\) sh\.addEventListener\('click'/.test(src));

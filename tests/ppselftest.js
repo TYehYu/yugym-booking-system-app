@@ -32,5 +32,21 @@ t('交易頁只列自己的日期／項目／金額／付款方式，沒有業�
   (()=>{ const pay=cut("if(PP.recView==='pay'){","return `<div class=\"pp-card\">${back}<div class=\"pp-card-t\">訓練紀錄");
     return !/sale_kind|sold_by|獎金|成本|業績/.test(pay); })());
 
+// ── 2026-08-22 三修（使用者）：改成視窗、欄位一列一列、移除修改密碼、更換照片改名 ──
+t('會員本人看自己也用浮動視窗（不是全頁面）',
+  /const _winM = !!\(kind==='member' && isMobileLayout\(\)\s*\n\s*&& \(\(SESSION && SESSION\.role==='admin'\) \|\| ppSelfView\(\)\)\);/.test(s));
+t('會員本人走「一列一列」的 pp-head-m2 版面',
+  /if\(isM && \(_selfPP \|\| \(typeof isDeskLike==='function'/.test(s)
+  && /pp-head-m2\$\{_selfPP\?' pp-head-self':''\}/.test(s));
+t('那個版面裡等級與主教練照樣不畫',
+  /pp-idtier">\$\{_selfPP\?'':tierItem\}/.test(s)
+  && /pp-fields">\$\{_selfPP\?'':coachItem\}/.test(s));
+t('會員不顯示「修改密碼」（LINE 登入）',
+  /pwBtn\.style\.display = \(SESSION\.role==='member'\)\?'none':''/.test(s)
+  && /if\(role!=='member'\) items\+=`<button class="more-item" onclick="closeModal\(\);openChangePassword\(\)">/.test(s));
+t('員工仍看得到修改密碼（帳號密碼登入）', /id="acct-changepw"/.test(s));
+t('「更換照片」改名「上傳大頭照」', !/更換照片<\/button>/.test(s)
+  && /上傳大頭照<\/button>/.test(s) && /📷　上傳大頭照/.test(s));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

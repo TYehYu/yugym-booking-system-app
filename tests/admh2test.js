@@ -88,7 +88,8 @@ ok('★ 上下箭頭提示可換週，也可以直接點',
 ok('　　純 CSS 三角形，不吃字型（跨機一致）',
    /\.a2-arw\{[\s\S]{0,160}?border-left:5px solid transparent;border-right:5px solid transparent;/.test(src));
 ok('★★ 上下拖曳換週：欄位跟著手指走一點點（打四五折、最多 26px）',
-   /const TH=44, HOLD=500, MAXOFF=26;/.test(src)
+   /* 停留門檻 0.5→0.25 秒（2026-08-22 使用者指示） */
+   /const TH=44, HOLD=250, MAXOFF=26;/.test(src)
    && /inner\.style\.transform='translateY\('\+Math\.max\(-MAXOFF,Math\.min\(MAXOFF, dy\*0\.45\)\)\+'px\)';/.test(src));
 ok('★★ 拉過門檻要「停住 0.5 秒」才真的換週（隨手一滑不會換掉整週）',
    /armT=setTimeout\(\(\)=>\{ fired=true; clearArm\(\); snap\(\);/.test(src)

@@ -13,7 +13,8 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');if(i<0)return'';let d=0;
 
 console.log('① 頁面結構');
 ok('★ 大標「我的票券」退場、改等級卡開頭',
-   /C\.innerHTML=\n\s*memTierBlock\(tier, usable\.length\)\+/.test(src)
+   /* 2026-08-22：V2 換成 memTierBlockV2（三條進度表），舊版仍是 memTierBlock */
+   /C\.innerHTML=\n\s*\(mtkV2\?memTierBlockV2\(tier, usable\.length\):memTierBlock\(tier, usable\.length\)\)\+/.test(src)
    && !/<h1>我的票券<\/h1>/.test(src));
 ok('★ 載入本人資料（算 tier_epoch 起點用）', /dbGet\('members',SESSION\.id\)\.catch\(\(\)=>null\)\]\);/.test(src));
 /* 2026-08-05 二修（使用者附截圖）：規則不寫「與抽獎目標同一套」、VIP 條目不顯示 */

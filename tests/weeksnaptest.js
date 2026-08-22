@@ -49,8 +49,8 @@ console.log('\n日期列的左右拖曳換週');
 ok('★ 兩端箭頭改用首頁那組 CSS 三角形（橫向版）',
    /<span class="a2-arw a2-arw-l" role="button" tabindex="0" title="上一週" onclick="\$\{prevFn\}"><\/span>/.test(src)
    && /\.a2-arw-l\{border-left:0;border-right:6px solid var\(--t3\);/.test(src));
-ok('★★ 手感與首頁直欄同一套：位移打四五折、門檻 44px、停 500ms 才換',
-   /const TH=44, HOLD=500, MAXOFF=26;\s*\n\s*let row=null, head=null/.test(src)
+ok('★★ 手感與首頁直欄同一套：位移打四五折、門檻 44px、停 250ms 才換',
+   /const TH=44, HOLD=250, MAXOFF=26;[^\n]*\n\s*let row=null, head=null/.test(src)
    && /row\.style\.transform='translateX\('\+Math\.max\(-MAXOFF,Math\.min\(MAXOFF, dx\*0\.45\)\)\+'px\)';/.test(src));
 ok('★ 往左拖＝下一週、往右拖＝上一週；待命時亮起對應那顆箭頭',
    /const d=\(dx<=-TH\)\?1:\(\(dx>=TH\)\?-1:0\);/.test(src)
