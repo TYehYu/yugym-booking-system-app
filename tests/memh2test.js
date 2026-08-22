@@ -58,7 +58,15 @@ t('票券顯示第幾堂／共幾堂', /第 \$\{_nth\} 堂／共 \$\{tk\.session
 /* 0822（使用者）：「手機版的課卡不用顯示金色外框 那個是給員工看的」 */
 t('課卡不加金框（金框在員工端是「逾時未簽到」的意思）', !/mh2-ck'/.test(html)
   && !/\.mh2-ck\{/.test(s));
-t('「可以簽到了」仍用金字標示', /st\.open\?' mh2-ckl':''/.test(html));
+/* 0822 再修（使用者）：「課卡的簽到狀態文字也不用顯示 直接看手指圖示就好」 */
+t('課卡不再寫簽到狀態文字', !/可以簽到了/.test(html) && !/開課前 30 分鐘可簽到/.test(html)
+  && !/a2-l2/.test(html));
+t('已簽到／請假／未到仍靠左邊那顆出席章辨識',
+  /st\.leave\?\['假','admh-st-leave'\]/.test(html) && /st\.done\?\['簽','admh-st-done'\]/.test(html));
+t('剩兩列：課程・場地（粗體）／第幾堂共幾堂', /class="a2-l1">\$\{cname\}/.test(html)
+  && /\$\{_tkTxt\?`<div class="a2-l3">\$\{_tkTxt\}<\/div>`:''\}/.test(html)
+  && /\.memh2 \.admh2-card \.a2-l1\{font-size:14\.5px;font-weight:800/.test(s));
+t('沒綁票的團課就不畫第二列（不留空行）', /\$\{_tkTxt\?`<div/.test(html));
 
 // ── 簽到視窗 ──
 const tap=cut('async function memh2Tap(id){','/* ［＋］預約自主訓練');
