@@ -76,3 +76,14 @@ ok('　　金底上的日期改白卡（原本是 --card2，疊在金底上會�
 ok('★ 「N 人上課中」標籤移除（那一列本來就有流星邊框）',
    !/\$\{_liveCount\?`<span class="tl-live-badge">/.test(src)
    && /頂上再掛一顆數字標是同一件事講兩次/.test(src));
+
+/* 2026-08-22 使用者指示：回到今天＝紅底、日期列翻頁鈕＝金底、教練＋課卡整列＝米底 */
+ok('★ 「回到今天」用品牌紅（紅>金>綠：它是「你現在不在今天」的最高等級提示）',
+   /\.tl-daynav\.tl-daynav-today\{width:auto;padding:0 12px;font-size:11\.5px;font-weight:700;\s*\n\s*color:#fff;background:var\(--danger,#7F0303\);/.test(src));
+ok('★ 日期列的翻頁鈕金底（跟金色的日期欄收在一起）',
+   /\.twk-rail-nav \.tl-daynav\{background:var\(--gold,#B48A56\);color:#fff;\}/.test(src));
+ok('★ 教練＋課卡整列米底（左金右米，兩區的界線不只靠那條線）',
+   /\.tl-3col \.tcard-row\{background:var\(--card2,#FAF7F0\);border-radius:12px;/.test(src));
+ok('　　⚠ sticky 的教練欄底色要一起換，否則橫捲時會露出一塊白',
+   /\.tl-3col \.tcard-row \.tcard-coach\{background:var\(--card2,#FAF7F0\);\}/.test(src)
+   && /否則捲動時會露出一塊白/.test(src));

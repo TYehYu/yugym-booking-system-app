@@ -125,8 +125,10 @@ ok('★ 過期票不再和「用完的」混在歷史紀錄裡',
 ok('★ 兩區各自有標題與筆數', /<summary>已過期方案（\$\{expd\.length\}）/.test(src)
    && /<summary>歷史紀錄（\$\{hist\.length\}）<\/summary>/.test(src));
 ok('★ 已過期方案排在歷史紀錄前面', /\$\{expdSec\}\$\{histSec\}<\/div>/.test(src));
+/* 0822：「可展延」的外觀（不淡化＋預設展開）與角色脫鉤，只有按鈕仍限櫃檯以上 */
 ok('★ 展延按鈕跟著搬到已過期方案那一區（展延只對過期票有意義）',
-   /const _extable=expd\.filter\(t=>isDeskLike\(\)&&tkCanExtend\(t,_tYmd\)\);/.test(src));
+   /const _extable=expd\.filter\(t=>tkCanExtend\(t,_tYmd\)\);/.test(src)
+   && /const canExtBtn=isDeskLike\(\)&&canExt;/.test(src));
 ok('　　有可展延的票時預設展開', /<details class="pp-hist"\$\{_extable\.length\?' open':''\}><summary>已過期方案/.test(src));
 ok('　　「目前沒有可用票券」要把兩區都算進去（0809 起也看待審核卡）', /\$\{!act\.length&&!_grHere\.length&&\(hist\.length\|\|expd\.length\)\?/.test(src));
 ok('★ 教練端簡易名片同一套語意：過期就歸已過期，不看剩不剩堂數',

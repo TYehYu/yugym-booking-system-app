@@ -10,8 +10,10 @@ console.log('三欄結構');
 ok('★ 第一欄＝出席章（假／未／簽三種照舊）',
    /<span class="t3-stamp">\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src)
    && /return k==='leave'\?'<span class="tcard-chk tcard-chk-leave">假<\/span>'/.test(src));
-ok('★ 第二欄三列：課程・場地／會員姓名（粗體）／第幾堂',
-   /<span class="t3-l1">\$\{catName\[cc\]\|\|'課程'\}\$\{\(\(\)=>\{const _v=\(typeof venueDisplay==='function'\)\?\(venueDisplay\(b\)\|\|''\):''; return _v\?'・'\+_v:'';\}\)\(\)\}<\/span>/.test(src)
+/* 0822 更正：場地從「跟課程名擠同一列」改成自己一列（第二列）——
+   「教練課・多功能訓練架」這種長度一定會被截掉，兩個都看不全。 */
+ok('★ 第二欄四列：課程／使用場地／會員姓名（粗體）／第幾堂',
+   /<span class="t3-l1">\$\{catName\[cc\]\|\|'課程'\}<\/span>\s*\n\s*<span class="t3-l1 t3-venue">\$\{\(typeof venueDisplay==='function'\)\?\(venueDisplay\(b\)\|\|''\):''\}<\/span>/.test(src)
    && /<span class="t3-l2 tcard-mem">\$\{nm\}<\/span>/.test(src)
    && /<span class="t3-l3">/.test(src)
    && /\.tcard-3c \.t3-l2\{font-size:14\.5px;font-weight:800;/.test(src));

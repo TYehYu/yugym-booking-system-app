@@ -105,8 +105,13 @@ ok('　　原因寫在程式裡', /過期票在系統裡完全動不了/.test(sr
 
 console.log('\n會員名片的票券頁也要看得到（2026-07-30 使用者回報「邱美珠過期的票券還沒有設定展延按鈕」）');
 ok('★ 過期但沒用完的票會被收進「歷史紀錄」→ 展延按鈕就放在那張卡上',
-   /const canExt=isDeskLike\(\)&&tkCanExtend\(t,_tYmd\);/.test(src)
-   && /\$\{canExt\?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event\.stopPropagation\(\);openTicketExtend\('\$\{t\.id\}'\)"/.test(src));
+   /const canExt=tkCanExtend\(t,_tYmd\);/.test(src)
+   && /const canExtBtn=isDeskLike\(\)&&canExt;/.test(src)
+   && /\$\{canExtBtn\?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event\.stopPropagation\(\);openTicketExtend\('\$\{t\.id\}'\)"/.test(src));
+ok('★★ 0822：不淡化這個「例外」不再依角色而定 —— 同一位會員，教練看是淡的、櫃檯看是亮的，'
+   +'正是使用者覺得規則不一致的來源；教練看到的是「可展延」標記，按鈕仍限櫃檯以上',
+   /外觀（不淡化＋標記）與角色無關/.test(src)
+   && /:\(canExt\?`<span class="pp-hist-tag" title="剩 \$\{Number\(t\.sessions_remaining\)\|\|0\} 堂沒用完，可請櫃檯展延">可展延<\/span>`:''\)/.test(src));
 ok('★ 有可展延的票時「歷史紀錄」預設展開，不用自己去點開',
    /<details class="pp-hist"\$\{_extable\.length\?' open':''\}>/.test(src));
 ok('★ 摺疊標題標出有幾張可展延',
@@ -118,8 +123,8 @@ ok('　　按鈕上的提示直接寫可延幾天、延到哪天',
 ok('★ 展延後票券回到可用區，卡片標「已展延（不得退費）」',
    /\$\{tkIsExtended\(t\)\?`　·　<b style="color:var\(--gold-d\);">已展延（不得退費）<\/b>`:''\}/.test(src));
 ok('　　歷史列若是已展延過的也標一下', /\$\{tkIsExtended\(t\)\?'<span class="pp-hist-tag">已展延<\/span>':''\}/.test(src));
-ok('　　只有櫃檯／管理員看得到按鈕（會員自己不能展延）',
-   /const _extable=expd\.filter\(t=>isDeskLike\(\)&&tkCanExtend\(t,_tYmd\)\);/.test(src));   // 2026-07-31：展延搬到「已過期方案」那一區
+ok('　　只有櫃檯／管理員按得到（其他角色看得到狀態、按不下去）',
+   /const canExtBtn=isDeskLike\(\)&&canExt;/.test(src));   // 2026-07-31 搬到「已過期方案」區；0822 外觀與角色脫鉤
 ok('　　點按鈕不會連帶收合／展開摺疊區', /onclick="event\.stopPropagation\(\);openTicketExtend/.test(src));
 ok('　　原因寫在程式裡', /展延開關只做在管理端的\s*\n\s*票券頁，這邊看不到/.test(src));
 
