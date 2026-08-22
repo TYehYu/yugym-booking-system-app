@@ -5,6 +5,9 @@
 //   數字被切成兩半最難讀。改成：標題與日期分行、每個分項自己一行、區塊之間空一行。
 // v4（2026-08-21 使用者指示）：抬頭統一成【有肌訓練 自動訊息】，第二行才寫是什麼通知。
 //   理由：「讓會員跟教練知道這個系統自動通知」—— 不然收到的人會以為是櫃檯手打的而去回訊息。
+// v6（2026-08-23）：員工的 LINE 通知開關 employees.line_notify（opt-out）——
+//   帳號抽屜的「通知設定」開放給管理員了，關掉就不再推戰報。
+//   has_line 一併看這個旗標，debug 模式列出來的收件人才與實際發送一致。
 // v5（2026-08-22 使用者回報「今天明明只有兩筆收款，戰報卻說有五筆」）：
 //   抽獎兌換也寫在 purchases（id 以 LOT- 開頭、deal_amount 0、payment_method 為 null），
 //   舊版的 purN 是「今天 purchases 的列數」，把抽獎那幾列也算成收款筆數。
@@ -98,12 +101,16 @@ Deno.serve(async (req) => {
 
     /* ── 收件人── */
     const { data: emps, error: emErr } = await admin.from('employees')
-      .select('id,name,name_en,role,is_manager,line_user_id,status')
+      .select('id,name,name_en,role,is_manager,line_user_id,status,line_notify')
     if (emErr) detectErrors.push('employees: ' + emErr.message)
     const active = (emps || []).filter(e => e.status !== 'inactive' && e.status !== 'resigned')
     const bosses = active.filter(e => e.role === 'admin' || (e as any).is_manager === true)
     const bossIds = new Set(bosses.map(e => e.id))
-    const coachLine = (e: any) => e.line_user_id || null
+    /* v6（2026-08-23）：員工的 LINE 通知開關（employees.line_notify，opt-out）。
+       使用者把「通知設定」那顆開關開放給管理員之後，關掉的人就不該再收到戰報 ——
+       開關關不掉東西，那顆開關就是假的。與會員端 members.line_notify 同一條規則。 */
+    const notifyOn = (e: any) => e.line_notify !== false
+    const coachLine = (e: any) => (notifyOn(e) ? (e.line_user_id || null) : null)
     const dispName = (e: any) => { const n = e.name_en || e.name || ''; return /[A-Za-z]/.test(n) ? n.toUpperCase() : n }
 
     /* v3 排版：一行一件事。
@@ -160,7 +167,7 @@ Deno.serve(async (req) => {
     const failDetail: Array<{ name: string; reason: string }> = []
     for (const r of plan) {
       const e = active.find(x => x.id === r.id)
-      const to = e && (e as any).line_user_id
+      const to = e && notifyOn(e) ? (e as any).line_user_id : null
       if (!to) { skipNoLine++; continue }
       const resp = await fetch('https://api.line.me/v2/bot/message/push', {
         method: 'POST',

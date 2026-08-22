@@ -77,11 +77,23 @@ ok('　　pointer-events:none：點擊照樣落在底下的課卡',
    /\.cag-gtop\{[^}]*pointer-events:none/.test(src));
 ok('★★ 刻度落在「自己的課／其他人的課」中間那條分隔線上，不是整條線的正中央'
    +'（使用者：「時間線改到左邊課卡分隔線這一欄」）',
-   /\.cag-gtop \.cag-gline-label\{left:calc\(\(100% - 5px\)\/3 \+ 2\.5px\);\}/.test(src));
-ok('★★ 位置用 calc 從 flex 2:4＋gap 5px 算出來，不寫死 33%（欄寬會隨螢幕變）',
-   /兩欄是 flex 2:4、中間 gap 5px/.test(src)
-   && /\.cag-wk-col\.cag-col-mine\{flex:2 1 0;\}/.test(src)
-   && /\.cag-wk-col\.cag-col-rest\{flex:4 1 0;\}/.test(src)
+   /\.cag-gtop \.cag-gline-label\{left:calc\(\(100% - 5px\) \* var\(--cagsplit,0\.3333\) \+ 2\.5px\);\}/.test(src));
+
+console.log('\n④-2 一日行事曆：自己的課卡跟教練們等寬');
+ok('★★ mine 不再是兩格寬（使用者：「幫我改成跟教練們一樣，因為課卡內容已經收斂了」）',
+   !/\.cag-wk-col\.cag-col-mine\{flex:2 1 0;\}/.test(src)
+   && /\.cag-wk-col\.cag-col-mine\{flex:1 1 0;\}/.test(src));
+ok('★★ mine 一格、右側佔「當天最多同時重疊幾張」格 —— 兩邊的一格才等寬',
+   /const _restLanes=Math\.max\(maxLanes,1\);/.test(src)
+   && /style="height:\$\{gridH\}px;flex:1 1 0;"/.test(src)
+   && /style="height:\$\{gridH\}px;flex:\$\{_restLanes\} 1 0;"/.test(src));
+ok('★★ maxLanes 要跑完所有重疊群組才知道 —— 欄寬在迴圈之後才寫',
+   /let maxLanes=0;/.test(src)
+   && /if\(unit>maxLanes\) maxLanes=unit;/.test(src)
+   && /maxLanes 要先跑完所有群組才知道/.test(src));
+ok('★★ 分隔線位置跟著欄寬走：比例寫成 --cagsplit 掛在 .cag-weekgrid 上',
+   /--cagsplit:\$\{\(1\/\(1\+Math\.max\(_cagRestLanes,1\)\)\)\.toFixed\(4\)\};/.test(src)
+   && /寫死 33% 會在別人課少的日子飄到課卡上/.test(src)
    && /\.cag-weekgrid\{position:relative;display:flex;gap:5px;padding:0 10px;\}/.test(src));
 /* showTime 這個名字別處（.wkx-* 那組週檢視）也有，只查一日檢視 renderCard 那一段 */
 const _dayCard=src.slice(src.indexOf("  const renderCard=(b,layer,dim,pos)=>{"),
@@ -114,6 +126,28 @@ ok('★ 月曆每一格底下的課堂數膠囊移除，只留日期',
    && !/<span class="mc-d">\$\{d2\}<\/span><span class="mc-dot/.test(src));
 ok('　　課種明細仍留在 title（滑鼠停留看得到）',
    /title="\$\{ds\}\$\{_tipOf\(ds\)\?'　'\+_tipOf\(ds\):'　沒有預約'\}"/.test(src));
+
+console.log('\n⑦ 通知設定：內嵌開關，管理員也有');
+ok('★★ 跳視窗那一套整組移除（openNotifSettings／saveNotifSettings）',
+   !/function openNotifSettings/.test(src) && !/function saveNotifSettings/.test(src)
+   && /通知設定視窗（openNotifSettings／saveNotifSettings）於 2026-08-23 整組移除/.test(src));
+ok('★ 按鈕本身不再帶 onclick（整列不開視窗）',
+   /<button class="tb-acct-item" id="acct-notif" style="display:none;">/.test(src));
+ok('★★ 管理員也要有（使用者：「第一列是通知設定，管理員應該也要有」）',
+   /if\(notif\) notif\.style\.display = \(role==='coach'\|\|role==='member'\|\|role==='admin'\)\?'':'none';/.test(src));
+ok('　　櫃檯沒加：兩支 Edge Function 都不推給櫃檯，給他關不到東西的開關只是誤會',
+   /櫃檯沒有加進來：/.test(src));
+ok('★★ 三種身分共用同一顆內嵌開關（不再只判 role===member）',
+   /if\(notif && notif\.style\.display!=='none'\)\{/.test(src)
+   && /acctQuickNotifToggle\(sw\)/.test(src));
+ok('★★ 目前值：會員讀 _meMember、員工讀 _meStaff，兩邊都是 opt-out（沒有值＝開著）',
+   /const _me = \(role==='member'\) \? window\._meMember : window\._meStaff;/.test(src)
+   && /const on=!\(_me && _me\.line_notify===false\);/.test(src));
+ok('★★ 寫入改走 fn_set_line_notify（那支同時認員工與會員），不再前端自己決定寫哪張表',
+   /const \{data,error\}=await sb\.rpc\('fn_set_line_notify',\{p_on:next\}\);/.test(src)
+   && /dbCacheClear\(\[isMem\?'members':'employees'\]\);/.test(src));
+ok('　　失敗要把開關扳回去（不要讓畫面說謊）',
+   /sw\.classList\.toggle\('on', !next\); sw\.setAttribute\('aria-checked', String\(!next\)\);/.test(src));
 
 console.log('\n⑥ 桌機行事曆底色');
 ok('★★ 整片底色白→米（使用者：「不要用白色，因為卡片就白色了」）',

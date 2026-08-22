@@ -101,16 +101,20 @@ console.log('\n④ 上課提醒發給「上課的人」');
   const fnPath=process.env.HOME+'/Projects/yugym-booking-system-app/docs/edge/line-push-daily.ts';
   ok('★ edge function 原始碼有進版控', fs.existsSync(fnPath));
   const ts=fs.readFileSync(fnPath,'utf8');
+  /* 2026-08-23：docs/edge/line-push-daily.ts 先前落後正式部署 11 個版本（版控 v9、線上 v20），
+     已用線上原始碼整份覆蓋。下面幾條原本咬的是舊檔裡的註解文字（線上那份從來沒有），
+     改成咬「行為」—— 註解會被改寫，select 欄位與函式行為不會。 */
   ok('★★ 抓得到使用人（bookings 多帶 trial_name）',
-     /member_ids,ticket_id,trial_name'\)/.test(ts));
+     /member_ids,ticket_id,trial_name/.test(ts));
   ok('★★ 找得出這張票可以給誰用（持有人＋共享者）',
      /const tkOwners: Record<string, string\[\]> = \{\}/.test(ts)
      && /await admin\.from\('member_tickets'\)\.select\('id,member_id,shared_with'\)/.test(ts));
   ok('★★ trial_name 對得上共享名單裡的真實會員 → 推給那一位',
      /const attendeeOf = \(b: any\): string \| null => \{/.test(ts)
      && /if \(m && String\(m\.name \|\| ''\)\.trim\(\) === nm\) return cand/.test(ts));
-  ok('★★ 對不上（「爸爸」「媽媽」）→ 維持發給帳號本人',
-     /對不上（「爸爸」「媽媽」這種家庭稱呼）→ 維持發給帳號本人，/.test(ts));
+  ok('★★ 對不上（「爸爸」「媽媽」這種家庭稱呼）→ 維持發給帳號本人',
+     /return b\.member_id \|\| null\s*\n\s*\}/.test(ts)
+     && /if \(!nm \|\| !b\.ticket_id\) return b\.member_id \|\| null/.test(ts));
   ok('★ 單人課改推 attendee，團課的名額清單照舊',
      /const att = attendeeOf\(b\)/.test(ts)
      && /if \(Array\.isArray\(b\.member_ids\)\) for \(const m of b\.member_ids\) if \(m && !seen\.has\(m\)\) \{ seen\.add\(m\); ids\.push\(m\) \}/.test(ts));
@@ -119,8 +123,14 @@ console.log('\n④ 上課提醒發給「上課的人」');
   ok('★ 收款提醒仍只看教練課的票（ptTkIds），沒有被共享票的查詢污染',
      /const ptTkIds = new Set<string>\(\)    \/\/ 收款提醒只看教練課/.test(ts)
      && /if \(ptTkIds\.size\) \{/.test(ts));
-  ok('　　使用者的原話寫在原地',
-     /「line 通知上課應該是通知上課的會員，而不是通知擁有票券的\s*\n\s*會員，如果是票券共享」「自主訓練也是發給上課的會員而不是票券本人」/.test(ts));
+  ok('★★ 版控的那一份就是線上那一份（2026-08-23 對齊後的規矩：改這裡＝改線上）',
+     /這份檔案先前落後正式部署整整 11 個版本/.test(ts)
+     && /v21（2026-08-23）/.test(ts));
+  ok('★★ v21：教練關掉 LINE 通知就不推收款提醒，而且不寫「未綁定」的櫃檯通知',
+     /const coachOptOut = new Set<string>\(\)/.test(ts)
+     && /if \(\(e as any\)\.line_user_id && \(e as any\)\.line_notify !== false\) coachLine\[e\.id\] = \(e as any\)\.line_user_id/.test(ts)
+     && /\} else if \(coachId && coachOptOut\.has\(coachId\)\) \{/.test(ts)
+     && /coach_skip_opt_out: coachOptOutSkip/.test(ts));
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');

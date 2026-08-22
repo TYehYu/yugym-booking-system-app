@@ -58,12 +58,17 @@ t('可修改欄位是一列一張白卡、點了就改',
 t('可點的那幾列有 › 指示', /\.pp-head-self \.pp-meta-i\.pp-f-click::after\{content:'›'/.test(s));
 t('LINE 那一列不在個人資料裡（已在通知設定）',
   /pp-idfields">\$\{phoneItem\}\$\{genderItem\}\$\{bdayItem\}\$\{_selfPP\?'':lineItem\}/.test(s));
+/* 2026-08-23：這顆開關從「只給會員」放寬成會員／教練／管理員共用（使用者：
+   「管理員應該也要有」「直接把開關設計在這個頁面就好」），寫入也從直接 update members
+   改走 fn_set_line_notify（那支同時認員工與會員）。細節由 aug23batchtest ⑦ 守著，
+   這裡只確認會員端沒有因為放寬而掉功能。 */
 t('「通知設定」右邊直接放 LINE 提醒開關（不用再開視窗）',
-  /if\(notif && role==='member'\)\{/.test(s)
-  && /sw\.onclick=e=>\{ e\.stopPropagation\(\); memQuickNotifToggle\(sw\); \};/.test(s));
-t('開關即時寫回 members.line_notify，失敗會扳回去',
-  /async function memQuickNotifToggle\(sw\)\{/.test(s)
-  && /update\(\{line_notify:next\}\)/.test(s)
+  /if\(notif && notif\.style\.display!=='none'\)\{/.test(s)
+  && /sw\.onclick=e=>\{ e\.stopPropagation\(\); acctQuickNotifToggle\(sw\); \};/.test(s)
+  && /notif\.style\.display = \(role==='coach'\|\|role==='member'\|\|role==='admin'\)\?'':'none';/.test(s));
+t('開關即時寫回（會員寫 members、員工寫 employees），失敗會扳回去',
+  /async function acctQuickNotifToggle\(sw\)\{/.test(s)
+  && /sb\.rpc\('fn_set_line_notify',\{p_on:next\}\)/.test(s)
   && /sw\.classList\.toggle\('on', !next\)/.test(s));
 t('開關靠右且不吃整列的點擊', /\.tb-acct-item \.acct-nsw\{margin-left:auto;flex:none;\}/.test(s));
 
