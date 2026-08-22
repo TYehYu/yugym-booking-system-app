@@ -31,8 +31,19 @@ ok('★ 大日期＋KPI 與教練篩選列維持原本那組 class',
 ok('★ 左欄七天、週一第一個（沿用既有的 heroWeekMonday，不另立一套）',
    /let _a2Rail='';[\s\S]{0,120}?for\(let i=0;i<7;i\+\+\)\{ const d=new Date\(_mon\);/.test(src)
    && /const _mon=heroWeekMonday\(date\);/.test(src));
-ok('★ 兩欄各自 overflow-y:auto',
-   /\.admh2-rail\{[^}]*overflow-y:auto/.test(src) && /\.admh2-cards\{[^}]*overflow-y:auto/.test(src));
+/* 2026-08-22 二修（使用者）：「讓畫面固定顯示七天…只有右邊課卡可以滑動」 */
+ok('★★ 左欄不捲：七天平分整欄高度（視窗矮的時候一起縮，不會有人被切掉）',
+   /\.admh2-rail\{flex:0 0 62px;overflow:hidden;/.test(src)
+   && /justify-content:space-evenly;/.test(src)
+   && /\.a2-day\{flex:1 1 0;min-height:0;overflow:hidden;/.test(src));
+ok('★ 只有右欄會捲', /\.admh2-cards\{flex:1 1 auto;min-width:0;overflow-y:auto;/.test(src));
+ok('★ 左欄不再顯示堂數（少一列才塞得下七天）',
+   !/<span class="a2-dc">/.test(src) && !/\.a2-day \.a2-dc\{/.test(src));
+ok('★★ 捲到底要放開再滑一次才帶動整頁 —— 這是原生行為，所以刻意不設 overscroll-behavior:contain',
+   /\.admh2-cards\{[^}]*overscroll-behavior-y:auto;/.test(src)
+   && /設了會變成永遠帶不動頁面/.test(src));
+ok('　　左欄不捲了，就不需要把選取那天捲進視線',
+   !/if\(on && on\.scrollIntoView\)/.test(src));
 ok('★★ 內層要捲得動就得有明確高度 → 掛載時依剩餘視窗高度算，resize／轉向重算',
    /const h=Math\.max\(240, Math\.round\(window\.innerHeight - r\.top - navH - 16\)\);/.test(src)
    && /window\.addEventListener\('resize', \(\)=>\{ try\{ admh2Mount\(\); \}catch\(_\)\{\} \}\);/.test(src));
@@ -45,10 +56,9 @@ ok('　　⚠ 取「量得到高度的那一個」：DOM 裡有隱藏的導覽�
 ok('★★ 課卡不能被壓扁（「右邊課卡全部重疊在一起了」）—— flex 直排＋固定高度時預設會 shrink',
    /\.admh2-cards>\*\{flex:0 0 auto;\}/.test(src)
    && /子項預設 flex-shrink:1 會被壓扁到重疊/.test(src));
-ok('★ 兩欄的捲軸都不顯示（使用者指示）',
-   /\.admh2-rail::-webkit-scrollbar\{display:none;width:0;height:0;\}/.test(src)
-   && /\.admh2-cards::-webkit-scrollbar\{display:none;width:0;height:0;\}/.test(src)
-   && (src.match(/scrollbar-width:none;-ms-overflow-style:none;/g)||[]).length>=2);
+ok('★ 捲軸不顯示（左欄已經不捲了，只剩右欄要藏）',
+   /\.admh2-cards::-webkit-scrollbar\{display:none;width:0;height:0;\}/.test(src)
+   && /\.admh2-cards\{[\s\S]{0,200}?scrollbar-width:none;-ms-overflow-style:none;\}/.test(src));
 ok('　　底部留一點，不要讓人以為頁面到底了（下面還有今日值班／本月成績）',
    /讓下面的「今日值班／本月成績」露出一角，不會讓人以為頁面到底了/.test(src));
 ok('★ 左右滑換週：往左＝下一週，沿用既有的 admWeekShift',
@@ -56,7 +66,6 @@ ok('★ 左右滑換週：往左＝下一週，沿用既有的 admWeekShift',
 ok('★★ ⚠ 軸鎖：左欄本身是上下捲的，水平位移要 >48px 且大於垂直 1.5 倍才算換週',
    /if\(Math\.abs\(dx\)>48 && Math\.abs\(dx\)>Math\.abs\(dy\)\*1\.5\)\{/.test(src)
    && /不鎖軸的話手指稍微斜一點就會誤觸換週/.test(src));
-ok('　　換週後把選取那天捲進視線', /if\(on && on\.scrollIntoView\) on\.scrollIntoView\(\{block:'nearest'\}\);/.test(src));
 
 console.log('\n④ 下拉更新只從頂列觸發（使用者指示）');
 ok('★★ 手指要落在頂欄上才起算（雙欄各自有捲軸，落在欄位裡往下滑是要捲內容）',
