@@ -44,6 +44,12 @@ ok('★★ 捲到底要放開再滑一次才帶動整頁 —— 這是原生行�
    && /設了會變成永遠帶不動頁面/.test(src));
 ok('　　左欄不捲了，就不需要把選取那天捲進視線',
    !/if\(on && on\.scrollIntoView\)/.test(src));
+/* 2026-08-22 使用者回報：「教練篩選列每次選取後就會跳回最左邊，滑到右邊點別的教練
+   又被重置，又要重新滑」 */
+ok('★★ 教練篩選列的捲動位置要還原 —— admhPickCoach 早就記了，但還原那一行只寫在'
+   +'舊版單欄的貼頂偵測裡，雙欄版沒有 .admh-sticky、整段沒搬過來',
+   /const cr=document\.querySelector\('\.admh-coach'\);\s*\n\s*if\(cr && window\._admhChipScroll\) cr\.scrollLeft=window\._admhChipScroll;/.test(src)
+   && /window\._admhChipScroll=row\?row\.scrollLeft:0;/.test(src));
 ok('★★ ⚠ 高度只能依版面位置算，不能依當下捲動位置（使用者：「連續點下方的首頁 畫面會變成這樣」）'
    +' —— navTo 保留捲動位置，捲下去之後 r.top 變小甚至變負，再算一次就把兩欄撐得比視窗還高',
    /const docTop=r\.top\+\(window\.scrollY\|\|document\.documentElement\.scrollTop\|\|0\);/.test(src)
