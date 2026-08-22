@@ -55,7 +55,10 @@ t('右下角教練名左邊有手勢圖示', /<span class="a2-coach">\$\{MEMH2_T
 t('時間在右上、教練在右下（沿用雙欄課卡骨架）',
   html.indexOf('<span class="a2-time">')<html.indexOf('<span class="a2-coach">'));
 t('票券顯示第幾堂／共幾堂', /第 \$\{_nth\} 堂／共 \$\{tk\.sessions_total\} 堂/.test(html));
-t('可簽到的卡加金框', /st\.open\?' mh2-ck':''/.test(html));
+/* 0822（使用者）：「手機版的課卡不用顯示金色外框 那個是給員工看的」 */
+t('課卡不加金框（金框在員工端是「逾時未簽到」的意思）', !/mh2-ck'/.test(html)
+  && !/\.mh2-ck\{/.test(s));
+t('「可以簽到了」仍用金字標示', /st\.open\?' mh2-ckl':''/.test(html));
 
 // ── 簽到視窗 ──
 const tap=cut('async function memh2Tap(id){','/* ［＋］預約自主訓練');
