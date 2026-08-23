@@ -69,10 +69,33 @@ ok('★ 提示用金色不用紅色（可以做但要知道；紅色留給不能
    && /紅色留給「不能做」，金色是次要提示/.test(src));
 ok('★★ 表單即時提示：選到營業時間外，時間欄底下就寫原因（不必等到按送出）',
    /function bkOffHoursWarn\(\)\{/.test(src)
-   && /tip\.textContent=`\$\{note\}　\$\{bkOffHoursAsk\(t&&t\.category\)\}`/.test(src));
+   && /tip\.textContent=hard\?hard:`\$\{note\}　\$\{bkOffHoursAsk\(t&&t\.category\)\}`/.test(src));
+ok('★★ 超過上限＝不能做 → 轉紅並把欄位標紅；界內＝可以做但要知道 → 金色',
+   /tip\.className=hard\?'adp-badnote':'adp-warnnote';/.test(src)
+   && /btn\.classList\.toggle\('adp-field-bad', !!hard\);/.test(src));
 ok('　　日期／時間改動與換課種都會重寫那句話',
    /try\{ bkOffHoursWarn\(\); \}catch\(_\)\{\}\s*\n\s*const tid=\(document\.getElementById\('bk-type'\)\|\|\{\}\)\.value\|\|'';/.test(src)
    && /try\{ bkOffHoursWarn\(\); \}catch\(_\)\{\}   \/\* 換課種也要重寫那句話/.test(src));
+
+console.log('\n④-2 越線的上限：營業時間前後各 1 小時（0823 三修定案）');
+/* 使用者：「頂多也就營業時間前後多一個小時，且只能由教練以上建立預約
+   （教練／櫃檯／店長／管理員），只是預約的時候要有提醒這是非營業時間」 */
+ok('★★ 超過前後各 1 小時一律擋 —— 連櫃檯與管理員都擋（上限是營業型態，不是權限大小）',
+   /const OFFHOURS_GRACE_MIN=60;/.test(src)
+   && /if\(st>=lo && en<=hi\) return '';/.test(src)
+   && /const lo=open-OFFHOURS_GRACE_MIN, hi=close\+OFFHOURS_GRACE_MIN;/.test(src)
+   && /這一條連櫃檯與管理員都擋 —— 上限是門市的營業型態，不是誰的權限大小/.test(src));
+ok('　　恰好 1 小時要放行（平日 08:00 開始、22:00 開始下課 23:00 都在界內＝現行清單兩端）',
+   /恰好 1 小時要放行（open-60 \/ close\+60 皆為合法邊界）/.test(src));
+ok('★★ 上限也擋在 validateBooking（與自主訓練那條同一格，所有入口共用）',
+   /const _ohBlk=bizOffHoursHardBlock\(date, time, dur\); if\(_ohBlk\) return _ohBlk;/.test(V));
+ok('　　建立預約在送出時先講一次（不要讓人填完整張表才被退）',
+   /const _ohBlk=bizOffHoursHardBlock\(date, time, 60\);\s*\n\s*if\(_ohBlk\)\{ showToast\(_ohBlk, 6000\); return; \}/.test(src));
+ok('★★ 會員自己建立的預約一律不給越線（不再只擋自主訓練）',
+   /if\(!\(SESSION && SESSION\.role==='member'\)\) return '';/.test(src)
+   && /不再只擋自主訓練 —— 使用者定案「只能由教練以上建立預約/.test(src));
+ok('　　團課報名走 fn_member_join_group（RPC），不經 validateBooking，不受影響',
+   /團課報名走 fn_member_join_group（RPC），不經過 validateBooking，不受影響/.test(src));
 
 console.log('\n⑤ 順手修掉查出來的另一個寫死');
 ok('★★ 一週檢視點格的上限原本寫死 21:00、不分星期（週日 15:00 打烊照樣點得到 21:00）',

@@ -345,10 +345,16 @@ console.log('\n⑪-2 一週檢視的日期列整列點亮');
 ok('★★ 一週檢視七天都給 .on，一日檢視維持只框選取的那天',
    /const _allOn=\(nD===7\);/.test(src)
    && /class="msb-date\$\{\(_allOn\|\|ds===sel\)&&ds!==today\?' on':''\}\$\{ds===today\?' hero-today':''\}"/.test(src));
-ok('★★ 今天不疊 .on —— 兩條規則同權重、.on 在後面，疊上去會把品牌綠底蓋成米底',
+ok('★★ 今天不疊 .on —— 兩條規則同權重、.on 在後面，疊上去會把品牌綠底蓋掉',
    /\.admh \.msb-date\.hero-today\{background:var\(--green\);/.test(src)
-   && /\.admh \.msb-date\.on\{background:var\(--card2\);border-color:#1a1a1a;\}/.test(src)
    && /疊上去會把綠底蓋成米底，今天就認不出來了/.test(src));
+/* 0823 再修（使用者：「行事曆的日期選取改用金色底（跟首頁一樣），今日維持綠色底」）——
+   與手機首頁的 .a2-day.on 同一組數值。一週檢視七天都帶 .on，淡金底比黑框耐看。 */
+ok('★★ 選取＝金色底，與手機首頁日期欄同一組數值',
+   /\.admh \.msb-date\.on\{background:rgba\(180,138,86,\.14\);border-color:var\(--gold,#B48A56\);\}/.test(src)
+   && /\.a2-day\.on\{background:rgba\(180,138,86,\.14\);border-color:var\(--gold,#B48A56\);\}/.test(src));
+ok('　　顏色改過三輪，歷程寫在原地（金→黑框→金）',
+   /歷程：金色（0819 前）→ 黑框（0819「金色改給翻頁鈕與 Today 鈕」）→ 金色（0823）/.test(src));
 ok('　　nD 要在迴圈之前算（原本在迴圈後面，拿不到）',
    src.indexOf('const nD=(Number(window._admCalDays)||1)===1?1:7;')
      < src.indexOf('const _allOn=(nD===7);'));

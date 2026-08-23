@@ -9155,9 +9155,14 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .admh .msb-date .cag-dn{color:var(--t2);font-size:10px;}
 .admh .msb-date.hero-today{background:var(--green);border-color:var(--green);color:rgba(255,255,255,.85);}
 .admh .msb-date.hero-today b,.admh .msb-date.hero-today .cag-dn{color:#fff;}
-/* 選取＝黑框（2026-08-19 使用者指示：金色改給翻頁鈕與 Today 鈕） */
-.admh .msb-date.on{background:var(--card2);border-color:#1a1a1a;}
-.admh .msb-date.on b{color:var(--text);}
+/* 選取＝金色底（2026-08-23 使用者指示：「行事曆的日期選取改用金色底（跟首頁一樣），
+   今日維持綠色底」）——與手機首頁的日期欄 .a2-day.on 同一組數值，兩邊終於一致。
+   歷程：金色（0819 前）→ 黑框（0819「金色改給翻頁鈕與 Today 鈕」）→ 金色（0823）。
+   ⚠ 今天走 .hero-today（整顆品牌綠）且永遠不帶 .on，兩者不會互相蓋。
+   ⚠ 一週檢視七天都帶 .on（0823），所以這一組會整列鋪開 —— 淡金底比黑框耐看，
+     這也是使用者會提出來的原因。 */
+.admh .msb-date.on{background:rgba(180,138,86,.14);border-color:var(--gold,#B48A56);}
+.admh .msb-date.on b,.admh .msb-date.on span,.admh .msb-date.on .cag-dn{color:var(--gold-d,#8a6a30);}
 .admh-sticky.stuck .msb-date .cag-dn{display:none;}
 .admh-sticky.stuck .admh-wkdays .msb-date{padding:8px 0 7px;}
 /* 三修（2026-08-19）：週列 ‹ › 併到日期兩側、大日期列與週列交換、中間分隔線 */
@@ -9796,8 +9801,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2010';
-const APP_VERSION_LABEL='v260823.2010';
+const APP_VERSION = '260823.2014';
+const APP_VERSION_LABEL='v260823.2014';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20960,7 +20965,8 @@ async function validateBooking(bk,date,time,duration){
        （會員自助另有 DB 的 fn_biz_hours，兩層都留著。）
      ⚠ 只擋「會員自己約的自主訓練」：員工（含教練）代排代表有人會到場開門，放行但要確認；
        教練課與團體課由使用者定案「有條件可以約」，一律走提示＋確認那條路（confirmOffHours）。 */
-  { const _selfBlk=bkSelfOffHoursBlock(bk.category, date, time, dur); if(_selfBlk) return _selfBlk; }
+  { const _ohBlk=bizOffHoursHardBlock(date, time, dur); if(_ohBlk) return _ohBlk;
+    const _selfBlk=bkSelfOffHoursBlock(bk.category, date, time, dur); if(_selfBlk) return _selfBlk; }
 
   /* 會員端 RLS 只讀得到自己的預約 → dbGetAll 等於空行事曆，場地/衝堂會全數誤判可約
      （2026-07-26 會員端 7/27 10:00 超賣的真正原因）。改走匿名佔用 RPC（security definer，
@@ -25096,7 +25102,9 @@ async function _submitBookingInner(){
      共用這一個入口，寫一次就三條路都有。
      ・自主訓練：直接擋（validateBooking 也會擋，這裡先講一次是為了不要讓人填完才被退）
      ・其餘課別：說明原因，由操作者決定 */
-  { const _selfBlk=bkSelfOffHoursBlock(t&&t.category, date, time, 60);
+  { const _ohBlk=bizOffHoursHardBlock(date, time, 60);
+    if(_ohBlk){ showToast(_ohBlk, 6000); return; }
+    const _selfBlk=bkSelfOffHoursBlock(t&&t.category, date, time, 60);
     if(_selfBlk){ showToast(_selfBlk, 5000); return; } }
   if(!(await confirmOffHours(date, time, 60, '取消預約', t&&t.category))) return;
 
@@ -29601,12 +29609,17 @@ function bkOffHoursWarn(){
   const tid=String((document.getElementById('bk-type')||{}).value||'');
   const t=(window._bkTypes||[]).find(x=>x&&x.id===tid);
   const note=(d&&tm)?bizOffHoursNote(d,tm,60):'';
+  /* 超過「前後 1 小時」的上限＝不能做 → 轉紅（.adp-badnote，與課種不可約同一套）；
+     界內＝可以做但要知道 → 維持金色。顏色強度 紅>金>綠。 */
+  const hard=(d&&tm)?bizOffHoursHardBlock(d,tm,60):'';
   let tip=document.getElementById('bk-time-oh');
-  if(note){
-    if(!tip){ tip=document.createElement('div'); tip.id='bk-time-oh'; tip.className='adp-warnnote';
+  if(note||hard){
+    if(!tip){ tip=document.createElement('div'); tip.id='bk-time-oh';
       btn.parentNode.appendChild(tip); }
-    tip.textContent=`${note}　${bkOffHoursAsk(t&&t.category)}`;
+    tip.className=hard?'adp-badnote':'adp-warnnote';
+    tip.textContent=hard?hard:`${note}　${bkOffHoursAsk(t&&t.category)}`;
   }else if(tip){ tip.remove(); }
+  btn.classList.toggle('adp-field-bad', !!hard);
 }
 /* 課程挑選（2026-08-21 使用者：「課程跟時間 也改成我們自己的風格」）——
    清單就是建立預約既有的 activeTypes（存在 window._bkTypes），
@@ -42922,6 +42935,26 @@ function bizOffHoursNote(ds, time, dur){
       : `這堂會上到 ${minToTime(en)}，超過營業時間（${bizHoursLabel(ds)}）`;
   }catch(_){ return ''; }
 }
+/* 越線的上限＝營業時間前後各 1 小時（2026-08-23 三修，使用者定案：
+     「頂多也就營業時間前後多一個小時，且只能由教練以上建立預約（教練／櫃檯／店長／
+       管理員），只是預約的時候要有提醒這是非營業時間」）——
+   「可以越線」不等於「沒有界線」：22:00 打烊排到 23:00 是留下來收個尾，
+   排到 00:30 就是另外開一個班了，那要先改營業時間，不是靠單筆預約繞過去。
+   ⚠ 這一條連櫃檯與管理員都擋 —— 上限是門市的營業型態，不是誰的權限大小。
+   ⚠ 恰好 1 小時要放行（open-60 / close+60 皆為合法邊界）：平日 08:00 開始、
+     22:00 開始（23:00 下課）都在界內，這正是現行時間清單的兩端。 */
+const OFFHOURS_GRACE_MIN=60;
+function bizOffHoursHardBlock(ds, time, dur){
+  try{
+    const t=String(time||'').slice(0,5); if(!t) return '';
+    const st=timeToMin(t), en=st+(Number(dur)||60);
+    const open=bizOpenMin(ds), close=bizCloseMin(ds);
+    const lo=open-OFFHOURS_GRACE_MIN, hi=close+OFFHOURS_GRACE_MIN;
+    if(st>=lo && en<=hi) return '';
+    return `最多只能排到營業時間前後 1 小時（${bizHoursLabel(ds)}）—— 這一天能排的範圍是 `
+      + `${minToTime(lo)} 開始、${minToTime(hi)} 前下課。要再往外排請先調整營業時間。`;
+  }catch(_){ return ''; }
+}
 /* 自主訓練的硬規則（2026-08-23 二修，使用者把理由講明白了：
      「因為如果讓會員自己預約非營業時間，那誰要來開門？可是如果教練有特別原因
        自己願意提早來幫學員開門，可以通融」）——
@@ -42936,10 +42969,16 @@ function bkOffHoursSelfOnly(cat){
   catch(_){ return false; }
 }
 function bkSelfOffHoursBlock(cat, ds, time, dur){
-  if(!bkOffHoursSelfOnly(cat)) return '';
   if(!bizOffHoursNote(ds, time, dur)) return '';
   if(!(SESSION && SESSION.role==='member')) return '';   // 員工代排＝有人會到場，放行
-  return `這個課別不能自己預約非營業時間（${bizHoursLabel(ds)}）—— 這個時間店裡沒有人開門。需要的話請洽櫃檯或你的教練協助安排`;
+  /* 2026-08-23 三修：不再只擋自主訓練 —— 使用者定案「只能由教練以上建立預約
+     （教練／櫃檯／店長／管理員）」，會員自己建立的任何預約都要有人到場開門。
+     實務上會員能自己建立的只有自主訓練（團課是報名既有的課，那堂本來就有教練），
+     所以這一改當下沒有行為差異；寫成不分課別是為了日後開放會員自助預約別的課種時，
+     不必記得回來補這一條。
+     ⚠ 團課報名走 fn_member_join_group（RPC），不經過 validateBooking，不受影響。 */
+  return `非營業時間（${bizHoursLabel(ds)}）不能自己預約 —— 這個時間店裡沒有人開門。`
+    + `需要的話請洽櫃檯或你的教練協助安排`;
 }
 /* 越線前的確認。沿用 confirmVenueOverflow 那一套 Promise 包 showModal。
    ⚠ 用金色不用紅色：品牌色強度 紅>金>綠，這是「可以做、但要知道」的次要提示，
@@ -42949,7 +42988,8 @@ function bkSelfOffHoursBlock(cat, ds, time, dur){
 function bkOffHoursAsk(cat){
   return bkOffHoursSelfOnly(cat)
     ? '這個時間店裡沒有人。要排的話，請先確認有教練或櫃檯會到場幫學員開門。'
-    : '確定要排嗎？排下去不會有其他阻擋，記得先跟教練確認會到場。';
+    : '確定要排嗎？排下去不會有其他阻擋，記得先跟教練確認會到場。'
+      + '（可排範圍是營業時間前後各 1 小時）';
 }
 function confirmOffHours(ds, time, dur, actLabel, cat){
   return new Promise(resolve=>{
