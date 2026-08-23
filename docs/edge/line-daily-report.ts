@@ -5,6 +5,10 @@
 //   數字被切成兩半最難讀。改成：標題與日期分行、每個分項自己一行、區塊之間空一行。
 // v4（2026-08-21 使用者指示）：抬頭統一成【有肌訓練 自動訊息】，第二行才寫是什麼通知。
 //   理由：「讓會員跟教練知道這個系統自動通知」—— 不然收到的人會以為是櫃檯手打的而去回訊息。
+// v7（2026-08-23）：訊息內容改吃 line_templates（管理員在「環境設定 › 通知範本」自行編輯）。
+//   ・body 用 {{變數}} 佔位，這裡替換；enabled=false → 那一種通知整組不發
+//   ・讀不到範本（表被刪、查詢失敗）→ 退回內建文字，通知不會因此中斷
+//   ・抬頭【有肌訓練 自動訊息】固定不給改；第二行的通知種類走 kind_label
 // v6（2026-08-23）：員工的 LINE 通知開關 employees.line_notify（opt-out）——
 //   帳號抽屜的「通知設定」開放給管理員了，關掉就不再推戰報。
 //   has_line 一併看這個旗標，debug 模式列出來的收件人才與實際發送一致。
@@ -30,6 +34,14 @@ const J = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, 
 const WD = ['日', '一', '二', '三', '四', '五', '六']
 const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US')
 const HEAD = '【有肌訓練 自動訊息】'
+/* v7：把 {{變數}} 換成實際內容（與前端合約範本的 fillContract 同一套：純字串取代，
+   找不到的變數留原樣 —— 留原樣比換成空字串好，一眼看得出是範本打錯字）。 */
+const fillTpl = (body: string, ctx: Record<string, string>) => {
+  let s = String(body || '')
+  for (const k of Object.keys(ctx)) s = s.split('{{' + k + '}}').join(ctx[k] ?? '')
+  return s
+}
+type Tpl = { kind_label: string; body: string; enabled: boolean }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -51,6 +63,14 @@ Deno.serve(async (req) => {
       (Deno.env.get('SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!,
     )
     const detectErrors: string[] = []
+
+    /* v7：通知範本。讀失敗就整包當作沒有 → 下面各處退回內建文字。 */
+    const tpl: Record<string, Tpl> = {}
+    try {
+      const { data: tps } = await admin.from('line_templates').select('id,kind_label,body,enabled')
+      for (const t of (tps || [])) tpl[(t as any).id] = { kind_label: (t as any).kind_label || '', body: (t as any).body || '', enabled: (t as any).enabled !== false }
+    } catch (_) { /* 沒有範本就用內建的 */ }
+    const tplOff = (id: string) => tpl[id] && tpl[id].enabled === false
 
     /* ── 今日營收（收款紀錄；+8 時區日期）── */
     const { data: purs, error: puErr } = await admin.from('purchases').select('id,deal_amount,payment_method,pay_split,created_at')
@@ -124,14 +144,20 @@ Deno.serve(async (req) => {
     if (other) revBlock.push(`　其他 ${money(other)}`)
     if (purN) revBlock.push(`　共 ${purN} 筆收款`)
 
+    /* v7：本文改吃範本；沒有範本（或查詢失敗）就用內建那一版，一字不差。 */
+    const _rep = tpl['LT-REPORT']
+    const bossBody = (_rep && _rep.body.trim())
+      ? fillTpl(_rep.body, {
+          date: dateLabel, revblock: revBlock.join('\n'),
+          revenue: money(revenue), cash: money(cash), bank: money(bank), other: money(other),
+          count: String(purN), pt: String(ptCount), grp: String(grpCount), grpheads: String(grpHeads),
+        })
+      : [...revBlock, '', `🏋️ 教練課 ${ptCount} 堂`, `👥 團課 ${grpCount} 堂（${grpHeads} 人次）`].join('\n')
     const bossText = [
       HEAD,
-      `今日戰報　${dateLabel}`,
+      `${(_rep && _rep.kind_label) || '今日戰報'}　${dateLabel}`,
       '',
-      ...revBlock,
-      '',
-      `🏋️ 教練課 ${ptCount} 堂`,
-      `👥 團課 ${grpCount} 堂（${grpHeads} 人次）`,
+      bossBody,
     ].join('\n')
 
     const coachLines = (cid: string) => {
@@ -143,25 +169,31 @@ Deno.serve(async (req) => {
     }
 
     const plan: Array<{ id: string; name: string; kind: string; text: string; has_line: boolean }> = []
-    for (const e of bosses) {
+    /* v7：停用的種類整組不進收件人清單 —— 不是發一封空的，是根本不發。 */
+    for (const e of (tplOff('LT-REPORT') ? [] : bosses)) {
       const mine = coachLines(e.id)
       const text = mine.length ? [bossText, '', '你今天的課', ...mine].join('\n') : bossText
       plan.push({ id: e.id, name: dispName(e), kind: 'boss', text, has_line: !!coachLine(e) })
     }
-    for (const cid of Object.keys(perCoach)) {
+    for (const cid of (tplOff('LT-COACHDAY') ? [] : Object.keys(perCoach))) {
       if (bossIds.has(cid)) continue   // 店長/管理員已在戰報附自己的課，不另發
       const e = active.find(x => x.id === cid); if (!e) continue
+      const _cd = tpl['LT-COACHDAY']
+      const s2 = perCoach[cid] || { pt: 0, grp: 0, heads: 0 }
+      const cdBody = (_cd && _cd.body.trim())
+        ? fillTpl(_cd.body, { date: dateLabel, mylines: coachLines(cid).join('\n'),
+            pt: String(s2.pt), grp: String(s2.grp), grpheads: String(s2.heads) })
+        : ['今天辛苦了！你今天完成：', ...coachLines(cid)].join('\n')
       const text = [
         HEAD,
-        `今日課堂　${dateLabel}`,
+        `${(_cd && _cd.kind_label) || '今日課堂'}　${dateLabel}`,
         '',
-        '今天辛苦了！你今天完成：',
-        ...coachLines(cid),
+        cdBody,
       ].join('\n')
       plan.push({ id: e.id, name: dispName(e), kind: 'coach', text, has_line: !!coachLine(e) })
     }
 
-    if (DEBUG) return J({ ok: true, debug: true, date: today, revenue, cash, bank, other, purchases: purN, skipped_lottery: skippedLot, skipped_zero: skippedZero, ptCount, grpCount, grpHeads, detect_errors: detectErrors, recipients: plan })
+    if (DEBUG) return J({ ok: true, debug: true, date: today, revenue, cash, bank, other, purchases: purN, skipped_lottery: skippedLot, skipped_zero: skippedZero, ptCount, grpCount, grpHeads, detect_errors: detectErrors, templates: Object.keys(tpl).map(k => ({ id: k, enabled: tpl[k].enabled })), recipients: plan })
 
     let sent = 0, skipNoLine = 0, failed = 0
     const failDetail: Array<{ name: string; reason: string }> = []

@@ -22,7 +22,7 @@ ok('★★ 「回到今天」放在往今天的那一側；兩側都預留固定
    /const _todaySide=\(\(\)=>\{/.test(src)
    && /if\(today<ymd\(mon\)\) return 'l';/.test(src)
    && /if\(today>ymd\(sun\)\) return 'r';/.test(src)
-   && /\.twk-today-slot\{flex:0 0 72px;/.test(src));
+   && /\.twk-today-slot\{flex:0 0 58px;/.test(src));
 ok('★★ 七天平分整列寬度（不是固定寬）—— 視窗變窄時一起縮，不出現橫向捲軸',
    /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;/.test(src)
    && /\.twk-barin\{flex:1 1 auto;min-width:0;display:flex;gap:5px;\}/.test(src));

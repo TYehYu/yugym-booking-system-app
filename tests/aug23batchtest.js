@@ -217,8 +217,11 @@ ok('★★ 「回到今天」放在往今天的那一側（今天在這一週之
    /if\(today<ymd\(mon\)\) return 'l';/.test(src)
    && /if\(today>ymd\(sun\)\) return 'r';/.test(src));
 ok('★★ 兩側都固定留一格，鈕出現時整列不會被推一下',
-   /\.twk-today-slot\{flex:0 0 72px;display:flex;align-items:center;justify-content:center;\}/.test(src)
+   /\.twk-today-slot\{flex:0 0 58px;display:flex;align-items:stretch;justify-content:center;\}/.test(src)
    && /不預留的話，鈕一出現整列會被推一下/.test(src));
+ok('★ 「回到今天」與日期格同高同圓角、文字折兩行（使用者：「改成跟日期一樣大」）',
+   /\.twk-bar>\.twk-today-slot \.tl-daynav-today\{margin:0;width:100%;height:auto;align-self:stretch;/.test(src)
+   && /onclick="dashPickDate\('\$\{today\}'\)">回到<br>今天<\/button>/.test(src));
 ok('　　寬度要寫死才有意義（auto 的話沒有鈕那側就是 0，等於沒預留）',
    /寬度寫死才有意義：用 auto 的話沒有鈕的那側寬度是 0/.test(src));
 ok('★ 每一天的按鈕加高（上方那列空出來之後補回版面）',

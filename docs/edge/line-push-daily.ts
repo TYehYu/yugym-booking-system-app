@@ -29,6 +29,10 @@
 //   使用者把帳號抽屜的「通知設定」改成內嵌開關、並開放給管理員之後，那顆開關對教練
 //   必須真的關得掉東西 —— 教練會收到的就是這支的收款提醒。關掉的人直接跳過，
 //   而且**不寫「未綁定 LINE」的櫃檯通知**（那是異常，這是他自己選的），只計一個數字。
+// v22（2026-08-23）：訊息內容改吃 line_templates（管理員在「環境設定 › 通知範本」自行編輯）。
+//   ・body 用 {{變數}} 佔位，這裡替換；enabled=false → 那一種通知整組不發
+//   ・讀不到範本（表被刪、查詢失敗）→ 退回內建文字，通知不會因此中斷
+//   ・抬頭【有肌訓練 自動訊息】與會員那則的「自動發送」註解固定不給改
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -49,6 +53,14 @@ const toMin = (t: string) => { const [h, m] = String(t || '0:0').split(':').map(
 const nid = () => 'NT-LP' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
 const HEAD = '【有肌訓練 自動訊息】'
 const AUTO_NOTE = '（這是系統自動發送的訊息，直接回覆不會有人看到；需要協助請聯繫櫃檯）'
+/* v22：把 {{變數}} 換成實際內容（與前端合約範本的 fillContract 同一套：純字串取代，
+   找不到的變數留原樣 —— 留原樣比換成空字串好，一眼看得出是範本打錯字）。 */
+const fillTpl = (body: string, ctx: Record<string, string>) => {
+  let s = String(body || '')
+  for (const k of Object.keys(ctx)) s = s.split('{{' + k + '}}').join(ctx[k] ?? '')
+  return s
+}
+type Tpl = { kind_label: string; body: string; enabled: boolean }
 const humanErr = (status: number, body: string) => {
   const s = String(body || '')
   if (status === 403 || /not.*friend|blocked/i.test(s)) return '會員尚未把官方帳號加為好友（或已封鎖）'
@@ -123,6 +135,14 @@ Deno.serve(async (req) => {
 
     /* v16：偵測用查詢的錯誤不再靜默呑掉 */
     const detectErrors: string[] = []
+
+    /* v22：通知範本。讀失敗就整包當作沒有 → 下面退回內建文字。 */
+    const tpl: Record<string, Tpl> = {}
+    try {
+      const { data: tps } = await admin.from('line_templates').select('id,kind_label,body,enabled')
+      for (const t of (tps || [])) tpl[(t as any).id] = { kind_label: (t as any).kind_label || '', body: (t as any).body || '', enabled: (t as any).enabled !== false }
+    } catch (_) { /* 沒有範本就用內建的 */ }
+    const tplOff = (id: string) => tpl[id] && tpl[id].enabled === false
 
     /* ── 共享票：這張票可以給哪些人用（持有人＋共享者）（v11）── */
     const tkOwners: Record<string, string[]> = {}
@@ -256,14 +276,24 @@ Deno.serve(async (req) => {
       }
       const line3 = coachName ? `🏋️ ${catName}･教練：${coachName}${seqStr}` : `🏋️ ${catName}${seqStr}`
       const venue = selfVenue(b)   // v18：自主訓練寫場地
-      /* v20 排版：抬頭→通知種類→空行→內容→空行→自動發送註解 */
-      const text = [HEAD, '上課提醒', '',
-        `📅 ${dateLabel} ${String(b.start_time).slice(0, 5)}`,
-        line3]
-        .concat(venue ? [`📍 場地：${venue}`] : [])
-        .concat(renewLine ? ['', renewLine] : [])
-        .concat(['', '如需請假或調整，請盡早告知教練 🙏', '期待見到您！', '', AUTO_NOTE])
-        .join('\n')
+      /* v20 排版：抬頭→通知種類→空行→內容→空行→自動發送註解
+         v22：中間那段內容改吃範本；沒有範本就用內建那一版，一字不差。
+         ⚠ venue／renew 兩個變數自己帶前導換行 —— 沒有場地／不是最後一堂時要整行消失，
+           換成空字串就不會留下空行。 */
+      const _cls = tpl['LT-CLASS']
+      const clsBody = (_cls && _cls.body.trim())
+        ? fillTpl(_cls.body, {
+            date: dateLabel, time: String(b.start_time).slice(0, 5),
+            course: line3, coach: coachName, category: catName, seq: seqStr,
+            venue: venue ? `\n📍 場地：${venue}` : '',
+            renew: renewLine ? `\n\n${renewLine}` : '',
+          })
+        : [`📅 ${dateLabel} ${String(b.start_time).slice(0, 5)}`, line3]
+            .concat(venue ? [`📍 場地：${venue}`] : [])
+            .concat(renewLine ? ['', renewLine] : [])
+            .concat(['', '如需請假或調整，請盡早告知教練 🙏', '期待見到您！'])
+            .join('\n')
+      const text = [HEAD, (_cls && _cls.kind_label) || '上課提醒', '', clsBody, '', AUTO_NOTE].join('\n')
       const ids: string[] = []
       const seen = new Set<string>()
       const att = attendeeOf(b)
@@ -285,7 +315,8 @@ Deno.serve(async (req) => {
         })
         continue
       }
-      for (const mid of ids) {
+      /* v22：上課提醒停用 → 這一輪完全不推給會員（收款提醒是另一種，各自獨立） */
+      for (const mid of (tplOff('LT-CLASS') ? [] : ids)) {
         if (pushedMem.has(mid)) { dedup++; continue }   // v12：這一輪已經提醒過
         const mem = memMap[mid]
         if (!mem || !mem.line_user_id) { skipNoLine++; continue }
@@ -301,15 +332,21 @@ Deno.serve(async (req) => {
         await deskNote('line_push_fail', '⚠ LINE 上課提醒沒送到',
           `${mem.name || mid}　${dateLabel} ${String(b.start_time).slice(0, 5)} ${catName}　—— ${why}`)
       }
-      if (coachAlert) {
+      if (coachAlert && !tplOff('LT-PAY')) {
         const who = ids.map(x => (memMap[x] && memMap[x].name) || '').filter(Boolean).join('、') || '會員'
         if (coachId && coachLine[coachId]) {
-          const ctext = [HEAD, '收款提醒', '',
-            '明天這堂該跟會員收款囉 💰',
-            `📅 ${dateLabel} ${String(b.start_time).slice(0, 5)}`,
-            `👤 ${who}${seqStr}`,
-            `💳 ${coachAlert}`, '',
-            '請在課後協助完成收款或轉告櫃檯。'].join('\n')
+          const _pay = tpl['LT-PAY']
+          const payBody = (_pay && _pay.body.trim())
+            ? fillTpl(_pay.body, {
+                date: dateLabel, time: String(b.start_time).slice(0, 5),
+                member: who, seq: seqStr, alert: coachAlert, coach: coachName,
+              })
+            : ['明天這堂該跟會員收款囉 💰',
+               `📅 ${dateLabel} ${String(b.start_time).slice(0, 5)}`,
+               `👤 ${who}${seqStr}`,
+               `💳 ${coachAlert}`, '',
+               '請在課後協助完成收款或轉告櫃檯。'].join('\n')
+          const ctext = [HEAD, (_pay && _pay.kind_label) || '收款提醒', '', payBody].join('\n')
           const r = await push(coachLine[coachId], ctext)
           if (r.ok) coachSent++
           else {
@@ -331,7 +368,7 @@ Deno.serve(async (req) => {
     if (okMembers.size && !DEBUG) {
       try { await admin.from('members').update({ line_push_failed_at: null, line_push_error: null }).in('id', [...okMembers]).not('line_push_failed_at', 'is', null) } catch (_) { /* 清旗標失敗不影響推播 */ }
     }
-    if (DEBUG) return J({ ok: true, debug: true, target, window: [winStart, winEnd], bookings: bks.length, detect_errors: detectErrors, rows: debugRows })
+    if (DEBUG) return J({ ok: true, debug: true, target, window: [winStart, winEnd], bookings: bks.length, detect_errors: detectErrors, templates: Object.keys(tpl).map(k => ({ id: k, enabled: tpl[k].enabled })), rows: debugRows })
     return J({ ok: true, target, window: [winStart, winEnd], bookings: bks.length, sent, dedup_same_member: dedup, redirected_to_attendee: redirected, coach_sent: coachSent, coach_skip_no_line: coachSkip, coach_skip_opt_out: coachOptOutSkip, skip_no_line: skipNoLine, skip_opt_out: skipOptOut, failed, fail_detail: failDetail, detect_errors: detectErrors })
   } catch (e) {
     return J({ error: String((e && (e as any).message) || e) }, 500)
