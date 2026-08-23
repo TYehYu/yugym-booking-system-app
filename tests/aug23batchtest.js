@@ -190,6 +190,18 @@ ok('★★ 下方列表每列一個白框（外圈米底、每列白底圓角）
    /\.ov-list\{display:flex;flex-direction:column;gap:6px;background:var\(--card2\);/.test(src)
    && /\.ov-i\{display:flex;align-items:center;gap:10px;padding:10px 11px;\s*\n\s*background:#fff;border:1px solid var\(--bd\);border-radius:10px;\}/.test(src));
 
+console.log('\n⑨-3 員工表現：白框列＋欄間分隔線');
+ok('★★ 每位員工一個白框（外圈米底），與上方營運速覽同一套語彙',
+   /\.perf-m\{background:var\(--card2\);border:1px solid var\(--bd\);border-radius:12px;padding:8px;\}/.test(src)
+   && /\.perf-m \.perf-m-row\{gap:0;padding:10px 12px;margin-bottom:6px;font-size:12\.5px;\s*\n\s*background:#fff;border:1px solid var\(--bd\);border-radius:10px;/.test(src));
+ok('★★ 欄與欄之間細分隔線（畫在第 2～5 格的 border-left，姓名左邊不畫）',
+   /\.perf-m \.perf-m-row span\+span\{border-left:1px solid var\(--bd2\);padding-left:6px;\}/.test(src));
+ok('★★ gap 要歸零改用內距 —— 留著 6px 的縫，線會浮在兩格中間看起來歪一邊',
+   /gap 從 6px 拉到 0、改用內距撐開，不然線會浮在兩格中間的縫裡/.test(src)
+   && /\.perf-m \.perf-m-head\{gap:0;/.test(src));
+ok('★★ 白框版要自己補 hover —— .perf-clickable:hover 的權重比 .perf-m .perf-m-row 低',
+   /\.perf-m \.perf-m-row\.perf-clickable:hover\{background:var\(--sage-bg\);border-color:var\(--green\);\}/.test(src));
+
 console.log('\n⑩ 支出登記入口');
 ok('★★ 期間控制列裡一顆紅底 [＋ 支出]，月份跟著翻頁走',
    /<button type="button" class="btn btn-sm dash-exp" onclick="openExpensePick\('\$\{ym\}'\)">＋ 支出<\/button>/.test(src)
