@@ -104,9 +104,10 @@ ok('★ 翻頁列只寫一次期間，完整日期放 title（0823 起期間那�
    && /<button type="button" class="dashctl-mo\$\{_dashRange==='month'\?' on':''\}" title="\$\{rangeFull\}/.test(src));
 ok('　　期間那格不換行（翻頁時按鈕不會跳動）',
    /\.dashctl-t,\.dashctl-mo\{[^}]*white-space:nowrap;\}/.test(src));
-ok('★★ 控制列搬進「◯◯總覽」那一列右邊；桌機另留一份（控制項無 id，重複畫不衝突）',
-   /<div class="ovh-bar"><span class="ovh-title">\$\{periodLabel\}總覽<\/span>\$\{_dashCtl\}<\/div>/.test(src)
-   && /<div class="filter-row desktop-only" style="margin-bottom:18px;">\$\{_dashCtl\}<\/div>/.test(src));
+ok('★★ 期間控制列在「◯◯總覽」那一列右邊；頂列只留 [＋ 支出]（期間僅桌機）',
+   /<div class="ovh-bar"><span class="ovh-title">\$\{periodLabel\}總覽<\/span>\$\{_dashPeriod\}<\/div>/.test(src)
+   && /<span class="dashctl-desk">\$\{_dashPeriod\}<\/span>/.test(src)
+   && /@media\(max-width:600px\)\{ \.dashctl-desk\{display:none;\} \}/.test(src));
 
 console.log('\n資料真的跟著錨點走');
 ok('★ inRange 用錨點的 today／ym', /const today=dashAnchorYmd\(\);/.test(src)

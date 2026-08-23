@@ -1769,13 +1769,19 @@ body.mc-mode .layout{padding-top:8px;}
    「2026年8月8日」就要 120px 以上，項目只剩不到 40px，連標題「項目」都被折成兩行。
    改成一列拆兩行：上排日期（跨兩欄）＋右上角刪除，下排項目＋金額。
    表頭跟著隱藏 —— 欄位對不齊了，留著只會誤導；兩個輸入框本來就有 placeholder。 */
+/* 2026-08-23 二修（使用者：「每一筆排版調整一下，第一列日期＋品項，第二列金額」）——
+   一修是「日期獨佔第一列、項目與金額擠第二列」，日期那格空了大半、下面兩格反而窄。
+   改成第一列日期＋品項並排（刪除鈕跟在後面），金額自己一整列 —— 金額是最常改的欄位，
+   給它整列最好按，也不會被日期的「2026年8月8日」擠掉。
+   日期那格要 1.35fr：iOS 的 date input 撐到「2026年8月8日」大約 130px，
+   給 1fr 會被截字。 */
 @media(max-width:560px){
   .fx-3 .fx-head{display:none;}
-  .fx-3 .fx-row{grid-template-columns:1fr 96px 30px;row-gap:6px;padding:9px 10px;}
-  .fx-3 .fx-row>:nth-child(1){grid-column:1 / 3;grid-row:1;}   /* 日期 */
-  .fx-3 .fx-row>:nth-child(4){grid-column:3;grid-row:1;}       /* ✕ 靠右上 */
-  .fx-3 .fx-row>:nth-child(2){grid-column:1;grid-row:2;}       /* 項目 */
-  .fx-3 .fx-row>:nth-child(3){grid-column:2 / 4;grid-row:2;}   /* 金額 */
+  .fx-3 .fx-row{grid-template-columns:1.35fr 1fr 30px;row-gap:6px;padding:9px 10px;}
+  .fx-3 .fx-row>:nth-child(1){grid-column:1;grid-row:1;}       /* 日期 */
+  .fx-3 .fx-row>:nth-child(2){grid-column:2;grid-row:1;}       /* 項目 */
+  .fx-3 .fx-row>:nth-child(4){grid-column:3;grid-row:1;}       /* ✕ */
+  .fx-3 .fx-row>:nth-child(3){grid-column:1 / 4;grid-row:2;}   /* 金額整列 */
 }
 .fx-head{background:var(--card2);font-size:11.5px;color:var(--t2);font-weight:700;}
 .fx-head span:nth-child(2){text-align:right;}
@@ -1823,6 +1829,13 @@ body.mc-mode .layout{padding-top:8px;}
 /* 期間控制列（2026-08-23 使用者指示：「[今日] ‹ 8月 › 改到本月總覽這一列右邊，
    減少畫面內容、呼吸感」）—— 三件事收成一顆：今日／翻頁／期間（兼回本月）。 */
 .dashctl{display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap;}
+/* 頂列（2026-08-23 三修）：只放 [＋ 支出] 並靠右；期間控制項只有桌機顯示
+   —— 手機的期間控制項畫在「◯◯總覽」那一列裡，頂上再畫一次就重複了。
+   ⚠ 這裡不能用 .desktop-only：它是 display:none，但同權重的 .filter-row{display:flex}
+     寫在後面會贏，手機照樣顯示（那正是重複的成因）。 */
+.dash-toprow{justify-content:flex-end;margin-bottom:18px;}
+.dashctl-desk{display:inline-flex;margin-right:auto;}
+@media(max-width:600px){ .dashctl-desk{display:none;} }
 .dashctl-t,.dashctl-mo{border:1px solid var(--bd);border-radius:8px;background:#fff;color:var(--t2);
   font-size:12px;font-weight:600;line-height:1;padding:0 10px;height:28px;cursor:pointer;
   font-family:inherit;white-space:nowrap;}
@@ -9561,8 +9574,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.0911';
-const APP_VERSION_LABEL='v260823.0911';
+const APP_VERSION = '260823.0929';
+const APP_VERSION_LABEL='v260823.0929';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18336,27 +18349,35 @@ PAGES.dashboard=async function(){
          （原本的「回本月／回今天」那顆鈕因此不用另外畫）
      整列搬進「◯◯總覽」那張卡的標題列右邊，頂上就完全空出來了。
      桌機另留一份（下面的表格區也吃同一組狀態）——控制項無 id，重複畫不會互相干擾。 */
-  const _dashCtl=`<span class="dashctl">
+  const _dashPeriod=`<span class="dashctl">
     <button type="button" class="dashctl-t${_dashRange==='today'?' on':''}" onclick="dashSetRange('today')">今日</button>
     <span class="dashctl-m">
       <button type="button" class="dash-pg" onclick="dashShift(-1)" aria-label="上一${_dashRange==='today'?'天':'月'}">‹</button>
       <button type="button" class="dashctl-mo${_dashRange==='month'?' on':''}" title="${rangeFull}${_dashRange!=='month' ? '　（按一下改看整個月）' : (_atNow ? '' : '　（按一下回本月）')}" onclick="dashCtlMain()">${rangeLabel}</button>
       <button type="button" class="dash-pg" onclick="dashShift(1)" ${_atNow?'disabled':''} aria-label="下一${_dashRange==='today'?'天':'月'}">›</button>
     </span>
-    ${/* 2026-08-23 使用者指示：「報表頁面上新增一個 [支出]，跳一個視窗方便用手機填寫
-         固定支出或其他支出」—— 登記入口原本只在「經營報表 › 支出」那一頁的深處，
-         人在看利潤時想補一筆房租得先切頁再找分頁。這裡直接開同一組編輯視窗
-         （openExpenseEditor），資料與經營報表是同一張 expenses 表，不會有第二份。
-         月份跟著翻頁走：翻到 6 月按支出，記的就是 6 月。 */''}
-    <button type="button" class="btn btn-sm dash-exp" onclick="openExpensePick('${ym}')">＋ 支出</button>
   </span>`;
+  /* 2026-08-23 使用者指示：「報表頁面上新增一個 [支出]，跳一個視窗方便用手機填寫
+     固定支出或其他支出」—— 登記入口原本只在「經營報表 › 支出」那一頁的深處，
+     人在看利潤時想補一筆房租得先切頁再找分頁。這裡直接開同一組編輯視窗
+     （openExpenseEditor），資料與經營報表是同一張 expenses 表，不會有第二份。
+     月份跟著翻頁走：翻到 6 月按支出，記的就是 6 月。 */
+  const _dashExp=`<button type="button" class="btn btn-sm dash-exp" onclick="openExpensePick('${ym}')">＋ 支出</button>`;
   C.innerHTML=
-  `<div class="filter-row desktop-only" style="margin-bottom:18px;">${_dashCtl}</div>
+  `<div class="filter-row dash-toprow">
+    ${/* 2026-08-23 三修（使用者：「剛剛製作的重複顯示了，視窗上面只保留支出靠右」）——
+         期間控制項在手機是畫在「◯◯總覽」那一列裡的，頂上這一列再畫一次就變成兩組。
+         頂上只留 [＋ 支出]（靠右），期間控制項只在桌機顯示（桌機沒有那張手機卡）。
+         ⚠ 不能用 .desktop-only —— 它是 display:none，但同權重的 .filter-row{display:flex}
+           寫在後面會贏，手機上照樣顯示（這就是重複的成因）。改用自己的 class。 */''}
+    <span class="dashctl-desk">${_dashPeriod}</span>
+    ${_dashExp}
+  </div>
 
   <!-- ═══ 手機版：營運速覽 ═══ -->
   <div class="mobile-only">
     <div class="card" style="padding:4px 14px;">
-      <div class="ovh-bar"><span class="ovh-title">${periodLabel}總覽</span>${_dashCtl}</div>
+      <div class="ovh-bar"><span class="ovh-title">${periodLabel}總覽</span>${_dashPeriod}</div>
       ${/* 2026-07-29 使用者指示：畫面太雜亂 → 改「圖示＋短標題＋數值」的簡易列表，
            利潤獨立成主數字、拆解收合在一行小字，其餘一列一項不再堆疊副標。 */''}
       ${profit!=null?`

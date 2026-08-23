@@ -200,10 +200,13 @@ ok('　　搬進控制列後不能再留 margin-left:auto（會在列裡撐出�
 ok('　　挑選視窗的兩顆按鈕是白底（米底彈窗上再鋪米底＝看不出來能按）',
    /\.exp-pick\{[^}]*background:#fff;/.test(src)
    && /彈窗本身就是米底，按鈕再用 var\(--card2\) 等於米底疊米底/.test(src));
-ok('★★ 手機上「其他支出」一列拆兩行（日期整排＋刪除靠右上／項目＋金額一排）',
-   /\.fx-3 \.fx-row\{grid-template-columns:1fr 96px 30px;row-gap:6px;padding:9px 10px;\}/.test(src)
+ok('★★ 手機上「其他支出」一列拆兩行：第一列日期＋品項（＋刪除），第二列金額整排',
+   /\.fx-3 \.fx-row\{grid-template-columns:1\.35fr 1fr 30px;row-gap:6px;padding:9px 10px;\}/.test(src)
+   && /\.fx-3 \.fx-row>:nth-child\(3\)\{grid-column:1 \/ 4;grid-row:2;\}   \/\* 金額整列 \*\//.test(src)
    && /\.fx-3 \.fx-head\{display:none;\}/.test(src)
    && /連標題「項目」都被折成兩行/.test(src));
+ok('　　日期那格要 1.35fr（iOS 的 date input 撐到「2026年8月8日」約 130px）',
+   /iOS 的 date input 撐到「2026年8月8日」大約 130px/.test(src));
 ok('★★ 底部「取消」改「返回」，回到固定／其他的挑選視窗（方便來回對照）',
    /<button class="btn btn-ghost" onclick="fxBack\(\)">返回<\/button>/.test(src)
    && /function fxBack\(\)\{/.test(src)
@@ -230,14 +233,19 @@ ok('★★ 按「＋ 新增一項」要捲到新的那一列並把游標放進�
    && /inp\.focus\(\{preventScroll:true\}\)/.test(src));
 
 console.log('\n⑨-2 營運分析期間控制列');
-ok('★★ [本月][今日] 分段鈕退場，收成 [今日] ‹ 期間 › ＋[＋ 支出] 一顆控制項',
-   /const _dashCtl=`<span class="dashctl">/.test(src)
+ok('★★ [本月][今日] 分段鈕退場，收成 [今日] ‹ 期間 › 一顆控制項',
+   /const _dashPeriod=`<span class="dashctl">/.test(src)
    && !/<button class="seg-btn \$\{_dashRange==='month'\?'active':''\}" onclick="dashSetRange\('month'\)">本月<\/button>/.test(src));
-ok('★★ 控制列搬到「◯◯總覽」那一列右邊，頂上完全空出來',
-   /<div class="ovh-bar"><span class="ovh-title">\$\{periodLabel\}總覽<\/span>\$\{_dashCtl\}<\/div>/.test(src)
+ok('★★ 期間控制列在「◯◯總覽」那一列右邊',
+   /<div class="ovh-bar"><span class="ovh-title">\$\{periodLabel\}總覽<\/span>\$\{_dashPeriod\}<\/div>/.test(src)
    && /\.ovh-bar\{display:flex;align-items:center;justify-content:space-between;gap:8px;/.test(src));
-ok('　　桌機另留一份（下面的表格區吃同一組狀態；控制項無 id，重複畫不衝突）',
-   /<div class="filter-row desktop-only" style="margin-bottom:18px;">\$\{_dashCtl\}<\/div>/.test(src));
+ok('★★ 頂列只留 [＋ 支出] 靠右；期間控制項只有桌機顯示（手機再畫一次就重複了）',
+   /<span class="dashctl-desk">\$\{_dashPeriod\}<\/span>\s*\n\s*\$\{_dashExp\}/.test(src)
+   && /\.dash-toprow\{justify-content:flex-end;margin-bottom:18px;\}/.test(src)
+   && /@media\(max-width:600px\)\{ \.dashctl-desk\{display:none;\} \}/.test(src));
+ok('★★ 不能用 .desktop-only 藏 —— 同權重的 .filter-row{display:flex} 寫在後面會贏（重複的成因）',
+   !/<div class="filter-row desktop-only"/.test(src)
+   && /寫在後面會贏，手機照樣顯示（那正是重複的成因）/.test(src));
 ok('★★ 中間那格一顆抵兩顆：日模式按它＝切月模式、已在月模式按它＝回本月',
    /function dashCtlMain\(\)\{/.test(src)
    && /if\(_dashRange!=='month'\)\{ dashSetRange\('month'\); return; \}/.test(src));
