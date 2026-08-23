@@ -200,13 +200,13 @@ ok('　　搬進控制列後不能再留 margin-left:auto（會在列裡撐出�
 ok('　　挑選視窗的兩顆按鈕是白底（米底彈窗上再鋪米底＝看不出來能按）',
    /\.exp-pick\{[^}]*background:#fff;/.test(src)
    && /彈窗本身就是米底，按鈕再用 var\(--card2\) 等於米底疊米底/.test(src));
-ok('★★ 手機上「其他支出」一列拆兩行：第一列日期＋品項（＋刪除），第二列金額整排',
-   /\.fx-3 \.fx-row\{grid-template-columns:1\.35fr 1fr 30px;row-gap:6px;padding:9px 10px;\}/.test(src)
-   && /\.fx-3 \.fx-row>:nth-child\(3\)\{grid-column:1 \/ 4;grid-row:2;\}   \/\* 金額整列 \*\//.test(src)
+ok('★★ 手機上「其他支出」一列拆兩行：第一列日期＋品項，第二列金額整排',
+   /\.fx-3 \.fx-row\{grid-template-columns:96px 1fr;row-gap:6px;padding:9px 10px;\}/.test(src)
+   && /\.fx-3 \.fx-row>:nth-child\(3\)\{grid-column:1 \/ 3;grid-row:2;\}   \/\* 金額整列 \*\//.test(src)
    && /\.fx-3 \.fx-head\{display:none;\}/.test(src)
    && /連標題「項目」都被折成兩行/.test(src));
-ok('　　日期那格要 1.35fr（iOS 的 date input 撐到「2026年8月8日」約 130px）',
-   /iOS 的 date input 撐到「2026年8月8日」大約 130px/.test(src));
+ok('　　日期只寫 月/日 之後 96px 就夠（原生 date input 的「2026年8月8日」要 130px）',
+   /日期（只寫 月\/日，96px 夠）/.test(src));
 ok('★★ 底部「取消」改「返回」，回到固定／其他的挑選視窗（方便來回對照）',
    /<button class="btn btn-ghost" onclick="fxBack\(\)">返回<\/button>/.test(src)
    && /function fxBack\(\)\{/.test(src)
@@ -229,8 +229,10 @@ ok('　　overflow-x 要留 hidden（只改 overflow-y 的話 iOS 會多出一�
    /原本 overflow:hidden 是為了讓子列的直角被圓角裁掉/.test(src));
 ok('★★ 按「＋ 新增一項」要捲到新的那一列並把游標放進「項目」欄',
    /list\.scrollTop=list\.scrollHeight;/.test(src)
-   && /const inp=last\.querySelector\('\.fx-in:not\(\[type="date"\]\):not\(\.num\)'\);/.test(src)
+   && /const inp=last\.querySelector\('input\.fx-in:not\(\.num\)'\);/.test(src)
    && /inp\.focus\(\{preventScroll:true\}\)/.test(src));
+ok('★★ 選擇器一定要寫 input.fx-in —— 日期欄改成 <span class="fx-in"> 包按鈕，只寫 .fx-in 會選到 span',
+   /只寫 \.fx-in 會先選到那個 span，focus\(\) 在 span 上什麼都不會發生/.test(src));
 
 console.log('\n⑨-2 營運分析期間控制列');
 ok('★★ [本月][今日] 分段鈕退場，收成 [今日] ‹ 期間 › 一顆控制項',

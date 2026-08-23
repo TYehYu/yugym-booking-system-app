@@ -1760,10 +1760,26 @@ body.mc-mode .layout{padding-top:8px;}
   max-height:46vh;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
 /* 抬頭釘住 —— 捲下去還看得到哪一欄是金額（其他支出在手機已隱藏抬頭，不受影響） */
 .fx-head{position:sticky;top:0;z-index:1;}
-.fx-head,.fx-row{display:grid;grid-template-columns:1fr 130px 34px;gap:8px;align-items:center;
+.fx-head,.fx-row{display:grid;grid-template-columns:1fr 130px;gap:8px;align-items:center;
   padding:7px 10px;border-bottom:1px solid var(--bd);}
 /* 其他支出多一個日期欄（一次性開銷要記是哪一天花的） */
-.fx-3 .fx-head,.fx-3 .fx-row{grid-template-columns:140px 1fr 120px 34px;}
+.fx-3 .fx-head,.fx-3 .fx-row{grid-template-columns:120px 1fr 120px;}
+/* ── 向左滑出現「刪除」（2026-08-23 使用者指示，取代常駐的 ✕）──
+   紅底鋪在底下、.fx-row 疊在上面往左推。用 translateX 不是改寬度：
+   位移只走合成層，滑起來才跟得上手指。
+   ⚠ .fx-row 的底色必須是不透明的（--card），不然滑動時會透出下面的紅色。 */
+.fx-swipe{position:relative;overflow:hidden;border-bottom:1px solid var(--bd);}
+.fx-swipe:last-child{border-bottom:none;}
+.fx-swipe .fx-row{border-bottom:none;background:var(--card);position:relative;z-index:1;
+  transition:transform .18s var(--ease-out,ease);will-change:transform;}
+.fx-swipe.open .fx-row{transform:translateX(-76px);}
+.fx-swdel{position:absolute;top:0;right:0;bottom:0;width:76px;z-index:0;
+  border:none;background:var(--red,#7A2E28);color:#fff;font-size:13px;font-weight:700;
+  letter-spacing:.05em;cursor:pointer;font-family:inherit;}
+.fx-swdel:active{background:#8f3730;}
+/* 日期欄改用自己的 adp-field（原生 date input 的文字格式改不了）；短版只寫 月/日 */
+.fx-dwrap{padding:0!important;border:none!important;background:none!important;display:block;min-width:0;}
+.adp-field.adp-short{min-width:0;}
 /* 手機上「其他支出」四欄排不下（2026-08-23 使用者回報：「其他支出手機版這樣看不出來是
    什麼內容」）—— 日期／項目／金額／刪除擠在 ~330px 的彈窗裡，日期欄光是
    「2026年8月8日」就要 120px 以上，項目只剩不到 40px，連標題「項目」都被折成兩行。
@@ -1777,16 +1793,17 @@ body.mc-mode .layout{padding-top:8px;}
    給 1fr 會被截字。 */
 @media(max-width:560px){
   .fx-3 .fx-head{display:none;}
-  .fx-3 .fx-row{grid-template-columns:1.35fr 1fr 30px;row-gap:6px;padding:9px 10px;}
-  .fx-3 .fx-row>:nth-child(1){grid-column:1;grid-row:1;}       /* 日期 */
+  /* ✕ 已改成向左滑出現的「刪除」，所以只剩三格：第一列日期＋品項、第二列金額整排 */
+  .fx-3 .fx-row{grid-template-columns:96px 1fr;row-gap:6px;padding:9px 10px;}
+  .fx-3 .fx-row>:nth-child(1){grid-column:1;grid-row:1;}       /* 日期（只寫 月/日，96px 夠） */
   .fx-3 .fx-row>:nth-child(2){grid-column:2;grid-row:1;}       /* 項目 */
-  .fx-3 .fx-row>:nth-child(4){grid-column:3;grid-row:1;}       /* ✕ */
-  .fx-3 .fx-row>:nth-child(3){grid-column:1 / 4;grid-row:2;}   /* 金額整列 */
+  .fx-3 .fx-row>:nth-child(3){grid-column:1 / 3;grid-row:2;}   /* 金額整列 */
 }
 .fx-head{background:var(--card2);font-size:11.5px;color:var(--t2);font-weight:700;}
 .fx-head span:nth-child(2){text-align:right;}
 .fx-3 .fx-head span:nth-child(2){text-align:left;}
 .fx-3 .fx-head span:nth-child(3){text-align:right;}
+/* .fx-row:last-child 的 border 交給 .fx-swipe 管（列現在包了一層） */
 .fx-row:last-child{border-bottom:none;}
 .fx-in{width:100%;padding:6px 9px;border:1px solid var(--bd);border-radius:7px;background:#fff;font-size:13px;}
 .fx-in:focus{outline:none;border-color:var(--green);}
@@ -9574,8 +9591,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.0929';
-const APP_VERSION_LABEL='v260823.0929';
+const APP_VERSION = '260823.0943';
+const APP_VERSION_LABEL='v260823.0943';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28962,17 +28979,22 @@ function bkIsGroup(b){
    （原本掛在 onchange 的 bkRefreshPlanFilter 等等都不用改）。 */
 /* 顯示格式定版（2026-08-21 使用者：「日期的風格改成 2026/08/21 年/月/日」）——
    不帶星期：欄位是「選了什麼」，星期在月曆裡看得到，兩邊都寫反而變雜。 */
-function ashDateLabel(v){
+/* short＝只顯示 月/日（2026-08-23 使用者指示：支出列「日期只要顯示月/日」）——
+   年份在視窗抬頭已經寫了（「2026 年 08 月」），每一列再寫一次只是把欄位撐寬。
+   短版旗標記在按鈕的 data-short 上，ashDatePick 選完之後才知道要用哪一種寫回去。 */
+function ashDateLabel(v, short){
   const d=v?parseYmd(v):null;
   if(!d) return '<span class="adp-ph">選擇日期</span>';
+  if(short) return `${d.getMonth()+1}/${d.getDate()}`;
   return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
 }
-function ashDateField(id, value, min, onchange){
+function ashDateField(id, value, min, onchange, opts){
   /* onchange 掛在隱藏 input 上 —— ashDatePick 會 dispatchEvent('change')，
      所以原本寫在 <input type=date onchange="..."> 的那些呼叫照樣會跑。 */
+  const sh=!!(opts&&opts.short);
   return `<input type="hidden" id="${id}" value="${value||''}"${min?` data-min="${min}"`:''}${onchange?` onchange="${onchange}"`:''}>
-    <button type="button" class="adp-field" id="${id}-btn" onclick="ashDateOpen('${id}')">
-      <span>${ashDateLabel(value)}</span><span class="adp-ic">▾</span></button>`;
+    <button type="button" class="adp-field${sh?' adp-short':''}"${sh?' data-short="1"':''} id="${id}-btn" onclick="ashDateOpen('${id}')">
+      <span>${ashDateLabel(value, sh)}</span><span class="adp-ic">▾</span></button>`;
 }
 function ashDateOpen(id){
   const inp=document.getElementById(id); if(!inp) return;
@@ -29094,7 +29116,7 @@ function ashDatePick(ds){
     if(c.min && ds<c.min){ showToast('不能選這一天'); return; }
     inp.value=ds;
     const btn=document.getElementById(c.id+'-btn');
-    if(btn) btn.firstElementChild.innerHTML=ashDateLabel(ds);
+    if(btn) btn.firstElementChild.innerHTML=ashDateLabel(ds, btn.getAttribute('data-short')==='1');
     try{ inp.dispatchEvent(new Event('change',{bubbles:true})); }catch(_){}
   }
   ashDateClose();
@@ -49968,13 +49990,22 @@ function fxRender(){
      :`<div style="font-size:12px;color:var(--t2);line-height:1.8;margin-bottom:10px;">
       ${fx?'房租、水電、網路這種每月都有的開銷。改完按儲存；下個月會自動帶入這一份當草稿。'
           :'耗材、設備、修繕這種一次性的開銷。<b>不會</b>帶到下個月 —— 每個月各自登記各自的。'}</div>`}
+    ${/* 2026-08-23 使用者指示：「日期只要顯示月/日」＋「單筆刪除做成向左滑出現 [刪除] 紅底，
+         點選刪除才移除，這樣可以不用顯示那個 ✕」——
+         ・日期改用自己的 adp-field（原生 <input type=date> 的文字格式改不了，
+           iOS 一律吐「2026年8月8日」，把整欄撐爆），short 只寫 月/日。
+         ・每一列包一層 .fx-swipe：底下鋪紅色「刪除」，上層 .fx-row 可以向左推開。
+           ✕ 因此拿掉 —— 一列裡少一個永遠在那裡的破壞性按鈕。
+         ⚠ 刪除鈕要放在 DOM 的最前面（在 .fx-row 之前），不然它會蓋在輸入框上面。 */''}
     <div class="fx-list${fx?'':' fx-3'}">
-      <div class="fx-head">${fx?'':'<span>日期</span>'}<span>項目</span><span>金額</span><span></span></div>
-      ${d.rows.map((r,i)=>`<div class="fx-row">
-        ${fx?'':`<input class="fx-in" type="date" min="${d.month}-01" value="${escH(r.date||'')}" oninput="fxSet(${i},'date',this.value)">`}
+      <div class="fx-head">${fx?'':'<span>日期</span>'}<span>項目</span><span>金額</span></div>
+      ${d.rows.map((r,i)=>`<div class="fx-swipe" data-i="${i}">
+        <button type="button" class="fx-swdel" onclick="fxDel(${i})">刪除</button>
+        <div class="fx-row">
+        ${fx?'':`<span class="fx-in fx-dwrap">${ashDateField('fxd'+i, r.date||'', d.month+'-01', `fxSet(${i},'date',this.value)`, {short:true})}</span>`}
         <input class="fx-in" value="${escH(r.category)}" placeholder="${fx?'例：房租':'例：清潔用品'}" oninput="fxSet(${i},'category',this.value)">
         <input class="fx-in num" type="number" min="0" step="1" value="${Number(r.amount)||0}" oninput="fxSet(${i},'amount',this.value)">
-        <button class="fx-del" title="刪除這一項" onclick="fxDel(${i})">✕</button>
+        </div>
       </div>`).join('')}
     </div>
     <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="fxAdd()">＋ 新增一項</button>
@@ -49984,6 +50015,7 @@ function fxRender(){
          「取消」只會把視窗關掉，等於每次都要從報表頁重按一次 [支出]。 */''}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="fxBack()">返回</button>
       <button class="btn btn-green" onclick="fxSave()">儲存</button></div>`);
+  try{ fxSwipeInit(); }catch(_){}
 }
 /* 返回「固定／其他」的挑選視窗。與原本的「取消」一樣不寫入 —— 沒按儲存就不算數，
    草稿一併丟掉，免得下次進來看到上次沒存的東西還以為存過了。 */
@@ -49992,6 +50024,45 @@ function fxBack(){
   window._fxDraft=null;
   closeModal();
   openExpensePick(m);
+}
+/* 向左滑出現「刪除」（2026-08-23 使用者指示）——
+   事件委派掛在 document 上一次就好：fxRender 每次都整張重畫，逐列綁一定會漏。
+   ・只認橫向手勢：|dx| 要大於 |dy| 才接手，不然清單就捲不動了（清單本身是可捲的）。
+   ・一次只開一列 —— 兩列同時開著，紅色佔掉半個畫面又不知道按哪個。
+   ・不 preventDefault：touchmove 用 passive，捲動照樣順；橫向位移只改 transform。
+   ・在輸入框上起手也放行 —— 一列幾乎被輸入框佔滿，不放行等於滑不動。 */
+function fxSwipeInit(){
+  if(window._fxSwipeOn) return; window._fxSwipeOn=true;
+  const TH=32;
+  let row=null, x0=null, y0=null, axis=null;
+  const closeAll=(except)=>{ document.querySelectorAll('.fx-swipe.open').forEach(el=>{ if(el!==except) el.classList.remove('open'); }); };
+  document.addEventListener('touchstart',e=>{
+    const t=e.target;
+    row=(t&&t.closest)?t.closest('.fx-swipe'):null;
+    if(!row) { closeAll(null); return; }
+    if(t.closest && t.closest('.fx-swdel')) { row=null; return; }   // 按刪除本身不算滑動
+    x0=e.touches[0].clientX; y0=e.touches[0].clientY; axis=null;
+  },{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!row||x0==null) return;
+    const dx=e.touches[0].clientX-x0, dy=e.touches[0].clientY-y0;
+    if(axis===null){
+      if(Math.abs(dx)<6 && Math.abs(dy)<6) return;
+      axis = Math.abs(dx)>Math.abs(dy) ? 'x' : 'y';
+    }
+    if(axis!=='x') return;
+    const open=row.classList.contains('open');
+    if(!open && dx<=-TH){ closeAll(row); row.classList.add('open'); }
+    else if(open && dx>=TH){ row.classList.remove('open'); }
+  },{passive:true});
+  const end=()=>{ row=null; x0=null; y0=null; axis=null; };
+  document.addEventListener('touchend',end,{passive:true});
+  document.addEventListener('touchcancel',end,{passive:true});
+  /* 桌機沒有觸控：滑不動就刪不掉，所以滑鼠移到列上時把刪除鈕推出來 */
+  document.addEventListener('mouseover',e=>{
+    const r=(e.target&&e.target.closest)?e.target.closest('.fx-swipe'):null;
+    if(r){ closeAll(r); r.classList.add('open'); } else closeAll(null);
+  });
 }
 function fxSet(i,k,v){ const d=window._fxDraft; if(!d||!d.rows[i]) return;
   d.rows[i][k] = k==='amount' ? (Number(v)||0) : v;
@@ -50011,8 +50082,10 @@ function fxAdd(){
     list.scrollTop=list.scrollHeight;
     const rows=list.querySelectorAll('.fx-row');
     const last=rows[rows.length-1]; if(!last) return;
-    /* 「項目」那格＝不是日期也不是金額的那一個（固定支出沒有日期欄，選擇器兩種都吃） */
-    const inp=last.querySelector('.fx-in:not([type="date"]):not(.num)');
+    /* 「項目」那格＝唯一的純文字 input。
+       ⚠ 一定要寫 input.fx-in —— 日期欄 0823 改成 <span class="fx-in fx-dwrap"> 包一顆按鈕，
+         只寫 .fx-in 會先選到那個 span，focus() 在 span 上什麼都不會發生。 */
+    const inp=last.querySelector('input.fx-in:not(.num)');
     if(inp){ try{ inp.focus({preventScroll:true}); }catch(_){ inp.focus(); } }
   });
 }

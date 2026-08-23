@@ -457,7 +457,7 @@ ok('　　為什麼要各自擋一次，寫在程式裡（原本只是「剛好�
 
 console.log('\n自家日期挑選器（使用者：這邊的按鈕 有更符合我們風格的方式嗎）');
 ok('★ 欄位換成自家按鈕＋隱藏 input（讀值的程式一行都不用改）',
-   /function ashDateField\(id, value, min, onchange\)\{/.test(src)
+   /function ashDateField\(id, value, min, onchange, opts\)\{/.test(src)   /* opts.short：2026-08-23 支出列只顯示 月/日 */
    && /<input type="hidden" id="\$\{id\}"/.test(src)
    && /\$\{ashDateField\('bk-date', pf\.date\|\|'', '', 'bkRefreshPlanFilter\(\)'\)\}/.test(src)
    && /\$\{ashDateField\('amv-d', b\.date, ymd\(TODAY\)\)\}/.test(src));
