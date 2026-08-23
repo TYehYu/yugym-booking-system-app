@@ -3961,8 +3961,14 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
    格子內容其實更長 → 欄背景/直向框線在中途被截斷。改 flex-start 讓欄高跟隨內容。 */
 .cal-body>.cal-timecol,.cal-body>.cal-daycol{flex-shrink:0;}
 /* 友善教練課可預約時段（平日、18:00 前上完；不設下限）：友善課色極淡底提示（今天欄疊在米白上） */
-.cal-half.fw-win{background:rgba(35,80,138,.05);}
-.cal-half.fw-win:hover{background:rgba(31,111,84,0.09);}
+/* 2026-08-23 使用者指示：格子底色改標場地狀態（統一米底、額滿淡紅、只剩教室淡金）。
+   .fw-win（友善課可約時段的淡藍）整組退場 —— 平日 18:00 前一律上色，半張表都是藍的，
+   反而看不出哪裡真的排得下。友善課的時段規則沒有變，仍由 validateBooking 把關。
+   ⚠ 淡到什麼程度是刻意的：課卡是白底＋課程色條，底色一深就會跟課卡搶視線。 */
+.cal-half.cal-half-full{background:rgba(181,55,46,.085);}
+.cal-half.cal-half-full:hover{background:rgba(181,55,46,.16);}
+.cal-half.cal-half-grp{background:rgba(180,138,86,.10);}
+.cal-half.cal-half-grp:hover{background:rgba(180,138,86,.20);}
 /* 營業前新增入口（每日 09:00 上方）：平常淡，Hover 顯現 */
 /* 營業前列：時間軌最上緣的「營業前」時段（在動態起點之前）。底線與 .cal-half 一致 → 視為軌道第一格。
    2026-07-19 使用者指示：不做 sticky —— 它屬於時間軌（黏著 08:30 那格），要跟格線一起捲動，
@@ -4044,7 +4050,8 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 打烊後的時段：灰底斜線、不可點（2026-08-21「週六週日不要顯示非營業時間的預約時段」） */
 .cal-half.cal-half-closed{cursor:default;background:rgba(0,0,0,0.045);}
 .cal-half.cal-half-closed:hover{background:rgba(0,0,0,0.045);}
-.cal-half.cal-half-closed.fw-win{background:rgba(0,0,0,0.045);}
+.cal-half.cal-half-closed.cal-half-full,
+.cal-half.cal-half-closed.cal-half-grp{background:rgba(0,0,0,0.045);}   /* 打烊後不論場地狀態都是灰的 */
 .cal-half.cal-half-noadd:hover{background:transparent;}
 /* ── 預約模式（2026-07-30 使用者指示）──
    課卡整層不吃點擊與拖曳，整片時間格都能直接點來排課；課卡降低透明度表示現在只是背景。 */
@@ -9682,8 +9689,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.1455';
-const APP_VERSION_LABEL='v260823.1455';
+const APP_VERSION = '260823.1502';
+const APP_VERSION_LABEL='v260823.1502';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19151,16 +19158,30 @@ async function renderCalendar(opts){
     const ds=ymd(d), isToday=ds===ymd(TODAY), isPast=ds<ymd(TODAY);
     // 半小時格(可點擊新增)
     let halves='';
-    /* 友善課時段提示：平日、且 60 分鐘的課要在 18:00 前上完 → 最晚 17:00 那一格
-       （2026-08-08 使用者更正：17:30 開始會上到 18:30，不算 18:00 前的時段）。
-       下限不設 —— 有客人 8:00 上課（2026-07-20 使用者更正）。 */
-    const _fwDay=d.getDay()>=1&&d.getDay()<=5;
+    /* 「友善課時段提示」（平日 18:00 前整片淡藍）於 2026-08-23 隨底色改版退場，
+       _fwDay 因此沒有呼叫端。友善課的時段規則本身沒變，仍由 validateBooking 把關。 */
     const _closeMin=(typeof bizCloseMin==='function')?bizCloseMin(ds):22*60;  // 週六 21:00、週日 15:00、平日 22:00
+    /* 格子底色改標「場地還排不排得下」（2026-08-23 使用者指示：「背景改成統一基本米色，
+       場地額滿用淡化紅，還有教室可約用淡化金」）——
+       原本整片是「友善課可約時段」的淡藍（.fw-win），平日 18:00 前一律上色，
+       等於半張表都是藍的，看不出哪裡真的排得下。
+       ⚠ 一定要用**全部**預約來算，不能用 visible —— 場地容量是全店共用的，
+         被教練篩選濾掉的課照樣佔著位子（用 visible 會算出「還有空位」的假象）。
+       ⚠ 只算需要場地的課別（CAP_CATS）；團課與場租不佔多功能／教室／跑步機那三池。 */
+    const _vAll=(bookings||[]).filter(x=>x && x.date===ds && x.status!=='cancelled');
+    const _vState=(mm)=>{
+      if(typeof allocateVenue!=='function') return '';
+      try{ const a=allocateVenue('私人教練', _vAll, mm, mm+60, null);
+        if(a && a.error) return ' cal-half-full';          // 三池都滿 → 淡化紅
+        if(a && a.toVid==='group') return ' cal-half-grp';  // 只剩教室 → 淡化金
+      }catch(_){}
+      return '';
+    };
     for(let s=0;s<totalSlots;s++){
       const min=_startMin+s*SLOT_MIN;
       const t=minToTime(min);
       const hourline=((min+SLOT_MIN)%60===0)?'hourline':'';
-      const fw=(_fwDay&&(min+60)<=1080)?' fw-win':'';
+      const fw=_vState(min);
       /* 打烊後不顯示成可約時段（2026-08-21 使用者指示）——七欄共用一條時間軸沒辦法只剪短某一欄，
          所以改成把那些格子畫成「已打烊」並拿掉點擊；該時段若已經有課，卡片照樣蓋在上面。 */
       const _closed=min>=_closeMin;
