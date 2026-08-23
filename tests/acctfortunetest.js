@@ -331,8 +331,12 @@ ok('　　桌機與其他角色維持原本的單行底列',
 ok('★ 預約紀錄：520px 月曆改成按月分段的清單（桌機仍是月曆）',
    /if\(_m2\)\{[\s\S]{0,900}<div class="pp-bkmon">[\s\S]{0,900}<div class="pp-bkrow"/.test(src)
    && src.includes('renderMemberWeek(); }catch(_){} },0);'));
+/* 0823 白底框語彙盤點：這一列改成白框，左緣課程色條從絕對定位的 ::before
+   換成 border-left（::before 貼在無框的列邊上沒問題，白框化之後會壓在框線上）。 */
 ok('　　清單一列一堂：日期／課名（帶課程色）／時間／教練／狀態',
-   /\.pp-bkrow::before\{[^}]*background:var\(--bkc/.test(src) && /class="pp-bktag \$\{st\[1\]\}"/.test(src));
+   /\.pp-bkrow\{[^}]*border-left:4px solid var\(--bkc,#1f6f54\);/.test(src)
+   && !/\.pp-bkrow::before/.test(src)
+   && /class="pp-bktag \$\{st\[1\]\}"/.test(src));
 ok('★ 會員資料改用浮動視窗、不再滿版（使用者指示：用視窗比較有彈性感）',
    /const _winM = !!\(kind==='member' && isMobileLayout\(\)\s*\n\s*&& \(\(SESSION && SESSION\.role==='admin'\) \|\| ppSelfView\(\)\)\);/.test(src)
    && /if\(isMobileLayout\(\)\) ppOpenSheet\(false, _winM\); else ppOpenPage\(\);/.test(src)

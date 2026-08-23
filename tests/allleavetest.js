@@ -100,7 +100,10 @@ ok('★ 「請假」改成紅底白字（原本淡金色，跟旁邊的淡綠「
 ok('★ 整列淡化＋左緣紅線（這個人今天不會來）',
    /const onLeaveM = att\[sk\]==='leave';/.test(src)
    && /gr-row\$\{onLeaveM\?' gr-row-leave':''\}/.test(src)
-   && /\.gr-row-leave::before\{content:'';position:absolute;left:0;/.test(src)
+   /* 0823 白底框化：左緣紅線從絕對定位的 ::before 改成 border-left ——
+      無框的列上 ::before 貼著邊沒問題，白框化之後會壓在框線上。 */
+   && /\.gr-row-leave\{position:relative;border-left:3px solid var\(--danger,#b5372e\);\}/.test(src)
+   && !/\.gr-row-leave::before/.test(src)
    && /\.gr-row-leave \.gr-name\{opacity:\.55;\}/.test(src));
 ok('★ 顏色與課卡右下角的紅色「假」章同一個語彙',
    /\.evc-check\.evc-leave,\.cal-ev\.cal-ev-std \.evc-check\.evc-leave\{background:var\(--danger,#b5372e\);\}/.test(src));
