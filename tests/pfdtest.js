@@ -93,9 +93,24 @@ ok('　　會員名字有跳脫（2026-08-12 改用全域 escH，區域 _esc 因
    /function escH\(t\)\{ return String\(t==null\?'':t\)\.replace\(\/&\/g,'&amp;'\)/.test(src)
    && !/const _esc=t=>String\(t\|\|''\)\.replace/.test(src));
 ok('　　預設收著，點了才開', /\.pfd-nl\{display:none;/.test(src) && /\.pfd-nl\.open\{display:flex;\}/.test(src));
+/* 0823 使用者指示：「四個 kpi 跟下面的資料都要用白底框」——米底改白底，
+   四格才分得出是四項；下面的薪資計算也一項一框。 */
 ok('　　可點那格平常跟其他三格一樣（滑過去才浮出來）',
-   /\.pfd-stats span,\.pfd-stats \.pfd-tap\{min-width:0;background:var\(--card2\)/.test(src)
+   /\.pfd-stats span,\.pfd-stats \.pfd-tap\{min-width:0;background:#fff/.test(src)
    && /\.pfd-stats \.pfd-tap:hover\{border-color:var\(--green\)/.test(src));
+ok('★★ 四格與薪資計算列都用白底框（與營運速覽／員工表現／損益表同一套語彙）',
+   /\.pfd-list\{display:flex;flex-direction:column;gap:6px;\}/.test(src)
+   && /\.pfd-row\{[^}]*background:#fff;border:1px solid var\(--bd\);border-radius:10px;padding:9px 11px;\}/.test(src));
+ok('　　合計那一列仍看得出是結論（白框＋綠邊，不再靠 border-top 分段）',
+   /\.pfd-row\.pfd-sum\{border-color:var\(--green\);background:color-mix\(in srgb,var\(--green\) 4%,#fff\);/.test(src));
+ok('★★ 這張卡只有管理員打得開（下半部是完整薪資結構）',
+   /if\(!\(SESSION && SESSION\.role==='admin'\)\)\{ showToast\('薪資明細僅管理員可查看'\); return; \}/.test(src)
+   && /const _perfTap=!!\(SESSION && SESSION\.role==='admin'\);/.test(src));
+ok('　　沒權限就連「可點」都不畫（權限層級＝這個身分根本沒有這個功能）',
+   /<div class="perf-m-row\$\{_perfTap\?' perf-clickable':''\}"\$\{_perfTap\?` onclick="openPerfDetail/.test(src)
+   && /<tr class="\$\{_perfTap\?'perf-clickable':''\}"\$\{_perfTap\?` onclick="openPerfDetail/.test(src));
+ok('　　上半部的「表現」不是機密，那張表照樣人人看得到',
+   /上半部的「表現」（堂數／續約／工時）不是機密，員工表現那張表照樣人人看得到/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
