@@ -22,11 +22,21 @@ const grabFn=n=>{let i=src.indexOf('function '+n+'(');if(src.slice(i-6,i)==='asy
 console.log('① 一個月份切換器');
 {
   const F=grabFn('finMonthBar');
+  /* 0823 使用者指示：「桌機這跟翻頁的功能感覺可以跟下面這個地方合併，就不用顯示兩列」——
+     切換器自成一張卡、下面第一張卡的標題又寫一次同一個月份。翻頁鈕併進損益表標題列
+     （finMonthHeadHTML），finMonthBar 只留下「決定月份」這個職責。 */
   ok('★★ 只有一個，而且兩個月份變數一起設（切了上面下面就跟著動）',
-     /window\._anaMonth=ym;                       \/\/ 下面每一段都跟著同一個月份/.test(F));
+     /window\._anaMonth=ym;/.test(F) && /box\.innerHTML='';/.test(F)
+     && /_anaMonth 仍要設/.test(src));
+  const H=grabFn('finMonthHeadHTML');
+  ok('★★ 翻頁鈕併進損益表的標題列（同一列講完月份、表名與翻頁）',
+     /finMonthMove\(-1\)/.test(H) && /finMonthMove\(1\)/.test(H)
+     && /\$\{Y\} 年 \$\{M\} 月　損益表/.test(H));
+  ok('　　載入中／算不出來也畫同一列（不然翻月時畫面會先塌一列再長回來）',
+     (src.match(/\$\{finMonthHeadHTML\(ym\)\}/g)||[]).length===3);
   ok('★ 本月會標「累計到今天」（月中的數字本來就還會變）',
-     /const isNow=ym===ymd\(TODAY\)\.slice\(0,7\);/.test(F)
-     && /本月（累計到今天）/.test(F));
+     /const isNow=ym===ymd\(TODAY\)\.slice\(0,7\);/.test(H)
+     && /本月（累計到今天）/.test(H));
   ok('★★ 底下兩段在整合頁不再各畫一個',
      /const dateBar=_one\?'':`<div class="card ops-datebar"[\s\S]{0,200}finMonthMove\(-1\)/.test(src)
      && /const dateBar=_one\?'':`<div class="card ops-datebar"[\s\S]{0,200}anaMonthMove\(-1\)/.test(src));

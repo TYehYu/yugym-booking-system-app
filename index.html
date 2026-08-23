@@ -1490,6 +1490,10 @@ body.mc-mode .layout{padding-top:8px;}
 .tlc-scroll.tlc-row{flex-wrap:nowrap;} /* 分頁圓圈：不換行，改橫向捲動 */
 .tlc-scroll .tlc-stop{min-width:62px;}
 .tlc-scroll .tlc-name{max-width:62px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* 損益表標題列（2026-08-23 併版）：左右翻頁、中間月份＋表名。
+   沿用 .ops-datebar 的三段式，但它是卡片內的一列，所以不帶卡片的內距與陰影。 */
+.pnl2-head-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-2px 0 10px;}
+.pnl2-head-mid{flex:1;text-align:center;min-width:0;}
 .ops-date-mid{flex:1;text-align:center;cursor:pointer;position:relative;}
 .ops-date-main{font-family:var(--serif);font-size:19px;font-weight:600;color:var(--green);letter-spacing:0.04em;}
 .ops-date-sub{font-size:11px;color:var(--t3);margin-top:2px;}
@@ -9792,8 +9796,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.1959';
-const APP_VERSION_LABEL='v260823.1959';
+const APP_VERSION = '260823.2002';
+const APP_VERSION_LABEL='v260823.2002';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -49865,15 +49869,25 @@ PAGES.fin_matrix=async function(){
    原本「收入結構」與「營運指標」各自帶一個，而且改的是兩個不同的變數
    （_finMonth / _anaMonth），切了上面那個下面不動，看起來像資料不同步。
    改成一個，兩個變數一起設。 */
+/* 2026-08-23 使用者指示：「桌機這跟翻頁的功能感覺可以跟下面這個地方合併，就不用顯示兩列」——
+   月份切換器自成一張卡，下面第一張卡的標題又寫一次「2026 年 08 月　損益表」，
+   同一個月份講兩遍、吃掉一整列高度。切換器併進損益表的標題列（finMonthHeadHTML），
+   這一支只留下「決定月份」這個職責：#fin-sum 清空，_anaMonth 仍要設
+   （下面每一段都跟著同一個月份，這是 0808 收斂成一份的重點，不能因為併版而掉）。 */
 function finMonthBar(){
   const box=document.getElementById('fin-sum'); if(!box) return;
   const ym=(window._finMonth||ymd(TODAY).slice(0,7));
-  window._anaMonth=ym;                       // 下面每一段都跟著同一個月份
-  const [Y,M]=ym.split('-');
+  window._anaMonth=ym;
+  box.innerHTML='';
+}
+/* 損益表的標題列＝翻頁鈕 ＋ 月份與表名。載入中／算不出來時也要畫同一列，
+   不然翻個月畫面會先塌掉一列再長回來。 */
+function finMonthHeadHTML(ym){
+  const [Y,M]=String(ym).split('-');
   const isNow=ym===ymd(TODAY).slice(0,7);
-  box.innerHTML=`<div class="card ops-datebar" style="margin-bottom:14px;">
+  return `<div class="pnl2-head-bar">
     <button class="btn btn-ghost btn-sm" onclick="finMonthMove(-1)">‹ 上個月</button>
-    <div class="ops-date-mid"><div class="ops-date-main">${Y} 年 ${M} 月</div>
+    <div class="pnl2-head-mid"><div class="card-title" style="margin:0;">${Y} 年 ${M} 月　損益表</div>
       ${isNow?'<div class="ops-date-sub">本月（累計到今天）</div>':''}</div>
     <button class="btn btn-ghost btn-sm" onclick="finMonthMove(1)">下個月 ›</button></div>`;
 }
@@ -50349,7 +50363,8 @@ function salaryMatrixHTML(rows){
 async function finPnl(){
   const box=document.getElementById('fin-pnl'); if(!box) return;
   const ym=(window._finMonth||ymd(TODAY).slice(0,7));
-  box.innerHTML='<div class="card" style="padding:14px 16px;margin-bottom:14px;color:var(--t3);font-size:12.5px;">損益表計算中…</div>';
+  box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;">${finMonthHeadHTML(ym)}
+    <div style="color:var(--t3);font-size:12.5px;">損益表計算中…</div></div>`;
   try{
     const [purAll,expAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('expenses').catch(()=>[])]);
     const pur=(purAll||[]).filter(p=>String(p.created_at||'').slice(0,7)===ym);
@@ -50403,7 +50418,7 @@ async function finPnl(){
     const spend=tax+salary+coIns+fixedTotal+otherTotal;
     const _isNow=ym===ymd(TODAY).slice(0,7);
     box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;">
-      <div class="card-title" style="margin-bottom:8px;">${Y} 年 ${M} 月　損益表</div>
+      ${finMonthHeadHTML(ym)}
       ${_prFail?`<div style="background:#fbeceb;border:1px solid #e8b6b0;color:#b5372e;border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.7;margin-bottom:10px;">⚠ 薪資資料讀取失敗，<b>本表未含人事成本</b>，淨利不可信 —— 請用管理員帳號查看，或重新整理再試。</div>`:''}
       ${/* 三個大數字：使用者要的「當月利潤／支出」放最上面，薪水在下面逐位列。
            與底下那張表是同一份計算，不會再出現兩個對不起來的淨利（2026-08-08）。 */''}
@@ -50479,7 +50494,8 @@ async function finPnl(){
         ・這是這一頁<b>唯一</b>的淨利數字，下方營運卡的銷課與這裡同一份計算。
       </div>
     </div>`;
-  }catch(e){ box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;color:var(--t3);font-size:12.5px;">損益表暫時算不出來（${(e&&e.message)||e}）</div>`; }
+  }catch(e){ box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;">${finMonthHeadHTML(ym)}
+    <div style="color:var(--t3);font-size:12.5px;">損益表暫時算不出來（${(e&&e.message)||e}）</div></div>`; }
 }
 async function finMonth(){
   const body=document.getElementById('fin-body'); if(!body) return;
