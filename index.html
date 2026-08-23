@@ -9889,8 +9889,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2325';
-const APP_VERSION_LABEL='v260823.2325';
+const APP_VERSION = '260823.2329';
+const APP_VERSION_LABEL='v260823.2329';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38469,8 +38469,17 @@ async function openPersonProfile(kind, id, backPage){
       /* 這一行是關鍵：卡頓佔了總時間多少。
          接近 100% → 瓶頸在瀏覽器（主執行緒被佔住），不是網路也不是伺服器。 */
       const _lagPct=_tot>0?Math.round(_lagMs/_tot*100):0;
-      const _why=(window._dbWhy||[]).slice(_whyFrom).filter(w=>w.判斷!=='命中快取')
-        .map(w=>`${w.表}:${w.判斷}${w.說明?'('+w.說明+')':''}`).slice(0,5).join('、');
+      /* ⚠ 不能只看「這次操作期間」的判斷：真正的大表（bookings）常常是頁面在使用者
+         點下去之前就開始抓的，它的判斷落在時間窗之外，於是最關鍵的那一行永遠印不出來
+         （0823 實測：吐司只印得到 contracts，而元凶是 bookings）。
+         改成反過來查：對每一張「真的抓了」的表，回頭找它最後一次的判斷。 */
+      const _all=(window._dbWhy||[]);
+      const _why=(window._dbStat||[]).slice(_statFrom).map(r=>{
+        for(let i=_all.length-1;i>=0;i--){ const w=_all[i];
+          if(w.表===r.表 && w.判斷!=='命中快取')
+            return `${w.表}:${w.判斷}${w.說明?'('+w.說明+')':''}`; }
+        return `${r.表}:（查不到判斷）`;
+      }).slice(0,4).join('、');
       const _hyd=(window._dbHydrated||[]).length;
       try{ showToast(`讀取 ${(_tot/1000).toFixed(1)} 秒：${_brk}${_top}`
         +`　【開場還原 ${_hyd} 張】${_why?'　'+_why:''}`, 14000); }catch(_){}
