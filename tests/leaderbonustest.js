@@ -133,8 +133,12 @@ ok('★ 取消店長身分就把名單清掉（免得日後重開沿用沒人記
    /c\.leader_members=null; c\.leader_t1=null; c\.leader_b1=null; c\.leader_t2=null; c\.leader_b2=null;/.test(src));
 
 console.log('\n⑧ 薪資明細看得到這一行');
+/* 0823：三處都改成「列出來＋帶名單」（leaderListHTML），寫法從 `if(x) h+=row(...)`
+   變成帶大括號的區塊，所以斷言跟著改；「只要是店長就列」這件事沒有變。 */
 ok('★ 只要是店長就列出來（金額 0 時那句「尚未設定名單」才看得到）',
-   (src.match(/if\(sal\.isLeader\)/g)||[]).length===2 && /if\(s\.isLeader\) h\+=rowL\('店長獎金'/.test(src));
+   /if\(sal\.isLeader\)\{$/m.test(src)
+   && /if\(sal\.isLeader\)\{ h\+=row\('店長獎金'/.test(src)
+   && /if\(s\.isLeader\)\{ h\+=rowL\('店長獎金'/.test(src));
 ok('　　為什麼改成 isLeader 而不是 pay>0，寫在程式裡',
    /但那行「尚未設定計算名單」正是最需要被看到的訊息/.test(src));
 ok('★ 全域設定改成「新店長的預設值」，並講明實際計算看各店長自己的',

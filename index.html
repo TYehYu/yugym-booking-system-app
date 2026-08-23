@@ -6510,7 +6510,10 @@ body.memh2-shell .bottom-nav .bn-lb{color:inherit;}
 .ds-card-tap:active{transform:scale(.98);}
 /* 名單彈窗：一列一筆（姓名／方案／金額），金額靠右對齊 */
 .nl-list{display:flex;flex-direction:column;gap:8px;max-height:56vh;overflow-y:auto;margin:2px 0 4px;}
-.nl-row{display:flex;align-items:center;gap:10px;background:var(--card2);border-radius:10px;padding:10px 12px;}
+/* 一列一位＝白底框（2026-08-23）：原本是米底方塊，而彈窗底本來就是米底，
+   在「表現與薪資」那張卡上幾乎看不出分列；薪資單那邊又是白卡，米底方塊也不對。
+   統一成白底＋淡邊，兩種底色上都讀得出來（與 .pnl2-i／.pfd-row 同一組數值）。 */
+.nl-row{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:9px 11px;}
 .nl-nm{font-size:13.5px;font-weight:800;color:var(--text);white-space:nowrap;}
 .nl-plan{flex:1;min-width:0;font-size:11.5px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .nl-amt{font-size:13.5px;font-weight:800;color:var(--gold-d);font-family:var(--num),inherit;white-space:nowrap;}
@@ -9845,8 +9848,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2054';
-const APP_VERSION_LABEL='v260823.2054';
+const APP_VERSION = '260823.2057';
+const APP_VERSION_LABEL='v260823.2057';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -34134,18 +34137,7 @@ async function openPerfDetail(empId, month){
       rows+=row('店長獎金', sal.leaderDetail||'', money(sal.leaderPay));
       /* 負責的教練逐位列出（2026-08-08 使用者指示）——達標的標綠、沒達標的標出還差幾堂，
          店長才知道月底要盯誰。名單本身在「員工資料 → 薪資規則 → 店長獎金」設定。 */
-      if((sal.leaderList||[]).length){
-        /* .pfd-nl 預設是收合的（要靠 .open 才顯示，見續約名單的 pfdToggleRenew）——
-           這份名單沒有展開的按鈕，所以直接帶 open，不然會整塊看不見。 */
-        rows+=`<div class="pfd-nl open" style="margin:2px 0 8px;">
-          ${sal.leaderList.map(r=>`<div class="nl-row">
-            <span class="nl-nm">${escH(r.name||'—')}</span>
-            <span class="nl-plan">${r.classes} 堂${r.hit?'':(r.need>0?`<span style="color:var(--t3);">　還差 ${r.need} 堂</span>`:'')}</span>
-            <span class="nl-amt" style="${r.hit?'color:var(--green);':'color:var(--t3);'}">${r.hit?'$'+r.pay.toLocaleString():'—'}</span>
-          </div>`).join('')}
-          <div class="nl-sum"><span>${sal.leaderList.filter(r=>r.hit).length} / ${sal.leaderList.length} 位達標${sal.leaderT1?`　·　門檻 ${sal.leaderT1} 堂 $${sal.leaderB1.toLocaleString()}${sal.leaderT2>0?`　·　${sal.leaderT2} 堂再加 $${sal.leaderB2.toLocaleString()}`:''}`:''}</span><b>${money(sal.leaderPay)}</b></div>
-        </div>`;
-      }
+      rows+=leaderListHTML(sal);
     }
     if(sal.supPay>0)   rows+=row('主管津貼', '固定津貼', money(sal.supPay));
     rows+=row('應發合計','', money(sal.grossPay), {sum:true});
@@ -34190,6 +34182,28 @@ async function openPerfDetail(empId, month){
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
         <button class="btn btn-green" onclick="closeModal();stGoEmp('${empId}','salary')">完整薪資單</button></div>`);
   }catch(e){ showToast('讀取失敗：'+(e&&e.message?e.message:e)); }
+}
+/* 店長獎金的名單（2026-08-08 使用者：「店長薪資單列出負責的教練」；
+   2026-08-23 使用者：「店長獎金這邊要列出名單，我記得有些地方有，有些地方是不是沒有列出來」）——
+   同一份名單原本只寫在「表現與薪資」那張彈窗裡，薪資單（員工資料 → 薪資單）與
+   薪資彙總的展開列都只有一行「名單 4 位，無人達到 80 堂」，看不出是誰、還差幾堂。
+   抽成一支，三處共用；日後改格式只改這裡。
+   ⚠ .pfd-nl 預設收合（靠 .open 顯示，見 pfdToggleRenew），這份沒有展開鈕 → 直接帶 open。 */
+function leaderListHTML(sal){
+  const list=(sal&&sal.leaderList)||[];
+  if(!list.length) return '';
+  const _m=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+  const t1=Number(sal.leaderT1)||0, t2=Number(sal.leaderT2)||0;
+  const b1=Number(sal.leaderB1)||0, b2=Number(sal.leaderB2)||0;
+  return `<div class="pfd-nl open" style="margin:2px 0 8px;">
+    ${list.map(r=>`<div class="nl-row">
+      <span class="nl-nm">${escH(r.name||'—')}</span>
+      <span class="nl-plan">${r.classes} 堂${r.hit?'':(r.need>0?`<span style="color:var(--t3);">　還差 ${r.need} 堂</span>`:'')}</span>
+      <span class="nl-amt" style="${r.hit?'color:var(--green);':'color:var(--t3);'}">${r.hit?_m(r.pay):'—'}</span>
+    </div>`).join('')}
+    <div class="nl-sum"><span>${list.filter(r=>r.hit).length} / ${list.length} 位達標${
+      t1?`　·　門檻 ${t1} 堂 ${_m(b1)}${t2>0?`　·　${t2} 堂再加 ${_m(b2)}`:''}`:''}</span><b>${_m(sal.leaderPay)}</b></div>
+  </div>`;
 }
 /* 續約名單就地展開（2026-08-02 使用者：「續約要可以看名單」）——
    不另外開一個彈窗：這個視窗本身就是彈窗，再疊一層就得做返回，
@@ -34380,7 +34394,9 @@ const rowL=(label,val,sub)=>`<div style="display:flex;justify-content:space-betw
             }
             if(s.bdayPay>0) h+=rowL('生日禮金',`$${s.bdayPay.toLocaleString()}`, s.bdayDetail);
             if(s.renewPay>0) h+=rowL('續約獎金',`$${s.renewPay.toLocaleString()}`, s.renewDetail);
-            if(s.isLeader) h+=rowL('店長獎金',`$${s.leaderPay.toLocaleString()}`, s.leaderDetail);
+            /* 名單一起列（2026-08-23 使用者指示）——三處共用 leaderListHTML */
+            if(s.isLeader){ h+=rowL('店長獎金',`$${s.leaderPay.toLocaleString()}`, s.leaderDetail);
+              h+=leaderListHTML(s); }
             if(s.supPay>0) h+=rowL('主管津貼',`$${s.supPay.toLocaleString()}`);
             return h;
 }
@@ -52141,7 +52157,9 @@ async function renderSalaryContent(TARGET, withHead){
         if(dutyHours>0 && sal.dutyPay>0) h+=row('值班費',`$${sal.dutyPay.toLocaleString()}`, `${dutyHours.toFixed(1)} 小時`);
         if(sal.bdayPay>0) h+=row('生日禮金',`$${sal.bdayPay.toLocaleString()}`, sal.bdayDetail);
         if(sal.renewPay>0) h+=row('續約獎金',`$${sal.renewPay.toLocaleString()}`, sal.renewDetail);
-        if(sal.isLeader) h+=row('店長獎金',`$${sal.leaderPay.toLocaleString()}`, sal.leaderDetail);
+        /* 名單一起列（2026-08-23 使用者指示）——原本只有一行「名單 4 位，無人達到 80 堂」 */
+        if(sal.isLeader){ h+=row('店長獎金',`$${sal.leaderPay.toLocaleString()}`, sal.leaderDetail);
+          h+=leaderListHTML(sal); }
         if(sal.supPay>0) h+=row('主管津貼',`$${sal.supPay.toLocaleString()}`);
         h+=row('應領合計',`$${estimate.toLocaleString()}`,'',{strong:true,top:true,color:'gold'});
         if(countSalary && sal.insEmpDeduct>0){

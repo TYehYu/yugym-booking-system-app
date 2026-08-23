@@ -72,22 +72,33 @@ console.log('\n③ 畫面：達標標綠、沒達標標出還差幾堂');
 ok('★★ 逐位一列（姓名／堂數／金額）',
    /<span class="nl-nm">\$\{escH\(r\.name\|\|'—'\)\}<\/span>/.test(src)
    && /<span class="nl-plan">\$\{r\.classes\} 堂\$\{r\.hit\?'':\(r\.need>0\?`<span style="color:var\(--t3\);">　還差 \$\{r\.need\} 堂<\/span>`:''\)\}<\/span>/.test(src));
+/* 0823 使用者：「店長獎金這邊要列出名單，我記得有些地方有，有些地方是不是沒有列出來」——
+   同一份名單原本只寫在「表現與薪資」彈窗裡；薪資單與薪資彙總的展開列都只有一行
+   「名單 4 位，無人達到 80 堂」。抽成 leaderListHTML 三處共用。 */
+const LL=(()=>{const i=src.indexOf('function leaderListHTML(sal){');
+  let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}})();
 ok('★ 達標綠色、未達標灰色破折號（一眼分得出來）',
-   /\$\{r\.hit\?'color:var\(--green\);':'color:var\(--t3\);'\}">\$\{r\.hit\?'\$'\+r\.pay\.toLocaleString\(\):'—'\}/.test(src));
+   /\$\{r\.hit\?'color:var\(--green\);':'color:var\(--t3\);'\}">\$\{r\.hit\?_m\(r\.pay\):'—'\}/.test(LL));
 ok('★ 底下一行寫「N / M 位達標」與門檻',
-   /\$\{sal\.leaderList\.filter\(r=>r\.hit\)\.length\} \/ \$\{sal\.leaderList\.length\} 位達標/.test(src)
-   && /門檻 \$\{sal\.leaderT1\} 堂 \$\$\{sal\.leaderB1\.toLocaleString\(\)\}/.test(src)
-   && /\$\{sal\.leaderT2\} 堂再加 \$\$\{sal\.leaderB2\.toLocaleString\(\)\}/.test(src));
+   /\$\{list\.filter\(r=>r\.hit\)\.length\} \/ \$\{list\.length\} 位達標/.test(LL)
+   && /門檻 \$\{t1\} 堂 \$\{_m\(b1\)\}/.test(LL)
+   && /\$\{t2\} 堂再加 \$\{_m\(b2\)\}/.test(LL));
 ok('★★ .pfd-nl 預設收合 → 這一塊要自己帶 open，否則整份名單看不見',
    /\.pfd-nl\{display:none;/.test(src) && /\.pfd-nl\.open\{display:flex;\}/.test(src)
-   && /rows\+=`<div class="pfd-nl open" style="margin:2px 0 8px;">/.test(src));
-ok('　　為什麼要帶 open，寫在原地', /這份名單沒有展開的按鈕，所以直接帶 open，不然會整塊看不見/.test(src));
+   && /return `<div class="pfd-nl open" style="margin:2px 0 8px;">/.test(LL));
+ok('　　為什麼要帶 open，寫在原地', /這份沒有展開鈕 → 直接帶 open/.test(src));
+ok('★★ 三處都列：表現與薪資彈窗、薪資單、薪資彙總展開列',
+   /rows\+=leaderListHTML\(sal\);/.test(src)
+   && /if\(sal\.isLeader\)\{ h\+=row\('店長獎金'[\s\S]{0,120}h\+=leaderListHTML\(sal\); \}/.test(src)
+   && /if\(s\.isLeader\)\{ h\+=rowL\('店長獎金'[\s\S]{0,120}h\+=leaderListHTML\(s\); \}/.test(src));
 ok('　　名單接在「店長獎金」那一列底下', (()=>{
   const a=src.indexOf(`rows+=row('店長獎金'`);
-  const b=src.indexOf('rows+=`<div class="pfd-nl open"');
+  const b=src.indexOf('rows+=leaderListHTML(sal);');
   return a>0 && b>a && (b-a)<600;
 })());
-ok('　　沒有名單就不畫空盒子', /if\(\(sal\.leaderList\|\|\[\]\)\.length\)\{/.test(src));
+ok('　　沒有名單就不畫空盒子', /const list=\(sal&&sal\.leaderList\)\|\|\[\];\s*\n\s*if\(!list\.length\) return '';/.test(LL));
+ok('★ 名單列改白底框（彈窗是米底、薪資單是白卡，兩種底色上都要讀得出「一列一位」）',
+   /\.nl-row\{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var\(--bd\);border-radius:10px;padding:9px 11px;\}/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
