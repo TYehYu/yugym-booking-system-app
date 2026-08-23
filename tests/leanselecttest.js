@@ -23,12 +23,30 @@ const DROP=(()=>{
 
 console.log('① 被精簡掉的欄位，程式裡真的沒人用');
 {
-  ok('★ 名單讀得到（9 欄）', DROP.length===9, DROP);
+  /* 0823：名單從 9 欄增為 14 欄。多出來的五個與原本九個是**不同類別**：
+     原本九個＝全程式碼完全沒人提到；新五個＝只寫不讀（只有寫入那一行會設它）。
+     所以檢查方式也要分開：前者「沒有任何引用」，後者「沒有任何『讀』」。
+     為什麼只寫不讀也安全：dbPut 的護欄會在 upsert 前把缺席的精簡欄位撈回來合併
+     （下面 ③ 有實跑驗證），不可能把既有值蓋成 null。 */
+  const NEVER=['is_substitute','original_coach_id','space_id','resource_id',
+    'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref'];
+  const WRITE_ONLY=['makeup_date','makeup_time','reward_issued_at','reward_type'];
+  ok('★ 名單讀得到（13 欄＝9 個沒人用＋4 個只寫不讀）', DROP.length===13, DROP);
+  ok('　　兩類加起來就是整份名單（沒有漏掉也沒有多出來）',
+     NEVER.concat(WRITE_ONLY).sort().join()===DROP.slice().sort().join());
   /* 把 LEAN_DROP 這一段本身挖掉再掃，否則名單自己會匹配到自己 */
   const body=src.replace(/const LEAN_DROP=\{[\s\S]*?\]\s*\};/,'');
-  DROP.forEach(c=>{
+  NEVER.forEach(c=>{
     const re=new RegExp('[.\'"\\[]'+c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b');
     ok('　　'+c+' 沒有任何引用', !re.test(body));
+  });
+  WRITE_ONLY.forEach(c=>{
+    /* 「讀」＝出現在 .欄位 的位置，而且後面不是緊接著 =（那是寫）。
+       b.makeup_date=b.date  → 寫，放行
+       b.makeup_date         → 讀，要擋 */
+    const re=new RegExp('[.\'"\\[]'+c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b(?!\\s*=[^=])','g');
+    const hits=(body.match(re)||[]);
+    ok('　　'+c+' 只被寫、沒有被讀', hits.length===0, hits.slice(0,3));
   });
 }
 
@@ -92,7 +110,10 @@ console.log('\n⑥ 實跑資料層（假 sb）：學欄位 → 精簡讀 → 回
 {
   const FULL={id:'BK-1',date:'2026-08-04',status:'booked',member_id:'M1',note:'原本的備註',
     import_ref:'IMPB-B123',makeup_status:'none',checkin_source:'qr',space_id:'S1',resource_id:'R1',
-    is_substitute:false,original_coach_id:'C0',actor_user_id:'U1',operator_employee_id:'E1'};
+    is_substitute:false,original_coach_id:'C0',actor_user_id:'U1',operator_employee_id:'E1',
+    /* 0823 追加的五個「只寫不讀」欄位：護欄要一樣護得住（回寫時不能被寫成 null） */
+    makeup_date:'2026-08-01',makeup_time:'10:00',reward_issued_at:'2026-08-01T00:00:00Z',
+    reward_type:'RW-1'};
   const DB={'BK-1':Object.assign({},FULL)};
   let lastUpsert=null, selUsed=[];
   const sb={ from:()=>({

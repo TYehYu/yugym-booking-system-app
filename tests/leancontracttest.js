@@ -23,8 +23,12 @@ console.log('① 清單讀取不搬合約全文與簽名圖');
   const m=/contracts:\['([^\]]*)'\]/.exec(src);
   ok('★ LEAN_DROP 有 contracts 這一組', !!m);
   eq('★★ 三個重欄位都在', m[1].split("','"), ['body_snapshot','fill_snapshot','signature']);
-  ok('★ bookings 那一組沒被動到',
-     /bookings:\['is_substitute','original_coach_id','space_id','resource_id',\n\s*'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref'\]/.test(src));
+  /* 0823：bookings 那一組從 9 欄加到 13 欄（追加 4 個只寫不讀的），contracts 這一組沒被動到
+     —— 兩組的理由不同，這支測試守的是 contracts 那一組。 */
+  ok('★ contracts 那一組沒被 bookings 的異動波及',
+     /contracts:\['body_snapshot','fill_snapshot','signature'\] \};/.test(src));
+  ok('　　bookings 那一組維持原本九欄＋0823 追加的四個只寫不讀',
+     /bookings:\['is_substitute','original_coach_id','space_id','resource_id',\n\s*'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref',\n\s*'makeup_date','makeup_time','reward_issued_at','reward_type'\]/.test(src));
   ok('★★ 為什麼與 bookings 那組理由不同，寫在原地',
      /\*\*是有人用的\*\*，但只在「打開某一份合約」時用，而那條路徑走的是 dbGet 單筆（全欄位）。/.test(src));
   ok('★ 數字有記下來（日後回頭看知道當初多大）',

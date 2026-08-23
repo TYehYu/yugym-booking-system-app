@@ -9889,8 +9889,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2202';
-const APP_VERSION_LABEL='v260823.2202';
+const APP_VERSION = '260823.2230';
+const APP_VERSION_LABEL='v260823.2230';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9983,8 +9983,23 @@ const DB_CACHE_TTL_BY={ticket_types:300000,course_plans:300000,exercises:300000,
    而櫃檯每點開一位會員的資料就會 dbGetAll('contracts') 整張表搬一次 ——
    合約愈簽愈多，這個成本是線性長的。清單用不到全文，就別搬。
    ⚠ 寫入不受影響：dbPut 的護欄看到物件缺了被精簡的欄位，會先撈單筆補齊再寫。 */
+/* 2026-08-23 追加 5 欄（使用者回報「開個表 17 秒」）——量出來 bookings 整表 JSON 有 7.7MB：
+   6,979 列 × 50 個欄位，每一列都要把 50 個欄位名再寫一次，而多數欄位的值是 null，
+   所以體積大半是重複的欄位名。少一個欄位 ≈ 少 2% 體積。
+
+   ⚠ 這五個與原本那九個「全程式碼沒人用」不同，它們是**只寫不讀**：
+     makeup_date / makeup_time      ← 只在標記補課那一行寫入
+     reward_issued_at / reward_type ← 只在發放獎勵那一行寫入
+   ⚠ reward_status 沒有列進來：它確實只在 RPC 回傳值上被讀（res.data.reward_status，
+     不是課卡欄位），照理也能砍，但測試的規則是「掃到 .欄位 就算被讀」，分不出那是
+     另一個物件。與其為了 2% 的體積在規則上開例外，不如留著 —— 規則保持乾淨比較值錢。
+   為什麼安全：dbPut 的寫入護欄（見下方「精簡欄位的寫入護欄」）在 upsert 之前會檢查
+   「物件是不是缺了任何一個被精簡的欄位」，缺就先 dbGet 撈完整單筆合併再寫 ——
+   所以不可能因為讀的時候沒帶而把既有值蓋成 null；寫入端自己設的值也照樣蓋得過去。
+   ⚠ 之後若要開始「讀」其中任何一欄，先把它從這裡移除。 */
 const LEAN_DROP={ bookings:['is_substitute','original_coach_id','space_id','resource_id',
-  'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref'],
+  'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref',
+  'makeup_date','makeup_time','reward_issued_at','reward_type'],
   contracts:['body_snapshot','fill_snapshot','signature'] };
 const _leanSel=new Map();          // 實體表名 → 精簡 select 字串（本 session 學到才有）
 function leanLearn(store,row){     // 從任何一筆完整資料學欄位（dbGetAll 首抓／dbGet 都會餵）
