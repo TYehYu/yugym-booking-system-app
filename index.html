@@ -9889,8 +9889,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2151';
-const APP_VERSION_LABEL='v260823.2151';
+const APP_VERSION = '260823.2200';
+const APP_VERSION_LABEL='v260823.2200';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38280,16 +38280,27 @@ function ppClose(){
 }
 // 主入口
 async function openPersonProfile(kind, id, backPage){
-  /* 忙碌遮罩（2026-08-08）：ppLoadCtx 一次要載 7 張表，冷快取時好幾秒 ——
-     在那之前畫面完全沒有反應，使用者會以為當機、然後重複點。 */
+  /* 忙碌遮罩（2026-08-08）：ppLoadCtx 一次要載 8 張表，冷快取時好幾秒 ——
+     在那之前畫面完全沒有反應，使用者會以為當機、然後重複點。
+     2026-08-23：使用者回報「還是很慢」。改成每一段各自計時、把耗時最久的那一段
+     寫在遮罩文字與 console 上 —— 與其猜是哪一段，不如讓它自己說。
+     ⚠ 只加量測，不改任何載入邏輯；量完就知道要往哪裡優化。 */
+  const _t0=Date.now(); const _mark={};
   const _busy=uiBusy('讀取資料中…');
+  const _say=t=>{ const el=document.getElementById('ui-busy');
+    const sp=el&&el.querySelector('.uib-box span:last-child'); if(sp) sp.textContent=t; };
   try{
     const table = kind==='member' ? 'members' : 'coaches';
+    _say('讀取基本資料…');
     const rec = await dbGet(table, id);
+    _mark['基本資料']=Date.now()-_t0;
     if(!rec){ showToast('找不到資料'); return; }
     Object.assign(PP,{kind, id, rec, draft:null, tab:'basic', editing:false, ctx:{}, recView:null,
       back:backPage||CUR_PAGE, backGroup:(typeof CUR_GROUP!=='undefined'?CUR_GROUP:null)});
+    _say('讀取票券與課堂…');
+    const _t1=Date.now();
     await ppLoadCtx();
+    _mark['八張表']=Date.now()-_t1;
     /* 管理員手機看會員資料改成浮動視窗（2026-08-20 使用者指示：
        「不要用全頁面顯示，用視窗比較有彈性感」）——同桌機那套暗背景＋置中卡，
        只是尺寸吃滿手機寬度。其他角色與員工資料維持滿版。 */
@@ -38297,8 +38308,19 @@ async function openPersonProfile(kind, id, backPage){
        （2026-08-22 使用者指示：「改成視窗 不要用全頁面」）。 */
     const _winM = !!(kind==='member' && isMobileLayout()
       && ((SESSION && SESSION.role==='admin') || ppSelfView()));
+    _say('繪製畫面…');
+    const _t2=Date.now();
     if(isMobileLayout()) ppOpenSheet(false, _winM); else ppOpenPage();
-  }finally{ _busy(); }
+    _mark['繪製']=Date.now()-_t2;
+  }finally{
+    _busy();
+    /* 慢的時候把分段時間講出來（超過 1.2 秒才吐司，平常不吵）——
+       使用者不必開 devtools 就能回報「卡在哪一段」。 */
+    const _tot=Date.now()-_t0;
+    const _brk=Object.entries(_mark).map(([k,v])=>`${k} ${(v/1000).toFixed(1)}s`).join('・');
+    try{ console.log(`[openPersonProfile] 共 ${(_tot/1000).toFixed(2)}s　${_brk}`); }catch(_){}
+    if(_tot>1200){ try{ showToast(`讀取 ${(_tot/1000).toFixed(1)} 秒：${_brk}`, 6000); }catch(_){} }
+  }
 }
 // 對照表與摘要數字
 async function ppLoadCtx(){
