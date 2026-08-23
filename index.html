@@ -9889,8 +9889,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2333';
-const APP_VERSION_LABEL='v260823.2333';
+const APP_VERSION = '260823.2338';
+const APP_VERSION_LABEL='v260823.2338';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10344,6 +10344,7 @@ async function _dbRebaseBg(store){
   const key=tbl(store);
   if(_dbRebasing.has(key)) return;
   _dbRebasing.add(key);
+  dbWhy(key,'背景整表校正');
   try{
     let sig=null, logAt=null;
     try{ const sigs=await tableSigs(); if(sigs){ if(sigs[key]) sig=sigs[key]; if(sigs._log!=null) logAt=sigs._log; } }catch(_){}
@@ -10365,6 +10366,7 @@ function dbWhy(key,why,extra){ try{
 async function dbGetAll(store,opts){
   const key=tbl(store);
   if(opts&&opts.fresh){
+    dbWhy(key,'強制重抓(fresh)');
     dbCacheClear(store);
   }else{
     const hit=_dbCache.get(key);
@@ -17759,7 +17761,10 @@ async function dashRevalidate(tabs){
   window._dashRevalidating=true;
   const key=CUR_PAGE, viewDate=_dashViewDate||ymd(TODAY);
   try{
-    await Promise.all((tabs||[]).map(t=>dbGetAll(t,{fresh:true}).catch(()=>null)));
+    /* ⚠ 2026-08-23：同 startCalPoll —— fresh 會跳過增量補資料整表重抓，
+       首頁輪詢因此每次都在重新下載大表。改成「標記過期＋走一般路徑」。 */
+    try{ dbCacheClear(tabs||[]); }catch(_){}
+    await Promise.all((tabs||[]).map(t=>dbGetAll(t).catch(()=>null)));
     if(CUR_PAGE!==key) return;                            // 已切到別頁
     /* 被彈窗／展開的課卡擋掉時掛 _dashDirty：輪詢下一輪會再試，收合後補重繪（2026-08-12） */
     if(document.getElementById('modal-bg')){ window._dashDirty=true; return; }       // 彈窗開著不打斷
@@ -20414,7 +20419,16 @@ function startCalPoll(){
     try{
       if(document.hidden) return;               // 分頁在背景就不打（回前景 visibilitychange 會補）
       if(!(await remoteSigChanged())) return;   // 簽章變了才重抓（省流量）
-      await Promise.all(['bookings','member_tickets'].map(t=>dbGetAll(t,{fresh:true}).catch(()=>null)));
+      /* ⚠ 2026-08-23：這裡原本帶 fresh 旗標，而它的意思是
+         「跳過簽章與增量補資料，直接整表重下載」。健身房整天都有人簽到／預約／取消，
+         簽章幾乎一直在變 —— 等於每 10 秒把 bookings 5.4MB ＋ member_tickets 2.5MB
+         重新下載一次。使用者回報「行事曆開課卡慢到不行」「開會員資料十幾秒」，
+         實際上是這支輪詢一直在佔線。
+         增量補資料（dbDeltaPatch）本來就是為這個情境做的：只撈變動的那幾列。
+         改成 dbCacheClear（只把時間戳歸零、資料與簽章都留著）＋ 一般的 dbGetAll，
+         就會走「簽章校驗 → 只補變動列」那條路。即時性完全不變。 */
+      try{ dbCacheClear(['bookings','member_tickets']); }catch(_){}
+      await Promise.all(['bookings','member_tickets'].map(t=>dbGetAll(t).catch(()=>null)));
       _calRevalidate();
     }catch(_){}
   },10000);   /* 2026-08-11 使用者回報「會員上課簽到畫面沒那麼即時」：30s→10s
@@ -38477,7 +38491,9 @@ async function openPersonProfile(kind, id, backPage){
          （0823 實測：吐司只印得到 contracts，而元凶是 bookings）。
          改成反過來查：對每一張「真的抓了」的表，回頭找它最後一次的判斷。 */
       const _all=(window._dbWhy||[]);
-      const _why=(window._dbStat||[]).slice(_statFrom).map(r=>{
+      /* 照耗時由大到小排 —— 先抓完的小表會把真正的元凶擠掉（0823 實測：
+         印出來的是四張小表，而 bookings 排在後面被截斷）。 */
+      const _why=(window._dbStat||[]).slice(_statFrom).slice().sort((a,b)=>b.ms-a.ms).map(r=>{
         for(let i=_all.length-1;i>=0;i--){ const w=_all[i];
           if(w.表===r.表 && w.判斷!=='命中快取')
             return `${w.表}:${w.判斷}${w.說明?'('+w.說明+')':''}`; }
