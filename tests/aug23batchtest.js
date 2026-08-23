@@ -191,9 +191,12 @@ ok('★★ 下方列表每列一個白框（外圈米底、每列白底圓角）
    && /\.ov-i\{display:flex;align-items:center;gap:10px;padding:10px 11px;\s*\n\s*background:#fff;border:1px solid var\(--bd\);border-radius:10px;\}/.test(src));
 
 console.log('\n⑩ 支出登記入口');
-ok('★★ 報表頁翻頁列右邊一顆紅底 [＋ 支出]，月份跟著翻頁走',
-   /<button class="btn btn-sm dash-exp" onclick="openExpensePick\('\$\{ym\}'\)">＋ 支出<\/button>/.test(src)
-   && /\.dash-exp\{flex:0 0 auto;margin-left:auto;\s*\n\s*background:var\(--red,#7A2E28\);color:#fff;/.test(src));
+ok('★★ 期間控制列裡一顆紅底 [＋ 支出]，月份跟著翻頁走',
+   /<button type="button" class="btn btn-sm dash-exp" onclick="openExpensePick\('\$\{ym\}'\)">＋ 支出<\/button>/.test(src)
+   && /\.dash-exp\{flex:0 0 auto;height:28px;[^}]*background:var\(--red,#7A2E28\);color:#fff;/.test(src));
+ok('　　搬進控制列後不能再留 margin-left:auto（會在列裡撐出一段空白）',
+   !/\.dash-exp\{flex:0 0 auto;margin-left:auto;/.test(src)
+   && /那是它獨佔一列時把自己推到最右用的/.test(src));
 ok('　　挑選視窗的兩顆按鈕是白底（米底彈窗上再鋪米底＝看不出來能按）',
    /\.exp-pick\{[^}]*background:#fff;/.test(src)
    && /彈窗本身就是米底，按鈕再用 var\(--card2\) 等於米底疊米底/.test(src));
@@ -215,6 +218,32 @@ ok('　　權限與既有編輯器一致（櫃檯以上）',
    /if\(!isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可登記支出'\); return; \}/.test(src));
 ok('　　兩顆按鈕是整列可點的大區塊（手機拇指按得準）',
    /\.exp-pick\{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;/.test(src));
+
+ok('★★ 中間資料段自己捲（項目一多整張彈窗會比螢幕高，合計與儲存鈕被推出畫面外）',
+   /\.fx-list\{border:1px solid var\(--bd\);border-radius:10px;overflow-x:hidden;overflow-y:auto;\s*\n\s*max-height:46vh;/.test(src)
+   && /\.fx-head\{position:sticky;top:0;z-index:1;\}/.test(src));
+ok('　　overflow-x 要留 hidden（只改 overflow-y 的話 iOS 會多出一條可橫拉的縫）',
+   /原本 overflow:hidden 是為了讓子列的直角被圓角裁掉/.test(src));
+ok('★★ 按「＋ 新增一項」要捲到新的那一列並把游標放進「項目」欄',
+   /list\.scrollTop=list\.scrollHeight;/.test(src)
+   && /const inp=last\.querySelector\('\.fx-in:not\(\[type="date"\]\):not\(\.num\)'\);/.test(src)
+   && /inp\.focus\(\{preventScroll:true\}\)/.test(src));
+
+console.log('\n⑨-2 營運分析期間控制列');
+ok('★★ [本月][今日] 分段鈕退場，收成 [今日] ‹ 期間 › ＋[＋ 支出] 一顆控制項',
+   /const _dashCtl=`<span class="dashctl">/.test(src)
+   && !/<button class="seg-btn \$\{_dashRange==='month'\?'active':''\}" onclick="dashSetRange\('month'\)">本月<\/button>/.test(src));
+ok('★★ 控制列搬到「◯◯總覽」那一列右邊，頂上完全空出來',
+   /<div class="ovh-bar"><span class="ovh-title">\$\{periodLabel\}總覽<\/span>\$\{_dashCtl\}<\/div>/.test(src)
+   && /\.ovh-bar\{display:flex;align-items:center;justify-content:space-between;gap:8px;/.test(src));
+ok('　　桌機另留一份（下面的表格區吃同一組狀態；控制項無 id，重複畫不衝突）',
+   /<div class="filter-row desktop-only" style="margin-bottom:18px;">\$\{_dashCtl\}<\/div>/.test(src));
+ok('★★ 中間那格一顆抵兩顆：日模式按它＝切月模式、已在月模式按它＝回本月',
+   /function dashCtlMain\(\)\{/.test(src)
+   && /if\(_dashRange!=='month'\)\{ dashSetRange\('month'\); return; \}/.test(src));
+ok('　　窄螢幕塞不下就整組換行，不要硬擠',
+   /\.ovh-bar\{[^}]*flex-wrap:wrap;/.test(src)
+   && /@media\(max-width:380px\)\{\s*\n\s*\.dashctl\{gap:4px;\}/.test(src));
 
 console.log('\n⑪ 手機行事曆課卡');
 ok('★★ 不再標示簽到；「假」留著（那是課的狀態，不是簽到與否）',

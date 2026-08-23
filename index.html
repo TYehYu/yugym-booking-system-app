@@ -1751,7 +1751,15 @@ body.mc-mode .layout{padding-top:8px;}
 .sal-mx-note{font-size:11px;color:var(--t3);line-height:1.8;margin-top:6px;}
 /* 固定支出設定（2026-08-08 使用者指示：可以改數字、加減項目，下個月自動帶入）——
    一列一項，直接在格子裡改；不做「編輯／儲存」兩段式，改完一起存。 */
-.fx-list{border:1px solid var(--bd);border-radius:10px;overflow:hidden;}
+/* 中間資料段自己捲（2026-08-23 使用者指示：「中間資料段要上下滾動…按了＋新增視窗會一直長高，
+   中間資料段加個滾輪就可以避免了」）—— 固定支出十來項時，整張彈窗會比螢幕還高，
+   底下的合計與儲存鈕被推出畫面外。改成清單自己捲，抬頭／合計／按鈕永遠看得到。
+   ⚠ 原本 overflow:hidden 是為了讓子列的直角被圓角裁掉；改成 overflow-y:auto 之後
+     水平方向要留 hidden，不然 iOS 會多出一條可橫拉的縫。 */
+.fx-list{border:1px solid var(--bd);border-radius:10px;overflow-x:hidden;overflow-y:auto;
+  max-height:46vh;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
+/* 抬頭釘住 —— 捲下去還看得到哪一欄是金額（其他支出在手機已隱藏抬頭，不受影響） */
+.fx-head{position:sticky;top:0;z-index:1;}
 .fx-head,.fx-row{display:grid;grid-template-columns:1fr 130px 34px;gap:8px;align-items:center;
   padding:7px 10px;border-bottom:1px solid var(--bd);}
 /* 其他支出多一個日期欄（一次性開銷要記是哪一天花的） */
@@ -1806,10 +1814,30 @@ body.mc-mode .layout{padding-top:8px;}
 /* 翻頁列右邊那顆「＋ 支出」：不要被翻頁鈕擠掉，也不要跟它們黏在一起。
    2026-08-23 使用者指示改成紅底 —— 這一列其他都是灰底的檢視切換（本月／今日／翻頁），
    只有它是「寫入一筆帳」的動作，用品牌紅一眼分得出來（紅>金>綠 的強度階級）。 */
-.dash-exp{flex:0 0 auto;margin-left:auto;
+/* 2026-08-23 二修：搬進 .dashctl 之後不再需要 margin-left:auto
+   （那是它獨佔一列時把自己推到最右用的，留著會在控制列裡撐出一段空白）。 */
+.dash-exp{flex:0 0 auto;height:28px;padding:0 11px;line-height:1;display:inline-flex;align-items:center;
   background:var(--red,#7A2E28);color:#fff;border:1px solid var(--red,#7A2E28);font-weight:600;}
 .dash-exp:hover{background:#8f3730;border-color:#8f3730;color:#fff;}
 .dash-exp:active{transform:scale(.96);}
+/* 期間控制列（2026-08-23 使用者指示：「[今日] ‹ 8月 › 改到本月總覽這一列右邊，
+   減少畫面內容、呼吸感」）—— 三件事收成一顆：今日／翻頁／期間（兼回本月）。 */
+.dashctl{display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap;}
+.dashctl-t,.dashctl-mo{border:1px solid var(--bd);border-radius:8px;background:#fff;color:var(--t2);
+  font-size:12px;font-weight:600;line-height:1;padding:0 10px;height:28px;cursor:pointer;
+  font-family:inherit;white-space:nowrap;}
+.dashctl-t.on,.dashctl-mo.on{background:var(--green);border-color:var(--green);color:#fff;}
+.dashctl-t:hover:not(.on),.dashctl-mo:hover:not(.on){border-color:var(--green);color:var(--green);}
+.dashctl-m{display:inline-flex;align-items:center;gap:3px;}
+/* 「◯◯總覽」那一列：標題靠左、控制項靠右；窄螢幕塞不下就整組換行（不要硬擠） */
+.ovh-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  flex-wrap:wrap;padding:12px 0 6px;}
+.ovh-title{font-size:11.5px;color:var(--t3);letter-spacing:0.08em;font-weight:600;}
+@media(max-width:380px){
+  .dashctl{gap:4px;}
+  .dashctl-t,.dashctl-mo{padding:0 8px;font-size:11.5px;}
+  .dashctl .dash-exp{padding:0 9px;font-size:11.5px;}
+}
 /* 營運分析翻頁列（2026-07-31） */
 .dash-pager{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;}
 .dash-pg{min-width:28px;height:28px;padding:0 8px;border:1px solid var(--bd);border-radius:8px;background:#fff;
@@ -9533,8 +9561,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.0859';
-const APP_VERSION_LABEL='v260823.0859';
+const APP_VERSION = '260823.0911';
+const APP_VERSION_LABEL='v260823.0911';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18029,6 +18057,12 @@ function dashShift(n){
 }
 /* 切換本月／今日時把錨點拉回今天 —— 停在五月又按「今日」會看到 5/01，很難解釋 */
 function dashSetRange(r){ _dashRange=r; _dashAnchor=null; navTo('dashboard'); }
+/* 控制列中間那格（2026-08-23）：日模式按它＝切回月模式；已經在月模式按它＝回本月。
+   把「本月」與「回本月／回今天」兩顆鈕併成同一格 —— 使用者要的是「減少畫面內容」。 */
+function dashCtlMain(){
+  if(_dashRange!=='month'){ dashSetRange('month'); return; }
+  _dashAnchor=null; navTo('dashboard');
+}
 PAGES.dashboard=async function(){
   /* 2026-08-23 使用者定案：報表（營運分析）只有管理員 */
   if(!canSeeReports()){ C.innerHTML=head('ANALYTICS','營運分析','')+
@@ -18291,31 +18325,38 @@ PAGES.dashboard=async function(){
      手機上那塊標頭吃掉快一整屏，而左側導覽／底部導覽本來就標著現在在哪一頁。
      ⚠ 只拿掉有資料時的那一份；上面「非管理員」那一份保留 —— 那頁只有一句話，
        沒有標題就變成一段沒頭沒尾的文字。 */
-  C.innerHTML=
-  `<div class="filter-row" style="margin-bottom:18px;">
-    <div class="seg">
-      <button class="seg-btn ${_dashRange==='month'?'active':''}" onclick="dashSetRange('month')">本月</button>
-      <button class="seg-btn ${_dashRange==='today'?'active':''}" onclick="dashSetRange('today')">今日</button>
-    </div>
-    ${/* 2026-07-31 使用者指示：要能翻到前一個月／前一天。往後只到當期為止（不看未來）。 */''}
-    <span class="dash-pager">
-      <button class="dash-pg" onclick="dashShift(-1)" aria-label="上一${_dashRange==='today'?'天':'月'}">‹</button>
-      <span class="dash-pg-l" title="${rangeFull}">${rangeLabel}</span>
-      <button class="dash-pg" onclick="dashShift(1)" ${_atNow?'disabled':''} aria-label="下一${_dashRange==='today'?'天':'月'}">›</button>
-      ${_atNow?'':`<button class="dash-pg dash-pg-now" onclick="_dashAnchor=null;navTo('dashboard')">回${_dashRange==='today'?'今天':'本月'}</button>`}
+  /* 期間控制列（2026-08-23 二修，使用者：「上方被擠壓了。把 [本月][今日] 改成
+     [今日] ‹ 8月 ›，改到本月總覽這一列右邊，本月的功能就改到 [8月] 這邊，
+     減少畫面內容、呼吸感」）——
+     原本頂上獨佔兩列：一列是「本月／今日」分段鈕＋翻頁器，一列是被擠下去的 [＋ 支出]。
+     三件事收成一顆控制項：
+       ・[今日]　→ 切日模式
+       ・‹ ›　　→ 翻頁（在哪個模式就翻哪一種：日模式翻天、月模式翻月）
+       ・中間那格 → 日模式按它＝切回月模式；已經在月模式按它＝回本月
+         （原本的「回本月／回今天」那顆鈕因此不用另外畫）
+     整列搬進「◯◯總覽」那張卡的標題列右邊，頂上就完全空出來了。
+     桌機另留一份（下面的表格區也吃同一組狀態）——控制項無 id，重複畫不會互相干擾。 */
+  const _dashCtl=`<span class="dashctl">
+    <button type="button" class="dashctl-t${_dashRange==='today'?' on':''}" onclick="dashSetRange('today')">今日</button>
+    <span class="dashctl-m">
+      <button type="button" class="dash-pg" onclick="dashShift(-1)" aria-label="上一${_dashRange==='today'?'天':'月'}">‹</button>
+      <button type="button" class="dashctl-mo${_dashRange==='month'?' on':''}" title="${rangeFull}${_dashRange!=='month' ? '　（按一下改看整個月）' : (_atNow ? '' : '　（按一下回本月）')}" onclick="dashCtlMain()">${rangeLabel}</button>
+      <button type="button" class="dash-pg" onclick="dashShift(1)" ${_atNow?'disabled':''} aria-label="下一${_dashRange==='today'?'天':'月'}">›</button>
     </span>
     ${/* 2026-08-23 使用者指示：「報表頁面上新增一個 [支出]，跳一個視窗方便用手機填寫
          固定支出或其他支出」—— 登記入口原本只在「經營報表 › 支出」那一頁的深處，
          人在看利潤時想補一筆房租得先切頁再找分頁。這裡直接開同一組編輯視窗
          （openExpenseEditor），資料與經營報表是同一張 expenses 表，不會有第二份。
-         月份跟著上面的翻頁走：翻到 6 月按支出，記的就是 6 月。 */''}
-    <button class="btn btn-sm dash-exp" onclick="openExpensePick('${ym}')">＋ 支出</button>
-  </div>
+         月份跟著翻頁走：翻到 6 月按支出，記的就是 6 月。 */''}
+    <button type="button" class="btn btn-sm dash-exp" onclick="openExpensePick('${ym}')">＋ 支出</button>
+  </span>`;
+  C.innerHTML=
+  `<div class="filter-row desktop-only" style="margin-bottom:18px;">${_dashCtl}</div>
 
   <!-- ═══ 手機版：營運速覽 ═══ -->
   <div class="mobile-only">
     <div class="card" style="padding:4px 14px;">
-      <div style="display:flex;align-items:center;padding:12px 0 4px;"><span style="font-size:11.5px;color:var(--t3);letter-spacing:0.08em;font-weight:600;">${periodLabel}總覽</span></div>
+      <div class="ovh-bar"><span class="ovh-title">${periodLabel}總覽</span>${_dashCtl}</div>
       ${/* 2026-07-29 使用者指示：畫面太雜亂 → 改「圖示＋短標題＋數值」的簡易列表，
            利潤獨立成主數字、拆解收合在一行小字，其餘一列一項不再堆疊副標。 */''}
       ${profit!=null?`
@@ -20684,6 +20725,15 @@ async function admhMoveAsk(id){
      層級問題已由 #bk-card-pop.admh-pop 的 z-index 修掉，這行不再需要：
      課卡留著，返回才能退回上一層。 */
   const dur=Number(b.duration)||60;
+  /* 連續預約（2026-08-23 使用者指示：「那個連續預約功能，放在標題卡『調整日期／時間』
+     這個按鈕裡面」）—— 以這一堂的日期時間為起點，往後每週再排 N 堂。
+     可用範圍（amvCanRecur）刻意收緊，理由都是「那條路不是走 runRecurringBooking」：
+     ・團體課：名額與票掛在 member_ids 上，另有一套建立流程，硬套會建出一人一堂的假團課
+     ・待簽約／空堂：沒有票也沒有會員，連續卡位有自己的入口（openPendingHold）
+     ・沒有 member_id（場租等）：挑不到票，整串只會回「票券不足」
+     堂數上限用「這位會員這類課還剩幾堂」；runRecurringBooking 內部還會再夾一次，
+     這裡算的只是給人看的預設值。 */
+  const _rec=await amvRecurCtx(b);
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">調整預約時間</div>
     <div class="ash-eihead">${calMoveWho(b)}</div>
     <div class="ash-eibox" style="margin-bottom:14px;">目前　<b style="font-family:var(--num);color:var(--text);">${fmtRange(b.date,b.start_time,dur)}</b></div>
@@ -20694,31 +20744,101 @@ async function admhMoveAsk(id){
       ${/* 框裡的時間置中（2026-08-20 使用者指示）；text-align-last 是 select 的關鍵，
            只給 text-align 在部分瀏覽器對收合狀態不生效 */''}
       <span style="flex:1;min-width:0;">${ashTimeField('amv-t', b.start_time)}</span></label>
+    ${_rec.ok?`<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--bd);">
+      <div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:8px;">
+        往後每週再排幾堂。<b>這一堂不會重複建立</b>，是從它的隔天開始算起；
+        時間就用上面那格（改了日期時間，連續預約也跟著新的走）。</div>
+      ${recurBoxHtml('amv', _rec.max, {countLabel:'往後再排幾堂（不含這一堂）'})}
+    </div>`:(_rec.why?`<div class="ash-einote" style="margin-top:12px;">${_rec.why}</div>`:'')}
     <div class="modal-foot">
       ${''/* 返回＝退回「調整課程」那一層（這頁就是從那裡點進來的），不是關掉全部 */}
       <button class="btn btn-ghost" onclick="closeModal();ashEditAsk('${b.id}')">返回</button>
       <button class="btn btn-green" onclick="admhMoveDo('${b.id}')">下一步</button>
     </div>`);
+  /* 預設勾好「這一堂的星期」——十次有九次就是要每週同一天，少一步操作。
+     只勾星期、不打開開關：開關要使用者自己按，才不會有人只想改時間卻默默多排了 N 堂。 */
+  if(_rec.ok){ try{
+    const _dw=parseYmd(b.date); if(_dw){ const v=_dw.getDay();
+      const cb=document.querySelector(`.amv-dow[value="${v}"]`);
+      if(cb){ cb.checked=true; recurDowToggle('amv', v); }
+    }
+  }catch(_){} }
+}
+/* 「調整日期／時間」能不能提供連續預約，以及堂數上限（2026-08-23）。
+   回 {ok, max, why}；why 是不能用時要顯示的一句話（空字串＝不必解釋，例如團體課）。 */
+async function amvRecurCtx(b){
+  if(!b) return {ok:false,max:0,why:''};
+  if(bkIsGroup(b)) return {ok:false,max:0,why:''};                 // 團體課另有整堂的建立流程
+  if(b.pending_contract) return {ok:false,max:0,why:'待簽約／保留的時段要連續卡位，請從「建立預約」的待簽約卡位進。'};
+  if(!b.member_id) return {ok:false,max:0,why:''};                 // 場租、未安排會員的空堂
+  if(b.category==='體驗') return {ok:true,max:RECUR_MAX,why:''};   // 體驗不扣票，上限就是方案上限
+  let max=0;
+  try{
+    const cands=await listUsableTickets(b.member_id, b.ticket_type_id, b.date, b.start_time);
+    max=(cands||[]).reduce((s,t)=>s+tkUnlockedLeft(t),0);
+  }catch(_){}
+  if(!(max>0)) return {ok:false,max:0,why:'這位會員目前沒有可用票券，無法往後連排；請先儲值或續約。'};
+  return {ok:true,max,why:''};
 }
 async function admhMoveDo(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   const nd=(document.getElementById('amv-d')||{}).value||b.date;
   const nt=((document.getElementById('amv-t')||{}).value||b.start_time).slice(0,5);
-  if(nd===b.date && nt===b.start_time){ showToast('時間沒有變動'); return; }
+  /* 連續預約（2026-08-23）：這個視窗現在有兩件事可做，改時間與往後連排，各自獨立。
+     只勾連續、時間沒動也要放行 —— 原本「時間沒有變動」直接擋掉會把連排一起擋死。 */
+  const rc=(document.getElementById('amv-recurring')) ? readRecur('amv') : {on:false};
+  if(rc.on){
+    if(!rc.dows.length){ showToast('請勾選至少一個星期'); return; }
+    if(!(rc.count>0)){ showToast('請填寫要再排幾堂'); return; }
+  }
+  const moved=(nd!==b.date || nt!==b.start_time);
+  if(!moved && !rc.on){ showToast('時間沒有變動'); return; }
   if(nd<ymd(TODAY)){ showToast('不能改到過去的日期'); return; }
-  const verr=await validateBooking(b,nd,nt,b.duration);
-  if(verr){ showToast(verr); return; }
+  if(moved){
+    const verr=await validateBooking(b,nd,nt,b.duration);
+    if(verr){ showToast(verr); return; }
+  }
   closeModal();
   /* 真的要送出了才收課卡：confirmCalMove 之後會 navTo 重繪整頁，
      課卡是掛在 body 的浮層、不會被重繪帶走，留著會變成孤兒。 */
   try{ collapseBkCard(); }catch(_){}
+  if(!moved){ await amvRunRecur(b, nd, nt, rc); navTo(CUR_PAGE); return; }
   confirmCalMove(b, b.date, b.start_time, b.duration||60, nd, nt, b.duration||60, async()=>{
     try{
       b.date=nd; b.start_time=nt; await dbPut('bookings',b);
       showToast('已更新預約時間');
-    }catch(err){ showToast('修改失敗：'+(err&&err.message?err.message:err)); }
+    }catch(err){ showToast('修改失敗：'+(err&&err.message?err.message:err)); navTo(CUR_PAGE); return; }
+    /* 先改期再連排 —— 起點要用「改完之後」的日期時間，不然新排的那幾堂還跟著舊時段走 */
+    if(rc.on) await amvRunRecur(b, nd, nt, rc);
     navTo(CUR_PAGE);
   });
+}
+/* 以某一堂為起點往後每週連排（2026-08-23 使用者指示，入口在「調整日期／時間」）。
+   整個建立走既有的 runRecurringBooking —— 挑票、扣課、寫 ticket_logs、場地配置、
+   衝堂跳過、分期未繳的保留課，全部與「建立預約」的連續預約同一條路，不另寫一份。
+   ⚠ startDate 要用「隔天」：buildRecurringDates 是含起始日的，直接傳當天會把這一堂
+     再建一次（同時段還會被 validateBooking 判成衝堂，看起來像少排了一堂）。 */
+async function amvRunRecur(b, d, t, rc){
+  const dur=Number(b.duration)||60;
+  let r=null;
+  try{
+    r=await runRecurringBooking({
+      member_id:b.member_id, coach_id:b.coach_id, substitute_coach_id:b.substitute_coach_id||null,
+      trial_name:(b.trial_name||null),
+      category:b.category, type_id:b.ticket_type_id, format:b.format||null,
+      startDate: ymd(addDays(parseYmd(d), 1)),
+      time:t, duration:dur,
+      dows:rc.dows, times:rc.times, count:rc.count, until:null,
+      venue_pref:b.venue_pref||null,
+    });
+  }catch(e){ showToast('連續預約失敗：'+((e&&e.message)||e), 5000); return; }
+  /* held＝分期票未開通的期數，走「待繳費保留」也是有建立成功的課，要算進去，
+     不然使用者會看到「沒有排成任何一堂」但行事曆上多了好幾張。 */
+  const okN=r?(r.ok||0):0, held=r?(r.held||0):0, sk=r?(r.skipped||0):0, nt2=r?(r.noTicket||0):0;
+  const made=okN+held;
+  if(!made){ showToast('沒有排成任何一堂'+(nt2?'：票券不足':(sk?'：時段都衝堂':'')), 5000); return; }
+  showToast(`已再排 ${made} 堂`+(held?`（其中 ${held} 堂待分期繳費保留）`:'')
+    +(sk?`，${sk} 堂衝堂略過`:'')+(nt2?`，${nt2} 堂票券不足`:''), (sk||nt2||held)?5000:3000);
 }
 /* 簡易課卡上的逐人請假／取消／簽到（2026-08-20 使用者指示：三顆圓鈕搬到會員卡上）——
    底下呼叫的是名單視窗那三支共用函式，它們做完會 openBookingDetail 回明細視窗
@@ -23709,7 +23829,9 @@ function bkFilterMembers(q){
    ⚠ 這裡的「次數」＝堂數不是週數 —— 一週勾兩天就是一週消耗 2 堂
    （buildRecurringSlots 是數日期不是數週，語意本來就一致）。 */
 const RECUR_MAX=12;
-function recurBoxHtml(prefix, maxN){
+/* opts.countLabel（2026-08-23）：「調整日期／時間」那個入口是替**既有的課**往後排，
+   第一堂已經存在，沿用「預約堂數（含第一堂）」會讓人多算一堂。其餘呼叫端不傳＝行為不變。 */
+function recurBoxHtml(prefix, maxN, opts){
   const WD=['一','二','三','四','五','六','日'];
   const _m=Number(maxN)>0 ? Math.min(Number(maxN), RECUR_MAX) : RECUR_MAX;
   const hasTk=Number(maxN)>0;
@@ -23737,7 +23859,7 @@ function recurBoxHtml(prefix, maxN){
       ${/* 2026-08-01 使用者回報：「不能只約 4 堂，因為旁邊沒有＋－的按鈕」——
            手機上的數字輸入框沒有加減鈕（那是桌機才有），要改數字得叫出鍵盤、鍵盤又蓋住半個視窗。
            改成「－ 數字 ＋」，常用的微調一根手指就好；要直接打數字仍然可以點中間那格。 */''}
-      <div class="form-row" style="margin:10px 0 6px;"><label>預約堂數（含第一堂）</label>
+      <div class="form-row" style="margin:10px 0 6px;"><label>${(opts&&opts.countLabel)||'預約堂數（含第一堂）'}</label>
         <div class="rc-count">
           <button type="button" class="rc-cbtn" onclick="recurStep('${prefix}',-1)" aria-label="減少一堂">−</button>
           <input type="number" id="${prefix}-count" min="1" max="${_m}" step="1" inputmode="numeric"
@@ -49856,7 +49978,23 @@ function fxSet(i,k,v){ const d=window._fxDraft; if(!d||!d.rows[i]) return;
   const t=d.rows.reduce((s,r)=>s+(Number(r.amount)||0),0);
   const el=document.querySelector('.fx-sum b'); if(el) el.textContent='$'+Math.round(t).toLocaleString();
 }
-function fxAdd(){ const d=window._fxDraft; if(!d) return; d.rows.push({...d.blank}); fxRender(); }
+/* 新增一項（2026-08-23 使用者指示：「按了＋新增要直接跳到新增的那一列」）——
+   fxRender 會整張重畫，新的那一列出現在清單最底下、而清單現在自己捲，
+   不捲過去的話畫面看起來完全沒反應。捲到底＋游標放進「項目」欄，接著就能打字。
+   ⚠ focus 用 preventScroll —— 讓瀏覽器自己捲會把整個彈窗往上頂，位置由我們自己設。 */
+function fxAdd(){
+  const d=window._fxDraft; if(!d) return;
+  d.rows.push({...d.blank}); fxRender();
+  requestAnimationFrame(()=>{
+    const list=document.querySelector('.fx-list'); if(!list) return;
+    list.scrollTop=list.scrollHeight;
+    const rows=list.querySelectorAll('.fx-row');
+    const last=rows[rows.length-1]; if(!last) return;
+    /* 「項目」那格＝不是日期也不是金額的那一個（固定支出沒有日期欄，選擇器兩種都吃） */
+    const inp=last.querySelector('.fx-in:not([type="date"]):not(.num)');
+    if(inp){ try{ inp.focus({preventScroll:true}); }catch(_){ inp.focus(); } }
+  });
+}
 function fxDel(i){ const d=window._fxDraft; if(!d) return; d.rows.splice(i,1);
   if(!d.rows.length) d.rows.push({...d.blank}); fxRender(); }
 async function fxSave(){ return onceAct('fxsave', _fxSave); }

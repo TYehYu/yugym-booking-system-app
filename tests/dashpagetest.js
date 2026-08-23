@@ -86,18 +86,27 @@ ok('★ 翻到過去就直接顯示日期／年月，不會還寫「本月」',
    /: \(_dashRange==='today' \? today\.slice\(5\)\.replace\('-','\/'\) : ym\.replace\('-','\/'\)\);/.test(src));
 ok('★ 上一頁／下一頁按鈕都在', /onclick="dashShift\(-1\)"/.test(src) && /onclick="dashShift\(1\)"/.test(src));
 ok('★ 當期時「下一頁」是 disabled', /onclick="dashShift\(1\)" \$\{_atNow\?'disabled':''\}/.test(src));
-ok('★ 不在當期才出現「回今天／回本月」', /\$\{_atNow\?'':`<button class="dash-pg dash-pg-now" onclick="_dashAnchor=null;navTo\('dashboard'\)">回\$\{_dashRange==='today'\?'今天':'本月'\}<\/button>`\}/.test(src));
+/* 2026-08-23 二修（使用者：「[本月][今日] 改成 [今日] ‹ 8月 ›，改到本月總覽這一列右邊，
+   本月的功能就改到 [8月] 這邊，減少畫面內容、呼吸感」）——
+   「回本月／回今天」那顆獨立按鈕併進中間那一格：日模式按它＝切回月模式、
+   已在月模式按它＝回本月。少一顆鈕、少一整列。 */
+ok('★ 「回本月」併進中間那一格（不再是獨立按鈕）',
+   /function dashCtlMain\(\)\{\s*\n\s*if\(_dashRange!=='month'\)\{ dashSetRange\('month'\); return; \}\s*\n\s*_dashAnchor=null; navTo\('dashboard'\);/.test(src)
+   && !/<button class="dash-pg dash-pg-now"/.test(src));
 ok('　　按鈕有樣式、disabled 看得出來',
    /\.dash-pg:disabled\{opacity:\.35;cursor:default;\}/.test(src)
-   && /\.dash-pager\{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;\}/.test(src));
+   && /\.dashctl\{display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap;\}/.test(src));
 /* 2026-07-31 使用者回報「日期被換行了」：原本翻頁列寫「2026/06（2026-06）」，
    同一個期間講兩次、字太長把整列擠到第二行還切掉箭頭 → 只留 periodLabel */
-ok('★ 翻頁列只寫一次期間，完整日期放 title',
+ok('★ 翻頁列只寫一次期間，完整日期放 title（0823 起期間那格本身可按）',
    /const rangeLabel=periodLabel;/.test(src)
    && /const rangeFull=_dashRange==='today'\?today:ym;/.test(src)
-   && /<span class="dash-pg-l" title="\$\{rangeFull\}">\$\{rangeLabel\}<\/span>/.test(src));
-ok('　　期間文字寬度固定、不換行，翻頁時按鈕不會跳動',
-   /\.dash-pg-l\{[^}]*min-width:62px;text-align:center;white-space:nowrap;\}/.test(src));
+   && /<button type="button" class="dashctl-mo\$\{_dashRange==='month'\?' on':''\}" title="\$\{rangeFull\}/.test(src));
+ok('　　期間那格不換行（翻頁時按鈕不會跳動）',
+   /\.dashctl-t,\.dashctl-mo\{[^}]*white-space:nowrap;\}/.test(src));
+ok('★★ 控制列搬進「◯◯總覽」那一列右邊；桌機另留一份（控制項無 id，重複畫不衝突）',
+   /<div class="ovh-bar"><span class="ovh-title">\$\{periodLabel\}總覽<\/span>\$\{_dashCtl\}<\/div>/.test(src)
+   && /<div class="filter-row desktop-only" style="margin-bottom:18px;">\$\{_dashCtl\}<\/div>/.test(src));
 
 console.log('\n資料真的跟著錨點走');
 ok('★ inRange 用錨點的 today／ym', /const today=dashAnchorYmd\(\);/.test(src)

@@ -20,8 +20,11 @@ ok('★ 點別張票券卡也要跟著換', /recurSetMax\('bk', \(window\._bkTkC
 ok('★ 每張票的可約堂數先建索引', /window\._bkTkCap=Object\.fromEntries\(list\.map\(tk=>\[tk\.id, tkUnlockedLeft\(tk\)\]\)\);/.test(src));
 ok('★ 待簽約卡位沒有票可扣 → 維持 12（不帶 maxN）', /\$\{recurBoxHtml\('ph'\)\}/.test(src));
 ok('　　團課也不帶（一次排多人、各人餘額不同）', /\$\{recurBoxHtml\('grp'\)\}/.test(src));
-ok('★ 標籤不再寫死「最多 12 堂」（會與下面的說明打架）',
-   /<label>預約堂數（含第一堂）<\/label>/.test(src) && !/預約堂數（含第一堂，最多 \$\{RECUR_MAX\} 堂）/.test(src));
+/* 2026-08-23：標籤改成可覆寫（opts.countLabel）——「調整日期／時間」那個入口是替既有的課
+   往後排，第一堂已經存在，沿用「含第一堂」會讓人多算一堂。不傳＝維持原字串。 */
+ok('★ 標籤不再寫死「最多 12 堂」（會與下面的說明打架），且預設仍是「含第一堂」',
+   /<label>\$\{\(opts&&opts\.countLabel\)\|\|'預約堂數（含第一堂）'\}<\/label>/.test(src)
+   && !/預約堂數（含第一堂，最多 \$\{RECUR_MAX\} 堂）/.test(src));
 ok('★ 說明文字抽成共用（兩處才不會漂移）', /function recurCountHint\(prefix, cap\)\{/.test(src));
 ok('★ 手動改過的數字不覆蓋，只夾上限',
    /el\.setAttribute\('data-touched','1'\);   \/\/ 手動改過/.test(src)
