@@ -47,25 +47,12 @@ ok('★ 打烊後不論場地狀態都是灰的',
 ok('★ 過去的日期整欄不上色（.cal-daycol.col-past 權重比新規則高）',
    /\.cal-daycol\.col-past \.cal-half\{background:transparent;\}/.test(src));
 
-console.log('\n窄卡：姓名直書、章與教練標靠底置中（2026-08-23 使用者指示）');
-ok('★★ 用 @container 判寬度，不靠 JS 量完才掛的 .ev-w-*（重疊分欄一變就要等下一次重繪）',
-   /@container \(max-width: 78px\)\{/.test(src)
-   && /卡片自己就是 container（container-type:size 在上面），寬度一變立刻生效/.test(src));
-ok('★★ 姓名直書、靠左、用 margin:auto 0 在剩餘空間垂直置中（時間留在最上面）',
-   /margin:auto 0;align-self:flex-start;\s*\n\s*writing-mode:vertical-rl;text-orientation:upright;/.test(src));
-ok('★★ 選擇器要含 .cal-ev-7d 那一版 —— 它是 (0,4,0)，不蓋掉的話 -webkit-box-orient:vertical '
-   +'會把每個字當成一行、由右往左堆，字序整個顛倒（0823 使用者回報「姓名都歪掉了啦」）',
-   /\.cal-ev\.cal-ev-std \.evc-name,\s*\n\s*\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-name,\s*\n\s*\.cal-ev\.cal-ev-std\.ev-w-tiny \.evc-name\{/.test(src)
-   && /-webkit-line-clamp:none;-webkit-box-orient:horizontal;/.test(src));
-ok('★★ 章與教練標靠底；只有章時置中，有教練標時兩個各據中線一側',
-   /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;top:auto;bottom:3px;\s*\n\s*left:50%;right:auto;transform:translateX\(-50%\);/.test(src)
-   && /\.cal-ev\.cal-ev-std:has\(\.evc-coach\) \.evc-check\{left:auto;right:50%;transform:none;margin-right:2px;\}/.test(src));
-ok('★ 教練標籤用縮寫（.co-ab），且極窄卡不再整個藏掉',
-   /\.cal-ev\.cal-ev-std \.evc-coach \.co-ab\{display:inline;\}/.test(src)
-   && /\.cal-ev\.cal-ev-std\.ev-w-tiny \.evc-coach\{display:inline-block;\}/.test(src));
-ok('　　體驗／待簽約那一列在這個寬度整列藏起來（理由寫在原地）',
-   /\.cal-ev\.cal-ev-std \.evc-sub\{display:none;\}/.test(src)
-   && /姓名轉直書之後它會被擠到\s*\n\s*姓名右邊的殘寬裡/.test(src));
+/* 窄卡「姓名直書」那組於 2026-08-23 當天還原（同日兩次都改壞：先字序顛倒、再整個不見）。
+   守住「不要再原地補宣告」這件事：直書要與 -webkit-box 折行、container-query 字級、
+   flex 置中三者相處，得先離線重現整條規則鏈量過再上。 */
+ok('★★ 窄卡直書那組已整組移除（不留半套在正式環境）',
+   !/writing-mode:vertical-rl/.test(src.slice(src.indexOf('.cal-ev.cal-ev-std'), src.indexOf('Calm Play · Hover')))
+   && /窄卡「姓名直書」整組還原（2026-08-23，同日兩次都改壞）/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

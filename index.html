@@ -4572,52 +4572,15 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-ev.cal-ev-std .evc-name,.cal-ev.cal-ev-std.cal-ev-7d .evc-name,.cal-ev.cal-ev-std.ev-w-tiny .evc-name{font-size:clamp(13px,min(38.5cqh,21cqw),35px);}
 .cal-ev.cal-ev-std .evc-coach{font-size:clamp(9.5px,min(17.6cqh,13.2cqw),20px);}
 .cal-ev.cal-ev-std .evc-txt{font-family:'Noto Sans TC',sans-serif;}
-/* ── 窄卡：姓名直書、章與教練標靠底置中（2026-08-23 使用者指示）──
-   「被壓縮的卡片姓名改直式靠左置中，底下的出席章跟教練標籤靠底置中，教練標籤要縮寫」
-
-   為什麼用 @container 而不是既有的 .ev-w-narrow／.ev-w-tiny：
-   那兩個 class 是 JS 量完再掛上去的，重疊分欄一變就要等下一次重繪；
-   卡片自己就是 container（container-type:size 在上面），寬度一變立刻生效。
-
-   78px 是實測的翻轉點：字級走 clamp(13px, min(38.5cqh,21cqw), 35px)，
-   窄卡由 21cqw 決定 → 78px 的卡字級約 16px，三個字＋內距剛好塞滿；再窄就開始吃掉字。
-
-   ⚠ .evc-sub（體驗／待簽約那一列）在這個寬度整列藏起來 —— 姓名轉直書之後它會被擠到
-     姓名右邊的殘寬裡，只剩一兩個字，看不出是什麼。課種本來就有底色與色條可辨。 */
-@container (max-width: 78px){
-  /* 時間留在最上面（橫的，四個字元本來就放得下），姓名用 margin:auto 0 吃掉剩餘空間置中 */
-  .cal-ev.cal-ev-std .evc-txt{align-items:flex-start;justify-content:flex-start;
-    text-align:left;padding:2px 3px 19px 4px;}
-  .cal-ev.cal-ev-std .evc-time{flex:0 0 auto;align-self:flex-start;}
-  /* ⚠ 選擇器一定要把 .cal-ev-7d 那一版也寫進來（2026-08-23 使用者回報「姓名都歪掉了啦」）——
-     7 日檢視的 .cal-ev.cal-ev-std.cal-ev-7d .evc-name 是 (0,4,0)，比 (0,3,0) 高，
-     它的 display:-webkit-box + -webkit-box-orient:vertical + word-break:break-all 會贏。
-     直書之下那組的效果是：每個字被當成一「行」、行又沿著水平方向由右往左堆 ——
-     於是「陳玉」被排成「玉陳」，看起來就是字序顛倒。 */
-  .cal-ev.cal-ev-std .evc-name,
-  .cal-ev.cal-ev-std.cal-ev-7d .evc-name,
-  .cal-ev.cal-ev-std.ev-w-tiny .evc-name{
-    margin:auto 0;align-self:flex-start;
-    writing-mode:vertical-rl;text-orientation:upright;letter-spacing:.02em;
-    display:block;-webkit-line-clamp:none;-webkit-box-orient:horizontal;white-space:nowrap;
-    max-height:100%;overflow:hidden;text-overflow:ellipsis;word-break:normal;}
-  .cal-ev.cal-ev-std .evc-sub{display:none;}
-  /* 教練標籤：縮寫、釘在底部中線右側 */
-  .cal-ev.cal-ev-std .evc-coach{position:absolute;left:50%;bottom:3px;margin:0 0 0 2px;
-    max-width:calc(50% - 4px);font-size:9px;padding:1px 4px;}
-  .cal-ev.cal-ev-std .evc-coach .co-fl{display:none;}
-  .cal-ev.cal-ev-std .evc-coach .co-ab{display:inline;}
-  /* 出席章：從右下角的 1/4 圓改成小圓章。
-     只有章的時候置中；有教練標時退到中線左側，兩個合起來看起來仍是置中的。
-     （:has 判斷「這張卡有沒有教練標」——沒有它就沒辦法只用 CSS 分這兩種情形。） */
-  .cal-ev.cal-ev-std .evc-check{position:absolute;top:auto;bottom:3px;
-    left:50%;right:auto;transform:translateX(-50%);
-    width:auto;min-width:16px;height:15px;border-radius:999px;padding:0 5px;
-    font-size:9.5px;align-items:center;justify-content:center;}
-  .cal-ev.cal-ev-std:has(.evc-coach) .evc-check{left:auto;right:50%;transform:none;margin-right:2px;}
-  /* .ev-w-tiny 原本整個藏掉教練標（0725）——現在縮寫放得下，不藏了 */
-  .cal-ev.cal-ev-std.ev-w-tiny .evc-coach{display:inline-block;}
-}
+/* ⚠ 窄卡「姓名直書」整組還原（2026-08-23，同日兩次都改壞）——
+   一修：字序顛倒（「陳玉」→「玉陳」），成因是 .cal-ev-7d 那條 (0,4,0) 的
+         display:-webkit-box + -webkit-box-orient:vertical 沒被蓋掉，
+         直書之下變成「每個字一行、行由右往左堆」。
+   二修：把選擇器提到同權重之後，姓名整個不見（使用者：「名字不見了 緊急緊急！」）。
+   直書要和既有的 -webkit-box 折行、container-query 字級、flex 置中三者同時相處，
+   顯然不是加幾條 CSS 就收得掉的；正式環境不該拿來試。整組拿掉，回到原本的橫排。
+   要重做的話：先在離線頁面把 .cal-ev-std 的完整規則鏈重現、量過再上，
+   不要只在 @container 裡補宣告。 */
 /* ══ Calm Play · Hover（V3 定案：只微放大，不展資訊卡）══
    Token 放大 106%、陰影略增，形狀與內容不變。詳細資訊改由點擊互動取得。 */
 .cal-ev.cal-ev-std .evc-more{display:none;}
@@ -9742,8 +9705,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.1511';
-const APP_VERSION_LABEL='v260823.1511';
+const APP_VERSION = '260823.1516';
+const APP_VERSION_LABEL='v260823.1516';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
