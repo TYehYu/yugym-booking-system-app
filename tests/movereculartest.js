@@ -15,8 +15,9 @@ console.log('入口：標題卡 → 調整課程 → 調整日期／時間');
 ok('★ 開關畫在「調整預約時間」那張視窗裡（不是另開一頁）',
    /recurBoxHtml\('amv', _rec\.max, \{countLabel:'往後再排幾堂（不含這一堂）'\}\)/.test(src)
    && /const _rec=await amvRecurCtx\(b\);/.test(src));
+/* 2026-08-23：那一列改成「能改就給 admhMoveAsk、不能改就淡化寫原因」，入口本身沒換 */
 ok('★ 「調整課程」那一列的入口沒被動到（admhMoveAsk 仍是同一支）',
-   /rows\+=row\(`closeModal\(\);admhMoveAsk\('\$\{b\.id\}'\)`,'調整日期／時間'/.test(src));
+   /: row\(`closeModal\(\);admhMoveAsk\('\$\{b\.id\}'\)`,'調整日期／時間'/.test(src));
 ok('★★ 堂數標籤要換掉 —— 第一堂已經存在，沿用「含第一堂」會讓人多算一堂',
    /countLabel:'往後再排幾堂（不含這一堂）'/.test(src)
    && /function recurBoxHtml\(prefix, maxN, opts\)\{/.test(src)

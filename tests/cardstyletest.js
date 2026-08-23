@@ -196,10 +196,14 @@ ok('　　為什麼放寬，寫在程式裡',
 console.log('\n過去的課不該有修改選項（2026-08-21 使用者回報 8/18 那筆）');
 /* 教練請假後來搬進「指派代課教練」，那一層的日期判斷改由 acts.sub 把關
    （sub 本來就要 _editable），所以這裡只剩兩項直接吃 A.editable。 */
+/* 2026-08-23：「調整日期／時間」那一列改吃 bkMoveBlockReason（與拖移共用同一份規則），
+   不能改時照樣列出、淡化並寫原因；其餘修改項仍統一吃 acts.editable。 */
 ok('★ 修改項統一吃 acts.editable（含「課程日 >= 今天」）',
    /editable: _editable,/.test(src)
-   && /if\(!_leave && A\.editable\) rows\+=row\(`closeModal\(\);admhMoveAsk/.test(src)
    && /if\(!_leave && A\.isGroup && A\.editable\)/.test(src));
+ok('★★ 改時間的規則收斂成一支，視窗與拖移共用（原本兩邊各判各的）',
+   /function bkMoveBlockReason\(b\)\{/.test(src)
+   && /const _mvBlk=_leave\?'教練請假中的課不能改時間，請先復原請假':bkMoveBlockReason\(b\);/.test(src));
 ok('　　請假那條路也擋得住過去的課（代課視窗本身要 _editable 才進得去）',
    /sub: \(_editable && !bkIsSelf\(b\)\) \? 'sub' : null/.test(src));
 ok('★ 舊的判斷（只看 staff／closed，沒帶日期）已經拿掉',

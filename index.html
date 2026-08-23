@@ -614,7 +614,7 @@ body:has(#login-screen:not(.hidden)){background:#003d32;}
 .st-l-bday.on{color:var(--gold-d,#b48a56);font-weight:700;}
 /* 生日禮金紅包（2026-08-23 使用者指示）：貼在實領薪資右邊，只在這個月真的要發時才出現。
    不佔欄寬（絕對定位會跟金額打架，這裡用一般行內元素＋負的右邊界收回去就好）。 */
-.st-l-red{margin-left:5px;font-size:13px;line-height:1;vertical-align:-1px;cursor:default;}
+.st-l-red{margin-right:5px;font-size:13px;line-height:1;vertical-align:-1px;cursor:default;}
 /* 數字欄：只放值，欄名在表頭 */
 /* 2026-07-31 使用者指示：總堂數～工作時數這一段的內容放大（原 16px）。
    ⚠ 使用者回報「文字高高低低」：那幾格是 grid 項目、垂直置中，字級不一樣時
@@ -1948,6 +1948,10 @@ body.mc-mode .layout{padding-top:8px;}
   display:flex;align-items:center;justify-content:center;}
 .ov-i-ic svg{width:15px;height:15px;}
 .ov-i-l{flex:1;min-width:0;font-size:13.5px;color:var(--text);font-weight:600;display:flex;flex-direction:column;gap:1px;}
+/* 標題那一行（2026-08-23）：標題＋堂數並排；堂數是輔助資訊，字小一級、不搶主色 */
+.ov-i-lt{display:flex;align-items:baseline;gap:8px;min-width:0;}
+.ov-i-cnt{font-style:normal;font-size:12.5px;font-weight:700;color:var(--text);
+  font-family:var(--num),inherit;white-space:nowrap;}
 .ov-i-note{font-style:normal;font-size:10.5px;font-weight:500;color:var(--t3);line-height:1.5;}
 .ov-i-v{font-size:17px;font-weight:800;font-family:var(--num);color:var(--text);white-space:nowrap;}
 .ov-i-v2{font-size:12.5px;font-weight:700;font-family:var(--num);color:var(--gold-d);margin-left:8px;white-space:nowrap;}
@@ -9671,8 +9675,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.1055';
-const APP_VERSION_LABEL='v260823.1055';
+const APP_VERSION = '260823.1443';
+const APP_VERSION_LABEL='v260823.1443';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18412,8 +18416,11 @@ PAGES.dashboard=async function(){
   const ovRow=(ic,label,val,sub,note,opt)=>{
     const tap=opt&&opt.tap;
     const tag=tap?'button':'div', extra=tap?` type="button" onclick="${opt.tap}"`:'';
+    /* opt.after（2026-08-23 使用者指示：「課堂數改到左邊接在教練課跟團體課後面」）——
+       接在標題同一行的小字。.ov-i-l 是直向 flex（標題／註解各一行），
+       所以標題那一行要再包一層橫向的 .ov-i-lt，不然 after 會掉到下一行。 */
     return `<${tag} class="ov-i${tap?' ov-i-tap':''}"${extra}><span class="ov-i-ic">${ic}</span>
-    <span class="ov-i-l">${label}${note?`<i class="ov-i-note">${note}</i>`:''}</span>
+    <span class="ov-i-l"><span class="ov-i-lt">${label}${(opt&&opt.after)?`<i class="ov-i-cnt">${opt.after}</i>`:''}</span>${note?`<i class="ov-i-note">${note}</i>`:''}</span>
     <span class="ov-i-v${(opt&&opt.gold)?' ov-i-gold':''}${(opt&&opt.red)?' ov-i-red':''}">${val}</span>${sub?`<span class="ov-i-v2${(opt&&opt.subPlain)?' ov-i-plain':''}">${sub}</span>`:''}${tap?'<span class="ov-i-go">›</span>':''}</${tag}>`;
   };
 
@@ -18540,8 +18547,12 @@ PAGES.dashboard=async function(){
         ${/* 2026-07-31 使用者指示：營收放第一列，接著教練課／團體課／銷課金額／銷課堂數；
              教練課與團體課改成「金額在左、堂數在右」，金額一律金色。 */''}
         ${ovRow(OV_IC.rev,'營收',fmtNT(revenue),'','',{gold:true})}
-        ${ovRow(OV_IC.pt,'教練課',fmtNT(_svPt!=null?_svPt:Math.round(ptFee)),`${ptDoneBk.length}/${ptClassCount} 堂`,'',{gold:true,subPlain:true})}
-        ${ovRow(OV_IC.grp,'團體課',fmtNT(_svGrp!=null?_svGrp:Math.round(grpFee)),`${grpDoneBk.length}/${groupClassCount} 堂`,'',{gold:true,subPlain:true})}
+        ${/* 2026-08-23 使用者指示：「教練課跟團體課 金額改到最右邊，課堂數改到左邊接在
+             教練課跟團體課後面」—— 原本金額在中間、堂數在最右，於是這五列的金額
+             上下對不齊（營收與銷課金額在最右、這兩列的在中間）。
+             改成堂數跟著標題走，金額全部靠右對齊成一欄。 */''}
+        ${ovRow(OV_IC.pt,'教練課',fmtNT(_svPt!=null?_svPt:Math.round(ptFee)),'','',{gold:true,after:`${ptDoneBk.length}/${ptClassCount} 堂`})}
+        ${ovRow(OV_IC.grp,'團體課',fmtNT(_svGrp!=null?_svGrp:Math.round(grpFee)),'','',{gold:true,after:`${grpDoneBk.length}/${groupClassCount} 堂`})}
         ${ovRow(OV_IC.rev,'銷課金額',fmtNT(_ovRev!=null?_ovRev:usedFee),'','',{gold:true})}
         ${ovRow(OV_IC.done,'銷課堂數',`${doneMainCount} 堂`,'',_doneMix)}
         ${/* 支出（2026-08-23 使用者指示：「這個移除的空間改成支出，加入下方的列表，
@@ -20879,14 +20890,40 @@ function venueMoveNote(b){
 /* 這是誰的哪一堂課（2026-08-07 使用者指示：「調整課卡時間的視窗 內容要清楚一點」）——
    確認框原本只有兩行日期時間，拖錯卡也看不出來。名字走 dbPeek（同步、讀快取），
    快取還沒有就只顯示課別，不為了一行字讓確認框變成非同步。 */
+/* 「這一堂現在能不能改時間」——唯一的規則來源（2026-08-23 使用者回報）：
+   「剛剛用手機端行事曆頁面，點選課卡調出的標題卡點了沒辦法修改時間，但是直接拖移就可以。
+     應該要兩種都要可以，只要是在規則內的情況。」
+   「如果拖移不行，也要先有拖移動作，然後跳訊息提醒為什麼不行修改。」
+
+   在這之前兩條路各寫各的：視窗（admhMoveAsk）擋已取消／已簽到／已完成／過期，
+   拖移（cagDropMove／wtlDropAt／wtlDropMove）只擋過期。於是「已簽到」的課點視窗被擋、
+   用拖的卻真的移得掉 —— 規則不一致，而且拖移那邊是靜靜放行（簽到過的課被移走，
+   堂數與出席紀錄就對不上了）。
+
+   回傳空字串＝可以改；否則就是「為什麼不行」那句話，四條路都拿它去吐司。
+   ⚠ 這裡只管「這一堂本身的狀態」。目標時段有沒有衝堂／場地夠不夠仍由 validateBooking 判斷
+     —— 那是另一件事，而且要等使用者選好新時間才知道。 */
+function bkMoveBlockReason(b){
+  if(!b) return '找不到預約';
+  if(b.status==='cancelled') return '已取消的課無法調整時間';
+  if(b.no_show===true) return '這一堂已標記未到課。要改時間請先在課卡按「取消未到課」';
+  if(b.status==='checked_in'||b.status==='completed') return '已簽到／已完成的課不能改時間（請先取消簽到）';
+  if(bkIsCoachLeave(b)) return '教練請假中的課不能改時間，請先復原請假';
+  if(String(b.date)<ymd(TODAY)) return '已過期的預約無法調整';
+  /* 教練只能動自己的課（與 expandBkCard 的 own 同一條規則）。
+     非教練角色與店長一律放行；代課也算自己的。 */
+  if(SESSION && SESSION.role==='coach' && !SESSION.is_manager
+     && !(typeof bkIsCoach==='function' && bkIsCoach(b,SESSION.id))) return '只能調整自己的課';
+  return '';
+}
 /* 簡易課卡右上角「調整日期／時間」（2026-08-20 使用者指示）——
    小視窗選新日期與時間 → validateBooking 驗過 → 走 confirmCalMove（原/新時間確認卡、
    場地備註、同日改時間會追問「後續系列一起改」），與拖曳改時間同一條路。 */
 async function admhMoveAsk(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
-  if(b.status==='cancelled'){ showToast('已取消的課無法調整時間'); return; }
-  if(b.status==='checked_in'||b.status==='completed'){ showToast('已簽到／已完成的課不能改時間（請先取消簽到）'); return; }
-  if(b.date<ymd(TODAY)){ showToast('已過期的預約無法調整'); return; }
+  /* 2026-08-23：規則收斂到 bkMoveBlockReason，與拖移那三條路共用（見那支的說明） */
+  const _blk=bkMoveBlockReason(b);
+  if(_blk){ showToast(_blk, 4000); return; }
   /* 2026-08-20 使用者回報「返回鈕會關掉整個視窗、不會回到上一個視窗」——
      原本這裡先 collapseBkCard()（當初是為了避開視窗被課卡蓋住），
      於是按返回只是 closeModal()、後面已經什麼都不剩。
@@ -21046,7 +21083,19 @@ async function ashEditAsk(id){
   if(b.no_show===true && (A.staff||A.coachCk))
     rows+=row(`closeModal();bkUndoNoShow('${b.id}')`,'取消未到課',
       '客人只是記錯時間？取消之後這堂就能改期或取消'+(/教練請假堂未到場結課/.test(String(b.note||''))?'（當初退回的那一堂會扣回票券）':''));
-  if(!_leave && A.editable) rows+=row(`closeModal();admhMoveAsk('${b.id}')`,'調整日期／時間',fmtRange(b.date,b.start_time,Number(b.duration)||60));
+  /* 「調整日期／時間」永遠列出來（2026-08-23 使用者：「應該要兩種都要可以，只要是在規則內」
+     ＋「跳訊息提醒為什麼不行修改」）——
+     原本只在 A.editable 成立時才畫，不能改的時候整列消失，使用者只看到「這裡沒有這個功能」，
+     不知道是因為已簽到還是過期。改成：不能改時照樣列出、淡化，點下去吐司說原因。
+     規則來源是 bkMoveBlockReason，與拖移共用同一份（不再兩邊各判各的）。
+     不能改的那一列用既有的 .ash-ei-off（0822 就定的語彙：「看起來就不像按鈕、也按不動」），
+     原因直接寫在副標上 —— 比點下去才跳吐司少一步。
+     ⚠ 教練請假的課仍然整列不畫 —— 那張卡的主軸是「復原請假」，改時間沒有意義。 */
+  const _mvBlk=_leave?'教練請假中的課不能改時間，請先復原請假':bkMoveBlockReason(b);
+  if(!_leave && (A.staff||A.own))
+    rows += _mvBlk
+      ? row('','調整日期／時間',_mvBlk,'ash-ei-off')
+      : row(`closeModal();admhMoveAsk('${b.id}')`,'調整日期／時間',fmtRange(b.date,b.start_time,Number(b.duration)||60));
   /* 更改場地（2026-08-20 使用者指示：教練課／友善教練課也要有）——
      自主訓練走 bkOrbitVenue（只有它有跑步機台數）；其他課別走 openVenueChange
      （列出所有啟用場地、逐一跑衝突檢查，該時段滿的會標出來）。
@@ -21963,7 +22012,9 @@ async function wtlDropAt(bid, ds, mm){
   try{
     const b=await dbGet('bookings',bid);
     if(!b){ return; }
-    if(b.date<ymd(TODAY)){ showToast('已過期的預約無法移動'); return; }
+    /* 2026-08-23：與視窗那條路共用同一份規則（見 bkMoveBlockReason） */
+    const _blk=bkMoveBlockReason(b);
+    if(_blk){ showToast(_blk, 4000); return; }
     if(ds<ymd(TODAY)){ showToast('不可移動到已過期的日期'); return; }
     if(ds===b.date && ntime===b.start_time){ return; } // 沒移動
     const verr=await validateBooking(b,ds,ntime,b.duration);
@@ -21982,7 +22033,9 @@ async function wtlDropMove(ds, mm){
   try{
     const b=await dbGet('bookings',bid);
     if(!b){ wtlCancelMove(); return; }
-    if(b.date<ymd(TODAY)){ showToast('已過期的預約無法移動'); wtlCancelMove(); return; }
+    /* 2026-08-23：與視窗那條路共用同一份規則（見 bkMoveBlockReason） */
+    const _blk=bkMoveBlockReason(b);
+    if(_blk){ showToast(_blk, 4000); wtlCancelMove(); return; }
     if(ds<ymd(TODAY)){ showToast('不可移動到已過期的日期'); return; }
     if(ds===b.date && ntime===b.start_time){ wtlCancelMove(); return; }
     const verr=await validateBooking(b,ds,ntime,b.duration);
@@ -22624,7 +22677,11 @@ async function cagDropMove(bid, ds, mm){
   try{
     const b=await dbGet('bookings',bid);
     if(!b){ return; }
-    if(b.date<ymd(TODAY)){ showToast('已過期的預約無法移動'); return; }
+    /* 2026-08-23 使用者指示：「如果拖移不行，也要先有拖移動作，然後跳訊息提醒為什麼不行修改」
+       —— 所以不在起手時擋，拖到定點才用共用判斷告訴他原因。
+       這裡原本只擋過期，已簽到／已完成的課用拖的真的移得掉（視窗那條路是擋的）。 */
+    const _blk=bkMoveBlockReason(b);
+    if(_blk){ showToast(_blk, 4000); return; }
     if(ds<ymd(TODAY)){ showToast('不可移動到已過期的日期'); return; }
     if(ds===b.date && ntime===b.start_time){ return; }
     const verr=await validateBooking(b,ds,ntime,b.duration);
@@ -34644,10 +34701,12 @@ async function renderStaffList(){
         if(!mm || mm!==bd.slice(5,7)) return '';
         return `<span class="st-l-red" title="${c.name||''} ${Number(mm)} 月生日 —— 生日禮金隨這個月的薪資於 ${Number(mm)}/5 一起發">🧧</span>`;
       })();
+      /* 2026-08-23 二修（使用者：「員工的紅包 顯示在左邊」）：紅包排在金額前面。
+         金額是右對齊的數字欄，紅包掛在右邊會把數字往左推、整欄對不齊。 */
       const payCell = !_canPay ? '<i class="st-l-none">•••</i>'
         : (_noPay ? `<i class="st-l-none" title="${empPayNote(c,_ym)}　·　到職當月才開始計薪">${empPayNote(c,_ym).split('（')[0]}</i>`
           : st.net==null ? '<i class="st-l-none">—</i>'
-          : `<b class="st-l-paytap" title="看 ${c.name||''} ${_ym.replace('-','年')}月的完整薪資明細" onclick="event.stopPropagation();openSalarySheet('${c.id}','${_ym}')"><small>$</small>${Math.round(st.net).toLocaleString()}</b>${_bdayRed}`);
+          : `${_bdayRed}<b class="st-l-paytap" title="看 ${c.name||''} ${_ym.replace('-','年')}月的完整薪資明細" onclick="event.stopPropagation();openSalarySheet('${c.id}','${_ym}')"><small>$</small>${Math.round(st.net).toLocaleString()}</b>`);
       /* 數字只放值，欄位名稱統一在表頭（2026-07-30 使用者指示：加標題、把中間的空白收掉）。
          已上與排定不同時，用小字補上排定堂數（例 92 /97）。 */
       const num=(v,sub,i,cls)=>`<span class="st-l-n st-l-n${i}${cls?' '+cls:''}">${v>0?v:'<i class="st-l-z">0</i>'}${sub?`<u>${sub}</u>`:''}</span>`;
