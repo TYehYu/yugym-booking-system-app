@@ -9889,8 +9889,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2252';
-const APP_VERSION_LABEL='v260823.2252';
+const APP_VERSION = '260823.2301';
+const APP_VERSION_LABEL='v260823.2301';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -9940,7 +9940,19 @@ function openDB(){ return Promise.resolve(); }  // 純雲端不需本機 DB
    需要強制重抓時：dbGetAll(store, {fresh:true})。
    ══════════════════════════════════════════════════════ */
 const _dbCache=new Map();      // 實體表名 → {t, data}
-const DB_SWR_MAX=600000;   // 簽章校驗可沿用快取的上限（見 dbGetAll）
+const DB_SWR_MAX=600000;   // 走過「增量補資料」之後，多久要整表校正一次（見 dbGetAll）
+/* 簽章「完全相符」時的整表校正上限（2026-08-23）——
+   簽章是「筆數:整列雜湊和」，相符＝這份快取與資料庫逐列相同，已經被證明過了，
+   沒有任何理由把整張表再抓一次。原本這條路也吃 DB_SWR_MAX（10 分鐘），
+   於是**每 10 分鐘、每一張表都會在背景整表重下載一遍，即使一個字都沒變**。
+   使用者回報「開個表 17 秒」，逐表量測抓到現行：一次操作抓了 22 張表，
+   bookings 5,581KB／16.0s、member_tickets 2,557KB／10.7s，連 114KB 的小表都等了 3.7s
+   —— 前景要用的資料被這些背景重抓塞住了。
+   資料量小的時候看不出來（2,000 筆時整表 1.5MB，背景默默做完）；
+   長到 7,000 筆就變成每 10 分鐘癱一次，這就是「原本不會、現在會」的答案。
+   保留一個很長的保險（6 小時）：雜湊和理論上可能碰撞，久久重新對一次基準仍有意義，
+   但不該是 10 分鐘一次。 */
+const DB_FULL_MAX=21600000;
 let _sigPromise=null, _sigAt=0;   // 共用的表簽章請求（3 秒內同一次往返）
 const _dbInflight=new Map();   // 實體表名 → Promise（同時發出的請求共用一次往返）
 const DB_CACHE_TTL=20000;   // 2026-07-26：8s→20s（讀取畫面出現太頻繁）；本機寫入仍即時失效
@@ -10314,12 +10326,18 @@ async function dbGetAll(store,opts){
        原本 fullAt 超過 10 分鐘的第一次讀取會當場整表重載，櫃檯每 10 分鐘就撞一次）。
        畫面永遠先用「簽章＋增量」秒回，整表校正由 _dbRebaseBg 在背景默默換新。 */
     if(hit && hit.sig){
-      const _needRebase = Date.now()-(hit.fullAt||hit.t) >= DB_SWR_MAX;
+      const _age = Date.now()-(hit.fullAt||hit.t);
       const sigs=await tableSigs();
       if(sigs && sigs[key] && sigs[key]===hit.sig){
         const cur=_dbCache.get(key);
-        if(cur===hit){ hit.t=Date.now(); cacheMarkDirty(key);
-          if(_needRebase) _dbRebaseBg(store);
+        if(cur===hit){
+          /* 簽章相符＝已經逐列證明相同 → 這份快取就是一份有效的「整表基準」，
+             把 fullAt 一起往後推，不要再排背景重抓（那正是 0823 的效能元凶）。
+             只有超過 DB_FULL_MAX（6 小時）才重新對一次基準。 */
+          hit.t=Date.now();
+          if(_age < DB_FULL_MAX) hit.fullAt=Date.now();
+          cacheMarkDirty(key);
+          if(_age >= DB_FULL_MAX) _dbRebaseBg(store);
           return hit.data.slice(); }   // 校驗期間被寫入清掉就不沿用
       }
       // 簽章不同 → 先試「只補變動的那幾列」，補不成才整表重抓
@@ -10328,7 +10346,8 @@ async function dbGetAll(store,opts){
         if(patched && _dbCache.get(key)===hit){
           _dbCache.set(key,{t:Date.now(),fullAt:hit.fullAt||hit.t,data:patched.data,sig:sigs[key],logAt:patched.logAt});
           cacheMarkDirty(key);
-          if(_needRebase) _dbRebaseBg(store);
+          /* 這一條是「靠增量補起來的」——補漏的風險在這裡，所以維持 10 分鐘整表校正一次。 */
+          if(_age >= DB_SWR_MAX) _dbRebaseBg(store);
           return patched.data.slice();
         }
       }

@@ -25,7 +25,7 @@ function makeEnv(o){
   const env={
     tbl:s=>s,
     _dbCache:new Map(), _dbInflight:new Map(),
-    DB_CACHE_TTL:20000, DB_CACHE_TTL_BY:{}, DB_SWR_MAX:600000,
+    DB_CACHE_TTL:20000, DB_CACHE_TTL_BY:{}, DB_SWR_MAX:600000, DB_FULL_MAX:21600000,
     occCacheClear:()=>{},
     sb:{ rpc:async()=>{ log.push('sig'); if(state.rpcFail) return {error:{message:'no'},data:null};
                         await new Promise(r=>setTimeout(r,1)); return {data:{bookings:state.sig},error:null}; } },
@@ -120,21 +120,37 @@ console.log('\n④b 清快取後、資料庫沒變 → 不必整表重抓');
 }
 
 /* 2026-08-05 使用者回報「首頁切預約管理卡 10 幾秒」：原本超過 10 分鐘的第一次讀取
-   會當場整表重載，櫃檯每 10 分鐘撞一次。改成畫面先用簽章結果秒回、整表校正丟背景。 */
-console.log('\n⑤ 超過 10 分鐘：畫面照樣秒回，整表校正在背景做');
+   會當場整表重載，櫃檯每 10 分鐘撞一次。改成畫面先用簽章結果秒回、整表校正丟背景。
+
+   2026-08-23 再修（使用者回報「開個表 17 秒」，逐表量測抓到一次操作抓了 22 張表）——
+   問題在於「簽章相符」也照樣排背景整表重抓。簽章是逐列雜湊和，相符＝已經證明
+   快取與資料庫一模一樣，再抓一次不會得到任何新資訊，卻要把 bookings 5.5MB 重下載，
+   而且是每 10 分鐘、每一張表。前景要用的資料就被這些背景重抓塞住。
+   現在分兩條路：簽章相符 → 把 fullAt 一起往後推、不重抓（6 小時才對一次基準）；
+   走過增量補資料 → 維持 10 分鐘整表校正（補漏的風險在那條路上）。 */
+console.log('\n⑤ 超過 10 分鐘且簽章相符：秒回，而且**不要**再整表重抓');
 {
   const {api,env,log}=makeEnv();
   await api.dbGetAll('bookings');
-  advance(11*60000);   // 11 分鐘 > DB_SWR_MAX
+  advance(11*60000);   // 11 分鐘 > DB_SWR_MAX，但簽章沒變
   log.length=0;
-  /* 讓「資料庫的新資料」與快取不同：畫面若真的等整表重抓，回來的會是新資料；
-     秒回的話拿到的是舊快取，背景換好之後才變新。 */
   const got=await api.dbGetAll('bookings');
-  ok('★ 這一次讀秒回舊快取（沒有當場等整表重抓）', got.length===1 && got[0].id==='BK-1');
+  ok('★ 秒回舊快取', got.length===1 && got[0].id==='BK-1');
   await new Promise(r=>setTimeout(r,30));
-  ok('★ 背景整表校正跑完（有抓表）', log.filter(x=>x==='data').length>=1, log);
-  ok('★ fullAt 重置（下一個 10 分鐘才會再排一次）',
+  ok('★★ 簽章相符就不重抓整表（0823 效能元凶）', log.filter(x=>x==='data').length===0, log);
+  ok('★★ fullAt 跟著往後推（這份快取已被證明是有效基準）',
      Date.now()-(env._dbCache.get('bookings').fullAt||0) < 60000);
+}
+console.log('\n⑤-2 超過 6 小時：久久還是要重新對一次基準（雜湊碰撞的保險）');
+{
+  const {api,env,log}=makeEnv();
+  await api.dbGetAll('bookings');
+  advance(7*3600000);   // 7 小時 > DB_FULL_MAX
+  log.length=0;
+  const got=await api.dbGetAll('bookings');
+  ok('★ 這一次讀仍然秒回（重抓在背景）', got.length===1);
+  await new Promise(r=>setTimeout(r,30));
+  ok('★ 背景整表校正有跑', log.filter(x=>x==='data').length>=1, log);
 }
 
 console.log('\n⑥ 同一次換頁多張表只打一支 RPC');
@@ -149,9 +165,15 @@ console.log('\n⑦ 程式碼層面的把關');
 {
   ok('★ 簽章 RPC 失敗一律回 null（不會誤判成沒變）',
      /\.catch\(\(\)=>null\)/.test(grabFn('tableSigs')) && /r && !r\.error && r\.data && typeof r\.data==='object'/.test(grabFn('tableSigs')));
+  /* 0823：那一段改寫（簽章相符不再排背景重抓），守的事情沒變 —— 拿快取之前
+     要再確認 _dbCache 裡還是同一份，中途被寫入清掉就不能沿用。 */
   ok('★ 校驗期間被寫入清掉就不沿用（避免用到已失效的快取）',
-     /const cur=_dbCache\.get\(key\);\n\s*if\(cur===hit\)\{ hit\.t=Date\.now\(\); cacheMarkDirty\(key\);/.test(src)
-     && /if\(_needRebase\) _dbRebaseBg\(store\);\n\s*return hit\.data\.slice\(\); \}/.test(src));
+     /const cur=_dbCache\.get\(key\);\n\s*if\(cur===hit\)\{/.test(src)
+     && /if\(_age >= DB_FULL_MAX\) _dbRebaseBg\(store\);\n\s*return hit\.data\.slice\(\); \}/.test(src));
+  ok('★★ 兩條路各自的整表校正門檻：簽章相符 6 小時、增量補過 10 分鐘',
+     /if\(_age < DB_FULL_MAX\) hit\.fullAt=Date\.now\(\);/.test(src)
+     && /if\(_age >= DB_SWR_MAX\) _dbRebaseBg\(store\);/.test(src)
+     && /補漏的風險在這裡，所以維持 10 分鐘整表校正一次/.test(src));
   ok('★ 寫入時把共用簽章丟掉（下次記到的是寫入後的簽章）',
      /_sigPromise=null; _sigAt=0;\n\s*if\(store===undefined\)/.test(src));
   ok('　　DB 端函式存在於 migration 留檔', fs.existsSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260804_fn_table_sigs.sql'));
