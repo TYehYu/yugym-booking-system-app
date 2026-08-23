@@ -5,6 +5,8 @@
 //   數字被切成兩半最難讀。改成：標題與日期分行、每個分項自己一行、區塊之間空一行。
 // v4（2026-08-21 使用者指示）：抬頭統一成【有肌訓練 自動訊息】，第二行才寫是什麼通知。
 //   理由：「讓會員跟教練知道這個系統自動通知」—— 不然收到的人會以為是櫃檯手打的而去回訊息。
+// v8（2026-08-23）：範本變數名稱改中文（{{日期}}{{營收明細}}…），與合約範本同一套慣例。
+//   英文鍵同時保留，舊寫法照樣替換得到。
 // v7（2026-08-23）：訊息內容改吃 line_templates（管理員在「環境設定 › 通知範本」自行編輯）。
 //   ・body 用 {{變數}} 佔位，這裡替換；enabled=false → 那一種通知整組不發
 //   ・讀不到範本（表被刪、查詢失敗）→ 退回內建文字，通知不會因此中斷
@@ -33,7 +35,10 @@ const corsHeaders = {
 const J = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 const WD = ['日', '一', '二', '三', '四', '五', '六']
 const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US')
-const HEAD = '【有肌訓練 自動訊息】'
+/* 抬頭預設值。實際用哪一行由 line_templates 的 LT-HEAD 決定（v9，2026-08-23
+   使用者：「有肌訓練 自動訊息 改成貼心提醒」）—— 這行字半個月內改了三次，
+   每次都要重新部署兩支 Edge Function，所以也搬進範本表。 */
+const HEAD_DEFAULT = '【有肌訓練 貼心提醒】'
 /* v7：把 {{變數}} 換成實際內容（與前端合約範本的 fillContract 同一套：純字串取代，
    找不到的變數留原樣 —— 留原樣比換成空字串好，一眼看得出是範本打錯字）。 */
 const fillTpl = (body: string, ctx: Record<string, string>) => {
@@ -71,6 +76,7 @@ Deno.serve(async (req) => {
       for (const t of (tps || [])) tpl[(t as any).id] = { kind_label: (t as any).kind_label || '', body: (t as any).body || '', enabled: (t as any).enabled !== false }
     } catch (_) { /* 沒有範本就用內建的 */ }
     const tplOff = (id: string) => tpl[id] && tpl[id].enabled === false
+    const HEAD = (tpl['LT-HEAD'] && tpl['LT-HEAD'].body.trim()) || HEAD_DEFAULT
 
     /* ── 今日營收（收款紀錄；+8 時區日期）── */
     const { data: purs, error: puErr } = await admin.from('purchases').select('id,deal_amount,payment_method,pay_split,created_at')
@@ -148,6 +154,11 @@ Deno.serve(async (req) => {
     const _rep = tpl['LT-REPORT']
     const bossBody = (_rep && _rep.body.trim())
       ? fillTpl(_rep.body, {
+          /* v8：變數名稱改中文（與合約範本同一套慣例）。英文鍵同時保留 ——
+             萬一有人已經用英文變數存過範本，照樣替換得到。 */
+          '日期': dateLabel, '營收明細': revBlock.join('\n'),
+          '營收': money(revenue), '現金': money(cash), '匯款': money(bank), '其他': money(other),
+          '收款筆數': String(purN), '教練課堂數': String(ptCount), '團課堂數': String(grpCount), '團課人次': String(grpHeads),
           date: dateLabel, revblock: revBlock.join('\n'),
           revenue: money(revenue), cash: money(cash), bank: money(bank), other: money(other),
           count: String(purN), pt: String(ptCount), grp: String(grpCount), grpheads: String(grpHeads),
@@ -181,7 +192,10 @@ Deno.serve(async (req) => {
       const _cd = tpl['LT-COACHDAY']
       const s2 = perCoach[cid] || { pt: 0, grp: 0, heads: 0 }
       const cdBody = (_cd && _cd.body.trim())
-        ? fillTpl(_cd.body, { date: dateLabel, mylines: coachLines(cid).join('\n'),
+        ? fillTpl(_cd.body, {
+            '日期': dateLabel, '我的堂數': coachLines(cid).join('\n'),
+            '教練課堂數': String(s2.pt), '團課堂數': String(s2.grp), '團課人次': String(s2.heads),
+            date: dateLabel, mylines: coachLines(cid).join('\n'),
             pt: String(s2.pt), grp: String(s2.grp), grpheads: String(s2.heads) })
         : ['今天辛苦了！你今天完成：', ...coachLines(cid)].join('\n')
       const text = [

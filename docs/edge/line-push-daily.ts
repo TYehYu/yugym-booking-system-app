@@ -29,6 +29,8 @@
 //   使用者把帳號抽屜的「通知設定」改成內嵌開關、並開放給管理員之後，那顆開關對教練
 //   必須真的關得掉東西 —— 教練會收到的就是這支的收款提醒。關掉的人直接跳過，
 //   而且**不寫「未綁定 LINE」的櫃檯通知**（那是異常，這是他自己選的），只計一個數字。
+// v23（2026-08-23）：範本變數名稱改中文（{{日期}}{{時間}}…），與合約範本同一套慣例。
+//   英文鍵同時保留，舊寫法照樣替換得到。
 // v22（2026-08-23）：訊息內容改吃 line_templates（管理員在「環境設定 › 通知範本」自行編輯）。
 //   ・body 用 {{變數}} 佔位，這裡替換；enabled=false → 那一種通知整組不發
 //   ・讀不到範本（表被刪、查詢失敗）→ 退回內建文字，通知不會因此中斷
@@ -51,7 +53,10 @@ const CAT_NAME: Record<string, string> = {
 const WD = ['日', '一', '二', '三', '四', '五', '六']
 const toMin = (t: string) => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + (m || 0) }
 const nid = () => 'NT-LP' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
-const HEAD = '【有肌訓練 自動訊息】'
+/* 抬頭預設值。實際用哪一行由 line_templates 的 LT-HEAD 決定（v24，2026-08-23
+   使用者：「有肌訓練 自動訊息 改成貼心提醒」）—— 這行字半個月內改了三次，
+   每次都要重新部署兩支 Edge Function，所以也搬進範本表。 */
+const HEAD_DEFAULT = '【有肌訓練 貼心提醒】'
 const AUTO_NOTE = '（這是系統自動發送的訊息，直接回覆不會有人看到；需要協助請聯繫櫃檯）'
 /* v22：把 {{變數}} 換成實際內容（與前端合約範本的 fillContract 同一套：純字串取代，
    找不到的變數留原樣 —— 留原樣比換成空字串好，一眼看得出是範本打錯字）。 */
@@ -143,6 +148,7 @@ Deno.serve(async (req) => {
       for (const t of (tps || [])) tpl[(t as any).id] = { kind_label: (t as any).kind_label || '', body: (t as any).body || '', enabled: (t as any).enabled !== false }
     } catch (_) { /* 沒有範本就用內建的 */ }
     const tplOff = (id: string) => tpl[id] && tpl[id].enabled === false
+    const HEAD = (tpl['LT-HEAD'] && tpl['LT-HEAD'].body.trim()) || HEAD_DEFAULT
 
     /* ── 共享票：這張票可以給哪些人用（持有人＋共享者）（v11）── */
     const tkOwners: Record<string, string[]> = {}
@@ -283,6 +289,12 @@ Deno.serve(async (req) => {
       const _cls = tpl['LT-CLASS']
       const clsBody = (_cls && _cls.body.trim())
         ? fillTpl(_cls.body, {
+            /* v23：變數名稱改中文（與合約範本同一套慣例）。英文鍵同時保留 ——
+               萬一有人已經用英文變數存過範本，照樣替換得到。 */
+            '日期': dateLabel, '時間': String(b.start_time).slice(0, 5),
+            '課程': line3, '教練': coachName, '課別': catName, '第幾堂': seqStr,
+            '場地': venue ? `\n📍 場地：${venue}` : '',
+            '續約提醒': renewLine ? `\n\n${renewLine}` : '',
             date: dateLabel, time: String(b.start_time).slice(0, 5),
             course: line3, coach: coachName, category: catName, seq: seqStr,
             venue: venue ? `\n📍 場地：${venue}` : '',
@@ -338,6 +350,8 @@ Deno.serve(async (req) => {
           const _pay = tpl['LT-PAY']
           const payBody = (_pay && _pay.body.trim())
             ? fillTpl(_pay.body, {
+                '日期': dateLabel, '時間': String(b.start_time).slice(0, 5),
+                '會員': who, '第幾堂': seqStr, '收款事由': coachAlert, '教練': coachName,
                 date: dateLabel, time: String(b.start_time).slice(0, 5),
                 member: who, seq: seqStr, alert: coachAlert, coach: coachName,
               })

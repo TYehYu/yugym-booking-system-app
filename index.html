@@ -612,6 +612,9 @@ body:has(#login-screen:not(.hidden)){background:#003d32;}
 /* 生日（2026-08-02）：平常只是淡淡一行資料；當月壽星亮金＝那個月有生日禮金 */
 .st-l-bday{margin-left:8px;font-size:11px;color:var(--t3);}
 .st-l-bday.on{color:var(--gold-d,#b48a56);font-weight:700;}
+/* 生日禮金紅包（2026-08-23 使用者指示）：貼在實領薪資右邊，只在這個月真的要發時才出現。
+   不佔欄寬（絕對定位會跟金額打架，這裡用一般行內元素＋負的右邊界收回去就好）。 */
+.st-l-red{margin-left:5px;font-size:13px;line-height:1;vertical-align:-1px;cursor:default;}
 /* 數字欄：只放值，欄名在表頭 */
 /* 2026-07-31 使用者指示：總堂數～工作時數這一段的內容放大（原 16px）。
    ⚠ 使用者回報「文字高高低低」：那幾格是 grid 項目、垂直置中，字級不一樣時
@@ -9668,8 +9671,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.1033';
-const APP_VERSION_LABEL='v260823.1033';
+const APP_VERSION = '260823.1055';
+const APP_VERSION_LABEL='v260823.1055';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21037,6 +21040,12 @@ async function ashEditAsk(id){
     <span class="ash-eilb">${label}</span>${sub?`<span class="ash-eisub">${sub}</span>`:''}</button>`;
   let rows='';
   const _leave=bkIsCoachLeave(b);
+  /* 取消未到課（2026-08-23 使用者回報：黃柏瑜記錯時間，櫃檯已標未到課，課卡就鎖住改不了）——
+     放在最上面：標了未到課的卡，這一列以外的每一項都不會出現（A.editable 是 false），
+     不放第一個等於整張清單是空的、使用者以為壞了。 */
+  if(b.no_show===true && (A.staff||A.coachCk))
+    rows+=row(`closeModal();bkUndoNoShow('${b.id}')`,'取消未到課',
+      '客人只是記錯時間？取消之後這堂就能改期或取消'+(/教練請假堂未到場結課/.test(String(b.note||''))?'（當初退回的那一堂會扣回票券）':''));
   if(!_leave && A.editable) rows+=row(`closeModal();admhMoveAsk('${b.id}')`,'調整日期／時間',fmtRange(b.date,b.start_time,Number(b.duration)||60));
   /* 更改場地（2026-08-20 使用者指示：教練課／友善教練課也要有）——
      自主訓練走 bkOrbitVenue（只有它有跑步機台數）；其他課別走 openVenueChange
@@ -25416,7 +25425,13 @@ async function expandBkCard(el, id){
      ・教練請假堂 → 結課退堂、不發點（bkCoachLeaveNoShow）
      ・一般自主訓練 → 結課蓋「未」章、點數照扣（bkSelfNoShow）
      時間未到的防線在各自函式裡。 */
-  if(!_calCtx && (staff||coachCk) && b.status==='coach_leave') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkCoachLeaveNoShow('${id}')`,'noshow','未到課');
+  /* ③-c 「取消未到課」（2026-08-23 使用者回報：黃柏瑜 8/23 記錯時間，櫃檯已標未到課，
+     課卡就被鎖住改不了 —— 標未到課會把 status 寫成 completed，_editable 的
+     `!closed` 因此不成立，改期／取消／代課整排都消失）。
+     ⚠ 這顆要放在「已經標了未到課」的卡上，所以條件是 b.no_show===true，
+       與上面那兩顆（還沒標）互斥，不會同時出現兩顆金鈕。 */
+  if(!_calCtx && (staff||coachCk) && b.no_show===true) btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkUndoNoShow('${id}')`,'noshow','取消未到課');
+  else if(!_calCtx && (staff||coachCk) && b.status==='coach_leave') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkCoachLeaveNoShow('${id}')`,'noshow','未到課');
   else if(!_calCtx && (staff||coachCk) && bkIsSelf(b) && !bkIsCoachLeave(b) && !isGroup && b.status==='booked') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkSelfNoShow('${id}')`,'noshow','未到課');
   // ④ 取消（紅；教練只能取消自己的課；2026-08-20 起管理員手機改掛在會員卡上）
   /* 非團課的取消／簽到擺回下方那一排（2026-08-21 使用者指示）——
@@ -26208,6 +26223,48 @@ async function bkSelfNoShow(id){ return onceAct('selfnoshow:'+id, async()=>{
     showToast('已標記未到課（點數照扣，不退回）');
     navTo(CUR_PAGE);
   }catch(e){ showToast('標記失敗：'+(e&&e.message?e.message:e)); }
+}); }
+/* 取消未到課（2026-08-23 使用者回報）——
+   「今天有一個客戶黃柏瑜記錯時間，預約表 9:00 後來改約 12:00，但是已經被櫃檯標示未到課，
+     就被鎖定無法再修改。讓這種未到課有取消修改的功能，以免客戶只是忘記時間。」
+
+   成因：標未到課的收尾是「結課蓋未章」（status→completed、no_show=true），
+   而 _editable 要求 `!closed`，completed 就是 closed → 改期／取消／代課整排消失。
+   在這之前沒有任何一條路把它改回來，只能請人直接改資料庫。
+
+   倒轉的規則，看當初那一次動了什麼票：
+   ・自主訓練（bkSelfNoShow）→ 當初「點數照扣」、沒碰票 → 這裡也不碰票，只還原狀態
+   ・教練請假堂（bkCoachLeaveNoShow）→ 當初退了一堂 → 這裡要把那一堂扣回去，
+     並且還原成 coach_leave（不是 booked，教練那天本來就請假）
+   兩者用備註裡的標記分辨（那兩支各自寫了自己的句子）。
+   ⚠ 扣不回去（票券沒餘額、票已作廢）不能當作沒事：狀態照樣還原，但要明講
+     「這一堂沒有扣回票」，讓櫃檯知道要人工處理 —— 靜靜地少扣一堂比鎖住還糟。 */
+async function bkUndoNoShow(id){ return onceAct('undonoshow:'+id, async()=>{
+  try{
+    const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+    if(b.no_show!==true){ showToast('這一堂不是未到課'); return; }
+    const _note=String(b.note||'');
+    const _wasLeave=/教練請假堂未到場結課/.test(_note);
+    /* 備註只清掉當初自動加的那一行，人工寫的其他行要留著 */
+    const _clean=_note.split('\n')
+      .filter(l=>!/未到場結課（堂數退回、不發點數）/.test(l) && !/自主訓練未到課（點數照扣）/.test(l))
+      .join('\n').trim();
+    let _rededucted=null;   // null＝不需要扣回；true/false＝扣回成功與否
+    if(_wasLeave && b.ticket_id){
+      const tk=await dbGet('member_tickets',b.ticket_id).catch(()=>null);
+      _rededucted = tk ? !!(await deductTicket(tk,b.id,SESSION.id)) : false;
+    }
+    b.status=_wasLeave?'coach_leave':'booked';
+    b.no_show=null;
+    b.note=_clean||null;
+    await dbPut('bookings',b);
+    collapseBkCard();
+    showToast('已取消未到課，這一堂可以再調整了'
+      + (_rededucted===true?'（堂數已扣回票券）':'')
+      + (_rededucted===false?'　⚠ 堂數沒有扣回票券（票券可能已無餘額或作廢），請人工確認':''),
+      _rededucted===false?6000:3000);
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('取消失敗：'+(e&&e.message?e.message:e)); }
 }); }
 /* 復原教練請假（2026-08-14 使用者需求）——把 bkCoachLeave 做的事全部倒轉：
    ①課種恢復（原課種記在 note 的「原：X」）②狀態回 booked ③當時退回的那張票扣回 1 堂
@@ -34573,10 +34630,24 @@ async function renderStaffList(){
          整列本來就會開員工明細，所以這一格要 stopPropagation，不然兩個視窗一起開。 */
       /* 匯入月份有紀錄就以紀錄為準：到職日填得比匯入資料晚時，不該蓋掉真的發過的薪水 */
       const _noPay = !empCountSalary(c,_ym) && !(Number(st.net)>0);
+      /* 生日禮金紅包（2026-08-23 使用者指示：「實領薪資旁邊新增一個紅包，
+         如果該員工當月要發生日禮金」）——
+         判斷與 stBdayTag／calcSalary 同一條規則：生日「月份」對上 birthPayMonthOf(這個月)。
+         ⚠ 是「這張薪資單發放時的那個月」，不是本月 —— 8 月的薪水 9/5 發，
+           所以看 8 月的名單，亮紅包的是 9 月生日的人（0802 使用者定案）。
+         ⚠ 只在真的算得出薪水時才掛：沒計薪（離職／待接受邀請）那幾格連數字都沒有，
+           掛個紅包會變成「他這個月有錢拿」的誤導。 */
+      const _bdayRed=(()=>{
+        if(!_canPay || _noPay || st.net==null) return '';
+        const bd=String(c.birthday||c.birth_date||''); if(bd.length<7) return '';
+        const mm=birthPayMonthOf(_ym);
+        if(!mm || mm!==bd.slice(5,7)) return '';
+        return `<span class="st-l-red" title="${c.name||''} ${Number(mm)} 月生日 —— 生日禮金隨這個月的薪資於 ${Number(mm)}/5 一起發">🧧</span>`;
+      })();
       const payCell = !_canPay ? '<i class="st-l-none">•••</i>'
         : (_noPay ? `<i class="st-l-none" title="${empPayNote(c,_ym)}　·　到職當月才開始計薪">${empPayNote(c,_ym).split('（')[0]}</i>`
           : st.net==null ? '<i class="st-l-none">—</i>'
-          : `<b class="st-l-paytap" title="看 ${c.name||''} ${_ym.replace('-','年')}月的完整薪資明細" onclick="event.stopPropagation();openSalarySheet('${c.id}','${_ym}')"><small>$</small>${Math.round(st.net).toLocaleString()}</b>`);
+          : `<b class="st-l-paytap" title="看 ${c.name||''} ${_ym.replace('-','年')}月的完整薪資明細" onclick="event.stopPropagation();openSalarySheet('${c.id}','${_ym}')"><small>$</small>${Math.round(st.net).toLocaleString()}</b>${_bdayRed}`);
       /* 數字只放值，欄位名稱統一在表頭（2026-07-30 使用者指示：加標題、把中間的空白收掉）。
          已上與排定不同時，用小字補上排定堂數（例 92 /97）。 */
       const num=(v,sub,i,cls)=>`<span class="st-l-n st-l-n${i}${cls?' '+cls:''}">${v>0?v:'<i class="st-l-z">0</i>'}${sub?`<u>${sub}</u>`:''}</span>`;
@@ -50926,28 +50997,32 @@ async function saveContractTpl(){
    ・停用＝那一種通知整組不發；讀不到範本 → Edge Function 退回內建文字，不會中斷
    ・抬頭【有肌訓練 自動訊息】固定不給改（那是「這是系統自動發的」的識別），
      第二行的通知種類（kind_label）可以改。 */
+/* 變數名稱用中文（2026-08-23 使用者：「這些標籤變數 可以用中文顯示嗎」）——
+   與合約範本的 CONTRACT_VARS 同一套慣例（那邊本來就是 {{會員姓名}}）。
+   ⚠ Edge Function 兩邊都吃：新的中文鍵與舊的英文鍵同時提供，
+     萬一有人已經用英文變數存過範本，照樣替換得到。 */
 const LINE_TPL_VARS={
   'LT-CLASS':[
-    ['date','8/24(一)'],['time','19:00'],
-    ['course','🏋️ 教練課･教練：RANDY（第 3/12 堂）'],
-    ['venue','\n📍 場地：跑步機'],
-    ['renew','\n\n💬 這期課程接近尾聲，若想繼續訓練，歡迎與教練討論續約方案！'],
-    ['coach','RANDY'],['category','教練課'],['seq','（第 3/12 堂）'],
+    ['日期','8/24(一)'],['時間','19:00'],
+    ['課程','🏋️ 教練課･教練：RANDY（第 3/12 堂）'],
+    ['場地','\n📍 場地：跑步機'],
+    ['續約提醒','\n\n💬 這期課程接近尾聲，若想繼續訓練，歡迎與教練討論續約方案！'],
+    ['教練','RANDY'],['課別','教練課'],['第幾堂','（第 3/12 堂）'],
   ],
   'LT-PAY':[
-    ['date','8/24(一)'],['time','19:00'],['member','王小明'],
-    ['seq','（第 12/12 堂）'],['alert','續約（這是這張票的最後一堂）'],['coach','RANDY'],
+    ['日期','8/24(一)'],['時間','19:00'],['會員','王小明'],
+    ['第幾堂','（第 12/12 堂）'],['收款事由','續約（這是這張票的最後一堂）'],['教練','RANDY'],
   ],
   'LT-REPORT':[
-    ['date','8/23（六）'],
-    ['revblock','💰 今日營收 $22,000\n　現金 $12,000\n　匯款 $10,000\n　共 2 筆收款'],
-    ['revenue','$22,000'],['cash','$12,000'],['bank','$10,000'],['other','$0'],['count','2'],
-    ['pt','12'],['grp','3'],['grpheads','18'],
+    ['日期','8/23（六）'],
+    ['營收明細','💰 今日營收 $22,000\n　現金 $12,000\n　匯款 $10,000\n　共 2 筆收款'],
+    ['營收','$22,000'],['現金','$12,000'],['匯款','$10,000'],['其他','$0'],['收款筆數','2'],
+    ['教練課堂數','12'],['團課堂數','3'],['團課人次','18'],
   ],
   'LT-COACHDAY':[
-    ['date','8/23（六）'],
-    ['mylines','🏋️ 教練課 6 堂\n👥 團課 1 堂（8 人次）'],
-    ['pt','6'],['grp','1'],['grpheads','8'],
+    ['日期','8/23（六）'],
+    ['我的堂數','🏋️ 教練課 6 堂\n👥 團課 1 堂（8 人次）'],
+    ['教練課堂數','6'],['團課堂數','1'],['團課人次','8'],
   ],
 };
 const LINE_TPL_NOTE={
@@ -50963,14 +51038,25 @@ PAGES.settings_line=async function(){
   let rows=[];
   try{ rows=(await dbGetAll('line_templates'))||[]; }catch(_){}
   const order=['LT-CLASS','LT-PAY','LT-REPORT','LT-COACHDAY'];
+  /* 共同抬頭（LT-HEAD）不是一種通知，自己一張卡，不進下面那組迴圈 */
+  const headRow=rows.find(r=>r.id==='LT-HEAD')||null;
+  rows=rows.filter(r=>r.id!=='LT-HEAD');
   rows.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
-  window._ltRows=rows;
+  window._ltRows=rows.concat(headRow?[headRow]:[]);
   const esc=x=>String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
   C.innerHTML=head('LINE','通知範本','系統自動發出的 LINE 訊息內容。改完按儲存，下一次排程就用新的；不必重新部署。')
   +`<div class="card">
-    <div class="card-title">共同格式</div>
-    <div class="lt-fixed">每則訊息都會自動加上前兩行：<b>【有肌訓練 自動訊息】</b>換行<b>通知種類</b>，
-      下面才是你在這裡寫的內容。抬頭固定不給改 —— 那是讓收到的人一眼看出「這是系統發的、回覆不會有人看到」。</div>
+    <div class="card-title">共同抬頭</div>
+    ${/* 2026-08-23 二修（使用者：「有肌訓練 自動訊息 改成貼心提醒」）——
+         這一行字半個月內改了三次，原本寫死在兩支 Edge Function 裡，
+         每改一次就要重新部署兩支。改成 LT-HEAD 那一列，在這裡直接編輯。 */''}
+    <div class="lt-fixed" style="margin-bottom:10px;">每則訊息的<b>第一行</b>。第二行是各自的「通知種類」，
+      第三行起才是內容。這一行的用途是讓收到的人一眼看出訊息是誰發的。</div>
+    ${headRow?`<div class="form-row" style="margin-bottom:0;">
+      <input id="lt-head" value="${esc(headRow.body)}" placeholder="例：【有肌訓練 貼心提醒】">
+      <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+        <button class="btn btn-green btn-sm" onclick="ltSaveHead()">儲存抬頭</button></div>
+    </div>`:'<div class="lt-note">找不到 LT-HEAD 那一列，請先套用 migration。</div>'}
   </div>`
   +(rows.length?rows.map(r=>{
     const vars=LINE_TPL_VARS[r.id]||[];
@@ -51010,7 +51096,10 @@ function ltPreview(id){
   const r=(window._ltRows||[]).find(x=>x.id===id); if(!r) return;
   const kind=((document.getElementById('lt-kind-'+id)||{}).value||r.kind_label||'').trim();
   const body=(document.getElementById('lt-body-'+id)||{}).value||'';
-  const txt=['【有肌訓練 自動訊息】',kind,'',ltFill(body,id)].join('\n');
+  /* 抬頭吃畫面上那一格（還沒存也要看得到改完的樣子） */
+  const head=((document.getElementById('lt-head')||{}).value||'').trim()
+    || (((window._ltRows||[]).find(x=>x.id==='LT-HEAD')||{}).body||'【有肌訓練 貼心提醒】');
+  const txt=[head,kind,'',ltFill(body,id)].join('\n');
   showModal(`<div class="modal-title">預覽（範例資料）</div>
     <div class="lt-preview">${txt.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
     <div style="font-size:11.5px;color:var(--t3);margin-top:8px;line-height:1.7;">＊會員那一則另外會自動加上一行「這是系統自動發送的訊息…」，不佔這裡的內容。</div>
@@ -51020,6 +51109,17 @@ function ltToggle(id){
   const card=document.getElementById('lt-on-'+id); if(!card) return;
   const box=card.closest('.lt-card'); if(box) box.classList.toggle('lt-off', !card.checked);
 }
+/* 共同抬頭（2026-08-23）：與各通知的內容分開存，因為它不屬於任何一種通知。 */
+async function ltSaveHead(){ return onceAct('ltsavehead', async()=>{
+  const r=(window._ltRows||[]).find(x=>x.id==='LT-HEAD'); if(!r){ showToast('找不到抬頭設定'); return; }
+  const v=((document.getElementById('lt-head')||{}).value||'').trim();
+  if(!v){ showToast('抬頭不能空白'); return; }
+  try{
+    await dbPut('line_templates',{...r, body:v, updated_at:new Date().toISOString(), updated_by:SESSION.id});
+    showToast('已儲存，下一次排程就用新的抬頭');
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('儲存失敗：'+dbFriendlyError(e)); }
+}); }
 async function ltSave(id){ return onceAct('ltsave:'+id, ()=>_ltSave(id)); }
 async function _ltSave(id){
   const r=(window._ltRows||[]).find(x=>x.id===id); if(!r){ showToast('找不到這個範本'); return; }

@@ -37,7 +37,7 @@ ok('★ 點標籤插入變數（沿用合約範本那一支的作法）',
    /function ltInsertVar\(id,v\)\{/.test(src)
    && /ta\.value=ta\.value\.slice\(0,s\)\+tag\+ta\.value\.slice\(e\);/.test(src));
 ok('★★ 預覽要連抬頭一起畫，不然看不出實際長相',
-   /const txt=\['【有肌訓練 自動訊息】',kind,'',ltFill\(body,id\)\]\.join\('\\n'\);/.test(src));
+   /const txt=\[head,kind,'',ltFill\(body,id\)\]\.join\('\\n'\);/.test(src));
 ok('　　預覽用範例資料填一遍（與 Edge Function 同一套純字串取代）',
    /function ltFill\(body, id\)\{/.test(src)
    && /s=s\.split\('\{\{'\+k\+'\}\}'\)\.join\(demo\);/.test(src));
@@ -71,6 +71,20 @@ ok('★★ 停用的種類整組不進收件人清單',
 ok('★ debug 模式回傳目前的範本開關（試算時看得出來哪一種被關掉）',
    /templates: Object\.keys\(tpl\)\.map\(k => \(\{ id: k, enabled: tpl\[k\]\.enabled \}\)\)/.test(dr)
    && /templates: Object\.keys\(tpl\)\.map\(k => \(\{ id: k, enabled: tpl\[k\]\.enabled \}\)\)/.test(pd));
+
+console.log('\n⑤-2 共同抬頭也可編輯（LT-HEAD）');
+ok('★★ 抬頭搬進範本表 —— 這行字半個月改了三次，寫死等於每次都要重新部署兩支 Edge Function',
+   /\('LT-HEAD','共同抬頭（每則訊息的第一行）','', '【有肌訓練 貼心提醒】', true\)/.test(mig)
+   && /const HEAD = \(tpl\['LT-HEAD'\] && tpl\['LT-HEAD'\]\.body\.trim\(\)\) \|\| HEAD_DEFAULT/.test(pd)
+   && /const HEAD = \(tpl\['LT-HEAD'\] && tpl\['LT-HEAD'\]\.body\.trim\(\)\) \|\| HEAD_DEFAULT/.test(dr));
+ok('★ 它不是一種通知：獨立一張卡，不進四種通知的迴圈',
+   /const headRow=rows\.find\(r=>r\.id==='LT-HEAD'\)\|\|null;/.test(src)
+   && /rows=rows\.filter\(r=>r\.id!=='LT-HEAD'\);/.test(src)
+   && /async function ltSaveHead\(\)\{/.test(src));
+ok('　　預覽吃畫面上那一格（還沒存也要看得到改完的樣子）',
+   /const head=\(\(document\.getElementById\('lt-head'\)\|\|\{\}\)\.value\|\|''\)\.trim\(\)/.test(src));
+ok('　　抬頭不能存空白（每則訊息的第一行不能是空的）',
+   /if\(!v\)\{ showToast\('抬頭不能空白'\); return; \}/.test(src));
 
 console.log('\n⑥ 新表該做的事（見 CLAUDE.md）');
 ok('★★ 掛 change_log 觸發器（不然前端增量同步看不到它的變動）',
