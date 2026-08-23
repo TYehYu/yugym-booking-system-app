@@ -9889,8 +9889,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2230';
-const APP_VERSION_LABEL='v260823.2230';
+const APP_VERSION = '260823.2252';
+const APP_VERSION_LABEL='v260823.2252';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10052,7 +10052,24 @@ function dbCacheClear(store){
   // 會員端場地佔用快取跟著 bookings 一起失效（fetchDayOccupancy，定義在場地區塊）
   if(list.some(s=>tbl(s)==='bookings')){ try{ occCacheClear(); }catch(_){} }
 }
+/* 逐表量測（2026-08-23）——使用者回報「開個表 17 秒」，而分段計時指出 16.9 秒全在
+   「抓那八張表」。要知道是哪一張、以及是「網路慢」還是「筆數多」，只能逐表記。
+   記在 window._dbStat 裡，開 console 打 dbStat() 就會印成表。
+   ⚠ 只記數字，不改任何行為；量完該拆的拆完就可以移除。 */
+window._dbStat=[];
+function dbStat(){
+  const rows=(window._dbStat||[]).slice(-40);
+  try{ console.table(rows); }catch(_){ console.log(rows); }
+  const tot=rows.reduce((s,r)=>s+r.ms,0), kb=rows.reduce((s,r)=>s+r.kb,0);
+  console.log(`合計 ${rows.length} 次抓取・${(tot/1000).toFixed(1)}s・${(kb/1024).toFixed(1)}MB`);
+  return rows;
+}
 async function _dbGetAllFresh(store){
+  const _statT=Date.now();
+  const _statPush=(rows,bytes)=>{ try{
+    window._dbStat.push({表:tbl(store), 列:rows, kb:Math.round(bytes/1024), ms:Date.now()-_statT});
+    if(window._dbStat.length>200) window._dbStat.shift();
+  }catch(_){} };
   /* 分頁改「波次並行」（2026-07-20 LAG 對策）：原逐頁序抓，大表（tickets 2,229＝3 頁）
      要 3 個序列往返；改為第 1 頁確認有續頁後、一次並行預抓 3 頁，罕見的超大表才需第二波。 */
   const PAGE=1000, WAVE=3;
@@ -10081,7 +10098,7 @@ async function _dbGetAllFresh(store){
   if(_sel==='*' && first && first.data && first.data[0]) leanLearn(store, first.data[0]);
   if(first.error) throw dbFriendlyError(first.error, store, '讀取');
   let out=first.data||[];
-  if(out.length<PAGE) return out;
+  if(out.length<PAGE){ _statPush(out.length, JSON.stringify(out).length); return out; }
   let from=PAGE;
   for(;;){
     const rs=await Promise.all(Array.from({length:WAVE},(_,i)=>q(from+i*PAGE)));
@@ -10095,6 +10112,7 @@ async function _dbGetAllFresh(store){
     if(done) break;
     from+=WAVE*PAGE;
   }
+  _statPush(out.length, JSON.stringify(out).length);
   return out;
 }
 /* ── SWR 取用：偷看快取，不發請求（2026-07-23 使用者回報「桌機導覽列切回首頁會 LAG」）──
@@ -10140,7 +10158,9 @@ function dbPeek(store,maxAge){
 function tableSigs(){
   if(_sigPromise && Date.now()-_sigAt<3000) return _sigPromise;   // 同一次換頁共用一支
   _sigAt=Date.now();
+  const _t0=Date.now();
   _sigPromise=sb.rpc('fn_table_sigs')
+    .then(r=>{ try{ window._dbStat.push({表:'fn_table_sigs', 列:0, kb:0, ms:Date.now()-_t0}); }catch(_){} return r; })
     .then(r=>(r && !r.error && r.data && typeof r.data==='object') ? r.data : null)
     .catch(()=>null);
   return _sigPromise;
@@ -38318,6 +38338,7 @@ async function openPersonProfile(kind, id, backPage){
      寫在遮罩文字與 console 上 —— 與其猜是哪一段，不如讓它自己說。
      ⚠ 只加量測，不改任何載入邏輯；量完就知道要往哪裡優化。 */
   const _t0=Date.now(); const _mark={};
+  const _statFrom=(window._dbStat||[]).length;   // 這一次操作抓了哪些表（見 dbStat()）
   const _busy=uiBusy('讀取資料中…');
   const _say=t=>{ const el=document.getElementById('ui-busy');
     const sp=el&&el.querySelector('.uib-box span:last-child'); if(sp) sp.textContent=t; };
@@ -38350,8 +38371,16 @@ async function openPersonProfile(kind, id, backPage){
        使用者不必開 devtools 就能回報「卡在哪一段」。 */
     const _tot=Date.now()-_t0;
     const _brk=Object.entries(_mark).map(([k,v])=>`${k} ${(v/1000).toFixed(1)}s`).join('・');
-    try{ console.log(`[openPersonProfile] 共 ${(_tot/1000).toFixed(2)}s　${_brk}`); }catch(_){}
-    if(_tot>1200){ try{ showToast(`讀取 ${(_tot/1000).toFixed(1)} 秒：${_brk}`, 6000); }catch(_){} }
+    /* 這一次真的去抓了哪幾張表、各花多久（沒抓的＝命中快取，不會出現在這裡）——
+       這一行就能分辨「快取沒生效」與「某一張表特別慢」。 */
+    const _got=(window._dbStat||[]).slice(_statFrom)
+      .sort((a,b)=>b.ms-a.ms).map(r=>`${r.表} ${(r.ms/1000).toFixed(1)}s/${r.kb}KB`);
+    try{ console.log(`[openPersonProfile] 共 ${(_tot/1000).toFixed(2)}s　${_brk}`, _got); }catch(_){}
+    if(_tot>1200){
+      const _top=_got.length?`　→ ${_got.slice(0,3).join('、')}${_got.length>3?` …共 ${_got.length} 張`:''}`
+                            :'　→ 全部命中快取（那就不是抓資料慢）';
+      try{ showToast(`讀取 ${(_tot/1000).toFixed(1)} 秒：${_brk}${_top}`, 9000); }catch(_){}
+    }
   }
 }
 // 對照表與摘要數字
