@@ -79,22 +79,34 @@ ok('★★ 刻度落在「自己的課／其他人的課」中間那條分隔線
    +'（使用者：「時間線改到左邊課卡分隔線這一欄」）',
    /\.cag-gtop \.cag-gline-label\{left:calc\(\(100% - 5px\) \* var\(--cagsplit,0\.3333\) \+ 2\.5px\);\}/.test(src));
 
-console.log('\n④-2 一日行事曆：自己的課卡跟教練們等寬');
-ok('★★ mine 不再是兩格寬（使用者：「幫我改成跟教練們一樣，因為課卡內容已經收斂了」）',
-   !/\.cag-wk-col\.cag-col-mine\{flex:2 1 0;\}/.test(src)
-   && /\.cag-wk-col\.cag-col-mine\{flex:1 1 0;\}/.test(src));
-ok('★★ mine 一格、右側佔「當天最多同時重疊幾張」格 —— 兩邊的一格才等寬',
-   /const _restLanes=Math\.max\(maxLanes,1\);/.test(src)
-   && /style="height:\$\{gridH\}px;flex:1 1 0;"/.test(src)
-   && /style="height:\$\{gridH\}px;flex:\$\{_restLanes\} 1 0;"/.test(src));
-ok('★★ maxLanes 要跑完所有重疊群組才知道 —— 欄寬在迴圈之後才寫',
+console.log('\n④-2 一日行事曆欄寬 4:3:3');
+/* 沿革：0726 mine 2 : rest 4 → 0823 一修 mine 1 : rest maxLanes（跟教練等寬，但別人課一多
+   我的就被壓縮）→ 0823 定版 4:6 兩個都是常數，我的課卡寬度完全不隨張數變。 */
+ok('★★ mine 與 rest 都是常數（我的課卡維持固定大小，不隨當天張數變）',
+   /const CAG_MINE_F=4, CAG_REST_F=6;/.test(src)
+   && /style="height:\$\{gridH\}px;flex:\$\{CAG_MINE_F\} 1 0;"/.test(src)
+   && /style="height:\$\{gridH\}px;flex:\$\{CAG_REST_F\} 1 0;"/.test(src));
+ok('　　CSS 保底值與行內值一致（4:6），不要一邊改一邊沒改',
+   /\.cag-wk-col\.cag-col-mine\{flex:4 1 0;\}/.test(src)
+   && /\.cag-wk-col\.cag-col-rest\{flex:6 1 0;\}/.test(src));
+ok('★★ 右側那 6 格由 N 條 lane 均分 → 兩張就是 4:3:3、張數愈多愈窄',
    /let maxLanes=0;/.test(src)
    && /if\(unit>maxLanes\) maxLanes=unit;/.test(src)
-   && /maxLanes 要先跑完所有群組才知道/.test(src));
-ok('★★ 分隔線位置跟著欄寬走：比例寫成 --cagsplit 掛在 .cag-weekgrid 上',
-   /--cagsplit:\$\{\(1\/\(1\+Math\.max\(_cagRestLanes,1\)\)\)\.toFixed\(4\)\};/.test(src)
-   && /寫死 33% 會在別人課少的日子飄到課卡上/.test(src)
+   && /2 張＝3 格（＝標題說的 4:3:3）/.test(src));
+ok('★★ 分隔線比例跟著欄寬（0.4）寫成 --cagsplit 掛在 .cag-weekgrid 上',
+   /const _cagSplit=0\.4;/.test(src)
+   && /--cagsplit:\$\{_cagSplit\};/.test(src)
    && /\.cag-weekgrid\{position:relative;display:flex;gap:5px;padding:0 10px;\}/.test(src));
+ok('★★ 窄到放不下橫排姓名 → 直書、只留姓名',
+   /@container \(max-width: 62px\)\{/.test(src)
+   && /writing-mode:vertical-rl;text-orientation:upright;/.test(src)
+   && /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-sub,\s*\n\s*\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(src));
+ok('★★ 用 @container 不是 @media —— 決定要不要轉的是這張卡多寬，不是螢幕多寬',
+   /⚠ 用 @container 而不是 @media：決定要不要轉的是\*\*這張卡多寬\*\*，不是螢幕多寬。/.test(src)
+   && /\.cal-ev\.cal-ev-std\{container-type:size;\}/.test(src));
+ok('★★ 管理員專屬的欄寬覆蓋退場（管理員跟教練統一），分隔線改成兩邊共用',
+   !/\.role-admin \.cag-wk-col\.cag-col-mine\{flex:1\.5 1 0;/.test(src)
+   && /\.cag-wk-col\.cag-col-mine\{border-right:1\.5px solid rgba\(120,110,95,\.35\);padding-right:4px;\}/.test(src));
 /* showTime 這個名字別處（.wkx-* 那組週檢視）也有，只查一日檢視 renderCard 那一段 */
 const _dayCard=src.slice(src.indexOf("  const renderCard=(b,layer,dim,pos)=>{"),
                          src.indexOf("  // 每欄整點槽背景（淡化方塊，標示每個整點時段範圍）"));
@@ -179,8 +191,22 @@ ok('★★ 下方列表每列一個白框（外圈米底、每列白底圓角）
    && /\.ov-i\{display:flex;align-items:center;gap:10px;padding:10px 11px;\s*\n\s*background:#fff;border:1px solid var\(--bd\);border-radius:10px;\}/.test(src));
 
 console.log('\n⑩ 支出登記入口');
-ok('★★ 報表頁翻頁列右邊一顆 [支出]，月份跟著翻頁走',
-   /<button class="btn btn-ghost btn-sm dash-exp" onclick="openExpensePick\('\$\{ym\}'\)">支出<\/button>/.test(src));
+ok('★★ 報表頁翻頁列右邊一顆紅底 [＋ 支出]，月份跟著翻頁走',
+   /<button class="btn btn-sm dash-exp" onclick="openExpensePick\('\$\{ym\}'\)">＋ 支出<\/button>/.test(src)
+   && /\.dash-exp\{flex:0 0 auto;margin-left:auto;\s*\n\s*background:var\(--red,#7A2E28\);color:#fff;/.test(src));
+ok('　　挑選視窗的兩顆按鈕是白底（米底彈窗上再鋪米底＝看不出來能按）',
+   /\.exp-pick\{[^}]*background:#fff;/.test(src)
+   && /彈窗本身就是米底，按鈕再用 var\(--card2\) 等於米底疊米底/.test(src));
+ok('★★ 手機上「其他支出」一列拆兩行（日期整排＋刪除靠右上／項目＋金額一排）',
+   /\.fx-3 \.fx-row\{grid-template-columns:1fr 96px 30px;row-gap:6px;padding:9px 10px;\}/.test(src)
+   && /\.fx-3 \.fx-head\{display:none;\}/.test(src)
+   && /連標題「項目」都被折成兩行/.test(src));
+ok('★★ 底部「取消」改「返回」，回到固定／其他的挑選視窗（方便來回對照）',
+   /<button class="btn btn-ghost" onclick="fxBack\(\)">返回<\/button>/.test(src)
+   && /function fxBack\(\)\{/.test(src)
+   && /openExpensePick\(m\);/.test(src));
+ok('　　返回一樣不寫入，草稿丟掉（沒按儲存就不算數）',
+   /window\._fxDraft=null;\s*\n\s*closeModal\(\);\s*\n\s*openExpensePick\(m\);/.test(src));
 ok('★★ 跳一個視窗先挑固定／其他，再進既有的 openExpenseEditor（不另開一份資料）',
    /function openExpensePick\(ym\)\{/.test(src)
    && /openExpenseEditor\('\$\{month\}',true\)/.test(src)
