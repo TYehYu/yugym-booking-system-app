@@ -9889,8 +9889,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2200';
-const APP_VERSION_LABEL='v260823.2200';
+const APP_VERSION = '260823.2202';
+const APP_VERSION_LABEL='v260823.2202';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10043,8 +10043,25 @@ async function _dbGetAllFresh(store){
   const PAGE=1000, WAVE=3;
   /* 精簡欄位（2026-08-04）：學到了就用，沒學到就照舊 select('*') 並趁這次學起來。
      整段流程對呼叫端完全透明，最壞情況＝與原本一模一樣。 */
-  const _sel=_leanSel.get(tbl(store))||'*';
-  const q=f=>sb.from(tbl(store)).select(_sel).range(f, f+PAGE-1);
+  /* ⚠ 先探一列再決定要抓哪些欄位（2026-08-23，使用者回報「首頁點今日營收名單讀取好久好久」）——
+     _leanSel 是「本 session 學到才有」，而它是**從整表首抓的第一列**學來的：
+     等於每次重新整理之後的第一次整表讀取，一定先把肥欄位整包載一次才學得起來。
+     contracts 實測：56 列共 1,366 kB，其中 signature（簽名圖 base64）就佔 1,176 kB —— 
+     LEAN_DROP 丟掉的那三欄是全表的 99.3%。所以「第一次開會員資料」要付 1.4MB，
+     而今天改版二十幾次、每次重新整理都算新 session，就變成每次都付一遍。
+     改成：有 LEAN_DROP 的表若還沒學過，先用 limit(1) 探一列（就一列，便宜）學欄位，
+     再用精簡欄位抓整表。多一個小往返，換掉一次肥載入。
+     ⚠ 不做跨 session 記住：欄位清單記死了，日後資料庫加欄位會靜靜抓不到（比慢更糟）。
+       每個 session 重新學一次，新欄位自動被涵蓋。 */
+  const _tk=tbl(store);
+  if(LEAN_DROP[_tk] && !_leanSel.has(_tk)){
+    try{
+      const probe=await sb.from(_tk).select('*').limit(1);
+      if(probe && !probe.error && probe.data && probe.data[0]) leanLearn(store, probe.data[0]);
+    }catch(_){}   // 探測失敗就照舊 select('*')，行為與改版前相同
+  }
+  const _sel=_leanSel.get(_tk)||'*';
+  const q=f=>sb.from(_tk).select(_sel).range(f, f+PAGE-1);
   const first=await q(0);
   if(_sel==='*' && first && first.data && first.data[0]) leanLearn(store, first.data[0]);
   if(first.error) throw dbFriendlyError(first.error, store, '讀取');

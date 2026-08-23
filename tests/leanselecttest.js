@@ -40,9 +40,19 @@ console.log('\n② 欄位清單是「學」來的，不是寫死的');
   ok('★ 只在「有東西可扣」時才記（沒學到就照舊全欄位）',
      /cols\.length && cols\.length<Object\.keys\(row\)\.length/.test(f));
   const g=grabFn('_dbGetAllFresh');
-  ok('★ 沒學到之前用 select(\'*\')，且趁首抓學起來',
-     /const _sel=_leanSel\.get\(tbl\(store\)\)\|\|'\*';/.test(g)
-     && /if\(_sel==='\*' && first && first\.data && first\.data\[0\]\) leanLearn\(store, first\.data\[0\]\);/.test(g));
+  /* 0823：改成「先探一列再抓整表」。原本是「首抓整表順便學」，等於每個 session 的
+     第一次整表讀取一定先付一次肥載入（contracts 的 signature 佔全表 99.3%）。 */
+  ok('★★ 有 LEAN_DROP 的表若還沒學過，先用 limit(1) 探一列學欄位，再用精簡欄位抓整表',
+     /if\(LEAN_DROP\[_tk\] && !_leanSel\.has\(_tk\)\)\{/.test(g)
+     && /const probe=await sb\.from\(_tk\)\.select\('\*'\)\.limit\(1\);/.test(g)
+     && /if\(probe && !probe\.error && probe\.data && probe\.data\[0\]\) leanLearn\(store, probe\.data\[0\]\);/.test(g)
+     && /const _sel=_leanSel\.get\(_tk\)\|\|'\*';/.test(g));
+  ok('　　探測失敗就照舊 select(\'*\')，行為與改版前相同',
+     /\}catch\(_\)\{\}   \/\/ 探測失敗就照舊 select\('\*'\)，行為與改版前相同/.test(g));
+  ok('★★ 不跨 session 記住欄位清單 —— 記死了，日後加欄位會靜靜抓不到（比慢更糟）',
+     /不做跨 session 記住：欄位清單記死了，日後資料庫加欄位會靜靜抓不到（比慢更糟）/.test(src));
+  ok('　　整表首抓仍會學（探測拿不到列、或表是空的時候的退路）',
+     /if\(_sel==='\*' && first && first\.data && first\.data\[0\]\) leanLearn\(store, first\.data\[0\]\);/.test(g));
   ok('　　只有列在 LEAN_DROP 的表會精簡（其他表完全不變）',
      /const key=tbl\(store\), drop=LEAN_DROP\[key\];\n\s*if\(!drop \|\| !row \|\| _leanSel\.has\(key\)\) return;/.test(f));
 }
