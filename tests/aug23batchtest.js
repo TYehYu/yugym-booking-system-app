@@ -220,8 +220,17 @@ console.log('\n⑪ 手機行事曆課卡');
 ok('★★ 不再標示簽到；「假」留著（那是課的狀態，不是簽到與否）',
    /return k==='leave'\?'<span class="evc-check evc-leave" title="全員請假">假<\/span>':'';/.test(src));
 ok('★★ 會員姓名靠左置中、教練名稱靠右靠下',
-   /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-txt\{align-items:flex-start;justify-content:center;\s*\n\s*text-align:left;padding:2px 4px 13px 6px;\}/.test(src)
+   /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-txt\{align-items:flex-start;justify-content:center;\s*\n\s*text-align:left;padding:2px 4px 2px 6px;\}/.test(src)
    && /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-coach\{position:absolute;right:4px;bottom:3px;/.test(src));
+ok('★★ 姓名要落在整張卡的正中央 —— 下內距不能替教練名預留（會變成偏上）',
+   /拿掉預留 → 姓名落在整張卡的正中央/.test(src));
+ok('★★ 直式時姓名貼左緣、垂直置中（align-items:flex-start＝水平靠左）',
+   /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-txt\{align-items:flex-start;justify-content:center;\s*\n\s*text-align:left;padding:3px 2px;\}/.test(src)
+   && /直書時 align-items 管的是水平位置/.test(src));
+ok('★★ 「額滿／教室」背景帶寬度跟著欄寬（--cagsplit）走，不再寫死 25%',
+   /\.cag-vrow,\.cag-vlab\{left:10px;right:auto;width:calc\(\(100% - 25px\) \* var\(--cagsplit,0\.4\)\);\}/.test(src)
+   && !/\.role-admin \.cag-vrow\{/.test(src)
+   && /left:0 是 \.cag-weekgrid 的 padding box 外緣，比內容區左緣多 10px/.test(src));
 ok('★★ 教練名要脫離文字流才能「姓名置中」＋「教練靠下」並存 —— 理由寫在原地',
    /要嘛用 margin-top:auto\s*\n\s*把姓名擠到頂端（就不是「置中」了），要嘛姓名置中就壓不到底部/.test(src));
 ok('　　只作用在手機行事曆課卡（.cag-wk-col 底下），不牽動桌機與手機首頁',
