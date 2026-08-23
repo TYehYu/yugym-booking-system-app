@@ -3023,6 +3023,8 @@ tr:hover td{background:var(--card2);}
   background:#fdf4f3;box-shadow:inset 0 0 0 1px rgba(127,3,3,.18);}
 .adp-field.adp-field-bad:hover{border-color:var(--danger,#7F0303);}
 .adp-badnote{font-size:11.5px;line-height:1.7;color:var(--danger,#7F0303);margin-top:6px;font-weight:600;}
+/* 可以做、但要知道（2026-08-23 非營業時間）——紅色留給「不能做」，金色是次要提示 */
+.adp-warnnote{font-size:11.5px;line-height:1.7;color:var(--gold-d,#9a6a1e);margin-top:6px;font-weight:600;}
 .adp-field .adp-ph{color:var(--t3);}
 .adp-field .adp-ic{flex:none;color:var(--t3);font-size:12px;}
 /* ══ 滾輪樣式（2026-08-21 使用者附圖：iOS 式滾輪）══
@@ -9771,8 +9773,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.1926';
-const APP_VERSION_LABEL='v260823.1926';
+const APP_VERSION = '260823.1951';
+const APP_VERSION_LABEL='v260823.1951';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13270,7 +13272,9 @@ const TK_POCKETS={
     expiryDays:7,
     multiPerBooking:true,     // 120 分鐘＝扣 2 點（圓形卡畫 2 顆同日期）
     timeRestricted:true,      // 友善點限平日、18:00 前上完（tkTimeOk）
-    businessHoursOnly:true,   // 會員自助預約限營業時間內
+    /* 會員自助預約限營業時間內。2026-08-23 起這個旗標也是「非營業時間要問誰來開門」
+       的唯一來源（見 bkOffHoursSelfOnly）—— 客人自己來練，店裡沒人就進不去。 */
+    businessHoursOnly:true,
   },
   massage:{ key:'massage', label:'運動按摩', unit:'堂', isCourse:true,
     stampFrom:['direct','infer'],
@@ -20916,6 +20920,17 @@ async function validateBooking(bk,date,time,duration){
     }
   }
 
+  /* 0c) 自主訓練不得由會員自己排在非營業時間（2026-08-23 使用者指示：「限制自主訓練
+     不能預約非營業時間使用 除非是櫃檯以上幫忙預約」，同日二修講明理由：「如果讓會員
+     自己預約非營業時間 那誰要來開門？可是如果教練有特別原因自己願意提早來幫學員開門
+     可以通融」）——所以擋的是「沒有人答應要來開門」，不是職級。
+     ⚠ 放在 validateBooking 而不是各入口：建立預約、連續預約、待簽約卡位、空堂卡位、
+       拖曳改期、調整日期／時間、改課種 …… 全部經過這裡，這是唯一擋得住所有路的地方。
+       （會員自助另有 DB 的 fn_biz_hours，兩層都留著。）
+     ⚠ 只擋「會員自己約的自主訓練」：員工（含教練）代排代表有人會到場開門，放行但要確認；
+       教練課與團體課由使用者定案「有條件可以約」，一律走提示＋確認那條路（confirmOffHours）。 */
+  { const _selfBlk=bkSelfOffHoursBlock(bk.category, date, time, dur); if(_selfBlk) return _selfBlk; }
+
   /* 會員端 RLS 只讀得到自己的預約 → dbGetAll 等於空行事曆，場地/衝堂會全數誤判可約
      （2026-07-26 會員端 7/27 10:00 超賣的真正原因）。改走匿名佔用 RPC（security definer，
      只回時間/課種/場地/教練檔期；member_id 只有自己那筆帶回）。員工端維持原路徑。 */
@@ -21420,6 +21435,14 @@ function confirmCalMove(b,od,ot,odur, nd,nt,ndur, onYes){
         <div style="color:var(--green);font-size:11px;font-weight:700;margin-bottom:3px;">新時間（改成這個）</div>
         <div style="font-size:15px;font-weight:800;color:var(--text);font-family:var(--num);">${fmtRange(nd,nt,ndur)}</div></div>
       ${venueMoveNote(b)}
+      ${/* 改到營業時間外（2026-08-23 使用者定案：「員工可越線但要說明原因」）——
+           這張卡本來就要按「確認修改」，所以不再多跳一層，原因直接寫在卡上。
+           金色＝可以做但要知道（紅色留給上面那格「原時間將空出」）。
+           ⚠ 自主訓練不會走到這裡：validateBooking 在更前面就擋掉了。 */''}
+      ${(()=>{ const _oh=bizOffHoursNote(nd,nt,ndur); return _oh
+        ? `<div style="background:rgba(180,138,86,.10);border:1px solid rgba(180,138,86,.45);border-radius:9px;
+             padding:9px 12px;font-size:12.5px;line-height:1.8;color:var(--gold-d,#9a6a1e);font-weight:600;">
+             ${escH(_oh)}<br><span style="font-weight:500;color:var(--t2);">${escH(bkOffHoursAsk(b&&b.category))}</span></div>` : ''; })()}
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal();window._calNo()">取消</button>
@@ -23551,6 +23574,7 @@ async function bkRefreshPlanFilter(){
   /* 日期／時間一改就重算「目前選的課種還能不能約」（2026-08-23 使用者指示）——
      這支本來就掛在兩個欄位的 onchange 上，不必再多綁一個監聽。 */
   try{ bkTypeTimeWarn(); }catch(_){}
+  try{ bkOffHoursWarn(); }catch(_){}
   const tid=(document.getElementById('bk-type')||{}).value||'';
   window._bkPlanIds=null; window._bkPlanName='';
   try{
@@ -24693,6 +24717,8 @@ async function submitPendingHold(){
     if(!rc.dows.length){ showToast('請勾選至少一個星期'); return; }
     if(!(rc.count>0)){ showToast('請填寫預約次數'); return; }
   }
+  /* 非營業時間（2026-08-23 定案）：卡位也是建立預約的一種，同樣要說明原因。 */
+  if(!(await confirmOffHours(date, time, 60, '取消卡位'))) return;
   const slots=rc.on
     ? buildRecurringSlots(date,time,rc.dows,rc.times,Math.min(rc.count,RECUR_MAX),ymd(addDays(parseYmd(date),370)))
     : [{date,time}];
@@ -25030,6 +25056,14 @@ async function _submitBookingInner(){
   const{type_id,t,coach_id,date,time}=_bkWizard;
   const isGroup = t.category==='小班肌力';
   const isTrial = t.category==='體驗';
+
+  /* 非營業時間（2026-08-23 使用者定案）——擺在最前面，三種課別（體驗／團課／教練課）
+     共用這一個入口，寫一次就三條路都有。
+     ・自主訓練：直接擋（validateBooking 也會擋，這裡先講一次是為了不要讓人填完才被退）
+     ・其餘課別：說明原因，由操作者決定 */
+  { const _selfBlk=bkSelfOffHoursBlock(t&&t.category, date, time, 60);
+    if(_selfBlk){ showToast(_selfBlk, 5000); return; } }
+  if(!(await confirmOffHours(date, time, 60, '取消預約', t&&t.category))) return;
 
   // ── 體驗課：留手機→建/綁正式會員；沒留手機→只記體驗（member_id=null，2026-07-25 放寬）。
   //    2026-07-21 曾把手機設必填（會員帳號＝手機），但有些客人不留電話，故改選填：
@@ -29515,6 +29549,24 @@ function bkTypeTimeWarn(){
     tip.textContent=`這個時段不能約「${t.name||t.category||'這個課程'}」（${bad}）—— 請重新選擇課程`;
   }else if(tip){ tip.remove(); }
 }
+/* 選到營業時間外 → 時間欄底下寫一句金色說明（2026-08-23 使用者定案：
+   「員工可越線但要說明原因」）——不擋、不藏，讓人在按送出之前就看見。
+   自主訓練由會員自己約時是硬擋，那條在 validateBooking；這裡只負責「說」。
+   與 bkTypeTimeWarn 同一套作法（同樣掛在日期／時間的 onchange 上）。 */
+function bkOffHoursWarn(){
+  const btn=document.getElementById('bk-time-btn'); if(!btn) return;
+  const d=(document.getElementById('bk-date')||{}).value||'';
+  const tm=String((document.getElementById('bk-time')||{}).value||'').slice(0,5);
+  const tid=String((document.getElementById('bk-type')||{}).value||'');
+  const t=(window._bkTypes||[]).find(x=>x&&x.id===tid);
+  const note=(d&&tm)?bizOffHoursNote(d,tm,60):'';
+  let tip=document.getElementById('bk-time-oh');
+  if(note){
+    if(!tip){ tip=document.createElement('div'); tip.id='bk-time-oh'; tip.className='adp-warnnote';
+      btn.parentNode.appendChild(tip); }
+    tip.textContent=`${note}　${bkOffHoursAsk(t&&t.category)}`;
+  }else if(tip){ tip.remove(); }
+}
 /* 課程挑選（2026-08-21 使用者：「課程跟時間 也改成我們自己的風格」）——
    清單就是建立預約既有的 activeTypes（存在 window._bkTypes），
    每一列帶課種色的小方塊，與課卡上的顏色語彙一致。 */
@@ -29558,6 +29610,7 @@ function ashTypePick(tid){
   ashDateClose();
   pickBkType(tid);
   try{ bkTypeTimeWarn(); }catch(_){}
+  try{ bkOffHoursWarn(); }catch(_){}   /* 換課種也要重寫那句話（自主訓練問的是「誰來開門」） */
 }
 /* 通用挑選欄位（2026-08-21 使用者：「課程點選跳視窗選擇」）——
    跟課程挑選同一個殼，差別只在清單由呼叫端給。用在「選項不多、但原生 <select>
@@ -42790,6 +42843,87 @@ function bizOpenMin(ds){
 }
 /* 快速預約的最後一格＝打烊前 60 分（一堂課的長度） */
 function quickBookLastMin(ds){ return bizCloseMin(ds)-60; }
+/* ══ 非營業時間（2026-08-23 使用者定案）══════════════════════════
+   起因：使用者在桌機行事曆點 21:30 建得成預約（平日 22:00 打烊，這堂上到 22:30），
+   問「這是不是只有櫃檯以上的桌機才做得到」。查下來不是權限設計，是兩個漏洞疊在一起：
+   ① 行事曆的「已打烊」灰格判斷是 min>=打烊 —— 只比開始時間，不算下課時間，
+      所以每一天都固定多開放半小時（週六到 20:30、週日到 14:30）。
+   ② validateBooking 與後端 fn_create_booking 完全沒有營業時間這條規則 ——
+      格子擋不擋只是畫面，只要能把時間送進表單就一定建得成：教練端、七日檢視、
+      一週檢視、連續預約、拖曳改期全部通。真正被擋住的只有會員自助（DB 的 fn_biz_hours）。
+   使用者定案兩條：
+   ・「員工可越線但要說明原因」→ 教練課／團體課／體驗／按摩：不藏、不擋，
+     建立預約表單即時顯示金色副標，送出與改時間前再確認一次。
+   ・「限制自主訓練不能預約非營業時間使用，除非是櫃檯以上幫忙預約」→ 自主訓練硬擋，
+     擋在 validateBooking（見那支的 0c）—— 那是所有入口唯一的共同關卡。
+   ⚠ 判斷用「整堂課要落在營業時間內」（開始 ≥ 開店 且 結束 ≤ 打烊），
+     不是只看開始時間 —— 那正是這次的漏洞成因。 */
+function bizHoursLabel(ds){
+  const d=(typeof parseYmd==='function'&&parseYmd(ds))||new Date(TODAY);
+  const dw='日一二三四五六'[d.getDay()]||'';
+  return `週${dw} ${minToTime(bizOpenMin(ds))}–${minToTime(bizCloseMin(ds))}`;
+}
+/* 這一堂有沒有落在營業時間外？有就回一句可直接顯示的話，沒有回空字串 */
+function bizOffHoursNote(ds, time, dur){
+  try{
+    const t=String(time||'').slice(0,5); if(!t) return '';
+    const st=timeToMin(t), en=st+(Number(dur)||60);
+    const open=bizOpenMin(ds), close=bizCloseMin(ds);
+    if(st>=open && en<=close) return '';
+    return st<open
+      ? `這堂 ${t} 開始，早於開店時間（${bizHoursLabel(ds)}）`
+      : `這堂會上到 ${minToTime(en)}，超過營業時間（${bizHoursLabel(ds)}）`;
+  }catch(_){ return ''; }
+}
+/* 自主訓練的硬規則（2026-08-23 二修，使用者把理由講明白了：
+     「因為如果讓會員自己預約非營業時間，那誰要來開門？可是如果教練有特別原因
+       自己願意提早來幫學員開門，可以通融」）——
+   所以這條線不是畫在「職級」上，是畫在「有沒有人會到場開門」上：
+   ・會員自己約 → 硬擋（沒有人答應要來開門，客人到了會吃閉門羹）
+   ・員工（櫃檯／管理員／教練）代排 → 放行，但要確認過「誰來開門」（見 confirmOffHours）
+     教練願意提早來幫學員開門是常有的事，不該被系統擋死。 */
+/* 「這個課別自己來就進不了門嗎」——問口袋，不要自己寫課別字串比較
+   （TK_POCKETS.self.businessHoursOnly；tests/pockettest.js 有棘輪擋散裝比較）。 */
+function bkOffHoursSelfOnly(cat){
+  try{ const p=bkPocket({category:String(cat||'')}, typeMapNow()); return !!(p&&p.businessHoursOnly); }
+  catch(_){ return false; }
+}
+function bkSelfOffHoursBlock(cat, ds, time, dur){
+  if(!bkOffHoursSelfOnly(cat)) return '';
+  if(!bizOffHoursNote(ds, time, dur)) return '';
+  if(!(SESSION && SESSION.role==='member')) return '';   // 員工代排＝有人會到場，放行
+  return `這個課別不能自己預約非營業時間（${bizHoursLabel(ds)}）—— 這個時間店裡沒有人開門。需要的話請洽櫃檯或你的教練協助安排`;
+}
+/* 越線前的確認。沿用 confirmVenueOverflow 那一套 Promise 包 showModal。
+   ⚠ 用金色不用紅色：品牌色強度 紅>金>綠，這是「可以做、但要知道」的次要提示，
+     不是錯誤（0821 定的顏色語意）。
+   ⚠ 自主訓練多問一句「誰來開門」—— 那是使用者定這條規則的真正理由，
+     不是流程上的客套話：客人自己來練，店裡沒人就進不去。 */
+function bkOffHoursAsk(cat){
+  return bkOffHoursSelfOnly(cat)
+    ? '這個時間店裡沒有人。要排的話，請先確認有教練或櫃檯會到場幫學員開門。'
+    : '確定要排嗎？排下去不會有其他阻擋，記得先跟教練確認會到場。';
+}
+function confirmOffHours(ds, time, dur, actLabel, cat){
+  return new Promise(resolve=>{
+    const note=bizOffHoursNote(ds, time, dur);
+    if(!note){ resolve(true); return; }
+    showModal(`<div class="modal-title">超過營業時間</div>
+      <div style="background:rgba(180,138,86,.10);border:1px solid rgba(180,138,86,.45);border-radius:9px;
+                  padding:11px 13px;margin:2px 0 10px;font-size:13px;line-height:1.85;color:var(--text);">
+        ${escH(note)}
+      </div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.8;margin-bottom:4px;">
+        ${escH(bkOffHoursAsk(cat))}
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal();window._ohNo&&window._ohNo()">${escH(actLabel||'取消')}</button>
+        <button class="btn btn-green" onclick="closeModal();window._ohYes&&window._ohYes()">仍要預約</button>
+      </div>`);
+    window._ohYes=()=>resolve(true);
+    window._ohNo=()=>resolve(false);
+  });
+}
 /* 表頭＋鈕（0819 收進模式列 → 2026-08-21 改回右下角浮動圓鈕）——一日＝展開可約時段層、一週＝開新增預約 */
 function admCalQuickAdd(){
   const nD=(Number(window._admCalDays)||1)===1?1:7;
@@ -42813,7 +42947,11 @@ function admwkSlot(e,ds){
   const r=e.currentTarget.getBoundingClientRect();
   const HH=46,S=8*60;
   let mm=S+Math.floor((e.clientY-r.top)/(HH/2))*30;
-  mm=Math.max(S,Math.min(21*60,mm));
+  /* 上限原本寫死 21:00，不分星期（2026-08-23 查營業時間漏洞時發現）——
+     週日 15:00 就打烊了，照樣點得到 21:00。改問同一份營業時間：打烊前一堂課。
+     ⚠ 只是「點到哪裡」的收斂，不是限制：要排打烊後的課，表單裡照樣選得到時間，
+       送出前會跳提示說明原因（confirmOffHours）。 */
+  mm=Math.max(S,Math.min(quickBookLastMin(ds),mm));
   if(ds===ymd(TODAY)){ const n=new Date(); if(mm<n.getHours()*60+n.getMinutes()){ showToast('過去的時段不能新增預約'); return; } }
   const t=String(Math.floor(mm/60)).padStart(2,'0')+':'+(mm%60?'30':'00');
   /* 點位方框（2026-08-19 使用者指示：要看得到點到哪個時段）——60 分預設長度的金色虛線框 */
@@ -46924,6 +47062,9 @@ async function _qbSubmitForm(){
     if(!f.dows.length){ showToast('請選重複星期'); return; }
     if(!(Number(f.count)>0)){ showToast('請填寫預約次數'); return; }
   }
+  /* 非營業時間（2026-08-23 定案）：這條路不經過 _submitBookingInner，要自己問一次。
+     這裡只建教練課，所以不必查自主訓練的硬規則。 */
+  if(!(await confirmOffHours(f.date, f.time, 60, '取消預約'))) return;
   qbShowProgress(0,0); // 立即回饋
   // 教練課找票（含友善教練課）：用 isPtTicket
   const ptFindTk=async(mid,ds)=>{
