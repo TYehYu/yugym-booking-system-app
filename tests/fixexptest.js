@@ -58,18 +58,23 @@ console.log('\n②-2 其他支出：多一個日期欄、不延續');
      /note:e\.note\|\|'', date:String\(e\.date\|\|''\)\.slice\(0,10\)\|\|defDate/.test(F));
   ok('★ 預設日期：這個月就用今天，不然用月初',
      /const defDate=\(String\(_today\)\.slice\(0,7\)===month\)\?_today:\(month\+'-01'\);   \/\/ 這個月就用今天，不然用月初/.test(F));
-  /* 2026-08-23：日期欄從原生 <input type=date> 換成自家 adp-field（short＝只寫 月/日）——
-     原生欄位的文字格式改不了，iOS 一律吐「2026年8月8日」，把整欄撐爆。 */
-  ok('★★ 畫面上多一欄日期（固定支出沒有），且只顯示 月/日',
-     /\$\{fx\?'':`<span class="fx-in fx-dwrap">\$\{ashDateField\('fxd'\+i, r\.date\|\|'', d\.month\+'-01', `fxSet\(\$\{i\},'date',this\.value\)`, \{short:true\}\)\}<\/span>`\}/.test(src)
-     && /\$\{fx\?'':'<span>日期<\/span>'\}/.test(src)
-     && /if\(short\) return `\$\{d\.getMonth\(\)\+1\}\/\$\{d\.getDate\(\)\}`;/.test(src));
+  /* 2026-08-23：日期欄從原生 <input type=date> 換掉（格式改不了，iOS 一律吐
+     「2026年8月8日」把整欄撐爆），二修再收成「只挑幾號」——
+     年月已經寫在視窗抬頭（使用者：「這邊已經是輸入 2026/8 月的支出了，只要看是幾號就好」）。 */
+  ok('★★ 畫面上多一欄日期（固定支出沒有），且只挑「幾號」',
+     /\$\{fx\?'':`<span class="fx-in fx-dwrap">\$\{ashOptField\('fxd'\+i, _dayOpts, r\.date\|\|'', '日期', `fxSet\(\$\{i\},'date',this\.value\)`\)\}<\/span>`\}/.test(src)
+     && /\$\{fx\?'':'<span>日期<\/span>'\}/.test(src));
+  ok('★★ 存進去的仍是完整 YYYY-MM-DD（expenses.date 是日期欄位，只存「號」會整組壞掉）',
+     /return \{v:`\$\{d\.month\}-\$\{dd\}`, label:`\$\{k\+1\} 日`\};/.test(src)
+     && /存進去的仍然是完整的 YYYY-MM-DD/.test(src));
+  ok('　　天數依當月算（不會出現 2 月 30 日）',
+     /const _dim=new Date\(Number\(Y\), Number\(M\), 0\)\.getDate\(\);/.test(src));
   ok('★ 標題與說明跟著換，並講明「不會帶到下個月」',
      /\$\{fx\?'固定支出設定':'其他支出'\}/.test(src)
      && /耗材、設備、修繕這種一次性的開銷。<b>不會<\/b>帶到下個月 —— 每個月各自登記各自的。/.test(src));
   /* ✕ 那一欄 0823 拿掉（改成向左滑出現「刪除」），所以各少一欄 */
   ok('★ 版面：其他支出三欄、固定支出兩欄',
-     /\.fx-3 \.fx-head,\.fx-3 \.fx-row\{grid-template-columns:120px 1fr 120px;\}/.test(src)
+     /\.fx-3 \.fx-head,\.fx-3 \.fx-row\{grid-template-columns:84px 1fr 120px;\}/.test(src)
      && /\.fx-head,\.fx-row\{display:grid;grid-template-columns:1fr 130px;/.test(src)
      && /<div class="fx-list\$\{fx\?'':' fx-3'\}">/.test(src));
 }
@@ -98,10 +103,20 @@ console.log('\n③ 改數字／加項目／減項目');
      原本用 JS 監聽 mouseover，但 iOS 點擊會補送一個 mouseover，等於每點一次
      輸入框就展開一次。改用 @media (hover:hover) and (pointer:fine)，
      那條媒體查詢在觸控裝置上永遠不成立。 */
-  ok('★★ 桌機用 CSS hover 推出刪除鈕，不能用 JS 的 mouseover（iOS 點擊會補送）',
-     /@media \(hover:hover\) and \(pointer:fine\)\{\s*\n\s*\.fx-swipe:hover \.fx-row\{transform:translateX\(-76px\);\}/.test(src)
-     && !/document\.addEventListener\('mouseover'/.test(grabFn('fxSwipeInit'))
+  /* 2026-08-23 二修（使用者：「桌機版 滑鼠放上去就自己跳出刪除了…不然他會擠壓掉旁邊日期」）——
+     桌機不再「滑過就推開」（整列往左推、日期欄被擠出畫面，滑鼠路過也會跳），
+     改成右側一顆常駐的小紅 ✕；向左滑那一套留給觸控裝置。 */
+  ok('★★ 桌機是常駐小紅 ✕、不是滑過推開；觸控才走向左滑',
+     /@media \(hover:hover\) and \(pointer:fine\)\{\s*\n\s*\.fx-swipe\{overflow:visible;\}/.test(src)
+     && /\.fx-swipe \.fx-swdel\{display:none;\}/.test(src)
+     && /\.fx-swipe \.fx-row\{transform:none!important;padding-right:34px;\}/.test(src)
+     && !/\.fx-swipe:hover \.fx-row\{transform:translateX\(-76px\);\}/.test(src));
+  ok('★★ 二選一要用 media query 不能用 JS（iOS 點擊會補送 mouseover）',
+     !/document\.addEventListener\('mouseover'/.test(grabFn('fxSwipeInit'))
      && /iOS 點擊會補送 mouseover/.test(src));
+  ok('　　✕ 用絕對定位貼在列的右緣，不佔欄位（不然又會把日期欄擠掉）',
+     /\.fx-x\{display:flex;align-items:center;justify-content:center;\s*\n\s*position:absolute;right:7px;top:50%;/.test(src)
+     && /\.fx-x\{display:none;\}/.test(src));
   ok('★ 日期格要與旁邊兩格同尺寸（.adp-field 預設是表單裡的大欄位）',
      /\.fx-dwrap \.adp-field\{padding:6px 9px;border-radius:7px;font-size:13px;gap:6px;min-width:0;\}/.test(src)
      && /日期這欄格子\s*\n\s*比旁邊的都大，畫面失去平衡/.test(src));
