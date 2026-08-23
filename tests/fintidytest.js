@@ -48,22 +48,24 @@ ok('　　函式本身保留未刪（要回頭比對時還在）', /async functi
 console.log('\n③ 老闆要看的重點標示出來');
 {
   const F=grabFn('finPnl');
-  ok('★★ 淨利獨佔一整塊、字最大（40px），賺／虧用綠紅分',
-     /<div class="pnl-hero-net \$\{net>=0\?'':'bad'\}">/.test(F)
-     && /\.pnl-hero-v\{font-family:var\(--num\),inherit;font-size:40px;font-weight:800;/.test(src)
-     && /\.pnl-hero-net\.bad\{background:linear-gradient\(180deg,#fdf1f0 0%,#fbe9e7 100%\);border-color:#e8b6b0;\}/.test(src));
+/* 0823 使用者指示改成兩欄版：淨利改為獨佔「頂列」（原本是與兩小格並排的左半）。 */
+  ok('★★ 淨利獨佔頂列一整條、字最大，賺／虧用綠紅分',
+     /<div class="pnl2-hero \$\{net>=0\?'ok':'bad'\}">/.test(F)
+     && /\.pnl2-hero-v\{font-family:var\(--num\),inherit;font-size:38px;font-weight:800;/.test(src)
+     && /\.pnl2-hero\.bad\{background:linear-gradient\(180deg,#fdf1f0 0%,#fbe9e7 100%\);border-color:#e8b6b0;\}/.test(src));
   ok('★★ 直接用白話講結論（「本月到目前為止賺 $X」）',
      /\$\{_isNow\?'本月到目前為止':'當月'\}\$\{net>=0\?'賺':'虧'\}/.test(F));
   ok('★ 月中會提醒「這個月還沒過完，數字會繼續變」',
      /\$\{_isNow\?'　·　這個月還沒過完，數字會繼續變':''\}/.test(F));
-  ok('★★ 營業額與支出退成旁邊兩格小的（它們是淨利怎麼來的）',
-     /<div class="pnl-hero-side">/.test(F)
-     && /\.pnl-hero\{display:grid;grid-template-columns:minmax\(0,1\.35fr\) minmax\(0,1fr\);/.test(src));
+  ok('★★ 銷課與支出各成一欄（左綠右紅），品項掛在各自底下',
+     /<section class="pnl2-col pnl2-in">/.test(F) && /<section class="pnl2-col pnl2-out">/.test(F)
+     && /\.pnl2-cols\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\);/.test(src)
+     && /\.pnl2-in \.pnl2-head-l,\.pnl2-in \.pnl2-head-v\{color:var\(--green,#1f6f54\);\}/.test(src)
+     && /\.pnl2-out \.pnl2-head-l,\.pnl2-out \.pnl2-head-v\{color:var\(--red,#7A2E28\);\}/.test(src));
   ok('★ 支出那格直接拆給你看（人事排最前 —— 那是最大一筆）',
      /人事 \$\{m\(staffCost\)\}・稅 \$\{m\(tax\)\}・固定 \$\{m\(fixedTotal\)\}・其他 \$\{m\(otherTotal\)\}/.test(F));
-  ok('★★ 各教練薪水那一列加重（老闆要找的第三件事）',
-     /<tr class="pnl-h pnl-out pnl-hr"><td>員工薪資（應發）/.test(F)
-     && /\.pnl tr\.pnl-hr td\{background:rgba\(180,138,86,\.07\);\}/.test(src));
+  ok('★★ 員工薪資仍是支出欄裡的一列，指向下方明細',
+     /<span class="pnl2-i-l">員工薪資（應發）<i>\$\{payRows\.length\} 位・明細見下方<\/i><\/span>/.test(F));
   ok('★ 逐位教練仍逐列列出、金額由大到小',
      /\.filter\(r=>r\.countSalary&&Number\(r\.sal&&r\.sal\.grossPay\)>0\)/.test(F)
      && /\.sort\(\(a,b\)=>b\.amt-a\.amt\)/.test(F));

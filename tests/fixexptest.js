@@ -166,13 +166,25 @@ console.log('\n④ 儲存：新增／修改／刪除一次到位');
 }
 
 console.log('\n⑤ 從哪裡進得去');
+/* 0823 兩欄改版：那一列從表格的 .pnl-link 改成右欄的 .pnl2-tap，入口沒變 */
 ok('★★ 損益表的「固定支出」那一列點得動',
-   /<button class="pnl-link" onclick="openFixedExpenses\('\$\{ym\}'\)">固定支出<span style="color:var\(--t3\);font-weight:400;"> 　點我設定<\/span><\/button>/.test(src));
+   /<button type="button" class="pnl2-i pnl2-tap" onclick="openFixedExpenses\('\$\{ym\}'\)">/.test(src));
 ok('★ 支出頁也有一顆設定鈕（講明可加減項目、下月自動帶入）',
    /onclick="openFixedExpenses\('\$\{month\}'\)">⚙ 固定支出設定（可加減項目・下月自動帶入）<\/button>/.test(src));
 ok('★★ 其他支出也有入口，並講明不延續',
-   /<tr class="pnl-h pnl-out"><td><button class="pnl-link" onclick="openOtherExpenses\('\$\{ym\}'\)">其他支出<span style="color:var\(--t3\);font-weight:400;"> 　點我登記<\/span><\/button><\/td>/.test(src)
+   /<button type="button" class="pnl2-i pnl2-tap" onclick="openOtherExpenses\('\$\{ym\}'\)">/.test(src)
    && /onclick="openOtherExpenses\('\$\{month\}'\)">⚙ 其他支出（一次登記多筆・不延續到下個月）<\/button>/.test(src));
+/* 2026-08-23 使用者指示：「在這個頁面每種支出的右上角就顯示金額」——
+   不然要點進去才知道這個月記了多少、有沒有漏。 */
+ok('★★ 支出登記的挑選視窗，每一種右上角顯示本月已登錄的金額',
+   /<span class="exp-pick-top"><span class="exp-pick-t">固定支出<\/span><span class="exp-pick-v">\$\{_m\(_fx\)\}<\/span><\/span>/.test(src)
+   && /<span class="exp-pick-top"><span class="exp-pick-t">其他支出<\/span><span class="exp-pick-v">\$\{_m\(_ot\)\}<\/span><\/span>/.test(src)
+   && /if\(e\.is_fixed===true\) _fx\+=v; else _ot\+=v;/.test(src));
+ok('★★ 日期清單一開就捲到選中的那一天（31 天的清單停在「1 日」等於每次都要滑十幾下）',
+   /const cell=host\.querySelector\('\.ash-ei-co'\);/.test(src)
+   && /cell\.scrollIntoView\(\{block:'center'\}\)/.test(src));
+ok('　　新列的預設日期是今天（openExpenseEditor 的 defDate），所以捲過去就是今天',
+   /const defDate=\(String\(_today\)\.slice\(0,7\)===month\)\?_today:\(month\+'-01'\);/.test(src));
 ok('★ 原本的一鍵沿用沒被拿掉（習慣那條路的人照舊）',
    /async function finExpenseCopyPrev\(\)\{/.test(src));
 ok('　　使用者的原話寫在程式裡',

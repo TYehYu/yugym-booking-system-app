@@ -97,9 +97,9 @@ console.log('\n④ 接到損益表上');
   ok('★★ 明細表接在損益表下面（不用點、不用展開）',
      /\$\{payRows\.length\?`<div class="card-title" style="margin:16px 0 6px;">員工薪資明細<\/div>\$\{salaryMatrixHTML\(payRows\)\}`:''\}/.test(F));
   ok('★ 損益表那一列只留總額，指向下方明細',
-     /<td>員工薪資（應發）<span style="color:var\(--t3\);font-weight:400;"> 　\$\{payRows\.length\} 位・明細見下方<\/span><\/td>/.test(F));
+     /<span class="pnl2-i-l">員工薪資（應發）<i>\$\{payRows\.length\} 位・明細見下方<\/i><\/span>/.test(F));
   ok('★★ 公司負擔仍是獨立的支出大項（標明含職災）',
-     /<td>公司負擔勞健保<span style="color:var\(--t3\);font-weight:400;"> 　勞保雇主＋健保雇主＋勞退＋職災<\/span><\/td>/.test(F));
+     /<span class="pnl2-i-l">公司負擔勞健保<i>勞保雇主＋健保雇主＋勞退＋職災<\/i><\/span>/.test(F));
   ok('★ 舊的「點姓名展開」已整組移除',
      !/pnlToggleEmp/.test(src) && !/function salaryParts\(/.test(src) && !/pnl-part/.test(src));
   ok('　　使用者的原話寫在程式裡',

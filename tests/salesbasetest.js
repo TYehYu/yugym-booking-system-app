@@ -65,11 +65,12 @@ console.log('① 銷課怎麼算（實跑）');
     ok('★ 為什麼稅不能用銷課算，寫在原地',
        /稅是對「實際開出去的銷售額」課的，\s*\n\s*所以基礎仍是\*\*收款\*\*，不是銷課 —— 兩者混用會算出一個不存在的稅額。/.test(P));
     ok('★★ 大數字那一塊改講「銷課 − 支出」',
-       /<span class="pnl-hero-say">銷課 \$\{m\(revenue\)\} − 支出 \$\{m\(spend\)\}/.test(P)
-       && /<span class="pnl-top-l">銷課金額<\/span>/.test(P));
-    ok('★ 表上把銷課拆成課種分類列（2026-08-13：教練課/友善 × 1V1/1V2、團體課）',
+       /<span class="pnl2-hero-say">銷課 \$\{m\(revenue\)\} − 支出 \$\{m\(spend\)\}/.test(P)
+       && /<span class="pnl2-head-l">銷課金額<\/span>/.test(P));
+    /* 0823 兩欄改版：分類列改畫在左欄的 .pnl2-i，分類來源與順序沒變 */
+    ok('★ 把銷課拆成課種分類列（2026-08-13：教練課/友善 × 1V1/1V2、團體課）',
        /REV_CLS_ORDER\.filter\(k=>k!=='grp'&&\(SV\.byCls\[k\]\|\|\{\}\)\.n>0\)\.map\(k=>/.test(P)
-       && /\$\{sub\('團體課',-Math\.round\(SV\.grpValue\),`\$\{SV\.grpCount\} 堂 \$\{SV\.grpHeads\} 人次`\)\.replace\('−\$','\$'\)\}/.test(P));
+       && /<span class="pnl2-i-l">團體課<i>\$\{SV\.grpCount\} 堂 \$\{SV\.grpHeads\} 人次<\/i><\/span>/.test(P));
     ok('★★ 收款仍看得到（與銷課並列，不會以為錢不見了）',
        /本月實際<b>收款<\/b> \$\{m\(cash\)\}（\$\{pur\.length\} 筆）—— 與銷課是兩件事，只用來算營業稅。/.test(P));
     ok('★ 銷課的定義寫在畫面上',
