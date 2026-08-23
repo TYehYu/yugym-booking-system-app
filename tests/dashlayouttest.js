@@ -110,17 +110,20 @@ ok('　　今天被選取時綠底不被蓋掉（底色那條帶 :not(.today)）
 ok('　　滑過看得到那天有幾堂', /title="\$\{ds\}\$\{n\?`　\$\{n\} 堂`:'　沒有課'\}"/.test(src));
 /* 0823 使用者指示：「首頁的月曆翻頁的按鈕跟日期列翻頁的按鈕都改成品牌紅」
    「月曆翻頁的按鈕改成左右」——日期格剛改成金色底，翻頁鈕再是金的就變成兩種金互相稀釋。 */
-ok('★★ 兩個翻頁鈕都是品牌紅（與「回到今天」同一支紅）',
-   /\.twk-bar>\.tl-daynav\{flex:0 0 auto;margin:0;align-self:center;\s*\n\s*background:var\(--danger,#7F0303\);color:#fff;\}/.test(src)
-   && /\.mcal-btn\.mcal-btn-nav\{background:var\(--danger,#7F0303\);color:#fff;font-weight:700;\}/.test(src));
+/* 同日再修（使用者看了實機）：「首頁月曆左右按鈕改回綠色加上透明」——
+   綠卡上的紅鈕變成整張卡最搶眼的東西，但它只是翻月。日期列那顆維持紅（米底＋金格才分得開）。 */
+ok('★★ 日期列的翻頁鈕是品牌紅（與「回到今天」同一支紅）',
+   /\.twk-bar>\.tl-daynav\{flex:0 0 auto;margin:0;align-self:center;\s*\n\s*background:var\(--danger,#7F0303\);color:#fff;\}/.test(src));
+ok('★★ 月曆翻頁鈕改回半透明白（疊在品牌綠底上＝透出來的綠），不再被紅色覆蓋',
+   !/\.mcal-btn\.mcal-btn-nav\{background:var\(--danger/.test(src)
+   && /\.cal-side \.mcal-btn,\.cag-mcal \.mcal-btn\{background:rgba\(255,255,255,\.14\);\}/.test(src)
+   && /綠卡上的紅鈕變成整張卡最搶眼的東西，\s*\n\s*但它只是翻月，不是提醒/.test(src));
 ok('★★ 月曆翻頁改左右箭頭（上下會被讀成「捲動這張表」）',
    /<button class="mcal-btn mcal-btn-nav" onclick="admCalShift\(-1\)" title="上個月">‹<\/button>/.test(src)
    && /<button class="mcal-btn mcal-btn-nav" onclick="admCalShift\(1\)" title="下個月">›<\/button>/.test(src)
    && !/onclick="admCalShift\(-1\)">︿/.test(src));
-ok('　　紅底那條要寫在三條半透明白底之後才蓋得過（同為 0,2,0）',
-   src.indexOf('.cal-side .mcal-btn,.cag-mcal .mcal-btn{')<src.indexOf('.mcal-btn.mcal-btn-nav{')
-   && src.indexOf('.cal-hero .mcal-btn{')<src.indexOf('.mcal-btn.mcal-btn-nav{')
-   && /只有寫在它們後面才蓋得過/.test(src));
+ok('　　class 留著但沒有樣式，是刻意的（‹ › 兩顆要與日後其他頭列鈕分得出來）',
+   /mcal-btn-nav 這個 class 留在標記上但目前沒有樣式，是刻意的/.test(src));
 /* 0823 使用者指示：「可以把內容距離邊界的空間縮小，不要讓邊邊白一區那麼多，今日營收也是」 */
 ok('★ 卡片內距收斂（日期列與 KPI 卡都不要四周留一條白帶）',
    /\.tl-panel\{background:var\(--card\);border:1px solid var\(--bd\);border-radius:16px;padding:12px 14px 8px;/.test(src)
