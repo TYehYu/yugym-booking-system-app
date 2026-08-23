@@ -9889,8 +9889,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2301';
-const APP_VERSION_LABEL='v260823.2301';
+const APP_VERSION = '260823.2308';
+const APP_VERSION_LABEL='v260823.2308';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10078,8 +10078,26 @@ function dbStat(){
 }
 async function _dbGetAllFresh(store){
   const _statT=Date.now();
+  const _statPerf=(()=>{ try{ return performance.now(); }catch(_){ return 0; } })();
   const _statPush=(rows,bytes)=>{ try{
-    window._dbStat.push({表:tbl(store), 列:rows, kb:Math.round(bytes/1024), ms:Date.now()-_statT});
+    /* 實際上線傳了幾個位元組（2026-08-23 二量）——上面的 bytes 是「解析後的 JSON 字串長度」，
+       看不出有沒有壓縮。PerformanceResourceTiming 的 transferSize 才是真的走過網路的量，
+       decodedBodySize 是解壓後的量：兩個一比就知道壓縮有沒有生效。
+       壓縮沒生效 → 5.5MB 真的要在線上跑 5.5MB，那是十倍的差距，修法完全不同。
+       ⚠ 跨網域資源要伺服器回 Timing-Allow-Origin 才拿得到 transferSize；拿不到會是 0，
+         那本身也是一個資訊（記成 -1 以示區別）。 */
+    let wire=null, dec=null;
+    try{
+      const es=performance.getEntriesByType('resource')
+        .filter(e=>e.name.indexOf('/rest/v1/'+tbl(store))>=0 && e.startTime>=_statPerf);
+      if(es.length){
+        wire=es.reduce((a,e)=>a+(e.transferSize||0),0);
+        dec =es.reduce((a,e)=>a+(e.decodedBodySize||0),0);
+      }
+    }catch(_){}
+    window._dbStat.push({表:tbl(store), 列:rows, kb:Math.round(bytes/1024), ms:Date.now()-_statT,
+      線上KB:(wire==null?null:(wire>0?Math.round(wire/1024):-1)),
+      解壓KB:(dec==null?null:Math.round(dec/1024))});
     if(window._dbStat.length>200) window._dbStat.shift();
   }catch(_){} };
   /* 分頁改「波次並行」（2026-07-20 LAG 對策）：原逐頁序抓，大表（tickets 2,229＝3 頁）
@@ -38393,7 +38411,8 @@ async function openPersonProfile(kind, id, backPage){
     /* 這一次真的去抓了哪幾張表、各花多久（沒抓的＝命中快取，不會出現在這裡）——
        這一行就能分辨「快取沒生效」與「某一張表特別慢」。 */
     const _got=(window._dbStat||[]).slice(_statFrom)
-      .sort((a,b)=>b.ms-a.ms).map(r=>`${r.表} ${(r.ms/1000).toFixed(1)}s/${r.kb}KB`);
+      .sort((a,b)=>b.ms-a.ms).map(r=>`${r.表} ${(r.ms/1000).toFixed(1)}s/${r.kb}KB`
+        +(r.線上KB==null?'':(r.線上KB<0?'(線上量測不到)':`(線上 ${r.線上KB}KB)`)));
     try{ console.log(`[openPersonProfile] 共 ${(_tot/1000).toFixed(2)}s　${_brk}`, _got); }catch(_){}
     if(_tot>1200){
       const _top=_got.length?`　→ ${_got.slice(0,3).join('、')}${_got.length>3?` …共 ${_got.length} 張`:''}`
