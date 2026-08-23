@@ -646,15 +646,19 @@ ok('★ 填滿那一組規則整組刪掉（不是用覆蓋蓋掉）',
 ok('★ DOM 仍在姓名列裡（絕對定位是相對整張卡，擺哪裡都不影響姓名列寬度）',
    /<span class="evc-nmrow"><span class="evc-name">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>/.test(src)
    && /\.cal-ev\.cal-ev-std \.evc-nmrow\{display:flex;align-items:center;justify-content:center;/.test(src));
+/* 2026-08-23 使用者回報「縮小的課卡 出席章變到左邊色條上了」：left 4px→9px。
+   左緣課程色條寬 5px，章從 4px 起算會壓在色條上，兩個又都是深色。5px＋4px 間距＝9px。 */
 ok('★ 章在卡片左下角，桌機用小圓章（1/4 圓在淺底卡上太搶）',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:4px; bottom:4px; right:auto; top:auto;\s*\n\s*width:16px; height:16px; border-radius:50%;/.test(src));
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:9px; bottom:4px; right:auto; top:auto;\s*\n\s*width:16px; height:16px; border-radius:50%;/.test(src));
+ok('★★ 章要避開左緣 5px 的課程色條（不然看起來像章長在色條裡）',
+   /左緣的課程色條（\.evc-body::before）寬 5px，章從 4px 起算就會壓在色條上/.test(src));
 ok('　　手機（.admcag）維持 1/4 圓 —— 深色滿版卡上圓章反而糊',
    /手機那邊維持 1\/4 圓（\.admcag 那組，深色滿版卡上圓章反而糊）/.test(src)
    && /\.admcag\.cal-ev-std \.evc-check\{position:absolute;bottom:0;right:0;top:auto;left:auto;\s*\n\s*width:26px;height:26px;border-radius:100% 0 10px 0;/.test(src));
 ok('　　右下角讓給教練標籤，左下角本來是空的（理由寫在原地）',
    /右下角讓給教練標籤（\.evc-abbr），左下角本來是空的；用與手機同一種 1\/4 圓/.test(src));
 ok('　　桌機是左下角小圓章，手機的角標基底規則不動',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:4px; bottom:4px;/.test(src)
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:9px; bottom:4px;/.test(src)
    && /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;top:auto;left:auto;bottom:0;right:0;/.test(src));
 ok('　　窄欄位時名字自己截斷，不會把章擠掉',
    /\.cal-ev\.cal-ev-std \.evc-nmrow \.evc-name\{min-width:0;\}/.test(src));
