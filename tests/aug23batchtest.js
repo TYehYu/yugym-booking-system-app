@@ -168,8 +168,15 @@ ok('★★ 整片底色白→米（使用者：「不要用白色，因為卡片
 ok('★★ 兩個 sticky 圖層要一起改，否則捲動時露出白柱／白條',
    /\.cal-timecol\{[^}]*background:var\(--bg\);\}/.test(src)
    && /\.cal-daycol-head\{[^}]*background:var\(--bg\);/.test(src));
-ok('　　今天那一欄的欄頭仍是自己的淡金底（不被統一底色蓋掉）',
-   /\.cal-daycol-head\.today\{background:#f3efe2;\}/.test(src));
+/* 0823 再修（使用者：「桌機預約行事曆今日這欄改成品牌綠」）——全站「今天」都是品牌綠，
+   只有這裡還留金色；而金色同日起已改標「選取」，兩種意思用同一色會打架。 */
+ok('　　今天那一欄的欄頭改品牌綠（不被統一底色蓋掉）',
+   /\.cal-daycol-head\.today\{background:var\(--green\);\}/.test(src)
+   && /\.cal-daycol-head\.today \.cd-line\{color:#fff;\}/.test(src)
+   && /\.cal-daycol-head\.today \.cd-today\{background:rgba\(255,255,255,\.24\);color:#fff;\}/.test(src));
+ok('　　欄身的淡米色不動（底下還疊著場地狀態的淡紅／淡金）',
+   /\.cal-daycol\.daycol-today\{background:#FFF8EF;\}/.test(src)
+   && /換成綠底會跟它們混在一起/.test(src));
 
 console.log('\n⑧ 桌機行事曆「營業前」列收斂成一顆金色 [+]');
 ok('★★ 每欄不再重複寫「營業前 ＋」，只留一顆置中的金色加號',

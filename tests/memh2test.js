@@ -197,7 +197,18 @@ const css=cut('/* ══ 會員手機首頁 V2','/* 2026-08-20 使用者指示�
    .tb-acct-item .acct-nsw 是帳號選單那顆開關 —— 兩者都各自有自己的範圍限定。 */
 t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot / .pp-head / .pp-sheet-self / .tb-acct-item 之下',
   css.split('\n').filter(l=>/^\.[a-z]/.test(l.trim()))
-     .every(l=>/^\.(memh2|mh2-|modal-foot\.mh2-foot|pp-head|pp-sheet(\.|-)|tb-acct-item|lp-)/.test(l.trim())));
+     .every(l=>/^\.(memh2|mh2-|mh2p-|modal-foot\.mh2-foot|pp-head|pp-sheet(\.|-)|tb-acct-item)/.test(l.trim())));
+/* 0823：主顧客課程價目那一段原本叫 lp-*，與桌機管理列表 lpTable 的 .lp-row 同名同權重，
+   而且寫在樣式表更後面 → 全站管理列表的資料列都被它蓋成白框，連 820px 以下
+   「攤成卡片」那條也失效。改名 mh2p-* 之後兩邊各歸各的。 */
+t('★★ 主顧客課程價目改名 mh2p-*，不再與 lpTable 的 .lp-row 撞名',
+  !/^\.lp-row\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto auto/m.test(s)
+  && /\.mh2p-row\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto auto/.test(s)
+  && /<div class="mh2p-row">/.test(s)
+  && /全站每一張管理列表（會員、票券、收款…）的資料列都被這裡的白框樣式蓋掉/.test(s));
+t('　　lpTable 那一組回到原本的「白底表格＋細分隔線」與 820px 攤成卡片',
+  /\.lp-row\{display:grid;gap:12px;padding:15px 18px;align-items:center;/.test(s)
+  && /\.lp-row\{display:flex;flex-direction:column;align-items:stretch;gap:8px;/.test(s));
 t('頂列米色', /\.memh2\{background:var\(--card2\)/.test(css));
 
 // ── 外框（2026-08-22 二修）：頂欄米色、收掉重置鈕、底部導覽品牌綠、下拉更新 ──
