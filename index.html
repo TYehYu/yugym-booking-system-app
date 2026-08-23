@@ -9889,8 +9889,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2143';
-const APP_VERSION_LABEL='v260823.2143';
+const APP_VERSION = '260823.2151';
+const APP_VERSION_LABEL='v260823.2151';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38304,23 +38304,31 @@ async function openPersonProfile(kind, id, backPage){
 async function ppLoadCtx(){
   const c=PP.ctx;
   if(PP.kind==='member'){
-    const [coaches,tickets,bookings,purchases,ttypes,contractsAll,tkLogs]=await Promise.all([
+    /* ⚠ 2026-08-23 使用者回報「首頁點今日營收名單，讀取好久好久好久」——
+       這一批本來就是並行的，但後面還跟著三個**序列**的 await：
+       grantReqPending()、dbGetAll('members')（算等級用）、dbGetAll('members')（共享章名字用，
+       同一張表抓第二次）。冷快取時每一個都要「簽章校驗＋分頁往返」，等於在並行批次
+       之後又排了三輪，而且其中兩輪抓的是同一張表。全部收進同一個 Promise.all，
+       members 只抓一次。 */
+    const [coaches,tickets,bookings,purchases,ttypes,contractsAll,tkLogs,membersAll,grPend]=await Promise.all([
       dbGetAll('coaches'), dbGetAll('member_tickets'), dbGetAll('bookings'), dbGetAll('purchases').catch(()=>[]),
       dbGetAll('ticket_types').catch(()=>[]), dbGetAll('contracts').catch(()=>[]),
-      dbGetAll('ticket_logs').catch(()=>[])]);   // 團課扣課紀錄（2026-07-31，見 grpTicketAlloc）
+      dbGetAll('ticket_logs').catch(()=>[]),   // 團課扣課紀錄（2026-07-31，見 grpTicketAlloc）
+      dbGetAll('members').catch(()=>[]),
+      (typeof grantReqPending==='function'?grantReqPending():Promise.resolve([])).catch(()=>[])]);
     c.ctByTicket=Object.fromEntries((contractsAll||[]).filter(x=>x.ticket_id&&x.member_id===PP.id).map(x=>[x.ticket_id,x.id]));   // 合約綁票券（2026-07-28）
     /* 待審核發放也要在票券頁看得到（2026-08-09 使用者指示：「教練課跟友善教練課櫃檯銷售之後，
        無法看到這一筆單是不是有成功送出或者有沒有錯誤，都要等客戶那邊回傳才能知道」）——
        電子合約的單在審核通過前還沒有票券，原本只有左上角的紅色提示，會員資料完全沒痕跡。
        把這位會員 pending 的發放申請帶進來，票券頁畫成「待審核」卡；合約簽回與否一併帶上。 */
-    try{ c.myGR=(await grantReqPending()).filter(r=>r.member_id===PP.id); }catch(_){ c.myGR=[]; }
+    try{ c.myGR=(grPend||[]).filter(r=>r.member_id===PP.id); }catch(_){ c.myGR=[]; }
     c.ctSigned={}; (contractsAll||[]).forEach(x=>{ if(x&&x.id) c.ctSigned[x.id]=!!x.signed_at; });
     c.typeMap=Object.fromEntries((ttypes||[]).map(t=>[t.id,t]));
     c.coachMap=Object.fromEntries(coaches.map(x=>[x.id,coachDisp(x)]));
     c.coachOpts=[['','—']].concat(coaches.filter(isCoachable).map(x=>[x.id,coachDisp(x)]));
     /* 2026-07-21：名片等級章改用 effTier（自動制）——bookings 本來就載了，順手建快取，
        確保直接開名片（未先進列表）時等級判定與列表一致 */
-    window._memberTierCache=Object.assign(computeMemberTiers(bookings,await dbGetAll('members').catch(()=>[])),{__ready:true});
+    window._memberTierCache=Object.assign(computeMemberTiers(bookings,membersAll||[]),{__ready:true});
     const myTk=tickets.filter(t=>tkUsableBy(t,PP.id));   // 含共享給他的票（與會員端一致）
     /* 團課的學員放在 member_ids、member_id 是 null（2026-07-29 使用者回報：團課票券被誤判
        成「已用畢」收進歷史）—— 只用 member_id 過濾會整批漏掉團課，票券的待上堂數就算不出來。 */
@@ -38363,8 +38371,10 @@ async function ppLoadCtx(){
     c.pcCount=c.myPc.length+c.myImpTx.length;
     // 行內展開用明細（2026-07-27：活動紀錄不再開新視窗）
     c.myTk=myTk; c.myBk=myBk; c.myLogs=tkLogs||[];
-    /* 共享章顯示名字用（2026-08-04 使用者指示：「共享人顯示清楚一點」）——dbGetAll 有快取，不多花往返 */
-    try{ c.memMap=Object.fromEntries((await dbGetAll('members')).map(m=>[m.id,m.name])); }catch(_){ c.memMap={}; }
+    /* 共享章顯示名字用（2026-08-04 使用者指示：「共享人顯示清楚一點」）——
+       2026-08-23：改用上面那一批一起抓回來的 membersAll，不要再 await 一次
+       （原本的註解說「有快取、不多花往返」，但冷快取時它就是一整輪往返）。 */
+    try{ c.memMap=Object.fromEntries((membersAll||[]).map(m=>[m.id,m.name])); }catch(_){ c.memMap={}; }
     c.tierOpts=[['','—']].concat(Object.entries(TIER_DEFS).map(([k,d])=>[k,d.label]));
   }else{
     c.bankOpts=HR_BANKS.slice();

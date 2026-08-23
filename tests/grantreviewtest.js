@@ -178,8 +178,11 @@ console.log('\n⑦ 會員資料票券頁的「待審核」卡（2026-08-09 使�
    卡在票券頁＝單有送出去；審核通過卡換成真票券、取消就消失。 */
 {
   const L=grabFn('ppLoadCtx');
+  /* 0823 效能：grantReqPending 原本是在並行批次「之後」才 await（序列多一輪往返），
+     改成收進同一個 Promise.all，這裡拿的是已經取回的結果。行為不變。 */
   ok('★★ ppLoadCtx 帶入本會員 pending 的發放申請',
-     /c\.myGR=\(await grantReqPending\(\)\)\.filter\(r=>r\.member_id===PP\.id\)/.test(L));
+     /c\.myGR=\(grPend\|\|\[\]\)\.filter\(r=>r\.member_id===PP\.id\)/.test(L)
+     && /\(typeof grantReqPending==='function'\?grantReqPending\(\):Promise\.resolve\(\[\]\)\)\.catch\(\(\)=>\[\]\)/.test(L));
   ok('★ 合約簽回與否一併帶上（ctSigned）',
      /c\.ctSigned=\{\}; \(contractsAll\|\|\[\]\)\.forEach\(x=>\{ if\(x&&x\.id\) c\.ctSigned\[x\.id\]=!!x\.signed_at; \}\)/.test(L));
   const R=grabFn('ppRecordHtml');
