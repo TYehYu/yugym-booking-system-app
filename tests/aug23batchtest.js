@@ -339,6 +339,20 @@ ok('★★ 教練名要脫離文字流才能「姓名置中」＋「教練靠下
 ok('　　只作用在手機行事曆課卡（.cag-wk-col 底下），不牽動桌機與手機首頁',
    /只作用在手機一日／週檢視的課卡（\.cag-wk-col 底下）/.test(src));
 
+console.log('\n⑪-2 一週檢視的日期列整列點亮');
+/* 使用者：「手機行事曆一週 上方日期列是不是全部點亮就好」——選取框的意思是
+   「你正在看這一天」，一週檢視七天同時在畫面上，只框一天看起來像另外六天不在。 */
+ok('★★ 一週檢視七天都給 .on，一日檢視維持只框選取的那天',
+   /const _allOn=\(nD===7\);/.test(src)
+   && /class="msb-date\$\{\(_allOn\|\|ds===sel\)&&ds!==today\?' on':''\}\$\{ds===today\?' hero-today':''\}"/.test(src));
+ok('★★ 今天不疊 .on —— 兩條規則同權重、.on 在後面，疊上去會把品牌綠底蓋成米底',
+   /\.admh \.msb-date\.hero-today\{background:var\(--green\);/.test(src)
+   && /\.admh \.msb-date\.on\{background:var\(--card2\);border-color:#1a1a1a;\}/.test(src)
+   && /疊上去會把綠底蓋成米底，今天就認不出來了/.test(src));
+ok('　　nD 要在迴圈之前算（原本在迴圈後面，拿不到）',
+   src.indexOf('const nD=(Number(window._admCalDays)||1)===1?1:7;')
+     < src.indexOf('const _allOn=(nD===7);'));
+
 console.log('\n⑫ 教練端快速預約比照管理員');
 ok('★★ 背景暗化與兩欄寬度不再限管理員',
    /\.cag-addlayer\{background:rgba\(30,27,22,\.24\);\}/.test(src)
