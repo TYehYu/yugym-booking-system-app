@@ -54,8 +54,13 @@ eq('★ 四個人 → 四個按鈕格', (grid.match(/<div class="tdl-cell[ "]/g)
 ok('　　中等寬度退成三格、手機退成兩格',
    /@media \(max-width:820px\)\{ \.tdl-tg-cells\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\);\} \}/.test(src)
    && /@media \(max-width:560px\)\{ \.tdl-tg-cells\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\}/.test(src));
-ok('　　一列四個要放得下 → 視窗加寬（modal-wide）',
-   /if\(useGrid\)\{ const m=document\.querySelector\('#modal-bg \.modal'\); if\(m\) m\.classList\.add\('modal-wide'\); \}/.test(src));
+/* 2026-08-23 使用者指示：「視窗可以窄一點」—— 收款提醒 0822 起是「一列一人」，
+   不再需要 720px，另掛 .tdl-narrow（520px）；其他走 grid 的名單（抽獎）維持寬版。 */
+ok('　　格狀名單仍加寬（modal-wide），收款提醒另收窄（tdl-narrow）',
+   /if\(m\)\{ m\.classList\.add\('modal-wide'\); if\(kind==='sign'\) m\.classList\.add\('tdl-narrow'\); \}/.test(src)
+   && /\.modal\.modal-wide\.tdl-narrow\{max-width:520px;\}/.test(src));
+ok('　　三顆續約鈕靠右（整張卡右緣才對得齊）',
+   /\.tdl2-acts\{display:flex;gap:6px;justify-content:flex-end;\}/.test(src));
 ok('　　名字過長會截斷，不撐破格子', /\.tdl-cell-nm\{[\s\S]{0,140}text-overflow:ellipsis;/.test(src)
    && /\.tdl-cell-sub\{[\s\S]{0,140}text-overflow:ellipsis;/.test(src));
 ok('　　整疊可捲動', /\.tdl-grid\{[\s\S]{0,160}overflow-y:auto;/.test(src));
