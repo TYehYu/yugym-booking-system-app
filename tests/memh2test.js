@@ -157,9 +157,23 @@ t('★ 沒有團體課票券的人也看得到課卡（列出來不看票券）'
   !/grpTks[\s\S]{0,60}grpOpen/.test(html));
 t('★ 沒票的人點下去給說明卡，不是一句吐司',
   /if\(!\(window\._msb\.grpTks\|\|\[\]\)\.length\)\{[\s\S]{0,400}購課請洽櫃檯或你的教練/.test(s));
-t('已經開始的不列（報不了名）', /\(_nowM<0 \|\| timeToMin\(b\.start_time\|\|'0:0'\)>=_nowM\)/.test(html));
-t('額滿的畫出來但點不下去', /const full=heads>=cap;/.test(html)
-  && /full\?'':` onclick="memh2GrpJoin\('\$\{b\.id\}'\)"`/.test(html));
+/* 0823 使用者回報：「會員端過期的團課沒有暗化 看起來像是可以預約」——
+   原本 _nowM 只在「看今天」時算得出來，其他日期一律 -1，而條件寫成 `_nowM<0 || …`，
+   於是翻到過去的日期時第一個條件短路成立，整批被列成「還可報名」。
+   改法：過去的照樣列（那天開過什麼課會員本來就該看得到），但暗化、不可點、寫「已結束」。 */
+t('今天：已經開始的不列（報不了名）', /\(_grpPast \|\| _nowM<0 \|\| timeToMin\(b\.start_time\|\|'0:0'\)>=_nowM\)/.test(html)
+  && /const _grpPast=\(s\.date<today\);/.test(html));
+t('過去的日子：列出來但暗化、不可點、文案改「已結束」',
+  /const past=_grpPast \|\| \(s\.date===today && _nowM>=0 && timeToMin\(b\.start_time\|\|'0:0'\)<_nowM\);/.test(html)
+  && /\$\{past\?' mh2-past':''\}/.test(html)
+  && /\$\{heads\}\/\$\{cap\} 人\$\{past\?'・已結束':\(full\?'・已額滿':'・還可報名'\)\}/.test(html));
+t('額滿或已結束的畫出來但點不下去', /const full=heads>=cap;/.test(html)
+  && /\(full\|\|past\)\?'':` onclick="memh2GrpJoin\('\$\{b\.id\}'\)"`/.test(html));
+t('自己已報名的課卡過期也暗化（st.past 早就算好，原本只有 memh2Tap 在用）',
+  /\$\{\(st\.past&&!st\.done\)\?' mh2-past':''\}/.test(html)
+  && /\.memh2 \.admh2-card\.mh2-past\{opacity:\.45;filter:brightness\(0\.92\) saturate\(0\.6\);\}/.test(s));
+t('　　已簽到的不必再暗（那顆綠章就是結論，暗掉反而像沒上到）',
+  /已簽到的不必再暗（那顆綠章就是結論，暗掉反而像沒上到）/.test(s));
 t('可報名的卡用虛線框，與自己的課分得開',
   /\.memh2 \.admh2-card\.mh2-grpopen\{[^}]*border:1\.5px dashed/.test(s.replace(/\n\s*/g,'')));
 t('報名沿用既有的 msbGrpJoin（只是先把 _msb 狀態建起來）',

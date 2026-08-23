@@ -9272,7 +9272,13 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
   display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:0 8px;align-items:center;}
 .admh2-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--admh-c,#1f6f54);}
 .admh2-card:active{transform:scale(.985);}
-.admh2-card .a2-stampcol{display:flex;align-items:flex-start;align-self:stretch;padding-top:1px;min-width:0;}
+/* 出席章靠左置中（2026-08-23 使用者指示：「手機端［首頁］跟會員手機端［我的預約］
+   課卡的出席章靠左置中」）——原本 align-items:flex-start＋align-self:stretch 讓章貼在
+   卡片頂端；卡片是三欄 grid（章／內容／右側），章這一欄本來就在最左，
+   缺的只是垂直置中。一排卡看過去，章的高度才會對齊。
+   ⚠ 這一條同時作用在管理員手機首頁、教練手機首頁、會員首頁與「我的預約」——
+     四處都用 .admh2-card，所以只改這裡就好（也代表改壞會四處一起壞）。 */
+.admh2-card .a2-stampcol{display:flex;align-items:center;align-self:center;min-width:0;}
 .admh2-card .a2-main{min-width:0;display:flex;flex-direction:column;gap:1px;}
 .admh2-card .a2-l1{font-size:11.5px;font-weight:600;color:var(--t2);letter-spacing:.03em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -9353,6 +9359,10 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
   display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;
   background:var(--admh-c,#9a5a1e);color:#fff;line-height:1;}
 .memh2 .admh2-card.mh2-full{opacity:.5;cursor:default;}
+/* 已結束（2026-08-23）：數值沿用行事曆過期課卡那一組（brightness .92／saturate .6），
+   opacity 比額滿再淡一點 —— 額滿是「還在，只是滿了」，已結束是「這件事過去了」。 */
+.memh2 .admh2-card.mh2-past{opacity:.45;filter:brightness(0.92) saturate(0.6);}
+.memh2 .admh2-card.mh2-past.mh2-grpopen{cursor:default;}
 .memh2 .admh2-card.mh2-full .mh2-joinic{background:var(--t3);font-size:11px;}
 /* 自主訓練的［＋］：品牌綠圓鈕，跟教練／管理員首頁那顆同一個語彙 */
 .memh2 .mh2-selfadd{align-self:center;margin:4px 0 2px;width:44px;height:44px;border-radius:50%;
@@ -9782,8 +9792,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.1956';
-const APP_VERSION_LABEL='v260823.1956';
+const APP_VERSION = '260823.1959';
+const APP_VERSION_LABEL='v260823.1959';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -45477,7 +45487,10 @@ function memh2HTML(o){
     /* 簽到狀態那一行拿掉（2026-08-22 使用者：「直接看手指圖示就好」）——
        已簽到／請假／未到本來就有左邊那顆出席章，再寫一次是同一件事講兩遍。
        剩下兩列：課程・場地（主要，粗體）／第幾堂共幾堂（沒綁票的團課就不畫）。 */
-    return `<div class="admh2-card${st.done?' admh-done':''}" style="--admh-c:${col};" onclick="memh2Tap('${b.id}')">
+    /* 過期就暗化（2026-08-23 使用者回報：「會員端過期的團課沒有暗化 看起來像是可以預約」）——
+       memh2CkState 早就算好 st.past（開始時間已過），但全檔只有 memh2Tap 在用它擋按鈕，
+       卡面完全看不出來。已簽到的不必再暗（那顆綠章就是結論，暗掉反而像沒上到）。 */
+    return `<div class="admh2-card${st.done?' admh-done':''}${(st.past&&!st.done)?' mh2-past':''}" style="--admh-c:${col};" onclick="memh2Tap('${b.id}')">
       <div class="a2-stampcol">${stamp?`<span class="admh-stamp ${stamp[1]}">${stamp[0]}</span>`:''}</div>
       <div class="a2-main">
         <div class="a2-l1">${cname}${_vn?'・'+_vn:''}</div>
@@ -45494,6 +45507,13 @@ function memh2HTML(o){
   /* 當天有開、自己還沒報名的團體課（2026-08-22 使用者指示：「每日有開的團體課課卡都顯示
      方便會員自行點選參加」）—— 只在「全部」與「團體課」分頁出現；已經開始的不列
      （報不了名）。點下去走既有的 msbGrpJoin（選票券 → 確認報名）。 */
+  /* ⚠ 2026-08-23 修：_nowM 只在「看今天」時才算得出分鐘數，其他日期一律 -1，
+     而下面的條件寫成 `_nowM<0 || 開始時間>=現在` —— 於是只要翻到今天以外的任何一天
+     （包含已經過去的日期），第一個條件就短路成立，過去的團課整批被列成「還可報名」。
+     這就是使用者回報的「過期的團課沒有暗化，看起來像是可以預約」。
+     改法：過去的日子照樣列出來（那天有開過什麼課，會員本來就該看得到），
+     但暗化、不可點、文案改成「已結束」—— 不是整批藏掉。 */
+  const _grpPast=(s.date<today);
   const _nowM=(s.date===today)?(new Date().getHours()*60+new Date().getMinutes()):-1;
   const grpOpen=(s.filter==='all')
     ? allBk.filter(b=>b && b.date===s.date && b.status!=='cancelled'
@@ -45503,22 +45523,26 @@ function memh2HTML(o){
         && !(typeof bkIsCoachLeave==='function' && bkIsCoachLeave(b))
         && typeof bkIsGroup==='function' && bkIsGroup(b)
         && !(typeof bkHasMember==='function' && bkHasMember(b,SESSION.id))
-        && (_nowM<0 || timeToMin(b.start_time||'0:0')>=_nowM))
+        && (_grpPast || _nowM<0 || timeToMin(b.start_time||'0:0')>=_nowM))
       .sort((a,b)=>String(a.start_time||'').localeCompare(String(b.start_time||'')))
     : [];
   const grpCards=grpOpen.map(b=>{
     const cap=Math.max(1,Number(b.max_heads)||5);
     const heads=Array.isArray(b.member_ids)?b.member_ids.length:0;
     const full=heads>=cap;
+    /* 已經結束的那一堂（過去的日期、或今天但時間已過）—— 報不了名了。
+       後端 fn_member_join_group 本來就會回 BOOKING.PAST_DATE 擋下，
+       但畫面上看起來可點，等於讓人白點一次才知道。 */
+    const past=_grpPast || (s.date===today && _nowM>=0 && timeToMin(b.start_time||'0:0')<_nowM);
     const _cid=b.substitute_coach_id||b.coach_id||null;
     const _cnm=(_cid&&coachMap[_cid])?coachMap[_cid]:'';
     const _vn=(typeof venueDisplay==='function')?(venueDisplay(b)||''):'';
-    return `<div class="admh2-card mh2-grpopen${full?' mh2-full':''}" style="--admh-c:${MEMH2_COL.group};"${
-      full?'':` onclick="memh2GrpJoin('${b.id}')"`}>
-      <div class="a2-stampcol"><span class="mh2-joinic">${full?'滿':'＋'}</span></div>
+    return `<div class="admh2-card mh2-grpopen${full?' mh2-full':''}${past?' mh2-past':''}" style="--admh-c:${MEMH2_COL.group};"${
+      (full||past)?'':` onclick="memh2GrpJoin('${b.id}')"`}>
+      <div class="a2-stampcol"><span class="mh2-joinic">${past?'—':(full?'滿':'＋')}</span></div>
       <div class="a2-main">
         <div class="a2-l1">團體課${_vn?'・'+_vn:''}</div>
-        <div class="a2-l3">${heads}/${cap} 人${full?'・已額滿':'・還可報名'}</div>
+        <div class="a2-l3">${heads}/${cap} 人${past?'・已結束':(full?'・已額滿':'・還可報名')}</div>
       </div>
       <div class="a2-side">
         <span class="a2-time">${b.start_time}</span>

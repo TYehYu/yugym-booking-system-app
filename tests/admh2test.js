@@ -120,8 +120,10 @@ ok('★★ 手指要落在頂欄上才起算（雙欄各自有捲軸，落在欄
 ok('　　理由寫在原地', /再讓它同時觸發整頁重載會打架/.test(src));
 
 console.log('\n⑤ 課卡欄位（使用者定版）');
-ok('★ 出席章獨立一欄在左上', /<div class="a2-stampcol">\$\{_st\?`<span class="admh-stamp \$\{_st\[1\]\}">\$\{_st\[0\]\}<\/span>`:''\}<\/div>/.test(src)
-   && /\.admh2-card \.a2-stampcol\{display:flex;align-items:flex-start;/.test(src));
+/* 0823 使用者指示：「手機端［首頁］跟會員手機端［我的預約］課卡的出席章靠左置中」
+   —— 欄位位置沒變（本來就是最左那一欄），改的是垂直對齊。 */
+ok('★ 出席章獨立一欄、靠左置中', /<div class="a2-stampcol">\$\{_st\?`<span class="admh-stamp \$\{_st\[1\]\}">\$\{_st\[0\]\}<\/span>`:''\}<\/div>/.test(src)
+   && /\.admh2-card \.a2-stampcol\{display:flex;align-items:center;align-self:center;min-width:0;\}/.test(src));
 ok('★ 中間三列：課程・場地／會員姓名（粗體）／第幾張票券',
    /<div class="a2-l1">\$\{cname\}\$\{_vlb\?'・'\+_vlb:''\}<\/div>/.test(src)
    && /<div class="a2-l2">\$\{mname\}<\/div>/.test(src)
