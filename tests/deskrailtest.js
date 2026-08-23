@@ -10,12 +10,19 @@ const ok=(n,c)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.lo
 
 console.log('日期列在上方橫排 → 底下是 教練 ｜ 課卡 兩欄');
 ok('★ 日期列獨立一列、排在課卡區之上',
-   /<div class="twk-bar">[\s\S]{0,300}<div class="twk-barin">\$\{_wkDays\}<\/div>[\s\S]{0,140}<div class="tl-3col">/.test(src)
+   /<div class="twk-bar">[\s\S]{0,600}<div class="twk-barin">\$\{_wkDays\}<\/div>[\s\S]{0,400}<div class="tl-3col">/.test(src)
    && /<div class="tcard-body">\$\{rows\.map/.test(src)
    && /\.tl-3col\{display:flex;gap:12px;flex:1;min-height:0;\}/.test(src));
+/* 2026-08-23：兩端各多一格 .twk-today-slot（「回到今天」的固定位），
+   箭頭仍緊貼在七天那一排的兩側。 */
 ok('★ 左右翻頁的箭頭回到日期列兩端',
-   /<div class="twk-bar">\s*\n\s*<button class="tl-daynav" onclick="dashDayShift\(-7\)" title="上一週">‹<\/button>/.test(src)
-   && /<button class="tl-daynav" onclick="dashDayShift\(7\)" title="下一週">›<\/button>\s*\n\s*<\/div>/.test(src));
+   /<span class="twk-today-slot">[\s\S]{0,220}?<\/span>\s*\n\s*<button class="tl-daynav" onclick="dashDayShift\(-7\)" title="上一週">‹<\/button>/.test(src)
+   && /<button class="tl-daynav" onclick="dashDayShift\(7\)" title="下一週">›<\/button>\s*\n\s*<span class="twk-today-slot">/.test(src));
+ok('★★ 「回到今天」放在往今天的那一側；兩側都預留固定寬，鈕出現時版面不跳',
+   /const _todaySide=\(\(\)=>\{/.test(src)
+   && /if\(today<ymd\(mon\)\) return 'l';/.test(src)
+   && /if\(today>ymd\(sun\)\) return 'r';/.test(src)
+   && /\.twk-today-slot\{flex:0 0 72px;/.test(src));
 ok('★★ 七天平分整列寬度（不是固定寬）—— 視窗變窄時一起縮，不出現橫向捲軸',
    /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;/.test(src)
    && /\.twk-barin\{flex:1 1 auto;min-width:0;display:flex;gap:5px;\}/.test(src));
@@ -28,8 +35,11 @@ ok('　　舊的直欄樣式已清乾淨（不留死 CSS）',
 ok('　　日期鈕沿用既有的 .twk-day（選中／今天的語彙不變）',
    /out\+=`<button type="button" class="twk-day\$\{sel\?' on':''\}\$\{isT\?' today':''\}"/.test(src)
    && /out\+=`<button type="button" class="twk-day/.test(src));   /* 選中／今天的配色 0822 改版，見下方 */
-ok('　　「回到今天」與「N 人上課中」留在標題列（只有日期列搬走）',
-   /<div class="tl-title tl-title-week">\$\{!isTodayView\?`<button class="tl-daynav tl-daynav-today"/.test(src));
+/* 2026-08-23 使用者指示：「[回到今天] 的按鈕改到左右翻頁鈕的旁邊」——
+   標題列因此只剩右邊的圖例（上面那塊空白就是使用者說「看起來好空」的地方）。 */
+ok('　　「回到今天」已從標題列搬到日期列的翻頁鈕旁',
+   !/<div class="tl-title tl-title-week">\$\{!isTodayView\?`<button class="tl-daynav tl-daynav-today"/.test(src)
+   && /<div class="tl-panel-top"><div class="tl-top-right">\$\{legend\}<\/div><\/div>/.test(src));
 ok('　　第二欄（教練姓名＋今日銷課\/總堂）沿用既有的課卡列，不另做一套',
    /<div class="tcard-body">\$\{rows\.map\(r=>r\.cardHtml\)\.join\(''\)\}<\/div>/.test(src));
 

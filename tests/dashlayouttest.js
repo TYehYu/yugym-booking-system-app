@@ -84,7 +84,8 @@ console.log('\n日期列改成一整週（2026-08-21 使用者：「改成一週
 ok('★ 桌機面板的日期鈕在上方、橫向一列',
    /<div class="twk-barin">\$\{_wkDays\}<\/div>/.test(src)
    && !/<div class="twk-railin">/.test(src)
-   && /<div class="tl-panel tl-desktop-only">[\s\S]{0,220}?<div class="tl-panel-top"><div class="tl-title tl-title-week">/.test(src));
+   /* 2026-08-23：「回到今天」搬到日期列的翻頁鈕旁邊 → 標題列只剩右邊的圖例 */
+   && /<div class="tl-panel tl-desktop-only">[\s\S]{0,400}?<div class="tl-panel-top"><div class="tl-top-right">\$\{legend\}<\/div><\/div>/.test(src));
 ok('　　手機版維持一天一天翻（螢幕放不下七個鈕）',
    /<div class="mtc-wrap-top"><div class="tl-title tl-title-date">[\s\S]{0,200}?<span class="tl-date">\$\{_taskDateLbl\}<\/span>/.test(src));
 ok('★ 週一起算（健身房的排班與課表都以週一為一週的開始）',

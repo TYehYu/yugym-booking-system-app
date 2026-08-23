@@ -59,7 +59,7 @@ t('　櫃檯手機導覽沒有報表',
 
 // ── 桌機首頁教練任務：日期列改回上方橫列 ──
 t('★ 日期列在課卡區之上、獨立一列',
-  /<div class="twk-bar">[\s\S]{0,260}<div class="twk-barin">\$\{_wkDays\}<\/div>[\s\S]{0,120}<div class="tl-3col">/.test(src));
+  /<div class="twk-bar">[\s\S]{0,600}<div class="twk-barin">\$\{_wkDays\}<\/div>[\s\S]{0,400}<div class="tl-3col">/.test(src));
 t('★ 七天平分寬度（不是固定寬、不出現橫捲）',
   /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;/.test(src)
   && /\.twk-barin\{flex:1 1 auto;min-width:0;display:flex/.test(src));

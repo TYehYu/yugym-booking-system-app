@@ -202,6 +202,29 @@ ok('★★ gap 要歸零改用內距 —— 留著 6px 的縫，線會浮在兩�
 ok('★★ 白框版要自己補 hover —— .perf-clickable:hover 的權重比 .perf-m .perf-m-row 低',
    /\.perf-m \.perf-m-row\.perf-clickable:hover\{background:var\(--sage-bg\);border-color:var\(--green\);\}/.test(src));
 
+console.log('\n⑨-4 頁面大標題整組移除');
+ok('★★ head() 只剩說明文字（英文眉標＋26px 大標＋裝飾線都不畫了）',
+   /function head\(ey,title,sub\)\{return sub\?`<div class="page-head page-head-subonly"><div class="ph-sub">\$\{sub\}<\/div><\/div>`:'';\}/.test(src));
+ok('★★ 說明文字要留 —— 那一行常常是這一頁的規則，刪掉等於把使用說明也刪了',
+   /只拿掉「標題」那三行，\*\*說明文字留著\*\*/.test(src));
+ok('　　保留 ey／title 兩個參數：40 個呼叫端一個都不用改，要恢復也只改這一支',
+   /保留 ey／title 兩個參數：40 個呼叫端一個都不用改/.test(src));
+ok('　　只剩說明時不需要 30px 下間距',
+   /\.page-head-subonly\{margin-bottom:14px;\}/.test(src));
+
+console.log('\n⑨-5 桌機首頁日期列：回到今天搬到翻頁鈕旁');
+ok('★★ 「回到今天」放在往今天的那一側（今天在這一週之前＝左、之後＝右）',
+   /if\(today<ymd\(mon\)\) return 'l';/.test(src)
+   && /if\(today>ymd\(sun\)\) return 'r';/.test(src));
+ok('★★ 兩側都固定留一格，鈕出現時整列不會被推一下',
+   /\.twk-today-slot\{flex:0 0 72px;display:flex;align-items:center;justify-content:center;\}/.test(src)
+   && /不預留的話，鈕一出現整列會被推一下/.test(src));
+ok('　　寬度要寫死才有意義（auto 的話沒有鈕那側就是 0，等於沒預留）',
+   /寬度寫死才有意義：用 auto 的話沒有鈕的那側寬度是 0/.test(src));
+ok('★ 每一天的按鈕加高（上方那列空出來之後補回版面）',
+   /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;justify-content:center;padding:11px 2px;background:#fff;\}/.test(src)
+   && /\.twk-barin \.twk-day \.twk-md\{font-size:15px;\}/.test(src));
+
 console.log('\n⑩ 支出登記入口');
 ok('★★ 期間控制列裡一顆紅底 [＋ 支出]，月份跟著翻頁走',
    /<button type="button" class="btn btn-sm dash-exp" onclick="openExpensePick\('\$\{ym\}'\)">＋ 支出<\/button>/.test(src)
