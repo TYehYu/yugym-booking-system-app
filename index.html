@@ -9889,8 +9889,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2320';
-const APP_VERSION_LABEL='v260823.2320';
+const APP_VERSION = '260823.2325';
+const APP_VERSION_LABEL='v260823.2325';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10242,16 +10242,32 @@ function cacheMarkDirty(key){
   const run=()=>{ _idbSaveT=null; cacheFlush(); };
   _idbSaveT=setTimeout(()=>{ if(window.requestIdleCallback) requestIdleCallback(run,{timeout:3000}); else run(); }, 2000);
 }
+/* ⚠ 2026-08-23：一張表一個交易（原本是全部塞進同一個 readwrite 交易）——
+   IndexedDB 的交易是全有全無：只要其中一張表寫失敗（超出配額、結構化複製失敗、
+   交易被中止），**整批都不會留下**。於是小表（contracts 56 列）看起來有存到，
+   大表（bookings 7,000 列 5.4MB）一失敗就連帶把整批拖掉，下次開場只好整表重抓。
+   量測現況：開會員資料時 contracts 走「簽章相符」（有存到），bookings 卻整張重抓。
+   拆成一張一個交易之後，一張失敗不影響其他張；而且失敗會記進 _dbWhy 查得到，
+   不再靜靜吞掉。 */
 async function cacheFlush(){
   if(!_idbUid || !_idbDirty.size) return;
   const keys=[..._idbDirty]; _idbDirty.clear();
-  try{
-    const st=await idbTx('readwrite'); if(!st) return;
-    keys.forEach(k=>{
-      const hit=_dbCache.get(k); if(!hit || !hit.sig) return;
-      try{ st.put({uid:_idbUid,table:k,data:hit.data,sig:hit.sig,logAt:hit.logAt,savedAt:Date.now()}, _idbUid+'|'+k); }catch(_){}
-    });
-  }catch(_){}
+  for(const k of keys){
+    const hit=_dbCache.get(k);
+    if(!hit || !hit.sig){ dbWhy(k,'沒存進 IndexedDB','沒有簽章'); continue; }
+    try{
+      const st=await idbTx('readwrite');
+      if(!st){ dbWhy(k,'沒存進 IndexedDB','開不了 IndexedDB'); continue; }
+      await new Promise((res,rej)=>{
+        let rq;
+        try{ rq=st.put({uid:_idbUid,table:k,data:hit.data,sig:hit.sig,logAt:hit.logAt,savedAt:Date.now()}, _idbUid+'|'+k); }
+        catch(e){ rej(e); return; }
+        rq.onsuccess=()=>res();
+        rq.onerror=()=>rej(rq.error||new Error('put failed'));
+        try{ st.transaction.onabort=()=>rej(st.transaction.error||new Error('aborted')); }catch(_){}
+      });
+    }catch(e){ dbWhy(k,'沒存進 IndexedDB',((e&&e.name)||'')+' '+((e&&e.message)||e)); }
+  }
 }
 async function cacheHydrate(uid){
   if(!uid) return 0;
@@ -10267,6 +10283,8 @@ async function cacheHydrate(uid){
       _dbCache.set(r.table,{t:0,fullAt:Date.now(),data:r.data,sig:r.sig,logAt:r.logAt});
       n++;
     });
+    try{ window._dbHydrated=rows.filter(r=>r&&r.uid===uid).map(r=>r.table).sort(); }catch(_){}
+    dbWhy('（開場）','從 IndexedDB 還原 '+n+' 張表',(window._dbHydrated||[]).join(','));
     return n;
   }catch(_){ return 0; }
 }
@@ -38397,6 +38415,7 @@ async function openPersonProfile(kind, id, backPage){
      ⚠ 只加量測，不改任何載入邏輯；量完就知道要往哪裡優化。 */
   const _t0=Date.now(); const _mark={};
   const _statFrom=(window._dbStat||[]).length;   // 這一次操作抓了哪些表（見 dbStat()）
+  const _whyFrom=(window._dbWhy||[]).length;
   /* 主執行緒卡頓偵測（2026-08-23 三量）——伺服器紀錄顯示 /rest/v1/bookings 平均只花
      151ms 就回完了（最慢 1.6s），但畫面等了 12～23 秒，而且 114KB 的小表也等一樣久。
      不是伺服器、也不合頻寬的行為，那就只剩一種可能：請求早就回來了，
@@ -38450,10 +38469,11 @@ async function openPersonProfile(kind, id, backPage){
       /* 這一行是關鍵：卡頓佔了總時間多少。
          接近 100% → 瓶頸在瀏覽器（主執行緒被佔住），不是網路也不是伺服器。 */
       const _lagPct=_tot>0?Math.round(_lagMs/_tot*100):0;
-      const _why=(window._dbWhy||[]).slice(-14).filter(w=>w.判斷!=='命中快取')
-        .map(w=>`${w.表}:${w.判斷}${w.說明?'('+w.說明+')':''}`).slice(0,4).join('、');
+      const _why=(window._dbWhy||[]).slice(_whyFrom).filter(w=>w.判斷!=='命中快取')
+        .map(w=>`${w.表}:${w.判斷}${w.說明?'('+w.說明+')':''}`).slice(0,5).join('、');
+      const _hyd=(window._dbHydrated||[]).length;
       try{ showToast(`讀取 ${(_tot/1000).toFixed(1)} 秒：${_brk}${_top}`
-        +`　【卡住 ${_lagPct}%】${_why?'　快取：'+_why:''}`, 14000); }catch(_){}
+        +`　【開場還原 ${_hyd} 張】${_why?'　'+_why:''}`, 14000); }catch(_){}
     }
   }
 }

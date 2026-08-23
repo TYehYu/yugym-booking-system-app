@@ -27,8 +27,9 @@ function makeStore(rows){
 }
 function load(store, o){
   o=o||{};
+  /* 0823：cacheHydrate 會呼叫 dbWhy() 並寫 window._dbHydrated（純量測）——沙箱補上。 */
   const env={ _dbCache:new Map(), IDB_MAX_AGE:86400000,
-    idbTx:async()=>(o.broken?null:store) };
+    idbTx:async()=>(o.broken?null:store), dbWhy:()=>{}, window:{} };
   const code=['let _idbUid=null,_idbSaveT=null; const _idbDirty=new Set();',
     'async '+grabFn('cacheHydrate'), 'async '+grabFn('cacheWipe'),
     'function _uid(){ return _idbUid; }'].join('\n');
@@ -94,7 +95,17 @@ console.log('\n⑥ 接線與把關（原始碼）');
   ok('★ 開場在 enterApp 之前載回來（兩條登入路徑都有）',
      (src.match(/try\{ await cacheHydrate\(uid\); \}catch\(_\)\{\}/g)||[]).length===2);
   ok('★ 登出會清空', /async function doLogout\(\)\{[\s\S]{0,400}?await cacheWipe\(\);/.test(src));
-  ok('　　只存有簽章的表（沒簽章的存了也不能用）', /if\(!hit \|\| !hit\.sig\) return;/.test(src));
+  ok('　　只存有簽章的表（沒簽章的存了也不能用）',
+     /if\(!hit \|\| !hit\.sig\)\{ dbWhy\(k,'沒存進 IndexedDB','沒有簽章'\); continue; \}/.test(src));
+  /* 0823：使用者回報開會員資料十幾秒，量到 contracts 走「簽章相符」（有存到）
+     但 bookings 整張重抓。原本整批表塞在同一個 readwrite 交易裡，而 IndexedDB 的交易
+     是全有全無 —— 一張寫失敗就整批不留，大表失敗會把小表一起拖掉。 */
+  ok('★★ 一張表一個交易（一張失敗不會把整批拖掉）',
+     /for\(const k of keys\)\{[\s\S]{0,400}?const st=await idbTx\('readwrite'\);/.test(src)
+     && /IndexedDB 的交易是全有全無/.test(src));
+  ok('★★ 寫入失敗不再靜靜吞掉（記進 _dbWhy 查得到）',
+     /catch\(e\)\{ dbWhy\(k,'沒存進 IndexedDB',\(\(e&&e\.name\)\|\|''\)\+' '\+\(\(e&&e\.message\)\|\|e\)\); \}/.test(src)
+     && /rq\.onerror=\(\)=>rej\(rq\.error\|\|new Error\('put failed'\)\);/.test(src));
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
