@@ -52,7 +52,11 @@ ok('★★ 用 @container 判寬度，不靠 JS 量完才掛的 .ev-w-*（重疊
    /@container \(max-width: 78px\)\{/.test(src)
    && /卡片自己就是 container（container-type:size 在上面），寬度一變立刻生效/.test(src));
 ok('★★ 姓名直書、靠左、用 margin:auto 0 在剩餘空間垂直置中（時間留在最上面）',
-   /\.cal-ev\.cal-ev-std \.evc-name\{\s*\n\s*margin:auto 0;align-self:flex-start;\s*\n\s*writing-mode:vertical-rl;text-orientation:upright;/.test(src));
+   /margin:auto 0;align-self:flex-start;\s*\n\s*writing-mode:vertical-rl;text-orientation:upright;/.test(src));
+ok('★★ 選擇器要含 .cal-ev-7d 那一版 —— 它是 (0,4,0)，不蓋掉的話 -webkit-box-orient:vertical '
+   +'會把每個字當成一行、由右往左堆，字序整個顛倒（0823 使用者回報「姓名都歪掉了啦」）',
+   /\.cal-ev\.cal-ev-std \.evc-name,\s*\n\s*\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-name,\s*\n\s*\.cal-ev\.cal-ev-std\.ev-w-tiny \.evc-name\{/.test(src)
+   && /-webkit-line-clamp:none;-webkit-box-orient:horizontal;/.test(src));
 ok('★★ 章與教練標靠底；只有章時置中，有教練標時兩個各據中線一側',
    /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;top:auto;bottom:3px;\s*\n\s*left:50%;right:auto;transform:translateX\(-50%\);/.test(src)
    && /\.cal-ev\.cal-ev-std:has\(\.evc-coach\) \.evc-check\{left:auto;right:50%;transform:none;margin-right:2px;\}/.test(src));
