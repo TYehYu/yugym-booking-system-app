@@ -315,6 +315,18 @@ ok('★★ 會員姓名靠左置中、教練名稱靠右靠下',
    && /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-coach\{position:absolute;right:4px;bottom:3px;/.test(src));
 ok('★★ 姓名要落在整張卡的正中央 —— 下內距不能替教練名預留（會變成偏上）',
    /拿掉預留 → 姓名落在整張卡的正中央/.test(src));
+/* 0823 五修（使用者：「手機課卡如果有出席章 在課卡要靠左置中」）——
+   角章是右下角 30px 的 1/4 圓，正好壓在同日搬過去的教練名上。 */
+ok('★★ 出席章排進姓名那一列的左邊（不是絕對定位的角章）',
+   /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-nmrow\{display:flex;flex-direction:row-reverse;/.test(src)
+   && /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-check\{position:static;flex:none;/.test(src)
+   && /border-radius:50%/.test(src));
+ok('　　不用 :has() 判斷有沒有章 —— 章回到文字流，沒有章時姓名自然貼回最左',
+   /不需要 :has\(\) 去判斷這張卡有沒有章/.test(src));
+ok('　　1/4 圓角章那條要明確覆蓋掉（不覆蓋會變成一顆歪的方塊）',
+   /一定要自己寫 position:static 與 border-radius:50%/.test(src));
+ok('★★ 直書時章疊在姓名上方，一樣靠左、整組垂直置中',
+   /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-nmrow\{flex-direction:column-reverse;/.test(src));
 ok('★★ 直式時姓名貼左緣、垂直置中（align-items:flex-start＝水平靠左）',
    /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-txt\{align-items:flex-start;justify-content:center;\s*\n\s*text-align:left;padding:3px 2px;\}/.test(src)
    && /直書時 align-items 管的是水平位置/.test(src));

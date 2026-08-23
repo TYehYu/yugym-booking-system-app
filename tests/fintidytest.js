@@ -49,8 +49,10 @@ console.log('\n③ 老闆要看的重點標示出來');
 {
   const F=grabFn('finPnl');
 /* 0823 使用者指示改成兩欄版：淨利改為獨佔「頂列」（原本是與兩小格並排的左半）。 */
-  ok('★★ 淨利獨佔頂列一整條、字最大，賺／虧用綠紅分',
+  /* 0823 二修（使用者：「上方的利潤置中顯示」）：它橫跨整個寬度，靠左時右邊空一大片。 */
+  ok('★★ 淨利獨佔頂列一整條、置中、字最大，賺／虧用綠紅分',
      /<div class="pnl2-hero \$\{net>=0\?'ok':'bad'\}">/.test(F)
+     && /\.pnl2-hero\{[^}]*align-items:center;text-align:center;/.test(src)
      && /\.pnl2-hero-v\{font-family:var\(--num\),inherit;font-size:38px;font-weight:800;/.test(src)
      && /\.pnl2-hero\.bad\{background:linear-gradient\(180deg,#fdf1f0 0%,#fbe9e7 100%\);border-color:#e8b6b0;\}/.test(src));
   ok('★★ 直接用白話講結論（「本月到目前為止賺 $X」）',
@@ -63,7 +65,7 @@ console.log('\n③ 老闆要看的重點標示出來');
      && /\.pnl2-in \.pnl2-head-l,\.pnl2-in \.pnl2-head-v\{color:var\(--green,#1f6f54\);\}/.test(src)
      && /\.pnl2-out \.pnl2-head-l,\.pnl2-out \.pnl2-head-v\{color:var\(--red,#7A2E28\);\}/.test(src));
   ok('★ 支出那格直接拆給你看（人事排最前 —— 那是最大一筆）',
-     /人事 \$\{m\(staffCost\)\}・稅 \$\{m\(tax\)\}・固定 \$\{m\(fixedTotal\)\}・其他 \$\{m\(otherTotal\)\}/.test(F));
+     /人事 \$\{m\(staffCost\)\}・稅 \$\{m\(tax\)\}・支出 \$\{m\(fixedTotal\+otherTotal\)\}/.test(F));
   ok('★★ 員工薪資仍是支出欄裡的一列，指向下方明細',
      /<span class="pnl2-i-l">員工薪資（應發）<i>\$\{payRows\.length\} 位・明細見下方<\/i><\/span>/.test(F));
   ok('★ 逐位教練仍逐列列出、金額由大到小',
@@ -72,7 +74,7 @@ console.log('\n③ 老闆要看的重點標示出來');
   ok('★ 支出合計＝稅＋薪資＋勞健保＋固定＋其他，與淨利同一份計算',
      /const spend=tax\+salary\+coIns\+fixedTotal\+otherTotal;/.test(F)
      && /const net=revenue-tax-salary-coIns-fixedTotal-otherTotal;/.test(F));
-  ok('　　手機版縮成一欄', /@media\(max-width:760px\)\{ \.pnl-hero\{grid-template-columns:1fr;\} \.pnl-hero-v\{font-size:34px;\} \}/.test(src));
+  ok('　　手機版縮成一欄', /@media\(max-width:900px\)\{ \.pnl2-cols\{grid-template-columns:1fr;\} \.pnl2-hero-v\{font-size:32px;\} \}/.test(src));
   ok('　　使用者的原話寫在程式裡', /「要重點標示身為老闆該看到的內容喔」/.test(src));
 }
 

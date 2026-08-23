@@ -50,12 +50,17 @@ console.log('\n④ 逐項列出');
 ok('★★ 每位教練一列（只列本月要計薪、金額大於 0 的，金額由大到小）',
    /\.filter\(r=>r\.countSalary&&Number\(r\.sal&&r\.sal\.grossPay\)>0\)/.test(F)
    && /\.sort\(\(a,b\)=>b\.amt-a\.amt\)/.test(F));
-/* 0823 兩欄改版：子項從表格的 .pnl-sub 改成右欄的 .pnl2-i-sub，合併與次數的規則沒變 */
-ok('★ 固定支出與其他支出各自逐項（同名目合併、多筆標次數）',
-   /const groupBy=a=>\{ const g=\{\}; a\.forEach\(e=>\{ const k=e\.category\|\|'其他';/.test(F)
-   && /r\.n>1\?`<i>×\$\{r\.n\}<\/i>`:''/.test(F));
-ok('　　沒有支出時也講清楚（不是留白）',
-   /本月沒有固定支出/.test(F) && /本月沒有其他支出/.test(F));
+/* 0823 二修（使用者：「收斂成［支出］」）：固定／其他兩列與各自的逐項清單收成一列總額，
+   品項改在支出登記視窗裡看。分法沒有消失——這一列的小字寫著各自多少。 */
+ok('★★ 損益表只留一列［支出］（固定＋其他），逐項清單不再畫在表上',
+   /<span class="pnl2-i-l">支出<i>固定 \$\{m\(fixedTotal\)\}・其他 \$\{m\(otherTotal\)\}/.test(F)
+   && /<span class="pnl2-i-v">\$\{neg\(fixedTotal\+otherTotal\)\}<\/span>/.test(F)
+   && !/pnl2-i-sub/.test(F));
+ok('　　沒登記過也講清楚（不是只留一個 −$0 讓人猜）',
+   /\$\{\(fixedTotal\+otherTotal\)\?'':'・本月還沒登記'\}/.test(F));
+ok('　　合併／次數那段沒有留半套在程式裡（groupBy 沒有呼叫端了就移除）',
+   !/const groupBy=/.test(F)
+   && /隨 0823 二修的「收斂成［支出］」\s*\n\s*一起移除/.test(F));
 /* 2026-08-08 使用者提問「人事成本還沒扣掉勞健保嗎」→ 納入；
    同日再指示「公司負擔的勞健保也獨立出來在每月支出」→ 改成與固定／其他支出並列的大項。 */
 ok('★ 淨利＝銷課 − 稅 − 薪資 − 公司負擔勞健保 − 固定 − 其他',
@@ -76,8 +81,13 @@ ok('★ 明說員工自付的那一份不必再扣（已含在應發裡）',
 ok('　　員工薪資標明是「應發」', /<b>員工薪資<\/b>＝各員工當月應發（與薪資頁同一支計算）/.test(F));
 
 console.log('\n⑥ 版面與防呆');
-ok('　　金額右對齊、等寬數字', /\.pnl td:last-child\{text-align:right;font-family:var\(--num\)/.test(src));
-ok('　　小項縮排', /\.pnl \.pnl-sub td:first-child\{padding-left:18px;/.test(src));
+ok('　　金額右對齊、等寬數字', /\.pnl2-i-v\{[^}]*font-family:var\(--num\)/.test(src)
+   && /\.pnl2-i\{[^}]*justify-content:space-between/.test(src));
+/* 0823 二修：表格版樣式（.pnl/.pnl-sub/.pnl-hero/.pnl-link）整組移除，沒有標記在用了。
+   縮排小項這件事本身也一起退場——支出只剩一列總額，品項在登記視窗裡看。 */
+ok('　　舊表格版樣式不留半套在檔案裡', !/^\.pnl\{/m.test(src) && !/\.pnl \.pnl-sub td/.test(src)
+   && !/\.pnl-link\{/.test(src) && !/^\.pnl-hero\{/m.test(src)
+   && /整組移除；現行樣式是下面的 \.pnl2-\*/.test(src));
 ok('　　算不出來時不留白', /損益表暫時算不出來/.test(F));
 ok('　　算之前先顯示計算中', /損益表計算中…/.test(F));
 ok('　　使用者的原話寫在程式裡', /經營報表幫我列出當月淨利，包含每個教練的薪資、/.test(src));

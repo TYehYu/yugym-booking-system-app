@@ -167,13 +167,17 @@ console.log('\n④ 儲存：新增／修改／刪除一次到位');
 
 console.log('\n⑤ 從哪裡進得去');
 /* 0823 兩欄改版：那一列從表格的 .pnl-link 改成右欄的 .pnl2-tap，入口沒變 */
-ok('★★ 損益表的「固定支出」那一列點得動',
-   /<button type="button" class="pnl2-i pnl2-tap" onclick="openFixedExpenses\('\$\{ym\}'\)">/.test(src));
+/* 0823 二修：損益表那兩列收斂成一列［支出］，點下去開挑選視窗，
+   再由視窗分到固定／其他 —— 兩個入口都還在，只是少一層。 */
+ok('★★ 損益表的「支出」那一列點得動（開挑選視窗）',
+   /<button type="button" class="pnl2-i pnl2-tap" onclick="openExpensePick\('\$\{ym\}'\)">/.test(src));
+ok('　　挑選視窗兩張卡各自通到固定／其他（入口沒有因為收斂而消失）',
+   /onclick="closeModal\(\);openExpenseEditor\('\$\{month\}',true\)"/.test(src)
+   && /onclick="closeModal\(\);openExpenseEditor\('\$\{month\}',false\)"/.test(src));
 ok('★ 支出頁也有一顆設定鈕（講明可加減項目、下月自動帶入）',
    /onclick="openFixedExpenses\('\$\{month\}'\)">⚙ 固定支出設定（可加減項目・下月自動帶入）<\/button>/.test(src));
 ok('★★ 其他支出也有入口，並講明不延續',
-   /<button type="button" class="pnl2-i pnl2-tap" onclick="openOtherExpenses\('\$\{ym\}'\)">/.test(src)
-   && /onclick="openOtherExpenses\('\$\{month\}'\)">⚙ 其他支出（一次登記多筆・不延續到下個月）<\/button>/.test(src));
+   /onclick="openOtherExpenses\('\$\{month\}'\)">⚙ 其他支出（一次登記多筆・不延續到下個月）<\/button>/.test(src));
 /* 2026-08-23 使用者指示：「在這個頁面每種支出的右上角就顯示金額」——
    不然要點進去才知道這個月記了多少、有沒有漏。 */
 ok('★★ 支出登記的挑選視窗，每一種右上角顯示本月已登錄的金額',
