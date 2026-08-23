@@ -63,9 +63,10 @@ t('★ 日期列在課卡區之上、獨立一列',
 t('★ 七天平分寬度（不是固定寬、不出現橫捲）',
   /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;/.test(src)
   && /\.twk-barin\{flex:1 1 auto;min-width:0;display:flex/.test(src));
-t('★ 今天綠底、選取黑框的語彙沒被改掉',
+/* 0823 使用者指示改成金色底（今天仍是綠底）——三個日期列統一。 */
+t('★ 今天綠底、選取金色底的語彙沒被改掉',
   /\.twk-day\.today\{background:var\(--green\);color:#fff;border-color:var\(--green\);\}/.test(src)
-  && /\.twk-day\.on\{border-color:#1a1a1a;border-width:2px;\}/.test(src));
+  && /\.twk-day\.on\{border-color:var\(--gold,#B48A56\);border-width:2px;\}/.test(src));
 t('　舊的直欄樣式已清掉（不留死 CSS）', !/\.twk-rail\{/.test(src) && !/\.twk-railin/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);

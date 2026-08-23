@@ -99,10 +99,32 @@ ok('★ 左右鍵直接 ±7 天，不另外維護週偏移狀態（會和 _dashV
    && /onclick="dashDayShift\(7\)" title="下一週"/.test(src)
    && /不另外維護一個週偏移狀態（那會和 _dashViewDate 兩份狀態互相打架）/.test(src));
 /* 0822 使用者定版：兩個維度交換 —— 今天＝品牌綠底、選取＝黑框（可以同時成立） */
-ok('　　選中的那天與今天分得開（今天＝綠底、選中＝黑框）',
+/* 0823：選取改金色底（使用者：「桌機首頁這邊日期列 選取也改成金色底」「今日維持綠色底」）
+   —— 與手機首頁 .a2-day.on、手機行事曆 .admh .msb-date.on 同一組數值。 */
+ok('　　選中的那天與今天分得開（今天＝綠底、選中＝金色底）',
    /\.twk-day\.today\{background:var\(--green\);color:#fff;border-color:var\(--green\);\}/.test(src)
-   && /\.twk-day\.on\{border-color:#1a1a1a;border-width:2px;\}/.test(src));
+   && /\.twk-day\.on\{border-color:var\(--gold,#B48A56\);border-width:2px;\}/.test(src)
+   && /\.twk-day\.on:not\(\.today\)\{background:rgba\(180,138,86,\.14\);color:var\(--gold-d,#8a6a30\);\}/.test(src));
+ok('　　今天被選取時綠底不被蓋掉（底色那條帶 :not(.today)）',
+   /今天被選取時＝綠底＋金框，綠底不被蓋掉/.test(src));
 ok('　　滑過看得到那天有幾堂', /title="\$\{ds\}\$\{n\?`　\$\{n\} 堂`:'　沒有課'\}"/.test(src));
+/* 0823 使用者指示：「首頁的月曆翻頁的按鈕跟日期列翻頁的按鈕都改成品牌紅」
+   「月曆翻頁的按鈕改成左右」——日期格剛改成金色底，翻頁鈕再是金的就變成兩種金互相稀釋。 */
+ok('★★ 兩個翻頁鈕都是品牌紅（與「回到今天」同一支紅）',
+   /\.twk-bar>\.tl-daynav\{flex:0 0 auto;margin:0;align-self:center;\s*\n\s*background:var\(--danger,#7F0303\);color:#fff;\}/.test(src)
+   && /\.mcal-btn\.mcal-btn-nav\{background:var\(--danger,#7F0303\);color:#fff;font-weight:700;\}/.test(src));
+ok('★★ 月曆翻頁改左右箭頭（上下會被讀成「捲動這張表」）',
+   /<button class="mcal-btn mcal-btn-nav" onclick="admCalShift\(-1\)" title="上個月">‹<\/button>/.test(src)
+   && /<button class="mcal-btn mcal-btn-nav" onclick="admCalShift\(1\)" title="下個月">›<\/button>/.test(src)
+   && !/onclick="admCalShift\(-1\)">︿/.test(src));
+ok('　　紅底那條要寫在三條半透明白底之後才蓋得過（同為 0,2,0）',
+   src.indexOf('.cal-side .mcal-btn,.cag-mcal .mcal-btn{')<src.indexOf('.mcal-btn.mcal-btn-nav{')
+   && src.indexOf('.cal-hero .mcal-btn{')<src.indexOf('.mcal-btn.mcal-btn-nav{')
+   && /只有寫在它們後面才蓋得過/.test(src));
+/* 0823 使用者指示：「可以把內容距離邊界的空間縮小，不要讓邊邊白一區那麼多，今日營收也是」 */
+ok('★ 卡片內距收斂（日期列與 KPI 卡都不要四周留一條白帶）',
+   /\.tl-panel\{background:var\(--card\);border:1px solid var\(--bd\);border-radius:16px;padding:12px 14px 8px;/.test(src)
+   && /\.dash-sum-card\{background:var\(--card\);border:1px solid var\(--bd\);border-radius:16px;padding:14px 16px;/.test(src));
 {
   /* 週一起算的算法（與 index.html 同一條式子） */
   const monOf=d=>{ const x=new Date(d); x.setDate(d.getDate()-((d.getDay()+6)%7)); return x; };
