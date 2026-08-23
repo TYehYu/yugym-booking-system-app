@@ -241,7 +241,7 @@ ok('　　挑選視窗的兩顆按鈕是白底（米底彈窗上再鋪米底＝�
 /* 三修（使用者：「每一筆改成一列，時間最短…品項最長，金額次等」）——
    日期改成只挑「幾號」之後只要 60px，三格塞得下就不折行了。 */
 ok('★★ 手機上「其他支出」一列三格：日期最短、品項最長、金額次等',
-   /\.fx-3 \.fx-head,\.fx-3 \.fx-row\{grid-template-columns:60px 1fr 84px;gap:6px;\}/.test(src)
+   /\.fx-3 \.fx-head,\.fx-3 \.fx-row\{grid-template-columns:60px 1fr 84px;gap:0;\}/.test(src)
    && !/\.fx-3 \.fx-head\{display:none;\}/.test(src));
 ok('　　欄位對得齊了，抬頭跟著留著（二修時因為折行對不齊才藏起來）',
    /欄位對得齊了，抬頭也跟著留著（二修時因為折行對不齊才藏起來）/.test(src));

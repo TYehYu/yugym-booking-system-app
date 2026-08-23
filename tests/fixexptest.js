@@ -118,8 +118,21 @@ console.log('\n③ 改數字／加項目／減項目');
      /\.fx-x\{display:flex;align-items:center;justify-content:center;\s*\n\s*position:absolute;right:7px;top:50%;/.test(src)
      && /\.fx-x\{display:none;\}/.test(src));
   ok('★ 日期格要與旁邊兩格同尺寸（.adp-field 預設是表單裡的大欄位）',
-     /\.fx-dwrap \.adp-field\{padding:6px 9px;border-radius:7px;font-size:13px;gap:6px;min-width:0;\}/.test(src)
+     /\.fx-dwrap \.adp-field\{padding:6px 9px;border-radius:7px;font-size:13px;gap:0;min-width:0;\s*\n\s*justify-content:flex-end;\}/.test(src)
      && /日期這欄格子\s*\n\s*比旁邊的都大，畫面失去平衡/.test(src));
+  /* 2026-08-23 使用者回報：「時間右邊的箭頭要隱藏，已經影響顯示了」——
+     欄位只有 60px，▾ 吃掉 10px 之後「15 日」被截成「15…」。 */
+  ok('★★ 日期欄的 ▾ 要藏（60px 的欄位放不下，會把「15 日」截成「15…」）',
+     /\.fx-dwrap \.adp-field \.adp-ic\{display:none;\}/.test(src));
+  ok('★★ 抬頭每欄之間一條細線，內容一律靠右（使用者指示）',
+     /\.fx-head>span\+span\{border-left:1px solid var\(--bd\);\}/.test(src)
+     && /\.fx-head>span\{text-align:right;\}/.test(src)
+     && /text-align:right;\}   \/\* 2026-08-23 使用者指示：內容都靠右 \*\//.test(src));
+  ok('★★ 欄距改用 margin 不用 gap —— 有 gap 與沒 gap 的列欄寬算法不同，'
+     +'抬頭的分隔線會對不到資料列的欄界',
+     /\.fx-head,\.fx-row\{display:grid;grid-template-columns:1fr 130px;gap:0;/.test(src)
+     && /\.fx-row>\*\{margin:0 4px;\}/.test(src)
+     && /gap 會讓「有 gap 的列」與「沒 gap 的列」欄寬算法不同/.test(src));
   ok('★ ＋新增一項', /onclick="fxAdd\(\)">＋ 新增一項<\/button>/.test(src));
   ok('★ 最上面一列是欄名（✕ 那一格已隨滑動刪除拿掉）',
      /<div class="fx-head">\$\{fx\?'':'<span>日期<\/span>'\}<span>項目<\/span><span>金額<\/span><\/div>/.test(src));
