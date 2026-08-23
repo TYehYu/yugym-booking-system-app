@@ -16,8 +16,11 @@ console.log('格子底色＝場地狀態');
 ok('★★ 額滿→淡化紅、只剩教室→淡化金；其餘不上色（露出 .cal-body 的米底）',
    /if\(a && a\.error\) return ' cal-half-full';/.test(src)
    && /if\(a && a\.toVid==='group'\) return ' cal-half-grp';/.test(src)
-   && /\.cal-half\.cal-half-full\{background:rgba\(181,55,46,\.085\);\}/.test(src)
-   && /\.cal-half\.cal-half-grp\{background:rgba\(180,138,86,\.10\);\}/.test(src));
+   && /\.cal-half\.cal-half-full\{background:rgba\(181,55,46,\.17\);\}/.test(src)
+   && /\.cal-half\.cal-half-grp\{background:rgba\(180,138,86,\.22\);\}/.test(src));
+ok('★★ mc-mode（桌機管理員側欄版面）的 .cal-body 也要是米底 —— 那條 (0,2,1) 權重比 .cal-body 高，'
+   +'留著 80% 白就會把米底整片蓋掉（0823 使用者回報「怎麼還有白色底的時段背景」）',
+   /body\.mc-mode \.cal-body\{background:var\(--bg\);\}/.test(src));
 ok('★★ 用全部預約算，不是用 visible —— 被教練篩選濾掉的課照樣佔場地',
    /const _vAll=\(bookings\|\|\[\]\)\.filter\(x=>x && x\.date===ds && x\.status!=='cancelled'\);/.test(src)
    && /場地容量是全店共用的，\s*\n\s*被教練篩選濾掉的課照樣佔著位子/.test(src));
@@ -43,6 +46,22 @@ ok('★ 打烊後不論場地狀態都是灰的',
    /\.cal-half\.cal-half-closed\.cal-half-full,\s*\n\.cal-half\.cal-half-closed\.cal-half-grp\{background:rgba\(0,0,0,0\.045\);\}/.test(src));
 ok('★ 過去的日期整欄不上色（.cal-daycol.col-past 權重比新規則高）',
    /\.cal-daycol\.col-past \.cal-half\{background:transparent;\}/.test(src));
+
+console.log('\n窄卡：姓名直書、章與教練標靠底置中（2026-08-23 使用者指示）');
+ok('★★ 用 @container 判寬度，不靠 JS 量完才掛的 .ev-w-*（重疊分欄一變就要等下一次重繪）',
+   /@container \(max-width: 78px\)\{/.test(src)
+   && /卡片自己就是 container（container-type:size 在上面），寬度一變立刻生效/.test(src));
+ok('★★ 姓名直書、靠左、用 margin:auto 0 在剩餘空間垂直置中（時間留在最上面）',
+   /\.cal-ev\.cal-ev-std \.evc-name\{\s*\n\s*margin:auto 0;align-self:flex-start;\s*\n\s*writing-mode:vertical-rl;text-orientation:upright;/.test(src));
+ok('★★ 章與教練標靠底；只有章時置中，有教練標時兩個各據中線一側',
+   /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;top:auto;bottom:3px;\s*\n\s*left:50%;right:auto;transform:translateX\(-50%\);/.test(src)
+   && /\.cal-ev\.cal-ev-std:has\(\.evc-coach\) \.evc-check\{left:auto;right:50%;transform:none;margin-right:2px;\}/.test(src));
+ok('★ 教練標籤用縮寫（.co-ab），且極窄卡不再整個藏掉',
+   /\.cal-ev\.cal-ev-std \.evc-coach \.co-ab\{display:inline;\}/.test(src)
+   && /\.cal-ev\.cal-ev-std\.ev-w-tiny \.evc-coach\{display:inline-block;\}/.test(src));
+ok('　　體驗／待簽約那一列在這個寬度整列藏起來（理由寫在原地）',
+   /\.cal-ev\.cal-ev-std \.evc-sub\{display:none;\}/.test(src)
+   && /姓名轉直書之後它會被擠到\s*\n\s*姓名右邊的殘寬裡/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
