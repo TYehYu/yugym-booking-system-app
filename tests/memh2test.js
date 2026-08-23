@@ -169,8 +169,10 @@ t('過去的日子：列出來但暗化、不可點、文案改「已結束」',
   && /\$\{heads\}\/\$\{cap\} 人\$\{past\?'・已結束':\(full\?'・已額滿':'・還可報名'\)\}/.test(html));
 t('額滿或已結束的畫出來但點不下去', /const full=heads>=cap;/.test(html)
   && /\(full\|\|past\)\?'':` onclick="memh2GrpJoin\('\$\{b\.id\}'\)"`/.test(html));
-t('自己已報名的課卡過期也暗化（st.past 早就算好，原本只有 memh2Tap 在用）',
-  /\$\{\(st\.past&&!st\.done\)\?' mh2-past':''\}/.test(html)
+t('自己已報名的課卡過期也暗化，且用 st.ended（下課時間）不是 st.past（開始時間）',
+  /\$\{\(st\.ended&&!st\.done\)\?' mh2-past':''\}/.test(html)
+  && /ended:\(slot\+\(\(Number\(b\.duration\)\|\|60\)\*60000\)\)<=Date\.now\(\)/.test(s)
+  && /past 給「改時間／取消」用 —— 課一開始就該鎖，這是原本的語意，不要動/.test(s)
   && /\.memh2 \.admh2-card\.mh2-past\{opacity:\.45;filter:brightness\(0\.92\) saturate\(0\.6\);\}/.test(s));
 t('　　已簽到的不必再暗（那顆綠章就是結論，暗掉反而像沒上到）',
   /已簽到的不必再暗（那顆綠章就是結論，暗掉反而像沒上到）/.test(s));

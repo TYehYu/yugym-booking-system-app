@@ -7021,6 +7021,10 @@ body:has(#wtl-page),body:has(.cag-wrap){overscroll-behavior-y:none;}
      那條是 1/4 圓角章（0,3,0），不覆蓋就會變成一顆歪的方塊。 */
 .cag-wk-col .cal-ev.cal-ev-std .evc-nmrow{display:flex;flex-direction:row-reverse;
   justify-content:flex-end;align-items:center;gap:3px;min-width:0;max-width:100%;}
+/* 姓名要能被壓縮才會出現「陳…」而不是撐破卡片：flex 子項預設 min-width:auto，
+   .evc-name 本身有 overflow:hidden 但沒有 min-width:0，排進 flex 之後就不縮了。
+   （桌機那組在 min-width:601px 的區塊裡有寫，手機這條路以前不是 flex 所以沒遇到。） */
+.cag-wk-col .cal-ev.cal-ev-std .evc-nmrow .evc-name{min-width:0;flex:0 1 auto;}
 .cag-wk-col .cal-ev.cal-ev-std .evc-check{position:static;flex:none;
   width:14px;height:14px;border-radius:50%;padding:0;
   font-size:9px;font-weight:800;line-height:1;
@@ -9822,8 +9826,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2030';
-const APP_VERSION_LABEL='v260823.2030';
+const APP_VERSION = '260823.2036';
+const APP_VERSION_LABEL='v260823.2036';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -45473,7 +45477,12 @@ function memh2CkState(b){
   const slot=new Date(b.date+'T'+b.start_time+':00').getTime();
   const open=!done && (isGrp?seats.length>0:true) && b.date===ymd(TODAY) && Date.now()>=slot-30*60000;
   const leave=isGrp && done && seats.length>0 && seats.every(k=>(att[k]||'')==='leave');
-  return {isGrp,done,open,leave,slot,past:slot<Date.now()};
+  /* past（開始時間已過）與 ended（已經上完）是兩件事，不能共用一個值：
+     ・past 給「改時間／取消」用 —— 課一開始就該鎖，這是原本的語意，不要動。
+     ・ended 給 0823 新加的卡片暗化用 —— 用開始時間的話，19:00 的課 19:05 就整張暗掉，
+       人還在上課。與桌機行事曆的 _isPastCard 同一個口徑（開始＋時長 <= 現在）。 */
+  return {isGrp,done,open,leave,slot,past:slot<Date.now(),
+    ended:(slot+((Number(b.duration)||60)*60000))<=Date.now()};
 }
 function memh2PickDay(ds){ mh2S().date=ds; window._memCalKeep=true; navTo('mem_bookings'); }
 /* 換週一律落在該週的週一（2026-08-22 全站規則） */
@@ -45562,9 +45571,10 @@ function memh2HTML(o){
        已簽到／請假／未到本來就有左邊那顆出席章，再寫一次是同一件事講兩遍。
        剩下兩列：課程・場地（主要，粗體）／第幾堂共幾堂（沒綁票的團課就不畫）。 */
     /* 過期就暗化（2026-08-23 使用者回報：「會員端過期的團課沒有暗化 看起來像是可以預約」）——
-       memh2CkState 早就算好 st.past（開始時間已過），但全檔只有 memh2Tap 在用它擋按鈕，
-       卡面完全看不出來。已簽到的不必再暗（那顆綠章就是結論，暗掉反而像沒上到）。 */
-    return `<div class="admh2-card${st.done?' admh-done':''}${(st.past&&!st.done)?' mh2-past':''}" style="--admh-c:${col};" onclick="memh2Tap('${b.id}')">
+       memh2CkState 早就算好時間狀態，但全檔只有 memh2Tap 在用它擋按鈕，卡面完全看不出來。
+       ⚠ 用 st.ended（下課時間）不是 st.past（開始時間）—— 後者會讓正在上課的那一堂先暗掉。
+       已簽到的不必再暗（那顆綠章就是結論，暗掉反而像沒上到）。 */
+    return `<div class="admh2-card${st.done?' admh-done':''}${(st.ended&&!st.done)?' mh2-past':''}" style="--admh-c:${col};" onclick="memh2Tap('${b.id}')">
       <div class="a2-stampcol">${stamp?`<span class="admh-stamp ${stamp[1]}">${stamp[0]}</span>`:''}</div>
       <div class="a2-main">
         <div class="a2-l1">${cname}${_vn?'・'+_vn:''}</div>
