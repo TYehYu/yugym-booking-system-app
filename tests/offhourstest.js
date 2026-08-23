@@ -81,5 +81,15 @@ ok('★★ 一週檢視點格的上限原本寫死 21:00、不分星期（週日
 ok('　　那只是「點到哪裡」的收斂，不是限制（表單裡照樣選得到，送出前會問）',
    /只是「點到哪裡」的收斂，不是限制/.test(src));
 
+console.log('\n⑥ 同批：指派代課教練收給櫃檯以上');
+ok('★★ 教練端不畫「指派代課教練」（權限層級＝這個身分根本沒有這個功能，整組不畫）',
+   /function bkCanSub\(\)\{ return isDeskLike\(\); \}/.test(src)
+   && /這一個不套「淡化＋寫原因」那一套語彙/.test(src));
+ok('★★ 桌機展開卡與明細視窗的教練下拉也一起收（不是只收簡易課卡那一列）',
+   /\$\{bkCanSub\(\)\?`<label>教練<select id="ed-subcoach">\$\{subOpts\}<\/select><\/label>`:''\}/.test(src)
+   && (src.match(/\$\{\(editable&&bkCanSub\(\)\)\?/g)||[]).length===3);
+ok('　　寫入端沒有下拉時沿用原本的代課設定（不會被清成 null）',
+   /const nsub=document\.getElementById\('ed-subcoach'\)\?document\.getElementById\('ed-subcoach'\)\.value\|\|null:b\.substitute_coach_id\|\|null;/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

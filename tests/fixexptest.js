@@ -167,10 +167,20 @@ console.log('\n④ 儲存：新增／修改／刪除一次到位');
 
 console.log('\n⑤ 從哪裡進得去');
 /* 0823 兩欄改版：那一列從表格的 .pnl-link 改成右欄的 .pnl2-tap，入口沒變 */
-/* 0823 二修：損益表那兩列收斂成一列［支出］，點下去開挑選視窗，
-   再由視窗分到固定／其他 —— 兩個入口都還在，只是少一層。 */
-ok('★★ 損益表的「支出」那一列點得動（開挑選視窗）',
-   /<button type="button" class="pnl2-i pnl2-tap" onclick="openExpensePick\('\$\{ym\}'\)">/.test(src));
+/* 0823 二修：損益表那兩列收斂成一列［支出］，點下去開挑選視窗，再由視窗分到固定／其他。
+   0823 三修（使用者：「支出改成兩個按鈕 固定支出跟其他支出 桌機版」）：桌機一列夠寬，
+   直接給兩顆、少點一次；手機維持一顆（兩顆並排在窄欄裡字會被擠掉）。 */
+ok('★★ 手機：一顆［支出］開挑選視窗',
+   /<button type="button" class="pnl2-i pnl2-tap pnl2-x1" onclick="openExpensePick\('\$\{ym\}'\)">/.test(src));
+ok('★★ 桌機：兩顆分別直通固定／其他',
+   /<div class="pnl2-x2">/.test(src)
+   && /<button type="button" class="pnl2-i pnl2-tap" onclick="openFixedExpenses\('\$\{ym\}'\)">/.test(src)
+   && /<button type="button" class="pnl2-i pnl2-tap" onclick="openOtherExpenses\('\$\{ym\}'\)">/.test(src));
+ok('　　斷點沿用兩欄收成一欄的 900px（收成一欄之後欄寬就等於手機）',
+   /\.pnl2-x2\{display:none;\}/.test(src) && /\.pnl2-x1\{display:flex;\}/.test(src)
+   && /@media\(min-width:901px\)\{\s*\n\s*\.pnl2-x2\{display:grid;grid-template-columns:repeat\(auto-fit,minmax\(190px,1fr\)\);gap:6px;\}\s*\n\s*\.pnl2-x1\{display:none;\}/.test(src));
+ok('　　逐項清單仍然不畫在表上（那是二修的重點，不要被三修帶回來）',
+   !/class="pnl2-i pnl2-i-sub"/.test(src));
 ok('　　挑選視窗兩張卡各自通到固定／其他（入口沒有因為收斂而消失）',
    /onclick="closeModal\(\);openExpenseEditor\('\$\{month\}',true\)"/.test(src)
    && /onclick="closeModal\(\);openExpenseEditor\('\$\{month\}',false\)"/.test(src));

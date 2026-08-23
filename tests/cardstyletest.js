@@ -204,8 +204,9 @@ ok('★ 修改項統一吃 acts.editable（含「課程日 >= 今天」）',
 ok('★★ 改時間的規則收斂成一支，視窗與拖移共用（原本兩邊各判各的）',
    /function bkMoveBlockReason\(b\)\{/.test(src)
    && /const _mvBlk=_leave\?'教練請假中的課不能改時間，請先復原請假':bkMoveBlockReason\(b\);/.test(src));
-ok('　　請假那條路也擋得住過去的課（代課視窗本身要 _editable 才進得去）',
-   /sub: \(_editable && !bkIsSelf\(b\)\) \? 'sub' : null/.test(src));
+ok('　　請假那條路也擋得住過去的課（兩條路都要 _editable：代課視窗、教練自己的那一列）',
+   /sub: \(bkCanSub\(\) && _editable && !bkIsSelf\(b\)\) \? 'sub' : null,/.test(src)
+   && /subLeave: \(!bkCanSub\(\) && _editable && !bkIsSelf\(b\)\) \? 'leave' : null\};/.test(src));
 ok('★ 舊的判斷（只看 staff／closed，沒帶日期）已經拿掉',
    !/if\(!_leave && A\.staff && !A\.closed\) rows\+=row\(`closeModal\(\);admhMoveAsk/.test(src)
    && !/\}else if\(A\.staff && !A\.closed && canCoachLeave\(b\)\)\{/.test(src)
@@ -239,7 +240,13 @@ ok('★ 分頁列的判斷同樣放寬到櫃檯以上',
 
 console.log('\n教練請假搬進「指派代課教練」（2026-08-21 使用者指示）');
 ok('★ 代課清單裡有請假這一列', /row\(`closeModal\(\);bkCoachLeave\('\$\{bid\}'\)`,'教練請假',/.test(src));
-ok('★ 調整課程那一層不再給請假', !/rows\+=row\(`closeModal\(\);bkCoachLeave\('\$\{b\.id\}'\)`,'教練請假'/.test(src));
+/* 0823：櫃檯以上仍然走代課清單那條；沒有代課權限的（教練）在調整課程那一層
+   直接給「教練請假」——否則代課一收走，他連請假都沒得按。 */
+ok('★ 有代課權限的人不在調整課程那一層重複給請假（走代課清單那一條）',
+   /if\(!_leave && A\.sub==='sub'\) rows\+=row\(`closeModal\(\);ashSubPick/.test(src));
+ok('★★ 沒有代課權限的人，那一列改成直接請假（條件與代課清單裡那一列一致）',
+   /rows\+=row\(`closeModal\(\);bkCoachLeave\('\$\{b\.id\}'\)`,'教練請假',\s*\n\s*\(typeof bkCoachLeaveSub==='function'\)\?bkCoachLeaveSub\(b\):'','ash-ei-danger'\);/.test(src)
+   && /typeof canCoachLeave==='function' && canCoachLeave\(b\) && !bkIsCoachLeave\(b\)/.test(src));
 ok('★ 已經請假的不重複給（只在還沒請假時出現）', /canCoachLeave\(b\) && !bkIsCoachLeave\(b\)/.test(src));
 ok('　　復原留在上一層（請假後變自主訓練，代課視窗根本進不去）',
    /acts\.sub 的條件不成立、代課視窗進不去，放那裡等於藏起來/.test(src));

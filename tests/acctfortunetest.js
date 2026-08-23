@@ -71,9 +71,16 @@ ok('　　真的送出時才收課卡（confirmCalMove 之後會 navTo 重繪，
 ok('★ 視窗集合：更改場地（所有課別，不再只有自主訓練）',
    /A\.venue==='self'\) rows\+=row\(`closeModal\(\);bkOrbitVenue/.test(ei)
    && /A\.venue==='any'\) rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openVenueChange/.test(ei));
-ok('　　venue 對所有課別開放、sub 只給非自主訓練',
+/* 0823：sub 再加一道 bkCanSub()（櫃檯／店長以上）——使用者：「教練端移除［指定代課
+   教練］ 這個功能只給櫃檯 店長以上」。教練不會因此失去請假：見下面的 subLeave。 */
+ok('　　venue 對所有課別開放、sub 只給「非自主訓練」且櫃檯以上',
    /venue: _editable \? \(bkIsSelf\(b\)\?'self':'any'\) : null,/.test(src)
-   && /sub: \(_editable && !bkIsSelf\(b\)\) \? 'sub' : null/.test(src));
+   && /sub: \(bkCanSub\(\) && _editable && !bkIsSelf\(b\)\) \? 'sub' : null,/.test(src)
+   && /function bkCanSub\(\)\{ return isDeskLike\(\); \}/.test(src));
+ok('★★ 教練沒有代課權限，但不能連「教練請假」一起失去（那是 0821 搬進代課清單的）',
+   /subLeave: \(!bkCanSub\(\) && _editable && !bkIsSelf\(b\)\) \? 'leave' : null\};/.test(src)
+   && /else if\(!_leave && A\.subLeave==='leave'/.test(src)
+   && /代課一收給櫃檯，教練會連請假入口\s*\n\s*一起失去/.test(src));
 ok('　　openVenueChange 的返回是 openBookingDetail，先立旗標才不會被丟進明細',
    /ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openVenueChange/.test(ei));
 ok('★ 視窗集合：指派代課教練', /A\.sub==='sub'\) rows\+=row\(`closeModal\(\);ashSubPick\('\$\{b\.id\}'\)`,'指派代課教練'/.test(ei));
@@ -104,7 +111,7 @@ ok('★ 已請假的堂：這一層只留復原', /if\(_leave\)\{\s*\n\s*rows \+
    && !/'教練請假',bkCoachLeaveSub\(b\)/.test(ei));
 /* 8 條：調整日期／時間、更改場地（自主訓練）、更改場地（其他課別）、指派代課、
    更換課程、更換票券、補簽、本堂人數上限（0821 之後陸續加的都跟著掛 !_leave）。 */
-ok('　　已請假的堂，其他修改一律不列（每一條都掛 !_leave）', (ei.match(/!_leave &&/g)||[]).length===8);
+ok('　　已請假的堂，其他修改一律不列（每一條都掛 !_leave）', (ei.match(/!_leave &&/g)||[]).length===9);
 ok('　　團課請假＝整堂取消、救不回來，照實說明', ei.includes('這堂的教練請假是<b>整堂取消</b>，無法復原'));
 ok('★ 復原前先跳視窗確認（使用者指示）',
    /async function ashCoachLeaveUndoAsk\(id\)[\s\S]*取消教練請假？[\s\S]*bkCoachLeaveUndo\('\$\{b\.id\}'\)/.test(src));

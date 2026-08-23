@@ -1728,6 +1728,15 @@ body.mc-mode .layout{padding-top:8px;}
 .pnl2-cap{font-size:11px;color:var(--t3);line-height:1.6;padding:0 4px 9px;}
 /* 每一項一個白框（與營運速覽／員工表現同一套語彙） */
 .pnl2-list{display:flex;flex-direction:column;gap:6px;}
+/* 支出入口：桌機兩顆（固定／其他各一），手機一顆（開挑選視窗）。
+   斷點沿用兩欄收成一欄的 900px —— 收成一欄之後欄寬就等於手機，兩顆並排會擠。
+   ⚠ auto-fit + minmax 是保險：欄再窄就自己疊成上下兩顆，不會把金額擠出去。 */
+.pnl2-x2{display:none;}
+.pnl2-x1{display:flex;}
+@media(min-width:901px){
+  .pnl2-x2{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;}
+  .pnl2-x1{display:none;}
+}
 .pnl2-i{display:flex;align-items:baseline;justify-content:space-between;gap:10px;width:100%;
   background:#fff;border:1px solid var(--bd);border-radius:10px;padding:9px 11px;
   font-family:inherit;text-align:left;}
@@ -9773,8 +9782,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.1951';
-const APP_VERSION_LABEL='v260823.1951';
+const APP_VERSION = '260823.1956';
+const APP_VERSION_LABEL='v260823.1956';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11299,6 +11308,14 @@ function applyDeepLink(){
 /* 店長＝櫃台級權限（2026-07-27 使用者定案：桌機同櫃台介面＋店長導覽列）。
    前端所有「後台人員」判斷統一走這裡；資料庫層 is_staff_desk() 已同步納入店長。 */
 function isDeskLike(){ return !!(SESSION && (SESSION.role==='admin'||SESSION.role==='front_desk'||(SESSION.role==='coach'&&SESSION.is_manager))); }
+/* 指派代課教練＝櫃檯／店長以上（2026-08-23 使用者指示：「教練端移除［指定代課教練］
+   這個功能只給櫃檯 店長以上」）——換誰上課會連動業績歸屬、薪資與班表，那是櫃檯在管的事；
+   教練要換人請走「教練請假」或跟櫃檯講。
+   ⚠ 這一個不套「淡化＋寫原因」那一套語彙：那是為「現在不能用」設計的，
+     這裡是「這個身分根本沒有這個功能」（權限層級），整組不畫才對。
+   ⚠ 桌機課卡圓鈕的「代課」本來就吃 staff（含店長），沒有這個破口；缺的是簡易課卡與
+     明細／展開卡裡的教練下拉。 */
+function bkCanSub(){ return isDeskLike(); }
 
 /* ══════ 會員自助異動 → 桌機右下角滑出通知（2026-07-29 使用者指示）══════
    會員自己在手機上改自主訓練／團體課時，櫃檯桌機不會知道。這裡輪詢
@@ -21231,6 +21248,10 @@ async function ashEditAsk(id){
   if(!_leave && A.venue==='self') rows+=row(`closeModal();bkOrbitVenue('${b.id}')`,'更換場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
   else if(!_leave && A.venue==='any') rows+=row(`ashBackArm('${b.id}');closeModal();openVenueChange('${b.id}','ash')`,'更換場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
   if(!_leave && A.sub==='sub') rows+=row(`closeModal();ashSubPick('${b.id}')`,'指派代課教練','從教練名單挑一位，或清除代課');
+  else if(!_leave && A.subLeave==='leave'
+          && typeof canCoachLeave==='function' && canCoachLeave(b) && !bkIsCoachLeave(b))
+    rows+=row(`closeModal();bkCoachLeave('${b.id}')`,'教練請假',
+      (typeof bkCoachLeaveSub==='function')?bkCoachLeaveSub(b):'','ash-ei-danger');
   /* 更換票券／補簽（2026-08-20）：桌機的詳細預約視窗要退役，這兩顆只在那裡有，
      不搬過來的話櫃檯會直接失去這兩個功能。條件與原本那兩顆完全一致：
      ・更換票券 = 還沒簽到、非團課（團課的票在 ticket_logs、不在 ticket_id）、櫃檯以上
@@ -25559,7 +25580,13 @@ async function expandBkCard(el, id){
        所以 8/18 這種已經上完的課還給得出改期與請假。統一吃這一個旗標。 */
     editable: _editable,
     venue: _editable ? (bkIsSelf(b)?'self':'any') : null,
-    sub: (_editable && !bkIsSelf(b)) ? 'sub' : null};
+    /* 2026-08-23：加上 bkCanSub()（櫃檯／店長以上）—— _editable 在 0822 放寬成
+       「staff 或 這堂是自己的」之後，教練點開自己的課就看得到這一列。 */
+    sub: (bkCanSub() && _editable && !bkIsSelf(b)) ? 'sub' : null,
+    /* ⚠ 教練請假 0821 搬進了「指派代課教練」那張清單，代課一收給櫃檯，教練會連請假入口
+       一起失去 —— 那不是使用者要的（他要移除的是「指定代課教練」）。
+       所以沒有代課權限的人，這一列改成直接給「教練請假」：同一個問題的另一個答案。 */
+    subLeave: (!bkCanSub() && _editable && !bkIsSelf(b)) ? 'leave' : null};
   let btns='';
   /* 待簽約／待分期保留（2026-08-04 使用者指示：「這種待簽約或待分期，只要顯示
      取消、明細、轉正」）——還沒收款的卡位談不上簽到、代課、場地，按鈕減到三顆；
@@ -26809,7 +26836,7 @@ async function bkInlineEdit(id){
     <label>時間<select id="ed-time">${bkTimeOptions(b.start_time,{noEmpty:1})}</select></label>
     <label>時長<select id="ed-dur">${durOpts}</select></label>
     ${isPersonalPT?`<label>教室<select id="ed-venue">${venOpts}</select></label>`:''}
-    <label>教練<select id="ed-subcoach">${subOpts}</select></label>
+    ${bkCanSub()?`<label>教練<select id="ed-subcoach">${subOpts}</select></label>`:''}
     <div class="evc-actions">
       <button class="evx-btn evx-primary" onclick="event.stopPropagation();bkInlineEditSave('${id}')">儲存</button>
       <button class="evx-btn" onclick="event.stopPropagation();collapseBkCard()">取消</button>
@@ -27513,7 +27540,7 @@ async function openBookingDetail(id){
       ${/* 2026-07-29 使用者指示：教練與場地移到時間下面、圓形卡上面 —— 先看清楚
            「誰上、在哪」，再看票券進度。 */''}
       <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
-        ${editable?`
+        ${(editable&&bkCanSub())?`
           <span style="color:var(--t2);flex-shrink:0;">教練</span>
           <select id="ed-subcoach" style="font-size:12.5px;padding:4px 6px;border:1px solid var(--bd);border-radius:7px;background:#fff;max-width:150px;">
             <option value="">${coach?coach.name:'—'}（主責）</option>
@@ -27555,7 +27582,7 @@ async function openBookingDetail(id){
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="color:var(--t2);flex-shrink:0;">教練</span><span style="flex-shrink:0;">${_coachNm}</span>
-        ${editable?`<select id="ed-subcoach" style="font-size:12.5px;padding:4px 8px;border:1px solid var(--bd);border-radius:7px;background:#fff;max-width:170px;">
+        ${(editable&&bkCanSub())?`<select id="ed-subcoach" style="font-size:12.5px;padding:4px 8px;border:1px solid var(--bd);border-radius:7px;background:#fff;max-width:170px;">
           <option value="">無代課</option>
           ${coachableList.filter(c=>c.id!==b.coach_id).map(c=>`<option value="${c.id}" ${b.substitute_coach_id===c.id?'selected':''}>代課：${coachDisp(c)}</option>`).join('')}</select>`
           :(_hasSub?`<span class="tag" style="background:#f5ede0;color:#8A5E28;">代課：${_subNm}</span>`:'')}
@@ -27589,7 +27616,7 @@ async function openBookingDetail(id){
           : `<span style="font-family:var(--num);font-size:15px;font-weight:700;color:var(--text);">${b.date.replace(/-/g,'/')}（${WD[d.getDay()]}）${b.start_time}　<span style="font-size:12px;color:var(--t3);font-weight:400;">${b.duration}分</span></span>`}
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">教練</span><span>${_coachNm}</span>
-        ${editable?`<select id="ed-subcoach" style="font-size:12.5px;padding:4px 8px;border:1px solid var(--bd);border-radius:7px;background:#fff;max-width:170px;">
+        ${(editable&&bkCanSub())?`<select id="ed-subcoach" style="font-size:12.5px;padding:4px 8px;border:1px solid var(--bd);border-radius:7px;background:#fff;max-width:170px;">
           <option value="">無代課</option>
           ${coachableList.filter(c=>c.id!==b.coach_id).map(c=>`<option value="${c.id}" ${b.substitute_coach_id===c.id?'selected':''}>代課：${coachDisp(c)}</option>`).join('')}</select>`
           :(_hasSub?`<span class="tag" style="background:#f5ede0;color:#8A5E28;">代課：${_subNm}</span>`:'')}
@@ -50395,7 +50422,19 @@ async function finPnl(){
             <div class="pnl2-i"><span class="pnl2-i-l">營業稅 5%<i>依收款 ${m(cash)} 內含計</i></span><span class="pnl2-i-v">${neg(tax)}</span></div>
             <div class="pnl2-i"><span class="pnl2-i-l">員工薪資（應發）<i>${payRows.length} 位・明細見下方</i></span><span class="pnl2-i-v">${neg(salary)}</span></div>
             <div class="pnl2-i"><span class="pnl2-i-l">公司負擔勞健保<i>勞保雇主＋健保雇主＋勞退＋職災</i></span><span class="pnl2-i-v">${neg(coIns)}</span></div>
-            <button type="button" class="pnl2-i pnl2-tap" onclick="openExpensePick('${ym}')">
+            ${/* 2026-08-23 三修（使用者：「支出改成兩個按鈕 固定支出跟其他支出 桌機版」）——
+                 桌機一列夠寬，直接給兩顆，少點一次挑選視窗；
+                 手機維持一顆［支出］，兩顆並排在窄欄裡字會被擠掉。
+                 逐項清單仍然不畫在表上（那是二修「收斂成［支出］」的重點）。 */''}
+            <div class="pnl2-x2">
+              <button type="button" class="pnl2-i pnl2-tap" onclick="openFixedExpenses('${ym}')">
+                <span class="pnl2-i-l">固定支出<i>點我設定</i></span>
+                <span class="pnl2-i-v">${neg(fixedTotal)}</span></button>
+              <button type="button" class="pnl2-i pnl2-tap" onclick="openOtherExpenses('${ym}')">
+                <span class="pnl2-i-l">其他支出<i>點我登記</i></span>
+                <span class="pnl2-i-v">${neg(otherTotal)}</span></button>
+            </div>
+            <button type="button" class="pnl2-i pnl2-tap pnl2-x1" onclick="openExpensePick('${ym}')">
               <span class="pnl2-i-l">支出<i>固定 ${m(fixedTotal)}・其他 ${m(otherTotal)}${(fixedTotal+otherTotal)?'':'・本月還沒登記'}・點我登記</i></span>
               <span class="pnl2-i-v">${neg(fixedTotal+otherTotal)}</span></button>
           </div>
