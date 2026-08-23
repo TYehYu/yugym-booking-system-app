@@ -9889,8 +9889,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2308';
-const APP_VERSION_LABEL='v260823.2308';
+const APP_VERSION = '260823.2312';
+const APP_VERSION_LABEL='v260823.2312';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10079,7 +10079,11 @@ function dbStat(){
 async function _dbGetAllFresh(store){
   const _statT=Date.now();
   const _statPerf=(()=>{ try{ return performance.now(); }catch(_){ return 0; } })();
-  const _statPush=(rows,bytes)=>{ try{
+  /* ⚠ 量測本身不可以貴：原本這裡對整張表做 JSON.stringify 只為了算 KB，
+     bookings 5.5MB 每抓一次就多做一遍 —— 量測工具自己變成負擔就沒意義了。
+     改成用「第一列的長度 × 列數」估，誤差不影響判斷。 */
+  const _statPush=(rows,firstRow)=>{ try{
+    const bytes=rows?Math.round(JSON.stringify(firstRow||{}).length*rows):0;
     /* 實際上線傳了幾個位元組（2026-08-23 二量）——上面的 bytes 是「解析後的 JSON 字串長度」，
        看不出有沒有壓縮。PerformanceResourceTiming 的 transferSize 才是真的走過網路的量，
        decodedBodySize 是解壓後的量：兩個一比就知道壓縮有沒有生效。
@@ -10088,7 +10092,10 @@ async function _dbGetAllFresh(store){
          那本身也是一個資訊（記成 -1 以示區別）。 */
     let wire=null, dec=null;
     try{
-      const es=performance.getEntriesByType('resource')
+      /* getEntriesByType('resource') 會回整頁所有資源，輪詢久了會有上萬筆 ——
+         只掃最後 40 筆就夠（我們要的一定是剛剛才發出的那幾個）。 */
+      const all=performance.getEntriesByType('resource');
+      const es=all.slice(-40)
         .filter(e=>e.name.indexOf('/rest/v1/'+tbl(store))>=0 && e.startTime>=_statPerf);
       if(es.length){
         wire=es.reduce((a,e)=>a+(e.transferSize||0),0);
@@ -10128,7 +10135,7 @@ async function _dbGetAllFresh(store){
   if(_sel==='*' && first && first.data && first.data[0]) leanLearn(store, first.data[0]);
   if(first.error) throw dbFriendlyError(first.error, store, '讀取');
   let out=first.data||[];
-  if(out.length<PAGE){ _statPush(out.length, JSON.stringify(out).length); return out; }
+  if(out.length<PAGE){ _statPush(out.length, out[0]); return out; }
   let from=PAGE;
   for(;;){
     const rs=await Promise.all(Array.from({length:WAVE},(_,i)=>q(from+i*PAGE)));
@@ -10142,7 +10149,7 @@ async function _dbGetAllFresh(store){
     if(done) break;
     from+=WAVE*PAGE;
   }
-  _statPush(out.length, JSON.stringify(out).length);
+  _statPush(out.length, out[0]);
   return out;
 }
 /* ── SWR 取用：偷看快取，不發請求（2026-07-23 使用者回報「桌機導覽列切回首頁會 LAG」）──
@@ -38376,6 +38383,14 @@ async function openPersonProfile(kind, id, backPage){
      ⚠ 只加量測，不改任何載入邏輯；量完就知道要往哪裡優化。 */
   const _t0=Date.now(); const _mark={};
   const _statFrom=(window._dbStat||[]).length;   // 這一次操作抓了哪些表（見 dbStat()）
+  /* 主執行緒卡頓偵測（2026-08-23 三量）——伺服器紀錄顯示 /rest/v1/bookings 平均只花
+     151ms 就回完了（最慢 1.6s），但畫面等了 12～23 秒，而且 114KB 的小表也等一樣久。
+     不是伺服器、也不合頻寬的行為，那就只剩一種可能：請求早就回來了，
+     但主執行緒忙著別的事，await 的回呼排不進去。
+     心跳每 100ms 跳一次，把「超過 250ms 沒跳到」的差額加總 ＝ 被卡住的總時間。 */
+  let _lagMs=0, _lagMax=0, _hbLast=Date.now();
+  const _hb=setInterval(()=>{ const n=Date.now(), d=n-_hbLast-100; _hbLast=n;
+    if(d>150){ _lagMs+=d; if(d>_lagMax) _lagMax=d; } }, 100);
   const _busy=uiBusy('讀取資料中…');
   const _say=t=>{ const el=document.getElementById('ui-busy');
     const sp=el&&el.querySelector('.uib-box span:last-child'); if(sp) sp.textContent=t; };
@@ -38403,6 +38418,7 @@ async function openPersonProfile(kind, id, backPage){
     if(isMobileLayout()) ppOpenSheet(false, _winM); else ppOpenPage();
     _mark['繪製']=Date.now()-_t2;
   }finally{
+    clearInterval(_hb);
     _busy();
     /* 慢的時候把分段時間講出來（超過 1.2 秒才吐司，平常不吵）——
        使用者不必開 devtools 就能回報「卡在哪一段」。 */
@@ -38417,7 +38433,11 @@ async function openPersonProfile(kind, id, backPage){
     if(_tot>1200){
       const _top=_got.length?`　→ ${_got.slice(0,3).join('、')}${_got.length>3?` …共 ${_got.length} 張`:''}`
                             :'　→ 全部命中快取（那就不是抓資料慢）';
-      try{ showToast(`讀取 ${(_tot/1000).toFixed(1)} 秒：${_brk}${_top}`, 9000); }catch(_){}
+      /* 這一行是關鍵：卡頓佔了總時間多少。
+         接近 100% → 瓶頸在瀏覽器（主執行緒被佔住），不是網路也不是伺服器。 */
+      const _lagPct=_tot>0?Math.round(_lagMs/_tot*100):0;
+      try{ showToast(`讀取 ${(_tot/1000).toFixed(1)} 秒：${_brk}${_top}`
+        +`　【主執行緒卡住 ${(_lagMs/1000).toFixed(1)}s（${_lagPct}%）・單次最久 ${_lagMax}ms】`, 12000); }catch(_){}
     }
   }
 }
