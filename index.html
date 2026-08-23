@@ -3547,6 +3547,18 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 /* 活動紀錄：一列按鈕，點了下方換內容（取代「一行一個入口＋返回」） */
 /* 四顆平分整列（2026-08-20 使用者回報最右邊的「訓練紀錄」被切掉）——
    原本是固定寬度＋橫向捲動，四顆加起來比卡片內寬還長，最後一顆就露不出來。 */
+/* 員工工作紀錄的分頁（2026-08-23）：摘要小字、頁內列、合計列。
+   一列一個白框，與損益表 .pnl2-i／薪資單 .sal-row 同一組數值。 */
+.pp-emp-cap{font-size:11.5px;color:var(--t2);line-height:1.8;margin:-2px 0 10px;}
+.pp-emp-cap b{font-family:var(--num),inherit;font-weight:800;color:var(--text);}
+.pp-emp-sub{font-size:11px;color:var(--t3);line-height:1.6;margin:0 2px 8px;}
+.pp-emp-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  background:#fff;border:1px solid var(--bd);border-radius:10px;padding:9px 11px;margin-bottom:6px;
+  font-size:13px;color:var(--text);}
+.pp-emp-row i{font-style:normal;font-size:11px;color:var(--t3);margin-left:6px;}
+.pp-emp-row b{font-family:var(--num),inherit;font-size:14px;font-weight:800;white-space:nowrap;}
+.pp-emp-row.pp-emp-sum{border-color:var(--green);background:color-mix(in srgb,var(--green) 4%,#fff);}
+.pp-emp-row.pp-emp-sum b{color:var(--green);font-size:16px;}
 .pp-rectabs{display:flex;gap:5px;margin-bottom:14px;}
 /* ⚠ nowrap 但沒有 overflow 處理＝文字直接溢出格子、跟隔壁疊在一起（2026-08-22 使用者回報
    「中間三個按鈕的文字被擠壓了」）。補 overflow/ellipsis，窄機型再降一級字與內距：
@@ -9848,8 +9860,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.2057';
-const APP_VERSION_LABEL='v260823.2057';
+const APP_VERSION = '260823.2120';
+const APP_VERSION_LABEL='v260823.2120';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37565,19 +37577,90 @@ function ppRecordHtml(){
      入口本來就少（四個），列表一行一個，名稱與數字對齊，掃一眼就到底。
      「最近打卡」併進值班、「特休」也併進值班，所以這裡從六顆收成四行。
      值班那一行的標題寫「值班與打卡」：不寫出來沒人知道打卡跑到哪去了。 */
+  /* 2026-08-23 使用者指示：「這邊仿造會員資料設計，中間有四個按鈕，下方用條列式顯示」——
+     會員那邊（.pp-rectabs）0820 就改成「一列按鈕、點了下方直接換內容」，員工這邊還是
+     0802 的「一行一個入口 → 各自跳一個視窗」。四個入口本來就固定，做成分頁比較順：
+     看完課堂想看打卡，不用關視窗再點一次。
+     ⚠ 四個分頁的內容各自需要非同步資料，所以這裡只畫殼，實際內容由 ppEmpPaneFill()
+       在 ppRenderBody() 把 HTML 塞進 DOM 之後補上（同一支也負責「載入中」）。
+     ⚠ 原本那四支入口（ppOpenEmpClasses／ppOpenEmpShifts／ppOpenEmpSalary／openHrSalary）
+       全部保留：員工列表的圖示、補登打卡存完的返回都還在用。 */
+  if(!PP.recView) PP.recView='classes';
+  const EMP_TABS=[['classes','本月課堂'],['duty','值班打卡'],['salary','薪資單'],['rules','薪資規則']];
+  const tabs=`<div class="pp-rectabs">${EMP_TABS.map(([k,l])=>
+    `<button class="pp-rectab${PP.recView===k?' active':''}" onclick="ppShowEmpRecord('${k}')">${l}</button>`).join('')}</div>`;
+  /* 摘要那兩個數字（本月課堂／值班工時）不因為改分頁而不見 —— 它們是「一眼就要看到」的，
+     移到分頁列上方當一行小字。特休可用時數也在這裡。 */
+  const cap=`<div class="pp-emp-cap">本月課堂 <b>${c.mClassDone}</b>/${c.mClassSched} 堂　·　`
+    +`值班打卡 <b>${(c.mDutyDone||0).toFixed(1)}</b>/${(c.mDutySched||0).toFixed(1)} 小時　·　特休 <b>${al}</b> 小時可用</div>`;
   return `<div class="pp-card">
     <div class="pp-card-t">工作紀錄</div>
-    <div class="pp-dlist">
-      ${ppDashRow('calendar','本月課堂',
-        `${c.mClassDone}<small>/ ${c.mClassSched} 堂</small>`,
-        '月曆 · 點日期看當天名單', `ppOpenEmpClasses('${id}')`)}
-      ${ppDashRow('clock','值班與打卡',
-        `${(c.mDutyDone||0).toFixed(1)}<small>/ ${(c.mDutySched||0).toFixed(1)} 小時</small>`,
-        `月曆 · 排班與打卡對照 · 特休 ${al} 小時可用`, `ppOpenEmpShifts('${id}')`)}
-      ${ppDashRow('money','薪資單','', '完整明細 · 可切換月份', `ppOpenEmpSalary('${id}')`)}
-      ${ppDashRow('card','薪資規則','', '值班模式 · 級距 · 獎金 · 津貼', `openHrSalary('${id}')`)}
-    </div>
+    ${cap}${tabs}
+    <div id="pp-emp-pane"><div class="pp-card-tip">載入中…</div></div>
   </div>`;
+}
+/* 薪資單（頁內版）：列出這個月的計算項目，完整的（含勞健保、換月份）仍走原本那張薪資頁。
+   ⚠ 沿用 computeMonthlyPayroll ＋ payrollCalcRows —— 與薪資彙總、薪資單同一套計算，
+     不要在這裡另外算一份（那是「兩個對不起來的數字」的標準起手式）。 */
+async function ppEmpSalaryHtml(id){
+  const ym=ymd(TODAY).slice(0,7);
+  const {rows}=await computeMonthlyPayroll(ym);
+  const r=(rows||[]).find(x=>x&&x.emp&&x.emp.id===id);
+  if(!r) return `<div class="pp-card-tip">這個月沒有這位員工的薪資資料。</div>`;
+  const _m=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+  const [Y,M]=ym.split('-');
+  return `<div class="pp-emp-sub">${Y} 年 ${M} 月　·　與薪資彙總同一套計算</div>
+    ${payrollCalcRows(r)}
+    <div class="pp-emp-row pp-emp-sum"><span>應發合計</span><b>${_m(r.sal&&r.sal.grossPay)}</b></div>
+    <div style="text-align:right;margin-top:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="ppOpenEmpSalary('${id}')">開啟完整薪資單 ›</button></div>`;
+}
+/* 薪資規則（頁內版）：把「這個月實際生效的條件」逐條列出來，改仍走原本那張表單。
+   ⚠ 用 empAtMonth 取當月版本，不要直接讀 coaches 那一列 —— 每個月的條件是各自的快照
+     （0802 定案），直接讀會顯示成「最新設定」而不是「這個月適用的」。 */
+function ppEmpRulesHtml(id){
+  const c0=(PP.rec&&PP.rec.id===id)?PP.rec:null;
+  if(!c0) return `<div class="pp-card-tip">讀不到員工資料。</div>`;
+  const ym=ymd(TODAY).slice(0,7);
+  const c=(typeof empAtMonth==='function')?empAtMonth(c0,ym):c0;
+  const _m=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+  const et=(typeof normEmp==='function')?(normEmp(c.employment_type||c.pay_type)||'full_time'):'full_time';
+  const etLb=((typeof HR_ET_LIST!=='undefined'&&HR_ET_LIST)||[]).reduce((a,[k,l])=>k===et?l:a,et);
+  const row=(l,v,sub)=>v==null||v===''?'':`<div class="pp-emp-row"><span>${escH(l)}${
+    sub?`<i>${escH(sub)}</i>`:''}</span><b>${v}</b></div>`;
+  const [Y,M]=ym.split('-');
+  const modeLb={progressive:'累進制（依堂數級距）',flat:'固定單價',percent:'抽成制'}[String(c.pt_mode||'')]||(c.pt_mode||'—');
+  return `<div class="pp-emp-sub">${Y} 年 ${M} 月適用</div>
+    ${row('聘僱類型', escH(etLb))}
+    ${row('需要值班', c.need_duty===false?'否':'是')}
+    ${row('每週工作天數', c.work_days?`${c.work_days} 天`:'')}
+    ${row('底薪', Number(c.base_salary)>0?_m(c.base_salary):'')}
+    ${row('值班時薪', Number(c.duty_hourly)>0?_m(c.duty_hourly):'')}
+    ${row('課堂薪資制度', escH(modeLb))}
+    ${row('團課單價', Number(c.group_rate)>0?_m(c.group_rate)+' / 人次':'')}
+    ${row('續約獎金', Number(c.renew_bonus)>0?_m(c.renew_bonus)+' / 張':'')}
+    ${row('店長獎金', c.is_manager?'是（名單與門檻見編輯）':'')}
+    ${row('主管津貼', Number(c.supervisor_bonus)>0?_m(c.supervisor_bonus):'')}
+    <div style="text-align:right;margin-top:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="openHrSalary('${id}')">編輯薪資規則 ›</button></div>`;
+}
+/* 員工工作紀錄的分頁切換（2026-08-23）。與會員端的 ppShowRecord 對稱。 */
+function ppShowEmpRecord(k){ PP.recView=k; ppRenderBody(); }
+/* 分頁內容：ppRenderBody() 之後才呼叫（那時候 #pp-emp-pane 已經在 DOM 裡）。
+   課堂與值班直接沿用既有的月曆（_ppCal ＋ ppCalDraw），只是畫在頁內而不是彈窗裡；
+   薪資單與薪資規則在頁內列出重點，完整的編輯仍走原本那兩張視窗。 */
+async function ppEmpPaneFill(){
+  const pane=document.getElementById('pp-emp-pane'); if(!pane) return;
+  const id=PP.id, v=PP.recView||'classes';
+  try{
+    if(v==='classes'||v==='duty'){
+      pane.innerHTML='<div id="ppcal-wrap"></div>';
+      await ppCalOpen(v==='classes'?'class':'duty', id, (_ppCal&&_ppCal.id===id)?_ppCal.month:null, true);
+      return;
+    }
+    if(v==='salary'){ pane.innerHTML=await ppEmpSalaryHtml(id); return; }
+    pane.innerHTML=ppEmpRulesHtml(id);
+  }catch(e){ pane.innerHTML=`<div class="pp-card-tip">讀取失敗：${escH((e&&e.message)||String(e))}</div>`; }
 }
 /* ── 員工資料 → 本月課堂／本月值班：月曆版（2026-08-02 使用者指示）──
    「本月課堂點開用月曆呈現，每一天可以再點開看當天的名單；本月值班也改成月曆模式，
@@ -37596,7 +37679,7 @@ async function ppOpenEmpShifts(id, month){ return ppCalOpen('duty', id, month); 
    一律導到值班月曆 —— 打卡紀錄現在住在那裡。同一個人的話沿用剛剛看的月份。 */
 async function ppOpenEmpPunch(id){ return ppCalOpen('duty', id, (_ppCal&&_ppCal.id===id)?_ppCal.month:null); }
 
-async function ppCalOpen(kind, id, month){
+async function ppCalOpen(kind, id, month, inline){
   const ym = month || ymd(TODAY).slice(0,7);
   const [bookings, members, shifts, att] = await Promise.all([
     dbGetAll('bookings'), dbGetAll('members'),
@@ -37607,8 +37690,10 @@ async function ppCalOpen(kind, id, month){
     bookings:(bookings||[]).filter(b=>bkIsCoach(b,id)&&b.status!=='cancelled'),
     memMap:Object.fromEntries((members||[]).map(m=>[m.id,m.name])),
     shifts:(shifts||[]).filter(s=>s.emp_id===id),
-    att:(att||[]).filter(a=>a.emp_id===id) };
-  showModal(`<div id="ppcal-wrap"></div>`);
+    att:(att||[]).filter(a=>a.emp_id===id), inline:!!inline };
+  /* 頁內版（2026-08-23 工作紀錄改分頁）：#ppcal-wrap 已經由 ppEmpPaneFill 放好了，
+     不要再疊一層彈窗。彈窗版維持原樣。 */
+  if(!inline) showModal(`<div id="ppcal-wrap"></div>`);
   ppCalDraw();
 }
 function ppCalMonth(delta){
@@ -37644,7 +37729,14 @@ function ppCalDraw(){
      特休本來就是「這個月哪幾天不用來」，跟排班是同一件事的兩面。
      做成這個視窗裡的一顆鈕、就地展開，不另外疊一層彈窗（疊起來就得再做返回）。 */
   const leaveBar = isCls ? '' : ppCalLeaveBar();
-  host.innerHTML=`<div class="modal-title">${isCls?'課堂月曆':'值班與打卡'}${who}</div>
+  /* 頁內版沒有「標題／關閉」那兩截（它就住在工作紀錄那張卡裡，卡上已經寫著分頁名）；
+     補登打卡那顆改成接在月份列後面，免得整條 modal-foot 出現在頁面中間。 */
+  const _inline=!!_ppCal.inline;
+  const _punch=(!isCls&&isDeskLike())
+    ? `<button class="btn btn-green btn-sm" onclick="openPunchEdit('${_ppCal.id}')">＋ 補登打卡</button>` : '';
+  host.innerHTML=_inline
+    ? `${head}${leaveBar}${ppCalGrid()}${ppCalDayBox()}${_punch?`<div style="text-align:right;margin-top:10px;">${_punch}</div>`:''}`
+    : `<div class="modal-title">${isCls?'課堂月曆':'值班與打卡'}${who}</div>
     ${head}${leaveBar}${ppCalGrid()}${ppCalDayBox()}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
       ${(!isCls&&isDeskLike())?`<button class="btn btn-green" onclick="openPunchEdit('${_ppCal.id}')">＋ 補登打卡</button>`:''}</div>`;
@@ -38055,6 +38147,9 @@ function ppRenderBody(){
     const tabsEl=bodyEl&&bodyEl.querySelector('.pp-rectabs');
     if(tabsEl) host.insertBefore(tabsEl, bodyEl);
   }catch(_){}
+  /* 員工工作紀錄的分頁內容是非同步的（2026-08-23）——HTML 進 DOM 之後才填。
+     不 await：ppRenderBody 是同步的，而且很多地方在事件處理器裡直接呼叫它。 */
+  if(isE && !PP.editing){ try{ ppEmpPaneFill(); }catch(_){} }
 }
 // LINE 通知開關（會員資料頂部；直接切 members.line_notify，opt-out）
 async function ppToggleLineNotify(id){

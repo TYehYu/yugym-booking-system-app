@@ -133,9 +133,12 @@ ok('　　太窄（<340px）才退成兩排', /@media \(max-width:340px\)\{ \.pr
 ok('★ 下方列出各項薪資的計算方式', /<details class="pr-m-calc"><summary>計算方式<\/summary>/.test(src)
    && /\$\{payrollCalcRows\(r\)\}\s*\n\s*<div class="pr-m-sum">/.test(src));
 ok('　　卡片底部帶應發／勞健保扣款／實發', /pr-m-sum[\s\S]{0,300}pr-m-ded[\s\S]{0,200}pr-m-net2/.test(src));
-ok('★ 計算明細抽成共用函式，桌機與手機同一份',
+/* 0823：員工資料的「薪資單」分頁也改用同一支（第 4 個呼叫點），
+   所以是 1 個定義＋3 個呼叫點。抽共用的用意正是這個 —— 又多一處要列同一份計算時，
+   不必再抄一遍。 */
+ok('★ 計算明細抽成共用函式，桌機、手機與員工資料同一份',
    /function payrollCalcRows\(r\)\{/.test(src)
-   && (src.match(/payrollCalcRows\(r\)/g)||[]).length===3);
+   && (src.match(/payrollCalcRows\(r\)/g)||[]).length===4);
 ok('　　桌機仍用原本的表格（加 desktop-only 讓兩邊不重疊）',
    /<table class="rwd-card desktop-only">/.test(src));
 ok('　　金額都取整數（與營運分析同口徑）',

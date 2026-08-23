@@ -125,23 +125,46 @@ console.log('\n③ 值班月曆：排班與打卡排在同一格');
 
 console.log('\n④ 入口整理：工作紀錄改成列表');
 ok('★ 改用列表（不是卡片格）', /<div class="pp-dlist">/.test(src) && /function ppDashRow\(icon, title, value, sub, go\)\{/.test(src));
-ok('★ 只剩四行：本月課堂／值班與打卡／薪資單／薪資規則',
-   /* 2026-08-04 會員活動紀錄也改列表 → 全檔 4+4 行。
-      2026-08-22：會員的「訓練紀錄」那行改成 ${ppSelfView()?'':ppDashRow(...)}，
-      所以直接接在 ${ 後面的只剩 7 個，總數仍是 8。 */
-   /* 2026-08-22：「訓練紀錄」是開發中的空頁，入口收起來 → 呼叫點 8→7 */
-   (src.match(/ppDashRow\(/g)||[]).length===8   /* 7 個呼叫點＋1 個函式定義 */
-   && /ppDashRow\('calendar','本月課堂'/.test(src)
-   && /ppDashRow\('clock','值班與打卡'/.test(src)
-   && /ppDashRow\('money','薪資單'/.test(src)
-   && /ppDashRow\('card','薪資規則'/.test(src));
+/* 2026-08-23 使用者指示：「這邊仿造會員資料設計，中間有四個按鈕，下方用條列式顯示」——
+   四行入口改成四顆分頁鈕（與會員端的 .pp-rectabs 同一套），點了就在下方換內容。
+   ⚠ 四個入口函式全部保留：員工列表的圖示、補登打卡存完的返回都還在用。 */
+ok('★ 四顆分頁鈕：本月課堂／值班打卡／薪資單／薪資規則',
+   /const EMP_TABS=\[\['classes','本月課堂'\],\['duty','值班打卡'\],\['salary','薪資單'\],\['rules','薪資規則'\]\];/.test(src)
+   && /class="pp-rectab\$\{PP\.recView===k\?' active':''\}" onclick="ppShowEmpRecord\('\$\{k\}'\)"/.test(src));
+ok('★★ 原本那四支入口沒有被刪（列表圖示、補登打卡返回都還在用）',
+   /async function ppOpenEmpClasses\(/.test(src) && /async function ppOpenEmpShifts\(/.test(src)
+   && /async function ppOpenEmpSalary\(/.test(src) && /async function openHrSalary\(/.test(src));
+ok('★★ 課堂與值班沿用同一份月曆，只是畫在頁內（inline，不再疊一層彈窗）',
+   /async function ppCalOpen\(kind, id, month, inline\)\{/.test(src)
+   && /if\(!inline\) showModal\(`<div id="ppcal-wrap"><\/div>`\);/.test(src)
+   && /const _inline=!!_ppCal\.inline;/.test(src));
+ok('　　頁內版不畫 modal-title／modal-foot，補登打卡改接在月份列後面',
+   /頁內版沒有「標題／關閉」那兩截/.test(src));
+ok('★★ 分頁內容是非同步的 → HTML 進 DOM 之後才填（ppEmpPaneFill）',
+   /if\(isE && !PP\.editing\)\{ try\{ ppEmpPaneFill\(\); \}catch\(_\)\{\} \}/.test(src)
+   && /async function ppEmpPaneFill\(\)\{/.test(src));
+ok('★★ 薪資單頁內版走 computeMonthlyPayroll ＋ payrollCalcRows（不另外算一份）',
+   /const \{rows\}=await computeMonthlyPayroll\(ym\);/.test(src)
+   && /\$\{payrollCalcRows\(r\)\}/.test(src)
+   && /與薪資彙總、薪資單同一套計算，\s*\n\s*不要在這裡另外算一份/.test(src));
+ok('★★ 薪資規則頁內版用 empAtMonth 取當月版本（不是直接讀 coaches 那一列）',
+   /const c=\(typeof empAtMonth==='function'\)\?empAtMonth\(c0,ym\):c0;/.test(src)
+   && /每個月的條件是各自的快照/.test(src));
+ok('　　兩張完整的編輯視窗仍留著入口',
+   /onclick="ppOpenEmpSalary\('\$\{id\}'\)">開啟完整薪資單/.test(src)
+   && /onclick="openHrSalary\('\$\{id\}'\)">編輯薪資規則/.test(src));
+ok('　　本月課堂／值班工時／特休那三個數字沒有因為改分頁而不見（移到分頁列上方的小字）',
+   /本月課堂 <b>\$\{c\.mClassDone\}<\/b>\/\$\{c\.mClassSched\} 堂/.test(src)
+   && /特休 <b>\$\{al\}<\/b> 小時可用/.test(src));
 ok('★「最近打卡」那顆卡拿掉了', !/ppDashCard\('clock','最近打卡'/.test(src) && !/'最近打卡'/.test(src));
 ok('★「特休」那顆卡也拿掉了（併進值班視窗）',
    !/ppDashCard\('leaf','特休'/.test(src) && !/async function ppOpenEmpLeave/.test(src));
-ok('　　值班那一行的標題寫出「打卡」，不然沒人知道打卡搬去哪了',
-   /ppDashRow\('clock','值班與打卡'/.test(src));
-ok('　　特休的數字仍在那一行的說明裡（不用點進去才知道剩多少）',
-   /月曆 · 排班與打卡對照 · 特休 \$\{al\} 小時可用/.test(src));
+/* 0823 改分頁之後，這兩件事的落點換了位置，但都還在：
+   「打卡」寫在分頁鈕上（值班打卡），特休寫在分頁列上方的摘要小字裡。 */
+ok('　　分頁鈕寫出「打卡」，不然沒人知道打卡搬去哪了',
+   /\['duty','值班打卡'\]/.test(src));
+ok('　　特休的數字仍看得到（不用點進去才知道剩多少）',
+   /特休 <b>\$\{al\}<\/b> 小時可用/.test(src));
 /* 2026-08-04 使用者指示：「會員資料的活動紀錄也改成列表，跟員工資料一樣」——
    當時「會員那側不改」的假設已被使用者推翻，改驗兩側同一套列表。 */
 ok('★ 會員活動紀錄也改成列表（與工作紀錄同一套 ppDashRow）',
