@@ -1773,12 +1773,24 @@ body.mc-mode .layout{padding-top:8px;}
 .fx-swipe .fx-row{border-bottom:none;background:var(--card);position:relative;z-index:1;
   transition:transform .18s var(--ease-out,ease);will-change:transform;}
 .fx-swipe.open .fx-row{transform:translateX(-76px);}
+/* 桌機（真的有滑鼠的裝置）滑過去就推出刪除鈕 —— 沒有觸控就滑不動，不給路等於刪不掉。
+   ⚠ 一定要用 (hover:hover) and (pointer:fine)：iOS 點擊會補送 mouseover，
+     用 JS 監聽的話每點一次輸入框刪除鈕就跳出來一次（0823 使用者回報）。 */
+@media (hover:hover) and (pointer:fine){
+  .fx-swipe:hover .fx-row{transform:translateX(-76px);}
+}
 .fx-swdel{position:absolute;top:0;right:0;bottom:0;width:76px;z-index:0;
   border:none;background:var(--red,#7A2E28);color:#fff;font-size:13px;font-weight:700;
   letter-spacing:.05em;cursor:pointer;font-family:inherit;}
 .fx-swdel:active{background:#8f3730;}
-/* 日期欄改用自己的 adp-field（原生 date input 的文字格式改不了）；短版只寫 月/日 */
+/* 日期欄改用自己的 adp-field（原生 date input 的文字格式改不了）；短版只寫 月/日。
+   ⚠ .adp-field 預設是「表單裡的大欄位」（padding 12/14、圓角 14、字 14px），
+     直接放進支出列會比旁邊兩格高一截、圓角也不一樣 —— 使用者回報「日期這欄格子
+     比旁邊的都大，畫面失去平衡」。這裡把它壓成與 .fx-in 完全同一組尺寸。 */
 .fx-dwrap{padding:0!important;border:none!important;background:none!important;display:block;min-width:0;}
+.fx-dwrap .adp-field{padding:6px 9px;border-radius:7px;font-size:13px;gap:6px;min-width:0;}
+.fx-dwrap .adp-field>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fx-dwrap .adp-field .adp-ic{font-size:10px;}
 .adp-field.adp-short{min-width:0;}
 /* 手機上「其他支出」四欄排不下（2026-08-23 使用者回報：「其他支出手機版這樣看不出來是
    什麼內容」）—— 日期／項目／金額／刪除擠在 ~330px 的彈窗裡，日期欄光是
@@ -1859,6 +1871,16 @@ body.mc-mode .layout{padding-top:8px;}
 .dashctl-t.on,.dashctl-mo.on{background:var(--green);border-color:var(--green);color:#fff;}
 .dashctl-t:hover:not(.on),.dashctl-mo:hover:not(.on){border-color:var(--green);color:var(--green);}
 .dashctl-m{display:inline-flex;align-items:center;gap:3px;}
+/* [月][日]：兩顆黏成一段（2026-08-23 四修）——中間不留縫、只有外側有圓角，
+   看起來是「一個二選一」而不是兩顆各自獨立的鈕。 */
+.dashctl-seg{display:inline-flex;}
+.dashctl-seg .dashctl-t{padding:0 11px;border-radius:0;}
+.dashctl-seg .dashctl-t:first-child{border-radius:8px 0 0 8px;}
+.dashctl-seg .dashctl-t:last-child{border-radius:0 8px 8px 0;margin-left:-1px;}
+.dashctl-seg .dashctl-t.on{position:relative;z-index:1;}
+/* 期間那格：當期時不可按（沒有「回本月」這回事），淡化但不要看起來像壞掉 */
+.dashctl-mo{min-width:56px;text-align:center;font-family:var(--num),inherit;}
+.dashctl-mo:disabled{cursor:default;background:var(--card2);color:var(--t2);}
 /* 「◯◯總覽」那一列：標題靠左、控制項靠右；窄螢幕塞不下就整組換行（不要硬擠） */
 .ovh-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;
   flex-wrap:wrap;padding:12px 0 6px;}
@@ -1907,6 +1929,14 @@ body.mc-mode .layout{padding-top:8px;}
   border:1px solid var(--bd);border-radius:12px;padding:8px;margin-bottom:12px;}
 .ov-i{display:flex;align-items:center;gap:10px;padding:10px 11px;
   background:#fff;border:1px solid var(--bd);border-radius:10px;}
+/* 可點的那一列（2026-08-23：支出）——整列是 <button>，寬度、字型要自己拉回來，
+   不然瀏覽器預設的 button 樣式會把它縮成一顆小鈕。 */
+.ov-i-tap{width:100%;text-align:left;font-family:inherit;cursor:pointer;transition:.14s;}
+.ov-i-tap:hover{border-color:var(--red,#7A2E28);box-shadow:0 3px 12px rgba(122,46,40,.12);}
+.ov-i-tap:active{transform:scale(.99);}
+.ov-i-tap .ov-i-ic{background:#f7ecea;color:var(--red,#7A2E28);}
+.ov-i-go{flex:0 0 auto;color:var(--t3);font-size:17px;font-weight:700;line-height:1;margin-left:2px;}
+.ov-i-v.ov-i-red{color:var(--red,#7A2E28);}
 .ov-i:last-child{border-bottom:1px solid var(--bd);}
 .ov-i-ic{flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--card2);color:var(--gold-d);
   display:flex;align-items:center;justify-content:center;}
@@ -9591,8 +9621,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260823.0943';
-const APP_VERSION_LABEL='v260823.0943';
+const APP_VERSION = '260823.0955';
+const APP_VERSION_LABEL='v260823.0955';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18087,12 +18117,8 @@ function dashShift(n){
 }
 /* 切換本月／今日時把錨點拉回今天 —— 停在五月又按「今日」會看到 5/01，很難解釋 */
 function dashSetRange(r){ _dashRange=r; _dashAnchor=null; navTo('dashboard'); }
-/* 控制列中間那格（2026-08-23）：日模式按它＝切回月模式；已經在月模式按它＝回本月。
-   把「本月」與「回本月／回今天」兩顆鈕併成同一格 —— 使用者要的是「減少畫面內容」。 */
-function dashCtlMain(){
-  if(_dashRange!=='month'){ dashSetRange('month'); return; }
-  _dashAnchor=null; navTo('dashboard');
-}
+/* dashCtlMain 於 2026-08-23 四修移除 —— 使用者要「模式是模式、期間是期間」，
+   [月][日] 各自切模式，期間那格只負責「回本月／回今天」（直接寫在 onclick 裡）。 */
 PAGES.dashboard=async function(){
   /* 2026-08-23 使用者定案：報表（營運分析）只有管理員 */
   if(!canSeeReports()){ C.innerHTML=head('ANALYTICS','營運分析','')+
@@ -18297,13 +18323,21 @@ PAGES.dashboard=async function(){
     grp:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="2.8"/><circle cx="16.5" cy="9" r="2.2"/><path d="M3.5 19c0-3 2.5-4.9 5.5-4.9s5.5 1.9 5.5 4.9"/><path d="M15 14.4c2.6.1 4.5 1.9 4.5 4.6"/></svg>',
     rev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7.8v8.4M14.2 9.6c0-1-1-1.7-2.2-1.7s-2.2.7-2.2 1.8c0 2.4 4.4 1.3 4.4 3.6 0 1-1 1.7-2.2 1.7s-2.2-.6-2.2-1.6"/></svg>',
     done:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><path d="M8.2 12.4l2.6 2.6 5-5.2"/></svg>',
+    /* 支出（2026-08-23）：錢往外走 —— 錢包＋往外的箭頭，與 rev 的圓幣區隔 */
+    exp:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 8.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6.5A1.5 1.5 0 0 1 5.5 5H17"/><path d="M4 7h14a2 2 0 0 1 2 2v0"/><circle cx="16.2" cy="13" r="1.1"/></svg>',
   };
   /* note＝標籤下方的小字說明（2026-07-30：銷課堂數要講清楚組成）
      opt.gold＝主數值上金色、opt.subPlain＝副數值不上色（2026-07-31 使用者指示：
      金額一律金色、堂數維持深色，這樣一眼分得出哪個是錢哪個是課）。 */
-  const ovRow=(ic,label,val,sub,note,opt)=>`<div class="ov-i"><span class="ov-i-ic">${ic}</span>
+  /* opt.tap＝整列可點（2026-08-23 使用者指示：支出那一列點下去就開登記視窗）。
+     用 <button> 而不是給 <div> 掛 onclick —— 鍵盤與讀屏才認得它是可以按的。 */
+  const ovRow=(ic,label,val,sub,note,opt)=>{
+    const tap=opt&&opt.tap;
+    const tag=tap?'button':'div', extra=tap?` type="button" onclick="${opt.tap}"`:'';
+    return `<${tag} class="ov-i${tap?' ov-i-tap':''}"${extra}><span class="ov-i-ic">${ic}</span>
     <span class="ov-i-l">${label}${note?`<i class="ov-i-note">${note}</i>`:''}</span>
-    <span class="ov-i-v${(opt&&opt.gold)?' ov-i-gold':''}">${val}</span>${sub?`<span class="ov-i-v2${(opt&&opt.subPlain)?' ov-i-plain':''}">${sub}</span>`:''}</div>`;
+    <span class="ov-i-v${(opt&&opt.gold)?' ov-i-gold':''}${(opt&&opt.red)?' ov-i-red':''}">${val}</span>${sub?`<span class="ov-i-v2${(opt&&opt.subPlain)?' ov-i-plain':''}">${sub}</span>`:''}${tap?'<span class="ov-i-go">›</span>':''}</${tag}>`;
+  };
 
   // ── 員工表現（手機版營運速覽）──
   // 載入本月出勤工時＋排班（值班時數）＋收款（續約歸屬）
@@ -18366,11 +18400,20 @@ PAGES.dashboard=async function(){
          （原本的「回本月／回今天」那顆鈕因此不用另外畫）
      整列搬進「◯◯總覽」那張卡的標題列右邊，頂上就完全空出來了。
      桌機另留一份（下面的表格區也吃同一組狀態）——控制項無 id，重複畫不會互相干擾。 */
+  /* 2026-08-23 四修（使用者：「右上角篩選列＋日期 改回 [月][日] ‹ 日期 ›」）——
+     三修那版把「切模式」與「顯示期間」壓成同一格（按期間＝切月模式／回本月），
+     省了寬度但要猜；使用者要回到「模式是模式、期間是期間」。
+     ・[月][日]：兩顆各自選模式，字縮成一個字省寬度（原本是「本月／今日」）
+     ・‹ 日期 ›：純翻頁；期間那格在不是當期時可按＝回本月／回今天
+       （所以仍然不必另外畫「回本月」那顆鈕） */
   const _dashPeriod=`<span class="dashctl">
-    <button type="button" class="dashctl-t${_dashRange==='today'?' on':''}" onclick="dashSetRange('today')">今日</button>
+    <span class="dashctl-seg">
+      <button type="button" class="dashctl-t${_dashRange==='month'?' on':''}" onclick="dashSetRange('month')">月</button>
+      <button type="button" class="dashctl-t${_dashRange==='today'?' on':''}" onclick="dashSetRange('today')">日</button>
+    </span>
     <span class="dashctl-m">
       <button type="button" class="dash-pg" onclick="dashShift(-1)" aria-label="上一${_dashRange==='today'?'天':'月'}">‹</button>
-      <button type="button" class="dashctl-mo${_dashRange==='month'?' on':''}" title="${rangeFull}${_dashRange!=='month' ? '　（按一下改看整個月）' : (_atNow ? '' : '　（按一下回本月）')}" onclick="dashCtlMain()">${rangeLabel}</button>
+      <button type="button" class="dashctl-mo" title="${rangeFull}${_atNow?'':`　（按一下回${_dashRange==='today'?'今天':'本月'}）`}"${_atNow?' disabled':` onclick="_dashAnchor=null;navTo('dashboard')"`}>${rangeLabel}</button>
       <button type="button" class="dash-pg" onclick="dashShift(1)" ${_atNow?'disabled':''} aria-label="下一${_dashRange==='today'?'天':'月'}">›</button>
     </span>
   </span>`;
@@ -18387,8 +18430,10 @@ PAGES.dashboard=async function(){
          頂上只留 [＋ 支出]（靠右），期間控制項只在桌機顯示（桌機沒有那張手機卡）。
          ⚠ 不能用 .desktop-only —— 它是 display:none，但同權重的 .filter-row{display:flex}
            寫在後面會贏，手機上照樣顯示（這就是重複的成因）。改用自己的 class。 */''}
-    <span class="dashctl-desk">${_dashPeriod}</span>
-    ${_dashExp}
+    ${/* 2026-08-23 三修：頂列的 [＋ 支出] 也拿掉了 —— 使用者把它移進下方列表的
+         「支出」那一列（點整列就開登記視窗）。頂列在手機因此完全空掉，
+         只剩桌機的期間控制項（桌機沒有那張手機卡，仍需要一個落點）。 */''}
+    <span class="dashctl-desk">${_dashPeriod}${_dashExp}</span>
   </div>
 
   <!-- ═══ 手機版：營運速覽 ═══ -->
@@ -18409,7 +18454,9 @@ PAGES.dashboard=async function(){
           <b class="ovh-in"><i>銷課</i>${fmtNT(_ovRev!=null?_ovRev:coachedFee)}</b><span class="ovh-op">−</span>
           <b class="ovh-pay"><i>人事</i>${fmtNT((salaryTotal||0)+_ovCoIns)}</b><span class="ovh-op">−</span>
           <b class="ovh-exp"><i>稅＋支出</i>${fmtNT(_ovTax+otherExp)}</b></span>
-        <span class="ov-hero-s2">與經營報表損益表同一套算法（含營業稅、公司負擔勞健保${otherExp>0?'、房租水電等支出':'；其他支出尚未登錄'}）</span>
+        ${/* 2026-08-23 使用者指示：「下面一排說明文字可以移除了」——
+             那句話（與經營報表同一套算法…）只在第一次看的時候有用，之後每次都佔兩行。
+             算法沒有變，只是不再每天複述一次。 */''}
       </div>`:''}
       <div class="ov-list">
         ${/* 2026-07-31 使用者指示：營收放第一列，接著教練課／團體課／銷課金額／銷課堂數；
@@ -18419,6 +18466,11 @@ PAGES.dashboard=async function(){
         ${ovRow(OV_IC.grp,'團體課',fmtNT(_svGrp!=null?_svGrp:Math.round(grpFee)),`${grpDoneBk.length}/${groupClassCount} 堂`,'',{gold:true,subPlain:true})}
         ${ovRow(OV_IC.rev,'銷課金額',fmtNT(_ovRev!=null?_ovRev:usedFee),'','',{gold:true})}
         ${ovRow(OV_IC.done,'銷課堂數',`${doneMainCount} 堂`,'',_doneMix)}
+        ${/* 支出（2026-08-23 使用者指示：「這個移除的空間改成支出，加入下方的列表，
+             就把視窗上面的 ＋支出 改到這，[支出 金額] 點選這列新增支出」）——
+             金額是這個月已登錄的固定＋其他支出合計（就是這一列點進去會編到的那些）；
+             上面「稅＋支出」還含營業稅，兩個數字不一樣是正常的。 */''}
+        ${ovRow(OV_IC.exp,'支出',fmtNT(otherExp),'',otherExp>0?'':'尚未登錄，點這裡新增',{red:true,tap:`openExpensePick('${ym}')`})}
       </div>
     </div>
     <div class="card">
@@ -50058,11 +50110,11 @@ function fxSwipeInit(){
   const end=()=>{ row=null; x0=null; y0=null; axis=null; };
   document.addEventListener('touchend',end,{passive:true});
   document.addEventListener('touchcancel',end,{passive:true});
-  /* 桌機沒有觸控：滑不動就刪不掉，所以滑鼠移到列上時把刪除鈕推出來 */
-  document.addEventListener('mouseover',e=>{
-    const r=(e.target&&e.target.closest)?e.target.closest('.fx-swipe'):null;
-    if(r){ closeAll(r); r.classList.add('open'); } else closeAll(null);
-  });
+  /* ⚠ 桌機的「滑鼠移過去就推出刪除鈕」原本寫在這裡，2026-08-23 使用者回報
+     「點了品項跟金額，刪除都會自動跳出來，不要自動」—— iOS 點擊會補送一個
+     mouseover，於是每點一次輸入框就展開一次。改用 CSS 的
+     @media (hover:hover) and (pointer:fine)：那條媒體查詢在觸控裝置上永遠不成立，
+     從根本上不會誤觸。JS 這裡只留真正的滑動手勢。 */
 }
 function fxSet(i,k,v){ const d=window._fxDraft; if(!d||!d.rows[i]) return;
   d.rows[i][k] = k==='amount' ? (Number(v)||0) : v;

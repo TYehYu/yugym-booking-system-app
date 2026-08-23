@@ -235,22 +235,36 @@ ok('★★ 選擇器一定要寫 input.fx-in —— 日期欄改成 <span class=
    /只寫 \.fx-in 會先選到那個 span，focus\(\) 在 span 上什麼都不會發生/.test(src));
 
 console.log('\n⑨-2 營運分析期間控制列');
-ok('★★ [本月][今日] 分段鈕退場，收成 [今日] ‹ 期間 › 一顆控制項',
+/* 沿革：0823 三修收成「[今日] ‹ 期間 ›」（期間那格兼切模式），四修使用者要回
+   「模式是模式、期間是期間」→ [月][日] ‹ 日期 ›，字縮成一個字省寬度。 */
+ok('★★ [本月][今日] 那組舊 seg-btn 退場，改成 [月][日] ‹ 日期 ›',
    /const _dashPeriod=`<span class="dashctl">/.test(src)
+   && /<span class="dashctl-seg">/.test(src)
+   && /onclick="dashSetRange\('month'\)">月<\/button>/.test(src)
+   && /onclick="dashSetRange\('today'\)">日<\/button>/.test(src)
    && !/<button class="seg-btn \$\{_dashRange==='month'\?'active':''\}" onclick="dashSetRange\('month'\)">本月<\/button>/.test(src));
 ok('★★ 期間控制列在「◯◯總覽」那一列右邊',
    /<div class="ovh-bar"><span class="ovh-title">\$\{periodLabel\}總覽<\/span>\$\{_dashPeriod\}<\/div>/.test(src)
    && /\.ovh-bar\{display:flex;align-items:center;justify-content:space-between;gap:8px;/.test(src));
-ok('★★ 頂列只留 [＋ 支出] 靠右；期間控制項只有桌機顯示（手機再畫一次就重複了）',
-   /<span class="dashctl-desk">\$\{_dashPeriod\}<\/span>\s*\n\s*\$\{_dashExp\}/.test(src)
+ok('★★ 頂列在手機完全空掉（[＋ 支出] 已移進下方列表的「支出」那一列）',
+   /<span class="dashctl-desk">\$\{_dashPeriod\}\$\{_dashExp\}<\/span>/.test(src)
    && /\.dash-toprow\{justify-content:flex-end;margin-bottom:18px;\}/.test(src)
    && /@media\(max-width:600px\)\{ \.dashctl-desk\{display:none;\} \}/.test(src));
+ok('★★ 「支出」那一列整列可點＝開登記視窗，金額＝本月已登錄的固定＋其他支出',
+   /ovRow\(OV_IC\.exp,'支出',fmtNT\(otherExp\),'',otherExp>0\?'':'尚未登錄，點這裡新增',\{red:true,tap:`openExpensePick\('\$\{ym\}'\)`\}\)/.test(src)
+   && /\.ov-i-tap\{width:100%;text-align:left;font-family:inherit;cursor:pointer;/.test(src));
+ok('　　可點的那一列要用 <button>（鍵盤與讀屏才認得），不是給 <div> 掛 onclick',
+   /const tag=tap\?'button':'div', extra=tap\?` type="button" onclick="\$\{opt\.tap\}"`:'';/.test(src));
+ok('★ 利潤下方那排說明文字移除（每次都佔兩行，算法沒變）',
+   !/與經營報表損益表同一套算法（含營業稅、公司負擔勞健保/.test(src)
+   && /只在第一次看的時候有用，之後每次都佔兩行/.test(src));
 ok('★★ 不能用 .desktop-only 藏 —— 同權重的 .filter-row{display:flex} 寫在後面會贏（重複的成因）',
    !/<div class="filter-row desktop-only"/.test(src)
    && /寫在後面會贏，手機照樣顯示（那正是重複的成因）/.test(src));
-ok('★★ 中間那格一顆抵兩顆：日模式按它＝切月模式、已在月模式按它＝回本月',
-   /function dashCtlMain\(\)\{/.test(src)
-   && /if\(_dashRange!=='month'\)\{ dashSetRange\('month'\); return; \}/.test(src));
+ok('★★ 期間那格只負責「回本月／回今天」；當期時 disabled（dashCtlMain 已退場）',
+   !/function dashCtlMain\(\)\{/.test(src)
+   && /\$\{_atNow\?' disabled':` onclick="_dashAnchor=null;navTo\('dashboard'\)"`\}/.test(src)
+   && /dashCtlMain 於 2026-08-23 四修移除/.test(src));
 ok('　　窄螢幕塞不下就整組換行，不要硬擠',
    /\.ovh-bar\{[^}]*flex-wrap:wrap;/.test(src)
    && /@media\(max-width:380px\)\{\s*\n\s*\.dashctl\{gap:4px;\}/.test(src));

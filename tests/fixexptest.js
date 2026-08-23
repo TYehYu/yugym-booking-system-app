@@ -94,8 +94,17 @@ console.log('\n③ 改數字／加項目／減項目');
      /axis = Math\.abs\(dx\)>Math\.abs\(dy\) \? 'x' : 'y';/.test(src)
      && /if\(axis!=='x'\) return;/.test(src)
      && /const closeAll=\(except\)=>/.test(src));
-  ok('　　桌機沒有觸控 → 滑鼠移到列上就把刪除鈕推出來（不然刪不掉）',
-     /桌機沒有觸控：滑不動就刪不掉/.test(src));
+  /* ⚠ 2026-08-23 使用者回報「點了品項跟金額，刪除都會自動跳出來，不要自動」——
+     原本用 JS 監聽 mouseover，但 iOS 點擊會補送一個 mouseover，等於每點一次
+     輸入框就展開一次。改用 @media (hover:hover) and (pointer:fine)，
+     那條媒體查詢在觸控裝置上永遠不成立。 */
+  ok('★★ 桌機用 CSS hover 推出刪除鈕，不能用 JS 的 mouseover（iOS 點擊會補送）',
+     /@media \(hover:hover\) and \(pointer:fine\)\{\s*\n\s*\.fx-swipe:hover \.fx-row\{transform:translateX\(-76px\);\}/.test(src)
+     && !/document\.addEventListener\('mouseover'/.test(grabFn('fxSwipeInit'))
+     && /iOS 點擊會補送 mouseover/.test(src));
+  ok('★ 日期格要與旁邊兩格同尺寸（.adp-field 預設是表單裡的大欄位）',
+     /\.fx-dwrap \.adp-field\{padding:6px 9px;border-radius:7px;font-size:13px;gap:6px;min-width:0;\}/.test(src)
+     && /日期這欄格子\s*\n\s*比旁邊的都大，畫面失去平衡/.test(src));
   ok('★ ＋新增一項', /onclick="fxAdd\(\)">＋ 新增一項<\/button>/.test(src));
   ok('★ 最上面一列是欄名（✕ 那一格已隨滑動刪除拿掉）',
      /<div class="fx-head">\$\{fx\?'':'<span>日期<\/span>'\}<span>項目<\/span><span>金額<\/span><\/div>/.test(src));

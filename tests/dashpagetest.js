@@ -90,23 +90,25 @@ ok('★ 當期時「下一頁」是 disabled', /onclick="dashShift\(1\)" \$\{_at
    本月的功能就改到 [8月] 這邊，減少畫面內容、呼吸感」）——
    「回本月／回今天」那顆獨立按鈕併進中間那一格：日模式按它＝切回月模式、
    已在月模式按它＝回本月。少一顆鈕、少一整列。 */
+/* 2026-08-23 四修：[月][日] 各自切模式，期間那格只負責「回本月／回今天」，
+   當期時 disabled —— 那顆獨立的「回本月」鈕仍然不需要。 */
 ok('★ 「回本月」併進中間那一格（不再是獨立按鈕）',
-   /function dashCtlMain\(\)\{\s*\n\s*if\(_dashRange!=='month'\)\{ dashSetRange\('month'\); return; \}\s*\n\s*_dashAnchor=null; navTo\('dashboard'\);/.test(src)
+   /\$\{_atNow\?' disabled':` onclick="_dashAnchor=null;navTo\('dashboard'\)"`\}/.test(src)
    && !/<button class="dash-pg dash-pg-now"/.test(src));
 ok('　　按鈕有樣式、disabled 看得出來',
    /\.dash-pg:disabled\{opacity:\.35;cursor:default;\}/.test(src)
    && /\.dashctl\{display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap;\}/.test(src));
 /* 2026-07-31 使用者回報「日期被換行了」：原本翻頁列寫「2026/06（2026-06）」，
    同一個期間講兩次、字太長把整列擠到第二行還切掉箭頭 → 只留 periodLabel */
-ok('★ 翻頁列只寫一次期間，完整日期放 title（0823 起期間那格本身可按）',
+ok('★ 翻頁列只寫一次期間，完整日期放 title（不是當期時那格可按＝回本月）',
    /const rangeLabel=periodLabel;/.test(src)
    && /const rangeFull=_dashRange==='today'\?today:ym;/.test(src)
-   && /<button type="button" class="dashctl-mo\$\{_dashRange==='month'\?' on':''\}" title="\$\{rangeFull\}/.test(src));
+   && /<button type="button" class="dashctl-mo" title="\$\{rangeFull\}/.test(src));
 ok('　　期間那格不換行（翻頁時按鈕不會跳動）',
    /\.dashctl-t,\.dashctl-mo\{[^}]*white-space:nowrap;\}/.test(src));
-ok('★★ 期間控制列在「◯◯總覽」那一列右邊；頂列只留 [＋ 支出]（期間僅桌機）',
+ok('★★ 期間控制列在「◯◯總覽」那一列右邊；頂列整組只給桌機（手機已完全空掉）',
    /<div class="ovh-bar"><span class="ovh-title">\$\{periodLabel\}總覽<\/span>\$\{_dashPeriod\}<\/div>/.test(src)
-   && /<span class="dashctl-desk">\$\{_dashPeriod\}<\/span>/.test(src)
+   && /<span class="dashctl-desk">\$\{_dashPeriod\}\$\{_dashExp\}<\/span>/.test(src)
    && /@media\(max-width:600px\)\{ \.dashctl-desk\{display:none;\} \}/.test(src));
 
 console.log('\n資料真的跟著錨點走');

@@ -17,8 +17,10 @@ console.log('列的順序');
 {
   const blk=g('<div class="ov-list">','</div>');
   const order=[...blk.matchAll(/ovRow\(OV_IC\.\w+,'([^']+)'/g)].map(m=>m[1]);
-  eq('★ 營收／教練課／團體課／銷課金額／銷課堂數',
-     order, ['營收','教練課','團體課','銷課金額','銷課堂數']);
+  /* 2026-08-23 使用者指示：利潤下方那排說明文字移除，空出來的位子改放「支出」，
+     整列可點＝開支出登記視窗（頂上的 [＋ 支出] 因此退場）。 */
+  eq('★ 營收／教練課／團體課／銷課金額／銷課堂數／支出',
+     order, ['營收','教練課','團體課','銷課金額','銷課堂數','支出']);
 }
 
 console.log('\n教練課與團體課：金額在左、堂數在右');
@@ -39,9 +41,11 @@ ok('★ 兩個修飾樣式都有定義',
    /\.ov-i-v\.ov-i-gold\{color:var\(--gold-d\);\}/.test(src)
    && /\.ov-i-v2\.ov-i-plain\{color:var\(--text\);\}/.test(src));
 {
-  const i=src.indexOf('  const ovRow=(ic,label,val,sub,note,opt)=>');
-  const line=src.slice(i,src.indexOf('</div>`;',i)+8);
-  const ovRow=new Function('return '+line.replace(/^\s*const ovRow=/,'').replace(/;$/,''))();
+  /* 2026-08-23：ovRow 從單行 arrow 改成有 block body（多了 opt.tap／opt.red），
+     所以抽法從「找 </div>`;」改成「找 };」—— 抓的仍是同一支真正的原始碼。 */
+  const i=src.indexOf('  const ovRow=(ic,label,val,sub,note,opt)=>{');
+  const line=src.slice(i, src.indexOf('\n  };', i)+5);
+  const ovRow=new Function('return '+line.replace(/^\s*const ovRow=/,'').replace(/;\s*$/,''))();
   const r1=ovRow('IC','教練課','$608,624','425/439 堂','',{gold:true,subPlain:true});
   ok('★ 實跑：金額在前、堂數在後', r1.indexOf('$608,624')<r1.indexOf('425/439 堂'));
   ok('★ 實跑：金額掛金色、堂數不掛金色',
