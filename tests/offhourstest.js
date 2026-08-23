@@ -50,7 +50,12 @@ ok('　　順序在票券限時段（0b）之後、抓當日預約（衝堂／�
    V.indexOf('endsBy18')<V.indexOf('_selfBlk')
    && V.indexOf('_selfBlk')<V.indexOf('fetchDayOccupancy'));
 ok('★ 教練課與團體課不在這裡擋（使用者：「都可以在有條件的情況下預約」）',
-   /只擋「會員自己約的自主訓練」/.test(V));
+   /教練課與團體課由使用者定案\s*\n\s*「有條件可以約」，一律走提示＋確認那條路/.test(V));
+/* 0823 稽核：三修拿掉課別條件之後，那段註解還寫著「只擋自主訓練」，而測試正好在
+   保護那句錯的文件（棘輪反了向）。註解與斷言一起改。 */
+ok('★★ 註解與程式碼一致：擋的是「會員自己建立的任何預約」，不再只有自主訓練',
+   /這裡擋的是「會員自己建立的任何預約」——三修（同日）把課別條件拿掉了/.test(V)
+   && !/只擋「會員自己約的自主訓練」/.test(V));
 
 console.log('\n④ 其餘課別：說明原因＋確認，不藏也不擋');
 ok('★★ 建立預約送出前問一次（體驗／團課／教練課共用 _submitBookingInner 這一個入口）',
@@ -59,6 +64,9 @@ ok('★ 教練手機「快速預約」不經 _submitBookingInner，自己問一�
    /if\(!\(await confirmOffHours\(f\.date, f\.time, 60, '取消預約'\)\)\) return;/.test(src));
 ok('★ 待簽約卡位也是建立預約的一種',
    /if\(!\(await confirmOffHours\(date, time, 60, '取消卡位'\)\)\) return;/.test(src));
+ok('★★ 空堂卡位也接上（0823 稽核發現當初漏了，兩者都是「建立一筆佔住時段的預約」）',
+   /if\(!\(await confirmOffHours\(date, time, 60, '取消卡位', t&&t\.category\)\)\) return;/.test(src)
+   && /待簽約卡位當初有接、空堂卡位漏了/.test(src));
 ok('★★ 改時間不另跳一層：那張確認卡本來就要按「確認修改」，原因直接寫在卡上',
    /const _oh=bizOffHoursNote\(nd,nt,ndur\); return _oh/.test(src)
    && /這張卡本來就要按「確認修改」，所以不再多跳一層/.test(src));
@@ -96,6 +104,28 @@ ok('★★ 會員自己建立的預約一律不給越線（不再只擋自主訓
    && /不再只擋自主訓練 —— 使用者定案「只能由教練以上建立預約/.test(src));
 ok('　　團課報名走 fn_member_join_group（RPC），不經 validateBooking，不受影響',
    /團課報名走 fn_member_join_group（RPC），不經過 validateBooking，不受影響/.test(src));
+
+console.log('\n④-3 稽核補漏（0823 當日自查）');
+/* 這一組全是「當天上線後回頭稽核才發現」的，不是原始需求的一部分，
+   但每一條都會讓使用者看到錯的東西，所以留在測試裡當回歸網。 */
+ok('★★ 時間沒動的驗證不重跑營業時間 —— 否則既有界外舊課連備註都存不了、'
+   +'換場地時每個場地都顯示「已滿」',
+   /async function validateBooking\(bk,date,time,duration,opts\)\{/.test(src)
+   && /if\(!\(opts&&opts\.skipBizHours\)\)\{/.test(src)
+   && /const verr=await validateBooking\(vbk, b\.date, b\.start_time, Number\(b\.duration\)\|\|60, \{skipBizHours:true\}\);/.test(src)
+   && (src.match(/validateBooking\(probe,b\.date,b\.start_time,b\.duration\|\|60,\{skipBizHours:true\}\)/g)||[]).length===2
+   && /let verr=await validateBooking\(vbk,nd,nt,ndur,\{skipBizHours:!_timeMoved\}\);/.test(src));
+ok('　　不能靠比對 bk.date 來推斷「有沒有在改時間」（連續預約傳進來就已經帶著目標日期）',
+   /不能靠比對 bk\.date\/bk\.start_time 來推斷/.test(src));
+ok('★★ 三條拖移路補上提示（原本只會被硬擋，界內就靜靜移過去了）',
+   /if\(!\(await confirmOffHours\(ds, ntime, b\.duration\|\|60, '取消移動', b\.category\)\)\)\{ renderWeekTimeline\(\); return; \}/.test(src)
+   && /if\(!\(await confirmOffHours\(ds, ntime, b\.duration\|\|60, '取消移動', b\.category\)\)\) return;/.test(src)
+   && /if\(!\(await confirmOffHours\(ds, newTime, dur\|\|60, '取消移動', b\.category\)\)\)\{ renderCoachDayList\(\); return; \}/.test(src));
+ok('★★ 明細／卡內編輯也補上，但只有真的動到時間才問',
+   /if\(_timeMoved && !\(await confirmOffHours\(nd, nt, ndur\|\|60, '取消修改', b\.category\)\)\) return false;/.test(src));
+ok('★★ 詢問順序：硬上限在前 —— 反過來會讓人在必被退的時間上先被問「仍要預約？」',
+   (src.match(/const _ohBlk=bizOffHoursHardBlock\(/g)||[]).length===4
+   && /反過來的話，使用者會在一個 100% 會被退的/.test(src));
 
 console.log('\n⑤ 順手修掉查出來的另一個寫死');
 ok('★★ 一週檢視點格的上限原本寫死 21:00、不分星期（週日 15:00 打烊照樣點得到 21:00）',

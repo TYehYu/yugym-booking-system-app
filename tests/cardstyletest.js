@@ -352,8 +352,10 @@ ok('★ 只在「完全沒有人」的卡上給：沒會員、沒名單、也沒
 ok('★ 不能用 A.editable（待簽約那條路刻意設成 false），自己判日期',
    /const _futureOk = A\.staff && !A\.closed && String\(b\.date\)>=ymd\(TODAY\);/.test(src)
    && /不能用 A\.editable：待簽約／空堂那條路刻意把它設成 false/.test(src));
-ok('★ 換課別要重跑衝堂與場地檢查（教練課換團課可能就擠不下）',
-   /const verr=await validateBooking\(vbk, b\.date, b\.start_time, Number\(b\.duration\)\|\|60\);/.test(src));
+/* 0823 稽核：validateBooking 加了營業時間硬上限之後，這種「時間根本沒動」的驗證
+   會把既有排在界外的舊課擋住（連換課種都不給）。呼叫端明講 skipBizHours。 */
+ok('★ 換課別要重跑衝堂與場地檢查（教練課換團課可能就擠不下），但不重驗營業時間',
+   /const verr=await validateBooking\(vbk, b\.date, b\.start_time, Number\(b\.duration\)\|\|60, \{skipBizHours:true\}\);/.test(src));
 ok('★ 換成團課要補人數上限（否則名單視窗抓不到預設值）',
    /&& !\(Number\(b\.max_heads\)>0\)\) b\.max_heads=5;/.test(src));
 /* 2026-08-21：原本只濾掉「友善自主訓練」（與自主訓練同行為、不重複列）；
