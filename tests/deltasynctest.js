@@ -66,7 +66,8 @@ function makeEnv(db,o){
   };
   /* 2026-08-04 第三批第二段：dbGetAll 會順手排程存檔到 IndexedDB。
      這支測的是增量補資料，存檔行為由 idbcachetest 驗，這裡放個空的即可。 */
-  const code=['function cacheMarkDirty(){}', grabFn('dbCacheClear'),
+  /* 0823：dbGetAll 會呼叫 dbWhy() 記錄快取決策（純量測）——沙箱補一個空的。 */
+  const code=['function dbWhy(){}', "let _dbDeltaWhy='';", 'function cacheMarkDirty(){}', grabFn('dbCacheClear'),
     'let _sigPromise=null,_sigAt=0;\n'+grabFn('tableSigs'),
     'async '+grabFn('dbDeltaPatch'),
     /* 2026-08-05：10 分鐘整表校正改背景做（_dbRebaseBg），一起帶進沙箱 */
@@ -178,8 +179,13 @@ console.log('\n⑧ 程式碼把關');
 {
   const f=grabFn('dbDeltaPatch');
   ok('★ 任何一步不順就回 null（呼叫端整表重抓）', (f.match(/return null;/g)||[]).length>=5);
-  ok('★ 水位與簽章來自同一個瞬間（sigs._log）', /if\(sigs\._log===hit\.logAt\) return null;/.test(f)
+  /* 0823：每一個放棄點都留下原因（_dbDeltaWhy，純量測），判斷本身沒變。 */
+  ok('★ 水位與簽章來自同一個瞬間（sigs._log）',
+     /if\(sigs\._log===hit\.logAt\)\{ _dbDeltaWhy='日誌沒動但簽章不同'; return null; \}/.test(f)
      && /logAt:sigs\._log/.test(f));
+  ok('★★ 每一個「放棄增量、退回整表」的出口都記下原因（要查得出為什麼在重抓）',
+     ['沒有水位','日誌沒動但簽章不同','讀不到 change_log','太多','日誌查無這張表的變動','補撈那幾列失敗']
+       .every(w=>f.indexOf(w)>=0));
   ok('★ in() 分段避免 URL 過長', /for\(let i=0;i<ids\.length;i\+=200\)/.test(f));
   ok('★ 精簡欄位一致（補進來的列跟列表同一組欄位）', /const sel=_leanSel\.get\(key\)\|\|'\*';/.test(f));
   ok('　　補資料期間被寫入清掉就不採用', /if\(patched && _dbCache\.get\(key\)===hit\)/.test(src));

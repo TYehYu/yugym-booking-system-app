@@ -34,7 +34,8 @@ function makeEnv(o){
   /* 2026-08-04 第三批：dbGetAll 會先試增量補資料。這支測的是「簽章校驗」本身，
      所以這裡放一個永遠放棄的 dbDeltaPatch（＝退回整表重抓），行為與第二批相同；
      增量補資料本身由 deltasynctest 驗。 */
-  const code=['function cacheMarkDirty(){}', grabFn('dbCacheClear'), 'let _sigPromise=null,_sigAt=0;\n'+grabFn('tableSigs'),
+  /* 0823：dbGetAll 現在會呼叫 dbWhy() 記錄快取決策（純量測）——沙箱補一個空的。 */
+  const code=['function cacheMarkDirty(){}', 'function dbWhy(){}', "let _dbDeltaWhy='';", grabFn('dbCacheClear'), 'let _sigPromise=null,_sigAt=0;\n'+grabFn('tableSigs'),
     'async function dbDeltaPatch(){ return null; }', 'const DELTA_MAX=400;',
     /* 2026-08-05：10 分鐘整表校正改背景做（_dbRebaseBg），一起帶進沙箱 */
     'const _dbRebasing=new Set();\nasync '+grabFn('_dbRebaseBg'),
