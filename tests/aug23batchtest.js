@@ -238,13 +238,13 @@ ok('　　搬進控制列後不能再留 margin-left:auto（會在列裡撐出�
 ok('　　挑選視窗的兩顆按鈕是白底（米底彈窗上再鋪米底＝看不出來能按）',
    /\.exp-pick\{[^}]*background:#fff;/.test(src)
    && /彈窗本身就是米底，按鈕再用 var\(--card2\) 等於米底疊米底/.test(src));
-ok('★★ 手機上「其他支出」一列拆兩行：第一列日期＋品項，第二列金額整排',
-   /\.fx-3 \.fx-row\{grid-template-columns:72px 1fr;row-gap:6px;padding:9px 10px;\}/.test(src)
-   && /\.fx-3 \.fx-row>:nth-child\(3\)\{grid-column:1 \/ 3;grid-row:2;\}   \/\* 金額整列 \*\//.test(src)
-   && /\.fx-3 \.fx-head\{display:none;\}/.test(src)
-   && /連標題「項目」都被折成兩行/.test(src));
-ok('　　日期只挑「幾號」之後 72px 就夠（原生 date input 的「2026年8月8日」要 130px）',
-   /日期（只挑「幾號」，72px 夠）/.test(src));
+/* 三修（使用者：「每一筆改成一列，時間最短…品項最長，金額次等」）——
+   日期改成只挑「幾號」之後只要 60px，三格塞得下就不折行了。 */
+ok('★★ 手機上「其他支出」一列三格：日期最短、品項最長、金額次等',
+   /\.fx-3 \.fx-head,\.fx-3 \.fx-row\{grid-template-columns:60px 1fr 84px;gap:6px;\}/.test(src)
+   && !/\.fx-3 \.fx-head\{display:none;\}/.test(src));
+ok('　　欄位對得齊了，抬頭跟著留著（二修時因為折行對不齊才藏起來）',
+   /欄位對得齊了，抬頭也跟著留著（二修時因為折行對不齊才藏起來）/.test(src));
 ok('★★ 底部「取消」改「返回」，回到固定／其他的挑選視窗（方便來回對照）',
    /<button class="btn btn-ghost" onclick="fxBack\(\)">返回<\/button>/.test(src)
    && /function fxBack\(\)\{/.test(src)
