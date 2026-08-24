@@ -118,8 +118,14 @@ console.log('\n⑧ 排序與呈現');
   ok('★ 右邊顯示「可用 N / 總 M 堂」，沒票就寫原因',
      /可用 <b>\$\{r\.left\}<\/b> \/ \$\{r\.total\} 堂/.test(src)
      && /const tag=m\.sum>0\?`可用 \$\{m\.sum\} \/ \$\{m\.total\|\|m\.sum\} 堂`:\(m\.why\|\|'無票（無法加入，請先儲值）'\)/.test(src));
+  /* 0824 第四批：名單分三種列 —— 有票（可點，直接加）／票排完了（可點，開圓形卡調課）／
+     真的不行（淡化）。「票排完了」不能淡化成不能選，那正是調課的入口。 */
   ok('★ 不能加入的淡化列出、不藏起來（0823 定的語彙）',
-     /class="ash-eirow\$\{r\.left>0\?'':' ash-ei-off'\}"/.test(src));
+     /const cls=\(can\|\|sw\)\?'':' ash-ei-off';/.test(src)
+     && /class="ash-eirow\$\{cls\}"/.test(src));
+  ok('★★ 「票已排完」自成一組，而且點得動（調課入口）',
+     /票已排完，可以調課過來（\$\{sw\.length\}）/.test(src)
+     && /const act=can\?` onclick="bamPick\('\$\{r\.id\}'\)"`:\(sw\?` onclick="bamSwap\('\$\{r\.id\}'\)"`:' disabled'\);/.test(src));
 }
 
 console.log('\n⑨ 寫入端：加人＝綁會員＋綁票＋扣課，而且空堂要轉正');
@@ -142,6 +148,43 @@ console.log('\n⑨ 寫入端：加人＝綁會員＋綁票＋扣課，而且空�
      /if\(b\.status!=='booked'\) return false;/.test(src) && /if\(String\(b\.date\)<ymd\(TODAY\)\) return false;/.test(src));
   ok('★ 課卡上那顆鈕與團課的「新增」共用同一個位置與外觀',
      /btns \+= evoBtn\('evo-b2','evo-gold',`collapseBkCard\(\);bkAddMemberOpen\('\$\{id\}'\)`,'plus','新增'\);/.test(src));
+}
+
+console.log('\n⑩ 圓形卡調課（第四批）');
+{
+  const f=g('async function bkSwapDo(','\n}');
+  ok('★★ 搬的是「人與票」，不是「課」—— A 清空變空堂、B 綁上會員與票',
+     /A\.member_id=null; A\.ticket_id=null;[\s\S]{0,80}?A\.pending_contract=true;/.test(f)
+     && /B\.member_id=mid; B\.ticket_id=tk\?tk\.id:null;/.test(f)
+     && /B\.pending_contract=false;/.test(f));
+  ok('★★ 為什麼不對調日期時間，寫在原地（A 有 A 的教練，對調會讓這堂變成 A 的教練上）',
+     /A 有 A 的教練、B 有 B 的教練 —— 對調時間會讓/.test(src));
+  ok('★★ 票券帳要誠實：A 退一堂、B 扣一堂（只改 ticket_id 會讓戳記歸錯堂）',
+     /await refundTicket\(tk, A\.id, SESSION\.id\)/.test(f)
+     && /await deductTicket\(fresh\|\|tk, B\.id, SESSION\.id\)/.test(f)
+     && /只把 ticket_id 改掉的話，帳本上那筆扣課仍指向 A/.test(src));
+  ok('★★ 套用既有的改期規則（含 24 小時與「教練只能動自己的課」）',
+     (f.match(/bkMoveBlockReason\(A\)/g)||[]).length>=1
+     && /const blk=\(typeof bkMoveBlockReason==='function'\)\?bkMoveBlockReason\(A\):'';/.test(f));
+  ok('★★ 動之前先驗新時段（衝堂／場地／營業時間），過不了就整個不做',
+     /const verr=await validateBooking\(vbk, B\.date, B\.start_time, Number\(B\.duration\)\|\|60\);/.test(f)
+     && f.indexOf('validateBooking')<f.indexOf('refundTicket'));
+  ok('★ 扣課失敗時說清楚現在的狀態（A 已經退成空堂了）',
+     /原本那一堂已經退成空堂，請重新指定/.test(f));
+  const cf=g('async function bkSwapConfirm(','\n}');
+  ok('★★ 動兩堂課與一張票，不該點一下就發生 → 先跳確認卡',
+     /原本這一堂（會變成空堂）/.test(cf) && /調到這一堂/.test(cf));
+  ok('★ 確認卡明講不會通知會員（使用者定案：不用通知）',
+     /<b>不會通知會員<\/b>，請自行告知/.test(cf));
+  ok('★ 防連點（這一步會退票再扣票）',
+     /onceAct\('bkswap:'\+b\.id\+':'\+fromBid, \(\)=>bkSwapConfirm\(fromBid, b\.id, mid\)\)/.test(src));
+  ok('★★ 圓點的可點模式預設關閉（既有呼叫點一個都不受影響）',
+     /function ticketTokens\(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts\)\{/.test(src)
+     && /const _tapB=!!\(opts&&opts\.tapBooked&&b&&b\.id&&!cur&&!clv\);/.test(src));
+  ok('　　只有「已預約未上、非本堂、非教練請假」的點能調',
+     /只有「已預約未上」的點可以調（已上完、請假、未開通的都不行）/.test(src));
+  ok('★ 調課視窗只列這個課別、而且真的有已預約堂數的票',
+     /ticketMatchesCategory\(sl\.t, cat\) && \(sl\.pending>0\)/.test(src));
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);

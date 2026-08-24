@@ -3068,6 +3068,11 @@ tr:hover td{background:var(--card2);}
 .bam-grp{font-size:11px;font-weight:700;color:var(--t3);letter-spacing:.04em;
   padding:10px 4px 5px;position:sticky;top:0;background:var(--card2);z-index:1;}
 .bam-grp:first-child{padding-top:2px;}
+.bam-go{font-style:normal;color:var(--green);font-weight:700;}
+/* 調課視窗：一張票一組圓形卡 */
+.bsw-tk{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:9px 11px;margin-bottom:8px;}
+.bsw-tk-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px;font-size:12.5px;}
+.bsw-tk-h span{font-size:11px;color:var(--t3);font-family:var(--num),inherit;}
 .adp-field .adp-ph{color:var(--t3);}
 .adp-field .adp-ic{flex:none;color:var(--t3);font-size:12px;}
 /* ══ 滾輪樣式（2026-08-21 使用者附圖：iOS 式滾輪）══
@@ -9920,8 +9925,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1147';
-const APP_VERSION_LABEL='v260824.1147';
+const APP_VERSION = '260824.1152';
+const APP_VERSION_LABEL='v260824.1152';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14484,7 +14489,9 @@ function bkMemTicketInfo(mid, b, allTk, cntMap){
   const booked=live.filter(t=>tkOverBooked(t,cntMap));
   if(booked.length===live.length){
     const n=live.reduce((s,t)=>s+(Number(t.sessions_remaining)||0),0);
-    return {left:0,total,why:`剩下的 ${n} 堂都已經排課了`};
+    /* swappable：這一位可以靠「把別堂調過來」解決 —— ［＋新增］名單會把這一列
+       做成可點的（點下去開圓形卡挑要調哪一堂），而不是淡化成不能選。 */
+    return {left:0,total,why:`剩下的 ${n} 堂都已經排課了`,swappable:true};
   }
   const timeBad=live.filter(t=>!tkTimeOk(t, b&&b.date, b&&b.start_time, (b&&b.duration)||60));
   if(timeBad.length===live.length) return {left:0,total,why:'票券限平日 18:00 前上完'};
@@ -24556,7 +24563,7 @@ async function bkAddMemberOpen(bid){
     const info=bkMemTicketInfo(m.id, b, allTk, cntMap);
     return { id:m.id, name:m.name||'', phone:m.phone||'',
              mine:String(m.default_coach_id||'')===String(b.coach_id||'') && !!b.coach_id,
-             left:info.left, total:info.total, why:info.why };
+             left:info.left, total:info.total, why:info.why, swap:!!info.swappable };
   });
   /* 排序（使用者定案）：有票的排最上面；同組內主教練是本堂教練的（★）再往前；其餘依姓名。
      ⚠ 兩層都要，不能只排一層 —— 「有票」決定加不加得進去，「主教練」決定櫃檯先找誰。 */
@@ -24570,9 +24577,18 @@ function bamRender(q){
   const nq=kw.replace(/\D/g,'');
   const hit=rows.filter(r=>!kw || String(r.name).indexOf(kw)>=0 || (nq && String(r.phone).indexOf(nq)>=0));
   const withTk=hit.filter(r=>r.left>0), noTk=hit.filter(r=>!(r.left>0));
-  const row=r=>`<button type="button" class="ash-eirow${r.left>0?'':' ash-ei-off'}"${r.left>0?` onclick="bamPick('${r.id}')"`:' disabled'}>
-    <span class="ash-eilb">${r.mine?'<i class="bam-star">★</i>':''}${escH(r.name)}</span>
-    <span class="ash-eisub">${r.left>0?`可用 <b>${r.left}</b> / ${r.total} 堂`:escH(r.why)}</span></button>`;
+  /* 三種列：有票（可點，直接加）／票排完了（可點，開圓形卡調課）／真的不行（淡化）。
+     ⚠ 「票排完了」不能淡化成不能選 —— 那正是使用者要的調課入口（2026-08-24）。 */
+  const row=r=>{
+    const can=r.left>0, sw=!can && r.swap;
+    const cls=(can||sw)?'':' ash-ei-off';
+    const act=can?` onclick="bamPick('${r.id}')"`:(sw?` onclick="bamSwap('${r.id}')"`:' disabled');
+    const sub=can?`可用 <b>${r.left}</b> / ${r.total} 堂`
+                 :(sw?`${escH(r.why)}<i class="bam-go"> · 點我調課 ›</i>`:escH(r.why));
+    return `<button type="button" class="ash-eirow${cls}"${act}>
+      <span class="ash-eilb">${r.mine?'<i class="bam-star">★</i>':''}${escH(r.name)}</span>
+      <span class="ash-eisub">${sub}</span></button>`;
+  };
   let host=document.getElementById('adp-sheet');
   if(!host){ host=document.createElement('div'); host.id='adp-sheet'; document.body.appendChild(host); }
   host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
@@ -24583,7 +24599,9 @@ function bamRender(q){
              placeholder="搜尋姓名或手機…" value="${escH(kw)}" oninput="bamRender(this.value)" autocomplete="off">
       <div style="flex:1;min-height:0;overflow-y:auto;">
         ${withTk.length?`<div class="bam-grp">有可用票券（${withTk.length}）</div>${withTk.map(row).join('')}`:''}
-        ${noTk.length?`<div class="bam-grp">目前不能加入（${noTk.length}）</div>${noTk.map(row).join('')}`:''}
+        ${(()=>{ const sw=noTk.filter(r=>r.swap), no=noTk.filter(r=>!r.swap);
+          return (sw.length?`<div class="bam-grp">票已排完，可以調課過來（${sw.length}）</div>${sw.map(row).join('')}`:'')
+               + (no.length?`<div class="bam-grp">目前不能加入（${no.length}）</div>${no.map(row).join('')}`:''); })()}
         ${(!withTk.length&&!noTk.length)?'<div class="ash-einote">找不到符合的會員。</div>':''}
       </div>
       <div class="adp-foot"><button class="btn btn-ghost" onclick="ashDateClose()">取消</button></div>
@@ -24591,10 +24609,127 @@ function bamRender(q){
   /* 打字之後游標要留在搜尋框（重畫會失焦） */
   try{ const el=document.getElementById('bam-q'); if(el && kw){ el.focus(); el.setSelectionRange(kw.length,kw.length); } }catch(_){}
 }
+function bamSwap(mid){
+  const b=window._bamB; if(!b){ ashDateClose(); return; }
+  ashDateClose();
+  return bkSwapPickOpen(b.id, mid);
+}
 async function bamPick(mid){
   const b=window._bamB; if(!b){ ashDateClose(); return; }
   ashDateClose();
   return onceAct('bkaddmem:'+b.id+':'+mid, ()=>bkAddMemberDo(b.id, mid));
+}
+/* ══ 票都排完了 → 用圓形卡把某一堂調過來（2026-08-24 使用者定案）══════════════
+   使用者原話：「如果可使用票券已經都先預約了，則要顯示視窗用圓形卡的方式，
+   點選看要調整哪張圓形卡過來這堂課」。同日確認的四條細節：
+     ・換過來後**原本的預約變成空堂**（時段留著，不是取消）
+     ・不用通知會員
+     ・別的教練的課也可以調過來
+     ・要套用既有的改期規則（bkMoveBlockReason，含 24 小時與「教練只能動自己的課」）
+
+   ⚠ 實作是「把人與票搬過去」，不是「把課搬過去」：
+     A（原本那一堂）清掉會員與票 → 變成空堂；B（這一堂）綁上會員與票。
+     為什麼不用對調日期時間？因為 A 有 A 的教練、B 有 B 的教練 —— 對調時間會讓
+     這一堂變成由 A 的教練上，那不是使用者要的（他要的是「這位會員來上這一堂」）。
+   ⚠ 票券帳要誠實：A 退一堂、B 扣一堂（淨額為零，但 ticket_logs 留得下軌跡）。
+     只把 ticket_id 改掉的話，帳本上那筆扣課仍指向 A，票券夾的戳記會歸錯堂。 */
+async function bkSwapPickOpen(bid, mid){
+  const b=await dbGet('bookings',bid);
+  if(!b){ showToast('找不到這堂課'); return; }
+  const _busy=uiBusy('讀取票券…');
+  let W=null, m=null;
+  try{
+    m=await dbGet('members',mid);
+    W=await buildWallet(mid, await walletCtx());
+  }catch(e){ _busy(); showToast('讀取失敗：'+((e&&e.message)||e)); return; }
+  _busy();
+  window._bswB=b; window._bswMid=mid;
+  const cat=b.category||'';
+  /* 只列「這個課別、還有已預約未上的堂」的票；其餘票列出來只是雜訊。 */
+  const slots=(W&&W.slots||[]).filter(sl=>sl && sl.t && ticketMatchesCategory(sl.t, cat) && (sl.pending>0));
+  const cards=slots.map(sl=>`<div class="bsw-tk">
+      <div class="bsw-tk-h"><b>${escH(sl.t.plan_name||cat||'票券')}</b>
+        <span>已預約 ${sl.pending} 堂・可用 ${sl.left} 堂</span></div>
+      <div class="mck-dots2">${ticketTokens(sl.t, sl.stamps, (W&&W.typeMap)||{}, sl.used, b.id, mid, W&&W.selfBk, 0, {tapBooked:'bswPick'})}</div>
+    </div>`).join('');
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">要把哪一堂調過來？</div>
+    <div class="ash-eihead">${escH((m&&m.name)||'')}　·　這一堂：${String(b.date).replace(/-/g,'/')} ${String(b.start_time).slice(0,5)}</div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.9;margin-bottom:10px;">
+      這位會員的票已經全部排課了。點下面任何一個<b>已預約</b>的圓點，
+      就把那一堂的會員與票券移到這一堂；<b>原本那個時段會留成空堂</b>，可以再安排別人。</div>
+    ${cards||'<div class="ash-einote">這個課別沒有可以調整的預約。</div>'}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
+}
+function bswPick(fromBid){
+  const b=window._bswB, mid=window._bswMid;
+  if(!b||!mid){ closeModal(); return; }
+  return onceAct('bkswap:'+b.id+':'+fromBid, ()=>bkSwapConfirm(fromBid, b.id, mid));
+}
+/* 動之前先講清楚會發生什麼（這一步會動到兩堂課與一張票，不該點一下就發生）。 */
+async function bkSwapConfirm(fromBid, toBid, mid){
+  const A=await dbGet('bookings',fromBid), B=await dbGet('bookings',toBid);
+  if(!A||!B){ showToast('找不到預約'); return; }
+  const blk=(typeof bkMoveBlockReason==='function')?bkMoveBlockReason(A):'';
+  if(blk){ showToast(blk, 5000); return; }        // 沿用改期的規則（含 24 小時、教練只能動自己的）
+  const cn=A.coach_id?await coachName(A.coach_id).catch(()=>''):'';
+  const _d=x=>String(x.date).replace(/-/g,'/')+' '+String(x.start_time).slice(0,5);
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">把這一堂調過來？</div>
+    <div style="display:flex;flex-direction:column;gap:8px;padding:2px 0 6px;font-size:13px;">
+      <div style="background:rgba(181,55,46,.08);border:1px solid rgba(181,55,46,.35);border-radius:9px;padding:10px 12px;">
+        <div style="color:var(--danger,#b5372e);font-size:11px;font-weight:700;margin-bottom:3px;">原本這一堂（會變成空堂）</div>
+        <div style="font-family:var(--num);">${_d(A)}${cn?`　·　${escH(cn)}`:''}</div></div>
+      <div style="display:flex;align-items:center;gap:8px;color:var(--gold-d);font-size:12px;font-weight:700;">
+        <span style="font-size:15px;line-height:1;">↓</span><span>會員與票券移過去</span></div>
+      <div style="background:rgba(31,111,84,.09);border:1.5px solid var(--green);border-radius:9px;padding:10px 12px;">
+        <div style="color:var(--green);font-size:11px;font-weight:700;margin-bottom:3px;">調到這一堂</div>
+        <div style="font-size:15px;font-weight:800;font-family:var(--num);">${_d(B)}</div></div>
+      <div style="font-size:11.5px;color:var(--t3);line-height:1.8;">
+        原時段會留成空堂（可以再安排別人）。票券總堂數不變：原本那一堂退回 1 堂、這一堂扣 1 堂。
+        <b>不會通知會員</b>，請自行告知。</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="closeModal();bkSwapDo('${fromBid}','${toBid}','${mid}')">確定調過來</button>
+    </div>`);
+}
+async function bkSwapDo(fromBid, toBid, mid){
+  const done=uiBusy('調整中…');
+  try{
+    const A=await dbGet('bookings',fromBid), B=await dbGet('bookings',toBid);
+    if(!A||!B){ showToast('找不到預約'); return; }
+    const blk=(typeof bkMoveBlockReason==='function')?bkMoveBlockReason(A):'';
+    if(blk){ showToast(blk, 5000); return; }
+    if(!bkCanAddMember(B)){ showToast('這一堂已經有人或狀態已改變，請重新整理'); return; }
+    const tkId=A.ticket_id;
+    const tk=tkId?await dbGet('member_tickets',tkId):null;
+    /* 先驗新時段（衝堂／場地／營業時間都在裡面），過不了就整個不做。 */
+    const vbk={id:B.id, coach_id:B.coach_id, category:B.category, ticket_type_id:B.ticket_type_id,
+               member_id:mid, venue_pref:null};
+    const verr=await validateBooking(vbk, B.date, B.start_time, Number(B.duration)||60);
+    if(verr){ showToast(verr, 5000); return; }
+    /* ① 原本那一堂：退票、清掉會員與票 → 變回空堂（時段留著） */
+    if(tk){ try{ await refundTicket(tk, A.id, SESSION.id); }catch(_){} }
+    A.member_id=null; A.ticket_id=null; A.trial_name=null; A.trial_phone=null;
+    A.pending_contract=true;
+    A.note=bkNoteJoin(bkNoteSplit(A.note).sys, (bkNoteSplit(A.note).user||''));
+    await dbPut('bookings', A);
+    /* ② 這一堂：綁會員與票、扣課、轉成正式課 */
+    B.member_id=mid; B.ticket_id=tk?tk.id:null;
+    B.ticket_type_id=(tk&&tk.ticket_type_id)||B.ticket_type_id||null;
+    B.pending_contract=false; B.trial_name=null; B.trial_phone=null;
+    if(tk){
+      const fresh=await dbGet('member_tickets', tk.id);
+      if(!(await deductTicket(fresh||tk, B.id, SESSION.id))){
+        showToast('扣課失敗（餘額護欄擋下）——原本那一堂已經退成空堂，請重新指定', 6000);
+        await dbPut('bookings', B); return;
+      }
+    }
+    await dbPut('bookings', B);
+    dbCacheClear(['bookings','member_tickets','ticket_logs']);
+    showToast('已調過來，原時段留成空堂');
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('調整失敗：'+((e&&e.message)||e)); }
+  finally{ done(); }
 }
 /* 真正把人與票綁上去。與「待簽約轉正」同一組動作，只是不處理整串卡位 ——
    空堂本來就是一堂一堂建的。 */
@@ -48977,7 +49112,12 @@ function bkSelfBooked(b, memberId, selfSet){
      20／24／34 堂都會被切掉，等於為了一張特例犧牲全部。
      正式庫實測：2,977 張票裡，61–998 堂的有 0 張，只有 1 張 9999（魚媽劉媽的無限次卡）。
      所以上限拉到 60 —— 真實票券 100% 完整顯示，那張 9999 仍然有收尾籤擋住。 */
-function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
+/* 2026-08-24 加一個「已預約的圓點可以點」的模式（opts.tapBooked＝要呼叫的函式名）——
+   給「票都排完了，要把哪一堂調過來」用（建立預約改版第四批）。
+   ⚠ 預設關閉：全系統既有的呼叫點一個都不受影響，圓點照舊只有紅虛線那顆點得動。
+   ⚠ 只有「已預約未上」的點可以調（已上完、請假、未開通的都不行）—— 那是唯一
+     還能改期的狀態，其餘點下去只會在後面被 bkMoveBlockReason 擋掉。 */
+function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts){
   const TK_DOT_MAX=60;
   const total=Math.max(Number(t.sessions_total)||0,0);
   const v=tkVisual(t,typeMap);
@@ -49110,7 +49250,10 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN){
       const vch=({'跑步機':'跑','教室':'教'})[vlb]||'';
       const shc2=((b&&b._shBy)?' mtk-sh':'')+_ownCls(b);
       const clv=(b&&typeof bkIsCoachLeave==='function'&&bkIsCoachLeave(b))?' mtk-cleave':'';   /* 紅圈空心＝教練請假（2026-08-14） */
-      s+=`<span class="mtk mtk-booked${clv}${cur}${slf}${shc2}" style="--tk-acc:${v.accent};" title="${clv?'教練請假（時段保留；會員簽到或取消時退堂）':'已預約'} ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}${b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}${cur?'<i class="mtk-comet"></i>':''}</span>`;
+      /* 可調課模式（2026-08-24）：只有「已預約未上」且不是本堂、也不是教練請假的點能點 */
+      const _tapB=!!(opts&&opts.tapBooked&&b&&b.id&&!cur&&!clv);
+      const _tapA=_tapB?` onclick="event.stopPropagation();${opts.tapBooked}('${b.id}')"`:'';
+      s+=`<span class="mtk mtk-booked${clv}${cur}${slf}${shc2}${_tapB?' mtk-tap':''}"${_tapA} style="--tk-acc:${v.accent};" title="${clv?'教練請假（時段保留；會員簽到或取消時退堂）':'已預約'} ${b.date||''} ${b.start_time||''}${vlb?'　·　'+vlb:''}${b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}${_tapB?'　·　點一下把這一堂調過來':''}">${md(b)}${vch?`<i class="mtk-venue">${vch}</i>`:''}${cur?'<i class="mtk-comet"></i>':''}</span>`;
     }
   }
   /* 票券堂數不夠放的已預約課程仍要看得到（2026-07-30 使用者回報：8/1 團課明明有預約，
