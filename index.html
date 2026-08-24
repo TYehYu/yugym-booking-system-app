@@ -9925,8 +9925,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1204';
-const APP_VERSION_LABEL='v260824.1204';
+const APP_VERSION = '260824.1245';
+const APP_VERSION_LABEL='v260824.1245';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24075,7 +24075,19 @@ function bkMemberOptsHTML(q, keepId){
   const qq=(q||'').trim(), qp=qq?normPhone(qq):'';
   const list=qq?all.filter(m=>(m.name||'').includes(qq)||(qp&&normPhone(m.phone).includes(qp))):all;
   const cid=window._bkCoachSel||'';
-  const opt=m=>`<option value="${m.id}">${m.name}（${fmtPhone(m.phone)}）</option>`;
+  /* 2026-08-24 使用者回報：「視窗二選好教練了，這邊是會員名單，沒有標出該教練的會員、
+     跟該會員的課堂數」——★＝主教練是目前選的那位教練；括號後面接「可用 N/M 堂」。
+     ⚠ 這是 <option>，只能放純文字（mpk 的挑選視窗照這段文字畫列），所以用 ★ 與空白排版，
+       不是 HTML。
+     ⚠ 堂數只有「有可用票券」那一組算得出來（bkRefreshPlanFilter 只對那組跑
+       bkMemTicketInfo，481 位全算會很慢）；其他會員就不顯示堂數，不要顯示 0 誤導。 */
+  const _tkMap=window._bkMemTk||{};
+  const opt=m=>{
+    const star=(cid && String(m.default_coach_id||'')===String(cid))?'★ ':'';
+    const ti=_tkMap[m.id];
+    const cnt=(ti && ti.left>0)?`　可用 ${ti.left}/${ti.total} 堂`:'';
+    return `<option value="${m.id}">${star}${m.name}（${fmtPhone(m.phone)}）${cnt}</option>`;
+  };
   const head='<option value="">— 選擇會員 —</option>';
   // 截斷但保住「目前已選的那位」，並回報被藏起來幾位
   const cut=arr=>{
@@ -24148,8 +24160,17 @@ async function bkRefreshPlanFilter(){
         cands.forEach(mid=>{ if(mid && !set[mid] && tkFitsBooking(tk,mid,tid,d,tm,cnt)) set[mid]=1; });
       });
       window._bkPlanIds=set; window._bkPlanName=t.name||'';
+      /* 每一位的「可用 / 該課別總堂數」（2026-08-24 使用者回報：視窗二的會員名單
+         沒有標出該教練的會員、也沒有課堂數）—— 與課卡［＋新增］用同一支 bkMemTicketInfo，
+         兩張名單講的話才會一樣。
+         ⚠ 只算「有可用票券」那一組（set 裡的人）：481 位全算要跑很久，而其他會員
+           本來就顯示在「其他會員」那一組、也不會馬上被選。 */
+      const _pb={category:t.category, ticket_type_id:tid, date:d, start_time:tm, duration:60};
+      const _tkInfo={};
+      Object.keys(set).forEach(mid=>{ try{ _tkInfo[mid]=bkMemTicketInfo(mid, _pb, tks, cnt); }catch(_){} });
+      window._bkMemTk=_tkInfo;
     }
-  }catch(_){ window._bkPlanIds=null; }
+  }catch(_){ window._bkPlanIds=null; window._bkMemTk=null; }
   bkRedrawMemberPick();
 }
 // 重畫步驟 1 的會員下拉並保留已選的那位（自訂下拉要重新掛回去）
@@ -24763,7 +24784,9 @@ async function bkSwapDo(fromBid, toBid, mid){
     const verr=await validateBooking(vbk, B.date, B.start_time, Number(B.duration)||60);
     if(verr){ showToast(verr, 5000); return; }
     /* ① 原本那一堂：退票、清掉會員與票 → 變回空堂（時段留著） */
-    if(tk){ try{ await refundTicket(tk, A.id, SESSION.id); }catch(_){} }
+    /* ⚠ refundTicket 的第一個參數是 **ticket_id**（不是票券物件）—— 傳物件進去
+       它會 dbGet(物件) 拿不到票，然後靜靜地什麼都不退。 */
+    if(tk){ try{ await refundTicket(tk.id, A.id, SESSION.id); }catch(_){} }
     A.member_id=null; A.ticket_id=null; A.trial_name=null; A.trial_phone=null;
     A.pending_contract=true;
     A.note=bkNoteJoin(bkNoteSplit(A.note).sys, (bkNoteSplit(A.note).user||''));
@@ -24775,8 +24798,13 @@ async function bkSwapDo(fromBid, toBid, mid){
     if(tk){
       const fresh=await dbGet('member_tickets', tk.id);
       if(!(await deductTicket(fresh||tk, B.id, SESSION.id))){
-        showToast('扣課失敗（餘額護欄擋下）——原本那一堂已經退成空堂，請重新指定', 6000);
-        await dbPut('bookings', B); return;
+        /* ⚠ 這裡**不可以**寫回 B —— 上面已經把 member_id／ticket_id 掛在記憶體裡的 B 上，
+           寫回去就變成「綁了票卻沒有扣課紀錄」的預約，票券夾會畫成需補票的紅虛線。
+           B 到這一刻為止在資料庫裡完全沒被動過，直接 return 就是乾淨的狀態：
+           A 已經退成空堂、B 維持原樣（空堂），使用者重新指定即可。 */
+        dbCacheClear(['bookings','member_tickets','ticket_logs']);
+        showToast('扣課失敗（餘額護欄擋下）——原本那一堂已經退成空堂，這一堂沒有變動，請重新指定', 7000);
+        navTo(CUR_PAGE); return;
       }
     }
     await dbPut('bookings', B);

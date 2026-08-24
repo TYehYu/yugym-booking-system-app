@@ -160,17 +160,22 @@ console.log('\n⑩ 圓形卡調課（第四批）');
   ok('★★ 為什麼不對調日期時間，寫在原地（A 有 A 的教練，對調會讓這堂變成 A 的教練上）',
      /A 有 A 的教練、B 有 B 的教練 —— 對調時間會讓/.test(src));
   ok('★★ 票券帳要誠實：A 退一堂、B 扣一堂（只改 ticket_id 會讓戳記歸錯堂）',
-     /await refundTicket\(tk, A\.id, SESSION\.id\)/.test(f)
+     /await refundTicket\(tk\.id, A\.id, SESSION\.id\)/.test(f)
      && /await deductTicket\(fresh\|\|tk, B\.id, SESSION\.id\)/.test(f)
      && /只把 ticket_id 改掉的話，帳本上那筆扣課仍指向 A/.test(src));
+  ok('★★ refundTicket 收的是 ticket_id 不是票券物件（傳錯會靜靜地什麼都不退）',
+     /refundTicket 的第一個參數是 \*\*ticket_id\*\*（不是票券物件）/.test(src)
+     && /^async function refundTicket\(ticket_id,booking_id,operator\)\{/m.test(src));
   ok('★★ 套用既有的改期規則（含 24 小時與「教練只能動自己的課」）',
      (f.match(/bkMoveBlockReason\(A\)/g)||[]).length>=1
      && /const blk=\(typeof bkMoveBlockReason==='function'\)\?bkMoveBlockReason\(A\):'';/.test(f));
   ok('★★ 動之前先驗新時段（衝堂／場地／營業時間），過不了就整個不做',
      /const verr=await validateBooking\(vbk, B\.date, B\.start_time, Number\(B\.duration\)\|\|60\);/.test(f)
      && f.indexOf('validateBooking')<f.indexOf('refundTicket'));
-  ok('★ 扣課失敗時說清楚現在的狀態（A 已經退成空堂了）',
-     /原本那一堂已經退成空堂，請重新指定/.test(f));
+  ok('★★ 扣課失敗時**不可以**寫回 B —— 否則變成「綁了票卻沒有扣課紀錄」的預約',
+     /這裡\*\*不可以\*\*寫回 B/.test(f)
+     && !/await dbPut\('bookings', B\); return;/.test(f)
+     && /原本那一堂已經退成空堂，這一堂沒有變動，請重新指定/.test(f));
   const cf=g('async function bkSwapConfirm(','\n}');
   ok('★★ 動兩堂課與一張票，不該點一下就發生 → 先跳確認卡',
      /原本這一堂（會變成空堂）/.test(cf) && /調到這一堂/.test(cf));
