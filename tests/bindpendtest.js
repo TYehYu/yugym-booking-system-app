@@ -51,9 +51,16 @@ console.log('\n③ 綁定流程本體');
 
 console.log('\n④ 入口與權限');
 {
-  ok('★ 明細有「綁定會員」鈕：櫃檯或教練自己的課',
+/* 2026-08-24 使用者回報：「點了安排會員的按鈕，跑到舊視窗了」——
+   空堂走的是「待簽約」那條早退分支，一般分支裡的［＋新增］從來沒被接上，
+   按鈕一直指到舊的 openBindPending。空堂改指 bkAddMemberOpen（那邊才問得出
+   「用票券／待簽約／待分期」，也才找得到還沒建檔的客人）；
+   散客卡（有 trial_name）維持 openBindPending —— 那是「把卡上的姓名對到一筆
+   真的會員資料」，不是「加一個人進來」。 */
+  ok('★ 明細那顆鈕：空堂→安排會員（新的［＋新增］）、散客→綁定會員（舊的對身分）',
      /isDeskLike\(\)\|\|\(SESSION&&SESSION\.role==='coach'&&\(bkCoachId\(b\)\)===SESSION\.id\)/.test(src)
-     && /openBindPending\('\$\{b\.id\}'\)">綁定會員/.test(src));
+     && /\$\{bkIsOpenHold\(b\)\?`closeModal\(\);bkAddMemberOpen\('\$\{b\.id\}'\)`:`openBindPending\('\$\{b\.id\}'\)`\}/.test(src)
+     && /\$\{bkIsOpenHold\(b\)\?'安排會員':'綁定會員'\}/.test(src));
   ok('★ 扣課的「轉正簽約」仍限櫃檯、且已綁定的卡位也按得到',
      /b\.pending_contract&&!b\.ticket_id&&b\.status==='booked'&&\(isDeskLike\(\)\)&&!bkIsInstHold\(b\)/.test(src));
   ok('★ 已綁定的卡位轉正 → 直接用綁好的會員，不再比對',

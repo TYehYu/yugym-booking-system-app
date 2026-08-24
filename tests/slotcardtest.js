@@ -97,8 +97,15 @@ ok('　　為什麼用既有形狀而不加欄位，寫在程式裡',
 
 console.log('\n把人補上去：綁定待簽約回到簡易課卡');
 /* 2026-08-21：改成三段式（安排會員 → 儲值 → 轉正），詳見 tests/cardstyletest.js */
-ok('★ 沒綁會員的卡位給「安排會員／綁定會員」，不是「轉正」',
-   /if\(!b\.member_id\)\{\s*\n\s*btns \+= evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);openBindPending\('\$\{id\}'\)`,'plus',bkIsOpenHold\(b\)\?'安排會員':'綁定會員'\);/.test(src));
+/* 2026-08-24 使用者回報：「點了安排會員的按鈕，跑到舊視窗了」——
+   空堂走的是「待簽約」那條早退分支，一般分支裡的［＋新增］從來沒被接上，
+   按鈕一直指到舊的 openBindPending。空堂改指 bkAddMemberOpen（那邊才問得出
+   「用票券／待簽約／待分期」，也才找得到還沒建檔的客人）；
+   散客卡（有 trial_name）維持 openBindPending —— 那是「把卡上的姓名對到一筆
+   真的會員資料」，不是「加一個人進來」。 */
+ok('★★ 沒綁會員的卡位給「安排會員／綁定會員」，不是「轉正」；兩者各接各的視窗',
+   /\? evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);bkAddMemberOpen\('\$\{id\}'\)`,'plus','安排會員'\)\s*\n\s*: evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);openBindPending\('\$\{id\}'\)`,'plus','綁定會員'\);/.test(src)
+   && /走的是這條「待簽約」早退分支/.test(src));
 ok('★ 已綁會員且有票才給轉正（沒票先給儲值）',
    /evoBtn\('evo-r2','evo-primary',`ashBackArm\('\$\{id\}'\);collapseBkCard\(\);openConvertPending\('\$\{id\}'\)`,'check','轉正'\)/.test(src)
    && /evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ppTopUp\('\$\{b\.member_id\}'\)`,'plus','儲值'\)/.test(src));

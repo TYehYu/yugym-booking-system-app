@@ -399,8 +399,14 @@ console.log('\n待簽約卡的下一步：安排會員 → 儲值 → 轉正 →
 ok('★ 「會員」鈕拿掉（點會員卡本來就會進會員資料）',
    !/evoBtn\('evo-b1','',`collapseBkCard\(\);openMemberDetail\('\$\{b\.member_id\}'\)`,'doc','會員'\)/.test(src)
    && /onclick="collapseBkCard\(\);openMemberDetail\('\$\{r\.mid\}'\)"/.test(src));
-ok('★ 沒排人 → 安排會員',
-   /if\(!b\.member_id\)\{\s*\n\s*btns \+= evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);openBindPending/.test(src));
+/* 2026-08-24 使用者回報：「點了安排會員的按鈕，跑到舊視窗了」——
+   空堂走的是「待簽約」那條早退分支，一般分支裡的［＋新增］從來沒被接上，
+   按鈕一直指到舊的 openBindPending。空堂改指 bkAddMemberOpen（那邊才問得出
+   「用票券／待簽約／待分期」，也才找得到還沒建檔的客人）；
+   散客卡（有 trial_name）維持 openBindPending —— 那是「把卡上的姓名對到一筆
+   真的會員資料」，不是「加一個人進來」。 */
+ok('★★ 沒排人 → 安排會員，而且是接到新的［＋新增］',
+   /btns \+= bkIsOpenHold\(b\)\s*\n\s*\? evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);bkAddMemberOpen\('\$\{id\}'\)`,'plus','安排會員'\)/.test(src));
 /* 2026-08-21：分期保留走「分期」，一般待簽約才走「儲值」 */
 ok('★ 有人沒票 → 儲值（開銷售視窗，會員已預選）',
    /: evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ppTopUp\('\$\{b\.member_id\}'\)`,'plus','儲值'\)\);/.test(src)

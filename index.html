@@ -9972,8 +9972,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1338';
-const APP_VERSION_LABEL='v260824.1338';
+const APP_VERSION = '260824.1347';
+const APP_VERSION_LABEL='v260824.1347';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26788,7 +26788,16 @@ async function expandBkCard(el, id){
        綁完之後這張卡就走一般路徑，簽到鈕本來就在會員卡上，所以第三段不必在這裡畫。 */
     if(staff && !closed && b.status==='booked'){
       if(!b.member_id){
-        btns += evoBtn('evo-r2','evo-gold',`collapseBkCard();openBindPending('${id}')`,'plus',bkIsOpenHold(b)?'安排會員':'綁定會員');
+        /* 2026-08-24 使用者回報：「點了安排會員的按鈕，跑到舊視窗了」——
+           空堂（還沒有人、也沒有散客姓名）走的是這條「待簽約」早退分支，
+           下面那顆［＋新增］在一般分支裡，所以**從來沒被接上**，一直指到舊的
+           openBindPending。空堂改指新的［＋新增］：那邊才問得出「用票券／待簽約／
+           待分期」，也才找得到還沒建檔的客人。
+           ⚠ 散客卡（有 trial_name）維持 openBindPending —— 那是另一件事：
+             把已經寫在卡上的姓名對到一筆真的會員資料，不是「加一個人進來」。 */
+        btns += bkIsOpenHold(b)
+          ? evoBtn('evo-r2','evo-gold',`collapseBkCard();bkAddMemberOpen('${id}')`,'plus','安排會員')
+          : evoBtn('evo-r2','evo-gold',`collapseBkCard();openBindPending('${id}')`,'plus','綁定會員');
       }else{
         let _hasTk=false;
         try{ _hasTk=((await listUsableTickets(b.member_id, b.ticket_type_id, b.date, b.start_time))||[]).length>0; }catch(_){}
@@ -28860,7 +28869,7 @@ async function openBookingDetail(id){
            純掛名不扣課；教練只能綁自己的課，扣課的「轉正簽約」仍限櫃檯。 */''}
       ${(b.pending_contract&&!b.member_id&&b.status==='booked'
           &&(isDeskLike()||(SESSION&&SESSION.role==='coach'&&(bkCoachId(b))===SESSION.id)))
-        ? `<button class="btn btn-ghost" onclick="openBindPending('${b.id}')">綁定會員</button>`:''}
+        ? `<button class="btn btn-ghost" onclick="${bkIsOpenHold(b)?`closeModal();bkAddMemberOpen('${b.id}')`:`openBindPending('${b.id}')`}">${bkIsOpenHold(b)?'安排會員':'綁定會員'}</button>`:''}
       ${(b.pending_contract&&!b.ticket_id&&b.status==='booked'&&(isDeskLike())&&!bkIsInstHold(b))
         ? `<button class="btn btn-green bkd-signup" onclick="openConvertPending('${b.id}')">轉正簽約</button>`:''}
     </div>`);
