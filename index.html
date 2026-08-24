@@ -10145,8 +10145,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1752';
-const APP_VERSION_LABEL='v260824.1752';
+const APP_VERSION = '260824.1759';
+const APP_VERSION_LABEL='v260824.1759';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14842,14 +14842,37 @@ async function tkBookedCountMap(){
   const map={};
   try{
     const bks=await dbGetAll('bookings');
+    const logs=await dbGetAll('ticket_logs').catch(()=>[]);
+    /* 逐「票券×預約」的帳本淨值（2026-08-24 劉雪珠 8/31 案例）——
+       原本只要「這筆預約掛著票、而且沒取消」就算佔一格，不管那一堂的堂數
+       是不是早就退回來了。教練請假的新制（0814）正是這種形狀：
+       請假當下不退、票掛著；會員到場簽到才退 1 堂，但那筆預約仍然掛著同一張票
+       （圓形卡的紅圈點靠它畫）。於是 4 堂的票掛了 4 筆預約 → 超約防線判定滿了，
+       會員手上明明還有 1 堂，畫面上卻只給「儲值」而不是「轉正」。
+       改成看帳本：這一堂的 delta 加總 <0 才算真的佔著。 */
+    const _net={}, _hasLg={};
+    (logs||[]).forEach(l=>{
+      if(!l || !l.ticket_id || !l.booking_id) return;
+      /* ⚠ delta 缺值時要看 action 推 —— 不能當成 0。0 在這套帳本裡有專門的意思
+         （「補連結」：只記歸屬、堂數當初就扣過了），把缺值一律當 0 會讓真正的扣課
+         被當成沒扣，超約防線就整個失效。 */
+      const _d=Number.isFinite(Number(l.delta)) ? Number(l.delta)
+        : (l.action==='deduct' ? -1 : (l.action==='refund' ? 1 : 0));
+      const k=l.ticket_id+'|'+l.booking_id;
+      _net[k]=(_net[k]||0)+_d;
+      if(_d!==0) _hasLg[k]=1;
+    });
     const st={};
     (bks||[]).forEach(b=>{
       if(!b || !b.id) return;
       st[b.id]={hasTk:!!b.ticket_id};
       if(!b.ticket_id || b.status==='cancelled') return;
+      /* ⚠ 沒有任何帳本紀錄的照舊算佔用 —— 舊系統匯入的課本來就沒有 ticket_logs，
+         用「查不到帳就當沒扣」會把超約防線整個拆掉。 */
+      const k=b.ticket_id+'|'+b.id;
+      if(_hasLg[k] && (_net[k]||0)>=0) return;   // 帳本說這一堂已經退回來了 → 不佔位
       map[b.ticket_id]=(map[b.ticket_id]||0)+1;
     });
-    const logs=await dbGetAll('ticket_logs').catch(()=>[]);
     (logs||[]).forEach(l=>{
       if(!l || !l.ticket_id || !l.booking_id) return;
       /* ⚠ delta 為 0 的是「補連結」——只記『這堂課用這張票』，票面堂數當初就已經扣過了

@@ -115,6 +115,38 @@ console.log('\n③ 退課護欄：不退超過總堂數（R3）');
   }
 }
 
+/* 2026-08-24 劉雪珠 8/31 案例：原本只要「掛著票、沒取消」就算佔一格，不管那一堂的
+   堂數是不是早就退回來了。教練請假新制（0814）正是這種形狀 —— 請假當下不退、票掛著，
+   會員到場簽到才退 1 堂，但預約仍掛著同一張票（圓形卡的紅圈點靠它畫）。
+   於是 4 堂的票掛 4 筆預約 → 判定滿了，會員明明還有 1 堂卻只給「儲值」不給「轉正」。 */
+console.log('\n② 帳本淨值：已經退回來的那一堂不算佔位');
+{
+  const BKS=[
+    {id:'b1',ticket_id:'T',status:'checked_in'},
+    {id:'b2',ticket_id:'T',status:'checked_in'},
+    {id:'b3',ticket_id:'T',status:'checked_in'},
+    {id:'b4',ticket_id:'T',status:'checked_in'},   // 教練請假 → 到場簽到已退堂
+    {id:'b5',ticket_id:'T',status:'cancelled'},
+    {id:'old',ticket_id:'X',status:'booked'},      // 舊系統匯入：完全沒有帳本
+  ];
+  const LOGS=[
+    {ticket_id:'T',booking_id:'b1',action:'deduct',delta:-1},
+    {ticket_id:'T',booking_id:'b2',action:'deduct',delta:-1},
+    {ticket_id:'T',booking_id:'b3',action:'deduct',delta:-1},
+    {ticket_id:'T',booking_id:'b4',action:'deduct',delta:-1},
+    {ticket_id:'T',booking_id:'b4',action:'refund',delta:1},
+    {ticket_id:'T',booking_id:'b4',action:'deduct',delta:-1},
+    {ticket_id:'T',booking_id:'b4',action:'refund',delta:1},
+  ];
+  const fn=new Function('dbGetAll', grabFn('tkBookedCountMap')+'\nreturn tkBookedCountMap;')(
+    async t=>(t==='bookings'?BKS:(t==='ticket_logs'?LOGS:[])));
+  const map=await fn();
+  eq('★★ 退回來的那一堂不佔位（4 筆預約只算 3 格）', map['T'], 3);
+  eq('★★ 完全沒有帳本的舊資料照舊算佔用（不能用「查不到帳」把防線拆掉）', map['X'], 1);
+  ok('　　delta 缺值時看 action 推，不能當成 0（0 在這套帳本裡是「補連結」）',
+     /Number\.isFinite\(Number\(l\.delta\)\) \? Number\(l\.delta\)/.test(src));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
 })();
