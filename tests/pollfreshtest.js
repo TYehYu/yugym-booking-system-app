@@ -53,5 +53,18 @@ console.log('\n④ fresh 這條路還在（有些地方真的要整表重來）�
      (src.match(/.{0,40}\{fresh:true\}.{0,20}/g)||[]));
 }
 
+console.log('\n⑤ 彈窗不該有橫向捲軸（2026-08-24）');
+{
+  ok('★★ .modal 明確關掉 x 軸捲動（只寫 overflow-y:auto 時，visible 會被當成 auto）',
+     /\.modal\{overflow-x:hidden;\}/.test(src)
+     && /visible 會被當成 auto/.test(src));
+  ok('★★ 兩欄表單與搜尋列的子項可以縮（grid／flex 預設 min-width:auto 會擋住）',
+     /\.form-2col>\*\{min-width:0;\}/.test(src)
+     && /\.mem-pick-row\{min-width:0;\}/.test(src)
+     && /\.mem-pick-row input,\.mem-pick-row select\{min-width:0;\}/.test(src));
+  ok('　　y 軸捲動沒有被關掉（內容過高仍要捲得動）',
+     /\.modal\{background:var\(--surface-3\);[^}]*overflow-y:auto;/.test(src));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
