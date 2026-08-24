@@ -69,7 +69,10 @@ console.log('\n④ 已請假的卡位不能轉正（2026-08-14 吳宜玲 8/21 �
    b.status==='booked' 的守衛移到外層 if 包住整組，轉正本身多一個「有票才給」。 */
 ok('★★ 轉正入口擋非 booked 狀態、卡上轉正鈕也不顯示',
    /if\(b\.status!=='booked'\)\{ _clr\(\); showToast\('這筆卡位已'/.test(src)
-   && /if\(staff && !closed && b\.status==='booked'\)\{/.test(src)
+   /* 2026-08-24 拆成兩段：「還沒有人」放寬到教練（自己的課），
+      「已經有人」的儲值／轉正／開通下一期仍然只給櫃檯以上（那些會動到錢與票）。 */
+   && /if\(staff && !closed && b\.status==='booked' && b\.member_id\)\{/.test(src)
+   && /if\(\(staff\|\|own\) && !closed && b\.status==='booked' && !b\.member_id\)\{/.test(src)
    && /evoBtn\('evo-r2','evo-primary',`ashBackArm\('\$\{id\}'\);collapseBkCard\(\);openConvertPending/.test(src));
 
 console.log('\n⑤ 沒綁票券的堂不能教練請假（2026-08-14 使用者定案）');

@@ -117,36 +117,33 @@ console.log('\n⑧ 排序與呈現');
      /const ta=\(a\.sum>0\), tb=\(b\.sum>0\);\s*\n\s*if\(ta!==tb\) return ta\?-1:1;/.test(src)
      && /「有票」要排在「★」之前：沒票的人再熟也加不進去/.test(src));
   /* 2026-08-24 使用者回報：「手機端這邊沒有篩選出教練的會員」——
-     原本只靠排序＋一個小星號，一長串名字裡看不出分界。改成每一組裡再切一刀，
-     「○○的會員」獨立一個小標。歸屬也改用 bkCoachId（代課優先）。 */
+     原本只靠排序＋一個小星號，一長串名字裡看不出分界。歸屬也改用 bkCoachId（代課優先）。
+     同日再指示：「安排會員的會員選單，要跟之前視窗二那個用一樣的就好」——
+     整張名單從 .ash-eirow 白卡改成「搜尋框＋隱藏 <select>」，由 mpkScan 升級成
+     統一挑選視窗（0801 定案）。分組改用 <optgroup>、★ 用 data-star、右邊的字用 data-sub。 */
   ok('★★ 教練歸屬用 bkCoachId（代課優先），不是原始 coach_id',
      /const _bcid=\(typeof bkCoachId==='function'\)\?bkCoachId\(b\):\(b\.coach_id\|\|null\);/.test(src)
-     && /mine:!!_bcid && String\(m\.default_coach_id\|\|''\)===String\(_bcid\)/.test(src)
-     && /<i class="bam-star">★<\/i>/.test(src));
-  ok('★★ 每一組裡再切「○○的會員」／「其他會員」兩半（是分組不是篩掉）',
-     /const grp=\(title, arr\)=>\{/.test(src)
-     && /<div class="bam-sub">\$\{escH\(cn\|\|'這堂教練'\)\}的會員（\$\{mine\.length\}）<\/div>/.test(src)
-     && /別的教練的會員照樣找得到（櫃檯常常在幫別人排）/.test(src));
-  ok('★★ 搜尋框不能溢出視窗 —— .ms-search 自帶左右 18px 外距，要用 .bam-inp 歸零',
-     /\.bam-inp\{width:100%;box-sizing:border-box;margin-left:0;margin-right:0;margin-bottom:8px;\}/.test(src)
-     && /<input id="bam-q" class="ms-search bam-inp"/.test(src)
-     && /行內只寫 margin-bottom 蓋不掉左右那 18px/.test(src));
-  ok('★ 右邊顯示「可用 N / 總 M 堂」，沒票就寫原因',
-     /可用 <b>\$\{r\.remain\}<\/b> \/ \$\{r\.total\} 堂/.test(src)
-     && /const tag=m\.sum>0\?`可用 \$\{m\.sum\} \/ \$\{m\.total\|\|m\.sum\} 堂`:\(m\.why\|\|'無票（無法加入，請先儲值）'\)/.test(src));
-  /* 0824 第四批：名單分三種列 —— 有票（可點，直接加）／票排完了（可點，開圓形卡調課）／
-     真的不行（淡化）。「票排完了」不能淡化成不能選，那正是調課的入口。 */
-  /* 2026-08-24 使用者定案：「待簽約跟分期應該留到＋新增這邊」＋「如果該會員沒有票券
-     （含散客），課卡就會顯示待簽約」——沒票的那一組不再是淡化的死路，而是待簽約入口。 */
-  ok('★★ 沒票的那一組改成可點的待簽約入口（不再有淡化的死路）',
-     /grp\('沒有可用票券 —— 可先待簽約', no\)/.test(src)
-     && !/const cls=\(can\|\|sw\)\?'':' ash-ei-off';/.test(src)
-     && /` onclick="bamHoldAsk\('\$\{r\.id\}'\)"`/.test(src));
-  ok('★★ 「票已排完」自成一組，而且點得動（調課入口）',
-     /grp\('票已排完，可以調課過來', sw\)/.test(src)
-     && /const act=can\?` onclick="bamPick\('\$\{r\.id\}'\)"`\n\s*:\(sw\?` onclick="bamSwap\('\$\{r\.id\}'\)"`:` onclick="bamHoldAsk\('\$\{r\.id\}'\)"`\);/.test(src));
-  ok('★ 三種列各自寫出「按下去會怎樣」（有票→堂數／排完→調課／沒票→待簽約）',
-     /· \$\{r\.inst\?'待簽約／待分期':'待簽約'\} ›/.test(src));
+     && /mine:!!_bcid && String\(m\.default_coach_id\|\|''\)===String\(_bcid\)/.test(src));
+  ok('★★ 與視窗二同一套挑選器（.mem-pick-row＋隱藏 select＋mpkScan），不自己畫一份名單',
+     /<div class="mem-pick-row">\s*\n\s*<input class="gt-search" id="bam-q"/.test(src)
+     && /<select id="bam-sel" onchange="bamSelPick\(\)">\$\{bamOptsHTML\(kw\)\}<\/select>/.test(src)
+     && /try\{ mpkScan\(\); \}catch\(_\)\{\}/.test(src));
+  ok('★★ ★ 與右邊的堂數走 data-star／data-sub（寫進 option 文字會被 mpkLabel 回填到搜尋框）',
+     /const opt=\(r,sub\)=>`<option value="\$\{r\.id\}"\$\{r\.mine\?' data-star="1"':''\} data-sub="\$\{escH\(sub\)\}">/.test(src));
+  ok('★★ 每一組裡再切「○○的會員」／「其他會員」兩半（optgroup 不能巢狀，所以開兩個）',
+     /<optgroup label="\$\{escH\(title\)\}・\$\{escH\(cn\|\|'這堂教練'\)\}的會員（\$\{mine\.length\}）">/.test(src)
+     && /<optgroup label="\$\{escH\(title\)\}・其他會員（\$\{rest\.length\}）">/.test(src));
+  ok('★★ 三組還在，而且每一組都寫出「按下去會怎樣」',
+     /grp\('有可用票券', withTk, r=>`可用 \$\{r\.remain\} \/ \$\{r\.total\} 堂`\)/.test(src)
+     && /grp\('票已排完，可以調課過來', sw, r=>`\$\{r\.why\} · 調課`\)/.test(src)
+     && /grp\('沒有可用票券 —— 可先待簽約', no, r=>`\$\{r\.why\} · \$\{r\.inst\?'待簽約／待分期':'待簽約'\}`\)/.test(src));
+  ok('★★ 選完之後依這一位的狀態分派（三種行為沒有變，只是不再是三張清單）',
+     /if\(r\.left>0\) return bamPick\(mid\);\s*\n\s*if\(r\.swap\)   return bamSwap\(mid\);\s*\n\s*return bamHoldAsk\(mid\);/.test(src));
+  ok('★ 視窗殼與建立預約同一個（showModal＋.modal-title＋.modal-foot），不再自己開 #adp-sheet',
+     /function bamShell\(kw\)\{[\s\S]{0,400}?showModal\(`<div class="modal-title">新增會員/.test(src)
+     && /<div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal\(\)">取消<\/button><\/div>/.test(src));
+  ok('★ 散客那一塊長得跟會員卡一致（使用者：「待簽約的按鈕也要跟會員卡片一致」）',
+     /<summary class="ash-eirow">\s*\n\s*<span class="ash-eilb">不在名單上？直接建立待簽約<\/span>/.test(src));
 }
 
 console.log('\n⑨ 寫入端：加人＝綁會員＋綁票＋扣課，而且空堂要轉正');

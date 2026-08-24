@@ -70,7 +70,7 @@ ok('★ 綁人之前再驗一次（同一個人同時段不該有兩堂）',
    /const verr=await validateBooking\(vbk, b\.date, b\.start_time, Number\(b\.duration\)\|\|60\);\n\s*if\(verr\)\{ showToast\(verr, 6000\); return; \}\n\s*b\.member_id=mid;/.test(src));
 ok('★ 還沒建檔的客人仍然打得了姓名（搬家不能把這個能力弄丟）',
    /function bamGuestHold\(\)\{/.test(src)
-   && /不在名單上？直接建立待簽約<\/summary>/.test(src)
+   && /不在名單上？直接建立待簽約<\/span>/.test(src)
    && /bkAddHoldDo\(b\.id, null, 'sign', nm, ph\)/.test(src));
 ok('　　只有一種選項時不多問一層（沒有分期票就直接待簽約）',
    /if\(!r\.inst\) return bamHoldDo\(mid,'sign'\);/.test(src));
