@@ -93,6 +93,13 @@ t('★★ 改成簡易課卡：標題卡＋會員卡＋圓形按鈕（不再是�
   /<div class="mtp-card mtp-head"/.test(tap)
   && /<div class="mtp-mcard">/.test(tap)
   && /<div class="mtp-orbs">\$\{ckBtn\}\$\{rsBtn\}\$\{cxBtn\}<\/div>/.test(tap));
+/* 2026-08-24 使用者問「團體課的簽到圓形鈕也正常嗎」——守住兩件事：
+   ① 團課走 memGrpCheckin（逐名額的 RPC），不是單人課那支 memCheckin；
+   ② 關窗要用 memTaskClose（新的 UI 是 #mem-task-pop，不是 modal）——
+      用 closeModal 的話視窗不會關，按完像沒反應。 */
+t('★★ 團體課簽到走 memGrpCheckin，而且關的是 #mem-task-pop',
+  /st\.isGrp\?`memTaskClose\(\);memGrpCheckin\('\$\{b\.id\}'\)`:`memTaskClose\(\);memCheckin\('\$\{b\.id\}'\)`/.test(tap)
+  && !/closeModal\(\)/.test(tap));
 t('★★ 簽到是圓鈕，開窗才可按（memh2CkState 的 open）',
   /st\.open \? orb\('go','✓','簽到'/.test(tap)
   && /orb\('off','🕒','尚未開放',null,'開課前 30 分鐘開放簽到'\)/.test(tap));
