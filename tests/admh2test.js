@@ -153,14 +153,24 @@ ok('　　已簽到仍是整張填滿課程色（與單欄版同語彙）',
 
 /* 矮螢幕收斂（2026-08-22 使用者：從 LINE 圖文選單開啟，上方多一條 LINE 標題列，
    webview 變矮 → 左欄七格分下來每格放不下三行，文字被壓縮） */
-ok('★ fit() 依實際格高掛 a2-tight / a2-tighter',
-   /_rail\.classList\.toggle\('a2-tight',  cell<58\);/.test(src)
-   && /_rail\.classList\.toggle\('a2-tighter',cell<46\);/.test(src));
+/* 2026-08-24 使用者再報：「會員首頁的日期列文字被壓縮了」——
+   門檻原本寫死成像素，使用者把系統字級調大之後，同樣的格高裝的是更大的字，
+   還沒觸發收斂就先被 overflow:hidden 裁掉。門檻改成跟著實測倍率走。 */
+ok('★★ 三段收斂，門檻跟著實測的字級倍率走（不是寫死像素）',
+   /const fz=Math\.max\(1, Number\(window\._fontScale\)\|\|1\);/.test(src)
+   && /_rail\.classList\.toggle\('a2-tight',   cell < 58\*fz\);/.test(src)
+   && /_rail\.classList\.toggle\('a2-tighter', cell < 46\*fz\);/.test(src)
+   && /_rail\.classList\.toggle\('a2-tightest',cell < 36\*fz\);/.test(src));
 ok('　格高算法有扣掉六個 gap', /\(_in\.getBoundingClientRect\(\)\.height-6\*5\)\/7/.test(src));
-ok('★ 先收「N 月」，再矮才縮字級（日期與星期是選日子真正在看的）',
+ok('★ 收的順序：先「N 月」→ 再縮字級 → 最後才收「週X」',
    /\.admh2-rail\.a2-tight \.a2-dm\{display:none;\}/.test(src)
    && /\.admh2-rail\.a2-tighter \.a2-dn\{font-size:19px;\}/.test(src)
-   && !/a2-tight[a-z]* \.a2-dw\{display:none/.test(src));
+   && /\.admh2-rail\.a2-tightest \.a2-dw\{display:none;\}/.test(src));
+ok('★★ 最擠的時候「今天」那一格仍然標得出來（整欄唯一的定位點）',
+   /\.admh2-rail\.a2-tightest \.a2-day\.a2-today \.a2-dw\{display:block;/.test(src)
+   && /那是整欄唯一的定位點，寧可它自己擠一點也不能不見/.test(src));
+ok('　　日期字級綁格高（cqh），系統字放到多大都不會再溢出格子',
+   /\.admh2-rail\.a2-tightest \.a2-dn\{font-size:clamp\(13px,52cqh,19px\);/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
