@@ -154,5 +154,23 @@ console.log('\n⑨ 教練專屬快速預約不能繞過場地選擇');
      /教練就多了一條\*\*繞過場地選擇\*\*的後門/.test(src));
 }
 
+console.log('\n⑩ 未到課的堂要把場地釋出（2026-08-24 使用者指示）');
+{
+  const full=[B('multi_1','10:00'),B('multi_2','10:00'),B('multi_3','10:00')];
+  ok('★★ 三台都被佔 → 不可用（基準）', at(full,'multi').ok===false);
+  const oneNS=[B('multi_1','10:00',{no_show:true}),B('multi_2','10:00'),B('multi_3','10:00')];
+  ok('★★ 其中一堂標了未到課 → 讓出一台，變成可用',
+     at(oneNS,'multi').ok===true && at(oneNS,'multi').left===1, at(oneNS,'multi'));
+  ok('★★ allocateVenue 也要跟著讓（分家就會「畫面說有位、送出說已滿」）',
+     !lib.allocateVenue('私人教練', oneNS, 600, 660, null, 'multi').error);
+  ok('★ 只認 no_show===true，別的真值不算（避免舊資料寫成字串就靜靜放行）',
+     at([B('multi_1','10:00',{no_show:'yes'}),B('multi_2','10:00'),B('multi_3','10:00')],'multi').ok===false);
+  ok('★ 沒標未到課的照樣佔位（取消由呼叫端先濾掉，教練請假不在此列）',
+     at([B('multi_1','10:00',{no_show:false}),B('multi_2','10:00'),B('multi_3','10:00')],'multi').ok===false);
+  ok('　　理由寫在原地（含「取消未到課會自動把場地收回去」）',
+     /同時段如果有未到課的教練課，場地要釋出/.test(src)
+     && /bkUndoNoShow）會把旗標清掉，場地就自動回到佔用/.test(src));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

@@ -9974,8 +9974,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1403';
-const APP_VERSION_LABEL='v260824.1403';
+const APP_VERSION = '260824.1408';
+const APP_VERSION_LABEL='v260824.1408';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21258,7 +21258,15 @@ function occupiedUnits(sameDay, ns, ne){
 function venueLoadAt(others, inst){
   const use={}; getVenues().forEach(v=>{ use[v.id]=0; });
   const seen={};
-  const cur=(others||[]).filter(x=>{ const s0=timeToMin(x.start_time), e0=s0+(x.duration||60); return s0<=inst && inst<e0; });
+  /* 2026-08-24 使用者指示：「同時段如果有未到課的教練課，場地要釋出」——
+     標了未到課（no_show）代表人沒來、那個空間現在是空的，櫃檯應該排得進去。
+     ⚠ 放在 venueLoadAt 是因為 allocateVenue 與 venueAvailAt 都吃這一支 ——
+       只改其中一邊會出現「畫面說有位、送出說已滿」（0824 抽這支出來的原因）。
+     ⚠ 只認 no_show===true。取消已經由呼叫端過濾掉；教練請假**不算**——
+       那堂課的處置另有一套（補課券／復原），課卡也還在，場地先留著。
+     ⚠ 「取消未到課」（bkUndoNoShow）會把旗標清掉，場地就自動回到佔用 —— 不必另外處理。 */
+  const cur=(others||[]).filter(x=>{ if(x && x.no_show===true) return false;
+    const s0=timeToMin(x.start_time), e0=s0+(x.duration||60); return s0<=inst && inst<e0; });
   // ① 有明確 venue_unit 的真實占用（同單位不重複計）
   cur.forEach(x=>{ if(x.venue_unit && !seen[x.venue_unit]){ seen[x.venue_unit]=1;
     const vid=String(x.venue_unit).split('_')[0]; if(use[vid]!=null) use[vid]++; } });
