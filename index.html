@@ -10152,8 +10152,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1917';
-const APP_VERSION_LABEL='v260824.1917';
+const APP_VERSION = '260824.1921';
+const APP_VERSION_LABEL='v260824.1921';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40421,28 +40421,41 @@ function hrSalaryBodyHtml(c,et){
   const mode=cfg.pt_mode==='tier'?'tier':'flat';
   const tiers=(cfg.pt_tiers||[]).length?cfg.pt_tiers:[{min:1,max:59,rate:625}];
   const bonus=(cfg.pt_bonus||[]);
-  // ① 值班設定（依模式不同）
-  let dutyRows='';
-  if(et==='full_time'){
-    dutyRows=`<div class="form-2col">
-      <div class="form-row"><label>每週工作天數</label><input type="number" id="hr-wwd" min="1" max="7" value="${n(c.weekly_work_days,5)}"></div>
-      <div class="form-row"><label>底薪</label><input type="number" id="hr-base" value="${n(c.base_salary,29500)}"></div>
-    </div>
-    <div class="form-row"><label>值班時薪</label><input type="number" id="hr-dutyrate2" value="${n(c.duty_hourly,0)}"></div>`;
-  }else if(et==='part_time'){
-    dutyRows=`<div class="form-2col">
-      <div class="form-row"><label>每週最低排班天數</label><input type="number" id="hr-wmsd" min="0" max="7" value="${n(c.weekly_min_shift_days,3)}"></div>
-      <div class="form-row"><label>值班時薪</label><input type="number" id="hr-dutyrate2" value="${n(c.duty_hourly,200)}"></div>
+  /* ══ 排序（2026-08-24 使用者定案：「排序可以整理一下」）══════════════════
+     照「錢怎麼來」由大到小排：固定薪資 → 課堂薪資 → 團課費 → 達標獎金 → 管理職津貼
+     → 值班（附加項，排最後）。
+     原本第一列就是「需要值班」的勾選＋值班時薪，但值班對多數人只是零頭，
+     擺在最前面等於用最小的項目開場，也把底薪擠到看不見的地方。 */
+  /* ① 固定薪資（每個月不動的那一段）——只有正職與兼職有；合作教練純抽成。 */
+  const _baseVal=Number(n(c.base_salary,29500))||0;
+  const _baseRow=`
+    <div class="form-row hr-basewrap${_baseVal>0?'':' hr-off'}" id="hr-base-row">
+      <label>底薪</label>
+      <input type="number" id="hr-base" value="${n(c.base_salary,29500)}" oninput="hrBaseSync()">
+      ${/* 2026-08-24 使用者指示：「如果改成課堂抽成、不是底薪的時候，底薪這欄就不要白色底框」——
+           填 0 ＝ 靠課堂抽成，那一欄實際上沒有作用。留著（要改回月薪制隨時要填）但淡化。
+           ⚠ 不藏起來：藏了就沒有地方把它改回月薪制（0823 定的語彙）。 */''}
+      <div class="hr-offnote">填 0 ＝ 這位是課堂抽成制，底薪不計入</div>
     </div>`;
+  let fixedRows='';
+  if(et==='full_time'){
+    fixedRows=`<div class="form-2col">
+      <div class="form-row"><label>每週工作天數</label><input type="number" id="hr-wwd" min="1" max="7" value="${n(c.weekly_work_days,5)}"></div>
+      ${_baseRow}
+    </div>`;
+  }else if(et==='part_time'){
+    fixedRows=`<div class="form-row"><label>每週最低排班天數</label><input type="number" id="hr-wmsd" min="0" max="7" value="${n(c.weekly_min_shift_days,3)}"></div>`;
   }else if(et==='contractor'){
-    dutyRows=`<div class="hr-note">合作教練<b>預設不需值班</b>；如需排班，請勾選「需要值班」並設定時薪（有值班時保底 200）。</div>
-    <div class="form-row" style="margin-top:10px;"><label>值班時薪</label><input type="number" id="hr-dutyrate2" value="${n(c.duty_hourly,200)}"></div>`;
-  }else{
-    dutyRows=`<div class="form-row"><label>值班時薪</label><input type="number" id="hr-dutyrate2" value="${n(c.duty_hourly,200)}"></div>`;
+    fixedRows=`<div class="hr-note">合作教練<b>沒有底薪</b>，薪資全部來自下面的課堂與獎金。</div>`;
   }
+  /* ② 值班（附加項）——時薪的預設值依聘僱類型不同，維持原本的數字。 */
+  const _dutyDef=(et==='full_time')?0:200;
+  const dutyRows=`
+    <label class="hr-check" style="margin-bottom:8px;"><input type="checkbox" id="hr-needduty" ${needDuty?'checked':''}>需要值班（取消＝不排班、不計值班薪資）</label>
+    ${et==='contractor'?`<div class="hr-note" style="margin-bottom:8px;">合作教練<b>預設不需值班</b>；如需排班，請勾選上面那一項並設定時薪（有值班時保底 200）。</div>`:''}
+    <div class="form-row"><label>值班時薪</label><input type="number" id="hr-dutyrate2" value="${n(c.duty_hourly,_dutyDef)}"></div>`;
   return `
-    <label class="hr-check"><input type="checkbox" id="hr-needduty" ${needDuty?'checked':''}>需要值班（取消＝不排班、不計值班薪資）</label>
-    ${dutyRows}
+    ${fixedRows?`<div class="hr-sec hr-sec2">固定薪資</div>${fixedRows}`:fixedRows}
 
     <div class="hr-sec hr-sec2">課堂薪資制度</div>
     <div class="form-row"><label>計算方式</label><select id="hr-ptmode" onchange="hrTogglePtMode()">
@@ -40480,7 +40493,11 @@ function hrSalaryBodyHtml(c,et){
       <label class="hr-check" style="margin:0;"><input type="checkbox" id="hr-issup" ${c.is_supervisor?'checked':''}>主管津貼</label>
     </div>
     <div class="form-row"><label>主管津貼金額</label><input type="number" id="hr-supbonus" value="${c.supervisor_bonus||0}"></div>
-    <div id="hr-mgr-box" style="display:${c.is_manager?'block':'none'};">${hrLeaderBoxHtml(c)}</div>`;
+    <div id="hr-mgr-box" style="display:${c.is_manager?'block':'none'};">${hrLeaderBoxHtml(c)}</div>
+
+    ${/* 值班排最後：它是附加項，金額通常最小（2026-08-24 使用者定案的排序） */''}
+    <div class="hr-sec hr-sec2">值班</div>
+    ${dutyRows}`;
 }
 /* 店長獎金（2026-08 起）：名單 × 兩個門檻，都存在這位店長身上。
    之所以不做成全域設定：分店之後兩位店長帶不同的人、給不同的錢，
