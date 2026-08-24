@@ -154,5 +154,22 @@ console.log('\n改抽獎項目');
      /\.filter\(x=>x\.d<5\*60000\)\.sort\(\(a,b\)=>a\.d-b\.d\)/.test(f));
 }
 
+/* 2026-08-24 使用者回報：「抽獎的視窗沒有路徑了」——
+   原本唯一的入口是桌機首頁那顆滑出鈕，而它只在「有人可抽」時出現。
+   選錯獎品的那位剛抽完就不在名單裡，想改也進不去；手機更是完全沒路。 */
+console.log('\n入口：任何裝置、任何時候都要進得去');
+ok('★★ 帳號選單多一項「現場抽獎登記」（手機的抽屜也是同一份）',
+   /id="acct-lotto" onclick="closeAcctMenu\(\);openLottoModal\(\)"/.test(src)
+   && /現場抽獎登記<\/button>/.test(src));
+ok('★★ 只給櫃檯以上，而且 openLottoModal 自己也擋一次（不能只靠畫面沒畫按鈕）',
+   /_lot\.style\.display = \(typeof isDeskLike==='function' && isDeskLike\(\)\)\?'':'none';/.test(src)
+   && /if\(typeof isDeskLike==='function' && !isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可登記抽獎'\); return; \}/.test(src));
+ok('★★ 首頁那顆鈕在「今天登記過」時也留著（原本沒人可抽就整顆消失）',
+   /const lottoFab=\(!isMobileLayout\(\)&&\(_lotEls\.length\|\|_lotToday\)\)/.test(src)
+   && /今天已登記 <b>\$\{_lotToday\}<\/b> 筆/.test(src));
+ok('★★ 沒有待抽名單時也要畫出「今天已登記」那一區（早退掉的話最需要改的那筆看不到）',
+   /if\(!list\.length\)\{[\s\S]{0,420}?\$\{_fixBlock\}/.test(src)
+   && /這一段要算在「沒有待抽獎會員」的早退\*\*之前\*\*/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
