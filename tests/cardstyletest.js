@@ -44,9 +44,18 @@ ok('★ ④ 行事曆已簽到 → 不填滿了（那一組規則已刪除）',
    && /已簽到不再填滿 —— 那一組規則直接刪掉了/.test(blk));
 
 /* 2026-08-21：淡化改暗化（驗在下方「待簽約／待付款的課卡也改暗化」） */
-ok('★ ⑤ 待簽約與空堂 → 暗化＋紅框',
-   /\.cal-ev\.cal-ev-std\.cal-ev-pend \.evc-body,\s*\n\s*\.tcard\.tcard-std\.tcard-pend \.tcard-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;/.test(blk)
-   && /\.tcard\.tcard-std\.tcard-pend\{ filter:brightness\(0\.9\) saturate\(0\.72\); \}/.test(blk));   /* 0822 與過期／教練請假團課統一數值 */
+/* 2026-08-24 使用者指示：「目前課卡沒有用票券時還是會顯示紅框，幫我移除，
+   只要讓課卡暗化就好」—— 會員改從課卡的［＋新增］安排之後，「沒票＝待簽約」
+   變成很常見的中間狀態，一整排紅框讓人以為出事了。紅色留給真正要動作的事。 */
+ok('★★ ⑤ 待簽約與空堂 → **只暗化，不畫紅框**',
+   /\.tcard\.tcard-std\.tcard-pend\{ filter:brightness\(0\.9\) saturate\(0\.72\); \}/.test(blk)   /* 0822 與過期／教練請假團課統一數值 */
+   && !/tcard-pend \.tcard-body\{[^}]*border:2px solid var\(--danger/.test(src)
+   && !/cal-ev-pend \.evc-body,/.test(src));
+/* ⚠ .cal-ev-renew（續約提醒）的紅框是另一件事，沒有跟著拿掉 —— 那是真的要動作。 */
+ok('　　續約提醒的紅框不受影響（紅色仍留給真正要動作的事）',
+   /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;/.test(src));
+ok('　　hover 時回到原本亮度（暗化不能讓人以為卡壞了）',
+   /\.tcard\.tcard-std\.tcard-pend:hover\{ filter:none; \}/.test(blk));
 
 console.log('\n行事曆課卡要有對應的 class（原本只有首頁標得出待簽約）');
 /* 0824 使用者指示：「空堂沒有票券，移除紅框，保持暗化課卡」——
@@ -54,9 +63,12 @@ console.log('\n行事曆課卡要有對應的 class（原本只有首頁標得�
 ok('★ 新增 cal-ev-pend，掛在課卡上；空堂另加 cal-ev-open',
    /const _pendCls = b\.pending_contract \? \(bkIsOpenHold\(b\) \? 'cal-ev-pend cal-ev-open' : 'cal-ev-pend'\) : '';/.test(src)
    && /\$\{_checkedCls\} \$\{_pendCls\} \$\{_pastCls\}/.test(src));
-ok('★★ 空堂只暗化、不畫紅框（上面那條用了 !important，收得掉才算數）',
-   /\.cal-ev\.cal-ev-std\.cal-ev-pend\.cal-ev-open \.evc-body,\s*\n\s*\.tcard\.tcard-std\.tcard-pend\.tcard-open \.tcard-body\{\s*\n\s*border:1px solid #33302A !important; box-shadow:none !important; \}/.test(src)
-   && /沒有欠款，紅框只是在嚇人/.test(src));
+ok('★★ 收紅框的那兩條覆蓋規則跟著退場（兩者現在長一樣，不必再各寫一條）',
+   !/\.tcard\.tcard-std\.tcard-pend\.tcard-open \.tcard-body\{/.test(src)
+   && !/\.cal-ev\.cal-ev-std\.cal-ev-pend\.cal-ev-open \.evc-body,/.test(src));
+ok('　　cal-ev-open／tcard-open 仍然掛著（不管邊框了，但姓名的金色「空白」與 title 靠它分辨）',
+   /\$\{_openHold\?' tcard-open':''\}/.test(src)
+   && /'cal-ev-pend cal-ev-open'/.test(src));
 ok('　　空堂也吃得到（bkIsOpenHold 的前提就是 pending_contract）',
    /pending_contract=true ＋ 沒有 member_id ＋ 沒有 trial_name/.test(src));
 
@@ -782,8 +794,6 @@ console.log('\n待簽約／待付款的課卡也改暗化（2026-08-21 使用者
 ok('★ 不再壓文字透明度，改成整張卡壓亮度',
    /\.cal-ev\.cal-ev-std\.cal-ev-pend,\s*\n\s*\.tcard\.tcard-std\.tcard-pend\{ filter:brightness\(0\.9\) saturate\(0\.72\); \}/.test(src)
    && !/\.tcard\.tcard-std\.tcard-pend \.tcard-txt\{ opacity:\.62; \}/.test(src));
-ok('　　紅框維持滿的（那是「還沒收款」的警示，不能一起變淡）',
-   /\.tcard\.tcard-std\.tcard-pend \.tcard-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;/.test(src));
 ok('　　滑過去恢復原狀', /\.tcard\.tcard-std\.tcard-pend:hover\{ filter:none; \}/.test(src));
 ok('　　與過期課卡同一套邏輯（透明會讓字糊掉，暗化保持對比度）',
    /原本是把文字 opacity 壓到 \.62（透明化），字會跟背景糊在一起；/.test(src));

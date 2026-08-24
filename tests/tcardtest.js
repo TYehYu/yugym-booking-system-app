@@ -26,16 +26,18 @@ ok('　　原因寫在程式裡', /她根本沒上這堂/.test(src));
 console.log('\n待簽約紅框');
 ok('★ 待簽約的任務課卡加 tcard-pend', /const _pend = !!b\.pending_contract;/.test(src)
    && /\$\{_pend\?' tcard-pend':''\}/.test(src));
-ok('★ 樣式與行事曆同一套：只加粗外框、不覆蓋課程底色',
-   /\.tcard\.tcard-std\.tcard-pend \.tcard-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;\s*\n\s*box-shadow:inset 0 0 0 1px rgba\(181,55,46,\.45\) !important;\}/.test(src));
+/* 2026-08-24 使用者指示：紅框整組移除，只留暗化（理由見 cardstyletest）。 */
+ok('★★ 樣式與行事曆同一套：只暗化、沒有紅框',
+   !/tcard-pend \.tcard-body\{[^}]*border:2px solid var\(--danger/.test(src)
+   && !/cal-ev-pend \.evc-body,/.test(src)
+   && /\.tcard\.tcard-std\.tcard-pend\{ filter:brightness\(0\.9\) saturate\(0\.72\); \}/.test(src));
 /* 2026-07-31：標籤改成姓名下面一列，title 用 _nmFull（已含「（待簽約）」）＋尚未收款 */
 /* 0824：空堂與待簽約分開講 —— 空堂是「還沒安排會員」，不是「尚未收款」。 */
 ok('　　滑鼠提示分得清空堂與待簽約',
    /\$\{_nmFull\}\$\{_pend\?\(_openHold\?'・尚未安排會員':'・尚未收款'\):''\}/.test(src));
-ok('　　空堂的課卡加 tcard-open（收掉紅框、保留暗化）',
+ok('　　空堂的課卡仍加 tcard-open（不再管邊框，但 title 與姓名的金色「空白」靠它分辨）',
    /const _openHold = _pend && \(typeof bkIsOpenHold==='function'\) && bkIsOpenHold\(b\);/.test(src)
-   && /\$\{_openHold\?' tcard-open':''\}/.test(src)
-   && /\.tcard\.tcard-std\.tcard-pend\.tcard-open \.tcard-body\{/.test(src));
+   && /\$\{_openHold\?' tcard-open':''\}/.test(src));
 
 console.log('\n體驗／待簽約放在姓名下面一列（2026-07-31 使用者指示）');
 ok('★ 卡片主行只放純姓名', /: \(b\.trial_name\|\|'—'\)\);/.test(src));
