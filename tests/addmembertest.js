@@ -41,24 +41,28 @@ const TK=(o)=>Object.assign({id:'T1', member_id:'M1', ticket_type_id:'TT-PT', ca
 console.log('① 正常有票：可用 / 總堂數都算得出來');
 {
   const r=lib.bkMemTicketInfo('M1', B, [TK()], {});
-  ok('★ 可用 10、總 10、沒有原因字串', r.left===10 && r.total===10 && r.why==='');
+  ok('★ 可用 10、總 10、沒有原因字串', r.left===10 && r.remain===10 && r.total===10 && r.why==='');
 }
 
-console.log('\n② 分母是「該課別的總堂數」，含已用完與過期的票（使用者定案）');
+console.log('\n② 分母只算「還沒用完、也還沒過期」的票（2026-08-24 使用者更正）');
 {
   const tks=[TK({id:'T1', sessions_remaining:2, sessions_total:10}),
              TK({id:'T2', sessions_remaining:0, sessions_total:8}),          // 用完
              TK({id:'T3', sessions_total:6, sessions_remaining:6, expire_date:'2026-08-01'})]; // 已過期
   const r=lib.bkMemTicketInfo('M1', B, tks, {});
   ok('★★ 分子只算現在能用的（2 堂）', r.left===2, r);
-  ok('★★ 分母是這個課別的總堂數（10+8+6＝24）', r.total===24, r);
+  /* 2026-08-24 使用者更正：「總堂數只要計算尚未用完方案，用完跟過期的方案就不要算進來了」
+     ——正式庫的陳綉敏原本顯示「可用 1 / 109 堂」，那 109 是六張早就上完的舊方案疊出來的。
+     T2 用完、T3 過期 → 分子分母都只剩 T1。 */
+  ok('★★ 分母只算「還沒用完、也還沒過期」的票（T1 的 10，不是 10+8+6＝24）', r.total===10, r);
+  ok('★★ 分子分母同一批票 —— remain 只加 T1 的 2 堂', r.remain===2, r);
 }
 
 console.log('\n③ 別的課別不算進來');
 {
   const tks=[TK(), TK({id:'T9', category:'小班肌力', ticket_type_id:'TT-G'})];
   const r=lib.bkMemTicketInfo('M1', B, tks, {});
-  ok('★ 團課票不會算進教練課的分母', r.total===10, r);
+  ok('★ 團課票不會算進教練課的分母', r.total===10 && r.remain===10, r);
 }
 
 console.log('\n④ 沒票時要說得出原因，而且從「最容易補救」講起');
@@ -116,7 +120,7 @@ console.log('\n⑧ 排序與呈現');
      /mine:String\(m\.default_coach_id\|\|''\)===String\(b\.coach_id\|\|''\) && !!b\.coach_id/.test(src)
      && /<i class="bam-star">★<\/i>/.test(src));
   ok('★ 右邊顯示「可用 N / 總 M 堂」，沒票就寫原因',
-     /可用 <b>\$\{r\.left\}<\/b> \/ \$\{r\.total\} 堂/.test(src)
+     /可用 <b>\$\{r\.remain\}<\/b> \/ \$\{r\.total\} 堂/.test(src)
      && /const tag=m\.sum>0\?`可用 \$\{m\.sum\} \/ \$\{m\.total\|\|m\.sum\} 堂`:\(m\.why\|\|'無票（無法加入，請先儲值）'\)/.test(src));
   /* 0824 第四批：名單分三種列 —— 有票（可點，直接加）／票排完了（可點，開圓形卡調課）／
      真的不行（淡化）。「票排完了」不能淡化成不能選，那正是調課的入口。 */
@@ -191,6 +195,43 @@ console.log('\n⑩ 圓形卡調課（第四批）');
   ok('★ 調課視窗只列這個課別、而且真的有已預約堂數的票',
      /ticketMatchesCategory\(sl\.t, cat\) && \(sl\.pending>0\)/.test(src));
 }
+
+/* ── 2026-08-24 第二輪自查（使用者：「做完再重新檢查一遍有沒有問題」） ── */
+console.log('\n第二輪自查');
+{
+  const f=g('async function bkSwapDo(','\n}');
+  ok('★★ 退課失敗就整個不做 —— refundTicket 是「回傳 false」不是丟例外，'
+   +'忽略回傳值＝A 的票沒退回來卻照樣從同一張票扣給 B（會員平白少一堂）',
+   /let _rok=false;/.test(f)
+   && /_rok=await refundTicket\(tk\.id, A\.id, SESSION\.id\)/.test(f)
+   && /if\(!_rok\)\{ showToast\('退課沒有成功，這次沒有調課（兩堂都維持原樣）', 6000\);/.test(f)
+   && /\*\*回傳 false\*\*、不丟例外/.test(src));
+ok('★ 調走之後原時段留一行系統註記（不通知會員，但櫃檯查得到原因），'
+   +'且不蓋掉「舊系統匯入」這類既有系統註記',
+   /已將原本的課調到 \$\{String\(B\.date\)/.test(f)
+   && /\(_an\.sys\?_an\.sys\+'／':''\)/.test(f));
+ok('★★ 加會員的權限與課卡那顆鈕的 _editable 對齊：教練只能加在自己主帶／代課的那一堂',
+   /const own = SESSION\.role!=='coach' \|\| !!SESSION\.is_manager \|\| bkIsCoach\(b, SESSION\.id\);/.test(src)
+   && /return !!\(staff \|\| \(SESSION\.role==='coach' && own\)\);/.test(src)
+   && !/isDeskLike\(\)\|\|SESSION\.role==='coach'/.test(src));
+}
+
+console.log('\n視窗二的會員名單：★ 與靠右的堂數');
+ok('★★ ★ 與堂數放 data-*，不寫進 option 文字 —— 那段文字選完會被回填到搜尋框（mpkLabel）',
+   /const star=\(cid && String\(m\.default_coach_id\|\|''\)===String\(cid\)\)\?' data-star="1"':'';/.test(src)
+   && /const cnt=\(ti && ti\.remain>0\)\?` data-sub="可用 \$\{ti\.remain\} \/ \$\{ti\.total\} 堂"`:'';/.test(src)
+   && /<option value="\$\{m\.id\}"\$\{star\}\$\{cnt\}>\$\{m\.name\}（\$\{fmtPhone\(m\.phone\)\}）<\/option>/.test(src));
+ok('★★ 挑選視窗把 data-sub 畫成靠右那一格（使用者：「課堂數靠右顯示」）',
+   /<span class="mpk-nm">\$\{star\}\$\{esc\(o\.textContent\)\}<\/span><span class="mpk-sub">\$\{esc\(sub\)\}<\/span>/.test(src)
+   && /\.mpk-item\.mpk-item-2c\{display:flex;align-items:baseline;gap:10px;\}/.test(src)
+   && /\.mpk-item-2c \.mpk-sub\{flex:none;[^}]*font-variant-numeric:tabular-nums;\}/.test(src));
+ok('★★ 沒有附註的清單（教練、票種、場地…）輸出跟以前一樣，不能改到 .mpk-item 基底',
+   /: star\+esc\(o\.textContent\)/.test(src)
+   && /不要直接把 \.mpk-item 改成 flex/.test(src));
+ok('★ 只對「有可用票券」那一組算堂數（481 位全算會很慢），沒算到的不顯示 0 誤導',
+   /Object\.keys\(set\)\.forEach\(mid=>\{ try\{ _tkInfo\[mid\]=bkMemTicketInfo\(mid, _pb, tks, cnt\); \}catch\(_\)\{\} \}\);/.test(src));
+ok('★★ 教練端的 _bkCoachSel 要補上自己，否則名單既沒分組也沒有 ★',
+   /window\._bkCoachSel = prefillCoach \|\| \(isCoach\?SESSION\.id:''\);/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

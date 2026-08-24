@@ -751,6 +751,17 @@ body:has(#login-screen:not(.hidden)){background:#003d32;}
 .mpk-item.cur{background:var(--green);color:#fff;font-weight:700;}
 .mpk-item.mpk-none{color:var(--t3);cursor:default;font-size:12.5px;}
 .mpk-item.mpk-none:hover{background:transparent;color:var(--t3);}
+/* 兩欄列：左名字、右堂數（2026-08-24 使用者：「這邊會員名單 課堂數靠右顯示」）。
+   ⚠ 用獨立的修飾 class，不要直接把 .mpk-item 改成 flex —— 這個挑選視窗同時服務教練、
+     票種、場地等等好幾張沒有附註的清單，改基底會一起動到。
+   數字用 tabular-nums 對齊，名字長就自己截斷，堂數那格不壓縮。 */
+.mpk-item.mpk-item-2c{display:flex;align-items:baseline;gap:10px;}
+.mpk-item-2c .mpk-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mpk-item-2c .mpk-sub{flex:none;font-size:12px;color:var(--t3);font-variant-numeric:tabular-nums;}
+.mpk-item-2c:hover .mpk-sub,.mpk-item-2c.on .mpk-sub{color:var(--green);}
+.mpk-item-2c.cur .mpk-sub{color:rgba(255,255,255,.85);}
+.mpk-star{font-style:normal;color:var(--gold,#B48A56);margin-right:4px;}
+.mpk-item.cur .mpk-star{color:#F0D9A8;}
 .gt-card.gt-card2.on{border-color:var(--pc,#1f6f54);box-shadow:0 0 0 3px color-mix(in srgb,var(--pc,#1f6f54) 32%,transparent);
   background:color-mix(in srgb,var(--pc,#1f6f54) 8%,#fff);border-left:4px solid var(--pc,#1f6f54);}
 .gt-card.gt-card2.on .gt-c2-price{color:var(--text);}
@@ -9931,8 +9942,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1251';
-const APP_VERSION_LABEL='v260824.1251';
+const APP_VERSION = '260824.1302';
+const APP_VERSION_LABEL='v260824.1302';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14469,10 +14480,18 @@ function tkOverBooked(t, bkCntByTicket){
 /* ══ 這位會員對「這一堂課」的票券狀況（2026-08-24 建立預約改版）══════════════
    加會員的名單上每一位右邊要顯示「可使用 / 該課別總堂數」，而且沒票的要能說出原因。
 
-   回傳 { left, total, why }
-     left  ＝ 現在真的可以拿來扣這一堂的堂數（Σ tkUnlockedLeft，只算過得了 tkFitsBooking 的票）
-     total ＝ 這位會員在**這個課別**的總堂數（Σ sessions_total，含已用完與過期的）
-     why   ＝ left===0 時「為什麼不能加」，可直接顯示；left>0 時是空字串
+   回傳 { left, remain, total, why }
+     left   ＝ 現在真的可以拿來扣**這一堂**的堂數（Σ tkUnlockedLeft，只算過得了 tkFitsBooking 的票）
+              —— 只用來決定「加不加得進去」與分組，不是畫面上那個分數。
+     remain ＝ 還沒銷課的堂數（Σ sessions_remaining，含已經排好課的）
+     total  ＝ remain 的分母：**同一批票**的總堂數
+     why    ＝ left===0 時「為什麼不能加」，可直接顯示；left>0 時是空字串
+
+   ⚠ remain／total 的票源是「還沒用完、也還沒過期」的那幾張（2026-08-24 使用者更正：
+     「總堂數只要計算尚未用完方案，用完跟過期的方案就不要算進來了」）——
+     原本分母是這個課別**歷來所有**票的 sessions_total 加總，正式庫的陳綉敏因此顯示
+     「可用 1 / 109 堂」：那 109 是六張早就上完的舊方案疊出來的數字，看了只會誤導。
+     分子分母一定要同一批票，不然又會出現分子大於分母之類的怪數。
 
    ⚠ left 一律走 tkFitsBooking —— 那是「這張票能不能用在這筆預約」的唯一判定
      （共享票、分期未開通、超約防線、限時段票、效期全都在裡面）。
@@ -14483,13 +14502,17 @@ function tkOverBooked(t, bkCntByTicket){
 function bkMemTicketInfo(mid, b, allTk, cntMap){
   const cat=(b&&b.category)||'';
   const mine=(allTk||[]).filter(t=>t && tkUsableBy(t,mid) && ticketMatchesCategory(t,cat));
-  const total=mine.reduce((s,t)=>s+(Number(t.sessions_total)||0),0);
+  /* 「還在的票」＝還有堂數、沒退費、在這一天還沒過期。畫面上的分數只看這一批。 */
+  const alive=mine.filter(t=>t.status==='usable' && (Number(t.sessions_remaining)||0)>0
+    && !(b&&b.date && t.expire_date && t.expire_date<b.date));
+  const remain=alive.reduce((s,t)=>s+(Number(t.sessions_remaining)||0),0);
+  const total=alive.reduce((s,t)=>s+(Number(t.sessions_total)||0),0);
   const usable=mine.filter(t=>tkFitsBooking(t, mid, b&&b.ticket_type_id, b&&b.date, b&&b.start_time, cntMap));
   const left=usable.reduce((s,t)=>s+Math.max(0,tkUnlockedLeft(t)),0);
-  if(left>0) return {left,total,why:''};
-  if(!mine.length) return {left:0,total:0,why:'沒有這個課別的票券'};
+  if(left>0) return {left,remain,total,why:''};
+  if(!mine.length) return {left:0,remain:0,total:0,why:'沒有這個課別的票券'};
   const live=mine.filter(t=>t.status==='usable' && (Number(t.sessions_remaining)||0)>0);
-  if(!live.length) return {left:0,total,why:'票券已用完或已退費'};
+  if(!live.length) return {left:0,remain,total,why:'票券已用完或已退費'};
   /* 「還有堂數，但都被未來的預約佔走了」—— 這是唯一可以靠調課解決的情況，
      所以要第一個講，而且要講出可以調（第四批的圓形卡調課就是接在這裡）。 */
   const booked=live.filter(t=>tkOverBooked(t,cntMap));
@@ -14497,15 +14520,15 @@ function bkMemTicketInfo(mid, b, allTk, cntMap){
     const n=live.reduce((s,t)=>s+(Number(t.sessions_remaining)||0),0);
     /* swappable：這一位可以靠「把別堂調過來」解決 —— ［＋新增］名單會把這一列
        做成可點的（點下去開圓形卡挑要調哪一堂），而不是淡化成不能選。 */
-    return {left:0,total,why:`剩下的 ${n} 堂都已經排課了`,swappable:true};
+    return {left:0,remain,total,why:`剩下的 ${n} 堂都已經排課了`,swappable:true};
   }
   const timeBad=live.filter(t=>!tkTimeOk(t, b&&b.date, b&&b.start_time, (b&&b.duration)||60));
-  if(timeBad.length===live.length) return {left:0,total,why:'票券限平日 18:00 前上完'};
+  if(timeBad.length===live.length) return {left:0,remain,total,why:'票券限平日 18:00 前上完'};
   const instLock=live.filter(t=>tkIsInstall(t) && tkUnlockedLeft(t)<=0);
-  if(instLock.length===live.length) return {left:0,total,why:'分期尚未繳費開通'};
+  if(instLock.length===live.length) return {left:0,remain,total,why:'分期尚未繳費開通'};
   const expired=live.filter(t=>b&&b.date && t.expire_date && t.expire_date<b.date);
-  if(expired.length===live.length) return {left:0,total,why:'票券在這一天已過期'};
-  return {left:0,total,why:'沒有可用於這一堂的票券'};
+  if(expired.length===live.length) return {left:0,remain,total,why:'票券在這一天已過期'};
+  return {left:0,remain,total,why:'沒有可用於這一堂的票券'};
 }
 function tkFitsBooking(t, member_id, type_id, bookDate, bookTime, bkCntByTicket){
   if(!tkUsableBy(t,member_id)) return false;   // 持有人或共享者皆可用
@@ -23680,7 +23703,16 @@ function mpkRender(row){
     row._mpkIdx=0; return;
   }
   const esc=x=>String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  const item=o=>`<button type="button" class="mpk-item${o.value===sel.value?' cur':''}${o.disabled?' mpk-none':''}" data-i="${opts.indexOf(o)}">${esc(o.textContent)}</button>`;
+  /* data-sub＝靠右的附註（建立預約的會員名單用它顯示「可用 N / M 堂」）、
+     data-star＝主教練是目前選的那位教練。兩個都沒有時輸出跟以前一模一樣的單欄列。 */
+  const item=o=>{
+    const sub=o.getAttribute&&o.getAttribute('data-sub');
+    const star=(o.getAttribute&&o.getAttribute('data-star'))?'<i class="mpk-star">★</i>':'';
+    const body=sub
+      ? `<span class="mpk-nm">${star}${esc(o.textContent)}</span><span class="mpk-sub">${esc(sub)}</span>`
+      : star+esc(o.textContent);
+    return `<button type="button" class="mpk-item${sub?' mpk-item-2c':''}${o.value===sel.value?' cur':''}${o.disabled?' mpk-none':''}" data-i="${opts.indexOf(o)}">${body}</button>`;
+  };
   let html='';
   [...sel.children].forEach(ch=>{
     if(ch.tagName==='OPTGROUP') html+=`<div class="mpk-grp">${esc(ch.label)}</div>`+[...ch.children].map(item).join('');
@@ -23995,7 +24027,11 @@ async function openBookingModal(){
     const _mine=window._bkCoaches.filter(c=>c.id===SESSION.id);
     if(_mine.length) window._bkCoaches=_mine;
   }
-  window._bkCoachSel = prefillCoach || '';   // 會員下拉的分組依據（該教練的會員排前）
+  /* 會員下拉的分組依據（該教練的會員排前、★ 標示）。
+     ⚠ 教練端要補上自己（2026-08-24 自查）——教練的視窗二不畫教練欄（固定是自己、
+       只有一個 hidden input），bkCoachChange() 永遠不會觸發，_bkCoachSel 就一直是空的，
+       於是教練看到的名單既沒有分組也沒有 ★。他建的每一堂課都是自己上，這裡不會有別的答案。 */
+  window._bkCoachSel = prefillCoach || (isCoach?SESSION.id:'');
   // 30 分鐘時段選項（08:00～22:00）
   /* timeOpts 已退場（2026-08-21 時間欄改成自家挑選器 ashTimeField）——
      bkTimeOptions 其他流程還在用（會員快速預約、班表），所以函式保留。 */
@@ -24090,11 +24126,16 @@ function bkMemberOptsHTML(q, keepId){
      ⚠ 堂數只有「有可用票券」那一組算得出來（bkRefreshPlanFilter 只對那組跑
        bkMemTicketInfo，481 位全算會很慢）；其他會員就不顯示堂數，不要顯示 0 誤導。 */
   const _tkMap=window._bkMemTk||{};
+  /* ⚠ ★ 與堂數放 data-*，**不要**寫進 option 的文字（2026-08-24 使用者：「課堂數靠右顯示」）：
+     ・靠右要有兩個獨立的格子，純文字排不出來（塞空白會隨字數浮動）；
+     ・option.textContent 同時是選完之後回填到搜尋框的字（mpkLabel），
+       混在裡面的話欄位會變成「★ 陳綉敏（09…）　可用 1/20 堂」。
+     mpkRender 讀這兩個屬性畫成左名字、右堂數。 */
   const opt=m=>{
-    const star=(cid && String(m.default_coach_id||'')===String(cid))?'★ ':'';
+    const star=(cid && String(m.default_coach_id||'')===String(cid))?' data-star="1"':'';
     const ti=_tkMap[m.id];
-    const cnt=(ti && ti.left>0)?`　可用 ${ti.left}/${ti.total} 堂`:'';
-    return `<option value="${m.id}">${star}${m.name}（${fmtPhone(m.phone)}）${cnt}</option>`;
+    const cnt=(ti && ti.remain>0)?` data-sub="可用 ${ti.remain} / ${ti.total} 堂"`:'';
+    return `<option value="${m.id}"${star}${cnt}>${m.name}（${fmtPhone(m.phone)}）</option>`;
   };
   const head='<option value="">— 選擇會員 —</option>';
   // 截斷但保住「目前已選的那位」，並回報被藏起來幾位
@@ -24629,7 +24670,13 @@ function bkCanAddMember(b){
   if(!bkIsOpenHold(b)) return false;           // 已經有人（或散客）就不是「加會員」
   if(b.status!=='booked') return false;        // 取消／請假的不給
   if(String(b.date)<ymd(TODAY)) return false;  // 過去的課不給
-  return !!(typeof isDeskLike==='function' ? (isDeskLike()||SESSION.role==='coach') : true);
+  /* 權限與課卡上那顆鈕的 _editable 對齊（2026-08-24 自查）：後台一律可以，
+     教練只能加在**自己主帶／代課**的那一堂 —— 原本寫 role==='coach' 就放行，
+     等於任何教練都能往別人的空堂塞人（畫面上按鈕看不到，但這支是外部可呼叫的）。
+     口徑與課卡的 own 同一句：非教練角色與店長一律 true，教練看 bkIsCoach。 */
+  const own = SESSION.role!=='coach' || !!SESSION.is_manager || bkIsCoach(b, SESSION.id);
+  const staff = (typeof isDeskLike==='function') ? isDeskLike() : true;
+  return !!(staff || (SESSION.role==='coach' && own));
 }
 async function bkAddMemberOpen(bid){
   const b=await dbGet('bookings',bid);
@@ -24647,7 +24694,7 @@ async function bkAddMemberOpen(bid){
     const info=bkMemTicketInfo(m.id, b, allTk, cntMap);
     return { id:m.id, name:m.name||'', phone:m.phone||'',
              mine:String(m.default_coach_id||'')===String(b.coach_id||'') && !!b.coach_id,
-             left:info.left, total:info.total, why:info.why, swap:!!info.swappable };
+             left:info.left, remain:info.remain, total:info.total, why:info.why, swap:!!info.swappable };
   });
   /* 排序（使用者定案）：有票的排最上面；同組內主教練是本堂教練的（★）再往前；其餘依姓名。
      ⚠ 兩層都要，不能只排一層 —— 「有票」決定加不加得進去，「主教練」決定櫃檯先找誰。 */
@@ -24667,7 +24714,7 @@ function bamRender(q){
     const can=r.left>0, sw=!can && r.swap;
     const cls=(can||sw)?'':' ash-ei-off';
     const act=can?` onclick="bamPick('${r.id}')"`:(sw?` onclick="bamSwap('${r.id}')"`:' disabled');
-    const sub=can?`可用 <b>${r.left}</b> / ${r.total} 堂`
+    const sub=can?`可用 <b>${r.remain}</b> / ${r.total} 堂`
                  :(sw?`${escH(r.why)}<i class="bam-go"> · 點我調課 ›</i>`:escH(r.why));
     return `<button type="button" class="ash-eirow${cls}"${act}>
       <span class="ash-eilb">${r.mine?'<i class="bam-star">★</i>':''}${escH(r.name)}</span>
@@ -24794,10 +24841,25 @@ async function bkSwapDo(fromBid, toBid, mid){
     /* ① 原本那一堂：退票、清掉會員與票 → 變回空堂（時段留著） */
     /* ⚠ refundTicket 的第一個參數是 **ticket_id**（不是票券物件）—— 傳物件進去
        它會 dbGet(物件) 拿不到票，然後靜靜地什麼都不退。 */
-    if(tk){ try{ await refundTicket(tk.id, A.id, SESSION.id); }catch(_){} }
+    if(tk){
+      /* ⚠ 退不成功就整個不做（2026-08-24 自查）——refundTicket 讀不到票或撞到
+         「餘額已滿」護欄時是**回傳 false**、不丟例外。原本包在 try/catch 裡忽略回傳值，
+         等於「A 的票沒退回來，卻照樣把 A 清空、再從同一張票扣一堂給 B」＝會員平白少一堂。
+         這一刻資料庫還完全沒被動過，直接 return 就是乾淨的。
+         refundTicket 自己已經寫了警示帳與吐司，這裡只要說「所以這次沒有調」。 */
+      let _rok=false;
+      try{ _rok=await refundTicket(tk.id, A.id, SESSION.id); }catch(_){ _rok=false; }
+      if(!_rok){ showToast('退課沒有成功，這次沒有調課（兩堂都維持原樣）', 6000);
+        dbCacheClear(['member_tickets','ticket_logs']); return; }
+    }
     A.member_id=null; A.ticket_id=null; A.trial_name=null; A.trial_phone=null;
     A.pending_contract=true;
-    A.note=bkNoteJoin(bkNoteSplit(A.note).sys, (bkNoteSplit(A.note).user||''));
+    /* 系統註記留一行「這一堂是被調走才變空的」—— 不通知會員（0824 使用者定案），
+       但櫃檯隔天看到一個突然多出來的空堂時要查得到原因。人工備註原封不動保留。 */
+    const _an=bkNoteSplit(A.note);
+    A.note=bkNoteJoin((_an.sys?_an.sys+'／':'')   /* 舊系統匯入等既有系統註記不能蓋掉 */
+      +`已將原本的課調到 ${String(B.date).replace(/-/g,'/')} ${String(B.start_time||'').slice(0,5)}`,
+      _an.user||'');
     await dbPut('bookings', A);
     /* ② 這一堂：綁會員與票、扣課、轉成正式課 */
     B.member_id=mid; B.ticket_id=tk?tk.id:null;
@@ -25003,8 +25065,27 @@ async function openBookingModalBack(){
      （課程／教練／會員／連續預約），不是視窗一 —— 日期時間場地那三件事已經定了，
      退回去重選反而是多一步。openBookingModal 畫的是視窗一，這裡直接前進一頁。 */
   if(W.date && W.time && W.venue){ showModal(bkStep1bHtml()); try{ mpkScan(); }catch(_){} }
+  else{
+    /* 沒有場地就退回視窗一（理論上走不到 —— 視窗一三個欄位都必填才過得去），
+       但真的走到了，至少要把已選的場地寫回按鈕，別讓人以為選過的東西不見了。 */
+    const vi=document.getElementById('bk-venue');
+    if(vi && W.venue){ vi.value=W.venue;
+      const vb=document.getElementById('bk-venue-btn');
+      if(vb){ const lb=vb.firstElementChild;
+        lb.textContent=(getVenues().find(x=>x.id===W.venue)||{}).name||W.venue; lb.className=''; } }
+  }
   // 還原第1頁選擇
   const ty=document.getElementById('bk-type'); if(ty){ty.value=W.type_id||'';renderBkTypeCards();await onBkTypeChange();}
+  /* 課程欄的按鈕字也要寫回去（2026-08-24 自查）——ty 是 hidden input，只設 .value 的話
+     畫面上那顆鈕還停在灰色的「選擇課程」，看起來像沒選過。這與 0814 修教練／會員
+     「只設 select.value 畫面仍是空的」是同一種錯，只是這次換成挑選鈕。
+     ⚠ 一併拿掉 adp-ph（灰字樣式），不然字寫回去了還是淡的。 */
+  try{
+    const tb=document.getElementById('bk-type-btn');
+    const tt=(window._bkTypes||[]).find(x=>x&&x.id===W.type_id);
+    if(tb&&tt){ const lb=tb.firstElementChild; lb.textContent=tt.name||tt.category||'課程'; lb.className=''; }
+  }catch(_){}
+  try{ bkTypeTimeWarn(); }catch(_){}
   const co=document.getElementById('bk-coach'); if(co&&W.coach_id){co.value=W.coach_id;bkCoachChange();}
   /* 還原步驟 1 的會員（2026-07-28）：名單有截斷，要先把這位塞進清單再選，否則選不回來 */
   const mp=document.getElementById('bk-mem-pre');
