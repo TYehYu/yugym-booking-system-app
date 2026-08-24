@@ -10045,8 +10045,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1523';
-const APP_VERSION_LABEL='v260824.1523';
+const APP_VERSION = '260824.1532';
+const APP_VERSION_LABEL='v260824.1532';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24136,7 +24136,20 @@ function bkStep1bHtml(){
             <input class="gt-search" id="bk-coach-q" placeholder="搜尋教練（共 ${(window._bkCoaches||[]).length} 位）" oninput="bkFilterCoaches(this.value)" autocomplete="off">
             <select id="bk-coach" onchange="bkCoachChange()">${bkCoachOptsHTML('')}</select>
           </div></div>`}
-    <input type="hidden" id="bk-mem-pre" value="">
+    ${/* 2026-08-24 使用者指示：「教練手機端建立預約還是照舊，一次就可以把會員姓名填上」
+         「也就是在視窗二的時候就可以選填會員」——
+         櫃檯是「先把時段場地佔下來、人與付款在課卡上決定」（那條路要處理待簽約、分期、
+         調課，本來就不是一次填得完的）；教練幫自己的學員排課只有一種情況：這個人、
+         這一堂、扣他的票。多走一趟課卡是純粹的多餘。
+         ⚠ 只給教練（不含店長，店長比照櫃檯）。其他人維持空的 hidden，
+           既有讀取點（_bkStep2、openBookingModalBack…）讀到的就是「沒選人」。 */''}
+    ${isCoach
+      ? `<div class="form-row"><label>會員<span style="font-weight:400;color:var(--t3);">（選填）</span></label>
+          <div class="mem-pick-row">
+            <input class="gt-search" id="bk-mem-q" placeholder="搜尋姓名或手機（共 ${(window._bkAllMembers||[]).length} 位）" oninput="bkFilterMembers(this.value)" autocomplete="off">
+            <select id="bk-mem-pre" onchange="bkS2BtnSync()">${bkMemberOptsHTML('')}</select>
+          </div></div>`
+      : `<input type="hidden" id="bk-mem-pre" value="">`}
     ${/* 團課的連續預約在下一步（prefix grp，跟名單一起設定），這裡不重複給一個開關 */''}
     <div class="form-row" id="bk-recur-row" style="margin-bottom:0;">${recurBoxHtml('bk')}</div>
     <div class="modal-foot">
@@ -24683,11 +24696,19 @@ async function onBkTypeChange(){
   /* 送出鈕的字要照實講（2026-08-24）：會員移到［＋新增］之後，一般課別按下去就直接
      建立空堂、視窗關掉；只有體驗（要填客戶姓名）與團課（名額名單）還有下一步。
      寫「下一步」卻直接建完、或寫「建立預約」卻又跳一頁，都會讓人以為按錯。 */
-  const _b2=document.getElementById('bk-s2btn');
-  if(_b2 && t){
-    const _more = t.category==='體驗' || bkIsGroup({category:t.category}) || tid==='__facility';
-    _b2.textContent = _more ? '下一步 →' : '建立預約';
-  }
+  bkS2BtnSync();
+}
+/* 送出鈕的字要照實講：按下去就結束的寫「建立預約」、還有下一步的寫「下一步 →」。
+   什麼時候還有下一步：體驗（填客戶姓名）／團課（名額名單）／場租，
+   以及**教練端選了會員**時的挑票那一步。 */
+function bkS2BtnSync(){
+  const _b2=document.getElementById('bk-s2btn'); if(!_b2) return;
+  const tid=String((document.getElementById('bk-type')||{}).value||'');
+  const t=(window._bkTypes||[]).find(x=>x&&x.id===tid);
+  if(!t && tid!=='__facility') return;
+  const mid=String(((document.getElementById('bk-mem-pre')||{}).value)||'');
+  const _more = tid==='__facility' || (t && (t.category==='體驗' || bkIsGroup({category:t.category}))) || !!mid;
+  _b2.textContent = _more ? '下一步 →' : '建立預約';
 }
 /* 把某一列整個關掉（淡化、不能點）並在下面寫一句原因；off=false 就還原。
    0823 定的語彙：不能用的東西要「淡化列出＋副標寫原因」，不要 display:none。 */
@@ -24749,7 +24770,9 @@ async function _bkStep2(){
      直接建立空堂（時段與場地佔下來），櫃檯再到課卡上補人。
      ⚠ 體驗與團課仍有自己的第二步：體驗要填客戶姓名（不綁會員、不扣票）、
        團課是名額制的多人名單，兩者都不是「一堂一人」的形狀，不共用［＋新增］。 */
-  if(!isTrial && !isGroup) return bkOpenHoldCreate();
+  /* 沒選人 → 直接建空堂（櫃檯的新流程）。選了人 → 照舊往下走挑票那一步
+     （教練端才有那個欄位，見 bkStep1bHtml 的說明）。 */
+  if(!isTrial && !isGroup && !preMid) return bkOpenHoldCreate();
 
   // ── 體驗課：填臨時客戶姓名+電話（不綁會員、不扣票）──
   if(isTrial){
@@ -47357,8 +47380,12 @@ function memh2HTML(o){
     const _cid=b.substitute_coach_id||b.coach_id||null;
     const _cnm=(_cid&&coachMap[_cid])?coachMap[_cid]:'';
     const _vn=(typeof venueDisplay==='function')?(venueDisplay(b)||''):'';
-    return `<div class="admh2-card mh2-grpopen${full?' mh2-full':''}${past?' mh2-past':''}" style="--admh-c:${MEMH2_COL.group};"${
-      (full||past)?'':` onclick="memh2GrpJoin('${b.id}')"`}>
+    /* 2026-08-24 使用者指示：「雖然我這帳號沒有團體課票，還是要先顯示團體課標題卡，
+       然後下方圓形鈕＋加入」—— 原本沒票就直接吐司、滿了與過期的整張不可點。
+       改成一律點得開：先看到卡，能不能加入由圓鈕自己說。
+       ⚠ 這裡是 .map 的函式本體，不是 template literal —— 註解要用純 /* *\/，
+         寫成 ${...} 會把整段 JS 打斷（0823 已經在別處踩過一次）。 */
+    return `<div class="admh2-card mh2-grpopen${full?' mh2-full':''}${past?' mh2-past':''}" style="--admh-c:${MEMH2_COL.group};" onclick="memh2GrpTap('${b.id}')">
       <div class="a2-stampcol"><span class="mh2-joinic">${past?'—':(full?'滿':'＋')}</span></div>
       <div class="a2-main">
         <div class="a2-l1">團體課${_vn?'・'+_vn:''}</div>
@@ -47598,6 +47625,75 @@ async function memh2SelfSlots(ds){
 }
 /* 報名團體課：沿用既有的 msbGrpJoin（選票券 → 確認 → fn_member_join_group），
    只是先把它需要的狀態（grpClasses／grpTks）建起來、並收掉舊版的下方訂位表。 */
+/* 團體課（還沒報名的那些）點開＝簡易課卡＋一顆圓鈕（2026-08-24 使用者指示）。
+   有票 → 「加入」走既有的確認報名視窗；沒票 → 「需購票」點開看方案。
+   滿了／已結束 → 圓鈕變成不可按的狀態說明，卡片本身照樣看得到。 */
+async function memh2GrpTap(bid){
+  const all=((window._memCalData&&window._memCalData.all)||[]);
+  const b=all.find(x=>x&&x.id===bid) || await dbGet('bookings',bid).catch(()=>null);
+  if(!b){ showToast('找不到這堂課'); return; }
+  const cm=((window._memCalData||{}).coachMap)||{};
+  const _cid=b.substitute_coach_id||b.coach_id;
+  const who=(cm[_cid]||'教練')+(b.substitute_coach_id?'（代課）':'');
+  const _vTxt=(typeof venueDisplay==='function')?(venueDisplay(b)||''):'';
+  const d=parseYmd(b.date)||new Date(TODAY);
+  const wd='日一二三四五六'[d.getDay()];
+  const dur=Number(b.duration)||60;
+  const cap=Math.max(1,Number(b.max_heads)||5);
+  const heads=Array.isArray(b.member_ids)?b.member_ids.length:0;
+  const full=heads>=cap;
+  const nowM=(b.date===ymd(TODAY))?(new Date().getHours()*60+new Date().getMinutes()):-1;
+  const past=(b.date<ymd(TODAY)) || (b.date===ymd(TODAY) && nowM>=0 && timeToMin(b.start_time||'0:0')<nowM);
+  /* 有沒有能用在這一堂的團體課票（效期要涵蓋到上課那天）——
+     判準與 msbGrpJoin 挑票那一段一致，不另寫一套。 */
+  let tkN=0;
+  try{
+    tkN=((window._allTkCache||[])||[]).filter(t=>t && tkUsableBy(t,SESSION.id)
+      && t.status==='usable' && (Number(t.sessions_remaining)||0)>0
+      && (typeof ticketCategoryOf==='function' ? ticketCategoryOf(t)==='小班肌力' : false)
+      && (!t.expire_date || t.expire_date>=b.date)).length;
+  }catch(_){}
+  const orb=(cls,ic,label,onclick,title)=>onclick
+    ? `<button class="mtp-orb ${cls}" onclick="${onclick}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></button>`
+    : `<div class="mtp-orb ${cls}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></div>`;
+  const joinOrb = past ? orb('off','—','已結束',null)
+    : (full ? orb('off','—','已額滿',null,`${heads}/${cap} 人`)
+      : (tkN>0 ? orb('go','＋','加入',`memTaskClose();memh2GrpJoin('${b.id}')`)
+               : orb('cx','＋','需購票',`memTaskClose();memGrpPlans()`,'還沒有團體課票券，點我看方案')));
+  memTaskClose();
+  const host=document.createElement('div');
+  host.id='mem-task-pop';
+  host.innerHTML=`<div class="mtp-back" onclick="memTaskClose()"></div>
+    <div class="mtp" id="mtp-box">
+      <div class="mtp-card mtp-head" style="--mtp-c:${MEMH2_COL.group};">
+        <span class="mtp-bar2"></span>
+        <div class="mtp-r1"><span class="mtp-course">團體課${_vTxt?`　<span style="font-weight:600;color:var(--t3);">${escH(_vTxt)}</span>`:''}</span>
+          <span class="mtp-right">${b.start_time}</span></div>
+        <div class="mtp-meta"><span><b>${b.date.slice(5).replace('-','/').replace(/^0/,'')}</b>（${wd}）</span><span>・</span><span>${dur} 分</span><span>・</span><span>${escH(who)}</span></div>
+      </div>
+      <div class="mtp-mcard">
+        <div class="mtp-mname"><span>${heads}/${cap} 人</span>${full?'<span class="mtp-mtag mtp-mtag-ns">已額滿</span>':''}</div>
+        <div class="mtp-msub">${tkN>0?`你有 ${tkN} 張團體課票券可以用`:'你目前沒有團體課票券'}</div>
+      </div>
+      <div class="mtp-orbs">${joinOrb}</div>
+    </div>`;
+  document.body.appendChild(host);
+}
+/* 團體課方案（2026-08-24 使用者提供的價目）——沒票的人點「需購票」看這張。
+   ⚠ 這裡只是「告訴客人有哪些方案」，不是購買入口：買方案一律洽櫃檯，
+     所以不要放任何看起來可以下單的按鈕。 */
+function memGrpPlans(){
+  const row=(nm,s,p,v)=>`<div class="ovd-row"><span>${nm}<i class="ovd-cnt">${s}${v?'・'+v:''}</i></span><b>$${p}</b></div>`;
+  showModal(`<div class="modal-title">團體課方案</div>
+    <div class="ovd-list">
+      ${row('體驗課','1 堂','600','')}
+      ${row('一般方案','12 堂','6,000','期限 12 個月')}
+      ${row('優惠方案','4 堂','1,600','期限 4 週')}
+    </div>
+    <div class="ovd-note">欲購買方案請洽<b>櫃檯小編</b>。<br>
+      買好之後票券會出現在「我的票券」，回到這一堂按「加入」就報得了名。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
 async function memh2GrpJoin(bid){
   if(!window._msb){ try{ await msbStart(); }catch(_){} }
   try{ const sh=document.getElementById('msb-sheet'); if(sh) sh.remove(); }catch(_){}

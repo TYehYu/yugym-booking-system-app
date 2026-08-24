@@ -175,8 +175,25 @@ t('過去的日子：列出來但暗化、不可點、文案改「已結束」',
   /const past=_grpPast \|\| \(s\.date===today && _nowM>=0 && timeToMin\(b\.start_time\|\|'0:0'\)<_nowM\);/.test(html)
   && /\$\{past\?' mh2-past':''\}/.test(html)
   && /\$\{heads\}\/\$\{cap\} 人\$\{past\?'・已結束':\(full\?'・已額滿':'・還可報名'\)\}/.test(html));
-t('額滿或已結束的畫出來但點不下去', /const full=heads>=cap;/.test(html)
-  && /\(full\|\|past\)\?'':` onclick="memh2GrpJoin\('\$\{b\.id\}'\)"`/.test(html));
+/* 2026-08-24 使用者指示：「雖然我這帳號沒有團體課票，還是要先顯示團體課標題卡，
+   然後下方圓形鈕＋加入」—— 卡片改成一律點得開（先看到卡），能不能加入由圓鈕自己說。 */
+t('★★ 團體課卡一律點得開（額滿／已結束也看得到卡）', /const full=heads>=cap;/.test(html)
+  && /onclick="memh2GrpTap\('\$\{b\.id\}'\)"/.test(html)
+  && !/\(full\|\|past\)\?''/.test(html));
+t('★★ 能不能加入由圓鈕說：額滿／已結束不可按，沒票改「需購票」',
+  /joinOrb = past \? orb\('off','—','已結束',null\)/.test(s)
+  && /full \? orb\('off','—','已額滿',null/.test(s)
+  && /tkN>0 \? orb\('go','＋','加入'/.test(s)
+  && /orb\('cx','＋','需購票',`memTaskClose\(\);memGrpPlans\(\)`/.test(s));
+t('★★ 有沒有票的判準與 msbGrpJoin 挑票那一段一致（效期要涵蓋上課那天）',
+  /t\.status==='usable' && \(Number\(t\.sessions_remaining\)\|\|0\)>0/.test(s)
+  && /\(!t\.expire_date \|\| t\.expire_date>=b\.date\)/.test(s));
+t('★ 方案表只講方案、不放下單按鈕（買方案一律洽櫃檯）',
+  /function memGrpPlans\(\)\{/.test(s)
+  && /row\('體驗課','1 堂','600',''\)/.test(s)
+  && /row\('一般方案','12 堂','6,000','期限 12 個月'\)/.test(s)
+  && /row\('優惠方案','4 堂','1,600','期限 4 週'\)/.test(s)
+  && /欲購買方案請洽<b>櫃檯小編<\/b>/.test(s));
 t('自己已報名的課卡過期也暗化，且用 st.ended（下課時間）不是 st.past（開始時間）',
   /\$\{\(st\.ended&&!st\.done\)\?' mh2-past':''\}/.test(html)
   && /ended:\(slot\+\(\(Number\(b\.duration\)\|\|60\)\*60000\)\)<=Date\.now\(\)/.test(s)

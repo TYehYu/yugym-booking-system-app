@@ -172,16 +172,23 @@ console.log('\n建立預約：視窗二＝課程與教練');
      && /function bkBackToStep1\(\)\{/.test(src));
   ok('　　回上一步要保留已選的場地（不然等於重填）',
      /if\(vi && w\.venue\)\{ vi\.value=w\.venue;/.test(src));
-  ok('★★ 視窗二不再挑會員（只留一個空的 hidden，讓既有讀取點讀到「沒選人」）',
-     !/<label>會員</.test(form)
-     && !/bkMemberOptsHTML\('\'\)/.test(form)
-     && /<input type="hidden" id="bk-mem-pre" value="">/.test(form)
+/* 2026-08-24 二修（使用者）：「教練手機端建立預約還是照舊，一次就可以把會員姓名填上」
+   「也就是在視窗二的時候就可以選填會員」—— 櫃檯維持「先建空堂、人在課卡上補」，
+   教練把會員欄拿回來（他幫自己的學員排課只有一種情況：這個人、這一堂、扣他的票）。 */
+  ok('★★ 櫃檯的視窗二不挑會員（只留空的 hidden），教練的才畫出挑選欄',
+     /\$\{isCoach\s*\n\s*\? `<div class="form-row"><label>會員<span style="font-weight:400;color:var\(--t3\);">（選填）<\/span><\/label>/.test(form)
+     && /: `<input type="hidden" id="bk-mem-pre" value="">`\}/.test(form)
      && !/體驗課／待簽約卡位可不選/.test(srcNC));
-  ok('★★ 一般課別按下去就直接建立空堂，不再多一頁（體驗與團課仍有自己的第二步）',
-     /if\(!isTrial && !isGroup\) return bkOpenHoldCreate\(\);/.test(src));
-  ok('★★ 送出鈕的字要照實講（直接建完就寫「建立預約」，還有下一步才寫「下一步」）',
+  ok('★ 只給教練、不含店長（店長比照櫃檯）',
+     /const isCoach=SESSION\.role==='coach' && !SESSION\.is_manager;/.test(src)
+     && /只給教練（不含店長，店長比照櫃檯）/.test(src));
+  ok('★★ 沒選人 → 直接建空堂；選了人 → 照舊往下走挑票那一步',
+     /if\(!isTrial && !isGroup && !preMid\) return bkOpenHoldCreate\(\);/.test(src));
+  ok('★★ 送出鈕的字要照實講，而且「選了會員」也算還有下一步',
      /<button class="btn btn-green" id="bk-s2btn" onclick="bkStep2\(\)">建立預約<\/button>/.test(form)
-     && /_b2\.textContent = _more \? '下一步 →' : '建立預約';/.test(src));
+     && /function bkS2BtnSync\(\)\{/.test(src)
+     && /const _more = tid==='__facility' \|\| \(t && \(t\.category==='體驗' \|\| bkIsGroup\(\{category:t\.category\}\)\)\) \|\| !!mid;/.test(src)
+     && /<select id="bk-mem-pre" onchange="bkS2BtnSync\(\)">/.test(form));
   ok('★ 連續預約在視窗二（不帶上限，票券的上限在下一步才夾）',
      /<div class="form-row" id="bk-recur-row" style="margin-bottom:0;">\$\{recurBoxHtml\('bk'\)\}<\/div>/.test(form));
   ok('★ 課程用自家挑選器（六張方案卡退場）',
