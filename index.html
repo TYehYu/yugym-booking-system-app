@@ -9907,8 +9907,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1128';
-const APP_VERSION_LABEL='v260824.1128';
+const APP_VERSION = '260824.1133';
+const APP_VERSION_LABEL='v260824.1133';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21026,13 +21026,20 @@ function venueCap(id){ const v=getVenues().find(x=>x.id===id); return v?(v.capac
 //   教練課/友善教練課：多功能 → 團課教室
 //   體驗課：同教練課
 //   團體課：只能團課教室
+//   運動按摩：只能團課教室（2026-08-24 使用者指示）
 //   自主訓練/友善自主訓練：多功能 → 教室 → 跑步機（2026-07-26 定案）
-function venuePriorityFor(category){
-  if(category==='小班肌力') return ['group'];
-  if(category==='自主訓練') return ['multi','group','treadmill'];   // 2026-07-26 使用者定案：多功能→教室→跑步機
-  // 私人教練（含友善）、體驗
-  return ['multi','group'];
-}
+/* 改成對照表（2026-08-24）——原本是三個 if 的字串比較。改表的兩個好處：
+   ① 新增課別只加一列，不會有人又在別處寫一個 category==='xxx'
+      （tests/pockettest.js 有一道棘輪在擋散裝課別比較，加 if 會被擋下來）
+   ② venueLoadAt 的舊資料回推可以直接吃這張表，不必再維護第二份分桶邏輯。
+   ⚠ 沒列到的課別（私人教練、友善教練課、體驗）走預設：多功能 → 團課教室。 */
+const VENUE_BY_CAT={
+  '小班肌力':['group'],                        // 團課只能團課教室
+  '運動按摩':['group'],                        // 2026-08-24 使用者指示：按摩也只能團課教室
+  '自主訓練':['multi','group','treadmill'],    // 2026-07-26 使用者定案：多功能→教室→跑步機
+};
+const VENUE_PRI_DEFAULT=['multi','group'];
+function venuePriorityFor(category){ return VENUE_BY_CAT[category] || VENUE_PRI_DEFAULT; }
 // 產生所有場地單位 id：multi_1..3 / treadmill_1..2 / group_1
 function venueUnits(){
   const units=[];
@@ -21123,14 +21130,16 @@ function venueLoadAt(others, inst){
   // ① 有明確 venue_unit 的真實占用（同單位不重複計）
   cur.forEach(x=>{ if(x.venue_unit && !seen[x.venue_unit]){ seen[x.venue_unit]=1;
     const vid=String(x.venue_unit).split('_')[0]; if(use[vid]!=null) use[vid]++; } });
-  // ② 舊資料沒 venue_unit → 按課種優先序回推佔位（多功能→教室→跑步機）
-  const fill=(vid,n)=>{ if(use[vid]==null) return n; const take=Math.min(Math.max(0,venueCap(vid)-use[vid]),n); use[vid]+=take; return n-take; };
-  let g=cur.filter(x=>!x.venue_unit&&bkIsGroup(x)).length;
-  let m=cur.filter(x=>!x.venue_unit&&(x.category==='私人教練'||x.category==='體驗')).length;
-  let sf=cur.filter(x=>!x.venue_unit&&bkIsSelf(x)).length;
-  g=fill('group',g);
-  m=fill('multi',m); if(m>0) fill('group',m);
-  sf=fill('multi',sf); sf=fill('group',sf); if(sf>0) fill('treadmill',sf);
+  /* ② 舊資料沒 venue_unit → 按各自課別的優先序回推佔位。
+     2026-08-24 收斂：原本是「團課→多功能→自主」三段寫死的分桶，改成直接吃
+     venuePriorityFor（課別→場地的唯一來源），新增課別不必再改這裡。
+     ⚠ 順序要保留「選擇少的先佔」：團課／按摩只有一個選項，得先讓它們佔到位，
+       否則教練課溢出去把團課教室吃掉，團課就無處可去。原本 group→multi→self
+       的處理順序，本質上就是依「可選場地數」由少到多，這裡照樣排序後再分。 */
+  cur.filter(x=>!x.venue_unit)
+     .map(x=>venuePriorityFor(x&&x.category))
+     .sort((a,b)=>a.length-b.length)
+     .forEach(pri=>{ for(const vid of pri){ if(use[vid]!=null && use[vid]<venueCap(vid)){ use[vid]++; break; } } });
   return use;
 }
 /* 這個時段每個場地還有沒有位（2026-08-24 建立預約改版：視窗一要淡化不能用的場地）——

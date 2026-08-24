@@ -22,7 +22,7 @@ const lib=new Function('getVenues','venueCap','venuePriorityFor','timeToMin','bk
   +'\nreturn {venueLoadAt,venueAvailAt,venueAllowsCategory,venueCatWhy,allocateVenue};')(
     ()=>VEN,
     v=>(VEN.find(x=>x.id===v)||{}).capacity||0,
-    c=>c==='小班肌力'?['group']:(c==='自主訓練'?['multi','group','treadmill']:['multi','group']),
+    c=>({'小班肌力':['group'],'運動按摩':['group'],'自主訓練':['multi','group','treadmill']})[c]||['multi','group'],
     t=>{const p=String(t).split(':');return (+p[0])*60+(+p[1]||0);},
     b=>!!b&&b.category==='小班肌力',
     b=>!!b&&b.category==='自主訓練');
@@ -97,6 +97,14 @@ console.log('\n⑥ 課別限制：反查 venuePriorityFor，不另寫一份對�
      && lib.venueAllowsCategory('group','私人教練')===true
      && lib.venueAllowsCategory('group','自主訓練')===true);
   ok('★ 多功能不能排團課', lib.venueAllowsCategory('multi','小班肌力')===false);
+  /* 0824 使用者指示：「運動按摩也只能在團課教室」 */
+  ok('★★ 運動按摩只能團課教室',
+     lib.venueAllowsCategory('group','運動按摩')===true
+     && lib.venueAllowsCategory('multi','運動按摩')===false
+     && lib.venueAllowsCategory('treadmill','運動按摩')===false);
+  ok('　　選錯場地時說得出「只能排：團課教室」',
+     lib.venueCatWhy('multi','運動按摩')==='多功能訓練架不能上這種課（只能排：團課教室）',
+     lib.venueCatWhy('multi','運動按摩'));
   ok('★★ 不能選時說得出原因，而且講出「那可以排哪裡」',
      lib.venueCatWhy('treadmill','私人教練')==='跑步機不能上這種課（只能排：多功能訓練架、團課教室）',
      lib.venueCatWhy('treadmill','私人教練'));

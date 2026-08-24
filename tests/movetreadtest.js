@@ -17,8 +17,16 @@ ok('★ 改期沿用跑步機（區域變數 _vpref，不寫回 bk）',
    && /const alloc = allocateVenue\(bk\.category, sameDay, ns, ne, bk\.id, _vpref\);/.test(src));
 ok('★ 為什麼不能寫回 bk，寫在程式裡', /寫回會讓後續 dbPut 整筆失敗（PGRST204）/.test(src));
 ok('　　新預約行為不變（venue_pref 有值時優先用它）', /bk\.venue_pref \|\|/.test(src));
+/* 0824：venuePriorityFor 從三個 if 改成對照表 VENUE_BY_CAT（新增課別只加一列，
+   而且 venueLoadAt 的舊資料回推可以直接吃同一張表）。順位定案本身沒有變。 */
 ok('　　自主訓練的順位定案沒動（多功能→教室→跑步機）',
-   /if\(category==='自主訓練'\) return \['multi','group','treadmill'\];/.test(src));
+   /'自主訓練':\['multi','group','treadmill'\],/.test(src)
+   && /function venuePriorityFor\(category\)\{ return VENUE_BY_CAT\[category\] \|\| VENUE_PRI_DEFAULT; \}/.test(src));
+ok('★★ 團課與運動按摩都只能團課教室（0824 使用者指示：按摩也只能在團課教室）',
+   /'小班肌力':\['group'\],/.test(src) && /'運動按摩':\['group'\],/.test(src));
+ok('　　舊資料回推改吃同一張表，而且「可選場地少的先佔」',
+   /\.map\(x=>venuePriorityFor\(x&&x\.category\)\)\s*\n\s*\.sort\(\(a,b\)=>a\.length-b\.length\)/.test(src)
+   && /否則教練課溢出去把團課教室吃掉，團課就無處可去/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
