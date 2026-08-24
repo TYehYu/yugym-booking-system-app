@@ -99,14 +99,21 @@ ok('★ 贈點會被收回也先講（教練端與櫃檯端都有）',
    && /這堂課發過 <b>\$\{_pt\} 點<\/b>自主訓練贈點，取消後會<b>一併收回<\/b>/.test(src));
 
 console.log('\n⑤ 待簽約卡位的連續預約');
-ok('★ 卡位視窗加上連續預約區塊', /<div style="margin-top:4px;">\$\{recurBoxHtml\('ph'\)\}<\/div>/.test(src));
+/* 2026-08-24 使用者：「這個待簽約卡位視窗，是不是就不用再重複出現一次了」——
+   連續預約在視窗二設定過了，這裡改成唯讀複述一行，讀取端換成 bkReadRecurBk()
+   （DOM 不在時回 _bkWizard.rc）。功能沒有消失，只是不再問第二次。 */
+ok('★ 卡位視窗的連續預約改成唯讀複述（不再給第二組控制項）',
+   /<div class="ph-recur"><span class="ph-recur-k">連續預約<\/span>/.test(src)
+   && !/recurBoxHtml\('ph'\)/.test(src)
+   && /是不是就不用再重複出現一次了/.test(src));
 // 2026-07-30：改用 buildRecurringSlots（各天可不同時間）＋上限 12 堂
 ok('★ 沿用正式預約同一套 readRecur／buildRecurringSlots',
-   /const rc=readRecur\('ph'\);/.test(src)
+   /const rc=bkReadRecurBk\(\);/.test(src)
    && /const slots=rc\.on\s*\n\s*\? buildRecurringSlots\(date,time,rc\.dows,rc\.times,Math\.min\(rc\.count,RECUR_MAX\),ymd\(addDays\(parseYmd\(date\),370\)\)\)/.test(src));
 ok('★ 每一堂各自驗證（用那一筆的時間），衝堂跳過不中斷',
    /const verr=await validateBooking\(vbk,d,tv,60\);\s*\n\s*if\(verr\)\{ skipped\.push/.test(src));
-ok('　　沒有票券所以不設次數上限（recurBoxHtml 不傳 maxN）', /recurBoxHtml\('ph'\)/.test(src));
+ok('　　沒有票券所以不設次數上限 —— bkReadRecurBk 不帶 maxN（帶了會被票券堂數壓低）',
+   /const rc=bkReadRecurBk\(\);/.test(src));
 ok('　　防連點（長串卡位無回饋會被連按）', /if\(window\._phSubmitting\)\{ showToast\('建立中，請稍候…'\); return; \}/.test(src));
 ok('　　建立中顯示進度、結果講清楚成功幾堂跳過幾堂',
    /已卡位 \$\{made\} 堂（待簽約）/.test(src) && /跳過 \$\{skipped\.length\} 堂/.test(src));

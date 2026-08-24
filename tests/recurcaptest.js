@@ -18,7 +18,10 @@ ok('★ 只有一張票時就用那張的可約堂數', /recurSetMax\('bk', tkUn
 ok('★ 多張票時用「目前選中那張」的可約堂數', /recurSetMax\('bk', window\._bkTkCap\[window\._bkTkSel\]\);/.test(src));
 ok('★ 點別張票券卡也要跟著換', /recurSetMax\('bk', \(window\._bkTkCap\|\|\{\}\)\[tid\]\);/.test(src));
 ok('★ 每張票的可約堂數先建索引', /window\._bkTkCap=Object\.fromEntries\(list\.map\(tk=>\[tk\.id, tkUnlockedLeft\(tk\)\]\)\);/.test(src));
-ok('★ 待簽約卡位沒有票可扣 → 維持 12（不帶 maxN）', /\$\{recurBoxHtml\('ph'\)\}/.test(src));
+/* 2026-08-24：待簽約視窗不再自己給一組控制項（見 batch0730test），
+   上限這件事改由 bkReadRecurBk() 不帶 maxN 表達 —— 一樣是 12。 */
+ok('★ 待簽約卡位沒有票可扣 → 維持 12（bkReadRecurBk 不帶 maxN）',
+   /const rc=bkReadRecurBk\(\);/.test(src) && !/recurBoxHtml\('ph'\)/.test(src));
 ok('　　團課也不帶（一次排多人、各人餘額不同）', /\$\{recurBoxHtml\('grp'\)\}/.test(src));
 /* 2026-08-23：標籤改成可覆寫（opts.countLabel）——「調整日期／時間」那個入口是替既有的課
    往後排，第一堂已經存在，沿用「含第一堂」會讓人多算一堂。不傳＝維持原字串。 */

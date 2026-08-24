@@ -9115,6 +9115,10 @@ button.rev-kind:hover{filter:brightness(.96);box-shadow:0 1px 4px rgba(60,50,38,
 .gr-sig-more:hover{text-decoration:underline;}
 .gr-sig-none{margin-top:9px;background:#fff;border:1px dashed var(--bd);border-radius:10px;
   padding:9px 11px;font-size:11.5px;line-height:1.8;color:var(--t2);}
+/* 待簽約視窗裡「連續預約」的唯讀複述（設定在視窗二，這裡只是讓人確認沒設錯） */
+.ph-recur{display:flex;align-items:baseline;gap:9px;margin-top:6px;background:var(--card2);
+  border:1px solid var(--bd);border-radius:10px;padding:9px 11px;font-size:12.5px;color:var(--text);}
+.ph-recur-k{flex:none;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--t3);}
 /* 30 分鐘完整退回（2026-08-08 使用者指示：「所有銷售的產品都可以在 30 分鐘內有退回的
    機制，按鈕放在首頁今日營收這列表裡面」）——輸入錯了要有一條乾淨的回頭路。 */
 .rev-undo{font-size:10px;font-weight:800;border-radius:999px;padding:2px 8px;flex-shrink:0;
@@ -9953,8 +9957,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1305';
-const APP_VERSION_LABEL='v260824.1305';
+const APP_VERSION = '260824.1312';
+const APP_VERSION_LABEL='v260824.1312';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23954,8 +23958,19 @@ function bkStep1bHtml(){
       <button class="btn btn-ghost" onclick="bkBackToStep1()">‹ 上一步</button>
       <button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`;
 }
-/* 回視窗一（保留已選的日期／時間／場地）。 */
+/* 回視窗一（保留已選的日期／時間／場地）。
+   ⚠ 也要把視窗二**已經填好的**課程／教練／會員／連續預約收進暫存（2026-08-24 自查）——
+     不收的話，只是回去把時間改個半小時，回來就得從課程重新選一遍，
+     那正是這次改版要消滅的「前面就白填寫了」。收在既有的 type_id／coach_id／member_id／rc
+     這幾個鍵上，與步驟 2 的「‹ 上一步」共用同一份還原程式（bkRestoreStep1b）。 */
 function bkBackToStep1(){
+  try{
+    const v=id=>((document.getElementById(id)||{}).value||'');
+    if(document.getElementById('bk-type')){
+      Object.assign(_bkWizard,{ type_id:v('bk-type'), coach_id:v('bk-coach'),
+        member_id:v('bk-mem-pre'), rc:(typeof readRecur==='function'?readRecur('bk'):null) });
+    }
+  }catch(_){}
   const w=_bkWizard||{};
   showModal(bkStep1Html({date:w.date||'', time:w.time||''}));
   const vi=document.getElementById('bk-venue');
@@ -23980,6 +23995,10 @@ async function bkStep1Next(){
   Object.assign(_bkWizard,{date:ds,time:tm,venue:vid});
   showModal(bkStep1bHtml());
   try{ mpkScan(); }catch(_){}
+  /* 從「改」回來的（暫存裡已經有課程）就把欄位放回去；第一次進來沒有，維持空白。
+     ⚠ 要在 bkRefreshPlanFilter 之前 —— 那支會依課程重畫會員名單，
+       順序反了會把剛還原的會員選擇洗掉。 */
+  if(_bkWizard.type_id){ try{ await bkRestoreStep1b(_bkWizard); }catch(_){} }
   try{ bkRefreshPlanFilter(); }catch(_){}
 }
 async function openBookingModal(){
@@ -25085,7 +25104,14 @@ async function openBookingModalBack(){
       if(vb){ const lb=vb.firstElementChild;
         lb.textContent=(getVenues().find(x=>x.id===W.venue)||{}).name||W.venue; lb.className=''; } }
   }
-  // 還原第1頁選擇
+  await bkRestoreStep1b(W);
+}
+/* 把暫存的課程／教練／會員／連續預約寫回視窗二的欄位。
+   兩條路共用（2026-08-24）：步驟 2 的「‹ 上一步」，以及視窗二摘要列上的「改」
+   ——後者原本會把已填的課程／教練／會員全部清掉，正是使用者當初要修掉的
+   「前面就白填寫了」的另一面。 */
+async function bkRestoreStep1b(W){
+  W=W||{};
   const ty=document.getElementById('bk-type'); if(ty){ty.value=W.type_id||'';renderBkTypeCards();await onBkTypeChange();}
   /* 課程欄的按鈕字也要寫回去（2026-08-24 自查）——ty 是 hidden input，只設 .value 的話
      畫面上那顆鈕還停在灰色的「選擇課程」，看起來像沒選過。這與 0814 修教練／會員
@@ -25315,6 +25341,16 @@ function bkReadRecurBk(maxN){
   if(!rc.on) return rc;
   const m=Number(maxN)>0 ? Math.min(Number(maxN), RECUR_MAX) : RECUR_MAX;
   return Object.assign({},rc,{count:Math.max(1,Math.min(Number(rc.count)||1,m)),max:m});
+}
+/* 一句話說明目前的連續預約設定（2026-08-24）——用在「已經在前一個視窗設定過、
+   這裡只是複述」的地方。沒開就回空字串，呼叫端整塊不畫。 */
+function recurSummaryText(rc){
+  if(!rc||!rc.on) return '';
+  const wd=(rc.dows||[]).slice().sort((a,b)=>a-b).map(d=>'日一二三四五六'[d]).join('、');
+  const tms=Object.keys(rc.times||{}).length
+    ? '　'+Object.keys(rc.times).sort().map(d=>`週${'日一二三四五六'[d]} ${rc.times[d]}`).join('、')
+    : '';
+  return `每週${wd||'—'}，共 ${Number(rc.count)||1} 次${tms}`;
 }
 function readRecur(prefix){
   const on=document.getElementById(prefix+'-recurring')?.checked;
@@ -25640,8 +25676,15 @@ function openPendingHold(){
       :`<div class="form-row"><label>客戶姓名 *</label><input id="ph-name" placeholder="輸入姓名" autocomplete="off"></div>
         <div class="form-row"><label>手機（選填）</label><input id="ph-phone" placeholder="0912345678" autocomplete="off"></div>`}
     ${/* 2026-07-30 使用者指示：待簽約課程也要有連續預約 —— 客人談的是一整期，
-         卡位卻只能一堂一堂點。沒有票券所以不設次數上限（正式預約才受堂數限制）。 */''}
-    <div style="margin-top:4px;">${recurBoxHtml('ph')}</div>
+         卡位卻只能一堂一堂點。沒有票券所以不設次數上限（正式預約才受堂數限制）。
+         2026-08-24 使用者：「這個待簽約卡位視窗，是不是就不用再重複出現一次了」——
+         連續預約在**視窗二**就設定過了（那一組 bk 前綴的控制項，收在 _bkWizard.rc），
+         這裡再給一組等於同一件事問兩次，而且兩邊不一致時誰贏也說不清。
+         改成唯讀複述一行；沒設定就整塊不畫。要改就回上一步改。
+         ⚠ 讀取端一併換成 bkReadRecurBk() —— 它在 DOM 不存在時會回 _bkWizard.rc，
+           正是這個情況。留著 readRecur('ph') 會永遠讀到「沒開」。 */''}
+    ${(()=>{ const _t=recurSummaryText((_bkWizard&&_bkWizard.rc)||null);
+        return _t?`<div class="ph-recur"><span class="ph-recur-k">連續預約</span><span>${escH(_t)}</span></div>`:''; })()}
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="submitPendingHold()">建立預約</button>
@@ -25657,7 +25700,7 @@ async function submitPendingHold(){
   const phone=(document.getElementById('ph-phone').value||'').trim()||null;
   /* 連續卡位（2026-07-30 使用者指示）：與正式預約同一套 readRecur／buildRecurringDates，
      衝堂自動跳過。沒有票券，所以不受堂數上限限制。 */
-  const rc=readRecur('ph');
+  const rc=bkReadRecurBk();
   if(rc.on){
     if(!rc.dows.length){ showToast('請勾選至少一個星期'); return; }
     if(!(rc.count>0)){ showToast('請填寫預約次數'); return; }

@@ -26,7 +26,16 @@ ok('★ 日期／時間改了要重算（場地與營業時間提示）',
    && /ashTimeField\('bk-time', pf\.time\|\|'', 'bkStep1Changed\(\)'\)/.test(src)
    && /function bkStep1Changed\(\)\{[\s\S]{0,200}?bkVenueRefresh\(\)[\s\S]{0,120}?bkOffHoursWarn\(\)/.test(src));
 ok('　　進視窗二時重算一次方案篩選（那時候日期時間已經定了）',
-   /showModal\(bkStep1bHtml\(\)\);[\s\S]{0,160}?bkRefreshPlanFilter\(\)/.test(src));
+   /showModal\(bkStep1bHtml\(\)\);[\s\S]{0,700}?bkRefreshPlanFilter\(\)/.test(src));
+/* 2026-08-24 自查：視窗二摘要列的「改」原本會把已填的課程／教練／會員全部清掉 ——
+   只是回去改個半小時，回來就要從課程重選一遍，正是這次改版要消滅的「前面就白填寫了」。 */
+ok('★★ 「改」回視窗一之前先把視窗二填好的收進暫存',
+   /Object\.assign\(_bkWizard,\{ type_id:v\('bk-type'\), coach_id:v\('bk-coach'\),/.test(src));
+ok('★★ 回到視窗二時放回去，且要**先於** bkRefreshPlanFilter（那支會重畫會員名單，順序反了會洗掉還原的選擇）',
+   /if\(_bkWizard\.type_id\)\{ try\{ await bkRestoreStep1b\(_bkWizard\); \}catch\(_\)\{\} \}\s*\n\s*try\{ bkRefreshPlanFilter\(\); \}catch\(_\)\{\}/.test(src));
+ok('★ 與步驟 2 的「‹ 上一步」共用同一份還原程式（不要兩套會走樣）',
+   /async function bkRestoreStep1b\(W\)\{/.test(src)
+   && (src.match(/bkRestoreStep1b\(/g)||[]).length>=3);
 ok('★ 每次開窗歸零，不留上一次的名單',
    /window\._bkPlanIds=null; window\._bkPlanName='';   \/\/ 每次開窗/.test(src));
 ok('　　超約／分期未開通／過期／限時段都算進去（因為走 tkFitsBooking）',
