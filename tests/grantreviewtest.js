@@ -254,5 +254,24 @@ console.log('\n櫃檯要在發放的同一個畫面上看到會員回簽');
      && /\.gr-sig-img\{[^}]*object-fit:contain;/.test(src));
 }
 
+/* 2026-08-24 使用者指示：「在我要預覽會員的這個頁面的我的票券，設計一張待簽名的票券，
+   我要看看這邊長怎麼樣」——角色預覽只換前端顯示、不換身分（SESSION.id 仍是管理員的
+   員工 id），真實資料一定是空的，這一區永遠看不到東西。 */
+console.log('\n預覽會員視角：待簽名票券的範例卡');
+{
+  const R=grabFn('renderMemTickets');
+  ok('★★ 只在「真管理員＋預覽會員視角＋本來就沒有待簽合約」時出現',
+     /const _ctDemo = \(typeof isRealAdmin==='function' && isRealAdmin\(\)\s*\n\s*&& SESSION && SESSION\.role==='member' && pendCt\.length===0\);/.test(R));
+  ok('★★ 真會員／真的有合約時完全不畫（不可以讓任何人看到不存在的合約）',
+     /不可以讓任何人看到不存在的合約/.test(src));
+  ok('★★ 卡上明寫「範例」，按鈕不接 memSignContract（點了只吐司說明）',
+     /範例<\/span>/.test(R)
+     && /onclick="showToast\('這是預覽用的範例卡/.test(R)
+     && !/onclick="event\.stopPropagation\(\);memSignContract\('demo/.test(R));
+  ok('★ 有範例卡時不要同時出現「目前沒有票券」空狀態',
+     /usable\.length===0&&inactive\.length===0&&pendCt\.length===0&&!_ctDemo/.test(R));
+  ok('　　範例卡接在真卡後面（真的有就先看真的）', /pendCards\+demoCard\+/.test(R));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
