@@ -178,12 +178,14 @@ ok('★★ 沒有待抽名單時也要畫出「今天已登記」那一區（早
 console.log('\n今日營收那一列的「抽獎」標籤＋當天限定');
 {
   const f=src.slice(src.indexOf('function revAttribChip(r){'), src.indexOf('async function openRevAttribPick('));
-  ok('★★ 抽獎那一列在「業績歸屬」的位置放「抽獎」標籤，點下去改獎品',
-     /if\(r && r\.lot\)\{/.test(f)
-     && /lottoFixAsk\('\$\{r\.lot\}','rev'\)/.test(f));
-  ok('★★ 這一段要放在最前面 —— 抽獎沒有業績歸屬，走到下一行就直接回空字串了',
-     /放在最前面 —— 抽獎沒有業績歸屬（attKind 是 null）/.test(src)
-     && f.indexOf("r.lot") < f.indexOf("!r.attKind"));
+/* 2026-08-24 版型改版：抽獎從第二欄的小標籤，改成最左邊那一欄的直式卡
+   （與新約／續約／分期同一欄 —— 它們本來就是同一類資訊：這一筆是什麼性質）。 */
+  ok('★★ 抽獎與約別收進同一支 revKindCell，畫在最左邊那一欄',
+     /function revKindCell\(r\)\{/.test(src)
+     && /class="rev-kind rev-kind-lottery/.test(src)
+     && /lottoFixAsk\('\$\{r\.lot\}','rev'\)/.test(src));
+  ok('★★ revAttribChip 只剩教練歸屬（抽獎那一段已經搬走）',
+     !/rev-att-lot/.test(src));
   ok('★★ 當天＝櫃檯自己能改；過了當天＝只有管理員',
      /function lottoFixAllow\(pu\)\{/.test(src)
      && /if\(_lotPuDate\(pu\)===ymd\(TODAY\)\) return \{ok:true, why:''\};/.test(src)
@@ -194,8 +196,8 @@ console.log('\n今日營收那一列的「抽獎」標籤＋當天限定');
      && /const _al=lottoFixAllow\(pu\);/.test(src));
   ok('★★ 寫入前要再擋一次（入口有兩個，視窗開著跨過午夜也會變成隔天）',
      /視窗開著跨過午夜就會從「當天」變成「隔天」/.test(src));
-  ok('★ 不能改的時候要說原因，不是只讓標籤按不動（0823 的語彙）',
-     /button\.rev-att\.rev-att-lot-off\{opacity:\.5;\}/.test(src)
+  ok('★ 不能改的時候要說原因，不是只讓卡按不動（0823 的語彙）',
+     /button\.rev-kind\.rev-kind-off\{opacity:\.5;\}/.test(src)
      && /<div class="modal-title">這一筆不能改<\/div>/.test(src)
      && /過了當天就不能自己改了/.test(src));
   ok('　　從今日營收進來的，改完關窗並重畫那一頁（標籤與品名要跟著更新）',
@@ -222,6 +224,10 @@ ok('★★ 抽獎排在收款之後（這一頁叫「今日營收」，錢要先
    /inv:\(p\.invoice_type==='cloud'\|\|p\.invoice_type==='paper'\)\};\}\),\s*\n\s*\/\* 抽獎排在最後/.test(src));
 ok('★★ 整列點下去就開重選視窗，不是跑去會員票券頁',
    (src.match(/r\.lot\?`onclick="lottoFixAsk\('\$\{r\.lot\}','rev'\)" title="改抽獎項目"`/g)||[]).length===2);
+ok('★★ 第二欄兩列：姓名｜教練標籤 ／ 品項｜金額（現金匯款同時出現時自己疊兩列）',
+   (src.match(/<div class="rv-r1">/g)||[]).length===2
+   && (src.match(/<div class="rv-r2">/g)||[]).length===2
+   && /\.mc-rev-r\{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;\}/.test(src));
 ok('　　首頁名單卡與營收彈窗兩處都要改（同一份資料兩個地方畫）',
    (src.match(/class="mc-rev-row\$\{\(r\.mid\|\|r\.lot\)\?' mc-rev-go':''\}"/g)||[]).length===2);
 

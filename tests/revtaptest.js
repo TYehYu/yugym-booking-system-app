@@ -31,7 +31,12 @@ ok('★ 有這支函式', /function openTodayRevList\(\)\{/.test(src));
    付款方式可修正（revpaytest.js）。 */
 /* 2026-08-07：歸屬 tag 移到姓名上方（使用者指示），姓名那一行只剩姓名 */
 ok('★ 每一列：歸屬 tag（上）／姓名／品項／付款方式／金額（發票標籤已移除）',
-   /<div class="mc-rev-b">\$\{revAttribChip\(r\)\}<span class="mc-rev-nm">\$\{esc\(r\.nm\)\}<\/span><span class="mc-rev-it">\$\{esc\(r\.it\)\}<\/span>/.test(src)
+/* 2026-08-24 使用者定案（版型改版）：「最左邊獨立一欄直式卡片 新約 續約 分期 抽獎；
+   第二欄調成兩列，第一列 會員姓名靠左、教練標籤靠右；第二列 購買品項靠左、金額靠右；
+   金額又有現金跟匯款，如果同時出現則要再分成兩列」——
+   歸屬標籤從「姓名上方自成一列」改成「與姓名同一列、靠右」。 */
+   /<div class="rv-r1"><span class="mc-rev-nm">\$\{esc\(r\.nm\)\}<\/span>\$\{revAttribChip\(r\)\}<\/div>/.test(src)
+   && /<div class="rv-r2"><span class="mc-rev-it">\$\{esc\(r\.it\)\}<\/span>/.test(src)
    && !/mc-rev-inv">發票/.test(src));
 ok('★ 有綁會員的列點下去跳到他的票券頁', /onclick="closeModal\(\);revRowGo\('\$\{r\.mid\}'\)"/.test(src));
 ok('　　revRowGo 就是開會員資料並切到票券分頁', /async function revRowGo\(mid\)\{[\s\S]{0,160}ppShowRecord\('tickets'\)/.test(src));
@@ -53,8 +58,10 @@ console.log('\n實跑：彈窗組裝');
      2026-08-08：又多了 revUndoChip（30 分鐘完整退回），一併給替身 */
   /* 2026-08-13：粗體金額只在付款標籤已帶金額時隱藏 —— 沙箱用真的 revAmtDup */
   const _revAmtDup=new Function('return '+g('function revAmtDup(r){','}'))();
-  const fn=new Function('showModal','window','revAttribChip','revPayChip','saleKindChip','revUndoChip','revAmtDup',
-    g('function openTodayRevList(){','\n}\n')+'\nreturn openTodayRevList;')(h=>{shown=h;}, globalThis, ()=>'', r=>r.pay?`<span class="mc-rev-pay">${r.pay}</span>`:'', ()=>'', ()=>'', _revAmtDup);
+  /* 2026-08-24：列的最左邊多了一欄直式卡（revKindCell：新約／續約／分期／抽獎），
+     沙箱一併給替身。 */
+  const fn=new Function('showModal','window','revAttribChip','revPayChip','saleKindChip','revUndoChip','revAmtDup','revKindCell',
+    g('function openTodayRevList(){','\n}\n')+'\nreturn openTodayRevList;')(h=>{shown=h;}, globalThis, ()=>'', r=>r.pay?`<span class="mc-rev-pay">${r.pay}</span>`:'', ()=>'', ()=>'', _revAmtDup, r=>r.kind?`<span class="mc-rev-kv">${r.kind}</span>`:'');
 
   globalThis._gdRev={date:'2026-08-01',total:12000,inv:9000,noInv:3000,rows:[
     {nm:'王小明',mid:'m1',it:'私人教練課 1V1',amt:9000,inv:true,pay:'現金'},

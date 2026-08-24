@@ -42,12 +42,16 @@ ok('　　沒有 attKind 就不畫標籤（既有防線）', /if\(!r \|\| !r\.at
 
 console.log('\n③ 標籤放在會員姓名上方');
 {
-  const rows=(src.match(/<div class="mc-rev-b">\$\{revAttribChip\(r\)\}<span class="mc-rev-nm">/g)||[]).length;
+/* 2026-08-24 使用者定案（版型改版）：「最左邊獨立一欄直式卡片 新約 續約 分期 抽獎；
+   第二欄調成兩列，第一列 會員姓名靠左、教練標籤靠右；第二列 購買品項靠左、金額靠右；
+   金額又有現金跟匯款，如果同時出現則要再分成兩列」——
+   歸屬標籤從「姓名上方自成一列」改成「與姓名同一列、靠右」。 */
+  const rows=(src.match(/<div class="rv-r1">/g)||[]).length;
   eq('★ 兩個列表（首頁右欄、今日營收彈窗）都改了', rows, 2);
-  ok('　　姓名那一行只剩姓名', !/mc-rev-nm">\$\{(esc\()?r\.nm\)?\}\$\{revAttribChip/.test(src));
-  ok('★ 標籤自成一列、靠左（mc-rev-b 是直向排列）',
-     /\.rev-att\{display:inline-block;align-self:flex-start;/.test(src)
-     && /\.mc-rev-b\{flex:1;min-width:0;display:flex;flex-direction:column;/.test(src));
+  ok('★ 歸屬標籤與姓名同一列、靠右',
+     (src.match(/<span class="mc-rev-nm">\$\{(esc\()?r\.nm\)?\}<\/span>\$\{revAttribChip\(r\)\}/g)||[]).length===2
+     && /\.rv-r1,\.rv-r2\{display:flex;align-items:baseline;justify-content:space-between;/.test(src)
+     && /\.rv-r1>\.rev-att\{flex:none;\}/.test(src));
   ok('　　不再用 margin-left 貼在名字右邊', !/\.rev-att\{[^}]*margin-left:6px/.test(src));
   ok('　　為什麼要搬，寫在程式裡', /歸屬教練放在會員姓名上方/.test(src));
 }

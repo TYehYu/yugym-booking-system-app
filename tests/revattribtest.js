@@ -40,8 +40,12 @@ ok('★ 純收款列不標歸屬（2026-08-15 起分期收款例外：章與歸�
 ok('★ 同一筆銷售不重複列（票券與其收款紀錄只列票券那筆）',
    /_dayPur\.filter\(p=>!\(p\.ticket_id&&_dayTk\.some\(t=>t\.id===p\.ticket_id\)\)\)/.test(src));
 ok('★ 右欄名單卡與彈窗都掛同一支 revAttribChip（2026-08-07 起放在姓名上方）',
+/* 2026-08-24 使用者定案（版型改版）：「最左邊獨立一欄直式卡片 新約 續約 分期 抽獎；
+   第二欄調成兩列，第一列 會員姓名靠左、教練標籤靠右；第二列 購買品項靠左、金額靠右；
+   金額又有現金跟匯款，如果同時出現則要再分成兩列」——
+   歸屬標籤從「姓名上方自成一列」改成「與姓名同一列、靠右」。 */
    (src.match(/\$\{revAttribChip\(r\)\}/g)||[]).length===2
-   && (src.match(/<div class="mc-rev-b">\$\{revAttribChip\(r\)\}<span class="mc-rev-nm">/g)||[]).length===2);
+   && (src.match(/<span class="mc-rev-nm">\$\{(esc\()?r\.nm\)?\}<\/span>\$\{revAttribChip\(r\)\}/g)||[]).length===2);
 
 console.log('\n③ 更改流程');
 ok('★ 只有櫃檯／管理員能開', /async function openRevAttribPick\(kind, ref\)\{\n\s*if\(!isDeskLike\(\)\) return;/.test(src));

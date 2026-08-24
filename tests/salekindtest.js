@@ -23,12 +23,16 @@ console.log('\n兩個畫面都要有（首頁名單卡＋點開的彈窗）');
 /* 2026-08-08：同一格前面多了「30 分鐘退回」鈕（revUndoChip） */
 /* 2026-08-13 兩修：①首頁名單卡的約別標籤移到列最左直式（.mc-rev-kv 包 saleKindChip）；
    ②付款標籤已帶金額時隱藏重複粗體金額（revAmtDup 條件包住 mc-rev-amt）；首頁那格前面再多發票鈕 revInvChip */
+/* 2026-08-24 版型改版：最左邊那一欄改由 revKindCell 統一畫（新約／續約／分期／抽獎）。 */
 ok('★ 首頁右欄名單卡（約別標籤在列最左、直式）',
-   /\$\{r\.kind\?`<span class="mc-rev-kv">\$\{saleKindChip\(r\.tk,r\.kind\)\}<\/span>`:''\}/.test(src)
+   /return r\.kind\?`<span class="mc-rev-kv">\$\{saleKindChip\(r\.tk,r\.kind\)\}<\/span>`:'';/.test(src)
+   && /\$\{revKindCell\(r\)\}\s*\n\s*<div class="mc-rev-b">/.test(src)
 /* 2026-08-24：抽獎那一列不畫金額（它是 $0 的贈品紀錄，不是收款），
    所以多一個 ||r.lot 的條件。 */
    && /<span class="mc-rev-r">\$\{revInvChip\(r\)\}\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\$\{_fm\(r\.amt\)\}/.test(src));
-ok('★ 營收彈窗', /\$\{r\.kind\?saleKindChip\(r\.tk,r\.kind\):''\}\s*\n\s*<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\{money\(r\.amt\)\}/.test(src));
+ok('★ 營收彈窗也走同一支（約別也在最左邊那一欄）',
+   (src.match(/\$\{revKindCell\(r\)\}/g)||[]).length===2
+   && /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\{money\(r\.amt\)\}/.test(src));
 ok('　　列上帶了票券 id，改的時候才知道改哪一張', /amt:_tkDayAmt\(t\), tk:t\.id, kind:_saleKindOf\(t\),/.test(src));   /* 2026-08-15 起金額改用當日實收 */
 
 console.log('\n可以就地更改');
