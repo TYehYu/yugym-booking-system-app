@@ -9801,6 +9801,10 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .admh-st-done{background:var(--green);color:#fff;}
 .admh-st-ns{background:var(--gold,#B48A56);color:#fff;}
 .admh-st-leave{background:#b5372e;color:#fff;}
+/* 待付款（待簽約／分期保留）的鎖頭（2026-08-24 使用者：「用一個鎖頭鎖住」）——
+   不是警告（沒有人做錯事），用中性的米灰底 */
+.admh-st-lock{background:var(--card2);color:var(--t2);box-shadow:inset 0 0 0 1px var(--bd);font-size:11px;}
+.memh2 .a2-l3.a2-lockl{color:var(--gold-d,#8a6a30);font-weight:700;}
 /* 教練請假紅標（2026-08-19）：課程色底或白底都要清楚 */
 .admh-lvtag{display:inline-block;margin-left:6px;background:#b5372e;color:#fff;border-radius:999px;
   padding:1px 8px;font-size:10.5px;font-weight:700;vertical-align:1px;box-shadow:0 0 0 1px rgba(255,255,255,.45);}
@@ -10119,8 +10123,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1729';
-const APP_VERSION_LABEL='v260824.1729';
+const APP_VERSION = '260824.1732';
+const APP_VERSION_LABEL='v260824.1732';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -47530,6 +47534,10 @@ function memh2CkState(b){
    排除條件見各欄註解，與 0821／0822 的定案一致。 */
 function memh2Acts(b, st){
   st=st||memh2CkState(b);
+  /* 待付款的課（待簽約／分期保留）＝看得到、動不了（2026-08-24 使用者定案）——
+     還沒扣票就簽到，帳會對不起來；取消與改期也一律由櫃檯處理。 */
+  const locked=!!(b && b.pending_contract && !b.ticket_id);
+  if(locked) return { isSelfBk:false, selfServe:false, checkin:false, resched:false, cancel:false, locked:true };
   /* 兩個會被 bkIsSelf 誤放行的例外：教練請假被改記成自主訓練的教練課（本質仍是教練課）、
      以及場地租借。 */
   const isSelfBk=bkIsSelf(b) && !(typeof bkIsCoachLeave==='function' && bkIsCoachLeave(b))
@@ -47632,7 +47640,12 @@ function memh2HTML(o){
       const _ud=Math.max(0,(Number(tk.sessions_total)||0)-(Number(tk.sessions_remaining)||0));
       const _nth=Math.min(Math.max(1,_ud-_lt), Number(tk.sessions_total)||_ud||1);
       return `第 ${_nth} 堂／共 ${tk.sessions_total} 堂`;})():'';
-    const stamp=st.leave?['假','admh-st-leave']:(st.done?['簽','admh-st-done']:(b.no_show===true?['未','admh-st-ns']:null));
+    /* 待付款的課蓋一顆鎖頭（2026-08-24 使用者：「只是要用一個鎖頭鎖住」）——
+       分期保留寫「待繳費」、教練先約的寫「待簽約」，兩件事客人要分得出來。 */
+    const _lk=!!(b.pending_contract && !b.ticket_id);
+    const _lkTxt=_lk?((typeof bkIsInstHold==='function'&&bkIsInstHold(b))?'待繳費':'待簽約'):'';
+    const stamp=_lk?['🔒','admh-st-lock']
+      :(st.leave?['假','admh-st-leave']:(st.done?['簽','admh-st-done']:(b.no_show===true?['未','admh-st-ns']:null)));
     /* 簽到狀態那一行拿掉（2026-08-22 使用者：「直接看手指圖示就好」）——
        已簽到／請假／未到本來就有左邊那顆出席章，再寫一次是同一件事講兩遍。
        剩下兩列：課程・場地（主要，粗體）／第幾堂共幾堂（沒綁票的團課就不畫）。 */
@@ -47644,7 +47657,7 @@ function memh2HTML(o){
       <div class="a2-stampcol">${stamp?`<span class="admh-stamp ${stamp[1]}">${stamp[0]}</span>`:''}</div>
       <div class="a2-main">
         <div class="a2-l1">${cname}${_vn?'・'+_vn:''}</div>
-        ${_tkTxt?`<div class="a2-l3">${_tkTxt}</div>`:''}
+        ${_lk?`<div class="a2-l3 a2-lockl">${_lkTxt}・尚未付款，暫時不能簽到</div>`:(_tkTxt?`<div class="a2-l3">${_tkTxt}</div>`:'')}
         ${(()=>{ const h=memh2Hint(b,st); return h?`<div class="a2-hint a2-hint-${h[1]}">${h[0]} ›</div>`:''; })()}
       </div>
       <div class="a2-side">
@@ -47852,7 +47865,18 @@ async function memh2Tap(id){
   }catch(_){}
   /* 簽到規則（0822 使用者特別要求要寫清楚）——改成圓鈕下方的一小段，
      只在「還不能簽」的時候出現；能簽的時候那段話已經沒有用了。 */
-  const ruleNote=(st.done||st.open)?''
+  if(_A.locked){
+    /* 待付款：不給任何圓鈕，改成一段說明（看得到、動不了） */
+    ckBtn=orb('off','🔒',(typeof bkIsInstHold==='function'&&bkIsInstHold(b))?'待繳費':'待簽約',null);
+    rsBtn=''; cxBtn='';
+  }
+  const ruleNote=_A.locked
+    ? `<div class="mtp-rule">這一堂<b>還沒完成付款</b>，時段已經先幫你留著。<br>
+        ${(typeof bkIsInstHold==='function'&&bkIsInstHold(b))
+          ? '這是分期方案先保留的堂數，繳了下一期就會自動變成正式預約。'
+          : '完成簽約付款後就會變成正式預約。'}<br>
+        在那之前不能簽到；要調整時間或取消，請告訴櫃檯或你的教練。</div>`
+    : (st.done||st.open)?''
     : `<div class="mtp-rule">課程開始前 <b>30 分鐘</b>開放簽到，且只有<b>上課當天</b>能簽。<br>
         這堂是 ${b.date.replace(/-/g,'/')} ${b.start_time}，${b.date>ymd(TODAY)?'當天再回來簽到就可以了':'簽到時間還沒到，請稍候'}。<br>
         遲到或漏簽請直接告訴櫃檯，會協助補簽。</div>`;
@@ -48056,11 +48080,17 @@ PAGES.mem_bookings=async function(){
      補一份只有名字的名冊（2026-08-08 使用者指示，見 coachDirectory）。 */
   if(!Object.keys(coachMap).length) Object.assign(coachMap, await coachDirectory());
   /* 團體課（member_id 為空、會員在 member_ids 名單裡）也算自己的課（2026-07-28 團課自主報名） */
-  /* 分期保留（pending_contract、還沒綁票）不給會員看（2026-08-11 黃柏瑜案例，使用者指示：
-     「分期的合約照理說應該只出現付費的 4 堂」）——那些是櫃檯先佔的時段，繳了下一期
-     才會綁票變成真預約；出現在首頁會讓會員以為 12 堂都排好了。 */
-  const mine=bookings.filter(b=>bkHasMember(b,SESSION.id)&&b.status!=='cancelled'
-      &&!(b.pending_contract&&!b.ticket_id))
+  /* 待付款的課要不要給會員看（2026-08-24 使用者定案，推翻 0811 的整批隱藏）——
+     0811 是因為黃柏瑜案例：分期買 12 堂只繳了 4 堂的錢，12 堂全列出來，
+     客人以為都排定了（使用者當時的話：「分期的合約照理說應該只出現付費的 4 堂」）。
+     0824 兩則回報把問題講清楚了：
+       ・「會員反應他 9/4 這邊沒看到預約訊息」—— 教練當面跟客人講好的時段，
+         藏起來客人只會覺得教練忘了排，然後傳訊息來問。
+       ・使用者定案：「那這樣分期的待付款課卡也應該讓客人看得到，只是要用一個鎖頭鎖住」
+     所以改成**都看得到，但鎖起來**：卡上一顆鎖頭、狀態寫清楚，
+     不給簽到也不給自助取消（見 memh2Acts）。這樣既回答得了「我 9/4 有沒有課」，
+     也不會讓人以為錢已經付完了。 */
+  const mine=bookings.filter(b=>bkHasMember(b,SESSION.id)&&b.status!=='cancelled')
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   /* 預覽用的範例課卡（2026-08-24 使用者指示：「在我的預約也塞一張範例課卡」）——
      資料現造現用，說明見 memDemoBk 那一組。 */

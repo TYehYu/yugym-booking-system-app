@@ -79,10 +79,23 @@ t('課卡不再寫簽到狀態文字', !/可以簽到了/.test(html) && !/開課
   && !/a2-l2/.test(html));
 t('已簽到／請假／未到仍靠左邊那顆出席章辨識',
   /st\.leave\?\['假','admh-st-leave'\]/.test(html) && /st\.done\?\['簽','admh-st-done'\]/.test(html));
+/* 2026-08-24 使用者定案（推翻 0811 的整批隱藏）：待付款的課卡要讓會員看得到，
+   「只是要用一個鎖頭鎖住」「如果這張課卡已經綁定會員，要讓會員看得到，只是要鎖著」。 */
 t('剩兩列：課程・場地（粗體）／第幾堂共幾堂', /class="a2-l1">\$\{cname\}/.test(html)
-  && /\$\{_tkTxt\?`<div class="a2-l3">\$\{_tkTxt\}<\/div>`:''\}/.test(html)
+  && /:\(_tkTxt\?`<div class="a2-l3">\$\{_tkTxt\}<\/div>`:''\)/.test(html)
   && /\.memh2 \.admh2-card \.a2-l1\{font-size:14\.5px;font-weight:800/.test(s));
-t('沒綁票的團課就不畫第二列（不留空行）', /\$\{_tkTxt\?`<div/.test(html));
+t('沒綁票的團課就不畫第二列（不留空行）', /_tkTxt\?`<div/.test(html));
+t('★★ 待付款的課卡蓋鎖頭，第二列寫清楚狀態（分期＝待繳費、教練先約＝待簽約）',
+  /const _lk=!!\(b\.pending_contract && !b\.ticket_id\);/.test(html)
+  && /const _lkTxt=_lk\?\(\(typeof bkIsInstHold==='function'&&bkIsInstHold\(b\)\)\?'待繳費':'待簽約'\):'';/.test(html)
+  && /const stamp=_lk\?\['🔒','admh-st-lock'\]/.test(html)
+  && /尚未付款，暫時不能簽到/.test(html));
+t('★★ 會員端不再整批藏掉待付款的課（0811 那條 filter 已移除）',
+  /const mine=bookings\.filter\(b=>bkHasMember\(b,SESSION\.id\)&&b\.status!=='cancelled'\)/.test(s)
+  && !/&&!\(b\.pending_contract&&!b\.ticket_id\)/.test(s));
+t('★★ 看得到但動不了：待付款一律不給簽到／改時間／取消',
+  /const locked=!!\(b && b\.pending_contract && !b\.ticket_id\);/.test(s)
+  && /if\(locked\) return \{ isSelfBk:false, selfServe:false, checkin:false, resched:false, cancel:false, locked:true \};/.test(s));
 
 // ── 簽到視窗 ──
 const tap=cut('async function memh2Tap(id){','/* ［＋］預約自主訓練');
@@ -104,8 +117,12 @@ t('★★ 簽到是圓鈕，開窗才可按（memh2CkState 的 open）',
   /st\.open \? orb\('go','✓','簽到'/.test(tap)
   && /orb\('off','🕒','尚未開放',null,'開課前 30 分鐘開放簽到'\)/.test(tap));
 t('　　簽到規則改放圓鈕下方，而且只在「還不能簽」時出現',
-  /const ruleNote=\(st\.done\|\|st\.open\)\?''/.test(tap)
+  /: \(st\.done\|\|st\.open\)\?''/.test(tap)
   && /課程開始前 <b>30 分鐘<\/b>開放簽到/.test(tap));
+t('★★ 待付款的課點開只有一顆鎖頭與說明，沒有任何可按的圓鈕',
+  /ckBtn=orb\('off','🔒',\(typeof bkIsInstHold==='function'&&bkIsInstHold\(b\)\)\?'待繳費':'待簽約',null\);/.test(tap)
+  && /rsBtn=''; cxBtn='';/.test(tap)
+  && /這一堂<b>還沒完成付款<\/b>，時段已經先幫你留著。/.test(tap));
 t('底部兩顆固定左右各半、等高',
   /\.modal-foot\.mh2-foot\{display:grid;grid-template-columns:1fr 1fr/.test(s)
   && /\.modal-foot\.mh2-foot \.btn\{[^}]*height:44px/.test(s)
