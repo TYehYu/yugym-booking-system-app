@@ -10131,8 +10131,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1742';
-const APP_VERSION_LABEL='v260824.1742';
+const APP_VERSION = '260824.1748';
+const APP_VERSION_LABEL='v260824.1748';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18217,13 +18217,19 @@ function lottoRuleNote(t){
     return '　已展延：不得申請退費。';   // 2026-07-30 使用者指示（合約〔展延規則〕）
   return (t && t.source==='lottery') ? '　抽獎獎品：永久有效，不得轉讓或退費。' : '';
 }
+/* 順序照實際籤筒排（2026-08-24 使用者指示）：
+   1 筋膜球　2 運動按摩折抵券300　3 教練課折抵券300　4 運動按摩　5 教練課　參加獎 蛋白粉
+   ⚠ label 一個字都沒有改 —— 它同時是寫進 purchases.plan_name（「抽獎：○○」）的字，
+     改了會對不上既有的登記，連「目前登記的是哪一項」都標不出來。要改文字得連同
+     歷史資料一起遷移，那是另一件事。
+   ⚠ note 只是畫面上的副標（例：蛋白粉是參加獎），不進資料。 */
 const LOTTO_PRIZES=[
-  {key:'pt',    label:'教練課',         kind:'session', cat:'私人教練', glyph:'■', gcol:'var(--course-pt-accent,#1f6f54)'},
-  {key:'ms',    label:'運動按摩',       kind:'session', cat:'運動按摩', glyph:'■', gcol:'#2f8f83'},
-  {key:'pt300', label:'教練課折抵300',   kind:'voucher', ttid:'tt-discount-pt300', plan:'教練課折抵券 $300'},
-  {key:'ms300', label:'運動按摩折抵300', kind:'voucher', ttid:'tt-discount-ms300', plan:'運動按摩折抵券 $300'},
   {key:'ball',    label:'筋膜球', kind:'goods', icon:'ball'},
-  {key:'protein', label:'蛋白粉', kind:'goods', icon:'bottle'},
+  {key:'ms300', label:'運動按摩折抵300', kind:'voucher', ttid:'tt-discount-ms300', plan:'運動按摩折抵券 $300'},
+  {key:'pt300', label:'教練課折抵300',   kind:'voucher', ttid:'tt-discount-pt300', plan:'教練課折抵券 $300'},
+  {key:'ms',    label:'運動按摩',       kind:'session', cat:'運動按摩', glyph:'■', gcol:'#2f8f83'},
+  {key:'pt',    label:'教練課',         kind:'session', cat:'私人教練', glyph:'■', gcol:'var(--course-pt-accent,#1f6f54)'},
+  {key:'protein', label:'蛋白粉', kind:'goods', icon:'bottle', note:'參加獎'},
 ];
 // 購買紀錄的台灣本地日期（puLocalDate 是各頁區域 helper，這裡自帶一份全域版）
 function _lotPuDate(p){
@@ -18443,7 +18449,8 @@ async function lottoFixAsk(lotId, from){
     return `<button type="button" class="ash-eirow ash-ei-2c lot-row${isCur?' lot-row-cur':''}"${isCur?' disabled':''}
         onclick="lottoFixConfirm('${lotId}','${x.key}')">
       <span class="ash-eilb"><span class="lot-row-ic">${ic}</span>${escH(x.label)}</span>
-      <span class="ash-eisub">${isCur?'目前登記的就是這一項':(x.kind==='goods'?'實體贈品・現場交付':'發進會員票券')}</span></button>`;
+      <span class="ash-eisub">${isCur?'目前登記的就是這一項'
+        :[x.note||'', x.kind==='goods'?'實體贈品・現場交付':'發進會員票券'].filter(Boolean).join('・')}</span></button>`;
   }).join('');
   showModal(`<div class="modal-title">改抽獎項目</div>
     <div class="ovd-list" style="margin-bottom:12px;">
@@ -18505,7 +18512,22 @@ async function _lottoFixDo(lotId,key){
       showToast('這張獎品票券已經被拿去預約了，不能直接改 —— 請先取消那一堂，或在票券頁人工處理', 8000);
       return;
     }
-    if(old.status==='usable'){
+    /* 發錯的那張直接刪掉（2026-08-24 使用者：「像這種發錯的調整，照理來講換完
+       應該就要刪掉發錯的內容吧」）——它是 $0 的贈品、從來沒被用過、也沒有任何收款，
+       留一張「已退費」的票躺在會員的票券夾裡只會讓人問「這是什麼」。
+       ⚠ 連它的帳本一起刪：留著會變成指向不存在票券的孤兒紀錄。
+       ⚠ 更正的軌跡不會消失 —— 記在這一筆登記的 note 上（見下面第 ③ 步），
+         那才是「這件事發生過」該待的地方。
+       ⚠ 只有「沒有被預約用掉」才走到這裡（上面已經擋掉）；刪不掉時退回作廢，
+         寧可留一張看得懂的廢票，也不要一半刪一半留。 */
+    let _del=false;
+    try{
+      const _lgs=((await dbGetAll('ticket_logs').catch(()=>[]))||[]).filter(l=>l&&l.ticket_id===old.id);
+      for(const l of _lgs){ await dbDel('ticket_logs', l.id); }
+      await dbDel('member_tickets', old.id);
+      _del=true;
+    }catch(_){ _del=false; }
+    if(!_del && old.status==='usable'){
       old.status='refunded'; old.sessions_remaining=0;
       await dbPut('member_tickets', old);
       await logTicket(old.id,'adjust',-1,null,SESSION.id,`抽獎項目更正：改為「${np.label}」`);

@@ -137,11 +137,17 @@ console.log('\n改抽獎項目');
   ok('★★ 已經被拿去預約的獎品票券不給改（會擋下來並說怎麼辦）',
      /if\(bks\.some\(b=>b && b\.ticket_id===old\.id && b\.status!=='cancelled'\)\)\{/.test(f)
      && /這張獎品票券已經被拿去預約了，不能直接改/.test(f));
-  ok('★★ 原本那張作廢要留紀錄（不是靜靜改掉）',
-     /old\.status='refunded'; old\.sessions_remaining=0;/.test(f)
+/* 2026-08-24 使用者：「像這種發錯的調整，照理來講換完應該就要刪掉發錯的內容吧」——
+   $0 的贈品、從來沒用過、也沒有收款，留一張「已退費」的票在票券夾只會讓人問「這是什麼」。 */
+  ok('★★ 發錯的那張直接刪掉，連它的帳本一起（孤兒紀錄不要留）',
+     /for\(const l of _lgs\)\{ await dbDel\('ticket_logs', l\.id\); \}/.test(f)
+     && /await dbDel\('member_tickets', old\.id\);/.test(f));
+  ok('★★ 刪不掉才退回作廢 —— 寧可留一張看得懂的廢票，也不要一半刪一半留',
+     /if\(!_del && old\.status==='usable'\)\{/.test(f)
      && /logTicket\(old\.id,'adjust',-1,null,SESSION\.id,`抽獎項目更正：改為「\$\{np\.label\}」`\)/.test(f));
-  ok('★★ 已經是作廢狀態的不再重複作廢（櫃檯可能自己先處理過了）',
-     /if\(old\.status==='usable'\)\{/.test(f));
+  ok('★ 更正的軌跡記在登記那一筆的 note 上（票刪了，事情還查得到）',
+     /更正抽獎項目：\$\{cur\} → \$\{np\.label\}/.test(f)
+     && /那才是「這件事發生過」該待的地方/.test(src));
   ok('★★ 更正的是**同一筆**登記，不新增一筆 —— 否則「這個月抽過幾次」會多算',
      /pu\.plan_name='抽獎：'\+np\.label;/.test(f)
      && /不新增一筆，否則「這個月抽過幾次」會多算/.test(f)
@@ -239,6 +245,18 @@ ok('★★ 第二欄兩列：姓名｜教練標籤 ／ 品項｜金額（現金�
    && /\.mc-rev-r\{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;\}/.test(src));
 ok('　　首頁名單卡與營收彈窗兩處都要改（同一份資料兩個地方畫）',
    (src.match(/class="mc-rev-row\$\{\(r\.mid\|\|r\.lot\)\?' mc-rev-go':''\}"/g)||[]).length===2);
+
+/* 2026-08-24 使用者指示：獎項順序照實際籤筒排。 */
+ok('★★ 獎項順序：筋膜球 → 運動按摩折抵300 → 教練課折抵300 → 運動按摩 → 教練課 → 蛋白粉',
+   (()=>{ const i=src.indexOf('const LOTTO_PRIZES=['), j=src.indexOf('];', i);
+     const keys=[...src.slice(i,j).matchAll(/key:'(\w+)'/g)].map(m=>m[1]);
+     return JSON.stringify(keys)===JSON.stringify(['ball','ms300','pt300','ms','pt','protein']); })());
+ok('★★ label 一個字都沒改（它同時是寫進 purchases.plan_name 的字，改了對不上既有登記）',
+   /label:'運動按摩折抵300'/.test(src) && /label:'教練課折抵300'/.test(src)
+   && /label 一個字都沒有改/.test(src));
+ok('★ 蛋白粉標「參加獎」（只是畫面上的副標，不進資料）',
+   /icon:'bottle', note:'參加獎'/.test(src)
+   && /\[x\.note\|\|'', x\.kind==='goods'\?'實體贈品・現場交付':'發進會員票券'\]/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
