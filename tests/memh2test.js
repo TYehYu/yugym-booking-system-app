@@ -88,7 +88,7 @@ t('沒綁票的團課就不畫第二列（不留空行）', /_tkTxt\?`<div/.test
 t('★★ 待付款的課卡蓋鎖頭，第二列寫清楚狀態（分期＝待繳費、教練先約＝待簽約）',
   /const _lk=!!\(b\.pending_contract && !b\.ticket_id\);/.test(html)
   && /const _lkTxt=_lk\?\(\(typeof bkIsInstHold==='function'&&bkIsInstHold\(b\)\)\?'待繳費':'待簽約'\):'';/.test(html)
-  && /const stamp=_lk\?\['🔒','admh-st-lock'\]/.test(html)
+  && /const stamp=_lk\?\[MEMH2_LOCKIC,'admh-st-lock'\]/.test(html)
   && /尚未付款，暫時不能簽到/.test(html));
 t('★★ 會員端不再整批藏掉待付款的課（0811 那條 filter 已移除）',
   /const mine=bookings\.filter\(b=>bkHasMember\(b,SESSION\.id\)&&b\.status!=='cancelled'\)/.test(s)
@@ -119,8 +119,14 @@ t('★★ 簽到是圓鈕，開窗才可按（memh2CkState 的 open）',
 t('　　簽到規則改放圓鈕下方，而且只在「還不能簽」時出現',
   /: \(st\.done\|\|st\.open\)\?''/.test(tap)
   && /課程開始前 <b>30 分鐘<\/b>開放簽到/.test(tap));
+/* 2026-08-24 使用者指示：「鎖頭顯示的方式，就跟會員課卡手指箭頭的方式一樣，用線條刻畫」——
+   emoji 的 🔒 在不同手機長得都不一樣（有的是彩色實心），跟這套介面對不起來。 */
+t('★★ 鎖頭是線條圖（與手勢圖示同一套：stroke、currentColor）',
+  /const MEMH2_LOCKIC='<svg class="mh2-lockic" viewBox="0 0 24 24" fill="none" stroke="currentColor"/.test(s)
+  /* ⚠ 只檢查會員端這兩段 —— 員工端的分期未開通圓點等處還在用 🔒，那是另一回事。 */
+  && !/🔒/.test(html) && !/🔒/.test(tap));
 t('★★ 待付款的課點開只有一顆鎖頭與說明，沒有任何可按的圓鈕',
-  /ckBtn=orb\('off','🔒',\(typeof bkIsInstHold==='function'&&bkIsInstHold\(b\)\)\?'待繳費':'待簽約',null\);/.test(tap)
+  /ckBtn=orb\('off',MEMH2_LOCKIC,\(typeof bkIsInstHold==='function'&&bkIsInstHold\(b\)\)\?'待繳費':'待簽約',null\);/.test(tap)
   && /rsBtn=''; cxBtn='';/.test(tap)
   && /這一堂<b>還沒完成付款<\/b>，時段已經先幫你留著。/.test(tap));
 t('底部兩顆固定左右各半、等高',
