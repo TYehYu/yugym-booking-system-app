@@ -129,6 +129,12 @@ t('★★ 待付款的課點開只有一顆鎖頭與說明，沒有任何可按�
   /ckBtn=orb\('off',MEMH2_LOCKIC,\(typeof bkIsInstHold==='function'&&bkIsInstHold\(b\)\)\?'待繳費':'待簽約',null\);/.test(tap)
   && /rsBtn=''; cxBtn='';/.test(tap)
   && /這一堂<b>還沒完成付款<\/b>，時段已經先幫你留著。/.test(tap));
+/* 2026-08-24 使用者回報：「教練手機端快速預約視窗，下面的關閉跟確認沒有一樣高」——
+   等高這件事原本只在 .mh2-foot 這一組解掉，其他視窗照樣會歪。改成所有 .modal-foot
+   的按鈕都吃同一個最小高度並置中。 */
+t('★★ 所有視窗的底部按鈕一律等高（不只 mh2-foot 那一組）',
+  /\.modal-foot \.btn\{box-sizing:border-box;min-height:44px;/.test(s)
+  && /用 min-height 不是 height：有些視窗的按鈕字會折兩行/.test(s));
 t('底部兩顆固定左右各半、等高',
   /\.modal-foot\.mh2-foot\{display:grid;grid-template-columns:1fr 1fr/.test(s)
   && /\.modal-foot\.mh2-foot \.btn\{[^}]*height:44px/.test(s)

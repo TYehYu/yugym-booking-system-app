@@ -2335,6 +2335,14 @@ tr:hover td{background:var(--card2);}
    不能把每顆擠成兩三行字。 */
 .modal-foot{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap;}
 .modal-foot .btn{white-space:nowrap;}
+/* 底部兩顆一律等高（2026-08-24 使用者回報：「教練手機端快速預約視窗，下面的關閉跟確認
+   沒有一樣高」）——這件事之前只在 .mh2-foot 那一組解掉，其他視窗照樣會歪：
+   btn-ghost 有 1px 外框、實心鈕沒有，加上各處自己覆寫 padding，兩顆就會差幾 px。
+   改成所有 .modal-foot 的按鈕都吃同一個最小高度並置中，來源不管誰寫都對得齊。
+   ⚠ 用 min-height 不是 height：有些視窗的按鈕字會折兩行（例如「已收到 $X・發放票券」），
+     寫死高度會把字切掉。 */
+.modal-foot .btn{box-sizing:border-box;min-height:44px;
+  display:inline-flex;align-items:center;justify-content:center;}
 .modal-tabs{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:var(--radius-md);margin-bottom:16px;overflow-x:auto;}
 .modal-tab{flex:1;white-space:nowrap;padding:8px 10px;text-align:center;font-size:12.5px;border-radius:var(--radius-xs);color:var(--text-secondary);font-weight:500;transition:.15s;cursor:pointer;}
 .md-head-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px 18px 14px;margin-bottom:14px;}
@@ -3964,9 +3972,18 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .hr-body .form-row input,.hr-body .form-row select{padding:7px 10px;font-size:13.5px;border-radius:8px;}
 .hr-body .form-row input[type=checkbox]{width:16px;height:16px;padding:0;}
 .hr-grid{display:grid;gap:10px;align-items:start;}
-.hr-sec{font-size:12px;font-weight:700;color:var(--green);letter-spacing:.02em;margin:0 0 9px;
-  padding-bottom:5px;border-bottom:1px solid var(--bd);}
-.hr-sec2{margin-top:14px;}
+/* 2026-08-24 使用者：「這邊還是舊風格」——薪資規則改用全站的白底卡語彙。
+   區標退成卡片上方的小標（不再有整條分隔線），每一區的欄位收進一張白卡；
+   卡在米底上才看得出邊界，輸入框改吃米底，才不會白底疊白底糊成一片。 */
+.hr-sec{font-size:11px;font-weight:800;color:var(--t3);letter-spacing:.08em;margin:0 0 6px 2px;}
+.hr-sec2{margin-top:16px;}
+.hr-card{background:#fff;border:1px solid var(--bd);border-radius:14px;padding:13px 14px;
+  margin-bottom:2px;box-shadow:0 2px 8px rgba(30,25,15,.06);}
+.hr-card>.form-row:last-child,.hr-card>.form-2col:last-child{margin-bottom:0;}
+.hr-card input,.hr-card select,.hr-card textarea{background:var(--card2);}
+.hr-card .hr-dash{background:var(--card2);border-style:solid;}
+.hr-card .hr-dash input,.hr-card .hr-dash select{background:#fff;}
+.hr-card .hr-note{background:var(--card2);}
 .hr-lock,.hr-opt{font-size:10px;font-weight:400;color:var(--t3);margin-left:5px;}
 .hr-ro{background:var(--card2)!important;color:var(--t2)!important;cursor:not-allowed;}
 .hr-check{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--t2);cursor:pointer;
@@ -10152,8 +10169,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1921';
-const APP_VERSION_LABEL='v260824.1921';
+const APP_VERSION = '260824.1956';
+const APP_VERSION_LABEL='v260824.1956';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -39499,18 +39516,28 @@ function ppEmpRulesHtml(id){
   const row=(l,v,sub)=>v==null||v===''?'':`<div class="pp-emp-row"><span>${escH(l)}${
     sub?`<i>${escH(sub)}</i>`:''}</span><b>${v}</b></div>`;
   const [Y,M]=ym.split('-');
-  const modeLb={progressive:'累進制（依堂數級距）',flat:'固定單價',percent:'抽成制'}[String(c.pt_mode||'')]||(c.pt_mode||'—');
+  /* 2026-08-24：級距制在資料上是 'tier'（不是 'progressive'）—— 原本對照表沒有這個鍵，
+     累進制的人會直接顯示成原始字串 "tier"。 */
+  const modeLb={tier:'累進制（依堂數級距）',progressive:'累進制（依堂數級距）',
+    flat:'固定制（每堂固定）',percent:'抽成制'}[String(c.pt_mode||'')]||(c.pt_mode||'—');
+  /* ⚠ 欄位名要跟編輯視窗存的一致（2026-08-24 發現）：
+     saveHrSalary 存的是 weekly_work_days／group_per_head，這裡原本讀 work_days／group_rate，
+     所以「每週工作天數」與「團課單價」永遠是空的、看起來像沒設定。 */
+  const _wwd=c.weekly_work_days!=null?c.weekly_work_days:c.work_days;
+  const _grp=c.group_per_head!=null?c.group_per_head:c.group_rate;
+  /* 順序與編輯視窗對齊（0824 定案：錢怎麼來由大到小，值班排最後）——
+     兩張表講同一件事，順序不一樣會讓人以為是兩套規則。 */
   return `<div class="pp-emp-sub">${Y} 年 ${M} 月適用</div>
     ${row('聘僱類型', escH(etLb))}
-    ${row('需要值班', c.need_duty===false?'否':'是')}
-    ${row('每週工作天數', c.work_days?`${c.work_days} 天`:'')}
+    ${row('每週工作天數', _wwd?`${_wwd} 天`:'')}
     ${row('底薪', Number(c.base_salary)>0?_m(c.base_salary):'')}
-    ${row('值班時薪', Number(c.duty_hourly)>0?_m(c.duty_hourly):'')}
     ${row('課堂薪資制度', escH(modeLb))}
-    ${row('團課單價', Number(c.group_rate)>0?_m(c.group_rate)+' / 人次':'')}
+    ${row('團課單價', Number(_grp)>0?_m(_grp)+' / 人次':'')}
     ${row('續約獎金', Number(c.renew_bonus)>0?_m(c.renew_bonus)+' / 張':'')}
     ${row('店長獎金', c.is_manager?'是（名單與門檻見編輯）':'')}
     ${row('主管津貼', Number(c.supervisor_bonus)>0?_m(c.supervisor_bonus):'')}
+    ${row('需要值班', c.need_duty===false?'否':'是')}
+    ${row('值班時薪', Number(c.duty_hourly)>0?_m(c.duty_hourly):'')}
     <div style="text-align:right;margin-top:10px;">
       <button class="btn btn-ghost btn-sm" onclick="openHrSalary('${id}')">編輯薪資規則 ›</button></div>`;
 }
@@ -40383,13 +40410,20 @@ async function openHrSalary(id, ym){
     : `<div class="hr-tip" style="margin:-4px 0 12px;">這個月有自己的條件（${window._hrSalYm.replace('-','/')} 版本）。</div>`;
   showModal(`<div class="modal-title">薪資規則 · ${c.name||''}</div>
     <div class="hr-body">
+      ${/* 2026-08-24 使用者：「這邊還是舊風格」——每一區收進白底卡（與票券夾、
+           會員資料、今日營收那幾頁同一套語彙），區標退場改成卡上方的小標。
+           原本是米底上一條細分隔線＋整排白色輸入框，米底與白框糊成一片。 */''}
       <div class="hr-sec">適用月份</div>
-      <div class="form-row"><label>月份</label><select onchange="openHrSalary('${id}',this.value)">${monthOptions(window._hrSalYm,'')}</select></div>
-      ${_inherit}
+      <div class="hr-card">
+        <div class="form-row"><label>月份</label><select onchange="openHrSalary('${id}',this.value)">${monthOptions(window._hrSalYm,'')}</select></div>
+        ${_inherit}
+      </div>
       <div class="hr-sec">聘僱類型</div>
-      <div class="form-row"><label>類型</label><select id="hr-ettype" onchange="hrPickEt(this.value)">
-        ${HR_ET_LIST.map(([k,lb])=>`<option value="${k}"${HR_SAL_ET===k?' selected':''}>${lb}</option>`).join('')}
-      </select></div>
+      <div class="hr-card">
+        <div class="form-row"><label>類型</label><select id="hr-ettype" onchange="hrPickEt(this.value)">
+          ${HR_ET_LIST.map(([k,lb])=>`<option value="${k}"${HR_SAL_ET===k?' selected':''}>${lb}</option>`).join('')}
+        </select></div>
+      </div>
       <div id="hr-sal-body">${hrSalaryBodyHtml(c,HR_SAL_ET)}</div>
     </div>
     <div class="modal-foot">
@@ -40455,9 +40489,10 @@ function hrSalaryBodyHtml(c,et){
     ${et==='contractor'?`<div class="hr-note" style="margin-bottom:8px;">合作教練<b>預設不需值班</b>；如需排班，請勾選上面那一項並設定時薪（有值班時保底 200）。</div>`:''}
     <div class="form-row"><label>值班時薪</label><input type="number" id="hr-dutyrate2" value="${n(c.duty_hourly,_dutyDef)}"></div>`;
   return `
-    ${fixedRows?`<div class="hr-sec hr-sec2">固定薪資</div>${fixedRows}`:fixedRows}
+    ${fixedRows?`<div class="hr-sec hr-sec2">固定薪資</div><div class="hr-card">${fixedRows}</div>`:''}
 
     <div class="hr-sec hr-sec2">課堂薪資制度</div>
+    <div class="hr-card">
     <div class="form-row"><label>計算方式</label><select id="hr-ptmode" onchange="hrTogglePtMode()">
       <option value="tier" ${mode==='tier'?'selected':''}>累進制（依堂數級距）</option>
       <option value="flat" ${mode==='flat'?'selected':''}>固定制（每堂固定）</option>
@@ -40470,9 +40505,11 @@ function hrSalaryBodyHtml(c,et){
     <div id="hr-flat-box" style="display:${mode==='flat'?'block':'none'};margin-bottom:12px;">
       <div class="form-row"><label>每堂薪資</label><input type="number" id="hr-ptrate" value="${cfg.pt_rate||0}"></div>
     </div>
-    <div class="form-row"><label>團課費（每人次）</label><input type="number" id="hr-grouprate" value="${cfg.group_per_head||0}"></div>
+    <div class="form-row" style="margin-bottom:0;"><label>團課費（每人次）</label><input type="number" id="hr-grouprate" value="${cfg.group_per_head||0}"></div>
+    </div>
 
-    <div class="hr-dash" style="margin-top:6px;">
+    <div class="hr-sec hr-sec2">達標獎金</div>
+    <div class="hr-card">
       <label class="hr-check" style="margin-bottom:10px;">
         <input type="checkbox" id="hr-bonusenabled" ${cfg.pt_bonus_enabled?'checked':''} onchange="hrToggleBonus()">啟用達標獎金
       </label>
@@ -40487,17 +40524,19 @@ function hrSalaryBodyHtml(c,et){
     </div>
 
     <div class="hr-sec hr-sec2">管理職津貼</div>
-    <div class="hr-tip" style="margin-bottom:8px;">與系統角色、職稱無關，獨立開關。</div>
-    <div style="display:flex;gap:18px;padding:2px 0 8px;">
-      <label class="hr-check" style="margin:0;"><input type="checkbox" id="hr-ismgr" ${c.is_manager?'checked':''} onchange="hrToggleMgr()">店長（排班權限＋獎金）</label>
-      <label class="hr-check" style="margin:0;"><input type="checkbox" id="hr-issup" ${c.is_supervisor?'checked':''}>主管津貼</label>
+    <div class="hr-card">
+      <div class="hr-tip" style="margin-bottom:8px;">與系統角色、職稱無關，獨立開關。</div>
+      <div style="display:flex;gap:18px;padding:2px 0 8px;flex-wrap:wrap;">
+        <label class="hr-check" style="margin:0;"><input type="checkbox" id="hr-ismgr" ${c.is_manager?'checked':''} onchange="hrToggleMgr()">店長（排班權限＋獎金）</label>
+        <label class="hr-check" style="margin:0;"><input type="checkbox" id="hr-issup" ${c.is_supervisor?'checked':''}>主管津貼</label>
+      </div>
+      <div class="form-row"><label>主管津貼金額</label><input type="number" id="hr-supbonus" value="${c.supervisor_bonus||0}"></div>
+      <div id="hr-mgr-box" style="display:${c.is_manager?'block':'none'};">${hrLeaderBoxHtml(c)}</div>
     </div>
-    <div class="form-row"><label>主管津貼金額</label><input type="number" id="hr-supbonus" value="${c.supervisor_bonus||0}"></div>
-    <div id="hr-mgr-box" style="display:${c.is_manager?'block':'none'};">${hrLeaderBoxHtml(c)}</div>
 
     ${/* 值班排最後：它是附加項，金額通常最小（2026-08-24 使用者定案的排序） */''}
     <div class="hr-sec hr-sec2">值班</div>
-    ${dutyRows}`;
+    <div class="hr-card">${dutyRows}</div>`;
 }
 /* 店長獎金（2026-08 起）：名單 × 兩個門檻，都存在這位店長身上。
    之所以不做成全域設定：分店之後兩位店長帶不同的人、給不同的錢，

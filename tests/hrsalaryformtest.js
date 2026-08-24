@@ -49,5 +49,34 @@ console.log('\n③ 欄位 id 沒有動（儲存是照 id 讀的，改版面不�
 ['hr-wwd','hr-wmsd','hr-base','hr-dutyrate2','hr-needduty','hr-ptmode','hr-grouprate']
   .forEach(x=>ok('　　'+x, F.indexOf('id="'+x+'"')>0));
 
+console.log('\n④ 新風格：每一區收進白底卡（2026-08-24 使用者：「這邊還是舊風格」）');
+{
+  const R=F.slice(F.lastIndexOf('return `'));
+  ok('★★ 五區各一張白卡（固定薪資／課堂／達標獎金／管理職／值班）',
+     (R.match(/<div class="hr-card">/g)||[]).length===5);
+  ok('★★ 區標退成卡上方的小標，不再是整條分隔線',
+     /\.hr-sec\{font-size:11px;font-weight:800;color:var\(--t3\);letter-spacing:\.08em;/.test(src)
+     && !/\.hr-sec\{[^}]*border-bottom/.test(src));
+  ok('★★ 卡在米底上才看得出邊界；輸入框改吃米底，白底疊白底會糊成一片',
+     /\.hr-card\{background:#fff;border:1px solid var\(--bd\);border-radius:14px;/.test(src)
+     && /\.hr-card input,\.hr-card select,\.hr-card textarea\{background:var\(--card2\);\}/.test(src));
+  ok('　　外層「適用月份」「聘僱類型」兩區也包了卡',
+     (src.match(/<div class="hr-card">/g)||[]).length>=7);
+}
+
+console.log('\n⑤ 唯讀那張摘要要跟編輯視窗講同一件事');
+{
+  const i2=src.indexOf("const modeLb={tier:");
+  const S=src.slice(i2-600, i2+1800);
+  ok('★★ 欄位名要跟儲存時一致（原本讀 work_days／group_rate，永遠是空的）',
+     /const _wwd=c\.weekly_work_days!=null\?c\.weekly_work_days:c\.work_days;/.test(S)
+     && /const _grp=c\.group_per_head!=null\?c\.group_per_head:c\.group_rate;/.test(S));
+  ok('★★ 級距制的鍵是 tier（原本對照表沒有，累進制會顯示成原始字串 "tier"）',
+     /modeLb=\{tier:'累進制（依堂數級距）'/.test(S));
+  ok('★ 順序與編輯視窗對齊（值班排最後）',
+     S.indexOf("row('底薪'") < S.indexOf("row('課堂薪資制度'")
+     && S.indexOf("row('課堂薪資制度'") < S.indexOf("row('需要值班'"));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
