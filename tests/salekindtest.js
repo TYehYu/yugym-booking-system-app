@@ -25,8 +25,10 @@ console.log('\n兩個畫面都要有（首頁名單卡＋點開的彈窗）');
    ②付款標籤已帶金額時隱藏重複粗體金額（revAmtDup 條件包住 mc-rev-amt）；首頁那格前面再多發票鈕 revInvChip */
 ok('★ 首頁右欄名單卡（約別標籤在列最左、直式）',
    /\$\{r\.kind\?`<span class="mc-rev-kv">\$\{saleKindChip\(r\.tk,r\.kind\)\}<\/span>`:''\}/.test(src)
-   && /<span class="mc-rev-r">\$\{revInvChip\(r\)\}\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{revAmtDup\(r\)\?'':`<span class="mc-rev-amt">\$\$\{_fm\(r\.amt\)\}/.test(src));
-ok('★ 營收彈窗', /\$\{r\.kind\?saleKindChip\(r\.tk,r\.kind\):''\}\s*\n\s*<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{revAmtDup\(r\)\?'':`<span class="mc-rev-amt">\$\{money\(r\.amt\)\}/.test(src));
+/* 2026-08-24：抽獎那一列不畫金額（它是 $0 的贈品紀錄，不是收款），
+   所以多一個 ||r.lot 的條件。 */
+   && /<span class="mc-rev-r">\$\{revInvChip\(r\)\}\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\$\{_fm\(r\.amt\)\}/.test(src));
+ok('★ 營收彈窗', /\$\{r\.kind\?saleKindChip\(r\.tk,r\.kind\):''\}\s*\n\s*<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\{money\(r\.amt\)\}/.test(src));
 ok('　　列上帶了票券 id，改的時候才知道改哪一張', /amt:_tkDayAmt\(t\), tk:t\.id, kind:_saleKindOf\(t\),/.test(src));   /* 2026-08-15 起金額改用當日實收 */
 
 console.log('\n可以就地更改');

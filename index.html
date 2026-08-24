@@ -10109,8 +10109,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1713';
-const APP_VERSION_LABEL='v260824.1713';
+const APP_VERSION = '260824.1719';
+const APP_VERSION_LABEL='v260824.1719';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17137,7 +17137,17 @@ PAGES.g_dashboard=async function(){
   const _payLb=m=>({cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統',split:'現金+匯款'}[m]||m||'');
   const _payByTk={}; (purchases||[]).forEach(p=>{
     if(p.ticket_id&&puLocalDate(p)===date) _payByTk[p.ticket_id]={m:p.payment_method||'',pid:p.id,sp:p.pay_split||null}; });
+  /* 抽獎登記也列進名單（2026-08-24 使用者定案：「在今日營收這邊顯示，左邊續約的標籤
+     改成抽獎，從這邊去調整抽獎內容」）——
+     ⚠ 只加進**顯示用**的 _revRows，不加進 _dayPur：那一份在算總額、發票數、
+       現金／匯款拆帳。抽獎是 $0 的贈品紀錄，混進去會讓「今天收了多少」變得可疑。
+     ⚠ 沒有金額、沒有付款方式、也不給 30 分鐘退回（它本來就不是收款）——
+       所以不帶 amt／pay／at／pur，那三顆標籤自然不會畫出來。 */
+  const _dayLot=(purchases||[]).filter(p=>p&&p.source==='lottery'&&puLocalDate(p)===date);
   const _revRows=[
+    ..._dayLot.map(p=>({
+      nm:(memMap[p.member_id]&&memMap[p.member_id].name)||'—', mid:p.member_id||null,
+      it:(p.plan_name||'抽獎'), amt:0, lot:p.id, lotDate:puLocalDate(p) })),
     ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—', mid:t.member_id||null,
       it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
       amt:_tkDayAmt(t), tk:t.id, kind:_saleKindOf(t),
@@ -17161,8 +17171,6 @@ PAGES.g_dashboard=async function(){
          從這邊去調整抽獎內容，所以只有看得到這個頁面的人可以修改」）——
          抽獎本來就會在今日營收留一筆 $0 的紀錄，改獎品的入口放在那一列最自然：
          櫃檯本來就會在這裡對帳，而且權限自動跟著這一頁走。 */
-      lot:(p.source==='lottery'?p.id:null),
-      lotDate:(p.source==='lottery'?_lotPuDate(p):null),
       pay:_payLb(p.payment_method), paySp:p.pay_split||null, payRef:p.id,
       inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')};}),
   ];
@@ -17196,7 +17204,7 @@ PAGES.g_dashboard=async function(){
         ${/* 約別標籤移到最左、直式（2026-08-13 使用者指示） */''}
         ${r.kind?`<span class="mc-rev-kv">${saleKindChip(r.tk,r.kind)}</span>`:''}
         <div class="mc-rev-b">${revAttribChip(r)}<span class="mc-rev-nm">${r.nm}</span><span class="mc-rev-it">${r.it}</span></div>
-        <span class="mc-rev-r">${revInvChip(r)}${revUndoChip(r)}${revPayChip(r)}${revAmtDup(r)?'':`<span class="mc-rev-amt">$${_fm(r.amt)}</span>`}</span>
+        <span class="mc-rev-r">${revInvChip(r)}${revUndoChip(r)}${revPayChip(r)}${(revAmtDup(r)||r.lot)?'':`<span class="mc-rev-amt">$${_fm(r.amt)}</span>`}</span>
         ${r.mid?'<span class="mc-td-arrow">›</span>':''}
       </div>`).join('')}</div>
       ${_revMore>0?`<button class="mc-rev-more" onclick="openTodayRevList()">還有 ${_revMore} 筆　·　看全部 ›</button>`:''}`
@@ -34800,7 +34808,7 @@ function openTodayRevList(){
         <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="closeModal();revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
           <div class="mc-rev-b">${revAttribChip(r)}<span class="mc-rev-nm">${esc(r.nm)}</span><span class="mc-rev-it">${esc(r.it)}</span></div>
           ${r.kind?saleKindChip(r.tk,r.kind):''}
-          <span class="mc-rev-r">${revUndoChip(r)}${revPayChip(r)}${revAmtDup(r)?'':`<span class="mc-rev-amt">${money(r.amt)}</span>`}</span>
+          <span class="mc-rev-r">${revUndoChip(r)}${revPayChip(r)}${(revAmtDup(r)||r.lot)?'':`<span class="mc-rev-amt">${money(r.amt)}</span>`}</span>
           ${r.mid?'<span class="mc-td-arrow">›</span>':''}
         </div>`).join('')}</div>
       <div class="nl-sum"><span>合計</span><b>${money(d.total)}</b></div>

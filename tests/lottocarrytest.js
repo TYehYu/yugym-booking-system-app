@@ -202,5 +202,19 @@ console.log('\n今日營收那一列的「抽獎」標籤＋當天限定');
      /if\(window\._lotFixFrom==='rev'\)\{ window\._lotFixFrom=''; closeModal\(\); navTo\(CUR_PAGE\); return; \}/.test(src));
 }
 
+/* 2026-08-24 使用者回報：「今日營收這邊沒看到按鈕」——真因是 _dayPur 的白名單
+   只收 reactivate／facility_rental／merchandise／installment，lottery 根本沒進清單，
+   標籤沒有列可以掛。 */
+ok('★★ 抽獎登記要列進今日營收的名單',
+   /const _dayLot=\(purchases\|\|\[\]\)\.filter\(p=>p&&p\.source==='lottery'&&puLocalDate\(p\)===date\);/.test(src)
+   && /\.\.\._dayLot\.map\(p=>\(\{/.test(src));
+ok('★★ 只加進顯示用的 _revRows，不加進 _dayPur（那一份在算總額、發票、現金匯款拆帳）',
+   /只加進\*\*顯示用\*\*的 _revRows，不加進 _dayPur/.test(src)
+   && /const _dayPur=\(purchases\|\|\[\]\)\.filter\(p=>puLocalDate\(p\)===date&&\(p\.source==='reactivate'/.test(src)
+   && !/p\.source==='lottery'\|\|p\.source==='reactivate'/.test(src));
+ok('★★ 抽獎那一列不畫金額、付款方式與 30 分鐘退回（它不是收款）',
+   /it:\(p\.plan_name\|\|'抽獎'\), amt:0, lot:p\.id, lotDate:puLocalDate\(p\) \}\)\)/.test(src)
+   && /\(revAmtDup\(r\)\|\|r\.lot\)\?''/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

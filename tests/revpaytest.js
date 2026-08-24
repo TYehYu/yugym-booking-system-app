@@ -40,8 +40,10 @@ ok('★ 兩個畫面共用 revPayChip', (src.match(/\$\{revPayChip\(r\)\}/g)||[]
    2026-08-13：付款標籤已帶金額時隱藏重複粗體金額（revAmtDup 條件包住 mc-rev-amt）；
    首頁那格最前面再多一顆發票鈕 revInvChip（invEnabled 才畫），順序 發票 → 退回 → 付款 → 金額 */
 ok('★ 付款方式疊在金額上方（2026-08-03 使用者指示：並排會把品項擠掉）',
-   /<span class="mc-rev-r">\$\{revInvChip\(r\)\}\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{revAmtDup\(r\)\?'':`<span class="mc-rev-amt">/.test(src)
-   && /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{revAmtDup\(r\)\?'':`<span class="mc-rev-amt">/.test(src)
+/* 2026-08-24：抽獎那一列不畫金額（它是 $0 的贈品紀錄，不是收款），
+   所以多一個 ||r.lot 的條件。 */
+   /<span class="mc-rev-r">\$\{revInvChip\(r\)\}\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">/.test(src)
+   && /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">/.test(src)
    && /\.mc-rev-r\{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;\}/.test(src));
 /* 2026-08-03 使用者指示：「不要列出刷卡，我們沒提供刷卡功能」。
    2026-08-12 拆帳改版：第三顆改成「現金+匯款」拆帳入口（openRevPaySplit），刷卡仍不列 */
