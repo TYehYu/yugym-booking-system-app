@@ -230,5 +230,29 @@ console.log('\n⑧ 會員端：待簽合約只在「我的票券」常駐（蓋�
      /renewHint\+\s*\n\s*pendCards\+/.test(R));
 }
 
+/* 2026-08-24 使用者指示：「剛剛有會員用電子合約簽名，櫃檯這邊要看到回簽才能審核，
+   可以跳出會員回簽的簽名欄，發放票券按鈕要設計在這個視窗」——
+   核對用的東西要跟「按下發放」在同一個畫面上，不能要求櫃檯先跳去看合約再跳回來。 */
+console.log('\n櫃檯要在發放的同一個畫面上看到會員回簽');
+{
+  const A=grabFn('openGrantApprove');
+  ok('★★ 簽名圖畫在確認視窗裡（原本只有一行「✓ 合約已於 X 簽回」的文字）',
+     /<img class="gr-sig-img" src="\$\{c\.signature\}" alt="會員簽名">/.test(A)
+     && /<div class="gr-sig-k">會員回簽<\/div>/.test(A));
+  ok('★★ 發放鈕仍在同一個視窗（簽名與按鈕不可分家）',
+     /onclick="grantReqApprove\('\$\{r\.id\}'\)">已收到 \$\$\{amt\.toLocaleString\(\)\}・發放票券<\/button>/.test(A));
+  ok('★★ 沒有簽名圖時不要留一塊空白 —— 寫清楚原因並給看全文的路（0823 的「不能用就寫原因」）',
+     /這份合約沒有存到簽名圖（紙本補簽或舊資料）/.test(A)
+     && /\$\{\(signed&&!\(c&&c\.signature\)\)\?/.test(A));
+  ok('★ 未簽回仍然完全擋住（0813 定案：警告仍可放行已退場）',
+     /if\(r\.contract_id && !signed\)\{ showToast\('合約尚未簽回/.test(A));
+  ok('★★ signature 在 LEAN_DROP 裡，這裡拿得到是因為走單筆 dbGet（select \*）—— 理由寫在原地',
+     /signature 在 LEAN_DROP 裡/.test(src)
+     && /單筆 dbGet\('contracts', id\)＝select\('\*'\)，圖是拿得到的/.test(src));
+  ok('　　簽名圖鋪白底（透明筆跡壓在綠色提示框上會看不清楚）',
+     /\.gr-sig-wrap\{[^}]*background:#fff;/.test(src)
+     && /\.gr-sig-img\{[^}]*object-fit:contain;/.test(src));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

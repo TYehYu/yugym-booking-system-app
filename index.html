@@ -9104,6 +9104,17 @@ button.rev-kind:hover{filter:brightness(.96);box-shadow:0 1px 4px rgba(60,50,38,
 .gr-sign-box{margin-top:10px;border-radius:10px;padding:9px 12px;font-size:12px;line-height:1.8;}
 .gr-sign-box.ok{background:#eef5f1;border:1px solid #cfe3d8;color:#1f6f54;}
 .gr-sign-box.wait{background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;}
+/* 會員回簽的簽名欄（2026-08-24 使用者指示：櫃檯要在按發放的同一個畫面上看到回簽）。
+   白底是刻意的 —— 簽名圖是透明底的筆跡，鋪在綠色提示框上會看不清楚。 */
+.gr-sig-wrap{margin-top:9px;background:#fff;border:1px solid var(--bd);border-radius:10px;
+  padding:9px 11px 11px;display:flex;flex-direction:column;gap:5px;}
+.gr-sig-k{font-size:11px;letter-spacing:.08em;font-weight:700;color:var(--t3);}
+.gr-sig-img{width:100%;max-height:130px;object-fit:contain;object-position:left center;background:#fff;}
+.gr-sig-more{align-self:flex-start;background:none;border:none;padding:0;cursor:pointer;
+  font-family:inherit;font-size:11.5px;font-weight:700;color:var(--green);}
+.gr-sig-more:hover{text-decoration:underline;}
+.gr-sig-none{margin-top:9px;background:#fff;border:1px dashed var(--bd);border-radius:10px;
+  padding:9px 11px;font-size:11.5px;line-height:1.8;color:var(--t2);}
 /* 30 分鐘完整退回（2026-08-08 使用者指示：「所有銷售的產品都可以在 30 分鐘內有退回的
    機制，按鈕放在首頁今日營收這列表裡面」）——輸入錯了要有一條乾淨的回頭路。 */
 .rev-undo{font-size:10px;font-weight:800;border-radius:999px;padding:2px 8px;flex-shrink:0;
@@ -9942,8 +9953,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1302';
-const APP_VERSION_LABEL='v260824.1302';
+const APP_VERSION = '260824.1305';
+const APP_VERSION_LABEL='v260824.1305';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -42752,9 +42763,23 @@ async function openGrantApprove(id){
       <span class="gr-amt-v">$${amt.toLocaleString()}</span>
       <span class="gr-amt-s">${_pay}${P.isInstall?`　·　分 ${P.installCount} 期，這是<b>第 1 期</b>（總額 $${(Number(P.dealAmount)||0).toLocaleString()}）`:''}${P.voucherN?`　·　已折抵券 ×${P.voucherN}（−$${(Number(P.voucherAmt)||0).toLocaleString()}）`:''}</span>
     </div>
+    ${/* 2026-08-24 使用者指示：「櫃檯這邊要看到回簽才能審核，可以跳出會員回簽的簽名欄，
+         發放票券按鈕要設計在這個視窗」—— 原本這裡只有一行「✓ 合約已於 X 簽回」的文字，
+         櫃檯要另外點「看合約」翻到最後才看得到那個簽名。核對的東西就放在按下發放的
+         同一個畫面上。
+         ⚠ signature 在 LEAN_DROP 裡（列表讀取不搬那三個大欄位，佔 contracts 表 96%），
+           但這裡是單筆 dbGet('contracts', id)＝select('*')，圖是拿得到的。 */''}
     <div class="gr-sign-box ${signed?'ok':'wait'}">
       ${signed?`✓ 合約已於 ${String(c.signed_at||'').slice(0,10)} 簽回`
               :'⏳ <b>合約尚未簽回</b> —— 需等會員簽回才能發放。'}
+      ${(signed&&c&&c.signature)?`<div class="gr-sig-wrap">
+          <div class="gr-sig-k">會員回簽</div>
+          <img class="gr-sig-img" src="${c.signature}" alt="會員簽名">
+          <button type="button" class="gr-sig-more" onclick="openContractView('${c.id}')">看合約全文 ›</button>
+        </div>`:''}
+      ${(signed&&!(c&&c.signature))?`<div class="gr-sig-none">這份合約沒有存到簽名圖（紙本補簽或舊資料）——
+          請先點「看合約全文」確認內容再發放。
+          <button type="button" class="gr-sig-more" onclick="openContractView('${c.id}')">看合約全文 ›</button></div>`:''}
     </div>
     <div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:1.9;">
       按下去會：發放票券、寫入購買紀錄${P.voucherN?'、扣掉折抵券':''}。<br>
