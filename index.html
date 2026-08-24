@@ -7364,6 +7364,7 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
 #mem-task-pop .mtp-mtag-ok{color:var(--green);background:var(--sage-bg,#E4EAD9);}
 #mem-task-pop .mtp-mtag-leave{color:#b5372e;background:#fbeceb;}
 #mem-task-pop .mtp-mtag-ns{color:#8a5e28;background:#f7efe0;}
+#mem-task-pop .mtp-dots{margin-top:8px;}
 #mem-task-pop .mtp-orbs{display:flex;justify-content:center;gap:20px;}
 #mem-task-pop .mtp-orb{width:72px;height:72px;border-radius:50%;border:none;cursor:pointer;font-family:inherit;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;transition:.14s;padding:0;}
@@ -10027,8 +10028,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1436';
-const APP_VERSION_LABEL='v260824.1436';
+const APP_VERSION = '260824.1446';
+const APP_VERSION_LABEL='v260824.1446';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -41873,7 +41874,12 @@ async function acctQuickNotifToggle(sw){
 }
 /* 會員手機端簽名（2026-07-28）：讀自己的待簽合約 → 全文＋簽名板 → RPC 寫回 */
 async function memSignContract(id){
-  const c=await dbGet('contracts',id).catch(()=>null);
+  /* 預覽用的範例合約（2026-08-24 使用者指示：「要測試到跳出簽名欄」）——
+     角色預覽抓不到自己的合約，這一整條路平常在預覽裡走不完。給一份記憶體裡的假合約，
+     簽名板、放大簽、清除重簽全部照真的跑；只有最後那顆「完成簽署」換成吐司，
+     不打 fn_member_sign_contract（那個 id 根本不存在，打了只會拿到錯誤）。 */
+  const _dc=(id==='DEMO-CT') ? memCtDemoObj() : null;
+  const c=_dc || await dbGet('contracts',id).catch(()=>null);
   if(!c||c.signed_at){ showToast('找不到待簽合約'); navTo(CUR_PAGE); return; }
   /* 簽署改滿版（2026-08-03 使用者回報：「簽名的時候會一直拖拉到畫面」「從票券查看
      合約也會超出畫面，幫我調整合約介面」）—— 原本是彈窗裡 38vh 的小框＋簽名板，
@@ -41904,7 +41910,7 @@ async function memSignContract(id){
         <div class="ct-sign-bar"><span>點簽名區可放大簽署</span><button type="button" class="ct-sign-clear" onclick="memSignClear()">清除重簽</button></div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn btn-ghost" style="flex:1;padding:12px;" onclick="closeContractReader()">稍後再簽</button>
-          <button class="btn btn-green" style="flex:1.6;padding:12px;font-size:15px;" onclick="memSignContractDo('${id}')">完成簽署</button>
+          <button class="btn btn-green" style="flex:1.6;padding:12px;font-size:15px;" onclick="${_dc?`closeContractReader();showToast('這是預覽用的範例合約，真的會員按下去才會送出簽名',5000)`:`memSignContractDo('${id}')`}">完成簽署</button>
         </div>
       </div>
     </div>`;
@@ -41932,6 +41938,18 @@ async function memSignContractDo(id){
       }
     }catch(_){}
   }catch(e){ showToast('簽署失敗：'+(e&&e.message?e.message:e)); }
+}
+/* 範例合約的內容（只在管理員預覽會員視角時用得到）。
+   全文與購買內容表都吃真的那一份（CONTRACT_TEXT／contractFillBlockHTML），
+   這樣看到的排版就是客人會看到的排版。 */
+function memCtDemoObj(){
+  let fill='';
+  try{ fill=contractFillBlockHTML({name:'（範例）王小明', phone:'0912345678',
+    planName:'私人教練課 1V1', sessions:12, amount:24000, unit:2000,
+    pay:'一次付清', buyDate:ymd(TODAY), validDays:365}); }catch(_){}
+  return { id:'DEMO-CT', member_id:(SESSION&&SESSION.id)||null, plan_name:'私人教練課 1V1',
+    sessions:12, amount:24000, sign_type:'remote', signed_at:null,
+    fill_snapshot:fill, body_snapshot:(typeof CONTRACT_TEXT!=='undefined')?CONTRACT_TEXT:'' };
 }
 function ctSetType(v){
   window._ctSignType=v;
@@ -47545,10 +47563,22 @@ PAGES.mem_bookings=async function(){
   if(typeof isRealAdmin==='function' && isRealAdmin() && SESSION && SESSION.role==='member'){
     const _n=new Date();
     const _m=Math.max(0, _n.getHours()*60+_n.getMinutes()+10);   // 10 分鐘後開始＝簽到已開放
+    const _dt=ymd(TODAY), _dtm=minToTime(Math.min(_m, 22*60));
     window._memDemoBk={
-      id:'DEMO-BK', member_id:SESSION.id, coach_id:null, ticket_id:null, ticket_type_id:null,
-      category:'私人教練', date:ymd(TODAY), start_time:minToTime(Math.min(_m, 22*60)),
+      id:'DEMO-BK', member_id:SESSION.id, coach_id:null, ticket_id:'DEMO-TK', ticket_type_id:null,
+      category:'私人教練', date:_dt, start_time:_dtm,
       duration:60, status:'booked', venue_unit:'multi_1', _demo:true };
+    /* 範例票券（2026-08-24 使用者指示：「幫我增加圓形卡的圖案」）——
+       會員卡上那排圓點是票券夾同一套 ticketTokens 畫的，要有票才畫得出來。
+       這裡給一張 10 堂、已上 3 堂、含這一堂共排 4 堂的假票，剛好看得到
+       「實心＝已上、空心圈起來＝這一堂、空心＝還沒排」三種狀態。 */
+    window._memDemoTk={ id:'DEMO-TK', member_id:SESSION.id, plan_name:'私人教練課 1V1',
+      category:'私人教練', status:'usable', sessions_total:10, sessions_remaining:6 };
+    window._memDemoStamps=[
+      {id:'DEMO-P1', date:'2026-08-03', start_time:'10:00', status:'checked_in', ticket_id:'DEMO-TK'},
+      {id:'DEMO-P2', date:'2026-08-10', start_time:'10:00', status:'checked_in', ticket_id:'DEMO-TK'},
+      {id:'DEMO-P3', date:'2026-08-17', start_time:'10:00', status:'checked_in', ticket_id:'DEMO-TK'},
+      window._memDemoBk ];
     mine.push(window._memDemoBk);
     mine.sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   }
@@ -47975,7 +48005,10 @@ async function famSave(){
 /* ══ 會員任務圓卡：點擊彈出「簽到／取消」兩顆圓形按鈕（2026-07-29 使用者指示）══ */
 function memPickDay(ds){ window._memCalKeep=true; _memCalSel=ds; navTo('mem_bookings'); }
 async function memTaskTap(id,el){
-  /* 範例卡不進資料庫（見 PAGES.mem_bookings 的 _memDemoBk） */
+  /* 範例卡不進資料庫（見 PAGES.mem_bookings 的 _memDemoBk）。
+     ⚠ 暫存有可能因為中途換頁而被清掉 —— 那時候不要吐「找不到預約」，
+       直接重畫一次頁面把它補回來（2026-08-24 使用者回報「找不到預約」）。 */
+  if(id==='DEMO-BK' && !window._memDemoBk){ navTo('mem_bookings'); return; }
   const b=(id==='DEMO-BK' && window._memDemoBk) ? window._memDemoBk : await dbGet('bookings',id);
   if(!b){ showToast('找不到預約'); return; }
   const _demo=!!(b&&b._demo);
@@ -48047,6 +48080,17 @@ async function memTaskTap(id,el){
   const _mBadge=done
     ? (_myAllLeave?'<span class="mtp-mtag mtp-mtag-leave">請假</span>':'<span class="mtp-mtag mtp-mtag-ok">已簽到</span>')
     : (b.no_show===true?'<span class="mtp-mtag mtp-mtag-ns">未到</span>':'');
+  /* 票券圓點（2026-08-24 使用者指示：「幫我增加圓形卡的圖案」）——
+     與員工端簡易課卡、票券夾同一支 ticketTokens，這一堂會被圈起來。
+     ⚠ 範例卡走 _memDemoTk；真資料要有 ticket_id 才畫得出來（團課的票在 ticket_logs，
+       不在 bookings.ticket_id，所以團課這裡本來就不會有圓點）。 */
+  let _dots='';
+  try{
+    const _t=_demo?window._memDemoTk:((window._allTkCache||[]).find(x=>x&&x.id===b.ticket_id));
+    const _st=_demo?window._memDemoStamps:((window._memCalData&&window._memCalData.mine)||[]).filter(x=>x&&x.ticket_id===b.ticket_id);
+    if(_t && typeof ticketTokens==='function')
+      _dots=`<div class="mtp-dots">${ticketTokens(_t,_st,window._memTypeMap||{},0,b.id,SESSION.id,null)}</div>`;
+  }catch(_){}
   const host=document.createElement('div');
   host.id='mem-task-pop';
   host.innerHTML=`<div class="mtp-back" onclick="memTaskClose()"></div>
@@ -48060,6 +48104,7 @@ async function memTaskTap(id,el){
       <div class="mtp-mcard">
         <div class="mtp-mname"><span>${escH(_myNm)}</span>${_mBadge}</div>
         ${_tkLine?`<div class="mtp-msub">${escH(_tkLine)}</div>`:''}
+        ${_dots}
       </div>
       <div class="mtp-orbs">${ckBtn}${rsBtn}${cxBtn}</div>
     </div>`;
@@ -50413,8 +50458,9 @@ function renderMemTickets(){
      一定是空的，這一區永遠看不到東西。塞一張假的進去給版面看。
      ⚠ 只在「真的是管理員 ＋ 正在預覽會員視角 ＋ 本來就沒有待簽合約」時出現，
        真會員與真的有合約時完全不畫 —— 不可以讓任何人看到不存在的合約。
-     ⚠ 卡上明寫「範例」，按鈕也不接 memSignContract（點了只吐司說明），
-       免得日後有人以為這是真的、按下去卻簽了個不存在的東西。 */
+     ⚠ 卡上明寫「範例」。按鈕**會**真的開簽名畫面（2026-08-24 使用者：「要測試到跳出
+       簽名欄」）——簽名板、放大簽、清除重簽都照真的跑，只有最後那顆「完成簽署」
+       換成吐司，不打 fn_member_sign_contract（那個 id 不存在，打了只會拿到錯誤）。 */
   const _ctDemo = (typeof isRealAdmin==='function' && isRealAdmin()
                    && SESSION && SESSION.role==='member' && pendCt.length===0);
   const demoCard = _ctDemo ? `<div class="card" style="border:1.5px dashed #d9b96a;background:#fdf9f0;padding:14px 16px;margin-bottom:10px;">
@@ -50422,7 +50468,7 @@ function renderMemTickets(){
         <b style="font-size:14.5px;color:var(--text);">私人教練課 1V1<span style="margin-left:7px;font-size:10.5px;font-weight:800;color:#8a5e28;background:#f3e6cc;border-radius:999px;padding:2px 8px;">範例</span></b>
         <span style="font-size:12px;color:var(--t2);">12 堂　·　$24,000</span></div>
       <div style="font-size:12.5px;color:#8a5e28;margin-top:8px;line-height:1.7;">📝 這份合約還沒簽名 —— 完成簽署、櫃檯確認收款後才會發放票券。</div>
-      <button class="btn btn-green" style="width:100%;margin-top:10px;padding:11px;" onclick="showToast('這是預覽用的範例卡，真的會員在這裡按下去會開啟合約簽名畫面',5000)">立即簽署</button>
+      <button class="btn btn-green" style="width:100%;margin-top:10px;padding:11px;" onclick="memSignContract('DEMO-CT')">立即簽署</button>
       <div style="font-size:11px;color:var(--t3);margin-top:8px;line-height:1.7;">＊ 只有管理員預覽會員視角時看得到（角色預覽不會真的換身分，所以這一區抓不到你的資料）。</div>
     </div>` : '';
   const pendCards=pendCt.map(c=>{

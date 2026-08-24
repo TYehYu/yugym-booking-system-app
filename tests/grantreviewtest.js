@@ -264,10 +264,17 @@ console.log('\n預覽會員視角：待簽名票券的範例卡');
      /const _ctDemo = \(typeof isRealAdmin==='function' && isRealAdmin\(\)\s*\n\s*&& SESSION && SESSION\.role==='member' && pendCt\.length===0\);/.test(R));
   ok('★★ 真會員／真的有合約時完全不畫（不可以讓任何人看到不存在的合約）',
      /不可以讓任何人看到不存在的合約/.test(src));
-  ok('★★ 卡上明寫「範例」，按鈕不接 memSignContract（點了只吐司說明）',
+  /* 2026-08-24 使用者追加：「要測試到跳出簽名欄」——按鈕會真的開簽名畫面，
+     簽名板／放大簽／清除重簽都照真的跑，只有最後那顆「完成簽署」換成吐司。 */
+  ok('★★ 卡上明寫「範例」，而且按鈕真的開得了簽名畫面',
      /範例<\/span>/.test(R)
-     && /onclick="showToast\('這是預覽用的範例卡/.test(R)
-     && !/onclick="event\.stopPropagation\(\);memSignContract\('demo/.test(R));
+     && /onclick="memSignContract\('DEMO-CT'\)"/.test(R));
+  ok('★★ 範例合約只活在記憶體裡，內容吃真的那一份（看到的排版＝客人看到的排版）',
+     /function memCtDemoObj\(\)\{/.test(src)
+     && /body_snapshot:\(typeof CONTRACT_TEXT!=='undefined'\)\?CONTRACT_TEXT:''/.test(src)
+     && /fill=contractFillBlockHTML\(\{name:'（範例）王小明'/.test(src));
+  ok('★★ 「完成簽署」不打 fn_member_sign_contract（那個 id 不存在，打了只會拿到錯誤）',
+     /\$\{_dc\?`closeContractReader\(\);showToast\('這是預覽用的範例合約，真的會員按下去才會送出簽名',5000\)`:`memSignContractDo\('\$\{id\}'\)`\}/.test(src));
   ok('★ 有範例卡時不要同時出現「目前沒有票券」空狀態',
      /usable\.length===0&&inactive\.length===0&&pendCt\.length===0&&!_ctDemo/.test(R));
   ok('　　範例卡接在真卡後面（真的有就先看真的）', /pendCards\+demoCard\+/.test(R));

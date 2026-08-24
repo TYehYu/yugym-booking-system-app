@@ -38,7 +38,9 @@ console.log('① 清單讀取不搬合約全文與簽名圖');
 console.log('\n② 用得到全文的地方都是單筆讀取');
 {
   ok('★★ 合約檢視走 dbGet 單筆', /async function openContractView\(id\)\{\n\s*const c=await dbGet\('contracts',id\)/.test(src));
-  ok('★★ 會員手機簽署走 dbGet 單筆', /async function memSignContract\(id\)\{\n\s*const c=await dbGet\('contracts',id\)/.test(src));
+  /* 2026-08-24：前面多了一行「預覽用的範例合約」分流（id==='DEMO-CT'），
+     真實那條路仍然是單筆 dbGet 全欄位。 */
+  ok('★★ 會員手機簽署走 dbGet 單筆', /const c=_dc \|\| await dbGet\('contracts',id\)\.catch\(\(\)=>null\);/.test(src));
   ok('★ 單筆讀取一律全欄位（沒有被精簡）',
      /單筆 `dbGet` 仍是 `select\('\*'\)`/.test(fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/CLAUDE.md','utf8'))
      || /const\{data,error\}=await sb\.from\(tbl\(store\)\)\.select\('\*'\)/.test(src));
