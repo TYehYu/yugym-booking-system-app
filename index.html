@@ -141,8 +141,25 @@
    Chrome 不吃這一套（fixed 照樣貼視窗），所以本機怎麼量都是對的、完全重現不出來。
    max-width:100vw 也一起移到 html —— 留在 body 同樣會讓 body 變成裁切容器。
    ⚠ 以後要擋水平捲動，請改 html 或個別容器，不要再回頭寫在 body 上。 */
-html{overflow-x:hidden;max-width:100vw;}
-body{font-family:var(--font-zh);background:var(--bg);color:var(--text);font-weight:400;line-height:var(--leading-relaxed);font-size:var(--text-body);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+/* 字級鎖定（2026-08-24 使用者回報：有位會員把手機系統字體調得很大，整個畫面的字
+   大到看不出版面；LINE 內建瀏覽器上面還有一條標題列，垂直空間更少）——
+   ・text-size-adjust:100% 關掉瀏覽器的「自動放大內文」（Android 的 font boosting、
+     iOS 的自動調整）。這是唯一一個網頁真的關得掉的那一種放大。
+   ・字級用 px 寫死（本專案本來就是），root 不用 rem，系統字級改動就影響不到版面。
+   ⚠ 說清楚做不到的部分：LINE 內建瀏覽器／Chrome 自己的「文字縮放」是使用者的
+     無障礙設定，瀏覽器**不允許**網頁覆寫（覆寫掉等於把放大功能拿走）。
+     真的遇到那種情況，bodyFontGuard() 會在畫面上退一步保護版面（見那支函式）。 */
+html{overflow-x:hidden;max-width:100vw;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+/* 被使用者自己的文字縮放放大時的退讓（由 bodyFontGuard 掛上 data-fz）——
+   關不掉那種放大，但可以讓版面別崩：長字截斷而不是把卡片撐爆、行高收一點、
+   兩欄的地方讓它折行。刻意**不**去縮字：那等於把無障礙設定偷偷關掉。 */
+html[data-fz] body{line-height:1.5;}
+html[data-fz] .tcard-mem,html[data-fz] .evc-name,html[data-fz] .mpk-nm,
+html[data-fz] .ash-eilb,html[data-fz] .mtp-course{overflow:hidden;text-overflow:ellipsis;}
+html[data-fz="xl"] .form-2col{grid-template-columns:1fr;}
+html[data-fz="xl"] .modal-foot{flex-direction:column;}
+html[data-fz="xl"] .modal-foot .btn{width:100%;}
+body{font-family:var(--font-zh);background:var(--bg);color:var(--text);font-weight:400;line-height:var(--leading-relaxed);font-size:var(--text-body);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
 /* ══ 統一 Typography ══ */
 /* 英文小標（SCHEDULE / ANALYTICS…）*/
 .page-head .ph-ey,.today-head .ph-ey,.section-eyebrow{font-family:var(--font-en) !important;font-size:var(--text-label) !important;font-weight:600 !important;letter-spacing:var(--tracking-brand) !important;text-transform:uppercase;color:#C9B28A !important;}
@@ -7650,6 +7667,11 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
   border-radius:18px;padding:14px 16px;margin-bottom:9px;cursor:pointer;
   box-shadow:0 6px 18px rgba(30,25,15,.13);}
 .ash-eirow:active{transform:scale(.99);}
+/* 兩欄列：左標題、右附註（場地挑選的餘位數用它；2026-08-24 使用者指示「靠右」）。
+   數字用 tabular-nums 才會上下對齊；名字長就自己截斷，右邊那格不壓縮。 */
+.ash-eirow.ash-ei-2c{flex-direction:row;align-items:baseline;justify-content:space-between;gap:12px;}
+.ash-eirow.ash-ei-2c .ash-eilb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ash-eirow.ash-ei-2c .ash-eisub{flex:none;text-align:right;font-variant-numeric:tabular-nums;}
 /* 不可操作的說明列（2026-08-22）：告訴使用者「這件事這裡做不到、該去哪裡做」，
    而不是把按鈕整個藏起來讓人以為系統壞了。看起來就不像按鈕，也按不動。 */
 .ash-eirow.ash-ei-off{background:var(--card2);box-shadow:none;cursor:default;
@@ -8404,6 +8426,8 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   /* 沒有名額圓鈕的卡（待簽約／空堂）不需要撐到 100，免得一片空白 */
   .ash-mrow:not(:has(.ash-morbs)) .ash-mcard{min-height:0;}
   .ash-mnotk{margin-top:6px;font-size:11.5px;font-weight:600;color:var(--t3);}
+  /* 「還有票，只差按轉正」不是警告，用品牌綠（一般提示）—— 灰字會跟「還要收款」混在一起 */
+  .ash-mnotk-ok{color:var(--green);}
   .ash-mcard:active{transform:scale(.99);}
   /* 請假：整張淡化＋左緣紅線（與名單視窗同一套語彙，紅＞金＞綠） */
   /* 請假的會員卡：2026-08-22 使用者回報「課卡內容顯示變得更糟糕了」——
@@ -10003,8 +10027,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1415';
-const APP_VERSION_LABEL='v260824.1415';
+const APP_VERSION = '260824.1427';
+const APP_VERSION_LABEL='v260824.1427';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13077,7 +13101,46 @@ window.PAGES={};
 /* ── 啟動（純雲端） ──
    重要：用 window load 包起來，確保第二段 <script> 的 PAGES 定義
    已全部執行完，才呼叫 enterApp/navTo，避免 PAGES[key] is not a function。 */
+/* ══ 字級護欄（2026-08-24 使用者回報）══════════════════════════════════
+   「有位會員把手機字體設定得很大，文字大到無法辨識；手機端上方還有 LINE 的標題列。
+     這個有辦法限制嗎？不管他手機設定文字多大，開我們的系統都不能變」
+
+   分兩種放大，能做的不一樣：
+   ① 瀏覽器的「自動放大內文」（Android font boosting、iOS 自動調整）
+      → CSS 的 text-size-adjust:100% 已經關掉（見 html/body），這一種完全擋得住。
+   ② 使用者自己調的文字縮放（LINE 內建瀏覽器的字體大小、Chrome 的文字縮放、
+      系統無障礙字級）→ 瀏覽器**不允許**網頁覆寫，那是無障礙功能，覆寫掉等於把它拿走。
+      這一種只能「量出來、把版面救回來」：
+
+   做法：量一個寫死 100px 的隱形元素實際被渲染成幾 px。比值 >1 就代表被放大了，
+   在 <html> 掛上 data-fz 與 --fz 讓版面可以退讓（目前用在：整體再縮一階的字級上限，
+   見 [data-fz] 那組 CSS）。**不動 zoom**：zoom 會連 vh／position:fixed 一起歪掉，
+   這個 app 有一整套滿版與黏頂的版面，代價比放大字更糟。 */
+function bodyFontGuard(){
+  try{
+    const probe=document.createElement('div');
+    probe.setAttribute('aria-hidden','true');
+    probe.style.cssText='position:absolute;left:-9999px;top:0;width:0;height:0;overflow:hidden;'
+      +'font-size:100px;line-height:1;font-family:monospace;';
+    probe.textContent='M';
+    document.body.appendChild(probe);
+    const actual=parseFloat(getComputedStyle(probe).fontSize)||100;
+    probe.remove();
+    const r=actual/100;
+    window._fontScale=r;
+    const root=document.documentElement;
+    /* 1.15 以下當作沒事（不同機型本來就有一點誤差，別為了 3% 就改版面）。 */
+    if(r>=1.45) root.setAttribute('data-fz','xl');
+    else if(r>=1.15) root.setAttribute('data-fz','lg');
+    else root.removeAttribute('data-fz');
+    root.style.setProperty('--fz', String(Math.round(r*100)/100));
+  }catch(_){}
+}
 function bootYugym(){
+  try{ bodyFontGuard(); }catch(_){}
+  /* 使用者在 LINE 或系統設定裡改了字級再切回來 —— 重新量一次（免得要重開 app）。 */
+  try{ window.addEventListener('pageshow', bodyFontGuard);
+       window.addEventListener('resize', ()=>{ clearTimeout(window._fzT); window._fzT=setTimeout(bodyFontGuard,300); }); }catch(_){}
   // 注入版本號（登入頁 logo 下方、登入後頂部 logo 下方、頁籤標題）
   document.title='YUGYM 有肌訓練 · '+APP_VERSION;
   const lv=document.getElementById('login-ver'); if(lv) lv.textContent=APP_VERSION_LABEL;
@@ -27135,6 +27198,23 @@ async function bkCardPop(el, b, btns, acts){
     }); }catch(_){}
     const _walOf=mid=>{ if(!mid||!_wctx) return null;
       try{ return _walCache[mid]||(_walCache[mid]=buildWallet(mid,_wctx)); }catch(_){ return null; } };
+    /* 待簽約的卡上要講對話（2026-08-24 使用者回報，梁國放 8/31 21:00）——
+       「這個會員還有一堂尚未使用，這邊不應該待簽約，下面按鈕出現的也是轉正而不是儲值。
+         會員名字下方這段文字會讓我誤會他已經要付費了」
+       圓鈕那邊算過 listUsableTickets（有票才給「轉正」、沒票才給「儲值」），
+       但會員卡上那一行不管有沒有票，一律寫「待簽約・尚未綁定票券」—— 兩邊講不同的話。
+       這裡先算一次「這位手上還有幾堂能用在這一堂」，兩處就同一個口徑。
+       ⚠ 只在待簽約、且非團課時算（團課的票在 ticket_logs，不在 bookings.ticket_id）。 */
+    const _pendTk={};
+    if(b.pending_contract && !A.isGroup){
+      for(const r of _rows){
+        if(!r.mid || _pendTk[r.mid]!=null) continue;
+        try{
+          const c=await listUsableTickets(r.mid, b.ticket_type_id, b.date, b.start_time);
+          _pendTk[r.mid]=(c||[]).reduce((s,t)=>s+Math.max(0,tkUnlockedLeft(t)),0);
+        }catch(_){ _pendTk[r.mid]=0; }
+      }
+    }
     const _memCards=_rows.map(r=>{
       const onLeave = r.sk ? (_att[r.sk]==='leave') : false;
       const inHere  = r.sk ? (_att[r.sk]==='checked_in') : done;
@@ -27221,8 +27301,16 @@ async function bkCardPop(el, b, btns, acts){
         const _ph=String(b.trial_phone||'').trim();
         if(b.category==='體驗') _noTkSub=`體驗課・不扣票券${_ph?`　·　${escH(fmtPhone(_ph))}`:''}`;
         else if(b.category==='場租') _noTkSub=`場地租借${_ph?`　·　${escH(fmtPhone(_ph))}`:''}`;
-        else if(b.pending_contract) _noTkSub=(typeof bkIsInstHold==='function'&&bkIsInstHold(b))
-          ? '分期待繳費・尚未綁定票券' : '待簽約・尚未綁定票券';
+        else if(b.pending_contract){
+          const _n=Number(_pendTk[r.mid])||0;
+          _noTkSub=(typeof bkIsInstHold==='function'&&bkIsInstHold(b))
+            ? '分期待繳費・尚未綁定票券'
+            : (_n>0
+               /* 有票 → 這張卡不是在等收款，只差按一下「轉正」把票綁上去。
+                  講成「尚未綁定票券」會讓櫃檯以為還要跟客人收錢。 */
+               ? `<span class="ash-mnotk-ok">還有 ${_n} 堂可用票券・按「轉正」就會扣課，不必再收款</span>`
+               : '待簽約・客人尚未購票（收款後按「轉正」）');
+        }
       }
       const _subLine=_noTkSub?`<div class="ash-mnotk">${_noTkSub}</div>`:'';
       const _seatTag=(r.mid&&_seatCnt[r.mid]>1)?`<span class="ash-mseat">第 ${r.n} 個名額</span>`:'';
@@ -30972,9 +31060,13 @@ async function ashVenueOpen(id){
     const s=(st||[]).find(x=>x.id===v.id);
     const bad=(s && !s.ok) ? s.why : '';
     const sub=bad || (s?`還有 ${s.left} / ${s.cap} 個位子`:'');
-    if(bad) return `<button type="button" class="ash-eirow ash-ei-off" disabled>
+    /* 2026-08-24 使用者指示：「場地數量這一列靠右」——場地名與餘位是兩個獨立的資訊，
+       疊成兩行要一路往下讀；同一列左名右數字，三個場地的位子數就對得起來。
+       ⚠ 用修飾 class（.ash-ei-2c），不要改 .ash-eirow 基底 —— 那個殼還服務代課、
+         課程、調整課程那幾張清單，它們的副標是整句說明，不該被擠到右邊。 */
+    if(bad) return `<button type="button" class="ash-eirow ash-ei-2c ash-ei-off" disabled>
         <span class="ash-eilb">${escH(v.name)}</span><span class="ash-eisub">${escH(sub)}</span></button>`;
-    return `<button type="button" class="ash-eirow${v.id===cur?' ash-ei-co':''}"
+    return `<button type="button" class="ash-eirow ash-ei-2c${v.id===cur?' ash-ei-co':''}"
         style="${v.id===cur?'--ash-co-fg:var(--green);':''}" onclick="ashVenuePick('${id||'bk-venue'}','${v.id}')">
         <span class="ash-eilb">${escH(v.name)}</span><span class="ash-eisub">${escH(sub)}</span></button>`;
   }).join('');

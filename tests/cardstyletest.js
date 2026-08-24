@@ -426,8 +426,18 @@ ok('★ 沒有圓鈕的卡不撐高（待簽約／空堂，免得一片空白）
    /\.ash-mrow:not\(:has\(\.ash-morbs\)\) \.ash-mcard\{min-height:0;\}/.test(css));
 ok('★ 補一行這張卡真正該有的資訊，不是留白',
    /if\(b\.category==='體驗'\) _noTkSub=`體驗課・不扣票券/.test(src)
-   && /else if\(b\.category==='場租'\) _noTkSub=`場地租借/.test(src)
-   && /\? '分期待繳費・尚未綁定票券' : '待簽約・尚未綁定票券';/.test(src));
+   && /else if\(b\.category==='場租'\) _noTkSub=`場地租借/.test(src)   /* 2026-08-24 使用者回報（梁國放 8/31）：「這個會員還有一堂尚未使用，這邊不應該待簽約，
+      下面按鈕出現的也是轉正而不是儲值。會員名字下方這段文字會讓我誤會他已經要付費了」——
+      有票的待簽約卡只差按「轉正」，不是在等收款。兩處（圓鈕與這一行）改吃同一個口徑。 */
+   && /\? '分期待繳費・尚未綁定票券'/.test(src)
+   && /還有 \$\{_n\} 堂可用票券・按「轉正」就會扣課，不必再收款/.test(src)
+   && /'待簽約・客人尚未購票（收款後按「轉正」）'/.test(src));
+ok('★★ 有票／沒票要講不同的話，而且口徑與圓鈕同一支（listUsableTickets）',
+   /const c=await listUsableTickets\(r\.mid, b\.ticket_type_id, b\.date, b\.start_time\);/.test(src)
+   && /_pendTk\[r\.mid\]=\(c\|\|\[\]\)\.reduce\(\(s,t\)=>s\+Math\.max\(0,tkUnlockedLeft\(t\)\),0\);/.test(src)
+   && /只在待簽約、且非團課時算（團課的票在 ticket_logs/.test(src));
+ok('　　「還有票，只差按轉正」用品牌綠（一般提示），不要跟「還要收款」混成同一種灰',
+   /\.ash-mnotk-ok\{color:var\(--green\);\}/.test(src));
 ok('★ 有票券圓點的卡不受影響（只在 !_tk 時才補）',
    /if\(!_tk && !r\.sk\)\{/.test(src));
 ok('　　體驗帶聯絡電話（櫃檯真的會用到）',
@@ -450,8 +460,9 @@ console.log('\n分期保留要走「開通下一期」而不是「儲值」（�
 ok('★ 用 bkIsInstHold 分辨（靠建立保留時寫的 note 標記）',
    /const _isInst=\(typeof bkIsInstHold==='function'\) && bkIsInstHold\(b\);/.test(src)
    && /_isInst\s*\n?\s*\? evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ashInstNext\('\$\{id\}'\)`,'plus','分期'\)/.test(src));
-ok('★ 副標也分得出來（分期待繳費 vs 待簽約）',
-   /\? '分期待繳費・尚未綁定票券' : '待簽約・尚未綁定票券';/.test(src));
+ok('★ 副標也分得出來（分期待繳費 vs 待簽約，且待簽約再分有票／沒票）',
+   /\? '分期待繳費・尚未綁定票券'/.test(src)
+   && /'待簽約・客人尚未購票（收款後按「轉正」）'/.test(src));
 ok('★ openInstallNext 吃票券 id，所以要先從預約找出那張分期票',
    /async function ashInstNext\(bid\)\{/.test(src)
    && /&& \(\(Number\(x\.sessions_total\)\|\|0\)-\(Number\(x\.unlocked_sessions\)\|\|0\)\)>0\)/.test(src));
@@ -548,7 +559,10 @@ ok('★ 課程欄不再是原生 select', (()=>{
 ok('★ 場地欄沿用同一套挑選器，而且不能用的場地淡化並寫原因',
    /function ashVenueField\(id, value\)\{/.test(src)
    && /<button type="button" class="adp-field" id="\$\{id\}-btn" onclick="ashVenueOpen\('\$\{id\}'\)">/.test(src)
-   && /if\(bad\) return `<button type="button" class="ash-eirow ash-ei-off" disabled>\s*\n\s*<span class="ash-eilb">\$\{escH\(v\.name\)\}<\/span>/.test(src));
+   /* 2026-08-24 使用者指示「場地數量這一列靠右」→ 多一個 .ash-ei-2c 修飾 class */
+   && /if\(bad\) return `<button type="button" class="ash-eirow ash-ei-2c ash-ei-off" disabled>\s*\n\s*<span class="ash-eilb">\$\{escH\(v\.name\)\}<\/span>/.test(src)
+   && /\.ash-eirow\.ash-ei-2c\{flex-direction:row;align-items:baseline;justify-content:space-between;gap:12px;\}/.test(src)
+   && /不要改 \.ash-eirow 基底/.test(src));
 ok('　　每一列帶課種色塊（與課卡的顏色語彙一致）',
    /<span class="adp-sw" style="background:\$\{col\};"><\/span>/.test(src));
 /* 2026-08-21 三修（使用者附圖 iOS 滾輪＋「只要一列就可以完成」）：

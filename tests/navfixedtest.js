@@ -17,7 +17,19 @@ const bodyRule=s.slice(s.indexOf('\nbody{font-family:var(--font-zh)'), s.indexOf
 t('★★ <body> 沒有 overflow（否則 iOS 的 position:fixed 會退化成 absolute）',
   !/overflow/.test(bodyRule));
 t('★★ <body> 也不要 max-width（同樣會讓 body 變成裁切容器）', !/max-width/.test(bodyRule));
-t('★★ 水平裁切改掛 <html>', /\nhtml\{overflow-x:hidden;max-width:100vw;\}/.test(s));
+/* 2026-08-24：同一條上面多掛了 text-size-adjust（字級鎖定，見 bodyFontGuard）。 */
+t('★★ 水平裁切改掛 <html>', /\nhtml\{overflow-x:hidden;max-width:100vw;/.test(s));
+t('★★ 字級鎖定：關掉瀏覽器的「自動放大內文」（html 與 body 都要，iOS 只看 body 的）',
+  /html\{overflow-x:hidden;max-width:100vw;-webkit-text-size-adjust:100%;text-size-adjust:100%;\}/.test(s)
+  && /body\{font-family:var\(--font-zh\);[^}]*-webkit-text-size-adjust:100%;text-size-adjust:100%;\}/.test(s));
+/* ⚠ 這幾條要比對 raw（未剝註解的原始碼）—— s 已經把 /* *\/ 註解拿掉了，
+     而「為什麼不動 zoom」正是寫在註解裡的決定。 */
+t('★★ 使用者自己調的文字縮放關不掉（那是無障礙設定）——量出來、讓版面退讓，不要動 zoom',
+  /function bodyFontGuard\(\)\{/.test(s)
+  && /root\.setAttribute\('data-fz','xl'\)/.test(s)
+  && /\*\*不動 zoom\*\*：zoom 會連 vh／position:fixed 一起歪掉/.test(raw));
+t('　　改了字級切回來要重量一次（pageshow／resize），不必重開 app',
+  /window\.addEventListener\('pageshow', bodyFontGuard\)/.test(s));
 t('底部導覽是 position:fixed 貼底', /position:fixed;left:0;right:0;bottom:0/.test(base));
 t('★ 不使用 backdrop-filter（iOS 上 fixed＋backdrop-filter 捲動會停在舊位置）',
   !/backdrop-filter/.test(base));
