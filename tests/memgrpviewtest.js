@@ -71,7 +71,14 @@ ok('★★ 我的預約・當日清單：教練 · N/M 人 · 時長 · 狀態',
 /* 2026-08-12 請假釋出名額：彈窗同步改吃 grpLiveHeads／grpLeaveSeats */
 ok('★★ 我的預約・課卡彈窗：時間 · 教練 · N/M 人',
    /const whoHeads=isGrp\?`\$\{grpLiveHeads\(b\)\}\/\$\{Math\.max\(1,Number\(b\.max_heads\)\|\|5\)\} 人\$\{grpLeaveSeats\(b\)\?`（\$\{grpLeaveSeats\(b\)\} 請假）`:''\}`:'';/.test(src)
-   && /\$\{whoHeads\?`　·　\$\{whoHeads\}`:''\}/.test(src));
+   /* 2026-08-24 使用者指示：會員端課卡改成「簡易課卡」兩層形狀（標題卡＋會員卡＋圓鈕）。
+      人數從標題卡的第二行搬到會員卡的票券那一行 —— 團課的票扣在 ticket_logs、
+      不在 bookings.ticket_id，查不到票就別假裝查得到，改寫人數。 */
+   && /if\(isGrp\) _tkLine=whoHeads\?`團體課・\$\{whoHeads\}`:'團體課';/.test(src)
+   && /<div class="mtp-mcard">/.test(src));
+ok('★★ 標題卡在會員端刻意不可點（員工端那張整張可點開「調整課程」）',
+   !/<div class="mtp-card mtp-head"[^>]*onclick=/.test(src)
+   && /會員這裡刻意不可點/.test(src));
 ok('★ 報名確認視窗也列出教練與人數（報名前就看得到這堂多滿）',
    /<div><span style="opacity:\.7;">上課人數<\/span>　\$\{\(Array\.isArray\(c\.member_ids\)\?c\.member_ids\.length:0\)\}\/\$\{Math\.max\(1,Number\(c\.max_heads\)\|\|5\)\} 人<\/div>/.test(src));
 ok('　　人數上限一律看課卡的 max_heads（櫃檯改過人數就跟著改）',
