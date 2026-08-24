@@ -49,9 +49,14 @@ ok('★ ⑤ 待簽約與空堂 → 暗化＋紅框',
    && /\.tcard\.tcard-std\.tcard-pend\{ filter:brightness\(0\.9\) saturate\(0\.72\); \}/.test(blk));   /* 0822 與過期／教練請假團課統一數值 */
 
 console.log('\n行事曆課卡要有對應的 class（原本只有首頁標得出待簽約）');
-ok('★ 新增 cal-ev-pend，掛在課卡上',
-   /const _pendCls = b\.pending_contract \? 'cal-ev-pend' : '';/.test(src)
+/* 0824 使用者指示：「空堂沒有票券，移除紅框，保持暗化課卡」——
+   待簽約＝有人、還沒收款（紅框在催款）；空堂＝還沒安排人，沒有欠款。兩者分開。 */
+ok('★ 新增 cal-ev-pend，掛在課卡上；空堂另加 cal-ev-open',
+   /const _pendCls = b\.pending_contract \? \(bkIsOpenHold\(b\) \? 'cal-ev-pend cal-ev-open' : 'cal-ev-pend'\) : '';/.test(src)
    && /\$\{_checkedCls\} \$\{_pendCls\} \$\{_pastCls\}/.test(src));
+ok('★★ 空堂只暗化、不畫紅框（上面那條用了 !important，收得掉才算數）',
+   /\.cal-ev\.cal-ev-std\.cal-ev-pend\.cal-ev-open \.evc-body,\s*\n\s*\.tcard\.tcard-std\.tcard-pend\.tcard-open \.tcard-body\{\s*\n\s*border:1px solid #33302A !important; box-shadow:none !important; \}/.test(src)
+   && /沒有欠款，紅框只是在嚇人/.test(src));
 ok('　　空堂也吃得到（bkIsOpenHold 的前提就是 pending_contract）',
    /pending_contract=true ＋ 沒有 member_id ＋ 沒有 trial_name/.test(src));
 

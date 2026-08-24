@@ -3063,6 +3063,11 @@ tr:hover td{background:var(--card2);}
   background:var(--card2);border:1px solid var(--bd);border-radius:10px;
   padding:8px 10px 8px 12px;margin:-2px 0 12px;font-size:12.5px;color:var(--t2);}
 .bk-s1sum b{font-family:var(--num),inherit;font-weight:800;color:var(--text);}
+/* 課卡［＋新增］的會員清單（2026-08-24）：★＝主教練是本堂教練、分組標題分「有票／不能加」 */
+.bam-star{font-style:normal;color:var(--gold,#B48A56);margin-right:4px;font-size:12px;}
+.bam-grp{font-size:11px;font-weight:700;color:var(--t3);letter-spacing:.04em;
+  padding:10px 4px 5px;position:sticky;top:0;background:var(--card2);z-index:1;}
+.bam-grp:first-child{padding-top:2px;}
 .adp-field .adp-ph{color:var(--t3);}
 .adp-field .adp-ic{flex:none;color:var(--t3);font-size:12px;}
 /* ══ 滾輪樣式（2026-08-21 使用者附圖：iOS 式滾輪）══
@@ -4768,6 +4773,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard.tcard-std.tcard-pend .tcard-body{
   border:2px solid var(--danger,#b5372e) !important;
   box-shadow:inset 0 0 0 1px rgba(181,55,46,.45) !important;}
+/* 空堂（還沒安排會員）不畫紅框，只保留暗化 —— 沒有欠款，紅框只是在嚇人（2026-08-24） */
+.tcard.tcard-std.tcard-pend.tcard-open .tcard-body{
+  border:1px solid #33302A !important; box-shadow:none !important;}
 .tcard-std.course-pt .tcard-body{--tk-soft:var(--course-pt-soft);}             .tcard-std.course-pt .tcard-txt{color:var(--course-pt-accent);}
 .tcard-std.course-friendly .tcard-body{--tk-soft:var(--course-friendly-soft);} .tcard-std.course-friendly .tcard-txt{color:var(--course-friendly-accent);}
 .tcard-std.course-group .tcard-body{--tk-soft:var(--course-group-soft);}       .tcard-std.course-group .tcard-txt{color:var(--course-group-accent);}
@@ -4952,6 +4960,11 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   .tcard.tcard-std.tcard-pend:hover{ filter:none; }
   .cal-ev.cal-ev-std.cal-ev-pend .evc-body::before,
   .tcard.tcard-std.tcard-pend .tcard-body::before{ opacity:.45; }
+  /* 空堂：只暗化、不畫紅框（2026-08-24 使用者指示）。
+     ⚠ 上面那條用了 !important（為了蓋過課種色的邊框），所以這裡也要 !important 才收得掉。 */
+  .cal-ev.cal-ev-std.cal-ev-pend.cal-ev-open .evc-body,
+  .tcard.tcard-std.tcard-pend.tcard-open .tcard-body{
+    border:1px solid #33302A !important; box-shadow:none !important; }
 }
 /* 配置（2026-07-18 使用者指定）：左＝代課、取消；右＝編輯、簽到。
    按鈕貼近卡緣（-3px）縮小縫隙，降低點到卡外誤收合的機率 */
@@ -9907,8 +9920,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1133';
-const APP_VERSION_LABEL='v260824.1133';
+const APP_VERSION = '260824.1147';
+const APP_VERSION_LABEL='v260824.1147';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14442,6 +14455,45 @@ function tkOverBooked(t, bkCntByTicket){
   if(!(total>0)) return false;
   return (Number(bkCntByTicket[t.id])||0) >= total;
 }
+/* ══ 這位會員對「這一堂課」的票券狀況（2026-08-24 建立預約改版）══════════════
+   加會員的名單上每一位右邊要顯示「可使用 / 該課別總堂數」，而且沒票的要能說出原因。
+
+   回傳 { left, total, why }
+     left  ＝ 現在真的可以拿來扣這一堂的堂數（Σ tkUnlockedLeft，只算過得了 tkFitsBooking 的票）
+     total ＝ 這位會員在**這個課別**的總堂數（Σ sessions_total，含已用完與過期的）
+     why   ＝ left===0 時「為什麼不能加」，可直接顯示；left>0 時是空字串
+
+   ⚠ left 一律走 tkFitsBooking —— 那是「這張票能不能用在這筆預約」的唯一判定
+     （共享票、分期未開通、超約防線、限時段票、效期全都在裡面）。
+     團課名單視窗以前自己寫了一套（只看 member_id 相符 ＋ sessions_remaining>0），
+     於是看不到共享票、擋不住分期、也沒有超約防線 —— 這次一起收斂到同一支。
+   ⚠ why 的分辨順序是「從最容易補救的講起」：都排走了（可以調課）→ 時段不合 →
+     分期未繳 → 過期 → 根本沒有票。講錯原因會讓櫃檯往錯的方向補救。 */
+function bkMemTicketInfo(mid, b, allTk, cntMap){
+  const cat=(b&&b.category)||'';
+  const mine=(allTk||[]).filter(t=>t && tkUsableBy(t,mid) && ticketMatchesCategory(t,cat));
+  const total=mine.reduce((s,t)=>s+(Number(t.sessions_total)||0),0);
+  const usable=mine.filter(t=>tkFitsBooking(t, mid, b&&b.ticket_type_id, b&&b.date, b&&b.start_time, cntMap));
+  const left=usable.reduce((s,t)=>s+Math.max(0,tkUnlockedLeft(t)),0);
+  if(left>0) return {left,total,why:''};
+  if(!mine.length) return {left:0,total:0,why:'沒有這個課別的票券'};
+  const live=mine.filter(t=>t.status==='usable' && (Number(t.sessions_remaining)||0)>0);
+  if(!live.length) return {left:0,total,why:'票券已用完或已退費'};
+  /* 「還有堂數，但都被未來的預約佔走了」—— 這是唯一可以靠調課解決的情況，
+     所以要第一個講，而且要講出可以調（第四批的圓形卡調課就是接在這裡）。 */
+  const booked=live.filter(t=>tkOverBooked(t,cntMap));
+  if(booked.length===live.length){
+    const n=live.reduce((s,t)=>s+(Number(t.sessions_remaining)||0),0);
+    return {left:0,total,why:`剩下的 ${n} 堂都已經排課了`};
+  }
+  const timeBad=live.filter(t=>!tkTimeOk(t, b&&b.date, b&&b.start_time, (b&&b.duration)||60));
+  if(timeBad.length===live.length) return {left:0,total,why:'票券限平日 18:00 前上完'};
+  const instLock=live.filter(t=>tkIsInstall(t) && tkUnlockedLeft(t)<=0);
+  if(instLock.length===live.length) return {left:0,total,why:'分期尚未繳費開通'};
+  const expired=live.filter(t=>b&&b.date && t.expire_date && t.expire_date<b.date);
+  if(expired.length===live.length) return {left:0,total,why:'票券在這一天已過期'};
+  return {left:0,total,why:'沒有可用於這一堂的票券'};
+}
 function tkFitsBooking(t, member_id, type_id, bookDate, bookTime, bkCntByTicket){
   if(!tkUsableBy(t,member_id)) return false;   // 持有人或共享者皆可用
   if(t.status!=='usable' || !(t.sessions_remaining>0)) return false;
@@ -16231,6 +16283,7 @@ PAGES.g_dashboard=async function(){
           const _nmFull = _isGrp ? nm : bkNameFull(b,_nameOf);
           /* 待簽約（還沒收款）→ 紅框，與行事曆課卡同一套提示（2026-07-30 使用者指示） */
           const _pend = !!b.pending_contract;
+          const _openHold = _pend && (typeof bkIsOpenHold==='function') && bkIsOpenHold(b);   // 空堂不畫紅框（2026-08-24）
           const canceled=isCancelled(b);
           const mn=timeToMin(b.start_time||'0:0');
           /* 2026-08-06 二修（使用者回報「還是沒看到流星」）：原本要「還沒簽到」才算上課中，
@@ -16253,7 +16306,7 @@ PAGES.g_dashboard=async function(){
           /* 邊框狀態（2026-08-06 使用者指示）：完成＝霧化綠框、上課中＝流星繞圈、
              已簽到＝綠框、時間過了還沒簽到＝金框（提醒櫃檯補簽）。 */
           const _miss = !canceled && !done && !live && nowMin>=mn+(Number(b.duration)||60);
-          return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}${_miss?' tcard-miss':''}${_pend?' tcard-pend':''}" data-st="${mn}" data-du="${Number(b.duration)||60}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${_nmFull}${_pend?'・尚未收款':''}${live?'（進行中）':''}${canceled?'（已取消）':''}">
+          return `<div class="tcard tcard-std ${_courseClsMap[cc]||'course-pt'} ${canceled?'tcard-cancel':''} ${live?'tcard-live':''} ${done?'tcard-done':''}${_miss?' tcard-miss':''}${_pend?' tcard-pend':''}${_openHold?' tcard-open':''}" data-st="${mn}" data-du="${Number(b.duration)||60}" onclick="onTcardClick(event,'${b.id}')" title="${b.start_time}｜${catName[cc]||'課程'}｜${_nmFull}${_pend?(_openHold?'・尚未安排會員':'・尚未收款'):''}${live?'（進行中）':''}${canceled?'（已取消）':''}">
             <div class="tcard-body"></div>${_mk}
             ${/* 出席章自己一列（第三列：時間 → 姓名 → 章），與行事曆課卡同一套。
                  未到課也補上金色「未」章：原本首頁只畫「簽」「假」，櫃檯在首頁看不出誰沒來。 */''}
@@ -19760,7 +19813,11 @@ async function renderCalendar(opts){
       const _checkedCls = (_isCheckedIn||_isMakeup) && b.status!=='cancelled' && !hideMember ? 'cal-ev-checked' : '';
       /* 待簽約／空堂（2026-08-21 使用者指示：淡化＋紅框）——首頁課卡早就有 .tcard-pend，
          行事曆卡一直沒有對應的 class，紅框只標在首頁、行事曆看不出來。 */
-      const _pendCls = b.pending_contract ? 'cal-ev-pend' : '';
+      /* 2026-08-24 使用者指示：「空堂沒有票券，移除紅框，保持暗化課卡」——
+         空堂與待簽約本來共用同一種視覺（暗化＋紅框，0821 定的），但兩者不是同一件事：
+         待簽約＝**有人、還沒收款**（紅框是在催款）；空堂＝**還沒安排人**，沒有欠款，
+         紅框只是在嚇人。改成空堂只暗化、不畫紅框。 */
+      const _pendCls = b.pending_contract ? (bkIsOpenHold(b) ? 'cal-ev-pend cal-ev-open' : 'cal-ev-pend') : '';
       /* 全員請假的團課蓋紅色「假」章（2026-07-31 使用者指示）。
          排在簽到章前面判斷 —— 全員請假時不會有人簽到，兩者不會同時成立。
          ⚠ 這一段要在 _bodyOut 之前算完（2026-08-21 出席章搬進姓名列之後才有這個順序要求）。 */
@@ -24467,6 +24524,123 @@ function _ashSlotMode(){ return SESSION.role==='admin' && isMobileLayout(); }
 function bkIsOpenHold(b){
   return !!(b && b.pending_contract && !b.member_id && !String(b.trial_name||'').trim());
 }
+/* ══ 課卡的［＋新增］：幫已經建立的課指定會員（2026-08-24 使用者定案）══════════
+   使用者原話：「建立課程以後再點選課程，在標題卡下方會出現＋新增，新增會員；
+   名單篩選 1 主教練為該課卡教練的會員名單，開頭加個星號；
+   會員列表右邊顯示可使用票券/總票券」。
+
+   ⚠ 只給「還沒有人」的單人課用（空堂）。團課有自己的名單視窗（openGroupMembers），
+     那邊是名額制、一次可以加多位，兩者不共用同一張表單。
+   ⚠ 加人＝把票扣下去，所以它其實是一次「轉正」：綁會員、綁票、pending_contract 收掉。
+     扣課仍走共用的 deductTicket（唯一的扣課入口），這裡只負責挑人與挑票。 */
+function bkCanAddMember(b){
+  if(!b || bkIsGroup(b)) return false;         // 團課走名單視窗
+  if(!bkIsOpenHold(b)) return false;           // 已經有人（或散客）就不是「加會員」
+  if(b.status!=='booked') return false;        // 取消／請假的不給
+  if(String(b.date)<ymd(TODAY)) return false;  // 過去的課不給
+  return !!(typeof isDeskLike==='function' ? (isDeskLike()||SESSION.role==='coach') : true);
+}
+async function bkAddMemberOpen(bid){
+  const b=await dbGet('bookings',bid);
+  if(!b){ showToast('找不到這堂課'); return; }
+  if(!bkCanAddMember(b)){ showToast('這堂課不能用這個方式加會員'); return; }
+  const _busy=uiBusy('讀取會員與票券…');
+  let members=[], allTk=[], cntMap={};
+  try{
+    [members, allTk]=await Promise.all([
+      dbGetAll('members').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[])]);
+    cntMap=await tkBookedCountMap().catch(()=>({}));
+  }finally{ _busy(); }
+  window._bamB=b;
+  window._bamRows=(members||[]).filter(m=>m && m.status==='active').map(m=>{
+    const info=bkMemTicketInfo(m.id, b, allTk, cntMap);
+    return { id:m.id, name:m.name||'', phone:m.phone||'',
+             mine:String(m.default_coach_id||'')===String(b.coach_id||'') && !!b.coach_id,
+             left:info.left, total:info.total, why:info.why };
+  });
+  /* 排序（使用者定案）：有票的排最上面；同組內主教練是本堂教練的（★）再往前；其餘依姓名。
+     ⚠ 兩層都要，不能只排一層 —— 「有票」決定加不加得進去，「主教練」決定櫃檯先找誰。 */
+  window._bamRows.sort((a,c)=>
+    (c.left>0)-(a.left>0) || (c.mine-a.mine) || String(a.name).localeCompare(String(c.name),'zh-Hant'));
+  bamRender('');
+}
+function bamRender(q){
+  const b=window._bamB||{}; const rows=window._bamRows||[];
+  const kw=String(q||'').trim();
+  const nq=kw.replace(/\D/g,'');
+  const hit=rows.filter(r=>!kw || String(r.name).indexOf(kw)>=0 || (nq && String(r.phone).indexOf(nq)>=0));
+  const withTk=hit.filter(r=>r.left>0), noTk=hit.filter(r=>!(r.left>0));
+  const row=r=>`<button type="button" class="ash-eirow${r.left>0?'':' ash-ei-off'}"${r.left>0?` onclick="bamPick('${r.id}')"`:' disabled'}>
+    <span class="ash-eilb">${r.mine?'<i class="bam-star">★</i>':''}${escH(r.name)}</span>
+    <span class="ash-eisub">${r.left>0?`可用 <b>${r.left}</b> / ${r.total} 堂`:escH(r.why)}</span></button>`;
+  let host=document.getElementById('adp-sheet');
+  if(!host){ host=document.createElement('div'); host.id='adp-sheet'; document.body.appendChild(host); }
+  host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
+    <div class="adp-box" style="max-height:86vh;display:flex;flex-direction:column;">
+      <div class="modal-title">新增會員</div>
+      <div class="ash-eihead">${String(b.date||'').replace(/-/g,'/')} ${String(b.start_time||'').slice(0,5)}　·　${escH(b.category||'')}</div>
+      <input id="bam-q" class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:8px;"
+             placeholder="搜尋姓名或手機…" value="${escH(kw)}" oninput="bamRender(this.value)" autocomplete="off">
+      <div style="flex:1;min-height:0;overflow-y:auto;">
+        ${withTk.length?`<div class="bam-grp">有可用票券（${withTk.length}）</div>${withTk.map(row).join('')}`:''}
+        ${noTk.length?`<div class="bam-grp">目前不能加入（${noTk.length}）</div>${noTk.map(row).join('')}`:''}
+        ${(!withTk.length&&!noTk.length)?'<div class="ash-einote">找不到符合的會員。</div>':''}
+      </div>
+      <div class="adp-foot"><button class="btn btn-ghost" onclick="ashDateClose()">取消</button></div>
+    </div>`;
+  /* 打字之後游標要留在搜尋框（重畫會失焦） */
+  try{ const el=document.getElementById('bam-q'); if(el && kw){ el.focus(); el.setSelectionRange(kw.length,kw.length); } }catch(_){}
+}
+async function bamPick(mid){
+  const b=window._bamB; if(!b){ ashDateClose(); return; }
+  ashDateClose();
+  return onceAct('bkaddmem:'+b.id+':'+mid, ()=>bkAddMemberDo(b.id, mid));
+}
+/* 真正把人與票綁上去。與「待簽約轉正」同一組動作，只是不處理整串卡位 ——
+   空堂本來就是一堂一堂建的。 */
+async function bkAddMemberDo(bid, mid, tkId){
+  const done=uiBusy('加入中…');
+  try{
+    const b=await dbGet('bookings',bid);
+    if(!b){ showToast('找不到這堂課'); return; }
+    if(!bkCanAddMember(b)){ showToast('這堂課已經有人或狀態已改變，請重新整理'); return; }
+    const cand=await listUsableTickets(mid, b.ticket_type_id, b.date, b.start_time);
+    if(!cand.length){
+      /* 走到這裡代表名單畫出來之後票被別人用掉了（競態）。照實說，不要靜靜失敗。 */
+      const allTk=await dbGetAll('member_tickets').catch(()=>[]);
+      const cnt=await tkBookedCountMap().catch(()=>({}));
+      const info=bkMemTicketInfo(mid, b, allTk, cnt);
+      showToast(info.why||'沒有可用票券', 5000); return;
+    }
+    /* 兩張以上先問要扣哪一張（與轉正同一個做法：第一張是最快到期的） */
+    if(!tkId && cand.length>1){
+      const nm=((await dbGet('members',mid))||{}).name||'';
+      showModal(`<div class="modal-title">要扣哪一張票券？</div>
+        <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">${escH(nm)}　${String(b.date).replace(/-/g,'/')} ${String(b.start_time).slice(0,5)}　${escH(b.category||'')}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${cand.map(t=>`<button class="btn btn-ghost" style="width:100%;text-align:left;" onclick="closeModal();bkAddMemberDo('${bid}','${mid}','${t.id}')">
+            <b>${escH(t.plan_name||b.category||'票券')}</b>　<span style="color:var(--t3);font-size:12px;">可約 ${tkUnlockedLeft(t)} 堂${t.expire_date?`　效期至 ${t.expire_date}`:'　無到期日'}</span></button>`).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--t3);margin-top:10px;">第一張是最快到期的，通常先用它。</div>
+        <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
+      return;
+    }
+    const tk=(tkId&&cand.find(t=>t.id===tkId))||cand[0];
+    if(!tk){ showToast('選的票券已不能用，請重新選一次'); return; }
+    b.member_id=mid;
+    b.ticket_id=tk.id;
+    b.ticket_type_id=tk.ticket_type_id||b.ticket_type_id||null;
+    b.pending_contract=false;      // 有人有票了 → 從空堂轉成正式課（統計才算得到）
+    b.trial_name=null; b.trial_phone=null;
+    if(!(await deductTicket(tk, b.id, SESSION.id))){ showToast('扣課失敗（餘額護欄擋下），沒有加入'); return; }
+    await dbPut('bookings', b);
+    dbCacheClear(['bookings','member_tickets','ticket_logs']);
+    showToast('已加入會員，並扣 1 堂');
+    try{ closeModal(); }catch(_){}
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('加入失敗：'+((e&&e.message)||e)); }
+  finally{ done(); }
+}
 async function ashSlotSheet(withTicket){
   const {t,date,time,coach_id}=_bkWizard||{};
   if(!t||!date||!time){ showToast('課程資料不完整，請重新操作'); return; }
@@ -24931,10 +25105,15 @@ function renderGrpPick(){
   const selOrder={}; (sel||[]).forEach((x,i)=>{ if(selOrder[x]==null) selOrder[x]=i; });
   const isSel=m=>selOrder[m.id]!=null;
   let list=(window._grpData||[]).filter(m=> !q || (m.name||'').toLowerCase().includes(q));
+  /* 排序（2026-08-24 使用者指示：「團體課新增會員的時候，也要把有票券的會員放在最上面」）——
+     已選 → 有可用票券 → ★主教練是本堂教練 → 姓名。
+     「有票」要排在「★」之前：沒票的人再熟也加不進去，先讓櫃檯看到加得進去的。 */
   list=list.slice().sort((a,b)=>{
     const sa=isSel(a), sb=isSel(b);
     if(sa!==sb) return sa?-1:1;
     if(sa&&sb) return selOrder[a.id]-selOrder[b.id];
+    const ta=(a.sum>0), tb=(b.sum>0);
+    if(ta!==tb) return ta?-1:1;
     if(a.mine!==b.mine) return a.mine?-1:1;
     return (a.name||'').localeCompare(b.name||'');
   });
@@ -24944,7 +25123,10 @@ function renderGrpPick(){
     const _div=(_i===firstUnsel&&firstUnsel>0)?'<div class="grp-div">其他會員</div>':'';
     const n=sel.filter(x=>x===m.id).length;
     const on=n>0;
-    const tag=m.sum>0?`團體課票 剩 ${m.sum} 堂`:'無票（無法加入，請先儲值）';
+    /* 2026-08-24：有票顯示「可用 N / 總 M 堂」（使用者要的「可使用票券/總票券」，
+       分母是這個課別的總堂數）；沒票就把原因寫出來，不要一律說「請先儲值」——
+       常見的其實是「剩下的都已經排課了」或「分期尚未繳費開通」。 */
+    const tag=m.sum>0?`可用 ${m.sum} / ${m.total||m.sum} 堂`:(m.why||'無票（無法加入，請先儲值）');
     /* 選了、而且有兩張以上可用票券 → 出下拉讓櫃檯指定扣哪一張（2026-07-30 使用者指示）。
        預設是最快到期那張（清單已按效期排序），避免快過期的優惠票被留到過期。 */
     const tks=m.tks||[];
@@ -26086,6 +26268,14 @@ async function expandBkCard(el, id){
   /* ⚠ 團課「新增名單」仍然只給櫃檯／管理員（2026-08-22 放寬 _editable 之後要補這個條件）——
      加名單會扣別人的票，那是收款端的事，不在教練調整自己課表的範圍內。 */
   if(staff && _editable && isGroup) btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();openGroupMembers('${id}')`,'plus','新增');
+  /* ③-a2 單人課的「＋新增」（2026-08-24 使用者定案：建立預約改成先建課、之後再加人）——
+     只在「空堂」（還沒有人、也沒有散客姓名）上出現，點了挑一位會員並扣一堂。
+     ⚠ 與團課那顆共用同一個位置與外觀（金色 plus），因為對使用者是同一件事：
+       這堂課要加人。差別只在團課是名額制、單人課一位就滿。
+     ⚠ 條件走 bkCanAddMember（同一支也擋在真正寫入的 bkAddMemberDo 裡），
+       不要在這裡另外寫一份判斷。 */
+  if(_editable && !isGroup && typeof bkCanAddMember==='function' && bkCanAddMember(b))
+    btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkAddMemberOpen('${id}')`,'plus','新增');
   /* ③-b 「未到課」（金；2026-08-14 使用者指示）：
      ・教練請假堂 → 結課退堂、不發點（bkCoachLeaveNoShow）
      ・一般自主訓練 → 結課蓋「未」章、點數照扣（bkSelfNoShow）
@@ -29491,14 +29681,23 @@ async function openGroupMembers(id, keepSel){
   const allTk=await dbGetAll('member_tickets');
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
   const cur=mids(b);
+  /* ⚠ 2026-08-24 收斂：候選票的判定改用 tkFitsBooking（＝建立預約流程用的同一支）。
+     原本這裡自己寫一套「member_id 相符 ＋ status usable ＋ sessions_remaining>0 ＋ 未過期」，
+     於是**看不到共享票、擋不住分期未開通、也沒有超約防線** —— 名單說有票、
+     送出卻扣不到的情況就是這樣來的（_saveGroupMembers 有第二道防線在擋，
+     但使用者看到的是「加了又被踢掉」）。
+     ⚠ 排序（使用者定案）：有票券的排最上面 —— 見 renderGrpPick。 */
+  const _cnt=await tkBookedCountMap().catch(()=>({}));
   window._grpData=members.map(m=>{
-    const tks=allTk.filter(tt=>tt.member_id===m.id && ticketMatchesCategory(tt,'小班肌力') && tt.status==='usable' && tt.sessions_remaining>0 && (!tt.expire_date||tt.expire_date>=b.date))
+    const tks=allTk.filter(tt=>tkFitsBooking(tt, m.id, b.ticket_type_id, b.date, b.start_time, _cnt))
       .sort((x,y)=>String(x.expire_date||'9999-12-31').localeCompare(String(y.expire_date||'9999-12-31')));
-    const sum=tks.reduce((s,tt)=>s+tt.sessions_remaining,0);
+    const sum=tks.reduce((s,tt)=>s+Math.max(0,tkUnlockedLeft(tt)),0);
     /* 多張票時把清單帶出來讓櫃檯挑（2026-07-30 使用者指示）：
        會員同時有「12 個月 12 堂」與「四週 4 堂優惠」時，自動的最快到期優先未必是客人要的。 */
-    return {id:m.id, name:m.name||'—', sum, mine:false,
-            tks:tks.map(t=>({id:t.id,name:t.plan_name||'團體課票券',left:t.sessions_remaining,exp:t.expire_date||null,fam:t.family_user||null}))};
+    const _info=bkMemTicketInfo(m.id, b, allTk, _cnt);
+    return {id:m.id, name:m.name||'—', sum, mine:String(m.default_coach_id||'')===String(b.coach_id||'')&&!!b.coach_id,
+            total:_info.total, why:_info.why,
+            tks:tks.map(t=>({id:t.id,name:t.plan_name||'團體課票券',left:Math.max(0,tkUnlockedLeft(t)),exp:t.expire_date||null,fam:t.family_user||null}))};
   });
   if(!keepSel) window._grpTkPick={};   // 每次開名單重置，指定不要跨堂殘留
   if(!keepSel || !Array.isArray(window._grpSel)) window._grpSel=cur.slice();
