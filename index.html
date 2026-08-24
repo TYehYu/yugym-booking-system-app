@@ -9190,6 +9190,19 @@ button.rev-kind:hover{filter:brightness(.96);box-shadow:0 1px 4px rgba(60,50,38,
 .ph-recur{display:flex;align-items:baseline;gap:9px;margin-top:6px;background:var(--card2);
   border:1px solid var(--bd);border-radius:10px;padding:9px 11px;font-size:12.5px;color:var(--text);}
 .ph-recur-k{flex:none;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--t3);}
+/* 營收／銷課的明細視窗（2026-08-24 使用者指示：報表頁收斂成三列，細項各自點開看）——
+   白底列、金額靠右、合計那一列加粗並用一條線隔開。 */
+.ovd-list{display:flex;flex-direction:column;gap:8px;}
+.ovd-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  background:#fff;border:1px solid var(--bd);border-radius:10px;padding:11px 13px;font-size:13.5px;color:var(--text);}
+.ovd-row b{font-family:var(--num),inherit;font-size:16px;font-weight:800;color:var(--gold-d);
+  flex:none;font-variant-numeric:tabular-nums;}
+.ovd-row .ovd-neg{color:var(--danger,#b5372e);}
+.ovd-cnt{font-style:normal;font-size:11.5px;font-weight:700;color:var(--t3);margin-left:7px;}
+.ovd-sum{background:var(--card2);border-color:transparent;box-shadow:inset 0 1px 0 var(--bd);}
+.ovd-sum b{font-size:19px;}
+.ovd-note{font-size:11.5px;color:var(--t2);line-height:1.9;margin-top:12px;
+  background:var(--card2);border-radius:10px;padding:10px 12px;}
 /* 30 分鐘完整退回（2026-08-08 使用者指示：「所有銷售的產品都可以在 30 分鐘內有退回的
    機制，按鈕放在首頁今日營收這列表裡面」）——輸入錯了要有一條乾淨的回頭路。 */
 .rev-undo{font-size:10px;font-weight:800;border-radius:999px;padding:2px 8px;flex-shrink:0;
@@ -10028,8 +10041,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1454';
-const APP_VERSION_LABEL='v260824.1454';
+const APP_VERSION = '260824.1511';
+const APP_VERSION_LABEL='v260824.1511';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18949,7 +18962,7 @@ PAGES.dashboard=async function(){
      教練課/團課列、總額列、業績排行、課程營收明細全部吃同一份 salesValue 計算。 */
   let _SVD=null;
   try{ _SVD=await monthSalesValue(_dashRange==='today'?today:ym,[bookings,tickets,types,_tkLogs]); }catch(_){}
-  let salaryTotal=null, profit=null, otherExp=0, _ovTax=0, _ovCoIns=0, _ovRev=null, _svPt=null, _svGrp=null;
+  let salaryTotal=null, profit=null, otherExp=0, _ovTax=0, _ovCoIns=0, _ovRev=null, _svPt=null, _svGrp=null, _ovCash=0;
   if(_SVD){ _ovRev=Math.round(_SVD.salesValue); _svPt=Math.round(_SVD.ptValue); _svGrp=Math.round(_SVD.grpValue); }
   if(_dashRange==='month'){
     try{ otherExp=((await dbGetAll('expenses').catch(()=>[]))||[])
@@ -18958,6 +18971,7 @@ PAGES.dashboard=async function(){
       const _cash=((await dbGetAll('purchases').catch(()=>[]))||[])
         .filter(p=>String(p.created_at||'').slice(0,7)===ym)
         .reduce((s2,p)=>s2+(Number(p.deal_amount)||0),0);
+      _ovCash=_cash;
       _ovTax=_cash-Math.round(_cash/1.05);
       const pr=await computeMonthlyPayroll(ym);
       salaryTotal=Math.round(Number(pr.grandTotal)||0);
@@ -19008,6 +19022,41 @@ PAGES.dashboard=async function(){
      金額一律金色、堂數維持深色，這樣一眼分得出哪個是錢哪個是課）。 */
   /* opt.tap＝整列可點（2026-08-23 使用者指示：支出那一列點下去就開登記視窗）。
      用 <button> 而不是給 <div> 掛 onclick —— 鍵盤與讀屏才認得它是可以按的。 */
+  /* 營收明細（2026-08-24 使用者指示：「營收點開可以看到扣稅金額」）——
+     營收＝當月收款總額，發票是內含 5% 的，所以稅是「從裡面抽出來」而不是外加。
+     算式與 finPnl、上方「稅＋支出」同一式（cash − round(cash/1.05)），三處同一個數字。 */
+  window.ovRevInfo=function(){
+    const o=window._ovStat||{};
+    const _t=Number(o.tax)||0, _r=Number(o.rev)||0;
+    showModal(`<div class="modal-title">營收明細　<span style="font-size:13px;color:var(--t3);font-weight:500;">${o.ym||''}</span></div>
+      <div class="ovd-list">
+        <div class="ovd-row"><span>收款總額</span><b>${fmtNT(_r)}</b></div>
+        <div class="ovd-row"><span>營業稅 5%（發票內含）</span><b class="ovd-neg">−${fmtNT(_t)}</b></div>
+        <div class="ovd-row ovd-sum"><span>扣稅後</span><b>${fmtNT(_r-_t)}</b></div>
+      </div>
+      <div class="ovd-note">營收＝這段期間實際<b>收到的錢</b>（賣票、加購、場租…）。<br>
+        發票金額是內含 5% 營業稅的，所以稅是從收款裡抽出來、不是另外加上去：
+        稅 ＝ 收款 − 收款 ÷ 1.05。<br>
+        ${o.range==='today'?'<b>今日檢視不計稅</b>（營業稅按月結），要看稅請切到本月。':'與經營報表、上方「稅＋支出」同一個算式。'}</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+  };
+  /* 銷課明細（同日指示：「教練課跟團體課收斂到銷課金額裡面，點開視窗查看」）——
+     金額全部來自 monthSalesValue（0820 定案的唯一來源），這裡只是把它拆開來顯示。 */
+  window.ovSalesInfo=function(){
+    const o=window._ovStat||{};
+    const row=(l,v,c)=>`<div class="ovd-row"><span>${l}${c?`<i class="ovd-cnt">${c}</i>`:''}</span><b>${fmtNT(v||0)}</b></div>`;
+    showModal(`<div class="modal-title">銷課明細　<span style="font-size:13px;color:var(--t3);font-weight:500;">${o.ym||''}</span></div>
+      <div class="ovd-list">
+        ${row('教練課', o.svPt, `${o.ptDone||0}/${o.ptAll||0} 堂`)}
+        ${row('團體課', o.svGrp, `${o.grpDone||0}/${o.grpAll||0} 堂`)}
+        <div class="ovd-row ovd-sum"><span>銷課金額<i class="ovd-cnt">${o.doneN||0} 堂</i></span><b>${fmtNT(o.sv||0)}</b></div>
+      </div>
+      <div class="ovd-note">銷課金額＝<b>已經上完的課</b> × 該張票的單堂價，不是賣票收的錢
+        （那是上面的「營收」）。薪資與利潤都用這個數字當基礎，兩邊才對得起來。<br>
+        堂數只記<b>教練課與團體課</b>：自主訓練多為簽到贈點、體驗課不扣票，
+        擺在金額旁邊會誤導。團課一堂算 1，不看人數。${o.mix?`<br>組成：${o.mix}`:''}</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+  };
   const ovRow=(ic,label,val,sub,note,opt)=>{
     const tap=opt&&opt.tap;
     const tag=tap?'button':'div', extra=tap?` type="button" onclick="${opt.tap}"`:'';
@@ -19144,21 +19193,29 @@ PAGES.dashboard=async function(){
       <div class="ov-list">
         ${/* 2026-07-31 使用者指示：營收放第一列，接著教練課／團體課／銷課金額／銷課堂數；
              教練課與團體課改成「金額在左、堂數在右」，金額一律金色。 */''}
-        ${ovRow(OV_IC.rev,'營收',fmtNT(revenue),'','',{gold:true})}
-        ${/* 2026-08-23 使用者指示：「教練課跟團體課 金額改到最右邊，課堂數改到左邊接在
-             教練課跟團體課後面」—— 原本金額在中間、堂數在最右，於是這五列的金額
-             上下對不齊（營收與銷課金額在最右、這兩列的在中間）。
-             改成堂數跟著標題走，金額全部靠右對齊成一欄。 */''}
-        ${ovRow(OV_IC.pt,'教練課',fmtNT(_svPt!=null?_svPt:Math.round(ptFee)),'','',{gold:true,after:`${ptDoneBk.length}/${ptClassCount} 堂`})}
-        ${ovRow(OV_IC.grp,'團體課',fmtNT(_svGrp!=null?_svGrp:Math.round(grpFee)),'','',{gold:true,after:`${grpDoneBk.length}/${groupClassCount} 堂`})}
-        ${ovRow(OV_IC.rev,'銷課金額',fmtNT(_ovRev!=null?_ovRev:usedFee),'','',{gold:true})}
-        ${ovRow(OV_IC.done,'銷課堂數',`${doneMainCount} 堂`,'',_doneMix)}
+        ${/* 2026-08-24 使用者定案：「營收點開可以看到扣稅金額；教練課跟團體課收斂到
+             銷課金額裡面，點開視窗查看；銷課堂數寫在銷課金額旁邊。所以報表這頁只看到
+             營收／支出／銷課金額三個項目」——
+             原本五列（營收／教練課／團體課／銷課金額／銷課堂數）＋支出共六列，
+             一眼掃過去分不出哪些是同一件事的細項。收斂成三列，細項各自點開看。
+             ⚠ 數字一個都沒有改，只是換了擺放的地方（教練課／團體課仍是 monthSalesValue
+               拆出來的 ptValue／grpValue，見 0820「銷課金額唯一來源」定案）。 */''}
+        ${ovRow(OV_IC.rev,'營收',fmtNT(revenue),'','',{gold:true,tap:`ovRevInfo()`})}
+        ${ovRow(OV_IC.done,'銷課金額',fmtNT(_ovRev!=null?_ovRev:usedFee),'','',{gold:true,after:`${doneMainCount} 堂`,tap:`ovSalesInfo()`})}
         ${/* 支出（2026-08-23 使用者指示：「這個移除的空間改成支出，加入下方的列表，
              就把視窗上面的 ＋支出 改到這，[支出 金額] 點選這列新增支出」）——
              金額是這個月已登錄的固定＋其他支出合計（就是這一列點進去會編到的那些）；
              上面「稅＋支出」還含營業稅，兩個數字不一樣是正常的。 */''}
         ${ovRow(OV_IC.exp,'支出',fmtNT(otherExp),'',otherExp>0?'':'尚未登錄，點這裡新增',{red:true,tap:`openExpensePick('${ym}')`})}
       </div>
+      ${/* 兩張明細視窗要用的數字先收起來（畫面已經算過一次，不要為了開視窗再算一遍）。 */''}
+      ${(()=>{ try{ window._ovStat={
+          ym, range:_dashRange, rev:revenue, cash:_ovCash, tax:_ovTax,
+          sv:(_ovRev!=null?_ovRev:usedFee), svPt:(_svPt!=null?_svPt:Math.round(ptFee)),
+          svGrp:(_svGrp!=null?_svGrp:Math.round(grpFee)),
+          ptDone:ptDoneBk.length, ptAll:ptClassCount,
+          grpDone:grpDoneBk.length, grpAll:groupClassCount,
+          doneN:doneMainCount, mix:_doneMix }; }catch(_){} return ''; })()}
     </div>
     <div class="card">
       <div class="card-title">員工表現</div>
