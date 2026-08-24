@@ -51,7 +51,7 @@ console.log('\n② 待簽約卡位不再繞過這條規則');
 {
   const F=grabFn('submitPendingHold');
   ok('★★ 驗證時帶上票種（原本刻意清成 null）',
-     /const vbk=\{id:null,coach_id,category:t\.category,ticket_type_id:type_id,member_id:_mid\};/.test(F)   /* 2026-08-14 起再帶會員 */
+     /const vbk=\{id:null,coach_id,category:t\.category,ticket_type_id:type_id,member_id:_mid,venue_pref:bkWizVenue\(\)\};/.test(F)   /* 2026-08-14 起再帶會員；0824 起帶視窗一選的場地 */
      && !/ticket_type_id:null\};   \/\/ 無票 → 不做限時票檢查/.test(F));
   ok('★ 課卡本來就會寫進票種（所以「無票」那個前提本來就不成立）',
      /coach_id,ticket_id:null,ticket_type_id:type_id,category:t\.category/.test(F));
@@ -104,5 +104,6 @@ ok('★★ 已選會員直接綁定（ph-mid 隱藏欄位 → member_id；散客
    /<input type="hidden" id="ph-mid" value="\$\{w\.member_id\|\|''\}">/.test(src)
    && /const _mid=\(\(document\.getElementById\('ph-mid'\)\|\|\{\}\)\.value\|\|''\)\.trim\(\)\|\|null;/.test(src)
    && /member_id:_mid,trial_name:_mid\?null:name,trial_phone:_mid\?null:phone,/.test(src));
-ok('★ 衝堂驗證帶會員（同會員同時段的防呆也吃得到）', /ticket_type_id:type_id,member_id:_mid\};/.test(src));
+ok('★ 衝堂驗證帶會員（同會員同時段的防呆也吃得到）',
+   /ticket_type_id:type_id,member_id:_mid,venue_pref:bkWizVenue\(\)\};/.test(src));
 process.exit(fail?1:0);

@@ -472,7 +472,8 @@ console.log('\n自家日期挑選器（使用者：這邊的按鈕 有更符合�
 ok('★ 欄位換成自家按鈕＋隱藏 input（讀值的程式一行都不用改）',
    /function ashDateField\(id, value, min, onchange, opts\)\{/.test(src)   /* opts.short：2026-08-23 支出列只顯示 月/日 */
    && /<input type="hidden" id="\$\{id\}"/.test(src)
-   && /\$\{ashDateField\('bk-date', pf\.date\|\|'', '', 'bkRefreshPlanFilter\(\)'\)\}/.test(src)
+   /* 0824 拆兩個視窗：日期搬到視窗一，onchange 改叫 bkStep1Changed（重驗場地＋營業時間） */
+   && /\$\{ashDateField\('bk-date', pf\.date\|\|'', '', 'bkStep1Changed\(\)'\)\}/.test(src)
    && /\$\{ashDateField\('amv-d', b\.date, ymd\(TODAY\)\)\}/.test(src));
 ok('★ 兩個原生 input[type=date] 都換掉了',
    !/<input type="date" id="bk-date"/.test(src) && !/<input type="date" id="amv-d"/.test(src));
@@ -494,7 +495,7 @@ ok('　　營業時間 08–22、分鐘只有整點與半點',
 
 console.log('\n時間也用自家挑選器（使用者：這邊也是）');
 ok('★ 兩處時間欄都換掉原生 select',
-   /\$\{ashTimeField\('bk-time', pf\.time\|\|'', 'bkRefreshPlanFilter\(\)'\)\}/.test(src)
+   /\$\{ashTimeField\('bk-time', pf\.time\|\|'', 'bkStep1Changed\(\)'\)\}/.test(src)
    && /\$\{ashTimeField\('amv-t', b\.start_time\)\}/.test(src)
    && !/<select id="bk-time"/.test(src) && !/<select id="amv-t"/.test(src));
 ok('★ 與日期共用同一層浮層（不會再蓋掉底下的表單）',
@@ -512,12 +513,18 @@ ok('　　bkTimeOptions 保留（會員快速預約與班表還在用）',
 
 console.log('\n課程也換自家挑選器；日期改成捲動清單；連續預約星期一列');
 /* 只查建立預約那張表單 —— 別處還有一個同 id 的暫時 select（tkFitsBooking 的沙箱用） */
+/* 0824：課程欄搬到視窗二（bkStep1bHtml） */
 ok('★ 課程欄不再是原生 select', (()=>{
-  const i=src.indexOf('<div class="modal-title">建立預約</div>');
+  const i=src.indexOf('function bkStep1bHtml(');
   const form=src.slice(i, src.indexOf('onclick="bkStep2()"', i));
   return !/<select id="bk-type"/.test(form)
     && /<button type="button" class="adp-field" id="bk-type-btn" onclick="ashTypeOpen\(\)">/.test(form);
 })());
+/* 0824 新增的場地欄也是同一套（自家按鈕＋隱藏 input＋#adp-sheet 浮層） */
+ok('★ 場地欄沿用同一套挑選器，而且不能用的場地淡化並寫原因',
+   /function ashVenueField\(id, value\)\{/.test(src)
+   && /<button type="button" class="adp-field" id="\$\{id\}-btn" onclick="ashVenueOpen\('\$\{id\}'\)">/.test(src)
+   && /if\(bad\) return `<button type="button" class="ash-eirow ash-ei-off" disabled>\s*\n\s*<span class="ash-eilb">\$\{escH\(v\.name\)\}<\/span>/.test(src));
 ok('　　每一列帶課種色塊（與課卡的顏色語彙一致）',
    /<span class="adp-sw" style="background:\$\{col\};"><\/span>/.test(src));
 /* 2026-08-21 三修（使用者附圖 iOS 滾輪＋「只要一列就可以完成」）：

@@ -110,34 +110,71 @@ ok('　　openBindPending 本來就吃「待簽約＋沒綁會員」',
 /* 2026-08-21 二修（使用者附截圖）：「改成建立預約 第一列課程用下拉式選單
    第二列日期 第三列時間 第四列教練＋會員」——六張方案卡改成下拉，日期與時間拆成兩列，
    教練與會員並排（它們是一組決定：挑了教練，會員名單就跟著重排）。 */
-console.log('\n建立預約的欄位順序（步驟 1）');
+/* 2026-08-24 使用者定案：建立預約拆成兩個視窗，場地提到最前面。
+   原話：「有時候所有資料都填寫完了，最後才發現場地沒有，這樣前面就白填寫了」。
+     視窗一 bkStep1Html：日期 → 時間 → 場地
+     視窗二 bkStep1bHtml：課程 → 教練 → 會員（選填）→ 連續預約
+   會員暫時留在視窗二（本來就是選填），等課卡的［＋新增］上線再決定要不要移除。 */
+console.log('\n建立預約：視窗一＝時段與場地');
 {
-  const i=src.indexOf('<div class="modal-title">建立預約</div>');
-  const j=src.indexOf('onclick="bkStep2()"', i);
-  ok('★ 抽得到步驟 1 的表單', i>0 && j>i);
-  const form=src.slice(i,j);
+  const g=n=>{const i=src.indexOf('function '+n+'(');let d=0;
+    for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
+  const s1=g('bkStep1Html');
+  ok('★ 抽得到視窗一', !!s1 && s1.length>200);
+  const a1=t=>s1.indexOf(t);
+  const 日期=a1('<label>日期</label>'), 時間=a1('<label>時間</label>'), 場地=a1('<label>場地</label>');
+  ok('★★ 三個欄位都在，順序＝日期 → 時間 → 場地',
+     日期>0 && 時間>日期 && 場地>時間, {日期,時間,場地});
+  ok('★★ 為什麼日期時間一定要在場地之前，寫在原地',
+     /場地能不能用取決於時段，不先知道時段就淡化不了/.test(src));
+  ok('★ 日期與時間改動都會重驗場地與營業時間',
+     /ashDateField\('bk-date', pf\.date\|\|'', '', 'bkStep1Changed\(\)'\)/.test(s1)
+     && /ashTimeField\('bk-time', pf\.time\|\|'', 'bkStep1Changed\(\)'\)/.test(s1));
+  ok('★ 場地用自家挑選器（沿用 .adp-field ＋ #adp-sheet 那一套）',
+     /ashVenueField\('bk-venue',''\)/.test(s1)
+     && /function ashVenueField\(id, value\)\{/.test(src));
+  const nx=g('bkStep1Next');
+  ok('★★ 三個欄位都必填（場地是硬指定，不給「之後再說」）',
+     /if\(!ds\)\{ showToast\('請選日期'\); return; \}/.test(nx)
+     && /if\(!tm\)\{ showToast\('請選時間'\); return; \}/.test(nx)
+     && /if\(!vid\)\{ showToast\('請選場地'\); return; \}/.test(nx));
+  ok('★★ 進下一步前再確認一次那個場地還在（可能選完又回頭改了時間）',
+     /const st=await bkVenueStatus\(ds, tm, 60\);[\s\S]{0,240}?if\(sv && !sv\.ok\)/.test(nx));
+}
+
+console.log('\n建立預約：視窗二＝課程與教練');
+{
+  const g=n=>{const i=src.indexOf('function '+n+'(');let d=0;
+    for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
+  const form=g('bkStep1bHtml');
+  ok('★ 抽得到視窗二', !!form && form.length>400);
   const at=s=>form.indexOf(s);
-  const 課程=at('<label>課程</label>'), 日期=at('<label>日期</label>'), 時間=at('<label>時間</label>'),
-        教練=at('>授課教練<'), 會員=at('<label>會員<'), 連續=at('id="bk-recur-row"');
-  ok('★ 六個欄位都在', [課程,日期,時間,教練,會員,連續].every(x=>x>0), {課程,日期,時間,教練,會員,連續});
-  ok('★ 順序＝課程 → 日期 → 時間 → 教練 → 會員 → 連續預約',
-     課程<日期 && 日期<時間 && 時間<教練 && 教練<會員 && 會員<連續,
-     {課程,日期,時間,教練,會員,連續});
+  const 課程=at('<label>課程</label>'), 教練=at('>授課教練<'), 會員=at('<label>會員<'), 連續=at('id="bk-recur-row"');
+  ok('★ 四個欄位都在，順序＝課程 → 教練 → 會員 → 連續預約',
+     [課程,教練,會員,連續].every(x=>x>0) && 課程<教練 && 教練<會員 && 會員<連續,
+     {課程,教練,會員,連續});
+  ok('★★ 日期／時間／場地用 hidden input 帶過來（既有的讀取點一行都不用改）',
+     /<input type="hidden" id="bk-date" value="\$\{w\.date\|\|''\}">/.test(form)
+     && /<input type="hidden" id="bk-time" value="\$\{w\.time\|\|''\}">/.test(form)
+     && /<input type="hidden" id="bk-venue" value="\$\{w\.venue\|\|''\}">/.test(form));
+  ok('★★ 上一步選了什麼要看得到，而且改得回去',
+     /<div class="bk-s1sum">/.test(form)
+     && /onclick="bkBackToStep1\(\)"/.test(form)
+     && /function bkBackToStep1\(\)\{/.test(src));
+  ok('　　回上一步要保留已選的場地（不然等於重填）',
+     /if\(vi && w\.venue\)\{ vi\.value=w\.venue;/.test(src));
   ok('★ 會員標「選填」（原本寫「體驗課／待簽約卡位可不選」）',
      /<label>會員<span style="font-weight:400;color:var\(--t3\);">（選填）<\/span><\/label>/.test(form)
      && !/體驗課／待簽約卡位可不選/.test(srcNC));
-  ok('★ 連續預約在步驟 1（不帶上限，票券的上限在步驟 2 才夾）',
+  ok('★ 連續預約在視窗二（不帶上限，票券的上限在下一步才夾）',
      /<div class="form-row" id="bk-recur-row" style="margin-bottom:0;">\$\{recurBoxHtml\('bk'\)\}<\/div>/.test(form));
-  /* 2026-08-21 二修：下拉再換成自家挑選器（原生 select 展開後是系統樣式） */
-  ok('★ 課程改成自家挑選器（六張方案卡退場）',
+  ok('★ 課程用自家挑選器（六張方案卡退場）',
      /<button type="button" class="adp-field" id="bk-type-btn" onclick="ashTypeOpen\(\)">/.test(form)
      && !/<div id="bk-type-cards" class="bk-cards"><\/div>/.test(form));
-  /* 2026-08-21：日期欄改成自家月曆（ashDateField），不再是原生 input[type=date] */
-  ok('★ 日期與時間各自一列（原本並排在 form-2col）',
-     /<div class="form-row"><label>日期<\/label>\$\{ashDateField\('bk-date'/.test(form)
-     && /<div class="form-row"><label>時間<\/label>\$\{ashTimeField\('bk-time'/.test(form));
   ok('★ 教練與會員並排在同一個 form-2col', 教練>0 && 會員>教練
      && /<div class="form-2col">[\s\S]{0,900}?id="bk-coach-row"[\s\S]{0,900}?id="bk-mem-pre"/.test(form));
+  ok('★★ 這個場地不能上的課要淡化並寫原因（不要藏起來）',
+     /const bad=bkTypeTimeBad\(t,_d,_tm\) \|\| venueCatWhy\(_vid, t\.category\);/.test(src));
   ok('　　renderBkTypeCards 還被回上一步呼叫，但找不到容器就直接 return（不會爆）',
      /const box=document\.getElementById\('bk-type-cards'\); if\(!box\)return;/.test(src));
   ok('　　會員下拉本來就把該教練的會員排在最上面＋可搜尋（這次只是換位置）',

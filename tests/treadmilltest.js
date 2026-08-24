@@ -60,15 +60,21 @@ ok('★ 只有自主訓練會出現這個欄位', /function bkTreadmillRow\(t\)\
 ok('★ 掛在步驟 2 的票券資訊與連續預約之間', /\$\{bkTreadmillRow\(t\)\}\s*\n\s*\$\{\/\*[\s\S]*?\*\/''\}\s*\n\s*\$\{bkRecurRecap\(preSum\)\}/.test(src));
 ok('★ 台數選項依場地設定的容量產生（不寫死 2）',   /* 2026-08-18 多功能也開放多台：按鈕畫到各多台場地的最大容量 */
    /const maxCap=Math\.max\(\.\.\.\(window\.VENUES\|\|\[\{capacity:2\}\]\)\.filter\(v=>venueAllowsMultiUnit\(v\.id\)\)\.map\(v=>v\.capacity\|\|2\), 2\);/.test(src));
-ok('★ 預設選項＝多功能訓練架（value 0，行為仍是自動配置、多功能優先；2026-08-12 使用者指示改名）',
-   /<option value="0">\$\{venueName\('multi'\)\}<\/option>/.test(src));
+/* 0824：場地已在視窗一選好，這個下拉改成「預設帶上那個選擇」——
+   不然使用者會看到剛選過的東西又問一次，而且預設值不是他選的那個。仍然可以改。 */
+ok('★ 預設值跟著視窗一選的場地走（沒選過就是多功能訓練架）',
+   /const _wv=\(typeof bkWizVenue==='function'&&bkWizVenue\(\)\)\|\|'';/.test(src)
+   && /const _sel=\{treadmill:'t', group:'g', multi:'0'\}\[_wv\]\|\|'0';/.test(src)
+   && /<option value="0"\$\{_sel==='0'\?' selected':''\}>\$\{venueName\('multi'\)\}<\/option>/.test(src));
 /* 2026-08-04：選單多了「團課教室」，讀值收斂到 bkVenueChoice（'treadmill'＋台數／'group'／null） */
 ok('★ 選了台數＝指定用跑步機、選團課教室＝指定 group（venue_pref）',
    /if\(el\.value==='g'\) return \{pref:'group', units:0\};/.test(src)
    && /return \{pref:n>0\?'treadmill':null, units:n\};/.test(src)
-   && /const _venuePref=_vc\.pref;/.test(src)
+   /* 0824：視窗一硬指定的場地當底，跑步機台數（更細）仍可覆蓋 */
+   && /const _venuePref=_vc\.pref \|\| bkWizVenue\(\);/.test(src)
    && /venue_pref:o\.venue_pref\|\|null,/.test(src));
-ok('★ 選單有「團課教室」選項', /<option value="g">\$\{venueName\('group'\)\}<\/option>/.test(src));   // 2026-08-10 場地名稱改吃設定值
+ok('★ 選單有「團課教室」選項',
+   /<option value="g"\$\{_sel==='g'\?' selected':''\}>\$\{venueName\('group'\)\}<\/option>/.test(src));   // 2026-08-10 場地名稱改吃設定值
 /* 2026-08-03 家庭成員：vbkChk 多帶 member_id 與使用人 */
 ok('★ 單筆預約的場地預驗證也帶上指定（否則會先被判成多功能區可用）',
    /const vbkChk=\{id:null,coach_id,category:t\.category,ticket_type_id:type_id,venue_pref:_venuePref,\n\s*member_id, trial_name:\(window\._bkFamUser!=null\?window\._bkFamUser:null\)\};/.test(src));   // 2026-08-04 '' 哨兵不塌成 null

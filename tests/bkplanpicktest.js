@@ -19,9 +19,14 @@ ok('★ 體驗課不綁票券 → 不篩（篩了會變空名單）',
    /t\.category!=='體驗'/.test(src) && /tid!=='__facility'/.test(src));
 /* 2026-08-21：日期欄改成自家月曆（ashDateField 產生「按鈕＋隱藏 input」），
    onchange 掛在那個隱藏 input 上，挑完由 ashDatePick 派送 change 事件。 */
-ok('★ 日期／時間改了要重算（限時段票與效期會變）',
-   /ashDateField\('bk-date', pf\.date\|\|'', '', 'bkRefreshPlanFilter\(\)'\)/.test(src)
-   && /ashTimeField\('bk-time', pf\.time\|\|'', 'bkRefreshPlanFilter\(\)'\)/.test(src));
+/* 0824 建立預約拆成兩個視窗：日期／時間搬到視窗一，onchange 改叫 bkStep1Changed()，
+   由它一次重畫「場地還有沒有位」與「營業時間提示」；方案篩選改在進入視窗二時跑一次。 */
+ok('★ 日期／時間改了要重算（場地與營業時間提示）',
+   /ashDateField\('bk-date', pf\.date\|\|'', '', 'bkStep1Changed\(\)'\)/.test(src)
+   && /ashTimeField\('bk-time', pf\.time\|\|'', 'bkStep1Changed\(\)'\)/.test(src)
+   && /function bkStep1Changed\(\)\{[\s\S]{0,200}?bkVenueRefresh\(\)[\s\S]{0,120}?bkOffHoursWarn\(\)/.test(src));
+ok('　　進視窗二時重算一次方案篩選（那時候日期時間已經定了）',
+   /showModal\(bkStep1bHtml\(\)\);[\s\S]{0,160}?bkRefreshPlanFilter\(\)/.test(src));
 ok('★ 每次開窗歸零，不留上一次的名單',
    /window\._bkPlanIds=null; window\._bkPlanName='';   \/\/ 每次開窗/.test(src));
 ok('　　超約／分期未開通／過期／限時段都算進去（因為走 tkFitsBooking）',
@@ -126,7 +131,7 @@ console.log('\n④ 授課教練也改成可搜尋的下拉');
 /* 2026-08-21：建立預約改版時提示字縮短（教練與會員並排一列，位置變窄）——
    元件與行為沒變，仍是 .mem-pick-row ＋ bkFilterCoaches。 */
 ok('★ 教練欄改用同一個元件（.mem-pick-row → mpkUpgrade）',
-   /<input class="gt-search" id="bk-coach-q" placeholder="搜尋教練（共 \$\{window\._bkCoaches\.length\} 位）" oninput="bkFilterCoaches\(this\.value\)"/.test(src)
+   /<input class="gt-search" id="bk-coach-q" placeholder="搜尋教練（共 \$\{\(window\._bkCoaches\|\|\[\]\)\.length\} 位）" oninput="bkFilterCoaches\(this\.value\)"/.test(src)
    && /<div class="mem-pick-row">[\s\S]{0,300}?id="bk-coach-q"/.test(src));
 ok('★ 選項改由 bkCoachOptsHTML 產生（原本的 coachOpts 靜態字串已移除）',
    /<select id="bk-coach" onchange="bkCoachChange\(\)">\$\{bkCoachOptsHTML\(''\)\}<\/select>/.test(src));

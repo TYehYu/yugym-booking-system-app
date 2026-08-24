@@ -3057,6 +3057,12 @@ tr:hover td{background:var(--card2);}
 .adp-badnote{font-size:11.5px;line-height:1.7;color:var(--danger,#7F0303);margin-top:6px;font-weight:600;}
 /* 可以做、但要知道（2026-08-23 非營業時間）——紅色留給「不能做」，金色是次要提示 */
 .adp-warnnote{font-size:11.5px;line-height:1.7;color:var(--gold-d,#9a6a1e);margin-top:6px;font-weight:600;}
+/* 建立預約視窗二頂端的「上一步選了什麼」摘要（2026-08-24）——
+   時段與場地已經是決定好的事，收成一行；要改就按旁邊那顆「改」回上一步。 */
+.bk-s1sum{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--card2);border:1px solid var(--bd);border-radius:10px;
+  padding:8px 10px 8px 12px;margin:-2px 0 12px;font-size:12.5px;color:var(--t2);}
+.bk-s1sum b{font-family:var(--num),inherit;font-weight:800;color:var(--text);}
 .adp-field .adp-ph{color:var(--t3);}
 .adp-field .adp-ic{flex:none;color:var(--t3);font-size:12px;}
 /* ══ 滾輪樣式（2026-08-21 使用者附圖：iOS 式滾輪）══
@@ -9901,8 +9907,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1107';
-const APP_VERSION_LABEL='v260824.1107';
+const APP_VERSION = '260824.1128';
+const APP_VERSION_LABEL='v260824.1128';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20173,11 +20179,16 @@ function bkTreadmillRow(t){
   window._bkTmN=1;
   const maxCap=Math.max(...(window.VENUES||[{capacity:2}]).filter(v=>venueAllowsMultiUnit(v.id)).map(v=>v.capacity||2), 2);
   const NUM=['','一','兩','三','四','五','六'];
+  /* 2026-08-24：場地已經在視窗一選好了，這裡的下拉預設帶上那個選擇 ——
+     不然使用者會看到「剛剛才選過的東西又問一次，而且預設值不是我選的那個」。
+     仍然可以改（例如臨時決定用團課教室），改了就以這裡為準（見 _venuePref）。 */
+  const _wv=(typeof bkWizVenue==='function'&&bkWizVenue())||'';
+  const _sel={treadmill:'t', group:'g', multi:'0'}[_wv]||'0';
   return `<div class="form-row"><label>場地</label>
     <select id="bk-treadmill" onchange="bkTmSwap()">
-      <option value="0">${venueName('multi')}</option>
-      <option value="t">${venueName('treadmill')}</option>
-      <option value="g">${venueName('group')}</option>
+      <option value="0"${_sel==='0'?' selected':''}>${venueName('multi')}</option>
+      <option value="t"${_sel==='t'?' selected':''}>${venueName('treadmill')}</option>
+      <option value="g"${_sel==='g'?' selected':''}>${venueName('group')}</option>
     </select>
     <div id="bk-tm-units" style="display:flex;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap;">
       <span style="font-size:12px;color:var(--t2);">台數</span>
@@ -23696,6 +23707,102 @@ try{ window._calBookMode = localStorage.getItem('yugym_cal_bookmode')==='1'; }ca
    全部不預設值；連續預約預設「否」。 */
 let _bkMembers=[];
 let _bkWizard={};   // 暫存第1頁選擇
+/* 使用者在視窗一硬指定的場地（2026-08-24）——沒有就回 null（＝沿用原本的自動配置）。
+   ⚠ 一律從 _bkWizard 讀，不要讀 DOM：送出時視窗二的 DOM 可能已經被下一頁蓋掉了
+     （這個專案 0820 已經因為「步驟 2 蓋掉步驟 1 的 DOM」踩過一次）。
+   ⚠ 自主訓練的跑步機台數選擇（bkVenueChoice）仍然有效，而且優先於這裡 ——
+     那是「同一個場地要幾台」，比「哪個場地」更細。 */
+function bkWizVenue(){ try{ return (_bkWizard&&_bkWizard.venue)||null; }catch(_){ return null; } }
+/* 視窗一：日期 → 時間 → 場地（2026-08-24 建立預約改版）。
+   ⚠ 日期／時間改動時要重驗場地（bkVenueRefresh）與營業時間（bkOffHoursWarn）—— 
+     後者原本掛在步驟 1 的時間欄上，現在時間欄住在這裡，所以提示也跟著搬過來。 */
+function bkStep1Html(pf){
+  pf=pf||{};
+  return `<div class="modal-title">建立預約　<span style="font-size:13px;color:var(--t3);font-weight:500;">1 / 2　時段與場地</span></div>
+    <div class="form-row"><label>日期</label>${ashDateField('bk-date', pf.date||'', '', 'bkStep1Changed()')}</div>
+    <div class="form-row"><label>時間</label>${ashTimeField('bk-time', pf.time||'', 'bkStep1Changed()')}</div>
+    <div class="form-row" id="bk-venue-row"><label>場地</label>${ashVenueField('bk-venue','')}</div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="cancelBookingModal()">取消</button>
+      <button class="btn btn-green" onclick="bkStep1Next()">下一步 →</button></div>`;
+}
+/* 日期或時間一改：場地可能滿了、時段可能超出營業時間 —— 兩個提示一起重畫。 */
+function bkStep1Changed(){
+  try{ bkVenueRefresh(); }catch(_){}
+  try{ bkOffHoursWarn(); }catch(_){}
+}
+/* 視窗二：課程 → 教練 → 會員（選填）→ 連續預約。
+   ⚠ 日期／時間／場地用 hidden input 帶過來，id 沿用 bk-date／bk-time／bk-venue，
+     所有既有的讀取點（_bkStep2、bkRefreshPlanFilter、submitPendingHold…）一行都不用改。
+   ⚠ 課程清單會把「這個場地不能上的課」淡化（見 ashTypeOpen）——例如選了跑步機，
+     教練課就會標「跑步機不能上這種課（只能排：多功能訓練架、團課教室）」。 */
+function bkStep1bHtml(){
+  const w=_bkWizard||{};
+  const isCoach=SESSION.role==='coach' && !SESSION.is_manager;
+  const vnm=(getVenues().find(x=>x.id===w.venue)||{}).name||w.venue||'';
+  const _wd=(()=>{ try{ const d=parseYmd(w.date); return d?'（'+'日一二三四五六'[d.getDay()]+'）':''; }catch(_){ return ''; } })();
+  return `<div class="modal-title">建立預約　<span style="font-size:13px;color:var(--t3);font-weight:500;">2 / 2　課程與教練</span></div>
+    ${/* 上一步選的三件事收成一行摘要，點「改」可以回去 —— 不要讓人記在腦子裡 */''}
+    <div class="bk-s1sum">
+      <span><b>${String(w.date||'').replace(/-/g,'/')}</b>${_wd} <b>${w.time||''}</b>　·　${escH(vnm)}</span>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="bkBackToStep1()">改</button>
+    </div>
+    <input type="hidden" id="bk-date" value="${w.date||''}">
+    <input type="hidden" id="bk-time" value="${w.time||''}">
+    <input type="hidden" id="bk-venue" value="${w.venue||''}">
+    <div class="form-row"><label>課程</label>
+      <input type="hidden" id="bk-type" value="">
+      <button type="button" class="adp-field" id="bk-type-btn" onclick="ashTypeOpen()">
+        <span class="adp-ph">選擇課程</span><span class="adp-ic">▾</span></button></div>
+    <div class="form-2col">
+      ${isCoach
+        ? `<input type="hidden" id="bk-coach" value="${SESSION.id}">`
+        : `<div class="form-row" id="bk-coach-row"><label>授課教練<span id="bk-coach-opt" style="font-weight:400;color:var(--t3);display:none;">（可不指定）</span></label>
+            <div class="mem-pick-row">
+              <input class="gt-search" id="bk-coach-q" placeholder="搜尋教練（共 ${(window._bkCoaches||[]).length} 位）" oninput="bkFilterCoaches(this.value)" autocomplete="off">
+              <select id="bk-coach" onchange="bkCoachChange()">${bkCoachOptsHTML('')}</select>
+            </div></div>`}
+      <div class="form-row"><label>會員<span style="font-weight:400;color:var(--t3);">（選填）</span></label>
+        <div class="mem-pick-row">
+          <input class="gt-search" id="bk-mem-q" placeholder="搜尋姓名或手機（共 ${(window._bkAllMembers||[]).length} 位）" oninput="bkFilterMembers(this.value)" autocomplete="off">
+          <select id="bk-mem-pre">${bkMemberOptsHTML('')}</select>
+        </div>
+      </div>
+    </div>
+    ${/* 團課的連續預約在下一步（prefix grp，跟名單一起設定），這裡不重複給一個開關 */''}
+    <div class="form-row" id="bk-recur-row" style="margin-bottom:0;">${recurBoxHtml('bk')}</div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="bkBackToStep1()">‹ 上一步</button>
+      <button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`;
+}
+/* 回視窗一（保留已選的日期／時間／場地）。 */
+function bkBackToStep1(){
+  const w=_bkWizard||{};
+  showModal(bkStep1Html({date:w.date||'', time:w.time||''}));
+  const vi=document.getElementById('bk-venue');
+  if(vi && w.venue){ vi.value=w.venue;
+    const btn=document.getElementById('bk-venue-btn');
+    if(btn){ const lb=btn.firstElementChild;
+      lb.textContent=(getVenues().find(x=>x.id===w.venue)||{}).name||w.venue; lb.className=''; } }
+  try{ bkStep1Changed(); }catch(_){}
+}
+/* 視窗一 → 視窗二。三個欄位都必填（場地是硬指定，不給「之後再說」）。 */
+async function bkStep1Next(){
+  const ds=(document.getElementById('bk-date')||{}).value||'';
+  const tm=String((document.getElementById('bk-time')||{}).value||'').slice(0,5);
+  const vid=String((document.getElementById('bk-venue')||{}).value||'');
+  if(!ds){ showToast('請選日期'); return; }
+  if(!tm){ showToast('請選時間'); return; }
+  if(!vid){ showToast('請選場地'); return; }
+  /* 送去下一步之前再確認一次那個場地還在 —— 使用者可能選完場地又回頭改了時間。 */
+  const st=await bkVenueStatus(ds, tm, 60);
+  const sv=(st||[]).find(x=>x.id===vid);
+  if(sv && !sv.ok){ showToast(`${sv.name}${sv.why}，請改選其他場地`, 4000); try{ bkVenueRefresh(); }catch(_){} return; }
+  Object.assign(_bkWizard,{date:ds,time:tm,venue:vid});
+  showModal(bkStep1bHtml());
+  try{ mpkScan(); }catch(_){}
+  try{ bkRefreshPlanFilter(); }catch(_){}
+}
 async function openBookingModal(){
   window._bkFamUser=null;   // 家庭成員使用人旗標只作用單筆（2026-08-03）
   const[coaches,types,_bkMemsAll]=await Promise.all([dbGetAll('coaches'),dbGetAll('ticket_types'),dbGetAll('members')]);
@@ -23772,36 +23879,16 @@ async function openBookingModal(){
      日期／時間／教練／會員全部進得了第一屏，不用捲。
      教練與會員並排是因為它們是一組決定（挑了教練，會員名單就跟著重排）。
      標題也從「新增預約・步驟 1 / 2」改成「建立預約」。 */
-  showModal(`<div class="modal-title">建立預約</div>
-    <div class="form-row"><label>課程</label>
-      ${/* 卡片版退場，但 renderBkTypeCards 仍被 openBookingModalBack 呼叫 ——
-           那支開頭就找不到 #bk-type-cards、直接 return，不會爆。
-           2026-08-21：原生 <select> 也換成自家挑選器（展開後才是系統樣式的重災區）。 */''}
-      <input type="hidden" id="bk-type" value="">
-      <button type="button" class="adp-field" id="bk-type-btn" onclick="ashTypeOpen()">
-        <span class="adp-ph">選擇課程</span><span class="adp-ic">▾</span></button></div>
-    <div class="form-row"><label>日期</label>${ashDateField('bk-date', pf.date||'', '', 'bkRefreshPlanFilter()')}</div>
-    <div class="form-row"><label>時間</label>${ashTimeField('bk-time', pf.time||'', 'bkRefreshPlanFilter()')}</div>
-    <div class="form-2col">
-      ${isCoach
-        ? `<input type="hidden" id="bk-coach" value="${SESSION.id}">`
-        : `<div class="form-row" id="bk-coach-row"><label>授課教練<span id="bk-coach-opt" style="font-weight:400;color:var(--t3);display:none;">（可不指定）</span></label>
-            <div class="mem-pick-row">
-              <input class="gt-search" id="bk-coach-q" placeholder="搜尋教練（共 ${window._bkCoaches.length} 位）" oninput="bkFilterCoaches(this.value)" autocomplete="off">
-              <select id="bk-coach" onchange="bkCoachChange()">${bkCoachOptsHTML('')}</select>
-            </div></div>`}
-      ${/* 會員下拉本來就把「該教練的會員」分組排在最上面（bkMemberOptsHTML 的 optgroup），
-           搜尋框也早就有（bkFilterMembers）—— 使用者要的這兩件事都已經在了，這裡只是換位置。 */''}
-      <div class="form-row"><label>會員<span style="font-weight:400;color:var(--t3);">（選填）</span></label>
-        <div class="mem-pick-row">
-          <input class="gt-search" id="bk-mem-q" placeholder="搜尋姓名或手機（共 ${window._bkAllMembers.length} 位）" oninput="bkFilterMembers(this.value)" autocomplete="off">
-          <select id="bk-mem-pre">${bkMemberOptsHTML('')}</select>
-        </div>
-      </div>
-    </div>
-    ${/* 團課的連續預約在步驟 2（prefix grp，跟名單一起設定），這裡不重複給一個開關 */''}
-    <div class="form-row" id="bk-recur-row" style="margin-bottom:0;">${recurBoxHtml('bk')}</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="cancelBookingModal()">取消</button><button class="btn btn-green" onclick="bkStep2()">下一步 →</button></div>`);
+  /* ══ 2026-08-24 使用者定案：拆成兩個視窗，場地提到最前面 ══════════════
+     原因（使用者原話）：「有時候所有資料都填寫完了，最後才發現場地沒有，這樣前面就白填寫了」。
+       視窗一：日期 → 時間 → 場地（不能用的淡化並寫原因）
+       視窗二：課程 → 教練 → 會員（選填）→ 連續預約
+     ⚠ 日期時間一定要在場地之前 —— 場地能不能用取決於時段，不先知道時段就淡化不了。
+     ⚠ 會員暫時留在視窗二（本來就是選填）：課卡的［＋新增］還沒做，先拿掉會讓櫃檯
+       連「建立時順手指定會員」都做不到。等［＋新增］上線再決定要不要移除。
+     ⚠ 視窗二會用 hidden input 把日期／時間／場地帶過去（id 沿用 bk-date／bk-time），
+       這樣所有既有的 getElementById('bk-date') 讀取點一行都不用改。 */
+  showModal(bkStep1Html(pf));
   // 渲染課程類型卡（場地租借＝銷售流程，不再列於此）
   window._bkTypes=activeTypes;
   window._bkCoachCourseOnly=false;   /* 一次性旗標：這一輪已經用來過濾了，別留到下一次開窗 */
@@ -24437,7 +24524,7 @@ async function _ashSlotHoldOpen(){
   /* 非營業時間（2026-08-23 稽核補上）——待簽約卡位當初有接、空堂卡位漏了。
      兩者都是「建立一筆佔住時段的預約」，同一條規則。 */
   if(!(await confirmOffHours(date, time, 60, '取消卡位', t&&t.category))) return;
-  const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id,member_id:null};
+  const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id,member_id:null,venue_pref:bkWizVenue()};
   const verr=await validateBooking(vbk,date,time,60);
   if(verr){ showToast(verr); return; }
   const bk={id:uid('BK'),member_id:null,trial_name:null,trial_phone:null,
@@ -24503,6 +24590,10 @@ async function openBookingModalBack(){
   _prefill={date:W.date,time:W.time};
   await openBookingModal();
   Object.assign(_bkWizard,W,{fromSlot:_bkWizard.fromSlot});   // 還原暫存（fromSlot 以新的為準）
+  /* 2026-08-24：建立預約拆成兩個視窗之後，「上一步」要回的是**視窗二**
+     （課程／教練／會員／連續預約），不是視窗一 —— 日期時間場地那三件事已經定了，
+     退回去重選反而是多一步。openBookingModal 畫的是視窗一，這裡直接前進一頁。 */
+  if(W.date && W.time && W.venue){ showModal(bkStep1bHtml()); try{ mpkScan(); }catch(_){} }
   // 還原第1頁選擇
   const ty=document.getElementById('bk-type'); if(ty){ty.value=W.type_id||'';renderBkTypeCards();await onBkTypeChange();}
   const co=document.getElementById('bk-coach'); if(co&&W.coach_id){co.value=W.coach_id;bkCoachChange();}
@@ -25085,7 +25176,7 @@ async function submitPendingHold(){
        步驟 1 已選會員就把 member_id 直接綁上（課卡顯示會員名、衝堂防呆也認得他）；
        只填姓名的散客照舊走 trial_name。 */
     const _mid=((document.getElementById('ph-mid')||{}).value||'').trim()||null;
-    const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id,member_id:_mid};
+    const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id,member_id:_mid,venue_pref:bkWizVenue()};
     const verr=await validateBooking(vbk,d,tv,60);
     if(verr){ skipped.push(`${String(d).slice(5).replace('-','/')} ${tv}（${verr}）`); continue; }
     const bk={id:uid('BK'),member_id:_mid,trial_name:_mid?null:name,trial_phone:_mid?null:phone,
@@ -25436,7 +25527,7 @@ async function _submitBookingInner(){
         catch(e){ showToast('建立會員失敗：'+(e&&e.message?e.message:e)); return; }
       }
     }
-    const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id};
+    const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id,venue_pref:bkWizVenue()};
     const verr=await validateBooking(vbk,date,time,60);
     if(verr){showToast(verr);return;}
     if(!(await confirmVenueOverflow(vbk))) return; // 場地溢出→教練取消
@@ -25473,7 +25564,7 @@ async function _submitBookingInner(){
       const dW=grpSlots[w].date, tW=grpSlots[w].time;   // 各天可不同時間（2026-07-30）
       if(repeatN>1){ const btn=[...document.querySelectorAll('#modal-bg .btn.btn-green')].pop();
         if(btn){ btn.disabled=true; btn.textContent=`建立中 ${w+1} / ${repeatN}…`; } }
-      const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id};
+      const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id,venue_pref:bkWizVenue()};
       const verr=await validateBooking(vbk,dW,tW,60);
       if(verr){ if(repeatN===1){showToast(verr);return;} skippedWeeks.push(dW.slice(5).replace('-','/')+' '+tW); continue; }
       if(w===0 && !(await confirmVenueOverflow(vbk))) return; // 首堂場地溢出→教練取消（後續週沿用）
@@ -25558,7 +25649,8 @@ async function _submitBookingInner(){
      第 2 台以 sibling_of 掛在主預約下、不另外扣點。 */
   const _vc=bkVenueChoice();                     // 場地指定：跑步機台數或團課教室（2026-08-04）
   const _tmN=_vc.units;
-  const _venuePref=_vc.pref;
+  /* 2026-08-24：視窗一硬指定的場地當底；自主訓練那個「幾台跑步機」的選擇更細，仍可覆蓋。 */
+  const _venuePref=_vc.pref || bkWizVenue();
   // 單筆預約（非連續）：先預驗證場地，若溢出到次選場地→跳確認，教練同意才建立
   if(!recurring){
     const vbkChk={id:null,coach_id,category:t.category,ticket_type_id:type_id,venue_pref:_venuePref,
@@ -29901,7 +29993,8 @@ function bkTypeTimeWarn(){
   const t=(window._bkTypes||[]).find(x=>x&&x.id===tid);
   const d=(document.getElementById('bk-date')||{}).value||'';
   const tm=String((document.getElementById('bk-time')||{}).value||'').slice(0,5);
-  const bad=t?bkTypeTimeBad(t,d,tm):'';
+  const _vid=String((document.getElementById('bk-venue')||{}).value||'');
+  const bad=t?(bkTypeTimeBad(t,d,tm) || venueCatWhy(_vid, t.category)):'';
   btn.classList.toggle('adp-field-bad', !!bad);
   let tip=document.getElementById('bk-type-bad');
   if(bad){
@@ -29933,6 +30026,87 @@ function bkOffHoursWarn(){
   }else if(tip){ tip.remove(); }
   btn.classList.toggle('adp-field-bad', !!hard);
 }
+/* ══ 場地挑選（2026-08-24 建立預約改版）══════════════════════════
+   使用者定案：「有時候所有資料都填寫完了，最後才發現場地沒有，這樣前面就白填寫了」
+   → 場地提到最前面（視窗一：日期 → 時間 → 場地），而且**硬指定**：選了就是那裡，
+   滿了擋下，不再自動改派到次選場地。
+   ⚠ 場地能不能用取決於「哪一天的哪個時段」，所以日期時間一定要排在它前面 ——
+     這是 0824 與使用者確認過的順序。
+   ⚠ 不能用的場地照樣列出來、淡化並寫原因（0823 定的語彙 .ash-ei-off），不要藏起來。 */
+function ashVenueField(id, value){
+  const v=String(value||'');
+  const nm=v?((getVenues().find(x=>x.id===v)||{}).name||v):'';
+  return `<input type="hidden" id="${id}" value="${v}">
+    <button type="button" class="adp-field" id="${id}-btn" onclick="ashVenueOpen('${id}')">
+      <span${nm?'':' class="adp-ph"'}>${nm||'選擇場地'}</span><span class="adp-ic">▾</span></button>`;
+}
+/* 這個時段各場地的狀況（供挑選視窗與「選完之後時段又被改動」的重驗共用）。
+   回傳 venueAvailAt 的結果；讀不到預約就回 null，呼叫端一律放行（寧可讓後端擋，
+   也不要因為讀取失敗就把所有場地都畫成不能選）。 */
+async function bkVenueStatus(ds, time, dur){
+  try{
+    if(!ds||!time) return null;
+    const all=await dbGetAll('bookings').catch(()=>null);
+    if(!all) return null;
+    const day=all.filter(x=>x && x.date===ds && x.status!=='cancelled');
+    const ns=timeToMin(String(time).slice(0,5)), ne=ns+(Number(dur)||60);
+    return venueAvailAt(day, ns, ne, null);
+  }catch(_){ return null; }
+}
+async function ashVenueOpen(id){
+  const inp=document.getElementById(id||'bk-venue'); if(!inp) return;
+  const cur=String(inp.value||'');
+  const ds=(document.getElementById('bk-date')||{}).value||'';
+  const tm=String((document.getElementById('bk-time')||{}).value||'').slice(0,5);
+  let host=document.getElementById('adp-sheet');
+  if(!host){ host=document.createElement('div'); host.id='adp-sheet'; document.body.appendChild(host); }
+  host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
+    <div class="adp-box"><div class="modal-title">選擇場地</div>
+      <div class="ash-einote">讀取場地狀況…</div></div>`;
+  const st=await bkVenueStatus(ds, tm, 60);
+  const rows=getVenues().map(v=>{
+    const s=(st||[]).find(x=>x.id===v.id);
+    const bad=(s && !s.ok) ? s.why : '';
+    const sub=bad || (s?`還有 ${s.left} / ${s.cap} 個位子`:'');
+    if(bad) return `<button type="button" class="ash-eirow ash-ei-off" disabled>
+        <span class="ash-eilb">${escH(v.name)}</span><span class="ash-eisub">${escH(sub)}</span></button>`;
+    return `<button type="button" class="ash-eirow${v.id===cur?' ash-ei-co':''}"
+        style="${v.id===cur?'--ash-co-fg:var(--green);':''}" onclick="ashVenuePick('${id||'bk-venue'}','${v.id}')">
+        <span class="ash-eilb">${escH(v.name)}</span><span class="ash-eisub">${escH(sub)}</span></button>`;
+  }).join('');
+  const box=host.querySelector('.adp-box'); if(!box) return;
+  box.innerHTML=`<div class="modal-title">選擇場地</div>
+    ${(!ds||!tm)?'<div class="ash-einote">請先選日期與時間，才知道哪些場地還有位。</div>':''}
+    ${rows||'<div class="ash-einote">沒有可用的場地。</div>'}
+    <div class="adp-foot"><button class="btn btn-ghost" onclick="ashDateClose()">取消</button></div>`;
+}
+function ashVenuePick(id, vid){
+  const inp=document.getElementById(id); if(!inp) return;
+  inp.value=vid;
+  const btn=document.getElementById(id+'-btn');
+  if(btn){ const lb=btn.firstElementChild;
+    lb.textContent=(getVenues().find(x=>x.id===vid)||{}).name||vid; lb.className=''; }
+  ashDateClose();
+  try{ bkVenueRefresh(); }catch(_){}
+}
+/* 日期或時間改了 → 原本選的場地可能已經滿了。不自動幫他換（那正是「硬指定」要避免的），
+   改成標紅並寫原因，請他重選 —— 與課種不可約時同一套處理（bkTypeTimeWarn）。 */
+async function bkVenueRefresh(){
+  const btn=document.getElementById('bk-venue-btn'); if(!btn) return;
+  const vid=String((document.getElementById('bk-venue')||{}).value||'');
+  const ds=(document.getElementById('bk-date')||{}).value||'';
+  const tm=String((document.getElementById('bk-time')||{}).value||'').slice(0,5);
+  let tip=document.getElementById('bk-venue-bad');
+  const clear=()=>{ btn.classList.remove('adp-field-bad'); if(tip) tip.remove(); };
+  if(!vid||!ds||!tm){ clear(); return; }
+  const st=await bkVenueStatus(ds, tm, 60);
+  const s=(st||[]).find(x=>x.id===vid);
+  if(!s || s.ok){ clear(); return; }
+  btn.classList.add('adp-field-bad');
+  if(!tip){ tip=document.createElement('div'); tip.id='bk-venue-bad'; tip.className='adp-badnote';
+    btn.parentNode.appendChild(tip); }
+  tip.textContent=`${(getVenues().find(x=>x.id===vid)||{}).name||vid}${s.why}—— 請改選其他場地`;
+}
 /* 課程挑選（2026-08-21 使用者：「課程跟時間 也改成我們自己的風格」）——
    清單就是建立預約既有的 activeTypes（存在 window._bkTypes），
    每一列帶課種色的小方塊，與課卡上的顏色語彙一致。 */
@@ -29941,6 +30115,7 @@ function ashTypeOpen(){
   const cur=String((document.getElementById('bk-type')||{}).value||'');
   const _d=(document.getElementById('bk-date')||{}).value||'';
   const _tm=String((document.getElementById('bk-time')||{}).value||'').slice(0,5);
+  const _vid=String((document.getElementById('bk-venue')||{}).value||'');
   let host=document.getElementById('adp-sheet');
   if(!host){ host=document.createElement('div'); host.id='adp-sheet'; document.body.appendChild(host); }
   const rows=types.map(t=>{
@@ -29949,7 +30124,9 @@ function ashTypeOpen(){
     /* 這個時段不能約的課種（限時段票：友善教練課）淡化、不給點，理由寫在副標。
        ⚠ 不整列藏掉 —— 藏起來會讓人以為「友善教練課不見了／系統壞了」，
          這是 0822 就定的語彙（.ash-ei-off）。 */
-    const bad=bkTypeTimeBad(t,_d,_tm);
+    /* 2026-08-24 多一條「這個場地不能上這種課」（視窗一已經硬指定場地了）。
+       與限時段票同一套呈現：淡化列出＋副標寫原因，不要藏起來（0823 定的語彙）。 */
+    const bad=bkTypeTimeBad(t,_d,_tm) || venueCatWhy(_vid, t.category);
     if(bad) return `<button type="button" class="ash-eirow ash-ei-off" disabled>
         <span class="ash-eilb"><span class="adp-sw" style="background:${col};"></span>${escH(t.name||t.category||'課程')}</span>
         <span class="ash-eisub">${escH(bad)}</span></button>`;
