@@ -27,7 +27,9 @@ ok('★ 選完自動重送、旗標只作用一筆',
    && /window\._bkFamUser=null;   \/\/ 使用人旗標只作用這一筆/.test(src)
    && /window\._bkFamUser=null;   \/\/ 家庭成員使用人旗標只作用單筆/.test(src));
 ok('★ 建立時把使用人寫進 trial_name（與家庭共享同一套規則）',
-   /trial_name:openHold\?null:\(o\.trial_name==null \? \(\(tk&&tk\.family_user\)\|\|null\) : \(o\.trial_name\|\|null\)\),/.test(src)   // 2026-08-04 三態：null＝依票券、''＝明確本人、名字＝成員
+   /* 2026-08-24 二修（鄭百益 9/08 起那一串）：openHold 不代表「沒有人」——
+   選了會員但他沒有可用票券時，這條路要建的是綁著他的待簽約，不是匿名空堂。 */
+   /trial_name:openHold\?\(o\.trial_name\|\|null\):\(o\.trial_name==null \? \(\(tk&&tk\.family_user\)\|\|null\) : \(o\.trial_name\|\|null\)\),/.test(src)   // 2026-08-04 三態：null＝依票券、''＝明確本人、名字＝成員
    && /trial_name:\(window\._bkFamUser!=null\?window\._bkFamUser:null\),/.test(src));   // '' 不能塌成 null（明確本人要蓋過票券預設）
 
 console.log('\n③ 明細姓名旁的使用人按鈕（實跑 bkFamBtn）');
