@@ -299,8 +299,13 @@ console.log('\n空堂的姓名＝品牌金的「空白」');
      (src.match(/\$\{bkNameBlankCls\(b\)\}/g)||[]).length===4);
   ok('★★ 判斷只寫一次，且就是 bkIsOpenHold',
      /function bkNameBlankCls\(b\)\{ return \(typeof bkIsOpenHold==='function' && bkIsOpenHold\(b\)\) \? ' bk-nm-blank' : ''; \}/.test(src));
-  ok('★★ 品牌金（不是淡化）—— 課卡整張本來就暗化了，姓名再淡下去會讀不到',
-     /\.bk-nm-blank\{color:var\(--gold,#B48A56\) !important;font-weight:800;\}/.test(src));
+  /* 2026-08-24 使用者回報「課卡［空白］沒有用到金色字體」：第一版寫 .bk-nm-blank（0,1,0），
+     被 `.cal-ev.cal-ev-std .evc-name{color:#2A2620 !important}`（0,3,0）整個蓋掉。
+     要跟它同等級的選擇器才吃得到。 */
+  ok('★★ 品牌金，而且選擇器要壓得過 .cal-ev.cal-ev-std .evc-name 的 #2A2620 !important',
+     /\.cal-ev\.cal-ev-std \.evc-name\.bk-nm-blank,\s*\n\s*\.tcard\.tcard-std \.tcard-mem\.bk-nm-blank,\s*\n\s*\.amcv-card \.amcv-nm\.bk-nm-blank\{ color:var\(--gold,#B48A56\) !important; \}/.test(src)
+     && !/^\.bk-nm-blank\{/m.test(src)
+     && /只寫 \.bk-nm-blank（0,1,0）會被 color:#2A2620 !important 蓋掉/.test(src));
   ok('　　手機七日那張的 nm 是自己組的，也要吃到「空白」',
      /nm=b\.trial_name\|\|mm\[b\.member_id\]\|\|\(bkIsOpenHold\(b\)\?'空白':'—'\)/.test(src));
 }

@@ -169,6 +169,21 @@ ok('　　每一條失敗路徑都會收掉忙碌狀態',
    && /if\(err\)\{ done\(\); showToast\('無法更換：'\+err\); return; \}/.test(src)
    && /\}catch\(e\)\{ done\(\); showToast\('更換失敗：/.test(src));
 
+/* 2026-08-24 使用者回報：「點這堂課的標題卡，沒有更改場地的選項」——
+   待簽約／空堂那條路的 acts 是手作的物件，從來沒有 venue 這個鍵。
+   0820 當時待簽約還是少數狀況；會員改從課卡的［＋新增］安排之後，
+   空堂變成建立預約的常態產物，「建好才發現場地要換」一定會發生。 */
+console.log('\n待簽約／空堂的標題卡也要給得出「更換場地」');
+ok('★★ 手作的 acts 補上 venue（條件與主路徑的 _editable 一字不差）',
+   /const _pendVenue=\(\(staff\|\|own\) && !closed && String\(b\.date\)>=ymd\(TODAY\) && !bkIsCoachLeave\(b\)\)\s*\n\s*\? \(bkIsSelf\(b\)\?'self':'any'\) : null;/.test(src)
+   && /editable:false,\s*\n\s*venue:_pendVenue\}\);/.test(src));
+ok('★ editable 本身維持 false（它還管代課與團課人數，那兩件事沒有要一起開）',
+   /editable:false,/.test(src)
+   && /它還管著代課與團課人數，那兩件事沒有要一起開/.test(src));
+ok('★ 兩種課別各走各的入口（自主訓練有跑步機台數 → bkOrbitVenue）',
+   /if\(!_leave && A\.venue==='self'\) rows\+=row\(`closeModal\(\);bkOrbitVenue\('\$\{b\.id\}'\)`,'更換場地'/.test(src)
+   && /else if\(!_leave && A\.venue==='any'\) rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openVenueChange\('\$\{b\.id\}','ash'\)`,'更換場地'/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
 }

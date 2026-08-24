@@ -4813,11 +4813,6 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard-chk.tcard-chk-leave{background:var(--danger,#b5372e);}   /* 全員請假（2026-07-31） */
 .tcard-chk.tcard-chk-ns{background:var(--gold-d,#b48a56);}      /* 未到（2026-08-21 補上顏色） */
 /* 姓名與章同一列：.tcard-txt 是直排，不包一層的話章會自己掉到下一行 */
-/* 空堂的姓名「空白」用品牌金（2026-08-24 使用者更正）——課卡整張本來就已經暗化，
-   姓名再一起淡下去就讀不到；金色是「還缺一個人」這種次要提示的顏色。
-   ⚠ 已簽到的卡會把 .evc-name 強制寫成白字（權重帶 !important），但空堂不可能簽到，
-     兩條規則碰不到面。 */
-.bk-nm-blank{color:var(--gold,#B48A56) !important;font-weight:800;}
 .tcard-nmrow{display:flex;align-items:center;justify-content:center;gap:4px;max-width:100%;min-width:0;}
 .tcard-nmrow .tcard-mem{min-width:0;}
 /* 取消課卡右下角「刪」角標（品牌紅）＋教練今日課堂數（5/5・完成打勾）2026-07-25 使用者指示 */
@@ -4875,6 +4870,16 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 名字字級上限壓到 18px（原 clamp 會隨寬卡放大到 35px → 長名被切／爆大）。
    仍隨卡片微幅縮放，但不再爆大；配合折兩行，各種欄寬都讀得完整。 */
 .cal-ev.cal-ev-std .evc-name{ font-size:clamp(12px,min(30cqh,16cqw),18px) !important; line-height:1.2 !important; }
+/* 空堂的姓名「空白」用品牌金（2026-08-24 使用者：「課卡［空白］沒有用到金色字體」）——
+   金色＝「這一堂沒問題，只是還缺一個人」這種次要提示（紅>金>綠）。
+   ⚠ 一定要跟上面那條同等級的選擇器（.cal-ev.cal-ev-std .evc-name 是 0,3,0 且帶
+     !important），只寫 .bk-nm-blank（0,1,0）會被 color:#2A2620 !important 蓋掉 ——
+     第一版就是這樣寫的，畫面上完全看不出金色。
+   ⚠ 已簽到的卡會把 .evc-name 寫成白字，但空堂不可能簽到，兩條碰不到面。
+   .amcv-nm 是手機七日那張自己的節點，一起列進來。 */
+.cal-ev.cal-ev-std .evc-name.bk-nm-blank,
+.tcard.tcard-std .tcard-mem.bk-nm-blank,
+.amcv-card .amcv-nm.bk-nm-blank{ color:var(--gold,#B48A56) !important; }
 /* 教練標籤與姓名拉開距離（2026-07-25 使用者指示） */
 .cal-ev.cal-ev-std .evc-coach,
 .tcard.tcard-std .tcard-co{ margin-top:5px !important; }
@@ -9119,6 +9124,12 @@ button.rev-kind:hover{filter:brightness(.96);box-shadow:0 1px 4px rgba(60,50,38,
 .bam-guest>summary::before{content:'＋ ';color:var(--gold,#B48A56);}
 .bam-guest[open]>summary::before{content:'− ';}
 .bam-guest-b{display:flex;flex-direction:column;gap:7px;padding:0 11px 11px;}
+/* .ms-search 自帶左右 18px 的外距（它原本長在有內距的清單裡）——放進彈窗要歸零，
+   否則 width:100% 會整條被推出視窗右緣（2026-08-24 使用者回報）。 */
+.bam-inp{width:100%;box-sizing:border-box;margin-left:0;margin-right:0;margin-bottom:8px;}
+/* 組內再切一刀的小標：比 .bam-grp 輕一階，看得出是「同一組裡的兩半」 */
+.bam-sub{font-size:11px;font-weight:700;color:var(--t3);letter-spacing:.04em;
+  padding:7px 2px 3px;}
 /* 待簽約視窗裡「連續預約」的唯讀複述（設定在視窗二，這裡只是讓人確認沒設錯） */
 .ph-recur{display:flex;align-items:baseline;gap:9px;margin-top:6px;background:var(--card2);
   border:1px solid var(--bd);border-radius:10px;padding:9px 11px;font-size:12.5px;color:var(--text);}
@@ -9961,8 +9972,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1327';
-const APP_VERSION_LABEL='v260824.1327';
+const APP_VERSION = '260824.1338';
+const APP_VERSION_LABEL='v260824.1338';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24753,6 +24764,11 @@ async function bkAddMemberOpen(bid){
     cntMap=await tkBookedCountMap().catch(()=>({}));
   }finally{ _busy(); }
   window._bamB=b;
+  const _bcid=(typeof bkCoachId==='function')?bkCoachId(b):(b.coach_id||null);
+  /* 教練名字給分組小標用。走表級快取的 dbGetAll，不要用 dbGet ——
+     那支沒有快取，為了一個標題多打一次網路不划算。 */
+  try{ const _c=_bcid?((await dbGetAll('coaches').catch(()=>[]))||[]).find(x=>x&&x.id===_bcid):null;
+       window._bamCoachNm=_c?coachDisp(_c):''; }catch(_){ window._bamCoachNm=''; }
   /* 「這位會員有沒有分期票、而且還有未開通堂數」——決定［＋新增］裡「待分期」能不能按。
      判準與步驟 2 原本那顆鈕完全一致（tkUsableBy＋usable＋installment＋未開通>0＋票種吻合），
      不另寫一份，不然兩邊會對不上。 */
@@ -24766,7 +24782,9 @@ async function bkAddMemberOpen(bid){
   window._bamRows=(members||[]).filter(m=>m && m.status==='active').map(m=>{
     const info=bkMemTicketInfo(m.id, b, allTk, cntMap);
     return { id:m.id, name:m.name||'', phone:m.phone||'',
-             mine:String(m.default_coach_id||'')===String(b.coach_id||'') && !!b.coach_id,
+             /* ⚠ 用 bkCoachId（代課優先）而不是 b.coach_id —— 有代課時這一堂實際上是
+                代課教練在帶，「他的會員」才是櫃檯要先找的那群。 */
+             mine:!!_bcid && String(m.default_coach_id||'')===String(_bcid),
              left:info.left, remain:info.remain, total:info.total, why:info.why, swap:!!info.swappable,
              inst:!!_instSet[m.id] };
   });
@@ -24801,14 +24819,28 @@ function bamRender(q){
       <span class="ash-eilb">${r.mine?'<i class="bam-star">★</i>':''}${escH(r.name)}</span>
       <span class="ash-eisub">${sub}</span></button>`;
   };
+  /* 一組列：先「這堂教練的會員」、再其他人。兩邊都空就整組不畫。 */
+  const cn=window._bamCoachNm||'';
+  const grp=(title, arr)=>{
+    if(!arr.length) return '';
+    const mine=arr.filter(r=>r.mine), rest=arr.filter(r=>!r.mine);
+    if(!mine.length) return `<div class="bam-grp">${escH(title)}（${arr.length}）</div>${rest.map(row).join('')}`;
+    return `<div class="bam-grp">${escH(title)}（${arr.length}）</div>`
+      + `<div class="bam-sub">${escH(cn||'這堂教練')}的會員（${mine.length}）</div>${mine.map(row).join('')}`
+      + (rest.length?`<div class="bam-sub">其他會員（${rest.length}）</div>${rest.map(row).join('')}`:'');
+  };
   let host=document.getElementById('adp-sheet');
   if(!host){ host=document.createElement('div'); host.id='adp-sheet'; document.body.appendChild(host); }
   host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
     <div class="adp-box" style="max-height:86vh;display:flex;flex-direction:column;">
       <div class="modal-title">新增會員</div>
       <div class="ash-eihead">${String(b.date||'').replace(/-/g,'/')} ${String(b.start_time||'').slice(0,5)}　·　${escH(b.category||'')}</div>
-      <input id="bam-q" class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:8px;"
-             placeholder="搜尋姓名或手機…" value="${escH(kw)}" oninput="bamRender(this.value)" autocomplete="off">
+      ${/* ⚠ 2026-08-24 使用者回報：「上方輸入姓名的空白框有點偏右，超過視窗了」——
+           .ms-search 自帶 `margin:0 18px 12px`（它原本長在有自己內距的清單裡）。
+           行內只寫 margin-bottom 蓋不掉左右那 18px，於是 width:100% 再被推右 18px、
+           整條溢出 36px。用 .bam-inp 把左右歸零，不要動 .ms-search 本體（別處還在用）。 */''}
+      <input id="bam-q" class="ms-search bam-inp" placeholder="搜尋姓名或手機…"
+             value="${escH(kw)}" oninput="bamRender(this.value)" autocomplete="off">
       ${/* 還沒建檔的客人（2026-08-24 使用者定案：待簽約要保留「打散客姓名」的能力）——
            建立預約視窗原本就填得了還沒建檔的人，搬到這裡不能把這個能力弄丟。
            ⚠ 這條路不綁 member_id，只寫 trial_name／trial_phone，與舊的「待簽約卡位」
@@ -24816,16 +24848,19 @@ function bamRender(q){
       <details class="bam-guest">
         <summary>不在名單上？直接建立待簽約</summary>
         <div class="bam-guest-b">
-          <input id="bam-gn" class="ms-search" placeholder="客戶姓名 *" autocomplete="off">
-          <input id="bam-gp" class="ms-search" placeholder="手機（選填）" autocomplete="off">
+          <input id="bam-gn" class="ms-search bam-inp" style="margin-bottom:0;" placeholder="客戶姓名 *" autocomplete="off">
+          <input id="bam-gp" class="ms-search bam-inp" style="margin-bottom:0;" placeholder="手機（選填）" autocomplete="off">
           <button type="button" class="btn btn-gold btn-sm" onclick="bamGuestHold()">建立待簽約</button>
         </div>
       </details>
       <div style="flex:1;min-height:0;overflow-y:auto;">
-        ${withTk.length?`<div class="bam-grp">有可用票券（${withTk.length}）</div>${withTk.map(row).join('')}`:''}
+        ${/* 2026-08-24 使用者回報：「手機端這邊沒有篩選出教練的會員」——
+             原本只靠排序（★ 的排前面）＋一個小星號，一長串名字裡根本看不出分界。
+             改成每一組裡再切一刀：「○○的會員」獨立一個小標，其餘接在後面。
+             ⚠ 是分組不是篩掉 —— 別的教練的會員照樣找得到（櫃檯常常在幫別人排）。 */''}
+        ${grp('有可用票券', withTk)}
         ${(()=>{ const sw=noTk.filter(r=>r.swap), no=noTk.filter(r=>!r.swap);
-          return (sw.length?`<div class="bam-grp">票已排完，可以調課過來（${sw.length}）</div>${sw.map(row).join('')}`:'')
-               + (no.length?`<div class="bam-grp">沒有可用票券 —— 可先待簽約（${no.length}）</div>${no.map(row).join('')}`:''); })()}
+          return grp('票已排完，可以調課過來', sw) + grp('沒有可用票券 —— 可先待簽約', no); })()}
         ${(!withTk.length&&!noTk.length)?'<div class="ash-einote">找不到符合的會員。</div>':''}
       </div>
       <div class="adp-foot"><button class="btn btn-ghost" onclick="ashDateClose()">取消</button></div>
@@ -26776,7 +26811,16 @@ async function expandBkCard(el, id){
        2026-08-21：acts 補齊，讓標題卡的「調整課程」也給得出刪除課卡
        （使用者回報「標題卡裡面又沒有取消預約」）—— pending 仍為 true，
        所以會員卡照舊不畫圓鈕，不會變成同一件事兩顆按鈕。 */
-    await bkCardPop(el, b, btns, {pending:true, staff, own, canCancel, closed, isGroup, editable:false});
+    /* 2026-08-24 使用者回報：「點這堂課的標題卡，沒有更改場地的選項」——
+       這個手作的 acts 物件從來沒有 venue 這個鍵，所以待簽約／空堂的卡永遠給不出「更換場地」。
+       0820 當時待簽約還是少數狀況；會員改從課卡的［＋新增］安排之後，空堂變成建立預約的
+       常態產物，「建好才發現場地要換」一定會發生。
+       ⚠ 條件與主路徑的 _editable 一字不差（同一句規則不要兩邊各寫一份）；
+         editable 本身維持 false —— 它還管著代課與團課人數，那兩件事沒有要一起開。 */
+    const _pendVenue=((staff||own) && !closed && String(b.date)>=ymd(TODAY) && !bkIsCoachLeave(b))
+      ? (bkIsSelf(b)?'self':'any') : null;
+    await bkCardPop(el, b, btns, {pending:true, staff, own, canCancel, closed, isGroup, editable:false,
+      venue:_pendVenue});
     window._expandedBkEl = el;
     return;
   }
@@ -29261,6 +29305,11 @@ async function _bkToggleVenueUnit(id, unit){
    原本一律 openBookingDetail —— 從簡易課卡進來的人期待的是回到剛剛那張清單，
    而不是被丟進（已經退役的）預約明細。其餘呼叫端不帶參數，行為完全不變。 */
 async function openVenueChange(id, backTo){
+  /* 2026-08-24 使用者回報：「從這邊點返回，又會出現該淘汰的預約明細」——
+     「返回」本來就會照 backTo 走，但**換成功之後**（doVenueChange）一律重開
+     openBookingDetail，於是從課卡的「調整課程」進來換場地，換完就掉進舊的明細視窗，
+     再按返回又是它。把 backTo 記下來，成功之後回到原本的地方。 */
+  window._vcBack=(backTo==='ash')?String(id):null;
   const b=await dbGet('bookings',id); if(!b){showToast('找不到預約');return;}
   const curVid=venueEffId(b);   // 沒填 venue_unit 時也要推得出預設場地（2026-08-21）
   const opts=await Promise.all(getVenues().filter(v=>v.active!==false).map(async v=>{
@@ -29319,14 +29368,23 @@ async function doVenueChange(id,vid){
       return;
     }
   }catch(_){}
-  await openBookingDetail(id);
+  await vcReopen(id);
   /* 底下那一頁也重畫（寫入時 dbCacheApply 已就地更新快取，所以是 0 網路等待）。
      _calStepping 讓行事曆吃快取重繪、不跑翻頁動畫；明細視窗是獨立覆層，不會被關掉。 */
   try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
  }catch(e){ done(); showToast('更換失敗：'+(e&&e.message?e.message:e)); }
 }
+/* 換完場地要回到「原本是從哪裡進來的」。從課卡的「調整課程」進來就回那一張，
+   不要把人丟進已經要淘汰的預約明細（2026-08-24 使用者回報）。 */
+async function vcReopen(id){
+  const fromAsh=(window._vcBack===String(id));
+  window._vcBack=null;
+  try{ window._ashBack=null; }catch(_){}   // 旗標已經用不到了，別留給下一次誤觸發
+  if(fromAsh && typeof ashEditAsk==='function') return ashEditAsk(id);
+  return openBookingDetail(id);
+}
 /* 換場地後的同行第二台：保留＝只刷新畫面；一併取消＝影子卡取消（本來就不扣點，無票務） */
-function vcKeepSibs(id){ try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}; openBookingDetail(id); }
+function vcKeepSibs(id){ try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}; vcReopen(id); }
 async function vcCancelSibs(id){
   const ids=window._vcSibs||[]; window._vcSibs=null;
   for(const sid of ids){
@@ -29340,7 +29398,7 @@ async function vcCancelSibs(id){
   try{ occCacheClear(); }catch(_){}
   showToast('同行第二台已取消');
   try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
-  openBookingDetail(id);
+  vcReopen(id);
 }
 // 確認補發補課券
 async function confirmMakeup(id){

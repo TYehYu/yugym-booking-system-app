@@ -116,9 +116,21 @@ console.log('\n⑧ 排序與呈現');
   ok('★★ 團課名單：已選 → 有票 → ★主教練 → 姓名（0824 使用者指示）',
      /const ta=\(a\.sum>0\), tb=\(b\.sum>0\);\s*\n\s*if\(ta!==tb\) return ta\?-1:1;/.test(src)
      && /「有票」要排在「★」之前：沒票的人再熟也加不進去/.test(src));
-  ok('★ 主教練是本堂教練的加 ★',
-     /mine:String\(m\.default_coach_id\|\|''\)===String\(b\.coach_id\|\|''\) && !!b\.coach_id/.test(src)
+  /* 2026-08-24 使用者回報：「手機端這邊沒有篩選出教練的會員」——
+     原本只靠排序＋一個小星號，一長串名字裡看不出分界。改成每一組裡再切一刀，
+     「○○的會員」獨立一個小標。歸屬也改用 bkCoachId（代課優先）。 */
+  ok('★★ 教練歸屬用 bkCoachId（代課優先），不是原始 coach_id',
+     /const _bcid=\(typeof bkCoachId==='function'\)\?bkCoachId\(b\):\(b\.coach_id\|\|null\);/.test(src)
+     && /mine:!!_bcid && String\(m\.default_coach_id\|\|''\)===String\(_bcid\)/.test(src)
      && /<i class="bam-star">★<\/i>/.test(src));
+  ok('★★ 每一組裡再切「○○的會員」／「其他會員」兩半（是分組不是篩掉）',
+     /const grp=\(title, arr\)=>\{/.test(src)
+     && /<div class="bam-sub">\$\{escH\(cn\|\|'這堂教練'\)\}的會員（\$\{mine\.length\}）<\/div>/.test(src)
+     && /別的教練的會員照樣找得到（櫃檯常常在幫別人排）/.test(src));
+  ok('★★ 搜尋框不能溢出視窗 —— .ms-search 自帶左右 18px 外距，要用 .bam-inp 歸零',
+     /\.bam-inp\{width:100%;box-sizing:border-box;margin-left:0;margin-right:0;margin-bottom:8px;\}/.test(src)
+     && /<input id="bam-q" class="ms-search bam-inp"/.test(src)
+     && /行內只寫 margin-bottom 蓋不掉左右那 18px/.test(src));
   ok('★ 右邊顯示「可用 N / 總 M 堂」，沒票就寫原因',
      /可用 <b>\$\{r\.remain\}<\/b> \/ \$\{r\.total\} 堂/.test(src)
      && /const tag=m\.sum>0\?`可用 \$\{m\.sum\} \/ \$\{m\.total\|\|m\.sum\} 堂`:\(m\.why\|\|'無票（無法加入，請先儲值）'\)/.test(src));
@@ -127,11 +139,11 @@ console.log('\n⑧ 排序與呈現');
   /* 2026-08-24 使用者定案：「待簽約跟分期應該留到＋新增這邊」＋「如果該會員沒有票券
      （含散客），課卡就會顯示待簽約」——沒票的那一組不再是淡化的死路，而是待簽約入口。 */
   ok('★★ 沒票的那一組改成可點的待簽約入口（不再有淡化的死路）',
-     /沒有可用票券 —— 可先待簽約（\$\{no\.length\}）/.test(src)
+     /grp\('沒有可用票券 —— 可先待簽約', no\)/.test(src)
      && !/const cls=\(can\|\|sw\)\?'':' ash-ei-off';/.test(src)
      && /` onclick="bamHoldAsk\('\$\{r\.id\}'\)"`/.test(src));
   ok('★★ 「票已排完」自成一組，而且點得動（調課入口）',
-     /票已排完，可以調課過來（\$\{sw\.length\}）/.test(src)
+     /grp\('票已排完，可以調課過來', sw\)/.test(src)
      && /const act=can\?` onclick="bamPick\('\$\{r\.id\}'\)"`\n\s*:\(sw\?` onclick="bamSwap\('\$\{r\.id\}'\)"`:` onclick="bamHoldAsk\('\$\{r\.id\}'\)"`\);/.test(src));
   ok('★ 三種列各自寫出「按下去會怎樣」（有票→堂數／排完→調課／沒票→待簽約）',
      /· \$\{r\.inst\?'待簽約／待分期':'待簽約'\} ›/.test(src));

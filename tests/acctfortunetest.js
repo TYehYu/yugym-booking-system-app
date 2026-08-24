@@ -194,8 +194,10 @@ ok('　　單人課走 confirmCancelBooking／checkInBooking（沒有逐人請�
 ok('　　待簽約／待分期不重複給圓鈕（體驗課例外，它本來就沒有 member_id）',
    src.includes("const _canAct = !!r.mid || b.category==='體驗';")
    && src.includes('if(!A.pending && _canAct){')
-   /* 待簽約那條路自己帶一組 acts（editable:false＝不給改期／場地／代課） */
-   && src.includes('await bkCardPop(el, b, btns, {pending:true, staff, own, canCancel, closed, isGroup, editable:false});'));
+   /* 待簽約那條路自己帶一組 acts。editable 仍是 false（它管代課與團課人數），
+      但 2026-08-24 補上 venue —— 空堂變成建立預約的常態產物，一定會需要改場地。 */
+   && src.includes('editable:false,')
+   && src.includes('venue:_pendVenue});'));
 ok('　　票券圓點保留（使用者定案）＋逐名額各取自己那張',
    src.includes('r.sk?(W.seatOf(b.id,r.n)||W.ticketOf(b.id)):W.ticketOf(b.id)') && src.includes('ticketTokens(sl.t,sl.stamps,'));
 ok('　　跨票時用票內序圈本堂（全體序會圈不到）', src.includes('if(s2&&s2.t&&s2.t.id===sl.t.id) _ord++;'));

@@ -329,7 +329,7 @@ console.log('\n待簽約卡：明細退場、刪除課卡補上（使用者回�
      !/openBookingDetail/.test(seg) && !/'doc','會員'/.test(seg));
 }
 ok('★ acts 補齊，標題卡的調整課程給得出刪除課卡',
-   /await bkCardPop\(el, b, btns, \{pending:true, staff, own, canCancel, closed, isGroup, editable:false\}\);/.test(src));
+   /await bkCardPop\(el, b, btns, \{pending:true, staff, own, canCancel, closed, isGroup, editable:false,\s*\n\s*venue:_pendVenue\}\);/.test(src));
 ok('★ 待簽約沒有票券 → 不列「更換票券」（否則是死路）',
    /if\(!_leave && !A\.pending && b\.status==='booked' && !A\.isGroup && isDeskLike\(\)\)/.test(src));
 ok('　　pending 仍為 true，會員卡照舊不畫圓鈕（不會變成兩顆按鈕做同一件事）',
