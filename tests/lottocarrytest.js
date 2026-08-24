@@ -164,9 +164,18 @@ ok('★★ 帳號選單多一項「現場抽獎登記」（手機的抽屜也是
 ok('★★ 只給櫃檯以上，而且 openLottoModal 自己也擋一次（不能只靠畫面沒畫按鈕）',
    /_lot\.style\.display = \(typeof isDeskLike==='function' && isDeskLike\(\)\)\?'':'none';/.test(src)
    && /if\(typeof isDeskLike==='function' && !isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可登記抽獎'\); return; \}/.test(src));
-ok('★★ 首頁那顆鈕在「今天登記過」時也留著（原本沒人可抽就整顆消失）',
-   /const lottoFab=\(!isMobileLayout\(\)&&\(_lotEls\.length\|\|_lotToday\)\)/.test(src)
-   && /今天已登記 <b>\$\{_lotToday\}<\/b> 筆/.test(src));
+/* 2026-08-24 二修（使用者：「這邊不用再提示了」）——改獎品的入口已經在今日營收那一列，
+   這顆就只剩提醒功能，沒人可抽時不需要一直掛在畫面上。 */
+ok('★★ 首頁那顆鈕回到「有人可抽才出現」',
+   /const lottoFab=\(!isMobileLayout\(\)&&_lotEls\.length\)/.test(src)
+   /* ⚠ 「今天已登記（按錯了可以改）」那一區還在（抽獎視窗裡的），這裡只檢查 FAB 那顆。 */
+   && !/今天已登記 <b>/.test(src));
+ok('★★ 改成清單＋先確認（不再是六格方塊、也不再點一下就改）',
+   /class="ash-eirow ash-ei-2c lot-row/.test(src)
+   && /onclick="lottoFixConfirm\('\$\{lotId\}','\$\{x\.key\}'\)"/.test(src)
+   && /async function lottoFixConfirm\(lotId,key\)\{/.test(src)
+   && /<button class="btn btn-green" onclick="lottoFixDo\('\$\{lotId\}','\$\{key\}'\)">確定更改<\/button>/.test(src));
+ok('　　目前登記的那一項標出來且按不動', /\$\{isCur\?' lot-row-cur':''\}"\$\{isCur\?' disabled':''\}/.test(src));
 ok('★★ 沒有待抽名單時也要畫出「今天已登記」那一區（早退掉的話最需要改的那筆看不到）',
    /if\(!list\.length\)\{[\s\S]{0,420}?\$\{_fixBlock\}/.test(src)
    && /這一段要算在「沒有待抽獎會員」的早退\*\*之前\*\*/.test(src));
