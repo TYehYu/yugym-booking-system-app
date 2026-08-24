@@ -107,5 +107,20 @@ ok('　　順帶跳過那一整套票券夾運算（會員頁用不到）',
 ok('　　使用者的原話寫在程式裡',
    /會員端看團體課，要看得到是哪個教練上課\s*\n\s*跟上課人數，但是不能看上課會員名單/.test(src));
 
+/* 2026-08-24 使用者回報兩次「找不到預約」——第一版把範例預約存在 window._memDemoBk，
+   只要中途換過頁就是空的，點下去掉進 dbGet('bookings','DEMO-BK')。改成純函式現造現用。 */
+console.log('\n預覽會員視角的範例課卡：現造現用，不依賴先前狀態');
+ok('★★ memTaskTap 直接造，不讀 window 暫存',
+   /const b=\(id==='DEMO-BK'\) \? memDemoBk\(\) : await dbGet\('bookings',id\);/.test(src)
+   && !/window\._memDemoBk\s*\?/.test(src));
+ok('★★ 三支都是純函式（不存 window、不寫資料庫）',
+   /function memDemoBk\(\)\{/.test(src) && /function memDemoTk\(\)\{/.test(src)
+   && /function memDemoStamps\(\)\{/.test(src));
+ok('★★ 只有「真管理員＋預覽會員視角」才成立',
+   /function memDemoOn\(\)\{\s*\n\s*return !!\(typeof isRealAdmin==='function' && isRealAdmin\(\) && SESSION && SESSION\.role==='member'\);/.test(src));
+ok('★ 時間放今天、10 分鐘後（落在開課前 30 分鐘內，簽到鈕才按得下去）',
+   /const m=Math\.min\(22\*60, Math\.max\(0, n\.getHours\(\)\*60\+n\.getMinutes\(\)\+10\)\);/.test(src)
+   && /擺到別天只看得到「尚未開放」，等於白測/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

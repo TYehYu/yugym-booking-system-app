@@ -10028,8 +10028,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1446';
-const APP_VERSION_LABEL='v260824.1446';
+const APP_VERSION = '260824.1454';
+const APP_VERSION_LABEL='v260824.1454';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -47552,34 +47552,9 @@ PAGES.mem_bookings=async function(){
       &&!(b.pending_contract&&!b.ticket_id))
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   /* 預覽用的範例課卡（2026-08-24 使用者指示：「在我的預約也塞一張範例課卡」）——
-     角色預覽只換前端顯示、不換身分（SESSION.id 仍是管理員的員工 id），而
-     bookings.member_id 有外鍵指向 members，員工 id 放不進去，所以預覽這一頁
-     永遠是空的、看不到剛改好的課卡。用一筆記憶體裡的假預約補上。
-     ⚠ 只有「真的是管理員 ＋ 正在預覽會員視角」才出現；真會員絕對看不到。
-     ⚠ 不寫進資料庫、不進任何統計 —— 它只活在 window._memDemoBk 裡，重整就沒了。
-     ⚠ 時間放今天、且落在「開課前 30 分鐘」內，這樣簽到鈕會是**可按**的狀態
-       （擺到週日的話只看得到「尚未開放」，等於白測）。三顆鈕都改成吐司說明，不動資料。 */
-  window._memDemoBk=null;
-  if(typeof isRealAdmin==='function' && isRealAdmin() && SESSION && SESSION.role==='member'){
-    const _n=new Date();
-    const _m=Math.max(0, _n.getHours()*60+_n.getMinutes()+10);   // 10 分鐘後開始＝簽到已開放
-    const _dt=ymd(TODAY), _dtm=minToTime(Math.min(_m, 22*60));
-    window._memDemoBk={
-      id:'DEMO-BK', member_id:SESSION.id, coach_id:null, ticket_id:'DEMO-TK', ticket_type_id:null,
-      category:'私人教練', date:_dt, start_time:_dtm,
-      duration:60, status:'booked', venue_unit:'multi_1', _demo:true };
-    /* 範例票券（2026-08-24 使用者指示：「幫我增加圓形卡的圖案」）——
-       會員卡上那排圓點是票券夾同一套 ticketTokens 畫的，要有票才畫得出來。
-       這裡給一張 10 堂、已上 3 堂、含這一堂共排 4 堂的假票，剛好看得到
-       「實心＝已上、空心圈起來＝這一堂、空心＝還沒排」三種狀態。 */
-    window._memDemoTk={ id:'DEMO-TK', member_id:SESSION.id, plan_name:'私人教練課 1V1',
-      category:'私人教練', status:'usable', sessions_total:10, sessions_remaining:6 };
-    window._memDemoStamps=[
-      {id:'DEMO-P1', date:'2026-08-03', start_time:'10:00', status:'checked_in', ticket_id:'DEMO-TK'},
-      {id:'DEMO-P2', date:'2026-08-10', start_time:'10:00', status:'checked_in', ticket_id:'DEMO-TK'},
-      {id:'DEMO-P3', date:'2026-08-17', start_time:'10:00', status:'checked_in', ticket_id:'DEMO-TK'},
-      window._memDemoBk ];
-    mine.push(window._memDemoBk);
+     資料現造現用，說明見 memDemoBk 那一組。 */
+  if(memDemoOn()){
+    mine.push(memDemoBk());
     mine.sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   }
   window._memCalData={mine,coachMap};
@@ -48003,13 +47978,45 @@ async function famSave(){
  }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
 }
 /* ══ 會員任務圓卡：點擊彈出「簽到／取消」兩顆圓形按鈕（2026-07-29 使用者指示）══ */
+/* ══ 預覽用的範例資料（2026-08-24）══════════════════════════════════════
+   角色預覽只換前端顯示、不換身分（SESSION.id 仍是管理員的員工 id），而
+   bookings.member_id 有外鍵指向 members —— 員工 id 放不進去，所以預覽會員視角時
+   「我的預約」永遠是空的，看不到課卡長什麼樣。用現造的假資料補上。
+   ⚠ 三支都是**純函式、現造現用**：不存 window、不寫資料庫、不進統計。
+     第一版存在 window._memDemoBk，換一次頁就沒了，點下去變成「找不到預約」。
+   ⚠ 只有「真的是管理員 ＋ 正在預覽會員視角」才成立；真會員一律拿不到。 */
+function memDemoOn(){
+  return !!(typeof isRealAdmin==='function' && isRealAdmin() && SESSION && SESSION.role==='member');
+}
+function memDemoBk(){
+  const n=new Date();
+  /* 放今天、10 分鐘後 —— 落在「開課前 30 分鐘」內，簽到鈕才會是可按的狀態。
+     擺到別天只看得到「尚未開放」，等於白測。 */
+  const m=Math.min(22*60, Math.max(0, n.getHours()*60+n.getMinutes()+10));
+  return { id:'DEMO-BK', member_id:(SESSION&&SESSION.id)||null, coach_id:null,
+    ticket_id:'DEMO-TK', ticket_type_id:null, category:'私人教練',
+    date:ymd(TODAY), start_time:minToTime(m), duration:60,
+    status:'booked', venue_unit:'multi_1', _demo:true };
+}
+/* 10 堂、已上 3 堂、含這一堂共排 4 堂 —— 圓形卡剛好看得到三種狀態：
+   實心＝已上、圈起來＝這一堂、空心＝還沒排。 */
+function memDemoTk(){
+  return { id:'DEMO-TK', member_id:(SESSION&&SESSION.id)||null, plan_name:'私人教練課 1V1',
+    category:'私人教練', status:'usable', sessions_total:10, sessions_remaining:6 };
+}
+function memDemoStamps(){
+  return [
+    {id:'DEMO-P1', date:'2026-08-03', start_time:'10:00', status:'checked_in', ticket_id:'DEMO-TK'},
+    {id:'DEMO-P2', date:'2026-08-10', start_time:'10:00', status:'checked_in', ticket_id:'DEMO-TK'},
+    {id:'DEMO-P3', date:'2026-08-17', start_time:'10:00', status:'checked_in', ticket_id:'DEMO-TK'},
+    memDemoBk() ];
+}
 function memPickDay(ds){ window._memCalKeep=true; _memCalSel=ds; navTo('mem_bookings'); }
 async function memTaskTap(id,el){
-  /* 範例卡不進資料庫（見 PAGES.mem_bookings 的 _memDemoBk）。
-     ⚠ 暫存有可能因為中途換頁而被清掉 —— 那時候不要吐「找不到預約」，
-       直接重畫一次頁面把它補回來（2026-08-24 使用者回報「找不到預約」）。 */
-  if(id==='DEMO-BK' && !window._memDemoBk){ navTo('mem_bookings'); return; }
-  const b=(id==='DEMO-BK' && window._memDemoBk) ? window._memDemoBk : await dbGet('bookings',id);
+  /* 範例卡不進資料庫 —— 現造現用（memDemoBk），不依賴任何先前存下來的狀態。
+     ⚠ 2026-08-24 二修：第一版把它存在 window._memDemoBk，只要中途換過頁就會是空的，
+       於是點下去掉進 dbGet('bookings','DEMO-BK')、吐「找不到預約」。 */
+  const b=(id==='DEMO-BK') ? memDemoBk() : await dbGet('bookings',id);
   if(!b){ showToast('找不到預約'); return; }
   const _demo=!!(b&&b._demo);
   memTaskClose();
@@ -48086,8 +48093,8 @@ async function memTaskTap(id,el){
        不在 bookings.ticket_id，所以團課這裡本來就不會有圓點）。 */
   let _dots='';
   try{
-    const _t=_demo?window._memDemoTk:((window._allTkCache||[]).find(x=>x&&x.id===b.ticket_id));
-    const _st=_demo?window._memDemoStamps:((window._memCalData&&window._memCalData.mine)||[]).filter(x=>x&&x.ticket_id===b.ticket_id);
+    const _t=_demo?memDemoTk():((window._allTkCache||[]).find(x=>x&&x.id===b.ticket_id));
+    const _st=_demo?memDemoStamps():((window._memCalData&&window._memCalData.mine)||[]).filter(x=>x&&x.ticket_id===b.ticket_id);
     if(_t && typeof ticketTokens==='function')
       _dots=`<div class="mtp-dots">${ticketTokens(_t,_st,window._memTypeMap||{},0,b.id,SESSION.id,null)}</div>`;
   }catch(_){}
