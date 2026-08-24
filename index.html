@@ -10169,8 +10169,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.2135';
-const APP_VERSION_LABEL='v260824.2135';
+const APP_VERSION = '260824.2147';
+const APP_VERSION_LABEL='v260824.2147';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -34571,14 +34571,47 @@ async function openSaleKindPick(tkId){
   if(!isDeskLike()) return;
   const t=await dbGet('member_tickets',tkId);
   if(!t){ showToast('找不到票券'); return; }
+  /* 分期方案的約別由系統判定（2026-08-24 使用者定案）——賣的時候不給選，
+     事後也不給改，否則等於留了一個把它改成「續約」多領獎金的後門。 */
+  if(t.installment && typeof t.installment==='object'){
+    showModal(`<div class="modal-title">約別</div>
+      <div style="font-size:13.5px;color:var(--text);line-height:1.95;padding:4px 0 8px;">
+        這張是<b>分期方案</b>，約別由系統判定為「分期」，不能更改。</div>
+      <div style="font-size:11.5px;color:var(--t3);line-height:1.9;">
+        分期不計續約獎金。如果這其實是「自訂方案手動分期」而不是分期方案，
+        那應該是另外開的票，改那一張。</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">知道了</button></div>`);
+    return;
+  }
   const cur=SALE_KIND_LB[t.sale_kind]?t.sale_kind:'new';
-  const btn=(k)=>`<button type="button" class="btn ${cur===k?'btn-green':'btn-ghost'}" style="flex:1;"
-      onclick="setSaleKind('${tkId}','${k}')">${SALE_KIND_LB[k]}</button>`;
+  /* 同一條規則：沒有「已完成的教練課系方案」就不給續約／分期（2026-08-24 使用者定案）。
+     ⚠ 賣的時候擋、事後也要擋 —— 只擋一邊等於留了一個把新約改成續約的後門。
+     ⚠ 判斷這張票**之前**有沒有上完的：拿這張票自己的購買日當界線，
+       不然剛買的這一張自己就是「還沒上完」，永遠算不出結果。 */
+  let _donePt=false;
+  try{
+    const [mts,tts]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
+    const tm=Object.fromEntries((tts||[]).map(x=>[x.id,x]));
+    const _buy=String(t.purchase_date||'').slice(0,10);
+    _donePt=(mts||[]).some(x=>{
+      if(!x || x.id===t.id || x.member_id!==t.member_id) return false;
+      if((tm[x.ticket_type_id]||{}).category!=='私人教練') return false;
+      if(x.status==='refunded') return false;
+      if(_buy && String(x.purchase_date||'').slice(0,10)>_buy) return false;   // 之後才買的不算
+      return (Number(x.sessions_remaining)||0)<=0 || x.status==='used_up';
+    });
+  }catch(_){}
+  const _allow=k=>(k==='new')?true:_donePt;
+  const btn=(k)=>_allow(k)?`<button type="button" class="btn ${cur===k?'btn-green':'btn-ghost'}" style="flex:1;"
+      onclick="setSaleKind('${tkId}','${k}')">${SALE_KIND_LB[k]}</button>`:'';
   showModal(`<div class="modal-title">約別</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">
       ${String(t.plan_name||'票券').replace(/</g,'&lt;')}　${t.sessions_total||0} 堂　$${Number(t.amount_paid||0).toLocaleString()}<br>
       <b>續約獎金只認「續約」</b>，改了會即時反映在教練的薪資計算上，請確認後再送出。</div>
     <div style="display:flex;gap:8px;">${btn('new')}${btn('renewal')}${btn('installment')}</div>
+    ${_donePt?'':`<div style="font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:10px;">
+      這位在買這張之前沒有<b>已上完</b>的教練課方案，所以只能是新約 ——
+      續約與分期要等上一份用完才會出現。</div>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
 }
 async function setSaleKind(tkId, kind){
@@ -42873,13 +42906,20 @@ async function openGrantModal(){
       ${/* 拆帳（2026-08-12 使用者需求：一筆 14400＝現金 7200＋匯款 7200）：填現金收多少，其餘記匯款 */''}
       <div class="form-row" id="gt-splitcash-wrap" style="display:none;"><label>其中現金收多少（其餘記匯款）</label><input type="number" id="gt-splitcash" min="0" placeholder="例如 7200"></div>
       <div class="form-2col">
-        <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>
+        <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher();gtSaleKindSync()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>
         <div class="form-row"><label>付款狀態</label><select id="gt-pay"><option value="paid">已付款</option><option value="unpaid">未付款</option></select></div>
       </div>
       <div class="form-2col">
         
         <!-- 約別（2026-07-27 使用者指示：續約靠人工標記，報表/薪資才數得準；會員有舊教練課票時自動預選續約 -->
-        <div class="form-row"><label>約別</label><select id="gt-salekind" onchange="this.dataset.touched=1"><option value="new">新約</option><option value="renewal">續約</option><option value="group">團課</option><option value="installment">分期</option></select></div>
+        ${/* 2026-08-24 使用者定案：「分期基本上是沒問題的…這種儲值就要移除類別選項，避免選錯」——
+             用內建分期功能賣的（期數 > 1），約別由系統判定成「分期」，整欄不畫。
+             ⚠ 只有內建分期才自動：自訂方案手動分期（每一期分開儲值）資料上看不出來是
+               同一份合約的第 N 期，那種仍然要人選，所以三個選項照舊。 */''}
+        <div class="form-row" id="gt-salekind-row"><label>約別</label><select id="gt-salekind" onchange="this.dataset.touched=1"><option value="new">新約</option><option value="renewal">續約</option><option value="group">團課</option><option value="installment">分期</option></select></div>
+        <div id="gt-salekind-auto" style="display:none;font-size:12px;color:var(--t2);background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px;line-height:1.8;margin-bottom:12px;">
+          約別：<b>分期</b>（這張是分期方案，系統自動判定，不需要選）</div>
+        <div id="gt-salekind-hint" style="display:none;font-size:11.5px;color:var(--t3);line-height:1.8;margin:-6px 0 12px;"></div>
       </div>
       <!-- 折抵券（2026-07-22 待辦2；2026-07-29 改品牌金醒目框＋預設帶入）：持有對應券才顯示；分期不併用 -->
       <div id="gt-voucher-wrap" class="gt-voucher-hi" style="display:none;">
@@ -42933,29 +42973,76 @@ async function openGrantModal(){
   const _mEl=document.querySelector('#modal-bg .modal'); if(_mEl) _mEl.classList.add('modal-wide');
   refreshGrantPlans(); // 依預設選到的會員載入可用方案
 }
+/* 分期（內建功能）的約別不給選（2026-08-24 使用者定案：「這種儲值就要移除類別選項，
+   避免選錯」）—— 期數 > 1 就把整欄收起來、強制標成分期，改成一行說明。
+   ⚠ 自訂方案手動分期不在此列：那種每一期各自儲值，資料上看不出是同一份合約的第 N 期，
+     系統沒有根據可以猜，所以照舊由人選。
+   ⚠ 用 display:none 是刻意的 —— 這裡不是「不能用」而是「沒有可選的餘地」，
+     留一個選不動的下拉只會讓人以為系統壞了（與 0823「不能用就寫原因」不衝突：
+     旁邊那一行就是原因）。 */
+/* 沒有「已完成的教練課系方案」就不給選續約／分期（2026-08-24 使用者定案）——
+   選項直接不列，而不是列出來讓人選了才擋：這一欄直接連到教練的續約獎金，
+   少一個誤選的機會就少一次要事後對帳的麻煩。
+   ⚠ 團課那一項不受影響（它跟教練課的續約獎金是兩回事）。 */
+function gtSaleKindOpts(donePt){
+  const sel=document.getElementById('gt-salekind'); if(!sel) return;
+  const cur=sel.value;
+  const OPTS=[['new','新約'],['renewal','續約'],['group','團課'],['installment','分期']];
+  const allow=k=>(k==='new'||k==='group')?true:!!donePt;
+  sel.innerHTML=OPTS.filter(([k])=>allow(k)).map(([k,lb])=>`<option value="${k}">${lb}</option>`).join('');
+  sel.value=allow(cur)?cur:'new';
+  const note=document.getElementById('gt-salekind-hint');
+  if(note){
+    note.style.display=donePt?'none':'';
+    note.textContent='這位還沒有上完的教練課方案，所以只能是新約（續約與分期要等上一份用完才會出現）。';
+  }
+}
+function gtSaleKindSync(){
+  const row=document.getElementById('gt-salekind-row');
+  const note=document.getElementById('gt-salekind-auto');
+  const sel=document.getElementById('gt-salekind');
+  if(!row||!note||!sel) return;
+  const inst=Number((document.getElementById('gt-install')||{}).value||1)>1;
+  row.style.display=inst?'none':'';
+  note.style.display=inst?'':'none';
+  if(inst){ sel.value='installment'; sel.dataset.touched=''; }
+}
 // 發放票券步驟切換
 function grantGoStep(n){
   document.querySelectorAll('.gt-step').forEach(s=>s.style.display=(Number(s.dataset.gtstep)===n)?'':'none');
-  if(n===2) refreshGrantInfo(); // 進購買資訊時刷新方案資訊與預設金額
+  if(n===2){ refreshGrantInfo(); try{ gtSaleKindSync(); }catch(_){} } // 進購買資訊時刷新方案資訊與預設金額
   // 約別預設（2026-07-27）：會員名下已有教練課類票 → 預選「續約」；櫃台改過就不再動
   if(n===2)(async()=>{ try{
     const mid=(document.getElementById('gt-member')||{}).value;
     const sel=document.getElementById('gt-salekind');
-    if(!mid||!sel||sel.dataset.touched) return;
+    if(!mid||!sel) return;
     const [mts,tts]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
     const tm=Object.fromEntries((tts||[]).map(t=>[t.id,t]));
-    /* 2026-07-29 使用者指示：約別加入「團課」「分期」（對齊帳務表四類）。
-       自動預選：賣團課 → 團課；分期 → 分期；否則看是否買過教練課決定新約/續約。
-       續約獎金只認 renewal，團課/分期不再被誤記成續約（原本團課 4 週優惠被標續約）。 */
+    /* ══ 約別（2026-08-24 使用者定案）══════════════════════════════════
+       「續約或分期的標示，要在該會員是有【已完成】的教練課或者友善教練課的方案、
+         再次儲值才會出現」
+       ⚠ 這一條就是 0727 那次高估的解藥：當時用「買過同類票就算續約」推測，
+         7 月推出 38 張、實際只有 9 張（加購、補儲、換方案全被誤算）。
+         改成「上一份**已經上完**」才給選，第一次買的人根本看不到「續約」這個選項。
+       ⚠ 「已完成」以**餘額**為準、順帶認 used_up —— 今天（0824）才修過兩張
+         「remaining>0 卻卡在 used_up」的票，狀態會跟餘額打架，餘額才是真的。
+         退費的不算（那不是上完，是拿回去了）。 */
+    const _donePt=(mts||[]).some(t=>{
+      if(!t || t.member_id!==mid) return false;
+      if((tm[t.ticket_type_id]||{}).category!=='私人教練') return false;   // 教練課／友善教練課
+      if(t.status==='refunded') return false;
+      return (Number(t.sessions_remaining)||0)<=0 || t.status==='used_up';
+    });
+    sel.dataset.donept=_donePt?'1':'';
+    gtSaleKindOpts(_donePt);
+    if(sel.dataset.touched) return;
+    /* 自動預選：賣團課 → 團課；分期 → 分期；有上完的教練課 → 續約；其餘 → 新約。 */
     const _planNow=window._grantPlanCache;
     const _catNow=_planNow?((tm[_planNow.ticket_type_id]||{}).category||''):'';
     const _instNow=Number((document.getElementById('gt-install')||{}).value||1)>1;
     if(_catNow==='小班肌力'||_catNow==='團體課'||/團課|團體課|小班/.test((_planNow&&_planNow.name)||'')){ sel.value='group'; return; }
-    if(_instNow){ sel.value='installment'; return; }
-    const hasPt=(mts||[]).some(t=>{ if(t.member_id!==mid) return false;
-      const c=(tm[t.ticket_type_id]||{}).category||'';
-      return c!=='自主訓練'&&c!=='團體課'&&!(t.plan_name||'').includes('團'); });
-    sel.value=hasPt?'renewal':'new';
+    if(_instNow){ sel.value='installment'; return; }   /* 畫面上那一欄已由 gtSaleKindSync 收起來 */
+    sel.value=_donePt?'renewal':'new';
   }catch(_){} })();
   if(n===3) renderGrantAttrib(); // 銷售入口：業績歸屬教練卡（預設會員主責教練）
   if(n===4) renderContractStep(); // 簽約：帶入本次金額組合約全文＋簽名板

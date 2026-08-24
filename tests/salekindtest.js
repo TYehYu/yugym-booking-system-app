@@ -116,5 +116,43 @@ ok('★★ 分期續約的續約獎金照算一次（renewListOf 不排除分期
      return !/if\(t\.installment&&typeof t\.installment==='object'\) return;/.test(F)
        && /獎金在購買月成立一次，後續各期不再計/.test(F); })());
 
+/* ══ 2026-08-24 使用者定案：約別盡量交給系統，避免人為多發或少發獎金 ══
+   ①「分期基本上是沒問題的…這種儲值就要移除類別選項，避免選錯」
+     → 用內建分期功能賣的（期數>1），約別自動判定成分期，整欄不畫。
+     ⚠ 自訂方案手動分期（每一期分開儲值）不在此列：資料上看不出是同一份合約的第 N 期。
+   ②「續約或分期的標示，要在該會員是有【已完成】的教練課或者友善教練課的方案、
+      再次儲值才會出現」
+     → 這一條是 0727 高估的解藥（當時「買過同類票就算續約」，推出 38 張、實際 9 張）。 */
+console.log('\n約別由系統判定（0824）');
+ok('★★ 內建分期：整欄不畫、強制標成分期',
+   /function gtSaleKindSync\(\)\{/.test(src)
+   && /row\.style\.display=inst\?'none':'';/.test(src)
+   && /if\(inst\)\{ sel\.value='installment'; sel\.dataset\.touched=''; \}/.test(src)
+   && /約別：<b>分期<\/b>（這張是分期方案，系統自動判定，不需要選）/.test(src));
+ok('　　期數一改就跟著（不是只有進到那一步才算一次）',
+   /onchange="refreshInstallPreview\(\);refreshGrantVoucher\(\);gtSaleKindSync\(\)"/.test(src));
+ok('★★ 沒有「已完成的教練課系方案」→ 續約與分期整個不列出來',
+   /function gtSaleKindOpts\(donePt\)\{/.test(src)
+   && /const allow=k=>\(k==='new'\|\|k==='group'\)\?true:!!donePt;/.test(src)
+   && /選項直接不列，而不是列出來讓人選了才擋/.test(src));
+ok('★★ 「已完成」以餘額為準、順帶認 used_up；退費的不算',
+   /return \(Number\(t\.sessions_remaining\)\|\|0\)<=0 \|\| t\.status==='used_up';/.test(src)
+   && /if\(t\.status==='refunded'\) return false;/.test(src)
+   && /狀態會跟餘額打架，餘額才是真的/.test(src));
+ok('★★ 只認教練課系（category 私人教練）——團課不受影響',
+   /if\(\(tm\[t\.ticket_type_id\]\|\|\{\}\)\.category!=='私人教練'\) return false;   \/\/ 教練課／友善教練課/.test(src));
+ok('★★ 賣的時候擋、事後也要擋（只擋一邊等於留了一個改成續約的後門）',
+   /const _allow=k=>\(k==='new'\)\?true:_donePt;/.test(src)
+   && /只擋一邊等於留了一個把新約改成續約的後門/.test(src));
+ok('★★ 事後判斷要看「買這張之前」有沒有上完的（否則這張自己就是還沒上完）',
+   /if\(_buy && String\(x\.purchase_date\|\|''\)\.slice\(0,10\)>_buy\) return false;   \/\/ 之後才買的不算/.test(src)
+   && /if\(!x \|\| x\.id===t\.id \|\| x\.member_id!==t\.member_id\) return false;/.test(src));
+ok('★★ 分期方案的約別事後也不給改（不然是多領獎金的後門）',
+   /if\(t\.installment && typeof t\.installment==='object'\)\{/.test(src)
+   && /這張是<b>分期方案<\/b>，約別由系統判定為「分期」，不能更改。/.test(src));
+ok('★ 不能選的時候要寫原因（0823 的語彙）',
+   /這位還沒有上完的教練課方案，所以只能是新約/.test(src)
+   && /續約與分期要等上一份用完才會出現/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
