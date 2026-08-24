@@ -123,5 +123,28 @@ console.log('\n⑦ 爛輸入不能炸');
      lib.venueAllowsCategory('','私人教練')===true && lib.venueAllowsCategory(null,'私人教練')===true);
 }
 
+console.log('\n⑧ 改期也要選場地（0824 使用者核可：選了就是那裡，滿了擋下）');
+{
+  ok('★★ 「調整預約時間」視窗多了場地欄，預設帶目前的場地',
+     /<label class="ash-eilabel"><span>場地<\/span>\s*\n\s*<span style="flex:1;min-width:0;">\$\{ashVenueField\('amv-v', venueEffId\(b\)\|\|''\)\}<\/span><\/label>/.test(src));
+  ok('★★ 排除自己（改期時自己佔的位不能把自己擋掉）',
+     /st=venueAvailAt\(day, ns, ne, b\?b\.id:null\);   \/\/ 排除自己/.test(src));
+  ok('★★ 選了哪個就用哪個（venue_pref＝forceVid），滿了直接擋',
+     /const vbk=Object\.assign\(\{\}, b, \{venue_pref:nv\|\|null\}\);/.test(src));
+  ok('　　與建立預約共用同一支重驗邏輯（hidden 鏡像 bk-date／bk-time／bk-venue）',
+     /function amvSync\(\)\{/.test(src) && /set\('bk-date',d\); set\('bk-time',t\); set\('bk-venue',v\);/.test(src));
+  ok('★★ 為什麼改期也要選，寫在原地', /辛苦選的場地，改個時間就被系統換掉/.test(src));
+}
+
+console.log('\n⑨ 教練專屬快速預約不能繞過場地選擇');
+{
+  ok('★★ 導向新的兩段式視窗（原本是一份獨立表單，會建出沒指定場地的課）',
+     /async function openQuickBookCoach\(\)\{[\s\S]{0,900}?window\._bkCoachCourseOnly=true;[\s\S]{0,80}?return openBookingModal\(\);/.test(src));
+  ok('　　舊表單整段留著沒刪（日後要退回不必重寫）',
+     /async function openQuickBookCoachLegacy\(\)\{/.test(src));
+  ok('　　理由寫在原地：不改就多一條繞過場地選擇的後門',
+     /教練就多了一條\*\*繞過場地選擇\*\*的後門/.test(src));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

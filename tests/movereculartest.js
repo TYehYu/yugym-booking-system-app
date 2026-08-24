@@ -43,9 +43,14 @@ ok('　　沒有可用票券就不給，並講原因（不要給一個按下去�
    /if\(!\(max>0\)\) return \{ok:false,max:0,why:'這位會員目前沒有可用票券，無法往後連排；請先儲值或續約。'\};/.test(src));
 
 console.log('\n送出（admhMoveDo）');
+/* 0824：這張視窗多了場地欄（建立時是硬指定的，改期也要），
+   所以早退條件變成「時間、場地都沒動，也沒勾連續」。 */
 ok('★★ 只勾連續、時間沒動也要放行 —— 原本「時間沒有變動」會把連排一起擋死',
    /const moved=\(nd!==b\.date \|\| nt!==b\.start_time\);/.test(src)
-   && /if\(!moved && !rc\.on\)\{ showToast\('時間沒有變動'\); return; \}/.test(src));
+   && /if\(!moved && !vChanged && !rc\.on\)\{ showToast\('時間與場地都沒有變動'\); return; \}/.test(src));
+ok('★★ 場地也是硬指定：選了哪個就用哪個，滿了直接擋',
+   /const vbk=Object\.assign\(\{\}, b, \{venue_pref:nv\|\|null\}\);/.test(src)
+   && /b\.venue_unit=vbk\.venue_unit\|\|b\.venue_unit;/.test(src));
 ok('★ 沒有畫開關的情況（不可用）readRecur 不會炸',
    /const rc=\(document\.getElementById\('amv-recurring'\)\) \? readRecur\('amv'\) : \{on:false\};/.test(src));
 ok('★ 勾了但沒選星期／沒填堂數要擋下來',
@@ -57,7 +62,9 @@ ok('★★ 有改時間時：先改期再連排，起點用「改完之後」的
 ok('★ 改期失敗就不連排（早退，不要在錯的時段上長出一串）',
    /catch\(err\)\{ showToast\('修改失敗：'\+\(err&&err\.message\?err\.message:err\)\); navTo\(CUR_PAGE\); return; \}/.test(src));
 ok('★ 只連排不改期：走早退路徑，不進 confirmCalMove',
-   /if\(!moved\)\{ await amvRunRecur\(b, nd, nt, rc\); navTo\(CUR_PAGE\); return; \}/.test(src));
+   /if\(!moved\)\{[\s\S]{0,320}?if\(rc\.on\) await amvRunRecur\(b, nd, nt, rc\);\s*\n\s*navTo\(CUR_PAGE\); return;/.test(src));
+ok('　　只改場地（沒改時間）也要寫回去',
+   /if\(vChanged\)\{ try\{ await dbPut\('bookings',b\); showToast\('已更新場地'\); \}/.test(src));
 
 console.log('\n建立（amvRunRecur）');
 ok('★★ 一律走 runRecurringBooking —— 自己 dbPut 的話票不會被扣',

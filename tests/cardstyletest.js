@@ -479,7 +479,8 @@ ok('★ 欄位換成自家按鈕＋隱藏 input（讀值的程式一行都不用
    && /<input type="hidden" id="\$\{id\}"/.test(src)
    /* 0824 拆兩個視窗：日期搬到視窗一，onchange 改叫 bkStep1Changed（重驗場地＋營業時間） */
    && /\$\{ashDateField\('bk-date', pf\.date\|\|'', '', 'bkStep1Changed\(\)'\)\}/.test(src)
-   && /\$\{ashDateField\('amv-d', b\.date, ymd\(TODAY\)\)\}/.test(src));
+   /* 0824：改期視窗多了場地欄，日期／時間改動時要同步鏡像並重驗（amvSync） */
+   && /\$\{ashDateField\('amv-d', b\.date, ymd\(TODAY\), 'amvSync\(\)'\)\}/.test(src));
 ok('★ 兩個原生 input[type=date] 都換掉了',
    !/<input type="date" id="bk-date"/.test(src) && !/<input type="date" id="amv-d"/.test(src));
 ok('★★ 不能用 showModal —— 日期欄長在「建立預約」那張視窗裡，一開日曆整張表單就沒了',
@@ -501,7 +502,7 @@ ok('　　營業時間 08–22、分鐘只有整點與半點',
 console.log('\n時間也用自家挑選器（使用者：這邊也是）');
 ok('★ 兩處時間欄都換掉原生 select',
    /\$\{ashTimeField\('bk-time', pf\.time\|\|'', 'bkStep1Changed\(\)'\)\}/.test(src)
-   && /\$\{ashTimeField\('amv-t', b\.start_time\)\}/.test(src)
+   && /\$\{ashTimeField\('amv-t', b\.start_time, 'amvSync\(\)'\)\}/.test(src)
    && !/<select id="bk-time"/.test(src) && !/<select id="amv-t"/.test(src));
 ok('★ 與日期共用同一層浮層（不會再蓋掉底下的表單）',
    /function ashTimeOpen\(id\)\{[\s\S]{0,600}?host\.id='adp-sheet'/.test(src));

@@ -65,7 +65,8 @@ ok('　　開這張時不再先收課卡（原本先收掉，返回就什麼都�
    closeModal → collapseBkCard 要在送出前成對出現。 */
 ok('　　真的送出時才收課卡（confirmCalMove 之後會 navTo 重繪，浮層會變孤兒）',
    /closeModal\(\);\s*\n\s*\/\* 真的要送出了才收課卡[\s\S]{0,140}try\{ collapseBkCard\(\); \}catch\(_\)\{\}/.test(src)
-   && /if\(!moved\)\{ await amvRunRecur\(b, nd, nt, rc\); navTo\(CUR_PAGE\); return; \}\s*\n\s*confirmCalMove\(/.test(src));
+   /* 0824：改期也要選場地，所以「沒改時間」那條路多了「只改場地也要寫回去」 */
+   && /if\(!moved\)\{\s*\n[\s\S]{0,320}?navTo\(CUR_PAGE\); return;\s*\n\s*\}\s*\n\s*confirmCalMove\(/.test(src));
 /* 2026-08-20 使用者指示：教練課／友善教練課也要能調整場地 → venue 與 sub 拆成兩個旗標。
    自主訓練走 bkOrbitVenue（只有它有跑步機台數），其他課別走 openVenueChange（逐場地檢查衝突）。 */
 ok('★ 視窗集合：更改場地（所有課別，不再只有自主訓練）',

@@ -9925,8 +9925,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1152';
-const APP_VERSION_LABEL='v260824.1152';
+const APP_VERSION = '260824.1157';
+const APP_VERSION_LABEL='v260824.1157';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21463,6 +21463,45 @@ function bkMoveBlockReason(b){
 /* 簡易課卡右上角「調整日期／時間」（2026-08-20 使用者指示）——
    小視窗選新日期與時間 → validateBooking 驗過 → 走 confirmCalMove（原/新時間確認卡、
    場地備註、同日改時間會追問「後續系列一起改」），與拖曳改時間同一條路。 */
+/* 「調整預約時間」那張視窗的欄位同步（2026-08-24）——
+   bkVenueRefresh／ashVenueOpen 讀的是 bk-date／bk-time／bk-venue（建立預約那條路的 id），
+   這裡放三個 hidden 鏡像，改動時同步過去，就能共用同一支重驗邏輯，
+   不必為改期再寫一份「這個時段場地還有沒有位」。 */
+function amvSync(){
+  const d=(document.getElementById('amv-d')||{}).value||'';
+  const t=String((document.getElementById('amv-t')||{}).value||'').slice(0,5);
+  const v=String((document.getElementById('amv-v')||{}).value||'');
+  const set=(id,val)=>{ const el=document.getElementById(id); if(el) el.value=val; };
+  set('bk-date',d); set('bk-time',t); set('bk-venue',v);
+  try{ amvVenueRefresh(); }catch(_){}
+}
+/* 與建立預約的 bkVenueRefresh 同一件事，只是標紅的欄位是 amv-v，
+   而且要排除自己（改期時自己佔的位不能把自己擋掉）。 */
+async function amvVenueRefresh(){
+  const btn=document.getElementById('amv-v-btn'); if(!btn) return;
+  const vid=String((document.getElementById('amv-v')||{}).value||'');
+  const ds=(document.getElementById('amv-d')||{}).value||'';
+  const tm=String((document.getElementById('amv-t')||{}).value||'').slice(0,5);
+  let tip=document.getElementById('amv-v-bad');
+  const clear=()=>{ btn.classList.remove('adp-field-bad'); if(tip) tip.remove(); };
+  if(!vid||!ds||!tm){ clear(); return; }
+  const b=window._amvB||null;
+  let st=null;
+  try{
+    const all=await dbGetAll('bookings').catch(()=>null);
+    if(all){
+      const day=all.filter(x=>x && x.date===ds && x.status!=='cancelled');
+      const ns=timeToMin(tm), ne=ns+((b&&Number(b.duration))||60);
+      st=venueAvailAt(day, ns, ne, b?b.id:null);   // 排除自己
+    }
+  }catch(_){}
+  const sv=(st||[]).find(x=>x.id===vid);
+  if(!sv || sv.ok){ clear(); return; }
+  btn.classList.add('adp-field-bad');
+  if(!tip){ tip=document.createElement('div'); tip.id='amv-v-bad'; tip.className='adp-badnote';
+    btn.parentNode.appendChild(tip); }
+  tip.textContent=`${sv.name}${sv.why}—— 請改選其他場地`;
+}
 async function admhMoveAsk(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   /* 2026-08-23：規則收斂到 bkMoveBlockReason，與拖移那三條路共用（見那支的說明） */
@@ -21483,16 +21522,28 @@ async function admhMoveAsk(id){
      堂數上限用「這位會員這類課還剩幾堂」；runRecurringBooking 內部還會再夾一次，
      這裡算的只是給人看的預設值。 */
   const _rec=await amvRecurCtx(b);
+  window._amvB=b;   // amvVenueRefresh 要用它排除自己、取時長
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">調整預約時間</div>
     <div class="ash-eihead">${calMoveWho(b)}</div>
     <div class="ash-eibox" style="margin-bottom:14px;">目前　<b style="font-family:var(--num);color:var(--text);">${fmtRange(b.date,b.start_time,dur)}</b></div>
     <label class="ash-eilabel"><span>日期</span>
-      <span style="flex:1;min-width:0;">${ashDateField('amv-d', b.date, ymd(TODAY))}</span></label>
+      <span style="flex:1;min-width:0;">${ashDateField('amv-d', b.date, ymd(TODAY), 'amvSync()')}</span></label>
     <label class="ash-eilabel"><span>時間</span>
       ${''/* 0801 定案：時間欄不用 input[type=time]（iOS 滾輪沒有確定鈕），一律下拉 */}
       ${/* 框裡的時間置中（2026-08-20 使用者指示）；text-align-last 是 select 的關鍵，
            只給 text-align 在部分瀏覽器對收合狀態不生效 */''}
-      <span style="flex:1;min-width:0;">${ashTimeField('amv-t', b.start_time)}</span></label>
+      <span style="flex:1;min-width:0;">${ashTimeField('amv-t', b.start_time, 'amvSync()')}</span></label>
+    ${/* 場地（2026-08-24 建立預約改版）：建立時場地是人硬指定的，改期當然也要 ——
+         否則「辛苦選的場地，改個時間就被系統換掉」，那正是這次要解決的痛點。
+         預設帶目前的場地；日期時間一改就重驗（滿了標紅要求重選，不自動改派）。
+         ⚠ 欄位 id 用 bk-date／bk-time／bk-venue 的**別名**：bkVenueRefresh 讀的是那三個 id，
+           所以這裡放三個 hidden 鏡像，改動時同步過去（不動 bkVenueRefresh 本身，
+           它同時服務建立預約那條路）。 */''}
+    <label class="ash-eilabel"><span>場地</span>
+      <span style="flex:1;min-width:0;">${ashVenueField('amv-v', venueEffId(b)||'')}</span></label>
+    <input type="hidden" id="bk-date" value="${b.date}">
+    <input type="hidden" id="bk-time" value="${String(b.start_time).slice(0,5)}">
+    <input type="hidden" id="bk-venue" value="${venueEffId(b)||''}">
     ${_rec.ok?`<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--bd);">
       <div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:8px;">
         往後每週再排幾堂。<b>這一堂不會重複建立</b>，是從它的隔天開始算起；
@@ -21540,18 +21591,29 @@ async function admhMoveDo(id){
     if(!rc.dows.length){ showToast('請勾選至少一個星期'); return; }
     if(!(rc.count>0)){ showToast('請填寫要再排幾堂'); return; }
   }
+  /* 場地（2026-08-24）：建立時是人硬指定的，改期也要 —— 否則「辛苦選的場地，
+     改個時間就被系統換掉」。選了哪個就用哪個（venue_pref＝forceVid），滿了直接擋。 */
+  const nv=String((document.getElementById('amv-v')||{}).value||'')||venueEffId(b)||'';
+  const vChanged=!!nv && nv!==(venueEffId(b)||'');
   const moved=(nd!==b.date || nt!==b.start_time);
-  if(!moved && !rc.on){ showToast('時間沒有變動'); return; }
+  if(!moved && !vChanged && !rc.on){ showToast('時間與場地都沒有變動'); return; }
   if(nd<ymd(TODAY)){ showToast('不能改到過去的日期'); return; }
-  if(moved){
-    const verr=await validateBooking(b,nd,nt,b.duration);
-    if(verr){ showToast(verr); return; }
+  if(moved || vChanged){
+    const vbk=Object.assign({}, b, {venue_pref:nv||null});
+    const verr=await validateBooking(vbk,nd,nt,b.duration);
+    if(verr){ showToast(verr, 5000); return; }
+    b.venue_unit=vbk.venue_unit||b.venue_unit;   // validateBooking 配好的單位（multi_2 這種）
   }
   closeModal();
   /* 真的要送出了才收課卡：confirmCalMove 之後會 navTo 重繪整頁，
      課卡是掛在 body 的浮層、不會被重繪帶走，留著會變成孤兒。 */
   try{ collapseBkCard(); }catch(_){}
-  if(!moved){ await amvRunRecur(b, nd, nt, rc); navTo(CUR_PAGE); return; }
+  if(!moved){
+    /* 只改場地（沒改時間）也要寫回去 */
+    if(vChanged){ try{ await dbPut('bookings',b); showToast('已更新場地'); }catch(e){ showToast('修改失敗：'+((e&&e.message)||e)); } }
+    if(rc.on) await amvRunRecur(b, nd, nt, rc);
+    navTo(CUR_PAGE); return;
+  }
   confirmCalMove(b, b.date, b.start_time, b.duration||60, nd, nt, b.duration||60, async()=>{
     try{
       b.date=nd; b.start_time=nt; await dbPut('bookings',b);
@@ -30430,7 +30492,9 @@ function ashVenuePick(id, vid){
   if(btn){ const lb=btn.firstElementChild;
     lb.textContent=(getVenues().find(x=>x.id===vid)||{}).name||vid; lb.className=''; }
   ashDateClose();
-  try{ bkVenueRefresh(); }catch(_){}
+  /* 改期視窗（amv-v）與建立預約（bk-venue）各自重驗；amvSync 會把值鏡射過去 */
+  if(id==='amv-v'){ try{ amvSync(); }catch(_){} }
+  else { try{ bkVenueRefresh(); }catch(_){} }
 }
 /* 日期或時間改了 → 原本選的場地可能已經滿了。不自動幫他換（那正是「硬指定」要避免的），
    改成標紅並寫原因，請他重選 —— 與課種不可約時同一套處理（bkTypeTimeWarn）。 */
@@ -47998,6 +48062,18 @@ async function qbScanSlots(date,period,vbk){
   return out;
 }
 async function openQuickBookCoach(){
+  /* ⚠ 2026-08-24 建立預約改版：這是一份**獨立**的建立表單（自己挑會員、自己叫
+     runRecurringBooking），完全不經過「建立預約」那兩個視窗。改版之後如果放著不管，
+     教練就多了一條**繞過場地選擇**的後門 —— 建出來的課沒有人指定場地，
+     又回到自動配置，而「場地由人硬指定」正是這次要立的規則。
+     使用者定案（同日）：導向新的兩段式視窗，少維護一份表單。
+     ⚠ _prefill 的日期時間照樣帶過去，所以從行事曆空白處點進來仍然是「直接選場地」。
+     ⚠ 舊的表單程式碼整段留著沒刪（_qbForm／_qbSubmitForm 等）：它還有「只列教練課」
+       與逐位會員票券摘要那些細節，日後若要退回這條路不必重寫。 */
+  window._bkCoachCourseOnly=true;    // 這顆鈕的語意就是「幫我排一堂教練課」
+  return openBookingModal();
+}
+async function openQuickBookCoachLegacy(){
   const myId=SESSION.id;
   // 找教練課種類
   let typeId=null;
