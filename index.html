@@ -9318,6 +9318,13 @@ button.rev-kind:hover{filter:brightness(.96);box-shadow:0 1px 4px rgba(60,50,38,
 .lot-fix-l i{font-style:normal;font-size:11.5px;color:var(--t2);}
 .lot-fix-r{flex:none;font-size:11.5px;color:var(--t3);font-family:var(--num),inherit;}
 .lot-fix-go{color:var(--green);font-weight:800;font-family:inherit;margin-left:4px;}
+/* 今日營收那一列的「抽獎」標籤（2026-08-24）——用獎品的金色，與教練歸屬的
+   代表色分得開；點得動的才有 hover。 */
+.rev-att.rev-att-lot{background:#f3e6cc;color:#8a5e28;}
+button.rev-att.rev-att-lot{cursor:pointer;}
+button.rev-att.rev-att-lot:hover{filter:brightness(.96);}
+/* 過了當天（非管理員）：淡化但仍可點 —— 點了會說明為什麼不能改 */
+button.rev-att.rev-att-lot-off{opacity:.5;}
 .lot-prize.lot-prize-cur{border-color:var(--green);background:#f4f9f6;opacity:.6;}
 /* 沒有人可抽、只是留著讓櫃檯改今天登記的那顆 —— 收斂成低調的樣子，不要跟
    「有人可抽」的提醒搶注意力（2026-08-24）。 */
@@ -10102,8 +10109,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1706';
-const APP_VERSION_LABEL='v260824.1706';
+const APP_VERSION = '260824.1713';
+const APP_VERSION_LABEL='v260824.1713';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17150,6 +17157,12 @@ PAGES.g_dashboard=async function(){
       tk:_t?_t.id:undefined, kind:_t?'installment':undefined,   /* 後續各期一律標「分期」（首期＝票券列，照票券約別） */
       /* 場租／商品／票券重啟不是教練課，一樣不標歸屬（2026-08-07 同一條規則） */
       att:(_t?( p.coach_id||_t.sold_by||null):(p.coach_id||null)), attKind:(_t&&_attNeed(_t))?'tk':null, attRef:_t?_t.id:p.id,
+      /* 抽獎登記（2026-08-24 使用者定案：「在今日營收這邊顯示，左邊續約的標籤改成抽獎，
+         從這邊去調整抽獎內容，所以只有看得到這個頁面的人可以修改」）——
+         抽獎本來就會在今日營收留一筆 $0 的紀錄，改獎品的入口放在那一列最自然：
+         櫃檯本來就會在這裡對帳，而且權限自動跟著這一頁走。 */
+      lot:(p.source==='lottery'?p.id:null),
+      lotDate:(p.source==='lottery'?_lotPuDate(p):null),
       pay:_payLb(p.payment_method), paySp:p.pay_split||null, payRef:p.id,
       inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')};}),
   ];
@@ -18347,10 +18360,35 @@ async function openLottoModal(selId){
     ${_fixBlock}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
+/* 誰、什麼時候改得動抽獎項目（2026-08-24 使用者定案：
+   「這些抽獎的品項只能在當天修正，過了就不能修改，除非找管理員」）——
+   當天＝櫃檯自己就能改（那是「剛剛按錯」）；過了當天＝只有管理員
+   （那就變成事後調整紀錄，該有人負責）。
+   ⚠ 判斷只寫這一支，畫面與寫入端都吃它 —— 兩邊各判各的遲早會漂。 */
+function lottoFixAllow(pu){
+  if(!pu) return {ok:false, why:'找不到這筆登記'};
+  const isAdmin=!!(SESSION && SESSION.role==='admin');
+  if(!isAdmin && !((typeof isDeskLike==='function') && isDeskLike()))
+    return {ok:false, why:'只有櫃檯以上可以修改抽獎項目'};
+  if(_lotPuDate(pu)===ymd(TODAY)) return {ok:true, why:''};
+  return isAdmin ? {ok:true, why:''}
+    : {ok:false, why:'過了當天就不能自己改了 —— 這一筆是 '+_lotPuDate(pu)+' 登記的，請找管理員處理'};
+}
 /* 改抽獎項目：先問改成哪一項（2026-08-24）。 */
-async function lottoFixAsk(lotId){
+async function lottoFixAsk(lotId, from){
   const p=await dbGet('purchases',lotId).catch(()=>null);
   if(!p){ showToast('找不到這筆登記'); return; }
+  const _al=lottoFixAllow(p);
+  if(!_al.ok){
+    /* 不能改的時候要說原因，不要只是按不動（0823 定的語彙） */
+    showModal(`<div class="modal-title">這一筆不能改</div>
+      <div style="font-size:13.5px;color:var(--text);line-height:1.95;padding:4px 0 8px;">${escH(_al.why)}</div>
+      <div style="font-size:11.5px;color:var(--t3);line-height:1.9;">
+        當天登記錯了，櫃檯可以自己在這裡改；隔天之後就變成事後調整紀錄，
+        要由管理員處理（票券已經發出去、也可能已經被用掉了）。</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="${from==='rev'?'closeModal()':'openLottoModal()'}">知道了</button></div>`);
+    return;
+  }
   const m=await dbGet('members',p.member_id).catch(()=>null);
   const cur=String(p.plan_name||'').replace(/^抽獎[：:]/,'');
   const grid=LOTTO_PRIZES.map(x=>`<button class="lot-prize${x.label===cur?' lot-prize-cur':''}" onclick="lottoFixDo('${lotId}','${x.key}')">${
@@ -18366,13 +18404,20 @@ async function lottoFixAsk(lotId){
     <div style="font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:10px;">
       改了會：把原本發錯的那張票券作廢（已經用掉的不能改，會擋下來）、發出正確的獎品、
       並更正這一筆登記的紀錄。抽獎次數不會多扣，也不會多給。</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="openLottoModal()">返回</button></div>`);
+    ${/* 從今日營收進來的就只是關掉（那一頁不是抽獎視窗，退回去會很怪）；
+         從抽獎視窗進來的才回抽獎視窗。 */''}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="${from==='rev'?'closeModal()':'openLottoModal()'}">返回</button></div>`);
+  window._lotFixFrom=(from==='rev')?'rev':'';
 }
 async function lottoFixDo(lotId,key){ return onceAct('lotfix:'+lotId, ()=>_lottoFixDo(lotId,key)); }
 async function _lottoFixDo(lotId,key){
  try{
   const np=LOTTO_PRIZES.find(x=>x.key===key); if(!np) return;
   const pu=await dbGet('purchases',lotId); if(!pu){ showToast('找不到這筆登記'); return; }
+  /* 寫入前再擋一次：入口有兩個（今日營收那一列、抽獎視窗），
+     而且視窗開著跨過午夜就會從「當天」變成「隔天」（2026-08-24）。 */
+  const _al=lottoFixAllow(pu);
+  if(!_al.ok){ showToast(_al.why, 7000); return; }
   const cur=String(pu.plan_name||'').replace(/^抽獎[：:]/,'');
   if(cur===np.label){ showToast('本來就是這一項，沒有變動'); openLottoModal(); return; }
   const mid=pu.member_id;
@@ -18420,6 +18465,8 @@ async function _lottoFixDo(lotId,key){
   dbCacheClear(['member_tickets','ticket_logs','purchases']);
   window._lottoMapCache=null; window._lottoDirty=true;
   showToast(`已更正為「${np.label}」`+(np.kind==='goods'?'（實體贈品現場交付）':'，獎品已重新發進會員票券'), 6000);
+  /* 從今日營收進來的：關掉視窗、重畫那一頁（那一列的標籤與品名要跟著更新）。 */
+  if(window._lotFixFrom==='rev'){ window._lotFixFrom=''; closeModal(); navTo(CUR_PAGE); return; }
   openLottoModal();
  }catch(e){ console.error('lottoFixDo 錯誤:',e); showToast('更正失敗：'+((e&&e.message)||e)); }
 }
@@ -34680,6 +34727,19 @@ async function _doSaleUndo(kind,id){
   }catch(e){ done(); showToast('退回失敗：'+((e&&e.message)||e)); }
 }
 function revAttribChip(r){
+  /* 抽獎那一列：左邊的標籤位置改放「抽獎」，點下去改獎品（2026-08-24 使用者定案）。
+     ⚠ 放在最前面 —— 抽獎沒有業績歸屬（attKind 是 null），走到下一行就直接回空字串了。
+     ⚠ 只有櫃檯以上點得動；其他人看得到標籤、按不下去（與這一頁其他可改的東西同一套）。 */
+  if(r && r.lot){
+    const canL=(typeof isDeskLike==='function')&&isDeskLike();
+    /* 過了當天只有管理員改得動（使用者定案）——不能改的畫成淡的，但仍然點得下去：
+       點了會說明為什麼，比一個按不動的標籤清楚（0823 的語彙）。 */
+    const _lotOld=(r.lotDate && r.lotDate!==ymd(TODAY));
+    const _lotOff=_lotOld && !(SESSION && SESSION.role==='admin');
+    return canL
+      ? `<button class="rev-att rev-att-lot${_lotOff?' rev-att-lot-off':''}" title="${_lotOff?'過了當天只有管理員能改':'抽獎登記　·　點一下改獎品'}" onclick="event.stopPropagation();lottoFixAsk('${r.lot}','rev')">抽獎</button>`
+      : `<span class="rev-att rev-att-lot">抽獎</span>`;
+  }
   if(!r || !r.attKind) return '';
   const nm=(window._revCoachTag||{})[r.att]||'';
   const can=(typeof isDeskLike==='function')&&isDeskLike();

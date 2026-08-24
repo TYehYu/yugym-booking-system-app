@@ -171,5 +171,36 @@ ok('★★ 沒有待抽名單時也要畫出「今天已登記」那一區（早
    /if\(!list\.length\)\{[\s\S]{0,420}?\$\{_fixBlock\}/.test(src)
    && /這一段要算在「沒有待抽獎會員」的早退\*\*之前\*\*/.test(src));
 
+/* 2026-08-24 使用者定案（兩句）：
+   「在今日營收這邊顯示，左邊續約的標籤改成抽獎，從這邊去調整抽獎內容，
+     所以只有看得到這個頁面的人可以修改」
+   「這些抽獎的品項只能在當天修正，過了就不能修改，除非找管理員」 */
+console.log('\n今日營收那一列的「抽獎」標籤＋當天限定');
+{
+  const f=src.slice(src.indexOf('function revAttribChip(r){'), src.indexOf('async function openRevAttribPick('));
+  ok('★★ 抽獎那一列在「業績歸屬」的位置放「抽獎」標籤，點下去改獎品',
+     /if\(r && r\.lot\)\{/.test(f)
+     && /lottoFixAsk\('\$\{r\.lot\}','rev'\)/.test(f));
+  ok('★★ 這一段要放在最前面 —— 抽獎沒有業績歸屬，走到下一行就直接回空字串了',
+     /放在最前面 —— 抽獎沒有業績歸屬（attKind 是 null）/.test(src)
+     && f.indexOf("r.lot") < f.indexOf("!r.attKind"));
+  ok('★★ 當天＝櫃檯自己能改；過了當天＝只有管理員',
+     /function lottoFixAllow\(pu\)\{/.test(src)
+     && /if\(_lotPuDate\(pu\)===ymd\(TODAY\)\) return \{ok:true, why:''\};/.test(src)
+     && /return isAdmin \? \{ok:true, why:''\}/.test(src));
+  ok('★★ 判斷只寫一支，畫面與寫入端都吃它（兩邊各判各的遲早會漂）',
+     /判斷只寫這一支，畫面與寫入端都吃它/.test(src)
+     && /const _al=lottoFixAllow\(p\);/.test(src)
+     && /const _al=lottoFixAllow\(pu\);/.test(src));
+  ok('★★ 寫入前要再擋一次（入口有兩個，視窗開著跨過午夜也會變成隔天）',
+     /視窗開著跨過午夜就會從「當天」變成「隔天」/.test(src));
+  ok('★ 不能改的時候要說原因，不是只讓標籤按不動（0823 的語彙）',
+     /button\.rev-att\.rev-att-lot-off\{opacity:\.5;\}/.test(src)
+     && /<div class="modal-title">這一筆不能改<\/div>/.test(src)
+     && /過了當天就不能自己改了/.test(src));
+  ok('　　從今日營收進來的，改完關窗並重畫那一頁（標籤與品名要跟著更新）',
+     /if\(window\._lotFixFrom==='rev'\)\{ window\._lotFixFrom=''; closeModal\(\); navTo\(CUR_PAGE\); return; \}/.test(src));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
