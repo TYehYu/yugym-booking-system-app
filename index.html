@@ -9149,6 +9149,12 @@ button.rev-kind:hover{filter:brightness(.96);box-shadow:0 1px 4px rgba(60,50,38,
 .bam-guest>summary .ash-eilb::before{content:'＋ ';color:var(--gold,#B48A56);}
 .bam-guest[open]>summary .ash-eilb::before{content:'− ';}
 .bam-guest-b{display:flex;flex-direction:column;gap:8px;padding:2px 4px 12px;}
+/* 建立預約：這個課別用不到的欄位（見 bkFieldOff）——淡化、不能點，下面寫原因。
+   ⚠ 只淡控制項、標籤與原因保持可讀：整列一起壓透明度就會連「為什麼不能用」都看不清。 */
+.bk-fld-off>label{opacity:.55;}
+.bk-fld-off .mem-pick-row,.bk-fld-off .switch-row,.bk-fld-off input,.bk-fld-off select,
+.bk-fld-off .adp-field,.bk-fld-off [id$="-recurring-box"]{opacity:.42;pointer-events:none;filter:grayscale(.4);}
+.bk-offnote{font-size:11.5px;color:var(--t3);line-height:1.7;margin-top:5px;}
 /* 挑選清單改用統一挑選視窗（mpk）之後，這裡不再自己畫名單，
    .bam-list 那條連同 .bam-grp／.bam-sub 一起退場（★ 與右邊的堂數由 .mpk-* 負責）。 */
 /* .ms-search 自帶左右 18px 的外距（它原本長在有內距的清單裡）——放進彈窗要歸零，
@@ -9997,8 +10003,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1412';
-const APP_VERSION_LABEL='v260824.1412';
+const APP_VERSION = '260824.1415';
+const APP_VERSION_LABEL='v260824.1415';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24521,6 +24527,19 @@ async function onBkTypeChange(){
      只是不強制；其餘課種一律必填。（教練端無此 row，已固定為自己） */
   const hint=document.getElementById('bk-coach-opt');
   if(hint) hint.style.display=needCoach?'none':'inline';
+  /* 2026-08-24 使用者指示：「選了自主訓練就把教練這欄互動關閉」＋「連續預約也是，關閉」——
+     自主訓練是會員自己練，沒有授課教練；連續預約也不適用（它是臨時來就練的）。
+     ⚠ 課別比較只寫在 bkIsSelf 裡（口袋棘輪：不要在各處散寫 category==='自主訓練'）。
+     ⚠ 用淡化＋寫原因，不是 display:none（0823 定的語彙：「不能用就寫原因，別藏按鈕」）——
+       整欄消失會讓人以為系統少了東西；寫出來才知道是這個課別本來就不需要。
+     ⚠ 關閉的同時要把值清掉，不然剛剛選好的教練會被靜靜帶進送出。 */
+  const isSelf = !!t && (typeof bkIsSelf==='function') && bkIsSelf({category:t.category});
+  bkFieldOff('bk-coach-row', isSelf, '自主訓練是會員自己練，不需要指定教練');
+  if(isSelf){
+    const co=document.getElementById('bk-coach');
+    if(co && co.value){ co.value=''; try{ bkCoachChange(); }catch(_){} }
+    const cq=document.getElementById('bk-coach-q'); if(cq) cq.value='';
+  }
   /* 團課的連續預約跟名單一起設定在步驟 2（prefix grp）——這裡收起來，
      否則同一次建立會出現兩個「連續預約」開關，櫃檯不知道該信哪一個。
      收起來時順便把開關關掉，免得留著一個看不見卻是勾選狀態的設定。 */
@@ -24528,7 +24547,10 @@ async function onBkTypeChange(){
   if(rrow){
     const isGrp = !!t && bkIsGroup({category:t.category});   // 課別比較只寫在 bkIsGroup 裡（口袋棘輪）
     rrow.style.display = isGrp ? 'none' : '';
-    if(isGrp){
+    /* 自主訓練不給連續預約（2026-08-24 使用者指示）——淡化＋寫原因，與教練欄同一套。
+       團課那條維持整列隱藏：它的連續預約在下一步（prefix grp），不是「不能用」。 */
+    bkFieldOff('bk-recur-row', isSelf, '自主訓練不做連續預約 —— 會員每次來再自己約時段');
+    if(isGrp || isSelf){
       const sw=document.getElementById('bk-recurring');
       if(sw && sw.checked){ sw.checked=false; try{ toggleRecurBox('bk'); }catch(_){} }
     }
@@ -24541,6 +24563,18 @@ async function onBkTypeChange(){
     const _more = t.category==='體驗' || bkIsGroup({category:t.category}) || tid==='__facility';
     _b2.textContent = _more ? '下一步 →' : '建立預約';
   }
+}
+/* 把某一列整個關掉（淡化、不能點）並在下面寫一句原因；off=false 就還原。
+   0823 定的語彙：不能用的東西要「淡化列出＋副標寫原因」，不要 display:none。 */
+function bkFieldOff(rowId, off, why){
+  const row=document.getElementById(rowId); if(!row) return;
+  row.classList.toggle('bk-fld-off', !!off);
+  row.querySelectorAll('input,select,button').forEach(el=>{ el.disabled=!!off; });
+  let note=row.querySelector('.bk-offnote');
+  if(off){
+    if(!note){ note=document.createElement('div'); note.className='bk-offnote'; row.appendChild(note); }
+    note.textContent=why||'';
+  }else if(note){ note.remove(); }
 }
 // 第1頁 → 第2頁
 /* 2026-08-06 使用者回報：自主訓練按「下一步」完全沒反應（沒有畫面、也沒有提示）——

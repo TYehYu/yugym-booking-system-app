@@ -317,5 +317,27 @@ console.log('\n空堂的姓名＝品牌金的「空白」');
      /nm=b\.trial_name\|\|mm\[b\.member_id\]\|\|\(bkIsOpenHold\(b\)\?'空白':'—'\)/.test(src));
 }
 
+/* 2026-08-24 使用者指示：「選了自主訓練就把教練這欄互動關閉」＋「連續預約也是，關閉」 */
+console.log('\n自主訓練：教練與連續預約整欄關閉');
+{
+  ok('★★ 課別比較只寫在 bkIsSelf 裡（口袋棘輪：不要散寫 category===\'自主訓練\'）',
+     /const isSelf = !!t && \(typeof bkIsSelf==='function'\) && bkIsSelf\(\{category:t\.category\}\);/.test(src));
+  ok('★★ 兩欄都關，而且各自寫出原因',
+     /bkFieldOff\('bk-coach-row', isSelf, '自主訓練是會員自己練，不需要指定教練'\);/.test(src)
+     && /bkFieldOff\('bk-recur-row', isSelf, '自主訓練不做連續預約 —— 會員每次來再自己約時段'\);/.test(src));
+  ok('★★ 關掉的同時要把值清掉（不然剛選好的教練會被靜靜帶進送出）',
+     /if\(co && co\.value\)\{ co\.value=''; try\{ bkCoachChange\(\); \}catch\(_\)\{\} \}/.test(src)
+     && /if\(isGrp \|\| isSelf\)\{\s*\n\s*const sw=document\.getElementById\('bk-recurring'\);/.test(src));
+  ok('★ 淡化＋寫原因，不是 display:none（0823 定的語彙）',
+     /function bkFieldOff\(rowId, off, why\)\{/.test(src)
+     && /row\.classList\.toggle\('bk-fld-off', !!off\);/.test(src)
+     && /整欄消失會讓人以為系統少了東西/.test(src));
+  ok('　　標籤與原因保持可讀，只淡控制項',
+     /\.bk-fld-off>label\{opacity:\.55;\}/.test(src)
+     && /\.bk-offnote\{font-size:11\.5px;/.test(src));
+  ok('　　團課那條維持整列隱藏（它的連續預約在下一步，不是「不能用」）',
+     /rrow\.style\.display = isGrp \? 'none' : '';/.test(src));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
