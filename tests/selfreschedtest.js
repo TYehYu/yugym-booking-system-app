@@ -25,10 +25,15 @@ ok('★★ 我的預約・當日清單：自主訓練有「改時間」，與「
    && /\+`<button class="btn btn-ghost btn-sm" style="margin-left:6px;" onclick="event\.stopPropagation\(\);memCancelSelf\('\$\{b\.id\}'\)">取消<\/button>`/.test(src));
 ok('★ 點按鈕不會順便觸發整列的動作', (src.match(/event\.stopPropagation\(\);msbStart/g)||[]).length>=1);
 ok('★★ 課卡彈窗：多一顆「改時間」圓鈕',
-   /const rsBtn=\(!done && !past && bkIsSelf\(b\) && b\.member_id===SESSION\.id\)\n\s*\? orb\('go','🕒','改時間',`memTaskClose\(\);msbStart\('\$\{b\.id\}'\)`\) : '';/.test(src));
+   /let rsBtn=\(!done && !past && bkIsSelf\(b\) && b\.member_id===SESSION\.id\)\n\s*\? orb\('go','🕒','改時間',`memTaskClose\(\);msbStart\('\$\{b\.id\}'\)`\) : '';/.test(src));
+/* 2026-08-24：三顆鈕改成 let —— 預覽用的範例課卡要把它們換成「點了只吐司」的版本
+   （見 PAGES.mem_bookings 的 _memDemoBk），值本身的算法一個字都沒動。 */
+ok('★ 範例卡把三顆鈕換掉，不動資料',
+   /if\(_demo\)\{/.test(src)
+   && /這是預覽用的範例課卡，真的會員在這裡按下去才會真的動作/.test(src));
 ok('★ 圓鈕排在簽到與取消之間', /<div class="mtp-orbs">\$\{ckBtn\}\$\{rsBtn\}\$\{cxBtn\}<\/div>/.test(src));
 ok('★ 已上完／已過時的課不出現改時間（與取消同一條）',
-   /const rsBtn=\(!done && !past && bkIsSelf\(b\)/.test(src));
+   /let rsBtn=\(!done && !past && bkIsSelf\(b\)/.test(src));
 ok('★ 只有自己的自主訓練才給改（別人的、教練課的都不出現）',
    /bkIsSelf\(b\) && b\.member_id===SESSION\.id/.test(src));
 ok('　　為什麼原本找不到，寫在原地',

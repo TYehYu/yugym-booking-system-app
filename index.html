@@ -10027,8 +10027,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1430';
-const APP_VERSION_LABEL='v260824.1430';
+const APP_VERSION = '260824.1436';
+const APP_VERSION_LABEL='v260824.1436';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -47533,6 +47533,25 @@ PAGES.mem_bookings=async function(){
   const mine=bookings.filter(b=>bkHasMember(b,SESSION.id)&&b.status!=='cancelled'
       &&!(b.pending_contract&&!b.ticket_id))
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
+  /* 預覽用的範例課卡（2026-08-24 使用者指示：「在我的預約也塞一張範例課卡」）——
+     角色預覽只換前端顯示、不換身分（SESSION.id 仍是管理員的員工 id），而
+     bookings.member_id 有外鍵指向 members，員工 id 放不進去，所以預覽這一頁
+     永遠是空的、看不到剛改好的課卡。用一筆記憶體裡的假預約補上。
+     ⚠ 只有「真的是管理員 ＋ 正在預覽會員視角」才出現；真會員絕對看不到。
+     ⚠ 不寫進資料庫、不進任何統計 —— 它只活在 window._memDemoBk 裡，重整就沒了。
+     ⚠ 時間放今天、且落在「開課前 30 分鐘」內，這樣簽到鈕會是**可按**的狀態
+       （擺到週日的話只看得到「尚未開放」，等於白測）。三顆鈕都改成吐司說明，不動資料。 */
+  window._memDemoBk=null;
+  if(typeof isRealAdmin==='function' && isRealAdmin() && SESSION && SESSION.role==='member'){
+    const _n=new Date();
+    const _m=Math.max(0, _n.getHours()*60+_n.getMinutes()+10);   // 10 分鐘後開始＝簽到已開放
+    window._memDemoBk={
+      id:'DEMO-BK', member_id:SESSION.id, coach_id:null, ticket_id:null, ticket_type_id:null,
+      category:'私人教練', date:ymd(TODAY), start_time:minToTime(Math.min(_m, 22*60)),
+      duration:60, status:'booked', venue_unit:'multi_1', _demo:true };
+    mine.push(window._memDemoBk);
+    mine.sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
+  }
   window._memCalData={mine,coachMap};
   if(!window._memCalKeep){ _memCalMonth=null; _memCalSel=null; }   // 選日/換週時保留（2026-07-29）
   window._memCalKeep=false;
@@ -47956,8 +47975,10 @@ async function famSave(){
 /* ══ 會員任務圓卡：點擊彈出「簽到／取消」兩顆圓形按鈕（2026-07-29 使用者指示）══ */
 function memPickDay(ds){ window._memCalKeep=true; _memCalSel=ds; navTo('mem_bookings'); }
 async function memTaskTap(id,el){
-  const b=await dbGet('bookings',id);
+  /* 範例卡不進資料庫（見 PAGES.mem_bookings 的 _memDemoBk） */
+  const b=(id==='DEMO-BK' && window._memDemoBk) ? window._memDemoBk : await dbGet('bookings',id);
   if(!b){ showToast('找不到預約'); return; }
+  const _demo=!!(b&&b._demo);
   memTaskClose();
   const slotDt=new Date(b.date+'T'+b.start_time+':00');
   const isGrp=bkIsGroup(b);
@@ -47984,18 +48005,18 @@ async function memTaskTap(id,el){
     ? `<button class="mtp-orb ${cls}" onclick="${onclick}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></button>`
     : `<div class="mtp-orb ${cls}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></div>`;
   const _myAllLeave=isGrp&&done&&_mySeats.every(k=>(_att[k]||'')==='leave');
-  const ckBtn=done
+  let ckBtn=done
     ? orb('done','✓',_myAllLeave?'已請假':'已簽到',null)
     : (ckOpen ? orb('go','✓','簽到',isGrp?`memTaskClose();memGrpCheckin('${b.id}')`:`memTaskClose();memCheckin('${b.id}')`)
               : orb('off','🕒','尚未開放',null,'開課前 30 分鐘開放簽到'));
   /* 2026-08-21 使用者定案：只有團課與自主訓練會員能自己動，其他課程按鈕直說「洽櫃檯」
      （還是點得下去，點了會看到完整說明——使用者要的是「留下訊息」，不是把鈕藏掉）。 */
-  const cxBtn=(done||past) ? orb('off','✕','不可取消',null)
+  let cxBtn=(done||past) ? orb('off','✕','不可取消',null)
     : (memSelfServe(b) ? orb('cx','✕','取消',`memCancelTap('${b.id}')`)
                        : orb('off','✕','洽櫃檯',`memCancelTap('${b.id}')`,'這類課程由櫃檯協助取消'));
   /* 自主訓練可以自己改時間（2026-08-09）——與「取消」同一條界線：還沒開始就可以改。
      改期比「取消再重約」好：時段直接換過去，不會在中間被別人搶走。 */
-  const rsBtn=(!done && !past && bkIsSelf(b) && b.member_id===SESSION.id)
+  let rsBtn=(!done && !past && bkIsSelf(b) && b.member_id===SESSION.id)
     ? orb('go','🕒','改時間',`memTaskClose();msbStart('${b.id}')`) : '';
   /* ══ 簡易課卡（2026-08-24 使用者指示：「會員端我的預約看到的課卡，點出來要出現
      簡易課卡［標題卡］＋［會員卡］，圓形按鈕［簽到］」）══════════════════
@@ -48015,6 +48036,13 @@ async function memTaskTap(id,el){
   else if(b.ticket_id){
     const _t=((window._allTkCache||[])||[]).find(x=>x&&x.id===b.ticket_id);
     _tkLine=_t?`${_t.plan_name||nm}・剩 ${Math.max(0,Number(_t.sessions_remaining)||0)} 堂`:'';
+  }
+  /* 範例卡：三顆鈕都不動資料，點了說明這是預覽用的（2026-08-24）。 */
+  if(_demo){
+    const _dtap=`memTaskClose();showToast('這是預覽用的範例課卡，真的會員在這裡按下去才會真的動作',5000)`;
+    ckBtn=orb('go','✓','簽到',_dtap);
+    rsBtn='';
+    cxBtn=orb('cx','✕','取消',_dtap);
   }
   const _mBadge=done
     ? (_myAllLeave?'<span class="mtp-mtag mtp-mtag-leave">請假</span>':'<span class="mtp-mtag mtp-mtag-ok">已簽到</span>')
