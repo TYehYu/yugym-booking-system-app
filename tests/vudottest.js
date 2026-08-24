@@ -85,8 +85,9 @@ console.log('\n名額：亮幾個燈就佔幾台（2026-07-31 使用者確認）
   const g2=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
   const code=g2('window.VENUES = window.VENUES || [','\n}\n')+'\n'
     +g2('function venuePriorityFor(category){','\n}\n')+'\n'
+    +g2('function venueLoadAt(others, inst){','\n}\n')+'\n'
     +g2('function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){','\n}\n');
-  const alloc=new Function('window','timeToMin', code+'\nreturn allocateVenue;')({}, t=>{const[h,m]=String(t).split(':').map(Number);return h*60+(m||0);});
+  const alloc=new Function('window','timeToMin','bkIsGroup','bkIsSelf', code+'\nreturn allocateVenue;')({}, t=>{const[h,m]=String(t).split(':').map(Number);return h*60+(m||0);}, b=>!!b&&b.category==='小班肌力', b=>!!b&&b.category==='自主訓練');
   const B=(u,extra)=>Object.assign({id:u,venue_unit:u,start_time:'17:00',duration:60,category:'自主訓練'},extra||{});
   ok('★ 只亮一個燈 → 還有一個名額，別人約得到',
      !!alloc('自主訓練',[B('treadmill_2')],1020,1080,null,'treadmill').unit);

@@ -11,7 +11,7 @@ const h=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
 const grab=n=>{let i=h.indexOf('function '+n+'(');let d=0;for(let k=h.indexOf('{',i);;k++){if(h[k]==='{')d++;else if(h[k]==='}'){d--;if(!d)return h.slice(i,k+1);}}};
 const VENUES=[{id:'multi',capacity:3},{id:'treadmill',capacity:2},{id:'group',capacity:1}];
 const lib=new Function('getVenues','timeToMin',
-  [grab('venueCap'),grab('venuePriorityFor'),grab('occupiedUnits'),grab('overlaps'),grab('allocateVenue')].join('\n')+';return {allocateVenue};')(
+  [grab('venueCap'),grab('venuePriorityFor'),grab('occupiedUnits'),grab('overlaps'),grab('venueLoadAt'),grab('allocateVenue')].join('\n')+';return {allocateVenue};')(
   ()=>VENUES, t=>{const[a,b]=t.split(':').map(Number);return a*60+b;});
 const mk=(id,cat,st)=>({id,category:cat,start_time:st,duration:60,venue_unit:null,status:'booked'});
 let pass=0,fail=0; const ok=(n,c)=>{c?pass++:fail++;console.log((c?'  ✓ ':'  ✗ ')+n);};

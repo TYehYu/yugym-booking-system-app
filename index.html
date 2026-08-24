@@ -9901,8 +9901,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.0949';
-const APP_VERSION_LABEL='v260824.0949';
+const APP_VERSION = '260824.1107';
+const APP_VERSION_LABEL='v260824.1107';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21101,29 +21101,61 @@ function occupiedUnits(sameDay, ns, ne){
 }
 // 為一筆預約分配場地單位：依課程類型優先序，找第一個該時段未被佔的單位。
 //   回傳 { unit } 或 { error }
+/* 某個時點各場地池的佔用數（2026-08-24 從 allocateVenue 的 loadAt 抽出來）——
+   抽出來的唯一理由：建立預約改成「先選場地」之後，選場地那一步要顯示「哪些場地還有位」，
+   而那個判斷**必須與實際配置用同一份口徑**，否則會出現「畫面說有位、送出說已滿」。
+   ⚠ 這裡的兩段（真實 venue_unit ＋ 舊資料按課種回推）都不能省，理由見 allocateVenue 的註解。 */
+function venueLoadAt(others, inst){
+  const use={}; getVenues().forEach(v=>{ use[v.id]=0; });
+  const seen={};
+  const cur=(others||[]).filter(x=>{ const s0=timeToMin(x.start_time), e0=s0+(x.duration||60); return s0<=inst && inst<e0; });
+  // ① 有明確 venue_unit 的真實占用（同單位不重複計）
+  cur.forEach(x=>{ if(x.venue_unit && !seen[x.venue_unit]){ seen[x.venue_unit]=1;
+    const vid=String(x.venue_unit).split('_')[0]; if(use[vid]!=null) use[vid]++; } });
+  // ② 舊資料沒 venue_unit → 按課種優先序回推佔位（多功能→教室→跑步機）
+  const fill=(vid,n)=>{ if(use[vid]==null) return n; const take=Math.min(Math.max(0,venueCap(vid)-use[vid]),n); use[vid]+=take; return n-take; };
+  let g=cur.filter(x=>!x.venue_unit&&bkIsGroup(x)).length;
+  let m=cur.filter(x=>!x.venue_unit&&(x.category==='私人教練'||x.category==='體驗')).length;
+  let sf=cur.filter(x=>!x.venue_unit&&bkIsSelf(x)).length;
+  g=fill('group',g);
+  m=fill('multi',m); if(m>0) fill('group',m);
+  sf=fill('multi',sf); sf=fill('group',sf); if(sf>0) fill('treadmill',sf);
+  return use;
+}
+/* 這個時段每個場地還有沒有位（2026-08-24 建立預約改版：視窗一要淡化不能用的場地）——
+   回傳 [{id,name,cap,used,left,ok,why}]，why 是「為什麼不能選」，可直接顯示給使用者。
+   ⚠ 峰值取法與 allocateVenue 一致：時窗內每個 30 分鐘時點都要有位才算可用
+     （只看起點會把「10:00 有位、10:30 滿」誤判成可約）。 */
+function venueAvailAt(sameDay, ns, ne, selfId){
+  const others=(sameDay||[]).filter(x=> x.id!==selfId);
+  return getVenues().map(v=>{
+    const cap=venueCap(v.id);
+    let peak=0;
+    for(let inst=ns; inst<ne; inst+=30){ const u=venueLoadAt(others, inst)[v.id]||0; if(u>peak) peak=u; }
+    const ok=peak<cap;
+    return { id:v.id, name:v.name, cap, used:peak, left:Math.max(0,cap-peak), ok,
+             why: ok?'':`這個時段已滿（${peak}/${cap}）` };
+  });
+}
+/* 這個場地能不能上這種課（2026-08-24）——視窗二要淡化不合場地的課程。
+   規則沿用 venuePriorityFor：那是「課別 → 可用場地」的唯一來源，這裡只是反查。 */
+function venueAllowsCategory(vid, category){
+  if(!vid) return true;
+  try{ return venuePriorityFor(category).indexOf(vid)>=0; }catch(_){ return true; }
+}
+function venueCatWhy(vid, category){
+  if(venueAllowsCategory(vid, category)) return '';
+  const nm=(getVenues().find(v=>v.id===vid)||{}).name||vid;
+  const okNames=getVenues().filter(v=>venuePriorityFor(category).indexOf(v.id)>=0).map(v=>v.name).join('、');
+  return `${nm}不能上這種課${okNames?`（只能排：${okNames}）`:''}`;
+}
 function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){
   /* v3（2026-07-26 使用者校正）：占用改「逐 30 分鐘時點」計算。
      v2 把整個時窗內所有重疊課視為同時佔位 —— 9:30 與 10:30 的教練課其實是
      先後使用同一位，卻被算成兩位，害 10:00 的自主被推去跑步機（應為教室）。
      區間排程定理：同質單位池可容納新區間 ⇔ 時窗內每個時點的併發數 < 容量。 */
   const others=sameDay.filter(x=> x.id!==selfId);
-  const loadAt=(inst)=>{                     // 該時點各場地池的占用數
-    const use={}; getVenues().forEach(v=>{ use[v.id]=0; });
-    const seen={};
-    const cur=others.filter(x=>{ const s0=timeToMin(x.start_time), e0=s0+(x.duration||60); return s0<=inst && inst<e0; });
-    // ① 有明確 venue_unit 的真實占用（同單位不重複計）
-    cur.forEach(x=>{ if(x.venue_unit && !seen[x.venue_unit]){ seen[x.venue_unit]=1;
-      const vid=String(x.venue_unit).split('_')[0]; if(use[vid]!=null) use[vid]++; } });
-    // ② 舊資料沒 venue_unit → 按課種優先序回推佔位（多功能→教室→跑步機）
-    const fill=(vid,n)=>{ if(use[vid]==null) return n; const take=Math.min(Math.max(0,venueCap(vid)-use[vid]),n); use[vid]+=take; return n-take; };
-    let g=cur.filter(x=>!x.venue_unit&&bkIsGroup(x)).length;
-    let m=cur.filter(x=>!x.venue_unit&&(x.category==='私人教練'||x.category==='體驗')).length;
-    let sf=cur.filter(x=>!x.venue_unit&&bkIsSelf(x)).length;
-    g=fill('group',g);
-    m=fill('multi',m); if(m>0) fill('group',m);
-    sf=fill('multi',sf); sf=fill('group',sf); if(sf>0) fill('treadmill',sf);
-    return use;
-  };
+  const loadAt=(inst)=>venueLoadAt(others, inst);
   const pri=forceVid?[forceVid]:venuePriorityFor(category);
   const primaryVid=pri[0]; // 首選場地
   for(const vid of pri){

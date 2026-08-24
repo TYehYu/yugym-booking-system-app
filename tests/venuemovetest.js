@@ -96,11 +96,14 @@ ok('　　也不會因為場地擠不下而擋住備註存檔',
 {
   const g=(s,e)=>{const i=src.indexOf(s);return src.slice(i,src.indexOf(e,i)+e.length);};
   const VEN=[{id:'multi',name:'多功能訓練區',cap:3},{id:'treadmill',name:'跑步機區',cap:2},{id:'group',name:'團課教室',cap:1}];
-  const alloc=new Function('getVenues','venueCap','venuePriorityFor','timeToMin',
-    g('function allocateVenue(','\n}')+'\nreturn allocateVenue;')(
+  /* 0824：loadAt 抽成頂層的 venueLoadAt（與「選場地時顯示還有幾位」共用同一份口徑），
+     沙箱要一起帶進來，並補它用到的 bkIsGroup／bkIsSelf。 */
+  const alloc=new Function('getVenues','venueCap','venuePriorityFor','timeToMin','bkIsGroup','bkIsSelf',
+    g('function venueLoadAt(','\n}')+'\n'+g('function allocateVenue(','\n}')+'\nreturn allocateVenue;')(
       ()=>VEN, v=>(VEN.find(x=>x.id===v)||{}).cap||0,
       c=>c==='小班肌力'?['group']:(c==='自主訓練'?['multi','treadmill','group']:['multi','group']),
-      t=>{const p=String(t).split(':');return (+p[0])*60+(+p[1]||0);});
+      t=>{const p=String(t).split(':');return (+p[0])*60+(+p[1]||0);},
+      b=>!!b&&b.category==='小班肌力', b=>!!b&&b.category==='自主訓練');
   const day=[
     {id:'BK-19fa308315d574c',start_time:'18:00',duration:60,category:'自主訓練',venue_unit:'multi_2'},
     {id:'BK-ms4u17qlae7h',   start_time:'18:00',duration:60,category:'體驗',    venue_unit:'multi_3'},
@@ -116,11 +119,12 @@ console.log('\n7/30 現場資料迴歸（張正怡 IMP-00034）');
 {
   const g=(s,e)=>{const i=src.indexOf(s);return src.slice(i,src.indexOf(e,i)+e.length);};
   const VEN=[{id:'multi',name:'多功能訓練區',cap:3},{id:'treadmill',name:'跑步機區',cap:2},{id:'group',name:'團課教室',cap:1}];
-  const alloc=new Function('getVenues','venueCap','venuePriorityFor','timeToMin',
-    g('function allocateVenue(','\n}')+'\nreturn allocateVenue;')(
+  const alloc=new Function('getVenues','venueCap','venuePriorityFor','timeToMin','bkIsGroup','bkIsSelf',
+    g('function venueLoadAt(','\n}')+'\n'+g('function allocateVenue(','\n}')+'\nreturn allocateVenue;')(
       ()=>VEN, v=>(VEN.find(x=>x.id===v)||{}).cap||0,
       c=>c==='小班肌力'?['group']:(c==='自主訓練'?['multi','treadmill','group']:['multi','group']),
-      t=>{const p=String(t).split(':');return (+p[0])*60+(+p[1]||0);});
+      t=>{const p=String(t).split(':');return (+p[0])*60+(+p[1]||0);},
+      b=>!!b&&b.category==='小班肌力', b=>!!b&&b.category==='自主訓練');
   // 當天與 18:00–19:00 有交集的實際預約
   const day=[
     {id:'BK-19fa308315d574c',start_time:'18:00',duration:60,category:'自主訓練',venue_unit:'multi_2'},
