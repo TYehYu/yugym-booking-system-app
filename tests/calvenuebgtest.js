@@ -16,8 +16,8 @@ console.log('格子底色＝場地狀態');
 ok('★★ 額滿→淡化紅、只剩教室→淡化金；其餘不上色（露出 .cal-body 的米底）',
    /if\(a && a\.error\) return ' cal-half-full';/.test(src)
    && /if\(a && a\.toVid==='group'\) return ' cal-half-grp';/.test(src)
-   && /\.cal-half\.cal-half-full\{background:rgba\(181,55,46,\.17\);\}/.test(src)
-   && /\.cal-half\.cal-half-grp\{background:rgba\(180,138,86,\.22\);\}/.test(src));
+   && /\.cal-half\.cal-half-full\{background:rgba\(181,55,46,\.24\);\}/.test(src)
+   && /\.cal-half\.cal-half-grp\{background:rgba\(180,138,86,\.30\);\}/.test(src));
 ok('★★ mc-mode（桌機管理員側欄版面）的 .cal-body 也要是米底 —— 那條 (0,2,1) 權重比 .cal-body 高，'
    +'留著 80% 白就會把米底整片蓋掉（0823 使用者回報「怎麼還有白色底的時段背景」）',
    /body\.mc-mode \.cal-body\{background:var\(--bg\);\}/.test(src));
@@ -53,6 +53,28 @@ ok('★ 過去的日期整欄不上色（.cal-daycol.col-past 權重比新規則
 ok('★★ 窄卡直書那組已整組移除（不留半套在正式環境）',
    !/writing-mode:vertical-rl/.test(src.slice(src.indexOf('.cal-ev.cal-ev-std'), src.indexOf('Calm Play · Hover')))
    && /窄卡「姓名直書」整組還原（2026-08-23，同日兩次都改壞）/.test(src));
+
+/* 2026-08-24 使用者指示：「手機行事曆一日跟七日的背景，淡紅是額滿、淡金是剩下團課教室，
+   跟桌機版本一樣，然後顏色可以再加深一點，包含桌機」
+   ——三個檢視是同一句話的三種畫法，色值散在三處，很容易只改到一處。 */
+console.log('\n手機一日／七日與桌機同一組語意');
+ok('★★ 手機一日：帶子分紅／金（原本兩種狀況都是同一個灰，只能讀那兩個小字分辨）',
+   /\.cag-vrow\.full\{background:rgba\(181,55,46,\.24\);\}/.test(src)
+   && /\.cag-vrow\.grp\{background:rgba\(180,138,86,\.30\);\}/.test(src));
+ok('★★ 一日的兩個產生端（管理員合併帶／教練逐半小時）都要帶狀態 class',
+   /<div class="cag-vrow \$\{r\.lab==='額滿'\?'full':'grp'\}"/.test(src)
+   && /<div class="cag-vrow \$\{lab==='額滿'\?'full':'grp'\}"/.test(src));
+ok('★★ 三個檢視的紅與金完全同值（分家就會變成「同一件事三種顏色」）',
+   /\.amcv-full\{background:rgba\(181,55,46,\.24\);/.test(src)
+   && /\.amcv-grp\{background:rgba\(180,138,86,\.30\);/.test(src));
+ok('　　七日多出來的「跑」（跑步機）一起加深，維持同一階',
+   /\.amcv-tm\{background:rgba\(35,80,138,\.22\);/.test(src));
+ok('　　桌機 hover 也跟著加深（不然滑過去反而比原本淡）',
+   /\.cal-half\.cal-half-full:hover\{background:rgba\(181,55,46,\.34\);\}/.test(src)
+   && /\.cal-half\.cal-half-grp:hover\{background:rgba\(180,138,86,\.42\);\}/.test(src));
+ok('　　一日只改顏色、不動寬度（0819「只覆蓋左側自己欄」定案還在）',
+   /\.cag-vrow,\.cag-vlab\{left:10px;right:auto;width:calc\(\(100% - 25px\) \* var\(--cagsplit,0\.4\)\);\}/.test(src)
+   && /寬度維持只覆蓋左側自己欄（2026-08-19 定案），這次只改顏色/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
