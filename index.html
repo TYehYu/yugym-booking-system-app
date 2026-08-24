@@ -7365,6 +7365,13 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
 #mem-task-pop .mtp-mtag-leave{color:#b5372e;background:#fbeceb;}
 #mem-task-pop .mtp-mtag-ns{color:#8a5e28;background:#f7efe0;}
 #mem-task-pop .mtp-dots{margin-top:8px;}
+/* 卡面的「點我可以做什麼」（2026-08-24）——手勢圖示說得出「可以點」，
+   說不出「點了會怎樣」。有客戶因此不知道自主訓練可以自己改時間。
+   做成一顆小膠囊，比純文字更像「這裡可以按」。 */
+.memh2 .a2-hint{display:inline-flex;align-items:center;align-self:flex-start;
+  margin-top:5px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:800;
+  background:var(--sage-bg,#E4EAD9);color:var(--green);letter-spacing:.02em;white-space:nowrap;}
+.memh2 .admh2-card.admh-done .a2-hint,.memh2 .admh2-card.mh2-past .a2-hint{display:none;}
 /* 簽到規則：圓鈕下方的一小段，只在「還不能簽」時出現（0822 使用者要求要寫清楚） */
 #mem-task-pop .mtp-rule{width:100%;background:#fff;border:1px solid var(--bd);border-radius:14px;
   padding:11px 14px;font-size:11.5px;line-height:1.9;color:var(--t2);
@@ -10055,8 +10062,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1545';
-const APP_VERSION_LABEL='v260824.1545';
+const APP_VERSION = '260824.1548';
+const APP_VERSION_LABEL='v260824.1548';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -47258,6 +47265,32 @@ function memh2CkState(b){
   return {isGrp,done,open,leave,slot,past:slot<Date.now(),
     ended:(slot+((Number(b.duration)||60)*60000))<=Date.now()};
 }
+/* 這一堂會員自己能做什麼（2026-08-24）——卡面的提示與點開後的圓鈕**共用這一份**。
+   ⚠ 分成兩份寫過就一定會漂：卡上寫「點我改時間」、點進去卻沒有那顆鈕，
+     比沒有提示更糟。所以 memh2Tap 也改吃這一支。
+   排除條件見各欄註解，與 0821／0822 的定案一致。 */
+function memh2Acts(b, st){
+  st=st||memh2CkState(b);
+  /* 兩個會被 bkIsSelf 誤放行的例外：教練請假被改記成自主訓練的教練課（本質仍是教練課）、
+     以及場地租借。 */
+  const isSelfBk=bkIsSelf(b) && !(typeof bkIsCoachLeave==='function' && bkIsCoachLeave(b))
+    && b.category!=='場租';
+  const selfServe=(!st.done && !st.past) && (st.isGrp || isSelfBk);
+  return { isSelfBk, selfServe,
+    checkin: !!st.open,
+    resched: !!(selfServe && isSelfBk && b.member_id===SESSION.id),
+    cancel:  !!selfServe };
+}
+/* 卡面上那句「點我可以做什麼」（2026-08-24 使用者回報：有客戶說不會自己調整時間，
+   可能是不知道要點標題卡）—— 原本只有一個手勢圖示，圖示說得出「可以點」，
+   說不出「點了會怎樣」。有事可做才寫，沒事可做就不要騙人點。 */
+function memh2Hint(b, st){
+  const a=memh2Acts(b, st);
+  if(a.checkin) return ['點我簽到','go'];
+  if(a.resched) return ['點我改時間或取消','go'];
+  if(a.cancel)  return ['點我取消名額','go'];
+  return null;
+}
 function memh2PickDay(ds){ mh2S().date=ds; window._memCalKeep=true; navTo('mem_bookings'); }
 /* 換週一律落在該週的週一（2026-08-22 全站規則） */
 function memh2WeekShift(d){
@@ -47353,6 +47386,7 @@ function memh2HTML(o){
       <div class="a2-main">
         <div class="a2-l1">${cname}${_vn?'・'+_vn:''}</div>
         ${_tkTxt?`<div class="a2-l3">${_tkTxt}</div>`:''}
+        ${(()=>{ const h=memh2Hint(b,st); return h?`<div class="a2-hint a2-hint-${h[1]}">${h[0]} ›</div>`:''; })()}
       </div>
       <div class="a2-side">
         <span class="a2-time">${b.start_time}</span>
@@ -47508,14 +47542,10 @@ async function memh2Tap(id){
   const who=b.coach_id?((cm[_cid]||'教練')+(b.substitute_coach_id?'（代課）':''))
     :(bkIsSelf(b)?(selfVenueLabel(b)||'自主訓練'):'');
   const _vTxt=(typeof venueDisplay==='function')?(venueDisplay(b)||''):'';
-  /* 團課與自主訓練才給自助操作（與 2026-08-21 的定案一致）。
-     ⚠ 兩個會被 bkIsSelf 誤放行的例外（2026-08-22 覆查）：
-       ・教練請假的教練課會被改記成自主訓練（口袋規則 coachLeave:'self'），
-         但那本質仍是教練課，不能讓會員自己改時間或取消。
-       ・場地租借（category='場租'）也不是會員自助的範圍。 */
-  const _isSelfBk=bkIsSelf(b) && !(typeof bkIsCoachLeave==='function' && bkIsCoachLeave(b))
-    && b.category!=='場租';
-  const selfServe=(!st.done && !st.past) && (st.isGrp || _isSelfBk);
+  /* 能做什麼與卡面的提示共用同一份（memh2Acts）——分兩份寫一定會漂：
+     卡上寫「點我改時間」、點進來卻沒有那顆鈕，比沒有提示更糟。 */
+  const _A=memh2Acts(b, st);
+  const _isSelfBk=_A.isSelfBk, selfServe=_A.selfServe;
   const orb=(cls,ic,label,onclick,title)=>onclick
     ? `<button class="mtp-orb ${cls}" onclick="${onclick}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></button>`
     : `<div class="mtp-orb ${cls}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></div>`;

@@ -116,8 +116,21 @@ t('自主訓練訂位視窗與教練快速預約也吃同一組底部',
 t('還沒到時間顯示簽到規則', /簽到規則/.test(tap) && /開放簽到/.test(tap));
 t('團課走 memGrpCheckin、其餘走 memCheckin', /memGrpCheckin\('\$\{b\.id\}'\)/.test(tap) && /memCheckin\('\$\{b\.id\}'\)/.test(tap));
 /* 0822 覆查：教練請假改記成自主訓練的教練課、以及場租，都不算會員自助 */
-t('只有團課與自主訓練給取消（教練課只做簽到）',
-  /const selfServe=\(!st\.done && !st\.past\) && \(st\.isGrp \|\| _isSelfBk\)/.test(tap));
+/* 2026-08-24：卡面的提示與視窗的圓鈕改吃同一支 memh2Acts ——
+   分兩份寫一定會漂：卡上寫「點我改時間」、點進來卻沒有那顆鈕，比沒有提示更糟。 */
+t('★★ 能做什麼只算一次（memh2Acts），視窗與卡面共用',
+  /const _A=memh2Acts\(b, st\);/.test(tap)
+  && /const _isSelfBk=_A\.isSelfBk, selfServe=_A\.selfServe;/.test(tap)
+  && /const selfServe=\(!st\.done && !st\.past\) && \(st\.isGrp \|\| isSelfBk\);/.test(s));
+t('★★ 卡面寫出「點了會怎樣」（有客戶不知道要點卡片才能改時間）',
+  /function memh2Hint\(b, st\)\{/.test(s)
+  && /if\(a\.checkin\) return \['點我簽到','go'\];/.test(s)
+  && /if\(a\.resched\) return \['點我改時間或取消','go'\];/.test(s)
+  && /if\(a\.cancel\)  return \['點我取消名額','go'\];/.test(s)
+  && /return null;/.test(s));
+t('★ 沒事可做就不寫（不要騙人點）',
+  /有事可做才寫，沒事可做就不要騙人點/.test(s)
+  && /\.memh2 \.admh2-card\.admh-done \.a2-hint,\.memh2 \.admh2-card\.mh2-past \.a2-hint\{display:none;\}/.test(s));
 t('改時間只給自主訓練', /selfServe && _isSelfBk && b\.member_id===SESSION\.id[\s\S]{0,120}改時間/.test(tap));
 
 // ── ［＋］沿用現有引擎 ──

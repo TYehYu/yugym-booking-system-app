@@ -86,7 +86,7 @@ t('★★ 團課的按鈕寫「取消名額」（不是整堂）',
 t('★ 團課取消只退自己那一堂，整堂課照常開',
   /只取消您的名額，這堂課照常開課/.test(src));
 t('★ 教練課只看得到簽到（沒有取消／改時間）',
-  /const selfServe=\(!st\.done && !st\.past\) && \(st\.isGrp \|\| _isSelfBk\);/.test(src));
+  /const selfServe=\(!st\.done && !st\.past\) && \(st\.isGrp \|\| isSelfBk\);/.test(src));
 t('★ 會員端從來沒有「刪除整堂團課」或「改團課時間」的入口',
   !/memh2[A-Za-z]*\(['"]?deleteClass/.test(src));
 

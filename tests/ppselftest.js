@@ -77,7 +77,7 @@ t('開關靠右且不吃整列的點擊', /\.tb-acct-item \.acct-nsw\{margin-lef
    ⚠ **規則一條都沒動**，只換呈現 —— 底下這幾條守的就是「規則沒被順手改掉」。 */
 t('★ 只有自主訓練能改時間', /\(selfServe && _isSelfBk && b\.member_id===SESSION\.id\)[\s\S]{0,140}改時間/.test(s));
 t('★ 只有團課與自主訓練能自行取消',
-  /const selfServe=\(!st\.done && !st\.past\) && \(st\.isGrp \|\| _isSelfBk\);/.test(s));
+  /const selfServe=\(!st\.done && !st\.past\) && \(st\.isGrp \|\| isSelfBk\);/.test(s));
 t('★ 教練請假改記成自主訓練的教練課不算（本質仍是教練課）',
   /!\(typeof bkIsCoachLeave==='function' && bkIsCoachLeave\(b\)\)/.test(s));
 t('★ 場地租借也不算會員自助範圍', /&& b\.category!=='場租';/.test(s));
