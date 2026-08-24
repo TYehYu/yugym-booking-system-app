@@ -127,8 +127,16 @@ console.log('\n⑧ 改期也要選場地（0824 使用者核可：選了就是�
 {
   ok('★★ 「調整預約時間」視窗多了場地欄，預設帶目前的場地',
      /<label class="ash-eilabel"><span>場地<\/span>\s*\n\s*<span style="flex:1;min-width:0;">\$\{ashVenueField\('amv-v', venueEffId\(b\)\|\|''\)\}<\/span><\/label>/.test(src));
+  /* 0824 修：挑選視窗原本沒有排除自己，改期時會把「自己現在佔的場地」畫成已滿。
+     排除自己這件事收進 bkVenueStatus 的第四個參數，挑選視窗與重驗共用同一支。 */
   ok('★★ 排除自己（改期時自己佔的位不能把自己擋掉）',
-     /st=venueAvailAt\(day, ns, ne, b\?b\.id:null\);   \/\/ 排除自己/.test(src));
+     /async function bkVenueStatus\(ds, time, dur, selfId\)\{/.test(src)
+     && /return venueAvailAt\(day, ns, ne, selfId\|\|null\);/.test(src)
+     && /我明明就在團課教室，它卻說滿了/.test(src));
+  ok('★★ 挑選視窗與重驗都帶自己（改期）／都傳 null（建立）',
+     /const _self=\(id==='amv-v' && window\._amvB\) \? window\._amvB : null;/.test(src)
+     && /const st=await bkVenueStatus\(ds, tm, \(_self&&Number\(_self\.duration\)\)\|\|60, _self\?_self\.id:null\);/.test(src)
+     && /const st=await bkVenueStatus\(ds, tm, \(b&&Number\(b\.duration\)\)\|\|60, b\?b\.id:null\);/.test(src));
   ok('★★ 選了哪個就用哪個（venue_pref＝forceVid），滿了直接擋',
      /const vbk=Object\.assign\(\{\}, b, \{venue_pref:nv\|\|null\}\);/.test(src));
   ok('　　與建立預約共用同一支重驗邏輯（hidden 鏡像 bk-date／bk-time／bk-venue）',

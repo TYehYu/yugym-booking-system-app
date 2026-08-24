@@ -139,7 +139,7 @@ console.log('\n建立預約：視窗一＝時段與場地');
      && /if\(!tm\)\{ showToast\('請選時間'\); return; \}/.test(nx)
      && /if\(!vid\)\{ showToast\('請選場地'\); return; \}/.test(nx));
   ok('★★ 進下一步前再確認一次那個場地還在（可能選完又回頭改了時間）',
-     /const st=await bkVenueStatus\(ds, tm, 60\);[\s\S]{0,240}?if\(sv && !sv\.ok\)/.test(nx));
+     /const st=await bkVenueStatus\(ds, tm, 60, null\);[\s\S]{0,240}?if\(sv && !sv\.ok\)/.test(nx));
 }
 
 console.log('\n建立預約：視窗二＝課程與教練');

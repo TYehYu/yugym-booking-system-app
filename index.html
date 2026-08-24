@@ -9925,8 +9925,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1157';
-const APP_VERSION_LABEL='v260824.1157';
+const APP_VERSION = '260824.1204';
+const APP_VERSION_LABEL='v260824.1204';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21486,15 +21486,8 @@ async function amvVenueRefresh(){
   const clear=()=>{ btn.classList.remove('adp-field-bad'); if(tip) tip.remove(); };
   if(!vid||!ds||!tm){ clear(); return; }
   const b=window._amvB||null;
-  let st=null;
-  try{
-    const all=await dbGetAll('bookings').catch(()=>null);
-    if(all){
-      const day=all.filter(x=>x && x.date===ds && x.status!=='cancelled');
-      const ns=timeToMin(tm), ne=ns+((b&&Number(b.duration))||60);
-      st=venueAvailAt(day, ns, ne, b?b.id:null);   // 排除自己
-    }
-  }catch(_){}
+  /* 與挑選視窗共用同一支（bkVenueStatus 已經支援排除自己），不要在這裡另寫一份撈資料 */
+  const st=await bkVenueStatus(ds, tm, (b&&Number(b.duration))||60, b?b.id:null);
   const sv=(st||[]).find(x=>x.id===vid);
   if(!sv || sv.ok){ clear(); return; }
   btn.classList.add('adp-field-bad');
@@ -23930,7 +23923,7 @@ async function bkStep1Next(){
   if(!tm){ showToast('請選時間'); return; }
   if(!vid){ showToast('請選場地'); return; }
   /* 送去下一步之前再確認一次那個場地還在 —— 使用者可能選完場地又回頭改了時間。 */
-  const st=await bkVenueStatus(ds, tm, 60);
+  const st=await bkVenueStatus(ds, tm, 60, null);
   const sv=(st||[]).find(x=>x.id===vid);
   if(sv && !sv.ok){ showToast(`${sv.name}${sv.why}，請改選其他場地`, 4000); try{ bkVenueRefresh(); }catch(_){} return; }
   Object.assign(_bkWizard,{date:ds,time:tm,venue:vid});
@@ -30448,19 +30441,24 @@ function ashVenueField(id, value){
 /* 這個時段各場地的狀況（供挑選視窗與「選完之後時段又被改動」的重驗共用）。
    回傳 venueAvailAt 的結果；讀不到預約就回 null，呼叫端一律放行（寧可讓後端擋，
    也不要因為讀取失敗就把所有場地都畫成不能選）。 */
-async function bkVenueStatus(ds, time, dur){
+async function bkVenueStatus(ds, time, dur, selfId){
   try{
     if(!ds||!time) return null;
     const all=await dbGetAll('bookings').catch(()=>null);
     if(!all) return null;
     const day=all.filter(x=>x && x.date===ds && x.status!=='cancelled');
     const ns=timeToMin(String(time).slice(0,5)), ne=ns+(Number(dur)||60);
-    return venueAvailAt(day, ns, ne, null);
+    /* ⚠ selfId：改期時一定要排除自己，否則「自己現在佔的那個場地」會被算進佔用，
+       畫成已滿 —— 使用者看到的是「我明明就在團課教室，它卻說滿了」。
+       建立預約時沒有自己，傳 null。 */
+    return venueAvailAt(day, ns, ne, selfId||null);
   }catch(_){ return null; }
 }
 async function ashVenueOpen(id){
   const inp=document.getElementById(id||'bk-venue'); if(!inp) return;
   const cur=String(inp.value||'');
+  /* 改期視窗（amv-v）要排除自己、而且時長吃這一筆的；建立預約沒有自己、時長固定 60。 */
+  const _self=(id==='amv-v' && window._amvB) ? window._amvB : null;
   const ds=(document.getElementById('bk-date')||{}).value||'';
   const tm=String((document.getElementById('bk-time')||{}).value||'').slice(0,5);
   let host=document.getElementById('adp-sheet');
@@ -30468,7 +30466,7 @@ async function ashVenueOpen(id){
   host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
     <div class="adp-box"><div class="modal-title">選擇場地</div>
       <div class="ash-einote">讀取場地狀況…</div></div>`;
-  const st=await bkVenueStatus(ds, tm, 60);
+  const st=await bkVenueStatus(ds, tm, (_self&&Number(_self.duration))||60, _self?_self.id:null);
   const rows=getVenues().map(v=>{
     const s=(st||[]).find(x=>x.id===v.id);
     const bad=(s && !s.ok) ? s.why : '';
@@ -30506,7 +30504,7 @@ async function bkVenueRefresh(){
   let tip=document.getElementById('bk-venue-bad');
   const clear=()=>{ btn.classList.remove('adp-field-bad'); if(tip) tip.remove(); };
   if(!vid||!ds||!tm){ clear(); return; }
-  const st=await bkVenueStatus(ds, tm, 60);
+  const st=await bkVenueStatus(ds, tm, 60, null);
   const s=(st||[]).find(x=>x.id===vid);
   if(!s || s.ok){ clear(); return; }
   btn.classList.add('adp-field-bad');
