@@ -29,7 +29,8 @@ ok('★ 貼齊頂欄的負上邊距也一致（-10 / 下 16；2026-08-12 起左�
    /\.mc-g5-left>\.mc-art-top,\.mc-g5-left>\.mc-payremind\{margin:-10px 0 16px !important;\}/.test(src)
    && /\.mc-g5-right>\.mc-know-top\{margin:-10px 0 16px !important;\}/.test(src));
 ok('★ 右欄原本用 padding-top:43px 撐的齊頭留白要拿掉，否則空白跑到知識卡上面',
-   /\.mc-g5-right\{flex:0 0 300px;min-width:0;display:flex;flex-direction:column;\s*\n\s*padding-top:0;\}/.test(src));
+   /* 2026-08-24：欄寬 300 → 340（使用者：今日營收的米色區要加寬，讓購買項目顯示得完整）。 */
+   /\.mc-g5-right\{flex:0 0 340px;min-width:0;display:flex;flex-direction:column;\s*\n\s*padding-top:0;\}/.test(src));
 ok('　　壓成矮卡後內文改緊湊版（不再有 190px 直式卡的 52px 上留白）',
    /\.mc-know-top \.know-body,\.mc-know-left \.know-body\{margin-top:0;/.test(src));
 ok('　　右側留給插圖，字不壓上去', /\.mc-know-top \.know-body,\.mc-know-left \.know-body\{margin-top:0;padding-right:62px;\}/.test(src));

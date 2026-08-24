@@ -181,7 +181,22 @@ ok('★★ 改成清單＋先確認（不再是六格方塊、也不再點一下
    && /onclick="lottoFixConfirm\('\$\{lotId\}','\$\{x\.key\}'\)"/.test(src)
    && /async function lottoFixConfirm\(lotId,key\)\{/.test(src)
    && /<button class="btn btn-green" onclick="lottoFixDo\('\$\{lotId\}','\$\{key\}'\)">確定更改<\/button>/.test(src));
-ok('　　目前登記的那一項標出來且按不動', /\$\{isCur\?' lot-row-cur':''\}"\$\{isCur\?' disabled':''\}/.test(src));
+/* 2026-08-24 使用者：「列表都改成白色框，選取的這一個用品牌綠底」「就不用多一列」 */
+ok('★★ 清單是白底框，目前登記的那一項用品牌綠底、按不動',
+   /\$\{isCur\?' lot-row-cur':''\}"\$\{isCur\?' disabled':''\}/.test(src)
+   && /\.lot-row\{margin-bottom:8px;background:#fff;border:1px solid var\(--bd\);/.test(src)
+   && /\.lot-row\.lot-row-cur\{background:var\(--green\);border-color:var\(--green\);/.test(src)
+   && /\.lot-row\.lot-row-cur \.ash-eilb\{color:#fff;\}/.test(src));
+ok('★ 綠底標出來之後，挑選那一頁就不必再多一列「原本登記」',
+   (()=>{ const i=src.indexOf('async function lottoFixAsk(lotId, from){');
+     const ask=src.slice(i, src.indexOf('async function lottoFixConfirm(', i));
+     return !/原本登記<\/span>/.test(ask); })()
+   && /上面那一列「原本登記」就多餘了/.test(src));
+/* ⚠ 確認視窗那一張仍然要寫「原本登記 → 改成」——那是要人核對的地方，不能省。 */
+ok('　　確認視窗仍然寫「原本登記 → 改成」（那是要核對的）',
+   (()=>{ const i=src.indexOf('async function lottoFixConfirm(lotId,key){');
+     const cf=src.slice(i, src.indexOf('async function lottoFixDo(', i));
+     return /原本登記<\/span>/.test(cf) && /<span>改成<\/span>/.test(cf); })());
 ok('★★ 沒有待抽名單時也要畫出「今天已登記」那一區（早退掉的話最需要改的那筆看不到）',
    /if\(!list\.length\)\{[\s\S]{0,420}?\$\{_fixBlock\}/.test(src)
    && /這一段要算在「沒有待抽獎會員」的早退\*\*之前\*\*/.test(src));
