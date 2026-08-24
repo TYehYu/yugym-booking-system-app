@@ -50,9 +50,9 @@ console.log('空堂的判定（形狀而非新欄位）');
   console.log('\n課卡上分得出來（櫃檯不能把「沒排人」看成「沒收錢」）');
   eq('★ 空堂的標籤是「待安排」，不是「待簽約」', lib.bkTag(open), '待安排');
   eq('★ 有姓名的卡位仍是「待簽約」', lib.bkTag(named), '待簽約');
-  eq('★ 空堂的主行寫「尚未安排」（原本會顯示成「客戶」）', lib.bkName(open, ()=>''), '尚未安排');
+  eq('★ 空堂的主行寫「空白」（0824 使用者指示，品牌金）（原本會顯示成「客戶」）', lib.bkName(open, ()=>''), '空白');
   eq('　　有姓名的卡位照樣顯示姓名', lib.bkName(named, ()=>''), '王小明');
-  eq('　　完整字串帶標籤', lib.bkNameFull(open, ()=>''), '尚未安排（待安排）');
+  eq('　　完整字串帶標籤', lib.bkNameFull(open, ()=>''), '空白（待安排）');
 }
 
 console.log('\n「安排這一堂」課卡（管理員手機端）');
@@ -279,6 +279,21 @@ console.log('\n桌機取代：CSS 必須跟著搬出手機專屬區塊');
      /#bk-card-pop\.admh-pop \.mtp\{left:12px;right:12px;/.test(css));
   ok('　　為什麼要搬，寫在程式裡',
      /29 個 \.ash-\* 選擇器在桌機完全沒有定義/.test(css));
+}
+
+/* 2026-08-24 使用者指示：「建立課卡沒有安排會員的時候，課卡會員姓名這邊要顯示
+   ［空白］」＋同日更正「要用品牌金」。四個畫課卡的地方共用 bkNameBlankCls，
+   免得又變成同一條規則寫四份（0731 重構就是為了這件事）。 */
+console.log('\n空堂的姓名＝品牌金的「空白」');
+{
+  ok('★★ 四個課卡都掛上 class（桌機標準卡／手機一日／首頁任務卡／手機七日）',
+     (src.match(/\$\{bkNameBlankCls\(b\)\}/g)||[]).length===4);
+  ok('★★ 判斷只寫一次，且就是 bkIsOpenHold',
+     /function bkNameBlankCls\(b\)\{ return \(typeof bkIsOpenHold==='function' && bkIsOpenHold\(b\)\) \? ' bk-nm-blank' : ''; \}/.test(src));
+  ok('★★ 品牌金（不是淡化）—— 課卡整張本來就暗化了，姓名再淡下去會讀不到',
+     /\.bk-nm-blank\{color:var\(--gold,#B48A56\) !important;font-weight:800;\}/.test(src));
+  ok('　　手機七日那張的 nm 是自己組的，也要吃到「空白」',
+     /nm=b\.trial_name\|\|mm\[b\.member_id\]\|\|\(bkIsOpenHold\(b\)\?'空白':'—'\)/.test(src));
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);

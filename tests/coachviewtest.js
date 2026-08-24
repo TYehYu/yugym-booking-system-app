@@ -50,7 +50,7 @@ console.log('\n內容照舊（「一樣正常顯示課卡內容」）');
 ok('★ 卡片內容的組法沒有因為唯讀而被砍掉（時間／名稱／標籤照畫）',
    /* 2026-08-23 使用者指示：一日課卡拿掉時間（改看整點刻度）、右下角改放教練名。
       這裡守的是「唯讀沒有把內容砍掉」，所以跟著改成現行組法。 */
-   /<div class="evc-txt"><span class="evc-name">\$\{disp\}<\/span>\$\{dispTag\?`<span class="evc-sub">\$\{dispTag\}<\/span>`:''\}\$\{tag\}<\/div>/.test(src));
+   /<div class="evc-txt"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{disp\}<\/span>\$\{dispTag\?`<span class="evc-sub">\$\{dispTag\}<\/span>`:''\}\$\{tag\}<\/div>/.test(src));
 ok('★ 繳費／續約角標仍只給看得到會員的卡（不外洩誰快用完票）',
    /const _mk = \(layer==='mine'\|\|isAdmin\) \? bkRenewBadge\(\{/.test(src));
 

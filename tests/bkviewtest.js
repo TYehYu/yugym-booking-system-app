@@ -56,7 +56,7 @@ eq('★ 待簽約 → 客戶名', api.bkName({pending_contract:true,trial_name:'
 eq('★ 場租 → 使用人', api.bkName({category:'場租',trial_name:'魚大東'}, nameOf), '魚大東');
 eq('　　體驗沒填名字 → 體驗客戶', api.bkName({category:'體驗'}, nameOf), '體驗客戶');
 eq('　　場租沒填名字 → 場地租借', api.bkName({category:'場租'}, nameOf), '場地租借');
-eq('　　待簽約沒填名字 → 尚未安排（0820 空堂）', api.bkName({pending_contract:true}, nameOf), '尚未安排');
+eq('　　待簽約沒填名字 → 空白（0820 空堂；0824 改文案＋品牌金）', api.bkName({pending_contract:true}, nameOf), '空白');
 eq('　　會員查不到名字 → —', api.bkName({member_id:'ZZ'}, nameOf), '—');
 eq('　　什麼都沒有 → —', api.bkName({category:'自主訓練'}, nameOf), '—');
 eq('　　null 不會爆', api.bkName(null, nameOf), '—');

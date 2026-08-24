@@ -112,7 +112,7 @@ const _dayCard=src.slice(src.indexOf("  const renderCard=(b,layer,dim,pos)=>{"),
                          src.indexOf("  // 每欄整點槽背景（淡化方塊，標示每個整點時段範圍）"));
 ok('★★ 課卡拿掉時間（showTime／.evc-time 都不畫了）',
    _dayCard.length>500 && !/showTime/.test(_dayCard) && !/evc-time/.test(_dayCard)
-   && /<div class="evc-txt"><span class="evc-name">\$\{disp\}<\/span>/.test(_dayCard));
+   && /<div class="evc-txt"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{disp\}<\/span>/.test(_dayCard));
 ok('★ 右下角標籤改放教練名；沒有教練的課（自主訓練／場租）才退回場地',
    /const _coNm = _co \? coachDisp\(_co\) : '';/.test(src)
    && /:\(_venue\?`<span class="evc-coach" style="background:\$\{_ccol\.bg\};color:\$\{_ccol\.fg\};">\$\{_venue\}<\/span>`:''\)\);/.test(src));

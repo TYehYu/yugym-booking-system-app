@@ -4815,6 +4815,11 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard-chk.tcard-chk-leave{background:var(--danger,#b5372e);}   /* 全員請假（2026-07-31） */
 .tcard-chk.tcard-chk-ns{background:var(--gold-d,#b48a56);}      /* 未到（2026-08-21 補上顏色） */
 /* 姓名與章同一列：.tcard-txt 是直排，不包一層的話章會自己掉到下一行 */
+/* 空堂的姓名「空白」用品牌金（2026-08-24 使用者更正）——課卡整張本來就已經暗化，
+   姓名再一起淡下去就讀不到；金色是「還缺一個人」這種次要提示的顏色。
+   ⚠ 已簽到的卡會把 .evc-name 強制寫成白字（權重帶 !important），但空堂不可能簽到，
+     兩條規則碰不到面。 */
+.bk-nm-blank{color:var(--gold,#B48A56) !important;font-weight:800;}
 .tcard-nmrow{display:flex;align-items:center;justify-content:center;gap:4px;max-width:100%;min-width:0;}
 .tcard-nmrow .tcard-mem{min-width:0;}
 /* 取消課卡右下角「刪」角標（品牌紅）＋教練今日課堂數（5/5・完成打勾）2026-07-25 使用者指示 */
@@ -9957,8 +9962,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1312';
-const APP_VERSION_LABEL='v260824.1312';
+const APP_VERSION = '260824.1316';
+const APP_VERSION_LABEL='v260824.1316';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16377,7 +16382,7 @@ PAGES.g_dashboard=async function(){
               <span class="t3-main">
                 <span class="t3-l1">${catName[cc]||'課程'}</span>
                 <span class="t3-l1 t3-venue">${(typeof venueDisplay==='function')?(venueDisplay(b)||''):''}</span>
-                <span class="t3-l2 tcard-mem">${nm}</span>
+                <span class="t3-l2 tcard-mem${bkNameBlankCls(b)}">${nm}</span>
                 <span class="t3-l3">${(()=>{
                   const q=(window._bkSeq||{})[b.id];
                   /* 無限次卡（親友自主訓練 sessions_total=9999）寫「45/9999 堂」沒有意義，只標第幾堂 */
@@ -19158,8 +19163,15 @@ function bkName(b, nameOf){
   if(b.member_id) return '—';
   if(b.trial_name) return b.trial_name;
   const t=bkTag(b);
-  return t==='體驗'?'體驗客戶' : t==='場租'?'場地租借' : t==='待安排'?'尚未安排' : t==='待簽約'?'客戶' : '—';
+  /* 空堂的姓名欄（2026-08-24 使用者指示：「建立課卡沒有安排會員的時候，課卡會員姓名
+     這邊要顯示暗化字體［空白］」，同日更正「這個［空白］要用品牌金」）——
+     原本寫「尚未安排」，跟下面那一列的標籤「待安排」講同一句話兩次。
+     金色＝次要提示（紅>金>綠）：這一堂沒問題，只是還缺一個人。 */
+  return t==='體驗'?'體驗客戶' : t==='場租'?'場地租借' : t==='待安排'?'空白' : t==='待簽約'?'客戶' : '—';
 }
+/* 課卡上的姓名要不要標成「空白」（品牌金）——四個畫課卡的地方共用這一句判斷，
+   免得又變成同一條規則寫四份（見 bkTag／bkName 上方那段重構說明）。 */
+function bkNameBlankCls(b){ return (typeof bkIsOpenHold==='function' && bkIsOpenHold(b)) ? ' bk-nm-blank' : ''; }
 /* 含標籤的完整字串（Hover 提示、無處放第二行時用） */
 function bkNameFull(b, nameOf){
   const n=bkName(b,nameOf), t=bkTag(b);
@@ -19883,7 +19895,7 @@ async function renderCalendar(opts){
          使用者三修：「桌機版行事曆 不要用填滿的方式簽到 用會員姓名旁邊顯示出席章」，
          與首頁課卡同一套。名字與章包成 .evc-nmrow 一列，名字可縮、章固定寬，
          窄欄位時名字自己截斷（不會把章擠掉）。DOM 只放一份，手機仍由 CSS 定回角標。 */
-      const _bodyOut = `<div class="evc-body"></div><div class="evc-txt"><span class="evc-time">${b.start_time}</span><span class="evc-nmrow"><span class="evc-name">${_stdName}</span>${_stampOut}</span>${_venueSub}${_stdTag}${_abbrOut}${_moreHtml}</div>`;
+      const _bodyOut = `<div class="evc-body"></div><div class="evc-txt"><span class="evc-time">${b.start_time}</span><span class="evc-nmrow"><span class="evc-name${bkNameBlankCls(b)}">${_stdName}</span>${_stampOut}</span>${_venueSub}${_stdTag}${_abbrOut}${_moreHtml}</div>`;
       // Focus Mode：過去的課（日期已過、或今天但已結束）自動淡化，焦點集中到現在與未來
       const _cardDate = ds;
       const _todayYmd = ymd(TODAY);
@@ -23047,7 +23059,7 @@ async function renderCoachAgenda(){
       ${(()=>{const k=bkStampKind(b);
         return k==='leave'?'<span class="evc-check evc-leave" title="全員請假">假</span>':'';})()}
       <div class="evc-body"></div>
-      <div class="evc-txt"><span class="evc-name">${disp}</span>${dispTag?`<span class="evc-sub">${dispTag}</span>`:''}${tag}</div>
+      <div class="evc-txt"><span class="evc-name${bkNameBlankCls(b)}">${disp}</span>${dispTag?`<span class="evc-sub">${dispTag}</span>`:''}${tag}</div>
     </div>`;
   };
 
@@ -44083,8 +44095,8 @@ async function admCalMultiHTML(nDays){
       if(bkIsGroup(b)||(Array.isArray(b.member_ids)&&b.member_ids.length)){
         const names=(b.member_ids||[]).map(x=>mm[x]).filter(Boolean);
         nm=names.length===0?'團體課':(names.length===1?names[0]:`${names[0]} 等${names.length}人`);
-      } else nm=b.trial_name||mm[b.member_id]||'—';
-      cards+=`<div class="amcv-card" style="top:${((s-S)/60*HH+1).toFixed(1)}px;min-height:${Math.max((e-s)/60*HH-2,14).toFixed(1)}px;left:2px;right:2px;--amc:${col};" onclick="admwkCardTap(event,'${b.id}')"><span class="amcv-nm">${nm}</span></div>`;
+      } else nm=b.trial_name||mm[b.member_id]||(bkIsOpenHold(b)?'空白':'—');
+      cards+=`<div class="amcv-card" style="top:${((s-S)/60*HH+1).toFixed(1)}px;min-height:${Math.max((e-s)/60*HH-2,14).toFixed(1)}px;left:2px;right:2px;--amc:${col};" onclick="admwkCardTap(event,'${b.id}')"><span class="amcv-nm${bkNameBlankCls(b)}">${nm}</span></div>`;
     });
     return `<div class="amcv-col">
       <div class="amcv-body" style="height:${GH}px;" onclick="admwkSlot(event,'${ds}')">${bands}${cards}</div>
