@@ -46,9 +46,34 @@ ok('★ 挑同會員同課種最早的保留課、補綁＋扣課＋清旗標',
 ok('　　案例寫在程式裡', /8\/1 取消了，8\/20 明明\n\s*落在已繳的第一期卻繼續掛紅框待收款/.test(src));
 
 console.log('\n③ 預約流程的「待分期」選項（2026-08-04 使用者指示：「後面第五堂同一時間點預約，\n   應該除了待簽約還有待分期的選項，這樣才可以接上原本前面四堂課的票券」）');
-ok('★ 會員有未開通的分期票（票種吻合）→ 步驟 2 多一顆「待分期繳費保留」',
-   /x\.installment && typeof x\.installment==='object'\n\s*&& bkTicketTypeOk\(x, type_id\)/.test(src)
-   && /\$\{_instOk\?'onclick="bkInstHold\(\)"':'disabled'\}>⏳ 待分期繳費保留<\/button>/.test(src));
+/* 2026-08-24 使用者定案：「待簽約跟分期，應該留到＋新增這邊」——
+   兩顆按鈕從**建立預約的步驟 2** 搬到**課卡的［＋新增］**。
+   理由：原本要在還沒建立這一堂的時候就先決定付款方式；現在時段與場地先佔下來，
+   人與付款方式一起在課卡上決定。判斷分期票的那一段完全沿用，只是換了地方跑。 */
+ok('★★ 「待分期」搬到課卡的［＋新增］（判準與原本那顆鈕一字不差）',
+   /if\(!x \|\| x\.status!=='usable' \|\| !tkIsInstall\(x\)\) return;/.test(src)
+   && /if\(!bkTicketTypeOk\(x, b\.ticket_type_id\)\) return;/.test(src)
+   && /if\(\(Number\(x\.sessions_total\)\|\|0\) - \(Number\(x\.unlocked_sessions\)\|\|0\) <= 0\) return;/.test(src)
+   && /onclick="closeModal\(\);bamHoldDo\('\$\{mid\}','inst'\)">/.test(src));
+ok('★★ 步驟 2 不再有那兩顆（同一件事只留一個入口）',
+   !/⏳ 待分期繳費保留<\/button>/.test(src)
+   && !/🕒 待簽約卡位<\/button>/.test(src)
+   && /onclick="bkOpenHoldCreate\(\)">＋ 先建立這一堂（空堂）<\/button>/.test(src));
+ok('★★ 空堂不可以寫 note —— bkIsInstHold 靠 note 認人，寫了會被當成分期保留自動綁票',
+   /note:\(!openHold&&holdOnly\)\?'分期待繳費保留（收款後自動補扣）':null,/.test(src)
+   && /不可以寫 note —— bkIsInstHold 靠 note 裡的「分期待繳費保留」認人/.test(src));
+ok('★★ ［＋新增］寫的分期保留 note 與建立引擎那份一字不差（差一個字就補不到這一堂）',
+   /b\.note=bkNoteJoin\(mode==='inst'\?'分期待繳費保留（收款後自動補扣）':'', _n\.user\|\|''\);/.test(src));
+ok('★ 保留不扣票、pending_contract 維持 true（錢還沒到就不能進統計）',
+   /b\.ticket_id=null;\n\s*b\.pending_contract=true;/.test(src));
+ok('★ 綁人之前再驗一次（同一個人同時段不該有兩堂）',
+   /const verr=await validateBooking\(vbk, b\.date, b\.start_time, Number\(b\.duration\)\|\|60\);\n\s*if\(verr\)\{ showToast\(verr, 6000\); return; \}\n\s*b\.member_id=mid;/.test(src));
+ok('★ 還沒建檔的客人仍然打得了姓名（搬家不能把這個能力弄丟）',
+   /function bamGuestHold\(\)\{/.test(src)
+   && /不在名單上？直接建立待簽約<\/summary>/.test(src)
+   && /bkAddHoldDo\(b\.id, null, 'sign', nm, ph\)/.test(src));
+ok('　　只有一種選項時不多問一層（沒有分期票就直接待簽約）',
+   /if\(!r\.inst\) return bamHoldDo\(mid,'sign'\);/.test(src));
 /* 2026-08-04 追加：「最多只能約剩下的堂數」 */
 ok('★ 連續保留夾上限＝未開通堂數（超過自動縮並提示）',
    /window\._bkInstMax=_instMax;/.test(src)
@@ -56,17 +81,23 @@ ok('★ 連續保留夾上限＝未開通堂數（超過自動縮並提示）',
 ok('★ 建立走 runRecurringBooking 的保留路徑（findTicketFn 回 null → holdOnly）',
    /async function _bkInstHold\(\)\{/.test(src) && /findTicketFn:async\(\)=>null,/.test(src));
 ok('★ 防連點', /async function bkInstHold\(\)\{ return onceAct\('bkinsthold', _bkInstHold\); \}/.test(src));
-ok('★ 待簽約卡位選項仍在（沒分期票的客人用）', /onclick="openPendingHold\(\)">🕒 待簽約卡位<\/button>/.test(src));
+ok('★ 待簽約選項仍在，只是換到［＋新增］', /onclick="closeModal\(\);bamHoldDo\('\$\{mid\}','sign'\)">/.test(src));
 /* 2026-08-04 使用者指示：「待分期跟待簽約改成兩個明顯的按鈕一左一右；如果該會員本身
    有分期的票券才顯示待分期，不然待分期的按鈕應該要淡化且不能按」（並排與停用細節見 stafflinetest） */
-ok('　　說明講清楚收款後自動補綁', /收到下一期款項、開通後自動補綁扣課/.test(src));
+ok('　　說明講清楚收款後自動補綁', /收到下一期款項、在票券卡按「開通下一期」後，會自動補綁票券並扣課。/.test(src));
 /* 2026-08-04 追加：「這種待分期繳費的也要能重複預約」 */
 /* 2026-08-20：開關搬到步驟 1，步驟 2 只覆述；上限仍是分期票未開通的堂數，
    改由 bkReadRecurBk(window._bkInstMax) 在送出時夾住。 */
-ok('★ 待分期也能連續預約（上限＝未開通堂數）',
-   /\$\{bkRecurRecap\(_instMax\|\|0\)\}/.test(src)
-   && /const rc=bkReadRecurBk\(window\._bkInstMax\);/.test(src)
-   && /dows:rc\.on\?rc\.dows:\[\], times:rc\.on\?rc\.times:null, count:cnt, until:null,/.test(src));
+/* 2026-08-24：連續預約現在發生在「建立空堂」那一步（一次建 N 堂空堂，再逐堂補人），
+   所以上限不再是分期票的未開通堂數 —— 空堂沒有票要看。_bkInstHold 仍在（沒有呼叫端了，
+   但整段留著，日後要退回不必重寫），它的夾上限邏輯也還在。 */
+ok('★ 一次建立多堂空堂（連續預約沿用視窗二的設定，上限 RECUR_MAX）',
+   /const rc=bkReadRecurBk\(\);\n\s*if\(rc\.on\)\{/.test(src)
+   && /openHold:true,/.test(src)
+   && /const cap = \(noDeduct\|\|canHold\|\|openHold\) \? reqCount : Math\.min\(reqCount, remainTotal\|\|0\);/.test(src));
+ok('　　_bkInstHold 整段留著（日後要退回不必重寫）',
+   /async function _bkInstHold\(\)\{/.test(src)
+   && /const rc=bkReadRecurBk\(window\._bkInstMax\);/.test(src));
 ok('★ 回報建立堂數（含跳過）', /已建立 \$\{ok\} 堂分期保留/.test(src));
 
 console.log('\n④ 待簽約整串轉正（2026-08-04 使用者指示）：「先約 12 堂先繳 4 堂 → 後面 8 堂\n   直接轉分期繳費保留」「只簽約 8 堂 → 直接取消後面佔位子的 4 堂」');

@@ -28,7 +28,7 @@ console.log('① 設定入口（會員資料的票券卡）');
 console.log('\n② 三條預約路徑都自動帶入（指定的使用人優先）');
 {
   ok('★ 櫃檯單筆／連續（原路徑）三態取值：null＝依票券、\'\'＝明確本人、名字＝成員',
-     /trial_name:\(o\.trial_name==null \? \(\(tk&&tk\.family_user\)\|\|null\) : \(o\.trial_name\|\|null\)\),/.test(src));
+     /trial_name:openHold\?null:\(o\.trial_name==null \? \(\(tk&&tk\.family_user\)\|\|null\) : \(o\.trial_name\|\|null\)\),/.test(src));
   ok('★ RPC 路徑：建完補寫（同一套取值）',
      /const _fam=\(o\.trial_name==null \? \(\(tk&&tk\.family_user\)\|\|null\) : \(o\.trial_name\|\|null\)\);/.test(src)
      && /update\(\{trial_name:_fam\}\)\.eq\('id',data\.booking_id\)/.test(src));

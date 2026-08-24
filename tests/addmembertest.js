@@ -124,12 +124,17 @@ console.log('\n⑧ 排序與呈現');
      && /const tag=m\.sum>0\?`可用 \$\{m\.sum\} \/ \$\{m\.total\|\|m\.sum\} 堂`:\(m\.why\|\|'無票（無法加入，請先儲值）'\)/.test(src));
   /* 0824 第四批：名單分三種列 —— 有票（可點，直接加）／票排完了（可點，開圓形卡調課）／
      真的不行（淡化）。「票排完了」不能淡化成不能選，那正是調課的入口。 */
-  ok('★ 不能加入的淡化列出、不藏起來（0823 定的語彙）',
-     /const cls=\(can\|\|sw\)\?'':' ash-ei-off';/.test(src)
-     && /class="ash-eirow\$\{cls\}"/.test(src));
+  /* 2026-08-24 使用者定案：「待簽約跟分期應該留到＋新增這邊」＋「如果該會員沒有票券
+     （含散客），課卡就會顯示待簽約」——沒票的那一組不再是淡化的死路，而是待簽約入口。 */
+  ok('★★ 沒票的那一組改成可點的待簽約入口（不再有淡化的死路）',
+     /沒有可用票券 —— 可先待簽約（\$\{no\.length\}）/.test(src)
+     && !/const cls=\(can\|\|sw\)\?'':' ash-ei-off';/.test(src)
+     && /` onclick="bamHoldAsk\('\$\{r\.id\}'\)"`/.test(src));
   ok('★★ 「票已排完」自成一組，而且點得動（調課入口）',
      /票已排完，可以調課過來（\$\{sw\.length\}）/.test(src)
-     && /const act=can\?` onclick="bamPick\('\$\{r\.id\}'\)"`:\(sw\?` onclick="bamSwap\('\$\{r\.id\}'\)"`:' disabled'\);/.test(src));
+     && /const act=can\?` onclick="bamPick\('\$\{r\.id\}'\)"`\n\s*:\(sw\?` onclick="bamSwap\('\$\{r\.id\}'\)"`:` onclick="bamHoldAsk\('\$\{r\.id\}'\)"`\);/.test(src));
+  ok('★ 三種列各自寫出「按下去會怎樣」（有票→堂數／排完→調課／沒票→待簽約）',
+     /· \$\{r\.inst\?'待簽約／待分期':'待簽約'\} ›/.test(src));
 }
 
 console.log('\n⑨ 寫入端：加人＝綁會員＋綁票＋扣課，而且空堂要轉正');

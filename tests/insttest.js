@@ -55,7 +55,7 @@ ok('★ 票券選擇顯示的是「可約」而非帳面剩餘',
 console.log('\n未繳期數改以「待繳費」保留時段');
 ok('★ 找不到票且有未繳期數 → 保留而不是跳過', /if\(canHold\) holdOnly=true;/.test(src));
 ok('　　保留課不扣票（pending_contract、無 ticket_id）',
-   /pending_contract:holdOnly\|\|false,/.test(src));
+   /pending_contract:openHold\|\|holdOnly\|\|false,/.test(src));
 ok('　　保留課不可走會扣票的 RPC', /&&tk&&!holdOnly&&!o\.venue_pref&&!bkIsSelf\(bk\)\)/.test(src));   // 2026-08-04 自主訓練也排除
 ok('★ 收款開通時自動補綁並扣課（2026-08-14 起堂數改吃畫面輸入 n）', /function bindHeldBookings\(/.test(src)
    && /bound=await bindHeldBookings\(t\.id, n\)/.test(src));

@@ -59,21 +59,23 @@ console.log('\n③ 員工掃描後：授權 → 寫入 → 結果頁');
      /login-screen'\)\?\.classList\.add\('hidden'\)/.test(grabFn('showStaffBindPage')));
 }
 
-console.log('\n④ 步驟 2：待分期／待簽約兩顆並排');
+/* 2026-08-24 使用者定案：「待簽約跟分期，應該留到＋新增這邊」＋「還是把視窗二的會員
+   移除，安排會員統一都從＋新增這邊」——原本這一節守的是步驟 2 那兩顆並排按鈕，
+   整組搬到課卡的［＋新增］了（細節在 addmembertest／instholdtest）。
+   這裡改守「搬乾淨了、而且沒有留下第二個入口」。 */
+console.log('\n④ 待分期／待簽約已搬到課卡的［＋新增］');
 {
-  const seg=src.slice(src.indexOf('window._bkInstMax=_instMax;'), src.indexOf('/* 待分期繳費保留（2026-08-04）'));
-  ok('★ 同一列（flex 均分；2026-08-14 加入第三顆「調課」後共 3 顆）', /display:flex;gap:10px;/.test(seg)
-     && (seg.match(/style="flex:1;padding:13px 8px;/g)||[]).length===3);
-  const row=seg.slice(seg.indexOf('display:flex;gap:10px;'));
-  ok('★ 左＝待分期、右＝待簽約', row.indexOf('待分期繳費保留')<row.indexOf('待簽約卡位'));
-  ok('★ 沒有分期票 → 淡化且不能按', /\$\{_instOk\?'':'opacity:\.4;filter:grayscale\(\.5\);cursor:not-allowed;'\}/.test(seg)
-     && /\$\{_instOk\?'onclick="bkInstHold\(\)"':'disabled'\}/.test(seg));
-  ok('★ 有分期票才綁 onclick（_instOk 由分期票判定）',
-     /x\.installment && typeof x\.installment==='object'/.test(src) && /_instOk=true/.test(src));
-  ok('★ 停用時說明為什麼', /這位會員沒有分期中的票券，故不可選/.test(seg));
-  /* 2026-08-20：連續預約的開關移到步驟 1，這裡只在有分期票時覆述，上限仍是未開通堂數 */
-  ok('　　連續預約的覆述只跟著待分期出現（上限＝未開通堂數）',
-     /_instOk\?`\$\{\/\*[\s\S]*?bkRecurRecap\(_instMax\|\|0\)/.test(seg));
+  ok('★★ 步驟 2 不再有那兩顆按鈕',
+     !/⏳ 待分期繳費保留<\/button>/.test(src) && !/🕒 待簽約卡位<\/button>/.test(src));
+  ok('★★ 沒票的那條路改成一顆「先建立這一堂（空堂）」',
+     /onclick="bkOpenHoldCreate\(\)">＋ 先建立這一堂（空堂）<\/button>/.test(src));
+  ok('★★ 兩種保留都在［＋新增］裡，而且只有一種可選時不多問一層',
+     /onclick="closeModal\(\);bamHoldDo\('\$\{mid\}','inst'\)"/.test(src)
+     && /onclick="closeModal\(\);bamHoldDo\('\$\{mid\}','sign'\)"/.test(src)
+     && /if\(!r\.inst\) return bamHoldDo\(mid,'sign'\);/.test(src));
+  ok('★ 有分期票才給「待分期」（判定沿用同一段分期票條件）',
+     /!tkIsInstall\(x\)/.test(src) && /_instSet\[mid\]=1/.test(src));
+  ok('★ 搬家的理由寫在原地', /待簽約跟分期，應該留到＋新增這邊/.test(src));
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');

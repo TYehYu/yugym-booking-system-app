@@ -149,10 +149,12 @@ console.log('\n建立預約：視窗二＝課程與教練');
   const form=g('bkStep1bHtml');
   ok('★ 抽得到視窗二', !!form && form.length>400);
   const at=s=>form.indexOf(s);
-  const 課程=at('<label>課程</label>'), 教練=at('>授課教練<'), 會員=at('<label>會員<'), 連續=at('id="bk-recur-row"');
-  ok('★ 四個欄位都在，順序＝課程 → 教練 → 會員 → 連續預約',
-     [課程,教練,會員,連續].every(x=>x>0) && 課程<教練 && 教練<會員 && 會員<連續,
-     {課程,教練,會員,連續});
+  const 課程=at('<label>課程</label>'), 教練=at('>授課教練<'), 連續=at('id="bk-recur-row"');
+  /* 2026-08-24 使用者定案：「還是把視窗二的會員移除，安排會員統一都從＋新增這邊」——
+     建立預約只做「什麼課、誰上、什麼時候、在哪」，人與付款方式一律在課卡上決定。 */
+  ok('★ 三個欄位，順序＝課程 → 教練 → 連續預約',
+     [課程,教練,連續].every(x=>x>0) && 課程<教練 && 教練<連續,
+     {課程,教練,連續});
   ok('★★ 日期／時間／場地用 hidden input 帶過來（既有的讀取點一行都不用改）',
      /<input type="hidden" id="bk-date" value="\$\{w\.date\|\|''\}">/.test(form)
      && /<input type="hidden" id="bk-time" value="\$\{w\.time\|\|''\}">/.test(form)
@@ -163,23 +165,28 @@ console.log('\n建立預約：視窗二＝課程與教練');
      && /function bkBackToStep1\(\)\{/.test(src));
   ok('　　回上一步要保留已選的場地（不然等於重填）',
      /if\(vi && w\.venue\)\{ vi\.value=w\.venue;/.test(src));
-  ok('★ 會員標「選填」（原本寫「體驗課／待簽約卡位可不選」）',
-     /<label>會員<span style="font-weight:400;color:var\(--t3\);">（選填）<\/span><\/label>/.test(form)
+  ok('★★ 視窗二不再挑會員（只留一個空的 hidden，讓既有讀取點讀到「沒選人」）',
+     !/<label>會員</.test(form)
+     && !/bkMemberOptsHTML\('\'\)/.test(form)
+     && /<input type="hidden" id="bk-mem-pre" value="">/.test(form)
      && !/體驗課／待簽約卡位可不選/.test(srcNC));
+  ok('★★ 一般課別按下去就直接建立空堂，不再多一頁（體驗與團課仍有自己的第二步）',
+     /if\(!isTrial && !isGroup\) return bkOpenHoldCreate\(\);/.test(src));
+  ok('★★ 送出鈕的字要照實講（直接建完就寫「建立預約」，還有下一步才寫「下一步」）',
+     /<button class="btn btn-green" id="bk-s2btn" onclick="bkStep2\(\)">建立預約<\/button>/.test(form)
+     && /_b2\.textContent = _more \? '下一步 →' : '建立預約';/.test(src));
   ok('★ 連續預約在視窗二（不帶上限，票券的上限在下一步才夾）',
      /<div class="form-row" id="bk-recur-row" style="margin-bottom:0;">\$\{recurBoxHtml\('bk'\)\}<\/div>/.test(form));
   ok('★ 課程用自家挑選器（六張方案卡退場）',
      /<button type="button" class="adp-field" id="bk-type-btn" onclick="ashTypeOpen\(\)">/.test(form)
      && !/<div id="bk-type-cards" class="bk-cards"><\/div>/.test(form));
-  ok('★ 教練與會員並排在同一個 form-2col', 教練>0 && 會員>教練
-     && /<div class="form-2col">[\s\S]{0,900}?id="bk-coach-row"[\s\S]{0,900}?id="bk-mem-pre"/.test(form));
+
   ok('★★ 這個場地不能上的課要淡化並寫原因（不要藏起來）',
      /const bad=bkTypeTimeBad\(t,_d,_tm\) \|\| venueCatWhy\(_vid, t\.category\);/.test(src));
   ok('　　renderBkTypeCards 還被回上一步呼叫，但找不到容器就直接 return（不會爆）',
      /const box=document\.getElementById\('bk-type-cards'\); if\(!box\)return;/.test(src));
-  ok('　　會員下拉本來就把該教練的會員排在最上面＋可搜尋（這次只是換位置）',
-     /optgroup label="\$\{label\}的會員（\$\{mine\.length\}）"/.test(src)
-     && /oninput="bkFilterMembers\(this\.value\)"/.test(form));
+  ok('　　「該教練的會員排最上面」那套排序仍在（現在服務的是［＋新增］的名單）',
+     /optgroup label="\$\{label\}的會員（\$\{mine\.length\}）"/.test(src));
 }
 
 console.log('\n連續預約搬家之後不能無聲失效');
@@ -194,8 +201,10 @@ ok('★ 送出時一律讀收起來的那份，不再直接讀已被換掉的 DO
    && !/const _rc=readRecur\('bk'\);/.test(src));
 ok('★ 票券只剩 N 堂時把堂數夾住（不要建立了才一堂堂失敗）',
    /return Object\.assign\(\{\},rc,\{count:Math\.max\(1,Math\.min\(Number\(rc\.count\)\|\|1,m\)\),max:m\}\);/.test(src));
+/* 2026-08-24：沒票的那條路改成「先建立空堂」，上限不再是分期票的未開通堂數
+   （空堂根本沒有票要看），所以覆述改帶 RECUR_MAX。 */
 ok('★ 步驟 2 改成唯讀覆述，不再畫第二個開關',
-   /\$\{bkRecurRecap\(preSum\)\}/.test(src) && /\$\{bkRecurRecap\(_instMax\|\|0\)\}/.test(src));
+   /\$\{bkRecurRecap\(preSum\)\}/.test(src) && /\$\{bkRecurRecap\(RECUR_MAX\)\}/.test(src));
 ok('★ 團課收起步驟 1 的開關（它的連續預約在步驟 2、prefix grp）',
    /const isGrp = !!t && bkIsGroup\(\{category:t\.category\}\);/.test(src)
    && /rrow\.style\.display = isGrp \? 'none' : '';/.test(src)
