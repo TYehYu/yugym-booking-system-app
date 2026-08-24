@@ -216,5 +216,14 @@ ok('★★ 抽獎那一列不畫金額、付款方式與 30 分鐘退回（它�
    /it:\(p\.plan_name\|\|'抽獎'\), amt:0, lot:p\.id, lotDate:puLocalDate\(p\) \}\)\)/.test(src)
    && /\(revAmtDup\(r\)\|\|r\.lot\)\?''/.test(src));
 
+/* 2026-08-24 使用者：「跑出所有抽獎名單了，我只要今天的」（實際上那五筆都是當天的，
+   問題是排在最前面把收款擠掉）＋「點下去只要跳窗讓我重新選擇就好」「不用進入會員資料」 */
+ok('★★ 抽獎排在收款之後（這一頁叫「今日營收」，錢要先看到）',
+   /inv:\(p\.invoice_type==='cloud'\|\|p\.invoice_type==='paper'\)\};\}\),\s*\n\s*\/\* 抽獎排在最後/.test(src));
+ok('★★ 整列點下去就開重選視窗，不是跑去會員票券頁',
+   (src.match(/r\.lot\?`onclick="lottoFixAsk\('\$\{r\.lot\}','rev'\)" title="改抽獎項目"`/g)||[]).length===2);
+ok('　　首頁名單卡與營收彈窗兩處都要改（同一份資料兩個地方畫）',
+   (src.match(/class="mc-rev-row\$\{\(r\.mid\|\|r\.lot\)\?' mc-rev-go':''\}"/g)||[]).length===2);
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

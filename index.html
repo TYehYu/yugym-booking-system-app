@@ -3091,6 +3091,13 @@ tr:hover td{background:var(--card2);}
   background:var(--card2);border:1px solid var(--bd);border-radius:10px;
   padding:8px 10px 8px 12px;margin:-2px 0 12px;font-size:12.5px;color:var(--t2);}
 .bk-s1sum b{font-family:var(--num),inherit;font-weight:800;color:var(--text);}
+/* 場地換到第二列（2026-08-24 使用者指示：一行擠不下，手機上會被折斷成兩截） */
+.bk-s1sum-l{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.bk-s1sum-l i{font-style:normal;font-size:12px;color:var(--t2);}
+/* 必填星號（2026-08-24 使用者指示：「必填的項目旁邊新增＊」＋更正「前面新增＊」）——
+   放在標籤前面、品牌紅、比標籤小一階：看得到但不搶字。 */
+.req{font-style:normal;color:var(--danger,#b5372e);font-size:11px;margin-right:3px;
+  vertical-align:1px;font-weight:800;}
 /* 課卡［＋新增］的會員清單（2026-08-24）：★＝主教練是本堂教練、分組標題分「有票／不能加」 */
 /* 2026-08-24：名單改用統一挑選視窗（mpk）之後，這三條（.bam-star／.bam-grp／.bam-go）
    沒有呼叫端了 —— ★ 走 .mpk-star、分組走 <optgroup>、右邊的字走 .mpk-sub。 */
@@ -10109,8 +10116,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1719';
-const APP_VERSION_LABEL='v260824.1719';
+const APP_VERSION = '260824.1723';
+const APP_VERSION_LABEL='v260824.1723';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17145,9 +17152,6 @@ PAGES.g_dashboard=async function(){
        所以不帶 amt／pay／at／pur，那三顆標籤自然不會畫出來。 */
   const _dayLot=(purchases||[]).filter(p=>p&&p.source==='lottery'&&puLocalDate(p)===date);
   const _revRows=[
-    ..._dayLot.map(p=>({
-      nm:(memMap[p.member_id]&&memMap[p.member_id].name)||'—', mid:p.member_id||null,
-      it:(p.plan_name||'抽獎'), amt:0, lot:p.id, lotDate:puLocalDate(p) })),
     ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—', mid:t.member_id||null,
       it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
       amt:_tkDayAmt(t), tk:t.id, kind:_saleKindOf(t),
@@ -17173,6 +17177,12 @@ PAGES.g_dashboard=async function(){
          櫃檯本來就會在這裡對帳，而且權限自動跟著這一頁走。 */
       pay:_payLb(p.payment_method), paySp:p.pay_split||null, payRef:p.id,
       inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')};}),
+    /* 抽獎排在最後（2026-08-24 使用者回報「跑出所有抽獎名單了」）——
+       那五筆確實都是當天的，問題出在它們排在最前面，把真正的收款擠到看不見。
+       這一頁叫「今日營收」，錢要先看到；抽獎是 $0 的贈品紀錄，收在尾巴當附錄。 */
+    ..._dayLot.map(p=>({
+      nm:(memMap[p.member_id]&&memMap[p.member_id].name)||'—', mid:p.member_id||null,
+      it:(p.plan_name||'抽獎'), amt:0, lot:p.id, lotDate:puLocalDate(p) })),
   ];
   /* 給「今日營收」彈窗用（2026-08-01）：與上方 KPI、右欄名單卡完全同源，不另外算一份，
      免得三個地方各自算出不同的數字 —— 這個系統踩過太多次那種坑。 */
@@ -17200,7 +17210,9 @@ PAGES.g_dashboard=async function(){
   const _revShown=_revRows, _revMore=0;
   const revListCard=`<div class="card mc-card mc-revlist-card">
     ${_revRows.length?`<div class="mc-revlist">${_revShown.map(r=>`
-      <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
+      ${/* 抽獎那一列：整列點下去就開重選視窗（2026-08-24 使用者：「點下去只要跳窗
+           讓我重新選擇就好」「不用進入會員資料」）—— 不必瞄準那顆小標籤。 */''}
+      <div class="mc-rev-row${(r.mid||r.lot)?' mc-rev-go':''}" ${r.lot?`onclick="lottoFixAsk('${r.lot}','rev')" title="改抽獎項目"`:(r.mid?`onclick="revRowGo('${r.mid}')" title="開啟會員票券"`:'')}>
         ${/* 約別標籤移到最左、直式（2026-08-13 使用者指示） */''}
         ${r.kind?`<span class="mc-rev-kv">${saleKindChip(r.tk,r.kind)}</span>`:''}
         <div class="mc-rev-b">${revAttribChip(r)}<span class="mc-rev-nm">${r.nm}</span><span class="mc-rev-it">${r.it}</span></div>
@@ -24310,9 +24322,11 @@ function bkWizVenue(){ try{ return (_bkWizard&&_bkWizard.venue)||null; }catch(_)
 function bkStep1Html(pf){
   pf=pf||{};
   return `<div class="modal-title">建立預約　<span style="font-size:13px;color:var(--t3);font-weight:500;">1 / 2　時段與場地</span></div>
-    <div class="form-row"><label>日期</label>${ashDateField('bk-date', pf.date||'', '', 'bkStep1Changed()')}</div>
-    <div class="form-row"><label>時間</label>${ashTimeField('bk-time', pf.time||'', 'bkStep1Changed()')}</div>
-    <div class="form-row" id="bk-venue-row"><label>場地</label>${ashVenueField('bk-venue','')}</div>
+    ${/* 2026-08-24 使用者指示：「預約視窗必填的項目旁邊新增＊」＋「前面新增＊」——
+         星號放在標籤**前面**（使用者更正）。視窗一三個欄位都必填，缺一個就過不去。 */''}
+    <div class="form-row"><label><i class="req">＊</i>日期</label>${ashDateField('bk-date', pf.date||'', '', 'bkStep1Changed()')}</div>
+    <div class="form-row"><label><i class="req">＊</i>時間</label>${ashTimeField('bk-time', pf.time||'', 'bkStep1Changed()')}</div>
+    <div class="form-row" id="bk-venue-row"><label><i class="req">＊</i>場地</label>${ashVenueField('bk-venue','')}</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="cancelBookingModal()">取消</button>
       <button class="btn btn-green" onclick="bkStep1Next()">下一步 →</button></div>`;
@@ -24333,15 +24347,21 @@ function bkStep1bHtml(){
   const vnm=(getVenues().find(x=>x.id===w.venue)||{}).name||w.venue||'';
   const _wd=(()=>{ try{ const d=parseYmd(w.date); return d?'（'+'日一二三四五六'[d.getDay()]+'）':''; }catch(_){ return ''; } })();
   return `<div class="modal-title">建立預約　<span style="font-size:13px;color:var(--t3);font-weight:500;">2 / 2　課程與教練</span></div>
-    ${/* 上一步選的三件事收成一行摘要，點「改」可以回去 —— 不要讓人記在腦子裡 */''}
+    ${/* 上一步選的三件事收成摘要，點「變更」可以回去 —— 不要讓人記在腦子裡。
+         2026-08-24 使用者指示：「上方場地被分段了，直接改到第二列吧」——
+         日期＋時間＋場地擠在一行，手機上場地會被折斷成兩截。改成上下兩列：
+         第一列日期時間、第二列場地。按鈕的字也照使用者說的改成「變更」。 */''}
     <div class="bk-s1sum">
-      <span><b>${String(w.date||'').replace(/-/g,'/')}</b>${_wd} <b>${w.time||''}</b>　·　${escH(vnm)}</span>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="bkBackToStep1()">改</button>
+      <span class="bk-s1sum-l">
+        <b>${String(w.date||'').replace(/-/g,'/')}</b>${_wd} <b>${w.time||''}</b>
+        <i>${escH(vnm)}</i>
+      </span>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="bkBackToStep1()">變更</button>
     </div>
     <input type="hidden" id="bk-date" value="${w.date||''}">
     <input type="hidden" id="bk-time" value="${w.time||''}">
     <input type="hidden" id="bk-venue" value="${w.venue||''}">
-    <div class="form-row"><label>課程</label>
+    <div class="form-row"><label><i class="req">＊</i>課程</label>
       <input type="hidden" id="bk-type" value="">
       <button type="button" class="adp-field" id="bk-type-btn" onclick="ashTypeOpen()">
         <span class="adp-ph">選擇課程</span><span class="adp-ic">▾</span></button></div>
@@ -24358,7 +24378,7 @@ function bkStep1bHtml(){
     <div class="form-2col">
       ${isCoach
         ? `<input type="hidden" id="bk-coach" value="${SESSION.id}">`
-        : `<div class="form-row" id="bk-coach-row"><label>授課教練<span id="bk-coach-opt" style="font-weight:400;color:var(--t3);display:none;">（可不指定）</span></label>
+        : `<div class="form-row" id="bk-coach-row"><label><i class="req" id="bk-coach-req">＊</i>授課教練<span id="bk-coach-opt" style="font-weight:400;color:var(--t3);display:none;">（可不指定）</span></label>
             <div class="mem-pick-row">
               <input class="gt-search" id="bk-coach-q" placeholder="搜尋教練（共 ${(window._bkCoaches||[]).length} 位）" oninput="bkFilterCoaches(this.value)" autocomplete="off">
               <select id="bk-coach" onchange="bkCoachChange()">${bkCoachOptsHTML('')}</select>
@@ -24888,6 +24908,9 @@ async function onBkTypeChange(){
      只是不強制；其餘課種一律必填。（教練端無此 row，已固定為自己） */
   const hint=document.getElementById('bk-coach-opt');
   if(hint) hint.style.display=needCoach?'none':'inline';
+  /* 星號跟著「這個課種要不要教練」走 —— 自主訓練不需要，掛一顆＊會逼人亂選一個 */
+  const _creq=document.getElementById('bk-coach-req');
+  if(_creq) _creq.style.display=needCoach?'':'none';
   /* 2026-08-24 使用者指示：「選了自主訓練就把教練這欄互動關閉」＋「連續預約也是，關閉」——
      自主訓練是會員自己練，沒有授課教練；連續預約也不適用（它是臨時來就練的）。
      ⚠ 課別比較只寫在 bkIsSelf 裡（口袋棘輪：不要在各處散寫 category==='自主訓練'）。
@@ -34805,7 +34828,7 @@ function openTodayRevList(){
   const ds=String(d.date||'').slice(5).replace('-','/');
   const body = rows.length
     ? `<div class="mc-revlist">${rows.map(r=>`
-        <div class="mc-rev-row${r.mid?' mc-rev-go':''}" ${r.mid?`onclick="closeModal();revRowGo('${r.mid}')" title="開啟會員票券"`:''}>
+        <div class="mc-rev-row${(r.mid||r.lot)?' mc-rev-go':''}" ${r.lot?`onclick="lottoFixAsk('${r.lot}','rev')" title="改抽獎項目"`:(r.mid?`onclick="closeModal();revRowGo('${r.mid}')" title="開啟會員票券"`:'')}>
           <div class="mc-rev-b">${revAttribChip(r)}<span class="mc-rev-nm">${esc(r.nm)}</span><span class="mc-rev-it">${esc(r.it)}</span></div>
           ${r.kind?saleKindChip(r.tk,r.kind):''}
           <span class="mc-rev-r">${revUndoChip(r)}${revPayChip(r)}${(revAmtDup(r)||r.lot)?'':`<span class="mc-rev-amt">${money(r.amt)}</span>`}</span>

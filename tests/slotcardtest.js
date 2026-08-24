@@ -129,7 +129,8 @@ console.log('\n建立預約：視窗一＝時段與場地');
   const s1=g('bkStep1Html');
   ok('★ 抽得到視窗一', !!s1 && s1.length>200);
   const a1=t=>s1.indexOf(t);
-  const 日期=a1('<label>日期</label>'), 時間=a1('<label>時間</label>'), 場地=a1('<label>場地</label>');
+  /* 2026-08-24：必填欄位的標籤前面多了一顆＊（<i class="req">＊</i>），比對要跟著改。 */
+  const 日期=a1('>日期</label>'), 時間=a1('>時間</label>'), 場地=a1('>場地</label>');
   ok('★★ 三個欄位都在，順序＝日期 → 時間 → 場地',
      日期>0 && 時間>日期 && 場地>時間, {日期,時間,場地});
   ok('★★ 為什麼日期時間一定要在場地之前，寫在原地',
@@ -156,7 +157,7 @@ console.log('\n建立預約：視窗二＝課程與教練');
   const form=g('bkStep1bHtml');
   ok('★ 抽得到視窗二', !!form && form.length>400);
   const at=s=>form.indexOf(s);
-  const 課程=at('<label>課程</label>'), 教練=at('>授課教練<'), 連續=at('id="bk-recur-row"');
+  const 課程=at('>課程</label>'), 教練=at('>授課教練<'), 連續=at('id="bk-recur-row"');
   /* 2026-08-24 使用者定案：「還是把視窗二的會員移除，安排會員統一都從＋新增這邊」——
      建立預約只做「什麼課、誰上、什麼時候、在哪」，人與付款方式一律在課卡上決定。 */
   ok('★ 三個欄位，順序＝課程 → 教練 → 連續預約',
