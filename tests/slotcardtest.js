@@ -177,7 +177,9 @@ console.log('\n建立預約：視窗二＝課程與教練');
    所以所有可以建立預約的權限統一改走這條」——
    當天走過三個版本：整個移除 → 只給教練 → 所有角色都留、但兩條路都通。 */
   ok('★★ 會員欄不分角色一律畫出來（捷徑，不是必填）',
-     /<div class="form-row"><label>會員<span style="font-weight:400;color:var\(--t3\);">（選填，之後也能在課卡補）<\/span><\/label>/.test(form)
+     /<div class="form-row"><label>會員<span style="font-weight:400;color:var\(--t3\);">（選填）<\/span><\/label>/.test(form)
+     /* 2026-08-24：「之後也能在課卡補」那句在手機上把整列擠成兩行，拿掉（使用者指示）。 */
+     && !/之後也能在課卡補<\/span>/.test(form)
      && !/<input type="hidden" id="bk-mem-pre" value="">/.test(form)
      && !/體驗課／待簽約卡位可不選/.test(srcNC));
   ok('★★ 兩條路都要通：填了走挑票、沒填建空堂',
