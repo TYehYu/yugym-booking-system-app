@@ -9306,6 +9306,19 @@ button.rev-kind:hover{filter:brightness(.96);box-shadow:0 1px 4px rgba(60,50,38,
      那邊仍是格狀、要寬版。所以另給一個窄版 class 蓋掉寬度。 */
 .modal.modal-wide.tdl-narrow{max-width:520px;}
 .lot-sec{font-size:12px;font-weight:700;color:var(--text);margin:12px 0 6px;}
+/* 「今天已登記（按錯了可以改）」（2026-08-24 使用者：櫃檯選錯抽獎項目）—— 白底列，
+   左邊姓名與獎品、右邊時間與「改」。只列今天的：改的是剛剛按錯，不是翻舊帳。 */
+.lot-fixes{display:flex;flex-direction:column;gap:7px;}
+.lot-fix{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+  background:#fff;border:1px solid var(--bd);border-radius:10px;padding:9px 11px;
+  font-family:inherit;text-align:left;cursor:pointer;}
+.lot-fix:hover{background:var(--card2);}
+.lot-fix-l{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.lot-fix-l b{font-size:13.5px;font-weight:700;color:var(--text);}
+.lot-fix-l i{font-style:normal;font-size:11.5px;color:var(--t2);}
+.lot-fix-r{flex:none;font-size:11.5px;color:var(--t3);font-family:var(--num),inherit;}
+.lot-fix-go{color:var(--green);font-weight:800;font-family:inherit;margin-left:4px;}
+.lot-prize.lot-prize-cur{border-color:var(--green);background:#f4f9f6;opacity:.6;}
 .lot-prizes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .lot-prize{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border:1px solid var(--bd);
   border-radius:12px;background:#fff;cursor:pointer;font-size:12px;font-weight:700;color:var(--text);font-family:inherit;}
@@ -10078,8 +10091,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1555';
-const APP_VERSION_LABEL='v260824.1555';
+const APP_VERSION = '260824.1605';
+const APP_VERSION_LABEL='v260824.1605';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18289,12 +18302,104 @@ async function openLottoModal(selId){
     `<button class="lot-prize" onclick="lottoAward('${selId}','${p.key}')">${
       p.kind==='goods'?LNI[p.icon]:(p.kind==='voucher'?LNI.coin:`<span class="lot-glyph" style="color:${p.gcol};">${p.glyph}</span>`)
     }<span>${p.label}</span></button>`).join('')}</div>`:'';
+  /* 今天已登記的抽獎＋「改」（2026-08-24 使用者回報：「櫃檯選錯抽獎項目，原本是
+     運動按摩折價券，選到了運動按摩」→「這邊有辦法設計一個修改的功能嗎」）——
+     原本登記完就沒有回頭路：櫃檯只能自己去票券頁把發錯的那張作廢，購買紀錄上
+     還是寫著錯的獎品，「這個月抽過了」也還記在那一筆上。
+     ⚠ 只列今天的：改的是「剛剛按錯」，不是翻舊帳。真要改更早的，請走票券頁。 */
+  const _todayLots=(purchases||[]).filter(p=>p&&p.source==='lottery' && _lotPuDate(p)===ymd(TODAY))
+    .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  const _fixRows=_todayLots.map(p=>{
+    const _nm=(mMap[p.member_id]&&mMap[p.member_id].name)||'—';
+    const _pz=String(p.plan_name||'').replace(/^抽獎[：:]/,'');
+    const _hm=String(p.created_at||'').slice(11,16);
+    return `<button type="button" class="lot-fix" onclick="lottoFixAsk('${p.id}')">
+      <span class="lot-fix-l"><b>${escH(_nm)}</b><i>${escH(_pz)}</i></span>
+      <span class="lot-fix-r">${_hm} <span class="lot-fix-go">改 ›</span></span></button>`;
+  }).join('');
   showModal(`<div class="modal-title">現場抽獎登記</div>
     <div class="lot-hint">當月<b>教練課（含友善）</b>簽到滿 4 堂可抽 1 次（可累計；團課/自主訓練不計）。<b>沒來抽的次數會一直留著</b>，直到客人來抽為止。請客人抽<b>實體籤筒</b>後在此登記中獎項目——折抵券與課程獎品會自動發進會員票券。</div>
     ${list.length>=8?`<input class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:8px;" placeholder="輸入姓名篩選…" oninput="lotFilter(this.value)" autocomplete="off">`:''}
     <div class="lot-btns">${rows}</div>
     ${prizeGrid}
+    ${_fixRows?`<div class="lot-sec">今天已登記（按錯了可以改）</div><div class="lot-fixes">${_fixRows}</div>`:''}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+/* 改抽獎項目：先問改成哪一項（2026-08-24）。 */
+async function lottoFixAsk(lotId){
+  const p=await dbGet('purchases',lotId).catch(()=>null);
+  if(!p){ showToast('找不到這筆登記'); return; }
+  const m=await dbGet('members',p.member_id).catch(()=>null);
+  const cur=String(p.plan_name||'').replace(/^抽獎[：:]/,'');
+  const grid=LOTTO_PRIZES.map(x=>`<button class="lot-prize${x.label===cur?' lot-prize-cur':''}" onclick="lottoFixDo('${lotId}','${x.key}')">${
+      x.kind==='goods'?LNI[x.icon]:(x.kind==='voucher'?LNI.coin:`<span class="lot-glyph" style="color:${x.gcol};">${x.glyph}</span>`)
+    }<span>${x.label}</span></button>`).join('');
+  showModal(`<div class="modal-title">改抽獎項目</div>
+    <div style="background:var(--card2);border-radius:10px;padding:12px 14px;font-size:13.5px;line-height:2;">
+      <div><span style="color:var(--t2);">會員</span>　<b>${escH((m&&m.name)||'—')}</b></div>
+      <div><span style="color:var(--t2);">原本登記</span>　${escH(cur)}</div>
+    </div>
+    <div class="lot-sec">改成哪一項？</div>
+    <div class="lot-prizes">${grid}</div>
+    <div style="font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:10px;">
+      改了會：把原本發錯的那張票券作廢（已經用掉的不能改，會擋下來）、發出正確的獎品、
+      並更正這一筆登記的紀錄。抽獎次數不會多扣，也不會多給。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openLottoModal()">返回</button></div>`);
+}
+async function lottoFixDo(lotId,key){ return onceAct('lotfix:'+lotId, ()=>_lottoFixDo(lotId,key)); }
+async function _lottoFixDo(lotId,key){
+ try{
+  const np=LOTTO_PRIZES.find(x=>x.key===key); if(!np) return;
+  const pu=await dbGet('purchases',lotId); if(!pu){ showToast('找不到這筆登記'); return; }
+  const cur=String(pu.plan_name||'').replace(/^抽獎[：:]/,'');
+  if(cur===np.label){ showToast('本來就是這一項，沒有變動'); openLottoModal(); return; }
+  const mid=pu.member_id;
+  /* ① 找出當初發的那張票（同一位、抽獎來源、時間貼著這筆登記）。
+     ⚠ 用時間相近而不是只看最新一張：同一天可能抽過兩次。
+     ⚠ 已經用掉（有預約掛著）或已經被作廢的，處理方式不同 —— 見下面。 */
+  const _t0=new Date(pu.created_at||Date.now()).getTime();
+  const allTk=await dbGetAll('member_tickets').catch(()=>[]);
+  const old=(allTk||[]).filter(t=>t && t.member_id===mid && t.source==='lottery')
+    .map(t=>({t, d:Math.abs(new Date(t.created_at||0).getTime()-_t0)}))
+    .filter(x=>x.d<5*60000).sort((a,b)=>a.d-b.d).map(x=>x.t)[0] || null;
+  if(old){
+    const bks=(await dbGetAll('bookings').catch(()=>[]))||[];
+    if(bks.some(b=>b && b.ticket_id===old.id && b.status!=='cancelled')){
+      showToast('這張獎品票券已經被拿去預約了，不能直接改 —— 請先取消那一堂，或在票券頁人工處理', 8000);
+      return;
+    }
+    if(old.status==='usable'){
+      old.status='refunded'; old.sessions_remaining=0;
+      await dbPut('member_tickets', old);
+      await logTicket(old.id,'adjust',-1,null,SESSION.id,`抽獎項目更正：改為「${np.label}」`);
+    }
+  }
+  /* ② 發正確的獎品（與 lottoAwardDo 同一段，只是不再寫一筆 purchases） */
+  const today=ymd(TODAY);
+  if(np.kind!=='goods'){
+    let ttid=np.ttid||null, plan=np.plan||('抽獎－'+np.label);
+    if(np.kind==='session'){
+      const types=await dbGetAll('ticket_types');
+      const t=types.find(t=>t.category===np.cat && !/友善|VIP|限定/.test(t.name||'') && t.active!==false)
+        || types.find(t=>t.category===np.cat);
+      ttid=t?t.id:null; plan='抽獎－'+np.label+' 1 堂';
+    }
+    if(!ttid){ showToast('找不到對應票種，無法發放'); return; }
+    const tk={id:uid('TK'),member_id:mid,ticket_type_id:ttid,plan_name:plan,source:'lottery',
+      unit_price:0,amount_paid:0,purchase_date:today,start_date:today,expire_date:null,
+      sessions_total:1,sessions_remaining:1,status:'usable',created_at:new Date().toISOString()};
+    await dbPut('member_tickets',tk);
+    await logTicket(tk.id,'grant',1,null,SESSION.id,`現場抽獎－${np.label}（更正自「${cur}」）`);
+  }
+  /* ③ 更正登記本身 —— 不新增一筆，否則「這個月抽過幾次」會多算。 */
+  pu.plan_name='抽獎：'+np.label;
+  pu.note=((pu.note?pu.note+'\n':'')+`${today} 更正抽獎項目：${cur} → ${np.label}（${SESSION.name||SESSION.id}）`);
+  await dbPut('purchases',pu);
+  dbCacheClear(['member_tickets','ticket_logs','purchases']);
+  window._lottoMapCache=null; window._lottoDirty=true;
+  showToast(`已更正為「${np.label}」`+(np.kind==='goods'?'（實體贈品現場交付）':'，獎品已重新發進會員票券'), 6000);
+  openLottoModal();
+ }catch(e){ console.error('lottoFixDo 錯誤:',e); showToast('更正失敗：'+((e&&e.message)||e)); }
 }
 /* 名單就地篩選（2026-08-03 使用者指示：「方便的地方改成輸入名字下面就會做出篩選」）——
    抽獎機會跨月保留後名單只會越來越長。用隱藏而非重繪：重繪會讓輸入框失焦。 */

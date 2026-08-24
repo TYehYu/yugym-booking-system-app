@@ -122,5 +122,37 @@ ok('　　選中仍是綠框綠底（沒有被白底蓋掉）',
    /\.lot-btn\.sel\{border-color:var\(--green\);background:#eaf3ee;/.test(src));
 ok('　　改的原因寫在原地', /一位會員時會孤零零一張卡佔掉一大格/.test(src));
 
+/* 2026-08-24 使用者回報：「剛剛櫃檯選錯抽獎項目，原本是運動按摩折價券，選到了運動按摩」
+   →「這邊有辦法設計一個修改的功能嗎」。登記完原本沒有回頭路：櫃檯只能自己去票券頁
+   把發錯的那張作廢，購買紀錄還是寫著錯的獎品、「這個月抽過了」也記在那一筆上。 */
+console.log('\n改抽獎項目');
+{
+  /* ⚠ 結尾要停在 _lottoFixDo 自己的結尾 —— 抓到 lottoAwardDo 就會把它那一筆
+     dbPut('purchases',{id:uid('LOT')…}) 也含進來，「不新增一筆」那條會假失敗。 */
+  const _fi=src.indexOf('async function _lottoFixDo(lotId,key){');
+  const f=src.slice(_fi, src.indexOf('/* 名單就地篩選', _fi));
+  ok('★★ 只列今天的登記可以改（改的是剛剛按錯，不是翻舊帳）',
+     /p\.source==='lottery' && _lotPuDate\(p\)===ymd\(TODAY\)/.test(src)
+     && /只列今天的：改的是「剛剛按錯」，不是翻舊帳/.test(src));
+  ok('★★ 已經被拿去預約的獎品票券不給改（會擋下來並說怎麼辦）',
+     /if\(bks\.some\(b=>b && b\.ticket_id===old\.id && b\.status!=='cancelled'\)\)\{/.test(f)
+     && /這張獎品票券已經被拿去預約了，不能直接改/.test(f));
+  ok('★★ 原本那張作廢要留紀錄（不是靜靜改掉）',
+     /old\.status='refunded'; old\.sessions_remaining=0;/.test(f)
+     && /logTicket\(old\.id,'adjust',-1,null,SESSION\.id,`抽獎項目更正：改為「\$\{np\.label\}」`\)/.test(f));
+  ok('★★ 已經是作廢狀態的不再重複作廢（櫃檯可能自己先處理過了）',
+     /if\(old\.status==='usable'\)\{/.test(f));
+  ok('★★ 更正的是**同一筆**登記，不新增一筆 —— 否則「這個月抽過幾次」會多算',
+     /pu\.plan_name='抽獎：'\+np\.label;/.test(f)
+     && /不新增一筆，否則「這個月抽過幾次」會多算/.test(f)
+     && !/dbPut\('purchases',\{id:uid\('LOT'\)/.test(f));
+  ok('★ 更正的軌跡寫進 note（誰、什麼時候、從什麼改成什麼）',
+     /更正抽獎項目：\$\{cur\} → \$\{np\.label\}/.test(f));
+  ok('★ 選到同一項時什麼都不做', /if\(cur===np\.label\)\{ showToast\('本來就是這一項，沒有變動'\)/.test(f));
+  ok('★ 防連點', /async function lottoFixDo\(lotId,key\)\{ return onceAct\('lotfix:'\+lotId/.test(src));
+  ok('　　找當初那張票用「時間貼近」而不是「最新一張」（同一天可能抽過兩次）',
+     /\.filter\(x=>x\.d<5\*60000\)\.sort\(\(a,b\)=>a\.d-b\.d\)/.test(f));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
