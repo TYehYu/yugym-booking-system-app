@@ -87,10 +87,18 @@ t('沒綁票的團課就不畫第二列（不留空行）', /\$\{_tkTxt\?`<div/.
 // ── 簽到視窗 ──
 const tap=cut('async function memh2Tap(id){','/* ［＋］預約自主訓練');
 /* 0822 二修（使用者）：「確認簽到跟關閉也改左右」——那顆從內文移到底部與關閉並排 */
-t('可簽到時「確認簽到」出現在底部、與關閉並排',
-  /class="modal-foot mh2-foot\$\{st\.open\?'':' one'\}"/.test(tap)
-  && /st\.open\?`<button class="btn btn-green"[\s\S]{0,160}確認簽到<\/button>`:''/.test(tap));
-t('內文只留狀態字，不再放整寬的簽到鈕', /現在可以簽到了/.test(tap));
+/* 2026-08-24 使用者指示：會員端課卡改成簡易課卡（標題卡＋會員卡＋圓形按鈕）。
+   ⚠ **規則一條都沒動**，只換呈現 —— 底下這幾條守的就是「規則沒被順手改掉」。 */
+t('★★ 改成簡易課卡：標題卡＋會員卡＋圓形按鈕（不再是一般彈窗）',
+  /<div class="mtp-card mtp-head"/.test(tap)
+  && /<div class="mtp-mcard">/.test(tap)
+  && /<div class="mtp-orbs">\$\{ckBtn\}\$\{rsBtn\}\$\{cxBtn\}<\/div>/.test(tap));
+t('★★ 簽到是圓鈕，開窗才可按（memh2CkState 的 open）',
+  /st\.open \? orb\('go','✓','簽到'/.test(tap)
+  && /orb\('off','🕒','尚未開放',null,'開課前 30 分鐘開放簽到'\)/.test(tap));
+t('　　簽到規則改放圓鈕下方，而且只在「還不能簽」時出現',
+  /const ruleNote=\(st\.done\|\|st\.open\)\?''/.test(tap)
+  && /課程開始前 <b>30 分鐘<\/b>開放簽到/.test(tap));
 t('底部兩顆固定左右各半、等高',
   /\.modal-foot\.mh2-foot\{display:grid;grid-template-columns:1fr 1fr/.test(s)
   && /\.modal-foot\.mh2-foot \.btn\{[^}]*height:44px/.test(s)

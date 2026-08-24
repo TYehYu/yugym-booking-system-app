@@ -7365,6 +7365,10 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
 #mem-task-pop .mtp-mtag-leave{color:#b5372e;background:#fbeceb;}
 #mem-task-pop .mtp-mtag-ns{color:#8a5e28;background:#f7efe0;}
 #mem-task-pop .mtp-dots{margin-top:8px;}
+/* 簽到規則：圓鈕下方的一小段，只在「還不能簽」時出現（0822 使用者要求要寫清楚） */
+#mem-task-pop .mtp-rule{width:100%;background:#fff;border:1px solid var(--bd);border-radius:14px;
+  padding:11px 14px;font-size:11.5px;line-height:1.9;color:var(--t2);
+  box-shadow:0 10px 30px rgba(20,18,14,.22);}
 #mem-task-pop .mtp-orbs{display:flex;justify-content:center;gap:20px;}
 #mem-task-pop .mtp-orb{width:72px;height:72px;border-radius:50%;border:none;cursor:pointer;font-family:inherit;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;transition:.14s;padding:0;}
@@ -10041,8 +10045,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260824.1511';
-const APP_VERSION_LABEL='v260824.1511';
+const APP_VERSION = '260824.1516';
+const APP_VERSION_LABEL='v260824.1516';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -47437,32 +47441,32 @@ function memh2MonthHTML(mine){
   </div>`;
 }
 /* 點課卡 → 簽到確認視窗（使用者定案：教練課只做簽到；團課與自主訓練才有取消／改時間） */
+/* ══ 會員端課卡（V2，全會員 0822 起走這條）══════════════════════════════
+   2026-08-24 使用者指示：「會員端我的預約看到的課卡，點出來要出現簡易課卡
+   ［標題卡］＋［會員卡］，圓形按鈕［簽到］」。
+   ⚠ 這一支才是會員實際看到的（memh2On）。同日第一版改到了舊的 memTaskTap，
+     那條路只有非手機／關掉 V2 的人會走，等於白改 —— 使用者回報「團體課點開沒有
+     出現標題卡，反而出現視窗」就是這個。
+   ⚠ **規則一條都沒動**：簽到窗（memh2CkState）、誰能自助（0822 覆查的兩個例外：
+     教練請假改記成自主訓練的、場租）全部照舊，只換呈現。
+   ⚠ 不能改成呼叫 memTaskTap —— 那支用 memSelfServe（團課／自主／體驗通行證），
+     少了上面那兩個例外，等於把會員的自助範圍偷偷放寬。 */
 async function memh2Tap(id){
-  const b=await dbGet('bookings',id);
+  const b=(id==='DEMO-BK') ? memDemoBk() : await dbGet('bookings',id);
   if(!b){ showToast('找不到預約'); return; }
+  const _demo=!!(b&&b._demo);
   const st=memh2CkState(b);
   const cc=bkCC(b), col=MEMH2_COL[cc]||MEMH2_COL.pt;
   const nm=bookingTypeName(b,window._memTypeMap);
   const d=parseYmd(b.date)||new Date(TODAY);
-  const end=minToTime(timeToMin(b.start_time)+(Number(b.duration)||60));
+  const wd='日一二三四五六'[d.getDay()];
+  const dur=Number(b.duration)||60;
   const cm=((window._memCalData||{}).coachMap)||{};
-  const cid=b.substitute_coach_id||b.coach_id;
-  const who=b.coach_id?((cm[cid]||'教練')+(b.substitute_coach_id?'（代課）':''))
+  const _cid=b.substitute_coach_id||b.coach_id;
+  const who=b.coach_id?((cm[_cid]||'教練')+(b.substitute_coach_id?'（代課）':''))
     :(bkIsSelf(b)?(selfVenueLabel(b)||'自主訓練'):'');
-  /* 主要內容：已簽到／還沒開放（把規則寫清楚，這是使用者特別要求的）。
-     「確認簽到」不放這裡 —— 2026-08-22 使用者指示「確認簽到跟關閉也改左右」，
-     那顆移到底部與「關閉」並排（見下方 modal-foot）。 */
-  const main=st.done
-    ? `<div class="mh2-rule" style="text-align:center;color:var(--green);font-weight:800;">${st.leave?'這堂已請假':'已完成簽到 ✓'}</div>`
-    : (st.open
-      ? `<div class="mh2-rule" style="text-align:center;color:var(--gold-d,#8a6a30);font-weight:800;">現在可以簽到了</div>`
-      : `<div class="mh2-rule">簽到規則<br>
-          ・課程開始前 <b>30 分鐘</b>開放簽到<br>
-          ・只有<b>上課當天</b>可以簽到，前一天無法先簽<br>
-          ・這堂是 ${b.date.replace(/-/g,'/')} ${b.start_time}，${
-            b.date>ymd(TODAY)?'當天再回來簽到就可以了':'簽到時間還沒到，請稍候'}<br>
-          ・遲到或漏簽請直接告訴櫃檯，會協助補簽</div>`);
-  /* 團課與自主訓練才給自助操作（其餘課程一律洽櫃檯，與 2026-08-21 的定案一致）。
+  const _vTxt=(typeof venueDisplay==='function')?(venueDisplay(b)||''):'';
+  /* 團課與自主訓練才給自助操作（與 2026-08-21 的定案一致）。
      ⚠ 兩個會被 bkIsSelf 誤放行的例外（2026-08-22 覆查）：
        ・教練請假的教練課會被改記成自主訓練（口袋規則 coachLeave:'self'），
          但那本質仍是教練課，不能讓會員自己改時間或取消。
@@ -47470,27 +47474,69 @@ async function memh2Tap(id){
   const _isSelfBk=bkIsSelf(b) && !(typeof bkIsCoachLeave==='function' && bkIsCoachLeave(b))
     && b.category!=='場租';
   const selfServe=(!st.done && !st.past) && (st.isGrp || _isSelfBk);
-  const acts=[];
-  if(selfServe && _isSelfBk && b.member_id===SESSION.id)
-    acts.push(`<button class="btn btn-ghost" onclick="closeModal();msbStart('${b.id}')">改時間</button>`);
-  /* 團課寫「取消我的名額」（2026-08-22 使用者：「團課不能刪除課程或調整課程時間」）——
-     會員取消的一直都只是自己的名額（memLeaveGroup 只退自己那一堂、整堂課照常開），
-     但按鈕寫「取消預約」讀起來像是把整堂課取消掉，措辭要跟權限對得起來。
-     整堂刪除與改時間是櫃檯的事，會員端從來沒有那兩個入口。 */
-  if(selfServe) acts.push(`<button class="btn btn-ghost" style="color:#b5372e;" onclick="closeModal();memCancelTap('${b.id}')">${st.isGrp?'取消我的名額':'取消預約'}</button>`);
-  showModal(`<div class="modal-title">${nm}</div>
-    <div style="display:flex;align-items:center;gap:10px;background:var(--card2);border-radius:12px;padding:12px 14px;margin-bottom:12px;">
-      <span style="width:5px;align-self:stretch;border-radius:3px;background:${col};"></span>
-      <div style="font-size:13px;line-height:1.9;">
-        <div style="font-weight:800;font-size:14.5px;">${b.date.slice(5).replace('-','/')}（週${'日一二三四五六'[d.getDay()]}）　${b.start_time}–${end}</div>
-        ${who?`<div style="color:var(--t2);">${who}</div>`:''}
+  const orb=(cls,ic,label,onclick,title)=>onclick
+    ? `<button class="mtp-orb ${cls}" onclick="${onclick}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></button>`
+    : `<div class="mtp-orb ${cls}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></div>`;
+  const _dtap=`memTaskClose();showToast('這是預覽用的範例課卡，真的會員在這裡按下去才會真的動作',5000)`;
+  let ckBtn=st.done
+    ? orb('done','✓',st.leave?'已請假':'已簽到',null)
+    : (st.open ? orb('go','✓','簽到', _demo?_dtap:(st.isGrp?`memTaskClose();memGrpCheckin('${b.id}')`:`memTaskClose();memCheckin('${b.id}')`))
+               : orb('off','🕒','尚未開放',null,'開課前 30 分鐘開放簽到'));
+  let rsBtn=(selfServe && _isSelfBk && b.member_id===SESSION.id)
+    ? orb('go','🕒','改時間', _demo?_dtap:`memTaskClose();msbStart('${b.id}')`) : '';
+  /* 不能自己動的課也給一顆鈕（0821 定案：「其他課程留下訊息，一律透過櫃檯處理」）——
+     點下去看到的是完整說明，而不是一張什麼都沒有的卡。 */
+  let cxBtn=(st.done||st.past) ? orb('off','✕','不可取消',null)
+    : (selfServe ? orb('cx','✕',st.isGrp?'取消名額':'取消', _demo?_dtap:`memCancelTap('${b.id}')`)
+                 : orb('off','✕','洽櫃檯', _demo?_dtap:`memCancelTap('${b.id}')`,'這類課程由櫃檯協助取消'));
+  /* 會員卡：自己的姓名＋狀態＋票券那一行＋圓形卡。
+     ⚠ 團課的票扣在 ticket_logs、不在 bookings.ticket_id，所以團課只寫人數，
+       不假裝查得到票（也就不會有圓形卡）。 */
+  const _myNm=((window._meMember||{}).name)||'我';
+  const _heads=st.isGrp?`${grpLiveHeads(b)}/${Math.max(1,Number(b.max_heads)||5)} 人${grpLeaveSeats(b)?`（${grpLeaveSeats(b)} 請假）`:''}`:'';
+  let _tkLine='';
+  if(st.isGrp) _tkLine=_heads?`團體課・${_heads}`:'團體課';
+  else if(b.pending_contract && !b.ticket_id) _tkLine='待簽約・尚未綁定票券';
+  else if(b.ticket_id){
+    const _t=_demo?memDemoTk():((window._allTkCache||[]).find(x=>x&&x.id===b.ticket_id));
+    _tkLine=_t?`${_t.plan_name||nm}・剩 ${Math.max(0,Number(_t.sessions_remaining)||0)} 堂`:'';
+  }
+  const _mBadge=st.done
+    ? (st.leave?'<span class="mtp-mtag mtp-mtag-leave">請假</span>':'<span class="mtp-mtag mtp-mtag-ok">已簽到</span>')
+    : (b.no_show===true?'<span class="mtp-mtag mtp-mtag-ns">未到</span>':'');
+  let _dots='';
+  try{
+    const _t=_demo?memDemoTk():((window._allTkCache||[]).find(x=>x&&x.id===b.ticket_id));
+    const _sp=_demo?memDemoStamps():((window._memCalData&&window._memCalData.mine)||[]).filter(x=>x&&x.ticket_id===b.ticket_id);
+    if(_t && !st.isGrp && typeof ticketTokens==='function')
+      _dots=`<div class="mtp-dots">${ticketTokens(_t,_sp,window._memTypeMap||{},0,b.id,SESSION.id,null)}</div>`;
+  }catch(_){}
+  /* 簽到規則（0822 使用者特別要求要寫清楚）——改成圓鈕下方的一小段，
+     只在「還不能簽」的時候出現；能簽的時候那段話已經沒有用了。 */
+  const ruleNote=(st.done||st.open)?''
+    : `<div class="mtp-rule">課程開始前 <b>30 分鐘</b>開放簽到，且只有<b>上課當天</b>能簽。<br>
+        這堂是 ${b.date.replace(/-/g,'/')} ${b.start_time}，${b.date>ymd(TODAY)?'當天再回來簽到就可以了':'簽到時間還沒到，請稍候'}。<br>
+        遲到或漏簽請直接告訴櫃檯，會協助補簽。</div>`;
+  memTaskClose();
+  const host=document.createElement('div');
+  host.id='mem-task-pop';
+  host.innerHTML=`<div class="mtp-back" onclick="memTaskClose()"></div>
+    <div class="mtp" id="mtp-box">
+      <div class="mtp-card mtp-head" style="--mtp-c:${col};">
+        <span class="mtp-bar2"></span>
+        <div class="mtp-r1"><span class="mtp-course">${nm}${_vTxt?`　<span style="font-weight:600;color:var(--t3);">${escH(_vTxt)}</span>`:''}</span>
+          <span class="mtp-right">${b.start_time}</span></div>
+        <div class="mtp-meta"><span><b>${b.date.slice(5).replace('-','/').replace(/^0/,'')}</b>（${wd}）</span><span>・</span><span>${dur} 分</span>${who?`<span>・</span><span>${escH(who)}</span>`:''}</div>
       </div>
-    </div>
-    ${main}
-    ${acts.length?`<div style="display:flex;gap:8px;margin-top:10px;">${acts.map(a=>a.replace('class="btn','style="flex:1;" class="btn')).join('')}</div>`:''}
-    <div class="modal-foot mh2-foot${st.open?'':' one'}"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>${
-      st.open?`<button class="btn btn-green" onclick="${
-        st.isGrp?`closeModal();memGrpCheckin('${b.id}')`:`closeModal();memCheckin('${b.id}')`}">確認簽到</button>`:''}</div>`);
+      <div class="mtp-mcard">
+        <div class="mtp-mname"><span>${escH(_myNm)}</span>${_mBadge}</div>
+        ${_tkLine?`<div class="mtp-msub">${escH(_tkLine)}</div>`:''}
+        ${_dots}
+      </div>
+      <div class="mtp-orbs">${ckBtn}${rsBtn}${cxBtn}</div>
+      ${ruleNote}
+    </div>`;
+  document.body.appendChild(host);
 }
 /* ［＋］預約自主訓練：沿用現有引擎（msbStart 建狀態、msbProbeFree 探測、msbPickSlot 確認），
    只把「挑時段」這一步換成跟教練／管理員快速預約同一款的視窗（兩欄、只列可約、要按確認）。 */
