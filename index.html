@@ -9417,6 +9417,18 @@ button.rev-kind.rev-kind-off{opacity:.5;}
   font-family:var(--num),inherit;font-size:16px;}
 .tdy-why{width:100%;padding:9px 11px;border:1px solid var(--bd);border-radius:9px;
   font-size:13px;font-family:inherit;margin-bottom:8px;}
+/* 圓形卡放在視窗最上面當定位（2026-08-25 使用者指示：「直接在該方案圓形卡下方
+   顯示按鈕填寫修正日期」）—— 沒有那排點，「第幾格沒有日期」講不清楚。 */
+.tdy-dots{background:#fff;border:1px solid var(--bd);border-radius:14px;padding:11px 13px;
+  margin:0 0 10px;box-shadow:0 2px 8px rgba(30,25,15,.07);}
+.tdy-mu{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:4px;}
+.tdy-mu-row{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--bd);
+  border-radius:11px;padding:7px 10px;box-shadow:0 2px 8px rgba(30,25,15,.07);}
+.tdy-mu-row>span{flex:none;font-size:11.5px;font-weight:700;color:var(--t3);}
+.tdy-mu-row input{flex:1 1 0;min-width:0;border:none;background:transparent;outline:none;
+  font-family:var(--num),inherit;font-size:14px;color:var(--text);}
+/* 補登的日期：實心點照畫（那一堂確實用掉了），只用一圈細虛線說「這格沒有課卡」 */
+.mtk.mtk-manual{outline:1px dashed rgba(255,255,255,.72);outline-offset:-3px;}
 .lot-prizes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .lot-prize{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border:1px solid var(--bd);
   border-radius:12px;background:#fff;cursor:pointer;font-size:12px;font-weight:700;color:var(--text);font-family:inherit;}
@@ -10202,8 +10214,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.1004';
-const APP_VERSION_LABEL='v260825.1004';
+const APP_VERSION = '260825.1025';
+const APP_VERSION_LABEL='v260825.1025';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11378,11 +11390,23 @@ async function tkTidyOpen(tkId){
   const sel={}, orig={};
   rows.forEach(r=>{ if(String(r.tk||'')===String(tkId)){ sel[r.id]=1; orig[r.id]=1; } });
   const m=await dbGet('members',mid).catch(()=>null);
+  /* 圓形卡要畫在視窗最上面（2026-08-25 使用者指示：「可以直接在該方案圓形卡下方
+     顯示按鈕填寫修正日期」）—— 沒有那排點當定位，「第幾格沒有日期」根本講不清楚。 */
+  let _dots='';
+  try{
+    const _W=await buildWallet(mid, {tickets:tks, bookings:bks, logs, types:(window._ttCache||[]),
+      typeMap:(()=>{ const o={}; (window._ttCache||[]).forEach(x=>{o[x.id]=x;}); return o; })()});
+    const _sl=_W.of(tkId)||{stamps:[],used:0};
+    _dots=ticketTokens(t, _sl.stamps, _W.typeMap||{}, _sl.used, null, mid, _W.selfBk);
+  }catch(_){ _dots=''; }
   /* 帳目可信的票才敢預設「依戳記重算」（見檔頭；沿用對帳巡檢的同一條基準線） */
   const _auditable=(typeof tkLedgerAuditable==='function')?tkLedgerAuditable(t):false;
   window._tdy={ tkId, mid, cat, rows, sel, orig, tkNo, tkName, grpN,
     total:Number(t.sessions_total)||0, rem0:Number(t.sessions_remaining)||0,
     remMode:_auditable?'auto':'keep', remManual:null, auditable:_auditable,
+    mu:(Array.isArray(t.manual_uses)?t.manual_uses.filter(Boolean).slice().sort():[]),
+    mu0:(Array.isArray(t.manual_uses)?t.manual_uses.filter(Boolean).slice().sort():[]).join(','),
+    muN:-1, dots:_dots,
     ttid:t.ticket_type_id||null, name:t.plan_name||cat||'票券', mname:(m&&m.name)||'' };
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">票券校正</div>
     <div class="ash-eihead">${escH(window._tdy.mname)}　·　${tkNoTag(tkNo[tkId])}${escH(window._tdy.name)}　·　共 ${window._tdy.total} 堂</div>
@@ -11393,7 +11417,9 @@ async function tkTidyOpen(tkId){
 }
 /* 視窗骨架抽出來（開窗與「‹ 返回」共用，兩邊長得一樣才不會有一邊漏改） */
 function tkTidyShell(S){
-  return `<div style="font-size:12px;color:var(--t2);line-height:1.9;margin:-6px 0 10px;">
+  return `${S.dots?`<div class="tdy-dots"><div class="mck-dots2">${S.dots}</div></div>`:''}
+    <div id="tdy-mubox"></div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.9;margin:2px 0 10px;">
       勾起來的就是<b>算在這張票上</b>的課；下面再決定票面餘額改成幾堂。</div>
     <div class="lot-sec">這位會員的${escH(S.cat||'課程')}（${S.rows.length} 堂）</div>
     <div class="tdy-list" id="tdy-list"></div>
@@ -11440,6 +11466,10 @@ function tkTidyManual(){
   const v=el?String(el.value).trim():'';
   S.remManual=(v===''?null:Number(v));
   tkTidyPaint();
+}
+function tkTidyMu(i, v){
+  const S=window._tdy; if(!S) return;
+  S.mu[i]=String(v||'').slice(0,10);
 }
 function tkTidyWhy(){
   const S=window._tdy; if(!S) return;
@@ -11495,6 +11525,22 @@ function tkTidyPaint(){
     ['manual', (S.remManual==null?'—':S.remManual), '自己填', '要寫原因'],
   ].map(([k,v,lb,sub])=>`<button type="button" class="tdy-chip${S.remMode===k?' on':''}"
       onclick="tkTidyRemMode('${k}')"><b>${v}</b><i>${lb}</i><em>${sub}</em></button>`).join('');
+  /* 補登日期（沒有課卡的格子）——2026-08-25 使用者指示。
+     需要幾格＝帳面已用 − 有課卡的堂數＝(總堂數 − 餘額) − 勾選數。
+     ⚠ 只有格數變了才重寫 innerHTML：不然每按一下清單，打到一半的日期就沒了。 */
+  const need=Math.max(0, (S.total-(Number.isFinite(rem)?rem:S.rem0)) - n);
+  const mb=document.getElementById('tdy-mubox');
+  if(mb && S.muN!==need){
+    S.muN=need;
+    S.mu=S.mu||[]; S.mu.length=Math.max(S.mu.length, need);
+    mb.innerHTML=need?`<div class="lot-sec">補登使用日期（${need} 格沒有課卡）</div>
+      <div class="ovd-note" style="margin:0 0 8px;">上面圓形卡裡<b>沒有日期的實心點</b>就是這幾格 ——
+        舊系統匯入只做到 2025/12/01，在那之前上過的課沒有課卡可以綁，日期只能手動補。
+        <b>純標示</b>：不會建立預約、不進銷課金額、也不算教練堂數。留白就維持沒有日期。</div>
+      <div class="tdy-mu">${Array.from({length:need},(_,i)=>
+        `<label class="tdy-mu-row"><span>第 ${i+1} 格</span>
+          <input type="date" value="${escH(S.mu[i]||'')}" oninput="tkTidyMu(${i},this.value)"></label>`).join('')}</div>`:'';
+  }
   const nt=document.getElementById('tdy-remnote');
   if(nt) nt.innerHTML=`<div class="ovd-note">${
     S.auditable
@@ -11515,13 +11561,17 @@ function tkTidyCheck(){
   const del=S.rows.filter(r=>!S.sel[r.id]&&S.orig[r.id]);
   const n=Object.keys(S.sel).length, auto=S.total-n, rem=tkTidyRemNow();
   const why=String(S.remWhy||'').trim();
-  const o={ok:false, add, del, n, rem, why};
+  const need=Math.max(0,(S.total-(Number.isFinite(rem)?rem:S.rem0))-n);
+  const mu=(S.mu||[]).slice(0,need).map(x=>String(x||'').trim()).filter(Boolean).sort();
+  const o={ok:false, add, del, n, rem, why, mu, muChanged:(mu.join(',')!==S.mu0)};
   if(auto<0) return Object.assign(o,{msg:`勾了 ${n} 堂，超過總堂數 ${S.total}`});
   if(!Number.isFinite(rem)||!Number.isInteger(rem)||rem<0||rem>S.total)
     return Object.assign(o,{msg:`餘額請填 0–${S.total} 的整數`});
   if(S.remMode==='manual' && !why) return Object.assign(o,{msg:'自己填餘額要寫原因'});
+  const _bad=mu.find(d=>!/^\d{4}-\d{2}-\d{2}$/.test(d));
+  if(_bad) return Object.assign(o,{msg:`補登日期格式不對：${_bad}`});
   /* 「什麼都沒改」也要擋：不然會寫出一筆看不出改了什麼的紀錄 */
-  if(!add.length && !del.length && rem===S.rem0) return Object.assign(o,{msg:'沒有任何更動'});
+  if(!add.length && !del.length && rem===S.rem0 && !o.muChanged) return Object.assign(o,{msg:'沒有任何更動'});
   return Object.assign(o,{ok:true});
 }
 /* 動之前先講清楚會發生什麼：這一步會改好幾堂課的歸屬，還會改票面餘額。 */
@@ -11549,6 +11599,9 @@ function tkTidyConfirm(){
       <div class="ash-eibox">${add.map(r=>`${_d(r)}${r.tk?`　<span style="color:var(--t3);">（原本 #${S.tkNo[r.tk]||'?'}）</span>`:'　<span style="color:var(--t3);">（原本未綁票）</span>'}`).join('<br>')}</div>`:''}
     ${del.length?`<div class="lot-sec">從這張票拿掉</div>
       <div class="ash-eibox">${del.map(r=>_d(r)).join('　')}</div>`:''}
+    ${C.muChanged?`<div class="lot-sec">補登的使用日期（${C.mu.length} 格）</div>
+      <div class="ash-eibox">${C.mu.length?C.mu.map(d=>d.replace(/-/g,'/')).join('　'):'<span style="color:var(--t3);">（清空，回到沒有日期）</span>'}</div>
+      <div class="ovd-note">這些<b>只是圓形卡上的標示</b>，不會建立預約、不進銷課金額、也不算教練堂數。</div>`:''}
     ${lostRows?`<div class="lot-sec">這幾張票會少掉戳記</div>
       <div class="ovd-list">${lostRows}</div>
       <div class="ovd-note">它們的<b>票面餘額不會自動跟著改</b> —— 舊系統匯入的票本來就對不上，
@@ -11576,7 +11629,7 @@ async function _tkTidyDo(){
   if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以校正票券'); return; }
   const C=tkTidyCheck();
   if(!C.ok){ showToast(C.msg); return; }
-  const add=C.add, del=C.del, n=C.n, rem=C.rem, why=C.why;
+  const add=C.add, del=C.del, n=C.n, rem=C.rem, why=C.why, mu=C.mu;
   const _busy=uiBusy('校正中…');
   const _d=r=>String(r.date).slice(0,10);
   for(const r of add){
@@ -11598,6 +11651,13 @@ async function _tkTidyDo(){
   }
   const t=await dbGet('member_tickets',S.tkId);
   if(t){
+    if(C.muChanged){
+      /* 補登日期：純標示，不建立預約、不動堂數（見 ticketTokens 的 _mu） */
+      t.manual_uses=mu.length?mu:null;
+      try{ await logTicket(S.tkId,'adjust',0,null,SESSION&&SESSION.id,
+        mu.length?`票券校正：補登使用日期 ${mu.join('、')}（無課卡，僅圓形卡標示）`
+                 :'票券校正：清掉補登的使用日期'); }catch(_){}
+    }
     const was=Number(t.sessions_remaining)||0;
     if(was!==rem){
       t.sessions_remaining=rem;
@@ -11611,11 +11671,12 @@ async function _tkTidyDo(){
       try{ await logTicket(S.tkId,'adjust',rem-was,null,SESSION&&SESSION.id,
         `票券校正：餘額 ${was} → ${rem}（${_how}）${why?`；${why}`:''}`); }catch(_){}
     }
+    else if(C.muChanged) await dbPut('member_tickets',t);   /* 只改了補登日期也要存 */
   }
   dbCacheClear(['bookings','member_tickets','ticket_logs']);
   _busy();
   closeModal();
-  showToast(`已校正：${n} 堂算在這張票、餘額 ${rem} 堂`);
+  showToast(`已校正：${n} 堂算在這張票、餘額 ${rem} 堂${C.muChanged?`、補登 ${mu.length} 個日期`:''}`);
   try{ if(typeof PP!=='undefined'&&PP.id){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }catch(_){ navTo(CUR_PAGE); }
  }catch(e){ console.error('tkTidyDo 錯誤:',e); showToast('校正失敗：'+((e&&e.message)||e)); }
 }
@@ -51147,12 +51208,17 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
      原本是「已用的排前面、已預約的排後面」；過去的課本來就都在前面，所以看不出問題。
      但請假／取消未退可以發生在**未來**（8/22 先請假，8/8、8/15 還沒上），
      那顆就被推到第一顆，日期看起來是亂的。改成整串照日期排，狀態各自畫各自的顏色。
-     _ghost＝帳面已用、卻找不到對應課卡的格子（舊系統匯入常見），沒有日期，仍排在最前面。 */
+     _ghost＝帳面已用、卻找不到對應課卡的格子（舊系統匯入常見），沒有日期，仍排在最前面。
+     2026-08-25 起這些格子可以由管理員補登日期（member_tickets.manual_uses，票券校正視窗）——
+     匯入只做到 2025-12-01，在那之前上過的課全庫有 9,034 格根本沒有 bookings 可綁，
+     「勾選哪一堂」對它們無效，只能手動把日期寫上去。純標示：不建立預約、不進任何統計。 */
   const _seq=done.map(b=>({b,st:'used'})).concat(booked.map(b=>({b,st:'booked'})))
     .concat(_clvAttL.map(b=>({b,st:'clx'})))
     .sort((x,y)=>((x.b.date||'')+(x.b.start_time||'')).localeCompare((y.b.date||'')+(y.b.start_time||'')));
   const _clxDot=b=>`<span class="mtk mtk-used mtk-clvatt" style="--tk-acc:${v.accent};" title="教練請假・會員已到場簽到（堂數已退回票券）${b&&b.date?' '+b.date:''}">${b?md(b):'✓'}</span>`;
   const _ghost=Math.max(0, used-done.length);
+  /* 補登的日期照日期排，依序填進前面那幾個無日期的格子 */
+  const _mu=Array.isArray(t.manual_uses)?t.manual_uses.filter(Boolean).slice().sort():[];
   /* 一次最多畫 TK_DOT_MAX 顆（2026-08-21 使用者定案：一列 8 顆、最多兩列）——
      成因：使用者回報「行事曆點了 18:00 魚媽劉媽的自主訓練 畫面會當機 是因為圓形卡太多了嗎」。
      是的。那張「親友自主訓練」是無限次卡，sessions_total=9999，這個迴圈就照著畫 9,999 顆，
@@ -51176,7 +51242,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
     if(i>=unlocked){ s+=`<span class="mtk mtk-lock" title="尚未開通（需繳下一期）">🔒</span>`; continue; }
     /* 教練請假已簽到的加值圓點：輪到它的日期就吐出來，不佔格（2026-08-14） */
     while(gi>=_ghost && qi<_seq.length && _seq[qi].st==='clx'){ s+=_clxDot(_seq[qi++].b); }
-    const _it=(gi<_ghost) ? (gi++, {b:null,st:'used'}) : (qi<_seq.length ? _seq[qi++] : null);
+    const _it=(gi<_ghost) ? {b:null,st:'used',g:gi++} : (qi<_seq.length ? _seq[qi++] : null);
     if(!_it){ s+=`<span class="mtk mtk-free" style="--tk-acc:${v.accent};" title="未使用"></span>`; continue; }
     if(_it.st==='used'){
       const b=_it.b;
@@ -51186,7 +51252,9 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
       /* 紅色的兩種「票用掉了但人沒上到課」（2026-08-06）：
          請假＝本堂照扣、另發補課券；取消未退＝取消時選了扣課不退。 */
       const lvc=(b&&b._leave)?' mtk-leave':((b&&b._eaten)?' mtk-eaten':'');
-      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}${shc}" style="--tk-acc:${v.accent};" title="${(b&&b._leave)?'請假（本堂照扣，另發補課券）':((b&&b._eaten)?'取消未退（取消時選了扣課不退）':'已完成')}${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${b?md(b):'✓'}${cur?'<i class="mtk-comet"></i>':''}</span>`;
+      /* 補登日期的格子（沒有課卡，_it.g 是它在 _ghost 裡的序號） */
+      const _md=(!b && _it.g!=null) ? (_mu[_it.g]||'') : '';
+      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}${shc}${_md?' mtk-manual':''}" style="--tk-acc:${v.accent};" title="${(b&&b._leave)?'請假（本堂照扣，另發補課券）':((b&&b._eaten)?'取消未退（取消時選了扣課不退）':'已完成')}${b&&b.date?' '+b.date:''}${_md?_md+'　·　舊系統補登（沒有對應課卡）':''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${b?md(b):(_md?md({date:_md}):'✓')}${cur?'<i class="mtk-comet"></i>':''}</span>`;
     }
     else {
       const b=_it.b;

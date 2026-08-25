@@ -29,9 +29,9 @@ const mk=new Function('window','document','escH','parseYmd','TK_AUDIT_SINCE',
   [grab('function tkTidyPaint(){'), grab('function tkTidyTap(bid){'),
    grab('function tkTidyRemAuto(){'), grab('function tkTidyRemNow(){'),
    grab('function tkTidyRemMode(mode){'), grab('function tkTidyManual(){'),
-   grab('function tkTidyCheck(){')].join('\n')
-  +'\nreturn {tkTidyPaint,tkTidyTap,tkTidyRemNow,tkTidyRemMode,tkTidyManual,tkTidyCheck};');
-const {tkTidyPaint,tkTidyTap,tkTidyRemNow,tkTidyRemMode,tkTidyManual,tkTidyCheck}
+   grab('function tkTidyMu(i, v){'), grab('function tkTidyCheck(){')].join('\n')
+  +'\nreturn {tkTidyPaint,tkTidyTap,tkTidyRemNow,tkTidyRemMode,tkTidyManual,tkTidyMu,tkTidyCheck};');
+const {tkTidyPaint,tkTidyTap,tkTidyRemNow,tkTidyRemMode,tkTidyManual,tkTidyMu,tkTidyCheck}
   =mk(W,doc,escH,parseYmd,'2026-07-30');
 
 /* 黃喬莉那張 1/8 的票：8 堂，七堂舊匯入（無帳）＋ 9/03（綁票沒扣）＋ 9/10（有扣課紀錄） */
@@ -49,8 +49,9 @@ const fresh=()=>{ W._tdy={ tkId:'TK-C', mid:'M1', cat:'私人教練', rows,
   tkNo:{'TK-A':1,'TK-B':2,'TK-C':3,'TK-D':4},
   tkName:{'TK-A':'私人教練課 1V2','TK-B':'私人教練課 1V2','TK-C':'私人教練課 1V2','TK-D':'私人教練課 1V2'},
   grpN:2, total:8, rem0:0, ttid:'tt-1v2', name:'私人教練課 1V2', mname:'黃喬莉',
-  remMode:'auto', remManual:null, remWhy:'', auditable:true };
-  ['tdy-list','tdy-sum','tdy-rembar','tdy-remnote','tdy-manual']
+  remMode:'auto', remManual:null, remWhy:'', auditable:true,
+  mu:[], mu0:'', muN:-1, dots:'' };
+  ['tdy-list','tdy-sum','tdy-rembar','tdy-remnote','tdy-manual','tdy-mubox']
     .forEach(k=>{ boxes[k]={innerHTML:'',style:{display:''}}; }); };
 
 console.log('實跑 tkTidyPaint');
@@ -119,6 +120,40 @@ ok('★★ 舊票（對帳基準日之前）預設「維持原本」，並寫出
 fresh(); tkTidyPaint();
 ok('　　帳目可信的票就直說紀錄是完整的', /扣課紀錄是完整的/.test(NOTE()));
 
+console.log('\n補登使用日期（沒有課卡的格子）');
+const MU=()=>boxes['tdy-mubox'].innerHTML;
+/* 舊系統匯入只做到 2025-12-01，在那之前上過的課全庫有 9,034 格根本沒有 bookings。
+   「勾選哪一堂」對它們無效 —— 只能手動把日期寫上去。 */
+fresh(); W._tdy.rem0=6; W._tdy.sel={}; W._tdy.orig={}; W._tdy.remMode='keep'; W._tdy.muN=-1;
+tkTidyPaint();
+ok('★★ 帳面已用 2 堂、一堂課卡都沒綁 → 開出 2 格補登欄',
+   /補登使用日期（2 格沒有課卡）/.test(MU())
+   && (MU().match(/oninput="tkTidyMu\(/g)||[]).length===2);
+ok('★ 講明是純標示，不會變成預約／不進統計',
+   /不會建立預約、不進銷課金額、也不算教練堂數/.test(MU()));
+tkTidyMu(0,'2025-10-03'); tkTidyMu(1,'2025-10-10');
+ok('★★ 填了日期就算有更動，送得出去', tkTidyCheck().ok===true
+   && tkTidyCheck().mu.join(',')==='2025-10-03,2025-10-10' && tkTidyCheck().muChanged===true);
+ok('★ 日期格式擋得住', (tkTidyMu(1,'10/10'), !tkTidyCheck().ok && /格式不對/.test(tkTidyCheck().msg)));
+tkTidyMu(1,'2025-10-10');
+/* 勾了課＝那一格有課卡了，補登欄要跟著少 */
+tkTidyTap('B1');
+ok('★★ 勾一堂課回來 → 補登欄少一格（有課卡的不用手填）',
+   /補登使用日期（1 格沒有課卡）/.test(MU())
+   && (MU().match(/oninput="tkTidyMu\(/g)||[]).length===1);
+ok('　　只取還需要的那幾格，多打的不會被寫進去', tkTidyCheck().mu.join(',')==='2025-10-03');
+/* 已經有補登日期、又原封不動送出 → 不算更動 */
+fresh(); W._tdy.rem0=6; W._tdy.sel={}; W._tdy.orig={}; W._tdy.remMode='keep'; W._tdy.muN=-1;
+W._tdy.mu=['2025-10-03','2025-10-10']; W._tdy.mu0='2025-10-03,2025-10-10';
+tkTidyPaint();
+ok('★ 沒改就是沒改（不會寫一筆看不出改了什麼的紀錄）',
+   !tkTidyCheck().ok && tkTidyCheck().msg==='沒有任何更動');
+ok('★ 清空也算更動（可以改回沒有日期）',
+   (tkTidyMu(0,''), tkTidyMu(1,''), tkTidyCheck().ok===true && tkTidyCheck().mu.length===0));
+/* 沒有 ghost 的票（戳記補齊了）就不該出現這一區 */
+fresh(); tkTidyPaint();
+ok('★ 戳記補得齊的票不出現補登區（餘額 6＋勾 2＝總 8）', MU()==='');
+
 console.log('\n送出把關 tkTidyCheck');
 fresh();
 ok('★ 什麼都沒改就擋（餘額也一樣）',
@@ -186,6 +221,31 @@ ok('★ 確認頁講清楚不會取消預約、不通知會員、不動收款',
    /不會取消任何預約、不會通知會員、也不會動到收款與發票/.test(CFM));
 ok('★ 返回會留住剛剛勾的（重開視窗會被資料庫洗掉）',
    /onclick="tkTidyBack\(\)"/.test(CFM) && /重開視窗會從資料庫重讀、把勾選洗掉/.test(src));
+
+console.log('\n圓形卡與寫入（原始碼）');
+ok('★★ 圓形卡畫在視窗最上面當定位（使用者：「直接在該方案圓形卡下方顯示」）',
+   /const _sl=_W\.of\(tkId\)\|\|\{stamps:\[\],used:0\};/.test(OPEN)
+   && /_dots=ticketTokens\(t, _sl\.stamps, _W\.typeMap\|\|\{\}, _sl\.used, null, mid, _W\.selfBk\);/.test(OPEN)
+   && /\$\{S\.dots\?`<div class="tdy-dots">/.test(src));
+ok('★★ 補登日期存在 member_tickets.manual_uses，空了就寫回 null',
+   /t\.manual_uses=mu\.length\?mu:null;/.test(DO));
+ok('★★ 只改補登日期（餘額沒變）時也要存回去',
+   /else if\(C\.muChanged\) await dbPut\('member_tickets',t\);/.test(DO));
+ok('★ 補登要留痕（寫得出補了哪些日期）',
+   /票券校正：補登使用日期 \$\{mu\.join\('、'\)\}（無課卡，僅圓形卡標示）/.test(DO)
+   && /票券校正：清掉補登的使用日期/.test(DO));
+
+console.log('\n圓形卡吃補登日期（ticketTokens）');
+const TT=grab('function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts){');
+ok('★★ 沒有課卡的格子（_ghost）依序吃 manual_uses 的日期',
+   /const _mu=Array\.isArray\(t\.manual_uses\)\?t\.manual_uses\.filter\(Boolean\)\.slice\(\)\.sort\(\):\[\];/.test(TT)
+   && /const _it=\(gi<_ghost\) \? \{b:null,st:'used',g:gi\+\+\}/.test(TT)
+   && /const _md=\(!b && _it\.g!=null\) \? \(_mu\[_it\.g\]\|\|''\) : '';/.test(TT));
+ok('★ 沒補的還是畫 ✓（不能因為多了這個功能就變空白）',
+   /\$\{b\?md\(b\):\(_md\?md\(\{date:_md\}\):'✓'\)\}/.test(TT));
+ok('★ 補登的格子看得出來（細虛線＋title 寫明沒有課卡）',
+   /mtk-manual/.test(TT) && /舊系統補登（沒有對應課卡）/.test(TT)
+   && /\.mtk\.mtk-manual\{outline:1px dashed/.test(src));
 
 console.log('\n入口');
 ok('★★ 持有中的票卡有「校正」（管理員限定）',

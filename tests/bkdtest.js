@@ -32,11 +32,13 @@ console.log('\n圓點渲染吃得到這個數字');
 ok('★ doneCount 傳給 ticketTokens（2026-08-01 起多帶使用人，用來標「會員自行預約」）',
    /ticketTokens\(tkC,tkBks2,_typeMapD,doneCount,b\.id,b\.member_id,_wSlotD&&_wSlotD\.selfBk\)/.test(src));
 /* 2026-08-06：圓點改依上課日期排（先請假的未來課不再被推到第一顆）——
-   「帳面已用、卻找不到對應課卡」的格子改由 _ghost 表示，仍排在最前面、畫成無日期的 ✓。 */
-ok('★ 已用堂數多於清單時，多出來的畫實心 ✓（沒有日期可標）',
+   「帳面已用、卻找不到對應課卡」的格子改由 _ghost 表示，仍排在最前面、畫成無日期的 ✓。
+   2026-08-25：這些格子可以由管理員在票券校正裡補登日期（manual_uses）；
+   沒補的仍然是 ✓（見 tests/tktidytest.js）。 */
+ok('★ 已用堂數多於清單時，多出來的畫實心 ✓（沒補登日期時）',
    /const _ghost=Math\.max\(0, used-done\.length\);/.test(src)
-   && /const _it=\(gi<_ghost\) \? \(gi\+\+, \{b:null,st:'used'\}\) : \(qi<_seq\.length \? _seq\[qi\+\+\] : null\);/.test(src)
-   && /\$\{b\?md\(b\):'✓'\}/.test(src));
+   && /const _it=\(gi<_ghost\) \? \{b:null,st:'used',g:gi\+\+\} : \(qi<_seq\.length \? _seq\[qi\+\+\] : null\);/.test(src)
+   && /\$\{b\?md\(b\):\(_md\?md\(\{date:_md\}\):'✓'\)\}/.test(src));
 ok('　　「本堂第幾堂」與圓點位置同源', /curIdx=_bi>=0\?doneCount\+_bi:-1/.test(src));
 /* 2026-08-01：票券夾的已用堂數也要涵蓋「蓋上戳記且已簽到」的課 ——
    ticketTokens 是「前 used 格填已完成的課」，used 比戳記少那幾堂就整個畫不出來
