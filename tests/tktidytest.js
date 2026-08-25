@@ -1,4 +1,4 @@
-/* 票券整理（2026-08-25 使用者提問：「像這種調整票券功能的，有辦法讓管理員操作嗎，
+/* 票券校正（畫面上叫「校正」，函式名沿用 tkTidy*；2026-08-25 使用者提問：「像這種調整票券功能的，有辦法讓管理員操作嗎，
    就不用每次都要找你修改」）
 
    當天的案例：黃喬莉三張同名的「私人教練課 1V2」，舊系統匯入把 1/17～3/26 那七堂
@@ -89,8 +89,8 @@ console.log('\n護欄（原始碼）');
 const OPEN=grab('async function tkTidyOpen(tkId){');
 const DO=grab('async function _tkTidyDo(){');
 ok('★★ 管理員限定（開窗與寫入兩邊都擋）',
-   /if\(!\(SESSION&&SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以整理票券'\)/.test(OPEN)
-   && /if\(!\(SESSION&&SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以整理票券'\)/.test(DO));
+   /if\(!\(SESSION&&SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以校正票券'\)/.test(OPEN)
+   && /if\(!\(SESSION&&SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以校正票券'\)/.test(DO));
 ok('★★ 團課排除在候選之外（團課的帳在 ticket_logs）', /if\(bkIsGroup\(b\)\)\{[^}]*return false; \}/.test(OPEN));
 ok('★★ 取消的預約不列', /if\(!b \|\| b\.status==='cancelled'\) return false;/.test(OPEN));
 ok('★ 已掛在這張票上的一律列出（才拿得掉）',
@@ -124,8 +124,8 @@ ok('★ 返回會留住剛剛勾的（重開視窗會被資料庫洗掉）',
    /onclick="tkTidyBack\(\)"/.test(CFM) && /重開視窗會從資料庫重讀、把勾選洗掉/.test(src));
 
 console.log('\n入口');
-ok('★★ 持有中的票卡有「整理」（管理員限定）',
-   /\$\{\(SESSION&&SESSION\.role==='admin'\)\?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="這張票蓋了哪幾堂[^"]*" onclick="tkTidyOpen\('\$\{t\.id\}'\)">整理<\/button>`:''\}/.test(src));
+ok('★★ 持有中的票卡有「校正」（管理員限定）',
+   /\$\{\(SESSION&&SESSION\.role==='admin'\)\?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="這張票蓋了哪幾堂[^"]*" onclick="tkTidyOpen\('\$\{t\.id\}'\)">校正<\/button>`:''\}/.test(src));
 ok('★★ 已過期／歷史紀錄的票也要有（黃喬莉那三張全在這一區）',
    /pp-hist-btn" onclick="event\.stopPropagation\(\);tkTidyOpen\('\$\{t\.id\}'\)/.test(src));
 ok('★ 案例寫在原地', /黃喬莉/.test(src) && /就不用每次都要找你修改/.test(src));

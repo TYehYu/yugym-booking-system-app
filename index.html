@@ -9384,7 +9384,7 @@ button.rev-kind.rev-kind-off{opacity:.5;}
 .lot-row.lot-row-cur .ash-eisub{color:rgba(255,255,255,.82);}
 .lot-row.lot-row-cur .lot-row-ic{color:#fff;}
 .lot-row.lot-row-cur .lot-glyph{color:#fff !important;}
-/* 票券整理（2026-08-25）：沿用「白底列＋選取的那一列品牌綠底」那一套（抽獎改項目定的）。
+/* 票券校正（2026-08-25）：沿用「白底列＋選取的那一列品牌綠底」那一套（抽獎改項目定的）。
    差別是這裡可以來回勾選，所以綠底那一列要按得動（不像 .lot-row-cur 是死的）。 */
 .tdy-row{margin-bottom:8px;background:#fff;border:1px solid var(--bd);
   box-shadow:0 2px 8px rgba(30,25,15,.07);padding:11px 14px;border-radius:14px;}
@@ -10184,8 +10184,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.0946';
-const APP_VERSION_LABEL='v260825.0946';
+const APP_VERSION = '260825.0951';
+const APP_VERSION_LABEL='v260825.0951';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11326,13 +11326,17 @@ async function doTkFixSessions(tkId){
   try{ if(typeof PP!=='undefined'&&PP.id){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }catch(_){ navTo(CUR_PAGE); }
  }catch(e){ showToast('校正失敗：'+((e&&e.message)||e)); }
 }
-/* ══ 票券整理：這張票到底蓋了哪幾堂（管理員，2026-08-25）════════════════════
+/* ══ 票券校正：這張票到底蓋了哪幾堂（管理員，2026-08-25）════════════════════
    起因：黃喬莉三張同名的「私人教練課 1V2」，舊系統匯入時把 1/17～3/26 那七堂
    掛到了較早的兩張票上，使用者只能傳訊息請人下 SQL 改。系統原本沒有這個入口 ——
      ・校正堂數  只改票面餘額，不會動到任何預約
      ・更換票券  只能改「還沒簽到」的未來預約（已上過的擋在 status!=='booked'）
      ・更換方案  只適用完全沒用過的票
    「已經上過的課算在哪張票上」於是變成每次都要找工程師。這裡把它交還給管理員。
+
+   ⚠ 畫面上叫「校正」（2026-08-25 使用者指示，原本叫「整理」），函式名沿用 tkTidy*。
+     與上面的「校正堂數」（tkFixSessions）是兩顆：那顆只改數字、這顆改「哪幾堂」。
+     兩顆在畫面上不會同時出現 —— 校正堂數只從紅虛線圓點的說明視窗進去。
 
    一個畫面兩件事：
      ① 勾選這位會員（同課別、非團課）的哪幾堂算在這張票上 → 寫 bookings.ticket_id
@@ -11345,7 +11349,7 @@ async function doTkFixSessions(tkId){
    ⚠ 只重算這張票的餘額。從別張票搬過來時，那張票的餘額不會自己跟著少一堂 ——
      確認頁會把受影響的票列出來，要調就各自再開一次（多半是舊匯入票，本來就對不上）。 */
 async function tkTidyOpen(tkId){
-  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以整理票券'); return; }
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以校正票券'); return; }
   const _busy=uiBusy('讀取票券與課卡…');
   let t=null,bks=[],tks=[],emps=[],logs=[];
   try{
@@ -11392,7 +11396,7 @@ async function tkTidyOpen(tkId){
   window._tdy={ tkId, mid, cat, rows, sel, orig, tkNo, tkName, grpN,
     total:Number(t.sessions_total)||0, rem0:Number(t.sessions_remaining)||0,
     ttid:t.ticket_type_id||null, name:t.plan_name||cat||'票券', mname:(m&&m.name)||'' };
-  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">票券整理</div>
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">票券校正</div>
     <div class="ash-eihead">${escH(window._tdy.mname)}　·　${tkNoTag(tkNo[tkId])}${escH(window._tdy.name)}　·　共 ${window._tdy.total} 堂</div>
     <div style="font-size:12px;color:var(--t2);line-height:1.9;margin:-6px 0 10px;">
       勾起來的就是<b>算在這張票上</b>的課。改完票面餘額會自動重算成「總堂數 − 勾選數」。</div>
@@ -11461,7 +11465,7 @@ function tkTidyConfirm(){
   const lost={}; add.forEach(r=>{ if(r.tk && String(r.tk)!==String(S.tkId)) lost[r.tk]=(lost[r.tk]||0)+1; });
   const lostRows=Object.keys(lost).map(id=>
     `<div class="ovd-row"><span>#${S.tkNo[id]||'?'} ${escH(S.tkName[id]||'票券')}</span><b class="ovd-neg">少 ${lost[id]} 堂戳記</b></div>`).join('');
-  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">確認整理</div>
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">確認校正</div>
     <div class="ash-eihead">${escH(S.mname)}　·　${tkNoTag(S.tkNo[S.tkId])}${escH(S.name)}</div>
     <div class="ovd-list">
       ${add.length?`<div class="ovd-row"><span>改成算這張票</span><b>${add.length} 堂</b></div>`:''}
@@ -11475,17 +11479,17 @@ function tkTidyConfirm(){
     ${lostRows?`<div class="lot-sec">這幾張票會少掉戳記</div>
       <div class="ovd-list">${lostRows}</div>
       <div class="ovd-note">它們的<b>票面餘額不會自動跟著改</b> —— 舊系統匯入的票本來就對不上，
-        系統不猜。要調的話各自開它的「整理」或「校正堂數」。</div>`:''}
+        系統不猜。要調的話各自開它的「校正」或「校正堂數」。</div>`:''}
     <div class="ovd-note">這次只動「哪一堂算在哪張票」與這張票的餘額，
       不會取消任何預約、不會通知會員、也不會動到收款與發票。全部會寫進票券紀錄。</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="tkTidyBack()">‹ 返回</button>
-      <button class="btn btn-green" onclick="tkTidyDo()">確定整理</button></div>`);
+      <button class="btn btn-green" onclick="tkTidyDo()">確定校正</button></div>`);
 }
 /* 返回要留住剛剛勾的（重開視窗會從資料庫重讀、把勾選洗掉） */
 function tkTidyBack(){
   const S=window._tdy; if(!S){ closeModal(); return; }
-  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">票券整理</div>
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">票券校正</div>
     <div class="ash-eihead">${escH(S.mname)}　·　${tkNoTag(S.tkNo[S.tkId])}${escH(S.name)}　·　共 ${S.total} 堂</div>
     <div style="font-size:12px;color:var(--t2);line-height:1.9;margin:-6px 0 10px;">
       勾起來的就是<b>算在這張票上</b>的課。改完票面餘額會自動重算成「總堂數 − 勾選數」。</div>
@@ -11500,12 +11504,12 @@ function tkTidyDo(){ const S=window._tdy; if(!S) return; return onceAct('tktidy:
 async function _tkTidyDo(){
  try{
   const S=window._tdy; if(!S) return;
-  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以整理票券'); return; }
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以校正票券'); return; }
   const add=S.rows.filter(r=>S.sel[r.id]&&!S.orig[r.id]);
   const del=S.rows.filter(r=>!S.sel[r.id]&&S.orig[r.id]);
   const n=Object.keys(S.sel).length, rem=S.total-n;
   if(rem<0){ showToast('勾選堂數超過總堂數'); return; }
-  const _busy=uiBusy('整理中…');
+  const _busy=uiBusy('校正中…');
   const _d=r=>String(r.date).slice(0,10);
   for(const r of add){
     const b=await dbGet('bookings',r.id); if(!b) continue;
@@ -11515,14 +11519,14 @@ async function _tkTidyDo(){
     /* 用 adjust／delta 0 留痕：票券夾的「連結」認的是 deduct+delta 0（見 buildWallet 的
        _bkTk），寫成那個的話之後再拿掉這一堂，舊連結會把它又黏回來。 */
     try{ await logTicket(S.tkId,'adjust',0,b.id,SESSION&&SESSION.id,
-      `票券整理：${_d(r)} 這一堂改算在這張票${r.tk?`（原本 #${S.tkNo[r.tk]||'?'}）`:'（原本未綁票）'}`); }catch(_){}
+      `票券校正：${_d(r)} 這一堂改算在這張票${r.tk?`（原本 #${S.tkNo[r.tk]||'?'}）`:'（原本未綁票）'}`); }catch(_){}
   }
   for(const r of del){
     const b=await dbGet('bookings',r.id); if(!b) continue;
     b.ticket_id=null;
     await dbPut('bookings',b);
     try{ await logTicket(S.tkId,'adjust',0,b.id,SESSION&&SESSION.id,
-      `票券整理：${_d(r)} 這一堂不再算在這張票`); }catch(_){}
+      `票券校正：${_d(r)} 這一堂不再算在這張票`); }catch(_){}
   }
   const t=await dbGet('member_tickets',S.tkId);
   if(t){
@@ -11535,15 +11539,15 @@ async function _tkTidyDo(){
       if(rem===0 && t.status==='usable') t.status='used_up';
       await dbPut('member_tickets',t);
       try{ await logTicket(S.tkId,'adjust',rem-was,null,SESSION&&SESSION.id,
-        `票券整理：餘額 ${was} → ${rem}（依實際 ${n} 堂重算）`); }catch(_){}
+        `票券校正：餘額 ${was} → ${rem}（依實際 ${n} 堂重算）`); }catch(_){}
     }
   }
   dbCacheClear(['bookings','member_tickets','ticket_logs']);
   _busy();
   closeModal();
-  showToast(`已整理：${n} 堂算在這張票、餘額 ${rem} 堂`);
+  showToast(`已校正：${n} 堂算在這張票、餘額 ${rem} 堂`);
   try{ if(typeof PP!=='undefined'&&PP.id){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }catch(_){ navTo(CUR_PAGE); }
- }catch(e){ console.error('tkTidyDo 錯誤:',e); showToast('整理失敗：'+((e&&e.message)||e)); }
+ }catch(e){ console.error('tkTidyDo 錯誤:',e); showToast('校正失敗：'+((e&&e.message)||e)); }
 }
 // 展延後的新到期日（原到期日 ＋ 原方案期限）
 function tkExtendTo(t){
@@ -39534,10 +39538,10 @@ function ppRecordHtml(){
                 ${/* 2026-08-08 使用者定案：賣錯方案但不退錢 → 更換方案（收款與發票不動）；
                      金額算錯要退錢 → 作廢（收款歸零）。兩條路分開放，按鈕上就講清楚差別。 */''}
                 ${(isDeskLike()&&t.status==='usable'&&t.source==='purchase')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="賣錯方案但錢不退：換一張正確的票，收款與發票不動" onclick="openSwapTicket('${t.id}')">更換方案</button>`:''}
-                ${/* 票券整理（2026-08-25 使用者提問：「這種調整票券功能的，有辦法讓管理員操作嗎，
+                ${/* 票券校正（2026-08-25 使用者提問：「這種調整票券功能的，有辦法讓管理員操作嗎，
                      就不用每次都要找你修改」）——哪幾堂算在這張票上（含已經上過的）。
                      管理員限定，與「校正堂數」同一級：兩顆都是事後更正帳的入口。 */''}
-                ${(SESSION&&SESSION.role==='admin')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="這張票蓋了哪幾堂（含已上過的）；改完票面餘額自動重算" onclick="tkTidyOpen('${t.id}')">整理</button>`:''}
+                ${(SESSION&&SESSION.role==='admin')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="這張票蓋了哪幾堂（含已上過的）；改完票面餘額自動重算" onclick="tkTidyOpen('${t.id}')">校正</button>`:''}
                 ${(isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger);" title="金額錯了要退錢：收款金額歸零，營收同步減少" onclick="voidTicketAsk('${t.id}')">作廢</button>`:''}
               </span>
             </div>
@@ -39626,9 +39630,9 @@ function ppRecordHtml(){
               <span>${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${tkMoneyHtml(t)}</span>
               <span style="display:flex;gap:6px;">
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">📄 合約</button>`:''}
-                ${/* 用完／過期的票也要能整理（2026-08-25）——黃喬莉那三張 1V2 全在這一區，
+                ${/* 用完／過期的票也要能校正（2026-08-25）——黃喬莉那三張 1V2 全在這一區，
                      入口只做在「持有中」的話，最需要更正的舊票反而點不到。 */''}
-                ${(SESSION&&SESSION.role==='admin')?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();tkTidyOpen('${t.id}')" title="這張票蓋了哪幾堂（含已上過的）；改完票面餘額自動重算">整理</button>`:''}
+                ${(SESSION&&SESSION.role==='admin')?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();tkTidyOpen('${t.id}')" title="這張票蓋了哪幾堂（含已上過的）；改完票面餘額自動重算">校正</button>`:''}
                 ${canExtBtn?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();openTicketExtend('${t.id}')" title="剩 ${Number(t.sessions_remaining)||0} 堂沒用完，可展延 ${tkPlanDays(t)} 天至 ${String(tkExtendTo(t)).replace(/-/g,'/')}">展延</button>`
                   :(canExt?`<span class="pp-hist-tag" title="剩 ${Number(t.sessions_remaining)||0} 堂沒用完，可請櫃檯展延">可展延</span>`:'')}
               </span>
