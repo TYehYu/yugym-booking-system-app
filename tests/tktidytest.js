@@ -25,14 +25,16 @@ const doc={ getElementById:id=>(boxes[id]=boxes[id]||{innerHTML:''}) };
 const escH=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 const parseYmd=s=>{ const p=String(s).slice(0,10).split('-'); return new Date(+p[0],+p[1]-1,+p[2]); };
 const W={};
-const mk=new Function('window','document','escH','parseYmd','TK_AUDIT_SINCE',
+const mk=new Function('window','document','escH','parseYmd','TK_AUDIT_SINCE','ashDateField',
   [grab('function tkTidyPaint(){'), grab('function tkTidyTap(bid){'),
    grab('function tkTidyRemAuto(){'), grab('function tkTidyRemNow(){'),
    grab('function tkTidyRemMode(mode){'), grab('function tkTidyManual(){'),
-   grab('function tkTidyMu(i, v){'), grab('function tkTidyCheck(){')].join('\n')
-  +'\nreturn {tkTidyPaint,tkTidyTap,tkTidyRemNow,tkTidyRemMode,tkTidyManual,tkTidyMu,tkTidyCheck};');
-const {tkTidyPaint,tkTidyTap,tkTidyRemNow,tkTidyRemMode,tkTidyManual,tkTidyMu,tkTidyCheck}
-  =mk(W,doc,escH,parseYmd,'2026-07-30');
+   grab('function tkTidyMu(i, v){'), grab('function tkTidyMuClear(i){'),
+   grab('function tkTidyCheck(){')].join('\n')
+  +'\nreturn {tkTidyPaint,tkTidyTap,tkTidyRemNow,tkTidyRemMode,tkTidyManual,tkTidyMu,tkTidyMuClear,tkTidyCheck};');
+const {tkTidyPaint,tkTidyTap,tkTidyRemNow,tkTidyRemMode,tkTidyManual,tkTidyMu,tkTidyMuClear,tkTidyCheck}
+  =mk(W,doc,escH,parseYmd,'2026-07-30',
+      (id,v)=>`<button class="adp-field" id="${id}-btn">${v||'選擇日期'}</button>`);
 
 /* 黃喬莉那張 1/8 的票：8 堂，七堂舊匯入（無帳）＋ 9/03（綁票沒扣）＋ 9/10（有扣課紀錄） */
 const rows=[
@@ -128,7 +130,12 @@ fresh(); W._tdy.rem0=6; W._tdy.sel={}; W._tdy.orig={}; W._tdy.remMode='keep'; W.
 tkTidyPaint();
 ok('★★ 帳面已用 2 堂、一堂課卡都沒綁 → 開出 2 格補登欄',
    /補登使用日期（2 格沒有課卡）/.test(MU())
-   && (MU().match(/oninput="tkTidyMu\(/g)||[]).length===2);
+   && (MU().match(/id="tdy-mu-\d-btn"/g)||[]).length===2);
+/* 2026-08-25 使用者指示：「這邊要用我們自己設計的日期」——
+   原本是 input[type=date]（瀏覽器原生日曆，每台裝置長得都不一樣、iOS 沒有確定鈕）。 */
+ok('★★ 用系統自己的日期挑選（ashDateField），不是瀏覽器原生的',
+   !/type="date"/.test(MU()) && /class="adp-field"/.test(MU())
+   && /ashDateField\('tdy-mu-'\+i, S\.mu\[i\]\|\|'', '', `tkTidyMu\(\$\{i\},this\.value\)`\)/.test(src));
 ok('★ 講明是純標示，不會變成預約／不進統計',
    /不會建立預約、不進銷課金額、也不算教練堂數/.test(MU()));
 tkTidyMu(0,'2025-10-03'); tkTidyMu(1,'2025-10-10');
@@ -136,11 +143,15 @@ ok('★★ 填了日期就算有更動，送得出去', tkTidyCheck().ok===true
    && tkTidyCheck().mu.join(',')==='2025-10-03,2025-10-10' && tkTidyCheck().muChanged===true);
 ok('★ 日期格式擋得住', (tkTidyMu(1,'10/10'), !tkTidyCheck().ok && /格式不對/.test(tkTidyCheck().msg)));
 tkTidyMu(1,'2025-10-10');
+ok('★★ 滾輪一定會回一個日期，所以要另外給「✕ 清掉」才留得了白',
+   /class="tdy-mu-x"[^>]*onclick="tkTidyMuClear\(\$\{i\}\)"/.test(src)
+   && (tkTidyMuClear(1), W._tdy.mu[1]==='' && tkTidyCheck().mu.join(',')==='2025-10-03'));
+tkTidyMu(1,'2025-10-10');
 /* 勾了課＝那一格有課卡了，補登欄要跟著少 */
 tkTidyTap('B1');
 ok('★★ 勾一堂課回來 → 補登欄少一格（有課卡的不用手填）',
    /補登使用日期（1 格沒有課卡）/.test(MU())
-   && (MU().match(/oninput="tkTidyMu\(/g)||[]).length===1);
+   && (MU().match(/id="tdy-mu-\d-btn"/g)||[]).length===1);
 ok('　　只取還需要的那幾格，多打的不會被寫進去', tkTidyCheck().mu.join(',')==='2025-10-03');
 /* 已經有補登日期、又原封不動送出 → 不算更動 */
 fresh(); W._tdy.rem0=6; W._tdy.sel={}; W._tdy.orig={}; W._tdy.remMode='keep'; W._tdy.muN=-1;
@@ -153,6 +164,9 @@ ok('★ 清空也算更動（可以改回沒有日期）',
 /* 沒有 ghost 的票（戳記補齊了）就不該出現這一區 */
 fresh(); tkTidyPaint();
 ok('★ 戳記補得齊的票不出現補登區（餘額 6＋勾 2＝總 8）', MU()==='');
+
+ok('★ 日期滾輪往前留三年（補登的是舊系統時代的課，bookings 只匯到 2025/12/01）',
+   /for\(let y=y0-3;y<=y0\+2;y\+\+\) years\.push/.test(src));
 
 console.log('\n送出把關 tkTidyCheck');
 fresh();

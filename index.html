@@ -9462,8 +9462,10 @@ button.rev-kind.rev-kind-off{opacity:.5;}
 .tdy-mu-row{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--bd);
   border-radius:11px;padding:7px 10px;box-shadow:0 2px 8px rgba(30,25,15,.07);}
 .tdy-mu-row>span{flex:none;font-size:11.5px;font-weight:700;color:var(--t3);}
-.tdy-mu-row input{flex:1 1 0;min-width:0;border:none;background:transparent;outline:none;
-  font-family:var(--num),inherit;font-size:14px;color:var(--text);}
+.tdy-mu-row .adp-field{flex:1 1 0;min-width:0;}
+.tdy-mu-x{flex:none;width:22px;height:22px;border-radius:50%;border:1px solid var(--bd);
+  background:#fff;color:var(--t3);font-size:11px;line-height:1;cursor:pointer;font-family:inherit;}
+.tdy-mu-x:active{transform:scale(.94);}
 /* 補登的日期：實心點照畫（那一堂確實用掉了），只用一圈細虛線說「這格沒有課卡」 */
 .mtk.mtk-manual{outline:1px dashed rgba(255,255,255,.72);outline-offset:-3px;}
 .lot-prizes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
@@ -10251,8 +10253,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.1348';
-const APP_VERSION_LABEL='v260825.1348';
+const APP_VERSION = '260825.1351';
+const APP_VERSION_LABEL='v260825.1351';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11516,6 +11518,13 @@ function tkTidyManual(){
 function tkTidyMu(i, v){
   const S=window._tdy; if(!S) return;
   S.mu[i]=String(v||'').slice(0,10);
+  S.muN=-1; try{ tkTidyPaint(); }catch(_){}   /* 重畫才會長出「✕ 清掉」那顆 */
+}
+/* 滾輪一定會回一個日期，沒有「不選」這條路 —— 想留白就要另外給一顆清除。 */
+function tkTidyMuClear(i){
+  const S=window._tdy; if(!S) return;
+  S.mu[i]=''; S.muN=-1;
+  try{ tkTidyPaint(); }catch(_){}
 }
 function tkTidyWhy(){
   const S=window._tdy; if(!S) return;
@@ -11583,9 +11592,14 @@ function tkTidyPaint(){
       <div class="ovd-note" style="margin:0 0 8px;">上面圓形卡裡<b>沒有日期的實心點</b>就是這幾格 ——
         舊系統匯入只做到 2025/12/01，在那之前上過的課沒有課卡可以綁，日期只能手動補。
         <b>純標示</b>：不會建立預約、不進銷課金額、也不算教練堂數。留白就維持沒有日期。</div>
+      ${/* 2026-08-25 使用者指示：「這邊要用我們自己設計的日期」——
+           原本用 input[type=date]，跳出來的是瀏覽器原生日曆（每台裝置長得都不一樣、
+           iOS 沒有確定鈕）。改吃 ashDateField（年／月／日三欄滾輪，0821 定版的那一套）。 */''}
       <div class="tdy-mu">${Array.from({length:need},(_,i)=>
-        `<label class="tdy-mu-row"><span>第 ${i+1} 格</span>
-          <input type="date" value="${escH(S.mu[i]||'')}" oninput="tkTidyMu(${i},this.value)"></label>`).join('')}</div>`:'';
+        `<div class="tdy-mu-row"><span>第 ${i+1} 格</span>
+          ${ashDateField('tdy-mu-'+i, S.mu[i]||'', '', `tkTidyMu(${i},this.value)`)}
+          ${S.mu[i]?`<button type="button" class="tdy-mu-x" title="清掉這一格的日期" onclick="tkTidyMuClear(${i})">✕</button>`:''}
+        </div>`).join('')}</div>`:'';
   }
   const nt=document.getElementById('tdy-remnote');
   if(nt) nt.innerHTML=`<div class="ovd-note">${
@@ -31902,7 +31916,10 @@ function ashDateRender(){
   if(!host){ host=document.createElement('div'); host.id='adp-sheet'; document.body.appendChild(host); }
   const base=(c.sel?parseYmd(c.sel):null)||TODAY;
   const y0=TODAY.getFullYear();
-  const years=[]; for(let y=y0-1;y<=y0+2;y++) years.push({v:y,label:y});
+  /* 往前留三年（2026-08-25）：票券校正要補登的是舊系統時代上過的課，
+     bookings 只匯到 2025-12-01，再往前的日期得選得到。往後兩年給連續預約用。
+     ⚠ 滾輪一開就停在目前那個值上，多幾格不影響平常挑今天前後的手感。 */
+  const years=[]; for(let y=y0-3;y<=y0+2;y++) years.push({v:y,label:y});
   const months=Array.from({length:12},(_,i)=>({v:i+1,label:i+1}));
   const days=Array.from({length:new Date(base.getFullYear(),base.getMonth()+1,0).getDate()},
     (_,i)=>({v:i+1,label:i+1}));

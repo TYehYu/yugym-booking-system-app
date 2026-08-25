@@ -582,8 +582,10 @@ ok('★ 時間兩欄（時／分）獨立滾動',
    /<div class="wh-wrap wh-2">/.test(src)
    && /\$\{ashWheelCol\('h',hours,ch\)\}/.test(src)
    && /\$\{ashWheelCol\('i',mins,cm\)\}/.test(src));
-ok('★ 年月日不顯示星期（使用者指示）',
-   /const years=\[\]; for\(let y=y0-1;y<=y0\+2;y\+\+\) years\.push\(\{v:y,label:y\}\);/.test(src)
+/* 2026-08-25：年份往前留三年（票券校正要補登舊系統時代上過的課，
+   bookings 只匯到 2025/12/01，再往前的日期得選得到）。 */
+ok('★ 年月日不顯示星期（使用者指示），年份範圍 y0-3 ～ y0+2',
+   /const years=\[\]; for\(let y=y0-3;y<=y0\+2;y\+\+\) years\.push\(\{v:y,label:y\}\);/.test(src)
    && /const months=Array\.from\(\{length:12\},\(_,i\)=>\(\{v:i\+1,label:i\+1\}\)\);/.test(src));
 ok('★ 轉年／月時日數要跟著改（2 月 28、4 月 30）',
    /function ashDateFixDays\(\)\{/.test(src)
