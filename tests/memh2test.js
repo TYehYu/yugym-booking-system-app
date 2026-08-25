@@ -309,5 +309,15 @@ t('三種角色的手機版都看得到「今日運勢」入口',
 // ── LINE 圖文選單的深層連結 ──
 t('?go=bookings 進「我的預約」', /if\(go==='bookings'\|\|go==='home'\)\{ navTo\('mem_bookings'\); return true; \}/.test(s));
 
+console.log('\n簡易課卡的圓形卡（2026-08-25 使用者回報「右邊四個位子偏移了　變高了」）');
+/* 容器原本只設 margin-top，ticketTokens 吐出來的 .mtk 就是行內元素，走文字基線對齊：
+   內容是「✓」的、是日期的、帶「本堂」彗星標記的各自基線不同，一換行就高高低低。
+   別處的圓點容器（.mck-dots2）本來就是 flex-wrap，只有這裡漏掉。 */
+t('★★ 圓點容器要 flex-wrap＋垂直置中，不能讓它走文字基線',
+   /#mem-task-pop \.mtp-dots\{margin-top:8px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;\}/.test(s));
+t('　　與別處的圓點容器同一組數值（.mck-dots2 是 flex-wrap gap:5px）',
+   /\.mck-dots2\{display:flex;flex-wrap:wrap;gap:5px;\}/.test(s));
+t('　　成因寫在原地', /走的是文字的基線對齊/.test(s));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
