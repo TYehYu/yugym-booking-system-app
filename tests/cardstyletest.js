@@ -521,9 +521,11 @@ ok('★ onchange 掛在隱藏 input 上，原本的 bkRefreshPlanFilter 照樣�
    /try\{ inp\.dispatchEvent\(new Event\('change',\{bubbles:true\}\)\); \}catch\(_\)\{\}/.test(src)
    && /onchange 掛在隱藏 input 上/.test(src));
 /* 2026-08-21 二修：月曆換成捲動清單，下限改用「清單從下限開始長」實作 —— 過去的日子根本不列 */
-ok('★ 單位標在滾輪下方，不跟著捲',
-   /<div class="wh-unit"><span>年<\/span><span>月<\/span><span>日<\/span><\/div>/.test(src)
-   && /<div class="wh-unit wh-unit-2"><span>時<\/span><span>分<\/span><\/div>/.test(src));
+/* 2026-08-25 使用者指示：「調整預約時間可以用我們風格的月曆嗎　白色底」
+   「用月曆選擇比較直覺」—— 日期改回月曆，**時間仍然是滾輪**（只有時／分兩欄、
+   而且是連續數列，滾輪本來就順手），所以 wh-* 那一整套還在用。 */
+ok('★ 單位標在滾輪下方，不跟著捲（時間欄）',
+   /<div class="wh-unit wh-unit-2"><span>時<\/span><span>分<\/span><\/div>/.test(src));
 ok('　　營業時間 08–22、分鐘只有整點與半點',
    /const hours=Array\.from\(\{length:15\},\(_,i\)=>\(\{v:i\+8/.test(src)
    && /const mins=\[\{v:'00',label:'00'\},\{v:'30',label:'30'\}\];/.test(src));
@@ -573,20 +575,31 @@ ok('★ 滾輪：中央高亮帶＋scroll-snap＋上下遮罩淡出',
    && /-webkit-mask-image:linear-gradient\(180deg,transparent 0,#000 26%,#000 74%,transparent 100%\)/.test(css));
 /* 2026-08-21 四修（使用者附圖）：一欄 → 各欄獨立滾動。
    日期年／月／日三欄、時間時／分兩欄；年月日不顯示星期。 */
-ok('★ 日期三欄（年／月／日）獨立滾動',
-   /<div class="wh-wrap wh-3">/.test(src)
-   && /\$\{ashWheelCol\('y',years,base\.getFullYear\(\)\)\}/.test(src)
-   && /\$\{ashWheelCol\('m',months,base\.getMonth\(\)\+1\)\}/.test(src)
-   && /\$\{ashWheelCol\('d',days,base\.getDate\(\)\)\}/.test(src));
+ok('★★ 日期改成月曆：白底、七欄格線、翻月與翻年',
+   /#adp-sheet \.adp-box\.adp-box-cal\{background:#fff;/.test(src)
+   && /<div class="adp-cal">\$\{cells\}<\/div>/.test(src)
+   && /onclick="ashDateMove\(-12\)"/.test(src) && /onclick="ashDateMove\(1\)"/.test(src)
+   && /function ashDateMove\(n\)\{/.test(src));
+ok('　　點一天就選好、直接關窗（沿用既有的 ashDatePick，含下限檢查）',
+   /onclick="ashDatePick\('\$\{ds\}'\)"/.test(src)
+   && /if\(c\.min && ds<c\.min\)\{ showToast\('不能選這一天'\); return; \}/.test(src));
+ok('　　早於下限的畫得出來但按不動（不能用就寫原因，別藏起來）',
+   /const bad=!!\(c\.min && ds<c\.min\);/.test(src)
+   && /<span class="\$\{cls\}" title="不能選這一天">/.test(src)
+   && /\.adp-c\.adp-c-off\{color:var\(--t3\);opacity:\.38;cursor:default;/.test(src));
+ok('　　選取＝品牌金、今天＝品牌綠（與行事曆日期列同一套）',
+   /\.adp-c\.adp-c-today\{background:var\(--green\)/.test(src)
+   && /\.adp-c\.adp-c-sel\{background:rgba\(180,138,86,\.16\);border-color:var\(--gold/.test(src));
+ok('　　為什麼換過兩次寫在原地（0821 滾輪 → 0825 月曆）',
+   /0821 使用者附 iOS 截圖改成年／月／日三欄滾輪 → 0825 改回月曆/.test(src));
 ok('★ 時間兩欄（時／分）獨立滾動',
    /<div class="wh-wrap wh-2">/.test(src)
    && /\$\{ashWheelCol\('h',hours,ch\)\}/.test(src)
    && /\$\{ashWheelCol\('i',mins,cm\)\}/.test(src));
-/* 2026-08-25：年份往前留三年（票券校正要補登舊系統時代上過的課，
-   bookings 只匯到 2025/12/01，再往前的日期得選得到）。 */
-ok('★ 年月日不顯示星期（使用者指示），年份範圍 y0-3 ～ y0+2',
-   /const years=\[\]; for\(let y=y0-3;y<=y0\+2;y\+\+\) years\.push\(\{v:y,label:y\}\);/.test(src)
-   && /const months=Array\.from\(\{length:12\},\(_,i\)=>\(\{v:i\+1,label:i\+1\}\)\);/.test(src));
+/* 2026-08-25：日期改月曆之後，年份不再受滾輪清單限制 —— 翻年鈕（«／»）想翻到
+   哪一年都行，票券校正要補登 2024 年的課也選得到。 */
+ok('★ 翻年沒有上下限（補登舊系統時代的課要選得到）',
+   /onclick="ashDateMove\(-12\)"/.test(src) && !/for\(let y=y0-3;y<=y0\+2;y\+\+\)/.test(src));
 ok('★ 轉年／月時日數要跟著改（2 月 28、4 月 30）',
    /function ashDateFixDays\(\)\{/.test(src)
    && /if\(window\._adpCtx && window\._adpCtx\.mode==='date' && \(key==='y'\|\|key==='m'\)\) ashDateFixDays\(\);/.test(src));
@@ -600,10 +613,9 @@ ok('★ 上下留半屏內距，第一格與最後一格才捲得到中央',
 ok('★ 捲停後 Math.round\(scrollTop\/格高\) 就是選到第幾格（不自己算慣性）',
    /const i=Math\.round\(col\.scrollTop\/ASH_WH_ITEM\);/.test(src)
    && /交給瀏覽器原生捲動，手感才對/.test(src));
-ok('★ 月曆與清單都已退場', !/adp-grid/.test(src) && !/function ashDateMove/.test(src)
-   && !/<div class="adp-list"/.test(src));
-ok('　　開窗各欄都轉到目前的值', /ashWheelGo\('y', Math\.max\(0,years\.findIndex/.test(src)
-   && /ashWheelGo\('h', hi<0\?1:hi\);/.test(src));
+ok('★ 舊的清單式挑選已退場（0821 之前那一版）',
+   !/adp-grid/.test(src) && !/<div class="adp-list"/.test(src));
+ok('　　時間開窗仍轉到目前的值', /ashWheelGo\('h', hi<0\?1:hi\);/.test(src));
 ok('★ 日期顯示 2026/08/21，不帶星期（使用者定版）',
    /return `\$\{d\.getFullYear\(\)\}\/\$\{String\(d\.getMonth\(\)\+1\)\.padStart\(2,'0'\)\}\/\$\{String\(d\.getDate\(\)\)\.padStart\(2,'0'\)\}`;/.test(src));
 ok('★ 連續預約：七顆星期膠囊一列，時間在下一列',

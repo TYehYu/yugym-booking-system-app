@@ -3151,6 +3151,35 @@ tr:hover td{background:var(--card2);}
 .adp-t.adp-sel{background:var(--green);color:#fff;}
 .adp-foot{display:flex;gap:8px;margin-top:12px;}
 .adp-foot .btn{flex:1;}
+/* ══ 月曆式日期挑選（2026-08-25 使用者指示：「用我們風格的月曆　白色底」）══════
+   底色用白（滾輪那版是米底 var(--bg)）；選取＝品牌金、今天＝品牌綠，
+   與行事曆日期列、首頁七天欄同一套語彙（紅>金>綠 裡的「選取用金」）。 */
+#adp-sheet .adp-box.adp-box-cal{background:#fff;width:min(360px,94vw);}
+.adp-cal-nav{display:flex;align-items:center;gap:4px;margin:-2px 0 10px;}
+.adp-cal-nav .adp-cal-t{flex:1;text-align:center;font-size:15px;font-weight:800;
+  color:var(--text);font-family:var(--num),inherit;letter-spacing:.02em;}
+.adp-nav{flex:none;width:30px;height:30px;border-radius:9px;border:1px solid var(--bd);
+  background:#fff;color:var(--green);font-size:14px;line-height:1;cursor:pointer;font-family:inherit;}
+.adp-nav:hover{background:var(--card2);}
+.adp-nav:active{transform:scale(.94);}
+.adp-cal-wd{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;}
+.adp-cal-wd span{text-align:center;font-size:11px;font-weight:700;color:var(--t3);}
+.adp-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.adp-c{display:flex;align-items:center;justify-content:center;aspect-ratio:1;min-width:0;
+  border:1px solid transparent;border-radius:10px;background:transparent;
+  font-family:var(--num),inherit;font-size:14.5px;font-weight:700;color:var(--text);
+  cursor:pointer;transition:background .12s,color .12s,border-color .12s;}
+.adp-c-pad{visibility:hidden;}
+.adp-c:hover{background:var(--card2);}
+.adp-c:active{transform:scale(.94);}
+/* 選取＝金底金字；今天＝綠底白字。兩者同時成立時「選取」在後面、蓋過今天。 */
+.adp-c.adp-c-today{background:var(--green);border-color:var(--green);color:#fff;}
+.adp-c.adp-c-sel{background:rgba(180,138,86,.16);border-color:var(--gold,#B48A56);
+  color:var(--gold-d,#8a6a30);}
+/* 不能選的（早於下限）：淡化並拿掉互動，但仍然畫出來 —— 
+   整格消失會讓人以為那一天不存在（0823 定的「不能用就寫原因，別藏起來」）。 */
+.adp-c.adp-c-off{color:var(--t3);opacity:.38;cursor:default;background:transparent;}
+.adp-c.adp-c-off:hover{background:transparent;}
 /* ══ 共用課程色 token（今日教練任務卡 mck-* 與 日檢視行事曆卡 cal-ev-day 共用同源）══ */
 /* 未來要調課程色，只改這一組，兩個畫面同步更新。色相調整另開「全系統課程色」階段。 */
 .course-pt{--course-accent:var(--course-pt-accent);--course-soft:var(--course-pt-soft);}
@@ -10259,8 +10288,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.1729';
-const APP_VERSION_LABEL='v260825.1729';
+const APP_VERSION = '260825.1752';
+const APP_VERSION_LABEL='v260825.1752';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31952,31 +31981,55 @@ function ashDateRender(){
   c.mode='date';
   let host=document.getElementById('adp-sheet');
   if(!host){ host=document.createElement('div'); host.id='adp-sheet'; document.body.appendChild(host); }
-  const base=(c.sel?parseYmd(c.sel):null)||TODAY;
-  const y0=TODAY.getFullYear();
-  /* 往前留三年（2026-08-25）：票券校正要補登的是舊系統時代上過的課，
-     bookings 只匯到 2025-12-01，再往前的日期得選得到。往後兩年給連續預約用。
-     ⚠ 滾輪一開就停在目前那個值上，多幾格不影響平常挑今天前後的手感。 */
-  const years=[]; for(let y=y0-3;y<=y0+2;y++) years.push({v:y,label:y});
-  const months=Array.from({length:12},(_,i)=>({v:i+1,label:i+1}));
-  const days=Array.from({length:new Date(base.getFullYear(),base.getMonth()+1,0).getDate()},
-    (_,i)=>({v:i+1,label:i+1}));
+  /* ══ 月曆（2026-08-25 使用者指示：「調整預約時間可以用我們風格的月曆嗎　白色底」
+       「用月曆選擇比較直覺」）══════════════════════════════════════════════
+     歷程：原本是月曆 → 0821 使用者附 iOS 截圖改成年／月／日三欄滾輪 → 0825 改回月曆。
+     這次改回來的理由是「直覺」：滾輪要轉三欄才選得到一天，而櫃檯腦子裡想的是
+     「下週二」「這個月最後一個週五」—— 那是要看得到整個月才答得出來的問題。
+     ⚠ 時間欄仍然是滾輪（那裡只有時／分兩欄、而且是連續數列，滾輪本來就順手），
+       所以下面 wh-* 那一整套與 ashDateFixDays 都還在用，不要順手刪掉。 */
+  const y=c.y, m=c.m;                       // m 是 0-based
+  const _pad=n=>String(n).padStart(2,'0');
+  const _ds=d=>`${y}-${_pad(m+1)}-${_pad(d)}`;
+  const lead=new Date(y,m,1).getDay();      // 這個月 1 號是星期幾（0＝日）
+  const dim=new Date(y,m+1,0).getDate();    // 這個月有幾天
+  const today=ymd(TODAY);
+  let cells='';
+  for(let i=0;i<lead;i++) cells+='<span class="adp-c adp-c-pad"></span>';
+  for(let d=1;d<=dim;d++){
+    const ds=_ds(d);
+    const bad=!!(c.min && ds<c.min);        // 早於下限＝不能選（例如改期不能改到過去）
+    const cls=[ 'adp-c',
+      ds===c.sel?'adp-c-sel':'',            // 選取＝品牌金（與行事曆日期列同一套）
+      ds===today?'adp-c-today':'',          // 今天＝品牌綠
+      bad?'adp-c-off':'' ].filter(Boolean).join(' ');
+    cells+=bad
+      ? `<span class="${cls}" title="不能選這一天">${d}</span>`
+      : `<button type="button" class="${cls}" onclick="ashDatePick('${ds}')">${d}</button>`;
+  }
   host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
-    <div class="adp-box"><div class="modal-title">選擇日期</div>
-      <div class="wh-wrap wh-3">
-        <div class="wh-band"></div>
-        ${ashWheelCol('y',years,base.getFullYear())}
-        ${ashWheelCol('m',months,base.getMonth()+1)}
-        ${ashWheelCol('d',days,base.getDate())}
+    <div class="adp-box adp-box-cal"><div class="modal-title">選擇日期</div>
+      <div class="adp-cal-nav">
+        <button type="button" class="adp-nav" onclick="ashDateMove(-12)" title="上一年">«</button>
+        <button type="button" class="adp-nav" onclick="ashDateMove(-1)" title="上個月">‹</button>
+        <b class="adp-cal-t">${y} 年 ${m+1} 月</b>
+        <button type="button" class="adp-nav" onclick="ashDateMove(1)" title="下個月">›</button>
+        <button type="button" class="adp-nav" onclick="ashDateMove(12)" title="下一年">»</button>
       </div>
-      <div class="wh-unit"><span>年</span><span>月</span><span>日</span></div>
+      <div class="adp-cal-wd">${'日一二三四五六'.split('').map(w=>`<span>${w}</span>`).join('')}</div>
+      <div class="adp-cal">${cells}</div>
       <div class="adp-foot">
         <button class="btn btn-ghost" onclick="ashDateClose()">取消</button>
-        <button class="btn btn-green" onclick="ashDateConfirm()">確定</button>
+        <button class="btn btn-ghost" onclick="ashDatePick('${today}')">今天</button>
       </div></div>`;
-  ashWheelGo('y', Math.max(0,years.findIndex(x=>x.v===base.getFullYear())));
-  ashWheelGo('m', base.getMonth());
-  ashWheelGo('d', base.getDate()-1);
+}
+/* 翻月／翻年：n 是月數（±12 就是換年）。只動視窗，選取的那一天不變 —— 
+   翻過去只是「看看別的月份」，沒點就沒選。 */
+function ashDateMove(n){
+  const c=window._adpCtx; if(!c) return;
+  const d=new Date(c.y, c.m+n, 1);
+  c.y=d.getFullYear(); c.m=d.getMonth();
+  ashDateRender();
 }
 function ashDateConfirm(){
   const y=ashWheelVal('y'), m=ashWheelVal('m'), d=ashWheelVal('d');
