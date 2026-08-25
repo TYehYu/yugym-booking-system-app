@@ -68,6 +68,9 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     isCoachClassTicket:(t,tm)=>((tm[t.ticket_type_id]||{}).category)==='私人教練',
     renewAttribOf:(t,purByTk)=> t.sold_by || purByTk[t.id] || null,
     addDays:(d,n)=>d, parseYmd:x=>new Date(x),
+    /* 2026-08-25：姓名字典抽成 memNameMap（教練撈不到別人的學員，用目錄補）——
+       沙箱裡沒有那本目錄，行為等同原本的 Object.fromEntries。 */
+    memNameMap:(mems)=>Object.fromEntries((mems||[]).filter(Boolean).map(m=>[m.id,m.name])),
   };
   /* fmWhoTip 是 finMatrix 的相依（新約/續約的滑鼠提示），一起帶進沙箱實跑 */
   const run=new Function(...Object.keys(env),

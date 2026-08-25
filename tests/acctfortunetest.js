@@ -332,7 +332,9 @@ ok('★ 票券卡：金額改放右下角、就在作廢按鈕上方',
 ok('　　桌機與其他角色維持原本的單行底列',
    src.includes(": `${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}"));
 ok('★ 預約紀錄：520px 月曆改成按月分段的清單（桌機仍是月曆）',
-   /if\(_m2\)\{[\s\S]{0,900}<div class="pp-bkmon">[\s\S]{0,900}<div class="pp-bkrow"/.test(src)
+   (()=>{ const i=src.indexOf('if(_m2){', src.indexOf("if(PP.recView==='bookings'){"));
+      const j=src.indexOf('<div class="pp-bkmon">', i), k=src.indexOf('<div class="pp-bkrow', j);
+      return i>0 && j>i && k>j; })()
    && src.includes('renderMemberWeek(); }catch(_){} },0);'));
 /* 0823 白底框語彙盤點：這一列改成白框，左緣課程色條從絕對定位的 ::before
    換成 border-left（::before 貼在無框的列邊上沒問題，白框化之後會壓在框線上）。 */

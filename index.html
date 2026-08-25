@@ -3711,7 +3711,20 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 .pp-bkmon:first-child{margin-top:2px;padding-top:0;border-top:none;}
 /* ⚠ 左緣的課程色條原本是絕對定位的 ::before（貼在無框的列邊上）；白框化之後
    改成 border-left，否則色條會壓在框線上（與 .gr-row-leave 同一天、同一個處理）。 */
-.pp-bkrow{display:flex;align-items:center;gap:11px;padding:9px 11px;
+/* 操作紀錄（2026-08-25）：誰、什麼時候動了這一筆。小字、不搶戲，
+   但「取消」那一段用品牌紅 —— 那是唯一一種「東西不見了」的紀錄。 */
+.pp-bkop{font-size:10.5px;color:var(--t3);line-height:1.6;margin-top:2px;
+  display:flex;flex-wrap:wrap;gap:0 10px;}
+.pp-bkop-x{color:var(--danger,#b5372e);font-weight:700;}
+.pp-bkrow.pp-bkrow-cx{opacity:.62;}
+.pp-bkrow.pp-bkrow-cx .pp-bkname{text-decoration:line-through;text-decoration-color:var(--t3);}
+.pp-bktag.pp-bk-cx{background:#f2eeea;color:var(--t2);}
+.ash-mop{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px;
+  font-size:10.5px;color:var(--t3);line-height:1.6;margin-top:3px;}
+.ash-mop i{font-style:normal;font-weight:700;color:var(--t3);opacity:.72;
+  border:1px solid var(--bd);border-radius:5px;padding:0 4px;flex:none;}
+.ash-mop b{color:var(--danger,#b5372e);font-weight:700;}
+.pp-bkrow{display:flex;align-items:flex-start;gap:11px;padding:9px 11px;
   background:#fff;border:1px solid var(--bd);border-left:4px solid var(--bkc,#1f6f54);
   border-radius:10px;}
 .pp-bkdate{flex:none;width:56px;font-family:var(--num);color:var(--text);}
@@ -10237,8 +10250,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.1318';
-const APP_VERSION_LABEL='v260825.1318';
+const APP_VERSION = '260825.1331';
+const APP_VERSION_LABEL='v260825.1331';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12965,6 +12978,48 @@ function coachDisp(c){ const n=c ? (c.name_en||c.name||'') : ''; return /[A-Za-z
    沒有放寬 employees 的 RLS（那是整列開放，薪資／電話／身分證都會跟著過去），
    改用只回「id + 名字」的 fn_coach_directory（security definer）。
    一個工作階段抓一次就夠：教練名字不會在使用中改。 */
+/* ══ 會員姓名目錄（2026-08-25 使用者定案，選乙案）══════════════════════════
+   使用者回報：「教練用桌機開　行事曆看不到其他會員的名字」。
+
+   查下去是**資料層擋的、不是畫面**：前端 0730 就放開了（renderCalendar 的 hideMember
+   一直是 false，註解寫著「教練也開放看其他預約課卡的會員名字，只是關閉互動功能」），
+   但 members 的 RLS 沒跟著放 —— can_coach_see_member() 只認「我是主責教練」或
+   「我教過／代過他的課」，所以教練撈不到別的教練的學員，bkName 查不到名字就回「—」——
+   UI 開了門，資料沒送過來。
+
+   兩條路擺出來讓使用者選，他選了乙：
+     甲　放寬 members_select —— 最快，但 RLS 是整列的，等於連電話、生日、
+        緊急聯絡人、備註都一起開。
+     乙　另開一條**只回 id 與 name** 的窄路（fn_member_names，security definer，
+        內部檢查 is_any_staff）。行事曆只需要名字，其他欄位維持原本的保護。
+
+   做法與 coachDirectory 同一套：一次 RPC、存成 id→name 的字典、整個工作階段共用。
+   ⚠ 只有教練需要（櫃檯以上本來就讀得到整張表，會員讀不到也不該讀）——
+     其他角色拿到的是空字典，memNameMap 因此完全等於原本的行為。 */
+let _memDirCache=null, _memDirBusy=null, _memDirWarmed=false;
+async function memberDirectory(){
+  if(_memDirCache) return _memDirCache;
+  if(_memDirBusy) return _memDirBusy;
+  _memDirBusy=(async()=>{
+    const map={};
+    try{
+      if(CLOUD && sb){
+        const {data,error}=await sb.rpc('fn_member_names');
+        if(!error && Array.isArray(data)) data.forEach(m=>{ if(m&&m.id) map[m.id]=m.name; });
+      }
+    }catch(_){}
+    _memDirCache=map; window._memNames=map; _memDirBusy=null;
+    return map;
+  })();
+  return _memDirBusy;
+}
+/* 名字字典：以「真的撈得到的那批會員」為準，撈不到的才用目錄補
+   —— 目錄只有名字，任何需要其他欄位的地方還是撈不到（那正是乙案的重點）。 */
+function memNameMap(members){
+  const o=Object.assign({}, window._memNames||{});
+  (members||[]).forEach(m=>{ if(m&&m.id) o[m.id]=m.name; });
+  return o;
+}
 let _coachDirCache=null;
 async function coachDirectory(){
   if(_coachDirCache) return _coachDirCache;
@@ -13521,6 +13576,13 @@ function navTo(key, gkey){
     const _mv=((key==='mem_bookings'||key==='mem_tickets')
       && typeof memh2On==='function' && memh2On());
     document.body.classList.toggle('memh2-shell', _mv);
+    /* 教練的會員姓名目錄（2026-08-25）：撈一次就好，回來之後重畫一次把「—」補成名字。
+       放在這裡而不是登入流程：教練有三條進場路徑（密碼、還原工作階段、角色預覽），
+       換頁一定會經過這裡，一個旗標就保證整個工作階段只跑一次。 */
+    if(SESSION && SESSION.role==='coach' && !_memDirWarmed){
+      _memDirWarmed=true;
+      memberDirectory().then(()=>{ try{ navTo(CUR_PAGE); }catch(_){} });
+    }
     /* 切到會員視角時登入流程已經跑完了，所以下拉更新要在這裡補掛一次
        （admPtrInit 自己有 _admPtrOn 旗標，重複呼叫不會重綁）。 */
     if(_mv && typeof admPtrInit==='function') admPtrInit();
@@ -19595,7 +19657,7 @@ PAGES.dashboard=async function(){
      （桌機走 analytics），所以症狀是「手機版報表打不開」。 */
   let _tkLogs=[]; try{ _tkLogs=await dbGetAll('ticket_logs'); }catch(_){}
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const planMap=Object.fromEntries(plans.map(p=>[p.id,p]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
 
@@ -20083,6 +20145,30 @@ function bkTag(b){
   return '';
 }
 /* nameOf：各畫面的會員名查法不同（有的 map 存物件、有的存字串），由呼叫端傳入 */
+/* ══ 這一筆是誰、什麼時候動的（2026-08-25 使用者指示：「還是在會員資料預約明細
+   這邊留下紀錄，紀錄每一筆是由哪邊操作的」「跟什麼時候操作的」）══════════════
+   起因：黃淨萍 8/25 19:00 那一堂是她自己在手機上取消的（8/18 18:59），
+   櫃檯只收到一則會滑掉的通知，事後只能靠票券帳本反推是誰動的。
+
+   建立端本來就有記錄（bookings.created_by）；取消端 0825 才補上 cancelled_by
+   （由 DB 觸發器 trg_bookings_cancelled_by 自動填，五條取消路徑一次蓋住）。
+   欄位裡存的可能是四種東西，各自要講人話： */
+function bkActorLabel(id, coachMap){
+  const v=String(id||'');
+  if(!v) return '沒有記錄';
+  if(v.indexOf('MEM-')===0) return '會員自己';
+  if(v==='system') return '系統自動';
+  if(v.indexOf('manual-fix')===0) return '後台修正';
+  return (coachMap&&coachMap[v]) || '員工';
+}
+/* 台北時間的 M/D HH:mm（資料庫存的是 UTC） */
+function bkOpTime(ts){
+  if(!ts) return '';
+  try{
+    const d=new Date(new Date(ts).getTime()+8*3600000).toISOString();
+    return `${Number(d.slice(5,7))}/${Number(d.slice(8,10))} ${d.slice(11,16)}`;
+  }catch(_){ return ''; }
+}
 function bkName(b, nameOf){
   if(!b) return '—';
   const v=b.member_id ? (nameOf?nameOf(b.member_id):'') : '';
@@ -20512,7 +20598,7 @@ async function renderCalendar(opts){
   }
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const coachObjMap=Object.fromEntries(coaches.map(c=>[c.id,c]));   // 卡片第三行教練縮寫 tag 用（coachAbbr 需完整物件）
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const ticketMap=Object.fromEntries(allTickets.map(t=>[t.id,t]));
   computeLastBkMarks(allTickets, bookings, typeMap);
@@ -23135,7 +23221,7 @@ async function renderDayTimeline(){
   const myId=SESSION.id;
   const role=window._coachScope==='all'?'admin':'coach';
   const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const isMine=(b)=> role==='admin' ? true : (bkIsCoach(b,myId));
   const dayBk=mergeSiblingUnits(bookings.filter(b=>b.date===ds&&b.status!=='cancelled'&&isMine(b)))
@@ -23851,7 +23937,7 @@ async function renderCoachAgenda(){
     const _tkAll=_tkPk ? _tkPk.data : await dbGetAll('member_tickets');
     computeLastBkMarks(_tkAll, bookings, Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t])));
   }catch(_){ window._installLastBk=window._installLastBk||{}; window._renewLastBk=window._renewLastBk||{}; }
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const coachObj=Object.fromEntries(coaches.map(c=>[c.id,c]));
   /* 2026-08-01 使用者回報：「A 教練請 B 教練代課，這堂課應該要顯示在 B 教練這邊」——
      教練端 15 處已改成 bkCoachId(b)===SESSION.id ＝「這堂實際由誰上」。
@@ -24358,7 +24444,7 @@ async function renderWeekTimeline(){
   const canClickOthers = isAdmin;
   const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const coachObj=Object.fromEntries(coaches.map(c=>[c.id,c]));
   const cardLabel=(b)=>{
@@ -25389,7 +25475,7 @@ async function bkStep2Facility(pDate,pTime){
 async function frVenueTicketOpts(){
   try{
     const [tks,members]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('members')]);
-    const mMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+    const mMap=memNameMap(members);
     const today=ymd(TODAY);
     return tks.filter(t=>t.ticket_type_id==='tt-venue-rental'&&t.status==='usable'
         &&(t.sessions_remaining||0)>0&&(!t.expire_date||String(t.expire_date).slice(0,10)>=today)
@@ -28214,9 +28300,19 @@ async function bkCardPop(el, b, btns, acts){
       const _badge=onLeave?'<span class="ash-mtag ash-mtag-leave">請假</span>'
         :(_noShow?'<span class="ash-mtag ash-mtag-ns">未到</span>'
         :(inHere?'<span class="ash-mtag ash-mtag-ok">已簽到</span>':''));
+      /* 操作紀錄（2026-08-25 使用者指示：「行事曆點課卡跳出的簡易課卡，會員卡上面
+         新增顯示操作時間跟由誰操作的」）——
+         ⚠ 寫「這一堂」不是「這個名額」：created_by／cancelled_by 記的是**整筆預約**，
+           團課後來才被加進名單的人沒有各自的時間戳，寫成「他是那時候被加進來的」會是謊。 */
+      const _opLine=(()=>{
+        const _c=`建立 ${bkActorLabel(b.created_by,cm)}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
+        const _x=(b.status==='cancelled')
+          ? `　取消 ${bkActorLabel(b.cancelled_by,cm)}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}` : '';
+        return `<div class="ash-mop"><i>這一堂</i>${escH(_c)}${_x?`<b>${escH(_x)}</b>`:''}</div>`;
+      })();
       return `<div class="ash-mrow">
           <div class="ash-mcard${onLeave?' ash-mleave':''}"${r.mid?` onclick="collapseBkCard();openMemberDetail('${r.mid}')"`:''}>
-            <div class="ash-mmain"><div class="ash-mname"><span>${nm2}</span>${_famBtn}${_seatTag}${_badge}${_noteBtn}${_leaveBtn}</div>${_tk}${_subLine}</div>
+            <div class="ash-mmain"><div class="ash-mname"><span>${nm2}</span>${_famBtn}${_seatTag}${_badge}${_noteBtn}${_leaveBtn}</div>${_tk}${_subLine}${_opLine}</div>
           </div>
           ${_outOrbs?`<div class="ash-morbs">${_outOrbs}</div>`:''}
         </div>`;
@@ -29619,7 +29715,7 @@ async function openBookingDetail(id){
   }
   /* 場地單位燈號（2026-07-31 使用者指示）：模板裡不能 await，先算好再帶進去 */
   const _vuDots=(typeof venueUnitDots==='function')?await venueUnitDots(b, editable):'';
-  const memMapD=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMapD=memNameMap(members);
   const isGroupD=bkIsGroup(b), isTrialD=b.category==='體驗';
   const gIdsD=mids(b);
   let memberLine;
@@ -39837,8 +39933,10 @@ function ppRecordHtml(){
            月曆在手機是 520px 寬、只能橫向捲著看。這裡改成由新到舊的清單、按月分段，
            一列就是一堂：日期／時間／課名（帶課程色）／教練／狀態。桌機維持月曆。 */
         if(_m2){
-          const _bk=(c.myBk||[]).filter(b=>b.status!=='cancelled')
-            .slice().sort((a,b)=>String(b.date+b.start_time).localeCompare(String(a.date+a.start_time)));
+          /* 2026-08-25：**取消的也要列出來**。原本一律濾掉，於是「會員自己把課取消了」
+             這件事在會員資料裡完全看不到 —— 黃淨萍 8/25 那一堂就是這樣消失一週的。 */
+          const _bk=(c.myBk||[]).slice()
+            .sort((a,b)=>String(b.date+b.start_time).localeCompare(String(a.date+a.start_time)));
           const _tm=c.typeMap||{}, _cm=c.coachMap||{};
           const _WD='日一二三四五六';
           let _lastMon='', _rows='';
@@ -39849,14 +39947,22 @@ function ppRecordHtml(){
             const col=(typeof catColor!=='undefined'&&typeof evColorClass==='function')
               ? (catColor[evColorClass(b,_tm)]||'#1f6f54') : '#1f6f54';
             const d=parseYmd(b.date), wd=d?_WD[d.getDay()]:'';
-            const st=b.status==='checked_in'||b.status==='completed'?['已簽到','pp-bk-ok']
+            const _cx=b.status==='cancelled';
+            const st=_cx?['已取消','pp-bk-cx']
+              :(b.status==='checked_in'||b.status==='completed'?['已簽到','pp-bk-ok']
               :(b.no_show===true?['未到','pp-bk-ns']
-              :(bkIsCoachLeave(b)?['教練請假','pp-bk-lv']:null));
+              :(bkIsCoachLeave(b)?['教練請假','pp-bk-lv']:null)));
             const _cn=(typeof bkCoachId==='function')?(_cm[bkCoachId(b)]||''):'';
-            _rows+=`<div class="pp-bkrow" style="--bkc:${col};">
+            /* 操作紀錄（2026-08-25）：建立一定有；取消只有取消過的才畫。
+               ⚠ 舊資料的 created_by／cancelled_by 可能是空的（0810 之前、或舊系統匯入），
+                 那就誠實寫「沒有記錄」，不要猜。 */
+            const _opC=`建立 ${bkActorLabel(b.created_by,_cm)}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
+            const _opX=_cx?`取消 ${bkActorLabel(b.cancelled_by,_cm)}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}`:'';
+            _rows+=`<div class="pp-bkrow${_cx?' pp-bkrow-cx':''}" style="--bkc:${col};">
               <div class="pp-bkdate"><b>${Number(String(b.date).slice(5,7))}/${Number(String(b.date).slice(8,10))}</b><span>（${wd}）</span></div>
               <div class="pp-bkmain"><div class="pp-bkname">${bookingTypeName(b,_tm)}${st?`<span class="pp-bktag ${st[1]}">${st[0]}</span>`:''}</div>
-                <div class="pp-bksub">${String(b.start_time).slice(0,5)}${_cn?'　·　'+_cn:''}</div></div>
+                <div class="pp-bksub">${String(b.start_time).slice(0,5)}${_cn?'　·　'+_cn:''}</div>
+                <div class="pp-bkop">${escH(_opC)}${_opX?`<span class="pp-bkop-x">${escH(_opX)}</span>`:''}</div></div>
             </div>`;
           });
           return `<div class="pp-card">${back}<div class="pp-card-t">預約紀錄（${c.bkCount||0}）</div>
@@ -40780,7 +40886,7 @@ async function ppLoadCtx(){
     /* 共享章顯示名字用（2026-08-04 使用者指示：「共享人顯示清楚一點」）——
        2026-08-23：改用上面那一批一起抓回來的 membersAll，不要再 await 一次
        （原本的註解說「有快取、不多花往返」，但冷快取時它就是一整輪往返）。 */
-    try{ c.memMap=Object.fromEntries((membersAll||[]).map(m=>[m.id,m.name])); }catch(_){ c.memMap={}; }
+    try{ c.memMap=memNameMap(membersAll); }catch(_){ c.memMap={}; }
     c.tierOpts=[['','—']].concat(Object.entries(TIER_DEFS).map(([k,d])=>[k,d.label]));
   }else{
     c.bankOpts=HR_BANKS.slice();
@@ -41557,7 +41663,7 @@ function fallbackCopy(txt){
 let _fdCalMonth=null, _fdCalSel=null;
 PAGES.fd_calendar=async function(){
   const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const all=bookings.filter(b=>b.status!=='cancelled');
   window._fdCalData={all,memMap,coachMap};
@@ -42658,7 +42764,7 @@ function tkShowMore(){ _tkShown+=TK_PAGE; PAGES.tickets(); }
 
 PAGES.tickets=async function(){
   const[tickets,members,types,plans]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('members'),dbGetAll('ticket_types'),dbGetAll('course_plans')]);
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const memPhone=Object.fromEntries(members.map(m=>[m.id,normPhone(m.phone)]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const stLabel={usable:'可用',used_up:'用畢',expired:'過期',refunded:'已退'};
@@ -44692,7 +44798,7 @@ PAGES.coach_today=async function(){
     dbGetAll('attendance').catch(()=>[]),dbGetAll('shifts').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[])]);
   const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
   await loadSalaryTemplates();
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const today=ymd(TODAY);
   const me=allStaff.find(c=>c.id===SESSION.id)||{};
   // 緊急修復橫幅（保留）
@@ -46343,7 +46449,7 @@ async function ucalClickDay(ds){
   if(cell)cell.classList.add('ucal-sel');
   const role=window._ucalRole||'admin', myId=SESSION.id;
   const[bookings,members,coaches,shifts,attendance]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches'),dbGetAll('shifts').catch(()=>[]),dbGetAll('attendance').catch(()=>[])]);
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const isMine=(b)=> role==='admin' ? true
     : role==='member' ? bkHasMember(b,myId)
@@ -46379,7 +46485,7 @@ async function opsDashClickDay(ds){
   document.querySelectorAll('.cdash-cell').forEach(c=>c.classList.remove('cdash-sel'));
   if(cell)cell.classList.add('cdash-sel');
   const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const list=bookings.filter(b=>b.date===ds&&b.status!=='cancelled').sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
   const [y,m,d]=ds.split('-');
@@ -46403,7 +46509,7 @@ async function coachDashClickDay(ds){
   document.querySelectorAll('.cdash-cell').forEach(c=>c.classList.remove('cdash-sel'));
   const cell=document.querySelector(`.cdash-cell[data-d="${ds}"]`); if(cell)cell.classList.add('cdash-sel');
   const[bookings,members,shifts]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('shifts').catch(()=>[])]);
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   coachDashShowDay(ds, bookings, shifts, memMap);
 }
 function coachDashShowDay(ds, bookings, shifts, memMap){
@@ -47383,7 +47489,7 @@ PAGES.coach_calendar=async function(){
   try{ window._allTkCache=await dbGetAll('member_tickets'); }catch(_){ window._allTkCache=[]; }
   try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
   try{ const tlogs=await dbGetAll('training_logs'); window._tlogBids=new Set(tlogs.map(l=>l.booking_id)); }catch(_){ window._tlogBids=new Set(); }
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const typeMap={};
   const visible=bookings.filter(b=>{
@@ -53130,7 +53236,7 @@ async function finMatrix(){
       dbGetAll('member_tickets').catch(()=>[]), dbGetAll('ticket_types').catch(()=>[]),
       dbGetAll('coaches').catch(()=>[]), dbGetAll('members').catch(()=>[])]);
   }
-  const memName=Object.fromEntries((mems||[]).map(m=>[m.id,m.name||'—']));
+  const memName=memNameMap(mems);
   const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
   const inM=d=>String(d||'').slice(0,7)===ym;
   // 這個月有動靜的教練（有堂數或有業績）才列，避免整排空欄
@@ -53312,7 +53418,7 @@ async function finToday(){
   const body=document.getElementById('fin-body'); if(!body) return;
   const today=ymd(TODAY);
   const [purchases,members]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('members').catch(()=>[])]);
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const todayPur=(purchases||[]).filter(p=>(p.created_at||'').slice(0,10)===today)
     .sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
   const total=todayPur.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
@@ -54110,7 +54216,7 @@ function finMonthMove(delta){
 async function finReceivable(){
   const body=document.getElementById('fin-body'); if(!body) return;
   const [tickets,members]=await Promise.all([dbGetAll('member_tickets').catch(()=>[]),dbGetAll('members').catch(()=>[])]);
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   // 分期未繳清的票券
   const pending=(tickets||[]).filter(t=>{ const i=t.installment; return i && typeof i==='object' && i.current<i.count; });
   let totalDue=0;
@@ -54163,7 +54269,7 @@ async function finRefunds(){
     dbGetAll('ticket_logs').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[]),
     dbGetAll('members').catch(()=>[]),dbGetAll('coaches').catch(()=>[])]);
   const tkMap=Object.fromEntries((tickets||[]).map(t=>[t.id,t]));
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const staffMap=Object.fromEntries((coaches||[]).map(c=>[c.id,c.name]));
   const _twDate=l=>{ const d=new Date(l.created_at||''); return isNaN(d)?String(l.created_at||'').slice(0,10)
     : new Date(d.getTime()+8*3600000).toISOString().slice(0,10); };   // 台北日界線
@@ -54387,7 +54493,7 @@ async function confirmAppCancel(id){
 /* ════════ 管理員:今日事項 ════════ */
 PAGES.admin_today=async function(){
   const[bookings,members,coaches,tickets,types]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   const today=ymd(TODAY);
@@ -55000,7 +55106,7 @@ async function renderSalaryContent(TARGET, withHead){
       <div style="font-size:12.5px;color:var(--t2);margin-top:8px;">請聯絡管理員。</div></div></div>`;
     return;
   }
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   if(!window._salaryMonth) window._salaryMonth=ymd(TODAY).slice(0,7);
   const month=window._salaryMonth; // 可切換月份 2026-06
   /* 2026-07 以前用匯入的紀錄，不列公式（2026-08-02 使用者指示）——
@@ -55265,7 +55371,7 @@ async function salaryClickDay(ds){
   const[bookings,members,shifts,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('shifts').catch(()=>[]),dbGetAll('coaches')]);
   await loadSalaryTemplates();
   const me=coaches.find(c=>c.id===SESSION.id)||{};
-  const memMap=Object.fromEntries(members.map(m=>[m.id,m.name]));
+  const memMap=memNameMap(members);
   const er=effRates(me); const dutyRate=(me.custom_salary?(me.duty_hourly||0):(er.duty_hourly||0)); const countSalary=empCountSalary(me, String(ds).slice(0,7));
   const dayResult=(d)=>{
     const dayBk=bookings.filter(b=>bkCoachId(b)===SESSION.id&&b.date===d&&(b.status==='completed'||b.status==='checked_in'));
