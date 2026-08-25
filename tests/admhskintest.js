@@ -7,6 +7,7 @@
      ・存在 localStorage，不進資料庫，隨時關掉不留痕 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+const CSS=src.slice(src.indexOf('/* ══ 手機首頁配色（2026-08-25 試點）'), src.indexOf('.skin-row{'));
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const grab=(sig)=>{ const i=src.indexOf(sig); if(i<0) throw new Error('找不到 '+sig);
@@ -19,7 +20,7 @@ const store={};
 const cls=new Set();
 const W={ SESSION:null, CUR_PAGE:'', mobile:true };
 const mk=new Function('localStorage','document','SESSION_REF','isMobileLayout',
-  src.slice(src.indexOf('const ADMH_SKINS=['), src.indexOf('function openAdmhSkin(){'))
+  src.slice(src.indexOf('const ADMH_SKIN_PAGES='), src.indexOf('function openAdmhSkin(){'))
   .replace(/\bSESSION\b/g,'SESSION_REF.v')
   +'\nreturn {ADMH_SKINS,admhSkin,admhSkinSet,admhSkinApply};');
 const SREF={v:null};
@@ -45,12 +46,17 @@ const on=()=>cls.has('admh-skin');
 SREF.v={role:'admin'}; W.mobile=true;
 admhSkinApply('g_dashboard');
 ok('★★ 管理員＋手機＋首頁 → 掛上', on()===true);
-admhSkinApply('calendar');
-ok('★★ 換到別頁就拿掉（不會整個後台變深藍）', on()===false);
 /* 2026-08-25 使用者回報「只有報表變色 首頁跟行事曆都沒有變」——
-   初版把條件寫成 key==='dashboard'，而那是底部導覽的「報表」；首頁是 g_dashboard。 */
+   初版把條件寫成 key==='dashboard'，而那是底部導覽的「報表」；首頁是 g_dashboard。
+   同日二修「行事曆跟報表也幫我改色」→ 底部導覽三頁都吃。 */
+admhSkinApply('calendar');
+ok('★★ 行事曆也吃（0825 二修）', on()===true);
 admhSkinApply('dashboard');
-ok('★★ 報表（dashboard）不是首頁，不吃這個皮膚', on()===false);
+ok('★★ 報表也吃（0825 二修）', on()===true);
+admhSkinApply('members');
+ok('★★ 三頁以外一律不吃（不會整個後台變深色）', on()===false);
+admhSkinApply('staff');
+ok('　　員工管理也不吃', on()===false);
 admhSkinApply('g_dashboard'); W.mobile=false; admhSkinApply('g_dashboard');
 ok('★★ 桌機不吃', on()===false);
 W.mobile=true;
@@ -72,6 +78,30 @@ store['admh_skin']='b'; admhSkinApply('g_dashboard');
 ok('★★ 換成 B → 上一個方案的 class 要拿掉', cls.has('admh-skin') && cls.has('admh-b') && !cls.has('admh-a'));
 store['admh_skin']='cream'; admhSkinApply('g_dashboard');
 
+console.log('\n行事曆與報表（只換坐在底色上的東西，白卡不碰）');
+ok('★★ 三頁清單寫成常數，不是散在各處的字串',
+   /const ADMH_SKIN_PAGES=\['g_dashboard','calendar','dashboard'\];/.test(src)
+   && /ADMH_SKIN_PAGES\.indexOf\(key\)>=0/.test(src));
+ok('★★ 行事曆的容器換底（cag 是滿版覆蓋層，不換的話整片還是米色）',
+   /body\.admh-skin \.cag-wrap,[\s\S]{0,80}?background:var\(--nv-bg\);/.test(CSS));
+ok('★★ 月曆帶原本是品牌綠底 → 改吃頂欄色（方案 B 的底也是綠，會糊在一起）',
+   /body\.admh-skin \.cag-mcal\{background:var\(--nv-bar\);\}/.test(CSS));
+ok('★★ 整點淡塊與過期遮罩要反過來（米底是壓深，深底要用亮的／壓黑）',
+   /body\.admh-skin \.cag-hourbg\{background:rgba\(255,255,255,\.055\);\}/.test(CSS)
+   && /body\.admh-skin \.cag-past\{background:rgba\(0,0,0,\.30\);\}/.test(CSS));
+ok('★★ 場地狀態（額滿淡紅／只剩教室淡金，0823 定的）色相不換，只提高透明度',
+   /body\.admh-skin \.cag-vrow\.full\{background:rgba\(200,72,62,\.34\);\}/.test(CSS)
+   && /body\.admh-skin \.cag-vrow\.grp\{background:rgba\(196,152,95,\.34\);\}/.test(CSS));
+ok('★ 行事曆的週列是另一套 markup（.admh .msb-date，不是首頁的 .a2-day），今天／選取都要接上',
+   /body\.admh-skin \.admh \.msb-date\.hero-today\{background:var\(--nv-today\)/.test(CSS)
+   && /body\.admh-skin \.admh \.msb-date\.on\{background:var\(--nv-sel\)/.test(CSS));
+ok('★ 一日／三日／週 切換籤：選中的整顆填亮（原本 .on 是深色，深底上看不出來）',
+   /body\.admh-skin \.admh-chip\.on\{background:var\(--nv-fg\);border-color:var\(--nv-fg\);color:var\(--nv-bar\);\}/.test(CSS));
+ok('★ 報表：坐在底色上的區塊小標與標題要提亮',
+   /body\.admh-skin \.dash-sec-label\{color:var\(--nv-sel-bd\);\}/.test(CSS));
+ok('★★ 白卡一律不碰 —— 這是風險最小的做法，寫在原地',
+   /只換「直接坐在底色上」的東西\*\*，白卡一律不碰/.test(CSS));
+
 console.log('\n入口');
 ok('★ 帳號選單有「首頁配色」', /id="acct-homeskin" onclick="closeAcctMenu\(\);openAdmhSkin\(\)"/.test(src)
    && /<\/span>首頁配色<\/button>/.test(src));
@@ -87,7 +117,6 @@ ok('★ 換頁時重算（與 chv2-shell／memh2-shell 同一處）',
    /if\(typeof admhSkinApply==='function'\) admhSkinApply\(key\);/.test(src));
 
 console.log('\n只換底色，語意不動');
-const CSS=src.slice(src.indexOf('/* ══ 手機首頁配色（2026-08-25 試點）'), src.indexOf('.skin-row{'));
 ok('★★ 規則只寫一份（body.admh-skin），方案只給 token —— 加第四個配色不用再抄一遍',
    (CSS.match(/body\.admh-skin /g)||[]).length>=18
    && /body\.admh-a\{/.test(CSS) && /body\.admh-b\{/.test(CSS));
