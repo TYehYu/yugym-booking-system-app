@@ -18,14 +18,19 @@ const grab=(sig)=>{ const i=src.indexOf(sig); if(i<0) throw new Error('找不到
   return src.slice(i,k+1); };
 
 const {bkActorLabel,bkOpTime}=new Function(
-  grab('function bkActorLabel(id, coachMap){')+'\n'+grab('function bkOpTime(ts){')
+  grab('function bkActorLabel(id, coachMap, memMap){')+'\n'+grab('function bkOpTime(ts){')
   +'\nreturn {bkActorLabel,bkOpTime};')();
 
 console.log('實跑 bkActorLabel：欄位裡四種東西各自要講人話');
 const CM={'c-abc':'有肌1','c-xyz':'余東曄'};
 ok('★ 員工 id → 名字', bkActorLabel('c-abc',CM)==='有肌1' && bkActorLabel('c-xyz',CM)==='余東曄');
-ok('★★ MEM- 開頭 → 會員自己（會員自助預約／取消，這是最需要看出來的一種）',
-   bkActorLabel('MEM-A71E46497682',CM)==='會員自己');
+/* 2026-08-25 二修使用者指示：「會員自己建立的改用會員的名字顯示」——
+   同一個帳號可能幫家人約，寫名字才看得出是誰動的。 */
+const MM={'MEM-1':'黃淨萍','MEM-2':{name:'陳世勳'}};
+ok('★★ MEM- 開頭 → 寫會員的名字', bkActorLabel('MEM-1',CM,MM)==='黃淨萍');
+ok('　　有些頁的 memMap 存的是整個物件，也要吃得下', bkActorLabel('MEM-2',CM,MM)==='陳世勳');
+ok('★ 查不到名字才退回「會員自己」（不要把 MEM-xxxx 印給人看）',
+   bkActorLabel('MEM-9',CM,MM)==='會員自己' && bkActorLabel('MEM-9',CM)==='會員自己');
 ok('★ system → 系統自動（轉正時自動取消那類）', bkActorLabel('system',CM)==='系統自動');
 ok('★ manual-fix-* → 後台修正', bkActorLabel('manual-fix-20260729',CM)==='後台修正');
 ok('★★ 空的就寫「沒有記錄」，不要猜（0810 之前與舊系統匯入的都是空的）',
@@ -51,22 +56,29 @@ ok('★ 已取消要標出來並淡化、名稱畫刪除線',
    /\['已取消','pp-bk-cx'\]/.test(PPB)
    && /\.pp-bkrow\.pp-bkrow-cx\{opacity:\.62;\}/.test(src)
    && /\.pp-bkrow\.pp-bkrow-cx \.pp-bkname\{text-decoration:line-through/.test(src));
-ok('★★ 每一列都寫「建立 誰・什麼時候」', /const _opC=`建立 \$\{bkActorLabel\(b\.created_by,_cm\)\}\$\{bkOpTime\(b\.created_at\)\?'・'\+bkOpTime\(b\.created_at\):''\}`;/.test(PPB));
+ok('★★ 每一列都寫「建立／開課 誰・什麼時候」，會員自己約的寫名字',
+   /const _opC=`\$\{_lb\} \$\{bkActorLabel\(b\.created_by,_cm,_mmn\)\}/.test(PPB)
+   && /const _lb=bkIsGroup\(b\)\?'開課':'建立';/.test(PPB));
 ok('★★ 取消過的多一段「取消 誰・什麼時候」，用品牌紅（唯一一種「東西不見了」的紀錄）',
-   /const _opX=_cx\?`取消 \$\{bkActorLabel\(b\.cancelled_by,_cm\)\}/.test(PPB)
+   /const _opX=_cx\?`取消 \$\{bkActorLabel\(b\.cancelled_by,_cm,_mmn\)\}/.test(PPB)
    && /\.pp-bkop-x\{color:var\(--danger/.test(src));
 ok('　　沒取消的就不畫那一段', /_opX\?`<span class="pp-bkop-x">\$\{escH\(_opX\)\}<\/span>`:''/.test(PPB));
 ok('　　多一行之後列不再垂直置中（不然日期會浮在中間）',
    /\.pp-bkrow\{display:flex;align-items:flex-start;/.test(src));
 
-console.log('\n簡易課卡的會員卡');
-ok('★★ 會員卡上多一行操作紀錄', /const _opLine=\(\(\)=>\{/.test(src)
-   && /<div class="ash-mop"><i>這一堂<\/i>/.test(src)
+console.log('\n簡易課卡：單人課畫在會員卡、團課畫在標題卡');
+/* 使用者看到團課四張會員卡都寫「建立 RANDY」，問「這一堂是 Randy 建立的?」——
+   RANDY 是余東曄的對外名稱，時間也對，但那是「他 7/28 開了這堂課」，
+   不是「他把郭祐竹加進來」。重複四次就一定被讀成後者。 */
+ok('★★ 單人課才畫在會員卡上', /const _opLine=bkIsGroup\(b\)\?'':\(\(\)=>\{/.test(src)
    && /\$\{_tk\}\$\{_subLine\}\$\{_opLine\}<\/div>/.test(src));
-ok('★★ 寫「這一堂」不是「這個名額」—— created_by 記的是整筆預約，'
-   +'團課後來被加進名單的人沒有各自的時間戳，寫成那樣是謊',
-   /寫「這一堂」不是「這個名額」/.test(src)
-   && /寫成「他是那時候被加進來的」會是謊/.test(src));
+ok('★★ 團課改畫在標題卡，而且改口說「開課」（那是整堂的事實）',
+   /\$\{bkIsGroup\(b\)\?`<div class="ash-mop ash-crsop">\$\{escH\(`開課 \$\{bkActorLabel\(b\.created_by,cm,mm\)\}/.test(src));
+ok('　　為什麼不能畫在會員卡上寫在原地',
+   /不是「這個人是誰加進來的」/.test(src)
+   && /讀起來就變成\s*\n\s*「Randy 把郭祐竹加進來」/.test(src));
+ok('★ 會員名字帶得進去（cm 之外多一個 mm）',
+   /bkActorLabel\(b\.created_by,cm,mm\)/.test(src) && /bkActorLabel\(b\.cancelled_by,cm,mm\)/.test(src));
 ok('★ 取消那一段同樣用紅色', /\.ash-mop b\{color:var\(--danger/.test(src));
 
 console.log('\n欄位撈得到（LEAN_DROP 沒把它們丟掉）');

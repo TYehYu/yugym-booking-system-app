@@ -3724,6 +3724,7 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 .ash-mop i{font-style:normal;font-weight:700;color:var(--t3);opacity:.72;
   border:1px solid var(--bd);border-radius:5px;padding:0 4px;flex:none;}
 .ash-mop b{color:var(--danger,#b5372e);font-weight:700;}
+.ash-crsop{margin-top:5px;padding-top:5px;border-top:1px solid var(--bd);}
 .pp-bkrow{display:flex;align-items:flex-start;gap:11px;padding:9px 11px;
   background:#fff;border:1px solid var(--bd);border-left:4px solid var(--bkc,#1f6f54);
   border-radius:10px;}
@@ -10250,8 +10251,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.1336';
-const APP_VERSION_LABEL='v260825.1336';
+const APP_VERSION = '260825.1348';
+const APP_VERSION_LABEL='v260825.1348';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20153,10 +20154,16 @@ function bkTag(b){
    建立端本來就有記錄（bookings.created_by）；取消端 0825 才補上 cancelled_by
    （由 DB 觸發器 trg_bookings_cancelled_by 自動填，五條取消路徑一次蓋住）。
    欄位裡存的可能是四種東西，各自要講人話： */
-function bkActorLabel(id, coachMap){
+function bkActorLabel(id, coachMap, memMap){
   const v=String(id||'');
   if(!v) return '沒有記錄';
-  if(v.indexOf('MEM-')===0) return '會員自己';
+  if(v.indexOf('MEM-')===0){
+    /* 2026-08-25 使用者指示：「會員自己建立的改用會員的名字顯示」——
+       同一個帳號可能幫家人約，寫名字才看得出是誰動的。查不到名字才退回「會員自己」。 */
+    const nm=memMap ? (typeof memMap==='function' ? memMap(v) : memMap[v]) : '';
+    const t=(nm&&typeof nm==='object')?(nm.name||''):(nm||'');
+    return t ? String(t) : '會員自己';
+  }
   if(v==='system') return '系統自動';
   if(v.indexOf('manual-fix')===0) return '後台修正';
   return (coachMap&&coachMap[v]) || '員工';
@@ -28300,15 +28307,18 @@ async function bkCardPop(el, b, btns, acts){
       const _badge=onLeave?'<span class="ash-mtag ash-mtag-leave">請假</span>'
         :(_noShow?'<span class="ash-mtag ash-mtag-ns">未到</span>'
         :(inHere?'<span class="ash-mtag ash-mtag-ok">已簽到</span>':''));
-      /* 操作紀錄（2026-08-25 使用者指示：「行事曆點課卡跳出的簡易課卡，會員卡上面
-         新增顯示操作時間跟由誰操作的」）——
-         ⚠ 寫「這一堂」不是「這個名額」：created_by／cancelled_by 記的是**整筆預約**，
-           團課後來才被加進名單的人沒有各自的時間戳，寫成「他是那時候被加進來的」會是謊。 */
-      const _opLine=(()=>{
-        const _c=`建立 ${bkActorLabel(b.created_by,cm)}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
+      /* 操作紀錄（2026-08-25 使用者指示：「會員卡上面新增顯示操作時間跟由誰操作的」）——
+         ⚠ 二修：**團課不畫在會員卡上**。created_by 記的是「這一堂課是誰開的」，
+           不是「這個人是誰加進來的」；團課的名額是後來陸續加的、沒有各自的時間戳。
+           畫在四張會員卡上，使用者看到的是「建立 RANDY」四次，讀起來就變成
+           「Randy 把郭祐竹加進來」—— 那是假的（他只是 7/28 開了這堂課）。
+           團課改畫在標題卡（那裡講的本來就是這一堂課），單人課才留在會員卡
+           —— 單人課的「這一堂」就等於「這個人的這一堂」，不會誤讀。 */
+      const _opLine=bkIsGroup(b)?'':(()=>{
+        const _c=`建立 ${bkActorLabel(b.created_by,cm,mm)}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
         const _x=(b.status==='cancelled')
-          ? `　取消 ${bkActorLabel(b.cancelled_by,cm)}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}` : '';
-        return `<div class="ash-mop"><i>這一堂</i>${escH(_c)}${_x?`<b>${escH(_x)}</b>`:''}</div>`;
+          ? `　取消 ${bkActorLabel(b.cancelled_by,cm,mm)}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}` : '';
+        return `<div class="ash-mop">${escH(_c)}${_x?`<b>${escH(_x)}</b>`:''}</div>`;
       })();
       return `<div class="ash-mrow">
           <div class="ash-mcard${onLeave?' ash-mleave':''}"${r.mid?` onclick="collapseBkCard();openMemberDetail('${r.mid}')"`:''}>
@@ -28323,6 +28333,8 @@ async function bkCardPop(el, b, btns, acts){
           <span class="ash-right">${String(b.start_time||'').replace(/^0/,'')}</span></div>
         ${/* 教練請假標移到右下角、教練名左邊（2026-08-20 使用者指示，與首頁課卡一致） */''}
         <div class="ash-meta"><span class="ash-mdate"><b>${String(b.date).slice(5).replace('-','/').replace(/^0/,'')}</b>（${wd}）</span><span class="ash-dot">・</span><span>${_dur} 分</span>${bkIsCoachLeave(b)?'<span class="admh-lvtag ash-lvtag">教練請假</span>':''}${_coachTxt}</div>
+        ${/* 團課：「這一堂課是誰開的」屬於整堂，畫在這裡而不是每張會員卡上（見 _opLine 的說明） */''}
+        ${bkIsGroup(b)?`<div class="ash-mop ash-crsop">${escH(`開課 ${bkActorLabel(b.created_by,cm,mm)}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`)}</div>`:''}
       </div>
       ${_memCards?`<div class="ash-mems">${_memCards}</div>`:''}`;
   }else{
@@ -39969,8 +39981,10 @@ function ppRecordHtml(){
             /* 操作紀錄（2026-08-25）：建立一定有；取消只有取消過的才畫。
                ⚠ 舊資料的 created_by／cancelled_by 可能是空的（0810 之前、或舊系統匯入），
                  那就誠實寫「沒有記錄」，不要猜。 */
-            const _opC=`建立 ${bkActorLabel(b.created_by,_cm)}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
-            const _opX=_cx?`取消 ${bkActorLabel(b.cancelled_by,_cm)}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}`:'';
+            const _mmn=c.memMap||{};
+            const _lb=bkIsGroup(b)?'開課':'建立';
+            const _opC=`${_lb} ${bkActorLabel(b.created_by,_cm,_mmn)}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
+            const _opX=_cx?`取消 ${bkActorLabel(b.cancelled_by,_cm,_mmn)}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}`:'';
             _rows+=`<div class="pp-bkrow${_cx?' pp-bkrow-cx':''}" style="--bkc:${col};">
               <div class="pp-bkdate"><b>${Number(String(b.date).slice(5,7))}/${Number(String(b.date).slice(8,10))}</b><span>（${wd}）</span></div>
               <div class="pp-bkmain"><div class="pp-bkname">${bookingTypeName(b,_tm)}${st?`<span class="pp-bktag ${st[1]}">${st[0]}</span>`:''}</div>
