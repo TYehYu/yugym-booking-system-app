@@ -167,9 +167,15 @@ console.log('\n入口：任何裝置、任何時候都要進得去');
 ok('★★ 帳號選單多一項「現場抽獎登記」（手機的抽屜也是同一份）',
    /id="acct-lotto" onclick="closeAcctMenu\(\);openLottoModal\(\)"/.test(src)
    && /現場抽獎登記<\/button>/.test(src));
-ok('★★ 只給櫃檯以上，而且 openLottoModal 自己也擋一次（不能只靠畫面沒畫按鈕）',
-   /_lot\.style\.display = \(typeof isDeskLike==='function' && isDeskLike\(\)\)\?'':'none';/.test(src)
-   && /if\(typeof isDeskLike==='function' && !isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可登記抽獎'\); return; \}/.test(src));
+/* 2026-08-25 使用者：「管理員的帳號資訊裡面怎麼會有抽獎登記　不需要吧」「手機端」——
+   登記是站在櫃檯的人的動作；管理員在桌機首頁有滑出鈕、改獎品在今日營收那一列。 */
+ok('★★ 選單項只給櫃檯設備帳號與店長，管理員不畫',
+   /_lot\.style\.display = \(role==='front_desk' \|\| !!\(SESSION&&SESSION\.is_manager\)\)\?'':'none';/.test(src));
+ok('★★ openLottoModal 自己那道權限不動（不能只靠畫面沒畫按鈕）',
+   /if\(typeof isDeskLike==='function' && !isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可登記抽獎'\); return; \}/.test(src));
+ok('　　管理員仍有路：桌機首頁的滑出鈕（有人可抽時）＋今日營收那一列改獎品',
+   /const lottoFab=\(!isMobileLayout\(\)&&_lotEls\.length\)/.test(src)
+   && /onclick="lottoFixAsk\('\$\{r\.lot\}','rev'\)"/.test(src));
 /* 2026-08-24 二修（使用者：「這邊不用再提示了」）——改獎品的入口已經在今日營收那一列，
    這顆就只剩提醒功能，沒人可抽時不需要一直掛在畫面上。 */
 ok('★★ 首頁那顆鈕回到「有人可抽才出現」',
