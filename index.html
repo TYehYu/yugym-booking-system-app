@@ -10253,8 +10253,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.1401';
-const APP_VERSION_LABEL='v260825.1401';
+const APP_VERSION = '260825.1405';
+const APP_VERSION_LABEL='v260825.1405';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28013,8 +28013,13 @@ async function expandBkCard(el, id){
     btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkAddMemberOpen('${id}')`,'plus','新增');
   /* ③-b 「未到課」（金；2026-08-14 使用者指示）：
      ・教練請假堂 → 結課退堂、不發點（bkCoachLeaveNoShow）
-     ・一般自主訓練 → 結課蓋「未」章、點數照扣（bkSelfNoShow）
-     時間未到的防線在各自函式裡。 */
+     ・其餘單人課 → 結課蓋「未」章、堂數照扣（bkMarkNoShow）
+     時間未到的防線在各自函式裡。
+     ⚠ 2026-08-25 使用者回報「今天陳世勳未出席，為什麼圓形按鈕沒有按鈕可以按」——
+       0814 這一顆只做給**自主訓練**（條件寫著 bkIsSelf(b)），教練課、友善教練課、
+       體驗全都沒有。櫃檯遇到客人沒來只剩兩條爛路：假簽到，或取消（會把堂數退回去、
+       客人等於白賺一堂）。條件放寬成「非團課、還在預約中、不是教練請假堂」。
+       團課不走這顆：名額各自有簽到／請假，那是另一套。 */
   /* ③-c 「取消未到課」（2026-08-23 使用者回報：黃柏瑜 8/23 記錯時間，櫃檯已標未到課，
      課卡就被鎖住改不了 —— 標未到課會把 status 寫成 completed，_editable 的
      `!closed` 因此不成立，改期／取消／代課整排都消失）。
@@ -28022,7 +28027,7 @@ async function expandBkCard(el, id){
        與上面那兩顆（還沒標）互斥，不會同時出現兩顆金鈕。 */
   if(!_calCtx && (staff||coachCk) && b.no_show===true) btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkUndoNoShow('${id}')`,'noshow','取消未到課');
   else if(!_calCtx && (staff||coachCk) && b.status==='coach_leave') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkCoachLeaveNoShow('${id}')`,'noshow','未到課');
-  else if(!_calCtx && (staff||coachCk) && bkIsSelf(b) && !bkIsCoachLeave(b) && !isGroup && b.status==='booked') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkSelfNoShow('${id}')`,'noshow','未到課');
+  else if(!_calCtx && (staff||coachCk) && !bkIsCoachLeave(b) && !isGroup && b.status==='booked') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkMarkNoShow('${id}')`,'noshow','未到課');
   // ④ 取消（紅；教練只能取消自己的課；2026-08-20 起管理員手機改掛在會員卡上）
   /* 非團課的取消／簽到擺回下方那一排（2026-08-21 使用者指示）——
      單人課只有一張會員卡，右邊掛兩顆圓鈕等於為了兩顆按鈕把卡撐到 100px 高；
@@ -28837,23 +28842,36 @@ async function bkCoachLeaveNoShow(id){ return onceAct('clvnoshow:'+id, async()=>
    然後標示金色在課卡右下角[未]」）—— 結課並蓋金色「未」章。
    與教練請假的未到課不同：這裡「不退點」——會員自己約了沒來，點數照用
    （教練請假那邊退堂是因為課上不成是館方的事）。 */
-async function bkSelfNoShow(id){ return onceAct('selfnoshow:'+id, async()=>{
+/* 客人沒來（2026-08-25 一般化，原本叫 bkSelfNoShow、只吃自主訓練）——
+   ⚠ 這一堂會被結成 completed，也就是**照扣、算進銷課金額、算教練堂數**：
+     人沒來，但教練到了、時段也被佔掉了。這與自主訓練 0814 起的做法一致
+     （那邊的措辭是「點數照扣」），不是新政策，只是同一條規則套到其餘課別。
+     要「不算」的話那是取消（會退堂數），不是未到課。
+   ⚠ 團課不走這裡：名額各自有簽到／請假，那是另一套。 */
+async function bkMarkNoShow(id){ return onceAct('selfnoshow:'+id, async()=>{
   try{
     const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
-    if(!(bkIsSelf(b)&&!bkIsCoachLeave(b))||b.status!=='booked'){ showToast('只有預約中的自主訓練可以標未到課'); return; }
+    if(bkIsCoachLeave(b)){ showToast('教練請假的堂請用「未到場結課」'); return; }
+    if(bkIsGroup(b)){ showToast('團體課請在名單上逐位處理'); return; }
+    if(b.status!=='booked'){ showToast('只有還在預約中的課可以標未到課'); return; }
     const slotDt=new Date(b.date+'T'+b.start_time+':00');
     if(new Date()<slotDt){ showToast('課程時間還沒到，還不能標未到課'); return; }
+    /* 措辭跟著課別走，但括號裡那句要留得住 —— bkUndoNoShow 靠它認出「當初沒碰票」。 */
+    const _unit=bkIsSelf(b)?'點數':'堂數';
+    const _lb=(b.category||'這一堂');
     b.status='completed';
     b.no_show=true;
     b.note=String(b.note||'').trim()
-      ? String(b.note).trim()+`\n${ymd(TODAY)} 自主訓練未到課（點數照扣）`
-      : `${ymd(TODAY)} 自主訓練未到課（點數照扣）`;
+      ? String(b.note).trim()+`\n${ymd(TODAY)} ${_lb}未到課（${_unit}照扣）`
+      : `${ymd(TODAY)} ${_lb}未到課（${_unit}照扣）`;
     await dbPut('bookings',b);
     collapseBkCard();
-    showToast('已標記未到課（點數照扣，不退回）');
+    showToast(`已標記未到課（${_unit}照扣，不退回）`);
     navTo(CUR_PAGE);
   }catch(e){ showToast('標記失敗：'+(e&&e.message?e.message:e)); }
 }); }
+/* 舊名字留著：0814～0825 之間可能還有別處在呼叫 */
+function bkSelfNoShow(id){ return bkMarkNoShow(id); }
 /* 取消未到課（2026-08-23 使用者回報）——
    「今天有一個客戶黃柏瑜記錯時間，預約表 9:00 後來改約 12:00，但是已經被櫃檯標示未到課，
      就被鎖定無法再修改。讓這種未到課有取消修改的功能，以免客戶只是忘記時間。」
@@ -28877,7 +28895,7 @@ async function bkUndoNoShow(id){ return onceAct('undonoshow:'+id, async()=>{
     const _wasLeave=/教練請假堂未到場結課/.test(_note);
     /* 備註只清掉當初自動加的那一行，人工寫的其他行要留著 */
     const _clean=_note.split('\n')
-      .filter(l=>!/未到場結課（堂數退回、不發點數）/.test(l) && !/自主訓練未到課（點數照扣）/.test(l))
+      .filter(l=>!/未到場結課（堂數退回、不發點數）/.test(l) && !/未到課（(點數|堂數)照扣）/.test(l))
       .join('\n').trim();
     let _rededucted=null;   // null＝不需要扣回；true/false＝扣回成功與否
     if(_wasLeave && b.ticket_id){

@@ -114,16 +114,33 @@ ok('★★ 請假堂不顯示代課（復原入口在明細）',
    && /教練請假的堂不顯示代課/.test(src));
 ok('★ noshow 圖示已註冊', /noshow:`<svg viewBox="0 0 24 24"/.test(src));
 
-console.log('\n自主訓練未到課（2026-08-14 使用者指示：金色圓鈕＋課卡右下角金色「未」章）');
-ok('★★ 自主訓練預約中有金色「未到課」圓鈕 → bkSelfNoShow',
-   /else if\(!_calCtx && \(staff\|\|coachCk\) && bkIsSelf\(b\) && !bkIsCoachLeave\(b\) && !isGroup && b\.status==='booked'\) btns \+= evoBtn\('evo-b2','evo-gold',`collapseBkCard\(\);bkSelfNoShow\('\$\{id\}'\)`,'noshow','未到課'\);/.test(src));   // 2026-08-19 行事曆情境不放
-ok('★★ bkSelfNoShow＝completed＋no_show 旗標、點數照扣不退',
-   (()=>{ const i2=src.indexOf('async function bkSelfNoShow');
-     const F=src.slice(i2, src.indexOf('\n/* 復原教練請假', i2));
+console.log('\n未到課（2026-08-14 金色圓鈕＋課卡右下角金色「未」章；0825 擴到所有單人課）');
+/* 2026-08-25 使用者回報「今天陳世勳未出席，為什麼圓形按鈕沒有按鈕可以按」——
+   0814 這一顆的條件寫著 bkIsSelf(b)，所以只有自主訓練有；教練課、友善教練課、體驗
+   全都沒有。櫃檯遇到客人沒來只剩假簽到或取消（取消會把堂數退回去）。 */
+ok('★★ 所有單人課（預約中、非教練請假堂）都有金色「未到課」圓鈕 → bkMarkNoShow',
+   /else if\(!_calCtx && \(staff\|\|coachCk\) && !bkIsCoachLeave\(b\) && !isGroup && b\.status==='booked'\) btns \+= evoBtn\('evo-b2','evo-gold',`collapseBkCard\(\);bkMarkNoShow\('\$\{id\}'\)`,'noshow','未到課'\);/.test(src)
+   && !/bkIsSelf\(b\) && !bkIsCoachLeave\(b\) && !isGroup && b\.status==='booked'\) btns/.test(src));   // 2026-08-19 行事曆情境不放
+ok('★★ bkMarkNoShow＝completed＋no_show 旗標、堂數照扣不退',
+   (()=>{ const i2=src.indexOf('async function bkMarkNoShow');
+     const F=src.slice(i2, src.indexOf('\n/* 舊名字留著', i2));
      return i2>=0 && /b\.status='completed';/.test(F) && /b\.no_show=true;/.test(F)
-       && !/refundTicket/.test(F) && /點數照扣/.test(F); })());
+       && !/refundTicket/.test(F) && /照扣/.test(F); })());
+ok('★★ 團課與教練請假堂各自擋掉（那是另外兩套流程）',
+   (()=>{ const i2=src.indexOf('async function bkMarkNoShow');
+     const F=src.slice(i2, src.indexOf('\n/* 舊名字留著', i2));
+     return /if\(bkIsCoachLeave\(b\)\)\{ showToast\('教練請假的堂請用「未到場結課」'\)/.test(F)
+       && /if\(bkIsGroup\(b\)\)\{ showToast\('團體課請在名單上逐位處理'\)/.test(F); })());
+ok('★★ 時間還沒到不給標（防手滑）',
+   (()=>{ const i2=src.indexOf('async function bkMarkNoShow');
+     const F=src.slice(i2, src.indexOf('\n/* 舊名字留著', i2));
+     return /if\(new Date\(\)<slotDt\)\{ showToast\('課程時間還沒到，還不能標未到課'\); return; \}/.test(F); })());
+ok('　　舊名字留著（0814～0825 之間可能還有別處在呼叫）',
+   /function bkSelfNoShow\(id\)\{ return bkMarkNoShow\(id\); \}/.test(src));
+ok('★★ 復原（bkUndoNoShow）認得出新的措辭，不然 note 會留一行殘骸',
+   /!\/未到課（\(點數\|堂數\)照扣）\/\.test\(l\)/.test(src));
 ok('★★ 教練請假未到場結課也記 no_show 旗標', (()=>{ const i2=src.indexOf('async function bkCoachLeaveNoShow');
-     const F=src.slice(i2, src.indexOf('\n/* 自主訓練・未到課', i2));
+     const F=src.slice(i2, src.indexOf('\n/* 客人沒來', i2));
      return i2>=0 && /b\.no_show=true;/.test(F); })());
 ok('★★ 課卡右下角金色「未」章（優先於綠色簽章）',
    /b\.no_show===true && b\.status!=='cancelled' && !hideMember\)\n\s*\? `<span class="evc-check evc-noshow" title="未到課">未<\/span>`/.test(src)
