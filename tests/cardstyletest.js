@@ -580,9 +580,24 @@ ok('★★ 日期改成月曆：白底、七欄格線、翻月與翻年',
    && /<div class="adp-cal">\$\{cells\}<\/div>/.test(src)
    && /onclick="ashDateMove\(-12\)"/.test(src) && /onclick="ashDateMove\(1\)"/.test(src)
    && /function ashDateMove\(n\)\{/.test(src));
-ok('　　點一天就選好、直接關窗（沿用既有的 ashDatePick，含下限檢查）',
-   /onclick="ashDatePick\('\$\{ds\}'\)"/.test(src)
-   && /if\(c\.min && ds<c\.min\)\{ showToast\('不能選這一天'\); return; \}/.test(src));
+/* 2026-08-25 二修使用者指示：「今天的按鈕改到上面　今天的位子改成確定綠色底」——
+   點一天改成只是「選起來」，按確定才寫回去。月曆一格才 40px 見方，滑動很容易誤觸；
+   滾輪那一版本來就有確定鈕，改成月曆不該把這道保險拿掉。 */
+ok('★★ 點一天只是選起來（不關窗），確定才寫回欄位',
+   /onclick="ashDateSel\('\$\{ds\}'\)"/.test(src)
+   && /function ashDateSel\(ds\)\{/.test(src)
+   && /function ashDateOk\(\)\{/.test(src)
+   && /if\(!c\.sel\)\{ showToast\('請先選一天'\); return; \}/.test(src)
+   && /ashDatePick\(c\.sel\);/.test(src));
+ok('★★ 下面那一排是「取消／確定（綠）」，今天搬到導覽列最左',
+   /<button class="btn btn-green" onclick="ashDateOk\(\)">確定<\/button>/.test(src)
+   && /<button type="button" class="adp-todaybtn" onclick="ashDateSel\('\$\{today\}'\)">今天<\/button>/.test(src)
+   && !/onclick="ashDatePick\('\$\{today\}'\)"/.test(src));
+ok('　　選了會跳到那一天所在的月份（按「今天」就翻回今天那個月）',
+   /c\.sel=ds;\s*\n\s*const d=parseYmd\(ds\); if\(d\)\{ c\.y=d\.getFullYear\(\); c\.m=d\.getMonth\(\); \}/.test(src));
+ok('　　下限檢查兩邊都有（選的時候擋、寫回去再擋一次）',
+   /if\(c\.min && ds<c\.min\)\{ showToast\('不能選這一天'\); return; \}/.test(src)
+   && (src.match(/showToast\('不能選這一天'\)/g)||[]).length===2);
 ok('　　早於下限的畫得出來但按不動（不能用就寫原因，別藏起來）',
    /const bad=!!\(c\.min && ds<c\.min\);/.test(src)
    && /<span class="\$\{cls\}" title="不能選這一天">/.test(src)

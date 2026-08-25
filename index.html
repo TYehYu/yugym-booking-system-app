@@ -3156,7 +3156,14 @@ tr:hover td{background:var(--card2);}
    與行事曆日期列、首頁七天欄同一套語彙（紅>金>綠 裡的「選取用金」）。 */
 #adp-sheet .adp-box.adp-box-cal{background:#fff;width:min(360px,94vw);}
 .adp-cal-nav{display:flex;align-items:center;gap:4px;margin:-2px 0 10px;}
-.adp-cal-nav .adp-cal-t{flex:1;text-align:center;font-size:15px;font-weight:800;
+/* 「今天」＝跳到今天，跟翻月翻年同一級，所以做成同高的膠囊、擺在導覽列最左 */
+.adp-todaybtn{flex:none;height:30px;padding:0 11px;border-radius:9px;border:1px solid var(--bd);
+  background:#fff;color:var(--green);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
+  margin-right:2px;}
+.adp-todaybtn:hover{background:var(--card2);}
+.adp-todaybtn:active{transform:scale(.94);}
+.adp-cal-nav .adp-cal-t{flex:1;min-width:0;text-align:center;font-size:14.5px;font-weight:800;
+  white-space:nowrap;
   color:var(--text);font-family:var(--num),inherit;letter-spacing:.02em;}
 .adp-nav{flex:none;width:30px;height:30px;border-radius:9px;border:1px solid var(--bd);
   background:#fff;color:var(--green);font-size:14px;line-height:1;cursor:pointer;font-family:inherit;}
@@ -10288,8 +10295,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.1752';
-const APP_VERSION_LABEL='v260825.1752';
+const APP_VERSION = '260825.1758';
+const APP_VERSION_LABEL='v260825.1758';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -32005,11 +32012,15 @@ function ashDateRender(){
       bad?'adp-c-off':'' ].filter(Boolean).join(' ');
     cells+=bad
       ? `<span class="${cls}" title="不能選這一天">${d}</span>`
-      : `<button type="button" class="${cls}" onclick="ashDatePick('${ds}')">${d}</button>`;
+      : `<button type="button" class="${cls}" onclick="ashDateSel('${ds}')">${d}</button>`;
   }
   host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
     <div class="adp-box adp-box-cal"><div class="modal-title">選擇日期</div>
+      ${/* 「今天」搬到上面（2026-08-25 使用者指示）—— 它是「跳到今天」，
+           跟翻月翻年是同一件事（都在換看哪一段時間），本來就該跟導覽在一起；
+           擺在下面那一排會跟「取消／確定」混成同一級，看起來像是送出用的鈕。 */''}
       <div class="adp-cal-nav">
+        <button type="button" class="adp-todaybtn" onclick="ashDateSel('${today}')">今天</button>
         <button type="button" class="adp-nav" onclick="ashDateMove(-12)" title="上一年">«</button>
         <button type="button" class="adp-nav" onclick="ashDateMove(-1)" title="上個月">‹</button>
         <b class="adp-cal-t">${y} 年 ${m+1} 月</b>
@@ -32018,10 +32029,29 @@ function ashDateRender(){
       </div>
       <div class="adp-cal-wd">${'日一二三四五六'.split('').map(w=>`<span>${w}</span>`).join('')}</div>
       <div class="adp-cal">${cells}</div>
+      ${/* 下面這一排只留「取消／確定」（2026-08-25 使用者指示：「今天的位子改成確定綠色底」）
+           —— 點日子改成只是「選起來」，按了確定才真的寫回去。
+           為什麼要多這一步：月曆上一格才 40px 見方，滑動時很容易誤觸；
+           滾輪那一版本來就有確定鈕，改成月曆不該把這道保險拿掉。 */''}
       <div class="adp-foot">
         <button class="btn btn-ghost" onclick="ashDateClose()">取消</button>
-        <button class="btn btn-ghost" onclick="ashDatePick('${today}')">今天</button>
+        <button class="btn btn-green" onclick="ashDateOk()">確定</button>
       </div></div>`;
+}
+/* 點一天＝只是選起來（不關窗）。順手把視窗跳到那一天所在的月份 ——
+   按「今天」時就會直接翻回今天那個月。 */
+function ashDateSel(ds){
+  const c=window._adpCtx; if(!c) return;
+  if(c.min && ds<c.min){ showToast('不能選這一天'); return; }
+  c.sel=ds;
+  const d=parseYmd(ds); if(d){ c.y=d.getFullYear(); c.m=d.getMonth(); }
+  ashDateRender();
+}
+/* 確定才寫回欄位（ashDatePick 內含下限檢查與關窗） */
+function ashDateOk(){
+  const c=window._adpCtx; if(!c) return;
+  if(!c.sel){ showToast('請先選一天'); return; }
+  ashDatePick(c.sel);
 }
 /* 翻月／翻年：n 是月數（±12 就是換年）。只動視窗，選取的那一天不變 —— 
    翻過去只是「看看別的月份」，沒點就沒選。 */
