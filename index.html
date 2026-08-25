@@ -3617,6 +3617,21 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 .pp-head-m2 .pp-idfields .pp-meta-v,.pp-head-m2 .pp-fields .pp-meta-v{text-align:right;}
 .pp-head-m2 .pp-head-act{grid-column:1/-1;}
 .pp-head-m2 .pp-head-act .btn{flex:1;}
+/* 詳細資料的開合鈕（2026-08-25 使用者指示：平常只留大頭照與姓名那一列）——
+   整列可點、字寫清楚（不是一顆光禿禿的箭頭，那沒人知道點下去會怎樣）。
+   收起來時整張抬頭只剩兩列，票券第一張就在第一屏。 */
+.pp-head-m2 .pp-headtg{grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:7px;
+  width:100%;margin:-2px 0 0;padding:7px 0;background:transparent;border:none;cursor:pointer;
+  font-family:inherit;font-size:12px;font-weight:700;color:var(--t2);letter-spacing:.04em;
+  border-radius:9px;transition:background .14s,color .14s;}
+.pp-head-m2 .pp-headtg:hover{background:var(--card2);color:var(--text);}
+.pp-head-m2 .pp-headtg:active{transform:scale(.99);}
+.pp-head-m2 .pp-headtg .pp-headtg-c{width:0;height:0;flex:none;
+  border-left:4.5px solid transparent;border-right:4.5px solid transparent;
+  border-top:5.5px solid currentColor;transition:transform .16s;}
+.pp-head-m2 .pp-headtg.on .pp-headtg-c{transform:rotate(180deg);}
+/* 收起來時上面那條分隔線就多餘了（它原本是用來隔開姓名列與欄位區的） */
+.pp-head-m2:not(.pp-head-open) .pp-idtop{border-bottom:none;padding-bottom:2px;}
 /* 活動紀錄：一列按鈕，點了下方換內容（取代「一行一個入口＋返回」） */
 /* 四顆平分整列（2026-08-20 使用者回報最右邊的「訓練紀錄」被切掉）——
    原本是固定寬度＋橫向捲動，四顆加起來比卡片內寬還長，最後一顆就露不出來。 */
@@ -10222,8 +10237,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.1133';
-const APP_VERSION_LABEL='v260825.1133';
+const APP_VERSION = '260825.1318';
+const APP_VERSION_LABEL='v260825.1318';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38756,7 +38771,19 @@ function ppHeaderHtml(){
        原本大頭照＋姓名都塞在左欄，左邊被壓得又高又密，右欄卻從最上面就開始列欄位。
        改成大頭照與姓名獨立一列（橫跨兩欄），底下才分左右；等級章跟著姓名走，
        左右就各是四列，重量自然平衡。 */
-    return `<div class="pp-head pp-head-m2${_selfPP?' pp-head-self':''}">
+    /* 詳細資料預設收起（2026-08-25 使用者指示：「會員資料視窗的詳細資料可以收納嗎，
+       需要編輯再打開，平常只要顯示大頭照跟姓名就這列好」）——
+       這一塊是固定在上方不捲的，佔多少高度就等於永久少掉多少可讀區（0822 已經收過一輪
+       內距與大頭照）。真正每天在看的是下面的票券與預約，抬頭只要認得出是誰就夠了。
+       ⚠ 只收櫃檯／管理員看別人的那一種。**會員看自己的不收** —— 他點進來就是要改
+         性別／生日／緊急聯絡人，收起來等於多一步。
+       狀態放 window（不進資料庫）：換一位會員時 openPersonProfile 會歸零，
+       所以每次打開都是收好的；在同一位身上編輯欄位觸發重畫則維持展開。 */
+    const _hOpen = _selfPP || !!window._ppHeadOpen;
+    const _hTg = _selfPP ? '' : `<button type="button" class="pp-headtg${_hOpen?' on':''}"
+        onclick="ppHeadToggle()" aria-expanded="${_hOpen?'true':'false'}">
+        <span>${_hOpen?'收合詳細資料':'詳細資料'}</span><i class="pp-headtg-c"></i></button>`;
+    return `<div class="pp-head pp-head-m2${_selfPP?' pp-head-self':''}${_hOpen?' pp-head-open':''}">
       <div class="pp-idtop">
         ${_avatar}
         <div class="pp-idname">
@@ -38764,12 +38791,13 @@ function ppHeaderHtml(){
           <div class="pp-meta pp-idtier">${_selfPP?'':tierItem}</div>
         </div>
       </div>
+      ${_hTg}
       ${/* 會員本人（2026-08-22 使用者指示）：一列一列的白底可點欄位 ——
              性別／生日／緊急聯絡人／載具。LINE 綁定與通知開關都在「通知設定」那邊了，
              這裡不重複放。電話與姓名是帳號資料，唯讀。 */''}
-      <div class="pp-meta pp-idfields">${phoneItem}${genderItem}${bdayItem}${_selfPP?'':lineItem}</div>
+      ${_hOpen?`<div class="pp-meta pp-idfields">${phoneItem}${genderItem}${bdayItem}${_selfPP?'':lineItem}</div>
       <div class="pp-meta pp-fields">${_selfPP?'':coachItem}${ecItem}${carrierItem}${famItem}</div>
-      ${act?`<div class="pp-head-act">${act}</div>`:''}
+      ${act?`<div class="pp-head-act">${act}</div>`:''}`:''}
     </div>`;
   }
   return `<div class="pp-head">
@@ -40456,6 +40484,12 @@ function ppBodyHtml(){
 }
 /* 員工編輯區＝基本資料＋身份設定合併（2026-07-27 使用者指示；系統資料整區移除） */
 function ppEmpEditSecs(){ const S=PP_SCHEMA.employee||{}; return (S.basic||[]).concat(S.ident||[]); }
+/* 表頭詳細資料的開合（2026-08-25）——純畫面切換，不重載資料：
+   ppLoadCtx 一次要載 8 張表，開個合就重載一次會把 0823 修好的效能又賠回去。 */
+function ppHeadToggle(){
+  window._ppHeadOpen=!window._ppHeadOpen;
+  try{ ppRenderBody(); }catch(_){}
+}
 function ppRenderBody(){
   const host=document.getElementById('pp-host');
   if(!host) return;
@@ -40593,6 +40627,7 @@ async function openPersonProfile(kind, id, backPage){
      2026-08-23：使用者回報「還是很慢」。改成每一段各自計時、把耗時最久的那一段
      寫在遮罩文字與 console 上 —— 與其猜是哪一段，不如讓它自己說。
      ⚠ 只加量測，不改任何載入邏輯；量完就知道要往哪裡優化。 */
+  window._ppHeadOpen=false;   /* 換一位就把表頭的詳細資料收回去（2026-08-25） */
   const _t0=Date.now(); const _mark={};
   const _statFrom=(window._dbStat||[]).length;   // 這一次操作抓了哪些表（見 dbStat()）
   const _whyFrom=(window._dbWhy||[]).length;

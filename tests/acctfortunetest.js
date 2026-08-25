@@ -261,7 +261,7 @@ const ph=g('function ppHeaderHtml(){','\n// ══════ Tabs ════
 /* 0821 放寬到櫃檯以上（含店長）：版面本身跟權限無關，能不能改名／刪除各自另有判斷 */
 /* 2026-08-22：會員本人（_selfPP）也走同一套版面，所以條件多了一個分支 */
 ok('★ 櫃檯以上（與會員本人）看會員資料一律走新版面（手機與桌機同一套）',
-   /if\(isM && \(_selfPP \|\| \(typeof isDeskLike==='function' \? isDeskLike\(\) : \(SESSION && SESSION\.role==='admin'\)\)\)\)\{[\s\S]{0,600}return `<div class="pp-head pp-head-m2/.test(ph)
+   /if\(isM && \(_selfPP \|\| \(typeof isDeskLike==='function' \? isDeskLike\(\) : \(SESSION && SESSION\.role==='admin'\)\)\)\)\{[\s\S]{0,2200}return `<div class="pp-head pp-head-m2/.test(ph)
    && !/isMobileLayout\(\)\)\{[\s\S]{0,80}pp-head-m2/.test(ph));
 ok('★ 大頭照＋姓名獨立一列、橫跨兩欄（使用者回報左右失衡）',
    /<div class="pp-idtop">\s*\n\s*\$\{_avatar\}[\s\S]{0,260}<div class="pp-meta pp-idtier">\$\{_selfPP\?'':tierItem\}<\/div>/.test(ph)
