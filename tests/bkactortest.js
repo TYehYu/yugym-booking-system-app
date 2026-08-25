@@ -81,6 +81,19 @@ ok('★ 會員名字帶得進去（cm 之外多一個 mm）',
    /bkActorLabel\(b\.created_by,cm,mm\)/.test(src) && /bkActorLabel\(b\.cancelled_by,cm,mm\)/.test(src));
 ok('★ 取消那一段同樣用紅色', /\.ash-mop b\{color:var\(--danger/.test(src));
 
+console.log('\n取消人留得住（0825 使用者回報「顯示沒有紀錄」）');
+/* 成因：前端備援取消路徑對同一筆連寫兩次 ——
+   ① status+cancelled_at（觸發器填上取消人）② 再補 refund_waived，送的是取消前讀的
+   那份 b（沒有 cancelled_by），第二次 old.status 已是 cancelled、觸發器跳過 → 被蓋回 null。 */
+const CB=src.slice(src.indexOf('async function cancelBooking(id, refundMode, opts){'),
+                   src.indexOf('let refundedCount=0, refundMissed=false;'));
+ok('★★ 取消只寫一次（status／cancelled_at／refund_waived 一起送）',
+   (CB.match(/await dbPut\('bookings',b\);/g)||[]).length===1
+   && /b\.status='cancelled';\s*\n\s*b\.cancelled_at=new Date\(\)\.toISOString\(\);\s*\n\s*b\.refund_waived = !doRefund;/.test(CB));
+ok('★★ 退不退要在寫回之前算完（不然沒辦法併成一次）',
+   CB.indexOf('let doRefund;') < CB.indexOf("b.status='cancelled';"));
+ok('　　為什麼併成一次寫在原地', /少一整類「用舊物件覆蓋新欄位」的坑/.test(CB));
+
 console.log('\n欄位撈得到（LEAN_DROP 沒把它們丟掉）');
 const LD=src.slice(src.indexOf('const LEAN_DROP={'), src.indexOf('const _leanSel=new Map()'));
 ok('★★ created_by 與 cancelled_by 都不在 bookings 的精簡清單裡（丟掉就整排變「沒有記錄」）',

@@ -10253,8 +10253,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.1405';
-const APP_VERSION_LABEL='v260825.1405';
+const APP_VERSION = '260825.1510';
+const APP_VERSION_LABEL='v260825.1510';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -32821,17 +32821,20 @@ async function cancelBooking(id, refundMode, opts){
     }
   }
 
-  b.status='cancelled';
-  b.cancelled_at=new Date().toISOString();
-  await dbPut('bookings',b);
-
-  // 決定是否退票
+  // 決定是否退票（要在寫回之前算完 —— 見下面「只寫一次」的說明）
   const hrs=hoursUntilStart(b);
   const within24 = hrs < 24;        // 24 小時內取消
   let doRefund;
   if(refundMode==='force') doRefund=true;
   else if(refundMode==='none') doRefund=false;
   else doRefund = true;             // auto：目前政策一律退課（2026-07-28 使用者定案，暫停 24h 扣課）
+  /* 只寫一次（2026-08-25 使用者回報「剛剛從我手機端取消這堂課，但為什麼顯示沒有紀錄」）——
+     原本這裡連寫兩次：先 status＋cancelled_at，再補 refund_waived。第二次送的是
+     **記憶體裡那份 b**（取消前讀的，沒有 cancelled_by），於是 DB 觸發器剛填好的
+     取消人被蓋回 null。DB 那邊已經改成「已取消且送進來是空的就沿用舊值」，
+     這裡再把兩次併成一次 —— 少一次寫入，也少一整類「用舊物件覆蓋新欄位」的坑。 */
+  b.status='cancelled';
+  b.cancelled_at=new Date().toISOString();
   b.refund_waived = !doRefund;      // 記錄是否扣課不退（供補課券判斷）
   await dbPut('bookings',b);
 
