@@ -63,6 +63,15 @@ ok('★ 換過去的數量對得上：22 個呼叫點＋1 個定義',
 ok('　　需要「整個會員物件」的那五頁維持原樣（都是櫃檯以上的頁面，教練走不到）',
    (src.match(/Object\.fromEntries\(members\.map\(m=>\[m\.id,m\]\)\)/g)||[]).length===5);
 
+console.log('\n名字放開了，資料沒有跟著放開');
+ok('★★ 教練點到別的教練的學員 → dbGet 回 null，要寫清楚為什麼看不到，不是白畫面',
+   /if\(!m\)\{\s*\n\s*showModal\(`<div class="modal-title">看不到這位會員的資料<\/div>/.test(src)
+   && /你看得到的是<b>自己帶過的學員<\/b>/.test(src));
+ok('★★ 這是刻意的界線寫在原地（名字放開是為了排課看得懂，資料沒跟著放開）',
+   /這是刻意的界線，不是 bug：名字放開是為了排課看得懂，資料沒有跟著放開/.test(src));
+ok('★ 櫃檯以上照舊走完整的會員資料頁（不受影響）',
+   /if\(isDeskLike\(\)\) return openPersonProfile\('member', member_id\);/.test(src));
+
 console.log('\n來由');
 ok('★ 甲乙兩案與否決理由寫在原地',
    /甲　放寬 members_select/.test(src) && /等於連電話、生日、\s*\n\s*緊急聯絡人、備註都一起開/.test(src));

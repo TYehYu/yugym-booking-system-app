@@ -10250,8 +10250,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.1331';
-const APP_VERSION_LABEL='v260825.1331';
+const APP_VERSION = '260825.1336';
+const APP_VERSION_LABEL='v260825.1336';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -33488,6 +33488,19 @@ async function openMemberDetail(member_id){
   const[m,coaches,tickets,bookings,types,purchases,tkLogs]=await Promise.all([
     dbGet('members',member_id),dbGetAll('coaches'),dbGetAll('member_tickets'),dbGetAll('bookings'),dbGetAll('ticket_types'),dbGetAll('purchases').catch(()=>[]),
     dbGetAll('ticket_logs').catch(()=>[])]);   // 團課扣課紀錄（2026-07-31，見 grpTicketAlloc）
+  /* 教練只讀得到自己帶過的學員（members 的 RLS：can_coach_see_member）——
+     2026-08-25：行事曆放開名字之後，教練點得到別的教練的學員名片，而 dbGet 會回 null，
+     原本會一路往下丟例外變成白畫面。看不到就寫清楚為什麼看不到（0823 定的語彙）。
+     ⚠ 這是刻意的界線，不是 bug：名字放開是為了排課看得懂，資料沒有跟著放開。 */
+  if(!m){
+    showModal(`<div class="modal-title">看不到這位會員的資料</div>
+      <div class="ash-einote">你看得到的是<b>自己帶過的學員</b>。這一位目前不是你的學員，
+        所以查不到她的票券與聯絡方式。<br>
+        行事曆上看得到名字與上課時間，是為了排課看得懂，資料本身沒有跟著開放。</div>
+      <div class="ash-einote">需要她的資料請找櫃檯。</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">知道了</button></div>`);
+    return;
+  }
   // 會員升降級（自動制）：確保等級快取就緒（此頁本就載入全部 bookings，順手重算）
   window._memberTierCache=Object.assign(computeMemberTiers(bookings,await dbGetAll('members').catch(()=>[])),{__ready:true});
   const myPurchases=(purchases||[]).filter(p=>p.member_id===member_id).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
