@@ -268,12 +268,19 @@ ok('★ 已經請假的不重複給（只在還沒請假時出現）', /canCoach
 ok('　　復原留在上一層（請假後變自主訓練，代課視窗根本進不去）',
    /acts\.sub 的條件不成立、代課視窗進不去，放那裡等於藏起來/.test(src));
 
-console.log('\n代課清單用教練自己的顏色（使用者：教練們的白框 用該教練的顏色）');
-ok('★ 每列吃 coachTagColor（與課卡標籤同一組色）',
-   /const cc=\(typeof coachTagColor==='function'\)\?coachTagColor\(c\.id\):/.test(src)
-   && /background:\$\{cc\.bg\};--ash-co-fg:\$\{cc\.fg\};/.test(src));
-ok('★ 文字色跟著換，淡底上才讀得清楚',
-   /\.ash-eirow\.ash-ei-co \.ash-eilb\{color:var\(--ash-co-fg,var\(--text\)\);\}/.test(css));
+console.log('\n代課清單（2026-08-25 使用者指示：「這邊移除教練的顏色」）');
+/* 0821 曾經反過來（「教練們的白框 用該教練的顏色」，想接上課表的顏色記憶），
+   但十位教練整排淡色鋪滿之後，這張清單看起來像色卡而不是選單，名字反而變難掃。 */
+ok('★★ 退回白框：這張清單不再吃 coachTagColor、也不再寫行內底色',
+   (()=>{ const i=src.indexOf('async function ashSubPick(bid){');
+     const F=src.slice(i, src.indexOf('\n/* 復原前先問一次', i)>i?src.indexOf('\n/* 復原前先問一次', i):i+4000);
+     return i>0 && !/coachTagColor/.test(F) && !/--ash-co-fg/.test(F); })());
+ok('★★ 目前的代課教練仍然標得出來（靠副標文字，不靠顏色）',
+   /row\(`closeModal\(\);bkOrbitSubSet\('\$\{bid\}','\$\{c\.id\}'\)`, escH\(_nm\(c\)\),\s*\n\s*b\.substitute_coach_id===c\.id\?'目前的代課教練':''\)/.test(src));
+ok('　　為什麼改回來寫在原地', /看起來像色卡而不是選單/.test(src));
+ok('　　.ash-ei-co 這個 class 留著（別的清單拿它標「目前選的那一項」）',
+   /\.ash-eirow\.ash-ei-co \.ash-eilb\{color:var\(--ash-co-fg,var\(--text\)\);\}/.test(css)
+   && /class="ash-eirow\$\{String\(o\.v\)===cur\?' ash-ei-co':''\}"/.test(src));
 
 console.log('\n子視窗的返回要回到「調整課程」');
 ok('★ 三支都收 backTo 參數',
