@@ -120,9 +120,13 @@ ok('　　可展延那張卡用品牌金框標出來、且不淡化（過期卡�
    /\.bkd-tkcard-hist\.bkd-tkcard-ext\{opacity:1;filter:none;background:#FBF6EC;/.test(src));
 ok('　　按鈕上的提示直接寫可延幾天、延到哪天',
    /title="剩 \$\{Number\(t\.sessions_remaining\)\|\|0\} 堂沒用完，可展延 \$\{tkPlanDays\(t\)\} 天至 \$\{String\(tkExtendTo\(t\)\)\.replace\(\/-\/g,'\/'\)\}"/.test(src));
-ok('★ 展延後票券回到可用區，卡片標「已展延（不得退費）」',
-   /\$\{tkIsExtended\(t\)\?`　·　<b style="color:var\(--gold-d\);">已展延（不得退費）<\/b>`:''\}/.test(src));
-ok('　　歷史列若是已展延過的也標一下', /\$\{tkIsExtended\(t\)\?'<span class="pp-hist-tag">已展延<\/span>':''\}/.test(src));
+/* 2026-08-25：這句話抽成 tkExtBadge()，文案統一成「此方案已展延，不得退費」，
+   並補到會員端與歷史紀錄（原本只有後台「持有中」那張卡有）。細節在 tkextnotetest.js。 */
+ok('★ 展延後票券回到可用區，卡片標「此方案已展延，不得退費」',
+   /\$\{tkIsExtended\(t\)\?`　·　\$\{tkExtBadge\(t\)\}`:''\}/.test(src)
+   && /const TK_EXT_TEXT='此方案已展延，不得退費';/.test(src));
+ok('　　歷史列若是已展延過的也標一下（0825 起同一句，不再只寫「已展延」）',
+   /\$\{shrTag\}\$\{tkExtBadge\(t\)\}<\/span>/.test(src));
 ok('　　只有櫃檯／管理員按得到（其他角色看得到狀態、按不下去）',
    /const canExtBtn=isDeskLike\(\)&&canExt;/.test(src));   // 2026-07-31 搬到「已過期方案」區；0822 外觀與角色脫鉤
 ok('　　點按鈕不會連帶收合／展開摺疊區', /onclick="event\.stopPropagation\(\);openTicketExtend/.test(src));
