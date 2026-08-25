@@ -25,9 +25,14 @@ const doc={ getElementById:id=>(boxes[id]=boxes[id]||{innerHTML:''}) };
 const escH=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 const parseYmd=s=>{ const p=String(s).slice(0,10).split('-'); return new Date(+p[0],+p[1]-1,+p[2]); };
 const W={};
-const mk=new Function('window','document','escH','parseYmd',
-  grab('function tkTidyPaint(){')+'\n'+grab('function tkTidyTap(bid){')+'\nreturn {tkTidyPaint,tkTidyTap};');
-const {tkTidyPaint,tkTidyTap}=mk(W,doc,escH,parseYmd);
+const mk=new Function('window','document','escH','parseYmd','TK_AUDIT_SINCE',
+  [grab('function tkTidyPaint(){'), grab('function tkTidyTap(bid){'),
+   grab('function tkTidyRemAuto(){'), grab('function tkTidyRemNow(){'),
+   grab('function tkTidyRemMode(mode){'), grab('function tkTidyManual(){'),
+   grab('function tkTidyCheck(){')].join('\n')
+  +'\nreturn {tkTidyPaint,tkTidyTap,tkTidyRemNow,tkTidyRemMode,tkTidyManual,tkTidyCheck};');
+const {tkTidyPaint,tkTidyTap,tkTidyRemNow,tkTidyRemMode,tkTidyManual,tkTidyCheck}
+  =mk(W,doc,escH,parseYmd,'2026-07-30');
 
 /* 黃喬莉那張 1/8 的票：8 堂，七堂舊匯入（無帳）＋ 9/03（綁票沒扣）＋ 9/10（有扣課紀錄） */
 const rows=[
@@ -43,8 +48,10 @@ const fresh=()=>{ W._tdy={ tkId:'TK-C', mid:'M1', cat:'私人教練', rows,
   sel:{B4:1,B5:1}, orig:{B4:1,B5:1},
   tkNo:{'TK-A':1,'TK-B':2,'TK-C':3,'TK-D':4},
   tkName:{'TK-A':'私人教練課 1V2','TK-B':'私人教練課 1V2','TK-C':'私人教練課 1V2','TK-D':'私人教練課 1V2'},
-  grpN:2, total:8, rem0:0, ttid:'tt-1v2', name:'私人教練課 1V2', mname:'黃喬莉' };
-  boxes['tdy-list']={innerHTML:''}; boxes['tdy-sum']={innerHTML:''}; };
+  grpN:2, total:8, rem0:0, ttid:'tt-1v2', name:'私人教練課 1V2', mname:'黃喬莉',
+  remMode:'auto', remManual:null, remWhy:'', auditable:true };
+  ['tdy-list','tdy-sum','tdy-rembar','tdy-remnote','tdy-manual']
+    .forEach(k=>{ boxes[k]={innerHTML:'',style:{display:''}}; }); };
 
 console.log('實跑 tkTidyPaint');
 fresh(); tkTidyPaint();
@@ -61,14 +68,14 @@ ok('★★ 有扣課紀錄、且扣在別張票的鎖住＋寫原因，不是藏
 ok('★★ 有扣課紀錄、扣在這張票的也鎖住（拿不掉）',
    /這一堂有扣課紀錄，拿不掉/.test(L()) && !/tkTidyTap\('B5'\)/.test(L()));
 ok('★ 日期帶星期（01/17（六））', /01\/17（六）/.test(L()));
-ok('★ 結算列寫出勾選堂數與新餘額', /勾選堂數[\s\S]*?2 \/ 8/.test(S()) && /票面餘額會變成[\s\S]*?6 堂/.test(S()));
+ok('★ 結算列寫出勾選堂數與「現在 → 之後」', /勾選堂數[\s\S]*?2 \/ 8/.test(S()) && /票面餘額[\s\S]*?0 → 6 堂/.test(S()));
 ok('★ 團課沒列出來要講一句（不是靜靜消失）', /另有 2 堂團課沒有列出來/.test(S()));
 
 console.log('\n勾選與算術');
 fresh(); tkTidyPaint();
 ['B1','B2','B3'].forEach(id=>tkTidyTap(id));
 ok('★★ 補上七堂中的三堂 → 勾 5 堂、餘額 3',
-   /5 \/ 8/.test(S()) && /票面餘額會變成[\s\S]*?3 堂/.test(S()));
+   /5 \/ 8/.test(S()) && /票面餘額[\s\S]*?0 → 3 堂/.test(S()));
 ok('　　更動筆數會講', /這次會更動 3 堂/.test(S()));
 tkTidyTap('B4');
 ok('★ 再點一下取消勾選（可來回）', /4 \/ 8/.test(S()) && !/tdy-row tdy-on"[^>]*onclick="tkTidyTap\('B4'\)/.test(L()));
@@ -84,6 +91,55 @@ W._tdy.sel.X1=1; W._tdy.sel.X2=1; W._tdy.sel.X3=1;
 tkTidyPaint();
 ok('★★ 勾超過總堂數：餘額畫成負數紅字並寫出要退掉幾堂',
    /ovd-neg/.test(S()) && /-1 堂/.test(S()) && /多出來的那 1 堂請取消勾選/.test(S()));
+
+console.log('\n餘額三選一（併進來的舊「校正堂數」）');
+const BAR=()=>boxes['tdy-rembar'].innerHTML, NOTE=()=>boxes['tdy-remnote'].innerHTML;
+fresh(); tkTidyPaint();
+ok('★ 三顆都畫出來，數字在上面（依戳記重算／維持原本／自己填）',
+   /依戳記重算/.test(BAR()) && /維持原本/.test(BAR()) && /自己填/.test(BAR())
+   && /<b>6<\/b><i>依戳記重算<\/i>/.test(BAR()) && /<b>0<\/b><i>維持原本<\/i>/.test(BAR()));
+ok('★ 帳目可信的票預設選「依戳記重算」',
+   /tdy-chip on"\s*\n?\s*onclick="tkTidyRemMode\('auto'\)/.test(BAR()) && tkTidyRemNow()===6);
+ok('★ 結算列寫「現在 → 之後」', /0 → 6 堂/.test(S()));
+tkTidyRemMode('keep');
+ok('★★ 按「維持原本」→ 餘額回到原本的 0（舊匯入票就靠這顆）',
+   tkTidyRemNow()===0 && /tdy-chip on"\s*\n?\s*onclick="tkTidyRemMode\('keep'\)/.test(BAR()));
+tkTidyRemMode('manual');
+ok('★★ 按「自己填」會帶出手填欄（預設帶自動算的數字）',
+   W._tdy.remMode==='manual' && W._tdy.remManual===6 && boxes['tdy-manual'].style.display==='');
+boxes['tdy-remn']={value:'3'}; tkTidyManual();
+ok('★ 手填 3 → 餘額 3', tkTidyRemNow()===3 && /0 → 3 堂/.test(S()));
+
+/* 舊票：預設不能是「依戳記重算」，否則黃喬莉 2025/09/15 那張 8 堂 2 戳記會憑空多 6 堂 */
+fresh(); W._tdy.auditable=false; W._tdy.remMode='keep'; tkTidyPaint();
+ok('★★ 舊票（對帳基準日之前）預設「維持原本」，並寫出為什麼',
+   tkTidyRemNow()===0
+   && /tdy-chip on"\s*\n?\s*onclick="tkTidyRemMode\('keep'\)/.test(BAR())
+   && /那時候上過的課沒有全部進系統/.test(NOTE()) && /2026\/07\/30/.test(NOTE()));
+fresh(); tkTidyPaint();
+ok('　　帳目可信的票就直說紀錄是完整的', /扣課紀錄是完整的/.test(NOTE()));
+
+console.log('\n送出把關 tkTidyCheck');
+fresh();
+ok('★ 什麼都沒改就擋（餘額也一樣）',
+   (W._tdy.remMode='keep', !tkTidyCheck().ok && tkTidyCheck().msg==='沒有任何更動'));
+fresh(); W._tdy.remMode='auto';
+ok('★★ 只改餘額、沒改歸屬也能送（這就是舊「校正堂數」的用法）', tkTidyCheck().ok===true);
+fresh(); W._tdy.remMode='manual'; W._tdy.remManual=3; W._tdy.remWhy='';
+ok('★★ 自己填一定要寫原因', !tkTidyCheck().ok && tkTidyCheck().msg==='自己填餘額要寫原因');
+W._tdy.remWhy='舊系統匯入，2025 年的課沒進系統';
+ok('　　寫了就放行，原因帶得出去', tkTidyCheck().ok===true && tkTidyCheck().why.indexOf('舊系統匯入')===0);
+fresh(); W._tdy.remMode='manual'; W._tdy.remManual=99; W._tdy.remWhy='x';
+ok('★ 只收 0–總堂數的整數', !tkTidyCheck().ok && /0–8 的整數/.test(tkTidyCheck().msg));
+fresh(); W._tdy.remMode='manual'; W._tdy.remManual=null; W._tdy.remWhy='x';
+ok('　　空白也擋（NaN 不能寫進資料庫）', !tkTidyCheck().ok);
+fresh(); ['B1','B2','B3'].forEach(id=>tkTidyTap(id));
+W._tdy.rows=W._tdy.rows.concat([{id:'Y1',date:'2026-05-01',time:'19:00',coach:'',st:'checked_in',pend:false,tk:null,lock:null},
+  {id:'Y2',date:'2026-05-08',time:'19:00',coach:'',st:'checked_in',pend:false,tk:null,lock:null},
+  {id:'Y3',date:'2026-05-15',time:'19:00',coach:'',st:'checked_in',pend:false,tk:null,lock:null},
+  {id:'Y4',date:'2026-05-22',time:'19:00',coach:'',st:'checked_in',pend:false,tk:null,lock:null}]);
+['Y1','Y2','Y3','Y4'].forEach(id=>tkTidyTap(id));
+ok('★★ 勾超過總堂數：不管餘額選哪一種都擋', !tkTidyCheck().ok && /超過總堂數 8/.test(tkTidyCheck().msg));
 
 console.log('\n護欄（原始碼）');
 const OPEN=grab('async function tkTidyOpen(tkId){');
@@ -101,15 +157,23 @@ ok('★★ 扣課紀錄只認 deduct−refund 的淨值（adjust 不算）',
 ok('★★ 留痕用 adjust／delta 0，不可以用 deduct（那是票券夾認的連結）',
    /logTicket\(S\.tkId,'adjust',0,b\.id,/.test(DO) && !/logTicket\(S\.tkId,'deduct'/.test(DO));
 ok('　　為什麼不能用 deduct 寫在原地', /票券夾的「連結」認的是 deduct\+delta 0/.test(DO));
-ok('★★ 餘額重算＝總堂數 − 勾選數，且寫進票券紀錄',
-   /const n=Object\.keys\(S\.sel\)\.length, rem=S\.total-n;/.test(DO)
-   && /t\.sessions_remaining=rem;/.test(DO)
-   && /logTicket\(S\.tkId,'adjust',rem-was,null,/.test(DO));
+ok('★★ 確認頁與寫入用同一支把關（不會只擋前面那一關）',
+   /const C=tkTidyCheck\(\);\s*\n\s*if\(!C\.ok\)\{ showToast\(C\.msg\); return; \}/.test(DO)
+   && /const C=tkTidyCheck\(\);\s*\n\s*if\(!C\.ok\)\{ showToast\(C\.msg\); return; \}/.test(src.slice(src.indexOf('function tkTidyConfirm(){'))));
+ok('★★ 餘額與票券紀錄成對寫入，紀錄要寫得出用的是哪一種口徑',
+   /t\.sessions_remaining=rem;/.test(DO)
+   && /logTicket\(S\.tkId,'adjust',rem-was,null,/.test(DO)
+   && /票券校正：餘額 \$\{was\} → \$\{rem\}（\$\{_how\}）/.test(DO));
 ok('★★ 餘額回來了狀態要跟著翻（0810 踩過：餘額 >0 卻掛 used_up 就沒有轉正）',
    /if\(rem>0 && t\.status==='used_up'\) t\.status='usable';/.test(DO)
    && /if\(rem===0 && t\.status==='usable'\) t\.status='used_up';/.test(DO));
 ok('★ 退費／作廢／過期的狀態不碰', /退費、作廢、過期的狀態不碰/.test(DO));
-ok('★★ 餘額負數要在寫入前擋下來', /if\(rem<0\)\{ showToast\('勾選堂數超過總堂數'\); return; \}/.test(DO));
+ok('★★ 舊票預設不吃「依戳記重算」（戳記補不齊，會憑空多給堂數）',
+   /remMode:_auditable\?'auto':'keep'/.test(OPEN)
+   && /tkLedgerAuditable/.test(OPEN)
+   && /照戳記重算會憑空多給她 6 堂/.test(src));
+ok('★ 舊票卻硬選「依戳記重算」時，確認頁要紅字再問一次',
+   /\(!S\.auditable&&S\.remMode==='auto'\)\?`<br><b style="color:var\(--danger/.test(src));
 ok('★★ 寫完要清快取（bookings／member_tickets／ticket_logs 三張都動到了）',
    /dbCacheClear\(\['bookings','member_tickets','ticket_logs'\]\)/.test(DO));
 ok('★ 防連點（同一張票只跑一次）', /onceAct\('tktidy:'\+S\.tkId/.test(src));

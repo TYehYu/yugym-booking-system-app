@@ -9398,7 +9398,25 @@ button.rev-kind.rev-kind-off{opacity:.5;}
 .tdy-row.tdy-lock{background:var(--card2);box-shadow:none;border-style:dashed;cursor:default;}
 .tdy-row.tdy-lock:active{transform:none;}
 .tdy-row.tdy-lock .ash-eilb{color:var(--t2);font-weight:700;}
-.tdy-list{max-height:44vh;overflow:auto;margin:2px -2px 12px;padding:2px;}
+.tdy-list{max-height:38vh;overflow:auto;margin:2px -2px 12px;padding:2px;}
+/* 餘額三選一（2026-08-25 把舊的「校正堂數」併進來）：一顆一個口徑，數字放大在上面，
+   看得到數字再按 —— 使用者要的是「順手好用的按鈕」，不是先讀完說明再決定。 */
+.tdy-rembar{display:flex;gap:8px;margin-bottom:8px;}
+.tdy-chip{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;
+  background:#fff;border:1px solid var(--bd);border-radius:14px;padding:9px 6px;cursor:pointer;
+  font-family:inherit;box-shadow:0 2px 8px rgba(30,25,15,.07);}
+.tdy-chip:active{transform:scale(.98);}
+.tdy-chip b{font-family:var(--num),inherit;font-size:21px;font-weight:800;color:var(--text);line-height:1.1;}
+.tdy-chip i{font-style:normal;font-size:12px;font-weight:700;color:var(--text);}
+.tdy-chip em{font-style:normal;font-size:10px;color:var(--t3);text-align:center;line-height:1.4;}
+.tdy-chip.on{background:var(--green);border-color:var(--green);box-shadow:0 4px 14px rgba(0,61,50,.25);}
+.tdy-chip.on b,.tdy-chip.on i{color:#fff;}
+.tdy-chip.on em{color:rgba(255,255,255,.8);}
+.tdy-manrow{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--t2);margin-bottom:8px;}
+.tdy-manrow input{width:84px;padding:8px 10px;border:1px solid var(--bd);border-radius:9px;
+  font-family:var(--num),inherit;font-size:16px;}
+.tdy-why{width:100%;padding:9px 11px;border:1px solid var(--bd);border-radius:9px;
+  font-size:13px;font-family:inherit;margin-bottom:8px;}
 .lot-prizes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .lot-prize{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border:1px solid var(--bd);
   border-radius:12px;background:#fff;cursor:pointer;font-size:12px;font-weight:700;color:var(--text);font-family:inherit;}
@@ -10184,8 +10202,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.0951';
-const APP_VERSION_LABEL='v260825.0951';
+const APP_VERSION = '260825.1004';
+const APP_VERSION_LABEL='v260825.1004';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11261,7 +11279,7 @@ async function mtkOverAsk(tkId, bkId){
   }else if(hold.length>total){
     why=`這張票 <b>${total}</b> 堂，實際卻掛著 <b>${hold.length}</b> 筆預約 —— <b>帳被多退過</b>，`
        +`餘額憑空多出來，才讓這一堂也扣得動。`;
-    fix=_isAdmin?`用下面的「校正堂數」把多出來的收回。`:`請管理員用「校正堂數」處理。`;
+    fix=_isAdmin?`用下面的「校正這張票」把多出來的收回。`:`請管理員用票券卡上的「校正」處理。`;
   }else{
     why=`這張票 <b>${total}</b> 堂已經全部有主（見下方清單），這一堂是排在票用完之後的。`;
     fix=`會員續約時系統會主動問要不要補扣這一堂，<b>不用現在處理</b>；若這堂不上了就直接取消。`;
@@ -11279,68 +11297,35 @@ async function mtkOverAsk(tkId, bkId){
     <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
       ${rem>0?`<button class="btn btn-ghost" onclick="closeModal();openBkTicketChange('${bkId}')">更換票券</button>`:''}
-      ${_isAdmin?`<button class="btn btn-red" onclick="tkFixSessions('${tkId}','${bkId}')">校正堂數</button>`:''}
+      ${/* 2026-08-25 使用者：「從沒看到校正堂數這個按鈕，也沒用過，他在哪裡，有存在必要嗎」——
+           它藏在這個視窗底下、而這個視窗又要那張票剛好有紅虛線點才開得出來，
+           上線三天一次都沒被用過（ticket_logs 裡 0 筆）。合併進票券卡上的「校正」：
+           那裡同時看得到「哪幾堂算在這張票」與「餘額改成幾堂」，是真的會去的地方。 */''}
+      ${_isAdmin?`<button class="btn btn-red" onclick="closeModal();tkTidyOpen('${tkId}')">校正這張票</button>`:''}
     </div>`);
-}
-/* 校正堂數（管理員限定，2026-08-22）——系統原本沒有任何調整餘額的入口：
-   作廢是整張歸零、更換方案只適用沒用過的票、展延只動效期，所以每次差一堂都得下 SQL。
-   ⚠ 一定要寫進票券紀錄：餘額自己會動、卻沒有一行說明為什麼，是最難查的一種帳。 */
-async function tkFixSessions(tkId, bkId){
-  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以校正堂數'); return; }
-  const t=await dbGet('member_tickets',tkId); if(!t){ showToast('找不到票券'); return; }
-  const total=Number(t.sessions_total)||0, rem=Number(t.sessions_remaining)||0;
-  showModal(`<div class="modal-title">校正堂數</div>
-    <div style="font-size:13px;color:var(--t2);line-height:1.9;margin-bottom:10px;">
-      ${(t.plan_name||'票券').replace(/</g,'&lt;')}　·　共 ${total} 堂<br>
-      目前票面餘額 <b class="num" style="color:var(--text);">${rem}</b> 堂</div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-      <span style="font-size:13px;">改為</span>
-      <input id="tkfix-n" type="number" inputmode="numeric" min="0" max="${total}" value="${rem}"
-        style="width:88px;padding:8px 10px;border:1px solid var(--bd);border-radius:9px;font-family:var(--num);font-size:15px;">
-      <span style="font-size:13px;color:var(--t3);">堂（0–${total}）</span></div>
-    <input id="tkfix-why" type="text" placeholder="原因（必填，會寫進票券紀錄）"
-      style="width:100%;padding:9px 11px;border:1px solid var(--bd);border-radius:9px;font-size:13px;">
-    <div style="font-size:11.5px;color:var(--t3);line-height:1.8;margin-top:10px;">
-      這裡只改票面餘額，不會動到任何預約。若是「這一堂該綁到票上」，請改用「更換票券」。</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="${bkId?`mtkOverAsk('${tkId}','${bkId}')`:'closeModal()'}">返回</button>
-      <button class="btn btn-red" onclick="doTkFixSessions('${tkId}')">確認校正</button></div>`);
-}
-async function doTkFixSessions(tkId){
- try{
-  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以校正堂數'); return; }
-  const t=await dbGet('member_tickets',tkId); if(!t){ showToast('找不到票券'); return; }
-  const total=Number(t.sessions_total)||0, rem=Number(t.sessions_remaining)||0;
-  const el=document.getElementById('tkfix-n'), elw=document.getElementById('tkfix-why');
-  const why=String((elw&&elw.value)||'').trim();
-  if(!why){ showToast('請填原因'); if(elw)elw.focus(); return; }
-  const n=Number(el&&el.value);
-  if(!Number.isFinite(n)||n<0||n>total||!Number.isInteger(n)){ showToast(`請填 0–${total} 的整數`); return; }
-  const delta=n-rem;
-  if(!delta){ showToast('餘額沒有變，不用校正'); return; }
-  t.sessions_remaining=n;
-  await dbPut('member_tickets',t);
-  /* delta 對齊帳本慣例：+ 是還回票券、− 是收回 */
-  await logTicket(tkId,'adjust',delta,null,SESSION&&SESSION.id,`校正堂數：${rem} → ${n}（${delta>0?'+':''}${delta}）；${why}`);
-  dbCacheClear(['member_tickets','ticket_logs']);
-  closeModal(); showToast(`已校正：${rem} → ${n} 堂`);
-  try{ if(typeof PP!=='undefined'&&PP.id){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }catch(_){ navTo(CUR_PAGE); }
- }catch(e){ showToast('校正失敗：'+((e&&e.message)||e)); }
 }
 /* ══ 票券校正：這張票到底蓋了哪幾堂（管理員，2026-08-25）════════════════════
    起因：黃喬莉三張同名的「私人教練課 1V2」，舊系統匯入時把 1/17～3/26 那七堂
    掛到了較早的兩張票上，使用者只能傳訊息請人下 SQL 改。系統原本沒有這個入口 ——
-     ・校正堂數  只改票面餘額，不會動到任何預約
      ・更換票券  只能改「還沒簽到」的未來預約（已上過的擋在 status!=='booked'）
      ・更換方案  只適用完全沒用過的票
    「已經上過的課算在哪張票上」於是變成每次都要找工程師。這裡把它交還給管理員。
 
    ⚠ 畫面上叫「校正」（2026-08-25 使用者指示，原本叫「整理」），函式名沿用 tkTidy*。
-     與上面的「校正堂數」（tkFixSessions）是兩顆：那顆只改數字、這顆改「哪幾堂」。
-     兩顆在畫面上不會同時出現 —— 校正堂數只從紅虛線圓點的說明視窗進去。
+   ⚠ 舊的「校正堂數」（tkFixSessions，8/22 做的）已併進這一支並移除。它藏在紅虛線圓點的
+     說明視窗底下，上線三天一次都沒被用過（ticket_logs 裡 0 筆）——
+     使用者原話：「從沒看到校正堂數這個按鈕，也沒用過，他在哪裡，有存在必要嗎」。
 
    一個畫面兩件事：
      ① 勾選這位會員（同課別、非團課）的哪幾堂算在這張票上 → 寫 bookings.ticket_id
-     ② 票面餘額自動＝總堂數 − 勾選數，按之前就看得到會變成幾堂
+     ② 票面餘額改成幾堂（三顆按鈕：依戳記重算／維持原本／自己填）
+
+   ⚠ 餘額預設值不能一律用「總堂數 − 勾選數」：舊系統匯入的票，2025 年上過的課根本
+     沒進系統，戳記永遠補不齊 —— 黃喬莉那張 2025/09/15 的票 8 堂只有 2 個戳記，
+     照戳記重算會憑空多給她 6 堂。所以：
+       ・帳目可信的票（購買日 >= TK_AUDIT_SINCE）預設「依戳記重算」
+       ・那之前的舊票預設「維持原本餘額」（安全的那一邊：寧可少給也不要多給）
+     兩顆都是一鍵，看得到數字再按。
 
    ⚠ 團課不列：一堂多人、各扣各的票，帳在 ticket_logs 不在 ticket_id
      （見 buildWallet 的 ②），改 ticket_id 對團課沒有作用。
@@ -11393,19 +11378,73 @@ async function tkTidyOpen(tkId){
   const sel={}, orig={};
   rows.forEach(r=>{ if(String(r.tk||'')===String(tkId)){ sel[r.id]=1; orig[r.id]=1; } });
   const m=await dbGet('members',mid).catch(()=>null);
+  /* 帳目可信的票才敢預設「依戳記重算」（見檔頭；沿用對帳巡檢的同一條基準線） */
+  const _auditable=(typeof tkLedgerAuditable==='function')?tkLedgerAuditable(t):false;
   window._tdy={ tkId, mid, cat, rows, sel, orig, tkNo, tkName, grpN,
     total:Number(t.sessions_total)||0, rem0:Number(t.sessions_remaining)||0,
+    remMode:_auditable?'auto':'keep', remManual:null, auditable:_auditable,
     ttid:t.ticket_type_id||null, name:t.plan_name||cat||'票券', mname:(m&&m.name)||'' };
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">票券校正</div>
     <div class="ash-eihead">${escH(window._tdy.mname)}　·　${tkNoTag(tkNo[tkId])}${escH(window._tdy.name)}　·　共 ${window._tdy.total} 堂</div>
-    <div style="font-size:12px;color:var(--t2);line-height:1.9;margin:-6px 0 10px;">
-      勾起來的就是<b>算在這張票上</b>的課。改完票面餘額會自動重算成「總堂數 − 勾選數」。</div>
-    <div class="lot-sec">這位會員的${escH(cat||'課程')}（${rows.length} 堂）</div>
-    <div class="tdy-list" id="tdy-list"></div>
-    <div id="tdy-sum"></div>
+    ${tkTidyShell(window._tdy)}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="tkTidyConfirm()">下一步</button></div>`);
   tkTidyPaint();
+}
+/* 視窗骨架抽出來（開窗與「‹ 返回」共用，兩邊長得一樣才不會有一邊漏改） */
+function tkTidyShell(S){
+  return `<div style="font-size:12px;color:var(--t2);line-height:1.9;margin:-6px 0 10px;">
+      勾起來的就是<b>算在這張票上</b>的課；下面再決定票面餘額改成幾堂。</div>
+    <div class="lot-sec">這位會員的${escH(S.cat||'課程')}（${S.rows.length} 堂）</div>
+    <div class="tdy-list" id="tdy-list"></div>
+    <div id="tdy-sum"></div>
+    <div class="lot-sec">票面餘額改成幾堂？</div>
+    <div class="tdy-rembar" id="tdy-rembar"></div>
+    ${/* 手填的那格放在重畫範圍外：tkTidyPaint 每按一下就重寫 #tdy-rembar，
+         輸入框若在裡面，打到一半會被清掉、游標也會跳走。 */''}
+    <div id="tdy-manual" style="display:${S.remMode==='manual'?'':'none'};">
+      <div class="tdy-manrow"><span>餘額改成</span>
+        <input id="tdy-remn" type="number" inputmode="numeric" min="0" max="${S.total}"
+          value="${S.remManual==null?'':S.remManual}" oninput="tkTidyManual()">
+        <span>堂（0–${S.total}）</span></div>
+      <input id="tdy-why" class="tdy-why" type="text" placeholder="原因（必填，會寫進票券紀錄）"
+        value="${escH(S.remWhy||'')}" oninput="tkTidyWhy()">
+    </div>
+    <div id="tdy-remnote"></div>`;
+}
+/* 三種餘額口徑（見檔頭的 ⚠）：
+     auto   依戳記重算＝總堂數 − 勾選數        ← 帳目可信的票預設
+     keep   維持原本的餘額                     ← 舊匯入票預設（戳記本來就補不齊）
+     manual 自己填（要寫原因）                 ← 併進來的舊「校正堂數」 */
+function tkTidyRemAuto(){ const S=window._tdy; return S?S.total-Object.keys(S.sel).length:0; }
+function tkTidyRemNow(){
+  const S=window._tdy; if(!S) return 0;
+  if(S.remMode==='keep') return S.rem0;
+  if(S.remMode==='manual') return (S.remManual==null?NaN:Number(S.remManual));
+  return tkTidyRemAuto();
+}
+function tkTidyRemMode(mode){
+  const S=window._tdy; if(!S) return;
+  S.remMode=mode;
+  if(mode==='manual' && S.remManual==null) S.remManual=tkTidyRemAuto();
+  const mb=document.getElementById('tdy-manual');
+  if(mb) mb.style.display=(mode==='manual')?'':'none';
+  const el=document.getElementById('tdy-remn');
+  if(el && mode==='manual') el.value=(S.remManual==null?'':String(S.remManual));
+  tkTidyPaint();
+  if(mode==='manual' && el){ try{ el.focus(); el.select(); }catch(_){} }
+}
+function tkTidyManual(){
+  const S=window._tdy; if(!S) return;
+  const el=document.getElementById('tdy-remn');
+  const v=el?String(el.value).trim():'';
+  S.remManual=(v===''?null:Number(v));
+  tkTidyPaint();
+}
+function tkTidyWhy(){
+  const S=window._tdy; if(!S) return;
+  const el=document.getElementById('tdy-why');
+  S.remWhy=el?String(el.value):'';
 }
 /* 只重畫清單與結算兩塊（不整個 showModal）——一按就重開視窗會把捲動位置彈回頂端，
    而這張清單常常有二十幾列。 */
@@ -11433,33 +11472,64 @@ function tkTidyPaint(){
       <span class="ash-eilb">${_dlb(r.date)} ${r.time}</span>
       <span class="ash-eisub">${escH(stLb)}${r.coach?'・'+escH(r.coach):''}<br>${escH(where)}</span></button>`;
   }).join(''):'<div class="ash-einote">這位會員沒有這個課別的單人課預約。</div>';
+  const n=Object.keys(S.sel).length, auto=S.total-n, rem=tkTidyRemNow();
+  const chg=S.rows.filter(r=>(!!S.sel[r.id])!==(!!S.orig[r.id])).length;
+  const remTxt=Number.isFinite(rem)?`${rem} 堂`:'—';
   if(es){
-    const n=Object.keys(S.sel).length, rem=S.total-n;
-    const chg=S.rows.filter(r=>(!!S.sel[r.id])!==(!!S.orig[r.id])).length;
     es.innerHTML=`<div class="ovd-list">
-      <div class="ovd-row"><span>勾選堂數</span><b>${n} / ${S.total}</b></div>
-      <div class="ovd-row ovd-sum"><span>票面餘額會變成</span>
-        <b class="${rem<0?'ovd-neg':''}">${rem} 堂</b></div>
+      <div class="ovd-row"><span>勾選堂數</span><b class="${auto<0?'ovd-neg':''}">${n} / ${S.total}</b></div>
+      <div class="ovd-row ovd-sum"><span>票面餘額</span>
+        <b class="${(Number.isFinite(rem)&&rem!==S.rem0)?'':'ovd-neg'}" style="${
+          (Number.isFinite(rem)&&rem!==S.rem0)?'':'color:var(--t3);'}">${S.rem0} → ${remTxt}</b></div>
     </div>
-    ${rem<0?`<div class="ovd-note" style="color:var(--danger,#b5372e);">勾了 ${n} 堂，超過這張票的 ${S.total} 堂。
-      多出來的那 ${-rem} 堂請取消勾選，或先確認是不是該算在別張票上。</div>`
-      :`<div class="ovd-note">目前票面餘額 ${S.rem0} 堂${chg?`　·　這次會更動 ${chg} 堂`:'　·　尚未更動'}。${
+    ${auto<0?`<div class="ovd-note" style="color:var(--danger,#b5372e);">勾了 ${n} 堂，超過這張票的 ${S.total} 堂。
+      多出來的那 ${-auto} 堂請取消勾選，或先確認是不是該算在別張票上。</div>`
+      :`<div class="ovd-note">${chg?`這次會更動 ${chg} 堂的歸屬。`:'課的歸屬尚未更動。'}${
         S.grpN?`<br>這位會員另有 ${S.grpN} 堂團課沒有列出來 —— 團課的票記在扣課紀錄裡，不是靠課卡綁定，改這裡沒有用。`:''}</div>`}`;
   }
+  /* 餘額三選一（併進來的舊「校正堂數」＝第三顆） */
+  const bar=document.getElementById('tdy-rembar');
+  if(bar) bar.innerHTML=[
+    ['auto', auto, '依戳記重算', `總堂數 ${S.total} − 勾選 ${n}`],
+    ['keep', S.rem0, '維持原本', '不動票面餘額'],
+    ['manual', (S.remManual==null?'—':S.remManual), '自己填', '要寫原因'],
+  ].map(([k,v,lb,sub])=>`<button type="button" class="tdy-chip${S.remMode===k?' on':''}"
+      onclick="tkTidyRemMode('${k}')"><b>${v}</b><i>${lb}</i><em>${sub}</em></button>`).join('');
+  const nt=document.getElementById('tdy-remnote');
+  if(nt) nt.innerHTML=`<div class="ovd-note">${
+    S.auditable
+      ? '這張票的扣課紀錄是完整的，預設用<b>依戳記重算</b>。'
+      : `這張票是<b>對帳基準日（${TK_AUDIT_SINCE.replace(/-/g,'/')}）之前</b>的舊票 —— 那時候上過的課沒有全部進系統，戳記永遠補不齊，所以預設<b>維持原本餘額</b>。照戳記重算會憑空多給堂數。`
+    }</div>`;
 }
 function tkTidyTap(bid){
   const S=window._tdy; if(!S) return;
   if(S.sel[bid]) delete S.sel[bid]; else S.sel[bid]=1;
   tkTidyPaint();
 }
+/* 送出前的把關（確認頁與寫入各叫一次；訊息要指得出是哪一格不對）——
+   回傳 {ok, add, del, n, rem, why, msg}。 */
+function tkTidyCheck(){
+  const S=window._tdy; if(!S) return {ok:false, msg:'視窗已關閉'};
+  const add=S.rows.filter(r=>S.sel[r.id]&&!S.orig[r.id]);
+  const del=S.rows.filter(r=>!S.sel[r.id]&&S.orig[r.id]);
+  const n=Object.keys(S.sel).length, auto=S.total-n, rem=tkTidyRemNow();
+  const why=String(S.remWhy||'').trim();
+  const o={ok:false, add, del, n, rem, why};
+  if(auto<0) return Object.assign(o,{msg:`勾了 ${n} 堂，超過總堂數 ${S.total}`});
+  if(!Number.isFinite(rem)||!Number.isInteger(rem)||rem<0||rem>S.total)
+    return Object.assign(o,{msg:`餘額請填 0–${S.total} 的整數`});
+  if(S.remMode==='manual' && !why) return Object.assign(o,{msg:'自己填餘額要寫原因'});
+  /* 「什麼都沒改」也要擋：不然會寫出一筆看不出改了什麼的紀錄 */
+  if(!add.length && !del.length && rem===S.rem0) return Object.assign(o,{msg:'沒有任何更動'});
+  return Object.assign(o,{ok:true});
+}
 /* 動之前先講清楚會發生什麼：這一步會改好幾堂課的歸屬，還會改票面餘額。 */
 function tkTidyConfirm(){
   const S=window._tdy; if(!S) return;
-  const add=S.rows.filter(r=>S.sel[r.id]&&!S.orig[r.id]);
-  const del=S.rows.filter(r=>!S.sel[r.id]&&S.orig[r.id]);
-  if(!add.length&&!del.length){ showToast('沒有任何更動'); return; }
-  const n=Object.keys(S.sel).length, rem=S.total-n;
-  if(rem<0){ showToast(`勾了 ${n} 堂，超過總堂數 ${S.total}`); return; }
+  const C=tkTidyCheck();
+  if(!C.ok){ showToast(C.msg); return; }
+  const add=C.add, del=C.del, n=C.n, rem=C.rem;
   const _d=r=>String(r.date).slice(5).replace('-','/');
   /* 被搬走的那幾張票要列出來（它們的餘額不會自己動） */
   const lost={}; add.forEach(r=>{ if(r.tk && String(r.tk)!==String(S.tkId)) lost[r.tk]=(lost[r.tk]||0)+1; });
@@ -11472,6 +11542,9 @@ function tkTidyConfirm(){
       ${del.length?`<div class="ovd-row"><span>從這張票拿掉</span><b class="ovd-neg">${del.length} 堂</b></div>`:''}
       <div class="ovd-row ovd-sum"><span>票面餘額</span><b>${S.rem0} → ${rem} 堂</b></div>
     </div>
+    <div class="ovd-note">餘額口徑：<b>${({auto:`依戳記重算（總堂數 ${S.total} − 勾選 ${n}）`,keep:'維持原本的餘額',manual:'管理員自己填'})[S.remMode]||'—'}</b>${
+      C.why?`<br>原因：${escH(C.why)}`:''}${
+      (!S.auditable&&S.remMode==='auto')?`<br><b style="color:var(--danger,#b5372e);">這是對帳基準日之前的舊票，照戳記重算可能會多給堂數 —— 再確認一次。</b>`:''}</div>
     ${add.length?`<div class="lot-sec">改成算這張票</div>
       <div class="ash-eibox">${add.map(r=>`${_d(r)}${r.tk?`　<span style="color:var(--t3);">（原本 #${S.tkNo[r.tk]||'?'}）</span>`:'　<span style="color:var(--t3);">（原本未綁票）</span>'}`).join('<br>')}</div>`:''}
     ${del.length?`<div class="lot-sec">從這張票拿掉</div>
@@ -11479,7 +11552,7 @@ function tkTidyConfirm(){
     ${lostRows?`<div class="lot-sec">這幾張票會少掉戳記</div>
       <div class="ovd-list">${lostRows}</div>
       <div class="ovd-note">它們的<b>票面餘額不會自動跟著改</b> —— 舊系統匯入的票本來就對不上，
-        系統不猜。要調的話各自開它的「校正」或「校正堂數」。</div>`:''}
+        系統不猜。要調的話各自開它的「校正」。</div>`:''}
     <div class="ovd-note">這次只動「哪一堂算在哪張票」與這張票的餘額，
       不會取消任何預約、不會通知會員、也不會動到收款與發票。全部會寫進票券紀錄。</div>
     <div class="modal-foot">
@@ -11491,11 +11564,7 @@ function tkTidyBack(){
   const S=window._tdy; if(!S){ closeModal(); return; }
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">票券校正</div>
     <div class="ash-eihead">${escH(S.mname)}　·　${tkNoTag(S.tkNo[S.tkId])}${escH(S.name)}　·　共 ${S.total} 堂</div>
-    <div style="font-size:12px;color:var(--t2);line-height:1.9;margin:-6px 0 10px;">
-      勾起來的就是<b>算在這張票上</b>的課。改完票面餘額會自動重算成「總堂數 − 勾選數」。</div>
-    <div class="lot-sec">這位會員的${escH(S.cat||'課程')}（${S.rows.length} 堂）</div>
-    <div class="tdy-list" id="tdy-list"></div>
-    <div id="tdy-sum"></div>
+    ${tkTidyShell(S)}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="tkTidyConfirm()">下一步</button></div>`);
   tkTidyPaint();
@@ -11505,10 +11574,9 @@ async function _tkTidyDo(){
  try{
   const S=window._tdy; if(!S) return;
   if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以校正票券'); return; }
-  const add=S.rows.filter(r=>S.sel[r.id]&&!S.orig[r.id]);
-  const del=S.rows.filter(r=>!S.sel[r.id]&&S.orig[r.id]);
-  const n=Object.keys(S.sel).length, rem=S.total-n;
-  if(rem<0){ showToast('勾選堂數超過總堂數'); return; }
+  const C=tkTidyCheck();
+  if(!C.ok){ showToast(C.msg); return; }
+  const add=C.add, del=C.del, n=C.n, rem=C.rem, why=C.why;
   const _busy=uiBusy('校正中…');
   const _d=r=>String(r.date).slice(0,10);
   for(const r of add){
@@ -11538,8 +11606,10 @@ async function _tkTidyDo(){
       if(rem>0 && t.status==='used_up') t.status='usable';
       if(rem===0 && t.status==='usable') t.status='used_up';
       await dbPut('member_tickets',t);
+      const _how=({auto:`依戳記重算（總堂數 ${S.total} − 勾選 ${n}）`,
+        keep:'維持原本的餘額', manual:'管理員自己填'})[S.remMode]||'';
       try{ await logTicket(S.tkId,'adjust',rem-was,null,SESSION&&SESSION.id,
-        `票券校正：餘額 ${was} → ${rem}（依實際 ${n} 堂重算）`); }catch(_){}
+        `票券校正：餘額 ${was} → ${rem}（${_how}）${why?`；${why}`:''}`); }catch(_){}
     }
   }
   dbCacheClear(['bookings','member_tickets','ticket_logs']);

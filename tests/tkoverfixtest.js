@@ -37,24 +37,19 @@ ok('　　佔用清單：取消的不算；單人課看 ticket_id、團課看帳
    && /\(String\(x\.ticket_id\|\|''\)===String\(tkId\) \|\| \(net\[x\.id\]\|\|0\)>0\)/.test(src));
 ok('　　清單裡標出「這一堂」是哪一筆', /← 這一堂/.test(src));
 
-console.log('\n校正堂數');
-ok('★ 管理員限定（櫃檯看得到原因，但改帳只有管理員）',
-   /async function tkFixSessions\(tkId, bkId\)\{\s*\n\s*if\(!\(SESSION&&SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以校正堂數'\); return; \}/.test(src)
-   && /\$\{_isAdmin\?`<button class="btn btn-red" onclick="tkFixSessions\('\$\{tkId\}','\$\{bkId\}'\)">校正堂數<\/button>`:''\}/.test(src));
-ok('　　送出時再擋一次（視窗開著時被切換角色也不會漏）',
-   /async function doTkFixSessions\(tkId\)\{[\s\S]{0,160}?if\(!\(SESSION&&SESSION\.role==='admin'\)\)/.test(src));
-ok('★ 原因必填 —— 餘額自己會動卻沒有一行說明為什麼，是最難查的一種帳',
-   /if\(!why\)\{ showToast\('請填原因'\);/.test(src)
-   && /placeholder="原因（必填，會寫進票券紀錄）"/.test(src));
-ok('★ 只收 0–總堂數的整數', /if\(!Number\.isFinite\(n\)\|\|n<0\|\|n>total\|\|!Number\.isInteger\(n\)\)/.test(src));
-ok('　　沒變就不寫帳', /if\(!delta\)\{ showToast\('餘額沒有變，不用校正'\); return; \}/.test(src));
-ok('★ 餘額與票券紀錄成對寫入（delta 對齊帳本慣例：+ 還回、− 收回）',
-   /t\.sessions_remaining=n;\s*\n\s*await dbPut\('member_tickets',t\);/.test(src)
-   && /await logTicket\(tkId,'adjust',delta,null,SESSION&&SESSION\.id,`校正堂數：\$\{rem\} → \$\{n\}/.test(src));
-ok('　　寫完清快取並重畫會員明細', /dbCacheClear\(\['member_tickets','ticket_logs'\]\);/.test(src));
-ok('　　只動餘額、不動預約（視窗裡講明，避免拿它當「補綁票」用）',
-   /這裡只改票面餘額，不會動到任何預約。若是「這一堂該綁到票上」，請改用「更換票券」。/.test(src));
-ok('　　返回回到原因視窗', /onclick="\$\{bkId\?`mtkOverAsk\('\$\{tkId\}','\$\{bkId\}'\)`:'closeModal\(\)'\}">返回/.test(src));
+console.log('\n改帳的入口（2026-08-25 併進票券卡的「校正」）');
+/* 舊的 tkFixSessions（8/22 做的「校正堂數」）已移除 —— 它藏在這個視窗底下、
+   而這個視窗又要那張票剛好有紅虛線點才開得出來，上線三天一次都沒被用過。
+   使用者：「從沒看到校正堂數這個按鈕，也沒用過，他在哪裡，有存在必要嗎」 */
+ok('★★ 舊的 tkFixSessions／doTkFixSessions 已整支退場，沒有殘留呼叫',
+   !/function tkFixSessions/.test(src) && !/doTkFixSessions/.test(src)
+   && !/tkFixSessions\(/.test(src));
+ok('★★ 這顆按鈕改開票券卡上的「校正」（管理員限定，先關掉這個視窗）',
+   /\$\{_isAdmin\?`<button class="btn btn-red" onclick="closeModal\(\);tkTidyOpen\('\$\{tkId\}'\)">校正這張票<\/button>`:''\}/.test(src));
+ok('　　②「帳被多退過」的建議文字跟著改，指得到現在的按鈕',
+   /用下面的「校正這張票」把多出來的收回/.test(src)
+   && /請管理員用票券卡上的「校正」處理/.test(src));
+ok('　　為什麼併掉寫在原地', /上線三天一次都沒被用過（ticket_logs 裡 0 筆）/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
