@@ -10253,8 +10253,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.1510';
-const APP_VERSION_LABEL='v260825.1510';
+const APP_VERSION = '260825.1519';
+const APP_VERSION_LABEL='v260825.1519';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20168,9 +20168,18 @@ function bkTag(b){
    建立端本來就有記錄（bookings.created_by）；取消端 0825 才補上 cancelled_by
    （由 DB 觸發器 trg_bookings_cancelled_by 自動填，五條取消路徑一次蓋住）。
    欄位裡存的可能是四種東西，各自要講人話： */
-function bkActorLabel(id, coachMap, memMap){
+/* 這兩個欄位各自從哪一天開始才有值（2026-08-25）——
+   在那之前的資料是「系統當時還沒在記」，不是「這一筆漏掉了」。
+   兩者對櫃檯的意義完全不同：前者不用查，後者要查。措辭因此分開。
+   ⚠ created_by：正式庫最後一筆空白是 2026-08-10；cancelled_by：0825 才加的欄位。 */
+const BK_ACTOR_SINCE={created:'2026-08-11', cancelled:'2026-08-25'};
+function bkActorLabel(id, coachMap, memMap, when, kind){
   const v=String(id||'');
-  if(!v) return '沒有記錄';
+  if(!v){
+    const _since=BK_ACTOR_SINCE[kind||''];
+    const _d=String(when||'').slice(0,10);
+    return (_since && _d && _d<_since) ? '當時未記錄' : '沒有記錄';
+  }
   if(v.indexOf('MEM-')===0){
     /* 2026-08-25 使用者指示：「會員自己建立的改用會員的名字顯示」——
        同一個帳號可能幫家人約，寫名字才看得出是誰動的。查不到名字才退回「會員自己」。 */
@@ -28339,9 +28348,9 @@ async function bkCardPop(el, b, btns, acts){
            團課改畫在標題卡（那裡講的本來就是這一堂課），單人課才留在會員卡
            —— 單人課的「這一堂」就等於「這個人的這一堂」，不會誤讀。 */
       const _opLine=bkIsGroup(b)?'':(()=>{
-        const _c=`建立 ${bkActorLabel(b.created_by,cm,mm)}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
+        const _c=`建立 ${bkActorLabel(b.created_by,cm,mm,b.created_at,'created')}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
         const _x=(b.status==='cancelled')
-          ? `　取消 ${bkActorLabel(b.cancelled_by,cm,mm)}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}` : '';
+          ? `　取消 ${bkActorLabel(b.cancelled_by,cm,mm,b.cancelled_at,'cancelled')}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}` : '';
         return `<div class="ash-mop">${escH(_c)}${_x?`<b>${escH(_x)}</b>`:''}</div>`;
       })();
       return `<div class="ash-mrow">
@@ -28358,7 +28367,7 @@ async function bkCardPop(el, b, btns, acts){
         ${/* 教練請假標移到右下角、教練名左邊（2026-08-20 使用者指示，與首頁課卡一致） */''}
         <div class="ash-meta"><span class="ash-mdate"><b>${String(b.date).slice(5).replace('-','/').replace(/^0/,'')}</b>（${wd}）</span><span class="ash-dot">・</span><span>${_dur} 分</span>${bkIsCoachLeave(b)?'<span class="admh-lvtag ash-lvtag">教練請假</span>':''}${_coachTxt}</div>
         ${/* 團課：「這一堂課是誰開的」屬於整堂，畫在這裡而不是每張會員卡上（見 _opLine 的說明） */''}
-        ${bkIsGroup(b)?`<div class="ash-mop ash-crsop">${escH(`開課 ${bkActorLabel(b.created_by,cm,mm)}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`)}</div>`:''}
+        ${bkIsGroup(b)?`<div class="ash-mop ash-crsop">${escH(`開課 ${bkActorLabel(b.created_by,cm,mm,b.created_at,'created')}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`)}</div>`:''}
       </div>
       ${_memCards?`<div class="ash-mems">${_memCards}</div>`:''}`;
   }else{
@@ -40026,8 +40035,8 @@ function ppRecordHtml(){
                  那就誠實寫「沒有記錄」，不要猜。 */
             const _mmn=c.memMap||{};
             const _lb=bkIsGroup(b)?'開課':'建立';
-            const _opC=`${_lb} ${bkActorLabel(b.created_by,_cm,_mmn)}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
-            const _opX=_cx?`取消 ${bkActorLabel(b.cancelled_by,_cm,_mmn)}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}`:'';
+            const _opC=`${_lb} ${bkActorLabel(b.created_by,_cm,_mmn,b.created_at,'created')}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
+            const _opX=_cx?`取消 ${bkActorLabel(b.cancelled_by,_cm,_mmn,b.cancelled_at,'cancelled')}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}`:'';
             _rows+=`<div class="pp-bkrow${_cx?' pp-bkrow-cx':''}" style="--bkc:${col};">
               <div class="pp-bkdate"><b>${Number(String(b.date).slice(5,7))}/${Number(String(b.date).slice(8,10))}</b><span>（${wd}）</span></div>
               <div class="pp-bkmain"><div class="pp-bkname">${bookingTypeName(b,_tm)}${st?`<span class="pp-bktag ${st[1]}">${st[0]}</span>`:''}</div>

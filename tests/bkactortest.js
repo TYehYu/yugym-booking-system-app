@@ -18,7 +18,7 @@ const grab=(sig)=>{ const i=src.indexOf(sig); if(i<0) throw new Error('找不到
   return src.slice(i,k+1); };
 
 const {bkActorLabel,bkOpTime}=new Function(
-  grab('function bkActorLabel(id, coachMap, memMap){')+'\n'+grab('function bkOpTime(ts){')
+  grab('const BK_ACTOR_SINCE={created:')+'\n'+grab('function bkActorLabel(id, coachMap, memMap, when, kind){')+'\n'+grab('function bkOpTime(ts){')
   +'\nreturn {bkActorLabel,bkOpTime};')();
 
 console.log('實跑 bkActorLabel：欄位裡四種東西各自要講人話');
@@ -35,6 +35,20 @@ ok('★ system → 系統自動（轉正時自動取消那類）', bkActorLabel(
 ok('★ manual-fix-* → 後台修正', bkActorLabel('manual-fix-20260729',CM)==='後台修正');
 ok('★★ 空的就寫「沒有記錄」，不要猜（0810 之前與舊系統匯入的都是空的）',
    bkActorLabel(null,CM)==='沒有記錄' && bkActorLabel('',CM)==='沒有記錄' && bkActorLabel(undefined,CM)==='沒有記錄');
+/* 2026-08-25 使用者：「這邊都是沒有紀錄　是什麼原因呢」——
+   羅秋菊那幾筆是 8/21 取消的，而 cancelled_by 這個欄位 8/25 才存在。
+   「系統當時還沒在記」跟「這一筆漏掉了」對櫃檯的意義完全不同：前者不用查，後者要查。 */
+ok('★★ 欄位還不存在的那段時間 → 「當時未記錄」，不要跟真的漏掉混在一起',
+   bkActorLabel(null,CM,null,'2026-08-21T13:28:00Z','cancelled')==='當時未記錄'
+   && bkActorLabel(null,CM,null,'2026-08-01T00:00:00Z','created')==='當時未記錄');
+ok('★★ 欄位上線之後還是空的 → 「沒有記錄」（那就是真的該查）',
+   bkActorLabel(null,CM,null,'2026-08-26T00:00:00Z','cancelled')==='沒有記錄'
+   && bkActorLabel(null,CM,null,'2026-08-20T00:00:00Z','created')==='沒有記錄');
+ok('　　兩個欄位各有各的起算日（created 0811、cancelled 0825）',
+   /const BK_ACTOR_SINCE=\{created:'2026-08-11', cancelled:'2026-08-25'\};/.test(src));
+ok('　　沒帶時間或種類就維持原本的「沒有記錄」（不會亂猜）',
+   bkActorLabel(null,CM,null,'2026-08-01T00:00:00Z')==='沒有記錄'
+   && bkActorLabel(null,CM,null,null,'cancelled')==='沒有記錄');
 ok('　　查不到名字的員工 id 也不留原始 id 給人看', bkActorLabel('c-unknown',CM)==='員工'
    && bkActorLabel('c-unknown',null)==='員工');
 
@@ -57,10 +71,10 @@ ok('★ 已取消要標出來並淡化、名稱畫刪除線',
    && /\.pp-bkrow\.pp-bkrow-cx\{opacity:\.62;\}/.test(src)
    && /\.pp-bkrow\.pp-bkrow-cx \.pp-bkname\{text-decoration:line-through/.test(src));
 ok('★★ 每一列都寫「建立／開課 誰・什麼時候」，會員自己約的寫名字',
-   /const _opC=`\$\{_lb\} \$\{bkActorLabel\(b\.created_by,_cm,_mmn\)\}/.test(PPB)
+   /const _opC=`\$\{_lb\} \$\{bkActorLabel\(b\.created_by,_cm,_mmn,b\.created_at,'created'\)\}/.test(PPB)
    && /const _lb=bkIsGroup\(b\)\?'開課':'建立';/.test(PPB));
 ok('★★ 取消過的多一段「取消 誰・什麼時候」，用品牌紅（唯一一種「東西不見了」的紀錄）',
-   /const _opX=_cx\?`取消 \$\{bkActorLabel\(b\.cancelled_by,_cm,_mmn\)\}/.test(PPB)
+   /const _opX=_cx\?`取消 \$\{bkActorLabel\(b\.cancelled_by,_cm,_mmn,b\.cancelled_at,'cancelled'\)\}/.test(PPB)
    && /\.pp-bkop-x\{color:var\(--danger/.test(src));
 ok('　　沒取消的就不畫那一段', /_opX\?`<span class="pp-bkop-x">\$\{escH\(_opX\)\}<\/span>`:''/.test(PPB));
 ok('　　多一行之後列不再垂直置中（不然日期會浮在中間）',
@@ -73,12 +87,13 @@ console.log('\n簡易課卡：單人課畫在會員卡、團課畫在標題卡')
 ok('★★ 單人課才畫在會員卡上', /const _opLine=bkIsGroup\(b\)\?'':\(\(\)=>\{/.test(src)
    && /\$\{_tk\}\$\{_subLine\}\$\{_opLine\}<\/div>/.test(src));
 ok('★★ 團課改畫在標題卡，而且改口說「開課」（那是整堂的事實）',
-   /\$\{bkIsGroup\(b\)\?`<div class="ash-mop ash-crsop">\$\{escH\(`開課 \$\{bkActorLabel\(b\.created_by,cm,mm\)\}/.test(src));
+   /\$\{bkIsGroup\(b\)\?`<div class="ash-mop ash-crsop">\$\{escH\(`開課 \$\{bkActorLabel\(b\.created_by,cm,mm,b\.created_at,'created'\)\}/.test(src));
 ok('　　為什麼不能畫在會員卡上寫在原地',
    /不是「這個人是誰加進來的」/.test(src)
    && /讀起來就變成\s*\n\s*「Randy 把郭祐竹加進來」/.test(src));
-ok('★ 會員名字帶得進去（cm 之外多一個 mm）',
-   /bkActorLabel\(b\.created_by,cm,mm\)/.test(src) && /bkActorLabel\(b\.cancelled_by,cm,mm\)/.test(src));
+ok('★ 會員名字與時間都帶得進去',
+   /bkActorLabel\(b\.created_by,cm,mm,b\.created_at,'created'\)/.test(src)
+   && /bkActorLabel\(b\.cancelled_by,cm,mm,b\.cancelled_at,'cancelled'\)/.test(src));
 ok('★ 取消那一段同樣用紅色', /\.ash-mop b\{color:var\(--danger/.test(src));
 
 console.log('\n取消人留得住（0825 使用者回報「顯示沒有紀錄」）');
