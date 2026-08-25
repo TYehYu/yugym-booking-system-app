@@ -112,7 +112,9 @@ ok('★ 已請假的堂：這一層只留復原', /if\(_leave\)\{\s*\n\s*rows \+
    && !/'教練請假',bkCoachLeaveSub\(b\)/.test(ei));
 /* 8 條：調整日期／時間、更改場地（自主訓練）、更改場地（其他課別）、指派代課、
    更換課程、更換票券、補簽、本堂人數上限（0821 之後陸續加的都跟著掛 !_leave）。 */
-ok('　　已請假的堂，其他修改一律不列（每一條都掛 !_leave）', (ei.match(/!_leave &&/g)||[]).length===9);
+/* 0825：更換票券整項移出這張清單，所以少一條（原本 9 條） */
+ok('　　已請假的堂，其他修改一律不列（每一條都掛 !_leave）', (ei.match(/!_leave &&/g)||[]).length===8,
+   (ei.match(/!_leave &&/g)||[]).length);
 ok('　　團課請假＝整堂取消、救不回來，照實說明', ei.includes('這堂的教練請假是<b>整堂取消</b>，無法復原'));
 ok('★ 復原前先跳視窗確認（使用者指示）',
    /async function ashCoachLeaveUndoAsk\(id\)[\s\S]*取消教練請假？[\s\S]*bkCoachLeaveUndo\('\$\{b\.id\}'\)/.test(src));

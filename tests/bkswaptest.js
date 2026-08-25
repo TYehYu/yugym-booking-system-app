@@ -38,8 +38,13 @@ console.log('\n② 候選名單（2026-08-14 二修抽成 bkSwapCandidates，步
 console.log('\n②-b 步驟 2 無票畫面的調課入口（2026-08-14 使用者指示）');
 {
   const G=grabFn('bkStep2Swap');
-  ok('★★ 有可讓的課就多一顆「調課」鈕、說明講堂數', /onclick="bkStep2Swap\(\)">🔁 調課（\$\{_swapN\} 堂可讓）/.test(src)
-     && /不過他之後還有 <b>\$\{_swapN\}<\/b> 堂已排課/.test(src));
+  /* 2026-08-25 使用者定案（A 案）：這一頁就是「觸發」，不再是說明文字＋兩顆鈕。
+     兩條路改成白底列直接問，調課排在上面 —— 那條不會多花錢。 */
+  ok('★★ 有可讓的課就跳出「把後面那一堂的票調過來」那一列，說明講堂數',
+     /onclick="bkStep2Swap\(\)">\s*\n\s*<span class="ash-eilb">把後面那一堂的票調過來<\/span>/.test(src)
+     && /從他之後已排的 \$\{_swapN\} 堂挑一堂讓出來/.test(src));
+  ok('★★ 調課排在「先建立這一堂」上面（不會多花錢的那條先給）',
+     src.indexOf('把後面那一堂的票調過來') < src.indexOf('<span class="ash-eilb">先建立這一堂'));
   ok('★★ 入口組單堂參數、開同一個調課視窗', /const opened=await bkOfferSwap\(\{member_id:C\.member_id, type_id:C\.type_id, date:C\.date, time:C\.time, opts\}\);/.test(G));
 }
 

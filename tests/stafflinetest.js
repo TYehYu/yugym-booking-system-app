@@ -69,8 +69,8 @@ console.log('\n④ 待分期／待簽約已搬到課卡的［＋新增］');
      !/⏳ 待分期繳費保留<\/button>/.test(src) && !/🕒 待簽約卡位<\/button>/.test(src));
 /* 2026-08-24 二修：按鈕的字跟著「有沒有選會員」變 ——
    選了人就是「（待簽約）」（整串掛他名下），沒選才是「（空堂）」。 */
-  ok('★★ 沒票的那條路改成一顆「先建立這一堂」',
-     /onclick="bkOpenHoldCreate\(\)">＋ 先建立這一堂\$\{preMid\?'（待簽約）':'（空堂）'\}<\/button>/.test(src));
+  ok('★★ 沒票的那條路是「先建立這一堂」（0825 改成白底選項列）',
+     /onclick="bkOpenHoldCreate\(\)">\s*\n\s*<span class="ash-eilb">先建立這一堂\$\{preMid\?'（待簽約）':'（空堂）'\}<\/span>/.test(src));
   ok('★★ 選了會員就整串掛他名下（不是匿名空堂）',
      /member_id:w\.member_id\|\|null, coach_id:w\.coach_id\|\|null/.test(src)
      && /openHold 不代表「沒有人」/.test(src));

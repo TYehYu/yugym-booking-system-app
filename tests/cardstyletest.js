@@ -337,8 +337,11 @@ console.log('\n待簽約卡：明細退場、刪除課卡補上（使用者回�
 }
 ok('★ acts 補齊，標題卡的調整課程給得出刪除課卡',
    /await bkCardPop\(el, b, btns, \{pending:true, staff, own, canCancel, closed, isGroup, editable:false,\s*\n\s*venue:_pendVenue\}\);/.test(src));
-ok('★ 待簽約沒有票券 → 不列「更換票券」（否則是死路）',
-   /if\(!_leave && !A\.pending && b\.status==='booked' && !A\.isGroup && isDeskLike\(\)\)/.test(src));
+/* 2026-08-25 使用者：「更換票券的按鈕是應該在標題卡嗎?」「還是改成用觸發的」——
+   整項移出這張清單：其他每一項講的都是這一堂課本身，只有它講「這個人用哪張票付」。 */
+ok('★★ 「更換票券」已移出調整課程（改成觸發＋點會員卡上的票券名稱）',
+   !/rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openBkTicketChange/.test(src)
+   && /只有它講的是「這個人用哪張票付」/.test(src));
 ok('　　pending 仍為 true，會員卡照舊不畫圓鈕（不會變成兩顆按鈕做同一件事）',
    /pending 仍為 true，\s*\n\s*所以會員卡照舊不畫圓鈕/.test(src));
 

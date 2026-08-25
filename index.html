@@ -8573,6 +8573,12 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   .ash-mtag-ns{background:#f7efe0;color:#8a5e28;}
   .ash-mtkname{margin-top:5px;font-size:11.5px;font-weight:600;color:var(--t2);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  /* 可點的票券名稱（2026-08-25，「更換票券」從標題卡搬過來）——
+     不做成按鈕的樣子（那一列本來就是資訊），只在右邊掛一個小小的「換票 ›」當提示。 */
+  .ash-mtkname.ash-mtkname-tap{display:flex;align-items:baseline;gap:6px;width:100%;
+    background:none;border:none;padding:0;font-family:inherit;text-align:left;cursor:pointer;}
+  .ash-mtkname.ash-mtkname-tap:active{opacity:.6;}
+  .ash-mtkgo{margin-left:auto;flex:none;font-size:10.5px;font-weight:700;color:var(--green);}
   .ash-mkchip{margin-left:5px;font-size:10px;font-weight:700;background:#eef6ee;color:#2f6b39;border-radius:999px;padding:1px 6px;}
   .ash-mcard .ash-tk{margin-top:4px;padding:0;background:none;border-radius:0;}
   /* 卡片外的圓鈕改直排：取消在上、簽到在下（2026-08-20 三修） */
@@ -10295,8 +10301,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.1802';
-const APP_VERSION_LABEL='v260825.1802';
+const APP_VERSION = '260825.1830';
+const APP_VERSION_LABEL='v260825.1830';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22891,10 +22897,15 @@ async function ashEditAsk(id){
   if(!_leave && _nobody && _futureOk)
     rows+=row(`closeModal();ashCourseAsk('${b.id}')`,'更換課程',
       `目前是${(typeof bookingTypeName==='function')?bookingTypeName(b,window._ttMapCache||window._memTypeMap):(b.category||'課程')}・這張卡還沒有人，可以直接換`);
-  /* !A.pending：待簽約／空堂本來就沒有綁票券（那正是它們的定義），
-     列出來只會走進「沒有其他可用票券可以換」的死路（2026-08-21）。 */
-  if(!_leave && !A.pending && b.status==='booked' && !A.isGroup && isDeskLike())
-    rows+=row(`ashBackArm('${b.id}');closeModal();openBkTicketChange('${b.id}','ash')`,'更換票券','這堂改扣同一位會員的另一張票（依效期排序）');
+  /* 「更換票券」2026-08-25 移出這張清單（使用者：「那更換票券的按鈕是應該在標題卡嗎?」
+     「還是改成用觸發的」）——
+     這裡其他每一項講的都是**這一堂課本身**（日期時間／場地／代課／刪除），
+     只有它講的是「這個人用哪張票付」，是會員層級的事，混在裡面是唯一的異類。
+     ⚠ 功能沒有消失，換成兩條路：
+       ・沒堂數又要約 → 建立預約步驟 2 自己會跳出「調課／待簽約」兩列（A 案，同日定案）
+       ・扣錯票要改 → 點會員卡上的**票券名稱那一行**（見 bkCardPop 的 .ash-mtkname）
+     為什麼要留手動那條：觸發只涵蓋「沒票可扣」，而「有票但扣錯張」——
+     快到期的沒先用、限定票種扣成一般票、分期票與正式票混——觸發永遠不會發生。 */
   if(!_leave && b.status==='booked' && !A.isGroup && (A.staff||A.coachCk) && bkDatePast(b))
     rows+=row(`ashBackArm('${b.id}');closeModal();openMakeupModal('${b.id}','ash')`,'補簽','補登這堂未簽到的課；自主訓練點數的效期自課程當天起算');
   /* 團課「改人數」（2026-08-07 既有功能）搬進標題卡（2026-08-20 使用者指示） */
@@ -25859,24 +25870,28 @@ async function bkStep2PT(preMid){
            統一在課卡的［＋新增］決定 —— 一件事一個入口。
            ⚠「調課」留著：它不是付款方式，是「這位會員有已排的課，讓一堂過來」，
              而且必須在有選會員的情況下才成立。 */
-        return `<div class="form-row"><div style="font-size:12.5px;color:var(--t2);line-height:1.8;padding:12px 14px;background:var(--card2);border-radius:10px;">
-          ${preMid?`<b>${preInfo?preInfo.name:'該會員'}</b> 沒有此課程的可用票券。${_swapN?`不過他之後還有 <b>${_swapN}</b> 堂已排課——可用「調課」讓一堂出來改到這裡。`:''}`
-                  :'尚未選擇會員。'}
-          <br>也可以<b>先把這一堂建起來</b>（時段與場地先佔住），建好之後在課卡按［＋新增］
-          挑人，並決定要用票券、待簽約，還是接上分期。${_instOk?'<br><span style="color:var(--gold-d,#9a7344);">這位會員有分期方案（尚有未開通堂數），到［＋新增］可以選「待分期」。</span>':''}</div></div>
-        <div class="form-row" style="margin-bottom:8px;">${bkRecurRecap(RECUR_MAX)}</div>
-        <div class="form-row" style="margin-bottom:10px;">
-          <div style="display:flex;gap:10px;">
-            ${_swapN?`<button type="button" class="btn btn-ghost" style="flex:1;padding:13px 8px;" onclick="bkStep2Swap()">🔁 調課（${_swapN} 堂可讓）</button>`:''}
-            <button type="button" class="btn btn-green" style="flex:1;padding:13px 8px;" onclick="bkOpenHoldCreate()">＋ 先建立這一堂${preMid?'（待簽約）':'（空堂）'}</button>
-          </div>
-          <div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.7;">
-            ${preMid
-              ? `<b>待簽約</b>：時段與場地先佔住並<b>掛在這位會員名下</b>，不扣票、不進統計。
-                 收款後在課卡按「轉正」就會扣課。連續預約會整串都掛他。`
-              : `<b>空堂</b>：只佔住時段與場地，不進任何統計、不扣任何票。課卡上會標「待安排」，
-                 姓名顯示金色的「空白」。之後在課卡按［＋新增］補人。`}</div>
-        </div>`; })()}
+        /* ══ 2026-08-25 使用者定案：這一頁就是「觸發」════════════════════════════
+           使用者原話：「票券已經預約完，但是又要新增新的預約時間的時候，
+           1 要開待繳費 2 要轉移票券過來」，並確認**只有沒堂數時才跳**（A 案）。
+
+           原本是一段米底說明文字＋下面兩顆按鈕，讀起來像「補充說明」，
+           櫃檯要自己看完才知道有兩條路。改成兩列白底選項直接問 ——
+           跟改期、挑場地、改抽獎項目同一套語彙（.ash-eirow），一眼就知道要選一個。
+           ⚠ 調課排在上面：那條路**不會多花錢**（把他自己後面那一堂的票挪過來），
+             待簽約是「還沒付款先卡位」，順序反過來會讓人先按到要收錢的那條。 */
+        return `<div class="form-row"><div class="ash-eihead" style="margin:0 0 10px;">
+            ${preMid?`<b style="color:var(--text);">${preInfo?preInfo.name:'該會員'}</b> 沒有此課程的可用票券`:'尚未選擇會員'}
+            ${_swapN?`　·　之後還有 <b style="color:var(--text);">${_swapN}</b> 堂已排課`:''}</div>
+          ${_swapN?`<button type="button" class="ash-eirow" onclick="bkStep2Swap()">
+            <span class="ash-eilb">把後面那一堂的票調過來</span>
+            <span class="ash-eisub">從他之後已排的 ${_swapN} 堂挑一堂讓出來（最遠的排最上面）；原本那個時段會留成空堂，不用多扣一堂票。</span></button>`:''}
+          <button type="button" class="ash-eirow" onclick="bkOpenHoldCreate()">
+            <span class="ash-eilb">先建立這一堂${preMid?'（待簽約）':'（空堂）'}</span>
+            <span class="ash-eisub">${preMid
+              ? `時段與場地先佔住並掛在這位會員名下，不扣票、不進統計。收款後在課卡按「轉正」才扣課；連續預約會整串都掛他。`
+              : `只佔住時段與場地，不進任何統計、不扣任何票。課卡上標「待安排」、姓名顯示金色的「空白」，之後在課卡按［＋新增］補人。`}</span></button>
+          ${_instOk?`<div class="ash-einote" style="color:var(--gold-d,#9a7344);">這位會員有<b>分期方案</b>（尚有未開通堂數）——先建立這一堂之後，到課卡的［＋新增］可以選「待分期」，堂序會接上原本那張票。</div>`:''}
+          <div class="form-row" style="margin:10px 0 0;">${bkRecurRecap(RECUR_MAX)}</div>`; })()}
     ${/* 從「安排這一堂」那張課卡挑人進來的，上一步要回課卡（回步驟 1 等於整張表單重填一次） */''}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="${_bkWizard.viaSlot?'ashSlotBack()':'openBookingModalBack()'}">← 上一步</button>${hasTk?'<button class="btn btn-green" onclick="submitBooking()">確認預約</button>':''}</div>`);
   if(hasTk) refreshBkTicket();
@@ -28276,7 +28291,18 @@ async function bkCardPop(el, b, btns, acts){
         if(sl&&sl.t&&typeof ticketTokens==='function'){
           let _ord=1;   // 票內序：同一張票上這是第幾個名額（跨票時全體序會圈不到）
           if(r.sk){ for(let k=1;k<r.n;k++){ const s2=W.seatOf(b.id,k); if(s2&&s2.t&&s2.t.id===sl.t.id) _ord++; } }
-          _tk=`<div class="ash-mtkname">${tkNoTag(sl.no)}${sl.t.plan_name||'票券'}${sl.t.source==='makeup'?'<span class="ash-mkchip">補課券</span>':''}</div>`
+          /* 票券名稱那一行可以點（2026-08-25）——「這一堂扣錯票」的唯一入口。
+             原本掛在標題卡的「更換票券」移到這裡：點你想改的那張票本身，
+             比「標題卡 → 調整課程 → 更換票券」三層直覺，也不必再解釋那句
+             「這堂改扣同一位會員的另一張票」——你點的就是那張票。
+             ⚠ 團課不給點：團課的票記在 ticket_logs、不在課卡的 ticket_id，
+               openBkTicketChange 換不動它。淡化並寫原因，不藏起來（0823 語彙）。 */
+          const _tkTap = isDeskLike() && b.status==='booked' && r.mid && !A.isGroup;
+          const _tkWhy = (isDeskLike() && b.status!=='booked') ? '　已簽到的課要先取消簽到才能換票'
+            : (isDeskLike() && A.isGroup) ? '　團課的票記在扣課紀錄裡，這裡換不動' : '';
+          _tk=`<${_tkTap?'button type="button"':'div'} class="ash-mtkname${_tkTap?' ash-mtkname-tap':''}"${
+              _tkTap?` onclick="event.stopPropagation();ashBackArm('${b.id}');collapseBkCard();openBkTicketChange('${b.id}','ash')" title="換一張票來扣這一堂"`:(_tkWhy?` title="${_tkWhy.trim()}"`:'')
+            }>${tkNoTag(sl.no)}${sl.t.plan_name||'票券'}${sl.t.source==='makeup'?'<span class="ash-mkchip">補課券</span>':''}${_tkTap?'<span class="ash-mtkgo">換票 ›</span>':''}</${_tkTap?'button':'div'}>`
             + `<div class="ash-tk">${ticketTokens(sl.t,sl.stamps,_wctx.typeMap,sl.used||0,b.id,r.mid,sl.selfBk,r.sk?_ord:undefined)}</div>`;
         }
       }catch(_){}

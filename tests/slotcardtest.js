@@ -254,12 +254,16 @@ ok('★ 空堂不再承諾「開課前 24 小時會提醒教練」（使用者�
    櫃檯會在切換的當下直接失去「更換票券」和「補簽」。 */
 console.log('\n桌機取代：先補功能');
 /* 2026-08-21：多一個 !A.pending —— 待簽約／空堂沒有綁票券，列出來是死路 */
-ok('★ 更換票券進了調整課程（未簽到／非團課／櫃檯以上／有票）',
-   /if\(!_leave && !A\.pending && b\.status==='booked' && !A\.isGroup && isDeskLike\(\)\)\s*\n\s*rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openBkTicketChange\('\$\{b\.id\}','ash'\)`,'更換票券'/.test(src));
+/* 2026-08-25：更換票券移出這張清單，改成「觸發＋點會員卡上的票券名稱」 */
+ok('★★ 更換票券改掛在會員卡的票券名稱那一行（未簽到／非團課／有會員／櫃檯以上）',
+   /const _tkTap = isDeskLike\(\) && b\.status==='booked' && r\.mid && !A\.isGroup;/.test(src)
+   && /onclick="event\.stopPropagation\(\);ashBackArm\('\$\{b\.id\}'\);collapseBkCard\(\);openBkTicketChange\('\$\{b\.id\}','ash'\)"/.test(src));
+ok('　　不能點的時候寫原因（已簽到／團課），不藏起來',
+   /已簽到的課要先取消簽到才能換票/.test(src) && /團課的票記在扣課紀錄裡，這裡換不動/.test(src));
 ok('★ 補簽進了調整課程（只對過去的課；今天以後的走簽到）',
    /if\(!_leave && b\.status==='booked' && !A\.isGroup && \(A\.staff\|\|A\.coachCk\) && bkDatePast\(b\)\)\s*\n\s*rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openMakeupModal\('\$\{b\.id\}','ash'\)`,'補簽'/.test(src));
-ok('★ 兩支的返回都先立旗標回課卡（它們原本的返回是 openBookingDetail）',
-   /ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openBkTicketChange/.test(src)
+ok('★ 返回都先立旗標回課卡（它們原本的返回是 openBookingDetail）',
+   /ashBackArm\('\$\{b\.id\}'\);collapseBkCard\(\);openBkTicketChange/.test(src)
    && /ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openMakeupModal/.test(src));
 ok('　　補簽的說明講明效期基準（使用者：不管哪天補簽都從上課那天算）',
    /補登這堂未簽到的課；自主訓練點數的效期自課程當天起算/.test(src));
