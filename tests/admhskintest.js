@@ -40,22 +40,26 @@ store['admh_skin']='navy';
 console.log('\n掛 class 的條件（三個都要成立）');
 const on=()=>cls.has('admh-navy');
 SREF.v={role:'admin'}; W.mobile=true;
-admhSkinApply('dashboard');
+admhSkinApply('g_dashboard');
 ok('★★ 管理員＋手機＋首頁 → 掛上', on()===true);
 admhSkinApply('calendar');
 ok('★★ 換到別頁就拿掉（不會整個後台變深藍）', on()===false);
-admhSkinApply('dashboard'); W.mobile=false; admhSkinApply('dashboard');
+/* 2026-08-25 使用者回報「只有報表變色 首頁跟行事曆都沒有變」——
+   初版把條件寫成 key==='dashboard'，而那是底部導覽的「報表」；首頁是 g_dashboard。 */
+admhSkinApply('dashboard');
+ok('★★ 報表（dashboard）不是首頁，不吃這個皮膚', on()===false);
+admhSkinApply('g_dashboard'); W.mobile=false; admhSkinApply('g_dashboard');
 ok('★★ 桌機不吃', on()===false);
 W.mobile=true;
-SREF.v={role:'front_desk'}; admhSkinApply('dashboard');
+SREF.v={role:'front_desk'}; admhSkinApply('g_dashboard');
 ok('★★ 櫃檯不吃（使用者說先在管理員帳號測試）', on()===false);
-SREF.v={role:'coach',is_manager:true}; admhSkinApply('dashboard');
+SREF.v={role:'coach',is_manager:true}; admhSkinApply('g_dashboard');
 ok('★★ 店長也不吃', on()===false);
-SREF.v={role:'member'}; admhSkinApply('dashboard');
+SREF.v={role:'member'}; admhSkinApply('g_dashboard');
 ok('★★ 會員不吃', on()===false);
-SREF.v={role:'admin'}; admhSkinApply('dashboard');
+SREF.v={role:'admin'}; admhSkinApply('g_dashboard');
 ok('　　管理員回來就恢復', on()===true);
-store['admh_skin']='cream'; admhSkinApply('dashboard');
+store['admh_skin']='cream'; admhSkinApply('g_dashboard');
 ok('★★ 切回米色就拿掉 class（一鍵還原）', on()===false);
 
 console.log('\n入口');
