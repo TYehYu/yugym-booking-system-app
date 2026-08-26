@@ -9447,7 +9447,10 @@ button.rev-kind.rev-kind-off{opacity:.5;}
 .lot-btn-nm{font-size:14.5px;font-weight:800;color:var(--text);flex:1;min-width:0;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .lot-btn-n{font-size:12.5px;font-weight:800;color:var(--gold-d);flex:none;}
-.lot-btn-sub{font-size:10.5px;color:var(--t3);flex:none;}
+/* 副標 2026-08-26 起會同時帶「本月幾堂」與「哪個月的舊帳」，比以前長 ——
+   讓它可以縮（姓名那格才不會被擠沒），縮不下去就打省略號。 */
+.lot-btn-sub{font-size:10.5px;color:var(--t3);flex:0 1 auto;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* 收款提醒：與抽獎名單同一套白卡（2026-08-22 使用者指示「格式參考抽獎提醒」） */
 .tdl2-row{width:100%;box-sizing:border-box;padding:11px 14px;border-radius:12px;background:#fff;
   border:1.5px solid var(--bd);cursor:pointer;transition:.14s;display:flex;flex-direction:column;gap:7px;}
@@ -10334,8 +10337,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.1852';
-const APP_VERSION_LABEL='v260826.1852';
+const APP_VERSION = '260826.1859';
+const APP_VERSION_LABEL='v260826.1859';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19051,7 +19054,14 @@ function lottoEarnedByMember(bookings, ym){
       const e=Math.floor(months[m]/4);
       if(e>0){ earned+=e; from.push({ym:m, n:e}); }
     });
-    out[id]={earned, att, months:from};
+    /* cur＝**這個月**簽到幾堂（2026-08-26 使用者回報「葉思葦簽到 7 堂?　這個月是 4 堂才對
+       這邊數字應該是代表這個月他上幾次了吧」）——
+       att 是 LOTTO_FROM 以來的累計，名單上卻寫在「當月滿 4 堂可抽 1 次」這句規則旁邊，
+       看起來就像本月堂數。葉思葦 7 月 3 堂＋8 月 4 堂＝7，畫面顯示「簽到 7 堂」。
+       ⚠ 而且 7 月那 3 堂**永遠不會**變成次數（門檻是逐月算、不滿 4 堂的餘數不累積），
+         把它們算進「簽到 N 堂」是雙重誤導。
+       att 保留不動：那是「累計上過幾堂」，日後若要看歷史還用得到。 */
+    out[id]={earned, att, cur:(ym?(months[ym]||0):0), months:from};
   });
   return out;
 }
@@ -19126,9 +19136,19 @@ function lottoStats(bookings,purchases,ym,members){
   const _vip=lottoVipSet(members);   // VIP 不參與常態抽獎（2026-07-29）
   const E=lottoEarnedByMember(bookings, ym), U=lottoUsedByMember(purchases, ym);
   return Object.keys(E).filter(id=>!_vip.has(id))
-    .map(id=>({id, att:E[id].att, earned:E[id].earned, used:U[id]||0, months:E[id].months}))
+    .map(id=>({id, att:E[id].att, cur:E[id].cur, earned:E[id].earned, used:U[id]||0, months:E[id].months}))
     .map(x=>Object.assign(x,{left:x.earned-x.used}))
     .filter(x=>x.left>0);
+}
+/* 名單那一列的副標（2026-08-26）：本月堂數是主角，舊帳接在後面。
+   原本是「有舊帳就只顯示舊帳、沒有才顯示堂數」二選一 —— 但那兩件事都要看：
+   本月幾堂決定「還差幾堂再多一次」，舊帳決定「這次是哪個月欠的」。 */
+function lottoSubLabel(x, ym){
+  const cur=(x&&x.cur)||0;
+  const need=(4-(cur%4))%4;
+  const base=`本月簽到 ${cur} 堂`+(need?`（再 ${need} 堂多一次）`:'');
+  const pend=lottoPendingFrom(x, ym);
+  return pend?`${base}　·　${pend}`:base;
 }
 /* 這幾次是哪幾個月掙到的（名單上標出來，櫃檯才知道是舊帳，客人問也答得出來） */
 function lottoPendingFrom(x, ym){
@@ -19140,7 +19160,9 @@ function lottoPendingFrom(x, ym){
   }
   const old=out.filter(o=>o.ym!==ym);
   if(!old.length) return '';
-  return old.map(o=>`${Number(o.ym.slice(5))} 月${o.n>1?` ${o.n} 次`:''}`).join('、')+' 未抽';
+  /* 2026-08-26：「未抽」前面原本多一個空白（「7 月 未抽」「7 月 2 次 未抽」）——
+     0826 起這句接在「本月簽到 N 堂　·　」後面，那個空白看起來就是漏字。 */
+  return old.map(o=>`${Number(o.ym.slice(5))} 月${o.n>1?` ${o.n} 次`:''}`).join('、')+'未抽';
 }
 async function openLottoModal(selId){
   /* 登記會把票券發出去 —— 入口多了一個（帳號選單）之後，這裡也要自己擋一次，
@@ -19178,7 +19200,7 @@ async function openLottoModal(selId){
   const rows=list.sort((a,b)=>b.left-a.left).map(x=>`<button class="lot-btn${selId===x.id?' sel':''}" onclick="openLottoModal('${x.id}')">
     <span class="lot-btn-nm">${(mMap[x.id]&&mMap[x.id].name)||'—'}</span>
     <span class="lot-btn-n">可抽 ${x.left} 次</span>
-    <span class="lot-btn-sub">${lottoPendingFrom(x, ym)||`簽到 ${x.att} 堂`}</span></button>`).join('');
+    <span class="lot-btn-sub">${lottoSubLabel(x, ym)}</span></button>`).join('');
   const prizeGrid=selId?`<div class="lot-sec">客人抽中哪一項？</div><div class="lot-prizes">${LOTTO_PRIZES.map(p=>
     `<button class="lot-prize" onclick="lottoAward('${selId}','${p.key}')">${
       p.kind==='goods'?LNI[p.icon]:(p.kind==='voucher'?LNI.coin:`<span class="lot-glyph" style="color:${p.gcol};">${p.glyph}</span>`)

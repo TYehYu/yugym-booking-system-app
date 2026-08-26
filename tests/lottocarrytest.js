@@ -81,14 +81,17 @@ console.log('\n⑥ 名單上要標出是哪個月的舊帳');
 {
   const B=[...bk('M1','2026-07-10',4), ...bk('M1','2026-08-05',4)];
   const x=API.lottoStats(B, [], '2026-08', [])[0];
-  eq('★ 兩次都沒抽 → 標出七月那筆', API.lottoPendingFrom(x,'2026-08'), '7 月 未抽');
+  eq('★ 兩次都沒抽 → 標出七月那筆', API.lottoPendingFrom(x,'2026-08'), '7 月未抽');   /* 0826 拿掉「未抽」前多餘的空白 */
   const y=API.lottoStats(B, [lot('M1','2026-08-06')], '2026-08', [])[0];
   eq('★ 抽掉一次 → 先抵最早的，剩下的是八月的（不標）', API.lottoPendingFrom(y,'2026-08'), '');
   const z=API.lottoStats([...bk('M1','2026-07-10',8)], [], '2026-08', [])[0];
-  eq('　　同一個月欠兩次 → 寫次數', API.lottoPendingFrom(z,'2026-08'), '7 月 2 次 未抽');
+  eq('　　同一個月欠兩次 → 寫次數', API.lottoPendingFrom(z,'2026-08'), '7 月 2 次未抽');
   eq('　　沒有資料不會爆', API.lottoPendingFrom(null,'2026-08'), '');
-  ok('　　名單上用得到（沒有舊帳時退回顯示簽到堂數）',
-     /\$\{lottoPendingFrom\(x, ym\)\|\|`簽到 \$\{x\.att\} 堂`\}/.test(src));
+  /* 2026-08-26：改成兩件事一起顯示（見 tests/lotsubtest.js）——
+     原本是「有舊帳就只顯示舊帳、沒有才顯示堂數」二選一，而那個堂數還是累計值。 */
+  ok('　　名單上用得到（現在由 lottoSubLabel 併進「本月簽到 N 堂」後面）',
+     /const pend=lottoPendingFrom\(x, ym\);/.test(src)
+     && /<span class="lot-btn-sub">\$\{lottoSubLabel\(x, ym\)\}<\/span>/.test(src));
 }
 
 console.log('\n⑦ 課卡的禮物圖示與說明文字');
@@ -115,7 +118,8 @@ ok('★ 白底（原本是米底 var(--card2)）',
 ok('　　整列橫向：姓名靠左撐開，可抽次數與簽到堂數靠右',
    /\.lot-btn-nm\{font-size:14\.5px;font-weight:800;color:var\(--text\);flex:1;min-width:0;/.test(src)
    && /\.lot-btn-n\{[^}]*flex:none;\}/.test(src)
-   && /\.lot-btn-sub\{[^}]*flex:none;\}/.test(src));
+   /* 副標 0826 起改成可縮（內容變長了），但仍然是靠右那一側 */
+   && /\.lot-btn-sub\{[^}]*flex:0 1 auto;min-width:0;/.test(src));
 ok('　　長姓名截斷不換行（一列的高度要固定）',
    /overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}\n\.lot-btn-n\{/.test(src));
 ok('　　選中仍是綠框綠底（沒有被白底蓋掉）',
