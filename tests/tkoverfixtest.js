@@ -45,8 +45,21 @@ ok('★★ 判讀用「票面餘額 vs 實際佔用的預約數」，不是只�
    +'（匯入票的基線用量沒進帳本，照帳本改會扣錯——林韋綺那張的教訓）',
    /一律用「票面餘額 vs 實際佔用的預約數」對照，帳本只當佐證/.test(src)
    && /林韋綺那張看起來「退兩次」，實際餘額是對的/.test(src));
-ok('　　佔用清單：取消的不算；單人課看 ticket_id、團課看帳本淨額',
-   /const hold=\(bks\|\|\[\]\)\.filter\(x=>x&&x\.status!=='cancelled'/.test(src)
+/* 2026-08-26 使用者：「林韋綺有兩堂是因為教練請假　所以這兩台不能算進來」——
+   教練請假新制（0814）是「請假當下不退、票掛著；到場簽到才退 1 堂，但預約仍掛著
+   同一張票」，所以 ticket_id 還在、帳本淨值卻是 0。只看 ticket_id 就會多算兩堂。 */
+ok('★★ 帳已退回的不算佔位（判準與超約防線 tkBookedCountMap 同一條）',
+   /const _freedOf=x=>!!_hasLg\[x\.id\] && \(net\[x\.id\]\|\|0\)<=0;/.test(src)
+   && /const hold=_all\.filter\(x=>!_freedOf\(x\)\);/.test(src)
+   && /const freed=_all\.filter\(_freedOf\);/.test(src));
+ok('★★ 完全沒有帳本紀錄的照舊算佔用（舊匯入沒有 ticket_logs，放行會拆掉整條防線）',
+   /有帳本且淨值 >= 0 才放行/.test(src)
+   && /用「查不到帳就當沒扣」會把整條防線拆掉/.test(src));
+ok('★★ 不算佔位的那幾筆仍然列出來（淡化＋寫原因，不藏起來）',
+   /另有 \$\{freed\.length\} 筆掛在這張票上，但堂數已經退回、<b>不算佔位<\/b>/.test(src)
+   && /\(x\.coach_leave===true\|\|x\.status==='coach_leave'\)\?'教練請假・已退回':'已退回'/.test(src));
+ok('　　候選：取消的不算；單人課看 ticket_id、團課看帳本淨額',
+   /const _all=\(bks\|\|\[\]\)\.filter\(x=>x&&x\.status!=='cancelled'/.test(src)
    && /\(String\(x\.ticket_id\|\|''\)===String\(tkId\) \|\| \(net\[x\.id\]\|\|0\)>0\)/.test(src));
 ok('　　清單裡標出「這一堂」是哪一筆', /← 這一堂/.test(src));
 

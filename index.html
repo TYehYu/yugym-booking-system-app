@@ -10301,8 +10301,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.1513';
-const APP_VERSION_LABEL='v260826.1513';
+const APP_VERSION = '260826.1518';
+const APP_VERSION_LABEL='v260826.1518';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11370,13 +11370,24 @@ async function mtkOverAsk(tkId, bkId){
   const total=Number(t.sessions_total)||0, rem=Number(t.sessions_remaining)||0;
   /* 實際佔用＝這張票身上「還算數」的預約：已上的、已預約未上的都算，取消的不算。
      單人課看 ticket_id，團課的帳只在 ticket_logs（淨扣 >0）。 */
-  const net={};
+  const net={}, _hasLg={};
   (logs||[]).forEach(l=>{ if(!l||l.ticket_id!==tkId||!l.booking_id) return;
     const d=l.action==='deduct'?1:(l.action==='refund'?-1:0); if(!d) return;
-    net[l.booking_id]=(net[l.booking_id]||0)+d; });
-  const hold=(bks||[]).filter(x=>x&&x.status!=='cancelled'
+    net[l.booking_id]=(net[l.booking_id]||0)+d; _hasLg[l.booking_id]=1; });
+  /* 帳已經退回來的那幾堂不算佔位（2026-08-26 使用者回報：「林韋綺有兩堂是因為
+     教練請假，所以這兩台不能算進來」）——
+     教練請假新制（0814）是「請假當下不退、票掛著；到場簽到才退 1 堂，但預約仍掛著
+     同一張票」。所以那兩堂的 ticket_id 還在，帳本淨值卻是 0。只看 ticket_id 就會
+     把它們算成佔位，於是「11 筆 / 8 堂」講成超約 3 堂，實際只超 1 堂。
+     ⚠ 判準與超約防線（tkBookedCountMap）同一條：**有帳本且淨值 >= 0 才放行**；
+       完全沒有帳本紀錄的照舊算佔用（舊系統匯入的課沒有 ticket_logs，
+       用「查不到帳就當沒扣」會把整條防線拆掉）。 */
+  const _freedOf=x=>!!_hasLg[x.id] && (net[x.id]||0)<=0;
+  const _all=(bks||[]).filter(x=>x&&x.status!=='cancelled'
       && (String(x.ticket_id||'')===String(tkId) || (net[x.id]||0)>0))
     .sort((x,y)=>String(x.date+x.start_time).localeCompare(String(y.date+y.start_time)));
+  const hold=_all.filter(x=>!_freedOf(x));
+  const freed=_all.filter(_freedOf);
   const _d=x=>String(x.date||'').slice(5).replace('-','/')+' '+String(x.start_time||'').slice(0,5);
   const _isAdmin=!!(SESSION&&SESSION.role==='admin');
   /* 三選一的判讀（順序有意義：先講「還有餘額」，那是一鍵就能解決的） */
@@ -11418,10 +11429,16 @@ async function mtkOverAsk(tkId, bkId){
       票券：${(t.plan_name||'票券').replace(/</g,'&lt;')}　·　${total} 堂　·　票面餘額 <b class="num">${rem}</b></div>
     <div style="background:var(--card2);border:1px solid var(--bd);border-radius:11px;padding:11px 13px;font-size:12.5px;line-height:1.9;">
       ${why}<br><span style="color:var(--green);">${fix}</span></div>
-    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">這張票目前掛著的 ${hold.length} 筆：</div>
+    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">這張票目前佔著的 ${hold.length} 筆：</div>
     <div style="background:var(--card2);border-radius:9px;padding:8px 12px;margin-top:4px;font-size:12.5px;line-height:1.9;max-height:180px;overflow:auto;">
       ${hold.length?hold.map(x=>`<div${x.id===bkId?' style="color:var(--danger,#b5372e);font-weight:700;"':''}>${_d(x)}　<span style="${
         x.id===bkId?'':'color:var(--t3);'}">${x.status==='booked'?'已預約':'已上'}${x.id===bkId?'　← 這一堂':''}</span></div>`).join(''):'<span style="color:var(--t3);">（沒有）</span>'}</div>
+    ${/* 掛著但帳已退回的也列出來 —— 不列的話櫃檯會以為那兩堂不見了（0823 的
+         「不能用就寫原因，別藏起來」同一個道理：數字不算它，但事情要看得到）。 */''}
+    ${freed.length?`<div style="font-size:11.5px;color:var(--t3);margin-top:10px;">另有 ${freed.length} 筆掛在這張票上，但堂數已經退回、<b>不算佔位</b>：</div>
+    <div style="background:var(--card2);border-radius:9px;padding:8px 12px;margin-top:4px;font-size:12.5px;line-height:1.9;opacity:.72;max-height:120px;overflow:auto;">
+      ${freed.map(x=>`<div>${_d(x)}　<span style="color:var(--t3);">${
+        (x.coach_leave===true||x.status==='coach_leave')?'教練請假・已退回':'已退回'}</span></div>`).join('')}</div>`:''}
     <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
       ${/* 2026-08-26：條件從「這張票還有餘額」放寬成「有別張可以用也算」——
