@@ -160,7 +160,7 @@ ok('★ 不用厚重陰影與發光（陰影 token 一律拉平）',
 /* 2026-08-26 二修（使用者附前後對照圖：「標題列幫我改一下，參考這張。用橄欖綠。
    設計語言要一致」）—— 頂欄從米白改成低彩度橄欖綠實心，字改米白。 */
 ok('★★ 頂欄是橄欖綠實心、字米白',
-   /body\.ink\{ --olive:#5E6A4A; --olive-d:#4E583D; --cream:#F2EFE4; \}/.test(src)
+   /body\.ink\{ --olive:#556B45; --olive-d:#445636; --cream:#F2EFE4; \}/.test(src)
    && /body\.ink\.mc-mode \.mc-sidebar\{\s*\n\s*background:var\(--olive\);color:var\(--cream\);/.test(src));
 ok('★★ 目前頁面仍用底線標示（不是實心膠囊），只是換成米白線',
    /body\.ink\.mc-mode \.mc-nav-item\.active\{background:transparent;color:#fff;\s*\n\s*border-bottom-color:var\(--cream\);/.test(src));
@@ -304,8 +304,8 @@ console.log('\n⑥ 首頁總覽（2026-08-26 使用者：「首頁參考這張�
      /body\.ink \.mc-card,body\.ink \.cal-hero,body\.ink \.ds-card,body\.ink \.wk-strip,/.test(src)
      && /border-radius:6px;box-shadow:none;border:1px solid var\(--bd\);background:var\(--card\);/.test(src));
   ok('★★ 今天／選取日改橄欖綠（與導覽列「目前頁面」同一種語彙）',
-     /body\.ink \.wk-cell\.wk-today \.wk-date\{background:var\(--olive,#5E6A4A\);color:#F2EFE4;\}/.test(src)
-     && /body\.ink \.cdash-cell\.cdash-sel\{border-color:var\(--olive,#5E6A4A\);/.test(src));
+     /body\.ink \.wk-cell\.wk-today \.wk-date\{background:var\(--olive,#556B45\);color:#F2EFE4;\}/.test(src)
+     && /body\.ink \.cdash-cell\.cdash-sel\{border-color:var\(--olive,#556B45\);/.test(src));
   ok('★ 月曆「今天」仍是金框（語意不變）',
      /body\.ink \.cdash-cell\.cdash-today\{box-shadow:0 0 0 2px var\(--gold-d\) inset;\}/.test(src));
   ok('★★ 今日教練任務卡與行事曆課卡同一張臉（同一組 color-mix 百分比）',
@@ -337,7 +337,7 @@ console.log('\n⑦ 首頁二修（使用者：「配色呢！！！我只有看�
   ok('★★ 月曆從深綠翻成米白面，而且字／格線／今天／選取全部跟著翻（不會白底白字）',
      /body\.ink \.mc-dash \.cal-side,body\.ink \.cal-side\{\s*\n\s*background:var\(--card\);/.test(src)
      && ['mc-wdh','mc-d','mc-dot','cal-hero-nav'].every(k=>new RegExp('body\\.ink \\.cal-side [^{]*'+k).test(src))
-     && /body\.ink \.cal-side \.mc-cell\.mc-today \.mc-d\{background:var\(--olive,#5E6A4A\);color:#F2EFE4;\}/.test(src));
+     && /body\.ink \.cal-side \.mc-cell\.mc-today \.mc-d\{background:var\(--olive,#556B45\);color:#F2EFE4;\}/.test(src));
   ok('★★ 兩張提醒卡：深紅漸層 → 米白面＋磚紅細框，數字仍是磚紅（紅色是語意，留著）',
      /body\.ink \.mc-kpistrip \.mc-alert2 \.mc-a2\{\s*\n\s*background:var\(--card\);border:1px solid color-mix\(in srgb, var\(--danger,#8C4A3E\) 38%, transparent\);/.test(src)
      && /body\.ink \.mc-kpistrip \.mc-alert2 \.mc-a2-n\{color:var\(--danger,#8C4A3E\);/.test(src));
@@ -354,6 +354,47 @@ console.log('\n⑦ 首頁二修（使用者：「配色呢！！！我只有看�
   ok('　 「上課中」那一圈刻意留著（那是另一個狀態，不是簽到）',
      /只關掉「已完成」那一圈；「上課中」\(\.tcard-live\) 的環還留著/.test(src)
      && /\.tcard-std\.tcard-live::before|tcardComet/.test(src));
+}
+
+
+console.log('\n⑧ 首頁三修：定色 #556B45 ＋ 左欄／中欄對齊參考圖');
+{
+  const H3=src.slice(src.indexOf('/* ══ Ink · 首頁 三修'), src.indexOf('</style>'));
+  eq('★★ 沒有寫死掉的選擇器', deadSel(H3), []);
+  ok('★★ 只改外觀（沒有一條碰版面）',
+     H3.replace(/\/\*[\s\S]*?\*\//g,'').split('}').filter(b=>{const i=b.indexOf('{'); if(i<0)return false;
+       return /(^|[;{\s])(position|top|left|right|bottom|width|height|display|flex-direction)\s*:/.test(b.slice(i+1));}).length===0);
+
+  ok('★★ 橄欖綠定色 #556B45（使用者指名色號）',
+     /body\.ink\{ --olive:#556B45; --olive-d:#445636; --cream:#F2EFE4; \}/.test(src));
+  /* ⚠ 這兩項比的是**舊**色號，不要跟著全域取代（第一次改就是這樣把自己改壞的） */
+  const OLD1='#5E'+'6A4A', OLD2='#6C'+'7757';
+  const olds=(src.match(new RegExp(OLD1+'|'+OLD2,'g'))||[]);
+  eq('★★ 舊色號只剩沿革註解那一行，規則裡一個都沒有', olds.length, 2);
+  ok('　 fallback 值也一起換掉了（只改 token 卻被 fallback 咬到是經典坑）',
+     src.indexOf('var(--olive,'+OLD1+')')<0 && /var\(--olive,#556B45\)/.test(src));
+
+  ok('★★ 兩張提醒卡改素面＋大黑數字（參考圖不是紅底也不是紅框）',
+     /body\.ink \.mc-kpistrip \.mc-alert2 \.mc-a2\{\s*\n\s*background:var\(--card\);border:1px solid var\(--bd\);border-radius:10px;box-shadow:none;\}/.test(H3)
+     && /body\.ink \.mc-kpistrip \.mc-alert2 \.mc-a2-n\{color:var\(--text\);/.test(H3));
+  ok('　 點下去仍是原本的名單視窗（功能沒動）',
+     /<button class="card mc-card mc-a2" onclick="openTodoList\('sign'\)">/.test(src)
+     && /<button class="card mc-card mc-a2" onclick="openTodoList\('demote'\)">/.test(src));
+
+  ok('★★ 中間日期列：素面白格＋細框，今天＝橄欖實心',
+     /body\.ink \.twk-barin \.twk-day\.today\{background:var\(--olive,#556B45\);border-color:var\(--olive,#556B45\);\}/.test(src)
+     && /body\.ink \.twk-barin \.twk-day\.today \.twk-md,body\.ink \.twk-barin \.twk-day\.today \.twk-w\{color:#F2EFE4;\}/.test(src));
+  ok('　 日期數字等寬（日期列才不會左右跳動）',
+     /body\.ink \.twk-day \.twk-md\{font-family:var\(--font-en\);font-variant-numeric:tabular-nums;/.test(src));
+  ok('★ 翻頁鈕與「回到今天」從品牌紅退成素面細框（紅色留給真的要處理的事）',
+     /body\.ink \.twk-bar>\.tl-daynav,body\.ink \.twk-bar>\.twk-today-slot \.tl-daynav-today\{/.test(src));
+  ok('　 原本的紅底沒被刪掉（關掉 Ink 就回去）',
+     /\.twk-bar>\.tl-daynav:hover\{background:#5E0303;\}/.test(src));
+
+  ok('★ 三個日期語彙統一成橄欖：導覽列目前頁面／月曆今天／日期列今天',
+     [/\.mc-nav-item\.active\{background:transparent;color:#fff;/,
+      /\.cal-side \.mc-cell\.mc-today \.mc-d\{background:var\(--olive,#556B45\)/,
+      /\.twk-barin \.twk-day\.today\{background:var\(--olive,#556B45\)/].every(re=>re.test(src)));
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
