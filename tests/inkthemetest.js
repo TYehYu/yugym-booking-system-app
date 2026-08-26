@@ -81,16 +81,29 @@ console.log('\n② 狀態語意全部保留（顏色深淺、反灰、今日、�
 
 console.log('\n③ 只示範管理員（使用者：「只示範更改管理員的頁面」）');
 {
-  const fn=new Function('SESSION','localStorage',
-    src.slice(src.indexOf('function inkOn(){'), src.indexOf('function inkApply()'))+'\nreturn inkOn;');
+  const mk=(mobile)=>new Function('SESSION','localStorage','isMobileLayout',
+    src.slice(src.indexOf('function inkOn(){'), src.indexOf('function inkApply()'))+'\nreturn inkOn;')
+    .bind(null);
   const LS=v=>({getItem:()=>v, setItem:()=>{}});
-  eq('★★ 管理員 → 開', fn({role:'admin'}, LS(null))(), true);
-  eq('★★ 櫃檯 → 不開', fn({role:'front_desk'}, LS(null))(), false);
-  eq('★★ 教練 → 不開', fn({role:'coach'}, LS(null))(), false);
-  eq('★★ 會員 → 不開', fn({role:'member'}, LS(null))(), false);
-  eq('　 還沒登入 → 不開', fn(null, LS(null))(), false);
-  eq('★★ 逃生門：管理員也能當場退回舊版（yugym_ink=0）', fn({role:'admin'}, LS('0'))(), false);
-  eq('★ 也能在非管理員帳號上試看（yugym_ink=1）', fn({role:'coach'}, LS('1'))(), true);
+  const fn=(sess,ls,mobile)=>new Function('SESSION','localStorage','isMobileLayout',
+    src.slice(src.indexOf('function inkOn(){'), src.indexOf('function inkApply()'))+'\nreturn inkOn;')(
+      sess, ls, ()=>!!mobile);
+  eq('★★ 管理員＋桌機 → 開', fn({role:'admin'}, LS(null), false)(), true);
+  eq('★★ 櫃檯 → 不開', fn({role:'front_desk'}, LS(null), false)(), false);
+  eq('★★ 教練 → 不開', fn({role:'coach'}, LS(null), false)(), false);
+  eq('★★ 會員 → 不開', fn({role:'member'}, LS(null), false)(), false);
+  eq('　 還沒登入 → 不開', fn(null, LS(null), false)(), false);
+  /* 2026-08-26 使用者：「但手機版的怎麼變這樣，你先不要動手機版的介面」——
+     .cal-chip／.btn／.mc-nav 是桌機與手機共用的 class，沒擋裝置手機會整片跟著變。 */
+  eq('★★ 管理員但在手機 → 不開（手機版一律維持原樣）', fn({role:'admin'}, LS(null), true)(), false);
+  eq('★★ 手機優先於 localStorage 的強制開啟', fn({role:'admin'}, LS('1'), true)(), false);
+  eq('★★ 逃生門：管理員也能當場退回舊版（yugym_ink=0）', fn({role:'admin'}, LS('0'), false)(), false);
+  eq('★ 也能在非管理員帳號上試看（yugym_ink=1）', fn({role:'coach'}, LS('1'), false)(), true);
+  ok('★ 轉向／改視窗大小會重算（navTo 只在換頁時跑）',
+     /window\.addEventListener\('resize', \(\)=>\{ try\{ inkApply\(\); \}catch\(_\)\{\} \}\);/.test(src)
+     && /window\.addEventListener\('orientationchange', \(\)=>\{ setTimeout\(\(\)=>\{ try\{ inkApply\(\); \}catch\(_\)\{\} \},200\); \}\);/.test(src));
+  ok('★★ 為什麼要擋手機（共用 class）寫在原地',
+     /這一層改的是 \.cal-chip／\.btn／\.mc-nav 這些\*\*桌機與手機共用\*\*的 class/.test(src));
   ok('★★ 三次版面大改被還原的紀錄寫在原地（所以第一天就帶逃生門）',
      /這個專案的版面大改被還原過三次/.test(src)
      && /就能立刻退回舊版，不必等重新部署/.test(src));
@@ -119,8 +132,21 @@ ok('★★ 教練篩選改「小色點＋名稱」，不是一整排彩色膠囊
    && /body\.ink \.cal-chip\{[^}]*background:transparent !important;color:var\(--t2\) !important;/.test(src));
 ok('★★ 色點只在 Ink 層出現，舊版一個字都沒變',
    /\.cchip-dot\{display:none;\}   \/\* 舊版不畫色點/.test(src));
-ok('★ 課程類型改細框按鈕，不再整排彩色（也不再灰階淡化）',
-   /body\.ink \.cal-chip\.cal-chip-course\{border:1px solid var\(--bd\);font-weight:500;\s*\n\s*opacity:1 !important;filter:none !important;\}/.test(src));
+/* 2026-08-26 使用者：「還有課程類型還是要標注顏色」—— 細框按鈕 ＋ 小色點，
+   與教練那排同一種語彙（顏色退到點上，字維持墨色）。 */
+ok('★★ 課程類型有標注顏色：小色點吃課程色 token',
+   /body\.ink \.cal-chip\.cal-chip-course::before\{content:'';width:6px;height:6px;border-radius:50%;/.test(src)
+   && /body\.ink \.cal-chip\.cal-chip-course\.ev-pt\{--ccol:var\(--course-pt-accent\);\}/.test(src)
+   && /body\.ink \.cal-chip\.cal-chip-course\.ev-trial\{--ccol:var\(--course-trial-accent\);\}/.test(src));
+ok('★★ 六種課別都有色點（含沒有 token 的運動按摩）',
+   ['ev-pt','ev-friendly','ev-group','ev-trial','ev-self','ev-massage']
+     .every(k=>new RegExp('cal-chip-course\\.'+k+'\\{--ccol:').test(src)));
+ok('★ 但仍然不是彩色膠囊：底透明、字墨色，顏色只在點與淡框',
+   /body\.ink \.cal-chip\.cal-chip-course\{font-weight:500;opacity:1 !important;filter:none !important;\s*\n\s*border:1px solid color-mix\(in srgb, var\(--ccol,#8a8178\) 34%, transparent\);\}/.test(src));
+ok('　 選取時色點翻成米白（不然會沉進深咖啡底）',
+   /body\.ink \.cal-chip\.cal-chip-course\.on::before\{background:#FFFDF8;\}/.test(src));
+ok('　 色點直接吃課程色 token，沒有另訂一份',
+   !/--ccol:#(?!2f8f83)/.test(src));
 ok('★ 選取狀態用深咖啡實心（教練與課程一致）',
    /body\.ink \.cal-chip\.on\{background:var\(--green\) !important;/.test(src));
 /* 2026-08-26 使用者更正：「全站不要使用任何 serif／宋體感字體」

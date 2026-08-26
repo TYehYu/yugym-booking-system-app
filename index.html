@@ -10274,10 +10274,24 @@ body.ink .cal-chip.cal-chip-coach{border:none;padding:6px 9px;gap:7px;}
 .cchip-dot{display:none;}   /* 舊版不畫色點（Ink 視覺層才開，見下） */
 body.ink .cchip-dot{display:inline-block;width:7px;height:7px;border-radius:50%;
   background:var(--cc,var(--t3));flex:none;}
-/* 課程類型＝細框按鈕，顏色只留一顆小點當辨識 */
-body.ink .cal-chip.cal-chip-course{border:1px solid var(--bd);font-weight:500;
-  opacity:1 !important;filter:none !important;}
-body.ink .cal-chip.cal-chip-course:hover{border-color:var(--green);}
+/* 課程類型＝細框按鈕 ＋ 小色點（2026-08-26 使用者：「課程類型還是要標注顏色」）——
+   與上面那排教練同一種語彙：顏色退到左邊那顆點，字維持墨色，整排不會變成五顏六色。
+   ⚠ 色點直接吃課程色 token（--course-*-accent），不另外訂一份；
+     ev-massage 沒有 token，只好寫死（既有色 #2f8f83，與課卡同一個值）。
+   ⚠ 框線用 color-mix 帶一點同色，比純灰框看得出課種，又不會變成彩色膠囊。 */
+body.ink .cal-chip.cal-chip-course{font-weight:500;opacity:1 !important;filter:none !important;
+  border:1px solid color-mix(in srgb, var(--ccol,#8a8178) 34%, transparent);}
+body.ink .cal-chip.cal-chip-course::before{content:'';width:6px;height:6px;border-radius:50%;
+  flex:none;background:var(--ccol,var(--t3));}
+body.ink .cal-chip.cal-chip-course.ev-pt{--ccol:var(--course-pt-accent);}
+body.ink .cal-chip.cal-chip-course.ev-friendly{--ccol:var(--course-friendly-accent);}
+body.ink .cal-chip.cal-chip-course.ev-group{--ccol:var(--course-group-accent);}
+body.ink .cal-chip.cal-chip-course.ev-trial{--ccol:var(--course-trial-accent);}
+body.ink .cal-chip.cal-chip-course.ev-self{--ccol:var(--course-self-accent);}
+body.ink .cal-chip.cal-chip-course.ev-massage{--ccol:#2f8f83;}
+body.ink .cal-chip.cal-chip-course:hover{border-color:var(--ccol,var(--green));}
+/* 選取時整顆深咖啡實心，色點翻成米白（不然點會沉進底色裡） */
+body.ink .cal-chip.cal-chip-course.on::before{background:#FFFDF8;}
 /* 選取狀態：深咖啡實心（教練與課程一致，一眼看得出選了哪個） */
 body.ink .cal-chip.on{background:var(--green) !important;color:#FFFDF8 !important;
   border-color:var(--green);font-weight:600;}
@@ -10527,8 +10541,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.2156';
-const APP_VERSION_LABEL='v260826.2156';
+const APP_VERSION = '260826.2202';
+const APP_VERSION_LABEL='v260826.2202';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13950,10 +13964,19 @@ window._navSeqNo=window._navSeqNo||0;
      就能立刻退回舊版，不必等重新部署；設 '1' 則可在非管理員帳號上試看。
    ⚠ 純視覺：body 上多一個 class 而已，沒有任何版面計算或資料流程依賴它。 */
 function inkOn(){
+  /* ⚠ 桌機限定（2026-08-26 使用者回報：「但手機版的怎麼變這樣，你先不要動手機版的介面」）——
+     這一層改的是 .cal-chip／.btn／.mc-nav 這些**桌機與手機共用**的 class，
+     沒擋裝置的話手機端會整片跟著變（課程類型那排先變成細框方角就是這樣來的）。
+     手機版另有自己的一套版面（admh2／cag／memh2），要不要跟進是之後另外決定的事。 */
+  if(typeof isMobileLayout==='function' && isMobileLayout()) return false;
   try{ const v=localStorage.getItem('yugym_ink'); if(v==='0') return false; if(v==='1') return true; }catch(_){}
   return !!(SESSION && SESSION.role==='admin');
 }
 function inkApply(){ try{ document.body.classList.toggle('ink', inkOn()); }catch(_){} }
+/* 轉向／改變視窗大小時要重算一次 —— navTo 只在換頁時跑，光轉向不換頁的話
+   class 會停在上一個狀態（桌機轉直式、或把視窗拉窄）。 */
+window.addEventListener('resize', ()=>{ try{ inkApply(); }catch(_){} });
+window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ try{ inkApply(); }catch(_){} },200); });
 function navTo(key, gkey){
   inkApply();
   if(key==='more_menu'){ openMoreMenu(); return; }
