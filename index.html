@@ -4494,7 +4494,10 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tkchip-none{background:#f2efe9;color:#6a655c;border:1.5px solid #ddd7cc;}
 /* 票券對帳警示（2026-08-06 稽核 R2）：帳面／帳目／課卡對不上的票掛這一枚 */
 .tk-audit{display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;line-height:1.5;
-  border-radius:6px;padding:1px 7px;background:#fbeceb;color:#b5372e;border:1px solid #f0c9c5;cursor:default;}
+  border-radius:6px;padding:1px 7px;background:#fbeceb;color:#b5372e;border:1px solid #f0c9c5;
+  font-family:inherit;cursor:pointer;}   /* 2026-08-26：改成可點（手機沒有 hover，title 等於沒有） */
+.tk-audit:hover{background:#f7dedb;}
+.tk-audit:active{transform:scale(.96);}
 /* 已預約、但這張票券已經沒堂數可對應（票用完或還沒買新票）→ 紅虛線圈提醒要補票
    （2026-07-30 使用者回報：8/1 團課明明有預約，三位會員的圓形卡都看不到那一堂） */
 .mtk-over{background:#fff;border:1.5px dashed var(--danger,#b5372e);box-shadow:none;color:var(--danger,#b5372e);}
@@ -10308,8 +10311,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.1530';
-const APP_VERSION_LABEL='v260826.1530';
+const APP_VERSION = '260826.1538';
+const APP_VERSION_LABEL='v260826.1538';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16053,6 +16056,67 @@ const TK_AUDIT_SINCE='2026-07-30';
 function tkLedgerAuditable(t){
   const d=String((t&&(t.purchase_date||t.start_date))||'').slice(0,10);
   return !!d && d>=TK_AUDIT_SINCE;
+}
+/* 票券層級的「帳目淨扣課」（2026-08-26 修）——**要把 adjust 算進去**。
+   起因：林韋綺 #16 修完溢退之後永遠掛著 ⚠ 對帳。校正堂數／收回溢退寫的是 adjust
+   （delta：+ 是還回票券、− 是收回），它確實改了餘額，只是原本這個算式只認
+   deduct／refund，於是「帳面已用」跟著 adjust 動了、「帳目」卻沒動 —— 每一次人工
+   校正都會留下一個永久的假警示，久了就沒人理那個 ⚠。
+   ⚠ 方向要反過來：adjust 的 delta 是「票券餘額的增減」，而這裡算的是「已用堂數」。
+     收回 1 堂（delta −1）＝ 已用 +1。
+   ⚠ 只有票券層級要這樣算。「這一筆預約有沒有扣過票」那種逐筆判斷仍然只認
+     deduct／refund —— adjust 沒有綁到特定一堂課。 */
+const _tkNetUsed=l=>l.action==='deduct'?1:(l.action==='refund'?-1
+  :(l.action==='adjust'?-(Number(l.delta)||0):0));
+/* 「對帳」到底在講什麼（2026-08-26 使用者問「對帳是什麼意思　我要做什麼」）——
+   把四個數字攤開講，並指出下一步。只有管理員給得到「校正」那顆。 */
+async function tkAuditWhy(tkId){
+  const _busy=uiBusy('對帳中…');
+  let t=null,bks=[],logs=[];
+  try{
+    t=await dbGet('member_tickets',tkId);
+    [bks,logs]=await Promise.all([dbGetAll('bookings'),dbGetAll('ticket_logs').catch(()=>[])]);
+  }catch(e){ _busy(); showToast('讀取失敗：'+((e&&e.message)||e)); return; }
+  _busy();
+  if(!t){ showToast('找不到票券'); return; }
+  const total=Number(t.sessions_total)||0, rem=Number(t.sessions_remaining)||0;
+  const bal=Math.max(0,total-rem);
+  let net=null;
+  (logs||[]).forEach(l=>{ if(!l||l.ticket_id!==tkId) return;
+    const d=_tkNetUsed(l); if(net===null) net=0; net+=d; });
+  let used=null;
+  try{
+    const W=await buildWallet(t.member_id, await walletCtx());
+    used=(W.of(tkId)||{}).used;
+  }catch(_){}
+  let cnt=null;
+  try{ cnt=(await tkBookedCountMap())[tkId]||0; }catch(_){}
+  const f=tkAuditFlags(t,{net, used, cnt});
+  const _isAdmin=!!(SESSION&&SESSION.role==='admin');
+  const row=(k,v,tip)=>`<div class="ovd-row"><span>${k}${tip?`<i style="display:block;font-style:normal;font-size:10.5px;color:var(--t3);">${tip}</i>`:''}</span><b>${v==null?'—':v}</b></div>`;
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">對帳：這張票的四個數字</div>
+    <div class="ash-eihead">${escH(t.plan_name||'票券')}　·　共 ${total} 堂　·　票面餘額 ${rem}</div>
+    <div class="ovd-note" style="margin:0 0 12px;">「對帳」是系統自己把<b>同一件事的四種算法</b>擺在一起比。
+      四個數字理論上要一樣；不一樣就代表中間有東西漂掉了，所以先掛一個 ⚠ 讓你知道，
+      而不是等哪天畫面顯示怪數字才被發現。</div>
+    <div class="ovd-list">
+      ${row('① 帳面已用', bal, '總堂數 − 票面餘額')}
+      ${row('② 帳目淨扣課', net, '票券紀錄裡的扣課 − 退課 ± 校正')}
+      ${row('③ 課卡戳記', used, '圓形卡上實際蓋了幾堂')}
+      ${row('④ 佔用格數', cnt, '有效預約佔住幾格')}
+    </div>
+    ${f.length?`<div class="ash-einote" style="border-left:4px solid var(--danger,#b5372e);">
+      <b style="color:var(--danger,#b5372e);">對不上的地方</b><br>${f.map(x=>'・'+x.msg).join('<br>')}</div>
+      <div class="ovd-note">要怎麼處理：<b>先看圓形卡</b>（③ 才是真的上過幾堂）。
+        如果是「哪一堂算在哪張票」錯了，用<b>校正</b>把歸屬勾一遍，餘額會跟著重算；
+        如果歸屬是對的、只有餘額不對，一樣在校正裡把餘額填成正確的數字。
+        ${_isAdmin?'':'<br><b>這件事只有管理員能改</b>，請找管理員處理。'}</div>`
+      : `<div class="ash-einote" style="border-left:4px solid var(--green);">
+          <b style="color:var(--green);">四個數字都對得上</b><br>這張票沒有問題，不用做任何事。</div>`}
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      ${_isAdmin?`<button class="btn btn-green" onclick="closeModal();tkTidyOpen('${tkId}')">校正這張票</button>`:''}
+    </div>`);
 }
 function tkAuditFlags(t, o){
   const out=[];
@@ -40058,7 +40122,7 @@ function ppRecordHtml(){
            讓系統先講，而不是等櫃檯看到怪畫面才回報。判定見 tkAuditFlags。 */
         const _netTk={};
         (c.myLogs||[]).forEach(l=>{ if(!l||!l.ticket_id) return;
-          const d=l.action==='deduct'?1:(l.action==='refund'?-1:0);
+          const d=_tkNetUsed(l);
           if(d) _netTk[l.ticket_id]=(_netTk[l.ticket_id]||0)+d; });
         const cardOf=t=>{
           const sl=WAL.of(t.id)||{stamps:[],used:0};
@@ -40083,7 +40147,11 @@ function ppRecordHtml(){
           return `<div class="bkd-tkcard" style="margin-bottom:10px;">
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 9px;font-size:11px;flex:none;" onclick="openContractView('${c.ctByTicket[t.id]}')" title="查看合約">📄 合約</button>`:''}${tkNoTag(sl.no)}${t.plan_name||'票券'}${_m2?stTag:''}${shrTag}${(()=>{
                 const f=tkAuditFlags(t,{net:_netTk[t.id], used});
-                return f.length?`<span class="tk-audit" title="對帳不一致：${f.map(x=>x.msg).join('；')}　·　數字仍以實際上課紀錄為準，請至票券管理 → 對帳巡檢處理">⚠ 對帳</span>`:''; })()}</span>
+                /* 2026-08-26 使用者：「對帳是什麼意思　我要做什麼」——
+                   原本只有 title 提示，而手機根本沒有 hover，等於掛了一個沒人看得懂的紅章。
+                   改成可以點，跳出視窗把四個數字攤開講，並直接給「校正」的入口。 */
+                return f.length?`<button type="button" class="tk-audit" onclick="event.stopPropagation();tkAuditWhy('${t.id}')"
+                  title="點一下看是哪個數字對不上">⚠ 對帳</button>`:''; })()}</span>
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
             ${/* 管理員手機（2026-08-20 使用者指示）：購買・效期提到第二列（緊接編號那一列），
                  金額改放右下角、就在「作廢」按鈕上方；其他角色與桌機維持原本的單行底列。 */''}
@@ -42526,7 +42594,7 @@ async function openGrpAudit(){
     // ② 票面已用 vs 帳目淨扣課
     const netTk={};
     (logs||[]).forEach(l=>{ if(!l||!l.ticket_id) return;
-      const d=l.action==='deduct'?1:(l.action==='refund'?-1:0); if(d) netTk[l.ticket_id]=(netTk[l.ticket_id]||0)+d; });
+      const d=_tkNetUsed(l); if(d) netTk[l.ticket_id]=(netTk[l.ticket_id]||0)+d; });
     /* ②③④ 全部走同一支 tkAuditFlags（規則只有一份，卡片上的 ⚠ 與這裡永遠一致）：
        ② 帳面 vs 帳目（受對帳基準日限制，舊匯入票不列）
        ③ 餘額數字本身不合理（負數／大於總堂數）

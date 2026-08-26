@@ -66,8 +66,35 @@ console.log('\n② 對帳旗標（R2）');
 console.log('\n③ 接線');
 ok('★ 票券卡掛 ⚠ 對帳徽章（規則與巡檢同一支）',
    /const f=tkAuditFlags\(t,\{net:_netTk\[t\.id\], used\}\);/.test(src)
-   && /return f\.length\?`<span class="tk-audit" title="對帳不一致：/.test(src)
    && /\.tk-audit\{display:inline-flex;/.test(src));
+/* 2026-08-26 使用者：「對帳是什麼意思　我要做什麼」——
+   原本只有 title 提示，而手機根本沒有 hover，等於掛了一個沒人看得懂的紅章。 */
+ok('★★ 徽章改成可點，跳出視窗把四個數字攤開講',
+   /return f\.length\?`<button type="button" class="tk-audit" onclick="event\.stopPropagation\(\);tkAuditWhy\('\$\{t\.id\}'\)"/.test(src)
+   && /async function tkAuditWhy\(tkId\)\{/.test(src)
+   && /\.tk-audit\{[^}]*cursor:pointer;\}/.test(src));
+ok('★★ 四個數字各自寫出算法，對不上的地方逐條列，並講下一步',
+   /① 帳面已用/.test(src) && /總堂數 − 票面餘額/.test(src)
+   && /② 帳目淨扣課/.test(src) && /③ 課卡戳記/.test(src) && /④ 佔用格數/.test(src)
+   && /<b style="color:var\(--danger,#b5372e\);">對不上的地方<\/b>/.test(src)
+   && /先看圓形卡<\/b>（③ 才是真的上過幾堂）/.test(src));
+ok('★ 都對得上時要明講「不用做任何事」（不要讓人以為還有事沒做）',
+   /四個數字都對得上<\/b><br>這張票沒有問題，不用做任何事/.test(src));
+ok('★ 只有管理員給得到「校正這張票」，其他角色寫明要找誰',
+   /\$\{_isAdmin\?`<button class="btn btn-green" onclick="closeModal\(\);tkTidyOpen\('\$\{tkId\}'\)">校正這張票<\/button>`:''\}/.test(src)
+   && /這件事只有管理員能改<\/b>，請找管理員處理/.test(src));
+
+console.log('\n帳目淨扣課要把 adjust 算進去（2026-08-26）');
+/* 起因：林韋綺 #16 修完溢退之後永遠掛著 ⚠。校正堂數／收回溢退寫的是 adjust，
+   它確實改了餘額，但原本的算式只認 deduct／refund，於是每一次人工校正都留下
+   一個永久的假警示。 */
+ok('★★ adjust 的 delta 要反向計入「已用堂數」（收回 1 堂＝已用 +1）',
+   /const _tkNetUsed=l=>l\.action==='deduct'\?1:\(l\.action==='refund'\?-1\s*\n\s*:\(l\.action==='adjust'\?-\(Number\(l\.delta\)\|\|0\):0\)\);/.test(src));
+ok('★★ 三個算票券層級淨值的地方都用同一支（票券卡、巡檢、對帳說明視窗）',
+   (src.match(/_tkNetUsed\(l\)/g)||[]).length===3);
+ok('　　逐筆「這一堂有沒有扣過票」仍然只認 deduct／refund（adjust 沒綁到特定一堂）',
+   /只有票券層級要這樣算/.test(src)
+   && (src.match(/const d=l\.action==='deduct'\?1:\(l\.action==='refund'\?-1:0\)/g)||[]).length>=5);
 ok('★ 巡檢視窗的 ②③④ 也走同一支（不再自己算一遍）',
    /tkAuditFlags\(t,\{net:netTk\[t\.id\], cnt:_cnt\[t\.id\]\}\)\.forEach\(x=>\{/.test(src));
 ok('★ 巡檢改名「票券對帳巡檢」（不只團課）',
