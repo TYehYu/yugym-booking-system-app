@@ -262,5 +262,55 @@ console.log('\n⑤ 互動一個都不能少');
      && !/display\s*:\s*none/.test(RULES.replace(/\.cchip-dot\{display:none;\}/,'')));
 }
 
+
+console.log('\n⑥ 首頁總覽（2026-08-26 使用者：「首頁參考這張，修改成同樣的設計語言，一樣所有功能都不更動」）');
+{
+  const HOME=src.slice(src.indexOf('/* ══ Ink · 首頁總覽'), src.indexOf('</style>'));
+  const HR=HOME.replace(/\/\*[\s\S]*?\*\//g,'');
+  ok('★ 首頁區塊存在且掛在 body.ink 底下', HR.length>500
+     && HR.split('\n').filter(l=>/^\s*[.#a-z]/i.test(l) && /\{/.test(l) && !/^\s*body\.ink/.test(l)).length===0);
+
+  /* ⚠ 這一項是「別再寫死掉的選擇器」的護欄：第一版猜了 .wk-date.on 與 .tcard-renew，
+     兩個在專案裡根本不存在，等於寫了一段永遠不會生效的 CSS。 */
+  const cls=new Set();
+  HR.replace(/\.([a-z][a-z0-9-]{2,})/g, (m,c)=>{ cls.add(c); return m; });
+  const OWN=new Set(['ink']);
+  const dead=[...cls].filter(c=>{
+    if(OWN.has(c)) return false;
+    const other=src.split('.'+c).length-1-(HOME.split('.'+c).length-1);
+    return other===0;
+  });
+  eq('★★ 首頁區塊沒有任何「專案裡不存在」的選擇器（防寫死掉的 CSS）', dead, []);
+
+  /* ::before 是卡片裡面那條左色條（裝飾），與版面無關 —— 與排課表那邊同一個判準 */
+  ok('★★ 純樣式：沒有一條規則碰版面（position／top／height／width／display）',
+     HR.split('}').filter(blk=>{
+       const i=blk.indexOf('{'); if(i<0) return false;
+       if(/::(before|after)/.test(blk.slice(0,i))) return false;
+       return /(^|[;{\s])(position|top|left|right|bottom|width|height|display|flex-direction)\s*:/.test(blk.slice(i+1));
+     }).length===0);
+  ok('★★ 有語意的顏色一律沒動：現金綠／匯款藍／值班燈號',
+     !/kpay-cash|kpay-bank|lamp-done|lamp-pend/.test(HR)
+     && /\.kpay-cash\{background:#eef5f1;color:#1f6f54;\}/.test(src)
+     && /\.kpay-bank\{background:#eef1f7;color:#3f5f85;\}/.test(src));
+  ok('★ 面：卡片一律細線＋小圓角、陰影拉平',
+     /body\.ink \.mc-card,body\.ink \.cal-hero,body\.ink \.ds-card,body\.ink \.wk-strip,/.test(src)
+     && /border-radius:6px;box-shadow:none;border:1px solid var\(--bd\);background:var\(--card\);/.test(src));
+  ok('★★ 今天／選取日改橄欖綠（與導覽列「目前頁面」同一種語彙）',
+     /body\.ink \.wk-cell\.wk-today \.wk-date\{background:var\(--olive,#5E6A4A\);color:#F2EFE4;\}/.test(src)
+     && /body\.ink \.cdash-cell\.cdash-sel\{border-color:var\(--olive,#5E6A4A\);/.test(src));
+  ok('★ 月曆「今天」仍是金框（語意不變）',
+     /body\.ink \.cdash-cell\.cdash-today\{box-shadow:0 0 0 2px var\(--gold-d\) inset;\}/.test(src));
+  ok('★★ 今日教練任務卡與行事曆課卡同一張臉（同一組 color-mix 百分比）',
+     /body\.ink \.tcard\.tcard-std \.tcard-body\{\s*\n\s*background:color-mix\(in srgb, var\(--course-soft,#EAF3EF\) 30%, #FFFDF8\) !important;/.test(src)
+     && /body\.ink \.tcard\.tcard-std \.tcard-body::before\{width:3px;border-radius:0;/.test(src));
+  ok('　 待簽約／待繳費仍走 .tcard-pend 的暗化（沒有被邊框那條蓋到）',
+     /\.cal-ev\.cal-ev-std\.cal-ev-pend,\s*\n\s*\.tcard\.tcard-std\.tcard-pend\{ filter:/.test(src));
+  ok('★ 小 KPI 用淡鼠尾草底，數字仍是墨色（顏色不搶主角）',
+     /body\.ink \.mc-kpi-mini\{background:#EDF0E5;border:1px solid #DCE2CE;border-radius:6px;box-shadow:none;\}/.test(src));
+  ok('★ 數字統一等寬（金額與堂數才對得齊）',
+     /body\.ink \.mc-k2-n,body\.ink \.ds-num,body\.ink \.mc-rev-amt,body\.ink \.lp-stat-v,[\s\S]{0,120}?font-variant-numeric:tabular-nums;/.test(src));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
