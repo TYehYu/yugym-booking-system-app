@@ -10181,6 +10181,143 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .amc-cell:active{background:rgba(255,255,255,.18);}
 .amc-today{background:var(--gold,#B48A56);color:#fff;font-weight:800;}
 .amc-empty{pointer-events:none;}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Ink · 編輯排版風視覺層（2026-08-26 使用者指示，附視覺示意圖）
+   ──────────────────────────────────────────────────────────────────────────────
+   「延續魚家財務室的設計語言，但排課系統仍要維持足夠清楚、俐落及高效率」
+   溫暖米白底／深墨字／深咖啡主操作色／低彩度輔助色；不用漸層、玻璃、厚陰影、發光；
+   減少圓角與卡片感，改用細線、留白與文字層級建立區隔。
+
+   ⚠⚠ 這一層**只寫樣式**，一行版面計算都沒動。排課表的尺寸語意全部來自 JS 算好的
+      inline style（top / height / left / width，見 renderCalendar 的 SLOT_PX 換算），
+      這裡沒有任何一條規則碰 .cal-ev 的 position／top／height／left／width，
+      所以「卡片起點依實際開始時間、高度依實際時長、並排寬度依重疊張數」原封不動。
+   ⚠ 狀態語意也全部保留：.cal-ev-past（已結案的過去→淡）、.cal-ev-todo（過去但沒結案→
+      維持原色，要跳出來）、.cal-ev-dark（教練請假團課）、.cal-ev-pend（待簽約→暗化）、
+      .cal-ev-checked、.cal-ev-renew、course-* 課程色、.cal-now 紅線、今日欄位。
+      它們原本就是用 filter:brightness/saturate 表達，不吃顏色改動，照舊生效。
+   ⚠ 課程色（--course-*-accent）刻意不動 —— 那是資料語意（哪一種課），不是裝飾。
+      指示第 11 條：「不確定某個顏色代表什麼，先保留原樣」。
+   ⚠ 只掛在 body.ink 底下。開關見 inkOn()：目前只有管理員、且可用
+      localStorage.setItem('yugym_ink','0') 當場退回舊版，不必等重新部署。
+   ══════════════════════════════════════════════════════════════════════════════ */
+body.ink{
+  /* 主操作色：深綠 → 深咖啡。舊程式碼很多地方直接吃 --green／--brand，改這裡就一起換。 */
+  --green:#4A3B2E; --green-l:#5D4B3B; --brand:#4A3B2E;
+  --bg:#F7F3EB; --card:#FFFDF8; --card2:#F2ECE1;
+  --text:#221C15; --t2:#6B6055; --t3:#9C9084;
+  --bd:rgba(45,36,28,.14); --bd2:rgba(45,36,28,.07);
+  /* 低彩度輔助色（鼠尾草綠／霧藍／燕麥金／灰紫／磚紅）—— 只用在輔助標示 */
+  --sage:#7E8C72; --sage-bg:#E8EBE1; --blue:#4A6076; --gold:#A98A55; --gold-d:#8A6E42;
+  --purple:#6E5C78; --red:#8C4A3E; --danger:#8C4A3E; --warn:#A98A55;
+  /* 不用厚重陰影與發光 */
+  --shadow-xs:none; --shadow-sm:none;
+  --shadow-md:0 1px 2px rgba(45,36,28,.07); --shadow-lg:0 2px 6px rgba(45,36,28,.09);
+  --shadow-xl:0 4px 14px rgba(45,36,28,.10); --shadow-focus:0 0 0 2px rgba(74,59,46,.22);
+  background:var(--bg);
+}
+/* 數字一律等寬，時間與金額才對得齊（指示：font-variant-numeric: tabular-nums） */
+body.ink .cal-title,body.ink .evc-time,body.ink .cal-timecol,body.ink .cal-dh-date,
+body.ink .tb-ver,body.ink .cal-ev .evc-name{font-variant-numeric:tabular-nums;}
+
+/* ── 一、頂欄：拿掉深綠厚重底，改米白＋細線；目前頁面用底線標示 ───────────── */
+body.ink.mc-mode .mc-sidebar{
+  background:var(--bg);color:var(--text);
+  border-bottom:1px solid var(--bd);box-shadow:none;}
+body.ink.mc-mode .mc-brand-mark{color:var(--text);font-family:"Noto Serif TC",serif;
+  font-weight:600;letter-spacing:.12em;font-size:21px;}
+body.ink.mc-mode .mc-brand-sub{color:var(--t3);}
+body.ink.mc-mode .mc-nav{background:transparent;border:none;box-shadow:none;padding:0;gap:6px;}
+body.ink.mc-mode .mc-nav-item{color:var(--t2);border-radius:0;padding:8px 14px 7px;
+  border-bottom:2px solid transparent;}
+body.ink.mc-mode .mc-nav-item:hover{background:transparent;color:var(--text);}
+/* 目前頁面＝深咖啡文字＋底線（不用大面積深色底） */
+body.ink.mc-mode .mc-nav-item.active{background:transparent;color:var(--green);
+  border-bottom-color:var(--green);box-shadow:none;font-weight:700;}
+body.ink.mc-mode .mc-admin-btn{background:transparent;border:1px solid var(--bd);
+  border-radius:4px;color:var(--t2);}
+body.ink.mc-mode .mc-admin-btn:hover{background:var(--card2);}
+body.ink.mc-mode .mc-admin-btn.active{background:transparent;color:var(--green);
+  border-color:var(--green);box-shadow:none;}
+body.ink .topbar{background:var(--bg);border-bottom:1px solid var(--bd);box-shadow:none;}
+
+/* ── 二、按鈕：新增預約＝深咖啡實心（唯一主操作）；其餘米白底＋咖啡細框 ───── */
+body.ink .btn{border-radius:4px;box-shadow:none;}
+body.ink .btn-green{background:var(--green);color:#FFFDF8;box-shadow:none;}
+body.ink .btn-green:hover{background:var(--green-l);box-shadow:none;}
+body.ink .btn-ghost{background:var(--card);color:var(--t2);border:1px solid var(--bd);}
+body.ink .btn-ghost:hover{background:var(--card2);color:var(--text);border-color:var(--green);}
+
+/* ── 三、篩選列：教練＝小色點＋名稱；課程＝細框分段選單 ─────────────────── */
+/* 兩排各自加一個欄位標題（純 CSS，不動 DOM） */
+body.ink .cal-head .cal-chip-row::before,
+body.ink .cal-bar2 .cal-chip-row::before{
+  font-size:12px;color:var(--t3);letter-spacing:.08em;margin-right:10px;align-self:center;
+  white-space:nowrap;font-weight:500;}
+body.ink .cal-head .cal-chip-row::before{content:'教練篩選';}
+body.ink .cal-bar2 .cal-chip-row::before{content:'課程類型';}
+/* 不要一整排彩色膠囊：底一律透明、字一律墨色，顏色退到左邊那顆小點 */
+body.ink .cal-chip{border-radius:3px;font-size:13px;padding:6px 11px;
+  background:transparent !important;color:var(--t2) !important;border-color:transparent;}
+body.ink .cal-chip:hover{background:var(--card2) !important;color:var(--text) !important;}
+body.ink .cal-chip.cal-chip-coach{border:none;padding:6px 9px;gap:7px;}
+.cchip-dot{display:none;}   /* 舊版不畫色點（Ink 視覺層才開，見下） */
+body.ink .cchip-dot{display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--cc,var(--t3));flex:none;}
+/* 課程類型＝細框按鈕，顏色只留一顆小點當辨識 */
+body.ink .cal-chip.cal-chip-course{border:1px solid var(--bd);font-weight:500;
+  opacity:1 !important;filter:none !important;}
+body.ink .cal-chip.cal-chip-course:hover{border-color:var(--green);}
+/* 選取狀態：深咖啡實心（教練與課程一致，一眼看得出選了哪個） */
+body.ink .cal-chip.on{background:var(--green) !important;color:#FFFDF8 !important;
+  border-color:var(--green);font-weight:600;}
+body.ink .cal-chip.on::before{background:#FFFDF8;}
+body.ink .cal-chip.cal-chip-coach.on .cchip-dot{box-shadow:0 0 0 1.5px rgba(255,253,248,.85);}
+
+/* ── 四、日期導覽：細框、方角、深咖啡字 ──────────────────────────────── */
+body.ink .cal-arrow{border-radius:3px;background:var(--card);border:1px solid var(--bd);
+  color:var(--green);font-weight:400;}
+body.ink .cal-arrow:hover{background:var(--green);color:#FFFDF8;border-color:var(--green);}
+body.ink .cal-title{font-family:"Noto Serif TC",serif;font-size:15.5px;font-weight:500;
+  letter-spacing:.04em;color:var(--text);}
+
+/* ── 五、週排課表：細線分隔、留白、宋體日期欄 ─────────────────────────── */
+body.ink .cal-body{background:var(--bg);border:1px solid var(--bd);border-radius:0;}
+body.ink .cal-timecol{background:var(--bg);}
+body.ink .cal-timecol .tc-row span{font-family:var(--num);font-size:11.5px;color:var(--t3);
+  letter-spacing:.06em;}
+/* 日期表頭：宋體、字距放開、細線分隔，拿掉那道陰影 */
+body.ink .cal-daycol-head{background:var(--bg);border-bottom:1px solid var(--bd);
+  box-shadow:none;}
+body.ink .cal-daycol-head .cd-line{font-family:"Noto Serif TC",serif;font-weight:500;
+  font-size:14px;letter-spacing:.12em;color:var(--t2);}
+/* 今日：原本是深綠實心塊 → 改溫暖米色底＋深墨字（指示：不用大面積深色底）。
+   ⚠ 「今日」這個狀態必須看得出來，所以底色與字重都還在，只是換了表達方式。 */
+body.ink .cal-daycol-head.today{background:var(--card2);}
+body.ink .cal-daycol-head.today .cd-line{color:var(--text);font-weight:600;}
+body.ink .cal-daycol-head.today .cd-today{background:var(--gold);color:#FFFDF8;
+  border-radius:2px;font-weight:500;letter-spacing:.05em;}
+body.ink .cal-daycol-head .cd-today{background:var(--gold);color:#FFFDF8;border-radius:2px;}
+/* 今日欄位維持暖色底（原本就是 #FFF8EF，只是跟著新底色調一階） */
+body.ink .cal-daycol.daycol-today{background:#FBF6EC;}
+/* 過去時間維持反灰（語意：時間已經過去、不可再排課）—— 只換色階，判斷邏輯完全沒動 */
+body.ink .cal-daycol.col-past{background:#F0EDE7;}
+body.ink .cal-daycol{border-left:1px solid var(--bd);}
+
+/* ── 六、課卡：白底、方角、細框、左色條保留（課程色＝資料語意，不動） ────── */
+body.ink .cal-ev.cal-ev-std .evc-body{background:var(--card) !important;
+  border:1px solid var(--bd) !important;border-radius:2px;box-shadow:none;}
+body.ink .cal-ev.cal-ev-std .evc-body::before{width:3px;border-radius:0;}
+body.ink .cal-ev.cal-ev-std{border-radius:2px;}
+/* 文字層級：時間在上（小、次要），姓名為主（宋體、墨色），課別更小，教練在右下 */
+body.ink .cal-ev.cal-ev-std .evc-time{color:var(--t2);font-weight:500;letter-spacing:.03em;}
+body.ink .cal-ev.cal-ev-std .evc-name{color:var(--text);font-family:"Noto Serif TC",serif;
+  font-weight:600;letter-spacing:.02em;}
+body.ink .cal-ev.cal-ev-std .evc-sub{color:var(--t3);font-weight:500;opacity:1;}
+/* 已簽到：原本是整張填色，改成左色條加粗＋右上角章（保留「已簽到」這個狀態的可辨識度） */
+body.ink .cal-ev.cal-ev-std.cal-ev-checked .evc-body::before{width:5px;}
+
 </style>
 </head>
 <body>
@@ -10358,8 +10495,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.2135';
-const APP_VERSION_LABEL='v260826.2135';
+const APP_VERSION = '260826.2143';
+const APP_VERSION_LABEL='v260826.2143';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13774,7 +13911,19 @@ function _pglWrap(fn){
   };
 }
 window._navSeqNo=window._navSeqNo||0;
+/* ══ Ink 視覺層的開關（2026-08-26）══
+   使用者指示「只示範更改管理員的頁面」—— 櫃檯／教練／會員一律維持原樣。
+   ⚠ 這個專案的版面大改被還原過三次（見 tests/uiscaletest.js 的紀錄），所以這一版
+     從第一天就帶著逃生門：在該台裝置的主控台下 localStorage.setItem('yugym_ink','0')
+     就能立刻退回舊版，不必等重新部署；設 '1' 則可在非管理員帳號上試看。
+   ⚠ 純視覺：body 上多一個 class 而已，沒有任何版面計算或資料流程依賴它。 */
+function inkOn(){
+  try{ const v=localStorage.getItem('yugym_ink'); if(v==='0') return false; if(v==='1') return true; }catch(_){}
+  return !!(SESSION && SESSION.role==='admin');
+}
+function inkApply(){ try{ document.body.classList.toggle('ink', inkOn()); }catch(_){} }
 function navTo(key, gkey){
+  inkApply();
   if(key==='more_menu'){ openMoreMenu(); return; }
   /* 教練首頁 V2 的外框樣式（2026-08-21）：頂列米色、底部導覽品牌綠、小管家收進帳號選單。
      這三樣都在頁面之外的外框上，改 CSS 會連教練本人一起改到 —— 所以掛一個 body class，
@@ -20657,8 +20806,11 @@ function calCoachChips(coaches, filterCoach){
   html += list.map(c=>{
     const cc = coachTagColor(c.id);
     const on = filterCoach===c.id;
-    const st = on ? `background:${cc.fg};color:#fff;` : `background:${cc.bg};color:${cc.fg};`;
-    return `<button class="cal-chip cal-chip-coach ${on?'on':''}" style="${st}" onclick="calSetCoach('${c.id}')">${coachDisp(c)}</button>`;
+    /* 2026-08-26：多帶一個 --cc（教練色）與一顆小色點 —— Ink 視覺層要的是
+       「小色點＋教練名稱」，不是一整排彩色膠囊。舊版的 .cchip-dot 是 display:none，
+       所以這一行對現行畫面零影響。 */
+    const st = `--cc:${cc.fg};` + (on ? `background:${cc.fg};color:#fff;` : `background:${cc.bg};color:${cc.fg};`);
+    return `<button class="cal-chip cal-chip-coach ${on?'on':''}" style="${st}" onclick="calSetCoach('${c.id}')"><i class="cchip-dot"></i>${coachDisp(c)}</button>`;
   }).join('');
   return html;
 }
