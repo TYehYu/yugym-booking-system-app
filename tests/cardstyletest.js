@@ -287,8 +287,11 @@ ok('★ 三支都收 backTo 參數',
    /async function openVenueChange\(id, backTo\)\{/.test(src)
    && /async function openBkTicketChange\(id, backTo\)\{/.test(src)
    && /async function openMakeupModal\(id, backTo\)\{/.test(src));
-ok('★ 從調整課程進去的都帶 ash',
-   (src.match(/openVenueChange\('\$\{b\.id\}','ash'\)|openBkTicketChange\('\$\{b\.id\}','ash'\)|openMakeupModal\('\$\{b\.id\}','ash'\)/g)||[]).length===3);
+/* 0825 更換票券移出調整課程，0826 那條改帶 'close'（會員卡進來沒有上一層可回），
+   所以這張清單剩兩支帶 ash。 */
+ok('★ 從調整課程進去的都帶 ash（更換場地／補簽）',
+   (src.match(/openVenueChange\('\$\{b\.id\}','ash'\)|openMakeupModal\('\$\{b\.id\}','ash'\)/g)||[]).length===2
+   && !/openBkTicketChange\('\$\{b\.id\}','ash'\)/.test(src));
 ok('★ 其餘呼叫端不帶參數、行為不變（仍走 openBookingDetail）',
    /backTo==='ash'\?`closeModal\(\);ashEditAsk\('\$\{id\}'\)`:`openBookingDetail\('\$\{id\}'\)`/.test(src));
 

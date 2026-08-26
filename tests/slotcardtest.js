@@ -257,14 +257,22 @@ console.log('\n桌機取代：先補功能');
 /* 2026-08-25：更換票券移出這張清單，改成「觸發＋點會員卡上的票券名稱」 */
 ok('★★ 更換票券改掛在會員卡的票券名稱那一行（未簽到／非團課／有會員／櫃檯以上）',
    /const _tkTap = isDeskLike\(\) && b\.status==='booked' && r\.mid && !A\.isGroup;/.test(src)
-   && /onclick="event\.stopPropagation\(\);ashBackArm\('\$\{b\.id\}'\);collapseBkCard\(\);openBkTicketChange\('\$\{b\.id\}','ash'\)"/.test(src));
+   && /onclick="event\.stopPropagation\(\);collapseBkCard\(\);openBkTicketChange\('\$\{b\.id\}','close'\)"/.test(src));
+/* 2026-08-26 使用者：「跳出的視窗按返回會跑回調整課程的視窗　這邊應該設計關閉的按鈕就好」
+   —— 從會員卡進來這條路沒有上一層可回，返回等於把人丟到一個他沒去過的地方。 */
+ok('★★ 從會員卡進來只給「關閉」，不給「返回」',
+   /\$\{backTo==='close'\s*\n\s*\? `<button class="btn btn-ghost" onclick="closeModal\(\)">關閉<\/button>`/.test(src));
+ok('★★ 換成功之後也照 backTo 走，不會一律掉進已退役的預約明細',
+   /const _back=window\._bkTkChgBack\|\|''; window\._bkTkChgBack='';/.test(src)
+   && /if\(_back==='close'\)\{ closeModal\(\); try\{ navTo\(CUR_PAGE\); \}catch\(_\)\{\} \}/.test(src)
+   && /else openBookingDetail\(id\);/.test(src));
 ok('　　不能點的時候寫原因（已簽到／團課），不藏起來',
    /已簽到的課要先取消簽到才能換票/.test(src) && /團課的票記在扣課紀錄裡，這裡換不動/.test(src));
 ok('★ 補簽進了調整課程（只對過去的課；今天以後的走簽到）',
    /if\(!_leave && b\.status==='booked' && !A\.isGroup && \(A\.staff\|\|A\.coachCk\) && bkDatePast\(b\)\)\s*\n\s*rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openMakeupModal\('\$\{b\.id\}','ash'\)`,'補簽'/.test(src));
-ok('★ 返回都先立旗標回課卡（它們原本的返回是 openBookingDetail）',
-   /ashBackArm\('\$\{b\.id\}'\);collapseBkCard\(\);openBkTicketChange/.test(src)
-   && /ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openMakeupModal/.test(src));
+ok('★ 從調整課程進去的返回先立旗標回課卡（原本的返回是 openBookingDetail）',
+   /ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openMakeupModal/.test(src)
+   && /ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openVenueChange/.test(src));
 ok('　　補簽的說明講明效期基準（使用者：不管哪天補簽都從上課那天算）',
    /補登這堂未簽到的課；自主訓練點數的效期自課程當天起算/.test(src));
 {

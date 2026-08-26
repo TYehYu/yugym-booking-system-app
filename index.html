@@ -10301,8 +10301,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260825.2159';
-const APP_VERSION_LABEL='v260825.2159';
+const APP_VERSION = '260826.1448';
+const APP_VERSION_LABEL='v260826.1448';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28301,7 +28301,7 @@ async function bkCardPop(el, b, btns, acts){
           const _tkWhy = (isDeskLike() && b.status!=='booked') ? '　已簽到的課要先取消簽到才能換票'
             : (isDeskLike() && A.isGroup) ? '　團課的票記在扣課紀錄裡，這裡換不動' : '';
           _tk=`<${_tkTap?'button type="button"':'div'} class="ash-mtkname${_tkTap?' ash-mtkname-tap':''}"${
-              _tkTap?` onclick="event.stopPropagation();ashBackArm('${b.id}');collapseBkCard();openBkTicketChange('${b.id}','ash')" title="換一張票來扣這一堂"`:(_tkWhy?` title="${_tkWhy.trim()}"`:'')
+              _tkTap?` onclick="event.stopPropagation();collapseBkCard();openBkTicketChange('${b.id}','close')" title="換一張票來扣這一堂"`:(_tkWhy?` title="${_tkWhy.trim()}"`:'')
             }>${tkNoTag(sl.no)}${sl.t.plan_name||'票券'}${sl.t.source==='makeup'?'<span class="ash-mkchip">補課券</span>':''}${_tkTap?'<span class="ash-mtkgo">換票 ›</span>':''}</${_tkTap?'button':'div'}>`
             + `<div class="ash-tk">${ticketTokens(sl.t,sl.stamps,_wctx.typeMap,sl.used||0,b.id,r.mid,sl.selfBk,r.sk?_ord:undefined)}</div>`;
         }
@@ -30373,6 +30373,14 @@ async function saveBookingNote(id){
    與 openVenueChange 同一套：從簡易課卡進來的人期待回到剛剛那張清單，
    而不是被丟進已經退役的預約明細。其餘呼叫端不帶參數，行為不變。 */
 async function openBkTicketChange(id, backTo){
+  /* backTo（2026-08-26 三修，使用者：「跳出的視窗按返回會跑回調整課程的視窗，
+     這邊應該設計關閉的按鈕就好」）：
+       'close' → 只給一顆「關閉」（從會員卡的票券名稱進來；那條路沒有上一層可回）
+       'ash'   → 返回「調整課程」（0825 起那張清單已經沒有這一項，留著給舊入口）
+       其餘    → 返回預約明細（桌機的舊路徑）
+     ⚠ 換成功之後也要照這個走，不能一律 openBookingDetail —— 那是已經退役的視窗，
+       從課卡進來的人按完會被丟到一個他沒打算去的地方（跟這次回報的是同一種問題）。 */
+  window._bkTkChgBack=backTo||'';
   const b=await dbGet('bookings',id); if(!b){showToast('找不到預約');return;}
   if(b.status!=='booked'){ showToast('已簽到的預約要先取消簽到才能換票券'); return; }
   if(!b.member_id){ showToast('這筆沒有綁會員，無法換票券'); return; }
@@ -30404,7 +30412,9 @@ async function openBkTicketChange(id, backTo){
     </div>
     <div style="font-size:11px;color:var(--t3);margin-top:10px;">換過去會退回原本那張 1 堂、扣新的那張 1 堂，兩邊的票券紀錄都會留痕。第一張是最快到期的。</div>`
     :`<div style="font-size:13px;color:var(--t2);padding:6px 0;">沒有其他可用票券可以換。</div>`}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="${backTo==='ash'?`closeModal();ashEditAsk('${id}')`:`openBookingDetail('${id}')`}">返回</button></div>`);
+    <div class="modal-foot">${backTo==='close'
+      ? `<button class="btn btn-ghost" onclick="closeModal()">關閉</button>`
+      : `<button class="btn btn-ghost" onclick="${backTo==='ash'?`closeModal();ashEditAsk('${id}')`:`openBookingDetail('${id}')`}">返回</button>`}</div>`);
 }
 /* 防連點（2026-08-01 巫雅雯案例：同一筆預約在 51 毫秒內被扣了兩次）——
    彈窗裡的按鈕是 inline onclick，手機上偶爾會收到兩次事件（touchend 之後補發的 click、
@@ -30444,7 +30454,10 @@ async function _doBkTicketChange(id,newTkId){
   await dbPut('bookings',b);
   if(old){ try{ await refundTicket(old,b.id,SESSION.id); }catch(e){ showToast('新票已扣，但原票退回失敗，請手動調整：'+((e&&e.message)||e)); } }
   showToast('已改用 '+(tk.plan_name||'該票券'));
-  openBookingDetail(id);
+  const _back=window._bkTkChgBack||''; window._bkTkChgBack='';
+  if(_back==='close'){ closeModal(); try{ navTo(CUR_PAGE); }catch(_){} }
+  else if(_back==='ash'){ closeModal(); ashEditAsk(id); }
+  else openBookingDetail(id);
  }catch(e){ showToast('更換失敗：'+(e&&e.message?e.message:e)); }
 }
 /* 哪些場地可以「一張預約佔多台」（2026-08-01 使用者指示：燈號只出現在跑步機）——
