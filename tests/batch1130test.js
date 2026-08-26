@@ -224,7 +224,7 @@ console.log('\n員工管理：卡片改回列表');
   // 三／四修：加入「工作規則／休假日／實領薪資」，數字欄名在翻月時會附月份標記
   /* 2026-07-31 使用者指示改版：總堂數在教練課前面、實領薪資移到工作時數後面、整列分三區 */
   ok('★ 表頭：姓名／總堂數／教練課／團課堂數／團課人次／體驗／續約／工作時數／實領薪資／休假日／權限開關（2026-08-12 工作規則欄移除）',
-     /<span>姓名<\/span>\s*\n\s*<span class="st-zb">總堂數\$\{_mTag\}<\/span><span>教練課\$\{_mTag\}<\/span><span>團課堂數\$\{_mTag\}<\/span><span>團課人次\$\{_mTag\}<\/span><span>體驗\$\{_mTag\}<\/span><span>續約\$\{_mTag\}<\/span><span>工作時數\$\{_mTag\}<\/span>\s*\n\s*<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">休假日<\/span>\s*\n\s*<span>權限開關<\/span>/.test(src));
+     /<span>姓名<\/span>\s*\n\s*<span class="st-zb"[^>]*>總堂數\$\{_mTag\}<\/span><span>教練課\$\{_mTag\}<\/span><span>團課堂數\$\{_mTag\}<\/span><span>團課人次\$\{_mTag\}<\/span><span>體驗\$\{_mTag\}<\/span><span>續約\$\{_mTag\}<\/span><span>工作時數\$\{_mTag\}<\/span>\s*\n\s*<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">休假日<\/span>\s*\n\s*<span>權限開關<\/span>/.test(src));
   ok('★ 固定欄位的 grid（2026-08-12：開關欄改吃剩餘寬度 minmax 1fr）',
      /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 24px 78px minmax\(360px,1fr\) 30px;/.test(src));
   ok('★ 舊的 flex 版樣式已移除（它排在後面會蓋掉 grid）',

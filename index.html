@@ -10329,8 +10329,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.1746';
-const APP_VERSION_LABEL='v260826.1746';
+const APP_VERSION = '260826.1802';
+const APP_VERSION_LABEL='v260826.1802';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29038,6 +29038,15 @@ function canCoachLeave(b){ return !!b && !!bkCoachLeaveMode(b) && (bkIsGroup(b) 
 /* 已經標記過教練請假了嗎 —— 教練課看狀態（coach_leave），團課是整堂取消、
    狀態會變 cancelled，所以另外立了 bookings.coach_leave 這個旗標記錄「為什麼取消」。 */
 function bkIsCoachLeave(b){ return !!b && (b.status==='coach_leave' || b.coach_leave===true); }
+/* 教練請假轉成的自主訓練（2026-08-26 使用者回報「這個員工這個月有請假　他的請假課堂
+   會列在這些資料裡面嗎?」，定案：從總堂數扣掉）——
+   1v1 教練請假時那堂改成自主訓練，會員照樣可以自己來練（0817 定的規則），
+   但課卡的 coach_id 還掛著請假的那位教練，狀態也照樣走到已簽到／已完成。
+   員工列表「總堂數」的定義是「這個月**實際帶**的所有課」，教練人在放假，不該算她的。
+   黃美蓉 8/20–8/24 特休 → 94 堂裡有 23 堂是這種（其中 6 堂會員根本沒到場）。
+   ⚠ 判準是 coach_leave 旗標，不是課種 —— 一般的「自主訓練陪同」仍然要算（那是真的有帶）。
+   ⚠ 只影響總堂數：教練課／團課／體驗那幾欄本來就只認自己的課種，計薪也不吃自主訓練。 */
+function bkIsLeaveSelfTrain(b){ return !!b && b.coach_leave===true && bkIsSelf(b); }
 /* 教練請假整堂取消的團課，課卡要留在課表上（2026-08-17 使用者指示「課卡請假不應該從畫面上消失」）——
    只是畫出來給人看（帶紅色「教練請假」標），堂數統計、佔位、衝堂判定一律照舊不計（status 仍是 cancelled）。 */
 /* card_hidden（2026-08-21）：櫃檯處理完之後把這張已取消的卡從課表收起來。
@@ -37751,7 +37760,9 @@ async function renderStaffList(){
           renew:n(h&&h.renew), hours:n(h&&h.duty), net:h?Math.round(n(h.net)):null, legacy:true };
         return;
       }
-      const mine=_mBk.filter(b=>(bkCoachId(b))===c.id);
+      /* 請假轉的自主訓練不算她的堂數（2026-08-26，見 bkIsLeaveSelfTrain）——
+         人在放假，總堂數不該把那幾堂當成「實際帶的課」。 */
+      const mine=_mBk.filter(b=>(bkCoachId(b))===c.id && !bkIsLeaveSelfTrain(b));
       const done=mine.filter(b=>b.status==='checked_in'||b.status==='completed');
       const isPt=isPtPayClass;   // 體驗不算（2026-07-31 使用者定案）
       let hrs=0;
@@ -38035,7 +38046,7 @@ async function renderStaffList(){
        但區塊標題那一列移除 —— 分隔線已經看得出分區，多一列標題只是佔高度。 */
     const stHead=`<div class="st-lhead">
       <span></span><span></span><span>姓名</span>
-      <span class="st-zb">總堂數${_mTag}</span><span>教練課${_mTag}</span><span>團課堂數${_mTag}</span><span>團課人次${_mTag}</span><span>體驗${_mTag}</span><span>續約${_mTag}</span><span>工作時數${_mTag}</span>
+      <span class="st-zb" title="這個月實際帶的所有課（教練課＋團課＋體驗＋自主訓練陪同），已上／當月排定。教練請假轉成自主訓練的那幾堂不計 —— 人在放假，不算實際帶課。">總堂數${_mTag}</span><span>教練課${_mTag}</span><span>團課堂數${_mTag}</span><span>團課人次${_mTag}</span><span>體驗${_mTag}</span><span>續約${_mTag}</span><span>工作時數${_mTag}</span>
       <span>實領薪資${_mTag}</span><span></span><span class="st-zb">休假日</span>
       <span>權限開關</span><span></span>
     </div>`;

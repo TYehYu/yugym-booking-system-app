@@ -26,7 +26,7 @@ ok('　　團課堂數仍照舊（一堂一筆）', /grp:done\.filter\(b=>bkIsGr
 
 console.log('\n② 欄位順序與表頭');
 {
-  const m=/<span class="st-zb">總堂數\$\{_mTag\}<\/span>([\s\S]+?)<span>實領薪資/.exec(src);
+  const m=/<span class="st-zb"[^>]*>總堂數\$\{_mTag\}<\/span>([\s\S]+?)<span>實領薪資/.exec(src);
   ok('★ 表頭找得到', !!m);
   const heads=[...(m[1]||'').matchAll(/<span>([^<$]+)\$\{_mTag\}<\/span>/g)].map(x=>x[1]);
   eq('★★ 總堂數之後依序是：教練課／團課堂數／團課人次／體驗／續約／工作時數',

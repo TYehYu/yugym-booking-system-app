@@ -15,14 +15,16 @@ const head=g('const stHead=`<div class="st-lhead">','</div>`;');
 
 console.log('欄位順序');
 {
-  const cols=[...head.matchAll(/<span(?: class="st-zb")?>([^<$]+?)(?:\$\{_mTag\})?<\/span>/g)]
+  const cols=[...head.matchAll(/<span(?:\s[^>]*)?>([^<$]+?)(?:\$\{_mTag\})?<\/span>/g)]
     .map(m=>m[1]).filter(x=>x && !/^\s*$/.test(x));
   eq('★ 姓名 → 總堂數 → 教練課 → 團體課 → 續約 → 工作時數 → 實領薪資 → 休假日 → 權限開關',
      cols, ['姓名','總堂數','教練課','團課堂數','團課人次','體驗','續約','工作時數','實領薪資','休假日','權限開關']);   /* 2026-08-12 工作規則欄移除 */
-  ok('★ 總堂數排在教練課前面', head.indexOf('總堂數')<head.indexOf('教練課'));
+  /* 比欄位順序要看解析出來的 cols，不能用 head.indexOf —— 2026-08-26 總堂數那格加了
+     title（內文提到「教練課」），raw 字串的 indexOf 會被 tooltip 的字咬到。 */
+  ok('★ 總堂數排在教練課前面', cols.indexOf('總堂數')>=0 && cols.indexOf('總堂數')<cols.indexOf('教練課'));
   ok('★ 實領薪資排在工作時數後面、休假日前面',
      head.indexOf('工作時數')<head.indexOf('實領薪資') && head.indexOf('實領薪資')<head.indexOf('休假日'));
-  ok('　　新欄位一樣會跟著月份翻頁', /<span class="st-zb">總堂數\$\{_mTag\}<\/span>/.test(head));
+  ok('　　新欄位一樣會跟著月份翻頁', /<span class="st-zb"[^>]*>總堂數\$\{_mTag\}<\/span>/.test(head));
 }
 
 console.log('\n總堂數的定義');
@@ -48,7 +50,7 @@ ok('★ 表頭回到單列（沒有第二列的 grid-template-rows）',
 ok('★ 分區改由兩條線表達：員工表現從「總堂數」起、權限管理從「休假日」起（2026-08-12 工作規則欄移除）',
    /num\(st\.all, [^)]*, 0, 'st-zb'\)/.test(src)
    && /<span class="st-l-off st-zb">/.test(src)   /* 2026-08-12 工作規則欄移除，分隔線移到休假日格 */
-   && /<span class="st-zb">總堂數\$\{_mTag\}<\/span>/.test(src)
+   && /<span class="st-zb"[^>]*>總堂數\$\{_mTag\}<\/span>/.test(src)
    && /<span class="st-zb">休假日<\/span>/.test(src));
 ok('★ 休假日歸在權限管理那一側（不在員工表現裡）',
    /<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">休假日<\/span>/.test(src)
