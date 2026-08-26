@@ -10308,8 +10308,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.1525';
-const APP_VERSION_LABEL='v260826.1525';
+const APP_VERSION = '260826.1530';
+const APP_VERSION_LABEL='v260826.1530';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31445,11 +31445,32 @@ async function confirmCancelBooking(id){
       _grpNetDeduct=_lg.filter(l=>l.action==='deduct').length - _lg.filter(l=>l.action==='refund').length;
     }catch(_){}
   }
-  const noTicket = !b.ticket_id && _grpNetDeduct<=0;
+  /* 綁了票、但那張票上從來沒扣過這一堂（2026-08-26 使用者回報，林韋綺 10/04）——
+     超約的課就是這種：ticket_id 有值（排課當下綁上去了），帳本卻沒有 deduct。
+     原本只看 `!b.ticket_id`，於是這種課走進「退回票券／扣課不退」那張表 ——
+     使用者原話：「這堂課本來就是多約的，取消的時候卻出現退回票券，
+     這會讓我誤以為退回後他會多一張票券」。
+     實際比誤會更嚴重：真的退了，票券餘額憑空多一堂（與 0810 那批溢退同源）。
+     ⚠ 判準與別處一致：有帳本且淨扣 > 0 才算「扣過」；完全沒有帳本紀錄的（舊匯入）
+       也算沒扣過 —— 匯入時的餘額已經反映過那些課，再退一次就是溢退。 */
+  let _selfNetDeduct=0, _selfHasLg=false;
+  if(b.ticket_id && !bkIsGroup(b)){
+    try{
+      const _lg=(await dbGetAll('ticket_logs')).filter(l=>l && l.booking_id===b.id && l.ticket_id===b.ticket_id);
+      _selfHasLg=_lg.length>0;
+      _selfNetDeduct=_lg.filter(l=>l.action==='deduct').length - _lg.filter(l=>l.action==='refund').length;
+    }catch(_){}
+  }
+  const _neverDeducted = !!b.ticket_id && !bkIsGroup(b) && _selfNetDeduct<=0;
+  const noTicket = (!b.ticket_id && _grpNetDeduct<=0) || _neverDeducted;
   if(noTicket && !isTrial){
-    const why = b.pending_contract ? '這是<b>待簽約卡位</b>，還沒收款也沒有票券 —— 取消只會釋出時段與場地。'
+    const why = _neverDeducted
+      ? (_selfHasLg
+          ? '這一堂的堂數<b>已經退回過了</b>（例如教練請假），取消只會釋出時段與場地，不會再退一次。'
+          : '這一堂<b>沒有扣過票</b>（超約，或當初建立時就沒扣）—— 取消只會釋出時段與場地，<b>不會退回任何堂數</b>。')
+      : (b.pending_contract ? '這是<b>待簽約卡位</b>，還沒收款也沒有票券 —— 取消只會釋出時段與場地。'
       : (b.category==='場租' ? '場地租借不涉及票券，取消只會釋出時段與場地。'
-      : '這筆預約沒有綁票券（舊系統匯入的課多半如此），取消不會影響任何堂數。');
+      : '這筆預約沒有綁票券（舊系統匯入的課多半如此），取消不會影響任何堂數。'));
     showModal(`<div class="modal-title">取消預約</div>
       <div style="font-size:13.5px;color:var(--text);padding:6px 0 4px;">確定要取消 ${b.date} ${String(b.start_time).slice(0,5)} 的${b.category}嗎？${b.trial_name?`<br><span style="color:var(--t2);font-size:12.5px;">客戶：${b.trial_name}</span>`:''}</div>
       <div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:2;background:var(--card2);border-radius:9px;padding:10px 12px;">${tkChip('none')}<br>${why}</div>
@@ -33056,7 +33077,16 @@ async function cancelBooking(id, refundMode, opts){
         if(await refundTicket(log.ticket_id,b.id,SESSION.id)) refundedCount++;
       }
     }else if(b.ticket_id){
-      refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
+      /* 再擋一次（2026-08-26）：畫面那一層已經不會問退不退了，但 refundMode='force'
+         也可能從別的呼叫端進來。沒扣過就不退 —— 退了就是憑空多一堂。 */
+      let _net=0, _has=false;
+      try{
+        const _lg=(await dbGetAll('ticket_logs')).filter(l=>l && l.booking_id===b.id && l.ticket_id===b.ticket_id);
+        _has=_lg.length>0;
+        _net=_lg.filter(l=>l.action==='deduct').length - _lg.filter(l=>l.action==='refund').length;
+      }catch(_){}
+      if(_net>0) refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
+      else { refundedCount=0; console.warn('取消未退課：這一堂在該票券上沒有淨扣課紀錄',b.id,b.ticket_id,{_has,_net}); }
     }
     /* 「沒綁票就回頭找一張票退」的備援（refundLegacyBooking）2026-08-14 退場——
        使用者指示（陳秀蘭案例：取消 6 筆無票預約、票憑空多 6 堂）：

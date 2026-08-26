@@ -13,8 +13,10 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('修法');
+/* 2026-08-26：條件多了 _neverDeducted（綁了票但那張票上沒扣過，例如超約的課）——
+   團課那一半（_grpNetDeduct）沒有變。 */
 ok('★ 團課改看扣課帳本，不再只看 bookings.ticket_id',
-   /const noTicket = !b\.ticket_id && _grpNetDeduct<=0;/.test(src));
+   /const noTicket = \(!b\.ticket_id && _grpNetDeduct<=0\) \|\| _neverDeducted;/.test(src));
 ok('★ 淨扣課＝deduct 筆數 − refund 筆數（重覆取消不會重覆問）',
    /_grpNetDeduct=_lg\.filter\(l=>l\.action==='deduct'\)\.length - _lg\.filter\(l=>l\.action==='refund'\)\.length;/.test(src));
 ok('★ 只有團課才去翻帳本（其他課種維持原本的快速判斷）', /if\(bkIsGroup\(b\)\)\{/.test(src));

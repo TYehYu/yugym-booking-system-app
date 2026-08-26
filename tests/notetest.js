@@ -203,20 +203,25 @@ console.log('\n取消沒綁票券的預約');
 {
   const i=src.indexOf('async function confirmCancelBooking(id){');
   const j=src.indexOf('\n}\n', src.indexOf("askSeriesCancel('${id}','auto')", i))+2;
-  const run=(b)=>{ let html='';
+  /* 2026-08-26：判斷多了「這一筆在這張票上到底扣過沒有」（見 cxnorefundtest.js），
+     所以沙箱要餵得出帳本；bkIsGroup 也要給（團課不走那條）。 */
+  const run=(b,logs)=>{ let html='';
     // 2026-07-30：取消視窗會問「這堂發過幾點贈點」→ 補上依賴（測試情境無贈點，回空字串）
     /* 2026-08-06：取消視窗改用票券結果色標（綠＝退回、紅＝扣除）→ 沙箱補上 tkChip */
     const fn=new Function('dbGet','showToast','showModal','hoursUntilStart','isDeskLike',
-      'cancelRewardWarnHtml','dbGetAll','tkChip',
+      'cancelRewardWarnHtml','dbGetAll','tkChip','bkIsGroup',
       src.slice(i,j)+'\nreturn confirmCancelBooking;')(async()=>b,()=>{},h=>{html=h;},()=>72,()=>true,
-      async()=>'', async()=>[], (k,t)=>`[${k}]${t||''}`);
+      async()=>'', async()=>(logs||[]), (k,t)=>`[${k}]${t||''}`, ()=>false);
     return fn('X').then(()=>html); };
   return Promise.all([
     run({id:'X',date:'2026-08-03',start_time:'16:00',category:'私人教練',pending_contract:true,ticket_id:null,trial_name:'劉雪珠'}),
     run({id:'X',date:'2026-08-03',start_time:'16:00',category:'場租',pending_contract:false,ticket_id:null}),
     run({id:'X',date:'2026-08-03',start_time:'16:00',category:'私人教練',pending_contract:false,ticket_id:null}),
-    run({id:'X',date:'2026-08-10',start_time:'16:00',category:'私人教練',pending_contract:false,ticket_id:'MTK-1'}),
-  ]).then(([pend,rent,noTk,normal])=>{
+    run({id:'X',date:'2026-08-10',start_time:'16:00',category:'私人教練',pending_contract:false,ticket_id:'MTK-1'},
+        [{booking_id:'X',ticket_id:'MTK-1',action:'deduct'}]),
+    /* 2026-08-26 使用者回報（林韋綺 10/04）：超約的課 ticket_id 有值、帳本卻沒扣過 */
+    run({id:'X',date:'2026-08-10',start_time:'16:00',category:'私人教練',pending_contract:false,ticket_id:'MTK-1'}, []),
+  ]).then(([pend,rent,noTk,normal,over])=>{
     ok('★ 待簽約卡位：不再問退票，說明「還沒收款也沒有票券」',
        !/退回票券/.test(pend) && /這是<b>待簽約卡位<\/b>，還沒收款也沒有票券/.test(pend));
     ok('　　卡位上填的客戶姓名會帶出來', /劉雪珠/.test(pend));
@@ -235,8 +240,10 @@ console.log('\n取消沒綁票券的預約');
     /* 2026-08-01：團課的票券記在 ticket_logs 不是 bookings.ticket_id，
        只看 ticket_id 會把每一堂團課都判成「沒有綁票券」而以不退收掉（許佳慈 8/14）。
        判斷條件加上團課的淨扣課筆數。見 tests/grpcanceltest.js。 */
-    ok('　　判斷條件是「有沒有綁票券」而非只看 pending_contract；團課另看扣課帳本',
-       /const noTicket = !b\.ticket_id && _grpNetDeduct<=0;/.test(src));
+    ok('★★ 綁了票、但帳本沒扣過（超約）→ 也不問退不退，並講明不會退回堂數',
+       !/退回票券/.test(over) && /這一堂<b>沒有扣過票<\/b>/.test(over) && /<b>不會退回任何堂數<\/b>/.test(over));
+    ok('　　判斷條件：沒綁票券，或綁了票但那張票上沒淨扣過這一堂',
+       /const noTicket = \(!b\.ticket_id && _grpNetDeduct<=0\) \|\| _neverDeducted;/.test(src));
     ok('　　原因寫在程式裡', /刪除「待簽約卡位」時跳出「是否退回票券」——那種卡位本來就沒有票券/.test(src));
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail?1:0);
