@@ -35,7 +35,7 @@ console.log('① 尺寸與位置：一行計算都不能動（使用者第 11 �
   });
   eq('★★ Ink 層沒有任何一條規則碰課卡／欄位本身的定位與尺寸', bad, []);
   ok('　 唯一碰到寬度的是卡片內的左色條（裝飾，不是幾何）',
-     /body\.ink \.cal-ev\.cal-ev-std \.evc-body::before\{width:3px;border-radius:0;\}/.test(src));
+     /body\.ink \.cal-ev\.cal-ev-std \.evc-body::before\{width:3px;/.test(src));
 
   ok('★★ 卡片垂直起點仍依實際開始時間（SLOT_PX 換算，沒被動過）',
      /const startMin=timeToMin\(b\.start_time\)-_startMin;/.test(src)
@@ -123,17 +123,48 @@ ok('★ 課程類型改細框按鈕，不再整排彩色（也不再灰階淡化
    /body\.ink \.cal-chip\.cal-chip-course\{border:1px solid var\(--bd\);font-weight:500;\s*\n\s*opacity:1 !important;filter:none !important;\}/.test(src));
 ok('★ 選取狀態用深咖啡實心（教練與課程一致）',
    /body\.ink \.cal-chip\.on\{background:var\(--green\) !important;/.test(src));
-ok('★ 標題與日期欄用 Noto Serif TC（head 早就載了，不必多開請求）',
-   /family=[^"]*Noto\+Serif\+TC/.test(src)
-   && /body\.ink \.cal-daycol-head \.cd-line\{font-family:"Noto Serif TC",serif;/.test(src)
-   && /body\.ink \.cal-ev\.cal-ev-std \.evc-name\{color:var\(--text\);font-family:"Noto Serif TC",serif;/.test(src));
+/* 2026-08-26 使用者更正：「全站不要使用任何 serif／宋體感字體」
+   ——第一版把日期欄與姓名做成宋體，整個拿掉。 */
+/* sans-serif 是無襯線的 fallback 關鍵字，不算宋體 —— 只抓真的襯線字族 */
+ok('★★ Ink 層一個宋體都沒有',
+   !/Noto Serif TC|Cormorant|Georgia|(^|[^-\\w])serif\\s*[;,}]/.test(RULES));
+ok('★★ 中文 Noto Sans TC / PingFang TC、英文與數字 Inter',
+   /--font-zh:"Noto Sans TC","PingFang TC"/.test(src)
+   && /--font-en:"Inter","SF Pro Text"/.test(src));
+ok('★ Inter 併進既有那一條 Google Fonts 請求（不多開）',
+   /family=Cormorant\+Garamond[^"]*&family=Inter:wght@400;500;600;700&family=Noto\+Sans\+TC/.test(src)
+   && (src.match(/fonts\.googleapis\.com\/css2/g)||[]).length===1);
+ok('★★ 字級不放大：日期欄 13px、時間 10px、課別 9px（教練由既有 clamp 管）',
+   /body\.ink \.cal-daycol-head \.cd-line\{font-weight:600;font-size:13px;/.test(src)
+   && /body\.ink \.cal-ev\.cal-ev-std \.evc-time\{color:var\(--t3\);font-weight:500;font-size:10px;/.test(src)
+   && /body\.ink \.cal-ev\.cal-ev-std \.evc-sub\{color:var\(--t2\);font-weight:500;font-size:9px;/.test(src));
+ok('★★ 姓名是主角（墨色、加粗），不是靠字級撐大',
+   /body\.ink \.cal-ev\.cal-ev-std \.evc-name\{color:var\(--text\);font-weight:700;/.test(src));
+
+console.log('\n④-2 兩套獨立的顏色對應（使用者第 3～5 點）');
+ok('★★ 課卡底色由「課程類型」決定：淡的同色底（course-soft 混出來）',
+   /background:color-mix\(in srgb, var\(--course-soft,#EAF3EF\) 30%, #FFFDF8\) !important;/.test(src));
+ok('★★ 左側 3px 類型色條（course-accent）',
+   /body\.ink \.cal-ev\.cal-ev-std \.evc-body::before\{width:3px;border-radius:0;\s*\n\s*background:var\(--course-accent,#3D7039\);\}/.test(src));
+ok('★★ 教練顏色只上在名字文字：底、內距、框全部拿掉',
+   /body\.ink \.cal-ev\.cal-ev-std \.evc-coach:not\(\.evc-leavetag\)\{\s*\n\s*background:transparent !important;padding:0 !important;border-radius:0;border:none;/.test(src));
+ok('★★ 教練色仍由 renderCalendar 的 inline color 帶（Ink 沒有自己訂一套教練色）',
+   /style="background:\$\{_cc\.bg\};color:\$\{_cc\.fg\};"/.test(src)
+   && !/_cc\.fg/.test(RULES));
+ok('★★ 兩套不互相覆蓋：課卡底色沒有吃到任何教練色變數',
+   !/--cc\b/.test(RULES.slice(RULES.indexOf('.evc-body'))) );
+ok('★ 請假標籤保留紅底（白字，底拿掉會看不見）',
+   /<span class="evc-coach evc-leavetag" style="background:#7A2E28;color:#F4F1E8;">請假<\/span>/.test(src)
+   && /body\.ink \.cal-ev\.cal-ev-std \.evc-leavetag\{border-radius:2px;/.test(src));
+ok('★ 姓名不再整塊吃課程色（顏色留給色條與淡底）',
+   /body\.ink \.cal-ev\.cal-ev-std \.evc-txt\{color:var\(--text\);\}/.test(src));
 ok('★ 數字等寬（tabular-nums），時間才對得齊',
    /font-variant-numeric:tabular-nums;/.test(RULES));
-ok('★ 減少圓角與卡片感（課卡 2px、按鈕 3～4px）',
-   /body\.ink \.cal-ev\.cal-ev-std\{border-radius:2px;\}/.test(src)
+ok('★ 減少圓角與卡片感（課卡 3px、按鈕 4px）',
+   /body\.ink \.cal-ev\.cal-ev-std\{border-radius:3px;\}/.test(src)
    && /body\.ink \.btn\{border-radius:4px;box-shadow:none;\}/.test(src));
 ok('★ 課卡左色條保留（課程辨識），只是變細',
-   /body\.ink \.cal-ev\.cal-ev-std \.evc-body::before\{width:3px;border-radius:0;\}/.test(src));
+   /body\.ink \.cal-ev\.cal-ev-std \.evc-body::before\{width:3px;/.test(src));
 
 console.log('\n⑤ 互動一個都不能少');
 {
