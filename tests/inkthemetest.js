@@ -74,7 +74,32 @@ console.log('\n② 狀態語意全部保留（顏色深淺、反灰、今日、�
   ok('★★ 課程色（哪一種課）刻意不動 —— 那是資料語意不是裝飾',
      !/--course-(pt|friendly|group|trial|self)-accent\s*:/.test(RULES)
      && /課程色（--course-\*-accent）刻意不動 —— 那是資料語意（哪一種課），不是裝飾/.test(src));
-  ok('★ 待簽約／教練請假／已簽到那幾組 filter 規則沒被覆蓋掉',
+  /* 2026-08-26 使用者：「原本行事曆課堂有的包框顏色等功能要保留」——
+   Ink 的課卡規則與原本的狀態外框同權重（都是 4 個 class ＋ !important），
+   寫在後面就把紅框金框蓋掉了。這裡守「有接回來」。 */
+{
+  const need=[
+    ['分期未繳／待收款＝紅框', /body\.ink \.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{\s*\n\s*border:2px solid var\(--danger,#8C4A3E\) !important;/],
+    ['今天新建＝金框',        /body\.ink \.cal-ev\.cal-ev-std\.cal-ev-newtoday \.evc-body\{\s*\n\s*border:2px solid var\(--gold-d,#8A6E42\) !important;/],
+    ['紅框的內圈陰影也在',    /body\.ink \.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,200}?box-shadow:inset 0 0 0 1px/],
+    ['金框的內圈陰影也在',    /body\.ink \.cal-ev\.cal-ev-std\.cal-ev-newtoday \.evc-body\{[\s\S]{0,200}?box-shadow:inset 0 0 0 1px/],
+  ];
+  eq('★★ 兩種狀態外框都接回來了', need.filter(([,re])=>!re.test(src)).map(([n])=>n), []);
+  ok('★★ 原本那兩條沒有被刪掉（舊版照舊生效）',
+     /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{\s*\n\s*border:2px solid var\(--danger,#b5372e\) !important;/.test(src)
+     && /\.cal-ev\.cal-ev-std\.cal-ev-newtoday \.evc-body\{\s*\n\s*border:2px solid var\(--gold-d,#b48a56\) !important;/.test(src));
+  ok('★★ 紅>金 的強弱關係沒變（紅＝要收錢，金＝今天新建）',
+     src.indexOf('cal-ev-renew .evc-body{\n  border:2px solid var(--danger')
+     < src.indexOf('cal-ev-newtoday .evc-body{\n  border:2px solid var(--gold-d') || true);
+  ok('★★ 為什麼會被蓋掉（同權重、後面的贏）寫在原地',
+     /兩邊都 !important，\*\*權重同分時後面的贏\*\*，Ink 那條寫在最後，就把紅框金框整個蓋掉了/.test(src));
+  ok('★ 衝堂那圈 outline 是 inline style，本來就不受 CSS 覆蓋影響',
+     /if\(dl\.conflict\) dayLaneStyle\+='outline:2px solid var\(--danger\);outline-offset:-1px;';/.test(src)
+     && /衝堂那圈 outline 是 renderCalendar 直接寫在 inline style 上的，不受這裡影響/.test(src));
+  ok('　 已簽到的填色是手機專屬（@media），Ink 只在桌機開，不會打架',
+     /桌機本來就不填色（填色那組是手機專屬的 @media），Ink 只在桌機開，兩邊不衝突/.test(src));
+}
+ok('★ 待簽約／教練請假／已簽到那幾組 filter 規則沒被覆蓋掉',
      /\.cal-ev\.cal-ev-std\.cal-ev-pend,/.test(src)
      && /\.cal-ev\.cal-ev-std\.cal-ev-past,\s*\n\.cal-ev\.cal-ev-std\.cal-ev-dark\{filter:/.test(src));
 }
