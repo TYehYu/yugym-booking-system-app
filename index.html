@@ -4611,6 +4611,13 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
    滑鼠停留看得到「會員自行預約」，圖例也有說明。 */
 .mtk.mtk-self::after{content:'';position:absolute;top:-1px;right:-1px;width:9px;height:9px;
   border-radius:50%;background:var(--gold-d,#b48a56);border:1.5px solid var(--card,#fff);box-sizing:border-box;}
+/* 圓形卡的圖例（2026-08-26，「沒有票可扣」那個視窗用）——
+   兩顆小圓點照著真的圓點畫：紅虛線＝超約、紅圈＝教練請假已退回。 */
+.mtk-lgd{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:9px;font-size:11px;color:var(--t3);}
+.mtk-lgd span{display:inline-flex;align-items:center;gap:5px;}
+.mtk-lgd-i{width:11px;height:11px;border-radius:50%;flex:none;box-sizing:border-box;}
+.mtk-lgd-over{border:1.5px dashed var(--danger,#b5372e);}
+.mtk-lgd-clx{background:var(--green);box-shadow:0 0 0 1.5px var(--danger,#b5372e);}
 .mtk-self-lg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--t3);}
 .mtk-self-lg i{width:9px;height:9px;border-radius:50%;background:var(--gold-d,#b48a56);display:inline-block;}
 /* ── 自主訓練點數獨立入口（2026-07-23 使用者指示）──
@@ -10301,8 +10308,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.1518';
-const APP_VERSION_LABEL='v260826.1518';
+const APP_VERSION = '260826.1525';
+const APP_VERSION_LABEL='v260826.1525';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11382,6 +11389,16 @@ async function mtkOverAsk(tkId, bkId){
      ⚠ 判準與超約防線（tkBookedCountMap）同一條：**有帳本且淨值 >= 0 才放行**；
        完全沒有帳本紀錄的照舊算佔用（舊系統匯入的課沒有 ticket_logs，
        用「查不到帳就當沒扣」會把整條防線拆掉）。 */
+  /* 圓形卡與票券卡同源（2026-08-26 使用者：「這邊是不是可以用圓形卡展示，
+     比文字直覺一點」）—— 直接問票券夾拿這張票的戳記與已用堂數，
+     畫出來就跟會員資料上那張票一模一樣（含本堂的圈選、紅虛線、教練請假的紅圈）。
+     ⚠ 不自己算：這一頁自己算一份戳記，就等於又多一種「已用幾堂」的口徑（0731 收斂掉的那件事）。 */
+  let _dotsHtml='';
+  try{
+    const _W=await buildWallet(b.member_id, await walletCtx());
+    const _sl=_W.of(tkId)||{stamps:[],used:0};
+    _dotsHtml=ticketTokens(t,_sl.stamps,_W.typeMap||{},_sl.used,bkId,b.member_id,_W.selfBk);
+  }catch(_){}
   const _freedOf=x=>!!_hasLg[x.id] && (net[x.id]||0)<=0;
   const _all=(bks||[]).filter(x=>x&&x.status!=='cancelled'
       && (String(x.ticket_id||'')===String(tkId) || (net[x.id]||0)>0))
@@ -11429,16 +11446,19 @@ async function mtkOverAsk(tkId, bkId){
       票券：${(t.plan_name||'票券').replace(/</g,'&lt;')}　·　${total} 堂　·　票面餘額 <b class="num">${rem}</b></div>
     <div style="background:var(--card2);border:1px solid var(--bd);border-radius:11px;padding:11px 13px;font-size:12.5px;line-height:1.9;">
       ${why}<br><span style="color:var(--green);">${fix}</span></div>
-    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">這張票目前佔著的 ${hold.length} 筆：</div>
-    <div style="background:var(--card2);border-radius:9px;padding:8px 12px;margin-top:4px;font-size:12.5px;line-height:1.9;max-height:180px;overflow:auto;">
-      ${hold.length?hold.map(x=>`<div${x.id===bkId?' style="color:var(--danger,#b5372e);font-weight:700;"':''}>${_d(x)}　<span style="${
-        x.id===bkId?'':'color:var(--t3);'}">${x.status==='booked'?'已預約':'已上'}${x.id===bkId?'　← 這一堂':''}</span></div>`).join(''):'<span style="color:var(--t3);">（沒有）</span>'}</div>
-    ${/* 掛著但帳已退回的也列出來 —— 不列的話櫃檯會以為那兩堂不見了（0823 的
-         「不能用就寫原因，別藏起來」同一個道理：數字不算它，但事情要看得到）。 */''}
-    ${freed.length?`<div style="font-size:11.5px;color:var(--t3);margin-top:10px;">另有 ${freed.length} 筆掛在這張票上，但堂數已經退回、<b>不算佔位</b>：</div>
-    <div style="background:var(--card2);border-radius:9px;padding:8px 12px;margin-top:4px;font-size:12.5px;line-height:1.9;opacity:.72;max-height:120px;overflow:auto;">
-      ${freed.map(x=>`<div>${_d(x)}　<span style="color:var(--t3);">${
-        (x.coach_leave===true||x.status==='coach_leave')?'教練請假・已退回':'已退回'}</span></div>`).join('')}</div>`:''}
+    ${/* 2026-08-26 使用者指示：這一段改用圓形卡 —— 一整排日期文字要逐行讀才知道
+         「哪一堂是我點的、哪幾堂沒票」，圓形卡一眼就看得出來（而且跟票券卡是同一張圖）。 */''}
+    <div style="font-size:11.5px;color:var(--t3);margin-top:12px;">這張票的圓形卡（<b>圈起來的就是這一堂</b>）：</div>
+    ${_dotsHtml
+      ? `<div style="background:var(--card2);border-radius:11px;padding:11px 12px;margin-top:5px;">
+          <div class="mck-dots2">${_dotsHtml}</div>
+          <div class="mtk-lgd">
+            <span><i class="mtk-lgd-i mtk-lgd-over"></i>紅色虛線＝沒有票可扣</span>
+            ${freed.length?`<span><i class="mtk-lgd-i mtk-lgd-clx"></i>紅圈＝教練請假已退回，不佔位（${freed.length} 堂）</span>`:''}
+          </div></div>`
+      : `<div style="background:var(--card2);border-radius:9px;padding:8px 12px;margin-top:4px;font-size:12.5px;line-height:1.9;max-height:180px;overflow:auto;">
+          ${hold.length?hold.map(x=>`<div${x.id===bkId?' style="color:var(--danger,#b5372e);font-weight:700;"':''}>${_d(x)}　<span style="${
+            x.id===bkId?'':'color:var(--t3);'}">${x.status==='booked'?'已預約':'已上'}${x.id===bkId?'　← 這一堂':''}</span></div>`).join(''):'<span style="color:var(--t3);">（沒有）</span>'}</div>`}
     <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
       ${/* 2026-08-26：條件從「這張票還有餘額」放寬成「有別張可以用也算」——

@@ -55,13 +55,29 @@ ok('★★ 帳已退回的不算佔位（判準與超約防線 tkBookedCountMap 
 ok('★★ 完全沒有帳本紀錄的照舊算佔用（舊匯入沒有 ticket_logs，放行會拆掉整條防線）',
    /有帳本且淨值 >= 0 才放行/.test(src)
    && /用「查不到帳就當沒扣」會把整條防線拆掉/.test(src));
-ok('★★ 不算佔位的那幾筆仍然列出來（淡化＋寫原因，不藏起來）',
-   /另有 \$\{freed\.length\} 筆掛在這張票上，但堂數已經退回、<b>不算佔位<\/b>/.test(src)
-   && /\(x\.coach_leave===true\|\|x\.status==='coach_leave'\)\?'教練請假・已退回':'已退回'/.test(src));
+/* 0826 二修：那幾筆改由圓形卡自己畫（ticketTokens 把 coach_leave 已簽到的畫成
+   「課種色填滿＋紅圈」的加值圓點，本來就不佔格），文字清單退場，改用圖例說明。 */
+ok('★★ 不算佔位的那幾筆看得到 —— 圓形卡畫成紅圈，圖例寫出堂數',
+   /紅圈＝教練請假已退回，不佔位（\$\{freed\.length\} 堂）/.test(src)
+   && /\.mtk-lgd-clx\{background:var\(--green\);box-shadow:0 0 0 1\.5px var\(--danger/.test(src));
 ok('　　候選：取消的不算；單人課看 ticket_id、團課看帳本淨額',
    /const _all=\(bks\|\|\[\]\)\.filter\(x=>x&&x\.status!=='cancelled'/.test(src)
    && /\(String\(x\.ticket_id\|\|''\)===String\(tkId\) \|\| \(net\[x\.id\]\|\|0\)>0\)/.test(src));
-ok('　　清單裡標出「這一堂」是哪一筆', /← 這一堂/.test(src));
+/* 2026-08-26 使用者：「這邊是不是可以用圓形卡展示　比文字直覺一點」——
+   一整排日期文字要逐行讀才知道哪一堂是我點的、哪幾堂沒票；圓形卡一眼就看得出來。 */
+ok('★★ 佔用清單改用圓形卡，而且與票券卡同源（問票券夾拿戳記與已用堂數）',
+   /const _W=await buildWallet\(b\.member_id, await walletCtx\(\)\);/.test(src)
+   && /_dotsHtml=ticketTokens\(t,_sl\.stamps,_W\.typeMap\|\|\{\},_sl\.used,bkId,b\.member_id,_W\.selfBk\);/.test(src)
+   && /<div class="mck-dots2">\$\{_dotsHtml\}<\/div>/.test(src));
+ok('★★ 不自己算戳記（多一種「已用幾堂」的口徑正是 0731 收斂掉的那件事）',
+   /這一頁自己算一份戳記，就等於又多一種「已用幾堂」的口徑/.test(src));
+ok('★★ 本堂會被圈起來（curId 傳 bkId），而且有圖例說明紅虛線與紅圈',
+   /圈起來的就是這一堂/.test(src)
+   && /紅色虛線＝沒有票可扣/.test(src)
+   && /紅圈＝教練請假已退回，不佔位/.test(src));
+ok('　　票券夾拿不到就退回原本的文字清單（不會變成空白）',
+   /: `<div style="background:var\(--card2\);border-radius:9px;padding:8px 12px;margin-top:4px;font-size:12\.5px;line-height:1\.9;max-height:180px;overflow:auto;">/.test(src)
+   && /← 這一堂/.test(src));
 
 console.log('\n改帳的入口（2026-08-25 併進票券卡的「校正」）');
 /* 舊的 tkFixSessions（8/22 做的「校正堂數」）已移除 —— 它藏在這個視窗底下、
