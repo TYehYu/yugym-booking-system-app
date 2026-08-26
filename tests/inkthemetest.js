@@ -149,7 +149,7 @@ ok('★ 不用厚重陰影與發光（陰影 token 一律拉平）',
 /* 2026-08-26 二修（使用者附前後對照圖：「標題列幫我改一下，參考這張。用橄欖綠。
    設計語言要一致」）—— 頂欄從米白改成低彩度橄欖綠實心，字改米白。 */
 ok('★★ 頂欄是橄欖綠實心、字米白',
-   /body\.ink\{ --olive:#6C7757; --olive-d:#5B6549; --cream:#F2EFE4; \}/.test(src)
+   /body\.ink\{ --olive:#5E6A4A; --olive-d:#4E583D; --cream:#F2EFE4; \}/.test(src)
    && /body\.ink\.mc-mode \.mc-sidebar\{\s*\n\s*background:var\(--olive\);color:var\(--cream\);/.test(src));
 ok('★★ 目前頁面仍用底線標示（不是實心膠囊），只是換成米白線',
    /body\.ink\.mc-mode \.mc-nav-item\.active\{background:transparent;color:#fff;\s*\n\s*border-bottom-color:var\(--cream\);/.test(src));
