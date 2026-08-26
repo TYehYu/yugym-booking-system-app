@@ -9493,6 +9493,11 @@ button.rev-kind.rev-kind-off{opacity:.5;}
 .tdy-row.tdy-lock{background:var(--card2);box-shadow:none;border-style:dashed;cursor:default;}
 .tdy-row.tdy-lock:active{transform:none;}
 .tdy-row.tdy-lock .ash-eilb{color:var(--t2);font-weight:700;}
+/* 鎖住的原因拉到標籤上（2026-08-26 使用者問「為什麼這筆能點那筆不能」）——
+   原本只寫在右邊的副標，一整排掃下來看不出兩者的差別。 */
+.tdy-lockchip{display:inline-block;margin-left:7px;font-size:10px;font-weight:700;
+  color:var(--t3);background:#fff;border:1px solid var(--bd);border-radius:999px;padding:1px 7px;
+  vertical-align:1px;}
 .tdy-list{max-height:38vh;overflow:auto;margin:2px -2px 12px;padding:2px;}
 /* 餘額三選一（2026-08-25 把舊的「校正堂數」併進來）：一顆一個口徑，數字放大在上面，
    看得到數字再按 —— 使用者要的是「順手好用的按鈕」，不是先讀完說明再決定。 */
@@ -10311,8 +10316,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.1543';
-const APP_VERSION_LABEL='v260826.1543';
+const APP_VERSION = '260826.1547';
+const APP_VERSION_LABEL='v260826.1547';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11532,6 +11537,16 @@ async function tkTidyOpen(tkId){
     const m=(netOf[l.booking_id]=netOf[l.booking_id]||{});
     m[l.ticket_id]=(m[l.ticket_id]||0)+d; });
   const _lockedTk=bid=>{ const m=netOf[bid]||{}; return Object.keys(m).filter(k=>m[k]>0)[0]||null; };
+  /* 帳已經退回來的那幾堂：**歸屬還在，但不佔堂數**（2026-08-26 使用者回報
+     「票面餘額 -2？」）——林韋綺 #16 上面掛著 10 堂，其中 8/20、8/23 是教練請假
+     （扣了又退，帳本淨值 0）。原本一律算進「勾選堂數」，一開視窗就是 10/8、
+     餘額 8−10＝−2，還沒動任何東西就先嚇人一跳。
+     ⚠ 勾選＝這一堂算在哪張票（歸屬）；佔堂數＝歸屬**而且**帳上真的扣著。兩件事。
+     判準與 mtkOverAsk／tkBookedCountMap 一致：有帳本且淨值 <= 0 就是已退回；
+     完全沒有帳本的照舊算佔用（舊匯入，見那兩支的說明）。 */
+  const _freedOf=bid=>{ const m=netOf[bid]||{};
+    const ks=Object.keys(m); if(!ks.length) return false;
+    return !ks.some(k=>m[k]>0); };
   const empMap={}; (emps||[]).forEach(e=>{ if(e) empMap[e.id]=e.name; });
   /* 候選＝這位會員同課別的非團課預約；已經掛在這張票上的一律列出（才拿得掉） */
   let grpN=0;
@@ -11545,7 +11560,8 @@ async function tkTidyOpen(tkId){
     .sort((a,b)=>String((a.date||'')+(a.start_time||'')).localeCompare(String((b.date||'')+(b.start_time||''))))
     .map(b=>({ id:b.id, date:String(b.date||''), time:String(b.start_time||'').slice(0,5),
       coach:empMap[b.substitute_coach_id||b.coach_id]||'', st:b.status,
-      pend:!!b.pending_contract, tk:b.ticket_id||null, lock:_lockedTk(b.id) }));
+      pend:!!b.pending_contract, tk:b.ticket_id||null, lock:_lockedTk(b.id),
+      freed:_freedOf(b.id), lv:(b.coach_leave===true||b.status==='coach_leave') }));
   const sel={}, orig={};
   rows.forEach(r=>{ if(String(r.tk||'')===String(tkId)){ sel[r.id]=1; orig[r.id]=1; } });
   const m=await dbGet('members',mid).catch(()=>null);
@@ -11601,7 +11617,13 @@ function tkTidyShell(S){
      auto   依戳記重算＝總堂數 − 勾選數        ← 帳目可信的票預設
      keep   維持原本的餘額                     ← 舊匯入票預設（戳記本來就補不齊）
      manual 自己填（要寫原因）                 ← 併進來的舊「校正堂數」 */
-function tkTidyRemAuto(){ const S=window._tdy; return S?S.total-Object.keys(S.sel).length:0; }
+/* 佔堂數的張數：勾起來、而且帳上沒有退回來的（見 _freedOf 的說明）。 */
+function tkTidyUsedN(){
+  const S=window._tdy; if(!S) return 0;
+  const m={}; (S.rows||[]).forEach(r=>{ m[r.id]=r; });
+  return Object.keys(S.sel).filter(id=>!(m[id]&&m[id].freed)).length;
+}
+function tkTidyRemAuto(){ const S=window._tdy; return S?S.total-tkTidyUsedN():0; }
 function tkTidyRemNow(){
   const S=window._tdy; if(!S) return 0;
   if(S.remMode==='keep') return S.rem0;
@@ -11653,27 +11675,29 @@ function tkTidyPaint(){
     return `${p[1]}/${p[2]}${w?`（${w}）`:''}`; };
   if(el) el.innerHTML=S.rows.length?S.rows.map(r=>{
     const on=!!S.sel[r.id];
-    const stLb=r.pend?'待簽約':(r.st==='checked_in'||r.st==='completed'?'已上':(r.st==='coach_leave'?'教練請假':'已預約'));
+    const stLb=(r.pend?'待簽約':(r.st==='checked_in'||r.st==='completed'?'已上':(r.st==='coach_leave'?'教練請假':'已預約')))
+      + (r.freed ? (r.lv?'・教練請假已退回':'・已退回') : '');
     const where=on?'算在這張票'
       :(r.tk?`目前算在 #${S.tkNo[r.tk]||'?'} ${S.tkName[r.tk]||'其他票券'}`:'未綁票券');
     if(r.lock && String(r.lock)!==String(S.tkId))
       return `<div class="ash-eirow ash-ei-2c tdy-row tdy-lock">
-        <span class="ash-eilb">${_dlb(r.date)} ${r.time}</span>
+        <span class="ash-eilb">${_dlb(r.date)} ${r.time}<span class="tdy-lockchip">已扣課・不能在這裡搬</span></span>
         <span class="ash-eisub">${escH(stLb)}${r.coach?'・'+escH(r.coach):''}<br>已扣 #${S.tkNo[r.lock]||'?'} 的課，請用課卡的「更換票券」</span></div>`;
     if(r.lock)
       return `<div class="ash-eirow ash-ei-2c tdy-row tdy-lock tdy-on" style="opacity:.9;">
-        <span class="ash-eilb">${_dlb(r.date)} ${r.time}</span>
+        <span class="ash-eilb">${_dlb(r.date)} ${r.time}<span class="tdy-lockchip">已扣課・拿不掉</span></span>
         <span class="ash-eisub">${escH(stLb)}${r.coach?'・'+escH(r.coach):''}<br>這一堂有扣課紀錄，拿不掉</span></div>`;
     return `<button type="button" class="ash-eirow ash-ei-2c tdy-row${on?' tdy-on':''}" onclick="tkTidyTap('${r.id}')">
       <span class="ash-eilb">${_dlb(r.date)} ${r.time}</span>
       <span class="ash-eisub">${escH(stLb)}${r.coach?'・'+escH(r.coach):''}<br>${escH(where)}</span></button>`;
   }).join(''):'<div class="ash-einote">這位會員沒有這個課別的單人課預約。</div>';
-  const n=Object.keys(S.sel).length, auto=S.total-n, rem=tkTidyRemNow();
+  const n=tkTidyUsedN(), auto=S.total-n, rem=tkTidyRemNow();
+  const _freedSel=Object.keys(S.sel).length-n;
   const chg=S.rows.filter(r=>(!!S.sel[r.id])!==(!!S.orig[r.id])).length;
   const remTxt=Number.isFinite(rem)?`${rem} 堂`:'—';
   if(es){
     es.innerHTML=`<div class="ovd-list">
-      <div class="ovd-row"><span>勾選堂數</span><b class="${auto<0?'ovd-neg':''}">${n} / ${S.total}</b></div>
+      <div class="ovd-row"><span>佔堂數${_freedSel?`<i style="display:block;font-style:normal;font-size:10.5px;color:var(--t3);">另有 ${_freedSel} 堂已退回，不佔堂數</i>`:''}</span><b class="${auto<0?'ovd-neg':''}">${n} / ${S.total}</b></div>
       <div class="ovd-row ovd-sum"><span>票面餘額</span>
         <b class="${(Number.isFinite(rem)&&rem!==S.rem0)?'':'ovd-neg'}" style="${
           (Number.isFinite(rem)&&rem!==S.rem0)?'':'color:var(--t3);'}">${S.rem0} → ${remTxt}</b></div>
@@ -11730,7 +11754,7 @@ function tkTidyCheck(){
   const S=window._tdy; if(!S) return {ok:false, msg:'視窗已關閉'};
   const add=S.rows.filter(r=>S.sel[r.id]&&!S.orig[r.id]);
   const del=S.rows.filter(r=>!S.sel[r.id]&&S.orig[r.id]);
-  const n=Object.keys(S.sel).length, auto=S.total-n, rem=tkTidyRemNow();
+  const n=tkTidyUsedN(), auto=S.total-n, rem=tkTidyRemNow();
   const why=String(S.remWhy||'').trim();
   const need=Math.max(0,(S.total-(Number.isFinite(rem)?rem:S.rem0))-n);
   const mu=(S.mu||[]).slice(0,need).map(x=>String(x||'').trim()).filter(Boolean).sort();

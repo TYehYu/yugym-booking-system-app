@@ -27,7 +27,7 @@ const parseYmd=s=>{ const p=String(s).slice(0,10).split('-'); return new Date(+p
 const W={};
 const mk=new Function('window','document','escH','parseYmd','TK_AUDIT_SINCE','ashDateField',
   [grab('function tkTidyPaint(){'), grab('function tkTidyTap(bid){'),
-   grab('function tkTidyRemAuto(){'), grab('function tkTidyRemNow(){'),
+   grab('function tkTidyUsedN(){'), grab('function tkTidyRemAuto(){'), grab('function tkTidyRemNow(){'),
    grab('function tkTidyRemMode(mode){'), grab('function tkTidyManual(){'),
    grab('function tkTidyMu(i, v){'), grab('function tkTidyMuClear(i){'),
    grab('function tkTidyCheck(){')].join('\n')
@@ -68,16 +68,38 @@ ok('★ 待簽約的標成待簽約，不是已預約',
 ok('★★ 有扣課紀錄、且扣在別張票的鎖住＋寫原因，不是藏起來',
    /tdy-lock/.test(L()) && /已扣 #4 的課，請用課卡的「更換票券」/.test(L())
    && !/tkTidyTap\('B7'\)/.test(L()));
+/* 2026-08-26 使用者問「為什麼『已上』的可以點、7/30 又不能點，差別在哪裡」——
+   差別是有沒有扣課紀錄，不是已上／未上。原本只寫在右邊副標，掃一排看不出來。 */
+ok('★★ 鎖住的原因拉到日期旁邊（一排掃下來看得出差別）',
+   /<span class="tdy-lockchip">已扣課・不能在這裡搬<\/span>/.test(L())
+   && /<span class="tdy-lockchip">已扣課・拿不掉<\/span>/.test(L()));
 ok('★★ 有扣課紀錄、扣在這張票的也鎖住（拿不掉）',
    /這一堂有扣課紀錄，拿不掉/.test(L()) && !/tkTidyTap\('B5'\)/.test(L()));
 ok('★ 日期帶星期（01/17（六））', /01\/17（六）/.test(L()));
-ok('★ 結算列寫出勾選堂數與「現在 → 之後」', /勾選堂數[\s\S]*?2 \/ 8/.test(S()) && /票面餘額[\s\S]*?0 → 6 堂/.test(S()));
+ok('★ 結算列寫出佔堂數與「現在 → 之後」', /佔堂數[\s\S]*?2 \/ 8/.test(S()) && /票面餘額[\s\S]*?0 → 6 堂/.test(S()));
+
+/* 2026-08-26 使用者：「票面餘額 -2？」——林韋綺 #16 掛著 10 堂，其中兩堂是教練請假
+   （扣了又退、帳本淨值 0）。一律算進去就變成 10/8、餘額 −2，還沒動就先嚇人。
+   勾選＝歸屬；佔堂數＝歸屬**而且**帳上真的扣著。 */
+(()=>{
+  fresh();
+  W._tdy.rows=W._tdy.rows.concat([
+    {id:'F1',date:'2026-08-20',time:'19:30',coach:'',st:'checked_in',pend:false,tk:'TK-C',lock:null,freed:true,lv:true},
+    {id:'F2',date:'2026-08-23',time:'12:00',coach:'',st:'checked_in',pend:false,tk:'TK-C',lock:null,freed:true,lv:true}]);
+  W._tdy.sel.F1=1; W._tdy.sel.F2=1; W._tdy.orig.F1=1; W._tdy.orig.F2=1; W._tdy.muN=-1;
+  tkTidyPaint();
+  ok('★★ 已退回的（教練請假）不算佔堂數：勾了 4 筆但只有 2 筆佔堂',
+     /佔堂數[\s\S]*?2 \/ 8/.test(S()) && /另有 2 堂已退回，不佔堂數/.test(S()));
+  ok('★★ 餘額因此不會變成負數（8 − 2 = 6，不是 8 − 4 = 4）',
+     /票面餘額[\s\S]*?0 → 6 堂/.test(S()));
+  ok('★ 清單上標得出來是哪一種', /教練請假已退回/.test(L()));
+})();
 ok('★ 團課沒列出來要講一句（不是靜靜消失）', /另有 2 堂團課沒有列出來/.test(S()));
 
 console.log('\n勾選與算術');
 fresh(); tkTidyPaint();
 ['B1','B2','B3'].forEach(id=>tkTidyTap(id));
-ok('★★ 補上七堂中的三堂 → 勾 5 堂、餘額 3',
+ok('★★ 補上七堂中的三堂 → 佔 5 堂、餘額 3',
    /5 \/ 8/.test(S()) && /票面餘額[\s\S]*?0 → 3 堂/.test(S()));
 ok('　　更動筆數會講', /這次會更動 3 堂/.test(S()));
 tkTidyTap('B4');
