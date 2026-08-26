@@ -155,7 +155,13 @@ ok('★★ 目前頁面仍用底線標示（不是實心膠囊），只是換成
    /body\.ink\.mc-mode \.mc-nav-item\.active\{background:transparent;color:#fff;\s*\n\s*border-bottom-color:var\(--cream\);/.test(src));
 ok('★ 管理員＝米白細框空心 chip；抽獎＝淺米綠實心（橄欖底上唯一亮塊）',
    /body\.ink\.mc-mode \.mc-admin-btn\{background:transparent;border:1px solid rgba\(242,239,228,\.36\);/.test(src)
-   && /body\.ink\.mc-mode \.mc-lotto-fab\{background:#DEE4CC;color:#3E4A2D;/.test(src));
+   && /body\.ink\.mc-mode \.mc-lotto-fab\{--lot-ink:#3E4A2D;/.test(src));
+ok('★★ 抽獎 chip 的圖示、數字、文字共用同一個色（使用者：icon 顏色要跟文字一樣）',
+   /body\.ink\.mc-mode \.mc-lotto-fab\{--lot-ink:#3E4A2D;\s*\n\s*background:#DEE4CC;color:var\(--lot-ink\);/.test(src)
+   && /body\.ink\.mc-mode \.mc-lotto-fab b\{color:var\(--lot-ink\);\}/.test(src)
+   && /body\.ink\.mc-mode \.mc-lotto-fab \.lni\{color:var\(--lot-ink\);\}/.test(src));
+ok('　 舊版那顆為金色漸層底配的淺米圖示還在（關掉 Ink 就回去）',
+   /\.mc-lotto-fab \.lni\{width:17px;height:17px;color:#FBEFD9;\}/.test(src));
 ok('★ 右側（更新鈕／時鐘／帳戶）整組跟著換米白系，沒有漏掉',
    ['mc-rf','mc-topclock','mc-acct','mc-acct-av','mc-acct-name','mc-acct-role','mc-acct-arrow']
      .every(k=>new RegExp('body\\.ink\\.mc-mode \\.'+k+'[{:]').test(src)));
