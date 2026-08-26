@@ -28,7 +28,11 @@ console.log('欄位順序');
 }
 
 console.log('\n總堂數的定義');
-ok('★ 不分課種，算這個月實際帶的所有課', /_stat\[c\.id\]=\{ all:done\.length, allAll:mine\.length,/.test(src));
+/* 2026-08-26：體驗退出總堂數 → 分子分母改吃 _tDone/_tAll（mine/done 仍供各分欄用） */
+ok('★ 算這個月實際帶的、算堂數的課（體驗不進來）',
+   /const inTotal=b=>!isTrial\(b\);/.test(src)
+   && /const _tAll=mine\.filter\(inTotal\), _tDone=done\.filter\(inTotal\);/.test(src)
+   && /_stat\[c\.id\]=\{ all:_tDone\.length, allAll:_tAll\.length,/.test(src));
 ok('★ 與「教練課」的差別寫在程式裡（一個是全部、一個是算薪的）',
    /教練課那欄是「算薪的堂數」，\s*\n\s*兩個數字用途不同，所以分開列/.test(src));
 ok('★ 排定堂數不同時一樣補小字（92 /97 那種）',

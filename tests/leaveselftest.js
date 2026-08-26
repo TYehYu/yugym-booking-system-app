@@ -72,8 +72,28 @@ console.log('\n② 接進員工列表的統計（總堂數那一欄）');
     _mBk,{id:'ME'},bkCoachId,isLST);
   const done=mine.filter(b=>b.status==='checked_in'||b.status==='completed');
 
+  /* 2026-08-26 二修（使用者：「這邊體驗也會算進總堂數嗎?」「應該不要算進去
+     不然教練會誤會他有達標獎金」「體驗就單獨紀錄」）——
+     總堂數再扣掉體驗。mine/done 保持完整（各分欄還要用），
+     只有 all/allAll 這一組吃 inTotal 過濾。 */
+  const isTrial=b=>!!b && b.category==='體驗';
+  const inTotal=b=>!isTrial(b);
+  const tAll=mine.filter(inTotal), tDone=done.filter(inTotal);
   eq('★★ 總堂數：94/123 → 74/103（扣掉 23 堂請假轉自主，留下 3 堂一般陪同）',
      [done.length, mine.length], [74,103]);
+  eq('★★ 再扣掉體驗 → 72/100（體驗 2 已上 / 3 排定）',
+     [tDone.length, tAll.length], [72,100]);
+  ok('★★ 線上真的這樣接（all/allAll 吃 _tDone/_tAll，不是 done/mine）',
+     /const inTotal=b=>!isTrial\(b\);/.test(src)
+     && /const _tAll=mine\.filter\(inTotal\), _tDone=done\.filter\(inTotal\);/.test(src)
+     && /_stat\[c\.id\]=\{ all:_tDone\.length, allAll:_tAll\.length,/.test(src));
+  ok('★★ 體驗欄仍然讀完整的 mine/done（使用者要「單獨紀錄」，不是拿掉）',
+     /trial:done\.filter\(isTrial\)\.length, trialAll:mine\.filter\(isTrial\)\.length,/.test(src));
+  ok('★★ 為什麼會誤導寫在原地（達標獎金只認 ptDone）',
+     /達標獎金看的是 calcPtBonus\(tpl, ptDone\)，\s*\n\s*ptDone 只認私人教練；體驗不計薪、也不進獎金門檻/.test(src)
+     && /門檻剛好在 100 的人會誤判自己已經到了/.test(src));
+  ok('★ 團課刻意留在總堂數裡，理由寫出來（免得下一個人順手一起拿掉）',
+     /團課仍然算進總堂數 —— 它是實打實的帶課工作量（另以人次計酬）；\s*\n\s*要不要一併拿掉是另一個決定，別順手改/.test(src));
   eq('★ 教練課那一欄完全沒動（63/89）',
      [done.filter(isPtPayClass).length, mine.filter(isPtPayClass).length], [63,89]);
   eq('★ 團課那一欄完全沒動（6/8，含她代別人的那 1 堂）',
@@ -95,7 +115,7 @@ ok('★★ 「判準是旗標不是課種」寫出來（一般陪同要算，這
 ok('★ 「只影響總堂數、不影響計薪」寫出來',
    /只影響總堂數：教練課／團課／體驗那幾欄本來就只認自己的課種，計薪也不吃自主訓練/.test(src));
 ok('★★ 欄位標題把算法講出來（手機沒有 hover，但桌機這一欄本來就有表頭）',
-   /title="這個月實際帶的所有課（教練課＋團課＋體驗＋自主訓練陪同），已上／當月排定。教練請假轉成自主訓練的那幾堂不計 —— 人在放假，不算實際帶課。">總堂數/.test(src));
+   /title="[^"]*教練請假轉成自主訓練的那幾堂不計 —— 人在放假，不算實際帶課。">總堂數/.test(src));
 
 console.log('\n④ 計薪那一路一堂都不能被碰到');
 ok('★★ 薪資的教練課堂數只認 isPtPayClass（私人教練）',
