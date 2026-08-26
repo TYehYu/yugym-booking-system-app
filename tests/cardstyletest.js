@@ -539,9 +539,12 @@ ok('★ onchange 掛在隱藏 input 上，原本的 bkRefreshPlanFilter 照樣�
    而且是連續數列，滾輪本來就順手），所以 wh-* 那一整套還在用。 */
 ok('★ 單位標在滾輪下方，不跟著捲（時間欄）',
    /<div class="wh-unit wh-unit-2"><span>時<\/span><span>分<\/span><\/div>/.test(src));
-ok('　　營業時間 08–22、分鐘只有整點與半點',
+/* 2026-08-26 使用者：「團體課時間可以再多安排一個 15 分跟 45 分　讓場地有中場休息的時間」
+   → 分鐘從 00／30 變成 00／15／30／45，四個挑時間的地方共用 BK_MINS。 */
+ok('　　營業時間 08–22、分鐘走 BK_MINS（00／15／30／45）',
    /const hours=Array\.from\(\{length:15\},\(_,i\)=>\(\{v:i\+8/.test(src)
-   && /const mins=\[\{v:'00',label:'00'\},\{v:'30',label:'30'\}\];/.test(src));
+   && /const mins=BK_MINS\.map\(v=>\(\{v,label:v\}\)\);/.test(src)
+   && /const BK_MINS=\['00','15','30','45'\];/.test(src));
 
 console.log('\n時間也用自家挑選器（使用者：這邊也是）');
 ok('★ 兩處時間欄都換掉原生 select',

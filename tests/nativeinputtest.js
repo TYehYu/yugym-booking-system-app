@@ -31,20 +31,27 @@ ok('★ 時間下拉要放得下 08:00（原本時長下拉的 78px 太窄）',
 
 console.log('\n　　⚠ 非 30 分格線的舊資料不能被悄悄改掉');
 {
-  const fn=new Function(g('function bkTimeOptions(selected, opts){','\n}\n')+'\nreturn bkTimeOptions;')();
+  const fn=new Function("const BK_MINS=['00','15','30','45'];\n"
+    +g('function bkTimeOptions(selected, opts){','\n}\n')+'\nreturn bkTimeOptions;')();
   const vals=h=>[...h.matchAll(/value="([^"]*)"/g)].map(m=>m[1]);
   const selOf=h=>{const m=h.match(/value="([^"]*)" selected/); return m?m[1]:null;};
 
-  // 08:00–22:00 每 30 分＝29 格（22:30 不放），加開頭空白列＝30
-  eq('★ 一般時間：08:00 起、22:00 止、30 分一格＋開頭的「請選擇時間…」',
-     [vals(fn('')).length, vals(fn(''))[0], vals(fn(''))[1], vals(fn('')).slice(-1)[0]], [30,'','08:00','22:00']);
-  eq('　　noEmpty 時不要空白列', vals(fn('09:00',{noEmpty:1})).length, 29);
+  /* 2026-08-26：分鐘加了 :15／:45（BK_MINS）——「團體課時間可以再多安排一個 15 分跟
+     45 分　讓場地有中場休息的時間」。08:00–21:45 共 14 小時 × 4 ＝ 56，再加 22:00 ＝ 57；
+     開頭的空白列 ＝ 58。 */
+  eq('★ 一般時間：08:00 起、22:00 止、15 分一格＋開頭的「請選擇時間…」',
+     [vals(fn('')).length, vals(fn(''))[0], vals(fn(''))[1], vals(fn('')).slice(-1)[0]], [58,'','08:00','22:00']);
+  eq('　　noEmpty 時不要空白列', vals(fn('09:00',{noEmpty:1})).length, 57);
+  eq('★★ :15 與 :45 真的在清單裡（團課要留場地中場休息）',
+     ['08:15','08:45','21:45'].every(t=>vals(fn('',{noEmpty:1})).includes(t)), true);
+  eq('　　22:00 之後不再往下（22:15 不放）',
+     vals(fn('',{noEmpty:1})).some(t=>t>'22:00'), false);
   eq('★ 匯入資料的 20:20 會被保留成一個選項（否則按儲存就被改成 08:00）',
      vals(fn('20:20',{noEmpty:1})).includes('20:20'), true);
   eq('★ 而且是被選中的那個', selOf(fn('20:20',{noEmpty:1})), '20:20');
   eq('　　保留的那筆插在正確的排序位置',
      (()=>{const v=vals(fn('20:20',{noEmpty:1})); return [v[v.indexOf('20:20')-1], v[v.indexOf('20:20')+1]];})(),
-     ['20:00','20:30']);
+     ['20:15','20:30']);
   eq('　　在格線上的就不重複插', vals(fn('20:30',{noEmpty:1})).filter(x=>x==='20:30').length, 1);
   eq('　　13:50、14:50、17:40 這幾筆同樣保得住',
      ['13:50','14:50','17:40'].every(t=>vals(fn(t,{noEmpty:1})).includes(t)), true);

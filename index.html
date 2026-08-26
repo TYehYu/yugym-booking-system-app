@@ -4799,7 +4799,12 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-ev.cal-ev-std .evc-time{font-family:var(--num);font-size:10px;font-weight:500;line-height:1.1;opacity:.8;letter-spacing:.01em;white-space:nowrap;}
 .cal-ev.cal-ev-std .evc-name{font-size:13px;font-weight:800;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
 /* 姓名下面那一列：體驗／待簽約／待繳費（2026-07-31 使用者指示，原本接在名字後面會把名字擠掉） */
-.cal-ev.cal-ev-std .evc-sub{font-size:9.5px;font-weight:700;line-height:1.1;opacity:.72;letter-spacing:.02em;
+/* ⚠ line-height 不能壓到 1.1（2026-08-26 使用者回報「桌機的課卡　待簽約下緣被切了一點」）——
+   9.5px × 1.1 = 10.45px 的內容框裝不下中文字身，而這一列是 overflow:hidden（要靠它做
+   橫向省略號），裝不下就直接把「待簽約」的下緣切掉。CSS 沒有「只裁橫向」這種寫法
+   （overflow 一邊 hidden 另一邊 visible 會被當成 auto），所以只能把行高放回來。
+   1.35 → 12.8px，中文字身放得下；整張卡只長 2px 多，30 分鐘的短卡也吃得住。 */
+.cal-ev.cal-ev-std .evc-sub{font-size:9.5px;font-weight:700;line-height:1.35;opacity:.72;letter-spacing:.02em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
 .cal-ev.cal-ev-std.cal-ev-7d .evc-sub,.cal-ev.cal-ev-std.ev-w-tiny .evc-sub{font-size:9px;}
 /* 第三行：教練縮寫 tag（教練色小膠囊，如 RA） */
@@ -10329,8 +10334,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.1802';
-const APP_VERSION_LABEL='v260826.1802';
+const APP_VERSION = '260826.1848';
+const APP_VERSION_LABEL='v260826.1848';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -25668,8 +25673,17 @@ function bkCoachChange(){
   window._bkCoachSel=(co&&co.value)||'';
   bkRedrawMemberPick();   // 已選的那位不會被截斷吃掉；開著的自訂選單也一起重畫
 }
-// 產生 30 分鐘間隔時段選項（08:00～22:00）
-/* 時段選項（08:00–22:00、30 分一格）。
+/* 可選的「分」（2026-08-26 使用者指示：「團體課時間可以再多安排一個 15 分跟 45 分
+   讓場地有中場休息的時間」）—— 原本只有整點與半點，兩堂團課接在一起場地沒有緩衝，
+   多了 :15／:45 就排得出 10:00–11:00 → 11:15–12:15 這種留白。
+   ⚠ 為什麼不只給團體課：0824 建立預約改版之後，視窗一只管「時段與場地」，
+     課種是到視窗二才選的 —— 挑時間的當下系統還不知道這會是團課。多出來的兩個選項
+     是純增加，別的課種要不要用由排課的人決定。
+   ⚠ 只影響「挑時間」。行事曆拖曳仍然吸附 30 分一格（格線是 30 分），
+     把 10:15 的課拖走會變成 10:00 或 10:30 —— 確認卡上看得到新舊時間。
+   四個挑時間的地方共用這一份，不要各寫各的。 */
+const BK_MINS=['00','15','30','45'];
+/* 時段選項（08:00–22:00，見 BK_MINS）。
    ⚠ selected 若不在格線上就額外插一列保留它 —— 匯入資料有 13:50、20:20 這種時間（19 筆），
      改成下拉之後若不保留，櫃檯只是進去看一眼、按個儲存就會把時間悄悄改掉（2026-08-01）。
    opts.noEmpty：不要「請選擇時間…」那一列（用在一定有值的編輯欄）。 */
@@ -25677,8 +25691,8 @@ function bkTimeOptions(selected, opts){
   const o=opts||{};
   const list=[];
   for(let h=8;h<=22;h++){
-    for(const mm of ['00','30']){
-      if(h===22&&mm==='30') break;
+    for(const mm of BK_MINS){
+      if(h===22&&mm!=='00') break;   // 最後一格是 22:00
       list.push(String(h).padStart(2,'0')+':'+mm);
     }
   }
@@ -26826,12 +26840,12 @@ function recurBoxHtml(prefix, maxN, opts){
     </div>`;
 }
 /* 連續預約每一天的時間選項：留空＝沿用第一堂的時間。
-   與步驟 1 的 bkTimeOptions 同一個時段範圍（08:00–22:00、30 分一格）。 */
+   與步驟 1 的 bkTimeOptions 同一個時段範圍（08:00–22:00，分見 BK_MINS）。 */
 function recurTimeOpts(){
   let html='<option value="">同第一堂</option>';
   for(let h=8;h<=22;h++){
-    for(const mm of ['00','30']){
-      if(h===22&&mm==='30') break;
+    for(const mm of BK_MINS){
+      if(h===22&&mm!=='00') break;
       const t=String(h).padStart(2,'0')+':'+mm;
       html+=`<option value="${t}">${t}</option>`;
     }
@@ -32635,7 +32649,7 @@ function ashOptPick(id, v){
    一樣是「按鈕＋隱藏 input」，讀值與 change 事件全部照舊。 */
 function ashTimeList(cur){
   const list=[];
-  for(let h=8;h<=22;h++) for(const mm of ['00','30']){ if(h===22&&mm==='30') break;
+  for(let h=8;h<=22;h++) for(const mm of BK_MINS){ if(h===22&&mm!=='00') break;
     list.push(String(h).padStart(2,'0')+':'+mm); }
   const c=String(cur||'').slice(0,5);
   if(c && list.indexOf(c)<0){ list.push(c); list.sort(); }
@@ -32654,9 +32668,11 @@ function ashTimeOpen(id){
   window._adpCtx={mode:'time', id};
   let host=document.getElementById('adp-sheet');
   if(!host){ host=document.createElement('div'); host.id='adp-sheet'; document.body.appendChild(host); }
-  /* 小時與分鐘各自獨立滾動（2026-08-21 使用者附圖）——營業時間 08–22，分鐘只有整點與半點 */
+  /* 小時與分鐘各自獨立滾動（2026-08-21 使用者附圖）——營業時間 08–22。
+     分鐘 2026-08-26 起是 00／15／30／45（見 BK_MINS）：團體課接團體課時，
+     場地需要中場休息的緩衝。 */
   const hours=Array.from({length:15},(_,i)=>({v:i+8,label:String(i+8).padStart(2,'0')}));
-  const mins=[{v:'00',label:'00'},{v:'30',label:'30'}];
+  const mins=BK_MINS.map(v=>({v,label:v}));
   host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
     <div class="adp-box"><div class="modal-title">選擇時間</div>
       <div class="wh-wrap wh-2">
@@ -32671,7 +32687,9 @@ function ashTimeOpen(id){
       </div></div>`;
   const hi=hours.findIndex(x=>x.v===ch);
   ashWheelGo('h', hi<0?1:hi);
-  ashWheelGo('i', cm==='30'?1:0);
+  /* 現值不在格線上時（匯入資料有 13:50、20:20 這種）滾到 :00，不要落在 -1 變空白 */
+  const ii=BK_MINS.indexOf(cm);
+  ashWheelGo('i', ii<0?0:ii);
 }
 function ashTimeConfirm(id){
   const h=ashWheelVal('h'), i=ashWheelVal('i');

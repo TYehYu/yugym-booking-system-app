@@ -153,10 +153,14 @@ ok('　　停用狀態的樣式一併補上', /\.rc-dow input\[type=time\]:disab
 ok('　　原因寫在程式裡', /勾了誰、誰的時間才出現在下面那一區/.test(src));
 {
   const g3=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
-  const fn=new Function(g3('function recurTimeOpts(){','\n}\n')+'\nreturn recurTimeOpts;')();
+  const fn=new Function("const BK_MINS=['00','15','30','45'];\n"
+    +g3('function recurTimeOpts(){','\n}\n')+'\nreturn recurTimeOpts;')();
   const vals=[...fn().matchAll(/value="([^"]*)"/g)].map(m=>m[1]);
   eq('★ 第一個是空值（＝同第一堂）', vals[0], '');
-  eq('★ 08:00 起、22:00 止、30 分一格', [vals[1], vals[vals.length-1], vals.length], ['08:00','22:00',30]);
+  /* 2026-08-26：與 bkTimeOptions 同一份 BK_MINS（00／15／30／45）→ 57 格＋「同第一堂」 */
+  eq('★ 08:00 起、22:00 止、15 分一格', [vals[1], vals[vals.length-1], vals.length], ['08:00','22:00',58]);
+  ok('★ :15 與 :45 也在（連續預約要跟第一堂用同一套格線）',
+     vals.includes('08:15') && vals.includes('21:45'));
   ok('　　讀取端的格式檢查吃得下（HH:MM）', vals.slice(1).every(v=>/^\d{2}:\d{2}$/.test(v)));
 }
 
