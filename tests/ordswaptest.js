@@ -48,12 +48,18 @@ const g=(a,b)=>{const i=src.indexOf(a);if(i<0)return '';return src.slice(i,src.i
       mk('b7','2026-08-13','19:00'),                    // ✗ 在本堂之前
     ];
     const win={};
-    const fn3=new Function('window','dbGetAll','parseYmd','showModal',
-      g('async function bkOfferSeriesMove(b, ot, nt){','\n}\n')+'\nreturn bkOfferSeriesMove;')(
-      win, async()=>all,
-      s=>{ const[y,m,d]=String(s).split('-').map(Number); return new Date(y,m-1,d); },
-      h=>{ shown.push(h); });
-    fn3(all[0],'19:00','14:00').then(()=>{
+    /* 2026-08-26：簽章從 (b, ot, nt) 變成 (b, od, ot, nd, nt) —— 日期也能一起平移了
+       （原本只有「同一天改時間」才問，見 tests/seriesmovetest.js）。
+       這裡驗的是同系列的篩選條件，那部分沒變，只是要多帶原/新日期進去。 */
+    const _pymd=s=>{ const[y,m,d]=String(s).split('-').map(Number); return new Date(y,m-1,d); };
+    const _ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const fn3=new Function('window','dbGetAll','parseYmd','ymd','addDays','showModal','escH','calMoveDiff','SM_WDN',
+      g('async function bkOfferSeriesMove(b, od, ot, nd, nt){','\n}\n')+'\nreturn bkOfferSeriesMove;')(
+      win, async()=>all, _pymd, _ymd,
+      (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; },
+      h=>{ shown.push(h); }, t=>String(t==null?'':t), ()=>'提前 5 小時',
+      ['日','一','二','三','四','五','六']);
+    fn3(all[0],'2026-08-20','19:00','2026-08-20','14:00').then(()=>{
       console.log('③ 連續預約改時間');
       eq('　同系列抓到 2 堂（b1、b2）', win._smSeries&&win._smSeries.ids, ['b1','b2']);
       eq('　新時間帶入', win._smSeries&&win._smSeries.nt, '14:00');

@@ -10329,8 +10329,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.1555';
-const APP_VERSION_LABEL='v260826.1555';
+const APP_VERSION = '260826.1746';
+const APP_VERSION_LABEL='v260826.1746';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -10465,10 +10465,32 @@ function leanLearn(store,row){     // 從任何一筆完整資料學欄位（dbG
    連續取消等於每一步都重新下載三張大表。改成：快取還在就把那一列就地改掉；
    t 歸 0 讓下一次讀取照常先做簽章校驗（別的裝置同時的改動由 change_log 增量補上），
    正確性與原本相同，只是自己的寫入不再觸發整表重抓。快取本來就不在 → 照舊丟掉。 */
+/* 行事曆的「翻頁快照」也要跟著改（2026-08-26 使用者回報：
+   「在桌機行事曆拉動課卡改時間的時候　畫面不會即時更新　都要按重整才會看到」）
+   ──────────────────────────────────────────────────────────────────────
+   `window._calDataCache` 是 renderCalendar 上一次渲染時**另外留的一份**，
+   跟這裡的 `_dbCache` 是兩份東西：dbGetAll 回的是 `hit.data.slice()`（陣列淺拷貝），
+   而下面 `e.data[i]=r` 是把元素**換成新物件**，舊陣列裡指的還是改動前那一顆。
+   本機寫完之後各處都用 `_calStepping=true` 重繪（刻意不等網路），吃到的就是這份
+   沒改到的舊快照 → 卡片畫回原位，看起來像沒存到，非得重整。
+   ⚠ 修在呼叫端沒有用：拖曳、換場地、改人數上限、批次改期…十幾處都會踩到，
+     所以補在「每一次寫入都會經過」的這裡，呼叫端一個都不必改。 */
+const CALSNAP_FIELD={bookings:'bookings', member_tickets:'allTickets', members:'members', employees:'coaches', ticket_types:'types'};
+function calSnapApply(key,row,del){
+  const c=window._calDataCache; if(!c) return;
+  const fld=CALSNAP_FIELD[key];
+  if(!fld || !Array.isArray(c[fld]) || !row || row.id==null) return;
+  const arr=c[fld];
+  const i=arr.findIndex(x=>x&&x.id===row.id);
+  if(del){ if(i>=0) arr.splice(i,1); }
+  else if(i>=0) arr[i]=row;
+  else arr.push(row);
+}
 function dbCacheApply(store,row,del){
   _sigPromise=null; _sigAt=0;                     // 簽章重新校驗（與 dbCacheClear 同）
   const key=tbl(store);
   const _bk=()=>{ if(key==='bookings'){ try{ occCacheClear(); }catch(_){} } };
+  try{ calSnapApply(key,row,del); }catch(_){}     // 見上：翻頁快照與 _dbCache 是兩份
   const e=_dbCache.get(key);
   if(!e || !Array.isArray(e.data) || !row || row.id==null){ _dbCache.delete(key); _bk(); return; }
   let r=row;
@@ -23226,10 +23248,14 @@ function calMoveDiff(od,ot,nd,nt){
 function confirmCalMove(b,od,ot,odur, nd,nt,ndur, onYes){
   /* 連續預約改時間（2026-08-18 使用者需求：「19:00 修改到 14:00 要跳出選項是否將
      後續課程統一修改」，教練先前只能在手機一堂一堂調）——單堂改完後，
-     若是「同日期、只改時間」，再問要不要把後續同系列（同會員/教練/課種/星期/原時間）
-     一起改過去。 */
+     再問要不要把後續同系列（同會員/教練/課種/星期/原時間）一起改過去。
+     ⚠ 2026-08-26 放寬（使用者回報：「教練 zoe 反應　他在調整客人黃柏桓的課程
+        無法全部一起調整」）——原本的條件是 `od===nd && ot!==nt`，**只要日期動了
+        就完全不問**。而「整串往後挪一週」「整串從週四改成週二」正是最常見的兩種，
+        剛好全被這一條擋在外面，看起來就像沒有這個功能。
+        現在只要時間或日期任一有動就問，日期的位移整串一起平移。 */
   const _apply=onYes||(()=>{});
-  window._calYes=async()=>{ await _apply(); if(od===nd && ot!==nt){ try{ await bkOfferSeriesMove(b, ot, nt); }catch(_){} } };
+  window._calYes=async()=>{ await _apply(); if(od!==nd || ot!==nt){ try{ await bkOfferSeriesMove(b, od, ot, nd, nt); }catch(_){} } };
   window._calNo=()=>navTo(CUR_PAGE);
   const who=calMoveWho(b);
   /* 前後用顏色標明（2026-08-07 使用者指示）——品牌色強度 紅>金>綠：
@@ -23266,27 +23292,41 @@ function confirmCalMove(b,od,ot,odur, nd,nt,ndur, onYes){
 /* 後續同系列一起改時間（2026-08-18）：同會員（單人課比 member_id、團課比整份名單）、
    同教練、同課種、同星期、原時間相同、日期在這堂之後、還沒上（booked）的課。
    逐堂跑 validateBooking，衝堂/場地滿的那幾堂跳過並列出來，不整批失敗。 */
-async function bkOfferSeriesMove(b, ot, nt){
+const SM_WDN=['日','一','二','三','四','五','六'];
+async function bkOfferSeriesMove(b, od, ot, nd, nt){
   const memKey=x=> (Array.isArray(x.member_ids)&&x.member_ids.length)
     ? 'g:'+x.member_ids.slice().sort().join(',') : 'm:'+(x.member_id||'');
   if(memKey(b)==='m:') return;   // 無主的卡（純體驗未留檔）不處理
-  const wd=parseYmd(b.date).getDay();
-  const all=await dbGetAll('bookings');
+  const d0=parseYmd(od), d1=parseYmd(nd);
+  if(!d0||!d1) return;
+  const days=Math.round((d1-d0)/86400000);
   const t5=s=>String(s||'').slice(0,5);
+  if(!days && t5(ot)===t5(nt)) return;
+  /* 比對用的是「這一堂原本的位置」（od／ot），不是 b.date —— 呼叫端已經先把這一堂
+     寫進資料庫了，b.date 已經是新日期。用新日期去比會整串認不出來。 */
+  const wd=d0.getDay();
+  const all=await dbGetAll('bookings');
   const series=all.filter(x=>x&&x.id!==b.id&&x.status==='booked'&&!x.sibling_of
     &&x.category===b.category&&(x.coach_id||'')===(b.coach_id||'')
-    &&memKey(x)===memKey(b)&&x.date>b.date
+    &&memKey(x)===memKey(b)&&x.date>od
     &&parseYmd(x.date).getDay()===wd&&t5(x.start_time)===t5(ot))
     .sort((a,c)=>a.date.localeCompare(c.date));
   if(!series.length) return;
-  const wdn=['日','一','二','三','四','五','六'][wd];
-  const list=series.map(x=>{const p=parseYmd(x.date);return `${p.getMonth()+1}/${p.getDate()}`;}).join('、');
-  window._smSeries={ids:series.map(x=>x.id), nt};
+  const md=s=>{const p=parseYmd(s);return `${p.getMonth()+1}/${p.getDate()}`;};
+  const shift=s=>days?ymd(addDays(parseYmd(s),days)):s;
+  const wdn=SM_WDN[wd], nwdn=SM_WDN[((wd+days)%7+7)%7];
+  /* 逐堂寫出「原本 → 改成」（2026-08-26）：日期會動的時候，只列原日期看不出結果，
+     而整串挪日期正是最容易挪錯的一種。超過 8 堂就收尾，不要把視窗撐爆。 */
+  const CAP=8;
+  const rows=series.slice(0,CAP).map(x=>`${md(x.date)} → <b>${md(shift(x.date))}</b>`).join('　');
+  const more=series.length>CAP?`　…等 ${series.length} 堂`:'';
+  window._smSeries={ids:series.map(x=>x.id), days, nt};
   showModal(`<div class="modal-title">後續課程要一起改嗎？</div>
     <div style="font-size:13px;line-height:1.9;color:var(--text);">
-      這位的後續還有 <b>${series.length}</b> 堂同系列（每週${wdn} ${ot}）：<br>
-      <span style="font-family:var(--num);color:var(--t2);">${list}</span><br>
-      要一起改到 <b>${nt}</b> 嗎？衝堂或場地已滿的會自動跳過並列出。
+      這位的後續還有 <b>${series.length}</b> 堂同系列（每週${wdn} ${t5(ot)}）。<br>
+      要一起改成 <b>每週${nwdn} ${t5(nt)}</b>（${escH(calMoveDiff(od,ot,nd,nt))}）嗎？
+      <div style="margin:8px 0 2px;font-family:var(--num);font-size:12.5px;color:var(--t2);line-height:2;">${rows}${more}</div>
+      衝堂、場地已滿或會挪到過去的那幾堂會自動跳過並列出來。
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">只改這一堂</button>
@@ -23297,20 +23337,30 @@ async function bkDoSeriesMove(){ return onceAct('seriesmove', _bkDoSeriesMove); 
 async function _bkDoSeriesMove(){
   const P=window._smSeries; window._smSeries=null;
   if(!P||!P.ids||!P.ids.length) return;
+  const days=Number(P.days)||0;
+  /* 往後挪要從最後一堂開始改（2026-08-26）：同一串每週同一時段，往後挪 7 天
+     就正好是下一堂現在的位置 —— 照順序改，第一堂會被還沒挪走的第二堂判成衝堂，
+     整串只成功最後一堂。往前挪則相反，照順序改才不會撞到前一堂。 */
+  const ids=days>0?P.ids.slice().reverse():P.ids.slice();
+  const today=ymd(TODAY);
   let okN=0; const fails=[];
-  for(const id of P.ids){
+  for(const id of ids){
     try{
       const x=await dbGet('bookings',id);
       if(!x||x.status!=='booked'){ continue; }
-      const verr=await validateBooking(x, x.date, P.nt, x.duration||60);
-      if(verr){ fails.push(x.date.slice(5).replace('-','/')+'（'+verr+'）'); continue; }
-      x.start_time=P.nt;
+      const was=String(x.date).slice(5).replace('-','/');
+      const ndate=days?ymd(addDays(parseYmd(x.date),days)):x.date;
+      if(ndate<today){ fails.push(was+'（會挪到過去）'); continue; }
+      const verr=await validateBooking(x, ndate, P.nt, x.duration||60);
+      if(verr){ fails.push(was+'（'+verr+'）'); continue; }
+      x.date=ndate; x.start_time=P.nt;
       await dbPut('bookings',x);
       okN++;
     }catch(_){ fails.push(id); }
   }
   try{ occCacheClear(); }catch(_){}
-  showToast(`已改 ${okN} 堂到 ${P.nt}`+(fails.length?`；${fails.length} 堂未改：${fails.join('、')}`:''));
+  showToast(`已改 ${okN} 堂`+(days?'（整串平移）':'')+`到 ${P.nt}`
+    +(fails.length?`；${fails.length} 堂未改：${fails.join('、')}`:''), fails.length?6000:3000);
   try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
 }
 
