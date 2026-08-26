@@ -181,9 +181,12 @@ ok('★ 行事曆的窄卡規則不動（那邊真的窄）',
    && /\.co-ab\{display:none;\}/.test(css));
 ok('　　太長的名字折行、不切成「…」（0821 已有的規則接手）',
    /white-space:normal !important; word-break:keep-all/.test(css));
+/* 2026-08-26：兩支請假標籤各多掛一個 class（evc-leavetag／tcard-leavetag）——
+   Ink 視覺層把教練標籤的底色整個拿掉「只留文字色」，而請假是白字紅底，
+   得靠這個 class 例外保留底色。文案與顏色都沒動。 */
 ok('★ 請假標籤縮成「請假」（使用者：其實改成請假就好）',
    /color:#F4F1E8;">請假<\/span>`\+_venueTag/.test(src)
-   && /<span class="tcard-co" style="background:#7A2E28;color:#F4F1E8;">請假<\/span>/.test(src));
+   && /<span class="tcard-co tcard-leavetag" style="background:#7A2E28;color:#F4F1E8;">請假<\/span>/.test(src));
 
 console.log('\n場地移到會員姓名下方（教室／跑步機）');
 ok('★ 不再是右下角跟教練並列的膠囊',

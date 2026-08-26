@@ -17,6 +17,17 @@ const INK=src.slice(src.lastIndexOf('/*', _ii), src.indexOf('</style>'));
 /* 只看真正的規則：註解裡本來就會提到 .cal-now、課程色這些名字（那是在說明「刻意不動」），
    拿註解去比會全部誤判。 */
 const RULES=INK.replace(/\/\*[\s\S]*?\*\//g,'');
+/* 一個 class 算「活的」＝ 它在這一區之外，要嘛以 .foo 出現在別的 CSS，
+   要嘛出現在某個 class="..." 屬性裡（新加的顯示元件就是後者）。 */
+function deadSel(block){
+  const cls=new Set();
+  block.replace(/\/\*[\s\S]*?\*\//g,'').replace(/\.([a-z][a-z0-9-]{2,})/g,(m,c)=>{cls.add(c);return m;});
+  const outside=src.split(block).join('');
+  return [...cls].filter(c=>c!=='ink'
+    && outside.indexOf('.'+c)<0
+    && !new RegExp('class="[^"]*\\b'+c+'\\b').test(outside));
+}
+
 
 console.log('① 尺寸與位置：一行計算都不能動（使用者第 11 條）');
 {
@@ -259,7 +270,11 @@ console.log('\n⑤ 互動一個都不能少');
   eq('★★ 十二項既有互動全部還在', keep.filter(([,re])=>!re.test(src)).map(([n])=>n), []);
   ok('★ Ink 層沒有動到任何 pointer-events／display（不會把東西藏掉或關掉點擊）',
      !/pointer-events\s*:/.test(RULES)
-     && !/display\s*:\s*none/.test(RULES.replace(/\.cchip-dot\{display:none;\}/,'')));
+     /* 允許兩個刻意的 display:none：舊版不畫的教練色點，以及使用者指名要拿掉的
+        「簽到後的綠框」（卡上已經有『簽』章）。其他一律不准藏東西。 */
+     && RULES.replace(/\.cchip-dot\{display:none;\}/,'')
+             .replace(/\.tcard-done:not\(\.tcard-live\)::before\{display:none;\}/,'')
+             .indexOf('display:none')<0);
 }
 
 
@@ -272,15 +287,7 @@ console.log('\n⑥ 首頁總覽（2026-08-26 使用者：「首頁參考這張�
 
   /* ⚠ 這一項是「別再寫死掉的選擇器」的護欄：第一版猜了 .wk-date.on 與 .tcard-renew，
      兩個在專案裡根本不存在，等於寫了一段永遠不會生效的 CSS。 */
-  const cls=new Set();
-  HR.replace(/\.([a-z][a-z0-9-]{2,})/g, (m,c)=>{ cls.add(c); return m; });
-  const OWN=new Set(['ink']);
-  const dead=[...cls].filter(c=>{
-    if(OWN.has(c)) return false;
-    const other=src.split('.'+c).length-1-(HOME.split('.'+c).length-1);
-    return other===0;
-  });
-  eq('★★ 首頁區塊沒有任何「專案裡不存在」的選擇器（防寫死掉的 CSS）', dead, []);
+  eq('★★ 首頁區塊沒有任何「專案裡不存在」的選擇器（防寫死掉的 CSS）', deadSel(HOME), []);
 
   /* ::before 是卡片裡面那條左色條（裝飾），與版面無關 —— 與排課表那邊同一個判準 */
   ok('★★ 純樣式：沒有一條規則碰版面（position／top／height／width／display）',
@@ -310,6 +317,43 @@ console.log('\n⑥ 首頁總覽（2026-08-26 使用者：「首頁參考這張�
      /body\.ink \.mc-kpi-mini\{background:#EDF0E5;border:1px solid #DCE2CE;border-radius:6px;box-shadow:none;\}/.test(src));
   ok('★ 數字統一等寬（金額與堂數才對得齊）',
      /body\.ink \.mc-k2-n,body\.ink \.ds-num,body\.ink \.mc-rev-amt,body\.ink \.lp-stat-v,[\s\S]{0,120}?font-variant-numeric:tabular-nums;/.test(src));
+}
+
+
+console.log('\n⑦ 首頁二修（使用者：「配色呢！！！我只有看到你把圓角改的比較方，根本就沒動啊！」）');
+{
+  const H2=src.slice(src.indexOf('/* ══ Ink · 首頁總覽 二修'), src.indexOf('</style>'));
+  const R2=H2.replace(/\/\*[\s\S]*?\*\//g,'');
+  ok('★★ 失敗原因寫在原地（首頁自己一層 .mc-dash/.mc-kpistrip，權重不夠＋顏色寫死）',
+     /選擇器比我寫的 `body\.ink \.xxx` 更/.test(src)
+     && /所以「權重不夠」＋「打不到」，\s*\n\s*畫面上只剩圓角有變/.test(src));
+  /* 同一個死選擇器護欄 */
+  eq('★★ 沒有寫死掉的選擇器', deadSel(H2), []);
+  ok('★★ 只改配色，沒有一條碰版面',
+     R2.split('}').filter(b=>{const i=b.indexOf('{'); if(i<0)return false;
+       if(/::(before|after)/.test(b.slice(0,i))) return false;
+       return /(^|[;{\s])(position|top|left|right|bottom|width|height|flex-direction)\s*:/.test(b.slice(i+1));}).length===0);
+
+  ok('★★ 月曆從深綠翻成米白面，而且字／格線／今天／選取全部跟著翻（不會白底白字）',
+     /body\.ink \.mc-dash \.cal-side,body\.ink \.cal-side\{\s*\n\s*background:var\(--card\);/.test(src)
+     && ['mc-wdh','mc-d','mc-dot','cal-hero-nav'].every(k=>new RegExp('body\\.ink \\.cal-side [^{]*'+k).test(src))
+     && /body\.ink \.cal-side \.mc-cell\.mc-today \.mc-d\{background:var\(--olive,#5E6A4A\);color:#F2EFE4;\}/.test(src));
+  ok('★★ 兩張提醒卡：深紅漸層 → 米白面＋磚紅細框，數字仍是磚紅（紅色是語意，留著）',
+     /body\.ink \.mc-kpistrip \.mc-alert2 \.mc-a2\{\s*\n\s*background:var\(--card\);border:1px solid color-mix\(in srgb, var\(--danger,#8C4A3E\) 38%, transparent\);/.test(src)
+     && /body\.ink \.mc-kpistrip \.mc-alert2 \.mc-a2-n\{color:var\(--danger,#8C4A3E\);/.test(src));
+  ok('　 原本的紅漸層沒被刪掉（關掉 Ink 就回去）',
+     /background:linear-gradient\(160deg,#7F0303 0%,#5E0303 100%\);/.test(src));
+  ok('★★ 教練名字改成只有文字上色（與行事曆課卡同一種做法）',
+     /body\.ink \.tcard-co:not\(\.tcard-leavetag\)\{background:transparent !important;padding:0 !important;/.test(src)
+     && /<span class="tcard-co tcard-leavetag" style="background:#7A2E28;color:#F4F1E8;">請假<\/span>/.test(src));
+  ok('★★ 教練色仍由首頁那支的 inline color 帶（Ink 沒有自己訂教練色）',
+     /style="background:\$\{_cc2\.bg\};color:\$\{_cc2\.fg\};"/.test(src)
+     && !/_cc2/.test(R2));
+  ok('★★ 簽到後的綠框關掉（卡上已經有「簽」章，同一件事不講兩次）',
+     /body\.ink \.tcard-std\.tcard-done:not\(\.tcard-live\)::before\{display:none;\}/.test(src));
+  ok('　 「上課中」那一圈刻意留著（那是另一個狀態，不是簽到）',
+     /只關掉「已完成」那一圈；「上課中」\(\.tcard-live\) 的環還留著/.test(src)
+     && /\.tcard-std\.tcard-live::before|tcardComet/.test(src));
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
