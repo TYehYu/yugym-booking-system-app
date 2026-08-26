@@ -120,6 +120,24 @@ ok('　　防連點（長串卡位無回饋會被連按）', /if\(window\._phSub
 ok('　　建立中顯示進度、結果講清楚成功幾堂跳過幾堂',
    /已卡位 \$\{made\} 堂（待簽約）/.test(src) && /跳過 \$\{skipped\.length\} 堂/.test(src));
 
+/* 2026-08-26 使用者提問：「連續預約　如果教練要簽新約　但是該會員還沒有建檔
+   目前不能連續建立待簽約嗎　然後再轉正」——
+   功能都在（含 0804 的整串轉正），但入口一直只開在管理員手機端：
+   openPendingHold 唯一的呼叫端是 ashSlotPending，而 ashSlotSheet 卡在
+   _ashSlotMode()＝admin＋手機。桌機／櫃檯／教練只走得到「空堂」。 */
+ok('★★ 建立預約步驟 2（沒選會員時）也給得到「用姓名卡位（待簽約）」',
+   /\$\{!preMid\?`<button type="button" class="ash-eirow" onclick="closeModal\(\);openPendingHold\(\)">\s*\n\s*<span class="ash-eilb">用姓名卡位（待簽約）<\/span>/.test(src));
+ok('★★ openPendingHold 不再只有一個呼叫端（原本只有 ashSlotPending）',
+   (src.match(/openPendingHold\(\)/g)||[]).length===3);
+ok('　　選了會員就不畫這一列（那時候要的是待簽約掛他名下，不是打散客姓名）',
+   /\$\{!preMid\?`<button type="button" class="ash-eirow" onclick="closeModal\(\);openPendingHold/.test(src));
+ok('　　說明講到「之後建檔賣票、轉正會自動扣課並取消多的」',
+   /之後建檔並賣票，在課卡按「轉正」會依已簽的堂數自動扣課、多出來的自動取消/.test(src));
+ok('★ 轉正會用手機／姓名自動對回那位新建的會員',
+   /const _ph=_norm\(b\.trial_phone\);/.test(src)
+   && /hit=members\.filter\(m=>String\(m\.name\|\|''\)\.trim\(\)===nm\);/.test(src)
+   && /if\(hit\.length===1\)\{ doConvertPending\(hit\[0\]\.id\); return; \}/.test(src));
+
 console.log('\n⑥ 超約防線');
 ok('★ 判定改用口徑無關的硬條件：綁到的未取消預約數 < 總堂數',
    /function tkOverBooked\(t, bkCntByTicket\)\{/.test(src)
