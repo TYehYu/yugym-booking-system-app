@@ -6276,6 +6276,19 @@ body.memh2-shell .bottom-nav .bn-lb{color:inherit;}
 .gt-search{width:100%;padding:8px 12px;margin-bottom:6px;border:1px solid var(--border-light);border-radius:10px;font-size:13px;font-family:inherit;background:var(--surface-3);color:var(--text-primary);}
 .gt-search:focus{outline:none;border-color:var(--brand);background:var(--surface-2);}
 .gt-hint{font-size:11.5px;color:var(--text-muted);margin-top:4px;min-height:14px;}
+/* 總價回推的單價（2026-08-26 放大）——原本是 11.5px 灰字，跟「填錯一個 0」比太小聲。
+   平常是米底白框的中性提示；單堂低到不合理才轉紅（紅＝要處理，紅>金>綠）。 */
+.gt-unitbox{margin-top:6px;font-size:12.5px;line-height:1.7;color:var(--t2);
+  background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:7px 10px;min-height:16px;}
+.gt-unitbox:empty{display:none;}
+.gt-unitbox b{color:var(--text);font-family:var(--num),inherit;font-size:14px;}
+.gt-unitbox i{display:block;font-style:normal;margin-top:5px;font-size:12px;line-height:1.8;}
+.gt-unitbox.gt-unitbox-bad{background:#fbeceb;border-color:#e8b6b0;color:#8c342c;}
+.gt-unitbox.gt-unitbox-bad b{color:#8c342c;}
+/* 欄位標題後面的紅色小注（把「這一格到底要填什麼」講死） */
+.lb-warn{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:700;
+  color:var(--danger,#b5372e);background:#fbeceb;border:1px solid #f0c9c5;
+  border-radius:999px;padding:1px 7px;vertical-align:1px;}
 
 /* ── 收回 .desktop-wide .card 搶走的控制權 ──
    2711 行的 .desktop-wide .card{padding:26px 28px;margin-bottom:22px} 特異度 (0,2,0)，
@@ -10316,8 +10329,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.1547';
-const APP_VERSION_LABEL='v260826.1547';
+const APP_VERSION = '260826.1555';
+const APP_VERSION_LABEL='v260826.1555';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31321,12 +31334,12 @@ async function grantCheckinReward(b){  if(b.reward_issued) return true;         
   let isFriendly=false, doGrant=false;
   const cat=b.category||'';
   // 反查該預約的票券種類（友善方案 category 可能仍是「私人教練」，需靠種類 color/名稱或扣抵票券名稱判斷友善）
-  let ttName='', ttColor='';
+  let ttName='', ttColor='', ttBt='';
   try{
     if(b.ticket_type_id){
       if(!window._ttCache) window._ttCache=await dbGetAll('ticket_types');
       const tt=(window._ttCache||[]).find(t=>t.id===b.ticket_type_id);
-      if(tt){ ttName=tt.name||''; ttColor=tt.color||''; }
+      if(tt){ ttName=tt.name||''; ttColor=tt.color||''; ttBt=tt.benefit_type||''; }
     }
   }catch(_){}
   // 扣抵的會員票券名稱（最準：友善方案票券 plan_name 含「友善」）
@@ -31334,7 +31347,10 @@ async function grantCheckinReward(b){  if(b.reward_issued) return true;         
   try{
     if(b.ticket_id){ const mt=await dbGet('member_tickets',b.ticket_id); if(mt) tkPlanName=mt.plan_name||''; }
   }catch(_){}
-  const friendly = b.ticket_type_id==='pt_friendly' || ttColor==='friendly'
+  /* 2026-08-26：票種的 benefit_type 擺第一 —— 自訂方案的 plan_name 是「自訂方案」，
+     只靠名字含「友善」會判成一般課（DB 端 handle_checkin_reward 同日修同一件事）。 */
+  const friendly = ttBt==='friendly_session'
+    || b.ticket_type_id==='pt_friendly' || ttColor==='friendly'
     || cat.indexOf('友善')>=0 || ttName.indexOf('友善')>=0 || tkPlanName.indexOf('友善')>=0;
   /* 2026-08-06 使用者定案：「體驗課不發自主訓練」，但「轉正的教練課或友善教練課也是教練課，所以要發」——
      判定改看「這堂是不是教練課」：課種是私人教練（含待簽約轉正後的教練課）、或扣的是教練課類的票；
@@ -43836,12 +43852,24 @@ async function openGrantModal(){
       <div id="gt-custom">
         <div style="background:var(--card2);border-radius:9px;padding:10px 12px;font-size:11.5px;color:var(--t2);line-height:1.7;margin-bottom:12px;">自訂銷售：自填票種、堂數、價格、效期，之後一樣選業績歸屬與簽約。</div>
         <div class="form-2col">
-          <div class="form-row"><label>票種 *（決定可約課程）</label>${ashOptField('gt-c-type', _ttList, _ttCur, '選擇票種', 'grantCustomValidate()')}</div>
+          ${/* 2026-08-26 使用者提問：「自訂方案 有辦法區分一般教練課跟友善教練課嗎？
+               差別在給的自主訓練點數的限制」「所以自訂方案要新增一個一般跟友善的項目」——
+               不用新增：這個票種清單本來就有「教練課」與「友善教練課」兩項（_CUSTOM_TT）。
+               真正的問題是**選了之後會怎樣沒有寫出來** —— 而它決定的不只是可約課程，
+               還決定簽到送哪一種自主訓練點數（友善點數限平日、18:00 前上完）。
+               把後果寫在欄位底下，選錯當場就看得出來。 */''}
+          <div class="form-row"><label>票種 *（決定可約課程與簽到贈點）</label>${ashOptField('gt-c-type', _ttList, _ttCur, '選擇票種', 'grantCustomValidate()')}
+            <div class="gt-unitbox" id="gt-c-bt"></div></div>
           <input type="hidden" id="gt-c-name" value="${(_pre&&_pre.name)||'自訂方案'}">   <!-- 2026-07-28 使用者指示：方案名稱統一「自訂方案」；固定商品帶自己的名字 -->
         </div>
         <div class="form-2col">
           <div class="form-row"><label>堂數 *</label><input type="number" id="gt-c-sessions" min="1" value="${(_pre&&_pre.sessions)||10}" oninput="grantCustomValidate()"></div>
-          <div class="form-row"><label>總價 *</label><input type="number" id="gt-c-price" min="0" value="${(_pre&&_pre.price!=null)?_pre.price:0}" oninput="grantCustomValidate()"><div class="gt-hint" id="gt-c-unit"></div></div>
+          ${/* 2026-08-26 使用者回報（陳英鴻 8/26：10 堂打成 1,100，實際是 11,000）——
+               「櫃檯金額打錯了…因為之前那格是單價　現在變總價」。欄位語意換過，
+               而舊習慣是打單價。標題直接把話講死，底下的回推提示也放大。 */''}
+          <div class="form-row"><label>總價 *<span class="lb-warn">整包金額，不是單堂</span></label>
+            <input type="number" id="gt-c-price" min="0" value="${(_pre&&_pre.price!=null)?_pre.price:0}" oninput="grantCustomValidate()" placeholder="例如 11000">
+            <div class="gt-unitbox" id="gt-c-unit"></div></div>
         </div>
         <div class="form-row"><label>效期天數 *</label><input type="number" id="gt-c-valid" min="1" value="${(_pre&&_pre.valid)||365}"></div>
       </div>`:''}
@@ -44062,16 +44090,53 @@ function _grantCustomPlan(){
     sessions_base:sessions, sessions_bonus:0, valid_days:Math.max(1,Number(v('gt-c-valid').value)||365),
     plan_type:'general', installment:false, __custom:true };
 }
-/* 總價底下即時標出回推的單價（櫃檯要對帳，看得到才不會以為填錯格） */
+/* 總價底下即時標出回推的單價（櫃檯要對帳，看得到才不會以為填錯格）
+   2026-08-26 放大＋加警示（陳英鴻案例：10 堂打成 1,100，實際是 11,000）——
+   原本是 11.5px 的灰字，跟「填錯一個 0」比起來太小聲了。
+   ⚠ 警示只對「本來就該有單價」的課別（教練課、團體課）——自主訓練點數、
+     折抵券、贈送方案本來就可能是 0 或很低，對它們跳警示只會變成雜訊。 */
+const GT_UNIT_MIN=300;   /* 教練課／團體課的單堂低於這個數，幾乎都是把單價打進總價 */
 function grantCustomUnitHint(p){
   const el=document.getElementById('gt-c-unit'); if(!el) return;
   const n=p?p.sessions_base:0, t=p?(Number(p.list_price)||0):0;
-  el.textContent=(n>0&&t>0)?`平均單堂 $${(Math.round(t/n)).toLocaleString()}　·　${n} 堂共 $${t.toLocaleString()}`:'';
+  if(!(n>0&&t>0)){ el.innerHTML=''; el.className='gt-unitbox'; return; }
+  const u=Math.round(t/n);
+  /* 只對「真的是一堂課」的票種示警 —— 判準用 benefit_type 而不是 category：
+     折抵券掛在「私人教練」這個 category 底下，但它 100 元 2 張很正常，
+     用 category 判會把它一起罵進去。 */
+  let bt='';
+  try{ const tt=(window._ttCache||[]).find(x=>x&&x.id===(p&&p.ticket_type_id)); bt=(tt&&tt.benefit_type)||''; }catch(_){}
+  const _priced=(bt==='coaching_session'||bt==='friendly_session');
+  const bad=_priced && u<GT_UNIT_MIN;
+  el.className='gt-unitbox'+(bad?' gt-unitbox-bad':'');
+  el.innerHTML=`<b>${n} 堂共 $${t.toLocaleString()}</b>　·　平均單堂 $${u.toLocaleString()}`
+    +(bad?`<i>單堂只有 $${u.toLocaleString()}，確定嗎？這一格填的是<b>整包總價</b> ——
+        如果單堂是 $${t.toLocaleString()}，這裡應該填 $${(t*n).toLocaleString()}。</i>`:'');
+}
+/* 這個票種簽到會送哪一種點數（2026-08-26）——一般與友善的差別在點數的時段限制，
+   而那是簽到當下才會發生的事，不寫出來櫃檯不會知道自己選錯了。
+   判準與發點端一致：ticket_types.benefit_type（friendly_session / coaching_session）。 */
+function grantCustomBenefitHint(p){
+  const el=document.getElementById('gt-c-bt'); if(!el) return;
+  let tt=null;
+  try{ tt=(window._ttCache||[]).find(x=>x&&x.id===(p&&p.ticket_type_id))||null; }catch(_){}
+  if(!tt){ el.innerHTML=''; el.className='gt-unitbox'; return; }
+  const bt=tt.benefit_type||'';
+  el.className='gt-unitbox';
+  if(bt==='friendly_session')
+    el.innerHTML=`<b>友善教練課</b>　·　簽到送<b>友善</b>自主訓練點數<i>友善點數<b>限平日、且要在 18:00 前上完</b>；本身也只能約平日 18:00 前的課。</i>`;
+  else if(bt==='coaching_session')
+    el.innerHTML=`<b>一般教練課</b>　·　簽到送一般自主訓練點數<i>沒有時段限制。</i>`;
+  else if((tt.category||'')==='自主訓練')
+    el.innerHTML=`<b>自主訓練</b><i>自主訓練本身不發贈點。</i>`;
+  else
+    el.innerHTML=`<b>${escH(tt.name||'')}</b><i>這個票種不發簽到贈點。</i>`;
 }
 // 自訂欄位齊全才允許「下一步」
 function grantCustomValidate(){
   const p=_grantCustomPlan();
   grantCustomUnitHint(p);
+  grantCustomBenefitHint(p);
   const ok=!!(p && p.name && p.ticket_type_id && p.sessions_base>0);
   const btn=document.getElementById('gt-next');
   if(btn){ btn.disabled=!ok; btn.style.opacity=ok?'1':'.4'; }

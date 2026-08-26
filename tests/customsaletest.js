@@ -9,7 +9,10 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('單價 → 總價');
-ok('★ 欄位標籤改成總價', /<label>總價 \*<\/label><input type="number" id="gt-c-price"/.test(src)
+/* 2026-08-26：標題後面加一顆紅色小注（陳英鴻 8/26 把單價打進總價，10 堂變 1,100）。
+   細節見 gtcustomtest.js。 */
+ok('★ 欄位標籤是總價，而且把「整包金額，不是單堂」寫在標題上',
+   /<label>總價 \*<span class="lb-warn">整包金額，不是單堂<\/span><\/label>/.test(src)
    && !/<label>單價 \*<\/label>/.test(src));
 ok('★ 填的是整包價，單價由堂數回推',
    /const totalPrice=Math\.max\(0,Number\(v\('gt-c-price'\)\.value\)\|\|0\);/.test(src)
@@ -22,8 +25,11 @@ ok('★ 送出時的定價（也是總金額沒填時的預設）同一套',
    /const listPrice=\(plan\.list_price!=null\)\?\(Number\(plan\.list_price\)\|\|0\):\(unitPrice\*plan\.sessions_base\);/.test(src));
 ok('　　總價底下即時標出回推的單價（櫃檯要對帳）',
    /function grantCustomUnitHint\(p\)\{/.test(src)
-   && /平均單堂 \$\$\{\(Math\.round\(t\/n\)\)\.toLocaleString\(\)\}　·　\$\{n\} 堂共 \$\$\{t\.toLocaleString\(\)\}/.test(src)
+   && /<b>\$\{n\} 堂共 \$\$\{t\.toLocaleString\(\)\}<\/b>　·　平均單堂 \$\$\{u\.toLocaleString\(\)\}/.test(src)
    && /grantCustomUnitHint\(p\);/.test(src));
+ok('★★ 單堂低到不合理就轉紅並算出該填多少（只對真的是一堂課的票種）',
+   /const bad=_priced && u<GT_UNIT_MIN;/.test(src)
+   && /應該填 \$\$\{\(t\*n\)\.toLocaleString\(\)\}/.test(src));
 
 console.log('\n回推的算術（不能讓整包價被四捨五入吃掉）');
 {
