@@ -10301,8 +10301,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.1448';
-const APP_VERSION_LABEL='v260826.1448';
+const APP_VERSION = '260826.1508';
+const APP_VERSION_LABEL='v260826.1508';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31098,8 +31098,16 @@ async function revokeCheckinReward(b){
     }
     if(kept>0) showToast('已取消簽到；此堂發放的自主訓練券已使用，未自動收回，請手動確認');
     else if(removed>0) showToast('已取消簽到，並收回未使用的自主訓練券');
-    // 清掉 booking 的已發旗標與來源標記，讓之後重新簽到能再次發券
+    /* 清掉旗標，讓之後重新簽到能再次發券。
+       ⚠ reward_status 一定要跟著改回 'pending'（2026-08-26 黃麗琴 8/26 15:00 案例）——
+         發點的判斷在 DB 的 handle_checkin_reward，它第一行就是
+         `if b.reward_status <> 'pending' then return`。
+         這裡原本只清 reward_issued（那是前端自己的旗標），reward_status 留在 'issued'，
+         於是「簽到 → 取消簽到 → 再簽到」的第二次簽到永遠不會再發點。
+         症狀認得出來：booking 的 reward_issued_at 早於 checked_in_at（正式庫 3 筆）。
+         同一件事有兩個旗標，只重設一個就等於沒重設。 */
     b.reward_issued=false;
+    b.reward_status='pending';
     await dbPut('bookings',b);
   }catch(e){ console.error('revokeCheckinReward fail',e); }
 }
@@ -31137,7 +31145,10 @@ async function revokeRewardOnCancel(b){
       try{ await dbDel('member_tickets', t.id); out.removed++; }catch(e){ console.error('刪贈點券失敗',t.id,e); out.kept++; }
     }
     if(out.removed){
+      /* 整堂取消：這一堂不會再簽到了，狀態記成 revoked（不是 pending）——
+         pending 的語意是「還等著發」，掛在已取消的課上會讓對帳誤判。 */
       b.reward_issued=false;
+      b.reward_status='revoked';
       try{ await dbPut('bookings',b); }catch(_){}
     }
   }catch(e){ console.error('revokeRewardOnCancel fail',e); }

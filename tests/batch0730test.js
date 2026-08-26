@@ -80,8 +80,10 @@ ok('　　會員通知與櫃檯 Toast 都講清楚收回幾點、連帶取消幾
    /function rewardNoteText\(rv\)\{/.test(src) && /function rewardToastText\(rv\)\{/.test(src)
    && /本堂贈送的自主訓練點數（\$\{rv\.points\} 點）已一併收回/.test(src));
 ok('　　刪券失敗記在 kept，不會假裝成功', /catch\(e\)\{ console\.error\('刪贈點券失敗',t\.id,e\); out\.kept\+\+; \}/.test(src));
-ok('　　收回後清掉 reward_issued，之後重新簽到能再發',
-   /if\(out\.removed\)\{\s*\n\s*b\.reward_issued=false;/.test(src));
+/* 2026-08-26：兩個旗標都要動 —— DB 的 handle_checkin_reward 只看 reward_status。
+   整堂取消記 'revoked'（不是 pending，那一堂不會再簽到了）。細節見 rewardredotest.js。 */
+ok('　　收回後兩個旗標都清（reward_issued＋reward_status）',
+   /if\(out\.removed\)\{[\s\S]{0,200}?b\.reward_issued=false;\s*\n\s*b\.reward_status='revoked';/.test(src));
 
 console.log('\n④ 教練端取消的提示');
 ok('★ 明講會動到哪一張票、剩幾堂、取消後幾堂',
