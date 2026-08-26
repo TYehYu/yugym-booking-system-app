@@ -132,21 +132,31 @@ ok('★★ 教練篩選改「小色點＋名稱」，不是一整排彩色膠囊
    && /body\.ink \.cal-chip\{[^}]*background:transparent !important;color:var\(--t2\) !important;/.test(src));
 ok('★★ 色點只在 Ink 層出現，舊版一個字都沒變',
    /\.cchip-dot\{display:none;\}   \/\* 舊版不畫色點/.test(src));
-/* 2026-08-26 使用者：「還有課程類型還是要標注顏色」—— 細框按鈕 ＋ 小色點，
-   與教練那排同一種語彙（顏色退到點上，字維持墨色）。 */
-ok('★★ 課程類型有標注顏色：小色點吃課程色 token',
-   /body\.ink \.cal-chip\.cal-chip-course::before\{content:'';width:6px;height:6px;border-radius:50%;/.test(src)
-   && /body\.ink \.cal-chip\.cal-chip-course\.ev-pt\{--ccol:var\(--course-pt-accent\);\}/.test(src)
-   && /body\.ink \.cal-chip\.cal-chip-course\.ev-trial\{--ccol:var\(--course-trial-accent\);\}/.test(src));
-ok('★★ 六種課別都有色點（含沒有 token 的運動按摩）',
-   ['ev-pt','ev-friendly','ev-group','ev-trial','ev-self','ev-massage']
-     .every(k=>new RegExp('cal-chip-course\\.'+k+'\\{--ccol:').test(src)));
-ok('★ 但仍然不是彩色膠囊：底透明、字墨色，顏色只在點與淡框',
-   /body\.ink \.cal-chip\.cal-chip-course\{font-weight:500;opacity:1 !important;filter:none !important;\s*\n\s*border:1px solid color-mix\(in srgb, var\(--ccol,#8a8178\) 34%, transparent\);\}/.test(src));
-ok('　 選取時色點翻成米白（不然會沉進深咖啡底）',
+/* 2026-08-26 二修（使用者：「課程類型用底色好了，跟下方行事曆視覺一致」）——
+   chip 與課卡用**完全相同的配方**：淡的同色底 ＋ 左側 3px 類型色條 ＋ 淡框，
+   連 color-mix 的百分比都一樣。小色點那一版退場（有底色就不需要再點一次）。 */
+{
+  /* ⚠ 一定要在 Ink 區塊（RULES）裡找，不能用整份 src —— 舊版另有一條
+     color-mix(--course-accent 18%) 的規則，用整份找會抓到那一條（第一版就誤判了）。 */
+  const card=(RULES.match(/background:color-mix\(in srgb, var\(--course-soft,#EAF3EF\) (\d+)%/)||[])[1];
+  const chip=(RULES.match(/background:color-mix\(in srgb, var\(--csoft,#EAF3EF\) (\d+)%/)||[])[1];
+  eq('★★ chip 的淡底與課卡同一個百分比（視覺才真的一致）', [card,chip,card===chip], ['30','30',true]);
+  const cardB=(RULES.match(/border:1px solid color-mix\(in srgb, var\(--course-accent,#3D7039\) (\d+)%/)||[])[1];
+  const chipB=(RULES.match(/border:1px solid color-mix\(in srgb, var\(--ccol,#8a8178\) (\d+)%/)||[])[1];
+  eq('★★ 框線的百分比也一樣', [cardB,chipB,cardB===chipB], ['20','20',true]);
+}
+ok('★★ 左側 3px 類型色條（與課卡同一種做法）',
+   /body\.ink \.cal-chip\.cal-chip-course::before\{content:'';position:absolute;left:0;top:0;bottom:0;\s*\n\s*width:3px;border-radius:0;background:var\(--ccol,var\(--t3\)\);\}/.test(src));
+ok('★★ 六種課別的 accent 與 soft 都對得上（含沒有 token 的運動按摩）',
+   ['ev-pt','ev-friendly','ev-group','ev-trial','ev-self']
+     .every(k=>new RegExp('cal-chip-course\\.'+k+'\\{--ccol:var\\(--course-'+k.slice(3)+'-accent\\);--csoft:var\\(--course-'+k.slice(3)+'-soft\\);\\}').test(src))
+   && /cal-chip-course\.ev-massage\{--ccol:#2f8f83;--csoft:#e0efec;\}/.test(src));
+ok('　 選取仍是深咖啡實心（與教練那排同一個選取語彙），色條翻米白',
    /body\.ink \.cal-chip\.cal-chip-course\.on::before\{background:#FFFDF8;\}/.test(src));
-ok('　 色點直接吃課程色 token，沒有另訂一份',
-   !/--ccol:#(?!2f8f83)/.test(src));
+ok('　 顏色只有一份來源：chip 沒有自己訂色（運動按摩沿用課卡同一組寫死值）',
+   !/--ccol:#(?!2f8f83)/.test(src) && !/--csoft:#(?!e0efec)/.test(src));
+ok('　 舊的小色點版本沒有殘留',
+   !/cal-chip-course::before\{content:'';width:6px/.test(src));
 ok('★ 選取狀態用深咖啡實心（教練與課程一致）',
    /body\.ink \.cal-chip\.on\{background:var\(--green\) !important;/.test(src));
 /* 2026-08-26 使用者更正：「全站不要使用任何 serif／宋體感字體」
