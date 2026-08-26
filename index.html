@@ -10717,8 +10717,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.2254';
-const APP_VERSION_LABEL='v260826.2254';
+const APP_VERSION = '260826.2300';
+const APP_VERSION_LABEL='v260826.2300';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13182,6 +13182,7 @@ async function verUpCheck(){
     else if(!_verUpTag){ _verUpTag=tag; }        // 第一輪：只記基準
     else if(tag!==_verUpTag){
       _verUpTag=tag;
+      /* 與 verUpApplyIfNew 同一支讀法，兩邊不要各自 match 一次 */
       const txt=await (await fetch(_verUpProbe(),{cache:'no-store'})).text();
       const m=txt.match(/const APP_VERSION = '([^']+)'/);
       const nv=m?m[1]:'';
@@ -19291,9 +19292,29 @@ function dashDataSig(date,bookings,attendance,purchases,mtickets,apps,punchReqs,
     (apps||[]).length,(punchReqs||[]).length,mChk,bkDay,attDay,tkDay,reqPend].join('#');
 }
 /* 首頁手動更新（2026-07-27 使用者指示）：立即清快取重抓整頁 */
+/* 問伺服器上現在是第幾版；不一樣就帶版本號重新載入（版本號只是為了穿過 HTML 快取）。
+   回傳「有沒有要換頁」，呼叫端才知道要不要繼續往下做。 */
+async function verUpApplyIfNew(){
+  const txt=await (await fetch(_verUpProbe(),{cache:'no-store'})).text();
+  const m=txt.match(/const APP_VERSION = '([^']+)'/);
+  const nv=m?m[1]:'';
+  if(!nv || nv===APP_VERSION) return false;
+  showToast('有新版 '+nv+'，重新載入…');
+  location.replace(location.pathname+'?v='+encodeURIComponent(nv));
+  return true;
+}
 async function dashManualRefresh(){
   window._remoteSig=null;
   dbCacheClear();
+  /* 順手問一次「伺服器上是不是已經有新版」（2026-08-26 使用者：「我都重新登入了怎麼還沒更新」）
+     ── GitHub Pages 給 index.html 的是 `cache-control: max-age=600`，所以按重新整理、
+     甚至重新登入，10 分鐘內拿到的都還是同一份舊檔（登入只換 session，不會重抓頁面檔）。
+     而這顆鈕原本只清資料快取＋重畫，永遠換不了版 —— 它的名字叫「更新畫面」，
+     使用者按下去的期待就是「給我最新的」，所以版本也要一起更新。
+     ⚠ 換頁時直接 return：後面的 navTo 會在卸載中的頁面上白跑一趟。 */
+  let jumped=false;
+  try{ jumped=await verUpApplyIfNew(); }catch(_){}
+  if(jumped) return;
   showToast('已更新');
   navTo(CUR_PAGE);
 }
