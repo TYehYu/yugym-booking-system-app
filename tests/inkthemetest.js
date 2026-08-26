@@ -146,9 +146,24 @@ ok('★ 背景溫暖米白、文字深墨（不是純白純黑）',
    && /--text:#221C15;/.test(src));
 ok('★ 不用厚重陰影與發光（陰影 token 一律拉平）',
    /--shadow-xs:none; --shadow-sm:none;/.test(src));
-ok('★ 頂欄不再是深綠實心，改米白＋細線；目前頁面用底線標示',
-   /body\.ink\.mc-mode \.mc-sidebar\{\s*\n\s*background:var\(--bg\);color:var\(--text\);/.test(src)
-   && /body\.ink\.mc-mode \.mc-nav-item\.active\{background:transparent;color:var\(--green\);\s*\n\s*border-bottom-color:var\(--green\);/.test(src));
+/* 2026-08-26 二修（使用者附前後對照圖：「標題列幫我改一下，參考這張。用橄欖綠。
+   設計語言要一致」）—— 頂欄從米白改成低彩度橄欖綠實心，字改米白。 */
+ok('★★ 頂欄是橄欖綠實心、字米白',
+   /body\.ink\{ --olive:#6C7757; --olive-d:#5B6549; --cream:#F2EFE4; \}/.test(src)
+   && /body\.ink\.mc-mode \.mc-sidebar\{\s*\n\s*background:var\(--olive\);color:var\(--cream\);/.test(src));
+ok('★★ 目前頁面仍用底線標示（不是實心膠囊），只是換成米白線',
+   /body\.ink\.mc-mode \.mc-nav-item\.active\{background:transparent;color:#fff;\s*\n\s*border-bottom-color:var\(--cream\);/.test(src));
+ok('★ 管理員＝米白細框空心 chip；抽獎＝淺米綠實心（橄欖底上唯一亮塊）',
+   /body\.ink\.mc-mode \.mc-admin-btn\{background:transparent;border:1px solid rgba\(242,239,228,\.36\);/.test(src)
+   && /body\.ink\.mc-mode \.mc-lotto-fab\{background:#DEE4CC;color:#3E4A2D;/.test(src));
+ok('★ 右側（更新鈕／時鐘／帳戶）整組跟著換米白系，沒有漏掉',
+   ['mc-rf','mc-topclock','mc-acct','mc-acct-av','mc-acct-name','mc-acct-role','mc-acct-arrow']
+     .every(k=>new RegExp('body\\.ink\\.mc-mode \\.'+k+'[{:]').test(src)));
+ok('★★ 橄欖綠仍守著原則：沒有漸層、玻璃、發光、厚陰影',
+   !/linear-gradient|backdrop-filter|blur\(/.test(RULES)
+   && (RULES.match(/box-shadow:none/g)||[]).length>=4);
+ok('　 為什麼改成深色帶（跟內容區分開）寫在原地',
+   /跟下面的內容區糊在一起、少了一條「這裡是導覽」的界線/.test(src));
 ok('★★ 新增預約維持深咖啡實心（唯一主操作），其餘米白底＋細框',
    /body\.ink \.btn-green\{background:var\(--green\);color:#FFFDF8;box-shadow:none;\}/.test(src)
    && /body\.ink \.btn-ghost\{background:var\(--card\);color:var\(--t2\);border:1px solid var\(--bd\);\}/.test(src));
