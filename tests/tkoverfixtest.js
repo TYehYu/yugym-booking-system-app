@@ -21,11 +21,24 @@ ok('　　看得出來可以按（游標＋hover＋按下回饋）',
 ok('　　title 也提示點得開', /需補票\$\{_canTap\?'（點一下看原因）':''\}/.test(src));
 
 console.log('\n說明視窗：三種原因分開講');
-ok('★ ① 票面還有餘額 → 只是沒綁上去，用「更換票券」一鍵解決',
-   /if\(rem>0\)\{[\s\S]{0,200}?這張票<b>還有 \$\{rem\} 堂<\/b>，只是這一堂沒有綁上去/.test(src)
-   && /\$\{rem>0\?`<button class="btn btn-ghost" onclick="closeModal\(\);openBkTicketChange\('\$\{bkId\}'\)">更換票券<\/button>`:''\}/.test(src));
-ok('★ ② 掛的預約比票的堂數多 → 帳被多退過，要校正',
-   /else if\(hold\.length>total\)\{/.test(src) && /帳被多退過/.test(src));
+ok('★ ② 票面還有餘額（而且沒超約）→ 只是沒綁上去',
+   /\}else if\(rem>0\)\{[\s\S]{0,200}?這張票<b>還有 \$\{rem\} 堂<\/b>，只是這一堂沒有綁上去/.test(src));
+/* 2026-08-26 使用者：「林韋綺有超約的四堂…可以點選虛線紅圈日期，跳出視窗
+   更改到其他票券或取消嗎? 這樣調整比較直接」——
+   原本這個視窗只問「**這一張**還有沒有餘額」，答不出「其實還有別張可以用」。 */
+ok('★★ ① 超約（掛的筆數 > 總堂數）要排在「還有餘額」前面',
+   /if\(hold\.length>total\)\{[\s\S]{0,400}?\}else if\(rem>0\)\{/.test(src)
+   && /超約是硬事實（筆數 vs 總堂數），餘額是衍生值，硬事實優先/.test(src));
+ok('★★ 會去查「這位會員別張票還有沒有堂數」，講得出剩幾堂、是哪張',
+   /_others=\(await listUsableTickets\(b\.member_id,_typeId,b\.date,b\.start_time\)\|\|\[\]\)\.filter\(x=>x\.id!==tkId\);/.test(src)
+   && /const _oSum=_others\.reduce\(\(n,x\)=>n\+Math\.max\(0,tkUnlockedLeft\(x\)\),0\);/.test(src)
+   && /這位會員<b>還有 \$\{_oSum\} 堂<\/b>可以用/.test(src));
+ok('★★ 有別張可以用時就給「更換票券」（不再只看這一張的餘額）',
+   /\$\{\(rem>0\|\|_others\.length\)\?`<button class="btn btn-ghost" onclick="closeModal\(\);openBkTicketChange\('\$\{bkId\}','close'\)">更換票券<\/button>`:''\}/.test(src));
+ok('★★ 也給「取消預約」（使用者同時提了「或取消」）',
+   /\$\{b\.status==='booked'\?`<button class="btn btn-ghost" style="color:var\(--danger,#b5372e\);" onclick="closeModal\(\);confirmCancelBooking\('\$\{bkId\}'\)">取消預約<\/button>`:''\}/.test(src));
+ok('　　換票視窗從這裡進去只給「關閉」（沒有上一層可回）',
+   /openBkTicketChange\('\$\{bkId\}','close'\)/.test(src));
 ok('★ ③ 票真的用完了 → 等續約時系統會問補扣，不用現在處理',
    /會員續約時系統會主動問要不要補扣這一堂，<b>不用現在處理<\/b>/.test(src));
 ok('★★ 判讀用「票面餘額 vs 實際佔用的預約數」，不是只看帳本淨額'
@@ -46,8 +59,8 @@ ok('★★ 舊的 tkFixSessions／doTkFixSessions 已整支退場，沒有殘留
    && !/tkFixSessions\(/.test(src));
 ok('★★ 這顆按鈕改開票券卡上的「校正」（管理員限定，先關掉這個視窗）',
    /\$\{_isAdmin\?`<button class="btn btn-red" onclick="closeModal\(\);tkTidyOpen\('\$\{tkId\}'\)">校正這張票<\/button>`:''\}/.test(src));
-ok('　　②「帳被多退過」的建議文字跟著改，指得到現在的按鈕',
-   /用下面的「校正這張票」把多出來的收回/.test(src)
+ok('　　沒有別張票可用時才叫人去校正（有別張就直接換過去）',
+   /用下面的「校正這張票」把歸屬與餘額整理好/.test(src)
    && /請管理員用票券卡上的「校正」處理/.test(src));
 ok('　　為什麼併掉寫在原地', /上線三天一次都沒被用過（ticket_logs 裡 0 筆）/.test(src));
 

@@ -10301,8 +10301,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.1508';
-const APP_VERSION_LABEL='v260826.1508';
+const APP_VERSION = '260826.1513';
+const APP_VERSION_LABEL='v260826.1513';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -11380,14 +11380,34 @@ async function mtkOverAsk(tkId, bkId){
   const _d=x=>String(x.date||'').slice(5).replace('-','/')+' '+String(x.start_time||'').slice(0,5);
   const _isAdmin=!!(SESSION&&SESSION.role==='admin');
   /* 三選一的判讀（順序有意義：先講「還有餘額」，那是一鍵就能解決的） */
+  /* 別張票還有沒有堂數（2026-08-26 使用者指示：「可以點選虛線紅圈日期，跳出視窗
+     更改到其他票券或取消嗎? 這樣調整比較直接」）——
+     林韋綺 8/26 的案例：#16 掛了 14 筆預約（總共只有 8 堂）而票面餘額還剩 2，
+     另外還有一張 #17 贈送的 3 堂沒動過。原本這個視窗只問「**這一張**還有沒有餘額」，
+     所以既答不出「其實還有別張可以用」，也沒有「換過去」的按鈕。 */
+  let _others=[];
+  try{
+    const _typeId=b.ticket_type_id||t.ticket_type_id||null;
+    _others=(await listUsableTickets(b.member_id,_typeId,b.date,b.start_time)||[]).filter(x=>x.id!==tkId);
+  }catch(_){}
+  const _oSum=_others.reduce((n,x)=>n+Math.max(0,tkUnlockedLeft(x)),0);
   let why, fix;
-  if(rem>0){
+  /* ⚠ 順序有意義，而且 2026-08-26 換過：「掛的筆數超過總堂數」要排在「還有餘額」前面。
+     原本 rem>0 排第一，於是林韋綺那張（餘額 2、卻掛著 14 筆）被講成
+     「還有 2 堂，只是這一堂沒綁上去」—— 聽起來像綁一下就好，實際上是帳對不起來。
+     超約是硬事實（筆數 vs 總堂數），餘額是衍生值，硬事實優先。 */
+  if(hold.length>total){
+    why=`這張票 <b>${total}</b> 堂，實際卻掛著 <b>${hold.length}</b> 筆預約 —— 多出來的 <b>${hold.length-total}</b> 堂沒有票可扣。`;
+    fix=_others.length
+      ? `這位會員另外還有 <b>${_oSum}</b> 堂可以用（${_others.map(x=>(x.plan_name||'票券')).slice(0,2).join('、')}${_others.length>2?' 等':''}）—— 按「更換票券」把這一堂換過去。`
+      : (_isAdmin?`用下面的「校正這張票」把歸屬與餘額整理好。`:`請管理員用票券卡上的「校正」處理。`);
+  }else if(rem>0){
     why=`這張票<b>還有 ${rem} 堂</b>，只是這一堂沒有綁上去 —— 多半是排課當下選錯票，或建立時票還沒發。`;
     fix=`按「更換票券」把它綁回這張票就好。`;
-  }else if(hold.length>total){
-    why=`這張票 <b>${total}</b> 堂，實際卻掛著 <b>${hold.length}</b> 筆預約 —— <b>帳被多退過</b>，`
-       +`餘額憑空多出來，才讓這一堂也扣得動。`;
-    fix=_isAdmin?`用下面的「校正這張票」把多出來的收回。`:`請管理員用票券卡上的「校正」處理。`;
+  }else if(_others.length){
+    why=`這張票 <b>${total}</b> 堂已經用完，但這位會員<b>還有 ${_oSum} 堂</b>可以用`
+       +`（${_others.map(x=>(x.plan_name||'票券')).slice(0,2).join('、')}${_others.length>2?' 等':''}）。`;
+    fix=`按「更換票券」把這一堂換過去就好。`;
   }else{
     why=`這張票 <b>${total}</b> 堂已經全部有主（見下方清單），這一堂是排在票用完之後的。`;
     fix=`會員續約時系統會主動問要不要補扣這一堂，<b>不用現在處理</b>；若這堂不上了就直接取消。`;
@@ -11404,7 +11424,10 @@ async function mtkOverAsk(tkId, bkId){
         x.id===bkId?'':'color:var(--t3);'}">${x.status==='booked'?'已預約':'已上'}${x.id===bkId?'　← 這一堂':''}</span></div>`).join(''):'<span style="color:var(--t3);">（沒有）</span>'}</div>
     <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
-      ${rem>0?`<button class="btn btn-ghost" onclick="closeModal();openBkTicketChange('${bkId}')">更換票券</button>`:''}
+      ${/* 2026-08-26：條件從「這張票還有餘額」放寬成「有別張可以用也算」——
+           使用者要的就是從這裡直接換到別張票。取消也一併給（他同時提了「或取消」）。 */''}
+      ${(rem>0||_others.length)?`<button class="btn btn-ghost" onclick="closeModal();openBkTicketChange('${bkId}','close')">更換票券</button>`:''}
+      ${b.status==='booked'?`<button class="btn btn-ghost" style="color:var(--danger,#b5372e);" onclick="closeModal();confirmCancelBooking('${bkId}')">取消預約</button>`:''}
       ${/* 2026-08-25 使用者：「從沒看到校正堂數這個按鈕，也沒用過，他在哪裡，有存在必要嗎」——
            它藏在這個視窗底下、而這個視窗又要那張票剛好有紅虛線點才開得出來，
            上線三天一次都沒被用過（ticket_logs 裡 0 筆）。合併進票券卡上的「校正」：
