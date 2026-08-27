@@ -147,17 +147,20 @@ console.log('\n③ 只示範管理員（使用者：「只示範更改管理員�
   const fn=(sess,ls,mobile)=>new Function('SESSION','localStorage','isMobileLayout',
     src.slice(src.indexOf('function inkOn(){'), src.indexOf('function inkApply()'))+'\nreturn inkOn;')(
       sess, ls, ()=>!!mobile);
+  /* 2026-08-27 使用者：「把教練、櫃檯的桌機頁面設計也全部改成跟管理員一樣」——
+     員工三種角色一律套；會員端仍然不套（他們有自己的 memh2 版面）。 */
   eq('★★ 管理員＋桌機 → 開', fn({role:'admin'}, LS(null), false)(), true);
-  eq('★★ 櫃檯 → 不開', fn({role:'front_desk'}, LS(null), false)(), false);
-  eq('★★ 教練 → 不開', fn({role:'coach'}, LS(null), false)(), false);
-  eq('★★ 會員 → 不開', fn({role:'member'}, LS(null), false)(), false);
+  eq('★★ 櫃檯＋桌機 → 開', fn({role:'front_desk'}, LS(null), false)(), true);
+  eq('★★ 教練＋桌機 → 開', fn({role:'coach'}, LS(null), false)(), true);
+  eq('★★ 會員 → 仍然不開（會員端有自己的版面）', fn({role:'member'}, LS(null), false)(), false);
   eq('　 還沒登入 → 不開', fn(null, LS(null), false)(), false);
   /* 2026-08-26 使用者：「但手機版的怎麼變這樣，你先不要動手機版的介面」——
      .cal-chip／.btn／.mc-nav 是桌機與手機共用的 class，沒擋裝置手機會整片跟著變。 */
   eq('★★ 管理員但在手機 → 不開（手機版一律維持原樣）', fn({role:'admin'}, LS(null), true)(), false);
+  eq('★★ 教練在手機 → 不開', fn({role:'coach'}, LS(null), true)(), false);
   eq('★★ 手機優先於 localStorage 的強制開啟', fn({role:'admin'}, LS('1'), true)(), false);
   eq('★★ 逃生門：管理員也能當場退回舊版（yugym_ink=0）', fn({role:'admin'}, LS('0'), false)(), false);
-  eq('★ 也能在非管理員帳號上試看（yugym_ink=1）', fn({role:'coach'}, LS('1'), false)(), true);
+  eq('　 沒有 role 的（還沒載完 SESSION）不開', fn({role:''}, LS(null), false)(), false);
   ok('★ 轉向／改視窗大小會重算（navTo 只在換頁時跑）',
      /window\.addEventListener\('resize', \(\)=>\{ try\{ inkApply\(\); \}catch\(_\)\{\} \}\);/.test(src)
      && /window\.addEventListener\('orientationchange', \(\)=>\{ setTimeout\(\(\)=>\{ try\{ inkApply\(\); \}catch\(_\)\{\} \},200\); \}\);/.test(src));
