@@ -285,7 +285,7 @@ const css=cut('/* ══ 會員手機首頁 V2','/* 2026-08-20 使用者指示�
    提升成共用 —— 教練手機首頁與管理員手機首頁同日也改成「日期列在上」，三頁同一份樣式。
    ⚠ 白名單逐個列名，不放行整個 .a2- 前綴：.a2-day／.a2-railin／.a2-quickadd 那些是
      左欄與課卡欄在用的共用件，會員頁不該去動它們。 */
-const MEMH2_SHARED_OK=/^\.a2-(week|wnav|wdays|wd|wdot|wtoday|wn)(?![\w-])/;
+const MEMH2_SHARED_OK=/^\.a2-(week|wnav|wdays|wd|wdot|wtoday|wn|wback)(?![\w-])/;
 t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot / .pp-head / .pp-sheet-self / .tb-acct-item 之下',
   css.split('\n').filter(l=>/^\.[a-z]/.test(l.trim()))
      .every(l=>/^\.(memh2|mh2-|mh2p-|modal-foot\.mh2-foot|pp-head|pp-sheet(\.|-)|tb-acct-item)/.test(l.trim())

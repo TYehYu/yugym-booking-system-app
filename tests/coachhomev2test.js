@@ -156,8 +156,11 @@ ok('　　點下去走 chv2DutyTap（還沒上班才是掃碼）', /class="admh-
      這樣課卡可以更寬更大　但是快速預約還是要保留在課卡下方」）——
    日期列從左欄搬回上方橫排，課卡欄吃滿整個寬度。 */
 ok('★★ 日期列在上、課卡欄獨佔整個寬度（原本的分隔線仍退場）',
-   /<div class="a2-week">[\s\S]{0,300}?<\/div>\s*\n\s*<div class="admh2-body">\s*\n\s*<div class="admh2-cards">/.test(src)
+   /<div class="a2-week">[\s\S]{0,600}?<\/div>\s*\n\s*<div class="admh2-body">\s*\n\s*<div class="admh2-cards">/.test(src)
    && !/<div class="admh-div chv2-div2"><\/div>/.test(src));
+ok('★★ 回到今天做進日期列（教練：ctBackToday），不再用 fixed 的 .admh-todaybk',
+   /\$\{date!==today\?`<button class="a2-wback" title="回到今天" onclick="ctBackToday\(\)">今<\/button>`:''\}/.test(src)
+   && !/admh-todaybk[^`]*ctBackToday/.test(src));
 ok('★ 本月成績改回進度環（沿用教練端舊版那組 .mstat）',
    /const ringCardOf=\(title,o,color\)=>\{/.test(src)
    && /<div class="mstat-row mstat-row-2">\$\{ringCardOf\('教練課',_mPt,'#1f6f54'\)\}\$\{ringCardOf\('團體課',_mGp,'#9a5a1e'\)\}<\/div>/.test(src)

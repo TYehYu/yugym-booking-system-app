@@ -128,10 +128,19 @@ console.log('\n⑥ 沒有拿掉任何既有功能');
   ok('★★ 「不能用就寫原因」：效期外不藏鈕，改寫下面那一行',
      /const _selfBad=\(pk\.self>0\) && !selfOk\(s\.date\);/.test(HTML)
      && /這一天不在點數效期內，請往後選日期/.test(HTML));
-  ok('★★ 三格票券 KPI、Today 鈕、下方月曆都還在',
+  /* 2026-08-27（使用者：「日期列的回到今日按鈕不見了」「會員端的沒看到」）——
+     .admh-todaybk 是 position:fixed 貼在頂欄左側；會員端是外殼模式（頂欄 position:static、
+     真正在捲的是 .content），fixed 的定位基準與層級都跟原本設想的不一樣。
+     改成日期列裡的一顆「今」，跟日期列一起流動、一起重繪。 */
+  ok('★★ 三格票券 KPI、下方月曆都還在',
      /class="admh-kpis">\$\{kpis\}/.test(HTML)
-     && /class="admh-todaybk" onclick="memh2PickDay\('\$\{today\}'\)/.test(HTML)
      && /\$\{memh2MonthHTML\(mine\)\}/.test(HTML));
+  ok('★★ 回到今天改做進日期列，只在「看的不是今天」時出現',
+     /\$\{s\.date!==today\?`<button class="a2-wback" title="回到今天" onclick="memh2PickDay\('\$\{today\}'\)">今<\/button>`:''\}/.test(HTML)
+     && !/admh-todaybk/.test(HTML));
+  ok('　 用品牌綠不用紅（紅是警示色階，回到今天不是警示；綠也對上這一列的「今天」）',
+     /\.a2-wback\{[\s\S]{0,200}?background:var\(--green\);/.test(CSS)
+     && /用品牌綠不用紅：紅是警示色階（紅>金>綠），而「回到今天」不是警示/.test(src));
   ok('★★ 團體課報名卡、簽到手勢圖示都還在',
      /class="admh2-card mh2-grpopen/.test(HTML) && /mh2-tapic/.test(src));
   ok('★ 換週還有兩條路：左右箭頭 ＋ 下方月曆點日期',

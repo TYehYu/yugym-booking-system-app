@@ -31,7 +31,18 @@ console.log('\n③ 版面：上方不動，下方兩欄各自捲動');
 ok('★ 大日期＋KPI 那一組 class 沒動', 
    /<div class="admh admh2">[\s\S]{0,900}?<div class="admh-bigrow">/.test(src));
 ok('★★ 交換位子：上方＝日期列，左欄＝教練篩選列',
-   /<div class="admh-div"><\/div>[\s\S]{0,200}?<div class="a2-week">[\s\S]{0,300}?<\/div>\s*\n\s*<div class="admh2-body">\s*\n\s*<div class="a2-chiprail">\$\{_chips\}<\/div>/.test(src));
+   /<div class="admh-div"><\/div>[\s\S]{0,200}?<div class="a2-week">[\s\S]{0,600}?<\/div>\s*\n\s*<div class="admh2-body">\s*\n\s*<div class="a2-chiprail">\$\{_chips\}<\/div>/.test(src));
+/* 2026-08-27（使用者：「日期列的回到今日按鈕不見了」「會員端的沒看到」）——
+   原本那顆 .admh-todaybk 是 position:fixed 貼在頂欄左側，只在整頁捲動的版面成立；
+   改成日期列裡的一顆「今」，三頁同一份，只在「看的不是今天」時出現。 */
+ok('★★ 回到今天做進日期列（管理員：dashPickDate(today)）',
+   /\$\{date!==today\?`<button class="a2-wback" title="回到今天" onclick="dashPickDate\('\$\{today\}'\)">今<\/button>`:''\}/.test(src)
+   && /\.a2-wback\{flex:0 0 auto;width:26px;height:26px;/.test(src));
+ok('★★ 雙欄版不再用 fixed 的 .admh-todaybk（舊版單欄那條路仍留著，是退回的路）',
+   !/<div class="admh admh2">[\s\S]{0,300}?admh-todaybk/.test(src)
+   && /admMobHero=`<div class="admh">[\s\S]{0,400}?admh-todaybk/.test(src));
+ok('　 成因寫在原地（外殼模式下頂欄是 static，fixed 的基準與層級都不一樣）',
+   /那條路只在「整頁捲動」的版面成立 —— 會員端是外殼模式/.test(src));
 ok('★★ 篩選列刻意不共用 .admh2-rail —— 那上面掛著「上下拖曳換週」，是給日期列的',
    /篩選列掛上去等於一滑就換週/.test(src)
    && /\.a2-chiprail\{flex:0 0 72px;/.test(src));
