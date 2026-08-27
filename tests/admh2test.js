@@ -39,6 +39,15 @@ ok('★★ 教練篩選的行為一格沒變（All 在最前、只列當日有�
    /const _chips=\[`<button class="admh-chip\$\{_cSel\?'':' on'\}" onclick="admhPickCoach\('all'\)">All<\/button>`\]/.test(src)
    && /\.concat\(\(coaches\|\|\[\]\)\.filter\(c=>_activeC\[c\.id\]\)/.test(src)
    && /onclick="admhPickCoach\('\$\{c\.id\}'\)"/.test(src));
+/* 2026-08-27 二修（使用者：「為什麼日期列每天下方都出現一個點」）——
+   那顆點的意思是「這天有課」，管理員幾乎天天有課，七格全亮＝沒有訊息量。
+   改成寫當日堂數（沒課留白）。會員端與教練端維持圓點：他們常常有空日。 */
+ok('★★ 管理員版第三列＝當日堂數，不是「有課就一顆點」',
+   /<em class="a2-wn">\$\{_n\|\|''\}<\/em>/.test(src)
+   && /\.a2-wn\{display:block;min-height:4px;/.test(src)
+   && /管理員這裡幾乎天天有課，七格全亮等於沒講任何事/.test(src));
+ok('　 沒課留白（不寫 0、也不畫點），格高仍由 min-height 撐住',
+   /沒課就留白，不寫 0 也不畫點/.test(src));
 ok('★ 日期列七天、週一第一個（沿用既有的 heroWeekMonday，不另立一套）',
    /let _a2Week='';[\s\S]{0,900}?for\(let i=0;i<7;i\+\+\)\{ const d=new Date\(_mon\);/.test(src)
    && /const _mon=heroWeekMonday\(date\);/.test(src));
