@@ -66,8 +66,8 @@ t('訂位挑票優先用效期較短的那張（照到期日由近而遠排）',
 t('還沒生效的票不會被挑走（起始日也要看）',
   /\.filter\(t=>!\(t\.start_date&&t\.expire_date\) \|\| String\(t\.start_date\)\.slice\(0,10\)<=s\.date\)/.test(s));
 t('★★ 換週改用左右箭頭（左欄退場，上下拖曳那支手勢跟著沒了）',
-  /<button class="mh2-wnav" title="上一週" onclick="memh2WeekShift\(-1\)">‹<\/button>/.test(html)
-  && /<button class="mh2-wnav" title="下一週" onclick="memh2WeekShift\(1\)">›<\/button>/.test(html)
+  /<button class="a2-wnav" title="上一週" onclick="memh2WeekShift\(-1\)">‹<\/button>/.test(html)
+  && /<button class="a2-wnav" title="下一週" onclick="memh2WeekShift\(1\)">›<\/button>/.test(html)
   && !/class="admh2-rail"/.test(html));
 t('拖曳換週一律綁 memh2WeekShift', /admh2Mount\(memh2WeekShift\)/.test(html));
 const shift=cut('function memh2WeekShift(d){','/* 課程篩選列已於');
@@ -281,9 +281,15 @@ const css=cut('/* ══ 會員手機首頁 V2','/* 2026-08-20 使用者指示�
    一樣只有帶 mh2-foot 的那幾張視窗吃得到。 */
 /* .pp-head-self 是會員本人的個人資料（不在 .memh2 裡）、
    .tb-acct-item .acct-nsw 是帳號選單那顆開關 —— 兩者都各自有自己的範圍限定。 */
+/* 2026-08-27 二修：橫排日期列那一組（.a2-week/.a2-wnav/.a2-wdays/.a2-wd/.a2-wdot/.a2-wtoday）
+   提升成共用 —— 教練手機首頁與管理員手機首頁同日也改成「日期列在上」，三頁同一份樣式。
+   ⚠ 白名單逐個列名，不放行整個 .a2- 前綴：.a2-day／.a2-railin／.a2-quickadd 那些是
+     左欄與課卡欄在用的共用件，會員頁不該去動它們。 */
+const MEMH2_SHARED_OK=/^\.a2-(week|wnav|wdays|wd|wdot|wtoday)(?![\w-])/;
 t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot / .pp-head / .pp-sheet-self / .tb-acct-item 之下',
   css.split('\n').filter(l=>/^\.[a-z]/.test(l.trim()))
-     .every(l=>/^\.(memh2|mh2-|mh2p-|modal-foot\.mh2-foot|pp-head|pp-sheet(\.|-)|tb-acct-item)/.test(l.trim())));
+     .every(l=>/^\.(memh2|mh2-|mh2p-|modal-foot\.mh2-foot|pp-head|pp-sheet(\.|-)|tb-acct-item)/.test(l.trim())
+              || MEMH2_SHARED_OK.test(l.trim())));
 /* 0823：主顧客課程價目那一段原本叫 lp-*，與桌機管理列表 lpTable 的 .lp-row 同名同權重，
    而且寫在樣式表更後面 → 全站管理列表的資料列都被它蓋成白框，連 820px 以下
    「攤成卡片」那條也失效。改名 mh2p-* 之後兩邊各歸各的。 */

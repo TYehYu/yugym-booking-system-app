@@ -152,8 +152,11 @@ ok('　　未排班／請假用虛線框，不要看起來像「有班」',
 ok('　　點下去走 chv2DutyTap（還沒上班才是掃碼）', /class="admh-kpi admh-rev chv2-dutytap" onclick="chv2DutyTap\(\)"/.test(src));
 
 /* 0822 雙欄之後不需要那條分隔線：日期列在左邊、課卡在右邊，本來就分得開 */
-ok('★ 日期列與課卡改成左右並排（原本的分隔線退場）',
-   /<div class="admh2-body">\s*\n\s*<div class="admh2-rail">/.test(src)
+/* 2026-08-27（使用者：「把教練手機端的首頁也改成這樣　日期列改到上方
+     這樣課卡可以更寬更大　但是快速預約還是要保留在課卡下方」）——
+   日期列從左欄搬回上方橫排，課卡欄吃滿整個寬度。 */
+ok('★★ 日期列在上、課卡欄獨佔整個寬度（原本的分隔線仍退場）',
+   /<div class="a2-week">[\s\S]{0,300}?<\/div>\s*\n\s*<div class="admh2-body">\s*\n\s*<div class="admh2-cards">/.test(src)
    && !/<div class="admh-div chv2-div2"><\/div>/.test(src));
 ok('★ 本月成績改回進度環（沿用教練端舊版那組 .mstat）',
    /const ringCardOf=\(title,o,color\)=>\{/.test(src)
@@ -243,12 +246,19 @@ ok('★ 右下角浮動打卡鈕退場（值班那格就能掃碼，浮動鈕還
 /* ═══ 2026-08-22：把管理員手機首頁今天做的內容同步過來（使用者指示）═══════════════
    「幫我把今天做的管理員手機首頁內容 也更新到教練版手機首頁」 */
 console.log('\n雙欄版面同步到教練首頁');
-ok('★ 日期列從上方橫排改成左側直欄（與管理員同一組 class）',
-   /_a2Rail\+=`<button class="a2-day\$\{ds===date&&ds!==today\?' on':''\}\$\{ds===today\?' a2-today':''\}" onclick="ctPickDay\('\$\{ds\}'\)">/.test(src)
-   && /<div class="admh2-body">\s*\n\s*<div class="admh2-rail">/.test(src));
-ok('★ 上下箭頭換週走教練自己的 coachWeekShift',
-   /<span class="a2-arw a2-arw-up" onclick="coachWeekShift\(-1\)"><\/span>/.test(src)
-   && /<span class="a2-arw a2-arw-dn" onclick="coachWeekShift\(1\)"><\/span>/.test(src));
+ok('★★ 日期列＝上方橫排七格（與會員端、管理員端同一組 a2-w* class）',
+   /_a2Week\+=`<button class="a2-wd\$\{ds===date&&ds!==today\?' on':''\}\$\{ds===today\?' a2-wtoday':''\}" onclick="ctPickDay\('\$\{ds\}'\)">/.test(src)
+   && !/class="admh2-rail"/.test(V2CODE));
+ok('★★ 有課的那幾天標小圓點（沿用已經算好的 _cnt，不另外數一次）',
+   /const _n=_cnt\[ds\]\|\|0;/.test(V2CODE)
+   && /<em class="a2-wdot\$\{_n\?'':' z'\}"><\/em>/.test(V2CODE));
+ok('★ 換週改用左右箭頭，仍走教練自己的 coachWeekShift',
+   /<button class="a2-wnav" title="上一週" onclick="coachWeekShift\(-1\)">‹<\/button>/.test(src)
+   && /<button class="a2-wnav" title="下一週" onclick="coachWeekShift\(1\)">›<\/button>/.test(src));
+ok('★★ 快速預約仍留在課卡欄最後一張（使用者特別交代「還是要保留在課卡下方」）',
+   /<div class="admh2-cards">\$\{_cards\}[\s\S]{0,400}?<button class="a2-quickadd" title="快速預約" onclick="chvQuickSlots\('\$\{date\}'\)">＋<\/button>/.test(src));
+ok('　 理由寫在原地（左欄七格瓜分視窗高度，橫排瓜分寬度）',
+   /跟會員端同一個理由：左欄七格瓜分的是視窗高度，webview 上緣一被吃掉就不夠放；/.test(src));
 ok('★★ 掛載沿用 admh2Mount，換週函式用參數帶進去（兩頁唯一的差別）',
    /function admh2Mount\(shiftFn\)\{/.test(src)
    && /admh2Mount\(coachWeekShift\)/.test(src)

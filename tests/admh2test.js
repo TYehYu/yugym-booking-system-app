@@ -26,10 +26,21 @@ ok('　　CSS 沒有任何一條把雙欄樣式加在裸 .admh 上',
 ok('　　教練首頁仍是 admh chv2（沒被改成雙欄）', /<div class="admh chv2">/.test(src));
 
 console.log('\n③ 版面：上方不動，下方兩欄各自捲動');
-ok('★ 大日期＋KPI 與教練篩選列維持原本那組 class',
-   /<div class="admh admh2">[\s\S]{0,900}?<div class="admh-bigrow">[\s\S]{0,1200}?<div class="admh-coach a2-chips">/.test(src));
-ok('★ 左欄七天、週一第一個（沿用既有的 heroWeekMonday，不另立一套）',
-   /let _a2Rail='';[\s\S]{0,120}?for\(let i=0;i<7;i\+\+\)\{ const d=new Date\(_mon\);/.test(src)
+/* 2026-08-27 使用者指示：「管理員的手機端首頁　日期列跟篩選列　交換位子」——
+   日期列搬到上方橫排（原本篩選列的位置），教練篩選列搬進左欄（原本日期列的位置）。 */
+ok('★ 大日期＋KPI 那一組 class 沒動', 
+   /<div class="admh admh2">[\s\S]{0,900}?<div class="admh-bigrow">/.test(src));
+ok('★★ 交換位子：上方＝日期列，左欄＝教練篩選列',
+   /<div class="admh-div"><\/div>[\s\S]{0,200}?<div class="a2-week">[\s\S]{0,300}?<\/div>\s*\n\s*<div class="admh2-body">\s*\n\s*<div class="a2-chiprail">\$\{_chips\}<\/div>/.test(src));
+ok('★★ 篩選列刻意不共用 .admh2-rail —— 那上面掛著「上下拖曳換週」，是給日期列的',
+   /篩選列掛上去等於一滑就換週/.test(src)
+   && /\.a2-chiprail\{flex:0 0 72px;/.test(src));
+ok('★★ 教練篩選的行為一格沒變（All 在最前、只列當日有課的、帶堂數、點了 admhPickCoach）',
+   /const _chips=\[`<button class="admh-chip\$\{_cSel\?'':' on'\}" onclick="admhPickCoach\('all'\)">All<\/button>`\]/.test(src)
+   && /\.concat\(\(coaches\|\|\[\]\)\.filter\(c=>_activeC\[c\.id\]\)/.test(src)
+   && /onclick="admhPickCoach\('\$\{c\.id\}'\)"/.test(src));
+ok('★ 日期列七天、週一第一個（沿用既有的 heroWeekMonday，不另立一套）',
+   /let _a2Week='';[\s\S]{0,900}?for\(let i=0;i<7;i\+\+\)\{ const d=new Date\(_mon\);/.test(src)
    && /const _mon=heroWeekMonday\(date\);/.test(src));
 /* 2026-08-22 二修（使用者）：「讓畫面固定顯示七天…只有右邊課卡可以滑動」 */
 ok('★★ 左欄不捲：七天平分整欄高度（視窗矮的時候一起縮，不會有人被切掉）',
@@ -49,7 +60,10 @@ ok('　　左欄不捲了，就不需要把選取那天捲進視線',
 ok('★★ 教練篩選列的捲動位置要還原 —— admhPickCoach 早就記了，但還原那一行只寫在'
    +'舊版單欄的貼頂偵測裡，雙欄版沒有 .admh-sticky、整段沒搬過來',
    /function admhRestoreChips\(\)\{/.test(src)
-   && /window\._admhChipScroll=row\?row\.scrollLeft:0;/.test(src));
+   /* 2026-08-27：篩選列改成左欄直捲，要還原的是 scrollTop；舊版單欄那條路仍是橫捲 */
+   && /window\._admhChipScroll=!row\?0:\(row\.classList\.contains\('a2-chiprail'\)\?row\.scrollTop:row\.scrollLeft\);/.test(src)
+   && /if\(cr\.classList\.contains\('a2-chiprail'\)\) cr\.scrollTop=window\._admhChipScroll;/.test(src)
+   && /else cr\.scrollLeft=window\._admhChipScroll;/.test(src));
 ok('★★ 還原要在 C.innerHTML 之後的**同一個同步任務**做（使用者：「會左右閃一下，'
    +'很像瞬間回去左邊又回來」＝先畫了 scrollLeft:0 那一格再跳回來）',
    /try\{ admhRestoreChips\(\); \}catch\(_\)\{\}\s*\n\s*document\.querySelectorAll\('body>\.mc-lotto-fab/.test(src)
@@ -82,9 +96,11 @@ ok('　　底部留一點，不要讓人以為頁面到底了（下面還有今�
 /* 2026-08-22 三修（使用者）：改成上下拖曳、拉住 0.5 秒才換週、上下畫箭頭提示 */
 ok('★ 每一天一個白框（與右欄課卡同語彙）',
    /\.a2-day\{[\s\S]{0,220}?border:1px solid var\(--bd\);background:#fff;/.test(src));
-ok('★ 上下箭頭提示可換週，也可以直接點',
-   /<span class="a2-arw a2-arw-up" onclick="admWeekShift\(-1\)"><\/span>/.test(src)
-   && /<span class="a2-arw a2-arw-dn" onclick="admWeekShift\(1\)"><\/span>/.test(src)
+/* 2026-08-27：日期列搬到上方後改用左右箭頭（上下拖曳那支手勢綁在 .admh2-rail 上，
+   日期列離開左欄就跟著沒了）。三角形箭頭的樣式留著 —— 那是退回左欄版的路。 */
+ok('★ 換週用左右箭頭，也可以直接點',
+   /<button class="a2-wnav" title="上一週" onclick="admWeekShift\(-1\)">‹<\/button>/.test(src)
+   && /<button class="a2-wnav" title="下一週" onclick="admWeekShift\(1\)">›<\/button>/.test(src)
    && /\.a2-arw-up\{border-bottom:6px solid var\(--t3\);\}/.test(src));
 ok('　　純 CSS 三角形，不吃字型（跨機一致）',
    /\.a2-arw\{[\s\S]{0,160}?border-left:5px solid transparent;border-right:5px solid transparent;/.test(src));

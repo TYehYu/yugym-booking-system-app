@@ -23,8 +23,9 @@ console.log('① 日期列從左欄搬到上方，取代篩選列');
   ok('★★ 左欄（.admh2-rail）已經不在會員頁的 HTML 裡',
      !/class="admh2-rail"/.test(HTML) && !/class="a2-railin"/.test(HTML));
   ok('★★ 篩選列也不在（會員用不到）', !/class="mh2-chips"/.test(HTML));
+  /* 2026-08-27 二修：日期列樣式從 .memh2 提升成共用的 .a2-w*（教練首頁也要用） */
   ok('★★ 上方是七格橫排日期列，接在分隔線之後、課卡欄之前',
-     /<div class="admh-div"><\/div>\s*\n\s*<div class="mh2-week">[\s\S]{0,400}<\/div>\s*\n\s*<div class="admh2-body">/.test(HTML));
+     /<div class="admh-div"><\/div>\s*\n\s*<div class="a2-week">[\s\S]{0,400}<\/div>\s*\n\s*<div class="admh2-body">/.test(HTML));
   ok('★★ 一樣是週一～週日（節奏不變，只是換了方向）',
      /const base=heroWeekMonday\(s\.date\);/.test(HTML)
      && /for\(let i=0;i<7;i\+\+\)\{/.test(HTML));
@@ -32,7 +33,7 @@ console.log('① 日期列從左欄搬到上方，取代篩選列');
      /onclick="memh2PickDay\('\$\{ds\}'\)"/.test(HTML));
   ok('★ 有課的那幾天標小圓點（左欄版沒有這個資訊）',
      /const _n=mine\.filter\(b=>b\.date===ds\)\.length;/.test(HTML)
-     && /<em class="mh2-wdot\$\{_n\?'':' z'\}"><\/em>/.test(HTML));
+     && /<em class="a2-wdot\$\{_n\?'':' z'\}"><\/em>/.test(HTML));
   ok('★★ 起因寫在原地（LINE 標題列 → 左欄七格瓜分高度）',
      /LINE 自己的標題列＋Android 狀態列吃掉視窗上緣，\s*\n\s*左欄七格被壓到只剩十幾 px，日期數字被裁掉一半、只看得到「8 月」/.test(src));
   ok('　 也寫了「換橫排就沒有這個前提」——不是再加第四段收斂',
@@ -43,9 +44,9 @@ console.log('\n② 課卡吃到整個寬度');
 {
   ok('★★ 課卡欄是 .admh2-body 裡唯一的一欄',
      /<div class="admh2-body">\s*\n\s*<div class="admh2-cards">\$\{cardsAll\}\$\{addBtn\}<\/div>\s*\n\s*<\/div>/.test(HTML));
-  ok('★ 兩欄之間的 gap 收掉（原本要留給 62px 的左欄）',
-     /\.memh2 \.admh2-body\{gap:0;\}/.test(CSS));
-  ok('★★ 只動 .memh2 —— 管理員／教練手機首頁還是左欄',
+  ok('★ 兩欄之間的 gap 收掉（原本要留給 62px 的左欄）—— 會員端與教練端逐頁列名',
+     /\.memh2 \.admh2-body,\.chv2 \.admh2-body\{gap:0;\}/.test(CSS));
+  ok('★★ 管理員手機首頁的左欄geometry還在（那 8px 是留給它的）',
      /\.admh2-body\{display:flex;gap:8px;/.test(CSS)
      && /\.admh2-rail\{flex:0 0 62px;/.test(CSS));
 }
@@ -94,8 +95,8 @@ console.log('\n⑤ 護欄：s.filter 固定 all，樣式一律掛 .memh2');
      /日後若又把 filter 切走，團課報名卡會整片消失/.test(src)
      && /客人從［＋］回來之後團課報名卡會整片不見/.test(src));
   /* 新增的 class 一條都不能漏掛 .memh2 —— .admh2-* 是三個角色共用的 */
-  const NEW=['mh2-week','mh2-wnav','mh2-wdays','mh2-wd','mh2-wdot','mh2-wtoday',
-             'mh2-selfbar','mh2-sbl','mh2-sbrow','mh2-sbc','mh2-sbtoday'];
+  /* 日期列那組已提升成共用（.a2-w*，教練首頁也用），所以只檢查會員專屬的浮動列 */
+  const NEW=['mh2-selfbar','mh2-sbl','mh2-sbrow','mh2-sbc','mh2-sbtoday'];
   const naked=[];
   CSS.replace(/\/\*[\s\S]*?\*\//g,'').split('}').forEach(blk=>{
     const i=blk.indexOf('{'); if(i<0) return;
