@@ -137,6 +137,12 @@ ok('　　待命時亮起「會換到哪一週」那一顆箭頭',
 ok('　　左欄自己不捲，所以垂直手勢全歸換週用（不需要軸鎖）',
    /左欄自己不捲（overflow:hidden），所以這裡不需要軸鎖/.test(src));
 
+/* 2026-08-27（使用者：「日期列換頁左右拖曳 要補上　會員端 教練端 管理員端 都要」） */
+ok('★★ 管理員也吃得到左右拖曳換週（走 admh2Mount 的預設 _shift＝admWeekShift）',
+   /try\{ a2WeekSwipe\(_shift\); \}catch\(_\)\{\}/.test(src)
+   && /:\(typeof admWeekShift==='function'\?admWeekShift:function\(\)\{\}\);/.test(src)
+   && /setTimeout\(\(\)=>\{ try\{ admh2Mount\(\); \}catch\(_\)\{\} \},0\);/.test(src));
+
 console.log('\n④ 下拉更新只從頂列觸發（使用者指示）');
 ok('★★ 手指要落在頂欄上才起算（雙欄各自有捲軸，落在欄位裡往下滑是要捲內容）',
    /return !!\(el && el\.closest && el\.closest\('\.topbar,\.topbar-fixed'\)\);/.test(src)

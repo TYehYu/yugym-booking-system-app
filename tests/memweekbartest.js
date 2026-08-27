@@ -126,5 +126,41 @@ console.log('\n⑥ 沒有拿掉任何既有功能');
      /onclick="memh2WeekShift\(-1\)"/.test(HTML) && /onclick="memh2WeekShift\(1\)"/.test(HTML));
 }
 
+console.log('\n⑦ 左右拖曳換週（2026-08-27 使用者：「日期列換頁左右拖曳 要補上　會員端 教練端 管理員端 都要」）');
+{
+  const SW=src.slice(src.indexOf('function a2WeekSwipe(shift){'),
+                     src.indexOf('/* ══ 底部導覽列：自己校正回視窗底部'));
+  ok('★★ 有這一支，而且三頁共用（掛在 admh2Mount 裡，換週函式用參數帶進來）',
+     SW.length>600 && /try\{ a2WeekSwipe\(_shift\); \}catch\(_\)\{\}/.test(src));
+  ok('★★ 換週函式不是寫死的 —— 三頁的選日狀態不同，共用一支會跳到別頁那一週',
+     /function a2WeekSwipe\(shift\)\{/.test(SW)
+     && /if\(d\)\{ try\{ shift\(d\); \}catch\(_\)\{\} \}/.test(SW)
+     && !/admWeekShift|coachWeekShift|memh2WeekShift/.test(SW));
+  ok('★★ 軸鎖：垂直手勢讓給頁面捲動（左欄版不需要，它自己 overflow:hidden）',
+     /let x0=null, y0=null, dir=0, lock=0;/.test(SW)
+     && /if\(!lock\)\{ if\(Math\.abs\(dx\)<6 && Math\.abs\(dy\)<6\) return; lock=\(Math\.abs\(dx\)>Math\.abs\(dy\)\)\?1:-1; \}/.test(SW)
+     && /if\(lock<0\) return;/.test(SW));
+  ok('　 軸鎖只判一次（斜著拉不會抖）', /軸鎖只判一次：先動哪個方向就歸哪個方向/.test(SW));
+  ok('★★ 放開才換週（0823 定案：拉著還沒放就不要換頁），touchcancel 視同取消',
+     /wk\.addEventListener\('touchend',\(\)=>end\(true\),\{passive:true\}\);/.test(SW)
+     && /wk\.addEventListener\('touchcancel',\(\)=>end\(false\),\{passive:true\}\);/.test(SW)
+     && /const end=\(commit\)=>\{\s*\n\s*const d=commit\?dir:0;/.test(SW));
+  ok('★★ 手感與左欄版同一組數值（門檻 44、位移封頂 26、打四五折）',
+     /const TH=44, MAXOFF=26;/.test(SW)
+     && /days\.style\.transform='translateX\('\+Math\.max\(-MAXOFF,Math\.min\(MAXOFF, dx\*0\.45\)\)\+'px\)';/.test(SW));
+  ok('★★ 往右拉＝上一週、往左推＝下一週（跟月曆一樣，往回拉就是往回看）',
+     /const d=\(dx<=-TH\)\?1:\(\(dx>=TH\)\?-1:0\);/.test(SW)
+     && /wk\.classList\.add\(d>0\?'a2-armnext':'a2-armprev'\);/.test(SW));
+  ok('★ 待命時亮起「會換到哪一週」那一顆箭頭',
+     /\.a2-week\.a2-armprev \.a2-wnav:first-child,\s*\n\.a2-week\.a2-armnext \.a2-wnav:last-child\{color:var\(--green\);transform:scale\(1\.5\);\}/.test(CSS));
+  ok('★ 放開一律彈回原位（不論有沒有換週）',
+     /const snap=\(\)=>\{ days\.style\.transition='transform \.18s'; days\.style\.transform='';/.test(SW)
+     && /clearArm\(\); snap\(\);/.test(SW));
+  ok('★★ 每個 .a2-week 元素只綁一次（每次重繪都是新元素，所以旗標掛在元素上）',
+     /if\(!wk \|\| wk\._a2ws\) return;/.test(SW) && /wk\._a2ws=true;/.test(SW));
+  ok('　 起因寫在原地（日期列搬上來之後，原本綁在 .admh2-rail 的手勢就跟著沒了）',
+     /0827 把日期列從左欄搬到上方之後，原本綁在 \.admh2-rail 上的「上下拖曳換週」就跟著沒了/.test(src));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

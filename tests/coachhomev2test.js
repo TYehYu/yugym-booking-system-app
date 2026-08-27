@@ -259,6 +259,10 @@ ok('★★ 快速預約仍留在課卡欄最後一張（使用者特別交代「
    /<div class="admh2-cards">\$\{_cards\}[\s\S]{0,400}?<button class="a2-quickadd" title="快速預約" onclick="chvQuickSlots\('\$\{date\}'\)">＋<\/button>/.test(src));
 ok('　 理由寫在原地（左欄七格瓜分視窗高度，橫排瓜分寬度）',
    /跟會員端同一個理由：左欄七格瓜分的是視窗高度，webview 上緣一被吃掉就不夠放；/.test(src));
+/* 2026-08-27（使用者：「日期列換頁左右拖曳 要補上　會員端 教練端 管理員端 都要」） */
+ok('★★ 教練端也吃得到左右拖曳換週，而且走的是 coachWeekShift',
+   /try\{ a2WeekSwipe\(_shift\); \}catch\(_\)\{\}/.test(src)
+   && /admh2Mount\(coachWeekShift\)/.test(src));
 ok('★★ 掛載沿用 admh2Mount，換週函式用參數帶進去（兩頁唯一的差別）',
    /function admh2Mount\(shiftFn\)\{/.test(src)
    && /admh2Mount\(coachWeekShift\)/.test(src)

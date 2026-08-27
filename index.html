@@ -10008,6 +10008,11 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .a2-wnav{flex:0 0 20px;border:none;background:transparent;color:var(--t3);
   font-size:19px;line-height:1;font-family:inherit;cursor:pointer;padding:0;}
 .a2-wnav:active{color:var(--text);}
+/* 左右拖曳換週的待命提示（見 a2WeekSwipe）：會換到哪一週，那一顆就亮起放大 */
+.a2-wnav{transition:color .15s,transform .15s;}
+.a2-week.a2-armprev .a2-wnav:first-child,
+.a2-week.a2-armnext .a2-wnav:last-child{color:var(--green);transform:scale(1.5);}
+.a2-wdays{will-change:transform;}
 .a2-wdays{flex:1 1 auto;min-width:0;display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
 .a2-wd{display:flex;flex-direction:column;align-items:center;gap:1px;
   padding:6px 0 5px;border:1.5px solid transparent;border-radius:11px;background:#fff;
@@ -11305,8 +11310,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260827.2209';
-const APP_VERSION_LABEL='v260827.2209';
+const APP_VERSION = '260827.2212';
+const APP_VERSION_LABEL='v260827.2212';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -47312,6 +47317,8 @@ function admh2Mount(shiftFn){
     window.addEventListener('resize', ()=>{ try{ admh2Mount(window._admh2Shift); }catch(_){} });
     window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ try{ admh2Mount(window._admh2Shift); }catch(_){} },200); });
   }
+  /* 橫排日期列的左右拖曳換週（2026-08-27）——三頁都經過這裡，換週函式用同一個 _shift。 */
+  try{ a2WeekSwipe(_shift); }catch(_){}
   /* 左欄固定顯示七天、不捲，所以不需要把選取那天捲進視線（2026-08-22 二修） */
   /* 上下拖曳換週（2026-08-22 三修使用者指示：「改成上下滑動日期欄，做一點小小的拖移動畫，
      大概停個 0.5 秒觸發換頁」）——
@@ -47354,6 +47361,53 @@ function admh2Mount(shiftFn){
   };
   rail.addEventListener('touchend',()=>end(true),{passive:true});
   rail.addEventListener('touchcancel',()=>end(false),{passive:true});
+}
+/* ══ 橫排日期列：左右拖曳換週（2026-08-27 使用者指示：「日期列換頁左右拖曳 要補上
+     會員端 教練端 管理員端 都要」）══════════════════════════════════════════
+   0827 把日期列從左欄搬到上方之後，原本綁在 .admh2-rail 上的「上下拖曳換週」就跟著沒了
+   （那支只認左欄）。這裡是同一套手感的橫向版，三頁共用：
+     ・整列跟著手指走一點點（最多 26px、位移打四五折），看得出來「拉得動」；
+     ・拉過門檻先進入待命（對應方向的 ‹ › 亮起放大），**放開才真的換週**
+       （0823 定案：拉著還沒放就不要換頁）；手縮回門檻內或 touchcancel 就取消。
+     ・往右拉＝上一週、往左推＝下一週（跟月曆一樣，往回拉就是往回看）。
+   ⚠ 要軸鎖：這一列是頁面內容的一部分，垂直手勢得留給頁面捲動
+     （左欄版沒有這個問題，它自己 overflow:hidden）。
+   ⚠ 換週函式用參數帶進來 —— 三頁各自的選日狀態不同（admWeekShift／coachWeekShift／
+     memh2WeekShift），共用一支會跳到別頁的那一週。 */
+function a2WeekSwipe(shift){
+  const wk=document.querySelector('.a2-week'); if(!wk || wk._a2ws) return;
+  const days=wk.querySelector('.a2-wdays'); if(!days) return;
+  wk._a2ws=true;
+  const TH=44, MAXOFF=26;
+  let x0=null, y0=null, dir=0, lock=0;   // lock: 0 未定、1 橫向、-1 縱向（讓給頁面捲動）
+  const clearArm=()=>{ dir=0; wk.classList.remove('a2-armprev','a2-armnext'); };
+  const snap=()=>{ days.style.transition='transform .18s'; days.style.transform='';
+    setTimeout(()=>{ days.style.transition=''; },200); };
+  wk.addEventListener('touchstart',e=>{
+    x0=e.touches[0].clientX; y0=e.touches[0].clientY; lock=0; clearArm(); days.style.transition='';
+  },{passive:true});
+  wk.addEventListener('touchmove',e=>{
+    if(x0==null) return;
+    const dx=e.touches[0].clientX-x0, dy=e.touches[0].clientY-y0;
+    /* 軸鎖只判一次：先動哪個方向就歸哪個方向，之後不再改（否則斜著拉會抖） */
+    if(!lock){ if(Math.abs(dx)<6 && Math.abs(dy)<6) return; lock=(Math.abs(dx)>Math.abs(dy))?1:-1; }
+    if(lock<0) return;
+    days.style.transform='translateX('+Math.max(-MAXOFF,Math.min(MAXOFF, dx*0.45))+'px)';
+    // 往左推＝下一週、往右拉＝上一週
+    const d=(dx<=-TH)?1:((dx>=TH)?-1:0);
+    if(d===dir) return;
+    clearArm(); dir=d;
+    if(!d) return;
+    wk.classList.add(d>0?'a2-armnext':'a2-armprev');
+  },{passive:true});
+  const end=(commit)=>{
+    const d=commit?dir:0;
+    clearArm(); snap();
+    if(d){ try{ shift(d); }catch(_){} }
+    x0=null; y0=null; lock=0;
+  };
+  wk.addEventListener('touchend',()=>end(true),{passive:true});
+  wk.addEventListener('touchcancel',()=>end(false),{passive:true});
 }
 /* ══ 底部導覽列：自己校正回視窗底部（2026-08-22 四修）══════════════════════════
    前三次都在猜成因（backdrop-filter → 合成層 → body 的 overflow-x），第三次確實把
