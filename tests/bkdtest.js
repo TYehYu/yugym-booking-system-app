@@ -38,7 +38,9 @@ ok('★ doneCount 傳給 ticketTokens（2026-08-01 起多帶使用人，用來�
 ok('★ 已用堂數多於清單時，多出來的畫實心 ✓（沒補登日期時）',
    /const _ghost=Math\.max\(0, used-done\.length\);/.test(src)
    && /const _it=\(gi<_ghost\) \? \{b:null,st:'used',g:gi\+\+\} : \(qi<_seq\.length \? _seq\[qi\+\+\] : null\);/.test(src)
-   && /\$\{b\?md\(b\):\(_md\?md\(\{date:_md\}\):'✓'\)\}/.test(src));
+   /* 2026-08-27：外面多包一層 _shBody（共享票那幾顆改成色點＋姓名＋日期），
+      沒有共享時它原封不動回傳同一串 —— 所以這裡連 _shBody 一起認 */
+   && /\$\{_shBody\(b, b\?md\(b\):\(_md\?md\(\{date:_md\}\):'✓'\)\)\}/.test(src));
 ok('　　「本堂第幾堂」與圓點位置同源', /curIdx=_bi>=0\?doneCount\+_bi:-1/.test(src));
 /* 2026-08-01：票券夾的已用堂數也要涵蓋「蓋上戳記且已簽到」的課 ——
    ticketTokens 是「前 used 格填已完成的課」，used 比戳記少那幾堂就整個畫不出來

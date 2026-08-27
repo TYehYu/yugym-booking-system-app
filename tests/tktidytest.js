@@ -280,7 +280,9 @@ ok('★★ 沒有課卡的格子（_ghost）依序吃 manual_uses 的日期',
    && /const _it=\(gi<_ghost\) \? \{b:null,st:'used',g:gi\+\+\}/.test(TT)
    && /const _md=\(!b && _it\.g!=null\) \? \(_mu\[_it\.g\]\|\|''\) : '';/.test(TT));
 ok('★ 沒補的還是畫 ✓（不能因為多了這個功能就變空白）',
-   /\$\{b\?md\(b\):\(_md\?md\(\{date:_md\}\):'✓'\)\}/.test(TT));
+   /\$\{_shBody\(b, b\?md\(b\):\(_md\?md\(\{date:_md\}\):'✓'\)\)\}/.test(TT)
+   /* _shBody 沒有共享時原封不動回傳（2026-08-27） */
+   && /: dt;/.test(TT));
 ok('★ 補登的格子看得出來（細虛線＋title 寫明沒有課卡）',
    /mtk-manual/.test(TT) && /舊系統補登（沒有對應課卡）/.test(TT)
    && /\.mtk\.mtk-manual\{outline:1px dashed/.test(src));

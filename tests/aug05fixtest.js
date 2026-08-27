@@ -44,9 +44,13 @@ console.log('\n③ 圓形卡尺寸（二修：整體放大、共享人縮小）'
 ok('★ 基準圓點放大到 35px（原共享票「自己那顆」的尺寸）',
    /\.mtk\{position:relative;width:35px;height:35px;/.test(src));
 /* 2026-08-06 使用者指示（附截圖）：共享的非本人圓點改成「周邊加金色圓框」，不再靠大小區分 */
-ok('★ 共享人的戳記外圈套金環（尺寸與本人一致）',
-   /\.mtk-sh\{position:relative;opacity:\.96;box-shadow:0 0 0 2px var\(--gold,#B48A56\);\}/.test(src)
-   && !/\.mtk-sh\{transform:scale/.test(src));
+/* 2026-08-27：金框也退場了（第三次改法）——「色點在上＋使用人／日期在下」。
+   前兩次（縮小一號、外圈金環）都只用一個視覺屬性講「不是持有人用的」，
+   講不出「是誰」；一張票共享給兩個人時兩邊長得一樣。詳見 tests/tkshnametest.js。 */
+ok('★ 共享人的戳記不再是縮小一號，也不再是金環',
+   !/\.mtk-sh\{transform:scale/.test(src)
+   && !/\.mtk-sh\{position:relative;opacity:\.96;box-shadow:0 0 0 2px var\(--gold,#B48A56\);\}/.test(src)
+   && /金框退場，改成「色點在上＋使用人／日期在下」/.test(src));
 ok('★ 列表迷你卡維持 26px 不動', /\.tkm-dots \.mtk\{width:26px;height:26px;/.test(src));
 ok('　　混有共享戳記的標記邏輯保留（_hasSh／mtk-own）',
    /const _hasSh=\[\.\.\.done,\.\.\.booked\]\.some\(b=>b&&b\._shBy\);/.test(src)
