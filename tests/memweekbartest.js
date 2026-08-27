@@ -87,6 +87,12 @@ console.log('\n④ 浮動列是 fixed —— 高度要自己扣，不然最後�
      && /window\.innerHeight - docTop - navH - 16 - barH/.test(src));
   ok('★★ navH 移到分岔之前量（兩條路共用）',
      src.indexOf("let navH=0;") < src.indexOf("const _sc=document.body.classList.contains('memh2-shell')"));
+  ok('★★ 也不能蓋住下方月曆 —— 月曆排在 .admh2-body 之後，屬於外層捲動內容',
+     /const _pad=barH\?\(16\+barH\)\+'px':'';/.test(src)
+     && /if\(_sc\) _sc\.style\.paddingBottom=_pad;/.test(src)
+     && /else \{ const _rt=body\.closest\('\.memh2'\); if\(_rt\) _rt\.style\.paddingBottom=_pad; \}/.test(src));
+  ok('　 沒約的人要把留白清掉（交還給 CSS 的 16px），底下不會多一塊空白',
+     /沒有浮動列時要把留白清掉（style 設回空字串，交還給 CSS 的 16px）/.test(src));
   ok('　 踩過的坑寫在原地（0822 導覽列擋住週日是同一個成因）',
      /浮動列不佔文件高度，所以要自己從可用高度裡扣掉，否則最後一張課卡躲在它底下/.test(src));
 }
