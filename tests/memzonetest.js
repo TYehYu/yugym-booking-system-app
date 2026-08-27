@@ -120,8 +120,10 @@ ok('★ 與員工列表同一種語言（那邊是聘僱類型色條）',
    && /border-left:4px solid var\(--pc,#8a8478\);/.test(src));
 /* 2026-08-05 三修（使用者附截圖）：色票併入工具列 lead 槽（與搜尋/篩選/翻頁同一列），
    新舊核對進度改統計卡第五格——表格上方不再各佔一列。 */
+/* 2026-08-27 使用者指示（附參考圖）：色票改成 segmented control（可點篩選），
+   class 從 .lp-legend 換成 .lp-seg —— 位置（工具列 lead 槽）與人數計算都沒變。 */
 ok('★ 色票說明帶各等級人數，走工具列 lead 槽',
-   /const tierLegend=`<div class="lp-legend">/.test(src)
+   /const tierLegend=`<div class="lp-seg">/.test(src)
    && /lead: tierLegend,/.test(src)
    && /if\(o\.lead\) r1 \+= o\.lead;/.test(src)
    && /body = lpTable\(cols, rows,/.test(src)
