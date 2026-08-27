@@ -38,7 +38,7 @@ console.log('\n② 固定格位：沒值班要留同高的空位，後面的人�
 
   eq('★★ 只有 BARRY 與 ZOE 值班 → 五個位置都在，RANDY/SANDY/MANGO 是空位',
      slotsOf(cell(1,'am')),
-     [['dw-empty','—'],['dw-empty','—'],['dw-on','BARRY'],['dw-empty','—'],['dw-on','ZOE']]);
+     [['dw-empty',''],['dw-empty',''],['dw-on','BARRY'],['dw-empty',''],['dw-on','ZOE']]);
   eq('★★ BARRY 永遠在第 3 位 —— 沒有往前補位',
      slotsOf(cell(1,'am'))[2][1], 'BARRY');
   eq('★ 全員都在 → 五個都是標籤，順序不變',
@@ -46,7 +46,7 @@ console.log('\n② 固定格位：沒值班要留同高的空位，後面的人�
   eq('★ 完全沒排班 → 仍然畫五個空位（格子高度不會塌）',
      slotsOf(cell(3,'am')).map(x=>x[0]), ['dw-empty','dw-empty','dw-empty','dw-empty','dw-empty']);
   eq('★★ 不在矩陣裡但有排班的人接在固定格位後面（資料不能消失）',
-     slotsOf(cell(4,'am')).map(x=>x[1]), ['—','SANDY','—','—','—','ANN']);
+     slotsOf(cell(4,'am')).map(x=>x[1]), ['','SANDY','','','','ANN']);
   ok('★★ 「空位一定要畫、而且同高」的理由寫在原地',
      /空位一定要畫，而且高度與有值班的一模一樣，否則下一位就往上補/.test(src)
      && /「第 N 列永遠是同一個人」這件事就破了（這正是這次要解決的問題）/.test(src));
@@ -77,16 +77,46 @@ console.log('\n②-2 不標示「今日」、上方壓縮、早午晚明顯隔�
      /\.dw-grid>\.dw-seg:last-of-type,\.dw-grid>\.dw-cell:nth-last-child\(-n\+7\)\{border-bottom:none;\}/.test(src));
 }
 
+
+console.log('\n②-3 兩欄固定位置（2026-08-27 三修）');
+{
+  ok('★★ cell 改 grid，而且是 column flow（row flow 會變成 1 2 / 3 4 左右交錯）',
+     /\.dw-cell\{display:grid;grid-auto-flow:column;gap:4px 6px;/.test(src)
+     && /一定要 grid-auto-flow:column ＋ 指定列數 —— 預設的 row flow 會變成/.test(src));
+  ok('★★ 列數由固定成員數算（ceil(n\/2)），不寫死 5 —— 之後加減人會自己跟著長',
+     /const _rows=Math\.max\(1, Math\.ceil\(D\.fixed\.length\/2\)\);/.test(src)
+     && /style="grid-template-rows:repeat\(\$\{_rows\},auto\);"/.test(src));
+  {
+    const seg=src.slice(src.indexOf('  const cell=(wd,seg)=>{'), src.indexOf('  const header=`<div class="dw-h dw-h-c">'));
+    const mk=(n)=>new Function('D','coachTagColor','chip', seg+'\nreturn cell;')(
+      {fixed:Array.from({length:n},(_,i)=>'c'+i), canEdit:false, cMap:{}, byKey:{}},
+      ()=>({fg:'#123',bg:'#eee'}), ()=>'');
+    const rowsOf=h=>Number((h.match(/repeat\((\d+),auto\)/)||[])[1]);
+    eq('★★ 10 位 → 5 列（左 1-5、右 6-10）', rowsOf(mk(10)(1,'am')), 5);
+    eq('★ 6 位 → 3 列', rowsOf(mk(6)(1,'am')), 3);
+    eq('★ 奇數（9 位）→ 5 列（左 5、右 4）', rowsOf(mk(9)(1,'am')), 5);
+    eq('　 0 位也不會變成 repeat(0)', rowsOf(mk(0)(1,'am')), 1);
+  }
+  ok('★★ 空位不印「—」，只留極淡暖灰（滿畫面的橫線比空白更吵）',
+     /: `<span class="dw-slot dw-empty"><\/span>`\)\.join\(''\);/.test(src)
+     && /\.dw-slot\.dw-empty\{background:#F6F4EF;border-left:3px solid transparent;\}/.test(src));
+  ok('★ slot 26px、圓角 4px、左側 3px 識別色、兩欄 gap 6px／列 gap 4px',
+     /\.dw-slot\{height:26px;[^}]*border-radius:4px;/.test(src)
+     && /gap:4px 6px;/.test(src)
+     && /\.dw-slot\.dw-on\{border-left:3px solid var\(--sc,var\(--bd\)\);/.test(src));
+  ok('　 每格加寬到 158px（兩欄放得下教練名），整表最小寬 1216px',
+     /grid-template-columns:110px repeat\(7,minmax\(158px,1fr\)\);gap:0;min-width:1216px;/.test(src));
+}
+
 console.log('\n③ 空位與標籤同高（不是只有邏輯上同高）');
-ok('★★ .dw-slot 統一 27px，空位只差在底色與邊框',
-   /\.dw-slot\{height:27px;/.test(src)
-   && /\.dw-slot\.dw-empty\{background:#F5F3EE;color:#C9C3B8;justify-content:center;font-weight:500;\s*\n\s*border-left:3px solid transparent;\}/.test(src));
-ok('★ 有值班的左側 3px 識別色條、圓角 4px、名字 13.5px semibold',
+ok('★★ .dw-slot 統一 26px，空位只差在底色與邊框（高度一樣才不會補位）',
+   /\.dw-slot\{height:26px;/.test(src)
+   && /\.dw-slot\.dw-empty\{background:#F6F4EF;border-left:3px solid transparent;\}/.test(src));
+ok('★ 有值班的左側 3px 識別色條、圓角 4px、名字 13px semibold',
    /\.dw-slot\.dw-on\{border-left:3px solid var\(--sc,var\(--bd\)\);/.test(src)
-   && /border-radius:4px;padding:0 9px;\s*\n\s*font-size:13\.5px;font-weight:600;/.test(src));
+   && /border-radius:4px;padding:0 8px;\s*\n\s*font-size:13px;font-weight:600;/.test(src));
 /* 0827 二修再收一階：cell padding 10→8、表頭 52→40（見 ②-2） */
-ok('★ 格子 padding 8px、slot 間距 3px',
-   /\.dw-cell\{display:flex;flex-direction:column;gap:3px;padding:8px;/.test(src));
+ok('★ 格子 padding 8px／7px', /\.dw-cell\{[^}]*gap:4px 6px;padding:8px 7px;/.test(src));
 
 console.log('\n④ 左欄：時段名＋時間區間＋人數區間');
 {
