@@ -49,6 +49,9 @@ console.log('\n② 圓形 badge → 教練欄');
   ok('　 長名字（中文全名）仍有縮字規則', /body\.ink \.tcard-cball \.tcard-cbn\.long\{font-size:12px;\}/.test(src));
   /* 2026-08-27 二修：「教練名字下方的數字放大一些」12 → 15px。
      名字仍靠「顏色＋字重」領先，不是靠字級 —— 所以數字比名字大一點是可以的。 */
+  ok('★ 數字在教練欄裡置中（名字維持靠左）',
+     /align-self:center;text-align:center;\}/.test(R)
+     && /align-items:flex-start/.test(R));
   ok('★★ 數字放大到 15px，但顏色與字重仍讓名字領先',
      /font-size:15px;font-weight:700;color:var\(--t2\);/.test(R)
      && /\.tcard-cbn\{font-size:13px;font-weight:700;opacity:1;/.test(R)
