@@ -14,24 +14,29 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 console.log('① 高度：一頁最多三張');
 {
   /* admh2Mount 的 fit() 那一段實跑：假的 DOM，只要量得到高度就算得出來 */
-  const seg=src.slice(src.indexOf("    const _cards=body.querySelector('.admh2-cards');"),
-                      src.indexOf("  };", src.indexOf("    const _cards=body.querySelector('.admh2-cards');")));
+  /* 2026-08-27 抽成 _a2cards(el)：原本寫在 fit() 尾巴，而外殼模式（會員端唯一走的那條）
+     在上面就 return 了 —— 也就是這一段在真實會員手機上從來沒跑過。 */
+  const seg=src.slice(src.indexOf("  const _a2cards=(el)=>{"),
+                      src.indexOf("  };", src.indexOf("  const _a2cards=(el)=>{"))+4);
   ok('★ 有取到那一段', /_cards\.style\.setProperty\('--mh2-cardh'/.test(seg), seg.slice(0,80));
   const run=(cardsH, isMem)=>{
     const set={};
     const cards={clientHeight:cardsH, style:{setProperty:(k,v)=>{set[k]=v;}}};
     const body={querySelector:s=>s==='.admh2-cards'?cards:null, closest:s=>isMem?{}:null};
-    new Function('body', seg)(body);
+    new Function(seg+'\n_a2cards(arguments[0]);')(body);
     return set['--mh2-cardh'];
   };
+  ok('★★ 外殼模式那條路也要呼叫它（0826 的放大其實沒在會員手機上生效過）',
+     (src.match(/_a2cards\(body\);/g)||[]).length===2
+     && /body\.style\.height=Math\.max\(240,Math\.round\(_sc\.clientHeight-top-16-barH\)\)\+'px';\s*\n\s*_a2cards\(body\);/.test(src));
   eq('★★ 右欄 500px → 每張 156px（500 − 14 padding − 18 gap = 468，÷3）', run(500,true), '156px');
   eq('★★ 三張加起來塞得進去', (()=>{const p=parseInt(run(500,true));return p*3+18+14<=500;})(), true);
   eq('★ 高螢幕（700px）也照比例長大', run(700,true), '222px');
   eq('★★ 矮螢幕有下限 74px（原本的自然高度）—— 寧可讓它捲，也不要壓得比現在小',
      run(200,true), '74px');
   eq('★★ 不是 .memh2 的（管理員／教練手機首頁）完全不設', run(500,false), undefined);
-  ok('★ 判斷用 body.closest(\'.memh2\')，不是全頁 querySelector',
-     /if\(_cards && body\.closest\('\.memh2'\)\)\{/.test(src));
+  ok('★ 判斷用 el.closest(\'.memh2\')，不是全頁 querySelector',
+     /if\(!_cards \|\| !el\.closest\('\.memh2'\)\) return;/.test(src));
   ok('　 扣掉的是上下 padding（2+12）與兩個 gap（9×2）',
      /const inner=_cards\.clientHeight - 14 - 9\*2;   \/\/ 扣掉上下 padding（2\+12）與兩個 gap/.test(src));
 }

@@ -62,7 +62,8 @@ ok('★★ ⚠ 高度只能依版面位置算，不能依當下捲動位置（�
    && /window\.innerHeight - docTop - navH - 16/.test(src)
    && /改成先換回「文件座標」再算，重算幾次都是同一個值/.test(src));
 ok('★★ 內層要捲得動就得有明確高度 → 掛載時依剩餘視窗高度算，resize／轉向重算',
-   /const h=Math\.max\(240, Math\.round\(window\.innerHeight - docTop - navH - 16\)\);/.test(src)
+   /* 2026-08-27 再扣一個 barH：會員端底部多了一條 fixed 的「接下來的自主訓練」浮動列 */
+   /const h=Math\.max\(240, Math\.round\(window\.innerHeight - docTop - navH - 16 - barH\)\);/.test(src)
    && /window\.addEventListener\('resize', \(\)=>\{ try\{ admh2Mount\(window\._admh2Shift\); \}catch\(_\)\{\} \}\);/.test(src));
 /* 2026-08-22 使用者回報三件事，這三條各守一件 */
 ok('★★ 高度要扣掉底部導覽列（「左邊日期欄週日會被下方導覽列擋住」）—— 它是 fixed、不佔文件高度',

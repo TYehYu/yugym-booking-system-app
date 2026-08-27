@@ -30,16 +30,20 @@ t('按摩券／折抵券不進三格', /if\(c!=='pt'\) return '';/.test(kind));
 
 // ── 篩選列 ──
 /* 0822 收斂（使用者）：「課程會員不必獨立出來看，只有自主訓練需要知道哪些日期可以約」 */
-t('篩選列只有 All 與自主訓練', /const MEMH2_FILTERS=\[\['self','自主訓練'\]\];/.test(s));
-t('自主訓練也是有票才出現', /MEMH2_FILTERS\.filter\(\(\[k\]\)=>pk\[k\]>0\)/.test(html));
+/* 2026-08-27：篩選列整條退場（使用者：「因為會員應該也用不到篩選列」），
+   位置讓給搬上來的日期列。MEMH2_FILTERS 這個常數留著沒人用會誤導，一併移除。 */
+t('★★ 篩選列已退場（沒有 chip、沒有 memh2PickFilter／memh2RestoreChips）',
+  !/mh2-chip[^s]/.test(html) && !/function memh2PickFilter/.test(s) && !/function memh2RestoreChips/.test(s));
+t('★★ 退場理由寫在原地', /課程篩選列已於 2026-08-27 退場（使用者：「會員應該也用不到篩選列」）/.test(s));
+t('★★ s.filter 固定為 all —— 兩處判斷照舊讀它（若被切走團課報名卡會整片消失）',
+  /const grpOpen=\(s\.filter==='all'\)/.test(html)
+  && /s\.filter==='all'\|\|bkCC\(b\)===s\.filter/.test(html)
+  && /const selfMode=false;/.test(html));
 t('月曆圖例仍是四色（用另一份 MEMH2_LEGEND，不跟篩選列綁在一起）',
   /const MEMH2_LEGEND=\[\['pt','教練課'\],\['friendly','友善教練課'\],\['group','團體課'\],\['self','自主訓練'\]\];/.test(s)
   && /MEMH2_LEGEND\.map\(\(\[k,l\]\)=>`<span><i style="background:\$\{MEMH2_COL\[k\]\}"/.test(s));
-t('All 永遠在最前面', /mh2-chip[^`]*onclick="memh2PickFilter\('all'\)">All/.test(html));
-t('篩選列滑到哪停到哪（同步還原、不閃）',
-  /window\._mh2Chip=r\.scrollLeft/.test(s) && /memh2RestoreChips\(\);\s+\/\/ 要同步做/.test(s));
-t('篩選列不共用 .admh-coach（避免被管理員教練列的位置推走）',
-  !/class="admh-coach mh2-chips/.test(s));
+t('MEMH2_FILTERS 這個常數也一起清掉（留著沒人用會誤導）',
+  !/const MEMH2_FILTERS=/.test(s) && /MEMH2_FILTERS）已於 2026-08-27 整條退場/.test(s));
 
 // ── 左邊日期欄 ──
 /* 0822 二修（使用者）：「自主訓練的日期列七天 還是幫我改回跟教練課顯示的一樣 週一～週日
@@ -51,17 +55,22 @@ t('多張自主訓練票取聯集：任何一張蓋得到就點亮',
   /const selfOk=ds=>ds>=today && selfRanges\.some\(\(\[st,ex\]\)=>\(!st\|\|ds>=st\)&&\(!ex\|\|ds<=ex\)\);/.test(html));
 t('每張票各自記 [起,訖]，不是只看最晚到期日',
   /selfRanges\.push\(\[st,e\]\);/.test(html));
-t('自主訓練分頁：蓋不到的那幾天暗化且點不下去',
-  /const off=selfMode && !selfOk\(ds\);/.test(html) && /off\?' disabled':/.test(html));
+/* 2026-08-27：日期列搬到上方之後暗化七格會太吵，改成只講「你現在選的這一天」，
+   鈕照樣留著（「不能用就寫原因，別藏按鈕」）。selfOk 仍然是那個判斷。 */
+t('★★ 選到的日子不在點數效期內：鈕不藏，下面寫原因',
+  /const _selfBad=\(pk\.self>0\) && !selfOk\(s\.date\);/.test(html)
+  && /這一天不在點數效期內，請往後選日期/.test(html)
+  && /const addBtn=\(pk\.self>0\)/.test(html));
 t('訂位挑票優先用效期較短的那張（照到期日由近而遠排）',
   /String\(a\.expire_date\|\|'9999-12-31'\)\.localeCompare\(String\(b\.expire_date\|\|'9999-12-31'\)\)/.test(s));
 t('還沒生效的票不會被挑走（起始日也要看）',
   /\.filter\(t=>!\(t\.start_date&&t\.expire_date\) \|\| String\(t\.start_date\)\.slice\(0,10\)<=s\.date\)/.test(s));
-t('上下箭頭一律畫（自主訓練也能翻頁）',
-  /<span class="a2-arw a2-arw-up" onclick="memh2WeekShift\(-1\)"><\/span>/.test(html)
-  && !/\$\{selfMode\?'':'<span class="a2-arw/.test(html));
+t('★★ 換週改用左右箭頭（左欄退場，上下拖曳那支手勢跟著沒了）',
+  /<button class="mh2-wnav" title="上一週" onclick="memh2WeekShift\(-1\)">‹<\/button>/.test(html)
+  && /<button class="mh2-wnav" title="下一週" onclick="memh2WeekShift\(1\)">›<\/button>/.test(html)
+  && !/class="admh2-rail"/.test(html));
 t('拖曳換週一律綁 memh2WeekShift', /admh2Mount\(memh2WeekShift\)/.test(html));
-const shift=cut('function memh2WeekShift(d){','function memh2PickFilter(k){');
+const shift=cut('function memh2WeekShift(d){','/* 課程篩選列已於');
 t('換週落在該週週一', /heroWeekMonday\(s\.date\)/.test(shift) && /setDate\(mon\.getDate\(\)\+d\*7\)/.test(shift));
 t('換週不再因為自主訓練而被擋掉', !/if\(s\.filter==='self'\) return;/.test(shift));
 
@@ -205,8 +214,11 @@ t('［＋］的時段也是點了就選它，誤觸第二下不會洗掉狀態',
 // ── 快速預約與團體課報名（2026-08-22 使用者指示）──
 t('［＋］在每個分頁都出現，只看有沒有自主訓練點數',
   /const addBtn=\(pk\.self>0\)/.test(html) && !/const addBtn=selfMode\?/.test(html));
-t('點［＋］先把篩選列切到自主訓練（日期欄才會連動）',
-  /if\(_s\.filter!=='self'\)\{ _s\.filter='self'; try\{ memh2PickDay\(date\); \}catch\(_\)\{\} \}/.test(s));
+/* 2026-08-27：這一段移除了 —— filter 一旦被切成 'self'，grpOpen 就不畫，
+   客人從［＋］回來之後「可報名的團體課」會整片不見。 */
+t('★★ 點［＋］不再動 filter（否則團課報名卡會整片消失）',
+  !/_s\.filter='self'/.test(s)
+  && /不能留著：s\.filter 一旦被切成 'self'，memh2HTML 就不畫「當天可報名的團體課」/.test(s));
 t('當天有開、自己還沒報名的團體課會列出來',
   /bkIsGroup\(b\)\s*\n\s*&& !\(typeof bkHasMember==='function' && bkHasMember\(b,SESSION\.id\)\)/.test(html));
 t('只在「全部」分頁出現（團體課分頁已收掉）', /const grpOpen=\(s\.filter==='all'\)/.test(html));
