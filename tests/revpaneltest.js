@@ -111,8 +111,10 @@ console.log('\n⑤ 「回到今天」：只要看的不是今天就要出現');
 
 console.log('\n⑥ 面板重做：做減法（2026-08-27 使用者：「主要問題是資訊層級與卡片結構太厚重」）');
 {
+  /* 結尾停在下一個 ══ 區塊，不要一路吃到 </style>（後面還接了別的樣式區塊） */
   const B=(()=>{const m='/* ══ Ink · 今日營收面板重做';const a=src.indexOf(m);
-    return src.slice(a, src.indexOf('</style>'));})();
+    const nxt=src.indexOf('\n/* ══', a+40), cap=src.indexOf('</style>');
+    return src.slice(a, (nxt>=0&&nxt<cap)?nxt:cap);})();
   ok('★★ 百分比整個退場（首頁不需要呈現付款方式比例）',
      !/_revPct/.test(src) && !/class="mc-rs-p"/.test(src) && !/\.mc-rs-p\{/.test(src));
   ok('★★ 明細標題改「營收明細　N 筆」，沒有虛線',

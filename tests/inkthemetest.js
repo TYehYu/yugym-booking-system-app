@@ -13,7 +13,14 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 /* 起點要往前含到開頭那個註解符號，否則下面的去註解正則配不到整塊，
    標題註解就會被當成規則（第一版誤判成「.cal-now 被動到」）。 */
 const _ii=src.indexOf('   Ink · 編輯排版風視覺層');
-const INK=src.slice(src.lastIndexOf('/*', _ii), src.indexOf('</style>'));
+const _is=src.lastIndexOf('/*', _ii);
+/* 結尾要停在「下一個 ══ 區塊」而不是 </style> —— 樣式表後面陸續會接別的區塊
+   （例如 2026-08-27 的排班表壓縮，那一組刻意不掛 body.ink），
+   一路吃到 </style> 會把別人的規則算到 Ink 頭上。 */
+const _ie=(()=>{ let i=src.indexOf('\n/* ══', _is+40); const cap=src.indexOf('</style>');
+  while(i>=0 && i<cap){ if(!/Ink/.test(src.slice(i,i+60))) return i; i=src.indexOf('\n/* ══', i+4); }
+  return cap; })();
+const INK=src.slice(_is, _ie);
 /* 只看真正的規則：註解裡本來就會提到 .cal-now、課程色這些名字（那是在說明「刻意不動」），
    拿註解去比會全部誤判。 */
 const RULES=INK.replace(/\/\*[\s\S]*?\*\//g,'');
