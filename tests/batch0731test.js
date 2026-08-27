@@ -83,12 +83,15 @@ console.log('\n團課明細排列：日期時間時長／教練／場地／名�
   const g=src.slice(i,j);
   ok('★ 團課／體驗走自己一套版面（與其餘課種分開）', i>0 && j>i);
   const at=t=>g.indexOf(t);
-  ok('★ 第一列＝日期・時間・時長', at('id="ed-date"')>0 && at('id="ed-dur"')>at('id="ed-date"'));
-  ok('★ 第二列＝教練', at('>教練<')>at('id="ed-date"'));
+/* 2026-08-27：日期欄從原生 <input type="date"> 換成自家的 ashDateField（月曆跳視窗），
+   id 與讀值方式沒變，但原始碼裡不再有字面上的 id="ed-date" —— 改比呼叫。 */
+const ED_DATE="ashDateField('ed-date'";
+  ok('★ 第一列＝日期・時間・時長', at(ED_DATE)>0 && at('id="ed-dur"')>at(ED_DATE));
+  ok('★ 第二列＝教練', at('>教練<')>at(ED_DATE));
   ok('★ 第三列＝場地', at('>場地<')>at('>教練<'));
   /* 2026-08-03 排列定版：體驗的姓名移到第一列（isTrialD?memberLine）、團課名單仍在場地後 */
   ok('★ 團課名單仍在場地之後、體驗姓名移到第一列', at("${isGroupD?memberLine:''}")>at('>場地<')
-     && at("${isTrialD?memberLine:''}")>=0 && at("${isTrialD?memberLine:''}")<at('id="ed-date"'));
+     && at("${isTrialD?memberLine:''}")>=0 && at("${isTrialD?memberLine:''}")<at(ED_DATE));
   const noteAt=src.indexOf('${bkNoteBlock(b, isMemberView, ownByCoach)}');
   ok('★ 備註在最後（整個版面之外、按鈕列之前）',
      noteAt>src.indexOf('${memberLine}')
@@ -96,7 +99,7 @@ console.log('\n團課明細排列：日期時間時長／教練／場地／名�
   ok('★ 下方的「調整時間」區塊已整個退場（2026-08-03 各分支時間都在第二列，不會撞 id）',
      !/調整時間（手機可用此處改期改時間）/.test(src));
   ok('　　ed-date/ed-time/ed-dur 在團課明細裡各只出現一次',
-     (g.match(/id="ed-date"/g)||[]).length===1 && (g.match(/id="ed-time"/g)||[]).length===1
+     (g.match(/ashDateField\('ed-date'/g)||[]).length===1 && (g.match(/id="ed-time"/g)||[]).length===1
      && (g.match(/id="ed-dur"/g)||[]).length===1);
   ok('　　代課下拉還在（團課也會換教練）', /id="ed-subcoach"/.test(g));
   ok('　　更換場地鈕還在', /openVenueChange\('\$\{b\.id\}'\)/.test(g));

@@ -26,7 +26,8 @@ console.log('① 三條會扣團課票的路，都要記下名額歸屬');
 console.log('\n② 建立團課（含連續預約開課）');
 {
   ok('★ 扣課成功才記，記在剛建立的那張課卡上',
-     /if\(tk && await deductTicket\(tk,bk\.id,SESSION\.id\)\)\{ charged\+\+;/.test(src)
+     /* 2026-08-27：團課一人多名額是合法的重複扣課，所以帶 {multi:true} 跳過冪等檢查 */
+     /if\(tk && await deductTicket\(tk,bk\.id,SESSION\.id,\{multi:true\}\)\)\{ charged\+\+;/.test(src)
      && /bk\.seat_tickets=Object\.assign\(\{\}, bk\.seat_tickets\|\|\{\}, \{\[_sk\]:tk\.id\}\);/.test(src));
   ok('★ 名額鍵沿用既有規則（第 1 個是 id、第 2 個起是 id#N）',   // 2026-08-20 取消教練招待：鍵改依「實際加入」的格數編號
      /const _sk=\(_c>1\)\?\(mid\+'#'\+_c\):mid;\n\s*bk\.seat_tickets=/.test(src));

@@ -11191,8 +11191,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260827.1617';
-const APP_VERSION_LABEL='v260827.1617';
+const APP_VERSION = '260827.2013';
+const APP_VERSION_LABEL='v260827.2013';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16637,7 +16637,35 @@ async function activateTicketIfNeeded(ticket,booking_id){
    一般路徑有 tkFitsBooking 擋，但補綁／批次／轉正／場租折抵是直接呼叫這一支，
    扣下去會變負數，之後每一張報表跟著錯，而且沒有任何痕跡。
    改成不扣、寫一筆警示紀錄、當面提示櫃檯，並回傳 false 讓呼叫端知道沒扣到。 */
-async function deductTicket(ticket,booking_id,operator){
+/* 冪等防線（2026-08-27 施佳靜案例）——
+   11 筆預約在 5 秒內產生了 18 筆扣課：同一支流程跑了兩次，7 筆預約各被扣兩次，
+   餘額被壓到 0（實際只用了 11 堂），票券卡掛上 ⚠ 對帳。
+   ⚠ 建立預約那條路 0728 就有 _bkSubmitting 防連點（魚媽案例），但「待簽約轉正／
+     批次綁票」那幾條沒有 —— 與其逐條補鎖，不如在真正扣課的這一支擋最後一關：
+     同一張票 × 同一筆預約，淨扣課不得超過 allow（預設 1）。
+   ⚠ 有兩種**合法的重複扣課**，它們必須自己說明白（opts.multi）：
+     ① 團課一人佔多個名額（許佳慈 4 個名額＝扣 4 堂）
+     ② 自主訓練 120 分鐘扣 2 點（改時長時逐點加扣）
+     這兩條路的重複次數由呼叫端自己控制，不走這道檢查。 */
+async function tkNetDeductOn(ticket_id, booking_id){
+  if(!ticket_id||!booking_id) return 0;
+  try{
+    const lg=(await dbGetAll('ticket_logs')).filter(l=>l&&l.ticket_id===ticket_id&&l.booking_id===booking_id);
+    return lg.filter(l=>l.action==='deduct').length - lg.filter(l=>l.action==='refund').length;
+  }catch(_){ return 0; }
+}
+async function deductTicket(ticket,booking_id,operator,opts){
+  const _multi=!!(opts&&opts.multi);
+  if(!_multi && booking_id && ticket && ticket.id){
+    const _net=await tkNetDeductOn(ticket.id, booking_id);
+    if(_net>0){
+      /* 已經扣過了 —— 回 true（這一堂確實掛在這張票上），但不再扣第二次。
+         留一筆 adjust／delta 0 當痕跡，之後查得到「這裡擋下過一次重複」。 */
+      try{ await logTicket(ticket.id,'adjust',0,booking_id,operator||'system',
+        '⚠ 已阻擋：這一堂在這張票上已經扣過 '+_net+' 堂，不重複扣'); }catch(_){}
+      return true;
+    }
+  }
   if(!(Number(ticket&&ticket.sessions_remaining)>0)){
     try{ await logTicket(ticket.id,'adjust',0,booking_id,operator||'system',
       '⚠ 已阻擋：餘額為 '+(Number(ticket&&ticket.sessions_remaining)||0)+'，未再扣課'); }catch(_){}
@@ -22897,8 +22925,11 @@ async function _calRevalidate(){
 function openCalJump(){
   const base=calWeekStart||TODAY;
   const val=ymd(base);
+  /* 2026-08-27 使用者回報：「這邊又有瀏覽器的日期」—— 這一格還是原生 <input type="date">，
+     點下去跳的是瀏覽器自己的月曆（樣式與全站不同、iOS 也沒有確定鈕）。
+     改用自家的 ashDateField（0821 定版：月曆跳視窗），id 與讀值方式完全不變。 */
   showModal(`<div class="modal-title">跳至日期</div>
-    <div class="form-row"><label>選擇日期</label><input type="date" id="cal-jump-date" value="${val}"></div>
+    <div class="form-row"><label>選擇日期</label>${ashDateField('cal-jump-date', val, '', '')}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="doCalJump()">前往</button></div>`);
 }
 function doCalJump(){
@@ -28771,7 +28802,9 @@ async function _submitBookingInner(){
         const want=grpPickOf(mid,_i);
         if(want){ const cand=await listUsableTickets(mid,type_id,dW,tW); tk=cand.find(x=>x.id===want)||null; }
         if(!tk) tk=await findUsableTicket(mid,type_id,dW,tW);
-        if(tk && await deductTicket(tk,bk.id,SESSION.id)){ charged++;
+        /* multi:true —— 團課一人可佔多個名額（許佳慈 4 個名額＝扣 4 堂），
+           同一張票、同一堂課合法地扣多次；次數由這個逐名額迴圈控制（2026-08-27）。 */
+        if(tk && await deductTicket(tk,bk.id,SESSION.id,{multi:true})){ charged++;
           bk.member_ids.push(mid);
           /* 逐名額記下用了哪張票（2026-08-07 許佳慈案例：「今天只是新儲值一堂，
              為什麼會打亂之前的票券」）—— 沒記下來的名額只能靠「把扣課紀錄依購買日
@@ -30562,7 +30595,7 @@ async function bkInlineEdit(id){
     + coachableList.filter(c=>c.id!==b.coach_id).map(c=>`<option value="${c.id}" ${b.substitute_coach_id===c.id?'selected':''}>改由 ${coachDisp(c)} 代課</option>`).join('');
   const form = `<div class="evx-edit">
     <div class="evx-edit-head"><span>編輯預約</span><button class="evx-close" title="關閉（Esc）" onclick="event.stopPropagation();collapseBkCard()">✕</button></div>
-    <label>日期<input type="date" id="ed-date" value="${b.date}"></label>
+    <label>日期${ashDateField('ed-date', b.date, '', '')}</label>
     <label>時間<select id="ed-time">${bkTimeOptions(b.start_time,{noEmpty:1})}</select></label>
     <label>時長<select id="ed-dur">${durOpts}</select></label>
     ${isPersonalPT?`<label>教室<select id="ed-venue">${venOpts}</select></label>`:''}
@@ -31261,7 +31294,7 @@ async function openBookingDetail(id){
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         ${editable
           ? `<span class="bkd-timeedit">
-               <input type="date" id="ed-date" value="${b.date}">
+               ${ashDateField('ed-date', b.date, '', '')}
                <select id="ed-time">${bkTimeOptions(b.start_time,{noEmpty:1})}</select>
                <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30 分</option><option value="60" ${b.duration===60?'selected':''}>60 分</option><option value="90" ${b.duration===90?'selected':''}>90 分</option><option value="120" ${b.duration===120?'selected':''}>120 分</option></select>
              </span>`
@@ -31305,7 +31338,7 @@ async function openBookingDetail(id){
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         ${editable
           ? `<span class="bkd-timeedit">
-               <input type="date" id="ed-date" value="${b.date}">
+               ${ashDateField('ed-date', b.date, '', '')}
                <select id="ed-time">${bkTimeOptions(b.start_time,{noEmpty:1})}</select>
                <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30 分</option><option value="60" ${b.duration===60?'selected':''}>60 分</option><option value="90" ${b.duration===90?'selected':''}>90 分</option><option value="120" ${b.duration===120?'selected':''}>120 分</option></select>
              </span>`
@@ -31340,7 +31373,7 @@ async function openBookingDetail(id){
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         ${editable
           ? `<span class="bkd-timeedit">
-               <input type="date" id="ed-date" value="${b.date}">
+               ${ashDateField('ed-date', b.date, '', '')}
                <select id="ed-time">${bkTimeOptions(b.start_time,{noEmpty:1})}</select>
                <select id="ed-dur"><option value="30" ${b.duration===30?'selected':''}>30 分</option><option value="60" ${b.duration===60?'selected':''}>60 分</option><option value="90" ${b.duration===90?'selected':''}>90 分</option><option value="120" ${b.duration===120?'selected':''}>120 分</option></select>
              </span>`
@@ -32791,8 +32824,10 @@ async function _saveBookingTime(id){
     const diff=Math.max(1,Math.round((Number(ndur)||60)/60)) - Math.max(1,Math.round(_oldDur/60));
     if(diff!==0){
       try{
+        /* multi:true —— 自主訓練 120 分鐘扣 2 點，同一筆預約本來就要扣多次，
+           次數由這個迴圈控制，不走 deductTicket 的冪等檢查（2026-08-27）。 */
         if(diff>0){ for(let k=0;k<diff;k++){ const tk=await dbGet('member_tickets',b.ticket_id);
-            if(!tk || !(await deductTicket(tk,b.id,SESSION.id))) break; } }   // 扣不到就停（2026-08-06）
+            if(!tk || !(await deductTicket(tk,b.id,SESSION.id,{multi:true}))) break; } }   // 扣不到就停（2026-08-06）
         else { for(let k=0;k<-diff;k++) await refundTicket(b.ticket_id,b.id,SESSION.id); }
         showToast(diff>0?`時長增加，已加扣 ${diff} 點`:`時長縮短，已退回 ${-diff} 點`);
       }catch(e){ console.error('時長點數調整失敗:',e); showToast('點數調整失敗，請至會員票券手動處理'); }

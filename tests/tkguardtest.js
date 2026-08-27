@@ -56,9 +56,13 @@ console.log('① 超約防線：團課也算得到（R1）');
 console.log('\n② 扣課護欄：餘額 0 就不再扣（R3）');
 {
   const mk=(tk)=>{ const L=[],T=[];
-    const fn=new Function('logTicket','activateTicketIfNeeded','dbPut','showToast',
+    /* 2026-08-27：deductTicket 前面多了一道冪等檢查（同票同預約不重複扣），
+       它會先問 tkNetDeductOn —— 沙箱給 0（＝這一堂還沒扣過），
+       其餘行為與原本完全相同。冪等本身另由 tests/deductonce.js 驗。 */
+    const fn=new Function('logTicket','activateTicketIfNeeded','dbPut','showToast','tkNetDeductOn',
       grabFn('deductTicket')+'\nreturn deductTicket;')(
-      async(...a)=>{L.push(a);}, async()=>null, async(_,o)=>{T.push(JSON.parse(JSON.stringify(o)));}, m=>L.push(['toast',m]));
+      async(...a)=>{L.push(a);}, async()=>null, async(_,o)=>{T.push(JSON.parse(JSON.stringify(o)));}, m=>L.push(['toast',m]),
+      async()=>0);
     return {fn,L,T}; };
   {
     const {fn,L,T}=mk();
