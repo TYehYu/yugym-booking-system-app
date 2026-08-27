@@ -340,5 +340,37 @@ t('　　與別處的圓點容器同一組數值（.mck-dots2 是 flex-wrap gap:
    /\.mck-dots2\{display:flex;flex-wrap:wrap;gap:5px;\}/.test(s));
 t('　　成因寫在原地', /走的是文字的基線對齊/.test(s));
 
+/* 2026-08-27 客人回饋（使用者轉述）：「自主訓練在快速預約的時候　都要關掉視窗再選其他天
+   再點快速預約　比起之前點快速預約可以在同一個頁面換日期多了一個步驟
+   可以把日期列設計回去快速預約的視窗裡面嗎」 */
+console.log('\n快速預約視窗裡的日期列（換一天不必關窗）');
+{
+  const QS=cut('async function memh2SelfSlots(ds){','function memh2SelSlot(');
+  t('★★ 視窗裡有日期列，排在標題與 qs-head 之間',
+    /<div class="modal-title">預約自主訓練<\/div>\s*\n\s*\$\{_dayRow\}\s*\n\s*<div class="qs-head">/.test(QS));
+  t('★★ 點某一天＝同一個視窗換內容（重新呼叫自己，不另外開一層）',
+    /onclick="memh2SelfSlots\('\$\{x\}'\)"/.test(QS));
+  t('★★ 只列約得到的日子：今天起，且落在任何一張自主訓練票的效期內（多張取聯集）',
+    /const _okDay=x=>x>=_t0 && _rng\.some\(\(\[st,ex\]\)=>\(!st\|\|x>=st\)&&\(!ex\|\|x<=ex\)\);/.test(QS)
+    && /const _selfTks=\[\]\.concat\(s\.groups\.self\|\|\[\], s\.groups\.friendly\|\|\[\]\);/.test(QS));
+  t('　 與課卡頁那支 selfOk 同一個判斷式（兩處要說同一件事）',
+    /const selfOk=ds=>ds>=today && selfRanges\.some\(\(\[st,ex\]\)=>\(!st\|\|ds>=st\)&&\(!ex\|\|ds<=ex\)\);/.test(s));
+  t('★★ 效期寫在說明裡（不是把不能用的日子偷偷藏掉）',
+    /\$\{_limTxt\?`<li>\$\{_limTxt\}，上方只列效期內約得到的日子<\/li>`:''\}/.test(QS)
+    && /這一列的定義就是「可預約日」/.test(s));
+  t('★ 封頂 14 天，超過的用一枚「\+N」說一聲（不默默截掉）',
+    /if\(_days\.length<14\) _days\.push\(\[x,dd\]\); else _more\+\+;/.test(QS)
+    && /_more\?`<span class="qs-day qs-daymore" title="效期內還有 \$\{_more\} 天，先約近的">\+\$\{_more\}<\/span>`:''/.test(QS));
+  t('★ 只有一天可約時不畫這一列（一顆按鈕的日期列沒有意義）',
+    /const _dayRow=_days\.length>1/.test(QS));
+  t('★ 選中＝品牌綠、今天＝金框（與頁面上的日期列同一組語彙）',
+    /\.qs-day\.on\{background:var\(--green\);border-color:var\(--green\);\}/.test(s)
+    && /\.qs-day\.qs-today\{border-color:var\(--gold,#B48A56\);\}/.test(s));
+  t('★★ 原本的挑時段流程一格沒動（時段格、確認鈕、過去時段仍濾掉）',
+    /onclick="memh2SelSlot\('\$\{minToTime\(m\)\}'\)"/.test(QS)
+    && /<button class="btn btn-primary" id="mh2qs-ok" disabled onclick="memh2GoSlot\(\)">確認<\/button>/.test(QS)
+    && /const mms=Array\.from\(r\.free\)\.filter\(m=>_nowMin<0\|\|m>=_nowMin\)\.sort\(\(a,b\)=>a-b\);/.test(QS));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

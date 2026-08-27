@@ -5998,6 +5998,24 @@ body.memh2-shell .bottom-nav .bn-lb{color:inherit;}
 .modal .cag-slots .cag-slot-off{background:rgba(0,0,0,.06);border-color:transparent;
   color:var(--t3);box-shadow:none;}
 /* 時段視窗的說明：標題一行、規則一行一句（2026-08-22 使用者：「處理一下上方的斷句」） */
+/* ── 快速預約視窗裡的日期列（2026-08-27 客人回饋：換一天不必關窗）──
+   橫捲、只列效期內約得到的日子；選中那一顆用品牌綠、今天描金框
+   （與頁面上的日期列同一組語彙：綠＝現在這個、金＝標出來的那一個）。 */
+.qs-days{display:flex;gap:6px;overflow-x:auto;margin:0 0 12px;padding:1px 1px 6px;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.qs-days::-webkit-scrollbar{display:none;height:0;}
+.qs-day{flex:none;display:flex;flex-direction:column;align-items:center;gap:1px;
+  min-width:52px;padding:6px 8px;border:1.5px solid var(--bd);border-radius:11px;
+  background:#fff;font-family:inherit;cursor:pointer;}
+.qs-day i{font-style:normal;font-size:9.5px;line-height:1.2;color:var(--t3);white-space:nowrap;}
+.qs-day b{font-family:var(--num),inherit;font-size:14px;font-weight:800;line-height:1.15;color:var(--t2);}
+.qs-day:active{transform:scale(.95);}
+.qs-day.qs-today{border-color:var(--gold,#B48A56);}
+.qs-day.on{background:var(--green);border-color:var(--green);}
+.qs-day.on i,.qs-day.on b{color:#fff;}
+/* 效期內還有更多天：只是說一聲，不是按鈕（先約近的） */
+.qs-daymore{justify-content:center;color:var(--t3);font-size:11px;font-weight:700;
+  border-style:dashed;cursor:default;min-width:44px;}
 .qs-head{margin-bottom:12px;}
 .qs-head-t{font-size:13px;color:var(--t2);line-height:1.6;}
 .qs-head-t b{color:var(--text);font-family:var(--num);font-size:14px;}
@@ -11310,8 +11328,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260827.2212';
-const APP_VERSION_LABEL='v260827.2212';
+const APP_VERSION = '260827.2221';
+const APP_VERSION_LABEL='v260827.2221';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50658,7 +50676,39 @@ async function memh2SelfSlots(ds){
     return `<button type="button" class="cag-slot" data-t="${minToTime(m)}" onclick="memh2SelSlot('${minToTime(m)}')">${
       minToTime(m)}${tag?`<span class="cag-slot-tag">${tag}</span>`:''}</button>`; }).join('');
   const _d=parseYmd(date)||new Date(TODAY);
+  /* ── 視窗裡的日期列（2026-08-27 使用者轉述客人回饋）──
+     「客人反應自主訓練在快速預約的時候　都要關掉視窗再選其他天再點快速預約
+       比起之前點快速預約可以在同一個頁面換日期多了一個步驟
+       可以把日期列設計回去快速預約的視窗裡面嗎」
+     ——換一天原本要「關窗→選日→再點一次＋」三步，現在在視窗裡點一下就換。
+     只列**約得到的那幾天**：今天起、且落在任何一張自主訓練票的效期內
+     （多張票取聯集，與課卡頁那支 selfOk 同一個判斷）。
+     ⚠ 不是「藏起不能用的按鈕」—— 這一列的定義就是「可預約日」，
+       效期本身寫在下面那條說明裡（見 qs-note 最後一行）。
+     ⚠ 點某一天＝重新呼叫自己（同一個視窗換內容），不另外開一層。 */
+  const _selfTks=[].concat(s.groups.self||[], s.groups.friendly||[]);
+  const _rng=_selfTks.map(t=>[t.start_date?String(t.start_date).slice(0,10):'',
+                              t.expire_date?String(t.expire_date).slice(0,10):'9999-12-31']);
+  const _t0=ymd(TODAY);
+  const _okDay=x=>x>=_t0 && _rng.some(([st,ex])=>(!st||x>=st)&&(!ex||x<=ex));
+  const _days=[]; let _more=0;
+  for(let i=0;i<60;i++){
+    const dd=new Date(TODAY); dd.setDate(TODAY.getDate()+i); const x=ymd(dd);
+    if(!_okDay(x)) continue;
+    if(_days.length<14) _days.push([x,dd]); else _more++;
+  }
+  const _dayRow=_days.length>1
+    ? `<div class="qs-days">${_days.map(([x,dd])=>
+        `<button type="button" class="qs-day${x===date?' on':''}${x===_t0?' qs-today':''}"
+          onclick="memh2SelfSlots('${x}')">
+          <i>${x===_t0?'今天':'週'+'日一二三四五六'[dd.getDay()]}</i>
+          <b>${dd.getMonth()+1}/${dd.getDate()}</b></button>`).join('')}${
+        _more?`<span class="qs-day qs-daymore" title="效期內還有 ${_more} 天，先約近的">+${_more}</span>`:''}</div>`
+    : '';
+  const _limTxt=(()=>{ const e=_rng.map(r=>r[1]).sort().pop();
+    return (e&&e!=='9999-12-31')?`點數效期到 ${e.replace(/-/g,'/')}`:''; })();
   showModal(`<div class="modal-title">預約自主訓練</div>
+    ${_dayRow}
     <div class="qs-head">
       <div class="qs-head-t">${date.replace(/-/g,'/')}（${'日一二三四五六'[_d.getDay()]}）　還能預約 <b>${mms.length}</b> 個時段</div>
       <ul class="qs-note">
@@ -50667,6 +50717,7 @@ async function memh2SelfSlots(ds){
         <li>沒標的就是多功能訓練架</li>
         <li>標「團課教室」或「跑步機」＝訓練架已滿</li>
         <li>跑步機可在下一步選 1 或 2 台</li>
+        ${_limTxt?`<li>${_limTxt}，上方只列效期內約得到的日子</li>`:''}
       </ul>
     </div>
     ${mms.length
