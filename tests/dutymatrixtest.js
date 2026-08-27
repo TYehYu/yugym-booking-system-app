@@ -52,6 +52,31 @@ console.log('\n② 固定格位：沒值班要留同高的空位，後面的人�
      && /「第 N 列永遠是同一個人」這件事就破了（這正是這次要解決的問題）/.test(src));
 }
 
+console.log('\n②-2 不標示「今日」、上方壓縮、早午晚明顯隔開（2026-08-27 二修）');
+{
+  ok('★★ 「今天」標籤與今日欄底色整組移除（這是一週固定模板，不綁特定日期）',
+     !/dw-todaycol/.test(src.replace(/\/\*[\s\S]*?\*\//g,''))
+     && !/\.dw-h\.today\{/.test(src)
+     && !/wd===todayWd/.test(src)
+     && /這一頁是\*\*一週固定模板\*\*，不綁特定日期，\s*\n\s*標「今天」反而讓人以為在看這一週的實際班表/.test(src));
+  ok('★★ 頁面副標退場（那句話 tray 裡已經寫過一次）',
+     /C\.innerHTML=`<div class="card dw-card">\$\{tray\}/.test(src)
+     && !/head\('DUTY','教練值班時段'/.test(src)
+     && /為了同一句話吃掉一整列高度不划算/.test(src));
+  ok('★ 卡片、tray、表頭、footer 全部收一階',
+     /\.dw-card\{padding:10px 12px;\}/.test(src)
+     && /\.dw-tray\{[^}]*padding:6px 9px;margin-bottom:8px;/.test(src)
+     && /\.dw-h\{min-height:40px;/.test(src)
+     && /\.dw-foot\{font-size:10\.5px;color:var\(--t3\);margin-top:7px;/.test(src));
+  ok('★★ 早／午／晚之間用 2px 深線隔開（格子內部仍是 1px 淡線）',
+     /\.dw-cell\{[^}]*border-bottom:2px solid rgba\(45,36,28,\.20\);/.test(src)
+     && /\.dw-seg\{[^}]*border-bottom:2px solid rgba\(45,36,28,\.20\);/.test(src)
+     && /\.dw-h\{[^}]*border-bottom:2px solid rgba\(45,36,28,\.20\);/.test(src)
+     && /格子內部靠 1px 淡線，段與段之間 2px 深線，三塊一眼分得出來/.test(src));
+  ok('　 最後一段不畫線（表格底部不會出現雙線）',
+     /\.dw-grid>\.dw-seg:last-of-type,\.dw-grid>\.dw-cell:nth-last-child\(-n\+7\)\{border-bottom:none;\}/.test(src));
+}
+
 console.log('\n③ 空位與標籤同高（不是只有邏輯上同高）');
 ok('★★ .dw-slot 統一 27px，空位只差在底色與邊框',
    /\.dw-slot\{height:27px;/.test(src)
@@ -59,9 +84,9 @@ ok('★★ .dw-slot 統一 27px，空位只差在底色與邊框',
 ok('★ 有值班的左側 3px 識別色條、圓角 4px、名字 13.5px semibold',
    /\.dw-slot\.dw-on\{border-left:3px solid var\(--sc,var\(--bd\)\);/.test(src)
    && /border-radius:4px;padding:0 9px;\s*\n\s*font-size:13\.5px;font-weight:600;/.test(src));
-ok('★ 格子上下 padding 10px、slot 間距 3px、星期表頭 52px',
-   /\.dw-cell\{display:flex;flex-direction:column;gap:3px;padding:10px 8px;/.test(src)
-   && /\.dw-h\{min-height:52px;/.test(src));
+/* 0827 二修再收一階：cell padding 10→8、表頭 52→40（見 ②-2） */
+ok('★ 格子 padding 8px、slot 間距 3px',
+   /\.dw-cell\{display:flex;flex-direction:column;gap:3px;padding:8px;/.test(src));
 
 console.log('\n④ 左欄：時段名＋時間區間＋人數區間');
 {
