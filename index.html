@@ -10586,6 +10586,49 @@ body.ink .mc-dash .card,body.ink .mc-dash .mc-card,body.ink .cal-side,
 body.ink .mc-dutyring-card,body.ink .tl-panel{
   border-radius:10px;border:1px solid var(--bd);box-shadow:none;}
 
+
+/* ══ Ink 修正（2026-08-27 使用者回報）══════════════════════════════════════
+   「我按了其他天，上方日期顯示仍停留在 8/27…這樣我會搞錯」
+   真因是我自己蓋掉的：`body.ink .twk-day{border:1px solid var(--bd)}` 的權重
+   （0,2,1）壓過原本的 `.twk-day.on{border-color:金;border-width:2px}`（0,2,0），
+   於是「選取」這個狀態整個沒了畫面 —— 只剩「今天」那一格有底色，
+   看起來就像永遠停在今天。 */
+/* 選取＝橄欖細框＋淡橄欖底；今天＝橄欖實心。兩者可以同時成立（今天又被選取）。 */
+body.ink .twk-day.on{border-color:var(--olive,#556B45);border-width:2px;}
+body.ink .twk-day.on:not(.today){
+  background:color-mix(in srgb, var(--olive,#556B45) 12%, #FFFDF8);
+  color:var(--olive-d,#445636);}
+body.ink .twk-day.on:not(.today) .twk-md{color:var(--olive-d,#445636);}
+/* 左欄月曆的「選取」原本是為深綠底配的米白細圈，翻成白底後幾乎看不見（使用者：
+   「還不是很清楚」）——改成橄欖 2px 實圈，與上面那排同一種語彙。 */
+body.ink .cal-side .mc-cell.mc-sel .mc-d{
+  border:2px solid var(--olive,#556B45);color:var(--olive-d,#445636);font-weight:700;}
+body.ink .cal-side .mc-cell.mc-today.mc-sel .mc-d{
+  border-color:var(--cream,#F2EFE4);color:#F2EFE4;}
+
+/* ══ 右欄「今日營收」面板（2026-08-27 使用者附參考圖）══ */
+body.ink .mc-revhd{display:flex;align-items:baseline;gap:10px;margin:0 0 12px;}
+body.ink .mc-revhd-t{font-size:16px;font-weight:700;color:var(--text);letter-spacing:.02em;}
+body.ink .mc-revhd-u{margin-left:auto;font-size:11.5px;color:var(--t3);
+  font-family:var(--font-en);font-variant-numeric:tabular-nums;}
+body.ink .mc-revsplit{display:flex;background:var(--card2);border:1px solid var(--bd);
+  border-radius:10px;padding:14px 4px;margin-bottom:14px;}
+body.ink .mc-rs-col{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:5px;
+  padding:0 14px;}
+body.ink .mc-rs-col + .mc-rs-col{border-left:1px solid var(--bd);}
+body.ink .mc-rs-l{font-size:12.5px;font-weight:600;}
+body.ink .mc-rs-v{font-family:var(--font-en);font-variant-numeric:tabular-nums;
+  font-size:24px;font-weight:700;color:var(--text);line-height:1.1;}
+body.ink .mc-rs-p{font-size:12px;font-family:var(--font-en);font-variant-numeric:tabular-nums;}
+/* 現金綠／匯款藍沿用既有的語意色（kpay-cash／kpay-bank 同一組），不另外訂 */
+body.ink .mc-rs-cash .mc-rs-l,body.ink .mc-rs-cash .mc-rs-p{color:#1f6f54;}
+body.ink .mc-rs-bank .mc-rs-l,body.ink .mc-rs-bank .mc-rs-p{color:#3f5f85;}
+body.ink .mc-rs-other .mc-rs-l,body.ink .mc-rs-other .mc-rs-p{color:var(--t3);}
+/* 「營收明細」小標：文字＋一條虛線拉到底（參考圖） */
+body.ink .mc-revsec{display:flex;align-items:center;gap:10px;margin:0 0 10px;
+  font-size:13px;font-weight:600;color:var(--t2);}
+body.ink .mc-revsec i{flex:1 1 auto;border-top:1px dashed var(--bd);}
+
 </style>
 </head>
 <body>
@@ -10763,8 +10806,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260826.2320';
-const APP_VERSION_LABEL='v260826.2320';
+const APP_VERSION = '260827.0926';
+const APP_VERSION_LABEL='v260827.0926';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17965,12 +18008,17 @@ PAGES.g_dashboard=async function(){
        不另外維護一個週偏移狀態（那會和 _dashViewDate 兩份狀態互相打架）。 */
   /* 「回到今天」要放哪一側（2026-08-23）：今天比這一週的週一還早 → 往回翻 → 放左邊；
      比週日還晚 → 往前翻 → 放右邊；今天就在這一週裡 → 兩邊都不放（本來就看得到）。 */
+  /* 「回到今天」擺哪一側（2026-08-27 使用者：「選擇其他天時一樣要出現『回到今天』的按鈕」）
+     ── 原本只有「今天根本不在這一週」才給，於是在同一週內點別天時完全沒有回頭路，
+        而上方那排又只有一格底色在動，很容易以為自己還停在今天。
+     規則：今天在本週左邊／右邊 → 貼那一側；今天就在本週但看的不是今天 → 放右側。
+     兩個插槽本來就固定佔位（.twk-today-slot 58px），多顯示一顆不會讓版面跳動。 */
   const _todaySide=(()=>{
     const mon=new Date(_tdD); mon.setDate(_tdD.getDate()-((_tdD.getDay()+6)%7));
     const sun=new Date(mon); sun.setDate(mon.getDate()+6);
     if(today<ymd(mon)) return 'l';
     if(today>ymd(sun)) return 'r';
-    return '';
+    return isTodayView ? '' : 'r';
   })();
   const _wkDays=(()=>{
     const mon=new Date(_tdD); mon.setDate(_tdD.getDate()-((_tdD.getDay()+6)%7));
@@ -18276,7 +18324,10 @@ PAGES.g_dashboard=async function(){
         <div class="mc-k2-n">$${_fm(_revTotal)}</div>
         <div class="mc-k2-l">今日營收<span class="mc-kpi-tapmark">›</span></div>
         ${/* 現金／匯款分開（2026-08-08 使用者指示）：櫃檯下班要點現金，
-             這一列直接告訴他「抽屜裡應該有多少」。金額為 0 的那一種不列，版面才不會被稀釋。 */''}
+             這一列直接告訴他「抽屜裡應該有多少」。金額為 0 的那一種不列，版面才不會被稀釋。
+             ⚠ 這是 _revCard（手機版 KPI 與舊版 kpiCards 在用），2026-08-27 使用者要拆掉的
+               是桌機那條 kpiStrip 上的同一組膠囊，不是這裡 —— 手機沒有右欄營收面板，
+               拆掉就真的看不到現金該收多少了。 */''}
         ${(_revCash||_revBank||_revOther)?`<div class="mc-kpi-rev-sub mc-kpi-pay">
           ${_revCash?`<span class="kpay kpay-cash">現金 $${_fm(_revCash)}</span>`:''}
           ${_revBank?`<span class="kpay kpay-bank">匯款 $${_fm(_revBank)}</span>`:''}
@@ -18334,12 +18385,13 @@ PAGES.g_dashboard=async function(){
        [OPS_TODO_IC.calendar,'團體課',`${_grpN}<small>堂</small>`,''],
        /* 發票區移除後新的收款一律無發票，只有還有舊資料時才列這一行（2026-08-02） */
        [OPS_TODO_IC.money,'今日營收',`$${_fm(_revTotal)}`,
-        /* 2026-08-24 使用者指示：「這邊現金跟匯款也做成標籤」——
-           原本是一行灰字用「·」串起來，跟右欄那張營收卡（早就用 .kpay 膠囊）長得不一樣。
-           改成同一組膠囊：現金綠、匯款藍、其他米灰，一眼分得出來。 */
-        [ _revCash?`<span class="kpay kpay-cash">現金 $${_fm(_revCash)}</span>`:'',
-          _revBank?`<span class="kpay kpay-bank">匯款 $${_fm(_revBank)}</span>`:'',
-          _revOther?`<span class="kpay kpay-other" title="沒有對應到今天的收款紀錄（多半是匯入的舊票）">其他 $${_fm(_revOther)}</span>`:'' ].filter(Boolean).join('')]]
+        /* 現金／匯款膠囊撤掉（2026-08-27 使用者：「原本今日營收下方的現金、匯款
+           就不用再顯示了」）—— 右欄「今日營收」面板已經把同一組數字攤開成兩欄、
+           還多了佔比，同一件事講兩次只是稀釋版面。
+           ⚠ 只拆桌機這一條；手機的 _revCard 保留（那邊沒有右欄面板）。
+           ⚠ 要還原就把 `''` 換回原本那個三段陣列（_revCash／_revBank／_revOther 都還在算）。
+           〔已移除〕2026-08-24 加的 .kpay 三色膠囊 */
+        '']]
       .map(([ic,l,n,sub])=>`<div class="kpi-it"><div class="kpi-n">${n}</div><div class="kpi-l">${ic}${l}</div>${sub?`<div class="kpi-sub${/kpay/.test(sub)?' kpi-sub-chips':''}">${sub}</div>`:''}</div>`).join('')}</div>
   </div>`;
 
@@ -18462,7 +18514,31 @@ PAGES.g_dashboard=async function(){
      當時下方還擠著待辦卡）——現在營收卡是右欄最後一格、伸縮墊到欄底，
      名單全列、超出的部分在卡內捲動（.mc-revlist 本來就 overflow-y:auto）。 */
   const _revShown=_revRows, _revMore=0;
+  /* 右欄「今日營收」面板（2026-08-27 使用者附參考圖）——
+     標題列（含最後更新時刻）＋ 現金／匯款分欄（金額與佔比）＋「營收明細」小標。
+     ⚠ 數字全部沿用既有的 _revCash／_revBank／_revOther／_revTotal，這裡只是換個呈現，
+       沒有另外算一份（這個專案踩過「同一個數字兩個地方各算一次」的坑）。
+     ⚠ 佔比的分母用「三種加總」而不是 _revTotal —— _revTotal 可能含沒有付款方式的舊票，
+       用它當分母會讓兩欄加起來不到 100%，看起來像少算了錢。 */
+  const _revPaySum=(_revCash||0)+(_revBank||0)+(_revOther||0);
+  const _revPct=v=>_revPaySum>0?(Math.round(v/_revPaySum*1000)/10).toFixed(1)+'%':'—';
+  const _revUpd=(()=>{ const d=new Date();
+    return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); })();
+  const _revSplitCol=(cls,label,val)=>!val?'':`<div class="mc-rs-col ${cls}">
+      <span class="mc-rs-l">${label}</span>
+      <b class="mc-rs-v">$${_fm(val)}</b>
+      <span class="mc-rs-p">${_revPct(val)}</span></div>`;
+  const revHead=`<div class="mc-revhd">
+      <span class="mc-revhd-t">今日營收</span>
+      <span class="mc-revhd-u">最後更新 ${_revUpd}</span></div>
+    ${_revPaySum>0?`<div class="mc-revsplit">
+      ${_revSplitCol('mc-rs-cash','現金收入',_revCash)}
+      ${_revSplitCol('mc-rs-bank','匯款收入',_revBank)}
+      ${_revSplitCol('mc-rs-other','其他',_revOther)}
+    </div>`:''}
+    ${_revRows.length?`<div class="mc-revsec"><span>營收明細</span><i></i></div>`:''}`;
   const revListCard=`<div class="card mc-card mc-revlist-card">
+    ${revHead}
     ${_revRows.length?`<div class="mc-revlist">${_revShown.map(r=>`
       ${/* 版型（2026-08-24 使用者定案）：最左邊一欄直式卡＝新約／續約／分期／抽獎；
            第二欄兩列 —— 第一列「姓名靠左、教練標籤靠右」，第二列「品項靠左、金額靠右」。

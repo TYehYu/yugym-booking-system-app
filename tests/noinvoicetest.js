@@ -35,9 +35,11 @@ ok('★ 桌機版：沒有發票金額就不列那一行',
    發票的拆解留在桌機 KPI 卡上。 */
 ok('★ 手機版同樣處理（改列現金／匯款）',
 /* 2026-08-24 使用者指示：「這邊現金跟匯款也做成標籤」——手機版那一列原本是灰字
-   用「·」串起來，改成與右欄營收卡同一組 .kpay 膠囊。 */
-   /_revCash\?`<span class="kpay kpay-cash">現金 \$\$\{_fm\(_revCash\)\}<\/span>`:'',/.test(src)
-   && /_revBank\?`<span class="kpay kpay-bank">匯款 \$\$\{_fm\(_revBank\)\}<\/span>`:'',/.test(src));
+   用「·」串起來，改成與右欄營收卡同一組 .kpay 膠囊。
+   ⚠ 2026-08-27：桌機 kpiStrip 上那組已依使用者要求撤掉（右欄營收面板取代），
+     這裡改驗仍然留著的 _revCard（手機版在用，那邊沒有右欄面板）。 */
+   /_revCash\?`<span class="kpay kpay-cash">現金 \$\$\{_fm\(_revCash\)\}<\/span>`:''/.test(src)
+   && /_revBank\?`<span class="kpay kpay-bank">匯款 \$\$\{_fm\(_revBank\)\}<\/span>`:''/.test(src));
 ok('　　舊資料還有發票時仍看得到（不是整段砍掉）', /_revInv>0\?/.test(src));
 /* 2026-08-03 使用者指示：發票標籤整個移除（付款方式取代其位置，見 revpaytest.js） */
 ok('　　營收名單上不再出現「發票」標籤', !/mc-rev-inv">發票/.test(src));

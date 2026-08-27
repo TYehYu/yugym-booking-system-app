@@ -36,9 +36,11 @@ ok('★★ 桌機 KPI 卡列出來，0 的那一種不列（版面不被稀釋�
    && /\$\{_revBank\?`<span class="kpay kpay-bank">匯款 \$\$\{_fm\(_revBank\)\}<\/span>`:''\}/.test(src));
 ok('★ 手機版那一列也換成現金／匯款',
 /* 2026-08-24 使用者指示：「這邊現金跟匯款也做成標籤」——手機版那一列原本是灰字
-   用「·」串起來，改成與右欄營收卡同一組 .kpay 膠囊。 */
-   /_revCash\?`<span class="kpay kpay-cash">現金 \$\$\{_fm\(_revCash\)\}<\/span>`:'',/.test(src)
-   && /_revBank\?`<span class="kpay kpay-bank">匯款 \$\$\{_fm\(_revBank\)\}<\/span>`:'',/.test(src));
+   用「·」串起來，改成與右欄營收卡同一組 .kpay 膠囊。
+   ⚠ 2026-08-27：桌機 kpiStrip 上那組已依使用者要求撤掉（右欄營收面板取代），
+     這裡改驗仍然留著的 _revCard（手機版在用，那邊沒有右欄面板）。 */
+   /_revCash\?`<span class="kpay kpay-cash">現金 \$\$\{_fm\(_revCash\)\}<\/span>`:''/.test(src)
+   && /_revBank\?`<span class="kpay kpay-bank">匯款 \$\$\{_fm\(_revBank\)\}<\/span>`:''/.test(src));
 ok('★ 「其他」有說明它是什麼（不會被當成漏帳）',
    /title="沒有對應到今天的收款紀錄（多半是匯入的舊票）"/.test(src));
 ok('★ 現金給實色標籤（下班要點的就是它）',

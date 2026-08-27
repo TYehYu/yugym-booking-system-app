@@ -19,13 +19,26 @@ const INK=src.slice(src.lastIndexOf('/*', _ii), src.indexOf('</style>'));
 const RULES=INK.replace(/\/\*[\s\S]*?\*\//g,'');
 /* 一個 class 算「活的」＝ 它在這一區之外，要嘛以 .foo 出現在別的 CSS，
    要嘛出現在某個 class="..." 屬性裡（新加的顯示元件就是後者）。 */
+/* 各區塊要切到「下一個 Ink 區塊開頭」為止 —— 這些區塊是一段一段接在檔尾的，
+   若一律切到 </style>，前面的區塊會把後面的全部吃進來（後來新增的規則就會
+   被算到舊區塊頭上，護欄跟著誤判）。 */
+function inkBlock(marker){
+  const a=src.indexOf(marker);
+  const rest=src.slice(a+marker.length);
+  const nxt=rest.indexOf('/* ══ Ink');
+  const end=nxt<0 ? src.indexOf('</style>') : a+marker.length+nxt;
+  return src.slice(a,end);
+}
 function deadSel(block){
   const cls=new Set();
   block.replace(/\/\*[\s\S]*?\*\//g,'').replace(/\.([a-z][a-z0-9-]{2,})/g,(m,c)=>{cls.add(c);return m;});
   const outside=src.split(block).join('');
   return [...cls].filter(c=>c!=='ink'
     && outside.indexOf('.'+c)<0
-    && !new RegExp('class="[^"]*\\b'+c+'\\b').test(outside));
+    && !new RegExp('class="[^"]*\\b'+c+'\\b').test(outside)
+    /* class 也可能只以字串常數傳進去（例如 _revSplitCol('mc-rs-cash',…)），
+       只認 class="…" 會把這種誤判成死選擇器。 */
+    && outside.indexOf("'"+c+"'")<0 && outside.indexOf('"'+c+'"')<0);
 }
 
 
@@ -280,7 +293,7 @@ console.log('\n⑤ 互動一個都不能少');
 
 console.log('\n⑥ 首頁總覽（2026-08-26 使用者：「首頁參考這張，修改成同樣的設計語言，一樣所有功能都不更動」）');
 {
-  const HOME=src.slice(src.indexOf('/* ══ Ink · 首頁總覽'), src.indexOf('</style>'));
+  const HOME=inkBlock('/* ══ Ink · 首頁總覽（2026-08-26');
   const HR=HOME.replace(/\/\*[\s\S]*?\*\//g,'');
   ok('★ 首頁區塊存在且掛在 body.ink 底下', HR.length>500
      && HR.split('\n').filter(l=>/^\s*[.#a-z]/i.test(l) && /\{/.test(l) && !/^\s*body\.ink/.test(l)).length===0);
@@ -290,8 +303,14 @@ console.log('\n⑥ 首頁總覽（2026-08-26 使用者：「首頁參考這張�
   eq('★★ 首頁區塊沒有任何「專案裡不存在」的選擇器（防寫死掉的 CSS）', deadSel(HOME), []);
 
   /* ::before 是卡片裡面那條左色條（裝飾），與版面無關 —— 與排課表那邊同一個判準 */
+  /* 「不准碰版面」是為了證明**既有**的 UI 沒被搬動；2026-08-27 新做的右欄營收面板
+     是全新的元件，它自己當然要排版。這些 class 在這一版之前不存在（死選擇器護欄
+     可以印證），所以放行。 */
+  const NEW_OWN=/\.(mc-revhd|mc-revhd-t|mc-revhd-u|mc-revsplit|mc-rs-col|mc-rs-l|mc-rs-v|mc-rs-p|mc-rs-cash|mc-rs-bank|mc-rs-other|mc-revsec)\b/;
   ok('★★ 純樣式：沒有一條規則碰版面（position／top／height／width／display）',
      HR.split('}').filter(blk=>{
+       const _i=blk.indexOf('{');
+       if(_i>=0 && NEW_OWN.test(blk.slice(0,_i))) return false;
        const i=blk.indexOf('{'); if(i<0) return false;
        if(/::(before|after)/.test(blk.slice(0,i))) return false;
        return /(^|[;{\s])(position|top|left|right|bottom|width|height|display|flex-direction)\s*:/.test(blk.slice(i+1));
@@ -322,7 +341,7 @@ console.log('\n⑥ 首頁總覽（2026-08-26 使用者：「首頁參考這張�
 
 console.log('\n⑦ 首頁二修（使用者：「配色呢！！！我只有看到你把圓角改的比較方，根本就沒動啊！」）');
 {
-  const H2=src.slice(src.indexOf('/* ══ Ink · 首頁總覽 二修'), src.indexOf('</style>'));
+  const H2=inkBlock('/* ══ Ink · 首頁總覽 二修');
   const R2=H2.replace(/\/\*[\s\S]*?\*\//g,'');
   ok('★★ 失敗原因寫在原地（首頁自己一層 .mc-dash/.mc-kpistrip，權重不夠＋顏色寫死）',
      /選擇器比我寫的 `body\.ink \.xxx` 更/.test(src)
@@ -359,7 +378,7 @@ console.log('\n⑦ 首頁二修（使用者：「配色呢！！！我只有看�
 
 console.log('\n⑧ 首頁三修：定色 #556B45 ＋ 左欄／中欄對齊參考圖');
 {
-  const H3=src.slice(src.indexOf('/* ══ Ink · 首頁 三修'), src.indexOf('</style>'));
+  const H3=inkBlock('/* ══ Ink · 首頁 三修');
   eq('★★ 沒有寫死掉的選擇器', deadSel(H3), []);
   ok('★★ 只改外觀（沒有一條碰版面）',
      H3.replace(/\/\*[\s\S]*?\*\//g,'').split('}').filter(b=>{const i=b.indexOf('{'); if(i<0)return false;
