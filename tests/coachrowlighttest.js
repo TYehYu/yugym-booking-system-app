@@ -44,9 +44,15 @@ console.log('\n② 圓形 badge → 教練欄');
      && !/_cc\.fg/.test(R));
   ok('★★ 名字放大成主角、堂數退成次要（原本是數字大、名字小）',
      /body\.ink \.tcard-cball \.tcard-cbn\{font-size:13px;font-weight:700;opacity:1;/.test(src)
-     && /body\.ink \.tcard-cball \.tcard-cbt\{font-size:12px;font-weight:600;color:var\(--t3\);/.test(src)
+     && /body\.ink \.tcard-cball \.tcard-cbt\{font-size:15px;font-weight:700;color:var\(--t2\);/.test(src)
      && /\.tcard-cball \.tcard-cbt\{font-family:var\(--num\);font-size:17px;font-weight:800;/.test(src));
   ok('　 長名字（中文全名）仍有縮字規則', /body\.ink \.tcard-cball \.tcard-cbn\.long\{font-size:12px;\}/.test(src));
+  /* 2026-08-27 二修：「教練名字下方的數字放大一些」12 → 15px。
+     名字仍靠「顏色＋字重」領先，不是靠字級 —— 所以數字比名字大一點是可以的。 */
+  ok('★★ 數字放大到 15px，但顏色與字重仍讓名字領先',
+     /font-size:15px;font-weight:700;color:var\(--t2\);/.test(R)
+     && /\.tcard-cbn\{font-size:13px;font-weight:700;opacity:1;/.test(R)
+     && /名字是這一欄的識別，\s*\n\s*顏色與字重都在它身上；數字只是放大到看得清楚，不搶主角/.test(src));
   ok('　 堂數用等寬數字（一欄數字才對得齊）', /font-variant-numeric:tabular-nums;/.test(R));
   ok('★ 教練欄與課卡之間留一條細線（固定寬度的 coach column 語彙）',
      /body\.ink \.tl-3col \.tcard-coach\{border-right:1px solid rgba\(45,36,28,\.08\);\}/.test(src));
