@@ -410,7 +410,11 @@ console.log('\n⑧ 首頁三修：定色 #556B45 ＋ 左欄／中欄對齊參考
      /<button class="card mc-card mc-a2" onclick="openTodoList\('sign'\)">/.test(src)
      && /<button class="card mc-card mc-a2" onclick="openTodoList\('demote'\)">/.test(src));
 
-  ok('★★ 中間日期列：素面白格＋細框，今天＝橄欖實心',
+  /* 2026-08-27：外框退場，只留一條底線（使用者：「背後不用再多一層卡片」） */
+  ok('★★ 日期列外面不再包一層卡，只留一條底線分隔',
+     /body\.ink \.twk-bar\{background:transparent;border:none;border-radius:0;\s*\n\s*border-bottom:1px solid var\(--bd\);padding:0 0 12px;\}/.test(src)
+     && /日期格本身已經是一格一格的白框，外面再包一層框就是 card in card/.test(src));
+  ok('★★ 中間日期列：素面白格＋今天＝橄欖實心',
      /body\.ink \.twk-barin \.twk-day\.today\{background:var\(--olive,#556B45\);border-color:var\(--olive,#556B45\);\}/.test(src)
      && /body\.ink \.twk-barin \.twk-day\.today \.twk-md,body\.ink \.twk-barin \.twk-day\.today \.twk-w\{color:#F2EFE4;\}/.test(src));
   ok('　 日期數字等寬（日期列才不會左右跳動）',
