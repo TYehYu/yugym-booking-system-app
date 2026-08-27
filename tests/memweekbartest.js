@@ -64,8 +64,14 @@ console.log('\n③ 底部浮動列：接下來的自主訓練');
      /<b>\$\{_d\.getMonth\(\)\+1\}\/\$\{_d\.getDate\(\)\}<\/b>\s*\n\s*<span>\$\{String\(b\.start_time\|\|''\)\.slice\(0,5\)\}<\/span>/.test(HTML));
   ok('★★ 點圓形卡＝跳到那一天（與月曆點日期同一個行為）',
      /class="mh2-sbc[\s\S]{0,120}onclick="memh2PickDay\('\$\{b\.date\}'\)"/.test(HTML));
-  ok('★ 圓的（border-radius:50%），不是膠囊',
-     /\.memh2 \.mh2-sbc\{flex:none;width:54px;height:54px;border-radius:50%;/.test(CSS));
+  /* 2026-08-27 二修（使用者：「自主訓練的這一列可以再大個一倍」）：54 → 84px */
+  ok('★ 圓的（border-radius:50%），不是膠囊，而且夠大（84px）',
+     /\.memh2 \.mh2-sbc\{flex:none;width:84px;height:84px;border-radius:50%;/.test(CSS));
+  ok('　 很窄的機型收一級，三顆仍排得下',
+     /@media\(max-width:360px\)\{\s*\n\s*\.memh2 \.mh2-sbc\{width:72px;height:72px;\}/.test(CSS));
+  ok('★★ 列變高不用另外算 —— admh2Mount 每次實測 barH 再從可用高度扣掉',
+     /barH=Math\.round\(_sb\.getBoundingClientRect\(\)\.height\);/.test(src)
+     && /高度變了課卡欄要跟著讓/.test(src));
   ok('　 用 bkIsSelf 判斷自主訓練（不自己比對課別字串）',
      /bkIsSelf\(b\) && String\(b\.date/.test(HTML));
   ok('　 封頂 12 張（一路排下去也不會變成無限長的橫捲）',
