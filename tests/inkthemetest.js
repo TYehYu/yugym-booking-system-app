@@ -26,7 +26,10 @@ function inkBlock(marker){
   const a=src.indexOf(marker);
   const rest=src.slice(a+marker.length);
   const nxt=rest.indexOf('/* ══ Ink');
-  const end=nxt<0 ? src.indexOf('</style>') : a+marker.length+nxt;
+  /* ⚠ 一定要夾在 </style> 以內 —— 樣式表外面也有 `/* ══ Ink` 開頭的註解
+     （開關那一段），不夾的話會把中間幾十萬字的 JS 全部當成 CSS 掃。 */
+  const cap=src.indexOf('</style>');
+  const end=Math.min(cap, nxt<0 ? cap : a+marker.length+nxt);
   return src.slice(a,end);
 }
 function deadSel(block){
@@ -414,6 +417,36 @@ console.log('\n⑧ 首頁三修：定色 #556B45 ＋ 左欄／中欄對齊參考
      [/\.mc-nav-item\.active\{background:transparent;color:#fff;/,
       /\.cal-side \.mc-cell\.mc-today \.mc-d\{background:var\(--olive,#556B45\)/,
       /\.twk-barin \.twk-day\.today\{background:var\(--olive,#556B45\)/].every(re=>re.test(src)));
+}
+
+
+console.log('\n⑨ 深綠底翻白底時漏翻的兩處（2026-08-27 使用者回報）');
+{
+  const H4=inkBlock('/* ══ Ink 修正（2026-08-27 使用者回報兩處）');
+  eq('★★ 沒有寫死掉的選擇器', deadSel(H4), []);
+
+  ok('★★ 月份與翻月鈕的顏色補上（原本 .cal-side .mcal-head 是為深綠底配的米白）',
+     /body\.ink \.cal-side \.mcal-head\{color:var\(--text\);\}/.test(src)
+     && /body\.ink \.cal-side \.mcal-t\{color:var\(--text\);font-weight:700;\}/.test(src)
+     && /body\.ink \.cal-side \.mcal-btn\{background:var\(--card2\);border:1px solid var\(--bd\);color:var\(--t2\);\}/.test(src));
+  ok('★★ 原本那條米白仍在（關掉 Ink 就回到深綠底的樣子）',
+     /\.cal-side \.mcal-head,\.cag-mcal \.mcal-head\{color:#F4F1E8;\}/.test(src));
+  ok('★★ 「.cal-hero-nav>div 從來沒生效過」的發現寫在原地（月份是 span 不是 div）',
+     /月份是 <span class="mcal-t">，不是 div/.test(src)
+     && /<span class="mcal-t">\$\{_ayy\}\/\$\{String\(_amm\)\.padStart\(2,'0'\)\}<\/span>/.test(src));
+
+  ok('★★ 衛教卡的分類籤改靠右，標題自己空出右邊的寬度',
+     /body\.ink \.know-card \.know-chip\{left:auto;right:14px;z-index:3;\}/.test(src)
+     && /body\.ink \.know-card \.know-t\{padding-right:104px;\}/.test(src));
+  ok('★★ 不再靠 margin-top 幫籤讓位（字一放大或標題折兩行就會撞上）',
+     /body\.ink \.know-card \.know-body\{margin-top:8px;\}/.test(src)
+     && /\.know-body\{position:relative;z-index:1;margin-top:52px;\}/.test(src)
+     && /字級一放大（或標題折兩行）那 52px 就不夠，籤與標題就疊在一起/.test(src));
+  ok('★ 右上的裝飾插圖往下挪，讓籤有乾淨的位置（不然兩個都在右上）',
+     /body\.ink \.know-card \.know-art\{top:26px;right:-6px;width:104px;height:104px;opacity:\.38;\}/.test(src));
+  ok('　 籤的 z-index 高於插圖（插圖是 opacity .38 的裝飾，壓在下面才對）',
+     /\.know-chip\{left:auto;right:14px;z-index:3;\}/.test(src)
+     && /\.know-art\{position:absolute;/.test(src));
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
