@@ -11191,8 +11191,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260827.1203';
-const APP_VERSION_LABEL='v260827.1203';
+const APP_VERSION = '260827.1603';
+const APP_VERSION_LABEL='v260827.1603';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37067,15 +37067,28 @@ function renewMapOf(month, tickets, purchases, bookings, types){
   const map={}; Object.keys(list).forEach(k=>{ map[k]=list[k].length; });
   return map;
 }
-/* 店長津貼的堂數基準（2026-07-29 使用者指示）：教練課＋友善教練課（皆為 category='私人教練'）
-   ＋團體課（小班肌力，一堂算 1 堂、不看人數）。體驗課與自主訓練不列入。
+/* 店長津貼的堂數基準。
+   舊（< LEADER_PT_ONLY_FROM）＝教練課＋友善教練課（皆為 category='私人教練'）
+     ＋團體課（小班肌力，一堂算 1 堂、不看人數）。2026-07-29 使用者指示。
+   新（>= LEADER_PT_ONLY_FROM）＝**只算教練課**（2026-08-27 使用者回報：
+     「沛瀞是教練課 77 團體課 8 應該還不到發獎金的程度，因為獎金只計算教練課」）。
+   ⚠ 為什麼換月生效而不是全面套用：七月的薪資已經照舊制發過了，
+     全面套用會讓回頭看的歷史薪資整片變動（與 LEADER_NEW_FROM 同一個理由）。
+     若要連七月一起重算，把 LEADER_PT_ONLY_FROM 改成 '2026-07' 即可。
+   ⚠ 體驗課與自主訓練兩制都不列入。
    ⚠ 排除老闆的名單過濾在呼叫端（role!=='admin'），三處計算共用本函式確保口徑一致。 */
 const LEADER_CATS=['私人教練','小班肌力'];
+const LEADER_CATS_PT=['私人教練'];
+const LEADER_PT_ONLY_FROM='2026-08';
+function leaderCatsOf(month){
+  return (String(month||'')>=LEADER_PT_ONLY_FROM) ? LEADER_CATS_PT : LEADER_CATS;
+}
 function leaderClassCount(bookings, coachId, month){
+  const cats=leaderCatsOf(month);
   return (bookings||[]).filter(b=>bkCoachId(b)===coachId   // 代課的課算在代課教練身上（2026-08-01）
     && (b.status==='completed'||b.status==='checked_in') && bkCounts(b)   // 全員請假不成課（2026-08-02）
     && String(b.date||'').slice(0,7)===month
-    && LEADER_CATS.includes(b.category)).length;
+    && cats.includes(b.category)).length;
 }
 function leaderBonusOf(emp, extras, G, month){
   G=G||{}; extras=extras||{};
