@@ -66,7 +66,7 @@ console.log('\n②-2 不標示「今日」、上方壓縮、早午晚明顯隔�
   ok('★ 卡片、tray、表頭、footer 全部收一階',
      /\.dw-card\{padding:10px 12px;\}/.test(src)
      && /\.dw-tray\{[^}]*padding:6px 9px;margin-bottom:8px;/.test(src)
-     && /\.dw-h\{min-height:40px;/.test(src)
+     && /\.dw-h\{min-height:44px;/.test(src)
      && /\.dw-foot\{font-size:10\.5px;color:var\(--t3\);margin-top:7px;/.test(src));
   ok('★★ 早／午／晚之間用 2px 深線隔開（格子內部仍是 1px 淡線）',
      /\.dw-cell\{[^}]*border-bottom:2px solid rgba\(45,36,28,\.20\);/.test(src)
@@ -81,7 +81,7 @@ console.log('\n②-2 不標示「今日」、上方壓縮、早午晚明顯隔�
 console.log('\n②-3 兩欄固定位置（2026-08-27 三修）');
 {
   ok('★★ cell 改 grid，而且是 column flow（row flow 會變成 1 2 / 3 4 左右交錯）',
-     /\.dw-cell\{display:grid;grid-auto-flow:column;gap:4px 6px;/.test(src)
+     /\.dw-cell\{display:grid;grid-auto-flow:column;gap:6px 7px;/.test(src)
      && /一定要 grid-auto-flow:column ＋ 指定列數 —— 預設的 row flow 會變成/.test(src));
   ok('★★ 列數由固定成員數算（ceil(n\/2)），不寫死 5 —— 之後加減人會自己跟著長',
      /const _rows=Math\.max\(1, Math\.ceil\(D\.fixed\.length\/2\)\);/.test(src)
@@ -102,7 +102,7 @@ console.log('\n②-3 兩欄固定位置（2026-08-27 三修）');
      && /\.dw-slot\.dw-empty\{background:#F6F4EF;border-left:3px solid transparent;\}/.test(src));
   ok('★ slot 26px、圓角 4px、左側 3px 識別色、兩欄 gap 6px／列 gap 4px',
      /\.dw-slot\{height:26px;[^}]*border-radius:4px;/.test(src)
-     && /gap:4px 6px;/.test(src)
+     && /gap:6px 7px;/.test(src)
      && /\.dw-slot\.dw-on\{border-left:3px solid var\(--sc,var\(--bd\)\);/.test(src));
   ok('　 每格加寬到 158px（兩欄放得下教練名），整表最小寬 1216px',
      /grid-template-columns:110px repeat\(7,minmax\(158px,1fr\)\);gap:0;min-width:1216px;/.test(src));
@@ -116,7 +116,12 @@ ok('★ 有值班的左側 3px 識別色條、圓角 4px、名字 13px semibold'
    /\.dw-slot\.dw-on\{border-left:3px solid var\(--sc,var\(--bd\)\);/.test(src)
    && /border-radius:4px;padding:0 8px;\s*\n\s*font-size:13px;font-weight:600;/.test(src));
 /* 0827 二修再收一階：cell padding 10→8、表頭 52→40（見 ②-2） */
-ok('★ 格子 padding 8px／7px', /\.dw-cell\{[^}]*gap:4px 6px;padding:8px 7px;/.test(src));
+/* 0827 四修：上下放寬（列距 4→6、格子上下內距 8→11、表頭 40→44） */
+ok('★ 上下間距放寬：列距 6px、格子上下內距 11px、表頭 44px',
+   /\.dw-cell\{[^}]*gap:6px 7px;padding:11px 9px;/.test(src)
+   && /\.dw-seg\{[^}]*padding:11px 6px;/.test(src)
+   && /\.dw-h\{min-height:44px;/.test(src)
+   && /橫向維持緊湊，加的都是垂直的呼吸/.test(src));
 
 console.log('\n④ 左欄：時段名＋時間區間＋人數區間');
 {
