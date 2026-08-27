@@ -16,10 +16,25 @@ const sync=g('function syncAcctMenuItems(){','\ndocument.addEventListener(\'clic
 ok('★ 開啟前把 role-admin 補到 #tb-acct-menu 本身', /getElementById\('tb-acct-menu'\)[\s\S]*classList\.toggle\('role-admin', *role==='admin'\)/.test(sync));
 ok('　　補 class 排在 renderFortuneInline 之前（否則同一輪還是量到 none）',
    sync.indexOf("classList.toggle('role-admin'") < sync.indexOf('renderFortuneInline'));
-/* 2026-08-22：結果框（#tb-fortune-inline）已不再被手機版藏起來，所以不需要祖先放行；
-   入口（.tb-acct-butler）仍靠角色祖先，而且教練／會員也要能看到。 */
-ok('　　入口仍靠角色祖先，三個角色都放行（所以上面補 class 那行是必要的）',
-   src.includes('.role-admin .tb-acct-butler,.role-coach .tb-acct-butler,.role-member .tb-acct-butler{display:flex;}'));
+/* 2026-08-22：結果框（#tb-fortune-inline）已不再被手機版藏起來，所以不需要祖先放行。
+   2026-08-27：入口也不再靠角色祖先了 —— 選單裡兩顆一模一樣的鈕（今日運勢／每日抽籤）
+   靠「一顆手機顯示、一顆桌機顯示」錯開，而 CSS 的 max-width:600px 與
+   isMobileLayout()（直式 1024 以內都算手機）在 601–1024 直式那一段判斷相反，
+   兩顆就一起出現（使用者附截圖回報）。合併成 #acct-fortune 一顆，改由 JS 決定。
+   ⚠ 補角色 class 那一段仍然必要 —— #tb-fortune-inline 的放行還在用它。 */
+ok('★★ 入口只剩一顆，而且不再用 CSS 斷點決定顯示',
+   !src.includes('.role-admin .tb-acct-butler,.role-coach .tb-acct-butler,.role-member .tb-acct-butler{display:flex;}')
+   && !/\.tb-acct-fortune\{display:none;\}/.test(src)
+   && !/class="tb-acct-item tb-acct-fortune"/.test(src)
+   && (src.match(/onclick="drawFortuneInline\(\)"/g)||[]).length===1
+   && /<button id="acct-fortune" class="tb-acct-item tb-acct-butler"/.test(src));
+ok('★★ 顯示與否由 syncAcctMenuItems 決定（同薪資／通知設定／抽獎登記那一套）',
+   /const _fort=document\.getElementById\('acct-fortune'\);/.test(sync)
+   && /\(role==='front_desk' && typeof isMobileLayout==='function' && isMobileLayout\(\)\) \? 'none' : '';/.test(sync));
+ok('★★ 各角色拿得到的範圍一格不變：管理員／教練／會員照舊，櫃檯維持只有桌機',
+   /・櫃檯 —— 原本只有桌機那一顆（手機版兩顆都被藏起來）/.test(src));
+ok('★★ 成因寫在原地（下次不要再靠斷點錯開兩顆一樣的鈕）',
+   /601–1024 直式那一段兩邊判斷相反，兩顆就一起出現。/.test(src));
 ok('　　結果框不再被手機版整個藏掉', !src.includes('.tb-acct-fortune,#tb-fortune-inline{display:none;}'));
 ok('　　教練與會員的角色 class 也補到抽屜本身',
    /_m\.classList\.toggle\('role-coach', role==='coach'\)/.test(src)

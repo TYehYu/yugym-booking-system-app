@@ -313,10 +313,13 @@ t('下拉更新後會員也回到原分頁', /_ptrBack && \(SESSION\.role==='adm
 // ── 今日運勢（2026-08-22 使用者回報「會員跟教練點了沒反應」）──
 t('抽籤結果框不再被手機版整個藏掉', !/\.tb-acct-fortune,#tb-fortune-inline\{display:none;\}/.test(s));
 t('頂欄左邊的燈泡小管家收掉（入口留在帳號選單）',
-  /body\.memh2-shell \.tb-bulb,\s*\n?body\.memh2-shell \.tb-butler,/.test(s)
-  && /body\.memh2-shell \.tb-acct-butler\{display:flex !important;\}/.test(s));
-t('三種角色的手機版都看得到「今日運勢」入口',
-  /\.role-admin \.tb-acct-butler,\.role-coach \.tb-acct-butler,\.role-member \.tb-acct-butler\{display:flex;\}/.test(s));
+  /body\.memh2-shell \.tb-bulb,\s*\n?body\.memh2-shell \.tb-butler,/.test(s));
+/* 2026-08-27：入口合併成一顆 #acct-fortune，顯示由 syncAcctMenuItems 決定
+   （原本手機／桌機各一顆，靠斷點錯開，601–1024 直式會同時出現）。 */
+t('★★ 「今日運勢」入口只剩一顆，三種角色照舊都看得到',
+  (s.match(/onclick="drawFortuneInline\(\)"/g)||[]).length===1
+  && /<button id="acct-fortune" class="tb-acct-item tb-acct-butler"/.test(s)
+  && /if\(_fort\) _fort\.style\.display =/.test(s));
 
 // ── LINE 圖文選單的深層連結 ──
 t('?go=bookings 進「我的預約」', /if\(go==='bookings'\|\|go==='home'\)\{ navTo\('mem_bookings'\); return true; \}/.test(s));

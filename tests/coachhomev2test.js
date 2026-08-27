@@ -132,8 +132,10 @@ ok('　　⚠ 這三樣都在頁面之外，直接改 CSS 會連教練本人一�
 ok('★ ① 頂列米色', /body\.chv2-shell \.topbar\{background:var\(--card2,#F4F0E8\);\}/.test(src));
 ok('★ ② 小管家收進帳號資訊（帳號選單本來就有一顆 .tb-acct-butler）',
    /body\.chv2-shell \.tb-butler,body\.chv2-shell \.tb-greet-inline\{display:none !important;\}/.test(src)
-   && /body\.chv2-shell \.tb-acct-butler\{display:flex !important;\}/.test(src)
-   && /class="tb-acct-item tb-acct-butler"/.test(src));
+   /* 2026-08-27：!important 那條拿掉了 —— 它正是「今日運勢與每日抽籤同時出現」的一半成因
+      （見 acctfortunetest.js）。入口還在，只是改由 syncAcctMenuItems 決定顯示。 */
+   && !/body\.chv2-shell \.tb-acct-butler\{display:flex !important;\}/.test(src)
+   && /<button id="acct-fortune" class="tb-acct-item tb-acct-butler"/.test(src));
 ok('★ ④ 底部導覽品牌綠（文字翻淺色，否則綠底深字看不見）',
    /body\.chv2-shell \.bottom-nav\{background:var\(--green\) !important;/.test(src)
    && /body\.chv2-shell \.bottom-nav \.bn-item\{color:rgba\(255,255,255,\.72\);\}/.test(src));
