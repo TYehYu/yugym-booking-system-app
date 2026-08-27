@@ -93,6 +93,17 @@ console.log('\n⑤ 工具列是一條完整的白色 bar');
 
 console.log('\n⑥ 配色與陰影');
 {
+  /* 2026-08-27 二修（使用者：「上方 icon 太大，導致數字被移到下一行」）——
+     基礎 .lp-stat 本身是 flex-direction:column，只設 display:flex 不會改方向。 */
+  ok('★★ 明確寫出 flex-direction:row（不然會沿用基礎的 column，icon 佔滿一行）',
+     /\.lp-stat\.has-ic\{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;/.test(src)
+     && /\.lp-stat\{[^}]*display:flex;flex-direction:column;/.test(src));
+  ok('★★ 標題與數字都不換行（換行會把卡撐高，四張卡就不等高）',
+     /\.lp-stat\.has-ic \.lp-stat-l\{[^}]*white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\}/.test(src)
+     && /\.lp-stat\.has-ic \.lp-stat-v\{[^}]*white-space:nowrap;\}/.test(src));
+  ok('★ icon 縮到 40px（原 46），字級 26（原 27）',
+     /\.lp-stat-ic\{flex:0 0 auto;width:40px;height:40px;border-radius:50%;/.test(src)
+     && /\.lp-stat-ic svg\{width:20px;height:20px;\}/.test(src));
   ok('★★ icon 圓底只用極淡 tint（color-mix 12%）',
      /background:color-mix\(in srgb, var\(--sic,#556B45\) 12%, transparent\);color:var\(--sic,#556B45\);/.test(src));
   ok('★★ 一般／正向橄欖綠、降級低飽和磚紅、續約燕麥金',
@@ -104,7 +115,7 @@ console.log('\n⑥ 配色與陰影');
   ok('★★ 大數字維持墨色（一整排都上色會太吵）',
      /\.lp-stat\.has-ic\.ok \.lp-stat-v,\.lp-stat\.has-ic\.warn \.lp-stat-v,\s*\n\.lp-stat\.has-ic\.accent \.lp-stat-v\{color:var\(--text\);\}/.test(src));
   ok('　 數字等寬（四張卡的數字才對得齊）',
-     /\.lp-stat\.has-ic \.lp-stat-v\{[^}]*font-variant-numeric:tabular-nums;\}/.test(src));
+     /\.lp-stat\.has-ic \.lp-stat-v\{[^}]*font-variant-numeric:tabular-nums;/.test(src));
   /* 只看這一次新增的區塊 —— Ink 層早就有兩條 .lp-stat-v／.lp-stat-l 的字色規則
      （首頁那批），那不是這次加的。 */
   const NEW=(()=>{const m='/* ══ 會員管理：KPI 卡與工具列';const a=src.indexOf(m);
