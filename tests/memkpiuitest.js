@@ -101,11 +101,19 @@ console.log('\n⑥ 配色與陰影');
   ok('★★ 標題與數字都不換行（換行會把卡撐高，四張卡就不等高）',
      /\.lp-stat\.has-ic \.lp-stat-l\{[^}]*white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\}/.test(src)
      && /\.lp-stat\.has-ic \.lp-stat-v\{[^}]*white-space:nowrap;\}/.test(src));
-  ok('★ icon 縮到 40px（原 46），字級 26（原 27）',
-     /\.lp-stat-ic\{flex:0 0 auto;width:40px;height:40px;border-radius:50%;/.test(src)
-     && /\.lp-stat-ic svg\{width:20px;height:20px;\}/.test(src));
-  ok('★★ icon 圓底只用極淡 tint（color-mix 12%）',
-     /background:color-mix\(in srgb, var\(--sic,#556B45\) 12%, transparent\);color:var\(--sic,#556B45\);/.test(src));
+  /* 三修：卡片再收薄 —— icon 34、數字 23、內距 10/14 */
+  ok('★★ 卡片收薄：icon 34px、數字 23px、內距 10/14',
+     /\.lp-stat-ic\{flex:0 0 auto;width:34px;height:34px;border-radius:50%;/.test(src)
+     && /\.lp-stat-ic svg\{width:17px;height:17px;\}/.test(src)
+     && /\.lp-stat\.has-ic \.lp-stat-v\{font-size:23px;/.test(src)
+     && /gap:11px;padding:10px 14px;border-radius:12px;/.test(src));
+  ok('★★ 「較上月」挪到卡片右側（margin-left:auto 推到右緣）',
+     /\.lp-stat-d\{margin-left:auto;flex:0 0 auto;align-self:flex-end;/.test(src));
+  ok('★★ 它是 .lp-stat-b 的兄弟、不是子元素（在裡面就推不到右緣）',
+     /放在數字下面會把卡片撐成三行高；挪到右邊之後卡片只有兩行/.test(src)
+     && /它是 \.lp-stat-b 的\*\*兄弟\*\*，不是子元素/.test(src));
+  ok('★★ icon 圓底只用極淡 tint（color-mix 11%）',
+     /background:color-mix\(in srgb, var\(--sic,#556B45\) 11%, transparent\);color:var\(--sic,#556B45\);/.test(src));
   ok('★★ 一般／正向橄欖綠、降級低飽和磚紅、續約燕麥金',
      /\.lp-stat\.has-ic\{--sic:#556B45;\}/.test(src)
      && /\.lp-stat\.has-ic\.warn\{--sic:#8C4A3E;\}/.test(src)
