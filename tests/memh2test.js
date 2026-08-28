@@ -372,7 +372,7 @@ console.log('\n快速預約視窗裡的日期列（換一天不必關窗）');
   t('★★ 視窗裡有日期列，排在標題與 qs-head 之間',
     /<div class="modal-title">預約自主訓練<\/div>\s*\n\s*\$\{_dayRow\}\s*\n\s*<div class="qs-head">/.test(QS));
   t('★★ 點某一天＝同一個視窗換內容（重新呼叫自己，不另外開一層）',
-    /onclick="memh2SelfSlots\('\$\{x\}'\)"/.test(QS));
+    /onclick="memh2SelfSlots\('\$\{x\}','\$\{_lim\}'\)"/.test(QS));
   t('★★ 只列約得到的日子：今天起，且落在任何一張自主訓練票的效期內（多張取聯集）',
     /const _okDay=x=>x>=_t0 && \(!_lim \|\| x<=_lim\)/.test(QS)
     && /&& _rng\.some\(\(\[st,ex\]\)=>\(!st\|\|x>=st\)&&\(!ex\|\|x<=ex\)\);/.test(QS)
@@ -382,6 +382,9 @@ t('★★ 從底部圓卡點進來時帶著那一點的到期日，日期列只�
     /async function memh2SelfSlots\(ds, until\)\{/.test(s)
     && /window\._mh2SelfUntil=String\(until\|\|''\)\|\|null;/.test(s)
     && /onclick="memh2SelfSlots\('\$\{p\.from\}','\$\{p\.ex\|\|''\}'\)"/.test(s));
+t('★★ 視窗裡換日期時效期篩選不能掉（客人會「看一下 7 點、再看一下 8 點」）',
+    /onclick="memh2SelfSlots\('\$\{x\}','\$\{_lim\}'\)"/.test(QS)
+    && /日期列會突然變回所有票的聯集 —— 剛做的按點篩選等於只在第一次生效。/.test(s));
 t('★★ 說明也改成講「這一點」的效期，不是講所有票的最晚那天',
     /if\(_lim\) return `這一點的效期到 \$\{_lim\.replace\(\/-\/g,'\/'\)\}`;/.test(QS));
 t('　 為什麼要按點篩選（白挨一次擋）—— 理由寫在原地',
