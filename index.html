@@ -9472,6 +9472,10 @@ button.rev-kind.rev-kind-off{opacity:.5;}
 .gr-fill{border:1.5px solid var(--gold,#B48A56);border-radius:11px;padding:13px 14px;margin:2px 0 10px;
   background:rgba(180,138,86,.07);}
 .gr-fill-h{font-size:12.5px;color:var(--text);line-height:1.8;margin-bottom:10px;}
+.gr-vrow{margin-top:2px;}
+.gr-vpick{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--t2);}
+.gr-vpick input{width:88px;flex:none;}
+.gr-vpick b{color:var(--gold-d,#8a6a30);font-family:var(--num),inherit;font-size:14px;}
 .gr-fill-note{font-size:11.5px;color:var(--t3);line-height:1.75;margin-top:4px;}
 .gr-amt-wait{color:var(--t3) !important;}
 .tk-unpaid{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:800;line-height:1.6;
@@ -11373,8 +11377,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.1739';
-const APP_VERSION_LABEL='v260828.1739';
+const APP_VERSION = '260828.1745';
+const APP_VERSION_LABEL='v260828.1745';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -46645,6 +46649,25 @@ async function openGrantApprove(id){
      要等會員簽完才改得動，客人臨櫃改現金／改分期就沒地方記。
      改成：視窗照開、欄位照改、可以「只存收款資訊」；**發放鈕仍然鎖著**直到簽回。 */
   const _canIssue = !(r.contract_id && !signed);
+  /* 折價券提醒（2026-08-28 使用者指示：「收款審核這邊 也要提醒櫃檯會員是否有折價票券
+     如果有再出現」）——建約當下可能沒挑（或那時候還沒發），收款這一刻才是真的要算錢的時候。
+     ⚠ 現在讀一次餘額，不是拿 payload 裡存的那份：審核可能隔了幾天，券有機會被別筆用掉。
+     ⚠ 一張沒有就整塊不畫（使用者：「如果有再出現」）。 */
+  window._grVouchers=[]; window._grVoucherMax=0;
+  try{
+    const _vt=VOUCHER_TT[(P.plan&&P.plan.category)||''] ||
+      (await (async()=>{ const types=window._ttCache&&window._ttCache.length?window._ttCache:await dbGetAll('ticket_types');
+        const tt=types.find(x=>x.id===((P.plan||{}).ticket_type_id)); return tt?VOUCHER_TT[tt.category]:null; })());
+    if(_vt){
+      const _tks=(await dbGetAll('member_tickets')).filter(t=>t.member_id===r.member_id&&t.ticket_type_id===_vt
+        &&(!t.status||t.status==='usable')&&(Number(t.sessions_remaining)||0)>0
+        &&(!t.expire_date||String(t.expire_date).slice(0,10)>=ymd(TODAY)))
+        .sort((a,b)=>String(a.expire_date||'9999').localeCompare(String(b.expire_date||'9999')));
+      window._grVouchers=_tks;
+      window._grVoucherMax=_tks.reduce((n,t)=>n+(Number(t.sessions_remaining)||0),0);
+    }
+  }catch(_){}
+  const _vHeld=Number(window._grVoucherMax)||0;
   const amt=Number(r.amount)||0;
   const P=r.payload||{};
   const _pay={cash:'現金',transfer:'匯款',card:'刷卡',split:'現金+匯款'}[P.method]||P.method||'—';
@@ -46680,6 +46703,14 @@ async function openGrantApprove(id){
         <select id="gr-install" onchange="grFillPreview()">${[1,2,3].map(n=>
           `<option value="${n}"${(Number(P.installCount||1)===n)?' selected':''}>${n===1?'不分期（一次付清）':`分 ${n} 期（分段開通）`}</option>`).join('')}</select>
         <div style="font-size:11px;color:var(--t3);margin-top:5px;line-height:1.7;">分期會改變<b>這次開通幾堂</b>與約別，發放前一定要確定。</div></div>`:''}
+      ${_vHeld?`<div class="form-row gr-vrow"><label>折價券（每張折 $300）</label>
+        <div class="gr-vpick">
+          <input type="number" id="gr-voucher" min="0" max="${_vHeld}" oninput="grFillPreview()"
+            value="${Math.min(_vHeld, Math.max(0, Number(P.voucherN)||0))}">
+          <span>／ 這位會員手上有 <b>${_vHeld}</b> 張</span>
+        </div>
+        <div style="font-size:11px;color:var(--t3);margin-top:5px;line-height:1.7;">
+          分期時每期只能用 1 張（0729 定案）；填了幾張就扣幾張，發放時才真的扣。</div></div>`:''}
       <div class="gr-fill-note">定價 $${(Number(P.listPrice)||0).toLocaleString()}　·　共 ${Number(P.total)||0} 堂${
         (P.voucherN)?`　·　已折抵券 ×${P.voucherN}（−$${(Number(P.voucherAmt)||0).toLocaleString()}，跟著保留）`:''}。填好按下面的鈕就會發票券並寫入購買紀錄。</div>
     </div>`}
@@ -46766,10 +46797,18 @@ function grFillApply(P, quiet){
   /* 折抵券：挑過的原封不動留著 —— 這一步只是「改收款方式／金額」，
      不該把人家挑好的券洗掉（2026-08-28 三修：教練那條也挑得到券了，不再一律歸零）。
      ⚠ 分期每期限用 1 張（0729 定案）：櫃檯若在這裡改成分期，張數要跟著夾。 */
-  const _vN0 = Math.max(0, Number(P.voucherN)||0);
+  /* 張數以畫面上的為準（2026-08-28）：欄位不在（這一筆沒有券）就沿用 payload 裡那份。
+     ⚠ 上限夾三層：持有量、分期每期 1 張（0729 定案）、不能是負數。
+     ⚠ 券的 id 也要重新給 —— 用開窗當下重讀的那份（payload 裡存的可能已經被別筆用掉）。 */
+  const _vEl=document.getElementById('gr-voucher');
+  const _vHeld=Math.max(0, Number(window._grVoucherMax)||0);
+  const _vN0 = _vEl ? Math.max(0, Math.min(_vHeld, Math.floor(Number(_vEl.value)||0)))
+                    : Math.max(0, Number(P.voucherN)||0);
   const _vN  = isInstall ? Math.min(1, _vN0) : _vN0;
   const _vAmt = _vN*300;
-  const _vIds = (Array.isArray(P.voucherTkIds)?P.voucherTkIds.slice(0,_vN):[]);
+  const _vIds = _vEl
+    ? (window._grVouchers||[]).map(t=>t.id).slice(0, _vN)
+    : (Array.isArray(P.voucherTkIds)?P.voucherTkIds.slice(0,_vN):[]);
   return Object.assign({}, P, {
     dealAmount:amount, method, splitCash, installCount,
     isInstall, unlocked:segs[0], firstAmount:amts[0],

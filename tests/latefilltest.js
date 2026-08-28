@@ -82,6 +82,48 @@ console.log('\n②-c 業績歸屬那一步：底列＝上一步／確認，沒�
      && /async function attribConfirm\(\)\{\s*\n\s*const p=window\._attribPending; if\(!p\) return;/.test(src));
 }
 
+console.log('\n②-d 收款審核要提醒折價券（有才出現）');
+{
+  const A=src.slice(src.indexOf('async function openGrantApprove(id){'), src.indexOf('function grFillApply(P, quiet){'));
+  ok('★★ 開窗時**現在**讀一次餘額，不是拿 payload 裡存的那份',
+     /window\._grVouchers=\[\]; window\._grVoucherMax=0;/.test(A)
+     && /現在讀一次餘額，不是拿 payload 裡存的那份：審核可能隔了幾天，券有機會被別筆用掉。/.test(src));
+  ok('★★ 判準與賣票那一步同一份（VOUCHER_TT＋usable＋有餘額＋沒過期）',
+     /VOUCHER_TT\[/.test(A)
+     && /\(!t\.status\|\|t\.status==='usable'\)&&\(Number\(t\.sessions_remaining\)\|\|0\)>0/.test(A)
+     && /\(!t\.expire_date\|\|String\(t\.expire_date\)\.slice\(0,10\)>=ymd\(TODAY\)\)/.test(A));
+  ok('★★ 一張都沒有就整塊不畫（使用者：「如果有再出現」）',
+     /\$\{_vHeld\?`<div class="form-row gr-vrow">/.test(A)
+     && /一張沒有就整塊不畫（使用者：「如果有再出現」）/.test(src));
+  ok('★★ 講出手上有幾張，而且改了會即時重算金額',
+     /這位會員手上有 <b>\$\{_vHeld\}<\/b> 張/.test(A)
+     && /id="gr-voucher" min="0" max="\$\{_vHeld\}" oninput="grFillPreview\(\)"/.test(A));
+  ok('★ 效期近的先用（與訂位挑票同一個順序）',
+     /\.sort\(\(a,b\)=>String\(a\.expire_date\|\|'9999'\)\.localeCompare\(String\(b\.expire_date\|\|'9999'\)\)\)/.test(A));
+
+  /* 實跑：張數要夾三層，而且券的 id 要用重讀的那份 */
+  const F=src.slice(src.indexOf('function grFillApply(P, quiet){'), src.indexOf('async function grantReqSaveFill(id){'));
+  const splitSessions=(t,n)=>{const b=Math.floor(t/n),r=t%n;return Array.from({length:n},(_,i)=>b+(i<r?1:0));};
+  const run=(P,v,held,ids)=>new Function('document','showToast','splitSessions','splitAmount','Object','Math','window',
+      F+'\nreturn grFillApply;')(
+        {getElementById:id=>(id in v)?{value:v[id]}:null}, ()=>{}, splitSessions, splitSessions, Object, Math,
+        {_grVoucherMax:held, _grVouchers:(ids||[]).map(id=>({id}))})(P);
+  const P={total:12, listPrice:14400, voucherN:0, voucherTkIds:[]};
+  const r2=run(P,{'gr-amt':'14400','gr-method':'cash','gr-install':'1','gr-voucher':'2'},3,['V1','V2','V3']);
+  eq('★★ 填 2 張 → 折 $600、實收 13800、用掉最先到期的兩張',
+     [r2.voucherN, r2.voucherAmt, r2.paidAmount, r2.voucherTkIds], [2, 600, 13800, ['V1','V2']]);
+  const r3=run(P,{'gr-amt':'14400','gr-method':'cash','gr-install':'1','gr-voucher':'9'},3,['V1','V2','V3']);
+  eq('★★ 填超過持有量要夾回持有量', [r3.voucherN, r3.voucherTkIds], [3, ['V1','V2','V3']]);
+  const r4=run(P,{'gr-amt':'14400','gr-method':'cash','gr-install':'3','gr-voucher':'3'},3,['V1','V2','V3']);
+  eq('★★ 分期每期只能用 1 張（0729 定案）', [r4.voucherN, r4.voucherAmt, r4.voucherTkIds], [1, 300, ['V1']]);
+  const r5=run(P,{'gr-amt':'14400','gr-method':'cash','gr-install':'1','gr-voucher':'-5'},3,['V1']);
+  eq('　 負數夾回 0', r5.voucherN, 0);
+  const r6=run({total:12,listPrice:14400,voucherN:2,voucherAmt:600,voucherTkIds:['OLD1','OLD2']},
+               {'gr-amt':'14400','gr-method':'cash','gr-install':'1'},0,[]);
+  eq('★★ 沒有券欄位（這一筆沒券可挑）時沿用 payload 裡那份',
+     [r6.voucherN, r6.voucherTkIds], [2, ['OLD1','OLD2']]);
+}
+
 console.log('\n③ 未付款：方案卡標「待付款」＋一顆「收款」');
 {
   ok('★★ 待付款章接在原本的狀態章後面（判定本身沒動）',
