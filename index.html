@@ -11393,8 +11393,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.2130';
-const APP_VERSION_LABEL='v260828.2130';
+const APP_VERSION = '260828.2133';
+const APP_VERSION_LABEL='v260828.2133';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -51474,6 +51474,11 @@ async function memSelfBarSync(){
         && bkIsSelf(b) && String(b.date||'')>=today)
       .sort((a,b)=>String(a.date+a.start_time).localeCompare(String(b.date+b.start_time)));
     /* 還沒約的：效期內、還有餘額的自主訓練票，一點一顆 */
+    /* ⚠ 一定要有上限（2026-08-28）：親友自主訓練是無限次卡（sessions_total=9999，
+       正式庫真的有一張剩 9,955 點）。照著餘額一點一顆展開會先造出近萬個物件才切掉，
+       白做而且是「圓形卡太多把畫面弄當」的同一類風險（0821 行事曆踩過）。
+       最多只造 CAP 顆 —— 反正畫得出來的就那幾顆。 */
+    const CAP=12;
     const pts=[];
     (tks||[]).filter(t=>t && tkUsableBy(t,SESSION.id) && (!t.status||t.status==='usable')
         && (Number(t.sessions_remaining)||0)>0
@@ -51484,10 +51489,10 @@ async function memSelfBarSync(){
         const st=t.start_date?String(t.start_date).slice(0,10):'';
         const from=(st&&st>today)?st:today;                    // 還沒生效的票要等生效日
         const ex=t.expire_date?String(t.expire_date).slice(0,10):'';
-        for(let i=0;i<(Number(t.sessions_remaining)||0);i++) pts.push({from, ex});
+        const _n=Math.min(Number(t.sessions_remaining)||0, CAP-pts.length);
+        for(let i=0;i<_n;i++) pts.push({from, ex});
       });
     if(!booked.length && !pts.length){ kill(); return; }
-    const CAP=12;
     const _cur=(typeof mh2S==='function')?(mh2S().date||today):today;
     const cards=booked.slice(0,CAP).map(b=>{
       const d=parseYmd(b.date)||new Date();

@@ -72,8 +72,12 @@ console.log('\n③ 底部「自主訓練」浮動列（2026-08-31 改成「他�
      /memh2TkKind\(t,typeMap\)==='self'/.test(B)
      && /\(Number\(t\.sessions_remaining\)\|\|0\)>0/.test(B)
      && /\(!t\.expire_date\|\|String\(t\.expire_date\)\.slice\(0,10\)>=today\)/.test(B));
-  ok('★★ 一點一顆（不是一張票一顆）',
-     /for\(let i=0;i<\(Number\(t\.sessions_remaining\)\|\|0\);i\+\+\) pts\.push\(\{from, ex\}\);/.test(B));
+  ok('★★ 一點一顆（不是一張票一顆），但展開時就先夾上限',
+     /const _n=Math\.min\(Number\(t\.sessions_remaining\)\|\|0, CAP-pts\.length\);/.test(B)
+     && /for\(let i=0;i<_n;i\+\+\) pts\.push\(\{from, ex\}\);/.test(B));
+  ok('★★ 無限次卡不能照餘額全部展開（正式庫真的有一張剩 9,955 點）',
+     /親友自主訓練是無限次卡（sessions_total=9999，/.test(src)
+     && /白做而且是「圓形卡太多把畫面弄當」的同一類風險/.test(src));
   ok('★★ 還沒生效的票要等生效日才約得到',
      /const from=\(st&&st>today\)\?st:today;                    \/\/ 還沒生效的票要等生效日/.test(B));
   ok('★★ 兩種都沒有才整條不畫（不是畫一條空的）',
