@@ -11388,8 +11388,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.2026';
-const APP_VERSION_LABEL='v260828.2026';
+const APP_VERSION = '260828.2106';
+const APP_VERSION_LABEL='v260828.2106';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -46962,7 +46962,14 @@ async function _grantReqSaveFill(id){
     r.payload=_p;
     r.amount=Number(_p.isInstall?Math.max(0,_p.firstAmount-_p.voucherAmt):_p.paidAmount)||0;
     r.filled_by=SESSION.id; r.filled_at=new Date().toISOString();
-    await dbPut('ticket_grant_requests',r);
+    try{ await dbPut('ticket_grant_requests',r); }
+    catch(e1){
+      /* 同上：欄位不存在就整筆寫不進去。這一支沒有發票券，退而求其次先把
+         收款資訊存起來（少留一筆「誰填的」總比整個存不了好）。 */
+      console.error('grant request save fail (1st)', e1);
+      const r2=Object.assign({},r); delete r2.filled_by; delete r2.filled_at;
+      await dbPut('ticket_grant_requests',r2);
+    }
     dbCacheClear(['ticket_grant_requests']);
     closeModal();
     showToast(`收款資訊已存起來（應收 $${r.amount.toLocaleString()}）　·　合約簽回後回這裡發放`, 6000);
@@ -46998,7 +47005,25 @@ async function _grantReqApprove(id){
     r.status='issued'; r.ticket_id=t.id;
     r.reviewed_by=SESSION.id; r.reviewed_at=new Date().toISOString();
     r.issued_at=new Date().toISOString();          // 30 分鐘退回從這一刻起算
-    await dbPut('ticket_grant_requests',r);
+    /* ⚠ 票券已經發出去了，這一筆狀態非改到不可（2026-08-28）——
+       改不成的話它會留在 pending，下一個人再按一次就發第二張票。
+       今天真的踩到：filled_by／filled_at 這兩欄當時資料庫裡沒有，dbPut 是 upsert，
+       PostgREST 找不到欄位就整筆失敗（欄位已補，但這道保險留著）。
+       所以：失敗先把「可有可無的欄位」拿掉重試一次；再失敗就大聲講，
+       不能靜靜吞掉 —— 櫃檯要知道「票發了但單沒收掉，先別再按」。 */
+    try{
+      await dbPut('ticket_grant_requests',r);
+    }catch(e1){
+      console.error('grant request update fail (1st)', e1);
+      try{
+        const r2=Object.assign({},r); delete r2.filled_by; delete r2.filled_at;
+        await dbPut('ticket_grant_requests',r2);
+      }catch(e2){
+        console.error('grant request update fail (2nd)', e2);
+        showToast('⚠ 票券已發放，但待審核單沒有更新成功 —— 請勿再按一次發放，'
+          +'並把這個訊息告知管理員：'+dbFriendlyError(e2), 15000);
+      }
+    }
     // 合約補上票券關聯（會員票券卡的「📄 合約」按鈕靠它）
     if(r.contract_id){ try{ const c=await dbGet('contracts',r.contract_id);
       if(c){ c.ticket_id=t.id; c.expire_date=t.expire_date||null; await dbPut('contracts',c); } }catch(_){} }

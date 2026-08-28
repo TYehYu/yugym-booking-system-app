@@ -173,6 +173,18 @@ ok('★★ 四個欄位改動都會重算',
      /原本不敢關掉互動，是怕櫃檯剛改好的\s*\n\s*金額與付款方式沒地方存；付款資訊區塊自己有一顆「儲存變更」之後就沒這個顧慮了。/.test(src));
   ok('★★ 也不用金（金是「可以做、但要知道」，這顆根本按不下去）—— 單純暗化',
      /也不用金：金是「可以做、但要知道」，而這顆現在根本按不下去。\s*\n\s*暗化＝單純的「還不到時候」，不佔任何色階。/.test(src));
+/* 2026-08-28 事故：filled_by／filled_at 這兩欄資料庫裡沒有（前端先寫、表沒加）——
+   dbPut 是 upsert，PostgREST 找不到欄位就整筆失敗。表現是「儲存變更跳錯誤訊息」，
+   但同一段程式在「確認收款・發放票券」也會跑：那裡票已經發出去了，狀態卻改不成，
+   單子留在 pending，下一個人再按一次就發第二張票。
+   欄位已用 migration 補上（grant_requests_filled_by_at），這幾條守那道保險。 */
+  ok('★★ 發票券之後那一筆狀態非改到不可：失敗先拿掉可有可無的欄位重試',
+     /const r2=Object\.assign\(\{\},r\); delete r2\.filled_by; delete r2\.filled_at;/.test(src)
+     && /await dbPut\('ticket_grant_requests',r2\);/.test(src));
+  ok('★★ 再失敗要大聲講，不能靜靜吞掉（櫃檯要知道「票發了但單沒收掉，先別再按」）',
+     /⚠ 票券已發放，但待審核單沒有更新成功 —— 請勿再按一次發放，/.test(src));
+  ok('★★ 理由寫在原地（改不成會留在 pending，再按一次就發第二張）',
+     /改不成的話它會留在 pending，下一個人再按一次就發第二張票。/.test(src));
   ok('★★ 只存與發放共用同一支 grFillApply（存的與之後發的是同一包）',
      /const _p=grFillApply\(r\.payload\);\s*\n\s*if\(!_p\) return;/.test(src)
      && /存進去的就是之後真的會發的那一包，/.test(src));
