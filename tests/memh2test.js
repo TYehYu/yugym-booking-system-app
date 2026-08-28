@@ -27,6 +27,13 @@ t('KPI 用票面剩餘堂數', /pk\[k\]\+=Number\(t\.sessions_remaining\)\|\|0/.
 t('友善教練課併進「教練課」那一格', /\['教練課',pk\.pt\+pk\.friendly\+_pend\.pt\+_pend\.friendly\]/.test(html));
 t('三格＝教練課／團體課／自主訓練',
   /\['團體課',pk\.group\+_pend\.group\]/.test(html) && /\['自主訓練',pk\.self\+_pend\.self\]/.test(html));
+/* 2026-08-31 使用者：「會員KPI可以篩選嗎　該會員有該種票券才顯示」 */
+t('★★ 只列真的有的那幾格（0 的不畫）', /\.filter\(\(\[,n\]\)=>n>0\);/.test(html));
+t('★★ 三格都 0 就寫一句話，不要留一整列空白',
+  /: `<div class="mh2-kpi mh2-kpi-none">目前沒有可用堂數<\/div>`;/.test(html)
+  && /\.memh2 \.mh2-kpi-none\{font-size:12px;color:var\(--t3\);/.test(s));
+t('　 判準沿用「尚未銷課」—— 堂數用完但還有已預約未上的那一格會留著',
+  /判準用的是上面剛算好的「尚未銷課」：票面剩餘＋已預約未上。/.test(s));
 t('★★ KPI＝票面剩餘＋已預約未上（尚未銷課）',
   /const _pend=\{pt:0,friendly:0,group:0,self:0\};/.test(html)
   && /const k=bkCC\(b\); if\(k in _pend\) _pend\[k\]\+\+;/.test(html));

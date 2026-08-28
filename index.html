@@ -10035,7 +10035,9 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .memh2 .mh2-kpi{display:flex;align-items:baseline;gap:8px;justify-content:flex-end;}
 .memh2 .mh2-kpi span{font-size:11.5px;color:var(--t2);white-space:nowrap;}
 .memh2 .mh2-kpi b{font-family:var(--num);font-size:19px;font-weight:800;color:var(--text);min-width:34px;text-align:right;}
-.memh2 .mh2-kpi b.z{color:var(--t3);}          /* 沒票的那一格安靜一點 */
+.memh2 .mh2-kpi b.z{color:var(--t3);}          /* 〔2026-08-31 起用不到：0 的那一格直接不畫〕 */
+/* 三格都 0：寫一句話，不要留一整列空白（2026-08-31） */
+.memh2 .mh2-kpi-none{font-size:12px;color:var(--t3);justify-content:flex-end;}
 .memh2 .mh2-kpi i{font-style:normal;font-size:10.5px;color:var(--t3);}
 /* ── 橫排日期列（2026-08-27）：取代原本的課程篩選列，也取代左邊那一欄 ──
    左欄七格要瓜分「視窗高度」，LINE 內建瀏覽器一壓就把數字裁掉；橫排瓜分的是寬度，
@@ -11384,8 +11386,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.1958';
-const APP_VERSION_LABEL='v260828.1958';
+const APP_VERSION = '260828.2007';
+const APP_VERSION_LABEL='v260828.2007';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -51056,10 +51058,18 @@ function memh2HTML(o){
     if(b.pending_contract && !b.ticket_id) return;
     const k=bkCC(b); if(k in _pend) _pend[k]++;
   });
-  const kpis=[['教練課',pk.pt+pk.friendly+_pend.pt+_pend.friendly],
-              ['團體課',pk.group+_pend.group],
-              ['自主訓練',pk.self+_pend.self]]
-    .map(([l,n])=>`<div class="mh2-kpi"><span>${l}</span><b class="${n?'':'z'}">${n}</b><i>堂</i></div>`).join('');
+  /* 只列「這位會員真的有的」那幾格（2026-08-31 使用者：「會員KPI可以篩選嗎
+     該會員有該種票券才顯示」）—— 三格永遠都在的話，只買自主訓練的客人會一直看到
+     兩個 0，反而要多花一秒判斷「我到底有沒有教練課」。
+     ⚠ 判準用的是上面剛算好的「尚未銷課」：票面剩餘＋已預約未上。
+       所以「堂數用完但還有已預約未上」的那一格仍然會留著（那幾堂還沒上）。
+     ⚠ 三格都 0 就整條不畫，改寫一句話 —— 空白的一列比 0 更難懂。 */
+  const _kpiRows=[['教練課',pk.pt+pk.friendly+_pend.pt+_pend.friendly],
+                  ['團體課',pk.group+_pend.group],
+                  ['自主訓練',pk.self+_pend.self]].filter(([,n])=>n>0);
+  const kpis=_kpiRows.length
+    ? _kpiRows.map(([l,n])=>`<div class="mh2-kpi"><span>${l}</span><b>${n}</b><i>堂</i></div>`).join('')
+    : `<div class="mh2-kpi mh2-kpi-none">目前沒有可用堂數</div>`;
   /* ── 日期列：從左欄搬到上方，取代原本的課程篩選列（2026-08-27 使用者指示）──
      起因是實機（LINE 內建瀏覽器）：LINE 自己的標題列＋Android 狀態列吃掉視窗上緣，
      左欄七格被壓到只剩十幾 px，日期數字被裁掉一半、只看得到「8 月」。
