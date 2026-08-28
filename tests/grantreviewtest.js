@@ -100,14 +100,30 @@ ok('★★ 提示掛在頂欄左側（桌機畫面左上角）',
 console.log('\n④ 審核視窗：應收金額要大、要有顏色');
 {
   const F=grabFn('openGrantApprove');
-  ok('★★ 應收金額獨立一塊，最大最亮',
-     /<span class="gr-amt-k">應收款項<\/span>/.test(F)
-     && /<span class="gr-amt-v">\$\$\{amt\.toLocaleString\(\)\}<\/span>/.test(F)
+  /* 2026-08-28 二修（使用者：「維持正常開合約 只是櫃檯再收款的時候保留付款調整的彈性」）——
+   收款這一步的欄位一律可編輯，但應收金額那一大塊**留著**，改成跟著欄位即時重算。
+   0808 定它的理由（避免櫃檯看錯）沒有變，變的只是數字的來源。 */
+ok('★★ 應收金額仍然是獨立一塊，只是改成即時重算',
+   /<div class="gr-amt-box" id="gr-amt-box"><\/div>/.test(src)
+   && /function grFillPreview\(\)\{/.test(src)
+   && /這一塊改成\*\*跟著欄位即時重算\*\*，/.test(src));
+ok('★★ 預覽與發放走同一支算式（不能另外寫一份「大概是這樣」）',
+   /const p=grFillApply\(P, true\);/.test(src)
+   && /走的是與發放同一支 grFillApply（quiet 模式）/.test(src));
+ok('★★ 算不出來時金額顯示「—」並把發放鈕停用',
+   /<span class="gr-amt-v gr-amt-wait">—<\/span>/.test(src)
+   && /if\(go\)\{ go\.disabled=true; go\.style\.opacity='\.45';/.test(src));
+ok('★★ 四個欄位改動都會重算',
+   (src.match(/grFillPreview\(\)/g)||[]).length>=6);
+  ok('★★ 大字塊的字級與紅色沒動（0808 的「最大最亮」）',
+     /<span class="gr-amt-k">應收款項<\/span>/.test(src)
      && /\.gr-amt-v\{font-family:var\(--num\),inherit;font-size:38px;font-weight:800;color:#b5372e;/.test(src));
   ok('★ 分期要講明「這是第 1 期」與總額（不會讓櫃檯照總額收）',
-     /分 \$\{P\.installCount\} 期，這是<b>第 1 期<\/b>（總額 \$\$\{\(Number\(P\.dealAmount\)\|\|0\)\.toLocaleString\(\)\}）/.test(F));
+     /分 \$\{p\.installCount\} 期，這是<b>第 1 期<\/b>（總額 \$\$\{\(Number\(p\.dealAmount\)\|\|0\)\.toLocaleString\(\)\}）/.test(src));
   ok('★ 折抵券也標出來（實收才是要收的錢）',
-     /已折抵券 ×\$\{P\.voucherN\}（−\$\$\{\(Number\(P\.voucherAmt\)\|\|0\)\.toLocaleString\(\)\}）/.test(F));
+     /已折抵券 ×\$\{p\.voucherN\}（−\$\$\{\(Number\(p\.voucherAmt\)\|\|0\)\.toLocaleString\(\)\}）/.test(src));
+  ok('★ 拆帳也拆給櫃檯看（現金收多少／匯款多少）',
+     /（現金 \$\$\{Number\(p\.splitCash\)\.toLocaleString\(\)\}／匯款/.test(src));
   ok('★★ 合約簽回沒簽回，兩種狀態分色',
      /<div class="gr-sign-box \$\{signed\?'ok':'wait'\}">/.test(F)
      && /\.gr-sign-box\.ok\{background:#eef5f1;/.test(src) && /\.gr-sign-box\.wait\{background:#f7efe0;/.test(src));
@@ -115,8 +131,11 @@ console.log('\n④ 審核視窗：應收金額要大、要有顏色');
   ok('★★ 沒簽回不能發：清單按鈕反灰、確認視窗入口直接擋',
      /title="合約簽回後才能發放"/.test(src)
      && /if\(r\.contract_id && !signed\)\{ showToast\('合約尚未簽回，等會員在手機上簽完才能發放'\); return; \}/.test(src));
-  ok('★★ 按鈕上再寫一次金額（避免櫃檯看錯）',
-     /已收到 \$\$\{amt\.toLocaleString\(\)\}・發放票券/.test(F));
+  /* 2026-08-28 二修：金額改成即時重算，寫死在按鈕上會與上方大字打架 ——
+     改成把「算不出來就按不下去」釘住（比重複一次數字更擋得住看錯）。 */
+  ok('★★ 算不出金額就按不下去（取代原本寫死在按鈕上的金額）',
+     /if\(go\)\{ go\.disabled=true; go\.style\.opacity='\.45'; go\.style\.cursor='not-allowed'; \}/.test(src)
+     && /if\(go\)\{ go\.disabled=false; go\.style\.opacity=''; go\.style\.cursor=''; \}/.test(src));
   ok('　　先講清楚按下去會發生什麼，包含 30 分鐘可退回',
      /發放後 <b>30 分鐘內<\/b>可在首頁「今日營收」名單整筆退回/.test(F));
   ok('　　使用者的原話寫在程式裡',
@@ -245,7 +264,7 @@ console.log('\n櫃檯要在發放的同一個畫面上看到會員回簽');
      /<img class="gr-sig-img" src="\$\{c\.signature\}" alt="會員簽名">/.test(A)
      && /<div class="gr-sig-k">會員回簽<\/div>/.test(A));
   ok('★★ 發放鈕仍在同一個視窗（簽名與按鈕不可分家）',
-     /onclick="grantReqApprove\('\$\{r\.id\}'\)">\$\{_fill\?'填好了・發放票券':`已收到 \$\$\{amt\.toLocaleString\(\)\}・發放票券`\}<\/button>/.test(A));
+     /id="gr-go" onclick="grantReqApprove\('\$\{r\.id\}'\)">\$\{_fill\?'填好了・發放票券':'確認收款・發放票券'\}<\/button>/.test(A));
   ok('★★ 沒有簽名圖時不要留一塊空白 —— 寫清楚原因並給看全文的路（0823 的「不能用就寫原因」）',
      /這份合約沒有存到簽名圖（紙本補簽或舊資料）/.test(A)
      && /\$\{\(signed&&!\(c&&c\.signature\)\)\?/.test(A));

@@ -56,28 +56,33 @@ console.log('\n② 票券不當場發，改進「待收款」佇列');
 
 console.log('\n③ 櫃檯補填：重算要與賣票當下一模一樣');
 {
-  const A=src.slice(src.indexOf('async function openGrantApprove(id){'), src.indexOf('function grFillApply(P){'));
-  ok('★★ 待補填時視窗改成可編輯（總金額／付款方式／拆帳／分期）',
+  const A=src.slice(src.indexOf('async function openGrantApprove(id){'), src.indexOf('function grFillApply(P, quiet){'));
+  /* 2026-08-28 二修（使用者：「維持正常開合約 只是櫃檯再收款的時候保留付款調整的彈性」）——
+     欄位改成**一律**可編輯：教練填了預帶他填的、沒填就空著等櫃檯填。
+     _fill 只剩「上方那句說明要講哪一種」。 */
+  ok('★★ 收款這一步一律可編輯（總金額／付款方式／拆帳／分期）',
      /const _fill=!!P\.pendingFill;/.test(A)
+     && /\$\{`<div class="gr-fill">/.test(A)
+     && /收款這一步一律可編輯，不再只有「待補填」那種才給。/.test(src)
      && /<input type="number" id="gr-amt"/.test(A)
      && /<select id="gr-method"/.test(A)
      && /<input type="number" id="gr-splitcash"/.test(A)
-     && /<select id="gr-install">/.test(A));
+     && /<select id="gr-install" onchange="grFillPreview\(\)">/.test(A));
   ok('★★ 標題與按鈕都換掉（這一步不是核對，是填寫）',
      /\$\{_fill\?'填寫收款資訊・發放票券':'確認收款・發放票券'\}/.test(A)
-     && /\$\{_fill\?'填好了・發放票券'/.test(A));
+     && /\$\{_fill\?'填好了・發放票券':'確認收款・發放票券'\}/.test(A));
   ok('★ 分期會改變開通堂數與約別，視窗上就講明白',
      /分期會改變<b>這次開通幾堂<\/b>與約別，發放前一定要確定。/.test(A));
 
   /* 實跑：把「賣票當下」與「櫃檯補填」兩段算式餵同一組輸入，結果必須相同 */
-  const F=src.slice(src.indexOf('function grFillApply(P){'), src.indexOf('async function grantReqApprove(id){'));
+  const F=src.slice(src.indexOf('function grFillApply(P, quiet){'), src.indexOf('async function grantReqApprove(id){'));
   const splitSessions=(t,n)=>{ const b=Math.floor(t/n), r=t%n;
     return Array.from({length:n},(_,i)=>b+(i<r?1:0)); };
   const splitAmount=(t,n)=>{ const b=Math.floor(t/n), r=t%n;
     return Array.from({length:n},(_,i)=>b+(i<r?1:0)); };
   const mkDoc=v=>({getElementById:id=>(id in v)?{value:v[id]}:null});
-  const run=(P,v)=>new Function('document','showToast','splitSessions','splitAmount','Object',
-      F+'\nreturn grFillApply;')(mkDoc(v), ()=>{}, splitSessions, splitAmount, Object)(P);
+  const run=(P,v)=>new Function('document','showToast','splitSessions','splitAmount','Object','Math',
+      F+'\nreturn grFillApply;')(mkDoc(v), ()=>{}, splitSessions, splitAmount, Object, Math)(P);
 
   const P={total:12, listPrice:14400, sale_kind:'renewal'};
   const r1=run(P,{'gr-amt':'14400','gr-method':'cash','gr-install':'1'});
@@ -107,9 +112,20 @@ console.log('\n③ 櫃檯補填：重算要與賣票當下一模一樣');
   eq('★ 明確打 0 是合法的（全額加贈）',
      (run(P,{'gr-amt':'0','gr-method':'cash','gr-install':'1'})||{}).dealAmount, 0);
 
-  ok('★★ 折抵券在這條路一律 0（教練沒挑、櫃檯這一步也不開放）',
+  ok('★★ 待補填那條折抵券一律 0（教練沒挑、櫃檯這一步也不開放）',
      [r1.voucherN, r1.voucherAmt].join()==='0,0' && JSON.stringify(r1.voucherTkIds)==='[]'
      && /要用券就走一般流程/.test(src));
+  /* 2026-08-28 二修：教練已經挑過券的正常合約，櫃檯在這裡改收款方式不該把券洗掉 */
+  {
+    const PV={total:12, listPrice:14400, pendingFill:false, voucherN:2, voucherAmt:600,
+              voucherTkIds:['V1','V2'], sale_kind:'new'};
+    const rv=run(PV,{'gr-amt':'14400','gr-method':'cash','gr-install':'1'});
+    eq('★★ 正常合約：折抵券原封不動留著，實收＝金額−折抵',
+       [rv.voucherN, rv.voucherAmt, rv.voucherTkIds, rv.paidAmount], [2, 600, ['V1','V2'], 13800]);
+    const rvi=run(PV,{'gr-amt':'14400','gr-method':'cash','gr-install':'3'});
+    eq('★★ 櫃檯改成分期時張數要夾成 1（0729 定案：分期每期限用 1 張）',
+       [rvi.voucherN, rvi.voucherAmt, rvi.voucherTkIds], [1, 300, ['V1']]);
+  }
   eq('★★ 補填完 payment_status 轉成已付款、pendingFill 收掉',
      [r1.payment_status, r1.pendingFill], ['paid', false]);
   ok('★★ 警語寫在原地（兩條路的算法必須一致）',
@@ -118,10 +134,11 @@ console.log('\n③ 櫃檯補填：重算要與賣票當下一模一樣');
 
 console.log('\n④ 發放：先重算再發，而且留下是誰填的');
 {
-  ok('★★ 發放前一定先過 grFillApply，失敗就中止',
-     /if\(r\.payload\.pendingFill\)\{\s*\n\s*const _p=grFillApply\(r\.payload\);\s*\n\s*if\(!_p\)\{ done\(\); return; \}/.test(src));
+  ok('★★ 發放前一律先過 grFillApply（不只待補填），失敗就中止',
+     /const _p=grFillApply\(r\.payload\);\s*\n\s*if\(!_p\)\{ done\(\); return; \}/.test(src)
+     && /一律重算（2026-08-28 二修）：收款這一步永遠可編輯，所以不論教練有沒有填，/.test(src));
   ok('★★ 重算後的 payload 與應收金額寫回待審核那一筆（之後查帳看得到）',
-     /r\.payload=_p;\s*\n\s*r\.amount=Number\(_p\.isInstall\?_p\.firstAmount:_p\.dealAmount\)\|\|0;\s*\n\s*r\.filled_by=SESSION\.id; r\.filled_at=new Date\(\)\.toISOString\(\);/.test(src));
+     /r\.payload=_p;\s*\n\s*r\.amount=Number\(_p\.isInstall\?Math\.max\(0,_p\.firstAmount-_p\.voucherAmt\):_p\.paidAmount\)\|\|0;\s*\n\s*r\.filled_by=SESSION\.id; r\.filled_at=new Date\(\)\.toISOString\(\);/.test(src));
   ok('★★ 發放仍走同一支 _grantIssue（沒有第二套發票邏輯）',
      /const t=await _grantIssue\(r\.payload\);/.test(src)
      && (src.match(/_grantIssue\(r\.payload\)/g)||[]).length===1);
