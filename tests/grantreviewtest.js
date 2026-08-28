@@ -149,16 +149,28 @@ ok('★★ 四個欄位改動都會重算',
    有了付款資訊區塊自己的「儲存收款資訊」，底下那顆才敢真的 disabled：
    櫃檯剛改好的數字有地方存，不會因為按不下去就整個丟掉。 */
   ok('★★ 未簽回時底列寫「尚未回簽」、暗化、關掉互動，鈕還在且有原因',
-     /<button class="btn btn-ghost" id="gr-go" disabled style="opacity:\.45;cursor:not-allowed;color:var\(--t3\);" title="要等會員簽回合約才發得出去；只要改收款資訊請用上面的「儲存收款資訊」">尚未回簽<\/button>/.test(src));
+     /<button class="btn btn-ghost" id="gr-go" disabled style="opacity:\.45;cursor:not-allowed;color:var\(--t3\);" title="要等會員簽回合約才發得出去；只要改收款資訊請用上面的「儲存變更」">尚未回簽<\/button>/.test(src));
   ok('★★ 簽回之後同一個位置變成發放票券',
      /\$\{_canIssue\s*\n\s*\? `<button class="btn btn-green" id="gr-go" onclick="grantReqApprove\('\$\{r\.id\}'\)">確認收款・發放票券<\/button>`/.test(src));
-  ok('★★ 付款資訊區塊自己有一顆「儲存收款資訊」（只改付款方式就按這顆）',
-     /<div class="gr-savebar">\s*\n\s*<button type="button" class="btn btn-ghost btn-sm" onclick="grantReqSaveFill\('\$\{r\.id\}'\)"\s*\n\s*title="只把上面的收款資訊存起來，不發票券">儲存收款資訊<\/button>/.test(src));
+  ok('★★ 付款資訊區塊自己有一顆「儲存變更」（只改付款方式就按這顆），預設暗化',
+     /<button type="button" class="btn btn-ghost btn-sm" id="gr-save" disabled\s*\n\s*style="opacity:\.45;cursor:not-allowed;color:var\(--t3\);"\s*\n\s*onclick="grantReqSaveFill\('\$\{r\.id\}'\)"\s*\n\s*title="把上面改過的收款資訊存起來，不發票券">儲存變更<\/button>/.test(src));
+  ok('★★ 有改過、而且改得出正確的一包才亮（沒改過按了也是白按）',
+     /const _dirty=\(window\._grFill0!=null\) && grFillSnap\(\)!==window\._grFill0;/.test(src)
+     && /const _valid=!!grFillApply\(P, true\);/.test(src)
+     && /const _on=_dirty&&_valid;/.test(src));
+  ok('★★ 按不下去時要講得出是哪一種（沒改過／填不完整）',
+     /_sv\.title=_on\?'把上面改過的收款資訊存起來，不發票券'\s*\n\s*:\(_dirty\?'上面的欄位還填不完整':'還沒有任何修改'\);/.test(src));
+  ok('★★ 比的是欄位原始字串，不是算完的結果（14400 與 14400.0 對櫃檯是「沒改」）',
+     /function grFillSnap\(\)\{/.test(src)
+     && /比的是\*\*欄位的原始字串\*\*，不是算完的結果：14400 與 14400\.0 對系統是同一個數字，/.test(src));
+  ok('　 開窗當下就記一份原始值', /window\._grFill0=grFillSnap\(\);/.test(src));
+  ok('　 五個欄位都納入比對（金額／方式／拆帳／分期／折價券）',
+     /return \[v\('gr-amt'\), v\('gr-method'\), v\('gr-splitcash'\), v\('gr-install'\), v\('gr-voucher'\)\]\.join\('\|'\);/.test(src));
   ok('★★ 說明也跟著改（底下那顆已經不做事了）',
      /合約還沒簽回，<b>發不了票券<\/b> —— 等會員在手機上簽完再回這裡按發放。/.test(src)
-     && /只是要改收款方式或金額的話，改完按上面的<b>「儲存收款資訊」<\/b>就好。/.test(src));
+     && /只是要改收款方式或金額的話，改完按上面的<b>「儲存變更」<\/b>就好。/.test(src));
   ok('　 為什麼原本不敢 disabled、現在敢了 —— 寫在原地',
-     /原本不敢關掉互動，是怕櫃檯剛改好的\s*\n\s*金額與付款方式沒地方存；付款資訊區塊自己有一顆「儲存收款資訊」之後就沒這個顧慮了。/.test(src));
+     /原本不敢關掉互動，是怕櫃檯剛改好的\s*\n\s*金額與付款方式沒地方存；付款資訊區塊自己有一顆「儲存變更」之後就沒這個顧慮了。/.test(src));
   ok('★★ 也不用金（金是「可以做、但要知道」，這顆根本按不下去）—— 單純暗化',
      /也不用金：金是「可以做、但要知道」，而這顆現在根本按不下去。\s*\n\s*暗化＝單純的「還不到時候」，不佔任何色階。/.test(src));
   ok('★★ 只存與發放共用同一支 grFillApply（存的與之後發的是同一包）',

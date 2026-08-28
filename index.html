@@ -11378,8 +11378,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.1821';
-const APP_VERSION_LABEL='v260828.1821';
+const APP_VERSION = '260828.1823';
+const APP_VERSION_LABEL='v260828.1823';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -46772,11 +46772,15 @@ async function openGrantApprove(id){
           分期時每期只能用 1 張（0729 定案）；填了幾張就扣幾張，發放時才真的扣。</div></div>`:''}
       ${/* 只改付款資訊、先不發票券的路（2026-08-28 使用者：「修改中間付款資訊這邊新增一個儲存
            如果櫃檯只是要修改付款方式可以從這邊按」）——
-           有了它，底下那顆「待回簽才能通過」才敢真的關掉互動：櫃檯剛改好的數字有地方存，
-           不會因為按不下去就整個丟掉。 */''}
+           有了它，底下那顆「尚未回簽」才敢真的關掉互動：櫃檯剛改好的數字有地方存，
+           不會因為按不下去就整個丟掉。
+           ⚠ 它自己也是「沒改過就不給按」（2026-08-28 三修）——一顆永遠亮著的儲存鈕
+             等於邀請人去按一個什麼都沒做的動作。 */''}
       <div class="gr-savebar">
-        <button type="button" class="btn btn-ghost btn-sm" onclick="grantReqSaveFill('${r.id}')"
-          title="只把上面的收款資訊存起來，不發票券">儲存收款資訊</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="gr-save" disabled
+          style="opacity:.45;cursor:not-allowed;color:var(--t3);"
+          onclick="grantReqSaveFill('${r.id}')"
+          title="把上面改過的收款資訊存起來，不發票券">儲存變更</button>
       </div>
       <div class="gr-fill-note">定價 $${(Number(P.listPrice)||0).toLocaleString()}　·　共 ${Number(P.total)||0} 堂${
         (P.voucherN)?`　·　已折抵券 ×${P.voucherN}（−$${(Number(P.voucherAmt)||0).toLocaleString()}，跟著保留）`:''}。填好按下面的鈕就會發票券並寫入購買紀錄。</div>
@@ -46804,13 +46808,13 @@ async function openGrantApprove(id){
         ? `按下去會：發放票券、寫入購買紀錄${P.voucherN?'、扣掉折抵券':''}。<br>
            發放後 <b>30 分鐘內</b>可在首頁「今日營收」名單整筆退回（打錯了不用怕）。`
         : `合約還沒簽回，<b>發不了票券</b> —— 等會員在手機上簽完再回這裡按發放。<br>
-           只是要改收款方式或金額的話，改完按上面的<b>「儲存收款資訊」</b>就好。`}</div>
+           只是要改收款方式或金額的話，改完按上面的<b>「儲存變更」</b>就好。`}</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="openGrantReview()">返回</button>
       ${/* 2026-08-28 使用者：「只存收款資訊 這一格要改成 待回簽才能通過」——
            鈕上寫的是「為什麼還不能發」，按下去做的事（把收款資訊存起來）寫在上一行。
            ⚠ 這顆現在是 disabled 的（2026-08-28 二修）。原本不敢關掉互動，是怕櫃檯剛改好的
-             金額與付款方式沒地方存；付款資訊區塊自己有一顆「儲存收款資訊」之後就沒這個顧慮了。
+             金額與付款方式沒地方存；付款資訊區塊自己有一顆「儲存變更」之後就沒這個顧慮了。
              鈕仍然留著、上面寫原因，不藏起來（0823「不能用就寫原因，別藏按鈕」）。
            ⚠ 不用綠色：綠＝這一步做完了，但這一步沒做完。
              2026-08-28 三修（使用者：「待回簽才能通過改成尚未回簽 按鈕暗化」）——
@@ -46821,15 +46825,39 @@ async function openGrantApprove(id){
              全站白畫面。範本字串裡的 ${} 是一個完整運算式，中間插不進東西。 */''}
       ${_canIssue
         ? `<button class="btn btn-green" id="gr-go" onclick="grantReqApprove('${r.id}')">確認收款・發放票券</button>`
-        : `<button class="btn btn-ghost" id="gr-go" disabled style="opacity:.45;cursor:not-allowed;color:var(--t3);" title="要等會員簽回合約才發得出去；只要改收款資訊請用上面的「儲存收款資訊」">尚未回簽</button>`}
+        : `<button class="btn btn-ghost" id="gr-go" disabled style="opacity:.45;cursor:not-allowed;color:var(--t3);" title="要等會員簽回合約才發得出去；只要改收款資訊請用上面的「儲存變更」">尚未回簽</button>`}
     </div>`);
-  window._grP=P; grFillPreview();
+  window._grP=P;
+  /* 「有改過才給存」（2026-08-28 使用者：「也是上方資料有修正的時候按鈕在跳出互動功能」）——
+     開窗當下先記一份原始值，之後每次 grFillPreview 都比一次。
+     ⚠ 比的是**欄位的原始字串**，不是算完的結果：14400 與 14400.0 對系統是同一個數字，
+       但櫃檯眼裡是「我沒改」，按鈕就不該亮。 */
+  window._grFill0=grFillSnap();
+  grFillPreview();
 }
 /* 應收金額即時重算（2026-08-28 二修）：欄位一改，上方大字與按鈕上的金額跟著變。
    ⚠ 走的是與發放同一支 grFillApply（quiet 模式）—— 預覽與真的算出來的一定一致，
      不能另外寫一份「大概是這樣」的算式。 */
+/* 收款欄位的原始字串快照（見 window._grFill0 的說明） */
+function grFillSnap(){
+  const v=id=>{ const el=document.getElementById(id); return el?String(el.value??''):''; };
+  return [v('gr-amt'), v('gr-method'), v('gr-splitcash'), v('gr-install'), v('gr-voucher')].join('|');
+}
 function grFillPreview(){
   const P=window._grP; if(!P) return;
+  /* 「儲存變更」：有改過、而且改得出正確的一包，才亮 */
+  const _sv=document.getElementById('gr-save');
+  if(_sv){
+    const _dirty=(window._grFill0!=null) && grFillSnap()!==window._grFill0;
+    const _valid=!!grFillApply(P, true);
+    const _on=_dirty&&_valid;
+    _sv.disabled=!_on;
+    _sv.style.opacity=_on?'':'.45';
+    _sv.style.cursor=_on?'':'not-allowed';
+    _sv.style.color=_on?'':'var(--t3)';
+    _sv.title=_on?'把上面改過的收款資訊存起來，不發票券'
+      :(_dirty?'上面的欄位還填不完整':'還沒有任何修改');
+  }
   const box=document.getElementById('gr-amt-box'); if(!box) return;
   const p=grFillApply(P, true);
   const go=document.getElementById('gr-go');
