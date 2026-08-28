@@ -11364,8 +11364,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.1637';
-const APP_VERSION_LABEL='v260828.1637';
+const APP_VERSION = '260828.1640';
+const APP_VERSION_LABEL='v260828.1640';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -27621,9 +27621,14 @@ async function bamSeriesRest(b){
     && (parseYmd(x.date)||new Date(0)).getDay()===_dow
   ).sort((p,q)=>String(p.date).localeCompare(String(q.date)));
 }
-function bamSeriesAsk(b, rest, mid, mode, guestName, guestPhone){
+function bamSeriesAsk(b, rest, mid, mode, guestName, guestPhone, leftN){
   const who=guestName || (((window._bamRows||[]).find(x=>x.id===mid)||{}).name) || '這位會員';
   const _wd='日一二三四五六'[(parseYmd(b.date)||new Date(TODAY)).getDay()];
+  const _book=(mode==='book');
+  /* 扣課模式：能排的只有「票還剩幾堂」那麼多，超出的先講明不會排 ——
+     不能讓人按下去才發現只成了一半（2026-08-04 整串轉正也是先給數字再按）。 */
+  const _can=_book?Math.min(rest.length, Math.max(0,Number(leftN)||0)):rest.length;
+  const _over=_book?(rest.length-_can):0;
   window._bamSeries={ ids:rest.map(x=>x.id), mid, mode, guestName:guestName||null, guestPhone:guestPhone||null };
   showModal(`<div class="modal-title">這一串還有 ${rest.length} 堂空堂</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.9;padding:2px 0 10px;">
@@ -27632,11 +27637,20 @@ function bamSeriesAsk(b, rest, mid, mode, guestName, guestPhone){
     <div class="sc-list">${rest.slice(0,12).map(x=>
       `<div class="sc-row"><span class="sc-d">${String(x.date).replace(/-/g,'/')}</span><span class="sc-x">${String(x.start_time).slice(0,5)}</span></div>`).join('')}
       ${rest.length>12?`<div class="sc-row"><span class="sc-d">…還有 ${rest.length-12} 堂</span><span class="sc-x"></span></div>`:''}</div>
-    <div style="font-size:11.5px;color:var(--t3);margin-top:8px;line-height:1.8;">
-      一樣<b>不扣票、不進統計</b>，只是把人先掛上去。時段衝突的那幾堂會自動跳過並列出來。</div>
+    ${_book?`<div class="sc-list" style="margin-top:8px;">
+        <div class="sc-row"><span class="sc-d">會扣課（正式預約）</span><span class="sc-x">${_can} 堂</span></div>
+        ${_over?`<div class="sc-row"><span class="sc-d" style="color:#b5372e;">票券不足 → 維持空堂</span><span class="sc-x" style="color:#b5372e;">${_over} 堂</span></div>`:''}
+      </div>
+      <div style="font-size:11.5px;color:var(--t3);margin-top:8px;line-height:1.8;">
+        目前可用 <b>${Math.max(0,Number(leftN)||0)}</b> 堂。逐堂扣課、逐堂驗證；
+        票不夠或時段衝突的那幾堂會自動跳過並列出來。</div>`
+      :`<div style="font-size:11.5px;color:var(--t3);margin-top:8px;line-height:1.8;">
+        一樣<b>不扣票、不進統計</b>，只是把人先掛上去。時段衝突的那幾堂會自動跳過並列出來。</div>`}
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal();navTo(CUR_PAGE)">只排這一堂</button>
-      <button class="btn btn-green" onclick="bamSeriesGo()">整串一起排 ${rest.length} 堂</button>
+      ${(_book&&!_can)
+        ? '<button class="btn btn-green" disabled style="opacity:.45;cursor:not-allowed;">票券不足，無法整串排</button>'
+        : `<button class="btn btn-green" onclick="bamSeriesGo()">整串一起排 ${_can} 堂</button>`}
     </div>`);
 }
 async function bamSeriesGo(){ return onceAct('bamseries', _bamSeriesGo); }
@@ -27659,14 +27673,29 @@ async function _bamSeriesGo(){
       }else{
         x.member_id=null; x.trial_name=S.guestName||null; x.trial_phone=S.guestPhone||null;
       }
+      if(S.mode==='book'){
+        /* 有票那條：逐堂挑票、逐堂扣課。票在中途被用完就停在那裡，
+           剩下的維持空堂（不是硬排下去，也不是靜靜少排 —— 會列在跳過名單裡）。 */
+        const cand=await listUsableTickets(S.mid, x.ticket_type_id, x.date, x.start_time);
+        if(!cand.length){ skip.push(String(x.date).replace(/-/g,'/')+'（票券不足）'); continue; }
+        const tk=cand[0];
+        x.ticket_id=tk.id;
+        x.ticket_type_id=tk.ticket_type_id||x.ticket_type_id||null;
+        x.pending_contract=false;      // 有人有票了 → 從空堂轉成正式課（統計才算得到）
+        if(!(await deductTicket(tk, x.id, SESSION.id))){
+          skip.push(String(x.date).replace(/-/g,'/')+'（扣課被護欄擋下）'); continue; }
+        await dbPut('bookings', x);
+        ok++; continue;
+      }
       x.ticket_id=null; x.pending_contract=true;
       const _n=bkNoteSplit(x.note);
       x.note=bkNoteJoin(S.mode==='inst'?'分期待繳費保留（收款後自動補扣）':'', _n.user||'');
       await dbPut('bookings', x);
       ok++;
     }
-    dbCacheClear(['bookings']);
-    showToast(`整串已排：${ok} 堂`+(skip.length?`；${skip.length} 堂跳過（${skip.slice(0,3).join('、')}${skip.length>3?'…':''}）`:''),
+    dbCacheClear(S.mode==='book'?['bookings','member_tickets','ticket_logs']:['bookings']);
+    showToast(`整串已排：${ok} 堂`+(S.mode==='book'?`（扣 ${ok} 堂）`:'')
+      +(skip.length?`；${skip.length} 堂跳過（${skip.slice(0,3).join('、')}${skip.length>3?'…':''}）`:''),
       skip.length?8000:4000);
   }catch(e){ showToast('整串排課失敗：'+((e&&e.message)||e), 8000); }
   finally{ done(); navTo(CUR_PAGE); }
@@ -27851,6 +27880,22 @@ async function bkAddMemberDo(bid, mid, tkId){
     dbCacheClear(['bookings','member_tickets','ticket_logs']);
     showToast('已加入會員，並扣 1 堂');
     try{ closeModal(); }catch(_){}
+    /* 同一串連續空堂（2026-08-28 使用者：「建立連續待簽約課卡目的就是要有票券的時候
+       能夠連續預約」）—— 這條路每一堂都會扣課，所以問之前先把「扣得起幾堂」算出來，
+       不能像待簽約那條只列日期就按下去。
+       ⚠ 待簽約→儲值→轉正 那條路本來就會整串處理（見 _doConvertPending 的「整串卡位
+         一起轉」），這裡補的是另一種情況：空堂＋會員手上已經有票。 */
+    const _rest=await bamSeriesRest(b).catch(()=>[]);
+    if(_rest.length){
+      let _left=0;
+      try{
+        const _tk=await dbGetAll('member_tickets').catch(()=>[]);
+        const _cnt=await tkBookedCountMap().catch(()=>({}));
+        _left=Math.max(0, Number((bkMemTicketInfo(mid, b, _tk, _cnt)||{}).left)||0);
+      }catch(_){}
+      bamSeriesAsk(b, _rest, mid, 'book', null, null, _left);
+      return;
+    }
     navTo(CUR_PAGE);
   }catch(e){ showToast('加入失敗：'+((e&&e.message)||e)); }
   finally{ done(); }

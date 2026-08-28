@@ -23,14 +23,17 @@ console.log('① 主要動作不變，整串是「之後才問」');
   ok('★★ 沒有同串空堂時行為完全和以前一樣（直接 navTo）',
      /if\(_rest\.length\)\{[^\n]*\}\s*\n\s*navTo\(CUR_PAGE\);/.test(src));
   ok('★★ 只在「綁人不扣票」這條路提供 —— 有票那條逐堂扣課是動到錢',
-     /只在「綁人不扣票」這條路提供（待簽約／待分期）—— 有票那條會逐堂扣課，/.test(src)
-     && /async function bamPick\(mid\)\{\s*\n\s*const b=window\._bamB; if\(!b\)\{ closeModal\(\); return; \}\s*\n\s*closeModal\(\);\s*\n\s*return onceAct\('bkaddmem:'\+b\.id\+':'\+mid, \(\)=>bkAddMemberDo\(b\.id, mid\)\);/.test(src));
+     /只在「綁人不扣票」這條路提供（待簽約／待分期）—— 有票那條會逐堂扣課，/.test(src));
+  ok('★★ 有票那條（2026-08-28 二修）也問整串，但先把可用堂數算出來再問',
+     /const _rest=await bamSeriesRest\(b\)\.catch\(\(\)=>\[\]\);\s*\n\s*if\(_rest\.length\)\{\s*\n\s*let _left=0;/.test(src)
+     && /_left=Math\.max\(0, Number\(\(bkMemTicketInfo\(mid, b, _tk, _cnt\)\|\|\{\}\)\.left\)\|\|0\);/.test(src)
+     && /bamSeriesAsk\(b, _rest, mid, 'book', null, null, _left\);/.test(src));
 }
 
 console.log('\n② 「同一串」的判準要窄，而且不能沿用 bpSeriesOf');
 {
   const seg=src.slice(src.indexOf('async function bamSeriesRest(b){'),
-                      src.indexOf('function bamSeriesAsk(b, rest, mid, mode, guestName, guestPhone){'));
+                      src.indexOf('function bamSeriesAsk(b, rest, mid, mode, guestName, guestPhone, leftN){'));
   ok('★★ 六個條件：同教練、同時間、同星期、同票種、還是空堂、今天以後',
      /String\(x\.coach_id\|\|''\)===String\(b\.coach_id\|\|''\)/.test(seg)
      && /String\(x\.start_time\|\|''\)\.slice\(0,5\)===String\(b\.start_time\|\|''\)\.slice\(0,5\)/.test(seg)
@@ -75,7 +78,15 @@ console.log('\n② 「同一串」的判準要窄，而且不能沿用 bpSeriesO
          && /…還有 \$\{rest\.length-12\} 堂/.test(src));
       ok('★★ 兩顆鈕講清楚：只排這一堂／整串一起排 N 堂',
          /onclick="closeModal\(\);navTo\(CUR_PAGE\)">只排這一堂<\/button>/.test(src)
-         && /onclick="bamSeriesGo\(\)">整串一起排 \$\{rest\.length\} 堂<\/button>/.test(src));
+         && /onclick="bamSeriesGo\(\)">整串一起排 \$\{_can\} 堂<\/button>/.test(src));
+      /* 2026-08-28 二修（使用者：「建立連續待簽約課卡目的就是要有票券的時候能夠連續預約」）——
+         有票那條也給整串，但它會逐堂扣課，所以要先算「扣得起幾堂」再讓人按。 */
+      ok('★★ 扣課模式：先算扣得起幾堂，票不夠的講明維持空堂',
+         /const _can=_book\?Math\.min\(rest\.length, Math\.max\(0,Number\(leftN\)\|\|0\)\):rest\.length;/.test(src)
+         && /票券不足 → 維持空堂/.test(src)
+         && /目前可用 <b>\$\{Math\.max\(0,Number\(leftN\)\|\|0\)\}<\/b> 堂/.test(src));
+      ok('★★ 一堂都扣不起時鈕直接停用（不要讓人按了才知道）',
+         /\$\{\(_book&&!_can\)\s*\n\s*\? '<button class="btn btn-green" disabled[^']*票券不足，無法整串排/.test(src));
       ok('★★ 講明不扣票、不進統計（與單堂那一步同一個語意）',
          /一樣<b>不扣票、不進統計<\/b>，只是把人先掛上去。時段衝突的那幾堂會自動跳過並列出來。/.test(src));
     }
@@ -92,7 +103,15 @@ console.log('\n② 「同一串」的判準要窄，而且不能沿用 bpSeriesO
       ok('★★ 待分期的 note 字串與單堂那一支一字不差（promoteHeldBooking 靠它認）',
          (src.match(/分期待繳費保留（收款後自動補扣）/g)||[]).length>=3);
       ok('★★ 跳過的堂數與原因要說出來，不能默默少排',
-         /showToast\(`整串已排：\$\{ok\} 堂`\+\(skip\.length\?`；\$\{skip\.length\} 堂跳過/.test(go));
+         /showToast\(`整串已排：\$\{ok\} 堂`\+\(S\.mode==='book'\?`（扣 \$\{ok\} 堂）`:''\)\s*\n\s*\+\(skip\.length\?`；\$\{skip\.length\} 堂跳過/.test(go));
+      ok('★★ 扣課模式逐堂挑票、逐堂扣；票在中途用完就停，剩下的維持空堂',
+         /const cand=await listUsableTickets\(S\.mid, x\.ticket_type_id, x\.date, x\.start_time\);/.test(go)
+         && /if\(!cand\.length\)\{ skip\.push\(String\(x\.date\)\.replace\(\/-\/g,'\/'\)\+'（票券不足）'\); continue; \}/.test(go)
+         && /if\(!\(await deductTicket\(tk, x\.id, SESSION\.id\)\)\)\{/.test(go));
+      ok('★★ 扣課模式才清票券快取（不扣票那條清 bookings 就好）',
+         /dbCacheClear\(S\.mode==='book'\?\['bookings','member_tickets','ticket_logs'\]:\['bookings'\]\);/.test(go));
+      ok('　 待簽約→儲值→轉正那條本來就會整串處理（不是這裡的責任）',
+         /待簽約→儲值→轉正 那條路本來就會整串處理（見 _doConvertPending 的「整串卡位/.test(src));
       ok('★ 防連點（onceAct）', /async function bamSeriesGo\(\)\{ return onceAct\('bamseries', _bamSeriesGo\); \}/.test(src));
       ok('★ 做完一定重繪（finally）', /finally\{ done\(\); navTo\(CUR_PAGE\); \}/.test(go));
     }
