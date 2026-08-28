@@ -331,7 +331,8 @@ console.log('「已完成」＝課真的銷完，不是排完');
 ok('★ 判定抽成 tkStBadgeUsed：只有實際銷課數達標才標已完成',
    /function tkStBadgeUsed\(t, used, total\)\{[\s\S]{0,220}if\(t\.status==='used_up' && Number\(total\)>0 && Number\(used\)<Number\(total\)\) return '';/.test(src));
 ok('★ 持有中的票券卡吃這個判定（原本直接讀 DB 的 status）',
-   src.includes('const stTag=tkStBadgeUsed(t, used, total);') && !/const stTag=tkStBadge\(t\.status\);/.test(src));
+   /* 2026-08-28：後面接了一枚「待付款」章（付款狀態 unpaid 時），判定本身沒動 */
+   src.includes('const stTag=tkStBadgeUsed(t, used, total)') && !/const stTag=tkStBadge\(t\.status\);/.test(src));
 ok('　　used／total 在 stTag 之前就算好', (()=>{const i=src.indexOf('const cardOf=t=>{');
    const seg=src.slice(i, i+900);
    return seg.indexOf('const used=sl.used;') < seg.indexOf('tkStBadgeUsed(t, used, total)');})());

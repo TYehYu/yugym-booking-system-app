@@ -28,9 +28,12 @@ console.log('① 兩條路分岔：紙本直接發、電子送審');
   const F=grabFn('submitGrant');
 /* 2026-08-28：待收款那條也走同一個佇列（使用者：「先把合約打好　後續交給櫃檯處理」）——
    電子合約要等簽名，待補填要等收款，兩者都是「合約先成立、票券後發」。 */
-  ok('★★ 進審核的兩種情況：電子合約，或收款資訊留給櫃檯補',
-     /if\(window\._grantSalesActive && window\._ctBody && \(window\._ctSignType==='remote' \|\| P\.pendingFill\)\)\{/.test(F)
-     && /const _isRemote=\(window\._ctSignType==='remote'\);/.test(F));
+/* 2026-08-28 三修（使用者定案）：「收款資訊之後再填」那個開關退場，改用既有的付款狀態
+   —— 未付款一樣發票券、方案卡標「待付款」，櫃檯之後點卡上的「收款」定案。
+   所以進審核佇列的情況回到只有一種：電子合約要等會員簽回。 */
+  ok('★★ 進審核只有一種情況：電子合約（等會員簽回）',
+     /if\(window\._grantSalesActive && window\._ctBody && window\._ctSignType==='remote'\)\{/.test(F)
+     && !/P\.pendingFill/.test(src));
   ok('★★ 送審那條不建票券（建的是合約＋申請，然後 return）',
      /await dbPut\('ticket_grant_requests',\{id:uid\('GR'\),member_id,/.test(F)
      && /status:'pending',/.test(F));
@@ -39,9 +42,8 @@ console.log('① 兩條路分岔：紙本直接發、電子送審');
      && /紙本＋待補填：合約當場就簽在紙上了，所以 signed_at 直接給值/.test(F));
   ok('★★ 推播叫會員去簽（客戶端的簽約視窗靠這個觸發）',
      /await pushNotification\(member_id,'announce','合約待簽名',/.test(F));
-  ok('★ Toast 明講「還沒發票券」與應收金額（待補填那條改講「收款時補金額」）',
-     /已送出審核：\$\{plan\.name\}　·　等會員簽回合約並確認收款後發放（應收 \$\$\{_amt\.toLocaleString\(\)\}）/.test(F)
-     && /合約已建立：\$\{plan\.name\}　·　已進「待收款」名單/.test(F));
+  ok('★ Toast 明講「還沒發票券」與應收金額',
+     /已送出審核：\$\{plan\.name\}　·　等會員簽回合約並確認收款後發放（應收 \$\$\{_amt\.toLocaleString\(\)\}）/.test(F));
   ok('★★ 紙本那條照舊，走到 _grantIssue 立刻發',
      /const t=await _grantIssue\(P\);/.test(F)
      && /const _remote=false;   \/\/ 走到這裡一定是紙本（電子那條在上面就 return 了）/.test(F));
@@ -264,7 +266,7 @@ console.log('\n櫃檯要在發放的同一個畫面上看到會員回簽');
      /<img class="gr-sig-img" src="\$\{c\.signature\}" alt="會員簽名">/.test(A)
      && /<div class="gr-sig-k">會員回簽<\/div>/.test(A));
   ok('★★ 發放鈕仍在同一個視窗（簽名與按鈕不可分家）',
-     /id="gr-go" onclick="grantReqApprove\('\$\{r\.id\}'\)">\$\{_fill\?'填好了・發放票券':'確認收款・發放票券'\}<\/button>/.test(A));
+     /id="gr-go" onclick="grantReqApprove\('\$\{r\.id\}'\)">確認收款・發放票券<\/button>/.test(A));
   ok('★★ 沒有簽名圖時不要留一塊空白 —— 寫清楚原因並給看全文的路（0823 的「不能用就寫原因」）',
      /這份合約沒有存到簽名圖（紙本補簽或舊資料）/.test(A)
      && /\$\{\(signed&&!\(c&&c\.signature\)\)\?/.test(A));

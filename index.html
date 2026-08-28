@@ -9468,18 +9468,15 @@ button.rev-kind.rev-kind-off{opacity:.5;}
 .gr-item-amt b{font-family:var(--num),inherit;font-size:19px;font-weight:800;color:#b5372e;}
 .gr-item-act{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap;}
 /* 確認視窗的應收金額 —— 整個視窗最大、最亮的一塊（使用者：避免櫃檯看錯） */
-/* 「收款資訊之後再填」的開關與櫃檯補填區（2026-08-28）—— 見 gtLaterSync／grFillApply */
-.gt-later{display:flex;align-items:flex-start;gap:9px;margin:0 0 14px;padding:11px 13px;
-  border:1.5px dashed var(--gold,#B48A56);border-radius:10px;background:rgba(180,138,86,.07);
-  font-size:12.5px;line-height:1.75;color:var(--text);cursor:pointer;}
-.gt-later input{margin:2px 0 0;flex:none;width:16px;height:16px;accent-color:var(--gold-d,#8a6a30);}
-.gt-later i{font-style:normal;font-size:11.5px;color:var(--t2);}
+/* 櫃檯補填收款資訊的區塊（2026-08-28）—— 見 grFillApply／tkPayOpen */
 .gr-fill{border:1.5px solid var(--gold,#B48A56);border-radius:11px;padding:13px 14px;margin:2px 0 10px;
   background:rgba(180,138,86,.07);}
 .gr-fill-h{font-size:12.5px;color:var(--text);line-height:1.8;margin-bottom:10px;}
 .gr-fill-note{font-size:11.5px;color:var(--t3);line-height:1.75;margin-top:4px;}
 .gr-amt-wait{color:var(--t3) !important;}
-.gr-item-fill{color:var(--gold-d,#8a6a30);font-size:12.5px;}
+.tk-unpaid{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:800;line-height:1.6;
+  color:#b5372e;background:#fbeceb;border:1px solid #e8b6b0;border-radius:999px;padding:1px 8px;}
+.gr-item-fill{display:block;font-style:normal;color:var(--gold-d,#8a6a30);font-size:10.5px;font-weight:700;}
 .gr-amt-box{background:#fbeceb;border:2px solid #e0a8a2;border-radius:14px;padding:16px 18px;
   display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;}
 .gr-amt-k{font-size:12px;color:#b5372e;letter-spacing:.08em;font-weight:700;}
@@ -11376,8 +11373,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.1706';
-const APP_VERSION_LABEL='v260828.1706';
+const APP_VERSION = '260828.1727';
+const APP_VERSION_LABEL='v260828.1727';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -41789,7 +41786,10 @@ function ppRecordHtml(){
           const used=sl.used;
           /* 已完成要以實際銷課數為準（見 tkStBadgeUsed）——這一區是「持有中」的票，
              出現「已完成」就代表口徑打架了。 */
-          const stTag=tkStBadgeUsed(t, used, total);
+          const stTag=tkStBadgeUsed(t, used, total)
+            /* 待付款章（2026-08-28）：紅＝要有人動作，與待審核卡同一套色 */
+            +(t.payment_status==='unpaid'
+              ? `<span class="tk-unpaid" title="錢還沒收到 —— 票券已發、客人可以先上課；櫃檯收到後按卡上的「收款」">待付款</span>` : '');
           /* 共享標籤（2026-07-28 使用者回報補齊）：共享給我的票標「共享」；我是持有人且有共享者標「共享中」 */
           const _shN=tkSharedIds(t).length;
           /* 共享設定移到共享章旁（2026-08-04 使用者指示：「共享設定放在共享人旁邊，方便查看」）——
@@ -41843,6 +41843,10 @@ function ppRecordHtml(){
                      就不用每次都要找你修改」）——哪幾堂算在這張票上（含已經上過的）。
                      管理員限定，與「校正堂數」同一級：兩顆都是事後更正帳的入口。 */''}
                 ${(SESSION&&SESSION.role==='admin')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="這張票蓋了哪幾堂（含已上過的）；改完票面餘額自動重算" onclick="tkTidyOpen('${t.id}')">校正</button>`:''}
+                ${/* 待付款（2026-08-28 使用者定案：「只要付款狀態選未付款 就會先出現在會員方案顯示待付款」）——
+                     票券照發、客人可以先上課；錢還沒收，櫃檯之後點這顆把金額與付款方式定案。
+                     ⚠ 只給櫃檯以上：這一步會寫進營收。 */''}
+                ${(isDeskLike()&&t.payment_status==='unpaid')?`<button class="btn btn-green btn-sm" style="padding:2px 10px;font-size:11px;" title="補上實際收到的金額與付款方式" onclick="tkPayOpen('${t.id}')">收款</button>`:''}
                 ${(isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger);" title="金額錯了要退錢：收款金額歸零，營收同步減少" onclick="voidTicketAsk('${t.id}')">作廢</button>`:''}
               </span>
             </div>
@@ -45486,16 +45490,13 @@ async function openGrantModal(){
     <div class="gt-step" data-gtstep="2" style="display:none;">
       <div class="form-row"><div id="gt-info" style="font-size:12.5px;color:var(--t2);line-height:1.9;"></div></div>
       <div style="margin:14px 0 8px;font-size:12.5px;color:var(--t3);letter-spacing:0.04em;">購買資訊</div>
-      ${/* 收款資訊之後再填（2026-08-28 使用者指示）——
-           「教練一堂堂的上課　有時候沒時間處理會員的合約　就可以先把合約打好
-             後續交給櫃檯處理」「付款方式等客戶付款再填寫　付款方式跟分期」
-           打開之後：總金額／付款方式／分期／折抵券整組交給櫃檯，票券**不當場發**，
-           改成進「待收款」名單，櫃檯收到錢、把這三欄填好，按下去才發票券。
-           ⚠ 為什麼一定要延後發票：這三個欄位決定開通堂數（分期）與營收分類
-             （現金／匯款），先發票就等於先記了一筆算不出來的帳。 */''}
-      <label class="gt-later"><input type="checkbox" id="gt-later" onchange="gtLaterSync()">
-        <span><b>收款資訊之後再填</b>（總金額／付款方式／分期交給櫃檯）<br>
-          <i>合約先成立、時段先留著；<b>票券等櫃檯收到款項才發</b>。</i></span></label>
+      ${/* 2026-08-28 三修（使用者：「那個收款資訊之後再填應該可以移除了」「只要付款狀態
+           選未付款　就會先出現在會員方案顯示待付款」）——
+           勾選框與「依角色自動判斷」兩版都退場，改用**既有的付款狀態**：
+             付款狀態選「未付款」→ 票券照常發（客人可以開始上課、時段留著），
+             會員資料的方案卡標「待付款」，櫃檯之後點卡上的「收款」把金額與付款方式定案。
+           ⚠ 分期方式**不在收款那一步改** —— 它決定發票當下開通幾堂，票已經發出去了
+             才改期數會讓已開通的堂數對不上。分期要在這裡就選好。 */''}
       <div class="form-2col">
         <div class="form-row"><label>總金額</label><input type="number" id="gt-amount" placeholder="課程總價"></div>
         <div class="form-row"><label>付款方式</label><select id="gt-method" onchange="var w=document.getElementById('gt-splitcash-wrap');if(w)w.style.display=this.value==='split'?'':'none';"><option value="cash">現金</option><option value="transfer">匯款</option><option value="split">現金＋匯款</option></select></div>
@@ -46145,16 +46146,13 @@ async function submitGrant(){
   const unitPrice=plan.unit_price||0;
   /* 自訂銷售填的是整包總價（2026-08-21）；模板方案照舊由單價乘堂數推 */
   const listPrice=(plan.list_price!=null)?(Number(plan.list_price)||0):(unitPrice*plan.sessions_base);
-  /* 收款資訊之後再填（2026-08-28）：這三欄由櫃檯在「確認收款」那一步補，
-     所以這裡先放安全的預設值，真正的數字等補填時重算（見 grFillApply）。 */
-  const _later=gtLaterOn();
-  const dealAmount=_later?0:(Number(document.getElementById('gt-amount').value)||listPrice); // 實際成交金額
-  const method=_later?'':document.getElementById('gt-method').value;
+  const dealAmount=Number(document.getElementById('gt-amount').value)||listPrice; // 實際成交金額
+  const method=document.getElementById('gt-method').value;
   /* 拆帳（2026-08-12）：現金部分必填、不可超過成交金額；匯款＝實收−現金，寫購買紀錄時才算（要扣掉折抵券） */
   const splitCash=method==='split'?Number((document.getElementById('gt-splitcash')||{}).value):null;
   if(method==='split' && (!Number.isFinite(splitCash)||splitCash<0||splitCash>dealAmount)){
     showToast('請輸入拆帳的現金金額（0 ～ 成交金額之間）'); return; }
-  const installCount=(_later||!plan.installment)?1:(Number(document.getElementById('gt-install').value)||1);
+  const installCount=plan.installment?(Number(document.getElementById('gt-install').value)||1):1;
   const note=document.getElementById('gt-note').value.trim()||null;
   // ── 分期（分段解鎖）計算 ──
   const isInstall = installCount>1;
@@ -46173,7 +46171,7 @@ async function submitGrant(){
   /* 折抵券（2026-07-29 使用者定案）：分期＝每期限用 1 張；一次付清＝無張數上限。
      window._gtVoucherMax 在 refreshGrantVoucher 已依此夾好，這裡再夾一次防繞過。 */
   const _vCap = isInstall ? 1 : Infinity;
-  const voucherN = _later ? 0 : Math.max(0, Math.min(
+  const voucherN = Math.max(0, Math.min(
     Math.floor(Number((document.getElementById('gt-voucher')||{}).value)||0),
     Number(window._gtVoucherMax)||0, _vCap));
   const voucherAmt=voucherN*300;
@@ -46182,6 +46180,7 @@ async function submitGrant(){
      電子合約要等客人簽名＋確認收款才發票券（見下方），中間可能隔幾小時到幾天。
      那時候這個表單早就關掉了 —— 所以把算好的數字原封不動存起來，
      審核通過時照著發，櫃檯不用再填一次、也不會因為重填而算出不一樣的金額。 */
+  const _mem0=await dbGet('members',member_id).catch(()=>null);
   const P={
     member_id, plan_id,
     plan:{ id:plan.id||null, name:plan.name, ticket_type_id:plan.ticket_type_id,
@@ -46196,10 +46195,7 @@ async function submitGrant(){
       .sort((a,b)=>(a.expire_date||'9999').localeCompare(b.expire_date||'9999')).map(v=>v.id),
     sale_kind:(document.getElementById('gt-salekind')||{}).value||null,
     sold_by:(window._grantSalesActive&&window._grantSalesActive.coach_id)||null,
-    payment_status:_later?'unpaid':((document.getElementById('gt-pay')||{}).value||'paid'),
-    /* 待櫃檯補填的三個欄位（2026-08-28）—— 有這個旗標就代表 dealAmount／method／
-       installCount 都還不算數，發放前一定要走 grFillApply 重算一次。 */
-    pendingFill:_later||false,
+    payment_status:(document.getElementById('gt-pay')||{}).value||'paid',
   };
   /* ══ 電子合約要等（2026-08-08 使用者定案）════════════════════════════════
      「如果是『紙本合約』就不用再經過審核，因為客戶已經看過紙本合約並完成匯款才會走到
@@ -46211,10 +46207,32 @@ async function submitGrant(){
      兩者共用同一條路（建合約＋送待審核，不發票券）。
      ⚠ 紙本＋待補填：合約當場就簽在紙上了，所以 signed_at 直接給值，
        否則審核那關的「合約尚未簽回」會把櫃檯永遠擋在外面。 */
-  if(window._grantSalesActive && window._ctBody && (window._ctSignType==='remote' || P.pendingFill)){
+  /* 選「已付款」＝這一按就把票券發出去、營收也記進去（2026-08-28 使用者指示：
+     「如果選擇『已付款』要有警告提示視窗」）——
+     「未付款」按錯還救得回來（方案卡會標待付款，櫃檯再收款就好）；
+     「已付款」按錯是錢沒收到卻記了一筆帳、票也發了，所以只擋這一邊。
+     ⚠ 用 bkAskOverlay 不用 showModal：這一支是從儲值表單那張彈窗裡跑起來的，
+       showModal 會把表單整個拆掉（0828 08:00 事故的同一個坑）。 */
+  if(P.payment_status==='paid'){
+    const _due=(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount);
+    const _payLb={cash:'現金',transfer:'匯款',card:'刷卡',split:'現金＋匯款'}[method]||method||'—';
+    if(!(await bkAskOverlay(`<div class="modal-title">確認已經收到錢了嗎？</div>
+      <div class="gr-amt-box" style="margin:2px 0 12px;">
+        <span class="gr-amt-k">應收款項</span>
+        <span class="gr-amt-v">$${_due.toLocaleString()}</span>
+        <span class="gr-amt-s">${escH(_payLb)}${isInstall?`　·　分 ${installCount} 期，這是<b>第 1 期</b>（總額 $${dealAmount.toLocaleString()}）`:''}${voucherN?`　·　已折抵券 ×${voucherN}（−$${voucherAmt.toLocaleString()}）`:''}</span>
+      </div>
+      <div style="font-size:12.5px;color:var(--text);line-height:1.9;">
+        ${escH((_mem0&&_mem0.name)||'')}　·　${escH(plan.name||'')}　·　${total} 堂<br>
+        按下去會<b>立刻發放票券</b>並記進今日營收。<br>
+        <span style="color:var(--t3);font-size:11.5px;">還沒收到錢的話，請改選「未付款」——
+        票券一樣會發、方案卡會標「待付款」，櫃檯收到再補上金額與付款方式。</span>
+      </div>`, '確認收到，發放票券', '返回修改'))) return;
+  }
+  if(window._grantSalesActive && window._ctBody && window._ctSignType==='remote'){
     const _isRemote=(window._ctSignType==='remote');
     const _mem=await dbGet('members',member_id).catch(()=>null);
-    const _amt=P.pendingFill?0:(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount);
+    const _amt=(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount);
     const _ctId=uid('CT');
     try{
       await dbPut('contracts',{id:_ctId,member_id,member_name:(_mem&&_mem.name)||null,
@@ -46239,9 +46257,7 @@ async function submitGrant(){
     dbCacheClear(['contracts','ticket_grant_requests','notifications']);
     window._ctBody=null; window._ctSignature=null;
     closeModal();
-    showToast(P.pendingFill
-      ? `合約已建立：${plan.name}　·　已進「待收款」名單，櫃檯收款時補上金額與付款方式才會發票券`
-      : `已送出審核：${plan.name}　·　等會員簽回合約並確認收款後發放（應收 $${_amt.toLocaleString()}）`, 7000);
+    showToast(`已送出審核：${plan.name}　·　等會員簽回合約並確認收款後發放（應收 $${_amt.toLocaleString()}）`, 7000);
     if(_grantFromDetail){_grantFromDetail=false;openMemberDetail(member_id);}
     else if(!(await ppRefreshIfOpen(member_id))) navTo(CUR_PAGE);
     return;
@@ -46446,22 +46462,98 @@ async function _doLineUnbind(mid){
     if(!(await ppRefreshIfOpen(mid))) navTo(CUR_PAGE);
   }catch(e){ showToast('解除失敗：'+((e&&e.message)||e)); }
 }
-/* 「收款資訊之後再填」的連動（2026-08-28）：三個欄位（含拆帳、折抵券）整組鎖起來，
-   付款狀態強制「未付款」。⚠ 只鎖不清值 —— 取消勾選要能原樣回來。 */
-function gtLaterOn(){ const el=document.getElementById('gt-later'); return !!(el&&el.checked); }
-function gtLaterSync(){
-  const on=gtLaterOn();
-  ['gt-amount','gt-method','gt-splitcash','gt-install','gt-voucher'].forEach(id=>{
-    const el=document.getElementById(id); if(!el) return;
-    el.disabled=on; el.style.opacity=on?'.45':''; el.style.pointerEvents=on?'none':'';
-  });
-  const pay=document.getElementById('gt-pay');
-  if(pay){ if(on){ pay.value='unpaid'; } pay.disabled=on; pay.style.opacity=on?'.45':''; }
-  const w=document.getElementById('gt-splitcash-wrap');
-  if(w && on) w.style.display='none';
-  const hint=document.getElementById('gt-later-hint');
-  if(hint) hint.style.display=on?'':'none';
-  try{ gtSaleKindSync(); }catch(_){}
+/* ══ 補收款（2026-08-28 使用者定案）══════════════════════════════════════
+   「只要付款狀態選未付款　就會先出現在會員方案顯示待付款」，櫃檯之後點方案卡上的
+   「收款」把金額與付款方式定案。
+
+   ⚠ 分期方式**不在這裡改**：它決定發票當下開通幾堂，票已經發出去、堂數也已經開通，
+     這時候改期數會讓已開通的堂數與期數對不上。分期要在建立合約那一步就選好。
+   ⚠ 營收記在**收款這一天**，不是建約那天 —— 錢什麼時候到，帳就記在哪一天。
+     所以這裡是補寫一筆 purchases，不是去改建約當天那一筆（那筆的 deal_amount 是 0）。 */
+async function tkPayOpen(tkId){
+  if(!isDeskLike()){ showToast('僅管理員／櫃台可收款'); return; }
+  const t=await dbGet('member_tickets',tkId);
+  if(!t){ showToast('找不到票券'); return; }
+  if(t.payment_status!=='unpaid'){ showToast('這張票不是待付款'); return; }
+  const m=await dbGet('members',t.member_id).catch(()=>null);
+  window._tkPay={id:tkId, name:(m&&m.name)||'', plan:t.plan_name||'票券'};
+  const _amt=Number(t.amount_paid)||0;
+  showModal(`<div class="modal-title">收款・${escH(t.plan_name||'票券')}</div>
+    <div style="font-size:13px;color:var(--t2);padding:2px 0 10px;">
+      ${escH((m&&m.name)||'—')}　·　共 ${Number(t.sessions_total)||0} 堂</div>
+    <div class="gr-fill">
+      <div class="gr-fill-h">照<b>實際收到的</b>填。按下去會記進<b>今天</b>的營收，並把這張票標成已付款。</div>
+      <div class="form-2col">
+        <div class="form-row"><label>實收金額 *</label>
+          <input type="number" id="tkp-amt" oninput="tkPayPreview()" value="${_amt||''}" placeholder="0"></div>
+        <div class="form-row"><label>付款方式 *</label>
+          <select id="tkp-method" onchange="var w=document.getElementById('tkp-split-wrap');if(w)w.style.display=this.value==='split'?'':'none';tkPayPreview();">
+            <option value="cash">現金</option><option value="transfer">匯款</option><option value="split">現金＋匯款</option></select></div>
+      </div>
+      <div class="form-row" id="tkp-split-wrap" style="display:none;"><label>其中現金收多少（其餘記匯款）</label>
+        <input type="number" id="tkp-split" min="0" oninput="tkPayPreview()" placeholder="例如 7200"></div>
+      <div class="gr-fill-note">分期方式不在這裡改 —— 它決定發票當下開通幾堂，票已經發出去了才改會對不上。</div>
+    </div>
+    <div class="gr-amt-box" id="tkp-box"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" id="tkp-go" onclick="tkPayGo()">確認收款</button></div>`);
+  tkPayPreview();
+}
+function tkPayRead(){
+  const raw=String(((document.getElementById('tkp-amt')||{}).value)??'').trim();
+  const amt=Number(raw);
+  if(!raw || !Number.isFinite(amt) || amt<0) return null;
+  const method=((document.getElementById('tkp-method')||{}).value)||'cash';
+  let split=null;
+  if(method==='split'){
+    split=Number((document.getElementById('tkp-split')||{}).value);
+    if(!Number.isFinite(split)||split<0||split>amt) return null;
+  }
+  return {amt, method, split};
+}
+function tkPayPreview(){
+  const box=document.getElementById('tkp-box'), go=document.getElementById('tkp-go');
+  const v=tkPayRead();
+  if(!box) return;
+  if(!v){ box.innerHTML=`<span class="gr-amt-k">實收</span><span class="gr-amt-v gr-amt-wait">—</span>
+      <span class="gr-amt-s">填好金額（拆帳的現金不能超過總額）</span>`;
+    if(go){ go.disabled=true; go.style.opacity='.45'; go.style.cursor='not-allowed'; } return; }
+  const _lb={cash:'現金',transfer:'匯款',split:'現金＋匯款'}[v.method]||v.method;
+  box.innerHTML=`<span class="gr-amt-k">實收</span><span class="gr-amt-v">$${v.amt.toLocaleString()}</span>
+    <span class="gr-amt-s">${_lb}${v.method==='split'?`（現金 $${v.split.toLocaleString()}／匯款 $${(v.amt-v.split).toLocaleString()}）`:''}　·　記在今天</span>`;
+  if(go){ go.disabled=false; go.style.opacity=''; go.style.cursor=''; }
+}
+async function tkPayGo(){ return onceAct('tkpay:'+((window._tkPay||{}).id||''), _tkPayGo); }
+async function _tkPayGo(){
+  const S=window._tkPay; if(!S){ closeModal(); return; }
+  const v=tkPayRead(); if(!v){ showToast('請填寫實收金額'); return; }
+  const done=cxBusy('收款中…');
+  try{
+    const t=await dbGet('member_tickets',S.id);
+    if(!t){ showToast('找不到票券'); return; }
+    if(t.payment_status!=='unpaid'){ showToast('這張票已經收過款了'); return; }
+    t.payment_status='paid';
+    t.amount_paid=(Number(t.amount_paid)||0)+v.amt;
+    await dbPut('member_tickets',t);
+    /* 營收記在收款這一天（見檔頭）：補寫一筆 purchases，不動建約那天那一筆。 */
+    try{
+      await dbPutPurchaseSafe({id:uid('PUR'), member_id:t.member_id, plan_id:t.source_plan_id||null,
+        ticket_id:t.id, plan_name:(t.plan_name||'票券')+'（補收款）',
+        list_price:v.amt, deal_amount:v.amt, payment_method:v.method,
+        split_cash:(v.method==='split'?v.split:null),
+        invoice_type:'none', installment_count:1,
+        note:`待付款補收（票券 ${t.id}）`, operator:SESSION.id,
+        source:'purchase', created_at:new Date().toISOString()});
+    }catch(e){ console.error('tkPay purchase fail',e);
+      showToast('收款紀錄寫入失敗（票券已標為已付款，請補開）：'+dbFriendlyError(e), 8000); }
+    await logTicket(t.id,'adjust',0,null,SESSION.id,
+      `補收款 $${v.amt.toLocaleString()}（${{cash:'現金',transfer:'匯款',split:'現金＋匯款'}[v.method]||v.method}）`);
+    dbCacheClear(['member_tickets','ticket_logs','purchases']);
+    closeModal();
+    showToast(`已收款 $${v.amt.toLocaleString()}　·　記在今天的營收`);
+    if(!(await ppRefreshIfOpen(t.member_id))) navTo(CUR_PAGE);
+  }catch(e){ showToast('收款失敗：'+((e&&e.message)||e)); }
+  finally{ done(); }
 }
 async function grantReqPending(){
   if(_grantReqOff) return [];
@@ -46510,9 +46602,7 @@ async function openGrantReview(){
         <span class="gr-sign ${signed?'ok':'wait'}">${signed?'✓ 合約已簽回':'⏳ 合約未簽回'}</span>
         <span class="gr-item-when">送出 ${String(r.requested_at||'').slice(5,16).replace('T',' ').replace('-','/')}</span>
       </div>
-      <div class="gr-item-amt">${(r.payload&&r.payload.pendingFill)
-        ? '<span>應收</span><b class="gr-item-fill">收款時填</b>'
-        : `<span>應收</span><b>$${amt.toLocaleString()}</b>`}</div>
+      <div class="gr-item-amt"><span>應收</span><b>$${amt.toLocaleString()}</b></div>
       <div class="gr-item-act">
         ${c?`<button class="btn btn-ghost btn-sm" onclick="openContractView('${c.id}')">看合約</button>`:''}
         <button class="btn btn-ghost btn-sm" style="color:var(--danger,#b5372e);" onclick="grantReqCancel('${r.id}')">取消</button>
@@ -46547,9 +46637,8 @@ async function openGrantApprove(id){
      ・教練有填 → 預帶他填的，櫃檯照實際收到的改（客人臨櫃改現金／改分期是常態）
      ・教練沒填（勾了「收款資訊之後再填」）→ 空著等櫃檯填，欄位一樣
      兩條路在櫃檯眼裡是同一個畫面，只有上方那句說明不同。 */
-  const _fill=!!P.pendingFill;
   const _canInstall=!!(P.plan && P.plan.id ? P.installable!==false : true);
-  showModal(`<div class="modal-title">${_fill?'填寫收款資訊・發放票券':'確認收款・發放票券'}</div>
+  showModal(`<div class="modal-title">確認收款・發放票券</div>
     <div style="font-size:13px;color:var(--text);padding:2px 0 10px;">
       ${escH(r.member_name||'—')}　·　${escH(r.plan_name||'')}　·　${Number(r.sessions)||0} 堂</div>
     ${/* 應收金額：整個視窗最大、最亮的一塊（0808 使用者指示：「避免櫃檯看錯」）——
@@ -46557,25 +46646,23 @@ async function openGrantApprove(id){
          而不是拿掉。櫃檯改了分期或金額，要收多少當場就變。 */''}
     <div class="gr-amt-box" id="gr-amt-box"></div>
     ${`<div class="gr-fill">
-      <div class="gr-fill-h">${_fill
-        ? '這份合約是<b>先建立、收款資訊留給櫃檯</b>的。請照實際收到的填：'
-        : '照<b>實際收到的</b>確認一次；教練填的可以改（客人臨櫃改現金、改分期都算常態）：'}</div>
+      <div class="gr-fill-h">照<b>實際收到的</b>確認一次；填錯可以直接在這裡改（客人臨櫃改現金、改分期都算常態）：</div>
       <div class="form-2col">
         <div class="form-row"><label>總金額 *</label>
-          <input type="number" id="gr-amt" oninput="grFillPreview()" placeholder="${(Number(P.listPrice)||0).toLocaleString()}" value="${_fill?(Number(P.listPrice)||''):(Number(P.dealAmount)||Number(P.listPrice)||'')}"></div>
+          <input type="number" id="gr-amt" oninput="grFillPreview()" placeholder="${(Number(P.listPrice)||0).toLocaleString()}" value="${Number(P.dealAmount)||Number(P.listPrice)||''}"></div>
         <div class="form-row"><label>付款方式 *</label>
           <select id="gr-method" onchange="var w=document.getElementById('gr-splitcash-wrap');if(w)w.style.display=this.value==='split'?'':'none';grFillPreview();">
             ${[['cash','現金'],['transfer','匯款'],['split','現金＋匯款']].map(([v,l])=>
-              `<option value="${v}"${(!_fill&&P.method===v)?' selected':''}>${l}</option>`).join('')}</select></div>
+              `<option value="${v}"${(P.method===v)?' selected':''}>${l}</option>`).join('')}</select></div>
       </div>
-      <div class="form-row" id="gr-splitcash-wrap" style="display:${(!_fill&&P.method==='split')?'':'none'};"><label>其中現金收多少（其餘記匯款）</label>
-        <input type="number" id="gr-splitcash" min="0" oninput="grFillPreview()" placeholder="例如 7200" value="${(!_fill&&P.splitCash!=null)?Number(P.splitCash):''}"></div>
+      <div class="form-row" id="gr-splitcash-wrap" style="display:${(P.method==='split')?'':'none'};"><label>其中現金收多少（其餘記匯款）</label>
+        <input type="number" id="gr-splitcash" min="0" oninput="grFillPreview()" placeholder="例如 7200" value="${P.splitCash!=null?Number(P.splitCash):''}"></div>
       ${_canInstall?`<div class="form-row"><label>分期方式 *</label>
         <select id="gr-install" onchange="grFillPreview()">${[1,2,3].map(n=>
-          `<option value="${n}"${(!_fill&&Number(P.installCount||1)===n)?' selected':''}>${n===1?'不分期（一次付清）':`分 ${n} 期（分段開通）`}</option>`).join('')}</select>
+          `<option value="${n}"${(Number(P.installCount||1)===n)?' selected':''}>${n===1?'不分期（一次付清）':`分 ${n} 期（分段開通）`}</option>`).join('')}</select>
         <div style="font-size:11px;color:var(--t3);margin-top:5px;line-height:1.7;">分期會改變<b>這次開通幾堂</b>與約別，發放前一定要確定。</div></div>`:''}
       <div class="gr-fill-note">定價 $${(Number(P.listPrice)||0).toLocaleString()}　·　共 ${Number(P.total)||0} 堂${
-        (!_fill&&P.voucherN)?`　·　已折抵券 ×${P.voucherN}（−$${(Number(P.voucherAmt)||0).toLocaleString()}，跟著保留）`:''}。填好按下面的鈕就會發票券並寫入購買紀錄。</div>
+        (P.voucherN)?`　·　已折抵券 ×${P.voucherN}（−$${(Number(P.voucherAmt)||0).toLocaleString()}，跟著保留）`:''}。填好按下面的鈕就會發票券並寫入購買紀錄。</div>
     </div>`}
     ${/* 2026-08-24 使用者指示：「櫃檯這邊要看到回簽才能審核，可以跳出會員回簽的簽名欄，
          發放票券按鈕要設計在這個視窗」—— 原本這裡只有一行「✓ 合約已於 X 簽回」的文字，
@@ -46600,7 +46687,7 @@ async function openGrantApprove(id){
       發放後 <b>30 分鐘內</b>可在首頁「今日營收」名單整筆退回（打錯了不用怕）。</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="openGrantReview()">返回</button>
-      <button class="btn btn-green" id="gr-go" onclick="grantReqApprove('${r.id}')">${_fill?'填好了・發放票券':'確認收款・發放票券'}</button>
+      <button class="btn btn-green" id="gr-go" onclick="grantReqApprove('${r.id}')">確認收款・發放票券</button>
     </div>`);
   window._grP=P; grFillPreview();
 }
@@ -46652,14 +46739,13 @@ function grFillApply(P, quiet){
   const isInstall=installCount>1;
   const segs=isInstall?splitSessions(total,installCount):[total];
   const amts=isInstall?splitAmount(amount,installCount):[amount];
-  /* 折抵券：待補填那條一律 0（教練建約當下沒挑券，這一步也不開放挑）；
-     教練已經挑過券的正常合約要原封不動留著 —— 這一步只是「改收款方式／金額」，
-     不該把人家挑好的券洗掉。
+  /* 折抵券：挑過的原封不動留著 —— 這一步只是「改收款方式／金額」，
+     不該把人家挑好的券洗掉（2026-08-28 三修：教練那條也挑得到券了，不再一律歸零）。
      ⚠ 分期每期限用 1 張（0729 定案）：櫃檯若在這裡改成分期，張數要跟著夾。 */
-  const _vN0 = P.pendingFill ? 0 : Math.max(0, Number(P.voucherN)||0);
+  const _vN0 = Math.max(0, Number(P.voucherN)||0);
   const _vN  = isInstall ? Math.min(1, _vN0) : _vN0;
   const _vAmt = _vN*300;
-  const _vIds = P.pendingFill ? [] : (Array.isArray(P.voucherTkIds)?P.voucherTkIds.slice(0,_vN):[]);
+  const _vIds = (Array.isArray(P.voucherTkIds)?P.voucherTkIds.slice(0,_vN):[]);
   return Object.assign({}, P, {
     dealAmount:amount, method, splitCash, installCount,
     isInstall, unlocked:segs[0], firstAmount:amts[0],
@@ -46669,7 +46755,6 @@ function grFillApply(P, quiet){
     paidAmount:Math.max(0, amount-_vAmt),
     sale_kind: isInstall ? 'installment' : (P.sale_kind||null),
     payment_status:'paid',      // 走到這一步就是櫃檯已經收到錢了
-    pendingFill:false,
   });
 }
 async function grantReqApprove(id){ return onceAct('grapp:'+id, ()=>_grantReqApprove(id)); }
