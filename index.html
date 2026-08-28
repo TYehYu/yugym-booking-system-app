@@ -9702,6 +9702,12 @@ button.rev-kind.rev-kind-off{opacity:.5;}
   font-size:13px;font-family:inherit;margin-bottom:8px;}
 /* 圓形卡放在視窗最上面當定位（2026-08-25 使用者指示：「直接在該方案圓形卡下方
    顯示按鈕填寫修正日期」）—— 沒有那排點，「第幾格沒有日期」講不清楚。 */
+.tdy-mu-hi{outline:2px solid var(--green);outline-offset:3px;border-radius:9px;}
+.tdy-pickbox{border:1.5px solid var(--green);border-radius:11px;padding:11px 13px;margin:2px 0 12px;
+  background:rgba(31,111,84,.06);}
+.tdy-pick-h{font-size:13.5px;font-weight:800;color:var(--text);font-family:var(--num),inherit;margin-bottom:9px;}
+.tdy-pick-b{display:flex;gap:8px;flex-wrap:wrap;}
+.tdy-pick-n{font-size:11px;color:var(--t3);line-height:1.7;margin-top:8px;}
 .tdy-dots{background:#fff;border:1px solid var(--bd);border-radius:14px;padding:11px 13px;
   margin:0 0 10px;box-shadow:0 2px 8px rgba(30,25,15,.07);}
 .tdy-mu{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:4px;}
@@ -11369,8 +11375,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.1643';
-const APP_VERSION_LABEL='v260828.1643';
+const APP_VERSION = '260828.1652';
+const APP_VERSION_LABEL='v260828.1652';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12647,7 +12653,10 @@ async function tkTidyOpen(tkId){
     const _W=await buildWallet(mid, {tickets:tks, bookings:bks, logs, types:(window._ttCache||[]),
       typeMap:(()=>{ const o={}; (window._ttCache||[]).forEach(x=>{o[x.id]=x;}); return o; })()});
     const _sl=_W.of(tkId)||{stamps:[],used:0};
-    _dots=ticketTokens(t, _sl.stamps, _W.typeMap||{}, _sl.used, null, mid, _W.selfBk);
+    /* 圓形卡可點（2026-08-28 使用者指示：「只要出現上方圓形卡 然後點選圓形卡的時候
+       下方出現日期改動或者取消的選項」）—— tapBooked 本來就只讓「已預約未上」的點可按，
+       正好是唯一能改日期／取消的那一類（已上過的、本堂、教練請假都不該從這裡動）。 */
+    _dots=ticketTokens(t, _sl.stamps, _W.typeMap||{}, _sl.used, null, mid, _W.selfBk, 0, {tapBooked:'tdyPick', tapGhost:'tdyMuFocus'});
   }catch(_){ _dots=''; }
   /* 帳目可信的票才敢預設「依戳記重算」（見檔頭；沿用對帳巡檢的同一條基準線） */
   const _auditable=(typeof tkLedgerAuditable==='function')?tkLedgerAuditable(t):false;
@@ -12666,13 +12675,21 @@ async function tkTidyOpen(tkId){
   tkTidyPaint();
 }
 /* 視窗骨架抽出來（開窗與「‹ 返回」共用，兩邊長得一樣才不會有一邊漏改） */
+/* 2026-08-28 使用者定案（三問三答）：
+     ・中間那一大串清單「整塊拿掉，全部改用圓形卡」
+     ・點圓形卡的「日期改動」＝真的改這堂課的上課日期（走 admhMoveAsk）
+     ・「取消」＝真的取消這堂課（走 confirmCancelBooking）
+   ⚠ 代價已當面講過並由使用者拍板：清單是**唯一**能把「已經上過的課」改算到別張票的路
+     （更換票券只收「還沒簽到」的），拿掉之後那種情況要再開新入口。
+     未來的課不受影響 —— 課卡的「更換票券」照舊。
+   ⚠ 勾選狀態（S.sel/S.orig）沒有跟著移除：票面餘額的「依戳記重算」還在讀它
+     （＝目前真的算在這張票上的那幾堂），只是不再能從畫面上改。 */
 function tkTidyShell(S){
   return `${S.dots?`<div class="tdy-dots"><div class="mck-dots2">${S.dots}</div></div>`:''}
-    <div id="tdy-mubox"></div>
     <div style="font-size:12px;color:var(--t2);line-height:1.9;margin:2px 0 10px;">
-      勾起來的就是<b>算在這張票上</b>的課；下面再決定票面餘額改成幾堂。</div>
-    <div class="lot-sec">這位會員的${escH(S.cat||'課程')}（${S.rows.length} 堂）</div>
-    <div class="tdy-list" id="tdy-list"></div>
+      點<b>已預約</b>的圓形卡可以改日期或取消那一堂；下面再決定票面餘額改成幾堂。</div>
+    <div id="tdy-pick"></div>
+    <div id="tdy-mubox"></div>
     <div id="tdy-sum"></div>
     <div class="lot-sec">票面餘額改成幾堂？</div>
     <div class="tdy-rembar" id="tdy-rembar"></div>
@@ -12741,31 +12758,57 @@ function tkTidyWhy(){
 }
 /* 只重畫清單與結算兩塊（不整個 showModal）——一按就重開視窗會把捲動位置彈回頂端，
    而這張清單常常有二十幾列。 */
+/* 點圓形卡：選起來（再點一次收掉），面板由 tkTidyPaint 畫。
+   ⚠ 只有「已預約未上」的點按得到（ticketTokens 的 tapBooked 已經夾好），
+     所以這裡不必再擋一次狀態；找不到對應那一列就當作沒點。 */
+/* 點「只有打勾」的圓形卡 → 跳到下面補登日期的那一格並打開它（2026-08-28）。
+   ⚠ 不把日期欄搬進圓形卡旁邊：補登的格數是「帳面已用 − 有課卡的堂數」算出來的，
+     跟圓點的順序不是一對一（有課卡的那幾顆夾在中間），搬過去反而對不起來。 */
+function tdyMuFocus(i){
+  const S=window._tdy; if(!S) return;
+  S.pick=null; tkTidyPaint();
+  setTimeout(()=>{
+    try{
+      const el=document.getElementById('tdy-mu-'+i);
+      if(!el){ showToast('這一格不需要補登日期'); return; }
+      const row=el.closest('.tdy-mu-row')||el;
+      row.scrollIntoView({block:'center', behavior:'smooth'});
+      row.classList.add('tdy-mu-hi');
+      setTimeout(()=>{ try{ row.classList.remove('tdy-mu-hi'); }catch(_){} }, 1600);
+      if(typeof el.click==='function') el.click();
+    }catch(_){}
+  },0);
+}
+function tdyPick(bid){
+  const S=window._tdy; if(!S) return;
+  S.pick=(String(S.pick||'')===String(bid))?null:String(bid);
+  tkTidyPaint();
+}
 function tkTidyPaint(){
   const S=window._tdy; if(!S) return;
-  const el=document.getElementById('tdy-list'), es=document.getElementById('tdy-sum');
+  const es=document.getElementById('tdy-sum');
   const _wd=['日','一','二','三','四','五','六'];
   const _dlb=d=>{ const p=String(d).split('-'); if(p.length<3) return String(d);
     let w=''; try{ w=_wd[parseYmd(String(d).slice(0,10)).getDay()]||''; }catch(_){}
     return `${p[1]}/${p[2]}${w?`（${w}）`:''}`; };
-  if(el) el.innerHTML=S.rows.length?S.rows.map(r=>{
-    const on=!!S.sel[r.id];
-    const stLb=(r.pend?'待簽約':(r.st==='checked_in'||r.st==='completed'?'已上':(r.st==='coach_leave'?'教練請假':'已預約')))
-      + (r.freed ? (r.lv?'・教練請假已退回':'・已退回') : '');
-    const where=on?'算在這張票'
-      :(r.tk?`目前算在 #${S.tkNo[r.tk]||'?'} ${S.tkName[r.tk]||'其他票券'}`:'未綁票券');
-    if(r.lock && String(r.lock)!==String(S.tkId))
-      return `<div class="ash-eirow ash-ei-2c tdy-row tdy-lock">
-        <span class="ash-eilb">${_dlb(r.date)} ${r.time}<span class="tdy-lockchip">已扣課・不能在這裡搬</span></span>
-        <span class="ash-eisub">${escH(stLb)}${r.coach?'・'+escH(r.coach):''}<br>已扣 #${S.tkNo[r.lock]||'?'} 的課，請用課卡的「更換票券」</span></div>`;
-    if(r.lock)
-      return `<div class="ash-eirow ash-ei-2c tdy-row tdy-lock tdy-on" style="opacity:.9;">
-        <span class="ash-eilb">${_dlb(r.date)} ${r.time}<span class="tdy-lockchip">已扣課・拿不掉</span></span>
-        <span class="ash-eisub">${escH(stLb)}${r.coach?'・'+escH(r.coach):''}<br>這一堂有扣課紀錄，拿不掉</span></div>`;
-    return `<button type="button" class="ash-eirow ash-ei-2c tdy-row${on?' tdy-on':''}" onclick="tkTidyTap('${r.id}')">
-      <span class="ash-eilb">${_dlb(r.date)} ${r.time}</span>
-      <span class="ash-eisub">${escH(stLb)}${r.coach?'・'+escH(r.coach):''}<br>${escH(where)}</span></button>`;
-  }).join(''):'<div class="ash-einote">這位會員沒有這個課別的單人課預約。</div>';
+  /* 點到的那一顆圓形卡 → 下方長出動作面板（2026-08-28）。
+     ⚠ 兩顆按鈕都會離開校正視窗（改日期與取消各有自己的確認流程，
+       而 showModal 是單一彈窗）—— 所以面板上就先講明白。 */
+  {
+    const ep=document.getElementById('tdy-pick');
+    const r=S.pick?(S.rows||[]).find(x=>x.id===S.pick):null;
+    if(ep) ep.innerHTML=r?`<div class="tdy-pickbox">
+      <div class="tdy-pick-h">${_dlb(r.date)} ${r.time}${r.coach?'　·　'+escH(r.coach):''}</div>
+      <div class="tdy-pick-b">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="closeModal();admhMoveAsk('${r.id}')">改日期／時間</button>
+        <button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger,#b5372e);" onclick="closeModal();confirmCancelBooking('${r.id}')">取消這一堂</button>
+      </div>
+      <div class="tdy-pick-n">按下去會離開校正視窗，各自有確認步驟。取消會退回堂數、時段還出去。</div>
+    </div>`:'';
+  }
+  /* 2026-08-28：中間那一大串清單整塊退場（使用者定案，見 tkTidyShell 的說明）——
+     繪製那一段一併刪掉，不留讀不到的死碼。歸屬仍由 S.sel 帶著（餘額「依戳記重算」在用），
+     只是不再能從畫面上改。 */
   const n=tkTidyUsedN(), auto=S.total-n, rem=tkTidyRemNow();
   const _freedSel=Object.keys(S.sel).length-n;
   const chg=S.rows.filter(r=>(!!S.sel[r.id])!==(!!S.orig[r.id])).length;
@@ -53725,7 +53768,13 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
       const lvc=(b&&b._leave)?' mtk-leave':((b&&b._eaten)?' mtk-eaten':'');
       /* 補登日期的格子（沒有課卡，_it.g 是它在 _ghost 裡的序號） */
       const _md=(!b && _it.g!=null) ? (_mu[_it.g]||'') : '';
-      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}${shc}${_md?' mtk-manual':''}" style="--tk-acc:${v.accent};" title="${(b&&b._leave)?'請假（本堂照扣，另發補課券）':((b&&b._eaten)?'取消未退（取消時選了扣課不退）':'已完成')}${b&&b.date?' '+b.date:''}${_md?_md+'　·　舊系統補登（沒有對應課卡）':''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${_shBody(b, b?md(b):(_md?md({date:_md}):'✓'))}${cur?'<i class="mtk-comet"></i>':''}</span>`;
+      /* 沒有課卡的那幾格（帳面已用、綁不到預約）也要點得到（2026-08-28 使用者：
+         「所以如果圓形卡只有顯示打勾 我選擇這個打勾的圓形卡的時候 也可以填寫日期進去」）——
+         點下去跳到下面「補登使用日期」的那一格。用 tapGhost 帶進來，
+         與 tapBooked 一樣是呼叫端決定要不要開放。 */
+      const _tapG=(!b && _it.g!=null && opts && opts.tapGhost)
+        ? ` onclick="event.stopPropagation();${opts.tapGhost}(${_it.g})"` : '';
+      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}${shc}${_md?' mtk-manual':''}${_tapG?' mtk-tap':''}"${_tapG}" style="--tk-acc:${v.accent};" title="${(b&&b._leave)?'請假（本堂照扣，另發補課券）':((b&&b._eaten)?'取消未退（取消時選了扣課不退）':'已完成')}${b&&b.date?' '+b.date:''}${_md?_md+'　·　舊系統補登（沒有對應課卡）':''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${_shBody(b, b?md(b):(_md?md({date:_md}):'✓'))}${cur?'<i class="mtk-comet"></i>':''}</span>`;
     }
     else {
       const b=_it.b;

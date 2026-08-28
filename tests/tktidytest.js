@@ -58,24 +58,60 @@ const fresh=()=>{ W._tdy={ tkId:'TK-C', mid:'M1', cat:'私人教練', rows,
 
 console.log('實跑 tkTidyPaint');
 fresh(); tkTidyPaint();
-const L=()=>boxes['tdy-list'].innerHTML, S=()=>boxes['tdy-sum'].innerHTML;
-ok('★ 已經算在這張票上的畫成綠底（tdy-on）',
-   /tkTidyTap\('B4'\)/.test(L()) && /tdy-row tdy-on"[^>]*onclick="tkTidyTap\('B4'\)/.test(L()));
-ok('★ 掛在別張票的寫得出「目前算在 #1」', /目前算在 #1 私人教練課 1V2/.test(L()));
-ok('★ 沒綁票的寫「未綁票券」', /未綁票券/.test(L()));
-ok('★ 待簽約的標成待簽約，不是已預約',
-   /B6/.test(L()) && L().split("tkTidyTap('B6')")[1].indexOf('待簽約')>=0);
-ok('★★ 有扣課紀錄、且扣在別張票的鎖住＋寫原因，不是藏起來',
-   /tdy-lock/.test(L()) && /已扣 #4 的課，請用課卡的「更換票券」/.test(L())
-   && !/tkTidyTap\('B7'\)/.test(L()));
-/* 2026-08-26 使用者問「為什麼『已上』的可以點、7/30 又不能點，差別在哪裡」——
-   差別是有沒有扣課紀錄，不是已上／未上。原本只寫在右邊副標，掃一排看不出來。 */
-ok('★★ 鎖住的原因拉到日期旁邊（一排掃下來看得出差別）',
-   /<span class="tdy-lockchip">已扣課・不能在這裡搬<\/span>/.test(L())
-   && /<span class="tdy-lockchip">已扣課・拿不掉<\/span>/.test(L()));
-ok('★★ 有扣課紀錄、扣在這張票的也鎖住（拿不掉）',
-   /這一堂有扣課紀錄，拿不掉/.test(L()) && !/tkTidyTap\('B5'\)/.test(L()));
-ok('★ 日期帶星期（01/17（六））', /01\/17（六）/.test(L()));
+const S=()=>boxes['tdy-sum'].innerHTML, PK=()=>boxes['tdy-pick'].innerHTML;
+/* ══ 2026-08-28 使用者定案：中間那一大串清單整塊退場 ══════════════════════
+   「票券校正的視窗 只要出現上方圓形卡 然後點選圓形卡的時候下方出現日期改動
+     或者取消的選項」，並在三問三答中確認：
+       ・清單「整塊拿掉，全部改用圓形卡」
+       ・「日期改動」＝真的改這堂課的上課日期（admhMoveAsk）
+       ・「取消」＝真的取消這堂課（confirmCancelBooking）
+
+   ⚠ 代價當面講過並由使用者拍板：清單是**唯一**能把「已經上過的課」改算到別張票的路
+     （更換票券只收「還沒簽到」的）。下面這幾條把當初的判準留成文件 ——
+     哪天要把那條路做回來，這裡有現成的規格：
+       ・有扣課紀錄、扣在別張票 → 鎖住，導去課卡的「更換票券」
+       ・有扣課紀錄、扣在這張票 → 鎖住（拿不掉）
+       ・已退回的（教練請假扣了又退）→ 算歸屬但不佔堂數
+   ⚠ 歸屬本身（S.sel）沒有跟著移除：票面餘額的「依戳記重算」還在讀它。 */
+ok('★★ 清單整塊退場（骨架與繪製都不留死碼）',
+   !/id="tdy-list"/.test(src) && !/tkTidyTap\('/.test(src)
+   && /中間那一大串清單整塊退場（使用者定案，見 tkTidyShell 的說明）/.test(src));
+ok('★★ 拿掉的代價寫在原地（已上過的課要改票就沒路了）',
+   /清單是\*\*唯一\*\*能把「已經上過的課」改算到別張票的路/.test(src)
+   && /更換票券只收「還沒簽到」的/.test(src));
+ok('★★ 歸屬沒被一起刪掉 —— 餘額「依戳記重算」還在讀 S.sel',
+   /function tkTidyUsedN\(\)\{/.test(src)
+   && /只是不再能從畫面上改/.test(src));
+
+console.log('\n點圓形卡 → 下方出現動作');
+/* 已預約未上的點才可按（ticketTokens 的 tapBooked 已經夾好：本堂與教練請假都排除） */
+W._tdy.pick='B4'; tkTidyPaint();
+ok('★★ 點了之後長出面板，寫出那一堂是哪一天', /09\/03（四） 19:00/.test(PK()));
+ok('★★ 兩顆按鈕：改日期／時間、取消這一堂',
+   /onclick="closeModal\(\);admhMoveAsk\('B4'\)"/.test(PK())
+   && /onclick="closeModal\(\);confirmCancelBooking\('B4'\)"/.test(PK()));
+ok('★★ 取消的後果先講（退回堂數、時段還出去），而且用警示紅',
+   /取消會退回堂數、時段還出去/.test(PK()) && /color:var\(--danger,#b5372e\);/.test(PK()));
+ok('★ 按下去會離開校正視窗 —— 先講明白（showModal 是單一彈窗）',
+   /按下去會離開校正視窗，各自有確認步驟/.test(PK()));
+W._tdy.pick=null; tkTidyPaint();
+ok('★ 沒點任何一顆時面板不畫（不佔位置）', PK()==='');
+
+console.log('\n只有打勾的格子也點得到（2026-08-28 二問）');
+/* 「所以如果圓形卡只有顯示打勾 我選擇這個打勾的圓形卡的時候 也可以填寫日期進去」 */
+ok('★★ 沒有課卡的 ✓ 格子帶 onclick，走 tapGhost',
+   /const _tapG=\(!b && _it\.g!=null && opts && opts\.tapGhost\)/.test(src)
+   && /\$\{_tapG\?' mtk-tap':''\}"\$\{_tapG\}/.test(src));
+ok('★★ 校正視窗兩種點都開放（已預約→動作面板、✓→補登日期）',
+   /\{tapBooked:'tdyPick', tapGhost:'tdyMuFocus'\}/.test(src));
+ok('★★ 點 ✓ 是跳到「補登使用日期」那一格並標起來，不是另開一套',
+   /function tdyMuFocus\(i\)\{/.test(src)
+   && /document\.getElementById\('tdy-mu-'\+i\)/.test(src)
+   && /row\.classList\.add\('tdy-mu-hi'\);/.test(src));
+ok('　 為什麼不把日期欄搬到圓點旁邊 —— 理由寫在原地',
+   /補登的格數是「帳面已用 − 有課卡的堂數」算出來的，\s*\n\s*跟圓點的順序不是一對一/.test(src));
+
+fresh(); tkTidyPaint();
 ok('★ 結算列寫出佔堂數與「現在 → 之後」', /佔堂數[\s\S]*?2 \/ 8/.test(S()) && /票面餘額[\s\S]*?0 → 6 堂/.test(S()));
 
 /* 2026-08-26 使用者：「票面餘額 -2？」——林韋綺 #16 掛著 10 堂，其中兩堂是教練請假
@@ -92,7 +128,7 @@ ok('★ 結算列寫出佔堂數與「現在 → 之後」', /佔堂數[\s\S]*?2
      /佔堂數[\s\S]*?2 \/ 8/.test(S()) && /另有 2 堂已退回，不佔堂數/.test(S()));
   ok('★★ 餘額因此不會變成負數（8 − 2 = 6，不是 8 − 4 = 4）',
      /票面餘額[\s\S]*?0 → 6 堂/.test(S()));
-  ok('★ 清單上標得出來是哪一種', /教練請假已退回/.test(L()));
+  /* 清單退場後，「哪一種」改由結算列的副標講（另有 N 堂已退回，不佔堂數） */
 })();
 ok('★ 團課沒列出來要講一句（不是靜靜消失）', /另有 2 堂團課沒有列出來/.test(S()));
 
@@ -103,7 +139,10 @@ ok('★★ 補上七堂中的三堂 → 佔 5 堂、餘額 3',
    /5 \/ 8/.test(S()) && /票面餘額[\s\S]*?0 → 3 堂/.test(S()));
 ok('　　更動筆數會講', /這次會更動 3 堂/.test(S()));
 tkTidyTap('B4');
-ok('★ 再點一下取消勾選（可來回）', /4 \/ 8/.test(S()) && !/tdy-row tdy-on"[^>]*onclick="tkTidyTap\('B4'\)/.test(L()));
+/* 清單退場後 tkTidyTap 只剩「切換歸屬」這個狀態動作（畫面上沒有入口了）——
+   刻意留著：餘額三顆按鈕讀的就是 S.sel，而且哪天要把清單做回來，這是現成的接點。
+   下面幾條照舊驗它的算術。 */
+ok('★ 再點一下取消勾選（可來回）', /4 \/ 8/.test(S()));
 
 /* 超過總堂數要當場擋住並說清楚 —— 黃喬莉這張正是 9 堂佔 8 格 */
 fresh();
@@ -263,7 +302,8 @@ ok('★ 返回會留住剛剛勾的（重開視窗會被資料庫洗掉）',
 console.log('\n圓形卡與寫入（原始碼）');
 ok('★★ 圓形卡畫在視窗最上面當定位（使用者：「直接在該方案圓形卡下方顯示」）',
    /const _sl=_W\.of\(tkId\)\|\|\{stamps:\[\],used:0\};/.test(OPEN)
-   && /_dots=ticketTokens\(t, _sl\.stamps, _W\.typeMap\|\|\{\}, _sl\.used, null, mid, _W\.selfBk\);/.test(OPEN)
+   /* 2026-08-28：圓形卡從「定位用的裝飾」升格成唯一的操作介面，所以多帶兩個 tap 入口 */
+   && /_dots=ticketTokens\(t, _sl\.stamps, _W\.typeMap\|\|\{\}, _sl\.used, null, mid, _W\.selfBk, 0, \{tapBooked:'tdyPick', tapGhost:'tdyMuFocus'\}\);/.test(OPEN)
    && /\$\{S\.dots\?`<div class="tdy-dots">/.test(src));
 ok('★★ 補登日期存在 member_tickets.manual_uses，空了就寫回 null',
    /t\.manual_uses=mu\.length\?mu:null;/.test(DO));
