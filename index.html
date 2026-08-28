@@ -11353,8 +11353,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260827.2247';
-const APP_VERSION_LABEL='v260827.2247';
+const APP_VERSION = '260828.1429';
+const APP_VERSION_LABEL='v260828.1429';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28474,23 +28474,52 @@ async function refreshBkTicket(){
 }
 // 場地溢出確認：若 vbk 帶 _venueOverflow（分到次選場地），跳確認框詢問教練
 //  回傳 Promise<boolean>：教練按「改用」→true；「取消」→false。無溢出直接 true。
-function confirmVenueOverflow(vbk, noLabel){
+/* ══ 建立預約途中的「問一句」浮層（2026-08-28）══════════════════════════════
+   ⚠ 這裡**不能用 showModal** —— showModal 是「單一彈窗」，開新的之前會先
+     `document.querySelectorAll('.modal-bg').forEach(el=>el.remove())`。
+     而 submitBooking 是從「新增預約」那個彈窗裡跑起來的：中途 showModal 等於把
+     整張表單拆掉，回來之後 `document.getElementById('bk-member').value` 就是
+     null.value，丟 TypeError，被最外層 catch 接住變成一閃即逝的紅吐司。
+
+   2026-08-28 使用者回報：「教練反應 預約早上8:00的時候 會出現錯誤訊息」「桌機行事曆
+   新增預約」「太快消失我截不到」—— 就是這條路。08:00 早於開店（09:00）會觸發
+   confirmOffHours，而 09:00–21:00 不會，所以只有非營業時間的時段會炸。
+
+   openBkFamPickNew 早在 0803 就因為同一個理由改用獨立浮層（見它的註記），
+   confirmOffHours / confirmVenueOverflow 當時沒有一起改。這一支把三者統一。
+   ⚠ 按鈕一律只 remove 自己，**絕對不要呼叫 closeModal()** —— 那會把底下的表單關掉。
+   ⚠ z-index 9860 > modal-bg 9750，蓋在彈窗之上。 */
+function bkAskOverlay(bodyHtml, yesLabel, noLabel){
   return new Promise(resolve=>{
-    const ov=vbk&&vbk._venueOverflow;
-    if(!ov){ resolve(true); return; }
-    const fromName=venueName(ov.fromVid+'_1')||'首選場地';
-    const toName=venueName(ov.toVid+'_1')||'次選場地';
-    showModal(`<div class="modal-title">場地已滿</div>
-      <div style="padding:6px 0 10px;font-size:13.5px;line-height:1.9;color:var(--text);">
-        <b>${fromName}</b>該時段已額滿。<br>是否改用 <b>${toName}</b>？
-      </div>
+    const id='bkask-ov';
+    let old=document.getElementById(id); if(old) old.remove();
+    const ov=document.createElement('div'); ov.id=id;
+    ov.style.cssText='position:fixed;inset:0;z-index:9860;background:rgba(20,18,14,0.45);'
+      +'display:flex;align-items:center;justify-content:center;padding:24px;';
+    ov.innerHTML=`<div class="modal" style="max-width:420px;width:100%;margin:0;">${bodyHtml}
       <div class="modal-foot">
-        <button class="btn btn-ghost" onclick="closeModal();window._venueOvNo&&window._venueOvNo()">${noLabel||'取消預約'}</button>
-        <button class="btn btn-green" onclick="closeModal();window._venueOvYes&&window._venueOvYes()">改用${toName}</button>
-      </div>`);
-    window._venueOvYes=()=>{ resolve(true); };
-    window._venueOvNo=()=>{ resolve(false); };
+        <button class="btn btn-ghost" data-a="no">${escH(noLabel||'取消')}</button>
+        <button class="btn btn-green" data-a="yes">${escH(yesLabel||'確定')}</button>
+      </div></div>`;
+    let done=false;
+    const fin=v=>{ if(done) return; done=true; try{ ov.remove(); }catch(_){} resolve(v); };
+    ov.addEventListener('click',e=>{
+      const b=e.target&&e.target.closest&&e.target.closest('button[data-a]');
+      if(b){ fin(b.getAttribute('data-a')==='yes'); return; }
+      if(e.target===ov) fin(false);          // 點背景＝取消（與 showModal 同手感）
+    });
+    document.body.appendChild(ov);
   });
+}
+function confirmVenueOverflow(vbk, noLabel){
+  const ov=vbk&&vbk._venueOverflow;
+  if(!ov) return Promise.resolve(true);
+  const fromName=venueName(ov.fromVid+'_1')||'首選場地';
+  const toName=venueName(ov.toVid+'_1')||'次選場地';
+  return bkAskOverlay(`<div class="modal-title">場地已滿</div>
+      <div style="padding:6px 0 10px;font-size:13.5px;line-height:1.9;color:var(--text);">
+        <b>${escH(fromName)}</b>該時段已額滿。<br>是否改用 <b>${escH(toName)}</b>？
+      </div>`, '改用'+toName, noLabel||'取消預約');
 }
 /* ── 待簽約卡位（2026-07-27 使用者指示）──
    客人尚未購票：以姓名先佔住時段與場地（pending_contract=true、member_id null）；
@@ -28909,8 +28938,10 @@ async function _submitBookingInner(){
   //    2026-07-21 曾把手機設必填（會員帳號＝手機），但有些客人不留電話，故改選填：
   //    有填才走建會員流程；沒填則沿用舊的「臨時體驗」模式（僅 trial_name，不建會員、不能綁）。
   if(isTrial){
-    const tname=(document.getElementById('bk-trial-name').value||'').trim();
-    const tphoneRaw=(document.getElementById('bk-trial-phone').value||'').trim();
+    const _tnEl=document.getElementById('bk-trial-name');
+    if(!_tnEl){ showToast('預約表單已經關閉了，請重新開啟「新增預約」', 6000); return; }   /* 同上（2026-08-28） */
+    const tname=(_tnEl.value||'').trim();
+    const tphoneRaw=(document.getElementById('bk-trial-phone')?.value||'').trim();
     const tphone=normPhone(tphoneRaw);
     if(!tname){showToast('請填寫客戶姓名');return;}
     if(memNameErr(tname)){showToast(memNameErr(tname));return;}
@@ -29010,7 +29041,12 @@ async function _submitBookingInner(){
   }
 
   // ── 一般課程（私教/友善/自主）──
-  const member_id=document.getElementById('bk-member').value;
+  /* 護欄（2026-08-28）：表單若不在了就講人話。原本直接 .value，表單被拆掉時
+     丟的是 `Cannot read properties of null`，使用者只看到一閃而過的紅吐司。
+     根因已在 bkAskOverlay 修掉，這一層是防下一次有人又在中途開 showModal。 */
+  const _mEl=document.getElementById('bk-member');
+  if(!_mEl){ showToast('預約表單已經關閉了，請重新開啟「新增預約」', 6000); return; }
+  const member_id=_mEl.value;
   if(!member_id){showToast('請選擇會員');return;}
   const _rc=bkReadRecurBk(window._bkRecurMax);
   if(_rc.on){
@@ -29138,7 +29174,8 @@ async function _submitBookingInner(){
     <div class="modal-foot"><button class="btn btn-green" onclick="closeModal();bkAfterSubmit()">完成</button></div>`);
  }catch(e){
    console.error('submitBooking 錯誤:',e);
-   showToast('預約失敗：'+(e&&e.message?e.message:e));
+   /* 2026-08-28 使用者：「太快消失我截不到」—— 失敗訊息是要拿來回報的，留久一點 */
+   showToast('預約失敗：'+(e&&e.message?e.message:e), 9000);
  }
 }
 // 依起始日、星期清單、次數上限、結束日，產生日期陣列
@@ -47799,25 +47836,19 @@ function bkOffHoursAsk(cat){
     : '確定要排嗎？排下去不會有其他阻擋，記得先跟教練確認會到場。'
       + '（可排範圍是營業時間前後各 1 小時）';
 }
+/* ⚠ 走 bkAskOverlay 而不是 showModal —— 這一支是從「新增預約」彈窗裡被呼叫的，
+     showModal 會把那張表單整個移除（見 bkAskOverlay 的說明，2026-08-28 的 08:00 事故）。 */
 function confirmOffHours(ds, time, dur, actLabel, cat){
-  return new Promise(resolve=>{
-    const note=bizOffHoursNote(ds, time, dur);
-    if(!note){ resolve(true); return; }
-    showModal(`<div class="modal-title">超過營業時間</div>
+  const note=bizOffHoursNote(ds, time, dur);
+  if(!note) return Promise.resolve(true);
+  return bkAskOverlay(`<div class="modal-title">超過營業時間</div>
       <div style="background:rgba(180,138,86,.10);border:1px solid rgba(180,138,86,.45);border-radius:9px;
                   padding:11px 13px;margin:2px 0 10px;font-size:13px;line-height:1.85;color:var(--text);">
         ${escH(note)}
       </div>
       <div style="font-size:12px;color:var(--t2);line-height:1.8;margin-bottom:4px;">
         ${escH(bkOffHoursAsk(cat))}
-      </div>
-      <div class="modal-foot">
-        <button class="btn btn-ghost" onclick="closeModal();window._ohNo&&window._ohNo()">${escH(actLabel||'取消')}</button>
-        <button class="btn btn-green" onclick="closeModal();window._ohYes&&window._ohYes()">仍要預約</button>
-      </div>`);
-    window._ohYes=()=>resolve(true);
-    window._ohNo=()=>resolve(false);
-  });
+      </div>`, '仍要預約', actLabel||'取消');
 }
 /* 表頭＋鈕（0819 收進模式列 → 2026-08-21 改回右下角浮動圓鈕）——一日＝展開可約時段層、一週＝開新增預約 */
 function admCalQuickAdd(){

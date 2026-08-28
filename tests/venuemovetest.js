@@ -75,7 +75,9 @@ ok('　　視窗版取消後把明細叫回來，不會變成空白',
    /if\(_inModal\) openBookingDetail\(id\); return false;/.test(src));
 ok('　　確認框的否定鈕文案可依情境改（移動時不該寫「取消預約」）',
    /function confirmVenueOverflow\(vbk, noLabel\)\{/.test(src)
-   && /\$\{noLabel\|\|'取消預約'\}/.test(src));
+   /* 2026-08-28 改走 bkAskOverlay（showModal 會把底下的「新增預約」表單拆掉），
+      文案改用參數傳給浮層，語意不變 */
+   && /noLabel\|\|'取消預約'\);/.test(src));
 
 /* ── 2b. 沒動到時間就別重新分配場地 ─────────────────────── */
 console.log('\n只改備註不該跳場地提示（2026-07-30 使用者指示）');
