@@ -57,6 +57,31 @@ console.log('\n② 選「已付款」要先確認（按錯＝錢沒收到卻記�
   ok('★★ 取消就整個不做（return，不會偷偷往下發票）', /\)\)\) return;/.test(C));
 }
 
+console.log('\n②-b 預設就是「未付款」（安全的那一邊）');
+{
+  ok('★★ gt-pay 的第一個選項是未付款、而且帶 selected',
+     /<select id="gt-pay"><option value="unpaid" selected>未付款<\/option><option value="paid">已付款<\/option><\/select>/.test(src));
+  ok('★★ 理由寫在原地', /預設「未付款」（2026-08-28 使用者指示）—— 安全的那一邊：/.test(src));
+}
+
+console.log('\n②-c 業績歸屬那一步：底列＝上一步／確認，沒選教練不給按');
+{
+  ok('★★ 底列與步驟 1／2 同一個形狀（左上一步、右確認）',
+     /<div class="modal-foot"><button class="btn btn-ghost" onclick="grantGoStep\(2\)">上一步<\/button>\s*\n\s*<button class="btn btn-green" id="gt-attrib-go" disabled style="opacity:\.4;cursor:not-allowed;" onclick="attribConfirm\(\)">確認<\/button><\/div>/.test(src));
+  ok('★★ 主責教練只標 ★，不預選（預選會讓人沒注意就按下去）',
+     /<button type="button" class="bk-card" data-attrib="\$\{c\.id\}"/.test(src)
+     && /主責教練只標 ★，\*\*不預選\*\*/.test(src));
+  ok('★★ 選了才亮，而且按鈕上寫出選到誰（兩步防呆的第二步不能盲按）',
+     /function attribSyncGo\(\)\{/.test(src)
+     && /go\.disabled=!p;/.test(src)
+     && /go\.textContent=p\?`確認：\$\{p\.name\}`:'確認';/.test(src));
+  ok('★★ 舊的那條浮出確認列整條退場',
+     !/gt-attrib-confirm'\); if\(bar\)/.test(src) && !/確認，繼續 →/.test(src));
+  ok('★★ 0728 的防選錯沒有被放寬（仍是兩步：點卡 → 按確認）',
+     /防選錯仍然是兩步（點卡 → 按確認），只是換了位置。/.test(src)
+     && /async function attribConfirm\(\)\{\s*\n\s*const p=window\._attribPending; if\(!p\) return;/.test(src));
+}
+
 console.log('\n③ 未付款：方案卡標「待付款」＋一顆「收款」');
 {
   ok('★★ 待付款章接在原本的狀態章後面（判定本身沒動）',

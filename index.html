@@ -11373,8 +11373,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.1727';
-const APP_VERSION_LABEL='v260828.1727';
+const APP_VERSION = '260828.1739';
+const APP_VERSION_LABEL='v260828.1739';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -41890,7 +41890,12 @@ function ppRecordHtml(){
               <span>應收 <b style="color:#b5372e;font-family:var(--num),inherit;font-size:14px;">$${amt.toLocaleString()}</b>　·　簽回合約並確認收款後才發放票券</span>
               <span style="display:flex;gap:6px;flex:none;margin-left:auto;white-space:nowrap;">
                 ${r.contract_id?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${r.contract_id}')">📄 合約</button>`:''}
-                ${isDeskLike()?`<button class="btn btn-green btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openGrantReview()">前往審核</button>`:''}
+                ${/* 2026-08-28 使用者指示：「這種未付款的票券設計兩個按鈕　一個取消　一個收款審核
+                     取消就直接把方案移除　收款審核進入付款視窗　審核發票券」——
+                     ⚠「收款審核」原本開的是整份待審核清單，還要自己在裡面找回同一筆，改成直開這一筆。
+                     ⚠「取消」走既有的 grantReqCancel（它會一併把合約收掉並問一次），不另做一套。 */''}
+                ${isDeskLike()?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger,#b5372e);" title="移除這份方案（不會發票券）" onclick="grantReqCancel('${r.id}')">取消</button>`:''}
+                ${isDeskLike()?`<button class="btn btn-green btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openGrantApprove('${r.id}')">收款審核</button>`:''}
               </span>
             </div>
           </div>`; };
@@ -45505,7 +45510,10 @@ async function openGrantModal(){
       <div class="form-row" id="gt-splitcash-wrap" style="display:none;"><label>其中現金收多少（其餘記匯款）</label><input type="number" id="gt-splitcash" min="0" placeholder="例如 7200"></div>
       <div class="form-2col">
         <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher();gtSaleKindSync()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>
-        <div class="form-row"><label>付款狀態</label><select id="gt-pay"><option value="paid">已付款</option><option value="unpaid">未付款</option></select></div>
+        ${/* 預設「未付款」（2026-08-28 使用者指示）—— 安全的那一邊：
+             未付款按錯救得回來（方案卡標待付款，櫃檯再收款），
+             已付款按錯是錢沒收到卻記了帳。選「已付款」會先跳確認。 */''}
+        <div class="form-row"><label>付款狀態</label><select id="gt-pay"><option value="unpaid" selected>未付款</option><option value="paid">已付款</option></select></div>
       </div>
       <div class="form-2col">
         
@@ -45531,7 +45539,12 @@ async function openGrantModal(){
     <div class="gt-step" data-gtstep="3" style="display:none;">
       <div style="font-size:12px;color:var(--t2);margin-bottom:10px;">${(sales&&sales.cat==='私人教練')?'點選業績歸屬教練，接著進行簽約。':'點選業績歸屬教練即完成銷售發放（本類別免簽約）。'}</div>
       <div class="form-row"><label>業績歸屬教練</label><div class="bk-cards" id="gt-attrib"></div></div>
-      <div class="modal-foot"><button class="btn btn-ghost" onclick="grantGoStep(2)">上一步</button></div>
+      ${/* 2026-08-28 使用者指示：「左下是上一步 右下是確認，但是確認的按鈕要等選定教練
+           以後才可以點選」—— 原本是點卡之後在卡片牆下方長出一條「確定嗎？重選／確認，繼續」，
+           跟其他每一步的底列長得不一樣，而且底下還另外掛一顆滿版的「上一步」。
+           改成與步驟 1／2 同一個底列。防選錯仍然是兩步（點卡 → 按確認），只是換了位置。 */''}
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="grantGoStep(2)">上一步</button>
+        <button class="btn btn-green" id="gt-attrib-go" disabled style="opacity:.4;cursor:not-allowed;" onclick="attribConfirm()">確認</button></div>
     </div>
     <!-- 步驟4（2026-07-23）：簽約 —— 電子＝現場平板手寫簽名／紙本＝只記錄 -->
     <div class="gt-step" data-gtstep="4" style="display:none;">
@@ -45642,7 +45655,7 @@ function grantGoStep(n){
     if(_instNow){ sel.value='installment'; return; }   /* 畫面上那一欄已由 gtSaleKindSync 收起來 */
     sel.value=_donePt?'renewal':'new';
   }catch(_){} })();
-  if(n===3) renderGrantAttrib(); // 銷售入口：業績歸屬教練卡（預設會員主責教練）
+  if(n===3) renderGrantAttrib(); // 銷售入口：業績歸屬教練卡（★ 標主責，但不預選）
   if(n===4) renderContractStep(); // 簽約：帶入本次金額組合約全文＋簽名板
 }
 /* 步驟3 業績歸屬卡（2026-07-21 使用者指示）：預設＝步驟1 所選會員的主責教練
@@ -45656,32 +45669,34 @@ function renderGrantAttrib(){
   if(defId) coaches.sort((a,b)=>(a.id===defId?0:1)-(b.id===defId?0:1));
   window._attribPending=undefined;
   /* 2026-07-28 使用者指示：①點教練先確認再繼續（防選錯）②可「不歸屬教練」 */
+  /* ⚠ 主責教練只標 ★，**不預選**（2026-08-28）——底列的「確認」要等真的點過才亮，
+     預選會讓人沒注意就按下去，那正是 0728 加防選錯要擋的事。 */
   box.innerHTML=coaches.map(c=>{
     const isDef=c.id===defId;
-    return `<button type="button" class="bk-card${isDef?' on':''}" data-attrib="${c.id}" onclick="attribPick('${c.id}','${(coachDisp(c)||'').replace(/'/g,'')}')">
+    return `<button type="button" class="bk-card" data-attrib="${c.id}" onclick="attribPick('${c.id}','${(coachDisp(c)||'').replace(/'/g,'')}')">
       <span class="bk-card-name">${isDef?'★ ':''}${coachDisp(c)}</span>${isDef?'<span class="bk-card-sub">主責教練</span>':''}
     </button>`;
   }).join('')
   +`<button type="button" class="bk-card" data-attrib="" onclick="attribPick('','不歸屬教練')">
       <span class="bk-card-name">不歸屬教練</span><span class="bk-card-sub">店內業績／無個人歸屬</span>
     </button>`;
-  document.getElementById('gt-attrib-confirm')?.remove();   // 重返步驟3不重複疊加
-  const bar=document.createElement('div'); bar.id='gt-attrib-confirm';
-  bar.style.cssText='display:none;margin-top:12px;padding:12px 14px;border-radius:12px;background:var(--card2);border:1.5px solid var(--green);align-items:center;justify-content:space-between;gap:10px;';
-  box.parentElement.appendChild(bar);
+  document.getElementById('gt-attrib-confirm')?.remove();   // 舊版那條浮出的確認列（2026-08-28 退場）
+  attribSyncGo();
+}
+/* 底列的「確認」跟著選取狀態開關（2026-08-28）：沒選教練就按不下去。
+   ⚠ 也負責寫按鈕上的字 —— 選了誰要看得到，不然兩步防呆的第二步等於在盲按。 */
+function attribSyncGo(){
+  const go=document.getElementById('gt-attrib-go'); if(!go) return;
+  const p=window._attribPending;
+  go.disabled=!p;
+  go.style.opacity=p?'':'.4';
+  go.style.cursor=p?'':'not-allowed';
+  go.textContent=p?`確認：${p.name}`:'確認';
 }
 function attribPick(cid,name){
   window._attribPending={cid:cid||null,name};
   document.querySelectorAll('#gt-attrib .bk-card').forEach(b=>b.classList.toggle('on', b.dataset.attrib===(cid||'')));
-  const bar=document.getElementById('gt-attrib-confirm');
-  if(bar){
-    bar.style.display='flex';
-    bar.innerHTML=`<span style="font-size:13.5px;font-weight:700;">業績歸屬：<span style="color:var(--green);">${name}</span>，確定嗎？</span>
-      <span style="display:flex;gap:8px;">
-        <button class="btn btn-ghost btn-sm" onclick="window._attribPending=undefined;this.closest('#gt-attrib-confirm').style.display='none';document.querySelectorAll('#gt-attrib .bk-card').forEach(b=>b.classList.remove('on'));">重選</button>
-        <button class="btn btn-green btn-sm" onclick="attribConfirm()">確認，繼續 →</button>
-      </span>`;
-  }
+  attribSyncGo();
 }
 async function attribConfirm(){
   const p=window._attribPending; if(!p) return;
@@ -46607,7 +46622,7 @@ async function openGrantReview(){
         ${c?`<button class="btn btn-ghost btn-sm" onclick="openContractView('${c.id}')">看合約</button>`:''}
         <button class="btn btn-ghost btn-sm" style="color:var(--danger,#b5372e);" onclick="grantReqCancel('${r.id}')">取消</button>
         ${signed?`<button class="btn btn-green btn-sm" onclick="openGrantApprove('${r.id}')">確認收款・發放</button>`
-                :`<button class="btn btn-sm" disabled style="opacity:.45;cursor:not-allowed;" title="合約簽回後才能發放">確認收款・發放</button>`}
+                :`<button class="btn btn-ghost btn-sm" title="合約簽回後才能發放；先進去把收款資訊改好" onclick="openGrantApprove('${r.id}')">收款資訊</button>`}
       </div>
     </div>`;
   }).join('');
@@ -46624,8 +46639,12 @@ async function openGrantApprove(id){
   if(!r||r.status!=='pending'){ showToast('這筆已處理過'); return; }
   const c=r.contract_id?await dbGet('contracts',r.contract_id).catch(()=>null):null;
   const signed=!!(c&&c.signed_at);
-  /* 2026-08-13 使用者指示：未簽回一律不能發放（0808 的「警告仍可放行」退場） */
-  if(r.contract_id && !signed){ showToast('合約尚未簽回，等會員在手機上簽完才能發放'); return; }
+  /* 2026-08-13 使用者指示：未簽回一律不能發放（0808 的「警告仍可放行」退場）。
+     2026-08-28 放寬的是**打不打得開**，不是能不能發：使用者問「這一張待審核的合約
+     櫃檯要從哪邊按可以修改付款資訊？」—— 原本未簽回連視窗都進不去，等於收款資訊
+     要等會員簽完才改得動，客人臨櫃改現金／改分期就沒地方記。
+     改成：視窗照開、欄位照改、可以「只存收款資訊」；**發放鈕仍然鎖著**直到簽回。 */
+  const _canIssue = !(r.contract_id && !signed);
   const amt=Number(r.amount)||0;
   const P=r.payload||{};
   const _pay={cash:'現金',transfer:'匯款',card:'刷卡',split:'現金+匯款'}[P.method]||P.method||'—';
@@ -46683,11 +46702,16 @@ async function openGrantApprove(id){
           <button type="button" class="gr-sig-more" onclick="openContractView('${c.id}')">看合約全文 ›</button></div>`:''}
     </div>
     <div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:1.9;">
-      按下去會：發放票券、寫入購買紀錄${P.voucherN?'、扣掉折抵券':''}。<br>
-      發放後 <b>30 分鐘內</b>可在首頁「今日營收」名單整筆退回（打錯了不用怕）。</div>
+      ${_canIssue
+        ? `按下去會：發放票券、寫入購買紀錄${P.voucherN?'、扣掉折抵券':''}。<br>
+           發放後 <b>30 分鐘內</b>可在首頁「今日營收」名單整筆退回（打錯了不用怕）。`
+        : `合約還沒簽回，<b>這一步不會發票券</b> —— 按下去只是把上面的收款資訊存起來，
+           等會員簽完再回這裡發放。`}</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="openGrantReview()">返回</button>
-      <button class="btn btn-green" id="gr-go" onclick="grantReqApprove('${r.id}')">確認收款・發放票券</button>
+      ${_canIssue
+        ? `<button class="btn btn-green" id="gr-go" onclick="grantReqApprove('${r.id}')">確認收款・發放票券</button>`
+        : `<button class="btn btn-green" id="gr-go" onclick="grantReqSaveFill('${r.id}')" title="合約簽回後才能發放；先把收款資訊存起來">只存收款資訊</button>`}
     </div>`);
   window._grP=P; grFillPreview();
 }
@@ -46757,6 +46781,28 @@ function grFillApply(P, quiet){
     payment_status:'paid',      // 走到這一步就是櫃檯已經收到錢了
   });
 }
+/* 只存收款資訊、不發票券（2026-08-28）——合約還沒簽回時走這條。
+   ⚠ 與發放共用同一支 grFillApply：存進去的就是之後真的會發的那一包，
+     不會有「存的時候一個數字、發的時候另一個數字」。 */
+async function grantReqSaveFill(id){ return onceAct('grsave:'+id, ()=>_grantReqSaveFill(id)); }
+async function _grantReqSaveFill(id){
+  try{
+    const r=await dbGet('ticket_grant_requests',id);
+    if(!r||r.status!=='pending'){ showToast('這筆已處理過'); return; }
+    if(!r.payload){ showToast('這筆沒有發放內容，請取消後重開一次'); return; }
+    const _p=grFillApply(r.payload);
+    if(!_p) return;                                  // 填得不對，grFillApply 已經講原因了
+    r.payload=_p;
+    r.amount=Number(_p.isInstall?Math.max(0,_p.firstAmount-_p.voucherAmt):_p.paidAmount)||0;
+    r.filled_by=SESSION.id; r.filled_at=new Date().toISOString();
+    await dbPut('ticket_grant_requests',r);
+    dbCacheClear(['ticket_grant_requests']);
+    closeModal();
+    showToast(`收款資訊已存起來（應收 $${r.amount.toLocaleString()}）　·　合約簽回後回這裡發放`, 6000);
+    try{ refreshGrantReviewPill(); }catch(_){}
+    if(!(await ppRefreshIfOpen(r.member_id))) navTo(CUR_PAGE);
+  }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
+}
 async function grantReqApprove(id){ return onceAct('grapp:'+id, ()=>_grantReqApprove(id)); }
 async function _grantReqApprove(id){
   const done=cxBusy('發放中…');
@@ -46764,6 +46810,12 @@ async function _grantReqApprove(id){
     const r=await dbGet('ticket_grant_requests',id);
     if(!r||r.status!=='pending'){ done(); showToast('這筆已處理過'); return; }
     if(!r.payload){ done(); showToast('這筆沒有發放內容，請取消後重開一次'); return; }
+    /* ⚠ 未簽回一律不能發（0813 定案）——0828 放寬的只是「視窗打得開」，
+       真正的發放這一關照舊擋住，不能靠繞過視窗就發出去。 */
+    if(r.contract_id){
+      const _c=await dbGet('contracts',r.contract_id).catch(()=>null);
+      if(!(_c&&_c.signed_at)){ done(); showToast('合約尚未簽回，等會員在手機上簽完才能發放', 5000); return; }
+    }
     /* 收款資訊由櫃檯補（2026-08-28）：發放之前先把三個欄位重算進 payload，
        並且寫回這一筆待審核 —— 之後查帳看得到櫃檯填的是什麼。 */
     /* 一律重算（2026-08-28 二修）：收款這一步永遠可編輯，所以不論教練有沒有填，

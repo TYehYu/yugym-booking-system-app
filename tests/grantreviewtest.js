@@ -130,9 +130,24 @@ ok('★★ 四個欄位改動都會重算',
      /<div class="gr-sign-box \$\{signed\?'ok':'wait'\}">/.test(F)
      && /\.gr-sign-box\.ok\{background:#eef5f1;/.test(src) && /\.gr-sign-box\.wait\{background:#f7efe0;/.test(src));
   /* 2026-08-13 使用者指示：改成未簽回一律不能發放（按鈕反灰＋入口擋），0808 警告放行退場 */
-  ok('★★ 沒簽回不能發：清單按鈕反灰、確認視窗入口直接擋',
-     /title="合約簽回後才能發放"/.test(src)
-     && /if\(r\.contract_id && !signed\)\{ showToast\('合約尚未簽回，等會員在手機上簽完才能發放'\); return; \}/.test(src));
+/* 2026-08-28（使用者問「這一張待審核的合約 櫃檯要從哪邊按可以修改付款資訊？」）——
+   放寬的是「視窗打不打得開」，不是「能不能發」：未簽回照樣進得去改收款資訊、可以只存，
+   但發放那一關仍然擋死。 */
+  ok('★★ 沒簽回不能發：發放動作本身再擋一次（視窗打得開不等於發得出去）',
+     /if\(!\(_c&&_c\.signed_at\)\)\{ done\(\); showToast\('合約尚未簽回，等會員在手機上簽完才能發放', 5000\); return; \}/.test(src)
+     && /真正的發放這一關照舊擋住，不能靠繞過視窗就發出去。/.test(src));
+  ok('★★ 清單那顆未簽回的鈕不再反灰，改成「收款資訊」（哪裡找到都改得動）',
+     /title="合約簽回後才能發放；先進去把收款資訊改好" onclick="openGrantApprove\('\$\{r\.id\}'\)">收款資訊<\/button>/.test(src));
+  ok('★★ 待審核卡兩顆鈕：取消（移除方案）／收款審核（進付款視窗）',
+     /title="移除這份方案（不會發票券）" onclick="grantReqCancel\('\$\{r\.id\}'\)">取消<\/button>/.test(src)
+     && /onclick="openGrantApprove\('\$\{r\.id\}'\)">收款審核<\/button>/.test(src)
+     && /「取消」走既有的 grantReqCancel（它會一併把合約收掉並問一次），不另做一套。/.test(src));
+  ok('★★ 未簽回時底列換成「只存收款資訊」，而且說明講明不會發票券',
+     /onclick="grantReqSaveFill\('\$\{r\.id\}'\)" title="合約簽回後才能發放；先把收款資訊存起來">只存收款資訊<\/button>/.test(src)
+     && /合約還沒簽回，<b>這一步不會發票券<\/b>/.test(src));
+  ok('★★ 只存與發放共用同一支 grFillApply（存的與之後發的是同一包）',
+     /const _p=grFillApply\(r\.payload\);\s*\n\s*if\(!_p\) return;/.test(src)
+     && /存進去的就是之後真的會發的那一包，/.test(src));
   /* 2026-08-28 二修：金額改成即時重算，寫死在按鈕上會與上方大字打架 ——
      改成把「算不出來就按不下去」釘住（比重複一次數字更擋得住看錯）。 */
   ok('★★ 算不出金額就按不下去（取代原本寫死在按鈕上的金額）',
@@ -220,7 +235,9 @@ console.log('\n⑦ 會員資料票券頁的「待審核」卡（2026-08-09 使�
      /signed\?'✓ 合約已簽回':'⏳ 合約未簽回'/.test(R)
      && /送出 \$\{String\(r\.requested_at\|\|''\)\.slice\(5,16\)/.test(R)
      && /應收 <b style="color:#b5372e;/.test(R));
-  ok('★ 「前往審核」開既有審核視窗，不另做一套',
+  ok('★ 會員資料的待審核卡直接開這一筆（原本開的是整份清單，還要自己找回來）',
+     /onclick="openGrantApprove\('\$\{r\.id\}'\)">收款審核<\/button>/.test(src));
+  const _skipOld=true; if(!_skipOld) ok('★ 「前往審核」開既有審核視窗，不另做一套',
      /onclick="openGrantReview\(\)">前往審核<\/button>/.test(R));
   ok('　　分頁章上加紅色待審數（跟可用張數分開兩顆）',
      /\$\{_grCnt\[k\]\?`<i class="tkf-n" style="background:#c8453a;/.test(R));
@@ -270,8 +287,9 @@ console.log('\n櫃檯要在發放的同一個畫面上看到會員回簽');
   ok('★★ 沒有簽名圖時不要留一塊空白 —— 寫清楚原因並給看全文的路（0823 的「不能用就寫原因」）',
      /這份合約沒有存到簽名圖（紙本補簽或舊資料）/.test(A)
      && /\$\{\(signed&&!\(c&&c\.signature\)\)\?/.test(A));
-  ok('★ 未簽回仍然完全擋住（0813 定案：警告仍可放行已退場）',
-     /if\(r\.contract_id && !signed\)\{ showToast\('合約尚未簽回/.test(A));
+  ok('★ 未簽回仍然發不出去（0813 定案沒有被放寬，只是視窗打得開了）',
+     /const _canIssue = !\(r\.contract_id && !signed\);/.test(A)
+     && /\$\{_canIssue\s*\n\s*\? `<button class="btn btn-green" id="gr-go" onclick="grantReqApprove/.test(A));
   ok('★★ signature 在 LEAN_DROP 裡，這裡拿得到是因為走單筆 dbGet（select \*）—— 理由寫在原地',
      /signature 在 LEAN_DROP 裡/.test(src)
      && /單筆 dbGet\('contracts', id\)＝select\('\*'\)，圖是拿得到的/.test(src));
