@@ -11375,8 +11375,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.1652';
-const APP_VERSION_LABEL='v260828.1652';
+const APP_VERSION = '260828.1701';
+const APP_VERSION_LABEL='v260828.1701';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16811,11 +16811,19 @@ function ticketUnused(t,usedMap,bookedCount){
   return unused;
 }
 // 若票券所有堂都已簽到/完成 → 設 used_up（真正上完才算用畢，非預約扣光）
+/* ⚠ 還有餘額就不能標 used_up（2026-08-28 李約儒 #1 案例）——
+   8/21 教練請假、會員到場簽到：DB 的 fn_checkin_booking 退回 1 堂，也有把
+   used_up 翻回 usable；但前端緊接著呼叫這一支，它只數「簽到完的堂數 >= 總堂數」
+   （12 堂全簽到過）就又壓回 used_up，餘額 1 堂的票於是變成挑不到、
+   「更換票券」的清單裡整張消失（listUsableTickets 只收 usable）。
+   「餘額 >0 卻掛 used_up」這條 0810 就踩過一次（見票券校正那邊的同名判斷），
+   這裡把同一條護欄補上：狀態由餘額說了算。 */
 async function markTicketUsedIfDone(ticket_id){
   if(!ticket_id) return;
   try{
     const t=await dbGet('member_tickets',ticket_id);
     if(!t || t.status!=='usable') return;
+    if((Number(t.sessions_remaining)||0)>0) return;   // 還有堂數可用 → 不是用畢
     const allBk=await dbGetAll('bookings');
     const doneCnt=allBk.filter(b=>b.ticket_id===ticket_id && (b.status==='checked_in'||b.status==='completed')).length;
     if(doneCnt>=(t.sessions_total||0)){
