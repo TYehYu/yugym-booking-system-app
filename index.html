@@ -11388,8 +11388,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.2013';
-const APP_VERSION_LABEL='v260828.2013';
+const APP_VERSION = '260828.2018';
+const APP_VERSION_LABEL='v260828.2018';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -51467,6 +51467,7 @@ function memSelfBarFit(){
 async function memh2SelfSlots(ds, until){
   const date=ds||mh2S().date;
   window._mh2SelfUntil=String(until||'')||null;
+  window._mh2SlotBack=null;        // 回到挑時段這一頁＝來路重新開始（見 msbSlotBack）
   /* 0822 這裡本來會先把篩選列切到「自主訓練」，好讓左邊日期欄把不能約的那幾天暗化。
      2026-08-27 篩選列與左欄一起退場（日期列改成橫排在上方），這一段跟著移除 ——
      ⚠ 不能留著：s.filter 一旦被切成 'self'，memh2HTML 就不畫「當天可報名的團體課」，
@@ -51664,6 +51665,9 @@ function memh2SelSlot(t){
 function memh2GoSlot(){
   const t=window._mh2Pick;
   if(!t){ showToast('請先選一個時段'); return; }
+  /* 記住來路，下一步的「返回」才退得回這一頁（2026-08-31）——
+     日期與「這一點的效期」都要帶，否則退回來的日期列會變成所有票的聯集。 */
+  window._mh2SlotBack={ date:((window._msb||{}).date)||mh2S().date, until:window._mh2SelfUntil||'' };
   closeModal(); msbPickSlot(t);     // 之後的場地／台數／使用人／選票券都走原本那一套
 }
 PAGES.mem_bookings=async function(){
@@ -52742,7 +52746,18 @@ async function msbPickSlot(t){
       ${s.resched?'':msbTkLine(t)}
     </div>
     <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">${s.resched?'改期不另扣點。':((s.tkCand||[]).length>1?'有多張點數可用，預設扣最快到期的那張，可自行改選。':'')+'確認後將扣 1 點。'}</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-green" onclick="msbConfirm('${t}')">${s.resched?'確認改期':'確認預約'}</button></div>`);
+    ${/* 「返回」要退回上一步（挑時段），不是關掉整個流程（2026-08-31 使用者：
+         「會員選了自主訓練-點了某時段 但沒有返回的按鈕 按了返回就回到主頁面 這樣有點慢」）——
+         客人挑錯時間只是想換一個，卻被丟回首頁，等於整套重來（首頁還要重新抓資料）。
+         ⚠ 只有「從底部圓卡進來的快速預約」那條路知道要退回哪裡（日期＋那一點的效期），
+           所以由 memh2GoSlot 立旗標；其他入口（舊版下方訂位表、改期）維持原本的關閉。 */''}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="msbSlotBack()">返回</button><button class="btn btn-green" onclick="msbConfirm('${t}')">${s.resched?'確認改期':'確認預約'}</button></div>`);
+}
+/* 退回挑時段那一步；沒有來路就照舊關掉（見上面的 ⚠）。 */
+function msbSlotBack(){
+  const b=window._mh2SlotBack;
+  if(b && b.date){ memh2SelfSlots(b.date, b.until||''); return; }
+  closeModal();
 }
 /* 台數（2026-08-02）：換場地時重置回 1 —— 只有跑步機有台數的概念 */
 function msbChooseUnits(n){
@@ -52855,6 +52870,7 @@ function _msbDupHint(msg){
   return msg;
 }
 async function msbConfirm(time){
+ window._mh2SlotBack=null;        // 送出＝這一輪結束，來路不留（見 msbSlotBack）
  try{
   const s=window._msb; if(!s){ showToast('資料遺失，請重試'); return; }
   if(s.resched){

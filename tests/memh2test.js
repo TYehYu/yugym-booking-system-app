@@ -386,6 +386,18 @@ t('★★ 說明也改成講「這一點」的效期，不是講所有票的最�
     /if\(_lim\) return `這一點的效期到 \$\{_lim\.replace\(\/-\/g,'\/'\)\}`;/.test(QS));
 t('　 為什麼要按點篩選（白挨一次擋）—— 理由寫在原地',
     /點的是 9\/3 到期那一點、卻看得到 9\/10，按下去才被擋，那個擋是白挨的。/.test(s));
+/* 2026-08-31 使用者：「會員選了自主訓練-點了某時段 但沒有返回的按鈕
+   按了返回就回到主頁面 這樣有點慢」 */
+t('★★ 確認預約那一步的「返回」退回挑時段，不是關掉整個流程',
+  /<button class="btn btn-ghost" onclick="msbSlotBack\(\)">返回<\/button>/.test(s)
+  && /function msbSlotBack\(\)\{\s*\n\s*const b=window\._mh2SlotBack;\s*\n\s*if\(b && b\.date\)\{ memh2SelfSlots\(b\.date, b\.until\|\|''\); return; \}/.test(s));
+t('★★ 來路由 memh2GoSlot 立（日期＋那一點的效期都要帶）',
+  /window\._mh2SlotBack=\{ date:\(\(window\._msb\|\|\{\}\)\.date\)\|\|mh2S\(\)\.date, until:window\._mh2SelfUntil\|\|'' \};/.test(s));
+t('★★ 沒有來路就照舊關掉（舊版下方訂位表、改期那兩條路不受影響）',
+  /closeModal\(\);\s*\n\}\s*\n\/\* 選好時段之後/.test(s) || /if\(b && b\.date\)\{ memh2SelfSlots[\s\S]{0,80}?closeModal\(\);/.test(s));
+t('★★ 旗標用完就清（回到挑時段那頁、送出預約各清一次）',
+  /window\._mh2SlotBack=null;        \/\/ 回到挑時段這一頁＝來路重新開始/.test(s)
+  && /window\._mh2SlotBack=null;        \/\/ 送出＝這一輪結束，來路不留/.test(s));
 t('★★ 日期列放大（52→70px，字級各升一級）',
     /\.qs-day\{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;\s*\n\s*min-width:70px;padding:10px 10px;/.test(s)
     && /\.qs-day b\{font-family:var\(--num\),inherit;font-size:19px;/.test(s));
