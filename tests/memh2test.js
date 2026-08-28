@@ -22,8 +22,21 @@ t('會員首頁有掛進去且早於舊版渲染', s.indexOf('if(memh2On()){')>0
 // ── KPI：票券剩餘堂數（使用者定案），友善併進教練課 ──
 const html=cut('function memh2HTML(o){','/* 點課卡 → 簽到確認視窗');
 t('KPI 用票面剩餘堂數', /pk\[k\]\+=Number\(t\.sessions_remaining\)\|\|0/.test(html));
-t('友善教練課併進「教練課」那一格', /\['教練課',pk\.pt\+pk\.friendly\]/.test(html));
-t('三格＝教練課／團體課／自主訓練', /\['團體課',pk\.group\],\['自主訓練',pk\.self\]/.test(html));
+/* 2026-08-31 使用者指示：「要顯示的應該是尚未銷課的課堂，已經預約的課堂但還沒使用
+   也應該顯示在這邊」—— 票面剩餘在預約當下就扣掉了，所以要把「已預約未上」加回來。 */
+t('友善教練課併進「教練課」那一格', /\['教練課',pk\.pt\+pk\.friendly\+_pend\.pt\+_pend\.friendly\]/.test(html));
+t('三格＝教練課／團體課／自主訓練',
+  /\['團體課',pk\.group\+_pend\.group\]/.test(html) && /\['自主訓練',pk\.self\+_pend\.self\]/.test(html));
+t('★★ KPI＝票面剩餘＋已預約未上（尚未銷課）',
+  /const _pend=\{pt:0,friendly:0,group:0,self:0\};/.test(html)
+  && /const k=bkCC\(b\); if\(k in _pend\) _pend\[k\]\+\+;/.test(html));
+t('★★ 已簽到／已完成的不算（那是真的上掉了）',
+  /if\(b\.status==='checked_in'\|\|b\.status==='completed'\) return;/.test(html));
+t('★★ 待簽約（沒綁票）不算 —— 錢還沒付',
+  /if\(b\.pending_contract && !b\.ticket_id\) return;/.test(html)
+  && /待簽約（沒綁票）也不算 —— 錢還沒付。/.test(s));
+t('★★ 教練請假中的算（那一堂還沒上，堂數也還在）',
+  /教練請假中的算 —— 那一堂還沒上，堂數也還在。/.test(s));
 const kind=cut('function memh2TkKind(t,typeMap){','function memh2CkState(b){');
 t('票券分類靠 tkClass5＋友善字樣', /tkClass5/.test(kind) && /友善/.test(kind));
 t('按摩券／折抵券不進三格', /if\(c!=='pt'\) return '';/.test(kind));
@@ -57,10 +70,12 @@ t('每張票各自記 [起,訖]，不是只看最晚到期日',
   /selfRanges\.push\(\[st,e\]\);/.test(html));
 /* 2026-08-27：日期列搬到上方之後暗化七格會太吵，改成只講「你現在選的這一天」，
    鈕照樣留著（「不能用就寫原因，別藏按鈕」）。selfOk 仍然是那個判斷。 */
-t('★★ 選到的日子不在點數效期內：鈕不藏，下面寫原因',
-  /const _selfBad=\(pk\.self>0\) && !selfOk\(s\.date\);/.test(html)
-  && /這一天不在點數效期內，請往後選日期/.test(html)
-  && /const addBtn=\(pk\.self>0\)/.test(html));
+/* 2026-08-31：課卡下方那顆［＋］退場，底部的自主訓練列每一點可用點數都是一顆可按的圓卡 */
+t('★★ 課卡下方的快速預約［＋］退場，理由寫在原地',
+  /const addBtn='';/.test(html)
+  && /底部的自主訓練列現在每一點可用點數都是一顆可按的圓卡/.test(s));
+t('★★ selfOk 還留著（底部那一列要靠它算「第一個約得到的日子」）',
+  /const selfOk=ds=>ds>=today && selfRanges\.some/.test(html));
 t('訂位挑票優先用效期較短的那張（照到期日由近而遠排）',
   /String\(a\.expire_date\|\|'9999-12-31'\)\.localeCompare\(String\(b\.expire_date\|\|'9999-12-31'\)\)/.test(s));
 t('還沒生效的票不會被挑走（起始日也要看）',
@@ -212,8 +227,9 @@ t('［＋］的時段也是點了就選它，誤觸第二下不會洗掉狀態',
   && !/_mh2Pick===t\)\?'':t/.test(s));
 
 // ── 快速預約與團體課報名（2026-08-22 使用者指示）──
-t('［＋］在每個分頁都出現，只看有沒有自主訓練點數',
-  /const addBtn=\(pk\.self>0\)/.test(html) && !/const addBtn=selfMode\?/.test(html));
+t('★★ 底部自主訓練列改成外殼層常駐（我的票券那一頁也看得到）',
+  /async function memSelfBarSync\(\)\{/.test(s)
+  && /setTimeout\(\(\)=>\{ try\{ memSelfBarSync\(\); \}catch\(_\)\{\} \},0\);/.test(s));
 /* 2026-08-27：這一段移除了 —— filter 一旦被切成 'self'，grpOpen 就不畫，
    客人從［＋］回來之後「可報名的團體課」會整片不見。 */
 t('★★ 點［＋］不再動 filter（否則團課報名卡會整片消失）',

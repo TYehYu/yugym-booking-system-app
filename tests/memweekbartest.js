@@ -51,46 +51,62 @@ console.log('\n② 課卡吃到整個寬度');
      && /\.admh2-rail\{flex:0 0 62px;/.test(CSS));
 }
 
-console.log('\n③ 底部浮動列：接下來的自主訓練');
+console.log('\n③ 底部「自主訓練」浮動列（2026-08-31 改成「他擁有的自主訓練」並常駐）');
 {
-  ok('★★ 有約才畫，沒約整條不出現（不是畫一條空的）',
-     /const selfBar=selfUp\.length\s*\n\s*\? `<div class="mh2-selfbar">/.test(HTML)
-     && /: '';/.test(HTML.slice(HTML.indexOf('const selfBar='))));
-  ok('★★ 只列今天起、還沒過去的自主訓練',
-     /const selfUp=mine\.filter\(b=>bkIsSelf\(b\) && String\(b\.date\|\|''\)>=today\)/.test(HTML));
-  ok('★★ 照日期＋時間排（最近的在左邊）',
-     /\.sort\(\(a,b\)=>String\(a\.date\+a\.start_time\)\.localeCompare\(String\(b\.date\+b\.start_time\)\)\)/.test(HTML));
-  ok('★★ 圓形卡上下兩行：日期在上、時間在下 —— 這正是使用者說「看不到時間」的那個資訊',
-     /<b>\$\{_d\.getMonth\(\)\+1\}\/\$\{_d\.getDate\(\)\}<\/b>\s*\n\s*<span>\$\{String\(b\.start_time\|\|''\)\.slice\(0,5\)\}<\/span>/.test(HTML));
-  ok('★★ 點圓形卡＝跳到那一天（與月曆點日期同一個行為）',
-     /class="mh2-sbc[\s\S]{0,120}onclick="memh2PickDay\('\$\{b\.date\}'\)"/.test(HTML));
-  /* 2026-08-27 二修（使用者：「自主訓練的這一列可以再大個一倍」）：54 → 84px */
-  ok('★ 圓的（border-radius:50%），不是膠囊，而且夠大（84px）',
-     /\.memh2 \.mh2-sbc\{flex:none;width:84px;height:84px;border-radius:50%;/.test(CSS));
-  ok('　 很窄的機型收一級，三顆仍排得下',
-     /@media\(max-width:360px\)\{\s*\n\s*\.memh2 \.mh2-sbc\{width:72px;height:72px;\}/.test(CSS));
-  ok('★★ 列變高不用另外算 —— admh2Mount 每次實測 barH 再從可用高度扣掉',
-     /barH=Math\.round\(_sb\.getBoundingClientRect\(\)\.height\);/.test(src)
-     && /高度變了課卡欄要跟著讓/.test(src));
-  ok('　 用 bkIsSelf 判斷自主訓練（不自己比對課別字串）',
-     /bkIsSelf\(b\) && String\(b\.date/.test(HTML));
-  ok('　 封頂 12 張（一路排下去也不會變成無限長的橫捲）',
-     /\.slice\(0,12\);/.test(HTML));
+  /* 客戶回饋：「希望在下方自主訓練列直接顯示他擁有的自主訓練，例如劉忠緯他應該出現
+     四個圓形卡，直接點圓形卡就可以安排預約，然後自主訓練列要一直顯示，包含選到
+     我的票券這個頁面的時候」。
+     劉忠緯＝2 已約（8/28、8/31）＋ 2 可用點數 ＝ 4 顆。 */
+  const B=src.slice(src.indexOf('async function memSelfBarSync(){'), src.indexOf('async function memh2SelfSlots(ds){'));
+  ok('★★ 搬到外殼層：掛在 body、由 navTo 呼叫（留在頁面裡換到「我的票券」就消失）',
+     /el=document\.createElement\('div'\); el\.id='mem-selfbar'; el\.className='mh2-selfbar';\s*\n\s*document\.body\.appendChild\(el\);/.test(B)
+     && /setTimeout\(\(\)=>\{ try\{ memSelfBarSync\(\); \}catch\(_\)\{\} \},0\);/.test(src)
+     && !/const selfBar=/.test(HTML));
+  ok('★★ 兩種圓卡：已約的（日期＋時間）與還沒約的（每一點一顆「可約」）',
+     /<b>\$\{d\.getMonth\(\)\+1\}\/\$\{d\.getDate\(\)\}<\/b><span>\$\{String\(b\.start_time\|\|''\)\.slice\(0,5\)\}<\/span>/.test(B)
+     && /<b>＋<\/b><span>可約<\/span>/.test(B));
+  ok('★★ 已約的點了跳到那一天；還沒約的點了直接開挑時段',
+     /onclick="memh2PickDay\('\$\{b\.date\}'\)"/.test(B)
+     && /onclick="memh2SelfSlots\('\$\{p\.from\}'\)"/.test(B));
+  ok('★★ 可用點數＝效期內、還有餘額、真的是自主訓練票（memh2TkKind）',
+     /memh2TkKind\(t,typeMap\)==='self'/.test(B)
+     && /\(Number\(t\.sessions_remaining\)\|\|0\)>0/.test(B)
+     && /\(!t\.expire_date\|\|String\(t\.expire_date\)\.slice\(0,10\)>=today\)/.test(B));
+  ok('★★ 一點一顆（不是一張票一顆）',
+     /for\(let i=0;i<\(Number\(t\.sessions_remaining\)\|\|0\);i\+\+\) pts\.push\(\{from, ex\}\);/.test(B));
+  ok('★★ 還沒生效的票要等生效日才約得到',
+     /const from=\(st&&st>today\)\?st:today;                    \/\/ 還沒生效的票要等生效日/.test(B));
+  ok('★★ 兩種都沒有才整條不畫（不是畫一條空的）',
+     /if\(!booked\.length && !pts\.length\)\{ kill\(\); return; \}/.test(B));
+  ok('★★ 已約的照日期＋時間排，效期近的點數排前面',
+     /\.sort\(\(a,b\)=>String\(a\.date\+a\.start_time\)\.localeCompare\(String\(b\.date\+b\.start_time\)\)\)/.test(B)
+     && /\.sort\(\(a,b\)=>String\(a\.expire_date\|\|'9999'\)\.localeCompare\(String\(b\.expire_date\|\|'9999'\)\)\)/.test(B));
+  ok('★ 圓的、夠大（84px），還沒約的用虛線綠空卡',
+     /\.mh2-sbc\{flex:none;width:84px;height:84px;border-radius:50%;/.test(CSS)
+     && /\.mh2-sbc\.mh2-sbfree\{background:#fff;border-style:dashed;border-color:var\(--green\);\}/.test(CSS));
+  ok('★ 封頂 12 顆，超過用「＋N」說一聲（不默默少畫）',
+     /const CAP=12;/.test(B) && /mh2-sbmore">＋\$\{_more\}/.test(B));
+  ok('★★ 課卡下方那顆快速預約［＋］退場（兩個入口只是多一個地方要維護）',
+     /const addBtn='';/.test(HTML)
+     && /底部的自主訓練列現在每一點可用點數都是一顆可按的圓卡/.test(src));
 }
 
 console.log('\n④ 浮動列是 fixed —— 高度要自己扣，不然最後一張課卡躲在它底下');
 {
   ok('★★ 依實測的導覽列高度把自己墊上去（導覽列在會員端是靜態排在 flex 欄底）',
-     /if\(_sb\)\{ _sb\.style\.bottom=navH\+'px'; barH=Math\.round\(_sb\.getBoundingClientRect\(\)\.height\); \}/.test(src));
+     /el\.style\.bottom=navH\+'px';/.test(src)
+     && /document\.querySelectorAll\('\.bottom-nav'\)\.forEach\(n=>\{/.test(src));
   ok('★★ 兩條路（外殼／整頁）都扣掉 barH',
      /_sc\.clientHeight-top-16-barH/.test(src)
      && /window\.innerHeight - docTop - navH - 16 - barH/.test(src));
+  ok('★★ .content 的下緣讓位只有一個地方在設（兩邊都設會打架）',
+     /if\(sc\) sc\.style\.paddingBottom=\(16\+h\)\+'px';/.test(src)
+     && /\.content 的下緣讓位已由 memSelfBarFit 負責/.test(src));
   ok('★★ navH 移到分岔之前量（兩條路共用）',
      src.indexOf("let navH=0;") < src.indexOf("const _sc=document.body.classList.contains('memh2-shell')"));
   ok('★★ 也不能蓋住下方月曆 —— 月曆排在 .admh2-body 之後，屬於外層捲動內容',
-     /const _pad=barH\?\(16\+barH\)\+'px':'';/.test(src)
-     && /if\(_sc\) _sc\.style\.paddingBottom=_pad;/.test(src)
-     && /else \{ const _rt=body\.closest\('\.memh2'\); if\(_rt\) _rt\.style\.paddingBottom=_pad; \}/.test(src));
+     /if\(sc\) sc\.style\.paddingBottom=\(16\+h\)\+'px';/.test(src)
+     && /if\(!_sc\)\{ const _rt=body\.closest\('\.memh2'\); if\(_rt\) _rt\.style\.paddingBottom=barH\?\(16\+barH\)\+'px':''; \}/.test(src));
   ok('　 沒約的人要把留白清掉（交還給 CSS 的 16px），底下不會多一塊空白',
      /沒有浮動列時要把留白清掉（style 設回空字串，交還給 CSS 的 16px）/.test(src));
   ok('　 踩過的坑寫在原地（0822 導覽列擋住週日是同一個成因）',
@@ -107,8 +123,10 @@ console.log('\n⑤ 護欄：s.filter 固定 all，樣式一律掛 .memh2');
      /日後若又把 filter 切走，團課報名卡會整片消失/.test(src)
      && /客人從［＋］回來之後團課報名卡會整片不見/.test(src));
   /* 新增的 class 一條都不能漏掛 .memh2 —— .admh2-* 是三個角色共用的 */
-  /* 日期列那組已提升成共用（.a2-w*，教練首頁也用），所以只檢查會員專屬的浮動列 */
-  const NEW=['mh2-selfbar','mh2-sbl','mh2-sbrow','mh2-sbc','mh2-sbtoday'];
+  /* 日期列那組已提升成共用（.a2-w*，教練首頁也用）；
+     底部自主訓練列 2026-08-31 也搬到外殼層（掛在 body、兩個會員頁共用），
+     所以它也不再掛 .memh2 —— 這裡只剩「會員頁自己的樣式不可以外流」要守。 */
+  const NEW=[];
   const naked=[];
   CSS.replace(/\/\*[\s\S]*?\*\//g,'').split('}').forEach(blk=>{
     const i=blk.indexOf('{'); if(i<0) return;
@@ -124,10 +142,8 @@ console.log('\n⑤ 護欄：s.filter 固定 all，樣式一律掛 .memh2');
 
 console.log('\n⑥ 沒有拿掉任何既有功能');
 {
-  ok('★★ ［＋］快速預約還在', /class="mh2-selfadd"[\s\S]{0,80}memh2SelfSlots/.test(HTML));
-  ok('★★ 「不能用就寫原因」：效期外不藏鈕，改寫下面那一行',
-     /const _selfBad=\(pk\.self>0\) && !selfOk\(s\.date\);/.test(HTML)
-     && /這一天不在點數效期內，請往後選日期/.test(HTML));
+  ok('★★ selfOk 仍然有人用（底部那一列要靠它算「第一個約得到的日子」）',
+     /const selfOk=ds=>ds>=today && selfRanges\.some/.test(HTML));
   /* 2026-08-27（使用者：「日期列的回到今日按鈕不見了」「會員端的沒看到」）——
      .admh-todaybk 是 position:fixed 貼在頂欄左側；會員端是外殼模式（頂欄 position:static、
      真正在捲的是 .content），fixed 的定位基準與層級都跟原本設想的不一樣。
