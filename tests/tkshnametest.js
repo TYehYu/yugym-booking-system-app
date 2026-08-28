@@ -29,9 +29,10 @@ console.log('① 內容：色點在上，使用人與日期各一行在下');
   ok('★★ 沒有共享時原封不動回傳同一串 —— 其他所有圓點一個位元都沒變',
      /\s+: dt;/.test(src));
   ok('★★ 兩處都套上了（已使用、已預約）',
-     (src.match(/\$\{_shBody\(/g)||[]).length===2
+     (src.match(/_shBody\(b, /g)||[]).length===2
      && /\$\{_shBody\(b, b\?md\(b\):\(_md\?md\(\{date:_md\}\):'✓'\)\)\}/.test(src)
-     && /\$\{_shBody\(b, md\(b\)\)\}/.test(src));
+     /* 2026-08-28：已預約那一處多一個分岔 —— 教練請假走 _lvBody（紅點＋請假＋日期） */
+     && /\$\{clv\?_lvBody\(b, md\(b\)\):_shBody\(b, md\(b\)\)\}/.test(src));
 
   /* 實跑一次，確認兩條路各自吐出什麼 */
   const seg=src.slice(src.indexOf('  const _shBody=(b,dt)=>'), src.indexOf('  const _ghost='));
@@ -46,6 +47,15 @@ console.log('① 內容：色點在上，使用人與日期各一行在下');
 
 console.log('\n② 色點吃課程色（使用者定案：「依照課程的顏色」）');
 {
+  ok('★★ 教練請假：紅點＋「請假」＋日期（2026-08-28 使用者指示）',
+     /const _lvBody=\(b,dt\)=>`<i class="mtk-shdot"><\/i><b class="mtk-shnm">請假<\/b><b class="mtk-shdt">\$\{dt\}<\/b>`;/.test(src)
+     && /\.mtk-lv \.mtk-shdot\{background:var\(--danger,#b5372e\);\}/.test(CSS)
+     && /\.mtk-lv \.mtk-shnm\{color:var\(--danger,#b5372e\);\}/.test(CSS));
+  ok('★★ 已簽到＝實心紅（堂已退回、人有到）；還沒上＝紅圈空心（時段還留著）',
+     /\.mtk-lv\.mtk-booked \.mtk-shdot\{background:#fff;border:2\.5px solid var\(--danger,#b5372e\);\}/.test(CSS));
+  ok('★★ 兩種教練請假狀態都掛上 mtk-lv',
+     /class="mtk mtk-used mtk-clvatt mtk-lv"/.test(src)
+     && /\$\{clv\}\$\{clv\?' mtk-lv':''\}/.test(src));
   ok('★★ 色點的底色＝--tk-acc（每張票的課種色，圓點本來就吃它）',
      /\.mtk-shdot\{width:12px;height:12px;border-radius:50%;flex:none;box-sizing:border-box;\s*\n\s*background:var\(--tk-acc,#1F6F54\);\}/.test(CSS));
   ok('★★ 原本的狀態語彙原封不動搬到色點上（不是只剩一種點）',
@@ -69,10 +79,11 @@ console.log('\n③ 金框退場，而且退乾淨');
 console.log('\n④ 權重：這一段一定要排在那三條之後（同分時後面的贏）');
 {
   const at=k=>CSS.indexOf(k);
+  /* 2026-08-28：教練請假那組（.mtk-lv）與共享票共用同一塊排版，選擇器合併寫 */
   ok('★★ 排在 .mtk-used.mtk-leave 之後（0,2,0 同分，否則被蓋回紅圓）',
-     at('.mtk-used.mtk-leave,.mtk-used.mtk-eaten{') < at('.mtk.mtk-sh{'));
+     at('.mtk-used.mtk-leave,.mtk-used.mtk-eaten{') < at('.mtk.mtk-sh,.mtk.mtk-lv{'));
   ok('★★ 排在 .mtk.mtk-cur 之後（0,2,0 同分，否則綠框畫在方卡上）',
-     at('.mtk.mtk-cur{') < at('.mtk.mtk-sh{'));
+     at('.mtk.mtk-cur{') < at('.mtk.mtk-sh,.mtk.mtk-lv{'));
   ok('★★ 排在 .mtk.mtk-self::after 之後',
      at('.mtk.mtk-self::after{') < at('.mtk.mtk-sh.mtk-self::after{'));
   ok('★★ 踩過的坑寫在原地', /同權重時後面的贏，寫在前面會被那三條蓋回圓形/.test(src));
@@ -81,16 +92,16 @@ console.log('\n④ 權重：這一段一定要排在那三條之後（同分時�
 console.log('\n⑤ 其他標記都還在，只是換了位置');
 {
   ok('★★ 「本堂」還看得出來（流星換成色點套綠環，同一組綠）',
-     /\.mtk-sh\.mtk-cur \.mtk-shdot\{box-shadow:0 0 0 3px rgba\(31,111,84,\.34\);\}/.test(CSS)
-     && /\.mtk\.mtk-sh\.mtk-cur\{box-shadow:none;border:none;\}/.test(CSS)
+     /\.mtk-sh\.mtk-cur \.mtk-shdot,\.mtk-lv\.mtk-cur \.mtk-shdot\{box-shadow:0 0 0 3px rgba\(31,111,84,\.34\);\}/.test(CSS)
+     && /\.mtk\.mtk-sh\.mtk-cur,\.mtk\.mtk-lv\.mtk-cur\{box-shadow:none;border:none;\}/.test(CSS)
      && /圓環流星畫在方形卡上會歪掉/.test(src));
   ok('★★ 場地徽章（跑／教）沒被蓋掉，改排成最後一行',
-     /\.mtk-sh \.mtk-venue\{position:static;transform:none;display:block;/.test(CSS));
+     /\.mtk-sh \.mtk-venue,\.mtk-lv \.mtk-venue\{position:static;transform:none;display:block;/.test(CSS));
   ok('★★ 「會員自行預約」的金點還在，只是貼到色點右上',
      /\.mtk\.mtk-sh\.mtk-self::after\{top:-2px;right:calc\(50% - 11px\);/.test(CSS));
   ok('★ 迷你卡與六欄格線版都有各自的收斂（不會被壓扁）',
-     /\.tkm-dots \.mtk\.mtk-sh\{min-width:34px;/.test(CSS)
-     && /\.mck-dots6 \.mtk\.mtk-sh\{aspect-ratio:auto;/.test(CSS));
+     /\.tkm-dots \.mtk\.mtk-sh,\.tkm-dots \.mtk\.mtk-lv\{min-width:34px;/.test(CSS)
+     && /\.mck-dots6 \.mtk\.mtk-sh,\.mck-dots6 \.mtk\.mtk-lv\{aspect-ratio:auto;/.test(CSS));
   ok('★★ title 一個字都沒改（誰預約的原本就寫在 title 裡，現在畫面上也看得到）',
      /\$\{b&&b\._shName\?'　·　'\+b\._shName\+' 預約':''\}/.test(src)
      && /\$\{b\._shName\?'　·　'\+b\._shName\+' 預約':''\}/.test(src));
