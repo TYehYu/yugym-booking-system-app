@@ -128,8 +128,23 @@ t('★★ 看得到但動不了：待付款一律不給簽到／改時間／取�
   /const locked=!!\(b && b\.pending_contract && !b\.ticket_id\);/.test(s)
   && /if\(locked\) return \{ isSelfBk:false, selfServe:false, checkin:false, resched:false, cancel:false, locked:true \};/.test(s));
 
+/* 2026-08-28 會員回報：「從我的預約點課卡就卡畫面了，只出現畫面讀取的動畫」——
+   後端查證完全正常（簽到其實成功了、沒有任何錯誤），是前端沒有逃生門。 */
+t('★★ 點課卡不會靜靜失敗（打不開要講出原因）',
+  /async function memh2Tap\(id\)\{ return _memh2Tap\(id\)\.catch\(e=>\{/.test(s)
+  && /showToast\('這張課卡打不開：'\+\(\(e&&e\.message\)\|\|e\), 8000\);/.test(s)
+  && /沉默失敗比錯誤訊息糟。/.test(s));
+t('★★ 讀取動畫撐過 12 秒就變成「點一下重新整理」（原本蓋滿畫面又不能點）',
+  /const PGL_STUCK_MS=12000;/.test(s)
+  && /el\.classList\.add\('pgl-stuck'\);/.test(s)
+  && /onclick="hidePageLoading\(\);location\.reload\(\);"/.test(s)
+  && /#pg-loading\.pgl-stuck\{pointer-events:auto;\}/.test(s));
+t('★★ 不自動 reload —— 正在送出的動作可能還在路上，決定權交還給人',
+  /不要改成「時間到就自動 reload」：正在送出的動作（簽到、預約）可能還在路上，/.test(s));
+t('　 收掉 loader 時要一併清掉那個計時器', /try\{ clearTimeout\(el\._t\); \}catch\(_\)\{\}/.test(s));
+
 // ── 簽到視窗 ──
-const tap=cut('async function memh2Tap(id){','/* ［＋］預約自主訓練');
+const tap=cut('async function _memh2Tap(id){','/* ［＋］預約自主訓練');
 /* 0822 二修（使用者）：「確認簽到跟關閉也改左右」——那顆從內文移到底部與關閉並排 */
 /* 2026-08-24 使用者指示：會員端課卡改成簡易課卡（標題卡＋會員卡＋圓形按鈕）。
    ⚠ **規則一條都沒動**，只換呈現 —— 底下這幾條守的就是「規則沒被順手改掉」。 */

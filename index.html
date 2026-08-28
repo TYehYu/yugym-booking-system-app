@@ -2432,6 +2432,11 @@ tr:hover td{background:var(--card2);}
 @keyframes pglSpin{to{transform:rotate(360deg)}}
 @keyframes pglIn{from{opacity:0;transform:scale(.96)}}
 @media (prefers-reduced-motion: reduce){ .pgl-spin{animation-duration:1.6s;} #pg-loading{animation:none;} }
+/* 卡太久的逃生門（2026-08-28）：這一刻起要點得到，所以放開 pointer-events */
+#pg-loading.pgl-stuck{pointer-events:auto;}
+.pgl-retry{flex-direction:column;gap:4px;cursor:pointer;font-family:inherit;
+  border-color:var(--gold,#B48A56);color:var(--gold-d,#8a6a30);}
+.pgl-retry .pgl-sub{font-size:12.5px;font-weight:600;letter-spacing:0;color:var(--t2);}
 .tkf-pane{display:none;}
 .tkf-pane.active{display:block;}
 /* 圓圈進度：每堂一個圈 */
@@ -11388,8 +11393,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.2106';
-const APP_VERSION_LABEL='v260828.2106';
+const APP_VERSION = '260828.2130';
+const APP_VERSION_LABEL='v260828.2130';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14833,14 +14838,34 @@ function groupOfPage(pageKey){
 const SCOPE_PAGES=['attendance','coach_shifts','coach_salary','calendar','m_tickets','m_bookings','m_training','m_payments'];
 /* ── 載入過場（2026-07-26）：資料抓取超過 250ms 才顯示，避免快頁閃爍 ── */
 let _pglSeq=0;
+/* ⚠ 讀取動畫一定要有逃生門（2026-08-28 會員回報：「從我的預約點課卡就卡畫面了，
+     只出現畫面讀取的動畫」）——
+   當時後端完全正常（簽到其實成功了、沒有任何錯誤），是某一個請求在手機網路上
+   沒有回來，收尾的 hidePageLoading 就永遠等不到。這一層蓋滿整個畫面、
+   pointer-events:none，客人連按都按不到，只能重開 App。
+   所以：撐過 12 秒就自己換成「載入太久了，點一下重新整理」，而且那一刻起可以點。
+   ⚠ 不要改成「時間到就自動 reload」：正在送出的動作（簽到、預約）可能還在路上，
+     自動重整會讓人以為沒成功而重按一次。把決定權交還給人。 */
+const PGL_STUCK_MS=12000;
 function showPageLoading(){
   if(document.getElementById('pg-loading')) return;
   const el=document.createElement('div');
   el.id='pg-loading';
   el.innerHTML='<div class="pgl-box"><div class="pgl-spin"></div><span>載入中…</span></div>';
   document.body.appendChild(el);
+  el._t=setTimeout(()=>{
+    if(!document.getElementById('pg-loading')) return;
+    el.classList.add('pgl-stuck');
+    el.innerHTML='<button type="button" class="pgl-box pgl-retry" onclick="hidePageLoading();location.reload();">'
+      +'<span>載入太久了</span><span class="pgl-sub">點一下重新整理</span></button>';
+  }, PGL_STUCK_MS);
 }
-function hidePageLoading(){ const el=document.getElementById('pg-loading'); if(el) el.remove(); }
+function hidePageLoading(){
+  const el=document.getElementById('pg-loading');
+  if(!el) return;
+  try{ clearTimeout(el._t); }catch(_){}
+  el.remove();
+}
 /* 包裝重型 async 開啟函式：起跑 250ms 未完成 → 顯示；結束（含出錯）→ 收掉 */
 function _pglWrap(fn){
   return async function(...a){
@@ -51307,7 +51332,15 @@ function memh2MonthHTML(mine){
      教練請假改記成自主訓練的、場租）全部照舊，只換呈現。
    ⚠ 不能改成呼叫 memTaskTap —— 那支用 memSelfServe（團課／自主／體驗通行證），
      少了上面那兩個例外，等於把會員的自助範圍偷偷放寬。 */
-async function memh2Tap(id){
+async function memh2Tap(id){ return _memh2Tap(id).catch(e=>{
+  /* 點課卡不能靜靜失敗（2026-08-28 會員回報「點課卡就卡畫面」）——
+     這一支中途任何一個欄位不如預期就整支中斷，畫面上什麼都不會發生，
+     客人只會覺得「按了沒反應／卡住」。與 checkInBooking 同一條原則：
+     沉默失敗比錯誤訊息糟。 */
+  console.error('memh2Tap fail', e);
+  showToast('這張課卡打不開：'+((e&&e.message)||e), 8000);
+}); }
+async function _memh2Tap(id){
   const b=(id==='DEMO-BK') ? memDemoBk() : await dbGet('bookings',id);
   if(!b){ showToast('找不到預約'); return; }
   const _demo=!!(b&&b._demo);
