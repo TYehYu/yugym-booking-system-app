@@ -138,10 +138,11 @@ ok('★★ 四個欄位改動都會重算',
      && /真正的發放這一關照舊擋住，不能靠繞過視窗就發出去。/.test(src));
   ok('★★ 清單那顆未簽回的鈕不再反灰，改成「收款資訊」（哪裡找到都改得動）',
      /title="合約簽回後才能發放；先進去把收款資訊改好" onclick="openGrantApprove\('\$\{r\.id\}'\)">收款資訊<\/button>/.test(src));
-  ok('★★ 待審核卡兩顆鈕：取消（移除方案）／收款審核（進付款視窗）',
-     /title="移除這份方案（不會發票券）" onclick="grantReqCancel\('\$\{r\.id\}'\)">取消<\/button>/.test(src)
-     && /onclick="openGrantApprove\('\$\{r\.id\}'\)">收款審核<\/button>/.test(src)
-     && /「取消」走既有的 grantReqCancel（它會一併把合約收掉並問一次），不另做一套。/.test(src));
+  ok('★★ 待審核卡兩顆鈕：刪除（移除方案）／收款審核（進付款視窗）',
+     /title="移除這份方案（不會發票券）" onclick="grantReqCancel\('\$\{r\.id\}'\)">刪除<\/button>/.test(src)
+     && /onclick="openGrantApprove\('\$\{r\.id\}'\)">收款審核<\/button>/.test(src));
+  ok('　 為什麼叫「刪除」不叫「取消」（與預約那邊的取消分開）',
+     /叫「取消」會跟預約那邊的取消混淆/.test(src));
   ok('★★ 未簽回時底列換成「只存收款資訊」，而且說明講明不會發票券',
      /onclick="grantReqSaveFill\('\$\{r\.id\}'\)" title="合約簽回後才能發放；先把收款資訊存起來">只存收款資訊<\/button>/.test(src)
      && /合約還沒簽回，<b>這一步不會發票券<\/b>/.test(src));

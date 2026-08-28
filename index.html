@@ -11377,8 +11377,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.1748';
-const APP_VERSION_LABEL='v260828.1748';
+const APP_VERSION = '260828.1756';
+const APP_VERSION_LABEL='v260828.1756';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -41897,8 +41897,9 @@ function ppRecordHtml(){
                 ${/* 2026-08-28 使用者指示：「這種未付款的票券設計兩個按鈕　一個取消　一個收款審核
                      取消就直接把方案移除　收款審核進入付款視窗　審核發票券」——
                      ⚠「收款審核」原本開的是整份待審核清單，還要自己在裡面找回同一筆，改成直開這一筆。
-                     ⚠「取消」走既有的 grantReqCancel（它會一併把合約收掉並問一次），不另做一套。 */''}
-                ${isDeskLike()?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger,#b5372e);" title="移除這份方案（不會發票券）" onclick="grantReqCancel('${r.id}')">取消</button>`:''}
+                     ⚠「刪除」（2026-08-28 使用者：「取消改名刪除」——它做的就是把這份方案整個移除，
+                       叫「取消」會跟預約那邊的取消混淆）走既有的 grantReqCancel，不另做一套。 */''}
+                ${isDeskLike()?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger,#b5372e);" title="移除這份方案（不會發票券）" onclick="grantReqCancel('${r.id}')">刪除</button>`:''}
                 ${isDeskLike()?`<button class="btn btn-green btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openGrantApprove('${r.id}')">收款審核</button>`:''}
               </span>
             </div>
@@ -46494,8 +46495,12 @@ async function _doLineUnbind(mid){
    「只要付款狀態選未付款　就會先出現在會員方案顯示待付款」，櫃檯之後點方案卡上的
    「收款」把金額與付款方式定案。
 
-   ⚠ 分期方式**不在這裡改**：它決定發票當下開通幾堂，票已經發出去、堂數也已經開通，
-     這時候改期數會讓已開通的堂數與期數對不上。分期要在建立合約那一步就選好。
+   ⚠ 分期**可以在這裡改**（2026-08-28 使用者：「有些時候會員跟教練說不用分期 但來到現場
+     決定要分期　如果這個決定要在建合約的時候就選好　那就沒有修正的空間　要重新建立合約」）——
+     這一步就是「第一次付款」，分期本來就該在這時候定案。
+     改成分期＝把票重新上鎖：unlocked_sessions 收成第一期的堂數、補上 installment 物件。
+     ⚠ 有一條線不能越：**已經扣掉的堂數不能超過新的第一期**，否則已排的課會落在還沒
+       開通的區段裡（後面的「開通下一期」會整個對不上）。擋在 tkPayRead 之後、寫入之前。
    ⚠ 營收記在**收款這一天**，不是建約那天 —— 錢什麼時候到，帳就記在哪一天。
      所以這裡是補寫一筆 purchases，不是去改建約當天那一筆（那筆的 deal_amount 是 0）。 */
 async function tkPayOpen(tkId){
@@ -46504,7 +46509,20 @@ async function tkPayOpen(tkId){
   if(!t){ showToast('找不到票券'); return; }
   if(t.payment_status!=='unpaid'){ showToast('這張票不是待付款'); return; }
   const m=await dbGet('members',t.member_id).catch(()=>null);
-  window._tkPay={id:tkId, name:(m&&m.name)||'', plan:t.plan_name||'票券'};
+  /* 能不能分期：看這張票背後的方案（course_plans.installment）。查不到就不給改 ——
+     寧可少一個選項，也不要把不能分期的方案硬拆成三期。 */
+  let _canInst=false;
+  try{
+    if(tkIsInstall(t)) _canInst=true;
+    else if(t.source_plan_id){
+      const _pl=await dbGet('course_plans',t.source_plan_id).catch(()=>null);
+      _canInst=!!(_pl && _pl.installment);
+    }
+  }catch(_){}
+  const _total=Number(t.sessions_total)||0;
+  const _usedN=Math.max(0, _total-(Number(t.sessions_remaining)||0));
+  const _curInst=tkIsInstall(t)?(Number((t.installment||{}).count)||1):1;
+  window._tkPay={id:tkId, name:(m&&m.name)||'', plan:t.plan_name||'票券', total:_total, used:_usedN};
   const _amt=Number(t.amount_paid)||0;
   showModal(`<div class="modal-title">收款・${escH(t.plan_name||'票券')}</div>
     <div style="font-size:13px;color:var(--t2);padding:2px 0 10px;">
@@ -46520,7 +46538,13 @@ async function tkPayOpen(tkId){
       </div>
       <div class="form-row" id="tkp-split-wrap" style="display:none;"><label>其中現金收多少（其餘記匯款）</label>
         <input type="number" id="tkp-split" min="0" oninput="tkPayPreview()" placeholder="例如 7200"></div>
-      <div class="gr-fill-note">分期方式不在這裡改 —— 它決定發票當下開通幾堂，票已經發出去了才改會對不上。</div>
+      ${_canInst?`<div class="form-row"><label>分期方式</label>
+        <select id="tkp-install" onchange="tkPayPreview()">${[1,2,3].map(n=>
+          `<option value="${n}"${_curInst===n?' selected':''}>${n===1?'不分期（一次付清）':`分 ${n} 期（分段開通）`}</option>`).join('')}</select>
+        <div style="font-size:11px;color:var(--t3);margin-top:5px;line-height:1.7;">
+          第一次付款就是決定分期的時候。改成分期會把票重新上鎖：這次只開通第一期的堂數，
+          其餘等收到下一期再開。${_usedN?`<b>已經用掉 ${_usedN} 堂</b>，第一期不能少於這個數。`:''}</div></div>`
+        :`<div class="gr-fill-note">這張票的方案不提供分期。</div>`}
     </div>
     <div class="gr-amt-box" id="tkp-box"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
@@ -46537,7 +46561,15 @@ function tkPayRead(){
     split=Number((document.getElementById('tkp-split')||{}).value);
     if(!Number.isFinite(split)||split<0||split>amt) return null;
   }
-  return {amt, method, split};
+  const _iEl=document.getElementById('tkp-install');
+  const inst=Math.max(1, Number(_iEl?_iEl.value:1)||1);
+  const S=window._tkPay||{};
+  const total=Math.max(0, Number(S.total)||0), used=Math.max(0, Number(S.used)||0);
+  const segs=inst>1?splitSessions(total,inst):[total];
+  /* ⚠ 已經扣掉的堂數不能超過新的第一期（見檔頭）——超過就整個不給送，
+     不是靜靜把第一期撐大（那等於偷偷改了客人談好的期數）。 */
+  if(inst>1 && used>segs[0]) return null;
+  return {amt, method, split, inst, segs, total, used};
 }
 function tkPayPreview(){
   const box=document.getElementById('tkp-box'), go=document.getElementById('tkp-go');
@@ -46548,7 +46580,8 @@ function tkPayPreview(){
     if(go){ go.disabled=true; go.style.opacity='.45'; go.style.cursor='not-allowed'; } return; }
   const _lb={cash:'現金',transfer:'匯款',split:'現金＋匯款'}[v.method]||v.method;
   box.innerHTML=`<span class="gr-amt-k">實收</span><span class="gr-amt-v">$${v.amt.toLocaleString()}</span>
-    <span class="gr-amt-s">${_lb}${v.method==='split'?`（現金 $${v.split.toLocaleString()}／匯款 $${(v.amt-v.split).toLocaleString()}）`:''}　·　記在今天</span>`;
+    <span class="gr-amt-s">${_lb}${v.method==='split'?`（現金 $${v.split.toLocaleString()}／匯款 $${(v.amt-v.split).toLocaleString()}）`:''}${
+      v.inst>1?`　·　分 ${v.inst} 期，這次開通 <b>${v.segs[0]}</b> 堂（共 ${v.total} 堂）`:''}　·　記在今天</span>`;
   if(go){ go.disabled=false; go.style.opacity=''; go.style.cursor=''; }
 }
 async function tkPayGo(){ return onceAct('tkpay:'+((window._tkPay||{}).id||''), _tkPayGo); }
@@ -46560,8 +46593,22 @@ async function _tkPayGo(){
     const t=await dbGet('member_tickets',S.id);
     if(!t){ showToast('找不到票券'); return; }
     if(t.payment_status!=='unpaid'){ showToast('這張票已經收過款了'); return; }
+    /* 已用堂數在這一刻可能又變了（名單畫出來之後有人簽到）—— 再擋一次那條線 */
+    const _usedNow=Math.max(0,(Number(t.sessions_total)||0)-(Number(t.sessions_remaining)||0));
+    if(v.inst>1 && _usedNow>v.segs[0]){
+      showToast(`已經用掉 ${_usedNow} 堂，分 ${v.inst} 期的第一期只有 ${v.segs[0]} 堂 —— 請改期數或先處理已排的課`, 8000);
+      return;
+    }
     t.payment_status='paid';
     t.amount_paid=(Number(t.amount_paid)||0)+v.amt;
+    if(v.inst>1){
+      /* 改成分期＝把票重新上鎖（2026-08-28）：只開通第一期，其餘等下一期收款。
+         金額切法與賣票當下同一支 splitAmount，兩條路算出來要一樣。 */
+      const _amts=splitAmount(Number(t.deal_amount)||v.amt*v.inst, v.inst);
+      t.unlocked_sessions=v.segs[0];
+      t.installment={count:v.inst, segments:v.segs, amounts:_amts,
+        paid:_amts.map((_,i)=>i===0), current:1};
+    }
     await dbPut('member_tickets',t);
     /* 營收記在收款這一天（見檔頭）：補寫一筆 purchases，不動建約那天那一筆。 */
     try{
@@ -46575,10 +46622,12 @@ async function _tkPayGo(){
     }catch(e){ console.error('tkPay purchase fail',e);
       showToast('收款紀錄寫入失敗（票券已標為已付款，請補開）：'+dbFriendlyError(e), 8000); }
     await logTicket(t.id,'adjust',0,null,SESSION.id,
-      `補收款 $${v.amt.toLocaleString()}（${{cash:'現金',transfer:'匯款',split:'現金＋匯款'}[v.method]||v.method}）`);
+      `補收款 $${v.amt.toLocaleString()}（${{cash:'現金',transfer:'匯款',split:'現金＋匯款'}[v.method]||v.method}）`
+      +(v.inst>1?`；改為分 ${v.inst} 期，本次開通 ${v.segs[0]}/${v.total} 堂`:''));
     dbCacheClear(['member_tickets','ticket_logs','purchases']);
     closeModal();
-    showToast(`已收款 $${v.amt.toLocaleString()}　·　記在今天的營收`);
+    showToast(`已收款 $${v.amt.toLocaleString()}　·　記在今天的營收`
+      +(v.inst>1?`；已改為分 ${v.inst} 期，這次開通 ${v.segs[0]} 堂`:''), v.inst>1?7000:4000);
     if(!(await ppRefreshIfOpen(t.member_id))) navTo(CUR_PAGE);
   }catch(e){ showToast('收款失敗：'+((e&&e.message)||e)); }
   finally{ done(); }

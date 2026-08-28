@@ -153,13 +153,34 @@ console.log('\n④ 收款視窗');
   ok('★★ 入口自己再擋一次權限與狀態（畫面藏起來不等於做不到）',
      /if\(!isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可收款'\); return; \}/.test(F)
      && /if\(t\.payment_status!=='unpaid'\)\{ showToast\('這張票不是待付款'\); return; \}/.test(F));
-  ok('★★ 只收「實收金額／付款方式／拆帳」——分期不給改',
+/* 2026-08-28 二修（使用者：「分期要在第一次付款的時候就要決定 因為有些時候會員跟教練說
+   不用分期 但來到現場決定要分期 如果這個決定要在建合約的時候就選好 那就沒有修正的空間
+   要重新建立合約耶」）—— 我原本把限制講太死了。這一步就是第一次付款，分期本來就該在
+   這時候定案；只有一條線不能越：已扣掉的堂數不能超過新的第一期。 */
+  ok('★★ 四個欄位：實收金額／付款方式／拆帳／分期',
      /<input type="number" id="tkp-amt"/.test(F) && /<select id="tkp-method"/.test(F)
      && /<input type="number" id="tkp-split"/.test(F)
-     && !/id="tkp-install"/.test(F));
-  ok('★★ 為什麼分期不能在這裡改，寫在原地',
-     /分期方式\*\*不在這裡改\*\*：它決定發票當下開通幾堂，票已經發出去、堂數也已經開通，/.test(src)
-     && /分期方式不在這裡改 —— 它決定發票當下開通幾堂，票已經發出去了才改會對不上。/.test(F));
+     && /<select id="tkp-install" onchange="tkPayPreview\(\)"/.test(F));
+  ok('★★ 能不能分期看方案（course_plans.installment）；查不到就不給改',
+     /const _pl=await dbGet\('course_plans',t\.source_plan_id\)\.catch\(\(\)=>null\);/.test(F)
+     && /_canInst=!!\(_pl && _pl\.installment\);/.test(F)
+     && /寧可少一個選項，也不要把不能分期的方案硬拆成三期。/.test(F)
+     && /這張票的方案不提供分期。/.test(F));
+  ok('★★ 改成分期＝把票重新上鎖（只開通第一期），理由寫在原地',
+     /改成分期＝把票重新上鎖：unlocked_sessions 收成第一期的堂數、補上 installment 物件。/.test(src)
+     && /第一次付款就是決定分期的時候。改成分期會把票重新上鎖：這次只開通第一期的堂數，/.test(F));
+  ok('★★ 那條不能越的線：已扣堂數不能超過新的第一期',
+     /已經扣掉的堂數不能超過新的第一期\*\*，否則已排的課會落在還沒/.test(src)
+     && /if\(inst>1 && used>segs\[0\]\) return null;/.test(src));
+  ok('★★ 送出前再擋一次（名單畫出來之後可能又有人簽到）',
+     /const _usedNow=Math\.max\(0,\(Number\(t\.sessions_total\)\|\|0\)-\(Number\(t\.sessions_remaining\)\|\|0\)\);/.test(src)
+     && /if\(v\.inst>1 && _usedNow>v\.segs\[0\]\)\{/.test(src));
+  ok('★★ 金額切法與賣票當下同一支 splitAmount（兩條路要算一樣）',
+     /const _amts=splitAmount\(Number\(t\.deal_amount\)\|\|v\.amt\*v\.inst, v\.inst\);/.test(src)
+     && /金額切法與賣票當下同一支 splitAmount，兩條路算出來要一樣。/.test(src));
+  ok('★ 預覽會講「這次開通幾堂」，帳本與吐司也留下改期數的痕跡',
+     /分 \$\{v\.inst\} 期，這次開通 <b>\$\{v\.segs\[0\]\}<\/b> 堂/.test(src)
+     && /；改為分 \$\{v\.inst\} 期，本次開通 \$\{v\.segs\[0\]\}\/\$\{v\.total\} 堂/.test(src));
   ok('★★ 實收金額即時預覽，算不出來就把確認鈕停用',
      /function tkPayPreview\(\)\{/.test(F)
      && /<span class="gr-amt-v gr-amt-wait">—<\/span>/.test(F)
@@ -167,16 +188,28 @@ console.log('\n④ 收款視窗');
 
   /* 實跑輸入驗證：與發放那一支同一組毛病（Number('')===0） */
   const R=src.slice(src.indexOf('function tkPayRead(){'), src.indexOf('function tkPayPreview(){'));
-  const run=v=>new Function('document','Number',
-    R+'\nreturn tkPayRead;')({getElementById:id=>(id in v)?{value:v[id]}:null}, Number)();
-  eq('★★ 正常填', run({'tkp-amt':'14400','tkp-method':'cash'}), {amt:14400,method:'cash',split:null});
-  eq('★★ 沒填金額 → null（不是變成 $0）', run({'tkp-amt':'','tkp-method':'cash'}), null);
-  eq('　 只有空白也要擋', run({'tkp-amt':'  ','tkp-method':'cash'}), null);
+  const splitSessions=(t,n)=>{const b=Math.floor(t/n),r=t%n;return Array.from({length:n},(_,i)=>b+(i<r?1:0));};
+  const run=(v,S)=>new Function('document','Number','Math','window','splitSessions',
+    R+'\nreturn tkPayRead;')({getElementById:id=>(id in v)?{value:v[id]}:null}, Number, Math,
+      {_tkPay:S||{total:12,used:0}}, splitSessions)();
+  eq('★★ 正常填（不分期）', run({'tkp-amt':'14400','tkp-method':'cash','tkp-install':'1'}),
+     {amt:14400,method:'cash',split:null,inst:1,segs:[12],total:12,used:0});
+  eq('★★ 沒填金額 → null（不是變成 $0）', run({'tkp-amt':'','tkp-method':'cash','tkp-install':'1'}), null);
+  eq('　 只有空白也要擋', run({'tkp-amt':'  ','tkp-method':'cash','tkp-install':'1'}), null);
   eq('★★ 拆帳超過總額 → null',
-     run({'tkp-amt':'14400','tkp-method':'split','tkp-split':'99999'}), null);
-  eq('★ 拆帳正常', run({'tkp-amt':'14400','tkp-method':'split','tkp-split':'7200'}),
-     {amt:14400,method:'split',split:7200});
-  eq('★ 明確打 0 合法（全額加贈）', run({'tkp-amt':'0','tkp-method':'cash'}), {amt:0,method:'cash',split:null});
+     run({'tkp-amt':'14400','tkp-method':'split','tkp-split':'99999','tkp-install':'1'}), null);
+  eq('★ 拆帳正常', run({'tkp-amt':'14400','tkp-method':'split','tkp-split':'7200','tkp-install':'1'}),
+     {amt:14400,method:'split',split:7200,inst:1,segs:[12],total:12,used:0});
+  eq('★★ 改成分 3 期：第一期 4 堂',
+     (run({'tkp-amt':'4800','tkp-method':'cash','tkp-install':'3'})||{}).segs, [4,4,4]);
+  eq('★★ 已用 5 堂卻要分 3 期（第一期只有 4 堂）→ 擋下，不偷偷把第一期撐大',
+     run({'tkp-amt':'4800','tkp-method':'cash','tkp-install':'3'}, {total:12,used:5}), null);
+  eq('★ 已用 4 堂、第一期正好 4 堂 → 放行',
+     (run({'tkp-amt':'4800','tkp-method':'cash','tkp-install':'3'}, {total:12,used:4})||{}).inst, 3);
+  eq('★ 不分期時已用幾堂都不擋（本來就全開通）',
+     (run({'tkp-amt':'14400','tkp-method':'cash','tkp-install':'1'}, {total:12,used:9})||{}).inst, 1);
+  eq('★ 明確打 0 合法（全額加贈）',
+     (run({'tkp-amt':'0','tkp-method':'cash','tkp-install':'1'})||{}).amt, 0);
 }
 
 console.log('\n⑤ 寫入：營收記在收款這一天');
