@@ -10045,6 +10045,8 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .memh2 .mh2-kpi b.z{color:var(--t3);}          /* 〔2026-08-31 起用不到：0 的那一格直接不畫〕 */
 /* 三格都 0：寫一句話，不要留一整列空白（2026-08-31） */
 .memh2 .mh2-kpi-none{font-size:12px;color:var(--t3);justify-content:flex-end;}
+/* 無限次卡：寫「不限」而不是一串數字（2026-08-28） */
+.memh2 .mh2-kpi-inf{font-size:15px;letter-spacing:.06em;}
 .memh2 .mh2-kpi i{font-style:normal;font-size:10.5px;color:var(--t3);}
 /* ── 橫排日期列（2026-08-27）：取代原本的課程篩選列，也取代左邊那一欄 ──
    左欄七格要瓜分「視窗高度」，LINE 內建瀏覽器一壓就把數字裁掉；橫排瓜分的是寬度，
@@ -11393,8 +11395,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.2133';
-const APP_VERSION_LABEL='v260828.2133';
+const APP_VERSION = '260828.2139';
+const APP_VERSION_LABEL='v260828.2139';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16546,6 +16548,14 @@ function tkUnlockedLeft(t){
   return Math.max(0, Math.min(remain, unlocked-used));
 }
 function tkIsInstall(t){ return !!(t && t.installment && typeof t.installment==='object'); }
+/* 無限次卡（2026-08-28 使用者：「魚媽劉媽有可能給他們一張無限卡 就不要用9999張」）——
+   資料上目前是用 sessions_total=9999 當哨兵值（正式庫 2,977 張票裡只有那一張），
+   這個約定原本散在四、五個地方各寫一次註解，很容易漏。先收成一個判斷：
+   凡是要「照堂數展開」「把餘額寫成數字」的地方，都先問它。
+   ⚠ 這一步刻意**不動資料**：真的加一個 unlimited 欄位要連扣課、退課、餘額護欄、
+     超約防線、報表一起改，那是另一件事，不該跟顯示混在一起做。
+   ⚠ 門檻沿用既有的 999（見 ticketTokens 的 TK_DOT_MAX 說明：61–998 堂的票有 0 張）。 */
+function tkUnlimited(t){ return (Number(t&&t.sessions_total)||0)>=999; }
 /* 該票券在「這個日期＋時段」是否可用（2026-07-30）：
    票種設 time_restricted（友善自主訓練、友善教練課）＝僅限平日、且要在 18:00 前上完。
    沒帶時間就只檢查星期，時段留給 validateBooking 最後把關。
@@ -51116,11 +51126,19 @@ function memh2HTML(o){
      ⚠ 判準用的是上面剛算好的「尚未銷課」：票面剩餘＋已預約未上。
        所以「堂數用完但還有已預約未上」的那一格仍然會留著（那幾堂還沒上）。
      ⚠ 三格都 0 就整條不畫，改寫一句話 —— 空白的一列比 0 更難懂。 */
-  const _kpiRows=[['教練課',pk.pt+pk.friendly+_pend.pt+_pend.friendly],
-                  ['團體課',pk.group+_pend.group],
-                  ['自主訓練',pk.self+_pend.self]].filter(([,n])=>n>0);
+  /* 無限次卡不要寫數字（2026-08-28 使用者指示）——魚媽劉媽那張會顯示「9955 堂」，
+     那不是資訊，是雜訊。改寫「不限」。 */
+  const _unlim={pt:false,group:false,self:false};
+  usable.forEach(t=>{ if(!tkUnlimited(t)) return;
+    const k=memh2TkKind(t,typeMap);
+    if(k==='self') _unlim.self=true; else if(k==='group') _unlim.group=true;
+    else if(k==='pt'||k==='friendly') _unlim.pt=true; });
+  const _kpiRows=[['教練課',pk.pt+pk.friendly+_pend.pt+_pend.friendly,_unlim.pt],
+                  ['團體課',pk.group+_pend.group,_unlim.group],
+                  ['自主訓練',pk.self+_pend.self,_unlim.self]].filter(([,n,u])=>u||n>0);
   const kpis=_kpiRows.length
-    ? _kpiRows.map(([l,n])=>`<div class="mh2-kpi"><span>${l}</span><b>${n}</b><i>堂</i></div>`).join('')
+    ? _kpiRows.map(([l,n,u])=>`<div class="mh2-kpi"><span>${l}</span>${
+        u?'<b class="mh2-kpi-inf">不限</b>':`<b>${n}</b><i>堂</i>`}</div>`).join('')
     : `<div class="mh2-kpi mh2-kpi-none">目前沒有可用堂數</div>`;
   /* ── 日期列：從左欄搬到上方，取代原本的課程篩選列（2026-08-27 使用者指示）──
      起因是實機（LINE 內建瀏覽器）：LINE 自己的標題列＋Android 狀態列吃掉視窗上緣，
@@ -51489,6 +51507,8 @@ async function memSelfBarSync(){
         const st=t.start_date?String(t.start_date).slice(0,10):'';
         const from=(st&&st>today)?st:today;                    // 還沒生效的票要等生效日
         const ex=t.expire_date?String(t.expire_date).slice(0,10):'';
+        /* 無限次卡只畫一顆「不限」—— 畫 12 顆一模一樣的可約卡沒有任何資訊量 */
+        if(tkUnlimited(t)){ pts.push({from, ex, inf:true}); return; }
         const _n=Math.min(Number(t.sessions_remaining)||0, CAP-pts.length);
         for(let i=0;i<_n;i++) pts.push({from, ex});
       });
@@ -51501,9 +51521,9 @@ async function memSelfBarSync(){
         onclick="memh2PickDay('${b.date}')">
         <b>${d.getMonth()+1}/${d.getDate()}</b><span>${String(b.start_time||'').slice(0,5)}</span></button>`;
     }).concat(pts.slice(0, Math.max(0, CAP-booked.length)).map(p=>
-      `<button class="mh2-sbc mh2-sbfree" title="還沒安排的自主訓練點數${p.ex?`（效期至 ${p.ex.replace(/-/g,'/')}）`:''}　·　點一下挑時段"
+      `<button class="mh2-sbc mh2-sbfree" title="${p.inf?'不限次數的自主訓練':'還沒安排的自主訓練點數'}${p.ex?`（效期至 ${p.ex.replace(/-/g,'/')}）`:''}　·　點一下挑時段"
         onclick="memh2SelfSlots('${p.from}','${p.ex||''}')">
-        <b>＋</b><span>可約</span></button>`)).join('');
+        <b>＋</b><span>${p.inf?'不限':'可約'}</span></button>`)).join('');
     const _more=(booked.length+pts.length)-Math.min(CAP, booked.length+pts.length);
     let el=host();
     if(!el){ el=document.createElement('div'); el.id='mem-selfbar'; el.className='mh2-selfbar';
@@ -54349,7 +54369,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
     const _hidden=total-(_to-_from);
     /* 無限次卡（親友自主訓練那種 9999 堂）標「+9984」沒有意義，直接寫「不限堂數」 */
     s+=`<span class="mtk mtk-more" title="這張票共 ${total} 堂，這裡只畫其中 ${_to-_from} 顆">${
-      total>=999?'不限堂數':('+'+_hidden)}</span>`;
+      tkUnlimited(t)?'不限堂數':('+'+_hidden)}</span>`;
   }
   return s||`<span class="mtk mtk-free" style="--tk-acc:${v.accent};"></span>`;
 }

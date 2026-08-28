@@ -24,11 +24,21 @@ const html=cut('function memh2HTML(o){','/* 點課卡 → 簽到確認視窗');
 t('KPI 用票面剩餘堂數', /pk\[k\]\+=Number\(t\.sessions_remaining\)\|\|0/.test(html));
 /* 2026-08-31 使用者指示：「要顯示的應該是尚未銷課的課堂，已經預約的課堂但還沒使用
    也應該顯示在這邊」—— 票面剩餘在預約當下就扣掉了，所以要把「已預約未上」加回來。 */
-t('友善教練課併進「教練課」那一格', /\['教練課',pk\.pt\+pk\.friendly\+_pend\.pt\+_pend\.friendly\]/.test(html));
+t('友善教練課併進「教練課」那一格', /\['教練課',pk\.pt\+pk\.friendly\+_pend\.pt\+_pend\.friendly,_unlim\.pt\]/.test(html));
 t('三格＝教練課／團體課／自主訓練',
-  /\['團體課',pk\.group\+_pend\.group\]/.test(html) && /\['自主訓練',pk\.self\+_pend\.self\]/.test(html));
+  /\['團體課',pk\.group\+_pend\.group,_unlim\.group\]/.test(html)
+  && /\['自主訓練',pk\.self\+_pend\.self,_unlim\.self\]/.test(html));
+/* 2026-08-28 使用者：「魚媽劉媽有可能給他們一張無限卡 就不要用9999張」 */
+t('★★ 無限次卡寫「不限」，不要寫 9955',
+  /u\?'<b class="mh2-kpi-inf">不限<\/b>':`<b>\$\{n\}<\/b><i>堂<\/i>`/.test(html)
+  && /那不是資訊，是雜訊。改寫「不限」。/.test(s));
+t('★★ 無限次卡那一格一定留著（就算 n 算出來是 0）',
+  /\.filter\(\(\[,n,u\]\)=>u\|\|n>0\);/.test(html));
+t('★★ 收成一個判斷 tkUnlimited，不再各處各寫一次 999',
+  /function tkUnlimited\(t\)\{ return \(Number\(t&&t\.sessions_total\)\|\|0\)>=999; \}/.test(s)
+  && /這一步刻意\*\*不動資料\*\*：真的加一個 unlimited 欄位要連扣課、退課、餘額護欄、/.test(s));
 /* 2026-08-31 使用者：「會員KPI可以篩選嗎　該會員有該種票券才顯示」 */
-t('★★ 只列真的有的那幾格（0 的不畫）', /\.filter\(\(\[,n\]\)=>n>0\);/.test(html));
+t('★★ 只列真的有的那幾格（0 的不畫）', /\.filter\(\(\[,n,u\]\)=>u\|\|n>0\);/.test(html));
 t('★★ 三格都 0 就寫一句話，不要留一整列空白',
   /: `<div class="mh2-kpi mh2-kpi-none">目前沒有可用堂數<\/div>`;/.test(html)
   && /\.memh2 \.mh2-kpi-none\{font-size:12px;color:var\(--t3\);/.test(s));

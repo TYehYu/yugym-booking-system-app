@@ -64,7 +64,9 @@ console.log('\n③ 底部「自主訓練」浮動列（2026-08-31 改成「他�
      && !/const selfBar=/.test(HTML));
   ok('★★ 兩種圓卡：已約的（日期＋時間）與還沒約的（每一點一顆「可約」）',
      /<b>\$\{d\.getMonth\(\)\+1\}\/\$\{d\.getDate\(\)\}<\/b><span>\$\{String\(b\.start_time\|\|''\)\.slice\(0,5\)\}<\/span>/.test(B)
-     && /<b>＋<\/b><span>可約<\/span>/.test(B));
+     && /<b>＋<\/b><span>\$\{p\.inf\?'不限':'可約'\}<\/span>/.test(B));
+  ok('★★ 無限次卡只畫一顆「不限」（12 顆一模一樣的可約卡沒有資訊量）',
+     /if\(tkUnlimited\(t\)\)\{ pts\.push\(\{from, ex, inf:true\}\); return; \}/.test(B));
   ok('★★ 已約的點了跳到那一天；還沒約的點了直接開挑時段',
      /onclick="memh2PickDay\('\$\{b\.date\}'\)"/.test(B)
      && /onclick="memh2SelfSlots\('\$\{p\.from\}','\$\{p\.ex\|\|''\}'\)"/.test(B));

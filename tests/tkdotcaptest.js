@@ -25,8 +25,10 @@ ok('　　成因與案例寫在原地',
 ok('★ 截斷時最後一格放收尾籤，不默默少畫',
    /const _win = _trunc \? TK_DOT_MAX-1 : total;/.test(src)
    && /<span class="mtk mtk-more"/.test(src));
+/* 2026-08-28：999 這個哨兵值收成 tkUnlimited()，不再各處各寫一次 */
 ok('　　無限次卡標「不限堂數」而不是「+9984」',
-   /total>=999\?'不限堂數':\('\+'\+_hidden\)/.test(src));
+   /tkUnlimited\(t\)\?'不限堂數':\('\+'\+_hidden\)/.test(src)
+   && /function tkUnlimited\(t\)\{ return \(Number\(t&&t\.sessions_total\)\|\|0\)>=999; \}/.test(src));
 ok('★ 視窗以「本堂」為中心（沒有本堂就對齊最新的內容）',
    /const _anchor = _curSlot>=0 \? _curSlot : Math\.max\(0, Math\.min\(_contentN,total\)-1\);/.test(src));
 ok('★ ⚠ 起點不是 0 之後，消耗指標要跟著對齊',
