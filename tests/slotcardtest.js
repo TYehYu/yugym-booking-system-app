@@ -104,7 +104,9 @@ console.log('\n把人補上去：綁定待簽約回到簡易課卡');
    散客卡（有 trial_name）維持 openBindPending —— 那是「把卡上的姓名對到一筆
    真的會員資料」，不是「加一個人進來」。 */
 ok('★★ 沒綁會員的卡位給「安排會員／綁定會員」，不是「轉正」；兩者各接各的視窗',
-   /\? evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);bkAddMemberOpen\('\$\{id\}'\)`,'plus','安排會員'\)\s*\n\s*: evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);openBindPending\('\$\{id\}'\)`,'plus','綁定會員'\);/.test(src)
+   /* 2026-08-28：課卡這條改走 bindPendingFromCard —— 它會先存下重開課卡的錨點再收卡，
+      「返回」才回得到同一張卡而不是舊的明細視窗（使用者回報）。 */
+   /\? evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);bkAddMemberOpen\('\$\{id\}'\)`,'plus','安排會員'\)\s*\n\s*: evoBtn\('evo-r2','evo-gold',`bindPendingFromCard\('\$\{id\}'\)`,'plus','綁定會員'\);/.test(src)
    && /走的是這條「待簽約」早退分支/.test(src));
 ok('★ 已綁會員且有票才給轉正（沒票先給儲值）',
    /evoBtn\('evo-r2','evo-primary',`ashBackArm\('\$\{id\}'\);collapseBkCard\(\);openConvertPending\('\$\{id\}'\)`,'check','轉正'\)/.test(src)

@@ -11353,8 +11353,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.1429';
-const APP_VERSION_LABEL='v260828.1429';
+const APP_VERSION = '260828.1436';
+const APP_VERSION_LABEL='v260828.1436';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28629,6 +28629,26 @@ async function submitPendingHold(){
    ・會員在自己手機看得到這些課、開課前 24 小時的 LINE 提醒會發
    ・之後「轉正簽約」不用再比對身分，直接進扣票
    ・不會被任何自動扣課路徑碰到（遞補與開通下一期只認分期保留標記，見 bkIsInstHold） */
+/* 「返回」要回到來的地方（2026-08-28 使用者回報：「這個綁定會員視窗　按了返回會跑進舊視窗耶」）——
+   openBindPending 有兩個入口：舊的明細視窗裡那顆鈕，以及新式簡易課卡上的 evo 圓鈕。
+   返回原本一律寫死 openBookingDetail，所以從課卡按進來的人會被丟進舊的明細視窗。
+   ⚠ 課卡那條路要先 collapseBkCard，而它會清掉 window._expandedBkEl（重開課卡的錨點）——
+     所以在收起之前先把錨點存下來，返回時才回得去同一張卡。
+   ⚠ 沒有錨點也要能回（首頁那條路本來就沒有 el），expandBkCard 已經處理 null。 */
+function bindPendingFromCard(id){
+  window._bpFrom='card';
+  window._bpBackEl=window._expandedBkEl||null;
+  try{ collapseBkCard(); }catch(_){}
+  openBindPending(id);
+}
+function bpBack(id){
+  if(window._bpFrom!=='card'){ openBookingDetail(id); return; }
+  try{ closeModal(); }catch(_){}
+  try{ collapseBkCard(); }catch(_){}
+  Promise.resolve()
+    .then(()=>expandBkCard(window._bpBackEl||null, id))
+    .catch(()=>openBookingDetail(id));   /* 重開失敗就退回明細，不要讓返回變成死路 */
+}
 async function openBindPending(id){
   const b=await dbGet('bookings',id);
   if(!b||!b.pending_contract||b.member_id){ showToast('這筆不是未綁定的待簽約卡位'); return; }
@@ -28641,7 +28661,7 @@ async function openBindPending(id){
     <div class="form-row"><label>選擇會員</label>
       <input id="bp-q" class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:8px;" placeholder="搜尋姓名或手機…" value="${String(b.trial_name||'').replace(/"/g,'&quot;')}" oninput="bpRenderList()" autocomplete="off">
       <div id="bp-list" class="ms-list" style="max-height:280px;border:1px solid var(--bd);border-radius:10px;padding:6px;"></div></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="bpBack('${id}')">返回</button></div>`);
   bpRenderList();
 }
 function bpRenderList(){
@@ -28676,6 +28696,7 @@ async function bpConfirm(memberId){
     </div>
     <div style="font-size:11.5px;color:var(--t3);margin-top:8px;line-height:1.7;">不扣課、不收款，狀態仍是「待簽約」。之後收款請照常按「轉正簽約」。</div>
     <div class="modal-foot">
+      ${/* 這一層的返回是回上一步（挑會員），不是回課卡 —— _bpFrom 保持不動 */''}
       <button class="btn btn-ghost" onclick="openBindPending('${id}')">返回</button>
       <button class="btn btn-green" onclick="bpGo('${memberId}')">確認綁定 ${series.length} 堂</button>
     </div>`);
@@ -29490,7 +29511,7 @@ async function expandBkCard(el, id){
              把已經寫在卡上的姓名對到一筆真的會員資料，不是「加一個人進來」。 */
         btns += bkIsOpenHold(b)
           ? evoBtn('evo-r2','evo-gold',`collapseBkCard();bkAddMemberOpen('${id}')`,'plus','安排會員')
-          : evoBtn('evo-r2','evo-gold',`collapseBkCard();openBindPending('${id}')`,'plus','綁定會員');
+          : evoBtn('evo-r2','evo-gold',`bindPendingFromCard('${id}')`,'plus','綁定會員');
       }
     }
     if(staff && !closed && b.status==='booked' && b.member_id){
@@ -31643,7 +31664,7 @@ async function openBookingDetail(id){
            純掛名不扣課；教練只能綁自己的課，扣課的「轉正簽約」仍限櫃檯。 */''}
       ${(b.pending_contract&&!b.member_id&&b.status==='booked'
           &&(isDeskLike()||(SESSION&&SESSION.role==='coach'&&(bkCoachId(b))===SESSION.id)))
-        ? `<button class="btn btn-ghost" onclick="${bkIsOpenHold(b)?`closeModal();bkAddMemberOpen('${b.id}')`:`openBindPending('${b.id}')`}">${bkIsOpenHold(b)?'安排會員':'綁定會員'}</button>`:''}
+        ? `<button class="btn btn-ghost" onclick="${bkIsOpenHold(b)?`closeModal();bkAddMemberOpen('${b.id}')`:`window._bpFrom='';openBindPending('${b.id}')`}">${bkIsOpenHold(b)?'安排會員':'綁定會員'}</button>`:''}
       ${(b.pending_contract&&!b.ticket_id&&b.status==='booked'&&(isDeskLike())&&!bkIsInstHold(b))
         ? `<button class="btn btn-green bkd-signup" onclick="openConvertPending('${b.id}')">轉正簽約</button>`:''}
     </div>`);

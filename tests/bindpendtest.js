@@ -59,7 +59,9 @@ console.log('\n④ 入口與權限');
    真的會員資料」，不是「加一個人進來」。 */
   ok('★ 明細那顆鈕：空堂→安排會員（新的［＋新增］）、散客→綁定會員（舊的對身分）',
      /isDeskLike\(\)\|\|\(SESSION&&SESSION\.role==='coach'&&\(bkCoachId\(b\)\)===SESSION\.id\)/.test(src)
-     && /\$\{bkIsOpenHold\(b\)\?`closeModal\(\);bkAddMemberOpen\('\$\{b\.id\}'\)`:`openBindPending\('\$\{b\.id\}'\)`\}/.test(src)
+     /* 2026-08-28：兩個入口各自標明來源，返回才回得去（見 bpBack）——
+        明細這條路把 _bpFrom 清空，返回回明細；課卡那條走 bindPendingFromCard。 */
+     && /\$\{bkIsOpenHold\(b\)\?`closeModal\(\);bkAddMemberOpen\('\$\{b\.id\}'\)`:`window\._bpFrom='';openBindPending\('\$\{b\.id\}'\)`\}/.test(src)
      && /\$\{bkIsOpenHold\(b\)\?'安排會員':'綁定會員'\}/.test(src));
   ok('★ 扣課的「轉正簽約」仍限櫃檯、且已綁定的卡位也按得到',
      /b\.pending_contract&&!b\.ticket_id&&b\.status==='booked'&&\(isDeskLike\(\)\)&&!bkIsInstHold\(b\)/.test(src));
@@ -91,6 +93,29 @@ ok('★ 旗標由 openBookingDetail 消化 → 回課卡（既有機制，沒有
    && /await expandBkCard\(_back\.el, id\); return;/.test(src));
 ok('　　「整串卡位要怎麼轉」那一顆返回仍走 openBookingDetail（被旗標接走）',
    /<button class="btn btn-ghost" onclick="openBookingDetail\('\$\{id\}'\)">返回<\/button>/.test(src));
+
+/* 「返回」跑進舊視窗（2026-08-28 使用者回報：「這個綁定會員視窗　按了返回會跑進舊視窗耶」）——
+   openBindPending 有兩個入口，返回卻一律寫死 openBookingDetail。 */
+console.log('\n⑦ 返回要回到來的地方');
+{
+  ok('★★ 挑會員那一層的返回改走 bpBack，不再寫死 openBookingDetail',
+     /<div class="modal-foot"><button class="btn btn-ghost" onclick="bpBack\('\$\{id\}'\)">返回<\/button><\/div>/.test(src)
+     && (src.match(/onclick="bpBack\(/g)||[]).length===1);
+  ok('★★ 從課卡進來的回課卡，其他一律回明細（原本的行為）',
+     /function bpBack\(id\)\{\s*\n\s*if\(window\._bpFrom!=='card'\)\{ openBookingDetail\(id\); return; \}/.test(src)
+     && /\.then\(\(\)=>expandBkCard\(window\._bpBackEl\|\|null, id\)\)/.test(src));
+  ok('★★ 錨點要在 collapseBkCard 之前存 —— 它會清掉 _expandedBkEl',
+     /window\._bpBackEl=window\._expandedBkEl\|\|null;\s*\n\s*try\{ collapseBkCard\(\); \}catch\(_\)\{\}/.test(src)
+     && /它會清掉 window\._expandedBkEl（重開課卡的錨點）/.test(src));
+  ok('★★ 重開失敗要退回明細，不能讓「返回」變成死路',
+     /\.catch\(\(\)=>openBookingDetail\(id\)\);   \/\* 重開失敗就退回明細，不要讓返回變成死路 \*\//.test(src));
+  ok('★ 第二層（確認綁定）的返回是回上一步挑會員，不是回課卡',
+     /這一層的返回是回上一步（挑會員），不是回課卡 —— _bpFrom 保持不動/.test(src)
+     && /<button class="btn btn-ghost" onclick="openBindPending\('\$\{id\}'\)">返回<\/button>/.test(src));
+  ok('　 綁定成功那條路不受影響（closeModal＋整頁重繪）',
+     /closeModal\(\);\s*\n\s*showToast\(`已綁定 \$\{m\.name\|\|'會員'\}/.test(src)
+     && /navTo\(CUR_PAGE\);/.test(src));
+}
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
