@@ -143,14 +143,24 @@ ok('★★ 四個欄位改動都會重算',
      && /onclick="openGrantApprove\('\$\{r\.id\}'\)">收款審核<\/button>/.test(src));
   ok('　 為什麼叫「刪除」不叫「取消」（與預約那邊的取消分開）',
      /叫「取消」會跟預約那邊的取消混淆/.test(src));
-  ok('★★ 未簽回時底列寫「待回簽才能通過」，說明講明不會發票券',
-     /onclick="grantReqSaveFill\('\$\{r\.id\}'\)" title="按下去會把上面的收款資訊存起來；票券要等會員簽回合約才發得出去">待回簽才能通過<\/button>/.test(src)
-     && /合約還沒簽回，<b>這一步不會發票券<\/b>/.test(src));
-  ok('★★ 不做成 disabled —— 櫃檯剛改好的金額與付款方式不能丟掉',
-     /不做成 disabled：櫃檯剛剛改好的金額與付款方式會整個丟掉，/.test(src)
-     && /onclick="grantReqSaveFill/.test(src));
+/* 2026-08-28 二修（使用者：「修改中間付款資訊這邊新增一個儲存 如果櫃檯只是要修改付款方式
+   可以從這邊按 然後下方待回簽才能通過這個按鈕 在還沒回簽的時候關閉互動」
+   ＋「回簽後再變成『發放票券』」）——
+   有了付款資訊區塊自己的「儲存收款資訊」，底下那顆才敢真的 disabled：
+   櫃檯剛改好的數字有地方存，不會因為按不下去就整個丟掉。 */
+  ok('★★ 未簽回時底列真的關掉互動（disabled），而且鈕還在、上面寫原因',
+     /<button class="btn btn-ghost" id="gr-go" disabled style="[^"]*opacity:\.6;cursor:not-allowed;" title="要等會員簽回合約才發得出去；只要改收款資訊請用上面的「儲存收款資訊」">待回簽才能通過<\/button>/.test(src));
+  ok('★★ 簽回之後同一個位置變成發放票券',
+     /\$\{_canIssue\s*\n\s*\? `<button class="btn btn-green" id="gr-go" onclick="grantReqApprove\('\$\{r\.id\}'\)">確認收款・發放票券<\/button>`/.test(src));
+  ok('★★ 付款資訊區塊自己有一顆「儲存收款資訊」（只改付款方式就按這顆）',
+     /<div class="gr-savebar">\s*\n\s*<button type="button" class="btn btn-ghost btn-sm" onclick="grantReqSaveFill\('\$\{r\.id\}'\)"\s*\n\s*title="只把上面的收款資訊存起來，不發票券">儲存收款資訊<\/button>/.test(src));
+  ok('★★ 說明也跟著改（底下那顆已經不做事了）',
+     /合約還沒簽回，<b>發不了票券<\/b> —— 等會員在手機上簽完再回這裡按發放。/.test(src)
+     && /只是要改收款方式或金額的話，改完按上面的<b>「儲存收款資訊」<\/b>就好。/.test(src));
+  ok('　 為什麼原本不敢 disabled、現在敢了 —— 寫在原地',
+     /原本不敢關掉互動，是怕櫃檯剛改好的\s*\n\s*金額與付款方式沒地方存；付款資訊區塊自己有一顆「儲存收款資訊」之後就沒這個顧慮了。/.test(src));
   ok('★★ 不用綠色（綠＝這一步做完了，但這一步沒做完）—— 用金（可以做、但要知道）',
-     /style="border-color:var\(--gold,#B48A56\);color:var\(--gold-d,#8a6a30\);font-weight:700;"/.test(src)
+     /border-color:var\(--gold,#B48A56\);color:var\(--gold-d,#8a6a30\);font-weight:700;/.test(src)
      && /金＝可以做、但要知道\s*\n\s*（品牌色階 紅>金>綠）/.test(src));
   ok('★★ 只存與發放共用同一支 grFillApply（存的與之後發的是同一包）',
      /const _p=grFillApply\(r\.payload\);\s*\n\s*if\(!_p\) return;/.test(src)
