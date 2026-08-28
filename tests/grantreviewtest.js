@@ -143,9 +143,15 @@ ok('★★ 四個欄位改動都會重算',
      && /onclick="openGrantApprove\('\$\{r\.id\}'\)">收款審核<\/button>/.test(src));
   ok('　 為什麼叫「刪除」不叫「取消」（與預約那邊的取消分開）',
      /叫「取消」會跟預約那邊的取消混淆/.test(src));
-  ok('★★ 未簽回時底列換成「只存收款資訊」，而且說明講明不會發票券',
-     /onclick="grantReqSaveFill\('\$\{r\.id\}'\)" title="合約簽回後才能發放；先把收款資訊存起來">只存收款資訊<\/button>/.test(src)
+  ok('★★ 未簽回時底列寫「待回簽才能通過」，說明講明不會發票券',
+     /onclick="grantReqSaveFill\('\$\{r\.id\}'\)" title="按下去會把上面的收款資訊存起來；票券要等會員簽回合約才發得出去">待回簽才能通過<\/button>/.test(src)
      && /合約還沒簽回，<b>這一步不會發票券<\/b>/.test(src));
+  ok('★★ 不做成 disabled —— 櫃檯剛改好的金額與付款方式不能丟掉',
+     /不做成 disabled：櫃檯剛剛改好的金額與付款方式會整個丟掉，/.test(src)
+     && /onclick="grantReqSaveFill/.test(src));
+  ok('★★ 不用綠色（綠＝這一步做完了，但這一步沒做完）—— 用金（可以做、但要知道）',
+     /style="border-color:var\(--gold,#B48A56\);color:var\(--gold-d,#8a6a30\);font-weight:700;"/.test(src)
+     && /金＝可以做、但要知道\s*\n\s*（品牌色階 紅>金>綠）/.test(src));
   ok('★★ 只存與發放共用同一支 grFillApply（存的與之後發的是同一包）',
      /const _p=grFillApply\(r\.payload\);\s*\n\s*if\(!_p\) return;/.test(src)
      && /存進去的就是之後真的會發的那一包，/.test(src));
