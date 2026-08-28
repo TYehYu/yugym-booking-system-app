@@ -75,7 +75,8 @@ console.log('\n④ 寫入不會因為精簡而掉資料');
      && /try\{ const full=await dbGet\(store,obj\.id\); if\(full\) obj=Object\.assign\(\{\},full,obj\); \}catch\(_\)\{\}/.test(F));
   ok('★ 新建的合約本來就帶齊三欄（不會多撈一次）',
      /signature:\(window\._ctSignature\|\|null\),body_snapshot:window\._ctBody,/.test(src)
-     && /sign_type:'remote',signature:null,body_snapshot:window\._ctBody,/.test(src));
+     /* 2026-08-28：待收款那條也走這裡，sign_type／signature 改成依來源給值 */
+     && /sign_type:\(_isRemote\?'remote':\(window\._ctSignType\|\|'paper'\)\),\s*\n\s*signature:\(_isRemote\?null:\(window\._ctSignature\|\|null\)\),body_snapshot:window\._ctBody,/.test(src));
   ok('★ 快取就地更新時也把重欄位剝掉（與清單同形）',
      /if\(drop && !del\)\{ r=Object\.assign\(\{\},row\); drop\.forEach\(c=>\{ delete r\[c\]; \}\); \}/.test(src));
 }
