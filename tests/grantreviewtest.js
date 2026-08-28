@@ -148,8 +148,8 @@ ok('★★ 四個欄位改動都會重算',
    ＋「回簽後再變成『發放票券』」）——
    有了付款資訊區塊自己的「儲存收款資訊」，底下那顆才敢真的 disabled：
    櫃檯剛改好的數字有地方存，不會因為按不下去就整個丟掉。 */
-  ok('★★ 未簽回時底列真的關掉互動（disabled），而且鈕還在、上面寫原因',
-     /<button class="btn btn-ghost" id="gr-go" disabled style="[^"]*opacity:\.6;cursor:not-allowed;" title="要等會員簽回合約才發得出去；只要改收款資訊請用上面的「儲存收款資訊」">待回簽才能通過<\/button>/.test(src));
+  ok('★★ 未簽回時底列寫「尚未回簽」、暗化、關掉互動，鈕還在且有原因',
+     /<button class="btn btn-ghost" id="gr-go" disabled style="opacity:\.45;cursor:not-allowed;color:var\(--t3\);" title="要等會員簽回合約才發得出去；只要改收款資訊請用上面的「儲存收款資訊」">尚未回簽<\/button>/.test(src));
   ok('★★ 簽回之後同一個位置變成發放票券',
      /\$\{_canIssue\s*\n\s*\? `<button class="btn btn-green" id="gr-go" onclick="grantReqApprove\('\$\{r\.id\}'\)">確認收款・發放票券<\/button>`/.test(src));
   ok('★★ 付款資訊區塊自己有一顆「儲存收款資訊」（只改付款方式就按這顆）',
@@ -159,9 +159,8 @@ ok('★★ 四個欄位改動都會重算',
      && /只是要改收款方式或金額的話，改完按上面的<b>「儲存收款資訊」<\/b>就好。/.test(src));
   ok('　 為什麼原本不敢 disabled、現在敢了 —— 寫在原地',
      /原本不敢關掉互動，是怕櫃檯剛改好的\s*\n\s*金額與付款方式沒地方存；付款資訊區塊自己有一顆「儲存收款資訊」之後就沒這個顧慮了。/.test(src));
-  ok('★★ 不用綠色（綠＝這一步做完了，但這一步沒做完）—— 用金（可以做、但要知道）',
-     /border-color:var\(--gold,#B48A56\);color:var\(--gold-d,#8a6a30\);font-weight:700;/.test(src)
-     && /金＝可以做、但要知道\s*\n\s*（品牌色階 紅>金>綠）/.test(src));
+  ok('★★ 也不用金（金是「可以做、但要知道」，這顆根本按不下去）—— 單純暗化',
+     /也不用金：金是「可以做、但要知道」，而這顆現在根本按不下去。\s*\n\s*暗化＝單純的「還不到時候」，不佔任何色階。/.test(src));
   ok('★★ 只存與發放共用同一支 grFillApply（存的與之後發的是同一包）',
      /const _p=grFillApply\(r\.payload\);\s*\n\s*if\(!_p\) return;/.test(src)
      && /存進去的就是之後真的會發的那一包，/.test(src));
