@@ -6006,14 +6006,16 @@ body.memh2-shell .bottom-nav .bn-lb{color:inherit;}
 /* ── 快速預約視窗裡的日期列（2026-08-27 客人回饋：換一天不必關窗）──
    橫捲、只列效期內約得到的日子；選中那一顆用品牌綠、今天描金框
    （與頁面上的日期列同一組語彙：綠＝現在這個、金＝標出來的那一個）。 */
-.qs-days{display:flex;gap:6px;overflow-x:auto;margin:0 0 12px;padding:1px 1px 6px;
+.qs-days{display:flex;gap:8px;overflow-x:auto;margin:0 0 14px;padding:2px 2px 8px;
   -webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .qs-days::-webkit-scrollbar{display:none;height:0;}
-.qs-day{flex:none;display:flex;flex-direction:column;align-items:center;gap:1px;
-  min-width:52px;padding:6px 8px;border:1.5px solid var(--bd);border-radius:11px;
+/* 2026-08-31 使用者：「上方的日期列可以大一點 有點被壓縮了」——
+   52→70px 寬、字級各升一級，手指按得到、日期也讀得清楚。 */
+.qs-day{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;
+  min-width:70px;padding:10px 10px;border:1.5px solid var(--bd);border-radius:13px;
   background:#fff;font-family:inherit;cursor:pointer;}
-.qs-day i{font-style:normal;font-size:9.5px;line-height:1.2;color:var(--t3);white-space:nowrap;}
-.qs-day b{font-family:var(--num),inherit;font-size:14px;font-weight:800;line-height:1.15;color:var(--t2);}
+.qs-day i{font-style:normal;font-size:11.5px;line-height:1.25;color:var(--t3);white-space:nowrap;}
+.qs-day b{font-family:var(--num),inherit;font-size:19px;font-weight:800;line-height:1.15;color:var(--t2);}
 .qs-day:active{transform:scale(.95);}
 .qs-day.qs-today{border-color:var(--gold,#B48A56);}
 .qs-day.on{background:var(--green);border-color:var(--green);}
@@ -11386,8 +11388,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.2007';
-const APP_VERSION_LABEL='v260828.2007';
+const APP_VERSION = '260828.2013';
+const APP_VERSION_LABEL='v260828.2013';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -51437,7 +51439,7 @@ async function memSelfBarSync(){
         <b>${d.getMonth()+1}/${d.getDate()}</b><span>${String(b.start_time||'').slice(0,5)}</span></button>`;
     }).concat(pts.slice(0, Math.max(0, CAP-booked.length)).map(p=>
       `<button class="mh2-sbc mh2-sbfree" title="還沒安排的自主訓練點數${p.ex?`（效期至 ${p.ex.replace(/-/g,'/')}）`:''}　·　點一下挑時段"
-        onclick="memh2SelfSlots('${p.from}')">
+        onclick="memh2SelfSlots('${p.from}','${p.ex||''}')">
         <b>＋</b><span>可約</span></button>`)).join('');
     const _more=(booked.length+pts.length)-Math.min(CAP, booked.length+pts.length);
     let el=host();
@@ -51458,8 +51460,13 @@ function memSelfBarFit(){
   const h=Math.round(el.getBoundingClientRect().height);
   try{ const sc=document.querySelector('.content'); if(sc) sc.style.paddingBottom=(16+h)+'px'; }catch(_){}
 }
-async function memh2SelfSlots(ds){
+/* @param until 這一點的到期日（YYYY-MM-DD）——從底部圓卡點進來時會帶。
+   2026-08-31 使用者：「上方的日期列也自動篩選該自主訓練的圓形卡的期限」——
+   一位客人手上常常同時有兩三張效期不同的點數票，日期列如果永遠列「所有票的聯集」，
+   點的是 9/3 到期那一點、卻看得到 9/10，按下去才被擋，那個擋是白挨的。 */
+async function memh2SelfSlots(ds, until){
   const date=ds||mh2S().date;
+  window._mh2SelfUntil=String(until||'')||null;
   /* 0822 這裡本來會先把篩選列切到「自主訓練」，好讓左邊日期欄把不能約的那幾天暗化。
      2026-08-27 篩選列與左欄一起退場（日期列改成橫排在上方），這一段跟著移除 ——
      ⚠ 不能留著：s.filter 一旦被切成 'self'，memh2HTML 就不畫「當天可報名的團體課」，
@@ -51507,7 +51514,9 @@ async function memh2SelfSlots(ds){
   const _rng=_selfTks.map(t=>[t.start_date?String(t.start_date).slice(0,10):'',
                               t.expire_date?String(t.expire_date).slice(0,10):'9999-12-31']);
   const _t0=ymd(TODAY);
-  const _okDay=x=>x>=_t0 && _rng.some(([st,ex])=>(!st||x>=st)&&(!ex||x<=ex));
+  const _lim=window._mh2SelfUntil||'';
+  const _okDay=x=>x>=_t0 && (!_lim || x<=_lim)
+    && _rng.some(([st,ex])=>(!st||x>=st)&&(!ex||x<=ex));
   const _days=[]; let _more=0;
   for(let i=0;i<60;i++){
     const dd=new Date(TODAY); dd.setDate(TODAY.getDate()+i); const x=ymd(dd);
@@ -51522,7 +51531,9 @@ async function memh2SelfSlots(ds){
           <b>${dd.getMonth()+1}/${dd.getDate()}</b></button>`).join('')}${
         _more?`<span class="qs-day qs-daymore" title="效期內還有 ${_more} 天，先約近的">+${_more}</span>`:''}</div>`
     : '';
-  const _limTxt=(()=>{ const e=_rng.map(r=>r[1]).sort().pop();
+  const _limTxt=(()=>{
+    if(_lim) return `這一點的效期到 ${_lim.replace(/-/g,'/')}`;
+    const e=_rng.map(r=>r[1]).sort().pop();
     return (e&&e!=='9999-12-31')?`點數效期到 ${e.replace(/-/g,'/')}`:''; })();
   showModal(`<div class="modal-title">預約自主訓練</div>
     ${_dayRow}

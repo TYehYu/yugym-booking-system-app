@@ -67,7 +67,7 @@ console.log('\n③ 底部「自主訓練」浮動列（2026-08-31 改成「他�
      && /<b>＋<\/b><span>可約<\/span>/.test(B));
   ok('★★ 已約的點了跳到那一天；還沒約的點了直接開挑時段',
      /onclick="memh2PickDay\('\$\{b\.date\}'\)"/.test(B)
-     && /onclick="memh2SelfSlots\('\$\{p\.from\}'\)"/.test(B));
+     && /onclick="memh2SelfSlots\('\$\{p\.from\}','\$\{p\.ex\|\|''\}'\)"/.test(B));
   ok('★★ 可用點數＝效期內、還有餘額、真的是自主訓練票（memh2TkKind）',
      /memh2TkKind\(t,typeMap\)==='self'/.test(B)
      && /\(Number\(t\.sessions_remaining\)\|\|0\)>0/.test(B)

@@ -197,7 +197,7 @@ t('改時間只給自主訓練', /selfServe && _isSelfBk && b\.member_id===SESSI
 t('時段探測已抽成共用的 msbProbeFree', /async function msbProbeFree\(\)\{/.test(s));
 t('msbLoadSlots 改呼叫 msbProbeFree（沒有兩份探測邏輯）',
   /const r=await msbProbeFree\(\);/.test(cut('async function msbLoadSlots(){','async function msbPickSlot(t){')));
-const add=cut('async function memh2SelfSlots(ds){','function memh2SelSlot(t){');
+const add=cut('async function memh2SelfSlots(ds, until){','function memh2SelSlot(t){');
 t('［＋］沿用 msbStart 建狀態', /await msbStart\(\)/.test(add));
 t('［＋］收掉舊版下方訂位表但保留狀態', /getElementById\('msb-sheet'\); if\(sh\) sh\.remove\(\)/.test(add));
 /* 0822 二修（使用者）：「多功能訓練架不用顯示」「8/22 9:00 也過期了 自主應該也不能預約」 */
@@ -368,14 +368,27 @@ t('　　成因寫在原地', /走的是文字的基線對齊/.test(s));
    可以把日期列設計回去快速預約的視窗裡面嗎」 */
 console.log('\n快速預約視窗裡的日期列（換一天不必關窗）');
 {
-  const QS=cut('async function memh2SelfSlots(ds){','function memh2SelSlot(');
+  const QS=cut('async function memh2SelfSlots(ds, until){','function memh2SelSlot(');
   t('★★ 視窗裡有日期列，排在標題與 qs-head 之間',
     /<div class="modal-title">預約自主訓練<\/div>\s*\n\s*\$\{_dayRow\}\s*\n\s*<div class="qs-head">/.test(QS));
   t('★★ 點某一天＝同一個視窗換內容（重新呼叫自己，不另外開一層）',
     /onclick="memh2SelfSlots\('\$\{x\}'\)"/.test(QS));
   t('★★ 只列約得到的日子：今天起，且落在任何一張自主訓練票的效期內（多張取聯集）',
-    /const _okDay=x=>x>=_t0 && _rng\.some\(\(\[st,ex\]\)=>\(!st\|\|x>=st\)&&\(!ex\|\|x<=ex\)\);/.test(QS)
+    /const _okDay=x=>x>=_t0 && \(!_lim \|\| x<=_lim\)/.test(QS)
+    && /&& _rng\.some\(\(\[st,ex\]\)=>\(!st\|\|x>=st\)&&\(!ex\|\|x<=ex\)\);/.test(QS)
     && /const _selfTks=\[\]\.concat\(s\.groups\.self\|\|\[\], s\.groups\.friendly\|\|\[\]\);/.test(QS));
+/* 2026-08-31 使用者：「上方的日期列也自動篩選該自主訓練的圓形卡的期限」 */
+t('★★ 從底部圓卡點進來時帶著那一點的到期日，日期列只列到那天',
+    /async function memh2SelfSlots\(ds, until\)\{/.test(s)
+    && /window\._mh2SelfUntil=String\(until\|\|''\)\|\|null;/.test(s)
+    && /onclick="memh2SelfSlots\('\$\{p\.from\}','\$\{p\.ex\|\|''\}'\)"/.test(s));
+t('★★ 說明也改成講「這一點」的效期，不是講所有票的最晚那天',
+    /if\(_lim\) return `這一點的效期到 \$\{_lim\.replace\(\/-\/g,'\/'\)\}`;/.test(QS));
+t('　 為什麼要按點篩選（白挨一次擋）—— 理由寫在原地',
+    /點的是 9\/3 到期那一點、卻看得到 9\/10，按下去才被擋，那個擋是白挨的。/.test(s));
+t('★★ 日期列放大（52→70px，字級各升一級）',
+    /\.qs-day\{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;\s*\n\s*min-width:70px;padding:10px 10px;/.test(s)
+    && /\.qs-day b\{font-family:var\(--num\),inherit;font-size:19px;/.test(s));
   t('　 與課卡頁那支 selfOk 同一個判斷式（兩處要說同一件事）',
     /const selfOk=ds=>ds>=today && selfRanges\.some\(\(\[st,ex\]\)=>\(!st\|\|ds>=st\)&&\(!ex\|\|ds<=ex\)\);/.test(s));
   t('★★ 效期寫在說明裡（不是把不能用的日子偷偷藏掉）',
