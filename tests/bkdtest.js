@@ -45,9 +45,19 @@ ok('　　「本堂第幾堂」與圓點位置同源', /curIdx=_bi>=0\?doneCount
 /* 2026-08-01：票券夾的已用堂數也要涵蓋「蓋上戳記且已簽到」的課 ——
    ticketTokens 是「前 used 格填已完成的課」，used 比戳記少那幾堂就整個畫不出來
    （使用者看到的「本堂沒有圓點」）。 */
+/* 2026-08-28：已簽到的戳記照算，但「教練請假已簽到」那一堂要排除 ——
+   堂數已經退回來了，它不佔堂（判準與 ticketTokens 的 _clvAttL 一字不差）。
+   不排除的話 used 會比 done 多一，ticketTokens 憑空補一顆 ✓ 鬼點佔掉一格，
+   分期票的開通區被擠爆，最後一堂變成「需補票」的紅虛線（吳宜玲案例）。 */
 ok('★ 票券夾的已用堂數涵蓋已簽到的戳記（否則最後那幾堂畫不出來）',
-   /const attIn=bks\.filter\(isAtt\)\.length;/.test(src)
+   /const attIn=bks\.filter\(b=>isAtt\(b\) && !_clvAtt\(b\)\)\.length;/.test(src)
    && /Math\.max\(dAtt, attIn, Math\.max\(0, total-\(Number\(rem\)\|\|0\)-pending\)\)/.test(src));
+ok('★★ 教練請假已簽到的堂不算已用（它已經退回票券了，不佔堂）',
+   /const _clvAtt=b=>!!\(b && b\.coach_leave===true && \(b\.status==='checked_in'\|\|b\.status==='completed'\)\);/.test(src)
+   && /const dAtt=bks\.filter\(b=>b\.ticket_id===t\.id && isAtt\(b\) && !_clvAtt\(b\)\)\.length;/.test(src));
+ok('★★ 判準與 ticketTokens 的 _clvAttL 一字不差（不然只是把不一致換個地方）',
+   /if\(b && b\.coach_leave===true && \(b\.status==='checked_in'\|\|b\.status==='completed'\)\)\{/.test(src)
+   && /判準必須與 ticketTokens 的 _clvAttL 一字不差，不然只是把不一致換個地方。/.test(src));
 ok('　　課比票多時保留最近的幾堂（本堂才不會落在圓點之外）',
    /if\(_cap>0 && feed\.length>_cap\) feed=feed\.slice\(feed\.length-_cap\);/.test(src));
 

@@ -11378,8 +11378,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.1823';
-const APP_VERSION_LABEL='v260828.1823';
+const APP_VERSION = '260828.1846';
+const APP_VERSION_LABEL='v260828.1846';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17558,7 +17558,15 @@ function buildWallet(memberId, ctx){
   const slotOf=t=>{
     const bks=stamps[t.id]||[];
     const total=Number(t.sessions_total)||0, rem=t.sessions_remaining;
-    const dAtt=bks.filter(b=>b.ticket_id===t.id && isAtt(b)).length;
+    /* 教練請假已簽到的那一堂不算「已用」（2026-08-28 吳宜玲又一次超約紅虛線）——
+       新制（0814）：請假當下不退、票掛著；會員到場簽到才退回 1 堂。堂數退回來了，
+       所以它**不佔堂**。ticketTokens 早就這樣處理（歸到 _clvAttL、畫成獨立紅圈點、
+       不佔格），但這裡的 dAtt／attIn 仍然把它數成已用 —— 兩邊對同一堂的認定不一致，
+       used 就比 done 多一，ticketTokens 憑空補一顆 ✓ 鬼點佔掉一格，
+       分期票開通區被擠爆，最後一堂就變成「需補票」的紅虛線。
+       ⚠ 判準必須與 ticketTokens 的 _clvAttL 一字不差，不然只是把不一致換個地方。 */
+    const _clvAtt=b=>!!(b && b.coach_leave===true && (b.status==='checked_in'||b.status==='completed'));
+    const dAtt=bks.filter(b=>b.ticket_id===t.id && isAtt(b) && !_clvAtt(b)).length;
     /* 待上＝蓋了戳記但還沒簽到：直連的 booked ＋ 團課扣了課還沒簽到的名額。
        推算出來的（③）不算 —— 舊系統匯入的預約當初沒扣過票，扣了會重複扣。
        教練請假中（coach_leave）也算待上（2026-08-14 吳宜玲案例）：新制「已扣待退」的堂
@@ -17570,7 +17578,7 @@ function buildWallet(memberId, ctx){
        used 比實際已簽到的戳記少，最後那幾堂就整個畫不出來 ——
        使用者在預約明細看到的「本堂沒有圓點」就是這個。
        票面餘額對不上實際上課紀錄時，寧可相信真的上過的課。 */
-    const attIn=bks.filter(isAtt).length;
+    const attIn=bks.filter(b=>isAtt(b) && !_clvAtt(b)).length;
     let used = (rem==null) ? Math.max(dAtt, attIn)
                            : Math.max(dAtt, attIn, Math.max(0, total-(Number(rem)||0)-pending));
     used=Math.min(used, total);
