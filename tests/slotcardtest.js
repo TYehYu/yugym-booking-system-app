@@ -271,7 +271,9 @@ ok('★★ 「有別張票可換」與 openBkTicketChange 的候選同一個判�
    /_swapN\[r\.mid\]=\(c\|\|\[\]\)\.filter\(t=>t && t\.id!==b\.ticket_id\)\.length;/.test(src)
    && /const list=cand\.filter\(t=>t\.id!==curId\);/.test(src));
 ok('★★ 本堂那一顆放大，而且只在簡易課卡放大（票券夾一列 60 顆不能跟著大）',
-   /\.ash-mcard \.ash-tk \.mtk\.mtk-cur\{width:66px;height:66px;font-size:18px;\}/.test(src)
+   /\.ash-mcard \.ash-tk \.mtk\.mtk-cur\{width:62px;height:62px;font-size:17px;\}/.test(src)
+   /* 二修：「兩倍大太大了　改成跟外面的圓形按鈕一樣大」→ 對齊 evo-btn 的 62px */
+   && /#bk-card-pop \.evo-btn\{position:static !important;transform:none !important;animation:none !important;\s*\n\s*width:62px;height:62px;/.test(src)
    && /只在簡易課卡的會員卡放大：票券夾那邊一列要排 60 顆，放大會整排爆掉/.test(src));
 /* 2026-08-26 使用者：「跳出的視窗按返回會跑回調整課程的視窗　這邊應該設計關閉的按鈕就好」
    —— 從會員卡進來這條路沒有上一層可回，返回等於把人丟到一個他沒去過的地方。 */

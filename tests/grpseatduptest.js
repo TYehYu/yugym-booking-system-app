@@ -117,6 +117,9 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      && /票券設了使用人的會分開一列（例：許佳慈（媽媽）、許佳慈（姊姊））/.test(src)
      && /點下面的圓形卡選要扣哪一張/.test(src)
      && !/帶親友同行可按已選會員的「＋」重複報名/.test(src));
+  ok('★★ 兩張名單視窗同一套風格（2026-08-29：「這個團體課名單的視窗　是不是舊視窗?」）',
+     /<div class="ash-sheetmk"><\/div><div class="modal-title">團體課名單<\/div>/.test(src)
+     && /<div class="ash-sheetmk"><\/div><div class="modal-title">新增團體課 · 步驟 2 \/ 2<\/div>/.test(src));
   ok('★ 逐名額的預設仍是「名額 i 用第 i 張」（畫面與實際扣的要同一套）',
      /const _defPkOf=\(m,i\)=>\{ const a=m\.tks\|\|\[\]; return \(a\[Math\.min\(i,a\.length-1\)\]\|\|\{\}\)\.id\|\|''; \};/.test(src));
 }

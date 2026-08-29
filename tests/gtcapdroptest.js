@@ -95,6 +95,14 @@ console.log('\n④ 無限卡整張只畫一顆 ∞');
   ok('★★ 樣式只多一條（吃課種色的實心圓，字放大）',
      /\.mtk-inf\{font-size:19px;font-weight:700;letter-spacing:0;\}/.test(src));
   ok('　 原因寫在原地', /圓點格子是拿來數「剩幾堂」的，無限卡沒有這件事/.test(src));
+  /* 2026-08-29 使用者：「這張無限卡右上角顯示8/9999　這個數字還有意義嗎　
+     還是改成使用次數　統計這張無限卡用了幾次」 */
+  ok('★★ 票券夾右上角：無限卡寫「已使用 N 次」，不寫 N / 9999',
+     /\$\{tkUnlimited\(t\)\s*\n\s*\? `<span style="color:var\(--t3\);font-weight:600;font-size:13px;">已使用 <\/span><b style="color:var\(--green\);">\$\{usedCount\}<\/b><span style="color:var\(--t3\);font-weight:600;font-size:13px;"> 次<\/span>`/.test(src));
+  ok('★★ 一般票券那一行一個字都沒動',
+     /`<b style="color:var\(--green\);">\$\{usedCount\}<\/b><span style="color:var\(--t3\);font-weight:600;font-size:13px;"> \/ \$\{total\}<\/span>`/.test(src));
+  ok('　 9999 是哨兵值不是張數，理由寫在原地',
+     /9999 是哨兵值不是張數，寫出來只會讓人以為真的買了 9999 堂/.test(src));
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
