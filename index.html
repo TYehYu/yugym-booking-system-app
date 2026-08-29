@@ -11500,8 +11500,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1858';
-const APP_VERSION_LABEL='v260829.1858';
+const APP_VERSION = '260829.1902';
+const APP_VERSION_LABEL='v260829.1902';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29720,6 +29720,7 @@ async function _submitBookingInner(){
          無票名額開始）。班可以先開著空位，之後儲值完再從名單加入。 */
       const _si={};   // 逐名額挑票（2026-08-05）：同一人第 N 個名額用第 N 個指定
       const _okCnt={}, _failedW=new Set();
+      const _wUsed=new Set();   // 這一堂已經被某個名額用掉的票（同 _saveGroupMembers 的 _used）
       for(const mid of ids){
         const _i=(_si[mid]=(_si[mid]==null?0:_si[mid]+1));
         if(_failedW.has(String(mid))){ skipped++; continue; }   // 同人前一格已失敗，後續格不跳號
@@ -29729,10 +29730,22 @@ async function _submitBookingInner(){
         let tk=null;
         const want=grpPickOf(mid,_i);
         if(want){ const cand=await listUsableTickets(mid,type_id,dW,tW); tk=cand.find(x=>x.id===want)||null; }
+        /* 沒指定就先拿「這一堂還沒用過的票」（2026-08-29 使用者定案：
+           「一個人購買票券　分享給家庭成員　都要分開來看」）——
+           findUsableTicket 永遠回第一張，多名額時三格會全扣同一張，
+           媽媽與姊姊的票原封不動、本人那張一次少三堂。
+           同一天在儲存名單與連續預約各修過一次，這是建立團課這條路。 */
+        if(!tk){
+          const _c=await listUsableTickets(mid,type_id,dW,tW).catch(()=>[]);
+          const _f=(_c||[]).filter(t=>t && !_wUsed.has(String(t.id)));
+          tk=_f.find(t=>!tkNeedsConfirm(t)) || _f[0] || null;
+        }
         if(!tk) tk=await findUsableTicket(mid,type_id,dW,tW);
         /* multi:true —— 團課一人可佔多個名額（許佳慈 4 個名額＝扣 4 堂），
-           同一張票、同一堂課合法地扣多次；次數由這個逐名額迴圈控制（2026-08-27）。 */
+           同一張票、同一堂課合法地扣多次；次數由這個逐名額迴圈控制（2026-08-27）。
+           ⚠ 只在「真的只剩同一張」時才會走到重複，見上面的 _wUsed。 */
         if(tk && await deductTicket(tk,bk.id,SESSION.id,{multi:true})){ charged++;
+          _wUsed.add(String(tk.id));
           bk.member_ids.push(mid);
           /* 逐名額記下用了哪張票（2026-08-07 許佳慈案例：「今天只是新儲值一堂，
              為什麼會打亂之前的票券」）—— 沒記下來的名額只能靠「把扣課紀錄依購買日

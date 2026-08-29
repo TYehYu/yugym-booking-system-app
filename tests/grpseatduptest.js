@@ -85,6 +85,23 @@ console.log('\n③ 實跑：三格三張票各自對上，票不夠時才共用'
      pick([{id:'TC',needConfirm:true},{id:'T9'}],1).map(x=>x.id), ['T9']);
 }
 
+console.log('\n③e 建立團課那條路也一樣（2026-08-29 定案：「一個人購買票券　分享給家庭成員　都要分開來看」）');
+{
+  /* 第六處。這一條走 bkAddMemberDo 的逐週迴圈，本來就帶 multi:true
+     （一張票扣多格是合法的），所以三個名額全扣同一張時連「已阻擋」都不會留下 ——
+     媽媽與姊姊的票原封不動、本人那張一次少三堂，帳面上還是「扣了三堂」，
+     只有翻 ticket_logs 才看得出來。 */
+  ok('★★★ 建立團課時也先挑「這一堂還沒用過的票」',
+     /const _wUsed=new Set\(\);   \/\/ 這一堂已經被某個名額用掉的票/.test(src)
+     && /const _f=\(_c\|\|\[\]\)\.filter\(t=>t && !_wUsed\.has\(String\(t\.id\)\)\);/.test(src)
+     && /tk=_f\.find\(t=>!tkNeedsConfirm\(t\)\) \|\| _f\[0\] \|\| null;/.test(src));
+  ok('★★ 扣成功才記進 _wUsed', /_wUsed\.add\(String\(tk\.id\)\);/.test(src));
+  ok('★★ 櫃檯指定的那一張仍然優先（指定就是指定）',
+     /const want=grpPickOf\(mid,_i\);\s*\n\s*if\(want\)\{ const cand=await listUsableTickets\(mid,type_id,dW,tW\); tk=cand\.find\(x=>x\.id===want\)\|\|null; \}/.test(src));
+  ok('★★ 真的只剩同一張時照舊重複扣（multi:true 沒被拿掉）',
+     /if\(tk && await deductTicket\(tk,bk\.id,SESSION\.id,\{multi:true\}\)\)\{ charged\+\+;/.test(src));
+}
+
 console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
 {
   ok('★★ 依票券使用人拆列（許佳慈（媽媽）／許佳慈（姊姊））',
