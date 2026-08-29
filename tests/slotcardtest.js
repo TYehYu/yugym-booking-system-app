@@ -263,10 +263,10 @@ console.log('\n桌機取代：先補功能');
 /* 2026-08-29 使用者指示：「卡片上換票的按鈕改成一個大圓形卡放在圓形卡這列的最右邊
    中間寫[變更]　這個變更要有觸發條件　如果該會員有其他可以更換的票券才顯示」——
    入口從票名那一行搬到圓點列最右邊，並多一個「真的有別張票」的條件。 */
-ok('★★ 更換票券＝圓點列最右邊的「變更」圓鈕（未簽到／非團課／有會員／櫃檯以上／有別張票可換）',
+ok('★★ 更換票券＝卡片右下角的「變更」圓鈕（未簽到／非團課／有會員／櫃檯以上／有別張票可換）',
    /const _tkTap = isDeskLike\(\) && b\.status==='booked' && r\.mid && !A\.isGroup && \(_swapN\[r\.mid\]\|\|0\)>0;/.test(src)
    && /<button type="button" class="mtk ash-mswap"/.test(src)
-   && /onclick="event\.stopPropagation\(\);collapseBkCard\(\);openBkTicketChange\('\$\{b\.id\}','close'\)">變更<\/button>/.test(src));
+   && /onclick="event\.stopPropagation\(\);ashSwapToggle\('\$\{r\.mid\}'\)">變更<\/button>/.test(src));
 /* 2026-08-29 使用者：「整張會員卡點了都會進會員視窗　這樣這個[變更]看起來沒有互動感
    把點進會員視窗收斂在最上方會員這一列」—— 卡片本身不再是一個大點擊區。 */
 ok('★★ 進會員資料的入口收在姓名上，整張卡不再可點',
@@ -275,8 +275,31 @@ ok('★★ 進會員資料的入口收在姓名上，整張卡不再可點',
 ok('★★ 連帶拿掉整張卡的 cursor:pointer 與按壓縮放（留著會繼續暗示整張可按）',
    !/\.ash-mcard:active\{transform:scale\(\.99\);\}/.test(src)
    && /整張卡不再可點（入口收在姓名上），所以拿掉 cursor:pointer/.test(src));
+/* 2026-08-29 三修：「讓這個[變更]更貼卡片的右下角　然後點了以後顯示該會員的其他方案
+   在卡片下方圓形按鈕上方」—— 換票不再跳出另一個視窗，就在原地展開。 */
+ok('★★ 「變更」貼在卡片右下角，卡片留出它的位置',
+   /\.ash-mswap\{position:absolute;right:12px;bottom:10px;margin:0;/.test(src)
+   && /\.ash-mcard\{position:relative;\}/.test(src)
+   && /\.ash-has-swap \.ash-mmain\{padding-right:58px;\}/.test(src));
+ok('★★ 其他方案展開在「會員卡與下方圓鈕之間」（使用者指定的位置）',
+   /<div id="ash-swapwrap" class="ash-swapwrap"><\/div>\s*\n\s*\$\{btns\?`<div class="mtp-orbs">\$\{btns\}<\/div>`:''\}/.test(src));
+ok('★★ 沒展開時整個容器不佔位', /\.ash-swapwrap:empty\{display:none;\}/.test(src));
+ok('★★ 候選在展開課卡時就算好，點「變更」不再重查',
+   /window\._ashSwap=\{bid:b\.id, tk:_swapTk, open:''\};/.test(src)
+   && /const list=\(S\.tk\|\|\{\}\)\[mid\]\|\|\[\];/.test(src));
+ok('★★ 再按一次收起來（同一顆是開關，不是只會開）',
+   /const same=\(S\.open===String\(mid\)\);/.test(src)
+   && /if\(same\)\{ box\.innerHTML=''; return; \}/.test(src));
+ok('★★ 票券卡沿用團課名單那一套 .gtk-card，不要再發明第三種',
+   /onclick="event\.stopPropagation\(\);ashSwapGo\('\$\{t\.id\}'\)">/.test(src)
+   && /不要再發明第三種票券卡/.test(src));
+ok('★★★ 換票仍然走 doBkTicketChange，而且要自己設 _bkTkChgBack（否則掉進退役的預約明細）',
+   /window\._bkTkChgBack='close';\s*\n\s*collapseBkCard\(\);\s*\n\s*doBkTicketChange\(S\.bid, tkid\);/.test(src));
+ok('　 沒有其他票時講人話，不是空白面板',
+   /這位會員沒有其他可用的票券。/.test(src));
 ok('★★ 「有別張票可換」與 openBkTicketChange 的候選同一個判準（可用票扣掉現在綁的那張）',
-   /_swapN\[r\.mid\]=\(c\|\|\[\]\)\.filter\(t=>t && t\.id!==b\.ticket_id\)\.length;/.test(src)
+   /_swapTk\[r\.mid\]=\(c\|\|\[\]\)\.filter\(t=>t && t\.id!==b\.ticket_id\)\.map\(t=>\(\{/.test(src)
+   && /_swapN\[r\.mid\]=_swapTk\[r\.mid\]\.length;/.test(src)
    && /const list=cand\.filter\(t=>t\.id!==curId\);/.test(src));
 ok('★★ 本堂那一顆放大，而且只在簡易課卡放大（票券夾一列 60 顆不能跟著大）',
    /* 66px（兩倍）→ 62px（對齊動作圓鈕）→ 44px：前兩次都被回「太大了」。

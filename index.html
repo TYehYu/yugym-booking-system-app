@@ -8810,11 +8810,23 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
        又不會把那一列擠變形。要再調就動這一個數字。
      ⚠ 只在簡易課卡的會員卡放大：票券夾那邊一列要排 60 顆，放大會整排爆掉。 */
   .ash-mcard .ash-tk .mtk.mtk-cur{width:44px;height:44px;font-size:13px;}
-  /* 「變更」＝換票入口，排在圓點列最右邊，做成同一個圓形語彙（2026-08-29） */
-  .ash-mswap{margin-left:auto;width:52px;height:52px;font-size:12.5px;font-weight:800;
+  /* 「變更」＝換票入口（2026-08-29 二修：「讓這個[變更]更貼卡片的右下角」）——
+     原本排在圓點列尾端、跟著圓點垂直置中；圓點少的時候它會浮在半空中。
+     改成絕對定位貼在卡片右下角，卡片再留出它的寬度（.ash-has-swap）。 */
+  .ash-mcard{position:relative;}
+  .ash-has-swap .ash-mmain{padding-right:58px;}
+  .ash-mswap{position:absolute;right:12px;bottom:10px;margin:0;
+    width:48px;height:48px;font-size:12px;font-weight:800;
     background:#fff;border:2px dashed var(--green,#1F6F54);color:var(--green,#1F6F54);
     cursor:pointer;font-family:inherit;}
   .ash-mswap:active{transform:scale(.95);}
+  .ash-mswap.on{background:var(--green,#1F6F54);border-style:solid;color:#fff;}
+  /* 其他方案：夾在會員卡與下方圓鈕之間（使用者指定的位置） */
+  .ash-swapwrap:empty{display:none;}
+  .ash-swapwrap{background:#fff;border-radius:16px;padding:11px 13px;
+    box-shadow:0 8px 22px rgba(30,25,15,.22);display:flex;flex-direction:column;gap:7px;}
+  .ash-swaptitle{font-size:11.5px;font-weight:800;color:var(--t2);}
+  .ash-swapempty{font-size:12px;color:var(--t3);}
   /* 卡片外的圓鈕改直排：取消在上、簽到在下（2026-08-20 三修） */
   .ash-morbs{flex:none;display:flex;flex-direction:column;gap:6px;}
   /* 請假＝卡片內、姓名列最右邊的小按鈕（只有有補課機制的票才會出現） */
@@ -11440,8 +11452,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1741';
-const APP_VERSION_LABEL='v260829.1741';
+const APP_VERSION = '260829.1743';
+const APP_VERSION_LABEL='v260829.1743';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28849,6 +28861,45 @@ function grpRowDel(i){
 }
 /* 點圓形卡 → 這一格改扣那張票 */
 function grpSeatPick(mid, seatIdx, tkid){ grpPickTk(mid, seatIdx, tkid); renderGrpPick(); }
+/* 簡易課卡的「變更」→ 在卡片與下方圓鈕之間展開這位會員的其他方案（2026-08-29 使用者指示：
+   「點了以後顯示該會員的其他方案在卡片下方圓形按鈕上方」）——
+   原本是關掉整張課卡再開「更換票券」彈窗，換一張票要走掉又走回來。
+   ⚠ 候選清單在展開課卡時就算好了（_ashSwap.tk），這裡不再重查，
+     真正的換票仍然走 doBkTicketChange（退原張、扣新張、兩邊都留痕）。
+   ⚠ 票券卡沿用團課名單那一套圓形卡（.gtk-card），不要再發明第三種票券卡。 */
+function ashSwapToggle(mid){
+  const S=window._ashSwap; const box=document.getElementById('ash-swapwrap');
+  if(!S || !box) return;
+  const btns=document.querySelectorAll('.ash-mswap');
+  const same=(S.open===String(mid));
+  S.open=same?'':String(mid);
+  btns.forEach(x=>x.classList.remove('on'));
+  if(same){ box.innerHTML=''; return; }
+  const list=(S.tk||{})[mid]||[];
+  const _dots=t=>{ const tot=Math.max(0,Number(t.tot)||0), left=Math.max(0,Number(t.left)||0);
+    const used=Math.max(0,tot-left), CAP=12, show=Math.min(tot,CAP);
+    let h=''; for(let k=0;k<show;k++) h+=`<i class="gtk-dot${k<used?' gtk-used':''}"></i>`;
+    return `<span class="gtk-dots">${h}${tot>CAP?`<span class="gtk-more">…共 ${tot} 堂</span>`:''}</span>`; };
+  box.innerHTML=`<div class="ash-swaptitle">改扣哪一張？</div>`
+    + (list.length ? list.map(t=>`<button type="button" class="gtk-card"
+        onclick="event.stopPropagation();ashSwapGo('${t.id}')">
+        <span class="gtk-head"><b class="gtk-fam">${t.fam?`${escH(t.fam)}的票`:'本人'}</b>
+          <span class="gtk-plan">${escH(t.name)}</span></span>
+        ${_dots(t)}
+        <span class="gtk-foot">剩 ${t.left} 堂　·　${t.exp?`效期至 ${String(t.exp).slice(5).replace('-','/')}`:'無到期日'}</span>
+      </button>`).join('')
+      : '<div class="ash-swapempty">這位會員沒有其他可用的票券。</div>');
+  /* 展開的那一顆填實，看得出是誰被打開的（同一堂可能有好幾位會員） */
+  btns.forEach(x=>{ if((x.getAttribute('onclick')||'').indexOf(`'${mid}'`)>=0) x.classList.add('on'); });
+}
+function ashSwapGo(tkid){
+  const S=window._ashSwap; if(!S||!S.bid) return;
+  /* ⚠ 這個旗標平常由 openBkTicketChange 設；繞過那個視窗就得自己設，
+     不然換完會掉進已經退役的預約明細（0826 就修過同一個坑）。 */
+  window._bkTkChgBack='close';
+  collapseBkCard();
+  doBkTicketChange(S.bid, tkid);
+}
 /* toggleGrpMember／grpAddOne／grpRemoveOne 已於 2026-08-29 退場 ——
    名單拆成「會員 × 使用人」之後，加減名額一律走 grpRowTap／grpRowAdd／grpRowDel
    （它們會同步 _grpTkPick，舊的三支只動 _grpSel）。留著會變成第二條路：
@@ -30244,16 +30295,22 @@ async function bkCardPop(el, b, btns, acts){
        只會點進去發現沒得換。
        ⚠ 判準與 openBkTicketChange 裡的候選一致：可用票券扣掉現在綁的那張。
        ⚠ 只在「換得動」的情境算（櫃檯以上、還沒簽到、非團課），省下整批 RPC。 */
-    const _swapN={};
+    const _swapN={}, _swapTk={};
     if(isDeskLike() && b.status==='booked' && !A.isGroup){
       for(const r of _rows){
         if(!r.mid || _swapN[r.mid]!=null) continue;
         try{
           const c=await listUsableTickets(r.mid, b.ticket_type_id, b.date, b.start_time);
-          _swapN[r.mid]=(c||[]).filter(t=>t && t.id!==b.ticket_id).length;
-        }catch(_){ _swapN[r.mid]=0; }
+          /* 候選清單留著（2026-08-29 使用者：「點了以後顯示該會員的其他方案在卡片下方
+             圓形按鈕上方」）—— 換票不再跳出另一個視窗，就在原地展開。 */
+          _swapTk[r.mid]=(c||[]).filter(t=>t && t.id!==b.ticket_id).map(t=>({
+            id:t.id, name:t.plan_name||'票券', left:Math.max(0,tkUnlockedLeft(t)),
+            tot:Math.max(0,Number(t.sessions_total)||0), exp:t.expire_date||null, fam:t.family_user||null}));
+          _swapN[r.mid]=_swapTk[r.mid].length;
+        }catch(_){ _swapN[r.mid]=0; _swapTk[r.mid]=[]; }
       }
     }
+    window._ashSwap={bid:b.id, tk:_swapTk, open:''};
     const _memCards=_rows.map(r=>{
       const onLeave = r.sk ? (_att[r.sk]==='leave') : false;
       const inHere  = r.sk ? (_att[r.sk]==='checked_in') : done;
@@ -30286,9 +30343,11 @@ async function bkCardPop(el, b, btns, acts){
             }>${tkNoTag(sl.no)}${sl.t.plan_name||'票券'}${sl.t.source==='makeup'?'<span class="ash-mkchip">補課券</span>':''}</div>`
             + `<div class="ash-tk">${ticketTokens(sl.t,sl.stamps,_wctx.typeMap,sl.used||0,b.id,r.mid,sl.selfBk,r.sk?_ord:undefined)}${
               _tkTap?`<button type="button" class="mtk ash-mswap" title="換一張票來扣這一堂（還有 ${_swapN[r.mid]} 張可選）"
-                onclick="event.stopPropagation();collapseBkCard();openBkTicketChange('${b.id}','close')">變更</button>`:''}</div>`;
+                onclick="event.stopPropagation();ashSwapToggle('${r.mid}')">變更</button>`:''}</div>`;
         }
       }catch(_){}
+      /* 右下角那顆「變更」會絕對定位，卡片要留出它的位置（2026-08-29） */
+      const _hasSwap=!!(isDeskLike() && b.status==='booked' && r.mid && !A.isGroup && (_swapN[r.mid]||0)>0);
       /* 動作分兩處（2026-08-20 三修，使用者定案）：
          ・請假＝卡片內、姓名列最右邊的小按鈕（請假中就換成「取消請假」）
          ・取消（上）／簽到（下）＝獨立在卡片外面的圓鈕，直排
@@ -30409,7 +30468,7 @@ async function bkCardPop(el, b, btns, acts){
                入口收在姓名本身（姓名列上的備註、請假、使用人各自 stopPropagation，
                本來就不會誤觸）。
                ⚠ 只搬位置：一樣是 collapseBkCard()＋openMemberDetail，權限與行為都沒動。 */''}
-          <div class="ash-mcard${onLeave?' ash-mleave':''}">
+          <div class="ash-mcard${onLeave?' ash-mleave':''}${_hasSwap?' ash-has-swap':''}">
             <div class="ash-mmain"><div class="ash-mname">${r.mid
               ? `<button type="button" class="ash-mgo" onclick="event.stopPropagation();collapseBkCard();openMemberDetail('${r.mid}')" title="開啟會員資料">${nm2}</button>`
               : `<span>${nm2}</span>`}${_famBtn}${_seatTag}${_badge}${_noteBtn}${_leaveBtn}</div>${_tk}${_subLine}${_opLine}</div>
@@ -30441,6 +30500,9 @@ async function bkCardPop(el, b, btns, acts){
   host.innerHTML=`<div class="mtp-back" onclick="collapseBkCard()"></div>
     <div class="mtp" id="bkp-box">
       ${_cardHtml}
+      ${/* 換票的其他方案就展開在這裡（2026-08-29 使用者指定的位置：
+           「卡片下方圓形按鈕上方」）。預設空的，按了「變更」才有內容。 */''}
+      <div id="ash-swapwrap" class="ash-swapwrap"></div>
       ${btns?`<div class="mtp-orbs">${btns}</div>`:''}
     </div>`;
   document.body.appendChild(host);
