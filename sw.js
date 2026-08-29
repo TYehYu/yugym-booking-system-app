@@ -26,9 +26,18 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(req)
       .then(res => {
-        // 同源檔案抓到就更新快取
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(req, copy)).catch(()=>{});
+        /* ⚠ 只快取「真的成功」的回應（2026-08-29 曾邦紅手機打不開頁面）——
+           原本是抓到什麼就存什麼：GitHub Pages 偶發的 5xx／部署當下的 404、
+           或行動網路中斷造成的部分回應（opaque/partial），都會被存進快取。
+           一旦存進去，之後每次離線或連線不穩都會拿那份壞的出來，
+           畫面就一直打不開，而且**清不掉**（下次成功前都不會被覆蓋）。
+           index.html 有 4MB，手機在外面很容易抓一半。
+           ⚠ res.ok 只涵蓋 200–299；type==='opaque' 的跨網域回應在這裡本來就被
+             上面的 origin 檢查擋掉了，不會走到這裡。 */
+        if (res && res.ok && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy)).catch(()=>{});
+        }
         return res;
       })
       .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
