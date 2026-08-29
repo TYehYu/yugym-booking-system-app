@@ -234,18 +234,17 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
       /String\(a\.expire_date\|\|'9999-12-31'\)\.localeCompare\(String\(b\.expire_date\|\|'9999-12-31'\)\)/.test(src)
       && !/return \(a\.expire_date\|\|''\)\.localeCompare\(b\.expire_date\|\|''\);/.test(src));
     /* 2026-08-05：改逐名額挑票——一個名額一個下拉，名額1用A票、名額2用B票 */
-    /* 2026-08-29 使用者：「同一人有多張票券的時候　這個點開的選單就用圓形卡的方式呈現
-       讓櫃檯可以直覺一點選擇要用哪一張」—— 原生 <select> 退場，改成可點的票券卡。
-       指定的存法沒變（grpPickTk / grpPickOf 還是同一組）。 */
-    chk('★ 櫃檯：名單上逐名額指定票券（改用圓形卡）', /function grpPickTk\(mid,seatIdx,tkid\)\{/.test(src)
-      && /onclick="event\.stopPropagation\(\);grpSeatPick\('\$\{m\.id\}',\$\{seatI\},'\$\{t\.id\}'\)"/.test(src)
-      && /function grpPickOf\(mid,seatIdx\)\{/.test(src));
-    chk('　　只有選了、且這位使用人有兩張以上才出現挑票卡', /const pick=\(on&&tks\.length>1\)/.test(src));
+    /* 2026-08-29 二修定案：名單改「一列一位使用人」，挑票＝挑那一列（不再逐名額挑）。
+       指定的存法沒變（grpPickTk / grpPickOf 還是同一組，grpRowAdd 會寫進去）。 */
+    chk('★ 櫃檯：名單上指定票券（改成一列一位使用人）', /function grpPickTk\(mid,seatIdx,tkid\)\{/.test(src)
+      && /function grpPickOf\(mid,seatIdx\)\{/.test(src)
+      && /const next=r\.tkIds\.find\(id=>used\.indexOf\(id\)<0\) \|\| r\.tkIds\[0\] \|\| null;/.test(src));
     /* 2026-08-29 使用者：「我在預約團課的時候選擇媽媽這張或姐姐這張」——
        使用人移到最前面（方案名稱三張都一樣，排後面要讀到行尾才分得出來）。 */
-    chk('　　卡片先標使用人，再標方案、圓點、剩餘堂數與效期',
-      /t\.fam\?`\$\{String\(t\.fam\)\.replace\(\/<\/g,'&lt;'\)\}的票`:'本人'\}<\/b>/.test(src)
-      && /<span class="gtk-foot">剩 \$\{t\.left\} 堂　·　/.test(src));
+    chk('　　列上左邊姓名（使用人）＋手機、右邊可用/總堂數',
+      /<span class="grp-nm">\$\{nameHtml\}/.test(src)
+      && /m\.phone\?`<span class="grp-ph">\$\{fmtPhone\(m\.phone\)\}<\/span>`:''/.test(src)
+      && /const tag=tks\.length\?`可用 \$\{gLeft\} \/ \$\{gTot\|\|gLeft\} 堂`:/.test(src));
     chk('★ 管理名單存檔時照逐名額指定的扣（新名額索引接在既有名額後）',
       /const want=grpPickOf\(mid,_i\);/.test(src)
       && /const _i=\(_seatIdx\[mid\]=\(_seatIdx\[mid\]==null\?\(pc\[mid\]\|\|0\):_seatIdx\[mid\]\+1\)\);/.test(src)

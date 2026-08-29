@@ -89,19 +89,24 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
 {
   ok('★★ 依票券使用人拆列（許佳慈（媽媽）／許佳慈（姊姊））',
      /const _groupsOf=m=>\{/.test(src)
-     && /r\.fam\?`<span style="font-weight:700;color:var\(--t2\);">（\$\{String\(r\.fam\)\.replace\(\/<\/g,'&lt;'\)\}）<\/span>`:''/.test(src));
+     && /r\.fam\?`<span class="grp-fam">（\$\{String\(r\.fam\)\.replace\(\/<\/g,'&lt;'\)\}）<\/span>`:''/.test(src));
   ok('★★ 分母也跟著拆 —— 不然「許佳慈（姊姊）」底下會寫著全部 21 堂',
      /const gLeft=tks\.reduce\(\(a,t\)=>a\+Math\.max\(0,Number\(t\.left\)\|\|0\),0\);/.test(src)
      && /const tag=tks\.length\?`可用 \$\{gLeft\} \/ \$\{gTot\|\|gLeft\} 堂`:/.test(src));
-  ok('★★ 挑票改成可點的圓形卡（原生 <select> 退場）',
-     /<button type="button" class="gtk-card\$\{cur\?' gtk-on':''\}"/.test(src)
-     && !/class="grp-tk-sel"/.test(src));
-  ok('★★ 圓點語彙沿用課卡（實心＝已用、空心＝還沒用）',
-     /h\+=`<i class="gtk-dot\$\{k<used\?' gtk-used':''\}"><\/i>`;/.test(src)
+  /* 2026-08-29 定案（使用者：「改成跟教練課一樣　搜尋姓名　然後選該會員就好」
+     「列表呈現　左邊是會員姓名　右邊是還可預約票券/總票券」）——
+     列裡攤開圓形卡挑票那一版退場：挑票已經被「一列一位使用人」解決掉了。 */
+  ok('★★ 名單列＝左名右堂數，列裡不再攤開圓形卡',
+     /<button type="button" class="ms-item grp-item grp-2c\$\{on\?' grp-on':''\}"/.test(src)
+     && /<span class="grp-rem" style="color:\$\{gLeft>0\?'var\(--green\)':'var\(--t3\)'\};">\$\{tag\}<\/span>/.test(src)
+     && !/class="grp-tk-sel"/.test(src)
+     && !/function grpSeatPick\(/.test(src));
+  ok('★★ 姓名或手機都能搜（與教練課那份同一套）',
+     /\|\| \(_nq && String\(m\.phone\|\|''\)\.replace\(\/\[\^0-9\]\/g,''\)\.includes\(_nq\)\)/.test(src)
+     && (src.match(/placeholder="搜尋姓名或手機…" oninput="renderGrpPick\(\)"/g)||[]).length===2);
+  ok('★★ 圓形卡沒有整組刪掉 —— 課卡上的「其他方案 ›」還在用（.gtk-card）',
+     /<button type="button" class="gtk-card"\s*\n\s*onclick="event\.stopPropagation\(\);ashSwapGo/.test(src)
      && /\.gtk-dot\.gtk-used\{background:#1F6F54;border-color:#1F6F54;\}/.test(src));
-  ok('★★ 快到期的排最上面而且標出來（使用者 0829 補充）',
-     /使用者 0829 補充：「如果本人的票券有不同期限　快到期的擺最上方」/.test(src)
-     && /\$\{soon\?'（快到期）':''\}/.test(src));
   ok('★★ 加減名額改走 row 版，_grpTkPick 會跟著 splice（索引不能位移）',
      /function grpSeatDel\(mid, seatIdx\)\{/.test(src)
      && /a\.splice\(seatIdx,1\); p\[mid\]=a;/.test(src)

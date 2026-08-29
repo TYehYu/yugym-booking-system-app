@@ -71,8 +71,9 @@ ok('★ 週曆長按移動：先問過才寫入',
    /if\(b\._venueOverflow && !\(await confirmVenueOverflow\(b,'取消移動'\)\)\) return;/.test(src));
 ok('★ 明細改時間：先問過才寫入',
    /if\(vbk\._venueOverflow\)\{[\s\S]{0,320}confirmVenueOverflow\(vbk,'取消修改'\)/.test(src));
-ok('　　視窗版取消後把明細叫回來，不會變成空白',
-   /if\(_inModal\) openBookingDetail\(id\); return false;/.test(src));
+/* 2026-08-29：改回課卡（預約明細已退役），見 grpBackToCard */
+ok('　　視窗版取消後把課卡叫回來，不會變成空白',
+   /if\(_inModal\) grpBackToCard\(id\); return false;/.test(src));
 ok('　　確認框的否定鈕文案可依情境改（移動時不該寫「取消預約」）',
    /function confirmVenueOverflow\(vbk, noLabel\)\{/.test(src)
    /* 2026-08-28 改走 bkAskOverlay（showModal 會把底下的「新增預約」表單拆掉），
@@ -170,7 +171,7 @@ console.log('\n忙碌回饋與即時更新（2026-08-07 使用者回報：「場
 ok('★ 換場地時顯示忙碌狀態（要重跑一次容量檢查，會停一下）',
    /const done=cxBusy\('更換中…'\);/.test(src));
 ok('★ 換完之後底下那一頁也重畫（原本只重開明細，行事曆還是舊場地）',
-   /await openBookingDetail\(id\);/.test(src)
+   /grpBackToCard\(id\);/.test(src)
    && /window\._calStepping=true; navTo\(CUR_PAGE, CUR_GROUP\);/.test(src));
 ok('　　重畫吃快取、0 網路等待（寫入時已就地更新）',
    /寫入時 dbCacheApply 已就地更新快取，所以是 0 網路等待/.test(src));

@@ -61,6 +61,8 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
       /* 2026-08-06：deductTicket 改回傳布林（餘額護欄），替身跟著回 true */
       deductTicket:async(tk,bid)=>{ tkLeft--; deducts.push(bid); return true; },
       dbCacheClear:()=>{}, closeModal:()=>{}, showToast:m=>toasts.push(m), openBookingDetail:()=>{},
+      /* 2026-08-29：做完改回課卡（不是已退役的預約明細），沙箱補這一支 */
+      grpBackToCard:()=>{},
       SESSION:{id:'desk'},
       /* 2026-08-12 請假釋出名額：補位的 room 改扣掉請假數，_grpFollowRun 用到 grpLeaveSeats
          → 沙箱抽真函式進來（不是 stub，滿員判斷要照實跑） */

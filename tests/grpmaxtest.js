@@ -43,14 +43,16 @@ console.log('\n③ 存檔的把關');
   ok('★ 只收 1–12', /if\(!\(n>=1&&n<=12\)\)\{ show\('請填 1–12 之間的人數'\); return false; \}/.test(s));
   ok('★★ 不能低於名單人數（否則會出現「6 人擠在上限 4」的課）',
      /if\(n<now\)\{ show\(`名單上已經有 \$\{now\} 人，上限不能低於這個數字（要先移除名額）`\); return false; \}/.test(s));
-  ok('　　沒改就直接關掉，不寫入', /if\(n===cur\)\{ closeModal\(\); openBookingDetail\(id\); return true; \}/.test(s));
+  /* 2026-08-29 使用者附截圖：「為什麼又出現舊視窗」—— 團課這幾條流程做完
+     一律 openBookingDetail（已退役的預約明細），改成回課卡（grpBackToCard）。 */
+  ok('　　沒改就直接關掉，不寫入', /if\(n===cur\)\{ grpBackToCard\(id\); return true; \}/.test(s));
   ok('★ 只動 max_heads（名單、票券一律不碰）',
      /b\.max_heads=n;\n\s*await dbPut\('bookings',b\);/.test(s)
      && !/deductTicket|refundTicket|member_ids=/.test(s));
   ok('★ 存檔時有讀取中（不像當機）', /const _clr=cxBusy\('儲存中…'\);/.test(s));
   ok('★ 防連點', /async function saveGrpMax\(id\)\{ return onceAct\('grpmax:'\+id, \(\)=>_saveGrpMax\(id\)\); \}/.test(src));
-  ok('★ 存完回明細，底下的行事曆也跟著更新',
-     /await openBookingDetail\(id\);/.test(s)
+  ok('★ 存完回課卡，底下的行事曆也跟著更新',
+     /grpBackToCard\(id\);/.test(s)
      && /try\{ window\._calStepping=true; navTo\(CUR_PAGE, CUR_GROUP\); \}catch\(_\)\{\}/.test(s));
   ok('　　改了多少講清楚', /本堂人數上限已改為 \$\{n\} 人（原 \$\{cur\} 人）/.test(s));
   ok('　　失敗時把按鈕還回去', /catch\(e\)\{ _clr\(\); show\('儲存失敗：'/.test(s));

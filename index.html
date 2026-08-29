@@ -3009,6 +3009,15 @@ tr:hover td{background:var(--card2);}
   padding:9px 8px 5px;margin-top:4px;border-top:1px solid var(--bd);}
 .grp-step{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border:1px solid var(--bd);border-radius:6px;background:#fff;color:#1f6f54;font-size:14px;font-weight:700;line-height:1;cursor:pointer;flex:0 0 auto;user-select:none;}
 .grp-step:hover{background:#eaf3ee;border-color:#1f6f54;}
+/* 一列一位使用人：左邊姓名（使用人）＋手機，右邊「可用 N / 總 M 堂」
+   （2026-08-29 使用者：「列表呈現　左邊是會員姓名　右邊是還可預約票券/總票券」，
+    並附了教練課那份挑選清單的截圖說「像這樣」）。 */
+.grp-2c{display:flex;align-items:center;gap:8px;text-align:left;}
+.grp-nm{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.grp-fam{font-weight:700;color:var(--t2);}
+.grp-ph{margin-left:7px;font-size:11.5px;font-weight:500;color:var(--t3);font-family:var(--num);}
+.grp-rem{flex:none;font-size:12px;font-weight:700;font-family:var(--num);}
 /* 團課名單的挑票圓形卡（2026-08-29 使用者指示：「同一人有多張票券的時候
    這個點開的選單就用圓形卡的方式呈現　讓櫃檯可以直覺一點選擇要用哪一張」）——
    原本是 <select>：五張同名的「團課 4週優惠」在原生下拉裡只能靠讀行尾分辨。
@@ -11457,8 +11466,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1752';
-const APP_VERSION_LABEL='v260829.1752';
+const APP_VERSION = '260829.1802';
+const APP_VERSION_LABEL='v260829.1802';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -27456,7 +27465,7 @@ async function _bkStep2(){
         .sort((x,y)=>String(x.expire_date||'9999-12-31').localeCompare(String(y.expire_date||'9999-12-31')));
       const sum=tks.reduce((s,tt)=>s+tkUnlockedLeft(tt),0);
       // 多張票時讓櫃檯挑要扣哪一張（2026-07-30 使用者指示）
-      return {id:m.id, name:m.name||'—', sum, mine:!!(coach_id&&m.default_coach_id===coach_id),
+      return {id:m.id, name:m.name||'—', phone:m.phone||'', sum, mine:!!(coach_id&&m.default_coach_id===coach_id),
               /* tot：圓形卡要畫「已用／未用」，所以總堂數也要帶（2026-08-29） */
               tks:tks.map(t=>({id:t.id,name:t.plan_name||'團體課票券',left:tkUnlockedLeft(t),tot:Math.max(0,Number(t.sessions_total)||0),exp:t.expire_date||null,fam:t.family_user||null}))};
     });
@@ -27474,7 +27483,7 @@ async function _bkStep2(){
       <div style="margin-top:4px;">${recurBoxHtml('grp')}</div>
       <div class="form-row"><label>加入會員（點選即可複選）</label>
         <input type="hidden" id="bk-member" value="">
-        <input id="grp-search" class="ms-search" style="margin:0 0 8px;width:100%;box-sizing:border-box;" placeholder="搜尋姓名…" oninput="renderGrpPick()" autocomplete="off">
+        <input id="grp-search" class="ms-search" style="margin:0 0 8px;width:100%;box-sizing:border-box;" placeholder="搜尋姓名或手機…" oninput="renderGrpPick()" autocomplete="off">
         <div id="grp-count" style="font-size:12px;color:var(--t2);margin-bottom:6px;"></div>
         <div id="grp-list" class="ms-list" style="max-height:280px;border:1px solid var(--bd);border-radius:10px;padding:6px;"></div></div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingModalBack()">← 上一步</button><button class="btn btn-green" onclick="submitBooking()">確認預約</button></div>`);
@@ -28698,7 +28707,12 @@ function renderGrpPick(){
      已選區內依「加入順序」排（＝實際報名順序），其餘維持 ★我的會員 → 姓名。 */
   const selOrder={}; (sel||[]).forEach((x,i)=>{ if(selOrder[x]==null) selOrder[x]=i; });
   const isSel=m=>selOrder[m.id]!=null;
-  let list=(window._grpData||[]).filter(m=> !q || (m.name||'').toLowerCase().includes(q));
+  /* 姓名或手機都能搜（2026-08-29 使用者指定要「跟教練課一樣」，並附了那份清單的截圖）——
+     那邊的搜尋框本來就是「搜尋姓名或手機」，客人報 0912-345-678 或 0912345678 都要找得到。 */
+  const _nq=q.replace(/[^0-9]/g,'');
+  let list=(window._grpData||[]).filter(m=> !q
+    || (m.name||'').toLowerCase().includes(q)
+    || (_nq && String(m.phone||'').replace(/[^0-9]/g,'').includes(_nq)));
   /* 只列有團體課票券的會員（2026-08-29 使用者指示：「團體課的圓形按鈕＋新增
      這個視窗的列表要顯示有團體課票券的會員就好」）—— 正式庫 432 位會員，
      真正買過團課的是少數，整份名單要一路捲才找得到人。
@@ -28777,49 +28791,20 @@ function renderGrpPick(){
        「剩下的都已經排課了」或「分期尚未繳費開通」。 */
     const tag=tks.length?`可用 ${gLeft} / ${gTot||gLeft} 堂`:(m.why||'無票（無法加入，請先儲值）');
     const nameHtml=`${m.mine?'<span class="ms-star">★</span> ':''}${m.name}${
-      r.fam?`<span style="font-weight:700;color:var(--t2);">（${String(r.fam).replace(/</g,'&lt;')}）</span>`:''}`;
-    /* 挑票圓形卡（2026-08-29）：這一列有兩張以上票才需要挑。
-       實心＝已用、空心＝還沒用，語彙與課卡的圓點一致。 */
-    const _dots=t=>{
-      const tot=Math.max(0,Number(t.tot)||0), left=Math.max(0,Number(t.left)||0);
-      const used=Math.max(0,tot-left), CAP=12;
-      const show=Math.min(tot,CAP);
-      let h='';
-      for(let k=0;k<show;k++) h+=`<i class="gtk-dot${k<used?' gtk-used':''}"></i>`;
-      return `<span class="gtk-dots">${h}${tot>CAP?`<span class="gtk-more">…共 ${tot} 堂</span>`:''}</span>`;
-    };
-    const _card=(seatI,t,cur)=>{
-      /* 30 天內到期的標紅（使用者 0829：快到期的擺最上方）—— 排序已經做了，
-         再標一次是因為「最上面那張」不一定看得出來為什麼在最上面。 */
-      const soon=!!(t.exp && (function(){ try{ const d=parseYmd(t.exp), n0=new Date(TODAY);
-        return (d-n0)/86400000<=30; }catch(_){ return false; } })());
-      return `<button type="button" class="gtk-card${cur?' gtk-on':''}"
-        onclick="event.stopPropagation();grpSeatPick('${m.id}',${seatI},'${t.id}')">
-        <span class="gtk-head"><b class="gtk-fam">${cur?'✓ ':''}${t.fam?`${String(t.fam).replace(/</g,'&lt;')}的票`:'本人'}</b>
-          <span class="gtk-plan">${String(t.name).replace(/</g,'&lt;')}</span></span>
-        ${_dots(t)}
-        <span class="gtk-foot">剩 ${t.left} 堂　·　${t.exp
-          ?`<span class="${soon?'gtk-soon':''}">效期至 ${String(t.exp).slice(5).replace('-','/')}${soon?'（快到期）':''}</span>`
-          :'無到期日'}</span></button>`;
-    };
-    const pick=(on&&tks.length>1)
-      ? r.seats.map((si,k)=>{
-          const cur=grpPickOf(m.id,si)||_defPkOf(m,si);
-          return `<div class="gtk-wrap" onclick="event.stopPropagation();">
-            ${n>1?`<span class="gtk-seat">名額 ${k+1}</span>`:''}
-            ${tks.map(t=>_card(si,t,t.id===cur)).join('')}</div>`;
-        }).join('')
-      : '';
-    return _div+`<button type="button" class="ms-item grp-item${on?' grp-on':''}" onclick="grpRowTap(${_i})">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span class="grp-check">${on?'✓':''}</span>
-        <span class="ms-name" style="margin:0;">${nameHtml}</span>
-        ${n>1?`<span class="grp-mult">×${n}</span>`:''}
-        ${on?`<span class="grp-step" onclick="event.stopPropagation();grpRowAdd(${_i})" title="同一位使用人再加一個名額（親友同行）">＋</span>`:''}
-        ${n>1?`<span class="grp-step" onclick="event.stopPropagation();grpRowDel(${_i})" title="減少一個名額">−</span>`:''}
-      </div>
-      <div class="ms-rem" style="margin-left:26px;color:${gLeft>0?'var(--green)':'var(--t3)'};">${tag}</div>
-      ${pick}
+      r.fam?`<span class="grp-fam">（${String(r.fam).replace(/</g,'&lt;')}）</span>`:''}${
+      m.phone?`<span class="grp-ph">${fmtPhone(m.phone)}</span>`:''}`;
+    /* 2026-08-29 定案（使用者：「改成跟教練課一樣　搜尋姓名　然後選該會員就好」
+       「列表呈現　左邊是會員姓名　右邊是還可預約票券/總票券」）——
+       稍早那版在每一列底下攤開票券圓形卡讓人逐名額挑票，一頁只放得下兩三個人，
+       而挑票這件事其實已經被「一位使用人一列」解決掉了：點哪一列就是用那位的票。
+       同一位使用人有兩張以上時取最快到期的（tks 已按效期排序）；
+       事後要換仍然可以，走課卡上的「其他方案 ›」。 */
+    return _div+`<button type="button" class="ms-item grp-item grp-2c${on?' grp-on':''}" onclick="grpRowTap(${_i})">
+      <span class="grp-check">${on?'✓':''}</span>
+      <span class="grp-nm">${nameHtml}${n>1?`<span class="grp-mult">×${n}</span>`:''}</span>
+      ${on?`<span class="grp-step" onclick="event.stopPropagation();grpRowAdd(${_i})" title="同一位使用人再加一個名額（親友同行）">＋</span>`:''}
+      ${n>1?`<span class="grp-step" onclick="event.stopPropagation();grpRowDel(${_i})" title="減少一個名額">−</span>`:''}
+      <span class="grp-rem" style="color:${gLeft>0?'var(--green)':'var(--t3)'};">${tag}</span>
     </button>`;
   }).join('');
   const c=document.getElementById('grp-count');
@@ -28827,7 +28812,9 @@ function renderGrpPick(){
     /* 搜尋會把不符關鍵字的已選會員濾掉 → 明講被藏了幾位，免得以為名單掉了 */
     const shown=new Set(list.filter(isSel).map(m=>m.id)).size;
     const total=new Set(sel).size;
-    c.textContent=`已選 ${sel.length} / ${grpMax()} 人`
+    /* 標題句對齊教練課那份（2026-08-29 使用者附截圖：「像這樣」）——
+       那邊是「有『教練課』可用的會員（81）」，這裡是同一句話的團課版。 */
+    c.textContent=`已選 ${sel.length} / ${grpMax()} 人　·　有「團體課」可用的會員（${ROWS.length}）`
       + ((q && shown<total) ? `（搜尋中隱藏了 ${total-shown} 位已選會員）` : '')
       /* 隱藏了幾位要說出來（2026-08-29）——不講的話「怎麼找不到某某」會被當成系統壞了 */
       + (_hidden ? `　·　未列出 ${_hidden} 位沒有團體課票券的會員` : '');
@@ -28890,8 +28877,9 @@ function grpRowDel(i){
   grpSeatDel(r.mid, r.seats[r.seats.length-1]);
   renderGrpPick();
 }
-/* 點圓形卡 → 這一格改扣那張票 */
-function grpSeatPick(mid, seatIdx, tkid){ grpPickTk(mid, seatIdx, tkid); renderGrpPick(); }
+/* grpSeatPick 已於 2026-08-29 退場 —— 名單改成「一列一位使用人」之後，
+   挑票就是挑那一列，列裡不再攤開圓形卡（使用者：「搜尋姓名　然後選該會員就好」）。
+   事後要換票走課卡上的「其他方案 ›」（ashSwapToggle），那邊仍用 .gtk-card。 */
 /* 簡易課卡的「變更」→ 在卡片與下方圓鈕之間展開這位會員的其他方案（2026-08-29 使用者指示：
    「點了以後顯示該會員的其他方案在卡片下方圓形按鈕上方」）——
    原本是關掉整張課卡再開「更換票券」彈窗，換一張票要走掉又走回來。
@@ -33629,7 +33617,7 @@ async function _saveBookingTime(id){
      視窗版的編輯表單會被確認框頂掉，取消時要把明細叫回來；卡片內嵌編輯則原地保留。 */
   if(vbk._venueOverflow){
     const _inModal=!!(document.getElementById('ed-date')&&document.getElementById('ed-date').closest('.modal'));
-    if(!(await confirmVenueOverflow(vbk,'取消修改'))){ if(_inModal) openBookingDetail(id); return false; }
+    if(!(await confirmVenueOverflow(vbk,'取消修改'))){ if(_inModal) grpBackToCard(id); return false; }
   }
   const _oldDur=Number(b.duration)||60;
   b.date=nd;b.start_time=nt;b.duration=ndur;b.substitute_coach_id=nsub;
@@ -33669,7 +33657,7 @@ async function openGrpMaxEdit(id){
       <input type="number" id="gmx-n" value="${cur}" min="${Math.max(1,now)}" max="12" style="width:96px;font-family:var(--num);font-size:16px;font-weight:700;">
       <span style="font-size:11.5px;color:var(--t3);">預設 5 人・最多 12 人${now>0?`・不可低於名單人數 ${now}`:''}</span></div>
     <div id="gmx-err" style="display:none;color:var(--danger,#b5372e);font-size:12.5px;margin:6px 0;"></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();openBookingDetail('${id}')">取消</button>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="grpBackToCard('${id}')">取消</button>
       <button class="btn btn-green" onclick="saveGrpMax('${id}')">儲存</button></div>`);
 }
 async function saveGrpMax(id){ return onceAct('grpmax:'+id, ()=>_saveGrpMax(id)); }
@@ -33683,13 +33671,13 @@ async function _saveGrpMax(id){
   if(!(n>=1&&n<=12)){ show('請填 1–12 之間的人數'); return false; }
   if(n<now){ show(`名單上已經有 ${now} 人，上限不能低於這個數字（要先移除名額）`); return false; }
   const cur=Math.max(1,Number(b.max_heads)||5);
-  if(n===cur){ closeModal(); openBookingDetail(id); return true; }
+  if(n===cur){ grpBackToCard(id); return true; }
   const _clr=cxBusy('儲存中…');
   try{
     b.max_heads=n;
     await dbPut('bookings',b);
     showToast(`本堂人數上限已改為 ${n} 人（原 ${cur} 人）`);
-    await openBookingDetail(id);
+    grpBackToCard(id);
     /* 底下那一頁也重畫（寫入時快取已就地更新，0 網路等待）；明細是獨立覆層不會被關掉 */
     try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
     return true;
@@ -33718,7 +33706,7 @@ async function openGroupMembers(id, keepSel){
     /* 多張票時把清單帶出來讓櫃檯挑（2026-07-30 使用者指示）：
        會員同時有「12 個月 12 堂」與「四週 4 堂優惠」時，自動的最快到期優先未必是客人要的。 */
     const _info=bkMemTicketInfo(m.id, b, allTk, _cnt);
-    return {id:m.id, name:m.name||'—', sum, mine:String(m.default_coach_id||'')===String(b.coach_id||'')&&!!b.coach_id,
+    return {id:m.id, name:m.name||'—', phone:m.phone||'', sum, mine:String(m.default_coach_id||'')===String(b.coach_id||'')&&!!b.coach_id,
             total:_info.total, why:_info.why,
             tks:tks.map(t=>({id:t.id,name:t.plan_name||'團體課票券',left:Math.max(0,tkUnlockedLeft(t)),tot:Math.max(0,Number(t.sessions_total)||0),exp:t.expire_date||null,fam:t.family_user||null}))};
   });
@@ -33735,7 +33723,7 @@ async function openGroupMembers(id, keepSel){
     <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">這裡只列<b>有團體課票券</b>的會員（沒票的請先儲值）。加入時扣 1 堂、移除時退回。票券設了使用人的會分開一列（例：許佳慈（媽媽）、許佳慈（姊姊））—— 點哪一列就是替那位報名。同一位要再加一個名額按「＋」；手上有多張票時，點下面的圓形卡選要扣哪一張。</div>
     <div class="form-row" style="display:flex;align-items:center;gap:10px;"><label style="margin:0;flex:none;">本堂人數上限</label><input type="number" id="grp-max" value="${Math.max(1,Number(b.max_heads)||5)}" min="1" max="12" style="width:76px;" oninput="window._grpMax=Math.max(1,Number(this.value)||5);renderGrpPick()"><span style="font-size:11.5px;color:var(--t3);">預設 5 人，場地有餘裕可放寬</span></div>
     <div class="form-row"><label>選擇會員（點選即可複選）</label>
-      <input id="grp-search" class="ms-search" style="margin:0 0 8px;width:100%;box-sizing:border-box;" placeholder="搜尋姓名…" oninput="renderGrpPick()" autocomplete="off">
+      <input id="grp-search" class="ms-search" style="margin:0 0 8px;width:100%;box-sizing:border-box;" placeholder="搜尋姓名或手機…" oninput="renderGrpPick()" autocomplete="off">
       <div id="grp-count" style="font-size:12px;color:var(--t2);margin-bottom:6px;"></div>
       <div id="grp-list" class="ms-list" style="max-height:300px;border:1px solid var(--bd);border-radius:10px;padding:6px;"></div></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();expandBkCard(window._expandedBkEl||null,'${id}')">返回</button><button class="btn btn-green" onclick="saveGroupMembers('${id}')">儲存名單</button></div>`);
@@ -33912,14 +33900,24 @@ async function _saveGroupMembers(id){
     return;
   }
   if(_addUniq.length){ try{ await grpFollowAsk(id,_addUniq,_addCnt); return; }catch(e){ console.error('連續加入詢問失敗',e); } }
-  openBookingDetail(id);
+  grpBackToCard(id);
 }
 /* 警告視窗按「知道了」之後接回原本的流程（連續預約詢問或回明細）（2026-08-05） */
 async function grpNoTkAck(){
   const p=window._gfaNext; window._gfaNext=null;
   if(!p) return;
   if(p.uniq&&p.uniq.length){ try{ await grpFollowAsk(p.id,p.uniq,p.cnt); return; }catch(_){} }
-  openBookingDetail(p.id);
+  grpBackToCard(p.id);
+}
+/* 團課這幾條流程做完要回哪裡（2026-08-29 使用者附截圖：「為什麼又出現舊視窗」）——
+   儲存名單／連續預約走完之後一律 openBookingDetail，那是已經退役的「預約明細」。
+   0821 就把名單視窗的「返回」改回課卡了，這幾個出口漏掉。
+   ⚠ 課卡的錨點（_expandedBkEl）可能已經不在畫面上，expandBkCard 對 null 有防呆
+     （0820 修過），拿不到就純粹重開面板。 */
+function grpBackToCard(id){
+  try{ closeModal(); }catch(_){}
+  try{ expandBkCard(window._expandedBkEl||null, id); }
+  catch(_){ try{ navTo(CUR_PAGE); }catch(__){} }
 }
 /* 團課的「同系列後續場次」：同教練＋同星期＋同時段＋未取消未完成、時間在這堂之後。
    取消側的 seriesOf 認 member_id，團課的學員在 member_ids（見 bkIsGroup 註解），
@@ -33961,7 +33959,7 @@ async function grpFollowAsk(id, addedIds, addedCnt){
     /* 同時段後面只剩單獨建立的課卡 —— 沒有連續系列可約，但要講一聲，
        不然櫃檯會以為系統沒問（2026-08-07）。 */
     if(solo.length) showToast(`後面 ${solo.length} 堂是單獨建立的課，不在連續系列裡，請到該堂名單各自加入`);
-    openBookingDetail(id); return;
+    grpBackToCard(id); return;
   }
   const allTk=await dbGetAll('member_tickets');
   const members=await dbGetAll('members');
@@ -33995,7 +33993,7 @@ async function grpFollowAsk(id, addedIds, addedCnt){
          不講的話櫃檯會以為系統漏約了那幾週。金色＝次要提示。 */''}
     ${solo.length?`<div style="font-size:11.5px;color:var(--gold-d);background:#f7f1e4;border-radius:8px;padding:8px 10px;margin-top:6px;line-height:1.8;">
       另有 <b>${solo.length}</b> 堂（${solo.slice(0,3).map(x=>String(x.date).slice(5).replace('-','/')).join('、')}${solo.length>3?'…':''}）是<b>單獨建立</b>的課，不在這個連續系列裡，要加請到那一堂的名單。</div>`:''}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();openBookingDetail('${id}')">不用</button>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="grpBackToCard('${id}')">不用</button>
       <button class="btn btn-green" onclick="grpFollowRun(${JSON.stringify(rows.map(r=>r.mid)).replace(/"/g,'&quot;')})">連續預約</button></div>`);
 }
 async function grpFollowRun(mids2){ return onceAct('gfrun', ()=>_grpFollowRun(mids2)); }
@@ -34003,7 +34001,7 @@ async function _grpFollowRun(mids2){
   const p=window._gfPend; if(!p) return;
   const wants=mids2.map((mid,i)=>({mid, n:Math.max(0,Number((document.getElementById('gf-n-'+i)||{}).value)||0)}))
     .filter(w=>w.n>0);
-  if(!wants.length){ closeModal(); openBookingDetail(p.id); return; }
+  if(!wants.length){ grpBackToCard(p.id); return; }
   const foot=document.querySelector('.modal-foot');
   const prog=(t)=>{ if(foot) foot.innerHTML='<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">'+t+'</div>'; };
   prog('預約中…');
@@ -34071,9 +34069,8 @@ async function _grpFollowRun(mids2){
   }
   window._gfPend=null;
   dbCacheClear(['bookings','member_tickets','ticket_logs']);
-  closeModal();
   showToast(report.join('；'));
-  openBookingDetail(p.id);
+  grpBackToCard(p.id);
 }
 function statusLabel(s){return {scheduled:'已預約',booked:'已預約',checked_in:'已簽到',completed:'已完成',cancelled:'已取消',no_show:'未到',coach_leave:'教練請假'}[s]||s;}
 // 安全取得團體課會員 id 陣列（相容資料庫回傳陣列或 JSON 字串）

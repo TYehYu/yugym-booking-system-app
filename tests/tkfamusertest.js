@@ -60,7 +60,7 @@ console.log('\n②b 團課票的家庭功能（2026-08-04 使用者指示：「�
   ok('★ 團課選會員名單：依票券使用人拆成一位一列（不是擠在名字旁的標籤裡）',
      /const _groupsOf=m=>\{/.test(src)
      && /const _famKey=t=>String\(\(t&&t\.fam\)\|\|''\);/.test(src)
-     && /r\.fam\?`<span style="font-weight:700;color:var\(--t2\);">（\$\{String\(r\.fam\)\.replace\(\/<\/g,'&lt;'\)\}）<\/span>`:''/.test(src)
+     && /r\.fam\?`<span class="grp-fam">（\$\{String\(r\.fam\)\.replace\(\/<\/g,'&lt;'\)\}）<\/span>`:''/.test(src)
      /* 三處：團課名單的兩份 _grpData，以及 0829 新增的簡易課卡「變更」候選清單 */
      && (src.match(/fam:t\.family_user\|\|null/g)||[]).length===3);
   ok('★ 明細名單：該名額扣到的票有預設使用人 → 標稱呼',
