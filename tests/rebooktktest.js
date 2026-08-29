@@ -70,14 +70,16 @@ const mk=(logs,cand)=>new Function('dbGetAll','bkHasMember','listUsableTickets',
   }
 
   console.log('\n② 接線');
-/* 2026-08-29：中間插了一層「名額 i 用第 i 張票」——與名單視窗畫面上的預設一致
-   （沒有它，畫面說名額2用姊姊那張、實際卻先進先出扣到媽媽那張）。
-   重約回原票仍然排在它前面：那是更明確的意圖。 */
-  ok('★ 團課加名單時排在「櫃檯指定」之後、「逐名額預設」之前，最後才是先進先出',
-     /if\(!tk\) tk=await rebookSameDayTicket\(mid,b\);/.test(src)
-     && /if\(_cand\.length\) tk=_cand\[Math\.min\(_i, _cand\.length-1\)\]\|\|null;/.test(src)
-     && src.indexOf('tk=await rebookSameDayTicket(mid,b);') < src.indexOf('if(_cand.length) tk=_cand[Math.min(_i, _cand.length-1)]')
-     && src.indexOf('if(_cand.length) tk=_cand[Math.min(_i, _cand.length-1)]') < src.indexOf('if(!tk) tk=await findUsableTicket(mid,b.ticket_type_id,b.date,b.start_time);'));
+/* 2026-08-29 二修（使用者附截圖：「這三個會員卡是同一張票券吧?」）——
+   許佳慈 9/4 三個名額全被這一支指到同一張票（那天稍早取消過，三格都判成「重約回原票」），
+   帳本上只有 1 筆扣課＋2 筆「已阻擋重複扣」，兩個名額沒付錢。
+   所以它的結果現在要先過 _used：這一堂已經被別的名額用掉的票不算「回得去」。
+   順序仍是：櫃檯指定 → 重約回原票 → 逐名額預設 → 先進先出。 */
+  ok('★ 重約回原票排在「櫃檯指定」之後、「逐名額預設」之前，最後才是先進先出',
+     /if\(!tk\)\{ const _rb=await rebookSameDayTicket\(mid,b\);\n\s*if\(_rb && !_used\.has\(String\(_rb\.id\)\)\) tk=_rb; \}/.test(src)
+     && /tk=_fc\.find\(t=>!tkNeedsConfirm\(t\)\) \|\| _fc\[0\] \|\| null;/.test(src)
+     && src.indexOf('const _rb=await rebookSameDayTicket(mid,b);') < src.indexOf('tk=_fc.find(t=>!tkNeedsConfirm(t))')
+     && src.indexOf('tk=_fc.find(t=>!tkNeedsConfirm(t))') < src.indexOf('if(!tk) tk=await findUsableTicket(mid,b.ticket_type_id,b.date,b.start_time);'));
   ok('　　挑出來的仍要通過 listUsableTickets 的可用性檢查（不硬塞不能用的票）',
      /const cand=await listUsableTickets\(member_id,b\.ticket_type_id,b\.date,b\.start_time\);\n\s*return cand\.find\(t=>back\.indexOf\(t\.id\)>=0\) \|\| null;/.test(src));
   ok('　　整段包 try（讀不到帳本就當作沒有，照常走原本的挑票）',

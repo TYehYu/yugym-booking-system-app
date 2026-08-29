@@ -238,7 +238,10 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
       && /onchange="grpPickTk\('\$\{m\.id\}',\$\{i\},this\.value\)"/.test(src)
       && /function grpPickOf\(mid,seatIdx\)\{/.test(src));
     chk('　　只有選了、且有兩張以上才出現下拉', /const pick=\(on&&tks\.length>1\)/.test(src));
-    chk('　　下拉標明剩餘堂數與效期', /扣：\$\{String\(t\.name\)\.replace\(\/<\/g,'&lt;'\)\}　剩 \$\{t\.left\} 堂/.test(src));
+    /* 2026-08-29 使用者：「我在預約團課的時候選擇媽媽這張或姐姐這張」——
+       使用人移到最前面（方案名稱三張都一樣，排後面要讀到行尾才分得出來）。 */
+    chk('　　下拉先標使用人，再標剩餘堂數與效期',
+      /t\.fam\?`\$\{String\(t\.fam\)\.replace\(\/<\/g,'&lt;'\)\}的票`:'本人'\}　·　\$\{String\(t\.name\)\.replace\(\/<\/g,'&lt;'\)\}　剩 \$\{t\.left\} 堂/.test(src));
     chk('★ 管理名單存檔時照逐名額指定的扣（新名額索引接在既有名額後）',
       /const want=grpPickOf\(mid,_i\);/.test(src)
       && /const _i=\(_seatIdx\[mid\]=\(_seatIdx\[mid\]==null\?\(pc\[mid\]\|\|0\):_seatIdx\[mid\]\+1\)\);/.test(src)

@@ -11395,8 +11395,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1636';
-const APP_VERSION_LABEL='v260829.1636';
+const APP_VERSION = '260829.1655';
+const APP_VERSION_LABEL='v260829.1655';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28651,7 +28651,12 @@ function renderGrpPick(){
           ${n>1?`<span style="flex:none;font-size:11px;color:var(--t3);">名額 ${i+1}</span>`:''}
           <select class="grp-tk-sel" onchange="grpPickTk('${m.id}',${i},this.value)"
                   style="flex:1;font-family:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--bd);border-radius:8px;background:#fff;">
-            ${tks.map(t=>`<option value="${t.id}" ${t.id===pk?'selected':''}>扣：${String(t.name).replace(/</g,'&lt;')}　剩 ${t.left} 堂${t.fam?`　使用人：${String(t.fam).replace(/</g,'&lt;')}`:''}${t.exp?`　效期至 ${t.exp.slice(5).replace('-','/')}`:'　無到期日'}</option>`).join('')}
+            ${/* 使用人放最前面（2026-08-29 使用者：「會員A買了三份團課優惠4堂　使用人給
+                 媽媽跟姐姐　我在預約團課的時候選擇媽媽這張或姐姐這張　該票券就要能辨別
+                 並預約」）—— 櫃檯是用「這格是誰要上」在選票的，方案名稱三張都一樣，
+                 把使用人排在後面等於要讀到行尾才分得出來。沒設使用人的寫「本人」。 */''}
+            ${tks.map(t=>`<option value="${t.id}" ${t.id===pk?'selected':''}>${
+              t.fam?`${String(t.fam).replace(/</g,'&lt;')}的票`:'本人'}　·　${String(t.name).replace(/</g,'&lt;')}　剩 ${t.left} 堂${t.exp?`　效期至 ${t.exp.slice(5).replace('-','/')}`:'　無到期日'}</option>`).join('')}
           </select></div>`;
     };
     const pick=(on&&tks.length>1)
@@ -33534,6 +33539,22 @@ async function _saveGroupMembers(id){
   const _seatIdx={};   // 逐名額挑票（2026-08-05）：新名額接在既有名額後面，索引從已有數量起算
   const _noTk={};      // 會員 → 這次加入但扣不到票的名額數
   const _failed=new Set();   // 扣不到票的會員：後續名額直接跳過，名額鍵才不會跳號（2026-08-20）
+  /* 這一堂已經被某個名額用掉的票（2026-08-29 使用者附截圖：「這三個會員卡是同一張票券吧?」）
+
+     許佳慈 9/4 20:00 的三個名額全指到 TK-mte3pejgah8w：那天稍早取消過一次，
+     三格都被 rebookSameDayTicket 判成「重約回原票」而拿到同一張，
+     結果帳本上只有 1 筆 deduct ＋ 2 筆「⚠ 已阻擋：這一堂在這張票上已經扣過 1 堂」——
+     **兩個名額站在名單上卻沒付錢**。
+
+     使用者要的模式（0829）：「會員A買了三份團課優惠4堂　使用人給媽媽跟姐姐
+     我在預約團課的時候選擇媽媽這張或姐姐這張　該票券就要能辨別並預約」——
+     所以自動挑票要**優先給每個名額一張還沒被這堂用掉的票**，家人的票才會各自對上。
+
+     ⚠ 但「一張票扣多格」本身是合法的：0827 許佳慈 4 個名額扣同一張 4 堂票就是這樣
+       （建立團課那條路一直是 multi:true）。所以這裡不是禁止重複，是**排在最後**：
+       沒有別張可用時照樣扣同一張，只是要明講 multi，不能讓護欄默默吃掉。 */
+  const _used=new Set(Object.values(b.seat_tickets||{}).map(String));
+  const _free=arr=>(arr||[]).filter(t=>t && !_used.has(String(t.id)));
   for(const mid of added){
     if(_failed.has(String(mid))){ (_noTk[mid]=(_noTk[mid]||0)+1); continue; }
     /* 櫃檯有指定要扣哪一張就照指定的（2026-07-30 使用者指示；2026-08-05 改逐名額）——
@@ -33547,25 +33568,31 @@ async function _saveGroupMembers(id){
       tk=cand.find(t=>t.id===want)||null;
       if(!tk) showToast('指定的票券已不能用，改用最快到期的那張');
     }
+    /* 以下三段都只從「這堂還沒用過的票」裡挑（見上面 _used 的說明）——
+       櫃檯自己指定的那一張例外：指定就是指定，重複也照他的意思做。 */
     // 取消後重約同一堂 → 先回到原本那張票（2026-08-06 林紫錡案例，見 rebookSameDayTicket）
-    if(!tk) tk=await rebookSameDayTicket(mid,b);
-    /* 沒有指定就照「名額 i 用第 i 張票」（2026-08-29 使用者回報：「家庭成員票券已經設定
-       使用人了，但是預約的時候該票券不會自動辨識使用人」）——
-       名單視窗的逐名額下拉本來就是這樣預設的（_defPk(i)＝tks[min(i,len-1)]），
-       但櫃檯沒動過那個下拉時 grpPickOf 是空的，這裡就退回 findUsableTicket 的先進先出，
-       於是**畫面說「名額1媽媽／名額2姊姊」，實際三格全扣到媽媽那張**。
-       許佳慈 8/28 那堂就是這樣：手上有媽媽／姊姊／媽媽三張，帳本上卻扣了媽媽兩次。
+    if(!tk){ const _rb=await rebookSameDayTicket(mid,b);
+      if(_rb && !_used.has(String(_rb.id))) tk=_rb; }
+    /* 沒有指定就給這個名額一張還沒被用掉的票（2026-08-29 使用者回報：「家庭成員票券
+       已經設定使用人了，但是預約的時候該票券不會自動辨識使用人」）——
+       名單視窗的逐名額下拉本來就是「名額 i 用第 i 張票」，把已用掉的排除之後，
+       「第一張還沒用的」就等於那個預設，而且不會因為 _used 裡有既有名額的票而錯位。
        ⚠ 排序要與名單視窗那份一致（listUsableTickets 已按效期由近而遠），
          兩邊不同步就又會「看到的跟扣到的不一樣」。
-       ⚠ 仍在「重約回原票」之後：那一條是更明確的意圖。 */
+       ⚠ 待確認的票排最後（沿用 findUsableTicket 的規則），全部都待確認才用它。 */
     if(!tk){
-      const _cand=await listUsableTickets(mid,b.ticket_type_id,b.date,b.start_time);
-      if(_cand.length) tk=_cand[Math.min(_i, _cand.length-1)]||null;
+      const _fc=_free(await listUsableTickets(mid,b.ticket_type_id,b.date,b.start_time));
+      tk=_fc.find(t=>!tkNeedsConfirm(t)) || _fc[0] || null;
     }
+    // 真的沒有別張了 → 回頭用已經扣過的那張（一張票扣多格，合法，見上面）
     if(!tk) tk=await findUsableTicket(mid,b.ticket_type_id,b.date,b.start_time);
     /* 2026-08-06：deductTicket 的餘額護欄會回 false（沒扣到）——
-       這時要跟「找不到票」一樣算進警告，不能讓名額靜靜地沒付錢。 */
-    const _ded = tk ? await deductTicket(tk,b.id,SESSION.id) : false;
+       這時要跟「找不到票」一樣算進警告，不能讓名額靜靜地沒付錢。
+       2026-08-29：走到「同一張票扣第二格」時要明講 multi，否則重複扣護欄會回 true
+       卻沒真的扣，名額就白站在名單上（許佳慈 9/4 就是這樣）。 */
+    const _ded = tk ? await deductTicket(tk,b.id,SESSION.id,
+      _used.has(String(tk.id))?{multi:true}:undefined) : false;
+    if(_ded) _used.add(String(tk.id));
     /* 取消教練招待（2026-08-20 使用者定案）：扣不到票的名額不再寫入名單——
        前面已先擋過一次，走到這裡是「驗票後、扣票前」被別的操作用掉的競態。 */
     if(!_ded){ (_noTk[mid]=(_noTk[mid]||0)+1); _failed.add(String(mid)); continue; }
@@ -34644,6 +34671,9 @@ async function _doSwapTicket(id){
       const _ttid=_v('swap-c-type').value||null;
       const _vd=Math.max(1,Number(_v('swap-c-valid').value)||365);
       if(!_ttid||!_sess){ done(); showToast('自訂方案要選票種並填堂數'); return; }
+      /* 上限與自訂銷售同一條（2026-08-29）——這一格是通往「無限卡」的第二道門，
+         只擋前門等於沒擋。 */
+      { const _sbad=gtSessionsBad(_sess); if(_sbad){ done(); showToast(_sbad, 7000); return; } }
       plan={ id:null, name:'自訂方案', ticket_type_id:_ttid, format:null,
         unit_price:Math.round((Number(tk.amount_paid)||0)/_sess)||0,
         sessions_base:_sess, sessions_bonus:0, valid_days:_vd };
@@ -41660,9 +41690,21 @@ async function unpaidFutureBookings(memberId, tk){
 async function askChargeUnpaid(memberId, ticketId){
   const tk=await dbGet('member_tickets',ticketId); if(!tk) return;
   const left=Number(tk.sessions_remaining)||0; if(left<=0) return;
-  const list=(await unpaidFutureBookings(memberId,tk)).slice(0,left);
+  const _allUnpaid=await unpaidFutureBookings(memberId,tk);
+  const list=_allUnpaid.slice(0,left);
   if(!list.length) return;
-  window._chgUnpaid={mid:memberId, tid:ticketId, ids:list.map(b=>b.id)};
+  /* 超出票券堂數的待簽約卡位（2026-08-29 使用者定案：
+     「待簽約排12堂 但實際8堂的情境　預約的時候把後面多的卡位刪除　給訊息提示確認」）——
+     這就是吳宜玲那種紅虛線超約圓點的來源：12 堂卡位、8 堂票，多的 4 堂沒人收，
+     一直掛在那裡佔時段，票券卡靠先進先出推算又會把它們畫進去。
+     ⚠ 只挑 pending_contract 的卡位。剩下那些「沒綁票也不是待簽約」的是
+       教練負責的免費名額（上面那句「先不補扣」講的就是它們），絕對不能一起取消。
+     ⚠ 不預設幫他取消：正式庫有人一次卡 28 堂（陳芷亘）、27 堂（葉政義），
+       那是分好幾張票陸續買的，整批砍掉會把教練排好的時段全還出去。
+       所以「只補扣」這條路一定要留著。 */
+  const over=_allUnpaid.slice(left).filter(b=>b && b.pending_contract===true);
+  const _od=b=>String(b.date).slice(5).replace('-','/')+' '+String(b.start_time||'').slice(0,5);
+  window._chgUnpaid={mid:memberId, tid:ticketId, ids:list.map(b=>b.id), over:over.map(b=>b.id)};
   showModal(`<div class="modal-title">這幾堂還沒扣到票</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-bottom:10px;">
       這位會員有 <b>${list.length}</b> 堂已排好、但當初沒有票可扣的課。要用剛買的
@@ -41671,12 +41713,19 @@ async function askChargeUnpaid(memberId, ticketId){
     <div style="background:var(--card2);border-radius:9px;padding:8px 12px;font-size:13px;line-height:2;">
       ${list.map(b=>`<div>${String(b.date).slice(5).replace('-','/')} ${String(b.start_time||'').slice(0,5)}　${b.category||''}</div>`).join('')}
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">先不補扣</button>
-      <button class="btn btn-red" onclick="doChargeUnpaid()">確認補扣 ${list.length} 堂</button></div>`);
+    ${over.length?`<div style="background:#fbeceb;border:1px solid #f0c9c5;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px;color:#b5372e;line-height:1.8;">
+      ⚠ 另外還有 <b>${over.length}</b> 堂待簽約卡位超出這張票的堂數：
+      ${over.slice(0,6).map(_od).join('、')}${over.length>6?`…等 ${over.length} 堂`:''}<br>
+      取消後時段會還出去，別人就約得走。<b>之後還要上就先留著</b>——會員再買票時可以再補扣。</div>`:''}
+    <div class="modal-foot"${over.length?' style="flex-wrap:wrap;gap:8px;"':''}><button class="btn btn-ghost" onclick="closeModal()">先不補扣</button>
+      ${over.length
+        ? `<button class="btn btn-ghost" onclick="doChargeUnpaid()">只補扣 ${list.length} 堂</button>
+           <button class="btn btn-red" onclick="doChargeUnpaid(1)">補扣 ${list.length} 堂並取消多的 ${over.length} 堂</button>`
+        : `<button class="btn btn-red" onclick="doChargeUnpaid()">確認補扣 ${list.length} 堂</button>`}</div>`);
 }
-async function doChargeUnpaid(){
+async function doChargeUnpaid(dropOver){
   const p=window._chgUnpaid; if(!p) return;
-  let n=0;
+  let n=0, dropped=0;
   try{
     for(const bid of p.ids){
       const tk=await dbGet('member_tickets',p.tid);
@@ -41694,10 +41743,24 @@ async function doChargeUnpaid(){
       if(_dirty) await dbPut('bookings',b);
       n++;
     }
+    /* 取消超出堂數的待簽約卡位（2026-08-29）——只有按了紅色那顆才會走到這裡。
+       ⚠ 每一筆都重讀再確認一次還是「待簽約、沒綁票、還沒取消」：畫面畫出來到按下去
+         之間，別人可能已經幫他轉正或取消了（整串轉正那條路同一個顧慮）。 */
+    if(dropOver){
+      for(const bid of (p.over||[])){
+        const b=await dbGet('bookings',bid);
+        if(!b || b.status!=='booked' || b.pending_contract!==true || b.ticket_id) continue;
+        b.status='cancelled'; b.cancelled_at=new Date().toISOString();
+        b.note=(b.note?b.note+'｜':'')+'超出票券堂數，補扣時自動取消';
+        await dbPut('bookings',b);
+        dropped++;
+      }
+    }
   }catch(e){ console.error('補扣失敗',e); }
   window._chgUnpaid=null;
   dbCacheClear(['bookings','member_tickets','ticket_logs']);
-  closeModal(); showToast(n?`已補扣 ${n} 堂`:'沒有補扣任何一堂');
+  closeModal(); showToast((n?`已補扣 ${n} 堂`:'沒有補扣任何一堂')
+    +(dropped?`，並取消多出的 ${dropped} 堂卡位`:''));
   try{ if(typeof PP!=='undefined'&&PP.id){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }catch(_){ navTo(CUR_PAGE); }
 }
 function ppShareTk(tid){ window._tkShareFromPP=true; openTicketShare(tid, PP.id); }
@@ -45630,7 +45693,10 @@ async function openGrantModal(){
           <input type="hidden" id="gt-c-name" value="${(_pre&&_pre.name)||'自訂方案'}">   <!-- 2026-07-28 使用者指示：方案名稱統一「自訂方案」；固定商品帶自己的名字 -->
         </div>
         <div class="form-2col">
-          <div class="form-row"><label>堂數 *</label><input type="number" id="gt-c-sessions" min="1" value="${(_pre&&_pre.sessions)||10}" oninput="grantCustomValidate()"></div>
+          ${/* 不寫 max —— 管理員可以越線發無限卡（0828 定案），欄位鎖死反而變成
+               「打不進去又沒說為什麼」。上限由 gtSessionsBad 擋，理由寫在底下。 */''}
+          <div class="form-row"><label>堂數 *<span class="lb-warn">上限 ${GT_SESSIONS_MAX} 堂</span></label><input type="number" id="gt-c-sessions" min="1" value="${(_pre&&_pre.sessions)||10}" oninput="grantCustomValidate()">
+            <div class="gt-unitbox" id="gt-c-smax" style="display:none;"></div></div>
           ${/* 2026-08-26 使用者回報（陳英鴻 8/26：10 堂打成 1,100，實際是 11,000）——
                「櫃檯金額打錯了…因為之前那格是單價　現在變總價」。欄位語意換過，
                而舊習慣是打單價。標題直接把話講死，底下的回推提示也放大。 */''}
@@ -45880,6 +45946,33 @@ function _grantCustomPlan(){
    ⚠ 警示只對「本來就該有單價」的課別（教練課、團體課）——自主訓練點數、
      折抵券、贈送方案本來就可能是 0 或很低，對它們跳警示只會變成雜訊。 */
 const GT_UNIT_MIN=300;   /* 教練課／團體課的單堂低於這個數，幾乎都是把單價打進總價 */
+/* 自訂銷售的堂數上限（2026-08-29 使用者定案：「無限卡上限就抓30堂」）——
+   起因是 0828 查到正式庫有一張 9,955 堂的票（魚媽劉媽的「無限卡」，
+   就是在這一格打 9999 打出來的，source_plan_id 是空的、沒有對應商品）。
+   這一格本來完全沒有上限，任何有櫃檯權限的人都做得到。
+   ⚠ 超過 30 堂不是「擋死」而是「換人發」——使用者 0828 定的是
+     「所以無限卡只有管理員可以發放」，所以管理員可以越線，只是要看到警語。
+   ⚠ 更換方案的自訂欄位（_doSwapTicket）是同一格的第二道門，一起吃這個上限。 */
+const GT_SESSIONS_MAX=30;
+function gtSessionsBad(n){
+  if((Number(n)||0)<=GT_SESSIONS_MAX) return '';
+  if(SESSION && SESSION.role==='admin') return '';
+  return `一次最多 ${GT_SESSIONS_MAX} 堂。超過就是無限卡等級，只有管理員能發放。`;
+}
+function gtSessionsWarn(n){
+  if((Number(n)||0)<=GT_SESSIONS_MAX) return '';
+  return `超過 ${GT_SESSIONS_MAX} 堂（無限卡等級），確定是這個數字嗎？`;
+}
+/* 堂數那一格底下的提示：一般人看到的是「不能發」，管理員看到的是「確定嗎」。
+   與總價那一格同一套外觀（gt-unitbox / gt-unitbox-bad）。 */
+function grantCustomSessionsHint(p){
+  const el=document.getElementById('gt-c-smax'); if(!el) return;
+  const n=p?p.sessions_base:0;
+  const bad=gtSessionsBad(n), warn=bad?'':gtSessionsWarn(n);
+  el.className='gt-unitbox'+((bad||warn)?' gt-unitbox-bad':'');
+  el.innerHTML=(bad||warn)?`<i>${bad||warn}</i>`:'';
+  el.style.display=(bad||warn)?'':'none';
+}
 function grantCustomUnitHint(p){
   const el=document.getElementById('gt-c-unit'); if(!el) return;
   const n=p?p.sessions_base:0, t=p?(Number(p.list_price)||0):0;
@@ -45921,7 +46014,9 @@ function grantCustomValidate(){
   const p=_grantCustomPlan();
   grantCustomUnitHint(p);
   grantCustomBenefitHint(p);
-  const ok=!!(p && p.name && p.ticket_type_id && p.sessions_base>0);
+  grantCustomSessionsHint(p);
+  const ok=!!(p && p.name && p.ticket_type_id && p.sessions_base>0)
+    && !gtSessionsBad(p&&p.sessions_base);   // 超過上限（非管理員）→ 下一步鎖住，理由寫在欄位底下
   const btn=document.getElementById('gt-next');
   if(btn){ btn.disabled=!ok; btn.style.opacity=ok?'1':'.4'; }
 }
