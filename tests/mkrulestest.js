@@ -172,8 +172,11 @@ console.log('  請假釋出名額（2026-08-12 使用者定案：「請假要釋
 {
   ok('★★ 有效名額 helper：總名額−請假名額',
      /function grpLeaveSeats\(b\)\{/.test(src) && /function grpLiveHeads\(b\)\{ return Math\.max\(0, mids\(b\)\.length - grpLeaveSeats\(b\)\); \}/.test(src));
+  /* 2026-08-29：加名額的三支（toggleGrpMember／grpAddOne／grpRemoveOne）合併成
+     grpSeatAdd 一支，所以這個運算式從 2 處變 1 處 —— 少了不是漏掉，是收斂了。 */
   ok('★★ 名單視窗與儲存的上限都放寬請假數（請假不佔位）',
-     (src.match(/grpMax\(\)\+\(Number\(window\._grpLeaveN\)\|\|0\)/g)||[]).length===2
+     (src.match(/grpMax\(\)\+\(Number\(window\._grpLeaveN\)\|\|0\)/g)||[]).length===1
+     && /function grpSeatAdd\(mid, tkid\)\{/.test(src)
      && /next\.length>gmax\+grpLeaveSeats\(b\)/.test(src));
   ok('★ 連續預約遞補與會員端「已滿」都改有效名額',
      /-\(cur\.length-grpLeaveSeats\(x\)\)/.test(src) && /const n=grpLiveHeads\(c\);/.test(src));

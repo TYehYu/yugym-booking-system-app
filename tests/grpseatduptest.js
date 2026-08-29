@@ -85,15 +85,35 @@ console.log('\n③ 實跑：三格三張票各自對上，票不夠時才共用'
      pick([{id:'TC',needConfirm:true},{id:'T9'}],1).map(x=>x.id), ['T9']);
 }
 
-console.log('\n④ 名單視窗：使用人要放在最前面，櫃檯是照「這格給誰」在選票');
+console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
 {
-  ok('★★ 下拉先寫使用人，沒設的寫「本人」',
-     /t\.fam\?`\$\{String\(t\.fam\)\.replace\(\/<\/g,'&lt;'\)\}的票`:'本人'\}　·　\$\{String\(t\.name\)\.replace\(\/<\/g,'&lt;'\)\}　剩 \$\{t\.left\} 堂/.test(src));
-  ok('★★ 使用者原話寫在原地', /我在預約團課的時候選擇媽媽這張或姐姐這張/.test(src));
-  ok('★★ 名字旁的使用人標籤仍是逐名額列出（0829 上午那一修沒被蓋掉）',
-     /const _famOf=i=>\{ const p=grpPickOf\(m\.id,i\)\|\|_defPk\(i\); const t=tks\.find\(x=>x\.id===p\); return \(t&&t\.fam\)\|\|''; \};/.test(src));
-  ok('★ 逐名額下拉的預設仍是「名額 i 用第 i 張」（畫面與實際扣的要同一套）',
-     /const _defPk=i=>\(tks\[Math\.min\(i,tks\.length-1\)\]\|\|\{\}\)\.id\|\|'';/.test(src));
+  ok('★★ 依票券使用人拆列（許佳慈（媽媽）／許佳慈（姊姊））',
+     /const _groupsOf=m=>\{/.test(src)
+     && /r\.fam\?`<span style="font-weight:700;color:var\(--t2\);">（\$\{String\(r\.fam\)\.replace\(\/<\/g,'&lt;'\)\}）<\/span>`:''/.test(src));
+  ok('★★ 分母也跟著拆 —— 不然「許佳慈（姊姊）」底下會寫著全部 21 堂',
+     /const gLeft=tks\.reduce\(\(a,t\)=>a\+Math\.max\(0,Number\(t\.left\)\|\|0\),0\);/.test(src)
+     && /const tag=tks\.length\?`可用 \$\{gLeft\} \/ \$\{gTot\|\|gLeft\} 堂`:/.test(src));
+  ok('★★ 挑票改成可點的圓形卡（原生 <select> 退場）',
+     /<button type="button" class="gtk-card\$\{cur\?' gtk-on':''\}"/.test(src)
+     && !/class="grp-tk-sel"/.test(src));
+  ok('★★ 圓點語彙沿用課卡（實心＝已用、空心＝還沒用）',
+     /h\+=`<i class="gtk-dot\$\{k<used\?' gtk-used':''\}"><\/i>`;/.test(src)
+     && /\.gtk-dot\.gtk-used\{background:#1F6F54;border-color:#1F6F54;\}/.test(src));
+  ok('★★ 快到期的排最上面而且標出來（使用者 0829 補充）',
+     /使用者 0829 補充：「如果本人的票券有不同期限　快到期的擺最上方」/.test(src)
+     && /\$\{soon\?'（快到期）':''\}/.test(src));
+  ok('★★ 加減名額改走 row 版，_grpTkPick 會跟著 splice（索引不能位移）',
+     /function grpSeatDel\(mid, seatIdx\)\{/.test(src)
+     && /a\.splice\(seatIdx,1\); p\[mid\]=a;/.test(src)
+     && /function grpRowTap\(i\)\{/.test(src));
+  ok('★★ 舊的三支退場，不留第二條路',
+     !/function toggleGrpMember\(/.test(src) && !/function grpAddOne\(/.test(src)
+     && !/function grpRemoveOne\(/.test(src)
+     && /toggleGrpMember／grpAddOne／grpRemoveOne 已於 2026-08-29 退場/.test(src));
+  ok('★ ＋ 會優先給這位使用人還沒用到的那張（媽媽有兩張時第二格用第二張）',
+     /const next=r\.tkIds\.find\(id=>used\.indexOf\(id\)<0\) \|\| r\.tkIds\[0\] \|\| null;/.test(src));
+  ok('★ 逐名額的預設仍是「名額 i 用第 i 張」（畫面與實際扣的要同一套）',
+     /const _defPkOf=\(m,i\)=>\{ const a=m\.tks\|\|\[\]; return \(a\[Math\.min\(i,a\.length-1\)\]\|\|\{\}\)\.id\|\|''; \};/.test(src));
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);

@@ -260,9 +260,19 @@ ok('★ 空堂不再承諾「開課前 24 小時會提醒教練」（使用者�
 console.log('\n桌機取代：先補功能');
 /* 2026-08-21：多一個 !A.pending —— 待簽約／空堂沒有綁票券，列出來是死路 */
 /* 2026-08-25：更換票券移出這張清單，改成「觸發＋點會員卡上的票券名稱」 */
-ok('★★ 更換票券改掛在會員卡的票券名稱那一行（未簽到／非團課／有會員／櫃檯以上）',
-   /const _tkTap = isDeskLike\(\) && b\.status==='booked' && r\.mid && !A\.isGroup;/.test(src)
-   && /onclick="event\.stopPropagation\(\);collapseBkCard\(\);openBkTicketChange\('\$\{b\.id\}','close'\)"/.test(src));
+/* 2026-08-29 使用者指示：「卡片上換票的按鈕改成一個大圓形卡放在圓形卡這列的最右邊
+   中間寫[變更]　這個變更要有觸發條件　如果該會員有其他可以更換的票券才顯示」——
+   入口從票名那一行搬到圓點列最右邊，並多一個「真的有別張票」的條件。 */
+ok('★★ 更換票券＝圓點列最右邊的「變更」圓鈕（未簽到／非團課／有會員／櫃檯以上／有別張票可換）',
+   /const _tkTap = isDeskLike\(\) && b\.status==='booked' && r\.mid && !A\.isGroup && \(_swapN\[r\.mid\]\|\|0\)>0;/.test(src)
+   && /<button type="button" class="mtk ash-mswap"/.test(src)
+   && /onclick="event\.stopPropagation\(\);collapseBkCard\(\);openBkTicketChange\('\$\{b\.id\}','close'\)">變更<\/button>/.test(src));
+ok('★★ 「有別張票可換」與 openBkTicketChange 的候選同一個判準（可用票扣掉現在綁的那張）',
+   /_swapN\[r\.mid\]=\(c\|\|\[\]\)\.filter\(t=>t && t\.id!==b\.ticket_id\)\.length;/.test(src)
+   && /const list=cand\.filter\(t=>t\.id!==curId\);/.test(src));
+ok('★★ 本堂那一顆放大，而且只在簡易課卡放大（票券夾一列 60 顆不能跟著大）',
+   /\.ash-mcard \.ash-tk \.mtk\.mtk-cur\{width:66px;height:66px;font-size:18px;\}/.test(src)
+   && /只在簡易課卡的會員卡放大：票券夾那邊一列要排 60 顆，放大會整排爆掉/.test(src));
 /* 2026-08-26 使用者：「跳出的視窗按返回會跑回調整課程的視窗　這邊應該設計關閉的按鈕就好」
    —— 從會員卡進來這條路沒有上一層可回，返回等於把人丟到一個他沒去過的地方。 */
 ok('★★ 從會員卡進來只給「關閉」，不給「返回」',

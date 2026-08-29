@@ -83,5 +83,19 @@ console.log('\n③ 補扣視窗：超出票券堂數的待簽約卡位');
      /超出簽約堂數 → 取消/.test(src) && /簽約堂數不含此堂，轉正時自動取消/.test(src));
 }
 
+console.log('\n④ 無限卡整張只畫一顆 ∞');
+{
+  /* 2026-08-29 使用者附截圖：「這張親友自主訓練 改成無限卡　出現一個圓形卡的圖案就好
+     中間給一個無限的符號　只能約自主訓練效期1年」——
+     原本畫 60 顆圓點再補一張「不限堂數」的籤（9,955 堂）。 */
+  ok('★★ ticketTokens 一進來就先處理無限卡（後面整段算 used／超約對它沒意義）',
+     /if\(typeof tkUnlimited==='function' && tkUnlimited\(t\)\)\{\s*\n\s*return `<span class="mtk mtk-inf" style="--tk-acc:\$\{v\.accent\};" title="無限卡・不限堂數">∞<\/span>`;/.test(src));
+  ok('★★ 判準用 tkUnlimited，不要在這裡另寫一個門檻',
+     /function tkUnlimited\(t\)\{ return \(Number\(t&&t\.sessions_total\)\|\|0\)>=999; \}/.test(src));
+  ok('★★ 樣式只多一條（吃課種色的實心圓，字放大）',
+     /\.mtk-inf\{font-size:19px;font-weight:700;letter-spacing:0;\}/.test(src));
+  ok('　 原因寫在原地', /圓點格子是拿來數「剩幾堂」的，無限卡沒有這件事/.test(src));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
