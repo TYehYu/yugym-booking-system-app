@@ -244,7 +244,7 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('　　列上左邊姓名（使用人）＋手機、右邊可用/總堂數',
       /<span class="grp-nm">\$\{nameHtml\}/.test(src)
       && /m\.phone\?`<span class="grp-ph">\$\{fmtPhone\(m\.phone\)\}<\/span>`:''/.test(src)
-      && /const tag=tks\.length\?`可用 \$\{gLeft\} \/ \$\{gTot\|\|gLeft\} 堂`:/.test(src));
+      && /const tag=_already\+\(tks\.length\?`可用 \$\{gLeft\} \/ \$\{gTot\|\|gLeft\} 堂`:/.test(src));
     chk('★ 管理名單存檔時照逐名額指定的扣（新名額索引接在既有名額後）',
       /const want=grpPickOf\(mid,_i\);/.test(src)
       && /const _i=\(_seatIdx\[mid\]=\(_seatIdx\[mid\]==null\?\(pc\[mid\]\|\|0\):_seatIdx\[mid\]\+1\)\);/.test(src)

@@ -92,7 +92,7 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      && /r\.fam\?`<span class="grp-fam">（\$\{String\(r\.fam\)\.replace\(\/<\/g,'&lt;'\)\}）<\/span>`:''/.test(src));
   ok('★★ 分母也跟著拆 —— 不然「許佳慈（姊姊）」底下會寫著全部 21 堂',
      /const gLeft=tks\.reduce\(\(a,t\)=>a\+Math\.max\(0,Number\(t\.left\)\|\|0\),0\);/.test(src)
-     && /const tag=tks\.length\?`可用 \$\{gLeft\} \/ \$\{gTot\|\|gLeft\} 堂`:/.test(src));
+     && /const tag=_already\+\(tks\.length\?`可用 \$\{gLeft\} \/ \$\{gTot\|\|gLeft\} 堂`:/.test(src));
   /* 2026-08-29 定案（使用者：「改成跟教練課一樣　搜尋姓名　然後選該會員就好」
      「列表呈現　左邊是會員姓名　右邊是還可預約票券/總票券」）——
      列裡攤開圓形卡挑票那一版退場：挑票已經被「一列一位使用人」解決掉了。 */
@@ -123,8 +123,20 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      && /點下面的圓形卡選要扣哪一張/.test(src)
      && !/帶親友同行可按已選會員的「＋」重複報名/.test(src));
   ok('★★ 兩張名單視窗同一套風格（2026-08-29：「這個團體課名單的視窗　是不是舊視窗?」）',
-     /<div class="ash-sheetmk"><\/div><div class="modal-title">團體課名單<\/div>/.test(src)
+     /<div class="ash-sheetmk"><\/div><div class="modal-title">\$\{addMode\?'加入會員':'團體課名單'\}<\/div>/.test(src)
      && /<div class="ash-sheetmk"><\/div><div class="modal-title">新增團體課 · 步驟 2 \/ 2<\/div>/.test(src));
+  /* 2026-08-29 使用者：「因為是新增　所以不用把其他正在上這堂課的會員也列出來
+     只要出現一個搜尋視窗就好」—— 同一支視窗兩種用途，資料與存檔完全共用。 */
+  ok('★★★ ［＋新增］模式把「已在名單」的人收起來，但搜尋時仍找得到（不是把路封死）',
+     /if\(_addMode && !q\)\{/.test(src)
+     && /list=list\.filter\(m=>!\( \(_base\[m\.id\]\|\|0\)>0 && sel\.filter\(x=>x===m\.id\)\.length<=\(_base\[m\.id\]\|\|0\) \)\);/.test(src)
+     && /已在名單 \$\{_base\[m\.id\]\} 個名額/.test(src));
+  ok('★★ 這一輪剛加進去的一定留著（剛按下去的人立刻消失會以為沒加到）',
+     /這一輪剛加進去的一定留著 —— 剛按下去的人立刻消失會以為沒加到。/.test(src));
+  ok('★★ 收起來幾位要說出來', /已在名單的 \$\{_inClass\} 位沒有列出來（搜尋姓名可找到）/.test(src));
+  ok('★ addMode 不顯示人數上限那一列（改人數另有入口 openGrpMaxEdit）',
+     /addMode\s*\n\s*\? `<div style="font-size:11\.5px;color:var\(--t2\);margin-bottom:10px;">目前 <b>\$\{_seatsNow\} \/ \$\{_cap\}<\/b> 人。/.test(src)
+     && /onclick="openGrpMaxEdit\('\$\{b\.id\}'\)"/.test(src));
   ok('★ 逐名額的預設仍是「名額 i 用第 i 張」（畫面與實際扣的要同一套）',
      /const _defPkOf=\(m,i\)=>\{ const a=m\.tks\|\|\[\]; return \(a\[Math\.min\(i,a\.length-1\)\]\|\|\{\}\)\.id\|\|''; \};/.test(src));
 }

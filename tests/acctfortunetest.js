@@ -234,7 +234,9 @@ ok('★ 團課的取消由會員卡負責，單人課回到下方那一排',
    exp.includes('if((!_ashMode || !isGroup) && canCancel && (isGroup ? staff : own)){'));
 ok('★ 簽到同一條規則', exp.includes('if((!_ashMode || !isGroup) && !_calCtx && (staff||coachCk) && !closed){'));
 ok('★ 明細鈕撤掉（簡易課卡已涵蓋這些操作）', /2026-08-20 使用者指示：管理員手機的簡易課卡已經涵蓋這些操作，明細鈕撤掉。 \*\/\s*\n\s*if\(!_ashMode\) btns \+=/.test(exp));
-ok('　　新增仍在下方（沒被搬走）', exp.includes("evoBtn('evo-b2','evo-gold',`collapseBkCard();openGroupMembers('${id}')`,'plus','新增')"));
+/* 2026-08-29：［＋新增］改開同一支視窗的 addMode（乾淨版：只有搜尋與候選名單） */
+ok('　　新增仍在下方（沒被搬走），而且走 addMode',
+   exp.includes("evoBtn('evo-b2','evo-gold',`collapseBkCard();openGroupMembers('${id}',false,true)`,'plus','新增')"));
 ok('　　一顆都沒有時不畫空的圓鈕列', src.includes('${btns?`<div class="mtp-orbs">${btns}</div>`:\'\'}'));
 ok('　　條件仍然只有 expandBkCard 在算（用 acts 帶給課卡）',
    /const acts = \{staff, own, coachCk, closed, canCancel, checked, isGroup, calCtx:_calCtx,/.test(exp)

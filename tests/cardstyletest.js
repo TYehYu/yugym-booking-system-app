@@ -357,8 +357,9 @@ ok('★ 「更改場地」→「更換場地」（與更換票券同一組動詞
    && !/'更改場地',\(typeof venueDisplay/.test(src));
 
 console.log('\n團課名單視窗（使用者：風格要更新、返回會跑回詳細預約）');
+/* 2026-08-29：標題依用途分兩種（［＋新增］＝「加入會員」、管理名單＝「團體課名單」） */
 ok('★ 掛上 ash-sheetmk，吃簡易課卡那一套視窗風格',
-   /showModal\(`<div class="ash-sheetmk"><\/div><div class="modal-title">團體課名單<\/div>/.test(src));
+   /showModal\(`<div class="ash-sheetmk"><\/div><div class="modal-title">\$\{addMode\?'加入會員':'團體課名單'\}<\/div>/.test(src));
 ok('★ 返回退回課卡，不再跳已退役的預約明細',
    /onclick="closeModal\(\);expandBkCard\(window\._expandedBkEl\|\|null,'\$\{id\}'\)">返回/.test(src));
 
