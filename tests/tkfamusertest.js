@@ -51,8 +51,12 @@ console.log('\n② 三條預約路徑都自動帶入（指定的使用人優先�
 
 console.log('\n②b 團課票的家庭功能（2026-08-04 使用者指示：「包含預約的地方」）');
 {
-  ok('★ 團課選會員名單：將被扣的票有預設使用人 → 名字旁標出',
-     /const _pk=tks\.find\(t=>t\.id===picked\);/.test(src) && /使用人：\$\{_pk\.fam\}/.test(src)
+/* 2026-08-29 使用者回報：「家庭成員票券已經設定使用人了，但是預約的時候該票券
+   不會自動辨識使用人」—— 一個帳號佔多個名額時，這個標籤原本只看第 0 格，
+   看起來像「三格都是媽媽」；而且挑票的預設與畫面不一致（見 rebooktktest）。 */
+  ok('★ 團課選會員名單：逐名額各自標出使用人（不是只看第一格）',
+     /const _famOf=i=>\{ const p=grpPickOf\(m\.id,i\)\|\|_defPk\(i\); const t=tks\.find\(x=>x\.id===p\); return \(t&&t\.fam\)\|\|''; \};/.test(src)
+     && /_fams\.map\(\(f,i\)=>\(n>1\?`\$\{i\+1\}\.\$\{f\|\|'本人'\}`:\(f\|\|'本人'\)\)\)\.join\('　'\)/.test(src)
      && (src.match(/fam:t\.family_user\|\|null/g)||[]).length===2);
   ok('★ 明細名單：該名額扣到的票有預設使用人 → 標稱呼',
      /_sl&&_sl\.t&&_sl\.t\.family_user\)\?`<span class="tag"[^`]*使用人：\$\{_sl\.t\.family_user\}/.test(src));

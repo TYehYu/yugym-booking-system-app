@@ -11395,8 +11395,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260828.2139';
-const APP_VERSION_LABEL='v260828.2139';
+const APP_VERSION = '260829.1621';
+const APP_VERSION_LABEL='v260829.1621';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28586,8 +28586,14 @@ function renderGrpPick(){
     const picked=grpPickOf(m.id,0)||_defPk(0);
     /* 團課票的家庭功能（2026-08-04 使用者指示：「團體課的票券也要有家庭功能，包含預約的地方」）——
        將被扣的那張票有預設使用人就直接標在名字旁，報名當下就看得到這格給誰。 */
-    const _pk=tks.find(t=>t.id===picked);
-    const famTag=(_pk&&_pk.fam)?`<span class="tag" style="font-size:10.5px;background:#eef2fa;color:#1a3a6e;">使用人：${_pk.fam}</span>`:'';
+    /* 名字旁的使用人標籤（2026-08-29 修）：原本只看第 0 格，一個帳號佔多格時
+       只會顯示第一格那位，看起來像「三格都是媽媽」。改成把每一格各自的使用人列出來。 */
+    const _famOf=i=>{ const p=grpPickOf(m.id,i)||_defPk(i); const t=tks.find(x=>x.id===p); return (t&&t.fam)||''; };
+    const _fams=Array.from({length:Math.max(1,n)},(_,i)=>_famOf(i));
+    const famTag=_fams.some(Boolean)
+      ? `<span class="tag" style="font-size:10.5px;background:#eef2fa;color:#1a3a6e;">使用人：${
+          _fams.map((f,i)=>(n>1?`${i+1}.${f||'本人'}`:(f||'本人'))).join('　')}</span>`
+      : '';
     const _seatSel=i=>{
       const pk=grpPickOf(m.id,i)||_defPk(i);
       return `<div style="margin:6px 0 0 26px;display:flex;align-items:center;gap:6px;" onclick="event.stopPropagation();">
@@ -33492,6 +33498,19 @@ async function _saveGroupMembers(id){
     }
     // 取消後重約同一堂 → 先回到原本那張票（2026-08-06 林紫錡案例，見 rebookSameDayTicket）
     if(!tk) tk=await rebookSameDayTicket(mid,b);
+    /* 沒有指定就照「名額 i 用第 i 張票」（2026-08-29 使用者回報：「家庭成員票券已經設定
+       使用人了，但是預約的時候該票券不會自動辨識使用人」）——
+       名單視窗的逐名額下拉本來就是這樣預設的（_defPk(i)＝tks[min(i,len-1)]），
+       但櫃檯沒動過那個下拉時 grpPickOf 是空的，這裡就退回 findUsableTicket 的先進先出，
+       於是**畫面說「名額1媽媽／名額2姊姊」，實際三格全扣到媽媽那張**。
+       許佳慈 8/28 那堂就是這樣：手上有媽媽／姊姊／媽媽三張，帳本上卻扣了媽媽兩次。
+       ⚠ 排序要與名單視窗那份一致（listUsableTickets 已按效期由近而遠），
+         兩邊不同步就又會「看到的跟扣到的不一樣」。
+       ⚠ 仍在「重約回原票」之後：那一條是更明確的意圖。 */
+    if(!tk){
+      const _cand=await listUsableTickets(mid,b.ticket_type_id,b.date,b.start_time);
+      if(_cand.length) tk=_cand[Math.min(_i, _cand.length-1)]||null;
+    }
     if(!tk) tk=await findUsableTicket(mid,b.ticket_type_id,b.date,b.start_time);
     /* 2026-08-06：deductTicket 的餘額護欄會回 false（沒扣到）——
        這時要跟「找不到票」一樣算進警告，不能讓名額靜靜地沒付錢。 */
