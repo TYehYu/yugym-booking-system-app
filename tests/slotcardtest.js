@@ -263,10 +263,12 @@ console.log('\n桌機取代：先補功能');
 /* 2026-08-29 使用者指示：「卡片上換票的按鈕改成一個大圓形卡放在圓形卡這列的最右邊
    中間寫[變更]　這個變更要有觸發條件　如果該會員有其他可以更換的票券才顯示」——
    入口從票名那一行搬到圓點列最右邊，並多一個「真的有別張票」的條件。 */
-ok('★★ 更換票券＝卡片右下角的「變更」圓鈕（未簽到／非團課／有會員／櫃檯以上／有別張票可換）',
+/* 三修：「改成[其他方案>]」—— 字變長，圓形塞不下，改膠囊（不再掛 .mtk）。 */
+ok('★★ 更換票券＝卡片右下角的「其他方案 ›」（未簽到／非團課／有會員／櫃檯以上／有別張票可換）',
    /const _tkTap = isDeskLike\(\) && b\.status==='booked' && r\.mid && !A\.isGroup && \(_swapN\[r\.mid\]\|\|0\)>0;/.test(src)
-   && /<button type="button" class="mtk ash-mswap"/.test(src)
-   && /onclick="event\.stopPropagation\(\);ashSwapToggle\('\$\{r\.mid\}'\)">變更<\/button>/.test(src));
+   && /<button type="button" class="ash-mswap"/.test(src)
+   && !/class="mtk ash-mswap"/.test(src)
+   && /onclick="event\.stopPropagation\(\);ashSwapToggle\('\$\{r\.mid\}'\)">其他方案 ›<\/button>/.test(src));
 /* 2026-08-29 使用者：「整張會員卡點了都會進會員視窗　這樣這個[變更]看起來沒有互動感
    把點進會員視窗收斂在最上方會員這一列」—— 卡片本身不再是一個大點擊區。 */
 ok('★★ 進會員資料的入口收在姓名上，整張卡不再可點',
@@ -280,7 +282,7 @@ ok('★★ 連帶拿掉整張卡的 cursor:pointer 與按壓縮放（留著會�
 ok('★★ 「變更」貼在卡片右下角，卡片留出它的位置',
    /\.ash-mswap\{position:absolute;right:12px;bottom:10px;margin:0;/.test(src)
    && /\.ash-mcard\{position:relative;\}/.test(src)
-   && /\.ash-has-swap \.ash-mmain\{padding-right:58px;\}/.test(src));
+   && /\.ash-has-swap \.ash-mmain\{padding-right:96px;\}/.test(src));
 ok('★★ 其他方案展開在「會員卡與下方圓鈕之間」（使用者指定的位置）',
    /<div id="ash-swapwrap" class="ash-swapwrap"><\/div>\s*\n\s*\$\{btns\?`<div class="mtp-orbs">\$\{btns\}<\/div>`:''\}/.test(src));
 ok('★★ 沒展開時整個容器不佔位', /\.ash-swapwrap:empty\{display:none;\}/.test(src));
