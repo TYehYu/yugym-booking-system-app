@@ -256,8 +256,9 @@ const chk=(n,c)=>{c?pass++:fail++;console.log(`  ${c?'✓':'✗'} ${n}`);};
     chk('　　指定的票不能用時退回自動挑選，不讓整堂建不起來',
       /if\(!tk\) tk=await findUsableTicket\(mid,type_id,dW,tW\);/.test(src)
       && /指定的票券已不能用，改用最快到期的那張/.test(src));
+    /* 三處：兩個視窗各一次，加上 2026-08-29 ［＋新增］的單選（換人時一併清掉舊指定） */
     chk('　　每次開視窗重置指定，不跨堂殘留',
-      (src.match(/window\._grpTkPick=\{\};/g)||[]).length===2);
+      (src.match(/window\._grpTkPick=\{\};/g)||[]).length===3);
     chk('★ 會員端：多張票時出下拉，預設最快到期',
       /<select id="grp-join-tk" onchange="window\._grpJoinTk=this\.value"/.test(src)
       && /const cand=\(s\.grpTks\|\|\[\]\)\.filter\(t=>!t\.expire_date\|\|t\.expire_date>=c\.date\)/.test(src));

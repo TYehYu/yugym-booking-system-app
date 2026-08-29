@@ -133,10 +133,29 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      && /已在名單 \$\{_base\[m\.id\]\} 個名額/.test(src));
   ok('★★ 這一輪剛加進去的一定留著（剛按下去的人立刻消失會以為沒加到）',
      /這一輪剛加進去的一定留著 —— 剛按下去的人立刻消失會以為沒加到。/.test(src));
-  ok('★★ 收起來幾位要說出來', /已在名單的 \$\{_inClass\} 位沒有列出來（搜尋姓名可找到）/.test(src));
-  ok('★ addMode 不顯示人數上限那一列（改人數另有入口 openGrpMaxEdit）',
-     /addMode\s*\n\s*\? `<div style="font-size:11\.5px;color:var\(--t2\);margin-bottom:10px;">目前 <b>\$\{_seatsNow\} \/ \$\{_cap\}<\/b> 人。/.test(src)
-     && /onclick="openGrpMaxEdit\('\$\{b\.id\}'\)"/.test(src));
+  ok('★★ 收起來幾位要說出來', /已在名單的 \$\{_inClass\} 位未列出/.test(src));
+  /* 2026-08-29 二修（使用者逐列指定版面 ＋「文字太多了」）：
+     第一列標題／第二列 課堂·教練（靠左）／第三列 目前報名人數（靠右）／
+     第四列 搜尋／第五列 重複預約開關。原本那四行說明整段退場。 */
+  ok('★★ ［＋新增］版面照使用者指定的五列',
+     /<div class="gadd-sub">\$\{escH\(_cls\)\}\$\{_cName\?`　·　\$\{escH\(_cName\)\}`:''\}<\/div>/.test(src)
+     && /<div class="gadd-cnt">目前 <b>\$\{_seatsNow\} \/ \$\{_cap\}<\/b> 人<\/div>/.test(src)
+     && /\.gadd-cnt\{[^}]*text-align:right;/.test(src)
+     && /<button type="button" class="gadd-rep" onclick="grpRepToggle\(\)">/.test(src));
+  ok('★ addMode 不顯示人數上限那一列（改人數已改成標題卡上就地加減）',
+     /onclick="grpMaxStep\('\$\{b\.id\}',1\)"/.test(src));
+  /* 「之前會做成這樣是因為要一次新增多名會員嗎? 不要這個功能了　一次新增一名會員就好」 */
+  ok('★★★ ［＋新增］是單選：點另一列就換人，不會愈選愈多',
+     /if\(window\._grpAdd\)\{\s*\n\s*const already=r\.seats\.length>0;\s*\n\s*window\._grpSel=\(window\._grpBase\|\|\[\]\)\.slice\(\);/.test(src)
+     && /管理名單那條路維持複選（要一次排一整班）。/.test(src));
+  ok('★★ 單選模式不出 ＋／−（要再加一位就再按一次［＋新增］）',
+     /\$\{\(on&&!_addMode\)\?`<span class="grp-step" onclick="event\.stopPropagation\(\);grpRowAdd/.test(src));
+  ok('★★ 重複預約開關：關掉就不問後續場次；管理名單那條路不受影響',
+     /function grpRepToggle\(\)\{/.test(src)
+     && /const _askRep=\(!window\._grpAdd\) \|\| !!window\._grpRep;/.test(src)
+     && /window\._grpRep 是 undefined，維持原本一律詢問的行為。/.test(src));
+  ok('★ 開關預設開（櫃檯多半是替客人把整期排掉，關掉才是例外）',
+     /if\(addMode\) window\._grpRep=\(window\._grpRep==null\)\?true:!!window\._grpRep;/.test(src));
   ok('★ 逐名額的預設仍是「名額 i 用第 i 張」（畫面與實際扣的要同一套）',
      /const _defPkOf=\(m,i\)=>\{ const a=m\.tks\|\|\[\]; return \(a\[Math\.min\(i,a\.length-1\)\]\|\|\{\}\)\.id\|\|''; \};/.test(src));
 }

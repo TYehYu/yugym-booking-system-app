@@ -125,8 +125,11 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
     }
 
     console.log('\n④ 流程接線');
-    ok('★ 儲存名單有新加入才追問（帶名額數，2026-08-05）',
-       /if\(_addUniq\.length\)\{ try\{ await grpFollowAsk\(id,_addUniq,_addCnt\); return; \}/.test(src)
+    /* 2026-08-29：［＋新增］那張多了「重複預約」開關，關掉就不問後續場次。
+       「管理名單」沒有這個開關（_grpAdd 是 false）→ 維持原本一律詢問。 */
+    ok('★ 儲存名單有新加入才追問（帶名額數，2026-08-05；重複預約關著時不問）',
+       /if\(_askRep && _addUniq\.length\)\{ try\{ await grpFollowAsk\(id,_addUniq,_addCnt\); return; \}/.test(src)
+       && /const _askRep=\(!window\._grpAdd\) \|\| !!window\._grpRep;/.test(src)
        && /const _addCnt=\{\}; added\.forEach\(m=>\{ _addCnt\[m\]=\(_addCnt\[m\]\|\|0\)\+1; \}\);/.test(src));
     ok('★ 預設堂數＝票券剩餘 ÷ 名額數（買 8 堂 2 名額預設 4）',
        /const def=Math\.min\(seats>1\?Math\.floor\(left\/seats\):left, cap\);/.test(src));
