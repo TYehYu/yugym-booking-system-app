@@ -11490,8 +11490,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1832';
-const APP_VERSION_LABEL='v260829.1832';
+const APP_VERSION = '260829.1836';
+const APP_VERSION_LABEL='v260829.1836';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28737,8 +28737,12 @@ function grpPickOf(mid,seatIdx){
   return v||null;
 }
 function renderGrpPick(){
-  const box=document.getElementById('grp-list'); if(!box)return;
-  const q=(document.getElementById('grp-search')?.value||'').trim().toLowerCase();
+  const box=document.getElementById('grp-list');
+  const selEl=document.getElementById('grp-pick');
+  if(!box && !selEl) return;
+  /* addMode 的搜尋在挑選視窗裡（#mpk-sheet 自己會過濾），所以這裡不吃欄位的字：
+     欄位顯示的是「已選的人」，拿它當搜尋字會把清單濾成只剩那一位。 */
+  const q=(box && document.getElementById('grp-search')?.value||'').trim().toLowerCase();
   const sel=window._grpSel||(window._grpSel=[]);
   /* 2026-07-30 使用者指示：已選取的會員排到名單最上面。
      會員多的時候要往下捲才看得到剛加的人，也不容易一眼確認名單對不對。
@@ -28844,6 +28848,26 @@ function renderGrpPick(){
   }
   window._grpRows=ROWS.map(r=>({mid:r.m.id, fam:r.fam, tkIds:r.tks.map(t=>t.id), seats:r.seats.slice()}));
   const firstUnsel=ROWS.findIndex(r=>!isSel(r.m));   // 已選區與其餘會員之間放一條分隔
+  /* addMode：清單就是 <select> 的選項，挑選視窗會把它畫成列（含右邊的堂數） */
+  if(selEl){
+    selEl.innerHTML='<option value="">— 選擇會員 —</option>'
+      + ROWS.map((r,_i)=>{
+          const gl=r.tks.reduce((a,t)=>a+Math.max(0,Number(t.left)||0),0);
+          const gt=r.tks.reduce((a,t)=>a+Math.max(0,Number(t.tot)||0),0);
+          const nm=`${r.m.name}${r.fam?`（${r.fam}）`:''}${r.m.phone?`（${fmtPhone(r.m.phone)}）`:''}`;
+          return `<option value="${_i}" data-sub="可用 ${gl} / ${gt||gl} 堂"${r.m.mine?' data-star="1"':''}>${escH(nm)}</option>`;
+        }).join('');
+    /* 選定的那一位用「是誰」對回去，不能用索引 —— 每次重畫都會重排（已在名單的列被濾掉），
+       索引會漂，欄位上就會顯示成別人。 */
+    const _pk=window._grpPick||{};
+    const _at=ROWS.findIndex(r=>String(r.m.id)===String(_pk.mid||'') && String(r.fam||'')===String(_pk.fam||''));
+    selEl.value=(_pk.mid && _at>=0)?String(_at):'';
+    const c2=document.getElementById('grp-count');
+    if(c2) c2.textContent=`可加入 ${ROWS.length} 位`;
+    const _q=document.getElementById('grp-search');
+    if(_q) _q.setAttribute('placeholder',`搜尋姓名或手機（共 ${ROWS.length} 位）`);
+    return;
+  }
   if(ROWS.length===0){ box.innerHTML=`<div class="ms-empty">${q
     ?`找不到有團體課票券的「${String(q).replace(/</g,'&lt;')}」。沒票的會員不會列出來，請先儲值。`
     :(_addMode?'沒有可以加入的會員了（其他持票會員都已經在這堂名單上）。'
@@ -28936,6 +28960,15 @@ function grpSeatDel(mid, seatIdx){
 function _grpRow(i){ return (window._grpRows||[])[i]||null; }
 /* 重複預約開關（2026-08-29 使用者指定的第五列）——
    開著＝存檔後照舊問「後面的場次要一起預約嗎？」；關掉＝只加這一堂，完全不問。 */
+/* 挑選視窗選定 → 就是點那一列（單選，見 grpRowTap 的 _grpAdd 分支）。
+   空值＝把選擇清掉。 */
+function grpPickSel(v){
+  if(v===''||v==null){
+    window._grpSel=(window._grpBase||[]).slice(); window._grpTkPick={}; window._grpPick=null;
+    renderGrpPick(); return;
+  }
+  grpRowTap(Number(v));
+}
 function grpRepToggle(){
   window._grpRep=!window._grpRep;
   const sw=document.getElementById('grp-rep-sw');
@@ -33871,15 +33904,29 @@ async function openGroupMembers(id, keepSel, addMode){
          <div class="gadd-cnt">目前 <b>${_seatsNow} / ${_cap}</b> 人</div>`
       : `<div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">這裡只列<b>有團體課票券</b>的會員（沒票的請先儲值）。加入時扣 1 堂、移除時退回。票券設了使用人的會分開一列（例：許佳慈（媽媽）、許佳慈（姊姊））—— 點哪一列就是替那位報名。同一位要再加一個名額按「＋」。</div>
          <div class="form-row" style="display:flex;align-items:center;gap:10px;"><label style="margin:0;flex:none;">本堂人數上限</label><input type="number" id="grp-max" value="${_cap}" min="1" max="12" style="width:76px;" oninput="window._grpMax=Math.max(1,Number(this.value)||5);renderGrpPick()"><span style="font-size:11.5px;color:var(--t3);">預設 5 人，場地有餘裕可放寬</span></div>`}
-    <div class="form-row">${addMode?'':'<label>選擇會員（點選即可複選）</label>'}
-      <input id="grp-search" class="ms-search" style="margin:0 0 8px;width:100%;box-sizing:border-box;" placeholder="搜尋姓名或手機…" oninput="renderGrpPick()" autocomplete="off">
-      ${addMode?`<button type="button" class="gadd-rep" onclick="grpRepToggle()">
-        <span class="gadd-repl">重複預約<i>後面同時段的場次一起約</i></span>
-        <span class="nsw${window._grpRep?' on':''}" id="grp-rep-sw"><span class="nsw-dot"></span></span></button>`:''}
-      <div id="grp-count" style="font-size:12px;color:var(--t2);margin-bottom:6px;"></div>
-      <div id="grp-list" class="ms-list" style="max-height:${addMode?'340px':'300px'};border:1px solid var(--bd);border-radius:10px;padding:6px;"></div></div>
+    ${addMode
+      ? /* 挑選欄位一律走定版的跳視窗模式（#mpk-sheet，0821 定案）——
+           2026-08-29 使用者：「不要下面的名單視窗　只要在上面搜尋列點選列出」，
+           並附了那個視窗的截圖。欄位只當入口與顯示，清單在視窗裡。
+           ⚠ 一定要是「input＋select」的 .mem-pick-row，mpkScan 才升級得了；
+             select 留在 DOM（隱藏），既有的 .value 讀取與 onchange 都不用改。 */
+        `<div class="form-row"><label>會員</label>
+          <div class="mem-pick-row">
+            <input class="gt-search" id="grp-search" placeholder="搜尋姓名或手機…" autocomplete="off">
+            <select id="grp-pick" onchange="grpPickSel(this.value)"></select>
+          </div>
+          <div id="grp-count" style="font-size:12px;color:var(--t2);margin:6px 0 0;"></div>
+        </div>
+        <button type="button" class="gadd-rep" onclick="grpRepToggle()">
+          <span class="gadd-repl">重複預約<i>後面同時段的場次一起約</i></span>
+          <span class="nsw${window._grpRep?' on':''}" id="grp-rep-sw"><span class="nsw-dot"></span></span></button>`
+      : `<div class="form-row"><label>選擇會員（點選即可複選）</label>
+          <input id="grp-search" class="ms-search" style="margin:0 0 8px;width:100%;box-sizing:border-box;" placeholder="搜尋姓名或手機…" oninput="renderGrpPick()" autocomplete="off">
+          <div id="grp-count" style="font-size:12px;color:var(--t2);margin-bottom:6px;"></div>
+          <div id="grp-list" class="ms-list" style="max-height:300px;border:1px solid var(--bd);border-radius:10px;padding:6px;"></div></div>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();expandBkCard(window._expandedBkEl||null,'${id}')">返回</button><button class="btn btn-green" onclick="saveGroupMembers('${id}')">${addMode?'加入':'儲存名單'}</button></div>`);
   renderGrpPick();
+  if(addMode){ try{ mpkScan(); }catch(_){} }   // 把欄位升級成跳視窗挑選器
 }
 /* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
 async function saveGroupMembers(id){ return onceAct('grpmem:'+id, ()=>_saveGroupMembers(id)); }

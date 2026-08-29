@@ -145,7 +145,21 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      && /const _seatFam=\(m,i\)=>\{ const pk=grpPickOf\(m\.id,i\)\|\|_seatRec\(m\.id,i\)\|\|_defPkOf\(m,i\);/.test(src)
      && /9\/25 兩格明明是媽媽與姊姊，畫面卻標成本人與媽媽（而且兩列都打勾）。/.test(src));
   ok('★ 計數列只留一句「可加入 N 位」（使用者：「給我單純一點的頁面」）',
-     /\? `可加入 \$\{ROWS\.length\} 位`\s*\n/.test(src));
+     /c2\.textContent=`可加入 \$\{ROWS\.length\} 位`;/.test(src));
+  /* 2026-08-29 四修（使用者：「不要下面的名單視窗　只要在上面搜尋列點選列出」
+     「點搜尋列　要跟建立預約2/2 會員這邊的搜尋列用一樣的」）——
+     欄位改成定版的挑選視窗入口（.mem-pick-row → mpkScan → #mpk-sheet）。 */
+  ok('★★★ ［＋新增］的會員欄＝定版的跳視窗挑選器（與建立預約 2/2 同一套）',
+     /<div class="mem-pick-row">\s*\n\s*<input class="gt-search" id="grp-search"/.test(src)
+     && /<select id="grp-pick" onchange="grpPickSel\(this\.value\)"><\/select>/.test(src)
+     && /if\(addMode\)\{ try\{ mpkScan\(\); \}catch\(_\)\{\} \}/.test(src));
+  ok('★★ 清單畫在挑選視窗裡（右邊靠 data-sub 顯示可用堂數，那是 mpkRender 支援的）',
+     /data-sub="可用 \$\{gl\} \/ \$\{gt\|\|gl\} 堂"/.test(src));
+  ok('★★★ 選定的人用「是誰」對回去，不能用索引（每次重畫都會重排）',
+     /const _at=ROWS\.findIndex\(r=>String\(r\.m\.id\)===String\(_pk\.mid\|\|''\) && String\(r\.fam\|\|''\)===String\(_pk\.fam\|\|''\)\);/.test(src)
+     && /索引會漂，欄位上就會顯示成別人。/.test(src));
+  ok('★★ addMode 不吃欄位的字當搜尋（欄位顯示的是已選的人，搜尋在視窗裡）',
+     /欄位顯示的是「已選的人」，拿它當搜尋字會把清單濾成只剩那一位。/.test(src));
   /* 2026-08-29 二修（使用者逐列指定版面 ＋「文字太多了」）：
      第一列標題／第二列 課堂·教練（靠左）／第三列 目前報名人數（靠右）／
      第四列 搜尋／第五列 重複預約開關。原本那四行說明整段退場。 */
