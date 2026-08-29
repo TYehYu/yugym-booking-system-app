@@ -269,14 +269,14 @@ ok('★★ 更換票券＝卡片右下角的「其他方案 ›」（未簽到�
    && /<button type="button" class="ash-mswap"/.test(src)
    && !/class="mtk ash-mswap"/.test(src)
    && /onclick="event\.stopPropagation\(\);ashSwapToggle\('\$\{r\.mid\}'\)">其他方案 ›<\/button>/.test(src));
-/* 2026-08-29 使用者：「整張會員卡點了都會進會員視窗　這樣這個[變更]看起來沒有互動感
-   把點進會員視窗收斂在最上方會員這一列」—— 卡片本身不再是一個大點擊區。 */
-ok('★★ 進會員資料的入口收在姓名上，整張卡不再可點',
-   /<button type="button" class="ash-mgo" onclick="event\.stopPropagation\(\);collapseBkCard\(\);openMemberDetail\('\$\{r\.mid\}'\)"/.test(src)
-   && !/<div class="ash-mcard\$\{onLeave\?' ash-mleave':''\}"\$\{r\.mid\?` onclick=/.test(src));
-ok('★★ 連帶拿掉整張卡的 cursor:pointer 與按壓縮放（留著會繼續暗示整張可按）',
-   !/\.ash-mcard:active\{transform:scale\(\.99\);\}/.test(src)
-   && /整張卡不再可點（入口收在姓名上），所以拿掉 cursor:pointer/.test(src));
+/* 2026-08-29 兩來回：先收斂到姓名，使用者再回「會員卡恢復整張課卡會點進會員資料的功能
+   但是右上角＋備註跟右下角[其他方案]滑鼠指上去時要有互動感」。 */
+ok('★★ 整張卡可點（回到原本的行為），按壓回饋也在',
+   /<div class="ash-mcard\$\{onLeave\?' ash-mleave':''\}\$\{_hasSwap\?' ash-has-swap':''\}"\$\{r\.mid\?` onclick="collapseBkCard\(\);openMemberDetail\('\$\{r\.mid\}'\)"`:''\}>/.test(src)
+   && /\.ash-mcard:active\{transform:scale\(\.99\);\}/.test(src));
+ok('★★ 卡上的文字動作各自 stopPropagation（按它們不會順便開啟會員資料）',
+   /onclick="event\.stopPropagation\(\);ashSwapToggle/.test(src)
+   && /卡上的備註／請假／使用人／其他方案各自 event\.stopPropagation\(\)/.test(src));
 /* 2026-08-29 三修：「讓這個[變更]更貼卡片的右下角　然後點了以後顯示該會員的其他方案
    在卡片下方圓形按鈕上方」—— 換票不再跳出另一個視窗，就在原地展開。 */
 /* 四修：「用文字顯示就好　不用做成圓形章」→ 連膠囊框都拿掉，純文字連結。 */

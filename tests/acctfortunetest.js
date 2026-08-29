@@ -154,12 +154,13 @@ ok('　　只吃帶標記的視窗，其他彈窗不受影響', /\.modal\{backgr
 console.log('簡易課卡：每位會員一張卡');
 ok('★ 團課逐名額一張卡、單人課一張', /_seatKs\.length \? _seatKs\.map\(sk=>\(\{sk, mid:seatMid\(sk\), n:seatNo\(sk\)\}\)\)/.test(src)
    && src.includes("(b.member_id ? [{sk:null, mid:b.member_id, n:1}]"));
-/* 2026-08-29：入口從「整張卡」收斂到姓名（使用者：整張卡可點時，卡上的
-   備註／變更看起來就不像按鈕）。行為沒變，只是點擊區小了。 */
-ok('★ 點會員姓名進會員資料',
-   src.includes('collapseBkCard();openMemberDetail(\'${r.mid}\')"')
-   && /<button type="button" class="ash-mgo"/.test(src));
-ok('　　沒有會員記錄（體驗／場租）就不掛點擊', /\$\{r\.mid\s*\n\s*\? `<button type="button" class="ash-mgo"[\s\S]*?: `<span>\$\{nm2\}<\/span>`\}/.test(src));
+/* 2026-08-29 兩來回後定案：整張卡照舊可點（最常用的動作，縮成一個名字反而難按）；
+   「卡上的備註／其他方案看起來不像按鈕」改用 hover 解決。 */
+ok('★ 點會員卡進會員資料', src.includes('onclick="collapseBkCard();openMemberDetail(\'${r.mid}\')"'));
+ok('　　沒有會員記錄（體驗／場租）就不掛點擊', src.includes('${r.mid?` onclick='));
+ok('★★ 卡上的文字動作滑過時要有互動感（整張卡本身就是按鈕，它們得自己講）',
+   /\.ash-mnote:hover,\.ash-mswap:hover\{background:var\(--card2\);box-shadow:0 0 0 6px var\(--card2\);/.test(src)
+   && /用 box-shadow 撐出光暈、不用 padding —— 加 padding 會在 hover 當下推移版面/.test(src));
 ok('★ 取消（上）／簽到（下）獨立在卡片外面',
    /<div class="ash-mrow">[\s\S]*<div class="ash-mcard[\s\S]*<\/div>\s*\$\{_outOrbs\?`<div class="ash-morbs">/.test(src)
    && /\.ash-morbs\{[^}]*flex-direction:column/.test(src));
