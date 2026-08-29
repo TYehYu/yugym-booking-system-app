@@ -11500,8 +11500,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1902';
-const APP_VERSION_LABEL='v260829.1902';
+const APP_VERSION = '260829.1908';
+const APP_VERSION_LABEL='v260829.1908';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -33932,7 +33932,9 @@ async function openGroupMembers(id, keepSel, addMode){
      把整期都排掉，關掉才是例外。開著＝存檔後照舊問「後面的場次要一起預約嗎？」
      （那張視窗會列出每一週、讓人填各加幾堂）；關掉就只加這一堂、完全不問。 */
   if(addMode) window._grpRep=(window._grpRep==null)?true:!!window._grpRep;
-  window._grpPick=null;
+  /* keepSel＝從別的視窗「上一步」退回來（票不夠、或連續預約那張按上一步）——
+     剛剛挑的人與方案要留著，不然等於白挑一次。 */
+  if(!keepSel) window._grpPick=null;
   window._grpMax=Math.max(1,Number(b.max_heads)||5);
   window._grpLeaveN=grpLeaveSeats(b);   // 請假名額不佔位（2026-08-12）
   /* 2026-08-21 使用者指示：「新增＋的視窗也要更新成我們最新的風格
@@ -34002,10 +34004,17 @@ async function saveGroupMembers(id){
 async function grpFollowPre(id){
   const pk=window._grpPick||{};
   if(!pk.mid) return _saveGroupMembers(id);
+  /* 前一步挑的那張票（沒挑過就是那一列的第一張，與實際會扣的一致） */
+  const _row=(window._grpRows||[]).find(r=>String(r.mid)===String(pk.mid)
+    && String(r.fam||'')===String(pk.fam||''));
+  const _si=(window._grpBase||[]).filter(x=>String(x)===String(pk.mid)).length;
+  const _tk=grpPickOf(pk.mid,_si) || ((_row&&_row.tkIds)||[])[0] || null;
   try{
-    await grpFollowAsk(id, [pk.mid], {[pk.mid]:1}, {[pk.mid]:pk.fam||''}, true);
+    await grpFollowAsk(id, [pk.mid], {[pk.mid]:1}, {[pk.mid]:pk.fam||''}, true, {[pk.mid]:_tk});
   }catch(e){ console.error('連續加入詢問失敗',e); return _saveGroupMembers(id); }
 }
+/* 「上一步」＝回加入會員那張，剛剛挑的人與方案都留著（什麼都還沒寫，退回去很安全） */
+function grpFollowBack(id){ window._gfPend=null; try{ closeModal(); }catch(_){} openGroupMembers(id, true, true); }
 /* 「不用」＝只建這一堂（此時什麼都還沒寫） */
 async function grpFollowOnce(id){ return onceAct('grpmem1:'+id, async()=>{
   const _r=window._grpRep; window._grpRep=false;      // 不要又問一次
@@ -34069,6 +34078,7 @@ async function _saveGroupMembers(id){
   // 新加入的有票就扣、移除的退回（依該 booking 的票券類型）
   const _seatIdx={};   // 逐名額挑票（2026-08-05）：新名額接在既有名額後面，索引從已有數量起算
   const _addFam={};    // 會員 → 這次加的名額扣到哪位使用人的票（null＝混用，不限定）
+  const _addTk={};     // 會員 → 這次加的名額扣到「哪一張」票（null＝混用，不限定）
   const _noTk={};      // 會員 → 這次加入但扣不到票的名額數
   const _failed=new Set();   // 扣不到票的會員：後續名額直接跳過，名額鍵才不會跳號（2026-08-20）
   /* 這一堂已經被某個名額用掉的票（2026-08-29 使用者附截圖：「這三個會員卡是同一張票券吧?」）
@@ -34138,7 +34148,12 @@ async function _saveGroupMembers(id){
          同一位會員這次加的幾格若扣到不同使用人，就記 null（不限定）。 */
       const _f=String(tk.family_user||'');
       if(_addFam[mid]===undefined) _addFam[mid]=_f;
-      else if(_addFam[mid]!==_f) _addFam[mid]=null; }
+      else if(_addFam[mid]!==_f) _addFam[mid]=null;
+      /* 連前一步「用哪一個方案？」挑的那一張也記下來（2026-08-29 使用者：
+         「我在前一步選了其中一份票券而已　這邊應該只要顯示該票券的4堂」）——
+         同一位使用人可能有好幾張（本人＝補課券＋兩張優惠團課），選了哪張就只算哪張。 */
+      if(_addTk[mid]===undefined) _addTk[mid]=String(tk.id);
+      else if(_addTk[mid]!==String(tk.id)) _addTk[mid]=null; }
   }
   for(const mid of removed){
     /* 找該會員因這堂課「還有淨扣課」的票退回（2026-08-03 修：原本抓第一筆扣課紀錄，
@@ -34179,7 +34194,7 @@ async function _saveGroupMembers(id){
     const _mems=await dbGetAll('members').catch(()=>[]);
     const _nm=mid=>{ const m=_mems.find(x=>String(x.id)===String(mid)); return (m&&m.name)||mid; };
     const rows=Object.entries(_noTk).map(([mid,n])=>`<b>${_nm(mid)}</b>：${n} 個名額`).join('、');
-    window._gfaNext={id, uniq:_addUniq, cnt:_addCnt, fam:_addFam};
+    window._gfaNext={id, uniq:_addUniq, cnt:_addCnt, fam:_addFam, tk:_addTk};
     showModal(`<div class="modal-title" style="color:var(--danger,#b5372e);">⚠ 有名額沒有加入</div>
       <div style="font-size:13px;color:var(--text);line-height:1.9;">下列名額在存檔時<b>扣不到票券</b>（可能剛被別的預約用掉），<b>沒有寫入名單</b>：<br>${rows}</div>
       <div style="font-size:12px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;">其餘名額已正常加入。請確認票券餘額（必要時先儲值），再回名單把這幾位加回來。</div>
@@ -34189,14 +34204,14 @@ async function _saveGroupMembers(id){
   /* 重複預約關著就不問後續場次（2026-08-29）——「管理名單」那條路沒有這個開關，
      window._grpRep 是 undefined，維持原本一律詢問的行為。 */
   const _askRep=(!window._grpAdd) || !!window._grpRep;
-  if(_askRep && _addUniq.length){ try{ await grpFollowAsk(id,_addUniq,_addCnt,_addFam); return; }catch(e){ console.error('連續加入詢問失敗',e); } }
+  if(_askRep && _addUniq.length){ try{ await grpFollowAsk(id,_addUniq,_addCnt,_addFam,false,_addTk); return; }catch(e){ console.error('連續加入詢問失敗',e); } }
   grpBackToCard(id);
 }
 /* 警告視窗按「知道了」之後接回原本的流程（連續預約詢問或回明細）（2026-08-05） */
 async function grpNoTkAck(){
   const p=window._gfaNext; window._gfaNext=null;
   if(!p) return;
-  if(p.uniq&&p.uniq.length){ try{ await grpFollowAsk(p.id,p.uniq,p.cnt,p.fam); return; }catch(_){} }
+  if(p.uniq&&p.uniq.length){ try{ await grpFollowAsk(p.id,p.uniq,p.cnt,p.fam,false,p.tk); return; }catch(_){} }
   grpBackToCard(p.id);
 }
 /* 團課這幾條流程做完要回哪裡（2026-08-29 使用者附截圖：「為什麼又出現舊視窗」）——
@@ -34247,7 +34262,7 @@ function grpSeriesSplit(b, all){
     .forEach(x=>{ (grpSeriesMember(x)?out.series:out.solo).push(x); });
   return out;
 }
-async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending){
+async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending, addedTk){
   const b=await dbGet('bookings',id);
   const _sp=grpSeriesSplit(b, await dbGetAll('bookings'));
   const later=_sp.series, solo=_sp.solo;
@@ -34267,10 +34282,16 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending){
        ⚠ addedFam[mid] 是 undefined／null（舊呼叫端、或這次混扣了不同使用人）
          時維持原本的整帳號口徑。 */
     const _fam=(addedFam||{})[mid];
-    const _famOk=t=>(_fam===undefined||_fam===null)||String(t.family_user||'')===String(_fam);
+    const _one=(addedTk||{})[mid];
+    /* 前一步挑過方案就只算那一張（2026-08-29 使用者：「我在前一步選了其中一份票券而已
+       這邊應該只要顯示該票券的4堂」）—— 本人那一組是補課券 1 ＋ 優惠團課 4 ＋ 4，
+       照整組算會寫成 9 堂，實際只會扣挑中的那一張。 */
+    const _famOk=t=>_one ? String(t.id)===String(_one)
+                         : ((_fam===undefined||_fam===null)||String(t.family_user||'')===String(_fam));
     const left=allTk.filter(t=>t.member_id===mid && ticketMatchesCategory(t,'小班肌力')
         && t.status==='usable' && t.sessions_remaining>0 && _famOk(t))
       .reduce((sum,t)=>sum+t.sessions_remaining,0);
+    const _oneTk=_one?allTk.find(t=>String(t.id)===String(_one)):null;
     /* 使用者的例子：開 10 週、新會員買 4 堂 → 預設就是 4（票剩幾堂就約幾堂，
        不超過剩餘場次）。沒票的（教練負責）預設 0，要約再自己調。
        多名額（2026-08-05）：這次加了 N 個名額 → 後續每堂也補到 N 個，
@@ -34278,10 +34299,10 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending){
     const seats=Math.max(1,(addedCnt||{})[mid]||1);
     const cap=later.length;
     const def=Math.min(seats>1?Math.floor(left/seats):left, cap);
-    return {mid, left, def, cap, seats};
+    return {mid, left, def, cap, seats, plan:(_oneTk&&_oneTk.plan_name)||''};
   });
   window._gfPend={id, laterIds:later.map(x=>x.id), seats:Object.fromEntries(rows.map(r=>[r.mid,r.seats])),
-    fam:Object.assign({}, addedFam||{}), pending:!!pending};
+    fam:Object.assign({}, addedFam||{}), tk:Object.assign({}, addedTk||{}), pending:!!pending};
   const WD=['日','一','二','三','四','五','六'];
   const dowLbl=WD[(parseYmd(b.date)||new Date()).getDay()];
   showModal(`<div class="modal-title">後面的場次要一起預約嗎？</div>
@@ -34298,7 +34319,7 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending){
         WD[(parseYmd(x.date)||new Date()).getDay()]}）${String(x.start_time||'').slice(0,5)}</span>`).join('')}${
       later.length>12?`<span class="gfa-day gfa-day-more">…還有 ${later.length-12} 堂</span>`:''}</div>
     ${rows.map((r,i)=>`<div class="form-row" style="display:flex;align-items:center;gap:10px;">
-      <label style="margin:0;flex:1;">${nameOf(r.mid)}${((addedFam||{})[r.mid])?`<span style="font-weight:700;color:var(--t2);">（${escH((addedFam||{})[r.mid])}）</span>`:''}${r.seats>1?`<span class="tag" style="font-size:10.5px;margin-left:6px;">每堂 ${r.seats} 個名額</span>`:''}<span style="font-size:11.5px;color:var(--t3);">　票剩 ${r.left} 堂</span></label>
+      <label style="margin:0;flex:1;">${nameOf(r.mid)}${((addedFam||{})[r.mid])?`<span style="font-weight:700;color:var(--t2);">（${escH((addedFam||{})[r.mid])}）</span>`:''}${r.seats>1?`<span class="tag" style="font-size:10.5px;margin-left:6px;">每堂 ${r.seats} 個名額</span>`:''}<span style="font-size:11.5px;color:var(--t3);">${r.plan?`　${escH(r.plan)}`:''}　剩 ${r.left} 堂</span></label>
       <input type="number" id="gf-n-${i}" value="${r.def}" min="0" max="${r.cap}" style="width:76px;"><span style="font-size:12px;color:var(--t3);">/ ${r.cap} 堂</span>
     </div>`).join('')}
     <div style="font-size:11.5px;color:var(--t2);margin-top:6px;">滿員或已在名單的場次會自動跳過、往後遞補；有票逐堂扣，票不夠會停下來告訴你。</div>
@@ -34309,7 +34330,11 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending){
     ${pending?`<div style="font-size:11.5px;color:var(--t2);background:var(--card2);border-radius:9px;padding:9px 11px;margin-top:6px;line-height:1.8;">
       這一堂（<b>${String(b.date).slice(5).replace('-','/')}</b>）也還沒建立 —— 按下去才會一起扣票建檔；
       按「只加這一堂」就只建這一堂。</div>`:''}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="${pending?`grpFollowOnce('${id}')`:`grpBackToCard('${id}')`}">${pending?'只加這一堂':'不用'}</button>
+    <div class="modal-foot"${pending?' style="flex-wrap:wrap;gap:8px;"':''}>${
+      /* 還沒寫入的那條路要能退回去改（2026-08-29 使用者：「然後這邊沒有上一步可以退回」）——
+         挑的人與方案都留著（keepSel）。 */''}
+      ${pending?`<button class="btn btn-ghost" onclick="grpFollowBack('${id}')">‹ 上一步</button>`:''}
+      <button class="btn btn-ghost" onclick="${pending?`grpFollowOnce('${id}')`:`grpBackToCard('${id}')`}">${pending?'只加這一堂':'不用'}</button>
       <button class="btn btn-green" onclick="grpFollowRun(${JSON.stringify(rows.map(r=>r.mid)).replace(/"/g,'&quot;')})">連續預約</button></div>`);
 }
 async function grpFollowRun(mids2){ return onceAct('gfrun', ()=>_grpFollowRun(mids2)); }
@@ -34367,15 +34392,17 @@ async function _grpFollowRun(mids2){
       const _used=new Set(Object.values(x.seat_tickets||{}).map(String));
       /* 只用「這次選定的那位使用人」的票（2026-08-29）—— 選了姊姊就不該把媽媽的票花掉。
          沒指定（舊呼叫端／混扣）時不限定，維持原本行為。 */
-      const _wf=(p.fam||{})[w.mid];
-      const _famOk=t=>(_wf===undefined||_wf===null)||String(t.family_user||'')===String(_wf);
+      const _wf=(p.fam||{})[w.mid], _wtk=(p.tk||{})[w.mid];
+      /* 挑過方案就只用那一張；沒挑過才退回「同一位使用人」的範圍（2026-08-29） */
+      const _famOk=t=>_wtk ? String(t.id)===String(_wtk)
+                           : ((_wf===undefined||_wf===null)||String(t.family_user||'')===String(_wf));
       for(let k=0;k<need;k++){
         const _cand=(await listUsableTickets(w.mid, x.ticket_type_id, x.date, x.start_time).catch(()=>[]))
           .filter(_famOk);
         const _free=(_cand||[]).filter(t=>t && !_used.has(String(t.id)));
         const tk=_free.find(t=>!tkNeedsConfirm(t)) || _free[0]
               || (_cand.length?_cand[0]:null)
-              || ((_wf===undefined||_wf===null)?await findUsableTicket(w.mid, x.ticket_type_id, x.date, x.start_time):null);
+              || ((!_wtk&&(_wf===undefined||_wf===null))?await findUsableTicket(w.mid, x.ticket_type_id, x.date, x.start_time):null);
         if(!tk){ noTk=true; break; }
         const _dup=_used.has(String(tk.id));
         if(!(await deductTicket(tk, x.id, SESSION.id, _dup?{multi:true}:undefined))){ noTk=true; break; }   // 護欄擋下＝沒扣到（2026-08-06）

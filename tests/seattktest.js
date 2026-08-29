@@ -70,7 +70,9 @@ console.log('\n③ 接線');
    連續預約要照那位的餘額算，不是整個帳號的。 */
 ok('★ 加名單扣課成功才記歸屬（逐名額鍵）',
    /if\(_ded\)\{ const _sk=\(_i>0\)\?\(mid\+'#'\+\(_i\+1\)\):mid;\n\s*b\.seat_tickets=Object\.assign\(\{\}, b\.seat_tickets\|\|\{\}, \{\[_sk\]:tk\.id\}\);/.test(src)
-   && /const _f=String\(tk\.family_user\|\|''\);\s*\n\s*if\(_addFam\[mid\]===undefined\) _addFam\[mid\]=_f;\s*\n\s*else if\(_addFam\[mid\]!==_f\) _addFam\[mid\]=null; \}/.test(src));
+   && /const _f=String\(tk\.family_user\|\|''\);\s*\n\s*if\(_addFam\[mid\]===undefined\) _addFam\[mid\]=_f;\s*\n\s*else if\(_addFam\[mid\]!==_f\) _addFam\[mid\]=null;/.test(src)
+   /* 2026-08-29：連「挑了哪一張」也記下來 —— 連續預約的堂數要照那一張算 */
+   && /if\(_addTk\[mid\]===undefined\) _addTk\[mid\]=String\(tk\.id\);\s*\n\s*else if\(_addTk\[mid\]!==String\(tk\.id\)\) _addTk\[mid\]=null; \}/.test(src));
 ok('★ 移除名額時歸屬跟著移除／重編',
    /b\.seat_tickets=seatTkReindexAfterRemove\(b, i\);/.test(src)
    && /const _ks=Object\.keys\(_st\)\.filter\(k=>seatMid\(k\)===String\(mid\)\);/.test(src));

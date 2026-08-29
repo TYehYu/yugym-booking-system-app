@@ -171,7 +171,7 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
       ok('★★★ ［＋新增］＋重複預約開著 → 先問再寫（不先存這一堂）',
          /if\(window\._grpAdd && window\._grpRep && \(window\._grpPick\|\|\{\}\)\.mid\)\{/.test(src)
          && /return onceAct\('grpmem:'\+id, \(\)=>grpFollowPre\(id\)\);/.test(src)
-         && /await grpFollowAsk\(id, \[pk\.mid\], \{\[pk\.mid\]:1\}, \{\[pk\.mid\]:pk\.fam\|\|''\}, true\);/.test(src));
+         && /await grpFollowAsk\(id, \[pk\.mid\], \{\[pk\.mid\]:1\}, \{\[pk\.mid\]:pk\.fam\|\|''\}, true, \{\[pk\.mid\]:_tk\}\);/.test(src));
       ok('★★ 「連續預約」按下去才把這一堂也建起來',
          /if\(p\.pending\)\{\s*\n\s*const _r=window\._grpRep; window\._grpRep=false;\s*\n\s*try\{ await _saveGroupMembers\(p\.id\); \}/.test(src));
       ok('★★ 暫時關掉旗標，免得 _saveGroupMembers 又把同一張視窗叫出來',
@@ -197,6 +197,21 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
          && /later\.length>12\?`<span class="gfa-day gfa-day-more">…還有 \$\{later\.length-12\} 堂<\/span>`:''/.test(src));
       ok('★ 還沒建的那一堂也列出來並標「本堂」',
          /<span class="gfa-day gfa-day-now">/.test(src) && /<i>本堂<\/i>/.test(src));
+      /* 2026-08-29：「我在前一步選了其中一份票券而已　這邊應該只要顯示該票券的4堂」 */
+      ok('★★★ 前一步挑過方案 → 餘額只算那一張（本人那組是 1＋4＋4，不能寫 9 堂）',
+         /const _one=\(addedTk\|\|\{\}\)\[mid\];/.test(src)
+         && /const _famOk=t=>_one \? String\(t\.id\)===String\(_one\)/.test(src)
+         && /本人那一組是補課券 1 ＋ 優惠團課 4 ＋ 4，/.test(src));
+      ok('★★ 後續場次也只用那一張（挑過就不會退回先進先出）',
+         /const _famOk=t=>_wtk \? String\(t\.id\)===String\(_wtk\)/.test(src)
+         && /\|\| \(\(!_wtk&&\(_wf===undefined\|\|_wf===null\)\)\?await findUsableTicket\(/.test(src));
+      ok('★ 視窗上標出方案名（看得出來算的是哪一張）',
+         /\$\{r\.plan\?`　\$\{escH\(r\.plan\)\}`:''\}　剩 \$\{r\.left\} 堂/.test(src));
+      /* 2026-08-29：「然後這邊沒有上一步可以退回」 */
+      ok('★★ 還沒寫入的那條路要能退回去改，而且挑好的人與方案要留著',
+         /function grpFollowBack\(id\)\{ window\._gfPend=null; try\{ closeModal\(\); \}catch\(_\)\{\} openGroupMembers\(id, true, true\); \}/.test(src)
+         && /\$\{pending\?`<button class="btn btn-ghost" onclick="grpFollowBack\('\$\{id\}'\)">‹ 上一步<\/button>`:''\}/.test(src)
+         && /if\(!keepSel\) window\._grpPick=null;/.test(src));
       ok('★ 管理名單那條路不受影響（沒有這個開關，維持先存再問）',
          /「管理名單」那條路不受影響（它本來就是複選、而且沒有這個開關）。/.test(src));
     }
@@ -205,7 +220,7 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
     /* 2026-08-29：［＋新增］那張多了「重複預約」開關，關掉就不問後續場次。
        「管理名單」沒有這個開關（_grpAdd 是 false）→ 維持原本一律詢問。 */
     ok('★ 儲存名單有新加入才追問（帶名額數，2026-08-05；重複預約關著時不問）',
-       /if\(_askRep && _addUniq\.length\)\{ try\{ await grpFollowAsk\(id,_addUniq,_addCnt,_addFam\); return; \}/.test(src)
+       /if\(_askRep && _addUniq\.length\)\{ try\{ await grpFollowAsk\(id,_addUniq,_addCnt,_addFam,false,_addTk\); return; \}/.test(src)
        && /const _askRep=\(!window\._grpAdd\) \|\| !!window\._grpRep;/.test(src)
        && /const _addCnt=\{\}; added\.forEach\(m=>\{ _addCnt\[m\]=\(_addCnt\[m\]\|\|0\)\+1; \}\);/.test(src));
     ok('★ 預設堂數＝票券剩餘 ÷ 名額數（買 8 堂 2 名額預設 4）',
