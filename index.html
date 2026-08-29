@@ -9084,6 +9084,13 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 /* ── 今日值班 · 圈型值班進度環（共用 .duty-ring：管理員首頁／教練首頁）── */
 .dr-row{display:flex;gap:20px;flex-wrap:wrap;padding:4px 2px 2px;}
 .duty-ring{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:86px;}
+/* 管理員可代打下班卡的那幾顆（2026-08-29）：滑過才浮出提示，平常與其他顆一模一樣 —— 
+   這一排的主要工作是「看今天誰在」，不要讓它變成一排按鈕。 */
+.duty-ring.dr-proxy{cursor:pointer;border-radius:14px;transition:background .14s;}
+.duty-ring.dr-proxy:hover{background:var(--card2);}
+.duty-ring.dr-proxy:active{transform:scale(.97);}
+.duty-ring.dr-proxy .dr-time::after{content:'　代打下班';color:var(--green);font-weight:700;opacity:0;transition:opacity .14s;}
+.duty-ring.dr-proxy:hover .dr-time::after{opacity:1;}
 .dr-wrap{position:relative;width:64px;height:64px;}
 .dr-wrap svg{width:64px;height:64px;transform:rotate(-90deg);}
 /* 值班中圓環秒針小點：60 秒繞一圈（2026-07-21 使用者指示） */
@@ -11500,8 +11507,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.2130';
-const APP_VERSION_LABEL='v260829.2130';
+const APP_VERSION = '260829.2140';
+const APP_VERSION_LABEL='v260829.2140';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20969,7 +20976,17 @@ function dutyRingHTML(name, att, shift, nowMinV, isToday){
   /* 2026-08-06 使用者指示：「值班中間顯示時間」——值班中顯示目前已值時數，
      下班後顯示當日總時數（碼錶指針已移除）。 */
   const center = `<div class="dr-center dr-center-done"><b>${dispH}</b><span>h</span></div>`;
-  return `<div class="duty-ring dr-cup${done?' dr-done':' dr-live'}" style="--dcc:${ringC};" title="${name}｜${att.clock_in}–${att.clock_out||'值班中'}｜${hrs}h／目標 ${(targetMin/60).toFixed(1)}h（${seg}/60 格）">
+  /* 管理員代打下班卡（2026-08-29 使用者指示：「幫我設計管理員代打卡下班功能 在這」，
+     指的就是這一排今日值班圓環）——
+     0829 曾邦紅手機打不開頁面、下班卡打不了。原本唯一的路是他自己「申請補打卡」
+     再由管理員審核，兩個人兩道手續；人已經走了，工時就這樣漏掉。
+     ⚠ 只有管理員（不是 isDeskLike —— 這是改別人的工時，櫃檯不該做）
+     ⚠ 只在「今天」這一頁，而且只對「已上班、還沒下班」的人出現
+     ⚠ 一定留痕：note 寫明是誰代打的（見 dutyPunchOutGo）。 */
+  const _canProxy=!!(isToday && !done && att && att.id
+    && SESSION && SESSION.role==='admin');
+  return `<div class="duty-ring dr-cup${done?' dr-done':' dr-live'}${_canProxy?' dr-proxy':''}" style="--dcc:${ringC};"${
+    _canProxy?` role="button" tabindex="0" onclick="dutyPunchOutAsk('${att.id}')"`:''} title="${name}｜${att.clock_in}–${att.clock_out||'值班中'}｜${hrs}h／目標 ${(targetMin/60).toFixed(1)}h（${seg}/60 格）${_canProxy?'　·　點一下可代打下班卡':''}">
     <div class="dr-wrap">
       <svg viewBox="0 0 64 64">
         <circle class="dr-cup-track" cx="32" cy="32" r="26"/>
@@ -20987,6 +21004,53 @@ function dutyRingHTML(name, att, shift, nowMinV, isToday){
   </div>`;
 }
 
+/* 管理員代打下班卡（2026-08-29）——入口是今日值班圓環，見 dutyRingHTML 的 _canProxy。 */
+async function dutyPunchOutAsk(attId){
+  try{
+    if(!(SESSION && SESSION.role==='admin')){ showToast('只有管理員可以代打卡'); return; }
+    const rec=await dbGet('attendance',attId);
+    if(!rec){ showToast('找不到這筆打卡紀錄'); return; }
+    if(!rec.clock_in){ showToast('這位今天還沒上班打卡，請改用「申請補打卡」'); return; }
+    if(rec.clock_out){ showToast(`已經下班打卡了（${rec.clock_out}）`); return; }
+    let nm=rec.emp_id||'';
+    try{ const e=await dbGet('coaches',rec.emp_id); if(e) nm=coachDisp(e)||e.name||nm; }catch(_){}
+    const _now=nowHM();
+    /* 預設「現在」，但一定要能改 —— 管理員多半是事後才代打，人是幾點走的只有他知道。 */
+    showModal(`<div class="ash-sheetmk"></div><div class="modal-title">代打下班卡</div>
+      <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-bottom:12px;">
+        <b>${escH(nm)}</b>　·　${String(rec.date||'').replace(/-/g,'/')}<br>
+        上班 <b>${rec.clock_in}</b>　·　目前仍是值班中</div>
+      <div class="form-row"><label>下班時間</label>${hmPicker('dpo-t',_now)}</div>
+      <div style="font-size:11.5px;color:var(--t2);background:var(--card2);border-radius:9px;padding:9px 11px;line-height:1.8;">
+        工時會依這個時間重算。這筆會記下是<b>你代打的</b>，之後在出勤紀錄看得到。</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        <button class="btn btn-green" onclick="dutyPunchOutGo('${attId}')">確認代打</button></div>`);
+  }catch(e){ showToast('開啟失敗：'+((e&&e.message)||e)); }
+}
+async function dutyPunchOutGo(attId){ return onceAct('dutyout:'+attId, ()=>_dutyPunchOutGo(attId)); }
+async function _dutyPunchOutGo(attId){
+  try{
+    if(!(SESSION && SESSION.role==='admin')){ showToast('只有管理員可以代打卡'); return; }
+    const t=readHM('dpo-t');
+    if(!t){ showToast('請選擇下班時間'); return; }
+    const rec=await dbGet('attendance',attId);
+    if(!rec || !rec.clock_in){ showToast('找不到上班紀錄'); return; }
+    if(rec.clock_out){ showToast(`已經下班打卡了（${rec.clock_out}）`); return; }
+    /* 早於上班時間就是打錯了 —— calcWorkHours 會當成跨午夜，算出 20 幾小時的工時。 */
+    if(timeToMin(t)<timeToMin(rec.clock_in)){
+      showToast(`下班時間不能早於上班時間（${rec.clock_in}）`, 6000); return; }
+    rec.clock_out=t;
+    rec.work_hours=calcWorkHours(rec);
+    /* 留痕（2026-08-29）：代打的工時之後一定會有人問「這是誰按的」。 */
+    const _who=(SESSION&&SESSION.name)||'管理員';
+    rec.note=(rec.note?rec.note+'｜':'')+`管理員代打下班（${_who}・${nowHM()}）`;
+    await dbPut('attendance',rec);
+    closeModal();
+    showToast(`已代打下班 ${t}，工時 ${rec.work_hours} 小時`);
+    try{ await refreshHeaderPunch(); }catch(_){}
+    try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){ navTo(CUR_PAGE); }
+  }catch(e){ showToast('代打失敗：'+((e&&e.message)||e), 7000); }
+}
 /* ══ Today Workforce 精簡卡（Decision Center · 狀態摘要 + 未打卡名單）══ */
 /* dashWorkforceCompact() 已刪除：唯一呼叫者是首頁的「今日人力」卡，該卡於 Dashboard V2
    移除後本函式失去出口。其 notPunched 的算法（班已開始且無 clock_in）已內聯到狀態卡的
