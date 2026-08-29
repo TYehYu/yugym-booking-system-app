@@ -11500,8 +11500,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1956';
-const APP_VERSION_LABEL='v260829.1956';
+const APP_VERSION = '260829.2005';
+const APP_VERSION_LABEL='v260829.2005';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17092,7 +17092,16 @@ async function grpNetDeductTicket(bid, mid){
   const mine=new Set(tks.filter(t=>String(t.member_id)===String(mid)).map(t=>t.id));
   const net={}, last={};
   (logs||[]).filter(l=>l.booking_id===bid&&mine.has(l.ticket_id)).forEach(l=>{
-    if(l.action==='deduct'){ net[l.ticket_id]=(net[l.ticket_id]||0)+1; last[l.ticket_id]=l.created_at||''; }
+    /* delta 0 的「補連結」不算扣課（2026-08-29）—— 它只記歸屬、堂數當初就扣過了。
+       算成 +1 會讓一張根本沒扣的票被挑出來退，等於憑空多退一堂。 */
+    if(Number(l.delta)===0 && l.action==='deduct') return;
+    if(l.action==='deduct'){ net[l.ticket_id]=(net[l.ticket_id]||0)+1;
+      /* 取「最新的那一筆」要比大小，不能直接覆蓋（2026-08-29）——
+         dbGetAll('ticket_logs') 的順序不保證按時間，直接覆蓋等於取「最後被掃到的」。
+         下面是靠 last 排序挑「最近扣的那張」，挑錯就退到別位使用人的票上：
+         同一堂課同一個帳號有媽媽與姊姊兩張都有淨扣時，這件事天天發生。 */
+      const _at=String(l.created_at||'');
+      if(!last[l.ticket_id] || _at>last[l.ticket_id]) last[l.ticket_id]=_at; }
     else if(l.action==='refund'){ net[l.ticket_id]=(net[l.ticket_id]||0)-1; }
   });
   return Object.keys(net).filter(k=>net[k]>0)
