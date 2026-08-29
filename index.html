@@ -11395,8 +11395,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1621';
-const APP_VERSION_LABEL='v260829.1621';
+const APP_VERSION = '260829.1636';
+const APP_VERSION_LABEL='v260829.1636';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15665,6 +15665,10 @@ const TK_POCKETS={
     coachLeave:'cancel',      // 教練請假 → 整堂取消、逐名額退票＋效期＋7 天（grpCoachLeave，不發補課券）
     memberLeave:'makeup',     // 逐人請假 → 本堂照扣、另發補課券（groupToggleLeave）
     grantsOnCheckin:null,
+    /* 開課前要清場（2026-08-29 使用者指示：「團課開課前 15 分鐘不得預約教室，
+       要讓老師調整教室場地」）—— 團課是唯一要重排器材的課別，所以規則寫在這裡，
+       場地那邊只問 prepMin，不要再寫一次「哪種課是團課」。見 venuePrepAt。 */
+    prepMin:15,
   },
   self:{ key:'self', label:'自主訓練', unit:'點', isCourse:true,
     stampFrom:['direct','infer'],
@@ -23924,6 +23928,46 @@ function venueAvailAt(sameDay, ns, ne, selfId){
 }
 /* 這個場地能不能上這種課（2026-08-24）——視窗二要淡化不合場地的課程。
    規則沿用 venuePriorityFor：那是「課別 → 可用場地」的唯一來源，這裡只是反查。 */
+/* 團課開課前的清場時段（2026-08-29 使用者指示：「團課開課前 15 分鐘不得預約教室，
+   要讓老師調整教室場地」）—— 回傳 {場地id: 為什麼不能排}，沒踩到就是空物件。
+
+   ⚠ 團課接團課不擋。正式庫未來的排法就是 19:00→20:00、19:30→20:30 每週固定一堂接一堂
+     （2026-08-29 查了一遍：09/07 之後踩到清場時段的全部都是團課接團課）。一律擋下去
+     等於整條團課課表排不出來 —— 要清場是因為「別的課佔著教室」，不是因為時段相鄰。
+     判斷「這堂要不要清場」一律問口袋的 prepMin，不要在這裡比對課別字串。
+   ⚠ 未到課（no_show）與 venueLoadAt 同一個處置：人沒來、空間是空的，就不必清場。
+   ⚠ 舊資料沒有 venue_unit → 用該課別的首選場地回推，與 venueLoadAt 的 ② 同一套。 */
+/* 2026-08-29 使用者指示：「9月先不強制規定　給教練跟客人一個月的適應期」——
+   9 月只在挑課程時提示一句，10/01 起才真的擋。看的是**那堂團課的日期**（不是今天）：
+   9 月排的 10 月課一樣受規範，客人才不會在 10 月才被突然擋住。
+   ⚠ 到期不必回來改程式；這個常數留著就是那一段歷史。 */
+const GRP_PREP_FROM='2026-10-01';
+function venuePrepAt(others, ns, ne, includeGrace){
+  const out={};
+  (others||[]).forEach(x=>{
+    if(!x || x.no_show===true) return;
+    const pm=Number((bkPocketNow(x)||{}).prepMin)||0; if(!pm) return;
+    const s0=timeToMin(x.start_time);
+    if(!(s0-pm < ne && ns < s0)) return;                 // 沒踩到 [開課-pm, 開課)
+    /* 沒有日期的一律當成生效（正式資料每一筆都有日期；寧可擋錯也不要讓規則靜悄悄消失） */
+    const live=!x.date || String(x.date)>=GRP_PREP_FROM;
+    if(!live && !includeGrace) return;
+    const vid=String(x.venue_unit||'').split('_')[0] || (venuePriorityFor(x.category)||[])[0];
+    if(!vid || out[vid]) return;
+    out[vid]=live
+      ? `${minToTime(s0)} 團課開課前 ${pm} 分鐘要留給老師調整場地`
+      : `${GRP_PREP_FROM.slice(5).replace('-','/')} 起：團課開課前 ${pm} 分鐘不排教室（${minToTime(s0)} 開課）`;
+  });
+  return out;
+}
+/* 這種課這個時段能不能進這個場地（清場規則的反查，供挑選視窗淡化用）。
+   要清場的課自己不受限（團課接團課），其餘一律問 venuePrepAt。 */
+function venuePrepWhy(vid, category, sameDay, ns, ne, selfId, includeGrace){
+  if(!vid) return '';
+  if(Number((bkPocketNow({category})||{}).prepMin)||0) return '';
+  const others=(sameDay||[]).filter(x=> x.id!==selfId);
+  return venuePrepAt(others, ns, ne, includeGrace)[vid] || '';
+}
 function venueAllowsCategory(vid, category){
   if(!vid) return true;
   try{ return venuePriorityFor(category).indexOf(vid)>=0; }catch(_){ return true; }
@@ -23943,7 +23987,13 @@ function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){
   const loadAt=(inst)=>venueLoadAt(others, inst);
   const pri=forceVid?[forceVid]:venuePriorityFor(category);
   const primaryVid=pri[0]; // 首選場地
+  /* 團課開課前的清場時段（2026-08-29）。要清場的課別自己不受限 —— 團課接團課是
+     他們固定的排法，理由寫在 venuePrepAt。被擋下時把原因留著，最後當錯誤訊息用：
+     運動按摩只能排團課教室，被擋就沒有退路，得讓櫃檯知道是「要清場」不是「額滿」。 */
+  const _prep=(Number((bkPocketNow({category})||{}).prepMin)||0) ? null : venuePrepAt(others, ns, ne);
+  let prepWhy='';
   for(const vid of pri){
+    if(_prep && _prep[vid]){ prepWhy=prepWhy||_prep[vid]; continue; }
     let okAll=true;
     for(let inst=ns; inst<ne; inst+=30){
       const u=loadAt(inst)[vid];
@@ -23974,6 +24024,7 @@ function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){
       return { unit:`${vid}_${pick}`, overflow: vid!==primaryVid, fromVid:primaryVid, toVid:vid };
     }
   }
+  if(prepWhy) return { error:prepWhy+'，這個時段排不進教室', prepBlock:true };
   return { error:'該時段沒有可用場地（已額滿）', hardFull:true };
 }
 function overlaps(s1,e1,s2,e2){ return s1<e2 && e1>s2; }
@@ -34096,7 +34147,7 @@ async function bkVenueRefresh(){
 /* 課程挑選（2026-08-21 使用者：「課程跟時間 也改成我們自己的風格」）——
    清單就是建立預約既有的 activeTypes（存在 window._bkTypes），
    每一列帶課種色的小方塊，與課卡上的顏色語彙一致。 */
-function ashTypeOpen(){
+async function ashTypeOpen(){
   const types=window._bkTypes||[];
   const cur=String((document.getElementById('bk-type')||{}).value||'');
   const _d=(document.getElementById('bk-date')||{}).value||'';
@@ -34104,6 +34155,18 @@ function ashTypeOpen(){
   const _vid=String((document.getElementById('bk-venue')||{}).value||'');
   let host=document.getElementById('adp-sheet');
   if(!host){ host=document.createElement('div'); host.id='adp-sheet'; document.body.appendChild(host); }
+  /* 先把殼畫出來再去讀當天的預約（清場規則要看同一天有沒有團課），與 ashVenueOpen 同一套。
+     ⚠ 讀不到就一律放行（_day=null）—— 寧可讓 allocateVenue 在送出時擋，
+       也不要因為讀取失敗把整排課程畫成不能選。 */
+  host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
+    <div class="adp-box"><div class="modal-title">選擇課程</div>
+      <div class="ash-einote">讀取場地狀況…</div></div>`;
+  let _day=null;
+  if(_vid && _d && _tm){
+    const all=await dbGetAll('bookings').catch(()=>null);
+    if(all) _day=all.filter(x=>x && x.date===_d && x.status!=='cancelled');
+  }
+  const _ns=_tm?timeToMin(_tm):0, _ne=_ns+60;
   const rows=types.map(t=>{
     const cc=(typeof bkCcOfType==='function')?bkCcOfType(t):'pt';
     const col=(typeof BK_ACCENT!=='undefined'&&BK_ACCENT[cc])||'var(--green)';
@@ -34112,19 +34175,26 @@ function ashTypeOpen(){
          這是 0822 就定的語彙（.ash-ei-off）。 */
     /* 2026-08-24 多一條「這個場地不能上這種課」（視窗一已經硬指定場地了）。
        與限時段票同一套呈現：淡化列出＋副標寫原因，不要藏起來（0823 定的語彙）。 */
-    const bad=bkTypeTimeBad(t,_d,_tm) || venueCatWhy(_vid, t.category);
+    /* 2026-08-29 再多一條「這個場地這個時段要清場」（團課開課前 15 分鐘）——
+       同樣淡化列出＋副標寫原因。團課自己不受限，venuePrepWhy 會回空字串。
+       9 月是適應期（GRP_PREP_FROM）：那一句改成副標的預告，照樣可以點。 */
+    const _prep=_day?venuePrepWhy(_vid, t.category, _day, _ns, _ne, null):'';
+    const _soon=(_day&&!_prep)?venuePrepWhy(_vid, t.category, _day, _ns, _ne, null, true):'';
+    const bad=bkTypeTimeBad(t,_d,_tm) || venueCatWhy(_vid, t.category) || _prep;
     if(bad) return `<button type="button" class="ash-eirow ash-ei-off" disabled>
         <span class="ash-eilb"><span class="adp-sw" style="background:${col};"></span>${escH(t.name||t.category||'課程')}</span>
         <span class="ash-eisub">${escH(bad)}</span></button>`;
+    const sub=_soon || ((t.category&&t.category!==t.name)?t.category:'');
     return `<button type="button" class="ash-eirow${t.id===cur?' ash-ei-co':''}"
         style="${t.id===cur?'--ash-co-fg:var(--green);':''}" onclick="ashTypePick('${t.id}')">
         <span class="ash-eilb"><span class="adp-sw" style="background:${col};"></span>${escH(t.name||t.category||'課程')}</span>
-        ${t.category&&t.category!==t.name?`<span class="ash-eisub">${escH(t.category)}</span>`:''}</button>`;
+        ${sub?`<span class="ash-eisub">${escH(sub)}</span>`:''}</button>`;
   }).join('');
-  host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
-    <div class="adp-box" style="max-height:86vh;overflow-y:auto;"><div class="modal-title">選擇課程</div>
-      ${rows||'<div class="ash-einote">沒有可選的課程。</div>'}
-      <div class="adp-foot"><button class="btn btn-ghost" onclick="ashDateClose()">取消</button></div></div>`;
+  const box=host.querySelector('.adp-box'); if(!box) return;   // 讀取中被關掉了
+  box.style.maxHeight='86vh'; box.style.overflowY='auto';
+  box.innerHTML=`<div class="modal-title">選擇課程</div>
+    ${rows||'<div class="ash-einote">沒有可選的課程。</div>'}
+    <div class="adp-foot"><button class="btn btn-ghost" onclick="ashDateClose()">取消</button></div>`;
 }
 function ashTypePick(tid){
   const inp=document.getElementById('bk-type'); if(!inp) return;

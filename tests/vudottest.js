@@ -86,8 +86,12 @@ console.log('\n名額：亮幾個燈就佔幾台（2026-07-31 使用者確認）
   const code=g2('window.VENUES = window.VENUES || [','\n}\n')+'\n'
     +g2('function venuePriorityFor(category){','\n}\n')+'\n'
     +g2('function venueLoadAt(others, inst){','\n}\n')+'\n'
+    +g2('function venuePrepAt(others, ns, ne, includeGrace){','\n}\n')+'\n'
     +g2('function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){','\n}\n');
-  const alloc=new Function('window','timeToMin','bkIsGroup','bkIsSelf', code+'\nreturn allocateVenue;')({}, t=>{const[h,m]=String(t).split(':').map(Number);return h*60+(m||0);}, b=>!!b&&b.category==='小班肌力', b=>!!b&&b.category==='自主訓練');
+  /* 2026-08-29：allocateVenue 開始問口袋的 prepMin（團課開課前 15 分鐘要清場），
+     沙箱要一起帶 venuePrepAt 與真的 bkPocketNow（見 tests/_pocketenv.js —— 
+     在這裡自己寫一個假口袋等於把規則抄第二份）。 */
+  const alloc=new Function('window','timeToMin','bkIsGroup','bkIsSelf','bkPocketNow','minToTime', code+'\nreturn allocateVenue;')({}, t=>{const[h,m]=String(t).split(':').map(Number);return h*60+(m||0);}, b=>!!b&&b.category==='小班肌力', b=>!!b&&b.category==='自主訓練', require('./_pocketenv.js').bkPocketNow, m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'));
   const B=(u,extra)=>Object.assign({id:u,venue_unit:u,start_time:'17:00',duration:60,category:'自主訓練'},extra||{});
   ok('★ 只亮一個燈 → 還有一個名額，別人約得到',
      !!alloc('自主訓練',[B('treadmill_2')],1020,1080,null,'treadmill').unit);

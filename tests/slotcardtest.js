@@ -205,8 +205,11 @@ console.log('\n建立預約：視窗二＝課程與教練');
      /<button type="button" class="adp-field" id="bk-type-btn" onclick="ashTypeOpen\(\)">/.test(form)
      && !/<div id="bk-type-cards" class="bk-cards"><\/div>/.test(form));
 
+  /* 2026-08-29 多接了第三條「這個時段要清場」（團課開課前 15 分鐘，見 grpprepvenuetest）。
+     這裡守的仍是原本那件事：不能上的課要淡化列出，不要藏起來。 */
   ok('★★ 這個場地不能上的課要淡化並寫原因（不要藏起來）',
-     /const bad=bkTypeTimeBad\(t,_d,_tm\) \|\| venueCatWhy\(_vid, t\.category\);/.test(src));
+     /const bad=bkTypeTimeBad\(t,_d,_tm\) \|\| venueCatWhy\(_vid, t\.category\) \|\| _prep;/.test(src)
+     && /if\(bad\) return `<button type="button" class="ash-eirow ash-ei-off" disabled>/.test(src));
   ok('　　renderBkTypeCards 還被回上一步呼叫，但找不到容器就直接 return（不會爆）',
      /const box=document\.getElementById\('bk-type-cards'\); if\(!box\)return;/.test(src));
   ok('　　「該教練的會員排最上面」那套排序仍在（現在服務的是［＋新增］的名單）',

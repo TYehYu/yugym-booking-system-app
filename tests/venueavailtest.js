@@ -15,17 +15,24 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 
 const g=(a,b)=>{const i=src.indexOf(a); if(i<0) throw new Error('找不到 '+a); return src.slice(i, src.indexOf(b,i)+b.length);};
 const VEN=[{id:'multi',name:'多功能訓練架',capacity:3},{id:'treadmill',name:'跑步機',capacity:2},{id:'group',name:'團課教室',capacity:1}];
-const lib=new Function('getVenues','venueCap','venuePriorityFor','timeToMin','bkIsGroup','bkIsSelf',
+const {bkPocketNow}=require('./_pocketenv.js');
+const minToTime=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+/* 2026-08-29：allocateVenue 開始問口袋的 prepMin（團課開課前 15 分鐘要清場），
+     沙箱要一起帶 venuePrepAt 與真的 bkPocketNow（見 tests/_pocketenv.js —— 
+     在這裡自己寫一個假口袋等於把規則抄第二份）。 */
+const lib=new Function('getVenues','venueCap','venuePriorityFor','timeToMin','bkIsGroup','bkIsSelf','bkPocketNow','minToTime',
   [g('function venueLoadAt(','\n}'), g('function venueAvailAt(','\n}'),
    g('function venueAllowsCategory(','\n}'), g('function venueCatWhy(','\n}'),
+   g('function venuePrepAt(','\n}'), g('function venuePrepWhy(','\n}'),
    g('function allocateVenue(','\n}')].join('\n')
-  +'\nreturn {venueLoadAt,venueAvailAt,venueAllowsCategory,venueCatWhy,allocateVenue};')(
+  +'\nreturn {venueLoadAt,venueAvailAt,venueAllowsCategory,venueCatWhy,venuePrepAt,venuePrepWhy,allocateVenue};')(
     ()=>VEN,
     v=>(VEN.find(x=>x.id===v)||{}).capacity||0,
     c=>({'小班肌力':['group'],'運動按摩':['group'],'自主訓練':['multi','group','treadmill']})[c]||['multi','group'],
     t=>{const p=String(t).split(':');return (+p[0])*60+(+p[1]||0);},
     b=>!!b&&b.category==='小班肌力',
-    b=>!!b&&b.category==='自主訓練');
+    b=>!!b&&b.category==='自主訓練',
+    bkPocketNow, minToTime);
 
 const B=(unit,st,extra)=>Object.assign({id:unit+'@'+st,venue_unit:unit,start_time:st,duration:60,category:'私人教練'},extra||{});
 const at=(rows,vid)=>lib.venueAvailAt(rows,600,660,null).find(v=>v.id===vid);
