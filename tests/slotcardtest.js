@@ -279,10 +279,12 @@ ok('★★ 連帶拿掉整張卡的 cursor:pointer 與按壓縮放（留著會�
    && /整張卡不再可點（入口收在姓名上），所以拿掉 cursor:pointer/.test(src));
 /* 2026-08-29 三修：「讓這個[變更]更貼卡片的右下角　然後點了以後顯示該會員的其他方案
    在卡片下方圓形按鈕上方」—— 換票不再跳出另一個視窗，就在原地展開。 */
-ok('★★ 「變更」貼在卡片右下角，卡片留出它的位置',
-   /\.ash-mswap\{position:absolute;right:12px;bottom:10px;margin:0;/.test(src)
+/* 四修：「用文字顯示就好　不用做成圓形章」→ 連膠囊框都拿掉，純文字連結。 */
+ok('★★ 「其他方案 ›」＝貼右下角的純文字，不是圓形也不是膠囊',
+   /\.ash-mswap\{position:absolute;right:13px;bottom:9px;margin:0;padding:4px 0;\s*\n\s*background:none;border:none;/.test(src)
    && /\.ash-mcard\{position:relative;\}/.test(src)
-   && /\.ash-has-swap \.ash-mmain\{padding-right:96px;\}/.test(src));
+   && /\.ash-has-swap \.ash-mmain\{padding-right:78px;\}/.test(src)
+   && !/class="mtk ash-mswap"/.test(src));
 ok('★★ 其他方案展開在「會員卡與下方圓鈕之間」（使用者指定的位置）',
    /<div id="ash-swapwrap" class="ash-swapwrap"><\/div>\s*\n\s*\$\{btns\?`<div class="mtp-orbs">\$\{btns\}<\/div>`:''\}/.test(src));
 ok('★★ 沒展開時整個容器不佔位', /\.ash-swapwrap:empty\{display:none;\}/.test(src));
@@ -304,9 +306,9 @@ ok('★★ 「有別張票可換」與 openBkTicketChange 的候選同一個判�
    && /_swapN\[r\.mid\]=_swapTk\[r\.mid\]\.length;/.test(src)
    && /const list=cand\.filter\(t=>t\.id!==curId\);/.test(src));
 ok('★★ 本堂那一顆放大，而且只在簡易課卡放大（票券夾一列 60 顆不能跟著大）',
-   /* 66px（兩倍）→ 62px（對齊動作圓鈕）→ 44px：前兩次都被回「太大了」。
-      那三顆動作鈕站在卡片外面，這一顆排在一列圓點裡，同尺寸會把整列撐開。 */
-   /\.ash-mcard \.ash-tk \.mtk\.mtk-cur\{width:44px;height:44px;font-size:13px;\}/.test(src)
+   /* 四修定案：還沒上的（已預約未上／還沒排）44px、已經上完的 35px。
+      大小本身就是資訊 —— 大的是還沒發生、還會動的。 */
+   /\.ash-mcard \.ash-tk \.mtk\.mtk-booked,\s*\n\s*\.ash-mcard \.ash-tk \.mtk\.mtk-free,\s*\n\s*\.ash-mcard \.ash-tk \.mtk\.mtk-cur\{width:44px;height:44px;font-size:13px;\}/.test(src)
    && /\.mtk\{position:relative;width:35px;height:35px;/.test(src)
    && /只在簡易課卡的會員卡放大：票券夾那邊一列要排 60 顆，放大會整排爆掉/.test(src));
 /* 2026-08-26 使用者：「跳出的視窗按返回會跑回調整課程的視窗　這邊應該設計關閉的按鈕就好」
