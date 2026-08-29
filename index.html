@@ -11500,8 +11500,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1908';
-const APP_VERSION_LABEL='v260829.1908';
+const APP_VERSION = '260829.1931';
+const APP_VERSION_LABEL='v260829.1931';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -34355,16 +34355,40 @@ async function _grpFollowRun(mids2){
     finally{ window._grpRep=_r; }
   }
   const report=[];
+  /* 票券對照表（2026-08-29）：算「這堂他已經有幾個同使用人的名額」時要用票查使用人。
+     dbGetAll 有快取，這裡只是一次讀取。 */
+  let _tkAll=[]; try{ _tkAll=await dbGetAll('member_tickets'); }catch(_){ _tkAll=[]; }
   for(const w of wants){
     let done=0, noTk=false;
     const seats=Math.max(1,(p.seats||{})[w.mid]||1);   // 這次加了幾個名額，後續每堂補到幾個（2026-08-05）
+    /* 只用「這次選定的那張票／那位使用人」（2026-08-29）—— 選了姊姊就不該把媽媽的票花掉。
+       沒指定（舊呼叫端／混扣）時不限定，維持原本行為。 */
+    const _wf=(p.fam||{})[w.mid], _wtk=(p.tk||{})[w.mid];
     for(const bid of p.laterIds){
       if(done>=w.n) break;
       const x=await dbGet('bookings',bid); if(!x) continue;
       const cur=mids(x);
       /* 多名額（2026-08-05 游晴雅案例）：不再「已在名單就整堂跳過」——
-         算他已佔幾個名額、缺幾個補幾個；本來就足額的才跳過（不佔次數）。 */
-      const has=cur.filter(m=>String(m)===String(w.mid)).length;
+         算他已佔幾個名額、缺幾個補幾個；本來就足額的才跳過（不佔次數）。
+
+         ⚠ 2026-08-29（使用者：「為什麼姐姐跟媽媽的票券不能連續約」）——
+         「已佔幾個」要用**這一次指定的那張票／那位使用人**去數，不能用會員數。
+         許佳慈先用本人那張連續約了 9/11、9/18、9/25，之後再替姊姊約同一串時，
+         每一堂都算成「他已經有 1 個名額」→ need=0 → 整串被 continue 跳過，
+         姊姊只剩 9/4 那一格。同一個帳號的不同使用人本來就該各佔各的名額。 */
+      const _stk=(x.seat_tickets&&typeof x.seat_tickets==='object')?x.seat_tickets:{};
+      const _mine=cur.filter(m=>String(m)===String(w.mid)).length;
+      let has=_mine;
+      if(_wtk || (_wf!==undefined && _wf!==null)){
+        has=0;
+        for(let k=0;k<_mine;k++){
+          const _k=(k>0)?(w.mid+'#'+(k+1)):w.mid;
+          const _tid=_stk[_k]; if(!_tid) continue;
+          if(_wtk){ if(String(_tid)===String(_wtk)) has++; }
+          else { const _t=_tkAll.find(t=>String(t.id)===String(_tid));
+                 if(_t && String(_t.family_user||'')===String(_wf)) has++; }
+        }
+      }
       let need=seats-has;
       if(need<=0) continue;
       const room=Math.max(1,Number(x.max_heads)||5)-(cur.length-grpLeaveSeats(x));   // 請假不佔位（2026-08-12）
@@ -34390,9 +34414,6 @@ async function _grpFollowRun(mids2){
          ⚠ 修法同樣不是禁止重複：只剩一張票時一張扣多格是合法的，
            但那時要明講 multi，不能讓護欄默默吃掉。 */
       const _used=new Set(Object.values(x.seat_tickets||{}).map(String));
-      /* 只用「這次選定的那位使用人」的票（2026-08-29）—— 選了姊姊就不該把媽媽的票花掉。
-         沒指定（舊呼叫端／混扣）時不限定，維持原本行為。 */
-      const _wf=(p.fam||{})[w.mid], _wtk=(p.tk||{})[w.mid];
       /* 挑過方案就只用那一張；沒挑過才退回「同一位使用人」的範圍（2026-08-29） */
       const _famOk=t=>_wtk ? String(t.id)===String(_wtk)
                            : ((_wf===undefined||_wf===null)||String(t.family_user||'')===String(_wf));
@@ -34409,7 +34430,10 @@ async function _grpFollowRun(mids2){
         _used.add(String(tk.id));
         /* 逐名額記下用了哪張票（2026-08-07）—— 連續預約補位原本只寫 member_ids，
            歸屬要靠近似法重算，之後只要這位會員新買一張票，圓點就會整排位移。 */
-        const _n=has+addedSeats;                       // 這是他在這堂的第幾個名額（0 起算）
+        /* 名額鍵要用「這位會員在這堂的總名額數」起算（2026-08-29 修）——
+           has 改成「同使用人的名額數」之後，拿它當索引會蓋掉別位使用人的那一格：
+           本人已佔第 1 格、姊姊的 has=0 → 又寫成第 1 格，本人的歸屬就不見了。 */
+        const _n=_mine+addedSeats;                     // 這是他在這堂的第幾個名額（0 起算）
         _newSeatTk[(_n>0)?(w.mid+'#'+(_n+1)):w.mid]=tk.id;
         addedSeats++;
       }

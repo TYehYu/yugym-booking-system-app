@@ -216,6 +216,54 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
          /「管理名單」那條路不受影響（它本來就是複選、而且沒有這個開關）。/.test(src));
     }
 
+    console.log('\n③f 同一帳號的不同使用人要各佔各的名額（2026-08-29「為什麼姐姐跟媽媽的票券不能連續約」）');
+    {
+      /* 正式庫：許佳慈先用本人那張連續約了 9/11、9/18、9/25，之後再替姊姊約同一串，
+         每一堂都被算成「他已經有 1 個名額」→ need=0 → 整串跳過，姊姊只剩 9/4 那一格。
+         「已佔幾個」要用這次指定的那張票／那位使用人去數，不能用會員數。 */
+      const DB6={ a:{id:'a',member_ids:['NEW'],seat_tickets:{NEW:'t本'},max_heads:5,
+                     ticket_type_id:'tt',date:'2026-09-11',start_time:'20:00'},
+                  b:{id:'b',member_ids:['NEW'],seat_tickets:{NEW:'t本'},max_heads:5,
+                     ticket_type_id:'tt',date:'2026-09-18',start_time:'20:00'} };
+      const TK6=[{id:'t姊',family_user:'姊姊'},{id:'t本',family_user:null}];
+      const ded6=[];
+      const env6=Object.assign({},env,{
+        window:{_gfPend:{id:'w0',laterIds:['a','b'],seats:{NEW:1},fam:{NEW:'姊姊'},tk:{NEW:'t姊'}}},
+        document:{getElementById:id=>({value: id==='gf-n-0'?'2':'0'}), querySelector:()=>null},
+        dbGet:async(t,id)=> t==='bookings'?(DB6[id]?{...DB6[id],member_ids:DB6[id].member_ids.slice()}:null):{id,name:'許佳慈'},
+        dbGetAll:async(t)=> t==='member_tickets'?TK6.slice():[],
+        dbPut:async(t,x)=>{ DB6[x.id]=x; },
+        listUsableTickets:async()=>TK6.slice(),
+        findUsableTicket:async()=>TK6[1],
+        deductTicket:async(tk,bid)=>{ ded6.push(bid+':'+tk.id); return true; },
+        showToast:()=>{},
+      });
+      const run6=new Function(...Object.keys(env6),'return async '+grabFn('_grpFollowRun'))(...Object.values(env6));
+      await run6(['NEW']);
+      eq('★★★ 本人已佔一格的那幾堂，姊姊照樣約得進去（不再整串跳過）',
+         ded6, ['a:t姊','b:t姊']);
+      eq('★★ 兩位使用人各佔一格',
+         ['a','b'].map(id=>DB6[id].member_ids.filter(m=>m==='NEW').length), [2,2]);
+      eq('★★ seat_tickets 兩格分別記本人與姊姊',
+         ['a','b'].map(id=>Object.values(DB6[id].seat_tickets||{}).join(',')),
+         ['t本,t姊','t本,t姊']);
+
+      /* 同一張票已經佔過的那一堂仍然跳過（不要重複塞第二格） */
+      const DB7={ c:{id:'c',member_ids:['NEW'],seat_tickets:{NEW:'t姊'},max_heads:5,
+                     ticket_type_id:'tt',date:'2026-09-11',start_time:'20:00'} };
+      const ded7=[];
+      const env7=Object.assign({},env6,{
+        window:{_gfPend:{id:'w0',laterIds:['c'],seats:{NEW:1},fam:{NEW:'姊姊'},tk:{NEW:'t姊'}}},
+        document:{getElementById:id=>({value: id==='gf-n-0'?'1':'0'}), querySelector:()=>null},
+        dbGet:async(t,id)=> t==='bookings'?(DB7[id]?{...DB7[id],member_ids:DB7[id].member_ids.slice()}:null):{id,name:'許佳慈'},
+        dbPut:async(t,x)=>{ DB7[x.id]=x; },
+        deductTicket:async(tk,bid)=>{ ded7.push(bid+':'+tk.id); return true; },
+      });
+      const run7=new Function(...Object.keys(env7),'return async '+grabFn('_grpFollowRun'))(...Object.values(env7));
+      await run7(['NEW']);
+      eq('★★ 姊姊那一格已經在了 → 這一堂跳過，不會重複塞', ded7, []);
+    }
+
     console.log('\n④ 流程接線');
     /* 2026-08-29：［＋新增］那張多了「重複預約」開關，關掉就不問後續場次。
        「管理名單」沒有這個開關（_grpAdd 是 false）→ 維持原本一律詢問。 */

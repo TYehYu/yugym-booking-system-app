@@ -39,8 +39,11 @@ console.log('\n③ 連續預約補位（後續場次一起約）');
 {
   const r=grabFn('_grpFollowRun');
   ok('★ 每扣一堂就記一個名額', /_newSeatTk\[\(_n>0\)\?\(w\.mid\+'#'\+\(_n\+1\)\):w\.mid\]=tk\.id;/.test(r));
+  /* 2026-08-29：has 改成「同一位使用人的名額數」（不同使用人要各佔各的名額），
+     所以序號改用 _mine＝這位會員在這堂的總名額數。用 has 當索引會蓋掉別位使用人那一格。 */
   ok('★★ 名額序號要接在他既有的名額後面（不是從 0 重算）',
-     /const _n=has\+addedSeats;/.test(r));
+     /const _n=_mine\+addedSeats;/.test(r)
+     && /const _mine=cur\.filter\(m=>String\(m\)===String\(w\.mid\)\)\.length;/.test(r));
   ok('★ 跟 member_ids 同一次寫回（不會只寫一半）',
      /x\.member_ids=cur\.concat\(Array\.from\(\{length:addedSeats\},\(\)=>w\.mid\)\);\n\s*x\.seat_tickets=Object\.assign\(\{\}, x\.seat_tickets\|\|\{\}, _newSeatTk\);\n\s*await dbPut\('bookings',x\);/.test(r));
   ok('　　扣不到票就停，停之前記的那幾格照樣有效', /if\(!tk\)\{ noTk=true; break; \}/.test(r));
