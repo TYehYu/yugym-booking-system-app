@@ -163,6 +163,28 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
       eq('　 沒指定使用人時維持原本行為（挑第一張可用的）', ded5, ['u:t姊']);
     }
 
+    console.log('\n③d 開著重複預約時「按下去才建檔」（2026-08-29）');
+    {
+      /* 使用者附截圖：「應該要點這個連續預約才開始建檔　這邊先直接約了一堂」——
+         原本是先存這一堂、再問後面要不要一起約，所以視窗跳出來時第一堂已經扣好票，
+         按「不用」也已經約掉一堂。 */
+      ok('★★★ ［＋新增］＋重複預約開著 → 先問再寫（不先存這一堂）',
+         /if\(window\._grpAdd && window\._grpRep && \(window\._grpPick\|\|\{\}\)\.mid\)\{/.test(src)
+         && /return onceAct\('grpmem:'\+id, \(\)=>grpFollowPre\(id\)\);/.test(src)
+         && /await grpFollowAsk\(id, \[pk\.mid\], \{\[pk\.mid\]:1\}, \{\[pk\.mid\]:pk\.fam\|\|''\}, true\);/.test(src));
+      ok('★★ 「連續預約」按下去才把這一堂也建起來',
+         /if\(p\.pending\)\{\s*\n\s*const _r=window\._grpRep; window\._grpRep=false;\s*\n\s*try\{ await _saveGroupMembers\(p\.id\); \}/.test(src));
+      ok('★★ 暫時關掉旗標，免得 _saveGroupMembers 又把同一張視窗叫出來',
+         /免得 _saveGroupMembers 又把這張視窗叫出來一次。/.test(src));
+      ok('★★ 「不用」改成「只加這一堂」，而且是按下去才寫',
+         /onclick="\$\{pending\?`grpFollowOnce\('\$\{id\}'\)`:`grpBackToCard\('\$\{id\}'\)`\}">\$\{pending\?'只加這一堂':'不用'\}/.test(src)
+         && /async function grpFollowOnce\(id\)\{/.test(src));
+      ok('★★ 視窗上要講明「這一堂也還沒建立」',
+         /這一堂（<b>\$\{String\(b\.date\)\.slice\(5\)\.replace\('-','\/'\)\}<\/b>）也還沒建立/.test(src));
+      ok('★ 管理名單那條路不受影響（沒有這個開關，維持先存再問）',
+         /「管理名單」那條路不受影響（它本來就是複選、而且沒有這個開關）。/.test(src));
+    }
+
     console.log('\n④ 流程接線');
     /* 2026-08-29：［＋新增］那張多了「重複預約」開關，關掉就不問後續場次。
        「管理名單」沒有這個開關（_grpAdd 是 false）→ 維持原本一律詢問。 */

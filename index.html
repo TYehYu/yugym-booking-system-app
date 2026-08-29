@@ -11490,8 +11490,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1845';
-const APP_VERSION_LABEL='v260829.1845';
+const APP_VERSION = '260829.1853';
+const APP_VERSION_LABEL='v260829.1853';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -33929,7 +33929,33 @@ async function openGroupMembers(id, keepSel, addMode){
   if(addMode){ try{ mpkScan(); }catch(_){} }   // 把欄位升級成跳視窗挑選器
 }
 /* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
-async function saveGroupMembers(id){ return onceAct('grpmem:'+id, ()=>_saveGroupMembers(id)); }
+/* ［＋新增］＋重複預約開著 → 先問再寫（2026-08-29 使用者附截圖：
+   「應該要點這個連續預約才開始建檔　這邊先直接約了一堂」）——
+   原本是「先把這一堂存進去，再問後面要不要一起約」，所以視窗跳出來的當下
+   第一堂已經扣好票了；按「不用」也已經約掉一堂。
+   改成整批在同一個確認之後才動手：先算出要問的內容（不寫任何東西），
+   「連續預約」＝這一堂＋後面 N 堂一起建，「不用」＝只建這一堂。
+   ⚠ 「管理名單」那條路不受影響（它本來就是複選、而且沒有這個開關）。 */
+async function saveGroupMembers(id){
+  if(window._grpAdd && window._grpRep && (window._grpPick||{}).mid){
+    return onceAct('grpmem:'+id, ()=>grpFollowPre(id));
+  }
+  return onceAct('grpmem:'+id, ()=>_saveGroupMembers(id));
+}
+/* 還沒寫入時就把「後面要不要一起約」問完 —— 要問的三樣東西都算得出來：
+   誰（_grpPick）、幾個名額（1，單選）、扣哪位使用人的票（_grpPick.fam）。 */
+async function grpFollowPre(id){
+  const pk=window._grpPick||{};
+  if(!pk.mid) return _saveGroupMembers(id);
+  try{
+    await grpFollowAsk(id, [pk.mid], {[pk.mid]:1}, {[pk.mid]:pk.fam||''}, true);
+  }catch(e){ console.error('連續加入詢問失敗',e); return _saveGroupMembers(id); }
+}
+/* 「不用」＝只建這一堂（此時什麼都還沒寫） */
+async function grpFollowOnce(id){ return onceAct('grpmem1:'+id, async()=>{
+  const _r=window._grpRep; window._grpRep=false;      // 不要又問一次
+  try{ await _saveGroupMembers(id); } finally{ window._grpRep=_r; }
+}); }
 /* 「仍以教練負責加入」已移除（2026-08-20 使用者定案：取消教練招待功能）——
    0820 林婉華案例：硬加出來的無票名額後續請假又發補課券，變成雙重補償。
    現在票不夠一律擋下，要加名額請先儲值。 */
@@ -34166,7 +34192,7 @@ function grpSeriesSplit(b, all){
     .forEach(x=>{ (grpSeriesMember(x)?out.series:out.solo).push(x); });
   return out;
 }
-async function grpFollowAsk(id, addedIds, addedCnt, addedFam){
+async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending){
   const b=await dbGet('bookings',id);
   const _sp=grpSeriesSplit(b, await dbGetAll('bookings'));
   const later=_sp.series, solo=_sp.solo;
@@ -34200,7 +34226,7 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam){
     return {mid, left, def, cap, seats};
   });
   window._gfPend={id, laterIds:later.map(x=>x.id), seats:Object.fromEntries(rows.map(r=>[r.mid,r.seats])),
-    fam:Object.assign({}, addedFam||{})};
+    fam:Object.assign({}, addedFam||{}), pending:!!pending};
   const WD=['日','一','二','三','四','五','六'];
   const dowLbl=WD[(parseYmd(b.date)||new Date()).getDay()];
   showModal(`<div class="modal-title">後面的場次要一起預約嗎？</div>
@@ -34216,7 +34242,10 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam){
          不講的話櫃檯會以為系統漏約了那幾週。金色＝次要提示。 */''}
     ${solo.length?`<div style="font-size:11.5px;color:var(--gold-d);background:#f7f1e4;border-radius:8px;padding:8px 10px;margin-top:6px;line-height:1.8;">
       另有 <b>${solo.length}</b> 堂（${solo.slice(0,3).map(x=>String(x.date).slice(5).replace('-','/')).join('、')}${solo.length>3?'…':''}）是<b>單獨建立</b>的課，不在這個連續系列裡，要加請到那一堂的名單。</div>`:''}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="grpBackToCard('${id}')">不用</button>
+    ${pending?`<div style="font-size:11.5px;color:var(--t2);background:var(--card2);border-radius:9px;padding:9px 11px;margin-top:6px;line-height:1.8;">
+      這一堂（<b>${String(b.date).slice(5).replace('-','/')}</b>）也還沒建立 —— 按下去才會一起扣票建檔；
+      按「只加這一堂」就只建這一堂。</div>`:''}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="${pending?`grpFollowOnce('${id}')`:`grpBackToCard('${id}')`}">${pending?'只加這一堂':'不用'}</button>
       <button class="btn btn-green" onclick="grpFollowRun(${JSON.stringify(rows.map(r=>r.mid)).replace(/"/g,'&quot;')})">連續預約</button></div>`);
 }
 async function grpFollowRun(mids2){ return onceAct('gfrun', ()=>_grpFollowRun(mids2)); }
@@ -34228,6 +34257,14 @@ async function _grpFollowRun(mids2){
   const foot=document.querySelector('.modal-foot');
   const prog=(t)=>{ if(foot) foot.innerHTML='<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">'+t+'</div>'; };
   prog('預約中…');
+  /* 還沒建的那一堂先建（2026-08-29：整批在同一個確認之後才動手）——
+     暫時關掉重複預約旗標，免得 _saveGroupMembers 又把這張視窗叫出來一次。 */
+  if(p.pending){
+    const _r=window._grpRep; window._grpRep=false;
+    try{ await _saveGroupMembers(p.id); }
+    catch(e){ console.error('建立本堂失敗',e); showToast('建立本堂失敗：'+((e&&e.message)||e), 8000); }
+    finally{ window._grpRep=_r; }
+  }
   const report=[];
   for(const w of wants){
     let done=0, noTk=false;

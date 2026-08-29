@@ -59,7 +59,8 @@ console.log('① 鎖本身');
     const ENTRIES=[
       ['submitFacilityBooking','(){',"'facility:'+((_bkWizard&&_bkWizard.date)||'')+((_bkWizard&&_bkWizard.time)||'')"],   // 場地租借收款（會扣場租票）
       ['saveBookingTime','(id){',"'bktime:'+id"],              // 改時間／改人數（差額補扣或退）
-      ['saveGroupMembers','(id){',"'grpmem:'+id"],             // 團課管理名單（加人＝扣票）
+      /* 2026-08-29：saveGroupMembers 多了一個分岔（［＋新增］開著重複預約時先問再寫），
+         兩條路都用同一把 'grpmem:'+id 的鎖，所以改成單獨驗、不套用共用樣板。 */
       ['qbSubmitForm','(){',"'qbform'"],                       // 教練端快速預約
       ['checkInBooking','(id, opts){',"'checkin:'+id"],        // 簽到（發點）
       ['undoCheckin','(id){',"'uncheckin:'+id"],               // 取消簽到（收回點）
@@ -73,6 +74,10 @@ console.log('① 鎖本身');
       const wrap=`async function ${fn}${sig} return onceAct(${key}, ()=>_${fn}(`;
       ok('★ '+fn, src.indexOf(wrap)>=0, wrap);
     });
+    ok('★ saveGroupMembers（兩條路共用同一把鎖）',
+       /async function saveGroupMembers\(id\)\{\s*\n\s*if\(window\._grpAdd && window\._grpRep && \(window\._grpPick\|\|\{\}\)\.mid\)\{\s*\n\s*return onceAct\('grpmem:'\+id, \(\)=>grpFollowPre\(id\)\);\s*\n\s*\}\s*\n\s*return onceAct\('grpmem:'\+id, \(\)=>_saveGroupMembers\(id\)\);/.test(src));
+    ok('　　「只加這一堂」也有自己的鎖（它會真的扣票）',
+       /async function grpFollowOnce\(id\)\{ return onceAct\('grpmem1:'\+id, async\(\)=>\{/.test(src));
     ok('　　原本的實作都改名成 _xxx（沒有留下兩份）',
        ENTRIES.every(([fn])=>src.indexOf(`async function _${fn}(`)>=0
          && src.split('async function '+fn+'(').length===2));
