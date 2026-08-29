@@ -92,7 +92,7 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      && /r\.fam\?`<span class="grp-fam">（\$\{String\(r\.fam\)\.replace\(\/<\/g,'&lt;'\)\}）<\/span>`:''/.test(src));
   ok('★★ 分母也跟著拆 —— 不然「許佳慈（姊姊）」底下會寫著全部 21 堂',
      /const gLeft=tks\.reduce\(\(a,t\)=>a\+Math\.max\(0,Number\(t\.left\)\|\|0\),0\);/.test(src)
-     && /const tag=_already\+\(tks\.length\?`可用 \$\{gLeft\} \/ \$\{gTot\|\|gLeft\} 堂`:/.test(src));
+     && /const tag=tks\.length\?`可用 \$\{gLeft\} \/ \$\{gTot\|\|gLeft\} 堂`:/.test(src));
   /* 2026-08-29 定案（使用者：「改成跟教練課一樣　搜尋姓名　然後選該會員就好」
      「列表呈現　左邊是會員姓名　右邊是還可預約票券/總票券」）——
      列裡攤開圓形卡挑票那一版退場：挑票已經被「一列一位使用人」解決掉了。 */
@@ -127,18 +127,31 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      && /<div class="ash-sheetmk"><\/div><div class="modal-title">新增團體課 · 步驟 2 \/ 2<\/div>/.test(src));
   /* 2026-08-29 使用者：「因為是新增　所以不用把其他正在上這堂課的會員也列出來
      只要出現一個搜尋視窗就好」—— 同一支視窗兩種用途，資料與存檔完全共用。 */
-  ok('★★★ ［＋新增］模式把「已在名單」的人收起來，但搜尋時仍找得到（不是把路封死）',
-     /if\(_addMode && !q\)\{/.test(src)
-     && /list=list\.filter\(m=>!\( \(_base\[m\.id\]\|\|0\)>0 && sel\.filter\(x=>x===m\.id\)\.length<=\(_base\[m\.id\]\|\|0\) \)\);/.test(src)
-     && /已在名單 \$\{_base\[m\.id\]\} 個名額/.test(src));
-  ok('★★ 這一輪剛加進去的一定留著（剛按下去的人立刻消失會以為沒加到）',
-     /這一輪剛加進去的一定留著 —— 剛按下去的人立刻消失會以為沒加到。/.test(src));
-  ok('★★ 收起來幾位要說出來', /已在名單的 \$\{_inClass\} 位未列出/.test(src));
+  /* 2026-08-29 三修（使用者：「為什麼又出線已經在名單上的兩個會員」「給我單純一點的
+     頁面　搜尋只要出現有票券的會員名單　不要出現已經在課堂內的名單」）——
+     第一版只在沒打字時收起來、搜尋放行，結果搜尋出來的兩列都是已在名單的、還打著勾。
+     改成一律不列。 */
+  ok('★★★ ［＋新增］一律不列已經在這堂的使用人（搜尋也一樣）',
+     /if\(_addMode\)\{\s*\n\s*const _pk=window\._grpPick\|\|\{\};/.test(src)
+     && /if\(r\.seats\.length && !isPicked\) ROWS\.splice\(i,1\);/.test(src));
+  ok('★★★ 濾的單位是「列」＝一位使用人，不是「會員」（不然補不了第三格）',
+     /濾的單位是「列」＝一位使用人，不是「會員」：許佳慈已用媽媽與姊姊各一格時，/.test(src)
+     && /用會員濾會把整個人藏掉，就補不了第三格。/.test(src));
+  ok('★★ 這一輪剛點選的那一列一定留著（按下去立刻消失會以為沒加到）',
+     /window\._grpPick=\{mid:r\.mid, fam:r\.fam\};/.test(src)
+     && /const isPicked=\(String\(_pk\.mid\|\|''\)===String\(r\.m\.id\) && String\(_pk\.fam\|\|''\)===String\(r\.fam\|\|''\)\);/.test(src));
+  ok('★★★ 既有名額的使用人讀課卡上真正記的票（不是用票券排序猜的）',
+     /const _seatRec=\(mid,i\)=>\{ const k=\(i>0\)\?\(mid\+'#'\+\(i\+1\)\):mid;/.test(src)
+     && /const _seatFam=\(m,i\)=>\{ const pk=grpPickOf\(m\.id,i\)\|\|_seatRec\(m\.id,i\)\|\|_defPkOf\(m,i\);/.test(src)
+     && /9\/25 兩格明明是媽媽與姊姊，畫面卻標成本人與媽媽（而且兩列都打勾）。/.test(src));
+  ok('★ 計數列只留一句「可加入 N 位」（使用者：「給我單純一點的頁面」）',
+     /\? `可加入 \$\{ROWS\.length\} 位`\s*\n/.test(src));
   /* 2026-08-29 二修（使用者逐列指定版面 ＋「文字太多了」）：
      第一列標題／第二列 課堂·教練（靠左）／第三列 目前報名人數（靠右）／
      第四列 搜尋／第五列 重複預約開關。原本那四行說明整段退場。 */
   ok('★★ ［＋新增］版面照使用者指定的五列',
-     /<div class="gadd-sub">\$\{escH\(_cls\)\}\$\{_cName\?`　·　\$\{escH\(_cName\)\}`:''\}<\/div>/.test(src)
+     /* 2026-08-29：「在第二列教練名稱前面新增一個日期及時間」 */
+     /<div class="gadd-sub">\$\{escH\(_cls\)\}　·　\$\{String\(b\.date\)\.slice\(5\)\.replace\('-','\/'\)\}（\$\{WD\[\(parseYmd\(b\.date\)\|\|new Date\(\)\)\.getDay\(\)\]\}）\$\{String\(b\.start_time\|\|''\)\.slice\(0,5\)\}\$\{_cName\?`　·　\$\{escH\(_cName\)\}`:''\}<\/div>/.test(src)
      && /<div class="gadd-cnt">目前 <b>\$\{_seatsNow\} \/ \$\{_cap\}<\/b> 人<\/div>/.test(src)
      && /\.gadd-cnt\{[^}]*text-align:right;/.test(src)
      && /<button type="button" class="gadd-rep" onclick="grpRepToggle\(\)">/.test(src));

@@ -11490,8 +11490,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1823';
-const APP_VERSION_LABEL='v260829.1823';
+const APP_VERSION = '260829.1832';
+const APP_VERSION_LABEL='v260829.1832';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28767,21 +28767,21 @@ function renderGrpPick(){
   const _hasTk=m=>!!(m && ((Number(m.sum)||0)>0 || (Number(m.total)||0)>0));
   const _hidden=list.filter(m=>!_hasTk(m) && !isSel(m)).length;
   list=list.filter(m=>_hasTk(m)||isSel(m));
-  /* ［＋新增］模式（2026-08-29 使用者：「因為是新增　所以不用把其他正在上這堂課的
-     會員也列出來　只要出現一個搜尋視窗就好」）——
-     打開視窗當下就在名單上的人不佔版面。
-     ⚠ 只在「沒有搜尋字」時收起來：要替已在名單的人多加一個名額，搜尋他的名字
-       就找得到（列上會標「已在名單」），不是把路封死。
-     ⚠ 這一輪剛加進去的一定留著 —— 剛按下去的人立刻消失會以為沒加到。 */
+  /* ［＋新增］模式（2026-08-29 使用者兩次指示）——
+       ①「因為是新增　所以不用把其他正在上這堂課的會員也列出來」
+       ②「為什麼又出線已經在名單上的兩個會員　我只需要搜尋還有票券的會員名單就好
+          不要再給我已經在該課堂的名單了」
+     第一版只在「沒打字」時收起來、搜尋還放行，被打回票：搜尋出來的兩列都是已在名單的，
+     還打著勾，等於只剩雜訊。改成**一律不列**。
+     ⚠ 濾的單位是「列」＝一位使用人，不是「會員」：許佳慈已用媽媽與姊姊各一格時，
+       「許佳慈（本人）」那一列還是要出現（那位還沒進這堂）。
+       用會員濾會把整個人藏掉，就補不了第三格。
+     ⚠ 這一輪剛點選的那一列一定留著 —— 按下去立刻消失會以為沒加到。
+     ⚠ 要替同一位使用人再加一個名額，請走「管理名單」（那邊有 ＋）。 */
   const _addMode=!!window._grpAdd;
   const _cnt2=a=>(a||[]).reduce((o,x)=>{o[x]=(o[x]||0)+1;return o;},{});
   const _base=_cnt2(window._grpBase||[]);
   let _inClass=0;
-  if(_addMode && !q){
-    const before=list.length;
-    list=list.filter(m=>!( (_base[m.id]||0)>0 && sel.filter(x=>x===m.id).length<=(_base[m.id]||0) ));
-    _inClass=before-list.length;
-  }
   /* 排序（2026-08-24 使用者指示：「團體課新增會員的時候，也要把有票券的會員放在最上面」）——
      已選 → 有可用票券 → ★主教練是本堂教練 → 姓名。
      「有票」要排在「★」之前：沒票的人再熟也加不進去，先讓櫃檯看到加得進去的。 */
@@ -28812,7 +28812,12 @@ function renderGrpPick(){
   /* 名額 → 使用人：沿用「名額 i 用第 i 張票」的預設，與 _saveGroupMembers 同一套。
      兩邊不同步就會回到 0829 早上那個「畫面說姊姊、實際扣媽媽」的老問題。 */
   const _defPkOf=(m,i)=>{ const a=m.tks||[]; return (a[Math.min(i,a.length-1)]||{}).id||''; };
-  const _seatFam=(m,i)=>{ const pk=grpPickOf(m.id,i)||_defPkOf(m,i);
+  /* 這一格用哪張票：櫃檯剛指定的 → 課卡上記的事實 → 才輪到「第 i 格用第 i 張」的近似。
+     ⚠ 中間那一段是 2026-08-29 補的：少了它，既有名額的使用人是用票券排序猜的，
+       9/25 兩格明明是媽媽與姊姊，畫面卻標成本人與媽媽（而且兩列都打勾）。 */
+  const _seatRec=(mid,i)=>{ const k=(i>0)?(mid+'#'+(i+1)):mid;
+    return (window._grpSeatTk||{})[k]||''; };
+  const _seatFam=(m,i)=>{ const pk=grpPickOf(m.id,i)||_seatRec(m.id,i)||_defPkOf(m,i);
     const t=(m.tks||[]).find(x=>x.id===pk); return t?_famKey(t):''; };
   const ROWS=[];
   list.forEach(m=>{
@@ -28825,11 +28830,23 @@ function renderGrpPick(){
     rows.sort((x,y)=>(y.seats.length?1:0)-(x.seats.length?1:0));
     rows.forEach(r=>ROWS.push(r));
   });
+  /* 已經在這堂的使用人不列出來（見上面 _addMode 的說明）。
+     _grpPick 是這一輪剛點選的那一列，永遠留著。 */
+  if(_addMode){
+    const _pk=window._grpPick||{};
+    const before=ROWS.length;
+    for(let i=ROWS.length-1;i>=0;i--){
+      const r=ROWS[i];
+      const isPicked=(String(_pk.mid||'')===String(r.m.id) && String(_pk.fam||'')===String(r.fam||''));
+      if(r.seats.length && !isPicked) ROWS.splice(i,1);
+    }
+    _inClass=before-ROWS.length;
+  }
   window._grpRows=ROWS.map(r=>({mid:r.m.id, fam:r.fam, tkIds:r.tks.map(t=>t.id), seats:r.seats.slice()}));
   const firstUnsel=ROWS.findIndex(r=>!isSel(r.m));   // 已選區與其餘會員之間放一條分隔
   if(ROWS.length===0){ box.innerHTML=`<div class="ms-empty">${q
     ?`找不到有團體課票券的「${String(q).replace(/</g,'&lt;')}」。沒票的會員不會列出來，請先儲值。`
-    :(_addMode?'沒有可以加入的會員了（其他持票會員都已在名單上，搜尋姓名可再加名額）。'
+    :(_addMode?'沒有可以加入的會員了（其他持票會員都已經在這堂名單上）。'
               :'目前沒有會員持有團體課票券。要加人請先儲值。')}</div>`; }
   else box.innerHTML=ROWS.map((r,_i)=>{
     const m=r.m, tks=r.tks;
@@ -28843,9 +28860,9 @@ function renderGrpPick(){
     /* 2026-08-24：有票顯示「可用 N / 總 M 堂」（使用者要的「可使用票券/總票券」）；
        沒票就把原因寫出來，不要一律說「請先儲值」—— 常見的其實是
        「剩下的都已經排課了」或「分期尚未繳費開通」。 */
-    /* 搜尋時會把已在名單的人找出來 —— 標一句，不然櫃檯會以為自己剛加過了（2026-08-29） */
-    const _already=(window._grpAdd && ((_base[m.id]||0)>0)) ? `已在名單 ${_base[m.id]} 個名額　·　` : '';
-    const tag=_already+(tks.length?`可用 ${gLeft} / ${gTot||gLeft} 堂`:(m.why||'無票（無法加入，請先儲值）'));
+    /* ［＋新增］那張只寫堂數（2026-08-29 使用者：「給我單純一點的頁面」）——
+       已經在這堂的列本來就被濾掉了，不必再解釋誰有幾個名額。 */
+    const tag=tks.length?`可用 ${gLeft} / ${gTot||gLeft} 堂`:(m.why||'無票（無法加入，請先儲值）');
     const nameHtml=`${m.mine?'<span class="ms-star">★</span> ':''}${m.name}${
       r.fam?`<span class="grp-fam">（${String(r.fam).replace(/</g,'&lt;')}）</span>`:''}${
       m.phone?`<span class="grp-ph">${fmtPhone(m.phone)}</span>`:''}`;
@@ -28874,7 +28891,7 @@ function renderGrpPick(){
     /* ［＋新增］那張只講「有幾位可以選」—— 已選幾人、隱藏幾位在單選模式下只是雜訊
        （2026-08-29 使用者：「文字太多了」）。 */
     c.textContent=_addMode
-      ? `可加入 ${ROWS.length} 位`+(_inClass?`　·　已在名單的 ${_inClass} 位未列出`:'')
+      ? `可加入 ${ROWS.length} 位`
       : `已選 ${sel.length} / ${grpMax()} 人　·　有「團體課」可用的會員（${ROWS.length}）`
         + ((q && shown<total) ? `（搜尋中隱藏了 ${total-shown} 位已選會員）` : '')
         /* 隱藏了幾位要說出來（2026-08-29）——不講的話「怎麼找不到某某」會被當成系統壞了 */
@@ -28936,7 +28953,9 @@ function grpRowTap(i){
     const already=r.seats.length>0;
     window._grpSel=(window._grpBase||[]).slice();
     window._grpTkPick={};
-    if(!already && !grpSeatAdd(r.mid, r.tkIds[0]||null)) return;
+    if(already){ window._grpPick=null; renderGrpPick(); return; }   // 再點一次＝取消
+    if(!grpSeatAdd(r.mid, r.tkIds[0]||null)) return;
+    window._grpPick={mid:r.mid, fam:r.fam};   // 這一列不會被「已在名單」那道濾網藏掉
     renderGrpPick(); return;
   }
   if(r.seats.length){ r.seats.slice().sort((a,b)=>b-a).forEach(si=>grpSeatDel(r.mid,si)); }
@@ -33822,10 +33841,15 @@ async function openGroupMembers(id, keepSel, addMode){
   if(!keepSel || !Array.isArray(window._grpSel)) window._grpSel=cur.slice();
   window._grpAdd=!!addMode;
   window._grpBase=cur.slice();      // 打開視窗當下就在名單上的人（addMode 用來收起來）
+  /* 課卡上逐名額記的票（2026-08-29）—— 名單視窗要知道「既有的第 i 格是哪位使用人」，
+     否則只能用 tks[i] 近似，於是 9/25 明明是媽媽＋姊姊，畫面卻標成本人＋媽媽。
+     這是同一天在別處修過兩次的老問題：畫面說一套、資料另一套。 */
+  window._grpSeatTk=(b && b.seat_tickets && typeof b.seat_tickets==='object')?b.seat_tickets:{};
   /* 重複預約開關（2026-08-29 使用者指定的第五列）—— 預設開：櫃檯多半是替客人
      把整期都排掉，關掉才是例外。開著＝存檔後照舊問「後面的場次要一起預約嗎？」
      （那張視窗會列出每一週、讓人填各加幾堂）；關掉就只加這一堂、完全不問。 */
   if(addMode) window._grpRep=(window._grpRep==null)?true:!!window._grpRep;
+  window._grpPick=null;
   window._grpMax=Math.max(1,Number(b.max_heads)||5);
   window._grpLeaveN=grpLeaveSeats(b);   // 請假名額不佔位（2026-08-12）
   /* 2026-08-21 使用者指示：「新增＋的視窗也要更新成我們最新的風格
@@ -33843,7 +33867,7 @@ async function openGroupMembers(id, keepSel, addMode){
     ? bookingTypeName(b, window._ttMapCache||window._memTypeMap) : (b.category||'團體課');
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">${addMode?'加入會員':'團體課名單'}</div>
     ${addMode
-      ? `<div class="gadd-sub">${escH(_cls)}${_cName?`　·　${escH(_cName)}`:''}</div>
+      ? `<div class="gadd-sub">${escH(_cls)}　·　${String(b.date).slice(5).replace('-','/')}（${WD[(parseYmd(b.date)||new Date()).getDay()]}）${String(b.start_time||'').slice(0,5)}${_cName?`　·　${escH(_cName)}`:''}</div>
          <div class="gadd-cnt">目前 <b>${_seatsNow} / ${_cap}</b> 人</div>`
       : `<div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">這裡只列<b>有團體課票券</b>的會員（沒票的請先儲值）。加入時扣 1 堂、移除時退回。票券設了使用人的會分開一列（例：許佳慈（媽媽）、許佳慈（姊姊））—— 點哪一列就是替那位報名。同一位要再加一個名額按「＋」。</div>
          <div class="form-row" style="display:flex;align-items:center;gap:10px;"><label style="margin:0;flex:none;">本堂人數上限</label><input type="number" id="grp-max" value="${_cap}" min="1" max="12" style="width:76px;" oninput="window._grpMax=Math.max(1,Number(this.value)||5);renderGrpPick()"><span style="font-size:11.5px;color:var(--t3);">預設 5 人，場地有餘裕可放寬</span></div>`}
