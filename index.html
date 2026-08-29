@@ -7962,6 +7962,21 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
   border-radius:18px;padding:14px 16px;margin-bottom:9px;cursor:pointer;
   box-shadow:0 6px 18px rgba(30,25,15,.13);}
 .ash-eirow:active{transform:scale(.99);}
+/* 就地加減的那一列（2026-08-29：本堂人數上限不再開視窗）——
+   左邊標題與說明疊兩行，右邊一組 −／數字／＋。 */
+.ash-eirow.ash-eistep{flex-direction:row;align-items:center;justify-content:space-between;
+  gap:12px;flex-wrap:wrap;cursor:default;}
+.ash-eirow.ash-eistep:active{transform:none;}
+.ash-eirow.ash-eistep .ash-eilb{flex:1 0 auto;}
+.ash-eirow.ash-eistep .ash-eisub{order:3;flex:1 0 100%;}
+.ash-stepper{flex:none;display:inline-flex;align-items:center;gap:10px;}
+.ash-stepbtn{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--bd);
+  background:#fff;color:var(--green,#1F6F54);font-size:17px;font-weight:800;line-height:1;
+  cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;}
+.ash-stepbtn:hover{background:#eaf3ee;border-color:var(--green,#1F6F54);}
+.ash-stepbtn:active{transform:scale(.92);}
+.ash-stepnum{min-width:26px;text-align:center;font-size:19px;font-weight:800;
+  font-family:var(--num);font-variant-numeric:tabular-nums;color:var(--text);}
 /* 兩欄列：左標題、右附註（場地挑選的餘位數用它；2026-08-24 使用者指示「靠右」）。
    數字用 tabular-nums 才會上下對齊；名字長就自己截斷，右邊那格不壓縮。 */
 .ash-eirow.ash-ei-2c{flex-direction:row;align-items:baseline;justify-content:space-between;gap:12px;}
@@ -11466,8 +11481,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1808';
-const APP_VERSION_LABEL='v260829.1808';
+const APP_VERSION = '260829.1813';
+const APP_VERSION_LABEL='v260829.1813';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24582,10 +24597,24 @@ async function ashEditAsk(id){
      快到期的沒先用、限定票種扣成一般票、分期票與正式票混——觸發永遠不會發生。 */
   if(!_leave && b.status==='booked' && !A.isGroup && (A.staff||A.coachCk) && bkDatePast(b))
     rows+=row(`ashBackArm('${b.id}');closeModal();openMakeupModal('${b.id}','ash')`,'補簽','補登這堂未簽到的課；自主訓練點數的效期自課程當天起算');
-  /* 團課「改人數」（2026-08-07 既有功能）搬進標題卡（2026-08-20 使用者指示） */
-  if(!_leave && A.isGroup && A.editable)
-    rows+=row(`ashBackArm('${b.id}');closeModal();openGrpMaxEdit('${b.id}')`,'本堂人數上限',
-      `目前 ${mids(b).length} / ${Math.max(1,Number(b.max_heads)||5)} 人・場地有餘裕時可放寬`);
+  /* 團課「改人數」（2026-08-07 既有功能）搬進標題卡（2026-08-20 使用者指示）——
+     2026-08-29 再簡化：「在這裡新增調整人數的功能就好　就不用再點開視窗了」。
+     這一項只是一個 1–12 的數字，開一張視窗、按儲存、再關掉，四個動作換一個加一。
+     ⚠ 改成就地加減，每按一下就寫回（規則與 _saveGrpMax 同一套：1–12、不得低於
+       名單人數）。不能低於名單人數這條要留著 —— 上限被壓到名單以下，
+       後面每一處「滿了沒」的判斷都會錯。
+     ⚠ 這一列不是按鈕（整列點下去沒有動作），所以用 div 不用 button。 */
+  if(!_leave && A.isGroup && A.editable){
+    const _gnow=mids(b).length, _gmx=Math.max(1,Number(b.max_heads)||5);
+    rows+=`<div class="ash-eirow ash-eistep">
+      <span class="ash-eilb">本堂人數上限</span>
+      <span class="ash-eisub">目前 ${_gnow} 人・場地有餘裕時可放寬（最多 12）</span>
+      <span class="ash-stepper">
+        <button type="button" class="ash-stepbtn" onclick="grpMaxStep('${b.id}',-1)" aria-label="減少 1">−</button>
+        <b class="ash-stepnum" id="gmx-num">${_gmx}</b>
+        <button type="button" class="ash-stepbtn" onclick="grpMaxStep('${b.id}',1)" aria-label="增加 1">＋</button>
+      </span></div>`;
+  }
   /* 教練請假／復原（使用者指示：「復原鈕就按教練請假這個地方，跳出視窗確認是否取消」）——
      已請假的堂，這一張清單只留復原（且團課的請假是整堂取消、救不回來，照舊說清楚）。 */
   if(_leave){
@@ -33678,6 +33707,25 @@ async function openGrpMaxEdit(id){
     <div id="gmx-err" style="display:none;color:var(--danger,#b5372e);font-size:12.5px;margin:6px 0;"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="grpBackToCard('${id}')">取消</button>
       <button class="btn btn-green" onclick="saveGrpMax('${id}')">儲存</button></div>`);
+}
+/* 就地加減（2026-08-29 使用者指示：「在這裡新增調整人數的功能就好　就不用再點開視窗了」）——
+   規則與 _saveGrpMax 一模一樣，只是少了「開視窗→填→按儲存」三步。
+   ⚠ 每按一下就寫回：這一格沒有「取消」的概念，按錯就按回來。 */
+async function grpMaxStep(id, d){ return onceAct('grpmaxstep:'+id+':'+d, ()=>_grpMaxStep(id,d)); }
+async function _grpMaxStep(id, d){
+  const b=await dbGet('bookings',id); if(!b) return;
+  const now=mids(b).length;
+  const cur=Math.max(1,Number(b.max_heads)||5);
+  const n=cur+(Number(d)||0);
+  if(n<1||n>12){ showToast(n<1?'最少 1 人':'最多 12 人'); return; }
+  /* 上限不能低於名單人數 —— 壓到名單以下，後面每一處「滿了沒」都會算錯（同 _saveGrpMax） */
+  if(n<now){ showToast(`名單上已經有 ${now} 人，上限不能低於這個數字（要先移除名額）`, 5000); return; }
+  b.max_heads=n;
+  await dbPut('bookings',b);
+  const el=document.getElementById('gmx-num'); if(el) el.textContent=n;
+  showToast(`本堂人數上限改為 ${n} 人（原 ${cur} 人）`);
+  /* 底下那一頁也重畫（寫入時快取已就地更新，0 網路等待）；這張清單是覆層不會被關掉 */
+  try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
 }
 async function saveGrpMax(id){ return onceAct('grpmax:'+id, ()=>_saveGrpMax(id)); }
 async function _saveGrpMax(id){

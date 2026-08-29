@@ -119,9 +119,19 @@ ok('　　⚠ 復原留在上一層（請假後課會變成自主訓練，這張
 ok('　　返回退回「調整課程」那一層', /onclick="closeModal\(\);ashEditAsk\('\$\{bid\}'\)">返回/.test(src));
 ok('★ 沒有錨點課卡也能重開面板（首頁那條路本來就沒有 el，原本會丟例外）',
    (src.match(/if\(el\)\{ el\.style\.marginLeft=''; el\.style\.marginTop=''; el\.classList\.add\('cal-ev-active'\); \}/g)||[]).length===2);
-ok('★ 視窗集合：本堂人數上限（改人數搬進標題卡）',
-   ei.includes("openGrpMaxEdit('${b.id}')") && ei.includes('if(!_leave && A.isGroup && A.editable)'));
-ok('　　改人數做完要回課卡（它的取消與儲存都會 openBookingDetail）', ei.includes("ashBackArm('${b.id}');closeModal();openGrpMaxEdit"));
+/* 2026-08-29 使用者：「在這裡新增調整人數的功能就好　就不用再點開視窗了」——
+   這一項只是一個 1–12 的數字，開視窗、填、按儲存、關掉，四個動作換一個加一。
+   改成就地 −／＋，每按一下就寫回。 */
+ok('★ 視窗集合：本堂人數上限就地加減（不再開視窗）',
+   ei.includes('if(!_leave && A.isGroup && A.editable){')
+   && ei.includes(`grpMaxStep('\${b.id}',-1)`) && ei.includes(`grpMaxStep('\${b.id}',1)`)
+   && !ei.includes("openGrpMaxEdit('${b.id}')"));
+ok('　　規則與原本的儲存版一致（1–12、不得低於名單人數）',
+   /if\(n<1\|\|n>12\)\{ showToast\(n<1\?'最少 1 人':'最多 12 人'\); return; \}/.test(src)
+   && /if\(n<now\)\{ showToast\(`名單上已經有 \$\{now\} 人，上限不能低於這個數字（要先移除名額）`, 5000\); return; \}/.test(src));
+ok('　　那一列不是按鈕（整列點下去沒有動作），所以用 div 不用 button',
+   /\.ash-eirow\.ash-eistep\{flex-direction:row;align-items:center;justify-content:space-between;\s*\n\s*gap:12px;flex-wrap:wrap;cursor:default;\}/.test(src)
+   && ei.includes('<div class="ash-eirow ash-eistep">'));
 /* 0821 起這一層只留復原：請假的入口搬到「指派代課教練」那張清單（見上面） */
 ok('★ 已請假的堂：這一層只留復原', /if\(_leave\)\{\s*\n\s*rows \+= \(b\.status==='coach_leave'\)\s*\n\s*\? row\(`ashCoachLeaveUndoAsk\('\$\{b\.id\}'\)`,'取消教練請假（復原）'/.test(ei)
    && !/'教練請假',bkCoachLeaveSub\(b\)/.test(ei));
