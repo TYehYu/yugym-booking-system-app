@@ -363,8 +363,10 @@ ok('★ 返回退回課卡，不再跳已退役的預約明細',
    /onclick="closeModal\(\);expandBkCard\(window\._expandedBkEl\|\|null,'\$\{id\}'\)">返回/.test(src));
 
 console.log('\n會員姓名右邊的使用人按鈕（使用者：蘭馨這堂是爸爸來用的）');
+/* 2026-08-29：姓名本身變成「進會員資料」的按鈕（見 acctfortunetest），
+   使用人鈕仍然緊接在姓名後面 —— 這一條守的是那個相對位置。 */
 ok('★ 按鈕接進會員卡的姓名列',
-   /<div class="ash-mname"><span>\$\{nm2\}<\/span>\$\{_famBtn\}/.test(src)
+   /<div class="ash-mname">\$\{r\.mid[\s\S]{0,320}?\}\$\{_famBtn\}/.test(src)
    && /class="ash-mfam" title="更改使用人"/.test(src));
 ok('★ 只有設定過家庭名單的會員才畫（沒設定的不出現）',
    /const f=\(m&&Array\.isArray\(m\.family_members\)\)\?m\.family_members\.filter\(Boolean\):\[\];\s*\n\s*if\(f\.length\) _famMap\[m\.id\]=f;/.test(src)
@@ -412,9 +414,9 @@ ok('　　為什麼要講，寫在程式裡（否則櫃檯會以為按了就整�
    /否則櫃檯會以為按了就整組回沖/.test(src));
 
 console.log('\n待簽約卡的下一步：安排會員 → 儲值 → 轉正 →（簽到）');
-ok('★ 「會員」鈕拿掉（點會員卡本來就會進會員資料）',
+ok('★ 「會員」鈕拿掉（點會員姓名本來就會進會員資料）',
    !/evoBtn\('evo-b1','',`collapseBkCard\(\);openMemberDetail\('\$\{b\.member_id\}'\)`,'doc','會員'\)/.test(src)
-   && /onclick="collapseBkCard\(\);openMemberDetail\('\$\{r\.mid\}'\)"/.test(src));
+   && /collapseBkCard\(\);openMemberDetail\('\$\{r\.mid\}'\)"/.test(src));
 /* 2026-08-24 使用者回報：「點了安排會員的按鈕，跑到舊視窗了」——
    空堂走的是「待簽約」那條早退分支，一般分支裡的［＋新增］從來沒被接上，
    按鈕一直指到舊的 openBindPending。空堂改指 bkAddMemberOpen（那邊才問得出

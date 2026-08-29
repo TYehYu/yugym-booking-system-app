@@ -154,8 +154,12 @@ ok('　　只吃帶標記的視窗，其他彈窗不受影響', /\.modal\{backgr
 console.log('簡易課卡：每位會員一張卡');
 ok('★ 團課逐名額一張卡、單人課一張', /_seatKs\.length \? _seatKs\.map\(sk=>\(\{sk, mid:seatMid\(sk\), n:seatNo\(sk\)\}\)\)/.test(src)
    && src.includes("(b.member_id ? [{sk:null, mid:b.member_id, n:1}]"));
-ok('★ 點會員卡進會員資料', src.includes('onclick="collapseBkCard();openMemberDetail(\'${r.mid}\')"'));
-ok('　　沒有會員記錄（體驗／場租）就不掛點擊', src.includes('${r.mid?` onclick='));
+/* 2026-08-29：入口從「整張卡」收斂到姓名（使用者：整張卡可點時，卡上的
+   備註／變更看起來就不像按鈕）。行為沒變，只是點擊區小了。 */
+ok('★ 點會員姓名進會員資料',
+   src.includes('collapseBkCard();openMemberDetail(\'${r.mid}\')"')
+   && /<button type="button" class="ash-mgo"/.test(src));
+ok('　　沒有會員記錄（體驗／場租）就不掛點擊', /\$\{r\.mid\s*\n\s*\? `<button type="button" class="ash-mgo"[\s\S]*?: `<span>\$\{nm2\}<\/span>`\}/.test(src));
 ok('★ 取消（上）／簽到（下）獨立在卡片外面',
    /<div class="ash-mrow">[\s\S]*<div class="ash-mcard[\s\S]*<\/div>\s*\$\{_outOrbs\?`<div class="ash-morbs">/.test(src)
    && /\.ash-morbs\{[^}]*flex-direction:column/.test(src));

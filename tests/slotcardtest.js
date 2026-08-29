@@ -267,13 +267,22 @@ ok('★★ 更換票券＝圓點列最右邊的「變更」圓鈕（未簽到／
    /const _tkTap = isDeskLike\(\) && b\.status==='booked' && r\.mid && !A\.isGroup && \(_swapN\[r\.mid\]\|\|0\)>0;/.test(src)
    && /<button type="button" class="mtk ash-mswap"/.test(src)
    && /onclick="event\.stopPropagation\(\);collapseBkCard\(\);openBkTicketChange\('\$\{b\.id\}','close'\)">變更<\/button>/.test(src));
+/* 2026-08-29 使用者：「整張會員卡點了都會進會員視窗　這樣這個[變更]看起來沒有互動感
+   把點進會員視窗收斂在最上方會員這一列」—— 卡片本身不再是一個大點擊區。 */
+ok('★★ 進會員資料的入口收在姓名上，整張卡不再可點',
+   /<button type="button" class="ash-mgo" onclick="event\.stopPropagation\(\);collapseBkCard\(\);openMemberDetail\('\$\{r\.mid\}'\)"/.test(src)
+   && !/<div class="ash-mcard\$\{onLeave\?' ash-mleave':''\}"\$\{r\.mid\?` onclick=/.test(src));
+ok('★★ 連帶拿掉整張卡的 cursor:pointer 與按壓縮放（留著會繼續暗示整張可按）',
+   !/\.ash-mcard:active\{transform:scale\(\.99\);\}/.test(src)
+   && /整張卡不再可點（入口收在姓名上），所以拿掉 cursor:pointer/.test(src));
 ok('★★ 「有別張票可換」與 openBkTicketChange 的候選同一個判準（可用票扣掉現在綁的那張）',
    /_swapN\[r\.mid\]=\(c\|\|\[\]\)\.filter\(t=>t && t\.id!==b\.ticket_id\)\.length;/.test(src)
    && /const list=cand\.filter\(t=>t\.id!==curId\);/.test(src));
 ok('★★ 本堂那一顆放大，而且只在簡易課卡放大（票券夾一列 60 顆不能跟著大）',
-   /\.ash-mcard \.ash-tk \.mtk\.mtk-cur\{width:62px;height:62px;font-size:17px;\}/.test(src)
-   /* 二修：「兩倍大太大了　改成跟外面的圓形按鈕一樣大」→ 對齊 evo-btn 的 62px */
-   && /#bk-card-pop \.evo-btn\{position:static !important;transform:none !important;animation:none !important;\s*\n\s*width:62px;height:62px;/.test(src)
+   /* 66px（兩倍）→ 62px（對齊動作圓鈕）→ 44px：前兩次都被回「太大了」。
+      那三顆動作鈕站在卡片外面，這一顆排在一列圓點裡，同尺寸會把整列撐開。 */
+   /\.ash-mcard \.ash-tk \.mtk\.mtk-cur\{width:44px;height:44px;font-size:13px;\}/.test(src)
+   && /\.mtk\{position:relative;width:35px;height:35px;/.test(src)
    && /只在簡易課卡的會員卡放大：票券夾那邊一列要排 60 顆，放大會整排爆掉/.test(src));
 /* 2026-08-26 使用者：「跳出的視窗按返回會跑回調整課程的視窗　這邊應該設計關閉的按鈕就好」
    —— 從會員卡進來這條路沒有上一層可回，返回等於把人丟到一個他沒去過的地方。 */
