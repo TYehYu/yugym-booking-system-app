@@ -43,7 +43,37 @@ console.log('① 超約防線：團課也算得到（R1）');
   const map=await fn();
   eq('★ 團課 G1・G2 各一格＋G4（扣課不退）一格＋單人課 P1 一格＝4',map['T1'],4);
   ok('★★ 補連結（delta 0）不算佔用 —— 否則固化推算之後，有餘額的票會被防線誤擋',
-     /if\(Number\(l\.delta\)===0\) return;/.test(src));
+     map['T1']===4 && /delta 為 0 的「補連結」本來就不進 _net/.test(src));
+
+  /* ── 亂序也要算對（2026-08-29 使用者：「還是看不到許佳慈那張給媽媽的票」）──
+     dbGetAll('ticket_logs') 的順序不保證按時間。原本逐筆 deduct +1 / refund −1，
+     refund 那邊還夾了 Math.max(0,…)：只要 refund 先被處理就被吃掉、後面的 deduct
+     照加，佔用就灌爆。許佳慈 TK-mte3oumslp83 累積 9 扣 6 退（真正還扣著 3 堂），
+     不巧的順序會算成 9 → 4 堂的票被判「已排滿」→ 名單上整個人不見。 */
+  {
+    const B2=[]; for(let i=1;i<=9;i++) B2.push({id:'B'+i,status:'booked'});
+    const L2=[];
+    for(let i=1;i<=9;i++) L2.push({ticket_id:'TT',booking_id:'B'+i,action:'deduct',delta:-1});
+    [1,4,6,7,8,9].forEach(i=>L2.push({ticket_id:'TT',booking_id:'B'+i,action:'refund',delta:1}));
+    const mk=async(order)=>{
+      const logs=order.slice();
+      const fn2=new Function('dbGetAll', grabFn('tkBookedCountMap')+'\nreturn tkBookedCountMap;')(
+        async t=>(t==='bookings'?B2:(t==='ticket_logs'?logs:[])));
+      return (await fn2())['TT'];
+    };
+    eq('★★★ 照時間順序 → 3（9 扣 6 退，真正還扣著 3 堂）', await mk(L2), 3);
+    eq('★★★ 退款排在前面（最壞的順序）→ 還是 3，不會變成 9',
+       await mk(L2.slice().reverse()), 3);
+    eq('★★ 完全打散也一樣',
+       await mk(L2.slice().sort((a,b)=>String(a.booking_id+a.action).localeCompare(String(b.booking_id+b.action)))), 3);
+    /* 同一堂扣兩格（一人兩個名額扣同一張票）要算成兩格，不是一格 */
+    const B3=[{id:'X1',status:'booked'}];
+    const L3=[{ticket_id:'TT',booking_id:'X1',action:'deduct',delta:-1},
+              {ticket_id:'TT',booking_id:'X1',action:'deduct',delta:-1}];
+    const fn3=new Function('dbGetAll', grabFn('tkBookedCountMap')+'\nreturn tkBookedCountMap;')(
+      async t=>(t==='bookings'?B3:(t==='ticket_logs'?L3:[])));
+    eq('★★ 同一堂扣兩格算兩格（團課一人多名額）', (await fn3())['TT'], 2);
+  }
 
   const over=new Function(grabFn('tkOverBooked')+'\nreturn tkOverBooked;')();
   ok('★ 4 堂票已被佔滿 4 格 → 擋下（團課現在也擋得住）', over({id:'T1',sessions_total:4},map)===true);

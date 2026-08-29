@@ -152,10 +152,13 @@ ok('　　已取消的預約不算（不然取消再約就永遠卡住）',
    /if\(!b\.ticket_id \|\| b\.status==='cancelled'\) return;/.test(src));
 /* 2026-08-06 稽核 R1：團課預約沒有 ticket_id，原本完全不受這道防線保護 →
    併入 ticket_logs 的淨扣課（正常取消淨 0；「扣課不退」仍留 1，票真的被吃掉了）。 */
+/* 2026-08-29：逐筆加減（deduct +1 / refund −1，還夾了 Math.max(0,…)）改成逐
+   「票券×課卡」取淨值 —— 流水順序不保證按時間，refund 排在 deduct 前面時會被
+   max(0,…) 吃掉、後面的 deduct 照加，佔用因此灌爆（見 tkguardtest 的亂序實跑）。 */
 ok('★ 團課也算得進來（從扣課紀錄取淨值，不重複計有 ticket_id 的那些）',
    /if\(!x \|\| x\.hasTk\) return;                  \/\/ 已由 ticket_id 計過 → 不重複算/.test(src)
-   && /if\(l\.action==='deduct'\) map\[l\.ticket_id\]=\(map\[l\.ticket_id\]\|\|0\)\+1;/.test(src)
-   && /else if\(l\.action==='refund'\) map\[l\.ticket_id\]=Math\.max\(0,\(map\[l\.ticket_id\]\|\|0\)-1\);/.test(src));
+   && /const n=-\(Number\(_net\[k\]\)\|\|0\);\s*\n\s*if\(n>0\) map\[tid\]=\(map\[tid\]\|\|0\)\+n;/.test(src)
+   && !/map\[l\.ticket_id\]=Math\.max\(0,\(map\[l\.ticket_id\]\|\|0\)-1\);/.test(src));
 ok('　　沒帶計數時維持原行為，不倒退', /if\(!t \|\| !bkCntByTicket\) return false;/.test(src));
 ok('　　原因寫在程式裡', /8 堂的票被排了 9 堂課/.test(src));
 

@@ -11500,8 +11500,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1945';
-const APP_VERSION_LABEL='v260829.1945';
+const APP_VERSION = '260829.1956';
+const APP_VERSION_LABEL='v260829.1956';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16852,19 +16852,30 @@ async function tkBookedCountMap(){
       if(_hasLg[k] && (_net[k]||0)>=0) return;   // 帳本說這一堂已經退回來了 → 不佔位
       map[b.ticket_id]=(map[b.ticket_id]||0)+1;
     });
-    (logs||[]).forEach(l=>{
-      if(!l || !l.ticket_id || !l.booking_id) return;
-      /* ⚠ delta 為 0 的是「補連結」——只記『這堂課用這張票』，票面堂數當初就已經扣過了
-         （舊系統匯入的課、以及 2026-08-06 固化推算寫進來的 532 筆）。
-         把它們算成佔用會重複計算：實測固化之後，有餘額卻被超約防線擋住的票
-         從 2 張暴增到 59 張，等於會員手上明明還有堂數卻約不了課。 */
-      if(Number(l.delta)===0) return;
-      const x=st[l.booking_id];
+    /* 團課（課卡不綁 ticket_id）改用「逐票券×逐課卡的淨值」算佔用（2026-08-29 修）——
+
+       原本是逐筆流水加減：deduct +1、refund −1，而且 refund 那邊夾了 Math.max(0,…)。
+       兩個問題疊在一起就會把佔用灌爆：
+         ① dbGetAll('ticket_logs') 回來的順序**不保證按時間**；
+         ② 只要 refund 排在 deduct 前面被處理，那一次就被 max(0,…) 吃掉，
+            後面的 deduct 卻照加。
+       許佳慈 TK-mte3oumslp83（媽媽）今天被反覆加入／移除，累積 9 筆 deduct、6 筆 refund，
+       真正還扣著的只有 3 堂；但只要順序不巧，這裡會算成最多 9 → 4 堂的票被判定
+       「已排滿」→ tkOverBooked 擋掉 → 名單上整個人不見（9/28 搜「許」一片空白）。
+
+       淨值算法沒有順序問題：同一張票、同一堂課的 delta 加總 <0 才算佔著，
+       而且「淨扣 2 堂」（同一人兩個名額扣同一張票）也照樣算成 2 格。
+       ⚠ delta 為 0 的「補連結」本來就不進 _net（加總不變），語意與原本一致：
+         那是只記歸屬、堂數當初就扣過了。 */
+    Object.keys(_net).forEach(k=>{
+      const i=k.indexOf('|'); if(i<0) return;
+      const tid=k.slice(0,i), bid=k.slice(i+1);
+      const x=st[bid];
       if(!x || x.hasTk) return;                  // 已由 ticket_id 計過 → 不重複算
       /* 取消的課不能直接跳過：正常取消是「扣 1 退 1」＝淨 0，但取消時選「扣課不退」
          那一堂票是真的被吃掉了，仍佔住一格（2026-08-06）。淨值自然算得出來。 */
-      if(l.action==='deduct') map[l.ticket_id]=(map[l.ticket_id]||0)+1;
-      else if(l.action==='refund') map[l.ticket_id]=Math.max(0,(map[l.ticket_id]||0)-1);
+      const n=-(Number(_net[k])||0);
+      if(n>0) map[tid]=(map[tid]||0)+n;
     });
   }catch(_){}
   return map;
