@@ -11500,8 +11500,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1931';
-const APP_VERSION_LABEL='v260829.1931';
+const APP_VERSION = '260829.1945';
+const APP_VERSION_LABEL='v260829.1945';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28848,11 +28848,14 @@ function renderGrpPick(){
      _grpPick 是這一輪剛點選的那一列，永遠留著。 */
   if(_addMode){
     const _pk=window._grpPick||{};
+    const _taken=window._grpTaken||{};
     const before=ROWS.length;
     for(let i=ROWS.length-1;i>=0;i--){
       const r=ROWS[i];
       const isPicked=(String(_pk.mid||'')===String(r.m.id) && String(_pk.fam||'')===String(r.fam||''));
-      if(r.seats.length && !isPicked) ROWS.splice(i,1);
+      /* 「已經在這堂」＝課卡上真的有一格記著這位使用人的票（_grpTaken，見 openGroupMembers）。
+         不要用 r.seats 判斷 —— 那是從候選清單推回去的，用完的票不在清單裡就會推錯人。 */
+      if(_taken[String(r.m.id)+'|'+String(r.fam||'')] && !isPicked) ROWS.splice(i,1);
     }
     _inClass=before-ROWS.length;
   }
@@ -33928,6 +33931,20 @@ async function openGroupMembers(id, keepSel, addMode){
      否則只能用 tks[i] 近似，於是 9/25 明明是媽媽＋姊姊，畫面卻標成本人＋媽媽。
      這是同一天在別處修過兩次的老問題：畫面說一套、資料另一套。 */
   window._grpSeatTk=(b && b.seat_tickets && typeof b.seat_tickets==='object')?b.seat_tickets:{};
+  /* 「這一堂已經被誰（哪位使用人）佔走」直接從課卡記的票查回去（2026-08-29 二修）——
+     使用者回報：9/28 打「許」整份清單是空的。原因是原本用「名額 i 用第 i 張票」去推：
+     那一格用的是本人那張（已經扣到 0 堂），而 0 堂的票不在候選清單裡，推算就退回
+     「候選清單的第 i 張」＝媽媽那張，於是媽媽被判定成「已經在名單上」整列藏掉。
+     ⚠ 用票券本身的 family_user 反查，不碰候選清單也不碰索引 —— 用完的票照樣查得到。
+     ⚠ 查不到票的名額（舊資料沒記）不列進來：寧可多列一位，也不要把人藏掉。 */
+  window._grpTaken=(function(){
+    const out={}; const map={}; (allTk||[]).forEach(t=>{ if(t&&t.id) map[t.id]=t; });
+    Object.keys(window._grpSeatTk||{}).forEach(k=>{
+      const tid=window._grpSeatTk[k]; const t=tid?map[tid]:null; if(!t) return;
+      out[String(seatMid(k))+'|'+String(t.family_user||'')]=1;
+    });
+    return out;
+  })();
   /* 重複預約開關（2026-08-29 使用者指定的第五列）—— 預設開：櫃檯多半是替客人
      把整期都排掉，關掉才是例外。開著＝存檔後照舊問「後面的場次要一起預約嗎？」
      （那張視窗會列出每一週、讓人填各加幾堂）；關掉就只加這一堂、完全不問。 */

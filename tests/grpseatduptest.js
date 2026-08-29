@@ -150,7 +150,18 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      改成一律不列。 */
   ok('★★★ ［＋新增］一律不列已經在這堂的使用人（搜尋也一樣）',
      /if\(_addMode\)\{\s*\n\s*const _pk=window\._grpPick\|\|\{\};/.test(src)
-     && /if\(r\.seats\.length && !isPicked\) ROWS\.splice\(i,1\);/.test(src));
+     && /if\(_taken\[String\(r\.m\.id\)\+'\|'\+String\(r\.fam\|\|''\)\] && !isPicked\) ROWS\.splice\(i,1\);/.test(src));
+  /* 2026-08-29 二修（使用者：「但是我在28單獨搜媽媽也找不到」）——
+     9/28 打「許」整份清單是空的：那一格用的是本人那張（已扣到 0 堂），
+     0 堂的票不在候選清單裡，「名額 i 用第 i 張票」的推算就退回候選清單的第 i 張
+     ＝媽媽那張，於是媽媽被判成「已經在名單上」整列藏掉。 */
+  ok('★★★ 「已經在這堂」直接從課卡記的票反查使用人，不用候選清單推',
+     /window\._grpTaken=\(function\(\)\{/.test(src)
+     && /out\[String\(seatMid\(k\)\)\+'\|'\+String\(t\.family_user\|\|''\)\]=1;/.test(src)
+     && /不要用 r\.seats 判斷 —— 那是從候選清單推回去的，用完的票不在清單裡就會推錯人。/.test(src));
+  ok('★★ 查不到票的名額不列進來（寧可多列一位，也不要把人藏掉）',
+     /const t=tid\?map\[tid\]:null; if\(!t\) return;/.test(src)
+     && /寧可多列一位，也不要把人藏掉。/.test(src));
   ok('★★★ 濾的單位是「列」＝一位使用人，不是「會員」（不然補不了第三格）',
      /濾的單位是「列」＝一位使用人，不是「會員」：許佳慈已用媽媽與姊姊各一格時，/.test(src)
      && /用會員濾會把整個人藏掉，就補不了第三格。/.test(src));
