@@ -11490,8 +11490,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1836';
-const APP_VERSION_LABEL='v260829.1836';
+const APP_VERSION = '260829.1845';
+const APP_VERSION_LABEL='v260829.1845';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -33987,6 +33987,7 @@ async function _saveGroupMembers(id){
   }
   // 新加入的有票就扣、移除的退回（依該 booking 的票券類型）
   const _seatIdx={};   // 逐名額挑票（2026-08-05）：新名額接在既有名額後面，索引從已有數量起算
+  const _addFam={};    // 會員 → 這次加的名額扣到哪位使用人的票（null＝混用，不限定）
   const _noTk={};      // 會員 → 這次加入但扣不到票的名額數
   const _failed=new Set();   // 扣不到票的會員：後續名額直接跳過，名額鍵才不會跳號（2026-08-20）
   /* 這一堂已經被某個名額用掉的票（2026-08-29 使用者附截圖：「這三個會員卡是同一張票券吧?」）
@@ -34050,7 +34051,13 @@ async function _saveGroupMembers(id){
        不能新增一個地方給他紀錄嗎？」）—— bookings.seat_tickets 是名額鍵 → 票券 id。
        有了這個事實，票券夾就不必再靠先進先出推算。 */
     if(_ded){ const _sk=(_i>0)?(mid+'#'+(_i+1)):mid;
-      b.seat_tickets=Object.assign({}, b.seat_tickets||{}, {[_sk]:tk.id}); }
+      b.seat_tickets=Object.assign({}, b.seat_tickets||{}, {[_sk]:tk.id});
+      /* 這一格扣到誰的票（2026-08-29 使用者回報：「我用了許佳慈(姐姐)　這邊卻跑出11票
+         可是姐姐應該只有四張」）—— 連續預約要照這位使用人的餘額算，不是整個帳號的。
+         同一位會員這次加的幾格若扣到不同使用人，就記 null（不限定）。 */
+      const _f=String(tk.family_user||'');
+      if(_addFam[mid]===undefined) _addFam[mid]=_f;
+      else if(_addFam[mid]!==_f) _addFam[mid]=null; }
   }
   for(const mid of removed){
     /* 找該會員因這堂課「還有淨扣課」的票退回（2026-08-03 修：原本抓第一筆扣課紀錄，
@@ -34091,7 +34098,7 @@ async function _saveGroupMembers(id){
     const _mems=await dbGetAll('members').catch(()=>[]);
     const _nm=mid=>{ const m=_mems.find(x=>String(x.id)===String(mid)); return (m&&m.name)||mid; };
     const rows=Object.entries(_noTk).map(([mid,n])=>`<b>${_nm(mid)}</b>：${n} 個名額`).join('、');
-    window._gfaNext={id, uniq:_addUniq, cnt:_addCnt};
+    window._gfaNext={id, uniq:_addUniq, cnt:_addCnt, fam:_addFam};
     showModal(`<div class="modal-title" style="color:var(--danger,#b5372e);">⚠ 有名額沒有加入</div>
       <div style="font-size:13px;color:var(--text);line-height:1.9;">下列名額在存檔時<b>扣不到票券</b>（可能剛被別的預約用掉），<b>沒有寫入名單</b>：<br>${rows}</div>
       <div style="font-size:12px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;">其餘名額已正常加入。請確認票券餘額（必要時先儲值），再回名單把這幾位加回來。</div>
@@ -34101,14 +34108,14 @@ async function _saveGroupMembers(id){
   /* 重複預約關著就不問後續場次（2026-08-29）——「管理名單」那條路沒有這個開關，
      window._grpRep 是 undefined，維持原本一律詢問的行為。 */
   const _askRep=(!window._grpAdd) || !!window._grpRep;
-  if(_askRep && _addUniq.length){ try{ await grpFollowAsk(id,_addUniq,_addCnt); return; }catch(e){ console.error('連續加入詢問失敗',e); } }
+  if(_askRep && _addUniq.length){ try{ await grpFollowAsk(id,_addUniq,_addCnt,_addFam); return; }catch(e){ console.error('連續加入詢問失敗',e); } }
   grpBackToCard(id);
 }
 /* 警告視窗按「知道了」之後接回原本的流程（連續預約詢問或回明細）（2026-08-05） */
 async function grpNoTkAck(){
   const p=window._gfaNext; window._gfaNext=null;
   if(!p) return;
-  if(p.uniq&&p.uniq.length){ try{ await grpFollowAsk(p.id,p.uniq,p.cnt); return; }catch(_){} }
+  if(p.uniq&&p.uniq.length){ try{ await grpFollowAsk(p.id,p.uniq,p.cnt,p.fam); return; }catch(_){} }
   grpBackToCard(p.id);
 }
 /* 團課這幾條流程做完要回哪裡（2026-08-29 使用者附截圖：「為什麼又出現舊視窗」）——
@@ -34120,6 +34127,12 @@ function grpBackToCard(id){
   try{ closeModal(); }catch(_){}
   try{ expandBkCard(window._expandedBkEl||null, id); }
   catch(_){ try{ navTo(CUR_PAGE); }catch(__){} }
+  /* 底下那一頁也要重畫（2026-08-29 使用者附截圖：「頁面沒有即時更新　應該已經是2人了」）——
+     課卡自己會重讀，但行事曆上那一格還寫著加人之前的人數。
+     ⚠ 順序：先回課卡再重畫。課卡是掛在 body 的獨立覆層（#bk-card-pop），
+       navTo 重畫頁面不會把它關掉（_saveGrpMax 0807 就是這個順序）。
+     ⚠ _calStepping：保留目前檢視的那一週，不要跳回本週。 */
+  try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
 }
 /* 團課的「同系列後續場次」：同教練＋同星期＋同時段＋未取消未完成、時間在這堂之後。
    取消側的 seriesOf 認 member_id，團課的學員在 member_ids（見 bkIsGroup 註解），
@@ -34153,7 +34166,7 @@ function grpSeriesSplit(b, all){
     .forEach(x=>{ (grpSeriesMember(x)?out.series:out.solo).push(x); });
   return out;
 }
-async function grpFollowAsk(id, addedIds, addedCnt){
+async function grpFollowAsk(id, addedIds, addedCnt, addedFam){
   const b=await dbGet('bookings',id);
   const _sp=grpSeriesSplit(b, await dbGetAll('bookings'));
   const later=_sp.series, solo=_sp.solo;
@@ -34167,8 +34180,15 @@ async function grpFollowAsk(id, addedIds, addedCnt){
   const members=await dbGetAll('members');
   const nameOf=mid=>{ const m=members.find(x=>String(x.id)===String(mid)); return (m&&m.name)||'—'; };
   const rows=addedIds.map(mid=>{
+    /* 餘額只算「這次扣到的那位使用人」的票（2026-08-29 使用者回報：選了許佳慈（姊姊），
+       視窗卻寫「票剩 19 堂」並預設連約 11 堂 —— 那 19 堂是整個帳號的，
+       姊姊那張只有 4 堂。照整帳號算會把媽媽與本人的票花在姊姊的名額上。
+       ⚠ addedFam[mid] 是 undefined／null（舊呼叫端、或這次混扣了不同使用人）
+         時維持原本的整帳號口徑。 */
+    const _fam=(addedFam||{})[mid];
+    const _famOk=t=>(_fam===undefined||_fam===null)||String(t.family_user||'')===String(_fam);
     const left=allTk.filter(t=>t.member_id===mid && ticketMatchesCategory(t,'小班肌力')
-        && t.status==='usable' && t.sessions_remaining>0)
+        && t.status==='usable' && t.sessions_remaining>0 && _famOk(t))
       .reduce((sum,t)=>sum+t.sessions_remaining,0);
     /* 使用者的例子：開 10 週、新會員買 4 堂 → 預設就是 4（票剩幾堂就約幾堂，
        不超過剩餘場次）。沒票的（教練負責）預設 0，要約再自己調。
@@ -34179,7 +34199,8 @@ async function grpFollowAsk(id, addedIds, addedCnt){
     const def=Math.min(seats>1?Math.floor(left/seats):left, cap);
     return {mid, left, def, cap, seats};
   });
-  window._gfPend={id, laterIds:later.map(x=>x.id), seats:Object.fromEntries(rows.map(r=>[r.mid,r.seats]))};
+  window._gfPend={id, laterIds:later.map(x=>x.id), seats:Object.fromEntries(rows.map(r=>[r.mid,r.seats])),
+    fam:Object.assign({}, addedFam||{})};
   const WD=['日','一','二','三','四','五','六'];
   const dowLbl=WD[(parseYmd(b.date)||new Date()).getDay()];
   showModal(`<div class="modal-title">後面的場次要一起預約嗎？</div>
@@ -34187,7 +34208,7 @@ async function grpFollowAsk(id, addedIds, addedCnt){
       這堂是 <b>週${dowLbl} ${String(b.start_time).slice(0,5)}</b> 的團體課，後面還有 <b>${later.length}</b> 堂
       （${String(later[0].date).replace(/-/g,'/')} 起）。剛加入的會員可以連續預約，堂數預設照票券剩餘：</div>
     ${rows.map((r,i)=>`<div class="form-row" style="display:flex;align-items:center;gap:10px;">
-      <label style="margin:0;flex:1;">${nameOf(r.mid)}${r.seats>1?`<span class="tag" style="font-size:10.5px;margin-left:6px;">每堂 ${r.seats} 個名額</span>`:''}<span style="font-size:11.5px;color:var(--t3);">　票剩 ${r.left} 堂</span></label>
+      <label style="margin:0;flex:1;">${nameOf(r.mid)}${((addedFam||{})[r.mid])?`<span style="font-weight:700;color:var(--t2);">（${escH((addedFam||{})[r.mid])}）</span>`:''}${r.seats>1?`<span class="tag" style="font-size:10.5px;margin-left:6px;">每堂 ${r.seats} 個名額</span>`:''}<span style="font-size:11.5px;color:var(--t3);">　票剩 ${r.left} 堂</span></label>
       <input type="number" id="gf-n-${i}" value="${r.def}" min="0" max="${r.cap}" style="width:76px;"><span style="font-size:12px;color:var(--t3);">/ ${r.cap} 堂</span>
     </div>`).join('')}
     <div style="font-size:11.5px;color:var(--t2);margin-top:6px;">滿員或已在名單的場次會自動跳過、往後遞補；有票逐堂扣，票不夠會停下來告訴你。</div>
@@ -34243,11 +34264,17 @@ async function _grpFollowRun(mids2){
          ⚠ 修法同樣不是禁止重複：只剩一張票時一張扣多格是合法的，
            但那時要明講 multi，不能讓護欄默默吃掉。 */
       const _used=new Set(Object.values(x.seat_tickets||{}).map(String));
+      /* 只用「這次選定的那位使用人」的票（2026-08-29）—— 選了姊姊就不該把媽媽的票花掉。
+         沒指定（舊呼叫端／混扣）時不限定，維持原本行為。 */
+      const _wf=(p.fam||{})[w.mid];
+      const _famOk=t=>(_wf===undefined||_wf===null)||String(t.family_user||'')===String(_wf);
       for(let k=0;k<need;k++){
-        const _cand=await listUsableTickets(w.mid, x.ticket_type_id, x.date, x.start_time).catch(()=>[]);
+        const _cand=(await listUsableTickets(w.mid, x.ticket_type_id, x.date, x.start_time).catch(()=>[]))
+          .filter(_famOk);
         const _free=(_cand||[]).filter(t=>t && !_used.has(String(t.id)));
         const tk=_free.find(t=>!tkNeedsConfirm(t)) || _free[0]
-              || await findUsableTicket(w.mid, x.ticket_type_id, x.date, x.start_time);
+              || (_cand.length?_cand[0]:null)
+              || ((_wf===undefined||_wf===null)?await findUsableTicket(w.mid, x.ticket_type_id, x.date, x.start_time):null);
         if(!tk){ noTk=true; break; }
         const _dup=_used.has(String(tk.id));
         if(!(await deductTicket(tk, x.id, SESSION.id, _dup?{multi:true}:undefined))){ noTk=true; break; }   // 護欄擋下＝沒扣到（2026-08-06）

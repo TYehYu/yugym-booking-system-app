@@ -66,8 +66,11 @@ console.log('\n② 票券夾優先採用這個事實');
 }
 
 console.log('\n③ 接線');
+/* 2026-08-29：同一段順便記下「這一格扣到哪位使用人的票」（_addFam），
+   連續預約要照那位的餘額算，不是整個帳號的。 */
 ok('★ 加名單扣課成功才記歸屬（逐名額鍵）',
-   /if\(_ded\)\{ const _sk=\(_i>0\)\?\(mid\+'#'\+\(_i\+1\)\):mid;\n\s*b\.seat_tickets=Object\.assign\(\{\}, b\.seat_tickets\|\|\{\}, \{\[_sk\]:tk\.id\}\); \}/.test(src));
+   /if\(_ded\)\{ const _sk=\(_i>0\)\?\(mid\+'#'\+\(_i\+1\)\):mid;\n\s*b\.seat_tickets=Object\.assign\(\{\}, b\.seat_tickets\|\|\{\}, \{\[_sk\]:tk\.id\}\);/.test(src)
+   && /const _f=String\(tk\.family_user\|\|''\);\s*\n\s*if\(_addFam\[mid\]===undefined\) _addFam\[mid\]=_f;\s*\n\s*else if\(_addFam\[mid\]!==_f\) _addFam\[mid\]=null; \}/.test(src));
 ok('★ 移除名額時歸屬跟著移除／重編',
    /b\.seat_tickets=seatTkReindexAfterRemove\(b, i\);/.test(src)
    && /const _ks=Object\.keys\(_st\)\.filter\(k=>seatMid\(k\)===String\(mid\)\);/.test(src));

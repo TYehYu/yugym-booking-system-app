@@ -124,11 +124,50 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
       eq('★★ 既有名額用掉的票（seat_tickets 帶進來的）不會被再挑一次', ded3, ['p:t姊']);
     }
 
+    console.log('\n③c 連續預約要照「這次選的那位使用人」算，不是整個帳號（2026-08-29）');
+    {
+      /* 使用者附截圖：「我用了許佳慈(姐姐) 這邊卻跑出11票 可是姐姐應該只有四張」——
+         視窗寫「票剩 19 堂」、預設連約 11 堂，那 19 堂是整個帳號（媽媽＋姊姊＋本人）的。
+         照整帳號算會把媽媽與本人的票花在姊姊那一格上。 */
+      const DB4={ u:{id:'u',member_ids:[],max_heads:5,ticket_type_id:'tt',date:'2026-09-11',start_time:'20:00'},
+                  v:{id:'v',member_ids:[],max_heads:5,ticket_type_id:'tt',date:'2026-09-18',start_time:'20:00'} };
+      const ALL=[{id:'t姊',family_user:'姊姊'},{id:'t媽',family_user:'媽媽'},{id:'t本',family_user:null}];
+      const ded4=[];
+      const env4=Object.assign({},env,{
+        window:{_gfPend:{id:'w0',laterIds:['u','v'],seats:{NEW:1},fam:{NEW:'姊姊'}}},
+        document:{getElementById:id=>({value: id==='gf-n-0'?'2':'0'}), querySelector:()=>null},
+        dbGet:async(t,id)=> t==='bookings'?(DB4[id]?{...DB4[id],member_ids:DB4[id].member_ids.slice()}:null):{id,name:'許佳慈'},
+        dbPut:async(t,x)=>{ DB4[x.id]=x; },
+        listUsableTickets:async()=>ALL.slice(),
+        findUsableTicket:async()=>ALL[1],          // 先進先出會挑到媽媽那張
+        deductTicket:async(tk,bid)=>{ ded4.push(bid+':'+tk.id); return true; },
+        showToast:()=>{},
+      });
+      const run4=new Function(...Object.keys(env4),'return async '+grabFn('_grpFollowRun'))(...Object.values(env4));
+      await run4(['NEW']);
+      eq('★★★ 選了姊姊 → 後面幾堂只扣姊姊那張，不會花到媽媽／本人的票',
+         ded4, ['u:t姊','v:t姊']);
+
+      /* 沒指定使用人（管理名單那條路）→ 維持原本先進先出 */
+      const DB5={ u:{id:'u',member_ids:[],max_heads:5,ticket_type_id:'tt',date:'2026-09-11',start_time:'20:00'} };
+      const ded5=[];
+      const env5=Object.assign({},env4,{
+        window:{_gfPend:{id:'w0',laterIds:['u'],seats:{NEW:1}}},
+        document:{getElementById:id=>({value: id==='gf-n-0'?'1':'0'}), querySelector:()=>null},
+        dbGet:async(t,id)=> t==='bookings'?(DB5[id]?{...DB5[id],member_ids:DB5[id].member_ids.slice()}:null):{id,name:'許佳慈'},
+        dbPut:async(t,x)=>{ DB5[x.id]=x; },
+        deductTicket:async(tk,bid)=>{ ded5.push(bid+':'+tk.id); return true; },
+      });
+      const run5=new Function(...Object.keys(env5),'return async '+grabFn('_grpFollowRun'))(...Object.values(env5));
+      await run5(['NEW']);
+      eq('　 沒指定使用人時維持原本行為（挑第一張可用的）', ded5, ['u:t姊']);
+    }
+
     console.log('\n④ 流程接線');
     /* 2026-08-29：［＋新增］那張多了「重複預約」開關，關掉就不問後續場次。
        「管理名單」沒有這個開關（_grpAdd 是 false）→ 維持原本一律詢問。 */
     ok('★ 儲存名單有新加入才追問（帶名額數，2026-08-05；重複預約關著時不問）',
-       /if\(_askRep && _addUniq\.length\)\{ try\{ await grpFollowAsk\(id,_addUniq,_addCnt\); return; \}/.test(src)
+       /if\(_askRep && _addUniq\.length\)\{ try\{ await grpFollowAsk\(id,_addUniq,_addCnt,_addFam\); return; \}/.test(src)
        && /const _askRep=\(!window\._grpAdd\) \|\| !!window\._grpRep;/.test(src)
        && /const _addCnt=\{\}; added\.forEach\(m=>\{ _addCnt\[m\]=\(_addCnt\[m\]\|\|0\)\+1; \}\);/.test(src));
     ok('★ 預設堂數＝票券剩餘 ÷ 名額數（買 8 堂 2 名額預設 4）',
