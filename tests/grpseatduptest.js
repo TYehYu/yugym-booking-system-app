@@ -112,6 +112,11 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      && /toggleGrpMember／grpAddOne／grpRemoveOne 已於 2026-08-29 退場/.test(src));
   ok('★ ＋ 會優先給這位使用人還沒用到的那張（媽媽有兩張時第二格用第二張）',
      /const next=r\.tkIds\.find\(id=>used\.indexOf\(id\)<0\) \|\| r\.tkIds\[0\] \|\| null;/.test(src));
+  ok('★★ 說明文字跟著改（拆列、圓形卡挑票、沒票不列）—— 畫面改了字沒改最容易誤導',
+     (src.match(/這裡只列<b>有團體課票券<\/b>的會員（沒票的請先儲值）。/g)||[]).length===2
+     && /票券設了使用人的會分開一列（例：許佳慈（媽媽）、許佳慈（姊姊））/.test(src)
+     && /點下面的圓形卡選要扣哪一張/.test(src)
+     && !/帶親友同行可按已選會員的「＋」重複報名/.test(src));
   ok('★ 逐名額的預設仍是「名額 i 用第 i 張」（畫面與實際扣的要同一套）',
      /const _defPkOf=\(m,i\)=>\{ const a=m\.tks\|\|\[\]; return \(a\[Math\.min\(i,a\.length-1\)\]\|\|\{\}\)\.id\|\|''; \};/.test(src));
 }
