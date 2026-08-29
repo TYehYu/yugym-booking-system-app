@@ -3016,6 +3016,16 @@ tr:hover td{background:var(--card2);}
 .gadd-sub{font-size:12.5px;font-weight:700;color:var(--t2);margin:2px 0 0;}
 .gadd-cnt{font-size:12.5px;color:var(--t2);text-align:right;margin:0 0 10px;
   font-variant-numeric:tabular-nums;}
+/* 連續預約視窗：要約哪幾天逐筆列出（2026-08-29 使用者指示） */
+.gfa-days{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px;}
+.gfa-day{font-size:12px;font-weight:700;color:var(--t2);background:var(--card2);
+  border-radius:999px;padding:5px 10px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.gfa-day i{font-style:normal;margin-left:5px;font-size:10px;font-weight:800;color:var(--green);}
+.gfa-day-now{background:var(--sage-bg,#E4EAD9);color:var(--green);}
+.gfa-day-more{background:none;color:var(--t3);font-weight:600;}
+.gadd-tkpick:empty{display:none;}
+.gadd-tkpick{display:flex;flex-direction:column;gap:7px;margin:9px 0 0;}
+.gadd-tktitle{font-size:11.5px;font-weight:800;color:var(--t2);}
 .gadd-rep{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;
   background:#fff;border:1px solid var(--bd);border-radius:14px;padding:10px 13px;
   margin:0 0 8px;cursor:pointer;font-family:inherit;text-align:left;}
@@ -11490,8 +11500,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.1853';
-const APP_VERSION_LABEL='v260829.1853';
+const APP_VERSION = '260829.1858';
+const APP_VERSION_LABEL='v260829.1858';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28866,6 +28876,31 @@ function renderGrpPick(){
     if(c2) c2.textContent=`可加入 ${ROWS.length} 位`;
     const _q=document.getElementById('grp-search');
     if(_q) _q.setAttribute('placeholder',`搜尋姓名或手機（共 ${ROWS.length} 位）`);
+    /* 選定的那位有兩張以上票 → 讓櫃檯自己挑要用哪一張（2026-08-29）。
+       圓形卡語彙沿用課卡上的「其他方案 ›」，不要再發明第三種。
+       ⚠ 預設是清單第一張（listUsableTickets 已按效期由近而遠），與實際扣的一致。 */
+    const tkBox=document.getElementById('grp-tkpick');
+    if(tkBox){
+      const r=(_pk.mid && _at>=0)?ROWS[_at]:null;
+      const tks=(r&&r.tks)||[];
+      if(!r || tks.length<2){ tkBox.innerHTML=''; }
+      else{
+        const _si=(window._grpBase||[]).filter(x=>String(x)===String(r.m.id)).length;   // 這是他的第幾個名額
+        const cur=grpPickOf(r.m.id,_si)||(tks[0]||{}).id||'';
+        const _dots=t=>{ const tot=Math.max(0,Number(t.tot)||0), left=Math.max(0,Number(t.left)||0);
+          const used=Math.max(0,tot-left), CAP=12, show=Math.min(tot,CAP);
+          let h=''; for(let k=0;k<show;k++) h+=`<i class="gtk-dot${k<used?' gtk-used':''}"></i>`;
+          return `<span class="gtk-dots">${h}${tot>CAP?`<span class="gtk-more">…共 ${tot} 堂</span>`:''}</span>`; };
+        tkBox.innerHTML=`<div class="gadd-tktitle">用哪一個方案？</div>`
+          + tks.map(t=>`<button type="button" class="gtk-card${t.id===cur?' gtk-on':''}"
+              onclick="grpAddPickTk('${r.m.id}',${_si},'${t.id}')">
+              <span class="gtk-head"><b class="gtk-fam">${t.id===cur?'✓ ':''}${escH(t.name)}</b>
+                ${t.fam?`<span class="gtk-plan">${escH(t.fam)}</span>`:''}</span>
+              ${_dots(t)}
+              <span class="gtk-foot">剩 ${t.left} 堂　·　${t.exp?`效期至 ${String(t.exp).slice(5).replace('-','/')}`:'無到期日'}</span>
+            </button>`).join('');
+      }
+    }
     return;
   }
   if(ROWS.length===0){ box.innerHTML=`<div class="ms-empty">${q
@@ -28969,6 +29004,8 @@ function grpPickSel(v){
   }
   grpRowTap(Number(v));
 }
+/* ［＋新增］挑方案：只動這一格的指定，不重挑人 */
+function grpAddPickTk(mid, seatIdx, tkid){ grpPickTk(mid, seatIdx, tkid); renderGrpPick(); }
 function grpRepToggle(){
   window._grpRep=!window._grpRep;
   const sw=document.getElementById('grp-rep-sw');
@@ -33916,6 +33953,11 @@ async function openGroupMembers(id, keepSel, addMode){
             <select id="grp-pick" onchange="grpPickSel(this.value)"></select>
           </div>
           <div id="grp-count" style="font-size:12px;color:var(--t2);margin:6px 0 0;"></div>
+          ${/* 選到的人手上有兩張以上票時，要挑用哪一張（2026-08-29 使用者：
+               「許佳慈本人有三個團課方案 #18補課 #25優惠團課 #26優惠團課
+                 所以點許佳慈的時候要跳出選擇使用方案」）。
+               只有一張就不出現 —— 沒得選的時候不要多一步。 */''}
+          <div id="grp-tkpick" class="gadd-tkpick"></div>
         </div>
         <button type="button" class="gadd-rep" onclick="grpRepToggle()">
           <span class="gadd-repl">重複預約<i>後面同時段的場次一起約</i></span>
@@ -34233,6 +34275,15 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending){
     <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:10px;">
       這堂是 <b>週${dowLbl} ${String(b.start_time).slice(0,5)}</b> 的團體課，後面還有 <b>${later.length}</b> 堂
       （${String(later[0].date).replace(/-/g,'/')} 起）。剛加入的會員可以連續預約，堂數預設照票券剩餘：</div>
+    ${/* 要約哪幾天，逐筆列出來（2026-08-29 使用者：「連續預約的這個視窗　要顯示預約的
+         日期跟時間」）—— 原本只寫「後面還有 11 堂（09/11 起）」，櫃檯要自己數週數
+         才知道會排到哪裡。整串轉正那張視窗 0804 就是這樣列的，同一套。 */''}
+    <div class="gfa-days">${pending?`<span class="gfa-day gfa-day-now">${
+        String(b.date).slice(5).replace('-','/')}（${WD[(parseYmd(b.date)||new Date()).getDay()]}）${
+        String(b.start_time||'').slice(0,5)}<i>本堂</i></span>`:''}${
+      later.slice(0,12).map(x=>`<span class="gfa-day">${String(x.date).slice(5).replace('-','/')}（${
+        WD[(parseYmd(x.date)||new Date()).getDay()]}）${String(x.start_time||'').slice(0,5)}</span>`).join('')}${
+      later.length>12?`<span class="gfa-day gfa-day-more">…還有 ${later.length-12} 堂</span>`:''}</div>
     ${rows.map((r,i)=>`<div class="form-row" style="display:flex;align-items:center;gap:10px;">
       <label style="margin:0;flex:1;">${nameOf(r.mid)}${((addedFam||{})[r.mid])?`<span style="font-weight:700;color:var(--t2);">（${escH((addedFam||{})[r.mid])}）</span>`:''}${r.seats>1?`<span class="tag" style="font-size:10.5px;margin-left:6px;">每堂 ${r.seats} 個名額</span>`:''}<span style="font-size:11.5px;color:var(--t3);">　票剩 ${r.left} 堂</span></label>
       <input type="number" id="gf-n-${i}" value="${r.def}" min="0" max="${r.cap}" style="width:76px;"><span style="font-size:12px;color:var(--t3);">/ ${r.cap} 堂</span>

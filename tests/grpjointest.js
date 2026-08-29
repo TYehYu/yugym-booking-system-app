@@ -181,6 +181,22 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
          && /async function grpFollowOnce\(id\)\{/.test(src));
       ok('★★ 視窗上要講明「這一堂也還沒建立」',
          /這一堂（<b>\$\{String\(b\.date\)\.slice\(5\)\.replace\('-','\/'\)\}<\/b>）也還沒建立/.test(src));
+      /* 2026-08-29：「許佳慈本人有三個團課方案 #18補課 #25優惠團課 #26優惠團課
+         所以點許佳慈的時候要跳出選擇使用方案」 */
+      ok('★★ 選到的人有兩張以上票 → 出方案挑選（只有一張就不出現）',
+         /if\(!r \|\| tks\.length<2\)\{ tkBox\.innerHTML=''; \}/.test(src)
+         && /<div class="gadd-tktitle">用哪一個方案？<\/div>/.test(src)
+         && /onclick="grpAddPickTk\('\$\{r\.m\.id\}',\$\{_si\},'\$\{t\.id\}'\)"/.test(src));
+      ok('★★ 挑的是「這一格」的指定，名額索引接在既有名額之後',
+         /const _si=\(window\._grpBase\|\|\[\]\)\.filter\(x=>String\(x\)===String\(r\.m\.id\)\)\.length;/.test(src)
+         && /function grpAddPickTk\(mid, seatIdx, tkid\)\{ grpPickTk\(mid, seatIdx, tkid\); renderGrpPick\(\); \}/.test(src));
+      /* 2026-08-29：「連續預約的這個視窗　要顯示預約的日期跟時間」 */
+      ok('★★ 連續預約視窗把要約的日期時間逐筆列出（超過 12 筆寫「還有 N 堂」）',
+         /<div class="gfa-days">/.test(src)
+         && /later\.slice\(0,12\)\.map\(x=>`<span class="gfa-day">/.test(src)
+         && /later\.length>12\?`<span class="gfa-day gfa-day-more">…還有 \$\{later\.length-12\} 堂<\/span>`:''/.test(src));
+      ok('★ 還沒建的那一堂也列出來並標「本堂」',
+         /<span class="gfa-day gfa-day-now">/.test(src) && /<i>本堂<\/i>/.test(src));
       ok('★ 管理名單那條路不受影響（沒有這個開關，維持先存再問）',
          /「管理名單」那條路不受影響（它本來就是複選、而且沒有這個開關）。/.test(src));
     }
