@@ -92,6 +92,36 @@ console.log('\n同一週只延一次（2026-08-30 使用者定案）');
   eq('★★★ 帳本只留一筆展延', logs2.length, 1);
 }
 
+console.log('\n教練請假的補償不可以被後面的「櫃檯展延」複利（2026-08-30）');
+{
+  /* 使用者問：「這種因為教練請假展延的方案 如果之後要啟動課程展延(不退費)會怎麼計算」
+     ——舊算法是「到期日 − 起始日」＝方案天數，而教練請假只改 expire_date、
+     刻意不寫 extended_from，所以補償的天數會被算進方案長度，展延時再送一次。 */
+  const g2=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
+  const days=new Function('parseYmd','window',
+    g2('function tkPlanDays(t){','\n}\n')+'\nreturn tkPlanDays;')(
+    ds=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(ds||''));return m?new Date(+m[1],+m[2]-1,+m[3]):null;},
+    {_ttCache:[]});
+  /* 鄭宇涵的實際形狀：07/06 起、原本 55 天到 08/30，兩次教練請假延到 09/13 */
+  const zyh={id:'T',start_date:'2026-07-06',expire_date:'2026-09-13',valid_days:55};
+  eq('★★★ 有 valid_days → 照合約天數 55（不是被墊高的 69）', days(zyh), 55);
+  eq('　 沒有 valid_days 的舊票只能回推（會被墊高，所以下面要補寫 valid_days）',
+     days({id:'T',start_date:'2026-07-06',expire_date:'2026-09-13'}), 69);
+  eq('★★ valid_days 排在回推之前（順序就是這一條規則本身）',
+     days({id:'T',start_date:'2026-07-06',expire_date:'2026-09-13',valid_days:365}), 365);
+
+  /* 展延當下把方案天數固定下來，之後就不會再被墊高 */
+  const m2=mk({id:'T1',start_date:'2026-07-06',expire_date:'2026-08-30'});
+  await m2.fn('T1',{id:'B',date:'2026-08-24'},'U');
+  eq('★★★ 教練請假展延時，順手把 valid_days 補成原本的方案天數（55）',
+     m2.saved[0].valid_days, 55);
+  eq('★★ 效期照樣 ＋7', m2.saved[0].expire_date, '2026-09-06');
+
+  const m3=mk({id:'T1',start_date:'2026-07-06',expire_date:'2026-08-30',valid_days:365});
+  await m3.fn('T1',{id:'B',date:'2026-08-24'},'U');
+  eq('★★★ 已經有 valid_days 就不覆蓋（賣票時談好的天數最大）', m3.saved[0].valid_days, 365);
+}
+
 console.log('\n什麼情況不延');
 {
   /* 2026-08-30：回傳改物件，三種「沒延」要分得出來 —— 櫃檯的提示要講對原因 */

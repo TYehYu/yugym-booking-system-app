@@ -11521,8 +11521,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.1016';
-const APP_VERSION_LABEL='v260830.1016';
+const APP_VERSION = '260830.1028';
+const APP_VERSION_LABEL='v260830.1028';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12492,13 +12492,26 @@ function fmtPhone(p){ return normPhone(p)||'—'; }
    原方案期限＝這張票原本的 start_date → expire_date 天數；抓不到就退回 valid_days／票種預設。 */
 function tkPlanDays(t){
   if(!t) return null;
+  /* 方案本身有幾天 —— valid_days 排第一（2026-08-30 修）。
+
+     ⚠ 原本是先用「到期日 − 起始日」算，只在算不出來時才看 valid_days。
+       那個算法對「教練請假展延過」的票是錯的：教練請假只改 expire_date、
+       **刻意不寫 extended_from**（那是「不得退費」的旗標，見 tkExtInfo），
+       所以 from 拿到的是已經延過的到期日，方案天數就被灌進了補償的天數。
+       實例：鄭宇涵的票 07/06 起、原本 55 天到 08/30，兩次教練請假延到 09/13；
+       舊算法會算成 69 天，之後櫃檯展延就多給 14 天 —— 店家的補償被複利了一次。
+     ⚠ valid_days 是賣票當下寫進去的合約天數，不會因為任何展延而變，
+       所以它才是「同原方案期限」這句話的正解。
+     ⚠ 沒有 valid_days 的舊票只能退回原本的算法（見下面）；
+       extendForCoachLeave 從今天起會在第一次展延前把 valid_days 補起來，
+       之後就不會再有這個問題。 */
+  if(Number(t.valid_days) > 0) return Number(t.valid_days);
   const from = t.extended_from || t.expire_date;   // 已展延過的以「原到期日」為準，重算才穩定
   const st = t.start_date || t.purchase_date;
   if(st && from){
     const d = Math.round((parseYmd(String(from).slice(0,10)) - parseYmd(String(st).slice(0,10)))/86400000);
     if(d > 0) return d;
   }
-  if(Number(t.valid_days) > 0) return Number(t.valid_days);
   const tt = (window._ttCache||[]).find(x=>x.id===t.ticket_type_id);
   if(tt && Number(tt.validity_days) > 0) return Number(tt.validity_days);
   return null;
@@ -31203,6 +31216,15 @@ async function extendForCoachLeave(ticket_id, booking, operator){
     if(await leaveExtDoneThisWeek(ticket_id,_bd)) return {skipped:'week', week:leaveWeekKey(_bd)};
     const from=String(t.expire_date).slice(0,10);
     const d=parseYmd(from); if(!d) return null;
+    /* 動效期之前先把「方案本來有幾天」固定下來（2026-08-30）——
+       之後櫃檯要展延時是照方案天數再給一次；如果沒有 valid_days，
+       那邊只能用「到期日 − 起始日」回推，而到期日已經被這次補償墊高了。
+       ⚠ 只在原本是空的時候寫，不覆蓋賣票時談好的天數。 */
+    if(!(Number(t.valid_days)>0)){
+      const _st=t.start_date||t.purchase_date;
+      if(_st){ const _d0=parseYmd(String(_st).slice(0,10));
+        if(_d0){ const _n=Math.round((parseYmd(from)-_d0)/86400000); if(_n>0) t.valid_days=_n; } }
+    }
     d.setDate(d.getDate()+COACH_LEAVE_EXTEND_DAYS);
     const to=ymd(d);
     const line=`${(booking&&booking.date)||ymd(TODAY)} 教練請假展延 ${COACH_LEAVE_EXTEND_DAYS} 天（${from.replace(/-/g,'/')} → ${to.replace(/-/g,'/')}）`;
