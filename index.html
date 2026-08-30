@@ -3026,6 +3026,9 @@ tr:hover td{background:var(--card2);}
 /* 兩種展延的標籤（2026-08-30 使用者指示：方案下方新增「教練展延」與「展延（不退費）」）——
    顏色語彙不同是因為後果不同：教練展延不影響退費（綠＝一般提示），
    櫃檯展延之後這張票不能退（金＝可以做但要知道）。 */
+/* 共享標與「設為共享」移到右上角、剩餘堂數左邊（2026-08-30 使用者指示） */
+.bkd-tkcard-share{display:inline-flex;align-items:center;gap:6px;margin-left:auto;margin-right:10px;flex:none;}
+.bkd-tkcard-share:empty{display:none;}
 .tkx{font-size:10.5px;font-weight:800;border-radius:999px;padding:2px 8px;white-space:nowrap;}
 .tkx-clv{color:var(--green,#1F6F54);background:var(--sage-bg,#E4EAD9);}
 .tkx-man{color:var(--gold-d,#9a7344);background:#f7f1e4;}
@@ -11527,8 +11530,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.1051';
-const APP_VERSION_LABEL='v260830.1051';
+const APP_VERSION = '260830.1059';
+const APP_VERSION_LABEL='v260830.1059';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13239,6 +13242,23 @@ function tkExtendTo(t){
   const d = parseYmd(String(from).slice(0,10));
   d.setDate(d.getDate() + days);
   return ymd(d);
+}
+/* 展延鈕為什麼還不能按（2026-08-30 使用者提問：「展延的按鈕觸發的條件是該課程尚未用完
+   但已經到期限的方案　但這功能會不會觸發的太慢?」）——
+   會，而且是設計上的：按鈕只在票券「已經過期」之後才長出來，在那之前櫃檯完全看不到
+   這個功能存在。改成常駐在右下角，還不能按的時候淡化並寫原因（0823 定的語彙）。
+   ⚠ 條件一個都沒放寬 —— 只是把「看不到」換成「看得到但按不下去，而且知道為什麼」。 */
+function tkExtWhyNot(t, today){
+  if(!t) return '找不到票券';
+  if(!tkPocketNow(t).canExtend) return '這種票券不提供展延';
+  const td=today||ymd(TODAY);
+  if(['refunded','void','cancelled'].includes(t.status)) return '已作廢／已退費的票不能展延';
+  if(!((Number(t.sessions_remaining)||0)>0)) return '堂數已經用完了，沒有東西可以延';
+  if(tkIsExtended(t)) return '已經展延過了（一次為限）';
+  if(!t.expire_date) return '這張票沒有到期日，不會過期';
+  if(String(t.expire_date).slice(0,10)>=td) return `還沒到期（${String(t.expire_date).slice(0,10).replace(/-/g,'/')}），到期後才能展延`;
+  if(!tkExtendTo(t)) return '算不出原方案期限，無法展延';
+  return '';
 }
 /* 可以展延的條件：已過期、還有沒用完的堂數、還沒展延過、算得出期限。
    已退費／作廢的不行；永久有效的票本來就不會過期，也不需要。 */
@@ -42977,13 +42997,17 @@ function ppRecordHtml(){
             :(_shN?`<button type="button" style="font-size:11px;color:#2f6f4f;border:1px solid #2f6b4f;border-radius:6px;padding:1px 8px;margin-left:6px;background:transparent;${_canShare?'cursor:pointer;':''}font-family:inherit;" ${_canShare?`onclick="ppShareTk('${t.id}')"`:''} title="共用同一個堂數池，任一人上課都從這張票扣${_canShare?'。點擊查看／調整共享名單':''}">共享：${_shLabel}${_canShare?' ›':''}</button>`:'');
           /* 合約鈕移到票券編號左邊（2026-08-04 使用者指示：減少底列被太多物件擠壓變形） */
           return `<div class="bkd-tkcard" style="margin-bottom:10px;">
-            <div class="bkd-tkcard-head"><span class="bkd-tkcard-name" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 9px;font-size:11px;flex:none;" onclick="openContractView('${c.ctByTicket[t.id]}')" title="查看合約">📄 合約</button>`:''}${tkNoTag(sl.no)}${t.plan_name||'票券'}${_m2?stTag:''}${shrTag}${(()=>{
+            <div class="bkd-tkcard-head"><span class="bkd-tkcard-name" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 9px;font-size:11px;flex:none;" onclick="openContractView('${c.ctByTicket[t.id]}')" title="查看合約">📄 合約</button>`:''}${tkNoTag(sl.no)}${t.plan_name||'票券'}${_m2?stTag:''}${(()=>{
                 const f=tkAuditFlags(t,{net:_netTk[t.id], used});
                 /* 2026-08-26 使用者：「對帳是什麼意思　我要做什麼」——
                    原本只有 title 提示，而手機根本沒有 hover，等於掛了一個沒人看得懂的紅章。
                    改成可以點，跳出視窗把四個數字攤開講，並直接給「校正」的入口。 */
                 return f.length?`<button type="button" class="tk-audit" onclick="event.stopPropagation();tkAuditWhy('${t.id}')"
                   title="點一下看是哪個數字對不上">⚠ 對帳</button>`:''; })()}</span>
+              ${/* 共享移到這裡（2026-08-30 使用者指示：「把[共享]·共享人改到右上角　剩餘課堂左邊」）——
+                   共享是「這張票是誰在用」，屬於票券的身分，跟右下角那排動作不是同一件事。 */''}
+              <span class="bkd-tkcard-share">${shrTag||''}${
+                (_canShare&&!_shN)?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="event.stopPropagation();ppShareTk('${t.id}')">設為共享</button>`:''}</span>
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
             ${/* 管理員手機（2026-08-20 使用者指示）：購買・效期提到第二列（緊接編號那一列），
                  金額改放右下角、就在「作廢」按鈕上方；其他角色與桌機維持原本的單行底列。 */''}
@@ -43010,14 +43034,21 @@ function ppRecordHtml(){
                   const _amt=Number((t.installment.amounts||[])[_cur])||0;
                   return `<button class="btn btn-gold btn-sm" style="padding:2px 10px;font-size:11px;" title="收款開通堂數：可收下一期、剩餘全繳或自訂堂數金額（鎖頭解開、保留課自動補綁）" onclick="openInstallNext('${t.id}')">💰 分期繳費</button>`;
                 })():''}
-                ${(_canShare&&!_shN)?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="ppShareTk('${t.id}')">設為共享</button>`:''}
+                ${/* 「設為共享」已移到右上角（剩餘堂數左邊）—— 2026-08-30 使用者指示：
+                     那是「這張票的身分」，不是動作列該放的東西。 */''}
                 ${/* 2026-08-08 使用者定案：賣錯方案但不退錢 → 更換方案（收款與發票不動）；
                      金額算錯要退錢 → 作廢（收款歸零）。兩條路分開放，按鈕上就講清楚差別。 */''}
                 ${(isDeskLike()&&t.status==='usable'&&t.source==='purchase')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="賣錯方案但錢不退：換一張正確的票，收款與發票不動" onclick="openSwapTicket('${t.id}')">更換方案</button>`:''}
                 ${/* 票券校正（2026-08-25 使用者提問：「這種調整票券功能的，有辦法讓管理員操作嗎，
                      就不用每次都要找你修改」）——哪幾堂算在這張票上（含已經上過的）。
                      管理員限定，與「校正堂數」同一級：兩顆都是事後更正帳的入口。 */''}
+                ${/* 右下角定版三顆：[校正][展延][作廢]（2026-08-30 使用者指示）。
+                     校正只有管理員看得到；展延常駐、不能按時淡化寫原因。 */''}
                 ${(SESSION&&SESSION.role==='admin')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="這張票蓋了哪幾堂（含已上過的）；改完票面餘額自動重算" onclick="tkTidyOpen('${t.id}')">校正</button>`:''}
+                ${isDeskLike()?(()=>{ const _w=tkExtWhyNot(t,ymd(TODAY));
+                  return _w
+                    ? `<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;opacity:.45;cursor:not-allowed;" disabled title="${escH(_w)}">展延</button>`
+                    : `<button class="btn btn-gold btn-sm" style="padding:2px 10px;font-size:11px;" title="展延一次，期限同原方案；展延後依合約不得退費" onclick="openTicketExtend('${t.id}')">展延</button>`; })():''}
                 ${/* 待付款（2026-08-28 使用者定案：「只要付款狀態選未付款 就會先出現在會員方案顯示待付款」）——
                      票券照發、客人可以先上課；錢還沒收，櫃檯之後點這顆把金額與付款方式定案。
                      ⚠ 只給櫃檯以上：這一步會寫進營收。 */''}
