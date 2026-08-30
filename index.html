@@ -11551,8 +11551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.1158';
-const APP_VERSION_LABEL='v260830.1158';
+const APP_VERSION = '260830.1208';
+const APP_VERSION_LABEL='v260830.1208';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -47494,6 +47494,14 @@ async function refreshGrantInfo(){
 /* ── 折抵券消費（2026-07-22 待辦2 使用者定案）：教練課/運動按摩簽約收款時可折抵，
    每張 $300；抽獎發的 tt-discount-* 票券即為折抵券。分期不併用（金額分段會亂）。 ── */
 const VOUCHER_TT={'私人教練':'tt-discount-pt300','運動按摩':'tt-discount-ms300'};
+/* 一次付清時的張數上限（2026-08-30 使用者定案）：
+     教練課折抵券 —— 最多 3 張（折上限 $900）
+     運動按摩折抵券 —— 不設限，$1,500 折到剩 $300 是使用者確認過的預期行為
+   沒列進來的就是不限。分期一律 1 張，那條規則比這裡優先（0729 定案）。
+   ⚠ 上限只有一份，refreshGrantVoucher（畫面）與 submitGrant（送出）都問這一支 ——
+     分成兩份寫，畫面擋住了但送出沒擋，等於沒擋。 */
+const VOUCHER_MAX={'tt-discount-pt300':3};
+function voucherCapOf(vt, isInst){ return isInst?1:(VOUCHER_MAX[vt]||Infinity); }
 async function refreshGrantVoucher(){
   const wrap=document.getElementById('gt-voucher-wrap'); if(!wrap) return;
   const plan=window._grantPlanCache;
@@ -47515,11 +47523,13 @@ async function refreshGrantVoucher(){
   }catch(_){}
   const held=tks.reduce((s,t)=>s+(Number(t.sessions_remaining)||0),0);
   if(!held){ wrap.style.display='none'; return; }
-  /* 2026-07-29 使用者定案：分期＝一期只能用 1 張；一次付清＝無張數上限（仍受金額與持有量限制）。
-     原本分期完全不能用券，改為每期上限 1 張。 */
+  /* 2026-07-29 使用者定案：分期＝一期只能用 1 張。
+     2026-08-30 再加一層：教練課折抵券一次最多 3 張（運動按摩仍不限）。 */
   const isInst=inst>1;
-  const total=isInst?Math.min(held,1):held;
-  window._gtVoucherMax=total; window._gtVoucherTks=tks; window._gtVoucherInst=isInst; window._gtVoucherHeld=held;
+  const cap=voucherCapOf(vt,isInst);
+  const total=Math.min(held,cap);
+  window._gtVoucherMax=total; window._gtVoucherTks=tks; window._gtVoucherInst=isInst;
+  window._gtVoucherHeld=held; window._gtVoucherTt=vt;
   wrap.style.display='';
   /* 2026-07-29 使用者指示：改品牌金醒目框，且「預設帶入」可用張數（櫃檯要不用再自己減），
      避免會員的券被忽略（原本預設 0 張、長得像一般欄位，很容易略過）。 */
@@ -47530,7 +47540,11 @@ async function refreshGrantVoucher(){
   document.getElementById('gt-voucher-box').innerHTML=`
     <div class="gt-vh-top">
       <span class="gt-vh-ic">${LNI.gift||'🎟'}</span>
-      <span class="gt-vh-t">此會員有 <b>${held}</b> 張折抵券（每張折 $300）${isInst?'<span class="gt-vh-lim">分期：本期限用 1 張</span>':''}</span>
+      ${/* 上限要寫出來 —— 櫃檯看到「有 5 張」卻只能輸入 3，不寫原因就會以為是壞了
+           （呼應「不能用就寫原因，別藏按鈕」） */''}
+      <span class="gt-vh-t">此會員有 <b>${held}</b> 張折抵券（每張折 $300）${
+        isInst?'<span class="gt-vh-lim">分期：本期限用 1 張</span>'
+        :(held>cap?`<span class="gt-vh-lim">本次最多 ${cap} 張</span>`:'')}</span>
     </div>
     <div class="gt-vh-row">
       <span>本次使用</span>
@@ -47666,9 +47680,10 @@ async function submitGrant(){
     current: 1                                      // 已開通到第 1 段
   } : null;
   // ── 折抵券（2026-07-22 待辦2）：每張折 $300、分期不併用；實收＝成交金額−折抵 ──
-  /* 折抵券（2026-07-29 使用者定案）：分期＝每期限用 1 張；一次付清＝無張數上限。
-     window._gtVoucherMax 在 refreshGrantVoucher 已依此夾好，這裡再夾一次防繞過。 */
-  const _vCap = isInstall ? 1 : Infinity;
+  /* 折抵券張數上限（2026-07-29 分期 1 張／2026-08-30 教練課一次最多 3 張）——
+     規則只有一份，見 voucherCapOf。window._gtVoucherMax 在 refreshGrantVoucher 已依此
+     夾好，這裡再夾一次防繞過（畫面擋住、送出沒擋，等於沒擋）。 */
+  const _vCap = voucherCapOf(window._gtVoucherTt, isInstall);
   const voucherN = Math.max(0, Math.min(
     Math.floor(Number((document.getElementById('gt-voucher')||{}).value)||0),
     Number(window._gtVoucherMax)||0, _vCap));
