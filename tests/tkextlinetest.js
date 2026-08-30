@@ -74,8 +74,21 @@ console.log('\n④ 接線與語彙');
   ok('★★★ 教練請假不寫 extended_from（那是「不得退費」的旗標）—— 理由寫在原地',
      /教練請假那條\*\*刻意不寫\*\* extended_from —— 那個欄位同時代表「已展延，不得退費」/.test(src)
      && !/extended_from/.test(grab('extendForCoachLeave')));
-  ok('★ 用金色（可以做但要知道），不是紅色警告',
-     /\.md-tk-ext-to\{font-weight:800;color:var\(--gold-d,#9a7344\);\}/.test(src));
+  ok('★ 櫃檯展延用金色（可以做但要知道），教練請假用綠（一般提示）',
+     /\.md-tk-ext-to\{font-weight:800;color:var\(--gold-d,#9a7344\);\}/.test(src)
+     && /\.md-tk-ext-clv>b\{color:var\(--green,#1F6F54\);background:var\(--sage-bg,#E4EAD9\);\}/.test(src));
+  /* 2026-08-30 使用者定案：「如果是因為教練請假的展延 是可以退費的
+     因為是教練的問題不應該影響會員權益」 */
+  ok('★★★ 教練請假展延要寫明「不影響退費」，櫃檯展延才寫「依合約不得退費」',
+     tkExtLineHTML({id:'T1',start_date:'2026-08-01'},
+       [{ticket_id:'T1',created_at:'1',note:'2026-08-24 教練請假展延 7 天（2026/08/30 → 2026/09/06）'}])
+         .indexOf('店家補償，<b>不影響退費</b>')>=0
+     && tkExtLineHTML({id:'T1',start_date:'2026-08-01'},
+       [{ticket_id:'T1',created_at:'1',note:'展延一次：2026-10-04 → 2026-11-01（28 天）'}])
+         .indexOf('依合約不得退費')>=0);
+  ok('★★★ 而且程式本來就沒把教練請假算成「已展延」（tkIsExtended 只看 extended_from）',
+     /function tkIsExtended\(t\)\{ return !!\(t && t\.extended_from\); \}/.test(src)
+     && !/extended_from/.test(grab('extendForCoachLeave')));
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
