@@ -5,6 +5,7 @@ globalThis.bkEatenCancel=b=>!!(b&&b.status==='cancelled'&&b.refund_waived);
 /* 2026-08-06 稽核 R4：推算切分日 —— 沙箱測資沒有 created_at，一律視為舊資料（照舊推算） */
 globalThis.inferAllowed=()=>true;
 const fs=require('fs');
+require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 function grab(startMark,endMark,label){

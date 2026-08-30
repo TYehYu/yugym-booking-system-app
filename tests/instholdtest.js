@@ -8,6 +8,7 @@
    ②顯示面：分期未繳期的「待繳費保留」課被畫成超約紅虛線 —— 未開通堂數已由
      🔒 表達，保留課不進圓點。 */
 const fs=require('fs');
+require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

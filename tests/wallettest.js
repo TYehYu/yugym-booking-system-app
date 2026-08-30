@@ -18,6 +18,7 @@ globalThis.bkEatenCancel=b=>!!(b&&b.status==='cancelled'&&b.refund_waived);
 globalThis.inferAllowed=()=>true;
 globalThis.mids=b=>(b&&Array.isArray(b.member_ids))?b.member_ids:[];
 const fs=require('fs');
+require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

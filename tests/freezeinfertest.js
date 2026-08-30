@@ -8,6 +8,7 @@
      ② 固化（本支）：把目前猜出來的歸屬一次性寫成 ticket_logs 連結（delta=0，不動餘額），
         寫完之後推算就能退場，畫面不變但不再重算 */
 const fs=require('fs');
+require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

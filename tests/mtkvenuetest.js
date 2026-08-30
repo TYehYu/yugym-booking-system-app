@@ -4,6 +4,7 @@
    圓形卡 30px 圓、日期置中 —— 場地掛在圓下緣的迷你徽章（跑＝跑步機、教＝教室），
    預設多功能訓練區不標（selfVenueLabel 既有口徑）。tooltip 也帶全名。 */
 const fs=require('fs');
+require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

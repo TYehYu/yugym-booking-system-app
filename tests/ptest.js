@@ -1,4 +1,5 @@
 const fs=require('fs');
+require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 /* 2026-07-31：課種判斷抽成共用的 bkIsGroup／bkIsSelf／bkIsMassage（見 TK_POCKETS）——
    沙箱裡給等價替身，測資只有 category 可判。 */
 globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');

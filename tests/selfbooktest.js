@@ -6,6 +6,7 @@
    櫃檯或教練建立的寫的是員工 id。所以「created_by ＝ 這位會員本人」就是自助預約，
    不需要另外加欄位（也就不會有「新資料才有、舊資料沒有」的落差）。 */
 const fs=require('fs');
+require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

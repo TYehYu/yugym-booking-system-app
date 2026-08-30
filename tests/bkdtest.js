@@ -3,6 +3,7 @@
    成因：直接綁到票券時，已用堂數只數「清單裡的出席筆數」，
    而匯入會員的歷史課沒有逐筆預約 → 已核銷的堂數整個消失，看起來像全新的票。 */
 const fs=require('fs');
+require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
@@ -53,11 +54,14 @@ ok('★ 票券夾的已用堂數涵蓋已簽到的戳記（否則最後那幾堂
    /const attIn=bks\.filter\(b=>isAtt\(b\) && !_clvAtt\(b\)\)\.length;/.test(src)
    && /Math\.max\(dAtt, attIn, Math\.max\(0, total-\(Number\(rem\)\|\|0\)-pending\)\)/.test(src));
 ok('★★ 教練請假已簽到的堂不算已用（它已經退回票券了，不佔堂）',
-   /const _clvAtt=b=>!!\(b && b\.coach_leave===true && \(b\.status==='checked_in'\|\|b\.status==='completed'\)\);/.test(src)
+   /const _clvAtt=bkLeaveRefunded;/.test(src)
    && /const dAtt=bks\.filter\(b=>b\.ticket_id===t\.id && isAtt\(b\) && !_clvAtt\(b\)\)\.length;/.test(src));
-ok('★★ 判準與 ticketTokens 的 _clvAttL 一字不差（不然只是把不一致換個地方）',
-   /if\(b && b\.coach_leave===true && \(b\.status==='checked_in'\|\|b\.status==='completed'\)\)\{/.test(src)
-   && /判準必須與 ticketTokens 的 _clvAttL 一字不差，不然只是把不一致換個地方。/.test(src));
+/* 2026-08-30：原本這一條要求兩份抄寫「一字不差」，但抄寫本身就是問題 ——
+   0830 發現 computeLastBkMarks 根本沒抄到，鄭宇涵那張票的第 7 堂被算成第 8 堂、
+   誤判最後一堂並跳收款提醒。改成釘住更強的事：判準只有一份。 */
+ok('★★★ 判準只有一份（bkLeaveRefunded），不再靠「抄得一樣」',
+   /function bkLeaveRefunded\(b\)\{/.test(src)
+   && (src.match(/coach_leave===true && \(b\.status==='checked_in'\|\|b\.status==='completed'\)/g)||[]).length===1);
 ok('　　課比票多時保留最近的幾堂（本堂才不會落在圓點之外）',
    /if\(_cap>0 && feed\.length>_cap\) feed=feed\.slice\(feed\.length-_cap\);/.test(src));
 

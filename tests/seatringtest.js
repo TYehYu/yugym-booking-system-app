@@ -5,6 +5,7 @@
    b.id===curId，兩顆都命中 → 兩列（第 1、第 2 個名額）各圈了兩顆。
    改成 ticketTokens 多收 seatN：第 N 個名額的列只圈第 N 顆命中的圓點。 */
 const fs=require('fs');
+require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

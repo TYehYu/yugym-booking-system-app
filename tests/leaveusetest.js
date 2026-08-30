@@ -9,6 +9,7 @@
    ・團課名單的「含補課券」標籤是看「這位會員手上有沒有補課券」，不是看這一格用的是哪一張。
    ・教練人次直接數 member_ids 長度，請假的人也算進教練成績。 */
 const fs=require('fs');
+require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

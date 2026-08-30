@@ -4,6 +4,7 @@
    原本只認「已簽到」，請假名額掉進「已預約」，票又已扣滿 → 畫成超約紅圈＋
    兩顆無日期的 ✓。改成請假名額也算已使用：實心、帶日期、紅圈消失。 */
 const fs=require('fs');
+require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

@@ -11560,8 +11560,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.1421';
-const APP_VERSION_LABEL='v260830.1421';
+const APP_VERSION = '260830.1721';
+const APP_VERSION_LABEL='v260830.1721';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17115,7 +17115,7 @@ function usedSessionsMap(bookings){
   const map={};
   (bookings||[]).forEach(b=>{
     if(!b||!b.ticket_id) return;
-    if(b.coach_leave===true && (b.status==='checked_in'||b.status==='completed')) return;   /* 教練請假簽到＝淨額 0（2026-08-14） */
+    if(bkLeaveRefunded(b)) return;   /* 教練請假簽到＝淨額 0（2026-08-14；0830 收斂成 bkLeaveRefunded） */
     if(b.status==='checked_in'||b.status==='completed'){
       map[b.ticket_id]=(map[b.ticket_id]||0)+1;
     }
@@ -17750,7 +17750,7 @@ function buildWallet(memberId, ctx){
   const isAtt=b=>{
     /* 教練請假後簽到（2026-08-14）：那格的扣課已在簽到當下退回（淨額 0），
        不算「用掉」——圓點另以「課種色填滿＋紅圈」呈現、不佔票面已用數。 */
-    if(b && b.coach_leave===true && (b.status==='checked_in'||b.status==='completed')) return false;
+    if(bkLeaveRefunded(b)) return false;
     /* 請假也算（2026-08-06 使用者定案：「團課的請假，對會員來說算一堂簽到」）——
        本堂照扣不退、另發補課券，票上那一格確實用掉了。原本只認 checked_in，
        請假那一格會掉回「待上」，票明明扣滿卻顯示還有一格空的
@@ -17908,7 +17908,7 @@ function buildWallet(memberId, ctx){
        used 就比 done 多一，ticketTokens 憑空補一顆 ✓ 鬼點佔掉一格，
        分期票開通區被擠爆，最後一堂就變成「需補票」的紅虛線。
        ⚠ 判準必須與 ticketTokens 的 _clvAttL 一字不差，不然只是把不一致換個地方。 */
-    const _clvAtt=b=>!!(b && b.coach_leave===true && (b.status==='checked_in'||b.status==='completed'));
+    const _clvAtt=bkLeaveRefunded;   /* 0830：與 ticketTokens／computeLastBkMarks 收斂成同一支 */
     const dAtt=bks.filter(b=>b.ticket_id===t.id && isAtt(b) && !_clvAtt(b)).length;
     /* 待上＝蓋了戳記但還沒簽到：直連的 booked ＋ 團課扣了課還沒簽到的名額。
        推算出來的（③）不算 —— 舊系統匯入的預約當初沒扣過票，扣了會重複扣。
@@ -22380,6 +22380,22 @@ function tkRenewGroup(t, typeMap){
   if(cat==='私人教練') return 'pt';
   return '';
 }
+/* ══ 教練請假退堂的那一格，不算這張票的一堂（2026-08-30 使用者回報）════════
+   「鄭宇涵這堂課是 7/8　為什麼被記錄成 8/8　還通知客人要繳錢了」
+
+   實際發生的事（MTK-CDDD37B6CD8C，8 堂）：
+     8/24 那堂 MANGO 請假 → 改記自主訓練、結課、**堂數當場退回**（帳本淨額 0），
+     但那筆預約**仍然掛著同一個 ticket_id、狀態 completed**。
+   票券夾早就不算它（見 buildWallet 的 isAtt），所以圓點畫 6/8 是對的；
+   可是「第幾堂／共幾堂」與續課提醒是另一套算法，把它當成一堂 →
+     ・_bkSeq：8/31 變成第 8 堂（正確是第 7 堂）
+     ・_renewLastBk：8−7已用−1已排＝0 → 判定「最後一堂」→ 跳續課提醒 → 櫃檯去跟客人收錢
+
+   同一張票不能有兩套「用了幾堂」的算法，所以把規則抽出來三處共用。
+   ⚠ 判準是「請假且已結課」，不是看備註文字 —— 備註是人寫的，會變。 */
+function bkLeaveRefunded(b){
+  return !!b && b.coach_leave===true && (b.status==='checked_in'||b.status==='completed');
+}
 function computeLastBkMarks(allTickets, bookings, typeMap){
   window._renewDoneBk={};   // 已續約 → 綠勾
   window._renewNoBk={};     // 不續約 → 紅叉
@@ -22387,7 +22403,10 @@ function computeLastBkMarks(allTickets, bookings, typeMap){
      （2,400 票 × 上萬筆＝兩千多萬次比對），行事曆每次重繪都要跑。
      改成先做一次分組索引與「每人各類別最晚購買日」索引，兩個迴圈共用。 */
   const _bkByTk={};
-  (bookings||[]).forEach(b=>{ if(b&&b.ticket_id&&b.status!=='cancelled'){ (_bkByTk[b.ticket_id]=_bkByTk[b.ticket_id]||[]).push(b); } });
+  /* ⚠ 教練請假退堂的那一格排除掉（2026-08-30）——它掛著 ticket_id、狀態也是 completed，
+     但堂數當場就退回去了，票上並沒有少一堂。留著會讓下面兩個數字一起錯：
+     「第幾堂／共幾堂」多算一堂、「還沒排的堂數」少算一堂（→ 誤判最後一堂、誤發收款提醒）。 */
+  (bookings||[]).forEach(b=>{ if(b&&b.ticket_id&&b.status!=='cancelled'&&!bkLeaveRefunded(b)){ (_bkByTk[b.ticket_id]=_bkByTk[b.ticket_id]||[]).push(b); } });
   Object.values(_bkByTk).forEach(a=>a.sort((x,y)=>((x.date||'')+(x.start_time||'')).localeCompare((y.date||'')+(y.start_time||''))));
   /* 這張票的第幾堂／共幾堂（2026-08-21 使用者指示：首頁課卡姓名下面顯示）——
      索引上面已經建好了（未取消、依日期時間排序），順手標上去，不另外掃一次 bookings。
@@ -55762,7 +55781,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
        淨額 0 不佔格，獨立畫成加值圓點。
        未到場結課（同日二修）：completed 但沒有 checked_in_at ＝櫃檯按「未到場結課」——
        堂數已退、人也沒來，不畫點也不佔格。 */
-    if(b && b.coach_leave===true && (b.status==='checked_in'||b.status==='completed')){
+    if(bkLeaveRefunded(b)){   /* 0830：收斂成 bkLeaveRefunded（原本這條判準抄了四份） */
       if(b.status==='checked_in'||b.checked_in_at) _clvAttL.push(b);
       return;
     }

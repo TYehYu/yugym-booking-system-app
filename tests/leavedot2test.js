@@ -10,6 +10,7 @@
    畫到第二張票時計數又從頭來一次（已簽到的先發），於是兩張票都拿到「已簽到」。
    修法：戳記蓋上名額鍵（grpTicketAlloc），圓點直接讀那個名額自己的出缺席。 */
 const fs=require('fs');
+require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
