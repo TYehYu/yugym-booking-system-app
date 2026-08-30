@@ -71,6 +71,28 @@ console.log('\n④ 接線與語彙');
 {
   ok('★★ 掛在票券卡的 meta 那一行底下（會員資料 → 票券）',
      /\$\{tkExtLineHTML\(t, tkLogs\)\}/.test(src));
+  /* 2026-08-30 使用者：「這種方案期限的內容 會員那邊也要能看到」 */
+  ok('★★★ 會員端兩種票券卡（V2 與傳統）也都看得到',
+     (src.match(/\$\{tkExtLineHTML\(t, logs\)\}/g)||[]).length===2
+     && /效期被改過是會員最該知道的事/.test(src));
+  /* 2026-08-30 使用者：「方案下方新增"教練展延"跟"展延\(不退費\)"」 */
+  ok('★★★ 兩種展延各一枚標籤，而且是「兩枚」不是二選一（一張票可能兩種都有）',
+     /const chips=\(e\.nClv\?`<b class="tkx tkx-clv">教練展延/.test(src)
+     && /\+\(e\.nMan\?`<b class="tkx tkx-man">展延（不退費）/.test(src)
+     && /一張票兩種都可能有（先被教練請假延過，之後櫃檯又展延一次），所以是兩枚不是二選一。/.test(src));
+  {
+    const two=tkExtLineHTML({id:'T1',start_date:'2026-08-01'},
+      [{ticket_id:'T1',created_at:'1',note:'2026-08-24 教練請假展延 7 天（2026/08/30 → 2026/09/06）'},
+       {ticket_id:'T1',created_at:'2',note:'展延一次：2026-09-06 → 2026-11-01（56 天）'}]);
+    ok('★★★ 兩種都有時兩枚都出現', two.indexOf('教練展延')>=0 && two.indexOf('展延（不退費）')>=0, two);
+    const only=tkExtLineHTML({id:'T1',start_date:'2026-08-01'},
+      [{ticket_id:'T1',created_at:'1',note:'2026-08-24 教練請假展延 7 天（2026/08/30 → 2026/09/06）'}]);
+    ok('★★ 只有教練展延時不會出現「不退費」那一枚', only.indexOf('展延（不退費）')<0, only);
+    ok('★ 同一種延兩次要標次數',
+       tkExtLineHTML({id:'T1'},[{ticket_id:'T1',created_at:'1',note:'2026-08-01 教練請假展延（a → b）'},
+                                {ticket_id:'T1',created_at:'2',note:'2026-08-08 教練請假展延（c → d）'}])
+         .indexOf('教練展延 ×2')>=0);
+  }
   ok('★★★ 教練請假不寫 extended_from（那是「不得退費」的旗標）—— 理由寫在原地',
      /教練請假那條\*\*刻意不寫\*\* extended_from —— 那個欄位同時代表「已展延，不得退費」/.test(src)
      && !/extended_from/.test(grab('extendForCoachLeave')));

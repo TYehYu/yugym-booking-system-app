@@ -3023,6 +3023,12 @@ tr:hover td{background:var(--card2);}
 .gfa-day i{font-style:normal;margin-left:5px;font-size:10px;font-weight:800;color:var(--green);}
 .gfa-day-now{background:var(--sage-bg,#E4EAD9);color:var(--green);}
 .gfa-day-more{background:none;color:var(--t3);font-weight:600;}
+/* 兩種展延的標籤（2026-08-30 使用者指示：方案下方新增「教練展延」與「展延（不退費）」）——
+   顏色語彙不同是因為後果不同：教練展延不影響退費（綠＝一般提示），
+   櫃檯展延之後這張票不能退（金＝可以做但要知道）。 */
+.tkx{font-size:10.5px;font-weight:800;border-radius:999px;padding:2px 8px;white-space:nowrap;}
+.tkx-clv{color:var(--green,#1F6F54);background:var(--sage-bg,#E4EAD9);}
+.tkx-man{color:var(--gold-d,#9a7344);background:#f7f1e4;}
 /* 展延過的票：把「起始 → 原到期 → 展延至」攤在卡片上（2026-08-30 使用者指示）。
    金色＝「可以做但要知道」那一階（紅>金>綠），它不是警告、但也不是常態。 */
 .md-tk-ext{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin-top:6px;
@@ -11521,8 +11527,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.1028';
-const APP_VERSION_LABEL='v260830.1028';
+const APP_VERSION = '260830.1032';
+const APP_VERSION_LABEL='v260830.1032';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12544,7 +12550,10 @@ function tkExtInfo(t, logs){
   const pick=n=>{ const m=String(n||'').match(/(\d{4}[-\/]\d{2}[-\/]\d{2})\s*→\s*(\d{4}[-\/]\d{2}[-\/]\d{2})/);
     return m?{from:m[1].replace(/\//g,'-'), to:m[2].replace(/\//g,'-')}:null; };
   const first=pick(mine[0].note), last=pick(mine[mine.length-1].note);
+  const isClv=l=>String(l.note||'').indexOf('教練請假')>=0;
   return { n:mine.length,
+    nClv:mine.filter(isClv).length,          // 教練展延（店家補償，不影響退費）
+    nMan:mine.filter(l=>!isClv(l)).length,   // 櫃檯展延（依合約不得退費）
     from:(first&&first.from)||null,                                   // 最初的到期日
     to:(last&&last.to)||(t.expire_date?String(t.expire_date).slice(0,10):null),
     at:String(mine[mine.length-1].created_at||'').slice(0,10)||null,  // 最後一次展延的日子
@@ -12555,6 +12564,13 @@ function tkExtInfo(t, logs){
 function tkExtLineHTML(t, logs){
   const e=tkExtInfo(t, logs); if(!e) return '';
   const f=x=>x?String(x).slice(0,10).replace(/-/g,'/'):'—';
+  /* 兩種展延各給一枚標籤（2026-08-30 使用者指示：「方案下方新增"教練展延"跟"展延(不退費)"」）——
+     一張票兩種都可能有（先被教練請假延過，之後櫃檯又展延一次），所以是兩枚不是二選一。
+     ⚠ 兩枚的顏色語彙不同，因為後果不同：
+       教練展延＝綠（一般提示，店家補償，退費權不變）
+       展延（不退費）＝金（可以做但要知道：按下去之後這張票不能退了） */
+  const chips=(e.nClv?`<b class="tkx tkx-clv">教練展延${e.nClv>1?` ×${e.nClv}`:''}</b>`:'')
+    +(e.nMan?`<b class="tkx tkx-man">展延（不退費）${e.nMan>1?` ×${e.nMan}`:''}</b>`:'');
   /* 退費權要一起講（2026-08-30 使用者定案：「如果是因為教練請假的展延　是可以退費的
      因為是教練的問題不應該影響會員權益」）——
      合約〔展延規則〕的「展延之課程不得申請退費」講的是**會員自己申請**的那一次；
@@ -12562,7 +12578,7 @@ function tkExtLineHTML(t, logs){
      extended_from，所以 tkIsExtended 是 false、不得退費那張籤也不會出現），
      但卡片上只寫「展延」兩個字，櫃檯很可能自己套用合約條款。所以直接寫出來。 */
   const clv=(e.why==='教練請假');
-  return `<div class="md-tk-ext${clv?' md-tk-ext-clv':''}"><b>展延</b>${e.n>1?` ×${e.n}`:''}
+  return `<div class="md-tk-ext${clv?' md-tk-ext-clv':''}">${chips}
     <span>起始 ${f(t.start_date)}</span><i>→</i>
     <span>原到期 ${f(e.from)}</span><i>→</i>
     <span class="md-tk-ext-to">展延至 ${f(e.to)}</span>
@@ -13199,6 +13215,13 @@ async function _tkTidyDo(){
  }catch(e){ console.error('tkTidyDo 錯誤:',e); showToast('校正失敗：'+((e&&e.message)||e)); }
 }
 // 展延後的新到期日（原到期日 ＋ 原方案期限）
+/* 展延到哪一天（2026-08-30 使用者定版，兩個部分要分開看）：
+     起點＝**現在的到期日**（教練請假墊高的那幾週算在裡面 ——
+            「該課程如果因為教練請假原本就多一週　就要從這一週往後展延」）
+     長度＝**原方案天數**（valid_days；不能用「到期日 − 起始日」回推，
+            那會把教練請假的補償算進方案長度，等於再送一次，見 tkPlanDays）
+   例：鄭宇涵 07/06 起、55 天、兩次教練請假延到 09/13
+       → 09/13（含補償）＋ 55（原方案）＝ 11/07。 */
 function tkExtendTo(t){
   const days = tkPlanDays(t);
   const from = t && (t.extended_from || t.expire_date);
@@ -55834,6 +55857,10 @@ function renderMemTickets(){
                <span class="mck-signpad-go">簽名 ›</span></button>`:''; })()}
           <div class="mck-dots2 mck-dots6">${ticketTokens(t,_bksC,typeMap,usedCnt,null,SESSION.id,_sl.selfBk)}</div>
           ${(t.installment && t.unlocked_sessions!=null && t.unlocked_sessions<total)?`<div class="mck-install">分期方案・目前開通 <b>${t.unlocked_sessions}</b> / ${total} 堂　·　🔒 部分堂數需繳下一期後開通</div>`:''}
+          ${/* 展延時間軸也給會員看（2026-08-30 使用者指示：「這種方案期限的內容
+               會員那邊也要能看到」）—— 效期被改過是會員最該知道的事，
+               而且教練請假那種是店家補償，講出來才看得到誠意。 */''}
+          ${tkExtLineHTML(t, logs)}
           <div class="mck-v2-foot">
             <span class="mck-v2-left">${_tag}${tkExtBadge(t)}${(window._ctByTicket&&window._ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px;" onclick="event.stopPropagation();openContractView('${window._ctByTicket[t.id]}')">📄 合約</button>`:''}</span>
             <span class="mck-v2-dates">${_dates}</span>
@@ -55852,6 +55879,7 @@ function renderMemTickets(){
                 :(soon?`<span class="mck-badge mck-badge-warn">${days} 天後到期</span>`:'')}${tkExtBadge(t)}
         </div>
         ${/* 小管家文案列已移除（2026-07-26 使用者指示） */''}
+        ${tkExtLineHTML(t, logs)}
         <div class="mck-dots2">${ticketTokens(t,_bksC,typeMap,usedCnt,null,SESSION.id,_sl.selfBk)}</div>
         ${(t.installment && t.unlocked_sessions!=null && t.unlocked_sessions<total)?`<div class="mck-install">分期方案・目前開通 <b>${t.unlocked_sessions}</b> / ${total} 堂　·　🔒 部分堂數需繳下一期後開通</div>`:''}
         ${/* 2026-08-08 使用者提問：「使用期限是從啟用日開始計算，所以很難在一開始就寫在

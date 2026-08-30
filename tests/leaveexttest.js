@@ -122,6 +122,31 @@ console.log('\n教練請假的補償不可以被後面的「櫃檯展延」複�
   eq('★★★ 已經有 valid_days 就不覆蓋（賣票時談好的天數最大）', m3.saved[0].valid_days, 365);
 }
 
+console.log('\n櫃檯展延的起點與長度是兩回事（2026-08-30 使用者定版）');
+{
+  /* 「該課程如果因為教練請假原本就多一週 就要從這一週往後展延」——
+       起點＝現在的到期日（含教練請假墊高的部分）
+       長度＝原方案天數（valid_days）
+     兩者不能混為一談：起點少算 → 會員虧掉補償；長度多算 → 補償被送兩次。 */
+  const g3=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
+  const extTo=new Function('parseYmd','ymd','window',
+    g3('function tkPlanDays(t){','\n}\n')+g3('function tkExtendTo(t){','\n}\n')
+    +'\nreturn tkExtendTo;')(
+    ds=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(ds||''));return m?new Date(+m[1],+m[2]-1,+m[3]):null;},
+    d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());},
+    {_ttCache:[]});
+  /* 鄭宇涵的實際形狀 */
+  const zyh={id:'T',start_date:'2026-07-06',expire_date:'2026-09-13',valid_days:55,extended_from:null};
+  eq('★★★ 起點用「現在的到期日」09/13（含教練請假的 14 天），長度用原方案 55 天 → 11/07',
+     extTo(zyh), '2026-11-07');
+  eq('★★★ 不是從原到期日 08/30 起算（那樣會把補償吃掉，變 10/24）',
+     extTo(zyh)==='2026-10-24', false);
+  eq('★★★ 也不是用被墊高的 69 天（那樣會多送 14 天，變 11/21）',
+     extTo(zyh)==='2026-11-21', false);
+  eq('　 沒被教練請假動過的票照舊：08/30 ＋ 55 → 10/24',
+     extTo({id:'T',start_date:'2026-07-06',expire_date:'2026-08-30',valid_days:55}), '2026-10-24');
+}
+
 console.log('\n什麼情況不延');
 {
   /* 2026-08-30：回傳改物件，三種「沒延」要分得出來 —— 櫃檯的提示要講對原因 */
