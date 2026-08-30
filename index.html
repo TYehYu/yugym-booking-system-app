@@ -4753,6 +4753,10 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .mtk-sh.mtk-cur .mtk-shdot,.mtk-lv.mtk-cur .mtk-shdot{box-shadow:0 0 0 3px rgba(31,111,84,.34);}
 /* 教練請假（2026-08-28）：色點與「請假」兩個字都用警示紅（紅>金>綠 的最上層）。
    已簽到的那一種是實心紅（堂已退回、人有到）；還沒上的是紅圈空心（時段還留著）。 */
+/* 教練請假・未到場結課（2026-08-30 使用者指示：「是因為未到　那用金色的色點」）——
+   紅＝請假但人有來（照樣佔用了教練與場地）；金＝請假而且人沒來。
+   同一條紅>金>綠：紅是要留意的，金是「知道就好」。堂數兩者都已退回、都不佔格。 */
+.mtk-lv.mtk-lv-ns .mtk-shdot{background:var(--gold-d,#b48a56);}
 .mtk-lv .mtk-shdot{background:var(--danger,#b5372e);}
 .mtk-lv.mtk-booked .mtk-shdot{background:#fff;border:2.5px solid var(--danger,#b5372e);}
 .mtk-lv .mtk-shnm{color:var(--danger,#b5372e);}
@@ -11560,8 +11564,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.1721';
-const APP_VERSION_LABEL='v260830.1721';
+const APP_VERSION = '260830.1839';
+const APP_VERSION_LABEL='v260830.1839';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -55777,12 +55781,15 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
   };
   const _doneL=[], _bookedL=[], _clvAttL=[];
   (bks||[]).forEach(b=>{
-    /* 教練請假後簽到（2026-08-14 使用者指示：「中間用課種色填滿、旁邊保持紅圈」）——
-       淨額 0 不佔格，獨立畫成加值圓點。
-       未到場結課（同日二修）：completed 但沒有 checked_in_at ＝櫃檯按「未到場結課」——
-       堂數已退、人也沒來，不畫點也不佔格。 */
+    /* 教練請假（2026-08-14 使用者指示：「中間用課種色填滿、旁邊保持紅圈」；
+       0828 改成「紅點＋請假＋日期」）—— 淨額 0 不佔格，獨立畫成加值圓點。
+       ⚠ 2026-08-30 使用者指示：「8/24 要出現　就跟其他教練請假的圓形卡一樣」——
+         **推翻 0814 同日二修的「未到場結課不畫點」**。當時的理由是「堂數已退、人也沒來」，
+         但那正是會員最需要看到的一格：鄭宇涵 8/24 那堂 MANGO 請假、人沒來，
+         卡片上什麼痕跡都沒有，客人只會覺得「我明明約了 8 堂，怎麼只看到 7 堂」。
+         現在只要是「請假且已結課」就畫，不再分有沒有簽到。 */
     if(bkLeaveRefunded(b)){   /* 0830：收斂成 bkLeaveRefunded（原本這條判準抄了四份） */
-      if(b.status==='checked_in'||b.checked_in_at) _clvAttL.push(b);
+      _clvAttL.push(b);
       return;
     }
     /* 分期待繳費保留（2026-08-04 徐千晴案例）不畫進圓點——這些課本來就等下一期
@@ -55831,7 +55838,11 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
      原本是「課種色填滿＋紅圈」，紅圈與「需補票」的紅虛線在一排裡很難分；
      直接把「請假」兩個字寫出來就不必靠記顏色。與共享票那一版同一套排法。 */
   const _lvBody=(b,dt)=>`<i class="mtk-shdot"></i><b class="mtk-shnm">請假</b><b class="mtk-shdt">${dt}</b>`;
-  const _clxDot=b=>`<span class="mtk mtk-used mtk-clvatt mtk-lv" style="--tk-acc:${v.accent};" title="教練請假・會員已到場簽到（堂數已退回票券）${b&&b.date?' '+b.date:''}">${_lvBody(b, b?md(b):'✓')}</span>`;
+  /* 到場與未到場分色（2026-08-30 使用者指示）：紅＝人有來、金＝未到場結課。
+     判準與 bkCoachLeaveNoShow 寫進去的一致（completed 且沒有 checked_in_at）。 */
+  const _clvNoShow=b=>!!b && b.status!=='checked_in' && !b.checked_in_at;
+  const _clxDot=b=>{ const ns=_clvNoShow(b);
+    return `<span class="mtk mtk-used mtk-clvatt mtk-lv${ns?' mtk-lv-ns':''}" style="--tk-acc:${v.accent};" title="教練請假・${ns?'未到場結課':'會員已到場簽到'}（堂數已退回票券）${b&&b.date?' '+b.date:''}">${_lvBody(b, b?md(b):'✓')}</span>`; };
   /* ── 共享票的那幾顆：色點在上、使用人與日期各一行在下（2026-08-27 使用者回報，附截圖）──
      「票券使用人用黃框表示不夠清楚　情境是 陳瀚竣的方案 分享給陳玟淂　則該張圓形卡
        改成一個色點在上方下方顯示使用人跟日期　因為今天10:00這一堂分不清楚是誰使用的」

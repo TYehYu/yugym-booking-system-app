@@ -53,8 +53,9 @@ console.log('\n② 色點吃課程色（使用者定案：「依照課程的顏�
      && /\.mtk-lv \.mtk-shnm\{color:var\(--danger,#b5372e\);\}/.test(CSS));
   ok('★★ 已簽到＝實心紅（堂已退回、人有到）；還沒上＝紅圈空心（時段還留著）',
      /\.mtk-lv\.mtk-booked \.mtk-shdot\{background:#fff;border:2\.5px solid var\(--danger,#b5372e\);\}/.test(CSS));
+  /* 2026-08-30：已結課那一顆多帶一個 mtk-lv-ns（未到場＝金點），mtk-lv 仍在 */
   ok('★★ 兩種教練請假狀態都掛上 mtk-lv',
-     /class="mtk mtk-used mtk-clvatt mtk-lv"/.test(src)
+     /class="mtk mtk-used mtk-clvatt mtk-lv\$\{ns\?' mtk-lv-ns':''\}"/.test(src)
      && /\$\{clv\}\$\{clv\?' mtk-lv':''\}/.test(src));
   ok('★★ 色點的底色＝--tk-acc（每張票的課種色，圓點本來就吃它）',
      /\.mtk-shdot\{width:12px;height:12px;border-radius:50%;flex:none;box-sizing:border-box;\s*\n\s*background:var\(--tk-acc,#1F6F54\);\}/.test(CSS));

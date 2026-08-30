@@ -124,8 +124,22 @@ ok('★★ 未到場結課＝completed＋退堂、不發點、不寫 checked_in_
      return i2>=0 && /b\.status='completed';/.test(F) && /refundTicket\(_tk,b\.id,SESSION\.id\)/.test(F)
        && !/checked_in_at=/.test(F) && !/grantCheckinReward|handle_checkin_reward|fn_checkin_booking/.test(F); })());
 ok('★ 課程時間未到不能結課', /課程時間還沒到，還不能結課/.test(src));
-ok('★★ 圓點：未到場結課（無 checked_in_at）不畫點不佔格；到場（checked_in 或有簽到時間）畫實心紅圈',
-   /if\(b\.status==='checked_in'\|\|b\.checked_in_at\) _clvAttL\.push\(b\);/.test(src));
+/* 2026-08-30 使用者指示推翻 0814 同日二修：「8/24 要出現 就跟其他教練請假的圓形卡一樣」。
+   當時不畫的理由是「堂數已退、人也沒來」，但那正是會員最需要看到的一格 ——
+   鄭宇涵 8/24 那堂 MANGO 請假、人沒來，卡片上完全沒有痕跡，
+   客人只會覺得「我約了 8 堂怎麼只看到 7 堂」。 */
+/* 2026-08-30 二修（使用者：「喔喔 是因為未到 那用金色的色點」）——
+   畫是要畫，但兩種要分得開：紅＝請假但人有來（教練與場地照樣被佔掉）、
+   金＝請假而且人沒來。同一條紅>金>綠：紅要留意、金知道就好。 */
+ok('★★★ 未到場結課畫金色點、到場畫紅色點（判準與 bkCoachLeaveNoShow 一致）',
+   /const _clvNoShow=b=>!!b && b\.status!=='checked_in' && !b\.checked_in_at;/.test(src)
+   && /\.mtk-lv\.mtk-lv-ns \.mtk-shdot\{background:var\(--gold-d,#b48a56\);\}/.test(src)
+   && /mtk-lv\$\{ns\?' mtk-lv-ns':''\}/.test(src));
+ok('★★ 滑鼠提示要說得出是哪一種（櫃檯不必靠記顏色）',
+   /title="教練請假・\$\{ns\?'未到場結課':'會員已到場簽到'\}（堂數已退回票券）/.test(src));
+ok('★★ 圓點：只要是「請假且已結課」就畫（不再分有沒有到場），一律不佔格',
+   /if\(bkLeaveRefunded\(b\)\)\{[\s\S]{0,120}?_clvAttL\.push\(b\);\s*\n\s*return;/.test(src)
+   && !/if\(b\.status==='checked_in'\|\|b\.checked_in_at\) _clvAttL\.push\(b\);/.test(src));
 
 console.log('\n課卡環繞按鈕（2026-08-14 使用者指示：加金色「未到課」、拿掉代課）');
 ok('★★ 請假堂有金色「未到課」圓鈕 → bkCoachLeaveNoShow',
