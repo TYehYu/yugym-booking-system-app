@@ -70,7 +70,27 @@ console.log('\n③ 卡片那一行：起始日 → 原到期日 → 展延至（
 console.log('\n④ 接線與語彙');
 {
   ok('★★ 掛在票券卡的 meta 那一行底下（會員資料 → 票券）',
-     /\$\{tkExtLineHTML\(t, tkLogs\)\}/.test(src));
+     /\$\{tkExtLineHTML\(t, tkLogs, \{noChips:true\}\)\}/.test(src));
+  /* 2026-08-30 使用者：「這種有教練請假的　要在第二列效期旁邊新增· 教練展延」
+     ＋「展延(不退費)也放在這」—— 兩枚都掛在效期後面。 */
+  ok('★★★ 效期旁邊的短標籤：教練展延與展延（不退費）都掛在同一支',
+     /function tkExtTagHTML\(t, logs\)\{/.test(src)
+     && /return \(e\.nClv\?`　·　<b class="tkx tkx-clv">教練展延/.test(src)
+     && /\+\(e\.nMan\?`　·　<b class="tkx tkx-man">展延（不退費）<\/b>`:''\)/.test(src));
+  ok('★★★ 三張有「效期／到期」那一行的卡都掛上了（後台票券夾＋會員資料的手機版與桌機版）',
+     (src.match(/\$\{tkExtTagHTML\(t,\s*(tkLogs|c\.myLogs)\)\}/g)||[]).length===3);
+  ok('★★ 掛了短標籤的那幾張，底下的時間軸就不重複掛（同一件事不講兩次）',
+     /\$\{opts&&opts\.noChips\?'':chips\}/.test(src)
+     && /會員端沒有那一行 meta，所以還是把標籤帶著。/.test(src));
+  {
+    const tag=new Function('escH', grab('tkExtInfo')+'\n'+grab('tkExtTagHTML')
+      +'\nreturn tkExtTagHTML;')(x=>String(x==null?'':x));
+    const both=tag({id:'T1'},[
+      {ticket_id:'T1',created_at:'1',note:'2026-08-24 教練請假展延 7 天（2026/08/30 → 2026/09/06）'},
+      {ticket_id:'T1',created_at:'2',note:'展延一次：2026-09-06 → 2026-11-01（56 天）'}]);
+    ok('★★★ 兩種都有 → 效期後面兩枚都出現', both.indexOf('教練展延')>=0 && both.indexOf('展延（不退費）')>=0, both);
+    eq('★★ 沒展延過就是空字串（一般票券那一行一個字都沒變）', tag({id:'T1'},[]), '');
+  }
   /* 2026-08-30 使用者：「這種方案期限的內容 會員那邊也要能看到」 */
   ok('★★★ 會員端兩種票券卡（V2 與傳統）也都看得到',
      (src.match(/\$\{tkExtLineHTML\(t, logs\)\}/g)||[]).length===2

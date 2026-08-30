@@ -11527,8 +11527,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.1032';
-const APP_VERSION_LABEL='v260830.1032';
+const APP_VERSION = '260830.1051';
+const APP_VERSION_LABEL='v260830.1051';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12559,9 +12559,17 @@ function tkExtInfo(t, logs){
     at:String(mine[mine.length-1].created_at||'').slice(0,10)||null,  // 最後一次展延的日子
     why:String(mine[mine.length-1].note||'').indexOf('教練請假')>=0?'教練請假':'櫃檯展延' };
 }
+/* 效期旁邊那一枚短標籤（2026-08-30 使用者指示：「這種有教練請假的　要在第二列
+   效期旁邊新增· 教練展延」）—— 那一行是櫃檯第一眼會看的地方；
+   底下那條完整時間軸是要細看時才讀的。兩者都要，但講的深度不同。 */
+function tkExtTagHTML(t, logs){
+  const e=tkExtInfo(t, logs); if(!e) return '';
+  return (e.nClv?`　·　<b class="tkx tkx-clv">教練展延${e.nClv>1?` ×${e.nClv}`:''}</b>`:'')
+    +(e.nMan?`　·　<b class="tkx tkx-man">展延（不退費）</b>`:'');
+}
 /* 課卡上那一行：起始日 → 原到期日 → 展延日（使用者指定的三個日期）。
    沒展延過就回空字串，一般票券的卡片一個字都不會變。 */
-function tkExtLineHTML(t, logs){
+function tkExtLineHTML(t, logs, opts){
   const e=tkExtInfo(t, logs); if(!e) return '';
   const f=x=>x?String(x).slice(0,10).replace(/-/g,'/'):'—';
   /* 兩種展延各給一枚標籤（2026-08-30 使用者指示：「方案下方新增"教練展延"跟"展延(不退費)"」）——
@@ -12578,7 +12586,9 @@ function tkExtLineHTML(t, logs){
      extended_from，所以 tkIsExtended 是 false、不得退費那張籤也不會出現），
      但卡片上只寫「展延」兩個字，櫃檯很可能自己套用合約條款。所以直接寫出來。 */
   const clv=(e.why==='教練請假');
-  return `<div class="md-tk-ext${clv?' md-tk-ext-clv':''}">${chips}
+  /* 標籤已經掛在效期旁邊（tkExtTagHTML），這一行只講日期，不要同一件事講兩次。
+     會員端沒有那一行 meta，所以還是把標籤帶著。 */
+  return `<div class="md-tk-ext${clv?' md-tk-ext-clv':''}">${opts&&opts.noChips?'':chips}
     <span>起始 ${f(t.start_date)}</span><i>→</i>
     <span>原到期 ${f(e.from)}</span><i>→</i>
     <span class="md-tk-ext-to">展延至 ${f(e.to)}</span>
@@ -36705,8 +36715,8 @@ async function openMemberDetail(member_id){
       </div>
       <div class="mck-dots2" style="margin:10px 0 12px;">${circles}</div>
       <div class="md-tk-foot">
-        <span class="md-tk-meta">${tkBuyDateHtml(t)}　·　到期 ${fmtExpire(t.expire_date,t)}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span>${tkMoneyHtml(t)}</span>
-        ${tkExtLineHTML(t, tkLogs)}
+        <span class="md-tk-meta">${tkBuyDateHtml(t)}　·　到期 ${fmtExpire(t.expire_date,t)}${tkExtTagHTML(t,tkLogs)}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span>${tkMoneyHtml(t)}</span>
+        ${tkExtLineHTML(t, tkLogs, {noChips:true})}
         ${(inst && (t.unlocked_sessions||0)<total && (isDeskLike()))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
         ${canShare?`<button class="btn btn-ghost btn-sm" onclick="openTicketShare('${t.id}','${member_id}')">${_others.length?'共享設定':'設為共享'}</button>`:''}
         ${extraBtn||''}
@@ -42978,14 +42988,15 @@ function ppRecordHtml(){
             ${/* 管理員手機（2026-08-20 使用者指示）：購買・效期提到第二列（緊接編號那一列），
                  金額改放右下角、就在「作廢」按鈕上方；其他角色與桌機維持原本的單行底列。 */''}
             ${/* 狀態章（已完成／已過期／已退費）2026-08-20 使用者指示移到課程方案名稱右邊 */''}
-            ${_m2?`<div class="tkc-meta">${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${tkIsExtended(t)?`　·　${tkExtBadge(t)}`:''}</div>`:''}
+            ${_m2?`<div class="tkc-meta">${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${tkExtTagHTML(t,c.myLogs)}${tkIsExtended(t)?`　·　${tkExtBadge(t)}`:''}</div>`:''}
+            ${tkExtLineHTML(t, c.myLogs, {noChips:true})}
             <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id,WAL.selfBk)}</div>
             ${/* 2026-08-04 使用者回報：加了「使用人」後右邊四顆按鈕被擠成直條 ——
                  允許整列換行、按鈕列不縮不折字。 */''}
             <div class="${_m2?'tkc-foot':''}" style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 10px;">
               <span style="min-width:0;">${_m2
                 ? `<span class="tkc-money">${tkMoneyHtml(t).replace(/^　·　/,'')}</span>`
-                : `${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${stTag?`　·　${stTag}`:''}${tkIsExtended(t)?`　·　${tkExtBadge(t)}`:''}${tkMoneyHtml(t)}`}</span>
+                : `${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${tkExtTagHTML(t,c.myLogs)}${stTag?`　·　${stTag}`:''}${tkIsExtended(t)?`　·　${tkExtBadge(t)}`:''}${tkMoneyHtml(t)}`}</span>
               <span style="display:flex;gap:6px;flex:none;margin-left:auto;white-space:nowrap;">
                 ${/* 合約鈕已移到表頭（票券編號左邊）；
                      票券預設使用人（2026-08-04 使用者指示：票券指定家庭成員，預約自動帶使用人） */''}
