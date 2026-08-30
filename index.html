@@ -11521,8 +11521,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.0955';
-const APP_VERSION_LABEL='v260830.0955';
+const APP_VERSION = '260830.1016';
+const APP_VERSION_LABEL='v260830.1016';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31168,10 +31168,39 @@ async function bkOrbitSub(id){
    ・帳本記一筆 adjust（delta 0，不動堂數），票券備註也寫一行，日後對帳查得到
    回傳實際延到的日期字串，沒延就回 null。 */
 const COACH_LEAVE_EXTEND_DAYS=7;
+/* 同一週的教練請假只延一次（2026-08-30 使用者定案）——
+   「同一週的教練請假 只會展延一次7天　不然同一週如果安排5堂課　教練請假一週
+     課程期限就會多5週　不合理」
+   ⚠ 「同一週」看的是**上課那一天**（週一起算），不是按下去那一天：
+     教練是那一週沒來，補的就是那一週。
+   ⚠ 判斷靠帳本 note 開頭的上課日期（extendForCoachLeave 自己寫的格式），
+     不是 created_at —— 補登時兩者會差很多（0830 幫鄭宇涵補 7/13 那次就是）。 */
+function leaveWeekKey(dstr){
+  const d=parseYmd(dstr); if(!d) return '';
+  const x=new Date(d.getTime());
+  x.setDate(x.getDate()-((x.getDay()+6)%7));   // 退到那一週的週一
+  return ymd(x);
+}
+/* 這張票在「這一週」是不是已經因為教練請假延過了 */
+async function leaveExtDoneThisWeek(ticket_id, dateStr){
+  const wk=leaveWeekKey(dateStr); if(!wk) return false;
+  try{
+    const logs=await dbGetAll('ticket_logs').catch(()=>[]);
+    return (logs||[]).some(l=>{
+      if(!l || String(l.ticket_id)!==String(ticket_id)) return false;
+      if(String(l.note||'').indexOf('教練請假展延')<0) return false;
+      const m=String(l.note||'').match(/^(\d{4}-\d{2}-\d{2})/);
+      return m ? leaveWeekKey(m[1])===wk : false;
+    });
+  }catch(_){ return false; }
+}
+/* 回傳：{to:'YYYY-MM-DD'} 成功／{skipped:'week'} 同一週已延過／{skipped:'noexp'} 沒到期日／null 失敗 */
 async function extendForCoachLeave(ticket_id, booking, operator){
   try{
     const t=await dbGet('member_tickets',ticket_id);
-    if(!t || !t.expire_date) return null;
+    if(!t || !t.expire_date) return {skipped:'noexp'};
+    const _bd=(booking&&booking.date)||ymd(TODAY);
+    if(await leaveExtDoneThisWeek(ticket_id,_bd)) return {skipped:'week', week:leaveWeekKey(_bd)};
     const from=String(t.expire_date).slice(0,10);
     const d=parseYmd(from); if(!d) return null;
     d.setDate(d.getDate()+COACH_LEAVE_EXTEND_DAYS);
@@ -31181,7 +31210,7 @@ async function extendForCoachLeave(ticket_id, booking, operator){
     t.note=String(t.note||'').trim() ? String(t.note).trim()+'\n'+line : line;
     await dbPut('member_tickets',t);
     try{ await logTicket(ticket_id,'adjust',0,booking&&booking.id,operator,line); }catch(_){}
-    return to;
+    return {to};
   }catch(_){ return null; }
 }
 /* 教練請假（2026-07-21 商業規則二；2026-07-31 使用者補充定案）：
@@ -31283,6 +31312,8 @@ async function bkCoachLeave(id){
   const _t=b.ticket_id?await dbGet('member_tickets',b.ticket_id).catch(()=>null):null;
   const _from=(_t&&_t.expire_date)?String(_t.expire_date).slice(0,10):'';
   let _to=''; if(_from){ const d=parseYmd(_from); if(d){ d.setDate(d.getDate()+COACH_LEAVE_EXTEND_DAYS); _to=ymd(d); } }
+  /* 同一週延過就先講（2026-08-30）—— 按下去才發現沒延，會以為是壞了 */
+  const _dupWk=(_t&&_from)?await leaveExtDoneThisWeek(b.ticket_id,b.date):false;
   const _f=x=>String(x||'').replace(/-/g,'/');
   const _mn=b.member_id?((await dbGet('members',b.member_id).catch(()=>null))||{}).name||'':'';
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">教練請假・改為自主訓練</div>
@@ -31291,9 +31322,11 @@ async function bkCoachLeave(id){
     <div style="background:#eef5f1;border:1.5px solid #cfe3d8;border-radius:12px;padding:12px 14px;font-size:13px;color:#1f6f54;line-height:1.9;">
       這一堂會改成<b>自主訓練</b> —— 教練沒來，但場地與時段還在，會員可以自己來練。<br>
       堂數<b>先不退</b>，等會員簽到或這堂被取消時才退回。<br>
-      ${_to
-        ? `票券效期 <b>${_f(_from)} → ${_f(_to)}</b>（延長 ${COACH_LEAVE_EXTEND_DAYS} 天）`
-        : `這張票<b>沒有到期日</b>，不需要展延。`}</div>
+      ${_dupWk
+        ? `票券效期<b>不再延長</b> —— 這一週（${_f(leaveWeekKey(b.date))} 那週）已經因為教練請假延過 ${COACH_LEAVE_EXTEND_DAYS} 天了。<br><span style="color:var(--t2);">同一週只補一次，不然一週排五堂就會多延五週。</span>`
+        : _to
+          ? `票券效期 <b>${_f(_from)} → ${_f(_to)}</b>（延長 ${COACH_LEAVE_EXTEND_DAYS} 天）`
+          : `這張票<b>沒有到期日</b>，不需要展延。`}</div>
     <div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:1.9;">
       找得到代課教練的話請改用「代課」，這堂就照常上。</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
@@ -31322,12 +31355,16 @@ async function _bkCoachLeaveGo(id){
       ? String(b.note).trim()+`\n${ymd(TODAY)} 教練請假，本堂改為自主訓練（原：${_wasCat}）（堂數待簽到或取消時退回）`
       : `${ymd(TODAY)} 教練請假，本堂改為自主訓練（原：${_wasCat}）（堂數待簽到或取消時退回）`;
     await dbPut('bookings',b);
-    let extendTo=null;
-    if(_tkId){ extendTo=await extendForCoachLeave(_tkId,b,SESSION.id); }
+    let _ext=null;
+    if(_tkId){ _ext=await extendForCoachLeave(_tkId,b,SESSION.id); }
+    const extendTo=(_ext&&_ext.to)||null;
+    const _why=(_ext&&_ext.skipped==='week')?'這一週已經延過，效期不再延'
+             :(_ext&&_ext.skipped==='noexp')?'這張票沒有到期日（不需展延）'
+             :null;
     collapseBkCard();
     /* 沒到期日時把話講完（2026-08-30）—— 原本只是把後半句整段拿掉，
        櫃檯分不出是「沒延到」還是「本來就不用延」。 */
-    showToast(`已標記教練請假：改為自主訓練、${extendTo?`效期延至 ${extendTo.replace(/-/g,'/')}`:'這張票沒有到期日（不需展延）'}；堂數會在會員簽到或取消這堂時退回`, 6000);
+    showToast(`已標記教練請假：改為自主訓練、${extendTo?`效期延至 ${extendTo.replace(/-/g,'/')}`:(_why||'效期未變')}；堂數會在會員簽到或取消這堂時退回`, 6000);
     navTo(CUR_PAGE);
   }catch(e){ showToast('標記請假失敗：'+(e&&e.message?e.message:e)); }
 }
@@ -31515,20 +31552,24 @@ async function grpCoachLeave(id){
     let t=null; try{ t=await seatTicketOf(b,k); }catch(_){}
     const from=t&&t.expire_date?String(t.expire_date).slice(0,10):'';
     let to=''; if(from){ const d=parseYmd(from); if(d){ d.setDate(d.getDate()+COACH_LEAVE_EXTEND_DAYS); to=ymd(d); } }
-    rows.push({name:(m&&m.name)||'會員', plan:(t&&t.plan_name)||'（查不到票券，取消時會再找一次）', from, to});
+    /* 同一週已經延過的名額要先講（2026-08-30）—— 逐名額列表本來就是給人核對的，
+       少了這一行會以為系統漏延。 */
+    let dup=false; if(t&&from){ try{ dup=await leaveExtDoneThisWeek(t.id,b.date); }catch(_){} }
+    rows.push({name:(m&&m.name)||'會員', plan:(t&&t.plan_name)||'（查不到票券，取消時會再找一次）', from, to:dup?'':to, dup});
   }
   const fmt=x=>String(x||'').slice(5).replace('-','/');
   showModal(`<div class="modal-title">教練請假・整堂取消</div>
     <div style="font-size:13.5px;color:var(--text);padding:2px 0 10px;">
       ${b.date.replace(/-/g,'/')} ${String(b.start_time).slice(0,5)}　小班肌力　共 ${ids.length} 個名額</div>
     <div style="background:#eef5f1;border:1.5px solid #cfe3d8;border-radius:12px;padding:12px 14px;font-size:13px;color:#1f6f54;line-height:1.9;">
-      ${tkChip('back','每個名額退回 1 堂')}　並將票券<b>使用期限各延長 ${COACH_LEAVE_EXTEND_DAYS} 天</b>。<br>
+      ${tkChip('back','每個名額退回 1 堂')}　並將票券<b>使用期限各延長 ${COACH_LEAVE_EXTEND_DAYS} 天</b>（<b>同一週只延一次</b>）。<br>
       <span style="color:var(--t2);">教練沒來，等於吃掉會員一週的名額 —— 時間要還給他。<b>不發補課券</b>（補課券是會員自己請假的補償）。</span></div>
     <div style="margin-top:10px;max-height:200px;overflow:auto;font-size:12.5px;line-height:2;">
       ${rows.map(r=>`<div style="display:flex;gap:8px;align-items:baseline;border-bottom:1px solid var(--bd);padding:4px 0;">
         <b style="flex-shrink:0;">${r.name}</b>
         <span style="color:var(--t2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.plan}</span>
-        <span class="num" style="flex-shrink:0;color:${r.to?'#1f6f54':'var(--t3)'};">${r.to?`${fmt(r.from)} → ${fmt(r.to)}`:'無到期日'}</span></div>`).join('')}
+        <span class="num" style="flex-shrink:0;color:${r.to?'#1f6f54':'var(--t3)'};">${
+          r.to?`${fmt(r.from)} → ${fmt(r.to)}`:(r.dup?'本週已延過':'無到期日')}</span></div>`).join('')}
     </div>
     <div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:1.9;">
       找得到代課教練的話請改用「代課」，這堂就照常上。</div>
@@ -31561,7 +31602,7 @@ async function _doGrpCoachLeave(id){
       .map(l=>l.ticket_id).filter(Boolean))];
   }catch(_){}
   let extN=0;
-  for(const tid of tkIds){ if(await extendForCoachLeave(tid,b,SESSION.id)) extN++; }
+  for(const tid of tkIds){ const r=await extendForCoachLeave(tid,b,SESSION.id); if(r&&r.to) extN++; }
   // 逐位通知（團課沒有 member_id，cancelBooking 的通知發不出去）
 /* 課程變動不通知會員（2026-08-14 使用者指示：只留上課前的開課通知） */
   dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);

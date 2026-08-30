@@ -22,41 +22,84 @@ const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.len
 /* 實跑 extendForCoachLeave：把 dbGet/dbPut/logTicket 換成假的 */
 function mk(tk){
   const saved=[], logs=[];
-  const fn=new Function('dbGet','dbPut','logTicket','parseYmd','ymd','TODAY',
-    'const COACH_LEAVE_EXTEND_DAYS=7;\n'+g('async function extendForCoachLeave(ticket_id, booking, operator){','\n}\n')
-    +'\nreturn extendForCoachLeave;')(
+  /* 2026-08-30：同一週只延一次 —— 那條判斷會去讀 ticket_logs，沙箱要一起帶
+     leaveWeekKey／leaveExtDoneThisWeek 與一份假帳本（預設空的＝這週還沒延過）。 */
+  const hist=(tk&&tk._logs)||[];
+  const fn=new Function('dbGet','dbPut','logTicket','parseYmd','ymd','TODAY','dbGetAll',
+    'const COACH_LEAVE_EXTEND_DAYS=7;\n'
+    +g('function leaveWeekKey(dstr){','\n}\n')
+    +g('async function leaveExtDoneThisWeek(ticket_id, dateStr){','\n}\n')
+    +g('async function extendForCoachLeave(ticket_id, booking, operator){','\n}\n')
+    +'\nreturn {extendForCoachLeave, leaveWeekKey};')(
     async()=>tk?Object.assign({},tk):null,
     async(_t,o)=>{ saved.push(o); },
     async(...a)=>{ logs.push(a); },
     ds=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(ds||''));return m?new Date(+m[1],+m[2]-1,+m[3]):null;},
     d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());},
-    new Date(2026,6,31));   // TODAY：沒帶 booking.date 時備註會用今天
-  return {fn, saved, logs};
+    new Date(2026,6,31),   // TODAY：沒帶 booking.date 時備註會用今天
+    async()=>hist);
+  return {fn:fn.extendForCoachLeave, wk:fn.leaveWeekKey, saved, logs};
 }
 
 (async()=>{
 console.log('展延天數');
 {
   const a=mk({id:'T1',expire_date:'2026-09-30'});
-  eq('★ 9/30 ＋7 天 → 10/07', await a.fn('T1',{id:'B1',date:'2026-08-05'},'U'), '2026-10-07');
+  /* 2026-08-30：回傳從字串改成物件（要分辨「延了」「同週已延」「沒到期日」三種） */
+  eq('★ 9/30 ＋7 天 → 10/07', (await a.fn('T1',{id:'B1',date:'2026-08-05'},'U')).to, '2026-10-07');
   eq('　　票券真的被寫回去', a.saved[0].expire_date, '2026-10-07');
 
   const b=mk({id:'T1',expire_date:'2026-10-07'});
-  eq('★ 再請假一堂就再 ＋7（連續請假會累加）', await b.fn('T1',{id:'B2',date:'2026-08-12'},'U'), '2026-10-14');
+  eq('★ 再請假一堂就再 ＋7（不同週才會累加）', (await b.fn('T1',{id:'B2',date:'2026-08-12'},'U')).to, '2026-10-14');
 
   const c=mk({id:'T1',expire_date:'2026-12-28'});
-  eq('　　跨月、跨年都算得對', await c.fn('T1',{},'U'), '2027-01-04');
+  eq('　　跨月、跨年都算得對', (await c.fn('T1',{},'U')).to, '2027-01-04');
   const d=mk({id:'T1',expire_date:'2026-02-25'});
-  eq('　　二月也算得對', await d.fn('T1',{},'U'), '2026-03-04');
+  eq('　　二月也算得對', (await d.fn('T1',{},'U')).to, '2026-03-04');
   ok('★ 天數是常數，日後要改只改一個地方', /const COACH_LEAVE_EXTEND_DAYS=7;/.test(src));
+}
+
+console.log('\n同一週只延一次（2026-08-30 使用者定案）');
+{
+  /* 「同一週的教練請假 只會展延一次7天　不然同一週如果安排5堂課
+      教練請假一週　課程期限就會多5週　不合理」
+     ⚠ 看的是**上課那一天**（週一起算），不是按下去那一天 —— 補登時兩者差很多。 */
+  const w=mk({id:'T1',expire_date:'2026-09-30'}).wk;
+  eq('★★ 週一起算：週二 8/04 與 週五 8/07 是同一週', [w('2026-08-04'), w('2026-08-07')], ['2026-08-03','2026-08-03']);
+  eq('★★ 週日算前一週（不是下一週的開始）', w('2026-08-09'), '2026-08-03');
+  eq('★★ 下週一就換一週', w('2026-08-10'), '2026-08-10');
+
+  /* 週二先延過了 → 週五那堂不再延 */
+  const hist=[{ticket_id:'T1',note:'2026-08-04 教練請假展延 7 天（2026/09/30 → 2026/10/07）'}];
+  const dup=mk({id:'T1',expire_date:'2026-10-07',_logs:hist});
+  eq('★★★ 同一週的第二堂不再延，而且說得出原因',
+     await dup.fn('T1',{id:'B2',date:'2026-08-07'},'U'), {skipped:'week', week:'2026-08-03'});
+  eq('★★★ 而且真的沒有寫回票券（效期原封不動）', dup.saved.length, 0);
+  eq('　 也沒有多留一筆帳本', dup.logs.length, 0);
+
+  /* 下一週的請假照樣延 */
+  const nx=mk({id:'T1',expire_date:'2026-10-07',_logs:hist});
+  eq('★★★ 下一週再請假就照樣 ＋7', (await nx.fn('T1',{id:'B3',date:'2026-08-11'},'U')).to, '2026-10-14');
+
+  /* 一週排五堂、教練整週請假 → 只會延一次，不是五次 */
+  let exp='2026-09-30', logs2=[], n=0;
+  for(const d of ['2026-08-04','2026-08-05','2026-08-06','2026-08-07','2026-08-08']){
+    const m=mk({id:'T1',expire_date:exp,_logs:logs2.slice()});
+    const r=await m.fn('T1',{id:'B'+(++n),date:d},'U');
+    if(r&&r.to){ exp=r.to; logs2.push({ticket_id:'T1',note:`${d} 教練請假展延 7 天（x → y）`}); }
+  }
+  eq('★★★ 一週五堂全請假 → 只延 7 天（不是 35 天）', exp, '2026-10-07');
+  eq('★★★ 帳本只留一筆展延', logs2.length, 1);
 }
 
 console.log('\n什麼情況不延');
 {
-  eq('★ 永久有效（沒有到期日）→ 不延', await mk({id:'T1',expire_date:null}).fn('T1',{},'U'), null);
+  /* 2026-08-30：回傳改物件，三種「沒延」要分得出來 —— 櫃檯的提示要講對原因 */
+  eq('★ 永久有效（沒有到期日）→ 不延，而且說得出是「沒到期日」',
+     await mk({id:'T1',expire_date:null}).fn('T1',{},'U'), {skipped:'noexp'});
   eq('★ 退票時效期被退回未開通（expire_date 變 null）→ 不延',
-     await mk({id:'T1',expire_date:''}).fn('T1',{},'U'), null);
-  eq('　　找不到票 → 不延，也不會爆', await mk(null).fn('T1',{},'U'), null);
+     await mk({id:'T1',expire_date:''}).fn('T1',{},'U'), {skipped:'noexp'});
+  eq('　　找不到票 → 不延，也不會爆', await mk(null).fn('T1',{},'U'), {skipped:'noexp'});
   eq('　　到期日格式壞掉 → 不延', await mk({id:'T1',expire_date:'—'}).fn('T1',{},'U'), null);
 }
 
@@ -81,7 +124,8 @@ const _CLV=g('async function bkCoachLeave(id){','\n}\n');
 ok('★ 請假當下不退堂：整個 bkCoachLeave 裡沒有 refundTicket ／ refundLegacyBooking',
    !!_CLV && !/refundTicket|refundLegacyBooking/.test(_CLV));
 ok('★ 有 ticket_id 就延那張（效期展延照舊在請假當下給）',
-   /if\(_tkId\)\{ extendTo=await extendForCoachLeave\(_tkId,b,SESSION\.id\); \}/.test(src));
+   /if\(_tkId\)\{ _ext=await extendForCoachLeave\(_tkId,b,SESSION\.id\); \}/.test(src)
+   && /const extendTo=\(_ext&&_ext\.to\)\|\|null;/.test(src));
 ok('★ 櫃檯的提示講出新的期限與延後釋出規則',
    /效期延至 \$\{extendTo\.replace\(\/-\/g,'\/'\)\}/.test(src)
    && /堂數會在會員簽到或取消這堂時退回/.test(src));

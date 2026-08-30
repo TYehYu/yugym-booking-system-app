@@ -110,8 +110,10 @@ console.log('  團課：整堂取消 → 逐名額退票 → 效期各 +7 天');
      && /\.filter\(l=>l&&l\.booking_id===b\.id&&l\.action==='refund'&&!before\.has\(l\.id\)\)/.test(F));
   ok('★ 為什麼要做差集（先前個別取消過的名額不能跟著延）',
      /先前個別取消過的名額不能跟著延（那是會員自己取消的，不是教練請假）。/.test(F));
+  /* 2026-08-30：回傳改成物件（要分辨「延了」「同週已延」「沒到期日」），
+     只有真的延到才計數。 */
   ok('★★ 逐張延 7 天，走與教練課同一支 extendForCoachLeave',
-     /for\(const tid of tkIds\)\{ if\(await extendForCoachLeave\(tid,b,SESSION\.id\)\) extN\+\+; \}/.test(F));
+     /for\(const tid of tkIds\)\{ const r=await extendForCoachLeave\(tid,b,SESSION\.id\); if\(r&&r\.to\) extN\+\+; \}/.test(F));
   ok('★ 旗標與備註寫在 cancelBooking 之前（它會重讀這一筆，寫在後面會被蓋掉）', (()=>{
     const a=F.indexOf('b.coach_leave=true;'), b=F.indexOf("await dbPut('bookings',b);"), c=F.indexOf("cancelBooking(id,'force'");
     return a>0 && b>a && c>b;
@@ -132,8 +134,9 @@ console.log('  團課：整堂取消 → 逐名額退票 → 效期各 +7 天');
 console.log('  按之前看得到會發生什麼');
 {
   const F=grabFn('grpCoachLeave');
-  ok('★★ 逐位列出：姓名／方案／效期會從哪天延到哪天',
-     /rows\.push\(\{name:\(m&&m\.name\)\|\|'會員', plan:\(t&&t\.plan_name\)\|\|'（查不到票券，取消時會再找一次）', from, to\}\);/.test(F));
+  ok('★★ 逐位列出：姓名／方案／效期會從哪天延到哪天（同一週已延過的標出來）',
+     /rows\.push\(\{name:\(m&&m\.name\)\|\|'會員', plan:\(t&&t\.plan_name\)\|\|'（查不到票券，取消時會再找一次）', from, to:dup\?'':to, dup\}\);/.test(F)
+     && /r\.dup\?'本週已延過':'無到期日'/.test(src));
   ok('★ 預覽的日期用同一個天數常數算（不會與實際延的天數不一致）',
      /d\.setDate\(d\.getDate\(\)\+COACH_LEAVE_EXTEND_DAYS\); to=ymd\(d\);/.test(F));
   ok('★ 綠底（票券退回）＋明講不發補課券',
