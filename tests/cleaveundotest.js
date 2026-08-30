@@ -137,6 +137,14 @@ ok('★★★ 未到場結課畫金色點、到場畫紅色點（判準與 bkCoa
    && /mtk-lv\$\{ns\?' mtk-lv-ns':''\}/.test(src));
 ok('★★ 滑鼠提示要說得出是哪一種（櫃檯不必靠記顏色）',
    /title="教練請假・\$\{ns\?'未到場結課':'會員已到場簽到'\}（堂數已退回票券）/.test(src));
+/* 2026-08-30 三修：整堂取消的教練請假也要畫。
+   0817 起這種課卡會留在行事曆上（bkShowsCancelled），但票券圓點還是整格消失 ——
+   鄭宇涵 7/13（MANGO 事假 12:00-18:00，當初以一般「取消」處理）在卡片上完全沒有痕跡。
+   ⚠ 沒有併進 bkLeaveRefunded：那一支被四處拿去算堂數，語意是「已結課但堂數退了」，
+     混進「取消」只會製造意外（取消本來就被各處的 status 關卡擋掉了）。 */
+ok('★★★ 整堂取消的教練請假也畫金點，且判準與 bkLeaveRefunded 分開',
+   /if\(b && b\.coach_leave===true && b\.status==='cancelled'\)\{ _clvAttL\.push\(b\); return; \}/.test(src)
+   && /判準沒有併進 bkLeaveRefunded/.test(src));
 ok('★★ 圓點：只要是「請假且已結課」就畫（不再分有沒有到場），一律不佔格',
    /if\(bkLeaveRefunded\(b\)\)\{[\s\S]{0,120}?_clvAttL\.push\(b\);\s*\n\s*return;/.test(src)
    && !/if\(b\.status==='checked_in'\|\|b\.checked_in_at\) _clvAttL\.push\(b\);/.test(src));
