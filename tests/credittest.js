@@ -175,6 +175,44 @@ async function runVoid(mode, amt, opts){
        /const _due=Math\.max\(0,\(isInstall\?Math\.max\(0,firstAmount-voucherAmt\):paidAmount\)-creditUse\);/.test(src));
   }
 
+  console.log('\n⑤ 會員端看得到（2026-08-30 使用者指示：「儲值金1會員要能看到」）');
+  {
+    ok('★★★ 會員票券頁有儲值金入口，餘額 0 不畫',
+       /function memCreditEntryHTML\(\)\{/.test(src)
+       && /const bal=\(_memTkData&&_memTkData\.credit\)\|\|0;\s*\n\s*if\(bal<=0\) return '';/.test(src));
+    ok('★★ 餘額跟著既有的 _me 走，沒有為了它多打一次資料庫',
+       /tier:memTierInfo\(_me,bookings\),credit:creditOf\(_me\)\}/.test(src));
+    ok('★★★ 會員端明文寫「不能退現」（客人會拿這頁問櫃檯）',
+       /只能用來購買方案，<b>?[^<]*不能退還現金|<b>只能用來購買方案，不能退還現金<\/b>/.test(src)
+       && /購買方案時可折抵，不能退現/.test(src));
+    ok('★★ 明細等點開才抓（不讓每個會員開票券頁都多讀一張表）',
+       /async function openMemCredit\(\)\{[\s\S]*?await dbGetAll\('member_credits'\)/.test(src));
+    ok('★★ 入口排在「我的合約」上面（錢的事在前）',
+       src.indexOf('memCreditEntryHTML()+') < src.indexOf('memContractEntryHTML()+'));
+    ok('★★ 餘額框用金色不用紅色（紅>金>綠：紅只留給要出事的事）',
+       /\.cr-amt-box\{/.test(src) && !/<div class="gr-amt-box" style="margin:2px 0 12px;">\s*\n\s*<span class="gr-amt-k">目前餘額/.test(src));
+  }
+
+  console.log('\n⑥ 管理員校正（2026-08-30：「2給管理員權限修改」）');
+  {
+    ok('★★★ 管理員限定 —— 開窗擋一次、送出前再驗一次',
+       (src.match(/if\(!\(SESSION&&SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以校正儲值金'\); return; \}/g)||[]).length===2);
+    ok('★★★ 一定要填原因（動錢沒留下為什麼，三個月後查不出來）',
+       /if\(!why\)\{ showToast\('請填校正原因 —— 動錢一定要留下為什麼'\); return; \}/.test(src));
+    ok('★★★ 送出前重讀餘額，別台動過就退回（拿舊餘額算差額會吃掉別人的變動）',
+       /const fresh=creditOf\(await dbGet\('members',mid\)\);/.test(src)
+       && /if\(fresh!==Number\(bal\|\|0\)\)\{/.test(src));
+    ok('★★ 填的是「正確餘額」不是差額 —— 人腦知道的是前者',
+       /填<b>正確的餘額<\/b>，系統自己算差額/.test(src));
+    ok('★★ 校正也走 creditMove（餘額與帳本一起動，不會只改一邊）',
+       /await creditMove\(mid, d, 'adjust', null, `管理員校正：\$\{why\}`\);/.test(src));
+    ok('★★ 防連點', /async function creditAdjDo\(mid,bal\)\{ return onceAct\('cadj:'\+mid, \(\)=>_creditAdjDo\(mid,bal\)\); \}/.test(src));
+    ok('★★★ 餘額 0 時管理員仍看得到那顆籤 —— 否則歸零之後就再也進不去校正',
+       /\$\{\(_cr>0\|\|\(SESSION&&SESSION\.role==='admin'\)\)\?`<button class="pp-credit/.test(src));
+    ok('★ 校正鍵只給管理員（櫃檯開同一個視窗看不到）',
+       /\$\{\(SESSION&&SESSION\.role==='admin'\)\?`<button class="btn btn-gold" onclick="creditAdjAsk/.test(src));
+  }
+
   console.log(`\n${pass} 通過 / ${fail} 失敗`);
   process.exit(fail?1:0);
 })().catch(e=>{ console.error(e); process.exit(1); });

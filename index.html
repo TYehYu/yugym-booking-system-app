@@ -9629,6 +9629,11 @@ button.rev-kind.rev-kind-off{opacity:.5;}
 .gr-amt-k{font-size:12px;color:#b5372e;letter-spacing:.08em;font-weight:700;}
 .gr-amt-v{font-family:var(--num),inherit;font-size:38px;font-weight:800;color:#b5372e;line-height:1.1;}
 .gr-amt-s{font-size:11.5px;color:#8a5e28;line-height:1.7;}
+/* 儲值金餘額框（2026-08-30）：長得像 .gr-amt-box 但用金色 ——
+   紅色是「應收款項」那種要出事的警示，餘額只是資訊，借紅色會把警示磨鈍。 */
+.cr-amt-box{background:#faf5ea;border:2px solid #e0c894;border-radius:14px;padding:16px 18px;
+  display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;}
+.cr-amt-box .gr-amt-k,.cr-amt-box .gr-amt-v{color:var(--gold-d,#b48a56);}
 .gr-sign-box{margin-top:10px;border-radius:10px;padding:9px 12px;font-size:12px;line-height:1.8;}
 .gr-sign-box.ok{background:#eef5f1;border:1px solid #cfe3d8;color:#1f6f54;}
 .gr-sign-box.wait{background:#f7efe0;border:1px solid #e8d9b8;color:#8a5e28;}
@@ -9711,6 +9716,9 @@ button.rev-kind.rev-kind-off{opacity:.5;}
   background:var(--card2);border:1px solid var(--gold-d,#b48a56);border-radius:999px;
   padding:4px 12px;cursor:pointer;white-space:nowrap;}
 .pp-credit:hover{background:var(--gold-d,#b48a56);color:#fff;}
+/* 餘額 0 只有管理員看得到（校正入口），淡化不搶眼 */
+.pp-credit-0{color:var(--t3);border-color:var(--bd);}
+.pp-credit-0:hover{background:var(--t3);}
 .ovd-note{font-size:11.5px;color:var(--t2);line-height:1.9;margin-top:12px;
   background:var(--card2);border-radius:10px;padding:10px 12px;}
 /* 30 分鐘完整退回（2026-08-08 使用者指示：「所有銷售的產品都可以在 30 分鐘內有退回的
@@ -11543,8 +11551,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.1131';
-const APP_VERSION_LABEL='v260830.1131';
+const APP_VERSION = '260830.1158';
+const APP_VERSION_LABEL='v260830.1158';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -35614,7 +35622,7 @@ async function openCreditLog(mid){
   const bal=creditOf(m);
   const sum=mine.reduce((n,r)=>n+(Number(r.delta)||0),0);
   showModal(`<div class="modal-title">儲值金　${escH((m&&m.name)||'')}</div>
-    <div class="gr-amt-box" style="margin:2px 0 12px;">
+    <div class="cr-amt-box" style="margin:2px 0 12px;">
       <span class="gr-amt-k">目前餘額</span><span class="gr-amt-v">$${bal.toLocaleString()}</span>
       <span class="gr-amt-s">只能拿來買方案，<b>不能退現</b></span></div>
     ${sum!==bal?`<div class="ovd-note" style="color:var(--danger,#b5372e);margin-top:0;">
@@ -35625,7 +35633,58 @@ async function openCreditLog(mid){
         ${r.note?`<i class="ovd-cnt">${escH(r.note)}</i>`:''}</span>
         <b class="${d<0?'ovd-neg':''}">${d<0?'−':'+'}$${Math.abs(d).toLocaleString()}</b></div>`;
     }).join(''):'<div class="ovd-note" style="margin-top:0;">還沒有任何進出。</div>'}</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      ${(SESSION&&SESSION.role==='admin')?`<button class="btn btn-gold" onclick="creditAdjAsk('${mid}')">校正餘額</button>`:''}</div>`);
+}
+/* 手動校正（2026-08-30 使用者指示：「給管理員權限修改」）——
+   ⚠ 正常情況**不需要**動這裡：作廢轉入與購買折抵都會自動記帳。
+     這是事後更正的入口，所以三個護欄一個都不能少：
+       ・管理員限定（前端擋、送出前再驗一次）
+       ・一定要填原因（動錢沒留下為什麼，三個月後沒有人查得出來）
+       ・送出前重讀餘額，別台動過就退回 —— 拿舊餘額算差額會把別人的變動吃掉 */
+async function creditAdjAsk(mid){
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以校正儲值金'); return; }
+  const m=await dbGet('members',mid); if(!m){ showToast('找不到會員'); return; }
+  const bal=creditOf(m);
+  showModal(`<div class="modal-title">校正儲值金　${escH(m.name||'')}</div>
+    <div class="ovd-note" style="margin-top:0;">填<b>正確的餘額</b>，系統自己算差額並記進帳本。
+      作廢轉入與購買折抵都會自動記 —— 正常情況不需要動這裡。</div>
+    <div class="form-row" style="margin-top:12px;"><label>目前餘額</label>
+      <input value="$${bal.toLocaleString()}" disabled></div>
+    <div class="form-row"><label>更正為 *</label>
+      <input type="number" id="cadj-to" min="0" value="${bal}" oninput="creditAdjHint(${bal})"></div>
+    <div id="cadj-hint" class="gt-unitbox"></div>
+    <div class="form-row"><label>原因 *</label><input id="cadj-why" placeholder="例：8/30 那筆作廢重複轉入"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openCreditLog('${mid}')">← 返回</button>
+      <button class="btn btn-danger" onclick="creditAdjDo('${mid}',${bal})">確認校正</button></div>`);
+  try{ creditAdjHint(bal); }catch(_){}
+}
+function creditAdjHint(bal){
+  const box=document.getElementById('cadj-hint'); if(!box) return;
+  const to=Math.max(0,Math.round(Number((document.getElementById('cadj-to')||{}).value)||0));
+  const d=to-Number(bal||0);
+  box.innerHTML=d===0?'<span style="color:var(--t3);">沒有變動</span>'
+    :`帳本會記一筆 <b style="color:${d>0?'var(--ok)':'var(--danger,#b5372e)'};">${d>0?'+':'−'}$${Math.abs(d).toLocaleString()}</b>`;
+}
+async function creditAdjDo(mid,bal){ return onceAct('cadj:'+mid, ()=>_creditAdjDo(mid,bal)); }
+async function _creditAdjDo(mid,bal){
+ try{
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以校正儲值金'); return; }
+  const to=Math.max(0,Math.round(Number((document.getElementById('cadj-to')||{}).value)||0));
+  const why=((document.getElementById('cadj-why')||{}).value||'').trim();
+  const d=to-Number(bal||0);
+  if(!d){ showToast('金額沒有變動'); return; }
+  if(!why){ showToast('請填校正原因 —— 動錢一定要留下為什麼'); return; }
+  /* 表單可能開了很久，中間別台可能剛好用掉一筆：拿舊餘額算差額會把那筆變動吃掉 */
+  const fresh=creditOf(await dbGet('members',mid));
+  if(fresh!==Number(bal||0)){
+    showToast(`餘額已經變成 $${fresh.toLocaleString()}（別台剛動過），請重新確認`);
+    openCreditLog(mid); return; }
+  await creditMove(mid, d, 'adjust', null, `管理員校正：${why}`);
+  closeModal(); showToast(`儲值金已更正為 $${to.toLocaleString()}`);
+  try{ if(typeof PP!=='undefined'&&PP.id===mid){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }
+  catch(_){ navTo(CUR_PAGE); }
+ }catch(e){ console.error('creditAdjDo',e); showToast('校正失敗：'+((e&&e.message)||e)); }
 }
 /* ⚠ 2026-08-30：入口按鈕已移除，改走「作廢 → 轉儲值金 → 重新儲值」
      （使用者：「刪除更換方案　把這個功能做到[作廢]裡面　因為這個功能就是要把這張方案
@@ -43312,7 +43371,8 @@ function ppRecordHtml(){
         const _cr=creditOf(PP.rec);
         return `<div class="pp-card">${back}<div class="pp-card-t" style="display:flex;justify-content:space-between;align-items:center;">票券
           <span style="display:flex;align-items:center;gap:8px;">
-          ${_cr>0?`<button class="pp-credit" onclick="openCreditLog('${PP.id}')" title="作廢票券時轉入的錢；只能拿來買方案，不能退現">儲值金 $${_cr.toLocaleString()}</button>`:''}
+          ${/* 餘額 0 對一般櫃檯是噪音，但管理員要有校正入口，所以他一律看得到 */''}
+          ${(_cr>0||(SESSION&&SESSION.role==='admin'))?`<button class="pp-credit${_cr>0?'':' pp-credit-0'}" onclick="openCreditLog('${PP.id}')" title="作廢票券時轉入的錢；只能拿來買方案，不能退現">儲值金 $${_cr.toLocaleString()}</button>`:''}
           ${isDeskLike()?`<button class="btn btn-green btn-sm" style="padding:5px 14px;font-size:12.5px;" onclick="ppTopUp('${PP.id}')">＋ 儲值</button>`:''}</span></div>
           <div class="tkfilter" style="margin:8px 0 12px;">${tabs}</div>
           ${/* 圖例（2026-08-01）：金點是「會員自己從手機約的」，不解釋沒人看得懂 */''}
@@ -55835,7 +55895,9 @@ PAGES.mem_tickets=async function(){
     ?Object.assign({},b,{_shBy:'享',_shName:'共享對象'}):b);
   const WAL=buildWallet(SESSION.id,{tickets,bookings:_pool,logs,typeMap});
   const mine=WAL.tickets;
-  _memTkData={mine,typeMap,logs,WAL,tier:memTierInfo(_me,bookings)};
+  /* 儲值金（2026-08-30 使用者指示：「會員要能看到」）——
+     _me 本來就抓了，餘額直接跟著走，不多打一次資料庫；明細等點開才抓。 */
+  _memTkData={mine,typeMap,logs,WAL,tier:memTierInfo(_me,bookings),credit:creditOf(_me)};
   renderMemTickets();
 };
 /* 會員端等級資訊（2026-08-05 使用者指示：「我的票券」上方改列等級、升降級規則、
@@ -56201,6 +56263,7 @@ function renderMemTickets(){
   C.innerHTML=
   (mtkV2?memTierBlockV2(tier, usable.length):memTierBlock(tier, usable.length))+
   (mtkV2?tabRow:`<div class="mtk-entry-row">${selfPtEntryHTML()}${voucherEntryHTML()}</div>`)+
+  memCreditEntryHTML()+
   memContractEntryHTML()+
   renewHint+
   pendCards+demoCard+
@@ -56211,6 +56274,40 @@ function renderMemTickets(){
   ${inactive.length>0?`<details class="mck-hist"><summary class="mck-section-label" style="cursor:pointer;list-style:none;">歷史票券（${inactive.length}）　<span style="font-size:11px;color:var(--t3);">點開查看</span></summary>${inactive.map(t=>card(t,true)).join('')}</details>`:''}`;
 }
 
+/* 儲值金（2026-08-30 使用者指示：「會員要能看到」）——
+   餘額 0 就不畫：沒有的人看到一列 $0 只會以為自己少了什麼。
+   ⚠ 文案要把「不能退現」寫出來 —— 客人會拿這一頁來問櫃檯，
+     頁面上先講清楚，櫃檯就不用每次重新解釋一遍。 */
+function memCreditEntryHTML(){
+  const bal=(_memTkData&&_memTkData.credit)||0;
+  if(bal<=0) return '';
+  return `<button class="mtk-self-btn" onclick="openMemCredit()">
+    ${/* 底色寫字面值不用 color-mix(--gold-d)：renewstatetest 用那個字串把關
+         「課卡不准被沖淡底色」，在這裡用會誤觸（見 tests/renewstatetest.js） */''}
+    <span class="mtk-self-ic" style="background:#faf5ea;color:var(--gold-d,#b48a56);">${LNI.gift||'🎟'}</span>
+    <span class="mtk-self-tx"><span class="mtk-self-t">儲值金</span><span class="mtk-self-s">購買方案時可折抵，不能退現</span></span>
+    <span class="mtk-self-n" style="color:var(--gold-d,#b48a56);"><b>$${bal.toLocaleString()}</b></span><span class="mtk-self-ar">›</span>
+  </button>`;
+}
+async function openMemCredit(){
+  const bal=(_memTkData&&_memTkData.credit)||0;
+  /* 明細等點開才抓（RLS mc_self_read 只讓會員看自己的） */
+  let mine=[];
+  try{ mine=(await dbGetAll('member_credits')).filter(r=>r&&String(r.member_id)===String(SESSION.id))
+    .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))); }catch(_){}
+  showModal(`<div class="modal-title">儲值金</div>
+    <div class="cr-amt-box" style="margin:2px 0 12px;">
+      <span class="gr-amt-k">目前餘額</span><span class="gr-amt-v">$${bal.toLocaleString()}</span>
+      <span class="gr-amt-s">下次購買方案時可直接折抵</span></div>
+    <div class="ovd-list">${mine.length?mine.map(r=>{
+      const d=Number(r.delta)||0;
+      return `<div class="ovd-row"><span>${String(r.created_at||'').slice(0,10)}　${escH(CREDIT_SRC_LB[r.source]||'異動')}</span>
+        <b class="${d<0?'ovd-neg':''}">${d<0?'−':'+'}$${Math.abs(d).toLocaleString()}</b></div>`;
+    }).join(''):'<div class="ovd-note" style="margin-top:0;">還沒有任何進出。</div>'}</div>
+    <div class="mck-d-rule" style="margin-top:12px;">儲值金是方案結束後折算保留在店裡的金額，
+      <b>只能用來購買方案，不能退還現金</b>，也沒有使用期限。要使用請告知櫃檯。</div>
+    <div class="modal-foot mh2-foot one"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
 /* ══ 我的合約（2026-07-23）：會員端唯讀查看已簽的合約（電子簽約含簽名影像）══
    資料由 PAGES.mem_tickets 併同載入（RLS：contracts_member_read 只讓會員看自己的）。 */
 function memContractEntryHTML(){
