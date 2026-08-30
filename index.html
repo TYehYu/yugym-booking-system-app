@@ -11507,8 +11507,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260829.2235';
-const APP_VERSION_LABEL='v260829.2235';
+const APP_VERSION = '260830.0945';
+const APP_VERSION_LABEL='v260830.0945';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31203,6 +31203,11 @@ function bkCoachLeaveBtn(b, editable){
   const tip=bkCoachLeaveMode(b)==='cancel'?'整堂取消、逐名額退票、效期＋7 天':'退票、效期＋7 天、課種改自主訓練';
   return `<button class="btn btn-ghost btn-sm bkd-cleave" onclick="bkCoachLeave('${b.id}')" title="${tip}">教練請假</button>`;
 }
+/* 先看清楚再按（2026-08-30 使用者指示：「請假展延的訊息要先提醒在確認」）——
+   團課那條 0808 就是先逐個名額列出「原效期 → 新效期」再按；教練課這條一直是
+   按下去才在吐司裡講一句。它動到的是**效期**，事後幾乎不會有人回頭去核對，
+   所以更需要事前講清楚。沒有到期日的票也要明講「不需要展延」——
+   不然吐司裡少了半句話，櫃檯分不出是「沒延到」還是「不用延」。 */
 async function bkCoachLeave(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   if(bkIsCoachLeave(b)){ showToast('這堂已經標記過教練請假'); return; }
@@ -31213,8 +31218,36 @@ async function bkCoachLeave(id){
       : `${b.category||'這種課'}不適用教練請假（只有教練課、友善教練課與團體課）`);
     return;
   }
-  // 團課走自己的一套（整堂取消＋逐名額退票展延），不改成自主訓練
+  // 團課走自己的一套（整堂取消＋逐名額退票展延，那張視窗本來就會先問）
   if(bkCoachLeaveMode(b)==='cancel') return grpCoachLeave(id);
+  const _t=b.ticket_id?await dbGet('member_tickets',b.ticket_id).catch(()=>null):null;
+  const _from=(_t&&_t.expire_date)?String(_t.expire_date).slice(0,10):'';
+  let _to=''; if(_from){ const d=parseYmd(_from); if(d){ d.setDate(d.getDate()+COACH_LEAVE_EXTEND_DAYS); _to=ymd(d); } }
+  const _f=x=>String(x||'').replace(/-/g,'/');
+  const _mn=b.member_id?((await dbGet('members',b.member_id).catch(()=>null))||{}).name||'':'';
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">教練請假・改為自主訓練</div>
+    <div style="font-size:13.5px;color:var(--text);padding:2px 0 10px;">
+      ${String(b.date).replace(/-/g,'/')} ${String(b.start_time).slice(0,5)}　${escH(b.category||'')}${_mn?`　·　${escH(_mn)}`:''}</div>
+    <div style="background:#eef5f1;border:1.5px solid #cfe3d8;border-radius:12px;padding:12px 14px;font-size:13px;color:#1f6f54;line-height:1.9;">
+      這一堂會改成<b>自主訓練</b> —— 教練沒來，但場地與時段還在，會員可以自己來練。<br>
+      堂數<b>先不退</b>，等會員簽到或這堂被取消時才退回。<br>
+      ${_to
+        ? `票券效期 <b>${_f(_from)} → ${_f(_to)}</b>（延長 ${COACH_LEAVE_EXTEND_DAYS} 天）`
+        : `這張票<b>沒有到期日</b>，不需要展延。`}</div>
+    <div style="font-size:12px;color:var(--t2);margin-top:10px;line-height:1.9;">
+      找得到代課教練的話請改用「代課」，這堂就照常上。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
+      <button class="btn btn-green" onclick="bkCoachLeaveGo('${id}')">確認請假</button></div>`);
+}
+async function bkCoachLeaveGo(id){ return onceAct('coachleave:'+id, ()=>_bkCoachLeaveGo(id)); }
+async function _bkCoachLeaveGo(id){
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+  /* 再驗一次（視窗開著的時候別人可能已經動過這堂） */
+  if(bkIsCoachLeave(b)){ closeModal(); showToast('這堂已經標記過教練請假'); return; }
+  if(b.status==='cancelled'||b.status==='checked_in'||b.status==='completed'){ closeModal(); showToast('此狀態不可標記請假'); return; }
+  if(!canCoachLeave(b)){ closeModal(); showToast('這堂不適用教練請假'); return; }
+  if(bkCoachLeaveMode(b)==='cancel'){ return grpCoachLeave(id); }
+  closeModal();
   const _tkId=b.ticket_id;
   const _wasCat=b.category||'';
   try{
@@ -31232,7 +31265,9 @@ async function bkCoachLeave(id){
     let extendTo=null;
     if(_tkId){ extendTo=await extendForCoachLeave(_tkId,b,SESSION.id); }
     collapseBkCard();
-    showToast(`已標記教練請假：改為自主訓練${extendTo?`、效期延至 ${extendTo.replace(/-/g,'/')}`:''}；堂數會在會員簽到或取消這堂時退回`);
+    /* 沒到期日時把話講完（2026-08-30）—— 原本只是把後半句整段拿掉，
+       櫃檯分不出是「沒延到」還是「本來就不用延」。 */
+    showToast(`已標記教練請假：改為自主訓練、${extendTo?`效期延至 ${extendTo.replace(/-/g,'/')}`:'這張票沒有到期日（不需展延）'}；堂數會在會員簽到或取消這堂時退回`, 6000);
     navTo(CUR_PAGE);
   }catch(e){ showToast('標記請假失敗：'+(e&&e.message?e.message:e)); }
 }

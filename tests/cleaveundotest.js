@@ -36,10 +36,24 @@ console.log('① 復原教練請假');
 
 console.log('\n①-b 新制：請假當下不退堂（2026-08-14 使用者定案：先釋出會被挪用，等簽到/取消才退）');
 {
-  const L=grabFn('bkCoachLeave');
+  /* 2026-08-30：bkCoachLeave 拆成「先問」＋「_bkCoachLeaveGo 才做」（使用者：
+     「請假展延的訊息要先提醒在確認」），真正動手的那一半在 _bkCoachLeaveGo。 */
+  const L=grabFn('_bkCoachLeaveGo');
   ok('★★ 請假不再立刻退堂、票繼續掛著（無 refundTicket 呼叫、不清 ticket_id）',
      !/refundTicket\(_tkId/.test(L) && !/b\.ticket_id=null/.test(L)
      && /堂數待簽到或取消時退回/.test(L));
+  ok('★★★ 動手之前先讓人看到「效期會從幾號延到幾號」',
+     /票券效期 <b>\$\{_f\(_from\)\} → \$\{_f\(_to\)\}<\/b>（延長 \$\{COACH_LEAVE_EXTEND_DAYS\} 天）/.test(src)
+     && /<button class="btn btn-green" onclick="bkCoachLeaveGo\('\$\{id\}'\)">確認請假<\/button>/.test(src));
+  ok('★★★ 沒有到期日要明講「不需要展延」（不能只是把那半句拿掉）',
+     /這張票<b>沒有到期日<\/b>，不需要展延。/.test(src)
+     && /:'這張票沒有到期日（不需展延）'\}/.test(src));
+  ok('★★ 確認之後再驗一次狀態（視窗開著時別人可能已經動過這堂）',
+     /if\(bkIsCoachLeave\(b\)\)\{ closeModal\(\); showToast\('這堂已經標記過教練請假'\); return; \}/.test(src));
+  ok('★★ 防連點（這會動效期）',
+     /async function bkCoachLeaveGo\(id\)\{ return onceAct\('coachleave:'\+id, \(\)=>_bkCoachLeaveGo\(id\)\); \}/.test(src));
+  ok('　 團課那條照舊走自己的確認視窗（它 0808 就會先問）',
+     /if\(bkCoachLeaveMode\(b\)==='cancel'\) return grpCoachLeave\(id\);/.test(src));
   ok('★★ 簽到時釋出：前端 fallback 退堂＋解綁、RPC 端同步（migration 留檔）',
      /const _clvTk=\(b\.coach_leave===true && b\.ticket_id\) \? b\.ticket_id : null;/.test(src)
      && /await refundTicket\(_clvTk,b\.id,SESSION\.id\)/.test(src));
