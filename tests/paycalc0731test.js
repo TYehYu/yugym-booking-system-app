@@ -20,12 +20,15 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
 /* 2026-08-01：值班重疊改用 bkCoachId（有代課算代課教練），沙箱補一個等價替身。
    2026-08-02：又多了 bkCounts（全員請假的課不成立，見 classvoidtest.js）—— 同樣給替身。 */
-const api=new Function('timeToMin','bkCoachId','bkIsGroup','bkCounts',
+const api=new Function('timeToMin','minToTime','bkCoachId','bkIsGroup','bkCounts',
   g('function normEmp(v){','\n}\n')+'\n'
   +g('function isPtPayClass(b){','\n')+'\n'
+  +g('function dutyClassOverlapRows(','\n}\n')+'\n'
   +g('function dutyClassOverlapHours(','\n}\n')
-  +'\nreturn {isPtPayClass,dutyClassOverlapHours};')(
+  +'\nreturn {isPtPayClass,dutyClassOverlapRows,dutyClassOverlapHours};')(
     t=>{const[h,m]=String(t||'0:0').split(':').map(Number);return h*60+(m||0);},
+    /* 2026-08-30：明細要回傳可讀的起迄時間，沙箱補一個等價替身 */
+    n=>String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0'),
     b=>(b&&(b.substitute_coach_id||b.coach_id))||null,
     b=>!!(b&&Array.isArray(b.member_ids)&&b.member_ids.length),
     b=>!!b && b.status!=='cancelled');
@@ -86,7 +89,13 @@ console.log('\n值班重疊：正職不扣');
 
 console.log('\n七個呼叫點都補上 emp（漏一個就會有一頁算出不同數字）');
 {
-  const calls=src.match(/(function )?dutyClassOverlapHours\([^)]*\)/g)||[];
+  /* 2026-08-30：拆成 Rows（回傳明細）＋ Hours（只是加總）兩支，
+     薪資單那三處改叫 Rows（要列出是哪一堂）。呼叫點總數不變，兩個名字一起數。 */
+  /* dutyClassOverlapHours 內部就是呼叫 Rows 再加總，那一行不是「呼叫點」——
+     先把它的函式本體切掉再數，數字才維持「畫面上有幾個地方要算重疊」的意思。 */
+  const _hi=src.indexOf('function dutyClassOverlapHours(');
+  const _src=src.slice(0,_hi)+src.slice(src.indexOf('\n}\n',_hi));
+  const calls=_src.match(/(function )?dutyClassOverlap(Rows|Hours)\([^)]*\)/g)||[];
   const real=calls.filter(c=>!c.startsWith('function '));   // 排除函式定義本身
   eq('★ 呼叫點共 7 處', real.length, 7);
   ok('★ 每一處都帶了第 5 個參數', real.every(c=>c.split(',').length===5), real.filter(c=>c.split(',').length!==5));

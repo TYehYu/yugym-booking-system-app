@@ -127,8 +127,12 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
        /title="新約・M1（教練課） \$0"/.test(out) || /新約・M1/.test(out), out.match(/title="[^"]*約[^"]*"/g));
     ok('★ 月合計那格列出整月每一筆（帶日期）', /title="[^"]*01日 新約・M1[^"]*"/.test(out));
     /* 2026-08-06 二修（使用者指示）：不用問號游標，維持一般游標 */
-    ok('　　游標維持一般（沒有 cursor:help）',
-       !/cursor:help/.test(src));
+    /* 2026-08-30：原本是全站禁用 cursor:help，但這條規則講的是**財務矩陣的格子**
+       （見上一行 0806 二修）。薪資單的淡化 KPI 用 help 游標是刻意的，
+       範圍縮到 .fm- 開頭的規則，維持原意又不會誤傷別的元件。 */
+    const _fmRules=(src.match(/[^{}\n][^{}]*\.fm-[^{}]*\{[^}]*\}/g)||[]);
+    ok('　　游標維持一般（財務矩陣沒有 cursor:help）',
+       _fmRules.length>0 && !_fmRules.some(r=>/cursor:help/.test(r)), _fmRules.length);
     ok('　　左上角（月合計＋日期）疊在最上層、滑過不變色',
        /\.fm-tb \.fm-sum \.fm-d\{z-index:4;\}/.test(src)
        && /tr\.fm-sum:hover td,\.fm-tb tbody tr\.fm-sum:hover \.fm-d\{background:#f7f3ea;\}/.test(src));

@@ -94,8 +94,10 @@ console.log('\n續約名單（與計數同一支）');
     /<span class="nl-nm">\$\{esc\(r\.name\|\|'—'\)\}<\/span>/.test(html)
     && /<span class="nl-plan">\$\{esc\(r\.plan\)\}/.test(html)
     && /<div class="nl-sum"><span>合計<\/span>/.test(html), true));
+  /* 2026-08-30：四張 KPI 卡改由 z() 統一產生（0 淡化＋滑鼠提示寫原因）；
+     可點與否搬進 z() 的 extra，但「有續約就能點開名單」這條沒變。 */
   t('★ 續約數那格看得出可以點', ()=>eq(
-    /<div class="ds-card\$\{renewCount\?' ds-card-tap':''\}"/.test(html)
+    /extra&&extra\.cls\|\|''/.test(html)
     && /onclick="openRenewList\(\)"/.test(html), true));
 }
 

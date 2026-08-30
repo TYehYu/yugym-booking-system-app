@@ -146,20 +146,27 @@ ok('　　金額都取整數（與營運分析同口徑）',
 {
   const i=src.indexOf('function payrollCalcRows(r){'); const j=src.indexOf('\n}\n',i)+2;
   /* 2026-08-01：明細改用共用的 fmtHours（工時不進位） */
-  const calc=new Function('fmtHours', src.slice(i,j)+'\nreturn payrollCalcRows;')(
-    h=>{const n=Number(h)||0;return (n%1===0)?String(n):n.toFixed(1);});
+  /* 2026-08-30：值班重疊的明細列抽成共用的 dutyOverlapListHTML —— 沙箱給個替身，
+     這一支管的是「扣款有沒有列出來」，明細長相由 dutyoverlaptest.js 顧。 */
+  const calc=new Function('fmtHours','dutyOverlapListHTML', src.slice(i,j)+'\nreturn payrollCalcRows;')(
+    h=>{const n=Number(h)||0;return (n%1===0)?String(n):n.toFixed(1);},
+    ()=>'');
   const r={countSalary:true, emp:{name:'王教練'}, ptDone:20, groupHeads:14, dutyHours:60.5,
     leave:{事假:0,病假:0,特休:8,其他:0},
     sal:{base:28000,adjBase:28000,baseHourly:175,schedHours:160,baseLeaveDeduct:0,
          ptPay:24000,ptIncome:28000,ptIsFloor:true,bonus:0,groupPay:4200,groupDetail:'14 人次',
-         dutyGross:9075,dutyPay:8000,dutyLeaveDeduct:0,dutyClassDeduct:1075,classOverlap:7.2,
+         dutyGross:9075,dutyPay:8000,dutyLeaveDeduct:0,dutyClassDeduct:0,classOverlap:0,
+         /* 2026-08-30：改吃 dutyOv*（純顯示欄位）——
+            舊的 dutyClassDeduct 上游一律是 0，那條顯示分支從來沒被畫出來過 */
+         dutyOvHr:7.2,dutyOvPay:1075,dutyOvGross:9075,dutyOvRows:[],
          renewPay:3000,renewDetail:'2 筆',leaderPay:0,supPay:0,mgmtPay:0,
          grossPay:43200,insEmpDeduct:1800,netPay:41400}};
   const h=calc(r);
   ok('★ 計算方式各項都列得出來（底薪／教練課收入／團課人頭／值班費／續約獎金）',
      /底薪/.test(h)&&/教練課收入/.test(h)&&/團課人頭/.test(h)&&/值班費/.test(h)&&/續約獎金/.test(h));
   ok('　　特休標「不扣薪」', /特休 8 小時[\s\S]{0,140}不扣薪/.test(h));
-  ok('　　值班時段上課的扣款也列出來', /值班時段上課 7\.2 小時/.test(h));
+  ok('　　值班時段上課的扣款也列出來（含「為什麼」）',
+     /值班時段內上課 7\.2 小時（改領課堂費用）/.test(h) && /實領值班費/.test(h));
 }
 
 

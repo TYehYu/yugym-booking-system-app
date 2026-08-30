@@ -65,8 +65,11 @@ ok('　　原因寫在程式裡', /最想知道的「這個月領多少」\s*\n\
 console.log('\n數字口徑沒被動到');
 ok('★ 教練課堂數仍走 isPtPayClass（體驗不算）', /const ptDone=done\.filter\(isPtPayClass\)\.length;/.test(blk));
 ok('★ 團課人次仍走 grpAttendHeads（請假不算）', /grpList\.reduce\(\(s,b\)=>s\+grpAttendHeads\(b\),0\)/.test(blk));
+/* 2026-08-30：改叫 dutyClassOverlapRows（要在薪資單列出是哪一堂），
+   時數由明細加總，算法與正職不扣的規則都沒變。 */
 ok('★ 值班工時仍是「打卡封頂 − 上課重疊」，且正職不扣重疊',
-   /const dutyOv=emp\.need_duty\?dutyClassOverlapHours\(shifts,bookings,empId,ym,emp\):0;/.test(blk)
+   /const dutyOvRows=emp\.need_duty\?dutyClassOverlapRows\(shifts,bookings,empId,ym,emp\):\[\];/.test(blk)
+   && /const dutyOv=dutyOvRows\.reduce\(\(n,r\)=>n\+r\.hr,0\);/.test(blk)
    && /const dutyHours=Math\.max\(dutyCap-dutyOv,0\);/.test(blk));
 
 console.log('\n續約可以看名單（2026-08-02 使用者指示）');

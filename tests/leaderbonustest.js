@@ -94,11 +94,13 @@ ok('★ 名單抽成共用函式（不再各寫一套「誰算在內」）',
    && /\.filter\(o=>o\.role!=='admin' && o\.role!=='front_desk' && o\.status!=='inactive'\)/.test(src));
 eq('★ 四處都改用它', (src.match(/leaderRowsOf\(/g)||[]).length, 5);   // 定義 1 ＋ 呼叫 4
 eq('★ 舊的 leaderHeads 全部清乾淨', (src.match(/leaderHeads/g)||[]), []);
+/* 2026-08-30：extras 後面多帶了 dutyOverlapRows（值班重疊明細，純顯示），
+   所以四處都改成「month 之後可以再接欄位」，仍然釘住 month 一定有傳。 */
 ok('★ 月份有傳進去（不然新舊制分不出來）',
-   /const extras=\{ renewCount:renewById\[emp\.id\]\|\|0, leaderRows, month \};/.test(src)
-   && /\{renewCount, leaderRows, month:ym\}/.test(src)
-   && /\{renewCount:renewMap\[c\.id\]\|\|0, leaderRows, month\}/.test(src)
-   && /\{renewCount, leaderRows, month\}/.test(src));
+   /const extras=\{ renewCount:renewById\[emp\.id\]\|\|0, leaderRows, month[,}]/.test(src)
+   && /\{renewCount, leaderRows, month:ym[,}]/.test(src)
+   && /\{renewCount:renewMap\[c\.id\]\|\|0, leaderRows, month[,}]/.test(src)
+   && /\{renewCount, leaderRows, month[,}]/.test(src));
 ok('　　calcSalary 兩條路徑都把月份帶給 leaderBonusOf',
    (src.match(/leaderBonusOf\(emp,extras,G[c]?,extras\.month\)/g)||[]).length===2);
 

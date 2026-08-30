@@ -51,7 +51,10 @@ ok('　　也寫了為什麼不是更高的數字（免得下次有人隨手改�
 
 console.log('\n④ 從薪資單點得到的其他入口也一起修好了');
 ok('　　薪資單本體就是用 sheet-ov', /ov\.id='salary-sheet-ov'; ov\.className='sheet-ov';/.test(src));
-ok('　　續約數那格可點', /<div class="ds-card\$\{renewCount\?' ds-card-tap':''\}"\$\{renewCount\?' onclick="openRenewList\(\)"/.test(src));
+/* 2026-08-30：四張 KPI 卡改由 z() 統一產生（0 的淡化＋寫原因），
+   可點的條件從內嵌三元式搬到 z() 的 extra 參數。 */
+ok('　　續約數那格可點', /attr:' onclick="openRenewList\(\)" title="點看續約名單"'/.test(src)
+   && /z\(renewCount,'續約數',renewCount,/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

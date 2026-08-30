@@ -8243,6 +8243,11 @@ body.wtl-dragging-active *{-webkit-user-select:none!important;user-select:none!i
    .dash-sum 在窄螢幕會落成兩欄兩列，薪資單這四格是同一組數字，拆成兩列反而要多看一眼。 */
 .dash-sum.sal-kpi4{grid-template-columns:repeat(4,1fr);gap:6px;}
 .dash-sum.sal-kpi4 .ds-card{padding:12px 4px;}
+/* 這個月是 0 的項目淡化（2026-08-30 使用者指示）——
+   淡化不隱藏：欄位消失的話，員工會以為系統漏算，而不是「這個月本來就沒有」。
+   原因寫在滑鼠提示裡，游標也改成 help 讓人知道有東西可以看。 */
+.dash-sum.sal-kpi4 .ds-card.ds-zero{opacity:.42;cursor:help;}
+.dash-sum.sal-kpi4 .ds-card.ds-zero:hover{opacity:.72;}
 .dash-sum.sal-kpi4 .ds-num{font-size:20px;}
 .dash-sum.sal-kpi4 .ds-num .ds-u{font-size:11px;}
 .dash-sum.sal-kpi4 .ds-lb{font-size:10.5px;margin-top:4px;white-space:nowrap;}
@@ -11551,8 +11556,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.1208';
-const APP_VERSION_LABEL='v260830.1208';
+const APP_VERSION = '260830.1410';
+const APP_VERSION_LABEL='v260830.1410';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38168,18 +38173,24 @@ function annualLeaveAccount(emp, shifts, year){
    原本 私人教練＋體驗 一起算，與櫃檯的薪資表（只算私人教練）差了 7 堂／7 月。
    體驗課仍會建卡、仍算銷課堂數，只是不進教練的堂數與課費。 */
 function isPtPayClass(b){ return !!b && b.category==='私人教練'; }
-function dutyClassOverlapHours(shifts, bookings, empId, month, emp){
+/* 逐筆回傳「哪一天、哪一堂、重疊幾小時」（2026-08-30 使用者指示：
+     「也要記錄在薪資單上　讓員工知道他為什麼被扣掉這個時數」）——
+   原本只回傳一個總時數，薪資單上那些小時就這樣靜靜消失，
+   員工看到的只有淨值班費，問櫃檯也答不出來是哪一堂造成的。
+   ⚠ 時數改由這支的明細加總（dutyClassOverlapHours 只是 sum）——
+     分兩份算的話，薪資單列出來的明細會跟實際扣的錢對不起來。 */
+function dutyClassOverlapRows(shifts, bookings, empId, month, emp){
   /* 2026-07-31 使用者定案：正職不再扣「值班時段內上課」的重疊時數
      （正職是月薪制，值班與上課本來就在同一段班內，扣了等於雙重懲罰）。
      兼職／工讀維持原規則 —— 他們的值班費是時薪，上課時段已另計課費。 */
-  if(emp && normEmp(emp.employment_type||emp.pay_type)==='full_time') return 0;
+  if(emp && normEmp(emp.employment_type||emp.pay_type)==='full_time') return [];
   const myShifts=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month);
-  if(!myShifts.length) return 0;
+  if(!myShifts.length) return [];
   // 該員工當月已上課（已完成或已簽到）、且有授課時段的課（私人教練/體驗/小班肌力團課）
   const myClasses=(bookings||[]).filter(b=>bkCoachId(b)===empId && (b.status==='completed'||b.status==='checked_in') && bkCounts(b)
     && (b.category==='私人教練'||b.category==='體驗'||bkIsGroup(b)) && (b.date||'').slice(0,7)===month);
-  if(!myClasses.length) return 0;
-  let overlapMin=0;
+  if(!myClasses.length) return [];
+  const out=[];
   // 依日期分組比對
   const shiftsByDate={}; myShifts.forEach(s=>{ (shiftsByDate[s.date]=shiftsByDate[s.date]||[]).push(s); });
   myClasses.forEach(b=>{
@@ -38187,11 +38198,17 @@ function dutyClassOverlapHours(shifts, bookings, empId, month, emp){
     const cs=timeToMin(b.start_time), ce=cs+(Number(b.duration)||60);
     daySh.forEach(s=>{
       const ss=timeToMin(s.start_time), se=timeToMin(s.end_time);
-      const ov=Math.min(ce,se)-Math.max(cs,ss); // 重疊分鐘
-      if(ov>0) overlapMin+=ov;
+      const a=Math.max(cs,ss), z=Math.min(ce,se);
+      if(z>a) out.push({date:b.date, from:minToTime(a), to:minToTime(z), hr:(z-a)/60,
+        category:b.category||'', cls:b.start_time});
     });
   });
-  return overlapMin/60;
+  out.sort((x,y)=>(x.date+x.from).localeCompare(y.date+y.from));
+  return out;
+}
+function dutyClassOverlapHours(shifts, bookings, empId, month, emp){
+  return dutyClassOverlapRows(shifts, bookings, empId, month, emp)
+    .reduce((n,r)=>n+r.hr, 0);
 }
 // ── 值班時數：以打卡時數計，但被排班時數封頂（每天取 min(打卡, 排班) 加總）──
 // 規則：照實際打卡算，但不超過排班；避免早到晚走多計。某天沒打卡則該天 0（視同未上班，不計值班費）。
@@ -39056,6 +39073,16 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const dutyClassDeduct=Math.round(co*dhr);
   const dutyPay=Math.max(dutyGross-dutyClassDeduct,0);
   const dutyDetail = tpl.need_duty ? `${_dutyHrs.toFixed(1)} hr × $${dhr}` : '不需值班';
+  /* ── 值班時段內上課：薪資單的說明用（2026-08-30 使用者指示）──────────
+     ⚠ 這幾個欄位**只給畫面看，不參與計算** —— 呼叫端傳進來的 dutyHours 早就
+       是「扣完重疊」的淨時數了（見 dutyClassOverlapHours 的三個呼叫點）。
+       如果在這裡再減一次，同一段時間會被扣兩遍。
+     dutyOvGross 用「淨值班費 ＋ 重疊金額」倒推，不用 hr × 時薪重算 ——
+     這樣三個數字在薪資單上一定加得起來，不會因為四捨五入差一塊錢。 */
+  const dutyOvRows=(extras.dutyOverlapRows||[]);
+  const dutyOvHr=tpl.need_duty ? dutyOvRows.reduce((n,r)=>n+(Number(r.hr)||0),0) : 0;
+  const dutyOvPay=Math.round(dutyOvHr*dhr);
+  const dutyOvGross=dutyPay+dutyOvPay;
 
   /* 請假扣款的時薪基準（2026-08-01 使用者定案）：
      時薪 = 底薪 ÷ 130（一年的月排班時數中位數，設定值 base_hours_divisor）。
@@ -39169,6 +39196,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
     ptPay, ptDetail, ptIncome, ptIsFloor, ptIncomeDetail,
     bonus, bonusDetail, groupPay, groupDetail,
     dutyGross, dutyLeaveDeduct, dutyClassDeduct, classOverlap:co, dutyPay, dutyDetail,
+    dutyOvRows, dutyOvHr, dutyOvPay, dutyOvGross,   // 值班時段內上課的說明（不參與計算）
     renewCount, renewPay, renewDetail,
     isSupervisor:isSup, supPay, isLeader, leaderPay, leaderDetail, leaderTotal, leaderUnits, mgmtPay,
     leaderList, leaderT1:_ldT1, leaderT2:_ldT2, leaderB1:_ldB1, leaderB2:_ldB2,
@@ -39915,7 +39943,8 @@ async function openPerfDetail(empId, month){
     const groupHeads=grpList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 只算已簽到（2026-07-31）
     const leave=leaveSummary(shifts, empId, ym);
     const dutyCap=emp.need_duty?dutyHoursCapped(attendance,shifts,empId,ym):0;
-    const dutyOv=emp.need_duty?dutyClassOverlapHours(shifts,bookings,empId,ym,emp):0;
+    const dutyOvRows=emp.need_duty?dutyClassOverlapRows(shifts,bookings,empId,ym,emp):[];
+    const dutyOv=dutyOvRows.reduce((n,r)=>n+r.hr,0);
     const dutyHours=Math.max(dutyCap-dutyOv,0);
     const[purAll,ttAll,memAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[]),dbGetAll('members').catch(()=>[])]);
     /* 2026-08-02 使用者：「續約要可以看名單」—— 原本只給一個張數，對不上就沒得查。
@@ -39924,7 +39953,7 @@ async function openPerfDetail(empId, month){
     const _memNm=Object.fromEntries((memAll||[]).map(x=>[x.id,x.name]));
     const renewCount=_renewRows.length;
     const leaderRows = emp.is_manager ? leaderRowsOf(await dbGetAll('coaches'), bookings, ym) : null;
-    const sal=calcSalary(empAtMonth(emp,ym), ptDone, groupHeads, dutyHours, leave, 0, {renewCount, leaderRows, month:ym});
+    const sal=calcSalary(empAtMonth(emp,ym), ptDone, groupHeads, dutyHours, leave, 0, {renewCount, leaderRows, month:ym, dutyOverlapRows:dutyOvRows});
     const money=n=>'$'+Math.round(Number(n)||0).toLocaleString();
     const row=(label,formula,amount,opt)=>`<div class="pfd-row${opt&&opt.sum?' pfd-sum':''}${opt&&opt.neg?' pfd-neg':''}">
       <span class="pfd-l">${label}${formula?`<span class="pfd-f">${formula}</span>`:''}</span>
@@ -39940,7 +39969,16 @@ async function openPerfDetail(empId, month){
     }
     if(sal.bonus>0)    rows+=row('達標獎金', sal.bonusDetail||'', money(sal.bonus));
     if(sal.groupPay>0) rows+=row('團體課費', sal.groupDetail||`${groupHeads} 人次`, money(sal.groupPay));
-    if(sal.dutyPay>0)  rows+=row('值班費', sal.dutyDetail||`${fmtHours(dutyHours)} 小時`, money(sal.dutyPay));
+    if(sal.dutyPay>0){
+      if(sal.dutyOvHr>0){
+        rows+=row('值班費', `${fmtHours(dutyHours+sal.dutyOvHr)} 小時（含值班時段內上課）`, money(sal.dutyOvGross));
+        rows+=row('　└ 值班時段內上課', `${fmtHours(sal.dutyOvHr)} 小時改領課堂費用`, '−'+money(sal.dutyOvPay), {neg:true});
+        rows+=dutyOverlapListHTML(sal);
+        rows+=row('實領值班費', sal.dutyDetail||`${fmtHours(dutyHours)} 小時`, money(sal.dutyPay), {sum:true});
+      }else{
+        rows+=row('值班費', sal.dutyDetail||`${fmtHours(dutyHours)} 小時`, money(sal.dutyPay));
+      }
+    }
     if(sal.bdayPay>0) rows+=row('生日禮金', sal.bdayDetail||'', money(sal.bdayPay));
     if(sal.renewPay>0) rows+=row('續約獎金', sal.renewDetail||`${renewCount} 張`, money(sal.renewPay));
     /* 2026-08-02：改成只要是店長就列 —— 新制沒設名單時金額是 0，
@@ -40001,6 +40039,23 @@ async function openPerfDetail(empId, month){
    薪資彙總的展開列都只有一行「名單 4 位，無人達到 80 堂」，看不出是誰、還差幾堂。
    抽成一支，三處共用；日後改格式只改這裡。
    ⚠ .pfd-nl 預設收合（靠 .open 顯示，見 pfdToggleRenew），這份沒有展開鈕 → 直接帶 open。 */
+/* 值班時段內上課的明細（2026-08-30 使用者指示：「讓員工知道他為什麼被扣掉這個時數」）——
+   只寫「扣了 1 小時」不夠：員工要能對到是哪一天、哪一堂。
+   三處薪資單（表現明細／月結明細／員工自己看的）共用這一份，
+   分開寫會出現「這邊列 1 小時、那邊列 2 小時」。 */
+function dutyOverlapListHTML(sal){
+  const rows=(sal&&sal.dutyOvRows)||[];
+  if(!rows.length) return '';
+  const CAT={'私人教練':'教練課','體驗':'體驗課','小班肌力':'團課'};
+  return `<div class="pfd-nl open" style="margin:2px 0 8px;">
+    ${rows.map(r=>`<div class="nl-row">
+      <span class="nl-nm">${String(r.date||'').slice(5).replace('-','/')}</span>
+      <span class="nl-plan">${escH(CAT[r.category]||r.category||'課程')}　${r.from}–${r.to}</span>
+      <span class="nl-amt" style="color:var(--t3);">${fmtHours(r.hr)} 小時</span>
+    </div>`).join('')}
+    <div class="nl-sum"><span>這幾段時間改領課堂費用，不重複計值班費</span><b>−${fmtHours(sal.dutyOvHr)} 小時</b></div>
+  </div>`;
+}
 function leaderListHTML(sal){
   const list=(sal&&sal.leaderList)||[];
   if(!list.length) return '';
@@ -40146,12 +40201,13 @@ async function computeMonthlyPayroll(month){
     // 值班費：打卡封頂時數 再扣掉「值班時段內上課」重疊 → 淨值班時數（顯示與計薪一致）
     const leave=leaveSummary(shifts, emp.id, month);
     const dutyCap=emp.need_duty ? dutyHoursCapped(attendance, shifts, emp.id, month) : 0;
-    const dutyOverlap=emp.need_duty ? dutyClassOverlapHours(shifts, bookings, emp.id, month, emp) : 0;
+    const dutyOvRows=emp.need_duty ? dutyClassOverlapRows(shifts, bookings, emp.id, month, emp) : [];
+    const dutyOverlap=dutyOvRows.reduce((n,r)=>n+r.hr,0);
     const dutyHours=Math.max(dutyCap - dutyOverlap, 0);
-    const classOverlap=0; // 重疊已從值班時數扣除，不再於 calcSalary 重複扣
+    const classOverlap=0; // 重疊已從值班時數扣除，不再於 calcSalary 重複扣（明細另外帶給畫面）
     // 店長津貼名單：全體可帶課的員工（排除老闆與櫃台；店長本人列入）＋各自的當月堂數
     const leaderRows = emp.is_manager ? leaderRowsOf(staff, bookings, month) : null;
-    const extras={ renewCount:renewById[emp.id]||0, leaderRows, month };
+    const extras={ renewCount:renewById[emp.id]||0, leaderRows, month, dutyOverlapRows:dutyOvRows };
     const sal=calcSalary(empAtMonth(emp,month), ptDone, groupHeads, dutyHours, leave, classOverlap, extras);
     const total=countSalary?sal.grossPay:0; // 應發（v2.0：續約/管理職津貼已含在 calcSalary）
     return {emp,countSalary,ptDone,groupHeads,dutyHours,leave,sal,total};
@@ -40200,9 +40256,17 @@ const rowL=(label,val,sub)=>`<div style="display:flex;justify-content:space-betw
             if(s.groupPay>0) h+=rowL('團課人頭',`$${s.groupPay.toLocaleString()}`, `${r.groupHeads} 人次`);
             // 值班費（僅實領 > 0 才顯示；正職值班費 0 不干擾）
             if(r.dutyHours>0 && s.dutyPay>0){
-              h+=rowL('值班費',`$${s.dutyGross.toLocaleString()}`, `${fmtHours(r.dutyHours)} 小時`);
-              if(s.dutyClassDeduct>0) h+=rowDeduct(`值班時段上課 ${fmtHours(s.classOverlap)} 小時（課程抽成為主）`, s.dutyClassDeduct);
-              if(s.dutyClassDeduct>0) h+=rowL('實領值班費',`<b>$${s.dutyPay.toLocaleString()}</b>`);
+              /* ⚠ 2026-08-30 修：原本這裡吃 s.dutyClassDeduct，但上游一律帶 classOverlap=0
+                   （重疊早就從 dutyHours 扣掉了），所以那兩行**從來沒有被畫出來過** ——
+                   時數靜靜少掉，員工看不到原因。改吃 dutyOv*（純顯示欄位）。 */
+              if(s.dutyOvHr>0){
+                h+=rowL('值班費',`$${s.dutyOvGross.toLocaleString()}`, `${fmtHours(r.dutyHours+s.dutyOvHr)} 小時`);
+                h+=rowDeduct(`值班時段內上課 ${fmtHours(s.dutyOvHr)} 小時（改領課堂費用）`, s.dutyOvPay);
+                h+=dutyOverlapListHTML(s);
+                h+=rowL('實領值班費',`<b>$${s.dutyPay.toLocaleString()}</b>`, `${fmtHours(r.dutyHours)} 小時`);
+              }else{
+                h+=rowL('值班費',`$${s.dutyGross.toLocaleString()}`, `${fmtHours(r.dutyHours)} 小時`);
+              }
             }
             if(s.bdayPay>0) h+=rowL('生日禮金',`$${s.bdayPay.toLocaleString()}`, s.bdayDetail);
             if(s.renewPay>0) h+=rowL('續約獎金',`$${s.renewPay.toLocaleString()}`, s.renewDetail);
@@ -59584,9 +59648,10 @@ async function renderSalaryContent(TARGET, withHead){
   const myShifts=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   const myLeave=leaveSummary(shifts, empId, month);
   const _dutyCap=me.need_duty ? dutyHoursCapped(attendance, shifts, empId, month) : 0;
-  const _dutyOverlap=me.need_duty ? dutyClassOverlapHours(shifts, bookings, empId, month, me) : 0;
+  const _dutyOvRows=me.need_duty ? dutyClassOverlapRows(shifts, bookings, empId, month, me) : [];
+  const _dutyOverlap=_dutyOvRows.reduce((n,r)=>n+r.hr,0);
   const dutyHours=Math.max(_dutyCap - _dutyOverlap, 0);
-  const myClassOverlap=0; // 重疊已從值班時數扣除
+  const myClassOverlap=0; // 重疊已從值班時數扣除（明細另外帶給畫面）
   const payTypeLabel=PAY_LABEL[me.employment_type||me.pay_type]||'—';
   // v2.0：店長津貼需全體教練當月堂數；續約張數由 member_tickets 統計
   const leaderRows = me.is_manager ? leaderRowsOf(coaches, bookings, month) : null;
@@ -59606,7 +59671,7 @@ async function renderSalaryContent(TARGET, withHead){
     window._renewRows=renewRows;
   }catch(_){}
   // 完整薪資計算（v2.0：含續約、店長階梯、主管津貼、勞健保）
-  const sal=calcSalary(empAtMonth(me,month), ptDone, groupHeads, dutyHours, myLeave, myClassOverlap, {renewCount, leaderRows, month});
+  const sal=calcSalary(empAtMonth(me,month), ptDone, groupHeads, dutyHours, myLeave, myClassOverlap, {renewCount, leaderRows, month, dutyOverlapRows:_dutyOvRows});
   const countSalary=empCountSalary(me, month);
   const estimate=countSalary?sal.grossPay:0;
   const mgrLine=[me.is_manager?`店長`:'',me.is_supervisor?`主管`:''].filter(Boolean).join('　·　');
@@ -59659,10 +59724,28 @@ async function renderSalaryContent(TARGET, withHead){
   </div>`:`<div class="sal-hero"><div class="sh-label">本月狀態</div><div class="sh-amount" style="font-size:30px;">不計薪</div></div>`)+
   // ── 區② 本月統計四卡（2026-08-23 使用者指示：四個一列，不要在窄螢幕折成兩列）──
   `<div class="dash-sum sal-kpi4" style="margin-bottom:14px;">
-    <div class="ds-card"><div class="ds-num">${ptDone+groupDone}</div><div class="ds-lb">課程數</div></div>
-    <div class="ds-card"><div class="ds-num">${dutyHours.toFixed(1)}<span class="ds-u">h</span></div><div class="ds-lb">值班時數</div></div>
-    <div class="ds-card"><div class="ds-num">${groupDone}</div><div class="ds-lb">團課堂數</div></div>
-    <div class="ds-card${renewCount?' ds-card-tap':''}"${renewCount?' onclick="openRenewList()" title="點看續約名單"':''}><div class="ds-num">${renewCount}</div><div class="ds-lb">續約數${renewCount?' ›':''}</div></div>
+    ${/* 0 的項目淡化＋在滑鼠提示寫清楚為什麼是 0（2026-08-30 使用者指示）——
+         「這個月沒帶課」和「這個職務不帶課」對員工來說是完全不同的兩件事，
+         都顯示成 0 而不解釋，只會換來一通電話。 */''}
+    ${(()=>{
+      const z=(n,lb,val,why,extra)=>`<div class="ds-card${n?(extra&&extra.cls||''):' ds-zero'}"${
+        n?(extra&&extra.attr||''):` title="${escH(why)}"`}><div class="ds-num">${val}</div><div class="ds-lb">${lb}${
+        n&&extra&&extra.arrow?' ›':''}</div></div>`;
+      const _cls=ptDone+groupDone;
+      /* 值班為什麼是 0，四種原因差很多，要分開講 */
+      /* 用 need_duty 不用 isDutyType：上面算 _dutyCap 判的就是 need_duty，
+         拿別的旗標來解釋會出現「說不需值班、卻有時數」的矛盾 */
+      const _dutyWhy = !me.need_duty ? '這個職務不需要值班，所以不計值班費。'
+        : (!myShifts.length ? '這個月沒有排班，所以沒有值班時數。'
+        : (_dutyCap<=0 ? '這個月有排班，但沒有打卡紀錄 —— 值班費以打卡時數計，沒打卡的當天不計。'
+        : '排班時間全部都在上課，那幾段已改領課堂費用，不重複計值班費。'));
+      return z(_cls,'課程數',_cls, '這個月還沒有已完成或已簽到的課程。')
+        + z(dutyHours,'值班時數',`${dutyHours.toFixed(1)}<span class="ds-u">h</span>`, _dutyWhy)
+        + z(groupDone,'團課堂數',groupDone, '這個月沒有帶團體課。')
+        + z(renewCount,'續約數',renewCount,
+            '這個月沒有續約單 —— 只有賣票時約別標記為「續約」的才算，新約與分期後續期數不計。',
+            {cls:' ds-card-tap', attr:' onclick="openRenewList()" title="點看續約名單"', arrow:true});
+    })()}
   </div>`+
   /* ── 特休卡片已移除（2026-08-23 使用者指示：「教練薪資單不用列出特休，特休在個人資料
        這邊就有顯示」）—— 同一份特休帳在「個人資料」視窗（openCoachProfile 的 .cp-leave）
@@ -59691,7 +59774,16 @@ async function renderSalaryContent(TARGET, withHead){
         }
         if(sal.bonus>0) h+=row('達標獎金',`$${sal.bonus.toLocaleString()}`, sal.bonusDetail);
         if(sal.groupPay>0) h+=row('團課費',`$${sal.groupPay.toLocaleString()}`, sal.groupDetail);
-        if(dutyHours>0 && sal.dutyPay>0) h+=row('值班費',`$${sal.dutyPay.toLocaleString()}`, `${dutyHours.toFixed(1)} 小時`);
+        if(dutyHours>0 && sal.dutyPay>0){
+          if(sal.dutyOvHr>0){
+            h+=row('值班費',`$${sal.dutyOvGross.toLocaleString()}`, `${fmtHours(dutyHours+sal.dutyOvHr)} 小時`);
+            h+=row('　└ 值班時段內上課',`<span style="color:#c0392b;">−$${sal.dutyOvPay.toLocaleString()}</span>`, `${fmtHours(sal.dutyOvHr)} 小時改領課堂費用`);
+            h+=dutyOverlapListHTML(sal);
+            h+=row('實領值班費',`<b>$${sal.dutyPay.toLocaleString()}</b>`, `${dutyHours.toFixed(1)} 小時`);
+          }else{
+            h+=row('值班費',`$${sal.dutyPay.toLocaleString()}`, `${dutyHours.toFixed(1)} 小時`);
+          }
+        }
         if(sal.bdayPay>0) h+=row('生日禮金',`$${sal.bdayPay.toLocaleString()}`, sal.bdayDetail);
         if(sal.renewPay>0) h+=row('續約獎金',`$${sal.renewPay.toLocaleString()}`, sal.renewDetail);
         /* 名單一起列（2026-08-23 使用者指示）——原本只有一行「名單 4 位，無人達到 80 堂」 */
