@@ -15,9 +15,10 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 const grab=n=>{let i=src.indexOf('function '+n+'(');if(i<0)throw new Error('切不到 '+n);
   let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 
-const api=new Function('escH', grab('tkExtInfo')+'\n'+grab('tkExtLineHTML')
-  +'\nreturn {tkExtInfo,tkExtLineHTML};')(x=>String(x==null?'':x));
-const {tkExtInfo,tkExtLineHTML}=api;
+const api=new Function('escH', grab('tkExtInfo')+'\n'+grab('tkExtTagHTML')+'\n'+grab('tkExtOrigExpire')
+  +'\n'+grab('tkExtLineHTML')
+  +'\nreturn {tkExtInfo,tkExtTagHTML,tkExtOrigExpire,tkExtLineHTML};')(x=>String(x==null?'':x));
+const {tkExtInfo,tkExtTagHTML,tkExtOrigExpire,tkExtLineHTML}=api;
 
 console.log('① 從帳本反推（兩種展延都只留 note，欄位靠不住）');
 {
@@ -55,33 +56,39 @@ console.log('\n② 沒展延過的票一個字都不變');
 console.log('\n③ 卡片那一行：起始日 → 原到期日 → 展延至（使用者指定的三個日期）');
 {
   const T={id:'T1',start_date:'2026-08-01',expire_date:'2026-10-04'};
+  /* 2026-08-30 收斂（使用者：「不用文字解釋那麼多」）——
+     會員端那一行變成「教練展延 <展延後日期> · 效期至 <原到期日>」，
+     日期是哪天延的、為什麼延那些字整段退場。 */
   const h=tkExtLineHTML(T,[{ticket_id:'T1',action:'adjust',created_at:'2026-08-24T10:00:00Z',
     note:'2026-08-24 教練請假展延 7 天（2026/09/27 → 2026/10/04）'}]);
-  ok('★★ 三個日期都在，而且照順序', /起始 2026\/08\/01[\s\S]*原到期 2026\/09\/27[\s\S]*展延至 2026\/10\/04/.test(h), h);
-  ok('★★ 標出是哪一天延的、為什麼延', h.indexOf('2026/08/24・教練請假')>=0, h);
+  ok('★★ 一行講完：標籤＋展延後日期＋原到期日',
+     h.indexOf('教練展延')>=0 && h.indexOf('2026/10/04')>=0 && h.indexOf('效期至 2026/09/27')>=0, h);
+  ok('★★ 不再印「哪天延的／為什麼延」那一長串',
+     h.indexOf('店家補償')<0 && h.indexOf('起始')<0, h);
   ok('★ 延過兩次要標次數',
-     tkExtLineHTML(T,[{ticket_id:'T1',created_at:'1',note:'展延（2026-09-01 → 2026-09-08）'},
-                      {ticket_id:'T1',created_at:'2',note:'展延（2026-09-08 → 2026-09-15）'}]).indexOf('×2')>=0);
-  ok('★ 沒有起始日就寫「—」，不要印 undefined',
-     tkExtLineHTML({id:'T1',expire_date:'2026-10-04'},
-       [{ticket_id:'T1',created_at:'1',note:'展延（2026-09-27 → 2026-10-04）'}]).indexOf('起始 —')>=0);
+     tkExtLineHTML(T,[{ticket_id:'T1',created_at:'1',note:'2026-09-01 教練請假展延（2026-09-01 → 2026-09-08）'},
+                      {ticket_id:'T1',created_at:'2',note:'2026-09-08 教練請假展延（2026-09-08 → 2026-09-15）'}]).indexOf('×2')>=0);
 }
 
 console.log('\n④ 接線與語彙');
 {
-  ok('★★ 掛在票券卡的 meta 那一行底下（會員資料 → 票券）',
-     /\$\{tkExtLineHTML\(t, tkLogs, \{noChips:true\}\)\}/.test(src));
+  ok('★★ 後台那一行不再另外掛時間軸（標籤已經接在效期後面）',
+     !/tkExtLineHTML\(t, tkLogs/.test(src)
+     && /\$\{tkExtTagHTML\(t,tkLogs\)\}/.test(src));
   /* 2026-08-30 使用者：「這種有教練請假的　要在第二列效期旁邊新增· 教練展延」
      ＋「展延(不退費)也放在這」—— 兩枚都掛在效期後面。 */
-  ok('★★★ 效期旁邊的短標籤：教練展延與展延（不退費）都掛在同一支',
+  ok('★★★ 效期旁邊的短標籤：兩種都掛在同一支，而且各自帶展延後的日期',
      /function tkExtTagHTML\(t, logs\)\{/.test(src)
-     && /return \(e\.nClv\?`　·　<b class="tkx tkx-clv">教練展延/.test(src)
-     && /\+\(e\.nMan\?`　·　<b class="tkx tkx-man">展延（不退費）<\/b>`:''\)/.test(src));
+     && /<b class="tkx tkx-clv">教練展延\$\{e\.nClv>1\?` ×\$\{e\.nClv\}`:''\}<\/b>\$\{to\?` <span class="tkx-d">\$\{to\}<\/span>`:''\}/.test(src)
+     && /<b class="tkx tkx-man">展延（不退費）<\/b>/.test(src));
+  ok('★★★ 前面的「效期至」改顯示原到期日（整句＝效期至 原到期 · 教練展延 展延後）',
+     /function tkExtOrigExpire\(t, logs\)\{/.test(src)
+     && (src.match(/fmtExpire\(tkExtOrigExpire\(t,(c\.myLogs|tkLogs)\)\|\|t\.expire_date,t\)/g)||[]).length===3);
   ok('★★★ 三張有「效期／到期」那一行的卡都掛上了（後台票券夾＋會員資料的手機版與桌機版）',
      (src.match(/\$\{tkExtTagHTML\(t,\s*(tkLogs|c\.myLogs)\)\}/g)||[]).length===3);
-  ok('★★ 掛了短標籤的那幾張，底下的時間軸就不重複掛（同一件事不講兩次）',
-     /\$\{opts&&opts\.noChips\?'':chips\}/.test(src)
-     && /會員端沒有那一行 meta，所以還是把標籤帶著。/.test(src));
+  ok('★★ 會員端那兩張沒有 meta 行，所以自己講同一句',
+     (src.match(/\$\{tkExtLineHTML\(t, logs\)\}/g)||[]).length===2
+     && /格式與後台那一行完全一致：效期至（原到期）· 教練展延（展延後）。/.test(src));
   {
     const tag=new Function('escH', grab('tkExtInfo')+'\n'+grab('tkExtTagHTML')
       +'\nreturn tkExtTagHTML;')(x=>String(x==null?'':x));
@@ -97,21 +104,35 @@ console.log('\n④ 接線與語彙');
      && /效期被改過是會員最該知道的事/.test(src));
   /* 2026-08-30 使用者：「方案下方新增"教練展延"跟"展延\(不退費\)"」 */
   ok('★★★ 兩種展延各一枚標籤，而且是「兩枚」不是二選一（一張票可能兩種都有）',
-     /const chips=\(e\.nClv\?`<b class="tkx tkx-clv">教練展延/.test(src)
-     && /\+\(e\.nMan\?`<b class="tkx tkx-man">展延（不退費）/.test(src)
-     && /一張票兩種都可能有（先被教練請假延過，之後櫃檯又展延一次），所以是兩枚不是二選一。/.test(src));
+     /\(e\.nClv\?`　·　<b class="tkx tkx-clv">教練展延/.test(src)
+     && /\+\(e\.nMan\?`　·　<b class="tkx tkx-man">展延（不退費）/.test(src));
   {
-    const two=tkExtLineHTML({id:'T1',start_date:'2026-08-01'},
+    const two=tkExtTagHTML({id:'T1'},
       [{ticket_id:'T1',created_at:'1',note:'2026-08-24 教練請假展延 7 天（2026/08/30 → 2026/09/06）'},
        {ticket_id:'T1',created_at:'2',note:'展延一次：2026-09-06 → 2026-11-01（56 天）'}]);
     ok('★★★ 兩種都有時兩枚都出現', two.indexOf('教練展延')>=0 && two.indexOf('展延（不退費）')>=0, two);
-    const only=tkExtLineHTML({id:'T1',start_date:'2026-08-01'},
+    const only=tkExtTagHTML({id:'T1'},
       [{ticket_id:'T1',created_at:'1',note:'2026-08-24 教練請假展延 7 天（2026/08/30 → 2026/09/06）'}]);
     ok('★★ 只有教練展延時不會出現「不退費」那一枚', only.indexOf('展延（不退費）')<0, only);
     ok('★ 同一種延兩次要標次數',
-       tkExtLineHTML({id:'T1'},[{ticket_id:'T1',created_at:'1',note:'2026-08-01 教練請假展延（a → b）'},
-                                {ticket_id:'T1',created_at:'2',note:'2026-08-08 教練請假展延（c → d）'}])
+       tkExtTagHTML({id:'T1'},[{ticket_id:'T1',created_at:'1',note:'2026-08-01 教練請假展延（a → b）'},
+                               {ticket_id:'T1',created_at:'2',note:'2026-08-08 教練請假展延（c → d）'}])
          .indexOf('教練展延 ×2')>=0);
+    /* 2026-08-30 使用者回報：「為什麼他是展延3不是只有一堂教練請假嗎」——
+       0830 收回同週重複展延時寫的**校正紀錄**也含「展延」兩個字，被算成一次。 */
+    ok('★★★ 校正／收回的紀錄不算一次展延',
+       tkExtTagHTML({id:'T1'},[
+         {ticket_id:'T1',created_at:'1',note:'2026-08-20 教練請假展延 7 天（a → b）'},
+         {ticket_id:'T1',created_at:'2',note:'2026-08-30 校正：同一週的教練請假重複展延，收回多延的 7 天（新規則：同一週只延一次）'}
+       ]).indexOf('×2')<0);
+    eq('　 只有校正紀錄時完全不算展延',
+       tkExtTagHTML({id:'T1'},[{ticket_id:'T1',created_at:'1',note:'2026-08-30 校正：收回多延的 7 天'}]), '');
+    /* 被事後收回的那一筆展延，原紀錄會補上「已收回」—— 也不能算 */
+    ok('★★★ 被收回的展延不算，剩下的那一筆日期才是對的',
+       (x=>x.indexOf('×2')<0 && x.indexOf('2027/08/26')>=0)(
+         tkExtTagHTML({id:'T1'},[
+           {ticket_id:'T1',created_at:'1',note:'2026-08-23 教練請假展延 7 天（2027/08/19 → 2027/08/26）'},
+           {ticket_id:'T1',created_at:'2',note:'2026-08-20 教練請假展延 7 天（2027/08/26 → 2027/09/02）｜已收回（2026-08-30：同一週只延一次）'}])));
   }
   ok('★★★ 教練請假不寫 extended_from（那是「不得退費」的旗標）—— 理由寫在原地',
      /教練請假那條\*\*刻意不寫\*\* extended_from —— 那個欄位同時代表「已展延，不得退費」/.test(src)
@@ -121,13 +142,12 @@ console.log('\n④ 接線與語彙');
      && /\.md-tk-ext-clv>b\{color:var\(--green,#1F6F54\);background:var\(--sage-bg,#E4EAD9\);\}/.test(src));
   /* 2026-08-30 使用者定案：「如果是因為教練請假的展延 是可以退費的
      因為是教練的問題不應該影響會員權益」 */
-  ok('★★★ 教練請假展延要寫明「不影響退費」，櫃檯展延才寫「依合約不得退費」',
-     tkExtLineHTML({id:'T1',start_date:'2026-08-01'},
-       [{ticket_id:'T1',created_at:'1',note:'2026-08-24 教練請假展延 7 天（2026/08/30 → 2026/09/06）'}])
-         .indexOf('店家補償，<b>不影響退費</b>')>=0
-     && tkExtLineHTML({id:'T1',start_date:'2026-08-01'},
-       [{ticket_id:'T1',created_at:'1',note:'展延一次：2026-10-04 → 2026-11-01（28 天）'}])
-         .indexOf('依合約不得退費')>=0);
+  /* 收斂後卡片不再寫退費那句話 —— 規則沒變（教練請假不寫 extended_from），
+     只是不佔版面。這一條改成守「規則本身」而不是「那句字」。 */
+  ok('★★★ 退費規則仍然靠欄位而不是文案（教練請假不寫 extended_from）',
+     /function tkIsExtended\(t\)\{ return !!\(t && t\.extended_from\); \}/.test(src)
+     && !/extended_from/.test(grab('extendForCoachLeave'))
+     && /退費那件事仍然成立，只是不寫在卡片上/.test(src));
   ok('★★★ 而且程式本來就沒把教練請假算成「已展延」（tkIsExtended 只看 extended_from）',
      /function tkIsExtended\(t\)\{ return !!\(t && t\.extended_from\); \}/.test(src)
      && !/extended_from/.test(grab('extendForCoachLeave')));

@@ -364,8 +364,10 @@ ok('★ 票券卡：狀態章（已完成／已過期／已退費）移到課程
 ok('★ 票券卡：金額改放右下角、就在作廢按鈕上方',
    /<span class="tkc-money">\$\{tkMoneyHtml\(t\)\.replace\(\/\^　·　\/,''\)\}<\/span>/.test(src)
    && /\.tkc-foot\{flex-direction:column;align-items:flex-end/.test(src));
+/* 2026-08-30：展延過的票，「效期至」顯示的是**原到期日**，展延後的日期跟在
+   「教練展延」標籤後面（使用者：內容收斂，一行講完）。沒展延過的票原樣不變。 */
 ok('　　桌機與其他角色維持原本的單行底列',
-   src.includes(": `${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}"));
+   src.includes(": `${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(tkExtOrigExpire(t,c.myLogs)||t.expire_date,t)}"));
 ok('★ 預約紀錄：520px 月曆改成按月分段的清單（桌機仍是月曆）',
    (()=>{ const i=src.indexOf('if(_m2){', src.indexOf("if(PP.recView==='bookings'){"));
       const j=src.indexOf('<div class="pp-bkmon">', i), k=src.indexOf('<div class="pp-bkrow', j);
