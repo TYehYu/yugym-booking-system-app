@@ -33,13 +33,20 @@ ok('　　公式最後一行仍保留實領薪資（那是算式的結論，不�
 
 console.log('\n四格');
 {
-  /* 2026-08-02：續約那格改成可點的 <button>（看名單），所以同時收 span 與 button */
-  const cells=[...blk.matchAll(/<(?:span|button[^>]*)><b>\$\{[^}]+\}<\/b>([^<]*)<i>([^<]+)<\/i><\/(?:span|button)>/g)].map(m=>m[2]);
-  eq('★ 剛好四格：教練課／團體課（含人次）／續約／值班工時',
-     cells, ['教練課','團體課・${groupHeads} 人次','續約 ›','值班工時']);
+  /* 2026-08-02：續約那格改成可點的 <button>（看名單）。
+     2026-08-30：四格改由 z() 統一產生（0 淡化＋滑鼠提示寫原因），
+     所以不再逐字比對 HTML，改看「有幾格、標籤依序是什麼、每格拿的是哪個數字」。 */
+  const uses=(blk.match(/\+ ?z\(|return z\(|: ?z\(/g)||[]).length;
+  eq('★ 剛好四格：教練課／團體課（含人次）／續約／值班工時', uses, 4);
+  /* 只看 .pfd-stats 那一塊 —— blk 前面就有「續約」兩個字（renewCount 的註解與計算），
+     用整個 blk 找位置會排出假的順序。 */
+  const _st=blk.slice(blk.indexOf('<div class="pfd-stats">'), blk.indexOf('</div>', blk.indexOf('<div class="pfd-stats">')+400));
+  const order=['教練課','團體課','續約','值班工時'].map(x=>_st.indexOf(x));
+  ok('★ 四格順序沒變', order.every((v,i)=>v>=0 && (i===0||v>order[i-1])), order);
+
   ok('★ 團課人次併進團體課那格，不再獨立一格', !/<i>團課人數<\/i>/.test(blk));
-  ok('★ 團體課那格顯示的是堂數', /<span><b>\$\{grpList\.length\}<\/b>堂<i>團體課・/.test(blk));
-  ok('★ 值班那格顯示的是工時', /<span><b>\$\{dutyHours\.toFixed\(1\)\}<\/b>hr<i>值班工時<\/i><\/span>/.test(blk));
+  ok('★ 團體課那格顯示的是堂數', /z\(grpList\.length, grpList\.length, '堂', `團體課/.test(blk));
+  ok('★ 值班那格顯示的是工時', /z\(dutyHours, dutyHours\.toFixed\(1\), 'hr', '值班工時', _dutyWhy\)/.test(blk));
   ok('★ 版面固定一列四格（不是原本會亂折行的 flex-wrap）',
      /\.pfd-stats\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\);gap:8px;/.test(src)
      && !/\.pfd-stats\{display:flex;flex-wrap:wrap;/.test(src));
@@ -78,9 +85,10 @@ console.log('\n續約可以看名單（2026-08-02 使用者指示）');
 ok('★ 拿的是逐筆清單，不是只有張數',
    /const _renewRows=\(renewListOf\(ym, tickets, purAll, bookings, ttAll\)\|\|\{\}\)\[empId\]\|\|\[\];/.test(src)
    && /const renewCount=_renewRows\.length;/.test(src));
+/* 2026-08-30：0 張那一邊改走 z()（淡化＋寫清楚什麼才算續約），可點的條件沒變 */
 ok('★ 有續約才變成可點（0 張不給點）',
-   /\$\{renewCount\n?\s*\? `<button class="pfd-tap" onclick="pfdToggleRenew\(\)"/.test(src)
-   && /: `<span><b>0<\/b>張<i>續約<\/i><\/span>`\}/.test(src));
+   /\(renewCount\n?\s*\? `<button class="pfd-tap" onclick="pfdToggleRenew\(\)"/.test(src)
+   && /: z\(0, 0, '張', '續約',/.test(src));
 ok('★ 就地展開，不疊第二層彈窗', /function pfdToggleRenew\(\)\{/.test(src)
    && /el\.classList\.toggle\('open'\);/.test(src)
    && /<div class="pfd-nl" id="pfd-renew">/.test(src));

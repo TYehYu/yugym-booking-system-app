@@ -100,8 +100,12 @@ console.log('\n③ 三個數字要加得起來');
     const dutyOvPay=Math.round(ovHr*rate);
     return {gross:dutyPay+dutyOvPay, deduct:dutyOvPay, net:dutyPay};
   };
-  const a=calc(95, 1, 200);
-  eq('★★★ 曾邦宏 8 月：$19,200 − $200 = $19,000', [a.gross,a.deduct,a.net], [19200,200,19000]);
+  /* 曾邦宏 2026-08 的真實數字（0830 逐日對過帳）：
+     排班 96.0 小時全數打卡封頂 → 毛 96.0；重疊 2.0（8/07 團課 18:00、8/17 代課 13:00）
+     ⚠ 8/17 那一堂是**代課**（coach_id 是別人、substitute_coach_id 才是他）——
+       第一次對帳漏掉它，少算了 1 小時。查重疊一定要用 bkCoachId 的口徑。 */
+  const a=calc(94, 2, 200);
+  eq('★★★ 曾邦宏 8 月：$19,200 − $400 = $18,800', [a.gross,a.deduct,a.net], [19200,400,18800]);
   const b=calc(37.5, 2.5, 183);   // 故意挑會產生小數的組合
   ok('★★★ 時薪不整除時也一定加得起來（倒推法的意義就在這裡）',
      b.gross-b.deduct===b.net, b);
@@ -126,6 +130,24 @@ console.log('\n④ 薪資單 KPI：0 就淡化並寫原因（2026-08-30 使用�
      && /拿別的旗標來解釋會出現「說不需值班、卻有時數」的矛盾/.test(src));
   ok('★★ 續約有數字時仍然可以點開名單（淡化不能把功能弄不見）',
      /attr:' onclick="openRenewList\(\)" title="點看續約名單"', arrow:true/.test(src));
+}
+
+console.log('\n⑤ 表現與薪資彈窗那四格套同一條規則（2026-08-30 使用者：「一起」）');
+{
+  ok('★★★ 同樣是淡化不隱藏，游標 help',
+     /\.pfd-stats \.pfd-zero\{opacity:\.42;cursor:help;\}/.test(src));
+  ok('★★★ 值班 0 的四種原因用同一份說法（兩張畫面不能各講各的）',
+     (src.match(/這個職務不需要值班，所以不計值班費。/g)||[]).length===2
+     && (src.match(/這個月沒有排班，所以沒有值班時數。/g)||[]).length===2
+     && (src.match(/排班時間全部都在上課，那幾段已改領課堂費用/g)||[]).length===2);
+  ok('★★ 續約 0 的說明也一致',
+     (src.match(/只有賣票時約別標記為「續約」的才算，新約與分期後續期數不計/g)||[]).length===2);
+  ok('★★ 這一頁的教練課不含體驗課，說明要講出來（與 0731 定案一致）',
+     /這個月沒有帶教練課（體驗課不計入）。/.test(src));
+  ok('★★ 有續約時仍然是可點的按鈕（沒有被 z\(\) 吃掉）',
+     /\? `<button class="pfd-tap" onclick="pfdToggleRenew\(\)" title="點一下看名單">/.test(src));
+  ok('★ 團課 0 時不要掛「・0 人次」這種空話',
+     /團體課\$\{groupHeads\?`・\$\{groupHeads\} 人次`:''\}/.test(src));
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);

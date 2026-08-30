@@ -2079,6 +2079,10 @@ body.mc-mode .layout{padding-top:8px;}
 /* 續約那格點得開（2026-08-02 使用者：「續約要可以看名單」）：
    平常跟其他三格長得一樣，滑過去才浮出可點的樣子 —— 不能為了一格改掉整排的節奏。 */
 .pfd-stats .pfd-tap{cursor:pointer;transition:border-color .12s,background .12s;}
+/* 這個月是 0 的項目淡化（2026-08-30 使用者指示，與薪資單那四格同一條規則）——
+   淡化不隱藏；原因寫在滑鼠提示，游標改 help 讓人知道有東西可以看。 */
+.pfd-stats .pfd-zero{opacity:.42;cursor:help;}
+.pfd-stats .pfd-zero:hover{opacity:.72;}
 .pfd-stats .pfd-tap:hover{border-color:var(--green);background:color-mix(in srgb,var(--green) 5%,#fff);}
 .pfd-stats .pfd-tap i{color:var(--green);font-weight:700;}
 /* 名單預設收著，點了才展開（就地展開，不疊第二層彈窗） */
@@ -11556,8 +11560,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.1410';
-const APP_VERSION_LABEL='v260830.1410';
+const APP_VERSION = '260830.1421';
+const APP_VERSION_LABEL='v260830.1421';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40009,13 +40013,28 @@ async function openPerfDetail(empId, month){
            → 分隔線 → 薪資計算公式。原本一進來先看到五格統計，最想知道的「這個月領多少」
            要捲到最下面才看得到。「團課人數」不再獨立一格，併進團體課那格。 */''}
       <div class="pfd-hero"><span class="pfd-hero-l">實領薪資</span><span class="pfd-hero-v">${money(sal.netPay)}</span></div>
+      ${/* 0 的項目淡化＋滑鼠提示寫原因（2026-08-30 使用者指示，與薪資單那四格同一條規則）——
+           「這個月沒帶課」和「這個職務不帶課」都顯示 0 而不解釋，只會換來一通電話。 */''}
       <div class="pfd-stats">
-        <span><b>${ptDone}</b>堂<i>教練課</i></span>
-        <span><b>${grpList.length}</b>堂<i>團體課・${groupHeads} 人次</i></span>
-        ${renewCount
-          ? `<button class="pfd-tap" onclick="pfdToggleRenew()" title="點一下看名單"><b>${renewCount}</b>張<i>續約 ›</i></button>`
-          : `<span><b>0</b>張<i>續約</i></span>`}
-        <span><b>${dutyHours.toFixed(1)}</b>hr<i>值班工時</i></span>
+        ${(()=>{
+          const z=(n,val,unit,lb,why)=>n
+            ? `<span><b>${val}</b>${unit}<i>${lb}</i></span>`
+            : `<span class="pfd-zero" title="${escH(why)}"><b>${val}</b>${unit}<i>${lb}</i></span>`;
+          const _myShifts=(shifts||[]).filter(x=>x.emp_id===empId&&(x.date||'').slice(0,7)===ym);
+          /* 值班為什麼是 0，四種原因差很多，要分開講（與薪資單同一份說法） */
+          const _dutyWhy = !emp.need_duty ? '這個職務不需要值班，所以不計值班費。'
+            : (!_myShifts.length ? '這個月沒有排班，所以沒有值班時數。'
+            : (dutyCap<=0 ? '這個月有排班，但沒有打卡紀錄 —— 值班費以打卡時數計，沒打卡的當天不計。'
+            : '排班時間全部都在上課，那幾段已改領課堂費用，不重複計值班費。'));
+          return z(ptDone, ptDone, '堂', '教練課', '這個月沒有帶教練課（體驗課不計入）。')
+            + z(grpList.length, grpList.length, '堂', `團體課${groupHeads?`・${groupHeads} 人次`:''}`,
+                '這個月沒有帶團體課。')
+            + (renewCount
+                ? `<button class="pfd-tap" onclick="pfdToggleRenew()" title="點一下看名單"><b>${renewCount}</b>張<i>續約 ›</i></button>`
+                : z(0, 0, '張', '續約',
+                    '這個月沒有續約單 —— 只有賣票時約別標記為「續約」的才算，新約與分期後續期數不計。'))
+            + z(dutyHours, dutyHours.toFixed(1), 'hr', '值班工時', _dutyWhy);
+        })()}
       </div>
       ${renewCount?`<div class="pfd-nl" id="pfd-renew">
         ${_renewRows.map(r=>`<div class="nl-row">
