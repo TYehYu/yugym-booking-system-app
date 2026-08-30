@@ -24,11 +24,15 @@ const grabFn=n=>{let i=src.indexOf('function '+n+'(');if(src.slice(i-6,i)==='asy
   let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 
 console.log('① 兩條路分得清楚');
-ok('★★ 票券卡上兩顆按鈕並列，各自講明白差別',
-   /title="賣錯方案但錢不退：換一張正確的票，收款與發票不動" onclick="openSwapTicket\('\$\{t\.id\}'\)">更換方案<\/button>/.test(src)
-   && /title="金額錯了要退錢：收款金額歸零，營收同步減少" onclick="voidTicketAsk\('\$\{t\.id\}'\)">作廢<\/button>/.test(src));
-ok('★ 作廢那一支也標明它是「有退錢」那一種',
-   /這一條是「有退錢」那一種：收款金額會歸零、營收跟著減少。/.test(src));
+/* 2026-08-30 使用者定案：入口按鈕已移除，改走「作廢 →〔轉儲值金〕→ 重新儲值」。
+   「刪除更換方案　把這個功能做到[作廢]裡面…結算後會變儲值金　再另外儲值新的方案使用」
+   ⚠ 函式本體刻意留著（舊分頁按下去不會白畫面），所以以下的規則測試照跑。 */
+ok('★★★ 更換方案的入口已移除（唯一的換方案路線＝作廢轉儲值金）',
+   !/onclick="openSwapTicket\(/.test(src));
+ok('★★ 但函式沒被刪 —— 舊分頁還開著的人按下去不能變成白畫面',
+   /async function openSwapTicket\(id\)\{/.test(src));
+ok('★★ 作廢按鈕改講三選一（不再只有「歸零」一種）',
+   /title="結束這張票：可選轉儲值金（營收保留）、全額退款、或扣 20％ 手續費退款" onclick="voidTicketAsk\('\$\{t\.id\}'\)">作廢<\/button>/.test(src));
 ok('★ 使用者的原話寫在程式裡',
    /所以差別在於註銷時金額是 0 還是有數字的。」/.test(src));
 
@@ -86,9 +90,10 @@ console.log('\n③ 換的時候錢怎麼走');
 
 console.log('\n④ 作廢那一條沒被動到');
 {
-  const F=grabFn('voidTicketDo');
-  ok('★ 仍然把收款金額歸零（那是「有退錢」的正確行為）',
-     /pc\.deal_amount=0;/.test(F) && /【已作廢 原\$\$\{orig\.toLocaleString\(\)\}/.test(F));
+  const F=grabFn('_voidTicketDo');   // 2026-08-30 加了 onceAct 護欄，本體搬到底線那一支
+  ok('★★ 退款那兩種仍然沖收款（歸零或只留手續費）；轉儲值金那種**不**動收款',
+     /pc\.deal_amount=keep;/.test(F) && /【已作廢 原\$\$\{orig\.toLocaleString\(\)\}/.test(F)
+     && /if\(mode==='credit'\)\{\s*\n\s*pc\.note=/.test(F));
   ok('★ 仍然限「完全未使用」', /if\(used>0\|\|bks\.length>0\)\{ showToast\(`不可作廢/.test(grabFn('voidTicketAsk')));
 }
 

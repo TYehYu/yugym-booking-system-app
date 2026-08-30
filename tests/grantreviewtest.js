@@ -71,9 +71,15 @@ console.log('\n② 賣票當下算好的一整包（審核時照著發）');
      /async function _grantIssue\(P\)\{/.test(src)
      && /① 紙本合約／後台直接發放 —— submitGrant 算完就叫它/.test(src)
      && /② 電子合約 —— 賣票當下只把 P 存起來，等合約簽回、櫃檯確認收款，審核通過時才叫它/.test(src));
-  ok('★ 不再重算任何金額（一律吃 P）',
-     /amount_paid:\(isInstall\?Math\.max\(0,P\.firstAmount-P\.voucherAmt\):P\.paidAmount\)/.test(F)
+  /* 金額一律吃 P（表單早就關掉了，重讀畫面等於重新填一次）。
+     2026-08-30 起唯一的例外是儲值金折抵：跟折抵券同一個理由 ——
+     審核可能隔了幾天，餘額有機會被別筆用掉，所以在發放當下重讀**餘額**（不是重讀表單）。 */
+  ok('★ 不再重算任何金額（一律吃 P，不碰表單）',
+     /amount_paid:Math\.max\(0,\(isInstall\?Math\.max\(0,P\.firstAmount-P\.voucherAmt\):P\.paidAmount\)-_crUse\)/.test(F)
      && !/document\.getElementById/.test(F));
+  ok('★★ 儲值金折抵的來源是 P.creditUse，只有餘額在發放當下重讀',
+     /let _crUse=Math\.max\(0, Math\.round\(Number\(P\.creditUse\)\|\|0\)\);/.test(F)
+     && /const _bal=creditOf\(await dbGet\('members',P\.member_id\)\.catch\(\(\)=>null\)\);/.test(F));
   ok('★★ 折抵券逐張重讀，扣不滿要說出來（不會靜靜少扣）',
      /const fresh=await dbGet\('member_tickets',vid\); if\(!fresh\) continue;/.test(F)
      && /if\(left>0\) showToast\(`折抵券只扣到 \$\{P\.voucherN-left\}\/\$\{P\.voucherN\} 張（餘額不足），請至會員票券確認`\);/.test(F));

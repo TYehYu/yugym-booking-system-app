@@ -9698,6 +9698,19 @@ button.rev-kind.rev-kind-off{opacity:.5;}
 .ovd-cnt{font-style:normal;font-size:11.5px;font-weight:700;color:var(--t3);margin-left:7px;}
 .ovd-sum{background:var(--card2);border-color:transparent;box-shadow:inset 0 1px 0 var(--bd);}
 .ovd-sum b{font-size:19px;}
+.vd-modes{display:flex;flex-direction:column;gap:7px;}
+.vd-mode{display:block;width:100%;text-align:left;padding:10px 13px;border:1px solid var(--bd);
+  border-radius:10px;background:var(--card);cursor:pointer;line-height:1.6;}
+.vd-mode b{display:block;font-size:13.5px;font-weight:800;color:var(--text);}
+.vd-mode i{display:block;font-style:normal;font-size:11.5px;color:var(--t2);margin-top:2px;}
+.vd-mode:hover{border-color:var(--gold-d,#b48a56);}
+.vd-mode.on{border-color:var(--gold-d,#b48a56);background:var(--card2);
+  box-shadow:inset 0 0 0 1px var(--gold-d,#b48a56);}
+/* 儲值金籤（2026-08-30）：擺在「＋ 儲值」左邊，點開看進出明細 */
+.pp-credit{font:inherit;font-size:12px;font-weight:800;color:var(--gold-d,#b48a56);
+  background:var(--card2);border:1px solid var(--gold-d,#b48a56);border-radius:999px;
+  padding:4px 12px;cursor:pointer;white-space:nowrap;}
+.pp-credit:hover{background:var(--gold-d,#b48a56);color:#fff;}
 .ovd-note{font-size:11.5px;color:var(--t2);line-height:1.9;margin-top:12px;
   background:var(--card2);border-radius:10px;padding:10px 12px;}
 /* 30 分鐘完整退回（2026-08-08 使用者指示：「所有銷售的產品都可以在 30 分鐘內有退回的
@@ -11530,8 +11543,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.1114';
-const APP_VERSION_LABEL='v260830.1114';
+const APP_VERSION = '260830.1131';
+const APP_VERSION_LABEL='v260830.1131';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19265,7 +19278,11 @@ PAGES.g_dashboard=async function(){
      分類：有分期物件＝分期；否則該會員此前已有購票紀錄＝續約、首購＝新約。 */
   /* 自主訓練點數（簽到贈點等，$0）不屬於營收，收款名單不列（2026-07-26 使用者指示） */
   const _dayTk=(mtickets||[]).filter(t=>t.source==='purchase'&&t.purchase_date===date
-    &&t.status!=='refunded'   /* 已作廢不列今日營收/收款名單（2026-07-28） */
+    &&(t.status!=='refunded' || t.void_mode==='credit')
+    /* 已作廢不列今日營收/收款名單（2026-07-28）——
+       但「作廢→轉儲值金」例外（2026-08-30 使用者定案：「保留這筆營收　只是客人把
+       部分付款要轉去其他方案」）：錢沒有離開店裡，沖掉就是把真的收到的錢當成沒收到。
+       另一頭配合的規則是「用儲值金買的方案營收記 $0」，同一筆錢只會被認一次。 */
     &&!((((types||[]).find(x=>x.id===t.ticket_type_id)||{}).category==='自主訓練')||(t.plan_name||'').includes('自主訓練')));
   /* 票券的「當日實收」優先用當日收款紀錄的金額（2026-08-15）：
      分期票的 amount_paid 是累計實收，事後回看購買日會把後續各期一起算進去。 */
@@ -35553,7 +35570,68 @@ function hoursUntilStart(b){
   try{ const dt=new Date(b.date+'T'+(b.start_time||'00:00')+':00'); return (dt.getTime()-Date.now())/3600000; }
   catch(_){ return 999; }
 }
-/* ══ 更換方案（不退費）2026-08-08 使用者定案 ══════════════════════════════
+/* ══ 儲值金（2026-08-30 使用者定案）══════════════════════════════════════
+   使用者原話：「[更換方案] 保留這筆營收　只是客人把部分付款要轉去其他方案」
+               「不能退現　所以[作廢]要有退款跟轉儲值金的選項
+                 退款要有[全額][扣除20％手續費]的選項」
+
+   三條規則綁在一起，抽掉任何一條帳都會歪：
+   ① 轉儲值金＝錢沒離開店裡 → 原本那筆營收**保留**（票券標 void_mode='credit'，
+      _dayTk 特別放行）。一般退款作廢仍照舊沖掉。
+   ② 用儲值金買的方案，營收只記「另外收的現金」那一段 —— 全額折抵就是 $0。
+      那筆錢在買第一張票的當天就認過一次了，再認一次就是同一筆錢算兩遍。
+   ③ 儲值金**不能退現**。想拿回現金只有作廢時選退款那條路。
+      （所以它不是負債，是「已經收到、還沒指定用途」的錢。）
+
+   ⚠ 續約獎金不必為此開洞：作廢的舊票是 refunded（不算續約），
+     拿儲值金買的新票是一張正常的續約票 —— 一筆成交剛好算一次。 */
+const CREDIT_FEE_PCT=20;
+function creditOf(m){ return Math.max(0, Math.round(Number(m&&m.credit_balance)||0)); }
+/* 動餘額一律走這裡：members.credit_balance 是給畫面看的快取、member_credits 才是帳本，
+   兩邊一起寫。對不上時以帳本為準（同「票券真相在帳本」那條規則）。 */
+async function creditMove(member_id, delta, source, ticket_id, note){
+  const d=Math.round(Number(delta)||0);
+  if(!member_id || !d) return null;
+  const m=await dbGet('members',member_id);
+  if(!m) throw new Error('找不到會員');
+  const before=creditOf(m), after=before+d;
+  if(after<0) throw new Error(`儲值金不足：餘額 $${before.toLocaleString()}，要扣 $${(-d).toLocaleString()}`);
+  m.credit_balance=after;
+  await dbPut('members',m);
+  await dbPut('member_credits',{id:uid('MC'),member_id,delta:d,balance_after:after,
+    source:source||'adjust',ticket_id:ticket_id||null,note:note||null,
+    operator:(SESSION&&SESSION.id)||null,created_at:new Date().toISOString()});
+  dbCacheClear(['members','member_credits']);
+  return after;
+}
+const CREDIT_SRC_LB={void:'作廢轉入',spend:'購買折抵',adjust:'人工校正'};
+/* 進出明細：櫃檯要能回答「這 $12,000 哪裡來的」 */
+async function openCreditLog(mid){
+  const [m,rows]=await Promise.all([dbGet('members',mid).catch(()=>null),
+    dbGetAll('member_credits').catch(()=>[])]);
+  const mine=(rows||[]).filter(r=>r&&String(r.member_id)===String(mid))
+    .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  const bal=creditOf(m);
+  const sum=mine.reduce((n,r)=>n+(Number(r.delta)||0),0);
+  showModal(`<div class="modal-title">儲值金　${escH((m&&m.name)||'')}</div>
+    <div class="gr-amt-box" style="margin:2px 0 12px;">
+      <span class="gr-amt-k">目前餘額</span><span class="gr-amt-v">$${bal.toLocaleString()}</span>
+      <span class="gr-amt-s">只能拿來買方案，<b>不能退現</b></span></div>
+    ${sum!==bal?`<div class="ovd-note" style="color:var(--danger,#b5372e);margin-top:0;">
+      ⚠ 帳本加總 $${sum.toLocaleString()} 與餘額 $${bal.toLocaleString()} 對不上，請找管理員確認。</div>`:''}
+    <div class="ovd-list">${mine.length?mine.map(r=>{
+      const d=Number(r.delta)||0;
+      return `<div class="ovd-row"><span>${String(r.created_at||'').slice(0,10)}　${escH(CREDIT_SRC_LB[r.source]||r.source||'')}
+        ${r.note?`<i class="ovd-cnt">${escH(r.note)}</i>`:''}</span>
+        <b class="${d<0?'ovd-neg':''}">${d<0?'−':'+'}$${Math.abs(d).toLocaleString()}</b></div>`;
+    }).join(''):'<div class="ovd-note" style="margin-top:0;">還沒有任何進出。</div>'}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+/* ⚠ 2026-08-30：入口按鈕已移除，改走「作廢 → 轉儲值金 → 重新儲值」
+     （使用者：「刪除更換方案　把這個功能做到[作廢]裡面　因為這個功能就是要把這張方案
+       結算後換另一個方案使用　所以結算後會變儲值金　再另外儲值新的方案使用」）。
+     函式先留著不刪 —— 舊分頁按下去還會走到這裡，砍掉會變成 ReferenceError 白畫面。
+   ══ 更換方案（不退費）2026-08-08 使用者定案 ══════════════════════════════
    「發票開出去但課程選錯，這時候不退費、只更改課程票券 —— 會註銷整筆但是不退費，
      所以發票還是存在，然後重新開一筆不開發票的正確票券給客人。
      但如果是金額錯誤必須要整筆修正，就要作廢或開折讓。
@@ -35704,11 +35782,19 @@ async function _doSwapTicket(id){
   }catch(e){ done(); console.error('doSwapTicket',e); showToast('更換失敗：'+((e&&e.message)||e)); }
 }
 // refundMode：'auto'(依24h自動)、'force'(強制退)、'none'(強制不退)
-/* 票券作廢（2026-07-28 使用者指示：儲值錯誤要能取消）——
-   ⚠ 這一條是「有退錢」那一種：收款金額會歸零、營收跟著減少。
-     賣錯方案但**不退錢**的情況請走 openSwapTicket（更換方案），那條路收款與發票都不動。
+/* ══ 票券作廢（2026-07-28 建立；2026-08-30 改成三選一）════════════════════
+   原本只有一種出場方式（整筆歸零＝全額退現）。使用者定案後拆成三種，
+   因為**錢的去向不一樣，帳就不能記成一樣**：
+
+     轉儲值金    錢留在店裡 → 營收保留，金額存進會員的儲值金（不能退現）
+     退款・全額   錢退出去   → 收款歸零、營收同步減少（＝舊行為）
+     退款・扣 20% 退一部分   → 只退 80%，手續費那 20% 留下來算營收
+
+   「賣錯方案要換一張」以前走「更換方案」，現在走這裡的〔轉儲值金〕再重新儲值
+   —— 使用者要的就是「結算後會變儲值金，再另外儲值新的方案使用」。
+
    限「完全未使用」的票：已扣堂或已綁未取消預約 → 擋下並提示。
-   作廢＝status refunded、剩餘歸零、寫 ticket_logs、購買紀錄金額歸零（營收同步修正）。 */
+   ⚠ 沒選出場方式不讓按：這是動錢的操作，預設值按錯了救不回來。 */
 async function voidTicketAsk(id){
   if(!isDeskLike()) return;
   const tk=await dbGet('member_tickets',id);
@@ -35718,34 +35804,91 @@ async function voidTicketAsk(id){
   if(used>0||bks.length>0){ showToast(`不可作廢：此票已有使用紀錄（扣 ${used} 堂、綁定預約 ${bks.length} 筆），請先處理`); return; }
   const purchases=(await dbGetAll('purchases').catch(()=>[])).filter(pc=>pc.ticket_id===id);
   const amt=purchases.reduce((s,pc)=>s+(Number(pc.deal_amount)||0),0);
+  const fee=Math.round(amt*CREDIT_FEE_PCT/100);
+  window._voidMode=null; window._voidAmt=amt;
   showModal(`<div class="modal-title">作廢票券</div>
-    <div style="font-size:13px;color:var(--text);line-height:1.9;">${tk.plan_name||'票券'}　${tk.sessions_total} 堂${amt?`　·　交易金額 $${amt.toLocaleString()}`:''}<br>
-    <span style="color:var(--t2);font-size:12px;">作廢後票券失效、交易金額歸零（營收同步修正）；此操作不可復原。</span></div>
+    <div style="font-size:13px;color:var(--text);line-height:1.9;">${escH(tk.plan_name||'票券')}　${tk.sessions_total} 堂${amt?`　·　交易金額 $${amt.toLocaleString()}`:''}<br>
+    <span style="color:var(--t2);font-size:12px;">作廢後票券失效、不可復原。</span></div>
+    ${amt>0?`<div class="form-row" style="margin-top:14px;"><label>這筆錢怎麼處理 *</label>
+      <div class="vd-modes">
+        <button type="button" class="vd-mode" data-vd="credit" onclick="voidPick('credit')">
+          <b>轉儲值金</b><i>$${amt.toLocaleString()} 存進會員帳上，之後買別的方案直接折抵</i></button>
+        <button type="button" class="vd-mode" data-vd="refund_full" onclick="voidPick('refund_full')">
+          <b>退款・全額</b><i>退還 $${amt.toLocaleString()}</i></button>
+        <button type="button" class="vd-mode" data-vd="refund_fee" onclick="voidPick('refund_fee')">
+          <b>退款・扣 ${CREDIT_FEE_PCT}％ 手續費</b><i>退還 $${(amt-fee).toLocaleString()}，手續費 $${fee.toLocaleString()}</i></button>
+      </div></div>
+    <div id="vd-why" class="ovd-note" style="display:none;"></div>`
+    :`<div class="ovd-note">這張票沒有對應的收款紀錄（$0），作廢不牽涉到錢。</div>`}
     <div class="form-row" style="margin-top:12px;"><label>作廢原因</label><input id="void-reason" placeholder="例：選錯方案／重複儲值"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
-      <button class="btn btn-danger" onclick="voidTicketDo('${id}')">確認作廢</button></div>`);
+      <button class="btn btn-danger" id="vd-go"${amt>0?' disabled style="opacity:.4;cursor:not-allowed;"':''} onclick="voidTicketDo('${id}')">確認作廢</button></div>`);
 }
-async function voidTicketDo(id){
+/* 選了才解鎖確認鍵，並把「這一選會發生什麼」寫在下面 ——
+   三種的差別全在帳上看不到的地方，不寫出來櫃檯只能用猜的。 */
+function voidPick(m){
+  window._voidMode=m;
+  document.querySelectorAll('.vd-mode').forEach(b=>b.classList.toggle('on', b.dataset.vd===m));
+  const go=document.getElementById('vd-go');
+  if(go){ go.disabled=false; go.style.opacity=''; go.style.cursor=''; }
+  const amt=Number(window._voidAmt)||0, fee=Math.round(amt*CREDIT_FEE_PCT/100);
+  const w=document.getElementById('vd-why');
+  if(!w) return;
+  w.style.display='';
+  w.innerHTML=({
+    credit:`錢沒有離開店裡，所以<b>這筆營收保留</b>不動。$${amt.toLocaleString()} 會存進會員的儲值金，
+      <b>不能退現</b>、只能拿來買方案；之後用儲值金買的方案營收記 $0（同一筆錢不會被算兩次）。`,
+    refund_full:`要退 <b>$${amt.toLocaleString()}</b> 現金給客人。這筆收款歸零，當日營收同步減少。`,
+    refund_fee:`要退 <b>$${(amt-fee).toLocaleString()}</b> 現金給客人，留下的手續費 $${fee.toLocaleString()} <b>算營收</b>。`,
+  })[m]||'';
+}
+async function voidTicketDo(id){ return onceAct('voidtk:'+id, ()=>_voidTicketDo(id)); }
+async function _voidTicketDo(id){
  try{
   const reason=(document.getElementById('void-reason')?.value||'').trim();
   const tk=await dbGet('member_tickets',id);
   if(!tk||tk.status!=='usable'){ showToast('此票券不可作廢'); return; }
-  tk.status='refunded'; tk.sessions_remaining=0; tk.amount_paid=0;   // 金額歸零：今日營收/交易同步消失（原額留在紀錄）
+  const purchases=(await dbGetAll('purchases').catch(()=>[])).filter(pc=>pc.ticket_id===id);
+  const amt=purchases.reduce((s,pc)=>s+(Number(pc.deal_amount)||0),0);
+  const mode=amt>0?window._voidMode:'refund_full';   // $0 的票沒得選，走原本那條
+  if(!mode){ showToast('請先選擇這筆錢怎麼處理'); return; }
+  /* 每筆收款各自算，不要用總額算完再攤 —— 一張票有兩筆收款時（分期）會湊不回去 */
+  const keepOf=orig=>mode==='credit'?orig:(mode==='refund_fee'?Math.round(orig*CREDIT_FEE_PCT/100):0);
+  const keepSum=purchases.reduce((n,pc)=>n+keepOf(Number(pc.deal_amount)||0),0);
+  const toCredit=mode==='credit'?amt:0;
+  const MODE_LB={credit:'轉儲值金',refund_full:'全額退款',refund_fee:`退款（扣 ${CREDIT_FEE_PCT}％ 手續費）`};
+
+  /* 先把儲值金存進去，再作廢票券 —— 反過來的話存款失敗會留下一張作廢又拿不回錢的票 */
+  if(toCredit>0) await creditMove(tk.member_id, toCredit, 'void', id,
+    `作廢轉入：${tk.plan_name||'票券'}${reason?`（${reason}）`:''}`);
+
+  tk.status='refunded'; tk.sessions_remaining=0;
+  tk.void_mode=mode;
+  /* 轉儲值金保留原金額（_dayTk 會放行，營收不動）；退款只留手續費那一段 */
+  tk.amount_paid = (mode==='credit') ? (Number(tk.amount_paid)||0) : keepSum;
   await dbPut('member_tickets',tk);
   /* action 用 'adjust'——ticket_logs.action 是列舉（grant/deduct/refund/adjust/expire），
      'void' 會被資料庫拒絕（2026-07-28 作廢卡住案例） */
   await dbPut('ticket_logs',{id:uid('LG'),ticket_id:id,action:'adjust',delta:-(Number(tk.sessions_total)||0),
-    operator:SESSION.id,note:'作廢'+(reason?`：${reason}`:''),created_at:new Date().toISOString()});
-  const purchases=(await dbGetAll('purchases').catch(()=>[])).filter(pc=>pc.ticket_id===id);
+    operator:SESSION.id,note:`作廢・${MODE_LB[mode]}`+(reason?`：${reason}`:''),created_at:new Date().toISOString()});
   for(const pc of purchases){
     const orig=Number(pc.deal_amount)||0;
     if(orig===0) continue;
-    pc.deal_amount=0;
-    pc.note=((pc.note||'')+`【已作廢 原$${orig.toLocaleString()}${reason?`：${reason}`:''}】`).trim();
+    if(mode==='credit'){
+      pc.note=((pc.note||'')+`【已作廢→轉儲值金 $${orig.toLocaleString()}${reason?`：${reason}`:''}】`).trim();
+    }else{
+      const keep=keepOf(orig);
+      pc.deal_amount=keep;
+      pc.note=((pc.note||'')+`【已作廢 原$${orig.toLocaleString()}`
+        +(mode==='refund_fee'?`　退 $${(orig-keep).toLocaleString()}、留手續費 $${keep.toLocaleString()}`:'')
+        +(reason?`：${reason}`:'')+'】').trim();
+    }
     await dbPut('purchases',pc);
   }
   dbCacheClear(['member_tickets','ticket_logs','purchases']);
-  closeModal(); showToast('票券已作廢');
+  closeModal();
+  showToast(toCredit>0?`票券已作廢，$${toCredit.toLocaleString()} 已轉入儲值金`
+    :(mode==='refund_fee'?`票券已作廢，請退還 $${(amt-keepSum).toLocaleString()}`:'票券已作廢'));
   try{ if(typeof PP!=='undefined'&&PP.id===tk.member_id){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }
   catch(_){ navTo(CUR_PAGE); }
  }catch(e){ console.error('voidTicketDo',e); showToast('作廢失敗：'+(e&&e.message?e.message:e)); }
@@ -43037,9 +43180,10 @@ function ppRecordHtml(){
                 })():''}
                 ${/* 「設為共享」已移到右上角（剩餘堂數左邊）—— 2026-08-30 使用者指示：
                      那是「這張票的身分」，不是動作列該放的東西。 */''}
-                ${/* 2026-08-08 使用者定案：賣錯方案但不退錢 → 更換方案（收款與發票不動）；
-                     金額算錯要退錢 → 作廢（收款歸零）。兩條路分開放，按鈕上就講清楚差別。 */''}
-                ${(isDeskLike()&&t.status==='usable'&&t.source==='purchase')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="賣錯方案但錢不退：換一張正確的票，收款與發票不動" onclick="openSwapTicket('${t.id}')">更換方案</button>`:''}
+                ${/* 〔已移除〕更換方案（2026-08-30 使用者指示）——
+                     「把這個功能做到[作廢]裡面　因為這個功能就是要把這張方案結算後換另一個
+                       方案使用　所以結算後會變儲值金　再另外儲值新的方案使用」。
+                     賣錯方案改走：作廢 →〔轉儲值金〕→ 用儲值金重新儲值正確的方案。 */''}
                 ${/* 票券校正（2026-08-25 使用者提問：「這種調整票券功能的，有辦法讓管理員操作嗎，
                      就不用每次都要找你修改」）——哪幾堂算在這張票上（含已經上過的）。
                      管理員限定，與「校正堂數」同一級：兩顆都是事後更正帳的入口。 */''}
@@ -43054,7 +43198,7 @@ function ppRecordHtml(){
                      票券照發、客人可以先上課；錢還沒收，櫃檯之後點這顆把金額與付款方式定案。
                      ⚠ 只給櫃檯以上：這一步會寫進營收。 */''}
                 ${(isDeskLike()&&t.payment_status==='unpaid')?`<button class="btn btn-green btn-sm" style="padding:2px 10px;font-size:11px;" title="補上實際收到的金額與付款方式" onclick="tkPayOpen('${t.id}')">收款</button>`:''}
-                ${(isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger);" title="金額錯了要退錢：收款金額歸零，營收同步減少" onclick="voidTicketAsk('${t.id}')">作廢</button>`:''}
+                ${(isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger);" title="結束這張票：可選轉儲值金（營收保留）、全額退款、或扣 20％ 手續費退款" onclick="voidTicketAsk('${t.id}')">作廢</button>`:''}
               </span>
             </div>
           </div>`; };
@@ -43163,8 +43307,13 @@ function ppRecordHtml(){
            的票時自動展開，這裡改成一律展開，兩區行為一致。 */
         const histSec=hist.length?`<details class="pp-hist" open><summary>歷史紀錄（${hist.length}）</summary>
           ${hist.map(histRow).join('')}</details>`:'';
+        /* 儲值金（2026-08-30 使用者指示：「儲值金列在上方頁面＋儲值左邊」）——
+           只有餘額 > 0 才出現：沒有的人看到一顆 $0 只是噪音。 */
+        const _cr=creditOf(PP.rec);
         return `<div class="pp-card">${back}<div class="pp-card-t" style="display:flex;justify-content:space-between;align-items:center;">票券
-          ${isDeskLike()?`<button class="btn btn-green btn-sm" style="padding:5px 14px;font-size:12.5px;" onclick="ppTopUp('${PP.id}')">＋ 儲值</button>`:''}</div>
+          <span style="display:flex;align-items:center;gap:8px;">
+          ${_cr>0?`<button class="pp-credit" onclick="openCreditLog('${PP.id}')" title="作廢票券時轉入的錢；只能拿來買方案，不能退現">儲值金 $${_cr.toLocaleString()}</button>`:''}
+          ${isDeskLike()?`<button class="btn btn-green btn-sm" style="padding:5px 14px;font-size:12.5px;" onclick="ppTopUp('${PP.id}')">＋ 儲值</button>`:''}</span></div>
           <div class="tkfilter" style="margin:8px 0 12px;">${tabs}</div>
           ${/* 圖例（2026-08-01）：金點是「會員自己從手機約的」，不解釋沒人看得懂 */''}
           ${act.some(t=>((WAL.of(t.id)||{stamps:[]}).stamps||[]).some(x=>bkSelfBooked(x,PP.id,WAL.selfBk)))
@@ -46714,7 +46863,12 @@ async function openGrantModal(){
            ⚠ 分期方式**不在收款那一步改** —— 它決定發票當下開通幾堂，票已經發出去了
              才改期數會讓已開通的堂數對不上。分期要在這裡就選好。 */''}
       <div class="form-2col">
-        <div class="form-row"><label>總金額</label><input type="number" id="gt-amount" placeholder="課程總價"></div>
+        <div class="form-row"><label>總金額</label><input type="number" id="gt-amount" placeholder="課程總價" oninput="try{gtCreditHint()}catch(_){}"></div>
+        ${/* 儲值金扣抵（2026-08-30）：有餘額才由 gtCreditSync 打開。
+             折抵的那一段不記營收 —— 那筆錢在買前一張票時就認過了。 */''}
+        <div class="form-row" id="gt-credit-row" style="display:none;"><label>儲值金扣抵<span class="lb-warn" id="gt-credit-max"></span></label>
+          <input type="number" id="gt-credit" min="0" value="0" oninput="this.dataset.touched=1;gtCreditHint()">
+          <div class="gt-unitbox" id="gt-credit-hint"></div></div>
         <div class="form-row"><label>付款方式</label><select id="gt-method" onchange="var w=document.getElementById('gt-splitcash-wrap');if(w)w.style.display=this.value==='split'?'':'none';"><option value="cash">現金</option><option value="transfer">匯款</option><option value="split">現金＋匯款</option></select></div>
       </div>
       ${/* 拆帳（2026-08-12 使用者需求：一筆 14400＝現金 7200＋匯款 7200）：填現金收多少，其餘記匯款 */''}
@@ -46830,9 +46984,38 @@ function gtSaleKindSync(){
   if(inst){ sel.value='installment'; sel.dataset.touched=''; }
 }
 // 發放票券步驟切換
+/* 儲值金扣抵（2026-08-30）——進到「購買資訊」才讀餘額：會員是在上一步才選的。
+   預設把能折的都折掉（櫃檯十次有九次就是要用完），但改過之後就不再自動覆蓋。 */
+async function gtCreditSync(){
+  const row=document.getElementById('gt-credit-row'); if(!row) return;
+  const mid=(document.getElementById('gt-member')||{}).value;
+  const m=mid?await dbGet('members',mid).catch(()=>null):null;
+  const bal=creditOf(m);
+  window._gtCreditMax=bal;
+  const inp=document.getElementById('gt-credit');
+  if(bal<=0){ row.style.display='none'; if(inp){ inp.value=0; delete inp.dataset.touched; } return; }
+  row.style.display='';
+  const lb=document.getElementById('gt-credit-max'); if(lb) lb.textContent=`餘額 $${bal.toLocaleString()}`;
+  if(inp && !inp.dataset.touched){
+    const amt=Number((document.getElementById('gt-amount')||{}).value)||0;
+    inp.value=Math.min(bal, amt);
+  }
+  gtCreditHint();
+}
+function gtCreditHint(){
+  const box=document.getElementById('gt-credit-hint'); if(!box) return;
+  const bal=Number(window._gtCreditMax)||0;
+  if(bal<=0){ box.textContent=''; return; }
+  const amt=Number((document.getElementById('gt-amount')||{}).value)||0;
+  const inp=document.getElementById('gt-credit');
+  const raw=Number(inp&&inp.value)||0;
+  const use=Math.max(0,Math.min(raw,bal,amt));
+  if(inp && raw!==use) inp.value=use;   // 夾在「餘額」與「總金額」之間，不讓它變成負數收款
+  box.textContent=use>0?`折抵後還要收 $${(amt-use).toLocaleString()}（營收只記這一段）`:'不使用儲值金';
+}
 function grantGoStep(n){
   document.querySelectorAll('.gt-step').forEach(s=>s.style.display=(Number(s.dataset.gtstep)===n)?'':'none');
-  if(n===2){ refreshGrantInfo(); try{ gtSaleKindSync(); }catch(_){} } // 進購買資訊時刷新方案資訊與預設金額
+  if(n===2){ refreshGrantInfo(); try{ gtSaleKindSync(); }catch(_){} try{ gtCreditSync(); }catch(_){} } // 進購買資訊時刷新方案資訊與預設金額
   // 約別預設（2026-07-27）：會員名下已有教練課類票 → 預選「續約」；櫃台改過就不再動
   if(n===2)(async()=>{ try{
     const mid=(document.getElementById('gt-member')||{}).value;
@@ -47431,6 +47614,15 @@ async function submitGrant(){
     Number(window._gtVoucherMax)||0, _vCap));
   const voucherAmt=voucherN*300;
   const paidAmount=Math.max(0,dealAmount-voucherAmt);   // 非分期實收（分期見下方 firstAmount 折抵）
+  /* ── 儲值金扣抵（2026-08-30）───────────────────────────────────
+     折抵的那一段**不記營收**：那筆錢在買前一張票的當天就已經認過一次。
+     ⚠ 不與分期併用：分期的期款要一期一期算，折抵要掛在哪一期沒有唯一答案，
+       湊出來的分法之後對帳一定會吵架。要用就一次付清。 */
+  const creditUse=Math.max(0,Math.min(
+    Math.round(Number((document.getElementById('gt-credit')||{}).value)||0),
+    Number(window._gtCreditMax)||0, paidAmount));
+  if(isInstall && creditUse>0){
+    showToast('儲值金不能和分期併用（期款要分期算）——請改成一次付清，或先不折抵'); return; }
   /* ── 賣票當下算好的一整包（2026-08-08）──────────────────────────────
      電子合約要等客人簽名＋確認收款才發票券（見下方），中間可能隔幾小時到幾天。
      那時候這個表單早就關掉了 —— 所以把算好的數字原封不動存起來，
@@ -47444,7 +47636,7 @@ async function submitGrant(){
            unit_price:unitPrice },
     total, unitPrice, listPrice, dealAmount, method, splitCash, installCount, note,
     isInstall, unlocked, firstAmount, installment,
-    voucherN, voucherAmt, paidAmount,
+    voucherN, voucherAmt, paidAmount, creditUse,
     /* 折抵券審核當下要重新讀一次餘額（可能被別筆用掉了）→ 只存 id 順序 */
     voucherTkIds:(window._gtVoucherTks||[]).slice()
       .sort((a,b)=>(a.expire_date||'9999').localeCompare(b.expire_date||'9999')).map(v=>v.id),
@@ -47470,13 +47662,13 @@ async function submitGrant(){
        showModal 會把表單整個拆掉（0828 08:00 事故的同一個坑）。 */
   if(P.payment_status==='paid'){
     const _ctRemote=(window._grantSalesActive && window._ctBody && window._ctSignType==='remote');
-    const _due=(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount);
+    const _due=Math.max(0,(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount)-creditUse);
     const _payLb={cash:'現金',transfer:'匯款',card:'刷卡',split:'現金＋匯款'}[method]||method||'—';
     if(!(await bkAskOverlay(`<div class="modal-title">確認已經收到錢了嗎？</div>
       <div class="gr-amt-box" style="margin:2px 0 12px;">
         <span class="gr-amt-k">應收款項</span>
         <span class="gr-amt-v">$${_due.toLocaleString()}</span>
-        <span class="gr-amt-s">${escH(_payLb)}${isInstall?`　·　分 ${installCount} 期，這是<b>第 1 期</b>（總額 $${dealAmount.toLocaleString()}）`:''}${voucherN?`　·　已折抵券 ×${voucherN}（−$${voucherAmt.toLocaleString()}）`:''}</span>
+        <span class="gr-amt-s">${escH(_payLb)}${isInstall?`　·　分 ${installCount} 期，這是<b>第 1 期</b>（總額 $${dealAmount.toLocaleString()}）`:''}${voucherN?`　·　已折抵券 ×${voucherN}（−$${voucherAmt.toLocaleString()}）`:''}${creditUse?`　·　儲值金折抵 −$${creditUse.toLocaleString()}`:''}</span>
       </div>
       <div style="font-size:12.5px;color:var(--text);line-height:1.9;">
         ${escH((_mem0&&_mem0.name)||'')}　·　${escH(plan.name||'')}　·　${total} 堂<br>
@@ -47571,10 +47763,17 @@ async function submitGrant(){
 async function _grantIssue(P){
   const plan=P.plan||{};
   const isInstall=!!P.isInstall;
+  /* 儲值金扣抵（2026-08-30）——跟折抵券一樣在發放當下重讀餘額：
+     電子合約那條路可能隔了幾天才審核，中間餘額有機會被別筆用掉。 */
+  let _crUse=Math.max(0, Math.round(Number(P.creditUse)||0));
+  if(_crUse>0){
+    const _bal=creditOf(await dbGet('members',P.member_id).catch(()=>null));
+    if(_crUse>_bal){ showToast(`儲值金只剩 $${_bal.toLocaleString()}，本次折抵改為 $${_bal.toLocaleString()}`); _crUse=_bal; }
+  }
   const t={id:uid('TK'),member_id:P.member_id,ticket_type_id:plan.ticket_type_id,
     source_plan_id:P.plan_id,plan_name:plan.name,format:plan.format||null,source:'purchase',
     unit_price:P.unitPrice,
-    amount_paid:(isInstall?Math.max(0,P.firstAmount-P.voucherAmt):P.paidAmount),   // 營收：分期只記第1期實收（扣折抵）；一次付清記折抵後實收
+    amount_paid:Math.max(0,(isInstall?Math.max(0,P.firstAmount-P.voucherAmt):P.paidAmount)-_crUse),   // 營收：分期只記第1期實收（扣折抵）；一次付清記折抵後實收；儲值金折抵那段不算營收
     /* 效期自「第一堂預約」起算（2026-07-24 使用者定案）：售票當下不寫 expire_date，
        改把方案效期天數記在 valid_days，等 deductTicket 首次扣課時才算到期日。
        start_date / expire_date / activated_at 皆留空＝尚未開通。 */
@@ -47621,18 +47820,28 @@ async function _grantIssue(P){
       if(left>0) showToast(`折抵券只扣到 ${P.voucherN-left}/${P.voucherN} 張（餘額不足），請至會員票券確認`);
     }catch(e){ console.error('折抵券扣點失敗',e); showToast('折抵券扣點失敗，請至會員票券手動處理'); }
   }
+  /* 儲值金真的扣下去（票券已經建好，扣失敗就會有一張沒付到錢的票 →
+     所以失敗要講清楚，不能靜靜吞掉） */
+  if(_crUse>0){
+    try{ await creditMove(P.member_id, -_crUse, 'spend', t.id, `購買折抵：${plan.name||'方案'}`); }
+    catch(e){ console.error('儲值金扣抵失敗',e); _crUse=0;
+      showToast('儲值金扣抵失敗，這筆先當成全額收現，請至會員票券確認：'+((e&&e.message)||e));
+      try{ t.amount_paid=(isInstall?Math.max(0,P.firstAmount-P.voucherAmt):P.paidAmount);
+           await dbPut('member_tickets',t); }catch(_){}
+    }
+  }
   // 建立購買紀錄（分期只記第1期實收金額；未收期款不列入營收）
   try{
-    const _dealRec=(isInstall?Math.max(0,P.firstAmount-P.voucherAmt):P.paidAmount);
+    const _dealRec=Math.max(0,(isInstall?Math.max(0,P.firstAmount-P.voucherAmt):P.paidAmount)-_crUse);
     /* 拆帳（2026-08-12）：現金以填的為準（夾在 0～實收），匯款＝實收−現金 */
     const _paySplit=(P.method==='split')?{cash:Math.max(0,Math.min(Number(P.splitCash)||0,_dealRec)),
       transfer:_dealRec-Math.max(0,Math.min(Number(P.splitCash)||0,_dealRec))}:null;
     await dbPutPurchaseSafe({id:uid('PUR'),member_id:P.member_id,plan_id:P.plan_id,ticket_id:t.id,plan_name:plan.name,
-      list_price:P.listPrice,deal_amount:_dealRec,
+      list_price:P.listPrice,deal_amount:_dealRec,credit_used:(_crUse||null),
       payment_method:P.method,pay_split:_paySplit,installment_count:P.installCount,   /* 2026-08-05：分期第 1 期記折抵後實收，與 amount_paid 同口徑 */
       invoice_type:'none',
       coach_id:P.sold_by||null,   // 業績歸屬（2026-07-21 銷售彈窗）
-      note:(P.note||'')+(isInstall?`（分期第1期／總額 $${(P.dealAmount||0).toLocaleString()}）`:'')+(P.voucherN?`（折抵券×${P.voucherN} −$${(P.voucherAmt||0).toLocaleString()}）`:''),
+      note:(P.note||'')+(isInstall?`（分期第1期／總額 $${(P.dealAmount||0).toLocaleString()}）`:'')+(P.voucherN?`（折抵券×${P.voucherN} −$${(P.voucherAmt||0).toLocaleString()}）`:'')+(_crUse?`（儲值金折抵 −$${_crUse.toLocaleString()}）`:''),
       operator:SESSION.id,source:'backoffice',created_at:new Date().toISOString()});
   }catch(e){ /* 購買紀錄失敗不阻斷發票券，僅記錄 */ console.error('purchase log fail',e); showToast('付款紀錄寫入失敗：'+(e.message||e)); }
   t._usedVouchers=_usedVouchers;   // 30 分鐘退回時要把折抵券還回去
