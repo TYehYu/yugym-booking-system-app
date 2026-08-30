@@ -3023,6 +3023,15 @@ tr:hover td{background:var(--card2);}
 .gfa-day i{font-style:normal;margin-left:5px;font-size:10px;font-weight:800;color:var(--green);}
 .gfa-day-now{background:var(--sage-bg,#E4EAD9);color:var(--green);}
 .gfa-day-more{background:none;color:var(--t3);font-weight:600;}
+/* 展延過的票：把「起始 → 原到期 → 展延至」攤在卡片上（2026-08-30 使用者指示）。
+   金色＝「可以做但要知道」那一階（紅>金>綠），它不是警告、但也不是常態。 */
+.md-tk-ext{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin-top:6px;
+  font-size:11.5px;color:var(--t2);font-variant-numeric:tabular-nums;}
+.md-tk-ext>b{font-size:10.5px;font-weight:800;color:var(--gold-d,#9a7344);
+  background:#f7f1e4;border-radius:999px;padding:2px 8px;}
+.md-tk-ext i{font-style:normal;color:var(--t3);}
+.md-tk-ext-to{font-weight:800;color:var(--gold-d,#9a7344);}
+.md-tk-ext-why{color:var(--t3);}
 .gadd-tkpick:empty{display:none;}
 .gadd-tkpick{display:flex;flex-direction:column;gap:7px;margin:9px 0 0;}
 .gadd-tktitle{font-size:11.5px;font-weight:800;color:var(--t2);}
@@ -11507,8 +11516,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260830.0945';
-const APP_VERSION_LABEL='v260830.0945';
+const APP_VERSION = '260830.0952';
+const APP_VERSION_LABEL='v260830.0952';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12496,6 +12505,44 @@ function tkIsExtended(t){ return !!(t && t.extended_from); }
    —— 而會員端 V2 的卡片根本不畫那一段（見 mtkV2 那個分支提早 return），
    所以真正需要知道這件事的人反而看不到。抽成一支，每個畫得出票券的地方都掛同一句。 */
 const TK_EXT_TEXT='此方案已展延，不得退費';
+/* 展延過的票要把整段時間軸攤出來（2026-08-30 使用者指示：「幫我把有展延過的課程
+   在課卡上顯示出來 起始日-到期日-展延日」）——
+
+   兩種展延都只改 expire_date，看得到的只有「現在幾號到期」，看不出來延過、
+   更看不出原本幾號到期：
+     ・櫃檯手動展延（tkExtend）      → 有 extended_from／extended_at 兩個欄位
+     ・教練請假自動展延（extendForCoachLeave）→ 只寫 note 與一筆 ticket_logs
+   ⚠ 教練請假那條**刻意不寫** extended_from —— 那個欄位同時代表「已展延，不得退費」
+     （合約〔展延規則〕），而教練請假是店家的補償，不該讓會員因此失去退費權。
+   所以這裡一律從帳本反推：兩條路都會留一筆帶「展延」的 adjust 紀錄。
+   ⚠ 解析靠 note 裡的「YYYY-MM-DD → YYYY-MM-DD」，那個格式是我們自己寫的
+     （見 tkExtend 與 extendForCoachLeave）；解析不出來就只回次數，不硬猜日期。 */
+function tkExtInfo(t, logs){
+  if(!t) return null;
+  const mine=(logs||[]).filter(l=>l && String(l.ticket_id)===String(t.id)
+    && String(l.note||'').indexOf('展延')>=0)
+    .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  if(!mine.length) return null;
+  const pick=n=>{ const m=String(n||'').match(/(\d{4}[-\/]\d{2}[-\/]\d{2})\s*→\s*(\d{4}[-\/]\d{2}[-\/]\d{2})/);
+    return m?{from:m[1].replace(/\//g,'-'), to:m[2].replace(/\//g,'-')}:null; };
+  const first=pick(mine[0].note), last=pick(mine[mine.length-1].note);
+  return { n:mine.length,
+    from:(first&&first.from)||null,                                   // 最初的到期日
+    to:(last&&last.to)||(t.expire_date?String(t.expire_date).slice(0,10):null),
+    at:String(mine[mine.length-1].created_at||'').slice(0,10)||null,  // 最後一次展延的日子
+    why:String(mine[mine.length-1].note||'').indexOf('教練請假')>=0?'教練請假':'櫃檯展延' };
+}
+/* 課卡上那一行：起始日 → 原到期日 → 展延日（使用者指定的三個日期）。
+   沒展延過就回空字串，一般票券的卡片一個字都不會變。 */
+function tkExtLineHTML(t, logs){
+  const e=tkExtInfo(t, logs); if(!e) return '';
+  const f=x=>x?String(x).slice(0,10).replace(/-/g,'/'):'—';
+  return `<div class="md-tk-ext"><b>展延</b>${e.n>1?` ×${e.n}`:''}
+    <span>起始 ${f(t.start_date)}</span><i>→</i>
+    <span>原到期 ${f(e.from)}</span><i>→</i>
+    <span class="md-tk-ext-to">展延至 ${f(e.to)}</span>
+    <span class="md-tk-ext-why">${f(e.at)}・${escH(e.why)}</span></div>`;
+}
 function tkExtBadge(t, cls){
   return tkIsExtended(t) ? `<span class="tk-noref${cls?' '+cls:''}" title="${TK_EXT_TEXT}（合約〔展延規則〕）">${TK_EXT_TEXT}</span>` : '';
 }
@@ -36560,6 +36607,7 @@ async function openMemberDetail(member_id){
       <div class="mck-dots2" style="margin:10px 0 12px;">${circles}</div>
       <div class="md-tk-foot">
         <span class="md-tk-meta">${tkBuyDateHtml(t)}　·　到期 ${fmtExpire(t.expire_date,t)}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span>${tkMoneyHtml(t)}</span>
+        ${tkExtLineHTML(t, tkLogs)}
         ${(inst && (t.unlocked_sessions||0)<total && (isDeskLike()))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
         ${canShare?`<button class="btn btn-ghost btn-sm" onclick="openTicketShare('${t.id}','${member_id}')">${_others.length?'共享設定':'設為共享'}</button>`:''}
         ${extraBtn||''}
