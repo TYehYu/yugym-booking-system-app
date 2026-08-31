@@ -22,4 +22,19 @@ if(typeof fn!=='function') throw new Error('_bkenv：切出來的不是函式');
 if(fn({coach_leave:true,status:'completed'})!==true
    || fn({coach_leave:true,status:'booked'})!==false) throw new Error('_bkenv：切到的函式行為不對');
 globalThis.bkLeaveRefunded=fn;
-module.exports={bkLeaveRefunded:fn};
+
+/* 2026-08-31 追加 tkUsableBy／tkSharedIds（同樣的理由）——
+   連續預約的「還剩幾堂」原本寫成 `t.member_id===mid`，共享票就算成 0 堂
+   （林繼霖用林政緯共享的團課票，那扇窗直接不給約）。改吃 tkUsableBy 之後，
+   只切了團課那一段的沙箱就會缺這一支。 */
+const i2=src.indexOf('function tkSharedIds(t){');
+const j2=src.indexOf('// 找會員某類型最早到期的可用票券');
+if(i2<0||j2<0||j2<i2) throw new Error('_bkenv：切不到 tkUsableBy 那一段');
+const tkEnv=new Function(src.slice(i2,j2)+'\nreturn {tkUsableBy,tkSharedIds};')();
+if(tkEnv.tkUsableBy({member_id:'A'},'A')!==true
+   || tkEnv.tkUsableBy({member_id:'A',shared_with:['B']},'B')!==true
+   || tkEnv.tkUsableBy({member_id:'A'},'B')!==false) throw new Error('_bkenv：tkUsableBy 行為不對');
+globalThis.tkUsableBy=tkEnv.tkUsableBy;
+globalThis.tkSharedIds=tkEnv.tkSharedIds;
+
+module.exports={bkLeaveRefunded:fn, tkUsableBy:tkEnv.tkUsableBy, tkSharedIds:tkEnv.tkSharedIds};

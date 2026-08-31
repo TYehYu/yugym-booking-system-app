@@ -13,6 +13,7 @@
      ・「連續預約」的視窗跳出來時，第一堂其實已經扣掉了（0829 傍晚）
      ・上一步退回去再送出 → 本堂扣兩次 */
 const fs=require('fs');
+require('./_bkenv.js');   // tkUsableBy／bkLeaveRefunded（見 _bkenv.js，勿在沙箱寫假貨）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
