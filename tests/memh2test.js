@@ -108,9 +108,13 @@ t('換週不再因為自主訓練而被擋掉', !/if\(s\.filter==='self'\) retur
 
 // ── 課卡 ──
 t('課卡點下去走 memh2Tap（簽到），不是編輯', /onclick="memh2Tap\('\$\{b\.id\}'\)/.test(html));
-t('右下角教練名左邊有手勢圖示', /<span class="a2-coach">\$\{MEMH2_TAPIC\}/.test(html));
-t('時間在右上、教練在右下（沿用雙欄課卡骨架）',
-  html.indexOf('<span class="a2-time">')<html.indexOf('<span class="a2-coach">'));
+/* 2026-08-31 使用者指示：「日期時間＋教練靠左　圓形簽到鈕靠右」——
+   時間與教練搬到左欄同一行（.a2-when），右欄改放快速簽到鈕。
+   手勢圖示跟著搬過來：它講的是「整張卡可以點」，與右邊那顆簽到是兩件事。 */
+t('時間與教練同一行、擺在左欄；手勢圖示跟著', /<div class="a2-when"><span class="a2-time">/.test(html)
+  && /<span class="a2-tapic">\$\{MEMH2_TAPIC\}<\/span>/.test(html));
+t('時間排在教練前面', html.indexOf('<span class="a2-time">')<html.indexOf('<span class="a2-coach">'));
+t('右欄改成快速簽到鈕', /<div class="a2-ck">\$\{memh2CkBtn\(b, st, _lk\)\}<\/div>/.test(html));
 t('票券顯示第幾堂／共幾堂', /第 \$\{_nth\} 堂／共 \$\{tk\.sessions_total\} 堂/.test(html));
 /* 0822（使用者）：「手機版的課卡不用顯示金色外框 那個是給員工看的」 */
 t('課卡不加金框（金框在員工端是「逾時未簽到」的意思）', !/mh2-ck'/.test(html)

@@ -46,11 +46,14 @@ console.log('\n② 每一條都掛在 .memh2 底下（不可以動到共用的�
   const rules=['\\.memh2 \\.admh2-card\\{min-height:var\\(--mh2-cardh,0px\\);align-content:center;',
                '\\.memh2 \\.admh2-card::before\\{width:6px;\\}',
                '\\.memh2 \\.admh2-card \\.a2-main\\{gap:3px;\\}',
-               '\\.memh2 \\.admh2-card \\.a2-l1\\{font-size:13\\.5px;\\}',
+               /* 2026-08-31 又升一級（使用者：「課卡的大小可以比現在大一點　因為長輩看會有點吃力」）；
+                  教練名搬到左欄的時間列之後，封頂改由 .a2-when 那一行統一夾。 */
+               '\\.memh2 \\.admh2-card \\.a2-l1\\{font-size:14\\.5px;\\}',
                '\\.memh2 \\.admh2-card \\.a2-l2\\{font-size:19px;line-height:1\\.3;\\}',
-               '\\.memh2 \\.admh2-card \\.a2-l3\\{font-size:12\\.5px;\\}',
+               '\\.memh2 \\.admh2-card \\.a2-l2\\{font-size:21px;\\}',
+               '\\.memh2 \\.admh2-card \\.a2-l3\\{font-size:13\\.5px;\\}',
                '\\.memh2 \\.admh2-card \\.a2-time\\{font-size:17px;\\}',
-               '\\.memh2 \\.admh2-card \\.a2-coach\\{font-size:12\\.5px;max-width:104px;\\}'];
+               '\\.memh2 \\.admh2-card \\.a2-coach\\{font-size:13\\.5px;max-width:none;\\}'];
   eq('★★ 八條新樣式全部有 .memh2 前綴', rules.filter(r=>!new RegExp(r).test(src)), []);
   ok('★★ 共用的那條課卡樣式一個字都沒動（管理員／教練手機首頁不受影響）',
      /\.admh2-card\{position:relative;overflow:hidden;background:#fff;border-radius:14px;\s*\n\s*padding:10px 9px 10px 13px;/.test(src));
@@ -66,8 +69,12 @@ console.log('\n③ 放大之後不能弄壞既有的三件事');
 ok('★ 卡片仍是三欄 grid（章／內容／時間教練），只是加了垂直置中',
    /\.admh2-card\{[^}]*display:grid;grid-template-columns:auto minmax\(0,1fr\) auto;/.test(src)
    && /\.memh2 \.admh2-card\{min-height:var\(--mh2-cardh,0px\);align-content:center;/.test(src));
-ok('★★ 教練欄的封頂仍是固定 px（0822 踩過：改百分比整欄會塌）',
-   /max-width:104px;\}/.test(src)
+/* 2026-08-31：教練名不再是 grid item（搬進左欄的 .a2-when 那一行），
+   封頂改由那一行的 overflow 夾。0822 那條「不可以改成百分比」的教訓照樣留著。 */
+ok('★★ 教練名改由時間列統一夾寬（不再自己吃固定 px 的封頂）',
+   /\.memh2 \.admh2-card \.a2-when\{display:flex;align-items:baseline;gap:6px;min-width:0;/.test(src)
+   && /white-space:nowrap;overflow:hidden;\}/.test(src)
+   && /\.memh2 \.admh2-card \.a2-when \.a2-coach\{min-width:0;overflow:hidden;text-overflow:ellipsis;\}/.test(src)
    && /仍然是固定 px，不可以改成百分比 —— 它是 grid item，百分比會對自己的欄寬算/.test(src));
 ok('★ 課卡仍然 flex:0 0 auto（0822 踩過：會被壓扁重疊）',
    /\.admh2-cards>\*\{flex:0 0 auto;\}/.test(src));
