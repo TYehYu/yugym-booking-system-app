@@ -51,9 +51,10 @@ console.log('\n①b 視窗裡要標出這張預約的時間');
      /mms\.concat\(\[_origM\]\)\.sort\(\(a,b\)=>a-b\)/.test(src));
   ok('★★★ 視窗上方寫出原時段與去向',
      /<div class="qs-orig">原時段　<b>\$\{String\(_rs\.origDate\)\.slice\(5\)\.replace\('-','\/'\)\}　\$\{String\(_rs\.origTime\)\.slice\(0,5\)\}<\/b>　→　請選新的時段<\/div>/.test(src));
-  ok('★★ 標題與說明跟著換（改期不另扣點）',
+  /* 2026-08-31：提示改成只留四條標籤說明，「改期不另扣點」單獨多加一條 */
+  ok('★★ 標題跟著換；改期時多一條「不另扣點」',
      /\$\{_rs\?'更改自主訓練時間':'預約自主訓練'\}/.test(src)
-     && /\$\{_rs\?'改期不另外扣點；開課 24 小時前可改':'每格 60 分鐘・扣 1 點'\}/.test(src));
+     && /\$\{_rs\?'<li>改期不另外扣點；開課 24 小時前可改<\/li>':''\}/.test(src));
   ok('★★★ 改期要用 reschedId 重起 msbStart（沿用舊狀態會改到別筆）',
      /if\(reschedId\)\{ try\{ await msbStart\(reschedId\); \}catch\(_\)\{\} \}/.test(src)
      && /沿用舊的 _msb 會拿到上一次的狀態，改到別筆去/.test(src));

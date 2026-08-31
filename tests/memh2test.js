@@ -416,8 +416,14 @@ t('★★ 從底部圓卡點進來時帶著那一點的到期日，日期列只�
 t('★★ 視窗裡換日期時效期篩選不能掉（客人會「看一下 7 點、再看一下 8 點」）',
     /onclick="memh2SelfSlots\('\$\{x\}','\$\{_lim\}'\$\{_rs\?`,'\$\{_rs\.id\}'`:''\}\)"/.test(QS)
     && /日期列會突然變回所有票的聯集 —— 剛做的按點篩選等於只在第一次生效。/.test(s));
-t('★★ 說明也改成講「這一點」的效期，不是講所有票的最晚那天',
-    /if\(_lim\) return `這一點的效期到 \$\{_lim\.replace\(\/-\/g,'\/'\)\}`;/.test(QS));
+/* 2026-08-31 使用者指示：提示只留四條「標籤是什麼意思」，
+   效期那一條（以及扣點、哪些時段不列）整段移除 —— 看過實機後決定不需要。
+   ⚠ 日期列的篩選邏輯本身沒動，只是不再寫出來。 */
+t('★★ 效期那一條說明已移除，但篩選邏輯還在',
+    /* 註解裡還留著 _limTxt 三個字（那是還原用的線索），只判有沒有被當成變數用 */
+    !/\$\{_limTxt/.test(QS) && !/const _limTxt=/.test(QS)
+    && /const _okDay=x=>x>=_t0 && \(!_lim \|\| x<=_lim\)/.test(QS)
+    && /要還原就把 _limTxt 加回 qs-note/.test(s));
 t('　 為什麼要按點篩選（白挨一次擋）—— 理由寫在原地',
     /點的是 9\/3 到期那一點、卻看得到 9\/10，按下去才被擋，那個擋是白挨的。/.test(s));
 /* 2026-08-31 使用者：「會員選了自主訓練-點了某時段 但沒有返回的按鈕
@@ -432,14 +438,19 @@ t('★★ 沒有來路就照舊關掉（舊版下方訂位表、改期那兩條�
 t('★★ 旗標用完就清（回到挑時段那頁、送出預約各清一次）',
   /window\._mh2SlotBack=null;        \/\/ 回到挑時段這一頁＝來路重新開始/.test(s)
   && /window\._mh2SlotBack=null;        \/\/ 送出＝這一輪結束，來路不留/.test(s));
-t('★★ 日期列放大（52→70px，字級各升一級）',
-    /\.qs-day\{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;\s*\n\s*min-width:70px;padding:10px 10px;/.test(s)
-    && /\.qs-day b\{font-family:var\(--num\),inherit;font-size:19px;/.test(s));
+/* 2026-08-31 三修：高度寫死＋內容置中 —— 前兩版靠 line-height／內距留空間，
+   手機上數字還是被切在卡片底緣（使用者連續回報三次）。 */
+t('★★ 日期卡高度寫死、內容置中（不再靠行高比例留空間）',
+    /\.qs-day\{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;\s*\n\s*min-width:70px;height:68px;/.test(s)
+    && /\.qs-day b\{font-family:var\(--num\),inherit;font-size:19px;font-weight:800;line-height:1\.1;/.test(s));
   t('　 與課卡頁那支 selfOk 同一個判斷式（兩處要說同一件事）',
     /const selfOk=ds=>ds>=today && selfRanges\.some\(\(\[st,ex\]\)=>\(!st\|\|ds>=st\)&&\(!ex\|\|ds<=ex\)\);/.test(s));
-  t('★★ 效期寫在說明裡（不是把不能用的日子偷偷藏掉）',
-    /\$\{_limTxt\?`<li>\$\{_limTxt\}，上方只列效期內約得到的日子<\/li>`:''\}/.test(QS)
-    && /這一列的定義就是「可預約日」/.test(s));
+  t('★★ 提示只留四條標籤說明（2026-08-31 使用者指示）',
+    /<li>沒有標示就是訓練架<\/li>/.test(QS)
+    && /<li>標團課教室就是訓練架已滿約<\/li>/.test(QS)
+    && /<li>標跑步機就是訓練架跟團課教室都已滿約<\/li>/.test(QS)
+    && /<li>跑步機可以選擇一次預約 1 台或 2 台<\/li>/.test(QS)
+    && !/每格 60 分鐘・扣 1 點<\/li>/.test(QS));
   /* 2026-08-31 使用者定案：14 → 7 天。375px 的手機一列只放得下 4 顆
      （每顆 70px＋間距 8），列 14 天就是塞滿還要橫捲，看起來像被壓縮。 */
   t('★ 封頂 7 天，超過的用一枚「\+N」說一聲（不默默截掉）',
