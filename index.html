@@ -11573,8 +11573,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260831.1720';
-const APP_VERSION_LABEL='v260831.1720';
+const APP_VERSION = '260831.1732';
+const APP_VERSION_LABEL='v260831.1732';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24749,7 +24749,9 @@ async function amvRecurCtx(b){
   if(!(max>0)) return {ok:false,max:0,why:'這位會員目前沒有可用票券，無法往後連排；請先儲值或續約。'};
   return {ok:true,max,why:''};
 }
-async function admhMoveDo(id){
+/* 防連點（2026-08-31）：調課本身只動一筆，但勾了連續預約就會一次建一整串。 */
+async function admhMoveDo(id){ return onceAct('admhmove:'+id, ()=>_admhMoveDo(id)); }
+async function _admhMoveDo(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   const nd=(document.getElementById('amv-d')||{}).value||b.date;
   const nt=((document.getElementById('amv-t')||{}).value||b.start_time).slice(0,5);
@@ -31736,7 +31738,10 @@ async function _bkCoachLeaveUndo(id){
    哪幾張票要延：拿「這次取消新增的 refund 帳本」回推，所以連舊的匯入預約
    （沒有 deduct 紀錄、靠 refundLegacyBooking 退的）也延得到；先前就已經退過的
    名額不會被誤延。 */
-async function grpCoachLeave(id){
+/* 防連點（2026-08-31）：整堂取消＋逐名額退票展延，跑兩次會退兩輪。
+   ⚠ 兩個呼叫端（bkCoachLeave 的團課分支、_bkCoachLeaveGo）都經過這裡，鎖在這一層就夠。 */
+async function grpCoachLeave(id){ return onceAct('grpclv:'+id, ()=>_grpCoachLeave(id)); }
+async function _grpCoachLeave(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   const ids=(Array.isArray(b.member_ids)?b.member_ids:[]).map(String);
   if(!ids.length){ showToast('這堂還沒有人報名，直接取消即可'); return; }
@@ -43106,7 +43111,17 @@ async function askChargeUnpaid(memberId, ticketId){
            <button class="btn btn-red" onclick="doChargeUnpaid(1)">補扣 ${list.length} 堂並取消多的 ${over.length} 堂</button>`
         : `<button class="btn btn-red" onclick="doChargeUnpaid()">確認補扣 ${list.length} 堂</button>`}</div>`);
 }
+/* ══ 批次寫入一律要防連點（2026-08-31 定案）════════════════════════════
+   這三支都是「一按下去跑一整串扣課／退課／建課」的流程。0827 施佳靜（11 筆預約
+   跑出 18 筆扣課）與 0831 劉雪珠（帳本出現 6 筆「⚠ 已阻擋」）都是同一支流程被跑了
+   兩次。deductTicket 的冪等防線接住了，沒有真的扣爆 —— 但那是**最後一道網**，
+   不該常態性地靠它。建立預約（_bkSubmitting）、轉正、開通下一期、連續加入早就各自
+   有鎖，這三條是漏的。 */
 async function doChargeUnpaid(dropOver){
+  const p=window._chgUnpaid; if(!p) return;
+  return onceAct('chgunpaid:'+(p.tid||''), ()=>_doChargeUnpaid(dropOver));
+}
+async function _doChargeUnpaid(dropOver){
   const p=window._chgUnpaid; if(!p) return;
   let n=0, dropped=0;
   try{

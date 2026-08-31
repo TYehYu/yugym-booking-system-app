@@ -133,7 +133,8 @@ console.log('  團課：整堂取消 → 逐名額退票 → 效期各 +7 天');
 
 console.log('  按之前看得到會發生什麼');
 {
-  const F=grabFn('grpCoachLeave');
+  /* 2026-08-31 加了防連點，本體搬到 _grpCoachLeave（同 doChargeUnpaid／admhMoveDo） */
+  const F=grabFn('_grpCoachLeave');
   ok('★★ 逐位列出：姓名／方案／效期會從哪天延到哪天（同一週已延過的標出來）',
      /rows\.push\(\{name:\(m&&m\.name\)\|\|'會員', plan:\(t&&t\.plan_name\)\|\|'（查不到票券，取消時會再找一次）', from, to:dup\?'':to, dup\}\);/.test(F)
      && /r\.dup\?'本週已延過':'無到期日'/.test(src));
