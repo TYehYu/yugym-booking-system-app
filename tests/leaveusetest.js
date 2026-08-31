@@ -173,8 +173,11 @@ console.log('\n⑥ 取消但「扣課不退」的那一堂要看得到（2026-08
   ok('★ 判定看帳本淨扣，不只看旗標',
      /const _eaten=b=>bkEatenCancel\(b\) && \(_netChg\[b\.id\]\|\|0\)>0;/.test(src));
   ok('★ 圓形卡把它畫成紅色（與請假同一個語彙）',
-     /const lvc=\(b&&b\._leave\)\?' mtk-leave':\(\(b&&b\._eaten\)\?' mtk-eaten':''\);/.test(src)
-     && /\.mtk-used\.mtk-leave,\.mtk-used\.mtk-eaten\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src));
+     /* 2026-08-31：多了金色的「未到課」，判準抽成 _usedCls 一支（兩條路共用）；
+        紅色仍然優先於未到課，語彙沒變。 */
+     /const _usedCls=b=>\(b&&b\._leave\)\?' mtk-leave':\(\(b&&b\._eaten\)\?' mtk-eaten':\(\(b&&b\.no_show===true\)\?' mtk-ns':''\)\);/.test(src)
+     && /\.mtk-used\.mtk-leave,\.mtk-used\.mtk-eaten\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src)
+     && /\.mtk-used\.mtk-ns\.mtk-leave,\.mtk-used\.mtk-ns\.mtk-eaten\{background:var\(--danger,#b5372e\);\}/.test(src));
   ok('　　滑鼠提示說得出原因', /取消未退（取消時選了扣課不退）/.test(src));
   ok('　　會員列表的預約索引也收進來（否則列表頁的圓點又會少一顆）',
      /if\(!b \|\| \(b\.status==='cancelled' && !bkEatenCancel\(b\)\)\) return;/.test(src));

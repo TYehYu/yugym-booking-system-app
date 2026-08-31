@@ -4580,6 +4580,12 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 團課請假（2026-08-06 使用者定案：「對會員來說算一堂簽到，圓形卡要填滿用紅色標示」）——
    這一堂票照扣不退、人沒來，另發補課券。實心紅＝用掉了但不是來上課。 */
 .mtk-used.mtk-leave,.mtk-used.mtk-eaten{background:var(--danger,#b5372e);color:#fff;}
+/* 未到課（2026-08-31 使用者指示：「未到課的圓形卡 要用金色」）——
+   與課卡右下角那顆金色「未」章同一個語彙（紅>金>綠：紅要留意、金知道就好）。
+   ⚠ 這一顆仍然是「已用掉」：人沒來但堂數照扣，格子不會空出來。
+   ⚠ 紅色優先 —— 請假（另發補課券）與取消未退（政策決定扣課）比「人沒出現」重。 */
+.mtk-used.mtk-ns{background:var(--gold-d,#b48a56);color:#fff;}
+.mtk-used.mtk-ns.mtk-leave,.mtk-used.mtk-ns.mtk-eaten{background:var(--danger,#b5372e);}
 /* 教練請假（2026-08-14 使用者指示：「紅圈空心＝有預約但教練請假」）——
    實線紅環空心；與「需補票」的紅【虛線】區分（那個是票不夠）。 */
 .mtk-booked.mtk-cleave{border:2px solid var(--danger,#b5372e);color:var(--danger,#b5372e);}
@@ -11567,8 +11573,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260831.1430';
-const APP_VERSION_LABEL='v260831.1430';
+const APP_VERSION = '260831.1450';
+const APP_VERSION_LABEL='v260831.1450';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -55952,6 +55958,14 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
      原本是「課種色填滿＋紅圈」，紅圈與「需補票」的紅虛線在一排裡很難分；
      直接把「請假」兩個字寫出來就不必靠記顏色。與共享票那一版同一套排法。 */
   const _lvBody=(b,dt)=>`<i class="mtk-shdot"></i><b class="mtk-shnm">請假</b><b class="mtk-shdt">${dt}</b>`;
+  /* 「已用掉」那一顆的狀態樣式與說明（2026-08-31 抽成一支）——
+     原本正常那條路與溢位那條路各抄一份，加一種狀態就得記得改兩個地方
+     （0830 才因為同一種抄寫吃過虧，見 bkLeaveRefunded）。
+     紅＝請假／取消未退，金＝未到課，其餘就是正常上完。 */
+  const _usedCls=b=>(b&&b._leave)?' mtk-leave':((b&&b._eaten)?' mtk-eaten':((b&&b.no_show===true)?' mtk-ns':''));
+  const _usedWhy=b=>(b&&b._leave)?'請假（本堂照扣，另發補課券）'
+    :((b&&b._eaten)?'取消未退（取消時選了扣課不退）'
+    :((b&&b.no_show===true)?'未到課（人沒來，堂數照扣）':'已完成'));
   /* 到場與未到場分色（2026-08-30 使用者指示）：紅＝人有來、金＝未到場結課。
      判準與 bkCoachLeaveNoShow 寫進去的一致（completed 且沒有 checked_in_at）。 */
   const _clvNoShow=b=>!!b && b.status!=='checked_in' && !b.checked_in_at;
@@ -56009,7 +56023,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
       const shc=((b&&b._shBy)?' mtk-sh':'')+_ownCls(b);
       /* 紅色的兩種「票用掉了但人沒上到課」（2026-08-06）：
          請假＝本堂照扣、另發補課券；取消未退＝取消時選了扣課不退。 */
-      const lvc=(b&&b._leave)?' mtk-leave':((b&&b._eaten)?' mtk-eaten':'');
+      const lvc=_usedCls(b);
       /* 補登日期的格子（沒有課卡，_it.g 是它在 _ghost 裡的序號） */
       const _md=(!b && _it.g!=null) ? (_mu[_it.g]||'') : '';
       /* 沒有課卡的那幾格（帳面已用、綁不到預約）也要點得到（2026-08-28 使用者：
@@ -56018,7 +56032,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
          與 tapBooked 一樣是呼叫端決定要不要開放。 */
       const _tapG=(!b && _it.g!=null && opts && opts.tapGhost)
         ? ` onclick="event.stopPropagation();${opts.tapGhost}(${_it.g})"` : '';
-      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}${shc}${_md?' mtk-manual':''}${_tapG?' mtk-tap':''}"${_tapG}" style="--tk-acc:${v.accent};" title="${(b&&b._leave)?'請假（本堂照扣，另發補課券）':((b&&b._eaten)?'取消未退（取消時選了扣課不退）':'已完成')}${b&&b.date?' '+b.date:''}${_md?_md+'　·　舊系統補登（沒有對應課卡）':''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${_shBody(b, b?md(b):(_md?md({date:_md}):'✓'))}${cur?'<i class="mtk-comet"></i>':''}</span>`;
+      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}${shc}${_md?' mtk-manual':''}${_tapG?' mtk-tap':''}"${_tapG}" style="--tk-acc:${v.accent};" title="${_usedWhy(b)}${b&&b.date?' '+b.date:''}${_md?_md+'　·　舊系統補登（沒有對應課卡）':''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${_shBody(b, b?md(b):(_md?md({date:_md}):'✓'))}${cur?'<i class="mtk-comet"></i>':''}</span>`;
     }
     else {
       const b=_it.b;
@@ -56049,8 +56063,8 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
     /* 已經上過（或請假／取消未退）的課溢位時仍畫成實心 —— 那堂票確實用掉了，
        標成「需補票」的紅虛線會看起來像欠票（2026-08-06 排序改動後才可能走到這裡）。 */
     if(_o.st==='used'){
-      const lvc=(b&&b._leave)?' mtk-leave':((b&&b._eaten)?' mtk-eaten':'');
-      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}" style="--tk-acc:${v.accent};" title="${(b&&b._leave)?'請假（本堂照扣，另發補課券）':((b&&b._eaten)?'取消未退（取消時選了扣課不退）':'已完成')} ${b.date||''}${cur?'（本堂）':''}">${md(b)}${cur?'<i class="mtk-comet"></i>':''}</span>`;
+      const lvc=_usedCls(b);
+      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}" style="--tk-acc:${v.accent};" title="${_usedWhy(b)} ${b.date||''}${cur?'（本堂）':''}">${md(b)}${cur?'<i class="mtk-comet"></i>':''}</span>`;
       continue;
     }
     const vlb=(typeof selfVenueLabel==='function'&&bkIsSelf(b))?selfVenueLabel(b):'';
