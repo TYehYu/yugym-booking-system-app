@@ -18,15 +18,22 @@ console.log('① 計算與欄位一個都沒動');
 {
   const RENDER=src.slice(src.indexOf('const head1=cols.map'), src.indexOf('fmStickyFit();'));
   ok('★★ 兩列表頭的欄位與順序原封不動（日期／全店合計 3 欄／每位教練 4 欄）',
-     /<th class="fm-d fm-h">日期<\/th><th class="fm-h fm-t" colspan="3">全店合計<\/th>\$\{head1\}/.test(RENDER)
-     && /<th class="fm-sh fm-t">教練課<\/th><th class="fm-sh fm-t fm-t2">團課<\/th><th class="fm-sh fm-t fm-t3">營業額<\/th>\$\{head2\}/.test(RENDER)
+   /* 2026-08-31：全店合計拆成五欄（教練課／團課／團課收入／其他／營業額）——
+      團課收入與其他＝沒歸屬到教練的收款，拆兩欄是因為團課 85,000 會蓋掉場租商品 4,326。 */
+     /<th class="fm-d fm-h">日期<\/th><th class="fm-h fm-t" colspan="5">全店合計<\/th>\$\{head1\}/.test(RENDER)
+     && /<th class="fm-sh fm-t">教練課<\/th><th class="fm-sh fm-t fm-t2">團課<\/th><th class="fm-sh fm-t fm-t5"[\s\S]{0,140}?<th class="fm-sh fm-t fm-t4"[\s\S]{0,80}?<th class="fm-sh fm-t fm-t3">營業額<\/th>\$\{head2\}/.test(RENDER)
      && /<th class="fm-sh fm-gs" style="--cc:\$\{cc\};">教練課<\/th><th class="fm-sh">團課<\/th><th class="fm-sh">業績<\/th><th class="fm-sh fm-ge" style="--cc:\$\{cc\};">新\/續<\/th>/.test(RENDER));
-  ok('★★ 月合計列的四個數字仍是原本那幾支（sumPt／sumGrp／sumAmtAll／sumTds）',
-     /<tr class="fm-sum"><th class="fm-d">月合計<\/th><td class="fm-c fm-t">\$\{num\(sumPt\)\}<\/td><td class="fm-c fm-t fm-t2">\$\{num\(sumGrp\)\}<\/td><td class="fm-c fm-t fm-t3">\$\{money\(sumAmtAll\)\}<\/td>\$\{sumTds\}<\/tr>/.test(RENDER));
+  ok('★★ 月合計列：五個數字（sumPt／sumGrp／sumGrpRev／sumOthRev／sumAmtAll）＋各教練',
+     /<tr class="fm-sum"><th class="fm-d">月合計<\/th><td class="fm-c fm-t">\$\{num\(sumPt\)\}<\/td><td class="fm-c fm-t fm-t2">\$\{num\(sumGrp\)\}<\/td><td class="fm-c fm-t fm-t5">\$\{money\(sumGrpRev\)\}<\/td><td class="fm-c fm-t fm-t4">\$\{money\(sumOthRev\)\}<\/td><td class="fm-c fm-t fm-t3">\$\{money\(sumAmtAll\)\}<\/td>\$\{sumTds\}<\/tr>/.test(RENDER));
+  ok('★★★ 團課收入＋其他＝沒歸屬教練的收款，加上各教練業績要等於營業額',
+     /if\(p\.coach_id\) return;                       \/\/ 有歸屬教練 → 已經在那位教練的業績欄/.test(src)
+     && /五欄相加＝營業額，永遠對得起來/.test(src));
   ok('★★ 教練色仍由 coachTagColor 帶（沒有另訂一套）',
      /const head1=cols\.map\(c=>\{ const k=coachTagColor\(c\.id\);/.test(RENDER)
      && !/coachTagColor/.test(B));
-  ok('　 底部的欄位定義說明沒被動', /教練課＝已簽到／已完成的教練課與體驗（自主訓練不計）；團課以人次計；/.test(src));
+  ok('★★ 底部的欄位定義跟著改（體驗不再算進教練課；多了團課收入與其他）',
+     /教練課＝已簽到／已完成的教練課、友善教練課與運動按摩（體驗、自主訓練、場租不計）；/.test(src)
+     && /團課收入與其他＝沒有歸屬到教練的收款/.test(src));
   /* ⚠ RENDER 的切片就結束在 fmStickyFit(); 這一行之前，要在 src 裡比 */
   ok('　 凍結表頭的量測（fmStickyFit）照舊',
      /<\/div>\s*\n\s*<\/div>`;\s*\n\s*fmStickyFit\(\);/.test(src) && /function fmStickyFit\(\)\{/.test(src));

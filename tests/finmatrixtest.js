@@ -71,6 +71,11 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     /* 2026-08-25：姓名字典抽成 memNameMap（教練撈不到別人的學員，用目錄補）——
        沙箱裡沒有那本目錄，行為等同原本的 Object.fromEntries。 */
     memNameMap:(mems)=>Object.fromEntries((mems||[]).filter(Boolean).map(m=>[m.id,m.name])),
+    /* 2026-08-31：教練課那一欄改用口袋分類器擋掉體驗／場租（見 finMatrix 的註解）——
+       注入**真的**那兩支，不要在沙箱裡寫一個 category 比對的假貨
+       （那就是 TK_POCKETS 當初要消滅的第二份規則，見 tests/_pocketenv.js）。 */
+    bkPocket: require('./_pocketenv.js').bkPocket,
+    tkClass5: require('./_pocketenv.js').tkClass5,
   };
   /* fmWhoTip 是 finMatrix 的相依（新約/續約的滑鼠提示），一起帶進沙箱實跑 */
   const run=new Function(...Object.keys(env),

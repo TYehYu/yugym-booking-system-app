@@ -11,8 +11,9 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('① 表頭：一個大標、兩個子標');
-ok('★ 上排「全店合計」橫跨三欄（2026-08-13 加營業額欄）',
-   /<th class="fm-d fm-h">日期<\/th><th class="fm-h fm-t" colspan="3">全店合計<\/th>/.test(src));
+/* 2026-08-31：再加「團課收入」「其他」→ 五欄 */
+ok('★ 上排「全店合計」橫跨五欄',
+   /<th class="fm-d fm-h">日期<\/th><th class="fm-h fm-t" colspan="5">全店合計<\/th>/.test(src));
 ok('★ 下排拆成「教練課」與「團課」',
    /<th class="fm-sh fm-t">教練課<\/th><th class="fm-sh fm-t fm-t2">團課<\/th>/.test(src));
 

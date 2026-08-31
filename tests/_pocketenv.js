@@ -9,5 +9,5 @@ const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 const i=src.indexOf('const TK_POCKETS={'), j=src.indexOf('function lpPerson(', i);
 if(i<0||j<0) throw new Error('_pocketenv：切不到 TK_POCKETS 區塊');
-const env=new Function('window', src.slice(i,j)+'\nreturn {tkPocketNow, bkPocketNow, tkClass5, TK_POCKETS};')({_ttCache:[]});
+const env=new Function('window', src.slice(i,j)+'\nreturn {tkPocketNow, bkPocketNow, bkPocket, tkPocket, tkClass5, TK_POCKETS};')({_ttCache:[]});
 module.exports=env;

@@ -1724,7 +1724,11 @@ body.mc-mode .layout{padding-top:8px;}
   border-right:1px solid var(--bd);}
 .fm-tb .fm-t.fm-t2{left:var(--fm-l2,126px);color:var(--brown);}
 /* 全店營業額欄（2026-08-13）：黏在團課欄右邊、承接原本的粗分隔線 */
-.fm-tb .fm-t.fm-t3{left:var(--fm-l3,190px);border-right:2px solid var(--bd);color:var(--green);min-width:70px;}
+/* 團課收入／其他（2026-08-31）：沒歸屬到教練的那兩段錢，黏在團課欄右邊。
+   拆兩欄的理由見 finMatrix 裡 dayGrpRev/dayOthRev 的說明（團課 85,000 會蓋掉場租商品 4,326）。 */
+.fm-tb .fm-t.fm-t5{left:var(--fm-l3,190px);color:var(--brown);min-width:70px;}
+.fm-tb .fm-t.fm-t4{left:var(--fm-l4,260px);color:var(--t2);min-width:64px;}
+.fm-tb .fm-t.fm-t3{left:var(--fm-l5,324px);border-right:2px solid var(--bd);color:var(--green);min-width:70px;}
 .fm-tb thead .fm-t{z-index:4;}
 .fm-tb .fm-sum .fm-t{z-index:3;}
 .fm-tb tbody tr:hover .fm-t{background:var(--sage-bg);}
@@ -11639,8 +11643,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260831.2124';
-const APP_VERSION_LABEL='v260831.2124';
+const APP_VERSION = '260831.2213';
+const APP_VERSION_LABEL='v260831.2213';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19743,14 +19747,19 @@ PAGES.g_dashboard=async function(){
       (purchases||[]).forEach(p=>{ if(p && p.ticket_id && (p.created_at||'').slice(0,7)===_mYm
         && p.source!=='reactivate' && p.source!=='facility_rental' && p.source!=='merchandise')
         _mTkPu[p.ticket_id]=(_mTkPu[p.ticket_id]||0)+(Number(p.deal_amount)||0); });
-      const _mNewTk=new Set((mtickets||[]).filter(t=>(t.purchase_date||'').slice(0,7)===_mYm).map(t=>t.id));
-      const _tkRev=(mtickets||[]).filter(t=>_mNewTk.has(t.id))
-        .reduce((s2,t)=>s2+(_mTkPu[t.id]!=null?_mTkPu[t.id]:(Number(t.amount_paid)||0)),0);
-      const _instRev=(purchases||[]).filter(p=>p.source==='installment'&&((p.created_at||'').slice(0,7)===_mYm)&&!_mNewTk.has(p.ticket_id))
+      /* 本月總營收＝這個月的收款紀錄（2026-08-31 使用者定案：「跟桌機一致」）——
+         與月報表／營業報表同一條公式（見 finMatrix 的 sumAmtAll、0813 定案
+         「營業額看 purchases.created_at」），不再自己算一套。
+
+         ⚠ 舊寫法是「這個月買的票券：有收款紀錄用它、**沒有就用票面金額**」。
+           那個 fallback 會把「作廢時走三十分鐘退回、收款紀錄已被刪掉」的殘骸
+           整筆算成營收 —— 8 月光這種就有 9 張、35,400 元（陳瀚竣 10,400、
+           劉忠緯 15,000、余宗豪 10,400、六張團課 4 週優惠…），
+           同時又漏掉「這個月收到、票是上個月買的」那些款項。
+           兩邊互相抵銷之後手機仍比桌機多 15,074，看起來只是「差一點」，
+           其實是兩個方向的錯各自不小。 */
+      _mRevTotal=(purchases||[]).filter(p=>p&&String(p.created_at||'').slice(0,7)===_mYm)
         .reduce((s2,p)=>s2+(Number(p.deal_amount)||0),0);
-      const _purRev=(purchases||[]).filter(p=>((p.created_at||'').slice(0,7)===_mYm)&&(p.source==='reactivate'||p.source==='facility_rental'||p.source==='merchandise'))
-        .reduce((s2,p)=>s2+(Number(p.deal_amount)||0),0);
-      _mRevTotal=_tkRev+_instRev+_purRev;
     }catch(_){}
   }
   /* 2026-08-21：三處「本月成績」都掛 .mstat-card —— 使用者連問四次「課卡與本月成績中間
@@ -47373,8 +47382,14 @@ function grantGoStep(n){
        ⚠ 「已完成」以**餘額**為準、順帶認 used_up —— 今天（0824）才修過兩張
          「remaining>0 卻卡在 used_up」的票，狀態會跟餘額打架，餘額才是真的。
          退費的不算（那不是上完，是拿回去了）。 */
+    /* ⚠ 共享票也要算（2026-08-31 使用者提問：「為什麼陳瀚竣還會被歸類在新約」）——
+       他一直在用陳玟淂共享給他的兩張教練課票（私人教練 1V1 5 堂、友善 1V1 4 堂，
+       都已用完），完全符合「已完成的教練課方案」；但這裡原本判的是「票在不在他名下」，
+       共享票不算 → 他看起來像第一次買，續約／分期整個選不到，只能標新約。
+       與同日修掉的連續預約（grpFollowAsk）是同一個 bug：
+       全系統判「這張票誰能用」只有 tkUsableBy 一支。 */
     const _donePt=(mts||[]).some(t=>{
-      if(!t || t.member_id!==mid) return false;
+      if(!t || !tkUsableBy(t,mid)) return false;
       if((tm[t.ticket_type_id]||{}).category!=='私人教練') return false;   // 教練課／友善教練課
       if(t.status==='refunded') return false;
       return (Number(t.sessions_remaining)||0)<=0 || t.status==='used_up';
@@ -58079,6 +58094,9 @@ async function finMatrix(){
   // 這個月有動靜的教練（有堂數或有業績）才列，避免整排空欄
   const list=(coaches||[]).filter(c=>c.role!=='front_desk'&&isCoachable(c));
   const cell={};   // cell[coachId][day] = {pt,grp,amt,nw,rn}
+  /* ⚠ 要宣告在下面兩個迴圈**之前** —— const 有 TDZ，放後面會整頁噴
+     「Cannot access '_typeMapFM' before initialization」。 */
+  const _typeMapFM=Object.fromEntries((types||[]).map(t=>[t.id,t]));
   /* who：這一格的新約/續約各是誰（2026-08-06 使用者指示：滑鼠提示這張是哪個會員） */
   const touch=(cid,day)=>{ const m=(cell[cid]=cell[cid]||{}); return (m[day]=m[day]||{pt:0,grp:0,amt:0,nw:0,rn:0,who:[]}); };
   // ① 堂數（已簽到/已完成）
@@ -58089,7 +58107,18 @@ async function finMatrix(){
     const d=String(b.date).slice(8,10);
     const c=touch(cid,d);
     if(bkIsGroup(b)) c.grp+=grpHeadsNoLeave(b);   // 團課算人次（請假不算，2026-08-06）
-    else if(!bkIsSelf(b)) c.pt+=1;                        // 自主訓練不算教練成績
+    /* 「教練課」這一欄只算 教練課＋友善教練課＋運動按摩（2026-08-31 使用者定案）——
+       原本寫成 `!bkIsSelf(b)`，只擋掉自主訓練，於是**體驗課也被算進去**
+       （8 月 16 堂），場租、掛了教練的其他類別也會混進來。
+       ⚠ 友善教練課的 category 就是「私人教練」（票種才分友善），所以這兩個值就夠。
+       ⚠ 與薪資的 isPtPayClass 不同：那邊只認私人教練（體驗不支薪，0731 定案），
+         這裡是「教練做了多少事」的報表，使用者要把運動按摩一起算。 */
+    else if(bkPocket(b,_typeMapFM)){
+      /* bkPocket 對「體驗」與「場租」回 null —— 先靠它擋掉（tkClass5 認不出體驗，
+         會退回 'pt'，直接用就會把 8 月那 16 堂體驗課算進教練課）。 */
+      const _k=tkClass5({ticket_type_id:b.ticket_type_id, plan_name:b.category}, _typeMapFM);
+      if(_k==='pt'||_k==='massage') c.pt+=1;
+    }
   });
   // ② 業績（收款紀錄實收，歸屬教練）
   const purByTk={};
@@ -58141,9 +58170,25 @@ async function finMatrix(){
   /* 全店營業額（2026-08-13 使用者指示：「月報表左邊要有營業額的加總」）——
      所有收款都算（含未歸屬教練的場租/商品/重啟），與教練業績欄同用 created_at 的日期口徑。 */
   const dayAmtAll={}; let sumAmtAll=0;
+  /* 沒歸屬到教練的收款再拆兩段（2026-08-31 使用者定案）——
+     8 月「營業額 − 各教練業績」是 89,326，其中 85,000 是**團課票沒選業績教練**，
+     場租＋商品只有 4,326。全部丟進一欄「其他」的話，使用者想看的蛋白粉與場租
+     會被團課整個蓋掉。所以分成「團課收入」與「其他」兩欄。
+     ⚠ 這兩欄講的都是「沒進任何教練欄的那部分」—— 有選業績教練的團課票
+       本來就算在那位教練的業績裡，不會在這裡重複出現。
+     ⚠ 五欄相加＝營業額，永遠對得起來（其他＝扣完教練與團課之後剩下的）。 */
+  const _tkById2={}; (tks||[]).forEach(t=>{ if(t&&t.id) _tkById2[t.id]=t; });
+  /* ⚠ 用口袋分類器 tkClass5，不要散裝比對 category（見 TK_POCKETS 的說明、
+     pockettest 的 ratchet）—— 團課的 category 在不同資料裡有兩種寫法。 */
+  const _isGrpPur=p=>{ const t=_tkById2[p&&p.ticket_id];
+    return !!t && tkClass5(t,_typeMapFM)==='group'; };
+  const dayGrpRev={}, dayOthRev={}; let sumGrpRev=0, sumOthRev=0;
   (purs||[]).forEach(p=>{ if(!p) return; const d10=String(p.created_at||'').slice(0,10);
-    if(!inM(d10)) return; const v=Number(p.deal_amount)||0;
-    dayAmtAll[d10.slice(8,10)]=(dayAmtAll[d10.slice(8,10)]||0)+v; sumAmtAll+=v; });
+    if(!inM(d10)) return; const v=Number(p.deal_amount)||0; const dd2=d10.slice(8,10);
+    dayAmtAll[dd2]=(dayAmtAll[dd2]||0)+v; sumAmtAll+=v;
+    if(p.coach_id) return;                       // 有歸屬教練 → 已經在那位教練的業績欄
+    if(_isGrpPur(p)){ dayGrpRev[dd2]=(dayGrpRev[dd2]||0)+v; sumGrpRev+=v; }
+    else { dayOthRev[dd2]=(dayOthRev[dd2]||0)+v; sumOthRev+=v; } });
   let dayRows='';
   for(let d=1;d<=days;d++){
     const dd=String(d).padStart(2,'0');
@@ -58163,6 +58208,8 @@ async function finMatrix(){
     });
     dayRows+=`<tr class="${isToday?'fm-today':''}"><th class="fm-d">${d}<span>（${wd}）</span></th>`
       +`<td class="fm-c fm-t">${num(dayPt)}</td><td class="fm-c fm-t fm-t2">${num(dayGrp)}</td>`
+      +`<td class="fm-c fm-t fm-t5">${dayGrpRev[dd]?money(dayGrpRev[dd]):''}</td>`
+      +`<td class="fm-c fm-t fm-t4">${dayOthRev[dd]?money(dayOthRev[dd]):''}</td>`
       +`<td class="fm-c fm-t fm-t3">${money(dayAmtAll[dd]||0)}</td>${tds}</tr>`;
   }
   let sumTds='', sumPt=0, sumGrp=0;
@@ -58187,15 +58234,15 @@ async function finMatrix(){
       <button class="btn btn-ghost btn-sm" onclick="finMonthMove(1)">下個月 ›</button></div>
     <div class="fm-wrap"><table class="fm-tb">
       <thead>
-        <tr><th class="fm-d fm-h">日期</th><th class="fm-h fm-t" colspan="3">全店合計</th>${head1}</tr>
-        <tr><th class="fm-d fm-sh"></th><th class="fm-sh fm-t">教練課</th><th class="fm-sh fm-t fm-t2">團課</th><th class="fm-sh fm-t fm-t3">營業額</th>${head2}</tr>
+        <tr><th class="fm-d fm-h">日期</th><th class="fm-h fm-t" colspan="5">全店合計</th>${head1}</tr>
+        <tr><th class="fm-d fm-sh"></th><th class="fm-sh fm-t">教練課</th><th class="fm-sh fm-t fm-t2">團課</th><th class="fm-sh fm-t fm-t5" title="團課票的收款中，賣票時沒有選業績歸屬教練的那部分（有選的已經算在右邊該教練的業績裡）">團課收入</th><th class="fm-sh fm-t fm-t4" title="場租、商品、重啟，以及對不到票券的收款">其他</th><th class="fm-sh fm-t fm-t3">營業額</th>${head2}</tr>
       </thead>
       <tbody>
-        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumPt)}</td><td class="fm-c fm-t fm-t2">${num(sumGrp)}</td><td class="fm-c fm-t fm-t3">${money(sumAmtAll)}</td>${sumTds}</tr>
+        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumPt)}</td><td class="fm-c fm-t fm-t2">${num(sumGrp)}</td><td class="fm-c fm-t fm-t5">${money(sumGrpRev)}</td><td class="fm-c fm-t fm-t4">${money(sumOthRev)}</td><td class="fm-c fm-t fm-t3">${money(sumAmtAll)}</td>${sumTds}</tr>
         ${dayRows}
       </tbody>
     </table></div>
-    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;line-height:1.8;">教練課＝已簽到／已完成的教練課與體驗（自主訓練不計）；團課以人次計；業績＝收款紀錄的實收金額（依業績歸屬教練）；新/續＝當日成交的票券約別（作廢退款不列）。</div>
+    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;line-height:1.8;">教練課＝已簽到／已完成的教練課、友善教練課與運動按摩（體驗、自主訓練、場租不計）；團課以人次計；團課收入與其他＝沒有歸屬到教練的收款（前者是團課票、後者是場租商品等）；業績＝收款紀錄的實收金額（依業績歸屬教練）；新/續＝當日成交的票券約別（作廢退款不列）。</div>
   </div>`;
   fmStickyFit();
 }
@@ -58229,10 +58276,17 @@ function fmStickyFit(){
       const t1=tb.querySelector('thead tr:nth-child(2) .fm-t:not(.fm-t2):not(.fm-t3)');
       const w2=t1?Math.round(t1.getBoundingClientRect().width):0;
       if(w1>0&&w2>0) tb.style.setProperty('--fm-l2',(w1+w2)+'px');
-      /* 2026-08-13：營業額欄要黏在團課欄右邊——位移＝前三欄實際寬度合計 */
+      /* 2026-08-13：第四欄要黏在團課欄右邊——位移＝前三欄實際寬度合計。
+         2026-08-31 中間插了「其他」：其他吃 --fm-l3、營業額往右挪到 --fm-l4。 */
       const t2=tb.querySelector('thead tr:nth-child(2) .fm-t.fm-t2');
       const w3=t2?Math.round(t2.getBoundingClientRect().width):0;
       if(w1>0&&w2>0&&w3>0) tb.style.setProperty('--fm-l3',(w1+w2+w3)+'px');
+      const t3=tb.querySelector('thead tr:nth-child(2) .fm-t.fm-t5');
+      const w4=t3?Math.round(t3.getBoundingClientRect().width):0;
+      if(w1>0&&w2>0&&w3>0&&w4>0) tb.style.setProperty('--fm-l4',(w1+w2+w3+w4)+'px');
+      const t4=tb.querySelector('thead tr:nth-child(2) .fm-t.fm-t4');
+      const w5=t4?Math.round(t4.getBoundingClientRect().width):0;
+      if(w1>0&&w2>0&&w3>0&&w4>0&&w5>0) tb.style.setProperty('--fm-l5',(w1+w2+w3+w4+w5)+'px');
     };
     fit();
     requestAnimationFrame(fit);                       // 字體載入後再量一次
