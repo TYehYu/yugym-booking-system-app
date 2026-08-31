@@ -11665,8 +11665,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260831.2302';
-const APP_VERSION_LABEL='v260831.2302';
+const APP_VERSION = '260831.2307';
+const APP_VERSION_LABEL='v260831.2307';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -58211,10 +58211,13 @@ async function finMatrix(){
      該金額是什麼內容嗎」）—— 表頭本來就有一句說明，但那是「規則」，
      使用者要問的是「這 85,000 到底是哪幾筆」。所以每一格都夾一份明細。
      ⚠ 只帶產品名與金額（0831 二修使用者指示，見 fmRevTip 的說明）。 */
-  const dayGrpWho={}, dayOthWho={}; const sumGrpWho=[], sumOthWho=[];
+  const dayGrpWho={}, dayOthWho={};
   const _purItem=p=>({
     kind:(_tkById2[p.ticket_id]||{}).plan_name || p.plan_name
          || ((_typeMapFM[(_tkById2[p.ticket_id]||{}).ticket_type_id]||{}).name) || '收款',
+    /* 查不到名字就退回 id（與新/續那支同一套退法）——「（無會員）」只留給
+       真的沒掛會員的收款（場租、商品），不要把撈不到名字的人也講成沒有會員。 */
+    name:memName[p.member_id]||p.member_id||'（無會員）',
     amt:Number(p.deal_amount)||0 });
   (purs||[]).forEach(p=>{ if(!p) return; const d10=String(p.created_at||'').slice(0,10);
     if(!inM(d10)) return; const v=Number(p.deal_amount)||0; const dd2=d10.slice(8,10);
@@ -58222,9 +58225,9 @@ async function finMatrix(){
     if(p.coach_id) return;                       // 有歸屬教練 → 已經在那位教練的業績欄
     const _it=_purItem(p);
     if(_isGrpPur(p)){ dayGrpRev[dd2]=(dayGrpRev[dd2]||0)+v; sumGrpRev+=v;
-      (dayGrpWho[dd2]=dayGrpWho[dd2]||[]).push(_it); sumGrpWho.push(Object.assign({d:Number(dd2)},_it)); }
+      (dayGrpWho[dd2]=dayGrpWho[dd2]||[]).push(_it); }
     else { dayOthRev[dd2]=(dayOthRev[dd2]||0)+v; sumOthRev+=v;
-      (dayOthWho[dd2]=dayOthWho[dd2]||[]).push(_it); sumOthWho.push(Object.assign({d:Number(dd2)},_it)); } });
+      (dayOthWho[dd2]=dayOthWho[dd2]||[]).push(_it); } });
   let dayRows='';
   for(let d=1;d<=days;d++){
     const dd=String(d).padStart(2,'0');
@@ -58271,10 +58274,10 @@ async function finMatrix(){
     <div class="fm-wrap"><table class="fm-tb">
       <thead>
         <tr><th class="fm-d fm-h">日期</th><th class="fm-h fm-t" colspan="5">全店合計</th>${head1}</tr>
-        <tr><th class="fm-d fm-sh"></th><th class="fm-sh fm-t">教練課</th><th class="fm-sh fm-t fm-t2">團課</th><th class="fm-sh fm-t fm-t5" title="${FM_TIP_GRP}（有選的已經算在右邊該教練的業績裡）&#10;下面每一格都可以指上去看是哪幾筆">團課收入</th><th class="fm-sh fm-t fm-t4" title="${FM_TIP_OTH}&#10;下面每一格都可以指上去看是哪幾筆">其他</th><th class="fm-sh fm-t fm-t3">營業額</th>${head2}</tr>
+        <tr><th class="fm-d fm-sh"></th><th class="fm-sh fm-t">教練課</th><th class="fm-sh fm-t fm-t2">團課</th><th class="fm-sh fm-t fm-t5" title="${FM_TIP_GRP}（有選的已經算在右邊該教練的業績裡）&#10;每日那一格可以指上去看是哪幾筆（月合計筆數太多不列）">團課收入</th><th class="fm-sh fm-t fm-t4" title="${FM_TIP_OTH}&#10;每日那一格可以指上去看是哪幾筆（月合計筆數太多不列）">其他</th><th class="fm-sh fm-t fm-t3">營業額</th>${head2}</tr>
       </thead>
       <tbody>
-        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumPt)}</td><td class="fm-c fm-t fm-t2">${num(sumGrp)}</td><td class="fm-c fm-t fm-t5"${fmRevTip(sumGrpWho)}>${money(sumGrpRev)}</td><td class="fm-c fm-t fm-t4"${fmRevTip(sumOthWho)}>${money(sumOthRev)}</td><td class="fm-c fm-t fm-t3">${money(sumAmtAll)}</td>${sumTds}</tr>
+        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumPt)}</td><td class="fm-c fm-t fm-t2">${num(sumGrp)}</td><td class="fm-c fm-t fm-t5">${money(sumGrpRev)}</td><td class="fm-c fm-t fm-t4">${money(sumOthRev)}</td><td class="fm-c fm-t fm-t3">${money(sumAmtAll)}</td>${sumTds}</tr>
         ${dayRows}
       </tbody>
     </table></div>
@@ -58288,17 +58291,19 @@ async function finMatrix(){
    該金額是什麼內容嗎」）—— 前一行是這一欄的定義，後面逐筆列出來。
    ⚠ 月合計那一格可能有上百筆 → 只列前 14 筆，其餘用「…另有 N 筆」交代，
      不是靜靜截斷（截斷而不說＝看到的人以為就這些）。 */
-/* ⚠ 只列「產品＋金額」（2026-08-31 二修，使用者：「只要列出 產品＋金額就好
-   其他文字太多餘」）—— 拿掉的三樣都是重複資訊，不要再加回來：
-   ・那一行欄位定義 → 表頭的 title 已經有
-   ・會員姓名 → 這裡問的是「這筆錢是什麼」，不是「誰付的」
-   ・合計 → 就是滑鼠底下那一格的數字本身
+/* 每一格列「產品・會員　金額」（2026-08-31 三修）。
+   ⚠ 只有**每日**那幾格掛提示，月合計那兩格刻意不掛 ——
+     使用者：「總收入就不用滑鼠指標提示了　因為也列不完」。
+     整月六十幾筆列不完，列了也讀不動；要看明細就看當天那一格。
+   ⚠ 二修曾把會員姓名拿掉，三修使用者要求加回來（「下面要把會員姓名加進去」）：
+     同一天好幾筆都叫「團課 4 週優惠」，沒有姓名根本分不出是誰。
+   欄位定義（表頭 title 已有）與合計（就是滑鼠底下那格的數字）維持不列。
    留著「…另有 N 筆」：那不是修飾，是「你看到的不是全部」的交代。 */
 const FM_TIP_MAX=14;
 function fmRevTip(list){
   if(!list || !list.length) return '';
   const show=list.slice(0,FM_TIP_MAX)
-    .map(w=>`${w.d?w.d+'日 ':''}${w.kind}　$${(Number(w.amt)||0).toLocaleString()}`);
+    .map(w=>`${w.kind}・${w.name}　$${(Number(w.amt)||0).toLocaleString()}`);
   const more=list.length-show.length;
   if(more>0) show.push(`…另有 ${more} 筆`);
   return ` title="${show.join('\n').replace(/"/g,'&quot;')}"`;
