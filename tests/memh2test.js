@@ -440,8 +440,11 @@ t('★★ 日期列放大（52→70px，字級各升一級）',
   t('★★ 效期寫在說明裡（不是把不能用的日子偷偷藏掉）',
     /\$\{_limTxt\?`<li>\$\{_limTxt\}，上方只列效期內約得到的日子<\/li>`:''\}/.test(QS)
     && /這一列的定義就是「可預約日」/.test(s));
-  t('★ 封頂 14 天，超過的用一枚「\+N」說一聲（不默默截掉）',
-    /if\(_days\.length<14\) _days\.push\(\[x,dd\]\); else _more\+\+;/.test(QS)
+  /* 2026-08-31 使用者定案：14 → 7 天。375px 的手機一列只放得下 4 顆
+     （每顆 70px＋間距 8），列 14 天就是塞滿還要橫捲，看起來像被壓縮。 */
+  t('★ 封頂 7 天，超過的用一枚「\+N」說一聲（不默默截掉）',
+    /const QS_DAY_MAX=7;/.test(QS)
+    && /if\(_days\.length<QS_DAY_MAX\) _days\.push\(\[x,dd\]\); else _more\+\+;/.test(QS)
     && /_more\?`<span class="qs-day qs-daymore" title="效期內還有 \$\{_more\} 天，先約近的">\+\$\{_more\}<\/span>`:''/.test(QS));
   t('★ 只有一天可約時不畫這一列（一顆按鈕的日期列沒有意義）',
     /const _dayRow=_days\.length>1/.test(QS));
