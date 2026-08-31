@@ -158,10 +158,13 @@ async function runVoid(mode, amt, opts){
   console.log('\n④ 用儲值金買方案：折抵那一段不記營收');
   {
     /* _grantIssue 太長且相依太多，這裡只驗金額公式那三行的算法 */
-    const m=src.match(/amount_paid:Math\.max\(0,\(isInstall\?Math\.max\(0,P\.firstAmount-P\.voucherAmt\):P\.paidAmount\)-_crUse\)/);
-    ok('★★★ 票券的 amount_paid 扣掉儲值金折抵', !!m);
+    /* 2026-08-31：前面多了一層「未付款先記 0」（陳瀚竣案例），扣抵的算式本身沒變 */
+    ok('★★★ 票券的 amount_paid 扣掉儲值金折抵',
+       /: Math\.max\(0,\(isInstall\?Math\.max\(0,P\.firstAmount-P\.voucherAmt\):P\.paidAmount\)-_crUse\),/.test(src));
     ok('★★★ 收款紀錄的 deal_amount 也扣掉（否則首頁營收與票券兩邊會打架）',
-       /const _dealRec=Math\.max\(0,\(isInstall\?Math\.max\(0,P\.firstAmount-P\.voucherAmt\):P\.paidAmount\)-_crUse\);/.test(src));
+       /const _dealRec=\(P\.payment_status==='unpaid'\) \? 0\s*\n\s*: Math\.max\(0,\(isInstall\?Math\.max\(0,P\.firstAmount-P\.voucherAmt\):P\.paidAmount\)-_crUse\);/.test(src));
+    ok('★★ 待付款不記錢那一層在扣抵之外（兩件事不要糾纏）',
+       /amount_paid:\(P\.payment_status==='unpaid'\) \? 0/.test(src));
     ok('★★ 折抵金額另外存一欄（報表要分得出「收現多少、折抵多少」）',
        /credit_used:\(_crUse\|\|null\)/.test(src));
     ok('★★★ 發放當下重讀餘額 —— 電子合約可能隔幾天才審核，中間可能被別筆用掉',

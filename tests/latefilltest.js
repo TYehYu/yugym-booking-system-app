@@ -220,9 +220,15 @@ console.log('\n⑤ 寫入：營收記在收款這一天');
      && /note:`待付款補收（票券 \$\{t\.id\}）`/.test(G));
   ok('★★ 理由寫在原地（錢什麼時候到，帳就記在哪一天）',
      /營收記在\*\*收款這一天\*\*，不是建約那天 —— 錢什麼時候到，帳就記在哪一天。/.test(src));
-  ok('★★ 票券標成已付款、實收累加（不是覆蓋）',
+  /* 2026-08-31 陳瀚竣案例：原本是累加，而發放那邊又照記全額 → $5,200 加成 $10,400。
+     這一欄的語意是「這張票總共收了多少」，不是流水帳，所以改成覆蓋；
+     收款紀錄那邊改成只補「還沒記到的那一段」（見 tkpaydoubletest.js）。 */
+  ok('★★★ 票券標成已付款、實收是覆蓋（不是累加 —— 累加會把同一筆錢算兩次）',
      /t\.payment_status='paid';/.test(G)
-     && /t\.amount_paid=\(Number\(t\.amount_paid\)\|\|0\)\+v\.amt;/.test(G));
+     && /t\.amount_paid=v\.amt;/.test(G)
+     && !/t\.amount_paid=\(Number\(t\.amount_paid\)\|\|0\)\+v\.amt;/.test(G));
+  ok('★★★ 收款紀錄只補差額（舊資料建約當天已經記過的不重複算）',
+     /const _newAmt=Math\.max\(0, v\.amt-_already\);/.test(G));
   ok('★★ 帳本留痕（adjust／0，不動堂數）',
      /await logTicket\(t\.id,'adjust',0,null,SESSION\.id,/.test(G)
      && /補收款 \$\$\{v\.amt\.toLocaleString\(\)\}/.test(G));

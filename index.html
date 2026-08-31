@@ -11567,8 +11567,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260831.1417';
-const APP_VERSION_LABEL='v260831.1417';
+const APP_VERSION = '260831.1430';
+const APP_VERSION_LABEL='v260831.1430';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48037,7 +48037,14 @@ async function _grantIssue(P){
   const t={id:uid('TK'),member_id:P.member_id,ticket_type_id:plan.ticket_type_id,
     source_plan_id:P.plan_id,plan_name:plan.name,format:plan.format||null,source:'purchase',
     unit_price:P.unitPrice,
-    amount_paid:Math.max(0,(isInstall?Math.max(0,P.firstAmount-P.voucherAmt):P.paidAmount)-_crUse),   // 營收：分期只記第1期實收（扣折抵）；一次付清記折抵後實收；儲值金折抵那段不算營收
+    /* 待付款＝錢還沒到，發放當下不記營收（2026-08-31 陳瀚竣案例）——
+       補收款那一支的檔頭本來就寫著「建約那天那一筆的 deal_amount 是 0」，
+       但這裡一直照記，於是同一筆錢被算兩次：
+         03:42 發放（未付款）→ amount_paid 5,200、purchases 也記 5,200
+         03:48 按〔收款〕$5,200 → amount_paid 變 10,400，又多一筆收款紀錄
+       錢什麼時候到、帳就記在哪一天（0828 定案），所以未付款一律先記 0。 */
+    amount_paid:(P.payment_status==='unpaid') ? 0
+      : Math.max(0,(isInstall?Math.max(0,P.firstAmount-P.voucherAmt):P.paidAmount)-_crUse),   // 營收：分期只記第1期實收（扣折抵）；一次付清記折抵後實收；儲值金折抵那段不算營收
     /* 效期自「第一堂預約」起算（2026-07-24 使用者定案）：售票當下不寫 expire_date，
        改把方案效期天數記在 valid_days，等 deductTicket 首次扣課時才算到期日。
        start_date / expire_date / activated_at 皆留空＝尚未開通。 */
@@ -48096,7 +48103,10 @@ async function _grantIssue(P){
   }
   // 建立購買紀錄（分期只記第1期實收金額；未收期款不列入營收）
   try{
-    const _dealRec=Math.max(0,(isInstall?Math.max(0,P.firstAmount-P.voucherAmt):P.paidAmount)-_crUse);
+    /* 待付款：收款紀錄先記 0（原價仍寫在 list_price，資料不會不見）——
+       等櫃檯按〔收款〕時才補一筆真正的金額，記在收到錢的那一天。 */
+    const _dealRec=(P.payment_status==='unpaid') ? 0
+      : Math.max(0,(isInstall?Math.max(0,P.firstAmount-P.voucherAmt):P.paidAmount)-_crUse);
     /* 拆帳（2026-08-12）：現金以填的為準（夾在 0～實收），匯款＝實收−現金 */
     const _paySplit=(P.method==='split')?{cash:Math.max(0,Math.min(Number(P.splitCash)||0,_dealRec)),
       transfer:_dealRec-Math.max(0,Math.min(Number(P.splitCash)||0,_dealRec))}:null;
@@ -48308,7 +48318,11 @@ async function _tkPayGo(){
       return;
     }
     t.payment_status='paid';
-    t.amount_paid=(Number(t.amount_paid)||0)+v.amt;
+    /* ⚠ 2026-08-31 陳瀚竣案例：原本是 `既有 + 本次`。這一支假設「未付款的票金額是 0」，
+       但發放那邊一直照記全額（上面已修），於是 $5,200 被加成 $10,400。
+       改成**填上去**：這一欄的語意是「這張票總共收了多少」，不是流水帳。
+       只跑得到一次（上面擋了 payment_status!=='unpaid'），所以設定值是對的。 */
+    t.amount_paid=v.amt;
     if(v.inst>1){
       /* 改成分期＝把票重新上鎖（2026-08-28）：只開通第一期，其餘等下一期收款。
          金額切法與賣票當下同一支 splitAmount，兩條路算出來要一樣。 */
@@ -48318,14 +48332,24 @@ async function _tkPayGo(){
         paid:_amts.map((_,i)=>i===0), current:1};
     }
     await dbPut('member_tickets',t);
-    /* 營收記在收款這一天（見檔頭）：補寫一筆 purchases，不動建約那天那一筆。 */
-    try{
+    /* 營收記在收款這一天（見檔頭）：補寫一筆 purchases，不動建約那天那一筆。
+       ⚠ 只補「還沒記到的那一段」（2026-08-31）——舊資料（0831 修正之前發放的待付款票）
+         建約當天就已經把錢記進 purchases 了，再補一筆全額就是同一筆錢算兩次。
+         蔡佳音 TK-msmvv10rgdpo 就是這種：8/10 已記 $10,400，按〔收款〕不該再記一次。 */
+    let _already=0;
+    try{ _already=(await dbGetAll('purchases').catch(()=>[]))
+      .filter(p=>p&&p.ticket_id===t.id).reduce((n,p)=>n+(Number(p.deal_amount)||0),0); }catch(_){}
+    const _newAmt=Math.max(0, v.amt-_already);
+    if(_newAmt<=0){
+      showToast(`這筆的 $${_already.toLocaleString()} 在建約當天就記過營收了，不重複計算`, 6000);
+    }else try{
       await dbPutPurchaseSafe({id:uid('PUR'), member_id:t.member_id, plan_id:t.source_plan_id||null,
         ticket_id:t.id, plan_name:(t.plan_name||'票券')+'（補收款）',
-        list_price:v.amt, deal_amount:v.amt, payment_method:v.method,
+        list_price:_newAmt, deal_amount:_newAmt, payment_method:v.method,
         split_cash:(v.method==='split'?v.split:null),
         invoice_type:'none', installment_count:1,
-        note:`待付款補收（票券 ${t.id}）`, operator:SESSION.id,
+        note:`待付款補收（票券 ${t.id}）`+(_already>0?`；建約當天已記 $${_already.toLocaleString()}，本筆只補差額`:''),
+        operator:SESSION.id,
         source:'purchase', created_at:new Date().toISOString()});
     }catch(e){ console.error('tkPay purchase fail',e);
       showToast('收款紀錄寫入失敗（票券已標為已付款，請補開）：'+dbFriendlyError(e), 8000); }
