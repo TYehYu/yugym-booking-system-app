@@ -283,7 +283,10 @@ ok('★★ 卡上的文字動作各自 stopPropagation（按它們不會順便�
 ok('★★ 「其他方案 ›」＝貼右下角的純文字，不是圓形也不是膠囊',
    /\.ash-mswap\{position:absolute;right:13px;bottom:9px;margin:0;padding:4px 0;\s*\n\s*background:none;border:none;/.test(src)
    && /\.ash-mcard\{position:relative;\}/.test(src)
-   && /\.ash-has-swap \.ash-mmain\{padding-right:78px;\}/.test(src)
+   /* 2026-08-31：留位改掛在 .ash-mop（只留在它壓到的那一行）——
+      掛在 .ash-mmain 會把姓名列與圓點容器一起縮 78px，
+      造成「＋ 備註」沒貼齊右緣、一列少一顆圓點（見 ashswappadtest.js）。 */
+   && /\.ash-has-swap \.ash-mop\{padding-right:78px;\}/.test(src)
    && !/class="mtk ash-mswap"/.test(src));
 ok('★★ 其他方案展開在「會員卡與下方圓鈕之間」（使用者指定的位置）',
    /<div id="ash-swapwrap" class="ash-swapwrap"><\/div>\s*\n\s*\$\{btns\?`<div class="mtp-orbs">\$\{btns\}<\/div>`:''\}/.test(src));
