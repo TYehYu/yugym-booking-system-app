@@ -9716,6 +9716,9 @@ button.rev-kind.rev-kind-off{opacity:.5;}
 .ovd-cnt{font-style:normal;font-size:11.5px;font-weight:700;color:var(--t3);margin-left:7px;}
 .ovd-sum{background:var(--card2);border-color:transparent;box-shadow:inset 0 1px 0 var(--bd);}
 .ovd-sum b{font-size:19px;}
+/* 成交金額高於定價的警示（2026-08-31 陳瀚竣案例：4 堂 $5,200 收成 $10,400） */
+.gt-amt-warn{margin:-6px 0 12px;padding:9px 12px;border-radius:9px;line-height:1.75;
+  font-size:12px;background:#fbeceb;border:1px solid #e0a8a2;color:#b5372e;}
 .vd-modes{display:flex;flex-direction:column;gap:7px;}
 .vd-mode{display:block;width:100%;text-align:left;padding:10px 13px;border:1px solid var(--bd);
   border-radius:10px;background:var(--card);cursor:pointer;line-height:1.6;}
@@ -11564,8 +11567,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260831.1406';
-const APP_VERSION_LABEL='v260831.1406';
+const APP_VERSION = '260831.1417';
+const APP_VERSION_LABEL='v260831.1417';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31446,6 +31449,38 @@ function bkCoachLeaveBtn(b, editable){
    按下去才在吐司裡講一句。它動到的是**效期**，事後幾乎不會有人回頭去核對，
    所以更需要事前講清楚。沒有到期日的票也要明講「不需要展延」——
    不然吐司裡少了半句話，櫃檯分不出是「沒延到」還是「不用延」。 */
+/* ══ 教練請假補登到排班表（2026-08-31 使用者指示）═══════════════════════
+   起因：0830 查鄭宇涵 7/13 那次請假時發現，**教練請假在系統裡只有一個地方有紀錄**
+   —— 預約上的 coach_leave 旗標。櫃檯改用一般「取消」處理的話，那次請假就徹底消失
+   （7/13 只能靠備註反推）。而排班表的請假紀錄只有兼職／櫃檯會填，教練沒有。
+
+   ⚠ 誠實說：這一支只在「有按教練請假」時才寫得進去，所以它**擋不住**
+     「櫃檯用一般取消」那條路 —— 那才是 7/13 真正的破口。它解決的是另一半：
+     請假有按了，但只有預約知道，人事／排班表查不到。兩者要分開處理。
+
+   ⚠ 薪資中立是硬要求：
+     ・leave_type 用 '教練請假' —— leaveSummary 只認 特休/病假/事假/其他，
+       不落任何一桶 → 不影響請假扣薪。
+     ・hours 與 leave_hours 都是 0 → 不影響值班時數（dutyHoursCapped 加 0）。
+     ・dutyClassOverlapRows 已改成跳過有 leave_type 的列（請假不是值班時段），
+       否則這一列會反過來讓那堂課去扣兼職的值班費。 */
+async function coachLeaveToRoster(empId, dateStr, startT, endT, why){
+  if(!empId || !dateStr) return null;
+  try{
+    const all=await dbGetAll('shifts').catch(()=>[]);
+    /* 已經有請假紀錄就不重複寫（同一天請假兩堂只留一列） */
+    if((all||[]).some(x=>x && x.emp_id===empId && String(x.date||'').slice(0,10)===String(dateStr).slice(0,10)
+        && x.leave_type)) return null;
+    const row={ id:uid('shift'), emp_id:empId, date:String(dateStr).slice(0,10),
+      start_time:String(startT||'00:00').slice(0,5), end_time:String(endT||startT||'00:00').slice(0,5),
+      hours:0, leave_type:'教練請假', leave_hours:0,
+      note:`系統自動補登：${why||'教練請假'}`,
+      created_by:(SESSION&&SESSION.id)||'', created_at:new Date().toISOString() };
+    await dbPut('shifts',row);
+    dbCacheClear('shifts');
+    return row;
+  }catch(e){ console.error('補登排班表失敗',e); return null; }
+}
 async function bkCoachLeave(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   if(bkIsCoachLeave(b)){ showToast('這堂已經標記過教練請假'); return; }
@@ -31504,6 +31539,10 @@ async function _bkCoachLeaveGo(id){
       ? String(b.note).trim()+`\n${ymd(TODAY)} 教練請假，本堂改為自主訓練（原：${_wasCat}）（堂數待簽到或取消時退回）`
       : `${ymd(TODAY)} 教練請假，本堂改為自主訓練（原：${_wasCat}）（堂數待簽到或取消時退回）`;
     await dbPut('bookings',b);
+    /* 補登到排班表（2026-08-31）：不影響薪資，見 coachLeaveToRoster 的註解 */
+    try{ await coachLeaveToRoster(bkCoachId(b), b.date, b.start_time,
+      minToTime(timeToMin(b.start_time)+(Number(b.duration)||60)),
+      `${String(b.start_time).slice(0,5)} ${_wasCat||'課程'}教練請假`); }catch(_){}
     let _ext=null;
     if(_tkId){ _ext=await extendForCoachLeave(_tkId,b,SESSION.id); }
     const extendTo=(_ext&&_ext.to)||null;
@@ -31741,6 +31780,10 @@ async function _doGrpCoachLeave(id){
   const _line=`${ymd(TODAY)} 教練請假，整堂取消（票券已退回、效期各延長 ${COACH_LEAVE_EXTEND_DAYS} 天）`;
   b.note=String(b.note||'').trim() ? String(b.note).trim()+'\n'+_line : _line;
   await dbPut('bookings',b);
+  /* 補登到排班表（2026-08-31）：不影響薪資，見 coachLeaveToRoster 的註解 */
+  try{ await coachLeaveToRoster(bkCoachId(b), b.date, b.start_time,
+    minToTime(timeToMin(b.start_time)+(Number(b.duration)||60)),
+    `${String(b.start_time).slice(0,5)} 團課教練請假（整堂取消）`); }catch(_){}
   // 退票走既有那一套（逐筆 deduct 帳本退回，並收回這堂發過的補課券與贈點）
   await cancelBooking(id,'force',{silent:true});
   // 這次退到哪幾張票，就延哪幾張
@@ -38225,7 +38268,10 @@ function dutyClassOverlapRows(shifts, bookings, empId, month, emp){
      （正職是月薪制，值班與上課本來就在同一段班內，扣了等於雙重懲罰）。
      兼職／工讀維持原規則 —— 他們的值班費是時薪，上課時段已另計課費。 */
   if(emp && normEmp(emp.employment_type||emp.pay_type)==='full_time') return [];
-  const myShifts=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month);
+  /* 請假的那一列不是值班時段（2026-08-31）——
+     否則 coachLeaveToRoster 補登的那一列會反過來讓同一堂課去扣兼職的值班費，
+     變成「因為請假所以被扣值班費」。 */
+  const myShifts=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month&&!s.leave_type);
   if(!myShifts.length) return [];
   // 該員工當月已上課（已完成或已簽到）、且有授課時段的課（私人教練/體驗/小班肌力團課）
   const myClasses=(bookings||[]).filter(b=>bkCoachId(b)===empId && (b.status==='completed'||b.status==='checked_in') && bkCounts(b)
@@ -47044,6 +47090,7 @@ async function openGrantModal(){
              才改期數會讓已開通的堂數對不上。分期要在這裡就選好。 */''}
       <div class="form-2col">
         <div class="form-row"><label>總金額</label><input type="number" id="gt-amount" placeholder="課程總價" oninput="try{gtCreditHint()}catch(_){}"></div>
+        <div id="gt-amt-warn" class="gt-amt-warn" style="display:none;"></div>
         ${/* 儲值金扣抵（2026-08-30）：有餘額才由 gtCreditSync 打開。
              折抵的那一段不記營收 —— 那筆錢在買前一張票時就認過了。 */''}
         <div class="form-row" id="gt-credit-row" style="display:none;"><label>儲值金扣抵<span class="lb-warn" id="gt-credit-max"></span></label>
@@ -47602,14 +47649,36 @@ async function refreshGrantInfo(){
          <span>分期 ${plan.installment?`<b style="color:var(--green);">可分期</b>`:'不可分期'}</span>
        </div>
      </div>`;
-  // 成交金額預設帶入定價
-  const amtEl=document.getElementById('gt-amount'); if(amtEl && !amtEl.dataset.touched) amtEl.value=listPrice;
-  if(amtEl) amtEl.oninput=()=>{amtEl.dataset.touched='1';refreshInstallPreview();gtVoucherCalc();};
+  /* 成交金額預設帶入定價
+     ⚠ 2026-08-31 陳瀚竣案例：4 堂 $5,200 的自訂方案，收款卻記成 $10,400。
+       成因是 dataset.touched 一旦設上就**永遠**不再同步 —— 櫃檯先填了金額、
+       再回上一步把方案改小，回到這一步時金額還停在舊的那個數字，
+       而確認視窗只是原封不動把它顯示出來，看起來完全正常。
+       改成：方案內容變了（名稱／堂數／定價／票種任一不同）就清掉 touched 重新帶入。
+       只有「同一個方案上打的折」才會被保留 —— 那正是 touched 當初要保護的東西。 */
+  const amtEl=document.getElementById('gt-amount');
+  const _sig=[plan.name||'',total,listPrice,plan.ticket_type_id||''].join('|');
+  if(amtEl && amtEl.dataset.sig!==_sig){ delete amtEl.dataset.touched; amtEl.dataset.sig=_sig; }
+  if(amtEl && !amtEl.dataset.touched) amtEl.value=listPrice;
+  if(amtEl) amtEl.oninput=()=>{amtEl.dataset.touched='1';refreshInstallPreview();gtVoucherCalc();gtAmtWarn(listPrice);};
+  gtAmtWarn(listPrice);
   // 分期欄位依模板是否可分期顯示
   const iw=document.getElementById('gt-install-wrap'); if(iw) iw.style.display=plan.installment?'':'none';
   if(!plan.installment){ const is=document.getElementById('gt-install'); if(is) is.value='1'; }
   refreshInstallPreview();
   refreshGrantVoucher();
+}
+/* 成交金額高於定價要出聲（2026-08-31）——
+   折扣（低於定價）很常見，不用吵；**高於定價**幾乎都是填錯，
+   而且往下走只會看到一個很正常的數字，沒有人會發現。 */
+function gtAmtWarn(listPrice){
+  const box=document.getElementById('gt-amt-warn'); if(!box) return;
+  const amt=Number((document.getElementById('gt-amount')||{}).value)||0;
+  const lp=Number(listPrice)||0;
+  if(lp>0 && amt>lp){
+    box.style.display='';
+    box.innerHTML=`⚠ 成交金額比定價多 <b>$${(amt-lp).toLocaleString()}</b>（定價 $${lp.toLocaleString()}）—— 確認不是多打一位數或改過方案沒改金額。`;
+  }else box.style.display='none';
 }
 /* ── 折抵券消費（2026-07-22 待辦2 使用者定案）：教練課/運動按摩簽約收款時可折抵，
    每張 $300；抽獎發的 tt-discount-* 票券即為折抵券。分期不併用（金額分段會亂）。 ── */
