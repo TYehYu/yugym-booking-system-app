@@ -30,6 +30,9 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
       {id:'p1',ticket_id:'t1',coach_id:'c1',deal_amount:12800,created_at:'2026-08-01T10:00:00Z'},
       {id:'p2',ticket_id:'t2',coach_id:'c2',deal_amount:6400,created_at:'2026-08-03T10:00:00Z'},
       {id:'p3',ticket_id:'t3',coach_id:null,deal_amount:100,created_at:'2026-08-03T10:00:00Z'},   // 無歸屬 → 不進矩陣
+      /* 2026-08-31：團課票、沒選業績教練 → 落在「團課收入」那一欄（不是「其他」）。
+         正式庫 8 月的 85,000 就是這一種，使用者要能指上去看是哪幾筆。 */
+      {id:'p4',ticket_id:'t5',member_id:'M4',coach_id:null,deal_amount:5000,created_at:'2026-08-04T10:00:00Z'},
     ],
     member_tickets:[
       {id:'t1',member_id:'M1',ticket_type_id:'tt-pt',purchase_date:'2026-08-01',sale_kind:'new',status:'usable'},
@@ -77,9 +80,15 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     bkPocket: require('./_pocketenv.js').bkPocket,
     tkClass5: require('./_pocketenv.js').tkClass5,
   };
-  /* fmWhoTip 是 finMatrix 的相依（新約/續約的滑鼠提示），一起帶進沙箱實跑 */
+  /* fmWhoTip 是 finMatrix 的相依（新約/續約的滑鼠提示），一起帶進沙箱實跑。
+     2026-08-31 追加 fmRevTip 與兩條說明字串 —— 團課收入／其他那兩格的明細提示
+     （使用者：「滑鼠指上去可以顯示該金額是什麼內容嗎」）。
+     ⚠ 一樣是切**真的**那一支進來，不要在沙箱裡寫個回空字串的假貨：
+       假貨會讓「明細有沒有真的組出來」這件事永遠測不到。 */
   const run=new Function(...Object.keys(env),
-    grabFn('fmWhoTip')+'\nreturn async '+grabFn('finMatrix'))(...Object.values(env));
+    grabFn('fmWhoTip')
+    +'\n'+src.slice(src.indexOf('const FM_TIP_MAX=14;'), src.indexOf("const FM_TIP_OTH='")+src.slice(src.indexOf("const FM_TIP_OTH='")).indexOf('\n'))
+    +'\nreturn async '+grabFn('finMatrix'))(...Object.values(env));
   (async()=>{
     await run();
     const out=html['fin-body']||'';
@@ -131,6 +140,24 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     ok('★ 新/續那一格帶 title：約別・姓名・方案・金額',
        /title="新約・M1（教練課） \$0"/.test(out) || /新約・M1/.test(out), out.match(/title="[^"]*約[^"]*"/g));
     ok('★ 月合計那格列出整月每一筆（帶日期）', /title="[^"]*01日 新約・M1[^"]*"/.test(out));
+    /* 2026-08-31 使用者：「團課收入跟其他　滑鼠指上去可以顯示該金額是什麼內容嗎」——
+       表頭本來就有一句定義，但那是規則；使用者問的是「這筆錢是哪幾筆」。
+       ⚠ 這兩欄的判準是「沒歸屬教練」，別把有教練的那幾筆也算進提示裡
+         （那會與右邊教練欄重複，看的人會以為營業額被算兩次）。 */
+    ok('★★ 團課收入那格列出明細（團課票、沒選業績教練的那幾筆）',
+       /title="團課收入：賣團課票的收款中，沒有選業績歸屬教練的那部分[^"]*團體課・M4　\$5,000[^"]*"/.test(out),
+       (out.match(/title="團課收入[^"]*"/g)||[]).slice(0,2));
+    ok('★★ 其他那格列出明細（對不到票券的收款，沒有會員就寫「（無會員）」）',
+       /title="其他：場租、商品、重啟，以及對不到票券的收款[^"]*收款・（無會員）　\$100[^"]*"/.test(out),
+       (out.match(/title="其他[^"]*"/g)||[]).slice(0,2));
+    ok('★★ 提示最後一行交代合計與筆數（看的人知道有沒有被截）',
+       /title="團課收入[^"]*合計 \$5,000（1 筆）"/.test(out));
+    ok('★★★ 有歸屬教練的收款不會混進這兩欄的提示（12,800／6,400 是 RANDY／SANDY 的業績）',
+       !/title="(團課收入|其他)[^"]*\$12,800[^"]*"/.test(out)
+       && !/title="(團課收入|其他)[^"]*\$6,400[^"]*"/.test(out));
+    ok('　　超過 14 筆只列前 14 筆，其餘用「…另有 N 筆」講出來（不默默截斷）',
+       /const FM_TIP_MAX=14;/.test(src)
+       && /if\(more>0\) show\.push\(`…另有 \$\{more\} 筆`\);/.test(src));
     /* 2026-08-06 二修（使用者指示）：不用問號游標，維持一般游標 */
     /* 2026-08-30：原本是全站禁用 cursor:help，但這條規則講的是**財務矩陣的格子**
        （見上一行 0806 二修）。薪資單的淡化 KPI 用 help 游標是刻意的，

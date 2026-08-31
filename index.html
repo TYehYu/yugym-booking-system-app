@@ -2348,6 +2348,13 @@ tr:hover td{background:var(--card2);}
 @media (max-width:600px){
   .modal-bg:not(.modal-side) .modal{max-height:calc(100dvh - 24px);}
 }
+/* 靠上對齊：只給有 .qs-mtop 標記的視窗（2026-08-31 使用者指示）——
+   「快速預約的視窗固定置中靠上　這樣不管下面時段多寡　也不會上上下下的跑」。
+   置中的視窗高度一變（換一天、時段數不同），整個框就會上下跳，
+   日期列跟著移位，等於每按一次都要重新找它在哪。靠上就釘住不動了。
+   ⚠ 這**不是**推翻上面 0729 的決定 —— 那條講的是全站彈窗（預約明細等）維持置中。
+     這裡只影響帶標記的那一支（會員端快速預約／改期），標記寫在 modal-title 上。 */
+.modal-bg:not(.modal-side):has(.qs-mtop){align-items:flex-start;}
 /* ── 彈窗互動語意統一（2026-07-27 使用者指示）：能點/能改＝白底（像按鈕）、純顯示＝米色 ──
    全站基準已大多符合：select/input/.btn-ghost 皆白底、資訊卡 var(--card2)。
    此處補強：彈窗內嵌的白色卡片/列表列（頁面預設白卡）在彈窗裡壓成米色；
@@ -6107,7 +6114,18 @@ body.memh2-shell .bottom-nav .bn-lb{color:inherit;}
    不是溢出而已（2026-08-31 使用者回報「日期列被壓縮」：手機上數字底部被切一截）。
    成因：--num 在 iPhone 解析到 SF Pro Display，數字比 line-height:1.15 的行框高。
    兩邊一起補：行高放寬（見 .qs-day b），這裡的上下內距也留足，字形才有地方站。 */
-.qs-days{display:flex;gap:8px;overflow-x:auto;margin:0 0 14px;padding:5px 2px 11px;
+/* ⚠⚠ 根因（2026-08-31 四修，使用者：「我按住拖拉的時候可以往下拉動　這樣不對」）——
+   手機的 .modal 是 display:flex;flex-direction:column（見 @media 那一段）。
+   flex 子項本來有「不得縮得比內容小」的保護（min-height:auto），
+   **但那條保護只在 overflow 是 visible 時成立** —— 這一列有 overflow-x:auto，
+   保護就失效了。於是視窗一撐到 max-height（下面時段一多就會），
+   日期列被壓扁成幾十 px：卡片被裁掉一截、還多出一條可以上下拉的捲軸。
+   這解釋了前三修為什麼都沒治好 —— 前三修都在調卡片自己的高度，
+   問題卻出在**外面的人把這一列壓扁**。
+   三件事一起釘死：flex:none（不准被壓）、height 寫死（68 卡片＋5＋11 內距）、
+   overflow-y:hidden（就算真的算錯也不給上下捲）。 */
+.qs-days{display:flex;align-items:center;gap:8px;overflow-x:auto;overflow-y:hidden;
+  flex:0 0 auto;height:84px;box-sizing:border-box;margin:0 0 14px;padding:5px 2px 11px;
   -webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .qs-days::-webkit-scrollbar{display:none;height:0;}
 /* 改期時的「原時段」提示條（2026-08-31）——同一個快速預約視窗兼作改期，
@@ -11647,8 +11665,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260831.2223';
-const APP_VERSION_LABEL='v260831.2223';
+const APP_VERSION = '260831.2253';
+const APP_VERSION_LABEL='v260831.2253';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -53495,7 +53513,7 @@ async function memh2SelfSlots(ds, until, reschedId){
   /* 〔已移除〕效期那一條提示（2026-08-31 使用者指示：提示只留四條標籤說明）——
      日期列本來就只列效期內約得到的日子，那一句是「為什麼只有這幾天」的註解；
      使用者看過實機後決定不需要。要還原就把 _limTxt 加回 qs-note。 */
-  showModal(`<div class="modal-title">${_rs?'更改自主訓練時間':'預約自主訓練'}</div>
+  showModal(`<div class="modal-title qs-mtop">${_rs?'更改自主訓練時間':'預約自主訓練'}</div>
     ${_rs?`<div class="qs-orig">原時段　<b>${String(_rs.origDate).slice(5).replace('-','/')}　${String(_rs.origTime).slice(0,5)}</b>　→　請選新的時段</div>`:''}
     ${_dayRow}
     <div class="qs-head">
@@ -58189,12 +58207,26 @@ async function finMatrix(){
   const _isGrpPur=p=>{ const t=_tkById2[p&&p.ticket_id];
     return !!t && tkClass5(t,_typeMapFM)==='group'; };
   const dayGrpRev={}, dayOthRev={}; let sumGrpRev=0, sumOthRev=0;
+  /* 這兩欄的金額「是什麼內容」要看得到（2026-08-31 使用者：「滑鼠指上去可以顯示
+     該金額是什麼內容嗎」）—— 表頭本來就有一句說明，但那是「規則」，
+     使用者要問的是「這 85,000 到底是哪幾筆」。所以每一格都夾一份明細，
+     和右邊教練欄的新/續提示（fmWhoTip）同一種語彙。 */
+  const dayGrpWho={}, dayOthWho={}; const sumGrpWho=[], sumOthWho=[];
+  const _purItem=(p,d10)=>({
+    kind:(_tkById2[p.ticket_id]||{}).plan_name || p.plan_name
+         || ((_typeMapFM[(_tkById2[p.ticket_id]||{}).ticket_type_id]||{}).name) || '收款',
+    /* 查不到名字就退回 id（與新/續那支同一套退法）——「（無會員）」只留給
+       真的沒掛會員的收款（場租、商品），不要把撈不到名字的人也講成沒有會員。 */
+    name:memName[p.member_id]||p.member_id||'（無會員）', amt:Number(p.deal_amount)||0 });
   (purs||[]).forEach(p=>{ if(!p) return; const d10=String(p.created_at||'').slice(0,10);
     if(!inM(d10)) return; const v=Number(p.deal_amount)||0; const dd2=d10.slice(8,10);
     dayAmtAll[dd2]=(dayAmtAll[dd2]||0)+v; sumAmtAll+=v;
     if(p.coach_id) return;                       // 有歸屬教練 → 已經在那位教練的業績欄
-    if(_isGrpPur(p)){ dayGrpRev[dd2]=(dayGrpRev[dd2]||0)+v; sumGrpRev+=v; }
-    else { dayOthRev[dd2]=(dayOthRev[dd2]||0)+v; sumOthRev+=v; } });
+    const _it=_purItem(p,d10);
+    if(_isGrpPur(p)){ dayGrpRev[dd2]=(dayGrpRev[dd2]||0)+v; sumGrpRev+=v;
+      (dayGrpWho[dd2]=dayGrpWho[dd2]||[]).push(_it); sumGrpWho.push(Object.assign({d:Number(dd2)},_it)); }
+    else { dayOthRev[dd2]=(dayOthRev[dd2]||0)+v; sumOthRev+=v;
+      (dayOthWho[dd2]=dayOthWho[dd2]||[]).push(_it); sumOthWho.push(Object.assign({d:Number(dd2)},_it)); } });
   let dayRows='';
   for(let d=1;d<=days;d++){
     const dd=String(d).padStart(2,'0');
@@ -58214,8 +58246,8 @@ async function finMatrix(){
     });
     dayRows+=`<tr class="${isToday?'fm-today':''}"><th class="fm-d">${d}<span>（${wd}）</span></th>`
       +`<td class="fm-c fm-t">${num(dayPt)}</td><td class="fm-c fm-t fm-t2">${num(dayGrp)}</td>`
-      +`<td class="fm-c fm-t fm-t5">${dayGrpRev[dd]?money(dayGrpRev[dd]):''}</td>`
-      +`<td class="fm-c fm-t fm-t4">${dayOthRev[dd]?money(dayOthRev[dd]):''}</td>`
+      +`<td class="fm-c fm-t fm-t5"${fmRevTip(FM_TIP_GRP,dayGrpWho[dd])}>${dayGrpRev[dd]?money(dayGrpRev[dd]):''}</td>`
+      +`<td class="fm-c fm-t fm-t4"${fmRevTip(FM_TIP_OTH,dayOthWho[dd])}>${dayOthRev[dd]?money(dayOthRev[dd]):''}</td>`
       +`<td class="fm-c fm-t fm-t3">${money(dayAmtAll[dd]||0)}</td>${tds}</tr>`;
   }
   let sumTds='', sumPt=0, sumGrp=0;
@@ -58241,10 +58273,10 @@ async function finMatrix(){
     <div class="fm-wrap"><table class="fm-tb">
       <thead>
         <tr><th class="fm-d fm-h">日期</th><th class="fm-h fm-t" colspan="5">全店合計</th>${head1}</tr>
-        <tr><th class="fm-d fm-sh"></th><th class="fm-sh fm-t">教練課</th><th class="fm-sh fm-t fm-t2">團課</th><th class="fm-sh fm-t fm-t5" title="團課票的收款中，賣票時沒有選業績歸屬教練的那部分（有選的已經算在右邊該教練的業績裡）">團課收入</th><th class="fm-sh fm-t fm-t4" title="場租、商品、重啟，以及對不到票券的收款">其他</th><th class="fm-sh fm-t fm-t3">營業額</th>${head2}</tr>
+        <tr><th class="fm-d fm-sh"></th><th class="fm-sh fm-t">教練課</th><th class="fm-sh fm-t fm-t2">團課</th><th class="fm-sh fm-t fm-t5" title="${FM_TIP_GRP}（有選的已經算在右邊該教練的業績裡）&#10;下面每一格都可以指上去看是哪幾筆">團課收入</th><th class="fm-sh fm-t fm-t4" title="${FM_TIP_OTH}&#10;下面每一格都可以指上去看是哪幾筆">其他</th><th class="fm-sh fm-t fm-t3">營業額</th>${head2}</tr>
       </thead>
       <tbody>
-        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumPt)}</td><td class="fm-c fm-t fm-t2">${num(sumGrp)}</td><td class="fm-c fm-t fm-t5">${money(sumGrpRev)}</td><td class="fm-c fm-t fm-t4">${money(sumOthRev)}</td><td class="fm-c fm-t fm-t3">${money(sumAmtAll)}</td>${sumTds}</tr>
+        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumPt)}</td><td class="fm-c fm-t fm-t2">${num(sumGrp)}</td><td class="fm-c fm-t fm-t5"${fmRevTip(FM_TIP_GRP,sumGrpWho)}>${money(sumGrpRev)}</td><td class="fm-c fm-t fm-t4"${fmRevTip(FM_TIP_OTH,sumOthWho)}>${money(sumOthRev)}</td><td class="fm-c fm-t fm-t3">${money(sumAmtAll)}</td>${sumTds}</tr>
         ${dayRows}
       </tbody>
     </table></div>
@@ -58254,6 +58286,24 @@ async function finMatrix(){
 }
 /* 新約/續約的滑鼠提示（2026-08-06 使用者指示：提示這張是哪個會員）——
    一格可能不只一張，逐張列出「約別・姓名・方案・金額」；月合計那格再帶上日期。 */
+/* 團課收入／其他這兩欄的明細提示（2026-08-31 使用者：「滑鼠指上去可以顯示
+   該金額是什麼內容嗎」）—— 前一行是這一欄的定義，後面逐筆列出來。
+   ⚠ 月合計那一格可能有上百筆 → 只列前 14 筆，其餘用「…另有 N 筆」交代，
+     不是靜靜截斷（截斷而不說＝看到的人以為就這些）。 */
+const FM_TIP_MAX=14;
+function fmRevTip(head, list){
+  if(!list || !list.length) return ` title="${head}"`;
+  const tot=list.reduce((n,w)=>n+(Number(w.amt)||0),0);
+  const show=list.slice(0,FM_TIP_MAX)
+    .map(w=>`${w.d?w.d+'日 ':''}${w.kind}・${w.name}　$${(Number(w.amt)||0).toLocaleString()}`);
+  const more=list.length-show.length;
+  if(more>0) show.push(`…另有 ${more} 筆`);
+  show.push(`合計 $${tot.toLocaleString()}（${list.length} 筆）`);
+  const txt=head+'\n\n'+show.join('\n');
+  return ` title="${String(txt).replace(/"/g,'&quot;')}"`;
+}
+const FM_TIP_GRP='團課收入：賣團課票的收款中，沒有選業績歸屬教練的那部分';
+const FM_TIP_OTH='其他：場租、商品、重啟，以及對不到票券的收款';
 function fmWhoTip(who){
   if(!who || !who.length) return '';
   const txt=who.map(w=>`${w.d?String(w.d)+'日 ':''}${w.kind}・${w.name}${w.plan?'（'+w.plan+'）':''}${w.amt?' $'+w.amt.toLocaleString():''}`).join('\n');
