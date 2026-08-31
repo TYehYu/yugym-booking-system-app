@@ -67,8 +67,10 @@ console.log('\n③ 底部「自主訓練」浮動列（2026-08-31 改成「他�
      && /<b>＋<\/b><span>\$\{p\.inf\?'不限':'可約'\}<\/span>/.test(B));
   ok('★★ 無限次卡只畫一顆「不限」（12 顆一模一樣的可約卡沒有資訊量）',
      /if\(tkUnlimited\(t\)\)\{ pts\.push\(\{from, ex, inf:true\}\); return; \}/.test(B));
-  ok('★★ 已約的點了跳到那一天；還沒約的點了直接開挑時段',
-     /onclick="memh2PickDay\('\$\{b\.date\}'\)"/.test(B)
+  /* 2026-08-31：已約的那顆改成兩段 —— 第一下跳到那一天（不變），
+     已經在那一天了第二下才進改期（msbStart）。見 selfbarrestest.js。 */
+  ok('★★ 已約的點了跳到那一天（已在那天則改期）；還沒約的點了直接開挑時段',
+     /onclick="\$\{_rs\?`msbStart\('\$\{b\.id\}'\)`:`memh2PickDay\('\$\{b\.date\}'\)`\}"/.test(B)
      && /onclick="memh2SelfSlots\('\$\{p\.from\}','\$\{p\.ex\|\|''\}'\)"/.test(B));
   ok('★★ 可用點數＝效期內、還有餘額、真的是自主訓練票（memh2TkKind）',
      /memh2TkKind\(t,typeMap\)==='self'/.test(B)

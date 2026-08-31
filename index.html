@@ -10319,6 +10319,15 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .mh2-sbc.mh2-sbtoday{background:var(--green);border-color:var(--green);}
 .mh2-sbc.mh2-sbtoday b,.mh2-sbc.mh2-sbtoday span{color:#fff;}
 .mh2-sbc.on{border-color:var(--gold,#B48A56);border-width:3px;}
+/* 已經選到的那一顆再點一次＝改時間（2026-08-31 使用者指示）——
+   右上角掛一個小時鐘當提示。用 ::after 疊上去、不佔位，圓卡的幾何完全不動。
+   ⚠ 只有真的改得動的才畫（.mh2-sbrs）：已簽到、教練請假改記的那種點了也沒用，
+     畫了圖示反而是騙人（「不能用就寫原因，別藏按鈕」的另一面：不能用就別畫成能用）。 */
+.mh2-sbc.mh2-sbrs{position:relative;}
+.mh2-sbc.mh2-sbrs::after{content:'🕒';position:absolute;top:-2px;right:-2px;
+  width:24px;height:24px;border-radius:50%;background:var(--gold,#B48A56);
+  display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;
+  box-shadow:0 1px 4px rgba(30,25,15,.28);}
 /* 還沒安排的點數：虛線空卡＝「這一點還沒用，按了就去挑時段」（與課卡的可報名團課同一個語彙） */
 .mh2-sbc.mh2-sbfree{background:#fff;border-style:dashed;border-color:var(--green);}
 .mh2-sbc.mh2-sbfree b{color:var(--green);font-size:24px;}
@@ -11580,8 +11589,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260831.1752';
-const APP_VERSION_LABEL='v260831.1752';
+const APP_VERSION = '260831.1811';
+const APP_VERSION_LABEL='v260831.1811';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -53246,9 +53255,19 @@ async function memSelfBarSync(){
     const _cur=(typeof mh2S==='function')?(mh2S().date||today):today;
     const cards=booked.slice(0,CAP).map(b=>{
       const d=parseYmd(b.date)||new Date();
-      return `<button class="mh2-sbc${b.date===_cur?' on':''}${b.date===today?' mh2-sbtoday':''}"
-        title="${b.date.replace(/-/g,'/')} ${String(b.start_time||'').slice(0,5)}　·　點一下跳到那一天"
-        onclick="memh2PickDay('${b.date}')">
+      /* 已經在那一天了，再點一次就進改期（2026-08-31 使用者指示：
+         「如果客人要把其中一個圓形卡修改日期　應該再點一次就可以調整」）——
+         第一下跳到那一天（原本的行為，最常用），第二下才動時間。
+         ⚠ 改得動的條件與課卡上那顆「更改時間」一字不差（見 rsBtn）：
+           還沒簽到（status 仍是 booked）、是自己的那一格（家人共享票時 member_id 才準）、
+           不是教練請假被改記成自主訓練的那種。條件不合就維持「跳到那一天」。 */
+      const _sel=b.date===_cur;
+      const _canRs=b.member_id===SESSION.id && b.status==='booked' && b.coach_leave!==true;
+      const _rs=_sel && _canRs;
+      return `<button class="mh2-sbc${_sel?' on':''}${b.date===today?' mh2-sbtoday':''}${_rs?' mh2-sbrs':''}"
+        title="${b.date.replace(/-/g,'/')} ${String(b.start_time||'').slice(0,5)}　·　${
+          _rs?'再點一次可以改時間':(_canRs?'點一下跳到那一天（再點一次可以改時間）':'點一下跳到那一天')}"
+        onclick="${_rs?`msbStart('${b.id}')`:`memh2PickDay('${b.date}')`}">
         <b>${d.getMonth()+1}/${d.getDate()}</b><span>${String(b.start_time||'').slice(0,5)}</span></button>`;
     }).concat(pts.slice(0, Math.max(0, CAP-booked.length)).map(p=>
       `<button class="mh2-sbc mh2-sbfree" title="${p.inf?'不限次數的自主訓練':'還沒安排的自主訓練點數'}${p.ex?`（效期至 ${p.ex.replace(/-/g,'/')}）`:''}　·　點一下挑時段"
