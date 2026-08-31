@@ -46,6 +46,24 @@ console.log('① 會員手機課卡（0831 就是這一塊出事）');
      && /會員端整頁噴\s*\n\s*「Can't find variable: _lvTag」/.test(src));
 }
 
+console.log('\n①b 標籤數量要對得起來（0831 第二個坑：多一個 </div>）');
+{
+  /* 多一個 </div> 會把卡片提早關掉，簽到鈕跟著跑到卡片外面 ——
+     畫面上看起來是「課卡變成橫排、每張被擠成一條」。
+     語法完全合法、變數也都在，所以前兩關都攔不到，只能數標籤。 */
+  const count=(from,to,label)=>{
+    const i=src.indexOf(from); if(i<0) throw new Error('切不到：'+label);
+    const j=src.indexOf(to,i);  if(j<0) throw new Error('切不到結尾：'+label);
+    /* 把 ${/* … *​/''} 這種模板註解拿掉再數，註解裡的標籤不算 */
+    const blk=src.slice(i,j).replace(/\$\{\/\*[\s\S]*?\*\/''\}/g,'');
+    return [ (blk.match(/<div\b/g)||[]).length, (blk.match(/<\/div>/g)||[]).length ];
+  };
+  const [o1,c1]=count('    return `<div class="admh2-card${st.done?', "  }).join('');", '會員手機課卡');
+  ok('★★★ 會員手機課卡的 <div> 開關數相等', o1===c1, {開:o1, 關:c1});
+  ok('★★ 這個坑的症狀寫在測試裡（下次看到橫排就知道往哪找）',
+     /畫面上看起來是「課卡變成橫排、每張被擠成一條」/.test(fs.readFileSync(__filename,'utf8')));
+}
+
 console.log('\n② 另外兩塊常被互相複製的課卡');
 {
   const b1=undeclared('  const cards=list.map(b=>{', "  }).join('')", '教練手機首頁課卡');
