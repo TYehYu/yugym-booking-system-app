@@ -26,7 +26,7 @@ console.log('① 計算與欄位一個都沒動');
   ok('★★ 月合計列：五個數字（sumPt／sumGrp／sumGrpRev／sumOthRev／sumAmtAll）＋各教練',
      /* 2026-08-31 二修：那兩格多夾一份 fmRevTip 明細提示（使用者：「滑鼠指上去
         可以顯示該金額是什麼內容嗎」），所以標籤與 > 之間允許一段 title。 */
-     /<tr class="fm-sum"><th class="fm-d">月合計<\/th><td class="fm-c fm-t">\$\{num\(sumPt\)\}<\/td><td class="fm-c fm-t fm-t2">\$\{num\(sumGrp\)\}<\/td><td class="fm-c fm-t fm-t5"\$\{fmRevTip\(FM_TIP_GRP,sumGrpWho\)\}>\$\{money\(sumGrpRev\)\}<\/td><td class="fm-c fm-t fm-t4"\$\{fmRevTip\(FM_TIP_OTH,sumOthWho\)\}>\$\{money\(sumOthRev\)\}<\/td><td class="fm-c fm-t fm-t3">\$\{money\(sumAmtAll\)\}<\/td>\$\{sumTds\}<\/tr>/.test(RENDER));
+     /<tr class="fm-sum"><th class="fm-d">月合計<\/th><td class="fm-c fm-t">\$\{num\(sumPt\)\}<\/td><td class="fm-c fm-t fm-t2">\$\{num\(sumGrp\)\}<\/td><td class="fm-c fm-t fm-t5"\$\{fmRevTip\(sumGrpWho\)\}>\$\{money\(sumGrpRev\)\}<\/td><td class="fm-c fm-t fm-t4"\$\{fmRevTip\(sumOthWho\)\}>\$\{money\(sumOthRev\)\}<\/td><td class="fm-c fm-t fm-t3">\$\{money\(sumAmtAll\)\}<\/td>\$\{sumTds\}<\/tr>/.test(RENDER));
   ok('★★★ 團課收入＋其他＝沒歸屬教練的收款，加上各教練業績要等於營業額',
      /if\(p\.coach_id\) return;                       \/\/ 有歸屬教練 → 已經在那位教練的業績欄/.test(src)
      && /五欄相加＝營業額，永遠對得起來/.test(src));
