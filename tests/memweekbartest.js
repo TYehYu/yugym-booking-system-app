@@ -57,7 +57,7 @@ console.log('\n③ 底部「自主訓練」浮動列（2026-08-31 改成「他�
      四個圓形卡，直接點圓形卡就可以安排預約，然後自主訓練列要一直顯示，包含選到
      我的票券這個頁面的時候」。
      劉忠緯＝2 已約（8/28、8/31）＋ 2 可用點數 ＝ 4 顆。 */
-  const B=src.slice(src.indexOf('async function memSelfBarSync(){'), src.indexOf('async function memh2SelfSlots(ds){'));
+  const B=src.slice(src.indexOf('async function memSelfBarSync(){'), src.indexOf('async function memh2SelfSlots(ds, until, reschedId){'));
   ok('★★ 搬到外殼層：掛在 body、由 navTo 呼叫（留在頁面裡換到「我的票券」就消失）',
      /el=document\.createElement\('div'\); el\.id='mem-selfbar'; el\.className='mh2-selfbar';\s*\n\s*document\.body\.appendChild\(el\);/.test(B)
      && /setTimeout\(\(\)=>\{ try\{ memSelfBarSync\(\); \}catch\(_\)\{\} \},0\);/.test(src)
@@ -69,8 +69,10 @@ console.log('\n③ 底部「自主訓練」浮動列（2026-08-31 改成「他�
      /if\(tkUnlimited\(t\)\)\{ pts\.push\(\{from, ex, inf:true\}\); return; \}/.test(B));
   /* 2026-08-31：已約的那顆改成兩段 —— 第一下跳到那一天（不變），
      已經在那一天了第二下才進改期（msbStart）。見 selfbarrestest.js。 */
-  ok('★★ 已約的點了跳到那一天（已在那天則改期）；還沒約的點了直接開挑時段',
-     /onclick="\$\{_rs\?`msbStart\('\$\{b\.id\}'\)`:`memh2PickDay\('\$\{b\.date\}'\)`\}"/.test(B)
+  /* 2026-08-31 二修：已約的那顆點一下直接開快速預約視窗改時間（帶預約 id），
+     不再先跳到那一天。改不動的（已簽到等）才維持跳日。見 selfbarrestest.js。 */
+  ok('★★ 已約的點了改時間（改不動才跳到那一天）；還沒約的點了直接開挑時段',
+     /onclick="\$\{_canRs\?`memh2SelfSlots\('\$\{b\.date\}','','\$\{b\.id\}'\)`:`memh2PickDay\('\$\{b\.date\}'\)`\}"/.test(B)
      && /onclick="memh2SelfSlots\('\$\{p\.from\}','\$\{p\.ex\|\|''\}'\)"/.test(B));
   ok('★★ 可用點數＝效期內、還有餘額、真的是自主訓練票（memh2TkKind）',
      /memh2TkKind\(t,typeMap\)==='self'/.test(B)

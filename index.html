@@ -6104,6 +6104,11 @@ body.memh2-shell .bottom-nav .bn-lb{color:inherit;}
 .qs-days::-webkit-scrollbar{display:none;height:0;}
 /* 2026-08-31 使用者：「上方的日期列可以大一點 有點被壓縮了」——
    52→70px 寬、字級各升一級，手指按得到、日期也讀得清楚。 */
+/* 改期時的「原時段」提示條（2026-08-31）——同一個快速預約視窗兼作改期，
+   上方先講清楚「現在在哪、要改去哪」。 */
+.qs-orig{margin:0 0 10px;padding:9px 12px;border-radius:10px;line-height:1.7;
+  font-size:12.5px;background:#faf5ea;border:1px solid #e0c894;color:var(--gold-d,#b48a56);}
+.qs-orig b{font-family:var(--num),inherit;color:var(--text);}
 .qs-day{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;
   min-width:70px;padding:10px 10px;border:1.5px solid var(--bd);border-radius:13px;
   background:#fff;font-family:inherit;cursor:pointer;}
@@ -9441,6 +9446,12 @@ button.vu-dot:hover{border-color:var(--green);color:var(--green);}
 .vu-dot.cur{box-shadow:0 0 0 2px var(--gold-d,#b48a56);}
 /* 跑步機燈號已移除（2026-08-03 使用者指示）——佔用數改為只在背後夾制台數選擇 */
 .cag-slot-tag{font-size:10px;opacity:.8;margin-left:5px;font-weight:600;}
+/* 改期視窗裡的「原時段」那一格（2026-08-31）：虛線淡化、不可點 ——
+   它被自己這筆預約佔著，不會出現在可選時段裡，但一定要看得到，
+   不然客人會以為原本那個時間不見了。 */
+.cag-slot.cag-slot-now{background:var(--card2);border:1px dashed var(--bd);
+  color:var(--t3);cursor:default;opacity:.9;}
+.cag-slot.cag-slot-now .cag-slot-tag{color:var(--gold-d,#b48a56);font-weight:800;opacity:1;}
 .msb-types{display:flex;gap:8px;padding:2px 16px 4px;}
 .msb-types button{flex:1;border:none;border-radius:999px;padding:8px 0;font-size:12.5px;font-weight:700;cursor:pointer;
   background:rgba(255,255,255,.14);color:rgba(244,241,232,.75);font-family:inherit;}
@@ -11589,8 +11600,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260831.1811';
-const APP_VERSION_LABEL='v260831.1811';
+const APP_VERSION = '260831.1824';
+const APP_VERSION_LABEL='v260831.1824';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -53261,13 +53272,18 @@ async function memSelfBarSync(){
          ⚠ 改得動的條件與課卡上那顆「更改時間」一字不差（見 rsBtn）：
            還沒簽到（status 仍是 booked）、是自己的那一格（家人共享票時 member_id 才準）、
            不是教練請假被改記成自主訓練的那種。條件不合就維持「跳到那一天」。 */
+      /* 點一下就開快速預約視窗改時間（2026-08-31 二修，使用者：
+           「不用跳過去那一天了　只要點了就再開一次快速預約視窗但要標示已經預約的時間」）——
+         一修做的是「第一下跳到那一天、第二下才改期」，但跳過去那一步對客人沒有用：
+         他要的就是換時間。改成一下到位，原時段在視窗裡標「目前」。
+         ⚠ 改不動的（已簽到／教練請假改記的／家人共享票不是自己那格）維持跳到那一天，
+           而且不畫時鐘 —— 畫了點下去沒反應比沒有提示更糟。 */
       const _sel=b.date===_cur;
       const _canRs=b.member_id===SESSION.id && b.status==='booked' && b.coach_leave!==true;
-      const _rs=_sel && _canRs;
-      return `<button class="mh2-sbc${_sel?' on':''}${b.date===today?' mh2-sbtoday':''}${_rs?' mh2-sbrs':''}"
+      return `<button class="mh2-sbc${_sel?' on':''}${b.date===today?' mh2-sbtoday':''}${_canRs?' mh2-sbrs':''}"
         title="${b.date.replace(/-/g,'/')} ${String(b.start_time||'').slice(0,5)}　·　${
-          _rs?'再點一次可以改時間':(_canRs?'點一下跳到那一天（再點一次可以改時間）':'點一下跳到那一天')}"
-        onclick="${_rs?`msbStart('${b.id}')`:`memh2PickDay('${b.date}')`}">
+          _canRs?'點一下改時間':'點一下跳到那一天'}"
+        onclick="${_canRs?`memh2SelfSlots('${b.date}','','${b.id}')`:`memh2PickDay('${b.date}')`}">
         <b>${d.getMonth()+1}/${d.getDate()}</b><span>${String(b.start_time||'').slice(0,5)}</span></button>`;
     }).concat(pts.slice(0, Math.max(0, CAP-booked.length)).map(p=>
       `<button class="mh2-sbc mh2-sbfree" title="${p.inf?'不限次數的自主訓練':'還沒安排的自主訓練點數'}${p.ex?`（效期至 ${p.ex.replace(/-/g,'/')}）`:''}　·　點一下挑時段"
@@ -53296,7 +53312,10 @@ function memSelfBarFit(){
    2026-08-31 使用者：「上方的日期列也自動篩選該自主訓練的圓形卡的期限」——
    一位客人手上常常同時有兩三張效期不同的點數票，日期列如果永遠列「所有票的聯集」，
    點的是 9/3 到期那一點、卻看得到 9/10，按下去才被擋，那個擋是白挨的。 */
-async function memh2SelfSlots(ds, until){
+/* @param reschedId 帶了就是「改這一筆的時間」（2026-08-31 使用者指示：
+     「不用跳過去那一天了　只要點了就再開一次快速預約視窗但要標示已經預約的時間」）——
+   同一個視窗兩用：沒帶＝約新的一點、帶了＝改期（不另扣點）。 */
+async function memh2SelfSlots(ds, until, reschedId){
   const date=ds||mh2S().date;
   window._mh2SelfUntil=String(until||'')||null;
   window._mh2SlotBack=null;        // 回到挑時段這一頁＝來路重新開始（見 msbSlotBack）
@@ -53304,13 +53323,18 @@ async function memh2SelfSlots(ds, until){
      2026-08-27 篩選列與左欄一起退場（日期列改成橫排在上方），這一段跟著移除 ——
      ⚠ 不能留著：s.filter 一旦被切成 'self'，memh2HTML 就不畫「當天可報名的團體課」，
        客人從［＋］回來之後團課報名卡會整片不見。改成用課卡欄下方那一行寫原因。 */
-  if(!window._msb){ try{ await msbStart(); }catch(_){} }
+  /* 改期：一定要用 reschedId 重新起一次（msbStart 會把原時段讀進 s.resched）——
+     沿用舊的 _msb 會拿到上一次的狀態，改到別筆去。 */
+  if(reschedId){ try{ await msbStart(reschedId); }catch(_){} }
+  else if(!window._msb){ try{ await msbStart(); }catch(_){} }
   /* msbStart 會順手展開舊版的下方訂位表與 ✕ 鈕 —— V2 不用，收掉但保留狀態 */
   try{ const sh=document.getElementById('msb-sheet'); if(sh) sh.remove(); }catch(_){}
   const s=window._msb;
   if(!s){ showToast('目前沒有自主訓練點數'); return; }
   if(!(s.groups.self||[]).length && (s.groups.friendly||[]).length) s.type='friendly';
-  s.date=date; s.resched=null;
+  s.date=date;
+  if(!reschedId) s.resched=null;   // 約新的一點才清；改期要留著（不另扣點、送出走改期那條）
+  const _rs=s.resched||null;
   const r=await msbProbeFree();
   if(!window._msb) return;
   if(!r || r.err==='expired'){
@@ -53329,7 +53353,14 @@ async function memh2SelfSlots(ds, until){
   const _nowMin=(date===ymd(TODAY))?(new Date().getHours()*60+new Date().getMinutes()):-1;
   const mms=Array.from(r.free).filter(m=>_nowMin<0||m>=_nowMin).sort((a,b)=>a-b);
   window._mh2Pick='';
-  const cells=mms.map(m=>{ const tag=VN[r.vids[m]]||'';
+  /* 原時段要看得到（2026-08-31）——它被自己這筆預約佔著，本來就不會出現在 free 裡，
+     所以另外插一格、標「目前」、不可點。少了它，客人會以為原本那個時間不見了。 */
+  const _origM=(_rs && _rs.origDate===date && _rs.origTime)?timeToMin(_rs.origTime):null;
+  const _all=(_origM!=null && mms.indexOf(_origM)<0) ? mms.concat([_origM]).sort((a,b)=>a-b) : mms;
+  const cells=_all.map(m=>{
+    if(m===_origM) return `<button type="button" class="cag-slot cag-slot-now" disabled
+      title="這張預約目前就在這個時段">${minToTime(m)}<span class="cag-slot-tag">目前</span></button>`;
+    const tag=VN[r.vids[m]]||'';
     return `<button type="button" class="cag-slot" data-t="${minToTime(m)}" onclick="memh2SelSlot('${minToTime(m)}')">${
       minToTime(m)}${tag?`<span class="cag-slot-tag">${tag}</span>`:''}</button>`; }).join('');
   const _d=parseYmd(date)||new Date(TODAY);
@@ -53362,7 +53393,7 @@ async function memh2SelfSlots(ds, until){
   const _dayRow=_days.length>1
     ? `<div class="qs-days">${_days.map(([x,dd])=>
         `<button type="button" class="qs-day${x===date?' on':''}${x===_t0?' qs-today':''}"
-          onclick="memh2SelfSlots('${x}','${_lim}')">
+          onclick="memh2SelfSlots('${x}','${_lim}'${_rs?`,'${_rs.id}'`:''})">
           <i>${x===_t0?'今天':'週'+'日一二三四五六'[dd.getDay()]}</i>
           <b>${dd.getMonth()+1}/${dd.getDate()}</b></button>`).join('')}${
         _more?`<span class="qs-day qs-daymore" title="效期內還有 ${_more} 天，先約近的">+${_more}</span>`:''}</div>`
@@ -53371,12 +53402,13 @@ async function memh2SelfSlots(ds, until){
     if(_lim) return `這一點的效期到 ${_lim.replace(/-/g,'/')}`;
     const e=_rng.map(r=>r[1]).sort().pop();
     return (e&&e!=='9999-12-31')?`點數效期到 ${e.replace(/-/g,'/')}`:''; })();
-  showModal(`<div class="modal-title">預約自主訓練</div>
+  showModal(`<div class="modal-title">${_rs?'更改自主訓練時間':'預約自主訓練'}</div>
+    ${_rs?`<div class="qs-orig">原時段　<b>${String(_rs.origDate).slice(5).replace('-','/')}　${String(_rs.origTime).slice(0,5)}</b>　→　請選新的時段</div>`:''}
     ${_dayRow}
     <div class="qs-head">
-      <div class="qs-head-t">${date.replace(/-/g,'/')}（${'日一二三四五六'[_d.getDay()]}）　還能預約 <b>${mms.length}</b> 個時段</div>
+      <div class="qs-head-t">${date.replace(/-/g,'/')}（${'日一二三四五六'[_d.getDay()]}）　${_rs?'可改到':'還能預約'} <b>${mms.length}</b> 個時段</div>
       <ul class="qs-note">
-        <li>每格 60 分鐘・扣 1 點</li>
+        <li>${_rs?'改期不另外扣點；開課 24 小時前可改':'每格 60 分鐘・扣 1 點'}</li>
         <li>已過去、已滿與打烊後的時段不會列出來</li>
         <li>沒標的就是多功能訓練架</li>
         <li>標「團課教室」或「跑步機」＝訓練架已滿</li>
