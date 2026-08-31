@@ -11573,8 +11573,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260831.1554';
-const APP_VERSION_LABEL='v260831.1554';
+const APP_VERSION = '260831.1720';
+const APP_VERSION_LABEL='v260831.1720';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -43053,10 +43053,25 @@ async function unpaidFutureBookings(memberId, tk){
 }
 async function askChargeUnpaid(memberId, ticketId){
   const tk=await dbGet('member_tickets',ticketId); if(!tk) return;
-  const left=Number(tk.sessions_remaining)||0; if(left<=0) return;
+  const _rem=Number(tk.sessions_remaining)||0; if(_rem<=0) return;
+  /* ⚠ 分期票只能補扣「已開通」的那幾堂（2026-08-31 劉雪珠案例）——
+     原本這裡用 sessions_remaining：她那張 12 堂分 3 期、只繳了第 1 期（開通 4 堂），
+     卻一次把 12 堂全部補扣光 → 客人付了三分之一的錢、課全排了、票券餘額歸零，
+     之後「開通下一期」也沒有東西可開。分段開通的鎖等於不存在。
+     tkFitsBooking 與「整串卡位轉正」早就夾了這條線，補扣這一支是漏網的。 */
+  const _inst=tkIsInstall(tk) && Number(tk.unlocked_sessions||0)<Number(tk.sessions_total||0);
+  const left=Math.max(0, tkUnlockedLeft(tk));
   const _allUnpaid=await unpaidFutureBookings(memberId,tk);
   const list=_allUnpaid.slice(0,left);
-  if(!list.length) return;
+  /* 未開通的那一段不是「超出堂數」，是「還沒繳到」——留成分期繳費保留
+     （收款開通下一期時自動補綁），**絕對不能拿去問要不要取消**：
+     取消掉等於把客人已經排好的時段還出去。 */
+  const _hold=_inst ? _allUnpaid.slice(left, _rem) : [];
+  if(!list.length){
+    if(_hold.length) showToast(`這位會員有 ${_hold.length} 堂已排的課還沒扣票 —— 這張分期票的已開通額度用完了，`
+      +`那幾堂維持「分期繳費保留」，收到下一期款項、按「開通下一期」時會自動補綁扣課`, 8000);
+    return;
+  }
   /* 超出票券堂數的待簽約卡位（2026-08-29 使用者定案：
      「待簽約排12堂 但實際8堂的情境　預約的時候把後面多的卡位刪除　給訊息提示確認」）——
      這就是吳宜玲那種紅虛線超約圓點的來源：12 堂卡位、8 堂票，多的 4 堂沒人收，
@@ -43066,14 +43081,18 @@ async function askChargeUnpaid(memberId, ticketId){
      ⚠ 不預設幫他取消：正式庫有人一次卡 28 堂（陳芷亘）、27 堂（葉政義），
        那是分好幾張票陸續買的，整批砍掉會把教練排好的時段全還出去。
        所以「只補扣」這條路一定要留著。 */
-  const over=_allUnpaid.slice(left).filter(b=>b && b.pending_contract===true);
+  const over=_allUnpaid.slice(_inst?_rem:left).filter(b=>b && b.pending_contract===true);
   const _od=b=>String(b.date).slice(5).replace('-','/')+' '+String(b.start_time||'').slice(0,5);
   window._chgUnpaid={mid:memberId, tid:ticketId, ids:list.map(b=>b.id), over:over.map(b=>b.id)};
   showModal(`<div class="modal-title">這幾堂還沒扣到票</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-bottom:10px;">
       這位會員有 <b>${list.length}</b> 堂已排好、但當初沒有票可扣的課。要用剛買的
-      <b>${tk.plan_name||'票券'}</b>（剩 ${left} 堂）補扣嗎？<br>
+      <b>${tk.plan_name||'票券'}</b>（${_inst?`本期開通 ${left} 堂`:`剩 ${left} 堂`}）補扣嗎？<br>
       <span style="color:var(--t3);">教練負責的免費名額請選「先不補扣」。</span></div>
+    ${_hold.length?`<div style="background:#f7efe0;border:1px solid #e8d9b8;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#8a5e28;line-height:1.8;">
+      ⏳ 另外 <b>${_hold.length}</b> 堂落在<b>還沒繳費的期數</b>裡，這次不扣、時段照留（分期繳費保留）：
+      ${_hold.slice(0,6).map(_od).join('、')}${_hold.length>6?`…等 ${_hold.length} 堂`:''}<br>
+      收到下一期款項、在票券卡按「開通下一期」時會自動補綁扣課。</div>`:''}
     <div style="background:var(--card2);border-radius:9px;padding:8px 12px;font-size:13px;line-height:2;">
       ${list.map(b=>`<div>${String(b.date).slice(5).replace('-','/')} ${String(b.start_time||'').slice(0,5)}　${b.category||''}</div>`).join('')}
     </div>
@@ -43093,7 +43112,8 @@ async function doChargeUnpaid(dropOver){
   try{
     for(const bid of p.ids){
       const tk=await dbGet('member_tickets',p.tid);
-      if(!tk || !(Number(tk.sessions_remaining)>0)) break;
+      /* 分期：只扣得到已開通的額度（2026-08-31 劉雪珠案例，同 askChargeUnpaid 的那條線） */
+      if(!tk || !(tkUnlockedLeft(tk)>0)) break;
       const b=await dbGet('bookings',bid);
       if(!b || b.status!=='booked') continue;
       if(!(await deductTicket(tk,bid,SESSION.id))) break;

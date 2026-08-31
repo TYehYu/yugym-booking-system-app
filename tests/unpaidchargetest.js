@@ -96,8 +96,10 @@ ok('★ 視窗講清楚可以不補（教練負責的免費名額）',
    && />先不補扣<\/button>/.test(src));
 ok('★ 補扣鈕是紅底（會扣票券，與全站顏色語彙一致）',
    /<button class="btn btn-red" onclick="doChargeUnpaid\(\)">確認補扣/.test(src));
-ok('★ 逐堂重讀票券、扣不到就停（沿用餘額護欄）',
-   /const tk=await dbGet\('member_tickets',p\.tid\);\n\s*if\(!tk \|\| !\(Number\(tk\.sessions_remaining\)>0\)\) break;/.test(src)
+/* 2026-08-31 劉雪珠案例：護欄從「餘額」改成「已開通額度」——
+   分期只繳第 1 期時，餘額是 12 但只能扣 4。非分期票兩者相同，行為不變。 */
+ok('★ 逐堂重讀票券、扣不到就停（護欄改吃已開通額度）',
+   /const tk=await dbGet\('member_tickets',p\.tid\);\n[\s\S]{0,120}?if\(!tk \|\| !\(tkUnlockedLeft\(tk\)>0\)\) break;/.test(src)
    && /if\(!\(await deductTicket\(tk,bid,SESSION\.id\)\)\) break;/.test(src));
 ok('　　單人課要把票綁上去，團課只留帳（沒有 ticket_id 欄位）',
    /if\(!bkIsGroup\(b\) && !b\.ticket_id\)\{ b\.ticket_id=tk\.id;/.test(src));

@@ -55,10 +55,13 @@ console.log('\n② 兩道門都要吃這個上限');
 
 console.log('\n③ 補扣視窗：超出票券堂數的待簽約卡位');
 {
-  ok('★★ 先把全部算出來，再切成「補得起的」與「超出的」',
+  /* 2026-08-31 劉雪珠案例：分期票多切一段「還沒繳到的期數」（_hold）——
+     那一段不是「超出堂數」，不能拿去問要不要取消。非分期票的切法完全沒變。 */
+  ok('★★ 先把全部算出來，再切成「補得起的」／「還沒繳到的」／「超出的」',
      /const _allUnpaid=await unpaidFutureBookings\(memberId,tk\);/.test(src)
      && /const list=_allUnpaid\.slice\(0,left\);/.test(src)
-     && /const over=_allUnpaid\.slice\(left\)\.filter\(b=>b && b\.pending_contract===true\);/.test(src));
+     && /const _hold=_inst \? _allUnpaid\.slice\(left, _rem\) : \[\];/.test(src)
+     && /const over=_allUnpaid\.slice\(_inst\?_rem:left\)\.filter\(b=>b && b\.pending_contract===true\);/.test(src));
   ok('★★★ 只取 pending_contract —— 其餘沒綁票的是教練負責的免費名額，不能一起取消',
      /只挑 pending_contract 的卡位。剩下那些「沒綁票也不是待簽約」的是\s*\n\s*教練負責的免費名額（上面那句「先不補扣」講的就是它們），絕對不能一起取消。/.test(src));
   ok('★★ 會被取消的日期要列出來（按下去之前先看到）',
