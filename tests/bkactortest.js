@@ -104,7 +104,9 @@ const CB=src.slice(src.indexOf('async function cancelBooking(id, refundMode, opt
                    src.indexOf('let refundedCount=0, refundMissed=false;'));
 ok('★★ 取消只寫一次（status／cancelled_at／refund_waived 一起送）',
    (CB.match(/await dbPut\('bookings',b\);/g)||[]).length===1
-   && /b\.status='cancelled';\s*\n\s*b\.cancelled_at=new Date\(\)\.toISOString\(\);\s*\n\s*b\.refund_waived = !doRefund;/.test(CB));
+   /* 2026-09-01：refund_waived 多夾一個「這一堂真的扣過票嗎」——
+      沒扣過的課沒有東西可以「不退」（見 bkWasDeducted）。仍然只寫一次。 */
+   && /b\.status='cancelled';\s*\n\s*b\.cancelled_at=new Date\(\)\.toISOString\(\);[\s\S]{0,700}?b\.refund_waived = \(!doRefund\) && \(await bkWasDeducted\(b\)\);/.test(CB));
 ok('★★ 退不退要在寫回之前算完（不然沒辦法併成一次）',
    CB.indexOf('let doRefund;') < CB.indexOf("b.status='cancelled';"));
 ok('　　為什麼併成一次寫在原地', /少一整類「用舊物件覆蓋新欄位」的坑/.test(CB));

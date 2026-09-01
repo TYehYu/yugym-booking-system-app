@@ -128,6 +128,30 @@ console.log('\n④ 實跑 grpTicketAlloc（林政緯那張票的形狀）');
   eq('★★ 自己的名額維持原本的後備猜法（行為沒被改掉）', ownNoLog.pend['TK-4W'], 1);
 }
 
+console.log('\n③b refund_waived 只在「真的扣過、而且選擇不退」時才成立（2026-09-01）');
+{
+  /* 使用者：「為什麼今天有兩位教練操作都扣課　是系統視窗設定錯誤　還是真的人為操作失誤」
+     → 是系統。「這一堂帳本查不到扣課」那條路只有一顆「確定取消」、沒問過人，
+       卻用 mode='none' 收掉，於是蓋上 refund_waived=true、下游算成用掉一堂。 */
+  ok('★★★ 沒扣過的課不蓋旗標（沒有東西可以「不退」）',
+     /b\.refund_waived = \(!doRefund\) && \(await bkWasDeducted\(b\)\);/.test(src)
+     && /旗標只在「真的扣過、而且這次選擇不退」時才成立/.test(src));
+  ok('★★★ 判準與 0826 那條同源：有帳本且淨扣 > 0 才算扣過',
+     /async function bkWasDeducted\(b\)\{/.test(src)
+     && /if\(!lg\.length\) return false;/.test(src)
+     && /return net>0;/.test(src));
+  ok('★★ delta 0 的 deduct 是「補連結」，不算這次扣的',
+     /lg\.filter\(l=>l\.action==='deduct'&&Number\(l\.delta\)!==0\)\.length/.test(src));
+  ok('★★★ 成因寫在原地（兩位教練同一天各中一次，不是人為失誤）',
+     /只有一顆「確定取消」、從頭到尾沒問過人/.test(src)
+     && /客人於是平白少一堂 —— 而那一堂根本沒被扣過/.test(src));
+  /* 實跑四種組合（判定式照抄，來源由上面的字面斷言釘住） */
+  const flag=(doRefund, wasDeducted)=>(!doRefund) && wasDeducted;
+  eq('★★★ 沒扣過 ＋ 不退 → 不蓋旗標（王錫昌 9/03 的形狀）', flag(false,false), false);
+  eq('★★★ 扣過 ＋ 選擇不退 → 蓋旗標（真正的 24 小時內扣課）', flag(false,true), true);
+  eq('★★ 有退 → 一律不蓋', [flag(true,true), flag(true,false)], [false,false]);
+}
+
 console.log('\n④b 選錯扣課，櫃檯自己改得回來');
 {
   ok('★★★ 金色那顆點得下去（櫃檯以上），入口就在看到問題的地方',

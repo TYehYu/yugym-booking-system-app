@@ -63,7 +63,9 @@ ok('　　原本的實作改名成 _ / __，沒有留下兩份',
 
 console.log('\n④ 取消本身的行為沒有被改到');
 ok('　　扣課不退仍然不退票券', /else if\(refundMode==='none'\) doRefund=false;/.test(src));
-ok('　　仍會記錄「扣課不退」供補課券判斷', /b\.refund_waived = !doRefund;/.test(src));
+/* 2026-09-01：旗標多夾一個「這一堂真的扣過票嗎」—— 沒扣過的課沒有東西可以「不退」 */
+ok('　　仍會記錄「扣課不退」供補課券判斷（且只在真的扣過時才記）',
+   /b\.refund_waived = \(!doRefund\) && \(await bkWasDeducted\(b\)\);/.test(src));
 ok('　　取消通知已退場（2026-08-14 使用者指示：課程變動不通知會員）',
    !/pushNotification\(b\.member_id,'cancel','預約已取消'/.test(src));
 ok('　　連續取消仍逐筆顯示進度', /取消中…（'\+\(done\+fail\)\+'\//.test(src));

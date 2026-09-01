@@ -11702,8 +11702,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.1659';
-const APP_VERSION_LABEL='v260901.1659';
+const APP_VERSION = '260901.1709';
+const APP_VERSION_LABEL='v260901.1709';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -36403,6 +36403,20 @@ async function promoteHeldBooking(memberId, ticketId){
   await dbPut('bookings',hb);
   showToast(`已把 ${String(hb.date).slice(5).replace('-','/')} 的保留課補綁到票券（取消退回的額度）`);
 }
+/* 「這一堂帳本上真的扣過票嗎」（2026-09-01 抽成一支）——
+   有帳本紀錄且淨扣 > 0 才算扣過；完全沒有紀錄的算沒扣過（與 0826 那條判準同源，
+   見 tkBookedCountMap／mtkOverAsk／tkTidyOpen）。
+   ⚠ delta 0 的 deduct 是「補連結」（只記歸屬、堂數當初就扣過了），不算這次扣的。 */
+async function bkWasDeducted(b){
+  if(!b||!b.id) return false;
+  try{
+    const lg=(await dbGetAll('ticket_logs')).filter(l=>l&&l.booking_id===b.id);
+    if(!lg.length) return false;
+    const net=lg.filter(l=>l.action==='deduct'&&Number(l.delta)!==0).length
+            - lg.filter(l=>l.action==='refund').length;
+    return net>0;
+  }catch(_){ return false; }
+}
 async function cancelBooking(id, refundMode, opts){
   const _silent=!!(opts&&opts.silent);
   const b=await dbGet('bookings',id);
@@ -36479,7 +36493,14 @@ async function cancelBooking(id, refundMode, opts){
      這裡再把兩次併成一次 —— 少一次寫入，也少一整類「用舊物件覆蓋新欄位」的坑。 */
   b.status='cancelled';
   b.cancelled_at=new Date().toISOString();
-  b.refund_waived = !doRefund;      // 記錄是否扣課不退（供補課券判斷）
+  /* ⚠ 「沒扣過的課，沒有東西可以『不退』」（2026-09-01 王錫昌 9/03、吳美芳 9/03 案例）——
+     refund_waived 的語意是「取消時**選了**扣課不退」，是一個人做的決定。
+     但「這一堂帳本上查不到扣課」那條路（見 __askSeriesCancel 的 noTicket 分支）
+     只有一顆「確定取消」、從頭到尾沒問過人，卻也走到這裡把旗標蓋成 true。
+     下游把它當成「這一格用掉了」（bkEatenCancel → 金色扣課點、佔一格），
+     客人於是平白少一堂 —— 而那一堂根本沒被扣過。
+     旗標只在「真的扣過、而且這次選擇不退」時才成立。 */
+  b.refund_waived = (!doRefund) && (await bkWasDeducted(b));
   await dbPut('bookings',b);
 
   let refundedCount=0, refundMissed=false;
