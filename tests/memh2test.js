@@ -406,10 +406,18 @@ console.log('\n快速預約視窗裡的日期列（換一天不必關窗）');
     /<div class="modal-title qs-mtop">\$\{_rs\?'更改自主訓練時間':'預約自主訓練'\}<\/div>\s*\n\s*\$\{_rs\?[\s\S]{0,220}?\}\s*\n\s*\$\{_dayRow\}\s*\n\s*<div class="qs-head">/.test(QS));
   /* 2026-09-01 使用者回報：「點選上方的日期的時候又會跳回第一天　這樣選後面日期的時候很困擾」 */
   t('★★★ 重畫之後把選中那一天捲回畫面（不然剛選的那天被捲出去）',
-    /const on=row\.querySelector\('\.qs-day\.on'\); if\(!on\) return;/.test(QS)
+    /const on=row&&row\.querySelector\('\.qs-day\.on'\);/.test(QS)
     && /row\.scrollLeft=Math\.min\(max, Math\.max\(0, on\.offsetLeft-\(row\.clientWidth-on\.offsetWidth\)\/2\)\);/.test(QS));
   t('★★ 用直接指定不用 smooth（平滑捲動會先畫在最左邊再滑過去，看起來還是跳回第一天）',
     /用直接指定不用 smooth/.test(QS) && !/scrollTo\(\{left:[^}]*behavior:'smooth'/.test(QS));
+  /* 2026-09-01 二修（使用者：「不會跳回去了　但是會閃爍一下」）——
+     與 0822 首頁教練篩選列同一個坑：放進 setTimeout(...,0) 的話，
+     瀏覽器先把 scrollLeft=0 畫出來一格，下一格才跳到位。 */
+  t('★★★ 在同一個同步任務裡設定（setTimeout 會讓它先畫在 0 再跳，就是那個閃爍）',
+    !/setTimeout\([\s\S]{0,200}?qs-day\.on/.test(QS)
+    && /一定要在\*\*這一個同步任務裡\*\*設定/.test(QS));
+  t('★★ 同一個坑的前例寫在原地（0822 首頁教練篩選列）',
+    /這與 0822 首頁教練篩選列那次是\*\*同一個坑\*\*/.test(QS));
   t('★★ 置中而不是只捲到看得見（前後都看得到才知道自己在哪一段）',
     /置中而不是只捲到看得見/.test(QS));
   t('★★ 點某一天＝同一個視窗換內容（重新呼叫自己，不另外開一層）',
