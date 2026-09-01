@@ -85,7 +85,11 @@ ok('★ 續約獎金仍只認 sale_kind===\'renewal\'',
 console.log('\n實跑分類');
 {
   const TYPES=[{id:'pt',category:'私人教練'},{id:'grp',category:'小班肌力'},{id:'self',category:'自主訓練'},{id:'ms',category:'運動按摩'}];
-  const fn=new Function('types', g('  const _saleKindOf=t=>{','  };')+'\nreturn _saleKindOf;')(TYPES);
+  /* ⚠ 注入**真的**那一份 TK_GIFT_SRC（不要在這裡寫 {lottery:1,...} 的假貨）——
+     假貨就是規則的第二份副本，正式碼那邊加一種來源時這裡不會跟著紅。 */
+  const GIFTSRC=(src.match(/const TK_GIFT_SRC=\{[^}]*\};/)||[])[0];
+  if(!GIFTSRC) throw new Error('salekindtest：切不到 TK_GIFT_SRC');
+  const fn=new Function('types', GIFTSRC+'\n'+g('  const _saleKindOf=t=>{','  };')+'\nreturn _saleKindOf;')(TYPES);
   eq('★ 教練課・標了續約 → renewal', fn({ticket_type_id:'pt',sale_kind:'renewal'}), 'renewal');
   eq('★ 教練課・標了分期 → installment', fn({ticket_type_id:'pt',sale_kind:'installment'}), 'installment');
   eq('★ 教練課・沒標 → 當新約', fn({ticket_type_id:'pt',sale_kind:null}), 'new');
@@ -94,6 +98,15 @@ console.log('\n實跑分類');
   eq('★ 團課 → 不標', fn({ticket_type_id:'grp',sale_kind:'group'}), null);
   eq('　　運動按摩 → 不標', fn({ticket_type_id:'ms',sale_kind:'new'}), null);
   eq('　　票種認不出來 → 不標（寧可少標也不要標錯）', fn({ticket_type_id:'zzz',sale_kind:'renewal'}), null);
+  /* 2026-09-01：「抽獎的票不要出現約別」 */
+  eq('★★★ 抽獎的教練課票 → 不標（就算舊資料上被寫了 renewal）',
+     fn({ticket_type_id:'pt',sale_kind:'renewal',source:'lottery'}), null);
+  eq('★★ 補課券 → 不標', fn({ticket_type_id:'pt',sale_kind:'new',source:'makeup'}), null);
+  eq('★★ 簽到贈送 → 不標', fn({ticket_type_id:'pt',sale_kind:'new',source:'checkin_grant'}), null);
+  eq('★★★ 真的買的照標（排除法沒有誤傷）',
+     fn({ticket_type_id:'pt',sale_kind:'renewal',source:'purchase'}), 'renewal');
+  eq('★★ 來源是空的也照標（舊資料不能因此變成沒有約別）',
+     fn({ticket_type_id:'pt',sale_kind:'renewal',source:null}), 'renewal');
 }
 
 console.log('\n分期後續收款列的章與歸屬（2026-08-15 使用者回報：蔡宜芬那筆沒有分期章跟業績歸屬）');
@@ -162,6 +175,24 @@ ok('★★ 只認教練課系（體驗、運動按摩、團課、自主訓練都
    && /體驗課的人確實是第一次簽約/.test(src));
 ok('★★ 退費作廢的不算（那不是紀錄，是拿回去了）',
    /if\(x\.status==='refunded'\) return false;/.test(src));
+
+/* 2026-09-01 使用者：「抽獎的票不要出現約別」——
+   順著同一條理由，送的／補的也不算「這位買過教練課」。 */
+ok('★★★ 送的、補的不算買過（抽獎／補課券／簽到贈送）',
+   /const TK_GIFT_SRC=\{lottery:1, makeup:1, checkin_grant:1\};/.test(src)
+   && /if\(TK_GIFT_SRC\[String\(x\.source\|\|''\)\]\) return false;   \/\/ 抽獎／補課券／簽到贈送不算/.test(src));
+ok('★★★ 抽獎票不畫約別章（_saleKindOf 回 null）',
+   /if\(TK_GIFT_SRC\[String\(t\.source\|\|''\)\]\) return null;/.test(src)
+   && /抽獎的票不要出現約別/.test(src));
+ok('★★★ 事後改約別也擋掉，而且寫出原因（不是靜靜什麼都不做）',
+   /if\(TK_GIFT_SRC\[String\(t\.source\|\|''\)\]\)\{/.test(src)
+   && /這張是<b>\$\{_lb\}<\/b>，沒有約別。/.test(src)
+   && /它不是一筆成交，所以不算新約也不算續約，續約獎金與新／續統計都不會計入。/.test(src));
+ok('★★ 用排除法不用白名單（來源多一種或舊資料是空的，預設仍算數）',
+   /用排除法而不是白名單/.test(src)
+   && /漏認一筆會讓老客戶被迫標新約，那比多認一筆難發現/.test(src));
+ok('　　三種來源的名字都寫出來（訊息不能只說「贈送」）',
+   /const _lb=\{lottery:'抽獎獎品', makeup:'補課券', checkin_grant:'簽到贈送'\}/.test(src));
 ok('★★ 事後改要看「買這張之前」的紀錄（否則這張自己也會被算進去）',
    /if\(beforeDate && String\(x\.purchase_date\|\|''\)\.slice\(0,10\)>beforeDate\) return false;/.test(src)
    && /const _hasPt=await memHasPtHistory\(t\.member_id, t\.id, String\(t\.purchase_date\|\|''\)\.slice\(0,10\)\);/.test(src));

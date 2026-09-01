@@ -11665,8 +11665,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.0828';
-const APP_VERSION_LABEL='v260901.0828';
+const APP_VERSION = '260901.0835';
+const APP_VERSION_LABEL='v260901.0835';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19581,6 +19581,11 @@ PAGES.g_dashboard=async function(){
   const _saleKindOf=t=>{
     const cat=(((types||[]).find(x=>x.id===t.ticket_type_id)||{}).category)||'';
     if(cat!=='私人教練') return null;                      // 只有教練課系要標
+    /* 抽獎／補課券／簽到贈送沒有約別（2026-09-01 使用者指示：「抽獎的票不要出現約別」）——
+       它們不是成交，標新約會多一筆、標續約會多一份獎金。
+       ⚠ 目前 _dayTk 只收 source==='purchase'，走不到這裡；規則還是寫在判斷點，
+         哪天那個過濾放寬了才不會默默長出一顆可以按的約別章。 */
+    if(TK_GIFT_SRC[String(t.source||'')]) return null;
     /* 2026-08-15 使用者定義二修：「有分期的話，第一期屬於續約、後面的期數都算分期」——
        票券本身的約別照登記（新約/續約），首期（購買日那列）就顯示它；
        「分期」只標在後續各期的收款列上（見 _revRows 的 installment 列）。 */
@@ -38656,6 +38661,11 @@ function saleKindChip(tkId, kind){
    ・折抵券也掛在 '私人教練' 底下，用 bkIsPtVoucherType 擋掉 —— 抽獎抽到一張 $300 券
      不是「上過教練課」
    ・退費作廢的不算（那不是紀錄，是拿回去了） */
+/* 送的、補的，不是買的（2026-09-01）——
+   抽獎中的獎品、教練請假的補課券、簽到送的點數都不算「這位買過教練課」。
+   ⚠ 用排除法而不是白名單：來源欄位以後多一種（或舊資料是空的）時，
+     預設仍算數 —— 漏認一筆會讓老客戶被迫標新約，那比多認一筆難發現。 */
+const TK_GIFT_SRC={lottery:1, makeup:1, checkin_grant:1};
 async function memHasPtHistory(mid, exceptTkId, beforeDate){
   if(!mid) return false;
   try{
@@ -38666,6 +38676,7 @@ async function memHasPtHistory(mid, exceptTkId, beforeDate){
       const ty=tm[x.ticket_type_id];
       if(!ty || ty.category!=='私人教練') return false;
       if(bkIsPtVoucherType(ty)) return false;
+      if(TK_GIFT_SRC[String(x.source||'')]) return false;   // 抽獎／補課券／簽到贈送不算
       if(x.status==='refunded') return false;
       if(beforeDate && String(x.purchase_date||'').slice(0,10)>beforeDate) return false;
       return true;
@@ -38676,6 +38687,18 @@ async function openSaleKindPick(tkId){
   if(!isDeskLike()) return;
   const t=await dbGet('member_tickets',tkId);
   if(!t){ showToast('找不到票券'); return; }
+  /* 送的、補的沒有約別（2026-09-01 使用者指示：「抽獎的票不要出現約別」）——
+     不是成交就沒有新約／續約可言，標了只會多一筆數字或多一份獎金。 */
+  if(TK_GIFT_SRC[String(t.source||'')]){
+    const _lb={lottery:'抽獎獎品', makeup:'補課券', checkin_grant:'簽到贈送'}[String(t.source||'')]||'贈送';
+    showModal(`<div class="modal-title">約別</div>
+      <div style="font-size:13.5px;color:var(--text);line-height:1.95;padding:4px 0 8px;">
+        這張是<b>${_lb}</b>，沒有約別。</div>
+      <div style="font-size:11.5px;color:var(--t3);line-height:1.9;">
+        它不是一筆成交，所以不算新約也不算續約，續約獎金與新／續統計都不會計入。</div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">知道了</button></div>`);
+    return;
+  }
   /* 分期方案的約別由系統判定（2026-08-24 使用者定案）——賣的時候不給選，
      事後也不給改，否則等於留了一個把它改成「續約」多領獎金的後門。 */
   if(t.installment && typeof t.installment==='object'){
