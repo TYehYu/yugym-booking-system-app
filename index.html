@@ -11728,8 +11728,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.2257';
-const APP_VERSION_LABEL='v260901.2257';
+const APP_VERSION = '260901.2304';
+const APP_VERSION_LABEL='v260901.2304';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22138,7 +22138,9 @@ PAGES.dashboard=async function(){
         _ovTax=vatForMonth(ym, _cash, _vr, _cashOf2).tax;
       }catch(_){ _ovTax=vatEstimate(_cash); }
       const pr=await computeMonthlyPayroll(ym);
-      salaryTotal=Math.round(Number(pr.grandTotal)||0);
+      /* 公司付出去的薪資＝應發 − 請假扣薪（2026-09-01 使用者定案）——
+         與損益表同一支（0812 才因為兩邊各算一次被修過一次）。 */
+      salaryTotal=Math.round(Number(pr.grandSalaryCost!=null?pr.grandSalaryCost:pr.grandTotal)||0);
       _ovCoIns=Math.round(Number(pr.grandCoCost)||0);
       profit=(_ovRev!=null)?(_ovRev-_ovTax-salaryTotal-_ovCoIns-otherExp):null;
     }catch(_){ salaryTotal=null; profit=null; }
@@ -40768,7 +40770,16 @@ async function computeMonthlyPayroll(month){
   const grandTotal=rows.reduce((s,r)=>s+(r.countSalary?r.sal.grossPay:0),0);
   const grandNet=rows.reduce((s,r)=>s+(r.countSalary?r.sal.netPay:0),0);
   const grandCoCost=rows.reduce((s,r)=>s+(r.countSalary?r.sal.insCoCost:0),0);
-  return {rows,staff,grandTotal,grandNet,grandCoCost,month};
+  /* 請假扣薪合計（2026-09-01 使用者定案）——「公司的薪資支出應該是
+     『應發 − 請假扣薪 ＋ 公司負擔』本來就應該是這樣，所以你公式要設定好，
+     即便目前沒有人請假扣薪，但公式也要設定好」。
+     ⚠ 請假扣薪那筆錢**公司沒有付出去**（員工請事假，公司少付），
+       所以它不是成本；代扣的勞健保則相反（錢還是公司付出去的，只是代扣代繳）。
+       兩者都在 grossPay 與 netPay 之間，很容易混為一談 —— 分開算出來。 */
+  const grandLeaveCut=rows.reduce((s,r)=>s+(r.countSalary?(Number(r.sal.leaveDeduct)||0):0),0);
+  const grandSalaryCost=grandTotal-grandLeaveCut;                 // 公司付出去的薪資（不含公司負擔）
+  const grandPeopleCost=grandSalaryCost+grandCoCost;              // 公司實際人事支出
+  return {rows,staff,grandTotal,grandNet,grandCoCost,grandLeaveCut,grandSalaryCost,grandPeopleCost,month};
 }
 /* 薪資計算明細列（2026-07-30 抽成具名函式）：桌機表格展開列與手機卡片共用同一份，
    兩邊不會再各寫一套而算法不一致。 */
@@ -40834,7 +40845,7 @@ async function renderPayrollSummary(){
   const month=_payrollMonth;
   const[my,mm]=month.split('-');
   const isCur=month===ymd(TODAY).slice(0,7);
-  const{rows,staff,grandTotal,grandNet,grandCoCost}=await computeMonthlyPayroll(month);
+  const{rows,staff,grandTotal,grandNet,grandCoCost,grandLeaveCut,grandPeopleCost}=await computeMonthlyPayroll(month);
 
   document.getElementById('staff-body').innerHTML=`
   <div class="card ops-datebar" style="margin-bottom:14px;">
@@ -40908,7 +40919,10 @@ async function renderPayrollSummary(){
         <span style="font-family:var(--display);font-size:28px;font-weight:700;color:var(--green);">$${grandNet.toLocaleString()}</span>
       </div>
       ${grandCoCost>0?`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--t3);margin-top:6px;"><span>公司負擔勞健保（勞保雇主＋健保雇主＋勞退）</span><span>$${grandCoCost.toLocaleString()}</span></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--t2);margin-top:6px;padding-top:6px;border-top:1px dashed var(--bd);"><span>公司實際人事成本（應發＋公司負擔）</span><span style="font-weight:700;">$${(grandTotal+grandCoCost).toLocaleString()}</span></div>`:''}
+      ${/* 公司實際人事成本＝應發 − 請假扣薪 ＋ 公司負擔（2026-09-01 使用者定案）——
+           請假扣薪那筆錢公司沒有付出去。沒有人請假時這一項為 0，算式一樣成立。 */''}
+      ${grandLeaveCut?`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--t2);margin-top:4px;"><span>請假扣薪（公司未支付）</span><span style="font-weight:600;">−$${grandLeaveCut.toLocaleString()}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--t2);margin-top:6px;padding-top:6px;border-top:1px dashed var(--bd);"><span>公司實際人事成本（應發${grandLeaveCut?' − 請假扣薪':''} ＋ 公司負擔）</span><span style="font-weight:700;">$${grandPeopleCost.toLocaleString()}</span></div>`:''}
     </div>
   </div>
   <div style="font-size:11.5px;color:var(--t3);padding:0 4px;line-height:1.7;">＊ 此為依薪資模板的試算金額，供月結參考。實際發放請以公司最終結算為準。完成課程、打卡工時會即時反映。</div>`;
@@ -58973,8 +58987,9 @@ function salaryMatrixHTML(rows){
     <div class="sal-mx-note">
       綠＝給出去的、紅＝扣的。<b>勞保／健保</b>是本人自付、從應發裡代扣（負責人的健保是雇主自負額，全額自付），<b>不是</b>公司的額外成本；
       公司的額外成本是最後一欄<b>公司負擔</b>（勞保雇主＋健保雇主＋勞退＋職災）——<b>負責人為 0</b>，公司沒有替雇主本人負擔的部分。<br>
-      公司這個月實際的人事支出＝應發合計 ${m(_grossTot)} ＋ 公司負擔 ${m(tot.co)} ＝ <b>${m(_grossTot+tot.co)}</b>
-      （應發＝各項給付加總，欄位已省略、各項目攤在表上）。
+      公司這個月實際的人事支出＝應發合計 ${m(_grossTot)}${tot.leave?` − 請假扣薪 ${m(tot.leave)}`:''} ＋ 公司負擔 ${m(tot.co)}
+      ＝ <b>${m(_grossTot-tot.leave+tot.co)}</b>
+      （應發＝各項給付加總，欄位已省略、各項目攤在表上；<b>請假扣薪那筆錢公司沒有付出去</b>，所以要扣掉）。
       ${/* 兩個總數的橋（2026-09-01 使用者：「為何這兩個數字對不上？」）——
            表格第一欄的合計是**實領**，損益表那一行是**應發**，中間差的是
            「請假扣薪＋員工自付勞健保」。兩個數字擺在同一頁卻沒說關係，
@@ -59171,7 +59186,12 @@ async function finPnl(){
                 amt:Math.round(Number(r.sal.grossPay)||0),
                 v:salaryRow(r.sal)}))
       .sort((a,b)=>b.amt-a.amt);
-    const salary=payRows.reduce((s,r)=>s+r.amt,0);
+    /* 公司的薪資支出＝應發 − 請假扣薪（2026-09-01 使用者定案，見 computeMonthlyPayroll）——
+       請假扣薪那筆錢公司沒有付出去，算進成本會高估人事。
+       ⚠ 代扣的勞健保**不能**扣：那筆錢公司還是付出去了（代扣代繳給勞保局）。 */
+    const leaveCut=payRows.reduce((s,r)=>s+(Number(r.v&&r.v.leave)||0),0);
+    const grossPay=payRows.reduce((s,r)=>s+r.amt,0);
+    const salary=grossPay-leaveCut;
     const coIns=Math.round(Number(pr&&pr.grandCoCost)||0);
     const exp=(expAll||[]).filter(e=>e.ym===ym);
     const fixed=exp.filter(e=>e.is_fixed===true);
@@ -59248,7 +59268,8 @@ async function finPnl(){
                 : `依收款 ${m(cash)} 內含計　·　${vatPeriodLabel(_vat.period)}期會計結算後會更新`
               }${(SESSION&&SESSION.role==='admin')?`　·　<b class="pnl2-go">點一下${_vat.actual?'修改':'填實際數'} ›</b>`:''}</i></span><span class="pnl2-i-v">${neg(tax)}</span>${
               (SESSION&&SESSION.role==='admin')?'</button>':'</div>'}
-            <div class="pnl2-i"><span class="pnl2-i-l">員工薪資（應發，含代扣勞健保）<i>${payRows.length} 位・明細見下方</i></span><span class="pnl2-i-v">${neg(salary)}</span></div>
+            <div class="pnl2-i"><span class="pnl2-i-l">員工薪資（${leaveCut?'應發−請假扣薪':'應發'}，含代扣勞健保）<i>${payRows.length} 位・${
+              leaveCut?`應發 ${m(grossPay)} − 請假扣薪 ${m(leaveCut)}・`:''}明細見下方</i></span><span class="pnl2-i-v">${neg(salary)}</span></div>
             <div class="pnl2-i"><span class="pnl2-i-l">公司負擔勞健保<i>勞保雇主＋健保雇主＋勞退＋職災</i></span><span class="pnl2-i-v">${neg(coIns)}</span></div>
             ${/* 2026-08-23 三修（使用者：「支出改成兩個按鈕 固定支出跟其他支出 桌機版」）——
                  桌機一列夠寬，直接給兩顆，少點一次挑選視窗；

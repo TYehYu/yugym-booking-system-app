@@ -82,8 +82,23 @@ console.log('\n③b 實領與應發的橋（2026-09-01 使用者：「為何這�
   ok('★★★ 明講損益表那一行是「應發」不是實領',
      /損益表的「員工薪資（應發，含代扣勞健保）」是<b>應發<\/b>，不是實領，兩者本來就不一樣/.test(src));
   ok('★★ 順帶更正一句錯的說明（應發是各項給付加總，沒有先扣掉扣薪）',
-     /（應發＝各項給付加總，欄位已省略、各項目攤在表上）/.test(src)
+     /應發＝各項給付加總，欄位已省略、各項目攤在表上；<b>請假扣薪那筆錢公司沒有付出去<\/b>，所以要扣掉/.test(src)
      && !/應發＝各項給付−扣薪/.test(src));
+  /* 2026-09-01 使用者定案：「公司的薪資支出應該是『應發 − 請假扣薪 ＋ 公司負擔』
+     本來就應該是這樣…即便目前沒有人請假扣薪，但公式也要設定好」 */
+  ok('★★★ 損益表的薪資＝應發 − 請假扣薪（代扣勞健保不扣：那筆錢公司還是付出去了）',
+     /const leaveCut=payRows\.reduce\(\(s,r\)=>s\+\(Number\(r\.v&&r\.v\.leave\)\|\|0\),0\);/.test(src)
+     && /const salary=grossPay-leaveCut;/.test(src)
+     && /代扣的勞健保\*\*不能\*\*扣：那筆錢公司還是付出去了（代扣代繳給勞保局）/.test(src));
+  ok('★★★ 算式收在 computeMonthlyPayroll，三處共用（不要各算一次）',
+     /const grandLeaveCut=rows\.reduce\(\(s,r\)=>s\+\(r\.countSalary\?\(Number\(r\.sal\.leaveDeduct\)\|\|0\):0\),0\);/.test(src)
+     && /const grandSalaryCost=grandTotal-grandLeaveCut;/.test(src)
+     && /const grandPeopleCost=grandSalaryCost\+grandCoCost;/.test(src));
+  ok('★★ 沒有人請假時算式一樣成立（那一項是 0，畫面不多一列）',
+     /\$\{tot\.leave\?` − 請假扣薪 \$\{m\(tot\.leave\)\}`:''\}/.test(src)
+     && /\$\{grandLeaveCut\?`<div style="display:flex;justify-content:space-between/.test(src));
+  ok('★★ 首頁營運卡吃同一個數字（0812 才因為兩邊各算一次被修過一次）',
+     /salaryTotal=Math\.round\(Number\(pr\.grandSalaryCost!=null\?pr\.grandSalaryCost:pr\.grandTotal\)\|\|0\);/.test(src));
   ok('★★ 算式與程式一致：netPay ＝ grossPay − 請假扣薪 − 員工自付',
      /const netPay   = Math\.max\(grossPay - leaveDeduct - insEmpDeduct, 0\);/.test(src));
 }
