@@ -97,7 +97,8 @@ console.log('\n④ 接到損益表上');
   ok('★★ 明細表接在損益表下面（不用點、不用展開）',
      /\$\{payRows\.length\?`<div class="card-title" style="margin:16px 0 6px;">員工薪資明細<\/div>\$\{salaryMatrixHTML\(payRows\)\}`:''\}/.test(F));
   ok('★ 損益表那一列只留總額，指向下方明細',
-     /<span class="pnl2-i-l">員工薪資（應發）<i>\$\{payRows\.length\} 位・明細見下方<\/i><\/span>/.test(F));
+     /* 2026-09-01 使用者指示：標題加註「含代扣勞健保」—— 那 8,154 的差就是它 */
+     /<span class="pnl2-i-l">員工薪資（應發，含代扣勞健保）<i>\$\{payRows\.length\} 位・明細見下方<\/i><\/span>/.test(F));
   ok('★★ 公司負擔仍是獨立的支出大項（標明含職災）',
      /<span class="pnl2-i-l">公司負擔勞健保<i>勞保雇主＋健保雇主＋勞退＋職災<\/i><\/span>/.test(F));
   ok('★ 舊的「點姓名展開」已整組移除',

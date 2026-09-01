@@ -77,7 +77,8 @@ console.log('\n③ 老闆要看的重點標示出來');
   ok('★ 支出那格直接拆給你看（人事排最前 —— 那是最大一筆）',
      /人事 \$\{m\(staffCost\)\}・稅 \$\{m\(tax\)\}・支出 \$\{m\(fixedTotal\+otherTotal\)\}/.test(F));
   ok('★★ 員工薪資仍是支出欄裡的一列，指向下方明細',
-     /<span class="pnl2-i-l">員工薪資（應發）<i>\$\{payRows\.length\} 位・明細見下方<\/i><\/span>/.test(F));
+     /* 2026-09-01 使用者指示：標題加註「含代扣勞健保」—— 那 8,154 的差就是它 */
+     /<span class="pnl2-i-l">員工薪資（應發，含代扣勞健保）<i>\$\{payRows\.length\} 位・明細見下方<\/i><\/span>/.test(F));
   ok('★ 逐位教練仍逐列列出、金額由大到小',
      /\.filter\(r=>r\.countSalary&&Number\(r\.sal&&r\.sal\.grossPay\)>0\)/.test(F)
      && /\.sort\(\(a,b\)=>b\.amt-a\.amt\)/.test(F));
