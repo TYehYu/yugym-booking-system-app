@@ -131,40 +131,59 @@ ok('★★ 內建分期：整欄不畫、強制標成分期',
    && /約別：<b>分期<\/b>（這張是分期方案，系統自動判定，不需要選）/.test(src));
 ok('　　期數一改就跟著（不是只有進到那一步才算一次）',
    /onchange="refreshInstallPreview\(\);refreshGrantVoucher\(\);gtSaleKindSync\(\)"/.test(src));
-ok('★★ 沒有「已完成的教練課系方案」→ 續約與分期整個不列出來',
-   /function gtSaleKindOpts\(donePt\)\{/.test(src)
-   && /const allow=k=>\(k==='new'\|\|k==='group'\)\?true:!!donePt;/.test(src)
+/* ══ 2026-09-01 使用者定版：約別二選一 ══════════════════════════════
+   「該會員只要票券歷史紀錄裡面有教練課或友善教練課，下次儲值就只有分期跟續約的判斷；
+     如果都沒有，就只有新約的判斷」
+
+   ⚠ 這放寬了 0824 的「已**完成**的方案才給選」（那條是 0727 高估的解藥）。
+     使用者知情後仍定為「有過就算」，代價由「新約消失」來抵：加購／補儲不能再標新約，
+     要在續約（計獎金）與分期（不計）之間選。這一欄直接連到教練的錢。 */
+console.log('\n約別二選一（0901 定版）');
+ok('★★★ 判準只有一支 memHasPtHistory（賣的時候與事後改共用）',
+   /async function memHasPtHistory\(mid, exceptTkId, beforeDate\)\{/.test(src)
+   && (src.match(/memHasPtHistory\(/g)||[]).length===3);   // 宣告 1 ＋ 兩條路各 1
+ok('★★★ 有紀錄 → 新約不列；沒紀錄 → 續約與分期不列（團課永遠在）',
+   /const allow=k=>\(k==='group'\)\?true:\(hasPt\?\(k!=='new'\):\(k==='new'\)\);/.test(src)
    && /選項直接不列，而不是列出來讓人選了才擋/.test(src));
-ok('★★ 「已完成」以餘額為準、順帶認 used_up；退費的不算',
-   /return \(Number\(t\.sessions_remaining\)\|\|0\)<=0 \|\| t\.status==='used_up';/.test(src)
-   && /if\(t\.status==='refunded'\) return false;/.test(src)
-   && /狀態會跟餘額打架，餘額才是真的/.test(src));
-ok('★★ 只認教練課系（category 私人教練）——團課不受影響',
-   /if\(\(tm\[t\.ticket_type_id\]\|\|\{\}\)\.category!=='私人教練'\) return false;   \/\/ 教練課／友善教練課/.test(src));
-ok('★★ 賣的時候擋、事後也要擋（只擋一邊等於留了一個改成續約的後門）',
-   /const _allow=k=>\(k==='new'\)\?true:_donePt;/.test(src)
-   && /只擋一邊等於留了一個把新約改成續約的後門/.test(src));
-ok('★★ 事後判斷要看「買這張之前」有沒有上完的（否則這張自己就是還沒上完）',
-   /if\(_buy && String\(x\.purchase_date\|\|''\)\.slice\(0,10\)>_buy\) return false;   \/\/ 之後才買的不算/.test(src)
-   && /if\(!x \|\| x\.id===t\.id \|\| !tkUsableBy\(x, t\.member_id\)\) return false;/.test(src));
-/* 2026-09-01：陳瀚竣一路在用陳玟淂共享的教練課票（1V1 5 堂＋友善 1V1 4 堂，都已上完），
-   卻只給得出「新約」—— 櫃檯想把 8/31 那張改成分期改不了。
-   賣票那條路 0831 已改吃 tkUsableBy，事後改約別這條漏了。 */
-ok('★★★ 共享票也算「已完成的教練課方案」——兩條路都要吃 tkUsableBy',
-   /if\(!x \|\| x\.id===t\.id \|\| !tkUsableBy\(x, t\.member_id\)\) return false;/.test(src)
-   && /if\(!t \|\| !tkUsableBy\(t,mid\)\) return false;/.test(src));
-ok('★★★ 兩條路都不准再用 member_id 直接比（那就是這個 bug 本身）',
-   !/if\(!x \|\| x\.id===t\.id \|\| x\.member_id!==t\.member_id\) return false;/.test(src)
-   && !/if\(!t \|\| t\.member_id!==mid\) return false;/.test(src));
-ok('★★ 原因寫在原地（下一個人才知道為什麼不能用 member_id）',
-   /判「這張票誰能用」全系統只有 tkUsableBy 一支/.test(src)
-   && /兩條路要一起看：賣的時候（gtSaleKind 那段）與事後改（這裡）/.test(src));
+ok('★★★ 事後改約別同一條規則（少一邊就是一個多領獎金的後門）',
+   /const _allow=k=>_hasPt\?\(k!=='new'\):\(k==='new'\);/.test(src));
+ok('★★★ 退路退到「還在清單裡的第一個」，不是寫死 new',
+   /sel\.value=allow\(cur\)\?cur:\(\(keep\[0\]\|\|\['new'\]\)\[0\]\);/.test(src)
+   && /有紀錄的人會被設成一個不在選單裡的值，sel\.value 變空字串/.test(src));
+ok('★★★ 條件是「有過」，不再要求上完（0824 那兩行已經不在判斷式裡）',
+   !/return \(Number\(x\.sessions_remaining\)\|\|0\)<=0 \|\| x\.status==='used_up';/.test(src));
+ok('★★★ 共享票要算（爸爸用兒子共享的票上完課也是紀錄）',
+   /if\(!x \|\| \(exceptTkId && x\.id===exceptTkId\) \|\| !tkUsableBy\(x, mid\)\) return false;/.test(src));
+ok('★★★ 折抵券不算（它掛在「私人教練」底下，但抽到一張 \$300 券不是上過教練課）',
+   /if\(bkIsPtVoucherType\(ty\)\) return false;/.test(src)
+   && /抽獎抽到一張 \$300 券\s*\n\s*不是「上過教練課」/.test(src));
+ok('★★ 只認教練課系（體驗、運動按摩、團課、自主訓練都不算）',
+   /if\(!ty \|\| ty\.category!=='私人教練'\) return false;/.test(src)
+   && /體驗課的人確實是第一次簽約/.test(src));
+ok('★★ 退費作廢的不算（那不是紀錄，是拿回去了）',
+   /if\(x\.status==='refunded'\) return false;/.test(src));
+ok('★★ 事後改要看「買這張之前」的紀錄（否則這張自己也會被算進去）',
+   /if\(beforeDate && String\(x\.purchase_date\|\|''\)\.slice\(0,10\)>beforeDate\) return false;/.test(src)
+   && /const _hasPt=await memHasPtHistory\(t\.member_id, t\.id, String\(t\.purchase_date\|\|''\)\.slice\(0,10\)\);/.test(src));
+ok('　　賣票是「現在」，不帶界線也不排除任何票',
+   /const _hasPt=await memHasPtHistory\(mid\);/.test(src));
+ok('★★ 兩邊都不准再用 member_id 直接比（那是 0831/0901 修掉的共享票 bug）',
+   !/x\.member_id!==t\.member_id/.test(src) && !/if\(!t \|\| t\.member_id!==mid\) return false;/.test(src));
+ok('★★ 不能選的時候要寫原因，兩個方向都要寫（0823 語彙）',
+   /這位已經有教練課／友善教練課的紀錄，所以不是新約 —— 請選續約或分期（分期不計續約獎金）。/.test(src)
+   && /這位還沒有教練課／友善教練課的紀錄，所以只能是新約/.test(src)
+   && /這位在買這張之前<b>已經有<\/b>教練課／友善教練課的紀錄/.test(src));
+ok('★★ 事後改的視窗要寫出「目前是什麼」（新約可能已經不在選項裡了）',
+   /目前：<b>\$\{SALE_KIND_LB\[t\.sale_kind\]\|\|'（未標）'\}<\/b>/.test(src));
+ok('★★ 0824 那段沿革留在原地（下一個人要知道為什麼放寬）',
+   /這條放寬了 0824 的「已\*\*完成\*\*的方案才給選」/.test(src)
+   && /推出 38 張、實際只有 9 張的高估/.test(src));
+
 ok('★★ 分期方案的約別事後也不給改（不然是多領獎金的後門）',
    /if\(t\.installment && typeof t\.installment==='object'\)\{/.test(src)
    && /這張是<b>分期方案<\/b>，約別由系統判定為「分期」，不能更改。/.test(src));
-ok('★ 不能選的時候要寫原因（0823 的語彙）',
-   /這位還沒有上完的教練課方案，所以只能是新約/.test(src)
-   && /續約與分期要等上一份用完才會出現/.test(src));
+/* 「不能選就寫原因」那一條已經改寫在上面的 0901 區塊（兩個方向都要寫），
+   這裡不再重複釘同一件事。 */
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

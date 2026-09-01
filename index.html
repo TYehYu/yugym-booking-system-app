@@ -11665,8 +11665,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.0819';
-const APP_VERSION_LABEL='v260901.0819';
+const APP_VERSION = '260901.0828';
+const APP_VERSION_LABEL='v260901.0828';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38638,6 +38638,40 @@ function saleKindChip(tkId, kind){
   const can=(typeof isDeskLike==='function') && isDeskLike();
   return `<${can?'button':'span'} class="rev-kind rev-kind-${k}"${can?` onclick="event.stopPropagation();openSaleKindPick('${tkId}')" title="點一下更改約別（影響續約獎金）"`:''}>${SALE_KIND_LB[k]}</${can?'button':'span'}>`;
 }
+/* 「這位有沒有教練課／友善教練課的紀錄」——約別二選一的唯一判準（2026-09-01 定版）。
+
+   使用者：「該會員只要票券歷史紀錄裡面有教練課或友善教練課，下次儲值就只有分期跟續約的
+             判斷；如果都沒有，就只有新約的判斷」
+
+   ⚠ 這是**二選一**，不是「多兩顆可以選」：有紀錄 → 新約消失；沒紀錄 → 只有新約。
+   ⚠ 這條放寬了 0824 的「已**完成**的方案才給選」（當時是為了修 0727「買過同類票就算續約」
+     推出 38 張、實際只有 9 張的高估）。0901 使用者知情後仍定為「有過就算」，
+     但同時讓新約消失 —— 加購／補儲要在續約（計獎金）與分期（不計）之間選，
+     不再有「標新約」這條中間路。**櫃檯按錯就直接影響教練的錢。**
+
+   四條排除，每一條都有理由，不要「順手」拿掉：
+   ・共享票要算（tkUsableBy）—— 爸爸用兒子共享的票上完課也是紀錄（陳瀚竣 0831/0901）
+   ・只認 category '私人教練'（＝教練課／友善教練課／VIP／限定）；體驗、運動按摩、
+     團課、自主訓練都不算 —— 體驗課的人確實是第一次簽約
+   ・折抵券也掛在 '私人教練' 底下，用 bkIsPtVoucherType 擋掉 —— 抽獎抽到一張 $300 券
+     不是「上過教練課」
+   ・退費作廢的不算（那不是紀錄，是拿回去了） */
+async function memHasPtHistory(mid, exceptTkId, beforeDate){
+  if(!mid) return false;
+  try{
+    const [mts,tts]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
+    const tm=Object.fromEntries((tts||[]).map(x=>[x.id,x]));
+    return (mts||[]).some(x=>{
+      if(!x || (exceptTkId && x.id===exceptTkId) || !tkUsableBy(x, mid)) return false;
+      const ty=tm[x.ticket_type_id];
+      if(!ty || ty.category!=='私人教練') return false;
+      if(bkIsPtVoucherType(ty)) return false;
+      if(x.status==='refunded') return false;
+      if(beforeDate && String(x.purchase_date||'').slice(0,10)>beforeDate) return false;
+      return true;
+    });
+  }catch(_){ return false; }
+}
 async function openSaleKindPick(tkId){
   if(!isDeskLike()) return;
   const t=await dbGet('member_tickets',tkId);
@@ -38655,40 +38689,23 @@ async function openSaleKindPick(tkId){
     return;
   }
   const cur=SALE_KIND_LB[t.sale_kind]?t.sale_kind:'new';
-  /* 同一條規則：沒有「已完成的教練課系方案」就不給續約／分期（2026-08-24 使用者定案）。
-     ⚠ 賣的時候擋、事後也要擋 —— 只擋一邊等於留了一個把新約改成續約的後門。
-     ⚠ 判斷這張票**之前**有沒有上完的：拿這張票自己的購買日當界線，
-       不然剛買的這一張自己就是「還沒上完」，永遠算不出結果。
-     ⚠ 共享票也要算（2026-09-01 補；賣票那條路 0831 已修，這條漏了）——
-       判「這張票誰能用」全系統只有 tkUsableBy 一支，寫成 x.member_id===t.member_id
-       就把「爸爸用兒子共享的票上完課」整段看不見。
-       陳瀚竣就是這樣：他一路在用陳玟淂共享的 私人教練 1V1 5 堂＋友善 1V1 4 堂
-       （都已上完），畫面卻只給得出「新約」，櫃檯想改成分期改不了。
-       ⚠ 兩條路要一起看：賣的時候（gtSaleKind 那段）與事後改（這裡）。 */
-  let _donePt=false;
-  try{
-    const [mts,tts]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
-    const tm=Object.fromEntries((tts||[]).map(x=>[x.id,x]));
-    const _buy=String(t.purchase_date||'').slice(0,10);
-    _donePt=(mts||[]).some(x=>{
-      if(!x || x.id===t.id || !tkUsableBy(x, t.member_id)) return false;
-      if((tm[x.ticket_type_id]||{}).category!=='私人教練') return false;
-      if(x.status==='refunded') return false;
-      if(_buy && String(x.purchase_date||'').slice(0,10)>_buy) return false;   // 之後才買的不算
-      return (Number(x.sessions_remaining)||0)<=0 || x.status==='used_up';
-    });
-  }catch(_){}
-  const _allow=k=>(k==='new')?true:_donePt;
+  /* 同一條規則兩條路都要（賣的時候／事後改），差一邊就是一個改成續約多領獎金的後門。
+     ⚠ 判斷這張票**之前**的紀錄：拿這張票自己的購買日當界線，
+       不然剛買的這一張自己也會被算進去。 */
+  const _hasPt=await memHasPtHistory(t.member_id, t.id, String(t.purchase_date||'').slice(0,10));
+  /* 二選一，不是三選一（2026-09-01 使用者定版，見 memHasPtHistory 的說明） */
+  const _allow=k=>_hasPt?(k!=='new'):(k==='new');
   const btn=(k)=>_allow(k)?`<button type="button" class="btn ${cur===k?'btn-green':'btn-ghost'}" style="flex:1;"
       onclick="setSaleKind('${tkId}','${k}')">${SALE_KIND_LB[k]}</button>`:'';
   showModal(`<div class="modal-title">約別</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">
-      ${String(t.plan_name||'票券').replace(/</g,'&lt;')}　${t.sessions_total||0} 堂　$${Number(t.amount_paid||0).toLocaleString()}<br>
+      ${String(t.plan_name||'票券').replace(/</g,'&lt;')}　${t.sessions_total||0} 堂　$${Number(t.amount_paid||0).toLocaleString()}
+      　目前：<b>${SALE_KIND_LB[t.sale_kind]||'（未標）'}</b><br>
       <b>續約獎金只認「續約」</b>，改了會即時反映在教練的薪資計算上，請確認後再送出。</div>
     <div style="display:flex;gap:8px;">${btn('new')}${btn('renewal')}${btn('installment')}</div>
-    ${_donePt?'':`<div style="font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:10px;">
-      這位在買這張之前沒有<b>已上完</b>的教練課方案，所以只能是新約 ——
-      續約與分期要等上一份用完才會出現。</div>`}
+    <div style="font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:10px;">${_hasPt
+      ? '這位在買這張之前<b>已經有</b>教練課／友善教練課的紀錄，所以不會是新約 —— 請選續約或分期。'
+      : '這位在買這張之前<b>沒有</b>教練課／友善教練課的紀錄，所以只能是新約 —— 續約與分期要等有過一份之後才會出現。'}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
 }
 async function setSaleKind(tkId, kind){
@@ -47334,21 +47351,27 @@ async function openGrantModal(){
    ⚠ 用 display:none 是刻意的 —— 這裡不是「不能用」而是「沒有可選的餘地」，
      留一個選不動的下拉只會讓人以為系統壞了（與 0823「不能用就寫原因」不衝突：
      旁邊那一行就是原因）。 */
-/* 沒有「已完成的教練課系方案」就不給選續約／分期（2026-08-24 使用者定案）——
+/* 約別選項＝二選一（2026-09-01 使用者定版；判準見 memHasPtHistory）——
+   有教練課／友善教練課的紀錄 → 只列 續約／分期；沒有 → 只列 新約。
    選項直接不列，而不是列出來讓人選了才擋：這一欄直接連到教練的續約獎金，
    少一個誤選的機會就少一次要事後對帳的麻煩。
    ⚠ 團課那一項不受影響（它跟教練課的續約獎金是兩回事）。 */
-function gtSaleKindOpts(donePt){
+function gtSaleKindOpts(hasPt){
   const sel=document.getElementById('gt-salekind'); if(!sel) return;
   const cur=sel.value;
   const OPTS=[['new','新約'],['renewal','續約'],['group','團課'],['installment','分期']];
-  const allow=k=>(k==='new'||k==='group')?true:!!donePt;
-  sel.innerHTML=OPTS.filter(([k])=>allow(k)).map(([k,lb])=>`<option value="${k}">${lb}</option>`).join('');
-  sel.value=allow(cur)?cur:'new';
+  const allow=k=>(k==='group')?true:(hasPt?(k!=='new'):(k==='new'));
+  const keep=OPTS.filter(([k])=>allow(k));
+  sel.innerHTML=keep.map(([k,lb])=>`<option value="${k}">${lb}</option>`).join('');
+  /* ⚠ 退路要退到「還在清單裡的第一個」——退成寫死的 'new' 的話，
+     有紀錄的人會被設成一個不在選單裡的值，sel.value 變空字串。 */
+  sel.value=allow(cur)?cur:((keep[0]||['new'])[0]);
   const note=document.getElementById('gt-salekind-hint');
   if(note){
-    note.style.display=donePt?'none':'';
-    note.textContent='這位還沒有上完的教練課方案，所以只能是新約（續約與分期要等上一份用完才會出現）。';
+    note.style.display='';
+    note.textContent=hasPt
+      ? '這位已經有教練課／友善教練課的紀錄，所以不是新約 —— 請選續約或分期（分期不計續約獎金）。'
+      : '這位還沒有教練課／友善教練課的紀錄，所以只能是新約（續約與分期要等有過一份之後才會出現）。';
   }
 }
 function gtSaleKindSync(){
@@ -47399,39 +47422,24 @@ function grantGoStep(n){
     const mid=(document.getElementById('gt-member')||{}).value;
     const sel=document.getElementById('gt-salekind');
     if(!mid||!sel) return;
-    const [mts,tts]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
+    const tts=await dbGetAll('ticket_types');
     const tm=Object.fromEntries((tts||[]).map(t=>[t.id,t]));
-    /* ══ 約別（2026-08-24 使用者定案）══════════════════════════════════
-       「續約或分期的標示，要在該會員是有【已完成】的教練課或者友善教練課的方案、
-         再次儲值才會出現」
-       ⚠ 這一條就是 0727 那次高估的解藥：當時用「買過同類票就算續約」推測，
-         7 月推出 38 張、實際只有 9 張（加購、補儲、換方案全被誤算）。
-         改成「上一份**已經上完**」才給選，第一次買的人根本看不到「續約」這個選項。
-       ⚠ 「已完成」以**餘額**為準、順帶認 used_up —— 今天（0824）才修過兩張
-         「remaining>0 卻卡在 used_up」的票，狀態會跟餘額打架，餘額才是真的。
-         退費的不算（那不是上完，是拿回去了）。 */
-    /* ⚠ 共享票也要算（2026-08-31 使用者提問：「為什麼陳瀚竣還會被歸類在新約」）——
-       他一直在用陳玟淂共享給他的兩張教練課票（私人教練 1V1 5 堂、友善 1V1 4 堂，
-       都已用完），完全符合「已完成的教練課方案」；但這裡原本判的是「票在不在他名下」，
-       共享票不算 → 他看起來像第一次買，續約／分期整個選不到，只能標新約。
-       與同日修掉的連續預約（grpFollowAsk）是同一個 bug：
-       全系統判「這張票誰能用」只有 tkUsableBy 一支。 */
-    const _donePt=(mts||[]).some(t=>{
-      if(!t || !tkUsableBy(t,mid)) return false;
-      if((tm[t.ticket_type_id]||{}).category!=='私人教練') return false;   // 教練課／友善教練課
-      if(t.status==='refunded') return false;
-      return (Number(t.sessions_remaining)||0)<=0 || t.status==='used_up';
-    });
-    sel.dataset.donept=_donePt?'1':'';
-    gtSaleKindOpts(_donePt);
+    /* ══ 約別（2026-09-01 使用者定版）══════════════════════════════════
+       「該會員只要票券歷史紀錄裡面有教練課或友善教練課，下次儲值就只有分期跟續約的
+         判斷；如果都沒有，就只有新約的判斷」
+       判準只有 memHasPtHistory 一支（賣的時候與事後改共用；歷史沿革寫在那裡）。
+       ⚠ 賣票是「現在」，沒有購買日界線，也沒有要排除的票。 */
+    const _hasPt=await memHasPtHistory(mid);
+    sel.dataset.donept=_hasPt?'1':'';
+    gtSaleKindOpts(_hasPt);
     if(sel.dataset.touched) return;
-    /* 自動預選：賣團課 → 團課；分期 → 分期；有上完的教練課 → 續約；其餘 → 新約。 */
+    /* 自動預選：賣團課 → 團課；分期 → 分期；有教練課紀錄 → 續約；其餘 → 新約。 */
     const _planNow=window._grantPlanCache;
     const _catNow=_planNow?((tm[_planNow.ticket_type_id]||{}).category||''):'';
     const _instNow=Number((document.getElementById('gt-install')||{}).value||1)>1;
     if(_catNow==='小班肌力'||_catNow==='團體課'||/團課|團體課|小班/.test((_planNow&&_planNow.name)||'')){ sel.value='group'; return; }
     if(_instNow){ sel.value='installment'; return; }   /* 畫面上那一欄已由 gtSaleKindSync 收起來 */
-    sel.value=_donePt?'renewal':'new';
+    sel.value=_hasPt?'renewal':'new';
   }catch(_){} })();
   if(n===3) renderGrantAttrib(); // 銷售入口：業績歸屬教練卡（★ 標主責，但不預選）
   if(n===4) renderContractStep(); // 簽約：帶入本次金額組合約全文＋簽名板
