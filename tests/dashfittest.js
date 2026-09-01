@@ -16,8 +16,11 @@ console.log('① 健身小知識移到右上角，與左上插畫對稱');
 /* 0822 四修（使用者指示，附全頁截圖）：左欄由上至下＝月曆 → 今日值班 → 健身小卡；
    右欄＝三張快捷卡 → 今日收款；中間只剩兩張紅卡＋KPI。 */
 ok('★ 右欄第一格＝三張快捷卡', /<div class="mc-g5-right">[\s\S]{0,240}<div class="mc-quick-top">\$\{quickCard\}<\/div>/.test(src));
-ok('★ 左欄由上至下：月曆 → 今日值班 → 健身小卡',
-   /<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>\s*\n\s*<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>\s*\n\s*<div class="mc-know-left">\$\{knowCardHTML\(\)\}<\/div>/.test(src));
+/* 2026-09-01：管理員桌機改版（.admd2）把左欄最下那格換成三顆快捷鈕、健身小卡移除；
+   櫃檯（與其他角色）維持原本的「月曆 → 今日值班 → 健身小卡」。兩條路都要在。 */
+ok('★ 左欄由上至下：月曆 → 今日值班 → 健身小卡（櫃檯）／三顆快捷鈕（管理員桌機）',
+   /<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>\s*\n\s*<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>\s*\n\s*\$\{_admD2\s*\n?\s*\? `<div class="mc-quick-bot">\$\{quickCard\}<\/div>`/.test(src)
+   && /: `<div class="mc-know-left">\$\{knowCardHTML\(\)\}<\/div>`\}/.test(src));
 /* 2026-08-01 三修（使用者：「健身小知識因為縮得太小了 看不到完整訊息 要放大一點
    （左邊縮圖也放大一點）」）：兩張一起 114 → 150px，仍然對稱。 */
 ok('★ 知識卡高度 150px（左右兩處共用同一組壓縮尺寸）',
@@ -162,7 +165,14 @@ ok('　　resize 仍然併到下一個影格只跑一次',
     const grid={ style:{ setProperty(k,v){ if(k==='--g5h') g5h=v; }, removeProperty(){ cleared++; } } };
     const mid={ getBoundingClientRect:()=>({top:midTop}), closest:()=>grid,
       style:{ set height(v){ midH=v; }, removeProperty(){ cleared++; } } };
-    const cc={ getBoundingClientRect:()=>({top:ccTop}), closest:()=>mid,
+    /* 2026-09-01：直式教練任務要量 .tcard-body 的高度（見 fitCoachCards）——
+       沙箱補上 querySelector；closest('.admd2') 回 null＝舊版面，該還原就還原。 */
+    let tbMax=null;
+    const tb={ getBoundingClientRect:()=>({top:ccTop+120}),
+      style:{ set maxHeight(v){ tbMax=v; }, removeProperty(){ tbMax='cleared'; } } };
+    const cc={ getBoundingClientRect:()=>({top:ccTop}),
+      closest:sel=>(sel==='.admd2'?(mobile?null:null):mid),
+      querySelector:()=>tb,
       style:{ set maxHeight(v){ ccMax=v; }, removeProperty(){ cleared++; } } };
     new Function('document','window','isMobileLayout',
       code+'\nfitCoachCards();')({querySelector:()=>cc},{innerHeight:winH},()=>!!mobile);

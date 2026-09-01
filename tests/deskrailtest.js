@@ -9,8 +9,11 @@ let pass=0,fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n);} };
 
 console.log('日期列在上方橫排 → 底下是 教練 ｜ 課卡 兩欄');
+/* 2026-09-01：日期列抽成 _twkBar 變數（管理員桌機把它搬到上方與兩張提醒卡並排，
+   其他角色維持在教練任務卡內、課卡區之上）。內容與行為同一份，只有位置在變。 */
 ok('★ 日期列獨立一列、排在課卡區之上',
-   /<div class="twk-bar">[\s\S]{0,600}<div class="twk-barin">\$\{_wkDays\}<\/div>[\s\S]{0,400}<div class="tl-3col">/.test(src)
+   /const _twkBar=`<div class="twk-bar">[\s\S]{0,600}<div class="twk-barin">\$\{_wkDays\}<\/div>/.test(src)
+   && /\$\{_admD2\?'':_twkBar\}\s*\n\s*<div class="tl-3col">/.test(src)
    && /<div class="tcard-body">\$\{rows\.map/.test(src)
    && /\.tl-3col\{display:flex;gap:12px;flex:1;min-height:0;\}/.test(src));
 /* 2026-08-23：兩端各多一格 .twk-today-slot（「回到今天」的固定位），

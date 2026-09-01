@@ -162,9 +162,14 @@ console.log('\n⑤ 即將降級名單：主教練標在會員旁邊');
 {
   ok('★★★ 名單帶主教練（沒指定的一樣列出來，寫「未指定」）',
      /coach:_coNm\[_cid\]\|\|'', coachId:_coNm\[_cid\]\?_cid:'',/.test(src)
-     && /const co=\(it\)=>\(it\.coach===undefined\)\?'':`<span class="tdl-co\$\{it\.coach\?'':' tdl-co-no'\}">\$\{it\.coach\|\|'未指定主教練'\}<\/span>`;/.test(src));
+     && /if\(!it\.coach\) return `<span class="tdl-co tdl-co-no">未指定主教練<\/span>`;/.test(src));
   ok('★★ 只有帶 coach 的名單會出現這顆章（收款提醒／未打卡不受影響）',
-     /\(it\.coach===undefined\)\?''/.test(src));
+     /if\(it\.coach===undefined\) return '';/.test(src));
+  /* 2026-09-01 使用者：「即將降級名單內的教練標籤　用上教練的顏色」 */
+  ok('★★★ 教練章穿教練自己的顏色（與篩選列、行事曆 chips 同一支 coachTagColor）',
+     /const cc=\(it\.coachId&&typeof coachTagColor==='function'\)\?coachTagColor\(it\.coachId\):null;/.test(src)
+     && /const st=cc\?` style="background:\$\{cc\.bg\};color:\$\{cc\.fg\};"`:'';/.test(src)
+     && /不另訂一套色/.test(src));
   ok('★★ 教練名走 coachDisp（顯示的是暱稱，與全站一致）',
      /const _coNm=\{\}; \(coaches\|\|\[\]\)\.forEach\(c=>\{ if\(c&&c\.id\) _coNm\[c\.id\]=coachDisp\(c\); \}\);/.test(src));
   ok('★★ 綠色＝一般提示（紅>金>綠 的色階，這不是警示）',

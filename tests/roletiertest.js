@@ -58,8 +58,10 @@ t('　櫃檯手機導覽沒有報表',
   && !/MOBILE_FRONTDESK_NAV=\[[\s\S]{0,200}dashboard/.test(src));
 
 // ── 桌機首頁教練任務：日期列改回上方橫列 ──
+/* 2026-09-01：抽成 _twkBar（管理員桌機搬到上方一列，其他角色照舊） */
 t('★ 日期列在課卡區之上、獨立一列',
-  /<div class="twk-bar">[\s\S]{0,600}<div class="twk-barin">\$\{_wkDays\}<\/div>[\s\S]{0,400}<div class="tl-3col">/.test(src));
+  /const _twkBar=`<div class="twk-bar">[\s\S]{0,600}<div class="twk-barin">\$\{_wkDays\}<\/div>/.test(src)
+  && /\$\{_admD2\?'':_twkBar\}\s*\n\s*<div class="tl-3col">/.test(src));
 t('★ 七天平分寬度（不是固定寬、不出現橫捲）',
   /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;/.test(src)
   && /\.twk-barin\{flex:1 1 auto;min-width:0;display:flex/.test(src));
