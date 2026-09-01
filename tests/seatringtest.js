@@ -6,6 +6,9 @@
    改成 ticketTokens 多收 seatN：第 N 個名額的列只圈第 N 顆命中的圓點。 */
 const fs=require('fs');
 require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
+/* 2026-09-01：ticketTokens 的 md() 開始用 TODAY 判斷「這一堂是不是今年的」
+   （跨年的圓點要多一行年份）—— 沙箱補上假時鐘，與各檔既有的測資年份一致。 */
+if(typeof globalThis.TODAY==='undefined') globalThis.TODAY=new Date(2026,8,1);   // 2026-09-01
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;

@@ -4584,6 +4584,18 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 空心環的邊色＝課種色（52% 混，實測下團課橘/按摩青/體驗紫皆可辨） */
 .mtk-free,.mtk-booked{background:#fff;border:2px solid color-mix(in srgb,var(--tk-acc,#1F6F54) 52%,#d8d2c6);box-shadow:none;color:var(--tk-acc,#1F6F54);}
 .mtk-lock{background:#f0ece3;border:1.5px dashed #cfc7b8;box-shadow:none;color:#a39b8f;font-size:11px;}
+/* 跨年的圓點：年份在上、日期在下（2026-09-01 使用者指示）——
+   35px 塞兩行會把日期擠小到看不清，所以這一顆放大到 40px（使用者：「如果圓形太小
+   可以放大一點」）。⚠ 只有帶 .mtk-yr 的那幾顆變大，今年的維持 35px。 */
+.mtk:has(.mtk-yr){flex-direction:column;gap:1px;width:40px;height:40px;}
+.mtk-yr{font-style:normal;font-size:9px;font-weight:800;line-height:1;letter-spacing:0;opacity:.78;}
+.mtk-mdv{font-style:normal;font-size:11px;font-weight:800;line-height:1;letter-spacing:-0.02em;}
+/* 六欄格版（我的票券 V2）：寬度由欄寬決定，不能被上面那條寫死成 40px */
+.mck-dots6 .mtk:has(.mtk-yr){width:100%;height:auto;}
+/* 共享／請假／扣課那幾顆本來就是「點＋兩行字」的排版，年份併進日期那一行的上方 */
+.mtk.mtk-sh:has(.mtk-yr),.mtk.mtk-lv:has(.mtk-yr){width:auto;height:auto;}
+.mtk-shdt .mtk-yr{display:block;font-size:8px;opacity:.7;}
+.mtk-shdt .mtk-mdv{display:block;font-size:inherit;}
 /* 無限卡只畫一顆 ∞（2026-08-29 使用者指示）——9,955 顆圓點數不出任何東西。
    實心、吃課種色，與「這一堂用掉了」同一個語彙：無限卡每一堂都用得到。 */
 .mtk-inf{font-size:19px;font-weight:700;letter-spacing:0;}
@@ -11690,8 +11702,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.1547';
-const APP_VERSION_LABEL='v260901.1547';
+const APP_VERSION = '260901.1557';
+const APP_VERSION_LABEL='v260901.1557';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -56359,7 +56371,17 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
   });
   const done=expand(_doneL)
     .sort((a,b)=>((a.date||'')+(a.start_time||'')).localeCompare((b.date||'')+(b.start_time||'')));
-  const md=b=>{ const d=parseYmd(b.date); return d?(d.getMonth()+1)+'/'+d.getDate():''; };
+  /* 跨年的圓點多一行年份（2026-09-01 使用者指示：「圓形卡如果是去年或前年的
+     在日期上方新增 24 25　例如 2025/9/17 上方寫 25 下方寫 9/17」）——
+     舊系統匯入的課很多是 2024／2025 年的，只寫「9/17」分不出是哪一年。
+     ⚠ 只有**非今年**才加：今年的維持一行，不然整排都變兩行、字反而變小。
+     ⚠ 回傳的是 HTML —— 目前 md() 的呼叫端全部都在 HTML 內容位置（不是 title 屬性），
+       要拿去放 title 的話請改用 b.date。 */
+  const md=b=>{ const d=parseYmd(b&&b.date); if(!d) return '';
+    const dt=(d.getMonth()+1)+'/'+d.getDate();
+    const y=d.getFullYear();
+    return (y===TODAY.getFullYear()) ? dt
+      : `<i class="mtk-yr">${String(y).slice(2)}</i><i class="mtk-mdv">${dt}</i>`; };
   const isInstall=t.installment&&t.unlocked_sessions!=null&&t.unlocked_sessions<total;
   const unlocked=isInstall?t.unlocked_sessions:total;
   const used=Math.min(Math.max(Number(usedCount)||0,0),total);

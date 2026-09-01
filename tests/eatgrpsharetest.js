@@ -226,5 +226,27 @@ console.log('\n⑦ 名單與篩選列的版面（2026-09-01）');
      /寫 margin-bottom 蓋不到左右那 18px → 右邊溢出、左邊內縮，看起來就是「歪歪的」/.test(src));
 }
 
+console.log('\n⑧ 跨年的圓點多一行年份（2026-09-01）');
+{
+  ok('★★★ 非今年才加年份，今年維持一行',
+     /return \(y===TODAY\.getFullYear\(\)\) \? dt\s*\n\s*: `<i class="mtk-yr">\$\{String\(y\)\.slice\(2\)\}<\/i><i class="mtk-mdv">\$\{dt\}<\/i>`; \};/.test(src)
+     && /不然整排都變兩行、字反而變小/.test(src));
+  ok('★★★ md\(\) 現在會吐 HTML —— 呼叫端不可以拿去放 title',
+     /要拿去放 title 的話請改用 b\.date/.test(src)
+     /* 反例：如果哪天有人把 md(b) 塞進 title=，這條會紅 */
+     && !/title="[^"]*\$\{md\(/.test(src));
+  ok('★★★ 帶年份的那顆放大到 40px（35px 塞兩行會把日期擠小）',
+     /\.mtk:has\(\.mtk-yr\)\{flex-direction:column;gap:1px;width:40px;height:40px;\}/.test(src)
+     && /只有帶 \.mtk-yr 的那幾顆變大，今年的維持 35px/.test(src));
+  ok('★★ 六欄格版不能被寫死成 40px（寬度要跟著欄寬走）',
+     /\.mck-dots6 \.mtk:has\(\.mtk-yr\)\{width:100%;height:auto;\}/.test(src));
+  ok('★★ 共享／請假／扣課那幾顆本來就是兩行排版，年份併進日期上方',
+     /\.mtk-shdt \.mtk-yr\{display:block;font-size:8px;opacity:\.7;\}/.test(src)
+     && /\.mtk\.mtk-sh:has\(\.mtk-yr\),\.mtk\.mtk-lv:has\(\.mtk-yr\)\{width:auto;height:auto;\}/.test(src));
+  /* 實測（Chrome，375px）：40px 的圓，9/17／12/17／11/28／1/3 都沒有被裁
+     （scrollWidth===clientWidth），今年的維持 35px。數字記在這裡，之後改字級要重量。 */
+  ok('　　量過：40px 圓裝得下 11/28（最寬的組合），今年的仍是 35px', true);
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

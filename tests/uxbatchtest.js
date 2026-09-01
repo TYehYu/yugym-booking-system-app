@@ -10,6 +10,9 @@ require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一�
 globalThis.bkIsGroup=b=>!!(b&&b.category==='小班肌力');
 globalThis.bkIsSelf=b=>!!(b&&b.category==='自主訓練');
 globalThis.bkIsMassage=b=>!!(b&&b.category==='運動按摩');
+/* 2026-09-01：ticketTokens 的 md() 開始用 TODAY 判斷「這一堂是不是今年的」
+   （跨年的圓點要多一行年份）—— 沙箱補上假時鐘，與各檔既有的測資年份一致。 */
+if(typeof globalThis.TODAY==='undefined') globalThis.TODAY=new Date(2026,8,1);   // 2026-09-01
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
