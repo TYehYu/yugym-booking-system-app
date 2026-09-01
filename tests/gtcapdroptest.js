@@ -62,16 +62,25 @@ console.log('\n③ 補扣視窗：超出票券堂數的待簽約卡位');
      && /const list=_allUnpaid\.slice\(0,left\);/.test(src)
      && /const _hold=_inst \? _allUnpaid\.slice\(left, _rem\) : \[\];/.test(src)
      && /const over=_allUnpaid\.slice\(_inst\?_rem:left\)\.filter\(b=>b && b\.pending_contract===true\);/.test(src));
-  ok('★★★ 只取 pending_contract —— 其餘沒綁票的是教練負責的免費名額，不能一起取消',
-     /只挑 pending_contract 的卡位。剩下那些「沒綁票也不是待簽約」的是\s*\n\s*教練負責的免費名額（上面那句「先不補扣」講的就是它們），絕對不能一起取消。/.test(src));
-  ok('★★ 會被取消的日期要列出來（按下去之前先看到）',
-     /另外還有 <b>\$\{over\.length\}<\/b> 堂待簽約卡位超出這張票的堂數：/.test(src)
+  ok('★★★ 只取 pending_contract —— 其餘沒綁票的是教練負責的免費名額，不能一起刪',
+     /只挑 pending_contract 的卡位。剩下那些「沒綁票也不是待簽約」的是\s*\n\s*教練負責的免費名額（下面那句「先不補扣」講的就是它們），絕對不能一起刪。/.test(src));
+  ok('★★ 會被刪除的日期要列出來（按下去之前先看到）',
+     /另外還有 <b>\$\{over\.length\}<\/b> 堂待簽約卡位<b>超出這張票的堂數<\/b>，會一併刪除：/.test(src)
      && /\$\{over\.slice\(0,6\)\.map\(_od\)\.join\('、'\)\}\$\{over\.length>6\?`…等 \$\{over\.length\} 堂`:''\}/.test(src));
-  ok('★★ 「只補扣」這條路一定要留著（正式庫有人一次卡 28 堂）',
-     /doChargeUnpaid\(\)">只補扣 \$\{list\.length\} 堂<\/button>/.test(src)
-     && /正式庫有人一次卡 28 堂（陳芷亘）、27 堂（葉政義）/.test(src));
-  ok('★★ 取消是紅色、而且把兩件事都寫在鈕上',
-     /<button class="btn btn-red" onclick="doChargeUnpaid\(1\)">補扣 \$\{list\.length\} 堂並取消多的 \$\{over\.length\} 堂<\/button>/.test(src));
+  /* 2026-09-01 使用者定案：「教練如果簽約 8 堂　後面的 4 堂要刪除不保留
+     教練要自己再去建立待簽約的課卡」＋「不能讓帳面有多於該會員票券的預約」——
+     0829 那顆「只補扣、把多的留著」的鈕退場，只剩一條路。 */
+  ok('★★★ 「只補扣、留著多的」那條路已退場（帳面不留比票券多的預約）',
+     !/doChargeUnpaid\(\)">只補扣 \$\{list\.length\} 堂<\/button>/.test(src)
+     && /不能讓帳面有多於該會員票券的預約/.test(src));
+  ok('★★★ 超出時只有一顆鈕，而且把兩件事都寫在鈕上',
+     /<button class="btn btn-red" onclick="doChargeUnpaid\(1\)">補扣 \$\{list\.length\} 堂並刪除多的 \$\{over\.length\} 堂<\/button>/.test(src));
+  ok('★★★ 分期不在此列：未開通的那一段仍然保留（走 _hold，不是 over）',
+     /客人買 12 堂分期、有效票券只有 4 堂，\s*\n\s*這時候還是要幫她保留後面 8 堂待簽約的預約/.test(src)
+     && /const _hold=_inst \? _allUnpaid\.slice\(left, _rem\) : \[\];/.test(src)
+     && /const over=_allUnpaid\.slice\(_inst\?_rem:left\)/.test(src));
+  ok('★★ 刪除之後要教練自己重建（畫面講出來，不要讓人以為系統會留著）',
+     /之後還要上，請教練重新建立待簽約的課卡/.test(src));
   ok('★★ 沒有超出時畫面一個字都沒變（原本那顆鈕原封不動）',
      /`<button class="btn btn-red" onclick="doChargeUnpaid\(\)">確認補扣 \$\{list\.length\} 堂<\/button>`/.test(src));
   ok('★★ 沒按紅色那顆就什麼都不取消（旗標傳進來才做）',

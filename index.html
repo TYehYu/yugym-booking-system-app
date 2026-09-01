@@ -11702,8 +11702,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.1709';
-const APP_VERSION_LABEL='v260901.1709';
+const APP_VERSION = '260901.1726';
+const APP_VERSION_LABEL='v260901.1726';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -43436,15 +43436,19 @@ async function askChargeUnpaid(memberId, ticketId){
       +`那幾堂維持「分期繳費保留」，收到下一期款項、按「開通下一期」時會自動補綁扣課`, 8000);
     return;
   }
-  /* 超出票券堂數的待簽約卡位（2026-08-29 使用者定案：
-     「待簽約排12堂 但實際8堂的情境　預約的時候把後面多的卡位刪除　給訊息提示確認」）——
+  /* 超出票券堂數的待簽約卡位（2026-08-29 定案，2026-09-01 二修改成一律刪除）——
      這就是吳宜玲那種紅虛線超約圓點的來源：12 堂卡位、8 堂票，多的 4 堂沒人收，
      一直掛在那裡佔時段，票券卡靠先進先出推算又會把它們畫進去。
+     ⚠ 2026-09-01 使用者定案：「待簽約最多只能開 12 堂　所以教練如果簽約 8 堂
+       後面的 4 堂要刪除不保留　教練要自己再去建立待簽約的課卡」
+       ＋「不能讓帳面有多於該會員票券的預約」
+       → 原本給兩顆鈕（只補扣／補扣並取消），現在只有一條路：補扣完就把多的刪掉。
+     ⚠ 分期**不在此列**（使用者同日補充：「客人買 12 堂分期、有效票券只有 4 堂，
+       這時候還是要幫她保留後面 8 堂待簽約的預約」）——
+       那一段走的是上面的 _hold（以整張票的 sessions_remaining 為界，不是已開通額度），
+       收下一期款時自動補綁。這裡的 over 只有「連整張票的總堂數都超出去」的那幾堂。
      ⚠ 只挑 pending_contract 的卡位。剩下那些「沒綁票也不是待簽約」的是
-       教練負責的免費名額（上面那句「先不補扣」講的就是它們），絕對不能一起取消。
-     ⚠ 不預設幫他取消：正式庫有人一次卡 28 堂（陳芷亘）、27 堂（葉政義），
-       那是分好幾張票陸續買的，整批砍掉會把教練排好的時段全還出去。
-       所以「只補扣」這條路一定要留著。 */
+       教練負責的免費名額（下面那句「先不補扣」講的就是它們），絕對不能一起刪。 */
   const over=_allUnpaid.slice(_inst?_rem:left).filter(b=>b && b.pending_contract===true);
   const _od=b=>String(b.date).slice(5).replace('-','/')+' '+String(b.start_time||'').slice(0,5);
   window._chgUnpaid={mid:memberId, tid:ticketId, ids:list.map(b=>b.id), over:over.map(b=>b.id)};
@@ -43461,13 +43465,13 @@ async function askChargeUnpaid(memberId, ticketId){
       ${list.map(b=>`<div>${String(b.date).slice(5).replace('-','/')} ${String(b.start_time||'').slice(0,5)}　${b.category||''}</div>`).join('')}
     </div>
     ${over.length?`<div style="background:#fbeceb;border:1px solid #f0c9c5;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px;color:#b5372e;line-height:1.8;">
-      ⚠ 另外還有 <b>${over.length}</b> 堂待簽約卡位超出這張票的堂數：
+      ⚠ 另外還有 <b>${over.length}</b> 堂待簽約卡位<b>超出這張票的堂數</b>，會一併刪除：
       ${over.slice(0,6).map(_od).join('、')}${over.length>6?`…等 ${over.length} 堂`:''}<br>
-      取消後時段會還出去，別人就約得走。<b>之後還要上就先留著</b>——會員再買票時可以再補扣。</div>`:''}
-    <div class="modal-foot"${over.length?' style="flex-wrap:wrap;gap:8px;"':''}><button class="btn btn-ghost" onclick="closeModal()">先不補扣</button>
+      時段會還出去、別人約得走。<b>之後還要上，請教練重新建立待簽約的課卡</b>
+      —— 帳面上不留比票券還多的預約。</div>`:''}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">先不補扣</button>
       ${over.length
-        ? `<button class="btn btn-ghost" onclick="doChargeUnpaid()">只補扣 ${list.length} 堂</button>
-           <button class="btn btn-red" onclick="doChargeUnpaid(1)">補扣 ${list.length} 堂並取消多的 ${over.length} 堂</button>`
+        ? `<button class="btn btn-red" onclick="doChargeUnpaid(1)">補扣 ${list.length} 堂並刪除多的 ${over.length} 堂</button>`
         : `<button class="btn btn-red" onclick="doChargeUnpaid()">確認補扣 ${list.length} 堂</button>`}</div>`);
 }
 /* ══ 批次寫入一律要防連點（2026-08-31 定案）════════════════════════════
