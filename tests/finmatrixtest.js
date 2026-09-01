@@ -87,7 +87,8 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
        假貨會讓「明細有沒有真的組出來」這件事永遠測不到。 */
   const run=new Function(...Object.keys(env),
     grabFn('fmWhoTip')
-    +'\n'+src.slice(src.indexOf('const FM_TIP_MAX=14;'), src.indexOf("const FM_TIP_OTH='")+src.slice(src.indexOf("const FM_TIP_OTH='")).indexOf('\n'))
+    +'\n'+src.slice(src.indexOf('const FM_TIP_MAX=14;'),
+        src.indexOf('\n}\n', src.indexOf('function fmRevTip(sec){'))+3)
     +'\nreturn async '+grabFn('finMatrix'))(...Object.values(env));
   (async()=>{
     await run();
@@ -144,40 +145,30 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
        表頭本來就有一句定義，但那是規則；使用者問的是「這筆錢是哪幾筆」。
        ⚠ 這兩欄的判準是「沒歸屬教練」，別把有教練的那幾筆也算進提示裡
          （那會與右邊教練欄重複，看的人會以為營業額被算兩次）。 */
-    /* 2026-08-31 二修（使用者：「只要列出 產品＋金額就好　其他文字太多餘」）——
-       欄位定義、會員姓名、合計三樣都拿掉：前者表頭已有，中者問的不是「誰付的」，
-       後者就是滑鼠底下那格的數字本身。 */
-    /* 2026-08-31 三修（使用者）：「總收入就不用滑鼠指標提示了　因為也列不完」
-       ＋「每一日的金額要把會員姓名列進去」。二修拿掉姓名，三修加回來 ——
-       同一天好幾筆都叫「團課 4 週優惠」，沒有姓名分不出是誰。 */
-    ok('★★★ 每日那格＝產品・會員　金額',
-       /title="團體課・M4　\$5,000"/.test(out), (out.match(/title="[^"]*5,000[^"]*"/g)||[]));
-    ok('★★★ 其他那格同一套（對不到票券的收款退回「收款」；沒掛會員寫「（無會員）」）',
-       /title="收款・（無會員）　\$100"/.test(out), (out.match(/title="[^"]*\$100[^"]*"/g)||[]));
-    /* ⚠ 只能在月合計**那一列之內**比 —— 用 [\s\S]*? 從 fm-sum 一路找下去的話，
-       會找到下面每日那幾格的 title，永遠是假紅燈。 */
-    const SUMROW=(out.match(/<tr class="fm-sum">[\s\S]*?<\/tr>/)||[''])[0];
-    ok('★★★ 月合計那兩格完全不掛提示（整月六十幾筆列不完）',
-       /<td class="fm-c fm-t fm-t5">/.test(SUMROW) && /<td class="fm-c fm-t fm-t4">/.test(SUMROW)
-       && !/fm-t5" title=/.test(SUMROW) && !/fm-t4" title=/.test(SUMROW), SUMROW.slice(0,300));
-    ok('　　連帶：不再收集整月清單（sumGrpWho／sumOthWho 已移除）',
-       !/sumGrpWho/.test(src) && !/sumOthWho/.test(src));
-    ok('★★★ 定義那句只留在表頭，格子裡不再重複',
-       !/<td[^>]*title="團課收入：/.test(out) && /<th[^>]*title="團課收入：/.test(out));
-    ok('★★★ 沒有合計那一列（就是滑鼠底下那格的數字本身）',
-       !/title="[^"]*合計 \$/.test(out));
-    ok('★★ fmRevTip 不再組日期前綴（只剩每日那格會掛提示，日期是多的）',
-       !/\$\{w\.d\?w\.d\+'日 ':''\}/.test(src));
-    ok('　　新/續那一欄的月合計提示照舊帶日期（那一欄沒有改，別誤傷）',
-       /title="[^"]*01日 新約・M1[^"]*"/.test(out) && /String\(w\.d\)\+'日 '/.test(src));
-    ok('★★★ 有歸屬教練的收款不會混進這兩欄的提示（12,800／6,400 是 RANDY／SANDY 的業績）',
-       !/<td class="fm-c fm-t fm-t[54]" title="[^"]*\$12,800[^"]*"/.test(out)
-       && !/<td class="fm-c fm-t fm-t[54]" title="[^"]*\$6,400[^"]*"/.test(out));
+    /* 2026-09-01 三修（使用者）：「團課收入跟其他　可以併入營業額這一欄
+       一樣用鼠標顯示該筆營業額的內容　只是教練課　團課　其他中間用一條分隔線」。
+       ⚠ 明細改成**全部收款**（含有歸屬教練的）—— 營業額本來就是全部，
+         只列沒歸屬的那幾筆會跟格子裡的數字對不起來。 */
+    ok('★★★ 營業額那格＝三段明細，段首寫段名與小計',
+       /title="團課　\$5,000\n　團體課・M4　\$5,000"/.test(out),
+       (out.match(/title="[^"]*5,000[^"]*"/g)||[]));
+    ok('★★★ 段與段之間一條分隔線',
+       /title="教練課　\$6,400\n　教練課・（無會員）　\$6,400\n──────────\n其他　\$100\n　收款・（無會員）　\$100"/.test(out),
+       (out.match(/title="[^"]*\$100[^"]*"/g)||[]));
+    ok('★★★ 有歸屬教練的收款也在明細裡（12,800 是 RANDY 的業績，仍算營業額）',
+       /title="教練課　\$12,800\n/.test(out));
+    ok('★★★ 月合計那一格不掛提示（整月六十幾筆列不完）',
+       (()=>{ const R=(out.match(/<tr class="fm-sum">[\s\S]*?<\/tr>/)||[''])[0];
+         return /<td class="fm-c fm-t fm-t3">/.test(R) && !/fm-t3" title=/.test(R); })());
+    ok('★★★ 併欄之後只剩三個凍結欄（fm-t5／fm-t4 已退場）',
+       !/fm-t5/.test(src) && !/fm-t4/.test(src)
+       && /<th class="fm-h fm-t" colspan="3">全店合計<\/th>/.test(src));
     ok('★★ 空的格子不掛空提示（沒有錢就沒有東西好解釋）',
-       /<td class="fm-c fm-t fm-t5"><\/td>/.test(out));
+       /<td class="fm-c fm-t fm-t3">0<\/td>/.test(out) || /<td class="fm-c fm-t fm-t3"><\/td>/.test(out),
+       (out.match(/<td class="fm-c fm-t fm-t3"[^>]*>/g)||[]).slice(0,3));
     ok('　　超過 14 筆只列前 14 筆，其餘用「…另有 N 筆」講出來（不默默截斷）',
        /const FM_TIP_MAX=14;/.test(src)
-       && /if\(more>0\) show\.push\(`…另有 \$\{more\} 筆`\);/.test(src));
+       && /if\(more>0\) show\.push\(`　…另有 \$\{more\} 筆`\);/.test(src));
     /* 2026-08-06 二修（使用者指示）：不用問號游標，維持一般游標 */
     /* 2026-08-30：原本是全站禁用 cursor:help，但這條規則講的是**財務矩陣的格子**
        （見上一行 0806 二修）。薪資單的淡化 KPI 用 help 游標是刻意的，

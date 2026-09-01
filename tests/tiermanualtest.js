@@ -38,6 +38,9 @@ console.log('\n①b computeMemberTiers：起點接手重播（實跑，假時鐘
     const isLegacyMember=m=>!!m.tier_epoch;
     ${grabFn('_tierBaseOf')}
     ${grabFn('_nextYm')}
+    const TIER_EPOCH_YM='2026-07';
+    ${grabFn('tierCountsOf')}
+    ${grabFn('tierWalkOne')}
     ${grabFn('computeMemberTiers')}
     return computeMemberTiers;`)({});
   // 新客本來是 regular；6 月手動調成主顧客 → 6、7 月都 0 堂 → low=2 仍是主顧客（差 1 個月才降）
@@ -46,10 +49,12 @@ console.log('\n①b computeMemberTiers：起點接手重播（實跑，假時鐘
   // 同上但 5 月調 → 5、6、7 三個完整月 0 堂 → 降回會員
   const r2=fn([], [{id:'M2',tier_epoch:false,created_at:'2026-04-01',tier_manual:'loyal',tier_manual_at:'2026-05-02'}]);
   eq('★ 連 3 個完整月未達標 → 自動降回會員（沒有鎖定）', r2.M2, 'regular');
-  ok('　　兩支觀察名單也吃同一個起點',
+  /* 2026-09-01：三支收斂成同一份重播 tierWalkOne，手動起點自然只剩一處 */
+  ok('　　兩支觀察名單也吃同一個起點（改成共用 tierWalkOne）',
      /function tierDemotionWatchIds\(bookings, members\)\{/.test(src)
      && /function tierPromotionWatchIds\(bookings, members\)\{/.test(src)
-     && (src.match(/if\(_bById\[mid\]\)\{ cur=_bById\[mid\]\.ym; state=_bById\[mid\]\.state; \}/g)||[]).length===2);
+     && (src.match(/const r=tierWalkOne\(m, byYm, nowYm, _hasM\);/g)||[]).length===2
+     && (src.match(/const base=hasM \? _tierBaseOf\(m\) : null;/g)||[]).length===1);
 }
 
 console.log('\n② 等級視窗與寫入');

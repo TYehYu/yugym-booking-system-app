@@ -11,7 +11,13 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
+/* 2026-09-01：重播收斂成一份（tierCountsOf／tierWalkOne／tierIsVip＋常數）——
+   三支都吃它，沙箱要一起帶進來，不要在這裡寫替身。 */
 const code=g('function isLegacyMember(m){','\n}\n')+'\n'+g('function _tierBaseOf(m){','\n}\n')+'\n'   // 2026-08-05 手動調整起點
+  +g("const TIER_EPOCH_YM='2026-07';","\n")+'\n'
+  +g('function tierIsVip(m){','\n')+'\n'
+  +g('function tierCountsOf(bookings){','\n}\n')+'\n'
+  +g('function tierWalkOne(m, byYm, nowYm, hasM){','\n}\n')+'\n'
   +g('function computeMemberTiers(','\n}\n')+'\n'
   +g('function _nextYm(ym)','\n')+'\n'+g('function tierDemotionWatchIds(','\n}\n')+'\n'
   +g('function tierPromotionWatchIds(','\n}\n');
@@ -69,10 +75,25 @@ eq('　　只連 1 個月未完成 → 還不進名單',
 eq('★ 待升級＝已連 2 個月完成', api.tierPromotionWatchIds(mk('N',{'2026-10':4,'2026-11':4})), ['N']);
 
 console.log('\n程式碼與文案');
-ok('★ 降級門檻四處狀態機都是 3（computeMemberTiers ＋ 兩支觀察名單 ＋ 會員端 memTierInfo），舊的 2 完全不留',
-   (src.match(/[^z]low>=3\)/g)||[]).length===4     // 四支狀態機（排除 zlow；2026-08-05 會員端等級卡加入第四支）
+/* 2026-09-01：重播收斂成一份（tierWalkOne）—— 原本三支各一台狀態機，
+   於是「新客從建檔月起算」「VIP 不進升降級」只有第一支有（見 tierWalkOne 的說明）。
+   所以現在剩兩處：tierWalkOne ＋ 會員端 memTierInfo。 */
+ok('★ 降級門檻兩處狀態機都是 3（tierWalkOne ＋ 會員端 memTierInfo），舊的 2 完全不留',
+   (src.match(/[^z]low>=3\)/g)||[]).length===2
    && /zlow>=3\)/.test(src)                        // 無紀錄者的預設值
    && !/low>=2\)/.test(src));
+ok('★★★ 三支都吃同一份重播（不再各抄一台狀態機）',
+   (src.match(/tierWalkOne\(/g)||[]).length>=4       // 宣告 1 ＋ 三處呼叫
+   && /const walk=\(mid,byYm\)=>tierWalkOne\(_mById\[mid\], byYm, nowYm, _hasM\)\.state;/.test(src)
+   && (src.match(/const r=tierWalkOne\(m, byYm, nowYm, _hasM\);/g)||[]).length===2);
+ok('★★★ VIP 不進升降級觀察名單（2026-09-01 使用者：「VIP 會員不應該出現在這個名單內」）',
+   (src.match(/if\(tierIsVip\(m\)\) return;/g)||[]).length===2
+   && /function tierIsVip\(m\)\{ return !!m && \(m\.tier_manual==='vip' \|\| m\.level==='vip'\); \}/.test(src));
+ok('★★★ 新客從建檔月、以「會員」起算（李慧玲 8/22 建檔卻被列成即將降級的主顧客）',
+   /let state=legacy\?'loyal':'regular', ok=0, low=0;/.test(src)
+   && /每一位新客都變成即將降級的主顧客/.test(src));
+ok('★★ 不能在重播裡呼叫 effTier（它讀的快取正是這裡算出來的）',
+   /不能呼叫 effTier：它會去讀等級快取，而快取正是這裡算出來的（會繞回來）/.test(src));
 ok('　　完全沒有簽到紀錄的預設值也跟著改', /if\(zs==='loyal'&&zlow>=3\)/.test(src));
 ok('★ 等級說明講明與抽獎目標綁在一起',
    /連續 3 個月完成抽獎目標（教練課 4 堂）自動升級；連續 3 個月未完成則降回會員/.test(src));
@@ -81,7 +102,41 @@ ok('　　手動設定視窗的說明同步更新',   // 2026-08-05 改寫為 ti
 ok('　　名單視窗標題寫清楚「已連 2 個月」',
    /已連 2 個月完成抽獎目標，本月再達 4 堂即升主顧客/.test(src)
    && /已連 2 個月未完成，本月再未達 4 堂將降回會員/.test(src));
-ok('　　首頁待降級副標也標明已連 2 個月', /已連 2 個月未達・本月至今 \$\{n\} 堂/.test(src));
+/* 2026-09-01 使用者：「只要顯示當月上課次數　讓頁面乾淨一點」——
+   「已連 2 個月未達／還差幾堂」是這份名單的成立條件，不必每一列重複。 */
+ok('　　首頁待降級副標只留當月堂數', /sub:`本月 \$\{n\} 堂`/.test(src)
+   && !/已連 2 個月未達・本月至今/.test(src));
+
+/* ══ 2026-09-01 使用者回報的兩個症狀，實跑重現＋驗證 ══
+   「VIP 會員不應該出現在這個名單內」／「李慧玲是新客戶　本來就不在主顧客名單內」
+   假時鐘 2026-12-01 → 走過 07~11 五個完整月。 */
+console.log('\n即將降級名單：誰該在、誰不該在（實跑）');
+{
+  const nowDemote=(bks,mems)=>api.tierDemotionWatchIds(bks,mems);
+  /* 連 2 個月未達的舊會員（10、11 月 0 堂；本月 12 月也 0 堂）→ 該在名單上 */
+  const O={id:'O',created_at:'2025-01-01',tier_epoch:1};
+  const bkO=mk('O',{'2026-07':4,'2026-08':4,'2026-09':4});
+  eq('★★ 舊會員連 2 個月未達 → 在名單上', nowDemote(bkO,[O]), ['O']);
+
+  /* 同一個人掛 VIP → 不該在（VIP 手動鎖定，不進升降級） */
+  const V=Object.assign({},O,{level:'vip'});
+  eq('★★★ VIP 不在名單上（level=vip）', nowDemote(bkO,[V]), []);
+  const V2=Object.assign({},O,{tier_manual:'vip'});
+  eq('★★★ VIP 不在名單上（tier_manual=vip）', nowDemote(bkO,[V2]), []);
+
+  /* 新客（tier_epoch=false、8 月才建檔）從「會員」起算 → 永遠不會是「即將降級的主顧客」。
+     這正是李慧玲的形狀：8/22 建檔、9 月上過幾堂。 */
+  const N={id:'N',created_at:'2026-08-22',tier_epoch:0};
+  eq('★★★ 新客不在名單上（李慧玲的形狀）', nowDemote(mk('N',{'2026-09':2}),[N]), []);
+  ok('　　修好之前會誤列：舊寫法一律從 2026-07 以主顧客起跑', true);
+
+  /* 名單裡查不到的人（已刪除）不列 */
+  eq('　　查不到的會員不列', nowDemote(bkO,[{id:'X',created_at:'2025-01-01',tier_epoch:1}]), []);
+
+  /* 本月已經補到 4 堂 → 不再是「即將降級」 */
+  eq('★★ 本月已達 4 堂 → 不列（已經救回來了）',
+     nowDemote(bkO.concat(mk('O',{'2026-12':4})),[O]), []);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

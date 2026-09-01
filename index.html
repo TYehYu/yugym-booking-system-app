@@ -1723,12 +1723,11 @@ body.mc-mode .layout{padding-top:8px;}
 .fm-tb .fm-t{position:sticky;left:var(--fm-l1,74px);z-index:2;background:var(--card2);
   border-right:1px solid var(--bd);}
 .fm-tb .fm-t.fm-t2{left:var(--fm-l2,126px);color:var(--brown);}
-/* 全店營業額欄（2026-08-13）：黏在團課欄右邊、承接原本的粗分隔線 */
-/* 團課收入／其他（2026-08-31）：沒歸屬到教練的那兩段錢，黏在團課欄右邊。
-   拆兩欄的理由見 finMatrix 裡 dayGrpRev/dayOthRev 的說明（團課 85,000 會蓋掉場租商品 4,326）。 */
-.fm-tb .fm-t.fm-t5{left:var(--fm-l3,190px);color:var(--brown);min-width:70px;}
-.fm-tb .fm-t.fm-t4{left:var(--fm-l4,260px);color:var(--t2);min-width:64px;}
-.fm-tb .fm-t.fm-t3{left:var(--fm-l5,324px);border-right:2px solid var(--bd);color:var(--green);min-width:70px;}
+/* 全店營業額欄（2026-08-13）：黏在團課欄右邊、承接原本的粗分隔線。
+   ⚠ 2026-09-01 把「團課收入／其他」兩欄併回營業額（使用者指示）——
+     凍結欄從五欄回到三欄。那兩欄一度把凍結區撐到快滿版，手機上左右滑不動、
+     根本看不到右邊的教練。要再加凍結欄之前先想清楚這件事。 */
+.fm-tb .fm-t.fm-t3{left:var(--fm-l3,190px);border-right:2px solid var(--bd);color:var(--green);min-width:70px;}
 .fm-tb thead .fm-t{z-index:4;}
 .fm-tb .fm-sum .fm-t{z-index:3;}
 .fm-tb tbody tr:hover .fm-t{background:var(--sage-bg);}
@@ -11691,8 +11690,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.1530';
-const APP_VERSION_LABEL='v260901.1530';
+const APP_VERSION = '260901.1547';
+const APP_VERSION_LABEL='v260901.1547';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15719,8 +15718,23 @@ function _tierBaseOf(m){
     return {ym:String(m.tier_manual_at).slice(0,7), state:v};
   return null;
 }
-function computeMemberTiers(bookings, members){
-  const counts={};                         // mid -> { 'YYYY-MM': 已簽到教練課數 }
+/* ══ 等級重播：全系統只有這一份（2026-09-01 收斂）══════════════════
+   使用者回報兩個症狀，成因是同一件事 —— 這段重播原本被抄了三份
+   （computeMemberTiers／tierDemotionWatchIds／tierPromotionWatchIds），
+   後兩份少抄了兩條規則：
+   ① 「VIP 不進升降級」（effTier 才有，重播沒有）→ VIP 出現在降級名單
+   ② 「新客從建檔月、以『會員』起算」（isLegacyMember）→ 兩份觀察名單一律從
+      2026-07 以『主顧客』起跑，於是**每一位新客都變成即將降級的主顧客**
+      （李慧玲 8/22 才建檔、tier_epoch=false，卻出現在名單上）。
+   ③ 順帶：共享票的等級歸屬（記在票券持有人名下）也只有第一份有。
+   看到「同一條規則抄成兩份」就是警訊 —— 這已經是這個系統第三次栽在同一件事上。 */
+const TIER_EPOCH_YM='2026-07';
+/* VIP 是手動鎖定的等級（effTier 直接回傳、不進重播）——升降級名單都不該有他。
+   ⚠ 不能呼叫 effTier：它會去讀等級快取，而快取正是這裡算出來的（會繞回來）。 */
+function tierIsVip(m){ return !!m && (m.tier_manual==='vip' || m.level==='vip'); }
+/* 逐月已簽到教練課數 mid -> { 'YYYY-MM': n } */
+function tierCountsOf(bookings){
+  const counts={};
   /* 共享票的等級歸屬（2026-08-11 使用者定案：「分享票券給其他人使用，等級累積應該
      還是算在原會員那邊；被分享的會員不會累積會員等級，除非他自己購買」）——
      有綁票的課記在「票券持有人」名下（自己的票＝自己，共享票＝原持有人）；
@@ -15734,34 +15748,40 @@ function computeMemberTiers(bookings, members){
     const ym=(b.date||'').slice(0,7); if(ym.length!==7) return;
     (counts[mid]=counts[mid]||{})[ym]=(counts[mid][ym]||0)+1;
   });
+  return counts;
+}
+/* 一個人的重播：走到上個月為止，回 {state, ok, low}
+   （ok/low＝連續達標／未達標的月數，觀察名單靠它判斷「再一個月就升／降」）。
+   hasM＝呼叫端有沒有帶會員名單；沒帶時維持舊行為（全部視為起點既有會員）。 */
+function tierWalkOne(m, byYm, nowYm, hasM){
+  const legacy=hasM ? isLegacyMember(m) : true;
+  const cYm=String((m&&m.created_at)||'').slice(0,7);
+  let cur=(legacy||!cYm||cYm<TIER_EPOCH_YM) ? TIER_EPOCH_YM : cYm;   // 新客從建檔月起算
+  let state=legacy?'loyal':'regular', ok=0, low=0;
+  /* 手動調整起點（2026-08-05）：從設定當月、以設定的等級接著走 */
+  const base=hasM ? _tierBaseOf(m) : null;
+  if(base){ cur=base.ym; state=base.state; }
+  while(cur<nowYm){                        // 只走到上個月（當月未結束）
+    const n=(byYm&&byYm[cur])||0;          // 空月＝0 堂，計入降級判定
+    ok  = n>=4 ? ok+1  : 0;
+    low = n<4  ? low+1 : 0;
+    if(state==='regular' && ok>=3){ state='loyal'; low=0; }
+    else if(state==='loyal' && low>=3){ state='regular'; ok=0; low=0; }   // 連續 3 個月未完成（2026-07-30）
+    cur=_nextYm(cur);
+  }
+  return {state, ok, low};
+}
+function computeMemberTiers(bookings, members){
+  const counts=tierCountsOf(bookings);
   const nowYm=ymd(TODAY).slice(0,7);
   const res={};
   // 制度起點條款（2026-07-18 使用者指示）：起點當下所有既有會員一律「主顧客」，
   // 之後由降級規則自然運作（未達標者連 3 個完整月後降級）。起點前的歷史不追溯。
-  const TIER_EPOCH_YM='2026-07';
   /* 有帶 members 時逐人判定起點（既有會員＝主顧客／新客＝會員，且從建檔月起算）；
      沒帶時維持舊行為（全部視為起點名單），避免其他呼叫端行為改變。 */
   const _mById={}; (members||[]).forEach(m=>{ _mById[m.id]=m; });
   const _hasM=(members&&members.length)>0;
-  const walk=(mid,byYm)=>{
-    const m=_mById[mid];
-    const legacy=_hasM ? isLegacyMember(m) : true;
-    const cYm=String((m&&m.created_at)||'').slice(0,7);
-    let cur=(legacy||!cYm||cYm<TIER_EPOCH_YM) ? TIER_EPOCH_YM : cYm;   // 新客從建檔月起算
-    let state=legacy?'loyal':'regular', ok=0, low=0;
-    /* 手動調整起點（2026-08-05）：從設定當月、以設定的等級接著走 */
-    const base=_hasM ? _tierBaseOf(m) : null;
-    if(base){ cur=base.ym; state=base.state; }
-    while(cur<nowYm){                      // 只走到上個月（當月未結束）
-      const n=byYm[cur]||0;                // 空月＝0 堂，計入降級判定
-      ok  = n>=4 ? ok+1  : 0;
-      low = n<4  ? low+1 : 0;
-      if(state==='regular' && ok>=3) state='loyal';
-      else if(state==='loyal' && low>=3){ state='regular'; ok=0; }   // 連續 3 個月未完成抽獎目標（2026-07-30）
-      cur=_nextYm(cur);
-    }
-    return state;
-  };
+  const walk=(mid,byYm)=>tierWalkOne(_mById[mid], byYm, nowYm, _hasM).state;
   const _ids=_hasM ? Object.keys(_mById) : Object.keys(counts);
   _ids.forEach(mid=>{ res[mid]=walk(mid, counts[mid]||{}); });
   // 完全沒有簽到紀錄的會員：以「每月 0 堂」走同一條規則（起點滿 2 個完整月即降級），
@@ -15778,56 +15798,34 @@ function _nextYm(ym){ let[y,m]=ym.split('-').map(Number); m++; if(m>12){m=1;y++;
    2026-07-30 使用者定案：降級門檻由 2 個月改為 3 個月，故觀察條件同步改成 low===2。
    注意：7 月為制度起點月（無已結束的完整月）→ 名單要 9 月起才會出現。 */
 function tierDemotionWatchIds(bookings, members){
-  const counts={};
-  (bookings||[]).forEach(b=>{
-    if(!(b.status==='checked_in'||b.status==='completed')) return;
-    if(b.category!=='私人教練') return;
-    const mid=b.member_id; if(!mid) return;
-    const ym=(b.date||'').slice(0,7); if(ym.length!==7) return;
-    (counts[mid]=counts[mid]||{})[ym]=(counts[mid][ym]||0)+1;
-  });
-  const _bById={}; (members||[]).forEach(m=>{ const b=_tierBaseOf(m); if(b) _bById[m.id]=b; });   // 手動調整起點（2026-08-05）
+  const counts=tierCountsOf(bookings);
   const nowYm=ymd(TODAY).slice(0,7);
+  const _mById={}; (members||[]).forEach(m=>{ _mById[m.id]=m; });
+  const _hasM=(members&&members.length)>0;
   const out=[];
   Object.entries(counts).forEach(([mid,byYm])=>{
-    let cur='2026-07', state='loyal', ok=0, low=0;
-    if(_bById[mid]){ cur=_bById[mid].ym; state=_bById[mid].state; }
-    while(cur<nowYm){
-      const n=byYm[cur]||0;
-      ok=n>=4?ok+1:0; low=n<4?low+1:0;
-      if(state==='regular'&&ok>=3) state='loyal';
-      else if(state==='loyal'&&low>=3){ state='regular'; ok=0; low=0; }
-      cur=_nextYm(cur);
-    }
-    if(state==='loyal' && low===2 && (byYm[nowYm]||0)<4) out.push(mid);   // 已連 2 個月未達，本月再未達就降（2026-07-30）
+    const m=_mById[mid];
+    if(_hasM && !m) return;                 // 名單裡查不到這個人（已刪除）
+    if(tierIsVip(m)) return;                // VIP 手動鎖定，不進升降級（2026-09-01 使用者指示）
+    const r=tierWalkOne(m, byYm, nowYm, _hasM);
+    if(r.state==='loyal' && r.low===2 && (byYm[nowYm]||0)<4) out.push(mid);   // 已連 2 個月未達，本月再未達就降（2026-07-30）
   });
   return out;
 }
 /* 待升級觀察名單（2026-07-28 使用者指示）：目前為「會員」、已連 2 個完整月完成抽獎目標
    （教練課 ≥4 堂）—— 本月再達 4 堂即於下月 1 日升主顧客。重播規則與 computeMemberTiers 同源。 */
 function tierPromotionWatchIds(bookings, members){
-  const counts={};
-  (bookings||[]).forEach(b=>{
-    if(!(b.status==='checked_in'||b.status==='completed')) return;
-    if(b.category!=='私人教練') return;
-    const mid=b.member_id; if(!mid) return;
-    const ym=(b.date||'').slice(0,7); if(ym.length!==7) return;
-    (counts[mid]=counts[mid]||{})[ym]=(counts[mid][ym]||0)+1;
-  });
-  const _bById={}; (members||[]).forEach(m=>{ const b=_tierBaseOf(m); if(b) _bById[m.id]=b; });   // 手動調整起點（2026-08-05）
+  const counts=tierCountsOf(bookings);
   const nowYm=ymd(TODAY).slice(0,7);
+  const _mById={}; (members||[]).forEach(m=>{ _mById[m.id]=m; });
+  const _hasM=(members&&members.length)>0;
   const out=[];
   Object.entries(counts).forEach(([mid,byYm])=>{
-    let cur='2026-07', state='loyal', ok=0, low=0;
-    if(_bById[mid]){ cur=_bById[mid].ym; state=_bById[mid].state; }
-    while(cur<nowYm){
-      const n=byYm[cur]||0;
-      ok=n>=4?ok+1:0; low=n<4?low+1:0;
-      if(state==='regular'&&ok>=3) state='loyal';
-      else if(state==='loyal'&&low>=3){ state='regular'; ok=0; low=0; }
-      cur=_nextYm(cur);
-    }
-    if(state==='regular' && ok===2) out.push(mid);
+    const m=_mById[mid];
+    if(_hasM && !m) return;
+    if(tierIsVip(m)) return;                // VIP 不進升降級（同降級名單）
+    const r=tierWalkOne(m, byYm, nowYm, _hasM);
+    if(r.state==='regular' && r.ok===2) out.push(mid);
   });
   return out;
 }
@@ -20120,9 +20118,12 @@ PAGES.g_dashboard=async function(){
     .filter(id=>memMap[id])
     .map(id=>{ const n=_ptCntThisMonth[id]||0;
       const _cid=memMap[id].default_coach_id||'';
+      /* 副標只留當月堂數（2026-09-01 使用者指示：「只要顯示當月上課次數　讓頁面乾淨一點」）——
+         「已連 2 個月未達」「還差幾堂」是這份名單的成立條件，每一列重複寫一次
+         等於把規則抄 112 遍；能上這張名單本來就代表那些條件都成立了。 */
       return {id,name:memMap[id].name,
         coach:_coNm[_cid]||'', coachId:_coNm[_cid]?_cid:'',   // 有名字才給 id（chip 的顏色靠它）
-        sub:`已連 2 個月未達・本月至今 ${n} 堂・還差 ${Math.max(0,4-n)} 堂即可保住主顧客`}; });
+        sub:`本月 ${n} 堂`}; });
   const _demoteNames=_demoteList.map(x=>x.name);
   const _l2=_demoteNames.length
     ? _demoteNames.slice(0,6).join('、')+(_demoteNames.length>6?` 等 ${_demoteNames.length} 人`:'')
@@ -20151,8 +20152,10 @@ PAGES.g_dashboard=async function(){
   window._todoLists={
     sign:{title:'今日收款提醒',items:_signList,empty:'今日無人待收款',grid:true,
       note:'今天要向這些人收款：教練課／友善教練課／團體課的最後一堂（續課或分期繳費），以及待簽約卡位的新客戶。名字後面是上課時間；點按鈕可進入會員資料'},
-    demote:{title:'本月即將降級名單',items:_demoteList,empty:'本月尚無即將降級的會員',
-      note:'主顧客且上個完整月未達 4 堂教練課；本月結束仍未達，下月 1 日降級。點會員可進入會員資料'},
+    /* 說明那一段拿掉（2026-09-01 使用者指示：「最上方這一句規則說明可以移除…讓頁面乾淨一點」）——
+       這份名單櫃檯每天看，規則只需要學一次；每次開窗都先讀三行字反而擋住名單。
+       ⚠ 要還原的話把 note 加回來即可（openTodoList 有帶就畫）。 */
+    demote:{title:'本月即將降級名單',items:_demoteList,empty:'本月尚無即將降級的會員'},
     nopunch:{title:'今日未打卡名單',items:_noPunchList,empty:'今日打卡皆正常',note:''}   // 併入今日值班後首頁不再列這行，其他入口仍可開
   };
   const todoCard=`<div class="card mc-card mc-todo-card">
@@ -58427,24 +58430,22 @@ async function finMatrix(){
   /* 全店營業額（2026-08-13 使用者指示：「月報表左邊要有營業額的加總」）——
      所有收款都算（含未歸屬教練的場租/商品/重啟），與教練業績欄同用 created_at 的日期口徑。 */
   const dayAmtAll={}; let sumAmtAll=0;
-  /* 沒歸屬到教練的收款再拆兩段（2026-08-31 使用者定案）——
-     8 月「營業額 − 各教練業績」是 89,326，其中 85,000 是**團課票沒選業績教練**，
-     場租＋商品只有 4,326。全部丟進一欄「其他」的話，使用者想看的蛋白粉與場租
-     會被團課整個蓋掉。所以分成「團課收入」與「其他」兩欄。
-     ⚠ 這兩欄講的都是「沒進任何教練欄的那部分」—— 有選業績教練的團課票
-       本來就算在那位教練的業績裡，不會在這裡重複出現。
-     ⚠ 五欄相加＝營業額，永遠對得起來（其他＝扣完教練與團課之後剩下的）。 */
+  /* 沿革：0831 曾把「沒歸屬到教練的收款」拆成「團課收入／其他」兩個獨立欄位
+     （8 月 89,326 之中 85,000 是團課票沒選業績教練，場租＋商品只有 4,326，
+     全丟一欄的話蛋白粉與場租會被團課蓋掉）。0901 使用者要求併回營業額 ——
+     那兩欄讓凍結欄變成五欄，手機上左右滑不動、看不到右邊的教練。
+     現在改成：欄位只留營業額，拆解放進滑鼠提示（見下方 dayRevSec）。
+     ⚠ 團課業績歸屬本來就不強制（使用者 0831 定案：一期課程可能換教練），
+       所以「營業額 − 各教練業績」會有差額，那是正常的，不要再去追。 */
   const _tkById2={}; (tks||[]).forEach(t=>{ if(t&&t.id) _tkById2[t.id]=t; });
-  /* ⚠ 用口袋分類器 tkClass5，不要散裝比對 category（見 TK_POCKETS 的說明、
-     pockettest 的 ratchet）—— 團課的 category 在不同資料裡有兩種寫法。 */
-  const _isGrpPur=p=>{ const t=_tkById2[p&&p.ticket_id];
-    return !!t && tkClass5(t,_typeMapFM)==='group'; };
-  const dayGrpRev={}, dayOthRev={}; let sumGrpRev=0, sumOthRev=0;
-  /* 這兩欄的金額「是什麼內容」要看得到（2026-08-31 使用者：「滑鼠指上去可以顯示
-     該金額是什麼內容嗎」）—— 表頭本來就有一句說明，但那是「規則」，
-     使用者要問的是「這 85,000 到底是哪幾筆」。所以每一格都夾一份明細。
-     ⚠ 只帶產品名與金額（0831 二修使用者指示，見 fmRevTip 的說明）。 */
-  const dayGrpWho={}, dayOthWho={};
+  /* 營業額那一格「是什麼內容」要看得到（2026-08-31 使用者提問，0901 二修合併）——
+     使用者：「團課收入跟其他　可以併入營業額這一欄　一樣用鼠標顯示該筆營業額的內容
+     只是教練課　團課　其他中間用一條分隔線」。
+     ⚠ 原本拆成「團課收入／其他」兩個獨立欄位（0831），凍結欄一口氣變五欄，
+       手機上左右滑不動、看不到教練。合併回營業額之後凍結欄回到三欄。
+     ⚠ 這裡是**全部**收款（含有歸屬教練的），與那兩個舊欄位「只算沒歸屬的」不同 ——
+       營業額本來就是全部，明細也該是全部，否則指上去看到的金額對不上格子裡的數字。 */
+  const dayRevSec={};   // dd -> {pt:[],grp:[],oth:[]}
   const _purItem=p=>({
     kind:(_tkById2[p.ticket_id]||{}).plan_name || p.plan_name
          || ((_typeMapFM[(_tkById2[p.ticket_id]||{}).ticket_type_id]||{}).name) || '收款',
@@ -58452,15 +58453,22 @@ async function finMatrix(){
        真的沒掛會員的收款（場租、商品），不要把撈不到名字的人也講成沒有會員。 */
     name:memName[p.member_id]||p.member_id||'（無會員）',
     amt:Number(p.deal_amount)||0 });
+  /* 三段的分法與上面「教練課」那一欄同一套：先用 bkPocket 擋掉體驗／場租
+     （tkClass5 認不出體驗、會退回 'pt'），再看口袋分類。
+     自主訓練點數、折抵券也歸「其他」—— 它們不是教練課也不是團課。 */
+  const _revSecOf=p=>{
+    const t=_tkById2[p&&p.ticket_id];
+    if(!t) return 'oth';                                   // 場租／商品／重啟／對不到票券的收款
+    const tt=_typeMapFM[t.ticket_type_id]||{};
+    if(!bkPocket({category:tt.category, ticket_type_id:t.ticket_type_id}, _typeMapFM)) return 'oth';
+    const k=tkClass5(t,_typeMapFM);
+    return k==='group' ? 'grp' : ((k==='pt'||k==='massage') ? 'pt' : 'oth');
+  };
   (purs||[]).forEach(p=>{ if(!p) return; const d10=String(p.created_at||'').slice(0,10);
     if(!inM(d10)) return; const v=Number(p.deal_amount)||0; const dd2=d10.slice(8,10);
     dayAmtAll[dd2]=(dayAmtAll[dd2]||0)+v; sumAmtAll+=v;
-    if(p.coach_id) return;                       // 有歸屬教練 → 已經在那位教練的業績欄
-    const _it=_purItem(p);
-    if(_isGrpPur(p)){ dayGrpRev[dd2]=(dayGrpRev[dd2]||0)+v; sumGrpRev+=v;
-      (dayGrpWho[dd2]=dayGrpWho[dd2]||[]).push(_it); }
-    else { dayOthRev[dd2]=(dayOthRev[dd2]||0)+v; sumOthRev+=v;
-      (dayOthWho[dd2]=dayOthWho[dd2]||[]).push(_it); } });
+    const sec=(dayRevSec[dd2]=dayRevSec[dd2]||{pt:[],grp:[],oth:[]});
+    sec[_revSecOf(p)].push(_purItem(p)); });
   let dayRows='';
   for(let d=1;d<=days;d++){
     const dd=String(d).padStart(2,'0');
@@ -58480,9 +58488,7 @@ async function finMatrix(){
     });
     dayRows+=`<tr class="${isToday?'fm-today':''}"><th class="fm-d">${d}<span>（${wd}）</span></th>`
       +`<td class="fm-c fm-t">${num(dayPt)}</td><td class="fm-c fm-t fm-t2">${num(dayGrp)}</td>`
-      +`<td class="fm-c fm-t fm-t5"${fmRevTip(dayGrpWho[dd])}>${dayGrpRev[dd]?money(dayGrpRev[dd]):''}</td>`
-      +`<td class="fm-c fm-t fm-t4"${fmRevTip(dayOthWho[dd])}>${dayOthRev[dd]?money(dayOthRev[dd]):''}</td>`
-      +`<td class="fm-c fm-t fm-t3">${money(dayAmtAll[dd]||0)}</td>${tds}</tr>`;
+      +`<td class="fm-c fm-t fm-t3"${fmRevTip(dayRevSec[dd])}>${money(dayAmtAll[dd]||0)}</td>${tds}</tr>`;
   }
   let sumTds='', sumPt=0, sumGrp=0;
   cols.forEach(c=>{ const s=sum[c.id]; sumPt+=s.pt; sumGrp+=s.grp; const cc=_fmCol[c.id];
@@ -58506,15 +58512,15 @@ async function finMatrix(){
       <button class="btn btn-ghost btn-sm" onclick="finMonthMove(1)">下個月 ›</button></div>
     <div class="fm-wrap"><table class="fm-tb">
       <thead>
-        <tr><th class="fm-d fm-h">日期</th><th class="fm-h fm-t" colspan="5">全店合計</th>${head1}</tr>
-        <tr><th class="fm-d fm-sh"></th><th class="fm-sh fm-t">教練課</th><th class="fm-sh fm-t fm-t2">團課</th><th class="fm-sh fm-t fm-t5" title="${FM_TIP_GRP}（有選的已經算在右邊該教練的業績裡）&#10;每日那一格可以指上去看是哪幾筆（月合計筆數太多不列）">團課收入</th><th class="fm-sh fm-t fm-t4" title="${FM_TIP_OTH}&#10;每日那一格可以指上去看是哪幾筆（月合計筆數太多不列）">其他</th><th class="fm-sh fm-t fm-t3">營業額</th>${head2}</tr>
+        <tr><th class="fm-d fm-h">日期</th><th class="fm-h fm-t" colspan="3">全店合計</th>${head1}</tr>
+        <tr><th class="fm-d fm-sh"></th><th class="fm-sh fm-t">教練課</th><th class="fm-sh fm-t fm-t2">團課</th><th class="fm-sh fm-t fm-t3" title="當天所有收款的合計&#10;每日那一格可以指上去看明細（教練課／團課／其他分段列出；月合計筆數太多不列）">營業額</th>${head2}</tr>
       </thead>
       <tbody>
-        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumPt)}</td><td class="fm-c fm-t fm-t2">${num(sumGrp)}</td><td class="fm-c fm-t fm-t5">${money(sumGrpRev)}</td><td class="fm-c fm-t fm-t4">${money(sumOthRev)}</td><td class="fm-c fm-t fm-t3">${money(sumAmtAll)}</td>${sumTds}</tr>
+        <tr class="fm-sum"><th class="fm-d">月合計</th><td class="fm-c fm-t">${num(sumPt)}</td><td class="fm-c fm-t fm-t2">${num(sumGrp)}</td><td class="fm-c fm-t fm-t3">${money(sumAmtAll)}</td>${sumTds}</tr>
         ${dayRows}
       </tbody>
     </table></div>
-    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;line-height:1.8;">教練課＝已簽到／已完成的教練課、友善教練課與運動按摩（體驗、自主訓練、場租不計）；團課以人次計；團課收入與其他＝沒有歸屬到教練的收款（前者是團課票、後者是場租商品等）；業績＝收款紀錄的實收金額（依業績歸屬教練）；新/續＝當日成交的票券約別（作廢退款不列）。</div>
+    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;line-height:1.8;">教練課＝已簽到／已完成的教練課、友善教練課與運動按摩（體驗、自主訓練、場租不計）；團課以人次計；營業額＝當天所有收款，滑鼠指上去看明細（教練課／團課／其他分段列出）；業績＝收款紀錄的實收金額（依業績歸屬教練）；新/續＝當日成交的票券約別（作廢退款不列）。</div>
   </div>`;
   fmStickyFit();
 }
@@ -58532,17 +58538,33 @@ async function finMatrix(){
      同一天好幾筆都叫「團課 4 週優惠」，沒有姓名根本分不出是誰。
    欄位定義（表頭 title 已有）與合計（就是滑鼠底下那格的數字）維持不列。
    留著「…另有 N 筆」：那不是修飾，是「你看到的不是全部」的交代。 */
+/* 營業額那一格的明細提示（2026-09-01 使用者：「一樣用鼠標顯示該筆營業額的內容
+   只是教練課　團課　其他中間用一條分隔線」）——
+   三段各自列「產品・會員　金額」，段首寫段名與小計，段與段之間一條分隔線。
+   ⚠ 段名與小計是「結構」不是贅字：不寫段名就不知道自己在看哪一段。
+     0831 拿掉的三樣（欄位定義、合計、日期前綴）維持不列。
+   ⚠ 只有**每日**那一格掛提示，月合計不掛 —— 使用者 0831：「總收入就不用滑鼠
+     指標提示了　因為也列不完」。 */
 const FM_TIP_MAX=14;
-function fmRevTip(list){
-  if(!list || !list.length) return '';
-  const show=list.slice(0,FM_TIP_MAX)
-    .map(w=>`${w.kind}・${w.name}　$${(Number(w.amt)||0).toLocaleString()}`);
-  const more=list.length-show.length;
-  if(more>0) show.push(`…另有 ${more} 筆`);
-  return ` title="${show.join('\n').replace(/"/g,'&quot;')}"`;
+const FM_TIP_SEC=[['pt','教練課'],['grp','團課'],['oth','其他']];
+const FM_TIP_HR='──────────';
+function fmRevTip(sec){
+  if(!sec) return '';
+  const out=[];
+  FM_TIP_SEC.forEach(([k,lb])=>{
+    const list=sec[k]||[]; if(!list.length) return;
+    const tot=list.reduce((n,w)=>n+(Number(w.amt)||0),0);
+    if(out.length) out.push(FM_TIP_HR);
+    out.push(`${lb}　$${tot.toLocaleString()}`);
+    const show=list.slice(0,FM_TIP_MAX)
+      .map(w=>`　${w.kind}・${w.name}　$${(Number(w.amt)||0).toLocaleString()}`);
+    const more=list.length-show.length;
+    if(more>0) show.push(`　…另有 ${more} 筆`);   // 不默默截斷
+    out.push.apply(out, show);
+  });
+  if(!out.length) return '';
+  return ` title="${out.join('\n').replace(/"/g,'&quot;')}"`;
 }
-const FM_TIP_GRP='團課收入：賣團課票的收款中，沒有選業績歸屬教練的那部分';
-const FM_TIP_OTH='其他：場租、商品、重啟，以及對不到票券的收款';
 function fmWhoTip(who){
   if(!who || !who.length) return '';
   const txt=who.map(w=>`${w.d?String(w.d)+'日 ':''}${w.kind}・${w.name}${w.plan?'（'+w.plan+'）':''}${w.amt?' $'+w.amt.toLocaleString():''}`).join('\n');
@@ -58571,17 +58593,12 @@ function fmStickyFit(){
       const t1=tb.querySelector('thead tr:nth-child(2) .fm-t:not(.fm-t2):not(.fm-t3)');
       const w2=t1?Math.round(t1.getBoundingClientRect().width):0;
       if(w1>0&&w2>0) tb.style.setProperty('--fm-l2',(w1+w2)+'px');
-      /* 2026-08-13：第四欄要黏在團課欄右邊——位移＝前三欄實際寬度合計。
-         2026-08-31 中間插了「其他」：其他吃 --fm-l3、營業額往右挪到 --fm-l4。 */
+      /* 2026-08-13：營業額欄黏在團課欄右邊——位移＝前三欄實際寬度合計。
+         ⚠ 2026-09-01：0831 中間插的「團課收入／其他」兩欄已併回營業額，
+           --fm-l4／--fm-l5 隨之退場（凍結欄回到三欄，手機才滑得動）。 */
       const t2=tb.querySelector('thead tr:nth-child(2) .fm-t.fm-t2');
       const w3=t2?Math.round(t2.getBoundingClientRect().width):0;
       if(w1>0&&w2>0&&w3>0) tb.style.setProperty('--fm-l3',(w1+w2+w3)+'px');
-      const t3=tb.querySelector('thead tr:nth-child(2) .fm-t.fm-t5');
-      const w4=t3?Math.round(t3.getBoundingClientRect().width):0;
-      if(w1>0&&w2>0&&w3>0&&w4>0) tb.style.setProperty('--fm-l4',(w1+w2+w3+w4)+'px');
-      const t4=tb.querySelector('thead tr:nth-child(2) .fm-t.fm-t4');
-      const w5=t4?Math.round(t4.getBoundingClientRect().width):0;
-      if(w1>0&&w2>0&&w3>0&&w4>0&&w5>0) tb.style.setProperty('--fm-l5',(w1+w2+w3+w4+w5)+'px');
     };
     fit();
     requestAnimationFrame(fit);                       // 字體載入後再量一次

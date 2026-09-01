@@ -12,8 +12,9 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 
 console.log('① 表頭：一個大標、兩個子標');
 /* 2026-08-31：再加「團課收入」「其他」→ 五欄 */
-ok('★ 上排「全店合計」橫跨五欄',
-   /<th class="fm-d fm-h">日期<\/th><th class="fm-h fm-t" colspan="5">全店合計<\/th>/.test(src));
+/* 2026-09-01：團課收入／其他併回營業額 → 三欄（見 finmatrixpagetest 的說明） */
+ok('★ 上排「全店合計」橫跨三欄',
+   /<th class="fm-d fm-h">日期<\/th><th class="fm-h fm-t" colspan="3">全店合計<\/th>/.test(src));
 ok('★ 下排拆成「教練課」與「團課」',
    /<th class="fm-sh fm-t">教練課<\/th><th class="fm-sh fm-t fm-t2">團課<\/th>/.test(src));
 

@@ -85,18 +85,23 @@ console.log('\n④ 左側兩欄凍結（2026-08-06 使用者指示：「左邊�
 ok('★ 總堂數欄黏在日期欄右邊（位移用量出來的 --fm-l1，不寫死）',
    /\.fm-tb \.fm-t\{position:sticky;left:var\(--fm-l1,74px\);z-index:2;background:var\(--card2\);\n\s*border-right:1px solid var\(--bd\);\}/.test(src)
    && /\.fm-tb \.fm-t\.fm-t2\{left:var\(--fm-l2,126px\);color:var\(--brown\)/.test(src)
-   /* 2026-08-31：全店合計拆成五欄（教練課／團課／團課收入／其他／營業額）——
-      團課收入與其他＝沒歸屬到教練的收款，拆兩欄是因為團課 85,000 會蓋掉場租商品 4,326。 */
-   && /\.fm-tb \.fm-t\.fm-t5\{left:var\(--fm-l3,190px\);/.test(src)
-   && /\.fm-tb \.fm-t\.fm-t4\{left:var\(--fm-l4,260px\);/.test(src)
-   && /\.fm-tb \.fm-t\.fm-t3\{left:var\(--fm-l5,324px\);border-right:2px solid var\(--bd\)/.test(src));
+   /* 2026-09-01：0831 拆出來的「團課收入／其他」兩欄併回營業額 ——
+      五個凍結欄把凍結區撐到快滿版，手機上左右滑不動、看不到右邊的教練。
+      現在回到三欄（教練課／團課／營業額），拆解改放進滑鼠提示。 */
+   && /\.fm-tb \.fm-t\.fm-t3\{left:var\(--fm-l3,190px\);border-right:2px solid var\(--bd\)/.test(src)
+   && !/fm-t5/.test(src) && !/fm-t4/.test(src));
+ok('★★★ 凍結欄只有三欄（再加之前先想清楚手機滑不動這件事）',
+   /要再加凍結欄之前先想清楚這件事/.test(src)
+   /* 只看真正生效的 CSS／量測；註解裡的沿革（--fm-l4／--fm-l5 隨之退場）刻意留著 */
+   && !/left:var\(--fm-l4/.test(src) && !/left:var\(--fm-l5/.test(src)
+   && !/setProperty\('--fm-l4'/.test(src) && !/setProperty\('--fm-l5'/.test(src));
 ok('★ 日期欄的實際寬度由 fmStickyFit 量（字體/縮放會變）',
    /const d0=tb\.querySelector\('thead \.fm-d'\);/.test(src)
    && /if\(w1>0\) tb\.style\.setProperty\('--fm-l1',w1\+'px'\);/.test(src));
 ok('★ 表頭那幾格也掛 fm-t，跟著凍結（2026-08-08 起是「全店總堂數」橫跨教練課／團課）',
-   /<th class="fm-h fm-t" colspan="5">全店合計<\/th>/.test(src)
-   && /<th class="fm-sh fm-t">教練課<\/th><th class="fm-sh fm-t fm-t2">團課<\/th><th class="fm-sh fm-t fm-t5"/.test(src)
-   && /<th class="fm-sh fm-t fm-t3">營業額<\/th>/.test(src));
+   /<th class="fm-h fm-t" colspan="3">全店合計<\/th>/.test(src)
+   && /<th class="fm-sh fm-t">教練課<\/th><th class="fm-sh fm-t fm-t2">團課<\/th><th class="fm-sh fm-t fm-t3"/.test(src)
+   && /title="當天所有收款的合計/.test(src));
 ok('　　疊層：表頭 > 月合計 > 一般列（橫捲時不會被別欄蓋住）',
    /\.fm-tb thead \.fm-t\{z-index:4;\}/.test(src)
    && /\.fm-tb \.fm-sum \.fm-t\{z-index:3;\}/.test(src));
