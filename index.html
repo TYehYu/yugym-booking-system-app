@@ -1801,6 +1801,12 @@ body.mc-mode .layout{padding-top:8px;}
 .pnl2-i-l i{font-style:normal;font-weight:400;font-size:11px;color:var(--t3);margin-left:6px;}
 .pnl2-i-v{font-family:var(--num),inherit;font-size:14px;font-weight:800;white-space:nowrap;}
 .pnl2-in .pnl2-i-v{color:var(--gold-d,#9a7344);}
+/* 可點的那一列（目前只有營業稅）：平常跟其他列一樣，滑過去才浮出可點的樣子 ——
+   不能為了一列改掉整張表的節奏（同 .pfd-tap 的作法）。 */
+.pnl2-i.pnl2-tap{cursor:pointer;transition:border-color .12s,box-shadow .12s;}
+.pnl2-i.pnl2-tap:hover{border-color:var(--green,#1f6f54);box-shadow:0 2px 10px rgba(31,111,84,.10);}
+.pnl2-i.pnl2-tap:active{transform:scale(.997);}
+.pnl2-go{font-style:normal;font-weight:700;color:var(--green,#1f6f54);}
 .pnl2-out .pnl2-i-v{color:var(--danger,#b5372e);}
 /* 子項（固定／其他支出的逐筆）：縮排、淡一階，看得出是掛在上面那一項底下的 */
 /* .pnl2-i-sub（縮排子項）隨 0823 二修「收斂成［支出］」移除，沒有呼叫端了 */
@@ -11722,8 +11728,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.2210';
-const APP_VERSION_LABEL='v260901.2210';
+const APP_VERSION = '260901.2236';
+const APP_VERSION_LABEL='v260901.2236';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -59222,11 +59228,18 @@ async function finPnl(){
           <div class="pnl2-head"><span class="pnl2-head-l">支出合計</span><span class="pnl2-head-v">${m(spend)}</span></div>
           <div class="pnl2-cap">人事 ${m(staffCost)}・稅 ${m(tax)}・支出 ${m(fixedTotal+otherTotal)}</div>
           <div class="pnl2-list">
-            <div class="pnl2-i"><span class="pnl2-i-l">${_vat.actual?'營業稅（實際）':'營業稅（預估 5%）'}<i>${
+            ${/* 這一行點得下去＝直接填這一期的實際應納（2026-09-01 使用者：「這裡嗎？我點了沒反應」）——
+                 入口就該在看到數字的地方。分頁那顆按鈕留著，兩條路都通。
+                 ⚠ 只有管理員能填；櫃檯看得到數字但沒有按鈕（畫成一般的一列）。 */''}
+            ${(SESSION&&SESSION.role==='admin')
+              ? `<button type="button" class="pnl2-i pnl2-tap" onclick="vatEditAsk('${_vat.period}')"
+                   title="點一下填這一期的實際應納稅額">`
+              : `<div class="pnl2-i">`}<span class="pnl2-i-l">${_vat.actual?'營業稅（實際）':'營業稅（預估 5%）'}<i>${
               _vat.actual
                 ? `${vatPeriodLabel(_vat.period)}期實際應納 ${m(_vat.periodAmount)}，依收款比例攤回本月`
                 : `依收款 ${m(cash)} 內含計　·　${vatPeriodLabel(_vat.period)}期會計結算後會更新`
-              }</i></span><span class="pnl2-i-v">${neg(tax)}</span></div>
+              }${(SESSION&&SESSION.role==='admin')?`　·　<b class="pnl2-go">點一下${_vat.actual?'修改':'填實際數'} ›</b>`:''}</i></span><span class="pnl2-i-v">${neg(tax)}</span>${
+              (SESSION&&SESSION.role==='admin')?'</button>':'</div>'}
             <div class="pnl2-i"><span class="pnl2-i-l">員工薪資（應發）<i>${payRows.length} 位・明細見下方</i></span><span class="pnl2-i-v">${neg(salary)}</span></div>
             <div class="pnl2-i"><span class="pnl2-i-l">公司負擔勞健保<i>勞保雇主＋健保雇主＋勞退＋職災</i></span><span class="pnl2-i-v">${neg(coIns)}</span></div>
             ${/* 2026-08-23 三修（使用者：「支出改成兩個按鈕 固定支出跟其他支出 桌機版」）——
