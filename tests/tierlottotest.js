@@ -78,8 +78,9 @@ console.log('\n程式碼與文案');
 /* 2026-09-01：重播收斂成一份（tierWalkOne）—— 原本三支各一台狀態機，
    於是「新客從建檔月起算」「VIP 不進升降級」只有第一支有（見 tierWalkOne 的說明）。
    所以現在剩兩處：tierWalkOne ＋ 會員端 memTierInfo。 */
-ok('★ 降級門檻兩處狀態機都是 3（tierWalkOne ＋ 會員端 memTierInfo），舊的 2 完全不留',
-   (src.match(/[^z]low>=3\)/g)||[]).length===2
+/* 2026-09-01 二修：會員端等級卡也收斂進 tierWalkOne → 全系統只剩一台狀態機 */
+ok('★ 降級門檻只有一處狀態機（tierWalkOne），舊的 2 完全不留',
+   (src.match(/[^z]low>=3\)/g)||[]).length===1
    && /zlow>=3\)/.test(src)                        // 無紀錄者的預設值
    && !/low>=2\)/.test(src));
 ok('★★★ 三支都吃同一份重播（不再各抄一台狀態機）',
@@ -110,6 +111,41 @@ ok('　　首頁待降級副標只留當月堂數', /sub:`本月 \$\{n\} 堂`/.t
 /* ══ 2026-09-01 使用者回報的兩個症狀，實跑重現＋驗證 ══
    「VIP 會員不應該出現在這個名單內」／「李慧玲是新客戶　本來就不在主顧客名單內」
    假時鐘 2026-12-01 → 走過 07~11 五個完整月。 */
+/* ══ 2026-09-01 定案：等級看「誰出席」，買課給別人上的那一方也算 ══
+   使用者：「升降級要看是誰出席來計算　不是誰買課」
+   ＋「原本是主顧客的會員買課給別人上課，自己三個月沒有上到 4 堂也會被降級；
+      如果是 2 堂自己上、2 堂別人上，這樣要維持主顧客等級吧」
+   → 一堂共享票的課兩邊各記一次（推翻 0811「只記持有人」）。 */
+console.log('\n共享票的等級歸屬：出席者與買票的人都算');
+{
+  const cnt=new Function('window',
+    src.slice(src.indexOf('function tierCountsOf(bookings){'),
+              src.indexOf('\n}\n', src.indexOf('function tierCountsOf(bookings){'))+2)
+    +'\nreturn tierCountsOf;')({_allTkCache:[{id:'TK-A',member_id:'OWN'}]});
+  const B=(mid,tid,n)=>Array.from({length:n},(_,i)=>({member_id:mid,ticket_id:tid,
+    status:'checked_in',category:'私人教練',date:'2026-08-0'+(i+1)}));
+
+  const r1=cnt(B('OWN','TK-A',2).concat(B('SHR','TK-A',2)));
+  eq('★★★ 自己上 2 堂＋別人用他的票上 2 堂 → 持有人算 4 堂（維持主顧客）',
+     r1['OWN']['2026-08'], 4);
+  eq('★★★ 被分享的那位也算得到自己上的 2 堂（不會被當成 0 堂）',
+     r1['SHR']['2026-08'], 2);
+
+  const r2=cnt(B('SHR','TK-A',4));
+  eq('★★★ 全部用共享票上 4 堂 → 出席者 4 堂（黃柏瑜／李昭賜的形狀，修好前是 0）',
+     r2['SHR']['2026-08'], 4);
+  eq('　　同一批課，買票的人也記 4 堂（兩邊各自算，不是共用額度池）',
+     r2['OWN']['2026-08'], 4);
+
+  const r3=cnt(B('OWN','TK-A',3));
+  eq('★★ 自己的票自己上 → 只記一次，不會變成兩堂',
+     [r3['OWN']['2026-08'], Object.keys(r3).length], [3,1]);
+
+  const r4=cnt([{member_id:'X',status:'checked_in',category:'小班肌力',date:'2026-08-01'},
+                {member_id:'X',status:'booked',category:'私人教練',date:'2026-08-02'}]);
+  eq('　　團課與還沒簽到的都不算', Object.keys(r4).length, 0);
+}
+
 console.log('\n即將降級名單：誰該在、誰不該在（實跑）');
 {
   const nowDemote=(bks,mems)=>api.tierDemotionWatchIds(bks,mems);

@@ -36,13 +36,17 @@ ok('★ 警示色階照品牌規則（降級倒數紅、未達標金、良好綠
 console.log('\n② memTierInfo 實跑（假時鐘 2026-08-05）');
 {
   const body=grabFn('memTierInfo');
-  /* 2026-08-13 更新：2026-08-11 共享票等級歸屬改版後，memTierInfo 內部改查
-     window._allTkCache（共享票記在持有人名下）—— 沙箱補 window stub，
-     空快取＝退回舊行為（記在上課者名下），以下情境判定不變。 */
+  /* 2026-09-01：memTierInfo 不再自己跑一台狀態機，改吃 tierCountsOf ＋ tierWalkOne
+     （會員看到的等級與後台必然一致）。堂數記在「誰出席」，不再查票券持有人 ——
+     所以沙箱也不需要 window._allTkCache 了。兩支都要注入真的那一份。 */
   const mk=new Function('window',`
     const TODAY=null; const ymd=()=>'2026-08-05';
     const isLegacyMember=m=>!!m.tier_epoch;
     const _nextYm=ym=>{let[y,m]=ym.split('-').map(Number);m++;if(m>12){m=1;y++;}return y+'-'+String(m).padStart(2,'0');};
+    const TIER_EPOCH_YM='2026-07';
+    const _tierBaseOf=()=>null;
+    ${grabFn('tierCountsOf')}
+    ${grabFn('tierWalkOne')}
     ${body}
     return memTierInfo;`)({});
   const bk=(mid,ym,n)=>Array.from({length:n},(_,i)=>({member_id:mid,status:'checked_in',category:'私人教練',date:ym+'-'+String(i+1).padStart(2,'0')}));

@@ -86,7 +86,10 @@ console.log('\n③ 會員端等級卡跟著反映');
 ok('★ VIP 鎖定才顯示「等級由門市設定」；手動起點照常顯示升降進度',
    /const man=\(me\.tier_manual==='vip'\)\?'vip':null;/.test(src)
    && /if\(ti\.manual\)\{\n\s*status=`<div class="mtc-status">等級由門市設定，不受自動升降級規則影響。<\/div>`;/.test(src));
-ok('★ 等級卡的重播也代入手動起點', /const _b=\(typeof _tierBaseOf==='function'\)\?_tierBaseOf\(me\):null;\n\s*if\(_b\)\{ cur=_b\.ym; state=_b\.state; \}/.test(src));
+/* 2026-09-01：等級卡改吃共用的 tierWalkOne，手動起點在那一支裡代入（只剩一處） */
+ok('★ 等級卡的重播也代入手動起點（改吃共用的 tierWalkOne）',
+   /const r=tierWalkOne\(me, byYm, nowYm, true\);/.test(src)
+   && /const base=hasM \? _tierBaseOf\(m\) : null;\s*\n\s*if\(base\)\{ cur=base\.ym; state=base\.state; \}/.test(src));
 
 console.log('\n④ migration 留檔');
 ok('★ tier_manual／tier_manual_at migration 檔存在',
