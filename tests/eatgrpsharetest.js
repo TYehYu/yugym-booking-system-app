@@ -152,6 +152,27 @@ console.log('\n③b refund_waived 只在「真的扣過、而且選擇不退」�
   eq('★★ 有退 → 一律不蓋', [flag(true,true), flag(true,false)], [false,false]);
 }
 
+console.log('\n③c 建立預約：扣不到票就不能留下半套（2026-09-01 根因）');
+{
+  /* 8/25–9/01 正式庫出現 19 筆「綁了票券、帳本卻沒有扣課紀錄」的預約。
+     成因是這條路的順序：先 dbPut 預約、再 deductTicket ——
+     扣課那一步失敗（丟例外或被護欄擋下）時，預約已經寫進去了。 */
+  ok('★★★ 扣不到票就把預約收回去（全成或全不成）',
+     /try\{ _ded=await deductTicket\(tk, bk\.id, operator\); \}/.test(src)
+     && /catch\(e\)\{ console\.error\('扣課失敗（建立預約）', bk\.id, e\); _ded=false; \}/.test(src)
+     && /if\(!_ded\)\{\s*\n\s*try\{ await dbDel\('bookings', bk\.id\); \}catch\(_\)\{\}/.test(src));
+  ok('★★★ 例外與「回 false」兩種失敗都要接（護欄擋下也算沒扣到）',
+     /let _ded=false;/.test(src) && /_ded=false;\s*\}\s*\n\s*if\(!_ded\)/.test(src));
+  ok('★★ 失敗要講出來，不能靜靜少排一堂',
+     /reason:'扣課失敗，這一堂沒有建立（票券未被扣）'/.test(src));
+  ok('★★★ 三層後果寫在原地（下一個人才知道為什麼不能只 dbPut）',
+     /票券卡的餘額高估（帳面還有 9 堂，其實有 3 堂已經被排走）/.test(src)
+     && /取消時被判成「這一堂沒有扣過票」/.test(src)
+     && /圓形卡靠先進先出推算，會把它畫成紅虛線超約/.test(src));
+  ok('★★ 與 DB 那兩支 RPC 同一個原則（單一交易、絕不半套）',
+     /「單一交易、絕不半套」同一個原則/.test(src));
+}
+
 console.log('\n④b 選錯扣課，櫃檯自己改得回來');
 {
   ok('★★★ 金色那顆點得下去（櫃檯以上），入口就在看到問題的地方',

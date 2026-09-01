@@ -11702,8 +11702,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.1726';
-const APP_VERSION_LABEL='v260901.1726';
+const APP_VERSION = '260901.1732';
+const APP_VERSION_LABEL='v260901.1732';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -30641,7 +30641,27 @@ async function runRecurringBooking(opts){
         // ── 原路徑（旗標關閉，維持與過往完全一致）──
         delete bk.venue_pref;                    // 只是配置提示，不入庫
         await dbPut('bookings', bk);
-        if(tk) await deductTicket(tk, bk.id, operator);
+        /* ⚠ 全成或全不成（2026-09-01）——原本是 `dbPut(bk); if(tk) await deductTicket(...)`，
+           扣課那一步只要失敗（丟例外、或被餘額護欄擋下回 false），預約已經寫進去了，
+           就留下一筆「綁了票券、帳本卻沒有扣課紀錄」的半套資料。後果有三層：
+             ① 票券卡的餘額高估（帳面還有 9 堂，其實有 3 堂已經被排走）
+             ② 取消時被判成「這一堂沒有扣過票」，只給一顆確定取消，
+                還蓋上 refund_waived=true → 客人平白少一堂（0901 王錫昌／吳美芳案例）
+             ③ 圓形卡靠先進先出推算，會把它畫成紅虛線超約
+           正式庫 8/25–9/01 出現 19 筆這種資料（已清）。
+           扣不到票就把預約收回去 —— 與 fn_cancel_booking／fn_create_booking
+           「單一交易、絕不半套」同一個原則。 */
+        if(tk){
+          let _ded=false;
+          try{ _ded=await deductTicket(tk, bk.id, operator); }
+          catch(e){ console.error('扣課失敗（建立預約）', bk.id, e); _ded=false; }
+          if(!_ded){
+            try{ await dbDel('bookings', bk.id); }catch(_){}
+            skipped++;
+            results.push({date:ds,ok:false,reason:'扣課失敗，這一堂沒有建立（票券未被扣）'});
+            continue;
+          }
+        }
         // 跑步機兩台：補開同行使用的那幾筆（不扣點）
         if(o.units>1){ try{ await bkAddTreadmillUnits(bk, o.units); }catch(_){} }
         if(holdOnly) held++; else ok++;
