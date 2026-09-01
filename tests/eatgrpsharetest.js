@@ -165,7 +165,8 @@ console.log('\n⑤ 即將降級名單：主教練標在會員旁邊');
      && /if\(!it\.coach\) return `<span class="tdl-co tdl-co-no">未指定主教練<\/span>`;/.test(src));
   ok('★★ 只有帶 coach 的名單會出現這顆章（收款提醒／未打卡不受影響）',
      /if\(it\.coach===undefined\) return '';/.test(src));
-  /* 2026-09-01 使用者：「即將降級名單內的教練標籤　用上教練的顏色」 */
+  /* 2026-09-01 使用者：「即將降級名單內的教練標籤　用上教練的顏色」
+     （這一條與首頁改版無關，首頁改回原樣時保留） */
   ok('★★★ 教練章穿教練自己的顏色（與篩選列、行事曆 chips 同一支 coachTagColor）',
      /const cc=\(it\.coachId&&typeof coachTagColor==='function'\)\?coachTagColor\(it\.coachId\):null;/.test(src)
      && /const st=cc\?` style="background:\$\{cc\.bg\};color:\$\{cc\.fg\};"`:'';/.test(src)
