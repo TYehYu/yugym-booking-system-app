@@ -60,8 +60,10 @@ console.log('① 銷課怎麼算（實跑）');
        && /const revenue=Math\.round\(SV\.salesValue\);/.test(P));
     ok('★★ 淨利＝銷課 − 稅 − 薪資 − 勞健保 − 固定 − 其他（＝銷課扣掉所有支出）',
        /const net=revenue-tax-salary-coIns-fixedTotal-otherTotal;/.test(P));
+    /* 2026-09-01：算式改走 vatForMonth（預估或實際），但基礎仍然是收款 */
     ok('★★ 稅的基礎仍是收款（不是銷課）',
-       /const taxBase=Math\.round\(cash\/1\.05\);/.test(P) && /const tax=cash-taxBase;/.test(P));
+       /const _vat=vatForMonth\(ym, cash, _vatRows, _cashOf\);/.test(P)
+       && /const tax=_vat\.tax;/.test(P) && /const taxBase=cash-tax;/.test(P));
     ok('★ 為什麼稅不能用銷課算，寫在原地',
        /稅是對「實際開出去的銷售額」課的，\s*\n\s*所以基礎仍是\*\*收款\*\*，不是銷課 —— 兩者混用會算出一個不存在的稅額。/.test(P));
     ok('★★ 大數字那一塊改講「銷課 − 支出」',

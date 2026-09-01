@@ -49,8 +49,12 @@ ok('★ 營收上金色，而且點得開（看扣稅）',
    /ovRow\(OV_IC\.rev,'營收',fmtNT\(revenue\),'','',\{gold:true,tap:`ovRevInfo\(\)`\}\)/.test(src));
 ok('★★ 銷課金額上金色，堂數接在標題後，點得開（看教練課／團體課）',
    /ovRow\(OV_IC\.done,'銷課金額',fmtNT\(_ovRev!=null\?_ovRev:usedFee\),'','',\{gold:true,after:`\$\{doneMainCount\} 堂`,tap:`ovSalesInfo\(\)`\}\)/.test(src));
-ok('★★ 營收的稅用同一式（收款 − 收款÷1.05），與 finPnl、上方「稅＋支出」同一個數字',
-   /_ovTax=_cash-Math\.round\(_cash\/1\.05\);/.test(src)
+/* 2026-09-01：稅改吃共用的 vatForMonth（該期填了實際數就用實際數攤回）——
+   仍然是「與 finPnl 同一個數字」，只是那支算式現在有兩種模式。 */
+ok('★★ 營收的稅與 finPnl 同一支（vatForMonth，不再各自寫一次算式）',
+   /_ovTax=vatForMonth\(ym, _cash, _vr, _cashOf2\)\.tax;/.test(src)
+   && /\}catch\(_\)\{ _ovTax=vatEstimate\(_cash\); \}/.test(src)
+   && /兩邊各算一次就會長出對不起來的數字/.test(src)
    && /營業稅 5%（發票內含）/.test(src));
 ok('　　今日檢視不計稅要講出來（營業稅按月結）',
    /今日檢視不計稅/.test(src));

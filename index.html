@@ -7986,6 +7986,26 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
 /* 主教練章（2026-09-01 使用者指示：即將降級名單要看得到誰負責這位會員）——
    綠＝一般提示（紅>金>綠 的色階：這不是警示，是給櫃檯找人的線索）；
    沒指定的降到灰字，看得出是「沒有」而不是「還沒載完」。 */
+/* 營業稅逐期表（2026-09-01）—— 白底框語彙，與支出明細那張同一組。 */
+.vat-note{font-size:12px;color:var(--t2);line-height:1.9;background:#fff;border:1px solid var(--bd);
+  border-radius:10px;padding:10px 12px;margin:0 0 12px;}
+.vat-wrap{overflow-x:auto;}
+.vat-tb{width:100%;border-collapse:collapse;font-size:13px;}
+.vat-tb th{font-size:11.5px;font-weight:700;color:var(--t3);text-align:left;padding:6px 10px;
+  border-bottom:1px solid var(--bd);white-space:nowrap;}
+.vat-tb td{padding:10px;border-bottom:1px solid rgba(45,36,28,.07);vertical-align:middle;}
+.vat-tb .vat-p{font-weight:700;color:var(--text);white-space:nowrap;}
+.vat-tb .vat-p i{font-style:normal;font-size:10.5px;font-weight:700;margin-left:6px;padding:1px 6px;
+  border-radius:5px;background:var(--sage-bg,#eef5f1);color:var(--green,#1f6f54);}
+.vat-tb .vat-n{text-align:right;font-family:var(--num);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.vat-tb .vat-est{color:var(--t2);}
+.vat-tb .vat-dim{color:var(--t3);text-decoration:line-through;}   /* 有實際數了，預估值降級 */
+.vat-tb .vat-act b{color:var(--green,#1f6f54);font-weight:800;}
+.vat-tb .vat-a{text-align:right;white-space:nowrap;}
+.vat-st{font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 8px;white-space:nowrap;}
+.vat-st-ok{background:var(--sage-bg,#eef5f1);color:var(--green,#1f6f54);}
+.vat-st-run{background:rgba(180,138,86,.16);color:var(--gold-d,#b48a56);}
+.vat-st-wait{background:rgba(120,113,102,.12);color:var(--t3);}
 /* 教練篩選列（2026-09-01 使用者指示：「要跟行事曆上方篩選列一樣」）——
    chips 本體直接穿 .cal-chip／.cal-chip-coach，這裡只補「這一列在視窗裡的間距」
    與人數字樣。⚠ 不要在這裡重寫 chip 的樣式：行事曆那組改了就會對不上。
@@ -11702,8 +11722,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.2021';
-const APP_VERSION_LABEL='v260901.2021';
+const APP_VERSION = '260901.2210';
+const APP_VERSION_LABEL='v260901.2210';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22102,7 +22122,15 @@ PAGES.dashboard=async function(){
         .filter(p=>String(p.created_at||'').slice(0,7)===ym)
         .reduce((s2,p)=>s2+(Number(p.deal_amount)||0),0);
       _ovCash=_cash;
-      _ovTax=_cash-Math.round(_cash/1.05);
+      /* 與損益表同一支（2026-09-01）：該期已填實際應納就用實際數攤回，沒填才預估。
+         ⚠ 兩邊各算一次就會長出對不起來的數字 —— 這張卡 0812 才因此被修過一次。 */
+      try{
+        const _vr=await dbGetAll('vat_periods').catch(()=>[]);
+        const _allPur=(await dbGetAll('purchases').catch(()=>[]))||[];
+        const _cashOf2=mm=>_allPur.filter(p=>p&&String(p.created_at||'').slice(0,7)===mm)
+          .reduce((a,p)=>a+(Number(p.deal_amount)||0),0);
+        _ovTax=vatForMonth(ym, _cash, _vr, _cashOf2).tax;
+      }catch(_){ _ovTax=vatEstimate(_cash); }
       const pr=await computeMonthlyPayroll(ym);
       salaryTotal=Math.round(Number(pr.grandTotal)||0);
       _ovCoIns=Math.round(Number(pr.grandCoCost)||0);
@@ -58336,6 +58364,7 @@ PAGES.finance=async function(){
   else if(_finTab==='people'){ await anaCoach(); }
   else if(_finTab==='receivable') await finReceivable();
   else if(_finTab==='expenses') await finExpenses();
+  else if(_finTab==='vat') await finVat();
   else if(_finTab==='review'){ document.getElementById('fin-body').innerHTML=`<div id="tk-body"></div>`; await PAGES.purchase_review(); }
   else if(_finTab==='refunds') await finRefunds();
 };
@@ -58713,6 +58742,7 @@ function finQuickLinks(){
     <div style="display:flex;flex-wrap:wrap;gap:8px;">
       <button class="btn btn-ghost btn-sm" onclick="setFinTab('receivable')">待收款</button>
       <button class="btn btn-ghost btn-sm" onclick="setFinTab('expenses')">支出明細</button>
+      <button class="btn btn-ghost btn-sm" onclick="setFinTab('vat')">營業稅</button>
       <button class="btn btn-ghost btn-sm" onclick="setFinTab('review')">購買審核</button>
       <button class="btn btn-ghost btn-sm" onclick="setFinTab('refunds')">課程修改紀錄</button>
       <button class="btn btn-ghost btn-sm" onclick="openGrpAudit()">🔍 票券對帳巡檢</button>
@@ -58940,6 +58970,156 @@ function salaryMatrixHTML(rows){
       公司這個月實際的人事支出＝應發合計 ${m(_grossTot)} ＋ 公司負擔 ${m(tot.co)} ＝ <b>${m(_grossTot+tot.co)}</b>（應發＝各項給付−扣薪，欄位已省略、各項目攤在表上）。
     </div>`;
 }
+/* ══ 營業稅：預估 vs 實際（2026-09-01 使用者定案）══════════════════════
+   使用者：「我們營業稅有先扣 5%，但每兩個月會計那邊會扣掉進項款後，才是我們真正要付的
+   金額」＋「我還是希望每兩個月就要把實際扣的錢放上來，金額才能即時更新到最正確，
+   我不想看一個大概」。
+
+   ⚠ 進項稅額**不由系統計算**（使用者：「進項款是會計看我們的發票計算的，我不想自己填
+     這些數字」）——只填一個數字：會計算出來的**該期實際應納稅額**。
+     系統自己去湊進項，只會生出一個跟申報書打架的數字。
+
+   台灣營業稅雙月一期：1-2、3-4、5-6、7-8、9-10、11-12 月，期別以**起月**當鍵。
+   ・該期還沒填 → 用「收款內含 5%」預估（原本的算法，一個字沒變）
+   ・該期已填   → 兩個月都改用實際數，**依各月收款比例攤回**
+     （稅本來就跟銷售額成比例；平均分一半會讓大小月的稅率看起來不一樣）
+   ⚠ 一期只填一次，兩個月一次 —— 會計給的那張申報書上就有。 */
+function vatPeriodKey(ym){
+  const [y,m]=String(ym||'').split('-').map(Number);
+  if(!y||!m) return '';
+  const start=m-((m-1)%2);                      // 1,3,5,7,9,11
+  return y+'-'+String(start).padStart(2,'0');
+}
+function vatPeriodMonths(key){
+  const [y,m]=String(key||'').split('-').map(Number);
+  if(!y||!m) return [];
+  /* ⚠ 期別的起月一定是單數月（1,3,5,7,9,11），第二個月就是 m+1 —— 不會跨年。
+     （一修寫成「11 月的下一個月是隔年 1 月」，把 11–12 月期算成 11 月＋隔年 1 月。） */
+  return [y+'-'+String(m).padStart(2,'0'), y+'-'+String(m+1).padStart(2,'0')];
+}
+function vatPeriodLabel(key){
+  const ms=vatPeriodMonths(key); if(!ms.length) return key||'';
+  const a=Number(ms[0].slice(5)), b=Number(ms[1].slice(5));
+  return `${ms[0].slice(0,4)} 年 ${a}–${b} 月`;
+}
+/* 收款內含 5% 的預估稅額（原本的算式，抽出來讓兩處共用）
+   ⚠ 若貴店報價改成稅外加，這裡要改成 Math.round(cash*0.05) —— 只有這一個地方。 */
+function vatEstimate(cash){ const c=Number(cash)||0; return c-Math.round(c/1.05); }
+/* 某個月要認列多少營業稅。
+   rows＝vat_periods 全部；cashOfMonth(ym)＝該月收款（同一支，避免兩邊各算一次）。
+   回 {tax, actual:true/false, period, periodAmount} */
+function vatForMonth(ym, cashThis, rows, cashOfMonth){
+  const key=vatPeriodKey(ym);
+  const row=(rows||[]).find(r=>r && r.period===key);
+  if(!row) return {tax:vatEstimate(cashThis), actual:false, period:key, periodAmount:null};
+  const amt=Math.max(0, Math.round(Number(row.amount)||0));
+  const ms=vatPeriodMonths(key);
+  let sum=0; const each=ms.map(m=>{ const c=Number(cashOfMonth(m))||0; sum+=c; return c; });
+  /* 整期都沒有收款 → 攤不出比例，平均分（多半是 0） */
+  const share=sum>0 ? (Number(cashThis)||0)/sum : (1/Math.max(1,ms.length));
+  return {tax:Math.round(amt*share), actual:true, period:key, periodAmount:amt};
+}
+/* 營業稅逐期表（2026-09-01）——只做一件事：把會計每期算出來的**實際應納稅額**收進來。
+   ⚠ 不算進項、不對發票。進項是會計看你們的發票算的，系統自己湊只會生出一個
+     跟申報書打架的數字（使用者原話：「我不想自己填這些數字」，指的是進項）。
+     這裡填的是**結果**，不是過程 —— 申報書上那一格照抄即可。 */
+async function finVat(){
+  const box=document.getElementById('fin-body'); if(!box) return;
+  box.innerHTML='<div class="card" style="padding:16px;color:var(--t3);font-size:12.5px;">整理中…</div>';
+  const [pur,rows]=await Promise.all([
+    dbGetAll('purchases').catch(()=>[]), dbGetAll('vat_periods').catch(()=>[])]);
+  const byM={};
+  (pur||[]).forEach(p=>{ const m=String(p&&p.created_at||'').slice(0,7);
+    if(m.length===7) byM[m]=(byM[m]||0)+(Number(p.deal_amount)||0); });
+  const nowKey=vatPeriodKey(ymd(TODAY).slice(0,7));
+  const keys=[...new Set(Object.keys(byM).map(vatPeriodKey).filter(Boolean).concat([nowKey]))]
+    .sort().reverse();
+  const _m=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+  const _isAdmin=!!(SESSION&&SESSION.role==='admin');
+  const list=keys.map(k=>{
+    const ms=vatPeriodMonths(k);
+    const cash=ms.reduce((a,m)=>a+(byM[m]||0),0);
+    const est=vatEstimate(cash);
+    const row=(rows||[]).find(r=>r&&r.period===k);
+    const cur=(k===nowKey);
+    /* 狀態三種：本期進行中／已填實際／等會計。三種都要看得出「現在能做什麼」。 */
+    const st=row ? `<span class="vat-st vat-st-ok">已填實際</span>`
+      : (cur ? `<span class="vat-st vat-st-run">本期進行中</span>`
+             : `<span class="vat-st vat-st-wait">等會計結算</span>`);
+    return `<tr>
+      <td class="vat-p">${vatPeriodLabel(k)}${cur?'<i>本期</i>':''}</td>
+      <td class="vat-n">${_m(cash)}</td>
+      <td class="vat-n vat-est${row?' vat-dim':''}">${_m(est)}</td>
+      <td class="vat-n vat-act">${row?`<b>${_m(row.amount)}</b>`:'—'}</td>
+      <td class="vat-s">${st}</td>
+      <td class="vat-a">${_isAdmin?`<button class="btn btn-ghost btn-sm" onclick="vatEditAsk('${k}')">${row?'修改':'填寫'}</button>`:''}</td>
+    </tr>`; }).join('');
+  box.innerHTML=`<div class="card" style="padding:16px;">
+    <div class="mc-card-h">營業稅（每兩個月一期）</div>
+    <div class="vat-note">
+      平常系統按<b>收款內含 5%</b>預估；會計每期扣掉進項後算出**實際應納稅額**，
+      填進來之後，那一期的<b>兩個月損益就改用實際數</b>（依各月收款比例攤回），不再是估計值。<br>
+      ⚠ 只要填一個數字 —— 申報書上的應納稅額。<b>進項不用填</b>，那是會計看發票算的。
+      進項大於銷項（留抵）就填 0。
+    </div>
+    <div class="vat-wrap"><table class="vat-tb">
+      <thead><tr><th>期別</th><th>收款合計</th><th>預估 5%</th><th>實際應納</th><th>狀態</th><th></th></tr></thead>
+      <tbody>${list||'<tr><td colspan="6" style="text-align:center;color:var(--t3);padding:18px;">還沒有收款紀錄</td></tr>'}</tbody>
+    </table></div>
+  </div>`;
+}
+async function vatEditAsk(period){
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以填營業稅'); return; }
+  const rows=await dbGetAll('vat_periods').catch(()=>[]);
+  const row=(rows||[]).find(r=>r&&r.period===period);
+  const pur=await dbGetAll('purchases').catch(()=>[]);
+  const ms=vatPeriodMonths(period);
+  const cash=ms.reduce((a,m)=>a+((pur||[]).filter(p=>p&&String(p.created_at||'').slice(0,7)===m)
+    .reduce((x,p)=>x+(Number(p.deal_amount)||0),0)),0);
+  const est=vatEstimate(cash);
+  showModal(`<div class="modal-title">${vatPeriodLabel(period)}　營業稅</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-bottom:10px;">
+      這一期收款合計 <b>$${cash.toLocaleString()}</b>，系統預估（內含 5%）<b>$${est.toLocaleString()}</b>。<br>
+      請填會計算出來的<b>實際應納稅額</b>（申報書上那一格）——
+      <span style="color:var(--t3);">進項不用填；進項大於銷項（留抵）填 0。</span></div>
+    <div class="form-row"><label>實際應納稅額</label>
+      <input id="vat-amt" type="number" min="0" step="1" inputmode="numeric"
+        value="${row?Math.round(Number(row.amount)||0):''}" placeholder="例如 ${est}"></div>
+    <div class="form-row"><label>備註（選填）</label>
+      <input id="vat-note" value="${String((row&&row.note)||'').replace(/"/g,'&quot;')}" placeholder="例如 已於 9/15 繳款"></div>
+    <div style="font-size:11.5px;color:var(--t3);line-height:1.9;">
+      填好之後，<b>${ms[0].replace('-','/')} 與 ${ms[1].replace('-','/')}</b> 兩個月的損益表會改用這個數字
+      （依各月收款比例攤回），首頁的營運卡也會跟著更新。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      ${row?`<button class="btn btn-ghost" onclick="vatClear('${period}')">清除</button>`:''}
+      <button class="btn btn-primary" onclick="vatSave('${period}')">儲存</button></div>`);
+}
+async function vatSave(period){ return onceAct('vatsave:'+period, ()=>_vatSave(period)); }
+async function _vatSave(period){
+  try{
+    const v=Number((document.getElementById('vat-amt')||{}).value);
+    if(!(v>=0)){ showToast('請填一個 0 或正整數'); return; }
+    const note=String((document.getElementById('vat-note')||{}).value||'').trim();
+    const rows=await dbGetAll('vat_periods').catch(()=>[]);
+    const old=(rows||[]).find(r=>r&&r.period===period);
+    await dbPut('vat_periods', Object.assign({}, old||{}, {
+      id:(old&&old.id)||('VAT-'+period), period, amount:Math.round(v), note:note||null,
+      created_by:(old&&old.created_by)||SESSION.id, updated_at:new Date().toISOString()}));
+    dbCacheClear(['vat_periods']);
+    closeModal(); showToast(`已記錄 ${vatPeriodLabel(period)} 的實際應納稅額`);
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
+}
+async function vatClear(period){
+  try{
+    const rows=await dbGetAll('vat_periods').catch(()=>[]);
+    const old=(rows||[]).find(r=>r&&r.period===period);
+    if(old) await dbDel('vat_periods', old.id);
+    dbCacheClear(['vat_periods']);
+    closeModal(); showToast('已清除，這一期回到預估 5%');
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('清除失敗：'+((e&&e.message)||e)); }
+}
 async function finPnl(){
   const box=document.getElementById('fin-pnl'); if(!box) return;
   const ym=(window._finMonth||ymd(TODAY).slice(0,7));
@@ -58957,10 +59137,14 @@ async function finPnl(){
     const revenue=Math.round(SV.salesValue);
     /* 營業稅（台灣統一發票為**內含**）：稅是對「實際開出去的銷售額」課的，
        所以基礎仍是**收款**，不是銷課 —— 兩者混用會算出一個不存在的稅額。
-       銷售額＝收款 ÷ 1.05，應納稅額＝銷售額 × 5%。
-       若貴店的報價是稅外加，這裡要改成 cash*0.05 —— 算式直接寫在畫面上，看得到才好改。 */
-    const taxBase=Math.round(cash/1.05);
-    const tax=cash-taxBase;
+       ⚠ 2026-09-01 起：該期若已填「實際應納稅額」，就改用實際數按收款比例攤回，
+         不再是估計值（見 vatForMonth）。沒填的期照舊用內含 5% 預估。 */
+    const _vatRows=await dbGetAll('vat_periods').catch(()=>[]);
+    const _cashOf=m=>(purAll||[]).filter(p=>p&&String(p.created_at||'').slice(0,7)===m)
+      .reduce((a,p)=>a+(Number(p.deal_amount)||0),0);
+    const _vat=vatForMonth(ym, cash, _vatRows, _cashOf);
+    const tax=_vat.tax;
+    const taxBase=cash-tax;
     /* 薪資讀不到不能靜默當 0（2026-08-12 使用者回報：手機看 -830、電腦看 -33,040——
        差的就是人事成本 32,210。薪資設定表只有管理員讀得到，讀取失敗時整份損益
        少掉最大一筆支出，看起來像另一份報表）。失敗就在表上明講。 */
@@ -59038,7 +59222,11 @@ async function finPnl(){
           <div class="pnl2-head"><span class="pnl2-head-l">支出合計</span><span class="pnl2-head-v">${m(spend)}</span></div>
           <div class="pnl2-cap">人事 ${m(staffCost)}・稅 ${m(tax)}・支出 ${m(fixedTotal+otherTotal)}</div>
           <div class="pnl2-list">
-            <div class="pnl2-i"><span class="pnl2-i-l">營業稅 5%<i>依收款 ${m(cash)} 內含計</i></span><span class="pnl2-i-v">${neg(tax)}</span></div>
+            <div class="pnl2-i"><span class="pnl2-i-l">${_vat.actual?'營業稅（實際）':'營業稅（預估 5%）'}<i>${
+              _vat.actual
+                ? `${vatPeriodLabel(_vat.period)}期實際應納 ${m(_vat.periodAmount)}，依收款比例攤回本月`
+                : `依收款 ${m(cash)} 內含計　·　${vatPeriodLabel(_vat.period)}期會計結算後會更新`
+              }</i></span><span class="pnl2-i-v">${neg(tax)}</span></div>
             <div class="pnl2-i"><span class="pnl2-i-l">員工薪資（應發）<i>${payRows.length} 位・明細見下方</i></span><span class="pnl2-i-v">${neg(salary)}</span></div>
             <div class="pnl2-i"><span class="pnl2-i-l">公司負擔勞健保<i>勞保雇主＋健保雇主＋勞退＋職災</i></span><span class="pnl2-i-v">${neg(coIns)}</span></div>
             ${/* 2026-08-23 三修（使用者：「支出改成兩個按鈕 固定支出跟其他支出 桌機版」）——
@@ -59066,7 +59254,9 @@ async function finPnl(){
         ・<b>銷課金額</b>＝這個月已簽到／已完成的課 × 那堂用的票的單價（自主訓練贈點與體驗課不計）。
           客人一次買、分好幾個月上，用「上掉多少」看經營才準；賣票那個月的收款是另一回事。<br>
         ・本月實際<b>收款</b> ${m(cash)}（${pur.length} 筆）—— 與銷課是兩件事，只用來算營業稅。<br>
-        ・營業稅按<b>內含</b>計：銷售額＝收款 ÷ 1.05，稅額＝銷售額 × 5%。若貴店報價是稅外加，跟我說改成收款 × 5%。<br>
+        ・營業稅：<b>${vatPeriodLabel(_vat.period)}</b>期${_vat.actual
+            ? `已填實際應納 <b>${m(_vat.periodAmount)}</b>，本月依收款比例攤回 <b>${m(tax)}</b> —— 這不是估計值。`
+            : `尚未填實際數，先按<b>內含 5%</b>預估（銷售額＝收款 ÷ 1.05，稅額＝銷售額 × 5%）。會計結算後到「營業稅」那一欄填一次，這兩個月就會改成正確數字。`}<br>
         ・<b>員工薪資</b>＝各員工當月應發（與薪資頁同一支計算）；下方「員工薪資明細」把課堂／團體課／值班／達標／續約等等逐欄列出來。<br>
         ・<b>公司負擔勞健保</b> ${m(coIns)} 獨立列一項（勞保雇主＋健保雇主＋勞退）。
           員工自付的那一份不必另外扣 —— 那是從應發裡代扣的，已經含在應發裡。

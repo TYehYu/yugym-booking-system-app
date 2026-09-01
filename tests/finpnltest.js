@@ -34,16 +34,40 @@ ok('★ 支出看 expenses.ym，用 is_fixed 分固定／其他',
    /const fixed=exp\.filter\(e=>e\.is_fixed===true\);/.test(F)
    && /const other=exp\.filter\(e=>e\.is_fixed!==true\);/.test(F));
 
-console.log('\n③ 營業稅：內含，算式寫在畫面上');
+console.log('\n③ 營業稅：預估內含 5%，該期填了實際數就改用實際數');
 {
-  const box=new Function('cash','return (function(){'+
-    /const taxBase=[\s\S]*?const tax=cash-taxBase;/.exec(F)[0]+' return {taxBase,tax}; })();');
-  eq('★★ 收款 105,000 → 銷售額 100,000、稅額 5,000', box(105000), {taxBase:100000, tax:5000});
-  eq('　　0 元不會爆', box(0), {taxBase:0, tax:0});
+  /* 2026-09-01 使用者定案：「每兩個月就要把實際扣的錢放上來，金額才能即時更新到最正確，
+     我不想看一個大概」——算式抽成 vatEstimate／vatForMonth，兩處（損益表、首頁營運卡）共用。 */
+  const g=n=>{const i=src.indexOf('function '+n+'(');let d=0;
+    for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
+  const api=new Function(g('vatPeriodKey')+g('vatPeriodMonths')+g('vatEstimate')+g('vatForMonth')
+    +'\nreturn {vatPeriodKey,vatPeriodMonths,vatEstimate,vatForMonth};')();
+  eq('★★ 預估：收款 105,000 → 稅額 5,000（內含）', api.vatEstimate(105000), 5000);
+  eq('　　0 元不會爆', api.vatEstimate(0), 0);
+  eq('★★★ 期別是雙月、以起月為鍵（1-2、3-4…11-12）',
+     ['2026-01','2026-02','2026-07','2026-08','2026-11','2026-12'].map(api.vatPeriodKey),
+     ['2026-01','2026-01','2026-07','2026-07','2026-11','2026-11']);
+  eq('　　11–12 月期的第二個月是同一年的 12 月', api.vatPeriodMonths('2026-11'), ['2026-11','2026-12']);
+
+  const cash={'2026-07':60000,'2026-08':40000};
+  const of=m=>cash[m]||0;
+  eq('★★★ 該期沒填 → 用預估（本月收款內含 5%）',
+     api.vatForMonth('2026-07', 60000, [], of), {tax:2857,actual:false,period:'2026-07',periodAmount:null});
+  const rows=[{period:'2026-07',amount:3000}];
+  eq('★★★ 填了實際 3,000 → 依收款比例攤回（7 月 60%）',
+     api.vatForMonth('2026-07', 60000, rows, of).tax, 1800);
+  eq('★★★ 同一期的 8 月拿另外 40%（兩個月加起來剛好是實際數）',
+     api.vatForMonth('2026-08', 40000, rows, of).tax, 1200);
+  eq('★★ 整期都沒收款 → 平均分，不會除以 0',
+     api.vatForMonth('2026-07', 0, rows, ()=>0).tax, 1500);
+  eq('★★ 留抵（進項>銷項）填 0 → 那兩個月的稅就是 0',
+     api.vatForMonth('2026-07', 60000, [{period:'2026-07',amount:0}], of).tax, 0);
   ok('★★ 稅的基礎是收款不是銷課（混用會算出不存在的稅額）',
-     /依收款 \$\{m\(cash\)\} 內含計/.test(F)   /* 0823 兩欄改版：這句移到支出欄那一列的小字 */
-     && /稅是對「實際開出去的銷售額」課的，\s*\n\s*所以基礎仍是\*\*收款\*\*，不是銷課/.test(F));
-  ok('★ 註明可改成外加', /若貴店報價是稅外加，跟我說改成收款 × 5%/.test(F));
+     /稅是對「實際開出去的銷售額」課的，\s*\n\s*所以基礎仍是\*\*收款\*\*，不是銷課/.test(F));
+  ok('★★★ 畫面要分得出「預估」還是「實際」',
+     /\$\{_vat\.actual\?'營業稅（實際）':'營業稅（預估 5%）'\}/.test(F));
+  ok('★ 註明可改成外加（只有一個地方要改）',
+     /若貴店報價改成稅外加，這裡要改成 Math\.round\(cash\*0\.05\) —— 只有這一個地方。/.test(src));
 }
 
 console.log('\n④ 逐項列出');
