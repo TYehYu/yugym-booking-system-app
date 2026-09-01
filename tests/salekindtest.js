@@ -146,7 +146,19 @@ ok('★★ 賣的時候擋、事後也要擋（只擋一邊等於留了一個改
    && /只擋一邊等於留了一個把新約改成續約的後門/.test(src));
 ok('★★ 事後判斷要看「買這張之前」有沒有上完的（否則這張自己就是還沒上完）',
    /if\(_buy && String\(x\.purchase_date\|\|''\)\.slice\(0,10\)>_buy\) return false;   \/\/ 之後才買的不算/.test(src)
-   && /if\(!x \|\| x\.id===t\.id \|\| x\.member_id!==t\.member_id\) return false;/.test(src));
+   && /if\(!x \|\| x\.id===t\.id \|\| !tkUsableBy\(x, t\.member_id\)\) return false;/.test(src));
+/* 2026-09-01：陳瀚竣一路在用陳玟淂共享的教練課票（1V1 5 堂＋友善 1V1 4 堂，都已上完），
+   卻只給得出「新約」—— 櫃檯想把 8/31 那張改成分期改不了。
+   賣票那條路 0831 已改吃 tkUsableBy，事後改約別這條漏了。 */
+ok('★★★ 共享票也算「已完成的教練課方案」——兩條路都要吃 tkUsableBy',
+   /if\(!x \|\| x\.id===t\.id \|\| !tkUsableBy\(x, t\.member_id\)\) return false;/.test(src)
+   && /if\(!t \|\| !tkUsableBy\(t,mid\)\) return false;/.test(src));
+ok('★★★ 兩條路都不准再用 member_id 直接比（那就是這個 bug 本身）',
+   !/if\(!x \|\| x\.id===t\.id \|\| x\.member_id!==t\.member_id\) return false;/.test(src)
+   && !/if\(!t \|\| t\.member_id!==mid\) return false;/.test(src));
+ok('★★ 原因寫在原地（下一個人才知道為什麼不能用 member_id）',
+   /判「這張票誰能用」全系統只有 tkUsableBy 一支/.test(src)
+   && /兩條路要一起看：賣的時候（gtSaleKind 那段）與事後改（這裡）/.test(src));
 ok('★★ 分期方案的約別事後也不給改（不然是多領獎金的後門）',
    /if\(t\.installment && typeof t\.installment==='object'\)\{/.test(src)
    && /這張是<b>分期方案<\/b>，約別由系統判定為「分期」，不能更改。/.test(src));

@@ -11665,8 +11665,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260831.2307';
-const APP_VERSION_LABEL='v260831.2307';
+const APP_VERSION = '260901.0819';
+const APP_VERSION_LABEL='v260901.0819';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38658,14 +38658,20 @@ async function openSaleKindPick(tkId){
   /* 同一條規則：沒有「已完成的教練課系方案」就不給續約／分期（2026-08-24 使用者定案）。
      ⚠ 賣的時候擋、事後也要擋 —— 只擋一邊等於留了一個把新約改成續約的後門。
      ⚠ 判斷這張票**之前**有沒有上完的：拿這張票自己的購買日當界線，
-       不然剛買的這一張自己就是「還沒上完」，永遠算不出結果。 */
+       不然剛買的這一張自己就是「還沒上完」，永遠算不出結果。
+     ⚠ 共享票也要算（2026-09-01 補；賣票那條路 0831 已修，這條漏了）——
+       判「這張票誰能用」全系統只有 tkUsableBy 一支，寫成 x.member_id===t.member_id
+       就把「爸爸用兒子共享的票上完課」整段看不見。
+       陳瀚竣就是這樣：他一路在用陳玟淂共享的 私人教練 1V1 5 堂＋友善 1V1 4 堂
+       （都已上完），畫面卻只給得出「新約」，櫃檯想改成分期改不了。
+       ⚠ 兩條路要一起看：賣的時候（gtSaleKind 那段）與事後改（這裡）。 */
   let _donePt=false;
   try{
     const [mts,tts]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('ticket_types')]);
     const tm=Object.fromEntries((tts||[]).map(x=>[x.id,x]));
     const _buy=String(t.purchase_date||'').slice(0,10);
     _donePt=(mts||[]).some(x=>{
-      if(!x || x.id===t.id || x.member_id!==t.member_id) return false;
+      if(!x || x.id===t.id || !tkUsableBy(x, t.member_id)) return false;
       if((tm[x.ticket_type_id]||{}).category!=='私人教練') return false;
       if(x.status==='refunded') return false;
       if(_buy && String(x.purchase_date||'').slice(0,10)>_buy) return false;   // 之後才買的不算
