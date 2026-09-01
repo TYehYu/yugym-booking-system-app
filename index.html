@@ -11677,8 +11677,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.1320';
-const APP_VERSION_LABEL='v260901.1320';
+const APP_VERSION = '260901.1326';
+const APP_VERSION_LABEL='v260901.1326';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12839,6 +12839,55 @@ async function doUndoTicketExtend(id){
    ⚠ 判斷 ③ 不能只看帳本淨額：匯入的票（IMPV-*）基線用量根本沒進 ticket_logs，
      林韋綺那張看起來「退兩次」，實際餘額是對的，照帳本去改反而會扣錯她一堂。
      所以這裡一律用「票面餘額 vs 實際佔用的預約數」對照，帳本只當佐證。 */
+/* 「取消時選錯了扣課不退」的更正入口（2026-09-01 使用者：「吳美芳 9/3 選錯扣課的票
+   有辦法修正嗎　讓我們自己有辦法修正」）——
+   入口就放在那顆金色的「扣課」圓點上：櫃檯是在圓形卡上看到不對勁的，
+   修正的按鈕就該在同一個地方，不要再開一層選單去找。
+   ⚠ 只做「退回」這個方向。反過來（把已退的改成扣課）沒有需求，
+     而且那等於憑空扣客人一堂 —— 真要扣就重新走一次取消流程。 */
+async function mtkEatUndo(tkId, bkId){
+  if(!(typeof isDeskLike==='function'&&isDeskLike())) return;
+  let t=null,b=null;
+  try{ t=await dbGet('member_tickets',tkId); b=await dbGet('bookings',bkId); }
+  catch(e){ showToast('讀取失敗：'+((e&&e.message)||e)); return; }
+  if(!t||!b){ showToast('找不到票券或預約'); return; }
+  if(b.refund_waived!==true){ showToast('這一堂沒有「扣課不退」的標記，不需要更正'); return; }
+  const rem=Math.max(0,Number(t.sessions_remaining)||0);
+  const _d=String(b.date||'').slice(5).replace('-','/')+(b.start_time?('　'+String(b.start_time).slice(0,5)):'');
+  showModal(`<div class="modal-title">把這一堂退回票券</div>
+    <div style="font-size:13px;color:var(--text);line-height:1.95;margin-bottom:10px;">
+      ${String(t.plan_name||'票券').replace(/</g,'&lt;')}　<b>${_d}</b><br>
+      這一堂在取消時選了「<b>扣課不退</b>」，所以票券少了一堂。</div>
+    <div style="background:#fff;border:1px solid var(--bd);border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.9;margin-bottom:12px;">
+      改成退回之後：剩餘堂數 <b class="num">${rem}</b> → <b class="num">${rem+1}</b> 堂，
+      圓形卡上那顆金色的「扣課」會消失。<br>
+      <span style="color:var(--t3);font-size:11.5px;">效期不會變動；之後真的要扣，重新走一次取消流程再選「扣課不退」即可。</span></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="mtkEatUndoDo('${tkId}','${bkId}')">退回這一堂</button></div>`);
+}
+/* 防連點（0831 定案：會改到堂數的批次一律夾 onceAct）—— 連按兩下會退回兩堂 */
+async function mtkEatUndoDo(tkId, bkId){ return onceAct('eatundo:'+bkId, ()=>_mtkEatUndoDo(tkId,bkId)); }
+async function _mtkEatUndoDo(tkId, bkId){
+  try{
+    const t=await dbGet('member_tickets',tkId), b=await dbGet('bookings',bkId);
+    if(!t||!b){ showToast('找不到票券或預約'); return; }
+    /* 重讀之後再確認一次（別的分頁可能已經改過了）—— dbPut 是整列覆寫，
+       不重讀就會把別人的改動蓋掉。 */
+    if(b.refund_waived!==true){ closeModal(); showToast('這一堂已經處理過了'); navTo(CUR_PAGE); return; }
+    b.refund_waived=false;
+    await dbPut('bookings', b);
+    t.sessions_remaining=Math.max(0,Number(t.sessions_remaining)||0)+1;
+    /* 有餘額就不能卡在「用畢」（狀態會跟餘額打架，餘額才是真的） */
+    if(t.status==='used_up') t.status='usable';
+    await dbPut('member_tickets', t);
+    /* 帳本要留這一筆 refund：① 堂數對得起來 ② 之後 _eaten 看得到「動過帳」，
+       不會再走「沒有紀錄就信旗標」那條退路。 */
+    try{ await logTicket(t.id,'refund',1,bkId,(SESSION&&(SESSION.name||SESSION.id))||'系統',
+      '更正：取消時誤選「扣課不退」，堂數退回'); }catch(_){}
+    dbCacheClear(['bookings','member_tickets','ticket_logs']);
+    closeModal(); showToast('已退回 1 堂'); navTo(CUR_PAGE);
+  }catch(e){ showToast('更正失敗：'+((e&&e.message)||e)); }
+}
 async function mtkOverAsk(tkId, bkId){
   if(!(typeof isDeskLike==='function'&&isDeskLike())) return;
   let t=null,b=null,bks=[],logs=[];
@@ -56288,7 +56337,13 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
      ⚠ 與教練請假共用 .mtk-lv 的排版（點在上、兩行字在下），只換顏色與字。
      ⚠ 兩條路都要用它：正常格子與溢位格子（0831 才因為 _usedCls 抄兩份吃過虧）。 */
   const _eatBody=(b,dt)=>`<i class="mtk-shdot"></i><b class="mtk-shnm">扣課</b><b class="mtk-shdt">${dt}</b>`;
-  const _eatDot=(b,cur,slf)=>`<span class="mtk mtk-used mtk-lv mtk-eat${cur||''}${slf||''}" style="--tk-acc:${v.accent};" title="取消未退（取消時選了扣課不退）${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}">${_eatBody(b, b?md(b):'✓')}${cur?'<i class="mtk-comet"></i>':''}</span>`;
+  /* 點得下去＝可以更正（2026-09-01 使用者：「讓我們自己有辦法修正」）——
+     櫃檯以上，且這顆點對得到票與預約時才給。⚠ stopPropagation：這些點常常畫在
+     課卡／票券卡裡面，不擋住外層就會連帶開錯視窗（同 mtkOverAsk 那顆）。 */
+  const _eatTap=!!(typeof isDeskLike==='function'&&isDeskLike()&&t&&t.id);
+  const _eatDot=(b,cur,slf)=>{
+    const _tp=(_eatTap&&b&&b.id)?` onclick="event.stopPropagation();mtkEatUndo('${t.id}','${b.id}')"`:'';
+    return `<span class="mtk mtk-used mtk-lv mtk-eat${_tp?' mtk-tap':''}${cur||''}${slf||''}"${_tp} style="--tk-acc:${v.accent};" title="取消未退（取消時選了扣課不退）${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${_tp?'　·　選錯了？點一下改成退回堂數':''}">${_eatBody(b, b?md(b):'✓')}${cur?'<i class="mtk-comet"></i>':''}</span>`; };
   const _clxDot=b=>{ const ns=_clvNoShow(b);
     return `<span class="mtk mtk-used mtk-clvatt mtk-lv${ns?' mtk-lv-ns':''}" style="--tk-acc:${v.accent};" title="教練請假・${ns?'未到場結課':'會員已到場簽到'}（堂數已退回票券）${b&&b.date?' '+b.date:''}">${_lvBody(b, b?md(b):'✓')}</span>`; };
   /* ── 共享票的那幾顆：色點在上、使用人與日期各一行在下（2026-08-27 使用者回報，附截圖）──

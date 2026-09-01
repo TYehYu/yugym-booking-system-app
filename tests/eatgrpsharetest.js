@@ -49,7 +49,8 @@ console.log('\n② 扣課那一顆＝金色點＋「扣課」＋日期');
 {
   ok('★★★ 有一支專門畫它（正常格子與溢位格子共用）',
      /const _eatBody=\(b,dt\)=>`<i class="mtk-shdot"><\/i><b class="mtk-shnm">扣課<\/b><b class="mtk-shdt">\$\{dt\}<\/b>`;/.test(src)
-     && /const _eatDot=\(b,cur,slf\)=>`<span class="mtk mtk-used mtk-lv mtk-eat/.test(src));
+     && /const _eatDot=\(b,cur,slf\)=>\{/.test(src)
+     && /<span class="mtk mtk-used mtk-lv mtk-eat\$\{_tp\?' mtk-tap':''\}/.test(src));
   ok('★★★ 兩條路都用它（0831 才因為抄兩份吃過虧）',
      (src.match(/if\(b && b\._eaten\)\{ s\+=_eatDot\(b,cur,slf\); continue; \}/g)||[]).length===2);
   ok('★★★ 金色（與「未到課」同一個語彙：人沒來、堂數照扣）',
@@ -125,6 +126,36 @@ console.log('\n④ 實跑 grpTicketAlloc（林政緯那張票的形狀）');
      [(noLog.byTicket['TK-4W']||[]).length, noLog.pend['TK-4W']], [0, undefined]);
   const ownNoLog=api([TK],[BK('B8','2026-09-28',[OWN])],[],OWN,isGrp,{[SHR]:1});
   eq('★★ 自己的名額維持原本的後備猜法（行為沒被改掉）', ownNoLog.pend['TK-4W'], 1);
+}
+
+console.log('\n④b 選錯扣課，櫃檯自己改得回來');
+{
+  ok('★★★ 金色那顆點得下去（櫃檯以上），入口就在看到問題的地方',
+     /const _eatTap=!!\(typeof isDeskLike==='function'&&isDeskLike\(\)&&t&&t\.id\);/.test(src)
+     && /onclick="event\.stopPropagation\(\);mtkEatUndo\('\$\{t\.id\}','\$\{b\.id\}'\)"/.test(src));
+  ok('★★ 提示寫出來這顆可以點（不是要人猜）',
+     /\$\{_tp\?'　·　選錯了？點一下改成退回堂數':''\}/.test(src));
+  ok('★★★ 更正只做「退回」一個方向（反過來等於憑空扣客人一堂）',
+     /只做「退回」這個方向/.test(src)
+     && /真要扣就重新走一次取消流程/.test(src));
+  ok('★★★ 三件事一起做：清旗標、餘額 +1、帳本寫 refund',
+     /b\.refund_waived=false;/.test(src)
+     && /t\.sessions_remaining=Math\.max\(0,Number\(t\.sessions_remaining\)\|\|0\)\+1;/.test(src)
+     && /await logTicket\(t\.id,'refund',1,bkId,/.test(src));
+  ok('★★★ 帳本那一筆是必要的 —— 之後 _eaten 才看得到「動過帳」，不會再走信旗標那條退路',
+     /不會再走「沒有紀錄就信旗標」那條退路/.test(src));
+  ok('★★ 有餘額就不能卡在「用畢」（狀態會跟餘額打架，餘額才是真的）',
+     /if\(t\.status==='used_up'\) t\.status='usable';/.test(src));
+  ok('★★★ 寫入前重讀並再確認一次（dbPut 是整列覆寫，別的分頁可能已經改過）',
+     /if\(b\.refund_waived!==true\)\{ closeModal\(\); showToast\('這一堂已經處理過了'\); navTo\(CUR_PAGE\); return; \}/.test(src));
+  ok('★★★ 防連點（連按兩下會退回兩堂）',
+     /async function mtkEatUndoDo\(tkId, bkId\)\{ return onceAct\('eatundo:'\+bkId, \(\)=>_mtkEatUndoDo\(tkId,bkId\)\); \}/.test(src));
+  ok('★★ 快取要清（不然本機看不到自己的改動）',
+     /dbCacheClear\(\['bookings','member_tickets','ticket_logs'\]\);/.test(src));
+  ok('★★ 視窗先講清楚會變成什麼（餘額 N → N+1、那顆點會消失）',
+     /剩餘堂數 <b class="num">\$\{rem\}<\/b> → <b class="num">\$\{rem\+1\}<\/b> 堂/.test(src));
+  ok('　　沒有標記的點進來要說一聲，不要靜靜沒反應',
+     /showToast\('這一堂沒有「扣課不退」的標記，不需要更正'\)/.test(src));
 }
 
 console.log('\n⑤ 即將降級名單：主教練標在會員旁邊');
