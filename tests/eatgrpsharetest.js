@@ -161,7 +161,7 @@ console.log('\n④b 選錯扣課，櫃檯自己改得回來');
 console.log('\n⑤ 即將降級名單：主教練標在會員旁邊');
 {
   ok('★★★ 名單帶主教練（沒指定的一樣列出來，寫「未指定」）',
-     /coach:_coNm\[memMap\[id\]\.default_coach_id\]\|\|'',/.test(src)
+     /coach:_coNm\[_cid\]\|\|'', coachId:_coNm\[_cid\]\?_cid:'',/.test(src)
      && /const co=\(it\)=>\(it\.coach===undefined\)\?'':`<span class="tdl-co\$\{it\.coach\?'':' tdl-co-no'\}">\$\{it\.coach\|\|'未指定主教練'\}<\/span>`;/.test(src));
   ok('★★ 只有帶 coach 的名單會出現這顆章（收款提醒／未打卡不受影響）',
      /\(it\.coach===undefined\)\?''/.test(src));
@@ -178,6 +178,20 @@ console.log('\n⑥ 教練篩選列');
 {
   ok('★★★ 只有帶 coach 的名單會長出來（收款提醒／未打卡不受影響）',
      /const _hasCo=\(L\.items\|\|\[\]\)\.some\(it=>it&&it\.coach!==undefined\);/.test(src));
+  ok('★★★ 直接穿行事曆那一組 chips，不另做一套樣式',
+     /class="cal-chip\$\{cc\?' cal-chip-coach':''\}\$\{on\?' on':''\}"/.test(src)
+     && /_coBar=`<div class="cal-chip-row tdl-cobar">/.test(src)
+     && /行事曆那組以後改了這裡自動跟上（自己複製一份就是第二份規則）/.test(src));
+  ok('★★★ 教練 chip 穿自己的代表色（與行事曆同一支 coachTagColor）',
+     /const cc=\(id&&typeof coachTagColor==='function'\)\?coachTagColor\(id\):null;/.test(src)
+     && /coach:_coNm\[_cid\]\|\|'', coachId:_coNm\[_cid\]\?_cid:'',/.test(src));
+  ok('★★★ 顏色在 inline style 上 → 切換時要連底色一起換（光切 class 只會換框線）',
+     /const bg=b\.dataset&&b\.dataset\.bg, fg=b\.dataset&&b\.dataset\.fg;/.test(src)
+     && /b\.setAttribute\('style', `--cc:\$\{fg\};`\+\(on\?`background:\$\{fg\};color:#fff;`:`background:\$\{bg\};color:\$\{fg\};`\)\);/.test(src));
+  ok('★★ CSS 只補間距與人數字樣，不重寫 chip 樣式',
+     /\.tdl-cobar\{margin:0 0 10px;\}/.test(src)
+     && /不要在這裡重寫 chip 的樣式：行事曆那組改了就會對不上/.test(src)
+     && !/\.tdl-cochip\{/.test(src));
   ok('★★★ 章上帶人數，照人數多到少排（這一列是「誰要追最多人」）',
      /const ks=Object\.keys\(cnt\)\.sort\(\(a,b\)=>\(cnt\[b\]-cnt\[a\]\)\|\|a\.localeCompare\(b\)\);/.test(src)
      && /這一列是「誰要去追最多人」，不是通訊錄/.test(src));
@@ -193,14 +207,23 @@ console.log('\n⑥ 教練篩選列');
      && /window\._tdlCo=same\?'':String\(co\|\|''\);/.test(src));
   ok('★★ 每次開窗都從「全部」開始（上次的篩選不會黏著）',
      /window\._tdlQ=''; window\._tdlCo='';   \/\/ 每次開窗都從「全部」開始/.test(src));
-  ok('★★★ 換行不橫捲（0831 日期列四修的教訓）',
-     /\.tdl-cobar\{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;\}/.test(src)
-     && /橫捲會讓 overflow-y 一起變 auto/.test(src));
   ok('★★ 教練暱稱是資料庫字串，標籤與 onclick 參數都有跳脫',
-     /const esc=x=>String\(x\)\.replace\(\/&\/g,'&amp;'\)\.replace\(\/<\/g,'&lt;'\)\.replace\(\/"\/g,'&quot;'\);/.test(src)
-     && /esc\(String\(val\)\.replace\(\/'\/g,"\\\\'"\)\)/.test(src));
-  ok('★★ 選中的章用品牌綠實心（與名單裡的主教練章同一組色）',
-     /\.tdl-cochip\.on\{background:var\(--green,#1f6f54\);border-color:var\(--green,#1f6f54\);color:#fff;\}/.test(src));
+     /const esc=x=>String\(x\)\.replace\(\/&\/g,'&amp;'\)\.replace\(\/<\/g,'&lt;'\)\.replace\(\/"\/g,'&quot;'\);/.test(src));
+}
+
+console.log('\n⑦ 名單與篩選列的版面（2026-09-01）');
+{
+  ok('★★★ 名單列改白底框（使用者：「下方會員名單要用白色框」）',
+     /\.tdl-row\{[^}]*background:#fff;border:1px solid var\(--bd\);border-radius:11px;/.test(src)
+     && /下方會員名單要用白色框/.test(src));
+  ok('★★★ 姓名篩選列不再歪：行內樣式整條蓋掉 margin（不是只寫 margin-bottom）',
+     /class="ms-search" style="width:100%;box-sizing:border-box;margin:0 0 10px;background:#fff;" placeholder="輸入姓名篩選…"/.test(src)
+     && !/class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:/.test(src));
+  ok('★★★ 同型的另外三處一起修（抽獎登記／卡位改綁兩支）',
+     (src.match(/class="ms-search" style="width:100%;box-sizing:border-box;margin:0 0 \d+px;/g)||[]).length===4,
+     (src.match(/class="ms-search" style="width:100%;box-sizing:border-box;margin:0 0 \d+px;/g)||[]).length);
+  ok('★★ 坑寫在 .ms-search 原地（下一個人才不會再踩）',
+     /寫 margin-bottom 蓋不到左右那 18px → 右邊溢出、左邊內縮，看起來就是「歪歪的」/.test(src));
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
