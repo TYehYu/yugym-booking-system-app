@@ -7971,6 +7971,16 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
 /* 主教練章（2026-09-01 使用者指示：即將降級名單要看得到誰負責這位會員）——
    綠＝一般提示（紅>金>綠 的色階：這不是警示，是給櫃檯找人的線索）；
    沒指定的降到灰字，看得出是「沒有」而不是「還沒載完」。 */
+/* 教練篩選列（2026-09-01 使用者指示）——與名單裡的主教練章同一組綠。
+   ⚠ 換行不橫捲：橫捲會讓 overflow-y 一起變 auto（0831 日期列的四修都是這個坑）。 */
+.tdl-cobar{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;}
+.tdl-cochip{font-size:11.5px;font-weight:700;border-radius:999px;padding:5px 11px;cursor:pointer;
+  background:#fff;border:1px solid var(--bd);color:var(--t2);font-family:inherit;
+  display:inline-flex;align-items:center;gap:5px;transition:.12s;}
+.tdl-cochip b{font-family:var(--num),inherit;font-weight:800;color:var(--t3);}
+.tdl-cochip:hover{border-color:var(--green,#1f6f54);}
+.tdl-cochip.on{background:var(--green,#1f6f54);border-color:var(--green,#1f6f54);color:#fff;}
+.tdl-cochip.on b{color:#fff;}
 .tdl-co{margin-left:7px;font-size:10.5px;font-weight:700;border-radius:6px;padding:2px 7px;
   background:var(--sage-bg,#eef5f1);color:var(--green,#1f6f54);white-space:nowrap;}
 .tdl-co.tdl-co-no{background:rgba(120,113,102,.12);color:var(--t3,#8b857a);font-weight:600;}
@@ -11677,8 +11687,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.1326';
-const APP_VERSION_LABEL='v260901.1326';
+const APP_VERSION = '260901.1518';
+const APP_VERSION_LABEL='v260901.1518';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20592,13 +20602,34 @@ function openTodoList(kind){
              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openMemberDetail('${it.id}');}">${inner}</div>`
         : `<div class="${cls}">${inner}</div>`;
     }).join('');
+  /* 教練篩選列（2026-09-01 使用者指示：「上方可以用教練篩選列嗎　可以直接看到該教練的
+     學生　例如 [Randy 3]」）—— 只有帶 coach 的名單（即將降級）會長出來。
+     ⚠ 用 flex-wrap 不用橫捲：橫捲的 overflow-x 會讓 overflow-y 一起變 auto，
+       這一列就會被上下拖動、字還被裁掉（0831 快速預約日期列踩過整整四修）。
+     ⚠ 排序照人數多到少 —— 這一列是「誰要去追最多人」，不是通訊錄。 */
+  const _hasCo=(L.items||[]).some(it=>it&&it.coach!==undefined);
+  let _coBar='';
+  if(_hasCo){
+    const NO='未指定主教練';
+    const cnt={}; (L.items||[]).forEach(it=>{ const k=(it&&it.coach)||NO; cnt[k]=(cnt[k]||0)+1; });
+    const ks=Object.keys(cnt).sort((a,b)=>(cnt[b]-cnt[a])||a.localeCompare(b));
+    /* 「未指定」永遠排最後：它不是一位教練，混在人數序裡會讓人以為那是誰的名字 */
+    ks.sort((a,b)=>(a===NO?1:0)-(b===NO?1:0));
+    /* 教練暱稱是資料庫來的字串：標籤要跳脫 <、onclick 的參數要跳脫單引號 */
+    const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+    const chip=(lb,val,n,on)=>`<button type="button" class="tdl-cochip${on?' on':''}" onclick="tdlCoachPick(this,'${esc(String(val).replace(/'/g,"\\'"))}')">${esc(lb)} <b>${n}</b></button>`;
+    _coBar=`<div class="tdl-cobar">${chip('全部','',(L.items||[]).length,true)}${
+      ks.map(k=>chip(k===NO?'未指定':k, k, cnt[k], false)).join('')}</div>`;
+  }
   const rows=useGrid
     ? gridHtml()
     : (L.items||[]).map(it=> it.id
         ? `<div class="tdl-row tdl-row2"><button class="tdl-main" onclick="openMemberDetail('${it.id}')">${body(it)}<span class="tdl-ar">›</span></button>${acts(it)}</div>`
         : `<div class="tdl-row tdl-static">${body(it)}</div>`).join('');
+  window._tdlQ=''; window._tdlCo='';   // 每次開窗都從「全部」開始
   showModal(`<div class="modal-title">${L.title}　<span style="font-size:12.5px;color:var(--t3);font-weight:500;">${(L.items||[]).length} 位</span></div>
     ${L.note?`<div class="lot-hint">${L.note}</div>`:''}
+    ${_coBar}
     ${(L.items||[]).length>=8?`<input class="ms-search" style="width:100%;box-sizing:border-box;margin-bottom:10px;" placeholder="輸入姓名篩選…" oninput="tdlFilter(this.value)" autocomplete="off">`:''}
     ${rows?`<div class="${useGrid?'lot-btns':'tdl-list'}">${rows}</div>`:`<div class="empty"><div class="em-t">${L.empty||'沒有資料'}</div></div>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
@@ -20610,15 +20641,28 @@ function openTodoList(kind){
 }
 /* 名單就地篩選（2026-08-03，同 lotFilter）：格狀（收款提醒）與清單兩種版型都吃；
    格狀模式整個時間組都被濾掉時，把該組（含左側時間標）一起藏。 */
-function tdlFilter(q){
-  q=String(q||'').trim();
-  const hit=(el,sel)=>{ const n=el.querySelector(sel); return !q||((n&&n.textContent)||'').indexOf(q)>=0; };
-  document.querySelectorAll('.tdl-cell').forEach(c=>{ c.style.display=hit(c,'.tdl-cell-nm')?'':'none'; });
+function tdlFilter(q){ window._tdlQ=String(q||'').trim(); tdlApply(); }
+/* 教練篩選（2026-09-01）：點同一顆＝取消（回到全部）—— 與其他章的按法一致 */
+function tdlCoachPick(btn, co){
+  const same=String(window._tdlCo||'')===String(co||'');
+  window._tdlCo=same?'':String(co||'');
+  const bar=btn&&btn.parentNode;
+  if(bar) bar.querySelectorAll('.tdl-cochip').forEach(b=>b.classList.remove('on'));
+  if(bar){ const pick=window._tdlCo?btn:bar.querySelector('.tdl-cochip'); if(pick) pick.classList.add('on'); }
+  tdlApply();
+}
+/* 兩個條件一起算（姓名 ＋ 教練）——
+   ⚠ 分成兩支各自 display 的話，後按的那個會把前一個的結果整片還原。 */
+function tdlApply(){
+  const q=String(window._tdlQ||''), co=String(window._tdlCo||'');
+  const hitQ=(el,sel)=>{ const n=el.querySelector(sel); return !q||((n&&n.textContent)||'').indexOf(q)>=0; };
+  const hitCo=el=>{ if(!co) return true; const n=el.querySelector('.tdl-co'); return !!n && n.textContent===co; };
+  document.querySelectorAll('.tdl-cell').forEach(c=>{ c.style.display=(hitQ(c,'.tdl-cell-nm')&&hitCo(c))?'':'none'; });
   document.querySelectorAll('.tdl-tg').forEach(g=>{
     const any=[...g.querySelectorAll('.tdl-cell')].some(c=>c.style.display!=='none');
     g.style.display=any?'':'none';
   });
-  document.querySelectorAll('.tdl-row').forEach(r=>{ r.style.display=hit(r,'.tdl-n')?'':'none'; });
+  document.querySelectorAll('.tdl-row').forEach(r=>{ r.style.display=(hitQ(r,'.tdl-n')&&hitCo(r))?'':'none'; });
 }
 /* 標記續約狀態（2026-07-29）：考慮中／不續約寫在票券上，再按一次同一顆＝取消標記 */
 async function setRenewStatus(tkid, st){

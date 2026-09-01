@@ -18,7 +18,11 @@ console.log('① 篩選（沙箱實跑 tdlFilter）');
   ].map(c=>({style:{display:''}, querySelector:sel=>sel==='.tdl-cell-nm'?{textContent:c.nm}:null, _nm:c.nm}));
   const grp={style:{display:''}, querySelectorAll:sel=>sel==='.tdl-cell'?cells:[]};
   const doc={querySelectorAll:sel=>sel==='.tdl-cell'?cells:(sel==='.tdl-tg'?[grp]:[])};
-  const f=new Function('document','return '+grabFn('tdlFilter'))(doc);
+  /* 2026-09-01：tdlFilter 只負責記下關鍵字，真正動畫面的是 tdlApply
+     （教練篩選也走同一支，兩個條件要一起算）—— 兩支都注入真的那一份。 */
+  const win={};
+  const f=new Function('document','window',
+    grabFn('tdlApply')+'\nreturn '+grabFn('tdlFilter'))(doc,win);
   f('蘭');
   ok('★ 命中的留著、沒中的藏起來', cells[0].style.display==='' && cells[1].style.display==='none');
   ok('★ 組內還有人 → 時間組保留', grp.style.display==='');
@@ -26,6 +30,33 @@ console.log('① 篩選（沙箱實跑 tdlFilter）');
   ok('★ 清空 → 全部回來', cells.every(c=>c.style.display==='') && grp.style.display==='');
   f('查無此人');
   ok('★ 全滅 → 整組（含時間標）一起藏', cells.every(c=>c.style.display==='none') && grp.style.display==='none');
+}
+
+console.log('\n①b 教練篩選與姓名篩選要一起算（2026-09-01）');
+{
+  const mk=(nm,co)=>({style:{display:''},
+    querySelector:sel=>sel==='.tdl-n'?{textContent:nm}:(sel==='.tdl-co'?{textContent:co}:null)});
+  const rows=[mk('林紋麒','RANDY'), mk('劉芷安','ZOE'), mk('胡霆易','RANDY')];
+  const doc={querySelectorAll:sel=>sel==='.tdl-row'?rows:[]};
+  const win={};
+  const box=new Function('document','window',
+    grabFn('tdlApply')+'\n'+grabFn('tdlFilter')+'\n'+grabFn('tdlCoachPick')
+    +'\nreturn {tdlApply,tdlFilter,tdlCoachPick};')(doc,win);
+  const vis=()=>rows.filter(r=>r.style.display!=='none').length;
+  const bar={querySelectorAll:()=>[], querySelector:()=>null};
+  const btn={parentNode:bar, classList:{add(){},remove(){}}};
+
+  box.tdlCoachPick(btn,'RANDY');
+  ok('★★★ 只留該教練的學生（RANDY 2 位）', vis()===2, vis());
+  box.tdlFilter('胡');
+  ok('★★★ 再加姓名篩選＝兩個條件同時成立（1 位）', vis()===1, vis());
+  box.tdlFilter('劉');
+  ok('★★★ 姓名對、教練不對 → 不留（0 位）', vis()===0, vis());
+  box.tdlFilter('');
+  box.tdlCoachPick(btn,'RANDY');
+  ok('★★ 點同一顆＝取消篩選，全部回來', vis()===3, vis());
+  box.tdlCoachPick(btn,'');
+  ok('　　「全部」那顆本來就等於不篩', vis()===3, vis());
 }
 
 console.log('\n② 兩個名單都掛上（8 人以上才顯示，短名單不佔位）');

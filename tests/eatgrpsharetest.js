@@ -174,5 +174,34 @@ console.log('\n⑤ 即將降級名單：主教練標在會員旁邊');
      /\.tdl-co\.tdl-co-no\{background:rgba\(120,113,102,\.12\);color:var\(--t3,#8b857a\);/.test(src));
 }
 
+console.log('\n⑥ 教練篩選列');
+{
+  ok('★★★ 只有帶 coach 的名單會長出來（收款提醒／未打卡不受影響）',
+     /const _hasCo=\(L\.items\|\|\[\]\)\.some\(it=>it&&it\.coach!==undefined\);/.test(src));
+  ok('★★★ 章上帶人數，照人數多到少排（這一列是「誰要追最多人」）',
+     /const ks=Object\.keys\(cnt\)\.sort\(\(a,b\)=>\(cnt\[b\]-cnt\[a\]\)\|\|a\.localeCompare\(b\)\);/.test(src)
+     && /這一列是「誰要去追最多人」，不是通訊錄/.test(src));
+  ok('★★ 「未指定」永遠排最後（它不是一位教練）',
+     /ks\.sort\(\(a,b\)=>\(a===NO\?1:0\)-\(b===NO\?1:0\)\);/.test(src));
+  ok('★★★ 姓名與教練兩個條件一起算（分兩支會互相還原）',
+     /function tdlApply\(\)\{/.test(src)
+     && /c\.style\.display=\(hitQ\(c,'\.tdl-cell-nm'\)&&hitCo\(c\)\)\?'':'none';/.test(src)
+     && /r\.style\.display=\(hitQ\(r,'\.tdl-n'\)&&hitCo\(r\)\)\?'':'none';/.test(src)
+     && /分成兩支各自 display 的話，後按的那個會把前一個的結果整片還原/.test(src));
+  ok('★★ 點同一顆＝取消（回到全部）',
+     /const same=String\(window\._tdlCo\|\|''\)===String\(co\|\|''\);/.test(src)
+     && /window\._tdlCo=same\?'':String\(co\|\|''\);/.test(src));
+  ok('★★ 每次開窗都從「全部」開始（上次的篩選不會黏著）',
+     /window\._tdlQ=''; window\._tdlCo='';   \/\/ 每次開窗都從「全部」開始/.test(src));
+  ok('★★★ 換行不橫捲（0831 日期列四修的教訓）',
+     /\.tdl-cobar\{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;\}/.test(src)
+     && /橫捲會讓 overflow-y 一起變 auto/.test(src));
+  ok('★★ 教練暱稱是資料庫字串，標籤與 onclick 參數都有跳脫',
+     /const esc=x=>String\(x\)\.replace\(\/&\/g,'&amp;'\)\.replace\(\/<\/g,'&lt;'\)\.replace\(\/"\/g,'&quot;'\);/.test(src)
+     && /esc\(String\(val\)\.replace\(\/'\/g,"\\\\'"\)\)/.test(src));
+  ok('★★ 選中的章用品牌綠實心（與名單裡的主教練章同一組色）',
+     /\.tdl-cochip\.on\{background:var\(--green,#1f6f54\);border-color:var\(--green,#1f6f54\);color:#fff;\}/.test(src));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
