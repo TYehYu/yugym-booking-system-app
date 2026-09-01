@@ -11728,8 +11728,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.2304';
-const APP_VERSION_LABEL='v260901.2304';
+const APP_VERSION = '260901.2310';
+const APP_VERSION_LABEL='v260901.2310';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -59155,7 +59155,10 @@ async function finPnl(){
   box.innerHTML=`<div class="card" style="padding:14px 16px;margin-bottom:14px;">${finMonthHeadHTML(ym)}
     <div style="color:var(--t3);font-size:12.5px;">損益表計算中…</div></div>`;
   try{
-    const [purAll,expAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('expenses').catch(()=>[])]);
+    let [purAll,expAll]=await Promise.all([dbGetAll('purchases').catch(()=>[]),dbGetAll('expenses').catch(()=>[])]);
+    /* 新的月份自動帶入上月的固定支出（2026-09-01）—— 只看損益表的人也要看得到，
+       不能等有人去點「支出明細」才補上。 */
+    if(await ensureFixedExpenses(ym, expAll)) expAll=(await dbGetAll('expenses').catch(()=>[]))||[];
     const pur=(purAll||[]).filter(p=>String(p.created_at||'').slice(0,7)===ym);
     const cash=pur.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);   // 這個月實際收到的錢
     /* 2026-08-08 使用者定案：「我們的淨利應該是教練們的銷課金額扣掉所有支出」——
@@ -59609,10 +59612,52 @@ async function _fxSave(){
     navTo(CUR_PAGE);
   }catch(e){ done(); showToast('儲存失敗：'+((e&&e.message)||e)); }
 }
+/* 固定支出自動帶入新月份（2026-09-01 使用者定案：「直接帶入，要修改再進去修改就好」）——
+   原本要「開設定視窗 → 看到上月帶過來的草稿 → 按儲存」才會寫進去。
+   使用者看到畫面上有內容就以為存好了，結果 9 月一筆固定支出都沒有，
+   損益表整整少算 55,795。畫面上那行金色提示（「按儲存才會寫進本月」）擋不住 ——
+   一個要「看到並照做」才會成立的流程，遲早會漏。改成系統自己帶。
+
+   ⚠ 只補「今天所在的月份或更早」：翻到未來月份不該憑空生出支出。
+   ⚠ 只在該月**完全沒有任何支出紀錄**時才補（不是只看固定支出）——
+     否則管理員刻意把某個月的固定支出清空（例如那個月房租免收），
+     下次進來又會被補回來。只要那個月動過任何一筆，系統就不再自作主張。
+   ⚠ 同一個月只跑一次：損益表與支出頁會前後腳呼叫，用 in-flight 表擋住重複建立。 */
+const _fxSeeding={};
+async function ensureFixedExpenses(month, all){
+  const ym=String(month||'').slice(0,7);
+  try{
+    if(!/^\d{4}-\d{2}$/.test(ym)) return 0;
+    if(ym>ymd(TODAY).slice(0,7)) return 0;                   // 未來月份不補
+    if(!(SESSION&&SESSION.role==='admin')) return 0;          // 只有管理員的畫面會補
+    if(_fxSeeding[ym]) return await _fxSeeding[ym];
+    const run=(async()=>{
+      const rows=all||((await dbGetAll('expenses').catch(()=>[]))||[]);
+      if(rows.some(e=>e&&e.ym===ym)) return 0;                // 這個月動過了 → 不補
+      const pm=prevYm(ym);
+      const prev=rows.filter(e=>e&&e.ym===pm&&e.is_fixed===true);
+      if(!prev.length) return 0;
+      for(const e of prev){
+        await dbPut('expenses',{ id:uid('EXP'), ym, date:ym+'-01', category:e.category,
+          amount:Number(e.amount)||0, note:e.note||null, is_fixed:true,
+          created_at:new Date().toISOString() });
+      }
+      dbCacheClear('expenses');
+      return prev.length;
+    })();
+    _fxSeeding[ym]=run;
+    const n=await run;
+    delete _fxSeeding[ym];
+    if(n) showToast(`已自動帶入 ${prevYm(ym).replace('-','/')} 的 ${n} 項固定支出，金額有變請直接改`, 6000);
+    return n;
+  }catch(_){ delete _fxSeeding[ym]; return 0; }
+}
 async function finExpenses(){
   const body=document.getElementById('fin-body'); if(!body) return;
   const month=(window._finMonth||ymd(TODAY).slice(0,7));
-  const all=(await dbGetAll('expenses').catch(()=>[]))||[];
+  let all=(await dbGetAll('expenses').catch(()=>[]))||[];
+  /* 新的月份自動帶入上月的固定支出（2026-09-01，見 ensureFixedExpenses） */
+  if(await ensureFixedExpenses(month, all)) all=(await dbGetAll('expenses').catch(()=>[]))||[];
   const mine=all.filter(e=>e&&e.ym===month)
     .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.created_at||'').localeCompare(String(b.created_at||'')));
   const fixed=mine.filter(e=>e.is_fixed), other=mine.filter(e=>!e.is_fixed);

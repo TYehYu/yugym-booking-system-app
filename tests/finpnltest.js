@@ -103,6 +103,36 @@ console.log('\n③b 實領與應發的橋（2026-09-01 使用者：「為何這�
      /const netPay   = Math\.max\(grossPay - leaveDeduct - insEmpDeduct, 0\);/.test(src));
 }
 
+console.log('\n③c 固定支出自動帶入新月份（2026-09-01 使用者：「直接帶入，要修改再進去修改就好」）');
+{
+  /* 原本要「開設定視窗看到上月草稿 → 按儲存」才寫入。使用者以為看到就是存好了，
+     9 月一筆固定支出都沒有、損益表少算 55,795。一個要「看到並照做」才成立的流程，
+     遲早會漏 —— 改成系統自己帶。 */
+  ok('★★★ 有一支專門做這件事，損益表與支出頁都會呼叫',
+     /async function ensureFixedExpenses\(month, all\)\{/.test(src)
+     && (src.match(/await ensureFixedExpenses\(/g)||[]).length===2);
+  ok('★★★ 未來月份不補（翻到 12 月不該憑空生出支出）',
+     /if\(ym>ymd\(TODAY\)\.slice\(0,7\)\) return 0;/.test(src)
+     && /翻到未來月份不該憑空生出支出/.test(src));
+  ok('★★★ 只在「該月完全沒有任何支出紀錄」時才補（刻意清空的月份不會被補回來）',
+     /if\(rows\.some\(e=>e&&e\.ym===ym\)\) return 0;/.test(src)
+     && /只要那個月動過任何一筆，系統就不再自作主張/.test(src));
+  ok('★★★ 同一個月只跑一次（損益表與支出頁會前後腳呼叫）',
+     /const _fxSeeding=\{\};/.test(src)
+     && /if\(_fxSeeding\[ym\]\) return await _fxSeeding\[ym\];/.test(src)
+     && /delete _fxSeeding\[ym\];/.test(src));
+  ok('★★ 只有管理員的畫面會補（櫃檯看報表不該產生資料）',
+     /if\(!\(SESSION&&SESSION\.role==='admin'\)\) return 0;/.test(src));
+  ok('★★ 帶進來要說一聲，並提醒金額可能要改',
+     /已自動帶入 \$\{prevYm\(ym\)\.replace\('-','\/'\)\} 的 \$\{n\} 項固定支出，金額有變請直接改/.test(src));
+  ok('★★ 補完要重讀（不然畫面還是舊的那一份）',
+     /if\(await ensureFixedExpenses\(month, all\)\) all=\(await dbGetAll\('expenses'\)\.catch\(\(\)=>\[\]\)\)\|\|\[\];/.test(src)
+     && /if\(await ensureFixedExpenses\(ym, expAll\)\) expAll=\(await dbGetAll\('expenses'\)\.catch\(\(\)=>\[\]\)\)\|\|\[\];/.test(src));
+  ok('★★ 原本那條「草稿要按儲存」的路留著（過去月份、或手動再帶一次仍走得通）',
+     /本月還沒設定過，已帶入 <b>\$\{d\.from\.replace\('-','\/'\)\}<\/b> 的項目與金額/.test(src)
+     && /async function _finExpenseCopyPrev\(\)\{/.test(src));
+}
+
 console.log('\n④ 逐項列出');
 ok('★★ 每位教練一列（只列本月要計薪、金額大於 0 的，金額由大到小）',
    /\.filter\(r=>r\.countSalary&&Number\(r\.sal&&r\.sal\.grossPay\)>0\)/.test(F)
