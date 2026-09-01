@@ -4773,6 +4773,12 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 /* 教練請假・未到場結課（2026-08-30 使用者指示：「是因為未到　那用金色的色點」）——
    紅＝請假但人有來（照樣佔用了教練與場地）；金＝請假而且人沒來。
    同一條紅>金>綠：紅是要留意的，金是「知道就好」。堂數兩者都已退回、都不佔格。 */
+/* 取消・扣課不退＝金色點＋「扣課」＋日期（2026-09-01 使用者指示：
+   「這種選了扣課的圓形卡　給他一張　金色點　寫上扣課＋日期」）——
+   原本是一顆實心紅，跟「請假」同色、又只有一個日期，看不出這一格是怎麼沒的。
+   金色的語意與「未到課」一致：人沒來、堂數照扣（紅留給人有來的請假）。 */
+.mtk-lv.mtk-eat .mtk-shdot{background:var(--gold-d,#b48a56);}
+.mtk-lv.mtk-eat .mtk-shnm{color:var(--gold-d,#b48a56);}
 .mtk-lv.mtk-lv-ns .mtk-shdot{background:var(--gold-d,#b48a56);}
 .mtk-lv .mtk-shdot{background:var(--danger,#b5372e);}
 .mtk-lv.mtk-booked .mtk-shdot{background:#fff;border:2.5px solid var(--danger,#b5372e);}
@@ -7962,6 +7968,12 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
 .tdl-b.on{background:var(--gold-d,#b48a56);border-color:var(--gold-d,#b48a56);color:#fff;font-weight:700;}
 .tdl-b-ok.on{background:var(--green,#1f6f54);border-color:var(--green,#1f6f54);}
 .tdl-rs{margin-left:7px;font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 8px;}
+/* 主教練章（2026-09-01 使用者指示：即將降級名單要看得到誰負責這位會員）——
+   綠＝一般提示（紅>金>綠 的色階：這不是警示，是給櫃檯找人的線索）；
+   沒指定的降到灰字，看得出是「沒有」而不是「還沒載完」。 */
+.tdl-co{margin-left:7px;font-size:10.5px;font-weight:700;border-radius:6px;padding:2px 7px;
+  background:var(--sage-bg,#eef5f1);color:var(--green,#1f6f54);white-space:nowrap;}
+.tdl-co.tdl-co-no{background:rgba(120,113,102,.12);color:var(--t3,#8b857a);font-weight:600;}
 /* 收款提醒的上課時間（2026-07-30 使用者指示）：一般續課用品牌金、待付費用品牌紅 */
 .tdl-tm{margin-left:7px;font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;
   font-family:var(--num),inherit;background:rgba(180,138,86,.16);color:var(--gold-d,#b48a56);}
@@ -11665,8 +11677,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.0835';
-const APP_VERSION_LABEL='v260901.0835';
+const APP_VERSION = '260901.1320';
+const APP_VERSION_LABEL='v260901.1320';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17641,7 +17653,10 @@ function allocBookingsToTickets(tickets,bookings,typeMap){
    沒有扣課紀錄的（舊系統匯入的預約）才退回原本「最近那張團課票」的猜法。
 
    回傳 pend＝每張票「已預約但還沒簽到」的堂數；byTicket＝每張票扣到的團課預約（給圓點）。 */
-function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk){
+/* alsoIds（2026-09-01）：共用同一批票的其他人（共享票的持有人／被共享人）。
+   他們的名額也要畫進這張票的圓點，但**只認帳本**：沒有扣課紀錄就不蓋、也不算待上，
+   免得把別人的課猜到我的票上（猜的那條路只留給自己的名額）。 */
+function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk, alsoIds){
   const pend={}, byTicket={};
   const tkById={}; (myTk||[]).forEach(t=>{ if(t&&t.id) tkById[t.id]=t; });
   // 每筆預約在每張票上的淨扣課數（同一人兩個名額＝兩筆 deduct；取消會有 refund 抵銷）
@@ -17667,11 +17682,13 @@ function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk){
     // 取消未退（扣課不退）的仍要蓋戳記 —— 票已經吃掉了（2026-08-06）
     if(!b || b.category!=='小班肌力' || (b.status==='cancelled' && !bkEatenCancel(b))) return;
     /* 逐名額（2026-07-30 名額鍵）：同一人兩個名額，只到一個時另一個仍是待上 */
-    const mine=[], seen={};
+    const mine=[], _own=[], seen={};
     (mids(b)||[]).forEach(id=>{
       seen[id]=(seen[id]||0)+1;
-      if(String(id)!==String(memberId)) return;
+      const _isMe=String(id)===String(memberId);
+      if(!_isMe && !(alsoIds && alsoIds[String(id)])) return;
       mine.push(seen[id]>1?id+'#'+seen[id]:id);
+      _own.push(_isMe);
     });
     if(!mine.length) return;
     const at=attObj(b);
@@ -17700,7 +17717,8 @@ function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk){
          沒有才退回「依扣課紀錄照購買日排序分配」的近似法 ——
          同一人多個名額扣在不同票上時，近似法會分錯格子。 */
       const logged=_fix[i]||slots[_si++]||null;
-      const tid=logged||(newest?newest.id:null);
+      /* 後備猜法（newest）只給自己的名額 —— 共享人的名額沒有帳本就當作不關這張票的事 */
+      const tid=logged||((_own[i]&&newest)?newest.id:null);
       if(!tid) return;
       // 圓點只認扣課紀錄：猜出來的不畫，否則舊系統匯入的整批課會全掛到最近那張票上
       /* 戳記帶上「這是第幾個名額」（2026-08-07 張家華案例：8/03 第 1 個名額已簽到、
@@ -17901,19 +17919,38 @@ function buildWallet(memberId, ctx){
     .forEach((t,i)=>{ _noOf[t.id]=i+1; });
   /* 共享票的堂數是共用的：蓋在我票上的課卡，就算上課的是共享者也要算進來
      （2026-07-26 起支援共享票，堂數共用一個池）。 */
+  /* 團課共享票（2026-09-01 林政緯案例）——
+     0804 已經把「掛在我票上、別人約的」併進來，但那條看的是 bookings.ticket_id，
+     而**團課的 ticket_id 永遠是空的**（帳在 ticket_logs，見 tkHoldingBookings）。
+     於是林繼霖用林政緯共享票上的 9/07・9/14・9/21 三堂，在林政緯的票券夾裡
+     完全看不到：三格變成沒有日期的 ✓，共享人的名字也標不出來。
+     ⚠ 判準用帳本：這筆預約在我的某張票上有扣課紀錄，就是我的票在付這堂。 */
+  const _lgBk={};
+  (c.logs||[]).forEach(l=>{ if(l&&l.booking_id&&l.ticket_id&&mineIds[l.ticket_id]) _lgBk[l.booking_id]=1; });
   const myBk=c.bookingsOf ? (c.bookingsOf(memberId)||[])
-    : (c.bookings||[]).filter(b=>b && (bkHasMember(b,memberId) || (b.ticket_id&&mineIds[b.ticket_id])));
+    : (c.bookings||[]).filter(b=>b && (bkHasMember(b,memberId) || (b.ticket_id&&mineIds[b.ticket_id]) || _lgBk[b.id]));
   /* 同行第二台（2026-08-05 黃麗琴案例：一點約兩台跑步機，圓形卡卻畫出 4 顆）——
      第二台是影子預約（sibling_of 指到主預約、不扣點），不列入戳記與堂數。 */
   /* 取消但扣課不退的那幾堂也要蓋戳記（2026-08-06 黃品華案例）——
      票被吃掉了卻不畫出來，圓形卡就會出現一顆沒有日期的「✓」。
      ⚠ 只認「帳本上真的還扣著」的：refund_waived 這個旗標留得住、事後補退的
      （7/23 那筆「取消未退堂回補」）旗標仍是 true，只看旗標會多畫一顆。 */
-  const _netChg={};
+  const _netChg={}, _hasMove={};
   (c.logs||[]).forEach(l=>{ if(!l||!l.booking_id||!l.ticket_id) return;
     const d=l.action==='deduct'?1:(l.action==='refund'?-1:0); if(!d) return;
+    _hasMove[l.booking_id]=1;
     _netChg[l.booking_id]=(_netChg[l.booking_id]||0)+d; });
-  const _eaten=b=>bkEatenCancel(b) && (_netChg[b.id]||0)>0;
+  /* ⚠ 「帳本上有沒有動過這筆預約」要先問，再看淨值（2026-09-01 吳美芳案例）——
+     淨值 0 有兩種完全相反的意思：
+     ① 扣過又退回（7/23 那筆「取消未退堂回補」）→ 票沒被吃掉，不該畫
+     ② 帳本上這筆預約**從來沒有 deduct 也沒有 refund** → 這張票的堂數是舊系統整批
+        對帳直接寫掉的（MTK-99C521F37E4D：0729 補綁 5 堂、0803 一筆 adjust −5 抹平殘值），
+        單筆預約本來就沒有自己的扣課紀錄。這時 refund_waived 就是唯一的事實。
+     只看淨值會把 ② 當成 ①：櫃檯今天取消 9/03、選了「扣課不退」，
+     那一格從「9/03 空心」變成一顆沒有日期的 ✓，誰也看不出用在哪。
+     ⚠ 判準是「有沒有 deduct／refund」，不是「有沒有紀錄」——
+       9/03 那筆帳本上有一列 adjust（delta 0，取消時寫的），它不是搬動堂數。 */
+  const _eaten=b=>bkEatenCancel(b) && (_hasMove[b.id] ? (_netChg[b.id]||0)>0 : true);
   const live=myBk.filter(b=>b && (b.status!=='cancelled' || _eaten(b)) && !b.sibling_of);
 
   /* 哪幾堂是會員自己從手機約的（2026-08-01 使用者指示：圓形卡旁邊做個備註）——
@@ -17964,7 +18001,14 @@ function buildWallet(memberId, ctx){
     if(tid) put(tid,b);
   });
   // ② 團課的扣課紀錄
-  const ga=grpTicketAlloc(mine, live, c.logs||[], memberId, ()=>true);
+  /* 誰的名額算在「我的票」上：我自己，加上與我共用同一批票的人（持有人／共享人）。
+     ⚠ 只放寬「認不認這個名額」，不放寬「猜」—— 別人的名額一定要有扣課紀錄才蓋戳記
+       （見 grpTicketAlloc 的 alsoIds）。 */
+  const _alsoIds={};
+  mine.forEach(t=>{ if(!t) return;
+    if(String(t.member_id||'')!==String(memberId)) _alsoIds[String(t.member_id)]=1;
+    (tkSharedIds(t)||[]).forEach(id=>{ if(String(id)!==String(memberId)) _alsoIds[String(id)]=1; }); });
+  const ga=grpTicketAlloc(mine, live, c.logs||[], memberId, ()=>true, _alsoIds);
   Object.keys(ga.byTicket).forEach(tid=>(ga.byTicket[tid]||[]).forEach(b=>putGrp(tid,b)));
   /* ③ 剩下的（舊系統匯入）用先進先出推算。容量要扣掉①②已經蓋掉的格子，
         否則會把課推到已經蓋滿的票上 —— 傳入容量已折算的副本，結果再依 id 對回原票。 */
@@ -20005,10 +20049,16 @@ PAGES.g_dashboard=async function(){
     if((b.date||'').slice(0,7)!==_thisYm || !b.member_id) return;
     _ptCntThisMonth[b.member_id]=(_ptCntThisMonth[b.member_id]||0)+1;
   });
+  /* 主教練標在會員旁邊（2026-09-01 使用者指示：「即將降級名單　有辦法把主教練
+     標示在會員旁邊嗎」）—— 這份名單是要「找人去約課」的，光有會員名字還得再查一次
+     誰負責他。沒指定主教練的照樣列出來並寫「未指定」，不要留白（0823 語彙）。 */
+  const _coNm={}; (coaches||[]).forEach(c=>{ if(c&&c.id) _coNm[c.id]=coachDisp(c); });
   const _demoteList=tierDemotionWatchIds(bookings||[], Object.values(memMap||{}))
     .filter(id=>memMap[id])
     .map(id=>{ const n=_ptCntThisMonth[id]||0;
-      return {id,name:memMap[id].name,sub:`已連 2 個月未達・本月至今 ${n} 堂・還差 ${Math.max(0,4-n)} 堂即可保住主顧客`}; });
+      return {id,name:memMap[id].name,
+        coach:_coNm[memMap[id].default_coach_id]||'',
+        sub:`已連 2 個月未達・本月至今 ${n} 堂・還差 ${Math.max(0,4-n)} 堂即可保住主顧客`}; });
   const _demoteNames=_demoteList.map(x=>x.name);
   const _l2=_demoteNames.length
     ? _demoteNames.slice(0,6).join('、')+(_demoteNames.length>6?` 等 ${_demoteNames.length} 人`:'')
@@ -20430,7 +20480,10 @@ function openTodoList(kind){
   /* 上課時間標在名字旁邊（2026-07-30 使用者指示：櫃檯要知道幾點見得到人）。
      待付費的（待簽約卡位／分期保留）用品牌紅，一般續課用金色 —— 紅 > 金 的色階。 */
   const tm=(it)=>it.time?`<span class="tdl-tm${it.pay?' tdl-tm-pay':''}">${it.time}</span>`:'';
-  const body=(it)=>`${ava(it.name)}<span class="tdl-tx"><span class="tdl-n">${it.name||'—'}${tm(it)}${tag(it)}</span>${it.sub?`<span class="tdl-s">${it.sub}</span>`:''}</span>`;
+  /* 主教練章（2026-09-01 使用者指示，即將降級名單用）—— 只有帶了 coach 的名單會出現。
+     沒指定的寫「未指定」而不是留白：留白看起來像資料還沒載完。 */
+  const co=(it)=>(it.coach===undefined)?'':`<span class="tdl-co${it.coach?'':' tdl-co-no'}">${it.coach||'未指定主教練'}</span>`;
+  const body=(it)=>`${ava(it.name)}<span class="tdl-tx"><span class="tdl-n">${it.name||'—'}${co(it)}${tm(it)}${tag(it)}</span>${it.sub?`<span class="tdl-s">${it.sub}</span>`:''}</span>`;
   /* 三顆都手動（2026-08-03 使用者指示）：續約也用按的，按同一顆＝取消標記。 */
   const acts=(it)=>(kind!=='sign'||!it.tkid)?'':
     `<span class="tdl-acts">
@@ -43523,9 +43576,14 @@ function ppRecordHtml(){
         /* 共享票的戳記標註（2026-08-04 使用者定案：「統一用享」）——
            非本人約的堂，圓點掛「享」徽章；是誰約的看 title（全名）。
            不用名字縮寫：同名撞字（陳蘭馨／陳蘭燕）永遠不會發生。 */
+        /* 團課的使用人在名額鍵上，不在 member_id（2026-09-01 林政緯案例）——
+           團課 b.member_id 是 null，原本這一行直接 return，共享人的名字永遠標不出來。
+           grpTicketAlloc 蓋戳記時已經把「這是第幾個名額」寫進 b._seat，直接讀它。 */
         const _shMark=arr=>arr.map(b=>{
-          if(!b||!b.member_id||b.member_id===PP.id) return b;
-          const nm=(c.memMap||{})[b.member_id]||'';
+          if(!b) return b;
+          const who=(b._seat&&typeof seatMid==='function')?seatMid(b._seat):(b.member_id||'');
+          if(!who || String(who)===String(PP.id)) return b;
+          const nm=(c.memMap||{})[who]||'';
           return Object.assign({},b,{_shBy:'享',_shName:nm||'共享對象'});
         });
         /* 對帳警示（2026-08-06 稽核 R2）：這張票的帳面／帳目／課卡對不上就掛一個 ⚠，
@@ -44665,7 +44723,13 @@ async function ppLoadCtx(){
     try{
       const _tkIds=new Set(myTk.map(t=>t.id));
       const _mine=new Set(myBk.map(b=>b.id));
-      const _pool=bookings.filter(b=>b.ticket_id&&_tkIds.has(b.ticket_id)&&!_mine.has(b.id));
+      /* ⚠ 團課的 ticket_id 永遠是空的（帳在 ticket_logs）——只看 ticket_id 的話，
+         共享人上的團課在持有人這邊整批看不到（2026-09-01 林政緯：三格變成無日期的 ✓）。
+         再收一次「帳本說扣在我票上」的那些。 */
+      const _lgIds=new Set();
+      (tkLogs||[]).forEach(l=>{ if(l&&l.booking_id&&l.ticket_id&&_tkIds.has(l.ticket_id)) _lgIds.add(l.booking_id); });
+      const _pool=bookings.filter(b=>b&&!_mine.has(b.id)
+        && ((b.ticket_id&&_tkIds.has(b.ticket_id)) || _lgIds.has(b.id)));
       if(_pool.length) myBk=myBk.concat(_pool);
     }catch(_){}
     const used=usedSessionsMap(bkOfMember(bookings, PP.id));
@@ -56220,6 +56284,11 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
   /* 到場與未到場分色（2026-08-30 使用者指示）：紅＝人有來、金＝未到場結課。
      判準與 bkCoachLeaveNoShow 寫進去的一致（completed 且沒有 checked_in_at）。 */
   const _clvNoShow=b=>!!b && b.status!=='checked_in' && !b.checked_in_at;
+  /* 取消・扣課不退那一顆（2026-09-01 使用者指示）——金色點＋「扣課」＋日期。
+     ⚠ 與教練請假共用 .mtk-lv 的排版（點在上、兩行字在下），只換顏色與字。
+     ⚠ 兩條路都要用它：正常格子與溢位格子（0831 才因為 _usedCls 抄兩份吃過虧）。 */
+  const _eatBody=(b,dt)=>`<i class="mtk-shdot"></i><b class="mtk-shnm">扣課</b><b class="mtk-shdt">${dt}</b>`;
+  const _eatDot=(b,cur,slf)=>`<span class="mtk mtk-used mtk-lv mtk-eat${cur||''}${slf||''}" style="--tk-acc:${v.accent};" title="取消未退（取消時選了扣課不退）${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}">${_eatBody(b, b?md(b):'✓')}${cur?'<i class="mtk-comet"></i>':''}</span>`;
   const _clxDot=b=>{ const ns=_clvNoShow(b);
     return `<span class="mtk mtk-used mtk-clvatt mtk-lv${ns?' mtk-lv-ns':''}" style="--tk-acc:${v.accent};" title="教練請假・${ns?'未到場結課':'會員已到場簽到'}（堂數已退回票券）${b&&b.date?' '+b.date:''}">${_lvBody(b, b?md(b):'✓')}</span>`; };
   /* ── 共享票的那幾顆：色點在上、使用人與日期各一行在下（2026-08-27 使用者回報，附截圖）──
@@ -56271,6 +56340,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
       const b=_it.b;
       const cur=_isCur(b)?' mtk-cur':'';
       const slf=selfCls(b);
+      if(b && b._eaten){ s+=_eatDot(b,cur,slf); continue; }
       const shc=((b&&b._shBy)?' mtk-sh':'')+_ownCls(b);
       /* 紅色的兩種「票用掉了但人沒上到課」（2026-08-06）：
          請假＝本堂照扣、另發補課券；取消未退＝取消時選了扣課不退。 */
@@ -56314,6 +56384,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
     /* 已經上過（或請假／取消未退）的課溢位時仍畫成實心 —— 那堂票確實用掉了，
        標成「需補票」的紅虛線會看起來像欠票（2026-08-06 排序改動後才可能走到這裡）。 */
     if(_o.st==='used'){
+      if(b && b._eaten){ s+=_eatDot(b,cur,slf); continue; }
       const lvc=_usedCls(b);
       s+=`<span class="mtk mtk-used${lvc}${cur}${slf}" style="--tk-acc:${v.accent};" title="${_usedWhy(b)} ${b.date||''}${cur?'（本堂）':''}">${md(b)}${cur?'<i class="mtk-comet"></i>':''}</span>`;
       continue;

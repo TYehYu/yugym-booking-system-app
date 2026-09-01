@@ -142,7 +142,8 @@ console.log('\n團課「已預約未上」要含匯入的未來預約');
   /* 2026-07-31：規則只寫一遍（票券夾 → grpTicketAlloc），八個畫面都吃它 */
   ok('★ 會員票券頁與人物檢視吃同一支',
      /那些一定還沒上（2026-07-30 Jackie 的 8\/01 匯入預約）/.test(src)
-     && /const ga=grpTicketAlloc\(mine, live, c\.logs\|\|\[\], memberId, \(\)=>true\);/.test(src));
+     /* 2026-09-01：多帶 alsoIds（共用同一批票的人）—— 團課共享票的名額原本整批看不到 */
+     && /const ga=grpTicketAlloc\(mine, live, c\.logs\|\|\[\], memberId, \(\)=>true, _alsoIds\);/.test(src));
   /* 2026-07-31：兩處的算式抽成共用的 grpTicketAlloc，規則不變（細節見 grpalloctest.js） */
   ok('★ 未來的課不看 BK- 前綴（匯入的預約也算）',
      /if\(String\(b\.date\|\|''\)<today && String\(b\.id\|\|''\)\.indexOf\('BK-'\)!==0\) return;/.test(src));

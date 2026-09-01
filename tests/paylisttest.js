@@ -39,7 +39,9 @@ ok('　　沒有會員 id 時該列不可點（走 tdl-static）', /\? `<div cla
 
 console.log('\n時間標示');
 ok('★ 名字旁邊標上課時間', /const tm=\(it\)=>it\.time\?`<span class="tdl-tm\$\{it\.pay\?' tdl-tm-pay':''\}">\$\{it\.time\}<\/span>`:'';/.test(src)
-   && /\$\{it\.name\|\|'—'\}\$\{tm\(it\)\}\$\{tag\(it\)\}/.test(src));
+   /* 2026-09-01：名字與時間之間多一顆主教練章（只有即將降級名單會帶 coach，
+      收款提醒的 it.coach 是 undefined → co() 回空字串，這一列的畫面沒變）。 */
+   && /\$\{it\.name\|\|'—'\}\$\{co\(it\)\}\$\{tm\(it\)\}\$\{tag\(it\)\}/.test(src));
 ok('★ 待付費用品牌紅、一般續課用品牌金（紅 > 金 色階；2026-07-30 待付費改實心底白字）',
    /\.tdl-tm\{[^}]*color:var\(--gold-d,#b48a56\);\}/.test(src)
    && /\.tdl-tm-pay\{background:var\(--danger,#b5372e\);color:#fff;\}/.test(src));

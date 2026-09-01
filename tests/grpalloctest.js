@@ -23,7 +23,7 @@ const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.len
 
 const TODAY=new Date(2026,6,31);
 const api=new Function('ymd','TODAY','mids','attObj',
-  g('function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk){','\n}\n')+'\n'
+  g('function grpTicketAlloc(myTk, myBk, logs, memberId, isGrpTk, alsoIds){','\n}\n')+'\n'
   +g('function grpMergeAlloc(base, ga){','\n}\n')
   +'\nreturn {grpTicketAlloc,grpMergeAlloc};')(
     d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());},
@@ -155,7 +155,8 @@ console.log('\n三個後台畫面都改吃同一支');
 /* 2026-07-31 二修：這一頁改從票券夾拿（buildWallet 內部就是呼叫 grpTicketAlloc） */
 ok('★ 會員個人資料頁（櫃檯／管理員）',
    /const WAL=buildWallet\(PP\.id,\{tickets:c\.myTk\|\|\[\], bookings:c\.myBk\|\|\[\], logs:c\.myLogs\|\|\[\], typeMap\}\);/.test(src)
-   && /const ga=grpTicketAlloc\(mine, live, c\.logs\|\|\[\], memberId, \(\)=>true\);/.test(src));
+   /* 2026-09-01：多帶一個 alsoIds（共用同一批票的人）—— 團課共享票的名額本來整批看不到 */
+   && /const ga=grpTicketAlloc\(mine, live, c\.logs\|\|\[\], memberId, \(\)=>true, _alsoIds\);/.test(src));
 /* 2026-07-31 二修：教練名片也改從票券夾拿（票券夾內部就是呼叫 grpTicketAlloc） */
 ok('★ 教練的簡易名片（openMemberDetail）',
    /const WAL=buildWallet\(member_id,\{tickets, bookingsOf:\(\)=>sharedBookings, logs:tkLogs\|\|\[\], typeMap\}\);/.test(src)
