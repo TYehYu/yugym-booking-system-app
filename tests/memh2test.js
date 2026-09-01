@@ -404,6 +404,14 @@ console.log('\n快速預約視窗裡的日期列（換一天不必關窗）');
     /* 2026-08-31 四修：標題多一個 qs-mtop 標記 —— 那是「這個視窗靠上對齊」的開關
        （置中的話換一天視窗高度一變就上下跳，見 .modal-bg:has(.qs-mtop)）。 */
     /<div class="modal-title qs-mtop">\$\{_rs\?'更改自主訓練時間':'預約自主訓練'\}<\/div>\s*\n\s*\$\{_rs\?[\s\S]{0,220}?\}\s*\n\s*\$\{_dayRow\}\s*\n\s*<div class="qs-head">/.test(QS));
+  /* 2026-09-01 使用者回報：「點選上方的日期的時候又會跳回第一天　這樣選後面日期的時候很困擾」 */
+  t('★★★ 重畫之後把選中那一天捲回畫面（不然剛選的那天被捲出去）',
+    /const on=row\.querySelector\('\.qs-day\.on'\); if\(!on\) return;/.test(QS)
+    && /row\.scrollLeft=Math\.min\(max, Math\.max\(0, on\.offsetLeft-\(row\.clientWidth-on\.offsetWidth\)\/2\)\);/.test(QS));
+  t('★★ 用直接指定不用 smooth（平滑捲動會先畫在最左邊再滑過去，看起來還是跳回第一天）',
+    /用直接指定不用 smooth/.test(QS) && !/scrollTo\(\{left:[^}]*behavior:'smooth'/.test(QS));
+  t('★★ 置中而不是只捲到看得見（前後都看得到才知道自己在哪一段）',
+    /置中而不是只捲到看得見/.test(QS));
   t('★★ 點某一天＝同一個視窗換內容（重新呼叫自己，不另外開一層）',
     /onclick="memh2SelfSlots\('\$\{x\}','\$\{_lim\}'\$\{_rs\?`,'\$\{_rs\.id\}'`:''\}\)"/.test(QS));
   t('★★ 只列約得到的日子：今天起，且落在任何一張自主訓練票的效期內（多張取聯集）',
