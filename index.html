@@ -7682,16 +7682,17 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
 .twk-bar>.tl-daynav{flex:0 0 auto;margin:0;align-self:center;
   background:var(--danger,#7F0303);color:#fff;}
 .twk-bar>.tl-daynav:hover{background:#5E0303;}
-/* 2026-09-02 使用者指示：「日期列靠右」——
-   七格原本平分整條寬度（flex:1 1 0），日期列搬出任務卡、變寬之後每一格都被撐得很大。
-   改成靠右收攏：整排不再吸滿剩餘寬度，多出來的空白留在左邊（「回到今天」那一側）。 */
-.twk-barin{flex:0 1 auto;min-width:0;display:flex;gap:5px;margin-left:auto;}
+/* 2026-09-02 二修（使用者附截圖：「中間空了一格　可以把每日的按鈕再加寬加高一點」）——
+   一修用 margin-left:auto 把整排推到右邊，於是多出來的空白全卡在 ‹ 的前面，
+   看起來就是「中間空一格」。改回讓七格平分剩餘寬度：空白被吃掉、按鈕同時變寬，
+   一個改動同時解掉兩件事。加高則是加內距（見 .twk-barin .twk-day）。 */
+.twk-barin{flex:1 1 auto;min-width:0;display:flex;gap:5px;}
 /* 每一天加高（2026-08-23 使用者指示：「幫我把每一天的按鈕加高」）——
    上方那一列拿掉「回到今天」之後空了一塊，日期列補上去把版面撐回來。 */
-.twk-barin .twk-day{flex:0 0 auto;width:74px;min-width:0;justify-content:center;padding:11px 2px;background:#fff;}
+.twk-barin .twk-day{flex:1 1 0;min-width:0;justify-content:center;padding:15px 2px;background:#fff;}
 .twk-barin .twk-day.today{background:var(--green);}
-.twk-barin .twk-day .twk-md{font-size:15px;}
-.twk-barin .twk-day .twk-w{font-size:11.5px;}
+.twk-barin .twk-day .twk-md{font-size:17px;}
+.twk-barin .twk-day .twk-w{font-size:12px;}
 /* 「回到今天」的固定格（2026-08-23 使用者指示：「要預設空間給他，不要按鈕顯示後
    才出現擠壓空間的畫面」）—— 兩側各留一格等寬空位，鈕在哪一側都不會把中間那七天推歪。
    ⚠ 寬度寫死才有意義：用 auto 的話沒有鈕的那側寬度是 0，等於沒預留。
@@ -11775,8 +11776,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260902.1749';
-const APP_VERSION_LABEL='260902.1749';
+const APP_VERSION='260902.1754';
+const APP_VERSION_LABEL='260902.1754';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26628,10 +26629,25 @@ function mcAdjCells(y,m){   // m: 1-based
   const tail=[]; const rem=(7-((fd+dim)%7))%7; for(let d=1;d<=rem;d++) tail.push(d);
   return {lead,tail};
 }
-/* 補日格帶「隱形佔位列」與一般格同構（2026-07-21 使用者回報日期對不準）：
-   一般格＝日期＋課數圈（教練版多一列班別代號），補日格缺這些列會讓數字垂直位置不同。 */
+/* 補日格要跟一般格「同構」（2026-07-21 使用者回報日期對不準）——
+   .mc-cell 是 flex-column＋justify-content:center，子元素多一個、整欄就往上位移，
+   補日的數字看起來就比本月的高一截。
+
+   ⚠ 2026-09-02 使用者回報（首頁左欄月曆，附截圖）：「每週日期列高度要固定…
+     是不是因為上個月或下個月的日期沒有按鈕互動功能 所以就靠上了」——
+     不是互動的關係，是子元素數量。0823「桌機首頁的月曆移除每日課堂數」之後，
+     首頁的一般格只剩「日期」一行，補日格卻還留著那顆隱形課數圈 → 補日往上頂。
+     教練版則相反：一般格有三行（日期／班別／課數），補日格只給了兩行。
+
+   ⚠ 所以佔位列改成**由呼叫端指定**，不要在這裡猜：
+       mcAdjCell(d)          → 只有日期（首頁月曆）
+       mcAdjCell(d,'dot')    → 日期＋課數圈
+       mcAdjCell(d,'coach')  → 日期＋班別＋課數圈（教練月曆）
+     新增月曆時對照一般格有幾行，這裡就給幾行。 */
 function mcAdjCell(d,kind,click){
-  return `<div class="mc-cell mc-adj${click?' mc-adj-click':''}"${click?` onclick="${click}"`:''}><span class="mc-d">${d}</span>${kind==='coach'?'<span class="cattn-shift cattn-empty" style="visibility:hidden;">·</span>':''}<span class="mc-dot mc-dot-empty">0</span></div>`;
+  const dot=(kind==='dot'||kind==='coach')?'<span class="mc-dot mc-dot-empty">0</span>':'';
+  const shift=(kind==='coach')?'<span class="cattn-shift cattn-empty" style="visibility:hidden;">·</span>':'';
+  return `<div class="mc-cell mc-adj${click?' mc-adj-click':''}"${click?` onclick="${click}"`:''}><span class="mc-d">${d}</span>${shift}${dot}</div>`;
 }
 // 月曆收合切換鈕（2026-07-21 定案：點取展開、點取縮小；只切 class 不重繪）
 function cagExpandCal(){
@@ -50180,7 +50196,7 @@ PAGES.coach_today=async function(){
   // 週列結構（月曆 Hero 收合用）：收合時留「當週」（檢視日所在週，非本月則第一週）
   const _cwArr=[]; let _cwIdx=-1;
   const _cwAdj=mcAdjCells(_ay,_am);   // 前後月補日（2026-07-21）
-  _cwAdj.lead.forEach(d=>_cwArr.push(mcAdjCell(d)));
+  _cwAdj.lead.forEach(d=>_cwArr.push(mcAdjCell(d,'coach')));   /* 一般格是三行（日期／班別／課數） */
   for(let d=1;d<=daysInMonth;d++){
     const ds=`${_ay}-${String(_am).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const isToday=ds===today;
@@ -50192,7 +50208,7 @@ PAGES.coach_today=async function(){
       <span class="cattn-shift${_calShift[ds]?'':' cattn-empty'}">${_calShift[ds]||'·'}</span>
       <span class="mc-dot${n>0?'':' mc-dot-empty'}">${n>0?n:'0'}</span></div>`);
   }
-  _cwAdj.tail.forEach(d=>_cwArr.push(mcAdjCell(d)));
+  _cwAdj.tail.forEach(d=>_cwArr.push(mcAdjCell(d,'coach')));
   const _cwCur=_cwIdx>=0?Math.floor(_cwIdx/7):0;
   let _cwWeeks='';
   for(let i=0;i<_cwArr.length;i+=7)

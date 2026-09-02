@@ -30,11 +30,12 @@ ok('★★ 「回到今天」固定在左邊；那一格仍預留固定寬，鈕
    !/_todaySide/.test(src)
    && /const _showToday=!isTodayView;/.test(src)
    && /\.twk-today-slot\{flex:0 0 58px;/.test(src));
-/* 2026-09-02 使用者：「日期列靠右」——日期列搬出任務卡後變寬，
-   七格平分會被撐得很大；改固定寬、整排靠右，空白留在左邊。 */
-ok('★★ 七天固定寬、整排靠右（空白留在左邊那一側）',
-   /\.twk-barin \.twk-day\{flex:0 0 auto;width:74px;min-width:0;/.test(src)
-   && /\.twk-barin\{flex:0 1 auto;min-width:0;display:flex;gap:5px;margin-left:auto;\}/.test(src));
+/* 2026-09-02 二修（使用者：「中間空了一格　可以把每日的按鈕再加寬加高一點」）——
+   一修的 margin-left:auto 把空白全推到 ‹ 前面；改回平分，空白被吃掉、按鈕同時變寬。 */
+ok('★★ 七天平分剩餘寬度，中間不留空格',
+   /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;justify-content:center;padding:15px 2px;/.test(src)
+   && /\.twk-barin\{flex:1 1 auto;min-width:0;display:flex;gap:5px;\}/.test(src)
+   && !/margin-left:auto;\}\s*\n?[^\n]*twk-barin/.test(src));
 /* 註解裡還提得到舊 class（說明它為什麼被移除），所以先把註解剝掉再檢查 */
 const _noComment = src.replace(/\/\*[\s\S]*?\*\//g,'');
 ok('　　舊的直欄樣式已清乾淨（不留死 CSS）',

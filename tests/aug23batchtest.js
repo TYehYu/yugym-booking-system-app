@@ -239,10 +239,10 @@ ok('★ 「回到今天」與日期格同高同圓角、文字折兩行（使用
    && /onclick="dashPickDate\('\$\{today\}'\)">回到<br>今天<\/button>/.test(src));
 ok('　　寬度要寫死才有意義（auto 的話沒有鈕那側就是 0，等於沒預留）',
    /寬度寫死才有意義：用 auto 的話沒有鈕的那側寬度是 0/.test(src));
-/* 2026-09-02：日期列搬出任務卡後變寬，七格平分會被撐得很大 → 改固定寬、整排靠右。 */
-ok('★ 每一天的按鈕加高，0902 起改固定寬靠右',
-   /\.twk-barin \.twk-day\{flex:0 0 auto;width:74px;min-width:0;justify-content:center;padding:11px 2px;background:#fff;\}/.test(src)
-   && /\.twk-barin \.twk-day \.twk-md\{font-size:15px;\}/.test(src));
+/* 2026-09-02 二修：使用者要「再加寬加高一點」→ 內距 11→15、日期字 15→17。 */
+ok('★ 每一天的按鈕加寬加高',
+   /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;justify-content:center;padding:15px 2px;background:#fff;\}/.test(src)
+   && /\.twk-barin \.twk-day \.twk-md\{font-size:17px;\}/.test(src));
 
 console.log('\n⑩ 支出登記入口');
 ok('★★ 期間控制列裡一顆紅底 [＋ 支出]，月份跟著翻頁走',
