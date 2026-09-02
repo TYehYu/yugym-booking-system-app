@@ -58,8 +58,10 @@ t('　櫃檯手機導覽沒有報表',
   && !/MOBILE_FRONTDESK_NAV=\[[\s\S]{0,200}dashboard/.test(src));
 
 // ── 桌機首頁教練任務：日期列改回上方橫列 ──
-t('★ 日期列在課卡區之上、獨立一列',
-  /<div class="twk-bar">[\s\S]{0,600}<div class="twk-barin">\$\{_wkDays\}<\/div>[\s\S]{0,400}<div class="tl-3col">/.test(src));
+/* 2026-09-02：日期列從任務卡裡面搬到卡片上方（使用者要它「左右延伸跟任務視窗一樣寬」）。 */
+t('★ 日期列在課卡區之上、獨立一列（0902 起是任務卡的外面）',
+  /const dayBar = `<div class="twk-bar">[\s\S]{0,600}<div class="twk-barin">\$\{_wkDays\}<\/div>/.test(src)
+  && /<div class="mc-daybar">\$\{dayBar\}<\/div>/.test(src));
 t('★ 七天平分寬度（不是固定寬、不出現橫捲）',
   /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;/.test(src)
   && /\.twk-barin\{flex:1 1 auto;min-width:0;display:flex/.test(src));

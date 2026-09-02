@@ -50,8 +50,14 @@ ok('★★ 三欄都貼齊頂欄（左欄月曆本來就有 −10px，中右兩�
    && /\.mc-g5-right>\.mc-kpiright\{margin:-10px 0 16px !important;\}/.test(src));
 /* ⚠ 數字級距不能用 vw：vw 看的是**整個視窗**、不是這一欄的 340px。 */
 ok('★★★ 右欄數字用固定級距，不是 vw',
-   /\.mc-kpirows \.kr-n\{font-family:var\(--font-en\),var\(--num\);font-size:26px;/.test(src)
+   /\.mc-kpirows \.kr-n\{font-family:var\(--font-en\),var\(--num\);font-size:34px;/.test(src)
    && !/\.mc-kpirows[\s\S]{0,400}?vw/.test(src));
+/* 2026-09-02（同一輪兩句）：「三個ＫＰＩ中間的分隔線移除」＋「ＫＰＩ只放大數字就好」 */
+ok('★★ 三列之間沒有分隔線',
+   !/\.mc-kpirows \.kr\{[^}]*border-bottom/.test(src)
+   && !/\.mc-kpirows \.kr:last-child\{border-bottom:none;\}/.test(src));
+ok('★★ 只放大數字，名稱維持原字級',
+   /\.mc-kpirows \.kr-l\{[\s\S]{0,80}?font-size:13px;/.test(src));
 ok('　　不畫白底（0819 使用者：「右上角ＫＰＩ去除白底」）',
    /不畫白底：0819 使用者指示過「右上角ＫＰＩ去除白底」/.test(src)
    && !/\.mc-kpirows\{[^}]*background/.test(src));

@@ -226,7 +226,8 @@ ok('★★ 「回到今天」放在往今天的那一側（今天在這一週之
    && /if\(today>ymd\(sun\)\) return 'r';/.test(src));
 ok('★★ 兩側都固定留一格，鈕出現時整列不會被推一下',
    /\.twk-today-slot\{flex:0 0 58px;display:flex;align-items:stretch;justify-content:center;\}/.test(src)
-   && /不預留的話，鈕一出現整列會被推一下/.test(src));
+   /* 2026-09-02 日期列移出任務卡後，這段說明跟著搬到 dayBar 的定義處 */
+   && /不預留的話鈕一出現整列會被推一下/.test(src));
 ok('★ 「回到今天」與日期格同高同圓角、文字折兩行（使用者：「改成跟日期一樣大」）',
    /\.twk-bar>\.twk-today-slot \.tl-daynav-today\{margin:0;width:100%;height:auto;align-self:stretch;/.test(src)
    && /onclick="dashPickDate\('\$\{today\}'\)">回到<br>今天<\/button>/.test(src));

@@ -9,9 +9,15 @@ let pass=0,fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n);} };
 
 console.log('日期列在上方橫排 → 底下是 教練 ｜ 課卡 兩欄');
-ok('★ 日期列獨立一列、排在課卡區之上',
-   /<div class="twk-bar">[\s\S]{0,600}<div class="twk-barin">\$\{_wkDays\}<\/div>[\s\S]{0,400}<div class="tl-3col">/.test(src)
-   && /<div class="tcard-body">\$\{rows\.map/.test(src)
+/* 2026-09-02 使用者指示：「中間欄上方的日期列　移出任務視窗改到上方
+   日期列左右延伸跟任務視窗一樣寬」—— 從 .tl-panel 裡面搬到任務卡外面、卡片上方。 */
+ok('★★ 日期列移出任務卡，掛在它上方（寬度＝中間欄寬＝跟卡片切齊）',
+   /const dayBar = `<div class="twk-bar">[\s\S]{0,600}<div class="twk-barin">\$\{_wkDays\}<\/div>/.test(src)
+   && /<div class="mc-daybar">\$\{dayBar\}<\/div>\s*\n\s*<div class="card mc-card mc-coachcenter">/.test(src)
+   && !/<div class="tl-panel tl-desktop-only">[\s\S]{0,900}?<div class="twk-bar">/.test(src)
+   && /\.mc-g5-mid>\.mc-daybar\{margin:-10px 0 12px !important;\}/.test(src));
+ok('★ 課卡區照舊',
+   /<div class="tcard-body">\$\{rows\.map/.test(src)
    && /\.tl-3col\{display:flex;gap:12px;flex:1;min-height:0;\}/.test(src));
 /* 2026-08-23：兩端各多一格 .twk-today-slot（「回到今天」的固定位），
    箭頭仍緊貼在七天那一排的兩側。 */
