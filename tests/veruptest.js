@@ -36,7 +36,11 @@ ok('★ 用 HEAD 比指紋，不是每輪抓 2.4MB',
 ok('　　指紋依序取 etag → last-modified → content-length',
    /r\.headers\.get\('etag'\)\|\|r\.headers\.get\('last-modified'\)\|\|r\.headers\.get\('content-length'\)/.test(src));
 ok('★ 第一輪只記基準值，不會一進來就跳', /else if\(!_verUpTag\)\{ _verUpTag=tag; \}/.test(src));
-ok('★ 指紋變了才 GET 全文讀新版本號', /const m=txt\.match\(\/const APP_VERSION = '\(\[\^'\]\+\)'\/\);/.test(src));
+/* 2026-09-02：讀版本號收斂成 verUpReadRemote，並修掉「正規表示式照到自己」
+   （舊寫法等號兩邊有空白，比不到真正的宣告，反而比到自己的原始碼、抓出 `([^`）。 */
+ok('★ 指紋變了才 GET 全文讀新版本號（走共用的 verUpReadRemote）',
+   /const nv=await verUpReadRemote\(\);/.test(src)
+   && /const m=txt\.match\(\/const APP_VERSION\\s\*=\\s\*'\(\[\\d\.\]\+\)'\/\);/.test(src));
 ok('★ 版本號要真的不一樣才提醒（同版重傳不跳）', /if\(nv && nv!==APP_VERSION && nv!==_verUpSkip\)/.test(src));
 ok('★ 會員端不提醒（LINE 進來本來就是新的）',
    /function verUpEnabled\(\)\{ return !!\(SESSION && SESSION\.role!=='member'\); \}/.test(src));

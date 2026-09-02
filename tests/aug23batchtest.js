@@ -236,9 +236,14 @@ ok('★★ 那一格永遠佔著（正在看今天就換成不可點的「今天
    /\.twk-today-slot\{flex:0 0 58px;display:flex;align-items:stretch;justify-content:center;\}/.test(src)
    && /<span class="tl-daynav tl-daynav-today is-today" title="正在看今天">今天<\/span>/.test(src)
    && /\.twk-bar>\.twk-today-slot \.tl-daynav-today\.is-today\{[\s\S]{0,240}?cursor:default;pointer-events:none;/.test(src));
-ok('★ 「回到今天」與日期格同高同圓角、文字折兩行（使用者：「改成跟日期一樣大」）',
-   /\.twk-bar>\.twk-today-slot \.tl-daynav-today\{margin:0;width:100%;height:auto;align-self:stretch;/.test(src)
-   && /onclick="dashPickDate\('\$\{today\}'\)">回到<br>今天<\/button>/.test(src));
+/* 2026-09-02 使用者：「回到今天跟回到當月的按鈕　可以做成圓形嗎」——
+   兩行的「回到／今天」塞不進圓形，改成單行「今天」，完整說明放 title。 */
+ok('★ 「回到今天」改成圓形（46px），文字單行',
+   /\.twk-bar>\.twk-today-slot \.tl-daynav-today\{margin:0;width:46px;height:46px;flex:0 0 auto;align-self:center;\s*\n\s*border-radius:50%;/.test(src)
+   && /onclick="dashPickDate\('\$\{today\}'\)" title="回到今天">今天<\/button>/.test(src)
+   /* ⚠ Ink 主題有一條 border-radius:8px 的覆蓋，權重更高 —— 要一起改成圓形，
+      不然實際在用的那個主題還是方角（同日紅卡搬家時踩過同一個坑）。 */
+   && /body\.ink \.twk-bar>\.twk-today-slot \.tl-daynav-today\{border-radius:50%;\}/.test(src));
 ok('　　寬度要寫死才有意義（auto 的話沒有鈕那側就是 0，等於沒預留）',
    /寬度寫死才有意義：用 auto 的話沒有鈕的那側寬度是 0/.test(src));
 /* 2026-09-02 二修：使用者要「再加寬加高一點」→ 內距 11→15、日期字 15→17。 */

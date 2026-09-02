@@ -65,9 +65,10 @@ ok('★★ admCalToday 把月份設回今天那個月，並保住選月旗標（
 ok('★★ span 要自己置中（同日「今天」那顆踩過的坑）',
    /\.mcal-btn-now\{[\s\S]{0,140}?display:inline-flex;align-items:center;justify-content:center;/.test(src)
    && /\.mcal-btn-now\.is-now\{opacity:\.55;cursor:default;pointer-events:none;\}/.test(src));
-ok('　 兩個字比 ‹ › 寬，所以不吃 .mcal-btn 的固定 34px',
-   /\.mcal-btn-now\{width:auto;min-width:40px;/.test(src)
-   && /\.mcal-btn\{[\s\S]{0,120}?width:34px;/.test(src));
+/* 2026-09-02 使用者：「回到今天跟回到當月的按鈕　可以做成圓形嗎」 */
+ok('★★ 圓形（34px），與日期列的「今天」同一個形狀',
+   /\.mcal-btn-now\{width:34px;height:34px;border-radius:50%;/.test(src)
+   && /\.twk-bar>\.twk-today-slot \.tl-daynav-today\{[\s\S]{0,120}?border-radius:50%;/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

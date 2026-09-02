@@ -202,11 +202,14 @@ t('底部兩顆固定左右各半、等高',
 /* 2026-09-02：自主訓練那張多一顆「取消預約」（只在點已排的圓形卡時出現），
    三顆鈕時格線改三欄（.mh2-foot.three）。 */
 t('自主訓練訂位視窗與教練快速預約也吃同一組底部',
-  /class="modal-foot mh2-foot\$\{_rs&&mms\.length\?' three':\(mms\.length\?'':' one'\)\}"/.test(s)
+  (s.match(/class="modal-foot mh2-foot\$\{mms\.length\?'':' one'\}"/g)||[]).length===1
   && /class="modal-foot mh2-foot\$\{slots\.length\?'':' one'\}"/.test(s));
-t('★★ 已排預約的圓形卡才畫「取消預約」，走既有的 memCancelSelf',
-  /_rs\?`<button class="btn btn-ghost mh2-foot-cx" onclick="closeModal\(\);memCancelSelf\('\$\{_rs\.id\}'\)">取消預約<\/button>`:''/.test(s)
-  && /\.modal-foot\.mh2-foot\.three\{grid-template-columns:1fr 1fr 1fr;gap:8px;\}/.test(s));
+/* 2026-09-02 二修（使用者：「改到上方預約自主訓練的右邊」）——
+   底部三顆鈕在 375px 上要縮字才塞得下，而且「取消」跟「確認」擺在一起容易按錯。 */
+t('★★ 「取消預約」在標題列右邊，只有已排預約的圓形卡才畫，走既有的 memCancelSelf',
+  /_rs\?`<button type="button" class="qs-cx" onclick="closeModal\(\);memCancelSelf\('\$\{_rs\.id\}'\)">取消預約<\/button>`:''/.test(s)
+  && /\.modal-title\.qs-mtitle\{display:flex;align-items:center;justify-content:space-between;gap:10px;\}/.test(s)
+  && !/mh2-foot\.three/.test(s));
 t('　 取消完回到原本那一頁，不強制跳去預約紀錄', /navTo\(CUR_PAGE\|\|'mem_bookings'\);/.test(s));
 t('還沒到時間顯示簽到規則', /簽到規則/.test(tap) && /開放簽到/.test(tap));
 t('團課走 memGrpCheckin、其餘走 memCheckin', /memGrpCheckin\('\$\{b\.id\}'\)/.test(tap) && /memCheckin\('\$\{b\.id\}'\)/.test(tap));
@@ -344,9 +347,12 @@ const css=cut('/* ══ 會員手機首頁 V2','/* 2026-08-20 使用者指示�
    ⚠ 白名單逐個列名，不放行整個 .a2- 前綴：.a2-day／.a2-railin／.a2-quickadd 那些是
      左欄與課卡欄在用的共用件，會員頁不該去動它們。 */
 const MEMH2_SHARED_OK=/^\.a2-(week|wnav|wdays|wd|wdot|wtoday|wn|wback)(?![\w-])/;
-t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot / .pp-head / .pp-sheet-self / .tb-acct-item 之下',
+/* 2026-09-02：自主訓練快速預約的標題列多一顆「取消預約」，樣式掛
+   .modal-title.qs-mtitle ／ .qs-mtitle .qs-cx —— 與 .modal-foot.mh2-foot 同一種寫法
+   （彈窗不在 .memh2 裡面，只能靠彈窗自己的修飾 class 收斂），一樣不是全域樣式。 */
+t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot / .modal-title.qs-mtitle / .pp-head / .pp-sheet-self / .tb-acct-item 之下',
   css.split('\n').filter(l=>/^\.[a-z]/.test(l.trim()))
-     .every(l=>/^\.(memh2|mh2-|mh2p-|modal-foot\.mh2-foot|pp-head|pp-sheet(\.|-)|tb-acct-item)/.test(l.trim())
+     .every(l=>/^\.(memh2|mh2-|mh2p-|modal-foot\.mh2-foot|modal-title\.qs-mtitle|qs-mtitle |pp-head|pp-sheet(\.|-)|tb-acct-item)/.test(l.trim())
               || MEMH2_SHARED_OK.test(l.trim())));
 /* 0823：主顧客課程價目那一段原本叫 lp-*，與桌機管理列表 lpTable 的 .lp-row 同名同權重，
    而且寫在樣式表更後面 → 全站管理列表的資料列都被它蓋成白框，連 820px 以下
@@ -409,7 +415,7 @@ console.log('\n快速預約視窗裡的日期列（換一天不必關窗）');
   t('★★ 視窗裡有日期列，排在標題（含原時段提示）與 qs-head 之間',
     /* 2026-08-31 四修：標題多一個 qs-mtop 標記 —— 那是「這個視窗靠上對齊」的開關
        （置中的話換一天視窗高度一變就上下跳，見 .modal-bg:has(.qs-mtop)）。 */
-    /<div class="modal-title qs-mtop">\$\{_rs\?'更改自主訓練時間':'預約自主訓練'\}<\/div>\s*\n\s*\$\{_rs\?[\s\S]{0,220}?\}\s*\n\s*\$\{_dayRow\}\s*\n\s*<div class="qs-head">/.test(QS));
+    /<div class="modal-title qs-mtop qs-mtitle">[\s\S]{0,900}?<\/div>\s*\n\s*\$\{_rs\?[\s\S]{0,220}?\}\s*\n\s*\$\{_dayRow\}\s*\n\s*<div class="qs-head">/.test(QS));
   /* 2026-09-01 使用者回報：「點選上方的日期的時候又會跳回第一天　這樣選後面日期的時候很困擾」 */
   t('★★★ 重畫之後把選中那一天捲回畫面（不然剛選的那天被捲出去）',
     /const on=row&&row\.querySelector\('\.qs-day\.on'\);/.test(QS)

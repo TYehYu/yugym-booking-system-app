@@ -58,8 +58,9 @@ console.log('\n③ 視窗靠上對齊：只給帶標記的那一支');
 {
   ok('★★★ 靠上的規則存在，且只吃 .qs-mtop',
      /\.modal-bg:not\(\.modal-side\):has\(\.qs-mtop\)\{align-items:flex-start;\}/.test(src));
+/* 2026-09-02：標題列多掛一個 qs-mtitle（右邊放「取消預約」），qs-mtop 照舊。 */
   ok('★★★ 標記掛在會員端快速預約／改期那個視窗的標題上',
-     /<div class="modal-title qs-mtop">\$\{_rs\?'更改自主訓練時間':'預約自主訓練'\}<\/div>/.test(src));
+     /<div class="modal-title qs-mtop qs-mtitle"><span>\$\{_rs\?'更改自主訓練時間':'預約自主訓練'\}<\/span>/.test(src));
   ok('★★★ 沒有把全站彈窗改成靠上（0729 定案：預約明細等維持垂直置中）',
      /\.modal-bg\{position:fixed;inset:0;[^}]*align-items:center;/.test(src)
      && !/\.modal-bg\{[^}]*align-items:flex-start/.test(src));
@@ -78,7 +79,7 @@ console.log('\n④ 這支測試自己要抓得到（不是只會說 OK）');
   /* 反例：桌機端那支快速排課視窗（51xx 行）也用同一組 .qs-days，
      所以這條 CSS 修的是兩個視窗；但 .qs-mtop 只掛一個，別掛錯。 */
   ok('★★ 只有一個模板掛這個標記（沒有偷偷擴散到別的視窗）',
-     (src.match(/class="modal-title qs-mtop"/g)||[]).length===1,
+     (src.match(/class="[^"]*\bqs-mtop\b[^"]*"/g)||[]).length===1,
      (src.match(/class="[^"]*qs-mtop[^"]*"/g)||[]));
 }
 

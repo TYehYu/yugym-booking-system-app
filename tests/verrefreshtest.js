@@ -12,18 +12,27 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
-const SEG=src.slice(src.indexOf('async function verUpApplyIfNew()'), src.indexOf('/* 遠端變更簽章'));
+/* 2026-09-02：讀版本號收斂成 verUpReadRemote（兩個呼叫端共用），
+   所以沙盒要把那一支也帶進來 —— 真正在測的就是它那條正規表示式。 */
+const READ=src.slice(src.indexOf('async function verUpReadRemote()'), src.indexOf('function verUpShow(nv){'));
+const SEG=READ+'\n'+src.slice(src.indexOf('async function verUpApplyIfNew()'), src.indexOf('/* 遠端變更簽章'));
 function mk(serverVer){
   const log={toast:[], replaced:null, nav:0, cleared:0};
   const env={
-    fetch:async()=>({ text:async()=>`x\nconst APP_VERSION = '${serverVer}';\ny` }),
+    /* ⚠ 用**真實的**宣告形式：實際檔案是 `const APP_VERSION='…'`（等號兩邊沒有空白）。
+       舊的正規表示式寫成有空白，所以永遠比不到；而檔案裡剛好有它自己的原始碼，
+       就照到鏡子抓出 `([^` 當版本號（0902 使用者附截圖回報）。
+       這一行連同下面那段「鏡子」一起餵進去，兩個坑同時守住。 */
+    fetch:async()=>({ text:async()=>
+      "x\nconst m=txt.match(/const APP_VERSION = '([^'"+"]+)'/);\n"
+      +"const APP_VERSION='"+serverVer+"';\ny" }),
     _verUpProbe:()=>'/app/?_vc=1',
     APP_VERSION:'260826.2254',
     showToast:t=>log.toast.push(t),
     location:{pathname:'/app/', replace:u=>{log.replaced=u;}},
     window:{}, dbCacheClear:()=>{log.cleared++;}, navTo:()=>{log.nav++;}, CUR_PAGE:'g_dashboard',
   };
-  const o=new Function(...Object.keys(env), SEG+'\nreturn {verUpApplyIfNew,dashManualRefresh};')(...Object.values(env));
+  const o=new Function(...Object.keys(env), SEG+'\nreturn {verUpApplyIfNew,dashManualRefresh,verUpReadRemote};')(...Object.values(env));
   return {o, log};
 }
 
@@ -74,6 +83,21 @@ console.log('\n③ 抓不到伺服器（離線）也不能把按鈕弄壞');
      [log.replaced, log.nav, log.cleared, log.toast.includes('已更新')], [null, 1, 1, true]);
   ok('★ try/catch 包住，不讓網路問題把整顆鈕炸掉',
      /let jumped=false;\s*\n\s*try\{ jumped=await verUpApplyIfNew\(\); \}catch\(_\)\{\}/.test(src));
+}
+
+console.log('\n★ 版本號的讀法（0902 bug：正規表示式照到自己的鏡子）');
+{
+  const {o}=mk('260902.1830');
+  /* 伺服器端那份餵的是「真實宣告形式 ＋ 舊正規表示式的原始碼」，
+     舊寫法會抓到 `([^`，新寫法要抓到真正的版本號。 */
+  eq('★★★ 抓到真正的版本號，不是 `([^`', await o.verUpReadRemote(), '260902.1830');
+  ok('★★★ 捕捉群限定數字與點（自己的原始碼下一個字是 `(`，照不到鏡子）',
+     /const m=txt\.match\(\/const APP_VERSION\\s\*=\\s\*'\(\[\\d\.\]\+\)'\/\);/.test(src));
+  ok('★★ \\s* 容許等號兩邊有沒有空白都比得到（實際宣告是沒有空白的）',
+     /`const APP_VERSION = '…'`（等號兩邊有空白），但實際宣告是/.test(src));
+  ok('★★ 只有一支讀法，兩個呼叫端共用（不要各自 match 一次）',
+     (src.match(/txt\.match\(\/const APP_VERSION/g)||[]).length===1
+     && (src.match(/await verUpReadRemote\(\)/g)||[]).length===2);
 }
 
 console.log('\n④ 原因寫在原地');

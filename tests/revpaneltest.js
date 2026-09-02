@@ -100,10 +100,10 @@ console.log('\n⑤ 「回到今天」：只要看的不是今天就要出現，�
   ok('★★ 看的就是今天 → 換成不可點的「今天」（不是整顆消失）',
      /<span class="tl-daynav tl-daynav-today is-today" title="正在看今天">今天<\/span>/.test(src)
      && /\.twk-bar>\.twk-today-slot \.tl-daynav-today\.is-today\{[\s\S]{0,240}?cursor:default;pointer-events:none;/.test(src));
-  /* span 不像 button 會自動置中；被 align-self:stretch 撐開後字會黏在左上角 */
-  ok('★★ 「今天」那顆要自己置中（span 沒有 button 的預設置中）',
-     /\.tl-daynav-today\.is-today\{\s*\n\s*display:flex;align-items:center;justify-content:center;text-align:center;/.test(src)
-     && /<br>，\s*\n?\s*父層一改成 flex/.test(src));
+  /* span 不像 button 會自動置中（0902 回報過一次）——改圓形後置中寫在共用那條的
+     inline-flex 上，兩個狀態都吃得到。 */
+  ok('★★ 「今天」那顆置中（共用那條就是 inline-flex 置中）',
+     /\.twk-bar>\.twk-today-slot \.tl-daynav-today\{[\s\S]{0,220}?display:inline-flex;align-items:center;justify-content:center;\}/.test(src));
   ok('★★ 桌機日期列只有左邊那一格（兩種狀態各一個），右邊那格連同判斷一起移除',
      ((src.slice(src.indexOf('const dayBar = `<div class="twk-bar">'),
                  src.indexOf('const coachSection = rows.length'))

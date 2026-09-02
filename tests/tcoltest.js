@@ -61,9 +61,22 @@ ok('★★★ 空白的來源記在原地（Ink 把色塊改成純文字，heigh
    && /\.tcol \.tcol-head \.tcard-cball\{width:100%;height:auto;/.test(src));
 /* 2026-09-02 三修（使用者：「教練任務區凍結教練列　下方預約課卡要可以上下滑動查看」） */
 ok('★★★ 教練列釘住、課卡上下捲；同一個容器吃兩個方向',
-   /\.tcol-head\{[\s\S]{0,200}?position:sticky;top:0;z-index:3;background:var\(--card\);/.test(src)
+   /\.tcol-head\{[\s\S]{0,200}?position:sticky;top:0;z-index:9;background:var\(--card\);/.test(src)
    && /\.tcol-scroll\{display:flex;align-items:stretch;[\s\S]{0,120}?flex:1;min-height:0;overflow:auto;/.test(src)
    && /\.tcol-wrap\{position:relative;min-width:0;flex:1;min-height:0;display:flex;flex-direction:column;\}/.test(src));
+/* 2026-09-02 使用者回報：「往上滑動的時候會看到卡片在教練列後方　不小心點到
+   就會蓋過教練列」—— 上課中／逾時未簽的課卡是 z-index:5（為了不被左側 sticky
+   教練欄切掉才提上去的），比原本的 3 高，於是壓在教練列上面。 */
+ok('★★★ 教練列的 z-index 要高過課卡的 5',
+   /\.tcard-std\.tcard-live,\.tcard-std\.tcard-miss\{z-index:5;\}/.test(src)
+   && /\.tcol-head\{[\s\S]{0,200}?z-index:9;/.test(src)
+   && /比原本的 3 高，\s*\n?\s*於是卡片直接壓在教練列上面/.test(src));
+ok('★★ 底色要補到欄的邊緣（只寫 background 的話左右內距是透的，卡片從縫裡透出來）',
+   /\.tcol-head\{[\s\S]{0,240}?margin:0 -4px;padding:0 4px;/.test(src));
+/* 2026-09-02 使用者：「首頁的課卡區背景加一個米色底」 */
+ok('★★ 課卡區米色底，釘住的教練列維持白底（分得出哪一列是凍結的）',
+   /\.tcol-scroll\{background:var\(--card2,#F4F0E8\);border-radius:12px;\}/.test(src)
+   && /\.tcol-head\{[\s\S]{0,200}?background:var\(--card\);/.test(src));
 ok('★★★ .tcol 要 stretch —— 欄高各自長的話，課少的那欄捲到底教練列會被推走',
    /align-items:stretch/.test(src)
    && /課少的那一欄捲到底之後它的教練列就會跟著被推走/.test(src));

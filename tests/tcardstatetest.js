@@ -37,19 +37,28 @@ console.log('\n② 樣式接線');
 ok('★ 卡片帶上 tcard-miss（其餘旗標不變）',
    /\$\{_miss\?' tcard-miss':''\}/.test(src)
    && /const _miss = !canceled && !done && !live && nowMin>=mn\+\(Number\(b\.duration\)\|\|60\);/.test(src));
-/* 2026-08-06 定版（使用者三次回饋後撤回 offset-path 版）：框固定不動、只掃漸層角度，
-   亮帶含前端白光沿四邊與圓角走；不另加頭部圓點（加了反而對不齊）。 */
-ok('★ 上課中：框不動、只掃漸層角度',
-   /@property --tcAng\{ syntax:'<angle>'; inherits:false; initial-value:0deg; \}/.test(src)
-   && /background:conic-gradient\(from var\(--tcAng\),/.test(src)
-   && /@keyframes tcardComet\{ from\{--tcAng:0deg;\} to\{--tcAng:360deg;\} \}/.test(src)
-   && !/offset-path:border-box/.test(src));   // 註解裡提到 offset-path 沒關係，只要沒真的套用
-/* 2026-08-06：課卡補流星頭 —— 同一支角度動畫的第二層「較粗一小段亮弧」，永遠在尾巴最前端 */
-ok('★ 課卡有流星頭（較粗的亮弧、與尾巴同一支動畫）',
-   /\.tcard-std\.tcard-live::after\{content:'';position:absolute;inset:-3px;/.test(src)
-   && /transparent 0deg, transparent 349deg,/.test(src)
-   && /mask-composite:exclude; padding:5px;/.test(src)
-   && (src.match(/animation:tcardComet 3\.2s linear infinite;/g)||[]).length===2);
+/* 2026-09-02 使用者指示：「首頁課卡『正在上課』的流星動畫移除」——
+   0806 定版的那兩層（conic 尾巴＋流星頭、同一支 tcardComet）整組退場，
+   改成靜止的整圈綠環。 */
+/* 只看程式 —— 註解裡還留著這些名字（說明它們為什麼被拿掉、怎麼復原） */
+{
+  const noC=src.replace(/\/\*[\s\S]*?\*\//g,'');
+  ok('★★ 上課中的流星整組移除（不留死 CSS）',
+     !/@property --tcAng/.test(noC)
+     && !/@keyframes tcardComet/.test(noC)
+     && !/animation:tcardComet/.test(noC)
+     && !/\.tcard-std\.tcard-live::after\{/.test(noC));
+}
+ok('★★ 改成靜止的整圈綠環（上課中仍看得出來）',
+   /\.tcard-std\.tcard-live::before\{content:'';position:absolute;inset:-2px;[\s\S]{0,200}?background:linear-gradient\(#2f9c74,#2f9c74\);/.test(src)
+   && !/\.tcard-std\.tcard-live::before\{[\s\S]{0,400}?animation:/.test(src));
+ok('★★ 靠什麼跟「已完成」分得開，寫在原地',
+   /上課中另有 \.tcard-live 的綠色外暈（drop-shadow，不會動）/.test(src)
+   && /已完成卡上有「簽」章/.test(src));
+ok('★★ 票券圓形卡的本堂流星是另一套，不受影響',
+   /animation:mtkCurComet 1\.6s linear infinite;/.test(src)
+   && /@keyframes mtkCurComet\{/.test(src)
+   && /是另一套\s*\n?\s*（轉 transform、keyframes 叫 mtkCurComet），不受這次影響/.test(src));
 ok('★ 上課中／逾時未簽仍疊在左側教練欄之上（框不被切掉）',
    /\.tcard-std\.tcard-live,\.tcard-std\.tcard-miss\{z-index:5;\}/.test(src)
    && /\.tcard-coach\{width:84px;flex-shrink:0;padding-top:4px;position:sticky;left:0;z-index:4;/.test(src));   /* 0822 欄寬 118→84 */
