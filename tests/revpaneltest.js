@@ -37,11 +37,16 @@ console.log('\n② 面板結構');
      /<span class="mc-revhd-t">今日營收<\/span>/.test(src)
      && /<span class="mc-revhd-u">最後更新 \$\{_revUpd\}<\/span>/.test(src));
   ok('★★ 現金／匯款分欄（只有標籤與金額，沒有佔比）',
-     /\$\{_revSplitCol\('mc-rs-cash','現金收入',_revCash\)\}/.test(src)
-     && /\$\{_revSplitCol\('mc-rs-bank','匯款收入',_revBank\)\}/.test(src)
-     && /<b class="mc-rs-v">\$\$\{_fm\(val\)\}<\/b>/.test(src));
-  ok('　 金額是 0 的那一欄不畫（版面不被稀釋，沿用既有慣例）',
-     /const _revSplitCol=\(cls,label,val\)=>!val\?'':/.test(src));
+     /\$\{_revSplitCol\('mc-rs-cash','現金收入',_revCash,true\)\}/.test(src)
+     && /\$\{_revSplitCol\('mc-rs-bank','匯款收入',_revBank,true\)\}/.test(src)
+     && /<b class="mc-rs-v">\$\$\{_fm\(val\|\|0\)\}<\/b>/.test(src));
+  /* 2026-09-02 使用者：「只要有收錢　現金跟匯款都要顯示」——
+     那兩欄一律成對出現（0 也畫 $0）：櫃檯下班要點現金，
+     「今天沒收到現金」和「這一欄不存在」是兩件事。
+     「其他」照舊只在有值時才畫（那是例外狀況，常態是 0）。 */
+  ok('★★ 現金／匯款帶 always 旗標（0 也要畫），其他欄沒有',
+     /const _revSplitCol=\(cls,label,val,always\)=>\(!val&&!always\)\?'':/.test(src)
+     && /\$\{_revSplitCol\('mc-rs-other','其他',_revOther\)\}/.test(src));
   /* 0827 二修：虛線退場，改「營收明細　N 筆」（見 ⑥） */
   ok('★ 「營收明細」小標＋筆數，沒有虛線',
      /<div class="mc-revsec"><span>營收明細<\/span><b>\$\{_revRows\.length\} 筆<\/b><\/div>/.test(src));
@@ -84,29 +89,22 @@ console.log('\n④ 選了別天要看得出來（Ink 層蓋掉的狀態要接回
      /body\.ink \.cal-side \.mc-cell\.mc-today\.mc-sel \.mc-d\{\s*\n\s*border-color:var\(--cream,#F2EFE4\);color:#F2EFE4;\}/.test(src));
 }
 
-console.log('\n⑤ 「回到今天」：只要看的不是今天就要出現');
+console.log('\n⑤ 「回到今天」：只要看的不是今天就要出現，位置固定在左邊');
 {
-  const seg=src.slice(src.indexOf('const _todaySide=(()=>{'), src.indexOf('const _wkDays='));
-  const run=(viewDate, todayStr)=>{
-    const parse=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);};
-    const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    return new Function('_tdD','today','ymd','isTodayView', seg+'\nreturn _todaySide;')(
-      parse(viewDate), todayStr, ymd, viewDate===todayStr);
-  };
-  eq('★★ 看的就是今天 → 不出現（本來就在今天，不需要回頭路）', run('2026-08-27','2026-08-27'), '');
-  eq('★★ 同一週內點別天 → 出現在右側　←　使用者回報的就是這一種',
-     run('2026-08-25','2026-08-27'), 'r');
-  eq('★ 今天在檢視週的更前面 → 貼左側', run('2026-09-10','2026-08-27'), 'l');
-  eq('★ 今天在檢視週的更後面 → 貼右側', run('2026-07-10','2026-08-27'), 'r');
-  ok('★★ 使用者原話與原本的漏洞寫在原地',
-     /選擇其他天時一樣要出現『回到今天』的按鈕/.test(src)
-     && /原本只有「今天根本不在這一週」才給，於是在同一週內點別天時完全沒有回頭路/.test(src));
-  ok('　 兩個插槽本來就固定佔位，多一顆不會讓版面跳動',
-     /兩個插槽本來就固定佔位（\.twk-today-slot 58px），多顯示一顆不會讓版面跳動/.test(src)
-     && /\.twk-today-slot\{flex:0 0 58px;/.test(src));
-  ok('　 按鈕仍走原本的 dashPickDate(today)（功能沒動）',
-     (src.match(/onclick="dashPickDate\('\$\{today\}'\)">回到<br>今天/g)||[]).length===2);
+  /* 0823 是「放在往今天的那一側」（今天在前＝左、在後＝右）；
+     2026-09-02 使用者：「回到今日的按鈕固定在日期列左邊」——
+     位置會跳的按鈕比較難按，左右判斷（_todaySide）整個移除，只留「要不要畫」。 */
+  ok('★★ 只剩「要不要畫」，沒有左右判斷', !/_todaySide/.test(src) && /const _showToday=!isTodayView;/.test(src));
+  ok('★★ 看的就是今天 → 不畫（本來就在今天，不需要回頭路）',
+     /\$\{_showToday\?`<button class="tl-daynav tl-daynav-today"/.test(src));
+  ok('★★ 桌機日期列只有左邊那一格，右邊那格連同判斷一起移除',
+     ((src.slice(src.indexOf('const dayBar = `<div class="twk-bar">'),
+                 src.indexOf('const coachSection = rows.length'))
+        .match(/tl-daynav-today/g))||[]).length===1);
+  ok('　 那一格仍固定留位，鈕消失時整列不會被推一下',
+     /\.twk-today-slot\{flex:0 0 58px;/.test(src) && /翻到本週時鈕一消失整列會被推一下/.test(src));
 }
+
 
 
 console.log('\n⑥ 面板重做：做減法（2026-08-27 使用者：「主要問題是資訊層級與卡片結構太厚重」）');

@@ -7682,10 +7682,13 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
 .twk-bar>.tl-daynav{flex:0 0 auto;margin:0;align-self:center;
   background:var(--danger,#7F0303);color:#fff;}
 .twk-bar>.tl-daynav:hover{background:#5E0303;}
-.twk-barin{flex:1 1 auto;min-width:0;display:flex;gap:5px;}
+/* 2026-09-02 使用者指示：「日期列靠右」——
+   七格原本平分整條寬度（flex:1 1 0），日期列搬出任務卡、變寬之後每一格都被撐得很大。
+   改成靠右收攏：整排不再吸滿剩餘寬度，多出來的空白留在左邊（「回到今天」那一側）。 */
+.twk-barin{flex:0 1 auto;min-width:0;display:flex;gap:5px;margin-left:auto;}
 /* 每一天加高（2026-08-23 使用者指示：「幫我把每一天的按鈕加高」）——
    上方那一列拿掉「回到今天」之後空了一塊，日期列補上去把版面撐回來。 */
-.twk-barin .twk-day{flex:1 1 0;min-width:0;justify-content:center;padding:11px 2px;background:#fff;}
+.twk-barin .twk-day{flex:0 0 auto;width:74px;min-width:0;justify-content:center;padding:11px 2px;background:#fff;}
 .twk-barin .twk-day.today{background:var(--green);}
 .twk-barin .twk-day .twk-md{font-size:15px;}
 .twk-barin .twk-day .twk-w{font-size:11.5px;}
@@ -11201,8 +11204,9 @@ body.ink .mc-alertleft .mc-alert2 .mc-a2-n{color:var(--text);font-variant-numeri
 /* 2026-08-27 使用者：「這裡的背後不用再多一層卡片了，在日期下方加一條橫線隔開就好」——
    日期格本身已經是一格一格的白框，外面再包一層框就是 card in card。
    只留一條底線當分隔，上下各留一點呼吸。 */
-body.ink .twk-bar{background:transparent;border:none;border-radius:0;
-  border-bottom:1px solid var(--bd);padding:0 0 12px;}
+/* 2026-09-02 使用者指示：「移除分隔線」——
+   日期列搬出任務卡之後，這條底線變成整頁橫貫的一刀，把上下切開反而更亂。 */
+body.ink .twk-bar{background:transparent;border:none;border-radius:0;padding:0;}
 body.ink .twk-day{background:var(--card);border:1px solid var(--bd);border-radius:8px;color:var(--t2);}
 body.ink .twk-day .twk-md{font-family:var(--font-en);font-variant-numeric:tabular-nums;color:var(--text);}
 body.ink .twk-day .twk-w{opacity:1;color:var(--t3);font-weight:500;}
@@ -11771,8 +11775,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260902.1741';
-const APP_VERSION_LABEL='260902.1741';
+const APP_VERSION='260902.1749';
+const APP_VERSION_LABEL='260902.1749';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19574,13 +19578,9 @@ PAGES.g_dashboard=async function(){
         而上方那排又只有一格底色在動，很容易以為自己還停在今天。
      規則：今天在本週左邊／右邊 → 貼那一側；今天就在本週但看的不是今天 → 放右側。
      兩個插槽本來就固定佔位（.twk-today-slot 58px），多顯示一顆不會讓版面跳動。 */
-  const _todaySide=(()=>{
-    const mon=new Date(_tdD); mon.setDate(_tdD.getDate()-((_tdD.getDay()+6)%7));
-    const sun=new Date(mon); sun.setDate(mon.getDate()+6);
-    if(today<ymd(mon)) return 'l';
-    if(today>ymd(sun)) return 'r';
-    return isTodayView ? '' : 'r';
-  })();
+  /* 要不要畫「回到今天」——正在看今天就不用畫（2026-09-02 起只剩「畫不畫」，
+     不再分左右：使用者指示「回到今日的按鈕固定在日期列左邊」）。 */
+  const _showToday=!isTodayView;
   const _wkDays=(()=>{
     const mon=new Date(_tdD); mon.setDate(_tdD.getDate()-((_tdD.getDay()+6)%7));
     const W='一二三四五六日';
@@ -19603,15 +19603,16 @@ PAGES.g_dashboard=async function(){
      日期列左右延伸跟任務視窗一樣寬」）——
    原本畫在教練任務卡「裡面」，所以左右都被卡片的內距夾住。
    拆成自己的一塊，掛在任務卡上方、與卡片同寬。
-   ⚠ 「回到今天」放在「往今天的那一側」（2026-08-23）：今天在這一週之前就放左邊、
-     之後就放右邊；兩側都固定留一格 .twk-today-slot，不預留的話鈕一出現整列會被推一下，
-     翻週時看起來像畫面在跳。 */
+   ⚠ 2026-09-02 使用者指示：「回到今日的按鈕固定在日期列左邊」——
+     推翻 0823 的「放在往今天的那一側」（今天在前就放左、在後就放右）。
+     位置會跳的按鈕比較難按，固定在同一個地方就好。右邊那一格連同判斷一起移除。
+     ⚠ 左邊那一格照舊固定留位（.twk-today-slot）：不預留的話，
+       翻到本週時鈕一消失整列會被推一下，看起來像畫面在跳。 */
   const dayBar = `<div class="twk-bar">
-    <span class="twk-today-slot">${_todaySide==='l'?`<button class="tl-daynav tl-daynav-today" onclick="dashPickDate('${today}')">回到<br>今天</button>`:''}</span>
+    <span class="twk-today-slot">${_showToday?`<button class="tl-daynav tl-daynav-today" onclick="dashPickDate('${today}')">回到<br>今天</button>`:''}</span>
     <button class="tl-daynav" onclick="dashDayShift(-7)" title="上一週">‹</button>
     <div class="twk-barin">${_wkDays}</div>
     <button class="tl-daynav" onclick="dashDayShift(7)" title="下一週">›</button>
-    <span class="twk-today-slot">${_todaySide==='r'?`<button class="tl-daynav tl-daynav-today" onclick="dashPickDate('${today}')">回到<br>今天</button>`:''}</span>
   </div>`;
   const coachSection = rows.length
     ? `<div class="tl-panel tl-desktop-only">
@@ -20105,16 +20106,21 @@ PAGES.g_dashboard=async function(){
   const _revUpd=(()=>{ const d=new Date();
     return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); })();
   /* 2026-08-27 二修（使用者：「刪除 70.9% / 29.1%，首頁不需要呈現付款方式比例」）——
-     佔比那一行退場。首頁要回答的是「今天收了多少、誰付的」，比例是報表的事。 */
-  const _revSplitCol=(cls,label,val)=>!val?'':`<div class="mc-rs-col ${cls}">
+     佔比那一行退場。首頁要回答的是「今天收了多少、誰付的」，比例是報表的事。
+     2026-09-02 使用者指示：「只要有收錢　現金跟匯款都要顯示」——
+     ⚠ 現金與匯款**一律成對出現**（0 也要畫 $0）：櫃檯下班要點現金，
+       「今天沒收到現金」和「這一欄不存在」是兩件事，藏起來只會讓人不確定是不是漏算。
+     ⚠ 「其他」照舊只在有值時才畫 —— 那一欄是例外狀況（多半是匯入的舊票），
+       常態是 0，固定畫出來只會每天問一次「其他是什麼」。 */
+  const _revSplitCol=(cls,label,val,always)=>(!val&&!always)?'':`<div class="mc-rs-col ${cls}">
       <span class="mc-rs-l">${label}</span>
-      <b class="mc-rs-v">$${_fm(val)}</b></div>`;
+      <b class="mc-rs-v">$${_fm(val||0)}</b></div>`;
   const revHead=`<div class="mc-revhd">
       <span class="mc-revhd-t">今日營收</span>
       <span class="mc-revhd-u">最後更新 ${_revUpd}</span></div>
     ${_revPaySum>0?`<div class="mc-revsplit">
-      ${_revSplitCol('mc-rs-cash','現金收入',_revCash)}
-      ${_revSplitCol('mc-rs-bank','匯款收入',_revBank)}
+      ${_revSplitCol('mc-rs-cash','現金收入',_revCash,true)}
+      ${_revSplitCol('mc-rs-bank','匯款收入',_revBank,true)}
       ${_revSplitCol('mc-rs-other','其他',_revOther)}
     </div>`:''}
     ${/* 「營收明細　N 筆」——不要虛線（2026-08-27 使用者指示）。

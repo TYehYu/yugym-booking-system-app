@@ -62,9 +62,10 @@ t('　櫃檯手機導覽沒有報表',
 t('★ 日期列在課卡區之上、獨立一列（0902 起是任務卡的外面）',
   /const dayBar = `<div class="twk-bar">[\s\S]{0,600}<div class="twk-barin">\$\{_wkDays\}<\/div>/.test(src)
   && /<div class="mc-daybar">\$\{dayBar\}<\/div>/.test(src));
-t('★ 七天平分寬度（不是固定寬、不出現橫捲）',
-  /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;/.test(src)
-  && /\.twk-barin\{flex:1 1 auto;min-width:0;display:flex/.test(src));
+/* 2026-09-02 使用者：「日期列靠右」——0902 起是固定寬靠右，不再平分 */
+t('★ 七天固定寬、整排靠右',
+  /\.twk-barin \.twk-day\{flex:0 0 auto;width:74px;min-width:0;/.test(src)
+  && /\.twk-barin\{flex:0 1 auto;min-width:0;display:flex;gap:5px;margin-left:auto;\}/.test(src));
 /* 0823 使用者指示改成金色底（今天仍是綠底）——三個日期列統一。 */
 t('★ 今天綠底、選取金色底的語彙沒被改掉',
   /\.twk-day\.today\{background:var\(--green\);color:#fff;border-color:var\(--green\);\}/.test(src)

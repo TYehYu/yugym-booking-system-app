@@ -221,20 +221,27 @@ ok('　　只剩說明時不需要 30px 下間距',
    /\.page-head-subonly\{margin-bottom:14px;\}/.test(src));
 
 console.log('\n⑨-5 桌機首頁日期列：回到今天搬到翻頁鈕旁');
-ok('★★ 「回到今天」放在往今天的那一側（今天在這一週之前＝左、之後＝右）',
-   /if\(today<ymd\(mon\)\) return 'l';/.test(src)
-   && /if\(today>ymd\(sun\)\) return 'r';/.test(src));
-ok('★★ 兩側都固定留一格，鈕出現時整列不會被推一下',
+/* 0823 是「放在往今天的那一側」（今天在前＝左、在後＝右）；
+   2026-09-02 使用者改成「回到今日的按鈕固定在日期列左邊」——位置會跳的按鈕比較難按。
+   右邊那一格連同左右判斷（_todaySide）一起移除，只留「要不要畫」。 */
+ok('★★ 「回到今天」固定在左邊，不再分左右',
+   !/_todaySide/.test(src)
+   && /const _showToday=!isTodayView;/.test(src)
+   /* 只看桌機那條日期列 —— 手機版（.mtc-wrap-top）另有一顆，不在這條規則裡 */
+   && ((src.slice(src.indexOf('const dayBar = `<div class="twk-bar">'),
+                  src.indexOf('const coachSection = rows.length'))
+        .match(/tl-daynav-today/g))||[]).length===1);
+ok('★★ 左邊那一格仍固定留位，鈕消失時整列不會被推一下',
    /\.twk-today-slot\{flex:0 0 58px;display:flex;align-items:stretch;justify-content:center;\}/.test(src)
-   /* 2026-09-02 日期列移出任務卡後，這段說明跟著搬到 dayBar 的定義處 */
-   && /不預留的話鈕一出現整列會被推一下/.test(src));
+   && /翻到本週時鈕一消失整列會被推一下/.test(src));
 ok('★ 「回到今天」與日期格同高同圓角、文字折兩行（使用者：「改成跟日期一樣大」）',
    /\.twk-bar>\.twk-today-slot \.tl-daynav-today\{margin:0;width:100%;height:auto;align-self:stretch;/.test(src)
    && /onclick="dashPickDate\('\$\{today\}'\)">回到<br>今天<\/button>/.test(src));
 ok('　　寬度要寫死才有意義（auto 的話沒有鈕那側就是 0，等於沒預留）',
    /寬度寫死才有意義：用 auto 的話沒有鈕的那側寬度是 0/.test(src));
-ok('★ 每一天的按鈕加高（上方那列空出來之後補回版面）',
-   /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;justify-content:center;padding:11px 2px;background:#fff;\}/.test(src)
+/* 2026-09-02：日期列搬出任務卡後變寬，七格平分會被撐得很大 → 改固定寬、整排靠右。 */
+ok('★ 每一天的按鈕加高，0902 起改固定寬靠右',
+   /\.twk-barin \.twk-day\{flex:0 0 auto;width:74px;min-width:0;justify-content:center;padding:11px 2px;background:#fff;\}/.test(src)
    && /\.twk-barin \.twk-day \.twk-md\{font-size:15px;\}/.test(src));
 
 console.log('\n⑩ 支出登記入口');

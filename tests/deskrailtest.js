@@ -21,17 +21,20 @@ ok('★ 課卡區照舊',
    && /\.tl-3col\{display:flex;gap:12px;flex:1;min-height:0;\}/.test(src));
 /* 2026-08-23：兩端各多一格 .twk-today-slot（「回到今天」的固定位），
    箭頭仍緊貼在七天那一排的兩側。 */
-ok('★ 左右翻頁的箭頭回到日期列兩端',
+ok('★ 左右翻頁的箭頭在日期列兩端',
    /<span class="twk-today-slot">[\s\S]{0,220}?<\/span>\s*\n\s*<button class="tl-daynav" onclick="dashDayShift\(-7\)" title="上一週">‹<\/button>/.test(src)
-   && /<button class="tl-daynav" onclick="dashDayShift\(7\)" title="下一週">›<\/button>\s*\n\s*<span class="twk-today-slot">/.test(src));
-ok('★★ 「回到今天」放在往今天的那一側；兩側都預留固定寬，鈕出現時版面不跳',
-   /const _todaySide=\(\(\)=>\{/.test(src)
-   && /if\(today<ymd\(mon\)\) return 'l';/.test(src)
-   && /if\(today>ymd\(sun\)\) return 'r';/.test(src)
+   && /<div class="twk-barin">\$\{_wkDays\}<\/div>\s*\n\s*<button class="tl-daynav" onclick="dashDayShift\(7\)" title="下一週">›<\/button>/.test(src));
+/* 2026-09-02 使用者：「回到今日的按鈕固定在日期列左邊」——
+   推翻 0823 的左右判斷（_todaySide），右邊那一格一起移除。 */
+ok('★★ 「回到今天」固定在左邊；那一格仍預留固定寬，鈕消失時版面不跳',
+   !/_todaySide/.test(src)
+   && /const _showToday=!isTodayView;/.test(src)
    && /\.twk-today-slot\{flex:0 0 58px;/.test(src));
-ok('★★ 七天平分整列寬度（不是固定寬）—— 視窗變窄時一起縮，不出現橫向捲軸',
-   /\.twk-barin \.twk-day\{flex:1 1 0;min-width:0;/.test(src)
-   && /\.twk-barin\{flex:1 1 auto;min-width:0;display:flex;gap:5px;\}/.test(src));
+/* 2026-09-02 使用者：「日期列靠右」——日期列搬出任務卡後變寬，
+   七格平分會被撐得很大；改固定寬、整排靠右，空白留在左邊。 */
+ok('★★ 七天固定寬、整排靠右（空白留在左邊那一側）',
+   /\.twk-barin \.twk-day\{flex:0 0 auto;width:74px;min-width:0;/.test(src)
+   && /\.twk-barin\{flex:0 1 auto;min-width:0;display:flex;gap:5px;margin-left:auto;\}/.test(src));
 /* 註解裡還提得到舊 class（說明它為什麼被移除），所以先把註解剝掉再檢查 */
 const _noComment = src.replace(/\/\*[\s\S]*?\*\//g,'');
 ok('　　舊的直欄樣式已清乾淨（不留死 CSS）',
