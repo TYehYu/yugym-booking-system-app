@@ -11765,8 +11765,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260902.1727';
-const APP_VERSION_LABEL='260902.1727';
+const APP_VERSION='260902.1734';
+const APP_VERSION_LABEL='260902.1734';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18272,8 +18272,22 @@ function buildWallet(memberId, ctx){
      於是林繼霖用林政緯共享票上的 9/07・9/14・9/21 三堂，在林政緯的票券夾裡
      完全看不到：三格變成沒有日期的 ✓，共享人的名字也標不出來。
      ⚠ 判準用帳本：這筆預約在我的某張票上有扣課紀錄，就是我的票在付這堂。 */
+  /* 只靠帳本撿回來的預約（自己不在名單上、票也沒直連）——一定要看**淨值**。
+     ⚠ 2026-09-02 許佳慈案例：10/02・10/09・10/16 三堂在 0829 被加了又移除，
+       名單早就清空（member_ids 空、seat_tickets 空），但帳本上留著成對的
+       deduct＋refund。原本只要「有紀錄」就撿回來，於是三堂空堂被當成她的預約，
+       在票券卡上畫成三顆紅色超約圈 —— 帳目其實是平的，什麼都沒超約。
+     ⚠ delta 0 的 adjust（「已阻擋：不重複扣」）不算異動，只認 deduct／refund。
+     （同 [[票券真相在帳本]]：status 與餘額打架時信餘額，超約防線看淨值。） */
+  const _lgNet={};
+  (c.logs||[]).forEach(l=>{
+    if(!l||!l.booking_id||!l.ticket_id||!mineIds[l.ticket_id]) return;
+    const d=(l.action==='deduct')?1:((l.action==='refund')?-1:0);
+    if(!d) return;
+    _lgNet[l.booking_id]=(_lgNet[l.booking_id]||0)+d;
+  });
   const _lgBk={};
-  (c.logs||[]).forEach(l=>{ if(l&&l.booking_id&&l.ticket_id&&mineIds[l.ticket_id]) _lgBk[l.booking_id]=1; });
+  Object.keys(_lgNet).forEach(k=>{ if(_lgNet[k]>0) _lgBk[k]=1; });
   const myBk=c.bookingsOf ? (c.bookingsOf(memberId)||[])
     : (c.bookings||[]).filter(b=>b && (bkHasMember(b,memberId) || (b.ticket_id&&mineIds[b.ticket_id]) || _lgBk[b.id]));
   /* 同行第二台（2026-08-05 黃麗琴案例：一點約兩台跑步機，圓形卡卻畫出 4 顆）——
@@ -37183,7 +37197,15 @@ PAGES.members=async function(){
   /* 濾法與 _memBkIdx 同一套：取消但扣課不退的要留著（票被吃掉了，那一格要畫得出來） */
   const _bkAlive=b=>!!b && !(b.status==='cancelled' && !bkEatenCancel(b));
   (allBk||[]).forEach(b=>{ if(_bkAlive(b) && b.ticket_id) (_bkByTk[b.ticket_id]=_bkByTk[b.ticket_id]||[]).push(b); });
-  (allLg||[]).forEach(l=>{ if(l && l.booking_id && l.ticket_id) (_lgTkOfBk[l.ticket_id]=_lgTkOfBk[l.ticket_id]||{})[l.booking_id]=1; });
+  /* ⚠ 淨值 >0 才算（同 buildWallet 的 _lgNet）：扣了又退的那幾堂名單早就清空，
+     撿回來只會在圓形卡上多畫紅色超約圈。 */
+  (allLg||[]).forEach(l=>{
+    if(!l || !l.booking_id || !l.ticket_id) return;
+    const d=(l.action==='deduct')?1:((l.action==='refund')?-1:0);
+    if(!d) return;
+    const m=(_lgTkOfBk[l.ticket_id]=_lgTkOfBk[l.ticket_id]||{});
+    m[l.booking_id]=(m[l.booking_id]||0)+d;
+  });
   const _bkById={}; (allBk||[]).forEach(b=>{ if(b&&b.id) _bkById[b.id]=b; });
   const _memNm={}; (members||[]).forEach(m=>{ if(m&&m.id) _memNm[m.id]=m.name||''; });
   /* 「他用得到的票」→ 票 id。⚠ 不能只看持有人：0902 陳瀚竣的那兩顆 ✓ 正是
@@ -37205,7 +37227,9 @@ PAGES.members=async function(){
     const out=own.slice();
     (_tkUseIdx[mid]||[]).forEach(tid=>{
       (_bkByTk[tid]||[]).forEach(b=>{ if(!seen[b.id]){ seen[b.id]=1; out.push(b); } });
-      Object.keys(_lgTkOfBk[tid]||{}).forEach(bid=>{
+      const _m=_lgTkOfBk[tid]||{};
+      Object.keys(_m).forEach(bid=>{
+        if(!(_m[bid]>0)) return;                 // 扣了又退＝這堂已經不是他的
         const b=_bkById[bid];
         if(_bkAlive(b) && !seen[bid]){ seen[bid]=1; out.push(b); }
       });

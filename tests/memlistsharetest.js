@@ -24,7 +24,8 @@ ok('★★★ 用 tkSharedIds 把被分享的一邊也算進去（陳瀚竣就�
 ok('★★ 舊的「只看持有人」索引已經沒有了', !/_tkOwnIdx/.test(src));
 ok('★★ 票 → 預約走 ticket_id，並且**連扣課紀錄一起認**（團課的 ticket_id 是 null）',
    /const _bkByTk=\{\}, _lgTkOfBk=\{\};/.test(src)
-   && /\(allLg\|\|\[\]\)\.forEach\(l=>\{ if\(l && l\.booking_id && l\.ticket_id\)/.test(src));
+   /* 2026-09-02 二修：帳本那條改成累加淨值（扣了又退的不算，見 lgnettest） */
+   && /\(allLg\|\|\[\]\)\.forEach\(l=>\{\s*\n\s*if\(!l \|\| !l\.booking_id \|\| !l\.ticket_id\) return;/.test(src));
 ok('★★ 取消但扣課不退的要留著（票被吃掉了，那一格要畫得出來）',
    /const _bkAlive=b=>!!b && !\(b\.status==='cancelled' && !bkEatenCancel\(b\)\);/.test(src));
 ok('★ 聯集不重複（自己的 ∪ 掛在票上的）',
