@@ -86,7 +86,13 @@ ok('　　順序要求寫在程式裡（免得日後有人搬回去）',
 /* 0822 三欄改版：章在第一欄、中間三列、右上時間右下教練（見 tests/deskcard3test.js） */
 ok('★ 首頁：出席章自己一欄（0822 起不再貼在姓名右邊）',
    /<span class="t3-stamp">\$\{\(\(\)=>\{const k=bkStampKind\(b\);/.test(src)
-   && /\.tcard-3c \.t3-stamp\{display:flex;align-items:flex-start;/.test(src));
+   && /\.tcard-3c \.t3-stamp\{display:flex;align-items:center;align-self:stretch;\}/.test(src));
+/* 2026-09-02 使用者指示：「課卡左邊的簽到章　靠左置中　放大一點」——
+   原本靠上（跟第一列課程名齊高）、16px。 */
+ok('★★ 出席章靠左置中並放大到 22px（簽／假／未共用同一顆）',
+   /\.tcard-3c \.tcard-chk\{position:static;margin:0;width:22px;height:22px;font-size:12px;\}/.test(src)
+   && /\.tcard-chk\.tcard-chk-leave\{background:var\(--danger,#b5372e\);\}/.test(src)
+   && /\.tcard-chk\.tcard-chk-ns\{background:var\(--gold-d,#b48a56\);\}/.test(src));
 
 console.log('\n過期的課卡也要開簡易課卡');
 ok('★ 不再依 editable 分流到舊的預約明細',

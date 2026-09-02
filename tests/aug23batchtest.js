@@ -125,8 +125,9 @@ ok('　　教練請假紅標仍在（那是狀態，不是時間）',
 console.log('\n⑤ 桌機首頁');
 ok('★ 課卡從 190px 收窄到 165px',
    /\.tcard\.tcard-std\{width:165px;min-height:98px;\}/.test(src));
-ok('　　內距與欄距一起收（10\\/9\\/10\\/11→9\\/7\\/9\\/10、7→6）',
-   /gap:0 6px;align-items:center;padding:9px 7px 9px 10px;\}/.test(src));
+/* 2026-09-02：出席章 16→22px，左內距再從 10 收到 8 討回 2px（見那段註解的換算）。 */
+ok('　　內距與欄距一起收（10\\/9\\/10\\/11→9\\/7\\/9\\/10、7→6；0902 左內距再收到 8）',
+   /gap:0 6px;align-items:center;padding:9px 7px 9px 8px;\}/.test(src));
 ok('★★ 收窄的底線寫進註解：中欄要留 ~76px 給「多功能訓練架」，再窄就先切到場地那一列',
    /場地「多功能訓練架」六個字 ×11px ≒ 66px 剛好不截斷/.test(src)
    && /再往下收就會先切到場地那一列/.test(src));

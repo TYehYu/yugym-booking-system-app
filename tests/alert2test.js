@@ -11,33 +11,42 @@ console.log('兩張卡');
 ok('★ 分成兩張，各自一個標題一個數字',
    /<button class="card mc-card mc-a2" onclick="openTodoList\('sign'\)">\s*\n\s*<span class="mc-a2-t">今日收款提醒<\/span><b class="mc-a2-n">\$\{_signByTime\.length\}<\/b><\/button>/.test(src)
    && /<button class="card mc-card mc-a2" onclick="openTodoList\('demote'\)">\s*\n\s*<span class="mc-a2-t">即將降級名單<\/span><b class="mc-a2-n">\$\{_demoteNames\.length\}<\/b><\/button>/.test(src));
-ok('★ 放在 KPI 左邊（插在 .mc-kpistrip 的最前面）',
-   /let kpiStrip=`<div class="mc-kpistrip"><!--ALERTS-->/.test(src)
-   && /kpiStrip=kpiStrip\.replace\('<!--ALERTS-->', alertCards\);/.test(src));
+/* 2026-09-02 使用者指示：「中間欄上面 今日收款提醒跟降級名單 改到左邊欄
+   新增會員跟銷售下面」—— 從 KPI 條搬到左欄，接在三顆快捷鈕後面。 */
+ok('★★ 放在左欄、三顆快捷鈕下面',
+   /let alertBox=`<div class="mc-alertleft"><!--ALERTS--><\/div>`;/.test(src)
+   && /alertBox=alertBox\.replace\('<!--ALERTS-->', alertCards\);/.test(src)
+   && /<div class="mc-quick-left">\$\{quickCard\}<\/div>\s*\n\s*\$\{alertBox\}/.test(src));
+ok('★★ KPI 條裡不再有它們', !/mc-kpistrip"><!--ALERTS-->/.test(src));
 ok('　　數字要等名單算完才知道，所以先留插點、算完再塞回來',
    /這裡先留插點，算完再塞回來/.test(src));
-ok('★ 外型與右邊三顆快捷鈕同一套直式卡片（同高 96、同圓角）',
-   /\.mc-kpistrip \.mc-alert2 \.mc-a2\{flex:0 1 auto;width:clamp\(84px,6\.2vw,108px\);min-width:66px;min-height:96px;/.test(src)
-   && /\.mc-kpistrip \.mc-quick3 \.mc-q3\{flex:0 1 auto;width:clamp\(76px,6\.4vw,96px\);min-width:62px;min-height:96px;/.test(src));
+ok('★ 外型仍是那套直式卡片（底色、圓角、內距）',
+   /\.mc-alertleft \.mc-alert2 \.mc-a2\{flex:0 1 auto;width:clamp\(84px,6\.2vw,108px\);min-width:66px;min-height:96px;/.test(src));
+/* 左欄只有 300px：clamp 的 108px 會在右邊留一塊空，改成兩張各佔一半。 */
+ok('★★ 左欄版兩張各佔一半、卡高收到 84',
+   /\.mc-alertleft \.mc-alert2 \.mc-a2\{flex:1 1 0;width:auto;min-height:84px;padding:12px 6px;\}/.test(src));
 ok('★ 底色維持品牌紅（--danger #7F0303 那支深紅）',
    /background:linear-gradient\(160deg,#7F0303 0%,#5E0303 100%\);/.test(src));
 ok('★★ ⚠ 選擇器要壓過 .card/.mc-card（使用者回報「紅色不見了」：兩個 class 同分，誰後面誰贏）',
-   /\.mc-kpistrip \.mc-alert2 \.mc-a2\{/.test(src)
+   /\.mc-alertleft \.mc-alert2 \.mc-a2\{/.test(src)
    && !/^\.mc-alert2 \.mc-a2\{/m.test(src)
    && /就不必跟載入順序賭/.test(src));
 ok('★ 數字用品牌金放大',
-   /\.mc-kpistrip \.mc-alert2 \.mc-a2-n\{font-family:var\(--font-en\),var\(--num\);font-size:clamp\(24px,2\.2vw,32px\);/.test(src)
+   /\.mc-alertleft \.mc-alert2 \.mc-a2-n\{font-family:var\(--font-en\),var\(--num\);font-size:clamp\(24px,2\.2vw,32px\);/.test(src)
    && /font-weight:800;line-height:1;color:#D9A441;\}/.test(src));
-ok('★★ KPI 不能被壓到疊在一起（使用者回報「用 mac 看 kpi 被壓縮了」）——'
-   +'數字群守住內容寬度，要讓位的是兩側的固定寬卡片',
-   /\.mc-kpistrip \.kpi-it\{min-width:max-content;\}/.test(src)
-   && /min-width:0 會讓格子縮到比文字還窄，nowrap 的數字就溢出來、三組疊在一起看不清楚/.test(src));
-ok('　　1400 以下先收兩側卡片、1150 再收一次',
-   /@media\(max-width:1400px\)\{[\s\S]{0,300}?\.mc-kpistrip \.mc-alert2 \.mc-a2\{width:92px;padding:12px 5px;\}/.test(src)
-   && /@media\(max-width:1150px\)\{[\s\S]{0,700}?\.mc-kpistrip \.mc-alert2 \.mc-a2\{width:82px;min-height:80px;/.test(src));
-ok('★ 兩張卡在最左邊（0822 三修：整條改成靠左排、KPI 數字群用 margin-left:auto 推到最右）',
-   /\.mc-kpistrip \.mc-alert2\{display:flex;gap:10px;flex:0 1 auto;min-width:0;\}/.test(src)
-   && /\.mc-kpinums\{[\s\S]{0,120}?margin-left:auto;/.test(src));
+/* 「KPI 被壓縮」那個問題（2026-08-22）在 0902 之後不會再發生 ——
+   三個 KPI、兩張紅卡、三顆快捷鈕不再擠同一條，各自在自己的欄位裡，欄寬是固定的。
+   那一整套收斂規則（.mc-kpistrip 與兩個斷點）連同 KPI 條一起移除。 */
+ok('★★ KPI 條那一整套已無人使用，連樣式一起移除（不留死 CSS）',
+   !/\.mc-kpistrip\{/.test(src) && !/\.mc-kpinums\{/.test(src) && !/^\.kpi-it\{/m.test(src)
+   && /全檔已經沒有任何 HTML 掛得上那些 class/.test(src));
+/* 窄視窗的收斂規則還掛在 .mc-kpistrip 上 —— 紅卡搬走後那幾條對它們不再生效，
+   但左欄是固定 300px，本來就不需要跟著視窗縮。留著是給 KPI 數字與（未來若有的）
+   其他成員用的，不是遺漏。 */
+ok('　　左欄版不吃視窗寬度的收斂（欄寬固定 300px）',
+   !/@media[\s\S]{0,900}?\.mc-alertleft/.test(src));
+ok('★ KPI 改成右欄三列（名稱靠左、數字靠右）',
+   /\.mc-kpirows \.kr\{display:flex;align-items:center;justify-content:space-between;/.test(src));
 
 console.log('\n點進去＝既有的視窗條列');
 ok('★★ 沿用 openTodoList（那支本來就是視窗條列，名單資料同一份）',

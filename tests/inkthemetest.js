@@ -371,8 +371,10 @@ console.log('\n⑦ 首頁二修（使用者：「配色呢！！！我只有看�
      && ['mc-wdh','mc-d','mc-dot','cal-hero-nav'].every(k=>new RegExp('body\\.ink \\.cal-side [^{]*'+k).test(src))
      && /body\.ink \.cal-side \.mc-cell\.mc-today \.mc-d\{background:var\(--olive,#556B45\);color:#F2EFE4;\}/.test(src));
   ok('★★ 兩張提醒卡：深紅漸層 → 米白面＋磚紅細框，數字仍是磚紅（紅色是語意，留著）',
-     /body\.ink \.mc-kpistrip \.mc-alert2 \.mc-a2\{\s*\n\s*background:var\(--card\);border:1px solid color-mix\(in srgb, var\(--danger,#8C4A3E\) 38%, transparent\);/.test(src)
-     && /body\.ink \.mc-kpistrip \.mc-alert2 \.mc-a2-n\{color:var\(--danger,#8C4A3E\);/.test(src));
+     /* 2026-09-02：兩張卡搬到左欄，外框 class 從 .mc-kpistrip 換成 .mc-alertleft ——
+        ⚠ Ink 的白底樣式掛在外框上，改名沒跟著改就會掉回紅色漸層。 */
+     /body\.ink \.mc-alertleft \.mc-alert2 \.mc-a2\{\s*\n\s*background:var\(--card\);border:1px solid color-mix\(in srgb, var\(--danger,#8C4A3E\) 38%, transparent\);/.test(src)
+     && /body\.ink \.mc-alertleft \.mc-alert2 \.mc-a2-n\{color:var\(--danger,#8C4A3E\);/.test(src));
   ok('　 原本的紅漸層沒被刪掉（關掉 Ink 就回去）',
      /background:linear-gradient\(160deg,#7F0303 0%,#5E0303 100%\);/.test(src));
   ok('★★ 教練名字改成只有文字上色（與行事曆課卡同一種做法）',
@@ -407,8 +409,8 @@ console.log('\n⑧ 首頁三修：定色 #556B45 ＋ 左欄／中欄對齊參考
      src.indexOf('var(--olive,'+OLD1+')')<0 && /var\(--olive,#556B45\)/.test(src));
 
   ok('★★ 兩張提醒卡改素面＋大黑數字（參考圖不是紅底也不是紅框）',
-     /body\.ink \.mc-kpistrip \.mc-alert2 \.mc-a2\{\s*\n\s*background:var\(--card\);border:1px solid var\(--bd\);border-radius:10px;box-shadow:none;\}/.test(H3)
-     && /body\.ink \.mc-kpistrip \.mc-alert2 \.mc-a2-n\{color:var\(--text\);/.test(H3));
+     /body\.ink \.mc-alertleft \.mc-alert2 \.mc-a2\{\s*\n\s*background:var\(--card\);border:1px solid var\(--bd\);border-radius:10px;box-shadow:none;\}/.test(H3)
+     && /body\.ink \.mc-alertleft \.mc-alert2 \.mc-a2-n\{color:var\(--text\);/.test(H3));
   ok('　 點下去仍是原本的名單視窗（功能沒動）',
      /<button class="card mc-card mc-a2" onclick="openTodoList\('sign'\)">/.test(src)
      && /<button class="card mc-card mc-a2" onclick="openTodoList\('demote'\)">/.test(src));
