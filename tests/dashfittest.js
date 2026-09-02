@@ -37,8 +37,21 @@ ok('★★ 教練課／團體課回到中間 KPI 條',
 ok('★★★ 三項共用同一個畫法，沒有為了搬家複製第二份',
    (src.match(/const _kpiIt=/g)||[]).length===1
    && /const kpiRev=`<div class="mc-kpinums">\$\{\s*\n?\s*_kpiIt\(\[OPS_TODO_IC\.money,'今日營收'/.test(src));
-ok('★★ 第一格接手「貼齊頂欄」的 −10px（不然右欄比左欄矮 10px 起跑）',
-   /\.mc-g5-right>\.mc-kpiright\{margin:-10px 0 14px !important;\}/.test(src));
+/* 2026-09-02 四修（使用者附截圖：「可以讓右邊欄跟中間欄對齊」）——
+   ⚠ 兩個錯一起造成的：
+     ① 右欄第一格沿用了左欄那條 −10px。左欄對齊的是**頂欄**，中間欄的 KPI 條沒有負邊距，
+        右欄跟著 −10 就比中間高 10px。
+     ② 光對齊上緣不夠：右欄只有一個數字（約 60px），中間那條被兩張紅卡撐到 102px，
+        下面的卡片照樣錯開。兩邊要吃同一個高度。 */
+ok('★★★ 右欄第一格與中間欄同起點（不掛 −10px）、同高度（--kpih）、垂直置中',
+   /\.mc-g5-right>\.mc-kpiright\{margin:0 0 16px !important;padding:6px 0 0;\s*\n\s*min-height:var\(--kpih\);display:flex;align-items:center;justify-content:center;\}/.test(src));
+ok('★★★ 高度寫成變數，中欄與右欄共用（改紅卡高度兩邊一起動）',
+   /\.mc-grid5\{--kpih:102px;\}/.test(src)
+   && /\.mc-g5-mid \.mc-kpistrip\{[\s\S]{0,140}?min-height:var\(--kpih\);\}/.test(src)
+   && (src.match(/min-height:var\(--kpih\)/g)||[]).length===2);
+ok('　　102 的來源寫在原地（6px 上內距＋紅卡 96px）',
+   /--kpih 是「KPI 那一列的高度」：6px 上內距＋兩張紅卡的 96px/.test(src)
+   && /\.mc-kpistrip \.mc-alert2 \.mc-a2\{[\s\S]{0,120}?min-height:96px;/.test(src));
 /* ⚠ 原本的 font-size:clamp(30px,3.4vw,44px) 是照**整個視窗**算的，
    搬進 340px 的欄位會算出比欄還寬的字；金額可能到 $845,870，
    而 .kpi-n 是 white-space:nowrap —— 擠不下不是折行而是穿出去。 */
@@ -105,7 +118,7 @@ ok('★ 三顆鈕的內容不變（新增會員／銷售／查看合約）',
 /* 2026-08-01 二修（使用者：「三個中間 KPI 要靠右 跟按鈕靠在一起」）——
    0902 教練課／團體課回到這一條，靠右照舊（紅卡在左、數字群靠最右）。 */
 ok('★ 整條靠右：兩張紅卡在左、數字群靠最右',
-   /\.mc-g5-mid \.mc-kpistrip\{margin-bottom:14px;padding:6px 14px 0;justify-content:flex-end;gap:clamp\(16px,2\.4vw,52px\);\}/.test(src)
+   /\.mc-g5-mid \.mc-kpistrip\{margin-bottom:14px;padding:6px 14px 0;justify-content:flex-end;\s*\n\s*gap:clamp\(16px,2\.4vw,52px\);min-height:var\(--kpih\);\}/.test(src)
    && !/\.mc-g5-mid \.mc-kpistrip \.mc-quick3\{margin-left:auto;\}/.test(src));
 ok('　　按鈕群自己的間距比數字之間近', /\.mc-kpistrip \.mc-quick3\{gap:10px;flex:0 1 auto;min-width:0;\}/.test(src));
 /* 2026-08-01 二修（使用者：「首頁 KPI 右邊的三個按鈕可以放大一點 改成直式卡片」）——
