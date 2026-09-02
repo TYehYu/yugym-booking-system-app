@@ -418,6 +418,13 @@ console.log('\n⑧ 首頁三修：定色 #556B45 ＋ 左欄／中欄對齊參考
   /* 2026-08-27：外框退場，只留一條底線（使用者：「背後不用再多一層卡片」） */
   /* 2026-09-02 使用者：「移除分隔線」—— 日期列搬出任務卡之後，
    那條底線變成整頁橫貫的一刀，把上下切開反而更亂。 */
+  /* 2026-09-02 使用者回報：「日期列的今天　可以互動的時候滑鼠移上去沒有變成綠色」——
+     hover 那條寫的是 .twk-bar>.tl-daynav（直接子層），只涵蓋 ‹ ›；
+     「今天」包在 .twk-today-slot 裡面，吃不到。 */
+  ok('★★ 「回到今天」也要有 hover 綠（它不是 .twk-bar 的直接子層）',
+     /body\.ink \.twk-bar>\.twk-today-slot button\.tl-daynav-today:hover\{\s*\n\s*background:var\(--olive,#556B45\);color:#F2EFE4;border-color:var\(--olive,#556B45\);\}/.test(src));
+  ok('★★ 用 button:hover —— 正在看今天時那顆是 <span>，不能點就不該有 hover 回饋',
+     /用 button:hover 而不是 \.tl-daynav-today:hover：正在看今天時那顆是 <span>/.test(src));
   ok('★★ 日期列外面不包卡，也不再有底線',
      /body\.ink \.twk-bar\{background:transparent;border:none;border-radius:0;padding:0;\}/.test(src)
      && /日期格本身已經是一格一格的白框，外面再包一層框就是 card in card/.test(src));
