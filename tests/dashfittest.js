@@ -12,12 +12,28 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
-console.log('① 健身小知識移到右上角，與左上插畫對稱');
-/* 0822 四修（使用者指示，附全頁截圖）：左欄由上至下＝月曆 → 今日值班 → 健身小卡；
-   右欄＝三張快捷卡 → 今日收款；中間只剩兩張紅卡＋KPI。 */
-ok('★ 右欄第一格＝三張快捷卡', /<div class="mc-g5-right">[\s\S]{0,240}<div class="mc-quick-top">\$\{quickCard\}<\/div>/.test(src));
-ok('★ 左欄由上至下：月曆 → 今日值班 → 健身小卡',
-   /<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>\s*\n\s*<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>\s*\n\s*<div class="mc-know-left">\$\{knowCardHTML\(\)\}<\/div>/.test(src));
+console.log('① 桌機三欄的排法');
+/* 2026-09-02 使用者指示：「移除健身小卡　把右上角三個按鈕（新增會員／銷售／查看合約）
+   改到左邊員工上班資訊下面」——
+   左欄＝月曆 → 今日值班 → 三顆快捷鈕；右欄只剩今日收款；健身小卡整張退場（桌機）。
+   ⚠ 0819 那次首頁全頁改版被要求整個改回去，所以這次刻意只動這兩件，
+     中欄（兩張紅卡＋KPI＋教練任務）一格都沒碰。 */
+ok('★★ 左欄由上至下：月曆 → 今日值班 → 三顆快捷鈕',
+   /<div class="mc-b4-cal">\$\{deskCalCard\}<\/div>\s*\n\s*<div class="mc-dutyplain">\$\{dutyRingCard\}<\/div>\s*\n\s*<div class="mc-quick-left">\$\{quickCard\}<\/div>/.test(src));
+ok('★★ 桌機不再畫健身小卡（knowCardHTML 只剩手機在用，函式保留備援）',
+   !/<div class="mc-know-left">/.test(src) && !/<div class="mc-know-top">/.test(src)
+   && /function knowCardHTML\(\)/.test(src)
+   /* 剩下 5 處＝1 個定義＋4 個呼叫，四個呼叫全部是手機路徑：
+      手機 slime 版面、換卡自動更新、教練手機首頁、會員手機首頁。 */
+   && (src.match(/knowCardHTML\(\)/g)||[]).length===5
+   && !/isMobileLayout\(\)\?\(admMobHero\|\|adminCalCard\)[\s\S]{0,4000}?mc-grid5[\s\S]{0,3000}?knowCardHTML\(\)/.test(src));
+ok('★★ 右欄只剩今日收款，並接手「貼齊頂欄」的 −10px（不然右欄比左欄矮 10px 起跑）',
+   /<div class="mc-g5-right">[\s\S]{0,200}\$\{revListCard\}/.test(src)
+   && !/<div class="mc-quick-top">\$\{quickCard\}<\/div>/.test(src)
+   && /\.mc-g5-right>\.mc-revlist-card:first-child\{margin:-10px 0 16px !important;\}/.test(src));
+ok('★★ 左欄只有 300px，三顆並排的字距與字級要收窄（查看合約不能斷成兩行）',
+   /\.mc-quick-left \.mc-quick3\{display:flex;gap:8px;\}/.test(src)
+   && /\.mc-quick-left \.mc-q3\{flex:1 1 0;min-width:0;min-height:84px;padding:13px 2px;gap:8px;\s*\n\s*font-size:12px;font-weight:700;border-radius:14px;white-space:nowrap;\}/.test(src));
 /* 2026-08-01 三修（使用者：「健身小知識因為縮得太小了 看不到完整訊息 要放大一點
    （左邊縮圖也放大一點）」）：兩張一起 114 → 150px，仍然對稱。 */
 ok('★ 知識卡高度 150px（左右兩處共用同一組壓縮尺寸）',
@@ -49,12 +65,14 @@ ok('　　手機版知識卡不受影響（走另一條分支）',
 
 console.log('\n② 三顆按鈕移到 KPI 右邊');
 /* 0822 三修：順序改成 兩張紅卡 → 三顆白鈕 → KPI 數字群（數字群靠最右） */
-/* 0822 四修：三顆鈕又搬回右欄最上（KPI 條只留兩張紅卡＋數字群） */
+/* 0822 四修把三顆鈕搬到右欄最上；0902 再搬到左欄值班卡下面。
+   不變的是 KPI 條：從 0822 起就只有兩張紅卡＋數字群，三顆鈕從來不在裡面。 */
 ok('★ KPI 條只剩兩張紅卡＋數字群',
    /<div class="mc-kpistrip"><!--ALERTS-->\s*\n\s*<div class="mc-kpinums">/.test(src)
    && !/mc-kpistrip[\s\S]{0,80}\$\{quickCard\}/.test(src));
-ok('★ quickCard 在右欄最上',
-   /<div class="mc-g5-right">[\s\S]{0,240}<div class="mc-quick-top">\$\{quickCard\}<\/div>/.test(src));
+ok('★★ quickCard 只出現一次，而且在左欄（搬家不能留下第二份）',
+   (src.match(/\$\{quickCard\}/g)||[]).length===1
+   && /<div class="mc-quick-left">\$\{quickCard\}<\/div>/.test(src));
 ok('★ 三顆鈕的內容不變（新增會員／銷售／查看合約）',
    /openBackofficeMember\(\)">\$\{ICONS\.people\}<span>新增會員<\/span>/.test(src)
    && /openSalesModal\(\)">\$\{OPS_TODO_IC\.ticket\}<span>銷售<\/span>/.test(src)
