@@ -102,6 +102,10 @@ console.log('\n④ 開不成不能擋住銷售（票券已經發出去了）');
   ok('★★ 失敗照樣寫進 invoices（status=failed）留著重試',
      /row\.status = r&&r\.ok \? 'issued' : 'failed';/.test(G)
      && /await dbPut\('invoices', row\);/.test(G));
+  /* 2026-09-02：invoices.print_flag 是 text 欄位，寫 boolean 會被 PostgREST 退件，
+     而且退件時票券早就發出去了 —— 這種型別不合只會在正式開立那天才炸。 */
+  ok('★★ print_flag 存綠界原值 \'0\'/\'1\'（欄位是 text，不是 boolean）',
+     /print_flag:d\.Print,/.test(G) && !/print_flag:d\.Print==='1'/.test(G));
   ok('★★ 成功才把發票號碼寫回 purchases', /invoice_type:'ecpay', invoice_number:rd\.InvoiceNo/.test(G));
   ok('★ 失敗只用 toast 告知，不 throw', /showToast\('⚠ 發票開立失敗：'/.test(G) && !/throw /.test(G));
   ok('★★ 呼叫端也包 try（發票爆掉不能讓票券發放整條中斷）',
