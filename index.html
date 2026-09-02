@@ -3111,6 +3111,35 @@ tr:hover td{background:var(--card2);}
   box-shadow:0 3px 12px rgba(90,28,23,0.25);}
 .qb-fab:active{transform:scale(0.99);}
 /* 折抵券醒目提示框（2026-07-29 使用者指示：改品牌金、預設帶入可用張數） */
+/* 電子發票（2026-09-02）：綠框＝一般提示（紅>金>綠，開發票不是警示） */
+.inv-alert{background:#fdecea;border:1px solid var(--danger,#b5372e);border-radius:10px;padding:10px 12px;
+  font-size:12.5px;color:var(--danger,#b5372e);line-height:1.75;margin-bottom:12px;}
+.inv-row{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px 2px;border-bottom:1px solid var(--bd);}
+.inv-row:last-child{border-bottom:0;}
+.inv-row-l{min-width:0;}
+.inv-row-l b{display:block;font-size:13.5px;font-weight:800;color:var(--t1);font-variant-numeric:tabular-nums;}
+.inv-row-l i{display:block;font-style:normal;font-size:11.5px;color:var(--t3);line-height:1.7;}
+.inv-why{color:var(--danger,#b5372e)!important;}
+.inv-s-test{font-style:normal;color:var(--gold-d,#b48a56);font-weight:700;}
+.inv-row-r{display:flex;align-items:center;gap:9px;flex-shrink:0;}
+.inv-amt{font-size:13.5px;font-weight:700;color:var(--t1);font-variant-numeric:tabular-nums;}
+.inv-s{font-size:11px;font-weight:700;border-radius:6px;padding:3px 8px;}
+.inv-s-ok{color:#fff;background:var(--green);}
+.inv-s-bad{color:#fff;background:var(--danger,#b5372e);}
+.inv-s-void{color:var(--t3);background:var(--card2);border:1px solid var(--bd);}
+.inv-wrap{background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:12px 13px 4px;margin:0 0 14px;}
+.inv-h{font-size:13px;font-weight:800;color:var(--t1);margin-bottom:9px;display:flex;align-items:center;gap:8px;}
+.inv-test{font-size:11px;font-weight:700;color:#fff;background:var(--gold-d,#b48a56);border-radius:6px;padding:2px 7px;font-style:normal;}
+.inv-seg{display:flex;gap:6px;margin-bottom:10px;}
+.inv-b{flex:1;padding:8px 4px;font-size:12.5px;font-weight:700;color:var(--t2);background:var(--card);
+  border:1px solid var(--bd);border-radius:9px;cursor:pointer;}
+.inv-b.on{color:#fff;background:var(--green);border-color:var(--green);}
+.inv-r{margin-bottom:8px;}
+.inv-r label{display:block;font-size:11.5px;color:var(--t2);margin-bottom:4px;}
+.inv-r input{width:100%;padding:9px 11px;font-size:14px;border:1px solid var(--bd);border-radius:9px;
+  background:var(--card);color:var(--t1);box-sizing:border-box;}
+.inv-note{font-size:11.5px;color:var(--t3);line-height:1.75;margin:2px 0 10px;}
 .gt-voucher-hi{background:#fbf3e4;border:1.5px solid var(--gold);border-radius:12px;
   padding:12px 14px;margin:0 0 12px;display:flex;flex-direction:column;gap:8px;}
 .gt-vh-top{display:flex;align-items:center;gap:8px;}
@@ -11731,8 +11760,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260901.2331';
-const APP_VERSION_LABEL='v260901.2331';
+const APP_VERSION='260902.0918';
+const APP_VERSION_LABEL='260902.0918';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12470,6 +12499,190 @@ async function dbPut(store,obj){
 }
 /* 收款紀錄防護寫入（2026-07-21）：正式庫若尚未套 20260721_04（purchases.invoice_type 欄），
    帶欄寫入會整筆失敗 → 自動退回「不帶 invoice_type」重寫一次，收款紀錄不因欄位缺席而漏記。 */
+/* ══ 電子發票（綠界 B2C）══════════════════════════════════════════════
+   2026-09-02。使用者定案：只串發票、不串金流；不用 POS（不要兩套帳）。
+   金鑰在 Supabase secrets、開立走 Edge Function `ecpay-invoice`，
+   前端從頭到尾看不到 HashKey —— index.html 是 GitHub Pages 上的公開檔。
+
+   ⚠ 預設是**關的**。字軌還沒下來（2026-09-02），開出去也只是測試發票。
+     ・ECPAY_ENV=prod（金鑰設好）→ 自動開，櫃檯什麼都不用做
+     ・還在 stage → 只有在瀏覽器 localStorage 設 einvoice_test=1 才會出現，
+       畫面上會明講「測試模式・不會送財政部」
+     這樣「程式先備好、拿到金鑰當天上線」，中間不會有人誤以為真的開了發票。 */
+let _invCfgP=null;
+async function invCfg(){
+  if(_invCfgP) return _invCfgP;
+  _invCfgP=(async()=>{
+    try{
+      const r=await sb.functions.invoke('ecpay-invoice',{body:{action:'ping'}});
+      const d=r&&r.data;
+      if(r&&r.error) return {on:false, why:'發票服務連不上'};
+      if(!d||!d.ok)  return {on:false, why:(d&&d.msg)||'發票服務尚未設定'};
+      const test=(d.env!=='prod');
+      const opened=!test || (typeof localStorage!=='undefined' && localStorage.getItem('einvoice_test')==='1');
+      return {on:opened, test, env:d.env, mid:d.mid, why:test?'測試模式・不會送財政部':''};
+    }catch(_){ return {on:false, why:'發票服務連不上'}; }
+  })();
+  return _invCfgP;
+}
+async function invCall(action, data){
+  try{
+    const r=await sb.functions.invoke('ecpay-invoice',{body:{action, data}});
+    if(r&&r.error) return {ok:false, msg:'連線失敗：'+((r.error&&r.error.message)||r.error)};
+    return (r&&r.data)||{ok:false,msg:'沒有回應'};
+  }catch(e){ return {ok:false, msg:String((e&&e.message)||e)}; }
+}
+/* 四種開法（互斥規則見 docs/edge/README-ecpay.md 的表）——
+   ⚠ 這四條的 Print／Donation／CarrierType／統編 組合是綠界硬性檢核的，
+     湊錯一格就開不出來，而且錯誤訊息只說「參數錯誤」。 */
+const INV_MODES=[['carrier','存載具'],['ubn','打統編'],['donate','捐贈'],['print','紙本']];
+function invFieldsHTML(){
+  return `<div id="inv-wrap" class="inv-wrap" style="display:none;">
+    <div class="inv-h">電子發票<i id="inv-mode"></i></div>
+    <div class="inv-seg">${INV_MODES.map(([k,l],i)=>
+      `<button type="button" class="inv-b${i===0?' on':''}" data-k="${k}" onclick="invPick('${k}')">${l}</button>`).join('')}</div>
+    <div id="inv-x"></div>
+  </div>`;
+}
+function invPick(k){
+  const w=document.getElementById('inv-wrap'); if(!w) return;
+  w.querySelectorAll('.inv-b').forEach(b=>b.classList.toggle('on', b.dataset.k===k));
+  w.dataset.mode=k;
+  const box=document.getElementById('inv-x'); if(!box) return;
+  const row=(id,lb,ph)=>`<div class="inv-r"><label>${lb}</label><input id="${id}" placeholder="${ph||''}" autocomplete="off"></div>`;
+  const note=t=>`<div class="inv-note">${t}</div>`;
+  let h='';
+  if(k==='carrier'){
+    h=row('inv-car','手機條碼','不填＝存綠界載具')
+      +note('不填就存<b>綠界載具</b>：客人事後查得到、中獎會通知，當場不用給紙本。');
+  }else if(k==='ubn'){
+    h=row('inv-ubn','統一編號','8 碼數字')+row('inv-title','公司抬頭','')+row('inv-email','Email','寄證明聯用')
+      +note('打統編就<b>不能</b>存載具或捐贈。');
+  }else if(k==='donate'){
+    h=row('inv-love','愛心碼','3–7 碼數字')
+      +note('捐贈之後<b>不能改</b>，也不能再打統編或存載具。');
+  }else{
+    h=row('inv-name','姓名','')+row('inv-addr','地址','紙本寄送用')
+      +note('紙本要自己列印寄出，一般建議用載具。');
+  }
+  box.innerHTML=h;
+}
+/* 顯示／隱藏。只有「已付款」才畫 —— 沒收到錢不能開發票。 */
+async function invSync(){
+  const w=document.getElementById('inv-wrap'); if(!w) return;
+  const paid=((document.getElementById('gt-pay')||{}).value||'')==='paid';
+  const cfg=await invCfg();
+  w.style.display=(paid&&cfg.on)?'':'none';
+  if(!(paid&&cfg.on)) return;
+  const m=document.getElementById('inv-mode');
+  if(m) m.innerHTML=cfg.test?'<b class="inv-test">測試模式・不會送財政部</b>':'';
+  if(!w.dataset.mode) invPick('carrier');
+}
+/* 讀畫面上那一格 → 一包乾淨的參數（沒開發票就回 null） */
+function invReadFields(){
+  const w=document.getElementById('inv-wrap');
+  if(!w || w.style.display==='none') return null;
+  const g=id=>((document.getElementById(id)||{}).value||'').trim();
+  const k=w.dataset.mode||'carrier';
+  if(k==='ubn')    return {mode:'ubn',    ubn:g('inv-ubn'), title:g('inv-title'), email:g('inv-email')};
+  if(k==='donate') return {mode:'donate', loveCode:g('inv-love')};
+  if(k==='print')  return {mode:'print',  name:g('inv-name'), addr:g('inv-addr')};
+  return {mode:'carrier', carrierNum:g('inv-car')};
+}
+/* 開立前先擋掉一定會被綠界退的（錯誤訊息只會說「參數錯誤」，當場沒人猜得到） */
+function invCheckFields(f){
+  if(!f) return '';
+  if(f.mode==='ubn'){
+    if(!/^\d{8}$/.test(f.ubn||'')) return '統一編號要 8 碼數字';
+    if(!(f.title||'').trim())      return '打統編要填公司抬頭';
+  }
+  if(f.mode==='donate' && !/^\d{3,7}$/.test(f.loveCode||'')) return '愛心碼要 3–7 碼數字';
+  if(f.mode==='carrier' && (f.carrierNum||'') && !/^\/[0-9A-Z+\-.]{7}$/.test(f.carrierNum)) return '手機條碼格式是 / 加 7 碼（例如 /ABC1234）';
+  if(f.mode==='print'  && !(f.addr||'').trim()) return '紙本發票要填地址';
+  return '';
+}
+/* 把一筆 purchase 組成綠界的參數。
+   ⚠ Print／Donation／CarrierType／統編 四者互斥，組合錯了綠界一律退件。 */
+function invPayload(pur, mem, f, items){
+  const amt=Math.round(Number(pur.deal_amount)||0);
+  /* 品項預設在這裡補，不在呼叫端 —— Items 空陣列綠界會退件，
+     而退件訊息只說「參數錯誤」，看不出來是品項沒帶。 */
+  if(!items||!items.length) items=[{name:pur.plan_name||'健身課程', amt}];
+  const d={
+    RelateNumber:String(pur.id).slice(0,30),
+    CustomerName:(mem&&mem.name)||'',
+    CustomerPhone:((mem&&mem.phone)||'').replace(/\D/g,''),
+    CustomerEmail:'',
+    CustomerAddr:'', CustomerIdentifier:'',
+    Print:'0', Donation:'0', LoveCode:'', CarrierType:'', CarrierNum:'',
+    TaxType:'1', SalesAmount:amt, InvType:'07', vat:'1',
+    Items:(items||[]).map((it,i)=>({ItemSeq:i+1, ItemName:String(it.name||'健身課程').slice(0,100),
+      ItemCount:1, ItemWord:'式', ItemPrice:Math.round(it.amt), ItemAmount:Math.round(it.amt)}))
+  };
+  if(f&&f.mode==='ubn'){
+    d.CustomerIdentifier=f.ubn; d.CustomerName=f.title||d.CustomerName;
+    d.CustomerEmail=f.email||''; d.CarrierType='1';   /* 統編＋綠界載具＝不用列印紙本 */
+  }else if(f&&f.mode==='donate'){
+    d.Donation='1'; d.LoveCode=f.loveCode;
+  }else if(f&&f.mode==='print'){
+    d.Print='1'; d.CustomerName=f.name||d.CustomerName; d.CustomerAddr=f.addr||'';
+  }else if(f&&f.mode==='carrier' && f.carrierNum){
+    d.CarrierType='3'; d.CarrierNum=f.carrierNum;
+  }else{
+    d.CarrierType='1';   /* 預設：存綠界載具（會員多半沒有 email，載具只要有手機就能開） */
+  }
+  return d;
+}
+/* 開立。⚠ 一律不阻斷銷售 —— 票券已經發出去了，發票開不成是後補的事，
+     所以任何失敗都寫進 invoices（status=failed）留著重試，只用 toast 告知。 */
+async function invIssueForPurchase(pur, mem, f, items, opt){
+  const cfg=await invCfg();
+  if(!cfg.on) return null;
+  const amt=Math.round((opt&&opt.amt!=null)?opt.amt:(Number(pur.deal_amount)||0));
+  if(amt<=0) return null;   /* 未付款發放、抽獎票、$0 折抵不開發票 */
+  const d=invPayload(Object.assign({}, pur, {id:(pur.id+((opt&&opt.relSuffix)||'')), deal_amount:amt}), mem, f, items);
+  const row={ id:uid('INV'), merchant_order_no:d.RelateNumber, purchase_id:pur.id,
+    member_id:pur.member_id||null, category:(opt&&opt.category)||'sale',
+    buyer_name:d.CustomerName, buyer_ubn:d.CustomerIdentifier||null,
+    carrier_type:d.CarrierType||null, carrier_num:d.CarrierNum||null,
+    love_code:d.LoveCode||null, print_flag:d.Print==='1',
+    amt, tax_amt:amt-Math.round(amt/1.05), total_amt:amt, items:d.Items,
+    env:cfg.env||'stage', created_by:(SESSION&&SESSION.id)||null, created_at:new Date().toISOString() };
+  const r=await invCall('issue', d);
+  const rd=(r&&r.data)||{};
+  row.status = r&&r.ok ? 'issued' : 'failed';
+  row.invoice_number = rd.InvoiceNo||null;
+  row.random_num     = rd.RandomNumber||null;
+  row.invoice_time   = rd.InvoiceDate||null;
+  row.raw_result     = r||null;
+  try{ await dbPut('invoices', row); }catch(e){ console.error('invoices 寫入失敗', e); }
+  if(r&&r.ok){
+    try{ await dbPut('purchases', Object.assign({}, pur, {invoice_type:'ecpay', invoice_number:rd.InvoiceNo})); }catch(_){}
+    showToast(`發票已開立 ${rd.InvoiceNo}${cfg.test?'（測試）':''}`);
+  }else{
+    showToast('⚠ 發票開立失敗：'+((r&&r.msg)||'未知')+'　（票券已發放，可到「發票」重試）', 6000);
+  }
+  return row;
+}
+/* 作廢。票券作廢／全額退費時連動 —— 發票留著不作廢，稅就白繳了。 */
+async function invVoidForPurchase(purId, reason){
+  const cfg=await invCfg(); if(!cfg.on || !purId) return null;
+  let rows=[]; try{ rows=(await dbGetAll('invoices'))||[]; }catch(_){ return null; }
+  const inv=rows.filter(x=>x&&x.purchase_id===purId&&x.status==='issued'&&x.invoice_number)
+                .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))[0];
+  if(!inv) return null;
+  const r=await invCall('invalid', { InvoiceNo:inv.invoice_number,
+    InvoiceDate:String(inv.invoice_time||'').slice(0,10).replace(/-/g,'-'),
+    Reason:String(reason||'交易取消').slice(0,20) });
+  if(r&&r.ok){
+    try{ await dbPut('invoices', Object.assign({}, inv, {status:'invalid',
+      invalid_reason:String(reason||'交易取消'), invalid_at:new Date().toISOString()})); }catch(_){}
+    showToast('發票 '+inv.invoice_number+' 已作廢');
+  }else{
+    showToast('⚠ 發票作廢失敗：'+((r&&r.msg)||'未知')+'　請到綠界後台處理', 6000);
+  }
+  return r;
+}
 async function dbPutPurchaseSafe(obj){
   try{ return await dbPut('purchases',obj); }
   catch(e){
@@ -36453,8 +36666,22 @@ async function _voidTicketDo(id){
         +(reason?`：${reason}`:'')+'】').trim();
     }
     await dbPut('purchases',pc);
+    /* 電子發票連動（2026-09-02）——
+       ・轉儲值金：營收保留，發票不動（稅照繳，發票也該留著）
+       ・全額退款：作廢
+       ・扣手續費：原發票作廢，手續費那一段另開一張（金額變了不能只改） */
+    if(mode!=='credit'){
+      try{
+        await invVoidForPurchase(pc.id, ('作廢・'+MODE_LB[mode]+(reason?'：'+reason:'')).slice(0,20));
+        const _keep=keepOf(orig);
+        if(mode==='refund_fee' && _keep>0){
+          await invIssueForPurchase(pc, await dbGet('members',tk.member_id).catch(()=>null), null,
+            [{name:'退款手續費', amt:_keep}], {amt:_keep, relSuffix:'-F', category:'fee'});
+        }
+      }catch(e){ console.error('invoice void fail', e); }
+    }
   }
-  dbCacheClear(['member_tickets','ticket_logs','purchases']);
+  dbCacheClear(['member_tickets','ticket_logs','purchases','invoices']);
   closeModal();
   showToast(toCredit>0?`票券已作廢，$${toCredit.toLocaleString()} 已轉入儲值金`
     :(mode==='refund_fee'?`票券已作廢，請退還 $${(amt-keepSum).toLocaleString()}`:'票券已作廢'));
@@ -47645,8 +47872,10 @@ async function openGrantModal(){
         ${/* 預設「未付款」（2026-08-28 使用者指示）—— 安全的那一邊：
              未付款按錯救得回來（方案卡標待付款，櫃檯再收款），
              已付款按錯是錢沒收到卻記了帳。選「已付款」會先跳確認。 */''}
-        <div class="form-row"><label>付款狀態</label><select id="gt-pay"><option value="unpaid" selected>未付款</option><option value="paid">已付款</option></select></div>
+        <div class="form-row"><label>付款狀態</label><select id="gt-pay" onchange="invSync()"><option value="unpaid" selected>未付款</option><option value="paid">已付款</option></select></div>
       </div>
+      ${/* 電子發票（2026-09-02）：只有「已付款」才畫 —— 沒收到錢不能開發票 */''}
+      ${invFieldsHTML()}
       <div class="form-2col">
         
         <!-- 約別（2026-07-27 使用者指示：續約靠人工標記，報表/薪資才數得準；會員有舊教練課票時自動預選續約 -->
@@ -47788,7 +48017,7 @@ function gtCreditHint(){
 }
 function grantGoStep(n){
   document.querySelectorAll('.gt-step').forEach(s=>s.style.display=(Number(s.dataset.gtstep)===n)?'':'none');
-  if(n===2){ refreshGrantInfo(); try{ gtSaleKindSync(); }catch(_){} try{ gtCreditSync(); }catch(_){} } // 進購買資訊時刷新方案資訊與預設金額
+  if(n===2){ refreshGrantInfo(); try{ gtSaleKindSync(); }catch(_){} try{ gtCreditSync(); }catch(_){} try{ invSync(); }catch(_){} } // 進購買資訊時刷新方案資訊與預設金額
   // 約別預設（2026-07-27）：會員名下已有教練課類票 → 預選「續約」；櫃台改過就不再動
   if(n===2)(async()=>{ try{
     const mid=(document.getElementById('gt-member')||{}).value;
@@ -48444,7 +48673,12 @@ async function submitGrant(){
     sale_kind:(document.getElementById('gt-salekind')||{}).value||null,
     sold_by:(window._grantSalesActive&&window._grantSalesActive.coach_id)||null,
     payment_status:(document.getElementById('gt-pay')||{}).value||'paid',
+    inv:invReadFields(),   /* 電子發票（2026-09-02）；電子合約要等審核，那時表單早關了，所以一起存起來 */
   };
+  {
+    const _ivErr=invCheckFields(P.inv);
+    if(_ivErr){ showToast('發票欄位：'+_ivErr); return; }
+  }
   /* ══ 電子合約要等（2026-08-08 使用者定案）════════════════════════════════
      「如果是『紙本合約』就不用再經過審核，因為客戶已經看過紙本合約並完成匯款才會走到
        儲值這一步。審核是因為客戶必須要等我們上傳電子合約，看過並簽名回傳系統，
@@ -48647,13 +48881,17 @@ async function _grantIssue(P){
     /* 拆帳（2026-08-12）：現金以填的為準（夾在 0～實收），匯款＝實收−現金 */
     const _paySplit=(P.method==='split')?{cash:Math.max(0,Math.min(Number(P.splitCash)||0,_dealRec)),
       transfer:_dealRec-Math.max(0,Math.min(Number(P.splitCash)||0,_dealRec))}:null;
-    await dbPutPurchaseSafe({id:uid('PUR'),member_id:P.member_id,plan_id:P.plan_id,ticket_id:t.id,plan_name:plan.name,
+    const _purRow={id:uid('PUR'),member_id:P.member_id,plan_id:P.plan_id,ticket_id:t.id,plan_name:plan.name,
       list_price:P.listPrice,deal_amount:_dealRec,credit_used:(_crUse||null),
       payment_method:P.method,pay_split:_paySplit,installment_count:P.installCount,   /* 2026-08-05：分期第 1 期記折抵後實收，與 amount_paid 同口徑 */
       invoice_type:'none',
       coach_id:P.sold_by||null,   // 業績歸屬（2026-07-21 銷售彈窗）
       note:(P.note||'')+(isInstall?`（分期第1期／總額 $${(P.dealAmount||0).toLocaleString()}）`:'')+(P.voucherN?`（折抵券×${P.voucherN} −$${(P.voucherAmt||0).toLocaleString()}）`:'')+(_crUse?`（儲值金折抵 −$${_crUse.toLocaleString()}）`:''),
-      operator:SESSION.id,source:'backoffice',created_at:new Date().toISOString()});
+      operator:SESSION.id,source:'backoffice',created_at:new Date().toISOString()};
+    await dbPutPurchaseSafe(_purRow);
+    /* 電子發票（2026-09-02）：開不成不阻斷 —— 票券已經發出去了，發票後補 */
+    try{ await invIssueForPurchase(_purRow, await dbGet('members',P.member_id).catch(()=>null), P.inv,
+      [{name:plan.name||'健身課程', amt:_dealRec}]); }catch(e){ console.error('invoice fail', e); }
   }catch(e){ /* 購買紀錄失敗不阻斷發票券，僅記錄 */ console.error('purchase log fail',e); showToast('付款紀錄寫入失敗：'+(e.message||e)); }
   t._usedVouchers=_usedVouchers;   // 30 分鐘退回時要把折抵券還回去
   return t;
@@ -58415,6 +58653,7 @@ PAGES.finance=async function(){
   else if(_finTab==='receivable') await finReceivable();
   else if(_finTab==='expenses') await finExpenses();
   else if(_finTab==='vat') await finVat();
+  else if(_finTab==='invoices') await finInvoices();
   else if(_finTab==='review'){ document.getElementById('fin-body').innerHTML=`<div id="tk-body"></div>`; await PAGES.purchase_review(); }
   else if(_finTab==='refunds') await finRefunds();
 };
@@ -58793,6 +59032,7 @@ function finQuickLinks(){
       <button class="btn btn-ghost btn-sm" onclick="setFinTab('receivable')">待收款</button>
       <button class="btn btn-ghost btn-sm" onclick="setFinTab('expenses')">支出明細</button>
       <button class="btn btn-ghost btn-sm" onclick="setFinTab('vat')">營業稅</button>
+      <button class="btn btn-ghost btn-sm" onclick="setFinTab('invoices')">電子發票</button>
       <button class="btn btn-ghost btn-sm" onclick="setFinTab('review')">購買審核</button>
       <button class="btn btn-ghost btn-sm" onclick="setFinTab('refunds')">課程修改紀錄</button>
       <button class="btn btn-ghost btn-sm" onclick="openGrpAudit()">🔍 票券對帳巡檢</button>
@@ -59082,6 +59322,79 @@ function vatForMonth(ym, cashThis, rows, cashOfMonth){
    ⚠ 不算進項、不對發票。進項是會計看你們的發票算的，系統自己湊只會生出一個
      跟申報書打架的數字（使用者原話：「我不想自己填這些數字」，指的是進項）。
      這裡填的是**結果**，不是過程 —— 申報書上那一格照抄即可。 */
+/* 電子發票清單（2026-09-02）——
+   存在的理由只有一個：**開失敗的要看得到、要能重開**。
+   開立失敗不阻斷銷售（票券已經發出去了），失敗那筆只寫進 invoices 就結束了，
+   沒有這一頁的話它會永遠躺在那裡沒人知道。 */
+async function finInvoices(){
+  const host=document.getElementById('fin-body'); if(!host) return;
+  host.innerHTML='<div class="card" style="padding:16px;">載入中…</div>';
+  const cfg=await invCfg();
+  let rows=[]; try{ rows=(await dbGetAll('invoices'))||[]; }catch(_){ rows=[]; }
+  rows=rows.slice().sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  const bad=rows.filter(r=>r.status==='failed');
+  const ST={issued:['已開立','inv-s-ok'], failed:['開立失敗','inv-s-bad'], invalid:['已作廢','inv-s-void']};
+  const line=r=>{
+    const [lb,cl]=ST[r.status]||[r.status||'—',''];
+    const md=(r.created_at||'').slice(5,10).replace('-','/');
+    return `<div class="inv-row">
+      <div class="inv-row-l">
+        <b>${r.invoice_number||'—'}</b>
+        <i>${md}　${r.buyer_name||'—'}${r.buyer_ubn?`　統編 ${r.buyer_ubn}`:''}${r.env!=='prod'?'　<em class="inv-s-test">測試</em>':''}</i>
+        ${r.status==='failed'?`<i class="inv-why">${(r.raw_result&&r.raw_result.msg)||'未知原因'}</i>`:''}
+      </div>
+      <div class="inv-row-r">
+        <span class="inv-amt">$${(Number(r.total_amt)||0).toLocaleString()}</span>
+        <span class="inv-s ${cl}">${lb}</span>
+        ${r.status==='failed'?`<button class="btn btn-ghost btn-sm" onclick="invRetry('${r.id}')">重開</button>`:''}
+      </div></div>`;
+  };
+  host.innerHTML=`<div class="card" style="padding:16px;">
+    <div class="card-title" style="margin-bottom:4px;">電子發票</div>
+    <div style="font-size:12px;color:var(--t3);line-height:1.8;margin-bottom:12px;">
+      ${cfg.on
+        ? (cfg.test
+            ? '<b style="color:var(--gold-d,#b48a56);">測試模式</b>：開出來的發票<b>不會</b>送財政部、也不佔字軌。'
+            : '正式開立中，商店代號 '+(cfg.mid||'—')+'。')
+        : '<b>尚未啟用</b>：'+(cfg.why||'等綠界字軌與金鑰下來後設定 ECPAY_ENV=prod 即可上線，程式不用再改。')}
+    </div>
+    ${bad.length?`<div class="inv-alert">有 <b>${bad.length}</b> 筆開立失敗，按「重開」重試；同一筆重開不會開出兩張（用同一個單號）。</div>`:''}
+    ${rows.length?rows.slice(0,200).map(line).join(''):'<div style="font-size:13px;color:var(--t3);padding:8px 0;">還沒有任何發票紀錄。</div>'}
+    ${rows.length>200?`<div style="font-size:11.5px;color:var(--t3);margin-top:8px;">只列最近 200 筆（共 ${rows.length} 筆）。</div>`:''}
+  </div>`;
+}
+/* 重開：沿用同一個 merchant_order_no —— 綠界同單號重送不會開出第二張，
+   所以按兩次也不會變兩張發票。 */
+async function invRetry(id){ return onceAct('invretry:'+id, ()=>_invRetry(id)); }
+async function _invRetry(id){
+  const rows=(await dbGetAll('invoices').catch(()=>[]))||[];
+  const inv=rows.find(x=>x&&x.id===id);
+  if(!inv || inv.status!=='failed'){ showToast('這筆不需要重開'); return; }
+  const pur=inv.purchase_id ? await dbGet('purchases', inv.purchase_id).catch(()=>null) : null;
+  if(!pur){ showToast('找不到對應的收款紀錄，無法重開'); return; }
+  /* 用當初存下來的那組條件重組（載具／統編／捐贈／紙本），不是重新問櫃檯 */
+  const r=await invCall('issue',
+    invPayload(Object.assign({}, pur, {id:inv.merchant_order_no, deal_amount:inv.total_amt}),
+      await dbGet('members', inv.member_id).catch(()=>null),
+      inv.buyer_ubn ? {mode:'ubn', ubn:inv.buyer_ubn, title:inv.buyer_name}
+      : inv.love_code ? {mode:'donate', loveCode:inv.love_code}
+      : inv.print_flag ? {mode:'print', name:inv.buyer_name, addr:''}
+      : {mode:'carrier', carrierNum:(inv.carrier_type==='3'?inv.carrier_num:'')},
+      inv.items));
+  const rd=(r&&r.data)||{};
+  await dbPut('invoices', Object.assign({}, inv, {
+    status: r&&r.ok?'issued':'failed',
+    invoice_number: rd.InvoiceNo||inv.invoice_number||null,
+    random_num: rd.RandomNumber||inv.random_num||null,
+    invoice_time: rd.InvoiceDate||inv.invoice_time||null,
+    raw_result: r||inv.raw_result }));
+  if(r&&r.ok){
+    try{ await dbPut('purchases', Object.assign({}, pur, {invoice_type:'ecpay', invoice_number:rd.InvoiceNo})); }catch(_){}
+    showToast('發票已開立 '+rd.InvoiceNo);
+  }else showToast('⚠ 還是失敗：'+((r&&r.msg)||'未知'), 6000);
+  dbCacheClear(['invoices','purchases']);
+  navTo('finance','g_admin');
+}
 async function finVat(){
   const box=document.getElementById('fin-body'); if(!box) return;
   box.innerHTML='<div class="card" style="padding:16px;color:var(--t3);font-size:12.5px;">整理中…</div>';

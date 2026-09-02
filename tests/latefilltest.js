@@ -70,7 +70,9 @@ console.log('\n② 選「已付款」要先確認（按錯＝錢沒收到卻記�
 console.log('\n②-b 預設就是「未付款」（安全的那一邊）');
 {
   ok('★★ gt-pay 的第一個選項是未付款、而且帶 selected',
-     /<select id="gt-pay"><option value="unpaid" selected>未付款<\/option><option value="paid">已付款<\/option><\/select>/.test(src));
+     /* 2026-09-02 起這個 select 多了 onchange（電子發票欄要跟著付款狀態顯示），
+        所以放行屬性，只釘選項順序與 selected —— 那才是這條在守的東西。 */
+     /<select id="gt-pay"[^>]*><option value="unpaid" selected>未付款<\/option><option value="paid">已付款<\/option><\/select>/.test(src));
   ok('★★ 理由寫在原地', /預設「未付款」（2026-08-28 使用者指示）—— 安全的那一邊：/.test(src));
 }
 
