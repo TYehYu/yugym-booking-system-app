@@ -11869,8 +11869,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260902.1842';
-const APP_VERSION_LABEL='260902.1842';
+const APP_VERSION='260902.1846';
+const APP_VERSION_LABEL='260902.1846';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19359,6 +19359,33 @@ PAGES.g_dashboard=async function(){
      這裡先把標記算好（同一支 computeLastBkMarks，判準不會漂移），卡片渲染時查 window 的表。 */
   try{ computeLastBkMarks(mtickets||[], bookings||[], typeMap||{}); }catch(_){}
 
+  /* 這一堂是「這位會員這個月的第幾堂教練課」（2026-09-02 使用者指示，附截圖）——
+     「這個數字代表這堂課是這個月的第幾堂　方便知道是否要抽獎
+       因為現在都要等會員簽到才會出現抽獎的圖案」
+     ⚠ 口徑跟 lottoEarnedByMember 對齊（category==='私人教練'、不算取消；
+       友善課的 category 也是私人教練，所以一起算），但**不看簽到狀態** ——
+       抽獎名單要等簽到才算數，這個數字的用途正好相反：讓櫃檯**事先**看出
+       「這堂上完就滿 4 堂了」。兩者口徑刻意只差這一個條件。
+     ⚠ 依日期＋時間排序後編號，所以同一天多堂也數得對；
+       整份 bookings 只掃一次，不要放進逐張卡片的迴圈裡。
+  ⚠⚠ 這一段一定要在 rows 之前算完（0902 上線後白畫面：
+       Cannot access '_monSeq' before initialization）——
+     rows 的 cardHtml 是**立即執行**的 IIFE，map 跑到哪就執行到哪，
+     放在 rows 後面等於在 TDZ 裡被讀。
+   */
+  const _monSeq={};
+  (function(){
+    const per={};
+    (bookings||[]).forEach(b=>{
+      if(!b || b.status==='cancelled' || b.category!=='私人教練' || !b.member_id) return;
+      const m=String(b.date||'').slice(0,7); if(m.length!==7) return;
+      (per[b.member_id+'|'+m]=per[b.member_id+'|'+m]||[]).push(b);
+    });
+    Object.keys(per).forEach(k=>{
+      per[k].sort((x,y)=>((x.date||'')+(x.start_time||'')).localeCompare((y.date||'')+(y.start_time||'')))
+            .forEach((b,i)=>{ _monSeq[b.id]=i+1; });
+    });
+  })();
   const rows=coachable.map(c=>{
     /* 2026-07-29 使用者指示：教練任務區不再顯示已取消的課卡。
        取消的課不是任務，留著只會讓時間軸看起來比實際忙。 */
@@ -19777,28 +19804,6 @@ PAGES.g_dashboard=async function(){
     <div class="twk-barin">${_wkDays}</div>
     <button class="tl-daynav" onclick="dashDayShift(7)" title="下一週">›</button>
   </div>`;
-  /* 這一堂是「這位會員這個月的第幾堂教練課」（2026-09-02 使用者指示，附截圖）——
-     「這個數字代表這堂課是這個月的第幾堂　方便知道是否要抽獎
-       因為現在都要等會員簽到才會出現抽獎的圖案」
-     ⚠ 口徑跟 lottoEarnedByMember 對齊（category==='私人教練'、不算取消；
-       友善課的 category 也是私人教練，所以一起算），但**不看簽到狀態** ——
-       抽獎名單要等簽到才算數，這個數字的用途正好相反：讓櫃檯**事先**看出
-       「這堂上完就滿 4 堂了」。兩者口徑刻意只差這一個條件。
-     ⚠ 依日期＋時間排序後編號，所以同一天多堂也數得對；
-       整份 bookings 只掃一次，不要放進逐張卡片的迴圈裡。 */
-  const _monSeq={};
-  (function(){
-    const per={};
-    (bookings||[]).forEach(b=>{
-      if(!b || b.status==='cancelled' || b.category!=='私人教練' || !b.member_id) return;
-      const m=String(b.date||'').slice(0,7); if(m.length!==7) return;
-      (per[b.member_id+'|'+m]=per[b.member_id+'|'+m]||[]).push(b);
-    });
-    Object.keys(per).forEach(k=>{
-      per[k].sort((x,y)=>((x.date||'')+(x.start_time||'')).localeCompare((y.date||'')+(y.start_time||'')))
-            .forEach((b,i)=>{ _monSeq[b.id]=i+1; });
-    });
-  })();
   const coachSection = rows.length
     ? `<div class="tl-panel tl-desktop-only">
         ${/* 「N 人上課中」標籤移除（2026-08-22 使用者指示）——上課中的那一列本來就有流星邊框，

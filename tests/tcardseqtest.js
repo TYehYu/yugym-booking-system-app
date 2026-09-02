@@ -14,8 +14,13 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
-/* 把編號那一段抽出來實跑 */
-const SEG=src.slice(src.indexOf('  const _monSeq={};'), src.indexOf('  const coachSection = rows.length'));
+/* 把編號那一段抽出來實跑。
+   ⚠ 它必須在 rows 之前 —— 0902 第一版放在 rows 後面，首頁直接白畫面
+     （Cannot access '_monSeq' before initialization）：rows 的 cardHtml 是
+     **立即執行**的 IIFE，map 跑到哪就執行到哪，放後面等於在 TDZ 裡被讀。 */
+const I_SEQ=src.indexOf('  const _monSeq={};');
+const I_ROWS=src.indexOf('  const rows=coachable.map(c=>{');
+const SEG=src.slice(I_SEQ, I_ROWS);
 const run=bks=>new Function('bookings', SEG+'\nreturn _monSeq;')(bks);
 
 console.log('① 編號');
@@ -69,6 +74,13 @@ ok('★★ 滿 4 的那一堂標品牌金（抽獎門檻是當月每 4 堂 1 次
    && /\.tcard-std \.tcard-seq\.tcard-seq-hit\{color:var\(--gold-d,#b48a56\);opacity:\.42;\}/.test(src));
 ok('★ 螢幕報讀器跳過（它是視覺輔助，唸出來只是雜訊）', /class="tcard-seq[\s\S]{0,60}?aria-hidden="true"/.test(src));
 ok('★ 沒有編號就不畫（不要留一個空的圖層）', /const _sq=_monSeq\[b\.id\]; if\(!_sq\) return '';/.test(src));
+
+console.log('\n★★★ 宣告順序（0902 白畫面事故）');
+ok('★★★ _monSeq 一定在 rows 之前算完（cardHtml 是立即執行的 IIFE）',
+   I_SEQ>0 && I_ROWS>0 && I_SEQ<I_ROWS);
+ok('★★ 事故與原因寫在原地',
+   /Cannot access '_monSeq' before initialization/.test(src)
+   && /rows 的 cardHtml 是\*\*立即執行\*\*的 IIFE/.test(src));
 
 console.log('\n④ 效能');
 ok('★★ 整份 bookings 只掃一次，不放進逐張卡片的迴圈',
