@@ -11765,8 +11765,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260902.1717';
-const APP_VERSION_LABEL='260902.1717';
+const APP_VERSION='260902.1724';
+const APP_VERSION_LABEL='260902.1724';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29722,7 +29722,18 @@ function renderGrpPick(){
        9/25 兩格明明是媽媽與姊姊，畫面卻標成本人與媽媽（而且兩列都打勾）。 */
   const _seatRec=(mid,i)=>{ const k=(i>0)?(mid+'#'+(i+1)):mid;
     return (window._grpSeatTk||{})[k]||''; };
+  /* 這一格是「哪一位使用人」的名額。
+     ⚠ 2026-09-02 緊急修（許佳慈 9/08 那堂）：原本只在候選清單 m.tks 裡找那張票，
+       但既有名額用的票常常已經扣到 0 堂、根本不在候選清單裡 —— 找不到就回 ''，
+       等於把姊姊的名額算到「本人」那一列頭上。
+       後果不是顯示錯而已：addMode 看到那一列「已經有名額」，
+       點下去會走「再點一次＝取消」那條，畫面完全沒反應，人也加不進去。
+       （這正是 0829 修 _grpTaken 時寫下的同一個坑：「用完的票不在清單裡就會推錯人」，
+         當時只修了 _grpTaken，這一支漏掉。）
+     ⚠ 先查 _grpTkFam（全部票券，含用完的），查不到才退回候選清單。 */
   const _seatFam=(m,i)=>{ const pk=grpPickOf(m.id,i)||_seatRec(m.id,i)||_defPkOf(m,i);
+    const g=(window._grpTkFam||{})[pk];
+    if(g!=null) return g;
     const t=(m.tks||[]).find(x=>x.id===pk); return t?_famKey(t):''; };
   const ROWS=[];
   list.forEach(m=>{
@@ -34993,6 +35004,10 @@ async function openGroupMembers(id, keepSel, addMode){
      「候選清單的第 i 張」＝媽媽那張，於是媽媽被判定成「已經在名單上」整列藏掉。
      ⚠ 用票券本身的 family_user 反查，不碰候選清單也不碰索引 —— 用完的票照樣查得到。
      ⚠ 查不到票的名額（舊資料沒記）不列進來：寧可多列一位，也不要把人藏掉。 */
+  /* 票 → 使用人（2026-09-02）。⚠ 一定要涵蓋**已經用完的票** ——
+     候選清單 m.tks 只收「還扣得到」的票，既有名額用的那張常常已經 0 堂，
+     在候選清單裡查不到就會被推成「本人」。見 renderGrpPick 的 _seatFam。 */
+  window._grpTkFam=(function(){ const o={}; (allTk||[]).forEach(t=>{ if(t&&t.id) o[t.id]=String(t.family_user||''); }); return o; })();
   window._grpTaken=(function(){
     const out={}; const map={}; (allTk||[]).forEach(t=>{ if(t&&t.id) map[t.id]=t; });
     Object.keys(window._grpSeatTk||{}).forEach(k=>{
