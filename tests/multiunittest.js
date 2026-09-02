@@ -1,6 +1,12 @@
-/* 同行多台開放到多功能訓練架（2026-08-18 使用者定案）：
-   「一個時段同一個名字要能夠預約多個場地——1v2 的客人，場地允許就可以約兩個多功能訓練架」
-   跑步機的同行第二台機制通用化：精靈選台數、明細台數開關、課卡標籤。 */
+/* 「一張預約可以佔幾個場地單位」——只有跑步機可以。
+
+   2026-08-18 曾把它開放給多功能訓練架（1v2 兩人各佔一架、只扣 1 點）；
+   2026-09-02 使用者**推翻**：「多功能訓練架跟跑步機不一樣，1 點只能約一個場地」。
+   訓練架的 3 個單位是「同時容納 3 個人」，不是同一張預約可以佔 3 個
+   —— 這其實是 0801 原本的規則，中間繞了一圈又回來。
+
+   ⚠ 0818–0902 之間沒有任何一筆預約真的佔了兩架（sibling_of＋multi% 實查 0 筆），
+     所以是純粹把功能收掉，沒有資料要清。 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 let pass=0,fail=0;
@@ -9,29 +15,52 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 const g=(a,b)=>{const i=src.indexOf(a);if(i<0)return '';return src.slice(i,src.indexOf(b,i)+b.length);};
 
 /* ── venueAllowsMultiUnit ── */
-const VENUE_MULTI_UNIT=['treadmill','multi'];
+const VENUE_MULTI_UNIT=['treadmill'];
 const venueAllowsMultiUnit=new Function('VENUE_MULTI_UNIT',
   g('function venueAllowsMultiUnit(vid){','}')+'\nreturn venueAllowsMultiUnit;')(VENUE_MULTI_UNIT);
 console.log('放行檢查');
 ok('　跑步機可多台', venueAllowsMultiUnit('treadmill'));
-ok('　多功能訓練架可多台', src.includes("const VENUE_MULTI_UNIT=['treadmill','multi']"));
+ok('★★ 多功能訓練架**不可**多台（0902 收回 0818）',
+   src.includes("const VENUE_MULTI_UNIT=['treadmill'];") && !venueAllowsMultiUnit('multi'));
 ok('　教室不可', !venueAllowsMultiUnit('group'));
-ok('　訓練架多台只給自主訓練', src.includes("if(vid==='multi' && b.category!=='自主訓練') return '';"));
+ok('★ 0818 那條「訓練架多台只給自主訓練」的閘門已移除（常數收掉後它是死碼）',
+   !src.includes("if(vid==='multi' && b.category!=='自主訓練') return '';"));
+ok('　　為什麼收回，寫在原地',
+   /多功能訓練架跟跑步機不一樣，1 點只能約一個場地/.test(src));
 
-/* ── bkVenueChoice：多功能 2 台 → 指定 multi ── */
+/* ── bkVenueChoice：訓練架永遠不帶台數 ── */
 console.log('精靈場地選擇');
 {
   const mk=(val,tmN)=>new Function('document','window',
     g('function bkVenueChoice(){','\n}')+'\nreturn bkVenueChoice();')(
     {getElementById:()=>({value:val})},{_bkTmN:tmN});
-  eq('　多功能＋1 台＝維持自動配置', mk('0',1), {pref:null,units:0});
-  eq('　多功能＋2 台＝指定 multi×2', mk('0',2), {pref:'multi',units:2});
-  eq('　多功能＋3 台＝指定 multi×3', mk('0',3), {pref:'multi',units:3});
+  eq('★★ 訓練架＋1 台＝自動配置', mk('0',1), {pref:null,units:0});
+  eq('★★ 訓練架就算 _bkTmN 殘留 2 也不帶台數（按鈕藏起來了，狀態可能還在）',
+     mk('0',2), {pref:null,units:0});
+  eq('★★ 訓練架殘留 3 也一樣', mk('0',3), {pref:null,units:0});
   eq('　跑步機＋2 台照舊', mk('t',2), {pref:'treadmill',units:2});
   eq('　團課教室照舊', mk('g',1), {pref:'group',units:0});
 }
 
-/* ── bkAddTreadmillUnits：multi 也能補開同行卡 ── */
+/* ── 台數那排按鈕：初次渲染就不能出現在訓練架上 ── */
+console.log('台數欄的顯示時機');
+{
+  const F=g('function bkTreadmillRow(t){','\n}');
+  /* 0902 使用者回報：「多功能訓練架有一台兩台三台可以選」——
+     bkTmSwap 只在 onchange 跑，預設場地是訓練架，一打開就會看到那排按鈕。
+     所以初始 display 一定要在 HTML 裡就算好，不能靠 onchange 補。 */
+  ok('★★★ 初始 display 由所選場地決定（不是寫死 flex）',
+     /id="bk-tm-units" style="display:\$\{_sel==='t'\?'flex':'none'\}/.test(F));
+  ok('★★ 只有自主訓練才有這一欄', /if\(!t \|\| t\.category!=='自主訓練'\) return '';/.test(F));
+  ok('★★ 按鈕最多畫到「可多台場地」的最大容量（現在只有跑步機＝2 台）',
+     /const maxCap=Math\.max\(\.\.\.\(window\.VENUES\|\|\[\{capacity:2\}\]\)\.filter\(v=>venueAllowsMultiUnit\(v\.id\)\)/.test(F));
+  const swap=g('function bkTmSwap(){','\n}');
+  ok('★ 換場地時跟著開關，並把台數歸 1',
+     /row\.style\.display=\(vid&&venueAllowsMultiUnit\(vid\)\)\?'flex':'none';/.test(swap)
+     && /window\._bkTmN=1;/.test(swap));
+}
+
+/* ── bkAddTreadmillUnits：訓練架不再補開同行卡 ── */
 console.log('同行卡建立');
 {
   const puts=[];
@@ -42,20 +71,28 @@ console.log('同行卡建立');
     async()=>[], async(t,o)=>{puts.push(o);}, p=>p+'-x', {id:'op'},
     v=>({multi:'多功能訓練架',treadmill:'跑步機'})[v]||v,
     s=>{const[a,b]=String(s).split(':').map(Number);return a*60+(b||0);});
-  fn({id:'BK-M',member_id:'m1',category:'自主訓練',venue_unit:'multi_2',date:'2026-08-21',start_time:'10:00',duration:60},2).then(made=>{
-    eq('　多功能開到 2 台', made, 2);
-    eq('　同行卡指回主卡', puts[0]&&puts[0].sibling_of, 'BK-M');
-    ok('　同行卡不綁票不扣點', puts[0]&&puts[0].ticket_id===null);
-    ok('　備註寫場地名', puts[0]&&/同行使用（多功能訓練架）/.test(puts[0].note));
-    ok('　台數編號跟著場地（multi_1）', puts[0]&&puts[0].venue_unit==='multi_1');
+  const base={id:'BK-M',member_id:'m1',category:'自主訓練',date:'2026-08-21',start_time:'10:00',duration:60};
+  fn(Object.assign({},base,{venue_unit:'multi_2'}),2).then(async made=>{
+    eq('★★ 訓練架要 2 台也只給 1 台（最後一道防線）', made, 1);
+    eq('　　而且一張同行卡都沒建', puts.length, 0);
 
-    /* ── venueUnitsLabel：訓練架多台要標 ── */
+    const made2=await fn(Object.assign({},base,{id:'BK-T',venue_unit:'treadmill_2'}),2);
+    eq('　跑步機照舊開到 2 台', made2, 2);
+    eq('　同行卡指回主卡', puts[0]&&puts[0].sibling_of, 'BK-T');
+    ok('　同行卡不綁票不扣點', puts[0]&&puts[0].ticket_id===null);
+    ok('　備註寫場地名', puts[0]&&/同行使用（跑步機）/.test(puts[0].note));
+    ok('　台數編號跟著場地（treadmill_1）', puts[0]&&puts[0].venue_unit==='treadmill_1');
+
+    /* ── venueUnitsLabel ── */
     console.log('課卡標籤');
     const bkIsGroup=b=>!!(b&&b.category==='小班肌力');
     const lbl=new Function('bkIsGroup',
       g('function selfVenueLabel(b){','\n}')+'\n'+g('function venueUnitsLabel(b){','\n}')+'\nreturn venueUnitsLabel;')(bkIsGroup);
-    eq('　訓練架×2 → 訓練架・兩台', lbl({category:'自主訓練',venue_unit:'multi_1',_units:2}), '訓練架・兩台');
-    eq('　訓練架×1 → 不標（照舊）', lbl({category:'自主訓練',venue_unit:'multi_1'}), '');
+    /* 這一行留著只是防呆 —— 新資料不會再有 _units>1 的訓練架（實查也是 0 筆），
+       但真的冒出來時要標出來，不能默默顯示成一台。 */
+    eq('　舊資料若真有訓練架×2 仍標得出來（防呆）',
+       lbl({category:'自主訓練',venue_unit:'multi_1',_units:2}), '訓練架・兩台');
+    eq('　訓練架×1 → 不標（預設場地，照舊）', lbl({category:'自主訓練',venue_unit:'multi_1'}), '');
     eq('　跑步機×2 照舊', lbl({category:'自主訓練',venue_unit:'treadmill_1',_units:2}), '跑步機・兩台');
 
     /* ── mergeSiblingUnits：同場地併卡、跨場地拆卡（2026-08-18 蘇美帆 10:00 案例） ── */

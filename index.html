@@ -11762,8 +11762,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260902.0925';
-const APP_VERSION_LABEL='260902.0925';
+const APP_VERSION='260902.1411';
+const APP_VERSION_LABEL='260902.1411';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23914,8 +23914,11 @@ function bkTreadmillRow(t){
   /* 2026-08-12 使用者指示：「跑步機選完後，下方跳出一台兩台的選項」——
      選單收斂成三個場地（自動配置／跑步機／團課教室），台數改成選了跑步機才出現的
      一台／兩台按鈕（value 't'＋window._bkTmN），語意與舊版數字值相同。
-     2026-08-18 使用者定案：多功能訓練架也開放多台（1v2 兩人各佔一架、只扣 1 點）——
-     按鈕一次畫到最大容量（3），bkTmSwap 依所選場地的容量顯示前幾顆。 */
+     2026-08-18 曾開放訓練架多台，2026-09-02 收回（訓練架 1 點只能約一個場地），
+     所以這排按鈕只跟著跑步機走。
+     ⚠ 初次渲染就要決定顯不顯示 —— bkTmSwap 只在 onchange 時跑，
+       預設場地是訓練架，靠 onchange 補的話一打開就會看到不該有的台數選項
+       （0902 使用者回報：「多功能訓練架有一台兩台三台可以選」）。 */
   window._bkTmN=1;
   const maxCap=Math.max(...(window.VENUES||[{capacity:2}]).filter(v=>venueAllowsMultiUnit(v.id)).map(v=>v.capacity||2), 2);
   const NUM=['','一','兩','三','四','五','六'];
@@ -23930,7 +23933,7 @@ function bkTreadmillRow(t){
       <option value="t"${_sel==='t'?' selected':''}>${venueName('treadmill')}</option>
       <option value="g"${_sel==='g'?' selected':''}>${venueName('group')}</option>
     </select>
-    <div id="bk-tm-units" style="display:flex;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap;">
+    <div id="bk-tm-units" style="display:${_sel==='t'?'flex':'none'};align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap;">
       <span style="font-size:12px;color:var(--t2);">台數</span>
       ${Array.from({length:maxCap},(_,i)=>i+1).map(n=>`<button type="button" class="btn btn-ghost btn-sm bk-tmn" data-n="${n}" style="padding:4px 16px;${n===1?'background:var(--green);border-color:var(--green);color:#fff;':''}" onclick="bkTmPick(${n})">${NUM[n]||n}台</button>`).join('')}
       <span style="font-size:11px;color:var(--t3);">兩台以上＝同行使用，<b>只扣 1 點</b></span>
@@ -23961,16 +23964,14 @@ function bkTreadmillN(){
   return Math.max(0, Number(el.value)||0);       // 舊值相容（'0'＝自動）
 }
 /* 場地選擇（2026-08-04）：'treadmill'＋台數／'group' 團課教室／null 自動配置
-   2026-08-18：多功能訓練架選 2 台以上 → 明確指定 multi＋台數（1 台維持自動配置不變）。 */
+   2026-09-02：訓練架不再有台數（1 點只能約一個場地），選它就是自動配置。 */
 function bkVenueChoice(){
   const el=document.getElementById('bk-treadmill');
   if(!el) return {pref:null, units:0};
   if(el.value==='g') return {pref:'group', units:0};
   if(el.value==='t') return {pref:'treadmill', units:Math.max(1,Number(window._bkTmN)||1)};
-  if(el.value==='0'){
-    const n=Math.max(1,Number(window._bkTmN)||1);
-    return n>1 ? {pref:'multi', units:n} : {pref:null, units:0};
-  }
+  /* 訓練架＝自動配置、永遠 1 台（2026-09-02 收回 0818 的多台） */
+  if(el.value==='0') return {pref:null, units:0};
   const n=Math.max(0, Number(el.value)||0);      // 舊值相容
   return {pref:n>0?'treadmill':null, units:n};
 }
@@ -24023,7 +24024,8 @@ function venueUnitsLabel(b){
   const n=Math.max(1,Number(b&&b._units)||1);
   const NUM=['','一台','兩台','三台'];
   if(v==='跑步機') return '跑步機・'+(NUM[n]||(n+' 台'));
-  /* 多功能訓練架平常不標（預設場地）；佔多架時要標出來（2026-08-18 同行多台開放到訓練架） */
+  /* 多功能訓練架平常不標（預設場地）。0818–0902 之間曾開放同行多台，實際 0 筆；
+     這一行留著只是防呆，新資料不會再有 _units>1 的訓練架。 */
   if(n>1 && String((b&&b.venue_unit)||'').startsWith('multi')) return '訓練架・'+(NUM[n]||(n+' 台'));
   return v;
 }
@@ -33782,7 +33784,13 @@ async function _doBkTicketChange(id,newTkId){
    在那裡畫燈號會讓櫃檯以為可以一次占滿，是誤導。
    ⚠ 用常數而不是 venues 表的欄位：window.VENUES 會被資料庫的 venues 覆寫（見 enterApp），
      DB 那份沒有這個欄位的話，功能會無聲消失。 */
-const VENUE_MULTI_UNIT=['treadmill','multi'];   /* 2026-08-18 使用者定案：多功能訓練架也開放同行多台（1v2 兩人可各佔一架） */
+/* 2026-09-02 使用者定案，**推翻 2026-08-18 的「訓練架也開放同行多台」**：
+     「多功能訓練架跟跑步機不一樣，1 點只能約一個場地」——
+     訓練架的 3 個單位是「同時容納 3 個人」，不是同一張預約可以佔 3 個
+     （這正是 0801 原本的規則，上面那段註解一直都寫著）。
+   ⚠ 0818 到 0902 之間沒有任何一筆預約真的佔了兩架（sibling_of＋multi% 查出來是 0 筆），
+     所以直接拿掉，不用清資料。 */
+const VENUE_MULTI_UNIT=['treadmill'];
 function venueAllowsMultiUnit(vid){ return VENUE_MULTI_UNIT.indexOf(String(vid||''))>=0; }
 /* ── 場地單位燈號開關（2026-07-31 使用者指示：明細的場地旁邊要有燈號讓我選）──
    跑步機是「一個場地兩台」，一對二的客人可能一張票就佔掉兩台。
@@ -33794,8 +33802,7 @@ async function venueUnitDots(b, editable){
     if(!b || !b.date || !b.start_time) return '';
     const vid=String(b.venue_unit||'').split('_')[0]
       || ((typeof venuePriorityFor==='function'?venuePriorityFor(b.category):[])||[])[0];
-    if(!venueAllowsMultiUnit(vid)) return '';     // 2026-08-01：跑步機；2026-08-18 起多功能訓練架也開放
-    if(vid==='multi' && b.category!=='自主訓練') return '';   // 訓練架多台只給自主訓練（教練課一人一架照舊）
+    if(!venueAllowsMultiUnit(vid)) return '';     // 只有跑步機（0818 開給訓練架，0902 收回）
     const cap=(typeof venueCap==='function')?(venueCap(vid)||0):0;
     if(cap<2) return '';
     const all=await dbGetAll('bookings').catch(()=>[]);
