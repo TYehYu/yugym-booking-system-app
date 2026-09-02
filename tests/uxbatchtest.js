@@ -111,8 +111,12 @@ console.log('\n會員列表的票券欄要看得到團課');
 ok('★ 餘額 0 但還有待上的課 → 票券燈號不判成紅燈',
    /if\(!s\|\|!s\.anyUsable\) return _memPendingIdx\[mid\] \? 'yellow' : 'red';/.test(src));
 /* 2026-07-31 二修：改成把索引交給票券夾（buildWallet 的 bookingsOf），一樣不逐人掃全表 */
+/* 2026-09-02：索引外面再包一層 _bkOf —— 除了自己的預約，還要帶上「掛在他用得到的票上、
+   但是別人約的」那幾筆（共享票）。不帶的話那幾堂在票券夾裡沒有對應預約，
+   圓形卡會畫成沒有日期的 ✓，跟舊系統匯入的無日期紀錄長得一模一樣（陳瀚竣案例）。 */
 ok('★ 組預約清單改用索引，含團課（學員在 member_ids、member_id 是 null）',
-   /bookingsOf:m=>_memBkIdx\[m\]\|\|\[\]/.test(src)
+   /bookingsOf:_bkOf/.test(src)
+   && /const own=_memBkIdx\[mid\]\|\|\[\];/.test(src)
    && /const myBk=c\.bookingsOf \? \(c\.bookingsOf\(memberId\)\|\|\[\]\)/.test(src)
    && !/const myBk=allBk\.filter\(b=>b\.member_id===m\.id&&b\.status!=='cancelled'\);/.test(src));
 ok('★ 兩個索引各建一次，不是每位會員掃一次上萬筆',
@@ -183,7 +187,7 @@ ok('★ 配對 key 不再把 format 算進團課（票券空白 vs 預約寫「�
 ok('★ 原因寫在程式裡（配不到又不會落到第二輪，整批被丟掉）',
    /那些課配不到票也不會落到第二輪（它們有 ticket_type_id），整批被丟掉/.test(src));
 ok('★ 會員列表也把「沒有票可扣的已預約未上」帶上，跟名單一樣看得到（見下方票券袋子）',
-   /let dots=ticketTokens\(tk,sl\.stamps\.concat\(extra\|\|\[\]\),typeMapFull,used,null,mid\|\|tk\.member_id,sl\.selfBk\);/.test(src));
+   /let dots=ticketTokens\(tk,_shMarkList\(sl\.stamps\.concat\(extra\|\|\[\]\),_who\),typeMapFull,used,null,_who,sl\.selfBk\);/.test(src));
 ok('　　已經配到票的不重複列（同一堂只會蓋在一張票上）',
    /put=\(tid,b\)=>\{ if\(!tid\|\|byBooking\[b\.id\]\) return;/.test(src));
 ok('　　只帶今天以後、且依課別歸戶（2026-07-31 起用票券五分類歸戶）',

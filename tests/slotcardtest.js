@@ -265,25 +265,23 @@ console.log('\n桌機取代：先補功能');
    入口從票名那一行搬到圓點列最右邊，並多一個「真的有別張票」的條件。 */
 /* 三修：「改成[其他方案>]」—— 字變長，圓形塞不下，改膠囊（不再掛 .mtk）。 */
 ok('★★ 更換票券＝卡片右下角的「其他方案 ›」（未簽到／非團課／有會員／櫃檯以上／有別張票可換）',
-   /const _tkCan = isDeskLike\(\) && b\.status==='booked' && r\.mid && !A\.isGroup;/.test(src)
-   && /const _tkTap = _tkCan && \(_swapN\[r\.mid\]\|\|0\)>0;/.test(src)
+   /const _tkTap = isDeskLike\(\) && b\.status==='booked' && r\.mid && !A\.isGroup && \(_swapN\[r\.mid\]\|\|0\)>0;/.test(src)
    && /<button type="button" class="ash-mswap"/.test(src)
    && !/class="mtk ash-mswap"/.test(src)
    && /onclick="event\.stopPropagation\(\);ashSwapToggle\('\$\{r\.mid\}'\)">其他方案 ›<\/button>/.test(src));
-/* 2026-09-01 使用者：「按鈕幫我淡化」——沒有可換的票時原本整顆不畫，
-   櫃檯只會覺得「怎麼沒有按鈕」（鄭雅芳：兩張教練課票剛好都排滿）。
-   照畫、淡化、點下去說原因（手機沒有 hover，原因不能只寫在 title）。 */
-ok('★★★ 沒票可換時照畫、淡化、點得下去說明原因（不是整顆消失）',
-   /const _tkOff = _tkCan && !_tkTap;/.test(src)
-   && /class="ash-mswap ash-mswap-off" title="沒有其他有堂數的票可以換"/.test(src)
-   && /onclick="event\.stopPropagation\(\);ashSwapWhy\('\$\{r\.mid\}'\)">其他方案<\/button>/.test(src)
-   && /\.ash-mswap\.ash-mswap-off\{color:var\(--t3\);font-weight:700;\}/.test(src));
-ok('★★★ 說明要講出路（先讓出一堂＝兩堂對調），不是只說「不行」',
-   /function ashSwapWhy\(mid\)\{/.test(src)
-   && /常見情況是<b>每一張票都剛好排滿了<\/b>/.test(src)
-   && /等於兩堂對調，兩張票都維持不超約/.test(src));
-ok('★★ 淡化那顆也要留位子（.ash-has-swap 的右內距）',
-   /const _hasSwap=!!\(isDeskLike\(\) && b\.status==='booked' && r\.mid && !A\.isGroup\);   \/\* 淡化的那顆也佔位 \*\//.test(src));
+/* ★ 2026-09-02 使用者定案，**收回 0901 的淡化版**：沒票可換就整顆不畫。
+   0901 為了鄭雅芳（兩張教練課票都排滿、按鈕消失）改成淡化保留，
+   但「其他方案」四個字讀起來像在宣告「這個人有其他方案」——
+   0902 蘇美帆（只有一張教練課票）就被誤讀成她還有別的票。
+   ⚠ 這是 0823「不能用就寫原因，別藏按鈕」的例外：那條規則講的是**列表裡的項目**
+     （淡化列出＋副標寫原因），這裡是卡片角落的一顆字，放不下副標，
+     光靠顏色分不出能點與不能點。 */
+ok('★★★ 沒票可換就整顆不畫（0902 收回淡化版）',
+   !/_tkOff/.test(src)
+   && !/ash-mswap-off/.test(src)
+   && !/function ashSwapWhy\(/.test(src));
+ok('★★ 沒畫按鈕就不留位子（不然卡片右下角會空一塊）',
+   /const _hasSwap=!!\(isDeskLike\(\) && b\.status==='booked' && r\.mid && !A\.isGroup && \(_swapN\[r\.mid\]\|\|0\)>0\);/.test(src));
 /* 2026-08-29 兩來回：先收斂到姓名，使用者再回「會員卡恢復整張課卡會點進會員資料的功能
    但是右上角＋備註跟右下角[其他方案]滑鼠指上去時要有互動感」。 */
 ok('★★ 整張卡可點（回到原本的行為），按壓回饋也在',
