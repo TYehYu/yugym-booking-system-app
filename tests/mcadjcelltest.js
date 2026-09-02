@@ -57,5 +57,17 @@ ok('★★ 成因與「不是互動的關係」留在程式裡',
    /不是互動的關係，是子元素數量/.test(src)
    && /新增月曆時對照一般格有幾行，這裡就給幾行/.test(src));
 
+console.log('\n⑤ 回到當月（2026-09-02 使用者指示：「首頁的月曆新增回到當月的按鈕」）');
+ok('★★ 不在當月＝可點的鈕；已經在當月＝不可點的「當月」（那一格永遠佔著）',
+   /\$\{_aYm===ymd\(TODAY\)\.slice\(0,7\)\s*\n\s*\? `<span class="mcal-btn mcal-btn-now is-now" title="正在看當月">當月<\/span>`\s*\n\s*: `<button class="mcal-btn mcal-btn-now" onclick="admCalToday\(\)"/.test(src));
+ok('★★ admCalToday 把月份設回今天那個月，並保住選月旗標（不然重繪會被 date 蓋掉）',
+   /function admCalToday\(\)\{\s*\n\s*window\._admCalYm=ymd\(TODAY\)\.slice\(0,7\);\s*\n\s*window\._admCalKeep=true;\s*\n\s*navTo\('g_dashboard'\);/.test(src));
+ok('★★ span 要自己置中（同日「今天」那顆踩過的坑）',
+   /\.mcal-btn-now\{[\s\S]{0,140}?display:inline-flex;align-items:center;justify-content:center;/.test(src)
+   && /\.mcal-btn-now\.is-now\{opacity:\.55;cursor:default;pointer-events:none;\}/.test(src));
+ok('　 兩個字比 ‹ › 寬，所以不吃 .mcal-btn 的固定 34px',
+   /\.mcal-btn-now\{width:auto;min-width:40px;/.test(src)
+   && /\.mcal-btn\{[\s\S]{0,120}?width:34px;/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
