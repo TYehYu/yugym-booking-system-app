@@ -144,5 +144,25 @@ console.log('\n⑥ ★★★ 金鑰不能出現在前端（index.html 是公開�
      (src.match(/sb\.functions\.invoke\('ecpay-invoice'/g)||[]).length===2);
 }
 
+console.log('\n⑦ ★★★ 只能有一套發票系統');
+{
+  /* 0811 做過一套 ezPay（商店 344990117、INVOICE_LIVE 閘門），0902 改走綠界後整套拆掉。
+     拆的理由不是「用不到」，是**兩套的 invCall 同名** —— 同一個 scope 兩個 function 宣告，
+     後面那個會把前面的蓋掉，於是總有一邊在呼叫另一邊的函式（而且測試全綠、只有上線那天才炸）。 */
+  /* 只看**程式**，墓碑註解裡寫得出這些字是刻意的（要留下拆掉的理由） */
+  ok('★★★ ezPay 那套沒有復活',
+     !/const INVOICE_LIVE\s*=|function invEnabled\(|localStorage\.getItem\('YUGYM_INV_TEST'|functions\/v1\/ezpay-invoice/.test(src));
+  ok('★★★ invCall 全檔只宣告一次（同名函式會互相蓋掉）',
+     (src.match(/^(async )?function invCall\(/gm)||[]).length===1);
+  const dup=(src.match(/^(?:async )?function (inv[A-Za-z0-9_$]*)\(/gm)||[])
+    .map(x=>x.replace(/^(?:async )?function /,'').replace('(',''))
+    .filter((v,i,a)=>a.indexOf(v)!==i);
+  ok('★★★ inv* 底下沒有任何同名函式', dup.length===0, dup);
+  ok('★ 30 分鐘退回改接綠界（退回＝這筆不存在，發票留著就是白繳稅）',
+     /for\(const pid of \(_undoPurIds\|\|\[\]\)\) await invVoidForPurchase\(pid, '銷售退回'\);/.test(src));
+  ok('★ 營收列的發票欄改成唯讀號碼（開立已經跟著收款做完了）',
+     /function revInvChip\(r\)\{[\s\S]{0,200}?rev-invno/.test(src));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
