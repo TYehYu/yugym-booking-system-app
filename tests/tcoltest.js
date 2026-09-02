@@ -49,15 +49,31 @@ console.log('\n② 翻頁');
 }
 
 console.log('\n③ 樣式');
-ok('★★★ 翻頁鈕釘在教練那一列的中線（.tcol-head 高 80 → top:40），不是整欄中間',
-   /\.tcol-head\{display:flex;align-items:center;justify-content:center;height:80px;flex:0 0 auto;\}/.test(src)
-   && /\.tcol-pg\{position:absolute;top:40px;transform:translateY\(-50%\);display:none;/.test(src)
+/* 2026-09-02 二修（使用者：「第一列教練名稱上下空白太多　可以收斂一點」）——
+   高度 80→46，寫成 --tcolhead 讓翻頁鈕的位置跟著走。 */
+ok('★★★ 翻頁鈕釘在教練那一列的中線，高度用同一個變數（不會脫鉤）',
+   /\.tcol-wrap\{--tcolhead:46px;\}/.test(src)
+   && /\.tcol-head\{[\s\S]{0,120}?height:var\(--tcolhead\);/.test(src)
+   && /\.tcol-pg\{position:absolute;top:calc\(var\(--tcolhead,46px\) \/ 2\);/.test(src)
    && /欄一長，中間那個位置會落在課卡上/.test(src));
+ok('★★★ 空白的來源記在原地（Ink 把色塊改成純文字，height:72px 卻留著）',
+   /Ink 主題把它改成純文字（背景透明、寬度自動），高度卻還留著 72px/.test(src)
+   && /\.tcol \.tcol-head \.tcard-cball\{width:100%;height:auto;/.test(src));
+/* 2026-09-02 三修（使用者：「教練任務區凍結教練列　下方預約課卡要可以上下滑動查看」） */
+ok('★★★ 教練列釘住、課卡上下捲；同一個容器吃兩個方向',
+   /\.tcol-head\{[\s\S]{0,200}?position:sticky;top:0;z-index:3;background:var\(--card\);/.test(src)
+   && /\.tcol-scroll\{display:flex;align-items:stretch;[\s\S]{0,120}?flex:1;min-height:0;overflow:auto;/.test(src)
+   && /\.tcol-wrap\{position:relative;min-width:0;flex:1;min-height:0;display:flex;flex-direction:column;\}/.test(src));
+ok('★★★ .tcol 要 stretch —— 欄高各自長的話，課少的那欄捲到底教練列會被推走',
+   /align-items:stretch/.test(src)
+   && /課少的那一欄捲到底之後它的教練列就會跟著被推走/.test(src));
+ok('★★ 兩欄的垂直位置要一起捲（分兩層容器就對不起同一個時段）',
+   /分成兩層容器的話，\s*\n?\s*兩欄的垂直位置會各捲各的，跨教練比對同一個時段就對不起來了/.test(src));
 ok('★★ 欄寬吃得下課卡（.tcard.tcard-std 是 165px）',
    /\.tcol\{flex:0 0 auto;width:173px;/.test(src)
    && /\.tcard\.tcard-std\{width:165px;/.test(src));
-ok('★★ 整批欄橫向捲動、不出現捲軸',
-   /\.tcol-scroll\{display:flex;align-items:flex-start;gap:10px;min-width:0;\s*\n\s*overflow-x:auto;overflow-y:hidden;/.test(src)
+ok('★★ 捲動但不出現捲軸（兩個方向都是）',
+   /\.tcol-scroll\{[\s\S]{0,200}?scrollbar-width:none;-ms-overflow-style:none;/.test(src)
    && /\.tcol-scroll::-webkit-scrollbar\{display:none;\}/.test(src));
 ok('★ 沒課那一格在直欄裡不能絕對定位（橫排版是 absolute，會飛出去）',
    /\.tcol-cards \.tcard-empty\{position:static;left:auto;top:auto;text-align:center;\}/.test(src));

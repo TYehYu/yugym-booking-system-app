@@ -227,13 +227,15 @@ console.log('\n⑨-5 桌機首頁日期列：回到今天搬到翻頁鈕旁');
 ok('★★ 「回到今天」固定在左邊，不再分左右',
    !/_todaySide/.test(src)
    && /const _showToday=!isTodayView;/.test(src)
-   /* 只看桌機那條日期列 —— 手機版（.mtc-wrap-top）另有一顆，不在這條規則裡 */
+   /* 只看桌機那條日期列 —— 手機版（.mtc-wrap-top）另有一顆，不在這條規則裡。
+      0902 二修後那一格永遠有東西：不是「回到今天」鈕，就是「今天」狀態。 */
    && ((src.slice(src.indexOf('const dayBar = `<div class="twk-bar">'),
                   src.indexOf('const coachSection = rows.length'))
-        .match(/tl-daynav-today/g))||[]).length===1);
-ok('★★ 左邊那一格仍固定留位，鈕消失時整列不會被推一下',
+        .match(/tl-daynav-today/g))||[]).length===2);
+ok('★★ 那一格永遠佔著（正在看今天就換成不可點的「今天」）',
    /\.twk-today-slot\{flex:0 0 58px;display:flex;align-items:stretch;justify-content:center;\}/.test(src)
-   && /翻到本週時鈕一消失整列會被推一下/.test(src));
+   && /<span class="tl-daynav tl-daynav-today is-today" title="正在看今天">今天<\/span>/.test(src)
+   && /\.twk-bar>\.twk-today-slot \.tl-daynav-today\.is-today\{[\s\S]{0,200}?cursor:default;pointer-events:none;/.test(src));
 ok('★ 「回到今天」與日期格同高同圓角、文字折兩行（使用者：「改成跟日期一樣大」）',
    /\.twk-bar>\.twk-today-slot \.tl-daynav-today\{margin:0;width:100%;height:auto;align-self:stretch;/.test(src)
    && /onclick="dashPickDate\('\$\{today\}'\)">回到<br>今天<\/button>/.test(src));

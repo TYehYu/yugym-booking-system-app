@@ -95,14 +95,17 @@ console.log('\n⑤ 「回到今天」：只要看的不是今天就要出現，�
      2026-09-02 使用者：「回到今日的按鈕固定在日期列左邊」——
      位置會跳的按鈕比較難按，左右判斷（_todaySide）整個移除，只留「要不要畫」。 */
   ok('★★ 只剩「要不要畫」，沒有左右判斷', !/_todaySide/.test(src) && /const _showToday=!isTodayView;/.test(src));
-  ok('★★ 看的就是今天 → 不畫（本來就在今天，不需要回頭路）',
-     /\$\{_showToday\?`<button class="tl-daynav tl-daynav-today"/.test(src));
-  ok('★★ 桌機日期列只有左邊那一格，右邊那格連同判斷一起移除',
+  /* 0902 二修（使用者：「回今天的按鈕　要一直顯示　如果剛好是今天就顯示今天」）——
+     那一格永遠佔著：不是「回到今天」鈕，就是不可點的「今天」狀態。 */
+  ok('★★ 看的就是今天 → 換成不可點的「今天」（不是整顆消失）',
+     /<span class="tl-daynav tl-daynav-today is-today" title="正在看今天">今天<\/span>/.test(src)
+     && /\.twk-bar>\.twk-today-slot \.tl-daynav-today\.is-today\{[\s\S]{0,200}?cursor:default;pointer-events:none;/.test(src));
+  ok('★★ 桌機日期列只有左邊那一格（兩種狀態各一個），右邊那格連同判斷一起移除',
      ((src.slice(src.indexOf('const dayBar = `<div class="twk-bar">'),
                  src.indexOf('const coachSection = rows.length'))
-        .match(/tl-daynav-today/g))||[]).length===1);
-  ok('　 那一格仍固定留位，鈕消失時整列不會被推一下',
-     /\.twk-today-slot\{flex:0 0 58px;/.test(src) && /翻到本週時鈕一消失整列會被推一下/.test(src));
+        .match(/tl-daynav-today/g))||[]).length===2);
+  ok('　 那一格固定留位（58px），內容換人時整列不會被推一下',
+     /\.twk-today-slot\{flex:0 0 58px;/.test(src));
 }
 
 
