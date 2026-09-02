@@ -16,15 +16,16 @@ const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.len
 const code=g('function isLegacyMember(m){','\n}\n')+'\n'+g('function _tierBaseOf(m){','\n}\n')+'\n'   // 2026-08-05 手動調整起點
   +g("const TIER_EPOCH_YM='2026-07';","\n")+'\n'
   +g('function tierIsVip(m){','\n')+'\n'
-  +g('function tierCountsOf(bookings){','\n}\n')+'\n'
+  +g('function tierCountsOf(bookings, tickets){','\n}\n')+'\n'
   +g('function tierWalkOne(m, byYm, nowYm, hasM){','\n}\n')+'\n'
   +g('function computeMemberTiers(','\n}\n')+'\n'
   +g('function _nextYm(ym)','\n')+'\n'+g('function tierDemotionWatchIds(','\n}\n')+'\n'
   +g('function tierPromotionWatchIds(','\n}\n');
 // 假設「今天」是 2026-12-01 → 會走訪 2026-07 ~ 2026-11 這 5 個完整月
-/* 2026-08-13 更新：2026-08-11 共享票等級歸屬改版後，computeMemberTiers 內部改查
-   window._allTkCache（共享票記在持有人名下）—— 沙箱補 window stub，
-   空快取＝退回舊行為（記在上課者名下），以下情境判定不變。 */
+/* 2026-08-13 更新：2026-08-11 共享票等級歸屬改版後，computeMemberTiers 要查
+   「票 → 持有人」（共享票記在持有人名下）。
+   2026-09-02 改成**參數傳進來**（原本只讀 window._allTkCache，見下方「票券要用傳的」那一段），
+   沙箱仍補一個空 window stub 當退路；不傳票券＝退回「只記上課者」，以下情境判定不變。 */
 const api=new Function('ymd','TODAY','window',code+'\nreturn {computeMemberTiers,tierDemotionWatchIds,tierPromotionWatchIds};')
   (()=>'2026-12', new Date(2026,11,1), {});
 const BK=(mid,ym,n)=>Array.from({length:n},(_,i)=>({member_id:mid,category:'私人教練',status:'checked_in',date:`${ym}-0${(i%9)+1}`}));
@@ -119,8 +120,8 @@ ok('　　首頁待降級副標只留當月堂數', /sub:`本月 \$\{n\} 堂`/.t
 console.log('\n共享票的等級歸屬：出席者與買票的人都算');
 {
   const cnt=new Function('window',
-    src.slice(src.indexOf('function tierCountsOf(bookings){'),
-              src.indexOf('\n}\n', src.indexOf('function tierCountsOf(bookings){'))+2)
+    src.slice(src.indexOf('function tierCountsOf(bookings, tickets){'),
+              src.indexOf('\n}\n', src.indexOf('function tierCountsOf(bookings, tickets){'))+2)
     +'\nreturn tierCountsOf;')({_allTkCache:[{id:'TK-A',member_id:'OWN'}]});
   const B=(mid,tid,n)=>Array.from({length:n},(_,i)=>({member_id:mid,ticket_id:tid,
     status:'checked_in',category:'私人教練',date:'2026-08-0'+(i+1)}));
@@ -172,6 +173,41 @@ console.log('\n即將降級名單：誰該在、誰不該在（實跑）');
   /* 本月已經補到 4 堂 → 不再是「即將降級」 */
   eq('★★ 本月已達 4 堂 → 不列（已經救回來了）',
      nowDemote(bkO.concat(mk('O',{'2026-12':4})),[O]), []);
+}
+
+/* ★★★ 2026-09-02 使用者回報：「即將降級名單　有時候是 94 有時候是 95」
+   真因：tierCountsOf 靠 window._allTkCache（票 → 持有人）替「買票給別人上」的人記堂數，
+   但**首頁從來沒設過那份快取** ——
+     ・重新整理後直接開首頁 → 快取空 → 持有人那一段整段跳過 → 名單多人
+     ・先逛過會員列表（那頁會設快取）再回首頁 → 少人
+   同一份資料、同一天，數字卻會跳。實測差 6 人（蘇靖淵／洪寶琇／邱玉梅／陳添泉／劉志明／陳奕彣
+   在「只算出席」時會被誤列），落到畫面上就是 94／95 的來回。
+   ⚠ 教訓：靠全域快取當**輸入**的函式，結果會取決於「使用者剛剛走過哪一頁」——
+     這種 bug 沒有固定重現步驟，只會被當成「有時候怪怪的」。 */
+console.log('\n★★★ 票券要用傳的，不能只靠全域快取');
+{
+  const decl=/function tierCountsOf\(bookings, tickets\)\{/.test(src);
+  const use=/\(\(tickets && tickets\.length \? tickets : \(window\._allTkCache\|\|\[\]\)\)\|\|\[\]\)/.test(src);
+  ok('★★★ tierCountsOf 接受票券參數，全域只當退路', decl && use);
+  ok('★★★ 三支重播都往下傳',
+     /function computeMemberTiers\(bookings, members, tickets\)\{/.test(src)
+     && /function tierDemotionWatchIds\(bookings, members, tickets\)\{/.test(src)
+     && /function tierPromotionWatchIds\(bookings, members, tickets\)\{/.test(src)
+     && (src.match(/const counts=tierCountsOf\(bookings, tickets\);/g)||[]).length===3);
+  ok('★★★ 會員端那一支也傳（memTierInfo）',
+     /function memTierInfo\(me,bookings,tickets\)\{/.test(src)
+     && /const byYm=\(tierCountsOf\(bookings, tickets\)\|\|\{\}\)\[me\.id\]\|\|\{\};/.test(src));
+  /* 每一個呼叫點都要真的帶票券 —— 漏一個就又回到「看你走過哪一頁」。
+     逐行看：呼叫與定義都在同一行，排掉 function 開頭的那三行就是呼叫點。 */
+  const callLines=src.split('\n')
+    .filter(l=>/\b(computeMemberTiers|tierDemotionWatchIds|tierPromotionWatchIds)\(/.test(l))
+    .filter(l=>!/^\s*function /.test(l));
+  const bare=callLines.filter(l=>!/\b(allTk|mtickets|tickets|tks)\b/.test(l)).map(l=>l.trim().slice(0,70));
+  ok('★★★ 所有呼叫點都帶了票券（漏一個就又會飄）',
+     callLines.length>=6 && bare.length===0, {共:callLines.length, 沒帶:bare});
+  ok('　　成因與教訓寫在原地',
+     /但\*\*首頁根本沒設過那份快取\*\*/.test(src)
+     && /靠全域當輸入的函式，結果會取決於「使用者剛剛走過哪一頁」/.test(src));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

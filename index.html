@@ -11876,8 +11876,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260902.1851';
-const APP_VERSION_LABEL='260902.1851';
+const APP_VERSION='260902.1904';
+const APP_VERSION_LABEL='260902.1904';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16124,7 +16124,15 @@ const TIER_EPOCH_YM='2026-07';
    ⚠ 不能呼叫 effTier：它會去讀等級快取，而快取正是這裡算出來的（會繞回來）。 */
 function tierIsVip(m){ return !!m && (m.tier_manual==='vip' || m.level==='vip'); }
 /* 逐月已簽到教練課數 mid -> { 'YYYY-MM': n } */
-function tierCountsOf(bookings){
+/* ⚠ 2026-09-02 使用者回報：「即將降級名單 有時候是 94 有時候是 95」——
+   真因是這一支靠 window._allTkCache（票 → 持有人）來替「買票給別人上」的人記堂數，
+   但**首頁根本沒設過那份快取**：
+     ・重新整理後直接開首頁 → 快取是空的 → 持有人那一段完全跳過 → 名單多一個人
+     ・先逛過會員列表（那頁會設快取）再回首頁 → 少一個人
+   同一份資料、同一天，數字卻會跳。
+   ⚠ 改法：票券改成**參數傳進來**（呼叫端本來就載好了），全域快取只當退路。
+     靠全域當輸入的函式，結果會取決於「使用者剛剛走過哪一頁」，這種 bug 很難重現。 */
+function tierCountsOf(bookings, tickets){
   const counts={};
   /* ⚠ 記在「誰出席」，不是「誰買課」（2026-09-01 使用者定案：
      「所以升降級要看是誰出席來計算　不是誰買課」）——
@@ -16148,7 +16156,8 @@ function tierCountsOf(bookings){
      ⚠ 抽獎機會走的是另一支 lottoEarnedByMember（只認出席者），不受這裡影響 ——
        買課給別人上不會多拿抽獎次數。 */
   const _tkOwn={};
-  ((window._allTkCache)||[]).forEach(t=>{ if(t&&t.id&&t.member_id) _tkOwn[t.id]=String(t.member_id); });
+  ((tickets && tickets.length ? tickets : (window._allTkCache||[]))||[])
+    .forEach(t=>{ if(t&&t.id&&t.member_id) _tkOwn[t.id]=String(t.member_id); });
   (bookings||[]).forEach(b=>{
     if(!(b.status==='checked_in'||b.status==='completed')) return;
     if(b.category!=='私人教練') return;    // 教練課（含友善）；團課/自主/體驗/按摩不計
@@ -16182,8 +16191,8 @@ function tierWalkOne(m, byYm, nowYm, hasM){
   }
   return {state, ok, low};
 }
-function computeMemberTiers(bookings, members){
-  const counts=tierCountsOf(bookings);
+function computeMemberTiers(bookings, members, tickets){
+  const counts=tierCountsOf(bookings, tickets);
   const nowYm=ymd(TODAY).slice(0,7);
   const res={};
   // 制度起點條款（2026-07-18 使用者指示）：起點當下所有既有會員一律「主顧客」，
@@ -16208,8 +16217,8 @@ function _nextYm(ym){ let[y,m]=ym.split('-').map(Number); m++; if(m>12){m=1;y++;
    若本月結束仍未達即於下月 1 日降級。重播規則與 computeMemberTiers 同源。
    2026-07-30 使用者定案：降級門檻由 2 個月改為 3 個月，故觀察條件同步改成 low===2。
    注意：7 月為制度起點月（無已結束的完整月）→ 名單要 9 月起才會出現。 */
-function tierDemotionWatchIds(bookings, members){
-  const counts=tierCountsOf(bookings);
+function tierDemotionWatchIds(bookings, members, tickets){
+  const counts=tierCountsOf(bookings, tickets);
   const nowYm=ymd(TODAY).slice(0,7);
   const _mById={}; (members||[]).forEach(m=>{ _mById[m.id]=m; });
   const _hasM=(members&&members.length)>0;
@@ -16225,8 +16234,8 @@ function tierDemotionWatchIds(bookings, members){
 }
 /* 待升級觀察名單（2026-07-28 使用者指示）：目前為「會員」、已連 2 個完整月完成抽獎目標
    （教練課 ≥4 堂）—— 本月再達 4 堂即於下月 1 日升主顧客。重播規則與 computeMemberTiers 同源。 */
-function tierPromotionWatchIds(bookings, members){
-  const counts=tierCountsOf(bookings);
+function tierPromotionWatchIds(bookings, members, tickets){
+  const counts=tierCountsOf(bookings, tickets);
   const nowYm=ymd(TODAY).slice(0,7);
   const _mById={}; (members||[]).forEach(m=>{ _mById[m.id]=m; });
   const _hasM=(members&&members.length)>0;
@@ -16261,7 +16270,7 @@ async function ensureMemberTiers(){
   const[bks,mems,tks]=await Promise.all([dbGetAll('bookings'),dbGetAll('members').catch(()=>[]),
     dbGetAll('member_tickets').catch(()=>null)]);
   if(tks) window._allTkCache=tks;   // 共享票等級歸屬要查持有人（2026-08-11）
-  window._memberTierCache=Object.assign(computeMemberTiers(bks,mems),{__ready:true});
+  window._memberTierCache=Object.assign(computeMemberTiers(bks,mems,tks||[]),{__ready:true});
   return window._memberTierCache;
 }
 // 會員標籤（可多選）：目標類 + 傷痛部位類
@@ -20642,7 +20651,7 @@ PAGES.g_dashboard=async function(){
      標示在會員旁邊嗎」）—— 這份名單是要「找人去約課」的，光有會員名字還得再查一次
      誰負責他。沒指定主教練的照樣列出來並寫「未指定」，不要留白（0823 語彙）。 */
   const _coNm={}; (coaches||[]).forEach(c=>{ if(c&&c.id) _coNm[c.id]=coachDisp(c); });
-  const _demoteList=tierDemotionWatchIds(bookings||[], Object.values(memMap||{}))
+  const _demoteList=tierDemotionWatchIds(bookings||[], Object.values(memMap||{}), mtickets||[])
     .filter(id=>memMap[id])
     .map(id=>{ const n=_ptCntThisMonth[id]||0;
       const _cid=memMap[id].default_coach_id||'';
@@ -37393,7 +37402,7 @@ PAGES.members=async function(){
   }
   // 會員升降級（自動制）：以完整簽到史重播出目前等級
   window._allTkCache=allTk;   // 共享票等級歸屬要查持有人（2026-08-11）
-  window._memberTierCache=Object.assign(computeMemberTiers(allBk,members),{__ready:true});
+  window._memberTierCache=Object.assign(computeMemberTiers(allBk,members,allTk),{__ready:true});
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   window._coachNameMap=coachMap;   // 核對記號要顯示「誰按的」（2026-08-02，legacyVerifyCell 用）
   const typeCatMap=Object.fromEntries(types.map(t=>[t.id,t.category]));
@@ -37598,8 +37607,8 @@ PAGES.members=async function(){
   const birthdayToday = members.filter(m=>String(m.birthday||'').slice(5)===todayMd).length;
   /* 2026-07-28 使用者指示：上方三卡＝總人數／待升級名單／待降級名單（點卡看名單） */
   const _memById=Object.fromEntries(members.map(m=>[m.id,m]));
-  const proIds=tierPromotionWatchIds(allBk,members).filter(id=>_memById[id]&&effTier(_memById[id])==='regular');
-  const demIds=tierDemotionWatchIds(allBk,members).filter(id=>_memById[id]&&effTier(_memById[id])==='loyal');
+  const proIds=tierPromotionWatchIds(allBk,members,allTk).filter(id=>_memById[id]&&effTier(_memById[id])==='regular');
+  const demIds=tierDemotionWatchIds(allBk,members,allTk).filter(id=>_memById[id]&&effTier(_memById[id])==='loyal');
   /* 待續約（2026-07-28 使用者定義二修）：教練課（含友善）與團體課分開判定——
      該類剩餘 0、且該類「最後一堂」（含已上/已預約，未取消）落在本月；名單標注課程。 */
   const _lastByGrp={};   // mid -> {pt:date, grp:date}
@@ -37935,7 +37944,7 @@ async function openMemberDetail(member_id){
     return;
   }
   // 會員升降級（自動制）：確保等級快取就緒（此頁本就載入全部 bookings，順手重算）
-  window._memberTierCache=Object.assign(computeMemberTiers(bookings,await dbGetAll('members').catch(()=>[])),{__ready:true});
+  window._memberTierCache=Object.assign(computeMemberTiers(bookings,await dbGetAll('members').catch(()=>[]),tickets),{__ready:true});
   const myPurchases=(purchases||[]).filter(p=>p.member_id===member_id).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
@@ -45428,7 +45437,7 @@ async function ppLoadCtx(){
     c.coachOpts=[['','—']].concat(coaches.filter(isCoachable).map(x=>[x.id,coachDisp(x)]));
     /* 2026-07-21：名片等級章改用 effTier（自動制）——bookings 本來就載了，順手建快取，
        確保直接開名片（未先進列表）時等級判定與列表一致 */
-    window._memberTierCache=Object.assign(computeMemberTiers(bookings,membersAll||[]),{__ready:true});
+    window._memberTierCache=Object.assign(computeMemberTiers(bookings,membersAll||[],tickets),{__ready:true});
     const myTk=tickets.filter(t=>tkUsableBy(t,PP.id));   // 含共享給他的票（與會員端一致）
     /* 團課的學員放在 member_ids、member_id 是 null（2026-07-29 使用者回報：團課票券被誤判
        成「已用畢」收進歷史）—— 只用 member_id 過濾會整批漏掉團課，票券的待上堂數就算不出來。 */
@@ -57257,7 +57266,7 @@ PAGES.mem_tickets=async function(){
   const mine=WAL.tickets;
   /* 儲值金（2026-08-30 使用者指示：「會員要能看到」）——
      _me 本來就抓了，餘額直接跟著走，不多打一次資料庫；明細等點開才抓。 */
-  _memTkData={mine,typeMap,logs,WAL,tier:memTierInfo(_me,bookings),credit:creditOf(_me)};
+  _memTkData={mine,typeMap,logs,WAL,tier:memTierInfo(_me,bookings,tickets),credit:creditOf(_me)};
   renderMemTickets();
 };
 /* 會員端等級資訊（2026-08-05 使用者指示：「我的票券」上方改列等級、升降級規則、
@@ -57269,10 +57278,10 @@ PAGES.mem_tickets=async function(){
      於是 VIP 與剛建檔的新客全被列進即將降級名單。現在一律吃 tierCountsOf ＋ tierWalkOne，
      會員看到的等級與後台算出來的必然是同一個。
    ⚠ 堂數記在「誰出席」（0901 定案，見 tierCountsOf 的說明），不再看票券持有人。 */
-function memTierInfo(me,bookings){
+function memTierInfo(me,bookings,tickets){
   if(!me) return null;
   const nowYm=ymd(TODAY).slice(0,7);
-  const byYm=(tierCountsOf(bookings)||{})[me.id]||{};
+  const byYm=(tierCountsOf(bookings, tickets)||{})[me.id]||{};
   const r=tierWalkOne(me, byYm, nowYm, true);
   /* VIP＝鎖定（照鎖定值顯示、提醒改為門市設定）；regular/loyal 的手動調整
      只是重播起點（tierWalkOne 已代入），提醒照常顯示升降進度（2026-08-05 二修）。 */
@@ -58732,7 +58741,7 @@ async function anaMember(){
   const active=members.filter(m=>{ const last=lastMap[m.id]; return last && diffDays(today,last)<=30; }).length;
 
   // 等級分布（自動制：以簽到史推算，非 members.level 欄位）
-  window._memberTierCache=Object.assign(computeMemberTiers(bookings||[],members),{__ready:true});
+  window._memberTierCache=Object.assign(computeMemberTiers(bookings||[],members,tickets),{__ready:true});
   const tierCount={regular:0,loyal:0,vip:0};
   members.forEach(m=>{ const t=effTier(m); if(tierCount[t]!=null)tierCount[t]++; else tierCount.regular++; });
   const TIER_LABEL={regular:'會員',loyal:'主顧客',vip:'VIP'};

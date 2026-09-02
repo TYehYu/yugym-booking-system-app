@@ -51,8 +51,9 @@ console.log('\n①b computeMemberTiers：起點接手重播（實跑，假時鐘
   eq('★ 連 3 個完整月未達標 → 自動降回會員（沒有鎖定）', r2.M2, 'regular');
   /* 2026-09-01：三支收斂成同一份重播 tierWalkOne，手動起點自然只剩一處 */
   ok('　　兩支觀察名單也吃同一個起點（改成共用 tierWalkOne）',
-     /function tierDemotionWatchIds\(bookings, members\)\{/.test(src)
-     && /function tierPromotionWatchIds\(bookings, members\)\{/.test(src)
+     /* 2026-09-02：兩支都多收一個 tickets（票券改用傳的，見 tierlottotest 最後一段） */
+     /function tierDemotionWatchIds\(bookings, members, tickets\)\{/.test(src)
+     && /function tierPromotionWatchIds\(bookings, members, tickets\)\{/.test(src)
      && (src.match(/const r=tierWalkOne\(m, byYm, nowYm, _hasM\);/g)||[]).length===2
      && (src.match(/const base=hasM \? _tierBaseOf\(m\) : null;/g)||[]).length===1);
 }

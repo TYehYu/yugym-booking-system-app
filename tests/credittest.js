@@ -184,7 +184,8 @@ async function runVoid(mode, amt, opts){
        /function memCreditEntryHTML\(\)\{/.test(src)
        && /const bal=\(_memTkData&&_memTkData\.credit\)\|\|0;\s*\n\s*if\(bal<=0\) return '';/.test(src));
     ok('★★ 餘額跟著既有的 _me 走，沒有為了它多打一次資料庫',
-       /tier:memTierInfo\(_me,bookings\),credit:creditOf\(_me\)\}/.test(src));
+       /* 2026-09-02：memTierInfo 多收一個 tickets（票券改用傳的，不再只讀全域快取） */
+       /tier:memTierInfo\(_me,bookings,tickets\),credit:creditOf\(_me\)\}/.test(src));
     ok('★★★ 會員端明文寫「不能退現」（客人會拿這頁問櫃檯）',
        /只能用來購買方案，<b>?[^<]*不能退還現金|<b>只能用來購買方案，不能退還現金<\/b>/.test(src)
        && /購買方案時可折抵，不能退現/.test(src));
