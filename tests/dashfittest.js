@@ -27,10 +27,22 @@ ok('★★ 桌機不再畫健身小卡（knowCardHTML 只剩手機在用，函�
       手機 slime 版面、換卡自動更新、教練手機首頁、會員手機首頁。 */
    && (src.match(/knowCardHTML\(\)/g)||[]).length===5
    && !/isMobileLayout\(\)\?\(admMobHero\|\|adminCalCard\)[\s\S]{0,4000}?mc-grid5[\s\S]{0,3000}?knowCardHTML\(\)/.test(src));
-ok('★★ 右欄只剩今日收款，並接手「貼齊頂欄」的 −10px（不然右欄比左欄矮 10px 起跑）',
-   /<div class="mc-g5-right">[\s\S]{0,200}\$\{revListCard\}/.test(src)
-   && !/<div class="mc-quick-top">\$\{quickCard\}<\/div>/.test(src)
-   && /\.mc-g5-right>\.mc-revlist-card:first-child\{margin:-10px 0 16px !important;\}/.test(src));
+/* 2026-09-02 二修（使用者：「再來把中間上方ＫＰＩ移動到右邊欄　今日營收上方」） */
+ok('★★ 右欄＝KPI 數字群 → 今日收款；三顆鈕不在這裡了',
+   /<div class="mc-kpiright">\$\{kpiNums\}<\/div>\s*\n\s*\$\{revListCard\}/.test(src)
+   && !/<div class="mc-quick-top">\$\{quickCard\}<\/div>/.test(src));
+ok('★★ 第一格接手「貼齊頂欄」的 −10px（不然右欄比左欄矮 10px 起跑）',
+   /\.mc-g5-right>\.mc-kpiright\{margin:-10px 0 16px !important;\}/.test(src));
+/* ⚠ 340px 放不下三個並排：教練課／團體課是兩位數，營收可能到 $845,870，
+   .kpi-n 是 white-space:nowrap，擠不下不是折行而是穿出去。
+   ⚠ 原本的 font-size:clamp(30px,3.4vw,44px) 是照**整個視窗**算的，
+     搬進 340px 的欄位會算出比欄還寬的字 —— 一定要換成固定級距。 */
+ok('★★★ 右欄版改兩列：教練課＋團體課一列、營收整列',
+   /\.mc-kpiright \.mc-kpinums\{display:grid;grid-template-columns:1fr 1fr;/.test(src)
+   && /\.mc-kpiright \.kpi-it:last-child\{grid-column:1 \/ -1;\}/.test(src));
+ok('★★★ 右欄版的字級是固定的，不是 vw（vw 看的是視窗不是欄寬）',
+   /\.mc-kpiright \.kpi-n\{font-size:30px;\}/.test(src)
+   && /\.mc-kpiright \.kpi-it:last-child \.kpi-n\{font-size:34px;\}/.test(src));
 ok('★★ 左欄只有 300px，三顆並排的字距與字級要收窄（查看合約不能斷成兩行）',
    /\.mc-quick-left \.mc-quick3\{display:flex;gap:8px;\}/.test(src)
    && /\.mc-quick-left \.mc-q3\{flex:1 1 0;min-width:0;min-height:84px;padding:13px 2px;gap:8px;\s*\n\s*font-size:12px;font-weight:700;border-radius:14px;white-space:nowrap;\}/.test(src));
@@ -67,9 +79,10 @@ console.log('\n② 三顆按鈕移到 KPI 右邊');
 /* 0822 三修：順序改成 兩張紅卡 → 三顆白鈕 → KPI 數字群（數字群靠最右） */
 /* 0822 四修把三顆鈕搬到右欄最上；0902 再搬到左欄值班卡下面。
    不變的是 KPI 條：從 0822 起就只有兩張紅卡＋數字群，三顆鈕從來不在裡面。 */
-ok('★ KPI 條只剩兩張紅卡＋數字群',
-   /<div class="mc-kpistrip"><!--ALERTS-->\s*\n\s*<div class="mc-kpinums">/.test(src)
-   && !/mc-kpistrip[\s\S]{0,80}\$\{quickCard\}/.test(src));
+ok('★★ KPI 條只剩兩張紅卡（數字群 0902 搬到右欄）',
+   /let kpiStrip=`<div class="mc-kpistrip"><!--ALERTS--><\/div>`;/.test(src)
+   && !/mc-kpistrip[\s\S]{0,80}\$\{quickCard\}/.test(src)
+   && /kpiStrip=kpiStrip\.replace\('<!--ALERTS-->', alertCards\);/.test(src));
 ok('★★ quickCard 只出現一次，而且在左欄（搬家不能留下第二份）',
    (src.match(/\$\{quickCard\}/g)||[]).length===1
    && /<div class="mc-quick-left">\$\{quickCard\}<\/div>/.test(src));
@@ -85,9 +98,10 @@ ok('★ 三顆鈕的內容不變（新增會員／銷售／查看合約）',
   ok('　　原處只留說明，沒有第二份定義',
      (src.match(/const quickCard=/g)||[]).length===1);
 }
-/* 2026-08-01 二修（使用者：「三個中間 KPI 要靠右 跟按鈕靠在一起」） */
-ok('★ 整條靠右，數字與按鈕成為同一群',
-   /\.mc-g5-mid \.mc-kpistrip\{margin-bottom:14px;padding:6px 14px 0;justify-content:flex-end;gap:clamp\(16px,2\.4vw,52px\);\}/.test(src)
+/* 2026-08-01 二修是「整條靠右」（數字群要跟按鈕靠在一起）；
+   0902 數字群搬走後那條只剩兩張紅卡，靠右會把它們推到中欄最右邊，改回靠左。 */
+ok('★★ 只剩兩張紅卡的那一條改靠左',
+   /\.mc-g5-mid \.mc-kpistrip\{margin-bottom:14px;padding:6px 14px 0;justify-content:flex-start;gap:clamp\(16px,2\.4vw,52px\);\}/.test(src)
    && !/\.mc-g5-mid \.mc-kpistrip \.mc-quick3\{margin-left:auto;\}/.test(src));
 ok('　　按鈕群自己的間距比數字之間近', /\.mc-kpistrip \.mc-quick3\{gap:10px;flex:0 1 auto;min-width:0;\}/.test(src));
 /* 2026-08-01 二修（使用者：「首頁 KPI 右邊的三個按鈕可以放大一點 改成直式卡片」）——
