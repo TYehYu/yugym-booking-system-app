@@ -16,8 +16,11 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('版面回到一列一位教練、課卡橫排');
-ok('★ 桌機面板直接排 cardHtml（一日行事曆退場）',
-   /<div class="tcard-body">\$\{rows\.map\(r=>r\.cardHtml\)\.join\(''\)\}<\/div>/.test(src));
+/* 2026-09-02 使用者指示（附截圖）：「從一列改成一欄　第一列是教練名稱
+   在教練下面排他當天的課卡」—— 桌機面板改排 colHtml（一位教練一欄）。
+   cardHtml（橫排版）留著沒刪：同一批卡片的另一種容器，版面被來回改過五次。 */
+ok('★ 桌機面板直接排 colHtml（一日行事曆退場）',
+   /<div class="tcol-scroll">\$\{rows\.map\(r=>r\.colHtml\)\.join\(''\)\}<\/div>/.test(src));
 /* 只驗「程式」不在了 —— 註解裡還留著這些名字，說明它們為什麼被拿掉 */
 ok('★ 一日行事曆整組移除：沒有殘留的死程式',
    !/function dashDayCalHTML/.test(src) && !/dashDayCalHTML\(rows/.test(src)

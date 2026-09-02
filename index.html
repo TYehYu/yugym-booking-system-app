@@ -6021,6 +6021,36 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcard-row.pg-atend .tcard-pg-r{opacity:.25;pointer-events:none;}
 .tcard-row{display:flex;align-items:stretch;gap:0;padding:7px 0;border-bottom:1px solid var(--border-light);position:relative;z-index:1;}
 .tcard-coach{width:84px;flex-shrink:0;padding-top:4px;position:sticky;left:0;z-index:4;background:var(--card);}
+/* ══ 直欄版任務面板（2026-09-02 使用者指示，附截圖）══════════════════════
+   「從一列改成一欄　第一列是教練名稱　在教練下面排他當天的課卡
+     左右翻頁的按鈕設計在教練這一列左右」
+   一位教練一欄：教練球在最上、課卡在底下直排；整批欄橫向捲動。
+   ⚠ 翻頁鈕釘在**教練那一列**的高度（top 對齊 .tcol-head 的中線），不是整欄的中間 ——
+     欄一長，中間那個位置會落在課卡上，看起來像卡片自己長了按鈕。
+   ⚠ 欄寬要吃得下課卡（.tcard.tcard-std 是 165px）＋左右各 4px 內距。 */
+.tcol-wrap{position:relative;min-width:0;}
+.tcol-scroll{display:flex;align-items:flex-start;gap:10px;min-width:0;
+  overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;
+  scrollbar-width:none;-ms-overflow-style:none;padding:2px 0 4px;}
+.tcol-scroll::-webkit-scrollbar{display:none;}
+.tcol{flex:0 0 auto;width:173px;min-width:0;display:flex;flex-direction:column;gap:8px;
+  padding:0 4px;border-right:1px solid var(--border-light);}
+.tcol:last-child{border-right:none;}
+.tcol-live{background:linear-gradient(180deg,rgba(31,111,84,.05),transparent);border-radius:10px;}
+.tcol-head{display:flex;align-items:center;justify-content:center;height:80px;flex:0 0 auto;}
+.tcol-cards{display:flex;flex-direction:column;gap:8px;min-width:0;}
+.tcol-cards .tcard-empty{position:static;left:auto;top:auto;text-align:center;}
+/* 翻頁鈕：對齊教練那一列（.tcol-head 高 80px → 中線 40px） */
+.tcol-pg{position:absolute;top:40px;transform:translateY(-50%);display:none;
+  width:26px;height:26px;border-radius:50%;align-items:center;justify-content:center;
+  background:var(--card);border:1px solid var(--bd);color:var(--t2);font-size:15px;line-height:1;
+  cursor:pointer;z-index:7;box-shadow:0 2px 8px rgba(30,25,15,.16);}
+.tcol-pg:hover{color:var(--green);border-color:var(--green);}
+.tcol-pg-l{left:-2px;}
+.tcol-pg-r{right:-2px;}
+.tcol-wrap.has-pg .tcol-pg{display:flex;}
+.tcol-wrap.pg-atstart .tcol-pg-l{opacity:.25;pointer-events:none;}
+.tcol-wrap.pg-atend .tcol-pg-r{opacity:.25;pointer-events:none;}
 /* 課卡定位版：寬度固定，不再 flex（Token 版尺寸） */
 .tcard{width:88px;min-width:0;min-height:56px;padding:0;flex-shrink:0;}
 .tcard-empty{position:absolute;left:0;top:24px;}
@@ -11776,8 +11806,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260902.1754';
-const APP_VERSION_LABEL='260902.1754';
+const APP_VERSION='260902.1805';
+const APP_VERSION_LABEL='260902.1805';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19004,6 +19034,29 @@ function tcardPage(e,dir){
   const list=row&&row.querySelector('.tcard-list'); if(!list) return;
   list.scrollBy({left:dir*Math.max(160, Math.round(list.clientWidth*0.85)), behavior:'smooth'});
 }
+/* 直欄版的翻頁（2026-09-02）：整批教練欄橫向捲動。
+   ⚠ 一次捲「整數欄」而不是固定像素：捲一半會讓教練球被切一半，
+     看起來像壞掉。欄寬從第一欄實量（含 gap），版面改寬度時不用回來改這裡。 */
+function tcolPage(e,dir){
+  try{ e.stopPropagation(); }catch(_){}
+  const btn=e&&e.currentTarget, wrap=btn&&btn.closest('.tcol-wrap');
+  const sc=wrap&&wrap.querySelector('.tcol-scroll'); if(!sc) return;
+  const col=sc.querySelector('.tcol');
+  const gap=parseFloat(getComputedStyle(sc).columnGap||getComputedStyle(sc).gap||'0')||0;
+  const w=col?(col.getBoundingClientRect().width+gap):Math.round(sc.clientWidth*0.85);
+  const n=Math.max(1, Math.floor(sc.clientWidth/Math.max(1,w)));
+  sc.scrollBy({left:dir*w*n, behavior:'smooth'});
+}
+/* 需不需要翻頁鈕、到頭了沒（同 tcardPagerSync，只是換成直欄版的容器） */
+function tcolPagerSync(){
+  document.querySelectorAll('.tcol-wrap').forEach(wrap=>{
+    const sc=wrap.querySelector('.tcol-scroll'); if(!sc) return;
+    wrap.classList.toggle('has-pg', sc.scrollWidth > sc.clientWidth+2);
+    wrap.classList.toggle('pg-atstart', sc.scrollLeft<=1);
+    wrap.classList.toggle('pg-atend', sc.scrollLeft+sc.clientWidth >= sc.scrollWidth-1);
+    if(!sc._pgBound){ sc._pgBound=1; sc.addEventListener('scroll',()=>tcolPagerSync(),{passive:true}); }
+  });
+}
 /* 哪幾列需要翻頁鈕、到頭了沒 —— 畫完與捲動時各算一次。
    ⚠ 要等版面算完才量得到 scrollWidth，所以呼叫點放在 innerHTML 之後（見 fitCoachCards 旁）。 */
 function tcardPagerSync(){
@@ -19473,6 +19526,27 @@ PAGES.g_dashboard=async function(){
           <button type="button" class="tcard-pg tcard-pg-r" onclick="tcardPage(event,1)" aria-label="下一批課卡">›</button>
         </div>`;
       })(),
+      /* 直欄版（2026-09-02 使用者指示，附截圖）：「中間欄下方的任務視窗　從一列改成一欄
+           第一列是教練名稱　在教練下面排他當天的課卡　這樣在查閱比較方便
+           左右翻頁的按鈕設計在教練這一列左右」——
+         一位教練一欄，教練球在最上面、他當天的課卡在底下直排。
+         ⚠ 跟橫排版共用同一批卡片（_cardsArr），只是換一個容器 ——
+           不要為了換排法把卡片產生器複製第二份（版面改過五次，複製過就回不去了）。 */
+      colHtml: (function(){
+        const cards=_cardsArr.join('');
+        const emptyC = (!drawBk.length)
+          ? `<div class="tcard-empty">${onLeave?'請假（全天）':(hasDuty?'值班中 · 今日無課':'今日無課')}</div>` : '';
+        const _cc=(typeof coachTagColor==='function')?coachTagColor(c.id):{bg:'#EAE6DE',fg:'#6a655c'};
+        return `<div class="tcol${inClass?' tcol-live':''}">
+          <div class="tcol-head">
+            <span class="tcard-cball" style="background:${_cc.bg};color:${_cc.fg};" title="${coachDisp(c)}　${done}/${total} 堂">
+              <b class="tcard-cbn${String(coachDisp(c)||'').length>4?' long':''}">${coachDisp(c)}</b>
+              <span class="tcard-cbt${(total>0&&done>=total)?' done':''}">${done}/${total}</span>
+            </span>
+          </div>
+          <div class="tcol-cards">${cards}${emptyC}</div>
+        </div>`;
+      })(),
       html:
       `<div class="tl-row${inClass?' tl-row-live':''}">
         <div class="tl-coach">
@@ -19623,15 +19697,17 @@ PAGES.g_dashboard=async function(){
              那顆鈕搬到日期列的翻頁鈕旁邊（見下方 .twk-bar），這一列因此只剩右邊的圖例。 */''}
         <div class="tl-panel-top"><div class="tl-top-right">${legend}</div></div>
         <div class="tl-3col">
-        ${/* 2026-08-21 使用者指示（同日兩次改動）：
-             ① 先改成一日行事曆（教練當欄位、時間軸、現在線）
-             ② 當天又說「首頁改回原本的樣式 只是課卡要維持現在這個版本的大小」
-             → 版面回到「一列一位教練、課卡橫排」，行事曆整組移除；
-               課卡沿用行事曆版放大後的尺寸（.tcard-std 由 84px 加寬到 120px）。
-             ⚠ .tcard-zoom 那套「縮放到剛好塞滿」沒有跟著回來 —— 課卡要維持固定大小，
-               縮放會讓它隨教練人數忽大忽小，正好牴觸使用者這次的要求。
-               教練多到放不下就內捲（.tcard-body 本來就是捲動容器）。 */''}
-          <div class="tcard-body">${rows.map(r=>r.cardHtml).join('')}</div>
+        ${/* 2026-09-02 使用者指示（附截圖）：一位教練一欄，教練球在最上面、
+             他當天的課卡在底下直排；翻頁鈕放在「教練那一列」的左右兩端。
+             ⚠ 教練多到一頁放不下就整欄橫向翻（.tcol-scroll 是捲動容器），
+               不是縮小課卡 —— 0821 就定過「課卡要維持固定大小」。
+             ⚠ 舊的橫排版（cardHtml／.tcard-row）留著沒刪：那是同一批卡片的另一種容器，
+               版面在這半個月被來回改過五次，留著比較好退。 */''}
+          <div class="tcol-wrap">
+            <button type="button" class="tcol-pg tcol-pg-l" onclick="tcolPage(event,-1)" aria-label="上一批教練">‹</button>
+            <div class="tcol-scroll">${rows.map(r=>r.colHtml).join('')}</div>
+            <button type="button" class="tcol-pg tcol-pg-r" onclick="tcolPage(event,1)" aria-label="下一批教練">›</button>
+          </div>
         </div>
       </div>
       <div class="mtc-wrap tl-mobile-only">
@@ -20842,6 +20918,7 @@ PAGES.g_dashboard=async function(){
      排在 innerHTML 之後：要量得到實際位置與內容高度。 */
   try{ fitCoachCards(); }catch(_){}
   try{ tcardPagerSync(); }catch(_){}   /* 課卡列的翻頁鈕（2026-08-21）：量得到寬度才算得出來 */
+  try{ tcolPagerSync(); }catch(_){}    /* 直欄版的翻頁鈕（2026-09-02），同理 */
   /* Hero 時鐘計時器已移除（2026-07-20）：大時鐘移到頂部導覽列（#mc-topclock），
      由全域 _clockTimer（startClock 的每秒 tick）順帶更新，本頁不再自管計時器。 */
   // ── SWR 收尾（2026-07-23）：這次若用了過期快取 → 背景重抓，有異動才悄悄重繪一次

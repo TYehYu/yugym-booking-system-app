@@ -16,8 +16,8 @@ ok('★★ 日期列移出任務卡，掛在它上方（寬度＝中間欄寬＝
    && /<div class="mc-daybar">\$\{dayBar\}<\/div>\s*\n\s*<div class="card mc-card mc-coachcenter">/.test(src)
    && !/<div class="tl-panel tl-desktop-only">[\s\S]{0,900}?<div class="twk-bar">/.test(src)
    && /\.mc-g5-mid>\.mc-daybar\{margin:-10px 0 12px !important;\}/.test(src));
-ok('★ 課卡區照舊',
-   /<div class="tcard-body">\$\{rows\.map/.test(src)
+ok('★ 課卡區照舊（0902 起是直欄版）',
+   /<div class="tcol-scroll">\$\{rows\.map/.test(src)
    && /\.tl-3col\{display:flex;gap:12px;flex:1;min-height:0;\}/.test(src));
 /* 2026-08-23：兩端各多一格 .twk-today-slot（「回到今天」的固定位），
    箭頭仍緊貼在七天那一排的兩側。 */
@@ -50,8 +50,10 @@ ok('　　日期鈕沿用既有的 .twk-day（選中／今天的語彙不變）'
 ok('　　「回到今天」已從標題列搬到日期列的翻頁鈕旁',
    !/<div class="tl-title tl-title-week">\$\{!isTodayView\?`<button class="tl-daynav tl-daynav-today"/.test(src)
    && /<div class="tl-panel-top"><div class="tl-top-right">\$\{legend\}<\/div><\/div>/.test(src));
-ok('　　第二欄（教練姓名＋今日銷課\/總堂）沿用既有的課卡列，不另做一套',
-   /<div class="tcard-body">\$\{rows\.map\(r=>r\.cardHtml\)\.join\(''\)\}<\/div>/.test(src));
+ok('　　第二欄（教練姓名＋今日銷課／總堂）沿用既有的課卡，不另做一套',
+   /<div class="tcol-scroll">\$\{rows\.map\(r=>r\.colHtml\)\.join\(''\)\}<\/div>/.test(src)
+   /* 直欄版與橫排版共用同一批卡片（_cardsArr），只是換容器 */
+   && (src.match(/const cards=_cardsArr\.join\(''\);/g)||[]).length===2);
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
