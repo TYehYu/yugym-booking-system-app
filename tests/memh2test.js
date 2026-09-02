@@ -199,9 +199,15 @@ t('底部兩顆固定左右各半、等高',
   /\.modal-foot\.mh2-foot\{display:grid;grid-template-columns:1fr 1fr/.test(s)
   && /\.modal-foot\.mh2-foot \.btn\{[^}]*height:44px/.test(s)
   && /\.modal-foot\.mh2-foot\.one\{grid-template-columns:1fr;\}/.test(s));
+/* 2026-09-02：自主訓練那張多一顆「取消預約」（只在點已排的圓形卡時出現），
+   三顆鈕時格線改三欄（.mh2-foot.three）。 */
 t('自主訓練訂位視窗與教練快速預約也吃同一組底部',
-  /class="modal-foot mh2-foot\$\{mms\.length\?'':' one'\}"/.test(s)
+  /class="modal-foot mh2-foot\$\{_rs&&mms\.length\?' three':\(mms\.length\?'':' one'\)\}"/.test(s)
   && /class="modal-foot mh2-foot\$\{slots\.length\?'':' one'\}"/.test(s));
+t('★★ 已排預約的圓形卡才畫「取消預約」，走既有的 memCancelSelf',
+  /_rs\?`<button class="btn btn-ghost mh2-foot-cx" onclick="closeModal\(\);memCancelSelf\('\$\{_rs\.id\}'\)">取消預約<\/button>`:''/.test(s)
+  && /\.modal-foot\.mh2-foot\.three\{grid-template-columns:1fr 1fr 1fr;gap:8px;\}/.test(s));
+t('　 取消完回到原本那一頁，不強制跳去預約紀錄', /navTo\(CUR_PAGE\|\|'mem_bookings'\);/.test(s));
 t('還沒到時間顯示簽到規則', /簽到規則/.test(tap) && /開放簽到/.test(tap));
 t('團課走 memGrpCheckin、其餘走 memCheckin', /memGrpCheckin\('\$\{b\.id\}'\)/.test(tap) && /memCheckin\('\$\{b\.id\}'\)/.test(tap));
 /* 0822 覆查：教練請假改記成自主訓練的教練課、以及場租，都不算會員自助 */

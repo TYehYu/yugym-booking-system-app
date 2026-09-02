@@ -10683,6 +10683,12 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 .modal-foot.mh2-foot .btn{min-width:0;width:100%;box-sizing:border-box;height:44px;padding:0 10px;
   display:inline-flex;align-items:center;justify-content:center;}
 .modal-foot.mh2-foot.one{grid-template-columns:1fr;}
+/* 三顆鈕（關閉／取消預約／確認）：2026-09-02 自主訓練快速預約視窗新增取消 */
+/* ⚠ 375px 的手機上三顆等分只剩 ~112px；「取消預約」四個字要縮一級字才不會被截。
+   「確認」是主要動作，權重不要被稀釋，所以只縮左邊兩顆。 */
+.modal-foot.mh2-foot.three{grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.modal-foot.mh2-foot.three .btn{padding:0 4px;font-size:14px;}
+.modal-foot.mh2-foot .mh2-foot-cx{color:var(--danger,#b5372e);}
 /* 2026-08-20 使用者指示：改白底＋左側課程色條，只有「已簽到」的整張填滿課程色 ——
    一眼掃過去，填滿的就是人已經到了的，其餘維持安靜的白底。 */
 .admh-card{position:relative;overflow:hidden;background:#fff;border-radius:18px;padding:16px 18px 14px 22px;
@@ -11806,8 +11812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260902.1805';
-const APP_VERSION_LABEL='260902.1805';
+const APP_VERSION='260902.1815';
+const APP_VERSION_LABEL='260902.1815';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -54235,7 +54241,15 @@ async function memh2SelfSlots(ds, until, reschedId){
     ${mms.length
       ? `<div class="cag-slots chvqs2">${cells}</div>`
       : `<div style="padding:18px 4px;color:var(--t3);font-size:13px;text-align:center;">這天沒有可預約的時段了<br><span style="font-size:11.5px;">本日營業 ${r.bh[0]}–${r.bh[1]}${_nowMin>=0?'（今天剩下的時段都排滿了）':''}；換一天試試</span></div>`}
-    <div class="modal-foot mh2-foot${mms.length?'':' one'}"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>${
+    ${/* 取消預約（2026-09-02 使用者指示：「剛剛有客人要從手機端取消自主訓練…
+           在該視窗新增一個取消預約的按鈕（如果該圓形卡已經安排預約）」）——
+         只有從「已排的那顆圓形卡」點進來（_rs 有值＝帶著 reschedId）才畫；
+         點空白的［＋］是要約新的一點，那裡沒有東西可以取消。
+         ⚠ 沿用既有的 memCancelSelf，不另做一條路 —— 退點規則（自主訓練一律退點、
+           不套 24 小時）在 DB 的 fn_cancel_booking 裡，前端只是入口。
+         ⚠ 三顆鈕時 .mh2-foot 是兩欄格線，要改三欄（見 .mh2-foot.three）。 */''}
+    <div class="modal-foot mh2-foot${_rs&&mms.length?' three':(mms.length?'':' one')}"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>${
+      _rs?`<button class="btn btn-ghost mh2-foot-cx" onclick="closeModal();memCancelSelf('${_rs.id}')">取消預約</button>`:''}${
       mms.length?`<button class="btn btn-primary" id="mh2qs-ok" disabled onclick="memh2GoSlot()">確認</button>`:''}</div>`);
   /* 選中那一天要留在畫面上（2026-09-01 使用者回報：「點選上方的日期的時候
      又會跳回第一天　這樣選後面日期的時候很困擾」）——
@@ -54780,7 +54794,10 @@ async function doMemCancelSelf(id){
   if(error||!data||!data.ok){ showToast('取消失敗'+(data&&data.error_code?'：'+data.error_code:'')); return; }
   closeModal();
   showToast(data.cancellation_result==='refunded'?'已取消，退回 1 點':'已取消（24 小時內，恕不退點）');
-  navTo('mem_bookings');
+  /* 回到原本那一頁（2026-09-02）——原本一律跳去「預約紀錄」，
+     但 0902 起也能從首頁自主訓練列的圓形卡取消，跳頁等於把人趕離現場。
+     從預約紀錄點進來時 CUR_PAGE 就是那一頁，行為與從前一樣。 */
+  navTo(CUR_PAGE||'mem_bookings');
 }
 
 /* ══ 家庭共享（2026-07-29 使用者指示）══
