@@ -72,10 +72,10 @@ ok('　　月排班視窗本身保留（別的地方還有入口）',
    /function openMonthScheduleModal\(/.test(src));
 /* 2026-08-01：KPI 條裡的問候（kpi-greet）已移除，改成三個數字＋右側三顆快捷鈕。
    這一項要驗的是「插畫沒有跑進中間那欄」，改成直接檢查 KPI 條的組成。 */
-/* 2026-09-02：KPI 數字群搬到右欄（今日營收上方），中間這一條只剩兩張紅色提醒卡。 */
-ok('★ 不在中間那欄（KPI 條裡沒有插畫；0902 起整條只剩兩張紅色提醒卡）',
+/* 2026-09-02：今日營收那一項搬到右欄，教練課／團體課留在這一條（前面仍是兩張紅色提醒卡）。 */
+ok('★ 不在中間那欄（KPI 條裡沒有插畫；0822 起最前面是兩張紅色提醒卡）',
    !/<div class="mc-kpistrip">[\s\S]{0,400}mc-art/.test(src)
-   && /let kpiStrip=`<div class="mc-kpistrip"><!--ALERTS--><\/div>`;/.test(src));
+   && /let kpiStrip=`<div class="mc-kpistrip"><!--ALERTS-->\$\{kpiNums\}<\/div>`;/.test(src));
 ok('★ 貼著頂欄下方：左欄的齊頭 padding 歸零，第一格自己抵掉 .content 的 10px 上內距（2026-08-12 起是收款提醒卡）',
    /\.mc-g5-left>\.mc-art-top,\.mc-g5-left>\.mc-payremind\{margin:-10px 0 16px !important;\}/.test(src)
    && /padding-top:0;\}  \/\* 2026-07-21 使用者指示：左欄與「今日教練任務」齊頭/.test(src)
