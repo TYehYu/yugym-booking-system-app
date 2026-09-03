@@ -17,13 +17,17 @@ const grabFn=n=>{let i=src.indexOf('function '+n+'(');if(src.slice(i-6,i)==='asy
 
 function mk(existingLogs){
   const logs=(existingLogs||[]).slice(), puts=[];
-  const fn=new Function('logTicket','activateTicketIfNeeded','dbPut','showToast','dbGetAll',
+  /* 2026-09-03：deductTicket 多一條「教練走 RPC」的分支（見 tests/coachdeducttest.js）。
+     這支測的是冪等與餘額防線，那是兩條路共用的前半段，所以沙箱固定站在櫃檯視角
+     （isDeskLike=true）走原本的直接寫入路徑。 */
+  const fn=new Function('logTicket','activateTicketIfNeeded','dbPut','showToast','dbGetAll','isDeskLike',
     grabFn('tkNetDeductOn')+'\n'+grabFn('deductTicket')+'\nreturn deductTicket;')(
     async(tid,action,delta,bid,op,note)=>{ logs.push({ticket_id:tid,action,delta,booking_id:bid,note}); },
     async()=>null,
     async(_,o)=>{ puts.push(o); },
     ()=>{},
-    async()=>logs);
+    async()=>logs,
+    ()=>true);
   return {fn,logs,puts};
 }
 const L=(tid,bid,action)=>({ticket_id:tid,booking_id:bid,action});

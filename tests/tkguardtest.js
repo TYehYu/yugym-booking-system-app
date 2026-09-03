@@ -89,10 +89,12 @@ console.log('\n② 扣課護欄：餘額 0 就不再扣（R3）');
     /* 2026-08-27：deductTicket 前面多了一道冪等檢查（同票同預約不重複扣），
        它會先問 tkNetDeductOn —— 沙箱給 0（＝這一堂還沒扣過），
        其餘行為與原本完全相同。冪等本身另由 tests/deductonce.js 驗。 */
-    const fn=new Function('logTicket','activateTicketIfNeeded','dbPut','showToast','tkNetDeductOn',
+    /* 2026-09-03：deductTicket 多一條「教練走 RPC」的分支（見 tests/coachdeducttest.js）。
+       這支測的是餘額護欄，兩條路共用，沙箱固定站在櫃檯視角走直接寫入那條。 */
+    const fn=new Function('logTicket','activateTicketIfNeeded','dbPut','showToast','tkNetDeductOn','isDeskLike',
       grabFn('deductTicket')+'\nreturn deductTicket;')(
       async(...a)=>{L.push(a);}, async()=>null, async(_,o)=>{T.push(JSON.parse(JSON.stringify(o)));}, m=>L.push(['toast',m]),
-      async()=>0);
+      async()=>0, ()=>true);
     return {fn,L,T}; };
   {
     const {fn,L,T}=mk();
