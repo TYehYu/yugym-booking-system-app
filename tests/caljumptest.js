@@ -16,8 +16,10 @@ ok('★★★ 不再開一層 showModal（原本要開視窗→點欄位→再�
    !/showModal\(/.test(F) && /ashDateOpen\('cal-jump-date'\);/.test(F));
 ok('★★★ 也不再用 ashDateField（那是「表單裡的一格」，這裡沒有表單）',
    !/ashDateField\(/.test(F));
-ok('★★ 日期標題仍然是入口（兩處：第一列與第二列的工具列）',
-   (src.match(/onclick="openCalJump\(\)"/g)||[]).length===2);
+/* 日期導覽只剩一份（_calNavHtml），所以入口也只剩一處 —— 定義處 1 次、使用處 1 次。 */
+ok('★★ 日期標題仍然是入口，而且整份只有一份導覽',
+   (src.match(/onclick="openCalJump\(\)"/g)||[]).length===1
+   && (src.match(/_calNavHtml/g)||[]).length===2);
 
 console.log('\n② 隱藏 input 只建一次、事件只綁一次');
 /* 綁兩次的話，選一天會觸發兩次 doCalJump —— 第二次跑時 navTo 已經重畫過，
@@ -54,18 +56,52 @@ ok('★★ 標題可由呼叫端指定，預設維持「選擇日期」',
    && /title:String\(inp\.getAttribute\('data-title'\)\|\|''\)/.test(src));
 ok('★★ 跳日期時寫「跳至日期」', /inp\.setAttribute\('data-title','跳至日期'\);/.test(F));
 
-console.log('\n⑤ 工具列三顆鈕搬到第二列');
-ok('★★★ 第一列整列都給教練 chips（右邊不再放東西）',
-   /<div class="cal-head-left" style="min-width:0;">\s*\n\s*\$\{opts\.coachFilter\?`<div class="cal-chip-row">\$\{calCoachChips\(coaches,filterCoach,chipN\.coach\)\}<\/div>`:''\}\s*\n\s*<\/div>\s*\n\s*\$\{opts\.coachFilter\?'':_calNavHtml\}/.test(src));
-ok('★★★ 三顆鈕在第二列、日期導覽的左邊',
-   /<div class="cal-head-right" style="display:flex;gap:8px;margin:0 8px 0 auto;flex:none;">[\s\S]{0,900}?＋ 新增預約<\/button>\s*\n\s*<\/div>\s*\n\s*<div class="cal-nav" style="margin:0;flex:none;">/.test(src));
-ok('★★ 三顆鈕只有一份（不是複製到第二列、第一列忘了刪）',
+console.log('\n⑤ 工具列排成穩定的兩列');
+/* 沿革（同一天兩輪）：
+   ① 篩選鈕加上堂數 → 教練那排變寬 → 被右邊三顆鈕擠到換行
+      使用者：「把右邊的預約模式按鈕改到下一列［今天］的左邊」
+   ② 照做之後第二列變成 課程 chips＋三顆鈕＋日期導覽 → 使用者：「然後多出一列」
+   實測（Ink 主題、真實 CSS）：課程 866＋三顆鈕 301＋導覽 277＋間距 ＝ 1453px，
+   1440／1512 的 MacBook 內容區只有 1400／1472，flex-wrap 就把導覽甩成第三列。
+   定案：三顆鈕留在第二列（使用者要的），**日期導覽改回第一列右邊** ——
+   列1 1390、列2 1162，1440 以上都是穩穩兩列。 */
+ok('★★★ 列1＝教練 chips ＋ 日期導覽',
+   /<div class="cal-head-left" style="min-width:0;">\s*\n\s*\$\{opts\.coachFilter\?`<div class="cal-chip-row">\$\{calCoachChips\(coaches,filterCoach,chipN\.coach\)\}<\/div>`:''\}\s*\n\s*<\/div>/.test(src)
+   && /\$\{_calNavHtml\}\s*\n\s*<\/div>/.test(src));
+ok('★★★ 列2＝課程 chips ＋ 三顆鈕，沒有日期導覽',
+   /<div class="cal-chip-row">\$\{calCourseChips\(chipN\.course\)\}<\/div>[\s\S]{0,1400}?＋ 新增預約<\/button>\s*\n\s*<\/div>\s*\n\s*<\/div>`:''\}/.test(src)
+   && !/cal-bar2[\s\S]{0,1600}?class="cal-nav"/.test(src));
+ok('★★ 三顆鈕只有一份（不是複製過去、原地忘了刪）',
    (src.match(/onclick="openGroupScheduleModal\(\)">團課課表<\/button>/g)||[]).length===1
    && (src.match(/id="cal-bookmode-btn"/g)||[]).length===1);
-ok('★★ 為什麼要搬，寫在原地',
-   /0903 篩選鈕加上堂數之後教練那排變寬，右邊被這三顆佔著就換行了/.test(src));
-ok('★ 沒有 coachFilter 的呼叫端仍在第一列放日期導覽（教練端／唯讀檢視）',
-   /\$\{opts\.coachFilter\?'':_calNavHtml\}/.test(src));
+ok('★★★ 量出來的數字寫在原地（下次再往工具列加東西，先看這筆帳）',
+   /課程 chips＋三顆鈕＋日期導覽，總寬 1453px/.test(src)
+   && /列1 1390、列2 1162/.test(src));
+
+console.log('\n⑥ 省下寬度的三個來源，一個都不能被改回去');
+ok('★★★ 同一年不寫年份（222px → ~95px，工具列最寬的一塊）',
+   /const _sameY=\(calWeekStart\.getFullYear\(\)===_tY && _weekEnd\.getFullYear\(\)===_tY\);/.test(src)
+   && /\? `\$\{_md\(calWeekStart\)\} ～ \$\{_md\(_weekEnd\)\}`/.test(src));
+ok('★★ 跨年與看往年時仍寫完整年份（那時候年份才是關鍵資訊）',
+   /跨年（12 月底那一週）與看往年時仍然寫完整年份/.test(src)
+   && /\$\{calWeekStart\.getFullYear\(\)\}\/\$\{_p2\(calWeekStart\.getMonth\(\)\+1\)\}/.test(src));
+ok('★★★ cal-title 的 min-width 從 160 收到 112（否則縮短文字省不到寬度）',
+   /\.cal-title\{[\s\S]{0,120}?min-width:112px;/.test(src));
+ok('★★ 防抖改靠 tabular-nums，不是靠 min-width 撐著',
+   /\.cal-title\{[\s\S]{0,200}?font-variant-numeric:tabular-nums;/.test(src)
+   && /tabular-nums 才是防抖的正解/.test(src));
+ok('★ 數字徽章壓縮（11 顆教練 chip 加起來省 ~30px）',
+   /\.cal-chip \.cchip-n\{[\s\S]{0,160}?font-size:\.8em;opacity:\.62;margin-left:3px;/.test(src));
+
+console.log('\n⑦ 更窄的視窗要折 chips，不要甩掉控制項');
+/* 1366 這種舊機還是放不下（列1 差 64px）。那時候要折的是 chips ——
+   chips 折行看得懂，一顆孤零零的日期導覽掉到下面則像壞掉。 */
+ok('★★★ 可壓縮的額度全給 chips，右側控制項不縮不折',
+   /\.cal-bar2 \.cal-chip-row\{flex:1 1 auto;min-width:0;\}/.test(src)
+   && /\.cal-head-left\{flex:1 1 auto;min-width:0;\}/.test(src)
+   && /\.cal-head>\.cal-nav\{flex:0 0 auto;\}/.test(src));
+ok('★★ 為什麼寧可折 chips，寫在原地',
+   /chips 折行是看得懂的，\s*\n?\s*一顆孤零零的日期導覽掉到下面則像壞掉/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
