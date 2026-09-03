@@ -97,15 +97,57 @@ ok('★★★ 門檻 58 是算出來的（SLOT_PX 34 → 30分34／45分51／60�
 ok('★★ 橫排時第一列不自成一列（display:contents），標籤排到最後',
    /\.cal-ev\.cal-ev-std \.evc-r1\{ display:contents; \}\s*\n\s*\.cal-ev\.cal-ev-std \.evc-r1 \.ev-tag2\{ order:5; \}/.test(src));
 ok('★★★ 橫排時姓名要能被壓縮（line-clamp 會撐出不肯縮的最小寬度）',
-   /\.cal-ev\.cal-ev-std \.evc-name\{ display:block !important; overflow:hidden;\s*\n\s*text-overflow:ellipsis; flex:0 1 auto; min-width:0; \}/.test(src));
+   /\.cal-ev\.cal-ev-std \.evc-name\{ display:block !important; overflow:hidden;\s*\n\s*text-overflow:ellipsis; flex:0 1 auto; min-width:0;/.test(src));
+ok('★★★ 橫排時姓名的可用寬度只有六成（要跟圓章與場地共用一列）',
+   /font-size:clamp\(10px, min\(calc\(56cqw \/ var\(--nml,3\)\), 26cqh\), 20px\) !important;/.test(src)
+   && /實際能用的大約只有六成寬度，所以除數的分子從 86cqw 降到 56cqw/.test(src));
 ok('★★ 又矮又窄時標籤讓位，姓名留下（姓名是使用者指定「統一只留下」的那一項）',
    /@container \(max-width:96px\) and \(max-height:58px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.ev-tag2\{ display:none; \}/.test(src)
    && /讓的是標籤不是姓名：姓名是使用者指定「統一只留下」的那一項/.test(src));
-ok('★★ 極窄卡姓名收到 11px（13px 下三個中文字一定折兩行，兩行會把高度撐爆）',
-   /@container \(max-width:66px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-name\{ font-size:11px !important; \}/.test(src)
-   && /收的是字級不是行數：0725 定過「窄卡姓名折兩行、不要切成…」/.test(src));
+/* 「極窄卡姓名固定 11px」那條 0903 同日被 --nml 公式取代 ——
+   字級改成「可用寬度 ÷ 字數」，比固定值更準（見 ⑥）。 */
+ok('★★ 不再用固定 11px 硬壓極窄卡的姓名',
+   !/@container \(max-width:66px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-name\{ font-size:11px !important; \}/.test(src));
 
-console.log('\n⑥ 手機那兩套不受影響');
+console.log('\n⑥ 會員姓名：最大、填滿、放不下就直書（2026-09-03 使用者）');
+/* 「會員姓名要最大 課卡內填滿 如果橫式放不下姓名就改直式」 */
+ok('★★★ 字級由「可用寬度 ÷ 字數」算出來，不是寫死也不是猜的百分比',
+   /font-size:clamp\(11px, min\(calc\(72cqw \/ var\(--nml,3\)\), 30cqh\), 26px\) !important;/.test(src));
+ok('★★★ 字數由 JS 用 CSS 變數傳給 CSS（CSS 量不到文字有多寬）',
+   /const _nmVar = `--nml:\$\{Math\.max\(1,Math\.min\(8,_nmLen\)\)\};`;/.test(src)
+   && /CSS 量不到文字有多寬，只能由這裡告訴它「這張卡的名字有幾個字」/.test(src));
+/* ⚠ 卡片上本來就有一個 style 屬性，--nml 一定要併進去 —— 第二個 style 會被整個忽略。 */
+ok('★★★ --nml 併進既有的 style，不是另外加一個 style 屬性',
+   /style="\$\{_nmVar\}\$\{useFixedLane\?dayLaneStyle:/.test(src)
+   && /同一個元素上第二個 style 會被瀏覽器整個忽略（改的時候真的寫錯過一次）/.test(src));
+ok('★★ 分子 72 是反推出來的（最窄的卡 45px 扣內距剩 33，33/45≒73%）',
+   /分子 72 是可用寬度佔卡寬的比例反推的：最窄的卡（45px）扣掉內距只剩 33px/.test(src));
+ok('★★★ 直書的字級由「可用高度 ÷ 字數」算，可用高度用 --nm-h 統一表達',
+   /--nm-h: calc\(100cqh - 30px\);/.test(src)
+   && /font-size:clamp\(9px, min\(calc\(var\(--nm-h\) \/ var\(--nml,3\)\), 30cqw\), 24px\) !important;/.test(src));
+ok('★★★ 有標籤時第一列多佔 14px，姓名可用高度要跟著扣',
+   /\.cal-ev\.cal-ev-std\.ev-has-new \.evc-name,\s*\n\s*\.cal-ev\.cal-ev-std\.ev-has-pay \.evc-name\{ --nm-h: calc\(100cqh - 44px\); \}/.test(src));
+ok('★★★ 橫排模式下姓名獨佔整條高度，--nm-h 覆寫回 −8px',
+   /\.cal-ev\.cal-ev-std \.evc-name\{ --nm-h: calc\(100cqh - 8px\); \}/.test(src));
+/* ⚠ 直書的高度上限不能用 max-height:100% —— 那是相對 .evc-nmrow，
+   而那一列的高度本來就跟著內容長，等於沒有上限。 */
+ok('★★★ 直書高度上限用 var(--nm-h)，不是 max-height:100%',
+   /max-height:var\(--nm-h\); overflow:hidden;/.test(src)
+   && /100% 是相對 \.evc-nmrow，而那一列的高度本來就跟著內容長，等於沒有上限/.test(src));
+ok('★★★ 直書門檻依字數分三段，矮卡（橫排）的門檻另外加高約 26px',
+   /@container \(max-width:44px\)\{/.test(src) && /@container \(max-width:58px\)\{/.test(src)
+   && /@container \(max-width:76px\)\{/.test(src)
+   && /@container \(max-width:70px\) and \(max-height:58px\)\{/.test(src)
+   && /@container \(max-width:84px\) and \(max-height:58px\)\{/.test(src)
+   && /@container \(max-width:102px\) and \(max-height:58px\)\{/.test(src));
+ok('★★ 為什麼矮卡門檻要加高，寫在原地',
+   /直排時姓名獨佔整個寬度；橫排時它要跟 16px 的教練圓章、間距與內距共用一列/.test(src));
+/* 第一版加了 min-height:56px，結果 45 張卡卡在「橫的放不下、又被擋著不能直」中間。 */
+ok('★★★ 直書沒有 min-height 限制（矮卡最需要直書：用高度換寬度）',
+   /直書的意義是\*\*用高度換寬度\*\* —— 所以「卡片太矮」不是不能直書的理由/.test(src)
+   && !/and \(min-height:56px\)/.test(src));
+
+console.log('\n⑦ 手機那兩套不受影響');
 ok('★★★ .evc-r1 在手機版當作不存在（display:contents）',
    /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-r1,\s*\n\.admcag\.cal-ev-std \.evc-r1\{display:contents;\}/.test(src));
 ok('★★ 理由寫在原地', /用 display:contents 讓那層包裝在這裡不存在，版面與改版前完全相同/.test(src));

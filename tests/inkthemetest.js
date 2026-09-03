@@ -82,8 +82,10 @@ console.log('① 尺寸與位置：一行計算都不能動（使用者第 11 �
      && /const leftPct=dl\.laneIdx\*laneWpct;/.test(src));
   ok('★★ 半小時格高沒被改（7 日／5 日 48px）',
      /SLOT_PX = \(nDays===7\|\|nDays===5\) \? 48 : \(nDays===3 \? 44 : 48\);/.test(src));
+  /* 2026-09-03：同一個 style 屬性前面多了 --nml（姓名字數，給字級公式用）——
+     那是**併進既有屬性**，不是另外加一個 style（第二個 style 會被瀏覽器忽略）。 */
   ok('　 inline style 仍然由 JS 輸出（沒有改成 class）',
-     /style="\$\{useFixedLane\?dayLaneStyle:`top:\$\{top\}px;height:/.test(src));
+     /style="\$\{_nmVar\}\$\{useFixedLane\?dayLaneStyle:`top:\$\{top\}px;height:/.test(src));
 }
 
 console.log('\n② 狀態語意全部保留（顏色深淺、反灰、今日、紅線）');
