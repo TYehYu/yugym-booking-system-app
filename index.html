@@ -11905,8 +11905,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260903.1508';
-const APP_VERSION_LABEL='260903.1508';
+const APP_VERSION='260903.1520';
+const APP_VERSION_LABEL='260903.1520';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17904,8 +17904,37 @@ async function deductTicket(ticket,booking_id,operator,opts){
   //  不在此設 used_up（否則約滿但還沒上的票會被誤判用畢、反灰）。
   //  真正的「用畢」由簽到完成後（markTicketUsedIfDone）或前端依已簽到數判斷。
   const newExpire=await activateTicketIfNeeded(ticket,booking_id);   // 首堂預約 → 開通並起算效期
+  const _note='預約扣課'+(newExpire?`（首堂開通，效期至 ${newExpire}）`:'');
+  /* 教練沒有 member_tickets／ticket_logs 的寫入權限（RLS 只給 is_staff_desk）——
+     2026-09-03 使用者回報：Zoe 用手機幫曾香瑾排 9/11 14:00，一直跳「扣課失敗，
+     這一堂沒有建立（票券未被扣）」。查下來預約建得起來（bookings 有 bk_coach_write），
+     但接著的扣課被 RLS 擋掉，0902 加的「全有或全無」就把預約回滾了。
+     使用者定案：「教練應該要能自己安排課程」。
+     ⚠ 沒有放寬 RLS —— 那會讓教練能直接改任何人的餘額。改走 SECURITY DEFINER 的
+       fn_deduct_ticket，授權在伺服器端判斷：非櫃檯層級只扣得動「自己那一堂」的票
+       （代課教練也算自己的課）。冪等與餘額防線在 RPC 裡再驗一次。
+     ⚠ 效期開通的日期仍由前端算（規則在 activateTicketIfNeeded／termExpire），
+       RPC 只負責「有帶才寫」，不覆蓋成 null。
+     ⚠ 櫃檯以上維持原本的直接寫入 —— 那條路已經上線很久，不在這次一起換。 */
+  if(!isDeskLike()){
+    const {data,error}=await sb.rpc('fn_deduct_ticket',{
+      p_ticket_id:ticket.id, p_booking_id:booking_id||null, p_note:_note,
+      p_start_date:ticket.start_date||null, p_expire_date:ticket.expire_date||null,
+      p_activated_at:ticket.activated_at||null });
+    dbCacheClear(['member_tickets','ticket_logs']);
+    if(error || !data || data.ok!==true){
+      ticket.sessions_remaining+=1;   // 沒扣成就把記憶體裡的餘額還原，別讓畫面先減了
+      const _code=(data&&data.error_code)||'';
+      const _msg={NOT_STAFF:'沒有權限扣課', NO_BOOKING:'找不到這筆預約',
+        NOT_YOUR_BOOKING:'只能扣自己課堂的票（請櫃檯協助）',
+        NO_TICKET:'找不到票券', NO_REMAINING:'票券已無剩餘堂數'}[_code]||('扣課失敗'+(_code?'：'+_code:''));
+      try{ if(typeof showToast==='function') showToast('⚠ '+_msg); }catch(_){}
+      return false;
+    }
+    return true;
+  }
   await dbPut('member_tickets',ticket);
-  await logTicket(ticket.id,'deduct',-1,booking_id,operator,'預約扣課'+(newExpire?`（首堂開通，效期至 ${newExpire}）`:''));
+  await logTicket(ticket.id,'deduct',-1,booking_id,operator,_note);
   return true;
 }
 // 退一堂
