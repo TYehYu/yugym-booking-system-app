@@ -41,6 +41,18 @@ ok('★★ 前綴這件事寫在原地（下一個人才不會漏）',
 ok('★★ 也寫了「試出來要留的怎麼收尾」',
    /試出來要留的，\s*\n?\s*搬到上面對應的區塊、拿掉 uilab 前綴，並補上為什麼要改/.test(src));
 
+console.log('\n②-2 實驗室要真的能用');
+/* 首頁的日期／月份切換原本寫死 navTo('g_dashboard')，在實驗室裡點一下日期
+   就被彈回營運畫面 —— 那樣實驗室只看得到「今天」一種狀態，根本比較不了。 */
+ok('★★★ 日期／月份切換改成重畫目前這一頁（實驗室裡點日期不會被彈出去）',
+   /function dashRepaint\(\)\{[\s\S]{0,220}?CUR_PAGE==='g_dashboard'\|\|CUR_PAGE==='g_uilab'/.test(src)
+   && /function dashPickDay\(ds\)\{ _dashViewDate=ds; dashRepaint\(\); \}/.test(src));
+ok('★★ 首頁自己的控制項全部改用 dashRepaint（不要漏一個）',
+   (src.match(/window\._admCalKeep=true;\s*\n\s*dashRepaint\(\);/g)||[]).length===6
+   && !/window\._admCalKeep=true;\s*\n\s*navTo\('g_dashboard'\);/.test(src));
+ok('　 在營運首頁時行為完全沒變（CUR_PAGE 本來就是 g_dashboard）',
+   /在營運首頁時 CUR_PAGE 本來就是 g_dashboard，行為完全沒變/.test(src));
+
 console.log('\n③ 不複製首頁的程式');
 ok('★★★ 直接跑同一支 PAGES.g_dashboard（同一份資料、同一批產生器）',
    /PAGES\.g_uilab=async function\(\)\{[\s\S]{0,400}?await PAGES\.g_dashboard\(\);/.test(src));

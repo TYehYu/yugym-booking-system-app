@@ -6109,7 +6109,28 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .uilab-bar span{font-size:12px;color:var(--t2);line-height:1.7;flex:1;min-width:200px;}
 .uilab-bar .btn{flex:none;}
 /* ── 實驗區：以下自由塗改，每條都要 body.uilab 前綴 ────────────────────── */
-/* （目前沒有任何實驗，稽核結果出來再往這裡加） */
+
+/* 【實驗 A】日期列的「今天」：能點與不能點要分得出來
+   來源：improve-ui 稽核（2026-09-03）第 1 條，信心「高」。
+
+   問題：在 Ink 主題（員工桌機實際在用的）下，這兩個狀態**長得一模一樣** ——
+     ・正在看別天（可點）：背景 --card2、文字 --t2、寫「今天」
+     ・正在看今天（不可點）：背景 --card2、文字 --t2、寫「今天」
+   我原本替不可點那顆寫的 `color:var(--t3)` 被蓋掉了：
+     body.ink .twk-bar>.twk-today-slot .tl-daynav-today   → (0,4,1)
+     .twk-bar>.twk-today-slot .tl-daynav-today.is-today   → (0,4,0)   ← 輸
+   程式裡自己的註解還寫著「顏色與紅色的『回到今天』分開，才不會被當成可以按」，
+   也就是**實作沒有達成宣告的意圖**。這不只是不齊，是會讓人一直去點按不動的東西。
+
+   改法：把權重拉到 Ink 那條之上（body.uilab 前綴剛好就做到了：(0,5,1) > (0,4,1)），
+   並且讓「不可點」看起來真的不可點 —— 底色收掉、只留虛線框與淡字。
+   ⚠ 不用 opacity 整顆調淡：那會讓框線也一起變糊，看起來像壞掉而不是「現在就在這裡」。 */
+body.uilab .twk-bar>.twk-today-slot .tl-daynav-today.is-today{
+  background:transparent;
+  border:1px dashed var(--bd);
+  color:var(--t3);
+  font-weight:600;
+}
 
 /* 課卡區的米色底（2026-09-02 使用者指示：「首頁的課卡區背景加一個米色底」）——
    釘住的教練列維持白底，跟底下這片米色分得開，一眼看得出哪一列是凍結的。 */
@@ -11905,8 +11926,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260903.1520';
-const APP_VERSION_LABEL='260903.1520';
+const APP_VERSION='260903.1527';
+const APP_VERSION_LABEL='260903.1527';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19149,9 +19170,19 @@ function opsSetDate(ds){ _opsDate=ds||ymd(TODAY); navTo('ops_center'); }
 // 管理員儀表板：可切換檢視日期（預設今天）與週偏移
 let _dashViewDate=null; // ymd；null=今天
 let _dashWeekOffset=0;
-function dashPickDay(ds){ _dashViewDate=ds; navTo('g_dashboard'); }
-function dashWeekStep(delta){ _dashWeekOffset+=delta; navTo('g_dashboard'); }
-function dashBackToday(){ _dashViewDate=null; _dashWeekOffset=0; navTo('g_dashboard'); }
+/* 首頁的日期／月份切換一律「重畫目前這一頁」，不要寫死跳回 g_dashboard
+   （2026-09-03）—— UI 實驗室（g_uilab）跑的是同一支首頁，寫死的話在實驗室裡
+   點一下日期就被彈回營運畫面，實驗室等於不能用。
+   ⚠ 在營運首頁時 CUR_PAGE 本來就是 g_dashboard，行為完全沒變。
+   ⚠ 從別的頁面呼叫（例如待辦列的捷徑）仍然要去首頁，所以留一個退路。 */
+function dashRepaint(){
+  const k=(typeof CUR_PAGE!=='undefined' && (CUR_PAGE==='g_dashboard'||CUR_PAGE==='g_uilab'))
+    ? CUR_PAGE : 'g_dashboard';
+  navTo(k);
+}
+function dashPickDay(ds){ _dashViewDate=ds; dashRepaint(); }
+function dashWeekStep(delta){ _dashWeekOffset+=delta; dashRepaint(); }
+function dashBackToday(){ _dashViewDate=null; _dashWeekOffset=0; dashRepaint(); }
 /* ── 首頁插畫（2026-07-31 使用者指示）────────────────────────────
    位置：頂欄下方、頁面最上方（原本在左欄裡，二修往上移出格線）。
    二修：關閉自動輪播，改成「點一下換一張」—— 自動換圖在做事的時候會分心。
@@ -51450,13 +51481,13 @@ function admhPickCoach(id){
   window._admhChipScroll=!row?0:(row.classList.contains('a2-chiprail')?row.scrollTop:row.scrollLeft);
   window._admhCoach=(id==='all')?null:id;
   window._admCalKeep=true;
-  navTo('g_dashboard');
+  dashRepaint();
 }
 // 管理員首頁月曆點日期（2026-07-20）：切換 _dashViewDate，下方「今日」各卡改顯示該日
 function dashPickDate(ds){
   _dashViewDate = (ds===ymd(TODAY)) ? null : ds;
   window._admCalKeep=true;
-  navTo('g_dashboard');
+  dashRepaint();
 }
 // 教練首頁月曆點日期（2026-07-20）：切換 _coachViewDate（今日課程/任務跟著換日），月份保留
 function coachPickDay2(ds){
@@ -51478,7 +51509,7 @@ function dashDayShift(dir){
   _dashViewDate=(ds===ymd(TODAY))?null:ds;
   window._admCalYm=ds.slice(0,7);
   window._admCalKeep=true;
-  navTo('g_dashboard');
+  dashRepaint();
 }
 function coachDayShift(dir){
   const cur=(typeof _coachViewDate!=='undefined'&&_coachViewDate)||ymd(TODAY);
@@ -51497,7 +51528,7 @@ function admWeekShift(dir){
   _dashViewDate=(ds===ymd(TODAY))?null:ds;
   window._admCalYm=ds.slice(0,7);
   window._admCalKeep=true;
-  navTo('g_dashboard');
+  dashRepaint();
 }
 function coachWeekShift(dir){
   const cur=(typeof _coachViewDate!=='undefined'&&_coachViewDate)||ymd(TODAY);
@@ -51514,7 +51545,7 @@ function coachWeekShift(dir){
 function admCalToday(){
   window._admCalYm=ymd(TODAY).slice(0,7);
   window._admCalKeep=true;
-  navTo('g_dashboard');
+  dashRepaint();
 }
 function admCalShift(dir){
   const cur=window._admCalYm||ymd(TODAY).slice(0,7);
@@ -51522,7 +51553,7 @@ function admCalShift(dir){
   m+=dir; if(m>12){m=1;y++;} if(m<1){m=12;y--;}
   window._admCalYm=y+'-'+String(m).padStart(2,'0');
   window._admCalKeep=true;
-  navTo('g_dashboard');
+  dashRepaint();
 }
 // 教練首頁「本月出勤」月曆翻頁（2026-07-20）：換月後 keep 旗標保住選月、navTo 重繪
 function coachAttnShift(dir){
