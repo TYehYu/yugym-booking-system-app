@@ -11876,8 +11876,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260902.1904';
-const APP_VERSION_LABEL='260902.1904';
+const APP_VERSION='260903.0959';
+const APP_VERSION_LABEL='260903.0959';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16223,10 +16223,22 @@ function tierDemotionWatchIds(bookings, members, tickets){
   const _mById={}; (members||[]).forEach(m=>{ _mById[m.id]=m; });
   const _hasM=(members&&members.length)>0;
   const out=[];
-  Object.entries(counts).forEach(([mid,byYm])=>{
+  /* ⚠ 2026-09-03 使用者定案：掃**全部會員**，不是只掃「有上課紀錄的人」。
+     原本走 Object.entries(counts) —— counts 只有「至少被記過一堂」的人，
+     於是「從來沒上過任何一堂教練課」的會員完全不在名單裡，
+     但 computeMemberTiers 是掃全部會員（沒紀錄就當每月 0 堂），**照樣把他們降級**。
+     兩支掃描對象不一樣 → 名單說 96 人，實際 10/01 會降 345 人，其中 250 人無聲掉下去。
+     （葉隆震就是這種：昨天別人用了他的票，他才第一次「被看見」。）
+     使用者選擇顯示完整名單：「這次是我當初統一讓所有會員升等　這次只是回收了
+       之後應該不會有這麼大量的降級名單」。
+     ⚠ 待升級名單（tierPromotionWatchIds）不用改：沒有任何一堂的人永遠升不上去，
+       counts 對它來說本來就是完整的。 */
+  const _ids=_hasM ? Object.keys(_mById) : Object.keys(counts);
+  _ids.forEach(mid=>{
     const m=_mById[mid];
     if(_hasM && !m) return;                 // 名單裡查不到這個人（已刪除）
     if(tierIsVip(m)) return;                // VIP 手動鎖定，不進升降級（2026-09-01 使用者指示）
+    const byYm=counts[mid]||{};             // 沒紀錄＝每月 0 堂，與 computeMemberTiers 同一套
     const r=tierWalkOne(m, byYm, nowYm, _hasM);
     if(r.state==='loyal' && r.low===2 && (byYm[nowYm]||0)<4) out.push(mid);   // 已連 2 個月未達，本月再未達就降（2026-07-30）
   });

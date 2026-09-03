@@ -184,6 +184,31 @@ console.log('\n即將降級名單：誰該在、誰不該在（實跑）');
    在「只算出席」時會被誤列），落到畫面上就是 94／95 的來回。
    ⚠ 教訓：靠全域快取當**輸入**的函式，結果會取決於「使用者剛剛走過哪一頁」——
      這種 bug 沒有固定重現步驟，只會被當成「有時候怪怪的」。 */
+/* ★★★ 2026-09-03 使用者定案：降級名單顯示**完整名單**（掃全部會員）。
+   原本只掃「有上課紀錄的人」（Object.entries(counts)），但判定等級那一支
+   （computeMemberTiers）是掃全部會員、沒紀錄就當每月 0 堂 → 照樣降級。
+   兩支掃描對象不一樣，於是「從來沒上過任何一堂教練課」的會員**會被降級卻不在名單上**：
+   實測 10/01 會降 345 人，名單只寫 95 人，250 人無聲掉下去。
+   使用者原話：「2 顯示完整名單　因為這次是我當初統一讓所有會員升等　這次只是回收了
+     之後應該不會有這麼大量的降級名單」。
+   ⚠ 待升級名單不用改：沒有任何一堂的人永遠升不上去，counts 對它來說本來就是完整的。 */
+console.log('\n★★★ 降級名單要掃全部會員（不是只掃有上課紀錄的人）');
+{
+  const F=src.slice(src.indexOf('function tierDemotionWatchIds('), src.indexOf('/* 待升級觀察名單'));
+  ok('★★★ 掃全部會員，沒紀錄當每月 0 堂（與 computeMemberTiers 同一套）',
+     /const _ids=_hasM \? Object\.keys\(_mById\) : Object\.keys\(counts\);/.test(F)
+     && /const byYm=counts\[mid\]\|\|\{\};/.test(F)
+     && !/Object\.entries\(counts\)\.forEach/.test(F));
+  ok('★★★ 兩支用同一種取 id 的方式（不對稱就是這個 bug 的來源）',
+     (src.match(/const _ids=_hasM \? Object\.keys\(_mById\) : Object\.keys\(counts\);/g)||[]).length===2);
+  const P=src.slice(src.indexOf('function tierPromotionWatchIds('), src.indexOf('function _tierBaseOf(') > src.indexOf('function tierPromotionWatchIds(') ? src.indexOf('function _tierBaseOf(') : src.length);
+  ok('★★ 待升級那一支維持只掃 counts（沒上過課的人升不上去，掃全部只是白跑）',
+     /Object\.entries\(counts\)/.test(P));
+  ok('　　為什麼要改、以及使用者的原話寫在原地',
+     /但 computeMemberTiers 是掃全部會員（沒紀錄就當每月 0 堂），\*\*照樣把他們降級\*\*/.test(src)
+     && /這次是我當初統一讓所有會員升等/.test(src));
+}
+
 console.log('\n★★★ 票券要用傳的，不能只靠全域快取');
 {
   const decl=/function tierCountsOf\(bookings, tickets\)\{/.test(src);
