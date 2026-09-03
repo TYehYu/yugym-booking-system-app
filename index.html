@@ -6195,19 +6195,35 @@ body.uilab.uilab-cal .cal-ev.cal-ev-std .evc-time{
   color:var(--t3,#8a857c) !important;opacity:.85;font-weight:400;
 }
 
-/* 【實驗 F】窄卡的教練縮寫改成色點
-   問題：卡片一窄就換成兩字母縮寫（coachAbbr：BARRY→BA、RANDY→RA、SANDY→SA…），
-     再窄一點連縮寫都被 ellipsis 切掉，最後看到的是「BAF」「RAND」「ANC」這種殘字。
-     殘字比沒有更糟 —— 它佔了一整列的空間，卻認不出是誰。
-   做法：窄卡把教練標籤縮成一顆色點。顏色是 renderCalendar 寫在元素上的 inline
-     background（每位教練一個色），跟頁面最上方那排教練篩選 chip 是**同一組顏色**，
-     所以照樣認得出人，而且在任何寬度都不會殘缺。
-   ⚠ font-size:0 會被子層 .co-fl／.co-ab 繼承，不必再各寫一條。
-   ⚠ 權重要壓得過 .cal-ev.cal-ev-std .evc-coach 的 clamp 字級（0,3,0）
-     與 @media(min-width:601px) 裡那條 !important 的 margin/align —— 這裡是 (0,6,1)。 */
-body.uilab.uilab-cal .cal-ev.cal-ev-std.ev-w-narrow .evc-coach{
-  font-size:0 !important;padding:0;width:9px;height:9px;flex:none;
-  border-radius:50%;overflow:hidden;
+/* 【實驗 F】窄卡的分級改吃「卡片真實寬度」，不要用 JS 估的
+   來源：使用者附實驗室截圖問「有辦法優化嗎」（2026-09-03）。截圖上教練標籤是
+   「ND」「NGO」「RR」這種殘字 —— 一開始以為是字太長被切，實測才知道不是。
+
+   真因：分級是 JS 估的 ——
+     const colW=(window.innerWidth-80)/nDays;  const cardW=colW/lane.total;
+     wCls = cardW<70 ? 'ev-w-tiny' : (cardW<90 ? 'ev-w-narrow' : '');
+   那個 80 要涵蓋時間軸欄、容器內距、捲軸、還有每張卡自己的 left/right:3px，
+   估寬了就會把**實際只有 52px** 的卡片判成「≥90px，顯示教練全名」。
+   全名膠囊靠右排，寬度 33–34px 蓋回卡片左半，正好壓在左下角那顆 16px 的簽到章下面
+   —— 實測：RANDY 被蓋掉 12px（前 2 個字）、MANGO 13px、BARRY 12px，
+   所以畫面上剩「NDY」「NGO」「RRY」。短名（ZOE）剛好躲過，所以問題看起來時有時無。
+
+   ⚠ 這不是樣式沒調好，是**分級用錯了輸入**。加大字、換色點、縮膠囊都只是繞過去。
+   ⚠ 修法：改用 @container 查卡片自己的寬度 —— .cal-ev.cal-ev-std 已經有
+     container-type:size，手機那套（.cag-wk-col 的 @container (max-width:62px)）
+     早就這樣做了，桌機這條路只是沒跟上。
+   ⚠ 門檻沿用原本的 90／70，行為不變，只是換成量真的。
+   ⚠ 先把 JS 那三段的效果歸零（不管它加了什麼 class 都當寬卡），再由容器查詢重新分段；
+     否則估錯的方向相反時（估成 tiny、其實很寬）教練名會平白消失。 */
+body.uilab.uilab-cal .cal-ev.cal-ev-std .co-fl{display:inline;}
+body.uilab.uilab-cal .cal-ev.cal-ev-std .co-ab{display:none;}
+body.uilab.uilab-cal .cal-ev.cal-ev-std .evc-coach{display:inline-flex;}
+@container (max-width:90px){
+  body.uilab.uilab-cal .cal-ev.cal-ev-std .co-fl{display:none;}
+  body.uilab.uilab-cal .cal-ev.cal-ev-std .co-ab{display:inline;}
+}
+@container (max-width:70px){
+  body.uilab.uilab-cal .cal-ev.cal-ev-std .evc-coach{display:none;}
 }
 
 /* 課卡區的米色底（2026-09-02 使用者指示：「首頁的課卡區背景加一個米色底」）——
@@ -12009,8 +12025,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260903.1623';
-const APP_VERSION_LABEL='260903.1623';
+const APP_VERSION='260903.1633';
+const APP_VERSION_LABEL='260903.1633';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24218,14 +24234,7 @@ async function renderCalendar(opts){
       <div class="cal-head-left" style="min-width:0;">
         ${opts.coachFilter?`<div class="cal-chip-row">${calCoachChips(coaches,filterCoach,chipN.coach)}</div>`:''}
       </div>
-      ${opts.coachFilter?`<div class="cal-head-right" style="display:flex;gap:8px;margin-left:auto;flex:none;">
-        ${/* 預約模式（2026-07-30 使用者指示）：關掉課卡互動，整片時間格都能直接點來排課。 */''}
-        <button class="btn ${window._calBookMode?'btn-green':'btn-ghost'}" id="cal-bookmode-btn"
-                title="開啟後：課卡不再反應點擊，直接點時間格就能新增預約"
-                onclick="toggleCalBookMode()">${window._calBookMode?'✓ 預約模式':'預約模式'}</button>
-        <button class="btn" style="background:var(--course-group-soft);color:var(--course-group-accent);border:1.5px solid var(--course-group-accent);font-weight:700;" onclick="openGroupScheduleModal()">團課課表</button>
-        <button class="btn btn-green" onclick="openBookingModal()">＋ 新增預約</button>
-      </div>`:_calNavHtml}
+      ${opts.coachFilter?'':_calNavHtml}
     </div>
     ${(window._calBookMode&&opts.coachFilter)?`<div class="cal-bookmode-bar">
       <span>預約模式中：課卡暫時不反應點擊，直接點時間格即可新增預約</span>
@@ -24235,7 +24244,19 @@ async function renderCalendar(opts){
          第二列 今天／日期列 —— 原本全部擠同一列，日期與按鈕互相搶寬度。 */''}
     ${opts.coachFilter?`<div class="cal-chips-bar cal-bar2" style="align-items:center;">
       <div class="cal-chip-row">${calCourseChips(chipN.course)}</div>
-      <div class="cal-nav" style="margin:0 0 0 auto;flex:none;">
+      ${/* 三顆操作鈕從第一列搬下來（2026-09-03 使用者：「教練篩選列換行了
+           把右邊的預約模式按鈕改到下一列［今天］的左邊」）——
+           0903 篩選鈕加上堂數之後教練那排變寬，右邊被這三顆佔著就換行了。
+           第一列現在整列都給教練 chips；操作鈕與日期導覽併到第二列右側。 */''}
+      <div class="cal-head-right" style="display:flex;gap:8px;margin:0 8px 0 auto;flex:none;">
+        ${/* 預約模式（2026-07-30 使用者指示）：關掉課卡互動，整片時間格都能直接點來排課。 */''}
+        <button class="btn ${window._calBookMode?'btn-green':'btn-ghost'}" id="cal-bookmode-btn"
+                title="開啟後：課卡不再反應點擊，直接點時間格就能新增預約"
+                onclick="toggleCalBookMode()">${window._calBookMode?'✓ 預約模式':'預約模式'}</button>
+        <button class="btn" style="background:var(--course-group-soft);color:var(--course-group-accent);border:1.5px solid var(--course-group-accent);font-weight:700;" onclick="openGroupScheduleModal()">團課課表</button>
+        <button class="btn btn-green" onclick="openBookingModal()">＋ 新增預約</button>
+      </div>
+      <div class="cal-nav" style="margin:0;flex:none;">
         <button class="btn btn-ghost cal-today-btn" onclick="calToToday();navTo(CUR_PAGE)">今天</button>
         <div class="cal-arrow" onclick="${nDays===1?`calStep(-1)`:`calStepWeek(-1)`}" title="前一週">‹</div>
         <div class="cal-title" onclick="openCalJump()" style="cursor:pointer;" title="點擊選擇日期">${title} ▾</div>
@@ -24813,26 +24834,40 @@ async function _calRevalidate(){
   finally{ window._calRevalidating=false; }
 }
 // 點標題跳出月曆快選日期
+/* 點日期標題＝直接開自家月曆（2026-09-03 使用者附截圖：「可以改成我們月曆的模式」）。
+
+   沿革：原生 <input type="date">（瀏覽器自己的月曆，樣式不同、iOS 沒有確定鈕）
+     → 0827 換成 ashDateField（自家月曆）→ 但那是「小視窗裡放一個日期欄」，
+     於是變成：開視窗 → 點欄位 → 再疊一層月曆 → 按確定 → 再按前往。
+     兩層視窗、兩顆確定鈕，而這裡從頭到尾只有「選一天」這一件事。
+   ⚠ 隱藏 input 掛在 body 上、只建一次 —— navTo 只換掉 #content，它會活著；
+     每次開啟只更新 value，事件不重覆綁（重覆綁會讓一次選取跳兩次）。 */
 function openCalJump(){
-  const base=calWeekStart||TODAY;
-  const val=ymd(base);
-  /* 2026-08-27 使用者回報：「這邊又有瀏覽器的日期」—— 這一格還是原生 <input type="date">，
-     點下去跳的是瀏覽器自己的月曆（樣式與全站不同、iOS 也沒有確定鈕）。
-     改用自家的 ashDateField（0821 定版：月曆跳視窗），id 與讀值方式完全不變。 */
-  showModal(`<div class="modal-title">跳至日期</div>
-    <div class="form-row"><label>選擇日期</label>${ashDateField('cal-jump-date', val, '', '')}</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="doCalJump()">前往</button></div>`);
+  let inp=document.getElementById('cal-jump-date');
+  if(!inp){
+    inp=document.createElement('input');
+    inp.type='hidden'; inp.id='cal-jump-date';
+    inp.setAttribute('data-title','跳至日期');
+    inp.addEventListener('change', doCalJump);
+    document.body.appendChild(inp);
+  }
+  inp.value=ymd(calWeekStart||TODAY);
+  ashDateOpen('cal-jump-date');
 }
 function doCalJump(){
-  const v=document.getElementById('cal-jump-date').value;
-  if(!v){closeModal();return;}
+  const v=(document.getElementById('cal-jump-date')||{}).value;
+  /* ⚠ 這一行原本是 closeModal()（舊路徑：小視窗裡放一個日期欄）。
+     改成直接開月曆之後，這裡若還呼 closeModal，關掉的會是**別人的視窗**。 */
+  if(!v){ ashDateClose(); return; }
   const d=parseYmd(v);
   const nDays=effCalDays();
   // 7日模式跳到該日期所在週的週一；其他模式直接以該日為起點
   if(nDays===7||nDays===5){ const dow=d.getDay(); calWeekStart=addDays(d,-((dow+6)%7)); }
   else{ calWeekStart=d; }
   window._calStepping=true;
-  closeModal(); navTo(CUR_PAGE);
+  /* ⚠ 這裡不能用 closeModal()：月曆是自己那一層 #adp-sheet，不是 .modal-bg
+     （ashDateClose 的註解寫過為什麼要自己開一層）。呼 closeModal 會關到別人。 */
+  ashDateClose(); navTo(CUR_PAGE);
 }
 // 頂部時鐘
 let _clockTimer=null;
@@ -36220,7 +36255,10 @@ function ashDateOpen(id){
   const cur=String(inp.value||'')||ymd(TODAY);
   const d=parseYmd(cur)||TODAY;
   window._adpCtx={id, y:d.getFullYear(), m:d.getMonth(), sel:String(inp.value||''),
-    min:String(inp.getAttribute('data-min')||'')};
+    min:String(inp.getAttribute('data-min')||''),
+    /* 標題可由呼叫端指定（2026-09-03）：行事曆的「跳至日期」直接開這一層，
+       標題寫「選擇日期」會看不出自己在做什麼。沒帶就維持原本的字。 */
+    title:String(inp.getAttribute('data-title')||'')};
   ashDateRender();
 }
 /* ⚠ 不能用 showModal（2026-08-21）——它會先清掉現有的 .modal-bg，
@@ -36324,7 +36362,7 @@ function ashDateRender(){
       : `<button type="button" class="${cls}" onclick="ashDateSel('${ds}')">${d}</button>`;
   }
   host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
-    <div class="adp-box adp-box-cal"><div class="modal-title">選擇日期</div>
+    <div class="adp-box adp-box-cal"><div class="modal-title">${c.title||'選擇日期'}</div>
       ${/* 「今天」搬到上面（2026-08-25 使用者指示）—— 它是「跳到今天」，
            跟翻月翻年是同一件事（都在換看哪一段時間），本來就該跟導覽在一起；
            擺在下面那一排會跟「取消／確定」混成同一級，看起來像是送出用的鈕。 */''}
