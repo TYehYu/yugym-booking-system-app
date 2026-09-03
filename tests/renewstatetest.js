@@ -26,25 +26,14 @@ ok('已續約優先於其他狀態（不會又綠又紅）',
 ok('不續約優先於待續約', badge({no:true,renew:true}).includes('✕'));
 
 console.log('\n顏色定義');
-/* 2026-09-03：這三顆從實心圓改成細線外框，與 [NEW]／[PAY] 同一套語彙 ——
-   同一張卡上實心的會把細框整個壓過去，而它們其實是同一級的提醒。
-   ⚠ 顏色語意沒變，只是從填色改成描邊＋文字色。 */
-ok('★ 綠勾用品牌綠（改成文字色）', /\.ev-pa-ok\{color:var\(--green,#1f6f54\);\}/.test(src));
-ok('★ 紅叉與紅字提醒用 danger（改成文字色）', /\.ev-pa-no\{color:var\(--danger,#b5372e\);\}/.test(src)
-   && /\.ev-pa-warn\{color:var\(--danger,#b5372e\);\}/.test(src));
-ok('★★ 透明底＋細框（不是把顏色拿掉）',
-   /\.ev-payalert\{[\s\S]{0,260}?background:transparent;border:1px solid currentColor;\}/.test(src));
+ok('★ 綠勾用品牌綠', /\.ev-pa-ok\{background:var\(--green,#1f6f54\);color:#fff;\}/.test(src));
+ok('★ 紅叉與紅字提醒用 danger', /\.ev-pa-no\{background:var\(--danger,#b5372e\)/.test(src)
+   && /\.ev-pa-warn\{background:var\(--danger,#b5372e\)/.test(src));
 // 2026-07-30 三修（使用者：金／紅不要淡化，色調不舒服）→ 底色完全不動，只加粗外框
-/* ══ 2026-09-03：桌機行事曆的紅框整組退場 ══════════════════════════════
-   使用者：「移除課卡紅色框的提示　看到暗化的課卡就知道這張要注意了」
-   未繳費現在用「暗化＋右上角 [PAY] 標籤」表達（見 tests/evcardv2test.js）。
-   ⚠ CSS 留著、手機那支（renderCoachAgenda）也照舊 —— 只有桌機不再掛這個 class。 */
-ok('★ 紅框的 CSS 留著（手機教練行事曆還在用）',
-   /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,320}border:2px solid var\(--danger,#b5372e\) !important;/.test(src));
-ok('★★★ 桌機不再掛紅框，改成暗化＋[PAY]',
-   !/const _alertCls = _isUnpaid \? ' cal-ev-renew'/.test(src)
-   && /const _tagPay = \(!hideMember && \(_isUnpaid \|\| _payAlert\)\)/.test(src)
-   && /\(_cardDate < _todayYmd \|\| _isUnpaid\) \? 'cal-ev-past' : '';/.test(src));
+ok('★ 待處理的課卡用加粗紅框標示（不再覆蓋底色）',
+   /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,160}border:2px solid var\(--danger,#b5372e\) !important;/.test(src));
+ok('★ 只有未繳費才反紅（2026-07-30 定案）',
+   /const _alertCls = _isUnpaid \? ' cal-ev-renew'/.test(src));
 ok('★ 最後一堂／分期繳費只留右上角驚嘆號，不整張反紅',
    !/_renewAlert\|\|_payAlert\) \? ' cal-ev-renew'/.test(src)
    && /if\(o\.renew\)return '<span class="ev-payalert ev-pa-warn"/.test(src));
@@ -70,25 +59,18 @@ ok('　　待處理排最前，已續約／不續約排後面',
 ok('　　考慮中／不續約可手動標記與取消標記', /async function setRenewStatus\(tkid, st\)/.test(src)
    && /const next=\(t\.renew_status===st\)\?null:st;/.test(src));
 
-console.log('\n課卡狀態提示（2026-09-03 改版：外框讓給出席，錢與覆核改用標籤）');
-/* 舊版：紅框＝待付費、金框＝今日新增，紅 > 金。
-   新版三條通道各管一件事（見 tests/evcardv2test.js）：
-     外框（只有當天）＝出席　／　暗化＝這張要注意　／　右上角標籤＝為什麼要注意
-   ⚠ 「紅 > 金」這個優先順序沒有消失，只是換了載體：
-     兩個標籤都在、又擺不下時，[PAY]（錢）留下、[New]（覆核）讓位。 */
-ok('★★★ 待付費 → 暗化 ＋ 右上角 [PAY]',
+console.log('\n課卡外框提示（品牌色階 紅 > 金）');
+ok('★ 待付費（待簽約卡位／分期待繳費保留）→ 品牌紅',
    /const _isUnpaid   = !!b\.pending_contract;/.test(src)
-   && /const _tagPay = \(!hideMember && \(_isUnpaid \|\| _payAlert\)\)/.test(src)
-   && /\(_cardDate < _todayYmd \|\| _isUnpaid\) \? 'cal-ev-past' : '';/.test(src));
-ok('★★★ 今日新增**或調整** → 右上角 [New]（不再是金框）',
-   /const _isNewToday = String\(b\.created_at\|\|''\)\.slice\(0,10\)===ymd\(TODAY\)\s*\n\s*\|\| String\(b\.updated_at\|\|''\)\.slice\(0,10\)===ymd\(TODAY\);/.test(src)
-   && /const _tagNew = \(!hideMember && _isNewToday\)/.test(src));
-ok('★★★ 「錢優先於覆核」改由標籤讓位表達',
-   /@container \(max-width:78px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.ev-has-new\.ev-has-pay \.ev-tag-new\{display:none;\}/.test(src)
-   && /極窄卡：兩個都掛不下，\[PAY\]（錢）優先於 \[New\]（覆核）/.test(src));
-ok('　　金框／紅框的 CSS 都留著（手機教練行事曆還在用）',
+   && /const _alertCls = _isUnpaid \? ' cal-ev-renew'/.test(src));
+ok('★ 今天新增的預約 → 品牌金',
+   /const _isNewToday = String\(b\.created_at\|\|''\)\.slice\(0,10\)===ymd\(TODAY\);/.test(src)
+   && /_isNewToday \? ' cal-ev-newtoday' : ''/.test(src));
+ok('★ 同時符合時紅色優先（未繳費比「今天新增」重要）',
+   /_isUnpaid \? ' cal-ev-renew'\s*\n\s*: \(_isNewToday/.test(src));
+ok('　　金框用品牌金、紅框用 danger',
    /\.cal-ev\.cal-ev-std\.cal-ev-newtoday \.evc-body\{[\s\S]{0,120}border:2px solid var\(--gold-d,#b48a56\)/.test(src)
-   && /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,320}border:2px solid var\(--danger,#b5372e\)/.test(src));
+   && /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,120}border:2px solid var\(--danger,#b5372e\)/.test(src));
 ok('　　手機端同一套（別人的課卡不標）',
    /const _vis=\(layer==='mine'\|\|isAdmin\);/.test(src)
    && /const _mkAlert = _unpaidM \? ' cal-ev-renew'/.test(src));

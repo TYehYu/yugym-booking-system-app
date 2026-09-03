@@ -74,7 +74,7 @@ ok('　　空堂也吃得到（bkIsOpenHold 的前提就是 pending_contract）'
 
 console.log('\n出席章的 DOM 只放一份');
 ok('★ 行事曆：章排在姓名之後、自成一列，外層不再重複輸出',
-   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span><span class="evc-r4">\$\{_venueSub\}\$\{_seqOut\}<\/span>\$\{_stdTag\}/.test(src)
+   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_venueSub\}\$\{_stdTag\}/.test(src)
    && /出席章已移進 _bodyOut 的姓名列（2026-08-21），這裡不再重複輸出一份/.test(src));
 ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    src.indexOf('const _stampOut =') < src.indexOf('const _bodyOut ='),
@@ -182,14 +182,12 @@ ok('★ 首頁卡改回顯示全名（不再跟著窄卡用縮寫）',
    !/\.tcard\.tcard-std \.co-fl\{display:none;\}/.test(css)
    && !/\.tcard\.tcard-std \.co-ab\{display:inline;\}/.test(css)
    && /首頁卡當天從 84px 加寬到 120px，原本「比照窄卡用縮寫」的理由消失了/.test(css));
-/* 2026-09-03（同日三修）：行事曆的窄卡仍然用縮寫，但判斷依據換了兩次 ——
-   ① 原本吃 JS 估的 wCls（估寬了就把 52px 的卡當成寬卡，教練全名被簽到章蓋掉前 2 字）
-   ② 改吃卡片真實寬度的 @container（門檻 90／70）
-   ③ 使用者把「時間讓位／教練縮寫／場地縮寫」綁成同一個「擺不下」判斷，
-      門檻併成 max-width:104px or max-height:58px。詳見 tests/evcardlayouttest.js。
+/* 2026-09-03：行事曆的窄卡仍然用縮寫，但**判斷依據換了** ——
+   原本吃 JS 估的 wCls（估寬了就把 52px 的卡當成寬卡，教練全名被簽到章蓋掉前 2 字），
+   改吃卡片真實寬度的 @container。門檻沿用 90／70，行為不變。詳見 tests/evwidthtest.js。
    首頁卡不受影響：它不是 .cal-ev，也不是查詢容器，所以照樣全名。 */
-ok('★ 行事曆的窄卡仍用縮寫，門檻已併成同一個「擺不下」判斷',
-   /@container \(max-width:104px\) or \(max-height:58px\)\{[\s\S]{0,400}?\.cal-ev\.cal-ev-std \.co-fl\{ display:none; \}/.test(css)
+ok('★ 行事曆的窄卡仍用縮寫，但改吃卡片真實寬度',
+   /@container \(max-width:90px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.co-fl\{display:none;\}/.test(css)
    && /\.co-ab\{display:none;\}/.test(css));
 ok('　　太長的名字折行、不切成「…」（0821 已有的規則接手）',
    /white-space:normal !important; word-break:keep-all/.test(css));
@@ -201,13 +199,11 @@ ok('★ 請假標籤縮成「請假」（使用者：其實改成請假就好）
    && /<span class="tcard-co tcard-leavetag" style="background:#7A2E28;color:#F4F1E8;">請假<\/span>/.test(src));
 
 console.log('\n場地移到會員姓名下方（教室／跑步機）');
-/* 2026-09-03：場地多帶一份縮寫（使用者：「場地縮寫」）——
-   全名與縮寫兩個 span 都畫出來，由 CSS 依卡片放不放得下挑一個。 */
-ok('★ 不再是右下角跟教練並列的膠囊，並多帶一份縮寫',
+ok('★ 不再是右下角跟教練並列的膠囊',
    /const _venueTag = '';/.test(src)
-   && /<span class="evc-sub evc-vsub"><span class="vn-fl">\$\{_selfVenue\}<\/span><span class="vn-ab">/.test(src));
+   && /const _venueSub = _selfVenue \? `<span class="evc-sub evc-vsub">\$\{_selfVenue\}<\/span>` : '';/.test(src));
 ok('★ 排在姓名之後、體驗／待簽約標籤之前',
-   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span><span class="evc-r4">\$\{_venueSub\}\$\{_seqOut\}<\/span>\$\{_stdTag\}/.test(src));
+   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_venueSub\}\$\{_stdTag\}/.test(src));
 ok('　　只有教室／跑步機會有值（多功能是預設場地、不標）',
    /selfVenueLabel 本來就只在教室／跑步機才有值/.test(src));
 
@@ -333,13 +329,10 @@ ok('★ 標準卡終於有窄卡專屬字級（原本只有舊卡 .ev-time／.ev
    && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-name\{font-size:11\.5px !important;/.test(css));
 /* 原則不變（越窄越少東西），只是兩項各走各的路：
    場地仍看 wCls（估錯只是多／少一列），教練改看容器真實寬度（估錯會把字蓋掉）。 */
-/* 2026-09-03 定版：「越窄越少東西」的順序改成 —— 先讓時間，再讓場地，
-   教練圓章與姓名留到最後（見 tests/evcardlayouttest.js）。
-   ⚠ 姓名是使用者指定「統一只留下」的那一項，任何情況都不能讓。 */
-ok('★ 越窄越少東西：先讓時間、再讓場地，姓名與教練圓章留到最後',
-   /@container \(max-width:104px\) or \(max-height:58px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-time\{ display:none; \}/.test(css)
-   && /@container \(max-width:66px\) or \(max-height:40px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-sub\{ display:none; \}/.test(css)
-   && /讓的是標籤不是姓名：姓名是使用者指定「統一只留下」的那一項/.test(css));
+ok('★ 越窄越少東西：窄卡先讓場地，極窄卡連教練也讓',
+   /\.cal-ev\.cal-ev-std\.ev-w-narrow \.evc-vsub\{display:none;\}/.test(css)
+   && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-vsub\{display:none;\}/.test(css)
+   && /@container \(max-width:70px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(css));
 ok('　　原則寫在程式裡（寧可少一項，也不要每一項都殘缺）',
    /寧可少一項，也不要每一項都殘缺/.test(css));
 
@@ -771,18 +764,8 @@ ok('★ DOM 仍在姓名列裡（絕對定位是相對整張卡，擺哪裡都�
    && /\.cal-ev\.cal-ev-std \.evc-nmrow\{display:flex;align-items:center;justify-content:center;/.test(src));
 /* 2026-08-23 使用者回報「縮小的課卡 出席章變到左邊色條上了」：left 4px→9px。
    左緣課程色條寬 5px，章從 4px 起算會壓在色條上，兩個又都是深色。5px＋4px 間距＝9px。 */
-/* 2026-09-03 同一天改了兩次：
-   一修（「出席章改到課卡靠上置中 時間靠右置上」）→ 章從左下角搬到頂列置中；
-   二修（「行事曆課卡資訊 … 出席章移除」）→ 桌機的章整個隱藏，
-        出席狀態改由當天課卡的外框表達（綠＝已簽到／金＝未出席）。
-   ⚠ DOM 留著：手機行事曆（.cag-wk-col）與管理員一日（.admcag）共用同一份，
-     它們仍然要那顆章。 */
-ok('★★★ 桌機隱藏出席章（DOM 不動）',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ display:none; \}/.test(src)
-   && /只在桌機隱藏，DOM 留著/.test(src));
-ok('★★★ 改由當天課卡的外框表達出席',
-   /\.cal-ev\.cal-ev-std\.cal-ev-mkin \.evc-body\{/.test(src)
-   && /\.cal-ev\.cal-ev-std\.cal-ev-mkno \.evc-body\{/.test(src));
+ok('★ 章在卡片左下角，桌機用小圓章（1/4 圓在淺底卡上太搶）',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:9px; bottom:4px; right:auto; top:auto;\s*\n\s*width:16px; height:16px; border-radius:50%;/.test(src));
 ok('★★ 章要避開左緣 5px 的課程色條（不然看起來像章長在色條裡）',
    /左緣的課程色條（\.evc-body::before）寬 5px，章從 4px 起算就會壓在色條上/.test(src));
 ok('　　手機（.admcag）維持 1/4 圓 —— 深色滿版卡上圓章反而糊',
@@ -790,8 +773,8 @@ ok('　　手機（.admcag）維持 1/4 圓 —— 深色滿版卡上圓章反�
    && /\.admcag\.cal-ev-std \.evc-check\{position:absolute;bottom:0;right:0;top:auto;left:auto;\s*\n\s*width:26px;height:26px;border-radius:100% 0 10px 0;/.test(src));
 ok('　　右下角讓給教練標籤，左下角本來是空的（理由寫在原地）',
    /右下角讓給教練標籤（\.evc-abbr），左下角本來是空的；用與手機同一種 1\/4 圓/.test(src));
-ok('　　桌機隱藏，手機的角標基底規則不動',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ display:none; \}/.test(src)
+ok('　　桌機是左下角小圓章，手機的角標基底規則不動',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:9px; bottom:4px;/.test(src)
    && /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;top:auto;left:auto;bottom:0;right:0;/.test(src));
 ok('　　窄欄位時名字自己截斷，不會把章擠掉',
    /\.cal-ev\.cal-ev-std \.evc-nmrow \.evc-name\{min-width:0;\}/.test(src));

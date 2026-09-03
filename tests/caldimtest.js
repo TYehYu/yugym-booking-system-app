@@ -13,28 +13,14 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 console.log('程式碼');
 ok('★ 過去課卡不再一律套 cal-ev-past',
    !/const _pastCls = _isPastCard \? 'cal-ev-past' : '';/.test(src));
-/* ══ 2026-09-03 改版：暗化的定義換了 ══════════════════════════════════════
-   使用者：「過期(當天不算)或沒有待簽約的課卡就暗化」
-         ＋「移除課卡紅色框的提示　看到暗化的課卡就知道這張要注意了」
-   暗化從「Focus Mode（過去的自動淡化）」變成**「這張要注意」的唯一通道**：
-     ・過期 —— 當天不算（今天的課改用外框表達出席狀態，見 tests/evcardv2test.js）
-     ・待簽約（pending_contract，錢還沒收）—— 原本是紅框，紅框整組退場
-   ⚠ 這推翻了 0801 的「未完成的過去課卡不淡化」（當時是要讓沒處理的舊卡跳出來）。
-     現在過期一律暗化，包含還沒簽到的。要恢復就把 _settled 那組判斷接回來。
-   ⚠ _isPastCard（含「今天但已結束」）連同 _settled 一起移除了 —— 使用者明說當天不算，
-     留著會是算了卻沒人讀的變數。 */
-ok('★★★ 改成「過期（當天不算）或待簽約 → 暗化」',
-   /const _pastCls = bkDarkNoTicket\(b\) \? 'cal-ev-dark'\s*\n\s*: \(_cardDate < _todayYmd \|\| _isUnpaid\) \? 'cal-ev-past' : '';/.test(src));
-ok('★★★ 舊的結案／未結案兩段判斷已移除',
-   !/_settled \? 'cal-ev-past' : 'cal-ev-todo'/.test(src)
-   && !/const _settled = /.test(src)
-   && !/let _isPastCard = false;/.test(src));
+ok('★ 改成結案→cal-ev-past、未結案→cal-ev-todo',
+   /: !_isPastCard \? '' : \(_settled \? 'cal-ev-past' : 'cal-ev-todo'\);/.test(src));   /* 2026-08-17 前面多了 bkShowsCancelled 分支（保留顯示的取消卡一律淡化） */
+ok('★ 結案的定義與簽到章同源（_isCheckedIn / _isMakeup / grpAllOnLeave）',
+   /const _settled = b\.status==='cancelled' \|\| b\.status==='no_show' \|\| hideMember\s*\n\s*\|\| _isCheckedIn \|\| _isMakeup \|\| grpAllOnLeave\(b\);/.test(src));
 ok('　　團課的「完成」＝每個名額都處理完（grpAllDone），不是整堂 status',
    /const _isCheckedIn = bkIsGroup\(b\) \? grpAllDone\(b\)/.test(src));
-ok('★★ 推翻 0801 這件事寫在原地（下一個人才知道不是漏掉）',
-   /這一條推翻了 0801 的「未完成的過去課卡不淡化」/.test(src));
-ok('　　未來的課不暗化（條件不成立就給空字串）',
-   /\|\| _isUnpaid\) \? 'cal-ev-past' : '';/.test(src));
+ok('　　遮蔽卡（教練看別人的課）維持淡化，不製造假警訊', /\|\| hideMember/.test(src));
+ok('　　未來的課不受影響（沒有 past class 就給空字串）', /!_isPastCard \? '' :/.test(src));
 
 console.log('\nCSS');
 ok('★ cal-ev-todo 取消淡化', /\.cal-ev\.cal-ev-todo,/.test(src));
