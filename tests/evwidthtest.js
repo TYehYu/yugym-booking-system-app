@@ -26,9 +26,13 @@ console.log('① 先歸零，再由容器查詢重新分段');
 ok('★★★ 三條歸零：不管 JS 加了什麼 class，都先當寬卡',
    /\.cal-ev\.cal-ev-std \.co-fl\{display:inline;\}\s*\n\s*\.cal-ev\.cal-ev-std \.co-ab\{display:none;\}\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:inline-flex;\}/.test(src));
 ok('★★★ 90px 以下換兩字縮寫',
-   /@container \(max-width:90px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.co-fl\{display:none;\}\s*\n\s*\.cal-ev\.cal-ev-std \.co-ab\{display:inline;\}\s*\n\s*\}/.test(src));
-ok('★★★ 70px 以下整個不顯示',
-   /@container \(max-width:70px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}\s*\n\s*\}/.test(src));
+   /@container \(max-width:90px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.co-fl\{display:none;\}\s*\n\s*\.cal-ev\.cal-ev-std \.co-ab\{display:inline;\}/.test(src));
+/* 2026-09-03 同日再修：窄卡的教練改成 20px 圓章（使用者：「教練用圓章＋教練色[RA][SA]」）。
+   圓章在任何寬度都放得下，所以原本「70px 以下整個藏起來」那條拿掉了 ——
+   教練是掃描時很常用的線索，能留就留。詳見 tests/evtoprowtest.js。 */
+ok('★★★ 70px 以下不再整個藏起來，改成固定 20px 圓章',
+   !/@container \(max-width:70px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(src)
+   && /\.cal-ev\.cal-ev-std \.evc-coach:not\(\.evc-leavetag\)\{\s*\n\s*width:20px;height:20px;/.test(src));
 ok('★★ 卡片本身要是查詢容器（沒有 container-type 的話整組不會生效）',
    /\.cal-ev\.cal-ev-std\{container-type:size;\}/.test(src));
 

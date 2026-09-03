@@ -18,16 +18,39 @@ ok('★★★ 不再回空字串，改回一個空的佔位格',
 ok('★★ 空格子對螢幕報讀器隱藏（它沒有內容，唸出來只是雜訊）',
    /mc-rev-kv-none" aria-hidden="true"/.test(src));
 ok('★★★ 欄寬固定，有沒有約別都一樣寬（姓名才在同一條垂直線上）',
-   /body\.ink \.mc-revlist-card \.mc-rev-kv\{flex:0 0 46px;/.test(src));
-ok('★★ 為什麼是 46px，算式寫在原地',
-   /46px 是「分期」在 11px 字級下的膠囊寬度（22 字寬＋18 內距＋2 框線）再留一點餘裕/.test(src));
+   /body\.ink \.mc-revlist-card \.mc-rev-kv\{flex:0 0 32px;/.test(src));
 ok('★★ 使用者原話留著（下次有人想「省掉空格子」時看得到理由）',
    /羅苡榕這種沒有分類的　也要保留左邊的空間/.test(src));
 
-console.log('\n② 約別改回圓形鈕');
-ok('★★★ 膠囊造型：圓角、內距、框線、橫排',
-   /body\.ink \.mc-revlist-card \.mc-rev-kv \.rev-kind\{[\s\S]{0,260}?border-radius:999px;padding:4px 9px;border-width:1px;border-style:solid;\}/.test(src)
-   && /body\.ink \.mc-revlist-card \.mc-rev-kv \.rev-kind\{[\s\S]{0,120}?writing-mode:horizontal-tb;/.test(src));
+console.log('\n② 約別＝一個字的正圓框章（2026-09-03 二修＋三修）');
+/* 二修：「分期[分] 續約[續] 新約[新] 用正圓形鈕 不要底色」
+   三修：「[新][續][分] 跟首頁課卡出席章的大小一樣」 */
+ok('★★★ 只顯示一個字（全名留在 title 與 SALE_KIND_LB）',
+   /const SALE_KIND_AB=\{new:'新', renewal:'續', installment:'分'\};/.test(src)
+   && /\$\{SALE_KIND_AB\[k\]\}<\/\$\{can\?'button':'span'\}>/.test(src)
+   && /const SALE_KIND_LB=\{new:'新約', renewal:'續約', installment:'分期'\};/.test(src));
+ok('★★★ 抽獎也是一個字', />獎<\/button>`/.test(src) && />獎<\/span>`;/.test(src));
+ok('★★ 全名放進 title（滑過去讀得到，報讀器也唸得出來）',
+   /const tt=can\?`\$\{SALE_KIND_LB\[k\]\}　點一下更改約別（影響續約獎金）`:SALE_KIND_LB\[k\];/.test(src)
+   && /title="抽獎　\$\{_off\?'過了當天只有管理員能改':'點一下改抽獎項目'\}"/.test(src));
+/* ⚠ 「正圓」＝寬高相等，所以是固定尺寸＋padding:0。靠 padding 撐出來的是膠囊不是圓
+   （左右內距永遠比上下大）—— 二修第一版就是這樣寫的。 */
+ok('★★★ 正圓：寬高相等、padding 歸零',
+   /width:22px;height:22px;padding:0;flex:none;/.test(src)
+   && /border-radius:50%;border-width:1\.5px;border-style:solid;/.test(src));
+ok('★★★ 尺寸與首頁課卡出席章一致（22×22／12px）',
+   /\.tcard-3c \.tcard-chk\{position:static;margin:0;width:22px;height:22px;font-size:12px;\}/.test(src)
+   && /font-size:12px;font-weight:700;letter-spacing:0;line-height:1;/.test(src)
+   && /尺寸對齊首頁課卡的出席章（\.tcard-3c \.tcard-chk 是 22×22／12px）/.test(src));
+ok('★★★ 沒有底色', /background:transparent;\}/.test(src));
+/* 底色拿掉後顏色只剩框線與文字 —— 原本那組極淡描邊（#e8d9b8…）是為「有底色的膠囊」
+   配的，放在米底上幾乎看不見。改吃 currentColor，四種語意色自動生效。
+   實測對比：新約 5.56、續約 5.97、分期 7.91、抽獎 5.56（UI 元件門檻是 3:1）。 */
+ok('★★★ 框線吃 currentColor（沿用原本的淡描邊會看不見）',
+   /border-color:currentColor;/.test(src)
+   && /那組（#e8d9b8／#cfe3d8／#ddd0e6）是為「有底色的膠囊」配的極淡描邊/.test(src));
+ok('★★ 橫排（不是 0813 那版的直書）',
+   /body\.ink \.mc-revlist-card \.mc-rev-kv \.rev-kind\{[\s\S]{0,120}?writing-mode:horizontal-tb;/.test(src));
 /* ⚠ 這一條是關鍵：Ink 有一條把 badge 全部退成純文字的規則（背景／框線／圓角／內距
    都 !important 清掉）。約別必須從那條的選擇器清單裡拿掉，否則怎麼寫都蓋不回來。 */
 ok('★★★ 約別已從「badge 退成純文字」那條規則裡移除',
@@ -51,8 +74,10 @@ console.log('\n④ 抽獎那一顆仍然可以點');
 ok('★★ 抽獎仍是按鈕，且過了當天非管理員只是淡化、不是消失',
    /<button class="rev-kind rev-kind-lottery\$\{_off\?' rev-kind-off':''\}"/.test(src)
    && /button\.rev-kind\.rev-kind-off\{opacity:\.5;\}/.test(src));
-ok('★ 膠囊的 hover 效果還在（它是可點的，要看得出來）',
+ok('★ hover 效果還在（它是可點的，要看得出來）',
    /button\.rev-kind:hover\{filter:brightness\(\.96\);box-shadow:0 1px 4px rgba\(60,50,38,\.18\);\}/.test(src));
+ok('★★ 改首頁出席章尺寸時要記得同步這裡（沒有共用變數）',
+   /改首頁那顆章的尺寸時，這裡要跟著改（兩處，沒有共用變數）/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

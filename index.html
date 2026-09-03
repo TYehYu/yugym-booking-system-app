@@ -5383,12 +5383,22 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   .cal-ev.cal-ev-std .co-fl{display:inline;}
   .cal-ev.cal-ev-std .co-ab{display:none;}
   .cal-ev.cal-ev-std .evc-coach{display:inline-flex;}
+  /* 窄卡的教練＝**圓章**（2026-09-03 使用者：「教練用圓章＋教練色[RA][SA]」）。
+     原本是「兩字縮寫的膠囊」，膠囊有左右內距、寬度跟著字走；改成固定 20px 正圓之後：
+     ・在任何寬度都放得下 —— 所以 70px 以下不必再整個藏起來（教練是掃描時很常用的線索）
+     ・一整排看過去是一列等距圓點，比長短不一的膠囊好認
+     ⚠ 顏色沿用 renderCalendar 寫在元素上的 inline background（每位教練一色），
+       跟頁面最上方那排教練篩選 chip 是同一組色，所以認得出是誰。
+     ⚠ 正圓要固定寬高＋padding:0；靠內距撐出來的是膠囊不是圓。
+     ⚠ 「請假」那顆也吃這條（它同樣是 .evc-coach）—— 兩個字塞不進 20px 圓，
+       所以 .evc-leavetag 排除在外，維持原本的膠囊。 */
   @container (max-width:90px){
     .cal-ev.cal-ev-std .co-fl{display:none;}
     .cal-ev.cal-ev-std .co-ab{display:inline;}
-  }
-  @container (max-width:70px){
-    .cal-ev.cal-ev-std .evc-coach{display:none;}
+    .cal-ev.cal-ev-std .evc-coach:not(.evc-leavetag){
+      width:20px;height:20px;padding:0;flex:none;border-radius:50%;
+      display:inline-flex;align-items:center;justify-content:center;
+      font-size:10px;font-weight:700;letter-spacing:0;line-height:1;overflow:hidden;}
   }
   /* 場地（教室／跑步機）改放姓名下方那一列，與體驗／待簽約標籤同一種樣式 */
   .cal-ev.cal-ev-std .evc-vsub{color:var(--course-accent,#3D7039);opacity:.9;}
@@ -5442,10 +5452,46 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   /* ⚠ left 要 9px 不是 4px（2026-08-23 使用者回報「縮小的課卡 出席章變到左邊色條上了」）——
      左緣的課程色條（.evc-body::before）寬 5px，章從 4px 起算就會壓在色條上，
      兩個又都是深色，看起來像章長在色條裡。5px 色條＋4px 間距 ＝ 9px。 */
-  .cal-ev.cal-ev-std .evc-check{ position:absolute; left:9px; bottom:4px; right:auto; top:auto;
+  /* ══ 頂列：出席章置中、時間靠右（2026-09-03 使用者指示，密集課卡優化）══════
+     「出席章改到課卡靠上置中　時間靠右置上」。
+     配合第 1 項（整點卡不印時間），多數卡的頂列只剩置中的一顆章 —— 乾淨，
+     而且**所有卡的姓名都從同一條 y 起算**，一整排掃過去對得齊（原本時間佔一行、
+     有章沒章又不一樣高）。
+     ⚠ 兩個都用絕對定位，不動 DOM —— 章在 DOM 上包在 .evc-nmrow 裡（手機那套靠它
+       把章排到姓名左邊），搬 DOM 會弄壞手機版。
+     ⚠ .evc-txt 要留出頂列的高度，否則姓名會被壓在章底下。
+     ⚠ 章與時間在窄卡上會不會撞：章 16px 置中、時間 ~24px 靠右，
+       52px 的卡上章佔 18–34、時間佔 26–49 —— 會重疊。但**只有非整點卡才有時間**，
+       而非整點卡是少數；下面用 :not(.ev-onhour) 把那種卡的章改成靠左，兩者就分開了。 */
+  .cal-ev.cal-ev-std .evc-check{ position:absolute; top:3px; left:50%; transform:translateX(-50%);
+    right:auto; bottom:auto;
     width:16px; height:16px; border-radius:50%; padding:0;
     font-size:9.5px; line-height:1; display:flex;
     align-items:center; justify-content:center; z-index:3; }
+  /* 有時間的卡（非整點）：章讓到左邊，不跟時間搶中間偏右那一段。
+     左緣 9px 的理由沿用 0823 —— 課程色條 5px＋間距 4px，不然章會壓在色條上。 */
+  .cal-ev.cal-ev-std:not(.ev-onhour) .evc-check{ left:9px; transform:none; }
+  .cal-ev.cal-ev-std .evc-time{ position:absolute; top:3px; right:6px; z-index:3;
+    align-self:auto; }
+  .cal-ev.cal-ev-std.ev-onhour .evc-time{ display:none; }
+  /* 頂列讓出來的高度：章 16px＋上緣 3px＋3px 呼吸 ＝ 22px。
+     ⚠ 覆寫的是 0821 那條帶 !important 的 padding，所以這裡也要 !important。 */
+  .cal-ev.cal-ev-std .evc-txt{ padding-top:22px !important; }
+  .cal-ev.cal-ev-std.ev-w-narrow .evc-txt,
+  .cal-ev.cal-ev-std.ev-w-tiny   .evc-txt{ padding-top:22px !important; }
+  /* 極窄卡：頂列放不下「章＋時間」兩樣，時間讓位。
+     ⚠ 用 @container 量卡片真實寬度，不要用 wCls —— wCls 是估的，
+       正是它估錯才造成 0903 那次教練標籤被章蓋掉的殘字。
+     實測（真實 CSS）：時間永遠 30px 寬（字級被更高權重的 clamp 鎖住，縮不動），
+     章 16px 從 x9 起算 → 62px 以上才不會撞（62px 時章 9–23、時間 29–59）。
+     ⚠ 61px 以下藏時間是**可以接受的取捨**：非整點的卡本來就落在半點虛線上，
+       垂直位置已經說明了它是 :30；真要確認，滑過去的提示卡有完整時段。
+       反過來藏章就不行 —— 有沒有簽到看不出替代線索。
+     ⚠ 時間藏掉之後，章要回到置中（上面 :not(.ev-onhour) 把它推到左邊是為了讓開時間）。 */
+  @container (max-width:61px){
+    .cal-ev.cal-ev-std .evc-time{ display:none; }
+    .cal-ev.cal-ev-std:not(.ev-onhour) .evc-check{ left:50%; transform:translateX(-50%); }
+  }
   /* ④ 已簽到不再填滿 —— 那一組規則直接刪掉了（見上方 .cal-ev-day.cal-ev-checked 的註記），
      這裡不需要再覆蓋。 */
   /* ⑤ 待簽約（還沒收款）與空堂（還沒排人）→ **只暗化，不畫紅框**。
@@ -11599,12 +11645,29 @@ body.ink .mc-revlist-card .rev-att{font-size:11px;}
    ⚠ 這一欄要**固定寬度**：有沒有約別都佔同樣的位置，姓名才會在同一條垂直線上。
      46px 是「分期」在 11px 字級下的膠囊寬度（22 字寬＋18 內距＋2 框線）再留一點餘裕。
    ⚠ 空格子（.mc-rev-kv-none）不畫任何東西，只是佔位。 */
-body.ink .mc-revlist-card .mc-rev-kv{flex:0 0 46px;align-self:center;
+body.ink .mc-revlist-card .mc-rev-kv{flex:0 0 32px;align-self:center;
   display:flex;align-items:center;justify-content:center;}
+/* 正圓、不要底色（2026-09-03 二修，使用者附截圖）——
+   ⚠ 「正圓」＝寬高相等，所以是固定 24×24 ＋ padding:0，不能靠 padding 撐
+     （左右內距永遠比上下大，撐出來的是膠囊不是圓）。
+   ⚠ 底色拿掉之後**顏色只剩框線與文字**，那正是語意所在（新約金／續約綠／分期紫／抽獎金），
+     所以 background 要蓋成 transparent，border-color 與 color 維持各自的 rev-kind-* 不動。 */
 body.ink .mc-revlist-card .mc-rev-kv .rev-kind{
   writing-mode:horizontal-tb;text-orientation:mixed;
-  font-size:11px;font-weight:700;letter-spacing:.04em;line-height:1.35;
-  border-radius:999px;padding:4px 9px;border-width:1px;border-style:solid;}
+  /* 尺寸對齊首頁課卡的出席章（.tcard-3c .tcard-chk 是 22×22／12px）——
+     2026-09-03 使用者：「[新][續][分] 跟首頁課卡出席章的大小一樣」。
+     兩個都是「一個字的圓章」，同一個量體，畫面上才像同一套語彙。
+     ⚠ 改首頁那顆章的尺寸時，這裡要跟著改（兩處，沒有共用變數）。 */
+  width:22px;height:22px;padding:0;flex:none;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;letter-spacing:0;line-height:1;
+  border-radius:50%;border-width:1.5px;border-style:solid;
+  /* ⚠ border-color 用 currentColor，不能沿用 rev-kind-* 原本的框線色 ——
+     那組（#e8d9b8／#cfe3d8／#ddd0e6）是為「有底色的膠囊」配的極淡描邊，
+     底色拿掉之後放在米底上幾乎看不見。currentColor 直接吃該約別的語意色
+     （新約金／續約綠／分期紫／抽獎金），四種都不必各寫一條。 */
+  border-color:currentColor;
+  background:transparent;}
 
 
 /* ══ 排班表：上半部壓縮（2026-08-27 使用者指示）══════════════════════════════
@@ -12023,8 +12086,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260903.1701';
-const APP_VERSION_LABEL='260903.1701';
+const APP_VERSION='260903.1723';
+const APP_VERSION_LABEL='260903.1723';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23902,6 +23965,12 @@ async function renderCalendar(opts){
       const cardW = colW / lane.total; // 同時段均分後每張卡寬度
       const mobile7 = isMobileLayout() && (nDays===7||nDays===5);
       const wCls = cardW < 70 ? 'ev-w-tiny' : (cardW < 90 ? 'ev-w-narrow' : '');
+      /* 整點開始的卡不印時間（2026-09-03 使用者：密集課卡優化第 1 項）——
+         卡片的垂直位置本來就對齊左側時間軸，一整列同鐘點的卡都印著同一個數字，
+         那是**重複資訊**，在同時段十幾張並排時吃掉的正是姓名要用的空間。
+         ⚠ 只有整點省略：19:30、20:30 這種不在標示線上的卡，時間是唯一線索，一定要留。
+         ⚠ 判斷字串就好 —— start_time 是 'HH:MM' 文字，不需要換算成分鐘。 */
+      const onHour = /:00$/.test(String(b.start_time||''));
       const tiny = cardW < 70; // 極窄：省略教練
       // 團課人數（合併卡）
       const gHeadsN=(Array.isArray(b.member_ids)&&b.member_ids.length)?b.member_ids.length:(b.member_id?1:0);
@@ -24097,7 +24166,7 @@ async function renderCalendar(opts){
         const n=Math.max(1, Number(b._units)||1);
         return `場地：${v}${v==='跑步機'?`　·　${n} 台`:''}`; })();
       const _tipStr = _tipEsc([`${b.start_time}–${_endT}`, _tipMem, _tipCoach, _tipVenue].filter(Boolean).join('\n'));
-      evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${wCls} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''}${_viewOnly?' cal-ev-view':''} cal-ev-day cal-ev-std ${_densityCls} ${_courseCls} ${_checkedCls} ${_pendCls} ${_pastCls}${_alertCls}" data-bid="${b.id}" data-time="${b.start_time}" data-tip="${_tipStr}"
+      evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${wCls}${onHour?' ev-onhour':''} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''}${_viewOnly?' cal-ev-view':''} cal-ev-day cal-ev-std ${_densityCls} ${_courseCls} ${_checkedCls} ${_pendCls} ${_pastCls}${_alertCls}" data-bid="${b.id}" data-time="${b.start_time}" data-tip="${_tipStr}"
         style="${useFixedLane?dayLaneStyle:`top:${top}px;height:${Math.max(h-2,(nDays===7||nDays===5)?40:64)}px;left:calc(${lane.idx*wpct}% + 3px);width:calc(${wpct}% - 6px);`}"
         ${/* 2026-08-01 使用者指示：「教練的行事曆，非本人的課卡一樣正常顯示課卡內容，
              但是要移除互動的功能，手機跟桌機都是」——內容照舊畫，只是不掛任何點擊。
@@ -39880,10 +39949,17 @@ async function _setRevPay(pid, m){
   }catch(e){ showToast('修改失敗：'+((e&&e.message)||e)); }
 }
 const SALE_KIND_LB={new:'新約', renewal:'續約', installment:'分期'};
+/* 營收明細那一欄只放**一個字**（2026-09-03 使用者附截圖：
+   「分期[分] 續約[續] 新約[新] 用正圓形鈕 不要底色」）。
+   ⚠ 只有這顆 chip 縮成一個字 —— SALE_KIND_LB 的全名別處還要用
+     （改約別的挑選視窗要看得懂「新約／續約／分期」，一個字看不出來）。
+   ⚠ 全名放進 title：滑過去仍讀得到，也讓螢幕報讀器唸得出來。 */
+const SALE_KIND_AB={new:'新', renewal:'續', installment:'分'};
 function saleKindChip(tkId, kind){
   const k=SALE_KIND_LB[kind]?kind:'new';
   const can=(typeof isDeskLike==='function') && isDeskLike();
-  return `<${can?'button':'span'} class="rev-kind rev-kind-${k}"${can?` onclick="event.stopPropagation();openSaleKindPick('${tkId}')" title="點一下更改約別（影響續約獎金）"`:''}>${SALE_KIND_LB[k]}</${can?'button':'span'}>`;
+  const tt=can?`${SALE_KIND_LB[k]}　點一下更改約別（影響續約獎金）`:SALE_KIND_LB[k];
+  return `<${can?'button':'span'} class="rev-kind rev-kind-${k}" title="${tt}"${can?` onclick="event.stopPropagation();openSaleKindPick('${tkId}')"`:''}>${SALE_KIND_AB[k]}</${can?'button':'span'}>`;
 }
 /* 「這位有沒有教練課／友善教練課的紀錄」——約別二選一的唯一判準（2026-09-01 定版）。
 
@@ -40157,8 +40233,8 @@ function revKindCell(r){
     const canL=(typeof isDeskLike==='function')&&isDeskLike();
     const _off=(r.lotDate && r.lotDate!==ymd(TODAY)) && !(SESSION && SESSION.role==='admin');
     const inner=canL
-      ? `<button class="rev-kind rev-kind-lottery${_off?' rev-kind-off':''}" title="${_off?'過了當天只有管理員能改':'點一下改抽獎項目'}" onclick="event.stopPropagation();lottoFixAsk('${r.lot}','rev')">抽獎</button>`
-      : `<span class="rev-kind rev-kind-lottery">抽獎</span>`;
+      ? `<button class="rev-kind rev-kind-lottery${_off?' rev-kind-off':''}" title="抽獎　${_off?'過了當天只有管理員能改':'點一下改抽獎項目'}" onclick="event.stopPropagation();lottoFixAsk('${r.lot}','rev')">獎</button>`
+      : `<span class="rev-kind rev-kind-lottery" title="抽獎">獎</span>`;
     return `<span class="mc-rev-kv">${inner}</span>`;
   }
   /* 沒有約別的列（團課方案、場租、商品…）也要輸出這一格

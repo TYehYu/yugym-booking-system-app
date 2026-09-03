@@ -173,7 +173,7 @@ console.log('\n⑥ 面板重做：做減法（2026-08-27 使用者：「主要�
     ok('★★ 只動外觀：除了約別欄的固定寬度，沒有一條規則碰 display／position／flex 方向',
        !/(^|[;{\s])(display|position|flex-direction|top|left|right|bottom|width|height)\s*:/.test(noKv));
     ok('★★ 約別欄的例外就是「固定寬度＋置中」，沒有夾帶別的',
-       /body\.ink \.mc-revlist-card \.mc-rev-kv\{flex:0 0 46px;align-self:center;\s*\n\s*display:flex;align-items:center;justify-content:center;\}/.test(src));
+       /body\.ink \.mc-revlist-card \.mc-rev-kv\{flex:0 0 32px;align-self:center;\s*\n\s*display:flex;align-items:center;justify-content:center;\}/.test(src));
   }
   ok('　 使用者原話（做減法）寫在原地',
      /不是加元素，而是做減法。減少框線、減少底色、減少 badge、降低卡片高度/.test(src)
