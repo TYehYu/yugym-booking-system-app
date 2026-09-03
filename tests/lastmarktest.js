@@ -113,9 +113,13 @@ ok('★ 首頁課卡（tcard）掛上 bkRenewBadge 角標',
    .ev-payalert 是為行事曆課卡寫的（絕對定位在卡片右上角，那裡沒有別的東西），
    但首頁課卡的**時間就在右上角**，徽章正好蓋住最後一位數字。
    時間是課卡上最要緊的資訊之一，不能被遮。改成同一列並排。 */
+/* ⚠ 這一改有代價，當天就被使用者看見：徽章回到文字流裡就會**佔寬度**，
+     165px 的卡片沒有那 18px 的餘裕，場地被擠成「史密斯訓…」。
+     所以徽章隨後從 14→12px、間距 4→3（連同另外三項）——
+     尺寸不是隨便挑的，改動前先看 tests/tcardwidthtest.js 那筆寬度帳。 */
 ok('★★★ 首頁課卡的徽章不再絕對定位（會蓋住時間）',
-   /\.tcard-3c \.ev-payalert\{position:static;top:auto;right:auto;width:14px;height:14px;/.test(src)
-   && /\.tcard-3c \.t3-top\{display:inline-flex;align-items:center;gap:4px;min-width:0;\}/.test(src));
+   /\.tcard-3c \.ev-payalert\{position:static;top:auto;right:auto;width:12px;height:12px;/.test(src)
+   && /\.tcard-3c \.t3-top\{display:inline-flex;align-items:center;gap:3px;min-width:0;\}/.test(src));
 ok('★★ 行事曆那邊維持原樣（只覆寫首頁這一種）',
    /\.ev-payalert\{position:absolute;top:2px;right:3px;left:auto;z-index:4;/.test(src)
    && /行事曆那邊維持原樣（見 \.ev-payalert 本體），只覆寫首頁這一種/.test(src));

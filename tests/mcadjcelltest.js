@@ -64,9 +64,12 @@ ok('★★ 不在當月＝可點的鈕；已經在當月＝不可點的「當月
    原本寫死 navTo('g_dashboard')，在 UI 實驗室裡點一下就被彈回營運畫面。 */
 ok('★★ admCalToday 把月份設回今天那個月，並保住選月旗標（不然重繪會被 date 蓋掉）',
    /function admCalToday\(\)\{\s*\n\s*window\._admCalYm=ymd\(TODAY\)\.slice\(0,7\);\s*\n\s*window\._admCalKeep=true;\s*\n\s*dashRepaint\(\);/.test(src));
+/* 2026-09-03：不可點的樣子從 opacity:.55 改成「透明底＋虛線框＋淡字」，
+   與日期列的「今天」同一套（UI 實驗室試過後上線）。opacity 會把框線一起調糊，
+   看起來像壞掉而不是「你已經在這裡」。 */
 ok('★★ span 要自己置中（同日「今天」那顆踩過的坑）',
    /\.mcal-btn-now\{[\s\S]{0,140}?display:inline-flex;align-items:center;justify-content:center;/.test(src)
-   && /\.mcal-btn-now\.is-now\{opacity:\.55;cursor:default;pointer-events:none;\}/.test(src));
+   && /\.mcal-btn-now\.is-now\{background:transparent;color:var\(--t3\);border:1px dashed var\(--bd\);\s*\n\s*cursor:default;pointer-events:none;\}/.test(src));
 /* 2026-09-02 使用者：「回到今天跟回到當月的按鈕　可以做成圓形嗎」 */
 ok('★★ 圓形（34px），與日期列的「今天」同一個形狀',
    /\.mcal-btn-now\{width:34px;height:34px;border-radius:50%;/.test(src)
