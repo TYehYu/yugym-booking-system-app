@@ -102,7 +102,7 @@ console.log('\n② 狀態語意全部保留（顏色深淺、反灰、今日、�
   ok('★★ 反灰欄裡「還沒處理」的課卡仍然不被一起淡化（原本那條例外還在）',
      /\.cal-daycol\.col-past \.cal-ev\.cal-ev-todo\{opacity:1;filter:none;\}/.test(src));
   ok('★★ 今日欄位仍然標示得出來（換成暖米底＋深墨字，不是拿掉）',
-     /body\.ink \.cal-daycol\.daycol-today\{background:#FBF6EC;\}/.test(src)
+     /body\.ink \.cal-daycol\.daycol-today\{background:#FDFAF4;\}/.test(src)
      && /body\.ink \.cal-daycol-head\.today\{background:var\(--card2\);\}/.test(src)
      && /body\.ink \.cal-daycol-head\.today \.cd-line\{color:var\(--text\);font-weight:600;\}/.test(src));
   ok('★ 「今天」小標仍然畫得出來', /body\.ink \.cal-daycol-head \.cd-today\{background:var\(--gold\)/.test(src));

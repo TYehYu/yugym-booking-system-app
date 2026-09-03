@@ -26,7 +26,7 @@ ok('★★★ 順序用 CSS order（不動 DOM）',
    /\.cal-ev\.cal-ev-std \.evc-r1\{ order:1;/.test(src)
    && /\.cal-ev\.cal-ev-std \.evc-nmrow\{ order:2;/.test(src)
    && /\.cal-ev\.cal-ev-std \.evc-coach\{ order:3;/.test(src)
-   && /\.cal-ev\.cal-ev-std \.evc-sub\{ order:4;/.test(src));
+   && /\.cal-ev\.cal-ev-std \.evc-r4\{ order:4;/.test(src));
 ok('★★ 不動 DOM 的理由寫在原地',
    /順序用 CSS 的 order，不動 DOM —— DOM 順序是 時間／姓名／場地／教練/.test(src));
 /* 左內距只要 6px：課程色條寬 5px，內容從 6px 起算就不會壓到它，左右因此可以對稱。
@@ -39,7 +39,7 @@ ok('★★ 教練回到置中（原本是 margin-top:auto 推到右下）',
 
 console.log('\n② 第一列：時間置中、[NEW][PAY] 靠右');
 ok('★★★ 第一列是真的一列（.evc-r1），不是絕對定位的角落',
-   /<span class="evc-r1"><span class="evc-time">\$\{b\.start_time\}<\/span>\$\{_tagPay\}\$\{_tagNew\}<\/span>/.test(src));
+   /<span class="evc-r1">\$\{_catOut\}<span class="evc-time">\$\{b\.start_time\}<\/span>\$\{_tagPay\}\$\{_tagNew\}<\/span>/.test(src));
 /* ⚠ 絕對定位在右上角看起來也在「第一列靠右」，但內容是垂直置中的，
    窄卡上姓名會頂到那個角落 —— 實測 90 種組合有 42 種相撞。 */
 ok('★★★ 為什麼不能用絕對定位，寫在原地（附實測數字）',
@@ -105,9 +105,45 @@ ok('★★ 極窄卡姓名收到 11px（13px 下三個中文字一定折兩行�
    /@container \(max-width:66px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-name\{ font-size:11px !important; \}/.test(src)
    && /收的是字級不是行數：0725 定過「窄卡姓名折兩行、不要切成…」/.test(src));
 
-console.log('\n⑥ 手機那兩套不受影響');
-ok('★★★ .evc-r1 在手機版當作不存在（display:contents）',
-   /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-r1,\s*\n\.admcag\.cal-ev-std \.evc-r1\{display:contents;\}/.test(src));
+console.log('\n⑥ 課種與堂數：參考首頁課卡補上（2026-09-03）');
+/* 使用者：「還是可以參考首頁的課卡　把能夠放進去的資訊擺進去行事曆」——
+   首頁有、行事曆沒有的就是這兩項。 */
+ok('★★★ 兩項都搭現有的行，不新增列（60 分鐘的卡實測只剩 8–13px）',
+   /兩項都\*\*搭現有的行\*\*，不新增列：60 分鐘的卡實測只剩 8–13px/.test(src)
+   && /<span class="evc-r4">\$\{_venueSub\}\$\{_seqOut\}<\/span>/.test(src));
+ok('★★★ 課種短名抽成共用常數（首頁那份是 g_dashboard 的區域變數，行事曆拿不到）',
+   /const EV_CAT_SHORT=\{'ev-pt':'教練課','ev-friendly':'友善課'/.test(src)
+   && /首頁那份 catName 是 PAGES\.g_dashboard 的\*\*區域變數\*\*，行事曆拿不到/.test(src));
+ok('★★ 堂數沿用 _bkSeq（與首頁課卡同一份算法，不另外算一套）',
+   /const _seqQ = \(window\._bkSeq\|\|\{\}\)\[b\.id\];/.test(src)
+   && /_seqQ\.n>=999\?\('第 '\+_seqQ\.i\+' 堂'\)/.test(src));
+/* 門檻用最長的實際字串反推 —— 用平均長度算會剛好過關，遇到長的就切字（實測踩過）。 */
+ok('★★★ 門檻用最長字串反推：堂數 90px、課種 118px',
+   /@container \(min-width:90px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-seq\{ display:inline; \}/.test(src)
+   && /@container \(min-width:118px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-cat\{ display:inline; \}/.test(src)
+   && /用平均長度（「友善課」「5\/8 堂」）算會剛好過關，遇到長的就切字 —— 實測踩過/.test(src));
+ok('★★ 橫排的矮卡兩項都讓位（一行擠不進去，姓名與教練不能讓）',
+   /\.cal-ev\.cal-ev-std \.evc-cat,\s*\n\s*\.cal-ev\.cal-ev-std \.evc-seq\{ display:none !important; \}/.test(src));
+ok('★★ 課種文字只是色條的第二條路（窄卡只靠顏色，不算少資訊）',
+   /課種其實已經由左邊色條表達了；文字是給「色盲／不熟色碼的人」的第二條路/.test(src));
+
+console.log('\n⑦ 教練中性、提醒細框、間距、今日欄（2026-09-03 使用者：「134先做 2要留課種顏色」）');
+ok('★★★ 教練標籤中性化，課種顏色留著',
+   /\.cal-ev\.cal-ev-std \.evc-coach:not\(\.evc-leavetag\)\{\s*\n\s*background:transparent !important; color:var\(--t2,#6B655C\) !important; \}/.test(src)
+   && /使用者選了課種，教練這邊退成中性灰/.test(src));
+ok('★★ 「請假」維持紅底白字（它是狀態不是身分）', /「請假」（\.evc-leavetag）維持紅底白字：它是狀態不是身分/.test(src));
+ok('★★ 不要在教練那條加 border（Ink 早就退成純文字，加了是死宣告）',
+   /加了也不會出現，只是死宣告/.test(src));
+ok('★★★ 卡與卡的間隙 3px→2px', /\.cal-ev\{position:absolute;left:2px;right:2px;/.test(src)
+   && /left:calc\(\$\{lane\.idx\*wpct\}% \+ 2px\);width:calc\(\$\{wpct\}% - 4px\);/.test(src));
+ok('★★ 續約提醒改細線外框', /\.ev-payalert\{[\s\S]{0,260}?background:transparent;border:1px solid currentColor;\}/.test(src));
+ok('★★ 今日欄底色降淡（兩種主題）',
+   /\.cal-daycol\.daycol-today\{background:#FFFCF7;\}/.test(src)
+   && /body\.ink \.cal-daycol\.daycol-today\{background:#FDFAF4;\}/.test(src));
+
+console.log('\n⑧ 手機那兩套不受影響');
+ok('★★★ .evc-r1／.evc-r4 在手機版都當作不存在（display:contents）',
+   /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-r1,\s*\n\.admcag\.cal-ev-std \.evc-r1,\s*\n\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-r4,\s*\n\.admcag\.cal-ev-std \.evc-r4\{display:contents;\}/.test(src));
 ok('★★ 理由寫在原地', /用 display:contents 讓那層包裝在這裡不存在，版面與改版前完全相同/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');

@@ -181,7 +181,7 @@ ok('　　今天那一欄的欄頭改品牌綠（不被統一底色蓋掉）',
    && /\.cal-daycol-head\.today \.cd-line\{color:#fff;\}/.test(src)
    && /\.cal-daycol-head\.today \.cd-today\{background:rgba\(255,255,255,\.24\);color:#fff;\}/.test(src));
 ok('　　欄身的淡米色不動（底下還疊著場地狀態的淡紅／淡金）',
-   /\.cal-daycol\.daycol-today\{background:#FFF8EF;\}/.test(src)
+   /\.cal-daycol\.daycol-today\{background:#FFFCF7;\}/.test(src)
    && /換成綠底會跟它們混在一起/.test(src));
 
 console.log('\n⑧ 桌機行事曆「營業前」列收斂成一顆金色 [+]');

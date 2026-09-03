@@ -74,7 +74,7 @@ ok('　　空堂也吃得到（bkIsOpenHold 的前提就是 pending_contract）'
 
 console.log('\n出席章的 DOM 只放一份');
 ok('★ 行事曆：章排在姓名之後、自成一列，外層不再重複輸出',
-   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_venueSub\}\$\{_stdTag\}/.test(src)
+   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span><span class="evc-r4">\$\{_venueSub\}\$\{_seqOut\}<\/span>\$\{_stdTag\}/.test(src)
    && /出席章已移進 _bodyOut 的姓名列（2026-08-21），這裡不再重複輸出一份/.test(src));
 ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    src.indexOf('const _stampOut =') < src.indexOf('const _bodyOut ='),
@@ -207,7 +207,7 @@ ok('★ 不再是右下角跟教練並列的膠囊，並多帶一份縮寫',
    /const _venueTag = '';/.test(src)
    && /<span class="evc-sub evc-vsub"><span class="vn-fl">\$\{_selfVenue\}<\/span><span class="vn-ab">/.test(src));
 ok('★ 排在姓名之後、體驗／待簽約標籤之前',
-   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_venueSub\}\$\{_stdTag\}/.test(src));
+   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span><span class="evc-r4">\$\{_venueSub\}\$\{_seqOut\}<\/span>\$\{_stdTag\}/.test(src));
 ok('　　只有教室／跑步機會有值（多功能是預設場地、不標）',
    /selfVenueLabel 本來就只在教室／跑步機才有值/.test(src));
 
