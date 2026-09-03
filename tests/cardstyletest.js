@@ -766,13 +766,18 @@ ok('★ DOM 仍在姓名列裡（絕對定位是相對整張卡，擺哪裡都�
    && /\.cal-ev\.cal-ev-std \.evc-nmrow\{display:flex;align-items:center;justify-content:center;/.test(src));
 /* 2026-08-23 使用者回報「縮小的課卡 出席章變到左邊色條上了」：left 4px→9px。
    左緣課程色條寬 5px，章從 4px 起算會壓在色條上，兩個又都是深色。5px＋4px 間距＝9px。 */
-/* 2026-09-03（密集課卡優化，使用者：「出席章改到課卡靠上置中 時間靠右置上」）——
-   桌機的章從左下角搬到頂列置中。小圓章 16px 這一點沒變（1/4 圓在淺底卡上太搶）。
-   非整點卡因為右上角要放時間，章仍然讓到左邊 9px（避開 5px 色條）。 */
-ok('★ 桌機用 16px 小圓章，位置改到頂列置中',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; top:3px; left:50%; transform:translateX\(-50%\);\s*\n\s*right:auto; bottom:auto;\s*\n\s*width:16px; height:16px; border-radius:50%;/.test(src));
-ok('★ 非整點卡（右上角有時間）章讓到左邊 9px',
-   /\.cal-ev\.cal-ev-std:not\(\.ev-onhour\) \.evc-check\{ left:9px; transform:none; \}/.test(src));
+/* 2026-09-03 同一天改了兩次：
+   一修（「出席章改到課卡靠上置中 時間靠右置上」）→ 章從左下角搬到頂列置中；
+   二修（「行事曆課卡資訊 … 出席章移除」）→ 桌機的章整個隱藏，
+        出席狀態改由當天課卡的外框表達（綠＝已簽到／金＝未出席）。
+   ⚠ DOM 留著：手機行事曆（.cag-wk-col）與管理員一日（.admcag）共用同一份，
+     它們仍然要那顆章。 */
+ok('★★★ 桌機隱藏出席章（DOM 不動）',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ display:none; \}/.test(src)
+   && /只在桌機隱藏，DOM 留著/.test(src));
+ok('★★★ 改由當天課卡的外框表達出席',
+   /\.cal-ev\.cal-ev-std\.cal-ev-mkin \.evc-body\{/.test(src)
+   && /\.cal-ev\.cal-ev-std\.cal-ev-mkno \.evc-body\{/.test(src));
 ok('★★ 章要避開左緣 5px 的課程色條（不然看起來像章長在色條裡）',
    /左緣的課程色條（\.evc-body::before）寬 5px，章從 4px 起算就會壓在色條上/.test(src));
 ok('　　手機（.admcag）維持 1/4 圓 —— 深色滿版卡上圓章反而糊',
@@ -780,8 +785,8 @@ ok('　　手機（.admcag）維持 1/4 圓 —— 深色滿版卡上圓章反�
    && /\.admcag\.cal-ev-std \.evc-check\{position:absolute;bottom:0;right:0;top:auto;left:auto;\s*\n\s*width:26px;height:26px;border-radius:100% 0 10px 0;/.test(src));
 ok('　　右下角讓給教練標籤，左下角本來是空的（理由寫在原地）',
    /右下角讓給教練標籤（\.evc-abbr），左下角本來是空的；用與手機同一種 1\/4 圓/.test(src));
-ok('　　桌機是頂列小圓章，手機的角標基底規則不動',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; top:3px; left:50%;/.test(src)
+ok('　　桌機隱藏，手機的角標基底規則不動',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ display:none; \}/.test(src)
    && /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;top:auto;left:auto;bottom:0;right:0;/.test(src));
 ok('　　窄欄位時名字自己截斷，不會把章擠掉',
    /\.cal-ev\.cal-ev-std \.evc-nmrow \.evc-name\{min-width:0;\}/.test(src));

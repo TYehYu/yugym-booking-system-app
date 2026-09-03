@@ -31,8 +31,11 @@ ok('★★★ class 掛在卡片上', /\$\{wCls\}\$\{onHour\?' ev-onhour':''\}/.
 ok('★★★ 不再無條件藏整點卡的時間（寬卡要印）',
    !/^\s*\.cal-ev\.cal-ev-std\.ev-onhour \.evc-time\{ display:none; \}$/m.test(
      src.split('@container (max-width:87px)')[0]));
-ok('★★★ 62–87px：整點省略時間、非整點的章讓到左邊',
-   /@container \(max-width:87px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.ev-onhour \.evc-time\{ display:none; \}\s*\n\s*\.cal-ev\.cal-ev-std:not\(\.ev-onhour\) \.evc-check\{ left:9px; transform:none; \}\s*\n\s*\}/.test(src));
+/* ⚠ 同日再改：出席章整個從桌機移除（見 tests/evcardv2test.js），
+   所以「章讓到左邊」那條也一起沒了 —— 沒有章就沒有互相讓位的問題。
+   62–87px 這一段只剩「整點省略時間」。 */
+ok('★★★ 62–87px：整點省略時間（章已移除，不再需要讓位）',
+   /@container \(max-width:87px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.ev-onhour \.evc-time\{ display:none; \}\s*\n\s*\}/.test(src));
 ok('★★★ 88px 這個門檻是算出來的，算式寫在原地',
    /卡寬\/2\+8 ≤ 卡寬-36 → 卡寬 ≥ 88/.test(src));
 ok('★★★ 二修的推論寫在原地（在寬卡上印時間是免費的）',
@@ -42,29 +45,26 @@ ok('★★★ 兩個 @container 區塊的順序有意義（61px 那塊要在後�
    src.indexOf('@container (max-width:87px)') < src.indexOf('@container (max-width:61px)')
    && /61px 那塊一定要在 87px 那塊後面/.test(src));
 
-console.log('\n② 出席章靠上置中、時間靠右置上');
-ok('★★★ 章：絕對定位、頂端、水平置中',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; top:3px; left:50%; transform:translateX\(-50%\);/.test(src));
+console.log('\n② 頂列：時間靠右（出席章同日已整個移除）');
+ok('★★★ 桌機的出席章已隱藏（狀態改由外框表達）',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ display:none; \}/.test(src));
 ok('★★★ 時間：絕對定位、頂端靠右',
    /\.cal-ev\.cal-ev-std \.evc-time\{ position:absolute; top:3px; right:6px; z-index:3;/.test(src));
-ok('★★★ .evc-txt 讓出頂列高度（不讓的話姓名會被壓在章底下）',
-   /\.cal-ev\.cal-ev-std \.evc-txt\{ padding-top:22px !important; \}/.test(src));
+ok('★★★ .evc-txt 仍留出頂列高度（章不見了，18px 就夠）',
+   /\.cal-ev\.cal-ev-std \.evc-txt\{ padding-top:18px !important; \}/.test(src));
 /* 有時間的卡（非整點）章要讓開，否則兩個都擠在中間偏右。
    左緣 9px 沿用 0823：課程色條 5px＋間距 4px，不然章會壓在色條上。 */
-ok('★★★ 章的預設是置中（讓到左邊只在 62–87px 那一段）',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; top:3px; left:50%; transform:translateX\(-50%\);/.test(src)
-   && /@container \(max-width:87px\)\{[\s\S]{0,220}?:not\(\.ev-onhour\) \.evc-check\{ left:9px; transform:none; \}/.test(src));
+ok('★★★ 章的定位規則整組移除（隱藏之後留著只是雜訊）',
+   !/\.evc-check\{ position:absolute; top:3px; left:50%/.test(src)
+   && !/:not\(\.ev-onhour\) \.evc-check\{/.test(src));
 ok('★★ 不動 DOM 的理由寫在原地（手機那套靠 .evc-nmrow）',
    /章在 DOM 上包在 \.evc-nmrow 裡（手機那套靠它\s*\n?\s*把章排到姓名左邊），搬 DOM 會弄壞手機版/.test(src));
 
 console.log('\n③ 極窄卡：時間讓位，不是章讓位');
 ok('★★★ 61px 以下藏時間（不論整不整點）',
    /@container \(max-width:61px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-time\{ display:none; \}/.test(src));
-ok('★★★ 時間藏掉後章回到置中（不然它還停在讓位的左邊）',
-   /@container \(max-width:61px\)\{[\s\S]{0,200}?\.cal-ev\.cal-ev-std:not\(\.ev-onhour\) \.evc-check\{ left:50%; transform:translateX\(-50%\); \}/.test(src));
-ok('★★★ 讓的是時間不是章，理由寫在原地',
-   /反過來藏章就不行 —— 有沒有簽到看不出替代線索/.test(src)
-   && /非整點的卡本來就落在半點虛線上，垂直位置已經說明它是 :30/.test(src));
+ok('★★★ 極窄卡時間讓位的理由寫在原地',
+   /非整點的卡本來就落在半點虛線上，垂直位置已經說明它是 :30/.test(src));
 ok('★★ 用 @container 不用 wCls，理由寫在原地',
    /門檻一律用 @container 量卡片真實寬度，不要用 wCls —— wCls 是\s*\n?\s*\(innerWidth-80\)\/nDays\/lane 估的/.test(src)
    && /這裡的三段判斷全部踩在同一個地雷上，一定要量真的/.test(src));

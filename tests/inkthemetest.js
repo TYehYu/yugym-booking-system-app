@@ -88,11 +88,14 @@ console.log('① 尺寸與位置：一行計算都不能動（使用者第 11 �
 
 console.log('\n② 狀態語意全部保留（顏色深淺、反灰、今日、紅線）');
 {
-  ok('★★ 過去時間反灰的判斷邏輯沒動（日期已過／今天但已結束）',
-     /if\(_cardDate < _todayYmd\)\{ _isPastCard = true; \}/.test(src)
-     && /if\(_endM <= _nowM\) _isPastCard = true;   \/\/ 已結束的課/.test(src));
-  ok('★★ 「已結案才淡化、沒結案維持原色」那條沒動（cal-ev-past ／ cal-ev-todo）',
-     /const _pastCls = bkDarkNoTicket\(b\) \? 'cal-ev-dark'\s*\n\s*: !_isPastCard \? '' : \(_settled \? 'cal-ev-past' : 'cal-ev-todo'\);/.test(src));
+  /* 2026-09-03 課卡狀態語彙改版：暗化的定義從「Focus Mode」換成「這張要注意」
+     （過期不含當天、或待簽約）。這支測試守的是「Ink 沒有把狀態語意弄丟」，
+     不是那段判斷的長相 —— 所以跟著新的判斷走，見 tests/caldimtest.js。 */
+  ok('★★ 過去／待簽約的暗化判斷還在（Ink 沒有把它弄丟）',
+     /const _pastCls = bkDarkNoTicket\(b\) \? 'cal-ev-dark'\s*\n\s*: \(_cardDate < _todayYmd \|\| _isUnpaid\) \? 'cal-ev-past' : '';/.test(src));
+  ok('★★ 當天的出席外框在 Ink 也接了一次（0,3,0 壓不過 body.ink 的 0,3,1）',
+     /body\.ink \.cal-ev\.cal-ev-std\.cal-ev-mkin \.evc-body\{/.test(src)
+     && /body\.ink \.cal-ev\.cal-ev-std\.cal-ev-mkno \.evc-body\{/.test(src));
   ok('★ 過去欄位仍然反灰（只換色階，沒有拿掉）',
      /body\.ink \.cal-daycol\.col-past\{background:#F0EDE7;\}/.test(src)
      && /\.cal-daycol\.col-past\{background:#f3f2ef;\}/.test(src));
