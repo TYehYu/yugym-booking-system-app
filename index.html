@@ -11966,8 +11966,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260903.1538';
-const APP_VERSION_LABEL='260903.1538';
+const APP_VERSION='260903.1554';
+const APP_VERSION_LABEL='260903.1554';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21561,10 +21561,25 @@ async function dashManualRefresh(){
 }
 /* 遠端變更簽章（2026-07-27 流量優化）：輪詢只打一支回傳幾十 bytes 的 RPC，
    簽章變了才做完整重抓——閒置時幾乎不耗流量（原本每 30 秒抓整張預約+票券表）。 */
+/* ⚠ 2026-09-03：這一支曾經整整 24 天回 400 都沒有人發現 ——
+     9 筆 8/10 手動建的 BK-FIX-* 預約，member_ids 是空**物件** '{}' 而不是空陣列 '[]'，
+     jsonb_array_length 對物件直接報錯 → 整支簽章函式垮掉。
+     而這裡把 error 悄悄吃掉回 false，於是「背景自動更新」靜靜地停擺，
+     畫面永遠不會自己刷新，只是沒有人把這兩件事連起來。
+   ⚠ 錯誤可以不影響流程，但不能無聲：現在會在主控台留一次警告（每種錯誤只印一次，
+     不洗版），至少 F12 打開就看得到。資料與函式的防線已補（見同日的 migration）。 */
+let _sigWarned='';
 async function remoteSigChanged(){
   try{
     const {data,error}=await sb.rpc('fn_change_sig');
-    if(error||!data) return false;
+    if(error){
+      const k=String(error.code||error.message||'err');
+      if(_sigWarned!==k){ _sigWarned=k;
+        console.warn('[remoteSigChanged] 變更簽章取不到，背景自動更新會停擺：', error); }
+      return false;
+    }
+    if(!data) return false;
+    _sigWarned='';
     if(window._remoteSig==null){ window._remoteSig=data; return false; }   // 首次只記錄
     if(window._remoteSig===data) return false;
     window._remoteSig=data;
