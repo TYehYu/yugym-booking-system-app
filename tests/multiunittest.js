@@ -86,15 +86,18 @@ console.log('同行卡建立');
     /* ── venueUnitsLabel ── */
     console.log('課卡標籤');
     const bkIsGroup=b=>!!(b&&b.category==='小班肌力');
-    /* 2026-09-03 場地更名後，「訓練架・兩台」的縮寫改吃 VENUE_SHORT（不再各處硬寫），
-       所以沙箱要把 venueShort 帶進來。 */
-    const lbl=new Function('bkIsGroup','venueShort',
-      g('function selfVenueLabel(b){','\n}')+'\n'+g('function venueUnitsLabel(b){','\n}')+'\nreturn venueUnitsLabel;')(
-      bkIsGroup, u=>({multi:'訓練架'})[String(u||'').split('_')[0]]||u);
-    /* 這一行留著只是防呆 —— 新資料不會再有 _units>1 的訓練架（實查也是 0 筆），
-       但真的冒出來時要標出來，不能默默顯示成一台。 */
-    eq('　舊資料若真有訓練架×2 仍標得出來（防呆）',
-       lbl({category:'自主訓練',venue_unit:'multi_1',_units:2}), '訓練架・兩台');
+    const lbl=new Function('bkIsGroup',
+      g('function selfVenueLabel(b){','\n}')+'\n'+g('function venueUnitsLabel(b){','\n}')+'\nreturn venueUnitsLabel;')(bkIsGroup);
+    /* 2026-09-03 使用者：「訓練架·兩台 這個功能還在嗎? 應該只有跑步機才有選擇台數的功能」——
+       0902 收回功能時留的那行防呆**不可能被觸發**（四道關卡都關著、正式庫 0 筆），
+       留著唯一的效果是讓人以為功能還在。整行移除。 */
+    eq('★★ 訓練架不再標台數（那行防呆已移除）',
+       lbl({category:'自主訓練',venue_unit:'multi_1',_units:2}), '');
+    /* 只看程式，不看註解 —— 註解裡刻意留著「〔已移除〕訓練架・兩台」當紀錄 */
+    ok('★★ 台數只剩跑步機這一條路', (()=>{
+      const noC=src.replace(/\/\*[\s\S]*?\*\//g,'');
+      return !/訓練架・/.test(noC) && !/venueShort/.test(noC);
+    })());
     eq('　訓練架×1 → 不標（預設場地，照舊）', lbl({category:'自主訓練',venue_unit:'multi_1'}), '');
     eq('　跑步機×2 照舊', lbl({category:'自主訓練',venue_unit:'treadmill_1',_units:2}), '跑步機・兩台');
 

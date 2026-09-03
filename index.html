@@ -11905,8 +11905,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260903.1501';
-const APP_VERSION_LABEL='260903.1501';
+const APP_VERSION='260903.1508';
+const APP_VERSION_LABEL='260903.1508';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24364,10 +24364,16 @@ function venueUnitsLabel(b){
   const n=Math.max(1,Number(b&&b._units)||1);
   const NUM=['','一台','兩台','三台'];
   if(v==='跑步機') return '跑步機・'+(NUM[n]||(n+' 台'));
-  /* 史密斯訓練架平常不標（預設場地）。0818–0902 之間曾開放同行多台，實際 0 筆；
-     這一行留著只是防呆，新資料不會再有 _units>1 的訓練架。
-     ⚠ 這裡用縮寫：後面還要接「・兩台」，全名會把那一格撐破。縮寫見 VENUE_SHORT。 */
-  if(n>1 && String((b&&b.venue_unit)||'').startsWith('multi')) return venueShort('multi')+'・'+(NUM[n]||(n+' 台'));
+  /* 史密斯訓練架平常不標（預設場地）。
+     〔已移除〕「訓練架・兩台」那一行（2026-09-03 使用者：「訓練架·兩台 這個功能還在嗎?
+       應該只有跑步機才有選擇台數的功能」）——
+     0902 收回「訓練架可佔多台」時我留了一行防呆，但它**不可能被觸發**：
+       ・台數欄只畫給跑步機（VENUE_MULTI_UNIT）
+       ・bkVenueChoice 選訓練架一律回「自動配置、0 台」
+       ・bkAddTreadmillUnits 對訓練架一律只給 1 台
+       ・正式庫實查 sibling_of＋multi% ＝ 0 筆
+     留著唯一的效果是讓人以為功能還在（使用者就是這樣問的）。不可能執行到的防呆
+     不是保險，是雜訊。真的哪天手動改資料造出來，也只是少一個「・N 台」後綴而已。 */
   return v;
 }
 function selfVenueLabel(b){
@@ -25124,7 +25130,7 @@ const CAP_CATS=['私人教練','自主訓練','體驗']; // 沿用：哪些類�
 // ── 場地設定（可在系統設定調整數量）──
 // 每個場地有 N 個單位（multi=3、treadmill=2、group=1）。
 window.VENUES = window.VENUES || [
-  { id:'multi',     name:'史密斯訓練架', capacity:3, active:true },   /* 2026-09-03 更名（原「多功能訓練架」）；縮寫見 VENUE_SHORT */
+  { id:'multi',     name:'史密斯訓練架', capacity:3, active:true },   /* 2026-09-03 更名（原「多功能訓練架」）；⚠ venues 表那份會覆寫這裡 */
   { id:'treadmill', name:'跑步機',       capacity:2, active:true },
   { id:'group',     name:'團課教室',     capacity:1, active:true },
 ];
@@ -25156,16 +25162,11 @@ function venueUnits(){
   return units;
 }
 // venue_unit（如 multi_1 / group_1 / treadmill_2）→ 場地名稱
-/* 場地縮寫（2026-09-03 使用者指示：「場地『多功能訓練架』更名『史密斯訓練架』…縮寫『訓練架』」）——
-   全名給挑選欄、設定頁、說明文字；縮寫給空間吃緊的地方（課卡的場地那一列）。
-   ⚠ 縮寫只在這裡定義一次。程式裡本來就有幾處硬寫著「訓練架・兩台」，
-     那是同一個縮寫；日後要改叫別的，只改這一張表。
-   ⚠ 只有訓練架需要縮寫：跑步機（3 字）、團課教室（4 字）本來就短。 */
-const VENUE_SHORT={ multi:'訓練架' };
-function venueShort(unit){
-  const vid=String(unit||'').split('_')[0];
-  return VENUE_SHORT[vid] || venueName(unit);
-}
+/* 〔沒有場地縮寫〕2026-09-03 使用者先說「縮寫『訓練架』」，同日再定案
+   「課卡維持　完整場地名稱　史密斯訓練架」—— 全站因此沒有任何地方需要縮寫，
+   一度加的 VENUE_SHORT／venueShort 隨最後一個使用者（「訓練架・兩台」）一起移除。
+   ⚠ 日後真的遇到塞不下的地方，縮寫叫「訓練架」（使用者指定），到時再加。
+     不要為了「以後可能會用到」先留一份沒有人呼叫的程式。 */
 function venueName(unit){
   if(!unit) return '';
   const vid=String(unit).split('_')[0];
@@ -25212,8 +25213,7 @@ function venueDisplay(b){
   /* 2026-09-03 使用者定案：「課卡維持　完整場地名稱　史密斯訓練架」——
      一度改成縮寫（那一欄約 72px、六個字 ≒ 66px 有點緊），但使用者要看完整名稱。
      ⚠ 新名與舊名同樣是六個字，所以寬度與 0823 那次換算相同，沒有新的截斷風險。
-     ⚠ 縮寫（VENUE_SHORT）仍然存在，用在真的塞不下的地方 —— 見 venueUnitsLabel
-       的「訓練架・兩台」。全站只有那一種縮寫。 */
+     ⚠ 全站沒有縮寫版（見上面 venueName 旁那段說明）。 */
   const n=venueName(b&&b.venue_unit); if(n) return n;
   const c=(b&&b.category)||'';
   if(c==='場租') return '';
