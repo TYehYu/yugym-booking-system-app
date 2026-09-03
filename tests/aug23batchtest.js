@@ -180,11 +180,8 @@ ok('　　今天那一欄的欄頭改品牌綠（不被統一底色蓋掉）',
    /\.cal-daycol-head\.today\{background:var\(--green\);\}/.test(src)
    && /\.cal-daycol-head\.today \.cd-line\{color:#fff;\}/.test(src)
    && /\.cal-daycol-head\.today \.cd-today\{background:rgba\(255,255,255,\.24\);color:#fff;\}/.test(src));
-/* 2026-09-03：欄身底色再降淡一階（#FFF8EF → #FFFCF7）——
-   「今天」的識別已經由欄頭綠底＋「今天」標籤完成，欄身只要一點暗示；
-   原本那塊色比課卡本身還搶眼。⚠ 守的仍是「維持淡米、不要換成綠底」。 */
-ok('　　欄身維持淡米色、沒有換成綠底（底下還疊著場地狀態的淡紅／淡金）',
-   /\.cal-daycol\.daycol-today\{background:#FFFCF7;\}/.test(src)
+ok('　　欄身的淡米色不動（底下還疊著場地狀態的淡紅／淡金）',
+   /\.cal-daycol\.daycol-today\{background:#FFF8EF;\}/.test(src)
    && /換成綠底會跟它們混在一起/.test(src));
 
 console.log('\n⑧ 桌機行事曆「營業前」列收斂成一顆金色 [+]');
