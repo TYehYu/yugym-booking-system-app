@@ -26,9 +26,14 @@ ok('已續約優先於其他狀態（不會又綠又紅）',
 ok('不續約優先於待續約', badge({no:true,renew:true}).includes('✕'));
 
 console.log('\n顏色定義');
-ok('★ 綠勾用品牌綠', /\.ev-pa-ok\{background:var\(--green,#1f6f54\);color:#fff;\}/.test(src));
-ok('★ 紅叉與紅字提醒用 danger', /\.ev-pa-no\{background:var\(--danger,#b5372e\)/.test(src)
-   && /\.ev-pa-warn\{background:var\(--danger,#b5372e\)/.test(src));
+/* 2026-09-03：這三顆從實心圓改成細線外框，與 [NEW]／[PAY] 同一套語彙 ——
+   一張卡上同時有實心紅圈與細框標籤時，實心的會把細框整個壓過去，
+   而它們其實是同一級的提醒。⚠ 顏色語意沒變，只是從填色改成描邊＋文字色。 */
+ok('★ 綠勾用品牌綠（改成文字色）', /\.ev-pa-ok\{color:var\(--green,#1f6f54\);\}/.test(src));
+ok('★ 紅叉與紅字提醒用 danger（改成文字色）', /\.ev-pa-no\{color:var\(--danger,#b5372e\);\}/.test(src)
+   && /\.ev-pa-warn\{color:var\(--danger,#b5372e\);\}/.test(src));
+ok('★★ 改成透明底＋細框（不是拿掉顏色）',
+   /\.ev-payalert\{[\s\S]{0,260}?background:transparent;border:1px solid currentColor;\}/.test(src));
 // 2026-07-30 三修（使用者：金／紅不要淡化，色調不舒服）→ 底色完全不動，只加粗外框
 /* ══ 2026-09-03：桌機行事曆的紅框整組退場 ══════════════════════════════
    使用者：「移除課卡紅色框的提示　看到暗化的課卡就知道這張要注意了」
