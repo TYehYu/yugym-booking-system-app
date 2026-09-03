@@ -25,8 +25,12 @@ console.log('① 先歸零，再由容器查詢重新分段');
 /* 不歸零的話，估錯的方向相反時（估成 tiny、其實很寬）教練名會平白消失。 */
 ok('★★★ 三條歸零：不管 JS 加了什麼 class，都先當寬卡',
    /\.cal-ev\.cal-ev-std \.co-fl\{display:inline;\}\s*\n\s*\.cal-ev\.cal-ev-std \.co-ab\{display:none;\}\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:inline-flex;\}/.test(src));
-ok('★★★ 90px 以下換兩字縮寫',
-   /@container \(max-width:90px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.co-fl\{display:none;\}\s*\n\s*\.cal-ev\.cal-ev-std \.co-ab\{display:inline;\}/.test(src));
+/* 2026-09-03 三修：門檻從 90px 併進「擺不下」那一段（max-width:104px or max-height:58px）——
+   使用者把「時間讓位／教練縮寫／場地縮寫」綁成同一個判斷，留兩套門檻只會互相打架。
+   詳見 tests/evcardlayouttest.js。 */
+ok('★★★ 擺不下時換兩字縮寫（門檻已併入同一段）',
+   /@container \(max-width:104px\) or \(max-height:58px\)\{[\s\S]{0,400}?\.cal-ev\.cal-ev-std \.co-fl\{ display:none; \}\s*\n\s*\.cal-ev\.cal-ev-std \.co-ab\{ display:inline; \}/.test(src)
+   && !/@container \(max-width:90px\)\{/.test(src));
 /* 2026-09-03 同日再修：窄卡的教練改成 20px 圓章（使用者：「教練用圓章＋教練色[RA][SA]」）。
    圓章在任何寬度都放得下，所以原本「70px 以下整個藏起來」那條拿掉了 ——
    教練是掃描時很常用的線索，能留就留。詳見 tests/evtoprowtest.js。 */

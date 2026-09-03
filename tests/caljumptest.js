@@ -16,10 +16,12 @@ ok('★★★ 不再開一層 showModal（原本要開視窗→點欄位→再�
    !/showModal\(/.test(F) && /ashDateOpen\('cal-jump-date'\);/.test(F));
 ok('★★★ 也不再用 ashDateField（那是「表單裡的一格」，這裡沒有表單）',
    !/ashDateField\(/.test(F));
-/* 日期導覽只剩一份（_calNavHtml），所以入口也只剩一處 —— 定義處 1 次、使用處 1 次。 */
+/* 日期導覽只有一份（_calNavHtml），入口也只有一處。
+   ⚠ 2026-09-03 三修後 _calNavHtml 出現 3 次：定義 1 次、
+     列1（沒有 coachFilter 的唯讀檢視）1 次、列2（櫃檯／管理員）1 次。 */
 ok('★★ 日期標題仍然是入口，而且整份只有一份導覽',
    (src.match(/onclick="openCalJump\(\)"/g)||[]).length===1
-   && (src.match(/_calNavHtml/g)||[]).length===2);
+   && (src.match(/_calNavHtml/g)||[]).length===3);
 
 console.log('\n② 隱藏 input 只建一次、事件只綁一次');
 /* 綁兩次的話，選一天會觸發兩次 doCalJump —— 第二次跑時 navTo 已經重畫過，
@@ -57,26 +59,32 @@ ok('★★ 標題可由呼叫端指定，預設維持「選擇日期」',
 ok('★★ 跳日期時寫「跳至日期」', /inp\.setAttribute\('data-title','跳至日期'\);/.test(F));
 
 console.log('\n⑤ 工具列排成穩定的兩列');
-/* 沿革（同一天兩輪）：
-   ① 篩選鈕加上堂數 → 教練那排變寬 → 被右邊三顆鈕擠到換行
-      使用者：「把右邊的預約模式按鈕改到下一列［今天］的左邊」
-   ② 照做之後第二列變成 課程 chips＋三顆鈕＋日期導覽 → 使用者：「然後多出一列」
-   實測（Ink 主題、真實 CSS）：課程 866＋三顆鈕 301＋導覽 277＋間距 ＝ 1453px，
-   1440／1512 的 MacBook 內容區只有 1400／1472，flex-wrap 就把導覽甩成第三列。
-   定案：三顆鈕留在第二列（使用者要的），**日期導覽改回第一列右邊** ——
-   列1 1390、列2 1162，1440 以上都是穩穩兩列。 */
-ok('★★★ 列1＝教練 chips ＋ 日期導覽',
-   /<div class="cal-head-left" style="min-width:0;">\s*\n\s*\$\{opts\.coachFilter\?`<div class="cal-chip-row">\$\{calCoachChips\(coaches,filterCoach,chipN\.coach\)\}<\/div>`:''\}\s*\n\s*<\/div>/.test(src)
-   && /\$\{_calNavHtml\}\s*\n\s*<\/div>/.test(src));
-ok('★★★ 列2＝課程 chips ＋ 三顆鈕，沒有日期導覽',
-   /<div class="cal-chip-row">\$\{calCourseChips\(chipN\.course\)\}<\/div>[\s\S]{0,1400}?＋ 新增預約<\/button>\s*\n\s*<\/div>\s*\n\s*<\/div>`:''\}/.test(src)
-   && !/cal-bar2[\s\S]{0,1600}?class="cal-nav"/.test(src));
-ok('★★ 三顆鈕只有一份（不是複製過去、原地忘了刪）',
+/* 沿革（同一天四輪）：
+   ① 篩選鈕加堂數 → 列1 被右邊三顆鈕擠到換行
+   ② 三顆鈕全搬列2 → 列2 塞不下，日期導覽被甩成第三列（使用者：「然後多出一列」）
+   ③ 日期導覽移回列1 → 兩列站得住（1440 以上）
+   ④ 使用者附截圖指定最終分配：
+        列1＝教練 chips ＋ [團課課表][＋新增預約]
+        列2＝課程 chips ＋ [預約模式][今天] 日期列
+   實測（Ink、真實 CSS）：列1 1319、列2 1240 —— 連 1366 的舊機都放得下，
+   是四種排法裡唯一全過的。 */
+ok('★★★ 列1＝教練 chips ＋ 團課課表 ＋ 新增預約',
+   /\$\{opts\.coachFilter\?`<div class="cal-head-right" style="display:flex;gap:8px;margin:0 0 0 auto;flex:none;">\s*\n\s*<button class="btn" style="background:var\(--course-group-soft\)[\s\S]{0,200}?團課課表<\/button>\s*\n\s*<button class="btn btn-green" onclick="openBookingModal\(\)">＋ 新增預約<\/button>/.test(src));
+ok('★★★ 列2＝課程 chips ＋ 預約模式 ＋ 日期導覽',
+   /id="cal-bookmode-btn"[\s\S]{0,220}?<\/button>\s*\n\s*<\/div>\s*\n\s*\$\{_calNavHtml\}/.test(src));
+ok('★★★ 「今天」在日期列左邊（使用者：「[預約模式][今天]日期列」）',
+   /const _calNavHtml=`<div class="cal-nav">\s*\n\s*<button class="btn btn-ghost cal-today-btn"[\s\S]{0,120}?今天<\/button>\s*\n\s*<div class="cal-arrow"/.test(src));
+/* ⚠ 「＋ 新增預約」全站有三處（首頁快捷、舊的 filter-row、行事曆工具列），
+   數量不能拿來當「有沒有重複」的判準。改成看**工具列那一段裡**只有一顆。 */
+ok('★★ 工具列的每顆鈕只有一份（不是複製過去、原地忘了刪）',
    (src.match(/onclick="openGroupScheduleModal\(\)">團課課表<\/button>/g)||[]).length===1
-   && (src.match(/id="cal-bookmode-btn"/g)||[]).length===1);
+   && (src.match(/id="cal-bookmode-btn"/g)||[]).length===1
+   && (() => { const i=src.indexOf('return `<div class="cal-wrap'), j=src.indexOf('<div class="cal-body-wrap">', i);
+       return (src.slice(i,j).match(/＋ 新增預約/g)||[]).length===1; })());
 ok('★★★ 量出來的數字寫在原地（下次再往工具列加東西，先看這筆帳）',
-   /課程 chips＋三顆鈕＋日期導覽，總寬 1453px/.test(src)
-   && /列1 1390、列2 1162/.test(src));
+   /拆開之後列1 約 1328、列2 約 1242，兩列都站得住/.test(src));
+ok('★★ 沒有 coachFilter 的呼叫端（教練端／唯讀檢視）仍在列1 放日期導覽',
+   /<\/div>`:_calNavHtml\}/.test(src));
 
 console.log('\n⑥ 省下寬度的三個來源，一個都不能被改回去');
 ok('★★★ 同一年不寫年份（222px → ~95px，工具列最寬的一塊）',
@@ -100,6 +108,7 @@ ok('★★★ 可壓縮的額度全給 chips，右側控制項不縮不折',
    /\.cal-bar2 \.cal-chip-row\{flex:1 1 auto;min-width:0;\}/.test(src)
    && /\.cal-head-left\{flex:1 1 auto;min-width:0;\}/.test(src)
    && /\.cal-head>\.cal-nav\{flex:0 0 auto;\}/.test(src));
+ok('★★ 列1 的按鈕組也不縮不折', /\.cal-bar2 \.cal-head-right\{flex:0 0 auto;\}/.test(src));
 ok('★★ 為什麼寧可折 chips，寫在原地',
    /chips 折行是看得懂的，\s*\n?\s*一顆孤零零的日期導覽掉到下面則像壞掉/.test(src));
 

@@ -21,8 +21,11 @@ ok('★★★ 桌機隱藏出席章', /\.cal-ev\.cal-ev-std \.evc-check\{ displa
 ok('★★★ DOM 沒被拿掉（手機行事曆與管理員一日還在用同一份）',
    /<span class="evc-nmrow">.*?\$\{_stampOut\}<\/span>/.test(src)
    && /只在桌機隱藏，DOM 留著 —— 手機行事曆（\.cag-wk-col）與管理員一日（\.admcag）/.test(src));
-ok('★★ 頂列預留高度跟著從 22px 收到 18px（章不見了就不必留那麼多）',
-   /\.cal-ev\.cal-ev-std \.evc-txt\{ padding-top:18px !important; \}/.test(src));
+/* 同日再改：版面整個換成「置中四段」，時間回到文字流的第一列，
+   所以「頂列預留高度」這個概念也不存在了（見 tests/evcardlayouttest.js）。 */
+ok('★★ 不再需要預留頂列高度（時間已回到文字流）',
+   !/padding-top:18px !important/.test(src)
+   && /padding:4px 6px !important; gap:1px !important;/.test(src));
 ok('★★ 章與時間互相讓位那組規則一併移除（沒有章就沒有那個問題）',
    !/:not\(\.ev-onhour\) \.evc-check\{ left:9px/.test(src)
    && !/:not\(\.ev-onhour\) \.evc-check\{ left:50%/.test(src));
@@ -83,11 +86,14 @@ ok('★★★ [PAY]＝待簽約卡位或分期本期最後一堂',
 ok('★★★ 遮蔽卡不標（會洩漏別人的收款狀態）',
    /const _tagNew = \(!hideMember && _isNewToday\)/.test(src)
    && /遮蔽卡（教練看別人的課）不標：那會洩漏別人的收款狀態/.test(src));
-ok('★★ 兩個都在時 New 最右、PAY 讓一格',
-   /\.cal-ev\.cal-ev-std\.ev-has-new \.ev-tag-pay\{right:40px;\}/.test(src));
-ok('★★ 時間跟著往左讓，讓不下就不印（標籤是要處理的事，優先於脈絡）',
-   /\.cal-ev\.cal-ev-std\.ev-has-new\.ev-has-pay \.evc-time\{ right:74px; \}/.test(src)
-   && /@container \(max-width:110px\)\{[\s\S]{0,200}?\.evc-time\{ display:none; \}/.test(src));
+/* 標籤從「絕對定位角落」改成「第一列裡的格子」之後，那些 right:40px／74px 的
+   位移全部失效並移除；並排改由 grid 的欄位負責。 */
+ok('★★ 兩個都在時 New 最右、PAY 讓一格（改由 grid 欄位表達）',
+   /\.cal-ev\.cal-ev-std\.ev-has-new\.ev-has-pay \.evc-r1 \.ev-tag-pay\{ grid-column:3; margin-left:3px; \}/.test(src)
+   && /\.cal-ev\.cal-ev-std\.ev-has-new\.ev-has-pay \.evc-r1 \.ev-tag-new\{ grid-column:4; margin-left:3px; \}/.test(src));
+ok('★★ 失效的絕對定位位移已清掉',
+   !/\.ev-has-new \.ev-tag-pay\{right:40px;\}/.test(src)
+   && !/\.ev-has-new\.ev-has-pay \.evc-time\{ right:74px; \}/.test(src));
 ok('★★ 極窄卡兩個掛不下時，[PAY]（錢）優先於 [New]（覆核）',
    /@container \(max-width:78px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.ev-has-new\.ev-has-pay \.ev-tag-new\{display:none;\}/.test(src));
 ok('★★ 標籤不吃點擊（它是狀態不是按鈕）',
