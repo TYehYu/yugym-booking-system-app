@@ -6,8 +6,10 @@ let pass=0,fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n);} };
 
 console.log('表頭固定、只有下方捲動');
+/* ⚠ 不要把 z-index 寫進這條斷言 —— 這支測試守的是「捲軸在哪一層」，
+   圖層順序是另一回事，由 tests/zorder.js 管（0903 從 90 抬到 800，這裡就誤報了一次）。 */
 ok('★★ 捲軸從外層移進 #pp-body（.pp-sheet 與 .pp-root 都改成 overflow:hidden）',
-   /\.pp-sheet\{position:fixed;inset:0;z-index:90;background:var\(--bg\);overflow:hidden;/.test(src)
+   /\.pp-sheet\{position:fixed;inset:0;z-index:\d+;background:var\(--bg\);overflow:hidden;/.test(src)
    && /\.pp-sheet \.pp-root\{display:flex;flex-direction:column;overflow:hidden;\}/.test(src)
    && /\.pp-sheet #pp-body\{flex:1 1 auto;min-height:0 !important;overflow-y:auto;/.test(src));
 ok('★★ ⚠ 中間那層 #pp-host 也要是 flex 容器並帶 min-height:0，否則 overflow 不生效',
