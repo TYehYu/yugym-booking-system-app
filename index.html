@@ -4365,6 +4365,18 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-chip.cal-chip-course.ev-self.on{background:var(--course-self-accent);color:#fff;}
 .cal-chip.cal-chip-course.ev-massage.on{background:#2f8f83;color:#fff;}
 .cal-chip-course::before{content:none;}   /* 不用選中圓點：選中以實色底表達 */
+/* 篩選鈕上的堂數（2026-09-03 使用者指示：「例如[RANDY 25]」）。
+   ⚠ 用 tabular-nums：一整排數字才對得齊，不然 1 跟 8 的寬度不同，鈕會忽寬忽窄。
+   ⚠ 不加粗、不用主色 —— 它是附註，主角仍是教練／課種的名字。 */
+.cal-chip .cchip-n{font-family:var(--num),inherit;font-variant-numeric:tabular-nums;
+  font-weight:700;font-size:.86em;opacity:.62;margin-left:5px;flex:none;}
+.cal-chip.on .cchip-n{opacity:.8;}
+/* 這幾天沒有這位教練／這種課：暗化＋不吃點擊，但**不隱藏**
+   （0823 定過的作法：不能用就寫原因，別藏按鈕 —— 藏起來會讓人以為那位教練離職了；
+    原因寫在 title 上）。⚠ 目前選中的那顆永遠不會是 is-empty，
+    否則選了某位教練再翻到他沒課的一週，那顆會變成點不動又取消不掉。 */
+.cal-chip.is-empty{opacity:.32;filter:grayscale(.6);cursor:default;pointer-events:none;}
+.cal-chip.is-empty .cchip-n{opacity:.5;}
 .cal-arrow:hover{background:var(--green);color:#fff;}
 .cal-title{font-family:var(--serif);font-size:15px;font-weight:600;min-width:160px;text-align:center;}
 /* 2026-08-23 使用者指示：「桌機的行事曆背景都改成週日下午這種米色，不要用白色，
@@ -11997,8 +12009,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260903.1616';
-const APP_VERSION_LABEL='260903.1616';
+const APP_VERSION='260903.1623';
+const APP_VERSION_LABEL='260903.1623';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23429,17 +23441,32 @@ const CALENDAR_COURSE_FILTERS = [
 const COURSE_SHAPE = {'ev-pt':'sq','ev-friendly':'ci','ev-trial':'tr','ev-group':'di','ev-self':'hx','ev-massage':'sq'};
 // 教練 Filter Chips：由 employees 動態產生（isTeachable=在職且開放開課），不寫死名稱。
 // Calm Play：chip 直接穿教練代表色（與行事曆 Token 同色）；選中反轉為 fg 深色底＋白字。
-function calCoachChips(coaches, filterCoach){
-  const list = (coaches||[]).filter(isTeachable);
-  let html = `<button class="cal-chip ${!filterCoach||filterCoach==='all'?'on':''}" onclick="calSetCoach('all')">全部</button>`;
-  html += list.map(c=>{
+/* 堂數＋暗化＋排序（2026-09-03 使用者指示：「該頁面有該教練或該種課程才顯示互動
+   沒有就暗化 然後顯示該課程或教練有幾堂 例如[RANDY 25]」「也要排序 課越多往前排」）。
+   ⚠ 這一週沒課的鈕**暗化但不隱藏**，並在 title 寫明原因 —— 專案定過的作法
+     （0823「不能用就寫原因，別藏按鈕」）：藏起來會讓人以為那位教練離職了。
+   ⚠ 排序有代價：翻週時鈕會換位置，記不住「ZOE 在第幾顆」。
+     取捨是使用者指定的（課多的先看到），但**目前選中的那顆永不暗化** ——
+     不然選了 ZOE 再翻到她沒課的一週，那顆會變成點不動又取消不掉。 */
+function calCoachChips(coaches, filterCoach, counts){
+  counts = counts||{};
+  const list = (coaches||[]).filter(isTeachable)
+    .map(c=>({ c, n:Number(counts[c.id])||0 }))
+    .sort((a,b)=> (b.n-a.n) || String(coachDisp(a.c)||'').localeCompare(String(coachDisp(b.c)||''),'zh-Hant'));
+  const nAll = Number(counts.all)||0;
+  let html = `<button class="cal-chip ${!filterCoach||filterCoach==='all'?'on':''}" onclick="calSetCoach('all')">全部<b class="cchip-n">${nAll}</b></button>`;
+  html += list.map(({c,n})=>{
     const cc = coachTagColor(c.id);
     const on = filterCoach===c.id;
+    const empty = (n===0) && !on;
     /* 2026-08-26：多帶一個 --cc（教練色）與一顆小色點 —— Ink 視覺層要的是
        「小色點＋教練名稱」，不是一整排彩色膠囊。舊版的 .cchip-dot 是 display:none，
        所以這一行對現行畫面零影響。 */
     const st = `--cc:${cc.fg};` + (on ? `background:${cc.fg};color:#fff;` : `background:${cc.bg};color:${cc.fg};`);
-    return `<button class="cal-chip cal-chip-coach ${on?'on':''}" style="${st}" onclick="calSetCoach('${c.id}')"><i class="cchip-dot"></i>${coachDisp(c)}</button>`;
+    const tt = empty ? `${coachDisp(c)}　這幾天沒有課` : (on?'再點一次看全部':`只看 ${coachDisp(c)}　${n} 堂`);
+    return `<button type="button" class="cal-chip cal-chip-coach${on?' on':''}${empty?' is-empty':''}" style="${st}"`
+      + ` title="${tt}"${empty?' aria-disabled="true"':''} onclick="calSetCoach('${c.id}')">`
+      + `<i class="cchip-dot"></i>${coachDisp(c)}<b class="cchip-n">${n}</b></button>`;
   }).join('');
   return html;
 }
@@ -23452,13 +23479,26 @@ function calCoachChips(coaches, filterCoach){
    同一套心智模型：點一種＝只看那一種，再點同一顆或按「全部」＝回到全部。
    ⚠ 舊的 window._calCourseOff（一組被關掉的課種）不再使用，改成 window._calCourse
      存「目前只看哪一種」；兩者語意相反，別把舊變數留著兩邊各判一次。 */
-function calCourseChips(){
+function calCourseChips(counts){
+  counts = counts||{};
   const sel=window._calCourse||'all';
-  let html = `<button class="cal-chip ${sel==='all'?'on':''}" onclick="calSetCourse('all')">全部</button>`;
-  html += CALENDAR_COURSE_FILTERS.map(f=>{
-    const on = sel===f.cls;
-    return `<button class="cal-chip cal-chip-course ${f.cls} ${on?'on':''}" style="${(sel!=='all'&&!on)?'opacity:.42;filter:grayscale(.45);':''}" title="${on?'再點一次看全部':'只看'+f.label}" onclick="calSetCourse('${f.cls}')">${f.label}</button>`;
-  }).join('');
+  const nAll = Number(counts.all)||0;
+  let html = `<button class="cal-chip ${sel==='all'?'on':''}" onclick="calSetCourse('all')">全部<b class="cchip-n">${nAll}</b></button>`;
+  html += CALENDAR_COURSE_FILTERS
+    .map(f=>({ f, n:Number(counts[f.cls])||0 }))
+    .sort((a,b)=> b.n-a.n)   /* 使用者：「課越多往前排」；同分維持 CALENDAR_COURSE_FILTERS 的原順序 */
+    .map(({f,n})=>{
+      const on = sel===f.cls;
+      const empty = (n===0) && !on;
+      /* 選了某一種時，其他種本來就會淡下去（0822 單選制）。
+         這裡的 is-empty 是另一回事：這幾天根本沒有這種課，所以連點都不用點。
+         兩者可能同時成立，交給 CSS 疊，不要在這裡各寫一份判斷。 */
+      const dim = (sel!=='all'&&!on) ? 'opacity:.42;filter:grayscale(.45);' : '';
+      const tt = empty ? `${f.label}　這幾天沒有課` : (on?'再點一次看全部':`只看${f.label}　${n} 堂`);
+      return `<button type="button" class="cal-chip cal-chip-course ${f.cls}${on?' on':''}${empty?' is-empty':''}"`
+        + ` style="${dim}" title="${tt}"${empty?' aria-disabled="true"':''} onclick="calSetCourse('${f.cls}')">`
+        + `${f.label}<b class="cchip-n">${n}</b></button>`;
+    }).join('');
   return html;
 }
 function calCourseAll(){ window._calCourse='all'; navTo(CUR_PAGE); }   /* 舊呼叫端相容 */
@@ -23732,19 +23772,40 @@ async function renderCalendar(opts){
   window._effStartMin = _earliestMin; // 實際起始（分鐘），供 top 計算
   let filterCoach=window._calFilter||'all';
 
-  const visible=mergeGroupBookings(bookings.filter(b=>{
+  /* 篩選判斷抽成一支，讓「畫面上畫什麼」與「篩選鈕上的堂數」吃同一套規則
+     （2026-09-03）—— 兩邊各寫一份的話，鈕上寫 25 堂、點下去只有 23 張卡，
+     而且沒有人會發現是哪一邊算錯。coachSel／courseSel 傳進來，是為了算
+     「如果我點這一顆，會看到幾堂」：算教練那排時不套教練篩選，算課種那排時不套課種篩選。 */
+  const _calPass=(b, coachSel, courseSel)=>{
     if(b.status==='cancelled' && !bkShowsCancelled(b)) return false; // 已取消的課不顯示（教練請假整堂取消的團課除外：課卡保留，2026-08-17）
     // allMode（全部預約總覽）：不依登入教練過濾，顯示全館佔用狀況
     // maskOthers（教練端「我的預約」）：別人的課保留作遮蔽佔位（顯示「已預約」、不可點），不濾掉
     if(opts.me && !opts.allMode && !opts.maskOthers && (bkCoachId(b))!==opts.me) return false;
     // 有代課要算代課教練（2026-07-31 使用者回報：小曾代的那堂篩不出來）
-    if(opts.coachFilter && filterCoach!=='all' && bkCoachId(b)!==filterCoach) return false;
-    // 課程 Filter Chip（2026-07-28 開關制）：被關掉的課種隱藏
+    if(opts.coachFilter && coachSel && coachSel!=='all' && bkCoachId(b)!==coachSel) return false;
     /* 課種單選（2026-08-22）：選了某一種就只留那一種；'all' 不過濾 */
-    if(window._calCourse && window._calCourse!=='all'
-       && evColorClass(b,typeMap,b.ticket_id?ticketMap[b.ticket_id]:null)!==window._calCourse) return false;
+    if(courseSel && courseSel!=='all'
+       && evColorClass(b,typeMap,b.ticket_id?ticketMap[b.ticket_id]:null)!==courseSel) return false;
     return true;
-  }));
+  };
+  const visible=mergeGroupBookings(bookings.filter(b=>_calPass(b, filterCoach, window._calCourse)));
+
+  /* 篩選鈕上的堂數（2026-09-03 使用者指示：「該頁面有該教練或該種課程才顯示互動
+     沒有就暗化 然後顯示該課程或教練有幾堂 例如[RANDY 25]」）——
+     只數**目前看得到的這幾天**，所以翻週會跟著變，那正是它的用處。
+     ⚠ 一定要跟課卡一樣先 mergeGroupBookings：一堂團課在資料上是多筆
+       （一位學員一筆），不併的話團課會被灌成好幾倍。
+     ⚠ 交叉計算：教練那排帶入目前選的課種、課種那排帶入目前選的教練 ——
+       也就是每一顆都回答「我點下去會剩幾堂」，而不是「這週總共幾堂」。
+       所以先選了「團體課」，只教一對一的教練就會歸零並暗化，這是對的。 */
+  const _chipDays=new Set(days.map(d=>ymd(d)));
+  const _chipPool=bookings.filter(b=>b && _chipDays.has(String(b.date||'').slice(0,10)));
+  const _chipCount=(coachSel,courseSel)=>
+    mergeGroupBookings(_chipPool.filter(b=>_calPass(b, coachSel, courseSel))).length;
+  const chipN={coach:{all:_chipCount('all', window._calCourse)},
+               course:{all:_chipCount(filterCoach,'all')}};
+  (coaches||[]).filter(isTeachable).forEach(c=>{ chipN.coach[c.id]=_chipCount(c.id, window._calCourse); });
+  CALENDAR_COURSE_FILTERS.forEach(f=>{ chipN.course[f.cls]=_chipCount(filterCoach, f.cls); });
 
   let filterHtml='';
   if(opts.coachFilter){
@@ -24155,7 +24216,7 @@ async function renderCalendar(opts){
   return `<div class="cal-wrap${window._calBookMode?' cal-bookmode':''}">
     <div class="cal-head" style="${opts.coachFilter?'display:flex;align-items:center;gap:10px;':''}">
       <div class="cal-head-left" style="min-width:0;">
-        ${opts.coachFilter?`<div class="cal-chip-row">${calCoachChips(coaches,filterCoach)}</div>`:''}
+        ${opts.coachFilter?`<div class="cal-chip-row">${calCoachChips(coaches,filterCoach,chipN.coach)}</div>`:''}
       </div>
       ${opts.coachFilter?`<div class="cal-head-right" style="display:flex;gap:8px;margin-left:auto;flex:none;">
         ${/* 預約模式（2026-07-30 使用者指示）：關掉課卡互動，整片時間格都能直接點來排課。 */''}
@@ -24173,7 +24234,7 @@ async function renderCalendar(opts){
     ${/* 右上角兩列（2026-08-04 使用者指示）：第一列 預約模式／團課課表／新增預約，
          第二列 今天／日期列 —— 原本全部擠同一列，日期與按鈕互相搶寬度。 */''}
     ${opts.coachFilter?`<div class="cal-chips-bar cal-bar2" style="align-items:center;">
-      <div class="cal-chip-row">${calCourseChips()}</div>
+      <div class="cal-chip-row">${calCourseChips(chipN.course)}</div>
       <div class="cal-nav" style="margin:0 0 0 auto;flex:none;">
         <button class="btn btn-ghost cal-today-btn" onclick="calToToday();navTo(CUR_PAGE)">今天</button>
         <div class="cal-arrow" onclick="${nDays===1?`calStep(-1)`:`calStepWeek(-1)`}" title="前一週">‹</div>

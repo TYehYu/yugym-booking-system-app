@@ -17,19 +17,25 @@ ok('★★ 舊的多選狀態 _calCourseOff 整組退場（語意相反，留著
 ok('　　「全部」鈕也走同一支', /function calCourseAll\(\)\{ window\._calCourse='all'; navTo\(CUR_PAGE\); \}/.test(src));
 
 console.log('\n過濾：選了就只留那一種');
+/* 2026-09-03：篩選判斷抽成 _calPass（繪製與篩選鈕上的堂數共用同一支），
+   課種那一條從寫死 window._calCourse 改成吃參數 courseSel ——
+   因為算課種那排的堂數時，要問的是「換成這一種會剩幾堂」，不是「現在選的是哪一種」。 */
 ok('★ 只留選中的課種，all 不過濾',
-   /if\(window\._calCourse && window\._calCourse!=='all'\s*\n\s*&& evColorClass\(b,typeMap,b\.ticket_id\?ticketMap\[b\.ticket_id\]:null\)!==window\._calCourse\) return false;/.test(src));
+   /if\(courseSel && courseSel!=='all'\s*\n\s*&& evColorClass\(b,typeMap,b\.ticket_id\?ticketMap\[b\.ticket_id\]:null\)!==courseSel\) return false;/.test(src));
+ok('★★ 畫面上仍然吃 window._calCourse（抽參數不等於改行為）',
+   /const visible=mergeGroupBookings\(bookings\.filter\(b=>_calPass\(b, filterCoach, window\._calCourse\)\)\);/.test(src));
 
 console.log('\n外觀：與教練那排同一套');
 ok('★ 全部沒選時不灰任何一顆（只有選了才把其他的壓灰）',
-   /style="\$\{\(sel!=='all'&&!on\)\?'opacity:\.42;filter:grayscale\(\.45\);':''\}"/.test(src));
+   /const dim = \(sel!=='all'&&!on\) \? 'opacity:\.42;filter:grayscale\(\.45\);' : '';/.test(src));
 ok('　　選中的那顆掛 on（與教練 chips 同一個 class）',
    /const on = sel===f\.cls;/.test(src)
-   && /class="cal-chip cal-chip-course \$\{f\.cls\} \$\{on\?'on':''\}"/.test(src));
-ok('　　提示文字跟著換（只看 X／再點一次看全部）',
-   /title="\$\{on\?'再點一次看全部':'只看'\+f\.label\}"/.test(src));
-ok('　　「全部」在沒選任何一種時亮起',
-   /<button class="cal-chip \$\{sel==='all'\?'on':''\}" onclick="calSetCourse\('all'\)">全部<\/button>/.test(src));
+   && /class="cal-chip cal-chip-course \$\{f\.cls\}\$\{on\?' on':''\}\$\{empty\?' is-empty':''\}"/.test(src));
+/* 2026-09-03 起 title 還要帶堂數，並在沒課時改寫成原因（見 tests/calchiptest.js） */
+ok('　　提示文字跟著換（沒課／只看 X N 堂／再點一次看全部）',
+   /const tt = empty \? `\$\{f\.label\}　這幾天沒有課` : \(on\?'再點一次看全部':`只看\$\{f\.label\}　\$\{n\} 堂`\);/.test(src));
+ok('　　「全部」在沒選任何一種時亮起（0903 起也帶總堂數）',
+   /<button class="cal-chip \$\{sel==='all'\?'on':''\}" onclick="calSetCourse\('all'\)">全部<b class="cchip-n">\$\{nAll\}<\/b><\/button>/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

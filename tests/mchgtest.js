@@ -149,8 +149,14 @@ console.log('\n狀態字樣上底色');
 
 /* 2026-07-31 使用者回報：7/13 13:00 小曾代課，行事曆上方篩選小曾卻看不到這堂 */
 console.log('\n行事曆教練篩選要算代課');
+/* 2026-09-03：篩選判斷抽成 _calPass（繪製與篩選鈕上的堂數共用同一支），
+   教練那一條從寫死 filterCoach 改成吃參數 coachSel —— 算教練那排的堂數時，
+   要問的是「換成這位教練會剩幾堂」。比對的仍然是 bkCoachId（代課算代課教練），
+   那才是這支測試真正在守的東西。 */
 ok('★ 篩選比對「實際上課的教練」（有代課就是代課教練）',
-   /if\(opts\.coachFilter && filterCoach!=='all' && bkCoachId\(b\)!==filterCoach\) return false;/.test(src));
+   /if\(opts\.coachFilter && coachSel && coachSel!=='all' && bkCoachId\(b\)!==coachSel\) return false;/.test(src));
+ok('★ 畫面上帶進去的仍是 filterCoach（抽參數不等於改行為）',
+   /const visible=mergeGroupBookings\(bookings\.filter\(b=>_calPass\(b, filterCoach, window\._calCourse\)\)\);/.test(src));
 ok('★ 「實際由誰上」與「跟誰有關係」分成兩支，不會再用錯',
    /function bkCoachId\(b\)\{ return \(b && \(b\.substitute_coach_id \|\| b\.coach_id\)\) \|\| null; \}/.test(src)
    && /function bkIsCoach\(b, cid\)\{/.test(src));
