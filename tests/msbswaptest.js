@@ -47,15 +47,15 @@ console.log('\n③ 挑選要換哪一筆：日期・時間・場地都要看得�
   const f=src.slice(src.indexOf('function msbSwapAsk(t){'), src.indexOf('async function msbSwapDo(bid,t){'));
   ok('★★ 每一列都寫出場地（不是只有日期與時間）',
      /<i>\$\{escH\(_oldV\(b\)\)\}/.test(f)
-     && /const _oldV=b=>venueName\(b&&b\.venue_unit\) \|\| '多功能訓練架';/.test(f));
+     && /const _oldV=b=>venueName\(b&&b\.venue_unit\) \|\| '史密斯訓練架';/.test(f));
   ok('★★ 上方另外寫出「要換到」的日期時間與場地，兩邊才對照得起來',
      /<div class="msw-new">/.test(f)
      && /<span class="msw-k">要換到<\/span>/.test(f)
      && /<span class="msw-v">\$\{escH\(_newV\)\}<\/span>/.test(f));
   ok('★★ 新時段的場地取自 msbProbeFree 算好的 s.vids（與真正送出時同一份配置）',
-     /const _newV=_vn\(s\.vids\?s\.vids\[timeToMin\(t\)\]:''\) \|\| '多功能訓練架';/.test(f));
-  ok('★★ 多功能訓練架也要寫出來 —— 別處刻意省略它，但這裡的重點正是「比較兩個場地」',
-     /場地一律寫出來，包含多功能訓練架/.test(src)
+     /const _newV=_vn\(s\.vids\?s\.vids\[timeToMin\(t\)\]:''\) \|\| '史密斯訓練架';/.test(f));
+  ok('★★ 史密斯訓練架也要寫出來 —— 別處刻意省略它，但這裡的重點正是「比較兩個場地」',
+     /場地一律寫出來，包含史密斯訓練架/.test(src)
      && /省略等於把要比的東西藏起來/.test(src));
   ok('　　順便補上星期（客人記時段常是靠星期，不是日期）',
      /const _wd=ds=>\{ const d=parseYmd\(ds\); return d\?'（'\+'日一二三四五六'\[d\.getDay\(\)\]\+'）':''; \};/.test(f));

@@ -32,12 +32,16 @@ console.log('① 計算與欄位一個都沒動');
   ok('★★ 教練色仍由 coachTagColor 帶（沒有另訂一套）',
      /const head1=cols\.map\(c=>\{ const k=coachTagColor\(c\.id\);/.test(RENDER)
      && !/coachTagColor/.test(B));
+  /* 2026-09-03 使用者指示：「有些視窗會有很多文字的規則　幫我整理段落　減少閱讀壓力」——
+     五條規則原本用「；」串成一句，改成一條一行（.rulelist）。定義本身沒有改。 */
   ok('★★ 底部的欄位定義跟著改（體驗不再算進教練課；營業額改成看提示）',
-     /教練課＝已簽到／已完成的教練課、友善教練課與運動按摩（體驗、自主訓練、場租不計）；/.test(src)
-     && /營業額＝當天所有收款，滑鼠指上去看明細（教練課／團課／其他分段列出）/.test(src));
+     /<li><b>教練課<\/b>　已簽到／已完成的教練課、友善教練課與運動按摩（體驗、自主訓練、場租不計）<\/li>/.test(src)
+     && /<li><b>營業額<\/b>　當天所有收款；滑鼠指上去看明細（教練課／團課／其他分段列出）<\/li>/.test(src));
+  ok('★ 五條規則各自一行，不再擠成一段',
+     /<ul class="rulelist">\s*\n\s*<li><b>教練課<\/b>[\s\S]{0,700}?<li><b>新／續<\/b>[^<]*<\/li>\s*\n\s*<\/ul>/.test(src));
   /* ⚠ RENDER 的切片就結束在 fmStickyFit(); 這一行之前，要在 src 裡比 */
   ok('　 凍結表頭的量測（fmStickyFit）照舊',
-     /<\/div>\s*\n\s*<\/div>`;\s*\n\s*fmStickyFit\(\);/.test(src) && /function fmStickyFit\(\)\{/.test(src));
+     /<\/ul>\s*\n\s*<\/div>`;\s*\n\s*fmStickyFit\(\);/.test(src) && /function fmStickyFit\(\)\{/.test(src));
 }
 
 console.log('\n② 月份列：置中、約 64px、不是卡片');
