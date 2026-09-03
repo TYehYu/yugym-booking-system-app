@@ -24,8 +24,11 @@ console.log('\n兩個畫面都要有（首頁名單卡＋點開的彈窗）');
 /* 2026-08-13 兩修：①首頁名單卡的約別標籤移到列最左直式（.mc-rev-kv 包 saleKindChip）；
    ②付款標籤已帶金額時隱藏重複粗體金額（revAmtDup 條件包住 mc-rev-amt）；首頁那格前面再多發票鈕 revInvChip */
 /* 2026-08-24 版型改版：最左邊那一欄改由 revKindCell 統一畫（新約／續約／分期／抽獎）。 */
-ok('★ 首頁右欄名單卡（約別標籤在列最左、直式）',
-   /return r\.kind\?`<span class="mc-rev-kv">\$\{saleKindChip\(r\.tk,r\.kind\)\}<\/span>`:'';/.test(src)
+/* 2026-09-03：使用者要「圓形鈕」＋「沒有分類的也保留左邊空間」，
+   所以 revKindCell 不再回空字串，改回一個空的佔位格（見 tests/revkindtest.js）。
+   這裡守的仍是「約別在列最左、由 revKindCell 統一畫」。 */
+ok('★ 首頁右欄名單卡（約別標籤在列最左，沒有約別也佔住那一格）',
+   /\? `<span class="mc-rev-kv">\$\{saleKindChip\(r\.tk,r\.kind\)\}<\/span>`\s*\n\s*: `<span class="mc-rev-kv mc-rev-kv-none" aria-hidden="true"><\/span>`;/.test(src)
    && /\$\{revKindCell\(r\)\}\s*\n\s*<div class="mc-rev-b">/.test(src)
 /* 2026-08-24：抽獎那一列不畫金額（它是 $0 的贈品紀錄，不是收款），
    所以多一個 ||r.lot 的條件。 */

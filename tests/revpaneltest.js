@@ -142,8 +142,13 @@ console.log('\n⑥ 面板重做：做減法（2026-08-27 使用者：「主要�
      /\.mc-rev-row\.mc-rev-go:hover\{background:transparent;/.test(B)
      && /\.mc-rev-row\.mc-rev-go:hover \.mc-rev-nm\{color:var\(--olive,#556B45\);\}/.test(B));
 
-  ok('★★ 三種 badge 全部退成純文字（底色／框線／圓角／內距都拿掉）',
-     /body\.ink \.mc-revlist-card \.mc-rev-pay,\s*\n\s*body\.ink \.mc-revlist-card \.rev-att,\s*\n\s*body\.ink \.mc-revlist-card \.rev-kind\{\s*\n\s*background:transparent !important;border:none !important;border-radius:0 !important;\s*\n\s*padding:0 !important;/.test(src));
+  /* 2026-09-03 使用者把「約別」要回膠囊（「分期 新約 續約用圓形鈕」），
+     所以退成純文字的只剩付款方式與教練歸屬兩種 —— 詳見 tests/revkindtest.js。
+     這裡守的是「其他 badge 沒有被一起改回去」。 */
+  ok('★★ 付款方式與教練歸屬仍是純文字（底色／框線／圓角／內距都拿掉）',
+     /body\.ink \.mc-revlist-card \.mc-rev-pay,\s*\n\s*body\.ink \.mc-revlist-card \.rev-att\{\s*\n\s*background:transparent !important;border:none !important;border-radius:0 !important;\s*\n\s*padding:0 !important;/.test(src));
+  ok('★★ 約別已經不在那條清單裡（在裡面的話膠囊樣式怎麼寫都蓋不回來）',
+     !/\.rev-att,\s*\n\s*body\.ink \.mc-revlist-card \.rev-kind\{/.test(src));
   ok('★★ 但顏色留著 —— 那是語意（現金綠／匯款金／分期紫／抽獎金／教練色）',
      /顏色留著（那是語意：現金綠／匯款金／分期紫／抽獎金／教練色）/.test(src)
      && /\.rev-kind-installment\{background:#efe7f3;color:#6e3a86;/.test(src));
@@ -155,9 +160,21 @@ console.log('\n⑥ 面板重做：做減法（2026-08-27 使用者：「主要�
      /body\.ink \.mc-revlist-card \.mc-rev-nm\{font-size:14px;font-weight:600;color:var\(--text\);\}/.test(src)
      && /body\.ink \.mc-revlist-card \.mc-rev-it\{font-size:11\.5px;color:var\(--t3\);font-weight:400;\}/.test(src)
      && /body\.ink \.mc-revlist-card \.mc-rev-amt\{[^}]*font-variant-numeric:tabular-nums;\}/.test(src));
-  ok('★★ 只動外觀：沒有一條規則碰 display／position／flex 方向',
-     !/(^|[;{\s])(display|position|flex-direction|top|left|right|bottom|width|height)\s*:/
-       .test(B.replace(/\/\*[\s\S]*?\*\//g,'')));
+  /* 「只動外觀」原本禁掉所有 display／尺寸宣告。2026-09-03 約別欄要固定寬度
+     （沒有約別的列也要佔位，姓名才對得齊），那是**排版**不是**改結構** ——
+     .mc-rev-kv 本來就是一格，只是從 flex:none 變成 flex:0 0 46px。
+     ⚠ 例外只開給 .mc-rev-kv 這一格，其餘照舊禁止：這條規則擋的是
+       「Ink 偷偷改版面結構」，不是擋所有跟尺寸有關的字。 */
+  {
+    /* ⚠ 要整條規則一起拿掉，不能逐行過濾 —— .mc-rev-kv{...} 是兩行，
+       第二行沒有選擇器，逐行濾會把 display:flex 那行留下來誤報。 */
+    const noKv=B.replace(/\/\*[\s\S]*?\*\//g,'')
+                .replace(/[^\n{}]*\.mc-rev-kv[^{]*\{[^}]*\}/g,'');
+    ok('★★ 只動外觀：除了約別欄的固定寬度，沒有一條規則碰 display／position／flex 方向',
+       !/(^|[;{\s])(display|position|flex-direction|top|left|right|bottom|width|height)\s*:/.test(noKv));
+    ok('★★ 約別欄的例外就是「固定寬度＋置中」，沒有夾帶別的',
+       /body\.ink \.mc-revlist-card \.mc-rev-kv\{flex:0 0 46px;align-self:center;\s*\n\s*display:flex;align-items:center;justify-content:center;\}/.test(src));
+  }
   ok('　 使用者原話（做減法）寫在原地',
      /不是加元素，而是做減法。減少框線、減少底色、減少 badge、降低卡片高度/.test(src)
      && /「今天收了多少」\s*\n\s*這件很簡單的事被包了四層才講完/.test(src));

@@ -40,8 +40,15 @@ console.log('\n② Ink 的 CSS 不會讓任何東西「從看不到變看得到�
         || /pointer-events\s*:\s*auto/.test(body)
         || /opacity\s*:\s*1(?![\d.])/.test(body) && /disabled|readonly|noint|masked|view/.test(b.slice(0,b.indexOf('{')));
   }).map(b=>b.slice(0,b.indexOf('{')).trim().replace(/\s+/g,' ').slice(0,60));
+  /* 白名單放的都是「本來就看得到的東西，只是換一種排法」——
+     display:inline-flex／flex 在這些選擇器上是為了置中或排欄，不是把藏起來的東西掀出來。
+     ⚠ 要往這裡加東西之前，先確認那個元素在沒有 body.ink 時也看得到；
+       這支測試守的是權限，不是版面。
+     ・cchip-dot／dw-／mc-rs-／mc-rev／lp-：既有項目
+     ・mc-cell.mc-sel .mc-d：日期數字（永遠可見），inline-flex 只為了置中在 22px 圓圈裡
+       （2026-09-03 選取從方框改圓框） */
   eq('★★ 沒有一條把元素顯示出來／恢復點擊（display:block、visibility、pointer-events:auto）',
-     shown.filter(x=>!/cchip-dot|dw-|mc-rs-|mc-rev|lp-/.test(x)), []);
+     shown.filter(x=>!/cchip-dot|dw-|mc-rs-|mc-rev|lp-|mc-cell\.mc-sel \.mc-d/.test(x)), []);
   ok('★★ 完全沒有 pointer-events —— 不可能把「不能點」變成「能點」',
      !INK_RULES.some(b=>/pointer-events/.test(b)));
   ok('★★ 唯一的兩個 display:none 都是「拿掉重複的裝飾」，不是藏功能',

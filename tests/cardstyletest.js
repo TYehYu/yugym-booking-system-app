@@ -182,8 +182,12 @@ ok('★ 首頁卡改回顯示全名（不再跟著窄卡用縮寫）',
    !/\.tcard\.tcard-std \.co-fl\{display:none;\}/.test(css)
    && !/\.tcard\.tcard-std \.co-ab\{display:inline;\}/.test(css)
    && /首頁卡當天從 84px 加寬到 120px，原本「比照窄卡用縮寫」的理由消失了/.test(css));
-ok('★ 行事曆的窄卡規則不動（那邊真的窄）',
-   /\.cal-ev\.cal-ev-std\.ev-w-narrow \.co-fl,\s*\n\s*\.cal-ev\.cal-ev-std\.ev-w-tiny \.co-fl\{display:none;\}/.test(css)
+/* 2026-09-03：行事曆的窄卡仍然用縮寫，但**判斷依據換了** ——
+   原本吃 JS 估的 wCls（估寬了就把 52px 的卡當成寬卡，教練全名被簽到章蓋掉前 2 字），
+   改吃卡片真實寬度的 @container。門檻沿用 90／70，行為不變。詳見 tests/evwidthtest.js。
+   首頁卡不受影響：它不是 .cal-ev，也不是查詢容器，所以照樣全名。 */
+ok('★ 行事曆的窄卡仍用縮寫，但改吃卡片真實寬度',
+   /@container \(max-width:90px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.co-fl\{display:none;\}/.test(css)
    && /\.co-ab\{display:none;\}/.test(css));
 ok('　　太長的名字折行、不切成「…」（0821 已有的規則接手）',
    /white-space:normal !important; word-break:keep-all/.test(css));
@@ -323,9 +327,12 @@ ok('★ 標準卡終於有窄卡專屬字級（原本只有舊卡 .ev-time／.ev
    /\.cal-ev\.cal-ev-std\.ev-w-narrow \.evc-time\{font-size:11px;\}/.test(css)
    && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-time\{font-size:10px;\}/.test(css)
    && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-name\{font-size:11\.5px !important;/.test(css));
+/* 原則不變（越窄越少東西），只是兩項各走各的路：
+   場地仍看 wCls（估錯只是多／少一列），教練改看容器真實寬度（估錯會把字蓋掉）。 */
 ok('★ 越窄越少東西：窄卡先讓場地，極窄卡連教練也讓',
    /\.cal-ev\.cal-ev-std\.ev-w-narrow \.evc-vsub\{display:none;\}/.test(css)
-   && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-vsub,\s*\n\s*\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-coach\{display:none;\}/.test(css));
+   && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-vsub\{display:none;\}/.test(css)
+   && /@container \(max-width:70px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(css));
 ok('　　原則寫在程式裡（寧可少一項，也不要每一項都殘缺）',
    /寧可少一項，也不要每一項都殘缺/.test(css));
 

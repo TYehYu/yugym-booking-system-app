@@ -5118,7 +5118,8 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .cal-ev.cal-ev-std.cal-ev-7d .evc-time{font-size:9px;}
 .cal-ev.cal-ev-std.cal-ev-7d .evc-name{font-size:11.5px;}
 .cal-ev.cal-ev-std.ev-w-tiny .evc-name{font-size:10.5px;}
-.cal-ev.cal-ev-std.ev-w-tiny .evc-coach{display:none;}
+/* 「極窄就不顯示教練」已改由容器查詢負責（2026-09-03，見上面那段寬度分級）——
+   這裡是 wCls（JS 估的）版本，留著會在「估成 tiny、其實很寬」時把教練名平白藏掉。 */
 /* 7 日卡會員名：改「最多兩行」而非單行截斷（2026-07-25 使用者回報「陳…郭…」）。
    卡片本就有高度，窄欄時折兩行能盡量顯示完整姓名；解析度無關 —— 短名/寬螢幕仍是
    單行、外觀與原本一致，只有塞不下時才折行，不會讓桌機在別的螢幕變怪。 */
@@ -5360,11 +5361,35 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
      首頁卡當天從 84px 加寬到 120px，原本「比照窄卡用縮寫」的理由消失了，
      改回顯示全名；太長的名字由下面那條 white-space:normal 折成兩行，不會被切成「…」。
      行事曆的窄卡規則不動 —— 那邊真的窄。 */
+  /* ══ 教練標籤的寬度分級：吃**卡片真實寬度**，不吃 JS 估的 ══════════════
+     2026-09-03 使用者附截圖，畫面上是「ND」「NGO」「RR」這種殘字。
+     實測後發現不是樣式沒調好，是**分級用錯了輸入**：
+       const colW=(window.innerWidth-80)/nDays;  const cardW=colW/lane.total;
+       wCls = cardW<70 ? 'ev-w-tiny' : (cardW<90 ? 'ev-w-narrow' : '');
+     那個 80 要涵蓋時間軸欄、容器內距、捲軸、每張卡自己的 left/right:3px。
+     估寬了就把**實際只有 52px** 的卡判成「≥90px，顯示教練全名」，
+     全名膠囊靠右排、寬 33–34px 蓋回卡片左半，正好壓在左下角那顆 16px 的簽到章底下
+     —— 實測 RANDY 被蓋掉 12px（前 2 字）、MANGO 13px、BARRY 12px，
+     所以看到的是「NDY」「NGO」「RRY」。短名（ZOE）剛好躲過，問題才時有時無。
+
+     .cal-ev.cal-ev-std 本來就有 container-type:size，手機那套（.cag-wk-col 的
+     @container (max-width:62px)）0823 起就這樣做了，桌機這條路只是沒跟上。
+     門檻沿用原本的 90／70，行為不變，只是換成量真的。
+     ⚠ 先把 JS 那三段的效果歸零（不管它加了什麼 class 都先當寬卡），再由容器查詢
+       重新分段；否則估錯的方向相反時（估成 tiny、其實很寬）教練名會平白消失。
+     ⚠ 只有**教練標籤**改吃容器寬度。字級與場地那一列仍走 wCls ——
+       那兩項估錯的後果只是字略大或多一列，不會像這裡一樣把字蓋掉。 */
   .co-ab{display:none;}
-  .cal-ev.cal-ev-std.ev-w-narrow .co-fl,
-  .cal-ev.cal-ev-std.ev-w-tiny .co-fl{display:none;}
-  .cal-ev.cal-ev-std.ev-w-narrow .co-ab,
-  .cal-ev.cal-ev-std.ev-w-tiny .co-ab{display:inline;}
+  .cal-ev.cal-ev-std .co-fl{display:inline;}
+  .cal-ev.cal-ev-std .co-ab{display:none;}
+  .cal-ev.cal-ev-std .evc-coach{display:inline-flex;}
+  @container (max-width:90px){
+    .cal-ev.cal-ev-std .co-fl{display:none;}
+    .cal-ev.cal-ev-std .co-ab{display:inline;}
+  }
+  @container (max-width:70px){
+    .cal-ev.cal-ev-std .evc-coach{display:none;}
+  }
   /* 場地（教室／跑步機）改放姓名下方那一列，與體驗／待簽約標籤同一種樣式 */
   .cal-ev.cal-ev-std .evc-vsub{color:var(--course-accent,#3D7039);opacity:.9;}
   /* ══ 窄欄位的取捨（2026-08-21 使用者回報：Mac 桌機 7 日檢視「課卡內容被壓縮」）══
@@ -5382,8 +5407,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   /* 極窄：場地與教練讓位給姓名（原本 ev-w-tiny 的規格就寫著「只顯示時間＋會員」，
      但那是舊卡的規則，標準卡從來沒跟上）。窄卡先讓場地，教練縮寫還留得住。 */
   .cal-ev.cal-ev-std.ev-w-narrow .evc-vsub{display:none;}
-  .cal-ev.cal-ev-std.ev-w-tiny   .evc-vsub,
-  .cal-ev.cal-ev-std.ev-w-tiny   .evc-coach{display:none;}
+  /* 教練那一項已移出（2026-09-03）：改由容器查詢依卡片真實寬度決定，
+     見上面「教練標籤的寬度分級」。場地仍走 wCls —— 估錯只是多／少一列，不會蓋掉字。 */
+  .cal-ev.cal-ev-std.ev-w-tiny   .evc-vsub{display:none;}
   /* 標籤太長就換行，不要用省略號（2026-08-21 使用者回報「mango 的教練請假也變成…」）——
      卡片只有 84px 寬、扣掉內距剩 66px，「教練請假」四個中文字加膠囊內距在字體較寬的
      環境下就頂到上限，於是被切成「教練…」，看不出是請假還是別的。
@@ -6169,87 +6195,15 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .tcol-wrap.has-pg .tcol-pg{display:flex;}
 .tcol-wrap.pg-atstart .tcol-pg-l{opacity:.25;pointer-events:none;}
 .tcol-wrap.pg-atend .tcol-pg-r{opacity:.25;pointer-events:none;}
-/* ══ UI 實驗室（2026-09-03）══════════════════════════════════════════════
-   目前只有一間：g_uilab_cal＝預約管理
-   （使用者：「管理員桌機頁面-預約管理可以建立ui實驗室嗎 這邊好像更需要調整」）。
-   首頁那間（g_uilab）同日收攤 —— 三條實驗都定案上線了，見下方
-   「你已經在這裡」與 .tcol-pg 那幾段。
-   在實驗室裡 body 會掛 uilab；預約管理那間**另外**再掛 uilab-cal。
-
-   ⚠ 這一段以下的每一條**都必須**以 body.uilab 開頭。
-     少寫一次前綴，那條規則就會套到營運畫面上（管理員首頁與櫃檯是同一支頁面）。
-     tests/uilabtest.js 會擋下沒有前綴的規則。
-   ⚠ 預約管理的實驗一律寫成 body.uilab.uilab-cal（兩個 class 疊著），理由有兩個：
-     ① 只有 body.uilab 的話，首頁那間也會吃到；
-     ② 行事曆課卡（.cal-ev-std）與首頁課卡（.tcard-std）**寫在同一條 CSS 規則裡**
-        （見 0725「卡片左色條白底改版」那一段，一條選擇器同時列兩個），
-        所以動課卡樣式時，選擇器一定要帶 .cal-ev —— 只寫 .evc-* 會連首頁一起改。
-   ⚠ 這裡是「試」的地方，不是「定案」的地方：試出來要留的，
-     搬到上面對應的區塊、拿掉 uilab 前綴，並補上為什麼要改。 */
-.uilab-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
-  background:#f4efe2;border:1px solid var(--gold,#B48A56);border-radius:12px;
-  padding:10px 14px;margin:-4px 0 12px;}
-.uilab-bar b{font-size:13px;color:var(--gold-d,#b48a56);flex:none;}
-.uilab-bar span{font-size:12px;color:var(--t2);line-height:1.7;flex:1;min-width:200px;}
-.uilab-bar .btn{flex:none;}
-/* ── 實驗區：以下自由塗改，每條都要 body.uilab 前綴 ────────────────────── */
-
-/* ══ 預約管理（g_uilab_cal）的實驗 ══════════════════════════════════════
-   一週七欄、同時段三四堂並排時每張卡只剩 ~55px，畫面上同時有幾百張卡。
-   這個密度下，問題不是「單張卡好不好看」，是**整片的訊噪比**：
-   每一格重複的東西（框線、陰影、時間）乘以幾百倍，就蓋掉了真正要找的東西（姓名）。
-   所以下面三條都是同一個方向：**把重複的壓下去，讓唯一的浮出來**。 */
-
-/* 【實驗 D】拿掉每張卡的框線與陰影
-   問題：每張卡都有 1px 實線 #E4DECF ＋ 一層陰影。單看很精緻，
-     但七欄並排時，幾百條框線自己組成了一張網格，跟底下真正的時間格線打架。
-   做法：框線降到幾乎看不見、陰影拿掉。卡片仍然分得開 —— 靠的是米白底
-     與左邊那條課程色條（.evc-body::before），那兩樣本來就夠了。
-   ⚠ 只降 .cal-ev 的，首頁課卡不動（兩者共用同一條規則，見上方警告）。 */
-body.uilab.uilab-cal .cal-ev{box-shadow:none;}
-body.uilab.uilab-cal .cal-ev.cal-ev-std .evc-body{border-color:rgba(51,48,42,.07) !important;}
-
-/* 【實驗 E】時間退到背景，姓名當主角
-   問題：時間現在用**課程強調色**（0725 那條 .evc-time{color:var(--course-accent)}），
-     與姓名的深灰同等搶眼，甚至更亮。但時間是**重複資訊** ——
-     卡片的垂直位置本來就對齊左側時間軸，一整列同一個鐘點的卡片都印著同一個數字。
-   做法：改成第三層灰、不加粗。時間還在（跨半點的卡仍需要它），只是不再搶戲。
-   ⚠ 不是直接 display:none —— 19:30、18:30 這種卡若沒有時間就真的讀不出來了。 */
-body.uilab.uilab-cal .cal-ev.cal-ev-std .evc-time{
-  color:var(--t3,#8a857c) !important;opacity:.85;font-weight:400;
-}
-
-/* 【實驗 F】窄卡的分級改吃「卡片真實寬度」，不要用 JS 估的
-   來源：使用者附實驗室截圖問「有辦法優化嗎」（2026-09-03）。截圖上教練標籤是
-   「ND」「NGO」「RR」這種殘字 —— 一開始以為是字太長被切，實測才知道不是。
-
-   真因：分級是 JS 估的 ——
-     const colW=(window.innerWidth-80)/nDays;  const cardW=colW/lane.total;
-     wCls = cardW<70 ? 'ev-w-tiny' : (cardW<90 ? 'ev-w-narrow' : '');
-   那個 80 要涵蓋時間軸欄、容器內距、捲軸、還有每張卡自己的 left/right:3px，
-   估寬了就會把**實際只有 52px** 的卡片判成「≥90px，顯示教練全名」。
-   全名膠囊靠右排，寬度 33–34px 蓋回卡片左半，正好壓在左下角那顆 16px 的簽到章下面
-   —— 實測：RANDY 被蓋掉 12px（前 2 個字）、MANGO 13px、BARRY 12px，
-   所以畫面上剩「NDY」「NGO」「RRY」。短名（ZOE）剛好躲過，所以問題看起來時有時無。
-
-   ⚠ 這不是樣式沒調好，是**分級用錯了輸入**。加大字、換色點、縮膠囊都只是繞過去。
-   ⚠ 修法：改用 @container 查卡片自己的寬度 —— .cal-ev.cal-ev-std 已經有
-     container-type:size，手機那套（.cag-wk-col 的 @container (max-width:62px)）
-     早就這樣做了，桌機這條路只是沒跟上。
-   ⚠ 門檻沿用原本的 90／70，行為不變，只是換成量真的。
-   ⚠ 先把 JS 那三段的效果歸零（不管它加了什麼 class 都當寬卡），再由容器查詢重新分段；
-     否則估錯的方向相反時（估成 tiny、其實很寬）教練名會平白消失。 */
-body.uilab.uilab-cal .cal-ev.cal-ev-std .co-fl{display:inline;}
-body.uilab.uilab-cal .cal-ev.cal-ev-std .co-ab{display:none;}
-body.uilab.uilab-cal .cal-ev.cal-ev-std .evc-coach{display:inline-flex;}
-@container (max-width:90px){
-  body.uilab.uilab-cal .cal-ev.cal-ev-std .co-fl{display:none;}
-  body.uilab.uilab-cal .cal-ev.cal-ev-std .co-ab{display:inline;}
-}
-@container (max-width:70px){
-  body.uilab.uilab-cal .cal-ev.cal-ev-std .evc-coach{display:none;}
-}
-
+/* UI 實驗室（2026-09-03）當天開、當天收 —— 兩間都已拆除。
+   首頁那間試出三條（日期列「今天」／月曆「當月」／教練欄翻頁鈕的統一語彙），
+   已就地上線，見「你已經在這裡」與 .tcol-pg 那幾段。
+   預約管理那間試出一條（教練標籤改吃卡片真實寬度，修掉「ND／NGO／RR」殘字），
+   已上線，見上方「教練標籤的寬度分級」；另外兩條（卡片框線陰影退場、時間退到背景）
+   使用者看過實機後判定「兩個都沒什麼差別」，整組丟掉。
+   ⚠ 下次要動共用頁面的版面，一樣先開一間（作法：導覽項目不加 fd、頁面本身守角色、
+     實驗樣式全掛 body.uilab；拿掉前綴上線時記得權重會從 (0,5,1) 掉到 (0,4,1)，
+     可能打不過 body.ink）。 */
 /* 課卡區的米色底（2026-09-02 使用者指示：「首頁的課卡區背景加一個米色底」）——
    釘住的教練列維持白底，跟底下這片米色分得開，一眼看得出哪一列是凍結的。 */
 .tcol-scroll{background:var(--card2,#F4F0E8);border-radius:12px;}
@@ -11518,9 +11472,19 @@ body.ink .twk-day.on:not(.today){
   color:var(--olive-d,#445636);}
 body.ink .twk-day.on:not(.today) .twk-md{color:var(--olive-d,#445636);}
 /* 左欄月曆的「選取」原本是為深綠底配的米白細圈，翻成白底後幾乎看不見（使用者：
-   「還不是很清楚」）——改成橄欖 2px 實圈，與上面那排同一種語彙。 */
+   「還不是很清楚」）——改成橄欖 2px 實圈，與上面那排同一種語彙。
+
+   2026-09-03（使用者附截圖：「首頁月曆 選到的日期現在是用方框 改成圓框」）：
+   ⚠ 上面那組共用規則（.cal-side/.cal-hero/.cag-mcal 的 mc-sel .mc-d）是**底線款**，
+     寫著 border:0;border-radius:0;width:auto;height:auto;padding:0 2px 2px;
+     這裡只改了 border，圓角與尺寸沒跟著改 → 2px 邊框套在 border-radius:0 上，
+     畫出來就是一個方框。
+   ⚠ 尺寸要跟「今天」那顆完全一致（22×22 圓），兩顆才會在同一列上對得齊；
+     padding 也要歸零，否則 22px 的框會被內距撐開。 */
 body.ink .cal-side .mc-cell.mc-sel .mc-d{
-  border:2px solid var(--olive,#556B45);color:var(--olive-d,#445636);font-weight:700;}
+  border:2px solid var(--olive,#556B45);color:var(--olive-d,#445636);font-weight:700;
+  border-radius:50%;width:22px;height:22px;padding:0;
+  display:inline-flex;align-items:center;justify-content:center;}
 body.ink .cal-side .mc-cell.mc-today.mc-sel .mc-d{
   border-color:var(--cream,#F2EFE4);color:#F2EFE4;}
 
@@ -11621,16 +11585,26 @@ body.ink .mc-td-arrow{color:var(--t3);font-size:14px;}
 /* ⑤ badge 全部退成純文字 —— 顏色留著（那是語意：現金綠／匯款金／分期紫／抽獎金／教練色），
    但底色、框線、圓角、內距都拿掉，讓它們回到「一行小字」的份量。 */
 body.ink .mc-revlist-card .mc-rev-pay,
-body.ink .mc-revlist-card .rev-att,
-body.ink .mc-revlist-card .rev-kind{
+body.ink .mc-revlist-card .rev-att{
   background:transparent !important;border:none !important;border-radius:0 !important;
   padding:0 !important;font-weight:600;letter-spacing:.02em;}
 body.ink .mc-revlist-card .mc-rev-pay{font-size:11.5px;}
 body.ink .mc-revlist-card .rev-att{font-size:11px;}
-/* 種類（新約／續約／分期／抽獎）原本是最左邊一整格直排文字，改成一行小字、不佔一欄的寬度 */
-body.ink .mc-revlist-card .mc-rev-kv .rev-kind{font-size:11px;letter-spacing:.06em;
-  writing-mode:horizontal-tb;text-orientation:mixed;align-self:center;}
-body.ink .mc-revlist-card .mc-rev-kv{align-self:center;}
+/* 種類（新約／續約／分期／抽獎）：原本是最左邊一整格**直排文字**（0813），
+   Ink 改版時跟著其他 badge 一起退成純文字。
+   2026-09-03 使用者附截圖：「營收明細左邊的分期 新約 續約用圓形鈕
+     羅苡榕這種沒有分類的 也要保留左邊的空間 讓客戶姓名對齊」——
+   改回膠囊，橫排、置中；顏色沿用既有語意（新約金／續約綠／分期紫／抽獎金），
+   所以上面那條退成純文字的規則不再包含 .rev-kind。
+   ⚠ 這一欄要**固定寬度**：有沒有約別都佔同樣的位置，姓名才會在同一條垂直線上。
+     46px 是「分期」在 11px 字級下的膠囊寬度（22 字寬＋18 內距＋2 框線）再留一點餘裕。
+   ⚠ 空格子（.mc-rev-kv-none）不畫任何東西，只是佔位。 */
+body.ink .mc-revlist-card .mc-rev-kv{flex:0 0 46px;align-self:center;
+  display:flex;align-items:center;justify-content:center;}
+body.ink .mc-revlist-card .mc-rev-kv .rev-kind{
+  writing-mode:horizontal-tb;text-orientation:mixed;
+  font-size:11px;font-weight:700;letter-spacing:.04em;line-height:1.35;
+  border-radius:999px;padding:4px 9px;border-width:1px;border-style:solid;}
 
 
 /* ══ 排班表：上半部壓縮（2026-08-27 使用者指示）══════════════════════════════
@@ -12049,8 +12023,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260903.1647';
-const APP_VERSION_LABEL='260903.1647';
+const APP_VERSION='260903.1701';
+const APP_VERSION_LABEL='260903.1701';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15173,15 +15147,11 @@ const NAV2_ICONS={
 const ADMIN_NAV2=[
   {key:'g_dashboard', icon:'🏠', label:'預約總覽', fd:true, sub:[
     {label:'今日總覽', page:'g_dashboard', fd:true},
-    /* 首頁的 UI 實驗室已於 2026-09-03 收攤（使用者：「首頁可以把實驗室上線
-       然後關掉實驗室的頁面」）—— 三條實驗都搬進正式規則了，見 CSS 的
-       「你已經在這裡」那一段。預約管理那間還開著（g_uilab_cal）。 */
+    /* UI 實驗室 2026-09-03 當天開、當天收（兩間都是）—— 試出來的規則已就地上線，
+       作法與踩過的坑記在 CSS 的「UI 實驗室」那段註解裡。 */
   ]},
   {key:'g_booking', icon:'📅', label:'預約', fd:true, sub:[
     {label:'行事曆', page:'calendar', fd:true},
-    /* UI 實驗室・預約（2026-09-03）：同樣沒有 fd → 櫃檯看不到這一項。
-       頁面本身還會再守一次（見 PAGES.g_uilab_cal）。 */
-    {label:'UI 實驗室', page:'g_uilab_cal'},
   ]},
   {key:'g_member', icon:'👥', label:'會員', fd:true, sub:[
     {label:'會員列表', page:'members', fd:true},
@@ -15943,17 +15913,6 @@ function navTo(key, gkey){
     const _mv=((key==='mem_bookings'||key==='mem_tickets')
       && typeof memh2On==='function' && memh2On());
     document.body.classList.toggle('memh2-shell', _mv);
-    /* UI 實驗室（2026-09-03 使用者指示：「先做一個專門來測試技能的頁面」）——
-       試 UI 技能的建議時，改動只掛在 body.uilab 底下，營運畫面一行都不會變。
-       ⚠ 掛在換頁這一層：離開就自動拿掉，不需要各處記得清（同 chv2-shell 的作法）。
-       ⚠ 只有管理員成立 —— 櫃檯與教練連這一頁都進不來（見 uilabShell 的守門）。 */
-    /* UI 實驗室：目前只剩預約管理那一間（首頁那間 0903 收攤）。
-       uilab＝在任一間實驗室；uilab-cal＝在預約管理那間 ——
-       兩個 class 疊著用，因為行事曆課卡與首頁課卡共用同一條 CSS 規則，
-       日後再開第二間時，只靠 body.uilab 分不開。 */
-    const _lab=(key==='g_uilab_cal') && !!(SESSION&&SESSION.role==='admin');
-    document.body.classList.toggle('uilab', _lab);
-    document.body.classList.toggle('uilab-cal', _lab && key==='g_uilab_cal');
     /* 底部自主訓練列（2026-08-31）：兩個會員頁都要有，所以掛在換頁這一層。
        放 setTimeout 讓它排在頁面畫完之後 —— 它要量導覽列高度。 */
     setTimeout(()=>{ try{ memSelfBarSync(); }catch(_){} },0);
@@ -19463,53 +19422,6 @@ function startButlerArt(){
   _artTop=false; _artBusy=false;
   a.src=butlerArtNext(); a.style.opacity='1'; b.style.opacity='0';
 }
-/* ══ UI 實驗室（2026-09-03 使用者指示：「先做一個專門來測試技能的頁面」）══════
-   要試 UI 技能（ui-skills 的 improve-ui、taste-skill 之類）給的建議，但**不能動到營運畫面**
-   —— 管理員桌機首頁與櫃檯是同一支（PAGES.g_dashboard，fd:true，桌機版沒有角色分支），
-   直接改那一頁，櫃檯明天早上開店就看到了。
-
-   ⚠ 這一頁刻意**不複製首頁的程式**，而是直接跑同一支 PAGES.g_dashboard ——
-     同一份資料、同一批產生器（kpiRows／quickCard／dayBar／colHtml…），
-     實驗只表現在 body.uilab 底下的 CSS。
-     複製一份的話兩邊會各自長歪：這個專案光 0902 一天就修了兩次
-     「同一條規則抄兩份、只改了一份」（_grpTaken／_seatFam、Ink 主題的白底沒跟著改名）。
-   ⚠ 侷限講在前面：這樣只試得動「用 CSS 表達得出來」的改動。
-     要改 HTML 結構的建議，得先在首頁那支加分支，那就不算零風險了 ——
-     真的走到那一步再說，不要為了方便先把門打開。
-
-   隔離的三道：① 導覽項目沒有 fd（櫃檯的選單不會出現）
-               ② 這裡再守一次角色
-               ③ 樣式全部掛在 body.uilab 底下（navTo 換頁時自動掛／拆） */
-/* 實驗室外殼：兩間（首頁／預約管理）共用這一支。
-   ⚠ 刻意做成一支帶參數的外殼，而不是複製兩份 —— 這個專案光 0902 一天就修了兩次
-     「同一條規則抄兩份、只改了一份」。第二間開下去時如果用複製的，
-     守門、提示條、回營運的按鈕就會各自漂移。 */
-async function uilabShell(realPage, backPage, backLabel, desc){
-  if(!(SESSION && SESSION.role==='admin')){
-    const C=document.getElementById('content');
-    if(C) C.innerHTML=`<div class="card" style="padding:40px;text-align:center;color:var(--t3);">
-      這一頁只有管理員看得到。</div>`;
-    return;
-  }
-  await PAGES[realPage]();
-  /* 提示條掛在內容最上面，讓人一眼知道自己不在營運畫面上。
-     ⚠ 插在真正那一頁畫完之後 —— 它是整段 innerHTML 覆寫，先插會被蓋掉。 */
-  const C=document.getElementById('content');
-  if(C) C.insertAdjacentHTML('afterbegin',
-    `<div class="uilab-bar">
-       <b>UI 實驗室</b>
-       <span>${desc}這裡的改動不會影響櫃檯與營運畫面。</span>
-       <button type="button" class="btn btn-ghost btn-sm" onclick="navTo('${backPage}')">${backLabel}</button>
-     </div>`);
-}
-/* 預約管理的實驗室（2026-09-03 使用者：「管理員桌機頁面-預約管理可以建立ui實驗室嗎
-   這邊好像更需要調整」）—— 一週七欄、幾百張課卡，密度比首頁高一個量級，
-   改壞的話櫃檯明天早上第一眼就是這一頁，所以更需要一個不會外洩的地方試。
-   實驗樣式全掛 body.uilab.uilab-cal（見 CSS 實驗區）。 */
-PAGES.g_uilab_cal=async function(){
-  await uilabShell('calendar','calendar','回營運行事曆',
-    '跟預約管理同一份資料與程式，只有樣式不同。');
-};
 PAGES.g_dashboard=async function(){
   const today=ymd(TODAY);
   const date=_dashViewDate||today;   // 檢視日期，可切換
@@ -40249,7 +40161,13 @@ function revKindCell(r){
       : `<span class="rev-kind rev-kind-lottery">抽獎</span>`;
     return `<span class="mc-rev-kv">${inner}</span>`;
   }
-  return r.kind?`<span class="mc-rev-kv">${saleKindChip(r.tk,r.kind)}</span>`:'';
+  /* 沒有約別的列（團課方案、場租、商品…）也要輸出這一格
+     （2026-09-03 使用者附截圖：「羅苡榕這種沒有分類的　也要保留左邊的空間
+       讓客戶姓名對齊」）—— 回空字串的話那一列的姓名會整個往左跑，
+     一整份名單看下來像沒對齊的表格。空格子只佔位，不畫任何東西。 */
+  return r.kind
+    ? `<span class="mc-rev-kv">${saleKindChip(r.tk,r.kind)}</span>`
+    : `<span class="mc-rev-kv mc-rev-kv-none" aria-hidden="true"></span>`;
 }
 function revAttribChip(r){
   if(!r || !r.attKind) return '';

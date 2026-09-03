@@ -75,5 +75,18 @@ ok('★★ 圓形（34px），與日期列的「今天」同一個形狀',
    /\.mcal-btn-now\{width:34px;height:34px;border-radius:50%;/.test(src)
    && /\.twk-bar>\.twk-today-slot \.tl-daynav-today\{[\s\S]{0,120}?border-radius:50%;/.test(src));
 
+console.log('\n⑥ 選取的日期是圓框（2026-09-03 使用者附截圖：「選到的日期現在是用方框 改成圓框」）');
+/* ⚠ 三個綠月曆共用的那組規則是**底線款**：border:0;border-radius:0;width:auto;height:auto;
+   padding:0 2px 2px。Ink 後來把 border 改成 2px 實圈，卻沒重設圓角與尺寸
+   → 2px 邊框套在 border-radius:0 上，畫出來就是方框。 */
+ok('★★★ Ink 的選取圈補上圓角與尺寸（不是只改 border）',
+   /body\.ink \.cal-side \.mc-cell\.mc-sel \.mc-d\{[\s\S]{0,220}?border-radius:50%;width:22px;height:22px;padding:0;/.test(src));
+ok('★★★ 尺寸與「今天」那顆一致（22×22 圓，兩顆才在同一列上對得齊）',
+   /\.cal-side \.mc-cell\.mc-today \.mc-d,[\s\S]{0,200}?border-radius:50%;width:22px;height:22px;/.test(src));
+ok('★★ padding 要歸零（底線款留了 0 2px 2px，不清掉會把 22px 的圈撐開）',
+   /padding 也要歸零，否則 22px 的框會被內距撐開/.test(src));
+ok('★★ 方框的成因寫在原地',
+   /這裡只改了 border，圓角與尺寸沒跟著改 → 2px 邊框套在 border-radius:0 上，\s*\n?\s*畫出來就是一個方框/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
