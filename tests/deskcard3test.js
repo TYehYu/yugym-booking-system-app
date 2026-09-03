@@ -17,8 +17,10 @@ ok('★ 第二欄四列：課程／使用場地／會員姓名（粗體）／第
    && /<span class="t3-l2 tcard-mem\$\{bkNameBlankCls\(b\)\}">\$\{nm\}<\/span>/.test(src)
    && /<span class="t3-l3">/.test(src)
    && /\.tcard-3c \.t3-l2\{font-size:14\.5px;font-weight:800;/.test(src));
+/* 2026-09-03：時間那一格多包一層 .t3-top —— 續約／繳費徽章改成與時間並排
+   （原本絕對定位在右上角，正好蓋住時間最後一位數字，見 lastmarktest）。 */
 ok('★ 右上時間、右下教練標籤（含待簽約等課別標）',
-   /<span class="t3-side"><span class="tcard-time">\$\{b\.start_time\}<\/span><span class="t3-co">\$\{_tagOut\}\$\{coTag\}<\/span><\/span>/.test(src)
+   /<span class="t3-side"><span class="t3-top">\$\{_mk\}<span class="tcard-time">\$\{b\.start_time\}<\/span><\/span><span class="t3-co">\$\{_tagOut\}\$\{coTag\}<\/span><\/span>/.test(src)
    && /\.tcard-3c \.t3-side\{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;/.test(src));
 ok('★★ ⚠ 舊規則把時間釘在左上（.tcard-std .tcard-time{align-self:flex-start}），三欄版要覆蓋掉',
    /\.tcard-3c \.tcard-time\{align-self:flex-end !important;\}/.test(src)

@@ -108,7 +108,17 @@ ok('★ 首頁先算好標記（同一支 computeLastBkMarks，判準不漂移�
    /try\{ computeLastBkMarks\(mtickets\|\|\[\], bookings\|\|\[\], typeMap\|\|\{\}\); \}catch\(_\)\{\}/.test(src));
 ok('★ 首頁課卡（tcard）掛上 bkRenewBadge 角標',
    /const _mk = bkRenewBadge\(\{\s*\n\s*done:\(window\._renewDoneBk&&window\._renewDoneBk\[b\.id\]\),/.test(src)
-   && /<div class="tcard-body"><\/div>\$\{_mk\}/.test(src));
+   && /<span class="t3-top">\$\{_mk\}<span class="tcard-time">/.test(src));
+/* ★★★ 2026-09-03 使用者附截圖：畫面上看到「10:0✓」「18:!」——
+   .ev-payalert 是為行事曆課卡寫的（絕對定位在卡片右上角，那裡沒有別的東西），
+   但首頁課卡的**時間就在右上角**，徽章正好蓋住最後一位數字。
+   時間是課卡上最要緊的資訊之一，不能被遮。改成同一列並排。 */
+ok('★★★ 首頁課卡的徽章不再絕對定位（會蓋住時間）',
+   /\.tcard-3c \.ev-payalert\{position:static;top:auto;right:auto;width:14px;height:14px;/.test(src)
+   && /\.tcard-3c \.t3-top\{display:inline-flex;align-items:center;gap:4px;min-width:0;\}/.test(src));
+ok('★★ 行事曆那邊維持原樣（只覆寫首頁這一種）',
+   /\.ev-payalert\{position:absolute;top:2px;right:3px;left:auto;z-index:4;/.test(src)
+   && /行事曆那邊維持原樣（見 \.ev-payalert 本體），只覆寫首頁這一種/.test(src));
 ok('　　四種狀態都吃：已續約✓／不續約✕／整張最後一堂!／分期本期最後一堂!',
    /no:\(window\._renewNoBk&&window\._renewNoBk\[b\.id\]\),/.test(src)
    && /renew:\(window\._renewLastBk&&window\._renewLastBk\[b\.id\]\),/.test(src)
