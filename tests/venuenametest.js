@@ -24,20 +24,24 @@ const api=new Function('window',
 
 console.log('① 全名與縮寫');
 eq('★★ 全名（挑選欄、設定頁、說明文字用）', api.venueName('multi_1'), '史密斯訓練架');
-eq('★★★ 縮寫（課卡的場地那一列用）', api.venueShort('multi_1'), '訓練架');
+eq('★★★ 縮寫（塞不下的地方用，例如「訓練架・兩台」）', api.venueShort('multi_1'), '訓練架');
 eq('★ 跑步機不縮（本來就短）', api.venueShort('treadmill_2'), '跑步機');
 eq('★ 團課教室不縮', api.venueShort('group'), '團課教室');
 eq('　 沒帶單位就回空字串', api.venueName(''), '');
 
-console.log('\n② 課卡顯示走縮寫');
-eq('★★★ 有 venue_unit → 縮寫', api.venueDisplay({venue_unit:'multi_2'}), '訓練架');
-eq('★★ 沒 venue_unit 的教練課 → 退回預設場地，一樣縮寫',
-   api.venueDisplay({category:'私人教練'}), '訓練架');
+console.log('\n② 課卡用全名（2026-09-03 使用者定案：「課卡維持　完整場地名稱　史密斯訓練架」）');
+eq('★★★ 有 venue_unit → 全名', api.venueDisplay({venue_unit:'multi_2'}), '史密斯訓練架');
+eq('★★ 沒 venue_unit 的教練課 → 退回預設場地，一樣全名',
+   api.venueDisplay({category:'私人教練'}), '史密斯訓練架');
 eq('★★ 團課退回團課教室', api.venueDisplay({category:'小班肌力'}), '團課教室');
 eq('★ 場租沒有場地', api.venueDisplay({category:'場租'}), '');
-ok('★★ 為什麼課卡用縮寫、別處用全名，寫在原地',
-   /課卡的場地那一列只有約 72px/.test(src)
-   && /挑選欄、設定頁、說明文字仍用全名（venueName）/.test(src));
+/* 新名與舊名同為六個字，所以 0823 那次的寬度換算原封不動仍然成立。 */
+ok('★★ 寬度沒有新的截斷風險，理由寫在原地',
+   /新名與舊名同樣是六個字，所以寬度與 0823 那次換算相同/.test(src)
+   && /2026-09-03 改名「史密斯訓練架」，同樣六個字，這條換算不變。/.test(src));
+ok('★★ 縮寫沒有變成死碼：真的有一個使用者（venueUnitsLabel 的「訓練架・兩台」）',
+   /return venueShort\('multi'\)\+'・'\+\(NUM\[n\]\|\|\(n\+' 台'\)\);/.test(src)
+   && /這裡用縮寫：後面還要接「・兩台」，全名會把那一格撐破/.test(src));
 
 console.log('\n③ 舊名稱清乾淨');
 {

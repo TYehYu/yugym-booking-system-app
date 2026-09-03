@@ -86,8 +86,11 @@ console.log('同行卡建立');
     /* ── venueUnitsLabel ── */
     console.log('課卡標籤');
     const bkIsGroup=b=>!!(b&&b.category==='小班肌力');
-    const lbl=new Function('bkIsGroup',
-      g('function selfVenueLabel(b){','\n}')+'\n'+g('function venueUnitsLabel(b){','\n}')+'\nreturn venueUnitsLabel;')(bkIsGroup);
+    /* 2026-09-03 場地更名後，「訓練架・兩台」的縮寫改吃 VENUE_SHORT（不再各處硬寫），
+       所以沙箱要把 venueShort 帶進來。 */
+    const lbl=new Function('bkIsGroup','venueShort',
+      g('function selfVenueLabel(b){','\n}')+'\n'+g('function venueUnitsLabel(b){','\n}')+'\nreturn venueUnitsLabel;')(
+      bkIsGroup, u=>({multi:'訓練架'})[String(u||'').split('_')[0]]||u);
     /* 這一行留著只是防呆 —— 新資料不會再有 _units>1 的訓練架（實查也是 0 筆），
        但真的冒出來時要標出來，不能默默顯示成一台。 */
     eq('　舊資料若真有訓練架×2 仍標得出來（防呆）',
