@@ -96,7 +96,12 @@ ok('★★ 提示掛在頂欄左側（桌機畫面左上角）',
    && /<span class="tb-role" id="tb-role">—<\/span>\n\s*<!-- 待審核發放提示（2026-08-08 使用者指示：「審核跳提示在桌機畫面左上角」）/.test(src));
 {
   const F=grabFn('refreshGrantReviewPill');
-  ok('★ 只有櫃檯／管理員看得到', /if\(!isDeskLike\(\)\) return;/.test(F));
+  /* 2026-09-03：從「不是櫃檯就 return」改成「不是櫃檯就清空再 return」——
+     那一格如果已經畫過（不重新整理就換帳號登入），教練會看到留在頂欄的待審核提示。
+     清空成本是零，漏掉的代價是權限外洩。 */
+  ok('★ 只有櫃檯／管理員看得到，而且非櫃檯時會把已經畫過的清掉',
+     /if\(!isDeskLike\(\)\)\{ host\.innerHTML=''; host\.style\.display='none'; return; \}/.test(F)
+     && !/if\(!isDeskLike\(\)\) return;/.test(F));
   ok('★ 沒有待審核就整顆不畫（不佔位置）',
      /if\(!list\.length\)\{ host\.innerHTML=''; host\.style\.display='none'; return; \}/.test(F));
   ok('★ 有幾筆就寫幾筆，點下去開審核清單',

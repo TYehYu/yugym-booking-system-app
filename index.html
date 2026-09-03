@@ -5468,26 +5468,38 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
     width:16px; height:16px; border-radius:50%; padding:0;
     font-size:9.5px; line-height:1; display:flex;
     align-items:center; justify-content:center; z-index:3; }
-  /* 有時間的卡（非整點）：章讓到左邊，不跟時間搶中間偏右那一段。
-     左緣 9px 的理由沿用 0823 —— 課程色條 5px＋間距 4px，不然章會壓在色條上。 */
-  .cal-ev.cal-ev-std:not(.ev-onhour) .evc-check{ left:9px; transform:none; }
   .cal-ev.cal-ev-std .evc-time{ position:absolute; top:3px; right:6px; z-index:3;
     align-self:auto; }
-  .cal-ev.cal-ev-std.ev-onhour .evc-time{ display:none; }
   /* 頂列讓出來的高度：章 16px＋上緣 3px＋3px 呼吸 ＝ 22px。
      ⚠ 覆寫的是 0821 那條帶 !important 的 padding，所以這裡也要 !important。 */
   .cal-ev.cal-ev-std .evc-txt{ padding-top:22px !important; }
   .cal-ev.cal-ev-std.ev-w-narrow .evc-txt,
   .cal-ev.cal-ev-std.ev-w-tiny   .evc-txt{ padding-top:22px !important; }
-  /* 極窄卡：頂列放不下「章＋時間」兩樣，時間讓位。
-     ⚠ 用 @container 量卡片真實寬度，不要用 wCls —— wCls 是估的，
-       正是它估錯才造成 0903 那次教練標籤被章蓋掉的殘字。
-     實測（真實 CSS）：時間永遠 30px 寬（字級被更高權重的 clamp 鎖住，縮不動），
-     章 16px 從 x9 起算 → 62px 以上才不會撞（62px 時章 9–23、時間 29–59）。
-     ⚠ 61px 以下藏時間是**可以接受的取捨**：非整點的卡本來就落在半點虛線上，
-       垂直位置已經說明了它是 :30；真要確認，滑過去的提示卡有完整時段。
-       反過來藏章就不行 —— 有沒有簽到看不出替代線索。
-     ⚠ 時間藏掉之後，章要回到置中（上面 :not(.ev-onhour) 把它推到左邊是為了讓開時間）。 */
+  /* ══ 時間什麼時候印：看卡片放不放得下，不是看整不整點（2026-09-03 二修）══════
+     一修把「整點卡」一律不印時間，理由是重複資訊。使用者看了實機：
+     「有些課卡是不是又變得太乾淨了」—— 大卡片只剩一個名字浮在中間，像壞掉。
+     ⚠ 一修的理由**在寬卡上已經不成立**：時間現在是絕對定位在頂列，
+       而那條頂列本來就為了出席章而存在（.evc-txt 讓出 22px）。
+       也就是說在寬卡上「印時間」是**免費的**，不再吃掉姓名任何空間。
+       真正有壓力的只有窄卡 —— 那裡章與時間會在同一條 22px 的帶子上撞在一起。
+     ⚠ 門檻一律用 @container 量卡片真實寬度，不要用 wCls —— wCls 是
+       (innerWidth-80)/nDays/lane 估的，正是它估錯才造成 0903 教練標籤被章蓋掉的殘字
+       （見 tests/evwidthtest.js）。這裡的三段判斷全部踩在同一個地雷上，一定要量真的。
+     所以改成三段，門檻全部由 @container 量卡片真實寬度：
+       ・≥88px：章置中 ＋ 時間靠右，兩者都印
+         （章 16px 置中佔 中±8，時間 30px 靠右佔 卡寬-36 起；卡寬/2+8 ≤ 卡寬-36 → 卡寬 ≥ 88）
+       ・62–87px：放不下「置中的章＋時間」，但放得下「靠左的章＋時間」——
+         整點卡省略時間（重複資訊，這是一修原本的理由，在這個寬度才真的成立）；
+         非整點卡保留時間、章讓到左邊 9px（避開 5px 課程色條，理由沿用 0823）
+       ・≤61px：兩樣都擺不下，時間讓位、章回到置中
+         （非整點的卡本來就落在半點虛線上，垂直位置已經說明它是 :30；
+          反過來藏章就不行 —— 有沒有簽到看不出替代線索）
+     ⚠ 兩個 @container 區塊的**先後順序有意義**：權重相同，靠原始碼順序決勝，
+       61px 那塊一定要在 87px 那塊後面。 */
+  @container (max-width:87px){
+    .cal-ev.cal-ev-std.ev-onhour .evc-time{ display:none; }
+    .cal-ev.cal-ev-std:not(.ev-onhour) .evc-check{ left:9px; transform:none; }
+  }
   @container (max-width:61px){
     .cal-ev.cal-ev-std .evc-time{ display:none; }
     .cal-ev.cal-ev-std:not(.ev-onhour) .evc-check{ left:50%; transform:translateX(-50%); }
@@ -12003,6 +12015,10 @@ body.ink .tcard-row .tcard-co:not(.tcard-leavetag){display:none;}
         <!-- 待審核發放提示（2026-08-08 使用者指示：「審核跳提示在桌機畫面左上角」）——
              只有櫃檯／管理員、且真的有待審核時才出現；沒有就整顆不畫，不佔位置。 -->
         <span id="tb-review-pill" style="display:none;"></span>
+        <!-- 會員申辦待審（2026-09-03 使用者指示：「這個審核確認要在櫃檯桌機每個頁面
+             都看到 不要只限制在首頁」）—— 原本只長在 g_dashboard 的右上滑出鈕裡，
+             換頁就不見了。改放頂欄，與「待審核發放」同一格語彙、同一條更新路徑。 -->
+        <span id="tb-memreq-pill" style="display:none;"></span>
         <div class="tb-butler" id="tb-butler"></div>
         <span class="tb-greet-inline" id="tb-greet-inline"></span>
       </div>
@@ -12086,8 +12102,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260903.1723';
-const APP_VERSION_LABEL='260903.1723';
+const APP_VERSION='260903.1733';
+const APP_VERSION_LABEL='260903.1733';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16027,6 +16043,7 @@ function navTo(key, gkey){
   /* 左上角的待審核提示（2026-08-08）：每次換頁順手更新一次 —— 它讀的是快取，
      沒有額外的網路成本；不放在渲染流程裡，出錯也不會影響換頁。 */
   try{ if(typeof refreshGrantReviewPill==='function') refreshGrantReviewPill(); }catch(_){}
+  try{ if(typeof refreshMemReqPill==='function') refreshMemReqPill(); }catch(_){}
   if(typeof closeModal==='function') closeModal(); // 切頁時關掉任何殘留的彈窗，避免 modal 蓋住新頁
   if(window._msb && key!=='mem_bookings' && typeof msbExit==='function') msbExit(true); // 離開會員首頁＝結束自主訓練訂位模式
   if(typeof clearPunchClock==='function') clearPunchClock(); // 停掉打卡時鐘計時器
@@ -20562,17 +20579,21 @@ PAGES.g_dashboard=async function(){
   /* 現場抽獎名單滑出鈕（2026-07-22 使用者指示）：桌機首頁右下角、有可抽名額才出現。
      資格算當下月份（非檢視日期）——登記永遠對本月。 */
   const _lotEls=lottoStats(bookings||[],purchases||[],ymd(TODAY).slice(0,7),members);
-  /* 會員申辦待審滑出鈕（2026-07-23 使用者指示：新會員與舊會員綁定統一在櫃台右下角提示）。
-     兩顆都在時，抽獎鈕往上疊一層（mc-fab-up）。 */
-  const _pendReq=(memberReqs||[]).filter(r=>r.status==='pending');
-  const reqFab=(!isMobileLayout()&&_pendReq.length)
-    ?`<button class="mc-req-fab" onclick="openMemberReqModal()">${LNI.user||LNI.book}<span><b>${_pendReq.length}</b> 筆會員申辦待確認</span></button>`:'';
+  /* 會員申辦待審的滑出鈕已整個退場（2026-09-03 使用者：「這個審核確認要在櫃檯桌機
+     每個頁面都看到 不要只限制在首頁」）—— 改成頂欄那一格（refreshMemReqPill），
+     換頁不會消失。
+     ⚠ 這裡**不要**兩個都留：同一件待辦在同一個畫面上出現兩次，
+       處理完一個另一個還亮著，反而讓人以為沒處理成功。
+     ⚠ 留下來的 .mc-req-fab CSS 與 mc-mode 的搬移選擇器現在都撈不到東西（沒有人再產生
+       那顆鈕）—— 沒有刪是因為那組樣式與抽獎鈕共用同一批規則，單獨拆掉風險大於收益。
+       ⚠ 但**不要**因為看到那些 CSS 就以為這顆鈕還在。
+     ⚠ memberReqs 仍然要留：dashDataSig 靠它判斷「有新申請 → 首頁要重畫」。 */
   /* 2026-08-24 二修（使用者：「這邊不用再提示了」）——
      0824 一度讓這顆在「今天登記過」時也留著，是為了給「改獎品」一條路；
      改獎品的入口現在在今日營收那一列（整列點下去就開），這顆就只剩提醒功能，
      沒人可抽時不需要一直掛在畫面上。回到原本的條件：有人可抽才出現。 */
   const lottoFab=(!isMobileLayout()&&_lotEls.length)
-    ?`<button class="mc-lotto-fab${reqFab?' mc-fab-up':''}" onclick="openLottoModal()">${LNI.gift}<span><b>${_lotEls.length}</b> 位會員可抽獎</span></button>`:'';
+    ?`<button class="mc-lotto-fab" onclick="openLottoModal()">${LNI.gift}<span><b>${_lotEls.length}</b> 位會員可抽獎</span></button>`:'';
 
   /* 2026-07-23 使用者指示：標題與總額都不顯示（上方 KPI 已有今日營收）—— 只留收款名單 */
   /* 2026-08-12 使用者指示「今天營收延伸到視窗底」：10 筆上限退場（0802 設限是因為
@@ -21300,7 +21321,7 @@ PAGES.g_dashboard=async function(){
       </div>
       </div>`}
     </div>
-    ${lottoFab}${reqFab}
+    ${lottoFab}
   `;
   /* 2026-08-13 使用者回報「又遮住管理員的按鈕」：浮動定位在頂列裡怎麼擺都會疊到東西
      （logo→管理員鈕→中央導覽的寬度都會變）。改成把提醒「插進頂列的 flex 排版」佔一格
@@ -49789,13 +49810,42 @@ async function grantReqPending(){
    有幾筆就寫幾筆；沒有就整顆不畫，不佔位置。 */
 async function refreshGrantReviewPill(){
   try{
-    if(!isDeskLike()) return;
     const host=document.getElementById('tb-review-pill'); if(!host) return;
+    /* ⚠ 不是櫃檯就要**清掉**，不能只 return（2026-09-03）——
+       原本直接 return，如果那一格已經畫過（例如不重新整理就換帳號登入），
+       教練會看到留在頂欄的待審核提示。清空的成本是零，漏掉的代價是權限外洩。 */
+    if(!isDeskLike()){ host.innerHTML=''; host.style.display='none'; return; }
     const list=await grantReqPending();
     if(!list.length){ host.innerHTML=''; host.style.display='none'; return; }
     host.style.display='';
     host.innerHTML=`<button class="tb-review" onclick="openGrantReview()" title="等會員簽回合約並確認收款後才發放票券">
       <span class="tb-review-dot"></span>待審核發放 <b>${list.length}</b></button>`;
+  }catch(_){}
+}
+/* 會員申辦待審的頂欄提示（2026-09-03）——
+   ⚠ 與 refreshGrantReviewPill 是**兩顆不同的事**，故意分開：
+     「待審核發放」＝票券要不要放行（錢的事）；「會員申辦」＝這個人是不是他說的那個人。
+     兩者處理的人、看的資料、按下去的視窗都不同，合成一顆反而要再點一層才知道是哪一種。
+   ⚠ 顏色：申辦用紅（#7A2E28，沿用原本滑出鈕的色）—— 紅＝要有人動作，
+     與待審核發放同一階；兩顆並排時靠文字區分，不是靠顏色。
+   ⚠ 讀的是 dbGetAll 快取（member_link_requests 本來就在預載清單裡），沒有額外網路成本。 */
+async function memReqPending(){
+  try{
+    const all=await dbGetAll('member_link_requests').catch(()=>[]);
+    return (all||[]).filter(r=>r && r.status==='pending')
+      .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  }catch(_){ return []; }
+}
+async function refreshMemReqPill(){
+  try{
+    const host=document.getElementById('tb-memreq-pill'); if(!host) return;
+    /* 同 refreshGrantReviewPill：不是櫃檯就清掉，不能只 return。 */
+    if(!isDeskLike()){ host.innerHTML=''; host.style.display='none'; return; }
+    const list=await memReqPending();
+    if(!list.length){ host.innerHTML=''; host.style.display='none'; return; }
+    host.style.display='';
+    host.innerHTML=`<button class="tb-review tb-memreq" onclick="openMemberReqModal()" title="會員掃 QR 申辦後要櫃檯核對身分才會開通">
+      <span class="tb-review-dot"></span>會員申辦待確認 <b>${list.length}</b></button>`;
   }catch(_){}
 }
 async function openGrantReview(){
