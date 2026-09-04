@@ -306,5 +306,27 @@ ok('★★ 體驗／待簽約仍緊貼姓名（那是狀態不是補充），寫
 ok('★★ A/B 對照結果記在這支測試裡',
    /「教練的垂直位置因為有沒有場地而不同」的組合 1162 → 434/.test(fs.readFileSync(__filename,'utf8')));
 
+console.log('\n⑬ 教練名改中性灰（2026-09-04 使用者：「好 改教練顏色」）');
+/* 行事曆上原本有兩套色相互相打架：
+     課種（左色條）教練課 #1F6F54 綠／友善 #23508A 藍／體驗 #75569A 紫
+     教練（名字） #4E6A44 綠／#3F5F75 藍灰／#5D4C79 紫
+   綠對綠、藍對藍、紫對紫 —— 同一張卡上兩個綠意思完全不同。 */
+ok('★★★ 教練名改成中性灰，底色一併拿掉',
+   /\.cal-ev\.cal-ev-std \.evc-coach:not\(\.evc-leavetag\)\{\s*\n\s*background:transparent !important; color:var\(--t2\) !important; \}/.test(src));
+/* 顏色是 renderCalendar 寫在元素上的行內樣式，沒有 !important 蓋不過去。 */
+ok('★★★ 用 !important（行內樣式蓋不過去），理由寫在原地',
+   /顏色是 renderCalendar 寫在元素上的\*\*行內樣式\*\*/.test(src));
+/* 只改文字色會變成「灰字配彩色底」，比原本更花 —— Ink 本來就沒底，非 Ink 還留著膠囊。 */
+ok('★★★ 底色也要拿掉（只改文字色會變成灰字配彩色底）',
+   /只改文字色會變成「灰字配彩色底」，比原本更花/.test(src));
+ok('★★★ 請假標籤例外（白字紅底，靠底色才看得見）',
+   /:not\(\.evc-leavetag\)/.test(src) && /請假標籤例外（\.evc-leavetag 白字紅底），它靠底色才看得見/.test(src));
+ok('★★ 首頁課卡刻意不動，理由寫在原地',
+   /首頁課卡（\.tcard-co）不動 —— 那邊一次只看得到十來張、卡片 320px 寬/.test(src));
+/* 離線量：六位教練在兩套主題都變成同一個灰（Ink #6B6055／非 Ink #6E665C），
+   底色全部 transparent，對比 5.4，請假標籤仍是 #F4F1E8 on #7A2E28。 */
+ok('★★ 量測結果記在這支測試裡',
+   /六位教練在兩套主題都變成同一個灰/.test(fs.readFileSync(__filename,'utf8')));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
