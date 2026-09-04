@@ -12381,8 +12381,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260904.1551';
-const APP_VERSION_LABEL='260904.1551';
+const APP_VERSION='260904.1600';
+const APP_VERSION_LABEL='260904.1600';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22625,20 +22625,26 @@ async function dutyPunchOutAsk(attId){
        唯一的路是員工自己送補卡申請、管理員再核准，兩個人兩道手續。
        ⚠ 已經下班的也能開（見 _canProxy 拿掉 !done），這時它是純修正對話框，
          標題與按鈕都換字，免得管理員以為自己在重打一次卡。
-       ⚠ 下班預設值：還沒下班＝現在（管理員多半事後才代打）；已下班＝原本那筆，
-         不要用現在覆蓋掉他本來就打對的時間。 */
+       ⚠ 下班預設值（2026-09-04 二修，使用者回報：「我剛剛修改上班打卡時間
+         結果連下班時間也一起儲存了」）——
+         一修把下班預設成 nowHM() 而且設成必填，於是管理員只想改上班時，
+         按下儲存等於**順手幫對方打了下班卡**（實際發生：余東翰被記成 15:53 下班）。
+         改成：還在值班中 → 下班欄**預設留空**，留空就只改上班、不動下班；
+               已經下班   → 帶原本那筆（不要用現在蓋掉他打對的時間）。 */
     const _done=!!rec.clock_out;
-    const _outDef=_done?rec.clock_out:nowHM();
+    const _outDef=_done?rec.clock_out:'';
     showModal(`<div class="ash-sheetmk"></div><div class="modal-title">${_done?'修正打卡時間':'代打下班卡'}</div>
       <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-bottom:12px;">
         <b>${escH(nm)}</b>　·　${String(rec.date||'').replace(/-/g,'/')}<br>
         ${_done?`原本 <b>${rec.clock_in}</b> – <b>${rec.clock_out}</b>`:'目前仍是值班中'}</div>
       <div class="form-2col">
         <div class="form-row"><label>上班時間</label>${hmPicker('dpo-in',rec.clock_in)}</div>
-        <div class="form-row"><label>下班時間</label>${hmPicker('dpo-t',_outDef)}</div>
+        <div class="form-row"><label>下班時間${_done?'':'（選填）'}</label>${hmPicker('dpo-t',_outDef)}</div>
       </div>
       <div style="font-size:11.5px;color:var(--t2);background:var(--card2);border-radius:9px;padding:9px 11px;line-height:1.8;">
-        工時會依這兩個時間重算。這筆會記下是<b>你改的</b>，之後在出勤紀錄看得到。</div>
+        ${_done?'工時會依這兩個時間重算。'
+               :'<b>下班留空</b>＝只改上班時間，這個人維持值班中。填了才會幫他打下班卡。'}
+        這筆會記下是<b>你改的</b>，之後在出勤紀錄看得到。</div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
         <button class="btn btn-green" onclick="dutyPunchOutGo('${attId}')">${_done?'儲存修正':'確認代打'}</button></div>`);
   }catch(e){ showToast('開啟失敗：'+((e&&e.message)||e)); }
@@ -22649,23 +22655,28 @@ async function _dutyPunchOutGo(attId){
     if(!(SESSION && SESSION.role==='admin')){ showToast('只有管理員可以代打卡'); return; }
     const t=readHM('dpo-t');
     const tin=readHM('dpo-in');
-    if(!t){ showToast('請選擇下班時間'); return; }
     if(!tin){ showToast('請選擇上班時間'); return; }
     const rec=await dbGet('attendance',attId);
     if(!rec || !rec.clock_in){ showToast('找不到上班紀錄'); return; }
+    /* 下班留空的兩種意思（2026-09-04 二修）：
+         還在值班中 → 「只改上班，不要幫他打下班卡」，這是常見的用法，放行。
+         已經下班   → 那是把既有的下班時間清掉，等於取消下班；這裡不做
+                      （員工端有「取消下班」，而且清掉會讓工時憑空消失）。 */
+    if(!t && rec.clock_out){
+      showToast('下班時間不能清空。要取消下班請用員工端的「取消下班」', 6000); return; }
     /* 早於上班時間就是打錯了 —— calcWorkHours 會當成跨午夜，算出 20 幾小時的工時。 */
-    if(timeToMin(t)<timeToMin(tin)){
+    if(t && timeToMin(t)<timeToMin(tin)){
       showToast(`下班時間不能早於上班時間（${tin}）`, 6000); return; }
     /* 2026-09-04：上班時間也能改，所以留痕要寫清楚**改了哪幾項**，
        只寫「代打下班」的話，日後看到工時對不上會找不到是上班被改過。 */
     const _chg=[];
     if(tin!==rec.clock_in) _chg.push(`上班 ${rec.clock_in}→${tin}`);
-    if(t!==rec.clock_out)  _chg.push(rec.clock_out?`下班 ${rec.clock_out}→${t}`:`代打下班 ${t}`);
+    if(t && t!==rec.clock_out) _chg.push(rec.clock_out?`下班 ${rec.clock_out}→${t}`:`代打下班 ${t}`);
     if(!_chg.length){ closeModal(); showToast('時間沒有變動'); return; }
     const _oldIn=rec.clock_in;
     rec.clock_in=tin;
-    rec.clock_out=t;
-    rec.work_hours=calcWorkHours(rec);
+    if(t) rec.clock_out=t;                    // 留空就維持原狀（值班中仍是 null）
+    rec.work_hours=rec.clock_out?calcWorkHours(rec):null;
     /* 留痕（2026-08-29 建立）：代打／修改過的工時之後一定會有人問「這是誰按的」。
        fixed_by／fixed_at 是 attendance 表本來就有的欄位，這裡一併寫。 */
     const _who=(SESSION&&SESSION.name)||'管理員';
@@ -22674,7 +22685,9 @@ async function _dutyPunchOutGo(attId){
     rec.fixed_at=new Date().toISOString();
     await dbPut('attendance',rec);
     closeModal();
-    showToast(`${_oldIn!==tin?`上班改為 ${tin}，`:''}下班 ${t}，工時 ${rec.work_hours} 小時`);
+    showToast(rec.clock_out
+      ? `${_oldIn!==tin?`上班改為 ${tin}，`:''}下班 ${rec.clock_out}，工時 ${rec.work_hours} 小時`
+      : `上班改為 ${tin}，仍是值班中`);
     try{ await refreshHeaderPunch(); }catch(_){}
     try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){ navTo(CUR_PAGE); }
   }catch(e){ showToast('代打失敗：'+((e&&e.message)||e), 7000); }
@@ -45655,14 +45668,16 @@ function ppCalDraw(){
   /* 頁內版沒有「標題／關閉」那兩截（它就住在工作紀錄那張卡裡，卡上已經寫著分頁名）；
      補登打卡那顆改成接在月份列後面，免得整條 modal-foot 出現在頁面中間。 */
   const _inline=!!_ppCal.inline;
-  const _punch=(!isCls&&isDeskLike())
+  /* 2026-09-04：補登打卡收成管理員限定（使用者：「員工打卡只有管理員可以操作」） */
+  const _canPunchEdit=!!(SESSION && SESSION.role==='admin');
+  const _punch=(!isCls&&_canPunchEdit)
     ? `<button class="btn btn-green btn-sm" onclick="openPunchEdit('${_ppCal.id}')">＋ 補登打卡</button>` : '';
   host.innerHTML=_inline
     ? `${head}${leaveBar}${ppCalGrid()}${ppCalDayBox()}${_punch?`<div style="text-align:right;margin-top:10px;">${_punch}</div>`:''}`
     : `<div class="modal-title">${isCls?'課堂月曆':'值班與打卡'}${who}</div>
     ${head}${leaveBar}${ppCalGrid()}${ppCalDayBox()}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
-      ${(!isCls&&isDeskLike())?`<button class="btn btn-green" onclick="openPunchEdit('${_ppCal.id}')">＋ 補登打卡</button>`:''}</div>`;
+      ${(!isCls&&_canPunchEdit)?`<button class="btn btn-green" onclick="openPunchEdit('${_ppCal.id}')">＋ 補登打卡</button>`:''}</div>`;
 }
 function ppCalToggleLeave(){ if(!_ppCal) return; _ppCal.al=!_ppCal.al; ppCalDraw(); }
 function ppCalLeaveBar(){
@@ -45893,7 +45908,11 @@ async function _saveLegacyVerify(mid, on){
    ・兩個時間都清空 → 刪掉那一天（打錯日期時要收得回來）
    時間用時：分兩個下拉（工時要算得準，不能用 30 分一格的時段下拉）。 */
 async function openPunchEdit(empId, dateStr){
-  if(!isDeskLike()){ showToast('只有管理員或櫃台可以補登打卡'); return; }
+  /* ⚠ 只有管理員（2026-09-04 使用者：「員工打卡只有管理員可以操作」）——
+     原本是 isDeskLike（櫃檯也能改），與同一天做的今日值班圓環那條路
+     （role==='admin'）不一致。改別人的工時會直接影響薪資，統一收成管理員。
+     ⚠ 這是前端守門，真正擋人的是 attendance 的 RLS；兩邊都要對得上。 */
+  if(!(SESSION && SESSION.role==='admin')){ showToast('只有管理員可以修改打卡'); return; }
   const emp=await dbGet('coaches',empId).catch(()=>null);
   const d=dateStr||ymd(TODAY);
   const rec=await getAttendance(empId,d);
@@ -45935,6 +45954,8 @@ async function savePunchEdit(empId){
 async function delPunchRec(empId, d){ return onceAct('punchdel:'+empId+':'+d, ()=>_delPunchRec(empId,d)); }
 async function _delPunchRec(empId, d){
  try{
+  /* ⚠ 2026-09-04：同上，這一支原本也沒有權限判斷，而它是**刪除**。 */
+  if(!(SESSION && SESSION.role==='admin')){ showToast('只有管理員可以刪除打卡紀錄'); return; }
   const rec=await getAttendance(empId,d);
   if(!rec){ showToast('這一天沒有打卡紀錄'); return; }
   if(!confirm(`確定刪除 ${String(d).replace(/-/g,'/')} 的打卡紀錄？\n刪除後這一天的工時不再計入。`)) return;
@@ -45944,6 +45965,9 @@ async function _delPunchRec(empId, d){
  }catch(e){ showToast('刪除失敗：'+((e&&e.message)||e)); }
 }
 async function _savePunchEdit(empId){
+  /* ⚠ 2026-09-04：這一支原本**完全沒有權限判斷**，只靠入口鈕藏起來。
+     藏按鈕不等於擋得住（主控台叫得到、別的路徑也可能接進來）。 */
+  if(!(SESSION && SESSION.role==='admin')){ showToast('只有管理員可以修改打卡'); return; }
  try{
   const d=(document.getElementById('pe-date')||{}).value||ymd(TODAY);
   const tin=readHM('pe-in'), tout=readHM('pe-out');

@@ -16,7 +16,22 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.in
 
 console.log('① 員工資料 → 打卡紀錄可以補登');
 ok('★ 有補登／修改的視窗', /async function openPunchEdit\(empId, dateStr\)\{/.test(src));
-ok('★ 只有管理員／櫃台可以補', /if\(!isDeskLike\(\)\)\{ showToast\('只有管理員或櫃台可以補登打卡'\); return; \}/.test(src));
+/* 2026-09-04 使用者定案：「員工打卡只有管理員可以操作」——
+   原本是 isDeskLike（櫃檯也能改），與同一天做的今日值班圓環（role==='admin'）不一致。
+   改別人的工時會直接影響薪資，統一收成管理員。 */
+ok('★★★ 只有管理員可以補登／修改打卡',
+   (src.match(/if\(!\(SESSION && SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以修改打卡'\); return; \}/g)||[]).length===2
+   && !/showToast\('只有管理員或櫃台可以補登打卡'\)/.test(src));
+/* ⚠ _savePunchEdit 與 _delPunchRec 原本**完全沒有權限判斷**，只靠入口鈕藏起來。
+   藏按鈕不等於擋得住（主控台叫得到、別的路徑也可能接進來）。 */
+ok('★★★ 儲存與刪除各自有守門（不能只靠藏按鈕）',
+   /async function _savePunchEdit\(empId\)\{[\s\S]{0,260}?只有管理員可以修改打卡/.test(src)
+   && /async function _delPunchRec\(empId, d\)\{[\s\S]{0,260}?只有管理員可以刪除打卡紀錄/.test(src));
+ok('★★★ 入口鈕也跟著收（兩處）',
+   /const _canPunchEdit=!!\(SESSION && SESSION\.role==='admin'\);/.test(src)
+   && !/\(!isCls&&isDeskLike\(\)\)\?`<button class="btn btn-green" onclick="openPunchEdit/.test(src));
+ok('★★ 前端守門不是真的擋人，RLS 才是（寫在原地）',
+   /這是前端守門，真正擋人的是 attendance 的 RLS；兩邊都要對得上/.test(src));
 /* 2026-08-02 二修（使用者指示「把最近打卡這功能整理在本月值班裡面」）：
    那張打卡長表格整份收進值班月曆了，入口改成月曆上的日期格（見 empcaltest.js）。 */
 ok('★ 月曆上點日期就能改那一天的打卡',
@@ -25,8 +40,8 @@ ok('★ 值班視窗下方有「＋ 補登打卡」（整天沒打到時用）',
    /<button class="btn btn-green" onclick="openPunchEdit\('\$\{_ppCal\.id\}'\)">＋ 補登打卡<\/button>/.test(src));
 ok('★ 忘記打下班的那幾天在月曆上就標出來',
    /\$\{miss\?'未打下班':/.test(src));
-ok('　　教練自己看的時候不出現補登（只有櫃檯能改）',
-   /\$\{\(!isCls&&isDeskLike\(\)\)\?`<button class="btn btn-green" onclick="openPunchEdit/.test(src));
+ok('　　只有管理員看得到補登鈕（2026-09-04 從 isDeskLike 收成 admin）',
+   /\$\{\(!isCls&&_canPunchEdit\)\?`<button class="btn btn-green" onclick="openPunchEdit/.test(src));
 ok('★ 上下班都用時：分兩個下拉（工時要算到分，不能用 30 分一格的時段下拉）',
    /\$\{hmPicker\('pe-in', \(rec&&rec\.clock_in\)\|\|''\)\}/.test(src)
    && /\$\{hmPicker\('pe-out',\(rec&&rec\.clock_out\)\|\|''\)\}/.test(src));
@@ -57,10 +72,12 @@ ok('★★★ 已下班時標題與按鈕換字',
    /\$\{_done\?'修正打卡時間':'代打下班卡'\}/.test(src)
    && /\$\{_done\?'儲存修正':'確認代打'\}/.test(src));
 /* 已下班時下班欄要帶原本的值，不能用「現在」蓋掉他本來就打對的時間。 */
-ok('★★★ 下班預設值：未下班＝現在，已下班＝原本那筆',
-   /const _outDef=_done\?rec\.clock_out:nowHM\(\);/.test(src));
+/* ⚠ 二修（使用者：「我剛剛修改上班打卡時間 結果連下班時間也一起儲存了」）——
+   一修預設 nowHM() 又設成必填，只想改上班的人按下儲存＝順手幫對方打了下班卡。 */
+ok('★★★ 下班預設值：未下班＝**留空**，已下班＝原本那筆',
+   /const _outDef=_done\?rec\.clock_out:'';/.test(src));
 ok('★★★ 上班不能晚於下班（跨午夜會算出 20 幾小時工時）',
-   /if\(timeToMin\(t\)<timeToMin\(tin\)\)\{/.test(src));
+   /if\(t && timeToMin\(t\)<timeToMin\(tin\)\)\{/.test(src));
 ok('★★★ 兩個都沒動就不寫入（避免留下無意義的修改紀錄）',
    /if\(!_chg\.length\)\{ closeModal\(\); showToast\('時間沒有變動'\); return; \}/.test(src));
 /* 留痕要寫清楚改了哪幾項 —— 只寫「代打下班」的話，日後工時對不上會找不到是上班被改過。 */
@@ -74,15 +91,17 @@ ok('★★ 「本來就有 openPunchEdit」這件事寫在原地，免得再誤�
    圓環這條沿用代打下班的 role==='admin'（櫃檯不能）。
    這個矛盾在 0829 代打下班上線時就存在，不是 0904 造成的；
    要收斂成哪一種是使用者的決定，這裡先把現況釘住，避免有人以為某一邊寫錯了。 */
-ok('★★★ 兩條路的權限差異已被釘住（改動任一邊都會在這裡爆）',
-   /if\(!isDeskLike\(\)\)\{ showToast\('只有管理員或櫃台可以補登打卡'\); return; \}/.test(src)
-   && /if\(!\(SESSION && SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以代打卡'\); return; \}/.test(src));
+/* 2026-09-04 使用者定案「員工打卡只有管理員可以操作」之後，兩條路已經一致。
+   這一條守的是「不要有人偷偷把某一邊放寬回 isDeskLike」。 */
+ok('★★★ 兩條路都是管理員限定（沒有任何一邊留著 isDeskLike）',
+   /if\(!\(SESSION && SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以代打卡'\); return; \}/.test(src)
+   && !/只有管理員或櫃台可以補登打卡/.test(src));
 
 console.log('\n② 實跑：補登的存檔規則');
 {
   const i=src.indexOf('async function _savePunchEdit(empId){');
   const body=src.slice(i, src.indexOf('\n}\n', i)+3);
-  const run=async(fields, existing)=>{
+  const run=async(fields, existing, sess)=>{
     const put=[], del=[]; const toasts=[];
     const vals={'pe-date':fields.date||'2026-08-01','pe-note':fields.note||''};
     const env={
@@ -96,7 +115,9 @@ console.log('\n② 實跑：補登的存檔規則');
         const[a,b]=r.clock_in.split(':').map(Number),[c,d]=r.clock_out.split(':').map(Number);
         let m=(c*60+d)-(a*60+b); if(m<0)m+=1440; return Math.round(m/6)/10; },
       uid:p=>p+'-1', ymd:()=>'2026-08-02', TODAY:new Date(2026,7,2),
-      SESSION:{id:'staff1'}, showToast:m=>toasts.push(m),
+      /* 2026-09-04：_savePunchEdit 加了「只有管理員」的守門，樁要給 role
+         才跑得進去 —— 這正是那道守門在做事的證明（下面另有一條驗非管理員被擋）。 */
+      SESSION:sess||{id:'staff1', role:'admin'}, showToast:m=>toasts.push(m),
       ppOpenEmpPunch:()=>{}, onceAct:(k,fn)=>fn(),
     };
     const f=new Function(...Object.keys(env), body+'\nreturn _savePunchEdit;')(...Object.values(env));
@@ -105,6 +126,11 @@ console.log('\n② 實跑：補登的存檔規則');
   };
 
   (async()=>{
+    /* 先驗守門真的擋得住：櫃檯（front_desk）跑同一支不能寫入。 */
+    const rDesk=await run({date:'2026-07-30', in:'09:00', out:'18:30'}, null, {id:'d1', role:'front_desk'});
+    eq('★★★ 櫃檯跑 _savePunchEdit 寫不進去（守門不是只藏按鈕）',
+       [rDesk.put.length, rDesk.toasts[0]], [0, '只有管理員可以修改打卡']);
+
     let r=await run({date:'2026-07-30', in:'09:00', out:'18:30'}, null);
     eq('★ 整天沒紀錄 → 新建一筆，上下班都寫進去',
        [r.put.length, r.put[0].date, r.put[0].clock_in, r.put[0].clock_out], [1,'2026-07-30','09:00','18:30']);

@@ -43,15 +43,15 @@ console.log('\n② 執行：三道防線＋留痕');
      /if\(!_chg\.length\)\{ closeModal\(\); showToast\('時間沒有變動'\); return; \}/.test(F)
      && !/if\(rec\.clock_out\)\{ showToast\(`已經下班打卡了/.test(F));
   ok('★★★ 下班早於上班要擋 —— calcWorkHours 會當成跨午夜，算出 20 幾小時',
-     /if\(timeToMin\(t\)<timeToMin\(tin\)\)\{/.test(F)
+     /if\(t && timeToMin\(t\)<timeToMin\(tin\)\)\{/.test(F)
      && /calcWorkHours 會當成跨午夜，算出 20 幾小時的工時。/.test(src));
 /* 0904：上班也能改，所以留痕要寫清楚**改了哪幾項**；只寫「代打下班」的話，
      日後工時對不上會找不到是上班被改過。另外一併寫 fixed_by／fixed_at。 */
   ok('★★★ 一定留痕：誰改的、幾點按的、改了哪幾項',
      /rec\.note=\(rec\.note\?rec\.note\+'｜':''\)\+`管理員修改（\$\{_who\}・\$\{nowHM\(\)\}）：\$\{_chg\.join\('、'\)\}`;/.test(F)
      && /rec\.fixed_by=\(SESSION&&SESSION\.id\)\|\|null;/.test(F));
-  ok('★★ 工時用既有的 calcWorkHours 重算（不要自己再算一套）',
-     /rec\.work_hours=calcWorkHours\(rec\);/.test(F));
+  ok('★★ 工時用既有的 calcWorkHours 重算（不要自己再算一套），沒下班就是 null',
+     /rec\.work_hours=rec\.clock_out\?calcWorkHours\(rec\):null;/.test(F));
   ok('★★ 防連點（這會寫工時）',
      /async function dutyPunchOutGo\(attId\)\{ return onceAct\('dutyout:'\+attId, \(\)=>_dutyPunchOutGo\(attId\)\); \}/.test(src));
   ok('★ 做完更新頂欄打卡狀態與底下那一頁',
@@ -60,17 +60,32 @@ console.log('\n② 執行：三道防線＋留痕');
 
 console.log('\n③ 時間可改（管理員多半是事後才代打）');
 {
-  ok('★★ 預設現在，但用 hmPicker 讓人改（已下班時預設帶原本那筆）',
-     /\$\{hmPicker\('dpo-t',_outDef\)\}/.test(src)
-     && /const _outDef=_done\?rec\.clock_out:nowHM\(\);/.test(src)
-     && /const t=readHM\('dpo-t'\);/.test(src));
+/* ⚠ 2026-09-04 二修（使用者：「我剛剛修改上班打卡時間 結果連下班時間也一起儲存了」）——
+     一修把下班預設成 nowHM() 而且必填，管理員只想改上班時按下儲存＝順手幫對方
+     打了下班卡（實際發生：余東翰被記成 15:53 下班、工時 7 小時）。
+     值班中一律預設留空；留空＝只改上班。 */
+  ok('★★★ 值班中下班欄預設留空（不能預設現在，會誤打下班卡）',
+     /const _outDef=_done\?rec\.clock_out:'';/.test(src)
+     && /\$\{hmPicker\('dpo-t',_outDef\)\}/.test(src));
+  ok('★★★ 留空＝只改上班，工時維持 null',
+     /if\(t\) rec\.clock_out=t;\s+\/\/ 留空就維持原狀（值班中仍是 null）/.test(src)
+     && /rec\.work_hours=rec\.clock_out\?calcWorkHours\(rec\):null;/.test(src));
+  ok('★★★ 已下班時不准把下班清空（那是取消下班，工時會憑空消失）',
+     /if\(!t && rec\.clock_out\)\{[\s\S]{0,120}?下班時間不能清空/.test(src));
+  ok('★★ 欄位標示「（選填）」並說明留空的意思',
+     /<label>下班時間\$\{_done\?'':'（選填）'\}<\/label>/.test(src)
+     && /<b>下班留空<\/b>＝只改上班時間，這個人維持值班中/.test(src));
+  ok('★★ 這次翻車的原因寫在原地',
+     /按下儲存等於\*\*順手幫對方打了下班卡\*\*（實際發生：余東翰被記成 15:53 下班）/.test(src));
   ok('★★★ 上班時間也是可改的欄位（0904）',
      /\$\{hmPicker\('dpo-in',rec\.clock_in\)\}/.test(src)
      && /const tin=readHM\('dpo-in'\);/.test(src)
      && /if\(!tin\)\{ showToast\('請選擇上班時間'\); return; \}/.test(src));
-  ok('★★ 沒選時間就擋', /if\(!t\)\{ showToast\('請選擇下班時間'\); return; \}/.test(src));
+  ok('★★ 上班沒選就擋（下班不再必填）',
+     /if\(!tin\)\{ showToast\('請選擇上班時間'\); return; \}/.test(src)
+     && !/if\(!t\)\{ showToast\('請選擇下班時間'\); return; \}/.test(src));
   ok('★ 視窗上先講清楚會重算工時、而且會留下修改紀錄',
-     /工時會依這兩個時間重算。這筆會記下是<b>你改的<\/b>/.test(src));
+     /工時會依這兩個時間重算。/.test(src) && /這筆會記下是<b>你改的<\/b>/.test(src));
   ok('　 沒上班打卡的人不給代打（那是補卡的事）',
      /這位今天還沒上班打卡，請改用「申請補打卡」/.test(src));
 }
