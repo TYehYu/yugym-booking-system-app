@@ -65,11 +65,16 @@ ok('★ 桌機管理員有側欄 → 左邊要讓開（與抽獎鈕同一套位�
    && /body\.mc-mode \.ver-up\{left:calc\(64px \+ 16px\);\}/.test(src));
 /* 2026-08-03：抽獎／審核鈕移到左上角（左欄改靠底後，月曆貼齊視窗底，
    左下角那兩顆疊在月曆上）—— 與左下角的更新提醒不再同角落，讓位規則移除。 */
-ok('★ 更新提醒與滑出鈕同在左上角：提醒顯示時滑出鈕整排往下讓位（實測高 77px → 168/226）',
-   /\.mc-lotto-fab\{position:fixed;left:24px;right:auto;top:78px;bottom:auto;/.test(src)
+/* 2026-09-04：左上角多了 #alert-dock（兩顆待審核提示），抽獎那顆改用
+   calc(基準 + var(--adock-h)) 讓開 —— 高度是量的（一顆與兩顆不一樣），不寫死。
+   基準值 78／168 沒變，讓位的邏輯也沒變，只是多讓一段。 */
+ok('★ 更新提醒與滑出鈕同在左上角：提醒顯示時滑出鈕整排往下讓位（基準 78 → 168）',
+   /\.mc-lotto-fab\{position:fixed;left:24px;right:auto;top:calc\(78px \+ var\(--adock-h,0px\)\);bottom:auto;/.test(src)
    && /body\.verup-on \.mc-req-fab\{top:168px;\}/.test(src)
-   && /body\.verup-on \.mc-lotto-fab\{top:168px;\}/.test(src)
+   && /body\.verup-on \.mc-lotto-fab\{top:calc\(168px \+ var\(--adock-h,0px\)\);\}/.test(src)
    && /body\.verup-on \.mc-lotto-fab\.mc-fab-up\{top:226px;\}/.test(src));
+ok('★★ 待審核提示也跟著更新提醒讓位',
+   /body\.verup-on \.alert-dock\{top:168px;\}/.test(src));
 ok('　　顯示/關閉時有加/拿掉 verup-on',
    /document\.body\.classList\.add\('verup-on'\);/.test(src)
    && /document\.body\.classList\.remove\('verup-on'\);/.test(src));

@@ -42,13 +42,13 @@ console.log('\n③ 只給櫃檯以上看，而且會清乾淨');
 /* ⚠ 原本兩支都是「不是櫃檯就直接 return」——那一格如果已經畫過（不重新整理就換帳號），
    教練會看到留在頂欄的待審核提示。清空成本是零，漏掉的代價是權限外洩。 */
 ok('★★★ 會員申辦：非櫃檯清空，不是只 return',
-   /async function refreshMemReqPill\(\)\{[\s\S]{0,300}?if\(!isDeskLike\(\)\)\{ host\.innerHTML=''; host\.style\.display='none'; return; \}/.test(src));
+   /async function refreshMemReqPill\(\)\{[\s\S]{0,300}?if\(!isDeskLike\(\)\)\{ host\.innerHTML=''; host\.style\.display='none'; alertDockSync\(\); return; \}/.test(src));
 ok('★★★ 待審核發放：同一個問題一起修',
-   /async function refreshGrantReviewPill\(\)\{[\s\S]{0,400}?if\(!isDeskLike\(\)\)\{ host\.innerHTML=''; host\.style\.display='none'; return; \}/.test(src));
+   /async function refreshGrantReviewPill\(\)\{[\s\S]{0,400}?if\(!isDeskLike\(\)\)\{ host\.innerHTML=''; host\.style\.display='none'; alertDockSync\(\); return; \}/.test(src));
 ok('★★ 為什麼不能只 return，寫在原地',
    /清空的成本是零，漏掉的代價是權限外洩/.test(src));
 ok('★★ 沒有待審時整顆收起來（不佔位置）',
-   /if\(!list\.length\)\{ host\.innerHTML=''; host\.style\.display='none'; return; \}/.test(src));
+   /if\(!list\.length\)\{ host\.innerHTML=''; host\.style\.display='none'; alertDockSync\(\); return; \}/.test(src));
 
 console.log('\n④ 內容與行為');
 ok('★★★ 點下去開的是原本那個審核視窗（沒有另做一套）',
@@ -107,6 +107,39 @@ ok('★★ 吞掉是對的，但要出聲（理由寫在原地）',
    讀失敗回空陣列且同一種錯只印一次。 */
 ok('★★ 實跑結果記在這支測試裡',
    /正常回兩筆並依 created_at 排序、真的沒有時不出聲、/.test(fs.readFileSync(__filename,'utf8')));
+
+console.log('\n⑦ 提示搬出 .tb-left（2026-09-04：mc-mode 把它整個藏起來）');
+/* 使用者連續回報「1901 沒看到申辦待確認」「沒看到你說的那個按鈕」，
+   而資料庫裡兩張表都確實有 pending、RLS 也正常。
+   根因是**位置**：兩顆原本掛在 .topbar 的 .tb-left 裡，而
+     body.mc-mode .tb-left{display:none}
+   mc-mode 正是桌機櫃檯／管理員的版面 —— 等於對它們唯一的觀眾永遠是隱藏的。
+   ⚠ 父層 display:none 之下子元素怎麼設 display 都救不回來，必須把節點搬出那棵子樹。
+   ⚠ 位置抄 .mc-lotto-fab（抽獎那顆）：position:fixed 掛在視窗上，不依賴任何版面容器
+     —— 那顆在使用者畫面上一直看得到，是現成的證據。 */
+ok('★★★ 兩個 host 已經不在 .tb-left 裡',
+   /<div id="alert-dock" class="alert-dock">[\s\S]{0,600}?id="tb-review-pill"[\s\S]{0,600}?id="tb-memreq-pill"[\s\S]{0,200}?<\/div>/.test(src)
+   && !/<div class="tb-left">[\s\S]{0,900}?id="tb-memreq-pill"/.test(src));
+ok('★★★ dock 是 fixed，不依賴任何版面容器',
+   /\.alert-dock\{position:fixed;left:24px;top:78px;z-index:97;display:none;/.test(src));
+ok('★★★ 空的時候整個收起來（不然透明區塊會擋到底下的東西）',
+   /\.alert-dock\.on\{display:flex;\}/.test(src)
+   && /d\.classList\.toggle\('on', has\);/.test(src));
+/* 抽獎那顆也在 left:24px/top:78px，會疊到 —— 由 dock 的實際高度推開。 */
+ok('★★★ 抽獎那顆用 calc 讓開，不寫死',
+   /\.mc-lotto-fab\{position:fixed;left:24px;right:auto;top:calc\(78px \+ var\(--adock-h,0px\)\);/.test(src)
+   && /body\.verup-on \.mc-lotto-fab\{top:calc\(168px \+ var\(--adock-h,0px\)\);\}/.test(src));
+ok('★★★ 高度是量的不是算的（一顆與兩顆不一樣）',
+   /document\.body\.style\.setProperty\('--adock-h', has \? \(d\.offsetHeight\+10\)\+'px' : '0px'\);/.test(src));
+ok('★★ 兩支 refresh 的每一條出口都要 sync（含清空那兩條）',
+   (src.match(/alertDockSync\(\);/g)||[]).length>=6);
+ok('★★ 父層 display:none 救不回來，所以要搬節點（理由寫在原地）',
+   /父層 display:none 之下，子元素再怎麼設 display 都救不回來/.test(src));
+/* 離線量測（2026-09-04，body.mc-mode）：.tb-left 確認是 display:none；
+   dock 不在它底下、空時收起、有內容時 x24/y78 兩顆都看得見、
+   抽獎從 78 被推到 168、清空後回到 78、pointer-events 可點。 */
+ok('★★ 離線量測結果記在這支測試裡',
+   /\.tb-left 確認是 display:none；/.test(fs.readFileSync(__filename,'utf8')));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

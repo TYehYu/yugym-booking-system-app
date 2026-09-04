@@ -10533,7 +10533,19 @@ button.rev-kind.rev-kind-off{opacity:.5;}
    2026-08-03 使用者指示（附截圖）：改到「左上角」—— 首頁左欄改成靠底之後，
    月曆貼齊視窗底，左下角那兩顆疊在月曆上；左欄的空白現在都在最上方，正好放它們。
    top 78px＝頂欄 64px＋14px 間距。維持全頁面顯示 —— 掛在 <body>，換頁不會消失。 */
-.mc-lotto-fab{position:fixed;left:24px;right:auto;top:78px;bottom:auto;z-index:96;display:flex;align-items:center;gap:9px;
+/* ══ 待審核提示的浮動座（2026-09-04）══════════════════════════════════════
+   與 .mc-lotto-fab 同一種做法：fixed 掛在視窗上，不受任何版面容器影響。
+   ⚠ 空的時候不能佔位（會擋到底下的東西）—— 兩顆都沒內容時整個收起來，
+     由 alertDockSync() 依實際內容切 .on。
+   ⚠ 手機不出現：這是櫃檯桌機的提示，手機端有自己的待辦清單。 */
+.alert-dock{position:fixed;left:24px;top:78px;z-index:97;display:none;
+  flex-direction:column;align-items:flex-start;gap:8px;pointer-events:none;}
+.alert-dock.on{display:flex;}
+.alert-dock>span{pointer-events:auto;}
+.alert-dock .tb-review{box-shadow:0 6px 18px rgba(0,0,0,.12);padding:8px 14px;font-size:12.5px;}
+@media(max-width:600px){ .alert-dock{display:none !important;} }
+body.verup-on .alert-dock{top:168px;}
+.mc-lotto-fab{position:fixed;left:24px;right:auto;top:calc(78px + var(--adock-h,0px));bottom:auto;z-index:96;display:flex;align-items:center;gap:9px;
   /* 2026-08-12 二修（使用者：「滑出提醒改成金色」；紅色那輪同日退場）：品牌金漸層 */
   background:linear-gradient(168deg,#A8804B 0%,#7E5A2C 100%);color:#F4F1E8;border:none;border-radius:999px;padding:12px 18px;cursor:pointer;
   font-family:inherit;font-size:13px;box-shadow:0 8px 24px rgba(126,90,44,.35);
@@ -10690,7 +10702,7 @@ button.rev-kind.rev-kind-off{opacity:.5;}
 .mc-lotto-fab.mc-fab-up{top:136px;}   /* 兩顆都在時往下疊一層（改到上方後，往下才是離開頂欄的方向） */
 /* 版本更新提醒佔了第一層（top:78px，實測高約 77px）→ 滑出鈕全體往下讓位（2026-08-03） */
 body.verup-on .mc-req-fab{top:168px;}
-body.verup-on .mc-lotto-fab{top:168px;}
+body.verup-on .mc-lotto-fab{top:calc(168px + var(--adock-h,0px));}
 body.verup-on .mc-lotto-fab.mc-fab-up{top:226px;}
 /* 2026-08-13 二修（使用者回報「又遮住管理員的按鈕」）：浮動定位退場，
    提醒改由 g_dashboard 插進頂列 flex（管理員鈕之後）佔一格——版面自己讓位，永遠不重疊。
@@ -12316,6 +12328,23 @@ body.ink .tcard-row .tcard-co:not(.tcard-leavetag){display:none;}
 <div id="app-screen" class="hidden">
   <!-- 桌機管理員：左側固定深綠側欄（Mission Control）。其它角色/手機沿用頂部導覽 -->
   <aside class="mc-sidebar" id="mc-sidebar"></aside>
+  <!-- ══ 待審核提示的浮動座（2026-09-04）══════════════════════════════════
+       使用者連續回報「沒看到申辦待確認」「沒看到你說的那個按鈕」，
+       而資料庫裡兩張表都確實有 pending。查下來不是資料也不是權限，是**位置**：
+       這兩顆原本掛在 .topbar 的 .tb-left 裡，而 `body.mc-mode .tb-left{display:none}`
+       —— mc-mode 正是桌機櫃檯／管理員的版面，等於對它們唯一的觀眾永遠是隱藏的。
+       ⚠ 父層 display:none 之下，子元素再怎麼設 display 都救不回來，
+         所以不是改 CSS 就好，必須把節點搬出那棵子樹。
+       ⚠ 位置抄 .mc-lotto-fab（抽獎那顆）：position:fixed 直接掛在視窗上，
+         不依賴任何版面容器 —— 那顆在使用者的畫面上一直都看得到，是現成的證據。
+       ⚠ 抽獎那顆也在 left:24px/top:78px，會疊到。改成由這裡的高度推開：
+         dock 有內容時把量到的高度寫進 --adock-h，抽獎的 top 用 calc 讓開。 -->
+  <div id="alert-dock" class="alert-dock">
+    <!-- 待審核發放（2026-08-08 使用者指示：「審核跳提示在桌機畫面左上角」） -->
+    <span id="tb-review-pill" style="display:none;"></span>
+    <!-- 會員申辦待審（2026-09-03 使用者指示：「這個審核確認要在櫃檯桌機每個頁面都看到」） -->
+    <span id="tb-memreq-pill" style="display:none;"></span>
+  </div>
   <div class="topbar-fixed">
     <div class="topbar">
       <div class="tb-left">
@@ -12326,13 +12355,9 @@ body.ink .tcard-row .tcard-co:not(.tcard-leavetag){display:none;}
           <span class="tb-ver" id="tb-ver"></span>
         </div>
         <span class="tb-role" id="tb-role">—</span>
-        <!-- 待審核發放提示（2026-08-08 使用者指示：「審核跳提示在桌機畫面左上角」）——
-             只有櫃檯／管理員、且真的有待審核時才出現；沒有就整顆不畫，不佔位置。 -->
-        <span id="tb-review-pill" style="display:none;"></span>
-        <!-- 會員申辦待審（2026-09-03 使用者指示：「這個審核確認要在櫃檯桌機每個頁面
-             都看到 不要只限制在首頁」）—— 原本只長在 g_dashboard 的右上滑出鈕裡，
-             換頁就不見了。改放頂欄，與「待審核發放」同一格語彙、同一條更新路徑。 -->
-        <span id="tb-memreq-pill" style="display:none;"></span>
+        <!-- 兩顆待審核提示已搬到 #alert-dock（2026-09-04，見那裡的註記）——
+             它們原本放在這裡，而 .tb-left 在 body.mc-mode 底下是 display:none，
+             等於對「桌機櫃檯／管理員」這個唯一的觀眾永遠看不見。 -->
         <div class="tb-butler" id="tb-butler"></div>
         <span class="tb-greet-inline" id="tb-greet-inline"></span>
       </div>
@@ -12416,8 +12441,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260904.1901';
-const APP_VERSION_LABEL='260904.1901';
+const APP_VERSION='260904.1923';
+const APP_VERSION_LABEL='260904.1923';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50374,12 +50399,13 @@ async function refreshGrantReviewPill(){
     /* ⚠ 不是櫃檯就要**清掉**，不能只 return（2026-09-03）——
        原本直接 return，如果那一格已經畫過（例如不重新整理就換帳號登入），
        教練會看到留在頂欄的待審核提示。清空的成本是零，漏掉的代價是權限外洩。 */
-    if(!isDeskLike()){ host.innerHTML=''; host.style.display='none'; return; }
+    if(!isDeskLike()){ host.innerHTML=''; host.style.display='none'; alertDockSync(); return; }
     const list=await grantReqPending();
-    if(!list.length){ host.innerHTML=''; host.style.display='none'; return; }
+    if(!list.length){ host.innerHTML=''; host.style.display='none'; alertDockSync(); return; }
     host.style.display='';
     host.innerHTML=`<button class="tb-review" onclick="openGrantReview()" title="等會員簽回合約並確認收款後才發放票券">
       <span class="tb-review-dot"></span>待審核發放 <b>${list.length}</b></button>`;
+    alertDockSync();
   }catch(_){}
 }
 /* 會員申辦待審的頂欄提示（2026-09-03）——
@@ -50431,6 +50457,19 @@ function startReviewPillPoll(){
    這與今天早上 fn_change_sig 那次是同一種病（前端吞掉錯誤，背景更新靜靜停擺）。
    吞掉是對的（不能讓一顆提示炸掉整個換頁），但**要出聲**：同一種錯只印一次，
    免得每 20 秒洗版。 */
+/* dock 的顯示與高度（2026-09-04）——兩顆提示每次重畫後都要叫一次。
+   ⚠ 空的時候一定要收起來：一個 24px 見方的透明區塊掛在 top:78px，
+     會擋掉底下的東西（點不到），而且 --adock-h 不歸零抽獎那顆會平白往下掉。
+   ⚠ 高度用量的（offsetHeight），不是算的 —— 一顆與兩顆的高度不一樣，
+     而且字級／換行都會影響。 */
+function alertDockSync(){
+  try{
+    const d=document.getElementById('alert-dock'); if(!d) return;
+    const has=[...d.children].some(el=>el && el.style.display!=='none' && el.innerHTML.trim());
+    d.classList.toggle('on', has);
+    document.body.style.setProperty('--adock-h', has ? (d.offsetHeight+10)+'px' : '0px');
+  }catch(_){}
+}
 let _memReqWarned='';
 async function memReqPending(){
   try{
@@ -50450,12 +50489,13 @@ async function refreshMemReqPill(){
   try{
     const host=document.getElementById('tb-memreq-pill'); if(!host) return;
     /* 同 refreshGrantReviewPill：不是櫃檯就清掉，不能只 return。 */
-    if(!isDeskLike()){ host.innerHTML=''; host.style.display='none'; return; }
+    if(!isDeskLike()){ host.innerHTML=''; host.style.display='none'; alertDockSync(); return; }
     const list=await memReqPending();
-    if(!list.length){ host.innerHTML=''; host.style.display='none'; return; }
+    if(!list.length){ host.innerHTML=''; host.style.display='none'; alertDockSync(); return; }
     host.style.display='';
     host.innerHTML=`<button class="tb-review tb-memreq" onclick="openMemberReqModal()" title="會員掃 QR 申辦後要櫃檯核對身分才會開通">
       <span class="tb-review-dot"></span>會員申辦待確認 <b>${list.length}</b></button>`;
+    alertDockSync();
   }catch(_){}
 }
 async function openGrantReview(){
