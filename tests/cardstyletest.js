@@ -341,8 +341,8 @@ ok('★ 越窄越少東西：窄卡先讓場地，極窄卡連教練也讓',
    && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-vsub\{display:none;\}/.test(css)
    && /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(css));
 /* 2026-09-04 新增的第五樣「讓位」：第一列放不下時讓掉**時間**（章與驚嘆號留著）。 */
-ok('★★ 第一列擠不下時讓掉時間，不讓章也不讓驚嘆號',
-   /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:none;\}/.test(css)
+ok('★★ 第一列擠不下時讓掉時間，不讓章也不讓驚嘆號；而且那一列一律保留',
+   /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{visibility:hidden;\}/.test(css)
    /* 0904 二修：收起來改用 visibility，第一列才不會塌掉讓姓名頂上去被章壓到 */
    && /@container \(max-width:81px\)\{[\s\S]{0,200}?\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{visibility:hidden;\}/.test(css)
    && /讓位的是時間，不是章也不是驚嘆號/.test(css));

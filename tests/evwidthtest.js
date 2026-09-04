@@ -105,7 +105,7 @@ ok('★★★ 時間靠右，自己讓開章的位置',
 ok('★★★ 只有真的有驚嘆號時才讓右邊（:has，不是無條件保留）',
    /\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{padding-right:16px;\}/.test(src));
 ok('★★★ 非 Ink：63px 以下（無徽章）／81px 以下（有徽章）不顯示時間',
-   /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:none;\}/.test(src)
+   /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{visibility:hidden;\}/.test(src)
    && /@container \(max-width:81px\)\{[\s\S]{0,200}?\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{visibility:hidden;\}/.test(src));
 ok('★★★ Ink：60px／76px 起放得下，再叫回來（display 與 visibility 都要還原）',
    /@container \(min-width:60px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:flex;visibility:visible;\}/.test(src)
@@ -117,13 +117,17 @@ ok('★★★ Ink：60px／76px 起放得下，再叫回來（display 與 visibi
    姓名頂上去正好被左上角那顆章壓在第一個字上（截圖是「簽蓉霆」疊在一起）。
    ⚠ 這一條**不能**改回 display:none 來「省一列」—— 省下來的那一列不是空的，
      章或驚嘆號就站在那裡。 */
-ok('★★★ 有章時保住第一列（visibility 而不是 display）',
-   /\.cal-ev\.cal-ev-std:has\(\.evc-check\):not\(:has\(\.ev-payalert\)\) \.evc-time\{\s*\n\s*display:flex; visibility:hidden;\}/.test(src));
+/* 二修：第一列**一律**保留。一修只在「有章或有驚嘆號」時保留、空的就收掉，
+   結果同一橫排裡有章的卡姓名在第二列、沒章的在第一列，一整排姓名對不齊。 */
+ok('★★★ 第一列一律保留（不再分「有沒有章」）',
+   /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{visibility:hidden;\}\s*\n\s*\}/.test(src)
+   && !/:has\(\.evc-check\):not\(:has\(\.ev-payalert\)\) \.evc-time/.test(src));
 ok('★★★ 有驚嘆號時也保住第一列',
    /\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{visibility:hidden;\}/.test(src));
-/* 第一列真的空無一物（沒章也沒驚嘆號）才收掉 —— 那種卡沒有東西會被壓到。 */
-ok('★★★ 第一列空無一物時才 display:none（讓姓名往上補位）',
-   /\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:none;\}/.test(src));
+ok('★★★ 課卡裡沒有任何一條把時間 display:none（那會讓姓名往上補位、整排對不齊）',
+   !/\.cal-ev\.cal-ev-std[^{}]*\.evc-time\{display:none;\}/.test(src));
+ok('★★ 二修的理由寫在原地（一整排姓名要在同一條水平線上）',
+   /一整排看過去\*\*姓名對不齊\*\*，正是同一天稍早靠左對齊要解決的那個問題/.test(src));
 ok('★★ 為什麼是 visibility 不是 display，寫在原地',
    /時間一旦 display:none，第一列整個塌掉，\s*\n\s*姓名就頂上去，正好被左上角那顆章壓在第一個字上/.test(src));
 /* A/B 對照的結果記在這裡：改門檻的人要知道原本修掉了什麼，別又踩回去。 */
@@ -186,6 +190,23 @@ ok('★★★ 靠左讓可用寬度變了，門檻有重量過（註記寫在原
    /這一改讓每張卡的可用寬度少 6px，\*\*上面所有的門檻都要重量\*\*/.test(src));
 ok('★★ 重量後的新值有記下來（置中時代是 68／56）',
    /（2026-09-04 列②～④ 靠左之後重量的值。原本置中時是 68／56 ——/.test(src));
+
+console.log('\n⑧ 會員姓名一定是最大的一項（2026-09-04 使用者：「課卡要最顯眼的資訊是會員姓名」）');
+/* 原本的上限是反過來的：時間 25px ＞ 教練 20px ＞ 姓名 18px。
+   在 194px 的寬卡上實測 時間 20.7px ＞ 姓名 18px —— 最搶眼的是每張卡都一樣的鐘點數字。 */
+ok('★★★ 姓名上限 22px（原 18）',
+   /\.cal-ev\.cal-ev-std \.evc-name\{ font-size:clamp\(12px,min\(30cqh,16cqw\),22px\) !important;/.test(src));
+ok('★★★ 時間上限壓到 13px（原 25）',
+   /\.cal-ev\.cal-ev-std \.evc-time,\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-time\{font-size:clamp\(11px,min\(22cqh,14\.3cqw\),13px\);\}/.test(src));
+ok('★★★ 教練上限壓到 14px（原 20）',
+   /\.cal-ev\.cal-ev-std \.evc-coach\{font-size:clamp\(9\.5px,min\(17\.6cqh,13\.2cqw\),14px\);\}/.test(src));
+/* 只動上限：下限與 cq 係數不變，窄卡的行為完全沒變（那邊本來就被壓在下限）。 */
+ok('★★★ 只動上限，下限與 cq 係數沒被碰',
+   /只動\*\*上限\*\*：下限與 cq 係數不變，所以窄卡的行為完全沒有改變/.test(src));
+ok('★★ 反轉的實測數字寫在原地（時間 20.7 ＞ 姓名 18）',
+   /在 1～2 張並排的寬卡上（194px）實測是 時間 20\.7px ＞ 姓名 18px/.test(src));
+ok('★★ 舊註解「上限壓到 18px」已經同步改掉（否則自相矛盾）',
+   !/名字字級上限壓到 18px/.test(src) && /名字字級上限 22px/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
