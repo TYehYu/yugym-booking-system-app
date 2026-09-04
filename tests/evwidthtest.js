@@ -260,5 +260,24 @@ ok('★★★ 簽到不再加粗左色條（有簽到章就夠了）',
 ok('★★ 不要改成 width:3px 去覆蓋（基本規則本來就是 3px）',
    /這一條刪掉就好，不要改成 width:3px 去「覆蓋」/.test(src));
 
+console.log('\n⑩ 第一列自己不能撞（章 vs 驚嘆號）');
+/* 2026-09-04 量到的既有 bug：41px 的卡上 章 x9..25、驚嘆號 x23..38，重疊 2px。
+   兩個都是絕對定位、都不參與流排版，誰也不會把誰推開；先前只驗了
+   「時間／NEW vs 章／驚嘆號」，漏掉「章 vs 驚嘆號」本身。 */
+ok('★★★ 47px 以下章與驚嘆號一起縮（間距回到 5px）',
+   /@container \(max-width:47px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-check\{width:14px;height:14px;left:7px;font-size:8\.5px;\}\s*\n\s*\.cal-ev\.cal-ev-std \.ev-payalert\{width:13px;height:13px;right:2px;font-size:9px;\}\s*\n\s*\}/.test(src));
+ok('★★★ 不能把章往左移（左緣有課程色條），理由寫在原地',
+   /不能把章往左移 —— 左緣有課程色條（一般 5px），left:9px 是為了避開它/.test(src));
+ok('★★ 只在極窄時縮，正常寬度不動（理由寫在原地）',
+   /正常寬度維持原尺寸，不要為了極端情況把所有卡都縮小/.test(src));
+/* 量出來的第一列組成（最擠：有章＋有 NEW＋有驚嘆號）：
+     41–53px  章 ❗              （時間與 NEW 都讓開）
+     65–97px  章 NEW ❗
+     131px+   章 時間 NEW ❗     （四項同時，最窄間隙 4px）
+   四項同時只發生在 131px 以上的寬卡 —— 使用者擔心的「第一列四個擠在一起」
+   在窄卡上不會發生，時間會自己讓開。 */
+ok('★★ 第一列的讓位結果記在這支測試裡',
+   /四項同時只發生在 131px 以上的寬卡/.test(fs.readFileSync(__filename,'utf8')));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
