@@ -12381,8 +12381,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260904.1445';
-const APP_VERSION_LABEL='260904.1445';
+const APP_VERSION='260904.1551';
+const APP_VERSION_LABEL='260904.1551';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22584,10 +22584,15 @@ function dutyRingHTML(name, att, shift, nowMinV, isToday){
      ⚠ 只有管理員（不是 isDeskLike —— 這是改別人的工時，櫃檯不該做）
      ⚠ 只在「今天」這一頁，而且只對「已上班、還沒下班」的人出現
      ⚠ 一定留痕：note 寫明是誰代打的（見 dutyPunchOutGo）。 */
-  const _canProxy=!!(isToday && !done && att && att.id
+  /* 2026-09-04 使用者：「這個晚打卡的 管理員有修正的功能嗎」——
+     原本只有「還沒下班」才點得開（_canProxy 帶 !done），所以晚打卡這種
+     **上班時間打錯**的情況，只要人已經下班就完全沒有入口。
+     ⚠ 只放寬到「已下班也點得開」，其餘限制不動：仍然只有管理員、只有今天。
+       改別人的工時不是櫃檯該做的事，過去的日期走「打卡異常與補卡」那條。 */
+  const _canProxy=!!(isToday && att && att.id
     && SESSION && SESSION.role==='admin');
   return `<div class="duty-ring dr-cup${done?' dr-done':' dr-live'}${_canProxy?' dr-proxy':''}" style="--dcc:${ringC};"${
-    _canProxy?` role="button" tabindex="0" onclick="dutyPunchOutAsk('${att.id}')"`:''} title="${name}｜${att.clock_in}–${att.clock_out||'值班中'}｜${hrs}h／目標 ${(targetMin/60).toFixed(1)}h（${seg}/60 格）${_canProxy?'　·　點一下可代打下班卡':''}">
+    _canProxy?` role="button" tabindex="0" onclick="dutyPunchOutAsk('${att.id}')"`:''} title="${name}｜${att.clock_in}–${att.clock_out||'值班中'}｜${hrs}h／目標 ${(targetMin/60).toFixed(1)}h（${seg}/60 格）${_canProxy?(done?'　·　點一下可修正打卡時間':'　·　點一下可代打下班卡'):''}">
     <div class="dr-wrap">
       <svg viewBox="0 0 64 64">
         <circle class="dr-cup-track" cx="32" cy="32" r="26"/>
@@ -22612,20 +22617,30 @@ async function dutyPunchOutAsk(attId){
     const rec=await dbGet('attendance',attId);
     if(!rec){ showToast('找不到這筆打卡紀錄'); return; }
     if(!rec.clock_in){ showToast('這位今天還沒上班打卡，請改用「申請補打卡」'); return; }
-    if(rec.clock_out){ showToast(`已經下班打卡了（${rec.clock_out}）`); return; }
     let nm=rec.emp_id||'';
     try{ const e=await dbGet('coaches',rec.emp_id); if(e) nm=coachDisp(e)||e.name||nm; }catch(_){}
-    const _now=nowHM();
-    /* 預設「現在」，但一定要能改 —— 管理員多半是事後才代打，人是幾點走的只有他知道。 */
-    showModal(`<div class="ash-sheetmk"></div><div class="modal-title">代打下班卡</div>
+    /* 2026-09-04：上班時間也做成可改的欄位（使用者：「這個晚打卡的 管理員有修正的功能嗎」）。
+       在此之前上班只是唯讀顯示，晚打卡（例：排 09:00、09:11 才打）沒有任何地方能改 ——
+       「打卡異常」只認「有上班沒下班」，晚打卡不算異常，不會出現在任何清單上；
+       唯一的路是員工自己送補卡申請、管理員再核准，兩個人兩道手續。
+       ⚠ 已經下班的也能開（見 _canProxy 拿掉 !done），這時它是純修正對話框，
+         標題與按鈕都換字，免得管理員以為自己在重打一次卡。
+       ⚠ 下班預設值：還沒下班＝現在（管理員多半事後才代打）；已下班＝原本那筆，
+         不要用現在覆蓋掉他本來就打對的時間。 */
+    const _done=!!rec.clock_out;
+    const _outDef=_done?rec.clock_out:nowHM();
+    showModal(`<div class="ash-sheetmk"></div><div class="modal-title">${_done?'修正打卡時間':'代打下班卡'}</div>
       <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-bottom:12px;">
         <b>${escH(nm)}</b>　·　${String(rec.date||'').replace(/-/g,'/')}<br>
-        上班 <b>${rec.clock_in}</b>　·　目前仍是值班中</div>
-      <div class="form-row"><label>下班時間</label>${hmPicker('dpo-t',_now)}</div>
+        ${_done?`原本 <b>${rec.clock_in}</b> – <b>${rec.clock_out}</b>`:'目前仍是值班中'}</div>
+      <div class="form-2col">
+        <div class="form-row"><label>上班時間</label>${hmPicker('dpo-in',rec.clock_in)}</div>
+        <div class="form-row"><label>下班時間</label>${hmPicker('dpo-t',_outDef)}</div>
+      </div>
       <div style="font-size:11.5px;color:var(--t2);background:var(--card2);border-radius:9px;padding:9px 11px;line-height:1.8;">
-        工時會依這個時間重算。這筆會記下是<b>你代打的</b>，之後在出勤紀錄看得到。</div>
+        工時會依這兩個時間重算。這筆會記下是<b>你改的</b>，之後在出勤紀錄看得到。</div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
-        <button class="btn btn-green" onclick="dutyPunchOutGo('${attId}')">確認代打</button></div>`);
+        <button class="btn btn-green" onclick="dutyPunchOutGo('${attId}')">${_done?'儲存修正':'確認代打'}</button></div>`);
   }catch(e){ showToast('開啟失敗：'+((e&&e.message)||e)); }
 }
 async function dutyPunchOutGo(attId){ return onceAct('dutyout:'+attId, ()=>_dutyPunchOutGo(attId)); }
@@ -22633,21 +22648,33 @@ async function _dutyPunchOutGo(attId){
   try{
     if(!(SESSION && SESSION.role==='admin')){ showToast('只有管理員可以代打卡'); return; }
     const t=readHM('dpo-t');
+    const tin=readHM('dpo-in');
     if(!t){ showToast('請選擇下班時間'); return; }
+    if(!tin){ showToast('請選擇上班時間'); return; }
     const rec=await dbGet('attendance',attId);
     if(!rec || !rec.clock_in){ showToast('找不到上班紀錄'); return; }
-    if(rec.clock_out){ showToast(`已經下班打卡了（${rec.clock_out}）`); return; }
     /* 早於上班時間就是打錯了 —— calcWorkHours 會當成跨午夜，算出 20 幾小時的工時。 */
-    if(timeToMin(t)<timeToMin(rec.clock_in)){
-      showToast(`下班時間不能早於上班時間（${rec.clock_in}）`, 6000); return; }
+    if(timeToMin(t)<timeToMin(tin)){
+      showToast(`下班時間不能早於上班時間（${tin}）`, 6000); return; }
+    /* 2026-09-04：上班時間也能改，所以留痕要寫清楚**改了哪幾項**，
+       只寫「代打下班」的話，日後看到工時對不上會找不到是上班被改過。 */
+    const _chg=[];
+    if(tin!==rec.clock_in) _chg.push(`上班 ${rec.clock_in}→${tin}`);
+    if(t!==rec.clock_out)  _chg.push(rec.clock_out?`下班 ${rec.clock_out}→${t}`:`代打下班 ${t}`);
+    if(!_chg.length){ closeModal(); showToast('時間沒有變動'); return; }
+    const _oldIn=rec.clock_in;
+    rec.clock_in=tin;
     rec.clock_out=t;
     rec.work_hours=calcWorkHours(rec);
-    /* 留痕（2026-08-29）：代打的工時之後一定會有人問「這是誰按的」。 */
+    /* 留痕（2026-08-29 建立）：代打／修改過的工時之後一定會有人問「這是誰按的」。
+       fixed_by／fixed_at 是 attendance 表本來就有的欄位，這裡一併寫。 */
     const _who=(SESSION&&SESSION.name)||'管理員';
-    rec.note=(rec.note?rec.note+'｜':'')+`管理員代打下班（${_who}・${nowHM()}）`;
+    rec.note=(rec.note?rec.note+'｜':'')+`管理員修改（${_who}・${nowHM()}）：${_chg.join('、')}`;
+    rec.fixed_by=(SESSION&&SESSION.id)||null;
+    rec.fixed_at=new Date().toISOString();
     await dbPut('attendance',rec);
     closeModal();
-    showToast(`已代打下班 ${t}，工時 ${rec.work_hours} 小時`);
+    showToast(`${_oldIn!==tin?`上班改為 ${tin}，`:''}下班 ${t}，工時 ${rec.work_hours} 小時`);
     try{ await refreshHeaderPunch(); }catch(_){}
     try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){ navTo(CUR_PAGE); }
   }catch(e){ showToast('代打失敗：'+((e&&e.message)||e), 7000); }

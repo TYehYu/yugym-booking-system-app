@@ -40,6 +40,44 @@ ok('　　存完回到值班月曆（連續處理不用重進）',
    (src.match(/ppOpenEmpPunch\(empId\); return;/g)||[]).length>=1
    && /showToast\(rec\.work_hours!=null\?`已儲存，工時 \$\{rec\.work_hours\} 小時`/.test(src));
 
+console.log('\n④ 今日值班圓環也能改上班時間（2026-09-04）');
+/* 使用者附截圖（代打下班卡）問「這個晚打卡的 管理員有修正的功能嗎」。
+   ⚠ 先講清楚：**本來就有** —— 就是這支測試 ① 在守的 openPunchEdit
+     （員工資料 → 本月值班 → 點某一列），上班下班都能改、還能刪。
+     我第一次回答說「沒有」是錯的。
+   缺的其實是**入口**：使用者看的是首頁今日值班的圓環，那裡原本只有「代打下班卡」，
+   上班時間是唯讀顯示；要改上班得離開首頁、繞到員工資料去。
+   ⚠ 而且原本只有「還沒下班」才點得開，人一旦下班，圓環就完全點不動了。 */
+ok('★★★ 已下班也點得開（_canProxy 不再帶 !done）',
+   /const _canProxy=!!\(isToday && att && att\.id\s*\n\s*&& SESSION && SESSION\.role==='admin'\);/.test(src));
+ok('★★★ 上班時間變成可改的欄位',
+   /<div class="form-row"><label>上班時間<\/label>\$\{hmPicker\('dpo-in',rec\.clock_in\)\}<\/div>/.test(src));
+/* 已下班時它是純修正對話框，標題與按鈕都要換字，免得管理員以為在重打一次卡。 */
+ok('★★★ 已下班時標題與按鈕換字',
+   /\$\{_done\?'修正打卡時間':'代打下班卡'\}/.test(src)
+   && /\$\{_done\?'儲存修正':'確認代打'\}/.test(src));
+/* 已下班時下班欄要帶原本的值，不能用「現在」蓋掉他本來就打對的時間。 */
+ok('★★★ 下班預設值：未下班＝現在，已下班＝原本那筆',
+   /const _outDef=_done\?rec\.clock_out:nowHM\(\);/.test(src));
+ok('★★★ 上班不能晚於下班（跨午夜會算出 20 幾小時工時）',
+   /if\(timeToMin\(t\)<timeToMin\(tin\)\)\{/.test(src));
+ok('★★★ 兩個都沒動就不寫入（避免留下無意義的修改紀錄）',
+   /if\(!_chg\.length\)\{ closeModal\(\); showToast\('時間沒有變動'\); return; \}/.test(src));
+/* 留痕要寫清楚改了哪幾項 —— 只寫「代打下班」的話，日後工時對不上會找不到是上班被改過。 */
+ok('★★★ 留痕列出實際改動（上班 09:11→09:00 這種）',
+   /if\(tin!==rec\.clock_in\) _chg\.push\(`上班 \$\{rec\.clock_in\}→\$\{tin\}`\);/.test(src));
+ok('★★★ fixed_by／fixed_at 一併寫（attendance 本來就有這兩欄）',
+   /rec\.fixed_by=\(SESSION&&SESSION\.id\)\|\|null;\s*\n\s*rec\.fixed_at=new Date\(\)\.toISOString\(\);/.test(src));
+ok('★★ 「本來就有 openPunchEdit」這件事寫在原地，免得再誤判一次',
+   /「打卡異常」只認「有上班沒下班」，晚打卡不算異常，不會出現在任何清單上/.test(src));
+/* ⚠ 兩條路的權限目前**不一致**：openPunchEdit 是 isDeskLike（櫃檯也能改），
+   圓環這條沿用代打下班的 role==='admin'（櫃檯不能）。
+   這個矛盾在 0829 代打下班上線時就存在，不是 0904 造成的；
+   要收斂成哪一種是使用者的決定，這裡先把現況釘住，避免有人以為某一邊寫錯了。 */
+ok('★★★ 兩條路的權限差異已被釘住（改動任一邊都會在這裡爆）',
+   /if\(!isDeskLike\(\)\)\{ showToast\('只有管理員或櫃台可以補登打卡'\); return; \}/.test(src)
+   && /if\(!\(SESSION && SESSION\.role==='admin'\)\)\{ showToast\('只有管理員可以代打卡'\); return; \}/.test(src));
+
 console.log('\n② 實跑：補登的存檔規則');
 {
   const i=src.indexOf('async function _savePunchEdit(empId){');
