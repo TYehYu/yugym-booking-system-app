@@ -55,14 +55,15 @@ console.log('\n② Ink 的 CSS 不會讓任何東西「從看不到變看得到�
      ・cchip-dot／dw-／mc-rs-／mc-rev／lp-：既有項目
      ・mc-cell.mc-sel .mc-d：日期數字（永遠可見），inline-flex 只為了置中在 22px 圓圈裡
        （2026-09-03 選取從方框改圓框）
-     ・cal-ev-std 的 co-fl／evc-coach／evc-time（2026-09-04 課卡四列改版）：
+     ・cal-ev-std 的 co-fl／evc-coach／evc-time／evc-hm（2026-09-04 課卡四列改版）：
+       （evc-hm ＝ 第一列裡的時鐘數字，2026-09-04 為了讓 [NEW] 能單獨留下才拆出來的節點）
        這三樣在**沒有 Ink 時也一樣顯示**，Ink 這幾條只是把「窄到什麼程度才收起來」
        的門檻放寬 —— Ink 把教練膠囊的底與 padding 拿掉、時間字級鎖 10px，
        同一張卡在 Ink 底下就是塞得下更多字（量出來：全名 62→52px、時間 64→60px）。
        它們全都是版面門檻，沒有一項是「非 Ink 看不到、Ink 才看得到」的功能。 */
   eq('★★ 沒有一條把元素顯示出來／恢復點擊（display:block、visibility、pointer-events:auto）',
      shown.filter(x=>!/cchip-dot|dw-|mc-rs-|mc-rev|lp-|mc-cell\.mc-sel \.mc-d/.test(x))
-          .filter(x=>!/^body\.ink \.cal-ev\.cal-ev-std.*(\.co-fl|\.evc-coach|\.evc-tim)/.test(x)), []);
+          .filter(x=>!/^body\.ink \.cal-ev\.cal-ev-std.*(\.co-fl|\.evc-coach|\.evc-tim|\.evc-hm)/.test(x)), []);
   ok('★★ 完全沒有 pointer-events —— 不可能把「不能點」變成「能點」',
      !INK_RULES.some(b=>/pointer-events/.test(b)));
   /* 三條 display:none 沒有一條是在藏功能：

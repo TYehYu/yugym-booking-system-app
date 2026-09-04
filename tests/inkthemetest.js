@@ -132,8 +132,11 @@ console.log('\n② 狀態語意全部保留（顏色深淺、反灰、今日、�
   ok('★ 衝堂那圈 outline 是 inline style，本來就不受 CSS 覆蓋影響',
      /if\(dl\.conflict\) dayLaneStyle\+='outline:2px solid var\(--danger\);outline-offset:-1px;';/.test(src)
      && /衝堂那圈 outline 是 renderCalendar 直接寫在 inline style 上的，不受這裡影響/.test(src));
-  ok('　 已簽到的填色是手機專屬（@media），Ink 只在桌機開，不會打架',
-     /桌機本來就不填色（填色那組是手機專屬的 @media），Ink 只在桌機開，兩邊不衝突/.test(src));
+  /* 2026-09-04 使用者：「有簽到章了 就不用在加粗線條 減少空間被壓縮」——
+     加粗那條寫在 0826，當時桌機課卡還沒有出席章；章 0904 搬到左上之後就重複了。 */
+  ok('　 已簽到不再加粗左色條（改由左上角的「簽」章表達）',
+     !/body\.ink \.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body::before\{width:5px;\}/.test(src)
+     && /有簽到章了 就不用在加粗線條 減少空間被壓縮/.test(src));
 }
 ok('★ 待簽約／教練請假／已簽到那幾組 filter 規則沒被覆蓋掉',
      /\.cal-ev\.cal-ev-std\.cal-ev-pend,/.test(src)

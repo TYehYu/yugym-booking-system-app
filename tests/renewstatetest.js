@@ -63,11 +63,19 @@ console.log('\n課卡外框提示（品牌色階 紅 > 金）');
 ok('★ 待付費（待簽約卡位／分期待繳費保留）→ 品牌紅',
    /const _isUnpaid   = !!b\.pending_contract;/.test(src)
    && /const _alertCls = _isUnpaid \? ' cal-ev-renew'/.test(src));
-ok('★ 今天新增的預約 → 品牌金',
-   /const _isNewToday = String\(b\.created_at\|\|''\)\.slice\(0,10\)===ymd\(TODAY\);/.test(src)
-   && /_isNewToday \? ' cal-ev-newtoday' : ''/.test(src));
-ok('★ 同時符合時紅色優先（未繳費比「今天新增」重要）',
-   /_isUnpaid \? ' cal-ev-renew'\s*\n\s*: \(_isNewToday/.test(src));
+/* 2026-09-04：桌機「今天新增或調整」從金框改成第一列右邊的 [NEW] 標籤
+   （0903 使用者指示，隨課卡改版被還原掉，現在補回來）。金框與標籤只留一個。
+   ⚠ 手機（cag）沒有第一列可以放標籤，仍用金框 —— 所以 cal-ev-newtoday 不是死碼。 */
+ok('★ 今天新增或調整 → 桌機用 [NEW] 標籤，不再上金框',
+   /const _newAt      = b\.updated_at \|\| b\.created_at;/.test(src)
+   && /const _alertCls = _isUnpaid \? ' cal-ev-renew' : '';/.test(src)
+   && !/_isNewToday \? ' cal-ev-newtoday' : ''/.test(src));
+ok('★ 手機仍用金框，且判斷條件已對齊桌機',
+   /const _mkAlert = _unpaidM \? ' cal-ev-renew' : \(_newM \? ' cal-ev-newtoday' : ''\);/.test(src)
+   && /const _newM=_vis && !!_newAtM && ymd\(new Date\(_newAtM\)\)===ymd\(TODAY\);/.test(src));
+ok('★ 紅色仍然優先（未繳費比「今天新增」重要）',
+   /const _alertCls = _isUnpaid \? ' cal-ev-renew' : '';/.test(src)
+   && /同時符合時紅色優先，錢的事比「今天新增」重要/.test(src));
 ok('　　金框用品牌金、紅框用 danger',
    /\.cal-ev\.cal-ev-std\.cal-ev-newtoday \.evc-body\{[\s\S]{0,120}border:2px solid var\(--gold-d,#b48a56\)/.test(src)
    && /\.cal-ev\.cal-ev-std\.cal-ev-renew \.evc-body\{[\s\S]{0,120}border:2px solid var\(--danger,#b5372e\)/.test(src));
