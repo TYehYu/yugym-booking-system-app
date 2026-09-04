@@ -159,7 +159,7 @@ ok('　　狀態（已完成／已過期／已退費）標在進度旁（2026-08
 // 2026-07-30：購買日改用共用的 tkBuyDateHtml（沒有購買日的退回起始日並標示）
 ok('　　購買日與效期都保留，共享標籤照舊', /\$\{tkBuyDateHtml\(t\)\}　·　效期至/.test(src)
    && /const shrTag=\(t\.member_id!==PP\.id\)/.test(src));
-ok('　　有合約的歷史票也能點開合約', /onclick="openContractView\('\$\{c\.ctByTicket\[t\.id\]\}'\)">📄 合約<\/button>/.test(src));
+ok('　　有合約的歷史票也能點開合約', /onclick="openContractView\('\$\{c\.ctByTicket\[t\.id\]\}'\)">合約<\/button>/.test(src));
 
 console.log('\n更新畫面按鈕統一（2026-07-30 使用者指示：放在標題列時間左邊）');
 ok('★ 抽成共用的一顆鈕', /function refreshBtn\(cls\)\{ return `<button type="button" class="rf-btn/.test(src)

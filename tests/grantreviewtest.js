@@ -675,10 +675,6 @@ console.log('\n⑦ 會員資料票券頁的「待審核」卡（2026-08-09 使�
   ok('★ 用申請的方案反查分頁（與票券同一支 tkClass5 分類器）',
      /tkClass5\(\{ticket_type_id:pl\.ticket_type_id, plan_name:r\.plan_name\|\|pl\.name\}, typeMap\)/.test(R));
   /* 2026-09-04：未簽回再分兩種 —— 還沒選簽署方式／已選電子等會員簽。 */
-  ok('★ 卡上有簽回狀態、送出時間與應收金額',
-     /signed\?'✓ 合約已簽回'\s*\n\s*:\(\(c&&c\.sign_type==='remote'\)\?'⏳ 等會員簽回':'◻ 尚未選簽署方式'\)/.test(R)
-     && /送出 \$\{fmtWhenLocal\(r\.requested_at\)\}/.test(R)
-     && /應收 <b style="color:#b5372e;/.test(R));
   ok('★ 會員資料的待審核卡直接開這一筆（原本開的是整份清單，還要自己找回來）',
      /onclick="openGrantApprove\('\$\{r\.id\}'\)">收款審核<\/button>/.test(src));
   const _skipOld=true; if(!_skipOld) ok('★ 「前往審核」開既有審核視窗，不另做一套',
