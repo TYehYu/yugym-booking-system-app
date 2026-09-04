@@ -12483,8 +12483,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260904.2357';
-const APP_VERSION_LABEL = 'v260904.2357';
+const APP_VERSION = '260905.0005';
+const APP_VERSION_LABEL = 'v260905.0005';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50937,6 +50937,17 @@ async function openGrantApprove(id){
      **按錯也沒有任何路可以改回紙本**（sign_type 已經不是 undecided）。
      改成只要還沒簽回就看得到，並把目前選的標出來。
      紙本仍然是單向的：按下去 signed_at 就寫了，那一刻起整塊收起來（本來就有二次確認）。 */
+  /* ══ 合約金額只講一次（2026-09-05 使用者：「應收款項已經列出總金額了 上面的
+       收款資訊就不用在顯示了吧」）════════════════════════════════════════
+     原本 $10,400 出現三次：標題列的「定價」、收款資訊的「總金額」、應收款項。
+     ⚠ 但不能只是刪掉：**定價 ≠ 合約金額**（有折扣時不同），而收款資訊那一格
+       顯示的是合約金額、標題列顯示的是定價 —— 剛好在沒折扣時長得一樣。
+     所以標題列改成講合約金額（真正要對的那個數字），定價只在**不一樣**時才附註；
+     收款資訊那一格整個拿掉，那一區從此只剩「收款方式」，與使用者的說法一致
+     （「這裡只調整收款方式」）。 */
+  const _lp=Number(P.listPrice)||0, _dl=Number(P.dealAmount)||_lp;
+  const _ctAmtLine=`合約金額 $${_dl.toLocaleString()}`
+    + ((_lp && _lp!==_dl) ? `（定價 $${_lp.toLocaleString()}）` : '');
   const _signOpen  = !!(c && !c.signed_at);
   const _signPicked= !!(c && c.sign_type && c.sign_type!=='undecided');
   /* 段落編號：實際有幾段就從 1 排到幾，不會跳號 */
@@ -50945,7 +50956,8 @@ async function openGrantApprove(id){
     ${/* 定價與堂數併進這一行（2026-09-04）：原本躲在收款區塊最底下的 gr-fill-note，
          那裡是整個視窗最不會被看的位置，而它是核對金額時第一個要對的數字。 */''}
     <div style="font-size:13px;color:var(--text);padding:2px 0 12px;line-height:1.8;">
-      ${escH(r.member_name||'—')}　·　${escH(r.plan_name||'')}　·　${Number(r.sessions)||0} 堂　·　定價 $${(Number(P.listPrice)||0).toLocaleString()}</div>
+      ${escH(r.member_name||'—')}　·　${escH(r.plan_name||'')}　·　${Number(r.sessions)||0} 堂　·　${_ctAmtLine}
+      <div class="gr-warn-amt" id="gr-warn-amt" style="display:none;"></div></div>
     ${/* ══ 順序：先定案數字，才送出去給客人簽（2026-09-04 二修）════════════
          使用者：「這個發放票券視窗的確認順序正確嗎?」—— 不正確，而且是今天才
          變成不正確的。0904 早上使用者描述的流程是「選電子或紙本 → 等回簽 →
@@ -50972,20 +50984,16 @@ async function openGrantApprove(id){
       ${/* 2026-09-04：拿掉「照實際收到的確認一次；填錯可以直接在這裡改…」那句 ——
            欄位標題已經自明，而那句每賣一筆都要再讀一次。 */''}
       <div class="form-2col">
-        ${/* ══ 總金額不可改（2026-09-04 使用者定案）════════════════════════════
+        ${/* ══ 總金額不在這一區（2026-09-04 定不可改、2026-09-05 移到標題列）══════
              「合約金額在一開始建立合約的時候就固定了 只是櫃檯收款的方式可能有變
                一次繳清變分期 現金變匯款 所以這總金額不應該能變動才是」
              0828 當初開放可編輯是為了「臨櫃改現金、改分期」的彈性 —— 但那兩件事
              都是**收款方式**，不是金額。金額一旦能改，等於櫃檯可以無授權改合約。
-             ⚠ 仍然保留 id="gr-amt"（改成 hidden）：grFillApply／grFillPreview／
-               拆帳推導全都讀它，拿掉會讓整包算不出來。值不會變，所以「有改過才給存」
+             ⚠ 仍然保留 id="gr-amt"（hidden）：grFillApply／grFillPreview／拆帳推導
+               全都讀它，拿掉會讓整包算不出來。值不會變，所以「有改過才給存」
                的比對也不受影響。
-             ⚠ 真的要改金額＝改合約 → 取消這筆發放、重開一份（下面的警示會指路）。 */''}
-        <div class="form-row"><label>總金額</label>
-          <div class="gr-ro">$${(Number(P.dealAmount)||Number(P.listPrice)||0).toLocaleString()}
-            <span>合約金額，建立合約時就固定了　·　這裡只調整收款方式</span></div>
-          <input type="hidden" id="gr-amt" value="${Number(P.dealAmount)||Number(P.listPrice)||''}">
-          <div class="gr-warn-amt" id="gr-warn-amt" style="display:none;"></div></div>
+             ⚠ 真的要改金額＝改合約 → 取消這筆發放、重開一份（標題列下的警示會指路）。 */''}
+        <input type="hidden" id="gr-amt" value="${Number(P.dealAmount)||Number(P.listPrice)||''}">
         <div class="form-row"><label>付款方式 *</label>
           <select id="gr-method" onchange="var w=document.getElementById('gr-split-wrap');if(w)w.style.display=this.value==='split'?'':'none';grFillPreview();">
             ${[['cash','現金'],['transfer','匯款'],['split','現金＋匯款']].map(([v,l])=>

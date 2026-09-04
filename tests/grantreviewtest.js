@@ -133,9 +133,16 @@ console.log('\n③a 三段式版面與防呆（2026-09-04：「讓櫃檯閱讀�
        .test(require('fs').readFileSync(__filename,'utf8')));
   ok('★★★ 少一段時編號往前移，不會跳號',
      /let _sn=0; const _n=\(\)=>\+\+_sn;/.test(src));
-  ok('★★ 定價併進標題列（原本躲在收款區塊最底下，最不會被看的位置）',
-     /定價 \$\$\{\(Number\(P\.listPrice\)\|\|0\)\.toLocaleString\(\)\}<\/div>/.test(src)
-     && !/<div class="gr-fill-note">定價/.test(src));
+  /* 2026-09-05 使用者：「應收款項已經列出總金額了 上面的收款資訊就不用在顯示了吧」
+     ——原本 $10,400 出現三次（標題列的定價、收款資訊的總金額、應收款項）。
+     ⚠ 不能只是刪：定價 ≠ 合約金額（有折扣時不同），剛好在沒折扣時長得一樣。
+     改成標題列講**合約金額**（真正要對的那個），定價只在不一樣時附註。 */
+  ok('★★★ 標題列講合約金額，不是定價',
+     /const _ctAmtLine=`合約金額 \$\$\{_dl\.toLocaleString\(\)\}`/.test(src)
+     && /堂　·　\$\{_ctAmtLine\}/.test(src));
+  ok('★★★ 定價只在與合約金額不同時才附註（沒折扣時不重複)',
+     /\(\(_lp && _lp!==_dl\) \? `（定價 \$\$\{_lp\.toLocaleString\(\)\}）` : ''\)/.test(src));
+  ok('★★ 收款區塊底下那條 gr-fill-note 已經不見了', !/<div class="gr-fill-note">定價/.test(src));
   ok('★★ 拿掉「照實際收到的確認一次…」那句（欄位標題已經自明）',
      !/照<b>實際收到的<\/b>確認一次/.test(src));
 
@@ -156,14 +163,16 @@ console.log('\n③a 三段式版面與防呆（2026-09-04：「讓櫃檯閱讀�
      收款的方式可能有變 一次繳清變分期 現金變匯款 所以這總金額不應該能變動才是」
      0828 開放可編輯是為了「臨櫃改現金、改分期」的彈性 —— 但那兩件事都是收款方式，
      不是金額。金額能改＝櫃檯可以無授權改合約。 */
-  ok('★★★ 總金額改成唯讀（只剩收款方式可調）',
-     /<div class="gr-ro">\$\$\{\(Number\(P\.dealAmount\)\|\|Number\(P\.listPrice\)\|\|0\)\.toLocaleString\(\)\}/.test(src)
-     && /合約金額，建立合約時就固定了　·　這裡只調整收款方式/.test(src)
-     && !/<input type="number" id="gr-amt"/.test(src));
+  /* ⚠ 只看 openGrantApprove 這一支：儲值表單（gt-amount）也有一格叫「總金額」，
+     那是另一個視窗、而且它本來就該可以填。 */
+  ok('★★★ 收款資訊那一區完全沒有總金額（同一個數字不講兩次）',
+     (()=>{ const G=grabFn('openGrantApprove');
+       return !/<label>總金額<\/label>/.test(G)
+         && !/<input type="number" id="gr-amt"/.test(G)
+         && /<input type="hidden" id="gr-amt"/.test(G); })());
   ok('★★★ id 仍然保留（改成 hidden）—— grFillApply／拆帳推導都讀它',
      /<input type="hidden" id="gr-amt" value=/.test(src)
      && /拿掉會讓整包算不出來/.test(src));
-  ok('★★ 不能填就不標必填星號', /<label>總金額<\/label>/.test(src));
   ok('★★★ 不比「低於定價」—— 折扣是常態，天天誤報的警示很快就沒人看',
      /不比「低於定價」：折扣本來就是常態，那樣會天天誤報，警示很快就沒人看/.test(src));
 
