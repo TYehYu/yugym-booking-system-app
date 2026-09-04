@@ -148,9 +148,22 @@ console.log('\n③a 三段式版面與防呆（2026-09-04：「讓櫃檯閱讀�
      && !/分期會改變<b>這次開通幾堂<\/b>與約別/.test(src));
   ok('★★★ 用的是 grFillApply 算出來的 unlocked，不另外寫一份算式',
      /不另外寫一份「大概是這樣」的算式/.test(src));
-  ok('★★★ 金額打錯會出聲：0 元、或比定價多出快一倍（多打一位數）',
-     /if\(da===0\) msg='總金額是 0 —— 確定是全額招待嗎？';/.test(F)
-     && /da>lp\*1\.9\) msg=`比定價多出 \$\{Math\.round\(da\/lp\*100-100\)\}% —— 是不是多打了一位數？`/.test(F));
+  /* 2026-09-04 二修：金額已經不能在這裡改（見下），所以警示要指向真正的解法。 */
+  ok('★★★ 金額不對會出聲，而且指路（取消重開，不是叫他在這裡改）',
+     /if\(da===0\) msg='合約金額是 0/.test(F)
+     && /請取消這筆發放、重開一份/.test(F));
+  /* ══ 2026-09-04 使用者定案：「合約金額在一開始建立合約的時候就固定了 只是櫃檯
+     收款的方式可能有變 一次繳清變分期 現金變匯款 所以這總金額不應該能變動才是」
+     0828 開放可編輯是為了「臨櫃改現金、改分期」的彈性 —— 但那兩件事都是收款方式，
+     不是金額。金額能改＝櫃檯可以無授權改合約。 */
+  ok('★★★ 總金額改成唯讀（只剩收款方式可調）',
+     /<div class="gr-ro">\$\$\{\(Number\(P\.dealAmount\)\|\|Number\(P\.listPrice\)\|\|0\)\.toLocaleString\(\)\}/.test(src)
+     && /合約金額，建立合約時就固定了　·　這裡只調整收款方式/.test(src)
+     && !/<input type="number" id="gr-amt"/.test(src));
+  ok('★★★ id 仍然保留（改成 hidden）—— grFillApply／拆帳推導都讀它',
+     /<input type="hidden" id="gr-amt" value=/.test(src)
+     && /拿掉會讓整包算不出來/.test(src));
+  ok('★★ 不能填就不標必填星號', /<label>總金額<\/label>/.test(src));
   ok('★★★ 不比「低於定價」—— 折扣是常態，天天誤報的警示很快就沒人看',
      /不比「低於定價」：折扣本來就是常態，那樣會天天誤報，警示很快就沒人看/.test(src));
 
@@ -241,9 +254,41 @@ console.log('\n③f 拆帳兩欄＋簽署方式的反悔機制（2026-09-04）')
   ok('★★★ 現金與匯款各一欄，同一列',
      /<div class="form-2col" id="gr-split-wrap"/.test(G)
      && /<label>現金收多少<\/label>/.test(G) && /<label>匯款收多少<\/label>/.test(G));
-  ok('★★★ 兩欄互補（不可能出現「現金＋匯款 ≠ 總金額」）',
+  /* ⚠ 2026-09-04 修：拆帳的基準是**應收**（折抵券之後），不是總金額。
+     有券時兩者差一截（總 19,200、折 1 張後應收 18,900）。原本拿總金額當上限，
+     畫面允許現金填到 19,200，而 _grantIssue 寫購買紀錄時是拿應收去夾
+     （cash=min(splitCash,應收)、transfer=應收−cash）→ 現金被無聲夾掉、匯款變 0。 */
+  ok('★★★ 拆帳以應收為基準，不是總金額',
+     /const _due=Math\.max\(0, \(isInstall\?\(Number\(amts\[0\]\)\|\|0\):amount\) - _vAmt\);/.test(grabFn('grFillApply'))
+     && /splitRaw>_due/.test(grabFn('grFillApply'))
+     && /應收 \$\$\{_due\.toLocaleString\(\)\} 之間/.test(grabFn('grFillApply')));
+  ok('★★★ 驗證要等折抵券與分期都算完才做（所以先讀原始值、最後才夾）',
+     /const splitRaw=\(method==='split'\)/.test(grabFn('grFillApply'))
+     && /所以驗證要等折抵券與分期都算完才做/.test(src));
+  ok('★★★ 推導那段必須放在 p0 之後（tdztest 抓到過：原本在上面，整段被 catch 吞掉）',
+     /一定要放在 p0 算完之後 —— 它讀 p0（tests\/tdztest\.js 抓到過/.test(src));
+  /* 離線實跑（2026-09-04）：總 19,200、現金 12,000
+       券 1 張 → 應收 18,900、匯款 6,900
+       券 2 張 → 應收 18,600、匯款 6,600
+       不用券 → 應收 19,200、匯款 7,200
+       現金填 19,000（> 應收 18,900）→ grFillApply 回 null，擋下來 */
+  ok('★★ 折抵券與拆帳的連動實跑結果記在這支測試裡',
+     /券 1 張 → 應收 18,900、匯款 6,900/.test(require('fs').readFileSync(__filename,'utf8')));
+
+  /* 折抵券那一列本身（早上修掉 TDZ 之前，這條路從來沒有真正跑過）——
+     離線實跑四種情況：沒有券→不出現；有 2 張→出現且數字對；券過期→不出現；
+     運動按摩的券配教練課方案（券種不符）→不出現。 */
+  ok('★★★ 折抵券偵測：券種由方案票種的 category 反查',
+     /const tt=types\.find\(x=>x\.id===\(\(P\.plan\|\|\{\}\)\.ticket_type_id\)\); return tt\?VOUCHER_TT\[tt\.category\]:null;/.test(grabFn('openGrantApprove')));
+  ok('★★★ 只算沒過期、還有餘額、狀態可用的券',
+     /&&\(!t\.status\|\|t\.status==='usable'\)&&\(Number\(t\.sessions_remaining\)\|\|0\)>0\s*\n\s*&&\(!t\.expire_date\|\|String\(t\.expire_date\)\.slice\(0,10\)>=ymd\(TODAY\)\)/.test(grabFn('openGrantApprove')));
+  ok('★★ 四種情況的實跑結果記在這支測試裡',
+     /運動按摩的券配教練課方案（券種不符）→不出現/.test(require('fs').readFileSync(__filename,'utf8')));
+
+  ok('★★★ 兩欄互補（不可能出現「現金＋匯款 ≠ 應收」）',
      /c\.value=\(String\(w\.value\)\.trim\(\)===''\|\|!Number\.isFinite\(wv\)\)/.test(W)
-     && /兩格是連動的，不是各填各的/.test(src));
+     && /兩格是連動的，不是各填各的/.test(src)
+     && /window\._grDue/.test(W));
   ok('★★★ 只存現金那一格，匯款是推導的（兩邊都存會多一個可以互相打架的欄位）',
      /真正存起來的仍然只有現金那一格（splitCash），匯款是推導出來的/.test(src));
   ok('★★ 使用者正在打匯款那格時不覆寫他',

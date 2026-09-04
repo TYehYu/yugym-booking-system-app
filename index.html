@@ -12483,8 +12483,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260904.2343';
-const APP_VERSION_LABEL = 'v260904.2343';
+const APP_VERSION = '260904.2357';
+const APP_VERSION_LABEL = 'v260904.2357';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50972,8 +50972,19 @@ async function openGrantApprove(id){
       ${/* 2026-09-04：拿掉「照實際收到的確認一次；填錯可以直接在這裡改…」那句 ——
            欄位標題已經自明，而那句每賣一筆都要再讀一次。 */''}
       <div class="form-2col">
-        <div class="form-row"><label>總金額 *</label>
-          <input type="number" id="gr-amt" oninput="grFillPreview()" placeholder="${(Number(P.listPrice)||0).toLocaleString()}" value="${Number(P.dealAmount)||Number(P.listPrice)||''}">
+        ${/* ══ 總金額不可改（2026-09-04 使用者定案）════════════════════════════
+             「合約金額在一開始建立合約的時候就固定了 只是櫃檯收款的方式可能有變
+               一次繳清變分期 現金變匯款 所以這總金額不應該能變動才是」
+             0828 當初開放可編輯是為了「臨櫃改現金、改分期」的彈性 —— 但那兩件事
+             都是**收款方式**，不是金額。金額一旦能改，等於櫃檯可以無授權改合約。
+             ⚠ 仍然保留 id="gr-amt"（改成 hidden）：grFillApply／grFillPreview／
+               拆帳推導全都讀它，拿掉會讓整包算不出來。值不會變，所以「有改過才給存」
+               的比對也不受影響。
+             ⚠ 真的要改金額＝改合約 → 取消這筆發放、重開一份（下面的警示會指路）。 */''}
+        <div class="form-row"><label>總金額</label>
+          <div class="gr-ro">$${(Number(P.dealAmount)||Number(P.listPrice)||0).toLocaleString()}
+            <span>合約金額，建立合約時就固定了　·　這裡只調整收款方式</span></div>
+          <input type="hidden" id="gr-amt" value="${Number(P.dealAmount)||Number(P.listPrice)||''}">
           <div class="gr-warn-amt" id="gr-warn-amt" style="display:none;"></div></div>
         <div class="form-row"><label>付款方式 *</label>
           <select id="gr-method" onchange="var w=document.getElementById('gr-split-wrap');if(w)w.style.display=this.value==='split'?'':'none';grFillPreview();">
@@ -51138,7 +51149,10 @@ function grFillSnap(){
 /* 匯款那格 → 回推現金（2026-09-04）。兩格互補，總和恆等於總金額。 */
 function grSplitFromWire(){
   try{
-    const a=Math.max(0, Number((document.getElementById('gr-amt')||{}).value)||0);
+    /* 基準是**應收**（折抵券之後），不是總金額 —— 見 grFillApply 的說明。
+       window._grDue 由 grFillPreview 每次算完後寫入；還沒算過就先退回總金額。 */
+    const a=Math.max(0, Number.isFinite(Number(window._grDue))
+      ? Number(window._grDue) : (Number((document.getElementById('gr-amt')||{}).value)||0));
     const w=document.getElementById('gr-splitwire'), c=document.getElementById('gr-splitcash');
     if(w&&c){
       const wv=Number(w.value);
@@ -51163,18 +51177,22 @@ function grFillPreview(){
     _sv.title=_on?'把上面改過的收款資訊存起來，不發票券'
       :(_dirty?'上面的欄位還填不完整':'還沒有任何修改');
   }
-  /* 匯款那格是推導出來的：現金或總金額一改就跟著重算（2026-09-04）。
-     ⚠ 只有在焦點不在匯款那格時才覆寫，不然使用者正在打字會被自己的推導蓋掉。 */
+  const p0=grFillApply(P, true);
+  /* 匯款那格是推導出來的：現金或應收一改就跟著重算（2026-09-04）。
+     ⚠ 一定要放在 p0 算完之後 —— 它讀 p0（tests/tdztest.js 抓到過：原本寫在上面，
+       p0 還在暫時死區，整段被 catch 吞掉、等於沒作用）。
+     ⚠ 只有在焦點不在匯款那格時才覆寫，不然使用者正在打字會被自己的推導蓋掉。
+     ⚠ 基準是**應收**（折抵券之後），不是總金額 —— 見 grFillApply 的說明。 */
   try{
     const _c=document.getElementById('gr-splitcash'), _w=document.getElementById('gr-splitwire');
     if(_c&&_w&&document.activeElement!==_w){
-      const _a=Math.max(0, Number((document.getElementById('gr-amt')||{}).value)||0);
+      const _a=Math.max(0, (p0 ? (p0.isInstall?Math.max(0,p0.firstAmount-p0.voucherAmt):p0.paidAmount)
+                               : (Number((document.getElementById('gr-amt')||{}).value)||0)));
       const _cv=Number(_c.value);
       _w.value=(String(_c.value).trim()===''||!Number.isFinite(_cv))
         ? '' : String(Math.max(0, _a-Math.max(0,Math.min(_cv,_a))));
     }
   }catch(_){}
-  const p0=grFillApply(P, true);
   /* ══ 分期的後果直接算出來（2026-09-04「避免操作失誤」）════════════════════
      原本寫的是規則：「分期會改變這次開通幾堂與約別，發放前一定要確定」——
      櫃檯得自己把「8 堂分 3 期」換算成「這次開 3 堂」。選了幾期就把答案寫出來。
@@ -51202,8 +51220,10 @@ function grFillPreview(){
     if(wa){
       const lp=Number(P.listPrice)||0, da=p0?Number(p0.dealAmount)||0:null;
       let msg='';
-      if(da===0) msg='總金額是 0 —— 確定是全額招待嗎？';
-      else if(da!=null && lp>0 && da>lp*1.9) msg=`比定價多出 ${Math.round(da/lp*100-100)}% —— 是不是多打了一位數？`;
+      /* 金額已經不能在這裡改了（2026-09-04），所以警示要指向真正的解法：
+         這一筆是建約當下就填錯的，只能取消重開。 */
+      if(da===0) msg='合約金額是 0 —— 確定是全額招待嗎？不對的話請取消這筆發放、重開一份。';
+      else if(da!=null && lp>0 && da>lp*1.9) msg=`合約金額比定價多出 ${Math.round(da/lp*100-100)}% —— 建約時可能多打了一位數，請取消這筆發放、重開一份。`;
       wa.innerHTML=msg; wa.style.display=msg?'':'none';
     }
   }
@@ -51217,6 +51237,7 @@ function grFillPreview(){
     return;
   }
   const due=p.isInstall?Math.max(0,p.firstAmount-p.voucherAmt):p.paidAmount;
+  try{ window._grDue=due; }catch(_){}   /* 拆帳兩欄以它為基準（見 grSplitFromWire） */
   const _pay={cash:'現金',transfer:'匯款',card:'刷卡',split:'現金+匯款'}[p.method]||p.method||'—';
   box.innerHTML=`<span class="gr-amt-k">應收款項</span>
     <span class="gr-amt-v">$${due.toLocaleString()}</span>
@@ -51239,12 +51260,14 @@ function grFillApply(P, quiet){
   const amount=Number(_amtRaw);
   if(!_amtRaw || !Number.isFinite(amount) || amount<0){ if(!quiet) showToast('請填寫總金額'); return null; }
   const method=((document.getElementById('gr-method')||{}).value)||'cash';
+  /* ⚠ 拆帳的上限是「應收」不是「總金額」（2026-09-04 修）——
+     有折抵券時兩者差一截：總 19,200、折抵 1 張後應收 18,900。
+     原本拿總金額當上限，於是畫面允許現金填到 19,200，而 _grantIssue 寫購買紀錄時
+     是拿應收去夾（cash=min(splitCash,應收)、transfer=應收−cash），
+     結果現金被無聲夾掉、匯款變 0，畫面與帳本對不起來。
+     ⚠ 所以驗證要等折抵券與分期都算完才做 —— 下面先算那兩項，再回頭夾這一個。 */
+  const splitRaw=(method==='split') ? Number((document.getElementById('gr-splitcash')||{}).value) : null;
   let splitCash=null;
-  if(method==='split'){
-    splitCash=Number((document.getElementById('gr-splitcash')||{}).value);
-    if(!Number.isFinite(splitCash)||splitCash<0||splitCash>amount){
-      if(!quiet) showToast('請輸入拆帳的現金金額（0 ～ 總金額之間）'); return null; }
-  }
   const installCount=Math.max(1, Number((document.getElementById('gr-install')||{}).value)||1);
   const total=Number(P.total)||0;
   const isInstall=installCount>1;
@@ -51265,6 +51288,13 @@ function grFillApply(P, quiet){
   const _vIds = _vEl
     ? (window._grVouchers||[]).map(t=>t.id).slice(0, _vN)
     : (Array.isArray(P.voucherTkIds)?P.voucherTkIds.slice(0,_vN):[]);
+  /* 應收＝這一期要收的錢（分期取第 1 期），扣掉折抵券之後 */
+  const _due=Math.max(0, (isInstall?(Number(amts[0])||0):amount) - _vAmt);
+  if(method==='split'){
+    if(!Number.isFinite(splitRaw)||splitRaw<0||splitRaw>_due){
+      if(!quiet) showToast(`請輸入拆帳的現金金額（0 ～ 應收 $${_due.toLocaleString()} 之間）`); return null; }
+    splitCash=splitRaw;
+  }
   return Object.assign({}, P, {
     dealAmount:amount, method, splitCash, installCount,
     isInstall, unlocked:segs[0], firstAmount:amts[0],
