@@ -243,16 +243,29 @@ ok('★★ 那個 5px 的實測寫在原地',
    /同樣的\s*\n\s*「09:00」在 11px 下從 28px 變成 33px，剛好頂到左上角那顆章/.test(src));
 ok('★★★ NEW 有全字／單字兩份 DOM（與教練同一套做法）',
    /<i class="evc-new" title="今日新增或調整"><span class="nw-fl">NEW<\/span><span class="nw-ab">新<\/span><\/i>/.test(src));
-ok('★★★ 讓位順序：時間 → NEW 全字 → 「新」 → 拿掉外框',
+ok('★★★ 讓位順序：時間 → NEW 全字 → 「新」 → 削內距（底色不丟）',
    /@container \(max-width:106px\)\{\s*\n\s*body \.cal-ev\.cal-ev-std:has\(\.evc-new\):not\(:has\(\.ev-payalert\)\) \.evc-hm\{display:none;\}/.test(src)
    && /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.nw-fl\{display:none;\}/.test(src)
-   && /@container \(max-width:50px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-new\{border:none;padding:0;\}/.test(src));
+   && /@container \(max-width:50px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-new\{border:none;padding:1px 1px;\}/.test(src));
 /* body 前綴 + 寫在 body.ink 之後，否則 Ink 的「60px 起把時間叫回來」會贏，時間壓到 NEW。 */
 ok('★★★ NEW 的時間門檻要贏過 body.ink 那組（body 前綴＋順序在後）',
    /選擇器要帶 `body `（\(0,5,1\)／\(0,6,1\)）而且要寫在上面那兩條 body\.ink 之後/.test(src));
 ok('★★★ NEW 只有兩種情況會被藏（都是量出來的臨界值）',
-   /@container \(max-width:56px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-new\{display:none;\}/.test(src)
-   && /@container \(max-width:40px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-new\{display:none;\}/.test(src));
+   /@container \(max-width:57px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-new\{display:none;\}/.test(src)
+   && /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-new\{display:none;\}/.test(src));
+/* ── NEW 一定要有底色（2026-09-04 三修）───────────────────────────────
+   使用者附截圖：「那個[新]太不明顯了」。一修是金色細框無底色，但旁邊的繳費
+   驚嘆號是**實心圓**，兩者一比就消失了。二修加了底色，卻沒注意到極窄那一段
+   寫的是 `background:transparent` —— 而使用者截圖那張正好是 4 欄的 ~48px 卡，
+   底色又被剝掉，看到的還是空心淡金字。
+   ⚠ 底色是這個提醒**唯一**的可見度來源，不能當「裝飾」先丟。要丟的是內距與外框。 */
+ok('★★★ 每一段都要有實心底色（極窄那一段也不例外）',
+   /background:var\(--gold-d,#9a6a1e\);\s*\n\s*color:#fff;/.test(src)
+   && !/\.evc-new\{[^}]*background:transparent/.test(src));
+ok('★★ 底色不是裝飾，寫在原地',
+   /底色是這個提醒\*\*唯一\*\*的可見度來源（旁邊的繳費驚嘆號是實心圓，一比就沒了），\s*\n\s*不能當成「裝飾」先丟/.test(src));
+ok('★★ 「改外觀就要重量門檻」的教訓寫在原地（底色讓 NEW 寬 2px，邊界跨過去）',
+   /改外觀就要重量門檻，即使「只是換個顏色」——底色會撐開盒子/.test(src));
 ok('★★ 紅 > 金 的取捨寫在原地', /照品牌色階 \*\*紅 > 金\*\*，讓金色的 NEW 退|紅 > 金，讓金的退/.test(src));
 ok('★★★ 簽到不再加粗左色條（有簽到章就夠了）',
    !/body\.ink \.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body::before\{width:5px;\}/.test(src)
