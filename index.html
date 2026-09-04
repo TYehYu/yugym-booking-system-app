@@ -12416,8 +12416,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260904.1828';
-const APP_VERSION_LABEL='260904.1828';
+const APP_VERSION='260904.1838';
+const APP_VERSION_LABEL='260904.1838';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50493,7 +50493,12 @@ async function _grantReqSetSign(id, kind){
       `您購買的「${r.plan_name||'課程'}」有一份合約待簽名，請登入後到「我的票券」完成簽署。`); }catch(_){} }
     dbCacheClear(['contracts','ticket_grant_requests','notifications']);
     showToast(_isPaper?'已設為紙本，可以確認收款發放了':'已設為電子簽，會員登入後可簽署');
-    openGrantReview();   // 回到同一個清單，連續處理不用重進
+    /* 2026-09-04 二修：選完**留在同一筆**往下走，不要跳回清單。
+       使用者描述的順序是「選電子或紙本 → 進入下一步選付款方式跟是否分期」；
+       跳回清單等於要他自己再點一次進來。
+       紙本：這一刻起 signed_at 有了，重開之後發放鈕就是亮的。
+       電子：重開之後顯示「等會員簽回」，收款資訊仍然可以先填（0828 放寬過）。 */
+    openGrantApprove(id);
   }catch(e){ showToast('設定失敗：'+((e&&e.message)||e), 7000); }
 }
 /* 確認視窗：應收金額要大、要有顏色（2026-08-08 使用者指示：「避免櫃檯看錯」） */
@@ -50539,9 +50544,43 @@ async function openGrantApprove(id){
      ・教練沒填（勾了「收款資訊之後再填」）→ 空著等櫃檯填，欄位一樣
      兩條路在櫃檯眼裡是同一個畫面，只有上方那句說明不同。 */
   const _canInstall=!!(P.plan && P.plan.id ? P.installable!==false : true);
-  showModal(`<div class="modal-title">確認收款・發放票券</div>
+  /* ══ 簽署方式也放進這個視窗（2026-09-04 二修）════════════════════════════
+     使用者重述流程時說「點待付款方案上面的按鈕[審核] 選擇電子或紙本」——
+     一修只把兩顆鈕加在「待審核發放」那份清單上，但櫃檯實際的入口是
+     **會員資料那張卡的「收款審核」**（0828 使用者指示改成直開這一筆的）。
+     從那裡進來看不到選擇，等於流程斷在半路。
+     放在這裡兩個入口都吃得到，而且順序正好是使用者描述的：
+       選電子或紙本 → （紙本立刻算已簽）→ 同一個視窗往下填付款方式與分期 → 發放。
+     ⚠ 只在「還沒選」時出現。已經選過的不重複問；已簽回的更不能改。 */
+  const _undecided = !!(c && !c.signed_at && c.sign_type==='undecided');
+  showModal(`<div class="modal-title">${_undecided?'選擇簽署方式':'確認收款・發放票券'}</div>
     <div style="font-size:13px;color:var(--text);padding:2px 0 10px;">
       ${escH(r.member_name||'—')}　·　${escH(r.plan_name||'')}　·　${Number(r.sessions)||0} 堂</div>
+    ${_undecided?`<div class="gr-fill" style="border-color:var(--green,#1f6f54);background:rgba(31,111,84,.06);">
+      <div class="gr-fill-h">這份合約<b>還沒決定簽署方式</b>。客人要怎麼簽？</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
+        <div style="display:flex;flex-direction:column;gap:3px;">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="grantReqSetSign('${r.id}','remote')"
+            title="會員登入「我的票券」自己簽；簽回後才能發放">用電子簽（會員自己簽）</button>
+          <span style="font-size:11px;color:var(--t3);padding-left:2px;">會通知會員，簽回後再發放</span>
+        </div>
+        ${/* 2026-09-04 使用者：「所以紙本合約下方可以有副標 點選下載紙本合約」——
+             紙本的正確順序是「先印出來 → 客人簽 → 才按用紙本」，
+             但按鈕上只寫「用紙本」，很容易以為按下去會跳出檔案。
+             副標直接做成可以按的：點下去就是列印／存 PDF（ctViewPrint 走
+             window.print()，未簽的合約會印出空白簽名欄，正是要給客人簽的那張）。 */''}
+        <div style="display:flex;flex-direction:column;gap:3px;">
+          <button type="button" class="btn btn-green btn-sm" onclick="grantReqSetSign('${r.id}','paper')"
+            title="客人已經在紙本上簽好了再按；按下去就算已簽，接著就能收款發放">用紙本</button>
+          <button type="button" onclick="ctViewPrint('${r.contract_id}')"
+            style="background:none;border:none;padding:0 0 0 2px;font-size:11px;color:var(--green,#1f6f54);text-decoration:underline;cursor:pointer;text-align:left;"
+            title="開啟列印視窗，可直接印或存成 PDF">點選下載紙本合約</button>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:var(--t2);margin-top:10px;line-height:1.8;">
+        紙本的順序是：<b>先下載列印</b> → 客人簽名 → 再按<b>用紙本</b>（按下去就算已簽）→ 在下面填付款方式並發放。<br>
+        選<b>電子</b>則會通知會員去簽，簽回後再回到這裡發放 —— 下面的收款資訊現在就可以先填。</div>
+    </div>`:''}
     ${/* 應收金額：整個視窗最大、最亮的一塊（0808 使用者指示：「避免櫃檯看錯」）——
          2026-08-28 二修之後欄位可編輯了，這一塊改成**跟著欄位即時重算**，
          而不是拿掉。櫃檯改了分期或金額，要收多少當場就變。 */''}

@@ -432,5 +432,34 @@ ok('★★ 限櫃檯以上＋防連點＋紙本要問一次',
 ok('★★ 一定留痕（誰決定的簽署方式）',
    /簽署方式設為\$\{_lb\}（\$\{_who\}・\$\{nowHM\(\)\}）/.test(src));
 
+/* ── 二修：選擇也要出現在「收款審核」那個視窗（2026-09-04）──────────────
+   使用者重述流程：「點待付款方案上面的按鈕[審核] 選擇電子或紙本
+                   電子等回簽 進入下一步選付款方式跟是否分期」
+   ⚠ 櫃檯實際的入口是**會員資料那張卡的「收款審核」**（0828 改成直開這一筆），
+     一修只把兩顆鈕加在「待審核發放」清單上，從會員資料進來看不到選擇，
+     流程會斷在半路。 */
+ok('★★★ 收款審核視窗裡也能選簽署方式（只在還沒選時出現）',
+   /const _undecided = !!\(c && !c\.signed_at && c\.sign_type==='undecided'\);/.test(src)
+   && /\$\{_undecided\?`<div class="gr-fill"[^`]*?onclick="grantReqSetSign\('\$\{r\.id\}','remote'\)"/s.test(src)
+   && /onclick="grantReqSetSign\('\$\{r\.id\}','paper'\)"[\s\S]{0,200}?用紙本<\/button>/.test(src));
+ok('★★★ 還沒選時標題就講清楚這一步在做什麼',
+   /\$\{_undecided\?'選擇簽署方式':'確認收款・發放票券'\}/.test(src));
+ok('★★★ 選完留在同一筆往下走，不跳回清單',
+   /openGrantApprove\(id\);/.test(src)
+   && /跳回清單等於要他自己再點一次進來/.test(src));
+ok('★★ 兩個入口都吃得到（清單與會員資料那張卡）',
+   /onclick="openGrantApprove\('\$\{r\.id\}'\)">收款審核<\/button>/.test(src)
+   && /放在這裡兩個入口都吃得到/.test(src));
+ok('★★★ 紙本下方有可按的副標「點選下載紙本合約」',
+   /onclick="ctViewPrint\('\$\{r\.contract_id\}'\)"[\s\S]{0,260}?點選下載紙本合約<\/button>/.test(src));
+/* ctViewPrint 對「還沒簽」的合約會走 ctSignBlock({paperNote:true})，
+   印出來就是空白簽名欄 —— 正是要給客人簽的那一張。 */
+ok('★★★ 未簽的合約列印出來是空白簽名欄（給客人簽的那張）',
+   /\$\{c\.signature\s*\n\s*\? ctSignBlock\(\{sigImg:c\.signature, dateText:\(c\.signed_at\|\|''\)\.slice\(0,10\)\.replace\(\/-\/g,' \/ '\)\}\)\s*\n\s*: ctSignBlock\(\{paperNote:true\}\)\}/.test(src));
+ok('★★ 紙本的正確順序寫在畫面上（先印 → 簽 → 才按）',
+   /紙本的順序是：<b>先下載列印<\/b> → 客人簽名 → 再按<b>用紙本<\/b>（按下去就算已簽）/.test(src));
+ok('★★ 為什麼副標要做成可按的，寫在原地',
+   /但按鈕上只寫「用紙本」，很容易以為按下去會跳出檔案/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
