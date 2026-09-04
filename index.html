@@ -5177,7 +5177,18 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
    直書要和既有的 -webkit-box 折行、container-query 字級、flex 置中三者同時相處，
    顯然不是加幾條 CSS 就收得掉的；正式環境不該拿來試。整組拿掉，回到原本的橫排。
    要重做的話：先在離線頁面把 .cal-ev-std 的完整規則鏈重現、量過再上，
-   不要只在 @container 裡補宣告。 */
+   不要只在 @container 裡補宣告。
+
+   ── 2026-09-04 重做，照上面那句話的前提做的 ─────────────────────────────
+   使用者：「如果因為瀏覽器讓課卡會員的名字會分行 就直接改成直式」
+   兩個舊 bug 的根因與這一版的處理：
+     ① 字序顛倒 ← -webkit-box-orient:vertical 沒被蓋掉，直書之下變成
+        「每個字一行、行由右往左堆」。這一版**明確把那一組關掉**
+        （display:block ＋ -webkit-line-clamp:none ＋ -webkit-box-orient:horizontal），
+        離線量過八個名字全部「由上而下・單欄」。
+     ② 姓名不見 ← 當時是把選擇器提到同權重去搶，這一版改用多一個 class
+        （.nm-v2／.nm-v3 → (0,5,0)）自然贏過 .cal-ev-7d 那條 (0,4,0)，不必搶。
+   規則寫在 @media(min-width:601px) 內的容器查詢，見下面的 .nm-v2／.nm-v3。 */
 /* ══ Calm Play · Hover（V3 定案：只微放大，不展資訊卡）══
    Token 放大 106%、陰影略增，形狀與內容不變。詳細資訊改由點擊互動取得。 */
 .cal-ev.cal-ev-std .evc-more{display:none;}
@@ -5538,6 +5549,30 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   }
   @container (max-width:41px){
     .cal-ev.cal-ev-std.cal-ev-7d .evc-name{-webkit-line-clamp:4;}
+  }
+  /* ══ 窄到會折行就改直書（2026-09-04 使用者指示）════════════════════════
+     門檻＝「橫排開始折行」的那個寬度，離線量的：2 字 ≤38px、3 字 ≤50px。
+     所以分成兩個 class，共用一個門檻會讓 2 字的名字在 39–50px 平白轉直書。
+     ⚠ 這四行 reset 是重點，不是可省的樣板：
+       display:block ＋ -webkit-line-clamp:none ＋ -webkit-box-orient:horizontal
+       ——不關掉 .cal-ev-7d 那條 -webkit-box，直書之下會變成「每個字一行、
+       行由右往左堆」＝字序顛倒（0823 一修就是這樣）。
+     ⚠ 選擇器多帶一個 .nm-v2／.nm-v3（0,5,0），自然贏過 (0,4,0) 的折行規則，
+       不要回去改那條的權重（0823 二修那樣搶，結果姓名整個不見）。
+     ⚠ text-orientation:upright 讓中文字正立；全形括號會自動轉向，不必另外處理。 */
+  @container (max-width:50px){
+    .cal-ev.cal-ev-std.cal-ev-7d .evc-name.nm-v3{
+      display:block; -webkit-line-clamp:none; -webkit-box-orient:horizontal;
+      writing-mode:vertical-rl; text-orientation:upright;
+      white-space:nowrap; overflow:hidden; text-overflow:clip;
+      max-width:none; line-height:1.05;}
+  }
+  @container (max-width:38px){
+    .cal-ev.cal-ev-std.cal-ev-7d .evc-name.nm-v2{
+      display:block; -webkit-line-clamp:none; -webkit-box-orient:horizontal;
+      writing-mode:vertical-rl; text-orientation:upright;
+      white-space:nowrap; overflow:hidden; text-overflow:clip;
+      max-width:none; line-height:1.05;}
   }
   /* ══ 場地（教室／跑步機）改放**最後一列**（2026-09-04 使用者：
         「使用場地 跑步機跟教室 調整到課卡底部適合嗎?」）════════════════════
@@ -12381,8 +12416,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260904.1600';
-const APP_VERSION_LABEL='260904.1600';
+const APP_VERSION='260904.1609';
+const APP_VERSION_LABEL='260904.1609';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24482,7 +24517,26 @@ async function renderCalendar(opts){
          時間永遠是最右邊那一項；擠不下時先犧牲時間，於是變成「❗＋新」。
          左上角的出席章是絕對定位，不參與這一列的流排版。 */
       const _alertOut = bkRenewBadge({done:_renewDone,no:_renewNo,renew:_renewAlert,pay:_payAlert});
-      const _bodyOut = `<div class="evc-body"></div><div class="evc-txt"><span class="evc-time">${_alertOut}${_newOut}<b class="evc-hm">${b.start_time}</b></span><span class="evc-nmrow"><span class="evc-name${bkNameBlankCls(b)}">${_stdName}</span>${_stampOut}</span>${_stdTag}${_abbrOut}${_venueSub}${_moreHtml}</div>`;
+      /* ══ 窄卡姓名改直書（2026-09-04 使用者：「如果因為瀏覽器讓課卡會員的名字
+         會分行 就直接改成直式」）════════════════════════════════════════════
+         ⚠ 這件事 0823 同一天壞過兩次（見 CSS 那段還原註記）：一次字序顛倒、
+           一次姓名整個不見。當時的結論是「要重做的話先在離線頁面把完整規則鏈
+           重現、量過再上」。這一版就是照那句話做的，量到的結果：
+             ・字序：把 -webkit-box 那組整組關掉之後，八個名字全部「由上而下・單欄」
+             ・高度：卡片 94px，姓名從 y=24 起算，可用 70px；一個字約 12px
+                 2 字 24px → 教練 y51 場地 y66  都在卡內
+                 3 字 36px → 教練 y63 場地 y77  都在卡內（場地底 89，剩 5px）
+                 5 字以上 → 教練與場地被擠出卡外**整個消失**
+           所以直書**只給 ≤3 字**，4 字以上維持橫排折行。
+         ⚠ 涵蓋率：實際上課的 148 位會員裡 145 位是 2～3 字（97.9%），
+           4 字以上只有 魚媽劉媽／林尚美 素真／蔡美芬 吳吉琇 三位。
+         ⚠ 分成 nm-v2／nm-v3 兩個 class 而不是一個：橫排的折行點跟字數有關
+           （2 字 ≤38px 才折、3 字 ≤50px 就折），共用一個門檻會讓 2 字的名字
+           在 39–50px 平白轉成直書 —— 那裡它橫著本來就放得下。
+         ⚠ 團課（「6 人」「4/5 人」）與遮蔽卡不掛：那不是人名，數字轉直書很怪。 */
+      const _nmLen = String(_stdName||'').replace(/\s/g,'').length;
+      const _nmVCls = (!hideMember && !_grpCard && _nmLen>=2 && _nmLen<=3) ? ` nm-v${_nmLen}` : '';
+      const _bodyOut = `<div class="evc-body"></div><div class="evc-txt"><span class="evc-time">${_alertOut}${_newOut}<b class="evc-hm">${b.start_time}</b></span><span class="evc-nmrow"><span class="evc-name${bkNameBlankCls(b)}${_nmVCls}">${_stdName}</span>${_stampOut}</span>${_stdTag}${_abbrOut}${_venueSub}${_moreHtml}</div>`;
       // Focus Mode：過去的課（日期已過、或今天但已結束）自動淡化，焦點集中到現在與未來
       const _cardDate = ds;
       const _todayYmd = ymd(TODAY);

@@ -81,7 +81,7 @@ ok('　　空堂也吃得到（bkIsOpenHold 的前提就是 pending_contract）'
 
 console.log('\n出席章的 DOM 只放一份');
 ok('★ 行事曆：章排在姓名之後、自成一列，外層不再重複輸出',
-   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_stdTag\}/.test(src)
+   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_stdTag\}/.test(src)
    && /繳費／續約徽章已移進 _bodyOut 的第一列（2026-09-04，見下方 _alertOut）/.test(src));
 ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    src.indexOf('const _stampOut =') < src.indexOf('const _bodyOut ='),
@@ -776,7 +776,7 @@ ok('★ 填滿那一組規則整組刪掉（不是用覆蓋蓋掉）',
    && !/\.cal-ev\.cal-ev-day\.cal-ev-checked \.evd-name\{color:#fff;\}/.test(src)
    && /用覆蓋的方式蓋不乾淨（底色、邊框、左色條、三種文字色各有 !important/.test(src));
 ok('★ DOM 仍在姓名列裡（絕對定位是相對整張卡，擺哪裡都不影響姓名列寬度）',
-   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>/.test(src)
+   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>/.test(src)
    && /\.cal-ev\.cal-ev-std \.evc-nmrow\{display:flex;align-items:center;justify-content:center;/.test(src));
 /* 2026-08-23 使用者回報「縮小的課卡 出席章變到左邊色條上了」：left 4px→9px。
    左緣課程色條寬 5px，章從 4px 起算會壓在色條上，兩個又都是深色。5px＋4px 間距＝9px。 */

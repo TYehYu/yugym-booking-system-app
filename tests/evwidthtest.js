@@ -158,7 +158,7 @@ ok('★★★ 教練不再推到右下角（那是首頁課卡才留著的位置
    /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:flex-start !important; \}/.test(src)
    && /\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(src));
 ok('★★ 出席章的 DOM 位置沒動（仍在 .evc-nmrow 裡，手機那套靠它）',
-   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>/.test(src));
+   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>/.test(src));
 
 console.log('\n⑤ 離線量法要留著（下次改門檻照這個跑）');
 ok('★★★ 量法寫在這支測試的開頭', /量法（2026-09-04 實際跑過，1824 張卡 × 2 主題）/.test(
@@ -327,6 +327,40 @@ ok('★★ 首頁課卡刻意不動，理由寫在原地',
    底色全部 transparent，對比 5.4，請假標籤仍是 #F4F1E8 on #7A2E28。 */
 ok('★★ 量測結果記在這支測試裡',
    /六位教練在兩套主題都變成同一個灰/.test(fs.readFileSync(__filename,'utf8')));
+
+console.log('\n⑭ 窄卡姓名改直書（2026-09-04 重做，0823 曾同日壞兩次）');
+/* 使用者：「如果因為瀏覽器讓課卡會員的名字會分行 就直接改成直式」
+   ⚠ 這件事 0823 壞過兩次：① 字序顛倒（陳玉→玉陳）② 姓名整個不見。
+     當時的結論寫在 CSS 裡：「要重做的話先在離線頁面把完整規則鏈重現、量過再上」。
+     這一版就是照那句話做的。 */
+ok('★★★ 兩個舊 bug 的根因與處理寫在原地',
+   /① 字序顛倒 ← -webkit-box-orient:vertical 沒被蓋掉/.test(src)
+   && /② 姓名不見 ← 當時是把選擇器提到同權重去搶，這一版改用多一個 class/.test(src));
+/* 關掉 -webkit-box 那組是重點：不關的話直書之下會變成「每個字一行、行由右往左堆」。 */
+ok('★★★ 三行 reset 一個都不能少（display／line-clamp／box-orient）',
+   /\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-name\.nm-v3\{\s*\n\s*display:block; -webkit-line-clamp:none; -webkit-box-orient:horizontal;\s*\n\s*writing-mode:vertical-rl; text-orientation:upright;/.test(src)
+   && /\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-name\.nm-v2\{\s*\n\s*display:block; -webkit-line-clamp:none; -webkit-box-orient:horizontal;/.test(src));
+/* 靠多一個 class 拿到 (0,5,0)，自然贏過 .cal-ev-7d 那條 (0,4,0)；不要回去改那條的權重。 */
+ok('★★★ 用多一個 class 取得權重，不是去搶 .cal-ev-7d 那條',
+   /選擇器多帶一個 \.nm-v2／\.nm-v3（0,5,0），自然贏過 \(0,4,0\) 的折行規則/.test(src));
+/* 門檻＝橫排開始折行的寬度（離線量：2 字 ≤38px、3 字 ≤50px）。 */
+ok('★★★ 兩個字數各有自己的門檻（共用會讓 2 字在 39–50px 平白轉直書）',
+   /@container \(max-width:50px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-name\.nm-v3\{/.test(src)
+   && /@container \(max-width:38px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-name\.nm-v2\{/.test(src));
+/* 4 字以上不轉：卡片 94px、姓名從 y=24 起算只剩 70px，一個字約 12px；
+   5 字以上教練與場地會被擠出卡外整個消失。 */
+ok('★★★ 只給 2～3 字（4 字以上維持橫排）',
+   /const _nmVCls = \(!hideMember && !_grpCard && _nmLen>=2 && _nmLen<=3\) \? ` nm-v\$\{_nmLen\}` : '';/.test(src));
+ok('★★ 為什麼卡在 3 字，量到的數字寫在原地',
+   /5 字以上 → 教練與場地被擠出卡外\*\*整個消失\*\*/.test(src));
+ok('★★ 涵蓋率寫在原地（148 位裡 145 位是 2～3 字）',
+   /實際上課的 148 位會員裡 145 位是 2～3 字（97\.9%）/.test(src));
+ok('★★ 團課與遮蔽卡不掛（數字轉直書很怪）',
+   /團課（「6 人」「4\/5 人」）與遮蔽卡不掛：那不是人名，數字轉直書很怪/.test(src));
+/* A/B 對照（78 種真實寬度 × 9 種姓名 × 有無章/場地 × 2 主題 ＝ 5616 組）：
+   字序顛倒 0、姓名不見 0、姓名被切 0、教練或場地被擠掉 0，648 張轉成直書。 */
+ok('★★ A/B 對照結果記在這支測試裡',
+   /字序顛倒 0、姓名不見 0、姓名被切 0、教練或場地被擠掉 0，648 張轉成直書/.test(fs.readFileSync(__filename,'utf8')));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
