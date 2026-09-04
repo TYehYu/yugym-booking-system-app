@@ -12483,8 +12483,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260904.2315';
-const APP_VERSION_LABEL = 'v260904.2315';
+const APP_VERSION = '260904.2334';
+const APP_VERSION_LABEL = 'v260904.2334';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50905,33 +50905,18 @@ async function openGrantApprove(id){
          那裡是整個視窗最不會被看的位置，而它是核對金額時第一個要對的數字。 */''}
     <div style="font-size:13px;color:var(--text);padding:2px 0 12px;line-height:1.8;">
       ${escH(r.member_name||'—')}　·　${escH(r.plan_name||'')}　·　${Number(r.sessions)||0} 堂　·　定價 $${(Number(P.listPrice)||0).toLocaleString()}</div>
-    ${_signOpen?`<section class="gr-step${_signPicked?' done':''}">
-      <div class="gr-step-h"><i>${_n()}</i>簽署方式${_signPicked?`<em>已選：${c.sign_type==='remote'?'電子簽':'紙本'}</em>`:''}</div>
-      <div class="gr-fill gr-plain">
-      ${/* 2026-09-04 使用者：「電子跟紙本這邊 不要太多文字敘述了 只要給簡單的按鈕」——
-           操作順序留在按鈕的 title（滑上去看得到），畫面上只留按鈕與一條可以按的副標。
-           ⚠ 要再加字之前先想：這裡是櫃檯每賣一筆都會看一次的地方，
-             看第二次以後就只是擋路。 */''}
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
-        <div style="display:flex;flex-direction:column;gap:3px;">
-          <button type="button" class="btn ${c&&c.sign_type==='remote'?'btn-green':'btn-ghost'} btn-sm" onclick="grantReqSetSign('${r.id}','remote')"
-            title="會員登入「我的票券」自己簽；簽回後才能發放">用電子簽</button>
-          <span style="font-size:11px;color:var(--t3);padding-left:2px;">會通知會員去簽</span>
-        </div>
-        ${/* 2026-09-04 使用者：「所以紙本合約下方可以有副標 點選下載紙本合約」——
-             紙本的正確順序是「先印出來 → 客人簽 → 才按用紙本」，
-             但按鈕上只寫「用紙本」，很容易以為按下去會跳出檔案。
-             副標直接做成可以按的：點下去就是列印／存 PDF。 */''}
-        <div style="display:flex;flex-direction:column;gap:3px;">
-          <button type="button" class="btn btn-ghost btn-sm" onclick="grantReqSetSign('${r.id}','paper')"
-            title="客人已經在紙本上簽好了再按；按下去就算已簽，接著就能收款發放">用紙本</button>
-          <button type="button" onclick="ctViewPrint('${r.contract_id}')"
-            style="background:none;border:none;padding:0 0 0 2px;font-size:11px;color:var(--green,#1f6f54);text-decoration:underline;cursor:pointer;text-align:left;"
-            title="開啟列印視窗，可直接印或存成 PDF">點選下載紙本合約</button>
-        </div>
-      </div>
-      </div>
-    </section>`:''}
+    ${/* ══ 順序：先定案數字，才送出去給客人簽（2026-09-04 二修）════════════
+         使用者：「這個發放票券視窗的確認順序正確嗎?」—— 不正確，而且是今天才
+         變成不正確的。0904 早上使用者描述的流程是「選電子或紙本 → 等回簽 →
+         再選付款方式跟分期」，那時候**教練建約就把數字全填好了**，先選簽署
+         方式沒問題。但同一天定案「櫃檯可以在正式收費前調整」之後，合約內文
+         改成在**按下簽署方式那一刻**才依最終數字重生 —— 相依關係反了過來。
+         版面若還把簽署放第一步，等於引導櫃檯：按了電子簽（用教練預填的數字
+         生合約、通知已送出）→ 才想到要改金額 → 會員簽的是舊數字 → 發放時
+         才跳「簽回後調整」，而通知早就收不回來。
+         ⚠ 送簽前的確認視窗（「他會簽到：8 堂・$10,400」）是最後一道防線，
+           不能拿來當作順序錯誤的補償。
+         ⚠ 編號用 _n() 依實際順序遞增，換位置就自動跟著改，不會有寫死的號碼。 */''}
     <section class="gr-step">
       <div class="gr-step-h"><i>${_n()}</i>收款資訊
         ${/* 只改付款資訊、先不發票券的路（2026-08-28）——
@@ -50976,10 +50961,38 @@ async function openGrantApprove(id){
           分期時每期只能用 1 張（0729 定案）；填了幾張就扣幾張，發放時才真的扣。</div></div>`:''}
       </div>
     </section>
-    ${/* 應收金額移到②之後（2026-09-04）：它是②算出來的**結果**，也是按下③之前
-         要核對的那個數字。原本夾在①②中間，等於把因果切斷。
+    ${/* 應收金額緊接在「收款資訊」之後（2026-09-04）：它是那些欄位算出來的
+         **結果**，隔開就把因果切斷。位置在送簽與發放這兩個動作之前 ——
+         兩者按下去都會外流（一個通知客人、一個發票券記帳），核對就放在它們前面。
          仍然是整個視窗最大最亮的一塊 —— 0808「避免櫃檯看錯」沒有放寬。 */''}
     <div class="gr-amt-box" id="gr-amt-box"></div>
+    ${_signOpen?`<section class="gr-step${_signPicked?' done':''}">
+      <div class="gr-step-h"><i>${_n()}</i>簽署方式${_signPicked?`<em>已選：${c.sign_type==='remote'?'電子簽':'紙本'}</em>`:''}</div>
+      <div class="gr-fill gr-plain">
+      ${/* 2026-09-04 使用者：「電子跟紙本這邊 不要太多文字敘述了 只要給簡單的按鈕」——
+           操作順序留在按鈕的 title（滑上去看得到），畫面上只留按鈕與一條可以按的副標。
+           ⚠ 要再加字之前先想：這裡是櫃檯每賣一筆都會看一次的地方，
+             看第二次以後就只是擋路。 */''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
+        <div style="display:flex;flex-direction:column;gap:3px;">
+          <button type="button" class="btn ${c&&c.sign_type==='remote'?'btn-green':'btn-ghost'} btn-sm" onclick="grantReqSetSign('${r.id}','remote')"
+            title="會員登入「我的票券」自己簽；簽回後才能發放">用電子簽</button>
+          <span style="font-size:11px;color:var(--t3);padding-left:2px;">會通知會員去簽</span>
+        </div>
+        ${/* 2026-09-04 使用者：「所以紙本合約下方可以有副標 點選下載紙本合約」——
+             紙本的正確順序是「先印出來 → 客人簽 → 才按用紙本」，
+             但按鈕上只寫「用紙本」，很容易以為按下去會跳出檔案。
+             副標直接做成可以按的：點下去就是列印／存 PDF。 */''}
+        <div style="display:flex;flex-direction:column;gap:3px;">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="grantReqSetSign('${r.id}','paper')"
+            title="客人已經在紙本上簽好了再按；按下去就算已簽，接著就能收款發放">用紙本</button>
+          <button type="button" onclick="ctViewPrint('${r.contract_id}')"
+            style="background:none;border:none;padding:0 0 0 2px;font-size:11px;color:var(--green,#1f6f54);text-decoration:underline;cursor:pointer;text-align:left;"
+            title="開啟列印視窗，可直接印或存成 PDF">點選下載紙本合約</button>
+        </div>
+      </div>
+      </div>
+    </section>`:''}
     <section class="gr-step" style="margin-top:11px;">
       <div class="gr-step-h"><i>${_n()}</i>發放</div>
       ${/* 2026-08-24 使用者指示：「櫃檯這邊要看到回簽才能審核，可以跳出會員回簽的簽名欄，
