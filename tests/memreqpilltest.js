@@ -65,5 +65,31 @@ ok('★ 沿用待審核發放那一套外觀（多一個 tb-memreq 供日後微�
 ok('★★ 為什麼不跟「待審核發放」合成一顆，寫在原地',
    /「待審核發放」＝票券要不要放行（錢的事）；「會員申辦」＝這個人是不是他說的那個人/.test(src));
 
+console.log('\n⑤ 提示會自己跳出來（2026-09-04）');
+/* 使用者回報：「剛剛蘇映倢 確認審核的視窗不見了」——
+   查資料庫那筆 member_link_requests 一直是 pending，trg_change_log 與 fn_table_sigs
+   也都正常。問題不在資料，在**更新時機**：這兩顆提示原本只在 navTo（換頁）時重算，
+   櫃檯坐在「預約管理」不動時，會員送出申辦，提示永遠不會自己跳出來。
+   ⚠ 這是 0903「這個審核確認要在櫃檯桌機每個頁面都看到」只做了一半：
+     放到每一頁了，但不會自己更新 —— 人不換頁就等於沒做。 */
+ok('★★★ 有背景輪詢，而且只會建一個計時器',
+   /function startReviewPillPoll\(\)\{\s*\n\s*if\(window\._pillPollTimer\) return;\s*\n\s*window\._pillPollTimer=setInterval\(async\(\)=>\{/.test(src));
+ok('★★★ navTo 會把它啟動起來', /try\{ if\(typeof startReviewPillPoll==='function'\) startReviewPillPoll\(\); \}catch\(_\)\{\}/.test(src));
+ok('★★★ 分頁在背景不打、非櫃檯不打',
+   /if\(document\.hidden\) return;\s*\n\s*if\(typeof isDeskLike!=='function' \|\| !isDeskLike\(\)\) return;/.test(src));
+ok('★★★ 回前景立刻補一次（背景時輪詢是停的）',
+   /回到前景立刻補一次 —— 分頁在背景時輪詢是停的，切回來不補的話還要再等 20 秒/.test(src));
+/* 既有的兩支輪詢都吃 remoteSigChanged()，而那支是一次性的（比對完就記下新簽章），
+   多一個呼叫端會互相吃掉對方的變更 —— 21676 行那段註解講的就是這個坑。 */
+ok('★★★ 沒有掛進既有的 _dashPollTimer／_calPollTimer（會吃掉彼此的簽章）',
+   /它們各自只在自己那一頁跑，而且都吃 remoteSigChanged\(\) —— 那支是\*\*一次性\*\*的/.test(src)
+   && !/_pillPollTimer[\s\S]{0,200}?remoteSigChanged/.test(src));
+ok('★★ 成本：只清時間戳，沒變動就不傳資料（理由寫在原地）',
+   /dbCacheClear 只把時間戳歸零（資料與簽章都留著），/.test(src));
+/* 離線實跑（2026-09-04）：重複呼叫只建一個 20 秒計時器、掛一個 visibilitychange；
+   櫃檯那一輪會清兩張表的快取並更新兩顆提示；非櫃檯與背景分頁都不打。 */
+ok('★★ 實跑四種情況的結果記在這支測試裡',
+   /重複呼叫只建一個 20 秒計時器、掛一個 visibilitychange/.test(fs.readFileSync(__filename,'utf8')));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

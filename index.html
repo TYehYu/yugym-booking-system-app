@@ -12416,8 +12416,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260904.1848';
-const APP_VERSION_LABEL='260904.1848';
+const APP_VERSION='260904.1855';
+const APP_VERSION_LABEL='260904.1855';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16358,6 +16358,7 @@ function navTo(key, gkey){
      沒有額外的網路成本；不放在渲染流程裡，出錯也不會影響換頁。 */
   try{ if(typeof refreshGrantReviewPill==='function') refreshGrantReviewPill(); }catch(_){}
   try{ if(typeof refreshMemReqPill==='function') refreshMemReqPill(); }catch(_){}
+  try{ if(typeof startReviewPillPoll==='function') startReviewPillPoll(); }catch(_){}
   if(typeof closeModal==='function') closeModal(); // 切頁時關掉任何殘留的彈窗，避免 modal 蓋住新頁
   if(window._msb && key!=='mem_bookings' && typeof msbExit==='function') msbExit(true); // 離開會員首頁＝結束自主訓練訂位模式
   if(typeof clearPunchClock==='function') clearPunchClock(); // 停掉打卡時鐘計時器
@@ -50388,6 +50389,42 @@ async function refreshGrantReviewPill(){
    ⚠ 顏色：申辦用紅（#7A2E28，沿用原本滑出鈕的色）—— 紅＝要有人動作，
      與待審核發放同一階；兩顆並排時靠文字區分，不是靠顏色。
    ⚠ 讀的是 dbGetAll 快取（member_link_requests 本來就在預載清單裡），沒有額外網路成本。 */
+/* ══ 兩顆待審核提示的背景輪詢（2026-09-04）════════════════════════════════
+   使用者回報：「剛剛蘇映倢 確認審核的視窗不見了」——
+   查資料庫那筆 member_link_requests 一直是 pending、trg_change_log 與 fn_table_sigs
+   也都正常，問題不在資料，在**更新時機**：這兩顆提示只在 navTo（換頁）時重算。
+   櫃檯坐在「預約管理」不動的時候，會員送出申辦，提示永遠不會自己跳出來。
+
+   ⚠ 這是 0903「這個審核確認要在櫃檯桌機每個頁面都看到」只做了一半：
+     放到每一頁了，但不會自己更新。人不換頁就等於沒做。
+   ⚠ 為什麼不掛進既有的那兩支輪詢（_dashPollTimer／_calPollTimer）：
+     它們各自只在自己那一頁跑，而且都吃 remoteSigChanged() —— 那支是**一次性**的
+     （比對完就記下新簽章），多一個呼叫端就會互相吃掉對方的變更，
+     正是 21676 行那段註解在講的坑。這裡不碰它，自己走快取校驗。
+   ⚠ 成本：兩張都是小表。dbCacheClear 只把時間戳歸零（資料與簽章都留著），
+     接著的 dbGetAll 走「簽章校驗 → 沒變就沿用」，沒變動時完全不傳資料。
+   ⚠ 分頁在背景不打（回前景由 visibilitychange 補），與行事曆那支同一個做法。 */
+function startReviewPillPoll(){
+  if(window._pillPollTimer) return;
+  window._pillPollTimer=setInterval(async()=>{
+    try{
+      if(document.hidden) return;
+      if(typeof isDeskLike!=='function' || !isDeskLike()) return;
+      dbCacheClear(['member_link_requests','ticket_grant_requests']);
+      if(typeof refreshMemReqPill==='function') await refreshMemReqPill();
+      if(typeof refreshGrantReviewPill==='function') await refreshGrantReviewPill();
+    }catch(_){}
+  }, 20000);
+  /* 回到前景立刻補一次 —— 分頁在背景時輪詢是停的，切回來不補的話還要再等 20 秒。 */
+  try{ document.addEventListener('visibilitychange',()=>{
+    if(document.hidden) return;
+    try{ if(typeof isDeskLike==='function' && isDeskLike()){
+      dbCacheClear(['member_link_requests','ticket_grant_requests']);
+      if(typeof refreshMemReqPill==='function') refreshMemReqPill();
+      if(typeof refreshGrantReviewPill==='function') refreshGrantReviewPill();
+    } }catch(_){}
+  }); }catch(_){}
+}
 async function memReqPending(){
   try{
     const all=await dbGetAll('member_link_requests').catch(()=>[]);
