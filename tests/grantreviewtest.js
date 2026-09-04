@@ -233,6 +233,51 @@ console.log('\n③e 兩顆都要二次確認（2026-09-04：「按了就直接�
        .test(require('fs').readFileSync(__filename,'utf8')));
 }
 
+console.log('\n③f 拆帳兩欄＋簽署方式的反悔機制（2026-09-04）');
+{
+  const G=grabFn('openGrantApprove'), U=grabFn('_grantReqUnsign'), W=grabFn('grSplitFromWire');
+  /* 使用者：「現金＋匯款的話 可以顯示兩列個別輸入嗎」——原本只有一格「其中現金
+     收多少（其餘記匯款）」，匯款那半要櫃檯自己心算。 */
+  ok('★★★ 現金與匯款各一欄，同一列',
+     /<div class="form-2col" id="gr-split-wrap"/.test(G)
+     && /<label>現金收多少<\/label>/.test(G) && /<label>匯款收多少<\/label>/.test(G));
+  ok('★★★ 兩欄互補（不可能出現「現金＋匯款 ≠ 總金額」）',
+     /c\.value=\(String\(w\.value\)\.trim\(\)===''\|\|!Number\.isFinite\(wv\)\)/.test(W)
+     && /兩格是連動的，不是各填各的/.test(src));
+  ok('★★★ 只存現金那一格，匯款是推導的（兩邊都存會多一個可以互相打架的欄位）',
+     /真正存起來的仍然只有現金那一格（splitCash），匯款是推導出來的/.test(src));
+  ok('★★ 使用者正在打匯款那格時不覆寫他',
+     /document\.activeElement!==_w/.test(grabFn('grFillPreview')));
+  ok('★★ 切換付款方式改對 wrap 的 id', /getElementById\('gr-split-wrap'\)/.test(G));
+
+  /* 使用者：「電子跟紙本 要有反悔的機制 不然櫃檯失誤就無法挽救了」——
+     按下「用紙本」會立刻寫 signed_at，而簽署方式那一段的條件是「還沒簽回」，
+     於是按錯的當下那一段就消失了，畫面上再也沒有任何路。 */
+  ok('★★★ 有一支可以把簽署方式改回「還沒選」',
+     /async function _grantReqUnsign\(id\)\{/.test(src)
+     && /c\.sign_type='undecided'; c\.signed_at=null;/.test(U));
+  ok('★★★ 紅線是簽名圖：會員真的簽過就不能一鍵抹掉',
+     /if\(c\.signature\)\{ showToast\('會員已經簽名回傳了，不能取消/.test(U)
+     && /要重簽就取消整筆發放、重開一份新合約給他簽/.test(src));
+  ok('★★★ 反悔入口要放在「已簽回但沒有簽名圖」那一格（紙本誤按時簽署那段已經收起來了）',
+     /onclick="grantReqUnsign\('\$\{r\.id\}'\)"[\s\S]{0,120}?按錯了？取消這次的簽署方式/.test(G)
+     && /反悔的入口一定要放在這裡，不然沒有路/.test(src));
+  ok('★★ 簽署方式那一段也有一顆（已選過時）',
+     /onclick="grantReqUnsign\('\$\{r\.id\}'\)" title="改回「還沒選」，可以重新選一次">按錯了<\/button>/.test(G));
+  ok('★★ 只有櫃檯以上可以按，而且要留痕',
+     /if\(!isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可操作'\); return; \}/.test(U)
+     && /取消\$\{_lb\}、改回未選（\$\{_who\}・\$\{nowHM\(\)\}）/.test(U));
+  ok('★★ 防連點', /async function grantReqUnsign\(id\)\{ return onceAct\('grunsign:'\+id/.test(src));
+  /* 離線實跑（2026-09-04，真實函式＋假資料庫）：
+       紙本誤按 → sign_type 回 undecided、signed_at 清空、留痕；
+       電子誤按（已通知未簽）→ 同上；
+       會員真的簽過（有簽名圖）→ 擋住、資料一個字都沒動；
+       本來就沒選 → 只提示；按取消 → 資料完全沒被改。 */
+  ok('★★ 五種情況的實跑結果記在這支測試裡',
+     /會員真的簽過（有簽名圖）→ 擋住、資料一個字都沒動；/
+       .test(require('fs').readFileSync(__filename,'utf8')));
+}
+
 console.log('\n③b 送簽之前把數字定案，合約內文跟著重生（2026-09-04）');
 /* 使用者定案：「教練建立合約的時候 只要填寫方案 課堂數 總價 一次付清跟分期
    也可以預填寫 但之後櫃檯端可以在正式收費前調整」——

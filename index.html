@@ -12483,8 +12483,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260904.2334';
-const APP_VERSION_LABEL = 'v260904.2334';
+const APP_VERSION = '260904.2343';
+const APP_VERSION_LABEL = 'v260904.2343';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50822,6 +50822,47 @@ async function _grantReqSetSign(id, kind){
     openGrantApprove(id);
   }catch(e){ showToast('設定失敗：'+((e&&e.message)||e), 7000); }
 }
+/* ══ 反悔（2026-09-04 使用者：「電子跟紙本 要有反悔的機制 不然櫃檯失誤就無法
+     挽救了」）════════════════════════════════════════════════════════════
+   按下「用紙本」會**立刻**把 signed_at 寫下去，而簽署方式那一段的條件是
+   「還沒簽回」—— 於是按錯的當下那一段就消失了，畫面上再也沒有任何路可以改。
+   （使用者截圖：合約已於 2026-09-04 簽回、但沒有簽名圖 —— 正是誤按的樣子。）
+
+   ⚠ 唯一的紅線是**簽名圖**：有 signature 代表會員真的在手機上簽過名，
+     那不能一鍵抹掉。要重簽就取消整筆發放、重開一份新合約給他簽。
+   ⚠ 沒有簽名圖的兩種情況都可以反悔：
+     ・紙本誤按 —— signed_at 是櫃檯按出來的，不是任何人簽的
+     ・電子已送出但還沒簽 —— 通知收不回來，但待簽卡會消失，客人不會簽到錯的那份
+   ⚠ 一定留痕：日後對帳會有人問「這份為什麼取消過簽署方式」。 */
+async function grantReqUnsign(id){ return onceAct('grunsign:'+id, ()=>_grantReqUnsign(id)); }
+async function _grantReqUnsign(id){
+  try{
+    if(!isDeskLike()){ showToast('僅管理員／櫃台可操作'); return; }
+    const r=await dbGet('ticket_grant_requests',id);
+    if(!r||r.status!=='pending'){ showToast('這筆已處理過'); return; }
+    if(!r.contract_id){ showToast('這筆沒有合約'); return; }
+    const c=await dbGet('contracts',r.contract_id).catch(()=>null);
+    if(!c){ showToast('找不到合約'); return; }
+    if(c.sign_type==='undecided' && !c.signed_at){ showToast('本來就還沒選簽署方式'); return; }
+    if(c.signature){ showToast('會員已經簽名回傳了，不能取消 —— 要重簽請「取消這筆發放」再重開一份', 9000); return; }
+    const _lb=(c.sign_type==='paper')?'紙本':'電子簽';
+    if(!confirm(`把「${r.plan_name||''}」的簽署方式改回「還沒選」？\n\n`
+      +`・目前是${_lb}${c.signed_at?'（已標示為已簽回）':''}\n`
+      +`・這份合約沒有簽名圖，所以不會刪掉任何人的簽名\n`
+      +`・會員手機上的待簽提醒會消失\n\n`
+      +`改回之後可以重新選一次電子或紙本。`)) return;
+    const _who=(SESSION&&SESSION.name)||'櫃檯';
+    c.sign_type='undecided'; c.signed_at=null;
+    c.note=(c.note?c.note+'｜':'')+`取消${_lb}、改回未選（${_who}・${nowHM()}）`;
+    await dbPut('contracts',c);
+    r.sign_type='undecided';
+    r.note=(r.note?r.note+'｜':'')+`取消${_lb}（${_who}・${nowHM()}）`;
+    await dbPut('ticket_grant_requests',r);
+    dbCacheClear(['contracts','ticket_grant_requests']);
+    showToast('已改回「還沒選簽署方式」，可以重新選一次');
+    openGrantApprove(id);
+  }catch(e){ showToast('取消失敗：'+((e&&e.message)||e), 7000); }
+}
 /* 確認視窗：應收金額要大、要有顏色（2026-08-08 使用者指示：「避免櫃檯看錯」） */
 async function openGrantApprove(id){
   const r=await dbGet('ticket_grant_requests',id);
@@ -50935,12 +50976,23 @@ async function openGrantApprove(id){
           <input type="number" id="gr-amt" oninput="grFillPreview()" placeholder="${(Number(P.listPrice)||0).toLocaleString()}" value="${Number(P.dealAmount)||Number(P.listPrice)||''}">
           <div class="gr-warn-amt" id="gr-warn-amt" style="display:none;"></div></div>
         <div class="form-row"><label>付款方式 *</label>
-          <select id="gr-method" onchange="var w=document.getElementById('gr-splitcash-wrap');if(w)w.style.display=this.value==='split'?'':'none';grFillPreview();">
+          <select id="gr-method" onchange="var w=document.getElementById('gr-split-wrap');if(w)w.style.display=this.value==='split'?'':'none';grFillPreview();">
             ${[['cash','現金'],['transfer','匯款'],['split','現金＋匯款']].map(([v,l])=>
               `<option value="${v}"${(P.method===v)?' selected':''}>${l}</option>`).join('')}</select></div>
       </div>
-      <div class="form-row" id="gr-splitcash-wrap" style="display:${(P.method==='split')?'':'none'};"><label>其中現金收多少（其餘記匯款）</label>
-        <input type="number" id="gr-splitcash" min="0" oninput="grFillPreview()" placeholder="例如 7200" value="${P.splitCash!=null?Number(P.splitCash):''}"></div>
+      ${/* 2026-09-04 使用者：「現金＋匯款的話 可以顯示兩列個別輸入嗎」——
+           原本只有一格「其中現金收多少（其餘記匯款）」，匯款那半要櫃檯自己心算，
+           而收據上、對帳時要的是兩個數字都看得見。
+           ⚠ 兩格是連動的，不是各填各的：兩邊都以總金額為準互補，所以**不可能**
+             出現「現金＋匯款 ≠ 總金額」的組合 —— 沒有這種錯誤，就不用做這種驗證。
+           ⚠ 真正存起來的仍然只有現金那一格（splitCash），匯款是推導出來的
+             （見 _grantIssue 的 _paySplit）。兩邊都存會多一個可以互相打架的欄位。 */''}
+      <div class="form-2col" id="gr-split-wrap" style="display:${(P.method==='split')?'':'none'};">
+        <div class="form-row"><label>現金收多少</label>
+          <input type="number" id="gr-splitcash" min="0" oninput="grFillPreview()" placeholder="例如 7200" value="${P.splitCash!=null?Number(P.splitCash):''}"></div>
+        <div class="form-row"><label>匯款收多少</label>
+          <input type="number" id="gr-splitwire" min="0" oninput="grSplitFromWire()" placeholder="其餘自動帶入"></div>
+      </div>
       <div class="form-row"><label>分期方式${_canInstall?' *':''}</label>
         ${_canInstall
           ? `<select id="gr-install" onchange="grFillPreview()">${[1,2,3].map(n=>
@@ -50967,7 +51019,9 @@ async function openGrantApprove(id){
          仍然是整個視窗最大最亮的一塊 —— 0808「避免櫃檯看錯」沒有放寬。 */''}
     <div class="gr-amt-box" id="gr-amt-box"></div>
     ${_signOpen?`<section class="gr-step${_signPicked?' done':''}">
-      <div class="gr-step-h"><i>${_n()}</i>簽署方式${_signPicked?`<em>已選：${c.sign_type==='remote'?'電子簽':'紙本'}</em>`:''}</div>
+      <div class="gr-step-h"><i>${_n()}</i>簽署方式${_signPicked?`<em>已選：${c.sign_type==='remote'?'電子簽':'紙本'}</em>
+        <button type="button" class="btn btn-ghost btn-sm gr-hbtn" style="margin-left:8px;"
+          onclick="grantReqUnsign('${r.id}')" title="改回「還沒選」，可以重新選一次">按錯了</button>`:''}</div>
       <div class="gr-fill gr-plain">
       ${/* 2026-09-04 使用者：「電子跟紙本這邊 不要太多文字敘述了 只要給簡單的按鈕」——
            操作順序留在按鈕的 title（滑上去看得到），畫面上只留按鈕與一條可以按的副標。
@@ -51009,7 +51063,11 @@ async function openGrantApprove(id){
           </div>`:''}
         ${(signed&&!(c&&c.signature))?`<div class="gr-sig-none">這份合約沒有存到簽名圖（紙本補簽或舊資料）——
             請先點「看合約全文」確認內容再發放。
-            <button type="button" class="gr-sig-more" onclick="openContractView('${c.id}')">看合約全文 ›</button></div>`:''}
+            <button type="button" class="gr-sig-more" onclick="openContractView('${c.id}')">看合約全文 ›</button>
+            ${/* 2026-09-04：紙本誤按就是長這個樣子（已簽回、沒有簽名圖），而簽署方式
+                 那一段這時已經收起來了 —— 反悔的入口一定要放在這裡，不然沒有路。 */''}
+            <button type="button" class="gr-sig-more" onclick="grantReqUnsign('${r.id}')"
+              title="改回「還沒選」，可以重新選一次">按錯了？取消這次的簽署方式 ›</button></div>`:''}
       </div>
       <div class="gr-fill-note" style="margin-top:8px;">
         ${_canIssue
@@ -51077,6 +51135,19 @@ function grFillSnap(){
   const v=id=>{ const el=document.getElementById(id); return el?String(el.value??''):''; };
   return [v('gr-amt'), v('gr-method'), v('gr-splitcash'), v('gr-install'), v('gr-voucher')].join('|');
 }
+/* 匯款那格 → 回推現金（2026-09-04）。兩格互補，總和恆等於總金額。 */
+function grSplitFromWire(){
+  try{
+    const a=Math.max(0, Number((document.getElementById('gr-amt')||{}).value)||0);
+    const w=document.getElementById('gr-splitwire'), c=document.getElementById('gr-splitcash');
+    if(w&&c){
+      const wv=Number(w.value);
+      c.value=(String(w.value).trim()===''||!Number.isFinite(wv))
+        ? '' : String(Math.max(0, a-Math.max(0,Math.min(wv,a))));
+    }
+  }catch(_){}
+  grFillPreview();
+}
 function grFillPreview(){
   const P=window._grP; if(!P) return;
   /* 「儲存變更」：有改過、而且改得出正確的一包，才亮 */
@@ -51092,6 +51163,17 @@ function grFillPreview(){
     _sv.title=_on?'把上面改過的收款資訊存起來，不發票券'
       :(_dirty?'上面的欄位還填不完整':'還沒有任何修改');
   }
+  /* 匯款那格是推導出來的：現金或總金額一改就跟著重算（2026-09-04）。
+     ⚠ 只有在焦點不在匯款那格時才覆寫，不然使用者正在打字會被自己的推導蓋掉。 */
+  try{
+    const _c=document.getElementById('gr-splitcash'), _w=document.getElementById('gr-splitwire');
+    if(_c&&_w&&document.activeElement!==_w){
+      const _a=Math.max(0, Number((document.getElementById('gr-amt')||{}).value)||0);
+      const _cv=Number(_c.value);
+      _w.value=(String(_c.value).trim()===''||!Number.isFinite(_cv))
+        ? '' : String(Math.max(0, _a-Math.max(0,Math.min(_cv,_a))));
+    }
+  }catch(_){}
   const p0=grFillApply(P, true);
   /* ══ 分期的後果直接算出來（2026-09-04「避免操作失誤」）════════════════════
      原本寫的是規則：「分期會改變這次開通幾堂與約別，發放前一定要確定」——
