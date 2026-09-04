@@ -248,7 +248,20 @@ ok('★★ 四個欄位改動都會重算',
   ok('★ 記下 issued_at —— 30 分鐘退回從這一刻起算',
      /r\.issued_at=new Date\(\)\.toISOString\(\);          \/\/ 30 分鐘退回從這一刻起算/.test(F));
   ok('★ 合約補上票券關聯（會員票券卡的「合約」按鈕靠它）',
-     /if\(c\)\{ c\.ticket_id=t\.id; c\.expire_date=t\.expire_date\|\|null; await dbPut\('contracts',c\); \}/.test(F));
+     /c\.ticket_id=t\.id; c\.expire_date=t\.expire_date\|\|null;/.test(F)
+     && /await dbPut\('contracts',c\);/.test(F));
+  /* 2026-09-04：收款這一步永遠可編輯（0828），櫃檯改了金額或分期之後，
+     contracts.amount 還停在建約當下那個數字 —— 四處顯示都讀它，於是與實收對不上。 */
+  ok('★★★ 金額也跟著更新（口徑與建約當下同一條算式）',
+     /const _final=Number\(_p\.isInstall\?Math\.max\(0,_p\.firstAmount-_p\.voucherAmt\):_p\.paidAmount\)\|\|0;/.test(F)
+     && /if\(_final!==_was\)\{/.test(F));
+  ok('★★★ 改過就留痕（對帳的人要看得到誰在什麼時候改的）',
+     /收款時調整金額 \$\$\{_was\.toLocaleString\(\)\}→\$\$\{_final\.toLocaleString\(\)\}/.test(F)
+     /* ⚠ 全形括號：程式裡寫的是「（…）」不是 "(...)"，用 \( 對不上 */
+     && /（\$\{\(SESSION&&SESSION\.name\)\|\|'櫃檯'\}・\$\{nowHM\(\)\}）/.test(F));
+  ok('★★★ 合約**內文**不動（那是會員簽名時看到的那一份，事後改掉等於竄改）',
+     !/c\.body_snapshot=/.test(F) && !/c\.fill_snapshot=/.test(F)
+     && /事後改掉等於竄改/.test(src));
   ok('★ 通知會員票券已啟用', /await pushNotification\(r\.member_id,'payment','票券已啟用',/.test(F));
   ok('　　防連點', /async function grantReqApprove\(id\)\{ return onceAct\('grapp:'\+id, \(\)=>_grantReqApprove\(id\)\); \}/.test(src));
   ok('　　寫入後清快取', /dbCacheClear\(\['member_tickets','ticket_logs','purchases','contracts','ticket_grant_requests','notifications'\]\);/.test(F));

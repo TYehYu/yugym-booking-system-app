@@ -12446,8 +12446,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260904.1959';
-const APP_VERSION_LABEL = 'v260904.1959';
+const APP_VERSION = '260904.2012';
+const APP_VERSION_LABEL = 'v260904.2012';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50627,6 +50627,13 @@ async function openGrantApprove(id){
      如果有再出現」）——建約當下可能沒挑（或那時候還沒發），收款這一刻才是真的要算錢的時候。
      ⚠ 現在讀一次餘額，不是拿 payload 裡存的那份：審核可能隔了幾天，券有機會被別筆用掉。
      ⚠ 一張沒有就整塊不畫（使用者：「如果有再出現」）。 */
+  /* ⚠ 2026-09-04 修：P 原本宣告在下面（折價券這一段之後），這裡卻已經在讀 P.plan ——
+     `const` 在初始化前是**暫時死區**，一讀就 ReferenceError；而整段包在 try{}catch(_){}
+     裡，於是錯誤被完全吞掉，表現成「折價券提醒從來沒出現過」。
+     使用者 0828 要的「收款審核也要提醒有沒有折價券」等於一直沒生效。
+     ⚠ 這一類錯不會白畫面、不會有紅字，只會安靜地少一塊功能 ——
+       靠 tests/tdztest.js 掃「同一個函式裡宣告前先用」。 */
+  const P=r.payload||{};
   window._grVouchers=[]; window._grVoucherMax=0;
   try{
     const _vt=VOUCHER_TT[(P.plan&&P.plan.category)||''] ||
@@ -50643,7 +50650,6 @@ async function openGrantApprove(id){
   }catch(_){}
   const _vHeld=Number(window._grVoucherMax)||0;
   const amt=Number(r.amount)||0;
-  const P=r.payload||{};
   const _pay={cash:'現金',transfer:'匯款',card:'刷卡',split:'現金+匯款'}[P.method]||P.method||'—';
   /* 收款資訊由櫃檯補（2026-08-28）：教練建合約時沒填總金額／付款方式／分期，
      這裡就不是「核對一個數字」而是「把它填出來」。填完才算得出應收，也才發得了票。
@@ -50955,8 +50961,28 @@ async function _grantReqApprove(id){
       }
     }
     // 合約補上票券關聯（會員票券卡的「📄 合約」按鈕靠它）
+    /* ⚠ 2026-09-04 補：金額也要跟著更新。收款這一步永遠可編輯（0828），櫃檯改了
+       總金額或分期之後，contracts.amount 還停在建約當下那個數字 —— 合約清單、
+       會員端合約列表、會員資料的合約卡四處都讀它，於是顯示的金額與實際收的對不上。
+       ⚠ 口徑不變（分期記第 1 期實收、一次付清記折抵後實收），與建約當下同一條算式；
+         這裡只是把數字換成最後真的成立的那一份。
+       ⚠ 合約**內文**（body_snapshot／fill_snapshot）不動：那是會員簽名時看到的那一份，
+         事後改掉等於竄改。內文與實收不一致時，用 note 留痕讓對帳的人看得到。 */
     if(r.contract_id){ try{ const c=await dbGet('contracts',r.contract_id);
-      if(c){ c.ticket_id=t.id; c.expire_date=t.expire_date||null; await dbPut('contracts',c); } }catch(_){} }
+      if(c){
+        c.ticket_id=t.id; c.expire_date=t.expire_date||null;
+        const _p=r.payload||{};
+        const _final=Number(_p.isInstall?Math.max(0,_p.firstAmount-_p.voucherAmt):_p.paidAmount)||0;
+        const _was=Number(c.amount)||0;
+        if(_final!==_was){
+          c.amount=_final;
+          c.note=(c.note?c.note+'｜':'')
+            +`收款時調整金額 $${_was.toLocaleString()}→$${_final.toLocaleString()}`
+            +(_p.isInstall?`（分 ${_p.installCount} 期・這是第 1 期）`:'')
+            +`（${(SESSION&&SESSION.name)||'櫃檯'}・${nowHM()}）`;
+        }
+        await dbPut('contracts',c);
+      } }catch(_){} }
     try{ await pushNotification(r.member_id,'payment','票券已啟用',
       `您購買的「${r.plan_name||'課程'}」已完成，票券已發放，可以開始預約囉。`); }catch(_){}
     dbCacheClear(['member_tickets','ticket_logs','purchases','contracts','ticket_grant_requests','notifications']);
