@@ -242,8 +242,21 @@ console.log('\n⑤ 紙本合約顯示「已使用紙本簽名」');
   ok('　　為什麼要明白寫出來（紙本沒有簽名圖檔可存）',
      /紙本沒有簽名圖檔可存（簽在紙上），所以系統要明白寫出「這一份是紙本簽的」，/.test(src));
 }
-ok('★★ 步驟 4 的兩顆按鈕改名為「電子合約／紙本合約」',
-   /電子合約\$\{_hasLine\?'':'（未綁定 LINE）'\}/.test(src) && />紙本合約<\/button>/.test(src));
+/* 2026-09-04：電子合約不再需要綁 LINE（推播 0822 就整組移除，改成「我的票券」
+   常駐的待簽卡；會員用手機號碼＋88888888 登入即可簽）。兩顆鈕都常駐可按。 */
+ok('★★ 步驟 4 的兩顆按鈕都可按（電子不再被 LINE 擋）',
+   />電子合約<\/button>/.test(src) && />紙本合約<\/button>/.test(src)
+   && !/disabled style="opacity:\.45;cursor:not-allowed;" title="此會員尚未綁定 LINE"/.test(src));
+ok('★★★ 未綁 LINE 時要當面告知怎麼登入（唯一真的差別是收不到通知）',
+   /這位會員<b>還沒綁定 LINE<\/b>，不會收到通知/.test(src)
+   && /用<b>手機號碼<\/b>加預設密碼 <b>88888888<\/b> 登入，到「我的票券」簽署/.test(src)
+   && /if\(_nl\) _nl\.style\.display=_hasLine\?'none':'';/.test(src));
+ok('★★ 為什麼可以拿掉（0822 推播移除）寫在原地',
+   /那個前提在 \*\*2026-08-22 就沒了\*\*/.test(src)
+   && /fn_member_sign_contract 只檢查 member_id，\*\*沒有任何 LINE 判斷\*\*/.test(src));
+ok('★★ 預設值刻意不動（沒綁 LINE 仍預設紙本）',
+   /ctSetType\(_hasLine\?'remote':'paper'\);/.test(src)
+   && /這次只放開「能不能選」，\s*\n\s*不改櫃檯現場銷售的既有習慣/.test(src));
 ok('★★ 送出鈕跟著換字（紙本＝發票券、電子＝送審）',
    /if\(sb2\) sb2\.textContent=\(v==='remote'\) \? '送出審核（等簽回＋確認收款）' : '完成簽約並發放票券';/.test(src));
 ok('★ 兩塊說明各自講清楚結果',
@@ -376,6 +389,29 @@ console.log('\n預覽會員視角：待簽名票券的範例卡');
      /usable\.length===0&&inactive\.length===0&&pendCt\.length===0&&!_ctDemo/.test(R));
   ok('　　範例卡接在真卡後面（真的有就先看真的）', /pendCards\+demoCard\+/.test(R));
 }
+
+console.log('\n⑧ 電子改紙本：客人到場才決定簽署方式（2026-09-04）');
+/* 使用者：「先讓教練可以用櫃檯帳號建立合約 等客人來現場後櫃檯再接手
+           要用紙本還是電子 是否要分期 現金還是匯款」
+   分期與付款方式在「收款資訊」裡本來就能改（0828）；電子↔紙本是唯一還不能延後的。
+   作業流程：建約時先開成電子（票券不發、進佇列）→ 客人到場要紙本就按這顆。 */
+ok('★★★ 待審核清單上有「改用紙本」，而且只在未簽回時出現',
+   /\$\{\(c && !signed\)\?`<button class="btn btn-ghost btn-sm" title="客人要簽紙本：改成紙本後這一筆就算已簽，可以直接確認收款發放" onclick="grantReqToPaper\('\$\{r\.id\}'\)">改用紙本<\/button>`:''\}/.test(src));
+ok('★★★ 已簽回的不給轉（會把會員的簽名紀錄抹掉）',
+   /if\(c\.signed_at\)\{ showToast\('這份合約已經簽回了，不需要改成紙本'\); return; \}/.test(src)
+   && /只轉「未簽回」的：已經簽回代表會員真的在手機上簽過名了/.test(src));
+ok('★★★ 合約與佇列兩邊的 sign_type 都要改',
+   /c\.sign_type='paper';/.test(src) && /r\.sign_type='paper';/.test(src)
+   && /只改一邊，清單上的標籤與合約頁會對不起來/.test(src));
+ok('★★★ 轉完會員手機上的待簽卡會自動消失（理由寫在原地）',
+   /會員端的待簽卡是 `sign_type==='remote' && !signed_at`（見 58273／58594），/.test(src));
+ok('★★★ 一定留痕（誰把電子改成紙本）',
+   /由電子改為紙本（\$\{_who\}・\$\{nowHM\(\)\}）/.test(src));
+ok('★★ 限櫃檯以上＋防連點',
+   /if\(!isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可操作'\); return; \}/.test(src)
+   && /async function grantReqToPaper\(id\)\{ return onceAct\('gr2paper:'\+id, \(\)=>_grantReqToPaper\(id\)\); \}/.test(src));
+ok('★★ 按下去前先問一次（要確認客人真的簽了紙本）',
+   /請確認客人已經在紙本合約上簽名。/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

@@ -12416,8 +12416,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260904.1633';
-const APP_VERSION_LABEL='260904.1633';
+const APP_VERSION='260904.1816';
+const APP_VERSION_LABEL='260904.1816';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48730,15 +48730,33 @@ async function renderContractStep(){
   const fbox=document.getElementById('ct-fill-preview');
   if(fbox){ try{ fbox.innerHTML=contractFillBlockHTML(window._ctFill); fbox.style.display=''; }
     catch(_){ fbox.style.display='none'; } }
-  /* 2026-07-28 使用者定案：電子簽約統一在會員手機（限 LINE 綁定者）；未綁定僅紙本 */
+  /* ══ 電子合約不再需要綁 LINE（2026-09-04）════════════════════════════════
+     0728 定案是「電子簽約統一在會員手機（限 LINE 綁定者）；未綁定僅紙本」，
+     因為當時合約是靠 LINE 推播送到會員手上的。
+
+     那個前提在 **2026-08-22 就沒了**：使用者說「這個簽約提示一直出現 可以移除了」，
+     推播與蓋版提醒整組拿掉（見 memSignBannerCheck 的還原註記），改成
+     「我的票券」頁常駐的待簽卡。會員自己登入就看得到，跟 LINE 沒有關係。
+       ・會員登入＝手機號碼＋預設密碼 88888888（見新增會員的說明文字）
+       ・fn_member_sign_contract 只檢查 member_id，**沒有任何 LINE 判斷**（已查 prosrc）
+     而 494 位會員裡有 308 位沒綁 LINE（62%），全被擋在電子合約外面。
+
+     2026-09-04 使用者的實際卡點：「因為目前建立合約會卡在這一步」——
+     教練用櫃檯帳號替新客人建約時，電子被 LINE 擋著、紙本又會「直接發放票券」，
+     兩條路都不能走（客人還沒付款也還沒簽）。
+
+     ⚠ 唯一真的差別是**收不到通知**，所以未綁定時在說明裡寫清楚要口頭告知。
+     ⚠ 預設值不動（沒綁 LINE 仍預設紙本）：這次只放開「能不能選」，
+       不改櫃檯現場銷售的既有習慣。 */
   const _hasLine=!!(m&&m.line_user_id);
   const tt=document.getElementById('ct-types');
-  if(tt){   /* 2026-07-28 二修：兩鈕常駐——未綁定 LINE 時電子簽約反灰並標注 */
-    tt.innerHTML=`<button type="button" class="ct-tbtn" data-t="remote" ${_hasLine
-        ? `onclick="ctSetType('remote')"`
-        : `disabled style="opacity:.45;cursor:not-allowed;" title="此會員尚未綁定 LINE"`}>電子合約${_hasLine?'':'（未綁定 LINE）'}</button>`
+  if(tt){
+    tt.innerHTML=`<button type="button" class="ct-tbtn" data-t="remote" onclick="ctSetType('remote')">電子合約</button>`
       + `<button type="button" class="ct-tbtn" data-t="paper" onclick="ctSetType('paper')">紙本合約</button>`;
   }
+  /* 未綁 LINE 時，電子合約的說明要多一句「他不會收到通知」 */
+  const _nl=document.getElementById('ct-remote-noline');
+  if(_nl) _nl.style.display=_hasLine?'none':'';
   ctSetType(_hasLine?'remote':'paper');
 }
 // 簽約完成 → 送出（發票券＋收款＋合約）
@@ -49128,9 +49146,12 @@ async function openGrantModal(){
       <div class="ct-types" id="ct-types"></div>   <!-- 2026-07-28 使用者定案：依 LINE 綁定動態決定選項 -->
       ${/* 2026-08-08 使用者定案：電子合約要等簽回＋確認收款才發票券；紙本當場完成。 */''}
       <div id="ct-remote-box" class="ct-paper-hint" style="display:none;">
-        <b>電子合約</b>：送出後系統以 LINE 通知會員，會員在自己手機上跳出合約視窗檢視並簽名。<br>
+        <b>電子合約</b>：會員登入後在「我的票券」看到待簽卡，點開檢視並簽名。<br>
         <b style="color:#b5372e;">此時還不會發放票券</b> —— 這筆會進「待審核發放」，
-        等合約簽回、櫃檯確認款項入帳後按「確認收款・發放」才發票券。
+        等合約簽回、櫃檯確認款項入帳後按「確認收款・發放」才發票券。<br>
+        <span id="ct-remote-noline" style="display:none;color:#9a6a1e;">
+          ⚠ 這位會員<b>還沒綁定 LINE</b>，不會收到通知 —— 請當面告訴他：
+          用<b>手機號碼</b>加預設密碼 <b>88888888</b> 登入，到「我的票券」簽署。</span>
       </div>
       <div id="ct-paper-box" style="display:none;">
         <div class="ct-paper-hint" style="margin-bottom:8px;"><b>紙本合約</b>：請先確認下方合約內容，列印後由會員簽署留存；系統記錄「<b>已使用紙本簽名</b>」與合約全文。<br>
@@ -50421,6 +50442,12 @@ async function openGrantReview(){
       <div class="gr-item-amt"><span>應收</span><b>$${amt.toLocaleString()}</b></div>
       <div class="gr-item-act">
         ${c?`<button class="btn btn-ghost btn-sm" onclick="openContractView('${c.id}')">看合約</button>`:''}
+        ${/* 2026-09-04 使用者：「先讓教練可以用櫃檯帳號建立合約 等客人來現場後櫃檯再接手
+             要用紙本還是電子 是否要分期 現金還是匯款」——
+             分期與付款方式本來就能在這裡改（0828），電子↔紙本是唯一還不能延後的。
+             建約時先開成電子（票券不發、進這個佇列），客人到場說要紙本就按這顆。
+             ⚠ 只在**未簽回**時出現：已經簽回就沒有改的必要，改了反而抹掉會員的簽名紀錄。 */''}
+        ${(c && !signed)?`<button class="btn btn-ghost btn-sm" title="客人要簽紙本：改成紙本後這一筆就算已簽，可以直接確認收款發放" onclick="grantReqToPaper('${r.id}')">改用紙本</button>`:''}
         <button class="btn btn-ghost btn-sm" style="color:var(--danger,#b5372e);" onclick="grantReqCancel('${r.id}')">取消</button>
         ${signed?`<button class="btn btn-green btn-sm" onclick="openGrantApprove('${r.id}')">確認收款・發放</button>`
                 :`<button class="btn btn-ghost btn-sm" title="合約簽回後才能發放；先進去把收款資訊改好" onclick="openGrantApprove('${r.id}')">收款資訊</button>`}
@@ -50429,10 +50456,54 @@ async function openGrantReview(){
   }).join('');
   showModal(`<div class="modal-title">待審核發放</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-bottom:12px;">
-      這些是<b>電子合約</b>的訂單：要等會員在手機上簽回合約、並確認款項已入帳，才發放票券。<br>
-      <span style="color:var(--t3);">紙本合約當場就完成了，不會出現在這裡。</span></div>
+      這些是<b>還沒發票券</b>的訂單：要等合約簽回、並確認款項已入帳，才發放票券。<br>
+      <span style="color:var(--t3);">客人到場改口要簽紙本，按「改用紙本」就可以直接收款發放；
+      金額、付款方式、分期都在「收款資訊」裡改。建約時就選紙本的當場完成，不會出現在這裡。</span></div>
     ${list.length?`<div class="gr-list">${rows}</div>`:'<div style="padding:26px 10px;text-align:center;color:var(--t3);font-size:13px;">目前沒有待審核的發放</div>'}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+/* ══ 電子改紙本（2026-09-04 使用者指示）════════════════════════════════
+   「先讓教練可以用櫃檯帳號建立合約　等客人來現場後櫃檯再接手
+     要用紙本還是電子　是否要分期　現金還是匯款」
+
+   分期與付款方式在「收款資訊」裡本來就能改（0828 為了同一種情況做的）；
+   電子↔紙本是唯一還不能延後的一項，補在這裡。
+   作業流程：建約時先開成**電子**（票券不發、進待審核佇列），客人到場說要紙本
+   就按這顆，這一筆立刻算已簽，接著照常「確認收款・發放」。
+
+   ⚠ 只轉「未簽回」的：已經簽回代表會員真的在手機上簽過名了，
+     轉成紙本會把 signed_at 蓋成現在、把那份簽名的意義抹掉。
+   ⚠ 會員端的待簽卡是 `sign_type==='remote' && !signed_at`（見 58273／58594），
+     轉成 paper＋signed_at 之後那張卡會自動從他手機消失 —— 這是對的，
+     他已經簽紙本了，不該再被提醒。
+   ⚠ 合約與佇列兩邊的 sign_type 都要改：只改一邊，清單上的標籤與合約頁會對不起來。
+   ⚠ 一定留痕：這是「誰把電子改成紙本」，日後對帳一定會有人問。 */
+async function grantReqToPaper(id){ return onceAct('gr2paper:'+id, ()=>_grantReqToPaper(id)); }
+async function _grantReqToPaper(id){
+  try{
+    if(!isDeskLike()){ showToast('僅管理員／櫃台可操作'); return; }
+    const r=await dbGet('ticket_grant_requests',id);
+    if(!r||r.status!=='pending'){ showToast('這筆已處理過'); return; }
+    if(!r.contract_id){ showToast('這筆沒有合約，無法改簽署方式'); return; }
+    const c=await dbGet('contracts',r.contract_id).catch(()=>null);
+    if(!c){ showToast('找不到合約'); return; }
+    if(c.signed_at){ showToast('這份合約已經簽回了，不需要改成紙本'); return; }
+    if(!confirm(`把 ${r.member_name||''} 的「${r.plan_name||''}」改成紙本簽署？\n\n`
+      +`・會員手機上的待簽提醒會消失\n`
+      +`・這一筆立刻算「已簽」，可以直接確認收款發放\n\n`
+      +`請確認客人已經在紙本合約上簽名。`)) return;
+    const _who=(SESSION&&SESSION.name)||'櫃檯';
+    c.sign_type='paper';
+    c.signed_at=new Date().toISOString();
+    c.note=(c.note?c.note+'｜':'')+`由電子改為紙本（${_who}・${nowHM()}）`;
+    await dbPut('contracts',c);
+    r.sign_type='paper';
+    r.note=(r.note?r.note+'｜':'')+`改用紙本（${_who}・${nowHM()}）`;
+    await dbPut('ticket_grant_requests',r);
+    dbCacheClear(['contracts','ticket_grant_requests']);
+    showToast('已改為紙本簽署，可以確認收款發放了');
+    openGrantReview();   // 回到同一個清單，連續處理不用重進
+  }catch(e){ showToast('改用紙本失敗：'+((e&&e.message)||e), 7000); }
 }
 /* 確認視窗：應收金額要大、要有顏色（2026-08-08 使用者指示：「避免櫃檯看錯」） */
 async function openGrantApprove(id){
