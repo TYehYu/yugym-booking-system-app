@@ -12469,8 +12469,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260904.2036';
-const APP_VERSION_LABEL = 'v260904.2036';
+const APP_VERSION = '260904.2048';
+const APP_VERSION_LABEL = 'v260904.2048';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -49964,7 +49964,13 @@ async function submitGrant(){
     plan:{ id:plan.id||null, name:plan.name, ticket_type_id:plan.ticket_type_id,
            format:plan.format||null, valid_days:plan.valid_days||null,
            sessions_base:plan.sessions_base, sessions_bonus:plan.sessions_bonus,
-           unit_price:unitPrice },
+           unit_price:unitPrice,
+           /* ⚠ 2026-09-04：這個旗標一定要跟著存（使用者：「有些方案不能分期」）——
+              收款審核那一步在幾天後才打開，那時候表單早關了，沒有這一欄就只能猜。
+              原本 openGrantApprove 讀的是 P.installable，而**從來沒有人寫過那一欄**，
+              於是永遠是「可以分期」：友善優惠1V1 這種不能分期的方案也給了分期選單。
+              （21 個方案裡有 9 個不能分期，佔 43%。）*/
+           installable: !!plan.installment },
     total, unitPrice, listPrice, dealAmount, method, splitCash, installCount, note,
     isInstall, unlocked, firstAmount, installment,
     voucherN, voucherAmt, paidAmount, creditUse,
@@ -50753,7 +50759,18 @@ async function openGrantApprove(id){
      ・教練有填 → 預帶他填的，櫃檯照實際收到的改（客人臨櫃改現金／改分期是常態）
      ・教練沒填（勾了「收款資訊之後再填」）→ 空著等櫃檯填，欄位一樣
      兩條路在櫃檯眼裡是同一個畫面，只有上方那句說明不同。 */
-  const _canInstall=!!(P.plan && P.plan.id ? P.installable!==false : true);
+  /* ══ 這個方案能不能分期（2026-09-04 使用者：「有些方案不能分期」）════════════
+     來源是 course_plans.installment（建約當下就存進 payload.plan.installable）。
+     ⚠ 舊的待審核單沒有那一欄 → 回頭讀一次方案；自訂銷售一律不分期
+       （_grantCustomPlan 本來就寫死 installment:false）。
+     ⚠ 不能分期時**不藏欄位**，改成淡化＋寫原因（0823 使用者定案：
+       「不能用就寫原因，別藏按鈕」）——整格消失會讓櫃檯以為系統壞了。 */
+  let _canInstall = (P.plan && P.plan.installable!=null) ? !!P.plan.installable : null;
+  if(_canInstall===null){
+    if(P.plan_id){ const _pl=await dbGet('course_plans',P.plan_id).catch(()=>null);
+                   _canInstall=!!(_pl&&_pl.installment); }
+    else _canInstall=false;
+  }
   /* ══ 簽署方式也放進這個視窗（2026-09-04 二修）════════════════════════════
      使用者重述流程時說「點待付款方案上面的按鈕[審核] 選擇電子或紙本」——
      一修只把兩顆鈕加在「待審核發放」那份清單上，但櫃檯實際的入口是
@@ -50820,10 +50837,16 @@ async function openGrantApprove(id){
       </div>
       <div class="form-row" id="gr-splitcash-wrap" style="display:${(P.method==='split')?'':'none'};"><label>其中現金收多少（其餘記匯款）</label>
         <input type="number" id="gr-splitcash" min="0" oninput="grFillPreview()" placeholder="例如 7200" value="${P.splitCash!=null?Number(P.splitCash):''}"></div>
-      ${_canInstall?`<div class="form-row"><label>分期方式 *</label>
-        <select id="gr-install" onchange="grFillPreview()">${[1,2,3].map(n=>
-          `<option value="${n}"${(Number(P.installCount||1)===n)?' selected':''}>${n===1?'不分期（一次付清）':`分 ${n} 期（分段開通）`}</option>`).join('')}</select>
-        <div class="gr-inst-hint plain" id="gr-inst-hint"></div></div>`:''}
+      <div class="form-row"><label>分期方式 *</label>
+        ${_canInstall
+          ? `<select id="gr-install" onchange="grFillPreview()">${[1,2,3].map(n=>
+              `<option value="${n}"${(Number(P.installCount||1)===n)?' selected':''}>${n===1?'不分期（一次付清）':`分 ${n} 期（分段開通）`}</option>`).join('')}</select>
+             <div class="gr-inst-hint plain" id="gr-inst-hint"></div>`
+          : `<select disabled style="opacity:.5;cursor:not-allowed;"><option>不分期（一次付清）</option></select>
+             <div class="gr-inst-hint plain">這個方案不提供分期　·　這次開通全部 <b>${Number(P.total)||0}</b> 堂。</div>`}
+        ${/* ⚠ 不能分期那一版**故意沒有 id="gr-install"**：grFillApply 讀不到欄位就一律
+             算 1 期，等於防線不只在畫面上。畫面擋住、送出沒擋等於沒擋。 */''}
+      </div>
       ${_vHeld?`<div class="form-row gr-vrow"><label>折價券（每張折 $300）</label>
         <div class="gr-vpick">
           <input type="number" id="gr-voucher" min="0" max="${_vHeld}" oninput="grFillPreview()"

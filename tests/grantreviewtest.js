@@ -141,6 +141,40 @@ console.log('\n③a 三段式版面與防呆（2026-09-04：「讓櫃檯閱讀�
   ok('★★ 返回鈕真的走 grBack', /<button class="btn btn-ghost" onclick="grBack\(\)">返回<\/button>/.test(src));
 }
 
+console.log('\n③d 有些方案不能分期（2026-09-04 使用者回報）');
+/* 21 個方案裡有 9 個不能分期（一般團體課、優惠教練課、友善優惠、自主訓練、
+   運動按摩…），佔 43%。收款審核卻一律給分期選單 —— 根因是 _canInstall 讀的
+   P.installable **從來沒有人寫過那一欄**，undefined!==false 永遠成立。
+   使用者截圖裡那筆「友善優惠1V1」正是不能分期的方案之一。 */
+{
+  const F=grabFn('submitGrant');
+  ok('★★★ 賣票當下就把「能不能分期」存進 payload',
+     /installable: !!plan\.installment \},/.test(F)
+     && /這個旗標一定要跟著存（使用者：「有些方案不能分期」）/.test(src));
+  ok('★★ 為什麼要存而不是事後查 —— 寫在原地',
+     /收款審核那一步在幾天後才打開，那時候表單早關了，沒有這一欄就只能猜。/.test(src));
+
+  const G=grabFn('openGrantApprove');
+  ok('★★★ 收款審核讀那個旗標',
+     /let _canInstall = \(P\.plan && P\.plan\.installable!=null\) \? !!P\.plan\.installable : null;/.test(G));
+  ok('★★★ 舊的待審核單沒有旗標 → 回頭讀一次方案（不是預設可以分期）',
+     /if\(P\.plan_id\)\{ const _pl=await dbGet\('course_plans',P\.plan_id\)\.catch\(\(\)=>null\);\s*\n\s*_canInstall=!!\(_pl&&_pl\.installment\); \}/.test(G));
+  ok('★★★ 自訂銷售一律不分期（_grantCustomPlan 本來就寫死 installment:false）',
+     /else _canInstall=false;/.test(G)
+     && /plan_type:'general', installment:false, __custom:true/.test(src));
+  ok('★★★ 不能分期不藏欄位，淡化＋寫原因（0823「不能用就寫原因，別藏按鈕」）',
+     /<select disabled style="opacity:\.5;cursor:not-allowed;"><option>不分期（一次付清）<\/option><\/select>/.test(G)
+     && /這個方案不提供分期　·　這次開通全部/.test(G));
+  ok('★★★ 防線不只在畫面上：那一版故意沒有 id，grFillApply 讀不到就一律算 1 期',
+     /\*\*故意沒有 id="gr-install"\*\*/.test(src)
+     && /畫面擋住、送出沒擋等於沒擋/.test(src));
+  /* 離線實跑（2026-09-04，真實 CSS＋真實範本＋真實 grFillApply）：
+     不能分期那版 → 選單 disabled、沒有 id；把值硬改成 '3' 之後 grFillApply
+     仍然回「不分期・開通全部」。可以分期那版 → 回「分3期・開通3堂」。 */
+  ok('★★ 實跑結果記在這支測試裡',
+     /把值硬改成 '3' 之後 grFillApply\s*\n\s*仍然回「不分期・開通全部」/.test(require('fs').readFileSync(__filename,'utf8')));
+}
+
 console.log('\n③b 送簽之前把數字定案，合約內文跟著重生（2026-09-04）');
 /* 使用者定案：「教練建立合約的時候 只要填寫方案 課堂數 總價 一次付清跟分期
    也可以預填寫 但之後櫃檯端可以在正式收費前調整」——
