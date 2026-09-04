@@ -117,9 +117,16 @@ console.log('\n⑦ 提示搬出 .tb-left（2026-09-04：mc-mode 把它整個藏�
    ⚠ 父層 display:none 之下子元素怎麼設 display 都救不回來，必須把節點搬出那棵子樹。
    ⚠ 位置抄 .mc-lotto-fab（抽獎那顆）：position:fixed 掛在視窗上，不依賴任何版面容器
      —— 那顆在使用者畫面上一直看得到，是現成的證據。 */
-ok('★★★ 兩個 host 已經不在 .tb-left 裡',
-   /<div id="alert-dock" class="alert-dock">[\s\S]{0,600}?id="tb-review-pill"[\s\S]{0,600}?id="tb-memreq-pill"[\s\S]{0,200}?<\/div>/.test(src)
+ok('★★★ host 已經不在 .tb-left 裡',
+   /<div id="alert-dock" class="alert-dock">[\s\S]{0,1200}?id="tb-memreq-pill"[\s\S]{0,1200}?<\/div>/.test(src)
    && !/<div class="tb-left">[\s\S]{0,900}?id="tb-memreq-pill"/.test(src));
+/* 2026-09-04 使用者定案：「待審核只要做會員連動 不要做票券發放提醒」——
+   同一天稍晚，dock 從兩顆縮成一顆。會員連動留著是因為它**沒有別的入口**；
+   待審核發放拿掉是因為它在會員資料裡已經看得到兩處（見 grantreviewtest ③）。 */
+ok('★★★ dock 裡只有會員連動這一顆',
+   /<div id="alert-dock" class="alert-dock">([\s\S]{0,1200}?)<\/div>/.test(src)
+   && (RegExp.$1.match(/<span id="/g)||[]).length===1
+   && !/id="tb-review-pill"/.test(src));
 ok('★★★ dock 是 fixed，不依賴任何版面容器',
    /\.alert-dock\{position:fixed;left:24px;top:78px;z-index:97;display:none;/.test(src));
 ok('★★★ 空的時候整個收起來（不然透明區塊會擋到底下的東西）',
@@ -136,8 +143,10 @@ ok('★★ 兩支 refresh 的每一條出口都要 sync（含清空那兩條）'
 ok('★★ 父層 display:none 救不回來，所以要搬節點（理由寫在原地）',
    /父層 display:none 之下，子元素再怎麼設 display 都救不回來/.test(src));
 /* 離線量測（2026-09-04，body.mc-mode）：.tb-left 確認是 display:none；
-   dock 不在它底下、空時收起、有內容時 x24/y78 兩顆都看得見、
-   抽獎從 78 被推到 168、清空後回到 78、pointer-events 可點。 */
+   dock 不在它底下、空時收起、有內容時 x24/y78 看得見、
+   抽獎被 --adock-h 推開、清空後回到 78、pointer-events 可點。
+   （當時量的是兩顆＝高 80、抽獎 78→168；改成一顆後高度變小，
+     但 --adock-h 是 offsetHeight 量出來的，不需要重量。） */
 ok('★★ 離線量測結果記在這支測試裡',
    /\.tb-left 確認是 display:none；/.test(fs.readFileSync(__filename,'utf8')));
 

@@ -103,14 +103,28 @@ console.log('\n② 賣票當下算好的一整包（審核時照著發）');
   ok('　　退回時要還折抵券 → 把扣了哪幾張帶回去', /t\._usedVouchers=_usedVouchers;/.test(F));
 }
 
-console.log('\n③ 左上角的待審核提示');
-/* 2026-09-04：從 .tb-left 搬到 #alert-dock —— body.mc-mode .tb-left{display:none}
-   等於對桌機櫃檯／管理員永遠隱藏（見 memreqpilltest ⑦）。位置仍是畫面左上角。 */
-ok('★★ 提示掛在畫面左上角的浮動座（不在 .tb-left 裡）',
-   /<div id="alert-dock" class="alert-dock">[\s\S]{0,600}?<span id="tb-review-pill" style="display:none;"><\/span>/.test(src)
-   && /\.alert-dock\{position:fixed;left:24px;top:78px;/.test(src));
+console.log('\n③ 待審核發放**沒有**浮動提示（2026-09-04 使用者定案）');
+/* 「待審核只要做會員連動 不要做票券發放提醒」——
+   #alert-dock 只留會員連動那顆。理由：同一件待辦不要有兩個提醒，
+   而票券這件事在會員資料裡本來就看得到兩處（下面兩條在守）。
+   ⚠ 這是刻意拿掉，不是漏做。要恢復的話把 host 加回 dock 就會活過來
+     （refreshGrantReviewPill 整支都還在，只是每次都在 !host 就 return）。 */
+ok('★★★ dock 裡沒有 tb-review-pill 這個 host',
+   /<div id="alert-dock" class="alert-dock">([\s\S]{0,1200}?)<\/div>/.test(src)
+   && !/id="tb-review-pill"/.test(RegExp.$1)
+   /* 全檔也不該有第二個地方偷偷長出來 */
+   && (src.match(/id="tb-review-pill"/g)||[]).length===0);
+ok('★★★ 拿掉提示之後，那些單子還找得到 —— ① 會員資料的待審核卡',
+   /onclick="openGrantApprove\('\$\{r\.id\}'\)"/.test(src));
+ok('★★★ 　　　　　　　　　　　　　 ② 票券分頁上的紅色計數',
+   /\$\{_grCnt\[k\]\?`<i class="tkf-n" style="background:#c8453a;color:#fff;" title="待審核發放">/.test(src));
+ok('★★ 刻意拿掉的理由寫在原地（不然下一個人會當成 bug 補回去）',
+   /待審核只要做會員連動 不要做票券發放提醒/.test(src));
 {
   const F=grabFn('refreshGrantReviewPill');
+  ok('★★ 這支現在是刻意空轉（host 不在，第一行就 return）',
+     /const host=document\.getElementById\('tb-review-pill'\); if\(!host\) return;/.test(F)
+     && /是\*\*刻意的空轉\*\*/.test(src));
   /* 2026-09-03：從「不是櫃檯就 return」改成「不是櫃檯就清空再 return」——
      那一格如果已經畫過（不重新整理就換帳號登入），教練會看到留在頂欄的待審核提示。
      清空成本是零，漏掉的代價是權限外洩。 */
@@ -119,6 +133,7 @@ ok('★★ 提示掛在畫面左上角的浮動座（不在 .tb-left 裡）',
      && !/if\(!isDeskLike\(\)\) return;/.test(F));
   ok('★ 沒有待審核就整顆不畫（不佔位置）',
      /if\(!list\.length\)\{ host\.innerHTML=''; host\.style\.display='none'; alertDockSync\(\); return; \}/.test(F));
+  /* 下面三條驗的是「恢復時這支還能用」，不是「畫面上看得到」 */
   ok('★ 有幾筆就寫幾筆，點下去開審核清單',
      /待審核發放 <b>\$\{list\.length\}<\/b>/.test(F) && /onclick="openGrantReview\(\)"/.test(F));
   ok('★ 換頁時順手更新（讀快取，沒有額外網路成本）',
