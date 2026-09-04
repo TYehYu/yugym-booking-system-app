@@ -12416,8 +12416,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260904.1855';
-const APP_VERSION_LABEL='260904.1855';
+const APP_VERSION='260904.1901';
+const APP_VERSION_LABEL='260904.1901';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50425,12 +50425,26 @@ function startReviewPillPoll(){
     } }catch(_){}
   }); }catch(_){}
 }
+/* ⚠ 2026-09-04：這兩支（memReqPending／grantReqPending）與它們的呼叫端原本
+   把錯誤整個吞掉（catch(_){} ＋ .catch(()=>[])）。壞掉的時候畫面跟「目前沒有待審核」
+   長得一模一樣 —— 櫃檯不會發現，只會覺得「怎麼沒跳出來」。
+   這與今天早上 fn_change_sig 那次是同一種病（前端吞掉錯誤，背景更新靜靜停擺）。
+   吞掉是對的（不能讓一顆提示炸掉整個換頁），但**要出聲**：同一種錯只印一次，
+   免得每 20 秒洗版。 */
+let _memReqWarned='';
 async function memReqPending(){
   try{
-    const all=await dbGetAll('member_link_requests').catch(()=>[]);
+    const all=await dbGetAll('member_link_requests').catch(e=>{
+      const k=String((e&&(e.code||e.message))||'err');
+      if(_memReqWarned!==k){ _memReqWarned=k;
+        console.warn('[會員申辦待確認] 讀取失敗，頂欄那顆提示會一直不出現：', e); }
+      return null;   // null＝讀失敗，與「真的沒有待審核」的 [] 區分開
+    });
+    if(all===null) return [];
+    _memReqWarned='';
     return (all||[]).filter(r=>r && r.status==='pending')
       .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
-  }catch(_){ return []; }
+  }catch(e){ console.warn('[會員申辦待確認] 計算失敗：', e); return []; }
 }
 async function refreshMemReqPill(){
   try{
