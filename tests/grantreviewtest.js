@@ -39,16 +39,27 @@ console.log('① 兩條路分岔：紙本直接發、電子送審');
   ok('★★ 送審那條不建票券（建的是合約＋申請，然後 return）',
      /await dbPut\('ticket_grant_requests',\{id:uid\('GR'\),member_id,/.test(F)
      && /status:'pending',/.test(F));
-  ok('★ 電子合約先記「待簽名」（signed_at 留空）；紙本＋待補填當場就簽了，直接給值',
-     /ticket_id:null,staff_id:SESSION\.id,\s*\n\s*signed_at:\(_isRemote\?null:new Date\(\)\.toISOString\(\)\),/.test(F)
-     && /紙本＋待補填：合約當場就簽在紙上了，所以 signed_at 直接給值/.test(F));
-  ok('★★ 推播叫會員去簽（客戶端的簽約視窗靠這個觸發）',
-     /await pushNotification\(member_id,'announce','合約待簽名',/.test(F));
+/* 2026-09-04：建約時不選簽署方式，所以**一律**先記成未簽（signed_at null）。
+   電子等會員簽、紙本等櫃檯按「用紙本」，兩者都在 grantReqSetSign 裡才寫 signed_at。
+   ⚠ 這一條原本吃 `_isRemote?null:now()`，而 _isRemote 被寫死成 false 之後
+     每一張新約都變成「已簽回」—— 就是使用者當天回報的那個 bug。 */
+  ok('★ 建約一律先記「未簽」（signed_at 留空）',
+     /ticket_id:null,staff_id:SESSION\.id,[\s\S]{0,700}?signed_at:null,/.test(F));
+  ok('★★ 推播搬到「選電子簽」那一刻（建約當下不通知）',
+     /if\(!_isPaper\)\{ try\{ await pushNotification\(r\.member_id,'announce','合約待簽名',/.test(src)
+     && !/await pushNotification\(member_id,'announce','合約待簽名',/.test(F));
   ok('★ Toast 明講「還沒發票券」與應收金額',
      /已建立合約：\$\{plan\.name\}　·　客人到場後在「待審核發放」選簽署方式並收款（應收 \$\$\{_amt\.toLocaleString\(\)\}）/.test(F));
-  ok('★★ 紙本那條照舊，走到 _grantIssue 立刻發',
+/* 2026-09-04：建約一律進佇列，所以走到 _grantIssue 只剩「後台直接發放票券」那條
+   （不簽約）。原本掛在它後面的補寫合約區塊已整段移除 —— 守門條件與上面那段
+   一模一樣而上面會 return，是死碼，而且裡面的註解與 signed_at 邏輯都已不成立。 */
+  ok('★★ _grantIssue 仍在（後台直接發放走這條），但後面不再補寫合約',
      /const t=await _grantIssue\(P\);/.test(F)
-     && /const _remote=false;   \/\/ 走到這裡一定是紙本（電子那條在上面就 return 了）/.test(F));
+     /* ⚠ 要先把註解拿掉再比 —— 移除那段死碼時，我在原地留了一句
+        「它裡面還留著 const _remote=false」來說明為什麼刪，
+        直接對 src 比會比到自己寫的說明。 */
+     && !/const _remote=false;/.test(src.replace(/\/\*[\s\S]*?\*\//g,''))
+     && /現在走到這一行代表「後台直接發放票券」，那條路本來就不簽約/.test(F));
   ok('★ 使用者的原話寫在原地',
      /「如果是『紙本合約』就不用再經過審核，因為客戶已經看過紙本合約並完成匯款才會走到\s*\n\s*儲值這一步。/.test(src));
 }
@@ -307,7 +318,7 @@ console.log('\n⑦ 會員資料票券頁的「待審核」卡（2026-08-09 使�
   /* 2026-09-04：未簽回再分兩種 —— 還沒選簽署方式／已選電子等會員簽。 */
   ok('★ 卡上有簽回狀態、送出時間與應收金額',
      /signed\?'✓ 合約已簽回'\s*\n\s*:\(\(c&&c\.sign_type==='remote'\)\?'⏳ 等會員簽回':'◻ 尚未選簽署方式'\)/.test(R)
-     && /送出 \$\{String\(r\.requested_at\|\|''\)\.slice\(5,16\)/.test(R)
+     && /送出 \$\{fmtWhenLocal\(r\.requested_at\)\}/.test(R)
      && /應收 <b style="color:#b5372e;/.test(R));
   ok('★ 會員資料的待審核卡直接開這一筆（原本開的是整份清單，還要自己找回來）',
      /onclick="openGrantApprove\('\$\{r\.id\}'\)">收款審核<\/button>/.test(src));
@@ -460,6 +471,26 @@ ok('★★ 紙本的正確順序寫在畫面上（先印 → 簽 → 才按）',
    /紙本的順序是：<b>先下載列印<\/b> → 客人簽名 → 再按<b>用紙本<\/b>（按下去就算已簽）/.test(src));
 ok('★★ 為什麼副標要做成可按的，寫在原地',
    /但按鈕上只寫「用紙本」，很容易以為按下去會跳出檔案/.test(src));
+
+/* ── 修：建約當下不能有 signed_at（2026-09-04 使用者回報）──────────────
+   「合約已回簽? 這是我剛剛建立來測試的」「電子跟紙本要從哪邊選呢」
+   同一個 bug 的兩個症狀：signed_at 那一行原本是 `_isRemote?null:now()`，
+   而同一天把 _isRemote 寫死成 false 之後，每一張新建的合約都被標成「已簽回」——
+   發放鈕直接亮（沒人簽過），而且「選擇簽署方式」那一塊的條件是 !signed_at，
+   整塊不出現，櫃檯根本找不到哪裡選電子／紙本。 */
+ok('★★★ 建約寫入時 signed_at 一律 null',
+   /signed_at:null,/.test(src) && !/signed_at:\(_isRemote\?null:new Date\(\)\.toISOString\(\)\)/.test(src));
+ok('★★★ _isRemote 這個變數已從程式碼移除（只剩註解提及）',
+   (src.replace(/\/\*[\s\S]*?\*\//g,'').match(/_isRemote/g)||[]).length===0);
+ok('★★ 這次翻車的兩個症狀寫在原地',
+   /每一張新建的合約都被標成「已簽回」/.test(src)
+   && /櫃檯根本找不到哪裡選電子／紙本/.test(src));
+/* 送出時間原本直接切 ISO 字串，而 requested_at 存的是 UTC —— 台灣看到的整整慢 8 小時。 */
+ok('★★★ 送出時間改用本地時間顯示（兩處都換）',
+   (src.match(/送出 \$\{fmtWhenLocal\(r\.requested_at\)\}/g)||[]).length===2
+   && !/送出 \$\{String\(r\.requested_at\|\|''\)\.slice\(5,16\)/.test(src));
+ok('★★ 存 UTC 是對的，要改的是顯示（寫在原地）',
+   /存 UTC 是對的（跨時區、排序都靠它），要改的是\*\*顯示\*\*/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

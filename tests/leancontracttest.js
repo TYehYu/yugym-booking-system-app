@@ -73,11 +73,11 @@ console.log('\n④ 寫入不會因為精簡而掉資料');
      /const _lean=obj&&obj\.id\?LEAN_DROP\[tbl\(store\)\]:null;/.test(F)
      && /if\(_lean && _lean\.some\(c=>!\(c in obj\)\)\)\{/.test(F)
      && /try\{ const full=await dbGet\(store,obj\.id\); if\(full\) obj=Object\.assign\(\{\},full,obj\); \}catch\(_\)\{\}/.test(F));
+  /* 2026-09-04：建約時不選簽署方式 —— sign_type 固定 'undecided'、簽名一律 null
+     （電子等會員簽、紙本由櫃檯在待審核那一步按下才算簽）。 */
   ok('★ 新建的合約本來就帶齊三欄（不會多撈一次）',
-     /signature:\(window\._ctSignature\|\|null\),body_snapshot:window\._ctBody,/.test(src)
-     /* 2026-09-04：建約時不選簽署方式，sign_type 固定寫 'undecided'，
-        簽名一律 null（電子等會員簽、紙本由櫃檯在待審核那步按下才算簽）。 */
-     && /sign_type:'undecided',\s*\n\s*signature:\(_isRemote\?null:\(window\._ctSignature\|\|null\)\),body_snapshot:window\._ctBody,/.test(src));
+     /sign_type:'undecided',\s*\n\s*signature:null,body_snapshot:window\._ctBody,/.test(src)
+     && /fill_snapshot:\(window\._ctFill\?contractFillBlockHTML\(window\._ctFill\):null\)/.test(src));
   ok('★ 快取就地更新時也把重欄位剝掉（與清單同形）',
      /if\(drop && !del\)\{ r=Object\.assign\(\{\},row\); drop\.forEach\(c=>\{ delete r\[c\]; \}\); \}/.test(src));
 }

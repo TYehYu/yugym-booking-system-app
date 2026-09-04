@@ -53,7 +53,10 @@ console.log('\n③ B 會員手機簽署：同一份購買內容表');
 console.log('\n④ 快照在簽名之前就存好了（B 才拿得到）');
 ok('★ 建立合約當下就寫 fill_snapshot（含待簽名的遠端合約）',
    /fill_snapshot:\(window\._ctFill\?contractFillBlockHTML\(window\._ctFill\):null\),/.test(src));
-ok('　　遠端簽約時 signed_at 先留空，快照照樣存', /signed_at:_remote\?null:new Date\(\)\.toISOString\(\)/.test(src));
+/* 2026-09-04：那一段（走過步驟 4 後補寫 contracts 的紙本路）已整段移除 —— 守門條件
+   跟上面那段一模一樣、而上面結尾是 return，早就跑不到了。現在建約一律 signed_at:null。 */
+ok('　　建約一律 signed_at 留空，快照照樣存',
+   /signed_at:null,/.test(src) && /fill_snapshot:\(window\._ctFill\?contractFillBlockHTML\(window\._ctFill\):null\)/.test(src));
 
 console.log('\n⑤ C／D 沒被動到');
 ok('　　合約檢視仍用 .ct-fill-view 包快照', /const fill=c\.fill_snapshot\?`<div class="ct-fill-view">\$\{c\.fill_snapshot\}<\/div>`:'';/.test(src));

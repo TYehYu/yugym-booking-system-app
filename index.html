@@ -12416,8 +12416,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260904.1838';
-const APP_VERSION_LABEL='260904.1838';
+const APP_VERSION='260904.1848';
+const APP_VERSION_LABEL='260904.1848';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -45414,7 +45414,7 @@ function ppRecordHtml(){
             <div class="gr-item-mid" style="margin-top:8px;">
               <span class="gr-sign ${signed?'ok':'wait'}">${signed?'✓ 合約已簽回'
           :((c&&c.sign_type==='remote')?'⏳ 等會員簽回':'◻ 尚未選簽署方式')}</span>
-              <span class="gr-item-when">送出 ${String(r.requested_at||'').slice(5,16).replace('T',' ').replace('-','/')}</span>
+              <span class="gr-item-when">送出 ${fmtWhenLocal(r.requested_at)}</span>
             </div>
             <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 10px;">
               <span>應收 <b style="color:#b5372e;font-family:var(--num),inherit;font-size:14px;">$${amt.toLocaleString()}</b>　·　簽回合約並確認收款後才發放票券</span>
@@ -49928,7 +49928,8 @@ async function submitGrant(){
      ⚠ 條件從三個變兩個，_ctSignType 不再參與判斷 —— 但 ctSetType 仍然把它
        固定成 'undecided'，因為底下寫 contracts／ticket_grant_requests 時要用。 */
   if(window._grantSalesActive && window._ctBody){
-    const _isRemote=false;   // 建約當下一律未定，沒有「現在就是電子」這回事
+    /* _isRemote 這個變數整個移除（2026-09-04）—— 它被寫死成 false 之後，
+       留著只會讓人以為還有分岔，而 signed_at 那一行就是這樣被寫成「已簽」的。 */
     const _mem=await dbGet('members',member_id).catch(()=>null);
     const _amt=(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount);
     const _ctId=uid('CT');
@@ -49936,10 +49937,18 @@ async function submitGrant(){
       await dbPut('contracts',{id:_ctId,member_id,member_name:(_mem&&_mem.name)||null,
         plan_name:plan.name,sessions:total,amount:_amt,
         expire_date:null,sign_type:'undecided',
-        signature:(_isRemote?null:(window._ctSignature||null)),body_snapshot:window._ctBody,
+        signature:null,body_snapshot:window._ctBody,
         fill_snapshot:(window._ctFill?contractFillBlockHTML(window._ctFill):null),
         ticket_id:null,staff_id:SESSION.id,
-        signed_at:(_isRemote?null:new Date().toISOString()),
+        /* ⚠ 2026-09-04 修：這一行原本是 `_isRemote?null:new Date().toISOString()`，
+           而同一天把 _isRemote 寫死成 false（建約不再選簽署方式）之後，
+           **每一張新建的合約都被標成「已簽回」** —— 沒有人簽過，發放鈕卻是亮的，
+           而且「選擇簽署方式」那一塊的條件是 !signed_at，於是整塊不出現，
+           櫃檯根本找不到哪裡選電子／紙本。
+           （使用者回報：「合約已回簽? 這是我剛剛建立來測試的」「電子跟紙本要從哪邊選呢」。）
+           建約當下一律未簽：電子等會員簽、紙本等櫃檯按「用紙本」，
+           兩者都在 grantReqSetSign 裡才寫 signed_at。 */
+        signed_at:null,
         created_at:new Date().toISOString()});
     }catch(e){ showToast('合約建立失敗，未送出審核：'+dbFriendlyError(e)); return; }
     try{
@@ -49961,27 +49970,15 @@ async function submitGrant(){
     return;
   }
   const t=await _grantIssue(P);
-  /* ── 簽約紀錄（2026-07-23）：只有銷售流程（走過步驟4）才寫；後台「發放票券」不簽約。
-     寫入失敗不阻斷發票券（票券／收款都已成立），但要出聲，讓櫃台知道要補簽。 ── */
-  if(window._grantSalesActive && window._ctBody){
-    try{
-      const mem=await dbGet('members',member_id).catch(()=>null);
-      const _remote=false;   // 走到這裡一定是紙本（電子那條在上面就 return 了）
-      const _ctId=uid('CT');
-      await dbPut('contracts',{id:_ctId,member_id,member_name:(mem&&mem.name)||null,
-        plan_name:plan.name,sessions:total,amount:(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount),   /* 2026-08-05：同口徑（折抵後） */
-        expire_date:t.expire_date,sign_type:(window._ctSignType||'paper'),
-        signature:(window._ctSignature||null),body_snapshot:window._ctBody,
-        /* 2026-07-30 使用者回報「會員端票券的合約內容太少」：原本只存合約條文，
-           會員看不到自己買的方案／堂數／金額／分期。這裡把簽約當下的「購買內容」
-           表格一起存成快照，會員端與列印都直接用它。 */
-        fill_snapshot:(window._ctFill?contractFillBlockHTML(window._ctFill):null),
-        ticket_id:t.id,staff_id:SESSION.id,signed_at:_remote?null:new Date().toISOString(),
-        created_at:new Date().toISOString()});
-      if(_remote){ try{ await pushNotification(member_id,'announce','合約待簽名',
-        `您購買的「${plan.name}」有一份合約待簽名，請開啟會員首頁完成簽署。`); }catch(_){} }
-    }catch(e){ console.error('contract write fail',e); showToast('合約紀錄寫入失敗（票券已發放，請補簽）：'+dbFriendlyError(e)); }
-  }
+  /* ── 簽約紀錄（2026-07-23 建立，2026-09-04 整段移除）─────────────────────
+     原本這裡還有一段「走過步驟 4 就補寫一筆 contracts（紙本那條）」。
+     2026-09-04 建約改成「一律進佇列、不發票券」之後，它的守門條件
+     `window._grantSalesActive && window._ctBody` 與上面那段**一模一樣**，
+     而上面那段結尾是 return —— 這一段從此永遠跑不到，是死碼。
+     ⚠ 它裡面還留著 `const _remote=false; // 走到這裡一定是紙本` 這種已經不成立的
+       註解，以及一組會寫 signed_at 的邏輯；留著只會誤導下一個人
+       （今天 signed_at 被誤寫成「已簽」就是同一類問題）。
+     現在走到這一行代表「後台直接發放票券」，那條路本來就不簽約。 */
   window._ctBody=null; window._ctSignature=null;   // 一次性，避免下一筆沿用
   // 新朋友購買「私人教練」課程 → 自動升級為「會員」
   closeModal();showToast('票券已發放：'+plan.name+(voucherN?`（折抵券×${voucherN}，實收 $${paidAmount.toLocaleString()}）`:''));
@@ -50346,6 +50343,16 @@ async function _tkPayGo(){
   }catch(e){ showToast('收款失敗：'+((e&&e.message)||e)); }
   finally{ done(); }
 }
+/* 送出時間顯示（2026-09-04）：requested_at 存的是 toISOString()＝**UTC**，
+   原本兩處都直接切字串顯示，台灣看到的時間整整慢 8 小時
+   （使用者 18:39 建的那筆顯示成 10:39）。
+   ⚠ 存 UTC 是對的（跨時區、排序都靠它），要改的是**顯示**。 */
+function fmtWhenLocal(v){
+  if(!v) return '—';
+  const d=new Date(v);
+  if(isNaN(d)) return String(v).slice(5,16).replace('T',' ');
+  return d.toLocaleString('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+}
 async function grantReqPending(){
   if(_grantReqOff) return [];
   try{
@@ -50420,7 +50427,7 @@ async function openGrantReview(){
       </div>
       <div class="gr-item-mid">
         <span class="gr-sign ${signed?'ok':'wait'}">${signed?'✓ 合約已簽回':'⏳ 合約未簽回'}</span>
-        <span class="gr-item-when">送出 ${String(r.requested_at||'').slice(5,16).replace('T',' ').replace('-','/')}</span>
+        <span class="gr-item-when">送出 ${fmtWhenLocal(r.requested_at)}</span>
       </div>
       <div class="gr-item-amt"><span>應收</span><b>$${amt.toLocaleString()}</b></div>
       <div class="gr-item-act">
