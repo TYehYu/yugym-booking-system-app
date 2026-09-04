@@ -152,8 +152,8 @@ ok('★★ 關掉 Ink 的人不能被切字（為什麼底線要用嚴的那組�
    /不能只寫 Ink 那組 —— 有人把 Ink 關掉（localStorage yugym_ink=0）就會被切字/.test(src));
 
 console.log('\n④ 四列的順序（DOM 由上而下：時間 → 姓名 → 場地 → 教練）');
-ok('★★★ _bodyOut 的順序沒被動過（時間列 → 姓名 → 場地 → 教練）',
-   /<span class="evc-time">\$\{_alertOut\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b><\/span><span class="evc-nmrow">.*?<\/span>\$\{_venueSub\}\$\{_stdTag\}\$\{_abbrOut\}/.test(src));
+ok('★★★ _bodyOut 的順序（時間列 → 姓名 → 體驗/待簽約 → 教練 → 場地）',
+   /<span class="evc-time">\$\{_alertOut\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b><\/span><span class="evc-nmrow">.*?<\/span>\$\{_stdTag\}\$\{_abbrOut\}\$\{_venueSub\}/.test(src));
 ok('★★★ 教練不再推到右下角（那是首頁課卡才留著的位置）',
    /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:flex-start !important; \}/.test(src)
    && /\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(src));
@@ -286,6 +286,25 @@ ok('★★ 極窄時兩個記號一起縮，讓流排版有迴旋空間（理由
    在窄卡上不會發生，時間會自己讓開。 */
 ok('★★ 第一列的讓位結果記在這支測試裡',
    /四項同時只發生在 131px 以上的寬卡/.test(fs.readFileSync(__filename,'utf8')));
+
+console.log('\n⑫ 場地移到最後一列（2026-09-04）');
+/* 使用者：「使用場地 跑步機跟教室 調整到課卡底部適合嗎?」
+   適合，理由跟同一天的靠左／姓名對齊同一條：場地原本夾在姓名與教練之間，
+   有場地的卡教練就被往下推一行，一整排看過去教練名對不齊。 */
+ok('★★★ DOM 順序：姓名 → 體驗/待簽約 → 教練 → 場地',
+   /<\/span>\$\{_stdTag\}\$\{_abbrOut\}\$\{_venueSub\}\$\{_moreHtml\}<\/div>/.test(src));
+ok('★★★ 舊順序（場地在教練前）已經不在',
+   !/\$\{_venueSub\}\$\{_stdTag\}\$\{_abbrOut\}/.test(src));
+ok('★★ 為什麼教練排在場地前面，寫在原地',
+   /場地是「這一堂在哪裡上」，屬於補充資訊；教練是「誰上的」，比場地重要/.test(src));
+ok('★★ 體驗／待簽約仍緊貼姓名（那是狀態不是補充），寫在原地',
+   /體驗／待簽約仍緊貼姓名 —— 那是狀態，不是補充/.test(src));
+/* A/B 對照（2496 張卡 × 2 主題）：
+   「教練的垂直位置因為有沒有場地而不同」的組合 1162 → 434，新問題 0。
+   剩下的 434 全是超出卡高的極窄卡（31px、姓名 43–58px 高），
+   flex 壓縮造成 1～4px 差，不是排序造成的。 */
+ok('★★ A/B 對照結果記在這支測試裡',
+   /「教練的垂直位置因為有沒有場地而不同」的組合 1162 → 434/.test(fs.readFileSync(__filename,'utf8')));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

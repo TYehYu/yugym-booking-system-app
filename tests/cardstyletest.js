@@ -81,7 +81,7 @@ ok('　　空堂也吃得到（bkIsOpenHold 的前提就是 pending_contract）'
 
 console.log('\n出席章的 DOM 只放一份');
 ok('★ 行事曆：章排在姓名之後、自成一列，外層不再重複輸出',
-   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_venueSub\}\$\{_stdTag\}/.test(src)
+   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_stdTag\}/.test(src)
    && /繳費／續約徽章已移進 _bodyOut 的第一列（2026-09-04，見下方 _alertOut）/.test(src));
 ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    src.indexOf('const _stampOut =') < src.indexOf('const _bodyOut ='),
@@ -209,8 +209,11 @@ console.log('\n場地移到會員姓名下方（教室／跑步機）');
 ok('★ 不再是右下角跟教練並列的膠囊',
    /const _venueTag = '';/.test(src)
    && /const _venueSub = _selfVenue \? `<span class="evc-sub evc-vsub">\$\{_selfVenue\}<\/span>` : '';/.test(src));
-ok('★ 排在姓名之後、體驗／待簽約標籤之前',
-   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_venueSub\}\$\{_stdTag\}/.test(src));
+/* 2026-09-04 使用者：「使用場地 跑步機跟教室 調整到課卡底部適合嗎?」——
+   場地移到**最後一列**。原本夾在姓名與教練之間，有場地的卡教練就被往下推一行，
+   一整排看過去教練名對不齊（A/B 對照：不一致的組合 1162 → 434）。 */
+ok('★ 場地改排在最後（教練之後）',
+   /<\/span>\$\{_stdTag\}\$\{_abbrOut\}\$\{_venueSub\}\$\{_moreHtml\}<\/div>/.test(src));
 ok('　　只有教室／跑步機會有值（多功能是預設場地、不標）',
    /selfVenueLabel 本來就只在教室／跑步機才有值/.test(src));
 
