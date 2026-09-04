@@ -343,7 +343,8 @@ ok('★ 越窄越少東西：窄卡先讓場地，極窄卡連教練也讓',
 /* 2026-09-04 新增的第五樣「讓位」：第一列放不下時讓掉**時間**（章與驚嘆號留著）。 */
 ok('★★ 第一列擠不下時讓掉時間，不讓章也不讓驚嘆號',
    /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:none;\}/.test(css)
-   && /@container \(max-width:85px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{display:none;\}/.test(css)
+   /* 0904 二修：收起來改用 visibility，第一列才不會塌掉讓姓名頂上去被章壓到 */
+   && /@container \(max-width:85px\)\{[\s\S]{0,200}?\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{visibility:hidden;\}/.test(css)
    && /讓位的是時間，不是章也不是驚嘆號/.test(css));
 ok('　　原則寫在程式裡（寧可少一項，也不要每一項都殘缺）',
    /寧可少一項，也不要每一項都殘缺/.test(css));

@@ -45,7 +45,24 @@
        時間（有驚嘆號）   86px    76px
 
    ⚠ 這些數字改過兩次都是因為**憑感覺訂**：先寫共用的 36 → 量出非 Ink 在 40px 切字；
-     再幫 Ink 放寬到 32 → 又量出 Ink 在 32px 也切字。不要再猜了。 */
+     再幫 Ink 放寬到 32 → 又量出 Ink 在 32px 也切字。不要再猜了。
+
+   ── 版面改動要跑 A/B 對照，不能只看新版有沒有問題 ──────────────────────
+   絕對值會被「不存在的尺寸」汙染：第一版掃描把卡高 56px（30 分鐘課）也算進去，
+   跳出一堆「姓名掉出卡外」。查了資料庫才發現**全部 2459 筆預約都是 60 分鐘**，
+   而 SLOT_PX=48 ⇒ 60 分鐘課卡固定 94px 高 —— 56px 那種卡根本不存在。
+   正確的做法是拿 `git show HEAD:index.html` 的 CSS 當 A、新版當 B，同一份 DOM
+   各量一次，只看**差集**：B 有而 A 沒有的才是真的變差。
+
+   2026-09-04 的對照結果（69 種真實寬度 × 有無章 × 有無驚嘆號 × 有無場地
+   × 4 種姓名 × 2 主題 ＝ 4416 組）：
+     ・新出現的問題：**0**
+     ・修掉 552 例「姓名被驚嘆號壓到」與 592 例「姓名被章壓到」
+
+   ⚠ 量姓名要用**元素框**，不能用 Range —— .evc-name 是 -webkit-line-clamp:2，
+     Range 會回報「裁切前」的整段文字，於是每一個長名字都被誤判成掉出卡外。
+     反過來，量時間**一定要用 Range** —— 它是 align-self:stretch，
+     元素左緣永遠貼齊卡片，量元素框會每一張都誤判成壓到章。 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 let pass=0,fail=0;
@@ -89,10 +106,29 @@ ok('★★★ 只有真的有驚嘆號時才讓右邊（:has，不是無條件�
    /\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{padding-right:16px;\}/.test(src));
 ok('★★★ 非 Ink：63px 以下（無徽章）／85px 以下（有徽章）不顯示時間',
    /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:none;\}/.test(src)
-   && /@container \(max-width:85px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{display:none;\}/.test(src));
-ok('★★★ Ink：60px／76px 起放得下，再叫回來',
-   /@container \(min-width:60px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:flex;\}/.test(src)
-   && /@container \(min-width:76px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{display:flex;\}/.test(src));
+   && /@container \(max-width:85px\)\{[\s\S]{0,200}?\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{visibility:hidden;\}/.test(src));
+ok('★★★ Ink：60px／76px 起放得下，再叫回來（display 與 visibility 都要還原）',
+   /@container \(min-width:60px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:flex;visibility:visible;\}/.test(src)
+   && /@container \(min-width:76px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{display:flex;visibility:visible;\}/.test(src));
+
+/* ── 收起時間時，第一列不能塌掉 ─────────────────────────────────────────
+   2026-09-04 使用者附截圖：「時間移除的時候 不要讓名字跑到第一列」
+   章與驚嘆號是絕對定位、不佔流排版；時間一旦 display:none，第一列整個消失，
+   姓名頂上去正好被左上角那顆章壓在第一個字上（截圖是「簽蓉霆」疊在一起）。
+   ⚠ 這一條**不能**改回 display:none 來「省一列」—— 省下來的那一列不是空的，
+     章或驚嘆號就站在那裡。 */
+ok('★★★ 有章時保住第一列（visibility 而不是 display）',
+   /\.cal-ev\.cal-ev-std:has\(\.evc-check\):not\(:has\(\.ev-payalert\)\) \.evc-time\{\s*\n\s*display:flex; visibility:hidden;\}/.test(src));
+ok('★★★ 有驚嘆號時也保住第一列',
+   /\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{visibility:hidden;\}/.test(src));
+/* 第一列真的空無一物（沒章也沒驚嘆號）才收掉 —— 那種卡沒有東西會被壓到。 */
+ok('★★★ 第一列空無一物時才 display:none（讓姓名往上補位）',
+   /\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:none;\}/.test(src));
+ok('★★ 為什麼是 visibility 不是 display，寫在原地',
+   /時間一旦 display:none，第一列整個塌掉，\s*\n\s*姓名就頂上去，正好被左上角那顆章壓在第一個字上/.test(src));
+/* A/B 對照的結果記在這裡：改門檻的人要知道原本修掉了什麼，別又踩回去。 */
+ok('★★ A/B 對照結果記在這支測試裡',
+   /修掉 552 例「姓名被驚嘆號壓到」與 592 例「姓名被章壓到」/.test(fs.readFileSync(__filename,'utf8')));
 ok('★★ 讓的是時間，不是章也不是驚嘆號（理由寫在原地）',
    /讓位的是時間，不是章也不是驚嘆號/.test(src));
 ok('★★ 關掉 Ink 的人不能被切字（為什麼底線要用嚴的那組）',
