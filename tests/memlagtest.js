@@ -82,5 +82,38 @@ console.log('\n⑧ 慢的時候要講得出「慢在哪」（2026-09-04：使用
      && /if\(d>150\)\{ _lagMs\+=d; if\(d>_lagMax\) _lagMax=d; \}/.test(src));
 }
 
+
+console.log('\n⑨ 5.6 秒那一輪：純網路往返，兩個往返可以省掉（2026-09-04）');
+{
+  const fs=require('fs');
+  const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  /* 補上量測之後拿到的第二筆數據：
+       讀取 5.6s：基本資料 0.9s・抓資料 4.7s・算 0.0s・繪製 0.0s　卡頓 0%
+       → fn_table_sigs 1.6s/0KB、fn_table_sigs 0.8s/0KB
+     算 0.0s ＋ 卡頓 0% ＝ 不是 CPU、也不是主執行緒被佔住（推翻先前兩個猜測）。
+     DB 端量到 fn_table_sigs 只花 106ms，所以 1.6s 裡有 1.5s 是往返。 */
+  ok('★★★ 簽章的共用視窗從「回來那一刻」起算（原本從送出算，回來只剩 1.4 秒可用）',
+     /_sigAt=Date\.now\(\);\s*\n\s*try\{ window\._dbStat\.push\(\{表:'fn_table_sigs'/.test(src)
+     && /共用視窗要「從回來那一刻」起算，不是從送出那一刻/.test(src));
+  ok('★★ 只延長共用、不放寬正確性（簽章仍先於資料，寫入照樣 dbCacheClear）',
+     /只是延長共用，不放寬正確性：簽章仍然先於資料取得，/.test(src));
+
+  ok('★★★ 單筆與整批同時開跑（原本一個等完才開始另一個）',
+     /if\(kind==='member'\) ppWarmMember\(\);\s*\n\s*const rec = await dbGet\(table, id\);/.test(src)
+     && /function ppWarmMember\(\)\{/.test(src));
+  ok('★★★ 預熱不重複實作抓取（靠 dbGetAll 的 in-flight 合併）',
+     /const inflight=_dbInflight\.get\(key\);/.test(src)
+     && /ppLoadCtx 稍後要同一張表時會直接沿用同一份，不會抓兩次/.test(src));
+
+  /* 兩份清單不同步的話，預熱會漏表 —— 不會出錯，但省不到。這裡直接比對。 */
+  const warm=(src.match(/const PP_MEMBER_TABLES=\[([\s\S]*?)\];/)||[])[1]||'';
+  const warmList=[...warm.matchAll(/'([^']+)'/g)].map(m=>m[1]).sort();
+  const body=(src.match(/const \[coaches,tickets,bookings,purchases,ttypes,contractsAll,tkLogs,membersAll,grPend\]=await Promise\.all\(\[([\s\S]*?)\]\);/)||[])[1]||'';
+  const useList=[...body.matchAll(/dbGetAll\('([^']+)'\)/g)].map(m=>m[1]).sort();
+  eq('★★★ 預熱清單與 ppLoadCtx 實際抓的表一致', warmList, useList);
+  ok('★★ 漏掉某張表只會少省一點、不會出錯（理由寫在原地）',
+     /清單漏掉某張表只會少預熱一點（退回原本的速度），/.test(src));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

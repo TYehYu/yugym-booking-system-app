@@ -12483,8 +12483,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260904.2309';
-const APP_VERSION_LABEL = 'v260904.2309';
+const APP_VERSION = '260904.2315';
+const APP_VERSION_LABEL = 'v260904.2315';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12813,7 +12813,17 @@ function tableSigs(){
   _sigAt=Date.now();
   const _t0=Date.now();
   _sigPromise=sb.rpc('fn_table_sigs')
-    .then(r=>{ try{ window._dbStat.push({表:'fn_table_sigs', 列:0, kb:0, ms:Date.now()-_t0}); }catch(_){} return r; })
+    .then(r=>{
+      /* ⚠ 2026-09-04：共用視窗要「從回來那一刻」起算，不是從送出那一刻。
+         這一支在使用者的網路上要 0.8～1.6 秒（DB 端只花 106ms，其餘全是往返），
+         而視窗是從送出算 3 秒 —— 回來時只剩 1.4 秒可以共用，稍晚一點的呼叫端
+         就又打了一支一模一樣的 RPC。0904 實測那一次：fn_table_sigs 1.6s ＋ 0.8s，
+         兩支加起來 2.4 秒，佔了「抓資料 4.7s」的一半，而且傳輸都是 0KB。
+         重設一次 _sigAt，等於回來之後還有完整 3 秒可以共用。
+         ⚠ 只是延長共用，不放寬正確性：簽章仍然先於資料取得，
+           而且任何自己的寫入都會 dbCacheClear，跟這個視窗無關。 */
+      _sigAt=Date.now();
+      try{ window._dbStat.push({表:'fn_table_sigs', 列:0, kb:0, ms:Date.now()-_t0}); }catch(_){} return r; })
     .then(r=>(r && !r.error && r.data && typeof r.data==='object') ? r.data : null)
     .catch(()=>null);
   return _sigPromise;
@@ -46407,6 +46417,13 @@ async function openPersonProfile(kind, id, backPage){
   try{
     const table = kind==='member' ? 'members' : 'coaches';
     _say('讀取基本資料…');
+    /* ⚠ 2026-09-04：這兩件事沒有先後關係，原本卻是一個等完才開始另一個。
+       單筆 dbGet 是一次獨立往返（0904 實測 0.9s），八張表那批也不依賴它的結果
+       （ppLoadCtx 只看 PP.id）。先把整批踢出去再 await 單筆，兩邊重疊 ——
+       實測那一次 基本資料 0.9s ＋ 抓資料 4.7s ＝ 5.6s，重疊之後省下的就是那 0.9s。
+       ⚠ 這裡不重複實作抓取：dbGetAll 有 in-flight 合併（_dbInflight），
+         ppLoadCtx 稍後要同一張表時會直接沿用同一份，不會抓兩次。 */
+    if(kind==='member') ppWarmMember();
     const rec = await dbGet(table, id);
     _mark['基本資料']=Date.now()-_t0;
     if(!rec){ showToast('找不到資料'); return; }
@@ -46479,6 +46496,17 @@ async function openPersonProfile(kind, id, backPage){
   }
 }
 // 對照表與摘要數字
+/* 會員資料要用到的表（2026-09-04）——ppWarmMember 與 ppLoadCtx 共用這一份，
+   免得有人加了表卻只改一邊。清單漏掉某張表只會少預熱一點（退回原本的速度），
+   不會出錯；tests/memlagtest.js 會比對兩邊是否一致。 */
+const PP_MEMBER_TABLES=['coaches','member_tickets','bookings','purchases',
+  'ticket_types','contracts','ticket_logs','members'];
+function ppWarmMember(){
+  try{
+    PP_MEMBER_TABLES.forEach(t=>{ try{ dbGetAll(t).catch(()=>{}); }catch(_){} });
+    if(typeof grantReqPending==='function'){ try{ grantReqPending().catch(()=>{}); }catch(_){} }
+  }catch(_){}
+}
 async function ppLoadCtx(){
   const c=PP.ctx;
   if(PP.kind==='member'){
