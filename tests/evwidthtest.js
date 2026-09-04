@@ -151,5 +151,23 @@ ok('★★★ 「只驗沒有溢出是不夠的」寫在原地', /整個藏起�
 ok('★★ 「只能比寬度」的教訓還在（inline 元素的 scrollHeight 含整個行框）',
    /被切？ el\.scrollWidth > el\.clientWidth\s+← \*\*只能比寬度\*\*/.test(fs.readFileSync(__filename,'utf8')));
 
+console.log('\n⑥ 每拿掉一列，姓名就多准一行（2026-09-04）');
+/* 極窄卡上姓名被切成「林尚·」不是寬度不夠，是行數不夠：32px、字級 12px 時
+   「林尚美」需要 3 行，而 line-clamp 只准 2 行；卡片有 94px 高、放得下 6 行。 */
+ok('★★★ ≤55px 給 3 行',
+   /@container \(max-width:55px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-name\{-webkit-line-clamp:3;\}\s*\n\s*\}/.test(src));
+ok('★★★ ≤43px 給 4 行（量出來的上限，不是 5）',
+   /@container \(max-width:43px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-name\{-webkit-line-clamp:4;\}\s*\n\s*\}/.test(src));
+/* 折兩行那條是 .cal-ev.cal-ev-std.cal-ev-7d .evc-name（0,4,0）；
+   只寫 .cal-ev.cal-ev-std .evc-name（0,3,0）蓋不過去，畫面上完全沒反應。 */
+ok('★★★ 選擇器帶 .cal-ev-7d（權重要對得上折行那條）',
+   /⚠ 選擇器一定要帶 \.cal-ev-7d —— 折兩行那條規則是/.test(src));
+ok('★★ 為什麼是 4 不是 5（第一版 5 行跑出 216 例掉出卡外）',
+   /第一版寫 5，離線對照跑出\s*\n\s*216 例「姓名掉出卡外」/.test(src));
+ok('★★★ 明令不准改用 max-height（0808 那次「內容都不見了」的根因）',
+   /不要改成用 max-height 限制高度 —— 2026-08 那次「內容都不見了」就是\s*\n\s*max-height 把姓名壓成 0 高度，而且\*\*不會溢出所以測不出來\*\*/.test(src));
+ok('★★ A/B 對照結果記在原地（592 個名字變完整、0 項變差）',
+   /改成 4 行：592 個原本被截的名字變完整，0 項變差/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
