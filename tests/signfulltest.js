@@ -18,7 +18,9 @@ console.log('① 會員簽約的簽名欄＝點一下放大');
      /id="ct-sign-hint"/.test(F) && /onclick="memSignClear\(\)"/.test(F));
   ok('★ 全系統只剩會員端這一顆手寫板（平板簽名 2026-07-28 已廢除），不會誤傷別的流程',
      (src.match(/<canvas class="ct-sign" id="ct-sign"/g)||[]).length===1
-     && /平板簽名廢除（2026-07-28：統一會員手機）/.test(src));
+     /* 2026-09-04：ctSetType 精簡（建約不選簽署方式），但那一行「把平板簽名板藏起來」
+        仍然要在 —— ct-sign-box 的 DOM 還在頁面上，不藏就會露出來。 */
+     && /const s2=document\.getElementById\('ct-sign-box'\); if\(s2\) s2\.style\.display='none';/.test(src));
 }
 
 console.log('\n② 全螢幕橫向簽名板');

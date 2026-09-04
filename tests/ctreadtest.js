@@ -58,7 +58,11 @@ ok('　　遠端簽約時 signed_at 先留空，快照照樣存', /signed_at:_re
 console.log('\n⑤ C／D 沒被動到');
 ok('　　合約檢視仍用 .ct-fill-view 包快照', /const fill=c\.fill_snapshot\?`<div class="ct-fill-view">\$\{c\.fill_snapshot\}<\/div>`:'';/.test(src));
 ok('　　列印版仍直接輸出快照', /\$\{c\.fill_snapshot\|\|''\}/.test(src));
-ok('　　紙本預覽本來就是白底', /id="ct-paper-preview"[^>]*background:#fff;/.test(src));
+/* 2026-09-04：建約時不再選簽署方式，紙本預覽那一塊（ct-paper-preview）整組移除 ——
+   合約全文本來就在上面的 ct-body，再開一個白底框只是同一份東西看兩次。
+   列印仍在（ctPrintPaper 走 window.print()）。 */
+ok('　　紙本預覽區塊已隨「建約不選簽署方式」一起移除，列印仍在',
+   !/id="ct-paper-preview"/.test(src) && /onclick="ctPrintPaper\(\)"/.test(src));
 
 console.log('\n⑥ 承上追加：櫃檯不必在小框裡讀、手機不必左右滑');
 {

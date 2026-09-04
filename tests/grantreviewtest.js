@@ -31,8 +31,10 @@ console.log('① 兩條路分岔：紙本直接發、電子送審');
 /* 2026-08-28 三修（使用者定案）：「收款資訊之後再填」那個開關退場，改用既有的付款狀態
    —— 未付款一樣發票券、方案卡標「待付款」，櫃檯之後點卡上的「收款」定案。
    所以進審核佇列的情況回到只有一種：電子合約要等會員簽回。 */
-  ok('★★ 進審核只有一種情況：電子合約（等會員簽回）',
-     /if\(window\._grantSalesActive && window\._ctBody && window\._ctSignType==='remote'\)\{/.test(F)
+/* 2026-09-04：建約時不再選簽署方式，走過簽約步驟的**一律**進佇列、不發票券。
+   條件從三個變兩個（_ctSignType 不再參與判斷）。 */
+  ok('★★ 走過簽約步驟的一律進佇列（不再分電子／紙本）',
+     /if\(window\._grantSalesActive && window\._ctBody\)\{/.test(F)
      && !/P\.pendingFill/.test(src));
   ok('★★ 送審那條不建票券（建的是合約＋申請，然後 return）',
      /await dbPut\('ticket_grant_requests',\{id:uid\('GR'\),member_id,/.test(F)
@@ -43,7 +45,7 @@ console.log('① 兩條路分岔：紙本直接發、電子送審');
   ok('★★ 推播叫會員去簽（客戶端的簽約視窗靠這個觸發）',
      /await pushNotification\(member_id,'announce','合約待簽名',/.test(F));
   ok('★ Toast 明講「還沒發票券」與應收金額',
-     /已送出審核：\$\{plan\.name\}　·　等會員簽回合約並確認收款後發放（應收 \$\$\{_amt\.toLocaleString\(\)\}）/.test(F));
+     /已建立合約：\$\{plan\.name\}　·　客人到場後在「待審核發放」選簽署方式並收款（應收 \$\$\{_amt\.toLocaleString\(\)\}）/.test(F));
   ok('★★ 紙本那條照舊，走到 _grantIssue 立刻發',
      /const t=await _grantIssue\(P\);/.test(F)
      && /const _remote=false;   \/\/ 走到這裡一定是紙本（電子那條在上面就 return 了）/.test(F));
@@ -244,24 +246,29 @@ console.log('\n⑤ 紙本合約顯示「已使用紙本簽名」');
 }
 /* 2026-09-04：電子合約不再需要綁 LINE（推播 0822 就整組移除，改成「我的票券」
    常駐的待簽卡；會員用手機號碼＋88888888 登入即可簽）。兩顆鈕都常駐可按。 */
-ok('★★ 步驟 4 的兩顆按鈕都可按（電子不再被 LINE 擋）',
-   />電子合約<\/button>/.test(src) && />紙本合約<\/button>/.test(src)
-   && !/disabled style="opacity:\.45;cursor:not-allowed;" title="此會員尚未綁定 LINE"/.test(src));
-ok('★★★ 未綁 LINE 時要當面告知怎麼登入（唯一真的差別是收不到通知）',
-   /這位會員<b>還沒綁定 LINE<\/b>，不會收到通知/.test(src)
-   && /用<b>手機號碼<\/b>加預設密碼 <b>88888888<\/b> 登入，到「我的票券」簽署/.test(src)
-   && /if\(_nl\) _nl\.style\.display=_hasLine\?'none':'';/.test(src));
-ok('★★ 為什麼可以拿掉（0822 推播移除）寫在原地',
-   /那個前提在 \*\*2026-08-22 就沒了\*\*/.test(src)
-   && /fn_member_sign_contract 只檢查 member_id，\*\*沒有任何 LINE 判斷\*\*/.test(src));
-ok('★★ 預設值刻意不動（沒綁 LINE 仍預設紙本）',
-   /ctSetType\(_hasLine\?'remote':'paper'\);/.test(src)
-   && /這次只放開「能不能選」，\s*\n\s*不改櫃檯現場銷售的既有習慣/.test(src));
-ok('★★ 送出鈕跟著換字（紙本＝發票券、電子＝送審）',
-   /if\(sb2\) sb2\.textContent=\(v==='remote'\) \? '送出審核（等簽回＋確認收款）' : '完成簽約並發放票券';/.test(src));
-ok('★ 兩塊說明各自講清楚結果',
-   /<b style="color:#b5372e;">此時還不會發放票券<\/b>/.test(src)
-   && /<b style="color:#1f6f54;">按下去就直接發放票券<\/b>，不需要再經過審核。/.test(src));
+/* 2026-09-04 使用者定案：「建立合約的時候 移除[電子][紙本] 下方改成建立合約
+   等櫃檯再次點開的時候再選擇合約方式」—— 兩顆選擇鈕整組退場。 */
+ok('★★★ 步驟 4 不再有簽署方式的選擇鈕',
+   !/class="ct-types" id="ct-types"/.test(src)
+   && !/data-t="remote"/.test(src) && !/data-t="paper"/.test(src));
+ok('★★★ 送出鈕改成「建立合約」',
+   /<button class="btn btn-green" id="ct-submit" onclick="ctSubmit\(\)">建立合約<\/button>/.test(src)
+   && /if\(sb2\) sb2\.textContent='建立合約';/.test(src));
+ok('★★★ 型別固定成 undecided（殘留成 paper 會當場把票券發出去）',
+   /window\._ctSignType='undecided';/.test(src)
+   && /_ctSignType 一定要明確設成 'undecided'/.test(src));
+ok('★★ LINE 那道限制的來龍去脈留在原地（0822 推播移除）',
+   /那個前提 2026-08-22 就沒了/.test(src)
+   && /fn_member_sign_contract 也只檢查 member_id，沒有任何 LINE 判斷/.test(src));
+/* 2026-09-04：建約時不再分電子／紙本，所以送出鈕不需要換字，
+   兩塊分岔說明也整併成一塊「建立後會發生什麼」。 */
+ok('★★ 送出鈕固定是「建立合約」',
+   /if\(sb2\) sb2\.textContent='建立合約';/.test(src)
+   && !/'送出審核（等簽回＋確認收款）'/.test(src));
+ok('★ 建立後會發生什麼，在步驟 4 就講清楚',
+   /建立後<b>還不會發票券<\/b>：這一筆會進「待審核發放」/.test(src)
+   && /・<b>用電子簽<\/b> → 會員登入「我的票券」點開簽名/.test(src)
+   && /・<b>用紙本<\/b> → 列印給客人簽，按下去就算已簽/.test(src));
 
 console.log('\n⑥ 資料表');
 {
@@ -297,8 +304,9 @@ console.log('\n⑦ 會員資料票券頁的「待審核」卡（2026-08-09 使�
      /const grCard=r=>\{/.test(R) && /待審核<\/span>/.test(R));
   ok('★ 用申請的方案反查分頁（與票券同一支 tkClass5 分類器）',
      /tkClass5\(\{ticket_type_id:pl\.ticket_type_id, plan_name:r\.plan_name\|\|pl\.name\}, typeMap\)/.test(R));
+  /* 2026-09-04：未簽回再分兩種 —— 還沒選簽署方式／已選電子等會員簽。 */
   ok('★ 卡上有簽回狀態、送出時間與應收金額',
-     /signed\?'✓ 合約已簽回':'⏳ 合約未簽回'/.test(R)
+     /signed\?'✓ 合約已簽回'\s*\n\s*:\(\(c&&c\.sign_type==='remote'\)\?'⏳ 等會員簽回':'◻ 尚未選簽署方式'\)/.test(R)
      && /送出 \$\{String\(r\.requested_at\|\|''\)\.slice\(5,16\)/.test(R)
      && /應收 <b style="color:#b5372e;/.test(R));
   ok('★ 會員資料的待審核卡直接開這一筆（原本開的是整份清單，還要自己找回來）',
@@ -390,28 +398,39 @@ console.log('\n預覽會員視角：待簽名票券的範例卡');
   ok('　　範例卡接在真卡後面（真的有就先看真的）', /pendCards\+demoCard\+/.test(R));
 }
 
-console.log('\n⑧ 電子改紙本：客人到場才決定簽署方式（2026-09-04）');
-/* 使用者：「先讓教練可以用櫃檯帳號建立合約 等客人來現場後櫃檯再接手
-           要用紙本還是電子 是否要分期 現金還是匯款」
-   分期與付款方式在「收款資訊」裡本來就能改（0828）；電子↔紙本是唯一還不能延後的。
-   作業流程：建約時先開成電子（票券不發、進佇列）→ 客人到場要紙本就按這顆。 */
-ok('★★★ 待審核清單上有「改用紙本」，而且只在未簽回時出現',
-   /\$\{\(c && !signed\)\?`<button class="btn btn-ghost btn-sm" title="客人要簽紙本：改成紙本後這一筆就算已簽，可以直接確認收款發放" onclick="grantReqToPaper\('\$\{r\.id\}'\)">改用紙本<\/button>`:''\}/.test(src));
-ok('★★★ 已簽回的不給轉（會把會員的簽名紀錄抹掉）',
-   /if\(c\.signed_at\)\{ showToast\('這份合約已經簽回了，不需要改成紙本'\); return; \}/.test(src)
-   && /只轉「未簽回」的：已經簽回代表會員真的在手機上簽過名了/.test(src));
+console.log('\n⑧ 簽署方式改在「待審核發放」才決定（2026-09-04）');
+/* 使用者：「建立合約的時候 移除[電子][紙本] 下方改成建立合約
+           等櫃檯再次點開的時候再選擇合約方式」
+   起因是教練用櫃檯帳號替新客人建約時卡住：電子被 LINE 擋著、紙本又會直接發票券，
+   而客人還沒付款也還沒簽。 */
+ok('★★★ 清單上有「用電子簽」「用紙本」兩顆，且只在未簽回時出現',
+   /\$\{\(c && !signed\)\?`<button class="btn btn-ghost btn-sm" title="會員登入「我的票券」自己簽；簽回後這一列的發放鈕才會亮" onclick="grantReqSetSign\('\$\{r\.id\}','remote'\)">用電子簽<\/button>/.test(src)
+   && /onclick="grantReqSetSign\('\$\{r\.id\}','paper'\)">用紙本<\/button>/.test(src));
+ok('★★★ 已簽回的不給改（會把會員的簽名紀錄抹掉）',
+   /if\(c\.signed_at\)\{ showToast\('這份合約已經簽回了，不能再改簽署方式'\); return; \}/.test(src)
+   && /只讓「未簽回」的改：已經簽回代表會員真的在手機上簽過名/.test(src));
 ok('★★★ 合約與佇列兩邊的 sign_type 都要改',
-   /c\.sign_type='paper';/.test(src) && /r\.sign_type='paper';/.test(src)
-   && /只改一邊，清單上的標籤與合約頁會對不起來/.test(src));
-ok('★★★ 轉完會員手機上的待簽卡會自動消失（理由寫在原地）',
-   /會員端的待簽卡是 `sign_type==='remote' && !signed_at`（見 58273／58594），/.test(src));
-ok('★★★ 一定留痕（誰把電子改成紙本）',
-   /由電子改為紙本（\$\{_who\}・\$\{nowHM\(\)\}）/.test(src));
-ok('★★ 限櫃檯以上＋防連點',
+   /c\.sign_type=kind;/.test(src) && /r\.sign_type=kind;/.test(src)
+   && /只改一邊，清單標籤與合約頁會對不起來/.test(src));
+/* 紙本＝按下就算已簽（列印給客人簽）；電子＝維持未簽，等會員自己簽。 */
+ok('★★★ 只有紙本會把 signed_at 蓋上去',
+   /if\(_isPaper\) c\.signed_at=new Date\(\)\.toISOString\(\);/.test(src));
+/* 建約當下不通知（那時還沒決定，通知了他也不知道要幹嘛）；選電子才推播。 */
+ok('★★★ 通知搬到「選電子簽」那一刻，建約時不通知',
+   /if\(!_isPaper\)\{ try\{ await pushNotification\(r\.member_id,'announce','合約待簽名',/.test(src)
+   && /建約當下不通知會員 —— 簽署方式還沒定，通知了他也不知道要幹嘛/.test(src));
+ok('★★★ undecided 期間會員手機上看不到待簽卡（理由寫在原地）',
+   /所以 undecided 期間他手機上不會看到；選了電子才出現；選紙本則永遠不出現/.test(src));
+/* ctSignLabel 最後是 fallthrough 到「紙本已簽」，不特別處理的話，
+   一份還沒決定也還沒簽的合約會在會員的合約列表上被標成「紙本已簽」—— 說謊。 */
+ok('★★★ undecided 不能被標成「紙本已簽」',
+   /if\(c\.sign_type==='undecided'\) return short\?'未簽署':'尚未選定簽署方式';/.test(src));
+ok('★★ 限櫃檯以上＋防連點＋紙本要問一次',
    /if\(!isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可操作'\); return; \}/.test(src)
-   && /async function grantReqToPaper\(id\)\{ return onceAct\('gr2paper:'\+id, \(\)=>_grantReqToPaper\(id\)\); \}/.test(src));
-ok('★★ 按下去前先問一次（要確認客人真的簽了紙本）',
-   /請確認客人已經在紙本合約上簽名。/.test(src));
+   && /async function grantReqSetSign\(id, kind\)\{ return onceAct\('grsign:'\+id, \(\)=>_grantReqSetSign\(id, kind\)\); \}/.test(src)
+   && /請確認客人已經在紙本合約上簽名。/.test(src));
+ok('★★ 一定留痕（誰決定的簽署方式）',
+   /簽署方式設為\$\{_lb\}（\$\{_who\}・\$\{nowHM\(\)\}）/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

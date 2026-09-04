@@ -26,8 +26,9 @@ console.log('① 前兩版都退乾淨了');
      !/id="gt-later"/.test(src) && !/gtLaterSync/.test(src) && !/gtLaterOn/.test(src));
   ok('★★ payload 的 pendingFill 旗標也拿掉了（不再有第二套發票路徑）',
      !/pendingFill/.test(src));
-  ok('★★ 進審核佇列回到只有電子合約那一種',
-     /if\(window\._grantSalesActive && window\._ctBody && window\._ctSignType==='remote'\)\{/.test(src));
+/* 2026-09-04：改成「走過簽約步驟的一律進佇列」（建約時不再選簽署方式）。 */
+  ok('★★ 走過簽約步驟的一律進佇列',
+     /if\(window\._grantSalesActive && window\._ctBody\)\{/.test(src));
   ok('★★ 三版的來龍去脈寫在原地（含「教練沒有建約權限」這條）',
      /勾選框與「依角色自動判斷」兩版都退場，改用\*\*既有的付款狀態\*\*/.test(src));
   ok('★★ 付款狀態回到直接讀欄位（沒有任何覆寫）',
