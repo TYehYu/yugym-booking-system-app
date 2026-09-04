@@ -12483,8 +12483,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260904.2301';
-const APP_VERSION_LABEL = 'v260904.2301';
+const APP_VERSION = '260904.2309';
+const APP_VERSION_LABEL = 'v260904.2309';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50745,10 +50745,33 @@ async function _grantReqSetSign(id, kind){
       c.sessions=Number((r.payload&&r.payload.total))||Number(c.sessions)||0;
     }catch(e){ console.error('送簽前定案數字失敗', e); }
     const _isPaper=(kind==='paper');
+    /* ══ 兩顆都要二次確認（2026-09-04 使用者：「這個是按了就直接確認簽約方式嗎?
+         不是應該要有個緩衝階段嗎」）════════════════════════════════════════
+       原本只有紙本有確認，電子簽按下去**立刻推播給會員** —— 對外的動作，
+       而且通知送出去就收不回來（簽署方式本身還改得回紙本，通知不行）。
+       ⚠ 確認視窗要寫出「客人會簽到什麼」：金額與分期是上面剛剛才定案的，
+         送出前讓櫃檯用眼睛對一次，比事後發現簽錯再重開一份便宜太多。
+       ⚠ 放在重算之後：這樣視窗裡的數字就是真的會寫進合約的那一份。
+         取消只是 return，前面那些都只改了記憶體裡的物件，沒有任何 dbPut。 */
+    const _sumLine=(()=>{
+      try{
+        const _p=r.payload||{};
+        const _n=Math.max(1,Number(_p.installCount)||1);
+        return `${Number(_p.total)||Number(r.sessions)||0} 堂　·　$${grCtAmount(_p).toLocaleString()}`
+             + `　·　${_n>1?`分 ${_n} 期`:'一次付清'}`;
+      }catch(_){ return ''; }
+    })();
     if(_isPaper && !confirm(`把 ${r.member_name||''} 的「${r.plan_name||''}」設為紙本簽署？\n\n`
+      +(_sumLine?`　合約內容：${_sumLine}\n\n`:'')
       +`・這一筆立刻算「已簽」，可以直接確認收款發放\n`
       +`・會員手機上不會出現待簽提醒\n\n`
       +`請確認客人已經在紙本合約上簽名。`)) return;
+    if(!_isPaper && !confirm(`把 ${r.member_name||''} 的「${r.plan_name||''}」用電子簽送出？\n\n`
+      +(_sumLine?`　他會簽到：${_sumLine}\n\n`:'')
+      +`・按下去會馬上通知會員到「我的票券」簽名\n`
+      +`・要等他簽回才能發放票券\n`
+      +`・簽回之前還可以改成紙本，但通知收不回來\n\n`
+      +`數字對了嗎？確定現在通知他？`)) return;
     const _who=(SESSION&&SESSION.name)||'櫃檯';
     const _lb=_isPaper?'紙本':'電子';
     c.sign_type=kind;

@@ -182,6 +182,35 @@ console.log('\n③d 有些方案不能分期（2026-09-04 使用者回報）');
      /把值硬改成 '3' 之後 grFillApply\s*\n\s*仍然回「不分期・開通全部」/.test(require('fs').readFileSync(__filename,'utf8')));
 }
 
+console.log('\n③e 兩顆都要二次確認（2026-09-04：「按了就直接確認簽約方式嗎? 不是應該要有個緩衝階段嗎」）');
+{
+  const G=grabFn('_grantReqSetSign');
+  /* 原本只有紙本有確認，電子簽按下去**立刻推播給會員** —— 對外的動作，
+     而且簽署方式還改得回紙本，通知卻收不回來。 */
+  ok('★★★ 電子簽也要先問（原本沒有）',
+     /if\(!_isPaper && !confirm\(`把 \$\{r\.member_name\|\|''\} 的「\$\{r\.plan_name\|\|''\}」用電子簽送出？/.test(G));
+  ok('★★★ 講清楚不可逆的是通知，不是簽署方式',
+     /・簽回之前還可以改成紙本，但通知收不回來/.test(G)
+     && /通知送出去就收不回來（簽署方式本身還改得回紙本，通知不行）/.test(src));
+  ok('★★★ 確認視窗要寫出「客人會簽到什麼」（金額／堂數／分期）',
+     /const _sumLine=\(\(\)=>\{/.test(G)
+     && /他會簽到：\$\{_sumLine\}/.test(G)
+     && /　合約內容：\$\{_sumLine\}/.test(G));
+  ok('★★★ 數字取的是剛剛才定案的那一份（確認放在重算之後）',
+     G.indexOf('ctRebuildSnapshot') < G.indexOf('const _sumLine=')
+     && /放在重算之後：這樣視窗裡的數字就是真的會寫進合約的那一份/.test(src));
+  ok('★★ 取消就是單純 return，前面都只改記憶體、沒有 dbPut',
+     /取消只是 return，前面那些都只改了記憶體裡的物件，沒有任何 dbPut/.test(src)
+     && G.indexOf("if(!_isPaper && !confirm(") < G.indexOf("await dbPut('contracts',c)"));
+  /* 離線實跑（2026-09-04，真實函式＋假資料庫）：
+     按取消 → 合約與待審核單一個位元組都沒變、sign_type 還是 undecided、沒有推播；
+     再按一次並確認 → sign_type=remote、推播 1 則；
+     已經是電子簽再按同一顆 → 只吐司提示，通知沒有重複送。 */
+  ok('★★ 實跑結果記在這支測試裡',
+     /按取消 → 合約與待審核單一個位元組都沒變、sign_type 還是 undecided、沒有推播；/
+       .test(require('fs').readFileSync(__filename,'utf8')));
+}
+
 console.log('\n③b 送簽之前把數字定案，合約內文跟著重生（2026-09-04）');
 /* 使用者定案：「教練建立合約的時候 只要填寫方案 課堂數 總價 一次付清跟分期
    也可以預填寫 但之後櫃檯端可以在正式收費前調整」——
