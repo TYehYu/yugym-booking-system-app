@@ -11,9 +11,17 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
-/* Ink 的所有 CSS 區塊（樣式表裡以 body.ink 開頭的每一條） */
+/* Ink 的所有 CSS 區塊（樣式表裡以 body.ink 開頭的每一條）
+   ⚠ 2026-09-04 補洞：原本只 split('}')，於是 @media／@container 區塊裡的
+     **第一條**規則會被漏掉 —— 那一塊切出來長這樣：
+        "@container (min-width:56px){\n  body.ink … .co-fl{display:inline;"
+     取第一個 '{' 之前當選擇器，拿到的是 "@container (min-width:56px)"，
+     不含 body.ink，就被濾掉了。第二條之後才正常。
+     這支測試守的是「Ink 不會把藏起來的東西掀出來」，漏看等於白守，
+     所以先把 at-rule 的前綴整個拿掉再切（多出來的 '}' 只會切出空塊，無害）。 */
 const CSS=src.slice(src.indexOf('<style>'), src.indexOf('</style>'));
 const INK_RULES=CSS.replace(/\/\*[\s\S]*?\*\//g,'')
+  .replace(/@[a-zA-Z-]+[^{]*\{/g,'')
   .split('}').filter(b=>b.indexOf('{')>=0 && /body\.ink/.test(b.slice(0,b.indexOf('{'))));
 
 console.log('① Ink 只是一個 class，沒有任何權限判斷讀它');
@@ -46,15 +54,28 @@ console.log('\n② Ink 的 CSS 不會讓任何東西「從看不到變看得到�
        這支測試守的是權限，不是版面。
      ・cchip-dot／dw-／mc-rs-／mc-rev／lp-：既有項目
      ・mc-cell.mc-sel .mc-d：日期數字（永遠可見），inline-flex 只為了置中在 22px 圓圈裡
-       （2026-09-03 選取從方框改圓框） */
+       （2026-09-03 選取從方框改圓框）
+     ・cal-ev-std 的 co-fl／evc-coach／evc-time（2026-09-04 課卡四列改版）：
+       這三樣在**沒有 Ink 時也一樣顯示**，Ink 這幾條只是把「窄到什麼程度才收起來」
+       的門檻放寬 —— Ink 把教練膠囊的底與 padding 拿掉、時間字級鎖 10px，
+       同一張卡在 Ink 底下就是塞得下更多字（量出來：全名 68→56px、時間 64→60px）。
+       它們全都是版面門檻，沒有一項是「非 Ink 看不到、Ink 才看得到」的功能。 */
   eq('★★ 沒有一條把元素顯示出來／恢復點擊（display:block、visibility、pointer-events:auto）',
-     shown.filter(x=>!/cchip-dot|dw-|mc-rs-|mc-rev|lp-|mc-cell\.mc-sel \.mc-d/.test(x)), []);
+     shown.filter(x=>!/cchip-dot|dw-|mc-rs-|mc-rev|lp-|mc-cell\.mc-sel \.mc-d/.test(x))
+          .filter(x=>!/^body\.ink \.cal-ev\.cal-ev-std.*(\.co-fl|\.evc-coach|\.evc-tim)/.test(x)), []);
   ok('★★ 完全沒有 pointer-events —— 不可能把「不能點」變成「能點」',
      !INK_RULES.some(b=>/pointer-events/.test(b)));
-  ok('★★ 唯一的兩個 display:none 都是「拿掉重複的裝飾」，不是藏功能',
-     INK_RULES.filter(b=>/display\s*:\s*none/.test(b)).length===2
+  /* 三條 display:none 沒有一條是在藏功能：
+     ・tcard-co／tcard-done::before：拿掉重複的裝飾（Ink 另有表達方式）
+     ・co-ab（2026-09-04）：教練「兩字縮寫」那一份。全名與縮寫本來就是兩份 DOM、
+       永遠只顯示其中一份；Ink 藏縮寫，正是因為它同時把**全名**放出來了
+       （見上面 co-fl 那條）。藏掉的資訊量是負的 —— 從 RA 變成 RANDY。 */
+  ok('★★ 三條 display:none 都是「拿掉重複的那一份」，不是藏功能',
+     INK_RULES.filter(b=>/display\s*:\s*none/.test(b)).length===3
      && /\.tcard-row \.tcard-co:not\(\.tcard-leavetag\)\{display:none;\}/.test(src)
-     && /\.tcard-std\.tcard-done:not\(\.tcard-live\)::before\{display:none;\}/.test(src));
+     && /\.tcard-std\.tcard-done:not\(\.tcard-live\)::before\{display:none;\}/.test(src)
+     /* 縮寫被藏起來時，同一個容器查詢一定要把全名放出來，否則就真的少了東西 */
+     && /@container \(min-width:56px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.co-fl\{display:inline;\}\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.co-ab\{display:none;\}/.test(src));
 }
 
 console.log('\n③ 三種角色各自的權限判斷一行都沒動');

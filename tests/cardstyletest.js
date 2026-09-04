@@ -27,8 +27,15 @@ ok('★ 只作用在桌機（min-width:601px），手機課卡不動',
 ok('★ ① 時間＋姓名靠左上（兩張卡成對）',
    /\.cal-ev\.cal-ev-std \.evc-txt,\s*\n\s*\.tcard\.tcard-std \.tcard-txt\{ justify-content:flex-start !important; \}/.test(blk));
 
-ok('★ ② 教練放底部靠右（margin-top:auto 推到底＋align-self 靠右）',
-   /\.cal-ev\.cal-ev-std \.evc-coach,\s*\n\s*\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(blk));
+/* 2026-09-04：這一條拆成兩半。行事曆課卡改成四列（章左上／時間右上／姓名／場地／教練），
+   教練不再推到右下角；首頁課卡（.tcard）沒有要求改，維持原本的右下角。 */
+ok('★ ② 首頁課卡的教練仍在右下角（margin-top:auto 推到底＋align-self 靠右）',
+   /\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(blk)
+   && !/\.cal-ev\.cal-ev-std \.evc-coach,\s*\n\s*\.tcard\.tcard-std \.tcard-co\{ margin-top:auto/.test(blk));
+ok('★★ ②b 行事曆課卡的教練改成第四列（不推到底、不靠右）',
+   /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:center !important; \}/.test(blk));
+ok('　　為什麼可以不靠右了，寫在原地（章搬到左上，右下角的歷史包袱一起拿掉）',
+   /章已經搬到左上，右下角這個歷史包袱可以一起拿掉/.test(blk));
 
 /* 三修：「桌機版課卡 移除出席章好了」→ 四修（同日）：「不要用填滿的 只要在會員姓名
    右邊顯示出席章」。首頁課卡的最終樣子驗在下面「簽到的課卡不填滿」那一段；
@@ -186,8 +193,8 @@ ok('★ 首頁卡改回顯示全名（不再跟著窄卡用縮寫）',
    原本吃 JS 估的 wCls（估寬了就把 52px 的卡當成寬卡，教練全名被簽到章蓋掉前 2 字），
    改吃卡片真實寬度的 @container。門檻沿用 90／70，行為不變。詳見 tests/evwidthtest.js。
    首頁卡不受影響：它不是 .cal-ev，也不是查詢容器，所以照樣全名。 */
-ok('★ 行事曆的窄卡仍用縮寫，但改吃卡片真實寬度',
-   /@container \(max-width:90px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.co-fl\{display:none;\}/.test(css)
+ok('★ 行事曆的窄卡仍用縮寫，但改吃卡片真實寬度（門檻 2026-09-04 下修，見 evwidthtest）',
+   /@container \(max-width:67px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.co-fl\{display:none;\}/.test(css)
    && /\.co-ab\{display:none;\}/.test(css));
 ok('　　太長的名字折行、不切成「…」（0821 已有的規則接手）',
    /white-space:normal !important; word-break:keep-all/.test(css));
@@ -332,7 +339,12 @@ ok('★ 標準卡終於有窄卡專屬字級（原本只有舊卡 .ev-time／.ev
 ok('★ 越窄越少東西：窄卡先讓場地，極窄卡連教練也讓',
    /\.cal-ev\.cal-ev-std\.ev-w-narrow \.evc-vsub\{display:none;\}/.test(css)
    && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-vsub\{display:none;\}/.test(css)
-   && /@container \(max-width:70px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(css));
+   && /@container \(max-width:43px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(css));
+/* 2026-09-04 新增的第五樣「讓位」：第一列放不下時讓掉**時間**（章與驚嘆號留著）。 */
+ok('★★ 第一列擠不下時讓掉時間，不讓章也不讓驚嘆號',
+   /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:none;\}/.test(css)
+   && /@container \(max-width:85px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{display:none;\}/.test(css)
+   && /讓位的是時間，不是章也不是驚嘆號/.test(css));
 ok('　　原則寫在程式裡（寧可少一項，也不要每一項都殘缺）',
    /寧可少一項，也不要每一項都殘缺/.test(css));
 
@@ -764,8 +776,12 @@ ok('★ DOM 仍在姓名列裡（絕對定位是相對整張卡，擺哪裡都�
    && /\.cal-ev\.cal-ev-std \.evc-nmrow\{display:flex;align-items:center;justify-content:center;/.test(src));
 /* 2026-08-23 使用者回報「縮小的課卡 出席章變到左邊色條上了」：left 4px→9px。
    左緣課程色條寬 5px，章從 4px 起算會壓在色條上，兩個又都是深色。5px＋4px 間距＝9px。 */
-ok('★ 章在卡片左下角，桌機用小圓章（1/4 圓在淺底卡上太搶）',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:9px; bottom:4px; right:auto; top:auto;\s*\n\s*width:16px; height:16px; border-radius:50%;/.test(src));
+/* 2026-09-04 使用者指示：「出席章放課卡左上 時間放右上」—— 章從左下搬到左上。
+   left:9px 的理由不變（避開左緣 5px 的課程色條）。 */
+ok('★ 章在卡片左上角，桌機用小圓章（1/4 圓在淺底卡上太搶）',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:9px; top:4px; right:auto; bottom:auto;\s*\n\s*width:16px; height:16px; border-radius:50%;/.test(src));
+ok('★★ 這一搬順帶解掉 0903「教練全名蓋到章」的老問題，寫在原地',
+   /這一搬順帶解掉了 0903 那個「教練全名蓋到章」的老問題/.test(src));
 ok('★★ 章要避開左緣 5px 的課程色條（不然看起來像章長在色條裡）',
    /左緣的課程色條（\.evc-body::before）寬 5px，章從 4px 起算就會壓在色條上/.test(src));
 ok('　　手機（.admcag）維持 1/4 圓 —— 深色滿版卡上圓章反而糊',
@@ -773,8 +789,8 @@ ok('　　手機（.admcag）維持 1/4 圓 —— 深色滿版卡上圓章反�
    && /\.admcag\.cal-ev-std \.evc-check\{position:absolute;bottom:0;right:0;top:auto;left:auto;\s*\n\s*width:26px;height:26px;border-radius:100% 0 10px 0;/.test(src));
 ok('　　右下角讓給教練標籤，左下角本來是空的（理由寫在原地）',
    /右下角讓給教練標籤（\.evc-abbr），左下角本來是空的；用與手機同一種 1\/4 圓/.test(src));
-ok('　　桌機是左下角小圓章，手機的角標基底規則不動',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:9px; bottom:4px;/.test(src)
+ok('　　桌機是左上角小圓章（0904 從左下搬上來），手機的角標基底規則不動',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:9px; top:4px;/.test(src)
    && /\.cal-ev\.cal-ev-std \.evc-check\{position:absolute;top:auto;left:auto;bottom:0;right:0;/.test(src));
 ok('　　窄欄位時名字自己截斷，不會把章擠掉',
    /\.cal-ev\.cal-ev-std \.evc-nmrow \.evc-name\{min-width:0;\}/.test(src));
