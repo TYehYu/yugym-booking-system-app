@@ -74,18 +74,18 @@ ok('★★★ 三條歸零：不管 JS 加了什麼 class，都先當寬卡',
    /\.cal-ev\.cal-ev-std \.co-fl\{display:inline;\}\s*\n\s*\.cal-ev\.cal-ev-std \.co-ab\{display:none;\}\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:inline-flex;\}/.test(src));
 
 console.log('\n② 教練：門檻兩套，Ink 比較鬆');
-ok('★★★ 非 Ink：67px 以下換兩字縮寫（量到全名要 68px）',
-   /@container \(max-width:67px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.co-fl\{display:none;\}\s*\n\s*\.cal-ev\.cal-ev-std \.co-ab\{display:inline;\}\s*\n\s*\}/.test(src));
-ok('★★★ Ink：56px 起就把全名叫回來（膠囊無底無 padding，窄 12px）',
-   /@container \(min-width:56px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.co-fl\{display:inline;\}\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.co-ab\{display:none;\}\s*\n\s*\}/.test(src));
+ok('★★★ 非 Ink：61px 以下換兩字縮寫（量到全名要 62px）',
+   /@container \(max-width:61px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.co-fl\{display:none;\}\s*\n\s*\.cal-ev\.cal-ev-std \.co-ab\{display:inline;\}\s*\n\s*\}/.test(src));
+ok('★★★ Ink：52px 起就把全名叫回來（膠囊無底無 padding，窄 10px）',
+   /@container \(min-width:52px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.co-fl\{display:inline;\}\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.co-ab\{display:none;\}\s*\n\s*\}/.test(src));
 /* Ink 那條要贏得過上面的 max-width:67 —— 靠多一個 body.ink（0,4,1 ＞ 0,3,0）。
    ⚠ @container 本身不加權重，只有選擇器算；這是 body.ink 這一整層踩過四次的坑。 */
 ok('★★★ Ink 那條的權重高一階（body.ink 多一個 class），否則 56–67 這一段叫不回來',
    /選擇器多一個 body\.ink（0,4,1 ＞ 上面的 0,3,0）/.test(src));
-ok('★★★ 非 Ink：43px 以下連縮寫都放不下，整個不顯示',
-   /@container \(max-width:43px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}\s*\n\s*\}/.test(src));
-ok('★★★ Ink：36px 起縮寫還撐得住',
-   /@container \(min-width:36px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.evc-coach\{display:inline-flex;\}\s*\n\s*\}/.test(src));
+ok('★★★ 非 Ink：41px 以下連縮寫都放不下，整個不顯示',
+   /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}\s*\n\s*\}/.test(src));
+ok('★★★ Ink：30px 起縮寫還撐得住',
+   /@container \(min-width:30px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.evc-coach\{display:inline-flex;\}\s*\n\s*\}/.test(src));
 /* 門檻只能往「量過的值」改。這幾條擋的是「順手調一下數字」—— 0903→0904 之間
    我自己就憑感覺改壞兩次（36→發現非 Ink 40px 切字；32→發現 Ink 32px 也切字）。 */
 ok('★★ 舊的 90／70 已經不在了（改門檻要連註解一起改，不能只換數字）',
@@ -104,9 +104,9 @@ ok('★★★ 時間靠右，自己讓開章的位置',
 /* 沒有徽章的卡佔多數，平白少 16px 會讓時間提早消失 —— 所以用 :has 只在有徽章時讓。 */
 ok('★★★ 只有真的有驚嘆號時才讓右邊（:has，不是無條件保留）',
    /\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{padding-right:16px;\}/.test(src));
-ok('★★★ 非 Ink：63px 以下（無徽章）／85px 以下（有徽章）不顯示時間',
+ok('★★★ 非 Ink：63px 以下（無徽章）／81px 以下（有徽章）不顯示時間',
    /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:none;\}/.test(src)
-   && /@container \(max-width:85px\)\{[\s\S]{0,200}?\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{visibility:hidden;\}/.test(src));
+   && /@container \(max-width:81px\)\{[\s\S]{0,200}?\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{visibility:hidden;\}/.test(src));
 ok('★★★ Ink：60px／76px 起放得下，再叫回來（display 與 visibility 都要還原）',
    /@container \(min-width:60px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:flex;visibility:visible;\}/.test(src)
    && /@container \(min-width:76px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{display:flex;visibility:visible;\}/.test(src));
@@ -138,7 +138,7 @@ console.log('\n④ 四列的順序（DOM 由上而下：時間 → 姓名 → �
 ok('★★★ _bodyOut 的順序沒被動過',
    /<span class="evc-time">\$\{b\.start_time\}<\/span><span class="evc-nmrow">.*?<\/span>\$\{_venueSub\}\$\{_stdTag\}\$\{_abbrOut\}/.test(src));
 ok('★★★ 教練不再推到右下角（那是首頁課卡才留著的位置）',
-   /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:center !important; \}/.test(src)
+   /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:flex-start !important; \}/.test(src)
    && /\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(src));
 ok('★★ 出席章的 DOM 位置沒動（仍在 .evc-nmrow 裡，手機那套靠它）',
    /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>/.test(src));
@@ -154,10 +154,10 @@ ok('★★ 「只能比寬度」的教訓還在（inline 元素的 scrollHeight 
 console.log('\n⑥ 每拿掉一列，姓名就多准一行（2026-09-04）');
 /* 極窄卡上姓名被切成「林尚·」不是寬度不夠，是行數不夠：32px、字級 12px 時
    「林尚美」需要 3 行，而 line-clamp 只准 2 行；卡片有 94px 高、放得下 6 行。 */
-ok('★★★ ≤55px 給 3 行',
-   /@container \(max-width:55px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-name\{-webkit-line-clamp:3;\}\s*\n\s*\}/.test(src));
-ok('★★★ ≤43px 給 4 行（量出來的上限，不是 5）',
-   /@container \(max-width:43px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-name\{-webkit-line-clamp:4;\}\s*\n\s*\}/.test(src));
+ok('★★★ ≤61px 給 3 行（與教練退成縮寫同一個門檻）',
+   /@container \(max-width:61px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-name\{-webkit-line-clamp:3;\}\s*\n\s*\}/.test(src));
+ok('★★★ ≤41px 給 4 行（量出來的上限，不是 5）',
+   /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-name\{-webkit-line-clamp:4;\}\s*\n\s*\}/.test(src));
 /* 折兩行那條是 .cal-ev.cal-ev-std.cal-ev-7d .evc-name（0,4,0）；
    只寫 .cal-ev.cal-ev-std .evc-name（0,3,0）蓋不過去，畫面上完全沒反應。 */
 ok('★★★ 選擇器帶 .cal-ev-7d（權重要對得上折行那條）',
@@ -168,6 +168,24 @@ ok('★★★ 明令不准改用 max-height（0808 那次「內容都不見了�
    /不要改成用 max-height 限制高度 —— 2026-08 那次「內容都不見了」就是\s*\n\s*max-height 把姓名壓成 0 高度，而且\*\*不會溢出所以測不出來\*\*/.test(src));
 ok('★★ A/B 對照結果記在原地（592 個名字變完整、0 項變差）',
    /改成 4 行：592 個原本被截的名字變完整，0 項變差/.test(src));
+
+console.log('\n⑦ 列②～④ 靠左對齊（2026-09-04）');
+/* 置中的問題是掃描沒有著力點：一整排卡片並列時人是拿同一個垂直位置比對的，
+   但每個人的姓名長度不同，置中之後每一行的起點都不一樣。 */
+ok('★★★ 文字層靠左，且讓開左緣的課程色條（9px ＝ 5px 色條 ＋ 4px）',
+   /\.cal-ev\.cal-ev-std \.evc-txt\{ align-items:flex-start !important; text-align:left !important;\s*\n\s*padding-left:9px !important; \}/.test(src));
+ok('★★★ 姓名那一列也靠左', /\.cal-ev\.cal-ev-std \.evc-nmrow\{ justify-content:flex-start; \}/.test(src));
+ok('★★★ 教練靠左（不是置中）',
+   /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:flex-start !important; \}/.test(src));
+/* 9px 與左上角那顆章的 left:9px 對齊 —— 章、姓名、場地、教練落在同一條左邊線上。 */
+ok('★★★ 與出席章同一條左邊線（章是 left:9px）',
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:9px; top:4px;/.test(src));
+ok('★★ padding 為什麼要 9 不是 3（會壓在課程色條上），寫在原地',
+   /文字從 3px 起算會壓在色條上/.test(src));
+ok('★★★ 靠左讓可用寬度變了，門檻有重量過（註記寫在原地）',
+   /這一改讓每張卡的可用寬度少 6px，\*\*上面所有的門檻都要重量\*\*/.test(src));
+ok('★★ 重量後的新值有記下來（置中時代是 68／56）',
+   /（2026-09-04 列②～④ 靠左之後重量的值。原本置中時是 68／56 ——/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

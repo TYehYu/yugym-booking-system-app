@@ -33,7 +33,7 @@ ok('★ ② 首頁課卡的教練仍在右下角（margin-top:auto 推到底＋a
    /\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(blk)
    && !/\.cal-ev\.cal-ev-std \.evc-coach,\s*\n\s*\.tcard\.tcard-std \.tcard-co\{ margin-top:auto/.test(blk));
 ok('★★ ②b 行事曆課卡的教練改成第四列（不推到底、不靠右）',
-   /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:center !important; \}/.test(blk));
+   /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:flex-start !important; \}/.test(blk));
 ok('　　為什麼可以不靠右了，寫在原地（章搬到左上，右下角的歷史包袱一起拿掉）',
    /章已經搬到左上，右下角這個歷史包袱可以一起拿掉/.test(blk));
 
@@ -194,7 +194,7 @@ ok('★ 首頁卡改回顯示全名（不再跟著窄卡用縮寫）',
    改吃卡片真實寬度的 @container。門檻沿用 90／70，行為不變。詳見 tests/evwidthtest.js。
    首頁卡不受影響：它不是 .cal-ev，也不是查詢容器，所以照樣全名。 */
 ok('★ 行事曆的窄卡仍用縮寫，但改吃卡片真實寬度（門檻 2026-09-04 下修，見 evwidthtest）',
-   /@container \(max-width:67px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.co-fl\{display:none;\}/.test(css)
+   /@container \(max-width:61px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.co-fl\{display:none;\}/.test(css)
    && /\.co-ab\{display:none;\}/.test(css));
 ok('　　太長的名字折行、不切成「…」（0821 已有的規則接手）',
    /white-space:normal !important; word-break:keep-all/.test(css));
@@ -339,12 +339,12 @@ ok('★ 標準卡終於有窄卡專屬字級（原本只有舊卡 .ev-time／.ev
 ok('★ 越窄越少東西：窄卡先讓場地，極窄卡連教練也讓',
    /\.cal-ev\.cal-ev-std\.ev-w-narrow \.evc-vsub\{display:none;\}/.test(css)
    && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-vsub\{display:none;\}/.test(css)
-   && /@container \(max-width:43px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(css));
+   && /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(css));
 /* 2026-09-04 新增的第五樣「讓位」：第一列放不下時讓掉**時間**（章與驚嘆號留著）。 */
 ok('★★ 第一列擠不下時讓掉時間，不讓章也不讓驚嘆號',
    /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-time\{display:none;\}/.test(css)
    /* 0904 二修：收起來改用 visibility，第一列才不會塌掉讓姓名頂上去被章壓到 */
-   && /@container \(max-width:85px\)\{[\s\S]{0,200}?\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{visibility:hidden;\}/.test(css)
+   && /@container \(max-width:81px\)\{[\s\S]{0,200}?\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{visibility:hidden;\}/.test(css)
    && /讓位的是時間，不是章也不是驚嘆號/.test(css));
 ok('　　原則寫在程式裡（寧可少一項，也不要每一項都殘缺）',
    /寧可少一項，也不要每一項都殘缺/.test(css));

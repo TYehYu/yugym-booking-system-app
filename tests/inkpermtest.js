@@ -14,7 +14,7 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 /* Ink 的所有 CSS 區塊（樣式表裡以 body.ink 開頭的每一條）
    ⚠ 2026-09-04 補洞：原本只 split('}')，於是 @media／@container 區塊裡的
      **第一條**規則會被漏掉 —— 那一塊切出來長這樣：
-        "@container (min-width:56px){\n  body.ink … .co-fl{display:inline;"
+        "@container (min-width:52px){\n  body.ink … .co-fl{display:inline;"
      取第一個 '{' 之前當選擇器，拿到的是 "@container (min-width:56px)"，
      不含 body.ink，就被濾掉了。第二條之後才正常。
      這支測試守的是「Ink 不會把藏起來的東西掀出來」，漏看等於白守，
@@ -58,7 +58,7 @@ console.log('\n② Ink 的 CSS 不會讓任何東西「從看不到變看得到�
      ・cal-ev-std 的 co-fl／evc-coach／evc-time（2026-09-04 課卡四列改版）：
        這三樣在**沒有 Ink 時也一樣顯示**，Ink 這幾條只是把「窄到什麼程度才收起來」
        的門檻放寬 —— Ink 把教練膠囊的底與 padding 拿掉、時間字級鎖 10px，
-       同一張卡在 Ink 底下就是塞得下更多字（量出來：全名 68→56px、時間 64→60px）。
+       同一張卡在 Ink 底下就是塞得下更多字（量出來：全名 62→52px、時間 64→60px）。
        它們全都是版面門檻，沒有一項是「非 Ink 看不到、Ink 才看得到」的功能。 */
   eq('★★ 沒有一條把元素顯示出來／恢復點擊（display:block、visibility、pointer-events:auto）',
      shown.filter(x=>!/cchip-dot|dw-|mc-rs-|mc-rev|lp-|mc-cell\.mc-sel \.mc-d/.test(x))
@@ -75,7 +75,7 @@ console.log('\n② Ink 的 CSS 不會讓任何東西「從看不到變看得到�
      && /\.tcard-row \.tcard-co:not\(\.tcard-leavetag\)\{display:none;\}/.test(src)
      && /\.tcard-std\.tcard-done:not\(\.tcard-live\)::before\{display:none;\}/.test(src)
      /* 縮寫被藏起來時，同一個容器查詢一定要把全名放出來，否則就真的少了東西 */
-     && /@container \(min-width:56px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.co-fl\{display:inline;\}\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.co-ab\{display:none;\}/.test(src));
+     && /@container \(min-width:52px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.co-fl\{display:inline;\}\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.co-ab\{display:none;\}/.test(src));
 }
 
 console.log('\n③ 三種角色各自的權限判斷一行都沒動');
