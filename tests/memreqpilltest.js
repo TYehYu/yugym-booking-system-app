@@ -16,8 +16,7 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 
 console.log('① 位置：頂欄，不是某一頁的內容');
 ok('★★★ 頂欄有這一格', /<span id="tb-memreq-pill" style="display:none;"><\/span>/.test(src));
-ok('★★★ 每次換頁都更新（與待審核發放同一條路徑）',
-   /try\{ if\(typeof refreshGrantReviewPill==='function'\) refreshGrantReviewPill\(\); \}catch\(_\)\{\}\s*\n\s*try\{ if\(typeof refreshMemReqPill==='function'\) refreshMemReqPill\(\); \}catch\(_\)\{\}/.test(src));
+ok('★★★ 每次換頁都更新', /try\{ if\(typeof refreshMemReqPill==='function'\) refreshMemReqPill\(\); \}catch\(_\)\{\}/.test(src));
 ok('★★ 更新失敗不能影響換頁（包在 try 裡、不 await）',
    /try\{ if\(typeof refreshMemReqPill==='function'\) refreshMemReqPill\(\); \}catch\(_\)\{\}/.test(src));
 
@@ -43,10 +42,8 @@ console.log('\n③ 只給櫃檯以上看，而且會清乾淨');
    教練會看到留在頂欄的待審核提示。清空成本是零，漏掉的代價是權限外洩。 */
 ok('★★★ 會員申辦：非櫃檯清空，不是只 return',
    /async function refreshMemReqPill\(\)\{[\s\S]{0,300}?if\(!isDeskLike\(\)\)\{ host\.innerHTML=''; host\.style\.display='none'; alertDockSync\(\); return; \}/.test(src));
-ok('★★★ 待審核發放：同一個問題一起修',
-   /async function refreshGrantReviewPill\(\)\{[\s\S]{0,400}?if\(!isDeskLike\(\)\)\{ host\.innerHTML=''; host\.style\.display='none'; alertDockSync\(\); return; \}/.test(src));
 ok('★★ 為什麼不能只 return，寫在原地',
-   /清空的成本是零，漏掉的代價是權限外洩/.test(src));
+   /不是櫃檯就清掉，不能只 return/.test(src));
 ok('★★ 沒有待審時整顆收起來（不佔位置）',
    /if\(!list\.length\)\{ host\.innerHTML=''; host\.style\.display='none'; alertDockSync\(\); return; \}/.test(src));
 
@@ -138,8 +135,7 @@ ok('★★★ 抽獎那顆用 calc 讓開，不寫死',
    && /body\.verup-on \.mc-lotto-fab\{top:calc\(168px \+ var\(--adock-h,0px\)\);\}/.test(src));
 ok('★★★ 高度是量的不是算的（一顆與兩顆不一樣）',
    /document\.body\.style\.setProperty\('--adock-h', has \? \(d\.offsetHeight\+10\)\+'px' : '0px'\);/.test(src));
-ok('★★ 兩支 refresh 的每一條出口都要 sync（含清空那兩條）',
-   (src.match(/alertDockSync\(\);/g)||[]).length>=6);
+ok('★★ 每一條出口都要 sync（含清空那條）', (src.match(/alertDockSync\(\);/g)||[]).length>=3);
 ok('★★ 父層 display:none 救不回來，所以要搬節點（理由寫在原地）',
    /父層 display:none 之下，子元素再怎麼設 display 都救不回來/.test(src));
 /* 離線量測（2026-09-04，body.mc-mode）：.tb-left 確認是 display:none；

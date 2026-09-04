@@ -12496,8 +12496,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260905.0016';
-const APP_VERSION_LABEL = 'v260905.0016';
+const APP_VERSION = '260905.0038';
+const APP_VERSION_LABEL = 'v260905.0038';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16446,7 +16446,6 @@ function navTo(key, gkey){
   CUR_PAGE=key;
   /* 左上角的待審核提示（2026-08-08）：每次換頁順手更新一次 —— 它讀的是快取，
      沒有額外的網路成本；不放在渲染流程裡，出錯也不會影響換頁。 */
-  try{ if(typeof refreshGrantReviewPill==='function') refreshGrantReviewPill(); }catch(_){}
   try{ if(typeof refreshMemReqPill==='function') refreshMemReqPill(); }catch(_){}
   try{ if(typeof startReviewPillPoll==='function') startReviewPillPoll(); }catch(_){}
   if(typeof closeModal==='function') closeModal(); // 切頁時關掉任何殘留的彈窗，避免 modal 蓋住新頁
@@ -40866,7 +40865,6 @@ async function _doSaleUndo(kind,id){
     }catch(e){ console.error('發票作廢失敗',e); }
     closeModal();
     showToast('已整筆退回');
-    try{ refreshGrantReviewPill(); }catch(_){}
     navTo(CUR_PAGE);
   }catch(e){ done(); showToast('退回失敗：'+((e&&e.message)||e)); }
 }
@@ -50572,28 +50570,6 @@ async function grantReqPending(){
 }
 /* 左上角的待審核提示（桌機）——放在頂欄左側，櫃檯一進系統就看得到。
    有幾筆就寫幾筆；沒有就整顆不畫，不佔位置。 */
-/* ⚠ 2026-09-04 使用者定案：「待審核只要做會員連動 不要做票券發放提醒」——
-   #tb-review-pill 這個 host 已從 #alert-dock 移除，所以這一支現在每次都在
-   第一行 `if(!host) return;` 就結束，是**刻意的空轉**。
-   函式與五個呼叫端都保留：它們全是「做完某個動作順手更新一下」的位置，
-   一個一個拆掉的風險大於收益，而且日後若要恢復提示，把 host 加回去就好。
-   ⚠ 不要因為看到這支還被呼叫，就以為畫面上還有那顆提示。
-   待審核發放要從會員資料進：那張虛線卡的「收款審核」，或票券分頁的紅色計數。 */
-async function refreshGrantReviewPill(){
-  try{
-    const host=document.getElementById('tb-review-pill'); if(!host) return;
-    /* ⚠ 不是櫃檯就要**清掉**，不能只 return（2026-09-03）——
-       原本直接 return，如果那一格已經畫過（例如不重新整理就換帳號登入），
-       教練會看到留在頂欄的待審核提示。清空的成本是零，漏掉的代價是權限外洩。 */
-    if(!isDeskLike()){ host.innerHTML=''; host.style.display='none'; alertDockSync(); return; }
-    const list=await grantReqPending();
-    if(!list.length){ host.innerHTML=''; host.style.display='none'; alertDockSync(); return; }
-    host.style.display='';
-    host.innerHTML=`<button class="tb-review" onclick="openGrantReview()" title="等會員簽回合約並確認收款後才發放票券">
-      <span class="tb-review-dot"></span>待審核發放 <b>${list.length}</b></button>`;
-    alertDockSync();
-  }catch(_){}
-}
 /* 會員申辦待審的頂欄提示（2026-09-03）——
    ⚠ 與 refreshGrantReviewPill 是**兩顆不同的事**，故意分開：
      「待審核發放」＝票券要不要放行（錢的事）；「會員申辦」＝這個人是不是他說的那個人。
@@ -50601,7 +50577,7 @@ async function refreshGrantReviewPill(){
    ⚠ 顏色：申辦用紅（#7A2E28，沿用原本滑出鈕的色）—— 紅＝要有人動作，
      與待審核發放同一階；兩顆並排時靠文字區分，不是靠顏色。
    ⚠ 讀的是 dbGetAll 快取（member_link_requests 本來就在預載清單裡），沒有額外網路成本。 */
-/* ══ 兩顆待審核提示的背景輪詢（2026-09-04）════════════════════════════════
+/* ══ 會員申辦提示的背景輪詢（2026-09-04）════════════════════════════════
    使用者回報：「剛剛蘇映倢 確認審核的視窗不見了」——
    查資料庫那筆 member_link_requests 一直是 pending、trg_change_log 與 fn_table_sigs
    也都正常，問題不在資料，在**更新時機**：這兩顆提示只在 navTo（換頁）時重算。
@@ -50622,18 +50598,16 @@ function startReviewPillPoll(){
     try{
       if(document.hidden) return;
       if(typeof isDeskLike!=='function' || !isDeskLike()) return;
-      dbCacheClear(['member_link_requests','ticket_grant_requests']);
+      dbCacheClear(['member_link_requests']);
       if(typeof refreshMemReqPill==='function') await refreshMemReqPill();
-      if(typeof refreshGrantReviewPill==='function') await refreshGrantReviewPill();
     }catch(_){}
   }, 20000);
   /* 回到前景立刻補一次 —— 分頁在背景時輪詢是停的，切回來不補的話還要再等 20 秒。 */
   try{ document.addEventListener('visibilitychange',()=>{
     if(document.hidden) return;
     try{ if(typeof isDeskLike==='function' && isDeskLike()){
-      dbCacheClear(['member_link_requests','ticket_grant_requests']);
+      dbCacheClear(['member_link_requests']);
       if(typeof refreshMemReqPill==='function') refreshMemReqPill();
-      if(typeof refreshGrantReviewPill==='function') refreshGrantReviewPill();
     } }catch(_){}
   }); }catch(_){}
 }
@@ -50684,53 +50658,17 @@ async function refreshMemReqPill(){
     alertDockSync();
   }catch(_){}
 }
-async function openGrantReview(){
-  if(!isDeskLike()){ showToast('僅管理員／櫃台可審核'); return; }
-  const _busy=uiBusy('讀取待審核…');
-  let list=[], cts={};
-  try{
-    list=await grantReqPending();
-    const all=await dbGetAll('contracts').catch(()=>[]);
-    (all||[]).forEach(c=>{ if(c&&c.id) cts[c.id]=c; });
-  }finally{ _busy(); }
-  const rows=list.map(r=>{
-    const c=cts[r.contract_id]||null;
-    const signed=!!(c&&c.signed_at);
-    const amt=Number(r.amount)||0;
-    return `<div class="gr-item">
-      <div class="gr-item-top">
-        <span class="gr-item-nm">${escH(r.member_name||'—')}</span>
-        <span class="gr-item-plan">${escH(r.plan_name||'')}　·　${Number(r.sessions)||0} 堂</span>
-      </div>
-      <div class="gr-item-mid">
-        <span class="gr-sign ${signed?'ok':'wait'}">${signed?'✓ 合約已簽回':'⏳ 合約未簽回'}</span>
-        <span class="gr-item-when">送出 ${fmtWhenLocal(r.requested_at)}</span>
-      </div>
-      <div class="gr-item-amt"><span>應收</span><b>$${amt.toLocaleString()}</b></div>
-      <div class="gr-item-act">
-        ${c?`<button class="btn btn-ghost btn-sm" onclick="openContractView('${c.id}')">看合約</button>`:''}
-        ${/* 2026-09-04 使用者：「先讓教練可以用櫃檯帳號建立合約 等客人來現場後櫃檯再接手
-             要用紙本還是電子 是否要分期 現金還是匯款」——
-             分期與付款方式本來就能在這裡改（0828），電子↔紙本是唯一還不能延後的。
-             建約時先開成電子（票券不發、進這個佇列），客人到場說要紙本就按這顆。
-             ⚠ 只在**未簽回**時出現：已經簽回就沒有改的必要，改了反而抹掉會員的簽名紀錄。 */''}
-        ${(c && !signed)?`<button class="btn btn-ghost btn-sm" title="會員登入「我的票券」自己簽；簽回後這一列的發放鈕才會亮" onclick="grantReqSetSign('${r.id}','remote')">用電子簽</button>
-        <button class="btn btn-ghost btn-sm" title="列印給客人簽；按下去就算已簽，可以直接確認收款發放" onclick="grantReqSetSign('${r.id}','paper')">用紙本</button>`:''}
-        <button class="btn btn-ghost btn-sm" style="color:var(--danger,#b5372e);" onclick="grantReqCancel('${r.id}')">取消</button>
-        ${signed?`<button class="btn btn-green btn-sm" onclick="openGrantApprove('${r.id}')">確認收款・發放</button>`
-                :`<button class="btn btn-ghost btn-sm" title="合約簽回後才能發放；先進去把收款資訊改好" onclick="openGrantApprove('${r.id}')">收款資訊</button>`}
-      </div>
-    </div>`;
-  }).join('');
-  showModal(`<div class="modal-title">待審核發放</div>
-    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-bottom:12px;">
-      這些是<b>還沒發票券</b>的訂單。客人到場後在這裡完成三件事：<br>
-      <span style="color:var(--t3);">① 選簽署方式（<b>用電子簽</b>＝會員自己登入簽／<b>用紙本</b>＝列印給他簽，按下就算已簽）<br>
-      ② 在「收款資訊」定案金額、付款方式、分期<br>
-      ③ 合約簽回後按「確認收款・發放」才發票券</span></div>
-    ${list.length?`<div class="gr-list">${rows}</div>`:'<div style="padding:26px 10px;text-align:center;color:var(--t3);font-size:13px;">目前沒有待審核的發放</div>'}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
-}
+/* ══ 「待審核發放」清單已移除（2026-09-05 使用者：「這個視窗應該不用了 只要在
+     會員資料這邊審核就好吧」）════════════════════════════════════════════
+   0904 拿掉左上角那顆浮動提示時就講過：這些單子在會員資料裡本來就看得到兩處
+   （虛線待審核卡的「收款審核」、票券分頁的紅色計數）。清單少了入口之後，
+   只剩兩顆「返回」會跳進來，變成一個沒有人從正門進、卻走得出去的死角。
+   ⚠ 一起搬走的還有「取消這筆發放」—— 它原本只長在清單的卡片上，清單拆掉就沒
+     地方取消了。現在放進收款審核視窗的按鈕列（見 openGrantApprove 的 modal-foot）。
+   ⚠ 那顆提示的重算函式也一併刪除：host 0904 就移除了，函式早已每次都在第一行
+     return，留著只會讓人以為畫面上還有那顆提示。
+   ⚠ 刪這種函式不要用大括號配對去切 —— 裡面有樣板字串，${} 的括號會把計數帶偏，
+     切錯位置會少一個 catch（2026-09-05 踩過）。用「切到頂層那行單獨的 }」。 */
 /* ══ 客人到場才決定簽署方式（2026-09-04 使用者定案）════════════════════
    「建立合約的時候 移除[電子][紙本] 下方改成建立合約
      等櫃檯再次點開的時候再選擇合約方式」
@@ -50878,6 +50816,10 @@ async function _grantReqUnsign(id){
 }
 /* 確認視窗：應收金額要大、要有顏色（2026-08-08 使用者指示：「避免櫃檯看錯」） */
 async function openGrantApprove(id){
+  /* ⚠ 2026-09-05：守門原本只長在「待審核發放」清單那一支上，而清單只保護清單自己 ——
+     收款審核、儲存、發放、取消這四支從來沒有檢查過（既有的洞，清單拆掉後更明顯）。
+     發票券＝發錢，與建立合約同一階：櫃檯以上才行（0904「合約只能櫃檯以上的帳號才能建立」）。 */
+  if(!isDeskLike()){ showToast('僅管理員／櫃台可審核'); return; }
   const r=await dbGet('ticket_grant_requests',id);
   if(!r||r.status!=='pending'){ showToast('這筆已處理過'); return; }
   const c=r.contract_id?await dbGet('contracts',r.contract_id).catch(()=>null):null;
@@ -51108,7 +51050,12 @@ async function openGrantApprove(id){
     </section>
     <div class="modal-foot">
       ${/* 2026-09-04「避免操作失誤」：改過沒存就離開，數字會靜靜丟掉 —— 先問一次（見 grBack） */''}
-      <button class="btn btn-ghost" onclick="grBack()">返回</button>
+      <button class="btn btn-ghost" onclick="grBack('${r.member_id||''}')">返回</button>
+      ${/* 2026-09-05：「取消這筆發放」原本只長在清單卡片上，清單拆掉就沒地方取消了。
+           ⚠ 用淡紅小鈕放在中間：它是「不做這筆」的出口，不該跟「發放」搶注意力，
+             但也不能藏起來（0823「不能用就寫原因，別藏按鈕」）。 */''}
+      <button class="btn btn-ghost btn-sm" style="color:var(--danger,#7F0303);"
+        onclick="grantReqCancel('${r.id}')" title="不發放這筆，待簽名的合約一併作廢">取消這筆</button>
       ${/* 2026-08-28 使用者：「只存收款資訊 這一格要改成 待回簽才能通過」。
            ⚠ 不用綠色：綠＝這一步做完了，但這一步沒做完。也不用金：金是「可以做、
              但要知道」，而這顆現在根本按不下去。暗化＝單純的「還不到時候」。
@@ -51133,13 +51080,16 @@ async function openGrantApprove(id){
    收款欄位改完不按「儲存變更」直接按返回，數字會靜靜丟掉 —— 而且畫面上
    沒有任何徵兆，櫃檯會以為存好了。比的是同一份快照（見 window._grFill0）。
    ⚠ 只擋「真的改過」：沒改過按返回不該多一次點擊。 */
-function grBack(){
+async function grBack(mid){
   try{
     if(window._grFill0!=null && grFillSnap()!==window._grFill0){
       if(!confirm('收款資訊改過了，但還沒按「儲存變更」。\n\n直接離開的話這些修改會丟掉，確定要離開嗎？')) return;
     }
   }catch(_){}
-  openGrantReview();
+  /* 2026-09-05：清單拆掉之後，返回就是回到你進來的地方 —— 會員資料。
+     ⚠ 沒開著會員資料（例如從別處直接叫這支）就只關窗，不要硬跳一頁。 */
+  closeModal();
+  try{ if(mid) await ppRefreshIfOpen(mid); }catch(_){}
 }
 /* 收款欄位的原始字串快照（見 window._grFill0 的說明） */
 /* ══ 兩個金額刻意不同（2026-09-04 使用者定案）════════════════════════════
@@ -51333,6 +51283,7 @@ function grFillApply(P, quiet){
 async function grantReqSaveFill(id){ return onceAct('grsave:'+id, ()=>_grantReqSaveFill(id)); }
 async function _grantReqSaveFill(id){
   try{
+    if(!isDeskLike()){ showToast('僅管理員／櫃台可修改收款資訊'); return; }
     const r=await dbGet('ticket_grant_requests',id);
     if(!r||r.status!=='pending'){ showToast('這筆已處理過'); return; }
     if(!r.payload){ showToast('這筆沒有發放內容，請取消後重開一次'); return; }
@@ -51352,12 +51303,12 @@ async function _grantReqSaveFill(id){
     dbCacheClear(['ticket_grant_requests']);
     closeModal();
     showToast(`收款資訊已存起來（應收 $${r.amount.toLocaleString()}）　·　合約簽回後回這裡發放`, 6000);
-    try{ refreshGrantReviewPill(); }catch(_){}
     if(!(await ppRefreshIfOpen(r.member_id))) navTo(CUR_PAGE);
   }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
 }
 async function grantReqApprove(id){ return onceAct('grapp:'+id, ()=>_grantReqApprove(id)); }
 async function _grantReqApprove(id){
+  if(!isDeskLike()){ showToast('僅管理員／櫃台可發放票券'); return; }
   const done=cxBusy('發放中…');
   try{
     const r=await dbGet('ticket_grant_requests',id);
@@ -51472,20 +51423,21 @@ async function _grantReqApprove(id){
     dbCacheClear(['member_tickets','ticket_logs','purchases','contracts','ticket_grant_requests','notifications']);
     closeModal();
     showToast(`已發放：${r.plan_name||'票券'}　·　30 分鐘內可在首頁今日營收整筆退回`);
-    try{ refreshGrantReviewPill(); }catch(_){}
     /* 會員資料開著時就地重讀（2026-08-09）：票券頁的「待審核」卡要當場換成真票券 */
     if(!(await ppRefreshIfOpen(r.member_id))) navTo(CUR_PAGE);
   }catch(e){ done(); showToast('發放失敗：'+((e&&e.message)||e)); }
 }
 function grantReqCancel(id){
+  if(!isDeskLike()){ showToast('僅管理員／櫃台可取消'); return; }
   showModal(`<div class="modal-title">取消這筆發放</div>
     <div style="font-size:13.5px;color:var(--text);padding:4px 0 8px;">取消後不會發放票券，待簽名的合約也一併作廢。</div>
     <div class="form-row"><label>原因（選填，會記在紀錄上）</label><input id="gr-cx-why" placeholder="例：客人改買別的方案"></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="openGrantReview()">返回</button>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="openGrantApprove('${id}')">返回</button>
       <button class="btn btn-red" onclick="doGrantReqCancel('${id}')">確定取消</button></div>`);
 }
 async function doGrantReqCancel(id){
   try{
+    if(!isDeskLike()){ showToast('僅管理員／櫃台可取消'); return; }
     const r=await dbGet('ticket_grant_requests',id);
     if(!r||r.status!=='pending'){ showToast('這筆已處理過'); return; }
     r.status='cancelled';
@@ -51495,7 +51447,6 @@ async function doGrantReqCancel(id){
     if(r.contract_id){ try{ await dbDel('contracts',r.contract_id); }catch(_){} }
     dbCacheClear(['ticket_grant_requests','contracts']);
     closeModal(); showToast('已取消這筆發放');
-    try{ refreshGrantReviewPill(); }catch(_){}
     /* 會員資料開著時就地重讀（2026-08-09）：票券頁的「待審核」卡要當場消失 */
     if(!(await ppRefreshIfOpen(r.member_id))) navTo(CUR_PAGE);
   }catch(e){ showToast('取消失敗：'+((e&&e.message)||e)); }

@@ -219,7 +219,7 @@ console.log('\n③a 三段式版面與防呆（2026-09-04：「讓櫃檯閱讀�
      && /直接離開的話這些修改會丟掉/.test(B));
   ok('★★★ 沒改過不多問（沒改過按返回不該多一次點擊）',
      /只擋「真的改過」：沒改過按返回不該多一次點擊/.test(src));
-  ok('★★ 返回鈕真的走 grBack', /<button class="btn btn-ghost" onclick="grBack\(\)">返回<\/button>/.test(src));
+  ok('★★ 返回鈕走 grBack，並帶著會員 id 回去', /onclick="grBack\('\$\{r\.member_id\|\|''\}'\)">返回<\/button>/.test(src));
 }
 
 console.log('\n③d 有些方案不能分期（2026-09-04 使用者回報）');
@@ -433,44 +433,23 @@ console.log('\n③c 簽回之後才改數字 → 發放前問一次');
      && /⚠ 簽回後調整：\$\{_drift\}/.test(F));
 }
 
-console.log('\n③ 待審核發放**沒有**浮動提示（2026-09-04 使用者定案）');
-/* 「待審核只要做會員連動 不要做票券發放提醒」——
-   #alert-dock 只留會員連動那顆。理由：同一件待辦不要有兩個提醒，
-   而票券這件事在會員資料裡本來就看得到兩處（下面兩條在守）。
-   ⚠ 這是刻意拿掉，不是漏做。要恢復的話把 host 加回 dock 就會活過來
-     （refreshGrantReviewPill 整支都還在，只是每次都在 !host 就 return）。 */
-ok('★★★ dock 裡沒有 tb-review-pill 這個 host',
-   /<div id="alert-dock" class="alert-dock">([\s\S]{0,1200}?)<\/div>/.test(src)
-   && !/id="tb-review-pill"/.test(RegExp.$1)
-   /* 全檔也不該有第二個地方偷偷長出來 */
-   && (src.match(/id="tb-review-pill"/g)||[]).length===0);
-ok('★★★ 拿掉提示之後，那些單子還找得到 —— ① 會員資料的待審核卡',
+console.log('\n③ 「待審核發放」清單已整個移除（2026-09-05）');
+/* 使用者：「這個視窗按返回跳到這個視窗 這個視窗應該不用了 只要在會員資料這邊審核就好吧」
+   0904 拿掉浮動提示時就講過：這些單子在會員資料裡本來就看得到兩處。清單少了入口之後，
+   只剩兩顆「返回」會跳進來，變成沒有人從正門進、卻走得出去的死角。 */
+ok('★★★ 清單視窗與那顆提示的重算函式都不在了',
+   !/openGrantReview/.test(src.replace(/\/\*[\s\S]*?\*\//g,''))
+   && !/refreshGrantReviewPill/.test(src.replace(/\/\*[\s\S]*?\*\//g,'')));
+ok('★★★ 那些單子還找得到 —— 會員資料的待審核卡',
    /onclick="openGrantApprove\('\$\{r\.id\}'\)"/.test(src));
-ok('★★★ 　　　　　　　　　　　　　 ② 票券分頁上的紅色計數',
+ok('★★★ 　　　　　　　　　　 ＋ 票券分頁上的紅色計數',
    /\$\{_grCnt\[k\]\?`<i class="tkf-n" style="background:#c8453a;color:#fff;" title="待審核發放">/.test(src));
-ok('★★ 刻意拿掉的理由寫在原地（不然下一個人會當成 bug 補回去）',
-   /待審核只要做會員連動 不要做票券發放提醒/.test(src));
-{
-  const F=grabFn('refreshGrantReviewPill');
-  ok('★★ 這支現在是刻意空轉（host 不在，第一行就 return）',
-     /const host=document\.getElementById\('tb-review-pill'\); if\(!host\) return;/.test(F)
-     && /是\*\*刻意的空轉\*\*/.test(src));
-  /* 2026-09-03：從「不是櫃檯就 return」改成「不是櫃檯就清空再 return」——
-     那一格如果已經畫過（不重新整理就換帳號登入），教練會看到留在頂欄的待審核提示。
-     清空成本是零，漏掉的代價是權限外洩。 */
-  ok('★ 只有櫃檯／管理員看得到，而且非櫃檯時會把已經畫過的清掉（0904 起連 dock 一起收）',
-     /if\(!isDeskLike\(\)\)\{ host\.innerHTML=''; host\.style\.display='none'; alertDockSync\(\); return; \}/.test(F)
-     && !/if\(!isDeskLike\(\)\) return;/.test(F));
-  ok('★ 沒有待審核就整顆不畫（不佔位置）',
-     /if\(!list\.length\)\{ host\.innerHTML=''; host\.style\.display='none'; alertDockSync\(\); return; \}/.test(F));
-  /* 下面三條驗的是「恢復時這支還能用」，不是「畫面上看得到」 */
-  ok('★ 有幾筆就寫幾筆，點下去開審核清單',
-     /待審核發放 <b>\$\{list\.length\}<\/b>/.test(F) && /onclick="openGrantReview\(\)"/.test(F));
-  ok('★ 換頁時順手更新（讀快取，沒有額外網路成本）',
-     /try\{ if\(typeof refreshGrantReviewPill==='function'\) refreshGrantReviewPill\(\); \}catch\(_\)\{\}/.test(src));
-  ok('　　用品牌紅＋呼吸點（沒處理就發不出票券，屬於「要動作」等級）',
-     /\.tb-review\{display:inline-flex;[^}]*color:#b5372e;/.test(src) && /@keyframes grpulse/.test(src));
-}
+ok('★★★ 「取消這筆發放」跟著搬進收款審核（原本只長在清單卡片上）',
+   /onclick="grantReqCancel\('\$\{r\.id\}'\)" title="不發放這筆，待簽名的合約一併作廢">取消這筆<\/button>/.test(src));
+ok('★★ 取消視窗的返回改回收款審核，不再跳清單',
+   /onclick="openGrantApprove\('\$\{id\}'\)">返回<\/button>/.test(src));
+ok('★★ 刪函式不要用大括號配對（樣板字串會把計數帶偏）—— 教訓寫在原地',
+   /\$\{\} 的括號會把計數帶偏，/.test(src));
 
 console.log('\n④ 審核視窗：應收金額要大、要有顏色');
 {
@@ -516,8 +495,6 @@ ok('★★ 四個欄位改動都會重算',
   ok('★★ 沒簽回不能發：發放動作本身再擋一次（視窗打得開不等於發得出去）',
      /if\(!\(_c&&_c\.signed_at\)\)\{ done\(\); showToast\('合約尚未簽回，等會員在手機上簽完才能發放', 5000\); return; \}/.test(src)
      && /真正的發放這一關照舊擋住，不能靠繞過視窗就發出去。/.test(src));
-  ok('★★ 清單那顆未簽回的鈕不再反灰，改成「收款資訊」（哪裡找到都改得動）',
-     /title="合約簽回後才能發放；先進去把收款資訊改好" onclick="openGrantApprove\('\$\{r\.id\}'\)">收款資訊<\/button>/.test(src));
   ok('★★ 待審核卡兩顆鈕：刪除（移除方案）／收款審核（進付款視窗）',
      /title="移除這份方案（不會發票券）" onclick="grantReqCancel\('\$\{r\.id\}'\)">刪除<\/button>/.test(src)
      && /onclick="openGrantApprove\('\$\{r\.id\}'\)">收款審核<\/button>/.test(src));
@@ -796,9 +773,10 @@ console.log('\n⑧ 簽署方式改在「待審核發放」才決定（2026-09-04
            等櫃檯再次點開的時候再選擇合約方式」
    起因是教練用櫃檯帳號替新客人建約時卡住：電子被 LINE 擋著、紙本又會直接發票券，
    而客人還沒付款也還沒簽。 */
-ok('★★★ 清單上有「用電子簽」「用紙本」兩顆，且只在未簽回時出現',
-   /\$\{\(c && !signed\)\?`<button class="btn btn-ghost btn-sm" title="會員登入「我的票券」自己簽；簽回後這一列的發放鈕才會亮" onclick="grantReqSetSign\('\$\{r\.id\}','remote'\)">用電子簽<\/button>/.test(src)
-   && /onclick="grantReqSetSign\('\$\{r\.id\}','paper'\)">用紙本<\/button>/.test(src));
+/* 2026-09-05：清單已移除，那兩顆只剩收款審核視窗裡那一組（見 ③e／③f）。 */
+ok('★★★ 兩顆簽署鈕在收款審核視窗裡',
+   /onclick="grantReqSetSign\('\$\{r\.id\}','remote'\)"/.test(src)
+   && /onclick="grantReqSetSign\('\$\{r\.id\}','paper'\)"/.test(src));
 ok('★★★ 已簽回的不給改（會把會員的簽名紀錄抹掉）',
    /if\(c\.signed_at\)\{ showToast\('這份合約已經簽回了，不能再改簽署方式'\); return; \}/.test(src)
    && /只讓「未簽回」的改：已經簽回代表會員真的在手機上簽過名/.test(src));
@@ -894,8 +872,8 @@ ok('★★ 這次翻車的兩個症狀寫在原地',
    /每一張新建的合約都被標成「已簽回」/.test(src)
    && /櫃檯根本找不到哪裡選電子／紙本/.test(src));
 /* 送出時間原本直接切 ISO 字串，而 requested_at 存的是 UTC —— 台灣看到的整整慢 8 小時。 */
-ok('★★★ 送出時間改用本地時間顯示（兩處都換）',
-   (src.match(/送出 \$\{fmtWhenLocal\(r\.requested_at\)\}/g)||[]).length===2
+ok('★★★ 送出時間改用本地時間顯示',
+   (src.match(/fmtWhenLocal\(/g)||[]).length>=2
    && !/送出 \$\{String\(r\.requested_at\|\|''\)\.slice\(5,16\)/.test(src));
 ok('★★ 存 UTC 是對的，要改的是顯示（寫在原地）',
    /存 UTC 是對的（跨時區、排序都靠它），要改的是\*\*顯示\*\*/.test(src));
