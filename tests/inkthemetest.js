@@ -76,10 +76,12 @@ console.log('① 尺寸與位置：一行計算都不能動（使用者第 11 �
      && /const top=\(startMin\/SLOT_MIN\)\*SLOT_PX;/.test(src));
   ok('★★ 卡片高度仍依實際時長（30／60／90 分不同高）',
      /const fixedH=\(\(Number\(b\.duration\)\|\|60\)\/SLOT_MIN\)\*SLOT_PX; \/\/ 依實際時長/.test(src));
-  ok('★★ 並排寬度仍依重疊張數（1 張整欄、2 張各半…）',
+  /* 2026-09-04：寬度改成每張卡各自算（見 assignLanesDay ③），但等寬那條路要留著 ——
+     新擺法只要有任何一張會變窄就整群退回，退回時走的就是 dl.unit 這一套。 */
+  ok('★★ 並排寬度仍依重疊張數（1 張整欄、2 張各半…），且退路還在',
      /const UNIT = Math\.max\(1, dl\.unit\|\|1\);/.test(src)
-     && /const laneWpct=100\/UNIT;/.test(src)
-     && /const leftPct=dl\.laneIdx\*laneWpct;/.test(src));
+     && /const laneWpct = \(dl\.width!=null\) \? dl\.width : 100\/UNIT;/.test(src)
+     && /const leftPct  = \(dl\.left !=null\) \? dl\.left  : dl\.laneIdx\*\(100\/UNIT\);/.test(src));
   ok('★★ 半小時格高沒被改（7 日／5 日 48px）',
      /SLOT_PX = \(nDays===7\|\|nDays===5\) \? 48 : \(nDays===3 \? 44 : 48\);/.test(src));
   ok('　 inline style 仍然由 JS 輸出（沒有改成 class）',

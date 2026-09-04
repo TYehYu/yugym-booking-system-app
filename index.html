@@ -12161,8 +12161,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260904.1148';
-const APP_VERSION_LABEL='260904.1148';
+const APP_VERSION='260904.1317';
+const APP_VERSION_LABEL='260904.1317';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23982,8 +23982,11 @@ async function renderCalendar(opts){
         const UNIT = Math.max(1, dl.unit||1);
         const gap = nDays===1 ? 8 : (nDays===3 ? 6 : 4);
         const edge = nDays===1 ? 4 : 2;
-        const laneWpct=100/UNIT;
-        const leftPct=dl.laneIdx*laneWpct;
+        /* 2026-09-04：寬度改成每張卡各自算（見 assignLanesDay ③）。
+           dl.left／dl.width 只有在「新擺法確定沒有任何一張變窄」時才會有值，
+           沒有就退回原本的等寬分欄 —— 兩條路都留著，出事可以只拿掉 assignLanesDay 那段。 */
+        const laneWpct = (dl.width!=null) ? dl.width : 100/UNIT;
+        const leftPct  = (dl.left !=null) ? dl.left  : dl.laneIdx*(100/UNIT);
         dayLaneStyle=`top:${top+2}px;height:${fixedH-6}px;left:calc(${leftPct}% + ${edge}px);width:calc(${laneWpct}% - ${gap}px);`;
         if(dl.conflict) dayLaneStyle+='outline:2px solid var(--danger);outline-offset:-1px;';
       }
@@ -24832,6 +24835,68 @@ function assignLanesDay(evs){
     });
     const n=lanes.length||1;
     cl.forEach(({b})=>{ res[b.id].unit=n; });
+
+    /* ══ ③ 每張卡各自的寬度（2026-09-04 使用者指示：「一個時段有 1～6 張卡」）══════
+       在此之前，欄數是「整條**重疊鏈**的最大同時張數」，整群共用。
+       只要有一堂半點開始的課把相鄰兩個整點串起來（9% 的課是半點，228/2460 筆），
+       12:00 那三張就被 13:00 那六張拖著一起變成 1/6 寬。
+
+       改法：每張卡的寬度吃「**自己區間內**的最大同時張數」L，寬度＝1/L，
+       位置用「由左往右找第一個放得下的空隙」擺（已擺好的重疊卡片不會被覆蓋）。
+
+       ══ 效益沒有想像中大，數字記在這裡免得有人再高估一次 ══════════════
+       我第一次用 SQL 估是「19%（307 張）」，那個數字是**錯的** —— 它拿
+       「卡片開始那一瞬間」的同時張數來比，但一張 12:00 的課還會跟 12:30 的課
+       重疊，所以起始瞬間會低估自己實際遇到的最大同時數。
+       用整段區間重算 8/01–9/30 的 1635 張課卡：
+         ・理論上可以變寬的只有 **139 張（9%）**
+           （6欄→只需5欄 ×36、6→4 ×24、6→3 ×18、4→3 ×27、其餘零星）
+         ・這個安全版實際拿到 **46 張**（其餘卡在「空隙破碎」而整群退回）
+       想再逼近 139 就得允許非格線對齊的擺放，實測會產生 23 處重疊 —— 不值得。
+
+       ⚠ 真正擠的那 219 張（5～6 張同時，佔 13%）**這裡一張都救不到** ——
+         它們是真的同時有這麼多堂，不是分欄算錯。那個要靠資訊取捨或分流解決。
+
+       ⚠ 為什麼不會重疊：某時刻 t 有 k 張同時，每張的 L 都 ≥ k（L 是自己區間內的
+         最大值，而 t 就在自己區間內），所以 Σ1/L ≤ Σ1/k = 1 —— 總寬永遠不超過一欄。
+       ⚠ 但空隙可能**破碎**（左邊剩 0.2、右邊剩 0.2，要 0.33 卻放不下）。
+         這種情況整群退回原本的等寬分欄 —— 寧可維持現狀，也不要有一張變得比原本更窄。
+       ⚠ 團課優先佔最左邊這件事沒有變：order 仍是「團課在前」，而由左往右擺的
+         第一張自然落在 x=0。 */
+    const pts=[...new Set(cl.flatMap(it=>[it.s,it.e]))].sort((a,b)=>a-b);
+    const concAt=(t)=>{ let c=0; cl.forEach(o=>{ if(o.s<=t && o.e>t) c++; }); return c; };
+    const localMax=(it)=>{ let m=1;
+      pts.forEach(t=>{ if(t>=it.s && t<it.e){ const c=concAt(t); if(c>m) m=c; } }); return m; };
+
+    const done=[], out={};
+    let degraded=false;
+    order.forEach(it=>{
+      const w=1/localMax(it);
+      const busy=done.filter(p=>p.s<it.e && p.e>it.s)
+                     .map(p=>[p.x, p.x+p.w]).sort((a,b)=>a[0]-b[0]);
+      let cursor=0, x=null, gapS=0, gapW=0;
+      for(const [a,b2] of busy){
+        /* ⚠ 要夾 0：busy 裡彼此不一定重疊（A 在 12:00、B 在 13:00 可以都站在 x=0），
+           不夾的話會算出負的空隙。 */
+        const g=Math.max(0, a-cursor);
+        if(g>gapW){ gapW=g; gapS=cursor; }
+        if(g>=w-1e-9){ x=cursor; break; }
+        if(b2>cursor) cursor=b2;
+      }
+      if(x===null){
+        const g=Math.max(0, 1-cursor);
+        if(g>gapW){ gapW=g; gapS=cursor; }
+        if(g>=w-1e-9) x=cursor;
+      }
+      let ww=w;
+      if(x===null){ x=gapS; ww=gapW; }          // 空隙破碎 → 用最大的那塊，絕不重疊
+      if(ww < 1/n - 1e-9) degraded=true;        // 比原本的等寬還窄 → 整群放棄
+      done.push({s:it.s, e:it.e, x, w:ww});
+      out[it.b.id]={ left:x*100, width:ww*100 };
+    });
+    /* 只有「每一張都不比原本窄」才採用新的擺法。 */
+    if(!degraded) cl.forEach(({b})=>{ if(out[b.id]){ res[b.id].left=out[b.id].left;
+                                                     res[b.id].width=out[b.id].width; } });
   });
   return res;
 }
