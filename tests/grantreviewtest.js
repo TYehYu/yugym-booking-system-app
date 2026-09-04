@@ -103,6 +103,44 @@ console.log('\n② 賣票當下算好的一整包（審核時照著發）');
   ok('　　退回時要還折抵券 → 把扣了哪幾張帶回去', /t\._usedVouchers=_usedVouchers;/.test(F));
 }
 
+console.log('\n③a 三段式版面與防呆（2026-09-04：「讓櫃檯閱讀容易一點」「避免操作失誤」）');
+{
+  ok('★★★ 編號三段：簽署方式 → 收款資訊 → 發放',
+     /<i>\$\{_n\(\)\}<\/i>簽署方式/.test(src)
+     && /<i>\$\{_n\(\)\}<\/i>收款資訊/.test(src)
+     && /<i>\$\{_n\(\)\}<\/i>發放/.test(src));
+  ok('★★★ 少一段時編號往前移，不會跳號',
+     /let _sn=0; const _n=\(\)=>\+\+_sn;/.test(src));
+  ok('★★ 定價併進標題列（原本躲在收款區塊最底下，最不會被看的位置）',
+     /定價 \$\$\{\(Number\(P\.listPrice\)\|\|0\)\.toLocaleString\(\)\}<\/div>/.test(src)
+     && !/<div class="gr-fill-note">定價/.test(src));
+  ok('★★ 拿掉「照實際收到的確認一次…」那句（欄位標題已經自明）',
+     !/照<b>實際收到的<\/b>確認一次/.test(src));
+
+  const F=grabFn('grFillPreview');
+  /* 原本寫的是規則「分期會改變這次開通幾堂與約別」，櫃檯得自己把
+     「8 堂分 3 期」換算成「這次開 3 堂」。改成直接把答案算出來。 */
+  ok('★★★ 分期的後果直接算成這一筆的實際堂數',
+     /這次只開通 \$\{p0\.unlocked\} 堂/.test(F)
+     && /其餘 \$\{Math\.max\(0,_tot-\(Number\(p0\.unlocked\)\|\|0\)\)\} 堂/.test(F)
+     && !/分期會改變<b>這次開通幾堂<\/b>與約別/.test(src));
+  ok('★★★ 用的是 grFillApply 算出來的 unlocked，不另外寫一份算式',
+     /不另外寫一份「大概是這樣」的算式/.test(src));
+  ok('★★★ 金額打錯會出聲：0 元、或比定價多出快一倍（多打一位數）',
+     /if\(da===0\) msg='總金額是 0 —— 確定是全額招待嗎？';/.test(F)
+     && /da>lp\*1\.9\) msg=`比定價多出 \$\{Math\.round\(da\/lp\*100-100\)\}% —— 是不是多打了一位數？`/.test(F));
+  ok('★★★ 不比「低於定價」—— 折扣是常態，天天誤報的警示很快就沒人看',
+     /不比「低於定價」：折扣本來就是常態，那樣會天天誤報，警示很快就沒人看/.test(src));
+
+  const B=grabFn('grBack');
+  ok('★★★ 改過沒存就按返回 → 先問一次（數字會靜靜丟掉）',
+     /window\._grFill0!=null && grFillSnap\(\)!==window\._grFill0/.test(B)
+     && /直接離開的話這些修改會丟掉/.test(B));
+  ok('★★★ 沒改過不多問（沒改過按返回不該多一次點擊）',
+     /只擋「真的改過」：沒改過按返回不該多一次點擊/.test(src));
+  ok('★★ 返回鈕真的走 grBack', /<button class="btn btn-ghost" onclick="grBack\(\)">返回<\/button>/.test(src));
+}
+
 console.log('\n③b 送簽之前把數字定案，合約內文跟著重生（2026-09-04）');
 /* 使用者定案：「教練建立合約的時候 只要填寫方案 課堂數 總價 一次付清跟分期
    也可以預填寫 但之後櫃檯端可以在正式收費前調整」——
@@ -196,10 +234,17 @@ console.log('\n④ 審核視窗：應收金額要大、要有顏色');
    0808 定它的理由（避免櫃檯看錯）沒有變，變的只是數字的來源。 */
 ok('★★ 應收金額仍然是獨立一塊，只是改成即時重算',
    /<div class="gr-amt-box" id="gr-amt-box"><\/div>/.test(src)
-   && /function grFillPreview\(\)\{/.test(src)
-   && /這一塊改成\*\*跟著欄位即時重算\*\*，/.test(src));
+   && /function grFillPreview\(\)\{/.test(src));
+/* 2026-09-04：位置從①②中間移到②之後、③之前 —— 它是②算出來的結果，
+   也是按下③之前要核對的數字，夾在中間等於把因果切斷。大小沒有變。 */
+ok('★★★ 應收金額排在「收款資訊」之後、「發放」之前',
+   src.indexOf('<i>${_n()}</i>收款資訊') < src.indexOf('id="gr-amt-box"')
+   && src.indexOf('id="gr-amt-box"') < src.indexOf('<i>${_n()}</i>發放'));
+ok('★★ 仍然是整個視窗最大最亮的一塊（0808「避免櫃檯看錯」沒有放寬）',
+   /\.gr-amt-v\{[^}]*font-size:38px;/.test(src)
+   && /仍然是整個視窗最大最亮的一塊 —— 0808「避免櫃檯看錯」沒有放寬/.test(src));
 ok('★★ 預覽與發放走同一支算式（不能另外寫一份「大概是這樣」）',
-   /const p=grFillApply\(P, true\);/.test(src)
+   /const p0=grFillApply\(P, true\);/.test(src) && /const p=p0;/.test(src)
    && /走的是與發放同一支 grFillApply（quiet 模式）/.test(src));
 ok('★★ 算不出來時金額顯示「—」並把發放鈕停用',
    /<span class="gr-amt-v gr-amt-wait">—<\/span>/.test(src)
@@ -256,12 +301,11 @@ ok('★★ 四個欄位改動都會重算',
   ok('　 五個欄位都納入比對（金額／方式／拆帳／分期／折價券）',
      /return \[v\('gr-amt'\), v\('gr-method'\), v\('gr-splitcash'\), v\('gr-install'\), v\('gr-voucher'\)\]\.join\('\|'\);/.test(src));
   ok('★★ 說明也跟著改（底下那顆已經不做事了）',
-     /合約還沒簽回，<b>發不了票券<\/b> —— 等會員在手機上簽完再回這裡按發放。/.test(src)
-     && /只是要改收款方式或金額的話，改完按上面的<b>「儲存變更」<\/b>就好。/.test(src));
+     /只是要改收款資訊的話，按上面的<b>「儲存變更」<\/b>就好。/.test(src));
   ok('　 為什麼原本不敢 disabled、現在敢了 —— 寫在原地',
-     /原本不敢關掉互動，是怕櫃檯剛改好的\s*\n\s*金額與付款方式沒地方存；付款資訊區塊自己有一顆「儲存變更」之後就沒這個顧慮了。/.test(src));
+     /有了它，底下那顆「尚未回簽」才敢真的關掉互動：櫃檯剛改好的數字有地方存。/.test(src));
   ok('★★ 也不用金（金是「可以做、但要知道」，這顆根本按不下去）—— 單純暗化',
-     /也不用金：金是「可以做、但要知道」，而這顆現在根本按不下去。\s*\n\s*暗化＝單純的「還不到時候」，不佔任何色階。/.test(src));
+     /也不用金：金是「可以做、\s*\n\s*但要知道」，而這顆現在根本按不下去。暗化＝單純的「還不到時候」。/.test(src));
 /* 2026-08-28 事故：filled_by／filled_at 這兩欄資料庫裡沒有（前端先寫、表沒加）——
    dbPut 是 upsert，PostgREST 找不到欄位就整筆失敗。表現是「儲存變更跳錯誤訊息」，
    但同一段程式在「確認收款・發放票券」也會跑：那裡票已經發出去了，狀態卻改不成，
@@ -283,7 +327,7 @@ ok('★★ 四個欄位改動都會重算',
      /if\(go\)\{ go\.disabled=true; go\.style\.opacity='\.45'; go\.style\.cursor='not-allowed'; \}/.test(src)
      && /if\(go\)\{ go\.disabled=false; go\.style\.opacity=''; go\.style\.cursor=''; \}/.test(src));
   ok('　　先講清楚按下去會發生什麼，包含 30 分鐘可退回',
-     /發放後 <b>30 分鐘內<\/b>可在首頁「今日營收」名單整筆退回/.test(F));
+     /發放後 <b>30 分鐘內<\/b>可在首頁「今日營收」整筆退回/.test(F));
   ok('　　使用者的原話寫在程式裡',
      /「打開視窗要明顯顯示應該要收到的款項再按發放票券，\s*\n\s*這邊要用顏色標明，避免櫃檯看錯」/.test(src));
 }
@@ -453,7 +497,7 @@ console.log('\n櫃檯要在發放的同一個畫面上看到會員回簽');
      && /\$\{_canIssue\s*\n\s*\? `<button class="btn btn-green" id="gr-go" onclick="grantReqApprove/.test(A));
   ok('★★ signature 在 LEAN_DROP 裡，這裡拿得到是因為走單筆 dbGet（select \*）—— 理由寫在原地',
      /signature 在 LEAN_DROP 裡/.test(src)
-     && /單筆 dbGet\('contracts', id\)＝select\('\*'\)，圖是拿得到的/.test(src));
+     && /單筆 dbGet\('contracts', id\)＝select\('\*'\)，\s*\n\s*圖是拿得到的/.test(src));
   ok('　　簽名圖鋪白底（透明筆跡壓在綠色提示框上會看不清楚）',
      /\.gr-sig-wrap\{[^}]*background:#fff;/.test(src)
      && /\.gr-sig-img\{[^}]*object-fit:contain;/.test(src));
@@ -525,10 +569,21 @@ ok('★★ 一定留痕（誰決定的簽署方式）',
    ⚠ 櫃檯實際的入口是**會員資料那張卡的「收款審核」**（0828 改成直開這一筆），
      一修只把兩顆鈕加在「待審核發放」清單上，從會員資料進來看不到選擇，
      流程會斷在半路。 */
-ok('★★★ 收款審核視窗裡也能選簽署方式（只在還沒選時出現）',
+ok('★★★ 收款審核視窗裡也能選簽署方式',
    /const _undecided = !!\(c && !c\.signed_at && c\.sign_type==='undecided'\);/.test(src)
-   && /\$\{_undecided\?`<div class="gr-fill"[^`]*?onclick="grantReqSetSign\('\$\{r\.id\}','remote'\)"/s.test(src)
+   && /onclick="grantReqSetSign\('\$\{r\.id\}','remote'\)"/.test(src)
    && /onclick="grantReqSetSign\('\$\{r\.id\}','paper'\)"[\s\S]{0,200}?用紙本<\/button>/.test(src));
+/* 2026-09-04「避免操作失誤」：原本條件是 _undecided —— 按下「用電子簽」之後
+   那一整塊就消失，**按錯也沒有任何路可以改回紙本**。改成只要還沒簽回都看得到。 */
+ok('★★★ 按錯電子簽還改得回紙本（未簽回期間按鈕一直在）',
+   /const _signOpen  = !!\(c && !c\.signed_at\);/.test(src)
+   && /\$\{_signOpen\?`<section class="gr-step/.test(src)
+   && /按錯也沒有任何路可以改回紙本/.test(src));
+ok('★★★ 目前選的要標出來（不然不知道按過沒）',
+   /const _signPicked= !!\(c && c\.sign_type && c\.sign_type!=='undecided'\);/.test(src)
+   && /<em>已選：\$\{c\.sign_type==='remote'\?'電子簽':'紙本'\}<\/em>/.test(src));
+ok('★★★ 重按同一顆不會再推播一次給會員',
+   /if\(c\.sign_type===kind\)\{ showToast\(kind==='remote'\?'已經是電子簽了/.test(src));
 ok('★★★ 還沒選時標題就講清楚這一步在做什麼',
    /\$\{_undecided\?'選擇簽署方式':'確認收款・發放票券'\}/.test(src));
 ok('★★★ 選完留在同一筆往下走，不跳回清單',
