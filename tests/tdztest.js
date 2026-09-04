@@ -21,7 +21,12 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const strip=s=>s.replace(/\/\*[\s\S]*?\*\//g,m=>m.replace(/[^\n]/g,' '))
                 .replace(/\/\/[^\n]*/g,'')
                 .replace(/`(?:\\.|[^`\\])*`/gs,m=>m.replace(/[^\n]/g,' '))
-                .replace(/'(?:\\.|[^'\\])*'/g,"''").replace(/"(?:\\.|[^"\\])*"/g,'""');
+                .replace(/'(?:\\.|[^'\\])*'/g,"''").replace(/"(?:\\.|[^"\\])*"/g,'""')
+                /* ⚠ 正則字面值也要抹掉：`/vip/i.test(x)` 裡的 i 看起來就像變數 i 後面接一個點，
+                   會被誤判成「宣告前先用」（2026-09-04 實際踩到）。
+                   只認「前面是 =(,:!&| 之一、而且內容不含空白」的形式 —— 這樣不會把
+                   `a / b` 這種除法整段吃掉。 */
+                .replace(/([=(,:!&|?])\/(?![*\/])(?:\\.|\[[^\]]*\]|[^\/\\\n\s])+\/[gimsuy]*/g, '$1RE');
 const lines=src.split('\n');
 const starts=[]; lines.forEach((l,i)=>{ if(/^\s*(async\s+)?function\s+[A-Za-z_$][\w$]*\s*\(/.test(l)) starts.push(i); });
 

@@ -12469,8 +12469,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260904.2108';
-const APP_VERSION_LABEL = 'v260904.2108';
+const APP_VERSION = '260904.2244';
+const APP_VERSION_LABEL = 'v260904.2244';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -49910,6 +49910,34 @@ async function submitGrant(){
         +`常見情況是重複儲值 —— 重複的那張之後排課會一直被挑走，很難清乾淨。\n`
         +`確定還要再發一張嗎？`)) return;
   }catch(_){}
+  /* ══ 還沒繳完的分期票（2026-09-04 使用者指示）════════════════════════════
+     「如果該客戶有分期票券 如果再次儲值的時候要先跳提醒」
+     「再次儲值相同類型票券的時候」
+     起因：施佩怡今天來繳分期第 2 期，櫃檯用＋儲值開了一張 4 堂的自訂方案，
+     於是原本那張分期票還停在 1/3 期、剩下 8 堂鎖著，帳也記成一般銷售而不是
+     分期收款；等她繳第 3 期還會溢發 4 堂。
+     ⚠ 同一個坑第二次了（8/22 也是她）。
+     ⚠ 只比**同一種票種**：手上有教練課的分期票、今天來買自主訓練點數，
+       那是兩件事，跳出來只會變成雜訊。
+     ⚠ 是確認不是禁止：分期沒繳完時另外賣一份（換方案、加購）本來就合法。 */
+  try{
+    const _instOpen=(await dbGetAll('member_tickets')).filter(t=>{
+      if(!t || t.member_id!==member_id || t.status==='refunded') return false;
+      const i=t.installment; if(!(i && typeof i==='object')) return false;
+      if(!((Number(i.current)||1) < (Number(i.count)||1))) return false;   // 已經繳完的不算
+      return String(t.ticket_type_id||'')===String(plan.ticket_type_id||'');
+    });
+    if(_instOpen.length){
+      const _t=_instOpen[0], _i=_t.installment;
+      if(!confirm(`⚠ 這位會員有一張還沒繳完的分期票：\n\n`
+        +`　${_t.plan_name||'分期票券'}\n`
+        +`　已開通 ${Number(_t.unlocked_sessions)||0}/${Number(_t.sessions_total)||0} 堂`
+        +`　·　已收第 ${Number(_i.current)||1}/${Number(_i.count)||1} 期\n\n`
+        +`如果客人是來繳下一期，請按「取消」，改到會員資料的票券卡按\n`
+        +`「開通下一期」——用＋儲值會另外開一張新票，堂數跟帳都會對不上。\n\n`
+        +`確定要另外賣一份新的方案嗎？`)) return;
+    }
+  }catch(e){ console.warn('分期票檢查失敗（不擋銷售）', e); }
   const total=plan.sessions_base+plan.sessions_bonus;
   const unitPrice=plan.unit_price||0;
   /* 自訂銷售填的是整包總價（2026-08-21）；模板方案照舊由單價乘堂數推 */
@@ -51403,7 +51431,14 @@ async function _confirmInstallNext(ticket_id){
       note:`分期收款・開通 ${n} 堂${_full?'（已全數開通）':`（累計 ${t.unlocked_sessions}/${total}）`}`,operator:SESSION.id,source:'installment',
       created_at:new Date().toISOString()});
   }catch(e){ console.error('install purchase log fail',e); showToast('付款紀錄寫入失敗：'+(e.message||e)); }
-  try{ await logTicket(t.id,'installment_unlock',n,null,SESSION.id,`分期收款開通 ${n} 堂（累計 ${t.unlocked_sessions}/${total}），實收 $${amt.toLocaleString()}`); }catch(_){}
+  /* ⚠ 2026-09-04 修：原本寫的 action 是 'installment_unlock'，但 ticket_logs.action 的
+     列舉只有 grant/deduct/refund/adjust/expire —— 資料庫一律退件，而這一行包在
+     catch(_){} 裡，於是**每一次開通下一期的帳本紀錄都靜靜地沒寫進去**（全庫 0 筆）。
+     改用 adjust＋delta 0：開通不改變餘額（sessions_remaining 沒動），只是把鎖打開，
+     所以 delta 就是 0；_tkNetUsed 對 adjust 算 -delta＝0，不會擾動對帳。
+     ⚠ 要新增動作類型就得改資料庫的 enum，不能只在前端寫一個新字串。 */
+  try{ await logTicket(t.id,'adjust',0,null,SESSION.id,`分期收款開通 ${n} 堂（累計 ${t.unlocked_sessions}/${total}），實收 $${amt.toLocaleString()}`); }
+  catch(e){ console.error('分期開通帳本寫入失敗',e); showToast('開通已完成，但帳本紀錄沒寫進去：'+dbFriendlyError(e), 8000); }
   // 把先前以「待繳費」保留的課補綁票券並扣課（由早到晚，最多本次開通的堂數）
   let bound=0;
   try{ bound=await bindHeldBookings(t.id, n); }catch(e){ console.error('補綁待繳費預約失敗',e); }

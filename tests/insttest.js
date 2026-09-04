@@ -142,5 +142,46 @@ ok('　　管理員／櫃檯仍可點別人的課卡；教練與店長手機回�
 ok('　　拖曳綁在可互動的卡上（0803 起管理身份全卡可拖，教練只有自己的）',
    /\$\{canClick\?`data-bid=/.test(src));
 
+
+console.log('\n⑨ 分期防呆與帳本（2026-09-04 施佩怡案例）');
+{
+  const fs=require('fs');
+  const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const grab=n=>{ const m=new RegExp('(?:^|\\n)(?:async )?function '+n+'\\(').exec(src);
+    if(!m) return ''; const i=m.index+(m[0][0]==='\n'?1:0); let d=0;
+    for(let k=src.indexOf('{',i);k<src.length;k++){ if(src[k]==='{')d++; else if(src[k]==='}'){d--; if(!d) return src.slice(i,k+1);} } };
+  const S=grab('submitGrant'), C=grab('_confirmInstallNext');
+
+  /* 起因：櫃檯用＋儲值開了一張自訂方案來收分期第 2 期，原本那張分期票還停在
+     1/3 期、剩下的堂數鎖著，帳也記成一般銷售。同一個坑第二次（8/22 也是她）。 */
+  ok('★★★ ＋儲值時，同票種還沒繳完的分期票要先問一次',
+     /const _instOpen=\(await dbGetAll\('member_tickets'\)\)\.filter\(t=>\{/.test(S)
+     && /這位會員有一張還沒繳完的分期票/.test(S));
+  ok('★★★ 只比同一種票種（教練課分期票 vs 今天買自主訓練點數是兩件事）',
+     /return String\(t\.ticket_type_id\|\|''\)===String\(plan\.ticket_type_id\|\|''\);/.test(S)
+     && /那是兩件事，跳出來只會變成雜訊/.test(src));
+  ok('★★★ 已經繳完的不算（current < count 才提醒）',
+     /if\(!\(\(Number\(i\.current\)\|\|1\) < \(Number\(i\.count\)\|\|1\)\)\) return false;/.test(S));
+  ok('★★★ 作廢的票不算', /t\.status==='refunded'\) return false;/.test(S));
+  ok('★★★ 是確認不是禁止（分期沒繳完時另外賣一份本來就合法）',
+     /確定要另外賣一份新的方案嗎？`\)\) return;/.test(S)
+     && /是確認不是禁止/.test(src));
+  ok('★★ 指出正確的路（不是只說「不要這樣做」）',
+     /改到會員資料的票券卡按/.test(S) && /「開通下一期」——用＋儲值會另外開一張新票/.test(S));
+  ok('★★ 檢查自己失敗不擋銷售', /catch\(e\)\{ console\.warn\('分期票檢查失敗（不擋銷售）', e\); \}/.test(S));
+
+  /* ticket_logs.action 的列舉只有 grant/deduct/refund/adjust/expire，
+     'installment_unlock' 一律被資料庫退件，而那一行包在 catch(_){} 裡 → 全庫 0 筆。 */
+  ok('★★★ 開通下一期的帳本改用合法的 action（原本一直寫不進去）',
+     /await logTicket\(t\.id,'adjust',0,null,SESSION\.id,`分期收款開通/.test(C)
+     /* ⚠ 不能整份 src 找字串：上面那段解釋 bug 的註解自己就寫著 installment_unlock */
+     && !/logTicket\([^)]*'installment_unlock'/.test(src));
+  ok('★★★ 寫不進去要出聲，不能再吞掉',
+     /catch\(e\)\{ console\.error\('分期開通帳本寫入失敗',e\); showToast\('開通已完成，但帳本紀錄沒寫進去：'/.test(C));
+  ok('★★ 為什麼是 delta 0（開通不改餘額，只是把鎖打開）',
+     /開通不改變餘額（sessions_remaining 沒動），只是把鎖打開，/.test(src)
+     && /要新增動作類型就得改資料庫的 enum，不能只在前端寫一個新字串/.test(src));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
