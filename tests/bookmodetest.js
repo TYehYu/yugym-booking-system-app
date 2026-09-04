@@ -94,8 +94,9 @@ console.log('\n團體課卡的最後一堂提醒');
      /團課預約不綁 ticket_id（一筆多位學員，欄位放不下），上面以票券為主軸的判定完全撈不到它/.test(src));
   ok('　　已續約／不續約的標記優先，不會又綠勾又驚嘆號',
      /if\(window\._renewDoneBk\[bid\] \|\| window\._renewNoBk\[bid\]\) return;/.test(src));
+  /* 2026-09-04：徽章搬進第一列，改由 _alertOut 這個 const 產生（見 _bodyOut）。 */
   ok('　　驚嘆號本來就不靠票券（團課沒票券也畫得出來）',
-     /\$\{bkRenewBadge\(\{done:_renewDone,no:_renewNo,renew:_renewAlert,pay:_payAlert\}\)\}/.test(src));
+     /const _alertOut = bkRenewBadge\(\{done:_renewDone,no:_renewNo,renew:_renewAlert,pay:_payAlert\}\);/.test(src));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

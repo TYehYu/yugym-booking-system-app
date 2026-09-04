@@ -82,7 +82,7 @@ ok('　　空堂也吃得到（bkIsOpenHold 的前提就是 pending_contract）'
 console.log('\n出席章的 DOM 只放一份');
 ok('★ 行事曆：章排在姓名之後、自成一列，外層不再重複輸出',
    /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_venueSub\}\$\{_stdTag\}/.test(src)
-   && /出席章已移進 _bodyOut 的姓名列（2026-08-21），這裡不再重複輸出一份/.test(src));
+   && /繳費／續約徽章已移進 _bodyOut 的第一列（2026-09-04，見下方 _alertOut）/.test(src));
 ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    src.indexOf('const _stampOut =') < src.indexOf('const _bodyOut ='),
    {stamp:src.indexOf('const _stampOut ='), body:src.indexOf('const _bodyOut =')});
@@ -342,9 +342,9 @@ ok('★ 越窄越少東西：窄卡先讓場地，極窄卡連教練也讓',
    && /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(css));
 /* 2026-09-04 新增的第五樣「讓位」：第一列放不下時讓掉**時間**（章與驚嘆號留著）。 */
 ok('★★ 第一列擠不下時讓掉時間，不讓章也不讓驚嘆號；而且那一列一律保留',
-   /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-hm\{display:none;\}/.test(css)
-   /* 0904 二修：收起來改用 visibility，第一列才不會塌掉讓姓名頂上去被章壓到 */
-   && /@container \(max-width:81px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-hm\{display:none;\}/.test(css)
+   /* 0904 三修：❗ 排進流裡之後組合變 6 種，門檻全部重量（見 evwidthtest ⑪） */
+   /@container \(max-width:47px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(css)
+   && /@container \(max-width:85px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-check\):has\(\.ev-payalert\) \.evc-hm\{display:none;\}/.test(css)
    && /讓位的是時間，不是章也不是驚嘆號/.test(css));
 ok('　　原則寫在程式裡（寧可少一項，也不要每一項都殘缺）',
    /寧可少一項，也不要每一項都殘缺/.test(css));

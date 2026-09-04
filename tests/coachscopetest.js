@@ -23,7 +23,10 @@ t('　CSS 也不給它 touch-action（觸控裝置一併擋）',
   /\.cal-drag-on \.cal-ev:not\(\.readonly\):not\(\.cal-ev-view\)\{touch-action:none;\}/.test(src));
 
 // ── 點擊：點得開，但只到唯讀明細 ──
-const ck=src.slice(src.indexOf('${opts.allMode || bkIsMasked(b) ?'), src.indexOf('${bkRenewBadge('));
+/* ⚠ 終點原本用 '${bkRenewBadge(' —— 2026-09-04 徽章搬進 _bodyOut 的第一列之後，
+   那個字串在源碼裡跑到 onclick **之前**，切片長度變負、ck 變空字串，
+   底下兩條就會無聲地通過／失敗。改用 '${_bodyOut}' 這個真正在後面的錨點。 */
+const ck=src.slice(src.indexOf('${opts.allMode || bkIsMasked(b) ?'), src.indexOf('${_bodyOut}'));
 /* 0822 二修（使用者）：「可以點開其他人的課卡 可以看簡易課卡的內容 但僅此而已」 */
 t('★★ 唯讀卡照樣走 onEvClick（開簡易課卡，不是明細視窗）',
   /onclick="onEvClick\(event,'\$\{b\.id\}'\)"/.test(ck)

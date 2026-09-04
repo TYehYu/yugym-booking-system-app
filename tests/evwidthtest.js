@@ -102,48 +102,58 @@ ok('★★★ 章搬到左上（0904 使用者指示）',
 ok('★★★ 時間靠右，自己讓開章的位置',
    /\.cal-ev\.cal-ev-std \.evc-time\{\s*\n\s*align-self:stretch; display:flex; align-items:center; justify-content:flex-end;\s*\n\s*gap:4px; min-height:16px; padding-left:18px;\}/.test(src));
 /* 沒有徽章的卡佔多數，平白少 16px 會讓時間提早消失 —— 所以用 :has 只在有徽章時讓。 */
-ok('★★★ 只有真的有驚嘆號時才讓右邊（:has，不是無條件保留）',
-   /\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-time\{padding-right:16px;\}/.test(src));
-ok('★★★ 非 Ink：63px 以下（無徽章）／81px 以下（有徽章）不顯示時間',
-   /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-hm\{display:none;\}/.test(src)
-   && /@container \(max-width:81px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-hm\{display:none;\}/.test(src));
-ok('★★★ Ink：60px／76px 起放得下，再叫回來（display 與 visibility 都要還原）',
-   /@container \(min-width:60px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-hm\{display:inline;\}/.test(src)
-   && /@container \(min-width:76px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-hm\{display:inline;\}/.test(src));
-
-/* ── 收起時間時，第一列不能塌掉 ─────────────────────────────────────────
-   2026-09-04 使用者附截圖：「時間移除的時候 不要讓名字跑到第一列」
-   章與驚嘆號是絕對定位、不佔流排版；時間一旦 display:none，第一列整個消失，
-   姓名頂上去正好被左上角那顆章壓在第一個字上（截圖是「簽蓉霆」疊在一起）。
-   ⚠ 這一條**不能**改回 display:none 來「省一列」—— 省下來的那一列不是空的，
-     章或驚嘆號就站在那裡。 */
-/* 二修：第一列**一律**保留。一修只在「有章或有驚嘆號」時保留、空的就收掉，
-   結果同一橫排裡有章的卡姓名在第二列、沒章的在第一列，一整排姓名對不齊。 */
-/* 第一列（.evc-time）本身永遠不收 —— 收的是裡面的時鐘（.evc-hm）。
-   收整列的話那一列會塌掉，姓名頂上去被章壓到。 */
-ok('★★★ 第一列一律保留：收的是 .evc-hm，不是 .evc-time',
-   !/\.cal-ev\.cal-ev-std[^{}]*\.evc-time\{display:none;\}/.test(src)
-   && !/\.cal-ev\.cal-ev-std[^{}]*\.evc-time\{visibility:hidden;\}/.test(src)
-   && !/:has\(\.evc-check\):not\(:has\(\.ev-payalert\)\) \.evc-time/.test(src));
-ok('★★★ 有驚嘆號時也只收時鐘',
-   /@container \(max-width:81px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-hm\{display:none;\}/.test(src));
-ok('★★★ 課卡裡沒有任何一條把時間 display:none（那會讓姓名往上補位、整排對不齊）',
-   !/\.cal-ev\.cal-ev-std[^{}]*\.evc-time\{display:none;\}/.test(src));
-ok('★★ 二修的理由寫在原地（一整排姓名要在同一條水平線上）',
-   /一整排看過去\*\*姓名對不齊\*\*，正是同一天稍早靠左對齊要解決的那個問題/.test(src));
-ok('★★ 為什麼是 visibility 不是 display，寫在原地',
-   /時間一旦 display:none，第一列整個塌掉，\s*\n\s*姓名就頂上去，正好被左上角那顆章壓在第一個字上/.test(src));
-/* A/B 對照的結果記在這裡：改門檻的人要知道原本修掉了什麼，別又踩回去。 */
-ok('★★ A/B 對照結果記在這支測試裡',
-   /修掉 552 例「姓名被驚嘆號壓到」與 592 例「姓名被章壓到」/.test(fs.readFileSync(__filename,'utf8')));
-ok('★★ 讓的是時間，不是章也不是驚嘆號（理由寫在原地）',
-   /讓位的是時間，不是章也不是驚嘆號/.test(src));
+/* ══ 第一列定版（2026-09-04 使用者）══════════════════════════════════
+   「時間總是擺在最右邊　除非需要犧牲　所以會是 ！＋新 或 簽＋時間
+     ！跟簽會同時出現　但新跟簽不用同時出現」
+   排列（靠右）：❗ → NEW → 時間。章是絕對定位在左上，不參與這一列。 */
+ok('★★★ 徽章排進第一列的流裡（原本 absolute right:3px，時間永遠排不到它右邊）',
+   /\.cal-ev\.cal-ev-std \.evc-time \.ev-payalert\{\s*\n\s*position:static; top:auto; right:auto; left:auto; flex:0 0 auto;\}/.test(src));
+ok('★★★ DOM 順序就是 ❗ → NEW → 時間',
+   /<span class="evc-time">\$\{_alertOut\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>/.test(src));
+ok('★★★ 有出席章就不出 NEW（使用者：新跟簽不用同時出現）',
+   /const _newOut = \(_isNewToday && !_stampOut\)/.test(src));
+ok('★★ 為什麼章與 NEW 互斥，寫在原地',
+   /課已經上完（或確定沒上）之後，「今天剛排的」就不再是需要覆核的事/.test(src));
+/* 六種組合的下限（離線量、取較嚴的非 Ink）：
+     什麼都沒有 48／＋章 64／＋❗ 67／＋章＋❗ 86／＋NEW 84／＋NEW＋❗ 106 */
+ok('★★★ 時間的六條讓位規則都在',
+   /@container \(max-width:47px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(src)
+   && /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-check\) \.evc-hm\{display:none;\}/.test(src)
+   && /@container \(max-width:66px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-hm\{display:none;\}/.test(src)
+   && /@container \(max-width:85px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-check\):has\(\.ev-payalert\) \.evc-hm\{display:none;\}/.test(src)
+   && /@container \(max-width:83px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-new\) \.evc-hm\{display:none;\}/.test(src)
+   && /@container \(max-width:105px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-new\):has\(\.ev-payalert\) \.evc-hm\{display:none;\}/.test(src));
+/* Ink 的放寬規則整組拿掉了：組合從 2 種變 6 種，再乘 2 套主題就是 12 條，
+   而 Ink 只鬆 2～4px。多那 4px 不值得十幾條規則與隨之而來的權重坑。 */
+ok('★★★ body.ink 的時間放寬規則已整組移除（兩套主題共用嚴的那組）',
+   !/body\.ink \.cal-ev\.cal-ev-std[^{}]*\.evc-hm\{display:inline;\}/.test(src)
+   && /這一版把 body\.ink 的放寬規則\*\*整組拿掉\*\*/.test(src));
+ok('★★★ NEW 全字→單字的兩個門檻（時間已收起後量的）',
+   /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.nw-fl\{display:none;\}/.test(src)
+   && /@container \(max-width:66px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.nw-fl\{display:none;\}/.test(src));
+ok('★★★ 削內距不丟底色',
+   /@container \(max-width:50px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-new\{border:none;padding:1px 1px;\}/.test(src));
+ok('★★★ 最後手段才藏 NEW（44／28）',
+   /@container \(max-width:44px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-new\{display:none;\}/.test(src)
+   && /@container \(max-width:28px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-new\{display:none;\}/.test(src));
+/* 41px 以下章（x7..21）與流排版最左邊的 ❗（x=w-16）一定會撞；
+   照紅>金>綠，讓最輕的章退。 */
+ok('★★★ 41px 以下有 ❗ 時讓章退（紅>金>綠）',
+   /@container \(max-width:40px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-check\{display:none;\}/.test(src));
+/* ⚠ 這兩段 @container 必須寫在 .evc-check 的基本規則**之後** —— 兩者都是 (0,3,0)。
+   第一版寫在前面，結果章完全沒縮，而同一個 @container 裡的驚嘆號卻縮了，
+   看起來像「規則只生效一半」。 */
+ok('★★★ 章的縮小規則寫在基本規則之後（同權重靠順序決勝）',
+   src.indexOf('.cal-ev.cal-ev-std .evc-check{ position:absolute; left:9px; top:4px;')
+   < src.indexOf('.cal-ev.cal-ev-std .evc-check{width:14px;height:14px;left:7px;'));
+ok('★★ 那個「只生效一半」的坑寫在原地',
+   /結果章完全沒縮，\s*\n\s*而同一個 @container 區塊裡的驚嘆號卻縮了/.test(src));
 ok('★★ 關掉 Ink 的人不能被切字（為什麼底線要用嚴的那組）',
    /不能只寫 Ink 那組 —— 有人把 Ink 關掉（localStorage yugym_ink=0）就會被切字/.test(src));
 
 console.log('\n④ 四列的順序（DOM 由上而下：時間 → 姓名 → 場地 → 教練）');
 ok('★★★ _bodyOut 的順序沒被動過（時間列 → 姓名 → 場地 → 教練）',
-   /<span class="evc-time"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_newOut\}<\/span><span class="evc-nmrow">.*?<\/span>\$\{_venueSub\}\$\{_stdTag\}\$\{_abbrOut\}/.test(src));
+   /<span class="evc-time">\$\{_alertOut\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b><\/span><span class="evc-nmrow">.*?<\/span>\$\{_venueSub\}\$\{_stdTag\}\$\{_abbrOut\}/.test(src));
 ok('★★★ 教練不再推到右下角（那是首頁課卡才留著的位置）',
    /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:flex-start !important; \}/.test(src)
    && /\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(src));
@@ -235,7 +245,7 @@ ok('★★ 手機版仍用金框，CSS 不能刪（理由寫在原地）',
    /手機版（cag）那條 27700 行的 _mkAlert 仍用金框，沒有跟著改/.test(src)
    && /_mkAlert = _unpaidM \? ' cal-ev-renew' : \(_newM \? ' cal-ev-newtoday' : ''\)/.test(src));
 ok('★★★ 時間包進 <b class="evc-hm">，.evc-time 變成第一列的容器',
-   /<span class="evc-time"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_newOut\}<\/span>/.test(src));
+   /<span class="evc-time">\$\{_alertOut\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>/.test(src));
 /* <b> 預設粗體：同樣的「09:00」在 11px 下從 28px 變 33px，剛好頂到左上角那顆章。 */
 ok('★★★ <b> 的預設粗體要拿掉（不然時間變寬 5px 會頂到章）',
    /\.cal-ev\.cal-ev-std \.evc-hm\{font-weight:inherit;font-size:inherit;color:inherit;\}/.test(src));
@@ -243,16 +253,6 @@ ok('★★ 那個 5px 的實測寫在原地',
    /同樣的\s*\n\s*「09:00」在 11px 下從 28px 變成 33px，剛好頂到左上角那顆章/.test(src));
 ok('★★★ NEW 有全字／單字兩份 DOM（與教練同一套做法）',
    /<i class="evc-new" title="今日新增或調整"><span class="nw-fl">NEW<\/span><span class="nw-ab">新<\/span><\/i>/.test(src));
-ok('★★★ 讓位順序：時間 → NEW 全字 → 「新」 → 削內距（底色不丟）',
-   /@container \(max-width:106px\)\{\s*\n\s*body \.cal-ev\.cal-ev-std:has\(\.evc-new\):not\(:has\(\.ev-payalert\)\) \.evc-hm\{display:none;\}/.test(src)
-   && /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.nw-fl\{display:none;\}/.test(src)
-   && /@container \(max-width:50px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-new\{border:none;padding:1px 1px;\}/.test(src));
-/* body 前綴 + 寫在 body.ink 之後，否則 Ink 的「60px 起把時間叫回來」會贏，時間壓到 NEW。 */
-ok('★★★ NEW 的時間門檻要贏過 body.ink 那組（body 前綴＋順序在後）',
-   /選擇器要帶 `body `（\(0,5,1\)／\(0,6,1\)）而且要寫在上面那兩條 body\.ink 之後/.test(src));
-ok('★★★ NEW 只有兩種情況會被藏（都是量出來的臨界值）',
-   /@container \(max-width:57px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-new\{display:none;\}/.test(src)
-   && /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-new\{display:none;\}/.test(src));
 /* ── NEW 一定要有底色（2026-09-04 三修）───────────────────────────────
    使用者附截圖：「那個[新]太不明顯了」。一修是金色細框無底色，但旁邊的繳費
    驚嘆號是**實心圓**，兩者一比就消失了。二修加了底色，卻沒注意到極窄那一段
@@ -263,10 +263,7 @@ ok('★★★ 每一段都要有實心底色（極窄那一段也不例外）',
    /background:var\(--gold-d,#9a6a1e\);\s*\n\s*color:#fff;/.test(src)
    && !/\.evc-new\{[^}]*background:transparent/.test(src));
 ok('★★ 底色不是裝飾，寫在原地',
-   /底色是這個提醒\*\*唯一\*\*的可見度來源（旁邊的繳費驚嘆號是實心圓，一比就沒了），\s*\n\s*不能當成「裝飾」先丟/.test(src));
-ok('★★ 「改外觀就要重量門檻」的教訓寫在原地（底色讓 NEW 寬 2px，邊界跨過去）',
-   /改外觀就要重量門檻，即使「只是換個顏色」——底色會撐開盒子/.test(src));
-ok('★★ 紅 > 金 的取捨寫在原地', /照品牌色階 \*\*紅 > 金\*\*，讓金色的 NEW 退|紅 > 金，讓金的退/.test(src));
+   /底色是這個提醒\*\*唯一\*\*的可見度來源，不能當「裝飾」先丟；要丟的是內距與外框/.test(src));
 ok('★★★ 簽到不再加粗左色條（有簽到章就夠了）',
    !/body\.ink \.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body::before\{width:5px;\}/.test(src)
    && /有簽到章了 就不用在加粗線條 減少空間被壓縮/.test(src));
@@ -277,12 +274,10 @@ console.log('\n⑩ 第一列自己不能撞（章 vs 驚嘆號）');
 /* 2026-09-04 量到的既有 bug：41px 的卡上 章 x9..25、驚嘆號 x23..38，重疊 2px。
    兩個都是絕對定位、都不參與流排版，誰也不會把誰推開；先前只驗了
    「時間／NEW vs 章／驚嘆號」，漏掉「章 vs 驚嘆號」本身。 */
-ok('★★★ 47px 以下章與驚嘆號一起縮（間距回到 5px）',
-   /@container \(max-width:47px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-check\{width:14px;height:14px;left:7px;font-size:8\.5px;\}\s*\n\s*\.cal-ev\.cal-ev-std \.ev-payalert\{width:13px;height:13px;right:2px;font-size:9px;\}\s*\n\s*\}/.test(src));
 ok('★★★ 不能把章往左移（左緣有課程色條），理由寫在原地',
    /不能把章往左移 —— 左緣有課程色條（一般 5px），left:9px 是為了避開它/.test(src));
-ok('★★ 只在極窄時縮，正常寬度不動（理由寫在原地）',
-   /正常寬度維持原尺寸，不要為了極端情況把所有卡都縮小/.test(src));
+ok('★★ 極窄時兩個記號一起縮，讓流排版有迴旋空間（理由寫在原地）',
+   /極窄卡上兩個記號都縮一號，讓流排版有更多迴旋空間/.test(src));
 /* 量出來的第一列組成（最擠：有章＋有 NEW＋有驚嘆號）：
      41–53px  章 ❗              （時間與 NEW 都讓開）
      65–97px  章 NEW ❗

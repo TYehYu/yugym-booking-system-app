@@ -5538,7 +5538,15 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   .cal-ev.cal-ev-std .evc-time{
     align-self:stretch; display:flex; align-items:center; justify-content:flex-end;
     gap:4px; min-height:16px; padding-left:18px;}
-  .cal-ev.cal-ev-std:has(.ev-payalert) .evc-time{padding-right:16px;}
+  /* 徽章排進第一列（2026-09-04）：原本是 position:absolute right:3px，
+     所以它永遠在最右邊、時間只能靠 padding-right 讓開。使用者要「時間在最右邊」，
+     就得讓徽章參與流排版。
+     ⚠ 只改**行事曆課卡第一列裡的**那一顆：首頁課卡（.tcard-3c）與手機（.admcag）
+       各自有自己的一份，位置規則不同，不能一起動。
+     ⚠ .ev-payalert 的基本規則仍是 absolute（那三條路共用），這裡用更具體的
+       選擇器覆蓋，並把 top/right 一起歸零，否則 static 之下殘留的 top 會位移。 */
+  .cal-ev.cal-ev-std .evc-time .ev-payalert{
+    position:static; top:auto; right:auto; left:auto; flex:0 0 auto;}
   /* ══ [NEW]：今日新增或調整（2026-09-04 使用者指示）═════════════════════
      位置放在**第一列右邊**，跟 ❗ 同一排 —— 第一列本來就是狀態列（章、驚嘆號），
      NEW 是狀態，語意對得上。
@@ -5599,86 +5607,74 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
        （掃描沒有著力點），只是換成垂直方向。
        改成**第一列一律保留**：不管有沒有東西站在那裡，姓名永遠從第二列開始。
        代價是空卡多 16px 留白，換到的是「一整排姓名在同一條水平線上」。 */
-  @container (max-width:63px){
-    .cal-ev.cal-ev-std:not(:has(.ev-payalert)) .evc-hm{display:none;}
+  /* ══ 第一列的讓位表（2026-09-04 使用者定版後全部重量）════════════════════
+     使用者：「時間總是擺在最右邊　除非需要犧牲　所以會是 ！＋新 或 簽＋時間
+              ！跟簽會同時出現　但新跟簽不用同時出現」
+
+     排列（靠右）：❗ → NEW → 時間。左上角的章是絕對定位，不參與這一列。
+     「新跟簽不用同時出現」在 JS 就處理掉了（有 _stampOut 就不出 _newOut），
+     所以下面不會有「章＋NEW」的組合。
+
+     ⚠ 這一版把 body.ink 的放寬規則**整組拿掉**，兩套主題共用同一組（較嚴的非 Ink）數字。
+       理由：❗ 進入流排版之後，組合從 2 種變成 6 種，再乘 2 套主題就是 12 條規則，
+       而 Ink 只鬆 2～4px。多那 4px 不值得十幾條規則與隨之而來的權重坑
+       （body.ink 這一層今天已經踩了五次）。少 4px 的代價是時間偶爾早一格消失。
+
+     整列（❗＋NEW＋時間）都放得下的下限，離線量的：
+       什麼都沒有            48px
+       ＋章                  64px
+       ＋❗                  67px
+       ＋章＋❗              86px
+       ＋NEW（全字）         84px
+       ＋NEW＋❗（全字）    106px
+     低於這些就把**時間**收起來。六條規則彼此不衝突：一張卡只會符合它自己那幾條，
+     宣告又完全相同，所以誰先誰後都一樣。 */
+  @container (max-width:47px){
+    .cal-ev.cal-ev-std .evc-hm{display:none;}
   }
-  @container (max-width:81px){
+  @container (max-width:63px){
+    .cal-ev.cal-ev-std:has(.evc-check) .evc-hm{display:none;}
+  }
+  @container (max-width:66px){
     .cal-ev.cal-ev-std:has(.ev-payalert) .evc-hm{display:none;}
   }
-  @container (min-width:60px){
-    body.ink .cal-ev.cal-ev-std:not(:has(.ev-payalert)) .evc-hm{display:inline;}
+  @container (max-width:85px){
+    .cal-ev.cal-ev-std:has(.evc-check):has(.ev-payalert) .evc-hm{display:none;}
   }
-  @container (min-width:76px){
-    body.ink .cal-ev.cal-ev-std:has(.ev-payalert) .evc-hm{display:inline;}
+  @container (max-width:83px){
+    .cal-ev.cal-ev-std:has(.evc-new) .evc-hm{display:none;}
   }
-  /* ══ 有 [NEW] 的卡：第一列多一個東西，時間要更早讓開 ══════════════════
-     離線量的（取兩套主題裡較嚴的非 Ink）：
-       NEW＋時間都放得下    無驚嘆號 107px　有驚嘆號 123px
-       只放 NEW（全字）     無驚嘆號  64px　有驚嘆號  80px
-       只放「新」（單字）   無驚嘆號  51px　有驚嘆號  66px
-       「新」拿掉外框內距   再省約 10px，41px 也放得下
-     ⚠ 讓的順序是 時間 → NEW 全字 → 「新」 → 拿掉外框。NEW 只有**一種**情況會被藏：
-       ① 同一張卡上有紅色驚嘆號、而且窄到 58px 以下（紅 > 金，讓金的退）
-       ② 窄到 42px 以下（章 16px＋左緣 9px 就吃掉一半，物理上放不下）
-       兩個都是量出來的臨界值。其餘情況 NEW 一定看得到 ——
-       它是一天只有 0～2 張的提醒，藏掉就等於沒做。
-     ⚠ 選擇器要帶 `body `（(0,5,1)／(0,6,1)）而且要寫在上面那兩條 body.ink 之後 ——
-       否則 Ink 的「60px 起把時間叫回來」(0,5,1) 會贏過這裡，時間就會壓到 NEW 上。
-       這是 body.ink 這一層踩過五次的權重坑。 */
-  @container (max-width:106px){
-    body .cal-ev.cal-ev-std:has(.evc-new):not(:has(.ev-payalert)) .evc-hm{display:none;}
+  @container (max-width:105px){
+    .cal-ev.cal-ev-std:has(.evc-new):has(.ev-payalert) .evc-hm{display:none;}
   }
-  @container (max-width:122px){
-    body .cal-ev.cal-ev-std:has(.evc-new):has(.ev-payalert) .evc-hm{display:none;}
-  }
-  @container (max-width:63px){
+  /* 時間收起來之後，NEW 還放不下就換單字「新」。量出來的下限（時間已收起）：
+       全字 NEW  無❗ 42px　有❗ 67px
+       單字 新   無❗ 29px　有❗ 45px */
+  @container (max-width:41px){
     .cal-ev.cal-ev-std:not(:has(.ev-payalert)) .nw-fl{display:none;}
     .cal-ev.cal-ev-std:not(:has(.ev-payalert)) .nw-ab{display:inline;}
   }
-  @container (max-width:79px){
+  @container (max-width:66px){
     .cal-ev.cal-ev-std:has(.ev-payalert) .nw-fl{display:none;}
     .cal-ev.cal-ev-std:has(.ev-payalert) .nw-ab{display:inline;}
   }
-  /* 最後一步：塞不下時**削內距，不丟底色**。
-     ⚠ 2026-09-04 三修（使用者附截圖：「那個[新]太不明顯了」）——
-       二修把底色加回來了，但截圖那張是 4 欄的 ~48px 卡，正好落在這一段，
-       而這一段當時寫的是「border:none;padding:0;background:transparent」
-       —— 底色又被剝掉，所以使用者看到的還是空心的淡金字。
-       底色是這個提醒**唯一**的可見度來源（旁邊的繳費驚嘆號是實心圓，一比就沒了），
-       不能當成「裝飾」先丟。要丟的是內距與外框，那才是真的裝飾。
-     ⚠ 左右內距 3px→1px、外框拿掉：省 6px，量出來單字版的下限從 51px 降到 45px。 */
+  /* 再塞不下就**削內距，不丟底色**。
+     ⚠ 2026-09-04 使用者附截圖：「那個[新]太不明顯了」——
+       當時這一段寫的是 background:transparent，而他截圖那張正好是 ~48px 的卡，
+       底色被剝掉就變成空心淡金字，旁邊的繳費驚嘆號是實心圓，一比就沒了。
+       底色是這個提醒**唯一**的可見度來源，不能當「裝飾」先丟；要丟的是內距與外框。 */
   @container (max-width:50px){
     .cal-ev.cal-ev-std:not(:has(.ev-payalert)) .evc-new{border:none;padding:1px 1px;}
   }
   @container (max-width:65px){
     .cal-ev.cal-ev-std:has(.ev-payalert) .evc-new{border:none;padding:1px 1px;}
   }
-  /* ══ 章與驚嘆號自己會撞（2026-09-04 量到的既有 bug）════════════════════
-     41px 的卡上：章 x9..25、驚嘆號 x23..38 —— **重疊 2px**。
-     兩個都是絕對定位、都不參與流排版，所以誰也不會把誰推開，先前的檢查
-     只驗了「時間／NEW vs 章／驚嘆號」，漏掉「章 vs 驚嘆號」本身。
-     1440 螢幕 × 7 日 × 5 欄就是 39px，會遇到。
-     ⚠ 不能把章往左移 —— 左緣有課程色條（一般 5px），left:9px 是為了避開它。
-       所以改成兩個一起縮：章 16→14px、驚嘆號 15→13px，間距回到 5px。
-     ⚠ 只在 47px 以下縮。這種寬度的卡本來就只剩姓名，章與驚嘆號小一點不影響辨識；
-       正常寬度維持原尺寸，不要為了極端情況把所有卡都縮小。 */
-  @container (max-width:47px){
-    .cal-ev.cal-ev-std .evc-check{width:14px;height:14px;left:7px;font-size:8.5px;}
-    .cal-ev.cal-ev-std .ev-payalert{width:13px;height:13px;right:2px;font-size:9px;}
-  }
-  /* 最窄的兩種情況：物理上放不進同一列，只能讓 NEW 退（量出來的兩個臨界值）。
-       ・同一張卡有紅色驚嘆號 → 58px 以下放不下（紅 > 金，讓金的退）
-       ・只有簽到章沒有驚嘆號 → 42px 以下放不下（章 16px＋左緣 9px 就吃掉一半）
-     ⚠ 這兩個數字比三修前各大 1px：加了底色之後 NEW 寬 2px，邊界剛好跨過去。
-       改外觀就要重量門檻，即使「只是換個顏色」——底色會撐開盒子。
-     ⚠ 這兩條是**最後手段**，不是省空間的手段。上面已經先讓掉時間、再縮成單字、
-       再拿掉外框，都還是塞不下才走到這裡。
-     ⚠ 41px 是 1280 螢幕 × 7 日 × 6 張同時 才會遇到的寬度；NEW 一天只有 0～2 張，
-       兩者同時發生的機率很低，但不處理就會疊在章上面（實測會）。 */
-  @container (max-width:57px){
+  /* 最後手段：連單字都放不下才藏 NEW（紅 > 金，讓金的退）。
+     ⚠ 「有章」那一組不必列 —— 章與 NEW 在 JS 就已經互斥了。 */
+  @container (max-width:44px){
     .cal-ev.cal-ev-std:has(.ev-payalert) .evc-new{display:none;}
   }
-  @container (max-width:41px){
+  @container (max-width:28px){
     .cal-ev.cal-ev-std .evc-new{display:none;}
   }
   .cal-ev.cal-ev-std.ev-w-narrow .evc-txt{padding:4px 4px 4px 9px !important;}
@@ -5733,6 +5729,28 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
     width:16px; height:16px; border-radius:50%; padding:0;
     font-size:9.5px; line-height:1; display:flex;
     align-items:center; justify-content:center; z-index:3; }
+  /* ⚠ 下面兩段 @container 一定要寫在**這一條之後** —— 兩者都是 (0,3,0)，
+     同權重時後面的贏。第一版寫在上面（第一列那一區），結果章完全沒縮，
+     而同一個 @container 區塊裡的驚嘆號卻縮了，看起來像「規則只生效一半」，
+     實際上是那一條被這裡的基本規則蓋回去。改樣式前先確認自己在源碼的哪個位置。 */
+  /* ══ 章與驚嘆號自己會撞（2026-09-04 量到的既有 bug）════════════════════
+     ❗ 還是絕對定位的時候：41px 的卡上 章 x9..25、驚嘆號 x23..38，**重疊 2px**。
+     現在 ❗ 已經排進流裡（見上方 .evc-time .ev-payalert），這一條主要是保險：
+     極窄卡上兩個記號都縮一號，讓流排版有更多迴旋空間。
+     ⚠ 不能把章往左移 —— 左緣有課程色條（一般 5px），left:9px 是為了避開它。 */
+  @container (max-width:47px){
+    .cal-ev.cal-ev-std .evc-check{width:14px;height:14px;left:7px;font-size:8.5px;}
+    .cal-ev.cal-ev-std .ev-payalert{width:13px;height:13px;font-size:9px;}
+  }
+  /* 41px 以下，章（絕對定位，佔左邊 7..21）與流排版最左邊的 ❗ 一定會撞：
+     ❗ 靠右排在 x=w-16，要不撞得 w≥41。這種寬度只有 1280 螢幕 × 7 日 × 6 張同時
+     才會出現（(1280-80)/7/6 ≒ 28px），整張卡本來就只剩姓名。
+     ⚠ 讓誰退？照品牌色階 **紅 > 金 > 綠**：❗ 是紅色、要立刻處理；
+       簽到章記的是「已經完成」，是三者裡最輕的一項，所以讓章退。
+     ⚠ 沒有 ❗ 的卡不受影響，章照常顯示 —— 那時左邊沒有人跟它搶。 */
+  @container (max-width:40px){
+    .cal-ev.cal-ev-std:has(.ev-payalert) .evc-check{display:none;}
+  }
   /* ④ 已簽到不再填滿 —— 那一組規則直接刪掉了（見上方 .cal-ev-day.cal-ev-checked 的註記），
      這裡不需要再覆蓋。 */
   /* ⑤ 待簽約（還沒收款）與空堂（還沒排人）→ **只暗化，不畫紅框**。
@@ -12335,8 +12353,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260904.1417';
-const APP_VERSION_LABEL='260904.1417';
+const APP_VERSION='260904.1431';
+const APP_VERSION_LABEL='260904.1431';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24385,9 +24403,18 @@ async function renderCalendar(opts){
          與教練標籤（.co-fl／.co-ab）同一套做法，不另外發明一種。
          ⚠ 實測密度：一天 0～2 張（當天總堂數 30～43）。這種標記一整片都亮就等於沒亮，
            要放寬觸發條件之前先回來看這個數字。 */
-      const _newOut = _isNewToday
+      /* ⚠ 已經有出席章（簽／未／假）就不出 NEW（2026-09-04 使用者：
+         「！跟簽會同時出現 但新跟簽不用同時出現」）——
+         課已經上完（或確定沒上）之後，「今天剛排的」就不再是需要覆核的事；
+         而繳費驚嘆號講的是錢，跟課上了沒有無關，所以那個要留。
+         這一條同時讓第一列少一項，窄卡上剛好把位置讓給時間。 */
+      const _newOut = (_isNewToday && !_stampOut)
         ? `<i class="evc-new" title="今日新增或調整"><span class="nw-fl">NEW</span><span class="nw-ab">新</span></i>` : '';
-      const _bodyOut = `<div class="evc-body"></div><div class="evc-txt"><span class="evc-time"><b class="evc-hm">${b.start_time}</b>${_newOut}</span><span class="evc-nmrow"><span class="evc-name${bkNameBlankCls(b)}">${_stdName}</span>${_stampOut}</span>${_venueSub}${_stdTag}${_abbrOut}${_moreHtml}</div>`;
+      /* 第一列的排列（2026-09-04 使用者定版）：靠右依序 ❗ → NEW → 時間，
+         時間永遠是最右邊那一項；擠不下時先犧牲時間，於是變成「❗＋新」。
+         左上角的出席章是絕對定位，不參與這一列的流排版。 */
+      const _alertOut = bkRenewBadge({done:_renewDone,no:_renewNo,renew:_renewAlert,pay:_payAlert});
+      const _bodyOut = `<div class="evc-body"></div><div class="evc-txt"><span class="evc-time">${_alertOut}${_newOut}<b class="evc-hm">${b.start_time}</b></span><span class="evc-nmrow"><span class="evc-name${bkNameBlankCls(b)}">${_stdName}</span>${_stampOut}</span>${_venueSub}${_stdTag}${_abbrOut}${_moreHtml}</div>`;
       // Focus Mode：過去的課（日期已過、或今天但已結束）自動淡化，焦點集中到現在與未來
       const _cardDate = ds;
       const _todayYmd = ymd(TODAY);
@@ -24466,8 +24493,9 @@ async function renderCalendar(opts){
                0822 使用者：「可以點開其他人的課卡 可以看簡易課卡的內容 但僅此而已」
                     → 開簡易課卡（不是明細視窗），動作鈕靠既有的 own 判斷自然消失。 */''}
         ${opts.allMode || bkIsMasked(b) ? '' : `onclick="onEvClick(event,'${b.id}')"`}>
-        ${bkRenewBadge({done:_renewDone,no:_renewNo,renew:_renewAlert,pay:_payAlert})}
-        ${/* 出席章已移進 _bodyOut 的姓名列（2026-08-21），這裡不再重複輸出一份 */''}
+        ${/* 繳費／續約徽章已移進 _bodyOut 的第一列（2026-09-04，見下方 _alertOut）——
+             使用者：「時間總是擺在最右邊」。徽章原本絕對定位在 right:3px，
+             時間永遠排不到它右邊；改成排進流裡才有辦法讓時間當最右邊那一項。 */''}
         ${_bodyOut}
         ${tip}
       </div>`;
