@@ -162,9 +162,16 @@ console.log('\n③d 有些方案不能分期（2026-09-04 使用者回報）');
   ok('★★★ 自訂銷售一律不分期（_grantCustomPlan 本來就寫死 installment:false）',
      /else _canInstall=false;/.test(G)
      && /plan_type:'general', installment:false, __custom:true/.test(src));
-  ok('★★★ 不能分期不藏欄位，淡化＋寫原因（0823「不能用就寫原因，別藏按鈕」）',
-     /<select disabled style="opacity:\.5;cursor:not-allowed;"><option>不分期（一次付清）<\/option><\/select>/.test(G)
-     && /這個方案不提供分期　·　這次開通全部/.test(G));
+  /* 2026-09-04 二修（使用者：「這邊需要美感建議」）——原本是一個 disabled 的
+     <select>，量出來跟可輸入欄同高 42px、同圓角 7px，只差 opacity .5，
+     櫃檯還是會去點。改成一句陳述：不藏、仍然寫原因，但不再假裝是輸入框。 */
+  ok('★★★ 不能分期不藏欄位、也不假裝可輸入（0823「不能用就寫原因，別藏按鈕」）',
+     /<div class="gr-ro">不分期（一次付清）/.test(G)
+     && /這個方案不提供分期　·　這次開通全部/.test(G)
+     && !/<select disabled/.test(G));
+  ok('★★ 不能填就不標必填星號', /<label>分期方式\$\{_canInstall\?' \*':''\}<\/label>/.test(G));
+  ok('★★ 為什麼不留 disabled 的輸入框 —— 理由寫在原地',
+     /不能填的欄位不要長得像輸入框（量到：停用的 select 與可輸入欄同高 42px、/.test(src));
   ok('★★★ 防線不只在畫面上：那一版故意沒有 id，grFillApply 讀不到就一律算 1 期',
      /\*\*故意沒有 id="gr-install"\*\*/.test(src)
      && /畫面擋住、送出沒擋等於沒擋/.test(src));
@@ -338,8 +345,19 @@ ok('★★ 四個欄位改動都會重算',
      /<button class="btn btn-ghost" id="gr-go" disabled style="opacity:\.45;cursor:not-allowed;color:var\(--t3\);" title="要等會員簽回合約才發得出去；只要改收款資訊請用上面的「儲存變更」">尚未回簽<\/button>/.test(src));
   ok('★★ 簽回之後同一個位置變成發放票券',
      /\$\{_canIssue\s*\n\s*\? `<button class="btn btn-green" id="gr-go" onclick="grantReqApprove\('\$\{r\.id\}'\)">確認收款・發放票券<\/button>`/.test(src));
-  ok('★★ 付款資訊區塊自己有一顆「儲存變更」（只改付款方式就按這顆），預設暗化',
-     /<button type="button" class="btn btn-ghost btn-sm" id="gr-save" disabled\s*\n\s*style="opacity:\.45;cursor:not-allowed;color:var\(--t3\);"\s*\n\s*onclick="grantReqSaveFill\('\$\{r\.id\}'\)"\s*\n\s*title="把上面改過的收款資訊存起來，不發票券">儲存變更<\/button>/.test(src));
+  /* 2026-09-04 二修：原本獨佔一整列（385px 的列只放 75px 的鈕，上方還有 14px
+     留白＝約 56px 空區），移到②的區塊標題列右邊。 */
+  ok('★★ 「儲存變更」在②的標題列右邊，預設暗化',
+     /<button type="button" class="btn btn-ghost btn-sm gr-hbtn" id="gr-save" disabled\s*\n\s*style="opacity:\.45;cursor:not-allowed;color:var\(--t3\);"\s*\n\s*onclick="grantReqSaveFill\('\$\{r\.id\}'\)"\s*\n\s*title="把上面改過的收款資訊存起來，不發票券">儲存變更<\/button>/.test(src)
+     && /\.gr-step-h \.gr-hbtn\{margin-left:auto;/.test(src)
+     && !/class="gr-savebar"/.test(src));
+  ok('★★★ 三個彩框只留一個（紅>金>綠：紅色要獨佔「這是要收的錢」）',
+     /\.gr-fill\.gr-plain\{border:1px solid var\(--bd\);background:transparent;\}/.test(src)
+     && /<div class="gr-fill gr-plain">/.test(src)
+     && !/border-color:var\(--green,#1f6f54\);background:rgba\(31,111,84,\.06\)/.test(src));
+  ok('★★★ 沒有改到 .gr-fill 本身（補收款那個視窗也在用，那裡金框是對的）',
+     /\.gr-fill\{border:1\.5px solid var\(--gold,#B48A56\);/.test(src)
+     && /不能直接改 \.gr-fill：補收款那個視窗也在用它/.test(src));
   ok('★★ 有改過、而且改得出正確的一包才亮（沒改過按了也是白按）',
      /const _dirty=\(window\._grFill0!=null\) && grFillSnap\(\)!==window\._grFill0;/.test(src)
      && /const _valid=!!grFillApply\(P, true\);/.test(src)
