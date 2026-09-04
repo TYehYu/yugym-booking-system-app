@@ -212,13 +212,31 @@ console.log('\n③b 送簽之前把數字定案，合約內文跟著重生（202
 console.log('\n③c 簽回之後才改數字 → 發放前問一次');
 {
   const F=grabFn('_grantReqApprove');
-  ok('★★★ 合約金額與現在要收的不一樣就跳確認',
-     /if\(_final!==_onCt\)\{/.test(F) && /會員已經簽回了，但收款金額跟合約上寫的不一樣/.test(F));
+  /* 2026-09-04：合約金額改成記**總價**之後，一次付清改成分期時總價根本沒變 ——
+     只比金額這道防線會整個失效，所以連期數一起比。 */
+  ok('★★★ 總價或期數其中一個不一樣就跳確認',
+     /if\(_final!==_onCt \|\| _nNow!==_nCt\)\{/.test(F)
+     && /會員已經簽回了，但收款內容跟合約上寫的不一樣/.test(F));
+  ok('★★★ 期數從購買內容表判讀（contracts 沒有這一欄，舊資料也認得）',
+     /const _nCt=ctSnapInstall\(_c\.fill_snapshot\);/.test(F)
+     && /function ctSnapInstall\(html\)\{/.test(src)
+     && /舊資料也認得：一次付清那版即使印了空白三列表，勾的仍然是「☑一次付清」/.test(src));
+  ok('★★★ 兩個金額刻意不同，而且不准互相抄',
+     /function grCtAmount\(P\)\{ return Math\.max\(0, Number\(P&&P\.paidAmount\)\|\|0\); \}/.test(src)
+     && /兩者不要互相抄 —— 只要有人圖方便把其中一個指向另一個，這個問題就回來了/.test(src));
+  ok('★★★ 建約時：合約存總價、待審核單存這一期',
+     /plan_name:plan\.name,sessions:total,amount:_ctAmt,/.test(src)
+     && /const _ctAmt=paidAmount;/.test(src)
+     && /amount:_amt, payload:P, contract_id:_ctId,/.test(src));
   ok('★★★ 講清楚內文不會跟著改（那是會員簽名時看到的那一份）',
      /合約內文不會跟著改 —— 那是會員簽名時看到的那一份。/.test(F));
   ok('★★★ 給得出下一步（不是只丟一個警告）',
      /建議先「取消這筆發放」再重開一份新合約給他簽/.test(F));
   ok('★★ 按取消就真的不發（要收掉忙碌遮罩）', /\{ done\(\); return; \}/.test(F));
+  /* 金額沒變、只有期數變（合約寫分 3 期、實際發一次付清）原本什麼都不會寫。 */
+  ok('★★★ 按了確定一定留痕，連「只有期數變」也寫',
+     /_drift=`合約寫 \$\$\{_onCt\.toLocaleString\(\)\}・\$\{_lb\(_nCt\)\}，實際發 \$\$\{_final\.toLocaleString\(\)\}・\$\{_lb\(_nNow\)\}`;/.test(F)
+     && /⚠ 簽回後調整：\$\{_drift\}/.test(F));
 }
 
 console.log('\n③ 待審核發放**沒有**浮動提示（2026-09-04 使用者定案）');
@@ -376,13 +394,18 @@ ok('★★ 四個欄位改動都會重算',
      && /await dbPut\('contracts',c\);/.test(F));
   /* 2026-09-04：收款這一步永遠可編輯（0828），櫃檯改了金額或分期之後，
      contracts.amount 還停在建約當下那個數字 —— 四處顯示都讀它，於是與實收對不上。 */
-  ok('★★★ 金額也跟著更新（口徑與建約當下同一條算式）',
-     /const _final=Number\(_p\.isInstall\?Math\.max\(0,_p\.firstAmount-_p\.voucherAmt\):_p\.paidAmount\)\|\|0;/.test(F)
-     && /if\(_final!==_was\)\{/.test(F));
+  ok('★★★ 金額也跟著更新（合約記總價）',
+     /const _final=grCtAmount\(_p\);/.test(F) && /if\(_final!==_was\)\{/.test(F));
   ok('★★★ 改過就留痕（對帳的人要看得到誰在什麼時候改的）',
      /收款時調整金額 \$\$\{_was\.toLocaleString\(\)\}→\$\$\{_final\.toLocaleString\(\)\}/.test(F)
      /* ⚠ 全形括號：程式裡寫的是「（…）」不是 "(...)"，用 \( 對不上 */
-     && /（\$\{\(SESSION&&SESSION\.name\)\|\|'櫃檯'\}・\$\{nowHM\(\)\}）/.test(F));
+     && /（\$\{_who\}・\$\{nowHM\(\)\}）/.test(F)
+     && /const _who=\(SESSION&&SESSION\.name\)\|\|'櫃檯';/.test(F));
+/* 2026-09-04 全流程實跑抓到：_drift 原本宣告在收款那個 `{ }` 區塊裡，
+   底下寫合約那一段讀不到 —— 而那一段包在 catch(_){} 裡，於是留痕靜靜消失。
+   與早上 openGrantApprove 的 P 同一類（被 try/catch 吞掉的作用域問題）。 */
+ok('★★★ _drift 宣告在區塊外面（底下寫合約那段要讀它）',
+   /let _drift=null;\s*\n\s*\{\s*\n\s*const _p=grFillApply\(r\.payload\);/.test(src));
   ok('★★★ 合約**內文**不動（那是會員簽名時看到的那一份，事後改掉等於竄改）',
      !/c\.body_snapshot=/.test(F) && !/c\.fill_snapshot=/.test(F)
      && /事後改掉等於竄改/.test(src));

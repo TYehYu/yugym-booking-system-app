@@ -70,7 +70,18 @@ console.log('\n分期表沒被動到');
      (t3.match(/＿＿ \/ ＿＿/g)||[]).length===2
      && /同本約簽名/.test(t3)
      && new RegExp('<b[^>]*>'+String(D.buyDate||'').slice(5).replace('-',' / ')+'</b>').test(t3));
-  ok('　　一次付清時給三列空白讓櫃檯手寫', (fn(D).match(/＄＿＿＿＿＿/g)||[]).length===3);
+  /* 2026-09-04 使用者：「合約如果選擇一次付清 下方分期的表格可以隱藏嗎」——
+     已經選定一次付清的那一版不再印空白分期表（客人簽的時候會以為要填），
+     但**沒帶購買資料的空白手寫版**仍然要印，那張本來就是要現場手寫的。 */
+  ok('★★★ 已選一次付清 → 不印分期表',
+     (fn(D).match(/＄＿＿＿＿＿/g)||[]).length===0
+     && !/期別/.test(fn(D))
+     && /☑一次付清/.test(fn(D)));
+  ok('★★★ 空白手寫版仍然印那張表（現場要手寫）',
+     (fn(null).match(/＄＿＿＿＿＿/g)||[]).length===3);
+  ok('★★ 只拿掉「已選定」那一版的理由寫在原地',
+     /\*\*沒帶購買資料的空白手寫版\*\*/.test(require('fs').readFileSync(
+       process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8')));
 }
 
 console.log('\n原因寫在程式裡');

@@ -12469,8 +12469,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260904.2048';
-const APP_VERSION_LABEL = 'v260904.2048';
+const APP_VERSION = '260904.2108';
+const APP_VERSION_LABEL = 'v260904.2108';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50035,11 +50035,12 @@ async function submitGrant(){
     /* _isRemote 這個變數整個移除（2026-09-04）—— 它被寫死成 false 之後，
        留著只會讓人以為還有分岔，而 signed_at 那一行就是這樣被寫成「已簽」的。 */
     const _mem=await dbGet('members',member_id).catch(()=>null);
-    const _amt=(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount);
+    const _amt=(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount);   // 待審核單＝這一期要收的
+    const _ctAmt=paidAmount;                                                // 合約＝這份合約的總價（見 grCtAmount）
     const _ctId=uid('CT');
     try{
       await dbPut('contracts',{id:_ctId,member_id,member_name:(_mem&&_mem.name)||null,
-        plan_name:plan.name,sessions:total,amount:_amt,
+        plan_name:plan.name,sessions:total,amount:_ctAmt,
         expire_date:null,sign_type:'undecided',
         signature:null,body_snapshot:window._ctBody,
         fill_snapshot:(window._ctFill?contractFillBlockHTML(window._ctFill):null),
@@ -50681,7 +50682,7 @@ async function _grantReqSetSign(id, kind){
       const _mem=await dbGet('members', r.member_id).catch(()=>null);
       const _snap=await ctRebuildSnapshot(r.payload||{}, _mem, c.created_at);
       if(_snap){ c.body_snapshot=_snap.body; c.fill_snapshot=_snap.fill; }
-      c.amount=Number(r.amount)||Number(c.amount)||0;
+      c.amount=grCtAmount(r.payload)||Number(c.amount)||0;   // 合約記總價，不是這一期
       c.sessions=Number((r.payload&&r.payload.total))||Number(c.sessions)||0;
     }catch(e){ console.error('送簽前定案數字失敗', e); }
     const _isPaper=(kind==='paper');
@@ -50930,6 +50931,27 @@ function grBack(){
   openGrantReview();
 }
 /* 收款欄位的原始字串快照（見 window._grFill0 的說明） */
+/* ══ 兩個金額刻意不同（2026-09-04 使用者定案）════════════════════════════
+   ・合約上的金額 ＝ 這份合約的**總價**（折抵券之後）
+   ・待審核單的金額 ＝ **這一期**要收的錢（分期就是第 1 期）
+   原本兩邊都寫第一期，於是合約清單把「12 堂・$4,400」並排顯示，看起來像
+   12 堂只要 4,400（正式庫 10 份分期合約全都這樣）。合約內文本來就印總價，
+   只有 amount 這一欄跟內文對不起來。
+   ⚠ 兩者不要互相抄 —— 只要有人圖方便把其中一個指向另一個，這個問題就回來了。 */
+function grCtAmount(P){ return Math.max(0, Number(P&&P.paidAmount)||0); }
+function grDueAmount(P){
+  if(!P) return 0;
+  return P.isInstall ? Math.max(0,(Number(P.firstAmount)||0)-(Number(P.voucherAmt)||0))
+                     : Math.max(0,Number(P.paidAmount)||0);
+}
+/* 合約當初寫的是幾期 —— contracts 沒有這一欄，從購買內容表判讀（HTML 是我們自己產的）。
+   ⚠ 舊資料也認得：一次付清那版即使印了空白三列表，勾的仍然是「☑一次付清」。 */
+function ctSnapInstall(html){
+  const h=String(html||'');
+  if(!/☑分期付款/.test(h)) return 1;
+  const n=(h.match(/第[一二三四五六七八九十]期/g)||[]).length;
+  return Math.max(2, n||2);
+}
 function grFillSnap(){
   const v=id=>{ const el=document.getElementById(id); return el?String(el.value??''):''; };
   return [v('gr-amt'), v('gr-method'), v('gr-splitcash'), v('gr-install'), v('gr-voucher')].join('|');
@@ -51098,6 +51120,10 @@ async function _grantReqApprove(id){
        並且寫回這一筆待審核 —— 之後查帳看得到櫃檯填的是什麼。 */
     /* 一律重算（2026-08-28 二修）：收款這一步永遠可編輯，所以不論教練有沒有填，
        都以櫃檯畫面上的數字為準。沒有改動時算出來的就是原本那一包。 */
+    /* ⚠ 宣告在區塊外面：底下寫合約那一段要讀它，而那一段包在 catch(_){} 裡 ——
+       放在 `{ }` 內的話會變成「讀不到就靜靜什麼都不做」，留痕整個消失。
+       （2026-09-04 全流程實跑抓到的；與早上 openGrantApprove 的 P 同一類問題。）*/
+    let _drift=null;
     {
       const _p=grFillApply(r.payload);
       if(!_p){ done(); return; }                 // 填得不對，grFillApply 已經講原因了
@@ -51111,16 +51137,25 @@ async function _grantReqApprove(id){
          ⚠ 用金額比對就夠：一次付清改成分期、期數改幾期，第 1 期應收都會變。
            只改付款方式（現金↔匯款）不會觸發，那也不影響合約的分期表。 */
       if(_c){
-        const _final=Number(_p.isInstall?Math.max(0,_p.firstAmount-_p.voucherAmt):_p.paidAmount)||0;
+        /* ⚠ 比的是**總價與期數**，不是「這一期要收多少」（2026-09-04 修）——
+           合約金額改成記總價之後，一次付清改成分期時總價根本沒變，
+           只比金額的話這道防線會整個失效。期數從購買內容表判讀。 */
+        const _final=grCtAmount(_p);
         const _onCt=Number(_c.amount)||0;
-        if(_final!==_onCt){
-          if(!confirm(`⚠ 這份合約會員已經簽回了，但收款金額跟合約上寫的不一樣。\n\n`
-            +`　合約上：$${_onCt.toLocaleString()}\n`
-            +`　現在要收：$${_final.toLocaleString()}`
-            +(_p.isInstall?`（分 ${_p.installCount} 期，這是第 1 期）`:'（一次付清）')+`\n\n`
+        const _nNow=Math.max(1,Number(_p.installCount)||1);
+        const _nCt=ctSnapInstall(_c.fill_snapshot);
+        if(_final!==_onCt || _nNow!==_nCt){
+          const _lb=n=>n>1?`分 ${n} 期`:'一次付清';
+          if(!confirm(`⚠ 這份合約會員已經簽回了，但收款內容跟合約上寫的不一樣。\n\n`
+            +`　合約上：$${_onCt.toLocaleString()}　·　${_lb(_nCt)}\n`
+            +`　現在要發：$${_final.toLocaleString()}　·　${_lb(_nNow)}`
+            +(_nNow>1?`（這次先收第 1 期 $${grDueAmount(_p).toLocaleString()}）`:'')+`\n\n`
             +`合約內文不會跟著改 —— 那是會員簽名時看到的那一份。\n`
             +`要照現在的金額發放嗎？（會在合約上留一筆調整紀錄）\n\n`
             +`如果客人是改了付款方式，建議先「取消這筆發放」再重開一份新合約給他簽。`)) { done(); return; }
+          /* 櫃檯按了「確定」→ 一定要留痕。金額沒變、只有期數變的情況（合約寫分 3 期、
+             實際發一次付清）原本什麼都不會寫，日後對帳的人看不出發生過什麼。 */
+          _drift=`合約寫 $${_onCt.toLocaleString()}・${_lb(_nCt)}，實際發 $${_final.toLocaleString()}・${_lb(_nNow)}`;
         }
       }
       r.payload=_p;
@@ -51162,14 +51197,19 @@ async function _grantReqApprove(id){
       if(c){
         c.ticket_id=t.id; c.expire_date=t.expire_date||null;
         const _p=r.payload||{};
-        const _final=Number(_p.isInstall?Math.max(0,_p.firstAmount-_p.voucherAmt):_p.paidAmount)||0;
+        const _final=grCtAmount(_p);            // 合約記總價（見 grCtAmount）
         const _was=Number(c.amount)||0;
-        if(_final!==_was){
+        const _who=(SESSION&&SESSION.name)||'櫃檯';
+        if(_drift){
+          /* 已簽回卻改了內容：把合約寫什麼、實際發什麼都寫下來（見上面的確認視窗） */
+          c.amount=_final;
+          c.note=(c.note?c.note+'｜':'')+`⚠ 簽回後調整：${_drift}（${_who}・${nowHM()}）`;
+        }else if(_final!==_was){
           c.amount=_final;
           c.note=(c.note?c.note+'｜':'')
             +`收款時調整金額 $${_was.toLocaleString()}→$${_final.toLocaleString()}`
-            +(_p.isInstall?`（分 ${_p.installCount} 期・這是第 1 期）`:'')
-            +`（${(SESSION&&SESSION.name)||'櫃檯'}・${nowHM()}）`;
+            +(_p.isInstall?`（分 ${_p.installCount} 期）`:'')
+            +`（${_who}・${nowHM()}）`;
         }
         await dbPut('contracts',c);
       } }catch(_){} }
@@ -59552,8 +59592,11 @@ function contractFillBlockHTML(d){
             const per=(d.instSess&&d.instSess[i]!=null)?d.instSess[i]:'';
             return `<tr>${td('第'+(_CN[i]||i+1)+'期')}${td('＄'+v(a.toLocaleString()))}${td(per!==''?v(per+' 堂'):'＿＿＿ 堂')}${td(i===0&&_d1?v(_d1):'＿＿ / ＿＿')}${i===0?td('<span style="color:#666;">同本約簽名</span>','height="34"'):td('&nbsp;','height="34"')}</tr>`;
           }).join(''))
-      : `分期：${ck(1)}一次付清　□分期付款`
-        + instTable([1,2,3].map(i=>`<tr>${td('第'+_CN[i-1]+'期')}${td('＄＿＿＿＿＿')}${td('＿＿＿ 堂')}${td('＿＿ / ＿＿')}${td('&nbsp;','height="34"')}</tr>`).join(''));
+      /* 2026-09-04 使用者：「合約如果選擇一次付清 下方分期的表格可以隱藏嗎」——
+         一次付清那版原本還印一張三列全空的分期表，客人簽的時候會以為要填。
+         ⚠ 只有「已經選定一次付清」這一版拿掉；**沒帶購買資料的空白手寫版**
+           （下面 d 為空的那條）仍然要印那張表，那張本來就是要現場手寫的。 */
+      : `分期：${ck(1)}一次付清　□分期付款`;
     return `<div class="ct-fill" style="margin:6px 0 20px;white-space:normal;">
     <div style="font-weight:700;font-size:14px;margin-bottom:7px;">會員資料 Member Information</div>
     <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
