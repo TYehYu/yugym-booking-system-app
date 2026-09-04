@@ -12446,8 +12446,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260904.2012';
-const APP_VERSION_LABEL = 'v260904.2012';
+const APP_VERSION = '260904.2020';
+const APP_VERSION_LABEL = 'v260904.2020';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48710,6 +48710,50 @@ function ctSetType(v){
   const sb2=document.getElementById('ct-submit');
   if(sb2) sb2.textContent='建立合約';
 }
+/* ══ 依最終數字重生合約內文（2026-09-04）════════════════════════════════
+   使用者定案：「教練建立合約的時候 只要填寫方案 課堂數 總價 一次付清跟分期
+   也可以預填寫 但之後櫃檯端可以在正式收費前調整」——
+   既然分期與金額是**預填**，合約內文就不能停在建約當下那一版：
+   客人簽的那張紙如果寫「一次付清」，實際卻發成分期，簽名就簽錯了東西。
+   （分期表尤其明顯：contractFillBlockHTML 會印出每期的金額／開通堂數／
+     收款日／客戶簽名欄，預填是一次付清的話那張表根本不存在。）
+
+   這一支是 renderContractStep 的無畫面版：同樣的 ctx 與 fill 欄位、同樣的
+   splitAmount 分法，差別只在數字改讀 payload 而不是讀表單。
+   ⚠ 只在**還沒簽回**時可以叫（呼叫端負責擋）：已經簽名的內文再動就是竄改。
+   ⚠ 簽約日期沿用合約建立那天，不是今天 —— 重生的是金額與分期，不是把合約
+     改成一份新的。 */
+async function ctRebuildSnapshot(P, mem, buyDate){
+  try{
+    const plan=(P&&P.plan)||{};
+    const total=Number(P.total)||0;
+    const deal=Number(P.dealAmount)||0;
+    const instN=Math.max(1, Number(P.installCount)||1);
+    const isInstall=instN>1;
+    const voucherN=Math.max(0, Number(P.voucherN)||0);
+    const paid=Math.max(0, deal-voucherN*300);
+    const payLabel={cash:'現金',transfer:'匯款',card:'刷卡',split:'現金＋匯款'}[P.method]||'—';
+    const _bd=String(buyDate||'').slice(0,10)||ymd(TODAY);
+    const expire=plan.valid_days?`${plan.valid_days} 天（至 ${termExpire(_bd, plan.valid_days)}）`:'—';
+    const tpl=await loadContractTpl();
+    const ctx={
+      會員姓名:(mem&&mem.name)||'—', 會員電話:(mem&&mem.phone)?fmtPhone(mem.phone):'—',
+      簽約日期:_bd, 方案名稱:plan.name||'—', 堂數:total, 效期:expire,
+      金額:paid.toLocaleString()+(voucherN?`（折抵券×${voucherN}，原價 $${deal.toLocaleString()}）`:''),
+      付款方式:payLabel+(isInstall?`（分${instN}期）`:''),
+    };
+    const fill={ name:(mem&&mem.name)||'', phone:(mem&&mem.phone)?fmtPhone(mem.phone):'',
+      buyDate:_bd, planName:plan.name||'', sessions:total, bonus:plan.sessions_bonus||0,
+      unit:plan.unit_price||0, amount:paid, validDays:Number(plan.valid_days)||365,
+      pay:P.method||'cash',
+      /* 與 renderContractStep 一字不差：第一期印折抵後金額，總額才對得上購買金額 */
+      installN:instN, instAmts:(()=>{ if(instN<=1) return null;
+        const a=splitAmount(deal,instN); if(voucherN) a[0]=Math.max(0,a[0]-voucherN*300); return a; })(),
+      instSess:instN>1?splitAmount(total,instN):null };
+    return { body:fillContract(tpl?tpl.body:CONTRACT_TEXT, ctx),
+             fill:contractFillBlockHTML(fill) };
+  }catch(e){ console.error('合約內文重生失敗', e); return null; }
+}
 /* 紙本列印（2026-07-28）：帶本次購買內容的合約全文，開列印視窗並自動叫出印表機 */
 function ctPrintPaper(){
   ctPrintOpen(ctPdfName(['YUGYM會員服務合約',(window._ctFill&&window._ctFill.name)||'',ymd(TODAY)]),
@@ -50584,6 +50628,30 @@ async function _grantReqSetSign(id, kind){
     const c=await dbGet('contracts',r.contract_id).catch(()=>null);
     if(!c){ showToast('找不到合約'); return; }
     if(c.signed_at){ showToast('這份合約已經簽回了，不能再改簽署方式'); return; }
+    /* ══ 送簽之前先定案數字（2026-09-04）════════════════════════════════
+       使用者：「一次付清跟分期也可以預填寫 但之後櫃檯端可以在正式收費前調整」。
+       「用電子簽」「用紙本」這兩顆就是**送出去給客人簽**的那一刻 —— 在這之前
+       把畫面上的收款欄位收進 payload，並照最終數字重生合約內文，
+       客人簽到／印出來的才是對的那一份。
+       ⚠ 欄位沒填完（grFillApply 回 null）不擋：收款資訊本來就可以之後再填，
+         那種情況就照教練預填的內容送簽。
+       ⚠ payment_status 保留原值 —— grFillApply 會把它設成 'paid'，但這一步
+         只是選簽署方式，錢還沒收到。 */
+    try{
+      if(document.getElementById('gr-amt') && typeof grFillApply==='function'){
+        const _pack=grFillApply(r.payload, true);
+        if(_pack){
+          _pack.payment_status=(r.payload&&r.payload.payment_status)||_pack.payment_status;
+          r.payload=_pack;
+          r.amount=Number(_pack.isInstall?Math.max(0,_pack.firstAmount-_pack.voucherAmt):_pack.paidAmount)||0;
+        }
+      }
+      const _mem=await dbGet('members', r.member_id).catch(()=>null);
+      const _snap=await ctRebuildSnapshot(r.payload||{}, _mem, c.created_at);
+      if(_snap){ c.body_snapshot=_snap.body; c.fill_snapshot=_snap.fill; }
+      c.amount=Number(r.amount)||Number(c.amount)||0;
+      c.sessions=Number((r.payload&&r.payload.total))||Number(c.sessions)||0;
+    }catch(e){ console.error('送簽前定案數字失敗', e); }
     const _isPaper=(kind==='paper');
     if(_isPaper && !confirm(`把 ${r.member_name||''} 的「${r.plan_name||''}」設為紙本簽署？\n\n`
       +`・這一筆立刻算「已簽」，可以直接確認收款發放\n`
@@ -50922,8 +50990,9 @@ async function _grantReqApprove(id){
     if(!r.payload){ done(); showToast('這筆沒有發放內容，請取消後重開一次'); return; }
     /* ⚠ 未簽回一律不能發（0813 定案）——0828 放寬的只是「視窗打得開」，
        真正的發放這一關照舊擋住，不能靠繞過視窗就發出去。 */
+    let _c=null;
     if(r.contract_id){
-      const _c=await dbGet('contracts',r.contract_id).catch(()=>null);
+      _c=await dbGet('contracts',r.contract_id).catch(()=>null);
       if(!(_c&&_c.signed_at)){ done(); showToast('合約尚未簽回，等會員在手機上簽完才能發放', 5000); return; }
     }
     /* 收款資訊由櫃檯補（2026-08-28）：發放之前先把三個欄位重算進 payload，
@@ -50933,6 +51002,28 @@ async function _grantReqApprove(id){
     {
       const _p=grFillApply(r.payload);
       if(!_p){ done(); return; }                 // 填得不對，grFillApply 已經講原因了
+      /* ══ 簽回之後才改數字（2026-09-04）══════════════════════════════════
+         送簽那一刻已經照最終數字重生過內文（見 grantReqSetSign），所以正常
+         流程走到這裡是不會有落差的。會有落差只剩一種情況：**簽回之後**櫃檯
+         又改了金額或分期。
+         那份內文不能再動 —— 會員已經在上面簽名了，事後改掉等於竄改。
+         所以只能問一次，讓櫃檯自己決定：照舊發放（合約與實收不一致，note
+         會留痕），還是先取消這筆重開一份。
+         ⚠ 用金額比對就夠：一次付清改成分期、期數改幾期，第 1 期應收都會變。
+           只改付款方式（現金↔匯款）不會觸發，那也不影響合約的分期表。 */
+      if(_c){
+        const _final=Number(_p.isInstall?Math.max(0,_p.firstAmount-_p.voucherAmt):_p.paidAmount)||0;
+        const _onCt=Number(_c.amount)||0;
+        if(_final!==_onCt){
+          if(!confirm(`⚠ 這份合約會員已經簽回了，但收款金額跟合約上寫的不一樣。\n\n`
+            +`　合約上：$${_onCt.toLocaleString()}\n`
+            +`　現在要收：$${_final.toLocaleString()}`
+            +(_p.isInstall?`（分 ${_p.installCount} 期，這是第 1 期）`:'（一次付清）')+`\n\n`
+            +`合約內文不會跟著改 —— 那是會員簽名時看到的那一份。\n`
+            +`要照現在的金額發放嗎？（會在合約上留一筆調整紀錄）\n\n`
+            +`如果客人是改了付款方式，建議先「取消這筆發放」再重開一份新合約給他簽。`)) { done(); return; }
+        }
+      }
       r.payload=_p;
       r.amount=Number(_p.isInstall?Math.max(0,_p.firstAmount-_p.voucherAmt):_p.paidAmount)||0;
       r.filled_by=SESSION.id; r.filled_at=new Date().toISOString();

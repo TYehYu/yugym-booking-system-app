@@ -103,6 +103,52 @@ console.log('\n② 賣票當下算好的一整包（審核時照著發）');
   ok('　　退回時要還折抵券 → 把扣了哪幾張帶回去', /t\._usedVouchers=_usedVouchers;/.test(F));
 }
 
+console.log('\n③b 送簽之前把數字定案，合約內文跟著重生（2026-09-04）');
+/* 使用者定案：「教練建立合約的時候 只要填寫方案 課堂數 總價 一次付清跟分期
+   也可以預填寫 但之後櫃檯端可以在正式收費前調整」——
+   既然分期是預填，客人簽的那份就必須是櫃檯調整後的版本。
+   ⚠ 差別很具體：contractFillBlockHTML 的分期小表（每期金額／開通堂數／收款日／
+     客戶簽名）在「一次付清」那版根本不存在，簽了等於沒簽到分期條款。 */
+{
+  const F=grabFn('ctRebuildSnapshot');
+  ok('★★★ 有一支不依賴畫面的重生函式', !!F && /async function ctRebuildSnapshot\(P, mem, buyDate\)/.test(src));
+  ok('★★★ 真的不讀畫面（數字一律來自 payload）',
+     !!F && !/document\.getElementById/.test(F));
+  ok('★★★ 分期算法與建約當下一字不差（splitAmount，第 1 期扣折抵券）',
+     /instAmts:\(\(\)=>\{ if\(instN<=1\) return null;\s*\n\s*const a=splitAmount\(deal,instN\); if\(voucherN\) a\[0\]=Math\.max\(0,a\[0\]-voucherN\*300\); return a; \}\)\(\)/.test(F)
+     && /instSess:instN>1\?splitAmount\(total,instN\):null/.test(F));
+  ok('★★★ 簽約日期沿用合約建立那天，不是今天',
+     /const _bd=String\(buyDate\|\|''\)\.slice\(0,10\)\|\|ymd\(TODAY\);/.test(F)
+     && /重生的是金額與分期，不是把合約\s*\n\s*改成一份新的/.test(src));
+
+  const G=grabFn('_grantReqSetSign');
+  ok('★★★ 送簽那一刻先把畫面上的收款欄位收進 payload',
+     /const _pack=grFillApply\(r\.payload, true\);/.test(G)
+     && /r\.amount=Number\(_pack\.isInstall\?Math\.max\(0,_pack\.firstAmount-_pack\.voucherAmt\):_pack\.paidAmount\)\|\|0;/.test(G));
+  ok('★★★ 再照最終數字重生內文',
+     /const _snap=await ctRebuildSnapshot\(r\.payload\|\|\{\}, _mem, c\.created_at\);/.test(G)
+     && /if\(_snap\)\{ c\.body_snapshot=_snap\.body; c\.fill_snapshot=_snap\.fill; \}/.test(G));
+  ok('★★★ 欄位沒填完不擋（收款資訊本來就可以之後再填）',
+     /if\(document\.getElementById\('gr-amt'\) && typeof grFillApply==='function'\)\{/.test(G));
+  ok('★★★ payment_status 保留原值（這一步只是選簽署方式，錢還沒收到）',
+     /_pack\.payment_status=\(r\.payload&&r\.payload\.payment_status\)\|\|_pack\.payment_status;/.test(G));
+  ok('★★★ 只有未簽回才走到這裡（已簽的內文不能動）',
+     /if\(c\.signed_at\)\{ showToast\('這份合約已經簽回了，不能再改簽署方式'\); return; \}/.test(G)
+     && G.indexOf("if(c.signed_at)") < G.indexOf("ctRebuildSnapshot"));
+}
+
+console.log('\n③c 簽回之後才改數字 → 發放前問一次');
+{
+  const F=grabFn('_grantReqApprove');
+  ok('★★★ 合約金額與現在要收的不一樣就跳確認',
+     /if\(_final!==_onCt\)\{/.test(F) && /會員已經簽回了，但收款金額跟合約上寫的不一樣/.test(F));
+  ok('★★★ 講清楚內文不會跟著改（那是會員簽名時看到的那一份）',
+     /合約內文不會跟著改 —— 那是會員簽名時看到的那一份。/.test(F));
+  ok('★★★ 給得出下一步（不是只丟一個警告）',
+     /建議先「取消這筆發放」再重開一份新合約給他簽/.test(F));
+  ok('★★ 按取消就真的不發（要收掉忙碌遮罩）', /\{ done\(\); return; \}/.test(F));
+}
+
 console.log('\n③ 待審核發放**沒有**浮動提示（2026-09-04 使用者定案）');
 /* 「待審核只要做會員連動 不要做票券發放提醒」——
    #alert-dock 只留會員連動那顆。理由：同一件待辦不要有兩個提醒，
