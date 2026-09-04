@@ -63,6 +63,7 @@ ok('★ 讀值改用 readHM', /const t=readHM\('fix-time'\);/.test(src));
 ok('★ 補打卡的上下班都改', /\$\{hmPicker\('pr-in',''\)\}/.test(src) && /\$\{hmPicker\('pr-out',''\)\}/.test(src));
 ok('★ 補打卡讀值也改', /const cin=readHM\('pr-in'\);\s*\n\s*const cout=readHM\('pr-out'\);/.test(src));
 ok('　　為什麼不用 30 分一格的時段下拉，寫在程式裡', /打卡時間需要「分」的精度（工時要算得準）/.test(src));
+/* 5 分一格 ≠ 30 分一格：前者仍然在「分」的層級，只是拿掉工時算不出差別的那 48 個選項。 */
 
 {
   const pick=new Function(g('function hmPicker(id, value, opts){','\n}\n')+'\nreturn hmPicker;')();
@@ -70,8 +71,26 @@ ok('　　為什麼不用 30 分一格的時段下拉，寫在程式裡', /打�
   const hs=h.slice(0,h.indexOf('</select>'));
   eq('★ 小時 00–23 ＋ 一列空白（＝這欄不填）',
      [(hs.match(/<option/g)||[]).length, /value=""/.test(hs), /value="23"/.test(hs)], [25,true,true]);
-  eq('★ 分鐘 00–59 每 1 分（打卡不能只有半小時精度）',
-     (h.slice(h.indexOf('</select>')).match(/<option/g)||[]).length, 60);
+  /* 2026-09-04 使用者附截圖：「時間選單突破天際了」——60 個 option 在 macOS 上
+     會撐成整個螢幕高的原生選單。改成 5 分一格（12 個）。
+     ⚠ 為什麼不失真：工時是 calcWorkHours 算的，而它 `Math.round(mins/30)/2`
+       ——以**半小時**為單位四捨五入。09:10 與 09:11 算出來的工時完全一樣。
+     ⚠ 但原本那個值一定要留著（見下一條）：打卡是機器寫的、有精確分鐘，
+       09:11 若從清單消失，管理員什麼都不動按儲存就會被悄悄改掉。 */
+  eq('★ 分鐘 5 分一格（12 個）—— 工時本來就只算到半小時',
+     (h.slice(h.indexOf('</select>')).match(/<option/g)||[]).length, 12);
+  ok('　　理由寫在程式裡（calcWorkHours 以半小時為單位）',
+     /`Math\.round\(mins\/30\)\/2` ——\*\*以半小時為單位四捨五入\*\*/.test(src));
+  {
+    /* 非 5 的倍數要原位補回去、而且是選中的那一個 */
+    const chk=(v,mm,cnt)=>{ const x=pick('t',v); const m=x.slice(x.indexOf('</select>'));
+      return [(m.match(/<option/g)||[]).length, (m.match(/value="([^"]*)" selected/)||[])[1],
+              m.indexOf('value="'+mm+'"')>0]; };
+    eq('★★ 09:11 → 分鐘清單補進 11 並選中', chk('09:11','11'), [13,'11',true]);
+    eq('★★ 15:53 → 補進 53 並選中',        chk('15:53','53'), [13,'53',true]);
+    eq('★★ 23:59 → 補進 59 並選中',        chk('23:59','59'), [13,'59',true]);
+    eq('　 08:05 → 本來就在清單裡，不多加', chk('08:05','05'), [12,'05',true]);
+  }
   ok('　　沒帶值時分鐘預設 00（只選小時就是整點）', /value="00" selected/.test(h));
   const h2=pick('t','09:37');
   ok('★ 帶值時兩邊都選好', /value="09" selected/.test(h2) && /value="37" selected/.test(h2));

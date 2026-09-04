@@ -12416,8 +12416,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION='260904.1609';
-const APP_VERSION_LABEL='260904.1609';
+const APP_VERSION='260904.1633';
+const APP_VERSION_LABEL='260904.1633';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22681,8 +22681,40 @@ async function dutyPunchOutAsk(attId){
                :'<b>下班留空</b>＝只改上班時間，這個人維持值班中。填了才會幫他打下班卡。'}
         這筆會記下是<b>你改的</b>，之後在出勤紀錄看得到。</div>
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        ${/* 2026-09-04 使用者：「所以這種情況管理員能怎麼更新 因為是剛剛我造成的錯誤
+             讓這個員工提早打了下班卡」——
+             管理員設得下去的東西，管理員就要能收回來。原本只有員工端的
+             doUndoPunchOut（限本人當天），等於又回到「兩個人兩道手續」，
+             而且這一次的錯還是管理員這邊造成的。 */''}
+        ${_done?`<button class="btn btn-ghost" style="color:var(--danger,#b5372e);" onclick="dutyUndoOut('${attId}')">取消下班</button>`:''}
         <button class="btn btn-green" onclick="dutyPunchOutGo('${attId}')">${_done?'儲存修正':'確認代打'}</button></div>`);
   }catch(e){ showToast('開啟失敗：'+((e&&e.message)||e)); }
+}
+/* 管理員把下班收回來（2026-09-04）——與員工端的 doUndoPunchOut 同一件事，
+   差別只在「誰按的」：那一支綁 SESSION.id（限本人當天），這一支給管理員，
+   而且**不限今天**（誤代打的那一筆可能昨天就寫下去了）。
+   ⚠ 一樣留痕：工時憑空消失最容易被誤會成系統出錯。 */
+async function dutyUndoOut(attId){ return onceAct('dutyundo:'+attId, ()=>_dutyUndoOut(attId)); }
+async function _dutyUndoOut(attId){
+  try{
+    if(!(SESSION && SESSION.role==='admin')){ showToast('只有管理員可以取消下班'); return; }
+    const rec=await dbGet('attendance',attId);
+    if(!rec){ showToast('找不到這筆打卡紀錄'); return; }
+    if(!rec.clock_out){ showToast('這筆目前就是值班中，沒有下班可以取消'); return; }
+    if(!confirm(`把 ${rec.emp_name||''} ${String(rec.date||'').replace(/-/g,'/')} 的下班取消？\n\n`
+      +`・下班 ${rec.clock_out} → 清除\n・工時 ${rec.work_hours==null?'—':rec.work_hours+' 小時'} → 清除\n\n`
+      +`會回到「值班中」，之後可以重新打卡或代打。`)) return;
+    const _who=(SESSION&&SESSION.name)||'管理員';
+    rec.note=(rec.note?rec.note+'｜':'')+`管理員取消下班（${_who}・${nowHM()}）：原 ${rec.clock_out}`;
+    rec.clock_out=null; rec.work_hours=null;
+    rec.fixed_by=(SESSION&&SESSION.id)||null;
+    rec.fixed_at=new Date().toISOString();
+    await dbPut('attendance',rec);
+    closeModal();
+    showToast('已取消下班，回到值班中');
+    try{ await refreshHeaderPunch(); }catch(_){}
+    try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){ navTo(CUR_PAGE); }
+  }catch(e){ showToast('取消失敗：'+((e&&e.message)||e), 7000); }
 }
 async function dutyPunchOutGo(attId){ return onceAct('dutyout:'+attId, ()=>_dutyPunchOutGo(attId)); }
 async function _dutyPunchOutGo(attId){
@@ -22695,10 +22727,11 @@ async function _dutyPunchOutGo(attId){
     if(!rec || !rec.clock_in){ showToast('找不到上班紀錄'); return; }
     /* 下班留空的兩種意思（2026-09-04 二修）：
          還在值班中 → 「只改上班，不要幫他打下班卡」，這是常見的用法，放行。
-         已經下班   → 那是把既有的下班時間清掉，等於取消下班；這裡不做
-                      （員工端有「取消下班」，而且清掉會讓工時憑空消失）。 */
+         已經下班   → 那是把既有的下班時間清掉。不從這個欄位做，因為「把欄位清空」
+                      跟「打錯沒填」長得一模一樣；改成彈窗底下一顆明確的
+                      「取消下班」（dutyUndoOut），按下去會問一次並留痕。 */
     if(!t && rec.clock_out){
-      showToast('下班時間不能清空。要取消下班請用員工端的「取消下班」', 6000); return; }
+      showToast('要清掉下班請按下面的「取消下班」', 5000); return; }
     /* 早於上班時間就是打錯了 —— calcWorkHours 會當成跨午夜，算出 20 幾小時的工時。 */
     if(t && timeToMin(t)<timeToMin(tin)){
       showToast(`下班時間不能早於上班時間（${tin}）`, 6000); return; }
@@ -22708,6 +22741,22 @@ async function _dutyPunchOutGo(attId){
     if(tin!==rec.clock_in) _chg.push(`上班 ${rec.clock_in}→${tin}`);
     if(t && t!==rec.clock_out) _chg.push(rec.clock_out?`下班 ${rec.clock_out}→${t}`:`代打下班 ${t}`);
     if(!_chg.length){ closeModal(); showToast('時間沒有變動'); return; }
+    /* ══ 儲存前先把改動攤開來確認（2026-09-04 使用者：「不然今天一次就改了
+       上下班的時間」）════════════════════════════════════════════════════
+       當天真的發生了：他只想改上班，結果上班與下班一起被改掉
+       （上班 09:11→09:00 是他要的，下班 null→15:53 是我把欄位預設成「現在」
+        又設成必填造成的）。預設值那個根因已經修掉，這一層是第二道防線。
+       ⚠ 使用者原本提的是「在這個視窗之前先選要改上班還是下班」。沒有那樣做，
+         因為前置一頁每次都多一次點擊，而真正會出錯的是**打錯數字**
+         （09:00 打成 19:00），選欄位擋不到；把工時變化一起列出來才擋得到。
+       ⚠ 只在真的有改動時才問（上面 _chg 為空就直接返回），不會每次都煩人。
+       ⚠ 用原生 confirm 與同檔其他 14 處一致（刪打卡紀錄也是這樣問）。 */
+    const _hOld=rec.work_hours;
+    const _hNew=(t||rec.clock_out)?calcWorkHours({clock_in:tin, clock_out:t||rec.clock_out}):null;
+    const _fmtH=h=>(h==null?'—':h+' 小時');
+    if(!confirm(`確認修改 ${(rec.emp_name||'')} ${String(rec.date||'').replace(/-/g,'/')} 的打卡？\n\n`
+      +_chg.map(x=>'・'+x).join('\n')
+      +`\n\n工時　${_fmtH(_hOld)} → ${_fmtH(_hNew)}`)) return;
     const _oldIn=rec.clock_in;
     rec.clock_in=tin;
     if(t) rec.clock_out=t;                    // 留空就維持原狀（值班中仍是 null）
@@ -29278,8 +29327,19 @@ function hmPicker(id, value, opts){
   const h2=n=>String(n).padStart(2,'0');
   let hs=`<option value="">--</option>`;
   for(let h=0;h<24;h++){ const t=h2(h); hs+=`<option value="${t}"${hv===t?' selected':''}>${t}</option>`; }
+  /* ══ 分鐘改 5 分一格（2026-09-04 使用者：「時間選單突破天際了」，附截圖）══
+     原本 0–59 全列，60 個 option 在 macOS 上會撐成整個螢幕高的原生選單。
+     ⚠ 為什麼 5 分一格不會失真：工時是 calcWorkHours 算的，而它
+       `Math.round(mins/30)/2` ——**以半小時為單位四捨五入**。
+       09:10 與 09:11 算出來的工時完全一樣，多那 59 個選項對薪資沒有任何影響。
+     ⚠ 但**一定要把原本那個值留著**：打卡是機器寫的（nowHM 有精確分鐘），
+       09:11 這種值如果從清單裡消失，管理員一打開這個視窗、什麼都不動按儲存，
+       就會被下拉的第一個值悄悄改掉。所以不是 5 的倍數就補進去、並排序。
+     ⚠ 七個呼叫點全是打卡時間（代打／修正／補登／補卡申請），同一個理由適用。 */
+  const mins=[]; for(let m=0;m<60;m+=5) mins.push(h2(m));
+  if(mv && mins.indexOf(mv)<0){ mins.push(mv); mins.sort(); }
   let ms='';
-  for(let m=0;m<60;m++){ const t=h2(m); ms+=`<option value="${t}"${mv===t?' selected':''}>${t}</option>`; }
+  mins.forEach(t=>{ ms+=`<option value="${t}"${mv===t?' selected':''}>${t}</option>`; });
   return `<span class="hm-pick"><select id="${id}-h"${o.onchange?` onchange="${o.onchange}"`:''}>${hs}</select>`
     + `<i>:</i><select id="${id}-m"${o.onchange?` onchange="${o.onchange}"`:''}>${ms}</select></span>`;
 }
