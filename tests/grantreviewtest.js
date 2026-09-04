@@ -103,6 +103,43 @@ console.log('\n② 賣票當下算好的一整包（審核時照著發）');
   ok('　　退回時要還折抵券 → 把扣了哪幾張帶回去', /t\._usedVouchers=_usedVouchers;/.test(F));
 }
 
+console.log('\n③z 減少 AI 感：圓角收斂＋狀態不用 emoji（2026-09-05）');
+{
+  const G=grabFn('openGrantApprove');
+  /* 使用者：「目的是想減少產品的ai感」。量出來這個視窗有 6 種圓角
+     （4px 按鈕／7px 欄位／10、11、14px 容器／50% 圓標）——「每個容器各挑一個
+     數字」正是生成出來的痕跡；人手做會有系統。 */
+  ok('★★★ 容器一律 14px（gr-fill／gr-amt-box／gr-sign-box）',
+     /\.gr-fill\{border:1\.5px solid var\(--gold,#B48A56\);border-radius:14px;/.test(src)
+     && /\.gr-amt-box\{[^}]*border-radius:14px;/.test(src)
+     && /\.gr-sign-box\{margin-top:10px;border-radius:14px;/.test(src));
+  ok('★★★ 容器內的小方塊一律 8px（gr-sig-wrap／gr-sig-none／gr-inst-hint）',
+     /\.gr-sig-wrap\{[^}]*border-radius:8px;/.test(src)
+     && /\.gr-sig-none\{[^}]*border-radius:8px;/.test(src)
+     && /\.gr-inst-hint\{[^}]*border-radius:8px;/.test(src));
+  ok('★★★ 同一件事不要兩種寫法：圓標從 50% 改 999px，與色點一致',
+     /\.gr-step-h i\{flex:0 0 auto;width:19px;height:19px;border-radius:999px;/.test(src)
+     && /\.gr-dot\{display:inline-block;width:7px;height:7px;border-radius:999px;/.test(src));
+  ok('★★★ 按鈕 4px、欄位 7px 刻意不動（那是全站 Ink 的系統，不從這裡開特例）',
+     /body\.ink \.btn\{border-radius:4px;/.test(src)
+     && /只有這個視窗改反而會跟其他頁面對不起來。要動就全站一起動，不從這裡開特例/.test(src));
+
+  /* ⏳／✓ 是最強的 AI 訊號，而且 Mac／Windows／Android 上長得三個樣。 */
+  ok('★★★ 合約狀態改用色點，畫面上沒有 emoji',
+     /<i class="gr-dot"><\/i>合約已於/.test(G)
+     && /<i class="gr-dot"><\/i><b>合約尚未簽回<\/b>/.test(G)
+     && !/[⏳✅💰🔒📄]/.test(G.replace(/\/\*[\s\S]*?\*\//g,'')));
+  ok('★★★ 色點顏色沿用框本來就有的語意（ok 綠／wait 金），不是另外發明一組',
+     /\.gr-sign-box\.ok \.gr-dot\{background:#1f6f54;\}/.test(src)
+     && /\.gr-sign-box\.wait \.gr-dot\{background:var\(--gold-d,#8a6a30\);\}/.test(src));
+  /* 離線量測（2026-09-05，真實 CSS）：
+     等回簽 → 圓角剩 4 種（14px 容器／4px 按鈕／7px 欄位／999px 膠囊），畫面無 emoji
+     已簽回 → 5 種（多一個 8px 的 gr-sig-none），畫面無 emoji */
+  ok('★★ 量測結果記在這支測試裡',
+     /等回簽 → 圓角剩 4 種（14px 容器／4px 按鈕／7px 欄位／999px 膠囊），畫面無 emoji/
+       .test(require('fs').readFileSync(__filename,'utf8')));
+}
+
 console.log('\n③a 三段式版面與防呆（2026-09-04：「讓櫃檯閱讀容易一點」「避免操作失誤」）');
 {
   ok('★★★ 編號三段：簽署方式 → 收款資訊 → 發放',
