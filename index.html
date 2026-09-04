@@ -12469,8 +12469,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260904.2244';
-const APP_VERSION_LABEL = 'v260904.2244';
+const APP_VERSION = '260904.2251';
+const APP_VERSION_LABEL = 'v260904.2251';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -46400,8 +46400,13 @@ async function openPersonProfile(kind, id, backPage){
       back:backPage||CUR_PAGE, backGroup:(typeof CUR_GROUP!=='undefined'?CUR_GROUP:null)});
     _say('讀取票券與課堂…');
     const _t1=Date.now();
+    window._ppFetchMs=null;
     await ppLoadCtx();
-    _mark['八張表']=Date.now()-_t1;
+    {
+      const _all=Date.now()-_t1, _fe=Number(window._ppFetchMs);
+      if(Number.isFinite(_fe)){ _mark['抓資料']=_fe; _mark['算']=Math.max(0,_all-_fe); }
+      else _mark['讀取']=_all;
+    }
     /* 管理員手機看會員資料改成浮動視窗（2026-08-20 使用者指示：
        「不要用全頁面顯示，用視窗比較有彈性感」）——同桌機那套暗背景＋置中卡，
        只是尺寸吃滿手機寬度。其他角色與員工資料維持滿版。 */
@@ -46435,6 +46440,11 @@ async function openPersonProfile(kind, id, backPage){
       /* 這一行是關鍵：卡頓佔了總時間多少。
          接近 100% → 瓶頸在瀏覽器（主執行緒被佔住），不是網路也不是伺服器。 */
       const _lagPct=_tot>0?Math.round(_lagMs/_tot*100):0;
+      /* ⚠ 2026-09-04：這兩個數字從 0823 就一直算出來卻**沒有印出來**，
+         而它們正是唯一能分辨「瀏覽器忙」與「網路慢」的證據 ——
+         0904 使用者回報 33 秒時，逐表統計只有 1.8 秒的網路，剩下 31 秒沒有解釋，
+         就是因為這一行被丟掉了。算了就要印。 */
+      const _lagTxt=`　卡頓 ${_lagPct}%（最久一次 ${_lagMax}ms）`;
       /* ⚠ 不能只看「這次操作期間」的判斷：真正的大表（bookings）常常是頁面在使用者
          點下去之前就開始抓的，它的判斷落在時間窗之外，於是最關鍵的那一行永遠印不出來
          （0823 實測：吐司只印得到 contracts，而元凶是 bookings）。
@@ -46449,7 +46459,7 @@ async function openPersonProfile(kind, id, backPage){
         return `${r.表}:（查不到判斷）`;
       }).slice(0,4).join('、');
       const _hyd=(window._dbHydrated||[]).length;
-      try{ showToast(`讀取 ${(_tot/1000).toFixed(1)} 秒：${_brk}${_top}`
+      try{ showToast(`讀取 ${(_tot/1000).toFixed(1)} 秒：${_brk}${_lagTxt}${_top}`
         +`　【開場還原 ${_hyd} 張】${_why?'　'+_why:''}`, 14000); }catch(_){}
     }
   }
@@ -46464,12 +46474,19 @@ async function ppLoadCtx(){
        同一張表抓第二次）。冷快取時每一個都要「簽章校驗＋分頁往返」，等於在並行批次
        之後又排了三輪，而且其中兩輪抓的是同一張表。全部收進同一個 Promise.all，
        members 只抓一次。 */
+    /* ⚠ 2026-09-04：這個階段原本整段掛在「八張表」這個名字底下，但它其實包含
+       Promise.all 之後所有的計算（buildWallet、computeMemberTiers、各種 map）。
+       0904 使用者回報 33 秒時，逐表統計只記到 1.8 秒的網路 —— 剩下 31 秒到底是
+       「還在等資料」還是「資料早就回來了在算」，光看那個名字分不出來。
+       所以分開量：_ppFetchMs＝真正在等 Promise.all，其餘＝算。 */
+    const _f0=Date.now();
     const [coaches,tickets,bookings,purchases,ttypes,contractsAll,tkLogs,membersAll,grPend]=await Promise.all([
       dbGetAll('coaches'), dbGetAll('member_tickets'), dbGetAll('bookings'), dbGetAll('purchases').catch(()=>[]),
       dbGetAll('ticket_types').catch(()=>[]), dbGetAll('contracts').catch(()=>[]),
       dbGetAll('ticket_logs').catch(()=>[]),   // 團課扣課紀錄（2026-07-31，見 grpTicketAlloc）
       dbGetAll('members').catch(()=>[]),
       (typeof grantReqPending==='function'?grantReqPending():Promise.resolve([])).catch(()=>[])]);
+    try{ window._ppFetchMs=Date.now()-_f0; }catch(_){}
     c.ctByTicket=Object.fromEntries((contractsAll||[]).filter(x=>x.ticket_id&&x.member_id===PP.id).map(x=>[x.ticket_id,x.id]));   // 合約綁票券（2026-07-28）
     /* 待審核發放也要在票券頁看得到（2026-08-09 使用者指示：「教練課跟友善教練課櫃檯銷售之後，
        無法看到這一筆單是不是有成功送出或者有沒有錯誤，都要等客戶那邊回傳才能知道」）——

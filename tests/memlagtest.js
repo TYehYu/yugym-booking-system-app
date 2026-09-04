@@ -57,5 +57,30 @@ console.log('\n④ 不會無限重畫');
      /重新開預約系統，點進會員管理會有好幾秒的讀取中/.test(src));
 }
 
+
+console.log('\n⑧ 慢的時候要講得出「慢在哪」（2026-09-04：使用者回報 33 秒）');
+{
+  const fs=require('fs');
+  const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  /* 那一則吐司寫「八張表 32.9s」，但逐表統計只有 fn_table_sigs 1.4s＋0.4s、傳輸 0KB。
+     剩下 31 秒沒有任何線索 —— 因為①階段名稱把「抓」和「算」混在一起，
+     ②卡頓比例算出來卻沒印。兩個都補上，下次一發生就自己講得出答案。 */
+  ok('★★★ 抓資料與算分開量（原本整段叫「八張表」）',
+     /window\._ppFetchMs=Date\.now\(\)-_f0;/.test(src)
+     && /_mark\['抓資料'\]=_fe; _mark\['算'\]=Math\.max\(0,_all-_fe\);/.test(src)
+     && !/_mark\['八張表'\]/.test(src));
+  ok('★★★ 量不到時要退回單一數字，不能顯示錯的拆分',
+     /else _mark\['讀取'\]=_all;/.test(src));
+  ok('★★★ 卡頓比例真的印出來（算了六百行卻丟掉的那個數字）',
+     /const _lagTxt=`　卡頓 \$\{_lagPct\}%（最久一次 \$\{_lagMax\}ms）`;/.test(src)
+     && /\$\{_brk\}\$\{_lagTxt\}\$\{_top\}/.test(src));
+  ok('★★ 它為什麼是關鍵，寫在原地',
+     /接近 100% → 瓶頸在瀏覽器（主執行緒被佔住），不是網路也不是伺服器。/.test(src)
+     && /算了就要印/.test(src));
+  ok('★★ 心跳偵測還在（超過 250ms 沒跳到就是被卡住）',
+     /const _hb=setInterval\(\(\)=>\{ const n=Date\.now\(\), d=n-_hbLast-100; _hbLast=n;/.test(src)
+     && /if\(d>150\)\{ _lagMs\+=d; if\(d>_lagMax\) _lagMax=d; \}/.test(src));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
