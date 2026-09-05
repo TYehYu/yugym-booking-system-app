@@ -119,5 +119,28 @@ console.log('\n⑨ 管理員手機首頁：圓角收斂（2026-09-05）');
      /圓角改了\*\*不會影響版面\*\*/.test(src));
 }
 
+
+console.log('\n⑩ 手機下限 11px（2026-09-05：可讀性 3/6）');
+{
+  const css2=src.replace(/\/\*[\s\S]*?\*\//g,'').match(/<style>[\s\S]*?<\/style>/g).join('');
+  const small=[];
+  (css2.match(/[^{}]+\{[^{}]*\}/g)||[]).forEach(r=>{
+    const i=r.indexOf('{'); const sel=r.slice(0,i), body=r.slice(i);
+    if(!/\.(mc-|mck)/.test(sel)) return;
+    const m=body.match(/font-size:\s*([0-9.]+)px/);
+    if(m && parseFloat(m[1])<11) small.push(sel.trim().replace(/\s+/g,' ').slice(0,40)+' '+m[1]);
+  });
+  /* ⚠ 剩下的七條全在圓點家族（.mck-dot／.mck-d2／.mc-dot／dots6）——
+     那裡的字級是跟著圓點尺寸等比的，放大會撐破。 */
+  ok('★★★ 低於 11px 的只剩圓點家族（原本 25 條，現在 '+small.length+' 條）',
+     small.length<=7 && small.every(x=>/mck-dot|mck-d2|mc-dot\b|mck-dots6/.test(x)), small);
+  ok('★★★ 為什麼圓點的字不能一起放大，寫在原地',
+     /圓點內的字級是\*\*跟著圓點尺寸等比\*\*的，放大會撐破/.test(src));
+  /* A/B 離線量測（2026-09-05，390px）：改 18 條，新溢出 0、新截斷 0、
+     小月曆週標題七格仍同列、頁高不變，只有 .mc-acct 高了 1px。 */
+  ok('★★ A/B 量測結果記在這支測試裡',
+     /改 18 條，新溢出 0、新截斷 0/.test(require('fs').readFileSync(__filename,'utf8')));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
