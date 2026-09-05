@@ -40,5 +40,33 @@ ok('★ 全域的 .cal-ev touch-action:none 沒有回來',
 ok('　　其他教練課卡維持純顯示、觸控穿透（0801 定版）',
    /不要再回頭用 pointer-events:none/.test(src));
 
+
+console.log('\n⑧ 教練手機圓角收斂（2026-09-05）');
+{
+  const fs2=require('fs');
+  const S=fs2.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const css=S.replace(/\/\*[\s\S]*?\*\//g,'').match(/<style>[\s\S]*?<\/style>/g).join('');
+  const kinds=new Set();
+  (css.match(/[^{}]+\{[^{}]*\}/g)||[]).forEach(r=>{
+    const i=r.indexOf('{'); if(!/\.(cag|coachhome|chome)/.test(r.slice(0,i))) return;
+    (r.slice(i).match(/border-radius:\s*([0-9]+px[^;]*|999px|50%)/g)||[])
+      .forEach(m=>kinds.add(m.split(':').slice(1).join(':').trim()));
+  });
+  ok('★★★ 圓角種類 13 → 5 以內　現在 '+kinds.size+' 種', kinds.size<=5, [...kinds].sort());
+  ok('★★★ 不再有 50%（其餘都是正方形：52／26／7／14／6／7）', !kinds.has('50%'));
+  ok('★★★ 三顆本來就是膠囊的改成 999px（.cag-cnt／.cag-cc／.cag-card-st）',
+     /\.cag-day \.cag-cnt\{[^}]*border-radius:999px;/.test(S)
+     && /\.cag-card-st\{[^}]*border-radius:999px;/.test(S));
+  ok('★★★ 刪掉死樣式 .cag-daymarks（全檔只出現在 CSS，沒有 markup 用）',
+     !/cag-daymarks/.test(S.replace(/\/\*[\s\S]*?\*\//g,'')));
+  /* ⚠ 這一輪踩到兩個坑，兩個測試都抓不到，是看 git diff 才發現的： */
+  ok('★★★ 四值簡寫沒被改壞（.cag-slotsheet-panel 上緣兩角要一樣）',
+     /\.cag-slotsheet-panel\{[^}]*border-radius:16px 16px 0 0;/.test(S));
+  ok('★★★ 沒有誤改到別家的規則（.mcal-btn-now 不是 cag 家族）',
+     /\.mcal-btn-now\{width:34px;height:34px;border-radius:50%;/.test(S));
+  ok('★★ 兩個坑寫在原地（扁平正則會把註解當選擇器、簡寫有四個值）',
+     /\*\*註解會被算進選擇器\*\*/.test(S) && /四值簡寫/.test(S));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
