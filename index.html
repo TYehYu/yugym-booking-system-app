@@ -12336,8 +12336,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260905.1635';
-const APP_VERSION_LABEL = 'v260905.1635';
+const APP_VERSION = '260905.1646';
+const APP_VERSION_LABEL = 'v260905.1646';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19404,14 +19404,27 @@ async function grantMakeupTicket(booking, memberIdOverride, seatKey){
     }
   }catch(_){}
   const today=ymd(TODAY);
-  /* 效期：自主訓練類 7 天、其他 14 天，且從「請假那堂課的日期」起算（見 makeupTerm）。
-     start_date 維持今天 —— 只是把期限往後延，不擋會員提早拿去補別堂。 */
+  /* 效期：自主訓練類 7 天、其他 14 天，從「請假那堂課的日期」起算（見 makeupTerm）。
+     ⚠ 2026-09-05 使用者回報（李曉娟 9/12 團課請假）：「補課券卻是今天開始計算」——
+       起算日 start_date 原本寫今天，理由是「只是把期限往後延，不擋會員提早拿去補別堂」。
+       兩個問題：
+       ① 會員票券明細那一列的標籤就叫「開始計算」，顯示 9/05 但效期算到 9/25，
+          中間 20 天對不上 14 天的規則，看的人無從判斷有沒有算錯。
+       ② 提前請假的話會開出一個洞：券今天就能用 → 用掉之後再取消請假，
+          revokeMakeupTicket 只收「完全沒用過」的，於是券留著、原本那一格也退回來，
+          淨得一堂免費課。
+       改成與效期同一個錨點（_term.base＝那堂課的日期，會員頁手動補發沒有課日期時
+       退回今天）。代價是不能拿去補開課日之前的課 —— 使用者 2026-09-05 定案接受。
+     ⚠ 事後補發（課日已過）不受影響：start_date 落在過去，bkFits 那條
+       `start_date > 課程日期` 的擋門本來就不會成立。
+     ⚠ 補課券沒有 valid_days，所以 activateTicketIfNeeded 與首堂取消退效期
+       那兩條會改寫 start_date 的路都走不到它。 */
   const _term=makeupTerm(booking);
   const makeupDays=(_term.days===7 || (planName&&planName.includes('自主'))) ? 7 : 14;
   const expire=(makeupDays===_term.days) ? _term.expire : termExpire(_term.base,makeupDays);
   const tk={ id:uid('TK'), member_id:_mid, ticket_type_id:type_id,
     source_plan_id:null, plan_name:planName, format:booking.format||null,
-    source:'makeup', purchase_date:today, start_date:today, expire_date:expire,
+    source:'makeup', purchase_date:today, start_date:_term.base, expire_date:expire,
     sessions_total:1, sessions_remaining:1, status:'usable',
     payment_status:'paid', invoice_status:'none',
     makeup_for_booking:_key||null, created_at:new Date().toISOString() };

@@ -45,8 +45,32 @@ ok('★ grantMakeupTicket 走 makeupTerm（不再寫死 addDays(TODAY,14)）',
    && !/const expire=ymd\(addDays\(TODAY,makeupDays\)\);/.test(src));
 ok('★ 票種名稱含「自主」的也吃 7 天（原本的 planName 判斷保留）',
    /const makeupDays=\(_term\.days===7 \|\| \(planName&&planName\.includes\('自主'\)\)\) \? 7 : 14;/.test(src));
-ok('★ start_date 維持今天（只延後期限，不擋提早使用）',
-   /source:'makeup', purchase_date:today, start_date:today, expire_date:expire,/.test(src));
+/* ══ 2026-09-05 使用者回報：李曉娟 9/12 團課請假「補課券卻是今天開始計算」══
+   效期本來就是對的（9/12 起算 14 天含當天＝9/25，從今天算會是 9/18）。
+   錯的是 start_date 寫今天，而會員票券明細那一列的標籤就叫「開始計算」。
+   除了讀起來對不上，提前請假還會開一個洞：券今天就能用 → 用掉後再取消請假，
+   revokeMakeupTicket 只收「完全沒用過」的，於是券留著、原本那一格也退回來，
+   淨得一堂免費課。改成與效期同一個錨點。 */
+ok('★★★ start_date 與效期同一個錨點（_term.base，不是今天）',
+   /source:'makeup', purchase_date:today, start_date:_term\.base, expire_date:expire,/.test(src)
+   && !/start_date:today, expire_date:expire,/.test(src));
+ok('★★★ 購買日仍是今天（那是「什麼時候發的」，跟起算日是兩件事）',
+   /purchase_date:today, start_date:_term\.base/.test(src));
+ok('★★ 手動補發沒有課日期時退回今天（makeupTerm 的既有退路，別被改掉）',
+   /const base=String\(\(booking&&booking\.date\)\|\|''\)\.slice\(0,10\) \|\| ymd\(TODAY\);/.test(src));
+ok('★★ 補課券沒有 valid_days，所以那兩條會改寫 start_date 的路走不到它',
+   /補課券沒有 valid_days，所以 activateTicketIfNeeded 與首堂取消退效期/.test(src));
+ok('★★ 為什麼不能維持今天（那個免費課的洞）寫在原地',
+   /用掉之後再取消請假/.test(src) && /淨得一堂免費課/.test(src));
+/* 實跑：確認新的起算日在「提前請假」與「事後補發」兩種情境下都算對 */
+eq('★★★ 實跑・提前請假（今天 9/05、課在 9/12）→ 起算 9/12、到期 9/25',
+   (()=>{ const t=makeupTerm({category:'小班肌力',date:'2026-09-12'});
+          return {start:t.base, expire:t.expire}; })(),
+   {start:'2026-09-12', expire:'2026-09-25'});
+eq('★★★ 實跑・事後補發（課在 8/08）→ 起算落在過去，不會擋掉任何預約',
+   (()=>{ const t=makeupTerm({category:'小班肌力',date:'2026-08-08'});
+          return {start:t.base, expire:t.expire}; })(),
+   {start:'2026-08-08', expire:'2026-08-21'});
 ok('★ 補發視窗顯示真正的起算日與到期日（不再寫死「自今日起 14 天」）',
    /const _tm=makeupTerm\(b\);/.test(src)
    && /效期：自 \$\{_tm\.base===ymd\(TODAY\)\?'今日':_tm\.base\.slice\(5\)\.replace\('-','\/'\)\+'（開課日）'\} 起 \$\{_tm\.days\} 天/.test(src)

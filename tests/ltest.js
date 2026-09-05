@@ -68,7 +68,12 @@ const mkTicket=()=>({id:'T1',member_id:'M1',ticket_type_id:'tt-g',sessions_total
     await api.groupToggleLeave('G1','M1');
     const f=Object.values(DB.member_tickets).find(t=>t.source==='makeup');
     chk('★ 提前請假：效期自課日 8/01 起算 14 天含當天（8/14，不是 8/08）', f && f.expire_date==='2026-08-14');
-    chk('　　仍可立刻使用（start_date 是今天）', f && f.start_date==='2026-07-26');
+    /* 2026-09-05 使用者定案（李曉娟 9/12 案例）：起算日改成課日，不再是今天。
+       原本寫今天是為了「不擋會員提早拿去補別堂」，但那會開一個洞——
+       提前請假的券今天就能用，用掉之後再取消請假，revokeMakeupTicket 只收
+       「完全沒用過」的，於是券留著、原本那一格也退回來，淨得一堂免費課。 */
+    chk('★★★ 起算日＝課日 8/01（不是按下去的 7/26）', f && f.start_date==='2026-08-01');
+    chk('　　購買日仍是今天（發券的日子，跟起算日是兩件事）', f && f.purchase_date==='2026-07-26');
     reset();
     DB.bookings.G1=Object.assign(mkBooking(),{date:'2026-07-20'});   // 已經過去的課
     DB.member_tickets.T1=mkTicket();
