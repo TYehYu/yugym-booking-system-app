@@ -53,7 +53,9 @@ ok('★ 待簽約／待繳費分得開（有沒有綁會員）',
 ok('　　體驗與場租沿用 bkGuestLabel（與行事曆同一套判定）',
    /if\(b\.category==='體驗'\) return '體驗';/.test(src));
 ok('　　團課不掛（主行是人數，不是姓名）', /_isGrp \? '' :/.test(src));
-ok('　　小字樣式有定義', /\.tcard-sub\{font-size:10px;font-weight:700;opacity:\.72;/.test(src));
+/* 2026-09-05：10 → 11px（手機下限）。⚠ 它在 10px 時就已經垂直被切
+   （line-height:1.1 取整），改成 11px 沒變好也沒變差 —— 那要調 line-height，不是字級。 */
+ok('　　小字樣式有定義', /\.tcard-sub\{font-size:11px;font-weight:700;opacity:\.72;/.test(src));
 ok('　　原因寫在程式裡', /原本是「程凱郁（體驗）」接在名字後面，窄卡會折行把名字擠掉/.test(src));
 
 console.log('\n薪資單移除月曆');

@@ -915,5 +915,34 @@ ok('　　沒有做出第二顆（沿用既有的 .cag-fab，不另立一套）'
 ok('　　一週檢視沒有這顆的理由寫在原地',
    /一週檢視沒有這顆：那邊點空白時段本來就會直接開新增預約/.test(src));
 
+
+console.log('\n⑨ 手機下限 11px：課卡與行事曆卡的查證結論（2026-09-05）');
+{
+  const fs4=require('fs');
+  const S=fs4.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const css=S.replace(/\/\*[\s\S]*?\*\//g,'').match(/<style>[\s\S]*?<\/style>/g).join('');
+  const under=(pat)=>{const o=[];
+    (css.match(/[^{}]+\{[^{}]*\}/g)||[]).forEach(r=>{
+      const i=r.indexOf('{'); const sel=r.slice(0,i), body=r.slice(i);
+      if(!new RegExp('\\.(?:'+pat+')').test(sel)) return;
+      const m=body.match(/font-size:\s*([0-9.]+)px/);
+      if(m && parseFloat(m[1])<11) o.push(sel.trim().replace(/\s+/g,' ').slice(0,44)+' '+m[1]);
+    }); return o;};
+  const tc=under('tcard');
+  ok('★★★ 課卡：10 條只動得了三條，其餘七條各有理由　現在剩 '+tc.length+' 條', tc.length===7);
+  ok('★★★ 三條動的是 .evr-title／.tcard-sub／.evo-lb（A/B 實測無新溢出、無新截斷）',
+     /\.tcard-std \.evr-title\{font-size:11px/.test(S)
+     && /\.tcard-sub\{font-size:11px/.test(S)
+     && /\.tcard-std \.evo-lb\{font-size:11px/.test(S));
+  ok('★★★ .tcard-co 仍是 9.5px（膠囊＋line-height:1，拉到 10 就被切）',
+     /\.tcard-co\{font-size:9\.5px/.test(S));
+  /* ⚠ 行事曆卡：0903 那整套 @container 讓位門檻就是照這些字級量出來的。 */
+  ok('★★★ 行事曆卡一條都沒動（門檻是照這些字級量的）',
+     under('cal-ev|evc-').length===32
+     && /行事曆卡\*\*一條都不能動\*\*/.test(S));
+  ok('★★ 為什麼不能動，逐項寫在原地（寬度變體／固定框／Ink 覆寫／基準值）',
+     /動了基準值，那 24 條門檻全部失效/.test(S));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
