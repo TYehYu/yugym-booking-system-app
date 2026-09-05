@@ -92,7 +92,7 @@ console.log('\n③ 底部「自主訓練」浮動列（2026-08-31 改成「他�
      /\.sort\(\(a,b\)=>String\(a\.date\+a\.start_time\)\.localeCompare\(String\(b\.date\+b\.start_time\)\)\)/.test(B)
      && /\.sort\(\(a,b\)=>String\(a\.expire_date\|\|'9999'\)\.localeCompare\(String\(b\.expire_date\|\|'9999'\)\)\)/.test(B));
   ok('★ 圓的、夠大（84px），還沒約的用虛線綠空卡',
-     /\.mh2-sbc\{flex:none;width:84px;height:84px;border-radius:50%;/.test(CSS)
+     /\.mh2-sbc\{flex:none;width:84px;height:84px;border-radius:999px;/.test(CSS)
      && /\.mh2-sbc\.mh2-sbfree\{background:#fff;border-style:dashed;border-color:var\(--green\);\}/.test(CSS));
   ok('★ 封頂 12 顆，超過用「＋N」說一聲（不默默少畫）',
      /const CAP=12;/.test(B) && /mh2-sbmore">＋\$\{_more\}/.test(B));

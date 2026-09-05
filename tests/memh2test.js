@@ -498,5 +498,31 @@ t('★★ 日期卡高度寫死、內容置中（不再靠行高比例留空間�
     && /const mms=Array\.from\(r\.free\)\.filter\(m=>_nowMin<0\|\|m>=_nowMin\)\.sort\(\(a,b\)=>a-b\);/.test(QS));
 }
 
+
+console.log('\n⑧ 會員端 V2 圓角收斂（2026-09-05）');
+{
+  const fs2=require('fs');
+  const S=fs2.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const css=S.replace(/\/\*[\s\S]*?\*\//g,'').match(/<style>[\s\S]*?<\/style>/g).join('');
+  const kinds=new Set();
+  (css.match(/[^{}]+\{[^{}]*\}/g)||[]).forEach(r=>{
+    const i=r.indexOf('{'); if(!/\.(memh2|mh2)/.test(r.slice(0,i))) return;
+    (r.slice(i).match(/border-radius:\s*([0-9]+px|999px|50%)/g)||[]).forEach(m=>kinds.add(m.split(':')[1].trim()));
+  });
+  t('★★★ 圓角種類 7 → 5 以內　現在 '+kinds.size+' 種', kinds.size<=5);
+  t('★★★ 不再有 50%（九條全是正方形：58／84／24／22／44／28／5／6／46）',
+     !kinds.has('50%') && kinds.has('999px'));
+  /* ⚠ 這一頁踩到兩個「刻意的值」，兩個都被測試擋下來： */
+  t('★★★ .admh2-card 的 18px 刻意留著（整張放大一級，為了長輩看得清楚）',
+     /\.memh2 \.admh2-card\{padding:17px 12px 17px 19px;border-radius:18px;\}/.test(S)
+     && /圓角在這裡是那個決定的一部分/.test(S));
+  /* 同優先權、位置在後者全贏 —— 8403 那條的 padding 與 border-radius:16px 是死的。 */
+  t('★★★ 清掉被同名規則蓋掉的死宣告（原本會讓人以為卡片是 16px 圓角）',
+     /\.memh2 \.admh2-card\{min-height:var\(--mh2-cardh,0px\);align-content:center;gap:0 10px;\}/.test(S)
+     && /那兩行是死的/.test(S));
+  t('★★ 字級那 19 種沒有動（大多是同一 class 的情境變體）',
+     /\.a2-l3 有 11／12\.5／13\.5 三種/.test(S));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
