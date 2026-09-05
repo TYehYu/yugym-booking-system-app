@@ -66,20 +66,33 @@ ok('★★ 左欄只有 300px，三顆並排的字距與字級要收窄（查看
    && /\.mc-quick-left \.mc-q3\{flex:1 1 0;min-width:0;min-height:84px;padding:13px 2px;gap:8px;\s*\n\s*font-size:12px;font-weight:700;border-radius:var\(--radius-xl\);white-space:nowrap;\}/.test(src));
 /* 2026-08-01 三修（使用者：「健身小知識因為縮得太小了 看不到完整訊息 要放大一點
    （左邊縮圖也放大一點）」）：兩張一起 114 → 150px，仍然對稱。 */
-ok('★ 知識卡高度 150px（左右兩處共用同一組壓縮尺寸）',
-   /\.mc-art\{position:relative;width:100%;height:150px;/.test(src)
-   && /\.mc-know-top \.know-card,\.mc-know-left \.know-card\{min-height:150px;height:150px;/.test(src));
-ok('★ 說明放到四行、字級回到 12.5px（原本兩行會把話截掉）',
-   /-webkit-line-clamp:4;/.test(src) && /\.mc-know-top \.know-s,\.mc-know-left \.know-s\{font-size:12\.5px;/.test(src));
-ok('★ 貼齊頂欄的負上邊距也一致（-10 / 下 16；2026-08-12 起左欄頂是收款提醒卡）',
-   /\.mc-g5-left>\.mc-art-top,\.mc-g5-left>\.mc-payremind\{margin:-10px 0 16px !important;\}/.test(src)
-   && /\.mc-g5-right>\.mc-know-top\{margin:-10px 0 16px !important;\}/.test(src));
+/* ⚠ 2026-09-05：.mc-know-top／.mc-know-left 這兩個「包裝」class 全檔零引用 ——
+   知識卡實際吐出的是 `<div class="card mc-card know-card know-${k.c}">`，外面
+   沒有任何一層掛這兩個 class。也就是說下面這一整組「壓成 150px 矮卡」的規則
+   **從來沒有生效過**，卡片一直是 .know-card 的 min-height:190px。
+   死 CSS 已移除（刪掉對畫面零影響，因為它本來就沒作用）。
+   ⚠ 但「知識卡要壓成 150px 與收款提醒卡同高」是一個**還沒實現的設計意圖**，
+     不是不要了。要恢復的話得在渲染時補上包裝 class，那會改變畫面，
+     屬於設計決定，等使用者定奪（2026-09-05 已回報）。 */
+ok('★★ 插圖卡仍是 150px（它是活的）',
+   /\.mc-art\{position:relative;width:100%;height:150px;/.test(src));
+ok('★★★ 知識卡那組壓縮規則已移除（掛在從沒被掛上的包裝 class 上）',
+   !/\.mc-know-top|\.mc-know-left/.test(src));
+ok('★ 說明放到四行（這條掛在 .know-s 本身，是活的）',
+   /-webkit-line-clamp:4;/.test(src));
+/* .mc-payremind 是「收款提醒＋降級名單」那張合併紅卡的容器，2026-09-02 該卡退場後
+   就沒有人掛它了；.mc-g5-right>.mc-know-top 同理。兩者已從選擇器裡摘掉。 */
+ok('★ 貼齊頂欄的負上邊距（左欄第一格自己抵掉 .content 的 10px）',
+   /\.mc-g5-left>\.mc-art-top\{margin:-10px 0 16px !important;\}/.test(src)
+   && !/\.mc-g5-left>\.mc-payremind/.test(src)
+   && !/\.mc-payremind \.mc-td-list/.test(src));   /* 註解裡還提到 .mc-payremind-card，所以要比對選擇器本身、不是字串 */
 ok('★ 右欄原本用 padding-top:43px 撐的齊頭留白要拿掉，否則空白跑到知識卡上面',
    /* 2026-08-24：欄寬 300 → 340（使用者：今日營收的米色區要加寬，讓購買項目顯示得完整）。 */
    /\.mc-g5-right\{flex:0 0 340px;min-width:0;display:flex;flex-direction:column;\s*\n\s*padding-top:0;\}/.test(src));
-ok('　　壓成矮卡後內文改緊湊版（不再有 190px 直式卡的 52px 上留白）',
-   /\.mc-know-top \.know-body,\.mc-know-left \.know-body\{margin-top:0;/.test(src));
-ok('　　右側留給插圖，字不壓上去', /\.mc-know-top \.know-body,\.mc-know-left \.know-body\{margin-top:0;padding-right:62px;\}/.test(src));
+ok('　　那組緊湊版內文規則一併移除（同樣從沒生效）',
+   !/\.know-body\{margin-top:0;padding-right:62px;\}/.test(src));
+ok('　　知識卡實際高度仍由 .know-card 的 min-height:190px 決定',
+   /\.know-card\{position:relative;min-height:190px;/.test(src));
 /* 2026-08-01 使用者指示：「全系統的健身知識卡 背景色幫我參考首頁插圖的背景色套用」 */
 ok('★ 知識卡底色與插圖卡一致（--card2 ＋ --bd 細框），不再是三個漸層',
    /\.know-card\{position:relative;min-height:190px;padding:16px 18px;overflow:hidden;cursor:pointer;\s*\n\s*background:var\(--card2,#FAF7F0\);border:1px solid var\(--bd\);/.test(src)

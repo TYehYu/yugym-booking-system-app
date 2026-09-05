@@ -79,7 +79,7 @@ ok('★ 不在中間那欄（中間欄第一格就是今日教練任務）',
    && !/\$\{kpiStrip\}/.test(src)
    && /<div class="mc-g5-mid">[\s\S]{0,200}?<div class="card mc-card mc-coachcenter">/.test(src));
 ok('★ 貼著頂欄下方：左欄的齊頭 padding 歸零，第一格自己抵掉 .content 的 10px 上內距（2026-08-12 起是收款提醒卡）',
-   /\.mc-g5-left>\.mc-art-top,\.mc-g5-left>\.mc-payremind\{margin:-10px 0 16px !important;\}/.test(src)
+   /\.mc-g5-left>\.mc-art-top\{margin:-10px 0 16px !important;\}/.test(src)   /* .mc-payremind 已於 2026-09-05 摘除：合併紅卡 0902 退場後沒人掛它 */
    && /padding-top:0;\}  \/\* 2026-07-21 使用者指示：左欄與「今日教練任務」齊頭/.test(src)
    && /body\.mc-mode \.content\{max-width:none;padding:10px 32px 10px;\}/.test(src));
 ok('★ 下一格（月班表）的位置與原本一致：−10 ＋ 116 ＋ 16 ＝ 122',
@@ -89,9 +89,11 @@ ok('　　真兇寫在程式裡（不是 margin 不夠，是左欄的 padding-to
    /真兇是 \.mc-g5-left 的 padding-top:122px（左欄齊頭用）/.test(src));
 /* 使用者回報「太高了 跟旁邊的 KPI 一樣高就好」→ 114px
    2026-08-01 三修（使用者：「左邊縮圖也放大一點」，配合右上角知識卡放大）→ 150px */
-ok('★ 寬度吃滿左欄、高度 150px（與知識卡同高）',
-   /\.mc-art\{position:relative;width:100%;height:150px;/.test(src)
-   && /\.mc-know-top \.know-card,\.mc-know-left \.know-card\{min-height:150px;height:150px;/.test(src));
+/* ⚠ 2026-09-05：原本這裡順帶斷言「知識卡也是 150px」，但那條規則掛在
+   .mc-know-top／.mc-know-left 這兩個全檔零引用的包裝 class 上，從沒生效過 ——
+   知識卡實際一直是 .know-card 的 190px。死 CSS 已移除，設計意圖待使用者定奪。 */
+ok('★ 寬度吃滿左欄、高度 150px',
+   /\.mc-art\{position:relative;width:100%;height:150px;/.test(src));
 ok('　　裁切幅度寫在程式裡（上下各約 9%，不會切到角色）',
    /這個高度會裁掉原圖上下各約 9%/.test(src));
 ok('★ 手機版待辦卡兩列不變（收款提醒與降級名單仍在 _todoItems 裡）',

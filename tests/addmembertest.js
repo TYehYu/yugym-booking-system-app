@@ -247,5 +247,43 @@ ok('★ 只對「有可用票券」那一組算堂數（481 位全算會很慢�
 ok('★★ 教練端的 _bkCoachSel 要補上自己，否則名單既沒分組也沒有 ★',
    /window\._bkCoachSel = prefillCoach \|\| \(isCoach\?SESSION\.id:''\);/.test(src));
 
+/* ══ 「還沒到起始日」要寫原因（2026-09-05）══════════════════════════════
+   tkFitsBooking 有一條 `start_date > 課程日期且未開通 → 不可用`，但它是靜默的：
+   票券直接從清單消失、會員整列不見，櫃檯只看到人沒了。
+   補課券改成「錨在缺席那堂」之後這條會真的被踩到 —— 9/12 請假發的券，
+   拿去補 9/07 的課就會被擋。與 0823「不能用就寫原因，別藏按鈕」同一條語彙。 */
+console.log('\n⑧ 還沒到起始日：要講原因，不是讓人整列消失');
+{
+  const b={date:'2026-09-07', start_time:'11:00', category:'小班肌力', ticket_type_id:'TT-G', duration:60};
+  const mk=(o)=>Object.assign({id:'T1', member_id:'M1', ticket_type_id:'TT-G', category:'小班肌力',
+    status:'usable', sessions_total:1, sessions_remaining:1, expire_date:'2026-09-26'}, o);
+
+  let r=lib.bkMemTicketInfo('M1', b, [mk({source:'makeup', start_date:'2026-09-12'})], {});
+  ok('★★★ 補課券起始日 9/12、要補 9/07 的課 → 講出「9/12 起才能用」',
+     r.left===0 && /補課券 09\/12 起才能用/.test(r.why), r.why);
+  ok('★★★ 而且要說明為什麼是那一天（不然櫃檯只會覺得系統壞了）',
+     /效期自缺席那堂起算/.test(r.why), r.why);
+
+  r=lib.bkMemTicketInfo('M1', b, [mk({source:'purchase', start_date:'2026-09-12'})], {});
+  ok('★★ 一般票券（賣票時談好的未來開課日）講法不同，不要張冠李戴',
+     /票券 09\/12 才開始生效/.test(r.why), r.why);
+
+  /* 事後補發：起始日落在過去 → 這條擋門本來就不成立，不可以誤報原因 */
+  r=lib.bkMemTicketInfo('M1', b, [mk({source:'makeup', start_date:'2026-08-30'})], {});
+  ok('★★★ 事後補發（起始日在過去）→ 照常可用，不能冒出這個原因',
+     r.left===1 && !r.why, {left:r.left, why:r.why});
+
+  /* 已開通的票不套這條（2026-08-14 魏婉倫案例：首堂取消後改約更早的課） */
+  r=lib.bkMemTicketInfo('M1', b, [mk({start_date:'2026-09-12', activated_at:'2026-09-01T00:00:00Z'})], {});
+  ok('★★★ 已開通的票不套這條（首堂取消改約更早的課，錨點會自己往前挪）',
+     r.left===1 && !r.why, {left:r.left, why:r.why});
+
+  /* 混合：只有一部分被擋 → 還有能用的，就不該報這個原因 */
+  r=lib.bkMemTicketInfo('M1', b, [mk({id:'T1', source:'makeup', start_date:'2026-09-12'}),
+                                  mk({id:'T2', source:'purchase', start_date:'2026-08-01'})], {});
+  ok('★★ 只有一部分被擋（另一張還能用）→ 不報原因，照常列出',
+     r.left===1 && !r.why, {left:r.left, why:r.why});
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

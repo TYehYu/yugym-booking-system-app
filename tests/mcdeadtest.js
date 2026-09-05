@@ -42,47 +42,60 @@ const GONE=[
   'mc-donut-lb', 'mc-donut-legend', 'mc-donut-lg', 'mc-donut-n',
   'mc-donut-svg', 'mc-donut-wrap', 'mc-duty-av', 'mc-duty-b',
   'mc-duty-badge', 'mc-duty-card', 'mc-duty-item', 'mc-duty-list',
-  'mc-duty-nm', 'mc-duty-tm', 'mc-greet-hi', 'mc-greet-sub',
-  'mc-grid-bottom', 'mc-grid-bottom-solo', 'mc-grid2', 'mc-grid3',
-  'mc-hero', 'mc-hero-art', 'mc-hero-bigclock', 'mc-hero-block',
-  'mc-hero-danger', 'mc-hero-date', 'mc-hero-hello', 'mc-hero-hi',
-  'mc-hero-meta', 'mc-hero-nobg', 'mc-hero-ok', 'mc-hero-row',
-  'mc-hero-slim', 'mc-hero-status', 'mc-hero-sub', 'mc-hero-summary',
-  'mc-hero-toolbar', 'mc-hero-tools', 'mc-hero-warn', 'mc-hero2-l',
-  'mc-hero2-r', 'mc-hm-b', 'mc-hm-ic', 'mc-hm-item',
-  'mc-hm-lbl', 'mc-hm-sep', 'mc-htool', 'mc-k2',
-  'mc-k2-row', 'mc-kpi', 'mc-kpi-b', 'mc-kpi-brk',
-  'mc-kpi-card', 'mc-kpi-ic', 'mc-kpi-l', 'mc-kpi-money',
+  'mc-duty-nm', 'mc-duty-tm', 'mc-fab-up', 'mc-greet-hi',
+  'mc-greet-sub', 'mc-grid-bottom', 'mc-grid-bottom-solo', 'mc-grid2',
+  'mc-grid3', 'mc-hero', 'mc-hero-art', 'mc-hero-bigclock',
+  'mc-hero-block', 'mc-hero-danger', 'mc-hero-date', 'mc-hero-hello',
+  'mc-hero-hi', 'mc-hero-meta', 'mc-hero-nobg', 'mc-hero-ok',
+  'mc-hero-row', 'mc-hero-slim', 'mc-hero-status', 'mc-hero-sub',
+  'mc-hero-summary', 'mc-hero-toolbar', 'mc-hero-tools', 'mc-hero-warn',
+  'mc-hero2-l', 'mc-hero2-r', 'mc-hm-b', 'mc-hm-ic',
+  'mc-hm-item', 'mc-hm-lbl', 'mc-hm-sep', 'mc-htool',
+  'mc-k2', 'mc-k2-row', 'mc-know-left', 'mc-know-top',
+  'mc-kpi', 'mc-kpi-b', 'mc-kpi-brk', 'mc-kpi-card',
+  'mc-kpi-ic', 'mc-kpi-l', 'mc-kpi-money', 'mc-kpi-n',
   'mc-kpi-s', 'mc-kpi-u', 'mc-kpis', 'mc-kpis-3',
   'mc-kpis-5', 'mc-kpis-cards', 'mc-main-left', 'mc-main-right',
   'mc-main-row', 'mc-msb', 'mc-msb-sel', 'mc-og-ic',
   'mc-ops-growth', 'mc-ops-i', 'mc-ops-ic', 'mc-ops-l',
   'mc-ops-money', 'mc-ops-n', 'mc-ops-nums', 'mc-ops-nums-3',
-  'mc-ops-s', 'mc-qtool', 'mc-quick-card', 'mc-quick-tools',
-  'mc-quick-tools-4', 'mc-quick-tools-6', 'mc-remind-all', 'mc-remind-card',
-  'mc-sb-ic', 'mc-sb-ic-g', 'mc-sb-lbl', 'mc-sb-time',
-  'mc-sb-who', 'mc-st-b', 'mc-st-ic', 'mc-st-s',
-  'mc-st-t', 'mc-st-top', 'mc-status-card', 'mc-sumbar',
-  'mc-sumbar-mid', 'mc-sumbar-next', 'mc-sumbar-view', 'mc-top4',
-  'mc-wallet', 'mc-wc-d-arrow', 'mc-wc-d-b', 'mc-wc-d-ic',
-  'mc-wc-detail', 'mc-wc-detail-h', 'mc-wc-l', 'mc-wc-n',
-  'mc-wc-num', 'mc-wc-nums', 'mc-wcard', 'mc-wcard-arrow',
-  'mc-wcard-b', 'mc-wcard-blue', 'mc-wcard-gold', 'mc-wcard-green',
-  'mc-wcard-ic', 'mc-wcard-t', 'mc-wcard-v', 'mc-wf-all',
-  'mc-wf-dot', 'mc-wf-hdot', 'mc-wf-head', 'mc-wf-leave',
-  'mc-wf-list', 'mc-wf-normal', 'mc-wf-row', 'mc-wf-tag',
-  'mc-wf-time', 'mcal', 'mcal-cell', 'mcal-duty',
-  'mcal-empty', 'mcal-grid', 'mcal-today', 'mcal-wk',
-  'tl-axis-row', 'tl-body', 'tl-grid',
+  'mc-ops-s', 'mc-payremind', 'mc-qtool', 'mc-quick-card',
+  'mc-quick-tools', 'mc-quick-tools-4', 'mc-quick-tools-6', 'mc-quick-top',
+  'mc-remind-all', 'mc-remind-card', 'mc-rev-inv', 'mc-sb-ic',
+  'mc-sb-ic-g', 'mc-sb-lbl', 'mc-sb-time', 'mc-sb-who',
+  'mc-st-b', 'mc-st-ic', 'mc-st-s', 'mc-st-t',
+  'mc-st-top', 'mc-status-card', 'mc-sumbar', 'mc-sumbar-mid',
+  'mc-sumbar-next', 'mc-sumbar-view', 'mc-top4', 'mc-wallet',
+  'mc-wc-d-arrow', 'mc-wc-d-b', 'mc-wc-d-ic', 'mc-wc-detail',
+  'mc-wc-detail-h', 'mc-wc-l', 'mc-wc-n', 'mc-wc-num',
+  'mc-wc-nums', 'mc-wcard', 'mc-wcard-arrow', 'mc-wcard-b',
+  'mc-wcard-blue', 'mc-wcard-gold', 'mc-wcard-green', 'mc-wcard-ic',
+  'mc-wcard-t', 'mc-wcard-v', 'mc-wf-all', 'mc-wf-dot',
+  'mc-wf-hdot', 'mc-wf-head', 'mc-wf-leave', 'mc-wf-list',
+  'mc-wf-normal', 'mc-wf-row', 'mc-wf-tag', 'mc-wf-time',
+  'mcal', 'mcal-cell', 'mcal-duty', 'mcal-empty',
+  'mcal-grid', 'mcal-today', 'mcal-wk', 'tl-axis-row',
+  'tl-body', 'tl-grid',
 ];
-/* 被測試釘住、這次刻意沒刪的 —— 它們在 HTML/JS 同樣零引用，但有測試在描述
-   使用者看得到的行為（例如 veruptest「提醒顯示時滑出鈕整排往下讓位」）。
-   矛盾要由人來裁決，不由清理腳本裁決。 */
+/* 2026-09-05 第二輪：原本有 7 個「測試釘住、暫不刪」的 class，逐一查證後全部確認是
+   死碼，測試釘的是**已經不生效的 CSS**，不是使用者看得到的行為：
+     mc-fab-up      浮動審核鈕 .mc-req-fab 於 0904 改成頂欄 pill，兩顆疊放的情境沒了
+     mc-quick-top   被 .mc-quick-left 取代（min-height 96px → 84px）
+     mc-payremind   「收款提醒＋降級名單」合併紅卡 0902 退場
+     mc-rev-inv     發票標籤刻意不顯示（noinvoicetest／revpaytest／revtaptest 都在斷言它不該出現）
+     mc-kpi-n       舊 KPI 卡的數字，現在是 .mc-k2-n
+     mc-know-top／mc-know-left
+                    ⚠ 這兩個不一樣：包裝 class 全檔零引用，所以「知識卡壓成 150px」
+                      那一整組規則從沒生效過，卡片一直是 .know-card 的 190px。
+                      刪 CSS 對畫面零影響，但那個**設計意圖尚未實現**，要不要補做
+                      是設計決定（2026-09-05 已回報使用者）。
+   教訓：測試斷言「CSS 文字存在」不等於「這條規則會生效」。掛在不存在的包裝 class
+   上的後代選擇器，測試照樣綠燈，功能卻是死的。 */
 /* ⚠ 2026-09-05 補漏：mc-donut-* 這一族（甜甜圈圖，9 個 class／18 條規則）第一次
    掃描時漏掉了 —— 死名單是從「已經先刪過 donut 的檔案」產生的規則集算出來的，
    後來為了修工具 git checkout 還原，名單就少了它們。教訓：名單一定要跟最終要動的
    那份檔案同一個版本產生，中途還原過就要整份重算。 */
-const KEPT=['mc-fab-up', 'mc-know-left', 'mc-know-top', 'mc-kpi-n', 'mc-payremind', 'mc-quick-top', 'mc-rev-inv'];
+const KEPT=[]
 
 console.log('\n① 刪掉的死 class：CSS 規則與 HTML/JS 引用都要是零');
 const b=n=>new RegExp('(?<![-A-Za-z0-9_])'+n.replace(/[-]/g,'\\-')+'(?![-A-Za-z0-9_])');
@@ -93,9 +106,8 @@ if(stillCss.length) console.log('      殘留：'+stillCss.join(', '));
 ok('★★★ 而且 HTML/JS 本來就沒有人掛它們（這才是「不影響營運」的依據）', stillJs.length===0);
 if(stillJs.length) console.log('      殘留：'+stillJs.join(', '));
 
-console.log('\n② 被測試釘住的那幾個沒有被誤刪');
-KEPT.forEach(n=>ok(`　 .${n} 的規則還在（待人工判斷是否真的還在用）`,
-  new RegExp('\\.'+n.replace(/[-]/g,'\\-')+'(?![-A-Za-z0-9_])').test(css)));
+console.log('\n② 沒有「暫時保留、待判斷」的殘留了');
+ok('★★ KEPT 已清空（那 7 個都查證完並刪除，理由寫在上面）', KEPT.length===0);
 
 console.log('\n③ 這次的教訓要留在原地');
 ok('★★ 判活的三種產生方式與「註解不算活」寫在本檔開頭',

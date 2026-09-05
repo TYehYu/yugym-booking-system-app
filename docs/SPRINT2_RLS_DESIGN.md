@@ -86,6 +86,49 @@ create policy emp_admin_all   on employees for all    using (is_admin()) with ch
 drop policy if exists attendance_all     on attendance;
 create policy att_self  on attendance for select using (emp_id = current_employee_id());
 create policy att_staff on attendance for all    using (is_staff_desk()) with check (is_staff_desk());
+```
+
+> **⚠ 2026-09-05 已修訂 attendance（使用者定案：「員工打卡只有管理員可以操作」）**
+>
+> 上面那組 `att_staff [ALL] is_staff_desk()` 讓**櫃檯可以改寫任何人的打卡紀錄**。
+> 前端其實已經擋住了（修改／刪除有 `role==='admin'` 閘；補登下班與補卡核准分別在
+> 出勤管理的「異常」分頁與員工管理頁，兩者櫃檯都進不去 —— `attTabsForRole()` 只給
+> 櫃檯 `shifts` 一個分頁），但 RLS 沒擋，直接打 API 就繞過去了。
+>
+> 現行政策（migration `attendance_rls_admin_only_writes`）：
+>
+> ```sql
+> -- 員工只能讀寫自己的：上班＝INSERT、下班＝UPDATE 同一列
+> create policy att_self_read on attendance for select
+>   using (emp_id = (select current_employee_id()));
+> create policy att_self_ins  on attendance for insert
+>   with check (emp_id = (select current_employee_id()));
+> create policy att_self_upd  on attendance for update
+>   using (emp_id = (select current_employee_id()))
+>   with check (emp_id = (select current_employee_id()));
+> -- 櫃檯以上唯讀全部（首頁「今日值班」卡也讀這張表，收成只看自己那張卡會空）
+> create policy att_staff_read on attendance for select using ((select is_staff_desk()));
+> -- 管理員全權，DELETE 只剩它（連員工刪自己的打卡都不行）
+> create policy att_admin on attendance for all
+>   using ((select is_admin())) with check ((select is_admin()));
+> ```
+>
+> 實跑驗證（在交易裡模擬 JWT 身分，七項全中）：
+>
+> | 身分 | 動作 | 結果 |
+> |---|---|---|
+> | 教練 | 上班打卡 INSERT（自己） | ✅ 成功 |
+> | 教練 | 下班打卡 UPDATE（自己） | ✅ 成功 |
+> | 教練 | 刪除自己的打卡 DELETE | ⛔ 擋下 |
+> | 教練 | 改別人的打卡 UPDATE | ⛔ 擋下 |
+> | 櫃檯 | 讀全部人的出勤 SELECT | ✅ 看得到 |
+> | 櫃檯 | 改別人的打卡 UPDATE | ⛔ 擋下 |
+> | 櫃檯 | 刪別人的打卡 DELETE | ⛔ 擋下 |
+>
+> ⚠ 還沒收的一項：員工仍可 UPDATE 自己的紀錄（下班打卡需要它），所以理論上能改自己的
+> 上班時間。要完全鎖住得把打卡改走 RPC，這次沒動。
+>
+> ```sql
 
 drop policy if exists shifts_all on shifts;
 create policy sh_self  on shifts for select using (emp_id = current_employee_id());

@@ -71,8 +71,7 @@ ok('★ 桌機管理員有側欄 → 左邊要讓開（與抽獎鈕同一套位�
 ok('★ 更新提醒與滑出鈕同在左上角：提醒顯示時滑出鈕整排往下讓位（基準 78 → 168）',
    /\.mc-lotto-fab\{position:fixed;left:24px;right:auto;top:calc\(78px \+ var\(--adock-h,0px\)\);bottom:auto;/.test(src)
    && /body\.verup-on \.mc-req-fab\{top:168px;\}/.test(src)
-   && /body\.verup-on \.mc-lotto-fab\{top:calc\(168px \+ var\(--adock-h,0px\)\);\}/.test(src)
-   && /body\.verup-on \.mc-lotto-fab\.mc-fab-up\{top:226px;\}/.test(src));
+   && /body\.verup-on \.mc-lotto-fab\{top:calc\(168px \+ var\(--adock-h,0px\)\);\}/.test(src));
 ok('★★ 待審核提示也跟著更新提醒讓位',
    /body\.verup-on \.alert-dock\{top:168px;\}/.test(src));
 ok('　　顯示/關閉時有加/拿掉 verup-on',
@@ -81,11 +80,15 @@ ok('　　顯示/關閉時有加/拿掉 verup-on',
 ok('　　右下角的 desk-feed 沒被動到（兩邊各據一角）',
    /#desk-feed\{position:fixed;right:18px;bottom:18px;/.test(src));
 {
-  // 疊放：兩顆鈕同時在左上角時，抽獎鈕往下疊一層，不可互相蓋住
+  /* ⚠ 2026-09-05：「兩顆鈕同時在左上角」這個情境已經不存在 —— 浮動審核鈕
+     .mc-req-fab 於 2026-09-04 改成頂欄的 pill（見 memreqpilltest：「不再產生
+     .mc-req-fab」「抽獎鈕不再需要兩顆都在時往下疊」）。於是 .mc-fab-up 這個
+     modifier 全檔沒有人加，那兩條位移規則永遠不生效，已移除。
+     .mc-req-fab 本身的 CSS 刻意留著（與抽獎鈕共用一批 mc-mode 搬移選擇器）。 */
   const reqTop=Number((src.match(/\.mc-req-fab\{[^}]*top:(\d+)px/)||[])[1]);
-  const lotUp=Number((src.match(/\.mc-lotto-fab\.mc-fab-up\{top:(\d+)px/)||[])[1]);
-  ok('★ 審核鈕在上、抽獎鈕往下疊（78 → 136，差一顆鈕的高度）',
-     reqTop===78 && lotUp>reqTop+40, {reqTop,lotUp});
+  ok('★ 審核鈕的基準位置沒被動到（78px）', reqTop===78, {reqTop});
+  ok('★★ 疊放用的 .mc-fab-up 已移除（產生它的那顆鈕 0904 就退場了）',
+     !/mc-fab-up/.test(src));
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
