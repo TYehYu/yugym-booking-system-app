@@ -24,7 +24,7 @@ console.log('管理員手機版報表打不開');
   ok('★ 宣告在用它之前', dash.indexOf('let _tkLogs=[]')>=0
      && dash.indexOf('let _tkLogs=[]') < dash.indexOf('(_tkLogs||[]).forEach'));
   ok('　　原因寫在程式裡（為什麼只有手機壞）', /這頁只有管理員手機版的「報表」進得來/.test(src));
-  ok('　　手機底部導覽的「報表」確實指向這一頁', /\{key:'dashboard',  label:'報表', ic:'📊'\}/.test(src));
+  ok('　　手機底部導覽的「報表」確實指向這一頁', /\{key:'dashboard',  label:'報表'\}/.test(src));
   /* 2026-08-05：財務總覽＋營運分析已整合成「經營報表」（analytics 頁保留，導覽入口合一） */
   ok('　　桌機管理員走的是另一頁（analytics 的內容已併進經營報表）',
      /\{grp:'財務', label:'經營報表', page:'finance'\}/.test(src)

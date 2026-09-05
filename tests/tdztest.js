@@ -113,5 +113,35 @@ console.log('\n③ 那一個 bug 的修法還在（P 在用它之前就宣告好
   ok('★★ 理由寫在原地', /`const` 在初始化前是\*\*暫時死區\*\*/.test(src));
 }
 
+
+console.log('\n④ 導覽與小語的 emoji 是死的，別再加回來（2026-09-05）');
+{
+  /* 「程式裡有 emoji」不等於「畫面上看得到 emoji」。今天三個發現都是同一類：
+     stIcon（指派 10 次沒被畫）、導覽列 icon/ic（SVG 永遠贏）、
+     FITNESS_TIPS 的 ic（渲染端只讀 cat 與 t）。合計 59 個從沒出現過的 emoji。 */
+  const codeNoCmt=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
+  const isEmoji=c=>{const o=c.codePointAt(0);
+    return (o>=0x1F300&&o<=0x1FAFF)||(o>=0x2600&&o<=0x27BF)||(o>=0x1F000&&o<=0x1F2FF);};
+  const hasEmoji=t=>[...t].some(isEmoji);
+
+  const nav=codeNoCmt.slice(codeNoCmt.indexOf("{key:'g_dashboard'"), codeNoCmt.indexOf("{key:'g_supervisor'")+400);
+  ok('★★★ 頂部導覽的群組不再帶 emoji（畫的是 NAV2_ICONS 的 SVG）',
+     !(nav.match(/icon:'[^']*'/g)||[]).some(hasEmoji));
+  ok('★★★ NAV2_ICONS 六群都有 SVG（所以 fallback 本來就輪不到）',
+     ['g_dashboard','g_booking','g_member','g_admin','g_report','g_supervisor']
+       .every(k=>new RegExp('\\n\\s*'+k+":\\s*'<svg").test(src)));
+
+  const bn=codeNoCmt.slice(codeNoCmt.indexOf('const ADMIN_BOTTOM_NAV=['), codeNoCmt.indexOf('const ADMIN_BOTTOM_NAV=[')+400);
+  ok('★★★ 底部導覽不再帶 emoji（畫的是 BN_ICONS 的 SVG，fallback 是空字串）',
+     !hasEmoji(bn) && /BN_ICONS\[n\.key\]\|\|''/.test(src));
+
+  const tipsA=codeNoCmt.indexOf('const FITNESS_TIPS=[');
+  const tips=codeNoCmt.slice(tipsA, codeNoCmt.indexOf('\n];', tipsA));
+  ok('★★★ 健康小語不再帶沒人讀的 ic（渲染端只用 cat 與 t）',
+     !/,ic:'/.test(tips) && /\{c:MAP\[tp\.cat\]\|\|'train', t:TITLE\[tp\.cat\]\|\|tp\.cat, s:tp\.t\}/.test(src));
+  ok('★★ 理由寫在原地（下次盤點要看渲染端，不是看原始碼）',
+     /「程式裡有 emoji」不等於「畫面上看得到 emoji」，盤點要看渲染端/.test(src));
+}
+
 console.log(`\n${fail?'✗ ':'✓ '}${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

@@ -12,14 +12,14 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 
 console.log('① 導覽列入口（2026-08-06 二修：改成頂欄自己的群組，放在「班表」左邊）');
 ok('★ 頂欄多一個「月報表」群組，只掛一個頁面',
-   /\{key:'g_report', icon:'📊', label:'月報表', fd:true, sub:\[\n\s*\{label:'月報表', page:'fin_matrix', fd:true\},\n\s*\]\},/.test(src));
+   /\{key:'g_report', label:'月報表', fd:true, sub:\[\n\s*\{label:'月報表', page:'fin_matrix', fd:true\},\n\s*\]\},/.test(src));
 ok('★ 排在「班表」左邊',
    src.indexOf("{key:'g_report'") < src.indexOf("{key:'g_supervisor'"));
 ok('★ 已從「管理員 → 財務」底下移走（不會兩個地方都出現）',
    !/\{grp:'財務', label:'月報表', page:'fin_matrix'\}/.test(src));
 /* 2026-08-06 三修（使用者指示）：「月報表可以開放權限給櫃檯帳號了，反正只能查看都不能更改」 */
 ok('★ 櫃檯也看得到（群組與子項目都掛 fd:true）',
-   /\{key:'g_report', icon:'📊', label:'月報表', fd:true, sub:\[\n\s*\{label:'月報表', page:'fin_matrix', fd:true\},\n\s*\]\},/.test(src));
+   /\{key:'g_report', label:'月報表', fd:true, sub:\[\n\s*\{label:'月報表', page:'fin_matrix', fd:true\},\n\s*\]\},/.test(src));
 {
   /* 實跑 visibleGroups 的過濾：櫃檯只留 fd 的群組與 fd 的子項目 */
   const NAV=[{key:'g_dashboard',fd:true,sub:[{label:'首頁',page:'dashboard',fd:true}]},

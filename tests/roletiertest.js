@@ -55,7 +55,7 @@ t('★★ 經營報表與營運分析兩頁都擋 navTo 直接進入',
   && /PAGES\.dashboard=async function\(\)\{\s*\n[\s\S]{0,200}if\(!canSeeReports\(\)\)/.test(src));
 t('　擋下來時給說明頁，不是白畫面', /這一頁需要管理員權限/.test(src));
 t('　導覽本來就沒給櫃檯（g_admin 沒有 fd:true）',
-  /\{key:'g_admin', icon:'🛠️', label:'管理員', sub:\[/.test(src));
+  /\{key:'g_admin', label:'管理員', sub:\[/.test(src));
 t('　櫃檯手機導覽沒有報表',
   /const MOBILE_FRONTDESK_NAV=\[\s*\n\s*\{key:'fd_calendar'[\s\S]{0,160}\];/.test(src)
   && !/MOBILE_FRONTDESK_NAV=\[[\s\S]{0,200}dashboard/.test(src));
