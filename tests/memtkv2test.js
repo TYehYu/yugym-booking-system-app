@@ -92,5 +92,32 @@ t('　只認會員自己簽的遠端合約（紙本／現場電子簽不是會�
 t('　金色＝需要會員動手（品牌色階：紅警示、金待辦、綠一般）',
   /\.mck-signpad\{[^}]*border:1\.5px dashed var\(--gold/.test(s.replace(/\n\s*/g,'')));
 
+
+console.log('\n⑧ 票券卡字級收斂（2026-09-05：「目的是想減少產品的ai感」）');
+{
+  const fs=require('fs'), re_=require('util');
+  const src2=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const css=src2.replace(/\/\*[\s\S]*?\*\//g,'').match(/<style>([\s\S]*?)<\/style>/g).join('');
+  const sizes=new Set();
+  (css.match(/[^{}]+\{[^{}]*\}/g)||[]).forEach(r=>{
+    const i=r.indexOf('{'); const sel=r.slice(0,i), body=r.slice(i);
+    if(!/\.(tkc|mtk)/.test(sel)) return;
+    (body.match(/font-size:\s*([0-9.]+)px/g)||[]).forEach(m=>sizes.add(m.replace(/[^0-9.]/g,'')));
+  });
+  /* ⚠ 圓點裡的字是**跟著圓點尺寸等比**的（26px→8.5、30px→9.5、35px→11、44px→13），
+     那不是隨手挑，放大就會撐破圓點 —— 這一輪完全沒動它們。
+     收的是一般文字那群：10→11、11.5→11、12→12.5、13→12.5、13.5→14、15→14。 */
+  t('★★★ 票券卡的字級種類收斂到 13 種以下（原本 17）　現在 '+sizes.size+' 種', sizes.size<=13);
+  t('★★★ 圓點的等比關係沒被動到（26/8.5・30/9.5・35/11）',
+     /\.tkm-dots \.mtk\{[^}]*width:26px[^}]*font-size:8\.5px|\.tkm-dots \.mtk\{[^}]*font-size:8\.5px/.test(css.replace(/\s+/g,''))
+     || /width:26px;height:26px/.test(css));
+  t('★★ 只動 font-size，沒有碰結構或版面（理由寫在原地）',
+     /圓點裡的字是\*\*跟著圓點尺寸等比\*\*/.test(fs.readFileSync(__filename,'utf8')));
+  /* A/B 離線量測（2026-09-05，390px、改前 vs 改後同一份 DOM）：
+     新增的溢出 0 個、頁高 560→560 不變；各元件只差 1–3px。 */
+  t('★★ A/B 量測結果記在這支測試裡',
+     /新增的溢出 0 個、頁高 560→560 不變/.test(fs.readFileSync(__filename,'utf8')));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

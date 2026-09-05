@@ -106,7 +106,7 @@ ok('★ 只畫「還在用的票」，用完/過期不再退回顯示',
    && !/w\.inClass\(k\)\.slice\(\)/.test(src));
 ok('★ 只剩舊票的人教練課欄出「無有效票券」章（看 active 不看 tickets.length）',
    /if\(_mTk\(m\.id\)\.active\(\)\.length\) return '';/.test(src));
-ok('★ 同課別還有幾張在用會標出來', /＋\$\{n-1\}<\/span>/.test(src) && /\.tkcat-n\{font-size:10px;/.test(src));
+ok('★ 同課別還有幾張在用會標出來', /＋\$\{n-1\}<\/span>/.test(src) && /\.tkcat-n\{font-size:11px;/.test(src));
 ok('★ 沒有那個課別的票就留空（教練課欄改出「無有效票券」章，2026-08-05）',
    /if\(!sl\) return k==='pt' \? tkNoneChip\(m\) : '';/.test(src));
 ok('　　沿用原本那顆圓形卡（tkRowHtml），不另做一套', /return tkRowHtml\(sl, w\.leftoverIn\(k\), m\.id, /.test(src));
