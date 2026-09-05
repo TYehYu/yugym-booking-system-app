@@ -339,7 +339,7 @@ console.log('\n⑥ 首頁總覽（2026-08-26 使用者：「首頁參考這張�
      && /\.kpay-bank\{background:#eef1f7;color:#3f5f85;\}/.test(src));
   ok('★ 面：卡片一律細線＋小圓角、陰影拉平',
      /body\.ink \.mc-card,body\.ink \.cal-hero,body\.ink \.ds-card,body\.ink \.wk-strip,/.test(src)
-     && /border-radius:6px;box-shadow:none;border:1px solid var\(--bd\);background:var\(--card\);/.test(src));
+     && /border-radius:var\(--radius-xs\);box-shadow:none;border:1px solid var\(--bd\);background:var\(--card\);/.test(src));
   ok('★★ 今天／選取日改橄欖綠（與導覽列「目前頁面」同一種語彙）',
      /body\.ink \.wk-cell\.wk-today \.wk-date\{background:var\(--olive,#556B45\);color:#F2EFE4;\}/.test(src)
      && /body\.ink \.cdash-cell\.cdash-sel\{border-color:var\(--olive,#556B45\);/.test(src));
@@ -351,7 +351,7 @@ console.log('\n⑥ 首頁總覽（2026-08-26 使用者：「首頁參考這張�
   ok('　 待簽約／待繳費仍走 .tcard-pend 的暗化（沒有被邊框那條蓋到）',
      /\.cal-ev\.cal-ev-std\.cal-ev-pend,\s*\n\s*\.tcard\.tcard-std\.tcard-pend\{ filter:/.test(src));
   ok('★ 小 KPI 用淡鼠尾草底，數字仍是墨色（顏色不搶主角）',
-     /body\.ink \.mc-kpi-mini\{background:#EDF0E5;border:1px solid #DCE2CE;border-radius:6px;box-shadow:none;\}/.test(src));
+     /body\.ink \.mc-kpi-mini\{background:#EDF0E5;border:1px solid #DCE2CE;border-radius:var\(--radius-xs\);box-shadow:none;\}/.test(src));
   ok('★ 數字統一等寬（金額與堂數才對得齊）',
      /body\.ink \.mc-k2-n,body\.ink \.ds-num,body\.ink \.mc-rev-amt,body\.ink \.lp-stat-v,[\s\S]{0,120}?font-variant-numeric:tabular-nums;/.test(src));
 }
@@ -414,7 +414,7 @@ console.log('\n⑧ 首頁三修：定色 #556B45 ＋ 左欄／中欄對齊參考
      src.indexOf('var(--olive,'+OLD1+')')<0 && /var\(--olive,#556B45\)/.test(src));
 
   ok('★★ 兩張提醒卡改素面＋大黑數字（參考圖不是紅底也不是紅框）',
-     /body\.ink \.mc-alertleft \.mc-alert2 \.mc-a2\{\s*\n\s*background:var\(--card\);border:1px solid var\(--bd\);border-radius:10px;box-shadow:none;\}/.test(H3)
+     /body\.ink \.mc-alertleft \.mc-alert2 \.mc-a2\{\s*\n\s*background:var\(--card\);border:1px solid var\(--bd\);border-radius:var\(--radius-md\);box-shadow:none;\}/.test(H3)
      && /body\.ink \.mc-alertleft \.mc-alert2 \.mc-a2-n\{color:var\(--text\);/.test(H3));
   ok('　 點下去仍是原本的名單視窗（功能沒動）',
      /<button class="card mc-card mc-a2" onclick="openTodoList\('sign'\)">/.test(src)

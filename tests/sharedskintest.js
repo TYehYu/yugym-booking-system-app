@@ -49,7 +49,7 @@ console.log('\n③ 標籤與表單');
 {
   ok('★★ 標籤從膠囊改方角小標（badge 是輔助不是主角）',
      /\.tag\{border-radius:4px;padding:2px 7px;font-size:10\.5px;font-weight:600;/.test(src)
-     && /\.tag\{display:inline-block;padding:2px 9px;border-radius:var\(--radius-pill\);/.test(src));
+     && /\.tag\{display:inline-block;padding:2px 9px;border-radius:var\(--radius-full\);/.test(src));
   ok('★★ 表單、下拉、搜尋框的 focus 統一成橄欖綠（與全站「目前／選取」同一個語彙）',
      ['\\.form-row input:focus','\\.form-row select:focus','\\.lp-sel:focus','\\.lp-search input:focus']
        .every(k=>new RegExp(k+'\\{border-color:#556B45;box-shadow:0 0 0 2px rgba\\(85,107,69,\\.16\\);\\}').test(src)));

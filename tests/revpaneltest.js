@@ -129,11 +129,11 @@ console.log('\n⑥ 面板重做：做減法（2026-08-27 使用者：「主要�
      /筆數用 _revRows\.length（全部），不是 _revShown\.length（截斷後）/.test(src));
 
   ok('★★ 摘要：極淡暖米色、沒有外框，兩欄之間只有一條細線',
-     /body\.ink \.mc-revsplit\{background:#FAF6EE;border:none;border-radius:8px;/.test(src)
+     /body\.ink \.mc-revsplit\{background:#FAF6EE;border:none;border-radius:var\(--radius-sm\);/.test(src)
      && /body\.ink \.mc-rs-col \+ \.mc-rs-col\{border-left:1px solid rgba\(45,36,28,\.10\);\}/.test(src));
 
   ok('★★ 明細變成「一個白色 list」：逐筆不再是卡片，只用 1px 淡線分隔',
-     /body\.ink \.mc-revlist-card \.mc-revlist\{gap:0;background:var\(--card\);\s*\n\s*border:1px solid var\(--bd\);border-radius:10px;padding:0 12px;\}/.test(src)
+     /body\.ink \.mc-revlist-card \.mc-revlist\{gap:0;background:var\(--card\);\s*\n\s*border:1px solid var\(--bd\);border-radius:var\(--radius-md\);padding:0 12px;\}/.test(src)
      && /body\.ink \.mc-revlist-card \.mc-rev-row\{background:transparent;border:none;border-radius:0;/.test(src)
      && /border-bottom:1px solid rgba\(45,36,28,\.07\);\}/.test(src));
   ok('　 最後一筆不畫線（list 底部才不會出現雙線）',

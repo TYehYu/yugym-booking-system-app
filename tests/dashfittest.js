@@ -63,7 +63,7 @@ ok('　　不畫白底（0819 使用者：「右上角ＫＰＩ去除白底」�
    && !/\.mc-kpirows\{[^}]*background/.test(src));
 ok('★★ 左欄只有 300px，三顆並排的字距與字級要收窄（查看合約不能斷成兩行）',
    /\.mc-quick-left \.mc-quick3\{display:flex;gap:8px;\}/.test(src)
-   && /\.mc-quick-left \.mc-q3\{flex:1 1 0;min-width:0;min-height:84px;padding:13px 2px;gap:8px;\s*\n\s*font-size:12px;font-weight:700;border-radius:14px;white-space:nowrap;\}/.test(src));
+   && /\.mc-quick-left \.mc-q3\{flex:1 1 0;min-width:0;min-height:84px;padding:13px 2px;gap:8px;\s*\n\s*font-size:12px;font-weight:700;border-radius:var\(--radius-xl\);white-space:nowrap;\}/.test(src));
 /* 2026-08-01 三修（使用者：「健身小知識因為縮得太小了 看不到完整訊息 要放大一點
    （左邊縮圖也放大一點）」）：兩張一起 114 → 150px，仍然對稱。 */
 ok('★ 知識卡高度 150px（左右兩處共用同一組壓縮尺寸）',

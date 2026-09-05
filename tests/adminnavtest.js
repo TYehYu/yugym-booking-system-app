@@ -44,7 +44,7 @@ ok('　　教練桌機版不畫這顆（isCoachWide 時 _adminG 為 null）',
 
 console.log('\n③ 樣式');
 ok('★ 獨立那顆自己帶膠囊底（它在 .mc-nav 之外，沒有容器可以靠）',
-   /body\.mc-mode \.mc-admin-btn\{flex:0 0 auto;margin-left:2px;\n\s*background:rgba\(255,255,255,\.1\);border:1px solid rgba\(255,255,255,\.16\);border-radius:999px;\}/.test(src));
+   /body\.mc-mode \.mc-admin-btn\{flex:0 0 auto;margin-left:2px;\n\s*background:rgba\(255,255,255,\.1\);border:1px solid rgba\(255,255,255,\.16\);border-radius:var\(--radius-full\);\}/.test(src));
 ok('★ 選中時與膠囊裡的 active 同一個樣子（米白底、綠字）',
    /body\.mc-mode \.mc-admin-btn\.active\{background:#F4F1E8;color:var\(--green\);font-weight:700;/.test(src)
    && /body\.mc-mode \.mc-nav-item\.active\{background:#F4F1E8;color:var\(--green\);/.test(src));

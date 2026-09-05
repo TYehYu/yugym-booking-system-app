@@ -82,9 +82,9 @@ console.log('\n⑥ 選取的日期是圓框（2026-09-03 使用者附截圖：�
    padding:0 2px 2px。Ink 後來把 border 改成 2px 實圈，卻沒重設圓角與尺寸
    → 2px 邊框套在 border-radius:0 上，畫出來就是方框。 */
 ok('★★★ Ink 的選取圈補上圓角與尺寸（不是只改 border）',
-   /body\.ink \.cal-side \.mc-cell\.mc-sel \.mc-d\{[\s\S]{0,220}?border-radius:999px;width:22px;height:22px;padding:0;/.test(src));
+   /body\.ink \.cal-side \.mc-cell\.mc-sel \.mc-d\{[\s\S]{0,220}?border-radius:var\(--radius-full\);width:22px;height:22px;padding:0;/.test(src));
 ok('★★★ 尺寸與「今天」那顆一致（22×22 圓，兩顆才在同一列上對得齊）',
-   /\.cal-side \.mc-cell\.mc-today \.mc-d,[\s\S]{0,200}?border-radius:999px;width:22px;height:22px;/.test(src));
+   /\.cal-side \.mc-cell\.mc-today \.mc-d,[\s\S]{0,200}?border-radius:var\(--radius-full\);width:22px;height:22px;/.test(src));
 ok('★★ padding 要歸零（底線款留了 0 2px 2px，不清掉會把 22px 的圈撐開）',
    /padding 也要歸零，否則 22px 的框會被內距撐開/.test(src));
 ok('★★ 方框的成因寫在原地',
@@ -94,11 +94,18 @@ ok('★★ 方框的成因寫在原地',
 console.log('\n⑨ 管理員手機首頁：圓角收斂（2026-09-05）');
 {
   const css=src.replace(/\/\*[\s\S]*?\*\//g,'').match(/<style>[\s\S]*?<\/style>/g).join('');
+  /* 2026-09-05：桌機家族的圓角改吃設計 token（--radius-xs…full，見 mctokentest）。
+     這裡把 token 展開回字面值再統計 —— 這一組斷言守的是「有幾種圓角級距」，
+     跟寫成字面還是 token 無關；不展開的話收斂成果會看起來像憑空消失。 */
+  const RTOK={'--radius-xs':'6px','--radius-sm':'8px','--radius-md':'10px','--radius-lg':'12px',
+              '--radius-xl':'14px','--radius-2xl':'16px','--radius-full':'999px'};
   const kinds=new Set();
   (css.match(/[^{}]+\{[^{}]*\}/g)||[]).forEach(r=>{
     const i=r.indexOf('{'); if(!/\.(mc-|mck)/.test(r.slice(0,i))) return;
-    (r.slice(i).match(/border-radius:\s*([0-9]+px|999px|50%)/g)||[])
-      .forEach(m=>kinds.add(m.split(':')[1].trim()));
+    (r.slice(i).match(/border-radius:\s*([0-9]+px|999px|50%|var\(--radius-[a-z0-9]+\))/g)||[])
+      .forEach(m=>{ const v=m.split(':')[1].trim();
+        const t=v.match(/^var\((--radius-[a-z0-9]+)\)$/);
+        kinds.add(t ? (RTOK[t[1]]||v) : v); });
   });
   /* ⚠ 為什麼這一頁挑圓角不挑字級：圓角改了**不會影響版面**（不改尺寸、不會溢出、
      不會把字擠掉），是最安全的一項。字級那 31 種大多是同一元件在不同情境的變體
@@ -113,8 +120,8 @@ console.log('\n⑨ 管理員手機首頁：圓角收斂（2026-09-05）');
   ok('★★ 刻意保留的沒被動到（細線 1px、捲軸 3px、進度條 5px、Ink 自己那套 4／6px）',
      ['1px','3px','4px','5px','6px'].every(k=>kinds.has(k)));
   ok('★★ 本來就是膠囊卻寫成固定數字的，改成 999px（語意才對）',
-     /\.mck-badge\{[^}]*border-radius:999px;/.test(src)
-     && /\.mc-rev-pay\{[^}]*border-radius:999px;/.test(src));
+     /\.mck-badge\{[^}]*border-radius:var\(--radius-full\);/.test(src)
+     && /\.mc-rev-pay\{[^}]*border-radius:var\(--radius-full\);/.test(src));
   ok('★★ 為什麼挑圓角不挑字級，寫在原地',
      /圓角改了\*\*不會影響版面\*\*/.test(src));
 }
