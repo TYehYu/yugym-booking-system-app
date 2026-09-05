@@ -12,7 +12,9 @@
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 let pass=0,fail=0;
-const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const ok=(n,c,x)=>{ if(c){pass++;/* 2026-09-05：這幾顆圓的 50% → 999px（逐條驗過都是正方形，畫出來一樣）——
+   同一件事只留一種寫法。 */
+console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 const B=(()=>{const m='/* ══ Ink · 首頁教練課程區做減法';const a=src.indexOf(m);
@@ -38,7 +40,7 @@ console.log('\n② 圓形 badge → 教練欄');
 {
   ok('★★ 底色拿掉、不再是 72px 圓',
      /body\.ink \.tcard-cball\{background:transparent !important;border-radius:0;/.test(src)
-     && /\.tcard-cball\{width:72px;height:72px;border-radius:50%;/.test(src));
+     && /\.tcard-cball\{width:72px;height:72px;border-radius:999px;/.test(src));
   ok('★★ 名字直接吃教練識別色（inline color 帶進來的），Ink 沒有自己訂教練色',
      /style="background:\$\{_cc\.bg\};color:\$\{_cc\.fg\};"/.test(src)
      && !/_cc\.fg/.test(R));

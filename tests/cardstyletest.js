@@ -9,7 +9,9 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 const css=src.slice(src.indexOf('<style>'), src.indexOf('</style>'));
 
 let pass=0,fail=0;
-const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const ok=(n,c,x)=>{ if(c){pass++;/* 2026-09-05：這幾顆圓的 50% → 999px（逐條驗過都是正方形，畫出來一樣）——
+   同一件事只留一種寫法。 */
+console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
 /* 抽出這次新增的桌機區塊，確認每一條都寫在裡面（而不是誤加到全域影響手機） */
 const i=css.indexOf('/* ══ 課卡定版（2026-08-21 使用者指示）');
@@ -749,7 +751,7 @@ ok('★ 出席章仍然顯示（0822 起自己一欄）',
    !/\.tcard\.tcard-std \.tcard-chk\{ display:none !important; \}/.test(src)
    && /<span class="t3-stamp">/.test(src));
 ok('　　章從右下角的三角形角章改成小圓章（角章會壓到教練標籤）',
-   /\.tcard-chk\{flex:none;width:16px;height:16px;border-radius:50%;/.test(src)
+   /\.tcard-chk\{flex:none;width:16px;height:16px;border-radius:999px;/.test(src)
    && /角章壓在教練標籤那一角，卡片一窄就互相疊/.test(src));
 ok('　　三種章各有顏色：簽到綠、請假紅、未到金',
    /\.tcard-chk\.tcard-chk-leave\{background:var\(--danger,#b5372e\);\}/.test(src)
@@ -783,7 +785,7 @@ ok('★ DOM 仍在姓名列裡（絕對定位是相對整張卡，擺哪裡都�
 /* 2026-09-04 使用者指示：「出席章放課卡左上 時間放右上」—— 章從左下搬到左上。
    left:9px 的理由不變（避開左緣 5px 的課程色條）。 */
 ok('★ 章在卡片左上角，桌機用小圓章（1/4 圓在淺底卡上太搶）',
-   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:9px; top:4px; right:auto; bottom:auto;\s*\n\s*width:16px; height:16px; border-radius:50%;/.test(src));
+   /\.cal-ev\.cal-ev-std \.evc-check\{ position:absolute; left:9px; top:4px; right:auto; bottom:auto;\s*\n\s*width:16px; height:16px; border-radius:999px;/.test(src));
 ok('★★ 這一搬順帶解掉 0903「教練全名蓋到章」的老問題，寫在原地',
    /這一搬順帶解掉了 0903 那個「教練全名蓋到章」的老問題/.test(src));
 ok('★★ 章要避開左緣 5px 的課程色條（不然看起來像章長在色條裡）',

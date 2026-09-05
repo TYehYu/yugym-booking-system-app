@@ -352,7 +352,7 @@ ok('★★ 出席章排進姓名那一列的左邊（不是絕對定位的角章
 ok('　　不用 :has() 判斷有沒有章 —— 章回到文字流，沒有章時姓名自然貼回最左',
    /不需要 :has\(\) 去判斷這張卡有沒有章/.test(src));
 ok('　　1/4 圓角章那條要明確覆蓋掉（不覆蓋會變成一顆歪的方塊）',
-   /一定要自己寫 position:static 與 border-radius:50%/.test(src));
+   /一定要自己寫 position:static 與 border-radius:999px/.test(src));
 ok('★★ 直書時章疊在姓名上方，一樣靠左、整組垂直置中',
    /\.cag-wk-col \.cal-ev\.cal-ev-std \.evc-nmrow\{flex-direction:column-reverse;/.test(src));
 ok('★★ 直式時姓名貼左緣、垂直置中（align-items:flex-start＝水平靠左）',

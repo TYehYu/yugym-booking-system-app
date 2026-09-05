@@ -120,5 +120,35 @@ console.log('\n⑨ $0 票要留到最後用（2026-09-05 使用者：「一般�
      /自訂方案賣 \$0 備註空的→\*\*照樣問\*\*/.test(require('fs').readFileSync(__filename,'utf8')));
 }
 
+
+console.log('\n⑩ 六個手機外殼：同一件事只留一種寫法（2026-09-05）');
+{
+  const fs2=require('fs');
+  const S=fs2.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const css=S.replace(/\/\*[\s\S]*?\*\//g,'').match(/<style>[\s\S]*?<\/style>/g).join('');
+  const FAM=[['手機課卡','tcard'],['行事曆卡','cal-ev|evc-'],['票券卡','tkc|mtk'],
+             ['管理員手機首頁','mc-|mck'],['教練手機','cag|coachhome|chome'],['會員端V2','memh2|mh2']];
+  const bad=[];
+  FAM.forEach(([nm,pat])=>{
+    const k=new Set();
+    (css.match(/[^{}]+\{[^{}]*\}/g)||[]).forEach(r=>{
+      const i=r.indexOf('{'); if(!new RegExp('\\.(?:'+pat+')').test(r.slice(0,i))) return;
+      (r.slice(i).match(/border-radius:\s*(50%|999px)/g)||[]).forEach(m=>k.add(m.includes('50%')?'50%':'999px'));
+    });
+    if(k.size>1) bad.push(nm);
+  });
+  ok('★★★ 六個外殼都沒有「50% 與 999px 並存」', bad.length===0, bad);
+  /* ⚠ 只改逐條驗過是正方形的（寫死等寬高、aspect-ratio:1、或 inset 撐在正方形父層上）。
+     非正方形上 50% 是橢圓、999px 是膠囊，形狀會變 —— 那種不能碰。 */
+  ok('★★ 只改正方形的理由寫在原地', /非正方形上 50% 是橢圓/.test(fs2.readFileSync(__filename,'utf8')));
+  /* ⚠ 行事曆卡的其他圓角**刻意不動**：那是跟著檢視模式編碼的系統 ——
+     3 日 8px／7 日 9px／日檢視 11px／標準 10px，而且每一種的左側色條左緣要跟卡片一樣
+     （8px 0 0 8px、9px 0 0 9px…）。教練標籤也跟著密度縮（6／5／4px）。收斂會拆散配對。 */
+  ok('★★★ 行事曆卡的「模式編碼」圓角沒被動到（卡片與左色條成對）',
+     /\.cal-ev\.cal-ev-3d \.ev-lbar\{[^}]*border-radius:8px 0 0 8px/.test(S)
+     && /\.cal-ev\.cal-ev-7d \.ev-lbar\{[^}]*border-radius:9px 0 0 9px/.test(S)
+     && /\.cal-ev-day \.ev-lbar\{[^}]*border-radius:11px 0 0 11px/.test(S));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

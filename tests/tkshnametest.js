@@ -15,7 +15,9 @@
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 let pass=0,fail=0;
-const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const ok=(n,c,x)=>{ if(c){pass++;/* 2026-09-05：這幾顆圓的 50% → 999px（逐條驗過都是正方形，畫出來一樣）——
+   同一件事只留一種寫法。 */
+console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 const CSS=src.slice(src.indexOf('<style>'), src.indexOf('</style>'));
@@ -58,7 +60,7 @@ console.log('\n② 色點吃課程色（使用者定案：「依照課程的顏�
      /class="mtk mtk-used mtk-clvatt mtk-lv\$\{ns\?' mtk-lv-ns':''\}"/.test(src)
      && /\$\{clv\}\$\{clv\?' mtk-lv':''\}/.test(src));
   ok('★★ 色點的底色＝--tk-acc（每張票的課種色，圓點本來就吃它）',
-     /\.mtk-shdot\{width:12px;height:12px;border-radius:50%;flex:none;box-sizing:border-box;\s*\n\s*background:var\(--tk-acc,#1F6F54\);\}/.test(CSS));
+     /\.mtk-shdot\{width:12px;height:12px;border-radius:999px;flex:none;box-sizing:border-box;\s*\n\s*background:var\(--tk-acc,#1F6F54\);\}/.test(CSS));
   ok('★★ 原本的狀態語彙原封不動搬到色點上（不是只剩一種點）',
      /\.mtk-booked \.mtk-shdot\{background:#fff;border:2\.5px solid color-mix\(in srgb,var\(--tk-acc,#1F6F54\) 52%,#d8d2c6\);\}/.test(CSS)
      && /\.mtk-leave \.mtk-shdot,\.mtk-eaten \.mtk-shdot\{background:var\(--danger,#b5372e\);\}/.test(CSS)
