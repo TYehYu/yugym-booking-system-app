@@ -14,7 +14,9 @@
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 let pass=0,fail=0;
-const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const ok=(n,c,x)=>{ if(c){pass++;/* 2026-09-05：圓角 50% → 999px（22 條，全部是正方形，畫出來一模一樣）——
+   同一件事只留一種寫法。 */
+console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 const i=src.indexOf('function mcAdjCell(');
@@ -80,13 +82,42 @@ console.log('\n⑥ 選取的日期是圓框（2026-09-03 使用者附截圖：�
    padding:0 2px 2px。Ink 後來把 border 改成 2px 實圈，卻沒重設圓角與尺寸
    → 2px 邊框套在 border-radius:0 上，畫出來就是方框。 */
 ok('★★★ Ink 的選取圈補上圓角與尺寸（不是只改 border）',
-   /body\.ink \.cal-side \.mc-cell\.mc-sel \.mc-d\{[\s\S]{0,220}?border-radius:50%;width:22px;height:22px;padding:0;/.test(src));
+   /body\.ink \.cal-side \.mc-cell\.mc-sel \.mc-d\{[\s\S]{0,220}?border-radius:999px;width:22px;height:22px;padding:0;/.test(src));
 ok('★★★ 尺寸與「今天」那顆一致（22×22 圓，兩顆才在同一列上對得齊）',
-   /\.cal-side \.mc-cell\.mc-today \.mc-d,[\s\S]{0,200}?border-radius:50%;width:22px;height:22px;/.test(src));
+   /\.cal-side \.mc-cell\.mc-today \.mc-d,[\s\S]{0,200}?border-radius:999px;width:22px;height:22px;/.test(src));
 ok('★★ padding 要歸零（底線款留了 0 2px 2px，不清掉會把 22px 的圈撐開）',
    /padding 也要歸零，否則 22px 的框會被內距撐開/.test(src));
 ok('★★ 方框的成因寫在原地',
    /這裡只改了 border，圓角與尺寸沒跟著改 → 2px 邊框套在 border-radius:0 上，\s*\n?\s*畫出來就是一個方框/.test(src));
+
+
+console.log('\n⑨ 管理員手機首頁：圓角收斂（2026-09-05）');
+{
+  const css=src.replace(/\/\*[\s\S]*?\*\//g,'').match(/<style>[\s\S]*?<\/style>/g).join('');
+  const kinds=new Set();
+  (css.match(/[^{}]+\{[^{}]*\}/g)||[]).forEach(r=>{
+    const i=r.indexOf('{'); if(!/\.(mc-|mck)/.test(r.slice(0,i))) return;
+    (r.slice(i).match(/border-radius:\s*([0-9]+px|999px|50%)/g)||[])
+      .forEach(m=>kinds.add(m.split(':')[1].trim()));
+  });
+  /* ⚠ 為什麼這一頁挑圓角不挑字級：圓角改了**不會影響版面**（不改尺寸、不會溢出、
+     不會把字擠掉），是最安全的一項。字級那 31 種大多是同一元件在不同情境的變體
+     （.mc-brand-mark 4 種、.mc-kpi-n 5 種：KPI 少的時候數字大）—— 跟課卡同一種
+     誤判，不要照數字砍。 */
+  ok('★★★ 圓角種類從 18 收到 11 以內　現在 '+kinds.size+' 種', kinds.size<=11, [...kinds].sort());
+  ok('★★★ 同一件事只留一種寫法：不再有 50%（22 條全是正方形，改了畫出來一樣）',
+     !kinds.has('50%') && kinds.has('999px'));
+  ok('★★★ 容器只剩 8／10／12／14／16 五級',
+     ['8px','10px','12px','14px','16px'].every(k=>kinds.has(k))
+     && !['11px','13px','18px','20px','24px'].some(k=>kinds.has(k)));
+  ok('★★ 刻意保留的沒被動到（細線 1px、捲軸 3px、進度條 5px、Ink 自己那套 4／6px）',
+     ['1px','3px','4px','5px','6px'].every(k=>kinds.has(k)));
+  ok('★★ 本來就是膠囊卻寫成固定數字的，改成 999px（語意才對）',
+     /\.mck-badge\{[^}]*border-radius:999px;/.test(src)
+     && /\.mc-rev-pay\{[^}]*border-radius:999px;/.test(src));
+  ok('★★ 為什麼挑圓角不挑字級，寫在原地',
+     /圓角改了\*\*不會影響版面\*\*/.test(src));
+}
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

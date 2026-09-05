@@ -10,7 +10,9 @@
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 let pass=0,fail=0;
-const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const ok=(n,c,x)=>{ if(c){pass++;/* 2026-09-05：圓角 50% → 999px（22 條，全部是正方形，畫出來一模一樣）——
+   同一件事只留一種寫法。 */
+console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
 console.log('① 沒有約別的列也要佔住左欄');
 ok('★★★ 不再回空字串，改回一個空的佔位格',
@@ -37,7 +39,7 @@ ok('★★ 全名放進 title（滑過去讀得到，報讀器也唸得出來）
    （左右內距永遠比上下大）—— 二修第一版就是這樣寫的。 */
 ok('★★★ 正圓：寬高相等、padding 歸零',
    /width:22px;height:22px;padding:0;flex:none;/.test(src)
-   && /border-radius:50%;border-width:1\.5px;border-style:solid;/.test(src));
+   && /border-radius:999px;border-width:1\.5px;border-style:solid;/.test(src));
 ok('★★★ 尺寸與首頁課卡出席章一致（22×22／12px）',
    /\.tcard-3c \.tcard-chk\{position:static;margin:0;width:22px;height:22px;font-size:12px;\}/.test(src)
    && /font-size:12px;font-weight:700;letter-spacing:0;line-height:1;/.test(src)
