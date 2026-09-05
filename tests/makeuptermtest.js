@@ -81,5 +81,33 @@ ok('★ 請假／補發的提示改報實際效期日',
    /已標記請假：本堂照扣，已發補課券（效期至 \$\{String\(tk\.expire_date\|\|''\)\.slice\(5\)\.replace\('-','\/'\)\}）/.test(src)
    && !/已補發補課券（效期 14 天）/.test(src));
 
+/* ══ 卡片要講起算日（2026-09-05 第二報）══════════════════════════════
+   資料改對之後使用者仍回報「現在看到還是 9/5」—— 因為卡片那一行寫的是
+   tkBuyDateHtml，顯示 purchase_date（發券日），從頭到尾沒顯示過起算日。
+   一般票券兩者同一天所以看不出問題，補課券是唯一會分開的票種。 */
+console.log('\n③ 卡片顯示（補課券講起算日，不是購買日）');
+(function(){
+  const i=src.indexOf('function tkBuyDateHtml(t){');
+  if(i<0) throw new Error('切不到 tkBuyDateHtml');
+  let d=0,j=src.indexOf('{',i),e=j;
+  for(let k=j;k<src.length;k++){ if(src[k]==='{')d++; else if(src[k]==='}'){d--; if(!d){e=k+1;break;}} }
+  const fn=new Function(src.slice(i,e)+'\nreturn tkBuyDateHtml;')();
+
+  const mk=fn({source:'makeup',purchase_date:'2026-09-05',start_date:'2026-09-12'});
+  ok('★★★ 補課券顯示起算日 9/12（不是發券日 9/05）',
+     /起算 <b class="num">2026\/09\/12<\/b>/.test(mk) && !/購買/.test(mk), mk);
+  ok('★★ 發券日仍看得到（櫃檯對帳會問「這張什麼時候發的」）',
+     /（2026\/09\/05 補發）/.test(mk), mk);
+  const same=fn({source:'makeup',purchase_date:'2026-09-05',start_date:'2026-09-05'});
+  ok('★★ 兩個日期同一天（事後補發／手動補發）就不重複寫',
+     /起算 <b class="num">2026\/09\/05<\/b>$/.test(same), same);
+  const norm=fn({source:'purchase',purchase_date:'2026-08-15',start_date:'2026-08-15'});
+  ok('★★★ 一般票券照舊講「購買」（這條只准影響補課券）',
+     /^購買 <b class="num">2026\/08\/15<\/b>$/.test(norm), norm);
+  const old=fn({source:'import',start_date:'2026-01-02'});
+  ok('★★ 舊系統匯入、沒有購買日的那條退路沒被擋掉',
+     /（起始日）/.test(old), old);
+})();
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
