@@ -45,8 +45,9 @@ t('會員不顯示「修改密碼」（LINE 登入）',
   /pwBtn\.style\.display = \(SESSION\.role==='member'\)\?'none':''/.test(s)
   && /if\(role!=='member'\) items\+=`<button class="more-item" onclick="closeModal\(\);openChangePassword\(\)">/.test(s));
 t('員工仍看得到修改密碼（帳號密碼登入）', /id="acct-changepw"/.test(s));
-t('「更換照片」改名「上傳大頭照」', !/更換照片<\/button>/.test(s)
-  && /上傳大頭照<\/button>/.test(s) && /📷　上傳大頭照/.test(s));
+/* 2026-09-05：圖示從 emoji 換成線條 SVG（見 moreIc），文字不變。 */
+t('「更換照片」改名「上傳大頭照」，圖示改用線條 SVG', !/更換照片<\/button>/.test(s)
+  && /上傳大頭照<\/button>/.test(s) && /\$\{moreIc\('camera'\)\}上傳大頭照/.test(s));
 
 // ── 2026-08-22 四修：白底可點的一列一列、LINE 移到通知設定、通知開關進選單 ──
 /* ⚠ 特異度：要 .pp-head.pp-head-self 才壓得過 .pp-head.pp-head-m2 的兩欄 grid
@@ -100,6 +101,34 @@ t('★ 只擋這一種：櫃檯／教練在手機改別人的會員資料照舊�
   /SESSION\.role==='member'/.test(s.slice(s.indexOf('async function mchgNotify'), s.indexOf('async function dbPut'))));
 t('★ 預約與補卡申請不受影響（MCHG_LABEL 沒動）',
   /const MCHG_LABEL=\{ bookings:'預約', punch_requests:'補卡申請',\s*\n\s*members:'會員資料' \};/.test(s));
+
+
+console.log('\n⑧ 「更多」選單改用線條圖示（2026-09-05：減少 AI 感）');
+{
+  const src2=require('fs').readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const mm=src2.slice(src2.indexOf('const MORE_ICONS={'), src2.indexOf('function openMoreMenu(){'));
+  const menu=src2.slice(src2.indexOf('function openMoreMenu(){'), src2.indexOf('function openMoreMenu(){')+2600);
+  const isEm=c=>{const o=c.codePointAt(0);
+    return (o>=0x1F300&&o<=0x1FAFF)||(o>=0x2600&&o<=0x27BF)||(o>=0x1F000&&o<=0x1F2FF);};
+  /* 原本 10 個項目全用 emoji 當圖示（🔔👥🧑‍🏫🎫⚙️👤👪📷🔑↩），而導覽列早就是統一的
+     線條圖示 —— 同一個 App 兩套視覺語言，emoji 那套還會因為作業系統各長一個樣。 */
+  t('★★★ 選單十個項目都不再用 emoji 當圖示',
+     ![...menu.replace(/\/\*[\s\S]*?\*\//g,'')].some(isEm));
+  t('★★★ 十個項目都走 moreIc（沒有漏網的）',
+     (menu.match(/\$\{moreIc\('[a-z]+'\)\}/g)||[]).length===10);
+  t('★★★ 能沿用的就沿用導覽列的圖示（會員／系統設定），不另外畫',
+     /k==='member'\?NAV2_ICONS\.g_member/.test(src2) && /k==='settings'\?NAV2_ICONS\.g_settings/.test(src2));
+  t('★★★ 規格與導覽列一致（24×24、stroke 1.7、currentColor）',
+     (mm.match(/viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1\.7"/g)||[]).length>=7);
+  /* ⚠ 撞臉會讓圖示失去意義：第一版「員工」沿用 g_staff（單人）與「個人資料」幾乎一樣，
+     「家庭成員」的兩個圓也跟「會員」一樣大。改成識別證與「大人＋小孩」。 */
+  t('★★ 員工用識別證、不跟個人資料的單人撞臉',
+     /staff:'<svg[^']*rect x="3\.5" y="6"/.test(mm));
+  t('★★ 家庭成員是「大人＋小孩」（兩個圓不一樣大）',
+     /family:'<svg[^']*circle cx="8\.5" cy="7\.5" r="3"[^']*circle cx="17" cy="12" r="2"/.test(mm));
+  t('★★ 顏色吃 currentColor，所以登出那顆自然是紅的',
+     /\.more-item\.more-logout \.mi-ic\{color:var\(--danger\);\}/.test(src2));
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
