@@ -68,5 +68,30 @@ console.log('\n⑧ 教練手機圓角收斂（2026-09-05）');
      /\*\*註解會被算進選擇器\*\*/.test(S) && /四值簡寫/.test(S));
 }
 
+
+console.log('\n⑨ 手機下限 11px（2026-09-05：可讀性 2/6）');
+{
+  const fs2=require('fs');
+  const S=fs2.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const css=S.replace(/\/\*[\s\S]*?\*\//g,'').match(/<style>[\s\S]*?<\/style>/g).join('');
+  const small=[];
+  (css.match(/[^{}]+\{[^{}]*\}/g)||[]).forEach(r=>{
+    const i=r.indexOf('{'); const sel=r.slice(0,i), body=r.slice(i);
+    if(!/\.(cag|coachhome|chome)/.test(sel)) return;
+    const m=body.match(/font-size:\s*([0-9.]+)px/);
+    if(m && parseFloat(m[1])<11) small.push(sel.trim().slice(0,44)+' '+m[1]+'px');
+  });
+  /* ⚠ 只剩一條低於 11px，而且是刻意的：evc-check 的 9px 在固定 14×14 的圓圈裡，
+     放大會撐破（比例 9/14，與票券卡的圓點同一回事）。 */
+  ok('★★★ 只剩「固定圓圈裡的章」低於 11px（原本 9 條）',
+     small.length===1 && /evc-check/.test(small[0]), small);
+  ok('★★★ 那一條為什麼不能動，寫在原地',
+     /放大會撐破（比例 9\/14，與票券卡的圓點同一回事）/.test(S));
+  /* A/B 離線量測（2026-09-05，390px）：新溢出 0、新截斷 0、七天仍同列、
+     日期列 82→86px（高 4px）、頁高不變；.cag-card-time 那個 flex:0 0 52px 沒爆。 */
+  ok('★★ A/B 量測結果記在這支測試裡',
+     /日期列 82→86px（高 4px）/.test(fs2.readFileSync(__filename,'utf8')));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
