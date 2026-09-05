@@ -158,8 +158,8 @@ console.log('\n約別二選一（0901 定版）');
 ok('★★★ 判準只有一支 memHasPtHistory（賣的時候與事後改共用）',
    /async function memHasPtHistory\(mid, exceptTkId, beforeDate\)\{/.test(src)
    && (src.match(/memHasPtHistory\(/g)||[]).length===3);   // 宣告 1 ＋ 兩條路各 1
-ok('★★★ 有紀錄 → 新約不列；沒紀錄 → 續約與分期不列（團課永遠在）',
-   /const allow=k=>\(k==='group'\)\?true:\(hasPt\?\(k!=='new'\):\(k==='new'\)\);/.test(src)
+ok('★★★ 有紀錄 → 新約不列；沒紀錄 → 續約與分期不列',
+   /const allow=k=>hasPt\?\(k!=='new'\):\(k==='new'\);/.test(src)
    && /選項直接不列，而不是列出來讓人選了才擋/.test(src));
 ok('★★★ 事後改約別同一條規則（少一邊就是一個多領獎金的後門）',
    /const _allow=k=>_hasPt\?\(k!=='new'\):\(k==='new'\);/.test(src));
@@ -218,6 +218,62 @@ ok('★★ 分期方案的約別事後也不給改（不然是多領獎金的後
    && /這張是<b>分期方案<\/b>，約別由系統判定為「分期」，不能更改。/.test(src));
 /* 「不能選就寫原因」那一條已經改寫在上面的 0901 區塊（兩個方向都要寫），
    這裡不再重複釘同一件事。 */
+
+/* ══ 2026-09-05 使用者指示：約別只給「私人教練」══════════════════════════
+   「運動按摩不需要約別」「而且我看到約別裡面有團課 購買團課也不需要約別」
+
+   這其實是把畫面補回程式本來就有的規則：_saleKindOf 對 category!=='私人教練'
+   一律回 null，所以運動按摩／自主訓練／體驗／團課標了約別也讀不出來、也不計獎金。
+   舊的 'group' 選項更慘 —— SALE_KIND_LB 裡沒有它，存進去的票在約別章上顯示
+   「（未標）」，純粹是髒資料。 */
+console.log('\n約別只給教練課（0905 定版）');
+ok('★★★ 團課選項整個移除（SALE_KIND_LB 沒有 group，存了也讀不出來）',
+   !/<option value="group">團課<\/option>/.test(src)
+   && !/sel\.value='group'/.test(src)
+   && /const SALE_KIND_LB=\{new:'新約', renewal:'續約', installment:'分期'\};/.test(src));
+ok('★★★ 判準與 _saleKindOf／_attNeed 同一條：category==="私人教練"',
+   /function gtSaleKindNeed\(\)\{/.test(src)
+   && /return cat\?\(cat==='私人教練'\):true;/.test(src));
+ok('★★★ 讀不到類別時維持顯示（漏標會少算續約獎金，寧可多問一次）',
+   /寧可多問一次，\n\s*也不要因為一次載入失敗就把該標的約別默默漏掉/.test(src));
+ok('★★★ 收起來的時候要清空值，不能留看不見卻有值的下拉',
+   /sel\.value=''; sel\.dataset\.touched='';\n\s*return;/.test(src)
+   && /submitGrant 讀 value\|\|null/.test(src));
+ok('★★ 換方案就重判（類別戳在 dataset.cat 上，refreshGrantInfo 那裡本來就算好 cat）',
+   /_sk\.dataset\.cat=cat; gtSaleKindSync\(\);/.test(src));
+ok('★★ 進第二步那條非同步線也要自己收一次，而且排在 Opts 後面',
+   /gtSaleKindOpts\(_hasPt\);\n\s*gtSaleKindSync\(\);/.test(src)
+   && /if\(!gtSaleKindNeed\(\)\) return;/.test(src));
+
+/* 實跑：把兩支函式切出來，配假 DOM 走一遍四種類別 —— 正則只證明字面，
+   證不了「按鈕真的收起來、值真的清掉」。 */
+(function(){
+  const cut=n=>{ const i=src.indexOf(`function ${n}(){`); if(i<0) throw new Error('切不到 '+n);
+    let d=0,j=src.indexOf('{',i); for(let k=j;k<src.length;k++){ if(src[k]==='{')d++; else if(src[k]==='}'){d--; if(!d) return src.slice(i,k+1);} } };
+  const els={};
+  const mk=id=>els[id]={id,style:{display:''},dataset:{},value:''};
+  ['gt-salekind-row','gt-salekind-auto','gt-salekind-hint','gt-salekind','gt-install'].forEach(mk);
+  const document={getElementById:id=>els[id]||null};
+  const fn=new Function('document',`${cut('gtSaleKindNeed')}\n${cut('gtSaleKindSync')}\nreturn {gtSaleKindNeed,gtSaleKindSync};`)(document);
+
+  const run=(cat,inst)=>{ els['gt-salekind'].dataset.cat=cat; els['gt-salekind'].value='renewal';
+    els['gt-install'].value=String(inst||1); fn.gtSaleKindSync();
+    return {row:els['gt-salekind-row'].style.display, hint:els['gt-salekind-hint'].style.display,
+            auto:els['gt-salekind-auto'].style.display, val:els['gt-salekind'].value}; };
+
+  let r=run('運動按摩'); ok('★★★ 實跑・運動按摩 → 整欄收起來且值清空（使用者原話）',
+    r.row==='none' && r.hint==='none' && r.auto==='none' && r.val==='');
+  r=run('小班肌力'); ok('★★★ 實跑・團課 → 一樣收起來（0905 補上）',
+    r.row==='none' && r.val==='');
+  ['自主訓練','體驗'].forEach(c=>{ const x=run(c);
+    ok(`★★ 實跑・${c} → 收起來`, x.row==='none' && x.val===''); });
+  r=run('私人教練'); ok('★★★ 實跑・教練課 → 照畫，值不動（這一欄連著續約獎金）',
+    r.row==='' && r.hint==='' && r.auto==='none' && r.val==='renewal');
+  r=run('私人教練',3); ok('★★★ 實跑・教練課＋分期 → 收成自動判定那一行（0824 規則沒被打壞）',
+    r.row==='none' && r.auto==='' && r.hint==='none' && r.val==='installment');
+  r=run('',1); ok('★★★ 實跑・類別讀不到 → 照畫（退路不能是默默不標）',
+    r.row==='' && r.val==='renewal');
+})();
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

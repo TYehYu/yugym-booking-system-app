@@ -12601,8 +12601,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260905.1400';
-const APP_VERSION_LABEL = 'v260905.1400';
+const APP_VERSION = '260905.1411';
+const APP_VERSION_LABEL = 'v260905.1411';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -49447,7 +49447,12 @@ async function openGrantModal(){
              用內建分期功能賣的（期數 > 1），約別由系統判定成「分期」，整欄不畫。
              ⚠ 只有內建分期才自動：自訂方案手動分期（每一期分開儲值）資料上看不出來是
                同一份合約的第 N 期，那種仍然要人選，所以三個選項照舊。 */''}
-        <div class="form-row" id="gt-salekind-row"><label>約別</label><select id="gt-salekind" onchange="this.dataset.touched=1"><option value="new">新約</option><option value="renewal">續約</option><option value="group">團課</option><option value="installment">分期</option></select></div>
+        ${/* 2026-09-05 使用者指示：「運動按摩不需要約別」「購買團課也不需要約別」——
+             約別本來就只有「私人教練」在用（_saleKindOf 對其他類別一律回 null），
+             整欄由 gtSaleKindNeed 依票種類別決定畫不畫。
+             ⚠ 團課那個選項一併移除：SALE_KIND_LB 裡根本沒有 'group'，
+               存下去的票在約別章上只會顯示「（未標）」，是個只會髒資料的死值。 */''}
+        <div class="form-row" id="gt-salekind-row"><label>約別</label><select id="gt-salekind" onchange="this.dataset.touched=1"><option value="new">新約</option><option value="renewal">續約</option><option value="installment">分期</option></select></div>
         <div id="gt-salekind-auto" style="display:none;font-size:12px;color:var(--t2);background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px;line-height:1.8;margin-bottom:12px;">
           約別：<b>分期</b>（這張是分期方案，系統自動判定，不需要選）</div>
         <div id="gt-salekind-hint" style="display:none;font-size:11.5px;color:var(--t3);line-height:1.8;margin:-6px 0 12px;"></div>
@@ -49524,12 +49529,14 @@ async function openGrantModal(){
    有教練課／友善教練課的紀錄 → 只列 續約／分期；沒有 → 只列 新約。
    選項直接不列，而不是列出來讓人選了才擋：這一欄直接連到教練的續約獎金，
    少一個誤選的機會就少一次要事後對帳的麻煩。
-   ⚠ 團課那一項不受影響（它跟教練課的續約獎金是兩回事）。 */
+   ⚠ 2026-09-05 修正：原本這裡留了一項「團課」不受影響，是錯的 —— 使用者指示
+     「購買團課也不需要約別」，而且 SALE_KIND_LB 沒有 'group'，存了也讀不出來。
+     現在整欄只在票種是「私人教練」時才畫（見 gtSaleKindNeed）。 */
 function gtSaleKindOpts(hasPt){
   const sel=document.getElementById('gt-salekind'); if(!sel) return;
   const cur=sel.value;
-  const OPTS=[['new','新約'],['renewal','續約'],['group','團課'],['installment','分期']];
-  const allow=k=>(k==='group')?true:(hasPt?(k!=='new'):(k==='new'));
+  const OPTS=[['new','新約'],['renewal','續約'],['installment','分期']];
+  const allow=k=>hasPt?(k!=='new'):(k==='new');
   const keep=OPTS.filter(([k])=>allow(k));
   sel.innerHTML=keep.map(([k,lb])=>`<option value="${k}">${lb}</option>`).join('');
   /* ⚠ 退路要退到「還在清單裡的第一個」——退成寫死的 'new' 的話，
@@ -49543,14 +49550,34 @@ function gtSaleKindOpts(hasPt){
       : '這位還沒有教練課／友善教練課的紀錄，所以只能是新約（續約與分期要等有過一份之後才會出現）。';
   }
 }
+/* 要不要畫約別這一欄（2026-09-05 使用者指示：「運動按摩不需要約別」「購買團課也不需要」）——
+   判準與 _saleKindOf／_attNeed 同一條：票種的 category 是不是「私人教練」。
+   類別由 refreshGrantInfo 換方案時蓋在 dataset.cat 上（那裡本來就算好了 cat）。
+   ⚠ 讀不到類別時（票種還沒載回來、dataset 還是空的）維持顯示：寧可多問一次，
+     也不要因為一次載入失敗就把該標的約別默默漏掉 —— 漏標會直接少算續約獎金。 */
+function gtSaleKindNeed(){
+  const sel=document.getElementById('gt-salekind');
+  const cat=sel?String(sel.dataset.cat||''):'';
+  return cat?(cat==='私人教練'):true;
+}
 function gtSaleKindSync(){
   const row=document.getElementById('gt-salekind-row');
   const note=document.getElementById('gt-salekind-auto');
+  const hint=document.getElementById('gt-salekind-hint');
   const sel=document.getElementById('gt-salekind');
   if(!row||!note||!sel) return;
+  /* 不是教練課系 → 整欄收起來，而且把值清空（submitGrant 讀 value||null，
+     清空後就寫 null）。留一個看不到卻有值的下拉，等於偷偷替櫃檯標了約別。 */
+  if(!gtSaleKindNeed()){
+    row.style.display='none'; note.style.display='none';
+    if(hint) hint.style.display='none';
+    sel.value=''; sel.dataset.touched='';
+    return;
+  }
   const inst=Number((document.getElementById('gt-install')||{}).value||1)>1;
   row.style.display=inst?'none':'';
   note.style.display=inst?'':'none';
+  if(hint) hint.style.display=inst?'none':'';
   if(inst){ sel.value='installment'; sel.dataset.touched=''; }
 }
 // 發放票券步驟切換
@@ -49600,13 +49627,17 @@ function grantGoStep(n){
        ⚠ 賣票是「現在」，沒有購買日界線，也沒有要排除的票。 */
     const _hasPt=await memHasPtHistory(mid);
     sel.dataset.donept=_hasPt?'1':'';
-    gtSaleKindOpts(_hasPt);
-    if(sel.dataset.touched) return;
-    /* 自動預選：賣團課 → 團課；分期 → 分期；有教練課紀錄 → 續約；其餘 → 新約。 */
+    /* 先把票種類別戳上去再重建選項：這一段跟 refreshGrantInfo 是兩條非同步線，
+       誰先到都要能自己把畫面收成正確的樣子。 */
     const _planNow=window._grantPlanCache;
-    const _catNow=_planNow?((tm[_planNow.ticket_type_id]||{}).category||''):'';
+    if(_planNow) sel.dataset.cat=(tm[_planNow.ticket_type_id]||{}).category||'';
+    gtSaleKindOpts(_hasPt);
+    gtSaleKindSync();   /* ⚠ 一定排在 Opts 後面：Opts 會把提示行重新打開 */
+    if(!gtSaleKindNeed()) return;   /* 不是教練課系 → 不預選、不寫值 */
+    if(sel.dataset.touched) return;
+    /* 自動預選：分期 → 分期；有教練課紀錄 → 續約；其餘 → 新約。
+       （2026-09-05 移除「賣團課 → 團課」：團課現在整欄不畫，見 gtSaleKindNeed） */
     const _instNow=Number((document.getElementById('gt-install')||{}).value||1)>1;
-    if(_catNow==='小班肌力'||_catNow==='團體課'||/團課|團體課|小班/.test((_planNow&&_planNow.name)||'')){ sel.value='group'; return; }
     if(_instNow){ sel.value='installment'; return; }   /* 畫面上那一欄已由 gtSaleKindSync 收起來 */
     sel.value=_hasPt?'renewal':'new';
   }catch(_){} })();
@@ -49961,6 +49992,10 @@ async function refreshGrantInfo(){
   // 課程色（與選擇卡片一致）
   const types=window._grantTypes||[];
   const cat=(types.find(t=>t.id===plan.ticket_type_id)||{}).category||'';
+  /* 約別欄跟著方案走（2026-09-05）：只有「私人教練」要標，換方案就重判一次。
+     類別在這裡本來就算好了，戳在 dataset 上讓 gtSaleKindSync 讀（見 gtSaleKindNeed）。 */
+  try{ const _sk=document.getElementById('gt-salekind');
+       if(_sk){ _sk.dataset.cat=cat; gtSaleKindSync(); } }catch(_){}
   const isFriendly=(plan.plan_type==='friendly'||plan.plan_type==='friendly_promo')||(plan.name||'').indexOf('友善')>=0;
   const col = cat==='自主訓練'?'#6a655c' : cat==='小班肌力'?'#9a5a1e' : isFriendly?'#23508a' : '#1f6f54';
   const typeName=(types.find(t=>t.id===plan.ticket_type_id)||{}).name||'';
