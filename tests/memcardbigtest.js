@@ -60,9 +60,10 @@ console.log('\n② 每一條都掛在 .memh2 底下（不可以動到共用的�
   ok('★★ 共用的字級也沒動',
      /\.admh2-card \.a2-l1\{font-size:11\.5px;/.test(src)
      && /\.admh2-card \.a2-l2\{font-size:15px;font-weight:800;line-height:1\.25;/.test(src)
-     && /\.admh2-card \.a2-l3\{font-size:10\.5px;color:var\(--t3\);font-family:var\(--num\);\}/.test(src)
+     /* 2026-09-05：a2-l3 10.5 → 11px（手機下限）。其餘共用字級不動。 */
+     && /\.admh2-card \.a2-l3\{font-size:11px;color:var\(--t3\);font-family:var\(--num\);\}/.test(src)
      && /\.admh2-card \.a2-time\{font-family:var\(--num\);font-size:13\.5px;font-weight:700;\}/.test(src)
-     && /\.admh2-card \.a2-coach\{font-size:10\.5px;color:var\(--t2\);max-width:96px;/.test(src));
+     && /\.admh2-card \.a2-coach\{font-size:11px;color:var\(--t2\);max-width:96px;/.test(src));
 }
 
 console.log('\n③ 放大之後不能弄壞既有的三件事');

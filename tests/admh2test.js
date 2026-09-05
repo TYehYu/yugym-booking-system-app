@@ -178,7 +178,8 @@ ok('★★ ⚠ 別在 .a2-side 寫 max-width:34% —— 它是 grid item，百�
    && /百分比是對「那一欄的寬度」算的/.test(src));
 ok('★★ 請假標與教練名改成上下兩行、都靠右（使用者：「[教練請假] 這個會壓縮掉教練的名稱」）'
    +' —— 同一行時兩者共用封頂，標籤先吃掉一半，名字只剩幾個字',
-   /\.admh2-card \.a2-coach\{font-size:10\.5px;color:var\(--t2\);max-width:96px;\s*\n\s*display:flex;flex-direction:column;align-items:flex-end;/.test(src)
+   /* 2026-09-05：10.5 → 11px（手機下限）。上下兩行、靠右、封頂 96px 都沒動。 */
+   /\.admh2-card \.a2-coach\{font-size:11px;color:var\(--t2\);max-width:96px;\s*\n\s*display:flex;flex-direction:column;align-items:flex-end;/.test(src)
    && /標籤先吃掉一半，名字只剩幾個字；改成各佔一行/.test(src));
 ok('　　整欄仍然封頂（96px），不會回頭去擠中間三列',
    /整欄仍然封頂（96px），不會回頭去擠中間三列/.test(src));
@@ -214,6 +215,58 @@ ok('★★ 最擠的時候「今天」那一格仍然標得出來（整欄唯一
    && /那是整欄唯一的定位點，寧可它自己擠一點也不能不見/.test(src));
 ok('　　日期字級綁格高（cqh），系統字放到多大都不會再溢出格子',
    /\.admh2-rail\.a2-tightest \.a2-dn\{font-size:clamp\(13px,52cqh,19px\);/.test(src));
+
+/* ══ 一致性收斂（2026-09-05）════════════════════════════════════════════
+   ⚠ 這個外殼先前的「六個手機外殼」盤點**漏掉了** —— 我把 body.mc-mode 誤標成
+     「管理員手機首頁」，那其實是桌機員工版（isDeskStaff = !isMobileLayout()
+     && isDeskLike()）。真正的手機首頁是 .admh*：160 條規則、0 個 !important。 */
+{
+  const css=src.replace(/\/\*[\s\S]*?\*\//g,'').match(/<style>[\s\S]*?<\/style>/g).join('');
+  const rules=(css.match(/[^{}]+\{[^{}]*\}/g)||[]).filter(r=>/\.admh/.test(r.slice(0,r.indexOf('{'))));
+  console.log('④ 圓角');
+{
+  const k=new Set();
+  rules.forEach(r=>(r.slice(r.indexOf('{')).match(/border-radius:\s*([0-9]+px|999px|50%)/g)||[])
+    .forEach(m=>k.add(m.split(':')[1].trim())));
+  ok('★★★ 圓角 7 → 5 種以內　現在 '+k.size+' 種', k.size<=5, [...k].sort());
+  ok('★★★ 沒有 50%（.admh-chip-n 20×20、.admh-stamp 21×21 都是正方形，改 999px 一模一樣）',
+     !k.has('50%') && k.has('999px'));
+  ok('★★★ 容器 18／20 收成 16', /\.admh-card\{position:relative;[^}]*border-radius:16px/.test(src)
+     && !/\.mtp-card\.admh-sheet\{[^}]*border-radius:20px/.test(src));
+  ok('★★ 會員端那張卡的 18px 刻意留著（整張放大一級，長輩看得清楚）',
+     /\.memh2 \.admh2-card\{padding:17px 12px 17px 19px;border-radius:18px;\}/.test(src));
+}
+
+  console.log('\n⑤ 手機下限 11px');
+{
+  const small=[];
+  rules.forEach(r=>{ const i=r.indexOf('{');
+    const m=r.slice(i).match(/font-size:\s*([0-9.]+)px/);
+    if(m && parseFloat(m[1])<11) small.push(r.slice(0,i).trim().replace(/\s+/g,' ').slice(0,44)+' '+m[1]);
+  });
+  /* ⚠ 剩下三條都是刻意的：兩條密度變體＋一條固定 17×17 圓圈裡的字。 */
+  ok('★★★ 6 → 3 條，而且剩下的都是刻意保留的', small.length===3
+     && small.every(x=>/a2-tighter|a2-tightest|a2-chiprail/.test(x)), small);
+  ok('★★★ 密度變體不能動（tightest 會把週標隱藏、改用 container-type:size ＋ clamp）',
+     /\.admh2-rail\.a2-tightest \.a2-dw\{display:none;\}/.test(src)
+     && /\.admh2-rail\.a2-tightest \.a2-dn\{font-size:clamp\(13px,52cqh,19px\)/.test(src));
+  ok('★★ 三處次要文字提到 11px', /\.admh2-card \.a2-l3\{font-size:11px/.test(src)
+     && /\.admh2-card \.a2-coach\{font-size:11px/.test(src)
+     && /\.admh-lvtag\{[^}]*font-size:11px/.test(src));
+}
+
+  console.log('\n⑥ 教訓寫在原地');
+{
+  ok('★★★ 錨點要「行首（可含縮排）＋夠長的選擇器」',
+     /'\.admh-chip-n\{' 會命中不能動的 '\.a2-chiprail \.admh-chip-n\{'/.test(src));
+  ok('★★ 這個外殼先前被漏掉的原因寫下來了',
+     /我把 body\.mc-mode 誤標成「管理員手機首頁」，那其實是\*\*桌機\*\*員工版/.test(src));
+  /* A/B 離線量測（2026-09-05，390px）：新溢出 0、新截斷 0、頁高 403→405。 */
+  ok('★★ A/B 量測結果記在這支測試裡',
+     /新溢出 0、新截斷 0、頁高 403→405/.test(fs.readFileSync(__filename,'utf8')));
+}
+
+}
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
