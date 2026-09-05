@@ -11,7 +11,10 @@ const grab=n=>{
 /* 2026-08-06：補課券效期改從「那堂課的日期」起算（makeupTerm），一併抽進來 */
 /* 2026-08-08：請假前要先認出「這一格用的是不是補課券」（補課券不能再請假），
    _groupToggleLeave 因此多依賴 seatTicketOf／tkIsMakeup，一併抽進來 */
-const src=[grab('seatNo'),grab('makeupKey'),grab('makeupTerm'),grab('grantMakeupTicket'),grab('revokeMakeupTicket'),
+/* 2026-09-05：含不含開課當天的判準抽成 makeupSelfLike／makeupExpire（自主含當天、
+   其餘從隔天起算），grantMakeupTicket 與 makeupTerm 都靠它們，一併抽進來 */
+const src=[grab('seatNo'),grab('makeupKey'),grab('makeupSelfLike'),grab('makeupExpire'),
+  grab('makeupTerm'),grab('grantMakeupTicket'),grab('revokeMakeupTicket'),
   grab('seatTicketOf'),grab('tkIsMakeup'),grab('_groupToggleLeave'),
   grab('grpLeaveSeats'),grab('grpLiveHeads'),grab('mids')].join('\n');   // 2026-08-12 取消請假防線用到有效名額
 
@@ -56,7 +59,9 @@ const mkTicket=()=>({id:'T1',member_id:'M1',ticket_type_id:'tt-g',sessions_total
   const mk=Object.values(DB.member_tickets).find(t=>t.source==='makeup');
   chk('有發補課券', !!mk);
   chk('補課券 1 堂', mk && mk.sessions_total===1 && mk.sessions_remaining===1);
-  chk('效期 14 天含開課當天（7/26 起 → 8/08）', mk && mk.expire_date==='2026-08-08');
+  /* 2026-09-05 使用者定案：團課請假「當天是不能來的」，所以從隔天起算
+     → 7/26 的課 + 14 天 ＝ 8/09（原本含當天是 8/08）。自主訓練另計，見下面那組。 */
+  chk('★★★ 團課：效期 14 天，從缺席那堂的隔天起算（7/26 → 8/09）', mk && mk.expire_date==='2026-08-09');
 
   /* 2026-08-06 使用者指示：「補課券的期限要從（請假的）那天開始計算」——
      提前幫還沒到的那堂課登記請假時，效期從課日起算，不是從按下去的當天。 */
@@ -67,7 +72,8 @@ const mkTicket=()=>({id:'T1',member_id:'M1',ticket_type_id:'tt-g',sessions_total
     DB.member_tickets.T1=mkTicket();
     await api.groupToggleLeave('G1','M1');
     const f=Object.values(DB.member_tickets).find(t=>t.source==='makeup');
-    chk('★ 提前請假：效期自課日 8/01 起算 14 天含當天（8/14，不是 8/08）', f && f.expire_date==='2026-08-14');
+    chk('★ 提前請假：效期錨在課日 8/01（不是按下去的 7/26），隔天起算 14 天 → 8/15',
+         f && f.expire_date==='2026-08-15');
     /* 2026-09-05 使用者定案（李曉娟 9/12 案例）：起算日改成課日，不再是今天。
        原本寫今天是為了「不擋會員提早拿去補別堂」，但那會開一個洞——
        提前請假的券今天就能用，用掉之後再取消請假，revokeMakeupTicket 只收
@@ -79,8 +85,8 @@ const mkTicket=()=>({id:'T1',member_id:'M1',ticket_type_id:'tt-g',sessions_total
     DB.member_tickets.T1=mkTicket();
     await api.groupToggleLeave('G1','M1');
     const g=Object.values(DB.member_tickets).find(t=>t.source==='makeup');
-    chk('★ 事後補發過去的課：一樣從開課日 7/20 起算＝8/02（使用者：補發也是以開課當天計算）',
-        g && g.expire_date==='2026-08-02');
+    chk('★ 事後補發過去的課：一樣錨在開課日 7/20（隔天起算 → 8/03），不是按下去的今天',
+        g && g.expire_date==='2026-08-03');
     DB=save;
   }
   chk('綁定本堂與本人', mk && mk.makeup_for_booking==='G1' && mk.member_id==='M1');

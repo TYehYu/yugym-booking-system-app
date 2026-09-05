@@ -12336,8 +12336,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260905.1654';
-const APP_VERSION_LABEL = 'v260905.1654';
+const APP_VERSION = '260905.1705';
+const APP_VERSION_LABEL = 'v260905.1705';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19384,12 +19384,36 @@ function makeupKey(bookingId, seatKey){
    課日已經過去很久的話，補發下去可能已經過期 —— 這是規則本身的結果，
    櫃檯若要放寬，走會員頁的手動補發（可自訂天數）。
    沒有課日期（會員頁手動補發）才退回今天。
-   天數規則不變：自主訓練類 7 天、其他 14 天。 */
+   天數規則不變：自主訓練類 7 天、其他 14 天。
+
+   ⚠ 2026-09-05 使用者定案：含不含開課當天，看「那天還能不能用得到」——
+     ・自主訓練：**含當天**。使用者原話：「自主訓練的 7 天是因為客人當天其實還可以
+       預約自主訓練，所以要當天開始計算」——自主訓練不綁固定時段，同一天換個時間
+       就能來，那天對他是有價值的。
+     ・團課等其他：**不含當天**。「請假的客人代表他當天是不能來的，所以補課的效期
+       要從隔天開始計算」——週課一天只有那一堂，缺席日對他是零價值的一天，
+       算成第 1 天等於收了一天拿不到的額度。
+     起因是客人的說法：「9/12 請假、補課券兩週，往後兩個週六都要可以補課才對」。
+     實際差別（缺席 9/12 週六、週課）：
+       含當天 → 9/25，只補得到 9/19；不含當天 → 9/26，9/19 與 9/26 都補得到。
+     ⚠ 這不是打破 2026-08-08 的「含首日」約定。那條的理由是「開始用的第一天也要
+       算進去」，而它預設第一天是會員**來上課**的那天；判準本來就是「用不用得到」，
+       這裡只是把同一條判準套在一個會員缺席的錨點上。
+   ⚠ start_date 一律是開課當天（不是隔天）—— 同一天若還有別堂同類課，沒有理由擋。
+     算的是「缺席之後 N 天」，不是「可用區間 N 天」。 */
+function makeupSelfLike(catOrName){ return String(catOrName||'').includes('自主'); }
+function makeupExpire(base, days, selfLike){
+  /* termExpire 是「含首日」（base + n−1）。自主訓練照它；其餘要 base + days，
+     所以傳 days+1。借用它而不自己算，是為了保留「壞字串回 null、不寫出
+     NaN-NaN-NaN 當成到期日」那道護欄（見 termExpire）。 */
+  return termExpire(base, selfLike ? days : days+1);
+}
 function makeupTerm(booking){
   const catName=(booking&&booking.category)||'';
-  const days=(catName.includes('自主')) ? 7 : 14;
+  const self=makeupSelfLike(catName);
+  const days=self ? 7 : 14;
   const base=String((booking&&booking.date)||'').slice(0,10) || ymd(TODAY);
-  return { base, days, expire: termExpire(base,days) };   // 含開課當天（2026-08-08）
+  return { base, days, self, expire: makeupExpire(base, days, self) };
 }
 async function grantMakeupTicket(booking, memberIdOverride, seatKey){
   const _mid = memberIdOverride || (booking&&booking.member_id);
@@ -19430,8 +19454,12 @@ async function grantMakeupTicket(booking, memberIdOverride, seatKey){
      ⚠ 補課券沒有 valid_days，所以 activateTicketIfNeeded 與首堂取消退效期
        那兩條會改寫 start_date 的路都走不到它。 */
   const _term=makeupTerm(booking);
-  const makeupDays=(_term.days===7 || (planName&&planName.includes('自主'))) ? 7 : 14;
-  const expire=(makeupDays===_term.days) ? _term.expire : termExpire(_term.base,makeupDays);
+  /* 票種名稱含「自主」但 category 不含的那種票，這裡才會跟 _term.days 不一樣 */
+  const _selfLike=_term.self || makeupSelfLike(planName);
+  const makeupDays=_selfLike ? 7 : 14;
+  /* ⚠ 一定要走 makeupExpire，不能直接 termExpire —— 含不含開課當天的判準在那支裡，
+     兩邊各算一次遲早會分岔（自主含當天、其餘不含，見 makeupTerm 的說明）。 */
+  const expire=makeupExpire(_term.base, makeupDays, _selfLike);
   const tk={ id:uid('TK'), member_id:_mid, ticket_type_id:type_id,
     source_plan_id:null, plan_name:planName, format:booking.format||null,
     source:'makeup', purchase_date:today, start_date:_term.base, expire_date:expire,
@@ -35305,7 +35333,9 @@ async function confirmMakeup(id){
     <div style="font-size:13px;color:var(--text);padding:4px 0;">將為此會員補發 1 張補課券：</div>
     <div style="font-size:12.5px;color:var(--t2);margin:8px 0 14px;line-height:1.8;background:var(--card2);padding:10px 12px;border-radius:9px;">
       課程類型：${b.category}（同類型可用）<br>堂數：1 堂<br>
-      效期：自 ${_tm.base===ymd(TODAY)?'今日':_tm.base.slice(5).replace('-','/')+'（開課日）'} 起 ${_tm.days} 天（至 ${_tm.expire.slice(5).replace('-','/')}）
+      ${/* 2026-09-05：自主訓練含開課當天、其餘從隔天起算 —— 文案要跟著講清楚，
+           不然櫃檯自己拿「開課日＋天數」去對，兩種票會各差一天（見 makeupTerm）。 */''}
+      效期：${_tm.base===ymd(TODAY)&&_tm.self?'自今日起':(_tm.base.slice(5).replace('-','/')+'（開課日）'+(_tm.self?'起':'之後'))} ${_tm.days} 天（至 ${_tm.expire.slice(5).replace('-','/')}）
       ${_tm.expire<ymd(TODAY)?'<span style="color:var(--red,#B3261E);">⚠ 依開課日起算已超過效期，補發後即為過期票券</span>':''}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-gold" onclick="doGrantMakeup('${id}')">確認補發</button></div>`);
 }

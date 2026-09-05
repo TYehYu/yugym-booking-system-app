@@ -47,8 +47,14 @@ console.log('\n④ 每一條期限都問同一支');
 {
   ok('★★ 票券開通（效期自第一堂預約起算）',
      /ticket\.expire_date=termExpire\(d,ticket\.valid_days\);   \/\/ 含開通當天（2026-08-08 使用者更正）/.test(src));
-  ok('★★ 補課券', /return \{ base, days, expire: termExpire\(base,days\) \};   \/\/ 含開課當天（2026-08-08）/.test(src)
-     && /const expire=\(makeupDays===_term\.days\) \? _term\.expire : termExpire\(_term\.base,makeupDays\);/.test(src));
+  /* 補課券 2026-09-05 起分兩種（見 makeupTerm）：自主訓練含開課當天、其餘從隔天起算。
+     判準集中在 makeupExpire 一支，它仍然是問 termExpire ——「含首日」這個底層約定沒變，
+     變的是要不要把缺席那天算進去（那天會員來不了，就不算）。 */
+  ok('★★ 補課券（自主含當天、其餘隔天起算，判準只有 makeupExpire 一支）',
+     /return termExpire\(base, selfLike \? days : days\+1\);/.test(src)
+     && /return \{ base, days, self, expire: makeupExpire\(base, days, self\) \};/.test(src)
+     && /const expire=makeupExpire\(_term\.base, makeupDays, _selfLike\);/.test(src)
+     && !/termExpire\(_term\.base,makeupDays\)/.test(src));
   ok('★★ 簽到贈點（前端原本比 DB 多一天）',
      /const expire=termExpire\(rewardStart,VALID_DAYS\);/.test(src)
      && /資料庫的 handle_checkin_reward 一直是\s*\n\s*b\.date \+ valid_days - 1，這裡多加了一天/.test(src));

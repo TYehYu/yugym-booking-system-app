@@ -21,30 +21,53 @@ const parseYmd=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d
 /* 2026-08-08 使用者更正：期限含首日（見 termdaytest.js）→ 14 天 ＝ 開課日 +13 */
 const termExpire=(base,days)=>{const d=(base instanceof Date)?base:parseYmd(String(base||'').slice(0,10));
   if(!d||isNaN(d.getTime()))return null; return ymd(addDays(d,Math.max(1,Number(days)||1)-1));};
+/* 2026-09-05：判準抽成 makeupSelfLike／makeupExpire，makeupTerm 靠它們，一起切進來 */
 const makeupTerm=new Function('TODAY','ymd','addDays','parseYmd','termExpire',
-  grabFn('makeupTerm')+'\nreturn makeupTerm;')(TODAY,ymd,addDays,parseYmd,termExpire);
+  [grabFn('makeupSelfLike'),grabFn('makeupExpire'),grabFn('makeupTerm')].join('\n')
+  +'\nreturn makeupTerm;')(TODAY,ymd,addDays,parseYmd,termExpire);
 
 console.log('① 效期起算日（實跑 makeupTerm，今天＝2026-08-06 週四）');
-eq('★ 週六(08-08)的課、今天先登記請假 → 從 08-08 起算 14 天＝08-21（含開課當天）',
-   makeupTerm({category:'小班肌力',date:'2026-08-08'}), {base:'2026-08-08',days:14,expire:'2026-08-21'});
-eq('★ 就是今天的課 → 從今天起算（規則不變）',
-   makeupTerm({category:'小班肌力',date:'2026-08-06'}), {base:'2026-08-06',days:14,expire:'2026-08-19'});
-eq('★ 上週的課事後補發 → 一樣從開課日 07-28 起算＝08-10（不是今天）',
-   makeupTerm({category:'小班肌力',date:'2026-07-28'}), {base:'2026-07-28',days:14,expire:'2026-08-10'});
+/* ══ 2026-09-05 使用者定案：含不含開課當天，看「那天還能不能用得到」══
+   「自主訓練的 7 天是因為客人當天其實還可以預約自主訓練，所以要當天開始計算」
+   「但是請假的客人代表他當天是不能來的，所以補課的效期要從隔天開始計算」
+   起因是客人的說法：9/12 請假、補課券兩週，往後兩個週六（9/19、9/26）都要能補。 */
+eq('★★★ 團課：08-08 的課請假 → 從隔天起算 14 天＝08-22（不是含當天的 08-21）',
+   makeupTerm({category:'小班肌力',date:'2026-08-08'}),
+   {base:'2026-08-08',days:14,self:false,expire:'2026-08-22'});
+eq('★★ 就是今天的課 → 錨點仍是今天，但一樣從隔天算（08-20）',
+   makeupTerm({category:'小班肌力',date:'2026-08-06'}),
+   {base:'2026-08-06',days:14,self:false,expire:'2026-08-20'});
+eq('★ 上週的課事後補發 → 一樣錨在開課日 07-28（隔天起算＝08-11），不是今天',
+   makeupTerm({category:'小班肌力',date:'2026-07-28'}),
+   {base:'2026-07-28',days:14,self:false,expire:'2026-08-11'});
 eq('　　開課日久遠 → 算出來就是已過期（規則本身的結果，補發視窗會警示）',
-   makeupTerm({category:'小班肌力',date:'2026-05-01'}), {base:'2026-05-01',days:14,expire:'2026-05-14'});
-eq('　　沒有課日期（會員頁手動補發） → 今天起算',
-   makeupTerm({category:'小班肌力'}), {base:'2026-08-06',days:14,expire:'2026-08-19'});
-eq('★ 自主訓練類仍是 7 天，起算日規則相同',
-   makeupTerm({category:'自主訓練',date:'2026-08-08'}), {base:'2026-08-08',days:7,expire:'2026-08-14'});
+   makeupTerm({category:'小班肌力',date:'2026-05-01'}),
+   {base:'2026-05-01',days:14,self:false,expire:'2026-05-15'});
+eq('　　沒有課日期（會員頁手動補發） → 錨點退回今天',
+   makeupTerm({category:'小班肌力'}), {base:'2026-08-06',days:14,self:false,expire:'2026-08-20'});
+eq('★★★ 自主訓練：7 天且**含開課當天**（那天他還能再約一次自主訓練）→ 08-14',
+   makeupTerm({category:'自主訓練',date:'2026-08-08'}),
+   {base:'2026-08-08',days:7,self:true,expire:'2026-08-14'});
+/* 客人那個情境的實跑：缺席 9/12（週六），往後兩個週六都要補得到 */
+eq('★★★ 李曉娟情境：缺席 9/12 週六 → 效期至 9/26，9/19 與 9/26 兩個週六都在裡面',
+   (()=>{ const t=makeupTerm({category:'小班肌力',date:'2026-09-12'});
+          return {expire:t.expire, 含9_19:t.expire>='2026-09-19', 含9_26:t.expire>='2026-09-26'}; })(),
+   {expire:'2026-09-26', '含9_19':true, '含9_26':true});
+ok('★★ 兩種票的差別就是「那天用不用得到」，理由寫在 makeupTerm 原地',
+   /自主訓練不綁固定時段，同一天換個時間\n\s*就能來，那天對他是有價值的/.test(src)
+   && /週課一天只有那一堂，缺席日對他是零價值的一天/.test(src));
 
 console.log('\n② 接線');
 ok('★ grantMakeupTicket 走 makeupTerm（不再寫死 addDays(TODAY,14)）',
    /const _term=makeupTerm\(booking\);/.test(src)
-   && /const expire=\(makeupDays===_term\.days\) \? _term\.expire : termExpire\(_term\.base,makeupDays\);/.test(src)
    && !/const expire=ymd\(addDays\(TODAY,makeupDays\)\);/.test(src));
-ok('★ 票種名稱含「自主」的也吃 7 天（原本的 planName 判斷保留）',
-   /const makeupDays=\(_term\.days===7 \|\| \(planName&&planName\.includes\('自主'\)\)\) \? 7 : 14;/.test(src));
+ok('★★ 票種名稱含「自主」但 category 不含的那種票，也走自主那一套（含當天）',
+   /const _selfLike=_term\.self \|\| makeupSelfLike\(planName\);/.test(src)
+   && /const makeupDays=_selfLike \? 7 : 14;/.test(src));
+ok('★★★ 含不含開課當天只有一支判準（兩邊各算一次遲早會分岔）',
+   /const expire=makeupExpire\(_term\.base, makeupDays, _selfLike\);/.test(src)
+   && /function makeupExpire\(base, days, selfLike\)\{/.test(src)
+   && !/termExpire\(_term\.base,makeupDays\)/.test(src));
 /* ══ 2026-09-05 使用者回報：李曉娟 9/12 團課請假「補課券卻是今天開始計算」══
    效期本來就是對的（9/12 起算 14 天含當天＝9/25，從今天算會是 9/18）。
    錯的是 start_date 寫今天，而會員票券明細那一列的標籤就叫「開始計算」。
@@ -63,17 +86,17 @@ ok('★★ 補課券沒有 valid_days，所以那兩條會改寫 start_date 的�
 ok('★★ 為什麼不能維持今天（那個免費課的洞）寫在原地',
    /用掉之後再取消請假/.test(src) && /淨得一堂免費課/.test(src));
 /* 實跑：確認新的起算日在「提前請假」與「事後補發」兩種情境下都算對 */
-eq('★★★ 實跑・提前請假（今天 9/05、課在 9/12）→ 起算 9/12、到期 9/25',
+eq('★★★ 實跑・提前請假（今天 9/05、課在 9/12）→ 起算 9/12、到期 9/26',
    (()=>{ const t=makeupTerm({category:'小班肌力',date:'2026-09-12'});
           return {start:t.base, expire:t.expire}; })(),
-   {start:'2026-09-12', expire:'2026-09-25'});
+   {start:'2026-09-12', expire:'2026-09-26'});
 eq('★★★ 實跑・事後補發（課在 8/08）→ 起算落在過去，不會擋掉任何預約',
    (()=>{ const t=makeupTerm({category:'小班肌力',date:'2026-08-08'});
           return {start:t.base, expire:t.expire}; })(),
-   {start:'2026-08-08', expire:'2026-08-21'});
-ok('★ 補發視窗顯示真正的起算日與到期日（不再寫死「自今日起 14 天」）',
+   {start:'2026-08-08', expire:'2026-08-22'});
+ok('★★ 補發視窗要講清楚是「起」還是「之後」（不然櫃檯自己對會差一天）',
    /const _tm=makeupTerm\(b\);/.test(src)
-   && /效期：自 \$\{_tm\.base===ymd\(TODAY\)\?'今日':_tm\.base\.slice\(5\)\.replace\('-','\/'\)\+'（開課日）'\} 起 \$\{_tm\.days\} 天/.test(src)
+   && /\(_tm\.self\?'起':'之後'\)/.test(src)
    && !/效期：自今日起 14 天/.test(src));
 ok('★ 開課日起算已過期時，補發視窗先警示',
    /依開課日起算已超過效期，補發後即為過期票券/.test(src));
