@@ -874,5 +874,30 @@ ok('★★★ 送出時間改用本地時間顯示',
 ok('★★ 存 UTC 是對的，要改的是顯示（寫在原地）',
    /存 UTC 是對的（跨時區、排序都靠它），要改的是\*\*顯示\*\*/.test(src));
 
+/* ══ $0 合約按不下發放（2026-09-05 使用者回報：葉政義・舊合約贈送 4 堂）══════
+   隱藏的 gr-amt 初值原本寫 `Number(P.dealAmount)||Number(P.listPrice)||''`，
+   0 是 falsy → 合法的 $0 合約一路掉到空字串 → grFillApply 判成「沒填」回 null
+   → 應收那格永遠是「填好上面的欄位才算得出來」、發放鈕永遠灰的。
+   諷刺的是 grFillApply 自己的註解就寫著「明確打 0 是合法的（全額加贈）」：
+   判「有沒有填」用的是空字串，初值這裡卻用 || 把 0 當成沒填。 */
+console.log('\n$0 合約也要發得出去（0905）');
+ok('★★★ gr-amt 初值不再用 || 串（0 會被吃掉）',
+   !/value="\$\{Number\(P\.dealAmount\)\|\|Number\(P\.listPrice\)\|\|''\}"/.test(src));
+ok('★★★ 改成挑「第一個算得出數字的」，0 是數字所以留得住',
+   /const n=Number\(v\); if\(v!=null && v!=='' && Number\.isFinite\(n\) && n>=0\) return n;/.test(src));
+ok('★★ 原因寫在原地（下一個人才不會又用 \|\| 改回去）',
+   /0 是 falsy，於是\*\*合法的 \$0 合約會一路掉到空字串\*\*/.test(src));
+{
+  const pick=P=>{ for(const v of [P.dealAmount,P.listPrice]){
+    const n=Number(v); if(v!=null && v!=='' && Number.isFinite(n) && n>=0) return n; } return ''; };
+  const eqv=(n,a,e)=>ok(n, JSON.stringify(a)===JSON.stringify(e), {得到:a,預期:e});
+  eqv('★★★ 實跑・$0 合約 → 0（原本會變成空字串）', pick({dealAmount:0,listPrice:0}), 0);
+  eqv('★★ 實跑・一般合約 → 成交價', pick({dealAmount:19200,listPrice:24000}), 19200);
+  eqv('★★ 實跑・只有定價 → 退回定價', pick({dealAmount:null,listPrice:6400}), 6400);
+  eqv('★★ 實跑・兩個都沒有 → 空字串（這時才該擋）', pick({}), '');
+}
+/* ⚠ $0 發得出去之後，那張票在別處會被當成「無金額票」：tkZeroWhy 標「無金額」、
+   bkGiftGuard 在同類型還有付費票時會跳提醒。那是 0801 的防呆，刻意保留。 */
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

@@ -10144,6 +10144,9 @@ button.rev-kind:hover{filter:brightness(.96);box-shadow:0 1px 4px rgba(60,50,38,
 .rev-kind-new{background:#f7efe0;color:#8a5e28;border-color:#e8d9b8;}
 .rev-kind-renewal{background:#eef5f1;color:#1f6f54;border-color:#cfe3d8;}
 .rev-kind-installment{background:#efe7f3;color:#6e3a86;border-color:#ddd0e6;}
+/* 贈送（2026-09-05，$0 方案）：用最淡的灰米 —— 品牌色階裡紅>金>綠是警示語彙，
+   贈送既不是警示也不是成交，不該跟新約（金）續約（綠）搶注意力。 */
+.rev-kind-gift{background:#f2efe9;color:#6e665c;border-color:#e2ddd3;}
 /* 抽獎（2026-08-24）：獎品的金色，與三種約別分得開 */
 .rev-kind-lottery{background:#f3e6cc;color:#8a5e28;border-color:#e5d3ae;}
 /* 過了當天（非管理員）改不動：淡化但仍可點 —— 點了會說明為什麼 */
@@ -12300,8 +12303,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260905.1749';
-const APP_VERSION_LABEL = 'v260905.1749';
+const APP_VERSION = '260905.1919';
+const APP_VERSION_LABEL = 'v260905.1919';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20866,7 +20869,10 @@ PAGES.g_dashboard=async function(){
        票券本身的約別照登記（新約/續約），首期（購買日那列）就顯示它；
        「分期」只標在後續各期的收款列上（見 _revRows 的 installment 列）。 */
     const k=String(t.sale_kind||'');
-    return (k==='new'||k==='renewal'||k==='installment') ? k : 'new';   // 沒標過的當新約（與獎金口徑一致）
+    /* 2026-09-05 放行 'gift'（$0 贈送）。⚠ 沒標過的仍當新約 —— 這個退路是與獎金口徑
+       對齊用的，不能因為金額是 0 就自動當贈送：舊資料裡有一批「先發票、事後補收款」
+       的 $0 票，那些是新約，只是當下還沒付到錢。要標贈送就明確去標。 */
+    return (k==='new'||k==='renewal'||k==='installment'||k==='gift') ? k : 'new';
   };
   /* 業績歸屬 tag（2026-08-03 使用者指示：「會員名稱右邊新增教練 tag，顯示該筆的
      業績歸屬，可以後續修改，如果不小心選錯人」）——
@@ -40559,13 +40565,16 @@ async function _setRevPay(pid, m){
     navTo(CUR_PAGE);
   }catch(e){ showToast('修改失敗：'+((e&&e.message)||e)); }
 }
-const SALE_KIND_LB={new:'新約', renewal:'續約', installment:'分期'};
+/* 2026-09-05 使用者指示：「設定 0 的方案 約別要多一個贈送」——
+   $0 的成交不是新約也不是續約（標續約會讓教練對一張免費票領到續約獎金）。
+   ⚠ 獎金與新／續統計都只認 'renewal'／'new'，'gift' 不會被任何一條數到。 */
+const SALE_KIND_LB={new:'新約', renewal:'續約', installment:'分期', gift:'贈送'};
 /* 營收明細那一欄只放**一個字**（2026-09-03 使用者附截圖：
    「分期[分] 續約[續] 新約[新] 用正圓形鈕 不要底色」）。
    ⚠ 只有這顆 chip 縮成一個字 —— SALE_KIND_LB 的全名別處還要用
      （改約別的挑選視窗要看得懂「新約／續約／分期」，一個字看不出來）。
    ⚠ 全名放進 title：滑過去仍讀得到，也讓螢幕報讀器唸得出來。 */
-const SALE_KIND_AB={new:'新', renewal:'續', installment:'分'};
+const SALE_KIND_AB={new:'新', renewal:'續', installment:'分', gift:'贈'};   /* 2026-09-05：$0 方案 */
 function saleKindChip(tkId, kind){
   const k=SALE_KIND_LB[kind]?kind:'new';
   const can=(typeof isDeskLike==='function') && isDeskLike();
@@ -40646,7 +40655,10 @@ async function openSaleKindPick(tkId){
        不然剛買的這一張自己也會被算進去。 */
   const _hasPt=await memHasPtHistory(t.member_id, t.id, String(t.purchase_date||'').slice(0,10));
   /* 二選一，不是三選一（2026-09-01 使用者定版，見 memHasPtHistory 的說明） */
-  const _allow=k=>_hasPt?(k!=='new'):(k==='new');
+  /* $0 的票才給「贈送」（2026-09-05）—— 有金額的成交不會是贈送，列出來只是多一個
+     誤選的機會；反過來 $0 的票也不該標新約／續約（續約會憑一張免費票發獎金）。 */
+  const _zero=Number(t.amount_paid||0)<=0;
+  const _allow=k=>_zero ? (k==='gift') : (k!=='gift' && (_hasPt?(k!=='new'):(k==='new')));
   const btn=(k)=>_allow(k)?`<button type="button" class="btn ${cur===k?'btn-green':'btn-ghost'}" style="flex:1;"
       onclick="setSaleKind('${tkId}','${k}')">${SALE_KIND_LB[k]}</button>`:'';
   showModal(`<div class="modal-title">約別</div>
@@ -40654,7 +40666,7 @@ async function openSaleKindPick(tkId){
       ${String(t.plan_name||'票券').replace(/</g,'&lt;')}　${t.sessions_total||0} 堂　$${Number(t.amount_paid||0).toLocaleString()}
       　目前：<b>${SALE_KIND_LB[t.sale_kind]||'（未標）'}</b><br>
       <b>續約獎金只認「續約」</b>，改了會即時反映在教練的薪資計算上，請確認後再送出。</div>
-    <div style="display:flex;gap:8px;">${btn('new')}${btn('renewal')}${btn('installment')}</div>
+    <div style="display:flex;gap:8px;">${btn('new')}${btn('renewal')}${btn('installment')}${btn('gift')}</div>
     <div style="font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:10px;">${_hasPt
       ? '這位在買這張之前<b>已經有</b>教練課／友善教練課的紀錄，所以不會是新約 —— 請選續約或分期。'
       : '這位在買這張之前<b>沒有</b>教練課／友善教練課的紀錄，所以只能是新約 —— 續約與分期要等有過一份之後才會出現。'}</div>
@@ -49298,11 +49310,26 @@ async function openGrantModal(){
    ⚠ 2026-09-05 修正：原本這裡留了一項「團課」不受影響，是錯的 —— 使用者指示
      「購買團課也不需要約別」，而且 SALE_KIND_LB 沒有 'group'，存了也讀不出來。
      現在整欄只在票種是「私人教練」時才畫（見 gtSaleKindNeed）。 */
+/* 這次的成交金額是不是 0（2026-09-05）—— 自訂方案用整包總價 list_price，
+   模板方案用單價 × 堂數，與 refreshGrantInfo 的算法同一套。
+   ⚠ 讀不到方案就回 false（照原本的三選一），不要因為抓不到就默默變成贈送。 */
+function gtIsZeroDeal(){
+  try{
+    const p=window._grantPlanCache; if(!p) return false;
+    const lp=(p.list_price!=null) ? (Number(p.list_price)||0)
+                                  : ((Number(p.unit_price)||0)*(Number(p.sessions_base)||0));
+    return lp<=0;
+  }catch(_){ return false; }
+}
 function gtSaleKindOpts(hasPt){
   const sel=document.getElementById('gt-salekind'); if(!sel) return;
   const cur=sel.value;
-  const OPTS=[['new','新約'],['renewal','續約'],['installment','分期']];
-  const allow=k=>hasPt?(k!=='new'):(k==='new');
+  const OPTS=[['new','新約'],['renewal','續約'],['installment','分期'],['gift','贈送']];
+  /* $0 的方案只給「贈送」（2026-09-05 使用者：「設定 0 的方案 約別要多一個贈送」）——
+     沿用這一欄一貫的作法：不合用的選項直接不列，而不是列出來讓人選了才擋。
+     這一欄直接連到教練的續約獎金，$0 標成續約等於憑一張免費票發一筆獎金。 */
+  const zero=gtIsZeroDeal();
+  const allow=k=>zero ? (k==='gift') : (k!=='gift' && (hasPt?(k!=='new'):(k==='new')));
   const keep=OPTS.filter(([k])=>allow(k));
   sel.innerHTML=keep.map(([k,lb])=>`<option value="${k}">${lb}</option>`).join('');
   /* ⚠ 退路要退到「還在清單裡的第一個」——退成寫死的 'new' 的話，
@@ -49311,9 +49338,11 @@ function gtSaleKindOpts(hasPt){
   const note=document.getElementById('gt-salekind-hint');
   if(note){
     note.style.display='';
-    note.textContent=hasPt
-      ? '這位已經有教練課／友善教練課的紀錄，所以不是新約 —— 請選續約或分期（分期不計續約獎金）。'
-      : '這位還沒有教練課／友善教練課的紀錄，所以只能是新約（續約與分期要等有過一份之後才會出現）。';
+    note.textContent=zero
+      ? '這個方案金額是 0，所以是贈送 —— 贈送不計新約、也不計續約獎金。'
+      : (hasPt
+        ? '這位已經有教練課／友善教練課的紀錄，所以不是新約 —— 請選續約或分期（分期不計續約獎金）。'
+        : '這位還沒有教練課／友善教練課的紀錄，所以只能是新約（續約與分期要等有過一份之後才會出現）。');
   }
 }
 /* 要不要畫約別這一欄（2026-09-05 使用者指示：「運動按摩不需要約別」「購買團課也不需要」）——
@@ -49401,8 +49430,12 @@ function grantGoStep(n){
     gtSaleKindSync();   /* ⚠ 一定排在 Opts 後面：Opts 會把提示行重新打開 */
     if(!gtSaleKindNeed()) return;   /* 不是教練課系 → 不預選、不寫值 */
     if(sel.dataset.touched) return;
-    /* 自動預選：分期 → 分期；有教練課紀錄 → 續約；其餘 → 新約。
-       （2026-09-05 移除「賣團課 → 團課」：團課現在整欄不畫，見 gtSaleKindNeed） */
+    /* 自動預選：$0 → 贈送；分期 → 分期；有教練課紀錄 → 續約；其餘 → 新約。
+       （2026-09-05 移除「賣團課 → 團課」：團課現在整欄不畫，見 gtSaleKindNeed）
+       ⚠ $0 這一條一定要在最前面且直接 return —— gtSaleKindOpts 已經把選單收成只剩
+         「贈送」，這裡再寫 'renewal'／'new' 會設成一個不在清單裡的值，
+         sel.value 直接變空字串（0901 那次退路寫死 'new' 就是踩到同一個坑）。 */
+    if(gtIsZeroDeal()){ sel.value='gift'; return; }
     const _instNow=Number((document.getElementById('gt-install')||{}).value||1)>1;
     if(_instNow){ sel.value='installment'; return; }   /* 畫面上那一欄已由 gtSaleKindSync 收起來 */
     sel.value=_hasPt?'renewal':'new';
@@ -50946,7 +50979,15 @@ async function openGrantApprove(id){
                全都讀它，拿掉會讓整包算不出來。值不會變，所以「有改過才給存」
                的比對也不受影響。
              ⚠ 真的要改金額＝改合約 → 取消這筆發放、重開一份（標題列下的警示會指路）。 */''}
-        <input type="hidden" id="gr-amt" value="${Number(P.dealAmount)||Number(P.listPrice)||''}">
+        ${/* ⚠ 2026-09-05 使用者回報（葉政義・舊合約贈送 4 堂・合約金額 $0）：
+              「無法按發放票券」。原本這裡寫 `Number(P.dealAmount)||Number(P.listPrice)||''`，
+              0 是 falsy，於是**合法的 $0 合約會一路掉到空字串**，grFillApply 判成「沒填」
+              回 null，應收那格永遠顯示「填好上面的欄位才算得出來」、發放鈕永遠是灰的。
+              諷刺的是 grFillApply 自己的註解就寫著「明確打 0 是合法的（全額加贈）」——
+              判「有沒有填」用的是空字串，這裡卻用 || 把 0 當成沒填。
+              改成挑「第一個算得出數字的」，0 是數字所以留得住。 */''}
+        <input type="hidden" id="gr-amt" value="${(()=>{ for(const v of [P.dealAmount,P.listPrice]){
+              const n=Number(v); if(v!=null && v!=='' && Number.isFinite(n) && n>=0) return n; } return ''; })()}">
         <div class="form-row"><label>付款方式 *</label>
           <select id="gr-method" onchange="var w=document.getElementById('gr-split-wrap');if(w)w.style.display=this.value==='split'?'':'none';grFillPreview();">
             ${[['cash','現金'],['transfer','匯款'],['split','現金＋匯款']].map(([v,l])=>

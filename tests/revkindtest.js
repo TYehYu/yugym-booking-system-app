@@ -28,9 +28,14 @@ console.log('\n② 約別＝一個字的正圓框章（2026-09-03 二修＋三�
 /* 二修：「分期[分] 續約[續] 新約[新] 用正圓形鈕 不要底色」
    三修：「[新][續][分] 跟首頁課卡出席章的大小一樣」 */
 ok('★★★ 只顯示一個字（全名留在 title 與 SALE_KIND_LB）',
-   /const SALE_KIND_AB=\{new:'新', renewal:'續', installment:'分'\};/.test(src)
+   /const SALE_KIND_AB=\{new:'新', renewal:'續', installment:'分', gift:'贈'\};/.test(src)
    && /\$\{SALE_KIND_AB\[k\]\}<\/\$\{can\?'button':'span'\}>/.test(src)
-   && /const SALE_KIND_LB=\{new:'新約', renewal:'續約', installment:'分期'\};/.test(src));
+   && /const SALE_KIND_LB=\{new:'新約', renewal:'續約', installment:'分期', gift:'贈送'\};/.test(src));
+/* 2026-09-05 使用者指示：「設定 0 的方案 約別要多一個贈送」。兩張表都要同步加，
+   少一邊 saleKindChip 會畫出空白（SALE_KIND_AB[k] 是 undefined）或退回「新」。 */
+ok('★★ 贈送章有自己的顏色，而且刻意最淡（不跟新約／續約搶注意力）',
+   /\.rev-kind-gift\{background:#f2efe9;/.test(src)
+   && /贈送既不是警示也不是成交/.test(src));
 ok('★★★ 抽獎也是一個字', />獎<\/button>`/.test(src) && />獎<\/span>`;/.test(src));
 ok('★★ 全名放進 title（滑過去讀得到，報讀器也唸得出來）',
    /const tt=can\?`\$\{SALE_KIND_LB\[k\]\}　點一下更改約別（影響續約獎金）`:SALE_KIND_LB\[k\];/.test(src)

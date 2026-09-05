@@ -15,7 +15,11 @@ console.log('只有教練課要標');
 ok('★ 有分類函式，且非私人教練回 null', /const _saleKindOf=t=>\{/.test(src)
    && /if\(cat!=='私人教練'\) return null;/.test(src));
 ok('★ 沒標過的當新約（與獎金口徑一致：只有 renewal 才算續約）',
-   /return \(k==='new'\|\|k==='renewal'\|\|k==='installment'\) \? k : 'new';/.test(src));
+   /return \(k==='new'\|\|k==='renewal'\|\|k==='installment'\|\|k==='gift'\) \? k : 'new';/.test(src));
+/* ⚠ 「沒標過的當新約」這個退路刻意**不**因為金額 0 就改判贈送 —— 舊資料裡有一批
+   「先發票、事後補收款」的 $0 票，那些是新約，只是當下還沒付到錢。 */
+ok('★★ 退路不看金額（$0 未必是贈送，也可能是還沒收到錢的新約）',
+   /不能因為金額是 0 就自動當贈送/.test(src));
 ok('　　為什麼團課不標，寫在程式裡', /團課與其他類別不標：它們本來就不進續約獎金/.test(src));
 
 console.log('\n兩個畫面都要有（首頁名單卡＋點開的彈窗）');
@@ -159,10 +163,10 @@ ok('★★★ 判準只有一支 memHasPtHistory（賣的時候與事後改共�
    /async function memHasPtHistory\(mid, exceptTkId, beforeDate\)\{/.test(src)
    && (src.match(/memHasPtHistory\(/g)||[]).length===3);   // 宣告 1 ＋ 兩條路各 1
 ok('★★★ 有紀錄 → 新約不列；沒紀錄 → 續約與分期不列',
-   /const allow=k=>hasPt\?\(k!=='new'\):\(k==='new'\);/.test(src)
+   /const allow=k=>zero \? \(k==='gift'\) : \(k!=='gift' && \(hasPt\?\(k!=='new'\):\(k==='new'\)\)\);/.test(src)
    && /選項直接不列，而不是列出來讓人選了才擋/.test(src));
 ok('★★★ 事後改約別同一條規則（少一邊就是一個多領獎金的後門）',
-   /const _allow=k=>_hasPt\?\(k!=='new'\):\(k==='new'\);/.test(src));
+   /const _allow=k=>_zero \? \(k==='gift'\) : \(k!=='gift' && \(_hasPt\?\(k!=='new'\):\(k==='new'\)\)\);/.test(src));
 ok('★★★ 退路退到「還在清單裡的第一個」，不是寫死 new',
    /sel\.value=allow\(cur\)\?cur:\(\(keep\[0\]\|\|\['new'\]\)\[0\]\);/.test(src)
    && /有紀錄的人會被設成一個不在選單裡的值，sel\.value 變空字串/.test(src));
@@ -230,7 +234,7 @@ console.log('\n約別只給教練課（0905 定版）');
 ok('★★★ 團課選項整個移除（SALE_KIND_LB 沒有 group，存了也讀不出來）',
    !/<option value="group">團課<\/option>/.test(src)
    && !/sel\.value='group'/.test(src)
-   && /const SALE_KIND_LB=\{new:'新約', renewal:'續約', installment:'分期'\};/.test(src));
+   && /const SALE_KIND_LB=\{new:'新約', renewal:'續約', installment:'分期', gift:'贈送'\};/.test(src));
 ok('★★★ 判準與 _saleKindOf／_attNeed 同一條：category==="私人教練"',
    /function gtSaleKindNeed\(\)\{/.test(src)
    && /return cat\?\(cat==='私人教練'\):true;/.test(src));
@@ -273,6 +277,51 @@ ok('★★ 進第二步那條非同步線也要自己收一次，而且排在 Op
     r.row==='none' && r.auto==='' && r.hint==='none' && r.val==='installment');
   r=run('',1); ok('★★★ 實跑・類別讀不到 → 照畫（退路不能是默默不標）',
     r.row==='' && r.val==='renewal');
+})();
+
+/* ══ 2026-09-05 使用者指示：「設定 0 的方案 約別要多一個贈送」══════════════
+   起因是葉政義那份舊合約贈送 4 堂、合約金額 $0，發放鈕按不下去（另修，見
+   gr-amt 的 hidden 初值）。順著看下去，$0 的成交本來就不該標新約或續約 ——
+   標續約等於讓教練憑一張免費票領到一筆續約獎金。 */
+console.log('\n贈送（0905 定版：$0 方案）');
+ok('★★★ 兩張對照表都加了 gift（少一邊，約別章會畫成空白或退回「新」）',
+   /const SALE_KIND_LB=\{new:'新約', renewal:'續約', installment:'分期', gift:'贈送'\};/.test(src)
+   && /const SALE_KIND_AB=\{new:'新', renewal:'續', installment:'分', gift:'贈'\};/.test(src));
+ok('★★★ $0 只列「贈送」，有金額的不列它（沿用這一欄「不合用就不列」的作法）',
+   /const allow=k=>zero \? \(k==='gift'\) : \(k!=='gift'/.test(src)
+   && /const _allow=k=>_zero \? \(k==='gift'\) : \(k!=='gift'/.test(src));
+ok('★★★ 判斷 $0 的算法與 refreshGrantInfo 同一套（自訂吃 list_price、模板單價×堂數）',
+   /function gtIsZeroDeal\(\)\{/.test(src)
+   && /const lp=\(p\.list_price!=null\) \? \(Number\(p\.list_price\)\|\|0\)/.test(src));
+ok('★★★ 讀不到方案時回 false（不能因為抓不到就默默變成贈送）',
+   /讀不到方案就回 false（照原本的三選一），不要因為抓不到就默默變成贈送/.test(src));
+ok('★★★ 自動預選要先擋 $0 並直接 return（否則會設成不在清單裡的值 → sel.value 變空字串）',
+   /if\(gtIsZeroDeal\(\)\)\{ sel\.value='gift'; return; \}/.test(src));
+ok('★★ 事後改約別：$0 的票只給贈送，有金額的票看不到贈送',
+   /const _zero=Number\(t\.amount_paid\|\|0\)<=0;/.test(src)
+   && /\$\{btn\('new'\)\}\$\{btn\('renewal'\)\}\$\{btn\('installment'\)\}\$\{btn\('gift'\)\}/.test(src));
+ok('★★ 提示文字也要跟著換（不能還在講「請選續約或分期」）',
+   /這個方案金額是 0，所以是贈送 —— 贈送不計新約、也不計續約獎金。/.test(src));
+/* 獎金與統計那三條路都只認 renewal／new，gift 進不去 —— 這一條是本次改動的安全底線 */
+ok('★★★ 續約獎金與新／續統計都數不到 gift',
+   /if\(t\.sale_kind!=='renewal'\) return;/.test(src)
+   && /if\(k!=='new'&&k!=='renewal'\) return;/.test(src));
+
+/* 實跑：把 _saleKindOf 切出來，確認 gift 讀得回來、而且不會被當成新約 */
+(function(){
+  const m=src.match(/const _saleKindOf=t=>\{[\s\S]*?\n  \};/);
+  if(!m) throw new Error('切不到 _saleKindOf');
+  const GIFTSRC=(src.match(/const TK_GIFT_SRC=\{[^}]*\};/)||[])[0];
+  /* ⚠ 不要把 TK_GIFT_SRC 也列成參數名 —— 下面會注入一份 `const TK_GIFT_SRC=…`，
+     參數與 const 同名會直接 SyntaxError（第一版就是這樣掛的）。 */
+  const fn=new Function('types', GIFTSRC+'\n'+m[0]+'\nreturn _saleKindOf;')(
+    [{id:'pt',category:'私人教練'},{id:'grp',category:'小班肌力'}]);
+  eq('★★★ 實跑・$0 贈送票 → gift（不是被退路吞成 new）',
+     fn({ticket_type_id:'pt',sale_kind:'gift',amount_paid:0}), 'gift');
+  eq('★★★ 實跑・$0 但沒標過 → 仍是 new（先發票後收款的舊資料）',
+     fn({ticket_type_id:'pt',amount_paid:0}), 'new');
+  eq('★★ 實跑・非教練課的贈送票 → 不標（整欄本來就不畫）',
+     fn({ticket_type_id:'grp',sale_kind:'gift'}), null);
 })();
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
