@@ -15,6 +15,9 @@
    ③ 其餘照購買順序先進先出（＝票券編號順序）
    加上：起始日還沒到的票，該日期不能用（tkFitsBooking）。 */
 const fs=require('fs');
+const grab=n=>{ const m=new RegExp('(?:^|\\n)(?:async )?function '+n+'\\(').exec(src);
+  if(!m) return ''; const i=m.index+(m[0][0]==='\n'?1:0); let d=0;
+  for(let k=src.indexOf('{',i);k<src.length;k++){ if(src[k]==='{')d++; else if(src[k]==='}'){d--; if(!d) return src.slice(i,k+1);} } };
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
@@ -83,6 +86,39 @@ ok('★ 規則的三層順序寫在排序旁邊',
 ok('　　使用者的定案原話記在程式裡',
    /應該從編號比較前面的票券先使用，除非後面的票券期限比較短才先用期限較近的/.test(src));
 ok('　　為什麼舊規則錯，寫在程式裡', /一年後才到期不叫「期限比較短」/.test(src));
+
+
+console.log('\n⑨ $0 票要留到最後用（2026-09-05 使用者：「一般票券尚未使用完就使用0元票券要跳提醒」）');
+{
+  const G=grab('bkGiftGuard'), P=grab('bkPaidLeftSameType'), Z=grab('tkZeroWhy'), I=grab('tkIsGift');
+  /* ⚠ 為什麼不能沿用 tkIsGift 當判準：它要求備註寫「加贈」，而那句話只有舊系統
+     匯入的票才有。實際掃到的兩筆漏網（陳苓汶、林韋綺）都是「自訂方案」賣 $0，
+     備註是空的 —— tkIsGift 認不出來。所以防呆只看「不用錢」＋「同票種還有付費票」。 */
+  ok('★★★ 防呆不看備註，只看金額 0 ＋ 同票種還有付費票有餘額',
+     /Number\(tk\.amount_paid\|\|0\)>0\) return null;/.test(P)
+     && /Number\(x\.amount_paid\|\|0\)>0/.test(P) && /tkUnlockedLeft\(x\)>0/.test(P));
+  ok('★★★ 只比同一種票種（自主訓練的付費票不能擋教練課）',
+     /String\(x\.ticket_type_id\|\|''\)===String\(tk\.ticket_type_id\|\|''\)/.test(P));
+  ok('★★★ 過期的付費票不算（不能拿一張過期的票擋住）',
+     /!x\.expire_date \|\| String\(x\.expire_date\)\.slice\(0,10\)>=ymd\(TODAY\)/.test(P));
+  ok('★★★ 共享票也算（tkUsableBy，不是只看持有人）', /tkUsableBy\(x, mid\)/.test(P));
+  ok('★★★ 抽獎票認得出來（使用者：贈送課現在只剩抽獎才會取得）',
+     /String\(t\.source\|\|''\)==='lottery'\) return true;/.test(I)
+     && /return '抽獎贈送';/.test(Z));
+  ok('★★★ 提醒要講這張 $0 是哪來的（抽獎／加贈／待確認／匯入）',
+     /抽獎贈送/.test(Z) && /隨方案加贈/.test(Z) && /金額待確認/.test(Z) && /舊系統匯入・無金額/.test(Z));
+  ok('★★ 是提醒不是禁止（先用 $0 有時是對的）', /是提醒不是禁止/.test(src));
+  ok('★★ 問在送出之前、不是在 bkFindTk 裡（連續預約會問 N 次）',
+     /const _tkPre=await bkFindTk\(member_id, date, time\);/.test(src)
+     && /放在這裡而不是 bkFindTk 裡面/.test(src));
+  ok('★★ 檢查自己失敗不擋預約', /catch\(e\)\{ console\.warn\('加贈票提醒檢查失敗（不擋預約）', e\); \}/.test(src));
+  /* 離線實跑（2026-09-05，真實函式＋假票券）：
+     抽獎票→問（標「抽獎贈送」）；舊系統加贈票→問（標「隨方案加贈」）；
+     自訂方案賣 $0 備註空的→**照樣問**（tkIsGift 認不出來但防呆有效）；
+     付費票→不問；付費票用完→不問；不同票種的付費票→不問。 */
+  ok('★★ 六種情況的實跑結果記在這支測試裡',
+     /自訂方案賣 \$0 備註空的→\*\*照樣問\*\*/.test(require('fs').readFileSync(__filename,'utf8')));
+}
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

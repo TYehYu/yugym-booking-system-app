@@ -12508,8 +12508,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260905.1152';
-const APP_VERSION_LABEL = 'v260905.1152';
+const APP_VERSION = '260905.1200';
+const APP_VERSION_LABEL = 'v260905.1200';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18334,10 +18334,58 @@ function tkIsTimeRestricted(t){
    與「金額待確認（購買當日查無收款紀錄）」都不是加贈，只是金額不明；
    把它們當加贈延後使用會挑錯票。判準沿用票券卡上「$0・加贈」那一套（見 tkMoneyHtml）：
    金額 0 **而且**備註寫著加贈（賣票時自動寫「隨 ⋯ 加贈」）。 */
+/* ══ 不加錢的票要留到最後用（2026-09-05 使用者指示）════════════════════════
+   「一般票券尚未使用完就使用0元票券要跳提醒」。
+   ⚠ 為什麼不能沿用 tkIsGift：它要求備註寫著「加贈」，而那句話**只有舊系統匯入的
+     票才有**（現行賣票流程不寫）。實際掃到的兩筆漏網（陳苓汶、林韋綺）都是
+     「自訂方案」賣 $0 —— 備註是空的或效期調整，tkIsGift 一律認不出來。
+   ⚠ 所以這裡不看備註，只看兩件事：這張不用錢、而且**同一票種還有付費票有餘額**。
+     這樣連「金額不明」的匯入票也會被問一次 —— 那是刻意的：金額不明本來就該確認，
+     問一句的成本遠低於把付費票放到過期。
+   ⚠ 是提醒不是禁止：先用 $0 的票有時是對的（快到期、方案要結案）。
+   ⚠ 2026-09-05 使用者：「這種贈送教練課的票券 現在只剩下抽獎才會取得，以前買多
+     送課的方案已經取消」—— 所以往後這裡攔到的多半是抽獎獎品。提醒裡會標出來源
+     （抽獎贈送／隨方案加贈／金額待確認／舊系統匯入），櫃檯才判斷得出能不能先用。 */
+async function bkPaidLeftSameType(tk, mid){
+  try{
+    if(!tk || Number(tk.amount_paid||0)>0) return null;
+    const all=await dbGetAll('member_tickets');
+    return (all||[]).find(x=> x && x.id!==tk.id
+      && String(x.ticket_type_id||'')===String(tk.ticket_type_id||'')
+      && x.status==='usable' && Number(x.amount_paid||0)>0
+      && tkUsableBy(x, mid) && tkUnlockedLeft(x)>0
+      && (!x.expire_date || String(x.expire_date).slice(0,10)>=ymd(TODAY))) || null;
+  }catch(_){ return null; }
+}
+async function bkGiftGuard(tk, mid){
+  const paid=await bkPaidLeftSameType(tk, mid);
+  if(!paid) return true;
+  const _why=(typeof tkZeroWhy==='function')?tkZeroWhy(tk):'';
+  return confirm(`這一堂會用到「${tk.plan_name||'票券'}」——這張是 $0 的票`
+    +(_why?`（${_why}）`:'')+`。\n\n`
+    +`同一種課他還有付費的沒用完：\n`
+    +`　${paid.plan_name||'票券'}　·　還剩 ${tkUnlockedLeft(paid)} 堂`
+    +(paid.expire_date?`　·　效期至 ${String(paid.expire_date).slice(0,10)}`:'')+`\n\n`
+    +`一般會先把付費的用完，$0 的留最後。確定要用 $0 這張嗎？`);
+}
 function tkIsGift(t){
   if(!t) return false;
   if(Number(t.amount_paid||0)>0) return false;
+  /* ⚠ 2026-09-05 使用者：「這種贈送教練課的票券 現在只剩下抽獎才會取得，
+     以前買多送課的方案已經取消」—— 抽獎發的票沒有「加贈」備註，但它有
+     source:'lottery'（見 openLottoModal 那一段），是明確的旗標，比備註可靠。
+     舊的「隨 ⋯ 加贈」留著：那句話只有舊系統匯入的票有，仍要認得。 */
+  if(String(t.source||'')==='lottery') return true;
   return /加贈/.test(String(t.note||''));
+}
+/* 這張 $0 是哪來的 —— 提醒裡要講，櫃檯才判斷得出「能不能先用」。 */
+function tkZeroWhy(t){
+  if(!t) return '';
+  if(String(t.source||'')==='lottery') return '抽獎贈送';
+  if(/加贈/.test(String(t.note||''))) return '隨方案加贈';
+  if(/待確認/.test(String(t.note||''))) return '金額待確認';
+  if(String(t.id||'').startsWith('MTK-')||String(t.id||'').startsWith('IMP')) return '舊系統匯入・無金額';
+  return '無金額';
 }
 /* 「這張票還沒確認過」的判定（2026-08-01 使用者問「連今天儲值的票券一直出錯，怎麼避免」）——
    今天李晏如那張 7/04 的票在舊系統早就註銷了，但在這裡是 usable，於是每次自動挑票都被挑走，
@@ -32050,6 +32098,13 @@ async function _submitBookingInner(){
     }
     return await findUsableTicket(mid,type_id,d,tsv||time);
   };
+  /* ⚠ 送出前先確認會挑到哪張票：如果是 $0 而同票種還有付費票沒用完，問一次
+     （2026-09-05 使用者指示）。放在這裡而不是 bkFindTk 裡面 —— 連續預約會呼叫
+     它很多次，問在迴圈裡會連問 N 次；而且取消時要能乾淨地整個不建立。 */
+  try{
+    const _tkPre=await bkFindTk(member_id, date, time);
+    if(_tkPre && !(await bkGiftGuard(_tkPre, member_id))) return;
+  }catch(e){ console.warn('加贈票提醒檢查失敗（不擋預約）', e); }
   /* 跑步機台數（2026-08-01 使用者指示）：選了台數＝指定用跑步機，
      第 2 台以 sibling_of 掛在主預約下、不另外扣點。 */
   const _vc=bkVenueChoice();                     // 場地指定：跑步機台數或團課教室（2026-08-04）
