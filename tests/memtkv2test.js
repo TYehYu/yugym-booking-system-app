@@ -119,5 +119,27 @@ console.log('\n⑧ 票券卡字級收斂（2026-09-05：「目的是想減少產
      /新增的溢出 0 個、頁高 560→560 不變/.test(fs.readFileSync(__filename,'utf8')));
 }
 
+
+console.log('\n⑨ 票券卡的小字：查證後一條都不能動（2026-09-05）');
+{
+  const fs3=require('fs');
+  const S=fs3.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const css=S.replace(/\/\*[\s\S]*?\*\//g,'').match(/<style>[\s\S]*?<\/style>/g).join('');
+  const small=[];
+  (css.match(/[^{}]+\{[^{}]*\}/g)||[]).forEach(r=>{
+    const i=r.indexOf('{'); const sel=r.slice(0,i), body=r.slice(i);
+    if(!/\.(tkc|mtk)/.test(sel)) return;
+    const m=body.match(/font-size:\s*([0-9.]+)px/);
+    if(m && parseFloat(m[1])<11) small.push(sel.trim().replace(/\s+/g,' ').slice(0,42));
+  });
+  const DOT=/mtk\b|mtk-venue|mtk-yr|mtk-sh|mtk-lv|mtk-shdt|tkc-dot|tkm-dots|mck-dots6|mtk-entry-row/;
+  t('★★★ 低於 11px 的十條全在圓點家族（等比字，放大會撐破）',
+    small.length>0 && small.every(x=>DOT.test(x)));
+  t('★★★ 這一輪對票券卡不改任何字級（結論寫在原地）',
+    /這一輪對票券卡\*\*不改任何字級\*\*/.test(S));
+  t('★★★ 正確的解法是把圓點做大，不是把字放大 —— 也寫下來了',
+    /正確的解法是\*\*把圓點做大\*\*/.test(S) && /不要用「把字放大」繞過去/.test(S));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
