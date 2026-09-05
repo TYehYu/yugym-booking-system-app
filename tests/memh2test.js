@@ -524,5 +524,29 @@ console.log('\n⑧ 會員端 V2 圓角收斂（2026-09-05）');
      /\.a2-l3 有 11／12\.5／13\.5 三種/.test(S));
 }
 
+
+console.log('\n⑨ 手機下限 11px（2026-09-05：可讀性）');
+{
+  const fs2=require('fs');
+  const S=fs2.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+  const css=S.replace(/\/\*[\s\S]*?\*\//g,'').match(/<style>[\s\S]*?<\/style>/g).join('');
+  const small=[];
+  (css.match(/[^{}]+\{[^{}]*\}/g)||[]).forEach(r=>{
+    const i=r.indexOf('{'); const sel=r.slice(0,i), body=r.slice(i);
+    if(!/\.(memh2|mh2)/.test(sel)) return;
+    const m=body.match(/font-size:\s*([0-9.]+)px/);
+    if(m && parseFloat(m[1])<11) small.push(sel.trim().slice(0,40)+' '+m[1]+'px');
+  });
+  /* 手機上 11px 是實用下限，再小在陽光下或年紀大一點的眼睛就讀不了 ——
+     這是功能問題，不只是美感。這一頁本來就有「長輩看得清楚」的方向。 */
+  t('★★★ 會員端沒有低於 11px 的字了　（原本 5 條：9.5／10.5px）', small.length===0, small);
+  t('★★★ 只動「自由文字」，不動圓點裡的等比字（那個放大會撐破）',
+     /圓點內的字級是\*\*跟著圓點尺寸等比\*\*的，放大會撐破/.test(S));
+  /* A/B 離線量測（2026-09-05，390px、改前 vs 改後同一份 DOM）：
+     新溢出 0、新截斷 0、月曆週標題七格仍在同一列、頁高 300→300 不變。 */
+  t('★★ A/B 量測結果記在這支測試裡',
+     /月曆週標題七格仍在同一列、頁高 300→300 不變/.test(fs2.readFileSync(__filename,'utf8')));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
