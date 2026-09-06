@@ -21,8 +21,15 @@ const g=(a,b)=>{const i=src.indexOf(a); if(i<0) throw new Error('找不到 '+a);
      tkSharedIds / ticketMatchesCategory / tkIsInstall）全部取自真實原始碼，
      不自己造替身 —— 否則驗的就不是產品的判定了。 */
 const lib=new Function('window','bkTicketTypeOk','ticketCategoryOf','categoryOfTypeId','parseYmd','timeToMin',
+  /* ⚠ tkIsInstall 是單行函式，原本寫 g('function tkIsInstall(','\n}') 會一路掃到
+       下一個「獨立成行的 }」為止，順手把 tkUnlimited 與 TK_TIME_END_MIN 也掃進來 ——
+       tkTimeOk 需要那個常數，卻沒有人明講。2026-09-06 在 tkIsInstall 後面插了兩支新函式，
+       掃描就停在那裡，TK_TIME_END_MIN 沒被帶進來，整支測試 ReferenceError 崩掉。
+       改成要什麼就抽什麼，不再依賴「剛好掃得到」。 */
   [g('function tkUsableBy(','\n}'), g('function tkSharedIds(','\n}'),
-   g('function tkIsInstall(','\n}'), g('function tkUnlockedLeft(','\n}'),
+   g('function tkIsInstall(','}'), g('function tkUnlimited(','}'),
+   g('const TK_TIME_END_MIN',';'),
+   g('function tkUnlockedLeft(','\n}'),
    g('function tkOverBooked(','\n}'), g('function tkTimeOk(','\n}'),
    g('function ticketMatchesCategory(','\n}'),
    g('function bkMemTicketInfo(','\n}'), g('function tkFitsBooking(','\n}')].join('\n')

@@ -27,9 +27,14 @@ console.log('① 實跑 tkMoneyHtml');
 }
 
 console.log('\n② 對照表的建法');
-/* 2026-08-13 拆帳改版：對照表每筆改存 {m:付款方式, sp:pay_split}，拆帳標籤才能帶金額 */
-ok('★ 開會員資料時就地建表（分期多筆取最新：依 created_at 排序後覆寫；存 {m,sp}）',
-   /window\._tkPayMap=\{\};\n\s*c\.myPc\.slice\(\)\.sort\(\(a,b\)=>String\(a\.created_at\|\|''\)\.localeCompare\(String\(b\.created_at\|\|''\)\)\)\n\s*\.forEach\(p=>\{ if\(p\.ticket_id&&p\.payment_method\) window\._tkPayMap\[p\.ticket_id\]=\{m:p\.payment_method, sp:p\.pay_split\|\|null\}; \}\);/.test(src));
+/* 2026-08-13 拆帳改版：對照表每筆改存 {m:付款方式, sp:pay_split}，拆帳標籤才能帶金額。
+   2026-09-06 又多了折抵（vn/va/cu/lp）。原本這一條是整段一字不差比對，
+   欄位一加就整條紅 —— 改成逐項釘「不能掉的那幾件事」，加欄位不會誤報。 */
+ok('★ 開會員資料時就地建表（分期多筆取最新：依 created_at 排序後覆寫）',
+   /window\._tkPayMap=\{\};/.test(src)
+   && /c\.myPc\.slice\(\)\.sort\(\(a,b\)=>String\(a\.created_at\|\|''\)\.localeCompare\(String\(b\.created_at\|\|''\)\)\)/.test(src)
+   && /\.forEach\(p=>\{ if\(!p\.ticket_id\|\|!p\.payment_method\) return;/.test(src)
+   && /window\._tkPayMap\[p\.ticket_id\]=\{m:p\.payment_method, sp:p\.pay_split\|\|null,/.test(src));
 ok('　　為什麼掛 window，寫在程式裡', /掛在 window 給 tkMoneyHtml 用（它是無資料存取的純顯示 helper）。/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
