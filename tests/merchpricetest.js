@@ -34,9 +34,13 @@ ok('★ 銷售頁右側購物車：點卡加入、同品項合併、結帳帶整
    /function slCartRender\(\)\{/.test(src)
    && /r\.name===name&&String\(r\.price\)===String\(preset\)/.test(src)   /* 2026-08-04 同名同價才合併：蛋白粉可一筆75一筆60 */
    && /openMerchSale\(null,null,cart\.map\(/.test(src));
+/* 2026-09-06：返回鍵改走 slBackToStep1（同時保留會員與購物車，見 tests/slbacktest.js）——
+   原本這裡釘的是行內的 `window._slKeepCart=1;openSalesModal()`，字串已經不存在。
+   改釘「返回鍵有走那支、而那支確實會保留購物車」。 */
 ok('★ 開新銷售視窗清空、從結帳返回保留、結帳成功清空',
    /if\(window\._slKeepCart\)\{ window\._slKeepCart=0; \} else \{ window\._slCart=\[\]; \}/.test(src)
-   && /window\._slKeepCart=1;openSalesModal\(\)/.test(src)
+   && /onclick="slBackToStep1\(\)">← 返回/.test(src)
+   && /function slBackToStep1\(\)\{[\s\S]*?window\._slKeepCart=1;/.test(src)
    && /window\._slCart=\[\];   \/\/ 結帳完成，清空購物車/.test(src));
 ok('★ 購物車：可加品項、自訂品名、一列一筆收款紀錄',
    /function msCartAdd\(\)\{/.test(src) && /自訂品項請填品名/.test(src)
