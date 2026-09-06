@@ -17929,6 +17929,30 @@ function tkUnlockedLeft(t){
   return Math.max(0, Math.min(remain, unlocked-used));
 }
 function tkIsInstall(t){ return !!(t && t.installment && typeof t.installment==='object'); }
+/* 這張票還欠錢嗎（2026-09-06）——「待收款」一直只認分期未繳清的期數，
+   `payment_status==='unpaid'`（發放時選未付款、櫃檯還沒按〔收款〕）**完全沒被算進去**：
+   首頁待辦不跳數字、財務的待收款也列不出來，只有管理員的「今日事項」那頁看得到。
+   蔡佳音 TK-msmvv10rgdpo 就是這樣掛了 26 天沒人發現（0906 已校正）。
+   兩種欠款收成同一個判斷，計數與名單才不會再各寫一套。
+   ⚠ 已退費／作廢的不算：那些票的帳已經結掉了，錢不會再進來。 */
+function tkOwesMoney(t){
+  if(!t) return false;
+  if(['refunded','void','cancelled'].includes(t.status)) return false;
+  if(t.payment_status==='unpaid') return true;
+  const i=t.installment;
+  return !!(i && typeof i==='object' && i.current<i.count);
+}
+/* 這張票還欠多少（分期＝未繳期數加總；待付款＝整張的價） */
+function tkOwedAmount(t){
+  if(!t) return 0;
+  const i=t.installment;
+  if(i && typeof i==='object' && i.current<i.count){
+    let due=0; for(let k=i.current;k<i.count;k++) due+=Number((i.amounts||[])[k])||0;
+    return due;
+  }
+  if(t.payment_status==='unpaid') return Math.max(0,(Number(t.unit_price)||0)*(Number(t.sessions_total)||0));
+  return 0;
+}
 /* 無限次卡（2026-08-28 使用者：「魚媽劉媽有可能給他們一張無限卡 就不要用9999張」）——
    資料上目前是用 sessions_total=9999 當哨兵值（正式庫 2,977 張票裡只有那一張），
    這個約定原本散在四、五個地方各寫一次註解，很容易漏。先收成一個判斷：
@@ -20504,7 +20528,7 @@ PAGES.g_dashboard=async function(){
   const _pendingApps=(apps||[]).filter(a=>a.status==='pending');
   const _invoicingApps=(apps||[]).filter(a=>a.status==='invoicing');
   const _pendingPunch=(punchReqs||[]).filter(r=>r.status==='pending');
-  const _unpaidTickets=(mtickets||[]).filter(t=>{ const i=t.installment; return i && typeof i==='object' && i.current<i.count; });
+  const _unpaidTickets=(mtickets||[]).filter(tkOwesMoney);   /* 2026-09-06：分期未繳＋待付款兩種都算，見 tkOwesMoney */
   const _unpaidMembers=[...new Set(_unpaidTickets.map(t=>t.member_id))];
   const _cancelReqCount=(bookings||[]).filter(b=>b.status==='refund_requested').length;
   // 營運概況分類計數（教練課含友善、團體課、自主）
@@ -23034,8 +23058,8 @@ PAGES.ops_center=async function(){
   const pendingApps=apps.filter(a=>a.status==='pending');
   const invoicingApps=apps.filter(a=>a.status==='invoicing');
   const pendingPunch=punchReqs.filter(r=>r.status==='pending');
-  // 待付款：分期未繳清的會員數（沿用財務頁 installment 邏輯，不新增資料）
-  const unpaidTickets=(mtickets||[]).filter(t=>{ const i=t.installment; return i && typeof i==='object' && i.current<i.count; });
+  // 待付款：分期未繳清＋發放時選未付款還沒收款的會員數（2026-09-06 起兩種都算，見 tkOwesMoney）
+  const unpaidTickets=(mtickets||[]).filter(tkOwesMoney);
   const unpaidMembers=[...new Set(unpaidTickets.map(t=>t.member_id))];
   // 取消申請：預約狀態為 refund_requested（沿用既有狀態）
   const cancelReqCount=(bookings||[]).filter(b=>b.status==='refund_requested').length;
@@ -62134,26 +62158,33 @@ async function finReceivable(){
   const body=document.getElementById('fin-body'); if(!body) return;
   const [tickets,members]=await Promise.all([dbGetAll('member_tickets').catch(()=>[]),dbGetAll('members').catch(()=>[])]);
   const memMap=memNameMap(members);
-  // 分期未繳清的票券
-  const pending=(tickets||[]).filter(t=>{ const i=t.installment; return i && typeof i==='object' && i.current<i.count; });
+  /* 兩種欠款一起列（2026-09-06）——原本只認分期未繳清的期數，
+     「發放時選未付款、櫃檯還沒按〔收款〕」那種完全不出現在這一頁，
+     首頁待辦點進來會看到「目前沒有待收款」，等於把人送進死路。
+     判斷收在 tkOwesMoney／tkOwedAmount，與首頁待辦的計數同一份。 */
+  const pending=(tickets||[]).filter(tkOwesMoney);
   let totalDue=0;
   const rowsData=pending.map(t=>{
     const inst=t.installment;
-    let due=0; for(let i=inst.current;i<inst.count;i++) due+=Number((inst.amounts||[])[i])||0;
+    const isInst=!!(inst && typeof inst==='object' && inst.current<inst.count);
+    const due=tkOwedAmount(t);
     totalDue+=due;
-    const nextAmt=Number((inst.amounts||[])[inst.current])||0;
-    return { member:memMap[t.member_id]||'—', plan:t.plan_name||'票券',
-      periodsLeft:inst.count-inst.current, total:inst.count, due, nextAmt, tid:t.id, member_id:t.member_id };
+    const nextAmt=isInst?(Number((inst.amounts||[])[inst.current])||0):due;
+    return { member:memMap[t.member_id]||'—', plan:t.plan_name||'票券', isInst,
+      periodsLeft:isInst?(inst.count-inst.current):0, total:isInst?inst.count:0,
+      due, nextAmt, tid:t.id, member_id:t.member_id };
   }).sort((a,b)=>b.due-a.due);
 
   const stats=lpStats([
-    {label:'待收款會員', value:pending.length, unit:'人'},
+    /* 這裡本來是 pending.length 卻標「人」——同一位會員有兩張欠款的票就會被數成兩個人。
+       改成不重複的會員數，與標籤一致（2026-09-06）。 */
+    {label:'待收款會員', value:new Set(rowsData.map(r=>r.member_id)).size, unit:'人'},
     {label:'待收款總額', value:finMoney(totalDue), unit:'', tone:'warn'},
   ]);
   const cols=[
     {label:'會員', width:'1.2fr'},
     {label:'方案', width:'1.6fr'},
-    {label:'剩餘期數', width:'0.9fr'},
+    {label:'狀態', width:'0.9fr'},
     {label:'下期應收', width:'1fr', align:'right'},
     {label:'待收總額', width:'1fr', align:'right'},
     {label:'', width:'0.9fr'},
@@ -62161,13 +62192,15 @@ async function finReceivable(){
   const rows=rowsData.map(r=>({ cells:[
     r.member,
     r.plan,
-    `${r.periodsLeft} / ${r.total} 期`,
+    r.isInst?`${r.periodsLeft} / ${r.total} 期`:'<span class="tk-unpaid">待付款</span>',
     finMoney(r.nextAmt),
     `<b style="font-family:var(--font-en);color:var(--danger);">${finMoney(r.due)}</b>`,
-    `<button class="btn btn-green btn-sm" onclick="openInstallNext('${r.tid}')">開通下一期</button>`,
+    r.isInst
+      ? `<button class="btn btn-green btn-sm" onclick="openInstallNext('${r.tid}')">開通下一期</button>`
+      : `<button class="btn btn-green btn-sm" onclick="tkPayOpen('${r.tid}')">收款</button>`,
   ]}));
   const table = pending.length===0
-    ? lpEmpty('目前沒有待收款','所有分期都已收齊。','')
+    ? lpEmpty('目前沒有待收款','分期都已收齊，也沒有待付款的票券。','')
     : lpTable(cols, rows, null);
   body.innerHTML = stats + table;
 }
