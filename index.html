@@ -10120,6 +10120,11 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 /* 會員票券卡金額旁的付款方式（2026-08-03） */
 .tk-pay{margin-left:6px;font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;background:#eef4ee;color:#2f6b39;}
 .tk-pay-tr{background:#f7efe0;color:#8a5e28;}
+/* 折抵標籤（2026-09-06 使用者回報：鄭超元 #23 運動按摩用了 4 張折抵券，
+   卡片只寫 $300「看起來像只花了 300」）——刻意用中性灰綠，不用品牌綠：
+   綠色在這一行已經是「現金」的意思（.tk-pay），再借一次會讀成付款方式。 */
+.tk-disc{margin-left:6px;font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;
+  background:#eef1ec;color:#4c6457;white-space:nowrap;}
 .mc-rev-amt{font-family:var(--num),inherit;font-size:13px;font-weight:800;color:var(--green);white-space:nowrap;}
 /* 付款方式疊在金額上方（2026-08-03 使用者指示：並排會把品項擠到顯示不完整） */
 .mc-rev-r{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;}
@@ -12303,8 +12308,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260905.1919';
-const APP_VERSION_LABEL = 'v260905.1919';
+const APP_VERSION = '260906.1202';
+const APP_VERSION_LABEL = 'v260906.1202';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -46593,7 +46598,15 @@ async function ppLoadCtx(){
        掛在 window 給 tkMoneyHtml 用（它是無資料存取的純顯示 helper）。 */
     window._tkPayMap={};
     c.myPc.slice().sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')))
-      .forEach(p=>{ if(p.ticket_id&&p.payment_method) window._tkPayMap[p.ticket_id]={m:p.payment_method, sp:p.pay_split||null}; });   /* 拆帳帶金額（2026-08-13） */
+      .forEach(p=>{ if(!p.ticket_id||!p.payment_method) return;
+        /* 折抵（2026-09-06）：折抵券的張數與金額只寫在 purchases.note，儲值金有自己的欄位。
+           ⚠ 不能用 list_price − deal_amount 回推：分期的 deal_amount 只有第 1 期，
+             整筆差額會被誤標成「折抵」。所以券看 note、儲值金看 credit_used，各有各的來源。 */
+        const _vm=/折抵券×(\d+)\s*−\$([\d,]+)/.exec(String(p.note||''));
+        window._tkPayMap[p.ticket_id]={m:p.payment_method, sp:p.pay_split||null,   /* 拆帳帶金額（2026-08-13） */
+          vn:_vm?Number(_vm[1]):0, va:_vm?Number(String(_vm[2]).replace(/,/g,'')):0,
+          cu:Number(p.credit_used)||0, lp:Number(p.list_price)||0};
+      });
     c.myImpTx=tickets.filter(t=>t.member_id===PP.id && Number(t.amount_paid)>0 && !String(t.id).startsWith('TK-'))
       .map(t=>({created_at:(t.purchase_date||'')+'T04:00:00Z', plan_name:t.plan_name,
         deal_amount:Number(t.amount_paid)||0, payment_method:'imported'}));
@@ -58636,7 +58649,17 @@ function tkMoneyHtml(t){
     const _pm=({cash:'現金',transfer:'匯款',card:'刷卡'})[_pe&&_pe.m]||'';
     _pmTag=_pm?`<span class="tk-pay${_pm==='匯款'?' tk-pay-tr':''}">${_pm}</span>`:'';
   }
-  if(amt>0) return `　·　<b class="tk-amt">$${amt.toLocaleString()}</b>${_pmTag}`;
+  /* 折抵標籤（2026-09-06）：只寫「實收」會讓一張原價 $1,500、用了 4 張券的票
+     看起來像只賣了 $300。券與儲值金各標一顆，原價放 title。 */
+  let _dcTag='';
+  if(_pe){
+    const _t=[];
+    if(_pe.vn>0) _t.push(`折抵券×${_pe.vn}${_pe.va>0?` −$${_pe.va.toLocaleString()}`:''}`);
+    if(_pe.cu>0) _t.push(`儲值金 −$${_pe.cu.toLocaleString()}`);
+    const _orig=(_pe.lp>0 && _pe.lp>amt) ? `原價 $${_pe.lp.toLocaleString()}` : '';
+    _dcTag=_t.map(x=>`<span class="tk-disc"${_orig?` title="${_orig}"`:''}>${x}</span>`).join('');
+  }
+  if(amt>0) return `　·　<b class="tk-amt">$${amt.toLocaleString()}</b>${_pmTag}${_dcTag}`;
   const n=String(t.note||'').trim();
   if(!n) return '　·　<span class="tk-amt tk-amt-zero">$0</span>';
   const gift=/加贈/.test(n), wait=/待確認/.test(n);
