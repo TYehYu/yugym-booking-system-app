@@ -150,9 +150,17 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      頁面　搜尋只要出現有票券的會員名單　不要出現已經在課堂內的名單」）——
      第一版只在沒打字時收起來、搜尋放行，結果搜尋出來的兩列都是已在名單的、還打著勾。
      改成一律不列。 */
+/* 2026-09-07 放寬一格（羅書恆案例，見 tests/grpdupseattest.js）：
+   「已在名單」仍然一律不列，但如果那一列**另有一張這堂還沒用到、且有剩餘堂數的票**，
+   就留著讓他排第二個名額 —— 兩張都沒填使用人的票會併成同一列，
+   全藏掉等於第二張票沒有入口。 */
   ok('★★★ ［＋新增］一律不列已經在這堂的使用人（搜尋也一樣）',
      /if\(_addMode\)\{\s*\n\s*const _pk=window\._grpPick\|\|\{\};/.test(src)
-     && /if\(_taken\[String\(r\.m\.id\)\+'\|'\+String\(r\.fam\|\|''\)\] && !isPicked\) ROWS\.splice\(i,1\);/.test(src));
+     && /if\(!_taken\[String\(r\.m\.id\)\+'\|'\+String\(r\.fam\|\|''\)\] \|\| isPicked\) continue;/.test(src)
+     && /ROWS\.splice\(i,1\);/.test(src));
+  ok('★★★ 例外只有一種：另有一張沒被這堂用掉、且有剩餘堂數的票',
+     /_spare=\(r\.tks\|\|\[\]\)\.some\(t=>t && !_usedTk\.has\(String\(t\.id\)\) && \(Number\(t\.left\)\|\|0\)>0\)/.test(src)
+     && /if\(_spare\)\{ r\.again=true; continue; \}/.test(src));
   /* 2026-08-29 二修（使用者：「但是我在28單獨搜媽媽也找不到」）——
      9/28 打「許」整份清單是空的：那一格用的是本人那張（已扣到 0 堂），
      0 堂的票不在候選清單裡，「名額 i 用第 i 張票」的推算就退回候選清單的第 i 張
@@ -184,7 +192,8 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      && /<select id="grp-pick" onchange="grpPickSel\(this\.value\)"><\/select>/.test(src)
      && /if\(addMode\)\{ try\{ mpkScan\(\); \}catch\(_\)\{\} \}/.test(src));
   ok('★★ 清單畫在挑選視窗裡（右邊靠 data-sub 顯示可用堂數，那是 mpkRender 支援的）',
-     /data-sub="可用 \$\{gl\} \/ \$\{gt\|\|gl\} 堂"/.test(src));
+     /可用 \$\{gl\} \/ \$\{gt\|\|gl\} 堂/.test(src)
+     && /data-sub="\$\{escH\(sub\)\}"/.test(src));
   ok('★★★ 選定的人用「是誰」對回去，不能用索引（每次重畫都會重排）',
      /const _at=ROWS\.findIndex\(r=>String\(r\.m\.id\)===String\(_pk\.mid\|\|''\) && String\(r\.fam\|\|''\)===String\(_pk\.fam\|\|''\)\);/.test(src)
      && /索引會漂，欄位上就會顯示成別人。/.test(src));

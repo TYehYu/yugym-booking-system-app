@@ -12308,8 +12308,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260907.1432';
-const APP_VERSION_LABEL = 'v260907.1432';
+const APP_VERSION = '260907.1437';
+const APP_VERSION_LABEL = 'v260907.1437';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31044,13 +31044,31 @@ function renderGrpPick(){
   if(_addMode){
     const _pk=window._grpPick||{};
     const _taken=window._grpTaken||{};
+    /* 這一堂已經被哪幾張票佔走（課卡逐名額記的事實）——
+       用來回答「這一列還有沒有第二張票可以再站一格」。 */
+    const _usedTk=new Set(Object.values(window._grpSeatTk||{}).map(String));
     const before=ROWS.length;
     for(let i=ROWS.length-1;i>=0;i--){
       const r=ROWS[i];
       const isPicked=(String(_pk.mid||'')===String(r.m.id) && String(_pk.fam||'')===String(r.fam||''));
       /* 「已經在這堂」＝課卡上真的有一格記著這位使用人的票（_grpTaken，見 openGroupMembers）。
          不要用 r.seats 判斷 —— 那是從候選清單推回去的，用完的票不在清單裡就會推錯人。 */
-      if(_taken[String(r.m.id)+'|'+String(r.fam||'')] && !isPicked) ROWS.splice(i,1);
+      if(!_taken[String(r.m.id)+'|'+String(r.fam||'')] || isPicked) continue;
+      /* ══ 但「買了兩份」要放行（2026-09-07 使用者回報）════════════════════════
+         「羅書恆購買兩份團課優惠　但是在預約團課的時候　如果不選擇使用人
+           就無法預約在同一堂課」
+         0829 把「已在名單」整列藏起來時，濾的單位是「一位使用人」——
+         而兩張都沒填使用人的票會併成同一列，於是第一格佔掉之後整列消失，
+         第二張票明明還在、卻沒有入口。他今天只好把其中一張的使用人填成「佩玲」
+         才排得進去 —— 那是被系統逼出來的假資料。
+         改成再問一句：**這一列還有沒有這堂還沒用到的票**。
+         有就留著（那一張真的付得起第二個名額），沒有才藏。
+         ⚠ 只放行「另有一張沒被這堂用掉的票」。同一張票扣兩格雖然也合法
+           （0827 許佳慈），但那是「管理名單」那條路的事 —— 這裡放行會讓
+           0829 想擋掉的雜訊全部回來。 */
+      const _spare=(r.tks||[]).some(t=>t && !_usedTk.has(String(t.id)) && (Number(t.left)||0)>0);
+      if(_spare){ r.again=true; continue; }
+      ROWS.splice(i,1);
     }
     _inClass=before-ROWS.length;
   }
@@ -31063,7 +31081,10 @@ function renderGrpPick(){
           const gl=r.tks.reduce((a,t)=>a+Math.max(0,Number(t.left)||0),0);
           const gt=r.tks.reduce((a,t)=>a+Math.max(0,Number(t.tot)||0),0);
           const nm=`${r.m.name}${r.fam?`（${r.fam}）`:''}${r.m.phone?`（${fmtPhone(r.m.phone)}）`:''}`;
-          return `<option value="${_i}" data-sub="可用 ${gl} / ${gt||gl} 堂"${r.m.mine?' data-star="1"':''}>${escH(nm)}</option>`;
+          /* 已經有一格、但另有一張票可以再站一格（2026-09-07）——
+             不寫出來的話櫃檯會以為自己看錯或重複點了。 */
+          const sub=`${r.again?'已在名單・可用另一張票再加一格　·　':''}可用 ${gl} / ${gt||gl} 堂`;
+          return `<option value="${_i}" data-sub="${escH(sub)}"${r.m.mine?' data-star="1"':''}>${escH(nm)}</option>`;
         }).join('');
     /* 選定的那一位用「是誰」對回去，不能用索引 —— 每次重畫都會重排（已在名單的列被濾掉），
        索引會漂，欄位上就會顯示成別人。 */
