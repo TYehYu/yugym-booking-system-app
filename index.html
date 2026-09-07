@@ -12308,8 +12308,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260907.1421';
-const APP_VERSION_LABEL = 'v260907.1421';
+const APP_VERSION = '260907.1432';
+const APP_VERSION_LABEL = 'v260907.1432';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -60056,26 +60056,44 @@ html,body{margin:0;padding:0;}
    2026-07-31 二修（又變 3 頁）：購買內容表多了一列、簽名區三欄擠不下會換行撐高，
    一起收 —— 邊界 18/16mm→15/14mm、字級 10.5/1.7→10pt/1.55、表格內距也縮，
    目標仍是全文落在 2 頁（雙面正好 1 張）。 */
+/* ══ 自動收進兩頁（2026-09-07 使用者回報：蘇月華的紙本印成三頁）══════════════
+   0729 與 0731 各手調過一次字級與邊界，兩次都在「內容再長一點」時又變回三頁 ——
+   因為合約長度本來就會變（分期表 3 期比不分期多 4 列、方案名稱長短也差一行）。
+   改成量完再決定：載入後量實際高度，超過兩頁就把 --ct-fit 一格一格調小，
+   直到收得進去為止（見 CT_PDF_JS 的 ctFitPages）。
+
+   ⚠ 縮的順序有講究：**留白先縮，字級最後才動**。
+     ・間距／內距／簽名區高度：直接乘 --ct-fit（縮得快）
+     ・字級：0.6+0.4×fit（fit=0.7 時還有 8.8pt，仍讀得清楚）
+     ・行高：1.2+0.35×fit（不能直接乘，字級已經在縮了，乘兩次會擠成一團）
+   ⚠ 內容本來就在兩頁內的合約，fit 維持 1，外觀與現在完全一樣。 */
+html{--ct-fit:1;}
 body{font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;color:#222;
-  font-size:10pt;line-height:1.55;orphans:3;widows:3;}
+  font-size:calc(10pt * (0.6 + 0.4 * var(--ct-fit)));
+  line-height:calc(1.2 + 0.35 * var(--ct-fit));orphans:3;widows:3;}
 .ct-page{background:#fff;}
 .ct-text{white-space:pre-wrap;}
 h1{font-size:14pt;text-align:center;letter-spacing:.08em;margin:0 0 3px;font-weight:700;}
-.sub{text-align:center;font-size:8.5pt;color:#8a6a3a;letter-spacing:.16em;margin:0 0 10px;}
+.sub{text-align:center;font-size:8.5pt;color:#8a6a3a;letter-spacing:.16em;
+  margin:0 0 calc(10px * var(--ct-fit));}
 .ct-fill{break-inside:avoid;page-break-inside:avoid;}
 .ct-fill table{width:100%;border-collapse:collapse;}
 /* 表格內距吃掉不少高度，列印時收一點（螢幕版不動） */
-.ct-fill table td{padding:5pt 7pt !important;font-size:9.5pt !important;}
+.ct-fill table td{padding:calc(5pt * var(--ct-fit)) calc(7pt * var(--ct-fit)) !important;
+  font-size:calc(9.5pt * (0.6 + 0.4 * var(--ct-fit))) !important;}
 /* 簽名區（2026-07-31 使用者回報「格式跑掉」）：原本三欄 flex，每欄還塞 12 個全形底線，
    合計寬度超過可印寬度就會擠成一團／換行。改成兩欄 grid（會員／教練），日期獨佔一列，
    簽名線用 border-bottom 畫 —— 線的長度自己跟著欄寬走，永遠不會溢出。 */
-.ct-sign{margin-top:8mm;display:grid;grid-template-columns:1fr 1fr;gap:7mm 12mm;font-size:10pt;
+.ct-sign{margin-top:calc(8mm * var(--ct-fit));display:grid;grid-template-columns:1fr 1fr;
+  gap:calc(7mm * var(--ct-fit)) 12mm;font-size:calc(10pt * (0.6 + 0.4 * var(--ct-fit)));
   break-inside:avoid;page-break-inside:avoid;}
 .ct-sign b{font-weight:700;font-size:9.5pt;color:#444;}
-.ct-sign .sig-line{display:block;border-bottom:1px solid #333;height:10mm;margin-top:1mm;}
+.ct-sign .sig-line{display:block;border-bottom:1px solid #333;
+  height:calc(10mm * var(--ct-fit));margin-top:1mm;}
 .ct-sign .sig-note{font-style:normal;font-size:8.5pt;color:#888;}
 .ct-sign .sig-date{grid-column:1 / -1;}
-img.ct-sig{display:block;max-width:100%;max-height:22mm;border:1px solid #ccc;border-radius:6px;margin-top:1mm;}
+img.ct-sig{display:block;max-width:100%;max-height:calc(22mm * var(--ct-fit));
+  border:1px solid #ccc;border-radius:6px;margin-top:1mm;}
 .bar{position:fixed;top:10px;right:12px;z-index:9;display:flex;align-items:center;gap:10px;
   background:rgba(255,255,255,.94);border:1px solid #ddd;border-radius:10px;padding:8px 10px;
   box-shadow:0 4px 16px rgba(0,0,0,.12);}
@@ -60104,6 +60122,39 @@ img.ct-sig{display:block;max-width:100%;max-height:22mm;border:1px solid #ccc;bo
 const CT_PDF_JS=`
 const A4W=210, A4H=297, MARGIN_X=16, MARGIN_TOP=18, MARGIN_BOT=16;
 const CONTENT_W=A4W-MARGIN_X*2, CONTENT_H=A4H-MARGIN_TOP-MARGIN_BOT;
+/* ══ 自動收進兩頁（2026-09-07 使用者：「可以調整一下段落間距 讓列印保證在兩頁嗎」）══
+   量 .ct-flow 的實際高度，超過兩頁就把 --ct-fit 一格一格調小，直到收得進去。
+   ⚠ 用 CONTENT_H（263mm，PDF 那條路的可用高度）當預算，不用列印的 267mm ——
+     取比較嚴的那個，兩條路才會一起是兩頁。
+   ⚠ 下限 0.62：再縮下去字會小到不好簽名，寧可讓它變三頁也不要印出看不清楚的合約
+     （真的觸底代表內容是真的長，那要改的是合約本文，不是版面）。
+   ⚠ 一定要等字型載入完才量：中文字型晚到會讓第一次量出來偏矮，縮不夠。 */
+function ctFitPages(){
+  var flow=document.querySelector('.ct-flow');
+  if(!flow) return;
+  var probe=document.createElement('div');
+  probe.style.cssText='position:absolute;left:-9999px;top:0;visibility:hidden;height:100mm;';
+  document.body.appendChild(probe);
+  var pxPerMm=probe.getBoundingClientRect().height/100;
+  probe.parentNode.removeChild(probe);
+  if(!(pxPerMm>0)) return;
+  var budget=CONTENT_H*2*pxPerMm;
+  var fit=1;
+  document.documentElement.style.setProperty('--ct-fit','1');
+  for(var i=0;i<20;i++){
+    if(flow.getBoundingClientRect().height<=budget) break;
+    fit=Math.round((fit-0.02)*100)/100;
+    if(fit<0.62){ fit=0.62; document.documentElement.style.setProperty('--ct-fit',String(fit)); break; }
+    document.documentElement.style.setProperty('--ct-fit',String(fit));
+  }
+}
+function ctFitLater(){
+  try{ ctFitPages(); }catch(e){}
+  try{ if(document.fonts&&document.fonts.ready) document.fonts.ready.then(function(){ try{ ctFitPages(); }catch(e){} }); }catch(e){}
+  setTimeout(function(){ try{ ctFitPages(); }catch(e){} },400);
+}
+ctFitLater();
+window.addEventListener('beforeprint',function(){ try{ ctFitPages(); }catch(e){} });
 function ctBusy(on,msg){
   const b=document.getElementById('ct-dl');
   if(!b) return;
@@ -60135,6 +60186,10 @@ async function ctSavePdf(){
     pg.style.width=CONTENT_W+'mm'; pg.style.padding='0';
     pg.style.boxShadow='none'; pg.style.minHeight='0';
     document.body.style.background='#ffffff';
+    /* 拍照前照著「PDF 的實際寬度」再收一次頁（2026-09-07）——
+       螢幕版的內容寬與這裡剛好一樣（210−16×2＝178mm），所以通常不會再變，
+       但字型晚載入或使用者放大過頁面時會差，量一次比賭它便宜。 */
+    try{ ctFitPages(); }catch(e){}
     const wpx=pg.offsetWidth;
     const S=2;
     const canvas=await html2canvas(pg,{scale:S,backgroundColor:'#ffffff',logging:false});
@@ -60188,7 +60243,7 @@ function ctPrintOpen(title, inner, opts){
       <button id="ct-pr" class="ghost" onclick="window.print()">列印</button>
       <div class="tip">雙面紙本：印表機設定選「雙面列印」</div>
     </div>
-    <div class="ct-page">${inner}</div>
+    <div class="ct-page"><div class="ct-flow">${inner}</div></div>
     <script>${CT_PDF_JS}<\/script></body></html>`);
   w.document.close(); w.focus();
   if(opts&&opts.auto===true) setTimeout(()=>{ try{ w.print(); }catch(_){} },350);

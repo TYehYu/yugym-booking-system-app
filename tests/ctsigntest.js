@@ -36,9 +36,10 @@ console.log('\n版面：兩欄＋日期獨佔一列');
   ok('★ 簽名線用 border-bottom 畫，不用全形底線',
      (h.match(/<span class="sig-line"><\/span>/g)||[]).length===2
      && !/＿＿＿＿＿＿/.test(h)
-     && /\.ct-sign \.sig-line\{display:block;border-bottom:1px solid #333;height:10mm;margin-top:1mm;\}/.test(src));
+     /* 2026-09-07：高度改成跟著 --ct-fit 縮（自動收頁），border-bottom 的作法不變 */
+     && /\.ct-sign \.sig-line\{display:block;border-bottom:1px solid #333;\s*\n\s*height:calc\(10mm \* var\(--ct-fit\)\);margin-top:1mm;\}/.test(src));
   ok('★ 版面是兩欄 grid（原本三欄 flex 擠不下）',
-     /\.ct-sign\{margin-top:8mm;display:grid;grid-template-columns:1fr 1fr;/.test(src)
+     /\.ct-sign\{margin-top:calc\(8mm \* var\(--ct-fit\)\);display:grid;grid-template-columns:1fr 1fr;/.test(src)
      && !/\.ct-sign\{margin-top:10mm;display:flex;gap:16mm;/.test(src));
   ok('　　原因寫在程式裡', /合計寬度超過可印寬度就會擠成一團／換行/.test(src));
 }
@@ -59,7 +60,8 @@ console.log('\n三種情境');
      && /<b>簽署日期<\/b>　2026 \/ 07 \/ 31/.test(signed));
   ok('★ 已簽版不再畫會員的空白線（已經有簽名圖了）',
      (signed.match(/sig-line/g)||[]).length===1);
-  ok('　　簽名圖限高，不會把簽名區撐爆', /img\.ct-sig\{display:block;max-width:100%;max-height:22mm;/.test(src));
+  ok('　　簽名圖限高，不會把簽名區撐爆（2026-09-07 起跟著 --ct-fit 縮）',
+     /max-height:calc\(22mm \* var\(--ct-fit\)\)/.test(src));
 }
 
 console.log('\n頁數：收到 2 頁（雙面正好 1 張）');
@@ -67,9 +69,13 @@ ok('★ 邊界收緊 18/16mm → 15/14mm',
    /@page\{size:A4;margin:15mm 14mm;\}/.test(src)
    && /@page :right\{margin-left:17mm;margin-right:12mm;\}/.test(src)
    && /@page :left\{margin-left:12mm;margin-right:17mm;\}/.test(src));
-ok('★ 字級行高收緊 10.5pt/1.7 → 10pt/1.55', /font-size:10pt;line-height:1\.55;orphans:3;widows:3;/.test(src));
-ok('★ 購買內容表的內距在列印時收一點（螢幕版不動）',
-   /\.ct-fill table td\{padding:5pt 7pt !important;font-size:9\.5pt !important;\}/.test(src));
+/* 2026-09-07：字級與行高改成跟著 --ct-fit 走（自動收頁）——
+   fit=1 時等值於原本的 10pt / 1.55，內容夠短的合約外觀完全沒變。 */
+ok('★ 字級行高收緊 10.5pt/1.7 → 10pt/1.55（現在由 --ct-fit 表示，fit=1 即原值）',
+   /font-size:calc\(10pt \* \(0\.6 \+ 0\.4 \* var\(--ct-fit\)\)\);/.test(src)
+   && /line-height:calc\(1\.2 \+ 0\.35 \* var\(--ct-fit\)\);orphans:3;widows:3;/.test(src));
+ok('★ 購買內容表的內距在列印時收一點（螢幕版不動；2026-09-07 起跟著 --ct-fit 縮）',
+   /\.ct-fill table td\{padding:calc\(5pt \* var\(--ct-fit\)\) calc\(7pt \* var\(--ct-fit\)\) !important;/.test(src));
 ok('　　標題也小一級', /h1\{font-size:14pt;/.test(src));
 ok('　　簽名區與購買內容表仍不會被切在兩頁之間',
    (src.match(/break-inside:avoid;page-break-inside:avoid;/g)||[]).length>=2);
