@@ -12308,8 +12308,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260906.2215';
-const APP_VERSION_LABEL = 'v260906.2215';
+const APP_VERSION = '260907.1109';
+const APP_VERSION_LABEL = 'v260907.1109';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20075,8 +20075,12 @@ PAGES.g_dashboard=async function(){
        改用 bkCoachId（代課優先）＝這堂實際由誰上，與教練端課表、薪資同一個口徑。 */
     const myBk=dayBkAll.filter(b=>bkCoachId(b)===c.id && !isCancelled(b))
       .sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
-    const myShift=dayShifts.find(s=>s.emp_id===c.id);
-    const onLeave=myShift&&myShift.leave_type;
+    /* 2026-09-07：一個人一天可能有兩列（正常班＋課程請假的補登），
+       原本 find 取到哪一列全看順序 —— 取到補登那列就變成「今天請假、沒有值班」。
+       正常班優先，真的只有補登那列才退而求其次。 */
+    const myShift=dayShifts.find(s=>s.emp_id===c.id&&!shIsClassLeave(s))
+                || dayShifts.find(s=>s.emp_id===c.id);
+    const onLeave=myShift&&shIsRosterLeave(myShift);
     const hasDuty=myShift&&!onLeave&&myShift.start_time&&myShift.end_time;
     const activeBk=myBk.filter(b=>!isCancelled(b));
     // 只顯示「今天有課」的教練：本區是「教練任務」，沒課就沒有任務可看。
@@ -22866,7 +22870,8 @@ function dashWorkforceSection(opts){
   const dow = (parseYmd(date)||TODAY).getDay();
   // 應到班：有起迄且未請假；請假：有 leave_type
   const working = dayShifts.filter(s=>s.start_time&&s.end_time&&!s.leave_type);
-  const onLeave = dayShifts.filter(s=>s.leave_type);
+  /* 2026-09-07：課程請假的補登列不算「今天請假」—— 那個人可能整天都在店裡 */
+  const onLeave = dayShifts.filter(shIsRosterLeave);
   const nm = id => coachMap[id] || id || '—';
   // 已到 / 未打卡（未打卡＝應到且無 clock_in 且班表開始已過 effNow）
   const arrived=[], notPunched=[];
@@ -33414,6 +33419,18 @@ function bkCoachLeaveBtn(b, editable){
      ・hours 與 leave_hours 都是 0 → 不影響值班時數（dutyHoursCapped 加 0）。
      ・dutyClassOverlapRows 已改成跳過有 leave_type 的列（請假不是值班時段），
        否則這一列會反過來讓那堂課去扣兼職的值班費。 */
+/* 「這一列是課程請假的補登，不是今天不上班」（2026-09-07 使用者回報）——
+   coachLeaveToRoster 會為請假的那一堂補一列 0 小時的班表紀錄，讓人事查得到。
+   它不代表這個人今天沒上班：黃美蓉 9/07 正常值班 12:00–18:00，晚上 21:00 那一堂
+   標了教練請假 → 首頁的值班籤變成「請假」、排班表整格被標成請假日，
+   12:00–18:00 那一列還好端端躺在旁邊。
+   薪資那一段 0831 建的時候就中立了（不落任何假別桶、時數 0）；
+   漏掉的是**顯示** —— 凡是問「今天是不是請假」的地方，都要跳過這一種。
+   ⚠ '教練請假' 只可能由 coachLeaveToRoster 寫入：人工選的假別只有
+     特休／病假／事假／其他四種（見 openShiftEdit 的下拉），所以這個字串足以分辨。 */
+function shIsClassLeave(s){ return !!(s && s.leave_type==='教練請假'); }
+/* 真正的排班請假（特休／病假／事假／其他）＝今天這個人不上班 */
+function shIsRosterLeave(s){ return !!(s && s.leave_type) && !shIsClassLeave(s); }
 async function coachLeaveToRoster(empId, dateStr, startT, endT, why){
   if(!empId || !dateStr) return null;
   try{
@@ -41654,7 +41671,7 @@ async function openMonthScheduleModal(mon){
         const _ccls=shiftCodeCls(_cd,isWk);
         const main=code?`<span class="sh-chip sh-chip-code"><b class="sh-code${_ccls}">${_cd}</b></span>`:`<span class="sh-chip sh-chip-time"><span class="sh-t1">${s.start_time}</span><span class="sh-t2">${s.end_time}</span></span>`;
         return main+leaveTag; }).join('');
-      const hasLeave=list.some(s=>s.leave_type);
+      const hasLeave=list.some(shIsRosterLeave);   /* 2026-09-07：課程請假的補登列不把整格標成請假日 */
       return `<td class="sh-cell${list.length?' has':''}${hasLeave?' has-leave':''}${isWk?' sh-cell-wk':''}${i+1===_todayD?' sh-today-c':''} sh-cell-ro">${inner}</td>`;
     }).join('');
     return `<tr><td class="sh-name"><div class="shn-row1"><span class="shn-name">${e.name||'—'}</span><span class="shn-hr">${empTotal[e.id].toFixed(1)}h</span></div></td>${cells}</tr>`;
@@ -41740,7 +41757,7 @@ async function renderShiftsTab(){
         const main=code?`<span class="sh-chip sh-chip-code"><b class="sh-code${_ccls}">${_cd}</b></span>`:`<span class="sh-chip sh-chip-time"><span class="sh-t1">${s.start_time}</span><span class="sh-t2">${s.end_time}</span></span>`;
         return main+leaveTag;
       }).join('');
-      const hasLeave=list.some(s=>s.leave_type);
+      const hasLeave=list.some(shIsRosterLeave);   /* 2026-09-07：課程請假的補登列不把整格標成請假日 */
       const cellClick=_canEditShifts?` onclick="openShiftEdit('${e.id}','${dateStr}')"`:'';
       return `<td class="sh-cell${list.length?' has':''}${hasLeave?' has-leave':''}${isWk?' sh-cell-wk':''}${_canEditShifts?'':' sh-cell-ro'}"${cellClick}>${inner||(_canEditShifts?'<span class="sh-plus">＋</span>':'')}</td>`;
     }).join('');
@@ -53208,7 +53225,9 @@ async function coachHomeV2(){
                {k:'pm',label:'晚班',col:'#3A5BA0'}];
   const myShifts=(shifts||[]).filter(x=>x&&x.emp_id===SESSION.id&&x.date===today);
   const att=(attendance||[]).find(a=>a&&a.emp_id===SESSION.id&&a.date===today)||null;
-  const onLeave=myShifts.find(x=>x.leave_type);
+  /* 2026-09-07：只有真正的排班請假才把整天標成請假 —— 課程請假的補登列跳過，
+     否則「晚上有一堂請假」會蓋掉白天正常的班（見 shIsClassLeave）。 */
+  const onLeave=myShifts.find(shIsRosterLeave);
   const hit={};
   myShifts.filter(x=>!x.leave_type&&x.start_time).forEach(x=>{ hit[bandOf(x.start_time)]=x; });
   /* 沒排班就看實際打卡時間歸班 —— 漏排班不該讓整條變灰（沿用 dutyShiftColor 的做法） */
