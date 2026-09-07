@@ -12316,8 +12316,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260907.1715';
-const APP_VERSION_LABEL = 'v260907.1715';
+const APP_VERSION = '260907.1748';
+const APP_VERSION_LABEL = 'v260907.1748';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40756,18 +40756,13 @@ async function openSaleKindPick(tkId){
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">知道了</button></div>`);
     return;
   }
-  /* 分期方案的約別由系統判定（2026-08-24 使用者定案）——賣的時候不給選，
-     事後也不給改，否則等於留了一個把它改成「續約」多領獎金的後門。 */
-  if(t.installment && typeof t.installment==='object'){
-    showModal(`<div class="modal-title">約別</div>
-      <div style="font-size:13.5px;color:var(--text);line-height:1.95;padding:4px 0 8px;">
-        這張是<b>分期方案</b>，約別由系統判定為「分期」，不能更改。</div>
-      <div style="font-size:11.5px;color:var(--t3);line-height:1.9;">
-        分期不計續約獎金。如果這其實是「自訂方案手動分期」而不是分期方案，
-        那應該是另外開的票，改那一張。</div>
-      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">知道了</button></div>`);
-    return;
-  }
+  /* 〔已移除〕分期方案不給改（2026-08-24 → 2026-09-07 退場）——
+     0824 把「內建分期」的約別鎖成 installment，賣的時候不給選、事後也不給改。
+     0907 使用者指出那是錯的：「雖然付費方式是分期　但他是第一期　等於是新的方案
+     約別應該是屬於續約才對」——分期繳費的第一期本來就算續約（0815 就定過）。
+     鎖住的代價是三張票默默少記了續約獎金（蘇月華／徐子芸／嚴晴，0907 逐張更正）。
+     ⚠ 「改成續約多領獎金的後門」這個顧慮還在，但擋法改成**看得見的那一種**：
+       下面的確認視窗本來就寫著「續約獎金只認續約，改了會即時反映在教練的薪資上」。 */
   const cur=SALE_KIND_LB[t.sale_kind]?t.sale_kind:'new';
   /* 同一條規則兩條路都要（賣的時候／事後改），差一邊就是一個改成續約多領獎金的後門。
      ⚠ 判斷這張票**之前**的紀錄：拿這張票自己的購買日當界線，
@@ -40777,7 +40772,8 @@ async function openSaleKindPick(tkId){
   /* $0 的票才給「贈送」（2026-09-05）—— 有金額的成交不會是贈送，列出來只是多一個
      誤選的機會；反過來 $0 的票也不該標新約／續約（續約會憑一張免費票發獎金）。 */
   const _zero=Number(t.amount_paid||0)<=0;
-  const _allow=k=>_zero ? (k==='gift') : (k!=='gift' && (_hasPt?(k!=='new'):(k==='new')));
+  /* 與賣票那條同一條規則（見 gtSaleKindOpts）：分期兩邊都在，只拿掉不合身分的那一顆 */
+  const _allow=k=>_zero ? (k==='gift') : (k!=='gift' && (k==='installment' || (_hasPt?(k!=='new'):(k==='new'))));
   const btn=(k)=>_allow(k)?`<button type="button" class="btn ${cur===k?'btn-green':'btn-ghost'}" style="flex:1;"
       onclick="setSaleKind('${tkId}','${k}')">${SALE_KIND_LB[k]}</button>`:'';
   showModal(`<div class="modal-title">約別</div>
@@ -40788,7 +40784,7 @@ async function openSaleKindPick(tkId){
     <div style="display:flex;gap:8px;">${btn('new')}${btn('renewal')}${btn('installment')}${btn('gift')}</div>
     <div style="font-size:11.5px;color:var(--t3);line-height:1.9;margin-top:10px;">${_hasPt
       ? '這位在買這張之前<b>已經有</b>教練課／友善教練課的紀錄，所以不會是新約 —— 請選續約或分期。'
-      : '這位在買這張之前<b>沒有</b>教練課／友善教練課的紀錄，所以只能是新約 —— 續約與分期要等有過一份之後才會出現。'}</div>
+      : '這位在買這張之前<b>沒有</b>教練課／友善教練課的紀錄，所以不會是續約 —— 一般選新約；如果這是舊合約的後續期數（第一期已用其他方式開立），選分期。'}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
 }
 async function setSaleKind(tkId, kind){
@@ -49497,7 +49493,16 @@ function gtSaleKindOpts(hasPt){
      沿用這一欄一貫的作法：不合用的選項直接不列，而不是列出來讓人選了才擋。
      這一欄直接連到教練的續約獎金，$0 標成續約等於憑一張免費票發一筆獎金。 */
   const zero=gtIsZeroDeal();
-  const allow=k=>zero ? (k==='gift') : (k!=='gift' && (hasPt?(k!=='new'):(k==='new')));
+  /* ══ 2026-09-07 二修：兩邊都是「○○或分期」════════════════════════════════
+     使用者：「應該說　新約或分期跟續約或分期　因為有的會員是舊合約　會用自訂方案
+       建立一份新的分期合約　因為第一期已經用其他方式開立」
+     ——「分期」不是「有沒有買過」的下游，它是另一個維度（這張票是不是某份舊合約的
+       後續期數）。新客也可能是分期：第一期在別的地方收過了，系統這張是第二期起。
+     所以規則是：
+       沒有教練課紀錄 → 新約 或 分期
+       有教練課紀錄   → 續約 或 分期（新約消失，0901 定案）
+     ⚠ 拿掉的只有「不合身分的那一顆」，分期兩邊都在。 */
+  const allow=k=>zero ? (k==='gift') : (k!=='gift' && (k==='installment' || (hasPt?(k!=='new'):(k==='new'))));
   const keep=OPTS.filter(([k])=>allow(k));
   sel.innerHTML=keep.map(([k,lb])=>`<option value="${k}">${lb}</option>`).join('');
   /* ⚠ 退路要退到「還在清單裡的第一個」——退成寫死的 'new' 的話，
@@ -49512,7 +49517,7 @@ function gtSaleKindOpts(hasPt){
       ? '這個方案金額是 0，所以是贈送 —— 贈送不計新約、也不計續約獎金。'
       : (hasPt
         ? '這位已經有教練課／友善教練課的紀錄，所以不是新約 —— 請選續約或分期（分期不計續約獎金）。'
-        : '這位還沒有教練課／友善教練課的紀錄，所以只能是新約（續約與分期要等有過一份之後才會出現）。');
+        : '這位還沒有教練課／友善教練課的紀錄，所以不會是續約 —— 一般選新約；如果這是舊合約的後續期數（第一期已用其他方式開立），選分期。');
     note.dataset.base=note.textContent;
   }
 }
