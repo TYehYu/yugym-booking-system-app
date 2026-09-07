@@ -143,12 +143,25 @@ ok('★★ 分期續約的續約獎金照算一次（renewListOf 不排除分期
    ②「續約或分期的標示，要在該會員是有【已完成】的教練課或者友善教練課的方案、
       再次儲值才會出現」
      → 這一條是 0727 高估的解藥（當時「買過同類票就算續約」，推出 38 張、實際 9 張）。 */
-console.log('\n約別由系統判定（0824）');
-ok('★★ 內建分期：整欄不畫、強制標成分期',
+/* ══ 2026-09-07 使用者定案：分期繳費**不等於**約別「分期」════════════════════
+   「蘇月華這一筆　雖然付費方式是分期　但他是第一期　等於是新的方案
+     約別應該是屬於續約才對」
+   回到 0815 的規則（「分期繳費的續約，第一期屬於續約」）——
+   0824 那版「整欄不畫、強制標成分期」把它蓋掉了，現在退場。
+   約別＝這張票怎麼成立的（票券層級）；分期＝這筆錢怎麼收的（收款層級）。
+   後面各期的收款列本來就會自動標分期（_revRows 固定 kind='installment'）。 */
+console.log('\n約別與分期是兩件事（0907 取代 0824 的自動判定）');
+ok('★★★ 分期不再把約別整欄收起來、也不再強制寫成 installment',
    /function gtSaleKindSync\(\)\{/.test(src)
-   && /row\.style\.display=inst\?'none':'';/.test(src)
-   && /if\(inst\)\{ sel\.value='installment'; sel\.dataset\.touched=''; \}/.test(src)
-   && /約別：<b>分期<\/b>（這張是分期方案，系統自動判定，不需要選）/.test(src));
+   && /row\.style\.display='';/.test(src)
+   && !/if\(inst\)\{ sel\.value='installment'; sel\.dataset\.touched=''; \}/.test(src));
+ok('★★★ 自動預選也不再因為分期就選 installment（那會默默吃掉一筆續約獎金）',
+   !/if\(_instNow\)\{ sel\.value='installment'; return; \}/.test(src)
+   && /if\(gtIsZeroDeal\(\)\)\{ sel\.value='gift'; return; \}\s*\n\s*sel\.value=_hasPt\?'renewal':'new';/.test(src));
+ok('★★ 分期時提示行要講清楚「第一期算續約」',
+   /<b>分期繳費的第一期算續約<\/b>（後面各期的收款列系統會自動標「分期」）/.test(src));
+ok('★★ 「分期」仍然是合法選項（陳瀚竣那種手動定的）',
+   /\['installment','分期'\]/.test(src));
 ok('　　期數一改就跟著（不是只有進到那一步才算一次）',
    /onchange="refreshInstallPreview\(\);refreshGrantVoucher\(\);gtSaleKindSync\(\)"/.test(src));
 /* ══ 2026-09-01 使用者定版：約別二選一 ══════════════════════════════
@@ -273,8 +286,8 @@ ok('★★ 進第二步那條非同步線也要自己收一次，而且排在 Op
     ok(`★★ 實跑・${c} → 收起來`, x.row==='none' && x.val===''); });
   r=run('私人教練'); ok('★★★ 實跑・教練課 → 照畫，值不動（這一欄連著續約獎金）',
     r.row==='' && r.hint==='' && r.auto==='none' && r.val==='renewal');
-  r=run('私人教練',3); ok('★★★ 實跑・教練課＋分期 → 收成自動判定那一行（0824 規則沒被打壞）',
-    r.row==='none' && r.auto==='' && r.hint==='none' && r.val==='installment');
+  r=run('私人教練',3); ok('★★★ 實跑・教練課＋分期 → 照畫、值不動（0907：第一期算續約）',
+    r.row==='' && r.auto==='none' && r.hint==='' && r.val==='renewal');
   r=run('',1); ok('★★★ 實跑・類別讀不到 → 照畫（退路不能是默默不標）',
     r.row==='' && r.val==='renewal');
 })();

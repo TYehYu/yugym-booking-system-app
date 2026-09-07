@@ -12316,8 +12316,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260907.1508';
-const APP_VERSION_LABEL = 'v260907.1508';
+const APP_VERSION = '260907.1715';
+const APP_VERSION_LABEL = 'v260907.1715';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -49506,11 +49506,14 @@ function gtSaleKindOpts(hasPt){
   const note=document.getElementById('gt-salekind-hint');
   if(note){
     note.style.display='';
+    /* 原句先留一份（2026-09-07）：分期時 gtSaleKindSync 會在後面接一段說明，
+       換方案重畫時要能還原，不然會愈接愈長。 */
     note.textContent=zero
       ? '這個方案金額是 0，所以是贈送 —— 贈送不計新約、也不計續約獎金。'
       : (hasPt
         ? '這位已經有教練課／友善教練課的紀錄，所以不是新約 —— 請選續約或分期（分期不計續約獎金）。'
         : '這位還沒有教練課／友善教練課的紀錄，所以只能是新約（續約與分期要等有過一份之後才會出現）。');
+    note.dataset.base=note.textContent;
   }
 }
 /* 要不要畫約別這一欄（2026-09-05 使用者指示：「運動按摩不需要約別」「購買團課也不需要」）——
@@ -49537,11 +49540,31 @@ function gtSaleKindSync(){
     sel.value=''; sel.dataset.touched='';
     return;
   }
+  /* ══ 2026-09-07 使用者定案：分期繳費**不等於**約別「分期」════════════════════
+     「蘇月華這一筆　雖然付費方式是分期　但他是第一期　等於是新的方案
+       約別應該是屬於續約才對」
+
+     這其實是回到 0815 定的規則（「分期繳費的續約，第一期屬於續約」）——
+     0824 那版「用內建分期賣的，約別由系統判定成分期、整欄不畫」把它蓋掉了。
+     兩者的差別在於**這一格問的是什麼**：
+       約別 ＝ 這張票怎麼成立的（第一次買／用完再買）  ← 票券層級
+       分期 ＝ 這筆錢怎麼收的                          ← 收款層級
+     後面各期的收款列本來就會自動標「分期」（_revRows 固定 kind='installment'，
+     不讀票券約別），所以票券這一格不需要也跟著標。
+
+     ⚠ 「分期」仍然是合法選項，只是不再自動選（陳瀚竣 TK-mtgpbx0sut6u 就是
+       使用者看過紙本合約後手動定為分期的）—— 改成畫出來讓人選，不要替他決定。
+     ⚠ 這一格直接連到教練的續約獎金：自動標成分期＝那筆續約獎金默默不見。 */
   const inst=Number((document.getElementById('gt-install')||{}).value||1)>1;
-  row.style.display=inst?'none':'';
-  note.style.display=inst?'':'none';
-  if(hint) hint.style.display=inst?'none':'';
-  if(inst){ sel.value='installment'; sel.dataset.touched=''; }
+  row.style.display='';
+  note.style.display='none';
+  if(hint){
+    hint.style.display='';
+    if(inst) hint.innerHTML=(hint.dataset.base||hint.textContent||'')
+      +'<br><b>分期繳費的第一期算續約</b>（後面各期的收款列系統會自動標「分期」）——'
+      +'這一格填的是「這張票怎麼成立」，不是「怎麼付錢」。';
+    else if(hint.dataset.base) hint.textContent=hint.dataset.base;
+  }
 }
 // 發放票券步驟切換
 /* 儲值金扣抵（2026-08-30）——進到「購買資訊」才讀餘額：會員是在上一步才選的。
@@ -49598,14 +49621,13 @@ function grantGoStep(n){
     gtSaleKindSync();   /* ⚠ 一定排在 Opts 後面：Opts 會把提示行重新打開 */
     if(!gtSaleKindNeed()) return;   /* 不是教練課系 → 不預選、不寫值 */
     if(sel.dataset.touched) return;
-    /* 自動預選：$0 → 贈送；分期 → 分期；有教練課紀錄 → 續約；其餘 → 新約。
+    /* 自動預選：$0 → 贈送；有教練課紀錄 → 續約；其餘 → 新約。
+       （2026-09-07 移除「分期 → 分期」：分期繳費的第一期算續約，見 gtSaleKindSync）
        （2026-09-05 移除「賣團課 → 團課」：團課現在整欄不畫，見 gtSaleKindNeed）
        ⚠ $0 這一條一定要在最前面且直接 return —— gtSaleKindOpts 已經把選單收成只剩
          「贈送」，這裡再寫 'renewal'／'new' 會設成一個不在清單裡的值，
          sel.value 直接變空字串（0901 那次退路寫死 'new' 就是踩到同一個坑）。 */
     if(gtIsZeroDeal()){ sel.value='gift'; return; }
-    const _instNow=Number((document.getElementById('gt-install')||{}).value||1)>1;
-    if(_instNow){ sel.value='installment'; return; }   /* 畫面上那一欄已由 gtSaleKindSync 收起來 */
     sel.value=_hasPt?'renewal':'new';
   }catch(_){} })();
   if(n===3) renderGrantAttrib(); // 銷售入口：業績歸屬教練卡（★ 標主責，但不預選）
