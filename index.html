@@ -12308,8 +12308,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260907.1417';
-const APP_VERSION_LABEL = 'v260907.1417';
+const APP_VERSION = '260907.1421';
+const APP_VERSION_LABEL = 'v260907.1421';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48959,7 +48959,12 @@ async function renderContractStep(){
   const voucherN=Math.max(0,Math.min(Math.floor(Number((document.getElementById('gt-voucher')||{}).value)||0),
     Number(window._gtVoucherMax)||0, isInstall?1:Infinity));   // 分期每期限 1 張（2026-07-29）
   const paid=Math.max(0,deal-voucherN*300);
-  const payLabel={cash:'現金',transfer:'匯款',card:'刷卡'}[(document.getElementById('gt-method')||{}).value]||'—';
+  /* 建約時已經不選付款方式了（2026-09-07）——草稿不要謊稱「現金」。
+     真正印出來／簽名的那一份，會在櫃檯按〔用電子簽〕／〔用紙本〕時
+     依當下選的付款方式重生（見 grantReqSetSign → ctRebuildSnapshot）。 */
+  const _payEl=document.getElementById('gt-method');
+  const payLabel=_payEl ? ({cash:'現金',transfer:'匯款',card:'刷卡',split:'現金＋匯款'}[_payEl.value]||'—')
+                        : '（收款時決定）';
   const expire=plan.valid_days?`${plan.valid_days} 天（至 ${termExpire(TODAY,plan.valid_days)}）`:'—';
   window._ctCtx={
     會員姓名:m.name||'—', 會員電話:m.phone?fmtPhone(m.phone):'—', 簽約日期:ymd(TODAY),
@@ -49319,11 +49324,22 @@ async function openGrantModal(){
         <div class="form-row" id="gt-credit-row" style="display:none;"><label>儲值金扣抵<span class="lb-warn" id="gt-credit-max"></span></label>
           <input type="number" id="gt-credit" min="0" value="0" oninput="this.dataset.touched=1;gtCreditHint()">
           <div class="gt-unitbox" id="gt-credit-hint"></div></div>
-        <div class="form-row"><label>付款方式</label><select id="gt-method" onchange="var w=document.getElementById('gt-splitcash-wrap');if(w)w.style.display=this.value==='split'?'':'none';"><option value="cash">現金</option><option value="transfer">匯款</option><option value="split">現金＋匯款</option></select></div>
+        ${/* ══ 2026-09-07 使用者定案：建立合約時不選付款方式 ══════════════════
+             「下方只要總金額　分期方式　約別　備註　付款方式跟付款狀態不用在這邊選」
+             接續同一天的付款狀態退場 —— 這兩格都是「錢怎麼收」，
+             而錢是櫃檯在「待審核發放」收的（那邊的收款資訊本來就有自己的付款方式，
+             見 grFillApply 讀的 gr-method）。
+             ⚠ 後台「直接發放票券」照舊要選：它沒有後面那一步。
+             ⚠ 建約這條路少了右半格，分期方式就搬上來跟總金額同一列，
+               不要留一個空洞（版面只做最小調整）。 */''}
+        ${sales
+          ? `<div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher();gtSaleKindSync()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>`
+          : `<div class="form-row"><label>付款方式</label><select id="gt-method" onchange="var w=document.getElementById('gt-splitcash-wrap');if(w)w.style.display=this.value==='split'?'':'none';"><option value="cash">現金</option><option value="transfer">匯款</option><option value="split">現金＋匯款</option></select></div>`}
       </div>
       ${/* 拆帳（2026-08-12 使用者需求：一筆 14400＝現金 7200＋匯款 7200）：填現金收多少，其餘記匯款 */''}
-      <div class="form-row" id="gt-splitcash-wrap" style="display:none;"><label>其中現金收多少（其餘記匯款）</label><input type="number" id="gt-splitcash" min="0" placeholder="例如 7200"></div>
-      <div class="form-2col">
+      ${sales?'':`<div class="form-row" id="gt-splitcash-wrap" style="display:none;"><label>其中現金收多少（其餘記匯款）</label><input type="number" id="gt-splitcash" min="0" placeholder="例如 7200"></div>`}
+      ${/* 建約那條路：分期方式已經搬到上面那一列，付款狀態也不畫 → 整列不用畫 */''}
+      ${sales?'':`<div class="form-2col">
         <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher();gtSaleKindSync()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>
         ${/* ══ 2026-09-07 使用者定案：建立合約時不再問付款狀態 ══════════════════
              「建立合約的時候　如果選了已付款　後續無法再發送電子合約
@@ -49337,8 +49353,8 @@ async function openGrantModal(){
              〔確認收款・發放票券〕那一刻（見 grFillApply 的 payment_status:'paid'）。
              ⚠ 後台「直接發放票券」（沒有合約、不進佇列）那條路照舊要問 ——
                它沒有後面那個收款步驟，唯一的補救是票券卡上的〔收款〕。 */''}
-        ${sales?'':`<div class="form-row"><label>付款狀態</label><select id="gt-pay" onchange="invSync()"><option value="unpaid" selected>未付款</option><option value="paid">已付款</option></select></div>`}
-      </div>
+        <div class="form-row"><label>付款狀態</label><select id="gt-pay" onchange="invSync()"><option value="unpaid" selected>未付款</option><option value="paid">已付款</option></select></div>
+      </div>`}
       ${/* 電子發票（2026-09-02）：只有「已付款」才畫 —— 沒收到錢不能開發票 */''}
       ${invFieldsHTML()}
       <div class="form-2col">
@@ -50167,7 +50183,10 @@ async function submitGrant(){
   /* 自訂銷售填的是整包總價（2026-08-21）；模板方案照舊由單價乘堂數推 */
   const listPrice=(plan.list_price!=null)?(Number(plan.list_price)||0):(unitPrice*plan.sessions_base);
   const dealAmount=Number(document.getElementById('gt-amount').value)||listPrice; // 實際成交金額
-  const method=document.getElementById('gt-method').value;
+  /* 2026-09-07：建約那條路沒有這個欄位了（付款方式留給櫃檯收款那一步決定，
+     見 grFillApply 讀的 gr-method）。欄位不在就先給 cash，
+     送簽之前 grantReqSetSign 會用櫃檯選的那個重生合約內文。 */
+  const method=((document.getElementById('gt-method')||{}).value)||'cash';
   /* 拆帳（2026-08-12）：現金部分必填、不可超過成交金額；匯款＝實收−現金，寫購買紀錄時才算（要扣掉折抵券） */
   const splitCash=method==='split'?Number((document.getElementById('gt-splitcash')||{}).value):null;
   if(method==='split' && (!Number.isFinite(splitCash)||splitCash<0||splitCash>dealAmount)){

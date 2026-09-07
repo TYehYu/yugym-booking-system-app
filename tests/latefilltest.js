@@ -39,8 +39,20 @@ console.log('① 前兩版都退乾淨了');
      !/getElementById\('gt-pay'\)\|\|\{\}\)\.value\|\|'paid'/.test(src));
   ok('★★ 真正把它翻成 paid 的是櫃檯那一步（grFillApply），建約不碰',
      /payment_status:'paid',\s+\/\/ 走到這一步就是櫃檯已經收到錢了/.test(src));
-  ok('★★ 付款狀態欄位只畫給「沒有合約」那條路',
-     /\$\{sales\?'':`<div class="form-row"><label>付款狀態<\/label><select id="gt-pay"/.test(src));
+/* 2026-09-07 二修：付款方式也退場了，整列（分期方式＋付款狀態）改成建約路不畫，
+   分期方式搬去跟總金額同一列。所以釘的東西從「那一格」變成「那一整列」。 */
+  ok('★★ 付款狀態與付款方式都只畫給「沒有合約」那條路',
+     /\$\{sales\?'':`<div class="form-2col">/.test(src)
+     && /<label>付款狀態<\/label><select id="gt-pay"/.test(src)
+     && /: `<div class="form-row"><label>付款方式<\/label><select id="gt-method"/.test(src));
+  ok('★★ 建約那一路：分期方式搬到總金額那一列（不留半格空洞）',
+     /\$\{sales\s*\n\s*\? `<div class="form-row" id="gt-install-wrap"/.test(src));
+  ok('★★ 拆帳那一列也跟著付款方式走',
+     /\$\{sales\?'':`<div class="form-row" id="gt-splitcash-wrap"/.test(src));
+  ok('★★ 付款方式讀不到欄位時預設現金（送簽前會用櫃檯選的重生合約）',
+     /const method=\(\(document\.getElementById\('gt-method'\)\|\|\{\}\)\.value\)\|\|'cash';/.test(src));
+  ok('★★ 合約草稿不謊稱現金（沒有欄位就寫「收款時決定」）',
+     /: '（收款時決定）';/.test(src));
 }
 
 console.log('\n② 選「已付款」要先確認（按錯＝錢沒收到卻記了帳）');
