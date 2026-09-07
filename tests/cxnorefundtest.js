@@ -36,9 +36,18 @@ ok('　　團課不走這條（團課的票在 ticket_logs、不在 ticket_id）
    /if\(b\.ticket_id && !bkIsGroup\(b\)\)\{/.test(CFM));
 
 console.log('\n寫入：再擋一次');
+/* 2026-09-07：帳本改成直接問資料庫（bkNetDeductDB），不再 filter 整表快取 ——
+   王秋香 9/12 那一堂就是因為快取少一列而靜靜沒退。
+   而且「查得到、真的沒扣過」那條路從 console.warn 升級成警示帳＋吐司。 */
 ok('★★ 真的要退之前先問帳本，沒淨扣就不退',
-   /if\(_net>0\) refundedCount=\(await refundTicket\(b\.ticket_id,b\.id,SESSION\.id\)\)\?1:0;/.test(CB)
-   && /else \{ refundedCount=0; console\.warn\('取消未退課：這一堂在該票券上沒有淨扣課紀錄'/.test(CB));
+   /const _net=await bkNetDeductDB\(b\.id, b\.ticket_id\);/.test(CB)
+   && /\}else if\(_net>0\)\{\s*\n\s*refundedCount=\(await refundTicket\(b\.ticket_id,b\.id,SESSION\.id\)\)\?1:0;/.test(CB)
+   && /console\.warn\('取消未退課：這一堂在該票券上沒有淨扣課紀錄'/.test(CB));
+ok('★★ 問不到（null）不等於沒扣過 —— 保守起見照退，不要吃掉客人一堂',
+   /if\(_net===null\)\{/.test(CB) && /保守起見照退/.test(CB));
+ok('★★ 沒退成不再是靜悄悄的：留警示帳＋當面說一聲',
+   /取消未退課：帳本上查不到這一堂的淨扣課/.test(CB)
+   && /已取消但沒有退回堂數/.test(CB));
 ok('　　為什麼要擋兩層（refundMode=force 可能從別的呼叫端進來）',
    /畫面那一層已經不會問退不退了，但 refundMode='force'\s*\n\s*也可能從別的呼叫端進來/.test(CB));
 

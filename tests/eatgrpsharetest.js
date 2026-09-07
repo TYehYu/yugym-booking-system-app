@@ -136,10 +136,12 @@ console.log('\n③b refund_waived 只在「真的扣過、而且選擇不退」�
   ok('★★★ 沒扣過的課不蓋旗標（沒有東西可以「不退」）',
      /b\.refund_waived = \(!doRefund\) && \(await bkWasDeducted\(b\)\);/.test(src)
      && /旗標只在「真的扣過、而且這次選擇不退」時才成立/.test(src));
+/* 2026-09-07：bkWasDeducted 改走 bkNetDeductDB（直接問資料庫）——
+   語意不變，只是資料來源從整表快取換成資料庫；問不到時回 null，一律當成「沒扣過」。 */
   ok('★★★ 判準與 0826 那條同源：有帳本且淨扣 > 0 才算扣過',
      /async function bkWasDeducted\(b\)\{/.test(src)
-     && /if\(!lg\.length\) return false;/.test(src)
-     && /return net>0;/.test(src));
+     && /const net=await bkNetDeductDB\(b\.id, null\);/.test(src)
+     && /return typeof net==='number' && net>0;/.test(src));
   ok('★★ delta 0 的 deduct 是「補連結」，不算這次扣的',
      /lg\.filter\(l=>l\.action==='deduct'&&Number\(l\.delta\)!==0\)\.length/.test(src));
   ok('★★★ 成因寫在原地（兩位教練同一天各中一次，不是人為失誤）',

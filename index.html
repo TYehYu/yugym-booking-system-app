@@ -12308,8 +12308,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260907.1205';
-const APP_VERSION_LABEL = 'v260907.1205';
+const APP_VERSION = '260907.1417';
+const APP_VERSION_LABEL = 'v260907.1417';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38105,15 +38105,47 @@ async function promoteHeldBooking(memberId, ticketId){
    有帳本紀錄且淨扣 > 0 才算扣過；完全沒有紀錄的算沒扣過（與 0826 那條判準同源，
    見 tkBookedCountMap／mtkOverAsk／tkTidyOpen）。
    ⚠ delta 0 的 deduct 是「補連結」（只記歸屬、堂數當初就扣過了），不算這次扣的。 */
+/* 「這一堂在這張票上還有沒有淨扣課」——**直接問資料庫，不要問快取**（2026-09-07 王秋香案例）。
+
+   取消退課的成敗完全押在這個數字上：算成 0 就靜靜不退，客人平白少一堂，
+   而畫面上只有一行 console.warn，櫃檯與教練都不會知道。
+   王秋香 9/12 那一堂就是這樣掉的：帳本裡明明有 8/04 的扣課紀錄，
+   取消當下卻沒有退回，也沒有留下任何 refundTicket 的警示帳
+   （它的兩個失敗分支都會寫 delta 0 的警示，這裡一筆都沒有 → 根本沒被呼叫到）。
+
+   原本讀的是 dbGetAll('ticket_logs') —— 幾千列的整表快取，靠簽章＋增量補資料維護。
+   它平常是對的，但「平常是對的」不足以拿來決定客人的堂數：
+   少一列的代價是一堂課，多問資料庫一次的代價是 30ms。
+
+   ⚠ 查詢失敗回 null（不是 0）—— 呼叫端要分得出「確定沒扣過」與「問不到」。
+     問不到時寧可退（refundTicket 自己有「餘額不超過總堂數」的護欄），
+     也不要靜靜吃掉客人一堂。 */
+async function bkNetDeductDB(bookingId, ticketId){
+  if(!bookingId) return null;
+  const _fromCache=async()=>{
+    try{
+      const lg=(await dbGetAll('ticket_logs'))
+        .filter(l=>l&&l.booking_id===bookingId&&(!ticketId||l.ticket_id===ticketId));
+      return lg.filter(l=>l.action==='deduct'&&Number(l.delta)!==0).length
+           - lg.filter(l=>l.action==='refund').length;
+    }catch(_){ return null; }
+  };
+  if(!(CLOUD && sb)) return _fromCache();   // 本機 demo 模式沒有雲端可問
+  try{
+    let q=sb.from('ticket_logs').select('action,delta,ticket_id').eq('booking_id',bookingId);
+    if(ticketId) q=q.eq('ticket_id',ticketId);
+    const {data,error}=await q;
+    if(error||!Array.isArray(data)) return null;
+    return data.filter(l=>l.action==='deduct'&&Number(l.delta)!==0).length
+         - data.filter(l=>l.action==='refund').length;
+  }catch(_){ return null; }
+}
+/* 這一堂到底扣過沒（用於 refund_waived 的語意：「取消時選了扣課不退」）——
+   問不到就當成「沒扣過」＝不標 waived，那是安全的一邊（不會讓畫面把它畫成用掉一格）。 */
 async function bkWasDeducted(b){
   if(!b||!b.id) return false;
-  try{
-    const lg=(await dbGetAll('ticket_logs')).filter(l=>l&&l.booking_id===b.id);
-    if(!lg.length) return false;
-    const net=lg.filter(l=>l.action==='deduct'&&Number(l.delta)!==0).length
-            - lg.filter(l=>l.action==='refund').length;
-    return net>0;
-  }catch(_){ return false; }
+  const net=await bkNetDeductDB(b.id, null);
+  return typeof net==='number' && net>0;
 }
 async function cancelBooking(id, refundMode, opts){
   const _silent=!!(opts&&opts.silent);
@@ -38215,15 +38247,27 @@ async function cancelBooking(id, refundMode, opts){
       }
     }else if(b.ticket_id){
       /* 再擋一次（2026-08-26）：畫面那一層已經不會問退不退了，但 refundMode='force'
-         也可能從別的呼叫端進來。沒扣過就不退 —— 退了就是憑空多一堂。 */
-      let _net=0, _has=false;
-      try{
-        const _lg=(await dbGetAll('ticket_logs')).filter(l=>l && l.booking_id===b.id && l.ticket_id===b.ticket_id);
-        _has=_lg.length>0;
-        _net=_lg.filter(l=>l.action==='deduct').length - _lg.filter(l=>l.action==='refund').length;
-      }catch(_){}
-      if(_net>0) refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
-      else { refundedCount=0; console.warn('取消未退課：這一堂在該票券上沒有淨扣課紀錄',b.id,b.ticket_id,{_has,_net}); }
+         也可能從別的呼叫端進來。沒扣過就不退 —— 退了就是憑空多一堂。
+         ⚠ 2026-09-07 改成直接問資料庫（見 bkNetDeductDB）：原本讀整表快取，
+           少一列就靜靜不退。王秋香 9/12 那一堂就是這樣掉的。 */
+      const _net=await bkNetDeductDB(b.id, b.ticket_id);
+      if(_net===null){
+        /* 問不到 ≠ 沒扣過。寧可退（refundTicket 有「不超過總堂數」的護欄擋重複退），
+           也不要在查不到的時候默默吃掉客人一堂。 */
+        console.warn('取消退課：查不到扣課紀錄（查詢失敗），保守起見照退',b.id,b.ticket_id);
+        refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
+      }else if(_net>0){
+        refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
+      }else{
+        /* 「查得到、而且真的沒扣過」才走這裡。以前這裡只有 console.warn ——
+           客人少一堂，畫面上完全沒有痕跡。改成留一筆警示帳＋當面說一聲，
+           與 refundTicket 兩個失敗分支同一套做法（2026-08-19 黃柏桓案例定的）。 */
+        refundedCount=0;
+        console.warn('取消未退課：這一堂在該票券上沒有淨扣課紀錄',b.id,b.ticket_id,{_net});
+        try{ await logTicket(b.ticket_id,'adjust',0,b.id,SESSION.id,
+          '取消未退課：帳本上查不到這一堂的淨扣課（沒扣過就不退，退了會憑空多一堂）'); }catch(_){}
+        if(!_silent){ try{ showToast('這一堂在票券上查不到扣課紀錄，已取消但沒有退回堂數 —— 若不對請用票券卡的「校正」處理', 8000); }catch(_){} }
+      }
     }
     /* 「沒綁票就回頭找一張票退」的備援（refundLegacyBooking）2026-08-14 退場——
        使用者指示（陳秀蘭案例：取消 6 筆無票預約、票憑空多 6 堂）：
