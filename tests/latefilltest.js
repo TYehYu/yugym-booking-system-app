@@ -31,8 +31,16 @@ console.log('① 前兩版都退乾淨了');
      /if\(window\._grantSalesActive && window\._ctBody\)\{/.test(src));
   ok('★★ 三版的來龍去脈寫在原地（含「教練沒有建約權限」這條）',
      /勾選框與「依角色自動判斷」兩版都退場，改用\*\*既有的付款狀態\*\*/.test(src));
-  ok('★★ 付款狀態回到直接讀欄位（沒有任何覆寫）',
-     /payment_status:\(document\.getElementById\('gt-pay'\)\|\|\{\}\)\.value\|\|'paid',/.test(src));
+/* 2026-09-07 使用者定案：「建立合約的時候不要有是否付款的選項　一律由櫃檯後面收款再選擇」
+   —— 建約那條路一律 unpaid，只有後台「直接發放票券」還讀欄位。 */
+  ok('★★ 建約一律 unpaid；只有直接發放才讀欄位，而且預設也是 unpaid',
+     /payment_status:window\._grantSalesActive\?'unpaid':\(\(\(document\.getElementById\('gt-pay'\)\|\|\{\}\)\.value\)\|\|'unpaid'\),/.test(src));
+  ok('★★ 舊的「讀不到欄位就當成已付款」預設已經拔掉（那是最貴的預設）',
+     !/getElementById\('gt-pay'\)\|\|\{\}\)\.value\|\|'paid'/.test(src));
+  ok('★★ 真正把它翻成 paid 的是櫃檯那一步（grFillApply），建約不碰',
+     /payment_status:'paid',\s+\/\/ 走到這一步就是櫃檯已經收到錢了/.test(src));
+  ok('★★ 付款狀態欄位只畫給「沒有合約」那條路',
+     /\$\{sales\?'':`<div class="form-row"><label>付款狀態<\/label><select id="gt-pay"/.test(src));
 }
 
 console.log('\n② 選「已付款」要先確認（按錯＝錢沒收到卻記了帳）');
@@ -48,20 +56,19 @@ console.log('\n② 選「已付款」要先確認（按錯＝錢沒收到卻記�
   ok('★★ 分期要講明「這是第 1 期」與總額（不會讓人照總額收）',
      /分 \$\{installCount\} 期，這是<b>第 1 期<\/b>（總額 \$\$\{dealAmount\.toLocaleString\(\)\}）/.test(C));
   ok('★★ 折抵券也標出來', /已折抵券 ×\$\{voucherN\}（−\$\$\{voucherAmt\.toLocaleString\(\)\}）/.test(C));
-/* 2026-08-28（使用者：「如果已付款 也要等會員回簽才可以發放票券」「除非選的是紙本合約」）——
-   規則本來就成立（電子那條在下面 return 去待審核），錯的是這個確認視窗：
-   它原本不分紙本電子都寫「立刻發放票券」，等於在騙人。 */
-  ok('★★ 紙本與電子講不同的話（下一步真的不一樣）',
-     /const _ctRemote=\(window\._grantSalesActive && window\._ctBody && window\._ctSignType==='remote'\);/.test(C)
-     && /這是<b>電子合約<\/b>：按下去會送出審核，<b>票券還不會發<\/b>/.test(C)
-     && /這是<b>紙本合約<\/b>：按下去會<b>立刻發放票券<\/b>並記進今日營收。/.test(C));
-  ok('★★ 連按鈕上的字都跟著換（送出審核／發放票券）',
-     /_ctRemote\?'確認收到，送出審核':'確認收到，發放票券', '返回修改'/.test(C));
-  ok('★★ 「還沒收到就改未付款」那條路兩種都講得出來',
-     /一樣送出審核，收到款再到「收款審核」補上金額與發放。/.test(C)
-     && /票券一樣會發、方案卡會標「待付款」，櫃檯收到再補上金額與付款方式。/.test(C));
-  ok('★★ 為什麼要分開講，寫在原地',
-     /紙本與電子的下一步完全不同，這裡不能講同一句/.test(src));
+/* 2026-08-28 那版這裡分「紙本／電子」講兩句話（電子要等回簽才發）。
+   0904 之後 _ctSignType 一律 undecided，電子那半就永遠是 false；
+   0907 建約又不能選已付款 —— 整段徹底不可能成立，已移除。
+   走到這個視窗一定是後台「直接發放票券」：沒有合約、按下去就發。 */
+  ok('★★ 不可能成立的電子/紙本分岔已經移除', !/const _ctRemote=/.test(C));
+  ok('★★ 只講「直接發放」這一種下一步（沒有合約，按下去就發、就記帳）',
+     /這是<b>直接發放<\/b>（沒有合約）：按下去會<b>立刻發放票券<\/b>並記進今日營收。/.test(C));
+  ok('★★ 按鈕上的字固定成「確認收到，發放票券」',
+     /'確認收到，發放票券', '返回修改'/.test(C));
+  ok('★★ 「還沒收到就改未付款」仍然講得出退路（指向票券卡上的收款）',
+     /票券一樣會發、方案卡會標「待付款」，櫃檯收到再按卡上的〔收款〕補金額與付款方式。/.test(C));
+  ok('★★ 為什麼整段拿掉，寫在原地',
+     /整段徹底不可能成立 —— 移除，不要留著讓人以為還有兩條路。/.test(src));
   ok('★★ ⚠ 用 bkAskOverlay 不用 showModal —— 這一支是從儲值表單那張彈窗裡跑起來的',
      /await bkAskOverlay\(/.test(C)
      && /showModal 會把表單整個拆掉（0828 08:00 事故的同一個坑）/.test(src));
@@ -74,7 +81,8 @@ console.log('\n②-b 預設就是「未付款」（安全的那一邊）');
      /* 2026-09-02 起這個 select 多了 onchange（電子發票欄要跟著付款狀態顯示），
         所以放行屬性，只釘選項順序與 selected —— 那才是這條在守的東西。 */
      /<select id="gt-pay"[^>]*><option value="unpaid" selected>未付款<\/option><option value="paid">已付款<\/option><\/select>/.test(src));
-  ok('★★ 理由寫在原地', /預設「未付款」（2026-08-28 使用者指示）—— 安全的那一邊：/.test(src));
+  ok('★★ 理由寫在原地（0828 的「安全的那一邊」已由 0907 的定案接手）',
+     /建約這條路一律寫 unpaid；真正把它翻成 paid 的是櫃檯在「待審核發放」按/.test(src));
 }
 
 console.log('\n②-c 業績歸屬那一步：底列＝上一步／確認，沒選教練不給按');

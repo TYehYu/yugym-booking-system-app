@@ -12308,8 +12308,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260907.1109';
-const APP_VERSION_LABEL = 'v260907.1109';
+const APP_VERSION = '260907.1205';
+const APP_VERSION_LABEL = 'v260907.1205';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -49281,10 +49281,19 @@ async function openGrantModal(){
       <div class="form-row" id="gt-splitcash-wrap" style="display:none;"><label>其中現金收多少（其餘記匯款）</label><input type="number" id="gt-splitcash" min="0" placeholder="例如 7200"></div>
       <div class="form-2col">
         <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher();gtSaleKindSync()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>
-        ${/* 預設「未付款」（2026-08-28 使用者指示）—— 安全的那一邊：
-             未付款按錯救得回來（方案卡標待付款，櫃檯再收款），
-             已付款按錯是錢沒收到卻記了帳。選「已付款」會先跳確認。 */''}
-        <div class="form-row"><label>付款狀態</label><select id="gt-pay" onchange="invSync()"><option value="unpaid" selected>未付款</option><option value="paid">已付款</option></select></div>
+        ${/* ══ 2026-09-07 使用者定案：建立合約時不再問付款狀態 ══════════════════
+             「建立合約的時候　如果選了已付款　後續無法再發送電子合約
+               所以建立合約的時候不要有是否付款的選項　一律由櫃檯後面收款再選擇」
+
+             這是 0904「建立合約時不選簽署方式」沒收乾淨的尾巴：那天已經把簽署方式、
+             分期、現金／匯款全部移到「待審核發放」，付款狀態卻留在原地，
+             於是建約的人要在「還沒收到錢」的當下先回答「收到錢了嗎」。
+
+             建約這條路一律寫 unpaid；真正把它翻成 paid 的是櫃檯在「待審核發放」按
+             〔確認收款・發放票券〕那一刻（見 grFillApply 的 payment_status:'paid'）。
+             ⚠ 後台「直接發放票券」（沒有合約、不進佇列）那條路照舊要問 ——
+               它沒有後面那個收款步驟，唯一的補救是票券卡上的〔收款〕。 */''}
+        ${sales?'':`<div class="form-row"><label>付款狀態</label><select id="gt-pay" onchange="invSync()"><option value="unpaid" selected>未付款</option><option value="paid">已付款</option></select></div>`}
       </div>
       ${/* 電子發票（2026-09-02）：只有「已付款」才畫 —— 沒收到錢不能開發票 */''}
       ${invFieldsHTML()}
@@ -50178,7 +50187,10 @@ async function submitGrant(){
       .sort((a,b)=>(a.expire_date||'9999').localeCompare(b.expire_date||'9999')).map(v=>v.id),
     sale_kind:(document.getElementById('gt-salekind')||{}).value||null,
     sold_by:(window._grantSalesActive&&window._grantSalesActive.coach_id)||null,
-    payment_status:(document.getElementById('gt-pay')||{}).value||'paid',
+    /* 2026-09-07：建約（sales）那條路沒有這個欄位了，一律 unpaid。
+       ⚠ 預設值同時從 'paid' 改成 'unpaid' —— 欄位不見時默默當成「已收到錢」
+         是最貴的那一種預設（錢沒收到卻記了一筆帳、票也發了）。 */
+    payment_status:window._grantSalesActive?'unpaid':(((document.getElementById('gt-pay')||{}).value)||'unpaid'),
     inv:invReadFields(),   /* 電子發票（2026-09-02）；電子合約要等審核，那時表單早關了，所以一起存起來 */
   };
   {
@@ -50202,7 +50214,11 @@ async function submitGrant(){
      ⚠ 用 bkAskOverlay 不用 showModal：這一支是從儲值表單那張彈窗裡跑起來的，
        showModal 會把表單整個拆掉（0828 08:00 事故的同一個坑）。 */
   if(P.payment_status==='paid'){
-    const _ctRemote=(window._grantSalesActive && window._ctBody && window._ctSignType==='remote');
+    /* 2026-09-07：建約那條路已經沒有「已付款」可選，走到這裡一定是後台
+       「直接發放票券」—— 沒有合約、不進佇列、按下去就發、就記帳。
+       原本這裡有一段 _ctRemote 分岔（電子合約要等回簽才發），0904 之後
+       _ctSignType 一律是 'undecided'，那個分支就永遠是 false 了；今天建約
+       又不能選已付款，整段徹底不可能成立 —— 移除，不要留著讓人以為還有兩條路。 */
     const _due=Math.max(0,(isInstall?Math.max(0,firstAmount-voucherAmt):paidAmount)-creditUse);
     const _payLb={cash:'現金',transfer:'匯款',card:'刷卡',split:'現金＋匯款'}[method]||method||'—';
     if(!(await bkAskOverlay(`<div class="modal-title">確認已經收到錢了嗎？</div>
@@ -50213,18 +50229,10 @@ async function submitGrant(){
       </div>
       <div style="font-size:12.5px;color:var(--text);line-height:1.9;">
         ${escH((_mem0&&_mem0.name)||'')}　·　${escH(plan.name||'')}　·　${total} 堂<br>
-        ${/* ⚠ 紙本與電子的下一步完全不同，這裡不能講同一句（2026-08-28 使用者：
-             「如果已付款 也要等會員回簽才可以發放票券」「除非選的是紙本合約」）——
-             規則本來就成立（電子那條在下面 return 去待審核），但這個確認視窗原本
-             不分兩者都寫「立刻發放票券」，等於在騙人。 */''}
-        ${_ctRemote
-          ? `這是<b>電子合約</b>：按下去會送出審核，<b>票券還不會發</b> ——
-             要等會員在手機上簽回，櫃檯再到「收款審核」按發放。`
-          : `這是<b>紙本合約</b>：按下去會<b>立刻發放票券</b>並記進今日營收。`}<br>
+        這是<b>直接發放</b>（沒有合約）：按下去會<b>立刻發放票券</b>並記進今日營收。<br>
         <span style="color:var(--t3);font-size:11.5px;">還沒收到錢的話，請改選「未付款」——
-        ${_ctRemote?'一樣送出審核，收到款再到「收款審核」補上金額與發放。'
-                   :'票券一樣會發、方案卡會標「待付款」，櫃檯收到再補上金額與付款方式。'}</span>
-      </div>`, _ctRemote?'確認收到，送出審核':'確認收到，發放票券', '返回修改'))) return;
+        票券一樣會發、方案卡會標「待付款」，櫃檯收到再按卡上的〔收款〕補金額與付款方式。</span>
+      </div>`, '確認收到，發放票券', '返回修改'))) return;
   }
   /* 2026-09-04：走過簽約步驟的一律進佇列、不發票券（使用者定案：建立合約時
      不選簽署方式）。原本這裡是 `_ctSignType==='remote'` 才進佇列，紙本當場發票券。
