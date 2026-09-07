@@ -828,8 +828,12 @@ ok('★★★ 選完留在同一筆往下走，不跳回清單',
 ok('★★ 兩個入口都吃得到（清單與會員資料那張卡）',
    /onclick="openGrantApprove\('\$\{r\.id\}'\)">收款審核<\/button>/.test(src)
    && /放在這裡兩個入口都吃得到/.test(src));
+/* 2026-09-07：改走 ctPrintForSign（帶申請單 id）——印之前先照現在的樣板重生，
+   否則「印給客人簽的」與「按〔用紙本〕後系統存的」會是兩個版本。 */
 ok('★★★ 紙本下方有可按的副標「點選下載紙本合約」',
-   /onclick="ctViewPrint\('\$\{r\.contract_id\}'\)"[\s\S]{0,260}?點選下載紙本合約<\/button>/.test(src));
+   /onclick="ctPrintForSign\('\$\{r\.id\}'\)"[\s\S]{0,300}?點選下載紙本合約<\/button>/.test(src));
+ok('★★★ 已簽的仍然原樣印，不會被重生蓋掉',
+   /if\(!c \|\| c\.signed_at\) return ctViewPrint\(cid\);/.test(src));
 /* ctViewPrint 對「還沒簽」的合約會走 ctSignBlock({paperNote:true})，
    印出來就是空白簽名欄 —— 正是要給客人簽的那一張。 */
 ok('★★★ 未簽的合約列印出來是空白簽名欄（給客人簽的那張）',

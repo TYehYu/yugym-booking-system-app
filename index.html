@@ -12316,8 +12316,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260907.1451';
-const APP_VERSION_LABEL = 'v260907.1451';
+const APP_VERSION = '260907.1508';
+const APP_VERSION_LABEL = 'v260907.1508';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -51223,9 +51223,9 @@ async function openGrantApprove(id){
         <div style="display:flex;flex-direction:column;gap:3px;">
           <button type="button" class="btn btn-ghost btn-sm" onclick="grantReqSetSign('${r.id}','paper')"
             title="客人已經在紙本上簽好了再按；按下去就算已簽，接著就能收款發放">用紙本</button>
-          <button type="button" onclick="ctViewPrint('${r.contract_id}')"
+          <button type="button" onclick="ctPrintForSign('${r.id}')"
             style="background:none;border:none;padding:0 0 0 2px;font-size:11px;color:var(--green,#1f6f54);text-decoration:underline;cursor:pointer;text-align:left;"
-            title="開啟列印視窗，可直接印或存成 PDF">點選下載紙本合約</button>
+            title="開啟列印視窗，可直接印或存成 PDF（會照現在的樣板與金額重生一次）">點選下載紙本合約</button>
         </div>
       </div>
       </div>
@@ -63109,6 +63109,44 @@ async function openContractView(id){
     `${meta}${fill}${body}${sig?'<div style="white-space:normal;">'+sig+'</div>':''}`,
     null,
     isDeskLike()?`<button class="btn btn-green" style="flex:1;padding:14px;font-size:15px;" onclick="ctViewPrint('${c.id}')">下載 PDF / 列印</button>`:null);
+}
+/* ══ 「點選下載紙本合約」印之前先重生一次（2026-09-07 使用者回報）══════════════
+   使用者：範本已經把「付款方式」拿掉了，從這顆印出來還是看得到。
+
+   原因：這顆原本直接印 contracts.body_snapshot —— 那是**建約當下**用當時的樣板
+   產生的。樣板之後改了它不會跟著動（已簽的合約就該凍結，那是對的）。
+   但這一份還沒簽，而且按〔用紙本〕時系統又會照現在的樣板重生一次快照
+   （見 grantReqSetSign）—— 等於「印出來給客人簽的」與「系統最後存的」是兩個版本。
+   要嘛都用舊的、要嘛都用新的，不能一邊一個。
+
+   ⚠ 已經簽回的（signed_at 有值）一律原樣印：那是客人簽過名的那一份，不能重生。
+   ⚠ 重生完就寫回去：印在紙上的那一份與系統存的那一份要是同一份。
+   ⚠ 重生失敗不擋列印 —— 印得出舊版總比印不出來好，錯誤留在 console。 */
+async function ctPrintForSign(reqId){
+  if(!isDeskLike()) return;
+  let cid=null;
+  try{
+    const r=await dbGet('ticket_grant_requests',reqId).catch(()=>null);
+    if(!r||!r.contract_id) return;
+    cid=r.contract_id;
+    const c=await dbGet('contracts',cid).catch(()=>null);
+    if(!c || c.signed_at) return ctViewPrint(cid);
+    /* 畫面上的收款欄位先收進來（與 grantReqSetSign 同一套）——
+       櫃檯剛改過金額或分期，客人要簽的就該是改過的那份。
+       ⚠ 只在記憶體裡改 r.payload，不寫回申請單：真正定案是按〔用紙本〕那一刻。 */
+    const P=(document.getElementById('gr-amt') && typeof grFillApply==='function')
+      ? (grFillApply(r.payload, true) || r.payload) : r.payload;
+    const _mem=await dbGet('members', r.member_id).catch(()=>null);
+    const _snap=await ctRebuildSnapshot(P||{}, _mem, c.created_at);
+    if(_snap){
+      c.body_snapshot=_snap.body; c.fill_snapshot=_snap.fill;
+      c.amount=grCtAmount(P)||Number(c.amount)||0;
+      c.sessions=Number((P&&P.total))||Number(c.sessions)||0;
+      await dbPut('contracts',c);
+      dbCacheClear(['contracts']);
+    }
+  }catch(e){ console.error('列印前重生合約失敗（改印現有版本）', e); }
+  return ctViewPrint(cid);
 }
 /* 已簽合約列印（2026-07-28）：全文快照＋簽名影像；僅後台人員（會員端唯讀不可列印） */
 async function ctViewPrint(id){
