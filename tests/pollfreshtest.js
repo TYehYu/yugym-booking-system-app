@@ -63,7 +63,7 @@ console.log('\n⑤ 彈窗不該有橫向捲軸（2026-08-24）');
      && /\.mem-pick-row\{min-width:0;\}/.test(src)
      && /\.mem-pick-row input,\.mem-pick-row select\{min-width:0;\}/.test(src));
   ok('　　y 軸捲動沒有被關掉（內容過高仍要捲得動）',
-     /\.modal\{background:var\(--surface-3\);[^}]*overflow-y:auto;/.test(src));
+     /\.modal\{--mpad:26px;background:var\(--surface-3\);[^}]*overflow-y:auto;/.test(src));
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);

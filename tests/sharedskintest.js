@@ -33,7 +33,7 @@ console.log('\n② 卡片／彈窗／列表：同一套語彙');
      /\.card\{border-radius:12px;border:1px solid rgba\(45,36,28,\.11\);padding:18px;margin-bottom:16px;\s*\n\s*box-shadow:none;\}/.test(src)
      && /\.card\{background:var\(--surface-2\);border:1px solid var\(--border-light\);border-radius:var\(--radius-2xl\);/.test(src));
   ok('★★ 彈窗與卡片同語彙（12px 圓角），陰影收成一層薄的',
-     /\.modal\{border-radius:12px;padding:22px;box-shadow:0 10px 34px rgba\(45,36,28,\.16\);\}/.test(src));
+     /\.modal\{--mpad:22px;border-radius:12px;padding:var\(--mpad\);box-shadow:0 10px 34px rgba\(45,36,28,\.16\);\}/.test(src));
   ok('★★ 卡片標題與彈窗標題都從「宋體金字」改成無襯線墨色',
      /\.card-title\{font-family:var\(--font-zh\);font-size:15px;font-weight:700;color:var\(--text\);/.test(src)
      && /\.modal-title\{font-family:var\(--font-zh\);font-size:16\.5px;font-weight:700;color:var\(--text\);/.test(src)
@@ -75,7 +75,7 @@ console.log('\n④ 只動外觀（這一層碰到全站，最不能出錯的地�
      !/body\.ink/.test(R)
      && /基礎樣式（不掛 body\.ink）—— 櫃檯與教練用的是同一批頁面/.test(src));
   ok('★ 原本的定義全部留著（只是被後面這層蓋掉，要退回很容易）',
-     /\.modal\{background:var\(--surface-3\);border-radius:var\(--radius-2xl\);padding:26px;/.test(src)
+     /\.modal\{--mpad:26px;background:var\(--surface-3\);border-radius:var\(--radius-2xl\);padding:var\(--mpad\);/.test(src)
      && /\.lp-table\{background:var\(--surface-2\);border:1px solid var\(--border-normal\);/.test(src)
      && /\.empty\{text-align:center;padding:40px 20px;color:var\(--t3\);\}/.test(src));
 }

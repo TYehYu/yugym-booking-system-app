@@ -120,7 +120,7 @@ ok('★ 視窗收窄成與建立預約同規格（拿掉 modal-wide＝回到 .mo
    (()=>{ const body=src.slice(src.indexOf('async function openSalesModal(){'),
                               src.indexOf('function slFilterMembers'));
           return !/classList\.add\('modal-wide'\)/.test(body); })()
-   && /\.modal\{background:var\(--surface-3\)[^}]*max-width:460px/.test(src)
+   && /\.modal\{--mpad:26px;background:var\(--surface-3\)[^}]*max-width:460px/.test(src)
    && /拿掉 modal-wide＝回到 \.modal 預設的 460px，與建立預約同一個規格/.test(src));
 ok('　　0728 那條「與簽約視窗統一 720px」為什麼不再成立，寫在原地',
    /那條「與簽約視窗統一 720px」是為了排四張卡，卡沒了就不成立/.test(src));

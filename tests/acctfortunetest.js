@@ -159,7 +159,8 @@ ok('★ 視窗風格對齊課卡（使用者回報「跟我們剛剛調整的差
 ok('　　從課卡開的視窗都掛上標記',
    ['調整課程','指派代課教練','取消教練請假？','調整預約時間','備註','更換課程','安排這一堂']
      .every(t=>src.includes(`<div class="ash-sheetmk"></div><div class="modal-title">${t}</div>`)));
-ok('　　只吃帶標記的視窗，其他彈窗不受影響', /\.modal\{background:var\(--surface-3\)/.test(src) && /\.ash-sheetmk\{display:none;\}/.test(src));
+/* 2026-09-07：.modal 開頭多了 --mpad（凍結底列的負邊距要用它，內距有三種尺寸） */
+ok('　　只吃帶標記的視窗，其他彈窗不受影響', /\.modal\{--mpad:26px;background:var\(--surface-3\)/.test(src) && /\.ash-sheetmk\{display:none;\}/.test(src));
 
 console.log('簡易課卡：每位會員一張卡');
 ok('★ 團課逐名額一張卡、單人課一張', /_seatKs\.length \? _seatKs\.map\(sk=>\(\{sk, mid:seatMid\(sk\), n:seatNo\(sk\)\}\)\)/.test(src)
