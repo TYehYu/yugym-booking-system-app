@@ -26,8 +26,11 @@ ok('★ 一律直接開放大閱讀器（桌機彈窗與「放大閱讀」鈕退
 ok('★ 內容含購買內容表、全文與簽名影像',
    /const fill=c\.fill_snapshot\?`<div class="ct-fill-view">\$\{c\.fill_snapshot\}<\/div>`:'';/.test(src)
    && /const sig=c\.signature\?/.test(src));
+/* 2026-09-07：內文改走 ctBodyHTML（逐行區塊＋懸掛縮排），跳脫在那一支裡做，
+   而且比原本多跳脫了 >（見 tests/ctbodyfmttest.js）。 */
 ok('★ 全文有跳脫（合約字裡有 < 不會壞版）',
-   /const body=String\(c\.body_snapshot\|\|''\)\.replace\(\/&\/g,'&amp;'\)\.replace\(\/<\/g,'&lt;'\);/.test(src));
+   /const body=ctBodyHTML\(c\.body_snapshot\);/.test(src)
+   && /replace\(\/&\/g,'&amp;'\)\.replace\(\/<\/g,'&lt;'\)\.replace\(\/>\/g,'&gt;'\)/.test(src));
 ok('★ 桌機閱讀器放大到 960px（分期五欄表放得下）',
    /width:min\(960px,calc\(100vw - 32px\)\)/.test(src));
 

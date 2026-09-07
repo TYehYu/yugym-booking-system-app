@@ -3027,7 +3027,15 @@ tr:hover td{background:var(--card2);}
 /* overflow-x:hidden＋斷詞（2026-08-03「從票券查看合約超出畫面」）：合約字裡的長串
    （網址、序號）在 pre-wrap 下會撐出橫向捲動；購買內容表自己有內捲，不受影響。
    overscroll-behavior 把捲動關在閱讀器裡，捲到底不會把底下的頁面拖著跑。 */
-.cr-body{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;word-break:break-word;-webkit-overflow-scrolling:touch;padding:20px 18px;font-size:15px;line-height:2.1;color:var(--text);white-space:pre-wrap;}
+/* 2026-09-07：內文改逐行區塊（ctBodyHTML）——與列印版同一套，
+   客人在手機上簽的那一份，排版要跟他拿到的紙本一樣。 */
+.cr-body{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;word-break:break-word;-webkit-overflow-scrolling:touch;padding:20px 18px;font-size:15px;line-height:2.1;color:var(--text);white-space:normal;}
+.cr-body .ct-h2{font-weight:700;}
+.cr-body .ct-li{display:flex;gap:.4em;padding-left:1.7em;}
+.cr-body .ct-li>.ct-li-n{flex:none;}
+.cr-body .ct-p{padding-left:1.7em;}
+.cr-body .ct-p0{padding-left:0;}
+.cr-body .ct-sp{height:.85em;}
 .cr-foot{flex-shrink:0;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--bd);}
 /* 滿版簽署（2026-08-03）：簽名區固定在底部，全文在上面自己捲 */
 .cr-signfoot{flex-shrink:0;padding:10px 14px calc(12px + env(safe-area-inset-bottom,0px));background:var(--card);border-top:1px solid var(--bd);}
@@ -12308,8 +12316,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260907.1437';
-const APP_VERSION_LABEL = 'v260907.1437';
+const APP_VERSION = '260907.1451';
+const APP_VERSION_LABEL = 'v260907.1451';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48848,7 +48856,7 @@ async function memSignContract(id){
       <div class="cr-body">${c.fill_snapshot
         ? `<div class="ct-fill-view">${c.fill_snapshot}</div>`
         : `<div style="white-space:normal;font-size:12.5px;color:var(--t2);margin-bottom:10px;">${c.plan_name||''}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</div>`
-        }${(c.body_snapshot||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+        }${ctBodyHTML(c.body_snapshot)}</div>
       <div class="cr-signfoot">
         ${/* 點簽名欄放大簽（2026-08-11 使用者回報：「有人反應簽名欄太小，可以讓客戶點
              簽名欄以後放大變成橫向佔滿畫面嗎」）——小框只當預覽（pointer-events:none，
@@ -48963,7 +48971,7 @@ function ctPrintPaper(){
     `<h1>YUGYM 有肌訓練　會員服務合約</h1>
      <div class="sub">版本 ${CONTRACT_VERSION}</div>
      ${contractFillBlockHTML(window._ctFill)}
-     <div class="ct-text">${(window._ctBody||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+     <div class="ct-text">${ctBodyHTML(window._ctBody)}</div>
      ${CT_SIGN_BLANK}`);
 }
 // 步驟 4：組合合約全文（帶入本次購買的實際數字）並初始化簽名板
@@ -60093,7 +60101,14 @@ body{font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;co
   font-size:calc(10pt * (0.6 + 0.4 * var(--ct-fit)));
   line-height:calc(1.2 + 0.35 * var(--ct-fit));orphans:3;widows:3;}
 .ct-page{background:#fff;}
-.ct-text{white-space:pre-wrap;}
+/* 合約內文（2026-09-07 起改逐行區塊，見 ctBodyHTML）。留白一律跟著 --ct-fit 縮。 */
+.ct-text{white-space:normal;}
+.ct-text .ct-h2{font-weight:700;}
+.ct-text .ct-li{display:flex;gap:.4em;padding-left:1.7em;}
+.ct-text .ct-li>.ct-li-n{flex:none;}
+.ct-text .ct-p{padding-left:1.7em;}
+.ct-text .ct-p0{padding-left:0;}
+.ct-text .ct-sp{height:calc(0.85em * var(--ct-fit));}
 h1{font-size:14pt;text-align:center;letter-spacing:.08em;margin:0 0 3px;font-weight:700;}
 .sub{text-align:center;font-size:8.5pt;color:#8a6a3a;letter-spacing:.16em;
   margin:0 0 calc(10px * var(--ct-fit));}
@@ -60270,6 +60285,34 @@ function ctPrintOpen(title, inner, opts){
   if(opts&&opts.auto===true) setTimeout(()=>{ try{ w.print(); }catch(_){} },350);
   return w;
 }
+/* ══ 合約內文的排版（2026-09-07 使用者回報：「合約這邊的規則　段落是不是沒有調整好」）══
+   合約本文一直是純文字用 white-space:pre-wrap 直接倒出來。問題出在**換行**：
+   「2. 會員事前透過系統或書面通知本公司…；本公司不收取轉讓手續費。受
+   讓人應完成會員登錄…」——第二行退回最左邊，看起來像斷掉的句子。
+   pre-wrap 沒有辦法做懸掛縮排（text-indent 只作用在整塊的第一行，不是每一行）。
+
+   改成逐行判型別、各自包一個區塊：
+     ・章節（一、二、…、十）        → 不縮排
+     ・編號項（1. / （一） / (1)）  → flex：編號自己一格，內容整段對齊，換行自然對齊
+     ・其餘有縮排的行              → 內文段落，整段一起縮
+     ・空行                        → 一個固定高度的間隔（維持原本的段落節奏）
+
+   ⚠ 電子與紙本用同一支：兩邊的內容本來就是同一份 body_snapshot，
+     排版也要一樣，否則客人在手機上簽的跟拿到的紙本看起來是兩份東西。
+   ⚠ 一律先跳脫再組 HTML —— 合約全文是資料，不是樣板。 */
+function ctBodyHTML(txt){
+  const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(txt||'').split(/\r?\n/).map(raw=>{
+    const line=raw.replace(/\s+$/,'');
+    if(!line.trim()) return '<div class="ct-sp"></div>';
+    const hadIndent=/^[\s\u3000]/.test(line);
+    const t=line.replace(/^[\s\u3000]+/,'');
+    let m=/^(\d+[.、]|[（(]\s*[0-9一二三四五六七八九十]+\s*[)）])\s*/.exec(t);
+    if(m) return '<div class="ct-li"><span class="ct-li-n">'+esc(m[1])+'</span><span>'+esc(t.slice(m[0].length))+'</span></div>';
+    if(/^[一二三四五六七八九十百]+、/.test(t)) return '<div class="ct-h2">'+esc(t)+'</div>';
+    return '<div class="ct-p'+(hadIndent?'':' ct-p0')+'">'+esc(t)+'</div>';
+  }).join('');
+}
 /* 簽名區（2026-07-30 新增教練簽名；2026-07-31 改由同一支產生）——
    空白版、紙本簽約版、已簽版三個入口共用，格式不會各長各的。
    簽名線用 border-bottom 畫（.sig-line），不用全形底線 —— 底線字數固定，
@@ -60302,7 +60345,7 @@ function openContractPrint(){
     `<h1>YUGYM 有肌訓練　會員服務合約</h1>
      <div class="sub">版本 ${CONTRACT_VERSION}</div>
      ${contractFillBlockHTML()}
-     <div class="ct-text">${CONTRACT_TEXT}</div>
+     <div class="ct-text">${ctBodyHTML(CONTRACT_TEXT)}</div>
      ${CT_SIGN_BLANK}`);
 }
 /* 滿版閱讀器共用殼（2026-08-03）：範本閱讀與已簽合約檢視都用它 —— 滿版、大字、
@@ -63053,7 +63096,7 @@ async function openContractView(id){
       ${c.member_name||''}　·　簽約日 ${(c.signed_at||'').slice(0,10)}　·　${ctSignLabel(c)}
     </div>`;
   const fill=c.fill_snapshot?`<div class="ct-fill-view">${c.fill_snapshot}</div>`:'';
-  const body=String(c.body_snapshot||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const body=ctBodyHTML(c.body_snapshot);
   const sig=c.signature?`<div style="margin-top:10px;"><div style="font-size:11.5px;color:var(--t3);margin-bottom:4px;">會員簽名</div>
       <img class="ct-sig-img" src="${c.signature}" alt="簽名"></div>`:'';
   /* 手機端直接滿版閱讀（2026-08-03 使用者：「會員手機端的合約，因為頁面的關係
@@ -63075,7 +63118,7 @@ async function ctViewPrint(id){
     `<h1>YUGYM 有肌訓練　會員服務合約</h1>
      <div class="sub">${c.member_name||''}　·　${c.plan_name||''}　·　簽約日 ${(c.signed_at||'').slice(0,10)}</div>
      ${c.fill_snapshot||''}
-     <div class="ct-text">${String(c.body_snapshot||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+     <div class="ct-text">${ctBodyHTML(c.body_snapshot)}</div>
      ${c.signature
        ? ctSignBlock({sigImg:c.signature, dateText:(c.signed_at||'').slice(0,10).replace(/-/g,' / ')})
        : ctSignBlock({paperNote:true})}`);

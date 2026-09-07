@@ -29,7 +29,8 @@ ok('★ 簽名區固定底部（cr-signfoot），小框改點開全螢幕簽名�
    /<div class="cr-signfoot">/.test(src)
    && /<div class="ct-sign-wrap" onclick="signFullOpen\(\)"[^>]*>\s*<canvas class="ct-sign" id="ct-sign" style="pointer-events:none;"><\/canvas>/.test(src)
    && /\.cr-signfoot\{flex-shrink:0;padding:10px 14px calc\(12px \+ env\(safe-area-inset-bottom,0px\)\);/.test(src));
-ok('★ 全文有跳脫', /\$\{\(c\.body_snapshot\|\|''\)\.replace\(\/&\/g,'&amp;'\)\.replace\(\/<\/g,'&lt;'\)\}/.test(src));
+/* 2026-09-07：內文改走 ctBodyHTML，跳脫在那一支裡做 */
+ok('★ 全文有跳脫', /\$\{ctBodyHTML\(c\.body_snapshot\)\}/.test(src));
 ok('★ 簽署成功把滿版殼收掉', /closeContractReader\(\); closeModal\(\); showToast\('合約已完成簽署，謝謝！'\);/.test(src));
 ok('　　稍後再簽／✕ 都走 closeContractReader',
    (src.match(/onclick="closeContractReader\(\)">稍後再簽<\/button>/)||[]).length===1);

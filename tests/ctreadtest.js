@@ -45,8 +45,9 @@ console.log('\n③ B 會員手機簽署：同一份購買內容表');
      /\$\{c\.fill_snapshot\n\s*\? `<div class="ct-fill-view">\$\{c\.fill_snapshot\}<\/div>`/.test(box));
   ok('★ 舊合約沒有快照時退回原本那一行摘要（不會變空白）',
      /: `<div style="white-space:normal;font-size:12\.5px;color:var\(--t2\);margin-bottom:10px;">\$\{c\.plan_name\|\|''\}/.test(box));
+  /* 2026-09-07：內文改走 ctBodyHTML（逐行區塊＋懸掛縮排） */
   ok('★ 條款仍接在後面（同一個捲動區）',
-     /\}\$\{\(c\.body_snapshot\|\|''\)\.replace\(\/&\/g,'&amp;'\)\.replace\(\/<\/g,'&lt;'\)\}<\/div>/.test(box));
+     /\}\$\{ctBodyHTML\(c\.body_snapshot\)\}<\/div>/.test(box));
   ok('　　簽名區仍固定在底部、不會被捲走', /<div class="cr-signfoot">/.test(box));
 }
 
