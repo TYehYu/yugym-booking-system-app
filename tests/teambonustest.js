@@ -44,7 +44,7 @@ console.log('\n③ 門檻與範圍');
 }
 {
   const r=fn(MGR,{leaderRows:rows(10,20), leaderMgrs:mgrs(1), month:'2026-09'},{},'2026-09');
-  ok('★★ 無人達標＝0，而且說得出「共幾位」', r.pay===0 && /全店無人達到 80 堂（共 2 位）/.test(r.detail));
+  ok('★★ 無人達標＝0，而且說得出「名單幾位」', r.pay===0 && /名單 2 位，無人達到 80 堂/.test(r.detail), r.detail);
 }
 {
   const r=fn(MGR,{leaderRows:rows(90,90), leaderMgrs:mgrs(1), month:'2026-09'},{leader_t1:100,leader_b1:5000},'2026-09');
@@ -72,8 +72,13 @@ console.log('\n④ 9 月起才換制，之前的薪資單不能被改動');
 
 console.log('\n⑤ 主管津貼');
 ok('★★★ 預設 3,000（原本 4,000）', /supervisor_bonus: 3000,/.test(src));
-ok('★★★ 判斷改看 is_manager（主管＝店長；is_supervisor 正式庫 0 人用過）',
-   /const isSup=!!\(emp&&\(emp\.is_manager\|\|emp\.is_supervisor\)\);/.test(src));
+/* 2026-09-08 二修（使用者：「主管津貼的調整　不要影響以前的薪資」）——
+   看 is_manager 這件事只能從 2026-09 起，否則店長連七、八月都會憑空多一筆。 */
+ok('★★★ 判斷改看 is_manager，但只從 2026-09 起',
+   /const _supByMgr = String\(extras\.month\|\|''\) >= LEADER_TEAM_FROM;/.test(src)
+   && /const isSup=!!\(emp&&\(emp\.is_supervisor\|\|\(_supByMgr&&emp\.is_manager\)\)\);/.test(src));
+ok('★★★ 九月以前照舊只看 is_supervisor（歷史薪資一毛都不會變）',
+   /九月以前照舊只看 is_supervisor（等於維持 0 元，歷史薪資單一毛都不會變）/.test(src));
 ok('★★ 每位固定、不平分（要平分的是獎金池）', /每位主管各拿 3,000，不平分/.test(src));
 
 console.log('\n⑥ 主管人數要用「那個月的」');
@@ -89,6 +94,53 @@ ok('★★★ 仍是教練課＋團課', /const LEADER_CATS=\['私人教練','�
 ok('★★★ 仍是已完成／已簽到、代課算在代課教練身上',
    /bkCoachId\(b\)===coachId   \/\/ 代課的課算在代課教練身上/.test(src)
    && /\(b\.status==='completed'\|\|b\.status==='checked_in'\)/.test(src));
+
+console.log('\n⑧ 門檻可增可刪、名單全主管共用（2026-09-08 使用者兩則）');
+{
+  const G={team_tiers:[{classes:80,amount:4000},{classes:100,amount:2000}]};
+  const r=fn(MGR,{leaderRows:rows(80,100,120,50), leaderMgrs:mgrs(1), month:'2026-09'},G,'2026-09');
+  ok('★★★ 多階是「追加」：80→4,000、100→再加 2,000，上滿 100 就是 6,000',
+     r.pool===4000+6000+6000 && r.pay===16000, {pool:r.pool});
+  ok('★★ 三位達標（50 堂那位不算）', r.units===3);
+  ok('★  明細寫出每位拿多少', /100 堂 \$6,000/.test(r.detail), r.detail);
+}
+{
+  const G={team_tiers:[{classes:100,amount:2000},{classes:80,amount:4000}]};
+  const r=fn(MGR,{leaderRows:rows(80), leaderMgrs:mgrs(1), month:'2026-09'},G,'2026-09');
+  ok('★★ 門檻沒照順序填也算得對（內部會排序）', r.pool===4000);
+}
+{
+  const G={team_members:['c0','c1']};
+  const r=fn(MGR,{leaderRows:rows(80,80,80,80), leaderMgrs:mgrs(1), month:'2026-09'},G,'2026-09');
+  ok('★★★ 名單全主管共用：只算名單內的兩位 ＝ 8,000', r.pool===8000 && r.scoped===true);
+  ok('★★ 名單外的不出現在明細裡', r.rows.length===2);
+}
+{
+  const r=fn(MGR,{leaderRows:rows(80,80), leaderMgrs:mgrs(1), month:'2026-09'},{team_members:null},'2026-09');
+  ok('★★★ 名單沒設（null）＝全體 —— 使用者定的規則就是「所有教練」',
+     r.pool===8000 && r.scoped===false);
+}
+{
+  const r=fn(MGR,{leaderRows:rows(80,80), leaderMgrs:mgrs(1), month:'2026-09'},{team_tiers:[]},'2026-09');
+  ok('★  門檻整個刪光時退回 80/4,000，不會算成 0 或爆掉', r.pool===8000);
+}
+
+console.log('\n⑨ 設定畫面');
+ok('★★★ 門檻可以新增、可以刪除',
+   /function hrAddTeamTier\(\)\{/.test(src)
+   && /onclick="hrAddTeamTier\(\)"/.test(src)
+   && /onclick="this\.parentElement\.remove\(\)" title="刪除這一階"/.test(src));
+ok('★★★ 名單是全域的，而且畫面上要講明「全主管共用」',
+   /<b>全主管共用<\/b>：這裡改的是全店設定，不是只改這一位。/.test(src));
+ok('★★★ 存的是全域 salary_templates._global，不是存在這位員工身上',
+   /_G\.team_tiers=hrReadTeamTiers\(\);/.test(src)
+   && /_G\.team_members=_tm;/.test(src)
+   && /await dbPut\('salary_templates',\{id:'_global',config:_G\}\);/.test(src));
+ok('★★★ 非主管的視窗畫不出那一塊時整段跳過（不會被清空）',
+   /if\(!els\.length\) return undefined;/.test(src)
+   && /if\(_tm!==undefined\)\{/.test(src));
+ok('★★ 全選＝null（日後新進教練自動納入），不是把當下每個人的 id 寫死',
+   /return \(on\.length===els\.length\) \? null : on;/.test(src));
 
 console.log(`\n${pass} 過 / ${fail} 敗`);
 process.exit(fail?1:0);

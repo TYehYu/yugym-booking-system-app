@@ -12365,8 +12365,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260908.1615';
-const APP_VERSION_LABEL = 'v260908.1615';
+const APP_VERSION = '260908.1621';
+const APP_VERSION_LABEL = 'v260908.1621';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40427,6 +40427,10 @@ const SALARY_GLOBAL_DEFAULT = {
   leader_per_amount: 4000,
   /* 2026-08 起的新制預設（每位店長可自己覆寫，見 employees.leader_t1/b1/t2/b2）：
      門檻① 80 堂 $4,000；門檻② 100 堂再追加 $2,000（滿 100 堂合計 $6,000）。 */
+  /* 團隊獎金（2026-09 起）：門檻可增可刪、名單全主管共用（2026-09-08 使用者兩則指示）。
+     team_members 給 null＝全體（日後新進教練自動納入）。 */
+  team_tiers: [{classes:80, amount:4000}],
+  team_members: null,
   leader_t1: 80, leader_b1: 4000,
   leader_t2: 100, leader_b2: 2000,
   leader_tiers: [
@@ -41373,7 +41377,7 @@ function leaderClassCount(bookings, coachId, month){
 }
 function leaderBonusOf(emp, extras, G, month){
   G=G||{}; extras=extras||{};
-  const rows=Array.isArray(extras.leaderRows)?extras.leaderRows:null;
+  let rows=Array.isArray(extras.leaderRows)?extras.leaderRows:null;
   if(!(emp&&emp.is_manager)||!rows) return {pay:0,total:0,units:0,detail:'—',rows:[],hitRows:[]};
   const ym=String(month||extras.month||'');
   const total=rows.reduce((s,r)=>s+(Number(r.classes)||0),0);
@@ -41387,22 +41391,35 @@ function leaderBonusOf(emp, extras, G, month){
   }
   /* 2026-09 起：團隊獎金池平分給主管（見 LEADER_TEAM_FROM 上方的說明） */
   if(ym && ym>=LEADER_TEAM_FROM){
-    const t1n=(G.leader_t1!=null&&G.leader_t1!=='')?Number(G.leader_t1):80;
-    const b1n=(G.leader_b1!=null&&G.leader_b1!=='')?Number(G.leader_b1):4000;
-    const hit=rows.filter(function(r){ return (Number(r.classes)||0)>=t1n; });
-    const pool=hit.length*b1n;
+    /* 門檻改成一份可增可刪的清單、名單全主管共用（2026-09-08 使用者兩則指示）——
+       多階是**追加**：滿 80 給 4,000、滿 100 再加 2,000，該教練上滿 100 堂就是 6,000。
+       ⚠ 名單沒設（null）＝全體：使用者定的規則本來就是「所有教練每一位達到 80 堂」，
+         全體是他要的預設，不是猜的。（0802 那條「不猜全員」講的是逐位店長的私人名單。） */
+    const _tiers=(Array.isArray(G.team_tiers)&&G.team_tiers.length)
+      ? G.team_tiers.slice().sort(function(a,b){ return (Number(a.classes)||0)-(Number(b.classes)||0); })
+      : [{classes:((G.leader_t1!=null&&G.leader_t1!=='')?Number(G.leader_t1):80),
+          amount:((G.leader_b1!=null&&G.leader_b1!=='')?Number(G.leader_b1):4000)}];
+    const _pick=Array.isArray(G.team_members)?G.team_members.map(String):null;
+    const _inList=_pick?rows.filter(function(r){ return _pick.indexOf(String(r.id))>=0; }):rows;
+    const _amtOf=function(n){ return _tiers.reduce(function(sum,t){
+      return sum + (((Number(t.classes)||0)>0 && n>=(Number(t.classes)||0)) ? (Number(t.amount)||0) : 0); },0); };
+    const t1n=Number((_tiers[0]||{}).classes)||80;
+    const b1n=Number((_tiers[0]||{}).amount)||4000;
+    const hit=_inList.filter(function(r){ return _amtOf(Number(r.classes)||0)>0; });
+    const pool=_inList.reduce(function(sum,r){ return sum+_amtOf(Number(r.classes)||0); },0);
+    rows=_inList;
     const mgrs=Array.isArray(extras.leaderMgrs)?extras.leaderMgrs:[];
     const n=Math.max(1, mgrs.length||1);
     const pay=Math.floor(pool/n);
     const rest=pool-pay*n;
-    return { pay:pay, total:total, units:hit.length, rows:rows, hitRows:hit,
-      t1:t1n, b1:b1n, t2:0, b2:0, team:true, pool:pool, mgrN:n, rest:rest,
+    return { pay:pay, total:total, units:hit.length, rows:rows, hitRows:hit, scoped:!!_pick,
+      t1:t1n, b1:b1n, t2:0, b2:0, team:true, pool:pool, mgrN:n, rest:rest, tiers:_tiers,
       detail: hit.length
-        ? (hit.length+' 位達標 × $'+b1n.toLocaleString()+' ＝ 池 $'+pool.toLocaleString()
+        ? (hit.length+' / '+_inList.length+' 位達標 ＝ 池 $'+pool.toLocaleString()
            +'　÷ '+n+' 位主管 ＝ $'+pay.toLocaleString()
            +(rest?('（餘 $'+rest+' 不分配）'):'')
-           +'　·　'+hit.map(function(r){ return r.name+' '+r.classes+' 堂'; }).join('、'))
-        : ('全店無人達到 '+t1n+' 堂（共 '+rows.length+' 位）') };
+           +'　·　'+hit.map(function(r){ return r.name+' '+r.classes+' 堂 $'+_amtOf(Number(r.classes)||0).toLocaleString(); }).join('、'))
+        : ('名單 '+_inList.length+' 位，無人達到 '+t1n+' 堂') };
   }
   /* 新制：逐位教練達標，兩個門檻（2026-08-02 使用者：「目前獎金門檻是 80 堂 4000、
      100 堂追加 2000，所以給我兩個設定門檻」）。
@@ -41578,8 +41595,14 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const renewDetail=renewCount>0?`${renewCount} 張 × $${renewEach}`:'—';
   /* ⑥ 主管津貼：固定金額，每位主管都拿（2026-09-08 使用者：「主管就是店長」）——
      原本看 is_supervisor，那個旗標正式庫從頭到尾 0 人使用；主管＝店長＝is_manager。
-     ⚠ 舊月份也一起改口徑：is_supervisor 沒有人被設過，所以不會動到任何一張歷史薪資單。 */
-  const isSup=!!(emp&&(emp.is_manager||emp.is_supervisor));
+
+     ⚠ 但這個改動**只能從 2026-09 起生效**（2026-09-08 使用者：「主管津貼的調整
+       不要影響以前的薪資」）—— 我第一版寫成無條件 is_manager||is_supervisor，
+       那會讓店長（Sandy）連七月、八月都憑空多出一筆從來沒發過的主管津貼。
+       「is_supervisor 沒人用過」只證明**舊條件**沒動到歷史，不代表**新條件**沒有。
+     ⚠ 九月以前照舊只看 is_supervisor（等於維持 0 元，歷史薪資單一毛都不會變）。 */
+  const _supByMgr = String(extras.month||'') >= LEADER_TEAM_FROM;
+  const isSup=!!(emp&&(emp.is_supervisor||(_supByMgr&&emp.is_manager)));
   const supPay=isSup?(Number(G.supervisor_bonus)||0):0;   /* 2026-09-08：isSup 已改看 is_manager，見上方 */
   // ⑦ 店長津貼：2026-08 起逐位教練達標制（見 leaderBonusOf）
   const isLeader=!!(emp&&emp.is_manager);
@@ -44401,6 +44424,12 @@ function hrTogglePtMode(){
   document.getElementById('hr-tier-box').style.display = m==='tier'?'block':'none';
   document.getElementById('hr-flat-box').style.display = m==='flat'?'block':'none';
 }
+/* 不用上課 → 課堂薪資與達標獎金整段收起來（2026-09-08） */
+function hrToggleTeach(){
+  const on=(document.getElementById('hr-canteach')||{}).checked;
+  const b=document.getElementById('hr-teach-box'); if(b) b.style.display=on?'block':'none';
+  const c=document.getElementById('hr-bonus-card'); if(c) c.style.display=on?'':'none';
+}
 function hrToggleBonus(){
   const on=document.getElementById('hr-bonusenabled').checked;
   document.getElementById('hr-bonus-box').style.display = on?'block':'none';
@@ -47193,6 +47222,12 @@ function hrSalaryBodyHtml(c,et){
 
     <div class="hr-card">
     <div class="hr-ct">課堂薪資制度</div>
+    ${/* 2026-09-08 使用者：「課堂獎金要設計打勾　如果該員工不用上課就不出現」——
+         行政、櫃檯、不帶課的工讀，這一整段（級距／每堂／團課費／達標獎金）都用不到，
+         留在畫面上只會讓人以為漏填。用既有的 can_teach 欄位，不另立一個新旗標
+         （那個欄位本來就決定「教練名單列不列他」，同一件事只該有一個開關）。 */''}
+    <label class="hr-check" style="margin:0 0 10px;"><input type="checkbox" id="hr-canteach" ${c.can_teach!==false?'checked':''} onchange="hrToggleTeach()">需要上課（排課、算課堂薪資）</label>
+    <div id="hr-teach-box" style="display:${c.can_teach!==false?'block':'none'};">
     <div class="form-row"><label>計算方式</label><select id="hr-ptmode" onchange="hrTogglePtMode()">
       <option value="tier" ${mode==='tier'?'selected':''}>累進制（依堂數級距）</option>
       <option value="flat" ${mode==='flat'?'selected':''}>固定制（每堂固定）</option>
@@ -47207,8 +47242,9 @@ function hrSalaryBodyHtml(c,et){
     </div>
     <div class="form-row" style="margin-bottom:0;"><label>團課費（每人次）</label><input type="number" id="hr-grouprate" value="${cfg.group_per_head||0}"></div>
     </div>
+    </div>
 
-    <div class="hr-card">
+    <div class="hr-card" id="hr-bonus-card" style="display:${c.can_teach!==false?'':'none'};">
       <div class="hr-ct">達標獎金</div>
       <label class="hr-check" style="margin-bottom:10px;">
         <input type="checkbox" id="hr-bonusenabled" ${cfg.pt_bonus_enabled?'checked':''} onchange="hrToggleBonus()">啟用達標獎金
@@ -47238,7 +47274,10 @@ function hrSalaryBodyHtml(c,et){
         並與其他主管<b>平分團隊獎金池</b>（全店每位教練達 ${Number((window.SALARY_GLOBAL||{}).leader_t1||80)} 堂 × $${Number((window.SALARY_GLOBAL||{}).leader_b1||4000).toLocaleString()}）。
         金額在「薪資規則 → 全域設定」統一調整。
       </div>
-      <div id="hr-mgr-box" style="display:${c.is_manager?'block':'none'};">${hrLeaderBoxHtml(c)}</div>
+      ${/* 2026-09-08：這一塊改成**全域**的團隊獎金設定（門檻可增可刪、名單全主管共用）。
+           舊的 hrLeaderBoxHtml（逐位店長自己的名單＋兩個固定門檻）只服務 8 月以前的薪資，
+           不再畫出來 —— 函式與欄位都留著，那幾個月還要靠它算。 */''}
+      <div id="hr-mgr-box" style="display:${c.is_manager?'block':'none'};">${hrTeamBoxHtml()}</div>
     </div>
 
     ${/* 值班排最後：它是附加項，金額通常最小（2026-08-24 使用者定案的排序） */''}
@@ -47247,6 +47286,77 @@ function hrSalaryBodyHtml(c,et){
 /* 店長獎金（2026-08 起）：名單 × 兩個門檻，都存在這位店長身上。
    之所以不做成全域設定：分店之後兩位店長帶不同的人、給不同的錢，
    全域一組數字就沒辦法分開設。 */
+/* ══ 團隊獎金的設定（2026-09-08 使用者兩則）══════════════════════════════════
+   「這邊獎金門檻要能夠新增跟刪除」「計算名單要跟所有"主管"共用」
+
+   0802 那套是「每位店長自己一份名單＋兩個固定門檻」，欄位存在該店長身上
+   （leader_members / leader_t1..b2）。新制整個翻過來：
+     ・名單一份，**全主管共用** → 存全域（SALARY_GLOBAL.team_members）
+     ・門檻**可增可刪**（不再是寫死的兩格）→ 存全域（SALARY_GLOBAL.team_tiers）
+     ・成果進池子平分給主管（見 leaderBonusOf 的 team 分支）
+
+   ⚠ 這一段畫在「某一位員工的薪資規則」視窗裡，改的卻是全店設定 ——
+     所以標題與說明都要把「全主管共用」寫出來，不然櫃檯會以為只改到這一位。
+   ⚠ 名單沒設＝全體。0802 當時定的是「不猜全員」，但那是**逐位店長**的名單
+     （猜錯等於憑空給某個人一筆錢）；現在是一份公開的全域名單，而使用者定的規則
+     本來就是「所有教練每一位達到 80 堂」，全體才是他要的預設，不是猜的。 */
+function hrTeamTierRow(t){
+  return '<div class="hr-tt-row" style="display:grid;grid-template-columns:1fr 1.2fr auto;gap:6px;align-items:center;margin-bottom:6px;">'
+    +'<input type="number" class="htt-c" placeholder="課堂（每位）" value="'+(t&&t.classes!=null?t.classes:0)+'">'
+    +'<input type="number" class="htt-a" placeholder="獎金" value="'+(t&&t.amount!=null?t.amount:0)+'">'
+    +'<button class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()" title="刪除這一階">✕</button>'
+    +'</div>';
+}
+function hrAddTeamTier(){
+  const box=document.getElementById('hr-tt-list'); if(!box) return;
+  box.insertAdjacentHTML('beforeend', hrTeamTierRow({classes:0,amount:0}));
+}
+function hrReadTeamTiers(){
+  return [...document.querySelectorAll('.hr-tt-row')].map(function(r){
+    return { classes:Number(r.querySelector('.htt-c').value)||0,
+             amount:Number(r.querySelector('.htt-a').value)||0 };
+  }).filter(function(t){ return t.classes>0 && t.amount>0; })
+    .sort(function(a,b){ return a.classes-b.classes; });
+}
+function hrReadTeamMembers(){
+  const els=[...document.querySelectorAll('.hr-tm')];
+  if(!els.length) return undefined;                 // 畫面上沒有這一塊 → 不要動到既有設定
+  const on=els.filter(function(e){ return e.checked; }).map(function(e){ return e.value; });
+  return (on.length===els.length) ? null : on;      // 全選＝null（＝全體，日後新進教練自動納入）
+}
+function hrTeamAll(on){ [...document.querySelectorAll('.hr-tm')].forEach(function(e){ e.checked=!!on; }); }
+function hrTeamBoxHtml(){
+  const G=window.SALARY_GLOBAL||{};
+  const tiers=(Array.isArray(G.team_tiers)&&G.team_tiers.length)?G.team_tiers:[{classes:80,amount:4000}];
+  const roster=(window._hrRoster||[]);
+  const picked=Array.isArray(G.team_members)?G.team_members.map(String):null;   // null＝全體
+  const ET={full_time:'正職',part_time:'兼職',intern:'工讀',contractor:'合作'};
+  return '<div class="hr-note" style="margin-bottom:10px;">'
+    +'<b>全主管共用</b>：這裡改的是全店設定，不是只改這一位。<br>'
+    +'名單裡<b>每有一位達到門檻就進獎金池</b>（多階是<b>追加</b>：滿 80 給 4,000、滿 100 再加 2,000，'
+    +'該教練上滿 100 堂就是 6,000），池子再由所有主管<b>平分</b>。'
+    +'</div>'
+    +'<div class="hr-sec" style="margin:0 0 6px 2px;">獎金門檻</div>'
+    +'<div id="hr-tt-list">'+tiers.map(hrTeamTierRow).join('')+'</div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="hrAddTeamTier()" style="margin:2px 0 12px;">＋ 新增門檻</button>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;">'
+    +'<div><b style="font-size:12.5px;">計算名單</b>'
+    +'<span style="font-size:11px;color:var(--t3);margin-left:6px;">打勾的人，他的課堂數才算進獎金池</span></div>'
+    +'<div style="display:flex;gap:6px;flex:none;">'
+    +'<button class="btn btn-ghost btn-sm" onclick="hrTeamAll(true)">全選</button>'
+    +'<button class="btn btn-ghost btn-sm" onclick="hrTeamAll(false)">全不選</button></div></div>'
+    +'<div class="hr-dash" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px 12px;">'
+    + roster.map(function(o){
+        const on = picked ? (picked.indexOf(String(o.id))>=0) : true;
+        return '<label class="hr-check" style="margin:0;justify-content:space-between;">'
+          +'<span style="display:flex;align-items:center;gap:7px;min-width:0;">'
+          +'<input type="checkbox" class="hr-tm" value="'+o.id+'"'+(on?' checked':'')+'>'
+          +'<b style="font-weight:700;">'+escH(o.name||'')+'</b></span>'
+          +'<i style="font-style:normal;font-size:11px;color:var(--t3);">'+(ET[normEmp(o.employment_type||o.pay_type)]||'')+'</i></label>';
+      }).join('')
+    +'</div>'
+    +'<div class="hr-tip" style="margin-top:8px;">全部打勾＝<b>全體</b>（日後新進教練自動納入）。</div>';
+}
 function hrLeaderBoxHtml(c){
   const G=window.SALARY_GLOBAL||{};
   const roster=(window._hrRoster||[]);
@@ -47315,6 +47425,21 @@ async function saveHrSalary(id){
   /* 2026-09-08：「主管津貼」那顆勾與逐人的金額欄位都退場了（主管＝店長＝is_manager，
      金額走全域設定）。這兩行留著只會把畫面上不存在的欄位讀成 false／0 覆蓋掉舊值。
      ⚠ 欄位本身不刪 —— 八月以前的薪資單還在用它們算（見 LEADER_TEAM_FROM）。 */
+  /* 需要上課（2026-09-08）：關掉就不排課、也不算課堂薪資 */
+  { const el=document.getElementById('hr-canteach'); if(el) c.can_teach=!!el.checked; }
+  /* 團隊獎金的門檻與名單是**全域**設定（全主管共用），跟著這張視窗一起存。
+     ⚠ 只有主管的視窗才畫得出那一塊；沒畫出來時 hrReadTeamMembers 回 undefined，
+       這裡整段跳過，不會被非主管的視窗清空。 */
+  try{
+    const _tm=hrReadTeamMembers();
+    if(_tm!==undefined){
+      const _G=Object.assign({}, window.SALARY_GLOBAL||{});
+      _G.team_tiers=hrReadTeamTiers();
+      _G.team_members=_tm;
+      await dbPut('salary_templates',{id:'_global',config:_G});
+      window.SALARY_GLOBAL=_G;
+    }
+  }catch(e){ console.error('團隊獎金設定儲存失敗',e); showToast('團隊獎金設定沒存成功：'+((e&&e.message)||e), 7000); }
   /* 店長獎金：名單、門檻、金額（2026-08-02）。取消店長就把名單清掉，
      免得之後重新打開時沿用一份沒人記得的舊名單。 */
   if(c.is_manager){

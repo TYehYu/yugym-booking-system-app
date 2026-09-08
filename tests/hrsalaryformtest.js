@@ -54,8 +54,14 @@ console.log('\n③ 欄位 id 沒有動（儲存是照 id 讀的，改版面不�
 console.log('\n④ 新風格：每一區收進白底卡（2026-08-24 使用者：「這邊還是舊風格」）');
 {
   const R=F.slice(F.lastIndexOf('return `'));
+/* 2026-09-08：達標獎金那張卡多了 id 與初始 display（不用上課就整張收起來），
+   所以它的開頭不再是純 <div class="hr-card">。 */
   ok('★★ 五區各一張白卡（固定薪資／課堂／達標獎金／管理職／值班）',
-     (R.match(/<div class="hr-card">/g)||[]).length===5);
+     (R.match(/<div class="hr-card"[ >]/g)||[]).length===5);
+  ok('★★★ 不用上課就整段不出現（課堂薪資與達標獎金一起收）',
+     /<input type="checkbox" id="hr-canteach"/.test(R)
+     && /<div id="hr-teach-box"/.test(R)
+     && /<div class="hr-card" id="hr-bonus-card"/.test(R));
   ok('★★ 區標退成卡上方的小標，不再是整條分隔線',
      /\.hr-sec\{font-size:11px;font-weight:800;color:var\(--t3\);letter-spacing:\.08em;/.test(src)
      && !/\.hr-sec\{[^}]*border-bottom/.test(src));
@@ -65,7 +71,7 @@ console.log('\n④ 新風格：每一區收進白底卡（2026-08-24 使用者�
   /* 2026-09-08：月份與聘僱類型併成一張「適用範圍」卡（兩個都是單一下拉），
      所以卡片數從 7 變 6；標題改成卡內的 .hr-ct。 */
   ok('　　外層那兩區併成一張「適用範圍」卡',
-     (src.match(/<div class="hr-card">/g)||[]).length>=6
+     (src.match(/<div class="hr-card"[ >]/g)||[]).length>=6
      && /<div class="hr-ct">適用範圍<\/div>/.test(src)
      && /<div class="form-row"><label>聘僱類型<\/label><select id="hr-ettype"/.test(src));
   ok('★★ 區標收進卡片裡（原本卡外小標＋白卡，兩層標題還各自留白）',
