@@ -252,7 +252,13 @@ ok('　　請假那條路也擋得住過去的課（兩條路都要 _editable：
 ok('★ 舊的判斷（只看 staff／closed，沒帶日期）已經拿掉',
    !/if\(!_leave && A\.staff && !A\.closed\) rows\+=row\(`closeModal\(\);admhMoveAsk/.test(src)
    && !/\}else if\(A\.staff && !A\.closed && canCoachLeave\(b\)\)\{/.test(src)
+   /* 2026-09-08「更換授課教練」用的是 A.isGroup && A.staff ＋ bkMoveBlockReason（帶日期），
+      不是舊那種「只看 staff／closed」。這裡釘的是舊寫法不能回來。 */
    && !/if\(!_leave && A\.isGroup && A\.staff && !A\.closed\)/.test(src));
+ok('★★ 新的「更換授課教練」有日期守門（借 bkMoveBlockReason，與調整日期同一份）',
+   /if\(!_leave && A\.isGroup && A\.staff\)\s*\n\s*rows \+= _mvBlk/.test(src));
+ok('★★★ 它自成一條 if —— 不能插進「指派代課／教練請假」那一對 if…else if 中間',
+   /if\(!_leave && A\.sub==='sub'\)[\s\S]{0,200}else if\(!_leave && A\.subLeave==='leave'/.test(src));
 ok('　　成因寫在程式裡（canCoachLeave 本身沒有日期條件）',
    /都沒帶到日期，\s*\n\s*所以 8\/18 這種已經上完的課還給得出改期與請假/.test(src));
 
@@ -265,8 +271,9 @@ ok('★ 單人課給「教練＋自己的課」，團課整堂取消只給櫃檯
    /const _canDelBk = A\.canCancel && !A\.closed && \(A\.staff \|\| \(A\.own && !A\.isGroup\)\);/.test(src)
    && /整堂取消請洽櫃檯/.test(src));
 /* 2026-08-21 三修（使用者：「還是統一改成刪除課卡 比較直覺」） */
+/* 2026-09-08：團課改走 grpDelAsk（先問後面要不要一起刪），單人課維持原本那條 */
 ok('★ 統一叫「刪除預約」（使用者正式定名），範圍寫在副標',
-   /rows\+=row\(`collapseBkCard\(\);confirmCancelBooking\('\$\{b\.id\}'\)`,'刪除預約',/.test(src)
+   /rows\+=row\(A\.isGroup\?`collapseBkCard\(\);grpDelAsk\('\$\{b\.id\}'\)`:`collapseBkCard\(\);confirmCancelBooking\('\$\{b\.id\}'\)`,'刪除預約',/.test(src)
    && !/A\.isGroup\?'取消整堂課程':'取消預約',/.test(src));
 ok('　　會員卡上那顆圓鈕仍叫「取消」（範圍是這個人／這個名額，不是整張卡）',
    /跟整張課卡不是同一件事，同名反而會讓人以為按哪個都一樣/.test(src));

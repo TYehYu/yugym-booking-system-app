@@ -12357,8 +12357,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260908.1345';
-const APP_VERSION_LABEL = 'v260908.1345';
+const APP_VERSION = '260908.1354';
+const APP_VERSION_LABEL = 'v260908.1354';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26809,6 +26809,18 @@ async function ashEditAsk(id){
           && typeof canCoachLeave==='function' && canCoachLeave(b) && !bkIsCoachLeave(b))
     rows+=row(`closeModal();bkCoachLeave('${b.id}')`,'教練請假',
       (typeof bkCoachLeaveSub==='function')?bkCoachLeaveSub(b):'','ash-ei-danger');
+  /* 更換授課教練（2026-09-08 使用者：「連續修改授課教練」）——
+     與「指派代課」是兩件事：代課＝這一堂臨時換人上、主責不變；
+     這一項改的是**主責**（這個班從此由誰帶），而且可以一路套用到後面的場次。
+     ⚠ 只給團課＋櫃檯以上：一對一的教練是「這位會員的教練」，換人要走別的流程。
+     ⚠ 自成一條 if —— 上面「指派代課／教練請假」是一對 if…else if，
+       插進那中間會讓「教練請假」變成這一條的 else，團課＋櫃檯就再也看不到請假。
+     ⚠ 日期條件借 bkMoveBlockReason（與「調整日期／時間」同一份）：已經上完或已簽到的課
+       不該再換主責，那會回頭改掉鐘點費歸屬。不能用時照 0823 的語彙淡化列出＋寫原因。 */
+  if(!_leave && A.isGroup && A.staff)
+    rows += _mvBlk
+      ? row('','更換授課教練',_mvBlk,'ash-ei-off')
+      : row(`closeModal();grpCoachPick('${b.id}')`,'更換授課教練','改主責（不是代課），可一併套用到後面的場次');
   /* 更換票券／補簽（2026-08-20）：桌機的詳細預約視窗要退役，這兩顆只在那裡有，
      不搬過來的話櫃檯會直接失去這兩個功能。條件與原本那兩顆完全一致：
      ・更換票券 = 還沒簽到、非團課（團課的票在 ticket_logs、不在 ticket_id）、櫃檯以上
@@ -26889,7 +26901,9 @@ async function ashEditAsk(id){
      不是把整班刪掉。單人課不變，教練照樣刪得掉自己的。 */
   const _canDelBk = A.canCancel && !A.closed && (A.staff || (A.own && !A.isGroup));
   if(_canDelBk)
-    rows+=row(`collapseBkCard();confirmCancelBooking('${b.id}')`,'刪除預約',
+    /* 團課改走 grpDelAsk（2026-09-08）：後面還有同系列就先問「只刪這一堂／連同後面 N 堂」。
+       單人課維持原本那條路 —— 它已經有 askSeriesCancel 在問連續預約了。 */
+    rows+=row(A.isGroup?`collapseBkCard();grpDelAsk('${b.id}')`:`collapseBkCard();confirmCancelBooking('${b.id}')`,'刪除預約',
       A.isGroup?`整堂取消、名單上的 ${mids(b).length} 個名額一起退`
                :'下一步可以選擇退回票券或扣課不退','ash-ei-danger');
   /* 教練看自己的團課時，把「為什麼沒有刪除」與「該用什麼」講清楚 —— 找不到按鈕又沒有
@@ -36778,6 +36792,144 @@ function grpSeriesSplit(b, all){
     .sort((a,c)=>String(a.date).localeCompare(String(c.date)))
     .forEach(x=>{ (grpSeriesMember(x)?out.series:out.solo).push(x); });
   return out;
+}
+/* ══ 團課的「連續」動作（2026-09-08 使用者：「團課沒有連續修改功能嗎　目前有連續建立
+   課卡的功能　但是連續刪除跟連續修改授課教練　連續修改時間　都要建立」）══════════
+
+   連續建立早就有了（recurring），加人也會問「後面的場次要一起預約嗎」，
+   但刪除與換教練一直是一堂一堂來 —— 週五 20:00 那一串就是這樣改到一半：
+   前段石頭代課、中段石頭主責、10/23–11/20 又跳回 Barry。
+
+   系列的判準沿用 grpSeriesSplit（同教練＋同星期＋同時段＋未來＋連續建立的），
+   它同時把「櫃檯單獨補開的那幾堂」分成 solo：**不自動處理，只講一聲**
+   （2026-08-07 定的規則：長得像同一系列 ≠ 真的是同一批開出來的）。
+
+   ⚠ 兩個動作都**先算好名單再動手**：換教練會改掉 coach_id，而系列的判準之一就是教練 ——
+     邊改邊算會在改到第二堂時就找不到自己人。
+   ⚠ 只給櫃檯以上：整串刪除等於連續好幾週整班解散，換教練動到鐘點費歸屬。 */
+async function grpSeriesLater(b){
+  try{ return grpSeriesSplit(b, await dbGetAll('bookings')); }
+  catch(_){ return {series:[],solo:[]}; }
+}
+function grpSeriesRowsHtml(list){
+  const WD=['日','一','二','三','四','五','六'];
+  return list.slice(0,8).map(x=>{
+    const d=parseYmd(x.date);
+    const n=(typeof mids==='function')?mids(x).length:0;
+    return '<div class="sc-row"><span class="sc-d">'+String(x.date).replace(/-/g,'/')
+      +'（'+(d?WD[d.getDay()]:'')+'）</span><span class="sc-t">'+String(x.start_time).slice(0,5)
+      +'</span><span class="sc-x">'+(n?(n+' 人'):'無名單')+'</span></div>';
+  }).join('')+(list.length>8?('<div class="sc-row"><span class="sc-x" style="margin:0;">…另有 '+(list.length-8)+' 堂</span></div>'):'');
+}
+/* 刪除：後面還有同系列就先問「只刪這一堂／連同後面 N 堂」 */
+async function grpDelAsk(id){
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+  const sp=await grpSeriesLater(b);
+  if(!sp.series.length){
+    if(sp.solo.length) showToast('後面 '+sp.solo.length+' 堂是單獨建立的課，不在連續系列裡，要刪請各自處理', 6000);
+    return confirmCancelBooking(id);
+  }
+  const _heads=sp.series.reduce(function(n,x){ return n+((typeof mids==='function')?mids(x).length:0); },0);
+  window._grpDelPend={id:id, ids:sp.series.map(function(x){return x.id;})};
+  showModal('<div class="ash-sheetmk"></div><div class="modal-title">後面的課要一起刪嗎？</div>'
+    +'<div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:10px;">'
+    +'這堂是<b>連續建立</b>的其中一堂，後面還有 <b>'+sp.series.length+'</b> 堂：</div>'
+    +'<div class="sc-list">'+grpSeriesRowsHtml(sp.series)+'</div>'
+    +'<div style="font-size:12px;color:'+(_heads?'var(--danger)':'var(--t2)')+';margin:12px 0 4px;line-height:1.8;">'
+    +(_heads?('⚠ 後面這 '+sp.series.length+' 堂總共有 <b>'+_heads+'</b> 個名額，刪掉會逐一退回票券。')
+            :'後面這幾堂都還沒有人報名。')
+    +(sp.solo.length?('<br>另有 '+sp.solo.length+' 堂是單獨建立的，不在這次範圍內。'):'')+'</div>'
+    +'<div class="modal-foot">'
+    +'<button class="btn btn-ghost" onclick="closeModal()">返回</button>'
+    +'<button class="btn btn-ghost" onclick="closeModal();confirmCancelBooking(\'' + id + '\')">只刪這一堂</button>'
+    +'<button class="btn btn-danger" onclick="grpDelRun()">連同後面 '+sp.series.length+' 堂</button>'
+    +'</div>');
+}
+async function grpDelRun(){ return onceAct('grpdel', _grpDelRun); }
+async function _grpDelRun(){
+  const p=window._grpDelPend; if(!p) return;
+  const ids=[p.id].concat(p.ids);
+  const foot=document.querySelector('.modal-foot');
+  const paint=function(n){ if(foot) foot.innerHTML='<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">刪除中…（'+n+'/'+ids.length+'）</div>'; };
+  paint(0);
+  let done=0, fail=0;
+  for(const bid of ids){
+    try{ await cancelBooking(bid,'force',{silent:true}); done++; }
+    catch(e){ fail++; console.error('連續刪除失敗',bid,e); }
+    paint(done+fail);
+  }
+  window._grpDelPend=null;
+  dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
+  closeModal();
+  showToast('已刪除 '+done+' 堂'+(fail?('，'+fail+' 堂失敗（請重試）'):'')+'　·　名額票券已退回', fail?8000:5000);
+  navTo(CUR_PAGE);
+}
+/* 換授課教練：改的是主責 coach_id（不是代課）——「這個班從此由誰帶」 */
+async function grpCoachPick(id){
+  if(!isDeskLike()){ showToast('僅管理員／櫃台可更換授課教練'); return; }
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+  const list=(await dbGetAll('coaches').catch(function(){return [];}))
+    .filter(function(c){ return c && c.status==='active' && c.can_teach!==false; });
+  const cur=bkCoachId(b);
+  const curNm=(function(){ const c=list.find(function(x){return x.id===cur;}); return c?coachDisp(c):'—'; })();
+  showModal('<div class="ash-sheetmk"></div><div class="modal-title">更換授課教練</div>'
+    +'<div class="ash-eihead">'+String(b.date).replace(/-/g,'/')+' '+String(b.start_time).slice(0,5)
+    +'　·　目前：'+escH(curNm)+'</div>'
+    +'<div style="font-size:11.5px;color:var(--t3);line-height:1.8;margin:2px 0 10px;">'
+    +'改的是<b>主責教練</b>（這個班從此由誰帶），不是單堂代課。鐘點費會跟著換人。</div>'
+    +list.map(function(c){
+        return '<button class="ash-eirow'+(c.id===cur?' ash-ei-off':'')+'"'
+          +(c.id===cur?'':(' onclick="grpCoachSet(\'' + id + '\',\'' + c.id + '\')"'))+'>'
+          +'<span class="ash-eilb">'+escH(coachDisp(c))+'</span>'
+          +(c.id===cur?'<span class="ash-eisub">目前的授課教練</span>':'')+'</button>';
+      }).join('')
+    +'<div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();ashEditAsk(\'' + id + '\')">返回</button></div>');
+}
+async function grpCoachSet(id, cid){
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+  const sp=await grpSeriesLater(b);   /* ⚠ 先算完再改：系列的判準之一是教練 */
+  const cs=(await dbGetAll('coaches').catch(function(){return [];})).find(function(c){ return c && c.id===cid; });
+  const nm=escH(coachDisp(cs||{})||'');
+  if(!sp.series.length){
+    if(sp.solo.length) showToast('後面 '+sp.solo.length+' 堂是單獨建立的課，不在連續系列裡，要換請各自處理', 6000);
+    return grpCoachRun(id, cid, []);
+  }
+  window._grpCoPend={id:id, cid:cid, ids:sp.series.map(function(x){return x.id;})};
+  showModal('<div class="ash-sheetmk"></div><div class="modal-title">後面的課要一起換嗎？</div>'
+    +'<div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:10px;">'
+    +'改成由 <b>'+nm+'</b> 授課。這堂是<b>連續建立</b>的其中一堂，後面還有 <b>'+sp.series.length+'</b> 堂：</div>'
+    +'<div class="sc-list">'+grpSeriesRowsHtml(sp.series)+'</div>'
+    +'<div style="font-size:12px;color:var(--t2);margin:12px 0 4px;line-height:1.8;">'
+    +'鐘點費會跟著換人。已經指定代課的那幾堂，代課若剛好是 '+nm+'，會一併清掉（他已經是主責了）。'
+    +(sp.solo.length?('<br>另有 '+sp.solo.length+' 堂是單獨建立的，不在這次範圍內。'):'')+'</div>'
+    +'<div class="modal-foot">'
+    +'<button class="btn btn-ghost" onclick="closeModal()">返回</button>'
+    +'<button class="btn btn-ghost" onclick="grpCoachRun(\'' + id + '\',\'' + cid + '\',[])">只換這一堂</button>'
+    +'<button class="btn btn-green" onclick="grpCoachRunLater()">連同後面 '+sp.series.length+' 堂</button>'
+    +'</div>');
+}
+function grpCoachRunLater(){ const p=window._grpCoPend; if(!p) return; return grpCoachRun(p.id,p.cid,p.ids); }
+async function grpCoachRun(id, cid, laterIds){ return onceAct('grpco:'+id, function(){ return _grpCoachRun(id,cid,laterIds||[]); }); }
+async function _grpCoachRun(id, cid, laterIds){
+  const ids=[id].concat(laterIds||[]);
+  const _busy=uiBusy('更換中…');
+  let ok2=0, fail=0;
+  try{
+    for(const bid of ids){
+      try{
+        const x=await dbGet('bookings',bid); if(!x) continue;
+        x.coach_id=cid;
+        /* 新主責原本掛著代課就清掉：他已經是主責了，再標「代課」只會讓薪資與課表對不上 */
+        if(String(x.substitute_coach_id||'')===String(cid)) x.substitute_coach_id=null;
+        await dbPut('bookings',x); ok2++;
+      }catch(e){ fail++; console.error('換教練失敗',bid,e); }
+    }
+  } finally { _busy(); }
+  window._grpCoPend=null;
+  dbCacheClear(['bookings']);
+  closeModal();
+  showToast('已更換授課教練：'+ok2+' 堂'+(fail?('，'+fail+' 堂失敗（請重試）'):''), fail?8000:4000);
+  navTo(CUR_PAGE);
 }
 async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending, addedTk){
   const b=await dbGet('bookings',id);
