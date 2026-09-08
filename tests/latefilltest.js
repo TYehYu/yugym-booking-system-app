@@ -36,8 +36,12 @@ console.log('① 前兩版都退乾淨了');
 /* 2026-09-08 修：判斷從「有沒有 sales」改成「會不會簽約」（gtNeedsContract）——
    團課／運動按摩免簽約、賣完就結束，一律 unpaid 會留下一張沒人收的待付款票
    （使用者 0908：「團課這邊不用在顯示收款　團課不用簽約」）。 */
-  ok('★★ 會簽約的那條路一律 unpaid；免簽約與直接發放才讀欄位，預設也是 unpaid',
-     /payment_status:gtNeedsContract\(\)\?'unpaid':\(\(\(document\.getElementById\('gt-pay'\)\|\|\{\}\)\.value\)\|\|'unpaid'\),/.test(src));
+/* 2026-09-08 二修（使用者：「付款狀態不需要了」）：免簽約那條路連欄位都拿掉了，
+   當場賣當場收，一律 paid。付款狀態欄位只剩後台「直接發放票券」還在問。 */
+  ok('★★★ 付款狀態三條路：會簽約→unpaid／免簽約的銷售→paid／直接發放→讀欄位',
+     /payment_status:gtNeedsContract\(\)\?'unpaid'\s*\n\s*:\(\(\(document\.getElementById\('gt-pay'\)\|\|\{\}\)\.value\)\|\|\(window\._grantSalesActive\?'paid':'unpaid'\)\),/.test(src));
+  ok('★★ 付款狀態欄位只畫給沒有 sales 的那條路（後台直接發放）',
+     /\$\{sales\?'':`<div class="form-row"><label>付款狀態<\/label><select id="gt-pay"/.test(src));
   ok('★★★ 「會不會簽約」只有一份判斷，賣票與業績歸屬那一步共用',
      /function gtNeedsContract\(sales\)\{/.test(src)
      && /return !!\(s && s\.cat==='私人教練'\);/.test(src)
