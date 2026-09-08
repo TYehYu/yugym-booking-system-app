@@ -126,6 +126,10 @@ console.log('\n⑧ 門檻可增可刪、名單全主管共用（2026-09-08 使�
 }
 
 console.log('\n⑨ 設定畫面');
+ok('★★★ 門檻那幾列不會撐出卡外（grid 子項要補 min-width:0）',
+   /\.hr-tt-row\{display:grid;grid-template-columns:1fr 1\.1fr 34px;/.test(src)
+   && /\.hr-tt-row>\*\{min-width:0;\}/.test(src)
+   && /<div class="hr-tt-head">/.test(src));
 ok('★★★ 門檻可以新增、可以刪除',
    /function hrAddTeamTier\(\)\{/.test(src)
    && /onclick="hrAddTeamTier\(\)"/.test(src)
