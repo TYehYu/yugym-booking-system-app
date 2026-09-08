@@ -51,5 +51,23 @@ ok('★★★ 仍然只對「私人教練」這一類生效',
 ok('★★ 免簽約的那條路才當場問付款方式（gtPaySync）',
    /const need=gtNeedsContract\(\);/.test(g('function gtPaySync(){','\n}')));
 
+console.log('\n⑤ 單堂排在第一列（2026-09-08 使用者：「單堂擺到第一列」）');
+{
+  const S=new Function('isVipPlan','return '+g('const slotOf=p=>{','; };').replace(/^const slotOf=/,'').replace(/;\s*$/,''))(p=>p.plan_type==='vip');
+  const order=[{plan_type:'single'},{plan_type:'general'},{plan_type:'promo'},
+               {plan_type:'friendly'},{plan_type:'friendly_promo'},{plan_type:'loyal',name:'主顧客'},{plan_type:'vip'}]
+    .map(p=>S(p));
+  eq('★★★ 單堂的名次比所有其他方案都前面', order[0], -1);
+  eq('★★ 其餘順序沒有被動到（一般→一般優惠→友善→友善優惠→主顧客→VIP）',
+     order.slice(1), [0,1,2,3,4,6]);
+  ok('★★★ 兩欄的牆，單堂是奇數張就補一格看不見的空卡 —— 否則一般／一般優惠會被拆到兩列',
+     /const _sng=arr\.filter\(x=>slotOf\(x\)===-1\), _rest=arr\.filter\(x=>slotOf\(x\)!==-1\);/.test(src)
+     && /\+ \(\(_sng\.length%2\)\?'<div class="gt-card-empty"><\/div>':''\)/.test(src));
+  ok('★★ 空卡那個 class 本來就有（visibility:hidden，佔位不顯示）',
+     /\.gt-card-empty\{visibility:hidden;\}/.test(src));
+  ok('★★ 理由寫在原地（櫃檯最常當場要找的就是單堂）',
+     /擺在最後每次都要捲過整面方案牆/.test(src));
+}
+
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);

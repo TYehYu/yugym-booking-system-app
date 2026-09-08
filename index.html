@@ -801,9 +801,15 @@ body:has(#login-screen:not(.hidden)){background:#003d32;}
      所以 max-width 一起放寬到 54%，超過的照樣截斷。 */
 .gt-c2-seq{position:absolute;right:8px;top:50%;transform:translateY(-50%);
   z-index:0;pointer-events:none;user-select:none;
-  font-size:27px;font-weight:800;line-height:1;letter-spacing:-.02em;
-  color:var(--pc,#1f6f54);opacity:.32;
-  max-width:54%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  display:flex;flex-direction:column;align-items:flex-end;gap:1px;
+  font-weight:800;line-height:1;letter-spacing:-.02em;
+  color:var(--pc,#1f6f54);opacity:.32;max-width:54%;}
+/* 上列＝人數形式（1V1／1V2），小一階；下列＝方案類型，就是原本那個大字。
+   ⚠ 截斷放在各自那一列上：外框是 flex column，把 ellipsis 寫在外框上不會生效。 */
+.gt-c2-seq>i{font-style:normal;display:block;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gt-c2-seq-f{font-size:15px;letter-spacing:.04em;opacity:.9;}
+.gt-c2-seq-t{font-size:27px;}
 .gt-card.gt-card2.on .gt-c2-seq{opacity:.5;}
 .gt-card.gt-card2>*:not(.gt-c2-seq){position:relative;z-index:1;}
 /* 簽約寬版視窗（2026-07-28 三修：內容過高時視窗內捲動，返回/下一步永遠搆得到） */
@@ -12446,8 +12452,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260908.1801';
-const APP_VERSION_LABEL = 'v260908.1801';
+const APP_VERSION = '260908.1807';
+const APP_VERSION_LABEL = 'v260908.1807';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50742,7 +50748,14 @@ function renderGrantPicker(){
                主顧客／VIP／單堂），不要在這裡另外判一次「名字有沒有友善」——
                那種判法 0718 就出過錯（友善課被當成一般教練課）。
              ⚠ aria-hidden：同一件事名稱那一行已經講過了，讀螢幕的人不需要聽兩次。 */''}
-        <span class="gt-c2-seq" aria-hidden="true">${slotLabel}</span>
+        ${/* 2026-09-08 三修（使用者：「浮水印上方加一列 1V1或1V2」）——
+             上一列是人數形式、下一列是方案類型，兩件事疊在同一個浮水印裡。
+             ⚠ 讀 p.format（資料就是 '1v1'／'1v2'），不要從方案名稱裡撈 ——
+               名稱是人打的，「優惠教練課1V1」跟「一般教練課 1V1」空格都不一樣。
+             ⚠ 沒有 format 的方案（團課、自主訓練那些）就只畫下面那一列。 */''}
+        <span class="gt-c2-seq" aria-hidden="true">
+          ${p.format?`<i class="gt-c2-seq-f">${String(p.format).toUpperCase()}</i>`:''}
+          <i class="gt-c2-seq-t">${slotLabel}</i></span>
         <div class="gt-c2-tag">$${(p.unit_price||0).toLocaleString()}/堂</div>
         <div class="gt-c2-name">${p.name}</div>
         <div class="gt-c2-price">$${price.toLocaleString()}<span class="gt-c2-cnt">${total} 堂</span></div>
@@ -50791,11 +50804,14 @@ function renderGrantPicker(){
   /* 2026-07-28 使用者指示：一般系第一列（4 張）、VIP＋主顧客第二列 */
   const slotOf=p=>{ if(isVipPlan(p)) return 6;   /* 2026-07-28 使用者指示：主顧客在前、VIP 在後 */
     if(p.plan_type==='loyal') return /友善/.test(p.name||'')?4.5:4;
+    /* 單堂排最前面（2026-09-08 使用者：「單堂擺到第一列」）—— 它是臨時補一堂課，
+       櫃檯最常要當場找到的就是它；擺在最後每次都要捲過整面方案牆。 */
+    if(p.plan_type==='single') return -1;
     const s={general:0,promo:1,friendly:2,friendly_promo:3}[p.plan_type]; return s==null?8:s; };
   const slotLabelOf=p=>{ if(isVipPlan(p)) return 'VIP';
     if(p.plan_type==='loyal') return /友善/.test(p.name||'')?'主顧客友善':'主顧客';
-    /* 2026-09-08 新增 single（單堂教練課）：排在最後、標籤講清楚是「單堂」，
-       不要落到「其他」那個看不出是什麼的字（slotOf 給 8，本來就排最後）。 */
+    /* 2026-09-08 新增 single（單堂教練課）：標籤講清楚是「單堂」，
+       不要落到「其他」那個看不出是什麼的字。（排序見 slotOf —— 同日改成排第一列。） */
     return ({general:'一般',promo:'一般優惠',friendly:'友善',friendly_promo:'友善優惠',single:'單堂'})[p.plan_type]||'其他'; };
   if(hasV1||hasV2){
     /* 2026-07-28 三修：自訂方案移到最上方、格子縮短 */
@@ -50810,8 +50826,15 @@ function renderGrantPicker(){
     html+=`</div>`;
     {
       const arr=(groups[curFmt]||[]).slice().sort((a,b)=>(slotOf(a)-slotOf(b))||((a.sessions_base||0)-(b.sessions_base||0)));
+      /* 單堂佔滿第一列（2026-09-08）：這面牆是兩欄，單堂只有一張，
+         直接排進去會把後面整串往後推一格 —— 一般／一般優惠原本同一列，就被拆到兩列去。
+         單堂數量是奇數時補一格看不見的空卡，讓後面的配對回到原位。 */
+      const _sng=arr.filter(x=>slotOf(x)===-1), _rest=arr.filter(x=>slotOf(x)!==-1);
+      const _cells=_sng.map(p=>cardHtml(p,blockOf(p),slotLabelOf(p))).join('')
+        + ((_sng.length%2)?'<div class="gt-card-empty"></div>':'')
+        + _rest.map(p=>cardHtml(p,blockOf(p),slotLabelOf(p))).join('');
       if(arr.length) html+=`<div class="gt-group"><div class="gt-group-lbl">${GROUP_LABEL[curFmt]}</div>
-        <div class="gt-matrix-row">${arr.map(p=>cardHtml(p,blockOf(p),slotLabelOf(p))).join('')}</div></div>`;
+        <div class="gt-matrix-row">${_cells}</div></div>`;
     }
   }
   // 團課、其他方案：與教練課同一套結構化卡（2026-07-28 使用者指示統一規格）
