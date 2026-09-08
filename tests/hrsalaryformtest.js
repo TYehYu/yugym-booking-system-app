@@ -18,8 +18,10 @@ const T=F.slice(F.lastIndexOf('return `'));
 console.log('① 區塊順序＝錢怎麼來');
 {
   const at=s=>T.indexOf(s);
+/* 2026-09-08 改版：區標從「卡外小標」收進卡片裡（.hr-ct），
+   「管理職津貼」同時更名為「管理職」（津貼金額改走全域設定）。 */
   const 固定=at('>固定薪資<'), 課堂=at('>課堂薪資制度<'), 團課=at('團課費（每人次）'),
-        獎金=at('啟用達標獎金'), 管理=at('>管理職津貼<'), 值班=at('>值班<');
+        獎金=at('啟用達標獎金'), 管理=at('>管理職<'), 值班=at('>值班<');
   ok('★★ 六個區塊都在，且順序正確',
      [固定,課堂,團課,獎金,管理,值班].every(x=>x>0)
      && 固定<課堂 && 課堂<團課 && 團課<獎金 && 獎金<管理 && 管理<值班,
@@ -60,8 +62,15 @@ console.log('\n④ 新風格：每一區收進白底卡（2026-08-24 使用者�
   ok('★★ 卡在米底上才看得出邊界；輸入框改吃米底，白底疊白底會糊成一片',
      /\.hr-card\{background:#fff;border:1px solid var\(--bd\);border-radius:14px;/.test(src)
      && /\.hr-card input,\.hr-card select,\.hr-card textarea\{background:var\(--card2\);\}/.test(src));
-  ok('　　外層「適用月份」「聘僱類型」兩區也包了卡',
-     (src.match(/<div class="hr-card">/g)||[]).length>=7);
+  /* 2026-09-08：月份與聘僱類型併成一張「適用範圍」卡（兩個都是單一下拉），
+     所以卡片數從 7 變 6；標題改成卡內的 .hr-ct。 */
+  ok('　　外層那兩區併成一張「適用範圍」卡',
+     (src.match(/<div class="hr-card">/g)||[]).length>=6
+     && /<div class="hr-ct">適用範圍<\/div>/.test(src)
+     && /<div class="form-row"><label>聘僱類型<\/label><select id="hr-ettype"/.test(src));
+  ok('★★ 區標收進卡片裡（原本卡外小標＋白卡，兩層標題還各自留白）',
+     /\.hr-ct\{font-size:11px;font-weight:800/.test(src)
+     && (src.match(/<div class="hr-ct">/g)||[]).length>=6);
 }
 
 console.log('\n⑤ 唯讀那張摘要要跟編輯視窗講同一件事');

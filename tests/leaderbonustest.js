@@ -108,9 +108,9 @@ ok('　　calcSalary 兩條路徑都把月份帶給 leaderBonusOf',
    (src.match(/leaderBonusOf\(emp,extras,G[c]?,extras\.month\)/g)||[]).length===2);
 
 console.log('\n⑦ 薪資規則的設定畫面');
+/* 2026-09-08 改版：聘僱類型併進「適用範圍」那張卡，標題改成卡內的 label */
 ok('★ 只顯示這個人的身份（原本是四個模式的按鈕列）',
-   /<div class="hr-sec">聘僱類型<\/div>/.test(src)
-   && /<select id="hr-ettype" onchange="hrPickEt\(this\.value\)">/.test(src)
+   /<label>聘僱類型<\/label><select id="hr-ettype" onchange="hrPickEt\(this\.value\)">/.test(src)
    && !/onclick="hrPickEt\('\$\{k\}'\)"/.test(src));
 ok('　　但仍改得動（聘僱類型在別的地方沒有編輯入口）',
    /const _et=g\('hr-ettype'\)\|\|HR_SAL_ET;/.test(src));
