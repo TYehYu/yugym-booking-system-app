@@ -70,19 +70,21 @@ ok('★★★ 卡片要 position:relative，否則會定位到更外面的祖先
    /\.gt-card\.gt-card2\{position:relative;overflow:hidden;\}/.test(src));
 ok('★★ 內容要壓在浮水印上面（z-index 分層）',
    /\.gt-card\.gt-card2>\*:not\(\.gt-c2-seq\)\{position:relative;z-index:1;\}/.test(src));
-ok('★★ 文字比數字長 → 寬度封頂再截斷（「友善優惠」不會頂到價格）',
-   /color:var\(--pc,#1f6f54\);opacity:\.32;max-width:62%;\}/.test(src)
-   && /overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src));
+ok('★★ 一列不折行（折了就不是浮水印，是一團字）',
+   /\.gt-c2-seq>i\{font-style:normal;display:block;white-space:nowrap;\}/.test(src));
 ok('★★ 選中的那張浮水印再明顯一點', /\.gt-card\.gt-card2\.on \.gt-c2-seq\{opacity:\.5;\}/.test(src));
-ok('★★★ 2026-09-08 二修：再大一點、顏色再明顯（20→27px、.15→.32）',
+ok('★★★ 二修：再大一點、顏色再明顯（20→27px、.15→.32）',
    /\.gt-c2-seq-t\{font-size:27px;\}/.test(src)
-   && /color:var\(--pc,#1f6f54\);opacity:\.32;max-width:62%;\}/.test(src));
-ok('★★★ 四修：字多的自己縮小，不要截成「主顧客…」（那看不出是哪一種）',
-   /\.gt-c2-seq-t\.s4\{font-size:23px;\}/.test(src)
-   && /\.gt-c2-seq-t\.s5\{font-size:19px;\}/.test(src)
-   && /String\(slotLabel\|\|''\)\.length>=5\?' s5':\(String\(slotLabel\|\|''\)\.length>=4\?' s4':''\)/.test(src));
-ok('★★ 用字數不用像素量測（一次性字串輸出量不到寬度，而且類型就那幾種）',
-   /用字數不用像素量測/.test(src));
+   && /color:var\(--pc,#1f6f54\);opacity:\.32;\}/.test(src));
+/* 2026-09-08 四修（使用者：「不用縮小文字　讓他被左邊的字蓋住沒關係　浮水印是視覺提醒」）
+   —— 三修那版「依字數降級 ＋ 截字」整組退場。 */
+ok('★★★ 字級一律 27px，沒有第二套（兩套規則並存會讓人以為字級是隨機的）',
+   !/\.gt-c2-seq-t\.s4\{/.test(src) && !/\.gt-c2-seq-t\.s5\{/.test(src)
+   && !/length>=5\?' s5'/.test(src));
+ok('★★★ 不設寬度上限、不截字 —— 長的那幾個往左伸到價格底下是刻意的',
+   !/\.gt-c2-seq\{[^}]*max-width:/.test(src)
+   && !/\.gt-c2-seq>i\{[^}]*text-overflow:/.test(src)
+   && /它是背景提醒，不是要讀完的資訊/.test(src));
 console.log('\n⑤ 浮水印上面加一列 1V1／1V2（2026-09-08 三修）');
 ok('★★★ 讀 p.format，不從方案名稱裡撈（名稱是人打的，空格都不一樣）',
    /\$\{p\.format\?`<i class="gt-c2-seq-f">\$\{String\(p\.format\)\.toUpperCase\(\)\}<\/i>`:''\}/.test(src)
@@ -91,12 +93,12 @@ ok('★★★ 沒有 format 的方案（團課、自主訓練）就只畫下面�
    /沒有 format 的方案（團課、自主訓練那些）就只畫下面那一列/.test(src));
 ok('★★★ 兩列靠右疊起來',
    /display:flex;flex-direction:column;align-items:flex-end;gap:1px;/.test(src));
-ok('★★★ 截斷要放在各自那一列上 —— 外框是 flex column，ellipsis 寫在外框不會生效',
-   /\.gt-c2-seq>i\{font-style:normal;display:block;max-width:100%;\s*\n\s*overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src)
-   && /把 ellipsis 寫在外框上不會生效/.test(src));
+ok('★★★ 蓋得住的前提：內容有 z-index:1 壓在上面、卡片 overflow:hidden 擋右緣',
+   /\.gt-card\.gt-card2>\*:not\(\.gt-c2-seq\)\{position:relative;z-index:1;\}/.test(src)
+   && /\.gt-card\.gt-card2\{position:relative;overflow:hidden;\}/.test(src));
 ok('★★ 上列小一階（它是附註，不是主角）', /\.gt-c2-seq-f\{font-size:15px;/.test(src));
-ok('★★ 放大之後寬度要跟著放寬，不然「友善優惠」四個字會被截掉',
-   /max-width:62%;\}/.test(src) && /再大就會撞到左邊的價格/.test(src));
+ok('★★ 卡片右緣不會被撐破（overflow:hidden）',
+   /\.gt-card\.gt-card2\{position:relative;overflow:hidden;\}/.test(src));
 ok('★★ 讀螢幕不重複念（名稱那一行已經講過）', /<span class="gt-c2-seq" aria-hidden="true">/.test(src));
 ok('★  單堂也有自己的標籤，不會落到看不出是什麼的「其他」',
    /friendly_promo:'友善優惠',single:'單堂'/.test(src));
