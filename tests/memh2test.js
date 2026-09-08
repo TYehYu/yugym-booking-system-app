@@ -293,10 +293,12 @@ t('★ 沒票的人點下去給說明卡，不是一句吐司',
    改法：過去的照樣列（那天開過什麼課會員本來就該看得到），但暗化、不可點、寫「已結束」。 */
 t('今天：已經開始的不列（報不了名）', /\(_grpPast \|\| _nowM<0 \|\| timeToMin\(b\.start_time\|\|'0:0'\)>=_nowM\)/.test(html)
   && /const _grpPast=\(s\.date<today\);/.test(html));
+/* 2026-09-08：多了一種「還沒開放」（開課前一週才給報名，見 tests/grpweektest.js），
+   所以暗化條件與文案都多帶一個 far；「過去的照樣列、只是暗化」這件事沒有變。 */
 t('過去的日子：列出來但暗化、不可點、文案改「已結束」',
   /const past=_grpPast \|\| \(s\.date===today && _nowM>=0 && timeToMin\(b\.start_time\|\|'0:0'\)<_nowM\);/.test(html)
-  && /\$\{past\?' mh2-past':''\}/.test(html)
-  && /\$\{heads\}\/\$\{cap\} 人\$\{past\?'・已結束':\(full\?'・已額滿':'・還可報名'\)\}/.test(html));
+  && /\$\{\(past\|\|far\)\?' mh2-past':''\}/.test(html)
+  && /\$\{heads\}\/\$\{cap\} 人\$\{past\?'・已結束':\(far\?'・開課前一週開放':\(full\?'・已額滿':'・還可報名'\)\)\}/.test(html));
 /* 2026-08-24 使用者指示：「雖然我這帳號沒有團體課票，還是要先顯示團體課標題卡，
    然後下方圓形鈕＋加入」—— 卡片改成一律點得開（先看到卡），能不能加入由圓鈕自己說。 */
 t('★★ 團體課卡一律點得開（額滿／已結束也看得到卡）', /const full=heads>=cap;/.test(html)

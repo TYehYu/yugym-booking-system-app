@@ -12375,8 +12375,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260908.1649';
-const APP_VERSION_LABEL = 'v260908.1649';
+const APP_VERSION = '260908.1710';
+const APP_VERSION_LABEL = 'v260908.1710';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31305,6 +31305,19 @@ function renderGrpPick(){
 }
 // 團課本堂人數上限（2026-07-27 使用者指示）：預設 5，場地有餘裕時可放寬（開課/名單視窗皆可調）
 function grpMax(){ return Math.max(1, Number(window._grpMax)||5); }
+/* ── 會員端團課只開放「一週內」報名（2026-09-08 使用者指示）─────────────
+   「會員端團課的預約幫我設定限制只能約一週內的課　例如今天是週二　會員端只能看到下週一」
+   今天算第 1 天，往後含今天共 7 天：週二 → 到下週一為止（＋6 天）。
+   ⚠ 只管**會員自己報名**這條路。櫃檯與教練排課完全不受限 —— 固定班本來就要往後排整串，
+     把他們一起擋住等於這個功能沒辦法用。
+   ⚠ 判準寫成一支給所有入口共用（預約表單的日期鈕、首頁課卡、報名前的攔截）：
+     三個地方各寫一次日期加減，遲早會有一個少算一天。 */
+const GRP_MEMBER_BOOK_DAYS=7;
+function grpBookLastDay(){
+  const d=new Date(TODAY); d.setDate(d.getDate()+(GRP_MEMBER_BOOK_DAYS-1)); return ymd(d);
+}
+function grpBookLastDayTxt(){ return grpBookLastDay().slice(5).replace('-','/'); }
+function grpTooFar(dateStr){ return String(dateStr||'')>grpBookLastDay(); }
 /* 請假釋出名額（2026-08-12 使用者定案：「請假要釋出名額」）——
    請假的票照扣、補課券照發（規則不變），但位子開放別人補：
    所有「滿了沒」的計算改用有效名額＝總名額−請假名額。 */
@@ -56518,6 +56531,9 @@ function memh2HTML(o){
        後端 fn_member_join_group 本來就會回 BOOKING.PAST_DATE 擋下，
        但畫面上看起來可點，等於讓人白點一次才知道。 */
     const past=_grpPast || (s.date===today && _nowM>=0 && timeToMin(b.start_time||'0:0')<_nowM);
+    /* 超過一週的那幾天（2026-09-08）：不藏起來 —— 藏了會員只會覺得「那天怎麼沒開課」。
+       比照「已結束」那一套：照樣列、暗化、不可報名，並在卡上寫出還沒開放。 */
+    const far=!past && grpTooFar(b.date);
     const _cid=b.substitute_coach_id||b.coach_id||null;
     const _cnm=(_cid&&coachMap[_cid])?coachMap[_cid]:'';
     const _vn=(typeof venueDisplay==='function')?(venueDisplay(b)||''):'';
@@ -56526,11 +56542,11 @@ function memh2HTML(o){
        改成一律點得開：先看到卡，能不能加入由圓鈕自己說。
        ⚠ 這裡是 .map 的函式本體，不是 template literal —— 註解要用純 /* *\/，
          寫成 ${...} 會把整段 JS 打斷（0823 已經在別處踩過一次）。 */
-    return `<div class="admh2-card mh2-grpopen${full?' mh2-full':''}${past?' mh2-past':''}" style="--admh-c:${MEMH2_COL.group};" onclick="memh2GrpTap('${b.id}')">
-      <div class="a2-stampcol"><span class="mh2-joinic">${past?'—':(full?'滿':'＋')}</span></div>
+    return `<div class="admh2-card mh2-grpopen${full?' mh2-full':''}${(past||far)?' mh2-past':''}" style="--admh-c:${MEMH2_COL.group};" onclick="memh2GrpTap('${b.id}')">
+      <div class="a2-stampcol"><span class="mh2-joinic">${(past||far)?'—':(full?'滿':'＋')}</span></div>
       <div class="a2-main">
         <div class="a2-l1">團體課${_vn?'・'+_vn:''}</div>
-        <div class="a2-l3">${heads}/${cap} 人${past?'・已結束':(full?'・已額滿':'・還可報名')}</div>
+        <div class="a2-l3">${heads}/${cap} 人${past?'・已結束':(far?'・開課前一週開放':(full?'・已額滿':'・還可報名'))}</div>
       </div>
       <div class="a2-side">
         <span class="a2-time">${b.start_time}</span>
@@ -57017,10 +57033,14 @@ async function memh2GrpTap(bid){
   const orb=(cls,ic,label,onclick,title)=>onclick
     ? `<button class="mtp-orb ${cls}" onclick="${onclick}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></button>`
     : `<div class="mtp-orb ${cls}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></div>`;
+  /* 一週以後的場次還沒開放報名（2026-09-08）—— 排在「已結束」之後、「已額滿」之前：
+     時間還沒到，是比人滿了更前面的一道門。 */
+  const tooFar=!past && grpTooFar(b.date);
   const joinOrb = past ? orb('off','—','已結束',null)
+    : (tooFar ? orb('off','—','尚未開放',null,`團體課開課前一週才開放報名（目前開放到 ${grpBookLastDayTxt()}）`)
     : (full ? orb('off','—','已額滿',null,`${heads}/${cap} 人`)
       : (tkN>0 ? orb('go','＋','加入',`memTaskClose();memh2GrpJoin('${b.id}')`)
-               : orb('cx','＋','需購票',`memTaskClose();memGrpPlans()`,'還沒有團體課票券，點我看方案')));
+               : orb('cx','＋','需購票',`memTaskClose();memGrpPlans()`,'還沒有團體課票券，點我看方案'))));
   memTaskClose();
   const host=document.createElement('div');
   host.id='mem-task-pop';
@@ -57034,7 +57054,7 @@ async function memh2GrpTap(bid){
       </div>
       <div class="mtp-mcard">
         <div class="mtp-mname"><span>${heads}/${cap} 人</span>${full?'<span class="mtp-mtag mtp-mtag-ns">已額滿</span>':''}</div>
-        <div class="mtp-msub">${tkN>0?`你有 ${tkN} 張團體課票券可以用`:'你目前沒有團體課票券'}</div>
+        <div class="mtp-msub">${tooFar?`團體課開課前<b>一週</b>才開放報名，目前開放到 ${grpBookLastDayTxt()}`:(tkN>0?`你有 ${tkN} 張團體課票券可以用`:'你目前沒有團體課票券')}</div>
       </div>
       <div class="mtp-orbs">${joinOrb}</div>
     </div>`;
@@ -57064,6 +57084,17 @@ async function memh2GrpJoin(bid){
   try{
     const _b=(window._msb.grpClasses||[]).find(x=>x.id===bid)
       || (window._memCalData&&(window._memCalData.mine||[]).find(x=>x.id===bid));
+    /* 一週以後的場次（2026-09-08）：擋在這裡，理由跟教練請假同一條 ——
+       首頁課卡那顆圓鈕已經不給點了，但這支是兩條路的匯流處，
+       落到 msbGrpJoin 只會得到一句「找不到這堂課」（清單已濾掉），那不是原因。 */
+    if(_b && grpTooFar(_b.date)){
+      showModal(`<div class="modal-title">還沒開放報名</div>
+        <div class="mh2-rule">團體課在<b>開課前一週</b>才開放報名。<br>
+          這一堂是 ${String(_b.date).slice(5).replace('-','/')}，目前開放到 ${grpBookLastDayTxt()}。<br>
+          時間到了就會出現在預約清單裡；有需要請洽櫃檯。</div>
+        <div class="modal-foot mh2-foot one"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+      return;
+    }
     if(_b && typeof bkIsCoachLeave==='function' && bkIsCoachLeave(_b)){
       showModal(`<div class="modal-title">這堂課教練請假</div>
         <div class="mh2-rule">這一堂因為教練請假不開課，沒辦法報名。<br>
@@ -57857,8 +57888,11 @@ async function msbStart(reschedId){
     futureSelf=(bks||[]).filter(x=>x.member_id===SESSION.id&&bkIsSelf(x)&&x.status==='booked'
       && new Date(x.date+'T'+x.start_time+':00').getTime()>now)
       .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
-    /* 未來的團體課場次（RLS 已開放會員讀「小班肌力」場次） */
+    /* 未來的團體課場次（RLS 已開放會員讀「小班肌力」場次）
+       2026-09-08：只留一週內的（grpTooFar）—— 日期鈕與場次列都吃這一份，
+       所以濾在來源這一層就好，不必兩個地方各擋一次。原因寫在面板下方那行提示。 */
     grpClasses=(bks||[]).filter(x=>bkIsGroup(x)&&x.status==='booked'
+      && !grpTooFar(x.date)
       && new Date(x.date+'T'+x.start_time+':00').getTime()>now)
       .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   }catch(_){}
@@ -57954,8 +57988,8 @@ function msbRenderSheet(){
     ${s.resched?'':typeRow}
     <div class="msb-sub">${s.date.slice(5).replace('-','/')}（週${WD[d.getDay()]}）</div>
     <div id="msb-slots"><div class="msb-empty" style="padding:18px;">載入時段中…</div></div>
-    <div class="msb-hint">${s.resched?'改期不另扣點；開課 24 小時前可改。':(isGrpType?(s.hasGrp?'點「報名」加入該堂團體課，確認後扣 1 堂；開課前可在「我的預約」取消退堂。'
-        :'這裡看得到近期團體課的時間與剩餘名額。購買團體課方案後，就能直接在這裡報名。'):(_msbSwapMode()?'點數已用於現有預約——點選新時段，選擇要把哪一筆換過來（原時段開課 24 小時前可換，不另扣點）。':'點選時段即可預約（60 分鐘）；系統自動使用最快到期的點數，確認後扣 1 點。'))}</div>
+    <div class="msb-hint">${s.resched?'改期不另扣點；開課 24 小時前可改。':(isGrpType?(s.hasGrp?`點「報名」加入該堂團體課，確認後扣 1 堂；開課前可在「我的預約」取消退堂。<br>團體課只開放<b>一週內</b>報名（目前到 ${grpBookLastDayTxt()}），再後面的場次要等時間到了才會出現。`
+        :`這裡看得到近期團體課的時間與剩餘名額（只列一週內，目前到 ${grpBookLastDayTxt()}）。購買團體課方案後，就能直接在這裡報名。`):(_msbSwapMode()?'點數已用於現有預約——點選新時段，選擇要把哪一筆換過來（原時段開課 24 小時前可換，不另扣點）。':'點選時段即可預約（60 分鐘）；系統自動使用最快到期的點數，確認後扣 1 點。'))}</div>
   </div>`;
   if(isGrpType && !s.resched) msbRenderGrpList(); else msbLoadSlots();
 }
@@ -58006,6 +58040,16 @@ const GRP_JOIN_ERR={'AUTH.FORBIDDEN':'僅限本人操作','BOOKING.NOT_FOUND':'�
 async function msbGrpJoin(bid){
   const s=window._msb; if(!s) return;
   const c=(s.grpClasses||[]).find(x=>x.id===bid); if(!c){ showToast('找不到這堂課'); return; }
+  /* 一週以後的場次擋在這裡（2026-09-08）—— grpClasses 已經濾過，但首頁課卡那條路
+     是拿 _memCalData 找的課，不見得經過同一份清單；報名會扣課，不能只靠畫面當防線。 */
+  if(grpTooFar(c.date)){
+    showModal(`<div class="modal-title">還沒開放報名</div>
+      <div class="mh2-rule">團體課在<b>開課前一週</b>才開放報名。<br>
+        這一堂是 ${c.date.slice(5).replace('-','/')}，目前開放到 ${grpBookLastDayTxt()}。<br>
+        時間到了就會出現在預約清單裡；有需要請洽櫃檯。</div>
+      <div class="modal-foot mh2-foot one"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+    return;
+  }
   /* 多張團體課票券時讓會員自己選要扣哪一張（2026-07-30 使用者指示）——
      同時有「12 個月 12 堂」與「四週 4 堂優惠」時，自動的最快到期優先雖然通常是對的，
      但客人有時想留著優惠票的堂數換別的時段，決定權還他。效期涵蓋不到這堂的不列。 */
