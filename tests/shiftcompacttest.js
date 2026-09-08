@@ -44,8 +44,8 @@ console.log('\n② 「店長・可編輯排班」不再獨占一行');
 {
   ok('★★ 頁面不再單獨掛那一列（head 只在帶 scope 進來時保留麵包屑）',
      /const hd = scoped \? head\('SHIFTS', SCOPE\.name\+' · 排班', sub\) : '';/.test(src));
-  ok('★★ 改成標題底下的一行小字：值班員工共 N 位　·　店長可編輯',
-     /<div class="sh-tb-sub">值班員工共 \$\{staff\.length\} 位　·　\$\{_canEditShifts\?'店長可編輯':'<b class="sh-ro">檢視模式<\/b>'\}<\/div>/.test(src));
+  ok('★★ 改成標題底下的一行小字：值班員工共 N 位　·　主管可編輯',
+     /<div class="sh-tb-sub">值班員工共 \$\{staff\.length\} 位　·　\$\{_canEditShifts\?'主管可編輯':'<b class="sh-ro">檢視模式<\/b>'\}<\/div>/.test(src));
   ok('★ 檢視模式（櫃檯）仍然標得出來，而且用金色點出（那是「你不能改」的提示）',
      /\.sh-tb-sub \.sh-ro\{color:var\(--gold-d\);font-weight:700;\}/.test(src));
   ok('　 從員工管理帶 scope 進來時的麵包屑沒被一起砍掉',

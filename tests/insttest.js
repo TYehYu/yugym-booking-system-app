@@ -94,7 +94,7 @@ ok('★ 排班表頁不再把櫃檯擋在門外',
    /SESSION\.role==='admin'\|\|SESSION\.is_manager\|\|SESSION\.role==='front_desk'/.test(src));
 ok('★ 教練值班時段的編輯權收回給管理員／店長（原本 isDeskLike 把櫃檯也算進去）',
    /const canEdit = SESSION\.role==='admin'\|\|!!SESSION\.is_manager;/.test(src));
-ok('　　標題會標明是檢視模式', /檢視模式 · 排班由店長或管理員編輯/.test(src));
+ok('　　標題會標明是檢視模式', /檢視模式 · 排班由主管或管理員編輯/.test(src));
 const guarded=['openWeeklyShift','openShiftEdit','saveShift','applyWeeklyToMonth','copyPrevMonthShifts'];
 guarded.forEach(fn=>{
   const i=src.indexOf('function '+fn+'(');

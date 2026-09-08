@@ -33,7 +33,7 @@ console.log('① 名單本身：只有「負責的教練」才算數');
   const noList=LB({id:'E1',is_manager:true},{leaderRows:rows,month:'2026-08'},{},'2026-08');
   eq('★★ 名單沒設定 → 不標 scoped（畫面就不會把全店當成負責名單列出來）', !!noList.scoped, false);
   eq('　　金額仍是 0，而且說得出原因', [noList.pay, noList.detail],
-     [0,'尚未設定計算名單（薪資規則 → 店長獎金）']);
+     [0,'尚未設定計算名單（薪資規則 → 主管獎金）']);
   const old=LB({id:'E1',is_manager:true,leader_members:['C1']},{leaderRows:rows,month:'2026-07'},{},'2026-07');
   eq('★ 舊制（七月以前的全店除法制）也不標 scoped', !!old.scoped, false);
 }
@@ -89,10 +89,10 @@ ok('★★ .pfd-nl 預設收合 → 這一塊要自己帶 open，否則整份名
 ok('　　為什麼要帶 open，寫在原地', /這份沒有展開鈕 → 直接帶 open/.test(src));
 ok('★★ 三處都列：表現與薪資彈窗、薪資單、薪資彙總展開列',
    /rows\+=leaderListHTML\(sal\);/.test(src)
-   && /if\(sal\.isLeader\)\{ h\+=row\('店長獎金'[\s\S]{0,120}h\+=leaderListHTML\(sal\); \}/.test(src)
-   && /if\(s\.isLeader\)\{ h\+=rowL\('店長獎金'[\s\S]{0,120}h\+=leaderListHTML\(s\); \}/.test(src));
-ok('　　名單接在「店長獎金」那一列底下', (()=>{
-  const a=src.indexOf(`rows+=row('店長獎金'`);
+   && /if\(sal\.isLeader\)\{ h\+=row\('主管獎金'[\s\S]{0,120}h\+=leaderListHTML\(sal\); \}/.test(src)
+   && /if\(s\.isLeader\)\{ h\+=rowL\('主管獎金'[\s\S]{0,120}h\+=leaderListHTML\(s\); \}/.test(src));
+ok('　　名單接在「主管獎金」那一列底下', (()=>{
+  const a=src.indexOf(`rows+=row('主管獎金'`);
   const b=src.indexOf('rows+=leaderListHTML(sal);');
   return a>0 && b>a && (b-a)<600;
 })());

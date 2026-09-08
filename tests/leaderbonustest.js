@@ -51,7 +51,7 @@ console.log('\n② 名單沒設 → 0，而且說得出原因');
 {
   const r=F(MGR({}), {leaderRows:ROWS}, G, '2026-08');
   eq('★ 從來沒設過名單 → 0（不猜「全員」）', r.pay, 0);
-  ok('★ 明細直接指路', /尚未設定計算名單（薪資規則 → 店長獎金）/.test(r.detail), r.detail);
+  ok('★ 明細直接指路', /尚未設定計算名單（薪資規則 → 主管獎金）/.test(r.detail), r.detail);
   eq('　　名單存成空陣列也一樣', F(MGR({leader_members:[]}), {leaderRows:ROWS}, G, '2026-08').pay, 0);
   ok('　　為什麼不猜全員，寫在程式裡',
      /新制沒有「全員」這個預設可以猜，\n\s*猜出來的金額是憑空生出來的/.test(src));
@@ -129,7 +129,7 @@ ok('　　名單本身排除老闆與櫃台裝置、離職',
 ok('　　店長本人也在名單裡（他自己帶的課也算）', /\$\{o\.id===c\.id\?'<i>（本人）<\/i>':''\}/.test(src));
 ok('　　有全選／全不選（十幾個人一個個點很煩）', /onclick="hrLeaderAll\(true\)"/.test(src) && /onclick="hrLeaderAll\(false\)"/.test(src));
 ok('★ 一個都沒選時當場警告（不然要等發薪才發現是 0）',
-   /<div class="hr-lm-warn">還沒選任何人 → 這位店長的獎金會算 0。<\/div>/.test(src));
+   /<div class="hr-lm-warn">還沒選任何人 → 這位主管的獎金會算 0。<\/div>/.test(src));
 ok('★ 存檔存的是這位店長自己的名單與兩組門檻',
    /c\.leader_members=hrReadLeaderMembers\(\);/.test(src)
    && /c\.leader_t1=Number\(g\('hr-ldt1'\)\)\|\|80;/.test(src)
@@ -142,13 +142,13 @@ console.log('\n⑧ 薪資明細看得到這一行');
    變成帶大括號的區塊，所以斷言跟著改；「只要是店長就列」這件事沒有變。 */
 ok('★ 只要是店長就列出來（金額 0 時那句「尚未設定名單」才看得到）',
    /if\(sal\.isLeader\)\{$/m.test(src)
-   && /if\(sal\.isLeader\)\{ h\+=row\('店長獎金'/.test(src)
-   && /if\(s\.isLeader\)\{ h\+=rowL\('店長獎金'/.test(src));
+   && /if\(sal\.isLeader\)\{ h\+=row\('主管獎金'/.test(src)
+   && /if\(s\.isLeader\)\{ h\+=rowL\('主管獎金'/.test(src));
 ok('　　為什麼改成 isLeader 而不是 pay>0，寫在程式裡',
    /但那行「尚未設定計算名單」正是最需要被看到的訊息/.test(src));
 ok('★ 全域設定改成「新店長的預設值」，並講明實際計算看各店長自己的',
-   /\$\{sec\('④ 店長獎金預設值（2026-08 起：逐位教練達標制）'\)\}/.test(src)
-   && /實際計算用的是每位店長自己的名單與金額/.test(src));
+   /\$\{sec\('④ 主管獎金預設值（2026-08 起：逐位教練達標制）'\)\}/.test(src)
+   && /實際計算用的是每位主管自己的名單與金額/.test(src));
 ok('　　全域預設就是現行的 80\/4000、100\/追加 2000',
    /leader_t1: 80, leader_b1: 4000,\n\s*leader_t2: 100, leader_b2: 2000,/.test(src));
 ok('　　舊制的兩個值沒有編輯欄位了，但原值原樣保留（七月以前還要用）',

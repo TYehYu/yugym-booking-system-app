@@ -163,7 +163,7 @@ console.log('\n⑥ 管理教練順序：存在 employees，不是另開一份設
   ok('★ 上下移動 ＋ 佔不佔格位的勾選',
      /function dwOrdMove\(i,d\)\{/.test(src) && /function dwOrdToggle\(i,v\)\{/.test(src));
   ok('★ 存檔走 onceAct（連點兩下不會寫兩輪）', /async function dwOrdSave\(\)\{ return onceAct\('dwordsave', _dwOrdSave\); \}/.test(src));
-  ok('　 只有管理員／店長能開', /if\(!D\.canEdit\)\{ showToast\('僅管理員／店長可調整'\); return; \}/.test(src));
+  ok('　 只有管理員／主管能開', /if\(!D\.canEdit\)\{ showToast\('僅管理員／主管可調整'\); return; \}/.test(src));
 }
 
 console.log('\n⑦ 排班資料與既有操作一行都沒動');

@@ -16,7 +16,7 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');if(i<0)return'';let d=0;
 
 console.log('① 員工資料 → 綁定 LINE 入口');
 {
-  ok('★ 員工表頭有 LINE 欄（empLine 併進 meta）', /empChips \+ empLine;/.test(src));
+  ok('★ 員工表頭有 LINE 欄（empLine 併進 meta）', /empChips \+ empAl \+ empLine;/.test(src));
   const seg=src.slice(src.indexOf('const empLine = !isM'), src.indexOf('const ecItem = isM'));
   ok('★ 未綁定 → 點擊開 ppStaffLineBind', /ppStaffLineBind\('\$\{r\.id\}'\)/.test(seg));
   ok('★ 已綁定 → 顯示「已綁定」且可解除', /已綁定/.test(seg) && /ppStaffLineUnbind/.test(seg));

@@ -128,8 +128,13 @@ ok('★ 改用列表（不是卡片格）', /<div class="pp-dlist">/.test(src) &
 /* 2026-08-23 使用者指示：「這邊仿造會員資料設計，中間有四個按鈕，下方用條列式顯示」——
    四行入口改成四顆分頁鈕（與會員端的 .pp-rectabs 同一套），點了就在下方換內容。
    ⚠ 四個入口函式全部保留：員工列表的圖示、補登打卡存完的返回都還在用。 */
+/* 2026-09-08 使用者指示：「該員工有課堂才顯示本月課堂　值班也是一樣」——
+   四顆固定的分頁改成依身份組出來，所以這裡不再釘死那一行陣列。
+   （詳細的條件與退路釘在 tests/emptabstest.js） */
 ok('★ 四顆分頁鈕：本月課堂／值班打卡／薪資單／薪資規則',
-   /const EMP_TABS=\[\['classes','本月課堂'\],\['duty','值班打卡'\],\['salary','薪資單'\],\['rules','薪資規則'\]\];/.test(src)
+   /_canTeach\?\[\['classes','本月課堂'\]\]:\[\]/.test(src)
+   && /_hasDuty \?\[\['duty','值班打卡'\]\]:\[\]/.test(src)
+   && /\[\['salary','薪資單'\],\['rules','薪資規則'\]\]\);/.test(src)
    && /class="pp-rectab\$\{PP\.recView===k\?' active':''\}" onclick="ppShowEmpRecord\('\$\{k\}'\)"/.test(src));
 ok('★★ 原本那四支入口沒有被刪（列表圖示、補登打卡返回都還在用）',
    /async function ppOpenEmpClasses\(/.test(src) && /async function ppOpenEmpShifts\(/.test(src)
@@ -153,9 +158,9 @@ ok('★★ 薪資規則頁內版用 empAtMonth 取當月版本（不是直接讀
 ok('　　兩張完整的編輯視窗仍留著入口',
    /onclick="ppOpenEmpSalary\('\$\{id\}'\)">開啟完整薪資單/.test(src)
    && /onclick="openHrSalary\('\$\{id\}'\)">編輯薪資規則/.test(src));
-ok('　　本月課堂／值班工時／特休那三個數字沒有因為改分頁而不見（移到分頁列上方的小字）',
+ok('　　本月課堂／值班工時那兩個數字沒有因為改分頁而不見（移到分頁列上方的小字）',
    /本月課堂 <b>\$\{c\.mClassDone\}<\/b>\/\$\{c\.mClassSched\} 堂/.test(src)
-   && /特休 <b>\$\{al\}<\/b> 小時可用/.test(src));
+   && /值班打卡 <b>\$\{\(c\.mDutyDone\|\|0\)\.toFixed\(1\)\}<\/b>/.test(src));
 ok('★「最近打卡」那顆卡拿掉了', !/ppDashCard\('clock','最近打卡'/.test(src) && !/'最近打卡'/.test(src));
 ok('★「特休」那顆卡也拿掉了（併進值班視窗）',
    !/ppDashCard\('leaf','特休'/.test(src) && !/async function ppOpenEmpLeave/.test(src));
@@ -163,8 +168,11 @@ ok('★「特休」那顆卡也拿掉了（併進值班視窗）',
    「打卡」寫在分頁鈕上（值班打卡），特休寫在分頁列上方的摘要小字裡。 */
 ok('　　分頁鈕寫出「打卡」，不然沒人知道打卡搬去哪了',
    /\['duty','值班打卡'\]/.test(src));
-ok('　　特休的數字仍看得到（不用點進去才知道剩多少）',
-   /特休 <b>\$\{al\}<\/b> 小時可用/.test(src));
+/* 2026-09-08 使用者指示：「員工資料上方的基本資料新增　特休時數」——
+   特休從工作紀錄的摘要小字搬到上方基本資料那一列（empAl），兩個地方都寫會對不起來。 */
+ok('　　特休的數字仍看得到（改在上方基本資料那一列）',
+   /<span class="pp-meta-l">特休<\/span>/.test(src)
+   && /\$\{ppAlAvailable\(r\)\}<\/b> 小時可用/.test(src));
 /* 2026-08-04 使用者指示：「會員資料的活動紀錄也改成列表，跟員工資料一樣」——
    當時「會員那側不改」的假設已被使用者推翻，改驗兩側同一套列表。 */
 ok('★ 會員活動紀錄也改成列表（與工作紀錄同一套 ppDashRow）',

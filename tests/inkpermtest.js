@@ -87,7 +87,7 @@ console.log('\n③ 三種角色各自的權限判斷一行都沒動');
     ['教練桌機：別人的課只看不動（maskOthers）',
      /const _isCoachView = SESSION\.role==='coach' && !SESSION\.is_manager;/],
     ['排班表：櫃檯可看不可改', /const canEdit = SESSION\.role==='admin'\|\|!!SESSION\.is_manager;/],
-    ['值班時段：同一條線', /if\(!D\.canEdit\)\{ showToast\('僅管理員／店長可調整'\); return; \}/],
+    ['值班時段：同一條線', /if\(!D\.canEdit\)\{ showToast\('僅管理員／主管可調整'\); return; \}/],
     ['抽獎登記：僅管理員／櫃台', /if\(typeof isDeskLike==='function' && !isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可登記抽獎'\); return; \}/],
     ['會員管理：新增會員限櫃檯以上', /const canManage = isDeskLike\(\);/],
     ['票券校正：只有管理員', /這件事只有管理員能改<\/b>，請找管理員處理/],
