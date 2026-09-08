@@ -62,7 +62,7 @@ ok('★★★ 規格照抄首頁課卡的 .tcard-seq（靠右、垂直置中、�
    /\.gt-c2-seq\{position:absolute;right:8px;top:50%;transform:translateY\(-50%\);/.test(src)
    && /\.tcard-std \.tcard-seq\{position:absolute;right:8px;top:50%;transform:translateY\(-50%\);/.test(src));
 ok('★★★ 字串用 slotLabelOf 算好的那一份，不在卡片裡另外判「名字有沒有友善」',
-   /<i class="gt-c2-seq-t">\$\{slotLabel\}<\/i><\/span>/.test(src)
+   /">\$\{slotLabel\}<\/i><\/span>/.test(src)
    && /那種判法 0718 就出過錯（友善課被當成一般教練課）/.test(src));
 ok('★★★ 是背景不是標籤：不能吃掉點卡片的動作',
    /\.gt-c2-seq\{[\s\S]{0,200}pointer-events:none;user-select:none;/.test(src));
@@ -71,12 +71,18 @@ ok('★★★ 卡片要 position:relative，否則會定位到更外面的祖先
 ok('★★ 內容要壓在浮水印上面（z-index 分層）',
    /\.gt-card\.gt-card2>\*:not\(\.gt-c2-seq\)\{position:relative;z-index:1;\}/.test(src));
 ok('★★ 文字比數字長 → 寬度封頂再截斷（「友善優惠」不會頂到價格）',
-   /color:var\(--pc,#1f6f54\);opacity:\.32;max-width:54%;\}/.test(src)
+   /color:var\(--pc,#1f6f54\);opacity:\.32;max-width:62%;\}/.test(src)
    && /overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src));
 ok('★★ 選中的那張浮水印再明顯一點', /\.gt-card\.gt-card2\.on \.gt-c2-seq\{opacity:\.5;\}/.test(src));
 ok('★★★ 2026-09-08 二修：再大一點、顏色再明顯（20→27px、.15→.32）',
    /\.gt-c2-seq-t\{font-size:27px;\}/.test(src)
-   && /color:var\(--pc,#1f6f54\);opacity:\.32;max-width:54%;\}/.test(src));
+   && /color:var\(--pc,#1f6f54\);opacity:\.32;max-width:62%;\}/.test(src));
+ok('★★★ 四修：字多的自己縮小，不要截成「主顧客…」（那看不出是哪一種）',
+   /\.gt-c2-seq-t\.s4\{font-size:23px;\}/.test(src)
+   && /\.gt-c2-seq-t\.s5\{font-size:19px;\}/.test(src)
+   && /String\(slotLabel\|\|''\)\.length>=5\?' s5':\(String\(slotLabel\|\|''\)\.length>=4\?' s4':''\)/.test(src));
+ok('★★ 用字數不用像素量測（一次性字串輸出量不到寬度，而且類型就那幾種）',
+   /用字數不用像素量測/.test(src));
 console.log('\n⑤ 浮水印上面加一列 1V1／1V2（2026-09-08 三修）');
 ok('★★★ 讀 p.format，不從方案名稱裡撈（名稱是人打的，空格都不一樣）',
    /\$\{p\.format\?`<i class="gt-c2-seq-f">\$\{String\(p\.format\)\.toUpperCase\(\)\}<\/i>`:''\}/.test(src)
@@ -90,7 +96,7 @@ ok('★★★ 截斷要放在各自那一列上 —— 外框是 flex column，e
    && /把 ellipsis 寫在外框上不會生效/.test(src));
 ok('★★ 上列小一階（它是附註，不是主角）', /\.gt-c2-seq-f\{font-size:15px;/.test(src));
 ok('★★ 放大之後寬度要跟著放寬，不然「友善優惠」四個字會被截掉',
-   /max-width:54%;\}/.test(src) && /再大就會撞到左邊的價格/.test(src));
+   /max-width:62%;\}/.test(src) && /再大就會撞到左邊的價格/.test(src));
 ok('★★ 讀螢幕不重複念（名稱那一行已經講過）', /<span class="gt-c2-seq" aria-hidden="true">/.test(src));
 ok('★  單堂也有自己的標籤，不會落到看不出是什麼的「其他」',
    /friendly_promo:'友善優惠',single:'單堂'/.test(src));
