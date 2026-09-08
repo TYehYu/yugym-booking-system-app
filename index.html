@@ -12365,8 +12365,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260908.1600';
-const APP_VERSION_LABEL = 'v260908.1600';
+const APP_VERSION = '260908.1615';
+const APP_VERSION_LABEL = 'v260908.1615';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48152,9 +48152,35 @@ function salesGrpTrial(){
      櫃檯得再去票券卡上按〔收款〕。使用者 0908 回報的就是這個：
      「團課這邊不用在顯示收款　團課不用簽約」。
    ⚠ 0907 那版寫成「只要是從銷售入口來的就不問」，把免簽約那條路一起關掉了 —— 這是回補。 */
-function gtNeedsContract(sales){
+function gtNeedsContract(sales, plan){
   const s=sales||window._grantSalesActive||null;
-  return !!(s && s.cat==='私人教練');
+  if(!(s && s.cat==='私人教練')) return false;
+  /* 單堂不用開合約（2026-09-08 使用者：「幫我新增一個單堂教練課 1v1 1700 1v2 2000
+     這種不需要開合約」）—— 合約談的是「一包課的權利義務」（效期、展延、退費、
+     分期），一堂課沒有這些東西可談，逼客人簽一份只會拖慢櫃檯。
+     ⚠ 判準是「總堂數 ≤ 1」而不是方案名稱：日後多開幾種單堂方案不用回來改程式。
+       正式庫查過，現有 16 張教練課方案沒有任何一張是 1 堂，不會誤傷。
+     ⚠ 自訂銷售也吃這條：自訂 1 堂就是單堂，同一個道理。 */
+  const p=plan||window._grantPlanCache||null;
+  if(p){
+    const _n=(Number(p.sessions_base)||0)+(Number(p.sessions_bonus)||0);
+    if(_n<=1) return false;
+  }
+  return true;
+}
+/* 換方案之後把「錢怎麼收」那幾格重新收放（2026-09-08）——
+   會簽約的那條路不問（收款在「待審核發放」定案），免簽約的當場問。
+   建視窗當下還沒選方案，所以一定要有這一支在選完方案後再判一次。 */
+function gtPaySync(){
+  const need=gtNeedsContract();
+  /* 付款狀態不在這裡管：它只畫給後台直接發放，本來就不受「要不要簽約」影響。 */
+  const m=document.getElementById('gt-method-row');
+  if(m) m.style.display=need?'none':'';
+  const w=document.getElementById('gt-splitcash-wrap');
+  if(w && need) w.style.display='none';
+  /* 分期反過來：只有會簽約的才給分期（單堂沒有分期可言） */
+  const inst=document.getElementById('gt-install-wrap');
+  if(inst && !need) inst.style.display='none';
 }
 async function salesAttribSubmit(cid){
   if(window._grantSubmitting) return;   // 防連點
@@ -49678,15 +49704,16 @@ async function openGrantModal(){
              ⚠ 後台「直接發放票券」照舊要選：它沒有後面那一步。
              ⚠ 建約這條路少了右半格，分期方式就搬上來跟總金額同一列，
                不要留一個空洞（版面只做最小調整）。 */''}
-        ${gtNeedsContract(sales)
-          ? `<div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher();gtSaleKindSync()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>`
-          : `<div class="form-row"><label>付款方式</label><select id="gt-method" onchange="var w=document.getElementById('gt-splitcash-wrap');if(w)w.style.display=this.value==='split'?'':'none';"><option value="cash">現金</option><option value="transfer">匯款</option><option value="split">現金＋匯款</option></select></div>`}
+        ${/* 兩格都畫出來、各給一個 id（2026-09-08）——建視窗當下還沒選方案，
+             而「要不要簽約」現在看的是方案（單堂不簽約），所以初值先照銷售類別給，
+             選完方案再由 gtPaySync 收放一次。 */''}
+        <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher();gtSaleKindSync()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>
+        <div class="form-row" id="gt-method-row" style="display:${gtNeedsContract(sales)?'none':''};"><label>付款方式</label><select id="gt-method" onchange="var w=document.getElementById('gt-splitcash-wrap');if(w)w.style.display=this.value==='split'?'':'none';"><option value="cash">現金</option><option value="transfer">匯款</option><option value="split">現金＋匯款</option></select></div>
       </div>
       ${/* 拆帳（2026-08-12 使用者需求：一筆 14400＝現金 7200＋匯款 7200）：填現金收多少，其餘記匯款 */''}
-      ${gtNeedsContract(sales)?'':`<div class="form-row" id="gt-splitcash-wrap" style="display:none;"><label>其中現金收多少（其餘記匯款）</label><input type="number" id="gt-splitcash" min="0" placeholder="例如 7200"></div>`}
-      ${/* 建約那條路：分期方式已經搬到上面那一列，付款狀態也不畫 → 整列不用畫 */''}
-      ${gtNeedsContract(sales)?'':`<div class="form-2col">
-        <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher();gtSaleKindSync()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>
+      <div class="form-row" id="gt-splitcash-wrap" style="display:none;"><label>其中現金收多少（其餘記匯款）</label><input type="number" id="gt-splitcash" min="0" placeholder="例如 7200"></div>
+      ${/* 分期方式已經搬到上面那一列；這一列只剩「付款狀態」，而它只給後台直接發放 */''}
+      ${sales?'':`<div class="form-2col">
         ${/* ══ 2026-09-07 使用者定案：建立合約時不再問付款狀態 ══════════════════
              「建立合約的時候　如果選了已付款　後續無法再發送電子合約
                所以建立合約的時候不要有是否付款的選項　一律由櫃檯後面收款再選擇」
@@ -49703,7 +49730,7 @@ async function openGrantModal(){
              免簽約那條路（團課／團課體驗／運動按摩）是櫃檯當場賣、當場收，
              賣完就結束，沒有「先欠著」這回事。欄位拿掉、一律當成已收（見 submitGrant）。
              ⚠ 後台「直接發放票券」照舊要問：那條路可能是補發、加贈、或先發後收。 */''}
-        ${sales?'':`<div class="form-row"><label>付款狀態</label><select id="gt-pay" onchange="invSync()"><option value="unpaid" selected>未付款</option><option value="paid">已付款</option></select></div>`}
+        <div class="form-row"><label>付款狀態</label><select id="gt-pay" onchange="invSync()"><option value="unpaid" selected>未付款</option><option value="paid">已付款</option></select></div>
       </div>`}
       ${/* 電子發票（2026-09-02）：只有「已付款」才畫 —— 沒收到錢不能開發票 */''}
       ${invFieldsHTML()}
@@ -50234,7 +50261,9 @@ function renderGrantPicker(){
     const s={general:0,promo:1,friendly:2,friendly_promo:3}[p.plan_type]; return s==null?8:s; };
   const slotLabelOf=p=>{ if(isVipPlan(p)) return 'VIP';
     if(p.plan_type==='loyal') return /友善/.test(p.name||'')?'主顧客友善':'主顧客';
-    return ({general:'一般',promo:'一般優惠',friendly:'友善',friendly_promo:'友善優惠'})[p.plan_type]||'其他'; };
+    /* 2026-09-08 新增 single（單堂教練課）：排在最後、標籤講清楚是「單堂」，
+       不要落到「其他」那個看不出是什麼的字（slotOf 給 8，本來就排最後）。 */
+    return ({general:'一般',promo:'一般優惠',friendly:'友善',friendly_promo:'友善優惠',single:'單堂'})[p.plan_type]||'其他'; };
   if(hasV1||hasV2){
     /* 2026-07-28 三修：自訂方案移到最上方、格子縮短 */
     if(window._grantSalesActive&&window._grantSalesActive.cat==='私人教練'&&!window._grantSalesActive.custom){
@@ -50356,6 +50385,7 @@ async function refreshGrantInfo(){
   gtAmtWarn(listPrice);
   // 分期欄位依模板是否可分期顯示
   const iw=document.getElementById('gt-install-wrap'); if(iw) iw.style.display=plan.installment?'':'none';
+  try{ gtPaySync(); }catch(_){}   /* 換方案 → 重判「要不要簽約」，收放付款方式／分期（2026-09-08） */
   if(!plan.installment){ const is=document.getElementById('gt-install'); if(is) is.value='1'; }
   refreshInstallPreview();
   refreshGrantVoucher();
