@@ -235,7 +235,8 @@ ok('★ 沒被任何票吸收的已預約未上 → 仍畫紅虛線圈，依課�
    /const leftover=live\.filter\(b=>!byBooking\[b\.id\] && b\.status==='booked'/.test(src)
    && /tkRowHtml\(sl, w\.leftoverIn\(k\), m\.id, /.test(src));
 ok('　　只帶今天以後的', /&& String\(b\.date\|\|''\)\.slice\(0,10\)>=today\);/.test(src));
-ok('★ 同課別還有幾張在用會標「＋N」', /＋\$\{n-1\}<\/span>/.test(src));
+/* 2026-09-07：改成帶字的「另 N 張」，與圓點裡的「+堂數」分開 */
+ok('★ 同課別還有幾張在用會標出來', /另 \$\{n-1\} 張<\/span>/.test(src));
 
 console.log('\n沒有票券的人要講對');
 ok('★ 五格全空看起來像沒載入 → 第一格掛提示',

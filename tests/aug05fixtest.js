@@ -51,7 +51,11 @@ ok('★ 共享人的戳記不再是縮小一號，也不再是金環',
    !/\.mtk-sh\{transform:scale/.test(src)
    && !/\.mtk-sh\{position:relative;opacity:\.96;box-shadow:0 0 0 2px var\(--gold,#B48A56\);\}/.test(src)
    && /金框退場，改成「色點在上＋使用人／日期在下」/.test(src));
-ok('★ 列表迷你卡維持 26px 不動', /\.tkm-dots \.mtk\{width:26px;height:26px;/.test(src));
+/* 2026-09-07 使用者：「會員列表的圓形卡…圓形可以大一點?」——
+   0805 當時刻意讓列表迷你卡維持 26px，這次放大到 30px（字跟著 8.5→9.5，同一套等比）。
+   0805 的重點是「其他圓形卡統一 35px」，那一條沒有變。 */
+ok('★ 列表迷你卡放大到 30px（0805 的 26px 由 0907 取代）',
+   /\.tkm-dots \.mtk\{width:30px;height:30px;font-size:9\.5px;\}/.test(src));
 ok('　　混有共享戳記的標記邏輯保留（_hasSh／mtk-own）',
    /const _hasSh=\[\.\.\.done,\.\.\.booked\]\.some\(b=>b&&b\._shBy\);/.test(src)
    && /const _ownCls=b=>\(_hasSh&&!\(b&&b\._shBy\)\)\?' mtk-own':'';/.test(src));

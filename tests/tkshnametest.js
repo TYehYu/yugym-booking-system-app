@@ -103,7 +103,7 @@ console.log('\n⑤ 其他標記都還在，只是換了位置');
   ok('★★ 「會員自行預約」的金點還在，只是貼到色點右上',
      /\.mtk\.mtk-sh\.mtk-self::after\{top:-2px;right:calc\(50% - 11px\);/.test(CSS));
   ok('★ 迷你卡與六欄格線版都有各自的收斂（不會被壓扁）',
-     /\.tkm-dots \.mtk\.mtk-sh,\.tkm-dots \.mtk\.mtk-lv\{min-width:34px;/.test(CSS)
+     /\.tkm-dots \.mtk\.mtk-sh,\.tkm-dots \.mtk\.mtk-lv\{min-width:39px;/.test(CSS)
      && /\.mck-dots6 \.mtk\.mtk-sh,\.mck-dots6 \.mtk\.mtk-lv\{aspect-ratio:auto;/.test(CSS));
   ok('★★ title 一個字都沒改（誰預約的原本就寫在 title 裡，現在畫面上也看得到）',
      /\$\{b&&b\._shName\?'　·　'\+b\._shName\+' 預約':''\}/.test(src)

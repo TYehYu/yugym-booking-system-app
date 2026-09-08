@@ -66,7 +66,8 @@ console.log('\n④ 圓形卡本身早就會畫「色點＋姓名＋日期」了�
 ok('★★ _shBody：有 _shName 就畫 色點／姓名／日期 三層',
    /const _shBody=\(b,dt\)=>\(b&&b\._shName\)\s*\n\s*\? `<i class="mtk-shdot"><\/i>`/.test(src));
 ok('★★ 列表的迷你圓點有替共享那顆放寬寬度（不然名字會被擠掉）',
-   /\.tkm-dots \.mtk\.mtk-sh,\.tkm-dots \.mtk\.mtk-lv\{min-width:34px;max-width:46px;font-size:8px;\}/.test(src));
+   /* 2026-09-07：圓點 26→30px，這裡的寬度與字級一併等比放大 */
+   /\.tkm-dots \.mtk\.mtk-sh,\.tkm-dots \.mtk\.mtk-lv\{min-width:39px;max-width:53px;font-size:9px;\}/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
