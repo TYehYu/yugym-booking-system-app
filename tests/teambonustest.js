@@ -146,5 +146,23 @@ ok('★★★ 非主管的視窗畫不出那一塊時整段跳過（不會被清
 ok('★★ 全選＝null（日後新進教練自動納入），不是把當下每個人的 id 寫死',
    /return \(on\.length===els\.length\) \? null : on;/.test(src));
 
+console.log('\n⑦ 主管津貼金額可以就地調整（2026-09-08 使用者：「主管津貼3000 是要讓我可以調整」）');
+ok('★★★ 欄位就在團隊獎金那一塊裡（跟門檻、名單同一處，抬頭已寫「全主管共用」）',
+   /<input type="number" id="hr-supbonus"/.test(src)
+   && src.indexOf('id="hr-supbonus"') < src.indexOf('>獎金門檻</div>'));
+ok('★★★ 存進全域 _global.config.supervisor_bonus —— calcSalary 讀的就是這一個',
+   /_G\.supervisor_bonus=Math\.max\(0,Number\(_sb\.value\)\|\|0\);/.test(src)
+   && /const supPay=isSup\?\(Number\(G\.supervisor_bonus\)\|\|0\):0;/.test(src));
+ok('★★★ 欄位沒畫出來（非主管的視窗）就別動它 —— 空值當 0 會把全店津貼歸零',
+   /if\(_sb && String\(_sb\.value\)\.trim\(\)!==''\)/.test(src));
+ok('★★ 上方說明不再把人指去「全域設定」那一頁',
+   /津貼金額與獎金門檻都在下面調整。/.test(src)
+   && !/金額在「薪資規則 → 全域設定」統一調整/.test(src));
+ok('★★ 全域設定頁那一格（sg-sup）仍是同一個值，兩邊改都算數',
+   /id="sg-sup" value="\$\{G\.supervisor_bonus\?\?0\}"/.test(src)
+   && /supervisor_bonus:gv\('sg-sup'\)/.test(src));
+ok('★  講明「固定發給每一位主管」，不會被讀成整池要分的總額',
+   /固定發給每一位主管/.test(src));
+
 console.log(`\n${pass} 過 / ${fail} 敗`);
 process.exit(fail?1:0);
