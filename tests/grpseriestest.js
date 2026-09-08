@@ -65,6 +65,31 @@ ok('★★ 那一支自己也再擋一次權限（深連結／程式呼叫繞不
 ok('★  兩個動作都有防連點（onceAct）',
    /onceAct\('grpdel', _grpDelRun\)/.test(src) && /onceAct\('grpco:'\+id/.test(src));
 
+console.log('\n⑤-b 連續改時間（2026-09-08 使用者：「連續改時間可以做」）');
+{
+  const A=g('async function grpTimeAsk(id, later, nt, nv){','\n}');
+  const R=g('async function _grpTimeRun(){','\n}');
+  ok('★★★ 只有「日期沒動、只改時間」才問（連日期一起改是整串往後挪，另一件事）',
+     /if\(bkIsGroup\(b\) && nd===b\.date && nt!==String\(b\.start_time\)\.slice\(0,5\)\)\{/.test(src)
+     && /只有「日期沒動、只改時間」才問：連日期一起改是「整串往後挪」/.test(src));
+  ok('★★★ 系列要在改動**之前**算完（判準之一就是 start_time）',
+     /_grpLater=\(await grpSeriesLater\(b\)\)\.series;/.test(src)
+     && src.indexOf('_grpLater=(await grpSeriesLater(b)).series;') < src.indexOf("b.date=nd; b.start_time=nt; await dbPut('bookings',b);"));
+  ok('★★★ 每一堂各自驗場地與衝堂（同一個時段這週空、下週未必）',
+     /const err=await validateBooking\(vbk, x\.date, p\.t, x\.duration\);/.test(R));
+  ok('★★★ 撞到的**不動**，而且要列出來讓櫃檯個別處理',
+     /if\(err\)\{ bad\.push\(\{b:x, why:err\}\); paint\(i\+1\); continue; \}/.test(R)
+     && /維持原時間沒有更動<\/b>，請個別處理/.test(R));
+  ok('★★ 已經是新時間的那幾堂略過，不重複寫入',
+     /if\(String\(x\.start_time\)\.slice\(0,5\)===p\.t\)\{ okList\.push\(x\); paint\(i\+1\); continue; \}/.test(R));
+  ok('★★ 場地跟著一起帶（同一個班通常同一間教室）',
+     /venue_pref:p\.v\|\|venueEffId\(x\)\|\|null/.test(R)
+     && /if\(vbk\.venue_unit\) x\.venue_unit=vbk\.venue_unit;/.test(R));
+  ok('★★ 有進度、有防連點', /onceAct\('grptime', _grpTimeRun\)/.test(src) && /處理中…（/.test(R));
+  ok('★  全部成功才只跳一句吐司，有失敗就攤開清單',
+     /if\(!bad\.length\)\{/.test(R) && /有 '\+bad\.length\+' 堂沒有改成/.test(R));
+}
+
 console.log('\n⑥ 團課不給「指派代課教練」（2026-09-08）');
 ok('★★★ 代課那一列只留給非團課', /if\(!_leave && !A\.isGroup && A\.sub==='sub'\)/.test(src));
 ok('★★★ 但團課不能因此失去「教練請假」（0821 把它收進代課那張清單了）',

@@ -12375,8 +12375,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260908.1629';
-const APP_VERSION_LABEL = 'v260908.1629';
+const APP_VERSION = '260908.1641';
+const APP_VERSION_LABEL = 'v260908.1641';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26711,6 +26711,13 @@ async function _admhMoveDo(id){
   const vChanged=!!nv && nv!==(venueEffId(b)||'');
   const moved=(nd!==b.date || nt!==b.start_time);
   if(!moved && !vChanged && !rc.on){ showToast('時間與場地都沒有變動'); return; }
+  /* 團課的連續改時間（2026-09-08）：系列要在**改動之前**算完 ——
+     grpSeriesSplit 的判準之一就是 start_time，改完再算就找不到自己人。
+     ⚠ 只有「日期沒動、只改時間」才問：連日期一起改是「整串往後挪」，那是另一件事。 */
+  let _grpLater=null;
+  if(bkIsGroup(b) && nd===b.date && nt!==String(b.start_time).slice(0,5)){
+    try{ _grpLater=(await grpSeriesLater(b)).series; }catch(_){ _grpLater=null; }
+  }
   if(nd<ymd(TODAY)){ showToast('不能改到過去的日期'); return; }
   if(moved || vChanged){
     const vbk=Object.assign({}, b, {venue_pref:nv||null});
@@ -26735,6 +26742,8 @@ async function _admhMoveDo(id){
     }catch(err){ showToast('修改失敗：'+(err&&err.message?err.message:err)); navTo(CUR_PAGE); return; }
     /* 先改期再連排 —— 起點要用「改完之後」的日期時間，不然新排的那幾堂還跟著舊時段走 */
     if(rc.on) await amvRunRecur(b, nd, nt, rc);
+    /* 團課：後面還有同系列就問要不要一起改成新時間（2026-09-08） */
+    if(_grpLater && _grpLater.length){ try{ await grpTimeAsk(b.id, _grpLater, nt, nv); return; }catch(_){} }
     navTo(CUR_PAGE);
   });
 }
@@ -36956,6 +36965,76 @@ async function _grpCoachRun(id, cid, laterIds){
   closeModal();
   showToast('已更換授課教練：'+ok2+' 堂'+(fail?('，'+fail+' 堂失敗（請重試）'):''), fail?8000:4000);
   navTo(CUR_PAGE);
+}
+/* ══ 團課的連續改時間（2026-09-08 使用者：「連續改時間可以做」）══════════════
+   刪除與換教練那兩支（grpDelAsk／grpCoachPick）是改一個欄位就好，這一支不是：
+   每一堂都要各自檢查場地與教練衝堂 —— 同一個新時段，這週空著、下週可能已經有別的課。
+
+   ⚠ 只有「日期沒動、只改時間」才提供連續 ——
+     連日期一起改就變成「整串往後挪」，那是另一件事（每一堂要位移同樣的天數），
+     混在一起會讓人以為只是改個時間，結果整串課都搬家了。
+   ⚠ 系列要在**改動這一堂之前**算完：grpSeriesSplit 的判準之一就是 start_time，
+     改完再算就找不到自己人（與 grpCoachSet 同一個坑）。
+   ⚠ 撞到的那幾堂**不動、列出來**，不自動跳過也不自動改別的時間 ——
+     櫃檯要知道哪幾週沒改到，才有辦法個別處理。 */
+async function grpTimeAsk(id, later, nt, nv){
+  const b=await dbGet('bookings',id); if(!b||!later||!later.length) return;
+  window._grpTimePend={ids:later.map(function(x){return x.id;}), t:nt, v:nv||''};
+  showModal('<div class="ash-sheetmk"></div><div class="modal-title">後面的課要一起改時間嗎？</div>'
+    +'<div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:10px;">'
+    +'這一堂已改成 <b>'+escH(nt)+'</b>。後面還有 <b>'+later.length+'</b> 堂同系列（同星期、同時段）：</div>'
+    +'<div class="sc-list">'+grpSeriesRowsHtml(later)+'</div>'
+    +'<div style="font-size:12px;color:var(--t2);margin:12px 0 4px;line-height:1.8;">'
+    +'日期不動，只把時間改成 <b>'+escH(nt)+'</b>。'
+    +'每一堂會各自檢查場地與教練有沒有撞課，<b>撞到的那幾堂不會動</b>，做完會列給你看。</div>'
+    +'<div class="modal-foot">'
+    +'<button class="btn btn-ghost" onclick="closeModal();navTo(CUR_PAGE)">只改這一堂</button>'
+    +'<button class="btn btn-green" onclick="grpTimeRun()">連同後面 '+later.length+' 堂</button>'
+    +'</div>');
+}
+async function grpTimeRun(){ return onceAct('grptime', _grpTimeRun); }
+async function _grpTimeRun(){
+  const p=window._grpTimePend; if(!p) return;
+  const foot=document.querySelector('.modal-foot');
+  const paint=function(n){ if(foot) foot.innerHTML='<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">處理中…（'+n+'/'+p.ids.length+'）</div>'; };
+  paint(0);
+  const okList=[], bad=[];
+  for(let i=0;i<p.ids.length;i++){
+    try{
+      const x=await dbGet('bookings',p.ids[i]);
+      if(!x){ continue; }
+      if(String(x.start_time).slice(0,5)===p.t){ okList.push(x); paint(i+1); continue; }   // 已經是新時間
+      const vbk=Object.assign({}, x, {venue_pref:p.v||venueEffId(x)||null});
+      const err=await validateBooking(vbk, x.date, p.t, x.duration);
+      if(err){ bad.push({b:x, why:err}); paint(i+1); continue; }
+      x.start_time=p.t;
+      if(vbk.venue_unit) x.venue_unit=vbk.venue_unit;
+      await dbPut('bookings',x);
+      okList.push(x);
+    }catch(e){ console.error('連續改時間失敗',p.ids[i],e);
+      bad.push({b:{date:'—',start_time:''}, why:(e&&e.message)||String(e)}); }
+    paint(i+1);
+  }
+  window._grpTimePend=null;
+  dbCacheClear(['bookings']);
+  if(!bad.length){
+    closeModal();
+    showToast('已改時間：'+okList.length+' 堂　·　都改成 '+p.t, 5000);
+    navTo(CUR_PAGE); return;
+  }
+  /* 有撞到的就把清單攤開 —— 只跳一句「N 堂失敗」等於要櫃檯自己一週一週去找 */
+  const WD=['日','一','二','三','四','五','六'];
+  showModal('<div class="ash-sheetmk"></div><div class="modal-title">有 '+bad.length+' 堂沒有改成</div>'
+    +'<div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:10px;">'
+    +'已改好 <b>'+okList.length+'</b> 堂。下面這幾堂在 <b>'+escH(p.t)+'</b> 撞到別的課或場地已滿，'
+    +'<b>維持原時間沒有更動</b>，請個別處理：</div>'
+    +'<div class="sc-list">'+bad.map(function(r){
+        const d=parseYmd(r.b.date);
+        return '<div class="sc-row"><span class="sc-d">'+String(r.b.date).replace(/-/g,'/')
+          +'（'+(d?WD[d.getDay()]:'')+'）</span>'
+          +'<span class="sc-x" style="flex:1;text-align:left;">'+escH(r.why)+'</span></div>';
+      }).join('')+'</div>'
+    +'<div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();navTo(CUR_PAGE)">知道了</button></div>');
 }
 async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending, addedTk){
   const b=await dbGet('bookings',id);
