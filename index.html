@@ -12342,8 +12342,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260907.1832';
-const APP_VERSION_LABEL = 'v260907.1832';
+const APP_VERSION = '260908.1326';
+const APP_VERSION_LABEL = 'v260908.1326';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13285,14 +13285,42 @@ async function invVoidForPurchase(purId, reason){
 async function dbPutPurchaseSafe(obj){
   try{ return await dbPut('purchases',obj); }
   catch(e){
-    // 選配欄位（正式庫可能尚未套 migration）：拔掉後重寫一次，收款紀錄不因此漏記
-    const opt=['invoice_type','coach_id','pay_split'].filter(k=>obj && k in obj);
+    /* ══ 一定要寫進去：收款紀錄漏一筆＝當天營收少一筆 ══════════════════════════
+       ① 選配欄位（正式庫可能尚未套 migration）：拔掉後重寫一次。
+       ② 2026-09-08 加：**PostgREST 指名哪一欄不認得就拔哪一欄**。
+          起因是補收款那支把 pay_split 寫成 split_cash（不存在的欄位），整筆被退件；
+          ①的清單裡沒有 split_cash，拔完再送還是同一個錯 → 收款紀錄整筆沒了，
+          而票券已經標成已付款，於是今日營收憑空少 $1,200（陳若馨／馮映庭）。
+          欄位名打錯這種事還會再發生，讓它「少一欄」也好過「整筆不見」。
+       ⚠ 只拔它指名的那一欄，而且最多再試 4 次 —— 不做「什麼都拔」的猜測，
+         也不能無限迴圈。真的救不回來就照舊往上拋，呼叫端要出聲。 */
+    let o2=Object.assign({}, obj);
+    const opt=['invoice_type','coach_id','pay_split'].filter(k=>k in o2);
     if(opt.length){
-      const o2=Object.assign({},obj); opt.forEach(k=>delete o2[k]);
-      return await dbPut('purchases',o2);
+      opt.forEach(k=>delete o2[k]);
+      try{ return await dbPut('purchases',o2); }catch(_){ /* 往下走，改拔被指名的那一欄 */ }
+    }
+    let last=e;
+    for(let i=0;i<4;i++){
+      const col=dbUnknownColumnOf(last);
+      if(!col || !(col in o2)) break;
+      console.warn('purchases 不認得欄位，拔掉重寫：',col);
+      delete o2[col];
+      try{ return await dbPut('purchases',o2); }catch(e2){ last=e2; }
     }
     throw e;
   }
+}
+/* 從 PostgREST 的錯誤訊息裡挖出「它不認得的那一欄」。
+   訊息長這樣：Could not find the 'split_cash' column of 'purchases' in the schema cache
+   也吃 Postgres 原生的：column "split_cash" of relation "purchases" does not exist */
+function dbUnknownColumnOf(err){
+  const msg=String((err&&(err.message||err.msg))||err||'');
+  let m=/Could not find the '([^']+)' column/.exec(msg);
+  if(m) return m[1];
+  m=/column "([^"]+)" of relation/.exec(msg);
+  if(m) return m[1];
+  return null;
 }
 async function dbDel(store,id){
   /* 刪除後就查不到內容了 → 先把要寫進通知的資料撈起來（撈不到也不影響刪除） */
@@ -50773,6 +50801,10 @@ async function _tkPayGo(){
        ⚠ 只補「還沒記到的那一段」（2026-08-31）——舊資料（0831 修正之前發放的待付款票）
          建約當天就已經把錢記進 purchases 了，再補一筆全額就是同一筆錢算兩次。
          蔡佳音 TK-msmvv10rgdpo 就是這種：8/10 已記 $10,400，按〔收款〕不該再記一次。 */
+    /* 寫入失敗時最後那句吐司不能還說「記在今天的營收」（2026-09-08）——
+       原本失敗的提示會被 3 行後的成功提示蓋掉，櫃檯看到的是「已收款・記在今天的營收」，
+       而營收那一筆根本沒寫進去。0908 兩筆團課體驗就是這樣過去的。 */
+    let _purFail=false;
     let _already=0;
     try{ _already=(await dbGetAll('purchases').catch(()=>[]))
       .filter(p=>p&&p.ticket_id===t.id).reduce((n,p)=>n+(Number(p.deal_amount)||0),0); }catch(_){}
@@ -50780,23 +50812,34 @@ async function _tkPayGo(){
     if(_newAmt<=0){
       showToast(`這筆的 $${_already.toLocaleString()} 在建約當天就記過營收了，不重複計算`, 6000);
     }else try{
+      /* ⚠ 欄位名是 pay_split，不是 split_cash（2026-09-08 陳若馨／馮映庭案例）——
+         purchases 沒有 split_cash 這一欄，PostgREST 會整筆退件；
+         dbPutPurchaseSafe 的退件重試只拔 invoice_type／coach_id／pay_split，
+         拔完 split_cash 還在，所以第二次照樣失敗 → 收款紀錄整筆沒寫進去。
+         票券那邊已經標成已付款、帳本也寫了「補收款 $600」，只有營收那一筆不見，
+         於是今日營收顯示 $0。形狀與賣票那條路一致（{cash,transfer}，見 _grantIssue）。
+         ⚠ 現金要夾在「這次要補的金額」內：_newAmt 可能小於 v.amt（只補差額）。 */
+      const _cash=(v.method==='split')?Math.max(0,Math.min(Number(v.split)||0,_newAmt)):0;
       await dbPutPurchaseSafe({id:uid('PUR'), member_id:t.member_id, plan_id:t.source_plan_id||null,
         ticket_id:t.id, plan_name:(t.plan_name||'票券')+'（補收款）',
         list_price:_newAmt, deal_amount:_newAmt, payment_method:v.method,
-        split_cash:(v.method==='split'?v.split:null),
+        pay_split:(v.method==='split'?{cash:_cash, transfer:_newAmt-_cash}:null),
         invoice_type:'none', installment_count:1,
         note:`待付款補收（票券 ${t.id}）`+(_already>0?`；建約當天已記 $${_already.toLocaleString()}，本筆只補差額`:''),
         operator:SESSION.id,
         source:'purchase', created_at:new Date().toISOString()});
-    }catch(e){ console.error('tkPay purchase fail',e);
+    }catch(e){ console.error('tkPay purchase fail',e); _purFail=true;
       showToast('收款紀錄寫入失敗（票券已標為已付款，請補開）：'+dbFriendlyError(e), 8000); }
     await logTicket(t.id,'adjust',0,null,SESSION.id,
       `補收款 $${v.amt.toLocaleString()}（${{cash:'現金',transfer:'匯款',split:'現金＋匯款'}[v.method]||v.method}）`
       +(v.inst>1?`；改為分 ${v.inst} 期，本次開通 ${v.segs[0]}/${v.total} 堂`:''));
     dbCacheClear(['member_tickets','ticket_logs','purchases']);
     closeModal();
-    showToast(`已收款 $${v.amt.toLocaleString()}　·　記在今天的營收`
-      +(v.inst>1?`；已改為分 ${v.inst} 期，這次開通 ${v.segs[0]} 堂`:''), v.inst>1?7000:4000);
+    showToast(_purFail
+      ? `已收款 $${v.amt.toLocaleString()}，但${'\u26A0'} 營收那一筆沒寫進去 —— 請到財務補開一筆，否則今日營收會少這一筆`
+      : `已收款 $${v.amt.toLocaleString()}　·　記在今天的營收`
+        +(v.inst>1?`；已改為分 ${v.inst} 期，這次開通 ${v.segs[0]} 堂`:''),
+      _purFail?9000:(v.inst>1?7000:4000));
     if(!(await ppRefreshIfOpen(t.member_id))) navTo(CUR_PAGE);
   }catch(e){ showToast('收款失敗：'+((e&&e.message)||e)); }
   finally{ done(); }
