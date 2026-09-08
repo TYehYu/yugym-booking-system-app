@@ -12357,8 +12357,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260908.1403';
-const APP_VERSION_LABEL = 'v260908.1403';
+const APP_VERSION = '260908.1553';
+const APP_VERSION_LABEL = 'v260908.1553';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40406,7 +40406,11 @@ const SALARY_GLOBAL_DEFAULT = {
      130 是一年的月排班時數中位數 —— 用固定值，同一個人每個月的時薪才一樣；
      若改用「當月實際排班時數」，班排多的月份時薪反而變低，同樣請一天扣的錢會不同。 */
   base_hours_divisor: 130,
-  supervisor_bonus: 4000,       // 主管固定津貼
+  /* 主管固定津貼（2026-09-08 使用者定案：「主管津貼　預設3000」「主管津貼每位固定3000」）——
+     4000 → 3000，而且判斷從 is_supervisor 改成 **is_manager**：
+     使用者定義「主管就是店長」，is_supervisor 這個旗標從頭到尾沒有人用過（正式庫 0 筆）。
+     ⚠ 每位主管各拿 3,000，不平分 —— 要平分的是團隊獎金池那一段。 */
+  supervisor_bonus: 3000,       // 主管固定津貼（每位）
   birthday_bonus: 1000,         // 生日禮金（生日當月自動加給，2026-08-02 使用者指示）
   /* 店長津貼（2026-07-29 使用者定案改制）：全店當月教練課總堂數（不含老闆/admin）
      每滿 leader_per_classes 堂給 leader_per_amount 元，可累計（120 堂＝1 個 80 → $4,000）。
@@ -40732,6 +40736,34 @@ function dutyHoursCapped(attendance, shifts, empId, month){
    舊制（< LEADER_NEW_FROM）：全店總堂數每滿 N 堂給一筆，可累計。
      七月以前的月份照舊算，回頭看歷史薪資不會整片變動。 */
 const LEADER_NEW_FROM='2026-08';
+/* ══ 2026-09 起：團隊獎金池，平分給主管（2026-09-08 使用者定案）══════════════
+   使用者原話：「主管津貼　預設3000　團隊獎金　所有教練每一位達到80堂(含團課)獎金4000
+   所以有四個教練達標　獎金16000　然後再平分給主管」，補充：「Sandy自己也算　
+   平分照人頭　9月開始　主管津貼每位固定3000」。
+
+     團隊獎金池 ＝ 達標教練數 × $4,000
+     主管實拿   ＝ 池子 ÷ 主管人數（照人頭平分，不按到職比例）
+     另加每位主管固定 $3,000 的主管津貼（不平分，見 calcSalary 的 supPay）
+
+   與 0802 那套（逐位店長自己的名單）三個差別：
+     ・不再有 leader_members —— 全店教練都算，主管自己也算（使用者指定）
+     ・不再有第二階 t2/b2 —— 全店統一 80 堂 / $4,000
+     ・成果不歸單一店長，進池子平分
+
+   ⚠ 堂數口徑一個字都沒動：教練課＋團課、已完成／已簽到、代課算在代課教練身上。
+     那一條 0729→0827 來回確認過兩次（見 leaderClassCount 上方），不要再動。
+   ⚠ 除不盡時**無條件捨去**：寧可全體少一元，也不要讓加總超過池子。
+   ⚠ 主管人數要用「那個月的」——is_manager 是月份版欄位（PAY_RULE_KEYS 有它），
+     用現在的身分去算八月的薪資會算錯。 */
+const LEADER_TEAM_FROM='2026-09';
+function leaderMgrsOf(staff, month){
+  return (staff||[]).filter(function(o){
+    if(!o || o.status==='inactive') return false;
+    const at=(typeof empAtMonth==='function')?empAtMonth(o, month):o;
+    return !!(at && at.is_manager);
+  }).map(function(o){ return {id:o.id, name:o.name||''}; });
+}
+
 /* 名單：全體可帶課的員工（排除老闆 admin 與櫃台裝置、離職），附上當月堂數。
    四個算薪的地方共用這一份，才不會各自寫一套「誰算在內」。 */
 function leaderRowsOf(staff, bookings, month){
@@ -41345,6 +41377,25 @@ function leaderBonusOf(emp, extras, G, month){
       detail: units>0 ? `全店 ${total} 堂 ÷ 每 ${per} 堂 ＝ ${units} 筆 × $${amt.toLocaleString()}`
                       : `全店 ${total} 堂（未滿 ${per} 堂）` };
   }
+  /* 2026-09 起：團隊獎金池平分給主管（見 LEADER_TEAM_FROM 上方的說明） */
+  if(ym && ym>=LEADER_TEAM_FROM){
+    const t1n=(G.leader_t1!=null&&G.leader_t1!=='')?Number(G.leader_t1):80;
+    const b1n=(G.leader_b1!=null&&G.leader_b1!=='')?Number(G.leader_b1):4000;
+    const hit=rows.filter(function(r){ return (Number(r.classes)||0)>=t1n; });
+    const pool=hit.length*b1n;
+    const mgrs=Array.isArray(extras.leaderMgrs)?extras.leaderMgrs:[];
+    const n=Math.max(1, mgrs.length||1);
+    const pay=Math.floor(pool/n);
+    const rest=pool-pay*n;
+    return { pay:pay, total:total, units:hit.length, rows:rows, hitRows:hit,
+      t1:t1n, b1:b1n, t2:0, b2:0, team:true, pool:pool, mgrN:n, rest:rest,
+      detail: hit.length
+        ? (hit.length+' 位達標 × $'+b1n.toLocaleString()+' ＝ 池 $'+pool.toLocaleString()
+           +'　÷ '+n+' 位主管 ＝ $'+pay.toLocaleString()
+           +(rest?('（餘 $'+rest+' 不分配）'):'')
+           +'　·　'+hit.map(function(r){ return r.name+' '+r.classes+' 堂'; }).join('、'))
+        : ('全店無人達到 '+t1n+' 堂（共 '+rows.length+' 位）') };
+  }
   /* 新制：逐位教練達標，兩個門檻（2026-08-02 使用者：「目前獎金門檻是 80 堂 4000、
      100 堂追加 2000，所以給我兩個設定門檻」）。
      第二個門檻是「追加」不是「取代」：滿 100 堂 ＝ 4000 ＋ 2000 ＝ 6000。 */
@@ -41517,9 +41568,11 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const renewEach=Number(G.renew_bonus)||0;
   const renewPay=renewCount*renewEach;
   const renewDetail=renewCount>0?`${renewCount} 張 × $${renewEach}`:'—';
-  // ⑥ 主管津貼：固定（is_supervisor）
-  const isSup=!!(emp&&emp.is_supervisor);
-  const supPay=isSup?(Number(G.supervisor_bonus)||0):0;
+  /* ⑥ 主管津貼：固定金額，每位主管都拿（2026-09-08 使用者：「主管就是店長」）——
+     原本看 is_supervisor，那個旗標正式庫從頭到尾 0 人使用；主管＝店長＝is_manager。
+     ⚠ 舊月份也一起改口徑：is_supervisor 沒有人被設過，所以不會動到任何一張歷史薪資單。 */
+  const isSup=!!(emp&&(emp.is_manager||emp.is_supervisor));
+  const supPay=isSup?(Number(G.supervisor_bonus)||0):0;   /* 2026-09-08：isSup 已改看 is_manager，見上方 */
   // ⑦ 店長津貼：2026-08 起逐位教練達標制（見 leaderBonusOf）
   const isLeader=!!(emp&&emp.is_manager);
   const _ld=leaderBonusOf(emp,extras,G,extras.month);
@@ -42349,8 +42402,12 @@ async function openPerfDetail(empId, month){
     const _renewRows=(renewListOf(ym, tickets, purAll, bookings, ttAll)||{})[empId]||[];
     const _memNm=Object.fromEntries((memAll||[]).map(x=>[x.id,x.name]));
     const renewCount=_renewRows.length;
-    const leaderRows = emp.is_manager ? leaderRowsOf(await dbGetAll('coaches'), bookings, ym) : null;
-    const sal=calcSalary(empAtMonth(emp,ym), ptDone, groupHeads, dutyHours, leave, 0, {renewCount, leaderRows, month:ym, dutyOverlapRows:dutyOvRows});
+    /* 團隊獎金池要平分，所以要知道「那個月有幾位主管」（2026-09-08）——
+       is_manager 是月份版欄位，不能拿現在的身分去算歷史月份。 */
+    const _allStaff = emp.is_manager ? await dbGetAll('coaches') : null;
+    const leaderRows = emp.is_manager ? leaderRowsOf(_allStaff, bookings, ym) : null;
+    const leaderMgrs = emp.is_manager ? leaderMgrsOf(_allStaff, ym) : null;
+    const sal=calcSalary(empAtMonth(emp,ym), ptDone, groupHeads, dutyHours, leave, 0, {renewCount, leaderRows, leaderMgrs, month:ym, dutyOverlapRows:dutyOvRows});
     const money=n=>'$'+Math.round(Number(n)||0).toLocaleString();
     const row=(label,formula,amount,opt)=>`<div class="pfd-row${opt&&opt.sum?' pfd-sum':''}${opt&&opt.neg?' pfd-neg':''}">
       <span class="pfd-l">${label}${formula?`<span class="pfd-f">${formula}</span>`:''}</span>
@@ -42619,7 +42676,8 @@ async function computeMonthlyPayroll(month){
     const classOverlap=0; // 重疊已從值班時數扣除，不再於 calcSalary 重複扣（明細另外帶給畫面）
     // 店長津貼名單：全體可帶課的員工（排除老闆與櫃台；店長本人列入）＋各自的當月堂數
     const leaderRows = emp.is_manager ? leaderRowsOf(staff, bookings, month) : null;
-    const extras={ renewCount:renewById[emp.id]||0, leaderRows, month, dutyOverlapRows:dutyOvRows };
+    const leaderMgrs = emp.is_manager ? leaderMgrsOf(staff, month) : null;   /* 團隊獎金池平分用（2026-09-08） */
+    const extras={ renewCount:renewById[emp.id]||0, leaderRows, leaderMgrs, month, dutyOverlapRows:dutyOvRows };
     const sal=calcSalary(empAtMonth(emp,month), ptDone, groupHeads, dutyHours, leave, classOverlap, extras);
     const total=countSalary?sal.grossPay:0; // 應發（v2.0：續約/管理職津貼已含在 calcSalary）
     return {emp,countSalary,ptDone,groupHeads,dutyHours,leave,sal,total};
@@ -60910,7 +60968,8 @@ async function anaMonth(){
       const dutyH=c.need_duty?Math.max(dutyHoursCapped(attendance,shifts,c.id,month)-dutyClassOverlapHours(shifts,bookings,c.id,month,c),0):0;
       const lv=leaveSummary(shifts,c.id,month);
       const leaderRows=c.is_manager ? leaderRowsOf(coaches, bookings, month) : null;
-      const sal=calcSalary(empAtMonth(c,month), ptD, gHeads, dutyH, lv, 0, {renewCount:renewMap[c.id]||0, leaderRows, month});
+      const leaderMgrs=c.is_manager ? leaderMgrsOf(coaches, month) : null;   /* 團隊獎金池平分用（2026-09-08） */
+      const sal=calcSalary(empAtMonth(c,month), ptD, gHeads, dutyH, lv, 0, {renewCount:renewMap[c.id]||0, leaderRows, leaderMgrs, month});
       totalSalary+=(sal&&sal.grossPay)||0;
     });
   }catch(e){ console.error('教練薪資合計失敗:',e); }
@@ -63706,6 +63765,7 @@ async function renderSalaryContent(TARGET, withHead){
   const payTypeLabel=PAY_LABEL[me.employment_type||me.pay_type]||'—';
   // v2.0：店長津貼需全體教練當月堂數；續約張數由 member_tickets 統計
   const leaderRows = me.is_manager ? leaderRowsOf(coaches, bookings, month) : null;
+  const leaderMgrs = me.is_manager ? leaderMgrsOf(coaches, month) : null;   /* 團隊獎金池平分用（2026-09-08） */
   let renewCount=0, renewRows=[];
   try{
     const[tks,purs,tys]=await Promise.all([dbGetAll('member_tickets'),dbGetAll('purchases').catch(()=>[]),dbGetAll('ticket_types').catch(()=>[])]);
@@ -63722,7 +63782,7 @@ async function renderSalaryContent(TARGET, withHead){
     window._renewRows=renewRows;
   }catch(_){}
   // 完整薪資計算（v2.0：含續約、店長階梯、主管津貼、勞健保）
-  const sal=calcSalary(empAtMonth(me,month), ptDone, groupHeads, dutyHours, myLeave, myClassOverlap, {renewCount, leaderRows, month, dutyOverlapRows:_dutyOvRows});
+  const sal=calcSalary(empAtMonth(me,month), ptDone, groupHeads, dutyHours, myLeave, myClassOverlap, {renewCount, leaderRows, leaderMgrs, month, dutyOverlapRows:_dutyOvRows});
   const countSalary=empCountSalary(me, month);
   const estimate=countSalary?sal.grossPay:0;
   const mgrLine=[me.is_manager?`店長`:'',me.is_supervisor?`主管`:''].filter(Boolean).join('　·　');

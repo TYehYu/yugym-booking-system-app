@@ -25,7 +25,7 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.in
    所以給我兩個設定門檻」）—— 單一門檻換成兩段，門檻②是追加。
    兩段的算術細節在 payrulemonthtest.js，這裡看的是名單與分店的分離。 */
 const G={leader_per_classes:80, leader_per_amount:4000, leader_t1:60, leader_b1:2000, leader_t2:0, leader_b2:0};
-const F=new Function('LEADER_NEW_FROM', grabFn('leaderBonusOf')+'\nreturn leaderBonusOf;')('2026-08');
+const F=new Function('LEADER_NEW_FROM','LEADER_TEAM_FROM', grabFn('leaderBonusOf')+'\nreturn leaderBonusOf;')('2026-08','2026-09');
 const ROWS=[{id:'A',name:'小安',classes:70},{id:'B',name:'小柏',classes:60},
             {id:'C',name:'小昌',classes:59},{id:'D',name:'小丁',classes:11}];
 const MGR=o=>Object.assign({is_manager:true, leader_t1:60, leader_b1:2000, leader_t2:0, leader_b2:0}, o||{});
@@ -96,11 +96,14 @@ eq('★ 四處都改用它', (src.match(/leaderRowsOf\(/g)||[]).length, 5);   //
 eq('★ 舊的 leaderHeads 全部清乾淨', (src.match(/leaderHeads/g)||[]), []);
 /* 2026-08-30：extras 後面多帶了 dutyOverlapRows（值班重疊明細，純顯示），
    所以四處都改成「month 之後可以再接欄位」，仍然釘住 month 一定有傳。 */
+/* 2026-09-08：extras 多帶一個 leaderMgrs（團隊獎金池要平分給主管） */
 ok('★ 月份有傳進去（不然新舊制分不出來）',
-   /const extras=\{ renewCount:renewById\[emp\.id\]\|\|0, leaderRows, month[,}]/.test(src)
-   && /\{renewCount, leaderRows, month:ym[,}]/.test(src)
-   && /\{renewCount:renewMap\[c\.id\]\|\|0, leaderRows, month[,}]/.test(src)
-   && /\{renewCount, leaderRows, month[,}]/.test(src));
+   /const extras=\{ renewCount:renewById\[emp\.id\]\|\|0, leaderRows, leaderMgrs, month[,}]/.test(src)
+   && /\{renewCount, leaderRows, leaderMgrs, month:ym[,}]/.test(src)
+   && /\{renewCount:renewMap\[c\.id\]\|\|0, leaderRows, leaderMgrs, month[,}]/.test(src)
+   && /\{renewCount, leaderRows, leaderMgrs, month[,}]/.test(src));
+ok('★★★ 四個呼叫端都帶了主管名單（少一個那條路就會整池全給一個人）',
+   (src.match(/leaderMgrs ?= ?\w+\.is_manager ?\? ?leaderMgrsOf\(/g)||[]).length===4);
 ok('　　calcSalary 兩條路徑都把月份帶給 leaderBonusOf',
    (src.match(/leaderBonusOf\(emp,extras,G[c]?,extras\.month\)/g)||[]).length===2);
 

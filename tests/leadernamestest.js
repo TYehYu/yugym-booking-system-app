@@ -15,7 +15,7 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 const grabFn=n=>{let i=src.indexOf('function '+n+'(');if(src.slice(i-6,i)==='async ')i-=6;
   let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 
-const LB=new Function('LEADER_NEW_FROM', grabFn('leaderBonusOf')+'\nreturn leaderBonusOf;')('2026-08');
+const LB=new Function('LEADER_NEW_FROM','LEADER_TEAM_FROM', grabFn('leaderBonusOf')+'\nreturn leaderBonusOf;')('2026-08','2026-09');
 
 console.log('① 名單本身：只有「負責的教練」才算數');
 {

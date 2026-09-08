@@ -56,7 +56,7 @@ console.log('\n② 快照存了哪些欄位');
 console.log('\n③ 店長獎金：兩個門檻');
 {
   const G={leader_t1:80, leader_b1:4000, leader_t2:100, leader_b2:2000};
-  const F=new Function('LEADER_NEW_FROM', grabFn('leaderBonusOf')+'\nreturn leaderBonusOf;')('2026-08');
+  const F=new Function('LEADER_NEW_FROM','LEADER_TEAM_FROM', grabFn('leaderBonusOf')+'\nreturn leaderBonusOf;')('2026-08','2026-09');
   const ROWS=[{id:'A',name:'甲',classes:120},{id:'B',name:'乙',classes:85},
               {id:'C',name:'丙',classes:79},{id:'D',name:'丁',classes:100}];
   const MGR=o=>Object.assign({is_manager:true, leader_members:['A','B','C','D'],
