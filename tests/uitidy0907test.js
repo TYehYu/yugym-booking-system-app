@@ -36,13 +36,17 @@ ok('★★★ 全站的 .modal-foot 沒有被改成 sticky（那會一次改掉�
    /\.modal-foot\{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap;\}/.test(src));
 ok('★★ 負邊距用 --mpad，不寫死 —— 內距有三種尺寸',
    /margin:18px calc\(var\(--mpad,26px\) \* -1\) calc\(var\(--mpad,26px\) \* -1\);/.test(src)
-   && /padding:12px var\(--mpad,26px\) var\(--mpad,26px\);/.test(src));
+   && /padding:16px var\(--mpad,26px\) var\(--mpad,26px\);/.test(src));
 ok('★★★ 三處 .modal 都要有 --mpad（少一處那個尺寸就會露出縫隙）',
    /\.modal\{--mpad:26px;/.test(src) && /\.modal\{--mpad:18px;/.test(src) && /\.modal\{--mpad:22px;/.test(src));
 ok('★★ 三處的 padding 都改成吃變數（寫死的話變數就只是裝飾）',
    (src.match(/padding:var\(--mpad\)/g)||[]).length===3);
-ok('★  底列要有底色，不然捲動的內容會透出來',
-   /\.modal-wide \.gt-step>\.modal-foot\{[\s\S]{0,320}background:var\(--surface-3\);/.test(src));
+/* 2026-09-08 使用者：「移除背景列　兩個按鈕像浮動按鈕」——
+   實心底列退場，改成底部一段漸層淡出（見 tests/footbtntest.js）。
+   「捲動的內容不能直接頂到按鈕」這件事沒有變，只是換了做法。 */
+ok('★  內容不會直接頂到按鈕（實心列 → 底部漸層淡出）',
+   /background:linear-gradient\(to bottom, rgba\(0,0,0,0\) 0%, var\(--surface-3\) 55%\);/.test(src)
+   && !/\.modal-wide \.gt-step>\.modal-foot\{[\s\S]{0,320}background:var\(--surface-3\);\s*\n\s*border-top/.test(src));
 
 console.log(`\n${pass} 過 / ${fail} 敗`);
 process.exit(fail?1:0);

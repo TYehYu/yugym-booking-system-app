@@ -48,8 +48,10 @@ console.log('① 前兩版都退乾淨了');
      /function gtNeedsContract\(sales, plan\)\{/.test(src)
      && /if\(!\(s && s\.cat==='私人教練'\)\) return false;/.test(src)
      && /const needContract = gtNeedsContract\(s\);/.test(src));
+  /* 2026-09-08：判準抽成共用的 gtIsSingle（「不用簽約」與「不用約別」同一支）。 */
   ok('★★★ 單堂不簽約，而且判準是堂數不是方案名稱',
-     /if\(_n<=1\) return false;/.test(src)
+     /if\(gtIsSingle\(plan\)\) return false;/.test(src)
+     && /return \(\(Number\(p\.sessions_base\)\|\|0\)\+\(Number\(p\.sessions_bonus\)\|\|0\)\)<=1;/.test(src)
      && /判準是「總堂數 ≤ 1」而不是方案名稱/.test(src));
   ok('★★ 舊的「讀不到欄位就當成已付款」預設已經拔掉（那是最貴的預設）',
      !/getElementById\('gt-pay'\)\|\|\{\}\)\.value\|\|'paid'/.test(src));

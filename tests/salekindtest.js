@@ -282,7 +282,11 @@ ok('★★ 進第二步那條非同步線也要自己收一次，而且排在 Op
   const mk=id=>els[id]={id,style:{display:''},dataset:{},value:''};
   ['gt-salekind-row','gt-salekind-auto','gt-salekind-hint','gt-salekind','gt-install'].forEach(mk);
   const document={getElementById:id=>els[id]||null};
-  const fn=new Function('document',`${cut('gtSaleKindNeed')}\n${cut('gtSaleKindSync')}\nreturn {gtSaleKindNeed,gtSaleKindSync};`)(document);
+  /* 2026-09-08：gtSaleKindSync 多吃一支 gtIsSingle（單堂不用約別），harness 要一起帶進來。
+     window._grantPlanCache 給空的 → 讀不到方案就不當單堂，既有這幾條實跑不受影響。 */
+  const cutf=n=>{ const i=src.indexOf(`function ${n}(plan){`); if(i<0) throw new Error('切不到 '+n);
+    let d=0,j=src.indexOf('{',i); for(let k=j;k<src.length;k++){ if(src[k]==='{')d++; else if(src[k]==='}'){d--; if(!d) return src.slice(i,k+1);} } };
+  const fn=new Function('document','window',`${cutf('gtIsSingle')}\n${cut('gtSaleKindNeed')}\n${cut('gtSaleKindSync')}\nreturn {gtSaleKindNeed,gtSaleKindSync,gtIsSingle};`)(document,{});
 
   const run=(cat,inst)=>{ els['gt-salekind'].dataset.cat=cat; els['gt-salekind'].value='renewal';
     els['gt-install'].value=String(inst||1); fn.gtSaleKindSync();
