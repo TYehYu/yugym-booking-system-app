@@ -32,28 +32,30 @@ console.log('① 兩欄');
      && /class="adp-box adp-box-2c"/.test(src));
 }
 
-console.log('\n② 視窗靠上');
-ok('★★★ 改成靠上，不再垂直置中',
-   /#adp-sheet \.adp-box\{position:absolute;left:50%;top:6vh;transform:translateX\(-50%\);/.test(src)
-   && !/#adp-sheet \.adp-box\{position:absolute;left:50%;top:50%;transform:translate\(-50%,-50%\);/.test(src));
-ok('★★★ 只動挑選視窗；一般 .modal 維持垂直置中（0729 使用者回報後定的，別順手推翻）',
-   /只動 #adp-sheet 這一組挑選視窗。一般 \.modal 維持垂直置中/.test(src)
-   && /預約明細沒有置中/.test(src));
-ok('★★★ 靠上之後高度要自己管：太高就自己捲，不要溢出畫面外',
+console.log('\n② 視窗一律置中（2026-09-08 當天試過靠上就撤：「視窗靠中好了」）');
+ok('★★★ 挑選視窗是置中的',
+   /#adp-sheet \.adp-box\{position:absolute;left:50%;top:50%;transform:translate\(-50%,-50%\);/.test(src));
+ok('★★★ 全站沒有第二套（沒有任何視窗被釘在上緣）',
+   !/align-items:flex-start;\}/.test(src.slice(src.indexOf('.modal-bg{'), src.indexOf('.modal-bg{')+600))
+   && !/\.modal-bg:has\(>\.modal-wide\)\{align-items:flex-start;\}/.test(src));
+ok('★★ 撤掉的理由留在原地，免得日後又有人「順手改成靠上」',
+   /試了一版，使用者當天改口「視窗靠中好了」→ 退回置中/.test(src)
+   && /全站視窗一律垂直置中，沒有例外，不要再分兩套/.test(src));
+ok('★★★ 靠上那版加的 max-height 與自捲留著（置中一樣需要，內容太高要能捲）',
    /max-height:88vh;overflow-y:auto;overscroll-behavior:contain;/.test(src));
-ok('★★ 原因寫在原地（連著開好幾層，置中會讓標題每次落在不同高度）',
-   /挑選視窗是連著開好幾層的（挑課程 → 挑方案 → 挑日期）/.test(src));
 ok('　　原本寫在 HTML 上的 max-height 改由 CSS 統一管（不要兩個地方各寫一次）',
    !/class="adp-box" style="max-height:86vh;overflow-y:auto;"/.test(src));
 
-console.log('\n③ 簽約視窗（2026-09-08 使用者：「這個視窗也採用同樣規格」）');
-ok('★★★ 寬視窗也靠上（多步驟，每一步高度差很多）',
-   /\.modal-bg:has\(>\.modal-wide\)\{align-items:flex-start;\}/.test(src));
-ok('★★★ 只吃 .modal-wide，其他視窗維持垂直置中',
-   /只吃 \.modal-wide；其他視窗維持垂直置中（0729 使用者回報後定的）/.test(src)
-   && /\.modal-bg\{position:fixed;inset:0;background:rgba\(20,18,14,0\.55\);display:flex;align-items:center;/.test(src));
-ok('★★ 用 align-items 改，不動 .modal 自己的 max-height 與捲動',
-   /用 align-items 而不是改 \.modal 的定位/.test(src));
+console.log('\n③ 簽約視窗：方案牆上方的自訂捷徑移除（2026-09-08 使用者：「這邊移除自訂方案捷徑」）');
+ok('★★★ 方案牆上不再有那顆「✎ 自訂方案」（只剩註解記著它為什麼被拿掉）',
+   !/gt-card-name" style="font-size:13px;">✎ 自訂方案/.test(src)
+   && !/onclick="gtSwitchCustom\(\)"/.test(src));
+ok('★★★ gtSwitchCustom 本身留著 —— 自訂銷售那條路還在用',
+   /function gtSwitchCustom\(/.test(src) && /function salesCustom\(\)\{/.test(src));
+ok('★★ 自訂仍然進得去（「選擇課程」那張視窗裡本來就有一項）',
+   /\{k:'custom',   name:'自訂',/.test(src));
+ok('★★ 移除的理由寫在原地（同一個入口兩條路，而且它長得像方案卡卻不是方案）',
+   /在方案牆上再放一次等於同一個入口兩條路/.test(src));
 
 console.log('\n④ 方案卡右側的類型浮水印');
 ok('★★★ 規格照抄首頁課卡的 .tcard-seq（靠右、垂直置中、大字、低透明度）',
@@ -68,9 +70,14 @@ ok('★★★ 卡片要 position:relative，否則會定位到更外面的祖先
    /\.gt-card\.gt-card2\{position:relative;overflow:hidden;\}/.test(src));
 ok('★★ 內容要壓在浮水印上面（z-index 分層）',
    /\.gt-card\.gt-card2>\*:not\(\.gt-c2-seq\)\{position:relative;z-index:1;\}/.test(src));
-ok('★★ 文字比數字長 → 字級小一階、寬度封頂再截斷（「友善優惠」不會頂到價格）',
-   /max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src));
-ok('★★ 選中的那張浮水印再明顯一點', /\.gt-card\.gt-card2\.on \.gt-c2-seq\{opacity:\.28;\}/.test(src));
+ok('★★ 文字比數字長 → 寬度封頂再截斷（「友善優惠」不會頂到價格）',
+   /max-width:54%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src));
+ok('★★ 選中的那張浮水印再明顯一點', /\.gt-card\.gt-card2\.on \.gt-c2-seq\{opacity:\.5;\}/.test(src));
+ok('★★★ 2026-09-08 二修：再大一點、顏色再明顯（20→27px、.15→.32）',
+   /font-size:27px;font-weight:800;line-height:1;letter-spacing:-\.02em;\s*\n\s*color:var\(--pc,#1f6f54\);opacity:\.32;/.test(src));
+ok('★★ 放大之後寬度要跟著放寬，不然「友善優惠」四個字會被截掉',
+   /max-width:54%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src)
+   && /再大就會撞到左邊的價格/.test(src));
 ok('★★ 讀螢幕不重複念（名稱那一行已經講過）', /<span class="gt-c2-seq" aria-hidden="true">/.test(src));
 ok('★  單堂也有自己的標籤，不會落到看不出是什麼的「其他」',
    /friendly_promo:'友善優惠',single:'單堂'/.test(src));
