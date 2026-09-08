@@ -49,5 +49,23 @@ ok('★★ _slKeepCart 用完歸零', /if\(window\._slKeepCart\)\{ window\._slKe
 ok('★★ _salesPreMember 用完清掉', /window\._salesPreMember=null;/.test(open));
 ok('★  帶回來的會員真的會被選起來', /pre===m\.id\?'selected':''/.test(open));
 
+console.log('\n④ 銷售流程的每一條返回都要走 slBackToStep1（2026-09-08）');
+/* 使用者回報：「這個返回鈕　會移除前一個頁面選到的會員」——
+   自主訓練票券那張視窗當初漏掉，直接叫 openSalesModal() 重開一張空的第一步。 */
+ok('★★★ 銷售視窗底下沒有任何「返回」是直接叫 openSalesModal() 的',
+   !/onclick="openSalesModal\(\)">← 返回/.test(src));
+ok('★★★ 自主訓練票券那張改吃 slBackToStep1',
+   /<button class="btn btn-ghost" onclick="slBackToStep1\(\)">← 返回<\/button><button class="btn btn-green" onclick="submitFacilityTicketSale\(\)"/.test(src));
+ok('★★ slBackToStep1 認得 ms-member（自主訓練那張用的是這個 id，不是 gt-member）',
+   /\['gt-member','ms-member'\]\.map\(id=>\(document\.getElementById\(id\)\|\|\{\}\)\.value\|\|''\)/.test(src)
+   && /<select id="ms-member">/.test(src));
+ok('★★ 回去再選一次自主訓練時，會員還會被帶回那張視窗',
+   /const _fpre=window\._salesFacilityMember\|\|'';/.test(src)
+   && /window\._salesFacilityMember=mid;/.test(src));
+ok('★  其餘三條（教練課／自訂／團課體驗）本來就走 openGrantModal，那張的返回早就對了',
+   /onclick="\$\{sales\?'slBackToStep1\(\)':'closeModal\(\)'\}">← 返回/.test(src));
+ok('　　「銷售」那顆入口鈕不受影響（它本來就該開一張新的）',
+   /<button class="card mc-card mc-q3" onclick="openSalesModal\(\)">/.test(src));
+
 console.log(`\n${pass} 過 / ${fail} 敗`);
 process.exit(fail?1:0);
