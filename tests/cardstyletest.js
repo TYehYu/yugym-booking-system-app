@@ -258,7 +258,7 @@ ok('★ 舊的判斷（只看 staff／closed，沒帶日期）已經拿掉',
 ok('★★ 新的「更換授課教練」有日期守門（借 bkMoveBlockReason，與調整日期同一份）',
    /if\(!_leave && A\.isGroup && A\.staff\)\s*\n\s*rows \+= _mvBlk/.test(src));
 ok('★★★ 它自成一條 if —— 不能插進「指派代課／教練請假」那一對 if…else if 中間',
-   /if\(!_leave && A\.sub==='sub'\)[\s\S]{0,200}else if\(!_leave && A\.subLeave==='leave'/.test(src));
+   /if\(!_leave && !A\.isGroup && A\.sub==='sub'\)[\s\S]{0,260}else if\(!_leave && \(A\.subLeave==='leave'/.test(src));
 ok('　　成因寫在程式裡（canCoachLeave 本身沒有日期條件）',
    /都沒帶到日期，\s*\n\s*所以 8\/18 這種已經上完的課還給得出改期與請假/.test(src));
 
@@ -291,8 +291,9 @@ console.log('\n教練請假搬進「指派代課教練」（2026-08-21 使用者
 ok('★ 代課清單裡有請假這一列', /row\(`closeModal\(\);bkCoachLeave\('\$\{bid\}'\)`,'教練請假',/.test(src));
 /* 0823：櫃檯以上仍然走代課清單那條；沒有代課權限的（教練）在調整課程那一層
    直接給「教練請假」——否則代課一收走，他連請假都沒得按。 */
-ok('★ 有代課權限的人不在調整課程那一層重複給請假（走代課清單那一條）',
-   /if\(!_leave && A\.sub==='sub'\) rows\+=row\(`closeModal\(\);ashSubPick/.test(src));
+/* 2026-09-08：團課不給代課，所以條件多了 !A.isGroup；團課改由下面那一支直接給請假 */
+ok('★ 有代課權限的人不在調整課程那一層重複給請假（非團課走代課清單那一條）',
+   /if\(!_leave && !A\.isGroup && A\.sub==='sub'\)\s*\n\s*rows\+=row\(`closeModal\(\);ashSubPick/.test(src));
 ok('★★ 沒有代課權限的人，那一列改成直接請假（條件與代課清單裡那一列一致）',
    /rows\+=row\(`closeModal\(\);bkCoachLeave\('\$\{b\.id\}'\)`,'教練請假',\s*\n\s*\(typeof bkCoachLeaveSub==='function'\)\?bkCoachLeaveSub\(b\):'','ash-ei-danger'\);/.test(src)
    && /typeof canCoachLeave==='function' && canCoachLeave\(b\) && !bkIsCoachLeave\(b\)/.test(src));

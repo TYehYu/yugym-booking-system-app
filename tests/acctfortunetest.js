@@ -95,11 +95,13 @@ ok('　　venue 對所有課別開放、sub 只給「非自主訓練」且櫃檯
    && /function bkCanSub\(\)\{ return isDeskLike\(\); \}/.test(src));
 ok('★★ 教練沒有代課權限，但不能連「教練請假」一起失去（那是 0821 搬進代課清單的）',
    /subLeave: \(!bkCanSub\(\) && _editable && !bkIsSelf\(b\)\) \? 'leave' : null\};/.test(src)
-   && /else if\(!_leave && A\.subLeave==='leave'/.test(src)
+   /* 2026-09-08：團課也收掉代課，那一列的條件多了「團課＋有代課權限」這一支 */
+   && /else if\(!_leave && \(A\.subLeave==='leave' \|\| \(A\.isGroup && A\.sub==='sub'\)\)/.test(src)
    && /代課一收給櫃檯，教練會連請假入口\s*\n\s*一起失去/.test(src));
 ok('　　openVenueChange 的返回是 openBookingDetail，先立旗標才不會被丟進明細',
    /ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openVenueChange/.test(ei));
-ok('★ 視窗集合：指派代課教練', /A\.sub==='sub'\) rows\+=row\(`closeModal\(\);ashSubPick\('\$\{b\.id\}'\)`,'指派代課教練'/.test(ei));
+/* 2026-09-08：團課不給代課（改用〔更換授課教練〕），所以多了 !A.isGroup */
+ok('★ 視窗集合：指派代課教練（非團課才有）', /!A\.isGroup && A\.sub==='sub'\)\s*\n\s*rows\+=row\(`closeModal\(\);ashSubPick\('\$\{b\.id\}'\)`,'指派代課教練'/.test(ei));
 /* 2026-08-20 二修（使用者回報：團課的會員卡一疊很長，代課名單吊在課卡上方沒空間）——
    改成獨立視窗，不再用 bkOrbitSub 那個掛在課卡上的面板。 */
 ok('★ 代課改成獨立視窗（不再吊在課卡上）',

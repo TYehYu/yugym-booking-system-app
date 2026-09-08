@@ -58,12 +58,19 @@ ok('★★★ 「更換授課教練」只給團課＋櫃檯以上（一對一的
 ok('★★★ 已經上完／已簽到的課不給換（會回頭改掉鐘點費歸屬）——借 bkMoveBlockReason 守門',
    /rows \+= _mvBlk\s*\n\s*\? row\('','更換授課教練',_mvBlk,'ash-ei-off'\)/.test(src));
 ok('★★★ 自成一條 if，沒有把「教練請假」變成它的 else',
-   /if\(!_leave && A\.sub==='sub'\)[\s\S]{0,200}else if\(!_leave && A\.subLeave==='leave'/.test(src)
+   /if\(!_leave && !A\.isGroup && A\.sub==='sub'\)[\s\S]{0,260}else if\(!_leave && \(A\.subLeave==='leave'/.test(src)
    && !/grpCoachPick[\s\S]{0,80}else if\(!_leave && A\.subLeave/.test(src));
 ok('★★ 那一支自己也再擋一次權限（深連結／程式呼叫繞不過去）',
    /if\(!isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可更換授課教練'\); return; \}/.test(src));
 ok('★  兩個動作都有防連點（onceAct）',
    /onceAct\('grpdel', _grpDelRun\)/.test(src) && /onceAct\('grpco:'\+id/.test(src));
+
+console.log('\n⑥ 團課不給「指派代課教練」（2026-09-08）');
+ok('★★★ 代課那一列只留給非團課', /if\(!_leave && !A\.isGroup && A\.sub==='sub'\)/.test(src));
+ok('★★★ 但團課不能因此失去「教練請假」（0821 把它收進代課那張清單了）',
+   /else if\(!_leave && \(A\.subLeave==='leave' \|\| \(A\.isGroup && A\.sub==='sub'\)\)/.test(src));
+ok('★★ 原因寫在原地（團課是一個班，換誰上就是這個班換誰帶）',
+   /團課是「一個班」，不是「某位會員的課」/.test(src));
 
 console.log(`\n${pass} 過 / ${fail} 敗`);
 process.exit(fail?1:0);
