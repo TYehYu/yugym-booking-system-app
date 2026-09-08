@@ -791,6 +791,8 @@ body:has(#login-screen:not(.hidden)){background:#003d32;}
 .gt-c2-valid{font-size:10px;color:var(--t3);}
 /* 簽約寬版視窗（2026-07-28 三修：內容過高時視窗內捲動，返回/下一步永遠搆得到） */
 .modal.modal-wide{max-width:720px;width:94vw;max-height:92vh;overflow-y:auto;overflow-x:hidden;}
+/* 簽約／發放視窗收窄（2026-09-08）：方案矩陣 0907 改兩欄之後，720px 太寬 */
+.modal.modal-wide.gt-narrow{max-width:560px;}
 /* ⚠ overflow-y:auto 會讓 overflow-x 的 visible 自動變成 auto（CSS 規範），
    而 .modal-foot 用 margin:0 -18px 做滿版底條 —— 那 18px 就變成一條左右捲軸。
    （2026-07-30 使用者回報「銷售視窗下方出現左右捲軸」）滿版是刻意的，直接切掉即可。 */
@@ -2415,7 +2417,15 @@ tr:hover td{background:var(--card2);}
   margin:18px calc(var(--mpad,26px) * -1) calc(var(--mpad,26px) * -1);
   padding:12px var(--mpad,26px) var(--mpad,26px);
   background:var(--surface-3);
+  border-top:1px solid var(--bd);
   box-shadow:0 -10px 18px -12px rgba(60,50,38,.35);}
+/* 2026-09-08 使用者：「下面的返回跟下一步蓋到方案的按鈕」——
+   凍住的底列本來就會讓內容從它底下捲過去（那是「凍結」的意思），
+   但捲到最底時最後一列卡片會剛好貼在按鈕上緣，看起來像被切掉。
+   在最後一段內容與底列之間留一段空白，捲到底就有呼吸空間。
+   ⚠ 加在底列的**上一個**兄弟元素上，不動底列本身的 sticky 行為。 */
+.modal-wide .gt-step>.modal-foot{margin-top:26px;}
+.modal-wide.gt-narrow .gt-matrix-row{gap:10px;}
 .modal-tabs{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:var(--radius-md);margin-bottom:16px;overflow-x:auto;}
 .modal-tab{flex:1;white-space:nowrap;padding:8px 10px;text-align:center;font-size:12.5px;border-radius:var(--radius-xs);color:var(--text-secondary);font-weight:500;transition:.15s;cursor:pointer;}
 .md-head-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px 18px 14px;margin-bottom:14px;}
@@ -12347,8 +12357,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260908.1328';
-const APP_VERSION_LABEL = 'v260908.1328';
+const APP_VERSION = '260908.1341';
+const APP_VERSION_LABEL = 'v260908.1341';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -47898,6 +47908,20 @@ function salesGrpTrial(){
 }
 // 簽約最後一步：點業績歸屬教練＝完成收款（防連點）
 /* 2026-07-23：點業績歸屬教練後不再直接送出，改進入「簽約」步驟（ctSubmit 才真正發票券） */
+/* 這一筆銷售會不會走「簽約 → 待審核發放」（2026-09-08 抽成共用）——
+   只有教練課系（cat='私人教練'，含友善與自訂方案）要簽約；
+   團體課／團課體驗／運動按摩一律免簽約，點完業績歸屬就直接發票券。
+
+   ⚠ 這條線同時決定「付款狀態與付款方式要不要在賣的時候問」：
+     會簽約的那條路後面有「待審核發放」的收款資訊可以定案（0907 定案，所以賣的時候不問）；
+     免簽約的那條路**後面什麼都沒有**，賣完票就結束了 —— 不問就只能留下一張待付款的票，
+     櫃檯得再去票券卡上按〔收款〕。使用者 0908 回報的就是這個：
+     「團課這邊不用在顯示收款　團課不用簽約」。
+   ⚠ 0907 那版寫成「只要是從銷售入口來的就不問」，把免簽約那條路一起關掉了 —— 這是回補。 */
+function gtNeedsContract(sales){
+  const s=sales||window._grantSalesActive||null;
+  return !!(s && s.cat==='私人教練');
+}
 async function salesAttribSubmit(cid){
   if(window._grantSubmitting) return;   // 防連點
   if(window._grantSalesActive) window._grantSalesActive.coach_id=cid;
@@ -47905,7 +47929,7 @@ async function salesAttribSubmit(cid){
   /* 教練課（私人教練，含友善方案）需要簽約——含自訂方案（2026-08-05 使用者回報：
      「今天的自訂方案怎麼沒有出現合約？」原設計自訂免簽約，改成教練課類一律簽）。
      團體課／運動按摩／團課體驗（cat 小班肌力）維持免簽約。 */
-  const needContract = !!(s && s.cat==='私人教練');
+  const needContract = gtNeedsContract(s);
   if(needContract){ grantGoStep(4); return; }
   window._grantSubmitting=true;
   try{ await submitGrant(); }
@@ -49420,14 +49444,14 @@ async function openGrantModal(){
              ⚠ 後台「直接發放票券」照舊要選：它沒有後面那一步。
              ⚠ 建約這條路少了右半格，分期方式就搬上來跟總金額同一列，
                不要留一個空洞（版面只做最小調整）。 */''}
-        ${sales
+        ${gtNeedsContract(sales)
           ? `<div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher();gtSaleKindSync()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>`
           : `<div class="form-row"><label>付款方式</label><select id="gt-method" onchange="var w=document.getElementById('gt-splitcash-wrap');if(w)w.style.display=this.value==='split'?'':'none';"><option value="cash">現金</option><option value="transfer">匯款</option><option value="split">現金＋匯款</option></select></div>`}
       </div>
       ${/* 拆帳（2026-08-12 使用者需求：一筆 14400＝現金 7200＋匯款 7200）：填現金收多少，其餘記匯款 */''}
-      ${sales?'':`<div class="form-row" id="gt-splitcash-wrap" style="display:none;"><label>其中現金收多少（其餘記匯款）</label><input type="number" id="gt-splitcash" min="0" placeholder="例如 7200"></div>`}
+      ${gtNeedsContract(sales)?'':`<div class="form-row" id="gt-splitcash-wrap" style="display:none;"><label>其中現金收多少（其餘記匯款）</label><input type="number" id="gt-splitcash" min="0" placeholder="例如 7200"></div>`}
       ${/* 建約那條路：分期方式已經搬到上面那一列，付款狀態也不畫 → 整列不用畫 */''}
-      ${sales?'':`<div class="form-2col">
+      ${gtNeedsContract(sales)?'':`<div class="form-2col">
         <div class="form-row" id="gt-install-wrap" style="display:none;"><label>分期方式</label><select id="gt-install" onchange="refreshInstallPreview();refreshGrantVoucher();gtSaleKindSync()"><option value="1">不分期（一次付清）</option><option value="2">分 2 期（分段開通）</option><option value="3">分 3 期（分段開通）</option></select></div>
         ${/* ══ 2026-09-07 使用者定案：建立合約時不再問付款狀態 ══════════════════
              「建立合約的時候　如果選了已付款　後續無法再發送電子合約
@@ -49519,8 +49543,12 @@ async function openGrantModal(){
       </div>
     </div>`:''}`);
   _grantPreMember=null;
-  /* 2026-07-28 使用者指示：簽約視窗放大，方案矩陣一次展示不捲動 */
-  const _mEl=document.querySelector('#modal-bg .modal'); if(_mEl) _mEl.classList.add('modal-wide');
+  /* 2026-07-28 使用者指示：簽約視窗放大，方案矩陣一次展示不捲動。
+     2026-09-08 使用者：「銷售視窗的寬度可以收斂」—— 0907 把矩陣從三欄改兩欄之後，
+     720px 讓兩張卡各撐到 660px，一張卡裡只有四行字，橫向全是空白。
+     加一個 .gt-narrow 把它收到 560px（.modal-wide 本身不動，別的視窗還在用）。 */
+  const _mEl=document.querySelector('#modal-bg .modal');
+  if(_mEl){ _mEl.classList.add('modal-wide'); _mEl.classList.add('gt-narrow'); }
   refreshGrantPlans(); // 依預設選到的會員載入可用方案
 }
 /* 分期（內建功能）的約別不給選（2026-08-24 使用者定案：「這種儲值就要移除類別選項，
@@ -50372,7 +50400,10 @@ async function submitGrant(){
     /* 2026-09-07：建約（sales）那條路沒有這個欄位了，一律 unpaid。
        ⚠ 預設值同時從 'paid' 改成 'unpaid' —— 欄位不見時默默當成「已收到錢」
          是最貴的那一種預設（錢沒收到卻記了一筆帳、票也發了）。 */
-    payment_status:window._grantSalesActive?'unpaid':(((document.getElementById('gt-pay')||{}).value)||'unpaid'),
+    /* 2026-09-07：會走簽約→待審核發放的那條路一律 unpaid（收款在後面那一步定案）。
+       2026-09-08 修：判斷從「有沒有 sales」改成「會不會簽約」——
+       團課／運動按摩免簽約，賣完就結束，一律 unpaid 會留下一張沒人收的待付款票。 */
+    payment_status:gtNeedsContract()?'unpaid':(((document.getElementById('gt-pay')||{}).value)||'unpaid'),
     inv:invReadFields(),   /* 電子發票（2026-09-02）；電子合約要等審核，那時表單早關了，所以一起存起來 */
   };
   {

@@ -33,22 +33,29 @@ console.log('① 前兩版都退乾淨了');
      /勾選框與「依角色自動判斷」兩版都退場，改用\*\*既有的付款狀態\*\*/.test(src));
 /* 2026-09-07 使用者定案：「建立合約的時候不要有是否付款的選項　一律由櫃檯後面收款再選擇」
    —— 建約那條路一律 unpaid，只有後台「直接發放票券」還讀欄位。 */
-  ok('★★ 建約一律 unpaid；只有直接發放才讀欄位，而且預設也是 unpaid',
-     /payment_status:window\._grantSalesActive\?'unpaid':\(\(\(document\.getElementById\('gt-pay'\)\|\|\{\}\)\.value\)\|\|'unpaid'\),/.test(src));
+/* 2026-09-08 修：判斷從「有沒有 sales」改成「會不會簽約」（gtNeedsContract）——
+   團課／運動按摩免簽約、賣完就結束，一律 unpaid 會留下一張沒人收的待付款票
+   （使用者 0908：「團課這邊不用在顯示收款　團課不用簽約」）。 */
+  ok('★★ 會簽約的那條路一律 unpaid；免簽約與直接發放才讀欄位，預設也是 unpaid',
+     /payment_status:gtNeedsContract\(\)\?'unpaid':\(\(\(document\.getElementById\('gt-pay'\)\|\|\{\}\)\.value\)\|\|'unpaid'\),/.test(src));
+  ok('★★★ 「會不會簽約」只有一份判斷，賣票與業績歸屬那一步共用',
+     /function gtNeedsContract\(sales\)\{/.test(src)
+     && /return !!\(s && s\.cat==='私人教練'\);/.test(src)
+     && /const needContract = gtNeedsContract\(s\);/.test(src));
   ok('★★ 舊的「讀不到欄位就當成已付款」預設已經拔掉（那是最貴的預設）',
      !/getElementById\('gt-pay'\)\|\|\{\}\)\.value\|\|'paid'/.test(src));
   ok('★★ 真正把它翻成 paid 的是櫃檯那一步（grFillApply），建約不碰',
      /payment_status:'paid',\s+\/\/ 走到這一步就是櫃檯已經收到錢了/.test(src));
 /* 2026-09-07 二修：付款方式也退場了，整列（分期方式＋付款狀態）改成建約路不畫，
    分期方式搬去跟總金額同一列。所以釘的東西從「那一格」變成「那一整列」。 */
-  ok('★★ 付款狀態與付款方式都只畫給「沒有合約」那條路',
-     /\$\{sales\?'':`<div class="form-2col">/.test(src)
+  ok('★★ 付款狀態與付款方式只畫給「不會簽約」那條路（免簽約與直接發放）',
+     /\$\{gtNeedsContract\(sales\)\?'':`<div class="form-2col">/.test(src)
      && /<label>付款狀態<\/label><select id="gt-pay"/.test(src)
      && /: `<div class="form-row"><label>付款方式<\/label><select id="gt-method"/.test(src));
-  ok('★★ 建約那一路：分期方式搬到總金額那一列（不留半格空洞）',
-     /\$\{sales\s*\n\s*\? `<div class="form-row" id="gt-install-wrap"/.test(src));
+  ok('★★ 會簽約那一路：分期方式搬到總金額那一列（不留半格空洞）',
+     /\$\{gtNeedsContract\(sales\)\s*\n\s*\? `<div class="form-row" id="gt-install-wrap"/.test(src));
   ok('★★ 拆帳那一列也跟著付款方式走',
-     /\$\{sales\?'':`<div class="form-row" id="gt-splitcash-wrap"/.test(src));
+     /\$\{gtNeedsContract\(sales\)\?'':`<div class="form-row" id="gt-splitcash-wrap"/.test(src));
   ok('★★ 付款方式讀不到欄位時預設現金（送簽前會用櫃檯選的重生合約）',
      /const method=\(\(document\.getElementById\('gt-method'\)\|\|\{\}\)\.value\)\|\|'cash';/.test(src));
   ok('★★ 合約草稿不謊稱現金（沒有欄位就寫「收款時決定」）',
