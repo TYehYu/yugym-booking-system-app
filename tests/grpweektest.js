@@ -71,5 +71,11 @@ ok('★★★ memh2GrpJoin 也擋 —— 那是兩條路的匯流處，落到 ms
 ok('★★ 擋下時說得出「這一堂是哪天、目前開放到哪天」，不是一句不能約',
    (src.match(/目前開放到 \$\{grpBookLastDayTxt\(\)\}。/g)||[]).length>=2);
 
+console.log('\n⑥ 資料庫端最後一道（fn_member_join_group，2026-09-08 已部署）');
+ok('★★★ 前端擋不到的路要有錯誤碼可以說話',
+   /'BOOKING\.TOO_FAR':'團體課開課前一週才開放報名，這一堂還沒開放'/.test(src));
+ok('★★ 註明那一道在資料庫端（改 edge／RPC 前要先比對線上版本）',
+   /資料庫端也擋一週以外的場次（fn_member_join_group）/.test(src));
+
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
