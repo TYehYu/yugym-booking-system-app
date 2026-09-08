@@ -12380,8 +12380,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260908.1728';
-const APP_VERSION_LABEL = 'v260908.1728';
+const APP_VERSION = '260908.1732';
+const APP_VERSION_LABEL = 'v260908.1732';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15404,7 +15404,7 @@ function enterApp(){
   }else{
     let firstItems;
     if(SESSION.role==='admin') firstItems = isMobile?MOBILE_ADMIN_NAV:NAV.admin;
-    else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:(SESSION.is_manager?NAV.front_desk:NAV.coach);   /* 店長桌機同櫃台落點 */
+    else if(SESSION.role==='coach') firstItems = isMobile?mobileCoachNavItems():(SESSION.is_manager?NAV.front_desk:NAV.coach);   /* 主管桌機同櫃台落點 */
     else if(SESSION.role==='front_desk') firstItems = isMobile?MOBILE_FRONTDESK_NAV:NAV.front_desk;
     else firstItems = NAV[SESSION.role]||[];
     /* 下拉更新後回到原分頁（2026-08-19 使用者指示：行事曆留在行事曆、報表留在報表） */
@@ -15459,7 +15459,7 @@ function switchPreviewRole(role){
   }else{
     let firstItems;
     if(SESSION.role==='admin') firstItems = isMobile?MOBILE_ADMIN_NAV:NAV.admin;
-    else if(SESSION.role==='coach') firstItems = isMobile?MOBILE_COACH_NAV:(SESSION.is_manager?NAV.front_desk:NAV.coach);   /* 店長桌機同櫃台落點 */
+    else if(SESSION.role==='coach') firstItems = isMobile?mobileCoachNavItems():(SESSION.is_manager?NAV.front_desk:NAV.coach);   /* 主管桌機同櫃台落點 */
     else if(SESSION.role==='front_desk') firstItems = isMobile?MOBILE_FRONTDESK_NAV:NAV.front_desk;
     else firstItems = NAV[SESSION.role]||[];
     /* 下拉更新後回到原分頁（2026-08-19 使用者指示：行事曆留在行事曆、報表留在報表） */
@@ -15793,6 +15793,13 @@ const MOBILE_COACH_NAV=[
   {key:'coach_calendar',label:'我的預約'},
   {key:'coach_salary',label:'薪資紀錄'},
 ];
+/* 不能開課的員工看不到行事曆（2026-08-21 使用者指示：「有[開課]才可以看到行事曆
+   不然一律只能看到首頁」）—— 底部導覽 coachBottomNavItems 早就擋了，側邊這一份沒擋，
+   於是余東翰（can_teach=false）從側邊還是進得去。兩份導覽要走同一條線。 */
+function mobileCoachNavItems(){
+  const canTeach = !SESSION || SESSION.can_teach!==false;
+  return canTeach ? MOBILE_COACH_NAV : MOBILE_COACH_NAV.filter(n=>n.key!=='coach_calendar');
+}
 // 櫃台｜手機版：精簡（行事曆只看月曆、會員只搜尋、票券只看方案；櫃台主力為平板/桌機）
 const MOBILE_FRONTDESK_NAV=[
   {key:'fd_calendar',label:'行事曆'},
@@ -54086,6 +54093,12 @@ async function coachHomeV2(){
                {k:'mid',label:'中班',col:'#1F6F54'},
                {k:'pm',label:'晚班',col:'#3A5BA0'}];
   const myShifts=(shifts||[]).filter(x=>x&&x.emp_id===SESSION.id&&x.date===today);
+  /* 不用打卡也不用值班的人（2026-09-08 檢查兩位主管的手機端時發現）——
+     黃沛瀞 need_punch=false、need_duty=false，但這裡的「今日值班」天天顯示「未排班」，
+     而且那兩格是打卡入口，點下去直接開掃碼。全檔其他打卡入口（浮動鈕、問候條、
+     出勤卡、桌機首頁）都看 need_punch，只有這一頁沒看。 */
+  const _meNow=(coaches||[]).find(c=>c&&c.id===SESSION.id)||{};
+  const _noDuty=(_meNow.need_punch===false)&&(_meNow.need_duty===false);
   const att=(attendance||[]).find(a=>a&&a.emp_id===SESSION.id&&a.date===today)||null;
   /* 2026-09-07：只有真正的排班請假才把整天標成請假 —— 課程請假的補登列跳過，
      否則「晚上有一堂請假」會蓋掉白天正常的班（見 shIsClassLeave）。 */
@@ -54242,11 +54255,14 @@ async function coachHomeV2(){
       <div class="admh-kpis">
         <div class="admh-kpi"><span>教練課</span><b>${_ptN} 堂</b></div>
         <div class="admh-kpi"><span>團體課</span><b>${_grpN} 堂</b></div>
-        <div class="admh-kpi admh-rev admh-rev-lb chv2-dutytap" role="button" tabindex="0"
+        ${_noDuty
+          ? `<div class="admh-kpi admh-rev admh-rev-lb"><span>今日值班</span></div>
+             <div class="admh-kpi admh-rev"><span class="chv2-bands"><span class="chv2-band chv2-band-off">不需值班</span></span></div>`
+          : `<div class="admh-kpi admh-rev admh-rev-lb chv2-dutytap" role="button" tabindex="0"
              onclick="chv2DutyTap()"
              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();chv2DutyTap();}"><span>今日值班</span></div>
         <div class="admh-kpi admh-rev chv2-dutytap" onclick="chv2DutyTap()">
-          <span class="chv2-bands">${bandChip}</span>${dutyTxt?`<b class="chv2-punch${(att&&att.clock_in)?' on':''}">${dutyTxt}</b>`:''}</div>
+          <span class="chv2-bands">${bandChip}</span>${dutyTxt?`<b class="chv2-punch${(att&&att.clock_in)?' on':''}">${dutyTxt}</b>`:''}</div>`}
       </div>
     </div>
     <div class="admh-div"></div>
@@ -54278,10 +54294,12 @@ async function coachHomeV2(){
 }
 PAGES.coach_notifications=async function(){
   const today=ymd(TODAY); const month=today.slice(0,7);
-  const[reqs,bookings,att]=await Promise.all([
+  const[reqs,bookings,att,_cos]=await Promise.all([
     dbGetAll('punch_requests').catch(()=>[]),
     dbGetAll('bookings').catch(()=>[]),
-    dbGetAll('attendance').catch(()=>[])]);
+    dbGetAll('attendance').catch(()=>[]),
+    dbGetAll('coaches').catch(()=>[])]);
+  const _me=(_cos||[]).find(c=>c&&c.id===SESSION.id)||{};
   const items=[];
   // 補打卡：自己尚未核准的申請
   (reqs||[]).filter(r=>r.emp_id===SESSION.id && r.status==='pending').forEach(r=>{
@@ -54290,7 +54308,10 @@ PAGES.coach_notifications=async function(){
   // 今日未打卡提醒
   const todayRec=(att||[]).find(a=>a.emp_id===SESSION.id&&a.date===today);
   const hasClassToday=(bookings||[]).some(b=>bkCoachId(b)===SESSION.id&&b.date===today&&b.status!=='cancelled');
-  if(hasClassToday && (!todayRec||!todayRec.clock_in)){
+  /* 2026-09-08：要打卡的人才提醒。原本只看「今天有沒有課」——
+     免打卡的員工（need_punch=false）每一個有課的日子都會掛一條紅字，
+     而且那顆右下角的打卡鈕對他根本不會出現（updatePunchFab 早就擋了）。 */
+  if(_me.need_punch!==false && hasClassToday && (!todayRec||!todayRec.clock_in)){
     items.push({dot:'#a86b1a',t:`今日尚未上班打卡`,sub:`點右下角打卡鈕完成上班`});
   }
   // 近期被取消的預約（自己的課，近 7 天）
