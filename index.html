@@ -12375,8 +12375,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260908.1718';
-const APP_VERSION_LABEL = 'v260908.1718';
+const APP_VERSION = '260908.1722';
+const APP_VERSION_LABEL = 'v260908.1722';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -46338,7 +46338,18 @@ function ppEmpRulesHtml(id){
     ${row('團課單價', Number(_grp)>0?_m(_grp)+' / 人次':'')}
     ${row('續約獎金', Number(c.renew_bonus)>0?_m(c.renew_bonus)+' / 張':'')}
     ${row('主管獎金', c.is_manager?'是（名單與門檻見編輯）':'')}
-    ${row('主管津貼', Number(c.supervisor_bonus)>0?_m(c.supervisor_bonus):'')}
+    ${/* 主管津貼（2026-09-08 修）：原本讀 c.supervisor_bonus —— 那是**逐人**的舊欄位，
+         0908 已退場，calcSalary 一直讀的是全域 SALARY_GLOBAL.supervisor_bonus。
+         黃沛瀞那一列存著舊值 4000，於是檢視頁顯示 4000、實際發 3000，兩個數字打架。
+         ⚠ 2026-09 起才看 is_manager（LEADER_TEAM_FROM），八月以前照舊看 is_supervisor，
+           否則回頭看歷史薪資會憑空多一筆從沒發過的津貼。 */''}
+    ${row('主管津貼', (()=>{
+      const _byMgr = String(ym||'') >= LEADER_TEAM_FROM;
+      const _isSup = c.is_supervisor || (_byMgr && c.is_manager);
+      if(!_isSup) return '';
+      const _amt = _byMgr ? (Number((window.SALARY_GLOBAL||{}).supervisor_bonus)||0) : (Number(c.supervisor_bonus)||0);
+      return _amt>0 ? _m(_amt)+'<span style="font-size:11px;color:var(--t3);font-weight:400;">　全店共用</span>' : '';
+    })())}
     ${row('需要值班', c.need_duty===false?'否':'是')}
     ${row('值班時薪', Number(c.duty_hourly)>0?_m(c.duty_hourly):'')}
     <div style="text-align:right;margin-top:10px;">
@@ -47783,12 +47794,13 @@ function payRoleFields(prefix,c,showRate){
     ${rateField}
     <div id="${prefix}-mgr-wrap" style="display:${normEmp(c.employment_type||c.pay_type)==='full_time'?'block':'none'};border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-bottom:14px;">
       <div style="font-size:11.5px;color:var(--t2);margin-bottom:10px;">管理職（限正職）</div>
-      <div class="form-2col">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="${prefix}-ismgr" ${c.is_manager?'checked':''} onchange="document.getElementById('${prefix}-mgrbonus-row').style.display=this.checked?'block':'none'">主管</label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="${prefix}-issup" ${c.is_supervisor?'checked':''} onchange="document.getElementById('${prefix}-supbonus-row').style.display=this.checked?'block':'none'">主管</label>
-      </div>
-      <div class="form-row" id="${prefix}-mgrbonus-row" style="display:${c.is_manager?'block':'none'};margin-top:10px;margin-bottom:8px;"><label>主管管理獎金（元）</label><input type="number" id="${prefix}-mgrbonus" value="${c.manager_bonus||0}" placeholder="例：2000 / 4000 / 6000"></div>
-      <div class="form-row" id="${prefix}-supbonus-row" style="display:${c.is_supervisor?'block':'none'};margin-bottom:0;"><label>主管管理獎金（元）</label><input type="number" id="${prefix}-supbonus" value="${c.supervisor_bonus||0}" placeholder="例：4000"></div>
+      ${/* 2026-09-08：原本這裡是兩顆勾（店長／主管津貼）＋兩個逐人金額欄位。
+           正名之後兩顆都叫「主管」，而且那兩個金額欄位**從來沒有被計算讀過**
+           （calcSalary 讀的是全域 supervisor_bonus）—— 存得進去卻不影響薪水，
+           是最難發現的那種壞掉。整組收掉，只留一顆開關。
+           津貼金額在「薪資規則 → 管理職」那一塊改，全店共用。 */''}
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="${prefix}-ismgr" ${c.is_manager?'checked':''}>主管</label>
+      <div style="font-size:11px;color:var(--t3);margin-top:6px;">主管每月固定津貼與團隊獎金池的門檻、名單，都在「薪資規則 → 管理職」設定（全店共用）。</div>
     </div>`;
 }
 function toggleMgr(prefix){
@@ -47799,14 +47811,13 @@ function readPayRoleFields(prefix){
   const empType=normEmp(document.getElementById(prefix+'-pay').value);
   const ft=empType==='full_time';
   const isMgr=ft&&document.getElementById(prefix+'-ismgr').checked;
-  const isSup=ft&&document.getElementById(prefix+'-issup').checked;
   const customEl=document.getElementById(prefix+'-custom'); // 自訂薪資開關（邀請階段無）
   const out={
     employment_type:empType,
     hire_date:document.getElementById(prefix+'-hire').value||null,
-    is_manager:isMgr, is_supervisor:isSup,
-    manager_bonus:isMgr?Number(document.getElementById(prefix+'-mgrbonus').value)||0:0,
-    supervisor_bonus:isSup?Number(document.getElementById(prefix+'-supbonus').value)||0:0,
+    is_manager:isMgr,
+    /* 2026-09-08：is_supervisor／manager_bonus／supervisor_bonus 三個逐人欄位不再寫入 ——
+       欄位留在資料表裡（八月以前的薪資單還讀 is_supervisor），但不該再產生新值。 */
   };
   const promoteEl=document.getElementById(prefix+'-promote');
   if(promoteEl) out.promote_date=promoteEl.value||null;

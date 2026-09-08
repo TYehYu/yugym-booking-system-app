@@ -164,5 +164,25 @@ ok('★★ 全域設定頁那一格（sg-sup）仍是同一個值，兩邊改都
 ok('★  講明「固定發給每一位主管」，不會被讀成整池要分的總額',
    /固定發給每一位主管/.test(src));
 
+console.log('\n⑧ 逐人的舊欄位不能再冒出來（2026-09-08 使用者回報：黃沛瀞的主管津貼顯示 4000，實發 3000）');
+ok('★★★ 薪資規則檢視頁改讀全域，不再讀逐人的 c.supervisor_bonus',
+   !/row\('主管津貼', Number\(c\.supervisor_bonus\)/.test(src)
+   && /const _amt = _byMgr \? \(Number\(\(window\.SALARY_GLOBAL\|\|\{\}\)\.supervisor_bonus\)\|\|0\)/.test(src));
+ok('★★★ 檢視頁也吃 2026-09 起才看 is_manager 的那道月份閘（跟 calcSalary 同一條線）',
+   /const _byMgr = String\(ym\|\|''\) >= LEADER_TEAM_FROM;/.test(src)
+   && /const _isSup = c\.is_supervisor \|\| \(_byMgr && c\.is_manager\);/.test(src));
+ok('★★ 顯示時標「全店共用」，不會被讀成這一位專屬的金額',
+   /全店共用<\/span>/.test(src));
+ok('★★★ 建立員工的表單不再有兩顆都叫「主管」的開關',
+   !/id="\$\{prefix\}-issup"/.test(src));
+ok('★★★ 那兩個從來沒被計算讀過的逐人金額欄位收掉了（存得進去卻不影響薪水最難發現）',
+   !/id="\$\{prefix\}-mgrbonus"/.test(src) && !/id="\$\{prefix\}-supbonus"/.test(src)
+   && !/manager_bonus:isMgr\?/.test(src) && !/supervisor_bonus:isSup\?/.test(src));
+ok('★★ 欄位本身留在資料表（八月以前的薪資單還讀 is_supervisor），只是不再產生新值',
+   /const supC=emp\.is_supervisor\?\(Number\(Gc\.supervisor_bonus\)\|\|0\):0;/.test(src)
+   && /三個逐人欄位不再寫入/.test(src));
+ok('★  表單改成指路：金額在「薪資規則 → 管理職」改，全店共用',
+   /都在「薪資規則 → 管理職」設定（全店共用）/.test(src));
+
 console.log(`\n${pass} 過 / ${fail} 敗`);
 process.exit(fail?1:0);
