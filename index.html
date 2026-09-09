@@ -4409,6 +4409,11 @@ button.wp-tag.wp-tag-off:hover{background:var(--card2);color:var(--t2);border-co
 /* 上在左、下在右（2026-09-09 三修）：方向跟位置一致，不會按錯 */
 .wp-item.wp-item-ord{padding-left:40px;padding-right:40px;cursor:grab;}
 .wp-item.wp-item-ord:active{cursor:grabbing;}
+/* 排序模式關掉 hover 邊框（2026-09-09）：重畫後滑鼠沒動，那個位子已經換成另一列，
+   hover 框會看起來像「跳到別人身上」。改成只有剛移動的那一列描框。 */
+.wp-item.wp-item-ord:hover{border-color:var(--bd);}
+.wp-item.wp-item-sel{border-color:var(--brand,#1f6f54);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--brand,#1f6f54) 28%,transparent);}
 .wp-item-b{position:absolute;top:50%;transform:translateY(-50%);width:28px;height:28px;
   border:1px solid var(--bd);background:#fff;color:var(--t2);border-radius:8px;
   font-size:11px;line-height:1;cursor:pointer;padding:0;font-family:inherit;
@@ -12629,8 +12634,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260909.1742';
-const APP_VERSION_LABEL = 'v260909.1742';
+const APP_VERSION = '260909.1744';
+const APP_VERSION_LABEL = 'v260909.1744';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -65088,7 +65093,7 @@ function wpPaint(){
            ⚠ 排序模式下整列不給點開編輯：正在調順序時誤觸就會跳出視窗，順序也白調了。
            ⚠ 拖移只在排序模式開著（手機沒有 HTML5 drag，箭頭才是主要的路）。 */
         const o=!!S._ord;
-        return `<div class="wp-item${o?' wp-item-ord':''}" data-i="${i}"${o?'':` onclick="wpItemEdit(${i})"`}
+        return `<div class="wp-item${o?' wp-item-ord':''}${(o&&S._ordSel===i)?' wp-item-sel':''}" data-i="${i}"${o?'':` onclick="wpItemEdit(${i})"`}
           ${o?`draggable="true" ondragstart="wpDragStart(event,${i})" ondragend="wpDragEnd(event)"
              ondragover="wpDragOver(event,${i})" ondrop="wpDrop(event,${i})"`:''}>
           ${/* 上在左、下在右（2026-09-09 三修，使用者：「左邊加一欄上　右邊加一欄下」）——
@@ -65151,13 +65156,18 @@ async function _wpShareSave(){
    ⚠ 拖移中不能觸發 wpItemEdit：放開時瀏覽器會補一個 click，
      所以拖過就立一個旗標，那一次的 click 直接吃掉。 */
 /* 「順序」開關（2026-09-09 二修）：只影響畫面，不動資料 */
-function wpOrdToggle(){ const S=window._wp; if(!S) return; S._ord=!S._ord; wpPaint(); }
+function wpOrdToggle(){ const S=window._wp; if(!S) return; S._ord=!S._ord; S._ordSel=null; wpPaint(); }
 function wpMove(i,d){
   const S=window._wp; if(!S) return;
   const j=i+d;
   if(j<0||j>=S.items.length) return;
   const [x]=S.items.splice(i,1);
   S.items.splice(j,0,x);
+  /* 外框跟著被移動的那一列（2026-09-09 使用者回報：「點了外框應該包在那列被移動的動作列
+     我剛剛點史密斯肩推往下　結果框在單手划船動力鏈」）——
+     ⚠ 原因是 :hover：重畫之後滑鼠沒動，落在那個位子的已經換成**另一列**了，
+       所以框看起來像跳到別人身上。排序模式關掉 hover 邊框，改成明確標記移動後的那一列。 */
+  S._ordSel=j;
   wpPaint();
 }
 function wpDragStart(e,i){
@@ -65182,6 +65192,7 @@ function wpDrop(e,i){
   window._wpDragged=1;                       /* 放開後那一次 click 不要開編輯 */
   const [x]=S.items.splice(from,1);
   S.items.splice(i,0,x);
+  S._ordSel=i;                               /* 外框跟著被拖的那一列（同 wpMove） */
   wpPaint();
 }
 function wpDragEnd(){

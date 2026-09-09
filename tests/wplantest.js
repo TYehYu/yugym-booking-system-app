@@ -309,7 +309,7 @@ ok('★★★ 拖完那一下的 click 被吃掉',
 ok('★★★ 上下鍵在排序模式才出現，按了就把那一列往上／往下移',
    /onclick="event\.stopPropagation\(\);wpMove\(\$\{i\},-1\)"/.test(src)
    && /onclick="event\.stopPropagation\(\);wpMove\(\$\{i\},1\)"/.test(src)
-   && /function wpOrdToggle\(\)\{ const S=window\._wp; if\(!S\) return; S\._ord=!S\._ord; wpPaint\(\); \}/.test(src));
+   && /function wpOrdToggle\(\)\{ const S=window\._wp; if\(!S\) return; S\._ord=!S\._ord; S\._ordSel=null; wpPaint\(\); \}/.test(src));
 ok('★★★ 上在左、下在右（疊在同一邊很容易按錯）',
    /\.wp-item-up\{left:7px;\}/.test(src) && /\.wp-item-dn\{right:7px;\}/.test(src)
    && /兩顆疊在同一邊時很容易按錯上下；分到兩側，方向跟位置一致/.test(src));
@@ -327,6 +327,26 @@ ok('★★ 只動記憶體，要按「儲存方案」才寫回資料庫（跟改
    /只動記憶體裡的 S\.items，要按「儲存方案」才寫回資料庫/.test(src));
 ok('★★ 唯讀的那份（別人分享的）本來就不走這條 —— 它畫的是 wp-item-ro，沒有排序模式',
    /<div class="wp-item wp-item-ro">/.test(src) && !/wp-item-ro[\s\S]{0,200}wpOrdToggle/.test(src));
+
+/* 2026-09-09 使用者回報：「點了外框應該包在那列被移動的動作列　我剛剛點史密斯肩推往下
+   結果框在單手划船動力鏈」—— 原因是 :hover：重畫後滑鼠沒動，那個位子已經換成另一列。 */
+{
+  const S={items:[{name:'A'},{name:'B'},{name:'C'}],_ord:true,_ordSel:null};
+  const MV=new Function('window','wpPaint','return '+g('function wpMove(i,d){','\n}'))({_wp:S},()=>{});
+  MV(0,1);
+  eq('★★★ 移動後外框記在**新位子**（＝被移動的那一列）', [S.items.map(x=>x.name), S._ordSel], [['B','A','C'],1]);
+  MV(1,-1);
+  eq('★★★ 移回去也跟著', [S.items.map(x=>x.name), S._ordSel], [['A','B','C'],0]);
+  MV(0,-1);
+  eq('★★ 移不動時不改標記', S._ordSel, 0);
+}
+ok('★★★ 排序模式關掉 hover 邊框（那正是「框跑到別人身上」的來源）',
+   /\.wp-item\.wp-item-ord:hover\{border-color:var\(--bd\);\}/.test(src)
+   && /重畫後滑鼠沒動，那個位子已經換成另一列，\s*\n\s*hover 框會看起來像「跳到別人身上」/.test(src));
+ok('★★ 被移動的那一列描框', /\.wp-item\.wp-item-sel\{border-color:var\(--brand,#1f6f54\);/.test(src)
+   && /\$\{\(o&&S\._ordSel===i\)\?' wp-item-sel':''\}/.test(src));
+ok('★★ 拖移放開後也標在被拖的那一列', /S\._ordSel=i;                               \/\* 外框跟著被拖的那一列（同 wpMove） \*\//.test(src));
+ok('★★ 關掉排序模式就把標記清掉', /S\._ord=!S\._ord; S\._ordSel=null;/.test(src));
 
 console.log('\n⑭ 教練手機首頁的課卡加「課表」圓鈕（2026-09-09 使用者指示）');
 ok('★★★ 圓鈕直接開訓練課表，不用先點開課卡（上課現場少一層）',
