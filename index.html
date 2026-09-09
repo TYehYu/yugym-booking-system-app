@@ -12769,8 +12769,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260909.2247';
-const APP_VERSION_LABEL = 'v260909.2247';
+const APP_VERSION = '260909.2251';
+const APP_VERSION_LABEL = 'v260909.2251';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -33200,10 +33200,12 @@ async function expandBkCard(el, id){
      ⚠ 自主訓練不畫：那是會員自己來、教練不在場，沒有訓練要記。
      ⚠ 行事曆情境（_calCtx）不畫：那邊的圓鈕只做「預約與調整」（0819 定案）。
      ⚠ 別人的課也不畫（own）—— 訓練紀錄是掛在帶課教練身上的。
-     ⚠ 櫃檯不畫（2026-09-09 使用者：「課表的圓形按鈕不要出現在櫃檯桌機的課卡」）——
-       櫃檯不帶課，沒有訓練要記；而且 openTrainingLog 本身就只放行帶課的人。
-       整個角色都不畫，不只桌機：同一顆鈕在櫃檯手機上一樣沒有意義。 */
-  if(!_calCtx && own && !bkIsSelf(b) && !(SESSION&&SESSION.role==='front_desk'))
+     ⚠ 只有教練與管理員畫（2026-09-09 使用者：「課表的圓形按鈕不要出現在櫃檯桌機的課卡」）——
+       櫃檯不帶課，沒有訓練要記；整個角色都不畫，不只桌機。
+       ⚠ 同日二修：原本寫成「排除 front_desk」，使用者回報櫃檯桌機還是看得到。
+         改成正面白名單「教練或管理員才畫」—— 排除法只要有一種角色狀態沒被列到就會漏，
+         白名單漏了只會少畫一顆鈕，不會把不該看的人放進來。 */
+  if(!_calCtx && own && !bkIsSelf(b) && tlCanLog())
     btns += evoBtn('evo-t2','',`collapseBkCard();openTrainingLog('${id}')`,'plan','課表');
   if(!_calCtx && (staff||coachCk) && b.no_show===true) btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkUndoNoShow('${id}')`,'noshow','取消未到課');
   else if(!_calCtx && (staff||coachCk) && b.status==='coach_leave') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkCoachLeaveNoShow('${id}')`,'noshow','未到課');
@@ -54925,7 +54927,8 @@ async function coachHomeV2(){
        上課現場最常做的就是記訓練，原本要點開課卡再點一次訓練紀錄，兩層。
        ⚠ 自主訓練不畫：那是會員自己來、教練不在場，沒有訓練要記。
        ⚠ 已經記過的用實心綠、還沒記的用外框 —— 不然看不出哪幾堂還沒記。 */
-    const _tlOk=!bkIsSelf(b);
+    /* ⚠ 同上，用 tlCanLog 白名單（這一頁管理員手機首頁也會走到，櫃檯不該看到） */
+    const _tlOk=!bkIsSelf(b) && tlCanLog();
     const _tlHas=(window._tlogBids||new Set()).has(b.id);
     return `<div class="admh2-card${done?' admh-done':''}" style="--admh-c:${_col};" onclick="admhCardTap(event,'${b.id}')">
       <div class="a2-stampcol">${_st?`<span class="admh-stamp ${_st[1]}">${_st[0]}</span>`:''}</div>
@@ -59754,6 +59757,11 @@ const TL_TOOLS=['啞鈴','壺鈴','槓鈴','SSB槓鈴','四角槓','史密斯','
 window._tlState=null; // 新增動作流程暫存
 
 // 入口：點訓練紀錄 → 開紀錄清單 sheet
+/* 誰能記訓練課表：帶課的人（教練、管理員；主管也是 role==='coach'）。
+   ⚠ 櫃檯與會員一律不行 —— 櫃檯不帶課，會員只在自己的「訓練紀錄」頁看歷史。
+   ⚠ 白名單而不是排除法：見 expandBkCard 那顆圓鈕的說明。 */
+function tlCanLog(){ return !!(SESSION && (SESSION.role==='coach' || SESSION.role==='admin')); }
+
 async function openTrainingLog(bookingId){
   closeModal();
   const b=await dbGet('bookings',bookingId);
@@ -59763,7 +59771,8 @@ async function openTrainingLog(bookingId){
      所以代課的人進得來，也就看得到這位會員的歷史課表（正是使用者要的例外）。
      ⚠ 這一道只是為了給得出「不是你的課」這句話：真正的把關在資料庫的
         training_logs / tlog_select_scoped，繞過前端也拿不到別人的紀錄。 */
-  if(SESSION && SESSION.role==='coach' && !SESSION.is_manager && !bkIsCoach(b,SESSION.id)){
+  if(!tlCanLog()){ showToast('只有教練與管理員能開課表'); return; }
+  if(SESSION.role==='coach' && !SESSION.is_manager && !bkIsCoach(b,SESSION.id)){
     showToast('這不是你的課，看不到課表'); return;
   }
   window._tlBooking=b;

@@ -26,8 +26,18 @@ ok('★★ 改口的理由寫在原地（原本預設開是 0829 定的）',
    /2026-09-09 使用者改口「團體課新增會員　預設要關閉重複預約」/.test(src));
 
 console.log('\n② 課表圓鈕不給櫃檯');
-ok('★★★ 櫃檯不畫這顆鈕',
-   /if\(!_calCtx && own && !bkIsSelf\(b\) && !\(SESSION&&SESSION\.role==='front_desk'\)\)/.test(src));
+/* 2026-09-09 二修（使用者：「版本2240桌機帳號還是可以看到課表按鈕」「櫃檯」）——
+   排除法只要有一種角色狀態沒被列到就會漏，改成正面白名單。 */
+ok('★★★ 正面白名單：只有教練與管理員畫得出這顆鈕',
+   /function tlCanLog\(\)\{ return !!\(SESSION && \(SESSION\.role==='coach' \|\| SESSION\.role==='admin'\)\); \}/.test(src)
+   && /if\(!_calCtx && own && !bkIsSelf\(b\) && tlCanLog\(\)\)/.test(src)
+   && !/!\(SESSION&&SESSION\.role==='front_desk'\)/.test(src));
+ok('★★★ 另一處課卡（教練／管理員手機首頁）也吃同一支白名單',
+   /const _tlOk=!bkIsSelf\(b\) && tlCanLog\(\);/.test(src));
+ok('★★★ 進入點也擋一次（繞過畫面也開不了）',
+   /if\(!tlCanLog\(\)\)\{ showToast\('只有教練與管理員能開課表'\); return; \}/.test(src));
+ok('★★ 為什麼用白名單寫在原地（漏了只會少畫一顆鈕，不會放錯人進來）',
+   /白名單漏了只會少畫一顆鈕，不會把不該看的人放進來/.test(src));
 ok('★★★ 整個角色都不畫，不只桌機（同一顆鈕在櫃檯手機上一樣沒意義）',
    /整個角色都不畫，不只桌機/.test(src));
 ok('★★ 教練／管理員照舊畫得出來（其餘條件沒動）',

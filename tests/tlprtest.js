@@ -12,7 +12,9 @@ const g=(a,b)=>{const i=src.indexOf(a); if(i<0) throw new Error('找不到 '+a);
 
 console.log('① 教練只進得去自己的課');
 ok('★★★ 教練（非主管）不是這堂的教練就擋下',
-   /if\(SESSION && SESSION\.role==='coach' && !SESSION\.is_manager && !bkIsCoach\(b,SESSION\.id\)\)\{\s*\n\s*showToast\('這不是你的課，看不到課表'\); return;/.test(src));
+   /if\(SESSION\.role==='coach' && !SESSION\.is_manager && !bkIsCoach\(b,SESSION\.id\)\)\{\s*\n\s*showToast\('這不是你的課，看不到課表'\); return;/.test(src));
+ok('★★★ 前面先過一次角色白名單（櫃檯／會員連開都開不了）',
+   /if\(!tlCanLog\(\)\)\{ showToast\('只有教練與管理員能開課表'\); return; \}/.test(src));
 ok('★★★ 代課算自己的課 —— bkIsCoach 兩欄都認',
    /return String\(b\.coach_id\|\|''\)===String\(cid\) \|\| String\(b\.substitute_coach_id\|\|''\)===String\(cid\);/.test(src));
 ok('★★★ 前端這道只是為了給訊息，真正的把關寫明在資料庫',

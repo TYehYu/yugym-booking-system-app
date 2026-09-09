@@ -408,7 +408,7 @@ ok('★★★ 圓鈕直接開訓練課表，不用先點開課卡（上課現場
 ok('★★★ 要 stopPropagation：整張卡本來就會開課卡明細',
    /class="a2-tlbtn[\s\S]{0,200}event\.stopPropagation\(\);openTrainingLog/.test(src));
 ok('★★★ 自主訓練不畫（會員自己來、教練不在場，沒有訓練要記）',
-   /const _tlOk=!bkIsSelf\(b\);/.test(src)
+   /const _tlOk=!bkIsSelf\(b\) && tlCanLog\(\);/.test(src)
    && /自主訓練不畫：那是會員自己來、教練不在場，沒有訓練要記/.test(src));
 ok('★★ 記過的實心綠、沒記的外框（看得出哪幾堂還沒記）',
    /const _tlHas=\(window\._tlogBids\|\|new Set\(\)\)\.has\(b\.id\);/.test(src)
@@ -421,8 +421,8 @@ ok('★★ 卡片多一欄放它（原本是三欄，硬塞會把中間那欄壓
 
 console.log('\n⑮ 課卡的圓形「課表」鈕（2026-09-09 使用者：「點這邊的課卡多一顆圓形按鈕[課表]」）');
 /* 2026-09-09 二修：櫃檯不畫這顆鈕（見 tests/grprepofftest.js） */
-ok('★★★ 課卡圓鈕多一顆課表，直接開訓練課表（櫃檯除外）',
-   /if\(!_calCtx && own && !bkIsSelf\(b\) && !\(SESSION&&SESSION\.role==='front_desk'\)\)\s*\n\s*btns \+= evoBtn\('evo-t2','',`collapseBkCard\(\);openTrainingLog\('\$\{id\}'\)`,'plan','課表'\);/.test(src));
+ok('★★★ 課卡圓鈕多一顆課表，直接開訓練課表（只有教練與管理員）',
+   /if\(!_calCtx && own && !bkIsSelf\(b\) && tlCanLog\(\)\)\s*\n\s*btns \+= evoBtn\('evo-t2','',`collapseBkCard\(\);openTrainingLog\('\$\{id\}'\)`,'plan','課表'\);/.test(src));
 ok('★★★ 自主訓練不畫（會員自己來、教練不在場，沒有訓練要記）',
    /⚠ 自主訓練不畫：那是會員自己來、教練不在場，沒有訓練要記。\s*\n\s*⚠ 行事曆情境/.test(src));
 ok('★★★ 行事曆情境不畫（那邊的圓鈕只做「預約與調整」，0819 定案）',
