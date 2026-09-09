@@ -11086,14 +11086,24 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
      再從可用高度扣掉，所以這裡只改 CSS 就好，不用另外算。 */
 .mh2-sbl{flex:0 0 auto;font-size:12.5px;font-weight:800;line-height:1.3;
   color:var(--t2);text-align:center;letter-spacing:.5px;}
-.mh2-sbrow{flex:1 1 auto;min-width:0;display:flex;gap:11px;overflow-x:auto;
+/* 2026-09-09：組與組之間拉開（16），組內的圓卡靠緊（8）——
+   一眼分得出「這幾顆是同一張票的」。overflow-x 留著當最後的退路：
+   顆數多到 44px 還排不下時才會用到（見 memSelfBarFit 的 ⚠）。 */
+.mh2-sbrow{flex:1 1 auto;min-width:0;display:flex;gap:16px;overflow-x:auto;align-items:flex-start;
   padding:1px 2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .mh2-sbrow::-webkit-scrollbar{display:none;height:0;}
-.mh2-sbc{flex:none;width:84px;height:84px;border-radius:999px;
+/* 圓形大小由 memSelfBarFit 依顆數算出來寫進 --sbsz（2026-09-09：全部要塞進畫面）——
+   字級跟著等比縮，不然縮到 44px 時 19px 的數字會爆出圓圈外。 */
+.mh2-sbc{flex:none;width:var(--sbsz,84px);height:var(--sbsz,84px);border-radius:999px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
   border:2px solid var(--bd);background:var(--card2);font-family:inherit;cursor:pointer;}
-.mh2-sbc b{font-family:var(--num);font-size:19px;font-weight:800;color:var(--text);line-height:1;}
-.mh2-sbc span{font-family:var(--num);font-size:15px;color:var(--t2);line-height:1;}
+.mh2-sbc b{font-family:var(--num);font-size:calc(var(--sbsz,84px)*0.226);font-weight:800;color:var(--text);line-height:1;}
+.mh2-sbc span{font-family:var(--num);font-size:calc(var(--sbsz,84px)*0.178);color:var(--t2);line-height:1;}
+/* 一張票一組：圓卡一列，使用期限寫在整組下方（2026-09-09 使用者指定的形式 1/1~1/7） */
+.mh2-sbgrp{flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.mh2-sbgrow{display:flex;gap:8px;}
+/* ⚠ 11px 是會員端的字級下限（2026-09-05 定案，長輩看得清楚）——不要為了塞得下調小 */
+.mh2-sbex{font-family:var(--num);font-size:11px;color:var(--t3);white-space:nowrap;line-height:1;}
 .mh2-sbc:active{transform:scale(.94);}
 /* 今天那一顆填滿品牌綠、現在選到的那一顆描金框 —— 與上方日期列同一組語彙 */
 .mh2-sbc.mh2-sbtoday{background:var(--green);border-color:var(--green);}
@@ -11110,7 +11120,7 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
   box-shadow:0 1px 4px rgba(30,25,15,.28);}
 /* 還沒安排的點數：虛線空卡＝「這一點還沒用，按了就去挑時段」（與課卡的可報名團課同一個語彙） */
 .mh2-sbc.mh2-sbfree{background:#fff;border-style:dashed;border-color:var(--green);}
-.mh2-sbc.mh2-sbfree b{color:var(--green);font-size:24px;}
+.mh2-sbc.mh2-sbfree b{color:var(--green);font-size:calc(var(--sbsz,84px)*0.286);}
 .mh2-sbc.mh2-sbfree span{color:var(--green);}
 /* 超過上限只說一聲，不是按鈕 */
 .mh2-sbc.mh2-sbmore{justify-content:center;border-style:dashed;color:var(--t3);cursor:default;font-weight:700;}
@@ -57182,66 +57192,122 @@ async function memSelfBarSync(){
     const booked=(bks||[]).filter(b=>b && b.status!=='cancelled' && bkHasMember(b,SESSION.id)
         && bkIsSelf(b) && String(b.date||'')>=today)
       .sort((a,b)=>String(a.date+a.start_time).localeCompare(String(b.date+b.start_time)));
-    /* 還沒約的：效期內、還有餘額的自主訓練票，一點一顆 */
-    /* ⚠ 一定要有上限（2026-08-28）：親友自主訓練是無限次卡（sessions_total=9999，
-       正式庫真的有一張剩 9,955 點）。照著餘額一點一顆展開會先造出近萬個物件才切掉，
-       白做而且是「圓形卡太多把畫面弄當」的同一類風險（0821 行事曆踩過）。
-       最多只造 CAP 顆 —— 反正畫得出來的就那幾顆。 */
+    /* ══ 一張票一組（2026-09-09 客訴）══════════════════════════════════════
+       「一組期限到9號一組期限到14號　然後他點後面約好時間以後　他會跑到第一格」
+       「是否可以讓這種期限不同的票顯示上有區分　因為從他的介面會看到下方有四個[+]
+         但無法確定哪個期限比較短　都要點進去才知道」
+       ＋「然後點數位子就固定」
+
+       原本是「已約的全排前面、可約的全排後面」，所以：
+       ・約掉一點 → 那顆從後半段消失、前半段多一顆，整排位移（＝客人說的「跑到第一格」）
+       ・四顆［＋］長得一模一樣，效期只寫在 title 裡 —— 手機沒有 hover，等於沒寫
+
+       改成**依票分組**：一組＝一張票，組內先列已約（帶日期）再列可約（帶＋），
+       整列照票的效期由近到遠排。約掉一點只是把那一組裡的一顆從「＋」變成日期，
+       位子不動。效期直接寫在圓卡上。
+       ⚠ 已約的靠 booking.ticket_id 歸組；歸不到的（舊資料、換過票）收在最後一組，
+         不要硬塞進某一張票裡 —— 那會讓「這張票還剩幾點」看起來是錯的。 */
     const CAP=12;
-    const pts=[];
-    (tks||[]).filter(t=>t && tkUsableBy(t,SESSION.id) && (!t.status||t.status==='usable')
+    const _selfTk=(tks||[]).filter(t=>t && tkUsableBy(t,SESSION.id) && (!t.status||t.status==='usable')
         && (Number(t.sessions_remaining)||0)>0
         && memh2TkKind(t,typeMap)==='self'
         && (!t.expire_date||String(t.expire_date).slice(0,10)>=today))
-      .sort((a,b)=>String(a.expire_date||'9999').localeCompare(String(b.expire_date||'9999')))
-      .forEach(t=>{
-        const st=t.start_date?String(t.start_date).slice(0,10):'';
-        const from=(st&&st>today)?st:today;                    // 還沒生效的票要等生效日
-        const ex=t.expire_date?String(t.expire_date).slice(0,10):'';
-        /* 無限次卡只畫一顆「不限」—— 畫 12 顆一模一樣的可約卡沒有任何資訊量 */
-        if(tkUnlimited(t)){ pts.push({from, ex, inf:true}); return; }
-        const _n=Math.min(Number(t.sessions_remaining)||0, CAP-pts.length);
-        for(let i=0;i<_n;i++) pts.push({from, ex});
-      });
-    if(!booked.length && !pts.length){ kill(); return; }
+      .sort((a,b)=>String(a.expire_date||'9999').localeCompare(String(b.expire_date||'9999')));
+    const _tkIds=new Set(_selfTk.map(t=>t.id));
+    let _n=0;                                    // 已經造了幾顆（含各組）
+    const groups=[];
+    _selfTk.forEach(t=>{
+      if(_n>=CAP) return;
+      const st=t.start_date?String(t.start_date).slice(0,10):'';
+      const from=(st&&st>today)?st:today;         // 還沒生效的票要等生效日
+      const ex=t.expire_date?String(t.expire_date).slice(0,10):'';
+      const mine=booked.filter(b=>String(b.ticket_id||'')===String(t.id));
+      const g={ex, from, tk:t, cards:[]};
+      mine.forEach(b=>{ if(_n<CAP){ g.cards.push({bk:b}); _n++; } });
+      /* 無限次卡只畫一顆「不限」—— 畫 12 顆一模一樣的可約卡沒有任何資訊量
+         （正式庫真的有一張剩 9,955 點，照著展開會先造出近萬個物件才切掉）。 */
+      if(tkUnlimited(t)){ if(_n<CAP){ g.cards.push({from, ex, inf:true}); _n++; } }
+      else{
+        const left=Math.max(0, (Number(t.sessions_remaining)||0) - mine.length);
+        for(let i=0;i<left && _n<CAP;i++){ g.cards.push({from, ex}); _n++; }
+      }
+      if(g.cards.length) groups.push(g);
+    });
+    /* 歸不到票的已約（舊資料、或票已經用完但課還在）—— 自成一組排最後 */
+    { const rest=booked.filter(b=>!_tkIds.has(String(b.ticket_id||'')));
+      const g={ex:'', from:today, tk:null, cards:[]};
+      rest.forEach(b=>{ if(_n<CAP){ g.cards.push({bk:b}); _n++; } });
+      if(g.cards.length) groups.push(g); }
+    const _total=booked.length + _selfTk.reduce((s,t)=>s+(tkUnlimited(t)?1:Math.max(0,(Number(t.sessions_remaining)||0)
+      - booked.filter(b=>String(b.ticket_id||'')===String(t.id)).length)),0);
+    if(!groups.length){ kill(); return; }
     const _cur=(typeof mh2S==='function')?(mh2S().date||today):today;
-    const cards=booked.slice(0,CAP).map(b=>{
-      const d=parseYmd(b.date)||new Date();
-      /* 已經在那一天了，再點一次就進改期（2026-08-31 使用者指示：
-         「如果客人要把其中一個圓形卡修改日期　應該再點一次就可以調整」）——
-         第一下跳到那一天（原本的行為，最常用），第二下才動時間。
-         ⚠ 改得動的條件與課卡上那顆「更改時間」一字不差（見 rsBtn）：
-           還沒簽到（status 仍是 booked）、是自己的那一格（家人共享票時 member_id 才準）、
-           不是教練請假被改記成自主訓練的那種。條件不合就維持「跳到那一天」。 */
-      /* 點一下就開快速預約視窗改時間（2026-08-31 二修，使用者：
-           「不用跳過去那一天了　只要點了就再開一次快速預約視窗但要標示已經預約的時間」）——
-         一修做的是「第一下跳到那一天、第二下才改期」，但跳過去那一步對客人沒有用：
-         他要的就是換時間。改成一下到位，原時段在視窗裡標「目前」。
-         ⚠ 改不動的（已簽到／教練請假改記的／家人共享票不是自己那格）維持跳到那一天，
-           而且不畫時鐘 —— 畫了點下去沒反應比沒有提示更糟。 */
-      const _sel=b.date===_cur;
-      const _canRs=b.member_id===SESSION.id && b.status==='booked' && b.coach_leave!==true;
-      return `<button class="mh2-sbc${_sel?' on':''}${b.date===today?' mh2-sbtoday':''}${_canRs?' mh2-sbrs':''}"
-        title="${b.date.replace(/-/g,'/')} ${String(b.start_time||'').slice(0,5)}　·　${
-          _canRs?'點一下改時間':'點一下跳到那一天'}"
-        onclick="${_canRs?`memh2SelfSlots('${b.date}','','${b.id}')`:`memh2PickDay('${b.date}')`}">
-        <b>${d.getMonth()+1}/${d.getDate()}</b><span>${String(b.start_time||'').slice(0,5)}</span></button>`;
-    }).concat(pts.slice(0, Math.max(0, CAP-booked.length)).map(p=>
-      `<button class="mh2-sbc mh2-sbfree" title="${p.inf?'不限次數的自主訓練':'還沒安排的自主訓練點數'}${p.ex?`（效期至 ${p.ex.replace(/-/g,'/')}）`:''}　·　點一下挑時段"
-        onclick="memh2SelfSlots('${p.from}','${p.ex||''}')">
-        <b>＋</b><span>${p.inf?'不限':'可約'}</span></button>`)).join('');
-    const _more=(booked.length+pts.length)-Math.min(CAP, booked.length+pts.length);
+    /* 使用期限寫在**整組下方**（2026-09-09 使用者：「可以在兩點下方顯示使用期限嗎　例如1/1~1/7」）——
+        一組＝一張票，期限是整張票的事，寫在每一顆圓卡上會重複四次。
+        ⚠ 手機沒有 hover，寫在 title 等於沒寫 —— 這一行必須是看得見的文字。 */
+    const _md=x=>{ const q=String(x).split('-'); return `${Number(q[1])}/${Number(q[2])}`; };
+    const _rangeTxt=(t,g)=>{
+      if(t&&tkUnlimited(t)) return t.expire_date?`至 ${_md(t.expire_date)}・不限次`:'不限次數';
+      const st=t&&t.start_date?String(t.start_date).slice(0,10):'';
+      const ex=g.ex||'';
+      if(st&&ex) return `${_md(st)}~${_md(ex)}`;
+      if(ex) return `至 ${_md(ex)}`;
+      if(st) return `${_md(st)} 起`;
+      return '';
+    };
+    const _card=c=>{
+      if(c.bk){
+        const b=c.bk, d=parseYmd(b.date)||new Date();
+        /* 點一下就開快速預約視窗改時間（2026-08-31 二修）——
+           ⚠ 改不動的（已簽到／教練請假改記的／家人共享票不是自己那格）維持跳到那一天，
+             而且不畫時鐘 —— 畫了點下去沒反應比沒有提示更糟。 */
+        const _sel=b.date===_cur;
+        const _canRs=b.member_id===SESSION.id && b.status==='booked' && b.coach_leave!==true;
+        return `<button class="mh2-sbc${_sel?' on':''}${b.date===today?' mh2-sbtoday':''}${_canRs?' mh2-sbrs':''}"
+          title="${b.date.replace(/-/g,'/')} ${String(b.start_time||'').slice(0,5)}　·　${
+            _canRs?'點一下改時間':'點一下跳到那一天'}"
+          onclick="${_canRs?`memh2SelfSlots('${b.date}','','${b.id}')`:`memh2PickDay('${b.date}')`}">
+          <b>${d.getMonth()+1}/${d.getDate()}</b><span>${String(b.start_time||'').slice(0,5)}</span></button>`;
+      }
+      return `<button class="mh2-sbc mh2-sbfree" title="${c.inf?'不限次數的自主訓練':'還沒安排的自主訓練點數'}${
+          c.ex?`（效期至 ${c.ex.replace(/-/g,'/')}）`:''}　·　點一下挑時段"
+        onclick="memh2SelfSlots('${c.from}','${c.ex||''}')">
+        <b>＋</b><span>${c.inf?'不限':'可約'}</span></button>`;
+    };
+    const cards=groups.map(g=>{
+      const _rt=_rangeTxt(g.tk,g);
+      return `<div class="mh2-sbgrp"><div class="mh2-sbgrow">${g.cards.map(_card).join('')}</div>${
+        _rt?`<div class="mh2-sbex">${_rt}</div>`:''}</div>`;
+    }).join('');
+    const _more=Math.max(0, _total-_n);
     let el=host();
     if(!el){ el=document.createElement('div'); el.id='mem-selfbar'; el.className='mh2-selfbar';
       document.body.appendChild(el); }
     el.innerHTML=`<span class="mh2-sbl">自主<br>訓練</span>
-      <div class="mh2-sbrow">${cards}${_more>0?`<span class="mh2-sbc mh2-sbmore">＋${_more}</span>`:''}</div>`;
+      <div class="mh2-sbrow">${cards}${_more>0?`<div class="mh2-sbgrp"><div class="mh2-sbgrow"><span class="mh2-sbc mh2-sbmore">＋${_more}</span></div></div>`:''}</div>`;
     memSelfBarFit();
   }catch(_){ kill(); }
 }
 /* 位置與讓位：墊到導覽列上面，並把捲動容器的下緣讓出來（見上面的 ⚠） */
 function memSelfBarFit(){
   const el=document.getElementById('mem-selfbar'); if(!el) return;
+  /* 全部塞得進畫面（2026-09-09 使用者：「要完整顯示所有點數不要超過視窗　必要時縮小圓形」）——
+     依實際顆數把圓形算小，算完寫進 --sbsz，字級跟著等比縮（寫死字級的話小圓圈會爆字）。
+     ⚠ 縮到 44px 就不再縮：那是手指點得到的下限，再小是「看得到但點不準」。
+       真的多到 44px 還排不下，才讓它水平捲 —— 那比縮到點不到好。
+     ⚠ 要在這裡算而不是渲染時算：旋轉／換裝置寬度時這一支會再跑一次（見下面的 resize）。 */
+  try{
+    const n=el.querySelectorAll('.mh2-sbc').length;
+    const grps=el.querySelectorAll('.mh2-sbgrp').length;
+    if(n){
+      const lbl=el.querySelector('.mh2-sbl');
+      const lw=lbl?Math.ceil(lbl.getBoundingClientRect().width)+10:0;
+      const GAP=8, GGAP=16, PAD=24;
+      const avail=el.clientWidth - lw - PAD - Math.max(0,grps-1)*GGAP - Math.max(0,n-grps)*GAP;
+      const sz=Math.max(44, Math.min(84, Math.floor(avail/n)));
+      el.style.setProperty('--sbsz', sz+'px');
+    }
+  }catch(_){}
   let navH=0;
   document.querySelectorAll('.bottom-nav').forEach(n=>{
     const h=n.getBoundingClientRect().height; if(h>navH) navH=Math.round(h); });
@@ -57249,6 +57315,9 @@ function memSelfBarFit(){
   const h=Math.round(el.getBoundingClientRect().height);
   try{ const sc=document.querySelector('.content'); if(sc) sc.style.paddingBottom=(16+h)+'px'; }catch(_){}
 }
+/* 寬度變了要重算圓形大小（2026-09-09）—— 只重算尺寸，不重抓資料 */
+window.addEventListener('resize', ()=>{ try{ memSelfBarFit(); }catch(_){} });
+window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ try{ memSelfBarFit(); }catch(_){} },200); });
 /* @param until 這一點的到期日（YYYY-MM-DD）——從底部圓卡點進來時會帶。
    2026-08-31 使用者：「上方的日期列也自動篩選該自主訓練的圓形卡的期限」——
    一位客人手上常常同時有兩三張效期不同的點數票，日期列如果永遠列「所有票的聯集」，

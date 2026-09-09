@@ -64,35 +64,37 @@ console.log('\n③ 底部「自主訓練」浮動列（2026-08-31 改成「他�
      && !/const selfBar=/.test(HTML));
   ok('★★ 兩種圓卡：已約的（日期＋時間）與還沒約的（每一點一顆「可約」）',
      /<b>\$\{d\.getMonth\(\)\+1\}\/\$\{d\.getDate\(\)\}<\/b><span>\$\{String\(b\.start_time\|\|''\)\.slice\(0,5\)\}<\/span>/.test(B)
-     && /<b>＋<\/b><span>\$\{p\.inf\?'不限':'可約'\}<\/span>/.test(B));
+     && /<b>＋<\/b><span>\$\{c\.inf\?'不限':'可約'\}<\/span>/.test(B));
+  /* 2026-09-09 改成一張票一組（客訴「約好之後圓卡跑到第一格」）—— 資料形狀從 pts 換成 groups */
   ok('★★ 無限次卡只畫一顆「不限」（12 顆一模一樣的可約卡沒有資訊量）',
-     /if\(tkUnlimited\(t\)\)\{ pts\.push\(\{from, ex, inf:true\}\); return; \}/.test(B));
+     /if\(tkUnlimited\(t\)\)\{ if\(_n<CAP\)\{ g\.cards\.push\(\{from, ex, inf:true\}\); _n\+\+; \} \}/.test(B));
   /* 2026-08-31：已約的那顆改成兩段 —— 第一下跳到那一天（不變），
      已經在那一天了第二下才進改期（msbStart）。見 selfbarrestest.js。 */
   /* 2026-08-31 二修：已約的那顆點一下直接開快速預約視窗改時間（帶預約 id），
      不再先跳到那一天。改不動的（已簽到等）才維持跳日。見 selfbarrestest.js。 */
   ok('★★ 已約的點了改時間（改不動才跳到那一天）；還沒約的點了直接開挑時段',
      /onclick="\$\{_canRs\?`memh2SelfSlots\('\$\{b\.date\}','','\$\{b\.id\}'\)`:`memh2PickDay\('\$\{b\.date\}'\)`\}"/.test(B)
-     && /onclick="memh2SelfSlots\('\$\{p\.from\}','\$\{p\.ex\|\|''\}'\)"/.test(B));
+     && /onclick="memh2SelfSlots\('\$\{c\.from\}','\$\{c\.ex\|\|''\}'\)"/.test(B));
   ok('★★ 可用點數＝效期內、還有餘額、真的是自主訓練票（memh2TkKind）',
      /memh2TkKind\(t,typeMap\)==='self'/.test(B)
      && /\(Number\(t\.sessions_remaining\)\|\|0\)>0/.test(B)
      && /\(!t\.expire_date\|\|String\(t\.expire_date\)\.slice\(0,10\)>=today\)/.test(B));
   ok('★★ 一點一顆（不是一張票一顆），但展開時就先夾上限',
-     /const _n=Math\.min\(Number\(t\.sessions_remaining\)\|\|0, CAP-pts\.length\);/.test(B)
-     && /for\(let i=0;i<_n;i\+\+\) pts\.push\(\{from, ex\}\);/.test(B));
+     /const left=Math\.max\(0, \(Number\(t\.sessions_remaining\)\|\|0\) - mine\.length\);/.test(B)
+     && /for\(let i=0;i<left && _n<CAP;i\+\+\)\{ g\.cards\.push\(\{from, ex\}\); _n\+\+; \}/.test(B));
   ok('★★ 無限次卡不能照餘額全部展開（正式庫真的有一張剩 9,955 點）',
-     /親友自主訓練是無限次卡（sessions_total=9999，/.test(src)
-     && /白做而且是「圓形卡太多把畫面弄當」的同一類風險/.test(src));
+     /正式庫真的有一張剩 9,955 點，照著展開會先造出近萬個物件才切掉/.test(src));
   ok('★★ 還沒生效的票要等生效日才約得到',
-     /const from=\(st&&st>today\)\?st:today;                    \/\/ 還沒生效的票要等生效日/.test(B));
+     /const from=\(st&&st>today\)\?st:today;         \/\/ 還沒生效的票要等生效日/.test(B));
   ok('★★ 兩種都沒有才整條不畫（不是畫一條空的）',
-     /if\(!booked\.length && !pts\.length\)\{ kill\(\); return; \}/.test(B));
+     /if\(!groups\.length\)\{ kill\(\); return; \}/.test(B));
   ok('★★ 已約的照日期＋時間排，效期近的點數排前面',
      /\.sort\(\(a,b\)=>String\(a\.date\+a\.start_time\)\.localeCompare\(String\(b\.date\+b\.start_time\)\)\)/.test(B)
      && /\.sort\(\(a,b\)=>String\(a\.expire_date\|\|'9999'\)\.localeCompare\(String\(b\.expire_date\|\|'9999'\)\)\)/.test(B));
-  ok('★ 圓的、夠大（84px），還沒約的用虛線綠空卡',
-     /\.mh2-sbc\{flex:none;width:84px;height:84px;border-radius:999px;/.test(CSS)
+  /* 2026-09-09：圓形大小改成依顆數算（使用者：「要完整顯示所有點數不要超過視窗
+     必要時縮小圓形」）—— 84px 變成上限，寫進 --sbsz。 */
+  ok('★ 圓的、預設 84px（顆數多時才縮，下限 44px），還沒約的用虛線綠空卡',
+     /\.mh2-sbc\{flex:none;width:var\(--sbsz,84px\);height:var\(--sbsz,84px\);border-radius:999px;/.test(CSS)
      && /\.mh2-sbc\.mh2-sbfree\{background:#fff;border-style:dashed;border-color:var\(--green\);\}/.test(CSS));
   ok('★ 封頂 12 顆，超過用「＋N」說一聲（不默默少畫）',
      /const CAP=12;/.test(B) && /mh2-sbmore">＋\$\{_more\}/.test(B));

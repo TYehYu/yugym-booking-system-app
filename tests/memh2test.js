@@ -444,7 +444,7 @@ console.log('\n快速預約視窗裡的日期列（換一天不必關窗）');
 t('★★ 從底部圓卡點進來時帶著那一點的到期日，日期列只列到那天',
     /async function memh2SelfSlots\(ds, until, reschedId\)\{/.test(s)
     && /window\._mh2SelfUntil=String\(until\|\|''\)\|\|null;/.test(s)
-    && /onclick="memh2SelfSlots\('\$\{p\.from\}','\$\{p\.ex\|\|''\}'\)"/.test(s));
+    && /onclick="memh2SelfSlots\('\$\{c\.from\}','\$\{c\.ex\|\|''\}'\)"/.test(s));
 t('★★ 視窗裡換日期時效期篩選不能掉（客人會「看一下 7 點、再看一下 8 點」）',
     /onclick="memh2SelfSlots\('\$\{x\}','\$\{_lim\}'\$\{_rs\?`,'\$\{_rs\.id\}'`:''\}\)"/.test(QS)
     && /日期列會突然變回所有票的聯集 —— 剛做的按點篩選等於只在第一次生效。/.test(s));
