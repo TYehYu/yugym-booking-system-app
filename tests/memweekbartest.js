@@ -79,8 +79,11 @@ console.log('\n③ 底部「自主訓練」浮動列（2026-08-31 改成「他�
      /memh2TkKind\(t,typeMap\)==='self'/.test(B)
      && /\(Number\(t\.sessions_remaining\)\|\|0\)>0/.test(B)
      && /\(!t\.expire_date\|\|String\(t\.expire_date\)\.slice\(0,10\)>=today\)/.test(B));
+    /* ⚠ 2026-09-09 客訴修正：原本又減一次 mine.length，等於把已約的點扣兩次
+     （自主訓練是預約當下就扣點，餘額本來就扣過了）—— 鄭雅芳 2 點約掉 1，
+     那顆［＋］就消失了。細節與實跑在 tests/grprepofftest.js。 */
   ok('★★ 一點一顆（不是一張票一顆），但展開時就先夾上限',
-     /const left=Math\.max\(0, \(Number\(t\.sessions_remaining\)\|\|0\) - mine\.length\);/.test(B)
+     /const left=Math\.max\(0, Math\.min\(Number\(t\.sessions_remaining\)\|\|0,\s*\n\s*\(Number\(t\.sessions_total\)\|\|0\) - mine\.length\)\);/.test(B)
      && /for\(let i=0;i<left && _n<CAP;i\+\+\)\{ g\.cards\.push\(\{from, ex\}\); _n\+\+; \}/.test(B));
   ok('★★ 無限次卡不能照餘額全部展開（正式庫真的有一張剩 9,955 點）',
      /正式庫真的有一張剩 9,955 點，照著展開會先造出近萬個物件才切掉/.test(src));

@@ -220,8 +220,11 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      /function grpRepToggle\(\)\{/.test(src)
      && /const _askRep=\(!window\._grpAdd\) \|\| !!window\._grpRep;/.test(src)
      && /window\._grpRep 是 undefined，維持原本一律詢問的行為。/.test(src));
-  ok('★ 開關預設開（櫃檯多半是替客人把整期排掉，關掉才是例外）',
-     /if\(addMode\) window\._grpRep=\(window\._grpRep==null\)\?true:!!window\._grpRep;/.test(src));
+  /* 2026-09-09 使用者改口「團體課新增會員　預設要關閉重複預約」——
+     原本預設開（0829），開著的代價是每次存檔都跳一張「後面的場次要一起預約嗎？」。
+     細節在 tests/grprepofftest.js。 */
+  ok('★ 開關預設關，且每次打開［＋新增］都重設',
+     /if\(addMode && !keepSel\) window\._grpRep=false;/.test(src));
   ok('★ 逐名額的預設仍是「名額 i 用第 i 張」（畫面與實際扣的要同一套）',
      /const _defPkOf=\(m,i\)=>\{ const a=m\.tks\|\|\[\]; return \(a\[Math\.min\(i,a\.length-1\)\]\|\|\{\}\)\.id\|\|''; \};/.test(src));
 }

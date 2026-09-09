@@ -21,8 +21,11 @@ ok('★★★ 組內先列已約再列可約，整列照票的效期由近到遠
    /_selfTk=[\s\S]{0,600}\.sort\(\(a,b\)=>String\(a\.expire_date\|\|'9999'\)\.localeCompare\(String\(b\.expire_date\|\|'9999'\)\)\)/.test(B)
    && B.indexOf('mine.forEach(b=>{ if(_n<CAP){ g.cards.push({bk:b}); _n++; } });')
       < B.indexOf('for(let i=0;i<left && _n<CAP;i++){ g.cards.push({from, ex}); _n++; }'));
-ok('★★★ 可約的顆數＝餘額 − 這張票已經約掉的（不然約完總數會多一顆）',
-   /const left=Math\.max\(0, \(Number\(t\.sessions_remaining\)\|\|0\) - mine\.length\);/.test(B));
+  /* ⚠ 2026-09-09 客訴修正：原本又減一次 mine.length，等於把已約的點扣兩次
+     （自主訓練是預約當下就扣點，餘額本來就扣過了）—— 鄭雅芳 2 點約掉 1，
+     那顆［＋］就消失了。細節與實跑在 tests/grprepofftest.js。 */
+ok('★★★ 可約的顆數＝票券餘額本身（已約的另外畫成日期卡，不能再扣一次）',
+   /const left=Math\.max\(0, Math\.min\(Number\(t\.sessions_remaining\)\|\|0,\s*\n\s*\(Number\(t\.sessions_total\)\|\|0\) - mine\.length\)\);/.test(B));
 ok('★★★ 歸不到票的已約自成一組排最後，不硬塞進某一張票',
    /const rest=booked\.filter\(b=>!_tkIds\.has\(String\(b\.ticket_id\|\|''\)\)\);/.test(B)
    && /不要硬塞進某一張票裡 —— 那會讓「這張票還剩幾點」看起來是錯的/.test(src));
