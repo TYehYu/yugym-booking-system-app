@@ -123,5 +123,40 @@ ok('★★ 會員自己命名的動作名要跳脫（tlSetLine 回 HTML，動作
 ok('★★ 這張視窗是從抽屜裡開的 —— 靠 body:has 那條規則才蓋得住抽屜',
    /body:has\(#tl-sheet\) \.modal-bg/.test(src));
 
+console.log('\n⑤ 抽屜不要蓋住頂列（2026-09-09：「上面表頭logo要露出」）');
+ok('★★★ mc-mode 下抽屜從頂列下方開始（桌機 60px、平板 56px）',
+   /body\.mc-mode #tl-sheet,body\.mc-mode #tl-add-sheet\{top:60px;\}/.test(src)
+   && /@media\(max-width:1080px\)\{ body\.mc-mode #tl-sheet,body\.mc-mode #tl-add-sheet\{top:56px;\} \}/.test(src));
+ok('★★★ 數字對得上頂列本身的高度（不是隨手抓的）',
+   /body\.mc-mode \.mc-sidebar\{[\s\S]{0,200}height:60px;/.test(src)
+   && /body\.mc-mode \.mc-sidebar\{width:100%;padding:0 12px;height:56px;\}/.test(src));
+ok('★★★ 手機不套（.topbar 是 sticky、沒有 fixed 頂列要讓）',
+   /手機沒有 fixed 頂列（\.topbar 是 sticky、會跟著捲），維持整片蓋滿/.test(src)
+   && /\.topbar-fixed\{position:sticky;top:0;/.test(src));
+ok('★★★ 頂列露出來就點得到 → 換頁要把抽屜收掉，否則浮在新頁面上',
+   /if\(document\.getElementById\('tl-sheet'\)\)\{ try\{ closeTrainingLog\(\); \}catch\(_\)\{\} \}/.test(src)
+   && /function navTo\(key, gkey\)\{\s*\n\s*inkApply\(\);\s*\n\s*\/\* 課表抽屜的頂列是露出來的/.test(src));
+ok('★★ 只改 top，面板置中靠 top:50% 自己重算（沒有第二處要跟著改）',
+   /\.ms-panel\{position:absolute;left:0;right:0;top:0;/.test(src)
+   && /只改 top，不動 inset 其餘三邊/.test(src));
+
+console.log('\n⑥ 「點下方新增動作開始記錄」卡在奇怪的位子（2026-09-09）');
+ok('★★★ 根因：值班時間軸的 .tl-empty 是絕對定位、又排在最後 → 蓋掉抽屜的同名規則',
+   /\.tl-track \.tl-empty\{position:absolute;top:50%;left:50%;/.test(src)
+   && !/^\.tl-empty\{position:absolute/m.test(src));
+ok('★★★ 抽屜的空狀態改用自己的名字，不再被同名規則波及',
+   /\.tls-empty\{text-align:center;/.test(src)
+   && /\? '<div class="tls-empty">尚無訓練紀錄/.test(src));
+ok('★★★ 抽屜面板也改名 —— .tl-panel 是時間軸那張卡，padding／背景／overflow-x 會整組蓋過來',
+   /\.tls-panel\{padding-bottom:16px;\}/.test(src)
+   && /<div class="ms-panel tls-panel">/.test(src));
+ok('★★★ 抽屜裡不再留任何 tl-panel／tl-empty 的用法',
+   !/class="ms-panel tl-panel"/.test(src)
+   && !/<div class="tl-empty">尚無訓練紀錄/.test(src));
+ok('★★ 時間軸那邊照舊（🌙 今日無課 仍在 .tl-track 裡，仍是釘在長條中央）',
+   /<div class="tl-track">/.test(src) && /<div class="tl-empty">🌙 今日無課<\/div>/.test(src));
+ok('★★ 陷阱寫在原地：tl- 前綴被兩個不相干的東西共用',
+   /tl- 這個前綴被兩個不相干的東西共用（值班時間軸／訓練課表）/.test(src));
+
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
