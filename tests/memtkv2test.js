@@ -4,7 +4,13 @@ const fs=require('fs');
 const s=fs.readFileSync(__dirname+'/../index.html','utf8');
 let pass=0, fail=0;
 const t=(n,ok)=>{ ok?pass++:fail++; console.log((ok?'  ok  ':'  FAIL')+'  '+n); };
-const cut=(a,b)=>s.slice(s.indexOf(a), s.indexOf(b));
+/* ⚠ 找不到標記時 indexOf 回 -1，slice(i,-1) 會把整個檔案後半段切進來 ——
+   區塊看起來還在、計數卻是全檔的（2026-09-09 就是這樣：結尾標記早改名了，
+   這裡切出 3.3MB，直到別處新增一個同樣的 for 迴圈才炸出來）。找不到就當場停。 */
+const cut=(a,b)=>{ const i=s.indexOf(a), j=s.indexOf(b, i+1);
+  if(i<0) throw new Error('切區塊：找不到起點 '+a);
+  if(j<0) throw new Error('切區塊：找不到終點 '+b);
+  return s.slice(i,j); };
 
 // ── 開關 ──
 t('只有 memh2On 才走 V2（真會員仍是舊版）',
@@ -33,7 +39,7 @@ t('分期、共享「享」章、合約鈕都保留',
 // ── 等級三條進度表 ──
 const bar=cut('function memTierBar(fill, tone){','function memTierBlockV2(');
 t('一條進度表固定四個刻度', /Array\.from\(\{length:4\}/.test(bar));
-const blk=cut('function memTierBlockV2(ti, usableCount){','/* 主顧客優惠方案說明');
+const blk=cut('function memTierBlockV2(ti, usableCount){','/* 主顧客課程方案');
 t('固定畫三條', /for\(let i=0;i<3;i\+\+\)/.test(blk) && (blk.match(/for\(let i=0;i<3;i\+\+\)/g)||[]).length===2);
 t('會員：前 ok 條已滿、第 ok+1 條是本月、其餘留空',
   /if\(i<ti\.ok\) arr\.push\(memTierBar\(4,'done'\)\);/.test(blk)

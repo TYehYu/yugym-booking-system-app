@@ -3772,12 +3772,39 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 /* P1-1 會員訓練總覽 */
 .tlh-ov{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:12px 14px;margin-bottom:4px;}
 .tlh-ov-row{display:flex;gap:10px;}
-.tlh-ov-cell{flex:1;text-align:center;background:var(--card2);border-radius:9px;padding:9px 4px;}
+/* ⚠ 兩格的主體字級不同（左邊 22px 的堂數、右邊 15px 的日期），只靠 text-align
+   只有水平置中；右邊那格內容比較矮，貼著上緣就看起來沒對齊（2026-09-09 使用者回報
+   「最近訓練這一格沒有置中」）。改成 flex 直向置中，兩格內容各自在自己的格子正中間。 */
+.tlh-ov-cell{flex:1;text-align:center;background:var(--card2);border-radius:9px;padding:9px 4px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;}
 .tlh-ov-n{font-size:22px;font-weight:800;color:var(--green);font-family:var(--num);line-height:1.2;}
 .tlh-ov-l{font-size:10.5px;color:var(--t3);margin-top:2px;}
 .tlh-ov-sub{font-size:12px;color:var(--text);margin-top:9px;line-height:1.6;}
 .tlh-ov-k{display:inline-block;min-width:38px;color:var(--t3);font-weight:600;margin-right:6px;}
 .tlh-hq-btn{background:none;border:none;color:var(--green);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
+/* 三大項紀錄（2026-09-09） */
+.tlh-pr{margin-top:9px;padding-top:9px;border-top:1px solid var(--bd2);}
+.tlh-pr-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+.tlh-pr-row{display:flex;align-items:baseline;gap:8px;font-size:12px;padding:2px 0;min-width:0;}
+.tlh-pr-ex{flex:0 0 44px;color:var(--t2);font-weight:700;}
+.tlh-pr-v{flex:1;min-width:0;color:var(--text);font-weight:600;font-family:var(--num);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tlh-pr-d{flex:none;color:var(--t3);font-family:var(--num);font-size:11px;}
+.prh-body{max-height:56vh;overflow-y:auto;}
+.prh-lift{margin-bottom:14px;}
+.prh-lift-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  padding-bottom:5px;border-bottom:1px solid var(--bd);margin-bottom:4px;}
+.prh-lift-h b{font-size:15px;color:var(--green);}
+.prh-lift-h span{font-size:13px;font-weight:700;font-family:var(--num);color:var(--text);}
+.prh-row{display:flex;align-items:baseline;gap:10px;font-size:12px;padding:5px 2px;min-width:0;}
+/* 目前的紀錄那一列標起來，底下是被它取代的舊紀錄 */
+.prh-row.on{background:#e3efe9;border-radius:7px;padding-left:6px;padding-right:6px;}
+.prh-d{flex:0 0 76px;color:var(--t3);font-family:var(--num);}
+.prh-x{flex:1;min-width:0;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.prh-v{flex:none;font-weight:700;font-family:var(--num);color:var(--text);}
+/* 總量：破紀錄的判準就是這個數字，列出來才知道為什麼這筆贏過上一筆 */
+.prh-vol{display:inline-block;margin-left:6px;font-style:normal;font-size:11px;font-weight:700;
+  font-family:var(--num);color:var(--green);background:#e3efe9;border-radius:5px;padding:1px 5px;}
 /* P1-3 動作歷史查詢 */
 .tleh-chips{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:6px;}
 .tleh-chip{background:var(--card2);border:1px solid var(--bd);border-radius:20px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;}
@@ -12715,8 +12742,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260909.1840';
-const APP_VERSION_LABEL = 'v260909.1840';
+const APP_VERSION = '260909.1852';
+const APP_VERSION_LABEL = 'v260909.1852';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -59670,12 +59697,43 @@ async function openTrainingLog(bookingId){
   closeModal();
   const b=await dbGet('bookings',bookingId);
   if(!b){showToast('找不到課程');return;}
+  /* 教練只能看跟設定「自己課」的課表（2026-09-09 使用者指示）。
+     代課也算自己的課 —— bkIsCoach 認 coach_id 與 substitute_coach_id 兩欄，
+     所以代課的人進得來，也就看得到這位會員的歷史課表（正是使用者要的例外）。
+     ⚠ 這一道只是為了給得出「不是你的課」這句話：真正的把關在資料庫的
+        training_logs / tlog_select_scoped，繞過前端也拿不到別人的紀錄。 */
+  if(SESSION && SESSION.role==='coach' && !SESSION.is_manager && !bkIsCoach(b,SESSION.id)){
+    showToast('這不是你的課，看不到課表'); return;
+  }
   window._tlBooking=b;
   // 會員名 + 票券剩餘 + 是否友善課
   let memName='會員', tkText='', isFriendly=false;
   try{ const m=await dbGet('members',b.member_id); if(m)memName=m.name; }catch(_){}
   try{
-    if(b.ticket_id){ const tk=await dbGet('member_tickets',b.ticket_id); if(tk)tkText=`${tk.plan_name||'票券'}　${tk.sessions_remaining}/${tk.sessions_total}`; }
+    if(b.ticket_id){
+      const tk=await dbGet('member_tickets',b.ticket_id);
+      if(tk){
+        /* ⚠ 原本寫「剩餘　自訂方案 0/10」，使用者讀成「第 0 堂」（2026-09-09 回報）。
+           那個 0 是 sessions_remaining，而預扣型票券的帳面剩餘很早就歸 0，
+           拿它當「進度」看一定是錯的。改成直接算這一堂是第幾堂。
+           算法沿用 2026-08-19 定版的那一條（管理員首頁課卡也是這樣算）：
+             第N ＝ 帳面已用（總−剩餘）−「排在本堂之後」的有效預約數
+           舊帳的幽靈堂自然被算進前面，不會讓進度倒退。 */
+        const _tot=Number(tk.sessions_total)||0, _rem=Number(tk.sessions_remaining)||0;
+        let _seq=0;
+        try{
+          const _all=await dbGetAll('bookings');
+          const _key=x=>String(x.date||'')+' '+String(x.start_time||'');
+          const _mine=(_all||[]).filter(x=>x && String(x.ticket_id||'')===String(tk.id)
+                       && x.status!=='cancelled' && !x.sibling_of);
+          const _after=_mine.filter(x=>_key(x)>_key(b)).length;
+          _seq=(_tot-_rem)-_after;
+        }catch(_){}
+        tkText = (_seq>=1 && _tot>0 && _seq<=_tot)
+          ? `${tk.plan_name||'票券'}　第 ${_seq}/${_tot} 堂`
+          : `${tk.plan_name||'票券'}　剩餘 ${_rem}/${_tot}`;
+      }
+    }
     // 判斷友善：看課程的票券種類名稱是否含「友善」
     if(b.ticket_type_id){
       const ty=await dbGet('ticket_types',b.ticket_type_id);
@@ -59709,7 +59767,7 @@ async function renderTrainingLogSheet(){
   // 第一區：會員資訊
   const sec1=`<div class="tlh-member ${memColorCls}">
     <div class="tlh-mem-name">${window._tlMemName}${fmt?`<span class="tlh-fmt">${fmt}</span>`:''}</div>
-    <div class="tlh-mem-sub">${typeM}${window._tlTkText?`　·　剩餘 ${window._tlTkText}`:''}</div>
+    <div class="tlh-mem-sub">${typeM}${window._tlTkText?'　·　'+window._tlTkText:''}</div>
   </div>`;
 
   // 第二區：今日訓練紀錄
@@ -59736,6 +59794,9 @@ async function renderTrainingLogSheet(){
   const partCount={};
   memAllLogs.forEach(l=>{ if(l.body_part) partCount[l.body_part]=(partCount[l.body_part]||0)+1; });
   const partLine=TL_BODY_PARTS.map(p=>partCount[p]?`${p} ${partCount[p]}`:null).filter(Boolean).join('　');
+  /* 個人紀錄：只在總覽露出最近破的四個，其餘進「全部紀錄」視窗 */
+  window._tlPr=tlPrByExercise(memAllLogs);
+  const prTop=window._tlPr;
   const overview=`<div class="tlh-ov">
       <div class="tlh-ov-row">
         <div class="tlh-ov-cell"><div class="tlh-ov-n">${sessionCount}</div><div class="tlh-ov-l">訓練堂數</div></div>
@@ -59743,6 +59804,15 @@ async function renderTrainingLogSheet(){
       </div>
       ${topEx.length?`<div class="tlh-ov-sub"><span class="tlh-ov-k">常練</span>${topEx.join('、')}</div>`:''}
       ${partLine?`<div class="tlh-ov-sub"><span class="tlh-ov-k">部位</span>${partLine}</div>`:''}
+      ${prTop.length?`<div class="tlh-pr">
+        <div class="tlh-pr-head"><span class="tlh-ov-k" style="margin:0;">紀錄</span>
+          <button class="tlh-hq-btn" onclick="tlOpenPrHistory()">全部紀錄 ›</button></div>
+        ${prTop.map(r=>`<div class="tlh-pr-row">
+            <span class="tlh-pr-ex">${escH(r.lift)}</span>
+            <span class="tlh-pr-v">${tlSetLine(r.best)}</span>
+            <span class="tlh-pr-d">${tlPrDate(r.best)}</span>
+          </div>`).join('')}
+      </div>`:''}
     </div>`;
 
   // ── P1-2 歷史課表（最近三次，可一鍵套用）──
@@ -65030,6 +65100,78 @@ function wpWeightHtml(w,u){
    （會員課卡、會員訓練紀錄頁）就變成五份，改一次要記得改五個地方。
    ⚠ 新的 weight／weight_unit 欄位優先（方案套用寫的就是它）；
      逐組明細是舊路徑（手動一組一組記），沒有新欄位時才退回去讀。 */
+/* ── 個人紀錄（2026-09-09 使用者指示）──
+   「例如 7/7 深蹲練到 10x3x60 公斤　歷史紀錄　只要之後訓練有超過就自動更新　但要留下紀錄」
+
+   ⚠ 沒有另開一張表：紀錄本來就是 training_logs 算得出來的（誰、哪個動作、哪天、幾次幾組幾公斤）。
+     從資料推導的好處是「自動更新」不用寫任何同步 —— 新的一筆存進去，紀錄自己就變了；
+     另存一份反而會有「表裡的紀錄跟實際紀錄對不起來」的一天（票券那邊就吃過這個虧）。
+   ⚠ 「留下紀錄」＝把歷次破紀錄的那幾筆按時間串起來（tlPrChain），不是只留最新的一筆。 */
+const TL_LB2KG=0.45359237;
+/* 一筆紀錄的比較值 ＝ 訓練總量（次數 × 組數 × 重量）。
+   使用者定的（2026-09-09）：「10x3x60=1800　如果有一次是 6x4x80=1920　超過 1800 就更新紀錄」。
+   ⚠ 不是比最大重量 —— 拿 6 次 4 組 80kg 去換 10 次 3 組 60kg，總量才看得出進步。
+   ⚠ 重量一律換算成公斤再乘，不然 lb 的數字天生比較大。
+   ⚠ 次數／組數沒填就當 1，不要當 0（當 0 會讓整筆總量歸零、永遠破不了紀錄）。
+   同總量時比重量，重的那筆算贏（一樣的總量，扛得重是進步）。 */
+function tlPrScore(l){
+  if(!l || l.weight==null || l.weight==='') return null;
+  const w=Number(l.weight); if(!isFinite(w)||w<=0) return null;
+  const kg=(String(l.weight_unit||'kg')==='lb')?w*TL_LB2KG:w;
+  const reps=Number(l.reps)>0?Number(l.reps):1;
+  const sets=Number(l.sets)>0?Number(l.sets):1;
+  return [reps*sets*kg, kg];
+}
+function tlPrBetter(a,b){        // a 是否勝過 b（b 可為 null）
+  if(!a) return false; if(!b) return true;
+  if(a[0]!==b[0]) return a[0]>b[0];
+  return a[1]>b[1];              // 總量一樣就比重量；完全一樣不算破紀錄
+}
+/* 總量，給紀錄列顯示用（1800 這種數字才對得上使用者的算式） */
+function tlPrVol(l){ const sc=tlPrScore(l); return sc?Math.round(sc[0]):null; }
+/* 某個動作的破紀錄歷程（由舊到新，每一筆都勝過它之前的全部） */
+function tlPrChain(logs){
+  const src=(logs||[]).filter(l=>tlPrScore(l))
+    .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  const chain=[]; let best=null;
+  src.forEach(l=>{ const sc=tlPrScore(l); if(tlPrBetter(sc,best)){ best=sc; chain.push(l); } });
+  return chain;
+}
+/* ⚠ 只追三大項（2026-09-09 使用者指示：「歷史紀錄　深蹲 硬舉 臥推 三個項目」）。
+   用「動作名稱包含關鍵字」歸戶，所以槓鈴深蹲／史密斯深蹲／相撲硬舉／上斜臥推都算進去 ——
+   教練自己命名的動作五花八門，比對全名一定漏。
+   每一列會標出破紀錄的當下用的是哪個動作，混在一起也看得出來。 */
+const TL_PR_LIFTS=['深蹲','硬舉','臥推'];
+/* 這位會員三大項的紀錄：[{lift, best, chain}]，沒練過的那一項不出現 */
+function tlPrByExercise(memLogs){
+  return TL_PR_LIFTS.map(lift=>{
+    const chain=tlPrChain((memLogs||[]).filter(l=>l && String(l.exercise_name||'').indexOf(lift)>=0));
+    return chain.length?{lift, ex:lift, best:chain[chain.length-1], chain}:null;
+  }).filter(Boolean);
+}
+const tlPrDate=l=>String((l&&l.created_at)||'').slice(5,10).replace('-','/');
+
+/* 三大項的完整破紀錄歷程（從抽屜裡開，靠 body:has 那條規則蓋在抽屜上面） */
+function tlOpenPrHistory(){
+  const list=window._tlPr||[];
+  const body=list.length?list.map(r=>`
+    <div class="prh-lift">
+      <div class="prh-lift-h"><b>${escH(r.lift)}</b><span>${tlSetLine(r.best)}<em class="prh-vol">${tlPrVol(r.best)}</em></span></div>
+      ${r.chain.slice().reverse().map((l,i)=>`<div class="prh-row${i?'':' on'}">
+        <span class="prh-d">${String(l.created_at||'').slice(0,10).replace(/-/g,'/')}</span>
+        <span class="prh-x">${escH(l.exercise_name||'')}</span>
+        <span class="prh-v">${tlSetLine(l)}<em class="prh-vol">${tlPrVol(l)}</em></span>
+      </div>`).join('')}
+    </div>`).join('')
+    : '<div class="ae-hint">還沒有深蹲／硬舉／臥推的紀錄。</div>';
+  showModal(`<div class="modal-card" style="max-width:460px;">
+    <div class="modal-title">歷史紀錄</div>
+    <div class="ae-hint" style="padding:0 0 10px;">深蹲・硬舉・臥推。之後練得比紀錄重（同重量則比次數、組數）就自動換上去，舊的留在下面。</div>
+    <div class="prh-body">${body}</div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">關閉</button></div>
+  </div>`);
+}
+
 function tlSetLine(l){
   if(!l) return '';
   if(l.weight!=null&&l.weight!==''){
