@@ -293,10 +293,26 @@ console.log('\n⑬ 動作用「長按拖移」調順序（2026-09-09 四修）')
      /\},400\);/.test(LP) && /用長按（400ms）而不是 HTML5 draggable/.test(src));
   ok('★★★ 還沒滿 400ms 就移動超過 8px＝在捲畫面，取消',
      /if\(Math\.abs\(ev\.clientY-startY\)>8\)\{ clearTimeout\(timer\); cleanup\(\); \}/.test(LP));
-  ok('★★★ 拖曳中只改透明度，不改尺寸也不改內距（使用者：卡片大小不要變）',
-     /\.wp-item\.wp-dragging\{opacity:\.5;\}/.test(src)
-     && /不要 transform、不要改內距，任何一個都會讓卡片看起來忽大忽小/.test(src)
+  ok('★★★ 拖曳中不改尺寸也不改內距（使用者：卡片大小不要變）',
+     /不要 transform、不要改內距 —— 使用者明確要求卡片大小不要變/.test(src)
      && !/\.wp-item\.wp-item-ord\{padding-left:40px/.test(src));
+  /* 2026-09-09 五修（使用者：「我剛剛拖移動作小卡　卡片沒有浮起來黏在手上的感覺」） */
+  ok('★★★ 做一個原尺寸的分身跟著手指跑，原本那一列留在原位當佔位',
+     /ghost=el\.cloneNode\(true\);/.test(LP)
+     && /if\(ghost\) ghost\.style\.top=\(ev\.clientY-offY\)\+'px';/.test(LP)
+     && /\.wp-item\.wp-dragging\{opacity:\.35;border-style:dashed;background:transparent;\}/.test(src));
+  ok('★★★ 分身不縮放，只加陰影（先前明確要求過卡片大小不要變）',
+     /\.wp-item\.wp-ghost\{background:#fff;border-color:var\(--brand,#1f6f54\);opacity:1;\s*\n\s*box-shadow:/.test(src)
+     && !/wp-ghost[^}]*scale\(/.test(src));
+  ok('★★★ 分身掛在 body、脫離清單，所以清單重排重畫時它不受影響',
+     /它掛在 body 上、脫離清單，所以清單重排重畫時分身不受影響/.test(src));
+  ok('★★★ z-index 要高過彈窗（這一頁本來就開在彈窗裡）',
+     /z-index:10200;/.test(LP) && /\.modal-bg 是 9750/.test(src));
+  ok('★★ 放開要把分身收掉，不然會留一張浮在畫面上',
+     /if\(ghost\)\{ try\{ ghost\.remove\(\); \}catch\(_\)\{\} ghost=null; \}/.test(LP));
+  ok('★★★ 長按不能選到文字 —— body 那條要 armed 之後才加，那 400ms 正好是選字的時間',
+     /user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;\}/.test(src)
+     && /那 400ms 正好就是\s*\n\s*瀏覽器開始選字的時間/.test(src));
   ok('★★★ 直接改 S.items 並重畫，不搬 DOM —— 重畫後尺寸完全一致',
      /const \[x\]=S\.items\.splice\(cur,1\);\s*\n\s*S\.items\.splice\(j,0,x\);/.test(LP)
      && /直接改 S\.items 並重畫，不去搬 DOM/.test(src));

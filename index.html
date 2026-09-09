@@ -4409,16 +4409,26 @@ button.wp-tag.wp-tag-off:hover{background:var(--card2);color:var(--t2);border-co
 /* 動作列：平常乾淨（名稱＋✕），按了「順序」才在左邊長出一欄上下鍵
    （2026-09-09 二修，使用者：「畫面變複雜了　還是可以新增一個按鈕[順序]左邊跳一欄上下的按鈕」） */
 .wp-item{position:relative;background:var(--card2);border:1px solid var(--bd);border-radius:11px;
-  padding:10px 34px 10px 12px;margin-bottom:7px;cursor:pointer;}
+  padding:10px 34px 10px 12px;margin-bottom:7px;cursor:pointer;
+  /* ⚠ 長按會選到文字（2026-09-09 使用者回報：「然後還會一直選到文字」）——
+     body.wp-dragging-on 那一條要等 400ms armed 之後才加上，那 400ms 正好就是
+     瀏覽器開始選字的時間。整列本來就是用點的、不是拿來複製的，直接在這裡關掉。
+     -webkit-touch-callout:none 是 iOS 長按跳出的那個放大鏡／選單。 */
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
 .wp-item:hover{border-color:var(--brand,#1f6f54);}
 .wp-item-ro{cursor:default;padding-right:12px;}
 /* 排序模式：左邊讓出一欄放上下鍵，整列不可點（避免誤觸開編輯），可拖曳 */
 /* 第一列＝動作名稱靠左、第二列＝次數×組數×重量靠右（2026-09-09 使用者指定） */
 .wp-item-nm{font-size:13.5px;font-weight:700;color:var(--text);line-height:1.5;text-align:left;}
 .wp-item-num{font-size:13px;color:var(--t2);line-height:1.6;text-align:right;margin-top:1px;}
-/* 長按拖移中：**只改透明度**（2026-09-09 使用者：「卡片大小不要變」）——
-   不要 transform、不要改內距，任何一個都會讓卡片看起來忽大忽小。 */
-.wp-item.wp-dragging{opacity:.5;}
+/* 長按拖移中：原本那一列留在原位當佔位（虛線淡框），真正跟著手指跑的是 .wp-ghost。
+   ⚠ 不要 transform、不要改內距 —— 使用者明確要求卡片大小不要變（2026-09-09）。 */
+.wp-item.wp-dragging{opacity:.35;border-style:dashed;background:transparent;}
+.wp-item.wp-dragging .wp-item-x{display:none;}
+/* 黏在手上的那一張：原尺寸、只加陰影與一點點抬起（不縮放） */
+.wp-item.wp-ghost{background:#fff;border-color:var(--brand,#1f6f54);opacity:1;
+  box-shadow:0 12px 28px rgba(30,25,15,.28);cursor:grabbing;}
+.wp-item.wp-ghost .wp-item-x{display:none;}
 .wp-item.wp-item-sel{border-color:var(--brand,#1f6f54);
   box-shadow:0 0 0 2px color-mix(in srgb,var(--brand,#1f6f54) 28%,transparent);}
 /* 拖移進行中整頁不要跟著捲（pointermove 已經 preventDefault，這一條是保險） */
@@ -12627,8 +12637,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260909.1801';
-const APP_VERSION_LABEL = 'v260909.1801';
+const APP_VERSION = '260909.1805';
+const APP_VERSION_LABEL = 'v260909.1805';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -65012,7 +65022,7 @@ PAGES.coach_plans=async function(){
     <div class="card">
       <div class="wp-head">
         <div><div class="card-title" style="margin:0;">訓練方案</div>
-          <div class="wp-sub">先把常用的菜單存成方案，上課直接套用。重量可以留空（徒手）。</div></div>
+          <div class="wp-sub">先把常用的菜單存成方案，上課直接套用。<br>重量可以留空（徒手）。</div></div>
         <button class="btn btn-green btn-sm" onclick="wpEdit('')">＋ 新方案</button>
       </div>
       ${mine.length?`<div class="wp-list">${mine.map(p=>card(p,true)).join('')}</div>`
@@ -65161,12 +65171,29 @@ function wpLpStart(e,i){
   const S=window._wp; if(!S) return;
   if(e.target && e.target.closest && e.target.closest('.wp-item-x')) return;   /* ✕ 不進拖移 */
   const startY=e.clientY;
-  let armed=false, cur=i;
+  let armed=false, cur=i, ghost=null, offY=0;
+  /* 浮起來、黏在手上（2026-09-09 使用者：「我剛剛拖移動作小卡　卡片沒有浮起來黏在手上的感覺」）——
+     做一個原尺寸的分身（clone）用 position:fixed 跟著手指跑，原本那一列留在原位當佔位。
+     ⚠ 分身**不縮放**（使用者先前明確要求卡片大小不要變），只加陰影與一點點抬起。
+     ⚠ 它掛在 body 上、脫離清單，所以清單重排重畫時分身不受影響。
+     ⚠ z-index 要高過彈窗（.modal-bg 是 9750）—— 這一頁本來就開在彈窗裡。 */
+  const lift=()=>{
+    const el=document.querySelector('#wp-items .wp-item[data-i="'+cur+'"]');
+    if(!el) return;
+    const r=el.getBoundingClientRect();
+    offY=startY-r.top;
+    ghost=el.cloneNode(true);
+    ghost.className='wp-item wp-ghost';
+    ghost.style.cssText='position:fixed;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;'
+      +'height:'+r.height+'px;margin:0;pointer-events:none;z-index:10200;box-sizing:border-box;';
+    document.body.appendChild(ghost);
+  };
   const timer=setTimeout(()=>{
     armed=true; window._wpDragI=cur;
     try{ if(navigator.vibrate) navigator.vibrate(15); }catch(_){}
     document.body.classList.add('wp-dragging-on');
     wpPaint();
+    lift();
   },400);
   const idxAt=(y)=>{
     const rows=[...document.querySelectorAll('#wp-items .wp-item')];
@@ -65182,6 +65209,7 @@ function wpLpStart(e,i){
       return;
     }
     ev.preventDefault();
+    if(ghost) ghost.style.top=(ev.clientY-offY)+'px';
     const j=idxAt(ev.clientY);
     if(j<0||j===cur) return;
     const [x]=S.items.splice(cur,1);
@@ -65196,6 +65224,7 @@ function wpLpStart(e,i){
       S._ordSel=cur;                /* 外框留在被移動的那一列 */
     }
     window._wpDragI=null;
+    if(ghost){ try{ ghost.remove(); }catch(_){} ghost=null; }
     document.body.classList.remove('wp-dragging-on');
     cleanup();
     if(armed) wpPaint();
