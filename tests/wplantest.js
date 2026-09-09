@@ -436,5 +436,19 @@ ok('★★★ 名字釘左、堂數釘右（原本兩段緊貼，名字長短不
    /\.mtc-r2-name\{[^}]*justify-content:space-between;gap:6px;/.test(src)
    && /名字釘左、堂數釘右，一整欄的堂數才對得齊/.test(src));
 
+console.log('\n⑰ 訓練課表抽屜的兩個回報（2026-09-09）');
+ok('★★★ 從抽屜開出來的彈窗要蓋在抽屜上面（抽屜 9999 > 彈窗 9750）',
+   /body:has\(#tl-sheet\) \.modal-bg,/.test(src)
+   && /body:has\(#bk-mem-sheet\) \.modal-bg\{z-index:10050;\}/.test(src)
+   && /從抽屜裡開出來的\s*\n\s*彈窗會躲在抽屜後面/.test(src));
+ok('★★★ 用 10050 不用更高 —— 挑選視窗 #adp-sheet 是 10090，那一層要能蓋在彈窗上面',
+   /用 10050 不用更高：挑選視窗 #adp-sheet 是 10090/.test(src)
+   && /#adp-sheet\{position:fixed;inset:0;z-index:10090;\}/.test(src));
+ok('★★★ 動作名稱長就截斷，不要把右邊的數字擠出去（flex 子項預設 min-width:auto）',
+   /\.tlh-ex\{font-size:14\.5px;font-weight:700;color:var\(--text\);\s*\n\s*min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src)
+   && /flex 子項預設 min-width:auto，長字串不會縮/.test(src));
+ok('★★ 右邊那段不折行、不被壓縮',
+   /\.tlh-sets\{[^}]*flex:none;white-space:nowrap;\}/.test(src));
+
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
