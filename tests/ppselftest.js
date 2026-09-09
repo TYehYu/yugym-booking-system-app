@@ -114,9 +114,8 @@ console.log('\n⑧ 「更多」選單改用線條圖示（2026-09-05：減少 AI
      線條圖示 —— 同一個 App 兩套視覺語言，emoji 那套還會因為作業系統各長一個樣。 */
   t('★★★ 選單十個項目都不再用 emoji 當圖示',
      ![...menu.replace(/\/\*[\s\S]*?\*\//g,'')].some(isEm));
-  /* 2026-09-09 管理員多一項「訓練方案」（手機底部只有三顆，不再擠第四顆 → 收在這裡） */
-  t('★★★ 十一個項目都走 moreIc（沒有漏網的）',
-     (menu.match(/\$\{moreIc\('[a-z]+'\)\}/g)||[]).length===11);
+  t('★★★ 十個項目都走 moreIc（沒有漏網的）',
+     (menu.match(/\$\{moreIc\('[a-z]+'\)\}/g)||[]).length===10);
   t('★★★ 能沿用的就沿用導覽列的圖示（會員／系統設定），不另外畫',
      /k==='member'\?NAV2_ICONS\.g_member/.test(src2) && /k==='settings'\?NAV2_ICONS\.g_settings/.test(src2));
   t('★★★ 規格與導覽列一致（24×24、stroke 1.7、currentColor）',

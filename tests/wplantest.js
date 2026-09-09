@@ -158,13 +158,20 @@ console.log('\n⑧ Phase 2：套用方案到課堂');
 }
 
 console.log('\n⑨ 管理員也用得到（2026-09-09 使用者：「先把這個功能開放到管理員端」）');
-ok('★★ 桌機在「管理員 → 環境設定」，接在動作資料庫旁邊',
-   /\{grp:'環境設定', label:'訓練方案', page:'coach_plans'\},/.test(src));
-ok('★★ 手機收在「其他」選單（底部三顆不再擠第四顆）',
-   /navTo\('coach_plans'\)\">\$\{moreIc\('plan'\)\}訓練方案/.test(src)
-   && /k==='plan'\?BN_ICONS\.coach_plans/.test(src));
+/* 2026-09-09 使用者：「桌機要放在上方分頁　手機放在下方分頁」——
+   原本桌機收在「管理員 → 環境設定」、手機收在「其他」選單，兩個都看不見。 */
+ok('★★★ 桌機在頂欄自己一組（只有一個子項目，點頂欄直接進頁）',
+   /\{key:'g_train', label:'訓練方案', sub:\[\s*\n\s*\{label:'訓練方案', page:'coach_plans'\},\s*\n\s*\]\},/.test(src)
+   && /g_train:'<svg viewBox="0 0 24 24"/.test(src));
+ok('★★★ 手機在底部導覽（不是收在「其他」選單裡）',
+   /\{key:'coach_plans', label:'訓練方案'\},/.test(src)
+   && !/navTo\('coach_plans'\)\">\$\{moreIc/.test(src));
+ok('★★ 不給櫃檯（沒有課要上，方案對他沒有用）',
+   /⚠ 不給 fd:true：櫃檯沒有課要上，方案對他沒有用。/.test(src));
+ok('★★ 動作資料庫留在環境設定（它是材料庫），沒有被一起搬走',
+   /\{grp:'環境設定', label:'動作資料庫', page:'exercise_db'\},/.test(src));
 ok('★★ 管理員看到的是自己那份（老闆本身也是教練，isCoachable 含 admin）',
-   /管理員看到的是\*\*自己那份\*\*方案（頁面吃 SESSION\.id）/.test(src));
+   /管理員看到的是\*\*自己那份\*\*（頁面吃 SESSION\.id）/.test(src));
 
 console.log('\n⑩ Phase 3：會員看得到自己的訓練紀錄');
 {
