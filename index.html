@@ -4423,6 +4423,7 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .mtp-tl-h i{font-style:normal;font-size:11px;font-weight:400;color:var(--t3);margin-left:8px;}
 .tl-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
 .tl-acts .btn{width:100%;}
+.tl-acts.tl-acts-one{grid-template-columns:1fr;}   /* 只剩一顆時撐滿（2026-09-09） */
 .wp-share-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px 12px;
   background:var(--card2);border:1px solid var(--bd);border-radius:11px;padding:10px 12px;}
 /* 動作設定視窗：一列一個數字，左右各一組加減 */
@@ -12560,8 +12561,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260909.1613';
-const APP_VERSION_LABEL = 'v260909.1613';
+const APP_VERSION = '260909.1620';
+const APP_VERSION_LABEL = 'v260909.1620';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16029,7 +16030,8 @@ const MOBILE_COACH_NAV=[
    於是余東翰（can_teach=false）從側邊還是進得去。兩份導覽要走同一條線。 */
 function mobileCoachNavItems(){
   const canTeach = !SESSION || SESSION.can_teach!==false;
-  return canTeach ? MOBILE_COACH_NAV : MOBILE_COACH_NAV.filter(n=>n.key!=='coach_calendar'&&n.key!=='coach_plans');
+  const base=MOBILE_COACH_NAV.filter(n=>n.key!=='coach_plans'||wpEnabled());
+  return canTeach ? base : base.filter(n=>n.key!=='coach_calendar');
 }
 // 櫃台｜手機版：精簡（行事曆只看月曆、會員只搜尋、票券只看方案；櫃台主力為平板/桌機）
 const MOBILE_FRONTDESK_NAV=[
@@ -16072,7 +16074,8 @@ function buildNav(){
       buildBottomNav();
       return;
     }
-    items = (isMobile ? MOBILE_COACH_NAV : NAV.coach).slice();
+    items = (isMobile ? MOBILE_COACH_NAV : NAV.coach).slice()
+      .filter(n=>n.key!=='coach_plans'||wpEnabled());   /* 目前只開放給管理員（見 wpEnabled） */
     // 我的出勤（唯讀班表）：所有教練
     if(!items.find(n=>n.key==='coach_attendance'))
       items.splice(1,0,{key:'coach_attendance',label:'我的出勤'});
@@ -16342,8 +16345,10 @@ const COACH_BOTTOM_NAV=[
    （「報表」本來就只在 ADMIN_BOTTOM_NAV，也就是 role='admin' 才有，不必另外擋。） */
 function coachBottomNavItems(){
   const canTeach = !SESSION || SESSION.can_teach!==false;
-  /* 2026-09-09：訓練方案跟行事曆同一條線 —— 不開課的人沒有課可以套方案。 */
-  return canTeach ? COACH_BOTTOM_NAV : COACH_BOTTOM_NAV.filter(n=>n.key!=='coach_calendar'&&n.key!=='coach_plans');
+  /* 2026-09-09：訓練方案跟行事曆同一條線 —— 不開課的人沒有課可以套方案。
+     再加一道 wpEnabled()：這個功能目前只開放給管理員（見 wpEnabled 的說明）。 */
+  const base=COACH_BOTTOM_NAV.filter(n=>n.key!=='coach_plans'||wpEnabled());
+  return canTeach ? base : base.filter(n=>n.key!=='coach_calendar');
 }
 // ── 會員端：底部固定導覽列（我的預約｜簽到｜我的票券）──
 const MEMBER_BOTTOM_NAV=[
@@ -59590,8 +59595,11 @@ async function renderTrainingLogSheet(){
         ${overview}
         <div class="tlh-label">今日訓練紀錄</div>
         ${sec2}
-        <div class="tl-acts">
-          <button class="btn btn-ghost" onclick="tlOpenPlanPick()">套用方案</button>
+        ${/* 「套用方案」跟著 wpEnabled()：目前只有管理員看得到。
+             ⚠ 沒有它的時候「新增動作」要撐滿整列（.tl-acts 是兩欄），
+               不然會變成半條孤零零的按鈕。 */''}
+        <div class="tl-acts${wpEnabled()?'':' tl-acts-one'}">
+          ${wpEnabled()?'<button class="btn btn-ghost" onclick="tlOpenPlanPick()">套用方案</button>':''}
           <button class="btn btn-green" onclick="tlStartAddExercise()">＋ 新增動作</button>
         </div>
         <div class="tlh-label" style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
@@ -64845,6 +64853,12 @@ function wpItemLine(it){
 function wpNewItem(){ return {name:'', body_part:'', tool:'', reps:12, sets:3, weight:'', unit:'kg', note:''}; }
 
 /* ── 我看得到哪些方案：自己的 ∪ 分享給我的（RLS 也擋一道，這裡只是畫面） ── */
+/* ── 訓練方案先只開放給管理員（2026-09-09 使用者：「訓練方案可以先套在管理員權限了嗎」）──
+   ⚠ 只有這一支判準，教練端要開放時改這裡就好 —— 散在各處的話一定會漏掉一個入口，
+     而漏掉的那個會變成「教練點得到、但不該點」的破口。
+   ⚠ 頁面本身不另外擋：導覽列沒有入口、課卡上沒有按鈕，就到不了；
+     真的手打網址進來也只會看到自己的（空的）方案，動不到別人的東西（RLS 擋著）。 */
+function wpEnabled(){ return !!(SESSION && SESSION.role==='admin'); }
 function wpMine(list){ const me=(SESSION&&SESSION.id)||''; return (list||[]).filter(p=>p&&p.active!==false&&p.coach_id===me); }
 function wpShared(list){ const me=(SESSION&&SESSION.id)||'';
   return (list||[]).filter(p=>p&&p.active!==false&&p.coach_id!==me

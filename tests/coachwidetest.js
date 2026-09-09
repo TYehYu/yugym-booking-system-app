@@ -35,7 +35,7 @@ ok('　　手機版維持原本的底部導覽（首頁／行事曆）',
    /const COACH_BOTTOM_NAV=\[\s*\n\s*\{key:'coach_today',   label:'首頁'\},[\s\S]{0,300}\{key:'coach_calendar',label:'行事曆'\},/.test(src));
 ok('　　薪資單／個人資料／補打卡仍在右上角 ☰ 選單', /薪資單、個人資料、補打卡等仍在右上角 ☰ 選單裡/.test(src));
 ok('　　套用後直接 return，不會又被下面的 NAV.coach 覆蓋',
-   /buildBottomNav\(\);\s*\n\s*return;\s*\n\s*\}\s*\n\s*items = \(isMobile \? MOBILE_COACH_NAV : NAV\.coach\)\.slice\(\);/.test(src));
+   /buildBottomNav\(\);\s*\n\s*return;\s*\n\s*\}\s*\n\s*items = \(isMobile \? MOBILE_COACH_NAV : NAV\.coach\)\.slice\(\)/.test(src));
 ok('　　舊的 navbar-row 顯示規則已移除（導覽改在綠底頂列）',
    !/#app-screen\.coach-wide\.role-coach \.navbar-row\{display:flex;\}/.test(src));
 ok('　　原因寫在程式裡', /教練用桌機時是「放大版的手機介面」/.test(src));

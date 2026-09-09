@@ -96,7 +96,7 @@ ok('★★★ 手機底部、手機側邊、桌機上方都有',
    && /\{key:'coach_plans',label:'訓練方案'\}/.test(src)
    && /\{key:'coach_plans',label:'訓練方案'\},   \/\* 2026-09-09 使用者指示：桌機上方也要 \*\//.test(src));
 ok('★★★ 不能開課的人看不到（跟行事曆同一條線）',
-   (src.match(/n\.key!=='coach_calendar'&&n\.key!=='coach_plans'/g)||[]).length===2);
+   (src.match(/return canTeach \? base : base\.filter\(n=>n\.key!=='coach_calendar'\);/g)||[]).length===2);
 ok('★★ 底部導覽的圖示有補（沒有的話那一顆是空的）', /  coach_plans:'<svg viewBox="0 0 24 24"/.test(src));
 
 console.log('\n⑦ 存檔');
@@ -207,6 +207,28 @@ ok('★★★ 櫃檯那張「功能開發中」的空頁換成真的內容',
 ok('★★ 訓練紀錄那一張表只有真的要看時才撈（每開一位會員都組一次 ctx）',
    /if\(PP\.recView==='training'\)\{/.test(src)
    && /訓練紀錄是四個分頁裡最少人點的那個/.test(src));
+
+console.log('\n⑪ 先只開放給管理員（2026-09-09 使用者：「訓練方案可以先套在管理員權限了嗎」）');
+{
+  const E=who=>new Function('SESSION','return '+g('function wpEnabled(){','\n}'))(who)();
+  eq('★★★ 管理員開、教練關', [E({role:'admin'}), E({role:'coach'})], [true,false]);
+  eq('★★ 櫃檯／會員也關', [E({role:'front_desk'}), E({role:'member'}), E(null)], [false,false,false]);
+}
+ok('★★★ 只有一支判準，教練端要開放時改那一支就好',
+   /只有這一支判準，教練端要開放時改這裡就好/.test(src)
+   && (src.match(/wpEnabled\(\)/g)||[]).length>=5);
+ok('★★★ 教練的三份導覽都吃這一支（少一份就是「點得到但不該點」的破口）',
+   (src.match(/n\.key!=='coach_plans'\|\|wpEnabled\(\)/g)||[]).length===3);
+ok('★★★ 課卡抽屜的「套用方案」也跟著關',
+   /\$\{wpEnabled\(\)\?'<button class="btn btn-ghost" onclick="tlOpenPlanPick\(\)">套用方案<\/button>':''\}/.test(src));
+ok('★★ 少一顆按鈕時「新增動作」要撐滿整列（不然是半條孤零零的按鈕）',
+   /<div class="tl-acts\$\{wpEnabled\(\)\?'':' tl-acts-one'\}">/.test(src)
+   && /\.tl-acts\.tl-acts-one\{grid-template-columns:1fr;\}/.test(src));
+ok('★★ 管理員那兩個入口不受影響（頂欄一組、手機底部一顆）',
+   /\{key:'g_train', label:'訓練方案', sub:\[/.test(src)
+   && /\{key:'coach_plans', label:'訓練方案'\},/.test(src));
+ok('★★ 頁面本身不另外擋，理由寫在原地（到不了就是到不了；RLS 才是真的防線）',
+   /導覽列沒有入口、課卡上沒有按鈕，就到不了/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
