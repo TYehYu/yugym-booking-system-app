@@ -552,5 +552,16 @@ console.log('\n⑨ 手機下限 11px（2026-09-05：可讀性）');
      /月曆週標題七格仍在同一列、頁高 300→300 不變/.test(fs2.readFileSync(__filename,'utf8')));
 }
 
+/* 2026-09-09 五修：從導覽列往上滑會把它拉離底部 */
+t('★★★ 導覽列與自主訓練列自己吃掉縱向手勢（它們不是捲動容器，手勢會傳給文件）',
+  /body\.memh2-shell #bottom-nav,\n\s*body\.memh2-shell #mem-selfbar\{touch-action:none;\}/.test(s));
+t('★★★ 自主訓練列裡面仍要能左右捲 → 那一層是 pan-x 不是 none',
+  /body\.memh2-shell #mem-selfbar \.mh2-sbrow\{touch-action:pan-x;\}/.test(s));
+t('★★★ html 也關掉回彈（body 設了 overflow:hidden，回彈仍可能發生在文件層）',
+  /html:has\(body\.memh2-shell\)\{height:100%;overflow:hidden;overscroll-behavior:none;\}/.test(s)
+  && /body\.memh2-shell\{height:100dvh;overflow:hidden;overscroll-behavior:none;\}/.test(s));
+t('★★ 只套會員外殼，不動管理員／教練的整頁捲動手感',
+  !/body\.chv2-shell #bottom-nav\{touch-action/.test(s));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

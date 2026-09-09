@@ -73,7 +73,8 @@ t('chv2-shell 只覆寫顏色', /body\.chv2-shell \.bottom-nav\{background:var\(
 /* 使用者：「用力上下滑動的時候下方的導覽列會脫離」。只要整份文件在捲，iOS 的橡皮筋
    回彈那幾幀就會把 position:fixed 帶著跑 —— 那是平台行為，改成浮動膠囊也一樣。
    根治：外殼固定滿版、只有內容區捲，導覽列在正常流程裡排在底部。 */
-t('★★ 外殼固定滿版、整頁不捲', /body\.memh2-shell\{height:100dvh;overflow:hidden;\}/.test(s)
+/* 2026-09-09 五修加上 overscroll-behavior:none（見 memh2test.js 那三條） */
+t('★★ 外殼固定滿版、整頁不捲', /body\.memh2-shell\{height:100dvh;overflow:hidden;overscroll-behavior:none;\}/.test(s)
   && /body\.memh2-shell #app-screen\{height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;\}/.test(s));
 t('★★ .content 不是 #app-screen 的直接子層 —— 中間的 .layout 也要撐滿',
   /body\.memh2-shell #app-screen>\.layout\{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;\}/.test(s));
