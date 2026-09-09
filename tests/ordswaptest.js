@@ -69,7 +69,7 @@ const g=(a,b)=>{const i=src.indexOf(a);if(i<0)return '';return src.slice(i,src.i
       console.log('② 換場地殘留同行');
       ok('　doVenueChange 有偵測不同場地類型的同行卡',
         src.includes("x.sibling_of===b.id&&x.status!=='cancelled'"));
-      ok('　詢問視窗（保留／一併取消）', /同行第二台還掛著/.test(src) && /vcCancelSibs/.test(src));
+      ok('　詢問視窗（保留／一併取消）', /同行的第 2 人還掛著/.test(src) && /vcCancelSibs/.test(src));
       ok('　一併取消走 cancelled＋備註，不碰票務',
         /s\.status='cancelled'; s\.cancelled_at=new Date\(\)\.toISOString\(\);/.test(src));
       console.log('① 掛載點');

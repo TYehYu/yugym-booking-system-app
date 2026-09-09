@@ -36,12 +36,12 @@ console.log('畫幾顆按鈕、什麼狀態（2026-08-12 改成「一台／兩�
 {
   let h=await mk([])(SELF(),true);
   eq('★ 跑步機畫兩顆', btns(h), ['on','']);   // 2026-08-12：燈號→台數按鈕；目前 1 台＝「一台」綠底
-  ok('　　本堂台數綠底（on）、另一顆是可點的開關',
+  ok('　　本堂人數綠底（on）、另一顆是可點的開關',
      /onclick="bkSetVenueUnits\('B0',2\)"/.test(h)
-     && /同行使用，第 2 台不另外扣點/.test(h));   // 2026-08-12：開第 2 台改走 bkSetVenueUnits
+     && /同行使用，第 2 人不另外扣點/.test(h));   // 2026-08-12：開第 2 台改走 bkSetVenueUnits
   /* 2026-08-12 使用者指示：按鈕寫「一台／兩台」（要的是結果台數，不是機台編號） */
-  ok('★ 按鈕標台數不標機台編號（一台／兩台）',
-     />一台<\/button>/.test(h) && />兩台<\/button>/.test(h) && !/>[12]<\/(span|button)>/.test(h));
+  ok('★ 按鈕標人數不標機台編號（一人／兩人）',
+     />一人<\/button>/.test(h) && />兩人<\/button>/.test(h) && !/>[12]<\/(span|button)>/.test(h));
 
   h=await mk([T('treadmill_2','17:00')])(SELF(),true);
   eq('★ 另一台被別人約走 → 「兩台」不可按', btns(h), ['on','dis']);   // 2026-08-12：taken 燈→disabled 按鈕
@@ -113,9 +113,9 @@ console.log('\n行事曆上是一張卡，不是兩張（2026-07-31 使用者回
   eq('　　空陣列／null 不會爆', [merge([]).length, merge(null).length], [0,0]);
 }
 /* 2026-08-05 使用者指示：「不要用燈號顯示了，直接顯示跑步機・一台或兩台」 */
-ok('★ 台數改文字（跑步機・一台／兩台），燈號退場',
+ok('★ 人數改文字（跑步機・一人／兩人），燈號退場',
    /function venueUnitsLabel\(b\)\{/.test(src)
-   && /return '跑步機・'\+\(NUM\[n\]\|\|\(n\+' 台'\)\);/.test(src)   /* 2026-08-18 抽出 NUM（訓練架多台共用） */
+   && /return '跑步機・'\+\(NUM\[n\]\|\|\(n\+' 人'\)\);/.test(src)   /* 2026-08-18 抽出 NUM（訓練架多台共用） */
    && !/'●'\.repeat\(b\._units\)/.test(src));
 ok('★ 四個畫課卡的地方都併卡：桌機行事曆／手機週檢視／首頁任務／桌機日檢視',
    /function mergeGroupBookings\(list\)\{\s*\n\s*list=mergeSiblingUnits\(list\);/.test(src)
@@ -146,7 +146,7 @@ console.log('\n權限');
   const h2=await mk([{id:'B9',date:'2026-07-31',status:'booked',venue_unit:'treadmill_2',
                       start_time:'17:00',duration:60,sibling_of:'B0'}])(SELF(),false);
   ok('★ 不可編輯時只顯示、不給點', !/<button/.test(h1) && !/<button/.test(h2)
-     && h1==='' && /使用 2 台/.test(h2));
+     && h1==='' && /2 人同行/.test(h2));
 }
 
 console.log('\n接到明細裡');
@@ -159,11 +159,11 @@ ok('★ 點燈號 → 開關這一台', /async function bkToggleVenueUnit\(id, u
 ok('★ 打開＝建一筆「同行使用」的預約，不綁票不扣點',
    /ticket_id:null, ticket_type_id:b\.ticket_type_id\|\|null,/.test(src)
    && /note:`同行使用（\$\{venueName\(vid\)\}）・不另外扣點`/.test(src));
-ok('★ 關掉＝取消那一筆；至少要留一台',
-   /if\(hit\.id===root\)\{ showToast\('至少要留一台；要收掉這一堂請用「取消預約」'\); return; \}/.test(src));
+ok('★ 關掉＝取消那一筆；至少要留 1 人',
+   /if\(hit\.id===root\)\{ showToast\('至少要留 1 人；要收掉這一堂請用「取消預約」'\); return; \}/.test(src));
 ok('★ 同一組用 sibling_of 串起來', /sibling_of:root,/.test(src)
    && /const root=b\.sibling_of\|\|b\.id;/.test(src));
-ok('★ 開之前確認沒被別人搶走', /showToast\('這一台剛被別人約走了'\); openBookingDetail\(id\); return;/.test(src));
+ok('★ 開之前確認沒被別人搶走', /showToast\('這一台跑步機剛被別人約走了'\); openBookingDetail\(id\); return;/.test(src));
 ok('★ 教練不能動別人的課', /if\(typeof coachOwnsBk==='function' && !coachOwnsBk\(b\)\)\{ showToast\('這不是你的課，只能查看'\); return; \}/.test(src));
 ok('　　改完重開明細並重繪行事曆', /openBookingDetail\(id\);\s*\n\s*if\(typeof navTo==='function' && \(CUR_PAGE==='calendar'\|\|CUR_PAGE==='g_dashboard'\)\) navTo\(CUR_PAGE\);/.test(src));
 ok('　　存檔失敗會講原因', /showToast\('儲存失敗：'\+\(\(e&&e\.message\)\|\|e\)\)/.test(src));

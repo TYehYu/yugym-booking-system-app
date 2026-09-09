@@ -99,7 +99,7 @@ console.log('同行卡建立');
       return !/訓練架・/.test(noC) && !/venueShort/.test(noC);
     })());
     eq('　訓練架×1 → 不標（預設場地，照舊）', lbl({category:'自主訓練',venue_unit:'multi_1'}), '');
-    eq('　跑步機×2 照舊', lbl({category:'自主訓練',venue_unit:'treadmill_1',_units:2}), '跑步機・兩台');
+    eq('　跑步機×2 照舊', lbl({category:'自主訓練',venue_unit:'treadmill_1',_units:2}), '跑步機・兩人');
 
     /* ── mergeSiblingUnits：同場地併卡、跨場地拆卡（2026-08-18 蘇美帆 10:00 案例） ── */
     console.log('同行卡合併規則');

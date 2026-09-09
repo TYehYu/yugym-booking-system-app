@@ -19,10 +19,10 @@ console.log('① 滑鼠提示顯示場地與台數');
     grabFn('selfVenueLabel')+'\n'+grabFn('bkVenueTipLine')+'\nreturn bkVenueTipLine;')(b=>b&&b.category==='小班肌力');
   const txt=h=>String(h).replace(/<[^>]*>/g,'').trim();
 
-  eq('★ 跑步機一台 → 標「跑步機 · 1 台」',
-     txt(fn({category:'自主訓練',venue_unit:'treadmill_1'})), '場地：跑步機　·　1 台');
-  eq('★ 跑步機兩台（合併卡的 _units）→ 標「2 台」',
-     txt(fn({category:'自主訓練',venue_unit:'treadmill_1',_units:2})), '場地：跑步機　·　2 台');
+  eq('★ 跑步機一台 → 標「跑步機 · 1 人」',
+     txt(fn({category:'自主訓練',venue_unit:'treadmill_1'})), '場地：跑步機　·　1 人');
+  eq('★ 跑步機兩台（合併卡的 _units）→ 標「2 人」',
+     txt(fn({category:'自主訓練',venue_unit:'treadmill_1',_units:2})), '場地：跑步機　·　2 人');
   eq('★ 團課教室 → 標場地，不標台數（教室不是以台計）',
      txt(fn({category:'自主訓練',venue_unit:'group_1'})), '場地：教室');
   eq('★ 教練課排到教室也要標（不是只有自主訓練）',
@@ -33,9 +33,9 @@ console.log('① 滑鼠提示顯示場地與台數');
   eq('　　團體課本來就在團課教室 → 不標', fn({category:'小班肌力',venue_unit:'group_1'}), '');
   eq('　　場租不標', fn({category:'場租',venue_unit:'group_1'}), '');
   eq('★ 舊系統匯入（只有 note 帶「教室:跑步機2」）也讀得到',
-     txt(fn({category:'自主訓練',venue_unit:null,note:'舊系統匯入｜教室:跑步機2'})), '場地：跑步機　·　1 台');
-  eq('　　_units 是壞值時當 1 台，不會印出 NaN',
-     txt(fn({category:'自主訓練',venue_unit:'treadmill_1',_units:'x'})), '場地：跑步機　·　1 台');
+     txt(fn({category:'自主訓練',venue_unit:null,note:'舊系統匯入｜教室:跑步機2'})), '場地：跑步機　·　1 人');
+  eq('　　_units 是壞值時當 1 人，不會印出 NaN',
+     txt(fn({category:'自主訓練',venue_unit:'treadmill_1',_units:'x'})), '場地：跑步機　·　1 人');
 }
 ok('★ 一般（顯示會員名）與遮蔽（教練看別人的課）兩種提示都掛上',
    (src.match(/\$\{bkVenueTipLine\(b\)\}/g)||[]).length===2);
@@ -44,8 +44,8 @@ ok('★ 一般（顯示會員名）與遮蔽（教練看別人的課）兩種提
    只加前者等於沒加。 */
 ok('★ 跟著游標的那個浮框（data-tip）也要有場地那一行',
    /const _tipStr = _tipEsc\(\[`\$\{b\.start_time\}–\$\{_endT\}`, _tipMem, _tipCoach, _tipVenue\]\.filter\(Boolean\)\.join\('\\n'\)\);/.test(src));
-ok('　　它同樣是「教室／跑步機才標、跑步機附台數」',
-   /const _tipVenue = \(function\(\)\{ const v=selfVenueLabel\(b\); if\(!v\) return '';[\s\S]{0,160}v==='跑步機'\?`　·　\$\{n\} 台`:''/.test(src));
+ok('　　它同樣是「教室／跑步機才標、跑步機附人數」',
+   /const _tipVenue = \(function\(\)\{ const v=selfVenueLabel\(b\); if\(!v\) return '';[\s\S]{0,160}v==='跑步機'\?`　·　\$\{n\} 人`:''/.test(src));
 ok('　　兩種提示的存在寫在程式裡（下次不會又只改一邊）',
    /實際看得到的是後者，只加前者等於沒加（使用者回報/.test(src));
 ok('　　場地不是隱私、正是排課要看的 —— 理由寫在程式裡',
@@ -78,7 +78,7 @@ ok('★ 選單有「團課教室」選項',
 /* 2026-08-03 家庭成員：vbkChk 多帶 member_id 與使用人 */
 ok('★ 單筆預約的場地預驗證也帶上指定（否則會先被判成多功能區可用）',
    /const vbkChk=\{id:null,coach_id,category:t\.category,ticket_type_id:type_id,venue_pref:_venuePref,\n\s*member_id, trial_name:\(window\._bkFamUser!=null\?window\._bkFamUser:null\)\};/.test(src));   // 2026-08-04 '' 哨兵不塌成 null
-ok('★ 兩台只扣 1 點，第 2 台是同行使用', /兩台以上＝同行使用，<b>只扣 1 點<\/b>/.test(src)   // 2026-08-18 多功能也開放多台後的文案
+ok('★ 兩人只扣 1 點，第 2 人是同行使用', /兩人以上＝同行使用，<b>只扣 1 點<\/b>/.test(src)   // 2026-08-18 多功能也開放多台後的文案
    && /note:`同行使用（\$\{venueName\(vid\)\}）・不另外扣點`/.test(src));
 ok('★ 第 2 台用 sibling_of 指回主預約（行事曆才會併成一張卡）',
    /sibling_of:bk\.id,/.test(src));
@@ -86,8 +86,8 @@ ok('★ 指定跑步機時走原路徑，不走 DB 的 fn_create_booking',
    /&&!o\.venue_pref&&!bkIsSelf\(bk\)\)\{/.test(src)   // 2026-08-04 自主訓練也排除
    && /跑步機是「一個場地兩台＋同行第 2 台不扣點」的獨立流程，還沒進那支 RPC/.test(src));
 ok('　　venue_pref 只是配置提示，不入庫', /delete bk\.venue_pref;                    \/\/ 只是配置提示，不入庫/.test(src));
-ok('　　建立成功的吐司講清楚開了幾台、第 2 台不扣點',
-   /（\$\{venueName\(_venuePref\)\|\|'場地'\} \$\{_tmN\} 台，第 2 台起不扣點）/.test(src));   /* 2026-08-18 場地名稱跟著指定場地 */
+ok('　　建立成功的吐司講清楚開了幾人、第 2 人不扣點',
+   /（\$\{venueName\(_venuePref\)\|\|'場地'\} \$\{_tmN\} 人，第 2 人起不扣點）/.test(src));   /* 2026-08-18 場地名稱跟著指定場地 */
 
 console.log('\n③ 會員自己從手機約也要能選台數');
 /* 2026-08-02 使用者指示：「只要會連動上行事曆、影響其他人預約場地的地方，
@@ -107,8 +107,8 @@ ok('★ 台數帶給 RPC（p_units），且只有真的排到跑步機才帶',
    && /const _units=\(String\(vbk\.venue_unit\|\|''\)\.split\('_'\)\[0\]==='treadmill'\)\?\(s\.pickUnits\|\|1\):1;/.test(src));
 ok('★ 實際開成幾台以 DB 回傳為準，被別人搶走時照實說（不謊報）',
    /const _got=Number\(r\.units\)\|\|1;/.test(src)
-   && /第 2 台剛被約走，只保留 1 台/.test(src));
-ok('　　標明第 2 台不扣點', /<span style="font-size:11px;color:var\(--t3\);">第 2 台不扣點<\/span>/.test(src));
+   && /沒有多的跑步機，只保留 1 人/.test(src));
+ok('　　標明第 2 人不扣點', /<span style="font-size:11px;color:var\(--t3\);">第 2 人不扣點<\/span>/.test(src));
 ok('　　台數不信任前端，理由寫在程式裡',
    /台數由 DB 端自己查還空著哪幾台，不信任這裡傳的數字/.test(src));
 
@@ -186,7 +186,7 @@ ok('★ 佔用數用「筆數」算並以容量封頂（舊資料有不帶編號
 ok('★ 就算前端被繞過，DB 也只開得成剩下的台數（migration 記載不信任前端）',
    fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260802_member_self_book_treadmill_units.sql','utf8')
      .includes('台數不信任前端'));
-ok('　　開不成兩台時吐司照實說', /第 2 台剛被約走，只保留 1 台/.test(src));
+ok('　　開不成兩人時吐司照實說', /沒有多的跑步機，只保留 1 人/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
     process.exit(fail?1:0);
