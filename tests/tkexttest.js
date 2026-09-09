@@ -171,9 +171,13 @@ ok('★ 教練／手機頂列：#tb-refresh 排在 #tb-clock 左邊',
    頂列的 #mc-topclock —— 按鈕做在 .tb-right 裡等於看不到（使用者回報「按鈕不見了」）。 */
 ok('★ 桌機管理版頂列：#mc-refresh 排在 #mc-topclock 左邊',
    /<button type="button" class="rf-btn mc-rf" id="mc-refresh" title="更新畫面（重新抓取最新資料）"\s*\n\s*aria-label="更新畫面" onclick="dashManualRefresh\(\)">\$\{RF_ICON\}<\/button>\s*\n\s*<span class="mc-topclock" id="mc-topclock">/.test(src));
-ok('　　靠右對齊由按鈕接手，時鐘的 margin-left:auto 讓給它',
-   /body\.mc-mode \.mc-rf\{margin-left:auto;/.test(src)
-   && /body\.mc-mode \.mc-rf \+ \.mc-topclock\{margin-left:0;\}/.test(src));
+/* 2026-09-09：兩個 auto 都拿掉了（使用者回報「上方導覽列沒有置中」）——
+   auto 邊界是平分剩餘空間，右邊多一個 auto 就會把中央膠囊擠偏。
+   靠右現在是「膠囊的右側 auto 把剩餘空間吃掉」達成的。 */
+ok('　　右側那組不再自己搶 auto（置中交給中央膠囊的 margin:0 auto）',
+   !/body\.mc-mode \.mc-rf\{margin-left:auto;/.test(src)
+   && !/body\.mc-mode \.mc-topclock\{margin-left:auto;/.test(src)
+   && /body\.mc-mode \.mc-nav\{position:static;transform:none;margin:0 auto;/.test(src));
 ok('　　非 mc-mode 時這顆不顯示（避免兩顆同時出現）', /body:not\(\.mc-mode\) \.mc-rf\{display:none;\}/.test(src));
 ok('　　綠底頂列上的配色（半透明白底＋淺色圖示）',
    /body\.mc-mode \.mc-rf\{[\s\S]{0,180}background:rgba\(255,255,255,\.1\);border:1px solid rgba\(255,255,255,\.18\);color:#F4F1E8;/.test(src));

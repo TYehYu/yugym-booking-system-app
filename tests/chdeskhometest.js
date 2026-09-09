@@ -36,25 +36,33 @@ ok('★★ Ink 只在員工桌機開（手機版不吃這一層）',
 
 console.log('\n③ 兩張 KPI 卡收斂（桌機）');
 ok('★★★ 桌機改成橫排一條（原本是置中直式大卡，一張佔半個螢幕只放一個數字）',
-   /\.cds-card\{flex-direction:row;align-items:center;justify-content:flex-start;/.test(src)
+   /\.dash-wrap \.cds-card\{flex-direction:row;align-items:center;justify-content:flex-start;/.test(src)
    && /一張佔半個螢幕\s*\n\s*只為了放一個數字/.test(src));
 ok('★★★ 值班那張是圓環版時仍維持直式（環要置中才好看）',
-   /\.cds-card:has\(\.dr-wrap\)\{flex-direction:column;align-items:center;text-align:center;\}/.test(src));
+   /\.dash-wrap \.cds-card:has\(\.dr-wrap\)\{flex-direction:column;align-items:center;text-align:center;\}/.test(src));
 ok('★★ 說明推到最右邊（橫排時它是附註，不該擠在數字旁邊）',
-   /\.cds-card \.mc-kpi-rev-sub\{margin-left:auto;text-align:right;\}/.test(src));
+   /\.dash-wrap \.cds-card \.mc-kpi-rev-sub\{margin-left:auto;text-align:right;\}/.test(src));
 
 console.log('\n④ 今日課程從圓圈攤成橫列（桌機）');
 ok('★★★ 桌機一列一堂，圓圈留著當左邊的時間章',
-   /\.task-dots\{flex-direction:column;flex-wrap:nowrap;gap:8px;\}/.test(src)
-   && /\.task-dot-wrap\{flex-direction:row;width:100%;gap:12px;align-items:center;/.test(src));
+   /\.dash-wrap \.task-dots\{flex-direction:column;flex-wrap:nowrap;gap:8px;\}/.test(src)
+   && /\.dash-wrap \.task-dot-wrap\{flex-direction:row;width:100%;gap:12px;align-items:center;/.test(src));
 ok('★★★ 右邊補上課種・場地與狀態（桌機才有空間放）',
    /const _tdSub=\[bookingTypeName\(b,typeMap\),/.test(src)
    && /<span class="task-dot-sub">\$\{escH\(_tdSub\)\}<\/span>/.test(src)
    && /<span class="task-dot-st">\$\{_tdSt\}<\/span>/.test(src));
 ok('★★★ 手機維持圓圈，多帶的兩段不畫（那一版是為手機設計的）',
-   /\.task-dot-sub,\.task-dot-st\{display:none;\}/.test(src)
-   && /手機維持圓圈（那一版是為手機設計的），多帶的兩段不畫/.test(src));
-ok('★★ 桌機那一段把它們打開', /\.task-dot-sub\{display:block;color:var\(--t3\);/.test(src));
+   /\.dash-wrap \.task-dot-sub,\.dash-wrap \.task-dot-st\{display:none;\}/.test(src));
+/* 2026-09-09 二修（使用者：「今日任務也還是維持圓形課卡　我記得要改?」）——
+   第一版整組沒生效：.task-dots／.cds-card 的原始定義寫在那一段**後面**，
+   而 media query 不會增加權重，同權重時後面的贏。 */
+ok('★★★ 桌機那一組全部加 .dash-wrap 前綴把權重墊高（media query 不加權重）',
+   /\.dash-wrap \.task-dots\{flex-direction:column;/.test(src)
+   && /\.dash-wrap \.cds-card\{flex-direction:row;/.test(src)
+   && /media query \*\*不會增加權重\*\*：同權重時後面的贏，所以第一版整組沒有生效/.test(src));
+ok('★★ .dash-wrap 只有教練首頁在用，加前綴不會波及別頁',
+   (src.match(/class="dash-wrap"/g)||[]).length===1);
+ok('★★ 桌機那一段把它們打開', /\.dash-wrap \.task-dot-sub\{display:block;color:var\(--t3\);/.test(src));
 ok('★★ 場地名稱有跳脫（它會被組進 HTML）', /escH\(_tdSub\)/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');

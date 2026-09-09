@@ -358,6 +358,14 @@ console.log('\n⑬ 動作用「長按拖移」調順序（2026-09-09 四修）')
      && /畫面上會同時有兩個被框起來的，看起來就像框在沒碰過的卡片上/.test(src));
   ok('★★★ 清的時候只能改 class，不能呼叫 wpPaint（拖移中重畫會中斷拖移）',
      /直接改 class，不能呼叫 wpPaint（拖移中重畫＝節點被銷毀＝pointercancel）/.test(src));
+  /* 2026-09-09 九修（使用者：「2號 還是會自己被選取」）—— 會畫出框的有兩個來源，兩個都處理。 */
+  ok('★★★ ①「剛移動」的標記 1.6 秒後自己退掉（標記是暫時的，就該有壽命）',
+     /\},1600\);/.test(LP) && /標記是暫時的，就該有壽命/.test(src));
+  ok('★★★ 退掉時要確認還是同一份方案（中途換方案就不要亂清別人的）',
+     /if\(!window\._wp \|\| window\._wp!==S\) return;/.test(LP));
+  ok('★★★ ② 列的 hover 外框整條移除 —— 放開後滑鼠停在哪一列就框哪一列，看起來像被選取',
+     !/\.wp-item:hover\{border-color:var\(--brand,#1f6f54\);\}/.test(src)
+     && /hover 描框給不了什麼資訊，卻兩次被誤認成選取狀態/.test(src));
   ok('★★ ✕ 不進拖移（不然想刪卻變成拖）',
      /if\(e\.target && e\.target\.closest && e\.target\.closest\('\.wp-item-x'\)\) return;/.test(LP));
   ok('★★ 拖移中整頁不跟著捲', /body\.wp-dragging-on\{touch-action:none;user-select:none;\}/.test(src));
