@@ -284,69 +284,52 @@ ok('★★ 動作名稱那一段仍然有跳脫（那是人打的字）',
 ok('★★ 純文字版 wpItemLine 留著（title 屬性那類地方不能塞 HTML）',
    /function wpItemLine\(it\)\{/.test(src) && /function wpItemLineHtml\(it\)\{/.test(src));
 
-console.log('\n⑬ 動作可以拖移排序（2026-09-09 使用者指示）');
+console.log('\n⑬ 動作用「長按拖移」調順序（2026-09-09 四修）');
+/* 沿革：拖移把手＋上下鍵常駐 →〔順序〕開關＋左右上下鍵 → 使用者：「動作順序移動還是
+   改回久按拖移　但是剛剛拖移的時候卡片會變小　卡片大小不要變」。 */
 {
-  const S={items:[{name:'A'},{name:'B'},{name:'C'}]};
-  const env={_wp:S,_wpDrag:null,_wpDragged:0};
-  const doc={querySelectorAll:()=>[]};
-  const MV=new Function('window','wpPaint','return '+g('function wpMove(i,d){','\n}'))(env,()=>{});
-  MV(2,-1); eq('★★★ 上移', S.items.map(x=>x.name), ['A','C','B']);
-  MV(0,1);  eq('★★★ 下移', S.items.map(x=>x.name), ['C','A','B']);
-  MV(0,-1); eq('★★★ 第一個再上移不會掉出去', S.items.map(x=>x.name), ['C','A','B']);
-  MV(2,1);  eq('★★★ 最後一個再下移不會掉出去', S.items.map(x=>x.name), ['C','A','B']);
-  const DROP=new Function('window','document','wpPaint','return '+g('function wpDrop(e,i){','\n}'))(env,doc,()=>{});
-  env._wpDrag=0; DROP({preventDefault(){}},2);
-  eq('★★★ 拖到第三個位子', S.items.map(x=>x.name), ['A','B','C']);
-  eq('★★★ 放開後要立旗標，否則瀏覽器補的那一次 click 會把編輯視窗打開', env._wpDragged, 1);
-  env._wpDrag=1; DROP({preventDefault(){}},1);
-  eq('★★ 拖回原位不做事', S.items.map(x=>x.name), ['A','B','C']);
+  const LP=g('function wpLpStart(e,i){','\n}');
+  ok('★★★ 長按 400ms 才進拖移（整列本來就要能點開編輯，直接可拖會打架）',
+     /\},400\);/.test(LP) && /用長按（400ms）而不是 HTML5 draggable/.test(src));
+  ok('★★★ 還沒滿 400ms 就移動超過 8px＝在捲畫面，取消',
+     /if\(Math\.abs\(ev\.clientY-startY\)>8\)\{ clearTimeout\(timer\); cleanup\(\); \}/.test(LP));
+  ok('★★★ 拖曳中只改透明度，不改尺寸也不改內距（使用者：卡片大小不要變）',
+     /\.wp-item\.wp-dragging\{opacity:\.5;\}/.test(src)
+     && /不要 transform、不要改內距，任何一個都會讓卡片看起來忽大忽小/.test(src)
+     && !/\.wp-item\.wp-item-ord\{padding-left:40px/.test(src));
+  ok('★★★ 直接改 S.items 並重畫，不搬 DOM —— 重畫後尺寸完全一致',
+     /const \[x\]=S\.items\.splice\(cur,1\);\s*\n\s*S\.items\.splice\(j,0,x\);/.test(LP)
+     && /直接改 S\.items 並重畫，不去搬 DOM/.test(src));
+  ok('★★★ 放開後那一次 click 要吃掉，不然會跳出編輯視窗',
+     /window\._wpDragged=1;/.test(LP)
+     && /if\(window\._wpDragged\)\{ window\._wpDragged=0; return; \}/.test(src));
+  ok('★★ 外框留在被移動的那一列（0909 三修的那個回報）', /S\._ordSel=cur;/.test(LP));
+  ok('★★ ✕ 不進拖移（不然想刪卻變成拖）',
+     /if\(e\.target && e\.target\.closest && e\.target\.closest\('\.wp-item-x'\)\) return;/.test(LP));
+  ok('★★ 拖移中整頁不跟著捲', /body\.wp-dragging-on\{touch-action:none;user-select:none;\}/.test(src));
+  ok('★★★ 舊那一套（上下鍵＋HTML5 draggable）整組移除，不留死碼',
+     !/function wpMove\(/.test(src) && !/function wpDragStart\(/.test(src)
+     && !/wp-ordbtn/.test(src) && /〔已移除〕wpMove／wpDragStart/.test(src));
+  ok('★★ 為什麼不用 HTML5 draggable，理由寫在原地',
+     /HTML5 draggable 在手機上根本不會觸發，那才是它要被換掉的原因/.test(src));
 }
-ok('★★★ 拖完那一下的 click 被吃掉',
-   /if\(window\._wpDragged\)\{ window\._wpDragged=0; return; \}/.test(src));
-/* 2026-09-09 二修＋三修（使用者：「畫面變複雜了　還是可以新增一個按鈕[順序]左邊跳一欄
-   上下的按鈕」→「左邊加一欄上　右邊加一欄下」）—— 平常乾淨，按了「順序」才長出兩顆；
-   上在左、下在右。 */
-ok('★★★ 上下鍵在排序模式才出現，按了就把那一列往上／往下移',
-   /onclick="event\.stopPropagation\(\);wpMove\(\$\{i\},-1\)"/.test(src)
-   && /onclick="event\.stopPropagation\(\);wpMove\(\$\{i\},1\)"/.test(src)
-   && /function wpOrdToggle\(\)\{ const S=window\._wp; if\(!S\) return; S\._ord=!S\._ord; S\._ordSel=null; wpPaint\(\); \}/.test(src));
-ok('★★★ 上在左、下在右（疊在同一邊很容易按錯）',
-   /\.wp-item-up\{left:7px;\}/.test(src) && /\.wp-item-dn\{right:7px;\}/.test(src)
-   && /兩顆疊在同一邊時很容易按錯上下；分到兩側，方向跟位置一致/.test(src));
-ok('★★★ 平常那一行是乾淨的（沒有把手、沒有上下鍵）',
-   /把手、上下鍵、可拖曳三樣平常全部不畫，/.test(src)
-   && !/<span class="wp-item-g"/.test(src));
-ok('★★★ 排序模式下整列不給點開編輯（正在調順序時誤觸就白調了）',
-   /\$\{o\?'':\` onclick="wpItemEdit\(\$\{i\}\)"\`\}/.test(src)
-   && /排序模式下整列不給點開編輯/.test(src));
-ok('★★ 第一個不能再上移、最後一個不能再下移（按鈕直接停用）',
-   /\$\{i===0\?'disabled':''\}/.test(src) && /\$\{i===\(S\.items\.length-1\)\?'disabled':''\}/.test(src));
-ok('★★ 拖移只在排序模式開著（手機沒有 HTML5 drag，箭頭才是主要的路）',
-   /拖移只在排序模式開著（手機沒有 HTML5 drag，箭頭才是主要的路）/.test(src));
-ok('★★ 只動記憶體，要按「儲存方案」才寫回資料庫（跟改次數／重量同一條線）',
-   /只動記憶體裡的 S\.items，要按「儲存方案」才寫回資料庫/.test(src));
-ok('★★ 唯讀的那份（別人分享的）本來就不走這條 —— 它畫的是 wp-item-ro，沒有排序模式',
-   /<div class="wp-item wp-item-ro">/.test(src) && !/wp-item-ro[\s\S]{0,200}wpOrdToggle/.test(src));
 
-/* 2026-09-09 使用者回報：「點了外框應該包在那列被移動的動作列　我剛剛點史密斯肩推往下
-   結果框在單手划船動力鏈」—— 原因是 :hover：重畫後滑鼠沒動，那個位子已經換成另一列。 */
+console.log('\n⑬b 一列拆兩行：動作靠左、次數×組數×重量靠右');
 {
-  const S={items:[{name:'A'},{name:'B'},{name:'C'}],_ord:true,_ordSel:null};
-  const MV=new Function('window','wpPaint','return '+g('function wpMove(i,d){','\n}'))({_wp:S},()=>{});
-  MV(0,1);
-  eq('★★★ 移動後外框記在**新位子**（＝被移動的那一列）', [S.items.map(x=>x.name), S._ordSel], [['B','A','C'],1]);
-  MV(1,-1);
-  eq('★★★ 移回去也跟著', [S.items.map(x=>x.name), S._ordSel], [['A','B','C'],0]);
-  MV(0,-1);
-  eq('★★ 移不動時不改標記', S._ordSel, 0);
+  const NH=new Function('wpWeightHtml','Number','return '+g('function wpItemNumsHtml(it){','\n}'))
+    ((w,u)=>w?('<b>'+w+'</b><i>'+(u||'kg')+'</i>'):'', Number);
+  eq('★★★ 只回數字那一段（名稱在上面一行）', NH({name:'深蹲',reps:12,sets:3,weight:40,unit:'kg'}),
+     '12 次 × 3 組 × <b>40</b><i>kg</i>');
+  eq('★★ 徒手就只有次數與組數', NH({name:'棒式',reps:30,sets:3,weight:''}), '30 次 × 3 組');
+  eq('★★ 什麼都沒填就回空字串（呼叫端才好整行不畫）', NH({name:'X'}), '');
+  eq('　　null 不會爆', NH(null), '');
 }
-ok('★★★ 排序模式關掉 hover 邊框（那正是「框跑到別人身上」的來源）',
-   /\.wp-item\.wp-item-ord:hover\{border-color:var\(--bd\);\}/.test(src)
-   && /重畫後滑鼠沒動，那個位子已經換成另一列，\s*\n\s*hover 框會看起來像「跳到別人身上」/.test(src));
-ok('★★ 被移動的那一列描框', /\.wp-item\.wp-item-sel\{border-color:var\(--brand,#1f6f54\);/.test(src)
-   && /\$\{\(o&&S\._ordSel===i\)\?' wp-item-sel':''\}/.test(src));
-ok('★★ 拖移放開後也標在被拖的那一列', /S\._ordSel=i;                               \/\* 外框跟著被拖的那一列（同 wpMove） \*\//.test(src));
-ok('★★ 關掉排序模式就把標記清掉', /S\._ord=!S\._ord; S\._ordSel=null;/.test(src));
+ok('★★★ 第一列動作靠左、第二列數字靠右',
+   /\.wp-item-nm\{[^}]*text-align:left;\}/.test(src)
+   && /\.wp-item-num\{[^}]*text-align:right;/.test(src)
+   && /<div class="wp-item-nm">/.test(src) && /<div class="wp-item-num">/.test(src));
+ok('★★ 數字整段空的時候不畫那一行（不要留一條空的）',
+   /const _n=wpItemNumsHtml\(it\); return _n\?`<div class="wp-item-num">/.test(src));
 
 console.log('\n⑭ 教練手機首頁的課卡加「課表」圓鈕（2026-09-09 使用者指示）');
 ok('★★★ 圓鈕直接開訓練課表，不用先點開課卡（上課現場少一層）',
