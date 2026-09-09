@@ -28,12 +28,12 @@ ok('★★ 全檔其他打卡入口本來就看 need_punch（這一條是為了�
 console.log('\n② 不開課的人（余東翰）看不到行事曆 —— 兩份導覽要同一條線');
 ok('★★★ 側邊導覽也擋（原本只有底部導覽擋，從側邊還是進得去）',
    /function mobileCoachNavItems\(\)\{/.test(src)
-   && /return canTeach \? MOBILE_COACH_NAV : MOBILE_COACH_NAV\.filter\(n=>n\.key!=='coach_calendar'\);/.test(src));
+   && /return canTeach \? MOBILE_COACH_NAV : MOBILE_COACH_NAV\.filter\(n=>n\.key!=='coach_calendar'&&n\.key!=='coach_plans'\);/.test(src));
 ok('★★★ 兩支 buildNav 都換過去（這一段在檔案裡有兩份）',
    (src.match(/isMobile\?mobileCoachNavItems\(\)/g)||[]).length===2
    && !/isMobile\?MOBILE_COACH_NAV/.test(src));
-ok('★★ 底部導覽那一支沒有被動到',
-   /return canTeach \? COACH_BOTTOM_NAV : COACH_BOTTOM_NAV\.filter\(n=>n\.key!=='coach_calendar'\);/.test(src));
+ok('★★ 底部導覽那一支跟著同一條線（2026-09-09 一起加了訓練方案）',
+   /return canTeach \? COACH_BOTTOM_NAV : COACH_BOTTOM_NAV\.filter\(n=>n\.key!=='coach_calendar'&&n\.key!=='coach_plans'\);/.test(src));
 ok('★★ 兩支判斷式一模一樣（不同寫法遲早會分岔）',
    (src.match(/const canTeach = !SESSION \|\| SESSION\.can_teach!==false;/g)||[]).length===2);
 

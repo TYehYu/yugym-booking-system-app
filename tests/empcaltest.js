@@ -179,8 +179,11 @@ ok('★ 會員活動紀錄也改成列表（與工作紀錄同一套 ppDashRow�
    !/<div class="pp-dash" style="grid-template-columns:repeat\(2,1fr\);">/.test(src)
    && /ppDashRow\('ticket','票券'/.test(src) && /ppDashRow\('calendar','預約紀錄'/.test(src)
    && /ppDashRow\('money','交易'/.test(src));
-ok('　　訓練紀錄那一行已收起（開發中的空頁，點進去是死路）',
-   !/ppDashRow\('dumbbell','訓練紀錄'/.test(src) && /功能開發中，敬請期待/.test(src));
+/* 2026-09-09 Phase 3：那一頁不再是空的（訓練紀錄畫出來了），但 0822 收起來的是
+   **會員活動紀錄列表**上的那一行入口，分頁本身照舊在 .pp-rectabs 裡點得到。 */
+ok('　　訓練紀錄不再是「功能開發中」的空頁',
+   !/ppDashRow\('dumbbell','訓練紀錄'/.test(src) && !/功能開發中，敬請期待/.test(src)
+   && /<div class="pp-card-t">訓練紀錄（\$\{_tl\.length\}）<\/div>/.test(src));
 ok('　　票券行：數字＝可用堂數、分類統計留在說明列',
    /\$\{c\.tkLeft\|\|0\}<small>堂可用<\/small>/.test(src)
    && /c\.tkSplit\.map\(x=>`\$\{x\[0\]\} \$\{x\[1\]\}`\)\.join\('、'\)/.test(src));

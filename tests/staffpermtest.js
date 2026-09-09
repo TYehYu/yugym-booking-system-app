@@ -14,8 +14,9 @@ console.log('① 手機導覽列：開課才看得到行事曆');
 ok('★ 導覽列改成動態產生',
    /function coachBottomNavItems\(\)\{/.test(src)
    && /navItems=coachBottomNavItems\(\)/.test(src));
-ok('★ 沒有開課權限就濾掉行事曆',
-   /return canTeach \? COACH_BOTTOM_NAV : COACH_BOTTOM_NAV\.filter\(n=>n\.key!=='coach_calendar'\);/.test(src));
+/* 2026-09-09：訓練方案跟行事曆同一條線（不開課的人沒有課可以套方案），一起濾掉 */
+ok('★ 沒有開課權限就濾掉行事曆與訓練方案',
+   /return canTeach \? COACH_BOTTOM_NAV : COACH_BOTTOM_NAV\.filter\(n=>n\.key!=='coach_calendar'&&n\.key!=='coach_plans'\);/.test(src));
 ok('★ 「開課」＝employees.can_teach（isTeachable 讀的就是它）',
    /function isTeachable\(c\)\{ return isCoachable\(c\) && c\.can_teach!==false; \}/.test(src)
    && /const canTeach = !SESSION \|\| SESSION\.can_teach!==false;/.test(src));

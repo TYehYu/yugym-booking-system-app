@@ -13,8 +13,10 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('① 教練桌機版行事曆');
+/* 2026-09-09：兩者之間插了「訓練方案」（使用者指示：桌機上方也要一個分頁）。
+   這條釘的是「預約行事曆在教練導覽裡」，順序沒有被推翻。 */
 ok('★ 教練導覽列加「預約行事曆」（導覽仍在上方，不走左側 Sidebar）',
-   /\{key:'calendar',label:'預約行事曆'\},\s*\n\s*\{key:'coach_salary',label:'薪資紀錄'\},/.test(src));
+   /\{key:'calendar',label:'預約行事曆'\},\s*\n\s*\{key:'coach_plans',label:'訓練方案'\},[\s\S]{0,120}\{key:'coach_salary',label:'薪資紀錄'\},/.test(src));
 /* 2026-07-31：「這堂跟這位教練有沒有關係」抽成共用的 bkIsCoach（權限用；
    「實際由誰上」是另一支 bkCoachId，篩選與計薪用） */
 /* 2026-08-03 使用者定案：店長（is_manager）視同後台，own 加了豁免（見 staffcardtest.js） */
