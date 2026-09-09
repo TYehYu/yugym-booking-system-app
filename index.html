@@ -4403,6 +4403,24 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   border:none;background:transparent;color:var(--t3);font-size:13px;cursor:pointer;line-height:1;}
 .wp-item-x:hover{color:var(--danger,#b5372e);}
 /* 訓練紀錄抽屜底下那兩顆（套用方案／新增動作）—— 等寬一列 */
+/* 訓練紀錄的清單（2026-09-09 Phase 3）：會員課卡、會員訓練紀錄頁、櫃檯分頁共用 */
+.tlv-sess{padding:10px 0;border-bottom:1px solid var(--bd);}
+.tlv-sess:last-child{border-bottom:none;}
+.tlv-date{font-size:13.5px;font-weight:800;color:var(--text);margin-bottom:6px;}
+.tlv-date i{font-style:normal;font-size:11.5px;font-weight:400;color:var(--t3);margin-left:8px;}
+.tlv-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:4px 0;font-size:13px;}
+.tlv-ex{color:var(--text);min-width:0;}
+.tlv-ex i{font-style:normal;color:var(--t3);font-size:11.5px;margin-left:6px;}
+.tlv-n{color:var(--t2);font-family:var(--num);white-space:nowrap;flex:none;}
+.tlv-note{font-size:11.5px;color:var(--t3);line-height:1.6;padding:0 0 4px 2px;}
+.tlv-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;
+  background:var(--card2);border-radius:12px;padding:12px 8px;text-align:center;}
+.tlv-stats b{display:block;font-family:var(--num);font-size:19px;font-weight:800;color:var(--text);}
+.tlv-stats span{font-size:11px;color:var(--t3);}
+/* 會員課卡上的「今日訓練」 */
+.mtp-tl{padding:12px 14px;}
+.mtp-tl-h{font-size:12.5px;font-weight:800;color:var(--text);margin-bottom:6px;}
+.mtp-tl-h i{font-style:normal;font-size:11px;font-weight:400;color:var(--t3);margin-left:8px;}
 .tl-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
 .tl-acts .btn{width:100%;}
 .wp-share-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px 12px;
@@ -16322,6 +16340,9 @@ function coachBottomNavItems(){
 // ── 會員端：底部固定導覽列（我的預約｜簽到｜我的票券）──
 const MEMBER_BOTTOM_NAV=[
   {key:'mem_bookings', label:'我的預約'},   /* 2026-08-22 使用者指示：原本叫「首頁」 */
+  /* 訓練紀錄（2026-09-09 使用者：「要讓會員可以看到自己當天的紀錄」＋「兩個都要」）——
+     當天的在課卡點開就看得到，這一頁是歷史。 */
+  {key:'mem_training', label:'訓練紀錄'},
   /* 「簽到」中央鈕已移除（2026-07-20 使用者指示：手機版簽到入口另行安排，新位置待定；
      __memscan 的處理程式與 scan_checkin 頁保留）。 */
   {key:'mem_tickets',  label:'我的票券'},
@@ -46615,7 +46636,14 @@ function ppRecordHtml(){
         return `<div class="pp-card">${back}<div class="pp-card-t">交易紀錄（${c.pcCount||0}）</div>
           ${sumBar}${rows?`<table class="mtk-table"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right;">金額</th><th>方式</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="pp-card-tip">尚無交易</div>'}</div>`;
       }
-      return `<div class="pp-card">${back}<div class="pp-card-t">訓練紀錄</div><div class="pp-card-tip">功能開發中，敬請期待。</div></div>`;
+      /* 2026-09-09：這一頁原本是「功能開發中」的空頁（入口 0822 因此收起來）。
+         資料一直都在（training_logs），只是沒人把它畫出來 —— Phase 3 一併補上。 */
+      {
+        const _tl=(c.trainLogs||[]).slice().sort((a,b2)=>String((b2&&b2.created_at)||'').localeCompare(String((a&&a.created_at)||'')));
+        const _body=tlSessionsHtml(_tl,40);
+        return `<div class="pp-card">${back}<div class="pp-card-t">訓練紀錄（${_tl.length}）</div>
+          ${_body||'<div class="pp-card-tip">尚無訓練紀錄。教練在課堂上記錄後會顯示在這裡。</div>'}</div>`;
+      }
     }
     /* 2026-08-04 使用者指示：「會員資料的活動紀錄也改成列表，跟員工資料一樣」——
        與工作紀錄同一套 ppDashRow：一行一個入口，名稱／說明／數字對齊，掃一眼就到底。
@@ -47207,18 +47235,7 @@ async function ppOpenTraining(id){
   const byBk={};
   logs.forEach(l=>{ (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
   const sessions=Object.entries(byBk).map(([bid,ls])=>({bid,ls,t:ls[0].created_at||''})).sort((a,b)=>b.t.localeCompare(a.t));
-  const setLine=(l)=>{
-    /* 2026-09-09：新的 weight／weight_unit 欄位優先（方案套用寫的就是它）；
-       逐組明細是舊路徑（手動一組一組記），沒有新欄位時才退回去讀。
-       ⚠ 這一段全檔有三份（教練抽屜／員工卡／會員資料），三處都要吃得到，
-         不然同一筆紀錄在不同頁面長得不一樣。 */
-    if(l.weight!=null&&l.weight!==''){
-      return [(l.reps!=null?l.reps+' 次':null),(l.sets?l.sets+' 組':null),wpWeightTxt(l.weight,l.weight_unit)]
-        .filter(Boolean).join(' × ');
-    }
-    if(l.sets_detail){ try{ const arr=JSON.parse(l.sets_detail); if(arr&&arr.length) return arr.map(s=>`${s.reps||'-'}${s.weight?'×'+s.weight+'kg':''}`).join('、'); }catch(_){} }
-    return `${l.reps??'-'} 次${l.sets?(' × '+l.sets+' 組'):''}`;
-  };
+  const setLine=tlSetLine;
   const body = sessions.length===0
     ? '<div class="empty" style="padding:26px;"><div class="em-t">尚無訓練紀錄</div><div class="em-s">教練在課堂中記錄後，會顯示在這裡。</div></div>'
     : sessions.slice(0,30).map(sess=>{
@@ -47589,6 +47606,13 @@ async function ppLoadCtx(){
     c.pcCount=c.myPc.length+c.myImpTx.length;
     // 行內展開用明細（2026-07-27：活動紀錄不再開新視窗）
     c.myTk=myTk; c.myBk=myBk; c.myLogs=tkLogs||[];
+    /* 訓練紀錄（2026-09-09 Phase 3）：那一頁原本是空的，資料一直都在。
+       ⚠ 只有真的要看時才撈 —— 這個 ctx 每開一位會員就組一次，
+         多撈一張表會拖慢每一次開會員資料，而訓練紀錄是四個分頁裡最少人點的那個。 */
+    c.trainLogs=[];
+    if(PP.recView==='training'){
+      try{ c.trainLogs=(await dbGetAll('training_logs')).filter(l=>l&&l.member_id===PP.id); }catch(_){}
+    }
     /* 共享章顯示名字用（2026-08-04 使用者指示：「共享人顯示清楚一點」）——
        2026-08-23：改用上面那一批一起抓回來的 membersAll，不要再 await 一次
        （原本的註解說「有快取、不多花往返」，但冷快取時它就是一整輪往返）。 */
@@ -49581,6 +49605,59 @@ PAGES.m_bookings=async function(){
 };
 
 /* ── 訓練紀錄（管理員視角）── */
+
+/* ══ 會員端的訓練紀錄（2026-09-09 Phase 3）════════════════════════════════
+   使用者：「要讓會員可以看到自己當天的紀錄」＋「兩個都要」
+   （課卡點開看當天、另外一頁看歷史）。
+   ⚠ 資料面本來就開好了：training_logs 的 RLS 有一條
+     `member_id = current_member_id()`，會員讀得到自己的、讀不到別人的。
+   ⚠ 這裡只讀不寫 —— 會員不能改教練記的東西。 */
+
+/* 一堂課的動作清單（會員端與櫃檯端共用同一份排版） */
+function tlLogRowsHtml(ls){
+  return (ls||[]).map(l=>`<div class="tlv-row">
+    <span class="tlv-ex">${escH(l.exercise_name||'—')}${
+      (l.tool||l.posture)?`<i>${escH([l.posture,l.tool].filter(Boolean).join(' / '))}</i>`:''}</span>
+    <span class="tlv-n">${escH(tlSetLine(l))}</span>
+  </div>${l.note?`<div class="tlv-note">${escH(String(l.note).replace(/\[[^\]]*\]/g,'').trim())}</div>`:''}`).join('');
+}
+/* 依課堂分組的歷史清單 */
+function tlSessionsHtml(logs, limit){
+  const byBk={};
+  (logs||[]).forEach(l=>{ if(l&&l.booking_id) (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
+  const sess=Object.entries(byBk).map(([bid,ls])=>({bid,ls,t:(ls[0]&&ls[0].created_at)||''}))
+    .sort((a,b)=>String(b.t).localeCompare(String(a.t)));
+  if(!sess.length) return '';
+  return sess.slice(0,limit||30).map(x=>`<div class="tlv-sess">
+    <div class="tlv-date">${String(x.t).slice(0,10).replace(/-/g,'/')||'—'}
+      <i>${x.ls.length} 個動作</i></div>
+    ${tlLogRowsHtml(x.ls)}
+  </div>`).join('');
+}
+
+/* ── 會員端：訓練紀錄頁（歷史）── */
+PAGES.mem_training=async function(){
+  const C=document.getElementById('content');
+  C.innerHTML='<div class="card"><div class="pp-card-tip">載入中…</div></div>';
+  let logs=[];
+  try{ logs=(await dbGetAll('training_logs')).filter(l=>l&&l.member_id===SESSION.id); }catch(_){}
+  logs.sort((a,b)=>String((b&&b.created_at)||'').localeCompare(String((a&&a.created_at)||'')));
+  const bks=new Set(logs.map(l=>l.booking_id).filter(Boolean));
+  const exs=new Set(logs.map(l=>l.exercise_name).filter(Boolean));
+  const body=tlSessionsHtml(logs,60);
+  C.innerHTML=`<div class="card">
+    <div class="card-title">訓練紀錄</div>
+    ${logs.length?`<div class="tlv-stats">
+        <div><b>${bks.size}</b><span>訓練堂數</span></div>
+        <div><b>${logs.length}</b><span>動作總數</span></div>
+        <div><b>${exs.size}</b><span>不同動作</span></div>
+      </div>${body}`
+      :`<div class="empty" style="padding:34px 10px;"><div class="em-t">還沒有訓練紀錄</div>
+        <div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:1.8;">
+          教練在課堂上記錄之後，這裡就會看得到每一堂做了哪些動作、幾次幾組幾公斤。</div></div>`}
+  </div>`;
+};
+
 PAGES.m_training=async function(){
   const H=mwHead('訓練紀錄','訓練紀錄','MEMBER');
   if(H.guard){ mwGuardBack(); return; }
@@ -49598,18 +49675,7 @@ PAGES.m_training=async function(){
     {label:'動作總數', value:logs.length, unit:'筆'},
     {label:'不同動作', value:exSet.size, unit:'種'},
   ]);
-  const setLine=(l)=>{
-    /* 2026-09-09：新的 weight／weight_unit 欄位優先（方案套用寫的就是它）；
-       逐組明細是舊路徑（手動一組一組記），沒有新欄位時才退回去讀。
-       ⚠ 這一段全檔有三份（教練抽屜／員工卡／會員資料），三處都要吃得到，
-         不然同一筆紀錄在不同頁面長得不一樣。 */
-    if(l.weight!=null&&l.weight!==''){
-      return [(l.reps!=null?l.reps+' 次':null),(l.sets?l.sets+' 組':null),wpWeightTxt(l.weight,l.weight_unit)]
-        .filter(Boolean).join(' × ');
-    }
-    if(l.sets_detail){ try{ const arr=JSON.parse(l.sets_detail); if(arr&&arr.length) return arr.map(s=>`${s.reps||'-'}${s.weight?'×'+s.weight+'kg':''}`).join('、'); }catch(_){} }
-    return `${l.reps??'-'} 次${l.sets?(' × '+l.sets+' 組'):''}`;
-  };
+  const setLine=tlSetLine;
   const body = sessions.length===0
     ? lpEmpty('這位會員還沒有訓練紀錄','教練在課堂中記錄後，會顯示在這裡。','')
     : `<div>${sessions.map(sess=>{
@@ -57237,6 +57303,18 @@ async function _memh2Tap(id){
     : `<div class="mtp-rule">課程開始前 <b>30 分鐘</b>開放簽到，且只有<b>上課當天</b>能簽。<br>
         這堂是 ${b.date.replace(/-/g,'/')} ${b.start_time}，${b.date>ymd(TODAY)?'當天再回來簽到就可以了':'簽到時間還沒到，請稍候'}。<br>
         遲到或漏簽請直接告訴櫃檯，會協助補簽。</div>`;
+  /* 這一堂的訓練紀錄（2026-09-09）：只有教練記過才畫。
+     ⚠ 只讀 —— 會員不能改教練記的東西。
+     ⚠ 撈不到就整塊不畫，不要在課卡上留一個「載入失敗」的空盒子。 */
+  let _tlBlock='';
+  try{
+    const _tl=(await dbGetAll('training_logs')).filter(l=>l&&l.booking_id===b.id);
+    if(_tl.length){
+      _tl.sort((a,c)=>String((a&&a.created_at)||'').localeCompare(String((c&&c.created_at)||'')));
+      _tlBlock=`<div class="mtp-card mtp-tl"><div class="mtp-tl-h">今日訓練<i>${_tl.length} 個動作</i></div>
+        ${tlLogRowsHtml(_tl)}</div>`;
+    }
+  }catch(_){}
   memTaskClose();
   const host=document.createElement('div');
   host.id='mem-task-pop';
@@ -57254,6 +57332,7 @@ async function _memh2Tap(id){
         ${_dots}
       </div>
       <div class="mtp-orbs">${ckBtn}${rsBtn}${cxBtn}</div>
+      ${_tlBlock}
       ${ruleNote}
     </div>`;
   document.body.appendChild(host);
@@ -59426,18 +59505,7 @@ async function renderTrainingLogSheet(){
   // 今日（本堂課）紀錄
   const logs=allLogs.filter(l=>l.booking_id===b.id).sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
   // 動作明細顯示（次數 x 重量；多組）
-  const setLine=(l)=>{
-    /* 2026-09-09：新的 weight／weight_unit 欄位優先（方案套用寫的就是它）；
-       逐組明細是舊路徑（手動一組一組記），沒有新欄位時才退回去讀。
-       ⚠ 這一段全檔有三份（教練抽屜／員工卡／會員資料），三處都要吃得到，
-         不然同一筆紀錄在不同頁面長得不一樣。 */
-    if(l.weight!=null&&l.weight!==''){
-      return [(l.reps!=null?l.reps+' 次':null),(l.sets?l.sets+' 組':null),wpWeightTxt(l.weight,l.weight_unit)]
-        .filter(Boolean).join(' × ');
-    }
-    if(l.sets_detail){ try{ const arr=JSON.parse(l.sets_detail); if(arr&&arr.length) return arr.map(s=>`${s.reps||'-'}${s.weight?'×'+s.weight+'kg':''}`).join('、'); }catch(_){} }
-    return `${l.reps??'-'} 次${l.sets?(' × '+l.sets+' 組'):''}`;
-  };
+  const setLine=tlSetLine;
   const fmt=b.format?b.format.toUpperCase():'';
   const isFriendly=window._tlIsFriendly;
   let typeM={'私人教練':'私人教練課','自主訓練':'自主訓練','體驗':'體驗課','小班肌力':'團體課'}[b.category]||'課程';
@@ -64741,6 +64809,21 @@ function wpWeightTxt(w,u){
   if(w==null||w==='') return '';
   const n=Number(w); if(!isFinite(n)||n<=0) return '';
   return (Math.round(n*10)/10)+' '+wpUnitOf(u);
+}
+/* 一筆訓練紀錄怎麼寫成一行（2026-09-09 抽成共用）——
+   原本這段在三個地方各抄一份（教練抽屜／員工卡／會員資料），Phase 3 要再加兩處
+   （會員課卡、會員訓練紀錄頁）就變成五份，改一次要記得改五個地方。
+   ⚠ 新的 weight／weight_unit 欄位優先（方案套用寫的就是它）；
+     逐組明細是舊路徑（手動一組一組記），沒有新欄位時才退回去讀。 */
+function tlSetLine(l){
+  if(!l) return '';
+  if(l.weight!=null&&l.weight!==''){
+    return [(l.reps!=null?l.reps+' 次':null),(l.sets?l.sets+' 組':null),wpWeightTxt(l.weight,l.weight_unit)]
+      .filter(Boolean).join(' × ');
+  }
+  if(l.sets_detail){ try{ const arr=JSON.parse(l.sets_detail);
+    if(arr&&arr.length) return arr.map(s=>`${s.reps||'-'}${s.weight?'×'+s.weight+'kg':''}`).join('、'); }catch(_){} }
+  return `${l.reps==null?'-':l.reps} 次${l.sets?(' × '+l.sets+' 組'):''}`;
 }
 /* 一行的樣子：深蹲 × 12次 × 3組 × 40kg（使用者指定的入口形式） */
 function wpItemLine(it){

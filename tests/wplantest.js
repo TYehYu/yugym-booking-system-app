@@ -147,9 +147,12 @@ console.log('\n⑧ Phase 2：套用方案到課堂');
   ok('★★ 沒有方案時給的是指路，不是一句吐司',
      /到「訓練方案」那一頁先把常用的菜單存起來，之後在這裡一鍵套用。/.test(src));
   ok('★★ 防連點', /return onceAct\('tlplan:'\+pid, \(\)=>_tlPlanApply\(pid,useLast\)\);/.test(src));
-  ok('★★★ 顯示那一段全檔三份都吃得到新欄位（教練抽屜／員工卡／會員資料）',
-     (src.match(/if\(l\.weight!=null&&l\.weight!==''\)\{/g)||[]).length===3
-     && /這一段全檔有三份（教練抽屜／員工卡／會員資料），三處都要吃得到/.test(src));
+  /* 2026-09-09 Phase 3：那三份抄來抄去的 setLine 收成一支 tlSetLine ——
+     Phase 3 要再加兩處（會員課卡、會員訓練紀錄頁），不收就變成五份。 */
+  ok('★★★ 顯示那一段收成一支共用的，全檔只有一份',
+     (src.match(/if\(l\.weight!=null&&l\.weight!==''\)\{/g)||[]).length===1
+     && /function tlSetLine\(l\)\{/.test(src)
+     && (src.match(/const setLine=tlSetLine;/g)||[]).length===3);
   ok('★★★ 手動逐組記錄也把重量落一份到新欄位 —— 兩條路要讀得到同一個地方',
      /weight:\(function\(\)\{ const w=valid\.map\(x=>Number\(x\.weight\)\)/.test(src));
 }
@@ -162,6 +165,41 @@ ok('★★ 手機收在「其他」選單（底部三顆不再擠第四顆）',
    && /k==='plan'\?BN_ICONS\.coach_plans/.test(src));
 ok('★★ 管理員看到的是自己那份（老闆本身也是教練，isCoachable 含 admin）',
    /管理員看到的是\*\*自己那份\*\*方案（頁面吃 SESSION\.id）/.test(src));
+
+console.log('\n⑩ Phase 3：會員看得到自己的訓練紀錄');
+{
+  const g3=(a,b)=>{const i=src.indexOf(a); return src.slice(i, src.indexOf(b,i)+b.length);};
+  const SESS=new Function('escH','tlSetLine','tlLogRowsHtml','return '+g3('function tlSessionsHtml(logs, limit){','\n}'))
+    (x=>String(x), l=>'x', ls=>'<rows n="'+ls.length+'">');
+  const L=[{booking_id:'B1',created_at:'2026-09-01T03:00'},
+           {booking_id:'B1',created_at:'2026-09-01T03:05'},
+           {booking_id:'B2',created_at:'2026-09-08T03:00'},
+           {booking_id:null,created_at:'2026-09-09'}];
+  const h=SESS(L,30);
+  ok('★★★ 依課堂分組、最近的在前', h.indexOf('2026/09/08')<h.indexOf('2026/09/01'));
+  /* 四筆裡有一筆沒有 booking_id → 只該分出兩堂（B1 兩個動作、B2 一個），那一筆整個不進來 */
+  eq('★★★ 沒有 booking_id 的不畫（那筆掛不到任何一堂課）',
+     [(h.match(/tlv-sess/g)||[]).length, /<rows n="2">/.test(h), /<rows n="1">/.test(h), /2026\/09\/09/.test(h)],
+     [2,true,true,false]);
+  eq('★★ 空清單回空字串（呼叫端才好接空狀態）', SESS([],30), '');
+  eq('　　null 不會爆', SESS(null,30), '');
+  ok('★★ limit 收得住', SESS(L,1).match(/tlv-sess/g).length===1);
+}
+ok('★★★ 會員課卡看得到當天（沒記過就整塊不畫，不要留空盒子）',
+   /const _tl=\(await dbGetAll\('training_logs'\)\)\.filter\(l=>l&&l\.booking_id===b\.id\);/.test(src)
+   && /if\(_tl\.length\)\{/.test(src)
+   && /撈不到就整塊不畫，不要在課卡上留一個「載入失敗」的空盒子/.test(src));
+ok('★★★ 會員多一頁「訓練紀錄」看歷史', /\{key:'mem_training', label:'訓練紀錄'\},/.test(src)
+   && /PAGES\.mem_training=async function\(\)\{/.test(src));
+ok('★★★ 會員只讀自己的（RLS 也有一條，這裡是畫面）',
+   /\.filter\(l=>l&&l\.member_id===SESSION\.id\)/.test(src)
+   && /這裡只讀不寫 —— 會員不能改教練記的東西/.test(src));
+ok('★★★ 櫃檯那張「功能開發中」的空頁換成真的內容',
+   !/功能開發中，敬請期待/.test(src)
+   && /<div class="pp-card-t">訓練紀錄（\$\{_tl\.length\}）<\/div>/.test(src));
+ok('★★ 訓練紀錄那一張表只有真的要看時才撈（每開一位會員都組一次 ctx）',
+   /if\(PP\.recView==='training'\)\{/.test(src)
+   && /訓練紀錄是四個分頁裡最少人點的那個/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
