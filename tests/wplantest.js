@@ -90,6 +90,15 @@ ok('★★★ 分享是方案卡上獨立的一顆，不在編輯視窗裡',
    /onclick="event\.stopPropagation\(\);wpShareOpen\('\$\{p\.id\}'\)"/.test(src)
    && /async function wpShareOpen\(id\)\{/.test(src)
    && !/<div id="wp-share"><\/div>/.test(src));
+/* 2026-09-09 使用者：「分享的按鈕做在這邊右上角」「[分享0]也要顯示分享幾個人了」 */
+ok('★★★ 分享鈕在卡片右上角（名稱那一列），不在底列',
+   /<div class="wp-card-h"><span class="wp-card-n">\$\{escH\(p\.name\|\|'未命名方案'\)\}<\/span>\s*\n\s*\$\{own/.test(src)
+   && /<div class="wp-card-f"><span class="wp-card-c">\$\{n\} 個動作<\/span>/.test(src));
+ok('★★★ 數字一律顯示（含 0）—— 不顯示的話「還沒分享」跟「沒有這個功能」長得一樣',
+   />分享 \$\{shN\}<\/button>/.test(src)
+   && /數字一律顯示（含 0）/.test(src));
+ok('★★★ 那一段是函式本體不是範本字串，註解不能用 \$\{…\}（0828 白畫面的同一個坑）',
+   /這裡是函式本體、不是範本字串 —— 註解要用純/.test(src));
 ok('★★★ 要 stopPropagation —— 整張卡本來就會開編輯',
    /⚠ 要 stopPropagation：整張卡本來就會開編輯。/.test(src));
 ok('★★★ 分享視窗直接存資料庫，不跟編輯視窗共用暫存',
@@ -247,6 +256,66 @@ ok('★★ 管理員那兩個入口不受影響（頂欄一組、手機底部一
    && /\{key:'coach_plans', label:'訓練方案'\},/.test(src));
 ok('★★ 頁面本身不另外擋，理由寫在原地（到不了就是到不了；RLS 才是真的防線）',
    /導覽列沒有入口、課卡上沒有按鈕，就到不了/.test(src));
+
+console.log('\n⑫ 重量單位做成有顏色的標籤（2026-09-09 使用者指示）');
+{
+  const unitOf=fn('function wpUnitOf(x){','\n}');
+  const wTxt=new Function('wpUnitOf','return '+g('function wpWeightTxt(w,u){','\n}'))(unitOf);
+  const H=new Function('wpWeightTxt','wpUnitOf','return '+g('function wpWeightHtml(w,u){','\n}'))(wTxt,unitOf);
+  eq('★★★ kg 與 lb 各自一個 class（顏色分開）',
+     [H(40,'kg'), H(45,'lb')],
+     ['<b class="wp-w">40</b><i class="wp-u wp-u-kg">kg</i>',
+      '<b class="wp-w">45</b><i class="wp-u wp-u-lb">lb</i>']);
+  eq('★★★ 徒手（留空）不畫標籤，不要出現一個沒有數字的單位', [H('','kg'), H(0,'lb'), H(null,'kg')], ['','','']);
+  eq('★★ 小數照樣只留一位', H(42.5,'kg'), '<b class="wp-w">42.5</b><i class="wp-u wp-u-kg">kg</i>');
+}
+ok('★★★ 顏色不借紅／金（那兩色是警示與次要提示），kg 綠、lb 藍',
+   /\.wp-u-kg\{background:rgba\(31,111,84,\.12\);color:var\(--green,#1f6f54\);\}/.test(src)
+   && /\.wp-u-lb\{background:rgba\(35,80,138,\.13\);color:#23508a;\}/.test(src)
+   && /不借紅／金：那兩色是警示與次要提示/.test(src));
+ok('★★★ 深淺也分得開，不是只靠色相（有色覺差異的人也認得出）',
+   /兩色的深淺也分得開，不是只靠色相/.test(src));
+ok('★★★ 回 HTML 的那幾支呼叫端不能再 escH（escH 會把標籤變成字面文字）',
+   /<span class="tlv-n">\$\{tlSetLine\(l\)\}<\/span>/.test(src)
+   && !/escH\(tlSetLine\(l\)\)/.test(src)
+   && /不能再 escH —— escH 會把標籤變成字面文字/.test(src));
+ok('★★ 動作名稱那一段仍然有跳脫（那是人打的字）',
+   /return \[escH\(it\.name\|\|'（未命名）'\)/.test(src));
+ok('★★ 純文字版 wpItemLine 留著（title 屬性那類地方不能塞 HTML）',
+   /function wpItemLine\(it\)\{/.test(src) && /function wpItemLineHtml\(it\)\{/.test(src));
+
+console.log('\n⑬ 動作可以拖移排序（2026-09-09 使用者指示）');
+{
+  const S={items:[{name:'A'},{name:'B'},{name:'C'}]};
+  const env={_wp:S,_wpDrag:null,_wpDragged:0};
+  const doc={querySelectorAll:()=>[]};
+  const MV=new Function('window','wpPaint','return '+g('function wpMove(i,d){','\n}'))(env,()=>{});
+  MV(2,-1); eq('★★★ 上移', S.items.map(x=>x.name), ['A','C','B']);
+  MV(0,1);  eq('★★★ 下移', S.items.map(x=>x.name), ['C','A','B']);
+  MV(0,-1); eq('★★★ 第一個再上移不會掉出去', S.items.map(x=>x.name), ['C','A','B']);
+  MV(2,1);  eq('★★★ 最後一個再下移不會掉出去', S.items.map(x=>x.name), ['C','A','B']);
+  const DROP=new Function('window','document','wpPaint','return '+g('function wpDrop(e,i){','\n}'))(env,doc,()=>{});
+  env._wpDrag=0; DROP({preventDefault(){}},2);
+  eq('★★★ 拖到第三個位子', S.items.map(x=>x.name), ['A','B','C']);
+  eq('★★★ 放開後要立旗標，否則瀏覽器補的那一次 click 會把編輯視窗打開', env._wpDragged, 1);
+  env._wpDrag=1; DROP({preventDefault(){}},1);
+  eq('★★ 拖回原位不做事', S.items.map(x=>x.name), ['A','B','C']);
+}
+ok('★★★ 拖完那一下的 click 被吃掉',
+   /if\(window\._wpDragged\)\{ window\._wpDragged=0; return; \}/.test(src));
+ok('★★★ 手機沒有 HTML5 drag，所以另外給上移／下移兩顆',
+   /onclick="event\.stopPropagation\(\);wpMove\(\$\{i\},-1\)"/.test(src)
+   && /onclick="event\.stopPropagation\(\);wpMove\(\$\{i\},1\)"/.test(src)
+   && /只做拖移的話，手機端等於沒有排序功能/.test(src));
+ok('★★ 第一個不能再上移、最後一個不能再下移（按鈕直接停用）',
+   /\$\{i===0\?'disabled':''\}/.test(src) && /\$\{i===\(S\.items\.length-1\)\?'disabled':''\}/.test(src));
+ok('★★ 有看得出來的拖移把手（不然「這一列可以拖」看不出來）',
+   /<span class="wp-item-g" title="拖曳可以調整順序">⠿<\/span>/.test(src)
+   && /\.wp-item-g\{position:absolute;left:8px;/.test(src));
+ok('★★ 只動記憶體，要按「儲存方案」才寫回資料庫（跟改次數／重量同一條線）',
+   /只動記憶體裡的 S\.items，要按「儲存方案」才寫回資料庫/.test(src));
+ok('★★ 唯讀的那份（別人分享的）不畫把手與上下移',
+   /\.wp-item-ro \.wp-item-g,\.wp-item-ro \.wp-item-mv\{display:none;\}/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
