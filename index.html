@@ -4007,6 +4007,10 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 }
 /* 分頁內容的手機版式（2026-08-20 使用者指示：四個分頁要調成手機好讀的規格） */
 /* 票券卡：購買・效期提到第二列；金額改放右下角、就在「作廢」按鈕上方 */
+/* 作廢原因（2026-09-09）：紅色語彙的最輕一階 —— 它是「這張票為什麼沒了」的說明，
+   不是警示；紅>金>綠的階級裡，作廢屬於紅但已成定局，用淡紅底細字。 */
+.tkc-void{font-size:11.5px;line-height:1.7;color:var(--danger,#b5372e);
+  background:rgba(181,55,46,.07);border-radius:8px;padding:6px 9px;margin:8px 0 0;}
 .tkc-meta{font-size:11px;color:var(--t3);margin-top:6px;line-height:1.7;}
 .tkc-foot{flex-direction:column;align-items:flex-end !important;gap:6px !important;}
 .tkc-foot>span{min-width:0;text-align:right;}
@@ -12459,8 +12463,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260909.1005';
-const APP_VERSION_LABEL = 'v260909.1005';
+const APP_VERSION = '260909.1012';
+const APP_VERSION_LABEL = 'v260909.1012';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14517,6 +14521,24 @@ function tkBuyDateHtml(t){
   if(d)  return `購買 <b class="num">${f(d)}</b>`;
   if(sd) return `購買 <b class="num" title="這張票沒有購買日，顯示的是舊系統的起始日">${f(sd)}</b><span style="opacity:.7;">（起始日）</span>`;
   return `購買 <span style="opacity:.7;">—</span>`;
+}
+/* 作廢原因（2026-09-09 使用者：「黃唐施#11補課券　作廢有備註說明　但現在看不到　
+   要寫在方案這邊」）—— 作廢時原因只寫進 ticket_logs 那一筆 adjust 的 note
+   （格式固定是「作廢・全額退款：理由」，見 tkVoidDo），票券卡上完全看不到。
+   ⚠ 從帳本撈回來畫，不另外存一份到 member_tickets：一份資料兩個地方存遲早對不起來，
+     而且既有的作廢票沒有那個欄位，補也補不回來。
+   ⚠ 同一張票理論上只作廢一次，但保險起見取最後一筆。 */
+function tkVoidNote(t, logs){
+  if(!t || t.status!=='refunded') return '';
+  const L=(logs||[]).filter(x=>x && String(x.ticket_id)===String(t.id) && x.action==='adjust'
+      && /^作廢・/.test(String(x.note||'')));
+  if(!L.length) return '';
+  L.sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  return String(L[L.length-1].note||'');
+}
+function tkVoidNoteHtml(t, logs){
+  const n=tkVoidNote(t, logs);
+  return n?`<div class="tkc-void">${escH(n)}</div>`:'';
 }
 function fmtExpire(d,t){
   if(!d && t && t.valid_days && !t.activated_at) return `未開通（首堂課後 ${t.valid_days} 天）`;
@@ -46213,6 +46235,7 @@ function ppRecordHtml(){
             ${/* 狀態章（已完成／已過期／已退費）2026-08-20 使用者指示移到課程方案名稱右邊 */''}
             ${_m2?`<div class="tkc-meta">${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(tkExtOrigExpire(t,c.myLogs)||t.expire_date,t)}${tkExtTagHTML(t,c.myLogs)}${tkIsExtended(t)?`　·　${tkExtBadge(t)}`:''}</div>`:''}
             <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id,WAL.selfBk)}</div>
+            ${tkVoidNoteHtml(t, c.myLogs)}
             ${/* 2026-08-04 使用者回報：加了「使用人」後右邊四顆按鈕被擠成直條 ——
                  允許整列換行、按鈕列不縮不折字。 */''}
             <div class="${_m2?'tkc-foot':''}" style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 10px;">
@@ -46343,6 +46366,7 @@ function ppRecordHtml(){
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${tkNoTag(WAL.noOf(t.id))}${t.plan_name||'票券'}${shrTag}${tkExtBadge(t)}</span>
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}　${st}</span></div>
             <div class="mck-dots2" style="margin:8px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id,WAL.selfBk)}</div>
+            ${tkVoidNoteHtml(t, c.myLogs)}
             <div style="font-size:11px;color:var(--t3);margin-top:7px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
               <span>${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${tkMoneyHtml(t)}</span>
               <span style="display:flex;gap:6px;">
