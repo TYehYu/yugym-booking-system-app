@@ -118,5 +118,50 @@ ok('★★★ 名稱與備註放在重畫範圍外（打到一半被清掉是踩
    /輸入框如果在裡面，打到一半會被清掉、游標也會跳走（校正視窗踩過同一個坑）/.test(src)
    && /function wpPaint\(\)\{/.test(src));
 
+console.log('\n⑧ Phase 2：套用方案到課堂');
+{
+  const g2=(a,b)=>{const i=src.indexOf(a); return src.slice(i, src.indexOf(b,i)+b.length);};
+  const AP=g2('async function _tlPlanApply(pid,useLast){','\n}');
+  const NUM=new Function('wpUnitOf','return '+g('function tlLogNums(l){','\n}'))(x=>['kg','lb'].indexOf(String(x||''))>=0?String(x):'kg');
+  eq('★★★ 舊紀錄沒有 weight 欄位時，退回逐組明細取最重那一組（一律當 kg，當時畫面就寫死 kg）',
+     NUM({reps:10,sets:3,sets_detail:'[{"reps":10,"weight":40},{"reps":8,"weight":45}]'}),
+     {reps:10,sets:3,weight:45,unit:'kg'});
+  eq('★★★ 新欄位優先', NUM({reps:12,sets:4,weight:50,weight_unit:'lb',sets_detail:'[{"reps":1,"weight":9}]'}),
+     {reps:12,sets:4,weight:50,unit:'lb'});
+  eq('★★ 徒手的舊紀錄不會被讀成有重量',
+     NUM({reps:30,sets:3,sets_detail:'[{"reps":30,"weight":""}]'}), {reps:30,sets:3,weight:'',unit:'kg'});
+  eq('★★ 壞掉的 JSON 不會爆', NUM({reps:5,sets:1,sets_detail:'{壞的'}), {reps:5,sets:1,weight:'',unit:'kg'});
+  eq('　　null 不會爆', NUM(null), null);
+  ok('★★★ 沿用的是「同一個動作」上一次的數字，不是整堂照抄',
+     /沿用的是「這位會員上一次做\*\*同一個動作\*\*的數字」，不是整堂課照抄/.test(src)
+     && /const L=useLast\?tlLogNums\(last\[it\.name\]\):null;/.test(AP));
+  ok('★★★ 沿用時逐項退回方案的值（他只做過其中兩個，就只有那兩個換掉）',
+     /const reps  =L&&L\.reps!==''   \? Number\(L\.reps\)   : \(it\.reps==null\?null:Number\(it\.reps\)\);/.test(AP));
+  ok('★★★ 重量 0／空一律存 null，單位也跟著不存（不要留一個沒有重量的單位）',
+     /weight:\(weight!=null&&isFinite\(weight\)&&weight>0\)\?weight:null,/.test(AP)
+     && /weight_unit:\(weight!=null&&isFinite\(weight\)&&weight>0\)\?unit:null,/.test(AP));
+  ok('★★★ 現場改的數字不回寫方案（方案是範本）',
+     /現場改的數字\*\*不回寫方案\*\*（方案是範本，當天的數字歸當天）/.test(src));
+  ok('★★ 一個動作都沒做過就不問（少一個沒有意義的步驟）',
+     /if\(!hits\.length\) return tlPlanApply\(pid,false\);/.test(src));
+  ok('★★ 沒有方案時給的是指路，不是一句吐司',
+     /到「訓練方案」那一頁先把常用的菜單存起來，之後在這裡一鍵套用。/.test(src));
+  ok('★★ 防連點', /return onceAct\('tlplan:'\+pid, \(\)=>_tlPlanApply\(pid,useLast\)\);/.test(src));
+  ok('★★★ 顯示那一段全檔三份都吃得到新欄位（教練抽屜／員工卡／會員資料）',
+     (src.match(/if\(l\.weight!=null&&l\.weight!==''\)\{/g)||[]).length===3
+     && /這一段全檔有三份（教練抽屜／員工卡／會員資料），三處都要吃得到/.test(src));
+  ok('★★★ 手動逐組記錄也把重量落一份到新欄位 —— 兩條路要讀得到同一個地方',
+     /weight:\(function\(\)\{ const w=valid\.map\(x=>Number\(x\.weight\)\)/.test(src));
+}
+
+console.log('\n⑨ 管理員也用得到（2026-09-09 使用者：「先把這個功能開放到管理員端」）');
+ok('★★ 桌機在「管理員 → 環境設定」，接在動作資料庫旁邊',
+   /\{grp:'環境設定', label:'訓練方案', page:'coach_plans'\},/.test(src));
+ok('★★ 手機收在「其他」選單（底部三顆不再擠第四顆）',
+   /navTo\('coach_plans'\)\">\$\{moreIc\('plan'\)\}訓練方案/.test(src)
+   && /k==='plan'\?BN_ICONS\.coach_plans/.test(src));
+ok('★★ 管理員看到的是自己那份（老闆本身也是教練，isCoachable 含 admin）',
+   /管理員看到的是\*\*自己那份\*\*方案（頁面吃 SESSION\.id）/.test(src));
+
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);

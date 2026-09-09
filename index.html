@@ -4402,6 +4402,9 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .wp-item-x{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:22px;height:22px;
   border:none;background:transparent;color:var(--t3);font-size:13px;cursor:pointer;line-height:1;}
 .wp-item-x:hover{color:var(--danger,#b5372e);}
+/* 訓練紀錄抽屜底下那兩顆（套用方案／新增動作）—— 等寬一列 */
+.tl-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
+.tl-acts .btn{width:100%;}
 .wp-share-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px 12px;
   background:var(--card2);border:1px solid var(--bd);border-radius:11px;padding:10px 12px;}
 /* 動作設定視窗：一列一個數字，左右各一組加減 */
@@ -15800,6 +15803,11 @@ const ADMIN_NAV2=[
        改一個字都要重新部署。範本存進 line_templates，這一頁改完即時生效。 */
     {grp:'環境設定', label:'通知範本', page:'settings_line'},
     {grp:'環境設定', label:'動作資料庫', page:'exercise_db'},
+    /* 訓練方案（2026-09-09 使用者：「可以先把這個功能開放到管理員端　應該只有我跟我太太」）——
+       接在動作資料庫旁邊：那兩件事是同一組（動作是材料、方案是菜單）。
+       ⚠ 管理員看到的是**自己那份**方案（頁面吃 SESSION.id）；
+         老闆本身也是教練（isCoachable 含 admin），所以這一頁對他就是他自己的方案。 */
+    {grp:'環境設定', label:'訓練方案', page:'coach_plans'},
   ]},
   /* 2026-08-06 使用者指示：「月報表要移動到頂欄那邊的導覽列，放在班表左邊」——
      獨立成頂欄群組（只有一個子項目 → renderSubnav 不會多長一層左側次選單，
@@ -16346,8 +16354,9 @@ const MORE_ICONS={
   logout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5h3A1.5 1.5 0 0 1 19 7v10a1.5 1.5 0 0 1-1.5 1.5h-3"/><path d="M11 15.5 7.5 12 11 8.5M7.5 12H16"/></svg>',
 };
 function moreIc(k){
+  /* 2026-09-09：訓練方案沿用底部導覽那顆清單圖示，不另外畫一個（同一個功能兩種圖示會認錯） */
   const v=(k==='member'?NAV2_ICONS.g_member:k==='staff'?MORE_ICONS.staff
-          :k==='settings'?NAV2_ICONS.g_settings:MORE_ICONS[k])||'';
+          :k==='settings'?NAV2_ICONS.g_settings:k==='plan'?BN_ICONS.coach_plans:MORE_ICONS[k])||'';
   return `<span class="mi-ic">${v}</span>`;
 }
 function openMoreMenu(){
@@ -16360,6 +16369,9 @@ function openMoreMenu(){
     items+=`<button class="more-item" onclick="closeModal();navTo('staff','g_staff')">${moreIc('staff')}員工</button>`;
     items+=`<button class="more-item" onclick="closeModal();navTo('ticketing','g_member')">${moreIc('ticket')}票券</button>`;
     items+=`<button class="more-item" onclick="closeModal();navTo('settings','g_settings')">${moreIc('settings')}系統設定</button>`;
+    /* 訓練方案（2026-09-09）：手機底部只有三顆，不再擠第四顆 —— 收在這裡。
+       桌機在「管理員 → 環境設定」有自己的入口。 */
+    items+=`<button class="more-item" onclick="closeModal();navTo('coach_plans')">${moreIc('plan')}訓練方案</button>`;
     items+=`<div class="more-sep"></div>`;
   }
   if(role==='coach') items+=`<button class="more-item" onclick="closeModal();openCoachProfile()">${moreIc('profile')}個人資料</button>`;
@@ -47196,6 +47208,14 @@ async function ppOpenTraining(id){
   logs.forEach(l=>{ (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
   const sessions=Object.entries(byBk).map(([bid,ls])=>({bid,ls,t:ls[0].created_at||''})).sort((a,b)=>b.t.localeCompare(a.t));
   const setLine=(l)=>{
+    /* 2026-09-09：新的 weight／weight_unit 欄位優先（方案套用寫的就是它）；
+       逐組明細是舊路徑（手動一組一組記），沒有新欄位時才退回去讀。
+       ⚠ 這一段全檔有三份（教練抽屜／員工卡／會員資料），三處都要吃得到，
+         不然同一筆紀錄在不同頁面長得不一樣。 */
+    if(l.weight!=null&&l.weight!==''){
+      return [(l.reps!=null?l.reps+' 次':null),(l.sets?l.sets+' 組':null),wpWeightTxt(l.weight,l.weight_unit)]
+        .filter(Boolean).join(' × ');
+    }
     if(l.sets_detail){ try{ const arr=JSON.parse(l.sets_detail); if(arr&&arr.length) return arr.map(s=>`${s.reps||'-'}${s.weight?'×'+s.weight+'kg':''}`).join('、'); }catch(_){} }
     return `${l.reps??'-'} 次${l.sets?(' × '+l.sets+' 組'):''}`;
   };
@@ -49579,6 +49599,14 @@ PAGES.m_training=async function(){
     {label:'不同動作', value:exSet.size, unit:'種'},
   ]);
   const setLine=(l)=>{
+    /* 2026-09-09：新的 weight／weight_unit 欄位優先（方案套用寫的就是它）；
+       逐組明細是舊路徑（手動一組一組記），沒有新欄位時才退回去讀。
+       ⚠ 這一段全檔有三份（教練抽屜／員工卡／會員資料），三處都要吃得到，
+         不然同一筆紀錄在不同頁面長得不一樣。 */
+    if(l.weight!=null&&l.weight!==''){
+      return [(l.reps!=null?l.reps+' 次':null),(l.sets?l.sets+' 組':null),wpWeightTxt(l.weight,l.weight_unit)]
+        .filter(Boolean).join(' × ');
+    }
     if(l.sets_detail){ try{ const arr=JSON.parse(l.sets_detail); if(arr&&arr.length) return arr.map(s=>`${s.reps||'-'}${s.weight?'×'+s.weight+'kg':''}`).join('、'); }catch(_){} }
     return `${l.reps??'-'} 次${l.sets?(' × '+l.sets+' 組'):''}`;
   };
@@ -59399,6 +59427,14 @@ async function renderTrainingLogSheet(){
   const logs=allLogs.filter(l=>l.booking_id===b.id).sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
   // 動作明細顯示（次數 x 重量；多組）
   const setLine=(l)=>{
+    /* 2026-09-09：新的 weight／weight_unit 欄位優先（方案套用寫的就是它）；
+       逐組明細是舊路徑（手動一組一組記），沒有新欄位時才退回去讀。
+       ⚠ 這一段全檔有三份（教練抽屜／員工卡／會員資料），三處都要吃得到，
+         不然同一筆紀錄在不同頁面長得不一樣。 */
+    if(l.weight!=null&&l.weight!==''){
+      return [(l.reps!=null?l.reps+' 次':null),(l.sets?l.sets+' 組':null),wpWeightTxt(l.weight,l.weight_unit)]
+        .filter(Boolean).join(' × ');
+    }
     if(l.sets_detail){ try{ const arr=JSON.parse(l.sets_detail); if(arr&&arr.length) return arr.map(s=>`${s.reps||'-'}${s.weight?'×'+s.weight+'kg':''}`).join('、'); }catch(_){} }
     return `${l.reps??'-'} 次${l.sets?(' × '+l.sets+' 組'):''}`;
   };
@@ -59477,7 +59513,10 @@ async function renderTrainingLogSheet(){
         ${overview}
         <div class="tlh-label">今日訓練紀錄</div>
         ${sec2}
-        <button class="btn btn-green" style="width:100%;margin-top:10px;" onclick="tlStartAddExercise()">＋ 新增動作</button>
+        <div class="tl-acts">
+          <button class="btn btn-ghost" onclick="tlOpenPlanPick()">套用方案</button>
+          <button class="btn btn-green" onclick="tlStartAddExercise()">＋ 新增動作</button>
+        </div>
         <div class="tlh-label" style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
           <span>歷史課表（最近三次）</span>
           <button class="tlh-hq-btn" onclick="tlOpenExerciseHistory()">動作查詢 ›</button>
@@ -59837,6 +59876,12 @@ async function tlSaveExercise(){
     id:uid('TLOG'), booking_id:b.id, member_id:b.member_id, coach_id:SESSION.id,
     exercise_name:st.exercise_name, body_part:st.body_part, posture:st.posture, tool:st.tool,
     reps:repsFirst, sets:valid.length,
+    /* 2026-09-09：逐組記錄也把重量落一份到新欄位（取最重的那一組）——
+       ⚠ 不是為了顯示（顯示優先吃逐組明細），是為了讓「沿用上次的數字」兩條路讀得到同一個地方。 */
+    weight:(function(){ const w=valid.map(x=>Number(x.weight)).filter(n=>isFinite(n)&&n>0);
+      return w.length?Math.max.apply(null,w):null; })(),
+    weight_unit:(function(){ const w=valid.map(x=>Number(x.weight)).filter(n=>isFinite(n)&&n>0);
+      return w.length?'kg':null; })(),   /* 逐組那一頁的輸入框寫死 kg */
     sets_detail:JSON.stringify(valid),    // 多組明細（次數+重量）
     note:(st.note||'') + (setsText?(st.note?'　':'')+'['+setsText+']':''),
     created_at:new Date().toISOString()
@@ -59848,6 +59893,112 @@ async function tlSaveExercise(){
     showToast('已加入紀錄');
     renderTrainingLogSheet();
   }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+}
+
+
+/* ══ 把方案套用到某一堂課（2026-09-09 Phase 2）═══════════════════════════
+   使用者：「套用預設是教練自己先設計的　但是如果該會員原本就有訓練紀錄
+             可以跳提示是否沿用紀錄」
+   ⚠ 沿用的是「這位會員上一次做**同一個動作**的數字」，不是整堂課照抄 ——
+     方案裡有五個動作、他只做過其中兩個，那就只有那兩個換成他的數字。
+   ⚠ 現場改的數字**不回寫方案**（方案是範本，當天的數字歸當天）。 */
+async function tlOpenPlanPick(){
+  const b=window._tlBooking; if(!b) return;
+  let plans=[],logs=[];
+  try{ [plans,logs]=await Promise.all([dbGetAll('workout_plans').catch(()=>[]),dbGetAll('training_logs').catch(()=>[])]); }catch(_){}
+  const usable=wpMine(plans).concat(wpShared(plans));
+  window._tlPlans=Object.fromEntries(usable.map(p=>[p.id,p]));
+  /* 這位會員做過的動作 → 最近一次的數字（同名比對；動作名是這套系統裡的自然鍵） */
+  const last={};
+  logs.filter(l=>l&&l.member_id===b.member_id && l.booking_id!==b.id)
+      .sort((a,c)=>String(a.created_at||'').localeCompare(String(c.created_at||'')))
+      .forEach(l=>{ if(l.exercise_name) last[l.exercise_name]=l; });
+  window._tlLastByEx=last;
+  if(!usable.length){
+    showModal(`<div class="modal-title">套用方案</div>
+      <div class="mh2-rule">你還沒有訓練方案。<br>
+        到「訓練方案」那一頁先把常用的菜單存起來，之後在這裡一鍵套用。</div>
+      <div class="modal-foot mh2-foot one"><button class="btn btn-ghost" onclick="closeModal()">知道了</button></div>`);
+    return;
+  }
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">套用方案</div>
+    <div class="wp-sub" style="margin-bottom:10px;">套進來之後每一項都還可以改；改了不會動到方案本身。</div>
+    <div class="wp-items">${usable.map(p=>{
+      const items=Array.isArray(p.items)?p.items:[];
+      const hit=items.filter(it=>it&&last[it.name]).length;
+      return `<div class="wp-item" onclick="tlPlanAsk('${p.id}')">
+        <div class="wp-item-l">${escH(p.name||'未命名方案')}<span class="wp-card-c" style="margin-left:8px;">${items.length} 個動作</span></div>
+        <div class="wp-item-n">${escH(items.map(x=>x&&x.name).filter(Boolean).slice(0,4).join('、'))}${items.length>4?'…':''}${
+          hit?`　·　<b style="color:var(--gold-d,#b48a56);">${hit} 個做過</b>`:''}</div>
+      </div>`; }).join('')}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
+}
+/* 有做過的動作才問「要不要沿用」；一個都沒做過就直接套（少一個沒有意義的步驟） */
+function tlPlanAsk(pid){
+  const p=(window._tlPlans||{})[pid]; if(!p) return;
+  const last=window._tlLastByEx||{};
+  const items=Array.isArray(p.items)?p.items:[];
+  const hits=items.filter(it=>it&&last[it.name]);
+  if(!hits.length) return tlPlanApply(pid,false);
+  const line=it=>{ const l=last[it.name];
+    return `<div class="wp-item wp-item-ro"><div class="wp-item-l">${escH(it.name)}</div>
+      <div class="wp-item-n">方案 ${escH(wpItemLine(it).replace(escH(it.name)+' × ','').replace(it.name+' × ',''))||'—'}
+        　→　上次 ${escH(tlLogLine(l))}</div></div>`; };
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">要沿用上次的數字嗎？</div>
+    <div class="wp-sub" style="margin-bottom:10px;">這位會員做過方案裡的 ${hits.length} 個動作。沿用＝用他上一次的次數／組數／重量，其餘照方案。</div>
+    <div class="wp-items">${hits.slice(0,6).map(line).join('')}${hits.length>6?`<div class="wp-card-empty">…另外 ${hits.length-6} 個</div>`:''}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="tlPlanApply('${pid}',false)">照方案</button>
+      <button class="btn btn-green" onclick="tlPlanApply('${pid}',true)">沿用上次</button></div>`);
+}
+/* 一筆舊紀錄怎麼讀成「次數／組數／重量」—— 新欄位優先，舊資料退回 sets_detail */
+function tlLogNums(l){
+  if(!l) return null;
+  let reps=(l.reps==null?'':l.reps), sets=(l.sets==null?'':l.sets),
+      weight=(l.weight==null?'':l.weight), unit=wpUnitOf(l.weight_unit);
+  if(weight===''&&l.sets_detail){
+    try{ const a=JSON.parse(l.sets_detail);
+      if(a&&a.length){ const w=a.map(x=>Number(x&&x.weight)).filter(n=>isFinite(n)&&n>0);
+        if(w.length) weight=Math.max.apply(null,w); }   /* 舊資料沒有單位欄，一律當 kg（當時畫面就寫死 kg） */
+    }catch(_){}
+  }
+  return {reps,sets,weight,unit};
+}
+function tlLogLine(l){
+  const n=tlLogNums(l); if(!n) return '—';
+  return [(n.reps!==''?n.reps+' 次':null),(n.sets!==''?n.sets+' 組':null),wpWeightTxt(n.weight,n.unit)||null]
+    .filter(Boolean).join(' × ')||'—';
+}
+async function tlPlanApply(pid,useLast){ return onceAct('tlplan:'+pid, ()=>_tlPlanApply(pid,useLast)); }
+async function _tlPlanApply(pid,useLast){
+  const p=(window._tlPlans||{})[pid], b=window._tlBooking;
+  if(!p||!b){ closeModal(); return; }
+  const last=window._tlLastByEx||{};
+  const items=(Array.isArray(p.items)?p.items:[]).filter(it=>it&&String(it.name||'').trim());
+  let n=0;
+  try{
+    for(const it of items){
+      const L=useLast?tlLogNums(last[it.name]):null;
+      const reps  =L&&L.reps!==''   ? Number(L.reps)   : (it.reps==null?null:Number(it.reps));
+      const sets  =L&&L.sets!==''   ? Number(L.sets)   : (it.sets==null?null:Number(it.sets));
+      const weight=L&&L.weight!==''  ? Number(L.weight) : (it.weight==null||it.weight===''?null:Number(it.weight));
+      const unit  =L&&L.weight!==''  ? wpUnitOf(L.unit) : wpUnitOf(it.unit);
+      await dbPut('training_logs',{
+        id:uid('TLOG'), booking_id:b.id, member_id:b.member_id, coach_id:SESSION.id,
+        exercise_name:String(it.name).trim(), body_part:it.body_part||null,
+        posture:null, tool:it.tool||null,
+        reps:isFinite(reps)?reps:null, sets:isFinite(sets)?sets:null,
+        weight:(weight!=null&&isFinite(weight)&&weight>0)?weight:null,
+        weight_unit:(weight!=null&&isFinite(weight)&&weight>0)?unit:null,
+        sets_detail:null,
+        note:it.note||null,
+        created_at:new Date().toISOString() });
+      window._tlogBids&&window._tlogBids.add(b.id);
+      n++;
+    }
+    closeModal();
+    showToast(`已套用 ${n} 個動作${useLast?'（沿用上次的數字）':''}`);
+    renderTrainingLogSheet();
+  }catch(e){ closeModal(); showToast('套用失敗：'+((e&&e.message)||e)); }
 }
 
 /* ════════════════════════════════════════════════════════════
