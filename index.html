@@ -4389,8 +4389,13 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 .wp-card-empty{color:var(--t3);font-size:12px;}
 .wp-card-f{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;}
-.wp-tag{font-size:10.5px;color:var(--green);border:1px solid var(--green);border-radius:6px;padding:1px 7px;}
+/* 分享那一顆 2026-09-09 從標籤變成按鈕（自己開一個視窗）—— 樣子不變、可以點 */
+.wp-tag{font-size:10.5px;color:var(--green);border:1px solid var(--green);border-radius:6px;padding:2px 8px;
+  background:transparent;font-family:inherit;line-height:1.5;}
+button.wp-tag{cursor:pointer;}
+button.wp-tag:hover{background:var(--green);color:#fff;}
 .wp-tag-off{color:var(--t3);border-color:var(--bd);}
+button.wp-tag.wp-tag-off:hover{background:var(--card2);color:var(--t2);border-color:var(--t3);}
 .wp-card-go{font-size:11.5px;color:var(--t3);flex:none;}
 /* 方案裡的動作列 */
 .wp-item{position:relative;background:var(--card2);border:1px solid var(--bd);border-radius:11px;
@@ -12578,8 +12583,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260909.1709';
-const APP_VERSION_LABEL = 'v260909.1709';
+const APP_VERSION = '260909.1724';
+const APP_VERSION_LABEL = 'v260909.1724';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -64897,8 +64902,13 @@ PAGES.coach_plans=async function(){
       <div class="wp-card-h"><span class="wp-card-n">${escH(p.name||'未命名方案')}</span>
         <span class="wp-card-c">${n} 個動作</span></div>
       ${first?`<div class="wp-card-s">${escH(first)}${n>3?'…':''}</div>`:'<div class="wp-card-s wp-card-empty">還沒有動作</div>'}
+      ${/* 分享改成卡片上獨立的一顆（2026-09-09 使用者：「分享的按鈕做在外面另外開一個視窗
+           不要放在訓練方案裡面」）—— 分享是「這份給誰看」，跟「這份的內容」是兩件事；
+           混在編輯視窗裡，改個次數也要連分享名單一起按存檔。
+         ⚠ 要 stopPropagation：整張卡本來就會開編輯。 */''}
       <div class="wp-card-f">${own
-        ? (shN?`<span class="wp-tag">已分享給 ${shN} 位</span>`:'<span class="wp-tag wp-tag-off">未分享</span>')
+        ? `<button type="button" class="wp-tag${shN?'':' wp-tag-off'}" onclick="event.stopPropagation();wpShareOpen('${p.id}')"
+             title="分享給其他教練">${shN?`已分享給 ${shN} 位`:'分享'}</button>`
         : `<span class="wp-tag">來自 ${escH(nameOf(p.coach_id))}</span>`}
         <span class="wp-card-go">${own?'編輯 ›':'查看 ›'}</span></div>
     </div>`;
@@ -64968,7 +64978,8 @@ function wpRender(){
     <button class="btn btn-ghost btn-sm" style="width:100%;margin:2px 0 12px;" onclick="wpAddItem()">＋ 新增動作</button>
     <div class="form-row"><label>方案備註（可留空）</label>
       <input type="text" id="wp-note" value="${escH(S.note||'')}" placeholder="例：熱身後做，組間休息 60 秒" oninput="window._wp.note=this.value"></div>
-    <div id="wp-share"></div>
+    ${/* 〔已移出〕分享名單 2026-09-09 移到方案卡上自己一個視窗（見 wpShareOpen）——
+         使用者：「分享的按鈕做在外面另外開一個視窗　不要放在訓練方案裡面」。 */''}
     <div class="modal-foot">
       ${S.created_at&&S._exists?`<button class="btn btn-ghost" style="color:#b5372e;" onclick="wpDelAsk()">刪除</button>`:''}
       <button class="btn btn-ghost" onclick="closeModal();navTo('coach_plans')">取消</button>
@@ -64986,22 +64997,48 @@ function wpPaint(){
         <button class="wp-item-x" title="移除這個動作" onclick="event.stopPropagation();wpDelItem(${i})">✕</button>
       </div>`).join('')
     : '<div class="wp-card-empty" style="padding:10px 2px;">還沒有動作，點下面新增。</div>';
-  const sh=document.getElementById('wp-share');
-  if(sh){
-    const others=(window._wpCoaches||[]).filter(c=>c&&c.id!==SESSION.id&&isCoachable(c)&&c.status!=='inactive');
-    const on=(S.shared_with||[]).map(String);
-    sh.innerHTML=`<div class="lot-sec">分享給其他教練<i class="wp-hint">對方只能看與複製</i></div>
-      ${others.length?`<div class="wp-share-grid">${others.map(c=>`
-        <label class="hr-check" style="margin:0;"><input type="checkbox" ${on.indexOf(String(c.id))>=0?'checked':''}
-          onchange="wpShareTgl('${c.id}',this.checked)"><b>${escH(coachDisp(c)||c.name||'')}</b></label>`).join('')}</div>`
-      :'<div class="wp-card-empty">店裡目前沒有其他教練。</div>'}`;
-  }
+}
+/* ── 分享給其他教練：自己一個視窗（2026-09-09）─────────────────────────────
+   ⚠ 直接存資料庫，不跟編輯視窗共用暫存 —— 兩邊各存各的，就不會有
+     「在這邊改了分享、在那邊按存檔又蓋回去」的問題。
+   ⚠ 對方只能看與複製（wpView），改不到你的原本。 */
+async function wpShareOpen(id){
+  let p=null; try{ p=await dbGet('workout_plans',id); }catch(_){}
+  if(!p){ showToast('找不到方案'); return; }
+  if(String(p.coach_id)!==String(SESSION.id)){ showToast('只能分享自己的方案'); return; }
+  let coaches=window._wpCoaches;
+  if(!coaches||!coaches.length){ try{ coaches=await dbGetAll('coaches'); window._wpCoaches=coaches; }catch(_){ coaches=[]; } }
+  window._wpShare={ id:p.id, name:p.name||'', on:(Array.isArray(p.shared_with)?p.shared_with:[]).map(String) };
+  const others=(coaches||[]).filter(c=>c&&c.id!==SESSION.id&&isCoachable(c)&&c.status!=='inactive');
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">分享方案</div>
+    <div class="wp-sub" style="margin-bottom:10px;">「<b>${escH(p.name||'未命名方案')}</b>」要給哪幾位教練看？<br>
+      對方只能看與複製一份來改，<b>改不到你的原本</b>。</div>
+    ${others.length?`<div class="wp-share-grid">${others.map(c=>`
+      <label class="hr-check" style="margin:0;"><input type="checkbox" ${window._wpShare.on.indexOf(String(c.id))>=0?'checked':''}
+        onchange="wpShareTgl('${c.id}',this.checked)"><b>${escH(coachDisp(c)||c.name||'')}</b></label>`).join('')}</div>`
+    :'<div class="wp-card-empty">店裡目前沒有其他教練。</div>'}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="wpShareSave()">儲存分享名單</button></div>`);
 }
 function wpShareTgl(id,on){
-  const S=window._wp; if(!S) return;
-  const a=(S.shared_with||[]).map(String).filter(x=>x!==String(id));
+  const S=window._wpShare; if(!S) return;
+  const a=(S.on||[]).map(String).filter(x=>x!==String(id));
   if(on) a.push(String(id));
-  S.shared_with=a;
+  S.on=a;
+}
+async function wpShareSave(){ return onceAct('wpshare', _wpShareSave); }
+async function _wpShareSave(){
+  const S=window._wpShare; if(!S) return;
+  try{
+    /* 只改分享名單那一欄：重新讀一次再回寫，免得蓋掉別的地方剛改好的內容 */
+    const rec=await dbGet('workout_plans',S.id);
+    if(!rec){ showToast('找不到方案'); return; }
+    rec.shared_with=(S.on||[]).map(String);
+    rec.updated_at=new Date().toISOString();
+    await dbPut('workout_plans',rec);
+    closeModal(); showToast(rec.shared_with.length?`已分享給 ${rec.shared_with.length} 位教練`:'已取消分享');
+    navTo('coach_plans');
+  }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
 }
 function wpAddItem(){ const S=window._wp; if(!S) return; S.items.push(wpNewItem()); wpPaint(); wpItemEdit(S.items.length-1); }
 function wpDelItem(i){ const S=window._wp; if(!S) return; S.items.splice(i,1); wpPaint(); }
@@ -65123,9 +65160,14 @@ async function _wpSave(){
       sets:(it.sets===''||it.sets==null)?null:Number(it.sets),
       weight:(it.weight===''||it.weight==null)?null:Number(it.weight),
       unit:wpUnitOf(it.unit), note:String(it.note||'').trim()||null })),
+    /* 分享名單不由這裡管（2026-09-09 移到 wpShareOpen）——
+       新方案給空的；既有方案原封不動帶回去，免得蓋掉剛在分享視窗改好的。 */
     shared_with:(S.shared_with||[]).map(String), active:true,
     created_at:S.created_at||new Date().toISOString(), updated_at:new Date().toISOString() };
   try{
+    /* 既有方案：分享名單以資料庫那一份為準（編輯視窗不碰它，手上這份可能是舊的） */
+    try{ const _cur=await dbGet('workout_plans',rec.id);
+         if(_cur) rec.shared_with=(Array.isArray(_cur.shared_with)?_cur.shared_with:[]).map(String); }catch(_){}
     await dbPut('workout_plans',rec);
     /* 新動作補進自己的動作庫（失敗不擋方案，見上面的 ⚠） */
     try{

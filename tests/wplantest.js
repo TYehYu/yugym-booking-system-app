@@ -84,6 +84,24 @@ ok('★★★ 分享的人只能看與複製，改不到原本',
    /別人分享的方案只能看。要調整請先複製一份。/.test(src)
    && /function wpCopy\(id\)\{/.test(src)
    && /if\(String\(p\.coach_id\)!==String\(SESSION\.id\)\)\{ return wpView\(id\); \}/.test(src));
+
+/* 2026-09-09 使用者：「分享的按鈕做在外面另外開一個視窗　不要放在訓練方案裡面」 */
+ok('★★★ 分享是方案卡上獨立的一顆，不在編輯視窗裡',
+   /onclick="event\.stopPropagation\(\);wpShareOpen\('\$\{p\.id\}'\)"/.test(src)
+   && /async function wpShareOpen\(id\)\{/.test(src)
+   && !/<div id="wp-share"><\/div>/.test(src));
+ok('★★★ 要 stopPropagation —— 整張卡本來就會開編輯',
+   /⚠ 要 stopPropagation：整張卡本來就會開編輯。/.test(src));
+ok('★★★ 分享視窗直接存資料庫，不跟編輯視窗共用暫存',
+   /window\._wpShare=\{ id:p\.id/.test(src)
+   && /async function _wpShareSave\(\)\{/.test(src)
+   && /直接存資料庫，不跟編輯視窗共用暫存/.test(src));
+ok('★★★ 存分享名單前重新讀一次，免得蓋掉別處剛改好的內容',
+   /const rec=await dbGet\('workout_plans',S\.id\);\s*\n\s*if\(!rec\)\{ showToast\('找不到方案'\); return; \}\s*\n\s*rec\.shared_with=/.test(src));
+ok('★★★ 反過來也要：存方案時分享名單以資料庫為準（編輯視窗不碰它，手上那份可能是舊的）',
+   /if\(_cur\) rec\.shared_with=\(Array\.isArray\(_cur\.shared_with\)\?_cur\.shared_with:\[\]\)\.map\(String\);/.test(src));
+ok('★★ 只能分享自己的方案', /if\(String\(p\.coach_id\)!==String\(SESSION\.id\)\)\{ showToast\('只能分享自己的方案'\); return; \}/.test(src));
+ok('★★ 防連點', /return onceAct\('wpshare', _wpShareSave\);/.test(src));
 /* ⚠ 這裡**不能**寫成「比對一段自己寫死的 SQL 字串」—— 那會永遠成立，是假的檢查。
    RLS 在資料庫端，這支測試看不到；改成釘住「程式裡有記著這件事」，
    真正的驗證是 migration 20260909_workout_plans（wp_select / wp_write 兩條 policy）。 */
