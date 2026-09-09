@@ -304,8 +304,8 @@ console.log('\n⑬ 動作用「長按拖移」調順序（2026-09-09 四修）')
   ok('★★★ 分身不縮放，只加陰影（先前明確要求過卡片大小不要變）',
      /\.wp-item\.wp-ghost\{background:#fff;border-color:var\(--brand,#1f6f54\);opacity:1;\s*\n\s*box-shadow:/.test(src)
      && !/wp-ghost[^}]*scale\(/.test(src));
-  ok('★★★ 分身掛在 body、脫離清單，所以清單重排重畫時它不受影響',
-     /它掛在 body 上、脫離清單，所以清單重排重畫時分身不受影響/.test(src));
+  ok('★★★ 分身掛在 body、脫離清單，所以清單裡怎麼搬都不影響它',
+     /掛在 body 上、脫離清單，所以清單裡怎麼搬都不影響它/.test(src));
   ok('★★★ z-index 要高過彈窗（這一頁本來就開在彈窗裡）',
      /z-index:10200;/.test(LP) && /\.modal-bg 是 9750/.test(src));
   ok('★★ 放開要把分身收掉，不然會留一張浮在畫面上',
@@ -313,21 +313,39 @@ console.log('\n⑬ 動作用「長按拖移」調順序（2026-09-09 四修）')
   ok('★★★ 長按不能選到文字 —— body 那條要 armed 之後才加，那 400ms 正好是選字的時間',
      /user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;\}/.test(src)
      && /那 400ms 正好就是\s*\n\s*瀏覽器開始選字的時間/.test(src));
-  ok('★★★ 直接改 S.items 並重畫，不搬 DOM —— 重畫後尺寸完全一致',
-     /const \[x\]=S\.items\.splice\(cur,1\);\s*\n\s*S\.items\.splice\(j,0,x\);/.test(LP)
-     && /直接改 S\.items 並重畫，不去搬 DOM/.test(src));
+/* 2026-09-09 六修（使用者：「動作小卡滑不動了　浮起來只有一下子」）——
+   長按成立時重畫清單會把收到 pointerdown 的節點銷毀，瀏覽器隨即送 pointercancel，
+   拖移在浮起來的下一刻就結束。改成全程只搬 DOM，放開才重排陣列。 */
+  ok('★★★ 拖移全程不重畫清單（重畫＝節點被銷毀＝pointercancel＝拖移中斷）',
+     /絕對不能重畫清單/.test(src)
+     && /瀏覽器隨即送出 pointercancel，拖移在浮起來的下一刻就結束了/.test(src)
+     && !/wpPaint\(\);\s*\n\s*lift\(\);/.test(src));
+  ok('★★★ 拖移中用 insertBefore 搬節點（那是「移動」，節點物件還活著）',
+     /box\.insertBefore\(el, before\)/.test(LP) && /box\.appendChild\(el\)/.test(LP));
+  ok('★★★ 放開之後才依 DOM 順序重排陣列（data-i 是原本的位置）',
+     /const order=rowsNow\(\)\.map\(r=>Number\(r\.dataset\.i\)\)\.filter\(n=>!isNaN\(n\)\);/.test(LP)
+     && /if\(order\.length===orig\.length\) S\.items=order\.map\(k=>orig\[k\]\);/.test(LP));
   ok('★★★ 放開後那一次 click 要吃掉，不然會跳出編輯視窗',
      /window\._wpDragged=1;/.test(LP)
      && /if\(window\._wpDragged\)\{ window\._wpDragged=0; return; \}/.test(src));
-  ok('★★ 外框留在被移動的那一列（0909 三修的那個回報）', /S\._ordSel=cur;/.test(LP));
+  ok('★★ 外框留在被移動的那一列（0909 三修的那個回報）',
+     /S\._ordSel=rowsNow\(\)\.indexOf\(el\);/.test(LP));
   ok('★★ ✕ 不進拖移（不然想刪卻變成拖）',
      /if\(e\.target && e\.target\.closest && e\.target\.closest\('\.wp-item-x'\)\) return;/.test(LP));
   ok('★★ 拖移中整頁不跟著捲', /body\.wp-dragging-on\{touch-action:none;user-select:none;\}/.test(src));
   ok('★★★ 舊那一套（上下鍵＋HTML5 draggable）整組移除，不留死碼',
      !/function wpMove\(/.test(src) && !/function wpDragStart\(/.test(src)
-     && !/wp-ordbtn/.test(src) && /〔已移除〕wpMove／wpDragStart/.test(src));
+     && !/wp-ordbtn/.test(src) && !/window\._wpDragI/.test(src)
+     && /〔已移除〕wpMove／wpDragStart/.test(src));
   ok('★★ 為什麼不用 HTML5 draggable，理由寫在原地',
-     /HTML5 draggable 在手機上根本不會觸發，那才是它要被換掉的原因/.test(src));
+     /HTML5 draggable 在手機上根本不會觸發/.test(src));
+  /* 2026-09-09 使用者：「動作小卡在名稱旁邊加上順序編號」 */
+  ok('★★★ 名稱旁邊有順序編號，用當下位置算（拖移之後自然跟著重排，不另外存）',
+     /<i class="wp-item-no">\$\{i\+1\}<\/i>/.test(src)
+     && /編號是「第幾個做」，拖移之後會跟著重排，所以直接用當下的位置算，不另外存/.test(src));
+  ok('★★ 編號是位置不是內容，樣式上不跟動作名稱搶',
+     /\.wp-item-no\{flex:none;font-style:normal;font-family:var\(--num\);/.test(src)
+     && /它是位置不是內容，不要跟動作名稱搶/.test(src));
 }
 
 console.log('\n⑬b 一列拆兩行：動作靠左、次數×組數×重量靠右');
@@ -341,7 +359,7 @@ console.log('\n⑬b 一列拆兩行：動作靠左、次數×組數×重量靠�
   eq('　　null 不會爆', NH(null), '');
 }
 ok('★★★ 第一列動作靠左、第二列數字靠右',
-   /\.wp-item-nm\{[^}]*text-align:left;\}/.test(src)
+   /\.wp-item-nm\{[^}]*text-align:left;/.test(src)
    && /\.wp-item-num\{[^}]*text-align:right;/.test(src)
    && /<div class="wp-item-nm">/.test(src) && /<div class="wp-item-num">/.test(src));
 ok('★★ 數字整段空的時候不畫那一行（不要留一條空的）',
