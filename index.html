@@ -12662,8 +12662,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260909.1813';
-const APP_VERSION_LABEL = 'v260909.1813';
+const APP_VERSION = '260909.1817';
+const APP_VERSION_LABEL = 'v260909.1817';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -65106,8 +65106,10 @@ function wpRender(){
     <div class="lot-sec">動作<i class="wp-hint">點一行改內容・<b>長按可以拖曳調順序</b></i></div>
     <div id="wp-items"></div>
     <button class="btn btn-ghost btn-sm" style="width:100%;margin:2px 0 12px;" onclick="wpAddItem()">＋ 新增動作</button>
-    <div class="form-row"><label>方案備註（可留空）</label>
-      <input type="text" id="wp-note" value="${escH(S.note||'')}" placeholder="例：熱身後做，組間休息 60 秒" oninput="window._wp.note=this.value"></div>
+    ${/* 〔已移除〕方案備註（2026-09-09 使用者：「動作小卡下方的方案備註移除」）——
+         每一個動作自己就有備註欄，方案層級再一個很少人填，只是把視窗拉長。
+         ⚠ 欄位本身留著、存檔照樣帶回去（見 _wpSave 的 note）—— 舊方案填過的字不會被清掉，
+           只是畫面上不再編輯。 */''}
     ${/* 〔已移出〕分享名單 2026-09-09 移到方案卡上自己一個視窗（見 wpShareOpen）——
          使用者：「分享的按鈕做在外面另外開一個視窗　不要放在訓練方案裡面」。 */''}
     <div class="modal-foot">
@@ -65199,12 +65201,17 @@ function wpLpStart(e,i){
   if(e.target && e.target.closest && e.target.closest('.wp-item-x')) return;   /* ✕ 不進拖移 */
   const el=e.currentTarget;
   const startY=e.clientY;
-  let armed=false, ghost=null, offY=0;
-  /* ⚠ 這裡**絕對不能重畫清單**（2026-09-09 使用者回報：「動作小卡滑不動了　浮起來只有一下子」）——
-     wpPaint() 會把整個 #wp-items 的 innerHTML 換掉，收到 pointerdown 的那個節點就被銷毀，
-     瀏覽器隨即送出 pointercancel，拖移在浮起來的下一刻就結束了。
-     所以：拖移全程只搬 DOM（insertBefore 是「移動」，節點物件還活著），
-     放開之後才依 DOM 的順序把陣列重排、再重畫一次。 */
+  let armed=false, ghost=null, offY=0, ended=false;
+  /* ⚠ 觸控上「拖不動／整個視窗跟著捲／浮起來一下就停」都是同一個根因
+     （2026-09-09 使用者回報 v1813）——瀏覽器在手指一動就決定「這是在捲畫面」，
+     於是送出 pointercancel，pointermove 從此不再進來。三道一起做才擋得住：
+       ① pointerdown 當下就把這一列的 touch-action 關掉（來得及影響這一次手勢）
+       ② 綁一個 **non-passive 的 touchmove**，長按成立後每一次都 preventDefault
+          —— 這是唯一保證停得住捲動的做法，光靠 touch-action 改在半路沒有用
+       ③ 長按成立後**不再把 pointercancel 當結束**，改等 pointerup／touchend
+     ⚠ 另外：拖移全程只搬 DOM，絕對不重畫清單 —— 重畫會把收到 pointerdown 的節點
+       銷毀，那也會觸發 pointercancel（v1805 就是這樣「浮起來一下子」）。 */
+  try{ el.style.touchAction='none'; }catch(_){}
   const rowsNow=()=>[...document.querySelectorAll('#wp-items .wp-item')];
   const lift=()=>{
     const r=el.getBoundingClientRect();
@@ -65226,31 +65233,38 @@ function wpLpStart(e,i){
     document.body.classList.add('wp-dragging-on');
     lift();
   },400);
-  const move=(ev)=>{
-    if(!armed){
-      if(Math.abs(ev.clientY-startY)>8){ clearTimeout(timer); cleanup(); }
-      return;
-    }
-    ev.preventDefault();
-    if(ghost) ghost.style.top=(ev.clientY-offY)+'px';
-    /* 找出手指現在落在哪一列之前，把自己搬過去（只搬 DOM，不重畫） */
+  /* ② 擋捲動：長按成立後每一次 touchmove 都 preventDefault（一定要 passive:false） */
+  const tmove=(ev)=>{ if(armed) ev.preventDefault(); };
+  const moveTo=(y)=>{
+    if(ghost) ghost.style.top=(y-offY)+'px';
     const rows=rowsNow();
     let before=null;
     for(const r of rows){
       if(r===el) continue;
       const b2=r.getBoundingClientRect();
-      if(ev.clientY < b2.top + b2.height/2){ before=r; break; }
+      if(y < b2.top + b2.height/2){ before=r; break; }
     }
     const box=document.getElementById('wp-items'); if(!box) return;
     if(before){ if(before!==el.nextSibling) box.insertBefore(el, before); }
     else if(el!==box.lastElementChild) box.appendChild(el);
   };
-  const up=()=>{
+  const move=(ev)=>{
+    if(!armed){
+      if(Math.abs(ev.clientY-startY)>8){ clearTimeout(timer); finish(false); }
+      return;
+    }
+    ev.preventDefault();
+    moveTo(ev.clientY);
+  };
+  const onCancel=()=>{ if(!armed) finish(false); };   /* ③ 成立之後不理 cancel */
+  const finish=(apply)=>{
+    if(ended) return; ended=true;
     clearTimeout(timer);
+    cleanup();
+    try{ el.style.touchAction=''; }catch(_){}
     if(ghost){ try{ ghost.remove(); }catch(_){} ghost=null; }
     document.body.classList.remove('wp-dragging-on');
-    cleanup();
-    if(!armed){ el.classList.remove('wp-dragging'); return; }
+    if(!apply || !armed){ el.classList.remove('wp-dragging'); return; }
     window._wpDragged=1;                       /* 放開後那一次 click 不要開編輯 */
     /* 依 DOM 的順序把陣列重排：每一列身上的 data-i 是它「原本」的位置 */
     const order=rowsNow().map(r=>Number(r.dataset.i)).filter(n=>!isNaN(n));
@@ -65259,14 +65273,21 @@ function wpLpStart(e,i){
     S._ordSel=rowsNow().indexOf(el);           /* 外框留在被移動的那一列 */
     wpPaint();
   };
+  const up=()=>finish(true);
   const cleanup=()=>{
     window.removeEventListener('pointermove',move);
     window.removeEventListener('pointerup',up);
-    window.removeEventListener('pointercancel',up);
+    window.removeEventListener('pointercancel',onCancel);
+    window.removeEventListener('touchmove',tmove);
+    window.removeEventListener('touchend',up);
+    window.removeEventListener('touchcancel',up);
   };
   window.addEventListener('pointermove',move,{passive:false});
   window.addEventListener('pointerup',up);
-  window.addEventListener('pointercancel',up);
+  window.addEventListener('pointercancel',onCancel);
+  window.addEventListener('touchmove',tmove,{passive:false});
+  window.addEventListener('touchend',up);
+  window.addEventListener('touchcancel',up);
 }
 /* 〔已移除〕wpMove／wpDragStart／wpDragOver／wpDrop／wpDragEnd 與〔順序〕開關（2026-09-09）——
    沿革：拖移把手＋上下鍵常駐 →〔順序〕開關＋左右兩顆上下鍵 → 使用者：「動作順序移動

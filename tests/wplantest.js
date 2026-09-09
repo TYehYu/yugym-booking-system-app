@@ -141,7 +141,13 @@ console.log('\n⑦ 存檔');
   ok('★★ 刪方案不動已經套用出去的訓練紀錄',
      /已經套用到課堂上的訓練紀錄不受影響（那是各堂課自己的資料）/.test(src));
 }
-ok('★★★ 名稱與備註放在重畫範圍外（打到一半被清掉是踩過的坑）',
+/* 2026-09-09 使用者：「動作小卡下方的方案備註移除」—— 每個動作自己就有備註欄，
+   方案層級再一個很少人填，只是把視窗拉長。欄位留著、存檔照樣帶回去。 */
+ok('★★★ 方案備註那一欄拿掉了，但舊方案填過的字不會被清掉',
+   !/id="wp-note"/.test(src)
+   && /note:String\(S\.note\|\|''\)\.trim\(\)\|\|null/.test(src)
+   && /舊方案填過的字不會被清掉/.test(src));
+ok('★★★ 名稱放在重畫範圍外（打到一半被清掉是踩過的坑）',
    /輸入框如果在裡面，打到一半會被清掉、游標也會跳走（校正視窗踩過同一個坑）/.test(src)
    && /function wpPaint\(\)\{/.test(src));
 
@@ -292,14 +298,14 @@ console.log('\n⑬ 動作用「長按拖移」調順序（2026-09-09 四修）')
   ok('★★★ 長按 400ms 才進拖移（整列本來就要能點開編輯，直接可拖會打架）',
      /\},400\);/.test(LP) && /用長按（400ms）而不是 HTML5 draggable/.test(src));
   ok('★★★ 還沒滿 400ms 就移動超過 8px＝在捲畫面，取消',
-     /if\(Math\.abs\(ev\.clientY-startY\)>8\)\{ clearTimeout\(timer\); cleanup\(\); \}/.test(LP));
+     /if\(Math\.abs\(ev\.clientY-startY\)>8\)\{ clearTimeout\(timer\); finish\(false\); \}/.test(LP));
   ok('★★★ 拖曳中不改尺寸也不改內距（使用者：卡片大小不要變）',
      /不要 transform、不要改內距 —— 使用者明確要求卡片大小不要變/.test(src)
      && !/\.wp-item\.wp-item-ord\{padding-left:40px/.test(src));
   /* 2026-09-09 五修（使用者：「我剛剛拖移動作小卡　卡片沒有浮起來黏在手上的感覺」） */
   ok('★★★ 做一個原尺寸的分身跟著手指跑，原本那一列留在原位當佔位',
      /ghost=el\.cloneNode\(true\);/.test(LP)
-     && /if\(ghost\) ghost\.style\.top=\(ev\.clientY-offY\)\+'px';/.test(LP)
+     && /if\(ghost\) ghost\.style\.top=\(y-offY\)\+'px';/.test(LP)
      && /\.wp-item\.wp-dragging\{opacity:\.35;border-style:dashed;background:transparent;\}/.test(src));
   ok('★★★ 分身不縮放，只加陰影（先前明確要求過卡片大小不要變）',
      /\.wp-item\.wp-ghost\{background:#fff;border-color:var\(--brand,#1f6f54\);opacity:1;\s*\n\s*box-shadow:/.test(src)
@@ -317,14 +323,29 @@ console.log('\n⑬ 動作用「長按拖移」調順序（2026-09-09 四修）')
    長按成立時重畫清單會把收到 pointerdown 的節點銷毀，瀏覽器隨即送 pointercancel，
    拖移在浮起來的下一刻就結束。改成全程只搬 DOM，放開才重排陣列。 */
   ok('★★★ 拖移全程不重畫清單（重畫＝節點被銷毀＝pointercancel＝拖移中斷）',
-     /絕對不能重畫清單/.test(src)
-     && /瀏覽器隨即送出 pointercancel，拖移在浮起來的下一刻就結束了/.test(src)
-     && !/wpPaint\(\);\s*\n\s*lift\(\);/.test(src));
+     /拖移全程只搬 DOM，絕對不重畫清單 —— 重畫會把收到 pointerdown 的節點/.test(src)
+     && /那也會觸發 pointercancel（v1805 就是這樣「浮起來一下子」）/.test(src));
   ok('★★★ 拖移中用 insertBefore 搬節點（那是「移動」，節點物件還活著）',
      /box\.insertBefore\(el, before\)/.test(LP) && /box\.appendChild\(el\)/.test(LP));
   ok('★★★ 放開之後才依 DOM 順序重排陣列（data-i 是原本的位置）',
      /const order=rowsNow\(\)\.map\(r=>Number\(r\.dataset\.i\)\)\.filter\(n=>!isNaN\(n\)\);/.test(LP)
      && /if\(order\.length===orig\.length\) S\.items=order\.map\(k=>orig\[k\]\);/.test(LP));
+  /* 2026-09-09 七修（使用者 v1813：「拖拉動作小卡的時候都會拉到整個視窗」「卡片都不動」）——
+     觸控上瀏覽器在手指一動就決定要捲畫面，然後送 pointercancel，pointermove 從此不進來。 */
+  ok('★★★ ① pointerdown 當下就關掉這一列的 touch-action',
+     /try\{ el\.style\.touchAction='none'; \}catch\(_\)\{\}/.test(LP));
+  ok('★★★ ② non-passive 的 touchmove，成立後每次 preventDefault（唯一保證停得住捲動的做法）',
+     /const tmove=\(ev\)=>\{ if\(armed\) ev\.preventDefault\(\); \};/.test(LP)
+     && /window\.addEventListener\('touchmove',tmove,\{passive:false\}\);/.test(LP)
+     && /光靠 touch-action 改在半路沒有用/.test(src));
+  ok('★★★ ③ 成立之後不再把 pointercancel 當結束，改等 pointerup／touchend',
+     /const onCancel=\(\)=>\{ if\(!armed\) finish\(false\); \};/.test(LP)
+     && /window\.addEventListener\('touchend',up\);/.test(LP)
+     && /window\.addEventListener\('touchcancel',up\);/.test(LP));
+  ok('★★ 結束只跑一次（三種結束事件都可能一起來）',
+     /if\(ended\) return; ended=true;/.test(LP));
+  ok('★★ 收尾要把那一列的 touch-action 還原',
+     /try\{ el\.style\.touchAction=''; \}catch\(_\)\{\}/.test(LP));
   ok('★★★ 放開後那一次 click 要吃掉，不然會跳出編輯視窗',
      /window\._wpDragged=1;/.test(LP)
      && /if\(window\._wpDragged\)\{ window\._wpDragged=0; return; \}/.test(src));
