@@ -419,5 +419,22 @@ ok('★★★ 只在教練首頁畫（管理員首頁與會員端用的是同一
 ok('★★ 卡片多一欄放它（原本是三欄，硬塞會把中間那欄壓掉）',
    /grid-template-columns:auto minmax\(0,1fr\) auto auto;/.test(src));
 
+console.log('\n⑮ 課卡的圓形「課表」鈕（2026-09-09 使用者：「點這邊的課卡多一顆圓形按鈕[課表]」）');
+ok('★★★ 課卡圓鈕多一顆課表，直接開訓練課表',
+   /if\(!_calCtx && own && !bkIsSelf\(b\)\) btns \+= evoBtn\('evo-t2','',`collapseBkCard\(\);openTrainingLog\('\$\{id\}'\)`,'plan','課表'\);/.test(src));
+ok('★★★ 自主訓練不畫（會員自己來、教練不在場，沒有訓練要記）',
+   /⚠ 自主訓練不畫：那是會員自己來、教練不在場，沒有訓練要記。\s*\n\s*⚠ 行事曆情境/.test(src));
+ok('★★★ 行事曆情境不畫（那邊的圓鈕只做「預約與調整」，0819 定案）',
+   /⚠ 行事曆情境（_calCtx）不畫：那邊的圓鈕只做「預約與調整」（0819 定案）/.test(src));
+ok('★★ 別人的課不畫（訓練紀錄掛在帶課教練身上）',
+   /⚠ 別人的課也不畫（own）—— 訓練紀錄是掛在帶課教練身上的。/.test(src));
+ok('★★ 圖示與底部導覽的訓練方案同一個造型（同一件事不要兩種圖示）',
+   /plan:`<svg viewBox="0 0 24 24" \$\{EVO_C\}><rect x="4" y="3\.5" width="16" height="17" rx="2\.5"\/>/.test(src));
+
+console.log('\n⑯ 管理員手機首頁的教練列（使用者：「名稱靠左　課堂數靠右」）');
+ok('★★★ 名字釘左、堂數釘右（原本兩段緊貼，名字長短不一堂數就浮動）',
+   /\.mtc-r2-name\{[^}]*justify-content:space-between;gap:6px;/.test(src)
+   && /名字釘左、堂數釘右，一整欄的堂數才對得齊/.test(src));
+
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
