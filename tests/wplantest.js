@@ -328,5 +328,23 @@ ok('★★ 只動記憶體，要按「儲存方案」才寫回資料庫（跟改
 ok('★★ 唯讀的那份（別人分享的）本來就不走這條 —— 它畫的是 wp-item-ro，沒有排序模式',
    /<div class="wp-item wp-item-ro">/.test(src) && !/wp-item-ro[\s\S]{0,200}wpOrdToggle/.test(src));
 
+console.log('\n⑭ 教練手機首頁的課卡加「課表」圓鈕（2026-09-09 使用者指示）');
+ok('★★★ 圓鈕直接開訓練課表，不用先點開課卡（上課現場少一層）',
+   /onclick="event\.stopPropagation\(\);openTrainingLog\('\$\{b\.id\}'\)"/.test(src)
+   && /上課現場最常做的就是記訓練，原本要點開課卡再點一次訓練紀錄，兩層/.test(src));
+ok('★★★ 要 stopPropagation：整張卡本來就會開課卡明細',
+   /class="a2-tlbtn[\s\S]{0,200}event\.stopPropagation\(\);openTrainingLog/.test(src));
+ok('★★★ 自主訓練不畫（會員自己來、教練不在場，沒有訓練要記）',
+   /const _tlOk=!bkIsSelf\(b\);/.test(src)
+   && /自主訓練不畫：那是會員自己來、教練不在場，沒有訓練要記/.test(src));
+ok('★★ 記過的實心綠、沒記的外框（看得出哪幾堂還沒記）',
+   /const _tlHas=\(window\._tlogBids\|\|new Set\(\)\)\.has\(b\.id\);/.test(src)
+   && /\.chv2 \.admh2-card \.a2-tlbtn\.on\{background:var\(--green,#1f6f54\);color:#fff;/.test(src));
+ok('★★★ 只在教練首頁畫（管理員首頁與會員端用的是同一個 .admh2-card）',
+   /\.chv2 \.admh2-card\{grid-template-columns:auto minmax\(0,1fr\) auto auto;\}/.test(src)
+   && /只在教練首頁（\.chv2）畫：管理員首頁與會員端用的是同一個 \.admh2-card/.test(src));
+ok('★★ 卡片多一欄放它（原本是三欄，硬塞會把中間那欄壓掉）',
+   /grid-template-columns:auto minmax\(0,1fr\) auto auto;/.test(src));
+
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
