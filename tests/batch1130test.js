@@ -214,7 +214,9 @@ console.log('\n員工管理：卡片改回列表');
   ok('　　待接受邀請：標籤照舊、齒輪變成複製邀請連結',
      /待接受邀請/.test(pend) && /copyInvite\('T'\)/.test(pend));
   // 2026-07-30 三修：分區取消，整份合成一張表、類型改用色條＋色票（詳見 stlisttest.js）
-  ok('★ 排序仍照聘僱類型', /const allRows=ET_ORDER\.flatMap\(\(\[k\]\)=>secs\[k\]\|\|\[\]\);/.test(src));
+  /* 2026-09-09：改成「管理員 → 主管 → 聘僱類型」，而且排在分頁之前（見 stlisttest） */
+  ok('★ 排序：管理員／主管在前，同一階再照聘僱類型', /const allRows=pageRows;/.test(src)
+     && /filtered\.sort\(\(a,b\)=>\(_stRank\(a\)-_stRank\(b\)\)/.test(src));
   ok('　　舊的 stCard 已移除，不留兩套', !/const stCard=c=>\{/.test(src) && /〔已移除〕stCard（直式員工卡）/.test(src));
   ok('　　窄畫面（<900px）收起表頭、數字自己一排並補回欄名',
      /@media\(max-width:900px\)\{\s*\n\s*\.st-lhead\{display:none;\}/.test(src)

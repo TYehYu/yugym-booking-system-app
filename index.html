@@ -12459,8 +12459,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260909.1000';
-const APP_VERSION_LABEL = 'v260909.1000';
+const APP_VERSION = '260909.1005';
+const APP_VERSION_LABEL = 'v260909.1005';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -43698,6 +43698,18 @@ async function renderStaffList(){
       || (c.emp_no||'').toLowerCase().includes(q);
   });
 
+  /* 排序：管理員 → 主管 → 其他；同一階再照聘僱類型（2026-09-09 使用者指示
+     「員工列表排列　管理員跟主管要往上方排」）——
+     ⚠ 一定要排在**分頁之前**：原本聘僱類型的分組是在畫的時候才做的，
+       等於只在「這一頁」裡重排，翻到第二頁又會從正職開始。管理員如果剛好是兼職
+       （劉怡秀），就會掉到教練後面 —— 那正是使用者看到的樣子。
+     ⚠ sort 是穩定排序，所以同一階裡的原本順序（依聘僱類型）不會被打亂。 */
+  const _stRank=c=>((c&&c.role==='admin')?0:((c&&c.is_manager)?1:2));
+  const _ET_RANK={full_time:0,part_time:1,contractor:2,intern:3};
+  const _etRank=c=>{ const k=normEmp(c.employment_type||c.pay_type);
+    return (_ET_RANK[k]!=null)?_ET_RANK[k]:9; };
+  filtered.sort((a,b)=>(_stRank(a)-_stRank(b))||(_etRank(a)-_etRank(b)));
+
   // 分頁
   const totalPages=Math.max(1,Math.ceil(filtered.length/_stSize));
   if(_stPage>totalPages) _stPage=totalPages;
@@ -43879,8 +43891,10 @@ async function renderStaffList(){
     </div>`;
     /* 2026-07-30 三修：分類不再各自切一段（每段都印一次標題＋表頭，畫面被切得很碎）。
        整份合成一張表、共用最上面那列標題，聘僱類型改用左邊色條區分，色票在表頭上方說明。
-       排序仍照聘僱類型（正職→兼職→合作→工讀→未分類），同類型內依原本的順序。 */
-    const allRows=ET_ORDER.flatMap(([k])=>secs[k]||[]);
+       ⚠ 2026-09-09：順序改在分頁之前就排好（管理員 → 主管 → 聘僱類型），
+         這裡不能再照 ET_ORDER 重排一次 —— 那會把管理員／主管又推回各自的類型堆裡。
+         secs 只留給下面的色票數字用。 */
+    const allRows=pageRows;
     const legend=ET_ORDER.filter(([k])=>secs[k]&&secs[k].length)
       .map(([k,label])=>`<b style="--lc:${ET_COLOR[k]||'#8a8478'};">${label}<i>${secs[k].length}</i></b>`).join('');
     /* 2026-08-05 使用者指示（附截圖）：排列比照會員列表——色票併入工具列 lead（最左）、

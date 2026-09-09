@@ -13,8 +13,20 @@ ok('★ 不再每個聘僱類型切一段、各印一次表頭',
 ok('★ 整份共用一列表頭、一個 st-list（2026-08-05：色票/月份移進工具列，表格上方不再另佔列）',
    /body = `\$\{stHead\}<div class="st-list">\$\{allRows\.map\(stRow\)\.join\(''\)\}<\/div>`;/.test(src)
    && /toolbar\.lead=`<div class="st-legend">\$\{legend\}<\/div>`;/.test(src));
-ok('★ 排序仍照聘僱類型（正職→兼職→合作→工讀→未分類）',
-   /const allRows=ET_ORDER\.flatMap\(\(\[k\]\)=>secs\[k\]\|\|\[\]\);/.test(src));
+/* 2026-09-09 使用者：「員工列表排列　管理員跟主管要往上方排」——
+   順序改在**分頁之前**就排好（管理員 → 主管 → 聘僱類型），畫的時候不再重排一次。
+   原本是畫的時候才照 ET_ORDER 分組，等於只在「這一頁」裡重排：翻到第二頁又從正職開始，
+   而管理員如果剛好是兼職（劉怡秀）就會掉到教練後面。 */
+ok('★★★ 管理員 → 主管 → 其他，同一階再照聘僱類型',
+   /const _stRank=c=>\(\(c&&c\.role==='admin'\)\?0:\(\(c&&c\.is_manager\)\?1:2\)\);/.test(src)
+   && /filtered\.sort\(\(a,b\)=>\(_stRank\(a\)-_stRank\(b\)\)\|\|\(_etRank\(a\)-_etRank\(b\)\)\);/.test(src));
+ok('★★★ 排在分頁之前 —— 排在後面等於只排這一頁',
+   src.indexOf('filtered.sort((a,b)=>(_stRank(a)-_stRank(b))') < src.indexOf('const pageRows=filtered.slice((_stPage-1)*_stSize'));
+ok('★★★ 畫的時候不能再照 ET_ORDER 重排（會把管理員／主管推回各自的類型堆裡）',
+   /const allRows=pageRows;/.test(src)
+   && !/const allRows=ET_ORDER\.flatMap/.test(src));
+ok('★★ secs 留著給色票數字用（那一段沒有被順手刪掉）',
+   /const legend=ET_ORDER\.filter\(\(\[k\]\)=>secs\[k\]&&secs\[k\]\.length\)/.test(src));
 ok('★ 類型改用左邊色條區分，上方給色票說明',
    /const legend=ET_ORDER\.filter\(\(\[k\]\)=>secs\[k\]&&secs\[k\]\.length\)/.test(src)
    && /<b style="--lc:\$\{ET_COLOR\[k\]\|\|'#8a8478'\};">\$\{label\}<i>\$\{secs\[k\]\.length\}<\/i><\/b>/.test(src)
