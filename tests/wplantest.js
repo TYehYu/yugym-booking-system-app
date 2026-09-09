@@ -351,6 +351,13 @@ console.log('\n⑬ 動作用「長按拖移」調順序（2026-09-09 四修）')
      && /if\(window\._wpDragged\)\{ window\._wpDragged=0; return; \}/.test(src));
   ok('★★ 外框留在被移動的那一列（0909 三修的那個回報）',
      /S\._ordSel=rowsNow\(\)\.indexOf\(el\);/.test(LP));
+  /* 2026-09-09 八修（使用者：「為什麼拖拉動作卡片的時候　會有一個自己被框起來
+     下面那個分腿蹲我沒有按他」）—— 那是上一次拖完留下的標記。 */
+  ok('★★★ 新的一次拖移開始時，先把上一次留下的外框清掉',
+     /S\._ordSel=null;\s*\n\s*document\.querySelectorAll\('#wp-items \.wp-item-sel'\)\.forEach\(x=>x\.classList\.remove\('wp-item-sel'\)\);/.test(LP)
+     && /畫面上會同時有兩個被框起來的，看起來就像框在沒碰過的卡片上/.test(src));
+  ok('★★★ 清的時候只能改 class，不能呼叫 wpPaint（拖移中重畫會中斷拖移）',
+     /直接改 class，不能呼叫 wpPaint（拖移中重畫＝節點被銷毀＝pointercancel）/.test(src));
   ok('★★ ✕ 不進拖移（不然想刪卻變成拖）',
      /if\(e\.target && e\.target\.closest && e\.target\.closest\('\.wp-item-x'\)\) return;/.test(LP));
   ok('★★ 拖移中整頁不跟著捲', /body\.wp-dragging-on\{touch-action:none;user-select:none;\}/.test(src));

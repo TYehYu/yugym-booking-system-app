@@ -7674,7 +7674,33 @@ body.memh2-shell .bottom-nav .bn-lb{color:inherit;}
    ⚠ 寬螢幕加寬度上限（2026-09-09）：原本整頁跟著視窗拉滿，2000px 的螢幕上內容全擠在左邊、
      右半是空的，而卡片本身又被拉成一條很長的橫帶。1180 是這一頁三張卡讀得舒服的寬度。 */
 .dash-wrap{display:flex;flex-direction:column;gap:14px;padding-bottom:20px;}
-@media(min-width:1024px){ .dash-wrap{max-width:1180px;margin:0 auto;width:100%;} }
+@media(min-width:1024px){
+  .dash-wrap{max-width:1180px;margin:0 auto;width:100%;}
+  /* ③ 兩張 KPI 卡收斂（2026-09-09）：原本是「置中的直式大卡」，一張佔半個螢幕
+     只為了放一個數字。桌機改成橫排一條：圖示與數字在左、說明在右。 */
+  .cds-row{grid-template-columns:1fr 1fr;gap:12px;}
+  .cds-card{flex-direction:row;align-items:center;justify-content:flex-start;
+    text-align:left;gap:12px;padding:12px 16px;flex-wrap:wrap;}
+  .cds-card .mc-k2-ic{flex:none;}
+  .cds-card .cds-num{flex:none;}
+  .cds-card .mc-k2-l{flex:none;font-weight:700;}
+  .cds-card .mc-kpi-rev-sub{margin-left:auto;text-align:right;}
+  /* 值班那張是圓環版時仍維持直式（環要置中才好看） */
+  .cds-card:has(.dr-wrap){flex-direction:column;align-items:center;text-align:center;}
+  .cds-card:has(.dr-wrap) .mc-kpi-rev-sub{margin-left:0;text-align:center;}
+  /* ④ 今日課程從圓圈攤成橫列（使用者：桌機空間大，圓圈只放得下時間與名字）——
+     圓圈本身留著當左邊的時間章，右邊補上會員、課種・場地、狀態。 */
+  .task-dots{flex-direction:column;flex-wrap:nowrap;gap:8px;}
+  .task-dot-wrap{flex-direction:row;width:100%;gap:12px;align-items:center;
+    padding:8px 12px;border:1px solid var(--bd);border-radius:12px;background:var(--card2);}
+  .task-dot-wrap:hover{border-color:var(--brand,#1f6f54);}
+  .task-dot-name{flex:none;font-weight:700;}
+  .task-dot-sub{display:block;color:var(--t3);font-size:12.5px;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .task-dot-st{margin-left:auto;flex:none;font-size:12px;color:var(--t2);}
+}
+/* 手機維持圓圈（那一版是為手機設計的），多帶的兩段不畫 */
+.task-dot-sub,.task-dot-st{display:none;}
 /* 今日總覽：三（或四）張獨立色卡 */
 .ovc-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
 .ovc-row.ovc-4{grid-template-columns:repeat(2,1fr);}
@@ -12662,8 +12688,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260909.1817';
-const APP_VERSION_LABEL = 'v260909.1817';
+const APP_VERSION = '260909.1822';
+const APP_VERSION_LABEL = 'v260909.1822';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -53556,9 +53582,17 @@ PAGES.coach_today=async function(){
     const circle = done
       ? `background:${ci.color};border:2px solid ${ci.color};color:#fff;`
       : `background:#fff;border:2px solid ${ci.color};color:${ci.color};`;
+    /* 桌機把這一列攤成橫排（2026-09-09 使用者：教練桌機首頁優化④）——
+       圓圈在手機上剛好，桌機一列 1180px 卻只放得下時間與名字。
+       多帶一段「課種・場地」，桌機顯示、手機隱藏（見 CSS）。 */
+    const _tdSub=[bookingTypeName(b,typeMap),
+      (typeof venueDisplay==='function')?(venueDisplay(b)||''):''].filter(Boolean).join('・');
+    const _tdSt=done?'已簽到':(b.no_show===true?'未到':'');
     taskDots+=`<button class="task-dot-wrap" onclick="wtlCardClick('${b.id}',this)">
       <span class="task-dot" style="${circle}"><span class="td-time">${b.start_time}</span></span>
       <span class="task-dot-name">${nm}</span>
+      <span class="task-dot-sub">${escH(_tdSub)}</span>
+      <span class="task-dot-st">${_tdSt}</span>
     </button>`;
   });
   // 值班進度條
@@ -65216,6 +65250,13 @@ function wpLpStart(e,i){
   const lift=()=>{
     const r=el.getBoundingClientRect();
     offY=startY-r.top;
+    /* 先把上一次拖完留下的外框清掉（2026-09-09 使用者回報：「為什麼拖拉動作卡片的時候
+       會有一個自己被框起來　下面那個分腿蹲我沒有按他」）——
+       那個框是「上一次被移動的那一列」的標記，沒清掉的話這一次拖到一半，
+       畫面上會同時有兩個被框起來的，看起來就像框在沒碰過的卡片上。
+       ⚠ 直接改 class，不能呼叫 wpPaint（拖移中重畫＝節點被銷毀＝pointercancel）。 */
+    S._ordSel=null;
+    document.querySelectorAll('#wp-items .wp-item-sel').forEach(x=>x.classList.remove('wp-item-sel'));
     el.classList.add('wp-dragging');
     /* 浮起來、黏在手上：原尺寸的分身用 position:fixed 跟著手指跑，原本那一列留著當佔位。
        ⚠ 分身不縮放（使用者明確要求卡片大小不要變），只加陰影。

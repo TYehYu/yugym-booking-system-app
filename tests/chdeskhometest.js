@@ -7,7 +7,7 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 
 console.log('① 寬螢幕不要把內容拉成一條');
 ok('★★★ .dash-wrap 在 ≥1024 給寬度上限並置中',
-   /@media\(min-width:1024px\)\{ \.dash-wrap\{max-width:1180px;margin:0 auto;width:100%;\} \}/.test(src));
+   /@media\(min-width:1024px\)\{\s*\n\s*\.dash-wrap\{max-width:1180px;margin:0 auto;width:100%;\}/.test(src));
 ok('★★ 只有教練首頁在用 .dash-wrap（加上限不會波及別頁）',
    (src.match(/class="dash-wrap"/g)||[]).length===1);
 ok('★★ 理由寫在原地', /2000px 的螢幕上內容全擠在左邊、\s*\n\s*右半是空的/.test(src));
@@ -33,6 +33,29 @@ ok('★★★ 教訓寫在原地：只換底不換字（0821 頂欄字不見是�
    /顏色一定要成對改，只換底不換字就是這個下場（0821 頂欄字不見踩過同一個坑）/.test(src));
 ok('★★ Ink 只在員工桌機開（手機版不吃這一層）',
    /function inkOn\(\)\{/.test(src) && /這一層改的是 \.cal-chip／\.btn／\.mc-nav 這些\*\*桌機與手機共用\*\*的 class/.test(src));
+
+console.log('\n③ 兩張 KPI 卡收斂（桌機）');
+ok('★★★ 桌機改成橫排一條（原本是置中直式大卡，一張佔半個螢幕只放一個數字）',
+   /\.cds-card\{flex-direction:row;align-items:center;justify-content:flex-start;/.test(src)
+   && /一張佔半個螢幕\s*\n\s*只為了放一個數字/.test(src));
+ok('★★★ 值班那張是圓環版時仍維持直式（環要置中才好看）',
+   /\.cds-card:has\(\.dr-wrap\)\{flex-direction:column;align-items:center;text-align:center;\}/.test(src));
+ok('★★ 說明推到最右邊（橫排時它是附註，不該擠在數字旁邊）',
+   /\.cds-card \.mc-kpi-rev-sub\{margin-left:auto;text-align:right;\}/.test(src));
+
+console.log('\n④ 今日課程從圓圈攤成橫列（桌機）');
+ok('★★★ 桌機一列一堂，圓圈留著當左邊的時間章',
+   /\.task-dots\{flex-direction:column;flex-wrap:nowrap;gap:8px;\}/.test(src)
+   && /\.task-dot-wrap\{flex-direction:row;width:100%;gap:12px;align-items:center;/.test(src));
+ok('★★★ 右邊補上課種・場地與狀態（桌機才有空間放）',
+   /const _tdSub=\[bookingTypeName\(b,typeMap\),/.test(src)
+   && /<span class="task-dot-sub">\$\{escH\(_tdSub\)\}<\/span>/.test(src)
+   && /<span class="task-dot-st">\$\{_tdSt\}<\/span>/.test(src));
+ok('★★★ 手機維持圓圈，多帶的兩段不畫（那一版是為手機設計的）',
+   /\.task-dot-sub,\.task-dot-st\{display:none;\}/.test(src)
+   && /手機維持圓圈（那一版是為手機設計的），多帶的兩段不畫/.test(src));
+ok('★★ 桌機那一段把它們打開', /\.task-dot-sub\{display:block;color:var\(--t3\);/.test(src));
+ok('★★ 場地名稱有跳脫（它會被組進 HTML）', /escH\(_tdSub\)/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
