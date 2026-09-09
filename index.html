@@ -13555,7 +13555,13 @@ const WD=['日','一','二','三','四','五','六'];
 function isMobileLayout(){
   const w=window.innerWidth, h=window.innerHeight;
   const portrait = h>=w;
-  return w<=600 || (portrait && w<=1024);
+  /* 手機橫著拿也是手機（2026-09-09 使用者回報：「手機版橫式畫面　太壓縮了」）——
+     844×390 這種尺寸：寬超過 600、又不是直式，原本兩條都不成立，
+     於是整個切成桌機寬版（左側深色側欄）塞進 390px 高的畫面裡。
+     ⚠ 用「短邊 ≤520」而不是「短邊 ≤600」：目前最大的手機短邊約 430，
+       iPad mini 橫式的短邊是 744 —— 520 這條線把兩者分得開，
+       也不會把「把瀏覽器視窗拉扁」的桌機使用者誤判成手機。 */
+  return w<=600 || (portrait && w<=1024) || (!portrait && h<=520);
 }
 function uid(p){return p+'-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -15927,6 +15933,18 @@ const MOBILE_FRONTDESK_NAV=[
 function buildNav(){
   const nav=document.getElementById('sidenav');
   const isMobile=isMobileLayout();
+  /* 轉回手機版時要把桌機的左側欄收掉（2026-09-09 使用者回報：
+     「轉回來後的直式畫面　上方出現導覽列」）——
+     ⚠ body.mc-mode 全檔只有 renderLeftSidebar 會開關，而下面那幾條手機的路
+       從來不呼叫它。所以「直式 → 橫式 → 直式」跑完，mc-mode 還留在 body 上，
+       body.mc-mode 那一整組樣式（含 .navbar-row{display:none} 的相反情況）
+       就跟手機版的規則打架，上方多出一條不該有的導覽列。
+     ⚠ 只在「本來是開著」時才動 —— 不要每次建導覽都寫一次 class。 */
+  if(isMobile && document.body.classList.contains('mc-mode')){
+    document.body.classList.remove('mc-mode');
+    document.body.classList.remove('mc-collapsed');
+    const _mc=document.getElementById('mc-sidebar'); if(_mc) _mc.innerHTML='';
+  }
   // 桌機｜管理員/櫃台 → 新版兩層導覽（上方主選單 + 頁內左側次選單）
   if(!isMobile && (isDeskLike())){
     buildNav2();
