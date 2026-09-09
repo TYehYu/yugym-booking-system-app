@@ -605,6 +605,11 @@ body:has(#login-screen:not(.hidden)){background:#003d32;}
   align-items:center;justify-content:center;background:var(--card2);}
 .st-l-ava svg{width:100%;height:100%;}
 .st-l-who{min-width:0;display:flex;flex-direction:column;gap:2px;}
+/* 管理員／主管的姓名格底色（2026-09-09）：中性墨色，管理員深一階。
+   ⚠ 用負邊距把底色往外撐，不然會把名字往內推、整欄跟其他列對不齊。 */
+.st-l-who.st-who-adm,.st-l-who.st-who-mgr{border-radius:9px;padding:3px 9px;margin:-3px -9px;}
+.st-l-who.st-who-adm{background:color-mix(in srgb,var(--text-primary,#2b2b2b) 10%,transparent);}
+.st-l-who.st-who-mgr{background:color-mix(in srgb,var(--text-primary,#2b2b2b) 5%,transparent);}
 .st-l-nm{font-size:14.5px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
 /* 打卡異常／補卡待審的驚嘆號（2026-08-01 使用者指示：有異常就在那一列顯示，點得開）——
    用紅色：忘記打下班會讓工時少算、直接影響薪資，是要處理的錯不是提醒。 */
@@ -12463,8 +12468,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260909.1012';
-const APP_VERSION_LABEL = 'v260909.1012';
+const APP_VERSION = '260909.1016';
+const APP_VERSION_LABEL = 'v260909.1016';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -43508,7 +43513,7 @@ async function stCardToggle(id,key){
     }
     const on=!ppEmpSwitchOn(c,key);
     if(key==='admin')           c.role = on?'admin':'coach';
-    else if(key==='manager')    c.is_manager = on;
+    else if(key==='manager'){ c.is_manager = on; stSyncMgrTitle(c, on); }
     else if(key==='supervisor') c.is_supervisor = on;
     else if(key==='punch')      c.need_punch = on;
     else if(key==='teach')      c.can_teach = on;
@@ -43519,6 +43524,21 @@ async function stCardToggle(id,key){
     showToast(`${c.name||'員工'}　${L}已${on?'開啟':'關閉'}`);
     stReload();
   }catch(e){ showToast('設定失敗：'+(e&&e.message?e.message:e)); }
+}
+/* 主管開關連動職稱（2026-09-09 使用者：「權限開關要連動」）——
+   起因：黃沛瀞的主管權限早就開著，職稱卻還印著舊稱「店長」，兩個都叫主管卻對不起來。
+   ⚠ **只單向**：開關 → 職稱。反過來（改職稱就給權限）不做 ——
+     is_manager 給的是排班權限、主管津貼與團隊獎金池，那是錢與權；
+     從一個自由填寫的下拉去發權限，打錯一格就多一筆津貼。
+   ⚠ 只覆寫「空的／主管／店長（舊稱）」三種：老闆、行政、教練、工讀那些是刻意填的職稱，
+     一個人可以是「行政」而同時有排班權限，不該被蓋掉。
+   ⚠ 關掉時只清掉我們寫進去的那兩種，同樣不動別的。 */
+const _MGR_TITLES=['','主管','店長'];
+function stSyncMgrTitle(c, on){
+  if(!c) return;
+  const cur=String(c.job_title||'');
+  if(_MGR_TITLES.indexOf(cur)<0) return;   // 刻意填的職稱不動
+  c.job_title = on ? '主管' : '';
 }
 let _stSort='status', _stSortDir=1;   // status / name / type / hire
 let _stPage=1, _stSize=20;
@@ -43879,7 +43899,11 @@ async function renderStaffList(){
       return `<div class="st-lrow${_off?' st-off':''}" style="--pc:${etc};" onclick="${click}">
         <span class="st-led${_off?' off':''}" title="${_off?'已停用':'啟用中'}"></span>
         <span class="st-l-ava" style="overflow:hidden;">${c.avatar_url?avatarImgHTML(c.avatar_url):genderAvatarSVG(c.gender)}</span>
-        <span class="st-l-who">
+        ${/* 管理員／主管的姓名格加底色（2026-09-09 使用者指示）——
+             左邊那條色帶已經被聘僱類型佔走了，所以職權另外用姓名格的底色表示。
+             ⚠ 用中性的墨色，不用紅或金：那兩色在這套語彙裡是「警示／次要提示」
+               （見品牌色階級），拿來標常態身分會讀成有事發生。管理員深一階、主管淺一階。 */''}
+        <span class="st-l-who${c.role==='admin'?' st-who-adm':(c.is_manager?' st-who-mgr':'')}">
           <span class="st-l-nm">${c.name||'（待填寫）'}${c.name_en?`<i>${c.name_en.toUpperCase()}</i>`:''}${stateOf(c)!=='active'?statusBadge(c):''}${(_punch[c.id]||0)?`<button class="st-punch-x" title="打卡異常／補卡申請 ${_punch[c.id]} 筆，點一下查看修改" onclick="event.stopPropagation();openPunchFixModal('${c.id}')">!</button>`:''}</span>
           <span class="st-l-sub">${tl!=='—'?`<b style="color:${etc};">${tl}</b>`:''}${(tl!=='—'&&c.job_title)?'・':''}${c.job_title||''}${nameSub(c)?`　${nameSub(c)}`:''}${stBdayTag(c,_ym)}</span>
         </span>
@@ -47856,6 +47880,7 @@ async function saveHrSalary(id){
   c.pt_bonus = c.pt_bonus_enabled ? hrReadBonus() : [];
 
   c.is_manager=ck('hr-ismgr');
+  stSyncMgrTitle(c, c.is_manager);   /* 職稱跟著開關走（2026-09-09）——兩個入口同一支，不然只有一邊會同步 */
   /* 2026-09-08：「主管津貼」那顆勾與逐人的金額欄位都退場了（主管＝店長＝is_manager，
      金額走全域設定）。這兩行留著只會把畫面上不存在的欄位讀成 false／0 覆蓋掉舊值。
      ⚠ 欄位本身不刪 —— 八月以前的薪資單還在用它們算（見 LEADER_TEAM_FROM）。 */
