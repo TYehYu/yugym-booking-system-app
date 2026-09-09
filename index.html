@@ -10640,6 +10640,11 @@ body.verup-on .alert-dock{top:168px;}
 .tdy-list{max-height:38vh;overflow:auto;margin:2px -2px 12px;padding:2px;}
 /* 餘額三選一（2026-08-25 把舊的「校正堂數」併進來）：一顆一個口徑，數字放大在上面，
    看得到數字再按 —— 使用者要的是「順手好用的按鈕」，不是先讀完說明再決定。 */
+/* 區塊標題旁那句建議（2026-09-09 簡化）：正常的票就一句短的，不再佔一整塊。
+   ⚠ 空字串時整個不佔位（:empty），否則標題後面會多一段空白。 */
+.tdy-rechint{display:inline;font-style:normal;font-weight:400;font-size:11px;
+  color:var(--t3);margin-left:8px;letter-spacing:0;}
+.tdy-rechint:empty{display:none;}
 .tdy-rembar{display:flex;gap:8px;margin-bottom:8px;}
 .tdy-chip{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;
   background:#fff;border:1px solid var(--bd);border-radius:14px;padding:9px 6px;cursor:pointer;
@@ -12454,8 +12459,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260908.1817';
-const APP_VERSION_LABEL = 'v260908.1817';
+const APP_VERSION = '260909.1000';
+const APP_VERSION_LABEL = 'v260909.1000';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14126,11 +14131,14 @@ async function tkTidyOpen(tkId){
 function tkTidyShell(S){
   return `${S.dots?`<div class="tdy-dots"><div class="mck-dots2">${S.dots}</div></div>`:''}
     <div style="font-size:12px;color:var(--t2);line-height:1.9;margin:2px 0 10px;">
-      點<b>已預約</b>的圓形卡可以改日期或取消那一堂；下面再決定票面餘額改成幾堂。</div>
+      ${/* 2026-09-09 使用者：「這邊的資訊有點複雜　你可以簡單化跟簡化視窗內容嗎」——
+           後半句「下面再決定票面餘額改成幾堂」刪掉：下面那個區塊的標題就叫
+           「票面餘額改成幾堂？」，等於同一句話講兩遍。 */''}
+      點<b>已預約</b>的圓形卡可以改日期或取消那一堂。</div>
     <div id="tdy-pick"></div>
     <div id="tdy-mubox"></div>
     <div id="tdy-sum"></div>
-    <div class="lot-sec">票面餘額改成幾堂？</div>
+    <div class="lot-sec">票面餘額改成幾堂？<i id="tdy-rechint" class="tdy-rechint"></i></div>
     <div class="tdy-rembar" id="tdy-rembar"></div>
     ${/* 手填的那格放在重畫範圍外：tkTidyPaint 每按一下就重寫 #tdy-rembar，
          輸入框若在裡面，打到一半會被清掉、游標也會跳走。 */''}
@@ -14142,6 +14150,9 @@ function tkTidyShell(S){
       <input id="tdy-why" class="tdy-why" type="text" placeholder="原因（必填，會寫進票券紀錄）"
         value="${escH(S.remWhy||'')}" oninput="tkTidyWhy()">
     </div>
+    ${/* 〔2026-09-09 簡化〕原本這裡還有一整塊 #tdy-remnote 講「為什麼預設是這一顆」。
+         帳目正常的票（絕大多數）那句話固定不變，等於每次都多讀一行 ——
+         改成接在區塊標題後面的一句短的；只有**舊票**那種需要解釋的才展開成一整塊。 */''}
     <div id="tdy-remnote"></div>`;
 }
 /* 三種餘額口徑（見檔頭的 ⚠）：
@@ -14250,24 +14261,28 @@ function tkTidyPaint(){
      只是不再能從畫面上改。 */
   const n=tkTidyUsedN(), auto=S.total-n, rem=tkTidyRemNow();
   const _freedSel=Object.keys(S.sel).length-n;
-  const chg=S.rows.filter(r=>(!!S.sel[r.id])!==(!!S.orig[r.id])).length;
   const remTxt=Number.isFinite(rem)?`${rem} 堂`:'—';
+  /* 〔2026-09-09 簡化〕拿掉「這次會更動 N 堂的歸屬／課的歸屬尚未更動」那一行 ——
+     0828 把中間那串清單整塊移除之後，畫面上已經沒有任何地方能改歸屬
+     （tkTidyTap 從此沒有人呼叫），所以那一行永遠是「尚未更動」，是純噪音。
+     ⚠ S.sel／S.orig 本身留著：餘額的「依戳記重算」還在讀它。
+     ⚠ 超約警告與團課那句留著 —— 那兩句只有真的踩到才出現，是資訊不是噪音。 */
   if(es){
     es.innerHTML=`<div class="ovd-list">
-      <div class="ovd-row"><span>佔堂數${_freedSel?`<i style="display:block;font-style:normal;font-size:10.5px;color:var(--t3);">另有 ${_freedSel} 堂已退回，不佔堂數</i>`:''}</span><b class="${auto<0?'ovd-neg':''}">${n} / ${S.total}</b></div>
+      <div class="ovd-row"><span>已排堂數${_freedSel?`<i style="display:block;font-style:normal;font-size:10.5px;color:var(--t3);">另有 ${_freedSel} 堂已退回，不佔堂數</i>`:''}</span><b class="${auto<0?'ovd-neg':''}">${n} / ${S.total}</b></div>
       <div class="ovd-row ovd-sum"><span>票面餘額</span>
         <b class="${(Number.isFinite(rem)&&rem!==S.rem0)?'':'ovd-neg'}" style="${
           (Number.isFinite(rem)&&rem!==S.rem0)?'':'color:var(--t3);'}">${S.rem0} → ${remTxt}</b></div>
     </div>
-    ${auto<0?`<div class="ovd-note" style="color:var(--danger,#b5372e);">勾了 ${n} 堂，超過這張票的 ${S.total} 堂。
-      多出來的那 ${-auto} 堂請取消勾選，或先確認是不是該算在別張票上。</div>`
-      :`<div class="ovd-note">${chg?`這次會更動 ${chg} 堂的歸屬。`:'課的歸屬尚未更動。'}${
-        S.grpN?`<br>這位會員另有 ${S.grpN} 堂團課沒有列出來 —— 團課的票記在扣課紀錄裡，不是靠課卡綁定，改這裡沒有用。`:''}</div>`}`;
+    ${auto<0?`<div class="ovd-note" style="color:var(--danger,#b5372e);">課卡上已經排了 ${n} 堂，超過這張票的 ${S.total} 堂。
+      多出來的那 ${-auto} 堂請先確認是不是該算在別張票上。</div>`:''}
+    ${S.grpN?`<div class="ovd-note">這位會員另有 ${S.grpN} 堂團課沒有列出來 —— 團課的票記在扣課紀錄裡，不是靠課卡綁定，改這裡沒有用。</div>`:''}`;
   }
   /* 餘額三選一（併進來的舊「校正堂數」＝第三顆） */
   const bar=document.getElementById('tdy-rembar');
   if(bar) bar.innerHTML=[
-    ['auto', auto, '依戳記重算', `總堂數 ${S.total} − 勾選 ${n}`],
+    /* 副標不再寫「勾選」：那個動作 0828 就跟著清單一起退場了（2026-09-09 簡化） */
+    ['auto', auto, '依戳記重算', `${S.total} 堂 − 已排 ${n} 堂`],
     ['keep', S.rem0, '維持原本', '不動票面餘額'],
     ['manual', (S.remManual==null?'—':S.remManual), '自己填', '要寫原因'],
   ].map(([k,v,lb,sub])=>`<button type="button" class="tdy-chip${S.remMode===k?' on':''}"
@@ -14293,11 +14308,13 @@ function tkTidyPaint(){
           ${S.mu[i]?`<button type="button" class="tdy-mu-x" title="清掉這一格的日期" onclick="tkTidyMuClear(${i})">✕</button>`:''}
         </div>`).join('')}</div>`:'';
   }
+  /* 〔2026-09-09 簡化〕帳目正常的票：一句短的接在區塊標題後面，不再佔一整塊。
+     舊票那段是真的需要讀完的警告（照戳記重算會憑空多給堂數），維持整塊展開。 */
+  const rh=document.getElementById('tdy-rechint');
+  if(rh) rh.textContent=S.auditable?'扣課紀錄完整，建議「依戳記重算」':'';
   const nt=document.getElementById('tdy-remnote');
-  if(nt) nt.innerHTML=`<div class="ovd-note">${
-    S.auditable
-      ? '這張票的扣課紀錄是完整的，預設用<b>依戳記重算</b>。'
-      : `這張票是<b>對帳基準日（${TK_AUDIT_SINCE.replace(/-/g,'/')}）之前</b>的舊票 —— 那時候上過的課沒有全部進系統，戳記永遠補不齊，所以預設<b>維持原本餘額</b>。照戳記重算會憑空多給堂數。`
+  if(nt) nt.innerHTML=S.auditable ? '' : `<div class="ovd-note">${
+    `這張票是<b>對帳基準日（${TK_AUDIT_SINCE.replace(/-/g,'/')}）之前</b>的舊票 —— 那時候上過的課沒有全部進系統，戳記永遠補不齊，所以預設<b>維持原本餘額</b>。照戳記重算會憑空多給堂數。`
     }</div>`;
 }
 function tkTidyTap(bid){
