@@ -303,19 +303,30 @@ console.log('\n⑬ 動作可以拖移排序（2026-09-09 使用者指示）');
 }
 ok('★★★ 拖完那一下的 click 被吃掉',
    /if\(window\._wpDragged\)\{ window\._wpDragged=0; return; \}/.test(src));
-ok('★★★ 手機沒有 HTML5 drag，所以另外給上移／下移兩顆',
+/* 2026-09-09 二修＋三修（使用者：「畫面變複雜了　還是可以新增一個按鈕[順序]左邊跳一欄
+   上下的按鈕」→「左邊加一欄上　右邊加一欄下」）—— 平常乾淨，按了「順序」才長出兩顆；
+   上在左、下在右。 */
+ok('★★★ 上下鍵在排序模式才出現，按了就把那一列往上／往下移',
    /onclick="event\.stopPropagation\(\);wpMove\(\$\{i\},-1\)"/.test(src)
    && /onclick="event\.stopPropagation\(\);wpMove\(\$\{i\},1\)"/.test(src)
-   && /只做拖移的話，手機端等於沒有排序功能/.test(src));
+   && /function wpOrdToggle\(\)\{ const S=window\._wp; if\(!S\) return; S\._ord=!S\._ord; wpPaint\(\); \}/.test(src));
+ok('★★★ 上在左、下在右（疊在同一邊很容易按錯）',
+   /\.wp-item-up\{left:7px;\}/.test(src) && /\.wp-item-dn\{right:7px;\}/.test(src)
+   && /兩顆疊在同一邊時很容易按錯上下；分到兩側，方向跟位置一致/.test(src));
+ok('★★★ 平常那一行是乾淨的（沒有把手、沒有上下鍵）',
+   /把手、上下鍵、可拖曳三樣平常全部不畫，/.test(src)
+   && !/<span class="wp-item-g"/.test(src));
+ok('★★★ 排序模式下整列不給點開編輯（正在調順序時誤觸就白調了）',
+   /\$\{o\?'':\` onclick="wpItemEdit\(\$\{i\}\)"\`\}/.test(src)
+   && /排序模式下整列不給點開編輯/.test(src));
 ok('★★ 第一個不能再上移、最後一個不能再下移（按鈕直接停用）',
    /\$\{i===0\?'disabled':''\}/.test(src) && /\$\{i===\(S\.items\.length-1\)\?'disabled':''\}/.test(src));
-ok('★★ 有看得出來的拖移把手（不然「這一列可以拖」看不出來）',
-   /<span class="wp-item-g" title="拖曳可以調整順序">⠿<\/span>/.test(src)
-   && /\.wp-item-g\{position:absolute;left:8px;/.test(src));
+ok('★★ 拖移只在排序模式開著（手機沒有 HTML5 drag，箭頭才是主要的路）',
+   /拖移只在排序模式開著（手機沒有 HTML5 drag，箭頭才是主要的路）/.test(src));
 ok('★★ 只動記憶體，要按「儲存方案」才寫回資料庫（跟改次數／重量同一條線）',
    /只動記憶體裡的 S\.items，要按「儲存方案」才寫回資料庫/.test(src));
-ok('★★ 唯讀的那份（別人分享的）不畫把手與上下移',
-   /\.wp-item-ro \.wp-item-g,\.wp-item-ro \.wp-item-mv\{display:none;\}/.test(src));
+ok('★★ 唯讀的那份（別人分享的）本來就不走這條 —— 它畫的是 wp-item-ro，沒有排序模式',
+   /<div class="wp-item wp-item-ro">/.test(src) && !/wp-item-ro[\s\S]{0,200}wpOrdToggle/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
