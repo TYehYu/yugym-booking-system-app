@@ -50,8 +50,11 @@ ok('★ 選中時與膠囊裡的 active 同一個樣子（米白底、綠字）'
    && /body\.mc-mode \.mc-nav-item\.active\{background:#F4F1E8;color:var\(--green\);/.test(src));
 ok('　　窄畫面跟著縮（與膠囊裡的項目同一組斷點）',
    /body\.mc-mode \.mc-admin-btn\{padding:8px 10px;\}   \/\* 獨立那顆也跟著縮（2026-08-06）/.test(src));
-ok('　　中央膠囊仍絕對置中（不會被左邊多一顆推歪）',
-   /body\.mc-mode \.mc-nav\{position:absolute;left:50%;top:50%;transform:translate\(-50%,-50%\);margin:0;\}/.test(src));
+/* 2026-09-09 使用者回報「訓練方案的按鈕被遮住」：絕對置中等於離開排版流，
+   右邊的時鐘與帳號 chip 攔不住它 —— 項目從五個變六個就壓上去了。改回流內置中。 */
+ok('　　中央膠囊改流內置中（絕對定位會壓到右邊的時鐘）',
+   /body\.mc-mode \.mc-nav\{position:static;transform:none;margin:0 auto;min-width:0;flex:0 1 auto;\}/.test(src)
+   && !/body\.mc-mode \.mc-nav\{position:absolute;/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
