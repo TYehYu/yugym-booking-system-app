@@ -28,10 +28,10 @@ ok('★★ 淨扣課用帳本算（deduct − refund，只看這一筆預約在�
    /_lg\.filter\(l=>l\.action==='deduct'\)\.length - _lg\.filter\(l=>l\.action==='refund'\)\.length;/.test(CFM)
    && /l\.booking_id===b\.id && l\.ticket_id===b\.ticket_id/.test(CFM));
 ok('★★ 文案講清楚「不會退回任何堂數」，不要讓人以為會多一張票',
-   /這一堂<b>沒有扣過票<\/b>（超約，或當初建立時就沒扣）/.test(CFM)
-   && /<b>不會退回任何堂數<\/b>/.test(CFM));
+   /* 2026-09-11 收斂成短句；「不會退回任何堂數」保留粗體（那是要讓人看到的後果） */
+   /這一堂<b>沒有扣過票<\/b>，<b>不會退回任何堂數<\/b>/.test(CFM));
 ok('★ 已經退回過的（教練請假）另外講一句，不要跟「從沒扣過」混為一談',
-   /這一堂的堂數<b>已經退回過了<\/b>（例如教練請假）/.test(CFM));
+   /堂數<b>已經退回過了<\/b>（例如教練請假），不會再退一次/.test(CFM));
 ok('　　團課不走這條（團課的票在 ticket_logs、不在 ticket_id）',
    /if\(b\.ticket_id && !bkIsGroup\(b\)\)\{/.test(CFM));
 

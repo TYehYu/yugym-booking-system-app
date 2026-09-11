@@ -62,7 +62,7 @@ console.log('\n② 視窗內容');
      /m\.line_user_id=null; m\.line_push_failed_at=null; m\.line_push_error=null;/.test(F)
      && /解除 LINE 綁定（推播送不到，請會員重新登入）/.test(F));
   ok('★ 事前講清楚後果（收不到通知、也不能用 LINE 登入）',
-     /解除後這位會員<b>暫時收不到任何 LINE 通知<\/b>，也<b>無法用 LINE 登入<\/b>/.test(src));
+     /<div class="mk-key">暫時收不到 LINE 通知、也無法用 LINE 登入<small>直到他重新用 LINE 登入一次<\/small><\/div>/.test(src));   /* 2026-09-11 紅字一條 */
   ok('★ 提醒要用「平常在用的那個 LINE 帳號」（這正是 badid 的成因）',
      /記得用<b>平常在用的那個 LINE 帳號<\/b>/.test(src));
   ok('　　防連點', /async function doLineUnbind\(mid\)\{ return onceAct\('lineunbind:'\+mid, \(\)=>_doLineUnbind\(mid\)\); \}/.test(src));

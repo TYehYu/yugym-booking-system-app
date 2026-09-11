@@ -205,12 +205,13 @@ console.log('\n取消沒綁票券的預約');
   const j=src.indexOf('\n}\n', src.indexOf("askSeriesCancel('${id}','auto')", i))+2;
   /* 2026-08-26：判斷多了「這一筆在這張票上到底扣過沒有」（見 cxnorefundtest.js），
      所以沙箱要餵得出帳本；bkIsGroup 也要給（團課不走那條）。 */
-  const run=(b,logs)=>{ let html='';
+  /* 2026-09-11：多收一個「距離開課幾小時」—— 24 小時內外的視窗內容不同了（見下面 near） */
+  const run=(b,logs,hrs)=>{ let html='';
     // 2026-07-30：取消視窗會問「這堂發過幾點贈點」→ 補上依賴（測試情境無贈點，回空字串）
     /* 2026-08-06：取消視窗改用票券結果色標（綠＝退回、紅＝扣除）→ 沙箱補上 tkChip */
     const fn=new Function('dbGet','showToast','showModal','hoursUntilStart','isDeskLike',
       'cancelRewardWarnHtml','dbGetAll','tkChip','bkIsGroup',
-      src.slice(i,j)+'\nreturn confirmCancelBooking;')(async()=>b,()=>{},h=>{html=h;},()=>72,()=>true,
+      src.slice(i,j)+'\nreturn confirmCancelBooking;')(async()=>b,()=>{},h=>{html=h;},()=>(hrs==null?72:hrs),()=>true,
       async()=>'', async()=>(logs||[]), (k,t)=>`[${k}]${t||''}`, ()=>false);
     return fn('X').then(()=>html); };
   return Promise.all([
@@ -221,9 +222,12 @@ console.log('\n取消沒綁票券的預約');
         [{booking_id:'X',ticket_id:'MTK-1',action:'deduct'}]),
     /* 2026-08-26 使用者回報（林韋綺 10/04）：超約的課 ticket_id 有值、帳本卻沒扣過 */
     run({id:'X',date:'2026-08-10',start_time:'16:00',category:'私人教練',pending_contract:false,ticket_id:'MTK-1'}, []),
-  ]).then(([pend,rent,noTk,normal,over])=>{
+    /* 同一堂正常的課，但只剩 5 小時開課 */
+    run({id:'X',date:'2026-08-10',start_time:'16:00',category:'私人教練',pending_contract:false,ticket_id:'MTK-1'},
+        [{booking_id:'X',ticket_id:'MTK-1',action:'deduct'}], 5),
+  ]).then(([pend,rent,noTk,normal,over,near])=>{
     ok('★ 待簽約卡位：不再問退票，說明「還沒收款也沒有票券」',
-       !/退回票券/.test(pend) && /這是<b>待簽約卡位<\/b>，還沒收款也沒有票券/.test(pend));
+       !/退回票券/.test(pend) && /<b>待簽約卡位<\/b>，還沒收款也沒有票券/.test(pend));
     ok('　　卡位上填的客戶姓名會帶出來', /劉雪珠/.test(pend));
     ok('　　只留一顆「確定取消」', (pend.match(/<button/g)||[]).length===2 && /確定取消/.test(pend));
     /* 2026-08-06：綠／紅專指票券退回／扣除 —— 不動票券的確定鍵改中性色 */
@@ -231,10 +235,16 @@ console.log('\n取消沒綁票券的預約');
        /btn btn-dark" onclick="askSeriesCancel\('X','none'\)/.test(pend) && !/btn-danger/.test(pend));
     ok('★ 場租：說明不涉及票券', /場地租借不涉及票券/.test(rent) && !/退回票券/.test(rent));
     ok('★ 未綁票券的匯入預約：說明不影響堂數', /沒有綁票券/.test(noTk) && !/退回票券/.test(noTk));
-    ok('★ 正常有綁票券的預約 → 兩種選擇照舊', /退回票券/.test(normal) && /扣課不退/.test(normal));
+    /* 2026-09-11 收斂：「扣課不退」只在 24 小時內列 —— 那顆鈕本來就只在 24 小時內出現（0813 防線），
+       列出一個按不到的選項只會讓人找鈕。0729「一定要有明確說明」在有兩種選擇的時候照樣兩種都講。 */
+    ok('★ 正常有綁票券、24 小時以上 → 只講退回（沒有扣課鈕可按，就不列扣課）',
+       /退回票券/.test(normal) && !/扣課不退/.test(normal) && /24 小時以上，依規則退回票券/.test(normal));
+    ok('★★ 24 小時內 → 兩種選擇都講，並有紅字一條',
+       /退回票券/.test(near) && /扣課不退/.test(near) && /<div class="mk-key">距離開課不到 24 小時/.test(near)
+       && /取消・<b>扣掉這一堂<\/b>/.test(near));
     /* 2026-08-06 使用者指示：綠色＝票券返回、紅色＝票券扣除 */
-    ok('★ 兩種結果各掛一枚色標（綠 back／紅 eat）',
-       /\[back\]/.test(normal) && /\[eat\]/.test(normal));
+    ok('★ 兩種結果各掛一枚色標（綠 back／紅 eat）；24 小時以上沒有紅標',
+       /\[back\]/.test(near) && /\[eat\]/.test(near) && /\[back\]/.test(normal) && !/\[eat\]/.test(normal));
     ok('　　沒有票券可動的取消掛灰標（不會誤讀成要扣票）',
        /\[none\]/.test(pend) && /\[none\]/.test(rent) && /\[none\]/.test(noTk));
     /* 2026-08-01：團課的票券記在 ticket_logs 不是 bookings.ticket_id，
