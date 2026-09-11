@@ -7,13 +7,14 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
 console.log('① 團課步驟 2：說明收起來，不是刪掉');
-ok('★★ 六條規則收進 <details>，預設收合',
-   /<details class="tipfold"><summary>名單怎麼選？（六條規則）<\/summary>/.test(src)
+ok('★★ 規則收進 <details>，預設收合',
+   /<details class="tipfold"><summary>名單怎麼選？<\/summary>/.test(src)
    && !/<details class="tipfold" open>/.test(src));
-ok('★★★ 六條一條都沒少（新來的櫃檯還是要看得到）',
-   ['名單可以<b>現在選</b>','只列<b>有團體課票券</b>的會員','加入扣 1 堂、移除退回',
-    '票券設了使用人會<b>分開一列</b>','同一位要<b>再加一個名額</b>按「＋」',
-    '手上有多張票時，點下面的圓形卡選要扣哪一張'].every(t=>src.includes(t)));
+/* 2026-09-11 使用者：「我希望每個視窗都清楚乾淨　不要規則一大堆」—— 六條收成四條。
+   拿掉的兩條（之後也能在明細加、多張票點圓形卡挑）畫面上看得到；核心四條一條都不能少。 */
+ok('★★★ 收成四條，核心四條都在（新來的櫃檯還是要看得到）',
+   ['只列<b>有團體課票券</b>的會員','加入扣 1 堂、移除退回',
+    '設了使用人的票<b>分開一列</b>，點哪列就替誰報名','同一位再加名額按「＋」'].every(t=>src.includes(t)));
 ok('★★ .tipfold 有 ＋／− 的開合標記（沿用 .bam-guest 的語彙）',
    /\.tipfold>summary::before\{content:'＋ '/.test(src)
    && /\.tipfold\[open\]>summary::before\{content:'− ';\}/.test(src));

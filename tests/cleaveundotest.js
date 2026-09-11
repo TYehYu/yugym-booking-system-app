@@ -43,16 +43,17 @@ console.log('\n①-b 新制：請假當下不退堂（2026-08-14 使用者定案
      !/refundTicket\(_tkId/.test(L) && !/b\.ticket_id=null/.test(L)
      && /堂數待簽到或取消時退回/.test(L));
   ok('★★★ 動手之前先讓人看到「效期會從幾號延到幾號」',
-     /票券效期 <b>\$\{_f\(_from\)\} → \$\{_f\(_to\)\}<\/b>（延長 \$\{COACH_LEAVE_EXTEND_DAYS\} 天）/.test(src)
+     /效期 <b>\$\{_f\(_from\)\} → \$\{_f\(_to\)\}<\/b>（延長 \$\{COACH_LEAVE_EXTEND_DAYS\} 天）/.test(src)
      && /<button class="btn btn-green" onclick="bkCoachLeaveGo\('\$\{id\}'\)">確認請假<\/button>/.test(src));
   ok('★★★ 沒有到期日要明講「不需要展延」（不能只是把那半句拿掉）',
-     /這張票<b>沒有到期日<\/b>，不需要展延。/.test(src)
+     /`沒有到期日，不需要展延`/.test(src)   /* 2026-09-11 收斂成短句 */
      && /\(_ext&&_ext\.skipped==='noexp'\)\?'這張票沒有到期日（不需展延）'/.test(src));
   /* 2026-08-30 使用者定案：同一週的教練請假只延一次 7 天 */
   ok('★★★ 同一週已延過 → 確認視窗先講，不要按了才發現沒延',
      /const _dupWk=\(_t&&_from\)\?await leaveExtDoneThisWeek\(b\.ticket_id,b\.date\):false;/.test(src)
-     && /票券效期<b>不再延長<\/b> —— 這一週（/.test(src)
-     && /同一週只補一次，不然一週排五堂就會多延五週。/.test(src));
+     && /效期<b>不再延長<\/b>：\$\{_f\(leaveWeekKey\(b\.date\)\)\} 那週已經延過（同一週只補一次）/.test(src)
+     /* 2026-09-11：理由（一週排五堂就會多延五週）從畫面搬進註解，畫面只寫結論 */
+     && /同一週只補一次的理由（2026-08-30 使用者：一週排五堂就會多延五週）/.test(src));
   ok('★★ 完成後的提示也要說得出原因（不是只顯示「效期未變」）',
      /\(_ext&&_ext\.skipped==='week'\)\?'這一週已經延過，效期不再延'/.test(src));
   ok('★★ 確認之後再驗一次狀態（視窗開著時別人可能已經動過這堂）',

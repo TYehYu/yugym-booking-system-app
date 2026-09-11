@@ -92,7 +92,7 @@ ok('★ 只問到「這張票剩幾堂」為止（不會列出超過票能付的
    && /const list=_allUnpaid\.slice\(0,left\);/.test(src));
 ok('★ 沒有要補的就完全不打擾', /if\(!list\.length\) return;/.test(src));
 ok('★ 視窗講清楚可以不補（教練負責的免費名額）',
-   /教練負責的免費名額請選「先不補扣」。/.test(src)
+   /<li>教練負責的免費名額請選「先不補扣」<\/li>/.test(src)   /* 2026-09-11 收斂成條列 */
    && />先不補扣<\/button>/.test(src));
 ok('★ 補扣鈕是紅底（會扣票券，與全站顏色語彙一致）',
    /<button class="btn btn-red" onclick="doChargeUnpaid\(\)">確認補扣/.test(src));

@@ -91,7 +91,9 @@ ok('★ 開關旁明講可延到哪一天、幾天、同原方案',
    /可延至 <b>\$\{String\(tkExtendTo\(t\)\)\.replace\(\/-\/g,'\/'\)\}<\/b>（\$\{tkPlanDays\(t\)\} 天，同原方案）/.test(src));
 /* 2026-09-11 使用者：「規則列出重點就好　不得退費可以明顯一點」 */
 ok('★★★ 確認視窗：不得退費獨立一條、品牌暗紅（紅＞金＞綠）',
-   /color:var\(--red,#7A2E28\);font-size:15px;font-weight:800;[^"]*">\s*\n\s*展延後不得申請退費<\/div>/.test(src));
+   /* 2026-09-11：inline 樣式收成共用的 .mk-key（預設品牌暗紅） */
+   /<div class="mk-key">展延後不得申請退費<\/div>/.test(src)
+   && /\.mk-key\{[^}]*border:1\.5px solid var\(--red,#7A2E28\);[\s\S]*?color:var\(--red,#7A2E28\);font-size:15px;font-weight:800;/.test(src));
 ok('★★ 規則只列重點：限一次；還沒到期才多一點「先取得客人同意」',
    /<li>一張票限展延一次<\/li>/.test(src)
    && /\$\{early\?`<li>還沒到期（\$\{f\(t\.expire_date\)\}）：請先取得客人同意<\/li>`:''\}/.test(src));

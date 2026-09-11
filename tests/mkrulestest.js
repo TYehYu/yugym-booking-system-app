@@ -77,13 +77,15 @@ console.log('  取消視窗要先講清楚（不能按下去才發現）');
 {
   const F=grabFn('_groupCancelSeat');
   ok('★★ 視窗開之前先查這一格的票', /const _seatTk=await seatTicketOf\(b, sk\);\n\s*const _isMk=tkIsMakeup\(_seatTk\);/.test(F));
-  ok('★★ 紅底警示只跟 24 小時內有關（補課券取消會退回，不再紅底）',
-     /background:\$\{within24\?'#fbeceb':'#eef5f1'\}/.test(F));
+  /* 2026-09-11 收斂成「24 小時內一條紅字＋條列」 */
+  ok('★★ 紅字只跟 24 小時內有關（補課券取消會退回，不再紅底）',
+     /\$\{within24\?`<div class="mk-key">距離開課不到 24 小時/.test(F)
+     && !/background:\$\{within24\?'#fbeceb'/.test(F));
   ok('★ 明講「補課券退回」與「效期不變」',
-     /\$\{tkChip\('back','補課券退回'\)\}/.test(F)
-     && /效期不變<\/b>（仍以券上原效期為準，請在效期內重新預約）/.test(F));
+     /tkChip\('back','補課券退回'\)/.test(F)
+     && /<li>補課券<b>效期不變<\/b>，請在效期內重新預約<\/li>/.test(F));
   ok('★ 補課券的情況不建議「改用請假」（補課券不能再請假）',
-     /\$\{_isMk\?'':`<div style="font-size:12px;color:var\(--t2\);margin-top:10px;line-height:2\.2;">/.test(F));
+     /\? `<li>補課券<b>效期不變<\/b>，請在效期內重新預約<\/li>`\s*\n\s*: `<li>想保留補課權益請改用「請假」/.test(F));
 }
 
 /* ── ③ 教練請假 → 期限延長一週；會員請假才給補課券 ────────────────── */

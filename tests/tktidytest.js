@@ -293,7 +293,7 @@ ok('★★ 舊票預設不吃「依戳記重算」（戳記補不齊，會憑空
    && /tkLedgerAuditable/.test(OPEN)
    && /照戳記重算會憑空多給她 6 堂/.test(src));
 ok('★ 舊票卻硬選「依戳記重算」時，確認頁要紅字再問一次',
-   /\(!S\.auditable&&S\.remMode==='auto'\)\?`<br><b style="color:var\(--danger/.test(src));
+   /\(!S\.auditable&&S\.remMode==='auto'\)\?`<div class="mk-key">舊票照戳記重算可能多給堂數/.test(src));   /* 2026-09-11 紅字獨立一條 */
 ok('★★ 寫完要清快取（bookings／member_tickets／ticket_logs 三張都動到了）',
    /dbCacheClear\(\['bookings','member_tickets','ticket_logs'\]\)/.test(DO));
 ok('★ 防連點（同一張票只跑一次）', /onceAct\('tktidy:'\+S\.tkId/.test(src));

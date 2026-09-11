@@ -70,10 +70,12 @@ console.log('\n③ 建立之前就先講規則');
 {
   const F=grabFn('openPendingHold');
   ok('★★ 限時段票種在視窗上方標明「僅限平日、18:00 前上完」',
-     /\$\{w\.t\.time_restricted\?`<div style="background:#f7efe0;/.test(F)
-     && /僅限<b>平日、且要在 18:00 前上完<\/b>（60 分鐘的課最晚 17:00 開始）。不符的時段不會建立（連續預約會自動跳過並列出）。/.test(F));
+     /* 2026-09-11：收成金色一條（次要提醒），細節放小字 */
+     /\$\{w\.t\.time_restricted\?`<div class="mk-key gold"/.test(F)
+     && /僅限平日、18:00 前上完/.test(F)
+     && /60 分鐘的課最晚 17:00 開始；不符的時段不會建立（連續預約自動跳過）/.test(F));
   ok('★ 不是限時段的票種不會多一塊警語（整塊掛在 w.t.time_restricted 上）',
-     /\$\{w\.t\.time_restricted\?`[\s\S]*?連續預約會自動跳過並列出）。<\/div>`:''\}/.test(F));
+     /\$\{w\.t\.time_restricted\?`[\s\S]*?連續預約自動跳過）<\/small><\/div>`:''\}/.test(F));
   ok('★★ 界線改看下課時間（使用者更正：17:30 開始會上到 18:30）',
      /const endsBy18 = ne <= 1080;   \/\/ 下課時間不晚於 18:00（ne＝開始＋時長）/.test(src)
      && /2026-08-08 使用者更正：「平日 17:30 也是不能預約友善教練課的時間」/.test(src));

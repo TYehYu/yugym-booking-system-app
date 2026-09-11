@@ -55,11 +55,13 @@ console.log('\n③ 按下去之前先擋掉不乾淨的情況');
      /else if\(\(Number\(tk\.sessions_remaining\)\|\|0\)!==\(Number\(tk\.sessions_total\)\|\|0\)\)/.test(F));
   ok('★ 超過 30 分鐘 → 擋下，指向正規退費', /已超過 \$\{SALE_UNDO_MIN\} 分鐘，不能直接退回 —— 請改走票券退費/.test(F));
   ok('★★ 確認視窗逐條列出「會被清掉什麼」',
-     /・票券作廢（會員看不到它）<br>・這筆購買紀錄刪除（今日營收會少掉這一筆）<br>・當時折抵的折抵券還回去<br>・當時建立的合約作廢/.test(F));
+     /<li>票券作廢（會員看不到它）<\/li><li>購買紀錄刪除，今日營收少這一筆<\/li><li>折抵券還回去、合約作廢<\/li>/.test(F));
   ok('★ 明說這不是退費，真的要退錢走另一條路',
-     /真的要退費給客人請改走票券頁的退費流程，那邊會留下退款紀錄。/.test(F));
-  ok('★ 紅底警示（會扣掉東西＝紅，與既有色標一致）',
-     /background:#fbeceb;border:1\.5px solid #e0a8a2/.test(F));
+     /<div class="mk-key">這不是退費，整筆會被清掉/.test(F)
+     && /<li>真的要退費給客人請改走票券頁的退費流程，那邊會留下退款紀錄<\/li>/.test(F));
+  /* 2026-09-11：紅底色塊改成共用的 .mk-key（預設就是品牌暗紅） */
+  ok('★ 紅字警示（會扣掉東西＝紅，與既有色標一致）',
+     /<div class="mk-key">這不是退費/.test(F) && !/<div class="mk-key (gold|green)">這不是退費/.test(F));
   ok('　　讀取時有忙碌提示', /const _busy=uiBusy\('檢查中…'\);/.test(F));
 }
 

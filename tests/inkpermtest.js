@@ -90,7 +90,7 @@ console.log('\n③ 三種角色各自的權限判斷一行都沒動');
     ['值班時段：同一條線', /if\(!D\.canEdit\)\{ showToast\('僅管理員／主管可調整'\); return; \}/],
     ['抽獎登記：僅管理員／櫃台', /if\(typeof isDeskLike==='function' && !isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可登記抽獎'\); return; \}/],
     ['會員管理：新增會員限櫃檯以上', /const canManage = isDeskLike\(\);/],
-    ['票券校正：只有管理員', /這件事只有管理員能改<\/b>，請找管理員處理/],
+    ['票券校正：只有管理員', /<li><b>只有管理員能改<\/b>，請找管理員<\/li>/],   // 2026-09-11 對帳視窗收斂成條列
     ['導覽列：依角色過濾', /function visibleGroups\(\)\{/],
     ['櫃檯是設備帳號（isDeskLike 定義）', /function isDeskLike\(\)/],
   ];
