@@ -54,10 +54,10 @@ eq('★★ 沒有教練的課卡 → 誰都看不到', btn(adminTeach,{coach_id:
 
 console.log('\n③ 畫面與進入點走同一條判準');
 ok('★★★ 圓形課卡鈕不再看 own（own 對管理員／店長恆為 true）',
-   /if\(!_calCtx && tlOwnsBk\(b\) && !bkIsSelf\(b\) && tlCanLog\(\)\)/.test(src)
+   /if\(!_calCtx && tlOwnsBk\(b\) && tlLoggable\(b\) && tlCanLog\(\)\)/.test(src)
    && !/if\(!_calCtx && own && !bkIsSelf\(b\) && tlCanLog\(\)\)/.test(src));
 ok('★★★ 教練首頁課卡鈕也過 tlOwnsBk',
-   /const _tlOk=!bkIsSelf\(b\) && tlCanLog\(\) && tlOwnsBk\(b\);/.test(src));
+   /const _tlOk=tlLoggable\(b\) && tlCanLog\(\) && tlOwnsBk\(b\);/.test(src));
 ok('★★★ openTrainingLog 用同一支，主管／管理員不再一律放行',
    /if\(!tlOwnsBk\(b\)\)\{ showToast\('這不是你的課，看不到課表'\); return; \}/.test(src)
    && !/SESSION\.role==='coach' && !SESSION\.is_manager && !bkIsCoach\(b,SESSION\.id\)\)\{\s*\n\s*showToast\('這不是你的課/.test(src));

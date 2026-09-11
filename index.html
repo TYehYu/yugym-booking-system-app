@@ -12812,8 +12812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.1627';
-const APP_VERSION_LABEL = 'v260911.1627';
+const APP_VERSION = '260911.1647';
+const APP_VERSION_LABEL = 'v260911.1647';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -33312,7 +33312,7 @@ async function expandBkCard(el, id){
        ⚠ 同日二修：原本寫成「排除 front_desk」，使用者回報櫃檯桌機還是看得到。
          改成正面白名單「教練或管理員才畫」—— 排除法只要有一種角色狀態沒被列到就會漏，
          白名單漏了只會少畫一顆鈕，不會把不該看的人放進來。 */
-  if(!_calCtx && tlOwnsBk(b) && !bkIsSelf(b) && tlCanLog())
+  if(!_calCtx && tlOwnsBk(b) && tlLoggable(b) && tlCanLog())
     btns += evoBtn('evo-t2','',`collapseBkCard();openTrainingLog('${id}')`,'plan','課表');
   if(!_calCtx && (staff||coachCk) && b.no_show===true) btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkUndoNoShow('${id}')`,'noshow','取消未到課');
   else if(!_calCtx && (staff||coachCk) && b.status==='coach_leave') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkCoachLeaveNoShow('${id}')`,'noshow','未到課');
@@ -55060,7 +55060,7 @@ async function coachHomeV2(){
        ⚠ 已經記過的用實心綠、還沒記的用外框 —— 不然看不出哪幾堂還沒記。 */
     /* ⚠ 同上，用 tlCanLog 白名單（這一頁管理員手機首頁也會走到，櫃檯不該看到）。
        tlOwnsBk：dayBk 已經只剩自己帶的課，這裡再過一次，是讓兩處課卡與 openTrainingLog 共用同一條判準。 */
-    const _tlOk=!bkIsSelf(b) && tlCanLog() && tlOwnsBk(b);
+    const _tlOk=tlLoggable(b) && tlCanLog() && tlOwnsBk(b);
     const _tlHas=(window._tlogBids||new Set()).has(b.id);
     return `<div class="admh2-card${done?' admh-done':''}" style="--admh-c:${_col};" onclick="admhCardTap(event,'${b.id}')">
       <div class="a2-stampcol">${_st?`<span class="admh-stamp ${_st[1]}">${_st[0]}</span>`:''}</div>
@@ -59966,6 +59966,10 @@ function tlCanLog(){ return !!(SESSION && isTeachable(SESSION)); }
       拿 own 來畫這顆鈕，別的教練的課卡也會出現課表鈕。
    ⚠ 被代課的原教練看不到：那堂他不在場，訓練由代課的人記。 */
 function tlOwnsBk(b){ return !!(SESSION && b && String(bkCoachId(b)||'')===String(SESSION.id)); }
+/* 哪些課種記課表（2026-09-11 使用者：「課表按鈕的部分 團課就不用了」）——
+   自主訓練：會員自己來、教練不在場；團課：一堂多位學員，課表是一對一記的。
+   兩處課表鈕（expandBkCard、教練首頁課卡）與 openTrainingLog 共用這一條。 */
+function tlLoggable(b){ return !!b && !bkIsSelf(b) && !bkIsGroup(b); }
 
 async function openTrainingLog(bookingId){
   closeModal();
@@ -59979,6 +59983,7 @@ async function openTrainingLog(bookingId){
         training_logs / tlog_select_scoped，繞過前端也拿不到別人的紀錄。 */
   if(!tlCanLog()){ showToast('只有能開課的教練能開課表'); return; }
   if(!tlOwnsBk(b)){ showToast('這不是你的課，看不到課表'); return; }
+  if(!tlLoggable(b)){ showToast('團課與自主訓練不記課表'); return; }
   window._tlBooking=b;
   // 會員名 + 票券剩餘 + 是否友善課
   let memName='會員', tkText='', isFriendly=false;

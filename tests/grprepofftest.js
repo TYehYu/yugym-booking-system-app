@@ -32,10 +32,10 @@ console.log('\n② 課表圓鈕不給櫃檯');
 ok('★★★ 正面白名單：只有教練與管理員畫得出這顆鈕',
    /function tlCanLog\(\)\{ return !!\(SESSION && isTeachable\(SESSION\)\); \}/.test(src)
    && /function isCoachable\(c\)\{ return c && \(c\.role==='coach' \|\| c\.role==='admin'\); \}/.test(src)
-   && /if\(!_calCtx && tlOwnsBk\(b\) && !bkIsSelf\(b\) && tlCanLog\(\)\)/.test(src)
+   && /if\(!_calCtx && tlOwnsBk\(b\) && tlLoggable\(b\) && tlCanLog\(\)\)/.test(src)
    && !/!\(SESSION&&SESSION\.role==='front_desk'\)/.test(src));
 ok('★★★ 另一處課卡（教練／管理員手機首頁）也吃同一支白名單',
-   /const _tlOk=!bkIsSelf\(b\) && tlCanLog\(\) && tlOwnsBk\(b\);/.test(src));
+   /const _tlOk=tlLoggable\(b\) && tlCanLog\(\) && tlOwnsBk\(b\);/.test(src));
 ok('★★★ 進入點也擋一次（繞過畫面也開不了）',
    /if\(!tlCanLog\(\)\)\{ showToast\('只有能開課的教練能開課表'\); return; \}/.test(src));
 ok('★★ 為什麼用白名單寫在原地（漏了只會少畫一顆鈕，不會放錯人進來）',
