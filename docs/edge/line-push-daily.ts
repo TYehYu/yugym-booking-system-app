@@ -34,7 +34,13 @@
 // v22（2026-08-23）：訊息內容改吃 line_templates（管理員在「環境設定 › 通知範本」自行編輯）。
 //   ・body 用 {{變數}} 佔位，這裡替換；enabled=false → 那一種通知整組不發
 //   ・讀不到範本（表被刪、查詢失敗）→ 退回內建文字，通知不會因此中斷
-//   ・抬頭【有肌訓練 自動訊息】與會員那則的「自動發送」註解固定不給改
+// v24（2026-08-23）：抬頭也搬進範本表（LT-HEAD）—— 使用者：「有肌訓練 自動訊息 改成貼心提醒」。
+//   ⚠ 會員那則的「自動發送」註解仍然寫死 —— 那不是語氣而是告知義務。
+// v25（2026-09-11 使用者：「請假的會員　還會收到line的開課通知　應該不要通知」）：
+//   團課逐名額的請假（bookings.attendance[名額鍵]==='leave'）不發上課提醒。
+//   名額鍵與前端 seatKeys 同一套：member_ids 的順序，同一人第 2 個名額起是「id#2」「id#3」。
+//   ⚠ 同一人佔好幾個名額時，**全部請假才跳過** —— 還有一個名額要來，就照樣提醒。
+//   ⚠ 同時把 v24 線上多出來、版控漏掉的 debug 回傳 head 補回來（版控＝線上）。
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -89,6 +95,25 @@ const selfVenue = (b: any): string => {
   if (/教室/.test(raw)) return '教室'
   return '多功能訓練架'
 }
+/* v25：這堂課裡「每個名額都請假」的會員（與前端 seatKeys／attObj 同一套）。
+   名額鍵＝member_ids 的順序，同一人第 2 個名額起加「#n」；attendance 讀不懂就當沒人請假
+   （寧可多發一則，也不要因為資料格式把該來的人漏掉）。 */
+const leaveOnlyMembers = (b: any): Set<string> => {
+  let att: Record<string, string> = {}
+  const raw = b && b.attendance
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) att = raw
+  else if (typeof raw === 'string' && raw.trim()) { try { const p = JSON.parse(raw); if (p && typeof p === 'object') att = p } catch (_) { /* 讀不懂就當沒有請假 */ } }
+  const seatN: Record<string, number> = {}; const leaveN: Record<string, number> = {}
+  if (Array.isArray(b && b.member_ids)) for (const m of b.member_ids) {
+    if (!m) continue
+    seatN[m] = (seatN[m] || 0) + 1
+    const k = seatN[m] > 1 ? m + '#' + seatN[m] : m
+    if (att[k] === 'leave') leaveN[m] = (leaveN[m] || 0) + 1
+  }
+  const out = new Set<string>()
+  for (const m of Object.keys(seatN)) if (leaveN[m] === seatN[m]) out.add(m)
+  return out
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -118,7 +143,7 @@ Deno.serve(async (req) => {
     )
 
     const { data: allBks, error: bkErr } = await admin
-      .from('bookings').select('id,date,start_time,category,coach_id,substitute_coach_id,member_id,member_ids,ticket_id,trial_name,sibling_of,venue_unit,note')
+      .from('bookings').select('id,date,start_time,category,coach_id,substitute_coach_id,member_id,member_ids,ticket_id,trial_name,sibling_of,venue_unit,note,attendance')
       .eq('date', target).neq('status', 'cancelled')
     if (bkErr) return J({ error: 'BOOKINGS_QUERY', detail: bkErr.message }, 500)
     /* v12：影子預約（第二台跑步機）不是另一堂課，直接濾掉 */
@@ -230,7 +255,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    let sent = 0; let skipNoLine = 0; let skipOptOut = 0; let failed = 0
+    let sent = 0; let skipNoLine = 0; let skipOptOut = 0; let skipLeave = 0; let failed = 0
     let coachSent = 0; let coachSkip = 0; let coachOptOutSkip = 0; let redirected = 0; let dedup = 0
     const failDetail: Array<{ member: string; reason: string }> = []
     const okMembers = new Set<string>()
@@ -312,6 +337,7 @@ Deno.serve(async (req) => {
       if (att && att !== b.member_id) redirected++
       if (att && !seen.has(att)) { seen.add(att); ids.push(att) }
       if (Array.isArray(b.member_ids)) for (const m of b.member_ids) if (m && !seen.has(m)) { seen.add(m); ids.push(m) }
+      const onLeave = leaveOnlyMembers(b)   // v25：每個名額都請假的人
       if (DEBUG) {
         debugRows.push({
           booking: b.id, time: String(b.start_time).slice(0, 5), category: b.category,
@@ -322,13 +348,14 @@ Deno.serve(async (req) => {
           coach_has_line: !!(coachId && coachLine[coachId]),
           coach_opt_out: !!(coachId && coachOptOut.has(coachId)),
           venue,
-          members: ids.map(x => ({ name: (memMap[x] && memMap[x].name) || x, has_line: !!(memMap[x] && memMap[x].line_user_id) })),
+          members: ids.map(x => ({ name: (memMap[x] && memMap[x].name) || x, has_line: !!(memMap[x] && memMap[x].line_user_id), on_leave: onLeave.has(x) })),
           text_preview: text,
         })
         continue
       }
       /* v22：上課提醒停用 → 這一輪完全不推給會員（收款提醒是另一種，各自獨立） */
       for (const mid of (tplOff('LT-CLASS') ? [] : ids)) {
+        if (onLeave.has(mid)) { skipLeave++; continue }   // v25：請假的名額不提醒
         if (pushedMem.has(mid)) { dedup++; continue }   // v12：這一輪已經提醒過
         const mem = memMap[mid]
         if (!mem || !mem.line_user_id) { skipNoLine++; continue }
@@ -382,8 +409,8 @@ Deno.serve(async (req) => {
     if (okMembers.size && !DEBUG) {
       try { await admin.from('members').update({ line_push_failed_at: null, line_push_error: null }).in('id', [...okMembers]).not('line_push_failed_at', 'is', null) } catch (_) { /* 清旗標失敗不影響推播 */ }
     }
-    if (DEBUG) return J({ ok: true, debug: true, target, window: [winStart, winEnd], bookings: bks.length, detect_errors: detectErrors, templates: Object.keys(tpl).map(k => ({ id: k, enabled: tpl[k].enabled })), rows: debugRows })
-    return J({ ok: true, target, window: [winStart, winEnd], bookings: bks.length, sent, dedup_same_member: dedup, redirected_to_attendee: redirected, coach_sent: coachSent, coach_skip_no_line: coachSkip, coach_skip_opt_out: coachOptOutSkip, skip_no_line: skipNoLine, skip_opt_out: skipOptOut, failed, fail_detail: failDetail, detect_errors: detectErrors })
+    if (DEBUG) return J({ ok: true, debug: true, target, window: [winStart, winEnd], bookings: bks.length, detect_errors: detectErrors, head: HEAD, templates: Object.keys(tpl).map(k => ({ id: k, enabled: tpl[k].enabled })), rows: debugRows })
+    return J({ ok: true, target, window: [winStart, winEnd], bookings: bks.length, sent, dedup_same_member: dedup, redirected_to_attendee: redirected, coach_sent: coachSent, coach_skip_no_line: coachSkip, coach_skip_opt_out: coachOptOutSkip, skip_no_line: skipNoLine, skip_opt_out: skipOptOut, skip_leave: skipLeave, failed, fail_detail: failDetail, detect_errors: detectErrors })
   } catch (e) {
     return J({ error: String((e && (e as any).message) || e) }, 500)
   }
