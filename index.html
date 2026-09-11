@@ -12810,8 +12810,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.1601';
-const APP_VERSION_LABEL = 'v260911.1601';
+const APP_VERSION = '260911.1614';
+const APP_VERSION_LABEL = 'v260911.1614';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14124,11 +14124,9 @@ async function openTicketExtend(id){
   const t=await dbGet('member_tickets',id);
   if(!t){ showToast('找不到票券'); return; }
   if(tkIsExtended(t)){ showToast('這張票券已經展延過了（一次為限）'); return; }
-  if(!tkCanExtend(t)){
-    showToast(tkPocketNow(t).canExtend
-      ? '這張票券不符合展延條件（需為已過期、且還有剩餘堂數）'
-      : `${tkPocketNow(t).label}不提供展延`);   // 自主訓練點數過期即作廢（2026-07-31）
-    return; }
+  /* 能不能展延要知道「已上幾堂」（2026-09-11 二改），跟票券卡同一個來源；說不行就講為什麼 */
+  const _why=tkExtWhyNot(t, null, await tkExtUsedOf(t));
+  if(_why){ showToast(_why, 5000); return; }
   const days=tkPlanDays(t), to=tkExtendTo(t), rem=Number(t.sessions_remaining)||0;
   const f=d=>String(d).slice(0,10).replace(/-/g,'/');
   /* 還沒到期就先展延（2026-09-11 放寬）：合約寫的是「到期後可申請」，提早展延是店家通融，
@@ -14158,7 +14156,7 @@ async function doTicketExtend(id){
   const t=await dbGet('member_tickets',id);
   if(!t){ showToast('找不到票券'); return; }
   if(tkIsExtended(t)){ showToast('這張票券已經展延過了'); return; }
-  if(!tkCanExtend(t)){ showToast('這張票券不符合展延條件'); return; }
+  if(!tkCanExtend(t, null, await tkExtUsedOf(t))){ showToast('這張票券不符合展延條件'); return; }
   const to=tkExtendTo(t), days=tkPlanDays(t), from=String(t.expire_date).slice(0,10);
   t.extended_from=from;
   t.extended_at=new Date().toISOString();
@@ -14843,42 +14841,61 @@ function tkExtendTo(t){
    兩條一夾，到期隔天以後的課只能等到期隔天當天先展延再約。改成**到期前 30 天內**就能按。
    展延後日期不受影響（tkExtendTo 從現在的到期日往後加原方案天數，早按晚按同一天）；
    差別只有「不得退費」提早生效，所以確認視窗要講明、要客人同意。
-   ⚠ 不是「隨時可按」：新票被誤按就等於放棄退費，30 天是讓快到期的票才開。 */
-const TK_EXT_EARLY_DAYS=30;
-/* 展延鈕從哪一天起可以按：到期日往前 TK_EXT_EARLY_DAYS 天（YYYY-MM-DD）。
+   ⚠ 不是「隨時可按」：新票被誤按就等於放棄退費，30 天是讓快到期的票才開。
+   ⚠⚠ 同日二改：30 天退場，改成「照一週一堂，剩下的時間上不上得完」—— 見下方。 */
+/* 展延門檻（2026-09-11 二改，使用者：「重新討論展延的設定　如果會員期限剩下4週　但是課堂超過4堂
+   以一週1堂的訓練頻率　就可以使用展延按鈕」；三選一挑了「公式取代 30 天」）——
+     未上堂數（總堂數 − 已上）＞ 距離到期的週數（無條件進位）→ 可以展延；已過期照舊可以。
+   例：剩 4 週還有 5 堂 ✓　剩 8 週還有 10 堂 ✓　剩 3 週 2 堂 ✗　剩 6 週 4 堂 ✗
+   ⚠ 「已上」＝票券夾的 used（已簽到／已結課，含請假與扣課不退）；已預約還沒上的算「未上」——
+     預扣型票券的帳面餘額很早就歸 0，不能拿來當剩幾堂（使用者同日選的算法）。
+   ⚠ 呼叫端要傳 usedN（票券夾算好的 used）；沒傳就退回「總堂數 − 帳面餘額」，寧可保守。
    ⚠ 自己算日期、不借 parseYmd／ymd —— 測試會把 ymd 換成固定回傳「今天」的假函式。 */
-function tkExtOpensOn(t){
-  if(!t || !t.expire_date) return null;
-  const [y,m,d]=String(t.expire_date).slice(0,10).split('-').map(Number);
-  return new Date(Date.UTC(y,m-1,d-TK_EXT_EARLY_DAYS)).toISOString().slice(0,10);
+const _tkExtDay=s=>{ const [y,m,d]=String(s).slice(0,10).split('-').map(Number); return Date.UTC(y,m-1,d)/86400000; };
+function tkExtLeftN(t, usedN){
+  const total=Number(t&&t.sessions_total)||0;
+  const used=(usedN!=null && usedN!=='' && isFinite(Number(usedN))) ? Number(usedN)
+    : Math.max(0, total-(Number(t&&t.sessions_remaining)||0));
+  return Math.max(0, total-used);
 }
-function tkExtWhyNot(t, today){
+function tkExtWeeksLeft(t, today){
+  if(!t || !t.expire_date) return null;
+  return Math.max(0, Math.ceil((_tkExtDay(t.expire_date)-_tkExtDay(today))/7));
+}
+/* 從哪一天起可以按：「週數 ＜ 未上堂數」的第一天＝到期日往前（未上 − 1）× 7 天 */
+function tkExtOpensOn(t, usedN){
+  if(!t || !t.expire_date) return null;
+  const left=tkExtLeftN(t, usedN); if(!(left>0)) return null;
+  return new Date((_tkExtDay(t.expire_date)-(left-1)*7)*86400000).toISOString().slice(0,10);
+}
+function tkExtWhyNot(t, today, usedN){
   if(!t) return '找不到票券';
-  if(!tkPocketNow(t).canExtend) return '這種票券不提供展延';
+  /* 按不到要說得出是哪一種票（2026-07-31：不是只說「不符合條件」）；拿不到名稱才退回「這種票券」 */
+  if(!tkPocketNow(t).canExtend) return `${tkPocketNow(t).label||'這種票券'}不提供展延`;
   const td=today||ymd(TODAY);
   if(['refunded','void','cancelled'].includes(t.status)) return '已作廢／已退費的票不能展延';
-  if(!((Number(t.sessions_remaining)||0)>0)) return '堂數已經用完了，沒有東西可以延';
+  const left=tkExtLeftN(t, usedN);
+  if(!(left>0)) return '堂數已經用完了，沒有東西可以延';
   if(tkIsExtended(t)) return '已經展延過了（一次為限）';
   if(!t.expire_date) return '這張票沒有到期日，不會過期';
-  if(td<tkExtOpensOn(t)) return `還沒到展延期（到期日 ${String(t.expire_date).slice(0,10).replace(/-/g,'/')}），${tkExtOpensOn(t).replace(/-/g,'/')} 起才能展延（到期前 ${TK_EXT_EARLY_DAYS} 天內）`;
+  if(String(t.expire_date).slice(0,10)>=td){
+    const w=tkExtWeeksLeft(t, td);
+    if(!(left>w)) return `還上得完：剩 ${w} 週、還有 ${left} 堂（一週一堂），${String(tkExtOpensOn(t,usedN)).replace(/-/g,'/')} 起才能展延`;
+  }
   if(!tkExtendTo(t)) return '算不出原方案期限，無法展延';
   return '';
 }
-/* 可以展延的條件：已過期或到期前 30 天內（2026-09-11 放寬，見 tkExtWhyNot 上方）、
-   還有沒用完的堂數、還沒展延過、算得出期限。
-   已退費／作廢的不行；永久有效的票本來就不會過期，也不需要。 */
-function tkCanExtend(t, today){
-  if(!t) return false;
-  /* 2026-07-31 使用者指示：自主訓練點數過期不能展延（效期本來就只有 7 天、簽到贈送，
-     過期即作廢 —— 2026-07-26 定案）。規則寫在口袋（TK_POCKETS.self.canExtend=false），
-     這裡只負責問，展延按鈕與「N 張可展延」的計數都會跟著消失。 */
-  if(!tkPocketNow(t).canExtend) return false;
-  const td = today || ymd(TODAY);
-  if(['refunded','void','cancelled'].includes(t.status)) return false;
-  if(!((Number(t.sessions_remaining)||0) > 0)) return false;
-  if(tkIsExtended(t)) return false;
-  if(!t.expire_date || td < tkExtOpensOn(t)) return false;
-  return !!tkExtendTo(t);
+/* 可以展延＝上面那一支講不出「為什麼不行」。規則只寫一份（tkExtWhyNot），這裡不另抄。
+   2026-07-31 使用者指示：自主訓練點數過期不能展延（效期本來就只有 7 天、簽到贈送，
+   過期即作廢 —— 2026-07-26 定案）。規則寫在口袋（TK_POCKETS.self.canExtend=false），
+   由 tkExtWhyNot 第一關去問；展延按鈕與「N 張可展延」的計數都會跟著消失。 */
+function tkCanExtend(t, today, usedN){
+  return !!t && tkExtWhyNot(t, today, usedN)==='';
+}
+/* 展延用的「已上幾堂」：跟票券卡同一個來源（票券夾的 used）。從視窗直接開的時候沒有現成的，就算一次。 */
+async function tkExtUsedOf(t){
+  try{ const W=buildWallet(t.member_id, await walletCtx()); const s=W&&W.of(t.id); return s?s.used:null; }
+  catch(_){ return null; }
 }
 /* 票券購買日（2026-07-30 使用者指示：列在票券下方）——
    匯入的票券有 96.6% 帶得到 purchase_date；只有起始日的用起始日並標「起」，
@@ -46790,7 +46807,7 @@ function ppRecordHtml(){
                 ${/* 右下角定版三顆：[校正][展延][作廢]（2026-08-30 使用者指示）。
                      校正只有管理員看得到；展延常駐、不能按時淡化寫原因。 */''}
                 ${(SESSION&&SESSION.role==='admin')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="這張票蓋了哪幾堂（含已上過的）；改完票面餘額自動重算" onclick="tkTidyOpen('${t.id}')">校正</button>`:''}
-                ${isDeskLike()?(()=>{ const _w=tkExtWhyNot(t,ymd(TODAY));
+                ${isDeskLike()?(()=>{ const _w=tkExtWhyNot(t,ymd(TODAY),usedOf(t));
                   return _w
                     ? `<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;opacity:.45;cursor:not-allowed;" disabled title="${escH(_w)}">展延</button>`
                     : `<button class="btn btn-gold btn-sm" style="padding:2px 10px;font-size:11px;" title="展延一次，期限同原方案；展延後依合約不得退費" onclick="openTicketExtend('${t.id}')">展延</button>`; })():''}
@@ -46859,7 +46876,7 @@ function ppRecordHtml(){
         /* 2026-07-30 使用者回報「邱美珠過期的票券還沒有設定展延按鈕」：
            過期但還沒用完的票會被 isHist 收進「歷史紀錄」摺疊區，展延開關只做在管理端的
            票券頁，這邊看不到 —— 直接把按鈕放進歷史列，並在有可展延的票時預設展開。 */
-        const _extable=expd.filter(t=>tkCanExtend(t,_tYmd));   /* 展開與否也跟角色無關（2026-08-22） */
+        const _extable=expd.filter(t=>tkCanExtend(t,_tYmd,usedOf(t)));   /* 展開與否也跟角色無關（2026-08-22） */
         /* 2026-07-30 使用者指示：歷史紀錄也用圓形卡顯示 ——
            原本只有一行「N/總・已過期・購買日」，看不出哪幾堂上在哪一天。
            直接沿用上面 cardOf 的同一張卡（同一套 ticketTokens），加 .bkd-tkcard-hist
@@ -46880,7 +46897,7 @@ function ppRecordHtml(){
                例外只有櫃檯／管理員看得到 —— 同一位會員，教練看是淡的、櫃檯看是亮的，
                這才是使用者覺得規則不一致的來源。改成：**外觀（不淡化＋標記）與角色無關**，
                只有「展延」那顆按鈕仍限櫃檯以上。 */
-          const canExt=tkCanExtend(t,_tYmd);
+          const canExt=tkCanExtend(t,_tYmd,usedOf(t));
           const canExtBtn=isDeskLike()&&canExt;
           const _shN=tkSharedIds(t).length;
           const shrTag=(t.member_id!==PP.id)?`<span style="font-size:11px;color:var(--gold-d);border:1px solid var(--gold-d);border-radius:6px;padding:1px 6px;margin-left:6px;">共享</span>`
@@ -49875,7 +49892,7 @@ PAGES.m_tickets=async function(){
                           : `<span class="tag ${stTag[t.status]||'tag-ok'}">${stLabel[t.status]||'可用'}</span>`;
         /* 展延開關（2026-07-30 使用者指示）：過期但沒用完的票可展延一次，
            期限同原方案；展延後不得申請退費（合約〔展延規則〕）。只有櫃檯／管理員看得到。 */
-        const _canExt = isDeskLike() && tkCanExtend(t, today);
+        const _canExt = isDeskLike() && tkCanExtend(t, today, used);   /* used＝上面票券夾算的已上堂數（2026-09-11 二改） */
         const extRow = tkIsExtended(t)
           ? `<div class="tk-ext tk-ext-on">
                <span class="tk-ext-t">已展延　<b>${String(t.extended_from).slice(0,10).replace(/-/g,'/')}</b> → <b>${String(t.expire_date).slice(0,10).replace(/-/g,'/')}</b>（${tkPlanDays(t)} 天，同原方案）</span>
@@ -59973,7 +59990,7 @@ async function renderTrainingLogSheet(){
   /* 三大項紀錄（2026-09-11 使用者：「硬舉 深蹲 臥推 歷史紀錄放在會員資料跟訓練動作中間
      用兩列表示紀錄　第一列深蹲 第二列3x10x60」）——
      固定三格、放在凍結區（會員資料正下方，捲動時也看得到）；還沒有紀錄的那格寫「—」。
-     ⚠ 第二列照使用者寫的「組×次×重量」（3×10×60）；今日紀錄那邊維持「次 × 組 × 重量」。
+     ⚠ 第二列照使用者寫的「組×次×重量」（3×10×60）；同日稍晚全系統都統一成這個順序（見 tlSetLine 上方）。
      ⚠ 原本那顆「全部紀錄 ›」併進來：整塊點下去就是全部紀錄。 */
   const _prOf=Object.fromEntries(prTop.map(r=>[r.lift,r]));
   const _prVal=r=>{
@@ -60170,8 +60187,8 @@ function tleRender(){
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">修改紀錄</div>
     <div class="form-row"><label>動作 *</label>
       <input type="text" id="tle-name" value="${escH(E.name)}" autocomplete="off" oninput="tleSet('name',this.value)"></div>
-    ${stepRow('reps','次數','次',[1])}
     ${stepRow('sets','組數','組',[1])}
+    ${stepRow('reps','次數','次',[1])}
     <div class="wpe-row">
       <div class="wpe-lb">重量<i class="wp-hint">可留空＝徒手</i></div>
       <div class="wpe-unit">${WP_UNITS.map(x=>`<button type="button" class="wpe-u${u===x?' on':''}" onclick="tleUnit('${x}')">${x}</button>`).join('')}
@@ -60180,7 +60197,7 @@ function tleRender(){
     ${stepRow('weight','',u,WP_STEPS[u])}
     <div class="form-row" style="margin-top:6px;"><label>備註（可留空）</label>
       <input type="text" id="tle-note" value="${escH(E.note)}" autocomplete="off" oninput="tleSet('note',this.value)"></div>
-    ${E.varied?'<ul class="mk-pts"><li>原本每組數字不同；改了數字會變成統一的次數 × 組數 × 重量</li></ul>':''}
+    ${E.varied?'<ul class="mk-pts"><li>原本每組數字不同；改了數字會變成統一的組數 × 次數 × 重量</li></ul>':''}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="tleSave()">儲存</button></div>`);
 }
@@ -60447,15 +60464,16 @@ function tlLogNums(l){
   }
   return {reps,sets,weight,unit};
 }
+/* 順序一律「組數 × 次數 × 重量」（2026-09-11 使用者：「訓練紀錄統一改成 組數x次數x重量」，見 tlSetLine 上方） */
 function tlLogLine(l){
   const n=tlLogNums(l); if(!n) return '—';
-  return [(n.reps!==''?n.reps+' 次':null),(n.sets!==''?n.sets+' 組':null),wpWeightTxt(n.weight,n.unit)||null]
+  return [(n.sets!==''?n.sets+' 組':null),(n.reps!==''?n.reps+' 次':null),wpWeightTxt(n.weight,n.unit)||null]
     .filter(Boolean).join(' × ')||'—';
 }
 /* HTML 版（單位帶顏色標籤）—— 數字都是自己算的，沒有要跳脫的東西 */
 function tlLogHtml(l){
   const n=tlLogNums(l); if(!n) return '—';
-  return [(n.reps!==''?n.reps+' 次':null),(n.sets!==''?n.sets+' 組':null),wpWeightHtml(n.weight,n.unit)||null]
+  return [(n.sets!==''?n.sets+' 組':null),(n.reps!==''?n.reps+' 次':null),wpWeightHtml(n.weight,n.unit)||null]
     .filter(Boolean).join(' × ')||'—';
 }
 async function tlPlanApply(pid,useLast){ return onceAct('tlplan:'+pid, ()=>_tlPlanApply(pid,useLast)); }
@@ -65320,40 +65338,45 @@ function tlOpenPrHistory(){
   </div>`);
 }
 
+/* ⚠ 數字的順序全系統一律「組數 × 次數 × 重量」（2026-09-11 使用者：「訓練紀錄統一改成 組數x次數x重量」）——
+   0909 訓練方案那邊使用者指定的是「動作 × 次數 × 組數 × 重量」，這次一起翻過來：
+   「沿用上次的數字」那張視窗會把方案與紀錄並排，兩邊順序不同就讀不懂。
+   這幾支（tlSetLine／tlLogLine／tlLogHtml／wpItemLine／wpItemNumsHtml／wpItemLineHtml）要一起動，不要只改一支。
+   逐組明細那一路（每一組各寫「次數×重量」）本來就沒有組數，不在此列。 */
 function tlSetLine(l){
   if(!l) return '';
   if(l.weight!=null&&l.weight!==''){
     /* 單位帶顏色標籤（2026-09-09）—— 呼叫端已經有三處，都是直接塞進 innerHTML，
        所以這裡回 HTML；動作名稱不在這一段裡，沒有要跳脫的東西。 */
-    return [(l.reps!=null?l.reps+' 次':null),(l.sets?l.sets+' 組':null),wpWeightHtml(l.weight,l.weight_unit)]
+    return [(l.sets?l.sets+' 組':null),(l.reps!=null?l.reps+' 次':null),wpWeightHtml(l.weight,l.weight_unit)]
       .filter(Boolean).join(' × ');
   }
   if(l.sets_detail){ try{ const arr=JSON.parse(l.sets_detail);
     if(arr&&arr.length) return arr.map(s=>`${s.reps||'-'}${s.weight?'×'+s.weight+'kg':''}`).join('、'); }catch(_){} }
-  return `${l.reps==null?'-':l.reps} 次${l.sets?(' × '+l.sets+' 組'):''}`;
+  return `${l.sets?(l.sets+' 組 × '):''}${l.reps==null?'-':l.reps} 次`;
 }
-/* 一行的樣子：深蹲 × 12次 × 3組 × 40kg（使用者指定的入口形式） */
+/* 一行的樣子：深蹲 × 3組 × 12次 × 40kg（0909 使用者指定的入口形式；0911 改成組數在前） */
 function wpItemLine(it){
   if(!it) return '';
   const w=wpWeightTxt(it.weight,it.unit);
-  return [it.name||'（未命名）', (it.reps!=null&&it.reps!=='')?`${it.reps} 次`:null,
-          (it.sets!=null&&it.sets!=='')?`${it.sets} 組`:null, w||null]
+  return [it.name||'（未命名）', (it.sets!=null&&it.sets!=='')?`${it.sets} 組`:null,
+          (it.reps!=null&&it.reps!=='')?`${it.reps} 次`:null, w||null]
     .filter(Boolean).join(' × ');
 }
-/* 只要「次數 × 組數 × 重量」那一段（2026-09-09 使用者：「動作第一列靠左
-   次數x組數x重量第二列靠右」）—— 名稱與數字拆成上下兩列，各自對齊。 */
+/* 只要「組數 × 次數 × 重量」那一段（2026-09-09 使用者：「動作第一列靠左
+   次數x組數x重量第二列靠右」；0911 改成組數在前）—— 名稱與數字拆成上下兩列，各自對齊。 */
 function wpItemNumsHtml(it){
   if(!it) return '';
-  return [(it.reps!=null&&it.reps!=='')?`${Number(it.reps)} 次`:null,
-          (it.sets!=null&&it.sets!=='')?`${Number(it.sets)} 組`:null,
+  return [(it.sets!=null&&it.sets!=='')?`${Number(it.sets)} 組`:null,
+          (it.reps!=null&&it.reps!=='')?`${Number(it.reps)} 次`:null,
           wpWeightHtml(it.weight,it.unit)||null].filter(Boolean).join(' × ');
 }
 /* 同一行的 HTML 版（單位帶顏色標籤）——名稱要跳脫，數字與標籤是自己組的 */
 function wpItemLineHtml(it){
   if(!it) return '';
   const w=wpWeightHtml(it.weight,it.unit);
-  return [escH(it.name||'（未命名）'), (it.reps!=null&&it.reps!=='')?`${Number(it.reps)} 次`:null,
-          (it.sets!=null&&it.sets!=='')?`${Number(it.sets)} 組`:null, w||null]
+  return [escH(it.name||'（未命名）'), (it.sets!=null&&it.sets!=='')?`${Number(it.sets)} 組`:null,
+          (it.reps!=null&&it.reps!=='')?`${Number(it.reps)} 次`:null, w||null]
     .filter(Boolean).join(' × ');
 }
 function wpNewItem(){ return {name:'', body_part:'', tool:'', reps:12, sets:3, weight:'', unit:'kg', note:''}; }
@@ -65714,8 +65737,8 @@ function wpItemRender(){
       </div>
       <div id="wpe-exlist" class="wpe-exlist"></div>
     </div>
-    ${stepRow('reps','次數','次',[1])}
     ${stepRow('sets','組數','組',[1])}
+    ${stepRow('reps','次數','次',[1])}
     <div class="wpe-row">
       <div class="wpe-lb">重量<i class="wp-hint">可留空＝徒手</i></div>
       <div class="wpe-unit">${WP_UNITS.map(x=>`<button type="button" class="wpe-u${u===x?' on':''}" onclick="wpUnit('${x}')">${x}</button>`).join('')}

@@ -36,7 +36,7 @@ ok('★★★ 數字沒動 → 逐組明細原封不動；動了才改成統一�
 ok('★★ 重量留空存 null（0 會被讀成空槓，0909 規則）', /weight:\(w!=null&&w>0\)\?w:null/.test(S));
 ok('★★ 名稱必填', /if\(!name\)\{ showToast\('請填動作名稱'\); return; \}/.test(S));
 ok('★★ 防連點', /async function tleSave\(\)\{ return onceAct\('tlesave', _tleSave\); \}/.test(src));
-ok('★ 逐組本來就不一樣的，視窗上先講一句', /原本每組數字不同；改了數字會變成統一的次數 × 組數 × 重量/.test(R));
+ok('★ 逐組本來就不一樣的，視窗上先講一句', /原本每組數字不同；改了數字會變成統一的組數 × 次數 × 重量/.test(R));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);

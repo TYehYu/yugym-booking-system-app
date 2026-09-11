@@ -26,8 +26,8 @@ console.log('\n② 一行的樣子＝使用者指定的入口形式');
   const unitOf=fn('function wpUnitOf(x){','\n}');
   const wTxt=new Function('wpUnitOf','return '+g('function wpWeightTxt(w,u){','\n}'))(unitOf);
   const line=new Function('wpWeightTxt','return '+g('function wpItemLine(it){','\n}'))(wTxt);
-  eq('★★★ 動作 × 次數 × 組數 × 重量', line({name:'深蹲',reps:12,sets:3,weight:40,unit:'kg'}), '深蹲 × 12 次 × 3 組 × 40 kg');
-  eq('★★★ 徒手就少最後一段（不留一個空的 ×）', line({name:'棒式',reps:30,sets:3,weight:''}), '棒式 × 30 次 × 3 組');
+  eq('★★★ 動作 × 次數 × 組數 × 重量', line({name:'深蹲',reps:12,sets:3,weight:40,unit:'kg'}), '深蹲 × 3 組 × 12 次 × 40 kg');   /* 0911 使用者：統一成「組數 × 次數 × 重量」 */
+  eq('★★★ 徒手就少最後一段（不留一個空的 ×）', line({name:'棒式',reps:30,sets:3,weight:''}), '棒式 × 3 組 × 30 次');
   eq('★★ 只有名字也畫得出來', line({name:'貓牛式'}), '貓牛式');
   eq('★★ 沒名字不會變成空字串（看得出是還沒設定）', line({reps:10}), '（未命名） × 10 次');
   eq('　　null 不會爆', line(null), '');
@@ -395,8 +395,8 @@ console.log('\n⑬b 一列拆兩行：動作靠左、次數×組數×重量靠�
   const NH=new Function('wpWeightHtml','Number','return '+g('function wpItemNumsHtml(it){','\n}'))
     ((w,u)=>w?('<b>'+w+'</b><i>'+(u||'kg')+'</i>'):'', Number);
   eq('★★★ 只回數字那一段（名稱在上面一行）', NH({name:'深蹲',reps:12,sets:3,weight:40,unit:'kg'}),
-     '12 次 × 3 組 × <b>40</b><i>kg</i>');
-  eq('★★ 徒手就只有次數與組數', NH({name:'棒式',reps:30,sets:3,weight:''}), '30 次 × 3 組');
+     '3 組 × 12 次 × <b>40</b><i>kg</i>');
+  eq('★★ 徒手就只有次數與組數', NH({name:'棒式',reps:30,sets:3,weight:''}), '3 組 × 30 次');
   eq('★★ 什麼都沒填就回空字串（呼叫端才好整行不畫）', NH({name:'X'}), '');
   eq('　　null 不會爆', NH(null), '');
 }

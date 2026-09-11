@@ -133,7 +133,8 @@ ok('★ 兩區各自有標題與筆數', /<summary>已過期方案（\$\{expd\.l
 ok('★ 已過期方案排在歷史紀錄前面', /\$\{expdSec\}\$\{histSec\}<\/div>/.test(src));
 /* 0822：「可展延」的外觀（不淡化＋預設展開）與角色脫鉤，只有按鈕仍限櫃檯以上 */
 ok('★ 展延按鈕跟著搬到已過期方案那一區（展延只對過期票有意義）',
-   /const _extable=expd\.filter\(t=>tkCanExtend\(t,_tYmd\)\);/.test(src)
+   /* 2026-09-11 二改：展延看「上不上得完」，要帶票券夾的已上堂數（usedOf） */
+   /const _extable=expd\.filter\(t=>tkCanExtend\(t,_tYmd,usedOf\(t\)\)\);/.test(src)
    && /const canExtBtn=isDeskLike\(\)&&canExt;/.test(src));
 ok('　　有可展延的票時預設展開', /<details class="pp-hist"\$\{_extable\.length\?' open':''\}><summary>已過期方案/.test(src));
 ok('　　「目前沒有可用票券」要把兩區都算進去（0809 起也看待審核卡）', /\$\{!act\.length&&!_grHere\.length&&\(hist\.length\|\|expd\.length\)\?/.test(src));

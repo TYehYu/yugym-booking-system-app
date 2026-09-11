@@ -18,26 +18,28 @@ const grab=n=>{let i=src.indexOf('function '+n+'(');if(i<0)throw new Error('切�
 
 console.log('① 展延：常駐，不能按時寫原因');
 {
-  /* 2026-09-11：tkExtWhyNot 多吃 TK_EXT_EARLY_DAYS／tkExtOpensOn，一併抽進來 */
-  const _early=src.match(/const TK_EXT_EARLY_DAYS=\d+;/)[0]+'\n'+grab('tkExtOpensOn')+'\n';
+  /* 2026-09-11 二改：展延看「照一週一堂上不上得完」—— tkExtWhyNot 多吃三支小函式，一併抽進來；
+     第三個參數＝票券夾算好的已上堂數 */
+  const _h=src.match(/const _tkExtDay=[^\n]*\n/)[0]+grab('tkExtLeftN')+'\n'+grab('tkExtWeeksLeft')+'\n'+grab('tkExtOpensOn')+'\n';
   const why=new Function('tkPocketNow','ymd','TODAY','tkIsExtended','tkExtendTo',
-    _early+grab('tkExtWhyNot')+'\nreturn tkExtWhyNot;')(
+    _h+grab('tkExtWhyNot')+'\nreturn tkExtWhyNot;')(
     ()=>({canExtend:true}), d=>'2026-08-30', null,
     t=>!!(t&&t.extended_from), t=>t&&t.expire_date?'2026-12-01':null);
-  const base={status:'usable',sessions_remaining:3,expire_date:'2026-08-01'};
-  eq('★★★ 已過期＋還有堂數 → 可以按（回空字串）', why(base,'2026-08-30'), '');
-  ok('★★★ 離到期超過 30 天 → 擋，而且講得出到期日與哪一天起能按',
-     /還沒到展延期（到期日 2026\/12\/31），2026\/12\/01 起才能展延（到期前 30 天內）/.test(why({...base,expire_date:'2026-12-31'},'2026-08-30')));
-  eq('★★★ 到期前 30 天內 → 可以按（使用者的案子：09/14 到期、09/11 按）',
-     why({...base,expire_date:'2026-09-14'},'2026-09-11'), '');
+  const base={status:'usable',sessions_total:10,sessions_remaining:3,expire_date:'2026-08-01'};
+  eq('★★★ 已過期＋還有堂數 → 可以按（回空字串）', why(base,'2026-08-30',7), '');
+  ok('★★★ 上得完 → 擋，而且講得出剩幾週、幾堂、哪一天起能按',
+     /還上得完：剩 18 週、還有 3 堂（一週一堂），2026\/12\/17 起才能展延/.test(why({...base,expire_date:'2026-12-31'},'2026-08-30',7)));
+  eq('★★★ 上不完 → 可以按（剩 4 週還有 5 堂）', why({...base,expire_date:'2026-09-27'},'2026-08-30',5), '');
+  eq('★★★ 已預約還沒上的算「未上」（帳面餘額 0 也照樣可以）',
+     why({...base,sessions_remaining:0,expire_date:'2026-09-27'},'2026-08-30',5), '');
   eq('★★ 堂數用完 → 沒有東西可以延',
-     why({...base,sessions_remaining:0},'2026-08-30'), '堂數已經用完了，沒有東西可以延');
+     why(base,'2026-08-30',10), '堂數已經用完了，沒有東西可以延');
   eq('★★ 已經延過（一次為限）',
-     why({...base,extended_from:'2026-07-01'},'2026-08-30'), '已經展延過了（一次為限）');
+     why({...base,extended_from:'2026-07-01'},'2026-08-30',7), '已經展延過了（一次為限）');
   eq('★★ 沒有到期日的票不會過期，也就不需要延',
-     why({...base,expire_date:null},'2026-08-30'), '這張票沒有到期日，不會過期');
+     why({...base,expire_date:null},'2026-08-30',7), '這張票沒有到期日，不會過期');
   eq('★★ 已作廢／已退費不能延',
-     why({...base,status:'refunded'},'2026-08-30'), '已作廢／已退費的票不能展延');
+     why({...base,status:'refunded'},'2026-08-30',7), '已作廢／已退費的票不能展延');
   const why2=new Function('tkPocketNow','ymd','TODAY','tkIsExtended','tkExtendTo',
     grab('tkExtWhyNot')+'\nreturn tkExtWhyNot;')(
     ()=>({canExtend:false}), d=>'2026-08-30', null, ()=>false, ()=>'x');
@@ -50,7 +52,7 @@ console.log('\n② 三顆按鈕的順序與權限');
   ok('★★★ 校正只有管理員（不是 isDeskLike —— 那是改帳的入口）',
      /\$\{\(SESSION&&SESSION\.role==='admin'\)\?`<button[^`]*onclick="tkTidyOpen\('\$\{t\.id\}'\)">校正<\/button>`:''\}/.test(src));
   ok('★★★ 展延常駐、不能按時淡化並把原因寫進 title',
-     /const _w=tkExtWhyNot\(t,ymd\(TODAY\)\);/.test(src)
+     /const _w=tkExtWhyNot\(t,ymd\(TODAY\),usedOf\(t\)\);/.test(src)
      && /opacity:\.45;cursor:not-allowed;" disabled title="\$\{escH\(_w\)\}">展延<\/button>/.test(src)
      && /onclick="openTicketExtend\('\$\{t\.id\}'\)">展延<\/button>/.test(src));
   ok('★★ 順序是 校正 → 展延 → 作廢',

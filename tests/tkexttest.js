@@ -15,14 +15,16 @@ const code=[src.slice(_pi, src.indexOf('\nfunction tkClass5(',_pi)),
             g('function tkClass5(t, typeMap){','\n}\n'),
             g('function tkPlanDays(t){','\n}\n'),g('function tkIsExtended(t){','\n'),
             g('function tkExtendTo(t){','\n}\n'),
-            g('const TK_EXT_EARLY_DAYS=','\n'),g('function tkExtOpensOn(t){','\n}\n'),   /* 2026-09-11：到期前 30 天內可展延 */
-            g('function tkCanExtend(t, today){','\n}\n')].join('\n');
+            /* 2026-09-11 二改：展延看「照一週一堂上不上得完」，規則寫在 tkExtWhyNot，tkCanExtend 只問它 */
+            g('const _tkExtDay=','\n'),g('function tkExtLeftN(t, usedN){','\n}\n'),g('function tkExtWeeksLeft(t, today){','\n}\n'),
+            g('function tkExtOpensOn(t, usedN){','\n}\n'),g('function tkExtWhyNot(t, today, usedN){','\n}\n'),
+            g('function tkCanExtend(t, today, usedN){','\n}\n')].join('\n');
 const env={ parseYmd:s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);},
             ymd:d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),
             TODAY:new Date(2026,6,30),
             window:{_ttCache:[{id:'tt-limited-legacy',name:'限定教練課',validity_days:28},
                               {id:'tt-self',name:'自主訓練',category:'自主訓練'}]} };
-const api=new Function(...Object.keys(env),code+'\nreturn {tkPlanDays,tkIsExtended,tkExtendTo,tkExtOpensOn,tkCanExtend,tkPocketNow};')(...Object.values(env));
+const api=new Function(...Object.keys(env),code+'\nreturn {tkPlanDays,tkIsExtended,tkExtendTo,tkExtOpensOn,tkExtWhyNot,tkCanExtend,tkPocketNow};')(...Object.values(env));
 const T=o=>Object.assign({ticket_type_id:'tt-limited-legacy',status:'usable',sessions_remaining:4},o);
 
 console.log('原方案期限');
@@ -45,19 +47,26 @@ console.log('\n可以展延的條件');
 {
   const base={start_date:'2026-04-23',expire_date:'2026-07-16',sessions_total:10,sessions_remaining:4};
   ok('★ 已過期＋有剩餘堂數 → 可以', api.tkCanExtend(T(base))===true);
-  /* 2026-09-11 放寬：到期前 30 天內就能展延（原本要等過期）。今天＝07/30 */
-  ok('★★★ 還沒過期、但在到期前 30 天內 → 可以（08/16 到期，07/17 起可按）',
-     api.tkCanExtend(T({...base,expire_date:'2026-08-16'}))===true);
-  ok('★★★ 使用者的案子：09/14 到期、09/11 想先展延好約 09/15 → 可以',
+  /* 2026-09-11 二改（使用者：「如果會員期限剩下4週　但是課堂超過4堂　以一週1堂的訓練頻率
+     就可以使用展延按鈕」）—— 未上堂數 ＞ 剩餘週數（無條件進位）就能按。今天＝07/30；第三個參數＝已上堂數 */
+  const X=(exp,used,o)=>api.tkCanExtend(T({...base,expire_date:exp,...(o||{})}),undefined,used);
+  ok('★★★ 剩 4 週還有 5 堂 → 可以（08/27 到期、10 堂已上 5）', X('2026-08-27',5)===true);
+  ok('★★★ 剩 4 週剛好 4 堂 → 不行（一週一堂上得完）', X('2026-08-27',6)===false);
+  ok('★★★ 剩 8 週還有 10 堂 → 可以（公式不綁「最後 4 週」）', X('2026-09-24',0)===true);
+  ok('★★★ 剩 3 週 2 堂 → 不行', X('2026-08-20',8)===false);
+  ok('★★★ 剩 6 週 4 堂 → 不行', X('2026-09-10',6)===false);
+  ok('★★★ 已預約還沒上的算「未上」—— 帳面餘額 0（預扣型）也照樣可以',
+     X('2026-08-27',5,{sessions_remaining:0})===true);
+  ok('★★ 沒傳已上堂數 → 退回「總堂數 − 帳面餘額」（10−4＝6 已上 → 剩 4 堂、4 週 → 不行，寧可保守）',
+     api.tkCanExtend(T({...base,expire_date:'2026-08-27'}))===false);
+  eq('★★ 從哪天起可以按：到期日往前（未上−1）×7 天（08/27 到期、5 堂 → 07/30）',
+     api.tkExtOpensOn(T({...base,expire_date:'2026-08-27'}),5), '2026-07-30');
+  eq('★★ 跨年也算得對（01/10 到期、2 堂 → 01/03）', api.tkExtOpensOn(T({...base,expire_date:'2027-01-10'}),8), '2027-01-03');
+  ok('★★ 還不能按的時候講得出為什麼、哪天起可以',
+     /還上得完：剩 4 週、還有 4 堂（一週一堂），2026\/08\/06 起才能展延/.test(api.tkExtWhyNot(T({...base,expire_date:'2026-08-27'}),'2026-07-30',6)));
+  ok('★★★ 使用者早上那個案子：09/14 到期、09/11 還有 4 堂 → 可以',
      api.tkCanExtend(T({...base,expire_date:'2026-09-14'}),'2026-09-11')===true);
-  ok('★★★ 離到期還超過 30 天 → 不行（新票不給誤按成不得退費）',
-     api.tkCanExtend(T({...base,expire_date:'2026-09-15'}))===false);
-  ok('★★ 界線：到期前剛好 30 天那天可以、31 天不行',
-     api.tkCanExtend(T({...base,expire_date:'2026-08-29'}))===true
-     && api.tkCanExtend(T({...base,expire_date:'2026-08-30'}))===false);
-  ok('★★ 跨月跨年也算得對（01/10 到期 → 12/11 起）',
-     api.tkExtOpensOn(T({expire_date:'2027-01-10'}))==='2026-12-11');
-  ok('★ 剛好今天到期 → 可以（本來就在 30 天內）',
+  ok('★ 剛好今天到期、還有堂數 → 可以（剩 0 週）',
      api.tkCanExtend(T({...base,expire_date:'2026-07-30'}))===true);
   eq('★★★ 提早按、晚按，展延後同一天（從現在的到期日往後加原方案天數）',
      api.tkExtendTo(T({...base,expire_date:'2026-09-14',valid_days:84,start_date:null})), '2026-12-07');
@@ -85,7 +94,7 @@ console.log('\n展延一次為限：重算以「原到期日」為準');
 
 console.log('\n接線');
 ok('★ 票券卡有展延開關（只給櫃檯／管理員）',
-   /const _canExt = isDeskLike\(\) && tkCanExtend\(t, today\);/.test(src)
+   /const _canExt = isDeskLike\(\) && tkCanExtend\(t, today, used\);/.test(src)
    && /openTicketExtend\('\$\{t\.id\}'\)/.test(src));
 ok('★ 開關旁明講可延到哪一天、幾天、同原方案',
    /可延至 <b>\$\{String\(tkExtendTo\(t\)\)\.replace\(\/-\/g,'\/'\)\}<\/b>（\$\{tkPlanDays\(t\)\} 天，同原方案）/.test(src));
@@ -120,13 +129,13 @@ ok('　　金色＝次要提示，符合品牌色階（紅>金>綠）',
 ok('　　過期票整張淡化，但有展延開關時不淡（要能看清楚才點得下去）',
    /\.mwtk-card\.mck-dim2:has\(\.tk-ext\)\{opacity:1;filter:none;\}/.test(src));
 ok('　　雙重把關：視窗與寫入都再驗一次條件',
-   /if\(!tkCanExtend\(t\)\)\{\s*\n\s*showToast\(tkPocketNow\(t\)\.canExtend/.test(src)
-   && /if\(!tkCanExtend\(t\)\)\{ showToast\('這張票券不符合展延條件'\); return; \}/.test(src));
+   /const _why=tkExtWhyNot\(t, null, await tkExtUsedOf\(t\)\);\s*\n\s*if\(_why\)\{ showToast\(_why, 5000\); return; \}/.test(src)
+   && /if\(!tkCanExtend\(t, null, await tkExtUsedOf\(t\)\)\)\{ showToast\('這張票券不符合展延條件'\); return; \}/.test(src));
 ok('　　原因寫在程式裡', /過期票在系統裡完全動不了/.test(src));
 
 console.log('\n會員名片的票券頁也要看得到（2026-07-30 使用者回報「邱美珠過期的票券還沒有設定展延按鈕」）');
 ok('★ 過期但沒用完的票會被收進「歷史紀錄」→ 展延按鈕就放在那張卡上',
-   /const canExt=tkCanExtend\(t,_tYmd\);/.test(src)
+   /const canExt=tkCanExtend\(t,_tYmd,usedOf\(t\)\);/.test(src)
    && /const canExtBtn=isDeskLike\(\)&&canExt;/.test(src)
    && /\$\{canExtBtn\?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event\.stopPropagation\(\);openTicketExtend\('\$\{t\.id\}'\)"/.test(src));
 ok('★★ 0822：不淡化這個「例外」不再依角色而定 —— 同一位會員，教練看是淡的、櫃檯看是亮的，'

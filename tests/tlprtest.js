@@ -122,7 +122,8 @@ ok('★★★ 紀錄列要看得到總量（判準就是這個數字，不列出
    && /<em class="prh-vol">\$\{tlPrVol\(r\.best\)\}<\/em>/.test(src)
    && /\.prh-vol\{/.test(src));
 ok('★★★ 次數與組數本來就在紀錄列上（tlSetLine 就是「12 次 × 3 組 × 70kg」）',
-   /\(l\.reps!=null\?l\.reps\+' 次':null\),\(l\.sets\?l\.sets\+' 組':null\)/.test(src));
+   /* 2026-09-11 使用者：「訓練紀錄統一改成 組數x次數x重量」 */
+   /\(l\.sets\?l\.sets\+' 組':null\),\(l\.reps!=null\?l\.reps\+' 次':null\)/.test(src));
 ok('★★ 會員自己命名的動作名要跳脫（tlSetLine 回 HTML，動作名不在裡面）',
    /<span class="prh-x">\$\{escH\(l\.exercise_name\|\|''\)\}<\/span>/.test(src)
    /* 2026-09-11：抽屜那三格的名稱直接來自固定清單 TL_PR_LIFTS（不是使用者輸入），不需跳脫 */
