@@ -3784,6 +3784,10 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
   flex:none;white-space:nowrap;}
 .tlh-log-sub{font-size:11px;color:var(--t3);margin-top:3px;}
 .tlh-log .tl-del{position:absolute;top:8px;right:8px;background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer;padding:4px;}
+/* 點一列＝修改（2026-09-11 使用者：「套用方案沒辦法修改內容」）—— 按下去要有回饋，看得出點得下去 */
+.tlh-log{cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .12s ease;}
+.tlh-log:active{background:#e3efe9;}
+.tlh-hint{font-weight:400;color:var(--t3);font-size:11px;margin-left:8px;letter-spacing:0;}
 .tls-empty{text-align:center;color:var(--t3);padding:24px 0;font-size:13.5px;line-height:1.8;}
 /* 第四區：歷史課表 */
 .tlh-hist{display:flex;gap:12px;align-items:center;padding:9px 2px;border-bottom:1px solid var(--bd2);}
@@ -12788,8 +12792,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.1505';
-const APP_VERSION_LABEL = 'v260911.1505';
+const APP_VERSION = '260911.1514';
+const APP_VERSION_LABEL = 'v260911.1514';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -59918,10 +59922,11 @@ async function renderTrainingLogSheet(){
   // 第二區：今日訓練紀錄
   const sec2 = logs.length===0
     ? '<div class="tls-empty">還沒有紀錄</div>'
-    : `<div class="tlh-logs">${logs.map(l=>`<div class="tlh-log">
+    : `<div class="tlh-logs">${logs.map(l=>`<div class="tlh-log" onclick="tlEditLog('${l.id}')">
         <div class="tlh-log-main"><span class="tlh-ex">${l.exercise_name}</span><span class="tlh-sets">${setLine(l)}</span></div>
         <div class="tlh-log-sub">${[l.posture,l.tool].filter(Boolean).join(' / ')}${l.note?'　·　'+l.note.replace(/\[[^\]]*\]/g,'').trim():''}</div>
-        <button class="tl-del" onclick="delTrainingLog('${l.id}')">✕</button>
+        ${/* ⚠ 整列點下去是修改（tlEditLog），✕ 要擋住冒泡，不然刪之前會先跳出修改視窗 */''}
+        <button class="tl-del" onclick="event.stopPropagation();delTrainingLog('${l.id}')">✕</button>
       </div>`).join('')}</div>`;
 
   // ── P1-1 會員訓練總覽（跨課程統計）──
@@ -59988,7 +59993,7 @@ async function renderTrainingLogSheet(){
       </div>
       <div class="tl-scroll">
         ${overview}
-        <div class="tlh-label">今日訓練紀錄</div>
+        <div class="tlh-label">今日訓練紀錄${logs.length?'<span class="tlh-hint">點一下可修改</span>':''}</div>
         ${sec2}
         ${/* 「套用方案」跟著 wpEnabled()：0911 起能開課的教練與管理員看得到。
              ⚠ 沒有它的時候「新增動作」要撐滿整列（.tl-acts 是兩欄），
@@ -60101,6 +60106,88 @@ async function delTrainingLog(id){
   if(!confirm('確定刪除這筆動作紀錄？'))return;
   try{ await dbDel('training_logs',id); }catch(_){}
   renderTrainingLogSheet();
+}
+/* ══ 修改一筆今日紀錄（2026-09-11 使用者附截圖：「套用方案沒辦法修改內容」）══
+   套用方案的視窗寫著「套進來之後每一項都還可以改」，但今日紀錄只有 ✕ 能刪，一直沒有改的入口。
+   點那一列 → 跟訓練方案編輯器同一套「動作設定」（.wpe-*；級距照 0909 定案：
+   次數／組數 ±1、kg ±1／±0.5、lb 只有 ±5），名稱、數字、單位、備註都能改。
+   ⚠ 手動一組一組記的紀錄（sets_detail）：數字沒動就原封不動留著逐組明細；
+     數字改了就以這一組為準（統一的次數×組數×重量）。逐組本來就不一樣的，視窗上先講一句。 */
+async function tlEditLog(id){
+  let l=null; try{ l=await dbGet('training_logs',id); }catch(_){}
+  if(!l){ showToast('找不到這筆紀錄'); return; }
+  const n=tlLogNums(l)||{reps:'',sets:'',weight:'',unit:'kg'};
+  if(n.sets==='' && l.sets_detail){ try{ const a=JSON.parse(l.sets_detail)||[]; if(a.length) n.sets=a.length; }catch(_){} }
+  let varied=false;
+  if(l.sets_detail){ try{ const a=JSON.parse(l.sets_detail)||[];
+    varied=a.length>1 && a.some(x=>String(x&&x.reps)!==String(a[0]&&a[0].reps)||String(x&&x.weight)!==String(a[0]&&a[0].weight)); }catch(_){} }
+  const unit=wpUnitOf(n.unit);
+  window._tle={id, name:l.exercise_name||'', reps:n.reps, sets:n.sets, weight:n.weight, unit, varied,
+    note:String(l.note||'').replace(/\[[^\]]*\]/g,'').trim(),     /* 舊路徑把逐組文字塞在備註的 [ ] 裡，顯示時本來就拿掉 */
+    orig:JSON.stringify([n.reps,n.sets,n.weight,unit])};
+  tleRender();
+}
+function tleRender(){
+  const E=window._tle; if(!E) return;
+  const u=E.unit;
+  const val=f=>(E[f]===''||E[f]==null)?'':E[f];
+  const stepRow=(field,label,unitTxt,steps)=>`
+    <div class="wpe-row">
+      <div class="wpe-lb">${label}</div>
+      <div class="wpe-ctl">
+        ${steps.map(s=>`<button type="button" class="wpe-b" onclick="tleStep('${field}',${-s})">−${s}</button>`).join('')}
+        <span class="wpe-v"><input type="number" inputmode="decimal" id="tle-${field}" value="${val(field)}"
+          placeholder="—" oninput="tleSet('${field}',this.value)">${unitTxt?`<i>${unitTxt}</i>`:''}</span>
+        ${steps.slice().reverse().map(s=>`<button type="button" class="wpe-b" onclick="tleStep('${field}',${s})">＋${s}</button>`).join('')}
+      </div>
+    </div>`;
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">修改紀錄</div>
+    <div class="form-row"><label>動作 *</label>
+      <input type="text" id="tle-name" value="${escH(E.name)}" autocomplete="off" oninput="tleSet('name',this.value)"></div>
+    ${stepRow('reps','次數','次',[1])}
+    ${stepRow('sets','組數','組',[1])}
+    <div class="wpe-row">
+      <div class="wpe-lb">重量<i class="wp-hint">可留空＝徒手</i></div>
+      <div class="wpe-unit">${WP_UNITS.map(x=>`<button type="button" class="wpe-u${u===x?' on':''}" onclick="tleUnit('${x}')">${x}</button>`).join('')}
+        <button type="button" class="wpe-clear" onclick="tleSet('weight','');tleRender();">徒手</button></div>
+    </div>
+    ${stepRow('weight','',u,WP_STEPS[u])}
+    <div class="form-row" style="margin-top:6px;"><label>備註（可留空）</label>
+      <input type="text" id="tle-note" value="${escH(E.note)}" autocomplete="off" oninput="tleSet('note',this.value)"></div>
+    ${E.varied?'<ul class="mk-pts"><li>原本每組數字不同；改了數字會變成統一的次數 × 組數 × 重量</li></ul>':''}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="tleSave()">儲存</button></div>`);
+}
+function tleSet(f,v){ const E=window._tle; if(!E) return; E[f]=(f==='name'||f==='note')?v:(String(v).trim()===''?'':Number(v)); }
+function tleUnit(u){ const E=window._tle; if(!E) return; E.unit=wpUnitOf(u); tleRender(); }
+/* 與 wpStep 同一套：小數四捨五入到一位（0.5 級距才不會跑出 40.300000000000004）；
+   重量減到 0 以下＝徒手（留空）；次數／組數最少 1 */
+function tleStep(f,d){
+  const E=window._tle; if(!E) return;
+  const cur=(E[f]===''||E[f]==null)?0:Number(E[f]);
+  let v=Math.round((cur+d)*10)/10;
+  if(f==='weight'){ if(v<=0) v=''; }
+  else { if(v<1) v=1; v=Math.round(v); }
+  E[f]=v;
+  const el=document.getElementById('tle-'+f); if(el) el.value=(v===''?'':v);
+}
+async function tleSave(){ return onceAct('tlesave', _tleSave); }
+async function _tleSave(){
+  const E=window._tle; if(!E) return;
+  const name=String(E.name||'').trim();
+  if(!name){ showToast('請填動作名稱'); return; }
+  let l=null; try{ l=await dbGet('training_logs',E.id); }catch(_){}
+  if(!l){ closeModal(); showToast('找不到這筆紀錄'); return; }
+  const num=x=>(x===''||x==null||!isFinite(Number(x)))?null:Number(x);
+  const w=num(E.weight);
+  Object.assign(l,{ exercise_name:name, note:String(E.note||'').trim()||null });
+  if(JSON.stringify([E.reps,E.sets,E.weight,E.unit])!==E.orig){
+    Object.assign(l,{ reps:num(E.reps), sets:num(E.sets),
+      weight:(w!=null&&w>0)?w:null, weight_unit:(w!=null&&w>0)?wpUnitOf(E.unit):null,
+      sets_detail:null });   /* 數字改過就以這一組為準（見上方 ⚠） */
+  }
+  try{ await dbPut('training_logs',l); closeModal(); showToast('已修改'); renderTrainingLogSheet(); }
+  catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
 }
 
 // ── 新增動作（兩頁式）──
