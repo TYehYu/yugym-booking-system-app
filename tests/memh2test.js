@@ -165,7 +165,7 @@ const tap=cut('async function _memh2Tap(id){','/* ［＋］預約自主訓練');
 t('★★ 改成簡易課卡：標題卡＋會員卡＋圓形按鈕（不再是一般彈窗）',
   /<div class="mtp-card mtp-head"/.test(tap)
   && /<div class="mtp-mcard">/.test(tap)
-  && /<div class="mtp-orbs">\$\{ckBtn\}\$\{rsBtn\}\$\{cxBtn\}<\/div>/.test(tap));
+  && /<div class="mtp-orbs">\$\{ckBtn\}\$\{rsBtn\}\$\{vnBtn\}\$\{cxBtn\}<\/div>/.test(tap));   // 0911 多一顆「場地」（vnBtn）
 /* 2026-08-24 使用者問「團體課的簽到圓形鈕也正常嗎」——守住兩件事：
    ① 團課走 memGrpCheckin（逐名額的 RPC），不是單人課那支 memCheckin；
    ② 關窗要用 memTaskClose（新的 UI 是 #mem-task-pop，不是 modal）——

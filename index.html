@@ -9054,6 +9054,8 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
 .ash-eirow.ash-ei-co .ash-eilb{color:var(--ash-co-fg,var(--text));}
 .ash-eirow.ash-ei-co .ash-eisub{color:var(--ash-co-fg,var(--t3));opacity:.75;}
 .ash-eisub{font-size:11.5px;color:var(--t3);line-height:1.6;}
+/* 「調整課程」那張：副標靠右（2026-09-11 使用者：「每一個按鈕的副標 都靠右」） */
+.ash-eirow.ash-ei-r .ash-eisub{align-self:stretch;text-align:right;}
 .ash-ei-danger .ash-eilb{color:var(--danger,#b5372e);}
 /* ⚠ margin-bottom 要跟 .ash-eirow 一樣（2026-08-21 使用者回報「視窗內容連在一起了」）——
    說明塊原本沒有下間距，後面接著一列（教練請假那張：說明＋「刪除預約」）時
@@ -12810,8 +12812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.1614';
-const APP_VERSION_LABEL = 'v260911.1614';
+const APP_VERSION = '260911.1627';
+const APP_VERSION_LABEL = 'v260911.1627';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -27395,7 +27397,9 @@ async function ashSeatAct(bid, act, seatKey){
 async function ashEditAsk(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   const A=window._ashActs||{};
-  const row=(onclick,label,sub,cls)=>`<button class="ash-eirow${cls?' '+cls:''}" onclick="${onclick}">
+  /* 副標一律靠右（2026-09-11 使用者附截圖：「每一個按鈕的副標 都靠右」）—— 只掛這張「調整課程」（.ash-ei-r），
+     其他共用 .ash-eirow 的清單不動 */
+  const row=(onclick,label,sub,cls)=>`<button class="ash-eirow ash-ei-r${cls?' '+cls:''}" onclick="${onclick}">
     <span class="ash-eilb">${label}</span>${sub?`<span class="ash-eisub">${sub}</span>`:''}</button>`;
   let rows='';
   const _leave=bkIsCoachLeave(b);
@@ -27422,8 +27426,10 @@ async function ashEditAsk(id){
      自主訓練走 bkOrbitVenue（只有它有跑步機台數）；其他課別走 openVenueChange
      （列出所有啟用場地、逐一跑衝突檢查，該時段滿的會標出來）。
      openVenueChange 的返回鈕是 openBookingDetail，先立旗標讓它回到課卡。 */
-  if(!_leave && A.venue==='self') rows+=row(`closeModal();bkOrbitVenue('${b.id}')`,'更換場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
-  else if(!_leave && A.venue==='any') rows+=row(`ashBackArm('${b.id}');closeModal();openVenueChange('${b.id}','ash')`,'更換場地',(typeof venueDisplay==='function')?(venueDisplay(b)||''):'');
+  /* 副標寫「能做什麼」（2026-09-11 使用者：「更改場地·更改跑步機人數」），跟這張清單其他列同一個寫法；
+     目前場地已經在上面的標題卡。只有自主訓練（bkOrbitVenue）能選跑步機人數，其他課別只寫「更改場地」。 */
+  if(!_leave && A.venue==='self') rows+=row(`closeModal();bkOrbitVenue('${b.id}')`,'更換場地','更改場地・更改跑步機人數');
+  else if(!_leave && A.venue==='any') rows+=row(`ashBackArm('${b.id}');closeModal();openVenueChange('${b.id}','ash')`,'更換場地','更改場地');
   /* 團課不給「指派代課教練」（2026-09-08 使用者：「團課就不用代課教練了　更換授課教練」）——
      團課是「一個班」，不是「某位會員的課」：這一堂換誰上，就是這個班換誰帶。
      代課只會讓課表與薪資出現兩個教練，而 0908 新做的〔更換授課教練〕已經涵蓋這件事
@@ -33461,7 +33467,8 @@ async function bkCardPop(el, b, btns, acts){
        行事曆的卡有 mergeSiblingUnits 幫忙算好 _units，但簡易課卡是用
        dbGet 單筆撈的，身上沒有 _units，所以標題卡只寫「跑步機」看不出是兩台。 */
     const _units = (typeof bkUnitCount==='function') ? await bkUnitCount(b) : 1;
-    const _unitTxt = _units>1 ? ` ×${_units}` : '';
+    /* 跑步機 1 人也寫（2026-09-11 使用者：「1人也要顯示」）；其他場地維持只有多台才標 */
+    const _unitTxt = String(b.venue_unit||'').startsWith('treadmill') ? `・${_units} 人` : (_units>1 ? ` ×${_units}` : '');
     const _vTxt = (_v ? '・'+_v+_unitTxt : '') + _seatTxt;
     const _coachTxt = coachNm ? `<span class="ash-coachtxt">${coachNm}</span>` : '';
     /* 名單：團課逐名額一張卡，單人課一張；體驗／場租沒有會員記錄，只顯示名字不給圓鈕 */
@@ -57633,8 +57640,11 @@ async function _memh2Tap(id){
   const dur=Number(b.duration)||60;
   const cm=((window._memCalData||{}).coachMap)||{};
   const _cid=b.substitute_coach_id||b.coach_id;
-  const who=b.coach_id?((cm[_cid]||'教練')+(b.substitute_coach_id?'（代課）':''))
+  let who=b.coach_id?((cm[_cid]||'教練')+(b.substitute_coach_id?'（代課）':''))
     :(bkIsSelf(b)?(selfVenueLabel(b)||'自主訓練'):'');
+  /* 跑步機 1 人也要寫（2026-09-11 會員來問「看不到跑步機預約是幾個人」）——
+     單筆 dbGet 身上沒有 _units，bkUnitCount 自己去數同行的第 2 台 */
+  if(!b.coach_id && bkIsSelf(b) && selfVenueLabel(b)==='跑步機') who+=`・${await bkUnitCount(b)} 人`;
   const _vTxt=(typeof venueDisplay==='function')?(venueDisplay(b)||''):'';
   /* 能做什麼與卡面的提示共用同一份（memh2Acts）——分兩份寫一定會漂：
      卡上寫「點我改時間」、點進來卻沒有那顆鈕，比沒有提示更糟。 */
@@ -57655,6 +57665,10 @@ async function _memh2Tap(id){
        場租；還有「這一堂是不是我自己的」（家人共享票時 member_id 才是帳號本人）。 */
   let rsBtn=(selfServe && _isSelfBk && b.member_id===SESSION.id)
     ? orb('go','🕒','更改時間', _demo?_dtap:`memTaskClose();msbStart('${b.id}')`) : '';
+  /* 場地（2026-09-11 使用者：「點自主訓練課卡的時候要能夠修改場地　包含跑步機使用的數量」）——
+     條件跟「更改時間」一模一樣（自己的、還沒開始的自主訓練），寫入走 fn_member_self_venue（見 memVenueOpen） */
+  let vnBtn=(selfServe && _isSelfBk && b.member_id===SESSION.id)
+    ? orb('go','📍','場地', _demo?_dtap:`memTaskClose();memVenueOpen('${b.id}')`) : '';
   /* 取消鈕只給「本來就能自己取消」的課（團課／自主訓練）。
      2026-08-24 使用者指示：「教練課就不要顯示取消的圓形按鈕了」——
      同日稍早依 0821 定案補過一顆「洽櫃檯」，但那顆對會員沒有用處：他按了也只是看到
@@ -57690,7 +57704,7 @@ async function _memh2Tap(id){
   if(_A.locked){
     /* 待付款：不給任何圓鈕，改成一段說明（看得到、動不了） */
     ckBtn=orb('off',MEMH2_LOCKIC,(typeof bkIsInstHold==='function'&&bkIsInstHold(b))?'待繳費':'待簽約',null);
-    rsBtn=''; cxBtn='';
+    rsBtn=''; cxBtn=''; vnBtn='';
   }
   const ruleNote=_A.locked
     ? `<div class="mtp-rule">這一堂<b>還沒完成付款</b>，時段已經先幫你留著。<br>
@@ -57730,7 +57744,7 @@ async function _memh2Tap(id){
         ${_tkLine?`<div class="mtp-msub">${escH(_tkLine)}</div>`:''}
         ${_dots}
       </div>
-      <div class="mtp-orbs">${ckBtn}${rsBtn}${cxBtn}</div>
+      <div class="mtp-orbs">${ckBtn}${rsBtn}${vnBtn}${cxBtn}</div>
       ${_tlBlock}
       ${ruleNote}
     </div>`;
@@ -58697,8 +58711,10 @@ async function memTaskTap(id,el){
   /* 有代課就顯示代課那位；團課再補人數（2026-08-08 使用者指示） */
   const _cmT=((window._memCalData||{}).coachMap)||{};
   const _whoIdT=b.substitute_coach_id||b.coach_id;
-  const who=b.coach_id?((_cmT[_whoIdT]||'教練')+(b.substitute_coach_id?'（代課）':''))
+  let who=b.coach_id?((_cmT[_whoIdT]||'教練')+(b.substitute_coach_id?'（代課）':''))
     :(bkIsSelf(b)?(selfVenueLabel(b)||'自主訓練'):'');
+  /* 跑步機 1 人也要寫（2026-09-11，同 _memh2Tap） */
+  if(!b.coach_id && bkIsSelf(b) && selfVenueLabel(b)==='跑步機') who+=`・${await bkUnitCount(b)} 人`;
   const whoHeads=isGrp?`${grpLiveHeads(b)}/${Math.max(1,Number(b.max_heads)||5)} 人${grpLeaveSeats(b)?`（${grpLeaveSeats(b)} 請假）`:''}`:'';
   const orb=(cls,ic,label,onclick,title)=>onclick
     ? `<button class="mtp-orb ${cls}" onclick="${onclick}" title="${title||label}"><span class="mtp-orb-ic">${ic}</span><span class="mtp-orb-l">${label}</span></button>`
@@ -58717,6 +58733,9 @@ async function memTaskTap(id,el){
      改期比「取消再重約」好：時段直接換過去，不會在中間被別人搶走。 */
   let rsBtn=(!done && !past && bkIsSelf(b) && b.member_id===SESSION.id)
     ? orb('go','🕒','改時間',`memTaskClose();msbStart('${b.id}')`) : '';
+  /* 場地（2026-09-11，同 _memh2Tap 那一顆）：條件跟「改時間」一樣 */
+  let vnBtn=(!done && !past && bkIsSelf(b) && b.member_id===SESSION.id)
+    ? orb('go','📍','場地',`memTaskClose();memVenueOpen('${b.id}')`) : '';
   /* ══ 簡易課卡（2026-08-24 使用者指示：「會員端我的預約看到的課卡，點出來要出現
      簡易課卡［標題卡］＋［會員卡］，圓形按鈕［簽到］」）══════════════════
      形狀對齊員工端：上面課程抬頭、下面自己那張會員卡、最後圓鈕。
@@ -58740,7 +58759,7 @@ async function memTaskTap(id,el){
   if(_demo){
     const _dtap=`memTaskClose();showToast('這是預覽用的範例課卡，真的會員在這裡按下去才會真的動作',5000)`;
     ckBtn=orb('go','✓','簽到',_dtap);
-    rsBtn='';
+    rsBtn=''; vnBtn='';
     cxBtn=orb('cx','✕','取消',_dtap);
   }
   const _mBadge=done
@@ -58772,7 +58791,7 @@ async function memTaskTap(id,el){
         ${_tkLine?`<div class="mtp-msub">${escH(_tkLine)}</div>`:''}
         ${_dots}
       </div>
-      <div class="mtp-orbs">${ckBtn}${rsBtn}${cxBtn}</div>
+      <div class="mtp-orbs">${ckBtn}${rsBtn}${vnBtn}${cxBtn}</div>
     </div>`;
   document.body.appendChild(host);
   /* 桌機：貼在被點的課卡下方（超出畫面自動夾回）；手機：畫面正中間（CSS 處理） */
@@ -59365,6 +59384,68 @@ async function msbSwapDo(bid,t){
   closeModal(); showToast('已更換時段');
   msbExit(true); navTo('mem_bookings');
  }catch(e){ showToast('更換失敗：'+(e&&e.message?e.message:e)); }
+}
+/* ══ 會員自己改自主訓練的場地／跑步機人數（2026-09-11 使用者：「點自主訓練課卡的時候要能夠修改場地
+   包含跑步機使用的數量」；三選一挑「會員自己在手機改」）══
+   ⚠ 寫入走 fn_member_self_venue（會員沒有 bookings 的寫入權，同 fn_member_self_book／reschedule）：
+     DB 端驗本人、還沒開始、那一台沒被別人佔；同行第 2 台先收再照人數重開（不扣點，同預約時）。
+     SQL 在 docs/migrations/20260911_member_self_venue.sql。
+   ⚠ 場地規則（容量、團課前清場…）跟預約同一支 validateBooking＋venue_pref，與櫃檯的 openVenueChange 同一個探法。
+   ⚠ 選 2 人但另一台剛好被約走 → DB 只開得出 1 台，照實講（同櫃檯 setSelfVenue 的做法），不另寫一份會員端算空位。 */
+const MEM_VENUES=['multi','group','treadmill'];
+async function memVenueOpen(bid){
+  const b=await dbGet('bookings',bid); if(!b){ showToast('找不到預約'); return; }
+  const curVid=venueEffId(b);
+  const curUnits=await bkUnitCount(b);
+  const vs=(getVenues()||[]).filter(v=>v && v.active!==false && MEM_VENUES.indexOf(v.id)>=0);
+  const opts=await Promise.all(vs.map(async v=>{
+    if(v.id===curVid) return {vid:v.id, name:v.name, ok:true, cur:true, unit:b.venue_unit||null};
+    const probe={...b, venue_pref:v.id};
+    const err=await validateBooking(probe,b.date,b.start_time,b.duration||60,{skipBizHours:true});
+    return {vid:v.id, name:v.name, ok:!err, cur:false, unit:probe.venue_unit||null};
+  }));
+  window._mvn={bid, opts, cur:curVid, pick:curVid, units:(curVid==='treadmill'?curUnits:1), curUnits};
+  memVenueRender();
+}
+function memVenueRender(){
+  const S=window._mvn; if(!S) return;
+  const opt=o=>(!o.ok && !o.cur)
+    ? `<button type="button" class="btn btn-ghost" disabled style="width:100%;opacity:.4;">${escH(o.name)}（該時段已滿）</button>`
+    : `<button type="button" class="btn ${S.pick===o.vid?'btn-green':'btn-ghost'}" style="width:100%;" onclick="memVenuePick('${o.vid}')">${escH(o.name)}${o.cur?'（目前）':''}</button>`;
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">更改場地</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">${S.opts.map(opt).join('')}</div>
+    ${S.pick==='treadmill'?`<div class="wpe-row" style="margin-top:14px;"><div class="wpe-lb">跑步機人數</div>
+        <div class="wpe-unit">${[1,2].map(n=>`<button type="button" class="wpe-u${S.units===n?' on':''}" onclick="memVenueUnits(${n})">${n} 人</button>`).join('')}</div></div>
+      <ul class="mk-pts"><li>第 2 人不扣點</li><li>另一台被約走時只會保留 1 人</li></ul>`:''}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="memVenueSave()">確認</button></div>`);
+}
+function memVenuePick(vid){
+  const S=window._mvn; if(!S) return;
+  S.pick=vid; S.units=(vid==='treadmill')?(S.cur==='treadmill'?S.curUnits:1):1;
+  memVenueRender();
+}
+function memVenueUnits(n){ const S=window._mvn; if(!S) return; S.units=Math.max(1,Math.min(2,Number(n)||1)); memVenueRender(); }
+async function memVenueSave(){ const S=window._mvn; if(!S) return; return onceAct('mvn:'+S.bid, _memVenueSave); }
+async function _memVenueSave(){
+  const S=window._mvn; if(!S) return;
+  const o=S.opts.find(x=>x.vid===S.pick); if(!o) return;
+  if(o.cur && (S.pick!=='treadmill' || S.units===S.curUnits)){ closeModal(); return; }   // 什麼都沒改
+  if(!o.ok){ showToast('該時段已滿'); return; }
+  const want=(S.pick==='treadmill')?S.units:1;
+  const {data,error}=await sb.rpc('fn_member_self_venue',{p_booking_id:S.bid, p_venue_unit:o.unit||S.pick, p_units:want});
+  dbCacheClear(['bookings']); try{ occCacheClear(); }catch(_){}
+  if(error){ showToast('連線失敗：'+(error.message||error)); return; }
+  if(!data||!data.ok){
+    const M={'BOOKING.TOO_LATE':'已經開始的預約不能改場地','BOOKING.RESOURCE_BUSY':'這個場地剛被約走了，請重新選一次',
+      'BOOKING.NOT_RESCHEDULABLE':'這筆預約不能自己改場地，請洽櫃檯','AUTH.FORBIDDEN':'這不是你的預約'};
+    showToast(M[data&&data.error_code]||('更改失敗：'+((data&&data.error_code)||'未知錯誤')), 5000); return;
+  }
+  window._mvn=null; closeModal();
+  const got=Math.max(1,Number(data.units)||1);
+  showToast('已改到「'+o.name+'」'+(S.pick==='treadmill'
+    ? `・${got} 人`+(want>got?'（另一台被約走了，只保留 1 人）':'') : ''), 5000);
+  navTo(CUR_PAGE);
 }
 /* 會員自主訓練預約一律走 RPC（2026-07-26 資安總檢）：RLS 沒有（也不該有）會員的
    資料表寫入權——直接 dbPut 會被擋。fn_member_self_book 在 DB 端以 security definer

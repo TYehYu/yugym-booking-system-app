@@ -192,8 +192,8 @@ ok('★ editable 本身維持 false（它還管代課與團課人數，那兩件
    /editable:false,/.test(src)
    && /它還管著代課與團課人數，那兩件事沒有要一起開/.test(src));
 ok('★ 兩種課別各走各的入口（自主訓練有跑步機台數 → bkOrbitVenue）',
-   /if\(!_leave && A\.venue==='self'\) rows\+=row\(`closeModal\(\);bkOrbitVenue\('\$\{b\.id\}'\)`,'更換場地'/.test(src)
-   && /else if\(!_leave && A\.venue==='any'\) rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openVenueChange\('\$\{b\.id\}','ash'\)`,'更換場地'/.test(src));
+   /if\(!_leave && A\.venue==='self'\) rows\+=row\(`closeModal\(\);bkOrbitVenue\('\$\{b\.id\}'\)`,'更換場地','更改場地・更改跑步機人數'\);/.test(src)
+   && /else if\(!_leave && A\.venue==='any'\) rows\+=row\(`ashBackArm\('\$\{b\.id\}'\);closeModal\(\);openVenueChange\('\$\{b\.id\}','ash'\)`,'更換場地','更改場地'\);/.test(src));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

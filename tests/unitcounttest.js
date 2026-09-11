@@ -46,9 +46,10 @@ console.log('bkUnitCount：實際去數同行的 sibling');
   eq('　　沒有場地 → 1', await fn({id:'Z', venue_unit:null}), 1);
 
   console.log('\n接回兩個出問題的地方');
-  ok('★ 標題卡標出台數（兩台以上才標，一台不囉嗦）',
+  /* 0911 使用者：「1人也要顯示」—— 跑步機一律寫「・N 人」，其他場地維持兩台以上才標 */
+  ok('★ 標題卡標出台數（跑步機 1 人也寫；其他場地兩台以上才標）',
      /const _units = \(typeof bkUnitCount==='function'\) \? await bkUnitCount\(b\) : 1;/.test(src)
-     && /const _unitTxt = _units>1 \? ` ×\$\{_units\}` : '';/.test(src)
+     && /const _unitTxt = String\(b\.venue_unit\|\|''\)\.startsWith\('treadmill'\) \? `・\$\{_units\} 人` : \(_units>1 \? ` ×\$\{_units\}` : ''\);/.test(src)
      && /const _vTxt = \(_v \? '・'\+_v\+_unitTxt : ''\) \+ _seatTxt;/.test(src));
   ok('★ 場地編輯視窗改用實際台數（原本讀 b._units 永遠是 1）',
      /units:await bkUnitCount\(b\)/.test(src)

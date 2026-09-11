@@ -31,7 +31,7 @@ ok('★★ 課卡彈窗：多一顆「改時間」圓鈕',
 ok('★ 範例卡把三顆鈕換掉，不動資料',
    /if\(_demo\)\{/.test(src)
    && /這是預覽用的範例課卡，真的會員在這裡按下去才會真的動作/.test(src));
-ok('★ 圓鈕排在簽到與取消之間', /<div class="mtp-orbs">\$\{ckBtn\}\$\{rsBtn\}\$\{cxBtn\}<\/div>/.test(src));
+ok('★ 圓鈕排在簽到與取消之間', /<div class="mtp-orbs">\$\{ckBtn\}\$\{rsBtn\}\$\{vnBtn\}\$\{cxBtn\}<\/div>/.test(src));   // 0911 旁邊多一顆「場地」
 ok('★ 已上完／已過時的課不出現改時間（與取消同一條）',
    /let rsBtn=\(!done && !past && bkIsSelf\(b\)/.test(src));
 ok('★ 只有自己的自主訓練才給改（別人的、教練課的都不出現）',

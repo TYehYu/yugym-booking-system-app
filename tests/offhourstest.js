@@ -113,7 +113,8 @@ ok('★★ 時間沒動的驗證不重跑營業時間 —— 否則既有界外�
    /async function validateBooking\(bk,date,time,duration,opts\)\{/.test(src)
    && /if\(!\(opts&&opts\.skipBizHours\)\)\{/.test(src)
    && /const verr=await validateBooking\(vbk, b\.date, b\.start_time, Number\(b\.duration\)\|\|60, \{skipBizHours:true\}\);/.test(src)
-   && (src.match(/validateBooking\(probe,b\.date,b\.start_time,b\.duration\|\|60,\{skipBizHours:true\}\)/g)||[]).length===2
+   /* 0911 多一處：會員自己改場地（memVenueOpen）——時間沒動，同理 */
+   && (src.match(/validateBooking\(probe,b\.date,b\.start_time,b\.duration\|\|60,\{skipBizHours:true\}\)/g)||[]).length===3
    && /let verr=await validateBooking\(vbk,nd,nt,ndur,\{skipBizHours:!_timeMoved\}\);/.test(src));
 ok('　　不能靠比對 bk.date 來推斷「有沒有在改時間」（連續預約傳進來就已經帶著目標日期）',
    /不能靠比對 bk\.date\/bk\.start_time 來推斷/.test(src));
