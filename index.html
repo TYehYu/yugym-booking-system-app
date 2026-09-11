@@ -3753,6 +3753,24 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 /* 訓練課表抽屜自己的面板。⚠ 不能叫 .tl-panel —— 那是值班時間軸那張卡，
    它的 padding／背景／overflow-x 會整組蓋過來（同名、且排在後面）。 */
 .tls-panel{padding-bottom:16px;}
+/* 課表抽屜：置中＋凍結區（2026-09-11 使用者：「視窗置中　視窗上方的會員資料凍結列」）——
+   手機直式原本從頂欄下緣往下貼（.ms-panel top:0），改成在剩下的空間裡置中、四角圓。
+   ⚠ 只管手機直式與 600 以下：橫向平板與桌機本來就由 .ms-panel 的 media 置中（寬 440），不動它。
+   ⚠ 會員資料＋三大項在 .tl-scroll 外面（凍結），.tl-scroll 吃掉剩下的高度才捲。 */
+@media (max-width:600px),(max-width:1024px) and (orientation:portrait){
+  #tl-sheet .ms-panel.tls-panel{left:12px;right:12px;top:50%;bottom:auto;transform:translateY(-50%);
+    border-radius:16px;max-height:calc(100% - 24px);padding-top:0;}
+}
+.tls-panel .tl-scroll{flex:1 1 auto;min-height:0;max-height:none;}
+/* 三大項紀錄：兩列（第一列項目、第二列 組×次×重量），固定三格；整塊點下去＝全部紀錄 */
+.tlh-prb{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 18px 10px;flex:none;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;}
+.tlh-prb-c{background:var(--card2);border-radius:10px;padding:8px 6px;text-align:center;min-width:0;transition:background .12s ease;}
+.tlh-prb:active .tlh-prb-c{background:#e3efe9;}
+.tlh-prb-k{font-size:11.5px;color:var(--t2);font-weight:700;}
+.tlh-prb-v{font-size:14px;font-weight:700;color:var(--text);font-family:var(--num);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tlh-prb-none{color:var(--t3);font-weight:400;}
 .tl-scroll{overflow-y:auto;max-height:64vh;padding:0 18px 8px;-webkit-overflow-scrolling:touch;}
 /* 第一區：會員資訊 */
 .tlh-member{background:#e3efe9;border-radius:12px;padding:14px 16px;margin-bottom:6px;}
@@ -12792,8 +12810,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.1514';
-const APP_VERSION_LABEL = 'v260911.1514';
+const APP_VERSION = '260911.1601';
+const APP_VERSION_LABEL = 'v260911.1601';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -59952,16 +59970,23 @@ async function renderTrainingLogSheet(){
      部位也不再問（新增動作改成自己打名稱，body_part 多半是空的）。
      三大項「紀錄」留著（0909 使用者定的規則），而且只有真的有紀錄才畫。 */
   void sessionCount; void lastTrainDate; void topEx; void partLine;
-  const overview=!prTop.length ? '' : `<div class="tlh-ov">
-      ${prTop.length?`<div class="tlh-pr">
-        <div class="tlh-pr-head"><span class="tlh-ov-k" style="margin:0;">紀錄</span>
-          <button class="tlh-hq-btn" onclick="tlOpenPrHistory()">全部紀錄 ›</button></div>
-        ${prTop.map(r=>`<div class="tlh-pr-row">
-            <span class="tlh-pr-ex">${escH(r.lift)}</span>
-            <span class="tlh-pr-v">${tlSetLine(r.best)}</span>
-            <span class="tlh-pr-d">${tlPrDate(r.best)}</span>
-          </div>`).join('')}
-      </div>`:''}
+  /* 三大項紀錄（2026-09-11 使用者：「硬舉 深蹲 臥推 歷史紀錄放在會員資料跟訓練動作中間
+     用兩列表示紀錄　第一列深蹲 第二列3x10x60」）——
+     固定三格、放在凍結區（會員資料正下方，捲動時也看得到）；還沒有紀錄的那格寫「—」。
+     ⚠ 第二列照使用者寫的「組×次×重量」（3×10×60）；今日紀錄那邊維持「次 × 組 × 重量」。
+     ⚠ 原本那顆「全部紀錄 ›」併進來：整塊點下去就是全部紀錄。 */
+  const _prOf=Object.fromEntries(prTop.map(r=>[r.lift,r]));
+  const _prVal=r=>{
+    if(!r) return '<span class="tlh-prb-none">—</span>';
+    const n=Object.assign({}, tlLogNums(r.best)||{});
+    if((n.sets===''||n.sets==null) && r.best && r.best.sets_detail){
+      try{ const a=JSON.parse(r.best.sets_detail); if(a&&a.length) n.sets=a.length; }catch(_){} }
+    const nums=[n.sets,n.reps].filter(x=>x!==''&&x!=null);
+    const w=wpWeightHtml(n.weight,n.unit);
+    return (nums.join('×')||'')+(w?(nums.length?'×':'')+w:'') || '—';
+  };
+  const overview=`<div class="tlh-prb" onclick="tlOpenPrHistory()" title="全部紀錄">
+      ${TL_PR_LIFTS.map(k=>`<div class="tlh-prb-c"><div class="tlh-prb-k">${k}</div><div class="tlh-prb-v">${_prVal(_prOf[k])}</div></div>`).join('')}
     </div>`;
 
   // ── P1-2 歷史課表（最近三次，可一鍵套用）──
@@ -59991,8 +60016,9 @@ async function renderTrainingLogSheet(){
           <div style="font-size:11.5px;color:var(--t3);margin-top:2px;">${b.date.replace(/-/g,'/')} ${b.start_time}${window._tlTkText?'　·　'+window._tlTkText:''}</div></div>
         <button class="ms-close" onclick="closeTrainingLog()">✕</button>
       </div>
+      ${/* 凍結區到這裡為止（會員資料＋三大項），下面的 .tl-scroll 才捲動（2026-09-11） */''}
+      ${overview}
       <div class="tl-scroll">
-        ${overview}
         <div class="tlh-label">今日訓練紀錄${logs.length?'<span class="tlh-hint">點一下可修改</span>':''}</div>
         ${sec2}
         ${/* 「套用方案」跟著 wpEnabled()：0911 起能開課的教練與管理員看得到。

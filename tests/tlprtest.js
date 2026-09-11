@@ -108,8 +108,9 @@ console.log('\n④ 三大項歷史紀錄');
 }
 ok('★★★ 不另開資料表 —— 紀錄由 training_logs 推導，所以「自動更新」不用寫同步',
    /沒有另開一張表：紀錄本來就是 training_logs 算得出來的/.test(src));
+/* 2026-09-11：三大項改成固定三格放在凍結區，「全部紀錄 ›」那顆鈕併進整塊（點哪裡都開全部紀錄） */
 ok('★★★ 總覽露出三大項＋「全部紀錄」入口',
-   /<button class="tlh-hq-btn" onclick="tlOpenPrHistory\(\)">全部紀錄 ›<\/button>/.test(src));
+   /<div class="tlh-prb" onclick="tlOpenPrHistory\(\)" title="全部紀錄">/.test(src));
 ok('★★★ 視窗列出每一項的完整歷程，最新那列標起來',
    /function tlOpenPrHistory\(\)\{/.test(src)
    && /r\.chain\.slice\(\)\.reverse\(\)\.map\(\(l,i\)=>`<div class="prh-row\$\{i\?'':' on'\}">/.test(src)
@@ -124,7 +125,8 @@ ok('★★★ 次數與組數本來就在紀錄列上（tlSetLine 就是「12 �
    /\(l\.reps!=null\?l\.reps\+' 次':null\),\(l\.sets\?l\.sets\+' 組':null\)/.test(src));
 ok('★★ 會員自己命名的動作名要跳脫（tlSetLine 回 HTML，動作名不在裡面）',
    /<span class="prh-x">\$\{escH\(l\.exercise_name\|\|''\)\}<\/span>/.test(src)
-   && /<span class="tlh-pr-ex">\$\{escH\(r\.lift\)\}<\/span>/.test(src));
+   /* 2026-09-11：抽屜那三格的名稱直接來自固定清單 TL_PR_LIFTS（不是使用者輸入），不需跳脫 */
+   && /\$\{TL_PR_LIFTS\.map\(k=>`<div class="tlh-prb-c"><div class="tlh-prb-k">\$\{k\}<\/div>/.test(src));
 ok('★★ 這張視窗是從抽屜裡開的 —— 靠 body:has 那條規則才蓋得住抽屜',
    /body:has\(#tl-sheet\) \.modal-bg/.test(src));
 

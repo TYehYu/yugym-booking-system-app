@@ -55,7 +55,8 @@ ok('★★★ 標題就是會員，副標是時間與第幾堂（會員色塊卡
 ok('★★ 「訓練堂數／最近訓練」兩格與常練／部位退場；三大項紀錄有才畫',
    !/<div class="tlh-ov-l">訓練堂數<\/div>/.test(S) && !/<div class="tlh-ov-l">最近訓練<\/div>/.test(S)
    && !/<span class="tlh-ov-k">常練<\/span>/.test(S) && !/<span class="tlh-ov-k">部位<\/span>/.test(S)
-   && /const overview=!prTop\.length \? '' :/.test(S));
+   /* 同日稍晚：三大項改成固定三格、放進凍結區（見 tests/tlprbar0911test.js） */
+   && /const overview=`<div class="tlh-prb" onclick="tlOpenPrHistory\(\)"/.test(S));
 ok('★★ 沒有歷史課表 → 整區（含標題與動作查詢）不畫', /\$\{hist\.length\?`<div class="tlh-label"/.test(S) && !/尚無歷史課表/.test(S));
 ok('★ 空狀態一行', /'<div class="tls-empty">還沒有紀錄<\/div>'/.test(S));
 
