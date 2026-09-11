@@ -41,6 +41,11 @@
 //   名額鍵與前端 seatKeys 同一套：member_ids 的順序，同一人第 2 個名額起是「id#2」「id#3」。
 //   ⚠ 同一人佔好幾個名額時，**全部請假才跳過** —— 還有一個名額要來，就照樣提醒。
 //   ⚠ 同時把 v24 線上多出來、版控漏掉的 debug 回傳 head 補回來（版控＝線上）。
+// v26（2026-09-11 使用者：「吳宜玲有遇到一次教練請假　所以不該是今天收款名單」）：
+//   「第幾堂／開通區最後一堂」的序列要排除教練請假已退堂的那一格
+//   （coach_leave=true 且已簽到／已結課 —— 與前端 bkLeaveRefunded 同一條）。
+//   那一堂到場簽到當下就退回了，票上沒有少一堂；留著會把收款提醒提早一堂發給教練
+//   （吳宜玲 8/21 請假 → 第 4 格落在 9/11，實際開通區最後一堂是 9/18）。
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -225,11 +230,13 @@ Deno.serve(async (req) => {
       const { data: tks, error: tkErr } = await admin.from('member_tickets')
         .select('id,sessions_total,sessions_remaining,unlocked_sessions,installment,status').in('id', [...ptTkIds])
       if (tkErr) detectErrors.push('tks: ' + tkErr.message)
-      const { data: tbks, error: tbErr } = await admin.from('bookings').select('id,ticket_id,date,start_time,status')
+      const { data: tbks, error: tbErr } = await admin.from('bookings').select('id,ticket_id,date,start_time,status,coach_leave')
         .in('ticket_id', [...ptTkIds]).neq('status', 'cancelled')
       if (tbErr) detectErrors.push('tbks: ' + tbErr.message)
       const by: Record<string, any[]> = {}
-      for (const x of (tbks || [])) (by[x.ticket_id] = by[x.ticket_id] || []).push(x)
+      /* v26：教練請假已退堂的那一格不佔票（與前端 bkLeaveRefunded 同一條） */
+      const leaveRefunded = (x: any) => x.coach_leave === true && (x.status === 'checked_in' || x.status === 'completed')
+      for (const x of (tbks || [])) { if (leaveRefunded(x)) continue; (by[x.ticket_id] = by[x.ticket_id] || []).push(x) }
       for (const k of Object.keys(by)) {
         by[k].sort((a, b) => ((a.date || '') + (a.start_time || '')).localeCompare((b.date || '') + (b.start_time || '')))
       }

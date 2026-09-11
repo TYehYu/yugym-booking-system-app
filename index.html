@@ -12784,8 +12784,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.1421';
-const APP_VERSION_LABEL = 'v260911.1421';
+const APP_VERSION = '260911.1426';
+const APP_VERSION_LABEL = 'v260911.1426';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21796,7 +21796,12 @@ PAGES.g_dashboard=async function(){
   /* 效能（2026-07-29）：原本每張票券都 filter 一次整個 bookings（2,400 票 × 上萬筆預約），
      首頁一進來就要跑兩千多萬次比對。改成先做一次分組索引，之後兩個迴圈共用。 */
   const _bkByTk={};
-  (bookings||[]).forEach(b=>{ if(b.ticket_id && b.status!=='cancelled'){ (_bkByTk[b.ticket_id]=_bkByTk[b.ticket_id]||[]).push(b); } });
+  /* ⚠ 教練請假退堂的那一格要排除（2026-09-11 使用者：「吳宜玲有遇到一次教練請假　所以不該是今天收款名單」）——
+     computeLastBkMarks 0830 就排除了（見那裡的註解），但這份首頁自己的索引是抄出來的、沒跟著改：
+     吳宜玲分期票開通 4 堂，8/21 那堂教練請假、到場簽到當下已退堂，卻被數成第 1 格，
+     第 4 格就落在 9/11（今天）→ 今日收款名單多了她；真正的開通區最後一堂是 9/18。
+     判準用同一支 bkLeaveRefunded，三處（這裡、computeLastBkMarks、LINE 推播 line-push-daily）一致。 */
+  (bookings||[]).forEach(b=>{ if(b.ticket_id && b.status!=='cancelled' && !bkLeaveRefunded(b)){ (_bkByTk[b.ticket_id]=_bkByTk[b.ticket_id]||[]).push(b); } });
   Object.values(_bkByTk).forEach(a=>a.sort((x,y)=>((x.date||'')+(x.start_time||'')).localeCompare((y.date||'')+(y.start_time||''))));
   try{
     (mtickets||[]).forEach(tk=>{
@@ -35104,7 +35109,9 @@ async function openBookingDetail(id){
   let _nearEnd=false;
   if(tk){
     const allBk=await dbGetAll('bookings').catch(()=>[]);
-    const tkBks=allBk.filter(x=>x.ticket_id===tk.id && x.status!=='cancelled')
+    /* ⚠ 教練請假已退堂的那一格不佔票（2026-09-11 吳宜玲案例，見首頁今日收款提醒的註解）——
+       這份也是抄出來的，沒排除就會在 9/11 的明細上掛「分期繳費」，真正的開通區最後一堂是 9/18。 */
+    const tkBks=allBk.filter(x=>x.ticket_id===tk.id && x.status!=='cancelled' && !bkLeaveRefunded(x))
       .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
     const _doneForRenew=tkBks.filter(x=>x.status==='checked_in'||x.status==='completed').length;
     _nearEnd=(Number(tk.sessions_total)||0)>0 && ((Number(tk.sessions_total)||0)-_doneForRenew)<=2;
