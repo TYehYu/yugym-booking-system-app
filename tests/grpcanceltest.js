@@ -16,14 +16,16 @@ console.log('修法');
 /* 2026-08-26：條件多了 _neverDeducted（綁了票但那張票上沒扣過，例如超約的課）——
    團課那一半（_grpNetDeduct）沒有變。 */
 ok('★ 團課改看扣課帳本，不再只看 bookings.ticket_id',
-   /const noTicket = \(!b\.ticket_id && _grpNetDeduct<=0\) \|\| _neverDeducted;/.test(src));
+   /const noTicket = \(\(!b\.ticket_id && _grpNetDeduct<=0\) \|\| _neverDeducted\) && !_netUnknown;/.test(src));
+/* 2026-09-11：改問資料庫（bkNetDeductDB 的算法同樣是 deduct − refund）；問不到不准判成沒扣過 */
 ok('★ 淨扣課＝deduct 筆數 − refund 筆數（重覆取消不會重覆問）',
-   /_grpNetDeduct=_lg\.filter\(l=>l\.action==='deduct'\)\.length - _lg\.filter\(l=>l\.action==='refund'\)\.length;/.test(src));
+   /const _n=await bkNetDeductDB\(b\.id, null\);\s*\n\s*if\(_n===null\) _netUnknown=true; else _grpNetDeduct=_n;/.test(src));
 ok('★ 只有團課才去翻帳本（其他課種維持原本的快速判斷）', /if\(bkIsGroup\(b\)\)\{/.test(src));
 ok('★ 退票說明講實際筆數，不再一律寫「1 堂」（2026-08-06 起包在綠色色標裡）',
    /tkChip\('back', `加回 \$\{_grpNetDeduct>0\?`\$\{_grpNetDeduct\} 堂（本堂共扣了 \$\{_grpNetDeduct\} 堂）`:'1 堂'\}`\)/.test(src));
-ok('　　整段包 try（讀不到帳本不能讓取消視窗開不起來）',
-   /try\{\s*\n\s*const _lg=\(await dbGetAll\('ticket_logs'\)\)/.test(src));
+/* 2026-09-11：bkNetDeductDB 自己吞錯回 null（不會丟例外），null 走 _netUnknown＝讓人選退回／扣課 */
+ok('　　讀不到帳本不能讓取消視窗開不起來（null → 讓人選，不判成沒扣過）',
+   /⚠ 問不到（null）＝ _netUnknown：不准走「沒扣過」那張/.test(src));
 ok('　　成因寫在程式裡', /每一堂團課都被判成「沒有綁票券」/.test(src));
 
 console.log('\n退票流程本身沒被動到（它一直是對的，問題在走不到）');

@@ -210,9 +210,12 @@ console.log('\n取消沒綁票券的預約');
     // 2026-07-30：取消視窗會問「這堂發過幾點贈點」→ 補上依賴（測試情境無贈點，回空字串）
     /* 2026-08-06：取消視窗改用票券結果色標（綠＝退回、紅＝扣除）→ 沙箱補上 tkChip */
     const fn=new Function('dbGet','showToast','showModal','hoursUntilStart','isDeskLike',
-      'cancelRewardWarnHtml','dbGetAll','tkChip','bkIsGroup',
+      'cancelRewardWarnHtml','dbGetAll','tkChip','bkIsGroup','bkNetDeductDB',
       src.slice(i,j)+'\nreturn confirmCancelBooking;')(async()=>b,()=>{},h=>{html=h;},()=>(hrs==null?72:hrs),()=>true,
-      async()=>'', async()=>(logs||[]), (k,t)=>`[${k}]${t||''}`, ()=>false);
+      async()=>'', async()=>(logs||[]), (k,t)=>`[${k}]${t||''}`, ()=>false,
+      /* 2026-09-11：扣過沒有改問資料庫（bkNetDeductDB）→ 沙箱照同一份帳本算 */
+      async(bid,tid)=>{ const lg=(logs||[]).filter(l=>l.booking_id===bid&&(!tid||l.ticket_id===tid));
+        return lg.filter(l=>l.action==='deduct').length-lg.filter(l=>l.action==='refund').length; });
     return fn('X').then(()=>html); };
   return Promise.all([
     run({id:'X',date:'2026-08-03',start_time:'16:00',category:'私人教練',pending_contract:true,ticket_id:null,trial_name:'劉雪珠'}),
@@ -232,7 +235,7 @@ console.log('\n取消沒綁票券的預約');
     ok('　　只留一顆「確定取消」', (pend.match(/<button/g)||[]).length===2 && /確定取消/.test(pend));
     /* 2026-08-06：綠／紅專指票券退回／扣除 —— 不動票券的確定鍵改中性色 */
     ok('★ 不動票券的確定鍵不用紅色（btn-dark）',
-       /btn btn-dark" onclick="askSeriesCancel\('X','none'\)/.test(pend) && !/btn-danger/.test(pend));
+       /btn btn-dark" onclick="askSeriesCancel\('X','plain'\)/.test(pend) && !/btn-danger/.test(pend));
     ok('★ 場租：說明不涉及票券', /場地租借不涉及票券/.test(rent) && !/退回票券/.test(rent));
     ok('★ 未綁票券的匯入預約：說明不影響堂數', /沒有綁票券/.test(noTk) && !/退回票券/.test(noTk));
     /* 2026-09-11 收斂：「扣課不退」只在 24 小時內列 —— 那顆鈕本來就只在 24 小時內出現（0813 防線），
@@ -253,7 +256,7 @@ console.log('\n取消沒綁票券的預約');
     ok('★★ 綁了票、但帳本沒扣過（超約）→ 也不問退不退，並講明不會退回堂數',
        !/退回票券/.test(over) && /這一堂<b>沒有扣過票<\/b>/.test(over) && /<b>不會退回任何堂數<\/b>/.test(over));
     ok('　　判斷條件：沒綁票券，或綁了票但那張票上沒淨扣過這一堂',
-       /const noTicket = \(!b\.ticket_id && _grpNetDeduct<=0\) \|\| _neverDeducted;/.test(src));
+       /const noTicket = \(\(!b\.ticket_id && _grpNetDeduct<=0\) \|\| _neverDeducted\) && !_netUnknown;/.test(src));   // 0911 問不到帳本不算沒扣過
     ok('　　原因寫在程式裡', /刪除「待簽約卡位」時跳出「是否退回票券」——那種卡位本來就沒有票券/.test(src));
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail?1:0);

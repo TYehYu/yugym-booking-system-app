@@ -68,7 +68,7 @@ console.log('\n③ 追問視窗要講清楚取消掉的是什麼');
      /只取消這堂/.test(f) && /連同後面 \$\{later\.length\} 堂/.test(f));
   /* 2026-08-06：綠／紅專指票券退回／扣除，不動票券的確定鍵改中性色（btn-dark） */
   ok('　　待簽約卡位的取消確認也走 askSeriesCancel',
-     /<button class="btn btn-dark" onclick="askSeriesCancel\('\$\{id\}','none'\)">確定取消<\/button>/.test(src));
+     /<button class="btn btn-dark" onclick="askSeriesCancel\('\$\{id\}','plain'\)">確定取消<\/button>/.test(src));   // 0911 none→plain（有扣過就退，不再是扣課不退）
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');

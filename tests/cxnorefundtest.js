@@ -22,11 +22,11 @@ const CB=src.slice(src.indexOf('async function cancelBooking(id, refundMode, opt
 
 console.log('畫面：不再問「退回票券／扣課不退」');
 ok('★★ 綁了票但帳本沒扣過 → 也算 noTicket（原本只看 !b.ticket_id）',
-   /const _neverDeducted = !!b\.ticket_id && !bkIsGroup\(b\) && _selfNetDeduct<=0;/.test(CFM)
-   && /const noTicket = \(!b\.ticket_id && _grpNetDeduct<=0\) \|\| _neverDeducted;/.test(CFM));
-ok('★★ 淨扣課用帳本算（deduct − refund，只看這一筆預約在這張票上的）',
-   /_lg\.filter\(l=>l\.action==='deduct'\)\.length - _lg\.filter\(l=>l\.action==='refund'\)\.length;/.test(CFM)
-   && /l\.booking_id===b\.id && l\.ticket_id===b\.ticket_id/.test(CFM));
+   /const _neverDeducted = !!b\.ticket_id && !bkIsGroup\(b\) && !_netUnknown && _selfNetDeduct<=0;/.test(CFM)
+   && /const noTicket = \(\(!b\.ticket_id && _grpNetDeduct<=0\) \|\| _neverDeducted\) && !_netUnknown;/.test(CFM));
+/* 2026-09-11 江旻季 9/10：畫面這一層也改問資料庫（bkNetDeductDB），不再 filter 整表快取 */
+ok('★★ 淨扣課用帳本算（deduct − refund，只看這一筆預約在這張票上的）——直接問資料庫',
+   /const _n=await bkNetDeductDB\(b\.id, b\.ticket_id\);/.test(CFM));
 ok('★★ 文案講清楚「不會退回任何堂數」，不要讓人以為會多一張票',
    /* 2026-09-11 收斂成短句；「不會退回任何堂數」保留粗體（那是要讓人看到的後果） */
    /這一堂<b>沒有扣過票<\/b>，<b>不會退回任何堂數<\/b>/.test(CFM));

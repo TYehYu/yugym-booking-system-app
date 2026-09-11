@@ -12812,8 +12812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.2004';
-const APP_VERSION_LABEL = 'v260911.2004';
+const APP_VERSION = '260911.2008';
+const APP_VERSION_LABEL = 'v260911.2008';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -35724,7 +35724,7 @@ async function __askSeriesCancel(id, mode){
     <div class="sc-list">${list}</div>
     <div style="font-size:12px;color:var(--t2);margin:12px 0 4px;line-height:1.8;">
       ${_noTk?'這些課都沒有綁票券（待簽約卡位／分期待繳費保留），取消只會釋出時段與場地，不會動到任何堂數。'
-             :`取消方式沿用上一步的選擇（${mode==='force'?'退回票券':mode==='none'?'扣課不退':'依 24 小時規則'}）。`}</div>
+             :`取消方式沿用上一步的選擇（${mode==='force'?'退回票券':mode==='none'?'扣課不退':mode==='plain'?'有扣過的一律退回票券':'依 24 小時規則'}）。`}</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">返回</button>
       <button class="btn btn-ghost" onclick="runSeriesCancel(false)">只取消這堂</button>
@@ -36838,12 +36838,16 @@ async function confirmCancelBooking(id){
         <button class="btn ${_hasTk?'btn-green':'btn-dark'}" onclick="askSeriesCancel('${id}','${_hasTk?'force':'none'}')">確定取消${_hasTk?'・退回票券':''}</button></div>`);
     return;
   }
-  let _grpNetDeduct=0;
+  /* 扣過沒有：直接問資料庫（2026-09-11 江旻季 9/10 案例，使用者：「要修」）——
+     原本讀 dbGetAll('ticket_logs') 整表快取：少一列、或讀失敗（catch 後維持 0），
+     就判成「沒扣過」→ 跳「票券不變・這一堂沒有扣過票」＋一顆「確定取消」；
+     但真正執行的 cancelBooking 是問資料庫的（bkNetDeductDB，0907 王秋香案例改的），
+     查到有扣 → 當成扣課不退、還記成「櫃檯選擇」。櫃檯按的是「不扣課」，客人卻被吃掉一堂。
+     ⚠ 問不到（null）＝ _netUnknown：不准走「沒扣過」那張，一律讓人選退回／扣課（安全的一邊）。 */
+  let _grpNetDeduct=0, _netUnknown=false;
   if(bkIsGroup(b)){
-    try{
-      const _lg=(await dbGetAll('ticket_logs')).filter(l=>l && l.booking_id===b.id);
-      _grpNetDeduct=_lg.filter(l=>l.action==='deduct').length - _lg.filter(l=>l.action==='refund').length;
-    }catch(_){}
+    const _n=await bkNetDeductDB(b.id, null);
+    if(_n===null) _netUnknown=true; else _grpNetDeduct=_n;
   }
   /* 綁了票、但那張票上從來沒扣過這一堂（2026-08-26 使用者回報，林韋綺 10/04）——
      超約的課就是這種：ticket_id 有值（排課當下綁上去了），帳本卻沒有 deduct。
@@ -36855,14 +36859,13 @@ async function confirmCancelBooking(id){
        也算沒扣過 —— 匯入時的餘額已經反映過那些課，再退一次就是溢退。 */
   let _selfNetDeduct=0, _selfHasLg=false;
   if(b.ticket_id && !bkIsGroup(b)){
-    try{
-      const _lg=(await dbGetAll('ticket_logs')).filter(l=>l && l.booking_id===b.id && l.ticket_id===b.ticket_id);
-      _selfHasLg=_lg.length>0;
-      _selfNetDeduct=_lg.filter(l=>l.action==='deduct').length - _lg.filter(l=>l.action==='refund').length;
-    }catch(_){}
+    const _n=await bkNetDeductDB(b.id, b.ticket_id);
+    if(_n===null) _netUnknown=true; else _selfNetDeduct=_n;
+    /* 有沒有帳本只用來挑說法（「已經退回過了」／「沒有扣過票」），不決定堂數，讀快取就好 */
+    try{ _selfHasLg=(await dbGetAll('ticket_logs')).some(l=>l && l.booking_id===b.id && l.ticket_id===b.ticket_id); }catch(_){}
   }
-  const _neverDeducted = !!b.ticket_id && !bkIsGroup(b) && _selfNetDeduct<=0;
-  const noTicket = (!b.ticket_id && _grpNetDeduct<=0) || _neverDeducted;
+  const _neverDeducted = !!b.ticket_id && !bkIsGroup(b) && !_netUnknown && _selfNetDeduct<=0;
+  const noTicket = ((!b.ticket_id && _grpNetDeduct<=0) || _neverDeducted) && !_netUnknown;
   if(noTicket && !isTrial){
     const why = _neverDeducted
       ? (_selfHasLg
@@ -36881,7 +36884,10 @@ async function confirmCancelBooking(id){
       </ul>
       ${/* 票券不受影響 → 按鈕不用紅（紅色在這套語彙裡專指「票券會被扣除」） */''}
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
-        <button class="btn btn-dark" onclick="askSeriesCancel('${id}','none')">確定取消</button></div>`);
+        ${/* 'plain'（2026-09-11）：原本送 'none'＝扣課不退 —— 畫面說「票券不變」，程式卻是「不退」，
+             萬一執行時資料庫查到其實有扣，就把客人一堂吃掉、還記成「櫃檯選擇」（江旻季 9/10）。
+             'plain' 在 cancelBooking 裡：有扣過就退、沒扣過就只取消，永遠不標扣課不退。 */''}
+        <button class="btn btn-dark" onclick="askSeriesCancel('${id}','plain')">確定取消</button></div>`);
     return;
   }
 
@@ -39184,7 +39190,7 @@ async function cancelBooking(id, refundMode, opts){
   // RPC 成功即 return；任何未成功（連線錯誤或 ok:false）→ 回退舊邏輯（RPC 為單一交易，失敗不留痕，回退安全）。
   const cancelRpcEligible = window.FEATURE_FLAGS && FEATURE_FLAGS.cancelBookingRpc && CLOUD
       && b.ticket_id && b.category!=='小班肌力'
-      && refundMode!=='force' && refundMode!=='none';
+      && refundMode!=='force' && refundMode!=='none' && refundMode!=='plain';   // plain 不能進 RPC：RPC 會套 24 小時規則扣課
   if(cancelRpcEligible){
     /* 連線抖動防半套（2026-08-19 黃柏桓案例：RPC 失敗→備援「先取消再退課」，
        退課那步又斷線 → 取消成功、退課消失）——
@@ -39243,6 +39249,7 @@ async function cancelBooking(id, refundMode, opts){
   if(refundMode==='force') doRefund=true;
   else if(refundMode==='none') doRefund=false;
   else doRefund = true;             // auto：目前政策一律退課（2026-07-28 使用者定案，暫停 24h 扣課）
+                                    // plain（2026-09-11）：視窗說「沒扣過」的確定取消 —— 有扣過就退，永遠不標扣課不退
   /* 只寫一次（2026-08-25 使用者回報「剛剛從我手機端取消這堂課，但為什麼顯示沒有紀錄」）——
      原本這裡連寫兩次：先 status＋cancelled_at，再補 refund_waived。第二次送的是
      **記憶體裡那份 b**（取消前讀的，沒有 cancelled_by），於是 DB 觸發器剛填好的
@@ -39285,6 +39292,8 @@ async function cancelBooking(id, refundMode, opts){
         refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
       }else if(_net>0){
         refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
+      }else if(refundMode==='plain'){
+        refundedCount=0;   // 視窗已經講過「這一堂沒有扣過票」，不用再寫警示帳、再跳一次
       }else{
         /* 「查得到、而且真的沒扣過」才走這裡。以前這裡只有 console.warn ——
            客人少一堂，畫面上完全沒有痕跡。改成留一筆警示帳＋當面說一聲，
@@ -39343,7 +39352,7 @@ async function cancelBooking(id, refundMode, opts){
   const _mkt=_mkRv?`，並收回未使用的補課券 ${_mkRv} 張`:'';
   if(refundedCount>0) showToast(`已取消預約，退回 ${refundedCount} 堂票券`+_mkt+_rt);
   else if(refundMissed) showToast('已取消預約，但找不到可退的票券 —— 請到會員票券手動確認堂數'+_mkt+_rt);
-  else if(within24 && refundMode!=='none' && refundMode!=='force') showToast('已取消預約（24 小時內，扣課不退）'+_mkt+_rt);
+  else if(within24 && refundMode!=='none' && refundMode!=='force' && refundMode!=='plain') showToast('已取消預約（24 小時內，扣課不退）'+_mkt+_rt);
   else showToast('已取消預約'+_mkt+_rt);
   navTo(CUR_PAGE);
 }
