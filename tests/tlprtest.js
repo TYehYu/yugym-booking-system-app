@@ -11,15 +11,18 @@ const eq=(n,a,b)=>ok(n,JSON.stringify(a)===JSON.stringify(b),{得到:a,預期:b}
 const g=(a,b)=>{const i=src.indexOf(a); if(i<0) throw new Error('找不到 '+a); return src.slice(i, src.indexOf(b,i)+b.length);};
 
 console.log('① 教練只進得去自己的課');
-ok('★★★ 教練（非主管）不是這堂的教練就擋下',
-   /if\(SESSION\.role==='coach' && !SESSION\.is_manager && !bkIsCoach\(b,SESSION\.id\)\)\{\s*\n\s*showToast\('這不是你的課，看不到課表'\); return;/.test(src));
-ok('★★★ 前面先過一次角色白名單（櫃檯／會員連開都開不了）',
-   /if\(!tlCanLog\(\)\)\{ showToast\('只有教練與管理員能開課表'\); return; \}/.test(src));
-ok('★★★ 代課算自己的課 —— bkIsCoach 兩欄都認',
-   /return String\(b\.coach_id\|\|''\)===String\(cid\) \|\| String\(b\.substitute_coach_id\|\|''\)===String\(cid\);/.test(src));
+ok('★★★ 不是這堂的負責教練就擋下',
+   /if\(!tlOwnsBk\(b\)\)\{ showToast\('這不是你的課，看不到課表'\); return; \}/.test(src));
+ok('★★★ 前面先過一次白名單（櫃檯／會員／不開課的人連開都開不了）',
+   /if\(!tlCanLog\(\)\)\{ showToast\('只有能開課的教練能開課表'\); return; \}/.test(src));
+ok('★★★ 代課算自己的課 —— tlOwnsBk 看實際上課的人（bkCoachId 代課優先）',
+   /function bkCoachId\(b\)\{ return \(b && \(b\.substitute_coach_id \|\| b\.coach_id\)\) \|\| null; \}/.test(src)
+   && /function tlOwnsBk\(b\)\{ return !!\(SESSION && b && String\(bkCoachId\(b\)\|\|''\)===String\(SESSION\.id\)\); \}/.test(src));
 ok('★★★ 前端這道只是為了給訊息，真正的把關寫明在資料庫',
    /真正的把關在資料庫的\s*\n\s*training_logs \/ tlog_select_scoped/.test(src));
-ok('★★ 主管不受限（他要看全店）', /!SESSION\.is_manager && !bkIsCoach/.test(src));
+/* 2026-09-11 使用者：「該課卡的負責教練　才可以看到課表的按鈕」—— 0909 的主管例外收掉 */
+ok('★★★ 主管與管理員也只進得去自己帶的課（不再一律放行）',
+   !/!SESSION\.is_manager && !bkIsCoach\(b,SESSION\.id\)\)\{\s*\n\s*showToast\('這不是你的課/.test(src));
 
 console.log('\n② 第幾堂');
 ok('★★★ 不再直接印 sessions_remaining/total',

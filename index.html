@@ -12769,8 +12769,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260909.2251';
-const APP_VERSION_LABEL = 'v260909.2251';
+const APP_VERSION = '260911.0908';
+const APP_VERSION_LABEL = 'v260911.0908';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -33199,13 +33199,15 @@ async function expandBkCard(el, id){
      教練在手機首頁點到今天上課的會員，就能直接開訓練課表，不必再繞去別的入口。
      ⚠ 自主訓練不畫：那是會員自己來、教練不在場，沒有訓練要記。
      ⚠ 行事曆情境（_calCtx）不畫：那邊的圓鈕只做「預約與調整」（0819 定案）。
-     ⚠ 別人的課也不畫（own）—— 訓練紀錄是掛在帶課教練身上的。
-     ⚠ 只有教練與管理員畫（2026-09-09 使用者：「課表的圓形按鈕不要出現在櫃檯桌機的課卡」）——
+     ⚠ 別人的課不畫（tlOwnsBk）—— 訓練紀錄是掛在帶課教練身上的。
+       2026-09-11 使用者：「該課卡的負責教練　才可以看到課表的按鈕」——
+       原本看 own，而 own 對管理員與店長恆為 true，他們在別的教練的課卡上也看得到這顆鈕。
+     ⚠ 只有能開課的人畫（tlCanLog；2026-09-09 使用者：「課表的圓形按鈕不要出現在櫃檯桌機的課卡」）——
        櫃檯不帶課，沒有訓練要記；整個角色都不畫，不只桌機。
        ⚠ 同日二修：原本寫成「排除 front_desk」，使用者回報櫃檯桌機還是看得到。
          改成正面白名單「教練或管理員才畫」—— 排除法只要有一種角色狀態沒被列到就會漏，
          白名單漏了只會少畫一顆鈕，不會把不該看的人放進來。 */
-  if(!_calCtx && own && !bkIsSelf(b) && tlCanLog())
+  if(!_calCtx && tlOwnsBk(b) && !bkIsSelf(b) && tlCanLog())
     btns += evoBtn('evo-t2','',`collapseBkCard();openTrainingLog('${id}')`,'plan','課表');
   if(!_calCtx && (staff||coachCk) && b.no_show===true) btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkUndoNoShow('${id}')`,'noshow','取消未到課');
   else if(!_calCtx && (staff||coachCk) && b.status==='coach_leave') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkCoachLeaveNoShow('${id}')`,'noshow','未到課');
@@ -54927,8 +54929,9 @@ async function coachHomeV2(){
        上課現場最常做的就是記訓練，原本要點開課卡再點一次訓練紀錄，兩層。
        ⚠ 自主訓練不畫：那是會員自己來、教練不在場，沒有訓練要記。
        ⚠ 已經記過的用實心綠、還沒記的用外框 —— 不然看不出哪幾堂還沒記。 */
-    /* ⚠ 同上，用 tlCanLog 白名單（這一頁管理員手機首頁也會走到，櫃檯不該看到） */
-    const _tlOk=!bkIsSelf(b) && tlCanLog();
+    /* ⚠ 同上，用 tlCanLog 白名單（這一頁管理員手機首頁也會走到，櫃檯不該看到）。
+       tlOwnsBk：dayBk 已經只剩自己帶的課，這裡再過一次，是讓兩處課卡與 openTrainingLog 共用同一條判準。 */
+    const _tlOk=!bkIsSelf(b) && tlCanLog() && tlOwnsBk(b);
     const _tlHas=(window._tlogBids||new Set()).has(b.id);
     return `<div class="admh2-card${done?' admh-done':''}" style="--admh-c:${_col};" onclick="admhCardTap(event,'${b.id}')">
       <div class="a2-stampcol">${_st?`<span class="admh-stamp ${_st[1]}">${_st[0]}</span>`:''}</div>
@@ -59757,24 +59760,32 @@ const TL_TOOLS=['啞鈴','壺鈴','槓鈴','SSB槓鈴','四角槓','史密斯','
 window._tlState=null; // 新增動作流程暫存
 
 // 入口：點訓練紀錄 → 開紀錄清單 sheet
-/* 誰能記訓練課表：帶課的人（教練、管理員；主管也是 role==='coach'）。
-   ⚠ 櫃檯與會員一律不行 —— 櫃檯不帶課，會員只在自己的「訓練紀錄」頁看歷史。
+/* 誰能記訓練課表：能開課的人（2026-09-11 使用者：「只要能開課的教練　都要可以使用」）——
+   直接走 isTeachable（員工名單排課用的同一條線）：教練或管理員，而且員工設定的「開課」沒關。
+   原本只看職級，不開課的管理員／店長也算進來。
+   ⚠ 櫃檯與會員一律不行 —— isCoachable 不收 front_desk（就算他的開課開關是開的），
+      會員只在自己的「訓練紀錄」頁看歷史。
    ⚠ 白名單而不是排除法：見 expandBkCard 那顆圓鈕的說明。 */
-function tlCanLog(){ return !!(SESSION && (SESSION.role==='coach' || SESSION.role==='admin')); }
+function tlCanLog(){ return !!(SESSION && isTeachable(SESSION)); }
+/* 這堂是不是我帶的（2026-09-11 使用者：「該課卡的負責教練　才可以看到課表的按鈕」）——
+   負責教練＝這堂實際由誰上：有代課就是代課教練（bkCoachId，與教練首頁、薪資同一個口徑）。
+   ⚠ 管理員與店長不例外：課卡的 own 對他們恆為 true（那是給改期／取消用的），
+      拿 own 來畫這顆鈕，別的教練的課卡也會出現課表鈕。
+   ⚠ 被代課的原教練看不到：那堂他不在場，訓練由代課的人記。 */
+function tlOwnsBk(b){ return !!(SESSION && b && String(bkCoachId(b)||'')===String(SESSION.id)); }
 
 async function openTrainingLog(bookingId){
   closeModal();
   const b=await dbGet('bookings',bookingId);
   if(!b){showToast('找不到課程');return;}
   /* 教練只能看跟設定「自己課」的課表（2026-09-09 使用者指示）。
-     代課也算自己的課 —— bkIsCoach 認 coach_id 與 substitute_coach_id 兩欄，
+     代課也算自己的課 —— tlOwnsBk 看的是實際上課的人，
      所以代課的人進得來，也就看得到這位會員的歷史課表（正是使用者要的例外）。
+     2026-09-11：管理員與店長也照這條（原本兩者一律放行），跟課卡上的課表鈕同一個判準。
      ⚠ 這一道只是為了給得出「不是你的課」這句話：真正的把關在資料庫的
         training_logs / tlog_select_scoped，繞過前端也拿不到別人的紀錄。 */
-  if(!tlCanLog()){ showToast('只有教練與管理員能開課表'); return; }
-  if(SESSION.role==='coach' && !SESSION.is_manager && !bkIsCoach(b,SESSION.id)){
-    showToast('這不是你的課，看不到課表'); return;
-  }
+  if(!tlCanLog()){ showToast('只有能開課的教練能開課表'); return; }
+  if(!tlOwnsBk(b)){ showToast('這不是你的課，看不到課表'); return; }
   window._tlBooking=b;
   // 會員名 + 票券剩餘 + 是否友善課
   let memName='會員', tkText='', isFriendly=false;
