@@ -3864,11 +3864,6 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .ae-chosen-meta{display:block;font-size:11.5px;color:#3f7a66;margin-top:3px;}
 .ae-chosen-edit{background:none;border:none;color:var(--green);font-size:11.5px;font-weight:700;text-decoration:underline;cursor:pointer;padding:0 0 0 4px;}
 .ae-tp{margin:8px 18px 0;}
-/* 訓練方向七大按鈕 */
-.ae-dir-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-.ae-dir{background:var(--card2);border:1px solid var(--bd);border-radius:13px;padding:20px 10px;font-size:15px;font-weight:700;color:var(--text);cursor:pointer;font-family:inherit;}
-.ae-dir:active{background:#e3efe9;border-color:var(--green);color:var(--green);}
-.ae-dir-grid .ae-dir:first-child{grid-column:1/-1;}
 /* 最近訓練 */
 .ae-last{background:var(--card2);border-radius:11px;padding:11px 13px;}
 .ae-last-date{font-size:11px;color:var(--t3);margin-bottom:6px;font-family:var(--num);}
@@ -4516,6 +4511,15 @@ body.wp-dragging-on .wp-item{cursor:grabbing;}
 .wp-u-kg{background:rgba(31,111,84,.12);color:var(--green,#1f6f54);}
 .wp-u-lb{background:rgba(35,80,138,.13);color:#23508a;}
 .wp-item-n{font-size:11.5px;color:var(--t3);margin-top:3px;line-height:1.6;}
+/* 套用方案的挑選卡（2026-09-11 使用者：「看起來太平面　沒有可以互動的感覺」）——
+   白底浮起來＋右邊一顆綠色「套用 ›」＋按下去縮一下。只掛在挑選視窗（.tlpp-card），
+   訓練方案編輯器的 .wp-item 不受影響（兩個 class 的權重蓋得過單一的 .wp-item）。 */
+.wp-item.tlpp-card{background:#fff;border-color:transparent;box-shadow:0 2px 10px rgba(30,25,15,.09);
+  padding-right:84px;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease,background .12s ease;
+  -webkit-tap-highlight-color:transparent;}
+.wp-item.tlpp-card:active{transform:scale(.98);background:#eef5f1;box-shadow:0 1px 4px rgba(30,25,15,.08);}
+.tlpp-go{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:var(--green,#1f6f54);color:#fff;
+  border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;line-height:1;pointer-events:none;}
 .wp-item-x{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:22px;height:22px;
   border:none;background:transparent;color:var(--t3);font-size:13px;cursor:pointer;line-height:1;}
 .wp-item-x:hover{color:var(--danger,#b5372e);}
@@ -12784,8 +12788,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.1426';
-const APP_VERSION_LABEL = 'v260911.1426';
+const APP_VERSION = '260911.1505';
+const APP_VERSION_LABEL = 'v260911.1505';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -59824,16 +59828,6 @@ async function submitQuickSelfBook(){
    單一任務 Bottom Sheet：課程卡 → 訓練紀錄 → 新增動作（一層一層）
    ════════════════════════════════════════════════════════════ */
 const TL_BODY_PARTS=['功能性','上肢','下肢'];
-// 訓練方向（七個入口）→ 對應現有 body_part（先簡化對應）
-const TL_DIRECTIONS=[
-  {key:'功能性',     part:'功能性'},
-  {key:'上肢垂直推', part:'上肢'},
-  {key:'上肢垂直拉', part:'上肢'},
-  {key:'上肢水平推', part:'上肢'},
-  {key:'上肢水平拉', part:'上肢'},
-  {key:'下肢深蹲',   part:'下肢'},
-  {key:'下肢硬舉',   part:'下肢'},
-];
 const TL_POSTURES=['站姿','跪姿','坐姿','趴姿','躺姿'];
 const TL_TOOLS=['啞鈴','壺鈴','槓鈴','SSB槓鈴','四角槓','史密斯','Cable','TRX','彈力帶','徒手'];
 window._tlState=null; // 新增動作流程暫存
@@ -59910,6 +59904,7 @@ async function renderTrainingLogSheet(){
   const b=window._tlBooking;
   let host=document.getElementById('tl-sheet');
   if(!host){ host=document.createElement('div'); host.id='tl-sheet'; document.body.appendChild(host); }
+  tlSheetTop(host);   /* 手機讓出頂欄（見 tlSheetTop） */
   document.querySelectorAll('.qb-fab').forEach(x=>x.style.display='none');
 
   let allLogs=[];
@@ -59919,20 +59914,10 @@ async function renderTrainingLogSheet(){
   // 動作明細顯示（次數 x 重量；多組）
   const setLine=tlSetLine;
   const fmt=b.format?b.format.toUpperCase():'';
-  const isFriendly=window._tlIsFriendly;
-  let typeM={'私人教練':'私人教練課','自主訓練':'自主訓練','體驗':'體驗課','小班肌力':'團體課'}[b.category]||'課程';
-  if(isFriendly && b.category==='私人教練') typeM='友善教練課';
-  const memColorCls = isFriendly?'tlh-member-friendly':'tlh-member-'+typeOfCat(b.category);
-
-  // 第一區：會員資訊
-  const sec1=`<div class="tlh-member ${memColorCls}">
-    <div class="tlh-mem-name">${window._tlMemName}${fmt?`<span class="tlh-fmt">${fmt}</span>`:''}</div>
-    <div class="tlh-mem-sub">${typeM}${window._tlTkText?'　·　'+window._tlTkText:''}</div>
-  </div>`;
 
   // 第二區：今日訓練紀錄
   const sec2 = logs.length===0
-    ? '<div class="tls-empty">尚無訓練紀錄<br><span style="font-size:11.5px;color:var(--t3);">點下方「新增動作」開始記錄</span></div>'
+    ? '<div class="tls-empty">還沒有紀錄</div>'
     : `<div class="tlh-logs">${logs.map(l=>`<div class="tlh-log">
         <div class="tlh-log-main"><span class="tlh-ex">${l.exercise_name}</span><span class="tlh-sets">${setLine(l)}</span></div>
         <div class="tlh-log-sub">${[l.posture,l.tool].filter(Boolean).join(' / ')}${l.note?'　·　'+l.note.replace(/\[[^\]]*\]/g,'').trim():''}</div>
@@ -59957,13 +59942,12 @@ async function renderTrainingLogSheet(){
   /* 個人紀錄：只在總覽露出最近破的四個，其餘進「全部紀錄」視窗 */
   window._tlPr=tlPrByExercise(memAllLogs);
   const prTop=window._tlPr;
-  const overview=`<div class="tlh-ov">
-      <div class="tlh-ov-row">
-        <div class="tlh-ov-cell"><div class="tlh-ov-n">${sessionCount}</div><div class="tlh-ov-l">訓練堂數</div></div>
-        <div class="tlh-ov-cell"><div class="tlh-ov-n" style="font-size:15px;">${lastTrainDate}</div><div class="tlh-ov-l">最近訓練</div></div>
-      </div>
-      ${topEx.length?`<div class="tlh-ov-sub"><span class="tlh-ov-k">常練</span>${topEx.join('、')}</div>`:''}
-      ${partLine?`<div class="tlh-ov-sub"><span class="tlh-ov-k">部位</span>${partLine}</div>`:''}
+  /* 2026-09-11 簡化（使用者：「這個頁面可以簡化　留下必要的資訊跟按鈕」）——
+     「訓練堂數／最近訓練」兩格、「常練」「部位」兩行拿掉：上課當下用不到，歷史課表就看得到最近幾次；
+     部位也不再問（新增動作改成自己打名稱，body_part 多半是空的）。
+     三大項「紀錄」留著（0909 使用者定的規則），而且只有真的有紀錄才畫。 */
+  void sessionCount; void lastTrainDate; void topEx; void partLine;
+  const overview=!prTop.length ? '' : `<div class="tlh-ov">
       ${prTop.length?`<div class="tlh-pr">
         <div class="tlh-pr-head"><span class="tlh-ov-k" style="margin:0;">紀錄</span>
           <button class="tlh-hq-btn" onclick="tlOpenPrHistory()">全部紀錄 ›</button></div>
@@ -59983,7 +59967,7 @@ async function renderTrainingLogSheet(){
     .sort((a,b)=>b.t.localeCompare(a.t)).slice(0,3);
   window._tlHistCache=Object.fromEntries(hist.map(h=>[h.bid,h.ls])); // 供套用取用
   const sec4 = hist.length===0
-    ? '<div style="font-size:12px;color:var(--t3);padding:10px 0;">尚無歷史課表</div>'
+    ? ''   /* 沒有歷史就整區不畫（2026-09-11 簡化），標題列一起收，見下方 */
     : hist.map(h=>{
         const dt=(h.t||'').slice(0,10).replace(/-/g,'/');
         const exs=[...new Set(h.ls.map(l=>l.exercise_name))].join('、');
@@ -59995,13 +59979,14 @@ async function renderTrainingLogSheet(){
 
   host.innerHTML=`<div class="ms-backdrop" onclick="closeTrainingLog()"></div>
     <div class="ms-panel tls-panel">
+      ${/* 2026-09-11 簡化：會員卡併進標題列 —— 標題就是會員，副標是時間與第幾堂。
+           原本「訓練課表」標題＋一張會員色塊卡，課程名稱還寫了兩次（私人教練課・私人教練課 1V1）。 */''}
       <div class="ms-head">
-        <div><div class="ms-title">訓練課表</div>
-          <div style="font-size:11.5px;color:var(--t3);margin-top:2px;">${b.date.replace(/-/g,'/')} ${b.start_time}</div></div>
+        <div><div class="ms-title">${escH(window._tlMemName||'會員')}${fmt?`<span class="tlh-fmt">${fmt}</span>`:''}</div>
+          <div style="font-size:11.5px;color:var(--t3);margin-top:2px;">${b.date.replace(/-/g,'/')} ${b.start_time}${window._tlTkText?'　·　'+window._tlTkText:''}</div></div>
         <button class="ms-close" onclick="closeTrainingLog()">✕</button>
       </div>
       <div class="tl-scroll">
-        ${sec1}
         ${overview}
         <div class="tlh-label">今日訓練紀錄</div>
         ${sec2}
@@ -60012,10 +59997,10 @@ async function renderTrainingLogSheet(){
           ${wpEnabled()?'<button class="btn btn-ghost" onclick="tlOpenPlanPick()">套用方案</button>':''}
           <button class="btn btn-green" onclick="tlStartAddExercise()">＋ 新增動作</button>
         </div>
-        <div class="tlh-label" style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
+        ${hist.length?`<div class="tlh-label" style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;">
           <span>歷史課表（最近三次）</span>
           <button class="tlh-hq-btn" onclick="tlOpenExerciseHistory()">動作查詢 ›</button>
-        </div>
+        </div>`:''}
         ${sec4}
       </div>
     </div>`;
@@ -60122,93 +60107,50 @@ async function delTrainingLog(id){
 //   第一頁：訓練部位＋動作選擇／使用工具＋使用姿勢
 //   第二頁：逐組記錄 次數＋重量，可 ＋ 加組，下方儲存
 function tlStartAddExercise(){
-  window._tlState={page:1, _dir:null, body_part:null, exercise_name:null, posture:null, tool:null, _tpOpen:false, _exq:'',
+  window._tlState={page:1, body_part:null, exercise_name:'', posture:null, tool:null, _tpOpen:false,
     sets:[{reps:'',weight:''}]};
   renderAddExerciseSheet();
 }
 function closeAddExercise(){ const s=document.getElementById('tl-add-sheet'); if(s)s.remove(); }
+/* 手機也要讓出頂欄（2026-09-11 使用者附截圖：「上面還是填滿的」）——
+   0909 只做了桌機（body.mc-mode 那條 top:60px 的 CSS），手機的頂欄是 sticky 的 .topbar-fixed，
+   抽屜（z-index 9999、inset:0）照樣從最上面蓋下去。手機頂欄高度依角色／版型不同，
+   開抽屜當下量它的下緣最準；頂欄被捲走（看不見）時就不讓，照舊整片蓋滿。
+   ⚠ 桌機交給 CSS（mc-mode 的頂欄是 static、高度 0，量了也是 0），這裡清掉 inline 值。 */
+function tlSheetTop(host){
+  if(!host) return;
+  try{
+    if(document.body.classList.contains('mc-mode')){ host.style.top=''; return; }
+    const tb=document.querySelector('.topbar-fixed'); const r=tb&&tb.getBoundingClientRect();
+    host.style.top=(r && r.height>0 && r.bottom>0 && r.top<=1) ? Math.round(r.bottom)+'px' : '';
+  }catch(_){}
+}
 
 async function renderAddExerciseSheet(){
   const st=window._tlState;
   let host=document.getElementById('tl-add-sheet');
   if(!host){ host=document.createElement('div'); host.id='tl-add-sheet'; document.body.appendChild(host); }
+  tlSheetTop(host);
 
   if(st.page===1){
-    let allEx=[];
-    /* 2026-09-09：只列自己看得到的（預設動作＋自己建的） */
-    try{ allEx=exVisible(await dbGetAll('exercises')); }catch(_){}
-    allEx.sort((a,b)=>(!!a.is_custom-!!b.is_custom)||(a.created_at||'').localeCompare(b.created_at||''));
-    { const seen=new Set(); allEx=allEx.filter(e=>{ if(seen.has(e.name))return false; seen.add(e.name); return true; }); }
-    const exByName=Object.fromEntries(allEx.map(e=>[e.name,e]));
-    const mkBtn=(name)=>{ const e=exByName[name]; if(!e)return''; return `<button class="ae-opt ${st.exercise_name===name?'active':''}" onclick="tlPickExAuto('${name.replace(/'/g,"\\'")}')">${name}</button>`; };
-
-    // 已選動作條（選了動作後顯示）
-    const chosen = st.exercise_name ? `<div class="ae-chosen-bar">
-      <div class="ae-chosen-l"><span class="ae-chosen-ex">${st.exercise_name}</span>
-        <span class="ae-chosen-meta">工具：${st.tool||'—'}　·　姿勢：${st.posture||'—'}　<button class="ae-chosen-edit" onclick="tlToggleTP()">${st._tpOpen?'收合':'修改'}</button></span></div>
-      </div>
-      ${st._tpOpen?`<div class="ae-tp">
-        <div class="ae-label">使用工具</div><div class="ae-grid ae-grid-3">${TL_TOOLS.map(t=>`<button class="ae-opt ${st.tool===t?'active':''}" onclick="tlPickTool('${t}')">${t}</button>`).join('')}</div>
-        <div class="ae-label">使用姿勢</div><div class="ae-grid ae-grid-2">${TL_POSTURES.map(p=>`<button class="ae-opt ${st.posture===p?'active':''}" onclick="tlPickPosture('${p}')">${p}</button>`).join('')}</div>
-      </div>`:''}` : '';
-    const ready = st.exercise_name && st.tool && st.posture;
-    const foot = `<div class="ae-foot"><button class="btn ${ready?'btn-green':'btn-ghost'}" style="width:100%;" ${ready?'':'disabled'} onclick="tlGoPage2()">開始記錄 →</button></div>`;
-
-    if(!st._dir){
-      // 步驟1：選訓練方向（七大按鈕）
-      const dirBtns=TL_DIRECTIONS.map(d=>`<button class="ae-dir" onclick="tlPickDir('${d.key}')">${d.key}</button>`).join('');
-      host.innerHTML=`<div class="ms-backdrop" onclick="closeAddExercise()"></div>
-        <div class="ms-panel ae-panel">
-          <div class="ms-head"><div class="ms-title">選擇訓練方向</div><button class="ms-close" onclick="closeAddExercise()">✕</button></div>
-          <div class="ae-body"><div class="ae-dir-grid">${dirBtns}</div></div>
-        </div>`;
-      return;
-    }
-
-    // 步驟2：方向已選 → 上次紀錄 + 快速套用 + 新增動作
-    const dir=TL_DIRECTIONS.find(d=>d.key===st._dir)||TL_DIRECTIONS[0];
-    const part=dir.part;
-    // 該會員最近一次此方向(part)的紀錄
-    let lastBlock='<div class="ae-hint">這個會員還沒有這個方向的紀錄</div>';
-    try{
-      const b=window._tlBooking;
-      const logs=(await dbGetAll('training_logs')).filter(l=>l.member_id===b.member_id && l.body_part===part && l.booking_id!==b.id)
-        .sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
-      if(logs.length){
-        // 取最近那一堂課(同 booking_id)的紀錄
-        const lastBid=logs[0].booking_id;
-        const lastLogs=logs.filter(l=>l.booking_id===lastBid);
-        const dt=(logs[0].created_at||'').slice(0,10).replace(/-/g,'/');
-        lastBlock=`<div class="ae-last-date">${dt}</div>`+lastLogs.map(l=>{
-          let sets='';
-          if(l.sets_detail){ try{ const arr=JSON.parse(l.sets_detail); sets=arr.map(s=>`${s.reps||'-'}×${s.weight||'-'}`).join('　'); }catch(_){} }
-          if(!sets) sets=`${l.reps||'-'} 次${l.sets?(' ×'+l.sets+'組'):''}`;
-          return `<div class="ae-last-row"><span class="ae-last-ex">${l.exercise_name}</span><span class="ae-last-sets">${sets}</span></div>`;
-        }).join('');
-      }
-    }catch(_){}
-
-    // 快速套用：此方向(part)的動作
-    const dirExs=allEx.filter(e=>e.body_part===part);
-    const quickBlock=`<div class="ae-grid ae-grid-2">${dirExs.map(e=>mkBtn(e.name)).join('')||'<div class="ae-hint">尚無動作</div>'}</div>`;
-
+    /* 2026-09-11 使用者：「新增動作要讓教練自己輸入名稱　不要在用設定好的模板」——
+       原本是「七個訓練方向 → 快速套用的預設動作按鈕」兩層，打自己的名稱還要再開一張
+       要填部位／工具／姿勢的表單。改成一打開就是名稱輸入框，打完直接進記錄頁：
+       ・部位不問（body_part 存 null；training_logs 只有 exercise_name 必填）
+       ・工具／姿勢選填，記錄頁點「修改」照樣補得上
+       ・不再寫進動作庫 —— 動作庫是訓練方案那邊在用的，這裡打的名字就是這一堂的紀錄 */
+    const _nm=String(st.exercise_name||'');
     host.innerHTML=`<div class="ms-backdrop" onclick="closeAddExercise()"></div>
       <div class="ms-panel ae-panel">
-        <div class="ms-head">
-          <button class="ae-back" onclick="tlBackToDir()">‹</button>
-          <div class="ms-title">${st._dir}</div>
-          <button class="ms-close" onclick="closeAddExercise()">✕</button>
-        </div>
+        <div class="ms-head"><div class="ms-title">新增動作</div><button class="ms-close" onclick="closeAddExercise()">✕</button></div>
         <div class="ae-body">
-          <div class="ae-label">最近訓練</div>
-          <div class="ae-last">${lastBlock}</div>
-          <div class="ae-label">快速套用</div>
-          ${quickBlock}
-          <div class="ae-grid ae-grid-2" style="margin-top:10px;"><button class="ae-opt ae-add" onclick="tlAddCustomExercise()">＋ 新增動作</button></div>
+          <div class="ae-label">動作名稱</div>
+          <input id="ae-name" class="ae-ex-search" placeholder="例如：保加利亞分腿蹲" value="${escH(_nm)}" autocomplete="off"
+            oninput="window._tlState.exercise_name=this.value" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();tlGoPage2();}">
         </div>
-        ${chosen}
-        ${foot}
+        <div class="ae-foot"><button class="btn btn-green" style="width:100%;" onclick="tlGoPage2()">開始記錄 →</button></div>
       </div>`;
+    setTimeout(()=>{ const i=document.getElementById('ae-name'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } },60);
   }else{
     // 第二頁：已完成的組顯示為摘要，最後一組為輸入；按「＋新增一組」定下當前組再開新組
     const done = st.sets.slice(0, st.sets.length-1); // 已定下的組
@@ -60260,54 +60202,15 @@ async function renderAddExerciseSheet(){
     setTimeout(()=>{const r=document.getElementById('ae-cur-reps');if(r&&!cur.reps)r.focus();},60);
   }
 }
-function tlPickBody(p){ window._tlState.body_part=p; window._tlState.exercise_name=null; window._tlState._exq=''; renderAddExerciseSheet(); }
-function tlExSearch(v){ window._tlState._exq=v; renderAddExerciseSheet(); setTimeout(()=>{const s=document.getElementById('ae-ex-search');if(s){s.focus();s.setSelectionRange(s.value.length,s.value.length);}},20); }
-function tlPickEx(n){
-  window._tlState.exercise_name=n;
-  // 自動帶入該動作的預設工具／姿勢（若有）
-  (async()=>{
-    try{
-      const ex=exVisible(await dbGetAll('exercises')).find(e=>e.name===n && e.body_part===window._tlState.body_part);
-      if(ex){ if(ex.default_tool && !window._tlState.tool) window._tlState.tool=ex.default_tool;
-              if(ex.default_posture && !window._tlState.posture) window._tlState.posture=ex.default_posture; }
-    }catch(_){}
-    renderAddExerciseSheet();
-  })();
-}
-// 選動作 → 自動帶入部位＋預設工具/姿勢，直接進入記錄頁（紙本邏輯：先記重量次數）
-async function tlPickExAuto(n){
-  const st=window._tlState;
-  st.exercise_name=n; st._tpOpen=false;
-  try{
-    const ex=exVisible(await dbGetAll('exercises')).find(e=>e.name===n);
-    if(ex){
-      st.body_part=ex.body_part||st.body_part;
-      st.tool = ex.default_tool || st.tool || '徒手';
-      st.posture = ex.default_posture || st.posture || '站姿';
-    }else{ st.tool=st.tool||'徒手'; st.posture=st.posture||'站姿'; }
-  }catch(_){ st.tool=st.tool||'徒手'; st.posture=st.posture||'站姿'; }
-  st.page=2; // 直接進記錄頁，不需再按「開始記錄」
-  renderAddExerciseSheet();
-}
 function tlToggleTP(){ if(window._tlState.page===2)tlReadCur(); window._tlState._tpOpen=!window._tlState._tpOpen; renderAddExerciseSheet(); }
-// 選訓練方向 → 帶入對應 body_part
-function tlPickDir(key){
-  const d=TL_DIRECTIONS.find(x=>x.key===key);
-  window._tlState._dir=key;
-  window._tlState.body_part=d?d.part:null;
-  window._tlState.exercise_name=null; window._tlState.tool=null; window._tlState.posture=null; window._tlState._tpOpen=false;
-  renderAddExerciseSheet();
-}
-function tlBackToDir(){
-  window._tlState._dir=null; window._tlState.exercise_name=null; window._tlState.tool=null; window._tlState.posture=null;
-  renderAddExerciseSheet();
-}
 function tlPickPosture(p){ if(window._tlState.page===2)tlReadCur(); window._tlState.posture=p; renderAddExerciseSheet(); }
 function tlPickTool(t){ if(window._tlState.page===2)tlReadCur(); window._tlState.tool=t; renderAddExerciseSheet(); }
 function tlBackPage1(){ tlReadCur(); window._tlState.page=1; renderAddExerciseSheet(); }
+/* 只要有名稱就能開始記（2026-09-11）：部位不問、工具／姿勢選填（記錄頁點「修改」補） */
 function tlGoPage2(){
   const st=window._tlState;
-  if(!(st.body_part&&st.exercise_name&&st.posture&&st.tool)){ showToast('請完成上方四項選擇'); return; }
+  const i=document.getElementById('ae-name'); if(i) st.exercise_name=i.value;
+  if(!String(st.exercise_name||'').trim()){ showToast('請輸入動作名稱'); if(i) i.focus(); return; }
   st.page=2; renderAddExerciseSheet();
 }
 // 讀取當前輸入組的值回 state
@@ -60328,37 +60231,6 @@ function tlAddSet(){
 function tlDelSet(i){ tlReadCur(); window._tlState.sets.splice(i,1); if(window._tlState.sets.length===0)window._tlState.sets.push({reps:'',weight:''}); renderAddExerciseSheet(); }
 function tlOpenNote(){ tlReadCur(); window._tlState._noteOpen=true; renderAddExerciseSheet(); }
 
-function tlAddCustomExercise(){
-  const st=window._tlState;
-  const toolOpts=TL_TOOLS.map(t=>`<option value="${t}">${t}</option>`).join('');
-  const postOpts=TL_POSTURES.map(p=>`<option value="${p}">${p}</option>`).join('');
-  const partOpts=TL_BODY_PARTS.map(p=>`<option value="${p}" ${st.body_part===p?'selected':''}>${p}</option>`).join('');
-  showModal(`<div class="modal-title">新增自訂動作</div>
-    <div class="form-row"><label>動作名稱</label><input id="cx-name" placeholder="例如：保加利亞分腿蹲"></div>
-    <div class="form-row"><label>訓練部位</label><select id="cx-part">${partOpts}</select></div>
-    <div class="form-2col">
-      <div class="form-row"><label>預設工具</label><select id="cx-tool">${toolOpts}</select></div>
-      <div class="form-row"><label>預設姿勢</label><select id="cx-post">${postOpts}</select></div>
-    </div>
-    <div style="font-size:11px;color:var(--t3);margin-bottom:6px;">建立後會直接出現在動作選擇裡，並自動帶入預設工具／姿勢。</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();renderAddExerciseSheet()">取消</button><button class="btn btn-green" onclick="saveCustomExercise()">建立並選用</button></div>`);
-}
-async function saveCustomExercise(){
-  const name=(document.getElementById('cx-name').value||'').trim();
-  if(!name){showToast('請輸入動作名稱');return;}
-  const part=document.getElementById('cx-part').value;
-  const tool=document.getElementById('cx-tool').value;
-  const post=document.getElementById('cx-post').value;
-  const ex={id:uid('EX'),name,body_part:part,default_tool:tool,default_posture:post,is_custom:true,created_by:SESSION.id,active:true,created_at:new Date().toISOString()};
-  try{
-    await dbPut('exercises',ex);
-    const st=window._tlState;
-    st.body_part=part; st.exercise_name=name;
-    if(!st.tool)st.tool=tool; if(!st.posture)st.posture=post;
-    closeModal();
-    renderAddExerciseSheet();
-  }catch(e){ showToast('建立失敗：'+(e&&e.message?e.message:e)); }
-}
 async function tlSaveExercise(){
   tlReadCur();
   const st=window._tlState, b=window._tlBooking;
@@ -60369,7 +60241,7 @@ async function tlSaveExercise(){
   const repsFirst=valid[0].reps!==''?parseInt(valid[0].reps,10):null;
   const log={
     id:uid('TLOG'), booking_id:b.id, member_id:b.member_id, coach_id:SESSION.id,
-    exercise_name:st.exercise_name, body_part:st.body_part, posture:st.posture, tool:st.tool,
+    exercise_name:String(st.exercise_name||'').trim(), body_part:st.body_part||null, posture:st.posture||null, tool:st.tool||null,
     reps:repsFirst, sets:valid.length,
     /* 2026-09-09：逐組記錄也把重量落一份到新欄位（取最重的那一組）——
        ⚠ 不是為了顯示（顯示優先吃逐組明細），是為了讓「沿用上次的數字」兩條路讀得到同一個地方。 */
@@ -60421,7 +60293,10 @@ async function tlOpenPlanPick(){
     <div class="wp-items">${usable.map(p=>{
       const items=Array.isArray(p.items)?p.items:[];
       const hit=items.filter(it=>it&&last[it.name]).length;
-      return `<div class="wp-item" onclick="tlPlanAsk('${p.id}')">
+      /* 2026-09-11 使用者：「套用方案這個頁面看起來太平面　沒有可以互動的感覺」——
+         原本整張卡跟文字一樣平，看不出點得下去。右邊放一顆「套用 ›」、白底浮起來、按下去會縮一下（.tlpp-card）。 */
+      return `<div class="wp-item tlpp-card" onclick="tlPlanAsk('${p.id}')">
+        <span class="tlpp-go">套用 ›</span>
         <div class="wp-item-l">${escH(p.name||'未命名方案')}<span class="wp-card-c" style="margin-left:8px;">${items.length} 個動作</span></div>
         <div class="wp-item-n">${escH(items.map(x=>x&&x.name).filter(Boolean).slice(0,4).join('、'))}${items.length>4?'…':''}${
           hit?`　·　<b style="color:var(--gold-d,#b48a56);">${hit} 個做過</b>`:''}</div>

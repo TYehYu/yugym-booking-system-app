@@ -151,7 +151,8 @@ ok('★★★ 根因：值班時間軸的 .tl-empty 是絕對定位、又排在�
    && !/^\.tl-empty\{position:absolute/m.test(src));
 ok('★★★ 抽屜的空狀態改用自己的名字，不再被同名規則波及',
    /\.tls-empty\{text-align:center;/.test(src)
-   && /\? '<div class="tls-empty">尚無訓練紀錄/.test(src));
+   /* 2026-09-11 簡化：空狀態縮成一行（使用者：「這個頁面可以簡化」）—— 守的仍是 class 名稱，不是文字 */
+   && /\? '<div class="tls-empty">還沒有紀錄<\/div>'/.test(src));
 ok('★★★ 抽屜面板也改名 —— .tl-panel 是時間軸那張卡，padding／背景／overflow-x 會整組蓋過來',
    /\.tls-panel\{padding-bottom:16px;\}/.test(src)
    && /<div class="ms-panel tls-panel">/.test(src));
