@@ -45,8 +45,12 @@ console.log('① grpSeatMark：只看這一格自己的出缺席');
   const b={id:'BOLD',date:'2026-06-01',status:'checked_in',member_ids:[ME],attendance:{}};
   eq('★ 整堂都沒標出缺席（舊匯入）→ 回 null，交給呼叫端用整堂判', mark(Object.assign({},b,{_seat:ME}), ME), null);
   eq('　　戳記沒有名額鍵 → 也回 null', mark(b, ME), null);
-  eq('　　名額鍵不是這位會員的 → 回 null',
-     mark({_seat:'MEM-OTHER',attendance:{'MEM-OTHER':'leave'}}, ME), null);
+  /* 2026-09-11 改口：原本「名額鍵不是這位會員的 → 回 null」。0901 起共享票會把共享對象的名額
+     也畫進這張票（grpTicketAlloc 的 alsoIds），回 null 之後呼叫端只數自己的 → 共享對象簽到的課
+     永遠算成沒上（林政緯 #17 超約、林繼霖 #1 四顆 ✓）。_seat 只由 grpTicketAlloc 蓋，
+     一定是這張票認得的名額 —— 讀那個名額自己的出缺席。見 tests/shseatmarktest.js。 */
+  eq('　　名額鍵是共享對象的 → 讀那個名額自己的出缺席（不再回 null）',
+     mark({_seat:'MEM-OTHER',attendance:{'MEM-OTHER':'leave'}}, ME), 'leave');
 }
 
 console.log('\n② 兩邊都問同一支（不再各寫一份）');

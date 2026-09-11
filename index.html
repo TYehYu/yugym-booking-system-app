@@ -6912,6 +6912,9 @@ body.wp-dragging-on .wp-item{cursor:grabbing;}
   font-family:var(--font-en),var(--num);font-size:34px;font-weight:800;line-height:1;
   color:currentColor;opacity:.13;letter-spacing:-.03em;}
 .tcard-std .tcard-seq.tcard-seq-hit{color:var(--gold-d,#b48a56);opacity:.42;}
+/* VIP 寫字不寫堂數（2026-09-11）：三個字母比一位數寬，縮到 22px 才不會壓到姓名；
+   顏色維持一般數字的淡色 —— 金色是「這堂有抽獎」的意思，VIP 不參加常態抽獎。 */
+.tcard-std .tcard-seq.tcard-seq-vip{font-size:22px;letter-spacing:.02em;}
 /* 課卡定位版：寬度固定，不再 flex（Token 版尺寸） */
 .tcard{width:88px;min-width:0;min-height:56px;padding:0;flex-shrink:0;}
 .tcard-empty{position:absolute;left:0;top:24px;}
@@ -12781,8 +12784,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.1049';
-const APP_VERSION_LABEL = 'v260911.1049';
+const APP_VERSION = '260911.1421';
+const APP_VERSION_LABEL = 'v260911.1421';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20898,6 +20901,12 @@ PAGES.g_dashboard=async function(){
                    金＝次要提示（紅>金>綠），不搶課卡本身的課種色。
                  ⚠ pointer-events:none：它是背景，不能吃掉點卡片的動作。 */
               const _sq=_monSeq[b.id]; if(!_sq) return '';
+              /* VIP 寫「VIP」不寫堂數（2026-09-11 使用者：「vip的浮水印改成VIP　這樣櫃檯才不會誤會抽獎」）——
+                 VIP 不參加常態抽獎（0729 定案），但第 4 堂照樣亮金色，櫃檯會讀成「這堂上完有抽獎」
+                 （0911 陳世勳、陳智傑兩位 VIP 當天都是第 4 堂）。不上金色，也不留數字。
+                 ⚠ 判準用抽獎自己那一支 lottoIsVip：抽獎怎麼認定 VIP，這裡就怎麼顯示，口徑不分家。 */
+              if(typeof lottoIsVip==='function' && lottoIsVip(memMap[b.member_id]))
+                return `<span class="tcard-seq tcard-seq-vip" aria-hidden="true">VIP</span>`;
               return `<span class="tcard-seq${_sq%4===0?' tcard-seq-hit':''}" aria-hidden="true">${_sq}</span>`;
             })()}
             ${/* 出席章自己一列（第三列：時間 → 姓名 → 章），與行事曆課卡同一套。
@@ -38497,12 +38506,23 @@ function bkEatenCancel(b){ return !!(b && b.status==='cancelled' && b.refund_wai
      於是「同一堂裡我另一個名額請假」會被算成「這一格也用掉了」——
      林紫錡 9/05 佔兩個名額，第 1 個請假、第 2 個用補課券還沒上，
      補課券那張就被畫成「✓ 一格 ＋ 需補票紅圈」。抽成一支，兩邊都問它。 */
+/* 共享票（2026-09-11 使用者附截圖：林政緯 #17「為什麼跑出超約」、林繼霖 #1「連票券1也被更改了」）——
+   原本這裡多一道「名額的主人必須是現在看的這位會員」，不是就回 null 交給呼叫端。
+   但 0901 起共享對象的名額也會畫進這張票（grpTicketAlloc 的 alsoIds，戳記同樣帶 _seat），
+   呼叫端的後備只數「看的人自己」的名額 → 共享對象已簽到的課永遠算成沒上：
+   帳面已用 2 堂、畫面只認得 1 堂，差的那格補成沒日期的 ✓，最後一堂被擠成超約紅虛線；
+   林繼霖看 #1 更是四堂全被當成沒上（四顆 ✓＋四個紅虛線）。帳本從頭到尾都是對的。
+   改成：戳記上的名額是誰的，就讀那個名額自己的出缺席 —— _seat 只會由 grpTicketAlloc 蓋上，
+   一定是這張票認得的名額（自己的或共享對象的）。
+   ⚠ 整堂都沒點過名的舊資料：自己的名額照舊交給呼叫端看整筆狀態；
+     共享對象的名額呼叫端數不到（它只數「我」的），這裡直接看整筆狀態。 */
 function grpSeatMark(b, memberId){
   const k=b&&b._seat;
   if(!k) return null;
-  if(typeof seatMid!=='function' || String(seatMid(k))!==String(memberId||'')) return null;
+  const _mine=(typeof seatMid!=='function') || String(seatMid(k))===String(memberId||'');
   const at=(typeof attObj==='function'?attObj(b):((b&&b.attendance)||{}))||{};
-  if(!Object.keys(at).some(x=>at[x]!=null)) return null;   // 整堂都沒標 → 看整筆狀態
+  if(!Object.keys(at).some(x=>at[x]!=null))   // 整堂都沒標 → 看整筆狀態
+    return _mine ? null : ((b.status==='checked_in'||b.status==='completed') ? 'att' : '');
   return at[k]==='leave' ? 'leave' : (at[k]==='checked_in' ? 'att' : '');
 }
 function grpSeatLeaveCount(b, memberId){
