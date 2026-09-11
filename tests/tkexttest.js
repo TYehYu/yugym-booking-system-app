@@ -14,13 +14,15 @@ const _pi=src.indexOf('const TK_POCKETS={');
 const code=[src.slice(_pi, src.indexOf('\nfunction tkClass5(',_pi)),
             g('function tkClass5(t, typeMap){','\n}\n'),
             g('function tkPlanDays(t){','\n}\n'),g('function tkIsExtended(t){','\n'),
-            g('function tkExtendTo(t){','\n}\n'),g('function tkCanExtend(t, today){','\n}\n')].join('\n');
+            g('function tkExtendTo(t){','\n}\n'),
+            g('const TK_EXT_EARLY_DAYS=','\n'),g('function tkExtOpensOn(t){','\n}\n'),   /* 2026-09-11：到期前 30 天內可展延 */
+            g('function tkCanExtend(t, today){','\n}\n')].join('\n');
 const env={ parseYmd:s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);},
             ymd:d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),
             TODAY:new Date(2026,6,30),
             window:{_ttCache:[{id:'tt-limited-legacy',name:'限定教練課',validity_days:28},
                               {id:'tt-self',name:'自主訓練',category:'自主訓練'}]} };
-const api=new Function(...Object.keys(env),code+'\nreturn {tkPlanDays,tkIsExtended,tkExtendTo,tkCanExtend,tkPocketNow};')(...Object.values(env));
+const api=new Function(...Object.keys(env),code+'\nreturn {tkPlanDays,tkIsExtended,tkExtendTo,tkExtOpensOn,tkCanExtend,tkPocketNow};')(...Object.values(env));
 const T=o=>Object.assign({ticket_type_id:'tt-limited-legacy',status:'usable',sessions_remaining:4},o);
 
 console.log('原方案期限');
@@ -43,10 +45,22 @@ console.log('\n可以展延的條件');
 {
   const base={start_date:'2026-04-23',expire_date:'2026-07-16',sessions_total:10,sessions_remaining:4};
   ok('★ 已過期＋有剩餘堂數 → 可以', api.tkCanExtend(T(base))===true);
-  ok('★ 還沒過期 → 不行（還在效期內不需要展延）',
-     api.tkCanExtend(T({...base,expire_date:'2026-08-16'}))===false);
-  ok('★ 剛好今天到期 → 不行（今天仍可用）',
-     api.tkCanExtend(T({...base,expire_date:'2026-07-30'}))===false);
+  /* 2026-09-11 放寬：到期前 30 天內就能展延（原本要等過期）。今天＝07/30 */
+  ok('★★★ 還沒過期、但在到期前 30 天內 → 可以（08/16 到期，07/17 起可按）',
+     api.tkCanExtend(T({...base,expire_date:'2026-08-16'}))===true);
+  ok('★★★ 使用者的案子：09/14 到期、09/11 想先展延好約 09/15 → 可以',
+     api.tkCanExtend(T({...base,expire_date:'2026-09-14'}),'2026-09-11')===true);
+  ok('★★★ 離到期還超過 30 天 → 不行（新票不給誤按成不得退費）',
+     api.tkCanExtend(T({...base,expire_date:'2026-09-15'}))===false);
+  ok('★★ 界線：到期前剛好 30 天那天可以、31 天不行',
+     api.tkCanExtend(T({...base,expire_date:'2026-08-29'}))===true
+     && api.tkCanExtend(T({...base,expire_date:'2026-08-30'}))===false);
+  ok('★★ 跨月跨年也算得對（01/10 到期 → 12/11 起）',
+     api.tkExtOpensOn(T({expire_date:'2027-01-10'}))==='2026-12-11');
+  ok('★ 剛好今天到期 → 可以（本來就在 30 天內）',
+     api.tkCanExtend(T({...base,expire_date:'2026-07-30'}))===true);
+  eq('★★★ 提早按、晚按，展延後同一天（從現在的到期日往後加原方案天數）',
+     api.tkExtendTo(T({...base,expire_date:'2026-09-14',valid_days:84,start_date:null})), '2026-12-07');
   ok('★ 堂數已用完 → 不行（沒東西可延）',
      api.tkCanExtend(T({...base,sessions_remaining:0}))===false);
   ok('★ 已經展延過 → 不行（一次為限）',

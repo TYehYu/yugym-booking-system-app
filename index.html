@@ -12769,8 +12769,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.0908';
-const APP_VERSION_LABEL = 'v260911.0908';
+const APP_VERSION = '260911.0950';
+const APP_VERSION_LABEL = 'v260911.0950';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14090,6 +14090,9 @@ async function openTicketExtend(id){
     return; }
   const days=tkPlanDays(t), to=tkExtendTo(t), rem=Number(t.sessions_remaining)||0;
   const f=d=>String(d).slice(0,10).replace(/-/g,'/');
+  /* 還沒到期就先展延（2026-09-11 放寬）：合約寫的是「到期後可申請」，提早展延是店家通融，
+     客人要同意「不得退費」從現在就生效 —— 視窗裡講明，櫃檯才會開口問。 */
+  const early=String(t.expire_date).slice(0,10)>=ymd(TODAY);
   showModal(`<div class="modal-title">票券展延</div>
     <div style="font-size:13.5px;color:var(--text);padding:2px 0 12px;">
       ${t.plan_name||'票券'}${t.format?' · '+String(t.format).toUpperCase():''}　·　剩 <b>${rem}</b> 堂</div>
@@ -14101,7 +14104,8 @@ async function openTicketExtend(id){
     <div style="background:#f7efe0;border:1.5px solid #e6d3ae;border-radius:12px;padding:12px 14px;margin-top:10px;
       font-size:12.5px;color:#8a5e28;line-height:1.9;">
       依合約〔展延規則〕：課程到期後可申請<b>展延一次</b>，展延期限同原方案期限；<br>
-      <b>展延之課程不得申請退費。</b>確認後這張票券會標記為不得退費。</div>
+      <b>展延之課程不得申請退費。</b>確認後這張票券會標記為不得退費。
+      ${early?`<br>這張票<b>還沒到期</b>（${f(t.expire_date)}）：提早展延前請先取得客人同意，確認後<b>立即</b>不得退費。`:''}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="doTicketExtend('${id}')">確認展延至 ${f(to)}</button></div>`);
 }
@@ -14785,7 +14789,21 @@ function tkExtendTo(t){
    但已經到期限的方案　但這功能會不會觸發的太慢?」）——
    會，而且是設計上的：按鈕只在票券「已經過期」之後才長出來，在那之前櫃檯完全看不到
    這個功能存在。改成常駐在右下角，還不能按的時候淡化並寫原因（0823 定的語彙）。
-   ⚠ 條件一個都沒放寬 —— 只是把「看不到」換成「看得到但按不下去，而且知道為什麼」。 */
+   ⚠ 條件一個都沒放寬 —— 只是把「看不到」換成「看得到但按不下去，而且知道為什麼」。
+   2026-09-11 放寬（使用者：「有一個客人下週14號過期 但他想要約15號 在客人同意展延不退費的
+   情況下 我是不是可以先按」）—— 原本要等過期才能展延，而約課又擋「約的日期超過效期」，
+   兩條一夾，到期隔天以後的課只能等到期隔天當天先展延再約。改成**到期前 30 天內**就能按。
+   展延後日期不受影響（tkExtendTo 從現在的到期日往後加原方案天數，早按晚按同一天）；
+   差別只有「不得退費」提早生效，所以確認視窗要講明、要客人同意。
+   ⚠ 不是「隨時可按」：新票被誤按就等於放棄退費，30 天是讓快到期的票才開。 */
+const TK_EXT_EARLY_DAYS=30;
+/* 展延鈕從哪一天起可以按：到期日往前 TK_EXT_EARLY_DAYS 天（YYYY-MM-DD）。
+   ⚠ 自己算日期、不借 parseYmd／ymd —— 測試會把 ymd 換成固定回傳「今天」的假函式。 */
+function tkExtOpensOn(t){
+  if(!t || !t.expire_date) return null;
+  const [y,m,d]=String(t.expire_date).slice(0,10).split('-').map(Number);
+  return new Date(Date.UTC(y,m-1,d-TK_EXT_EARLY_DAYS)).toISOString().slice(0,10);
+}
 function tkExtWhyNot(t, today){
   if(!t) return '找不到票券';
   if(!tkPocketNow(t).canExtend) return '這種票券不提供展延';
@@ -14794,11 +14812,12 @@ function tkExtWhyNot(t, today){
   if(!((Number(t.sessions_remaining)||0)>0)) return '堂數已經用完了，沒有東西可以延';
   if(tkIsExtended(t)) return '已經展延過了（一次為限）';
   if(!t.expire_date) return '這張票沒有到期日，不會過期';
-  if(String(t.expire_date).slice(0,10)>=td) return `還沒到期（${String(t.expire_date).slice(0,10).replace(/-/g,'/')}），到期後才能展延`;
+  if(td<tkExtOpensOn(t)) return `還沒到展延期（到期日 ${String(t.expire_date).slice(0,10).replace(/-/g,'/')}），${tkExtOpensOn(t).replace(/-/g,'/')} 起才能展延（到期前 ${TK_EXT_EARLY_DAYS} 天內）`;
   if(!tkExtendTo(t)) return '算不出原方案期限，無法展延';
   return '';
 }
-/* 可以展延的條件：已過期、還有沒用完的堂數、還沒展延過、算得出期限。
+/* 可以展延的條件：已過期或到期前 30 天內（2026-09-11 放寬，見 tkExtWhyNot 上方）、
+   還有沒用完的堂數、還沒展延過、算得出期限。
    已退費／作廢的不行；永久有效的票本來就不會過期，也不需要。 */
 function tkCanExtend(t, today){
   if(!t) return false;
@@ -14810,7 +14829,7 @@ function tkCanExtend(t, today){
   if(['refunded','void','cancelled'].includes(t.status)) return false;
   if(!((Number(t.sessions_remaining)||0) > 0)) return false;
   if(tkIsExtended(t)) return false;
-  if(!t.expire_date || String(t.expire_date).slice(0,10) >= td) return false;
+  if(!t.expire_date || td < tkExtOpensOn(t)) return false;
   return !!tkExtendTo(t);
 }
 /* 票券購買日（2026-07-30 使用者指示：列在票券下方）——

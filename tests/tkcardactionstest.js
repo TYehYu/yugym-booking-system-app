@@ -6,7 +6,8 @@
 
    ⚠ 「觸發太慢」是真的：展延鈕原本只長在「已過期方案」那一區，票還沒過期時
      櫃檯根本不知道有這個功能。改成常駐右下角，不能按時淡化並寫原因（0823 語彙）。
-   ⚠ 條件一條都沒放寬 —— 只是把「看不到」換成「看得到但按不下去，而且知道為什麼」。 */
+   ⚠ 條件一條都沒放寬 —— 只是把「看不到」換成「看得到但按不下去，而且知道為什麼」。
+   2026-09-11 才放寬：到期前 30 天內就能按（見 tests/tkexttest.js）。 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 let pass=0,fail=0;
@@ -17,14 +18,18 @@ const grab=n=>{let i=src.indexOf('function '+n+'(');if(i<0)throw new Error('切�
 
 console.log('① 展延：常駐，不能按時寫原因');
 {
+  /* 2026-09-11：tkExtWhyNot 多吃 TK_EXT_EARLY_DAYS／tkExtOpensOn，一併抽進來 */
+  const _early=src.match(/const TK_EXT_EARLY_DAYS=\d+;/)[0]+'\n'+grab('tkExtOpensOn')+'\n';
   const why=new Function('tkPocketNow','ymd','TODAY','tkIsExtended','tkExtendTo',
-    grab('tkExtWhyNot')+'\nreturn tkExtWhyNot;')(
+    _early+grab('tkExtWhyNot')+'\nreturn tkExtWhyNot;')(
     ()=>({canExtend:true}), d=>'2026-08-30', null,
     t=>!!(t&&t.extended_from), t=>t&&t.expire_date?'2026-12-01':null);
   const base={status:'usable',sessions_remaining:3,expire_date:'2026-08-01'};
   eq('★★★ 已過期＋還有堂數 → 可以按（回空字串）', why(base,'2026-08-30'), '');
-  ok('★★★ 還沒到期 → 擋，而且講得出哪一天到期',
-     /還沒到期（2026\/12\/31），到期後才能展延/.test(why({...base,expire_date:'2026-12-31'},'2026-08-30')));
+  ok('★★★ 離到期超過 30 天 → 擋，而且講得出到期日與哪一天起能按',
+     /還沒到展延期（到期日 2026\/12\/31），2026\/12\/01 起才能展延（到期前 30 天內）/.test(why({...base,expire_date:'2026-12-31'},'2026-08-30')));
+  eq('★★★ 到期前 30 天內 → 可以按（使用者的案子：09/14 到期、09/11 按）',
+     why({...base,expire_date:'2026-09-14'},'2026-09-11'), '');
   eq('★★ 堂數用完 → 沒有東西可以延',
      why({...base,sessions_remaining:0},'2026-08-30'), '堂數已經用完了，沒有東西可以延');
   eq('★★ 已經延過（一次為限）',
