@@ -30,7 +30,7 @@ ok('null 安全', bkShowsCancelled(null)===false);
 /* ── 各掛載點：畫面留卡、統計不計 ── */
 console.log('掛載點');
 ok('renderCalendar 的 visible 篩選有放行',
-  src.includes("if(b.status==='cancelled' && !bkShowsCancelled(b)) return false;"));
+  src.includes("if(b.status==='cancelled' && !bkCalKeepsCancelled(b)) return false;"));   // 0911 外層改成 bkCalKeepsCancelled（內含 bkShowsCancelled）
 ok('renderCoachAgenda 的 allBk 有放行',
   src.includes("bookings.filter(b=>b.status!=='cancelled'||bkShowsCancelled(b))"));
 ok('renderCoachAgenda 堂數統計不計取消卡',

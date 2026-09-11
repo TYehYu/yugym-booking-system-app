@@ -12812,8 +12812,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.1647';
-const APP_VERSION_LABEL = 'v260911.1647';
+const APP_VERSION = '260911.1654';
+const APP_VERSION_LABEL = 'v260911.1654';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24975,7 +24975,7 @@ async function renderCalendar(opts){
   const _dayset=new Set(days.map(d=>ymd(d)));
   let _earliestMin = CAL_START_H*60;
   bookings.forEach(b=>{
-    if(b.status==='cancelled' && !bkShowsCancelled(b)) return;   // 保留顯示的取消課卡也要撐開時間軸（2026-08-17）
+    if(b.status==='cancelled' && !bkCalKeepsCancelled(b)) return;   // 保留顯示的取消課卡也要撐開時間軸（2026-08-17；0911 含扣課不退）
     if(!_dayset.has(b.date)) return;
     const m=timeToMin(b.start_time||'9:0');
     if(m < _earliestMin) _earliestMin = Math.floor(m/30)*30; // 向下取整 30 分
@@ -24988,7 +24988,7 @@ async function renderCalendar(opts){
      而且沒有人會發現是哪一邊算錯。coachSel／courseSel 傳進來，是為了算
      「如果我點這一顆，會看到幾堂」：算教練那排時不套教練篩選，算課種那排時不套課種篩選。 */
   const _calPass=(b, coachSel, courseSel)=>{
-    if(b.status==='cancelled' && !bkShowsCancelled(b)) return false; // 已取消的課不顯示（教練請假整堂取消的團課除外：課卡保留，2026-08-17）
+    if(b.status==='cancelled' && !bkCalKeepsCancelled(b)) return false; // 已取消的課不顯示（教練請假整堂取消的團課除外：課卡保留，2026-08-17；0911 扣課不退也保留）
     // allMode（全部預約總覽）：不依登入教練過濾，顯示全館佔用狀況
     // maskOthers（教練端「我的預約」）：別人的課保留作遮蔽佔位（顯示「已預約」、不可點），不濾掉
     if(opts.me && !opts.allMode && !opts.maskOthers && (bkCoachId(b))!==opts.me) return false;
@@ -25315,6 +25315,8 @@ async function renderCalendar(opts){
       const _allLeave = !hideMember && grpAllOnLeave(b);
       const _stampOut = _allLeave
         ? `<span class="evc-check evc-leave" title="全員請假">假</span>`
+        : (bkEatenCancel(b) && !hideMember)   /* 0911：取消・扣課不退也蓋「未」章（票用掉了、人沒上到課） */
+        ? `<span class="evc-check evc-noshow" title="取消・扣課不退">未</span>`
         : (b.no_show===true && b.status!=='cancelled' && !hideMember)
         ? `<span class="evc-check evc-noshow" title="未到課">未</span>`   /* 2026-08-14 使用者指示：金色「未」章 */
         : ((_isCheckedIn||_isMakeup) && b.status!=='cancelled' && !hideMember)
@@ -34146,6 +34148,12 @@ function bkIsLeaveSelfTrain(b){ return !!b && b.coach_leave===true && bkIsSelf(b
    純顯示旗標，不動 status／票券／效期 —— 退回的堂數與延長的效期是教練請假的補償，
    本來就不該因為「卡片不想看到了」而收回。 */
 function bkShowsCancelled(b){ return !!b && b.status==='cancelled' && b.coach_leave===true && bkIsGroup(b) && !b.card_hidden; }
+/* 行事曆要不要畫這張已取消的卡（2026-09-11 使用者：「扣課不退 一樣要畫在行事曆上 出席章用[未]」）——
+   江旻季 9/10：櫃檯開課後 20 分鐘取消、選扣課不退，票券夾出現「扣課 9/10」，行事曆卻找不到那堂。
+   票被吃掉了＝那一堂算用掉，行事曆要對得上票券夾。
+   只是畫出來：佔位、衝堂、堂數照舊不計（status 仍是 cancelled）；card_hidden 一樣收得起來。
+   ⚠ 不併進 bkShowsCancelled：那支也管暗化（bkDarkNoTicket），扣課不退的課不該暗化。 */
+function bkCalKeepsCancelled(b){ return bkShowsCancelled(b) || (bkEatenCancel(b) && !b.card_hidden); }
 /* 這一堂要不要暗化＝它還會不會產生扣課（2026-08-22 使用者定義「暗化＝沒有有效票券」）——
    這支只判「團課因請假整堂不會發生」那一種；過期與待付款各自有既有判斷（cal-ev-past／cal-ev-pend）。
    收三種：①團課＋教練請假＋已取消（bkShowsCancelled）②團課＋教練請假但還沒轉成取消
