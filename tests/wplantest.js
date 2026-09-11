@@ -241,14 +241,20 @@ ok('★★ 訓練紀錄那一張表只有真的要看時才撈（每開一位會
    /if\(PP\.recView==='training'\)\{/.test(src)
    && /訓練紀錄是四個分頁裡最少人點的那個/.test(src));
 
-console.log('\n⑪ 先只開放給管理員（2026-09-09 使用者：「訓練方案可以先套在管理員權限了嗎」）');
+console.log('\n⑪ 誰能用（0909 先只給管理員 → 0911 使用者：「開放給教練」＝能開課的人）');
 {
-  const E=who=>new Function('SESSION','return '+g('function wpEnabled(){','\n}'))(who)();
-  eq('★★★ 管理員開、教練關', [E({role:'admin'}), E({role:'coach'})], [true,false]);
-  eq('★★ 櫃檯／會員也關', [E({role:'front_desk'}), E({role:'member'}), E(null)], [false,false,false]);
+  /* isTeachable／isCoachable 一併抽進來 —— wpEnabled 0911 起走 isTeachable */
+  const _fn=n=>src.match(new RegExp('function '+n+'\\([^)]*\\)\\{[^\\n]*\\n'))[0];
+  const E=who=>new Function('SESSION',_fn('isCoachable')+_fn('isTeachable')+'return '+g('function wpEnabled(){','\n}'))(who)();
+  eq('★★★ 管理員開（開不開課都開：0909 就有的入口不收回）',
+     [E({role:'admin'}), E({role:'admin',can_teach:false})], [true,true]);
+  eq('★★★ 能開課的教練開、不開課的教練關',
+     [E({role:'coach'}), E({role:'coach',can_teach:true}), E({role:'coach',can_teach:false})], [true,true,false]);
+  eq('★★ 櫃檯（就算開課開關是開的）／會員／沒登入都關',
+     [E({role:'front_desk',can_teach:true}), E({role:'member'}), E(null)], [false,false,false]);
 }
-ok('★★★ 只有一支判準，教練端要開放時改那一支就好',
-   /只有這一支判準，教練端要開放時改這裡就好/.test(src)
+ok('★★★ 只有一支判準，三份導覽與套用方案全部吃它',
+   /只有這一支判準，三份導覽與課卡抽屜的「套用方案」全部吃它/.test(src)
    && (src.match(/wpEnabled\(\)/g)||[]).length>=5);
 ok('★★★ 教練的三份導覽都吃這一支（少一份就是「點得到但不該點」的破口）',
    (src.match(/n\.key!=='coach_plans'\|\|wpEnabled\(\)/g)||[]).length===3);

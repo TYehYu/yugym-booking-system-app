@@ -12781,8 +12781,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.1033';
-const APP_VERSION_LABEL = 'v260911.1033';
+const APP_VERSION = '260911.1049';
+const APP_VERSION_LABEL = 'v260911.1049';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16321,7 +16321,7 @@ function buildNav(){
       return;
     }
     items = (isMobile ? MOBILE_COACH_NAV : NAV.coach).slice()
-      .filter(n=>n.key!=='coach_plans'||wpEnabled());   /* 目前只開放給管理員（見 wpEnabled） */
+      .filter(n=>n.key!=='coach_plans'||wpEnabled());   /* 能開課的人與管理員（見 wpEnabled） */
     // 我的出勤（唯讀班表）：所有教練
     if(!items.find(n=>n.key==='coach_attendance'))
       items.splice(1,0,{key:'coach_attendance',label:'我的出勤'});
@@ -16594,7 +16594,7 @@ const COACH_BOTTOM_NAV=[
 function coachBottomNavItems(){
   const canTeach = !SESSION || SESSION.can_teach!==false;
   /* 2026-09-09：訓練方案跟行事曆同一條線 —— 不開課的人沒有課可以套方案。
-     再加一道 wpEnabled()：這個功能目前只開放給管理員（見 wpEnabled 的說明）。 */
+     再加一道 wpEnabled()（0911 起＝能開課的人與管理員，見 wpEnabled 的說明）。 */
   const base=COACH_BOTTOM_NAV.filter(n=>n.key!=='coach_plans'||wpEnabled());
   return canTeach ? base : base.filter(n=>n.key!=='coach_calendar');
 }
@@ -48594,7 +48594,7 @@ function openStaffModal(){
       <div class="form-row"><label>電話（登入帳號）*</label><input id="st-phone" placeholder="0912xxxxxx"></div>
     </div>
     <div class="form-row"><label>角色</label><select id="st-role"><option value="coach">一般員工</option><option value="admin">管理員</option></select>
-      <div style="font-size:11px;color:var(--t3);margin-top:5px;">管理員只保留一位：設成管理員會把原管理員轉為一般員工。設備帳號請到下方「後台專用帳號」新增。</div></div>
+      <div style="font-size:11px;color:var(--t3);margin-top:5px;">設備帳號請到下方「後台專用帳號」新增。</div></div>
     ${payRoleFields('st',{employment_type:'full_time'},false)}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" onclick="submitStaffInvite()">建立帳號</button></div>`);
 }
@@ -48617,11 +48617,9 @@ async function submitStaffInvite(){
     return;
   }
   const chosenRole=document.getElementById('st-role').value;
-  // 若新員工設為管理員：先把既有 admin 降為一般員工（系統僅一位管理員）
-  if(chosenRole==='admin'){
-    const others=(await dbGetAll('coaches')).filter(x=>x.role==='admin');
-    for(const o of others){ o.role='coach'; try{ await dbPut('coaches',o); }catch(_){} }
-  }
+  /* 2026-09-11 使用者：「拿掉只有一位管理員的限制」—— 原本這裡會把既有的管理員全部降成一般員工，
+     而店裡早就有兩位管理員（另一位是從員工卡設的），再用這張表單建一位，兩位會一起被降級。
+     管理員可以多位；資料庫與 Edge Function 本來就沒有這條限制，只有這裡在做。 */
   const c=Object.assign({
     id:uid('c'),
     name:preName, phone:prePhone,
@@ -48730,7 +48728,7 @@ async function _openStaffEdit_deprecated(id){
     <div class="form-row"><label>角色</label><select id="se-role">
       <option value="coach" ${c.role==='coach'?'selected':''}>一般員工</option>
       <option value="admin" ${c.role==='admin'?'selected':''}>管理員</option></select>
-      <div style="font-size:11px;color:var(--t3);margin-top:5px;">系統僅保留一位管理員：將他人設為管理員時，原管理員會自動轉為一般員工。</div></div>
+      </div>
     ${payRoleFields('se',c,true)}
     <div class="form-row"><label>在職狀態</label>
       <select id="se-status">
@@ -48745,16 +48743,7 @@ async function saveStaffEdit(id){
  try{
   const c=await dbGet('coaches',id);
   const newRole=document.getElementById('se-role').value;
-  // 管理員轉移：若把此人設為 admin，將其他既有 admin 自動降為教練（系統僅一位管理員）
-  if(newRole==='admin' && c.role!=='admin'){
-    const all=await dbGetAll('coaches');
-    const others=all.filter(x=>x.role==='admin' && x.id!==id);
-    if(others.length){
-      const names=others.map(x=>x.name||x.phone||x.id).join('、');
-      if(!confirm(`確定將管理員權限轉移給「${c.name||c.phone}」？\n原管理員（${names}）將自動轉為一般員工。`)) return;
-      for(const o of others){ o.role='coach'; await dbPut('coaches',o); }
-    }
-  }
+  /* 2026-09-11：「管理員轉移」（設一位就把其他管理員降級）拿掉 —— 管理員可以多位，見 submitStaffInvite */
   c.role=newRole;
   c.name_en=(document.getElementById('se-namedisp').value||'').trim()||null;
   Object.assign(c,readPayRoleFields('se'));
@@ -59989,7 +59978,7 @@ async function renderTrainingLogSheet(){
         ${overview}
         <div class="tlh-label">今日訓練紀錄</div>
         ${sec2}
-        ${/* 「套用方案」跟著 wpEnabled()：目前只有管理員看得到。
+        ${/* 「套用方案」跟著 wpEnabled()：0911 起能開課的教練與管理員看得到。
              ⚠ 沒有它的時候「新增動作」要撐滿整列（.tl-acts 是兩欄），
                不然會變成半條孤零零的按鈕。 */''}
         <div class="tl-acts${wpEnabled()?'':' tl-acts-one'}">
@@ -65355,12 +65344,14 @@ function wpItemLineHtml(it){
 function wpNewItem(){ return {name:'', body_part:'', tool:'', reps:12, sets:3, weight:'', unit:'kg', note:''}; }
 
 /* ── 我看得到哪些方案：自己的 ∪ 分享給我的（RLS 也擋一道，這裡只是畫面） ── */
-/* ── 訓練方案先只開放給管理員（2026-09-09 使用者：「訓練方案可以先套在管理員權限了嗎」）──
-   ⚠ 只有這一支判準，教練端要開放時改這裡就好 —— 散在各處的話一定會漏掉一個入口，
-     而漏掉的那個會變成「教練點得到、但不該點」的破口。
+/* ── 誰能用訓練方案 ──
+   2026-09-09：先只開放給管理員（使用者：「訓練方案可以先套在管理員權限了嗎」）。
+   2026-09-11：開放給教練（使用者：「開放給教練」）—— 跟課表同一條線：能開課的人（isTeachable，
+     看員工設定的「開課」開關），不開課的教練沒有課可以套方案。管理員照舊一律開（0909 就有的入口不收回）。
+   ⚠ 只有這一支判準，三份導覽與課卡抽屜的「套用方案」全部吃它 —— 散在各處的話一定會漏掉一個入口。
    ⚠ 頁面本身不另外擋：導覽列沒有入口、課卡上沒有按鈕，就到不了；
      真的手打網址進來也只會看到自己的（空的）方案，動不到別人的東西（RLS 擋著）。 */
-function wpEnabled(){ return !!(SESSION && SESSION.role==='admin'); }
+function wpEnabled(){ return !!(SESSION && (SESSION.role==='admin' || isTeachable(SESSION))); }
 function wpMine(list){ const me=(SESSION&&SESSION.id)||''; return (list||[]).filter(p=>p&&p.active!==false&&p.coach_id===me); }
 function wpShared(list){ const me=(SESSION&&SESSION.id)||'';
   return (list||[]).filter(p=>p&&p.active!==false&&p.coach_id!==me
