@@ -98,7 +98,7 @@ console.log('\n④ 寫入護欄：不可能把沒抓的欄位寫成 null');
 console.log('\n⑤ 少變動設定表的快取拉長');
 {
   ok('★ 票種／方案／場地／動作庫 5 分鐘',
-     /const DB_CACHE_TTL_BY=\{ticket_types:300000,course_plans:300000,exercises:300000,venues:300000\};/.test(src));
+     /const DB_CACHE_TTL_BY=\{ticket_types:300000,course_plans:300000,exercises:300000,venues:300000,coach_exercises:300000\};/.test(src));   // 0912 常用動作也是設定表
   ok('　　寫入直改快取（自己改的立刻看得到、不整表重抓，2026-08-05）', /dbCacheApply\(store, data\|\|obj\);/.test(src));
   ok('　　分頁隱藏 15 秒回來全清（跨裝置補償）',
      /else if\(_hidAt && Date\.now\(\)-_hidAt>15000\)\{ dbCacheClear\(\); \}/.test(src));

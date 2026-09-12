@@ -3898,6 +3898,22 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .ae-opt{background:var(--card2);border:1px solid var(--bd);border-radius:11px;padding:13px 6px;font-size:13.5px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;}
 .ae-opt.active{background:#e3efe9;border-color:var(--green);color:var(--green);}
 .ae-opt.ae-add{background:#fff;border-style:dashed;color:var(--t2);}
+/* 常用動作清單（2026-09-12）：一列一個動作，右邊是這位會員上次的數字 */
+.ae-pre{display:flex;flex-direction:column;gap:7px;}
+.ae-pre-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;background:var(--card2);
+  border:1px solid var(--bd);border-radius:11px;padding:11px 13px;font-family:inherit;cursor:pointer;text-align:left;}
+.ae-pre-row:active{transform:scale(.99);}
+.ae-pre-n{font-size:14px;font-weight:700;color:var(--text);}
+.ae-pre-l{font-size:11.5px;color:var(--green);font-family:var(--num);font-weight:600;white-space:nowrap;}
+.ae-pre-l i{font-style:normal;color:var(--t3);margin-left:6px;}
+.ae-pre-none{color:var(--t3);font-weight:500;}
+/* 訓練方案頁的「我的常用動作」清單 */
+.cxe-list{display:flex;flex-direction:column;gap:8px;}
+.cxe-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;width:100%;background:#fff;
+  border:1px solid var(--bd);border-radius:11px;padding:12px 14px;font-family:inherit;cursor:pointer;text-align:left;}
+.cxe-row:active{transform:scale(.99);}
+.cxe-n{font-size:14.5px;font-weight:700;color:var(--text);}
+.cxe-s{font-size:11.5px;color:var(--t3);}
 .ae-back{background:none;border:none;font-size:22px;color:var(--t2);cursor:pointer;width:28px;padding:0;}
 /* 第二頁：已選內容 */
 .ae-chosen{margin:0 18px 12px;padding:12px 14px;background:#e3efe9;border-radius:11px;}
@@ -12812,8 +12828,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260911.2008';
-const APP_VERSION_LABEL = 'v260911.2008';
+const APP_VERSION = '260912.1526';
+const APP_VERSION_LABEL = 'v260912.1526';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -12895,7 +12911,7 @@ const DB_CACHE_TTL=20000;   // 2026-07-26：8s→20s（讀取畫面出現太頻�
    都是「設定好就很少動」的表，卻跟著每次切頁重抓。寫入端一律 dbCacheClear（自己改的
    立刻看得到），分頁隱藏 15 秒回來也會全清 —— 拉長只影響「別台裝置剛改、這台還沒重整」
    的空窗，對設定表無實害。 */
-const DB_CACHE_TTL_BY={ticket_types:300000,course_plans:300000,exercises:300000,venues:300000};
+const DB_CACHE_TTL_BY={ticket_types:300000,course_plans:300000,exercises:300000,venues:300000,coach_exercises:300000};
 /* ══ 精簡欄位讀取（2026-08-04 讀取量優化第一批）══════════════════════════
    bookings 共 46 欄、5,708 筆，整表 JSON 6.4 MB，而且 25 個頁面都在抓它。
    其中這 9 欄「全程式碼從沒被引用過」（測試 leanselecttest 會逐一重驗，
@@ -60345,10 +60361,78 @@ async function _tleSave(){
 // ── 新增動作（兩頁式）──
 //   第一頁：訓練部位＋動作選擇／使用工具＋使用姿勢
 //   第二頁：逐組記錄 次數＋重量，可 ＋ 加組，下方儲存
-function tlStartAddExercise(){
+async function tlStartAddExercise(){
   window._tlState={page:1, body_part:null, exercise_name:'', posture:null, tool:null, _tpOpen:false,
     sets:[{reps:'',weight:''}]};
-  renderAddExerciseSheet();
+  renderAddExerciseSheet();                       // 先開視窗，清單非同步補上（現場等不得）
+  try{ await tlLoadQuickEx(); }catch(_){}
+  if(window._tlState && window._tlState.page===1) tlQuickFilter();
+}
+/* ══ 常用動作（2026-09-12 使用者：「教練可以自己設計預設動作　在上課的時後可以快速取用
+     然後再同一個客人取用相同動作的時候　要套用這個客人之前的紀錄」）══
+   使用者選的三件事：①另做一份課表專用的清單 ②數字直接帶入、可以改 ③依「我最常用」排序。
+   ⚠ 清單存在 coach_exercises（每位教練自己一份）—— 不是 exercises，那是訓練方案的動作庫
+     （0911 使用者才把課表的模板拿掉，課表打的名字不進動作庫，這條維持）。
+   ⚠ 「最常用」＝這位教練自己記過幾次，不分會員；沒記過的照建立順序排後面。
+   ⚠ 「上次的數字」不分教練 —— 會員的歷史就是會員的（與套用方案的沿用同一個來源）。 */
+async function tlLoadQuickEx(){
+  const b=window._tlBooking; if(!b) return;
+  let pre=[], logs=[];
+  try{ [pre,logs]=await Promise.all([dbGetAll('coach_exercises').catch(()=>[]),dbGetAll('training_logs').catch(()=>[])]); }catch(_){}
+  const me=String((SESSION&&SESSION.id)||'');
+  const useN={};
+  (logs||[]).forEach(l=>{ if(l&&l.exercise_name&&String(l.coach_id||'')===me) useN[l.exercise_name]=(useN[l.exercise_name]||0)+1; });
+  window._tlQuickEx=(pre||[]).filter(e=>e&&e.active!==false&&String(e.coach_id||'')===me)
+    .sort((a,c)=>(useN[c.name]||0)-(useN[a.name]||0)
+      || String(a.created_at||'').localeCompare(String(c.created_at||'')));
+  const last={};
+  (logs||[]).filter(l=>l&&l.member_id===b.member_id&&l.booking_id!==b.id)
+    .sort((a,c)=>String(a.created_at||'').localeCompare(String(c.created_at||'')))
+    .forEach(l=>{ if(l.exercise_name) last[l.exercise_name]=l; });
+  window._tlLastByEx=last;
+}
+/* 清單那一塊（打字時只重畫這塊 —— 整頁重畫會讓輸入框失焦，中文選字也會被打斷） */
+function tlQuickHtml(){
+  const st=window._tlState||{};
+  if(!window._tlQuickEx) return '';                            // 還在載入
+  const q=String(st.exercise_name||'').trim();
+  const last=window._tlLastByEx||{};
+  const list=window._tlQuickEx.filter(e=>!q || String(e.name||'').indexOf(q)>=0);
+  if(!list.length) return q ? '' :
+    '<div class="ae-hint">還沒有常用動作 —— 到「訓練方案」頁的「我的常用動作」先設定，或直接在上面打名稱。</div>';
+  return `<div class="ae-label">常用動作</div><div class="ae-pre">${list.map(e=>{
+    const L=last[e.name];
+    const dt=L?String(L.created_at||'').slice(5,10).replace('-','/'):'';
+    return `<button type="button" class="ae-pre-row" onclick="tlPickQuick('${String(e.name).replace(/'/g,"\\'")}')">
+      <span class="ae-pre-n">${escH(e.name)}</span>
+      ${L?`<span class="ae-pre-l">上次 ${tlSetLine(L)}<i>${dt}</i></span>`
+         :'<span class="ae-pre-l ae-pre-none">還沒做過</span>'}</button>`;
+  }).join('')}</div>`;
+}
+function tlQuickFilter(){ const box=document.getElementById('ae-pre-box'); if(box) box.innerHTML=tlQuickHtml(); }
+/* 上次那一筆攤成一組一組的預填：逐組明細優先，只有「組×次×重量」的就展開成同樣幾組。
+   ⚠ 最後一組是可編輯的當前組（第二頁的規矩），所以不另外補空白組 —— 直接按儲存就是照上次的組數。
+   ⚠ 磅（lb）不帶重量：第二頁的輸入框寫死 kg，帶進去會變成把 100lb 記成 100kg。 */
+function tlSetsFromLog(L){
+  if(!L) return [];
+  if(L.sets_detail){ try{ const a=JSON.parse(L.sets_detail);
+    if(Array.isArray(a)&&a.length) return a.map(s=>({reps:String(s.reps==null?'':s.reps), weight:String(s.weight==null?'':s.weight)}));
+  }catch(_){} }
+  const n=Math.max(1,Math.min(12,Number(L.sets)||1));
+  const reps=(L.reps==null)?'':String(L.reps);
+  const w=(L.weight==null||!isFinite(Number(L.weight))||(L.weight_unit&&L.weight_unit!=='kg'))?'':String(L.weight);
+  return Array.from({length:n},()=>({reps,weight:w}));
+}
+function tlPickQuick(name){
+  const st=window._tlState; if(!st) return;
+  const e=(window._tlQuickEx||[]).find(x=>x&&x.name===name);
+  const L=(window._tlLastByEx||{})[name];
+  const sets=tlSetsFromLog(L);
+  st.exercise_name=name;
+  st.tool=(e&&e.tool)||null; st.posture=(e&&e.posture)||null;
+  st.sets=sets.length?sets:[{reps:'',weight:''}];
+  st._lastDate=(sets.length&&L)?String(L.created_at||'').slice(5,10).replace('-','/'):'';
+  st.page=2; renderAddExerciseSheet();
 }
 function closeAddExercise(){ const s=document.getElementById('tl-add-sheet'); if(s)s.remove(); }
 /* 手機也要讓出頂欄（2026-09-11 使用者附截圖：「上面還是填滿的」）——
@@ -60385,7 +60469,9 @@ async function renderAddExerciseSheet(){
         <div class="ae-body">
           <div class="ae-label">動作名稱</div>
           <input id="ae-name" class="ae-ex-search" placeholder="例如：保加利亞分腿蹲" value="${escH(_nm)}" autocomplete="off"
-            oninput="window._tlState.exercise_name=this.value" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();tlGoPage2();}">
+            oninput="window._tlState.exercise_name=this.value;tlQuickFilter();" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();tlGoPage2();}">
+          ${/* 常用動作清單（2026-09-12）：打字會即時篩選，點一下直接進記錄頁並帶入上次的數字 */''}
+          <div id="ae-pre-box">${tlQuickHtml()}</div>
         </div>
         <div class="ae-foot"><button class="btn btn-green" style="width:100%;" onclick="tlGoPage2()">開始記錄 →</button></div>
       </div>`;
@@ -60426,7 +60512,8 @@ async function renderAddExerciseSheet(){
         </div>
         <div class="ae-chosen">
           <div class="ae-chosen-ex">${st.exercise_name}</div>
-          <div class="ae-chosen-sub">${[st.posture,st.tool].filter(Boolean).join('　·　')||'未設定工具姿勢'}　<button class="ae-chosen-edit" onclick="tlToggleTP()">${st._tpOpen?'收合':'修改'}</button></div>
+          ${/* 數字是哪來的要講一句（2026-09-12）：不講的話，教練會以為這幾組是自己剛剛打的 */''}
+          <div class="ae-chosen-sub">${st._lastDate?`已帶入上次（${st._lastDate}）的數字　·　`:''}${[st.posture,st.tool].filter(Boolean).join('　·　')||'未設定工具姿勢'}　<button class="ae-chosen-edit" onclick="tlToggleTP()">${st._tpOpen?'收合':'修改'}</button></div>
           ${tpBlock}
         </div>
         <div class="ae-body">
@@ -65507,8 +65594,9 @@ function wpShared(list){ const me=(SESSION&&SESSION.id)||'';
 PAGES.coach_plans=async function(){
   const C=document.getElementById('content');
   C.innerHTML='<div class="card"><div class="pp-card-tip">載入中…</div></div>';
-  let plans=[],coaches=[];
-  try{ [plans,coaches]=await Promise.all([dbGetAll('workout_plans').catch(()=>[]),dbGetAll('coaches').catch(()=>[])]); }catch(_){}
+  let plans=[],coaches=[],quickEx=[];
+  try{ [plans,coaches,quickEx]=await Promise.all([dbGetAll('workout_plans').catch(()=>[]),dbGetAll('coaches').catch(()=>[]),
+        dbGetAll('coach_exercises').catch(()=>[])]); }catch(_){}
   window._wpCoaches=coaches;
   const mine=wpMine(plans), shared=wpShared(plans);
   const nameOf=id=>{ const c=(coaches||[]).find(x=>x&&x.id===id); return c?(coachDisp(c)||c.name||'教練'):'教練'; };
@@ -65548,6 +65636,7 @@ PAGES.coach_plans=async function(){
           <div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:1.8;">
             方案是你自己的訓練範本 —— 動作、次數、組數、重量先設定好，<br>上課時在課卡的「訓練紀錄」一鍵套用。</div></div>`}
     </div>
+    ${cxeCardHtml(quickEx)}
     ${shared.length?`<div class="card"><div class="card-title">其他教練分享的（${shared.length}）</div>
       <div class="wp-sub" style="margin-bottom:10px;">只能看與複製一份來改，改不到對方的原本。</div>
       <div class="wp-list">${shared.map(p=>card(p,false)).join('')}</div></div>`:''}`;
@@ -65945,6 +66034,85 @@ async function _wpSave(){
     }catch(e){ console.warn('新動作沒進動作庫',e); }
     closeModal(); showToast('方案已儲存'); navTo('coach_plans');
   }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
+}
+/* ══ 我的常用動作（2026-09-12 使用者：「教練可以自己設計預設動作」）══════════
+   課表「＋ 新增動作」第一頁的快速清單就是這一份（見 tlLoadQuickEx）。
+   ⚠ 與訓練方案的動作庫（exercises）分開 —— 使用者選的是「另做一份課表專用的常用清單」。
+   ⚠ 只存名稱與工具姿勢，**不存組數次數重量**：數字一律以「這位會員上次做的」為準，
+     存一份預設數字只會跟上次的打架（使用者要的是套用客人自己的紀錄）。 */
+function cxeMine(list){
+  const me=String((SESSION&&SESSION.id)||'');
+  return (list||[]).filter(e=>e&&e.active!==false&&String(e.coach_id||'')===me);
+}
+function cxeCardHtml(list){
+  const mine=cxeMine(list);
+  return `<div class="card">
+    <div class="wp-head">
+      <div><div class="card-title" style="margin:0;">我的常用動作</div>
+        <div class="wp-sub">上課按「＋ 新增動作」時，這些排在最前面，點一下就開始記。<br>這位會員做過的，數字會自動帶上次的。</div></div>
+      <button class="btn btn-green btn-sm" onclick="cxeEdit('')">＋ 新增</button>
+    </div>
+    ${mine.length?`<div class="cxe-list">${mine.map(e=>`<button type="button" class="cxe-row" onclick="cxeEdit('${e.id}')">
+        <span class="cxe-n">${escH(e.name||'')}</span>
+        <span class="cxe-s">${escH([e.posture,e.tool].filter(Boolean).join(' / ')||'未設定工具姿勢')}</span>
+      </button>`).join('')}</div>`
+      :`<div class="empty wp-empty" style="padding:22px 8px;"><div class="em-t">還沒有常用動作</div>
+        <div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:1.8;">
+          把自己最常帶的動作先存起來，<br>上課記錄時點一下就好，不用每次重打。</div></div>`}
+  </div>`;
+}
+async function cxeEdit(id){
+  let e={id:'',name:'',tool:'',posture:'',created_at:''};
+  if(id){ try{ const r=await dbGet('coach_exercises',id);
+    if(r) e={id:r.id,name:r.name||'',tool:r.tool||'',posture:r.posture||'',created_at:r.created_at||''}; }catch(_){} }
+  window._cxe=e; cxeRender();
+}
+function cxeRender(){
+  const e=window._cxe; if(!e) return;
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">${e.id?'修改常用動作':'新增常用動作'}</div>
+    <div class="form-row"><label>動作名稱 *</label>
+      <input type="text" id="cxe-name" value="${escH(e.name)}" placeholder="例如：保加利亞分腿蹲" oninput="window._cxe.name=this.value"></div>
+    <div class="ae-label">使用工具（可不選）</div>
+    <div class="ae-grid ae-grid-3">${TL_TOOLS.map(t=>`<button type="button" class="ae-opt${e.tool===t?' active':''}" onclick="cxeSet('tool','${t}')">${t}</button>`).join('')}</div>
+    <div class="ae-label">使用姿勢（可不選）</div>
+    <div class="ae-grid ae-grid-2">${TL_POSTURES.map(p=>`<button type="button" class="ae-opt${e.posture===p?' active':''}" onclick="cxeSet('posture','${p}')">${p}</button>`).join('')}</div>
+    <div class="modal-foot">${e.id?'<button class="btn btn-red" onclick="cxeDelAsk()">刪除</button>':''}
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="cxeSave()">儲存</button></div>`);
+}
+/* 再點一次＝取消選擇（工具姿勢本來就可以不填）；重畫前先把輸入框的名稱收回來，不然會被洗掉 */
+function cxeSet(f,v){
+  const e=window._cxe; if(!e) return;
+  const i=document.getElementById('cxe-name'); if(i) e.name=i.value;
+  e[f]=(e[f]===v)?'':v; cxeRender();
+}
+async function cxeSave(){ return onceAct('cxesave', _cxeSave); }
+async function _cxeSave(){
+  const e=window._cxe; if(!e) return;
+  const i=document.getElementById('cxe-name'); if(i) e.name=i.value;
+  const name=String(e.name||'').trim();
+  if(!name){ showToast('請填動作名稱'); return; }
+  /* 同名擋在這裡（DB 沒加唯一索引）：清單是給人點的，重覆兩列只會讓人挑錯 */
+  try{ const dup=cxeMine(await dbGetAll('coach_exercises')).find(x=>x.name===name && x.id!==e.id);
+       if(dup){ showToast(`「${name}」已經在常用清單裡了`); return; } }catch(_){}
+  try{
+    await dbPut('coach_exercises',{ id:e.id||uid('CXE'), coach_id:SESSION.id, name,
+      tool:e.tool||null, posture:e.posture||null, active:true,
+      created_at:e.created_at||new Date().toISOString(), updated_at:new Date().toISOString() });
+    closeModal(); showToast('已儲存'); navTo('coach_plans');
+  }catch(err){ showToast('儲存失敗：'+((err&&err.message)||err)); }
+}
+function cxeDelAsk(){
+  const e=window._cxe; if(!e||!e.id) return;
+  showModal(`<div class="modal-title">刪除常用動作</div>
+    <div class="mh2-rule">把「<b>${escH(e.name||'')}</b>」從常用清單移除？<br>已經記錄的訓練不受影響。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="cxeRender()">返回</button>
+      <button class="btn btn-red" onclick="cxeDelDo()">確定刪除</button></div>`);
+}
+async function cxeDelDo(){
+  const e=window._cxe; if(!e||!e.id) return;
+  try{ await dbDel('coach_exercises',e.id); closeModal(); showToast('已刪除'); navTo('coach_plans'); }
+  catch(err){ showToast('刪除失敗：'+((err&&err.message)||err)); }
 }
 function wpDelAsk(){
   const S=window._wp; if(!S) return;
