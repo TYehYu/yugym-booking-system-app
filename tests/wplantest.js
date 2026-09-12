@@ -54,20 +54,21 @@ ok('★★★ 次數與組數 ±1、kg 兩排（±1／±0.5）、lb 只有 ±5',
   eq('★★ 空的次數加一下變 1', S.items[0].reps, 1);
 }
 
-console.log('\n④ 誰看得到（使用者：自建的只有自己看得到）');
+console.log('\n④ 動作來源（2026-09-12 改成每位教練自己的常用動作）');
+/* 使用者：「把目前訓練方案移除　統一改由訓練動作去設計」，三選一挑「停用，統一用常用動作」——
+   exVisible／動作庫管理頁整組退場，方案的動作改吃 coach_exercises。細節在 tests/wpquick0912test.js。 */
 {
-  const vis=who=>new Function('SESSION','return '+g('function exVisible(list){','\n}'))(who);
-  const L=[{name:'深蹲',is_custom:false,active:true},
-           {name:'我的動作',is_custom:true,created_by:'C1',active:true},
-           {name:'別人的',is_custom:true,created_by:'C2',active:true},
-           {name:'停用的',is_custom:false,active:false}];
-  eq('★★★ 預設動作全店共用、自建的只有自己', vis({id:'C1',role:'coach'})(L).map(x=>x.name), ['深蹲','我的動作']);
-  eq('★★★ 別人自建的看不到', vis({id:'C2',role:'coach'})(L).map(x=>x.name), ['深蹲','別人的']);
-  eq('★★ 管理員看全部（動作庫本來就是他在維護）', vis({id:'A',role:'admin'})(L).map(x=>x.name), ['深蹲','我的動作','別人的']);
-  eq('★★ 停用的一律不畫', vis({id:'A',role:'admin'})(L).filter(x=>x.name==='停用的').length, 0);
+  const vis=who=>new Function('SESSION','return '+g('function cxeMine(list){','\n}'))(who);
+  const L=[{name:'我的動作',coach_id:'C1',active:true},
+           {name:'別人的',coach_id:'C2',active:true},
+           {name:'停用的',coach_id:'C1',active:false}];
+  eq('★★★ 只看自己的', vis({id:'C1',role:'coach'})(L).map(x=>x.name), ['我的動作']);
+  eq('★★★ 別人的看不到（管理員也一樣：這是「我的」清單，不是全店設定）',
+     vis({id:'A',role:'admin'})(L).map(x=>x.name), []);
+  eq('★★ 停用的一律不畫', vis({id:'C1',role:'coach'})(L).filter(x=>x.name==='停用的').length, 0);
 }
-ok('★★ 現有 22 個動作全是預設（is_custom=false），這條規則上線不會讓任何人少看到東西',
-   /正式庫現有 22 個動作全是預設/.test(src));
+ok('★★ 動作庫（exercises）整組退場，沒有殘留的呼叫',
+   !/function exVisible\(/.test(src) && !/PAGES\.exercise_db=/.test(src) && !/dbGetAll\('exercises'\)/.test(src));
 
 console.log('\n⑤ 方案是誰的');
 {
@@ -133,10 +134,12 @@ console.log('\n⑦ 存檔');
      && /if\(!items\.length\)\{ showToast\('至少要有一個動作'\); return; \}/.test(SV));
   ok('★★★ 空重量存 null，不存 0（0 會被讀成空槓）',
      /weight:\(it\.weight===''\|\|it\.weight==null\)\?null:Number\(it\.weight\)/.test(SV));
-  ok('★★★ 打字打出來的新動作自動進**自己的**動作庫（is_custom:true、created_by:自己）',
-     /is_custom:true,\s*\n\s*created_by:SESSION\.id/.test(SV));
-  ok('★★ 動作庫存不進去不擋方案（那只是方便，方案存的是名字字串）',
-     /\}catch\(e\)\{ console\.warn\('新動作沒進動作庫',e\); \}/.test(SV));
+  /* 2026-09-12：寫回的目標從動作庫改成「我的常用動作」（coach_exercises），排在最後面 */
+  ok('★★★ 打字打出來的新動作自動進**自己的**常用動作',
+     /await dbPut\('coach_exercises',\{ id:uid\('CXE'\), coach_id:SESSION\.id, name:it\.name,/.test(SV)
+     && /ord\+\+;/.test(SV));
+  ok('★★ 存不進去不擋方案（那只是方便，方案存的是名字字串）',
+     /\}catch\(e\)\{ console\.warn\('新動作沒進常用動作',e\); \}/.test(SV));
   ok('★★ 防連點', /return onceAct\('wpsave', _wpSave\);/.test(src));
   ok('★★ 刪方案不動已經套用出去的訓練紀錄',
      /已經套用到課堂上的訓練紀錄不受影響（那是各堂課自己的資料）/.test(src));
@@ -201,8 +204,10 @@ ok('★★★ 手機在底部導覽（不是收在「其他」選單裡）',
    && !/navTo\('coach_plans'\)\">\$\{moreIc/.test(src));
 ok('★★ 不給櫃檯（沒有課要上，方案對他沒有用）',
    /⚠ 不給 fd:true：櫃檯沒有課要上，方案對他沒有用。/.test(src));
-ok('★★ 動作資料庫留在環境設定（它是材料庫），沒有被一起搬走',
-   /\{grp:'環境設定', label:'動作資料庫', page:'exercise_db'\},/.test(src));
+/* 2026-09-12：動作資料庫退場（使用者選「停用，統一用常用動作」）—— 設定入口改成訓練方案頁裡的
+   「我的常用動作」卡片，導覽列不再有這一頁。 */
+ok('★★ 動作資料庫的導覽列入口已經拿掉（兩處都要）',
+   !/label:'動作資料庫'/.test(src) && !/exercise_db/.test(src.replace(/〔已移除〕[^\n]*\n/g,'')));
 ok('★★ 管理員看到的是自己那份（老闆本身也是教練，isCoachable 含 admin）',
    /管理員看到的是\*\*自己那份\*\*（頁面吃 SESSION\.id）/.test(src));
 

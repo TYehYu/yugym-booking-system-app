@@ -46,10 +46,10 @@ console.log('\n③ 清單來源與排序');
 const L=fnBody('tlLoadQuickEx');
 ok('★★★ 讀 coach_exercises（不是訓練方案的動作庫 exercises）',
    /dbGetAll\('coach_exercises'\)/.test(L) && !/dbGetAll\('exercises'\)/.test(L));
-ok('★★★ 只看自己的、啟用中的', /e\.active!==false&&String\(e\.coach_id\|\|''\)===me/.test(L));
-ok('★★★ 依「我最常用」排（自己記過幾次，不分會員）',
-   /if\(l&&l\.exercise_name&&String\(l\.coach_id\|\|''\)===me\) useN\[l\.exercise_name\]=\(useN\[l\.exercise_name\]\|\|0\)\+1;/.test(L)
-   && /\(useN\[c\.name\]\|\|0\)-\(useN\[a\.name\]\|\|0\)/.test(L));
+/* 0912 二修：清單與排序抽成 cxeMine／cxeSorted（訓練方案那邊也吃同一支） */
+ok('★★★ 只看自己的、啟用中的', /return \(list\|\|\[\]\)\.filter\(e=>e&&e\.active!==false&&String\(e\.coach_id\|\|''\)===me\);/.test(src));
+ok('★★★ 順序是教練自己排的（sort_order），不再照「我最常用」自動排',
+   /window\._tlQuickEx=cxeSorted\(cxeMine\(pre\)\);/.test(L) && !/useN/.test(src));
 ok('★★ 上次的數字不分教練（會員的歷史就是會員的）',
    /l\.member_id===b\.member_id&&l\.booking_id!==b\.id/.test(L) && !/coach_id/.test(L.split('const last={}')[1]||''));
 ok('★★ 打字只重畫清單那一塊（整頁重畫會失焦、中文選字被打斷）',
