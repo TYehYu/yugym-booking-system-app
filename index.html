@@ -12836,8 +12836,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260912.1541';
-const APP_VERSION_LABEL = 'v260912.1541';
+const APP_VERSION = '260912.2121';
+const APP_VERSION_LABEL = 'v260912.2121';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15176,7 +15176,13 @@ async function doLogin(){
         return;
       }
     }
-    err.textContent='手機號碼或密碼錯誤';err.style.display='block';return;
+    /* 員工打錯地方（2026-09-12 曾邦宏案例）——首頁這張表單組出來的是 {手機}@member...，
+       而正式庫 197 個會員帳號**全部是 LINE 帳號**、沒有半個手機密碼帳號：員工在這裡輸入
+       自己的手機與密碼，永遠只會拿到「手機號碼或密碼錯誤」，但他其實登得進去，
+       只是要按下面那顆「員工登入」。會員這條走不通時，自動再用員工帳號試一次。 */
+    if(await staffSignIn(acct, pw, err, {quiet:true})) return;
+    err.innerHTML='手機號碼或密碼錯誤<br><span style="font-size:11.5px;">員工請改用下方的「員工登入」</span>';
+    err.style.display='block';return;
   }
   const m=(await sb.from('members').select('*').eq('auth_id',data.user.id).maybeSingle()).data;
   if(!m){
@@ -15262,20 +15268,34 @@ async function doLoginStaff(){
   const pw=document.getElementById('login-pw-staff').value;
   const err=document.getElementById('login-err-staff');
   if(!acct||!pw){err.textContent='請輸入帳號與密碼';err.style.display='block';return;}
+  if(!(await staffSignIn(acct, pw, err))) { err.textContent='帳號或密碼錯誤'; err.style.display='block'; }
+}
+/* 員工登入的共用流程（2026-09-12 抽出）——員工表單與「會員表單登入失敗自動改試」都走這支。
+   回傳 true ＝ 已經處理完（登入成功，或找到人但被擋下並且訊息已經寫出去）；
+   回傳 false ＝ 帳號密碼不對，請呼叫端自己講。
+   ⚠ quiet（從會員表單過來的那次）只影響「帳密不對」那一條；被停用、查無員工資料這些
+     是真的找到人了，照樣要講清楚，不然使用者只會看到「手機號碼或密碼錯誤」。
+   ⚠ 擋下來時一定要 signOut：Auth 已經有 session 了，留著就是看不到任何資料的半殘登入狀態。 */
+async function staffSignIn(acct, pw, err, opts){
+  const _quiet=!!(opts&&opts.quiet);
   const{data,error}=await sb.auth.signInWithPassword({email:toEmail('staff',acct),password:pw});
-  if(error){err.textContent='帳號或密碼錯誤';err.style.display='block';return;}
+  if(error) return false;
   const c=(await sb.from('employees').select('*').eq('auth_id',data.user.id).maybeSingle()).data;
-  if(!c){err.textContent='查無員工資料';err.style.display='block';return;}
-  if(c.status!=='active'){err.textContent='帳號尚未啟用，請聯繫管理員';err.style.display='block';return;}
+  if(!c){ try{ await sb.auth.signOut(); }catch(_){}
+    if(err){ err.textContent='查無員工資料'; err.style.display='block'; } return true; }
+  if(c.status!=='active'){ try{ await sb.auth.signOut(); }catch(_){}
+    if(err){ err.textContent='帳號尚未啟用，請聯繫管理員'; err.style.display='block'; } return true; }
+  void _quiet;
   // 首次登入：須改密碼+完善資料
   if(c.must_setup){
     SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager,can_teach:(c.can_teach!==false)};
     showStaffSetup(c);
-    return;
+    return true;
   }
   // 員工實際角色以資料庫為準（admin / coach / front_desk）
   SESSION={role:c.role,id:c.id,name:c.name,gender:c.gender||null,is_supervisor:!!c.is_supervisor,is_manager:!!c.is_manager,can_teach:(c.can_teach!==false)};
   enterApp();
+  return true;
 }
 // 首次登入強制設定：改密碼 + 完善資料
 function showStaffSetup(c){
@@ -34038,6 +34058,7 @@ async function bkOrbitSub(id){
   const html = `<div class="evc-roster evr-up" onclick="event.stopPropagation()">`
     + `<div class="evr-title">代課教練（點選改派）</div>`
     + (b.substitute_coach_id?`<button class="evr-row" onclick="event.stopPropagation();bkOrbitSubSet('${id}','')">清除代課（回主責）</button>`:'')
+    + `<button class="evr-row" onclick="event.stopPropagation();bkOrbitOwnerAsk('${id}')">更換主責教練<i>這堂以後就是他的課，不是代課</i></button>`
     + list.map(c=>`<button class="evr-row ${b.substitute_coach_id===c.id?'on':''}" onclick="event.stopPropagation();bkOrbitSubSet('${id}','${c.id}')">${coachDisp(c)}${b.substitute_coach_id===c.id?'<span class="evr-tick">✓ 代課中</span>':''}</button>`).join('')
     /* 教練請假（2026-07-21 商業規則二；2026-07-31 使用者指示移到教練名單後面）——
        找不到代課才會走這條，所以排在名單最後；它也是這個面板裡唯一破壞性的動作，
@@ -34613,6 +34634,49 @@ async function bkOrbitSubSet(id, cid){
   await dbPut('bookings', b);
   showToast(cid ? '已改派代課教練' : '已清除代課，回歸主責教練');
   collapseBkCard();
+  navTo(CUR_PAGE);
+}
+/* ══ 更換主責教練（2026-09-12 使用者：9/18 團課「先改成 BARRY 再改成石頭　應該就不會出現代課」）══
+   代課選單永遠濾掉主責教練本人，所以「換成主責」這件事在畫面上做不到 —— 原本只能改資料庫。
+   ⚠ 跟代課不一樣：主責＝這堂課本來就是誰的，業績歸屬、堂數與薪資都跟著走；
+     代課只是「今天誰站上場」。所以換主責會**一併清掉代課標記**（不然換完還掛著代課，兩邊打架）。
+   ⚠ 權限同代課（bkCanSub＝櫃檯／主管以上）：換誰的課是櫃檯在管的事。
+   ⚠ 衝堂檢查與代課同一套（該教練同時段已有課就擋）。 */
+async function bkOrbitOwnerAsk(id){
+  if(!bkCanSub()){ showToast('只有櫃檯與主管以上可以更換主責教練'); return; }
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
+  const coaches=await dbGetAll('coaches');
+  const cur=coaches.find(c=>c.id===b.coach_id);
+  const list=coaches.filter(c=>isTeachable(c) && c.invite_status!=='pending' && c.id!==b.coach_id);
+  collapseBkCard();
+  showModal(`<div class="modal-title">更換主責教練</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.9;margin-bottom:10px;">
+      ${String(b.date).replace(/-/g,'/')} ${String(b.start_time).slice(0,5)}　目前主責：<b>${escH((cur&&coachDisp(cur))||'—')}</b>
+      ${b.substitute_coach_id?'（目前有代課）':''}</div>
+    <ul class="mk-pts"><li>這堂的業績、堂數與薪資改算在新的主責教練身上</li>
+      <li>原本的代課標記會一起清掉</li>
+      <li>名單與票券不動</li></ul>
+    <div class="wp-items" style="margin-top:10px;">${list.map(c=>`<button type="button" class="evr-row"
+      onclick="bkOrbitOwnerSet('${id}','${c.id}')">${escH(coachDisp(c))}</button>`).join('')||'<div class="wp-card-empty">沒有其他能開課的教練。</div>'}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
+}
+async function bkOrbitOwnerSet(id,cid){ return onceAct('bkowner:'+id+':'+cid, ()=>_bkOrbitOwnerSet(id,cid)); }
+async function _bkOrbitOwnerSet(id,cid){
+  if(!bkCanSub()){ showToast('只有櫃檯與主管以上可以更換主責教練'); return; }
+  const b=await dbGet('bookings',id); if(!b||!cid) return;
+  const all=await dbGetAll('bookings');
+  const s1=timeToMin(b.start_time), e1=s1+(b.duration||60);
+  const clash=all.some(x=>{
+    if(x.id===b.id || x.date!==b.date || x.status==='cancelled') return false;
+    if((x.substitute_coach_id||x.coach_id)!==cid) return false;
+    const s2=timeToMin(x.start_time), e2=s2+(x.duration||60);
+    return s1<e2 && s2<e1;
+  });
+  if(clash){ showToast('該教練此時段已有課程'); return; }
+  b.coach_id=cid; b.substitute_coach_id=null;
+  await dbPut('bookings',b);
+  closeModal();
+  showToast('已更換主責教練');
   navTo(CUR_PAGE);
 }
 // 編輯：由三按鈕轉入原地展開編輯（Phase 3b 流程，不開 Modal）
