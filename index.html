@@ -12853,8 +12853,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260912.2128';
-const APP_VERSION_LABEL = 'v260912.2128';
+const APP_VERSION = '260913.2226';
+const APP_VERSION_LABEL = 'v260913.2226';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -56434,7 +56434,75 @@ async function openPunchFixModal(empId){
     :`<div class="empty" style="padding:26px 8px;"><div class="em-t">沒有需要處理的打卡問題 👍</div>
        <div style="font-size:11.5px;color:var(--t3);margin-top:6px;line-height:1.7;">
          這裡會列出「有上班沒下班」的紀錄，以及員工送出、還沒審核的補卡申請。</div></div>`}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+    <div class="modal-foot">
+      ${/* 代補打卡（2026-09-13 使用者：「今天員工mango忘記打卡　我無法幫她補打」）——
+           那天她**整天沒打卡**，而兩個既有入口都要求「當天已經有一筆紀錄」：
+           ① 驚嘆號只認「有上班、忘了下班，而且是今天以前」（punchIssuesOf）
+           ② 今日值班圓環的代打要 att.id 存在才點得開（dutyRingHTML 的 _canProxy）
+           於是「完全沒打」變成唯一沒有入口的情況，只能等本人送申請（submitPunchRequest
+           寫死 emp_id:SESSION.id，管理員代送不了）。這顆補上那個缺口。
+           ⚠ 只給管理員：改別人的工時不是櫃檯該做的事（同 dutyPunchOutAsk 的分界）。 */''}
+      ${SESSION&&SESSION.role==='admin'?`<button class="btn btn-ghost" onclick="openProxyPunch()">代補打卡</button>`:''}
+      <button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+/* ══ 管理員代補打卡（2026-09-13）══════════════════════════════════
+   指定員工＋日期，直接寫進出勤，不用等本人送申請再核准（兩個人兩道手續）。
+   ⚠ 一定留痕：note 寫明是誰代補的，fixed_by／fixed_at 一起寫（與補登下班同一套欄位）。
+   ⚠ 已經有紀錄的那一天：只補「空著的那一格」，不覆蓋他本人打對的時間。
+   ⚠ 未來日期不給選（max=今天）—— 打卡是既成事實，不是排班。 */
+async function openProxyPunch(){
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以代補打卡'); return; }
+  let coaches=[]; try{ coaches=await dbGetAll('coaches'); }catch(_){}
+  const list=(coaches||[]).filter(c=>c && c.need_punch && c.status!=='inactive' && c.status!=='resigned')
+    .sort((a,b)=>String(coachDisp(a)||'').localeCompare(String(coachDisp(b)||''),'zh-Hant'));
+  const pre=window._punchFixEmp||'';
+  const today=ymd(TODAY);
+  showModal(`<div class="modal-title">代補打卡</div>
+    <ul class="mk-pts"><li>直接寫進出勤紀錄，不用再走申請與審核</li>
+      <li>會記下是你代補的，之後查得到</li>
+      <li>那天已經打過的時間不會被蓋掉</li></ul>
+    <div class="form-row"><label>員工 *</label>
+      <select id="pp-emp">${list.length?list.map(c=>`<option value="${c.id}"${String(pre)===String(c.id)?' selected':''}>${escH(coachDisp(c)||c.name||'')}</option>`).join('')
+        :'<option value="">（沒有需要打卡的員工）</option>'}</select></div>
+    <div class="form-row"><label>日期 *</label><input type="date" id="pp-date" value="${today}" max="${today}"></div>
+    <div class="form-2col">
+      <div class="form-row"><label>上班時間</label>${hmPicker('pp-in','')}</div>
+      <div class="form-row"><label>下班時間</label>${hmPicker('pp-out','')}</div>
+    </div>
+    <div class="form-row"><label>原因（可留空）</label><input id="pp-reason" placeholder="例：忘記打卡、手機打不開"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="punchFixReopen()">返回</button>
+      <button class="btn btn-green" onclick="saveProxyPunch()">儲存</button></div>`);
+}
+async function saveProxyPunch(){ return onceAct('proxypunch', _saveProxyPunch); }
+async function _saveProxyPunch(){
+ try{
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以代補打卡'); return; }
+  const empId=(document.getElementById('pp-emp')||{}).value||'';
+  const date=(document.getElementById('pp-date')||{}).value||'';
+  const cin=readHM('pp-in'), cout=readHM('pp-out');
+  const reason=String((document.getElementById('pp-reason')||{}).value||'').trim();
+  if(!empId){ showToast('請選員工'); return; }
+  if(!date){ showToast('請選日期'); return; }
+  if(date>ymd(TODAY)){ showToast('不能補未來的日期'); return; }
+  if(!cin&&!cout){ showToast('請至少填一個時間'); return; }
+  let nm=''; try{ const e=await dbGet('coaches',empId); nm=(e&&(e.name||coachDisp(e)))||''; }catch(_){}
+  /* 已有那天的紀錄就補空格，沒有才新建（與 approvePunchReq 同一套寫法） */
+  let rec=await getAttendance(empId,date);
+  const _isNew=!rec;
+  if(!rec) rec={id:uid('AT'),emp_id:empId,emp_name:nm,date,created_at:new Date().toISOString()};
+  const _kept=[];
+  if(cin){ if(rec.clock_in && rec.clock_in!==cin) _kept.push('上班'); else rec.clock_in=cin; }
+  if(cout){ if(rec.clock_out && rec.clock_out!==cout) _kept.push('下班'); else rec.clock_out=cout; }
+  if(rec.clock_in&&rec.clock_out) rec.work_hours=calcWorkHours(rec);
+  rec.fixed_by=SESSION.id; rec.fixed_at=new Date().toISOString();
+  rec.note=[rec.note||'', `${date} ${SESSION.name||'管理員'}代補打卡${reason?('（'+reason+'）'):''}`].filter(Boolean).join('｜');
+  await dbPut('attendance',rec);
+  closeModal();
+  showToast(`已${_isNew?'補登':'更新'} ${nm||''} ${date.replace(/-/g,'/')} 的打卡`
+    +(rec.work_hours!=null?`　·　工時 ${rec.work_hours} 小時`:'')
+    +(_kept.length?`（${_kept.join('、')}原本就有紀錄，沒有蓋掉）`:''), 6000);
+  punchFixReopen();
+ }catch(e){ console.error('代補打卡失敗:',e); showToast('代補失敗：'+((e&&e.message)||e)); }
 }
 /* 處理完一筆之後回到同一個彈窗（原本是 navTo('attendance') 跳走，
    一次要處理三四筆就得重進三四次）。 */
