@@ -12,7 +12,8 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('會員端：自主訓練不再嚇人（DB 端已改成一律退點）');
-ok('★ 自主訓練的取消說明改成「會退回 1 點」', /<b>會退回 1 點<\/b>　自主訓練不佔教練時間，取消不扣點。/.test(src));
+/* 2026-09-14 銀髮友善改版：句子收成「會退回 1 點」一句話，理由搬進註解。事實一條都沒少。 */
+ok('★ 自主訓練的取消說明是「會退回 1 點」', /<div class="mk-key green">會退回 1 點<\/div>/.test(src));
 ok('★ 不再有「視同使用，恕不退回點數」那段', !/視同使用，恕不退回點數/.test(src));
 ok('　　仍提醒點數有 7 天效期（那才是真正會損失的地方）', /點數本身有 7 天效期，過期就不能用了/.test(src));
 ok('　　成因與對應的 migration 寫在程式裡',
@@ -55,9 +56,12 @@ ok('★ DB 擋下時前端不得回退舊的直寫路徑（否則規則等於沒
 ok('★ 團課退出也用同一條 24 小時界線（原本只擋開課當天）',
    /if\(hoursUntilStart\(b\) < 24\)\{ cancelTooLateModal\(\); return; \}/.test(src)
    && !/開課當天無法自行取消報名/.test(src));
-ok('　　會退回的維持低調綠框（自主訓練那張仍在，教練課那張隨流程退場）',
-   /<div class="cx-note cx-note-ok"><b>會退回 1 點<\/b>/.test(src)
-   && !/<div class="cx-note cx-note-ok"><b>會退回 1 堂票券<\/b>/.test(src));
+/* 2026-09-14 銀髮友善改版：會員端兩張取消視窗改用全站統一的 .mk-key.green，
+   舊的 .cx-note 語彙在這兩支退場（教練課那張早就隨流程退場）。 */
+ok('　　會退回的用綠框講結果（自主訓練 1 點／團體課 1 堂）',
+   /<div class="mk-key green">會退回 1 點<\/div>/.test(src)
+   && /<div class="mk-key green">會退回 1 堂<\/div>/.test(src)
+   && !/<div class="cx-note cx-note-ok"><b>會退回 1 點<\/b>/.test(src));
 
 console.log('\n櫃檯端：兩顆按鈕分得開');
 ok('★ 「扣掉這一堂」是紅底實心並加底線（2026-08-06 三修：btn-danger 淡粉底 → btn-red 實心紅）',

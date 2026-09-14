@@ -11608,6 +11608,19 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
 /* 會員端這兩張視窗的底部按鈕固定左右各半（2026-08-22 使用者指示「關閉跟確認位子改成左右」）——
    共用的 .modal-foot 是 flex-wrap:wrap ＋ min-width:fit-content，「確認 19:00」這種變長的
    標籤在窄螢幕上會被擠到下一行，變成上下排。改用兩欄 grid，寬度由欄位決定、不再換行。 */
+/* ══ 會員端確認視窗放大版（2026-09-14 使用者：「是不是有更適合銀髮族的方式　視窗大一點
+     資訊少一點　選項單純一點」）══════════════════════════════════════════
+   只掛在**會員自己按得到**的取消視窗（.mcx），櫃檯那幾張不動 ——
+   櫃檯是在客人面前操作，一頁看得完整比一個字大重要。
+   ⚠ 按鈕改成上下各一列：左右並排時「返回」與「確定取消」一樣大又緊鄰，長輩最容易按錯。
+   ⚠ .modal-foot .btn 在手機斷點是 flex:1 1 auto（橫向分配寬度），改直排後那條會變成
+     **分配高度**、按鈕被拉得忽高忽低 —— 這裡一定要改回 flex:0 0 auto。 */
+.mcx-when{font-size:21px;font-weight:900;line-height:1.45;margin:2px 0 0;color:var(--text);}
+.mcx-when span{display:block;font-size:15px;font-weight:500;color:var(--t2);margin-top:3px;}
+.modal:has(.mcx) .modal-title{font-size:22px;font-weight:900;margin-bottom:12px;}
+.modal:has(.mcx) .mk-key{font-size:19px;padding:14px 16px;}
+.modal-foot.mcx-foot{display:flex;flex-direction:column;gap:10px;}
+.modal-foot.mcx-foot .btn{flex:0 0 auto;width:100%;min-height:56px;font-size:17px;font-weight:800;border-radius:12px;}
 .modal-foot.mh2-foot{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 /* 兩顆等高：btn-ghost 有 1px 外框、btn-primary 沒有，不拉齊會差 2px 並且底部對齊、看起來像沒對好 */
 .modal-foot.mh2-foot .btn{min-width:0;width:100%;box-sizing:border-box;height:44px;padding:0 10px;
@@ -12853,8 +12866,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260913.2226';
-const APP_VERSION_LABEL = 'v260913.2226';
+const APP_VERSION = '260914.1311';
+const APP_VERSION_LABEL = 'v260914.1311';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -58776,6 +58789,16 @@ async function sbConfirm(time){
  }catch(e){ console.error('sbConfirm 錯誤:',e); showToast('預約失敗：'+(e&&e.message?e.message:e)); }
 }
 // 會員自行取消自主訓練（退回 1 點）
+/* 會員端確認視窗的「哪一堂」一行（2026-09-14 銀髮友善）——
+   fmtRange 給的是「2026-09-14（日）10:00–11:00」，年份與結束時間對長輩都是雜訊；
+   這裡只留看得懂的那幾個字：9/14（日）上午 10:00。
+   ⚠ 上午／下午／晚間的切法沿用 QB_PERIODS（上午 9–12、下午 12–18、晚間 18–22），
+     不另立一套，免得同一個時間在兩個地方講法不一樣。 */
+function memWhenText(date,time){
+  const d=parseYmd(date), mm=timeToMin(String(time||'').slice(0,5));
+  const part=mm<QB_PERIODS.pm.s?'上午':(mm<QB_PERIODS.night.s?'下午':'晚上');
+  return `${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）${part} ${String(time||'').slice(0,5)}`;
+}
 async function memCancelSelf(id){
   const b=await dbGet('bookings',id);
   if(!b||b.member_id!==SESSION.id){showToast('找不到預約');return;}
@@ -58784,11 +58807,16 @@ async function memCancelSelf(id){
      24 小時規則是為了保護「教練的時間」，自主訓練不佔教練，套那條沒有道理。
      DB 端（fn_cancel_booking，migration 20260801_self_cancel_grace_and_training_pass）
      已改成自主訓練一律退點，這裡的說明也跟著改，不要再嚇會員。 */
-  showModal(`<div class="modal-title">取消自主訓練</div>
-    <div style="font-size:13.5px;padding:6px 0 4px;">確定取消 ${b.date} ${b.start_time} 的自主訓練嗎？</div>
-    <div class="cx-note cx-note-ok"><b>會退回 1 點</b>　自主訓練不佔教練時間，取消不扣點。
-      <span style="display:block;font-size:12px;opacity:.85;margin-top:4px;">提醒：點數本身有 7 天效期，過期就不能用了。</span></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-danger" onclick="doMemCancelSelf('${id}')">確定取消</button></div>`);
+  /* 2026-09-14 銀髮友善改版：標題講「要做什麼」、大字一行講「哪一堂」、綠框只留結果。
+     ⚠ 效期那句**要留著**（0801 定的，測試 cancelwarntest 守著）——取消本身不扣點，
+       真正會損失的就是「點數只有 7 天」。收成 .mk-pts 一行短句，不再是綠框裡的小字。 */
+  showModal(`<div class="mcx"></div><div class="modal-title">取消預約</div>
+    <p class="mcx-when">${memWhenText(b.date,b.start_time)}<span>自主訓練</span></p>
+    <div class="mk-key green">會退回 1 點</div>
+    <ul class="mk-pts"><li>點數本身有 7 天效期，過期就不能用了</li></ul>
+    <div class="modal-foot mcx-foot">
+      <button class="btn btn-danger" onclick="doMemCancelSelf('${id}')">確定取消</button>
+      <button class="btn btn-ghost" onclick="closeModal()">先不要</button></div>`);
 }
 async function doMemCancelSelf(id){
   const b=await dbGet('bookings',id);
@@ -59025,10 +59053,15 @@ async function memLeaveGroup(id){
   /* 2026-08-20：改用統一的 24 小時界線（原本只擋「開課當天」，
      會漏掉「明天早上 8 點的課、今晚 11 點退」這種只剩 9 小時的情況）。 */
   if(hoursUntilStart(b) < 24){ cancelTooLateModal(); return; }
-  showModal(`<div class="modal-title">取消團體課報名</div>
-    <div style="font-size:13.5px;padding:6px 0 4px;">確定取消 ${b.date} ${b.start_time} 的團體課報名嗎？</div>
-    <div style="font-size:12px;color:var(--t2);margin-top:6px;line-height:1.6;">取消後退回 1 堂團體課票券；只取消您的名額，這堂課照常開課。</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button><button class="btn btn-danger" onclick="doMemLeaveGroup('${id}')">確定取消</button></div>`);
+  /* 2026-09-14 銀髮友善改版：與自主訓練那張同一套版面。
+     ⚠ 「這堂課照常開課」要留著 —— 長輩會擔心自己按了會把整堂課取消掉。 */
+  showModal(`<div class="mcx"></div><div class="modal-title">取消報名</div>
+    <p class="mcx-when">${memWhenText(b.date,b.start_time)}<span>團體課</span></p>
+    <div class="mk-key green">會退回 1 堂</div>
+    <ul class="mk-pts"><li>只取消您的名額，這堂課照常開課</li></ul>
+    <div class="modal-foot mcx-foot">
+      <button class="btn btn-danger" onclick="doMemLeaveGroup('${id}')">確定取消</button>
+      <button class="btn btn-ghost" onclick="closeModal()">先不要</button></div>`);
 }
 async function doMemLeaveGroup(id){
  try{

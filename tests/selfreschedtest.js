@@ -60,9 +60,10 @@ console.log('\n② 規則：改期與取消同一條界線');
 }
 
 console.log('\n③ 既有的自助規則沒被動到');
+/* 0914 句子改寫（銀髮友善），事實不變：成因留在註解、畫面講結果 */
 ok('　　自主訓練取消仍是「一律退點」（2026-08-01 定案）',
    /24 小時規則是為了保護「教練的時間」，自主訓練不佔教練，套那條沒有道理。/.test(src)
-   && /<b>會退回 1 點<\/b>　自主訓練不佔教練時間，取消不扣點。/.test(src));
+   && /<div class="mk-key green">會退回 1 點<\/div>/.test(src));
 ok('　　改期仍走 RPC（本人驗證與時段檢查都在 DB 端）',
    /sb\.rpc\('fn_member_self_reschedule',\{p_booking_id:bid,p_date:s\.date,p_start_time:t,p_venue_unit:vbk\.venue_unit\|\|null\}\)/.test(src));
 ok('　　改期不扣不退（點數已經扣在原本那筆上）',

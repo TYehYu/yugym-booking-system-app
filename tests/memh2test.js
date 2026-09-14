@@ -352,9 +352,11 @@ const MEMH2_SHARED_OK=/^\.a2-(week|wnav|wdays|wd|wdot|wtoday|wn|wback)(?![\w-])/
 /* 2026-09-02：自主訓練快速預約的標題列多一顆「取消預約」，樣式掛
    .modal-title.qs-mtitle ／ .qs-mtitle .qs-cx —— 與 .modal-foot.mh2-foot 同一種寫法
    （彈窗不在 .memh2 裡面，只能靠彈窗自己的修飾 class 收斂），一樣不是全域樣式。 */
-t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot / .modal-title.qs-mtitle / .pp-head / .pp-sheet-self / .tb-acct-item 之下',
+/* 2026-09-14：會員端取消視窗的放大版（銀髮友善）也是同一種寫法 —— 彈窗不在 .memh2 裡面，
+   只能靠彈窗自己的修飾 class（.mcx／.mcx-when／.modal-foot.mcx-foot）收斂，不是全域樣式。 */
+t('所有新樣式都掛在 .memh2 / .mh2- / .modal-foot.mh2-foot / .modal-title.qs-mtitle / .mcx- / .pp-head / .pp-sheet-self / .tb-acct-item 之下',
   css.split('\n').filter(l=>/^\.[a-z]/.test(l.trim()))
-     .every(l=>/^\.(memh2|mh2-|mh2p-|modal-foot\.mh2-foot|modal-title\.qs-mtitle|qs-mtitle |pp-head|pp-sheet(\.|-)|tb-acct-item)/.test(l.trim())
+     .every(l=>/^\.(memh2|mh2-|mh2p-|mcx-|modal-foot\.mcx-foot|modal:has\(\.mcx\)|modal-foot\.mh2-foot|modal-title\.qs-mtitle|qs-mtitle |pp-head|pp-sheet(\.|-)|tb-acct-item)/.test(l.trim())
               || MEMH2_SHARED_OK.test(l.trim())));
 /* 0823：主顧客課程價目那一段原本叫 lp-*，與桌機管理列表 lpTable 的 .lp-row 同名同權重，
    而且寫在樣式表更後面 → 全站管理列表的資料列都被它蓋成白框，連 820px 以下
