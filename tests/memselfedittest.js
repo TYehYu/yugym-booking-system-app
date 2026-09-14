@@ -34,7 +34,9 @@ ok('★ 表頭有發票欄（櫃檯或本人可點）',
    /const carrierItem = isM \? \(\(\)=>\{/.test(src)
    && /<span class="pp-meta-l">發票<\/span>/.test(src)
    && /onclick="ppCarrierEdit\(event\)"/.test(src)
-   && /\+ ecItem \+ lineItem \+ carrierItem \+ emailItem/.test(src));
+   /* 2026-09-14 二修：發票與 Email 從詳細資料搬到頂列姓名區（.pp-idinv）。
+      橫向表頭（員工／合約列印用的 meta）維持原順序，那條路 isM 才有這兩格。 */
+   && /<div class="pp-meta pp-idinv">\$\{carrierItem\}\$\{emailItem\}<\/div>/.test(src));
 /* 2026-09-14（使用者截圖問「會員資料不是從這邊輸入嗎　email 載具」）——
    「發票」那列只講買受人身份（統編／載具），Email 獨立一列。
    ⚠ 第一版寫成「有載具就 else if 不顯示 email」，有載具的人只看得到載具，
