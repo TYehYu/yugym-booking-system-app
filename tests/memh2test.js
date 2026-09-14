@@ -478,22 +478,24 @@ t('★★ 旗標用完就清（回到挑時段那頁、送出預約各清一次�
 /* 2026-08-31 三修：高度寫死＋內容置中 —— 前兩版靠 line-height／內距留空間，
    手機上數字還是被切在卡片底緣（使用者連續回報三次）。 */
 t('★★ 日期卡高度寫死、內容置中（不再靠行高比例留空間）',
-    /\.qs-day\{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;\s*\n\s*min-width:70px;height:68px;/.test(s)
-    && /\.qs-day b\{font-family:var\(--num\),inherit;font-size:19px;font-weight:800;line-height:1\.1;/.test(s));
+    /* 0914：min-width:70px → 0（改七格 grid）、字級改 clamp；高度寫死 68px 照舊 */
+    /\.qs-day\{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;\s*\n\s*min-width:0;height:68px;/.test(s)
+    && /\.qs-day b\{font-family:var\(--num\),inherit;font-size:clamp\(12px,4\.2cqw,19px\);font-weight:800;line-height:1\.1;/.test(s));
   t('　 與課卡頁那支 selfOk 同一個判斷式（兩處要說同一件事）',
     /const selfOk=ds=>ds>=today && selfRanges\.some\(\(\[st,ex\]\)=>\(!st\|\|ds>=st\)&&\(!ex\|\|ds<=ex\)\);/.test(s));
-  t('★★ 提示只留四條標籤說明（2026-08-31 使用者指示）',
-    /<li>沒有標示就是訓練架<\/li>/.test(QS)
-    && /<li>標團課教室就是訓練架已滿約<\/li>/.test(QS)
-    && /<li>標跑步機就是訓練架跟團課教室都已滿約<\/li>/.test(QS)
-    && /<li>跑步機可以選擇一次預約 1 人或 2 人<\/li>/.test(QS)
-    && !/每格 60 分鐘・扣 1 點<\/li>/.test(QS));
+  /* 2026-09-14 使用者：「中間那四段文字可以移除」——標籤本身就寫在時段格上，
+     看得到就懂；長輩在這一頁只要挑時間。改期那一句留著（規則，不是標籤說明）。 */
+  t('★★ 四條標籤說明已移除，只在改期時留一句規則',
+    !/<li>沒有標示就是訓練架<\/li>/.test(QS)
+    && !/<li>跑步機可以選擇一次預約 1 人或 2 人<\/li>/.test(QS)
+    && /_rs\?'<ul class="qs-note"><li>改期不另外扣點；開課 24 小時前可改<\/li><\/ul>':''/.test(QS));
   /* 2026-08-31 使用者定案：14 → 7 天。375px 的手機一列只放得下 4 顆
      （每顆 70px＋間距 8），列 14 天就是塞滿還要橫捲，看起來像被壓縮。 */
-  t('★ 封頂 7 天，超過的用一枚「\+N」說一聲（不默默截掉）',
+  /* 0914：改七格 grid、一次全在畫面上，「+N」那顆跟著退場（封頂邏輯本身保留） */
+  t('★ 封頂 7 天，七格一次攤開（不再有「+N」）',
     /const QS_DAY_MAX=7;/.test(QS)
     && /if\(_days\.length<QS_DAY_MAX\) _days\.push\(\[x,dd\]\); else _more\+\+;/.test(QS)
-    && /_more\?`<span class="qs-day qs-daymore" title="效期內還有 \$\{_more\} 天，先約近的">\+\$\{_more\}<\/span>`:''/.test(QS));
+    && !/qs-daymore/.test(QS));
   t('★ 只有一天可約時不畫這一列（一顆按鈕的日期列沒有意義）',
     /const _dayRow=_days\.length>1/.test(QS));
   t('★ 選中＝品牌綠、今天＝金框（與頁面上的日期列同一組語彙）',

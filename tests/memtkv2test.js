@@ -82,6 +82,8 @@ t('自主訓練／折扣券的獨立入口在 V2 收起（改由分頁承接）'
 /* 底部導覽的 iOS 問題改成全域處理了，斷言移到 tests/navfixedtest.js */
 
 /* 時段視窗的說明改成一行一句（2026-08-22 使用者：「處理一下上方的斷句 方便閱讀」） */
+/* 2026-09-14：會員端那支的四條標籤說明移除（只剩改期那一句，寫成單行 ul）；
+   桌機端快速排課視窗那組 qs-note 沒有動 —— 所以總數仍是 2。 */
 t('時段視窗說明改成條列（不再是一整段）',
   /<ul class="qs-note">/.test(s) && /\.qs-note li\{position:relative;padding-left:12px/.test(s)
   && (s.match(/<ul class="qs-note">/g)||[]).length===2);

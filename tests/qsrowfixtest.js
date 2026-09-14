@@ -25,33 +25,47 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 
 const QSDAYS=(src.match(/\.qs-days\{[^}]*\}/)||[''])[0];
 
-console.log('① 日期列：不准被壓、不准上下捲');
+/* ══ 2026-09-14 改版（使用者附截圖：「一列七天日期沒有成功嗎　我這張圖看到四個而已」）══
+   日期列從「橫捲＋每顆 min-width:70px」改成七格 grid ——
+   程式本來就算好 7 天，看不到是因為 375px 一次只排得下 4 顆。
+   ⚠ 橫捲拿掉之後，上面那個根因（overflow 取消 min-height:auto 保護）已經不存在，
+     但 flex:0 0 auto 與 overflow-y:hidden **照樣要留著**當雙保險 —— 那是四修的成果。
+   ⚠ 列高改 auto（七等分後每顆自己長高），所以 84=68+5+11 那條算式跟著退場。 */
+console.log('① 日期列：七格攤開、不准被壓、不准上下捲');
 {
-  ok('★★★ flex:0 0 auto —— 這是關鍵那一條（min-height:auto 的保護已被 overflow 取消）',
+  ok('★★★ 七格 grid（一次看得完一週，不必左右滑）',
+     /display:grid;grid-template-columns:repeat\(7,1fr\);/.test(QSDAYS), QSDAYS);
+  ok('★★★ 橫捲已拿掉（那是「只看得到四天」的原因）', !/overflow-x:auto;/.test(QSDAYS));
+  ok('★★★ flex:0 0 auto 留著（四修的成果，不因改版拆掉）',
      /flex:0 0 auto;/.test(QSDAYS), QSDAYS);
-  ok('★★★ 高度寫死 84px（68 卡片 ＋ 5 上內距 ＋ 11 下內距），box-sizing 一起寫',
-     /height:84px;/.test(QSDAYS) && /box-sizing:border-box;/.test(QSDAYS)
-     && /padding:5px 2px 11px;/.test(QSDAYS));
-  ok('★★★ overflow-y:hidden —— 就算高度真的算錯，也不給使用者上下拉',
+  ok('★★★ overflow-y:hidden 留著 —— 就算高度真的算錯，也不給使用者上下拉',
      /overflow-y:hidden;/.test(QSDAYS));
-  ok('★★ 橫捲留著（日期列本來就要左右滑）',
-     /overflow-x:auto;/.test(QSDAYS));
-  ok('★★ 內容垂直置中，卡片不會貼著上緣',
-     /align-items:center;/.test(QSDAYS));
-  ok('★★★ 根因寫在 CSS 原地（下一個人才不會又去調卡片高度）',
+  ok('★★★ 根因與「為什麼不拆保險」寫在 CSS 原地',
      /那條保護只在 overflow 是 visible 時成立/.test(src)
-     && /前三修都在調卡片自己的高度/.test(src));
+     && /flex:0 0 auto 與\s*\n\s*overflow-y:hidden \*\*照樣留著\*\*當雙保險/.test(src));
   ok('★★ 卡片本身維持固定 68px（三修的成果沒有被推翻）',
      /\.qs-day\{[^}]*height:68px;/.test(src));
+  ok('★★★ min-width:70px 已拿掉（七等分之後它會撐破容器）',
+     /\.qs-day\{[^}]*min-width:0;/.test(src) && !/\.qs-day\{[^}]*min-width:70px;/.test(src));
 }
 
-console.log('\n② 算式核對：84 = 68 + 5 + 11');
+console.log('\n② 字級改吃容器寬度，不用斷點');
 {
-  const g=re=>Number((QSDAYS.match(re)||[])[1]);
-  const h=g(/height:(\d+)px/), pt=g(/padding:(\d+)px/), pb=g(/padding:\d+px \d+px (\d+)px/);
-  const card=Number((/\.qs-day\{[^}]*height:(\d+)px;/.exec(src)||[])[1]);
-  ok('★★★ 高度剛好裝得下卡片＋上下內距（多一點會空、少一點就會裁）',
-     h===card+pt+pb, {列高:h, 卡片:card, 上:pt, 下:pb});
+  ok('★★★ 容器宣告 container-type', /container-type:inline-size;/.test(QSDAYS));
+  ok('★★★ 日期與週標都用 clamp(...cqw...) 連續縮放',
+     /\.qs-day b\{[^}]*font-size:clamp\(12px,4\.2cqw,19px\);/.test(src)
+     && /\.qs-day i\{[^}]*font-size:clamp\(9px,2\.6cqw,11\.5px\);/.test(src));
+  ok('★★ 兩行都不准折行（寧可字小一階，也不要七格高低不齊）',
+     /\.qs-day i\{[^}]*white-space:nowrap;/.test(src) && /\.qs-day b\{[^}]*white-space:nowrap;/.test(src));
+}
+
+console.log('\n②-2 視窗全螢幕（使用者：「可以讓這個窗變全螢幕」）');
+{
+  ok('★★★ 只吃帶 .qs-mtop 標記的那一支，不動全域 .modal',
+     /\.modal-bg:not\(\.modal-side\):has\(\.qs-mtop\) \.modal\{\s*\n\s*max-width:100vw;width:100vw;max-height:100dvh;height:100dvh;border-radius:0;/.test(src));
+  ok('★★ 只在手機全螢幕，桌機維持置中視窗',
+     /@media\(max-width:600px\),\(orientation:portrait\) and \(max-width:1024px\)\{\s*\n\s*\.modal-bg:not\(\.modal-side\):has\(\.qs-mtop\) \.modal\{/.test(src));
+  ok('★★ 有留安全區內距（瀏海與底部手勢列）', /env\(safe-area-inset-top,0px\)/.test(src) && /env\(safe-area-inset-bottom,0px\)/.test(src));
 }
 
 console.log('\n③ 視窗靠上對齊：只給帶標記的那一支');
