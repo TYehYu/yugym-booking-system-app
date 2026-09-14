@@ -24,16 +24,19 @@ ok('★★ 我的預約・當日清單：自主訓練有「改時間」，與「
    /else if\(isSelf\) actionBtn=`<button class="btn btn-ghost btn-sm" onclick="event\.stopPropagation\(\);msbStart\('\$\{b\.id\}'\)">改時間<\/button>`/.test(src)
    && /\+`<button class="btn btn-ghost btn-sm" style="margin-left:6px;" onclick="event\.stopPropagation\(\);memCancelSelf\('\$\{b\.id\}'\)">取消<\/button>`/.test(src));
 ok('★ 點按鈕不會順便觸發整列的動作', (src.match(/event\.stopPropagation\(\);msbStart/g)||[]).length>=1);
-ok('★★ 課卡彈窗：多一顆「改時間」圓鈕',
-   /let rsBtn=\(!done && !past && bkIsSelf\(b\) && b\.member_id===SESSION\.id\)\n\s*\? orb\('go','🕒','改時間',`memTaskClose\(\);msbStart\('\$\{b\.id\}'\)`\) : '';/.test(src));
+/* 0914：這顆併進「更改」，點開後第一列就是「更改時間」，仍走 msbStart */
+ok('★★ 課卡彈窗：多一顆「更改」圓鈕',
+   /let edBtn=\(!done && !past && bkIsSelf\(b\) && b\.member_id===SESSION\.id\)\n\s*\? orb\('go','✎','更改',`memTaskClose\(\);memEditAsk\('\$\{b\.id\}'\)`\) : '';/.test(src));
 /* 2026-08-24：三顆鈕改成 let —— 預覽用的範例課卡要把它們換成「點了只吐司」的版本
    （見 PAGES.mem_bookings 的 _memDemoBk），值本身的算法一個字都沒動。 */
 ok('★ 範例卡把三顆鈕換掉，不動資料',
    /if\(_demo\)\{/.test(src)
    && /這是預覽用的範例課卡，真的會員在這裡按下去才會真的動作/.test(src));
-ok('★ 圓鈕排在簽到與取消之間', /<div class="mtp-orbs">\$\{ckBtn\}\$\{rsBtn\}\$\{vnBtn\}\$\{cxBtn\}<\/div>/.test(src));   // 0911 旁邊多一顆「場地」
-ok('★ 已上完／已過時的課不出現改時間（與取消同一條）',
-   /let rsBtn=\(!done && !past && bkIsSelf\(b\)/.test(src));
+/* 0914：改時間與場地併成一顆「更改」（memEditAsk 再二選一），圓鈕仍排在簽到與取消之間 */
+ok('★ 圓鈕排在簽到與取消之間', /<div class="mtp-orbs">\$\{ckBtn\}\$\{edBtn\}\$\{cxBtn\}<\/div>/.test(src));
+ok('★ 「更改時間」仍走 msbStart（只是改從「更改」點進去）', /onclick="closeModal\(\);msbStart\('\$\{b\.id\}'\)">\s*\n?\s*<b>更改時間<\/b>/.test(src));
+ok('★ 已上完／已過時的課不出現更改（與取消同一條）',
+   /let edBtn=\(!done && !past && bkIsSelf\(b\)/.test(src));
 ok('★ 只有自己的自主訓練才給改（別人的、教練課的都不出現）',
    /bkIsSelf\(b\) && b\.member_id===SESSION\.id/.test(src));
 ok('　　為什麼原本找不到，寫在原地',

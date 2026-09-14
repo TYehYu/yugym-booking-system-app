@@ -18,11 +18,14 @@ ok('★★ 人數用 bkUnitCount 實際去數（單筆 dbGet 身上沒有 _units
 ok('★★ 櫃檯簡易課卡標題：跑步機 1 人也寫', /const _unitTxt = String\(b\.venue_unit\|\|''\)\.startsWith\('treadmill'\) \? `・\$\{_units\} 人` : \(_units>1 \? ` ×\$\{_units\}` : ''\);/.test(src));
 
 console.log('\n② 會員自己改場地：入口');
-ok('★★★ 兩個會員課卡都多一顆「場地」，條件跟「更改時間」一樣',
-   /let vnBtn=\(selfServe && _isSelfBk && b\.member_id===SESSION\.id\)\s*\n\s*\? orb\('go','📍','場地'/.test(src)
-   && /let vnBtn=\(!done && !past && bkIsSelf\(b\) && b\.member_id===SESSION\.id\)\s*\n\s*\? orb\('go','📍','場地'/.test(src));
-ok('★★ 排在「更改時間」旁邊（兩處）', (src.match(/<div class="mtp-orbs">\$\{ckBtn\}\$\{rsBtn\}\$\{vnBtn\}\$\{cxBtn\}<\/div>/g)||[]).length===2);
-ok('★★ 待付款鎖住、範例課卡都不給', /rsBtn=''; cxBtn=''; vnBtn='';/.test(src) && /rsBtn=''; vnBtn='';\s*\n\s*cxBtn=orb\('cx','✕','取消',_dtap\);/.test(src));
+/* 2026-09-14 銀髮友善：0911 那顆獨立的「場地」併進「更改」一顆（memEditAsk 再二選一），
+   顯示條件一個字都沒放寬，只是入口少一層擁擠。 */
+ok('★★★ 兩個會員課卡都有「更改」，條件跟原本的改時間／場地一樣',
+   /let edBtn=\(selfServe && _isSelfBk && b\.member_id===SESSION\.id\)\s*\n\s*\? orb\('go','✎','更改'/.test(src)
+   && /let edBtn=\(!done && !past && bkIsSelf\(b\) && b\.member_id===SESSION\.id\)\s*\n\s*\? orb\('go','✎','更改'/.test(src));
+ok('★★ 圓鈕剩三顆（簽到／更改／取消），兩處都是', (src.match(/<div class="mtp-orbs">\$\{ckBtn\}\$\{edBtn\}\$\{cxBtn\}<\/div>/g)||[]).length===2);
+ok('★★ 待付款鎖住、範例課卡都不給', /edBtn=''; cxBtn='';/.test(src) && /edBtn='';\s*\n\s*cxBtn=orb\('cx','✕','取消',_dtap\);/.test(src));
+ok('★★ 換器材仍走 memVenueOpen（規則與寫入都沒搬家）', /onclick="closeModal\(\);memVenueOpen\('\$\{b\.id\}'\)">/.test(src));
 
 console.log('\n③ 會員自己改場地：視窗');
 const O=fn('memVenueOpen'), R=fn('memVenueRender'), SV=fn('_memVenueSave');

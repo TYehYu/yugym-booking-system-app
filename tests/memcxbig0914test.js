@@ -39,8 +39,9 @@ ok('★★★ 效期提醒留著，但從綠框小字改成條列一行',
 ok('★★★ 團體課：同一套版面，但「這堂課照常開課」要留著',
    /<p class="mcx-when">\$\{memWhenText\(b\.date,b\.start_time\)\}<span>團體課<\/span><\/p>/.test(GRP)
    && /只取消您的名額，這堂課照常開課/.test(GRP));
+/* 0914 稍晚：memEditAsk（更改二選一）也用同一套版面，所以 mcx-foot 變成三處 */
 ok('★★★ 兩張都是上下排、確定在上、返回在下寫「先不要」',
-   (src.match(/<div class="modal-foot mcx-foot">/g)||[]).length===2
+   (src.match(/<div class="modal-foot mcx-foot">/g)||[]).length===3
    && /<button class="btn btn-danger" onclick="doMemCancelSelf\('\$\{id\}'\)">確定取消<\/button>\s*\n\s*<button class="btn btn-ghost" onclick="closeModal\(\)">先不要<\/button>/.test(SELF)
    && /<button class="btn btn-danger" onclick="doMemLeaveGroup\('\$\{id\}'\)">確定取消<\/button>\s*\n\s*<button class="btn btn-ghost" onclick="closeModal\(\)">先不要<\/button>/.test(GRP));
 ok('★★ 標題改成動作本身（取消預約／取消報名）',
@@ -49,7 +50,7 @@ ok('★★ 標題改成動作本身（取消預約／取消報名）',
 console.log('\n③ 放大只掛在會員端這兩張，櫃檯不受影響');
 ok('★★★ 用 .mcx 這個旗標開啟放大，不是改全域 .modal',
    /\.modal:has\(\.mcx\) \.modal-title\{font-size:22px;font-weight:900;/.test(src)
-   && (src.match(/<div class="mcx"><\/div>/g)||[]).length===2);
+   && (src.match(/<div class="mcx"><\/div>/g)||[]).length===3);   // 取消 ×2 ＋ 更改二選一 ×1
 ok('★★★ 按鈕 56px／17px、整列寬', /\.modal-foot\.mcx-foot \.btn\{flex:0 0 auto;width:100%;min-height:56px;font-size:17px;/.test(src));
 ok('★★★ 直排時要把 flex:1 1 auto 改掉（手機那條會變成分配高度，按鈕忽高忽低）',
    /\.modal-foot \.btn 在手機斷點是 flex:1 1 auto（橫向分配寬度），改直排後那條會變成/.test(src));

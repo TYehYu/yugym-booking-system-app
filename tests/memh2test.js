@@ -165,7 +165,7 @@ const tap=cut('async function _memh2Tap(id){','/* ［＋］預約自主訓練');
 t('★★ 改成簡易課卡：標題卡＋會員卡＋圓形按鈕（不再是一般彈窗）',
   /<div class="mtp-card mtp-head"/.test(tap)
   && /<div class="mtp-mcard">/.test(tap)
-  && /<div class="mtp-orbs">\$\{ckBtn\}\$\{rsBtn\}\$\{vnBtn\}\$\{cxBtn\}<\/div>/.test(tap));   // 0911 多一顆「場地」（vnBtn）
+  && /<div class="mtp-orbs">\$\{ckBtn\}\$\{edBtn\}\$\{cxBtn\}<\/div>/.test(tap));   // 0914 改時間＋場地併成一顆「更改」（edBtn）
 /* 2026-08-24 使用者問「團體課的簽到圓形鈕也正常嗎」——守住兩件事：
    ① 團課走 memGrpCheckin（逐名額的 RPC），不是單人課那支 memCheckin；
    ② 關窗要用 memTaskClose（新的 UI 是 #mem-task-pop，不是 modal）——
@@ -187,7 +187,7 @@ t('★★ 鎖頭是線條圖（與手勢圖示同一套：stroke、currentColor�
   && !/🔒/.test(html) && !/🔒/.test(tap));
 t('★★ 待付款的課點開只有一顆鎖頭與說明，沒有任何可按的圓鈕',
   /ckBtn=orb\('off',MEMH2_LOCKIC,\(typeof bkIsInstHold==='function'&&bkIsInstHold\(b\)\)\?'待繳費':'待簽約',null\);/.test(tap)
-  && /rsBtn=''; cxBtn='';/.test(tap)
+  && /edBtn=''; cxBtn='';/.test(tap)   // 0914：改時間與場地併成 edBtn
   && /這一堂<b>還沒完成付款<\/b>，時段已經先幫你留著。/.test(tap));
 /* 2026-08-24 使用者回報：「教練手機端快速預約視窗，下面的關閉跟確認沒有一樣高」——
    等高這件事原本只在 .mh2-foot 這一組解掉，其他視窗照樣會歪。改成所有 .modal-foot
@@ -229,7 +229,8 @@ t('★★ 卡面寫出「點了會怎樣」（有客戶不知道要點卡片才�
 t('★ 沒事可做就不寫（不要騙人點）',
   /有事可做才寫，沒事可做就不要騙人點/.test(s)
   && /\.memh2 \.admh2-card\.admh-done \.a2-hint,\.memh2 \.admh2-card\.mh2-past \.a2-hint\{display:none;\}/.test(s));
-t('改時間只給自主訓練', /selfServe && _isSelfBk && b\.member_id===SESSION\.id[\s\S]{0,120}改時間/.test(tap));
+t('改時間只給自主訓練（0914 起收在「更改」裡）',
+  /selfServe && _isSelfBk && b\.member_id===SESSION\.id[\s\S]{0,120}'更改'/.test(tap));
 
 // ── ［＋］沿用現有引擎 ──
 t('時段探測已抽成共用的 msbProbeFree', /async function msbProbeFree\(\)\{/.test(s));
