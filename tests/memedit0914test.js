@@ -20,7 +20,8 @@ ok('★★ 成因寫在原地（四顆會擠、「場地」對長輩是陌生詞
 console.log('\n② 「更改」點開後的二選一');
 const ASK=fnBody('memEditAsk');
 ok('★★★ 兩列：更改時間／換器材，各自帶回原本那條路',
-   /onclick="closeModal\(\);msbStart\('\$\{b\.id\}'\)">\s*\n?\s*<b>更改時間<\/b>/.test(ASK)
+   /* 0914 二修：改走 memh2SelfSlots（全螢幕視窗），不再開底部深綠面板 */
+   /onclick="closeModal\(\);memh2SelfSlots\('\$\{b\.date\}','','\$\{b\.id\}'\)">\s*\n?\s*<b>更改時間<\/b>/.test(ASK)
    && /onclick="closeModal\(\);memVenueOpen\('\$\{b\.id\}'\)">\s*\n?\s*<b>換器材<\/b>/.test(ASK));
 ok('★★★ 副標靠右，而且寫出「目前是什麼」',
    /<span>目前是 \$\{memWhenText\(b\.date,b\.start_time\)\}<\/span>/.test(ASK)

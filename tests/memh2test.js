@@ -237,7 +237,12 @@ t('時段探測已抽成共用的 msbProbeFree', /async function msbProbeFree\(\
 t('msbLoadSlots 改呼叫 msbProbeFree（沒有兩份探測邏輯）',
   /const r=await msbProbeFree\(\);/.test(cut('async function msbLoadSlots(){','async function msbPickSlot(t){')));
 const add=cut('async function memh2SelfSlots(ds, until, reschedId){','function memh2SelSlot(t){');
-t('［＋］沿用 msbStart 建狀態', /await msbStart\(\)/.test(add));
+/* 0914 二修：［＋］改開全螢幕視窗（memh2SelfSlots），它內部仍呼叫 msbStart() 建狀態。
+   ⚠ 兩句話出處不同：「改開全螢幕」在 memSelfBookToggle 裡（整份 s 找），
+     「狀態由 msbStart 建」在 memh2SelfSlots 自己的本體（add）裡。 */
+t('［＋］改開全螢幕視窗，狀態仍由 msbStart 建',
+  /async function memSelfBookToggle\(\)\{\s*\n\s*if\(window\._msb\)\{ msbExit\(\); return; \}\s*\n\s*await memh2SelfSlots\(\);/.test(s)
+  && /else if\(!window\._msb\)\{ try\{ await msbStart\(\); \}catch\(_\)\{\} \}/.test(add));
 t('［＋］收掉舊版下方訂位表但保留狀態', /getElementById\('msb-sheet'\); if\(sh\) sh\.remove\(\)/.test(add));
 /* 0822 二修（使用者）：「多功能訓練架不用顯示」「8/22 9:00 也過期了 自主應該也不能預約」 */
 t('多功能訓練架不標（沒標就是它），只標教室與跑步機',

@@ -34,7 +34,11 @@ ok('★ 範例卡把三顆鈕換掉，不動資料',
    && /這是預覽用的範例課卡，真的會員在這裡按下去才會真的動作/.test(src));
 /* 0914：改時間與場地併成一顆「更改」（memEditAsk 再二選一），圓鈕仍排在簽到與取消之間 */
 ok('★ 圓鈕排在簽到與取消之間', /<div class="mtp-orbs">\$\{ckBtn\}\$\{edBtn\}\$\{cxBtn\}<\/div>/.test(src));
-ok('★ 「更改時間」仍走 msbStart（只是改從「更改」點進去）', /onclick="closeModal\(\);msbStart\('\$\{b\.id\}'\)">\s*\n?\s*<b>更改時間<\/b>/.test(src));
+/* 0914 二修：入口改走 memh2SelfSlots（全螢幕視窗）。規則沒搬家 ——
+   memh2SelfSlots 開頭照樣呼叫 msbStart(reschedId) 建狀態、寫入仍是 fn_member_self_reschedule。 */
+ok('★ 「更改時間」改走全螢幕視窗（不再開底部深綠面板）',
+   /onclick="closeModal\(\);memh2SelfSlots\('\$\{b\.date\}','','\$\{b\.id\}'\)">\s*\n?\s*<b>更改時間<\/b>/.test(src)
+   && /if\(reschedId\)\{ try\{ await msbStart\(reschedId\); \}catch\(_\)\{\} \}/.test(src));
 ok('★ 已上完／已過時的課不出現更改（與取消同一條）',
    /let edBtn=\(!done && !past && bkIsSelf\(b\)/.test(src));
 ok('★ 只有自己的自主訓練才給改（別人的、教練課的都不出現）',
