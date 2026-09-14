@@ -24,14 +24,33 @@ ok('★ ppInlineEdit 放行會員本人（主教練與生日性別改為管理�
    && /if\(\(fid==='birthday'\|\|fid==='gender'\) && !\(canEditMemberData\(\)\|\|_selfM\)\)/.test(src));
 ok('　　緊急聯絡人維持開放（2026-07-27 既有）', /onclick="ppEmergencyEdit\(event\)"/.test(src));
 
-console.log('\n② 載具');
-ok('★ 表頭有載具欄（櫃檯或本人可點）',
-   /const carrierItem = isM \? `<div class="pp-meta-i\$\{_canBG\?' pp-f-click':''\}"\$\{_canBG\?` onclick="ppCarrierEdit\(event\)"`:''\}><span class="pp-meta-l">載具<\/span>/.test(src)
+console.log('\n② 載具 →（2026-09-14 擴充成「發票」：Email／載具／統編／抬頭一整組）');
+/* ⚠ 0914 改動：ppCarrierEdit／ppCarrierSave 換成共用的 invPrefModal／invPrefSave ——
+   櫃檯的會員資料頁與會員端首頁的提醒卡共用同一份實作（0914 才因為「兩支長得一樣的
+   預約視窗」付過代價，見 yugym-member-v2）。ppCarrierEdit 留成薄包裝，因為表頭那一列的
+   onclick 仍寫 ppCarrierEdit(event)。
+   ⚠ 規則一條都沒放寬：本人可改、存前轉大寫、格式相同、留空＝清除。 */
+ok('★ 表頭有發票欄（櫃檯或本人可點）',
+   /const carrierItem = isM \? \(\(\)=>\{/.test(src)
+   && /<span class="pp-meta-l">發票<\/span>/.test(src)
+   && /onclick="ppCarrierEdit\(event\)"/.test(src)
    && /\+ ecItem \+ lineItem \+ carrierItem/.test(src));
+ok('★★ 舊入口保留成薄包裝（那一列的 onclick 一個字沒改）',
+   /function ppCarrierEdit\(ev\)\{[\s\S]{0,220}?invPrefModal\(PP\.id/.test(src));
 {
-  const f=grabFn('ppCarrierSave');
-  ok('★ 寫回 members.invoice_carrier（留空＝清除）', /rec\.invoice_carrier=v\|\|null;/.test(f));
-  ok('★ 存前轉大寫＋驗格式', /\.trim\(\)\.toUpperCase\(\)/.test(f) && /\^\\\/\[0-9A-Z\+\.\\-\]\{7\}\$/.test(f));
+  const f=grabFn('invPrefSave');
+  ok('★ 寫回 members.invoice_carrier（留空＝清除）', /rec\.invoice_carrier=car\|\|null;/.test(f));
+  ok('★ 存前轉大寫＋驗格式', /g\('ip-car'\)\.toUpperCase\(\)/.test(f) && /\^\\\/\[0-9A-Z\+\.\\-\]\{7\}\$/.test(f));
+  ok('★★ Email 與統編抬頭也一起存（0914 新增，開統編的客人不必每次重打）',
+     /rec\.email=email\|\|null;/.test(f)
+     && /rec\.invoice_ubn=ubn\|\|null;/.test(f)
+     && /rec\.invoice_title=title\|\|null;/.test(f));
+  ok('★★★ 三選一必填：Email 或手機條碼至少一項（沒有通知管道的發票等於沒開）',
+     /if\(!email && !car\)\{ showToast\('Email 或手機條碼至少填一項'\); return; \}/.test(f));
+  ok('★★ 打統編一定要抬頭', /if\(ubn && !title\)/.test(f));
+  ok('★★ 權限仍是「櫃檯以上或會員本人」',
+     /const isSelf = !!\(SESSION && SESSION\.role==='member' && String\(SESSION\.id\)===String\(mid\)\);/.test(src)
+     && /if\(!\(canEditMemberData\(\)\|\|isSelf\)\)\{ showToast\('修改會員資料需要櫃檯以上權限'\); return; \}/.test(src));
   // 手機條碼格式實跑：斜線開頭共 8 碼
   const re=/^\/[0-9A-Z+.\-]{7}$/;
   ok('★ 實跑：/ABC+123 ✓、/ABC1234 ✓', re.test('/ABC+123') && re.test('/ABC1234'));

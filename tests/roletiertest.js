@@ -19,8 +19,16 @@ t('★★ 會員資料表頭的可編輯欄位吃 canEditMemberData',
 t('★ 主教練／生日／性別的原地編輯走同一支',
   /if\(fid==='default_coach_id' && !canEditMemberData\(\)\)/.test(src)
   && /if\(\(fid==='birthday'\|\|fid==='gender'\) && !\(canEditMemberData\(\)\|\|_selfM\)\)/.test(src));
+/* ⚠ 2026-09-14：載具那個入口搬進共用的 invPrefModal（櫃檯的會員資料頁與會員端首頁的
+   提醒卡共用一份實作），守門條件從 ppSelfView() 換成等價的 isSelf ——
+   ppSelfView() 讀的是 PP.kind／PP.id，而共用視窗接受任意 mid、會員端首頁根本沒有 PP 狀態，
+   沿用 ppSelfView() 會讓會員在首頁點提醒卡時被自己的權限擋掉。
+   所以 `canEditMemberData()||ppSelfView()` 從 2 處變 1 處（只剩緊急聯絡人），
+   **三個入口各自守門這條規則一點沒放寬**，載具那道改由下面兩行釘著。 */
 t('★ 緊急聯絡人／載具／家庭成員三個入口各自守門',
-  (src.match(/canEditMemberData\(\)\|\|ppSelfView\(\)/g)||[]).length===2
+  (src.match(/canEditMemberData\(\)\|\|ppSelfView\(\)/g)||[]).length===1
+  && /const isSelf = !!\(SESSION && SESSION\.role==='member' && String\(SESSION\.id\)===String\(mid\)\);/.test(src)
+  && /if\(!\(canEditMemberData\(\)\|\|isSelf\)\)\{ showToast\('修改會員資料需要櫃檯以上權限'\); return; \}/.test(src)
   && /async function ppFamEdit\(mid\)\{\s*\n\s*if\(!canEditMemberData\(\)\)/.test(src));
 t('★★ 姓名也開放給櫃檯（原本只有管理員）',
   /function ppEditName\(\)\{[\s\S]{0,220}if\(!canEditMemberData\(\)\)/.test(src)

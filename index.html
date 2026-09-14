@@ -11660,6 +11660,16 @@ body.mc-mode .ver-up{left:calc(232px + 20px);}
   cursor:pointer;box-shadow:0 3px 12px rgba(45,90,61,.35);}
 .memh2 .mh2-selfadd:active{transform:scale(.94);}
 .memh2 .mh2-note{font-size:11px;color:var(--t3);text-align:center;padding:2px 6px 0;line-height:1.6;}
+/* 發票設定提醒卡（2026-09-14）——白卡＋金色左緣。
+   ⚠ 用金不用紅：紅留給真正的警示（見品牌色強度階級），這是「待辦但不緊急」。
+   ⚠ 圓角吃 14px（與 .admh2-card 同級），不自創新的級距。 */
+.memh2 .mh2-invpref{background:#fff;border:1px solid var(--bd);border-left:4px solid var(--gold-d,#b48a56);
+  border-radius:12px;padding:13px 15px;margin:0 0 12px;cursor:pointer;
+  box-shadow:0 2px 8px rgba(50,42,30,.08);}
+.memh2 .mh2-invpref:active{transform:scale(.99);}
+.memh2 .mh2-invpref-t{font-size:14.5px;font-weight:800;color:var(--text);margin-bottom:3px;}
+.memh2 .mh2-invpref-s{font-size:12px;color:var(--t2);line-height:1.6;}
+.memh2 .mh2-invpref-go{display:inline-block;margin-top:7px;font-size:12.5px;font-weight:700;color:var(--gold-d,#b48a56);}
 /* ── 月曆（2026-08-22 使用者指示）：頁面最下面看整個月的預約，一天多堂就左右排 ── */
 /* ⚠ 白底而不是 var(--card2)：整個 .memh2 外框本來就是 card2，同色會整張消失 */
 .memh2-mon{background:#fff;border-radius:16px;padding:14px 12px 12px;margin:14px 0 6px;
@@ -13011,8 +13021,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260914.1552';
-const APP_VERSION_LABEL = 'v260914.1552';
+const APP_VERSION = '260914.2202';
+const APP_VERSION_LABEL = 'v260914.2202';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13798,12 +13808,33 @@ async function invCall(action, data){
      湊錯一格就開不出來，而且錯誤訊息只說「參數錯誤」。 */
 const INV_MODES=[['carrier','存載具'],['ubn','打統編'],['donate','捐贈'],['print','紙本']];
 function invFieldsHTML(){
+  /* 2026-09-14 使用者定案：「櫃檯收款的時候要有開發票或不開發票的選項
+     點開發票要有 email 或載具或統編」——
+     多一層開關的理由是 0914 真的誤開過一張（FX28688351，會員資料還沒齊就自動開立、
+     當天作廢）。開立與否變成櫃檯**明確的一次選擇**，不再是「勾了已付款就自動開」。
+     ⚠ 預設仍是「開立」：收錢本來就該開發票，預設不開會變成常態性漏開。 */
   return `<div id="inv-wrap" class="inv-wrap" style="display:none;">
     <div class="inv-h">電子發票<i id="inv-mode"></i></div>
-    <div class="inv-seg">${INV_MODES.map(([k,l],i)=>
-      `<button type="button" class="inv-b${i===0?' on':''}" data-k="${k}" onclick="invPick('${k}')">${l}</button>`).join('')}</div>
-    <div id="inv-x"></div>
+    <div class="inv-seg">
+      <button type="button" class="inv-b on" data-on="1" onclick="invSetOn(1)">開立發票</button>
+      <button type="button" class="inv-b"    data-on="0" onclick="invSetOn(0)">不開發票</button>
+    </div>
+    <div id="inv-body">
+      <div class="inv-seg">${INV_MODES.map(([k,l],i)=>
+        `<button type="button" class="inv-b${i===0?' on':''}" data-k="${k}" onclick="invPick('${k}')">${l}</button>`).join('')}</div>
+      <div id="inv-x"></div>
+    </div>
   </div>`;
+}
+/* 開立／不開立。⚠ 用 dataset.on 記在 #inv-wrap 上，invReadFields 讀它決定回 {mode:'none'}。
+   不能用「f 是 null」表示不開 —— null 在 invIssueForPurchase 的既有語意是「走預設載具照常開」
+   （退款手續費那條路 39399 就是傳 null），混用會讓手續費發票整批開不出來。 */
+function invSetOn(v){
+  const w=document.getElementById('inv-wrap'); if(!w) return;
+  const on=String(v)==='1';
+  w.dataset.on=on?'1':'0';
+  w.querySelectorAll('.inv-b[data-on]').forEach(b=>b.classList.toggle('on', (b.dataset.on==='1')===on));
+  const body=document.getElementById('inv-body'); if(body) body.style.display=on?'':'none';
 }
 function invPick(k){
   const w=document.getElementById('inv-wrap'); if(!w) return;
@@ -13820,11 +13851,13 @@ function invPick(k){
          填了手機條碼 → CarrierType=3，存客人自己的載具，中獎通知走財政部平台（不需要我們的 email）
          沒填         → CarrierType=1 存綠界載具＋email，開立與中獎都由綠界寄信，憑通知到超商列印
        ⚠ 兩格都空一樣開得成（載具只要有手機就夠），只是客人收不到任何通知。 */
-    h=row('inv-car','手機條碼','沒有就留空')
+    h=row('inv-car','手機條碼','沒有就留空',window._invMemCarrier||'')
       +row('inv-email','Email','寄發票與中獎通知',_mail,'email')
-      +note('有手機條碼就存客人自己的載具。<b>沒有就填 Email</b>：存綠界載具，開立與中獎都寄信通知，中獎憑通知到<b>超商列印</b>。');
+      +note('有手機條碼就存客人自己的載具。<b>沒有就填 Email</b>：存綠界載具，開立與中獎都寄信通知，中獎憑通知到<b>超商列印</b>。兩格<b>至少填一項</b>。');
   }else if(k==='ubn'){
-    h=row('inv-ubn','統一編號','8 碼數字')+row('inv-title','公司抬頭','')+row('inv-email','Email','寄證明聯用',_mail,'email')
+    h=row('inv-ubn','統一編號','8 碼數字',window._invMemUbn||'')
+      +row('inv-title','公司抬頭','',window._invMemTitle||'')
+      +row('inv-email','Email','寄證明聯用',_mail,'email')
       +note('打統編就<b>不能</b>存載具或捐贈。');
   }else if(k==='donate'){
     h=row('inv-love','愛心碼','3–7 碼數字')
@@ -13854,14 +13887,23 @@ async function invSync(){
   /* 2026-09-14：預填客人上次留的 email —— 504 位會員只有 17 位有 email，
      所以多半還是要當場問；但問過一次就該記住（開立成功會寫回 members）。 */
   { const _mid=((document.getElementById('gt-member')||{}).value)||'';
-    const _m=(window._grantMembers||[]).find(x=>x&&x.id===_mid);
-    window._invMemEmail=(_m&&_m.email)||''; }
-  if(!w.dataset.mode) invPick('carrier');
+    const _m=(window._grantMembers||[]).find(x=>x&&x.id===_mid)||{};
+    window._invMemEmail  =_m.email||'';
+    window._invMemCarrier=_m.invoice_carrier||'';
+    window._invMemUbn    =_m.invoice_ubn||'';
+    window._invMemTitle  =_m.invoice_title||''; }
+  if(!w.dataset.on) invSetOn(1);   /* 預設開立：收錢本來就該開發票 */
+  /* 2026-09-14：這位客人有統編就自動切到「打統編」並帶入（使用者：開統編的客人存進會員資料自動帶入）。
+     ⚠ 只在櫃檯還沒自己選過模式時才切 —— 否則每次重繪都會蓋掉櫃檯當下的選擇。 */
+  if(!w.dataset.mode) invPick(window._invMemUbn?'ubn':'carrier');
 }
 /* 讀畫面上那一格 → 一包乾淨的參數（沒開發票就回 null） */
 function invReadFields(){
   const w=document.getElementById('inv-wrap');
   if(!w || w.style.display==='none') return null;
+  /* 2026-09-14：櫃檯明確選了「不開發票」。
+     ⚠ 回 {mode:'none'} 而不是 null —— null 的既有語意是「走預設載具照常開」。 */
+  if(w.dataset.on==='0') return {mode:'none'};
   const g=id=>((document.getElementById(id)||{}).value||'').trim();
   const k=w.dataset.mode||'carrier';
   if(k==='ubn')    return {mode:'ubn',    ubn:g('inv-ubn'), title:g('inv-title'), email:g('inv-email')};
@@ -13872,6 +13914,13 @@ function invReadFields(){
 /* 開立前先擋掉一定會被綠界退的（錯誤訊息只會說「參數錯誤」，當場沒人猜得到） */
 function invCheckFields(f){
   if(!f) return '';
+  if(f.mode==='none') return '';   /* 2026-09-14：櫃檯選了不開發票，沒有欄位要驗 */
+  /* 2026-09-14 使用者定案：「點開發票要有 email 或載具或統編」——
+     載具那條路兩格都空時，發票雖然開得成（綠界載具只要有手機就夠）卻沒有任何通知管道，
+     客人根本不知道自己有發票。0914 誤開的 FX28688351 就是這個缺口，所以改成擋下來。
+     統編／捐贈／紙本三條各自有必填（統編、愛心碼、地址），不重複擋。 */
+  if(f.mode==='carrier' && !(f.carrierNum||'').trim() && !(f.email||'').trim())
+    return '開發票要填 Email 或手機條碼（擇一）';
   if(f.mode==='ubn'){
     if(!/^\d{8}$/.test(f.ubn||'')) return '統一編號要 8 碼數字';
     if(!(f.title||'').trim())      return '打統編要填公司抬頭';
@@ -13926,6 +13975,10 @@ function invPayload(pur, mem, f, items){
 async function invIssueForPurchase(pur, mem, f, items, opt){
   const cfg=await invCfg();
   if(!cfg.on) return null;
+  /* 2026-09-14：櫃檯選了「不開發票」就整條跳過。
+     ⚠ 判斷用 f.mode==='none'，不能用 f==null —— null 是「走預設載具照常開」，
+       退款手續費那條路（invVoidForPurchase 後的補開）就是傳 null。 */
+  if(f && f.mode==='none') return null;
   const amt=Math.round((opt&&opt.amt!=null)?opt.amt:(Number(pur.deal_amount)||0));
   if(amt<=0) return null;   /* 未付款發放、抽獎票、$0 折抵不開發票 */
   const d=invPayload(Object.assign({}, pur, {id:(pur.id+((opt&&opt.relSuffix)||'')), deal_amount:amt}), mem, f, items);
@@ -40898,10 +40951,18 @@ async function openBackofficeMember(){
       <div class="form-row"><label>姓名 *</label><input id="bo-name"></div>
       <div class="form-row"><label>手機 *（作為識別）</label><input id="bo-phone" placeholder="0912xxxxxx"></div>
     </div>
+    <!-- 2026-09-14 使用者定案：「創立帳號的時候就要要求填寫或者選填手機載具」——
+         發票的通知管道二選一必填。504 位舊會員裡有 359 位兩者都沒有，
+         那些人發票開得出來卻沒人收得到；新會員不要再產生這種缺口。 -->
     <div class="form-2col">
-      <div class="form-row"><label>Email（選填）</label><input id="bo-email"></div>
-      <div class="form-row"><label>主教練</label><select id="bo-coach"><option value="">無</option>${coachOpts}</select></div>
+      <div class="form-row"><label>Email</label><input id="bo-email" type="email" placeholder="name@example.com"></div>
+      <div class="form-row"><label>手機條碼</label><input id="bo-carrier" placeholder="/ABC1234" maxlength="8" style="text-transform:uppercase;"></div>
     </div>
+    <div style="font-size:12px;color:var(--t2);margin:-2px 0 12px;line-height:1.65;">
+      <b style="color:var(--text);">發票怎麼給？上面兩格至少填一項。</b>
+      有<b>手機條碼</b>就存客人自己的載具；沒有就填 <b>Email</b>，發票存綠界載具並寄信通知，中獎憑通知到<b>超商列印</b>。
+    </div>
+    <div class="form-row"><label>主教練</label><select id="bo-coach"><option value="">無</option>${coachOpts}</select></div>
     <div class="form-row"><label>生日（選填）</label>${birthdaySelects('bo')}</div>
     <div id="bo-err" style="display:none;color:var(--danger);font-size:12.5px;margin-bottom:10px;"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button><button class="btn btn-green" id="bo-submit" onclick="submitBackofficeMember()">建立會員</button></div>`);
@@ -40929,6 +40990,13 @@ async function submitBackofficeMember(){
   if(!name||!phone){showErr('請填寫姓名與手機');return;}
   if(memNameErr(name)){showErr(memNameErr(name));return;}
   if(!/^09\d{8}$/.test(phone)){showErr('手機號碼格式不正確，請填 09 開頭的 10 位數字（會員日後用它登入）');return;}
+  /* 2026-09-14：發票的通知管道二選一必填（使用者：「創立帳號的時候就要要求填寫或者選填手機載具」）。
+     ⚠ 只擋「兩個都空」，不強迫填某一個 —— 有手機條碼的客人不需要留 email。
+     格式在這裡就擋掉：條碼錯了要等到收款那天才會被綠界退件，那時客人已經走了。 */
+  const boMail=v('bo-email'), boCar=v('bo-carrier').toUpperCase();
+  if(!boMail && !boCar){showErr('發票怎麼給？請填 Email 或手機條碼（至少一項）');return;}
+  if(boMail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(boMail)){showErr('Email 格式不正確');return;}
+  if(boCar && !/^\/[0-9A-Z+.\-]{7}$/.test(boCar)){showErr('手機條碼格式不正確：斜線開頭共 8 碼（例：/ABC1234）');return;}
   const btn=document.getElementById('bo-submit'); if(btn){btn.disabled=true;btn.textContent='建立中…';}
   try{
     // 同手機是否已存在會員 → 避免重複建立（比對正規化後的號碼，與登入時的組法一致）
@@ -46060,7 +46128,16 @@ function ppHeaderHtml(){
     return `<div class="pp-meta-i pp-f-click" onclick="ppEmergencyEdit(event)"><span class="pp-meta-l">緊急聯絡人</span><span class="pp-meta-v">${v||'<span style="color:var(--t3);">＋ 設定</span>'}</span></div>`; })() : '';
   const genderItem = isM ? `<div class="pp-meta-i${_canBG?' pp-f-click':''}"${_canBG?` onclick="ppInlineEdit(event,'gender')"`:''}><span class="pp-meta-l">性別</span><span class="pp-meta-v">${({male:'男',female:'女',other:'其他'})[r.gender]||'<span style="color:var(--t3);">'+(_canBG?'＋ 設定':'未填')+'</span>'}</span></div>` : '';
   /* 發票載具（2026-08-05）：手機條碼，之後開立電子發票直接帶入；櫃檯與會員本人可改 */
-  const carrierItem = isM ? `<div class="pp-meta-i${_canBG?' pp-f-click':''}"${_canBG?` onclick="ppCarrierEdit(event)"`:''}><span class="pp-meta-l">載具</span><span class="pp-meta-v">${r.invoice_carrier||'<span style="color:var(--t3);">'+(_canBG?'＋ 設定':'未填')+'</span>'}</span></div>` : '';
+  /* 2026-09-14：這一列從「載具」擴充成「發票」—— 統編／載具／寄送信箱一眼看完，
+     點進去是同一個 invPrefModal（櫃檯與會員本人共用）。 */
+  const carrierItem = isM ? (()=>{
+    const _b=[];
+    if(r.invoice_ubn) _b.push('統編 '+r.invoice_ubn);
+    if(r.invoice_carrier) _b.push(r.invoice_carrier);
+    else if(r.email) _b.push('寄 '+r.email);
+    const _v=_b.join('・');
+    return `<div class="pp-meta-i${_canBG?' pp-f-click':''}"${_canBG?` onclick="ppCarrierEdit(event)"`:''}><span class="pp-meta-l">發票</span><span class="pp-meta-v">${_v||'<span style="color:var(--t3);">'+(_canBG?'＋ 設定':'未填')+'</span>'}</span></div>`;
+  })() : '';
   /* 2026-07-28 使用者指示：會員表頭固定兩列——
      第一列 姓名/電話/性別/生日；第二列 等級/教練/緊急聯絡人/LINE 開關 */
   const phoneItem = isM ? mvA('電話',fmtPhone(r.phone),'','未填') : '';
@@ -46382,30 +46459,64 @@ async function ppEmergencySave(){
   }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
   closeModal(); ppRenderBody();
 }
-/* 發票載具編輯小視窗（2026-08-05 使用者指示：會員端可自行更新；櫃檯代改亦同路徑）——
-   手機條碼載具：斜線開頭共 8 碼（/ 後接 7 碼的數字、大寫英文、+ - .）。留空＝清除。 */
-function ppCarrierEdit(ev){
-  if(!(canEditMemberData()||ppSelfView())){ showToast('修改會員資料需要櫃檯以上權限'); return; }
-  try{ ev.stopPropagation(); }catch(_){}
-  const r=PP.rec||{};
-  showModal(`<div class="modal-title">發票載具</div>
-    <div style="font-size:12.5px;color:var(--t2);margin-bottom:10px;line-height:1.7;">手機條碼載具（斜線開頭共 8 碼，例：/ABC+123）。之後開立電子發票會自動存入此載具；留空＝不使用。</div>
-    <div class="form-row"><label>手機條碼</label><input id="pc-carrier" value="${(r.invoice_carrier||'').replace(/"/g,'&quot;')}" placeholder="/ABC1234" maxlength="8" style="text-transform:uppercase;"></div>
-    <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
-      <button class="btn btn-green" onclick="ppCarrierSave()">儲存</button>
-    </div>`);
+/* 發票偏好設定（2026-08-05 起有載具；2026-09-14 擴充成 Email／載具／統編／抬頭一整組）——
+   使用者定案：「創立帳號的時候就要要求填寫或者選填手機載具」
+               「開統編的客人存進會員資料、收款自動帶入」
+               「會員自己在手機補」
+   ⚠⚠ **只有這一份實作**，兩個入口共用：櫃檯的會員資料頁（ppCarrierEdit）與
+       會員端首頁的提醒卡（memh2InvPrefCard）。0914 才因為「兩支長得一樣的預約視窗」
+       付過代價（同一個版面改兩次、米底白框只套到其中一支），這裡不要再分兩份。
+   ⚠ 權限沿用舊的那條：櫃檯以上，或會員本人。 */
+function invPrefModal(mid, after){
+  if(!mid){ showToast('找不到會員'); return; }
+  const isSelf = !!(SESSION && SESSION.role==='member' && String(SESSION.id)===String(mid));
+  if(!(canEditMemberData()||isSelf)){ showToast('修改會員資料需要櫃檯以上權限'); return; }
+  window._invPrefMid=mid;
+  window._invPrefAfter=(typeof after==='function')?after:null;
+  dbGet('members',mid).then(r=>{
+    r=r||{};
+    const q=v=>String(v||'').replace(/"/g,'&quot;');
+    showModal(`<div class="modal-title">發票怎麼給你？</div>
+      <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;line-height:1.7;">
+        設定一次就好，之後收款自動帶入。<b>Email 或手機條碼至少填一項</b>，
+        發票才有地方通知；中獎時憑通知到<b>超商列印</b>。</div>
+      <div class="form-row"><label>Email</label><input id="ip-email" type="email" value="${q(r.email)}" placeholder="name@example.com"></div>
+      <div class="form-row"><label>手機條碼</label><input id="ip-car" value="${q(r.invoice_carrier)}" placeholder="/ABC1234" maxlength="8" style="text-transform:uppercase;"></div>
+      <div style="font-size:11.5px;color:var(--t3);margin:-2px 0 12px;line-height:1.65;">有手機條碼就存你自己的載具；沒有就用 Email，發票存綠界載具並寄信給你。</div>
+      <div class="form-row"><label>統一編號（公司行號才填）</label><input id="ip-ubn" value="${q(r.invoice_ubn)}" placeholder="8 碼數字" maxlength="8"></div>
+      <div class="form-row"><label>公司抬頭</label><input id="ip-title" value="${q(r.invoice_title)}" placeholder="打統編才需要"></div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        <button class="btn btn-green" onclick="invPrefSave()">儲存</button>
+      </div>`);
+  }).catch(e=>showToast('讀取失敗：'+(e&&e.message?e.message:e)));
 }
-async function ppCarrierSave(){
-  let v=(document.getElementById('pc-carrier').value||'').trim().toUpperCase();
-  if(v && !/^\/[0-9A-Z+.\-]{7}$/.test(v)){ showToast('載具格式不正確：斜線開頭共 8 碼（數字、大寫英文、+ - .）'); return; }
+async function invPrefSave(){
+  const g=id=>((document.getElementById(id)||{}).value||'').trim();
+  const email=g('ip-email'), car=g('ip-car').toUpperCase(), ubn=g('ip-ubn'), title=g('ip-title');
+  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){ showToast('Email 格式不正確'); return; }
+  if(car && !/^\/[0-9A-Z+.\-]{7}$/.test(car)){ showToast('載具格式不正確：斜線開頭共 8 碼（數字、大寫英文、+ - .）'); return; }
+  if(ubn && !/^\d{8}$/.test(ubn)){ showToast('統一編號要 8 碼數字'); return; }
+  if(ubn && !title){ showToast('打統編要填公司抬頭'); return; }
+  if(!email && !car){ showToast('Email 或手機條碼至少填一項'); return; }
   try{
-    const rec=await dbGet('members',PP.id);
-    rec.invoice_carrier=v||null;
+    const rec=await dbGet('members', window._invPrefMid);
+    rec.email=email||null; rec.invoice_carrier=car||null;
+    rec.invoice_ubn=ubn||null; rec.invoice_title=title||null;
     await dbPut('members',rec);
-    PP.rec=rec; showToast(v?'載具已更新':'已清除載具');
-  }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
-  closeModal(); ppRenderBody();
+    if(String(PP.id)===String(window._invPrefMid)) PP.rec=rec;
+    /* 會員自己改的話順手更新首頁那份快取，否則提醒卡要等下次整頁重載才會消失 */
+    if(SESSION && SESSION.role==='member' && String(SESSION.id)===String(window._invPrefMid)) window._meMember=rec;
+    showToast('發票設定已儲存');
+  }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); return; }
+  closeModal();
+  const fn=window._invPrefAfter; window._invPrefAfter=null;
+  if(fn){ try{ fn(); }catch(_){} }
+}
+/* 舊入口保留：會員資料頁那一列的 onclick 寫的是 ppCarrierEdit(event) */
+function ppCarrierEdit(ev){
+  try{ ev.stopPropagation(); }catch(_){}
+  return invPrefModal(PP.id, ()=>{ try{ ppRenderBody(); }catch(_){} });
 }
 /* 主教練挑選小視窗（2026-07-27 使用者指示：按鈕名單） */
 function ppPickCoach(){
@@ -57754,6 +57865,20 @@ function memh2WeekShift(d){
 /* 課程篩選列已於 2026-08-27 退場（使用者：「會員應該也用不到篩選列」），
    memh2PickFilter／memh2RestoreChips 一併移除。s.filter 保留在狀態裡固定為 'all'，
    memh2HTML 的兩處判斷（課卡過濾、可報名團體課）照舊讀它，不動那兩條路。 */
+/* 發票設定提醒（2026-09-14 使用者定案：那 359 位既有會員「會員自己在手機補」）——
+   504 位會員裡有 359 位既沒 email 也沒載具，收款時發票開得出來卻沒人收得到。
+   ⚠ 三者任一有值就不出現 —— 這是缺口提示，不是常駐功能入口（設定入口在個人資料頁）。
+   ⚠ 讀 window._meMember：它在 58669 載首頁資料時就設好了，早於 memh2HTML 被呼叫。 */
+function memh2InvPrefCard(){
+  const me=window._meMember||{};
+  if(!me.id) return '';
+  if((me.invoice_carrier||'').trim() || (me.email||'').trim() || (me.invoice_ubn||'').trim()) return '';
+  return `<div class="mh2-invpref" onclick="invPrefModal('${me.id}', ()=>navTo('mem_bookings'))">
+    <div class="mh2-invpref-t">還沒設定發票怎麼給你</div>
+    <div class="mh2-invpref-s">填 Email 或手機條碼，發票才寄得到你手上・中獎憑通知到超商列印</div>
+    <span class="mh2-invpref-go">去設定 ›</span>
+  </div>`;
+}
 function memh2HTML(o){
   const mine=o.mine||[], coachMap=o.coachMap||{}, mtickets=o.mtickets||[], typeMap=o.typeMap||{};
   const allBk=o.all||[];
@@ -57963,7 +58088,7 @@ function memh2HTML(o){
      留在這一頁的話換到「我的票券」就整條消失了。 */
   setTimeout(()=>{ try{ admh2Mount(memh2WeekShift); }catch(_){} },0);
   return `<div class="admh admh2 memh2">
-
+    ${memh2InvPrefCard()}
     <div class="admh-bigrow">
       <div class="admh-bigdate"><span class="admh-dnum">${_dv.getDate()}</span>
         <span class="admh-dside"><b>${_dv.getMonth()+1} 月</b><span>週${_wdz[_dv.getDay()]}${s.date===today?'・今天':''}</span></span></div>

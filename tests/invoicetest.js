@@ -89,13 +89,21 @@ eq('★★ 打統編一定要抬頭', invCheckFields({mode:'ubn',ubn:'53538851',
 eq('★★ 愛心碼 3–7 碼', invCheckFields({mode:'donate',loveCode:'12'}), '愛心碼要 3–7 碼數字');
 eq('★★ 手機條碼是 / 加 7 碼', invCheckFields({mode:'carrier',carrierNum:'ABC1234'}),
    '手機條碼格式是 / 加 7 碼（例如 /ABC1234）');
-eq('　　手機條碼留空是合法的（＝存綠界載具）', invCheckFields({mode:'carrier',carrierNum:''}), '');
+/* ⚠ 2026-09-14 規則改了：原本「手機條碼留空是合法的」——因為綠界載具只要有手機就開得成。
+   但那樣開出來的發票**沒有任何通知管道**，客人根本不知道自己有發票（0914 誤開的
+   FX28688351 就是這個缺口）。使用者定案：「點開發票要有 email 或載具或統編」。 */
+eq('★★★ 兩格都空要擋（開發票一定要有通知管道）',
+   invCheckFields({mode:'carrier',carrierNum:''}), '開發票要填 Email 或手機條碼（擇一）');
+eq('★★ 有手機條碼就放行', invCheckFields({mode:'carrier',carrierNum:'/ABC1234'}), '');
+eq('★★ 只有 Email 也放行', invCheckFields({mode:'carrier',carrierNum:'',email:'a@b.co'}), '');
 eq('★ 紙本沒地址寄不出去', invCheckFields({mode:'print',addr:''}), '紙本發票要填地址');
 eq('　　沒開發票（null）不擋', invCheckFields(null), '');
 /* 2026-09-14：email 有填才驗 —— 沒填不是錯誤（載具只要有手機就夠），
    填了格式錯卻一定被綠界退件，當場擋下來比較好。 */
 eq('★★ email 格式錯要擋', invCheckFields({mode:'carrier',carrierNum:'',email:'abc'}), 'Email 格式不對');
-eq('　　email 沒填不算錯', invCheckFields({mode:'carrier',carrierNum:'',email:''}), '');
+eq('　　email 沒填不是「格式錯」（有條碼就放行）', invCheckFields({mode:'carrier',carrierNum:'/ABC1234',email:''}), '');
+/* 2026-09-14 使用者定案：「櫃檯收款的時候要有開發票或不開發票的選項」 */
+eq('★★★ 選了不開發票就整條跳過驗證', invCheckFields({mode:'none'}), '');
 eq('　　正常 email 放行', invCheckFields({mode:'carrier',carrierNum:'',email:'a@b.co'}), '');
 eq('　　統編那格的 email 也驗', invCheckFields({mode:'ubn',ubn:'53538851',title:'雨果',email:'x@y'}), 'Email 格式不對');
 eq('　　正確的四組都放行',
@@ -139,6 +147,23 @@ console.log('\n④ 開不成不能擋住銷售（票券已經發出去了）');
   ok('★ 失敗只用 toast 告知，不 throw', /showToast\('⚠ 發票開立失敗：'/.test(G) && !/throw /.test(G));
   ok('★★ 呼叫端也包 try（發票爆掉不能讓票券發放整條中斷）',
      /try\{ await invIssueForPurchase\(_purRow, await dbGet\('members',P\.member_id\)\.catch\(\(\)=>null\), P\.inv,[\s\S]{0,120}?\}catch\(e\)\{ console\.error\('invoice fail', e\); \}/.test(src));
+  /* 2026-09-14 使用者定案：「櫃檯收款的時候要有開發票或不開發票的選項」。
+     ⚠⚠ 表示「不開」一定要用 {mode:'none'}，**不能用 f==null** ——
+       null 的既有語意是「走預設載具照常開」，退款手續費那條路（39399）就是傳 null。
+       混用的話手續費發票會整批開不出來，而且不會有任何錯誤訊息。 */
+  ok('★★★ 選了不開發票就整條跳過（判斷 f.mode===\'none\'，不是 f==null）',
+     /if\(f && f\.mode==='none'\) return null;/.test(G));
+  ok('★★★ 不能改成用 null 判斷（那會把手續費補開也一起關掉）',
+     !/if\(!f\) return null;/.test(G));
+}
+{
+  const R=grabFn('invReadFields');
+  ok('★★★ 櫃檯按「不開發票」→ 回 {mode:\'none\'}', /if\(w\.dataset\.on==='0'\) return \{mode:'none'\};/.test(R));
+  const S=grabFn('invSetOn');
+  ok('★★ 開關把四格整區藏起來（選不開就不該還看得到載具欄）',
+     /body\.style\.display=on\?'':'none'/.test(S));
+  ok('★★ 預設是「開立」（收錢本來就該開發票，預設不開會變成常態性漏開）',
+     /if\(!w\.dataset\.on\) invSetOn\(1\);/.test(src));
 }
 
 console.log('\n⑤ 作廢票券連動');
