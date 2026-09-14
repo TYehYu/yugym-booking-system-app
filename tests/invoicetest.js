@@ -35,6 +35,29 @@ console.log('① 四種開法的互斥組合（湊錯一格綠界一律退件）
   eq('　　金額與品項', [d.SalesAmount,d.Items.length,d.Items[0].ItemAmount], [36000,1,36000]);
   eq('　　RelateNumber＝purchase id（查詢 GetIssue 只認這個，不認發票號碼）', d.RelateNumber, 'PUR-abc');
 }
+/* 2026-09-14 使用者定案：「還是可以請客人填寫 email　發票除了用雲端條碼之外的都統一存放去 email」
+   「然後中獎通知　去超商列印」——
+   email 是**通知管道**不是開立條件：四種開法都吃，櫃檯當場填的優先、沒填就回退到會員資料。 */
+{
+  const d=invPayload(PUR, MEM, {mode:'carrier', carrierNum:'', email:'guest@mail.com'});
+  eq('★★★ 沒有手機條碼的客人 → 綠界載具＋email（開立與中獎都靠這封信）',
+     [d.CarrierType,d.CustomerEmail,d.Print,d.Donation], ['1','guest@mail.com','0','0']);
+}
+{
+  const MEM2={name:'王小明', phone:'0912-345-678', email:'old@mail.com'};
+  eq('★★★ 櫃檯沒填就回退到會員資料裡的 email', invPayload(PUR,MEM2,{mode:'carrier',carrierNum:''}).CustomerEmail, 'old@mail.com');
+  eq('★★ 櫃檯填了就以櫃檯為準（客人當場改用別的信箱）',
+     invPayload(PUR,MEM2,{mode:'carrier',carrierNum:'',email:'new@mail.com'}).CustomerEmail, 'new@mail.com');
+  eq('★★ 手機條碼那條也照樣帶（多一個通知管道不會壞事）',
+     invPayload(PUR,MEM2,{mode:'carrier',carrierNum:'/ABC1234'}).CustomerEmail, 'old@mail.com');
+  /* ⚠ 這條是 0914 真的改掉的 bug：ubn 分支原本有一行 d.CustomerEmail=f.email||''，
+     櫃檯沒填時會把會員既有的 email 蓋成空字串 —— 打統編的客人反而收不到證明聯。 */
+  eq('★★★ 統編沒填 email 也要回退到會員資料（不能被蓋成空字串）',
+     invPayload(PUR,MEM2,{mode:'ubn',ubn:'53538851',title:'雨果'}).CustomerEmail, 'old@mail.com');
+}
+eq('　　兩格都空一樣開得成（綠界載具只要有手機就夠，只是客人收不到通知）',
+   [invPayload(PUR,MEM,{mode:'carrier',carrierNum:''}).CarrierType,
+    invPayload(PUR,MEM,{mode:'carrier',carrierNum:''}).CustomerEmail], ['1','']);
 {
   const d=invPayload(PUR, MEM, {mode:'carrier', carrierNum:'/ABC1234'});
   eq('★★ 手機條碼 → CarrierType=3＋條碼，不列印不捐贈',
@@ -69,6 +92,12 @@ eq('★★ 手機條碼是 / 加 7 碼', invCheckFields({mode:'carrier',carrierN
 eq('　　手機條碼留空是合法的（＝存綠界載具）', invCheckFields({mode:'carrier',carrierNum:''}), '');
 eq('★ 紙本沒地址寄不出去', invCheckFields({mode:'print',addr:''}), '紙本發票要填地址');
 eq('　　沒開發票（null）不擋', invCheckFields(null), '');
+/* 2026-09-14：email 有填才驗 —— 沒填不是錯誤（載具只要有手機就夠），
+   填了格式錯卻一定被綠界退件，當場擋下來比較好。 */
+eq('★★ email 格式錯要擋', invCheckFields({mode:'carrier',carrierNum:'',email:'abc'}), 'Email 格式不對');
+eq('　　email 沒填不算錯', invCheckFields({mode:'carrier',carrierNum:'',email:''}), '');
+eq('　　正常 email 放行', invCheckFields({mode:'carrier',carrierNum:'',email:'a@b.co'}), '');
+eq('　　統編那格的 email 也驗', invCheckFields({mode:'ubn',ubn:'53538851',title:'雨果',email:'x@y'}), 'Email 格式不對');
 eq('　　正確的四組都放行',
    [{mode:'carrier',carrierNum:'/ABC1234'},{mode:'ubn',ubn:'53538851',title:'雨果'},
     {mode:'donate',loveCode:'168001'},{mode:'print',addr:'台北市'}].map(invCheckFields),

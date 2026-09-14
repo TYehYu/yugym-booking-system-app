@@ -13011,8 +13011,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260914.1413';
-const APP_VERSION_LABEL = 'v260914.1413';
+const APP_VERSION = '260914.1552';
+const APP_VERSION_LABEL = 'v260914.1552';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13810,14 +13810,21 @@ function invPick(k){
   w.querySelectorAll('.inv-b').forEach(b=>b.classList.toggle('on', b.dataset.k===k));
   w.dataset.mode=k;
   const box=document.getElementById('inv-x'); if(!box) return;
-  const row=(id,lb,ph)=>`<div class="inv-r"><label>${lb}</label><input id="${id}" placeholder="${ph||''}" autocomplete="off"></div>`;
+  const row=(id,lb,ph,val,type)=>`<div class="inv-r"><label>${lb}</label><input id="${id}" type="${type||'text'}" placeholder="${ph||''}" value="${esc(val||'')}" autocomplete="off"></div>`;
   const note=t=>`<div class="inv-note">${t}</div>`;
+  const _mail=window._invMemEmail||'';   /* 客人上次留的 email（invSync 去撈），免得每次重問 */
   let h='';
   if(k==='carrier'){
-    h=row('inv-car','手機條碼','不填＝存綠界載具')
-      +note('不填就存<b>綠界載具</b>：客人事後查得到、中獎會通知，當場不用給紙本。');
+    /* 2026-09-14 使用者定案：「發票除了用雲端條碼之外的都統一存放去 email」「中獎通知 去超商列印」。
+       兩格的分工 ——
+         填了手機條碼 → CarrierType=3，存客人自己的載具，中獎通知走財政部平台（不需要我們的 email）
+         沒填         → CarrierType=1 存綠界載具＋email，開立與中獎都由綠界寄信，憑通知到超商列印
+       ⚠ 兩格都空一樣開得成（載具只要有手機就夠），只是客人收不到任何通知。 */
+    h=row('inv-car','手機條碼','沒有就留空')
+      +row('inv-email','Email','寄發票與中獎通知',_mail,'email')
+      +note('有手機條碼就存客人自己的載具。<b>沒有就填 Email</b>：存綠界載具，開立與中獎都寄信通知，中獎憑通知到<b>超商列印</b>。');
   }else if(k==='ubn'){
-    h=row('inv-ubn','統一編號','8 碼數字')+row('inv-title','公司抬頭','')+row('inv-email','Email','寄證明聯用')
+    h=row('inv-ubn','統一編號','8 碼數字')+row('inv-title','公司抬頭','')+row('inv-email','Email','寄證明聯用',_mail,'email')
       +note('打統編就<b>不能</b>存載具或捐贈。');
   }else if(k==='donate'){
     h=row('inv-love','愛心碼','3–7 碼數字')
@@ -13844,6 +13851,11 @@ async function invSync(){
   if(!(paid&&cfg.on)) return;
   const m=document.getElementById('inv-mode');
   if(m) m.innerHTML=cfg.test?'<b class="inv-test">測試模式・不會送財政部</b>':'';
+  /* 2026-09-14：預填客人上次留的 email —— 504 位會員只有 17 位有 email，
+     所以多半還是要當場問；但問過一次就該記住（開立成功會寫回 members）。 */
+  { const _mid=((document.getElementById('gt-member')||{}).value)||'';
+    const _m=(window._grantMembers||[]).find(x=>x&&x.id===_mid);
+    window._invMemEmail=(_m&&_m.email)||''; }
   if(!w.dataset.mode) invPick('carrier');
 }
 /* 讀畫面上那一格 → 一包乾淨的參數（沒開發票就回 null） */
@@ -13855,7 +13867,7 @@ function invReadFields(){
   if(k==='ubn')    return {mode:'ubn',    ubn:g('inv-ubn'), title:g('inv-title'), email:g('inv-email')};
   if(k==='donate') return {mode:'donate', loveCode:g('inv-love')};
   if(k==='print')  return {mode:'print',  name:g('inv-name'), addr:g('inv-addr')};
-  return {mode:'carrier', carrierNum:g('inv-car')};
+  return {mode:'carrier', carrierNum:g('inv-car'), email:g('inv-email')};
 }
 /* 開立前先擋掉一定會被綠界退的（錯誤訊息只會說「參數錯誤」，當場沒人猜得到） */
 function invCheckFields(f){
@@ -13867,6 +13879,9 @@ function invCheckFields(f){
   if(f.mode==='donate' && !/^\d{3,7}$/.test(f.loveCode||'')) return '愛心碼要 3–7 碼數字';
   if(f.mode==='carrier' && (f.carrierNum||'') && !/^\/[0-9A-Z+\-.]{7}$/.test(f.carrierNum)) return '手機條碼格式是 / 加 7 碼（例如 /ABC1234）';
   if(f.mode==='print'  && !(f.addr||'').trim()) return '紙本發票要填地址';
+  /* 2026-09-14：email 有填才驗 —— 沒填一樣開得成（綠界載具只要有手機就夠），
+     只是客人收不到開立與中獎通知。格式錯了綠界會退件，當場擋下來比較好。 */
+  if((f.email||'') && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email)) return 'Email 格式不對';
   return '';
 }
 /* 把一筆 purchase 組成綠界的參數。
@@ -13880,7 +13895,10 @@ function invPayload(pur, mem, f, items){
     RelateNumber:String(pur.id).slice(0,30),
     CustomerName:(mem&&mem.name)||'',
     CustomerPhone:((mem&&mem.phone)||'').replace(/\D/g,''),
-    CustomerEmail:'',
+    /* 2026-09-14 使用者定案：「除了用雲端條碼之外的都統一存放去 email」「中獎通知 去超商列印」。
+       所以 email 在這裡統一處理（四種開法都吃）：櫃檯當場填的優先，沒填就用會員資料裡的。
+       綠界拿到 CustomerEmail 才會寄開立與中獎通知；空的也開得成，只是客人收不到信。 */
+    CustomerEmail:((f&&f.email)||(mem&&mem.email)||''),
     CustomerAddr:'', CustomerIdentifier:'',
     Print:'0', Donation:'0', LoveCode:'', CarrierType:'', CarrierNum:'',
     TaxType:'1', SalesAmount:amt, InvType:'07', vat:'1',
@@ -13889,7 +13907,9 @@ function invPayload(pur, mem, f, items){
   };
   if(f&&f.mode==='ubn'){
     d.CustomerIdentifier=f.ubn; d.CustomerName=f.title||d.CustomerName;
-    d.CustomerEmail=f.email||''; d.CarrierType='1';   /* 統編＋綠界載具＝不用列印紙本 */
+    d.CarrierType='1';   /* 統編＋綠界載具＝不用列印紙本。⚠ email 已在上面統一處理（2026-09-14），
+                            這裡原本有一行 d.CustomerEmail=f.email||'' —— 留著會把「櫃檯沒填但會員
+                            資料有」的情況蓋成空字串，等於統編客人反而收不到證明聯。 */
   }else if(f&&f.mode==='donate'){
     d.Donation='1'; d.LoveCode=f.loveCode;
   }else if(f&&f.mode==='print'){
@@ -13912,6 +13932,7 @@ async function invIssueForPurchase(pur, mem, f, items, opt){
   const row={ id:uid('INV'), merchant_order_no:d.RelateNumber, purchase_id:pur.id,
     member_id:pur.member_id||null, category:(opt&&opt.category)||'sale',
     buyer_name:d.CustomerName, buyer_ubn:d.CustomerIdentifier||null,
+    buyer_email:d.CustomerEmail||null,   /* 2026-09-14：重開要用它，散客掉了就救不回來 */
     carrier_type:d.CarrierType||null, carrier_num:d.CarrierNum||null,
     love_code:d.LoveCode||null, print_flag:d.Print,   /* 欄位是 text，存綠界原值 '0'/'1'（寫 boolean 會被 PostgREST 退件） */
     amt, tax_amt:amt-Math.round(amt/1.05), total_amt:amt, items:d.Items,
@@ -13926,6 +13947,12 @@ async function invIssueForPurchase(pur, mem, f, items, opt){
   try{ await dbPut('invoices', row); }catch(e){ console.error('invoices 寫入失敗', e); }
   if(r&&r.ok){
     try{ await dbPut('purchases', Object.assign({}, pur, {invoice_type:'ecpay', invoice_number:rd.InvoiceNo})); }catch(_){}
+    /* 2026-09-14：問過一次就記住 —— 下次收款 invSync 自動帶入，櫃檯不必再問。
+       ⚠ 只在會員原本沒有 email 時寫，不覆蓋既有值（客人可能自己在個人資料改過，
+         那一份比櫃檯當場聽寫的可信）。 */
+    if(mem && mem.id && d.CustomerEmail && !((mem.email||'').trim())){
+      try{ await dbPut('members', Object.assign({}, mem, {email:d.CustomerEmail})); }catch(_){}
+    }
     showToast(`發票已開立 ${rd.InvoiceNo}${cfg.test?'（測試）':''}`);
   }else{
     showToast('⚠ 發票開立失敗：'+((r&&r.msg)||'未知')+'　（票券已發放，可到「發票」重試）', 6000);
@@ -64087,10 +64114,14 @@ async function _invRetry(id){
   const r=await invCall('issue',
     invPayload(Object.assign({}, pur, {id:inv.merchant_order_no, deal_amount:inv.total_amt}),
       await dbGet('members', inv.member_id).catch(()=>null),
-      inv.buyer_ubn ? {mode:'ubn', ubn:inv.buyer_ubn, title:inv.buyer_name}
-      : inv.love_code ? {mode:'donate', loveCode:inv.love_code}
-      : (inv.print_flag==='1') ? {mode:'print', name:inv.buyer_name, addr:''}
-      : {mode:'carrier', carrierNum:(inv.carrier_type==='3'?inv.carrier_num:'')},
+      /* 2026-09-14：email 也要帶回去 —— 重開走的是「當初存下來的那組條件」，
+         漏掉的話重開出來的發票沒有通知信箱，散客（member_id 是 null）更是救不回來。 */
+      Object.assign(
+        inv.buyer_ubn ? {mode:'ubn', ubn:inv.buyer_ubn, title:inv.buyer_name}
+        : inv.love_code ? {mode:'donate', loveCode:inv.love_code}
+        : (inv.print_flag==='1') ? {mode:'print', name:inv.buyer_name, addr:''}
+        : {mode:'carrier', carrierNum:(inv.carrier_type==='3'?inv.carrier_num:'')},
+        {email:inv.buyer_email||''}),
       inv.items));
   const rd=(r&&r.data)||{};
   await dbPut('invoices', Object.assign({}, inv, {
