@@ -7215,6 +7215,12 @@ body.memh2-shell .bottom-nav .bn-lb{color:inherit;}
   .modal-bg:not(.modal-side):has(.qs-mtop) .modal-title{font-size:21px;font-weight:900;}
   .modal-bg:not(.modal-side):has(.qs-mtop) .modal-foot .btn{min-height:54px;font-size:17px;font-weight:800;}
 }
+/* 票種分頁（2026-09-14）：與日期列同一組語彙（選中＝品牌綠實心） */
+.qs-types{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 10px;}
+.qs-type{border:1.5px solid var(--bd);border-radius:12px;background:#fff;color:var(--t2);
+  padding:11px 6px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.qs-type.on{background:var(--green);border-color:var(--green);color:#fff;}
+.qs-tnote{margin:-4px 0 10px;font-size:12px;color:var(--gold-d,#8a5e28);line-height:1.6;}
 .qs-head{margin-bottom:12px;}
 .qs-head-t{font-size:13px;color:var(--t2);line-height:1.6;}
 .qs-head-t b{color:var(--text);font-family:var(--num);font-size:14px;}
@@ -12989,8 +12995,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260914.1352';
-const APP_VERSION_LABEL = 'v260914.1352';
+const APP_VERSION = '260914.1358';
+const APP_VERSION_LABEL = 'v260914.1358';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -58338,6 +58344,23 @@ async function memh2SelfSlots(ds, until, reschedId){
     if(!_okDay(x)) continue;
     if(_days.length<QS_DAY_MAX) _days.push([x,dd]); else _more++;
   }
+  /* ── 票種分頁（2026-09-14 補上；這是缺口不是重構）────────────────────────
+     這個視窗一直只做了「沒有一般點就自動切友善」（見開頭那行），
+     所以**同時有一般點與友善點**的會員在這裡沒辦法選要用哪一種 ——
+     只有舊的底部面板有分頁列（msbSetType），而那支正在退場。
+     ⚠ 兩種都有才畫：只有一種時多一列分頁只是多一個要理解的東西（銀髮友善那條）。
+     ⚠ 改期／換時段不畫：那兩種情況票已經定了（s.resched）或沒有點數可挑。
+     ⚠ 切換要重探時段：可約時段是 msbProbeFree 依「目前這一種票」算的
+       （msbPickTicket→msbGroupTks 讀 s.type），不重跑會拿到上一種票的結果。
+     ⚠ 友善點的限制寫出來：限平日、而且要在 18:00 前上完（tkTimeOk 的實際判準）。 */
+  const _bothPts=!_rs && (s.groups.self||[]).length>0 && (s.groups.friendly||[]).length>0;
+  const _sum=g=>(g||[]).reduce((a,t)=>a+(Number(t.sessions_remaining)||0),0);
+  const _typeRow=_bothPts
+    ? `<div class="qs-types">
+        <button type="button" class="qs-type${s.type==='self'?' on':''}" onclick="memh2SetType('self')">自主訓練　${_sum(s.groups.self)} 點</button>
+        <button type="button" class="qs-type${s.type==='friendly'?' on':''}" onclick="memh2SetType('friendly')">友善　${_sum(s.groups.friendly)} 點</button>
+      </div>${s.type==='friendly'?'<div class="qs-tnote">友善點限平日使用，而且要在 18:00 前上完</div>':''}`
+    : '';
   const _dayRow=_days.length>1
     ? `<div class="qs-days">${_days.map(([x,dd])=>
         `<button type="button" class="qs-day${x===date?' on':''}${x===_t0?' qs-today':''}"
@@ -58357,6 +58380,7 @@ async function memh2SelfSlots(ds, until, reschedId){
          而且「取消」跟「確認」擺在一起容易按錯。 */''
   }${_rs?`<button type="button" class="qs-cx" onclick="closeModal();memCancelSelf('${_rs.id}')">取消預約</button>`:''}</div>
     ${_rs?`<div class="qs-orig">原時段　<b>${String(_rs.origDate).slice(5).replace('-','/')}　${String(_rs.origTime).slice(0,5)}</b>　→　請選新的時段</div>`:''}
+    ${_typeRow}
     ${_dayRow}
     <div class="qs-head">
       <div class="qs-head-t">${date.replace(/-/g,'/')}（${'日一二三四五六'[_d.getDay()]}）　${_rs?'可改到':'還能預約'} <b>${mms.length}</b> 個時段</div>
@@ -58509,6 +58533,16 @@ async function memh2GrpJoin(bid){
     return;
   }
   try{ msbGrpJoin(bid); }catch(e){ showToast('開啟報名失敗'); }
+}
+/* 切換票種（2026-09-14）：換一種票＝可約時段整組要重算，所以清掉 free 再重開這個視窗。
+   ⚠ 不是只改 s.type 就好 —— msbProbeFree 是依「目前這一種票」探的（msbPickTicket→msbGroupTks）。
+   ⚠ 日期沿用現在選的那一天；那天若不符新票種的限制（例如友善點碰到週末），
+     memh2SelfSlots 會照既有規則顯示「這天沒有可預約的時段」，不必另外判一次。 */
+function memh2SetType(t){
+  const s=window._msb; if(!s) return;
+  if(s.type===t) return;
+  s.type=t; s.free=null;
+  memh2SelfSlots(s.date, window._mh2SelfUntil||'');
 }
 function memh2SelSlot(t){
   window._mh2Pick=t;      // 點了就是選它（同上，不做「再點一次取消」）
