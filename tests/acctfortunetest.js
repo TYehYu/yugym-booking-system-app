@@ -307,7 +307,9 @@ ok('★ 大頭照＋姓名獨立一列、橫跨兩欄（使用者回報左右失
 ok('★ 底下左右各四列：電話/性別/生日/LINE ｜ 主教練/緊急聯絡人/載具/家庭成員',
    /* 2026-08-22：會員本人不畫 LINE 那一列（已移到通知設定），櫃檯端仍是四列 */
    ph.includes('<div class="pp-meta pp-idfields">${phoneItem}${genderItem}${bdayItem}${_selfPP?\'\':lineItem}</div>')
-   && ph.includes('<div class="pp-meta pp-fields">${_selfPP?\'\':coachItem}${ecItem}${carrierItem}${famItem}</div>')
+   /* 2026-09-14：右欄多一列 Email（電子發票的主要送達管道，值得自己的位置）——
+      原本 email 只在「發票」那列有載具時被 else if 吃掉，看起來像沒地方填。 */
+   && ph.includes('<div class="pp-meta pp-fields">${_selfPP?\'\':coachItem}${ecItem}${carrierItem}${emailItem}${famItem}</div>')
    && /\.pp-head\.pp-head-m2\{display:grid;grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/.test(src));
 /* 0820 放大到 76 → 0822 收回 58：表頭改成固定不捲之後，它佔的高度是永久少掉的可讀區
    （使用者：「把上方底部米色視窗縮短一點」）。見 tests/ppstickytest.js。 */
@@ -323,7 +325,7 @@ ok('　　只吃這兩種視窗，其他地方的 .pp-card 基底規則沒被動
 ok('　　主教練／家庭成員抽成具名變數，兩種版面共用同一份', /const coachItem = isM \? mvA\('主教練'/.test(src)
    && /const famItem = \(isM&&_canBase\)\?/.test(src)
    /* 2026-08-22：會員看自己時 tierItem/coachItem 收起來（ppSelfView），組法不變 */
-   && /const meta = isM\s*\n\s*\? \(ppSelfView\(\)\?'':tierItem \+ coachItem\) \+ ecItem \+ lineItem \+ carrierItem \+ famItem/.test(src));
+   && /const meta = isM\s*\n\s*\? \(ppSelfView\(\)\?'':tierItem \+ coachItem\) \+ ecItem \+ lineItem \+ carrierItem \+ emailItem \+ famItem/.test(src));
 ok('　　姓名與大頭照抽成共用變數，兩種版面各用一次（沒有複製兩份）',
    (ph.match(/\$\{_avatar\}/g)||[]).length===2 && (ph.match(/\$\{_nameHtml\}/g)||[]).length===2);
 ok('　　員工資料／其他角色維持原本的橫向表頭', ph.includes('return `<div class="pp-head">'));

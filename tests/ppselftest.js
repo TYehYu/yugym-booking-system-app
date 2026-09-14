@@ -16,8 +16,9 @@ t('櫃檯／教練／管理員看會員資料不受影響（沒有其他角色�
 const hd=cut('function ppHeaderHtml(){','function ppOpenPage(');
 t('會員看自己時不顯示「等級」與「主教練」',
   /\(ppSelfView\(\)\?'':tierItem \+ coachItem\)/.test(hd));
-t('緊急聯絡人／LINE／載具照舊（本來就是會員自己能改的）',
-  /ecItem \+ lineItem \+ carrierItem/.test(hd));
+/* 2026-09-14：中間插一列 Email（發票的主要送達管道）—— 會員本人一樣看得到、改得動。 */
+t('緊急聯絡人／LINE／載具／Email 照舊（本來就是會員自己能改的）',
+  /ecItem \+ lineItem \+ carrierItem \+ emailItem/.test(hd));
 t('等級章仍只有管理員點得動（原規則沒被動到）',
   /const _canTier = !!\(SESSION&&SESSION\.role==='admin'\);/.test(hd));
 t('家庭成員仍只有櫃檯以上維護', /const famItem = \(isM&&_canBase\)\?/.test(hd));

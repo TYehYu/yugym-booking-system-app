@@ -34,7 +34,17 @@ ok('★ 表頭有發票欄（櫃檯或本人可點）',
    /const carrierItem = isM \? \(\(\)=>\{/.test(src)
    && /<span class="pp-meta-l">發票<\/span>/.test(src)
    && /onclick="ppCarrierEdit\(event\)"/.test(src)
-   && /\+ ecItem \+ lineItem \+ carrierItem/.test(src));
+   && /\+ ecItem \+ lineItem \+ carrierItem \+ emailItem/.test(src));
+/* 2026-09-14（使用者截圖問「會員資料不是從這邊輸入嗎　email 載具」）——
+   「發票」那列只講買受人身份（統編／載具），Email 獨立一列。
+   ⚠ 第一版寫成「有載具就 else if 不顯示 email」，有載具的人只看得到載具，
+     而表頭又沒有 email 欄 → 看起來像 email 根本沒地方填（其實點進去就有）。 */
+ok('★★★ Email 自己一列，不再被載具吃掉',
+   /const emailItem = isM \? `<div class="pp-meta-i/.test(src)
+   && /<span class="pp-meta-l">Email<\/span>/.test(src)
+   && !/else if\(r\.email\) _b\.push/.test(src));
+ok('★★ Email 那列點下去也是同一個發票設定視窗（不另做一套）',
+   /const emailItem = isM \? `<div class="pp-meta-i\$\{_canBG\?' pp-f-click':''\}"\$\{_canBG\?` onclick="ppCarrierEdit\(event\)"/.test(src));
 ok('★★ 舊入口保留成薄包裝（那一列的 onclick 一個字沒改）',
    /function ppCarrierEdit\(ev\)\{[\s\S]{0,220}?invPrefModal\(PP\.id/.test(src));
 {
