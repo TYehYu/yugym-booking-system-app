@@ -37,9 +37,13 @@ ok('★★★ 視窗標題改了', /<div class="modal-title">換器材<\/div>/.t
 
 console.log('\n④ 不同規格手機不會折行（使用者特別交代）');
 ok('★★★ 七格日期一律不折行', /#msb-sheet \.msb-date span,#msb-sheet \.msb-date b\{white-space:nowrap;\}/.test(src));
-ok('★★★ 380／360 兩段各縮一階（沿用系統既有斷點，不自創）',
-   /@media\(max-width:380px\)\{\s*\n\s*#msb-sheet \.msb-dates\{gap:3px;/.test(src)
-   && /@media\(max-width:360px\)\{\s*\n\s*#msb-sheet \.msb-date b\{font-size:11\.5px;\}/.test(src));
+/* 2026-09-14 二修（使用者：要一套能應付不同解析度的機制，「先風險低的開始」）——
+   日期列的 380／360 斷點退場，改成 container query＋clamp 連續縮放；
+   做法與行事曆課卡（.cal-ev-std）同一套，不是新發明的。 */
+ok('★★★ 日期列改吃容器寬度（clamp+cqw），不再用斷點跳階',
+   /#msb-sheet \.msb-dates\{[^}]*container-type:inline-size;\}/.test(src)
+   && /#msb-sheet \.msb-date span\{font-size:clamp\(9px,2\.9cqw,11px\);\}/.test(src)
+   && !/#msb-sheet \.msb-dates\{gap:3px;/.test(src));
 ok('★★ 取消視窗的大字在窄機降一階、整句平衡換行',
    /\.mcx-when\{text-wrap:balance;\}/.test(src)
    && /@media\(max-width:360px\)\{ \.mcx-when\{font-size:19px;\} \.modal:has\(\.mcx\) \.modal-title\{font-size:20px;\} \}/.test(src));
