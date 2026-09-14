@@ -181,6 +181,21 @@ ok('★ 團課簽到名單的圓點直接問票券夾（不再自己算一套）
 ok('★ 簽到名單逐名額對到票（票券夾的 seatOf，來源是扣課紀錄）',
    /slotAt:n=>W\.seatOf\(b\.id,n\) \|\| W\.ticketOf\(b\.id\) \|\| fb,/.test(src)
    && /seatOf:\(bid,n\)=>byId\[\(seatTk\[bid\]\|\|\[\]\)\[Math\.max\(0,\(Number\(n\)\|\|1\)-1\)\]\]\|\|null,/.test(src));
+/* 2026-09-14（修 0829 遺留的第 6 點）：seatTk 原本是依「掃票順序」push 的，
+   與名額編號無關 —— A 佔第 1、3 格時 seatOf(bid,2) 會指到別人那一格的票。
+   改成用 grpTicketAlloc 算好的 seatByKey（名額鍵 → 票）依 seatNo 回填。 */
+ok('★★★ 名額 → 票用權威答案回填，不再靠掃票順序',
+   /const pend=\{\}, byTicket=\{\}, seatByKey=\{\};/.test(src)
+   && /if\(logged\) \(seatByKey\[b\.id\]=seatByKey\[b\.id\]\|\|\{\}\)\[k\]=logged;/.test(src)
+   && /return \{pend, byTicket, seatByKey\};/.test(src)
+   && /const no=i<0\?1:\(Number\(String\(k\)\.slice\(i\+1\)\)\|\|1\);/.test(src)
+   && /arr\[Math\.max\(0,no-1\)\]=m\[k\];/.test(src));
+/* ⚠ 名額鍵就地解析，不呼叫 seatNo() —— buildWallet 會被 wallettest 抽進沙箱單獨跑
+   （沙箱只注入 ymd／TODAY／parseYmd／attObj），多一個外部依賴就多一個
+   「正式環境好好的、測試炸掉」的破口。這一條當場抓到過一次。 */
+ok('★★ buildWallet 不因這次修正多依賴外部函式', !/seatNo\(k\)/.test(src));
+ok('★★ 沒有 seatByKey 的課卡（舊匯入、純推算）維持原本順序當後備',
+   /if\(arr\.length\) seatTk\[bid\]=arr;/.test(src));
 ok('★ 每一列標出票券夾裡的第幾套（#N）＋方案名，能直接跟票券頁對照',
    /<div class="gr-tkname">\$\{tkNoTag\(_sl\.no\)\}\$\{_sl\.t\.plan_name\|\|'票券'\}/.test(src));
 ok('　　補課券不參與先進先出推算（它一定有扣課紀錄；被「發它的那一堂」吃掉會顯示已用畢）',
