@@ -13021,8 +13021,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260914.2216';
-const APP_VERSION_LABEL = 'v260914.2216';
+const APP_VERSION = '260914.2224';
+const APP_VERSION_LABEL = 'v260914.2224';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15370,19 +15370,22 @@ function showLineRegisterPage(prefillName){
   // 刻意不預填 LINE 暱稱到姓名欄（會讓人直接送出暱稱）；改用姓/名兩格引導填本名，
   // LINE 暱稱只放一行灰字供對照。本名的最終把關仍是櫃台核准時當面核對。
   const nm=(prefillName||'').replace(/</g,'&lt;');
+  /* 2026-09-14 使用者定案：「email 性別 生日　然後視窗要設計的簡單清楚　不要太多文字」——
+     三欄從選填改**必填**（原本 40 筆新申辦只有 13 筆填了 email，等於發票沒地方寄），
+     同時把原本三段說明（開場白＋LINE 名稱對照＋底部本名註解）砍成一句。
+     ⚠ 只留一個真的會出事的提醒：舊會員填錯手機，票券與預約就接不回來。
+     ⚠ 後端不用改 —— fn_complete_member_registration 本來就收 p_email／p_birthday／p_gender。 */
   showModal(`<div class="modal-title">完成會員申辦</div>
-    <div style="font-size:12.5px;color:var(--t2);line-height:1.7;margin-bottom:14px;">已用 LINE 驗證身分，請填<b>真實姓名</b>與手機。送出後至櫃台確認即完成；<b>原有會員填相同手機</b>即可接回既有票券與預約。</div>
-    ${nm?`<div style="font-size:11.5px;color:var(--t3);margin-bottom:10px;">您的 LINE 名稱：${nm}（僅供對照，請於下方填寫本名）</div>`:''}
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.7;margin-bottom:14px;">請填本名與手機，方便櫃台核對${nm?`（您的 LINE 名稱：${nm}）`:''}</div>
     <div class="form-2col">
-      <div class="form-row"><label>姓 *</label><input id="lr-surname" placeholder="例：王" maxlength="10"></div>
-      <div class="form-row"><label>名 *</label><input id="lr-given" placeholder="例：小明" maxlength="20"></div>
+      <div class="form-row"><label>姓</label><input id="lr-surname" placeholder="王" maxlength="10"></div>
+      <div class="form-row"><label>名</label><input id="lr-given" placeholder="小明" maxlength="20"></div>
     </div>
-    <div class="form-row"><label>手機 *（作為識別）</label><input id="lr-phone" placeholder="0912xxxxxx" inputmode="numeric" maxlength="10"></div>
-    <div class="form-row"><label>Email（選填）</label><input id="lr-email"></div>
-    ${/* 性別與生日選填（2026-08-05 使用者指示） */''}
-    <div class="form-row"><label>性別（選填）</label><select id="lr-gender"><option value="">—</option><option value="male">男</option><option value="female">女</option><option value="other">其他</option></select></div>
-    <div class="form-row"><label>生日（選填）</label>${birthdaySelects('lr')}</div>
-    <div style="font-size:11px;color:var(--t3);line-height:1.6;margin-bottom:6px;">＊ 請填與身分證相符的本名，方便櫃台核對；外文姓名可全填於「名」。</div>
+    <div class="form-row"><label>手機</label><input id="lr-phone" placeholder="0912345678" inputmode="numeric" maxlength="10"></div>
+    <div style="font-size:11px;color:var(--t3);line-height:1.6;margin:-6px 0 10px;">原本就是會員的話，請填<b>原本的手機</b>，票券與預約會接回來。</div>
+    <div class="form-row"><label>Email</label><input id="lr-email" type="email" placeholder="電子發票寄這裡"></div>
+    <div class="form-row"><label>性別</label><select id="lr-gender"><option value="">請選擇</option><option value="male">男</option><option value="female">女</option><option value="other">其他</option></select></div>
+    <div class="form-row"><label>生日</label>${birthdaySelects('lr')}</div>
     <div id="lr-err" style="display:none;color:var(--danger);font-size:12.5px;margin:8px 0;"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="lineAbort()">取消</button><button class="btn btn-green" id="lr-submit" onclick="submitLineRegister()">送出申辦</button></div>`);
 }
@@ -15396,10 +15399,17 @@ async function submitLineRegister(){
   if(!surname||!given){ showErr('請填寫姓與名（本名）'); return; }
   if(!phone){ showErr('請填手機'); return; }
   if(!/^09\d{8}$/.test(phone)){ showErr('手機格式不正確（09 開頭 10 碼）'); return; }
+  /* 2026-09-14：Email／性別／生日從選填改必填（使用者：「email 性別 生日」）——
+     Email 是電子發票唯一的送達管道，原本選填的結果是 40 筆新申辦只有 13 筆有填。 */
+  const email=v('lr-email'), gender=v('lr-gender'), birthday=readBirthday('lr');
+  if(!email){ showErr('請填 Email，電子發票會寄到這裡'); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){ showErr('Email 格式不正確'); return; }
+  if(!gender){ showErr('請選擇性別'); return; }
+  if(!birthday){ showErr('請選擇生日（年、月、日都要選）'); return; }
   const btn=document.getElementById('lr-submit'); if(btn){btn.disabled=true;btn.textContent='送出中…';}
   try{
-    const{data:rpc,error}=await sb.rpc('fn_complete_member_registration',{p_name:name,p_phone:phone,p_email:v('lr-email')||null,
-      p_birthday:readBirthday('lr')||null, p_gender:v('lr-gender')||null});   /* 性別/生日選填（2026-08-05） */
+    const{data:rpc,error}=await sb.rpc('fn_complete_member_registration',
+      {p_name:name, p_phone:phone, p_email:email, p_birthday:birthday, p_gender:gender});   /* 三欄 0914 起必填 */
     if(error) throw error;
     if(!rpc||rpc.ok!==true){
       const code=(rpc&&rpc.error_code)||'';
