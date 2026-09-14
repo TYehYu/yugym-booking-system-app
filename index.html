@@ -13021,8 +13021,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260914.2202';
-const APP_VERSION_LABEL = 'v260914.2202';
+const APP_VERSION = '260914.2216';
+const APP_VERSION_LABEL = 'v260914.2216';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13879,11 +13879,17 @@ function revInvChip(r){
 async function invSync(){
   const w=document.getElementById('inv-wrap'); if(!w) return;
   const paid=((document.getElementById('gt-pay')||{}).value||'')==='paid';
+  /* 2026-09-14 二修：**資料照收，開立與否另計**（使用者：「明天早上開始請櫃檯要收費的時候
+     通知客人填寫資料或者櫃檯幫忙填寫」）——
+     原本顯示條件是 paid && cfg.on，發票服務關著（stage）時整塊不出現，
+     櫃檯連 Email／載具都沒地方填。現在脫鉤：欄位只看「已付款」，
+     cfg.on 只決定能不能真的開立。 */
+  w.style.display=paid?'':'none';
+  if(!paid) return;
   const cfg=await invCfg();
-  w.style.display=(paid&&cfg.on)?'':'none';
-  if(!(paid&&cfg.on)) return;
   const m=document.getElementById('inv-mode');
-  if(m) m.innerHTML=cfg.test?'<b class="inv-test">測試模式・不會送財政部</b>':'';
+  if(m) m.innerHTML = !cfg.on ? '<b class="inv-test">發票暫停中・資料先存起來</b>'
+                     : (cfg.test?'<b class="inv-test">測試模式・不會送財政部</b>':'');
   /* 2026-09-14：預填客人上次留的 email —— 504 位會員只有 17 位有 email，
      所以多半還是要當場問；但問過一次就該記住（開立成功會寫回 members）。 */
   { const _mid=((document.getElementById('gt-member')||{}).value)||'';
@@ -13892,7 +13898,18 @@ async function invSync(){
     window._invMemCarrier=_m.invoice_carrier||'';
     window._invMemUbn    =_m.invoice_ubn||'';
     window._invMemTitle  =_m.invoice_title||''; }
-  if(!w.dataset.on) invSetOn(1);   /* 預設開立：收錢本來就該開發票 */
+  /* 發票服務沒開（stage／金鑰未設）→ 開／不開那組開關沒得選，整組藏起來；
+     但買受人欄位**照樣顯示**，櫃檯繼續收 Email／載具／統編，值會寫回會員資料。
+     ⚠ 不呼叫 invSetOn(0) —— 那會連同欄位一起收起來，就又沒得填了。 */
+  { const _seg=w.querySelector('.inv-seg'); const _body=document.getElementById('inv-body');
+    if(!cfg.on){
+      if(_seg) _seg.style.display='none';
+      w.dataset.on='0';
+      if(_body) _body.style.display='';
+    }else{
+      if(_seg) _seg.style.display='';
+      if(!w.dataset.on) invSetOn(1);   /* 預設開立：收錢本來就該開發票 */
+    } }
   /* 2026-09-14：這位客人有統編就自動切到「打統編」並帶入（使用者：開統編的客人存進會員資料自動帶入）。
      ⚠ 只在櫃檯還沒自己選過模式時才切 —— 否則每次重繪都會蓋掉櫃檯當下的選擇。 */
   if(!w.dataset.mode) invPick(window._invMemUbn?'ubn':'carrier');
@@ -13901,20 +13918,31 @@ async function invSync(){
 function invReadFields(){
   const w=document.getElementById('inv-wrap');
   if(!w || w.style.display==='none') return null;
-  /* 2026-09-14：櫃檯明確選了「不開發票」。
-     ⚠ 回 {mode:'none'} 而不是 null —— null 的既有語意是「走預設載具照常開」。 */
-  if(w.dataset.on==='0') return {mode:'none'};
   const g=id=>((document.getElementById(id)||{}).value||'').trim();
   const k=w.dataset.mode||'carrier';
-  if(k==='ubn')    return {mode:'ubn',    ubn:g('inv-ubn'), title:g('inv-title'), email:g('inv-email')};
-  if(k==='donate') return {mode:'donate', loveCode:g('inv-love')};
-  if(k==='print')  return {mode:'print',  name:g('inv-name'), addr:g('inv-addr')};
-  return {mode:'carrier', carrierNum:g('inv-car'), email:g('inv-email')};
+  let f;
+  if(k==='ubn')         f={mode:'ubn',    ubn:g('inv-ubn'), title:g('inv-title'), email:g('inv-email')};
+  else if(k==='donate') f={mode:'donate', loveCode:g('inv-love')};
+  else if(k==='print')  f={mode:'print',  name:g('inv-name'), addr:g('inv-addr')};
+  else                  f={mode:'carrier', carrierNum:g('inv-car'), email:g('inv-email')};
+  /* 2026-09-14：櫃檯選了「不開發票」，或發票服務暫停中。
+     ⚠ 回 {mode:'none'} 而不是 null —— null 的既有語意是「走預設載具照常開」。
+     ⚠⚠ 二修：**欄位值要一起帶回去**。發票暫停時櫃檯照樣在收 Email／載具，
+        收款流程要拿這些值寫回會員資料；只回一個 {mode:'none'} 等於把櫃檯剛問到的資料丟掉。 */
+  if(w.dataset.on==='0') f.mode='none';
+  return f;
 }
 /* 開立前先擋掉一定會被綠界退的（錯誤訊息只會說「參數錯誤」，當場沒人猜得到） */
 function invCheckFields(f){
   if(!f) return '';
-  if(f.mode==='none') return '';   /* 2026-09-14：櫃檯選了不開發票，沒有欄位要驗 */
+  /* 2026-09-14：不開立這一筆。⚠ 二修：仍要驗 Email／載具格式 ——
+     這兩個值會寫回會員資料，錯的存進去要等發票恢復開立那天才會發現。 */
+  if(f.mode==='none'){
+    if((f.email||'') && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email)) return 'Email 格式不對';
+    if((f.carrierNum||'') && !/^\/[0-9A-Z+\-.]{7}$/.test(f.carrierNum)) return '手機條碼格式是 / 加 7 碼（例如 /ABC1234）';
+    if((f.ubn||'') && !/^\d{8}$/.test(f.ubn)) return '統一編號要 8 碼數字';
+    return '';
+  }
   /* 2026-09-14 使用者定案：「點開發票要有 email 或載具或統編」——
      載具那條路兩格都空時，發票雖然開得成（綠界載具只要有手機就夠）卻沒有任何通知管道，
      客人根本不知道自己有發票。0914 誤開的 FX28688351 就是這個缺口，所以改成擋下來。
@@ -14000,12 +14028,10 @@ async function invIssueForPurchase(pur, mem, f, items, opt){
   try{ await dbPut('invoices', row); }catch(e){ console.error('invoices 寫入失敗', e); }
   if(r&&r.ok){
     try{ await dbPut('purchases', Object.assign({}, pur, {invoice_type:'ecpay', invoice_number:rd.InvoiceNo})); }catch(_){}
-    /* 2026-09-14：問過一次就記住 —— 下次收款 invSync 自動帶入，櫃檯不必再問。
-       ⚠ 只在會員原本沒有 email 時寫，不覆蓋既有值（客人可能自己在個人資料改過，
-         那一份比櫃檯當場聽寫的可信）。 */
-    if(mem && mem.id && d.CustomerEmail && !((mem.email||'').trim())){
-      try{ await dbPut('members', Object.assign({}, mem, {email:d.CustomerEmail})); }catch(_){}
-    }
+    /* ⚠ 2026-09-14 二修：發票偏好寫回會員的那一段**搬到收款流程**（submitGrant 內）了。
+       原因：放在這裡的話「只有開立成功才寫」，而發票暫停（stage）時一張都不會開，
+       櫃檯問到的 Email／載具就全丟了 —— 那正是使用者要櫃檯明天開始收的東西。
+       同一件事只留一份實作，不要兩邊都寫。 */
     showToast(`發票已開立 ${rd.InvoiceNo}${cfg.test?'（測試）':''}`);
   }else{
     showToast('⚠ 發票開立失敗：'+((r&&r.msg)||'未知')+'　（票券已發放，可到「發票」重試）', 6000);
@@ -22360,11 +22386,40 @@ PAGES.g_dashboard=async function(){
         coach:_coNm[_cid]||'', coachId:_coNm[_cid]?_cid:'',   // 有名字才給 id（chip 的顏色靠它）
         sub:`本月 ${n} 堂`}; });
   const _demoteNames=_demoteList.map(x=>x.name);
+  /* 待補發票資料（2026-09-14 使用者定案：「明天早上開始請櫃檯要收費的時候
+     通知客人填寫資料或者櫃檯幫忙填寫」）——
+     Email／載具／統編三項全空＝這人的發票開出去沒有任何通知管道。
+     ⚠ 只列**近 90 天有來上課**的：全部 358 位的清單櫃檯根本用不了，
+       而這 69 位近期會進門，收費時順手問就補得到。
+     ⚠ 點一列＝進會員資料頁（帶 id），那裡的「發票」欄就是同一個 invPrefModal。 */
+  const _invPrefList=(()=>{
+    const _cut=ymd(new Date(TODAY.getTime()-90*86400000));
+    const _seen={};
+    (bookings||[]).forEach(b=>{
+      if(!b||!b.member_id||b.status==='cancelled') return;
+      if((b.date||'')<_cut) return;
+      _seen[b.member_id]=true;
+    });
+    return Object.keys(_seen)
+      .map(id=>memMap[id]).filter(m=>m&&m.status==='active')
+      .filter(m=>!((m.email||'').trim()||(m.invoice_carrier||'').trim()||(m.invoice_ubn||'').trim()))
+      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'))
+      .map(m=>({id:m.id,name:m.name,sub:'還沒有 Email／載具／統編'}));
+  })();
   const _l2=_demoteNames.length
     ? _demoteNames.slice(0,6).join('、')+(_demoteNames.length>6?` 等 ${_demoteNames.length} 人`:'')
     : '本月尚無即將降級的會員';
   const _rowDemote=_todoRow(OPS_TODO_IC.ticket,'本月即將降級名單',_l2,_demoteNames.length,'gold',"openTodoList('demote')");
   _todoItems.push(_rowDemote);
+  /* 待補發票資料（2026-09-14）—— 與首頁紅卡同一份名單（_invPrefList／_todoLists.invpref）。
+     ⚠ 0 筆就不列：待辦列每天看，永遠掛一行 0 會讓整列失去意義。
+     ⚠ 金色不是紅色：這是「收費時順手問」的待辦，不是警示（紅留給真正該擋下的事）。
+     ⚠ 這一行一定要放在 _invPrefList 宣告（上方）之後 —— const 在宣告前引用會落在 TDZ 直接爆。 */
+  if(_invPrefList.length){
+    const _lInv=_invPrefList.slice(0,6).map(x=>x.name).join('、')
+      +(_invPrefList.length>6?` 等 ${_invPrefList.length} 人`:'');
+    _todoItems.push(_todoRow(OPS_TODO_IC.money,'待補發票資料',_lInv,_invPrefList.length,'gold',"openTodoList('invpref')"));
+  }
   /* 今日未打卡名單（2026-07-21 使用者指示）：含上班未打卡＋下班未打卡。
      對象＝當日有排班（非請假）且需打卡（need_punch）的在職員工：
      班已開始仍無 clock_in＝上班未打卡；有 clock_in 無 clock_out 且班已結束＝下班未打卡。
@@ -22391,6 +22446,8 @@ PAGES.g_dashboard=async function(){
        這份名單櫃檯每天看，規則只需要學一次；每次開窗都先讀三行字反而擋住名單。
        ⚠ 要還原的話把 note 加回來即可（openTodoList 有帶就畫）。 */
     demote:{title:'本月即將降級名單',items:_demoteList,empty:'本月尚無即將降級的會員'},
+    invpref:{title:'待補發票資料',items:_invPrefList,empty:'近期來過的會員都有發票資料了',
+      note:'這些人近 90 天有來上課，但 Email／載具／統編三項都沒有 —— 發票開出去他們收不到。收費時順手問一下，點名字就能直接填。'},
     nopunch:{title:'今日未打卡名單',items:_noPunchList,empty:'今日打卡皆正常',note:''}   // 併入今日值班後首頁不再列這行，其他入口仍可開
   };
   const todoCard=`<div class="card mc-card mc-todo-card">
@@ -22409,11 +22466,15 @@ PAGES.g_dashboard=async function(){
      放標題、第二列只放數字用品牌金放大顯示；名單點進去後用視窗條列顯示」。
      ⚠ 點擊沿用既有的 openTodoList('sign'/'demote') —— 那支本來就是「視窗條列」，
        名單資料（window._todoLists）也是同一份，不另外做一套。 */
+  /* 第三張「待補發票資料」（2026-09-14）—— 0 筆就不畫：
+     永遠掛一顆 0 在首頁，櫃檯三天後就會自動略過整排卡。 */
   const alertCards=`<div class="mc-alert2">
     <button class="card mc-card mc-a2" onclick="openTodoList('sign')">
       <span class="mc-a2-t">今日收款提醒</span><b class="mc-a2-n">${_signByTime.length}</b></button>
     <button class="card mc-card mc-a2" onclick="openTodoList('demote')">
       <span class="mc-a2-t">即將降級名單</span><b class="mc-a2-n">${_demoteNames.length}</b></button>
+    ${_invPrefList.length?`<button class="card mc-card mc-a2" onclick="openTodoList('invpref')">
+      <span class="mc-a2-t">待補發票資料</span><b class="mc-a2-n">${_invPrefList.length}</b></button>`:''}
   </div>`;
   alertBox=alertBox.replace('<!--ALERTS-->', alertCards);
   /* 原本左欄那張「收款提醒＋降級名單」合併紅卡退場（內容已拆成上面兩張，
@@ -52560,6 +52621,29 @@ async function _grantIssue(P){
       note:(P.note||'')+(isInstall?`（分期第1期／總額 $${(P.dealAmount||0).toLocaleString()}）`:'')+(P.voucherN?`（折抵券×${P.voucherN} −$${(P.voucherAmt||0).toLocaleString()}）`:'')+(_crUse?`（儲值金折抵 −$${_crUse.toLocaleString()}）`:''),
       operator:SESSION.id,source:'backoffice',created_at:new Date().toISOString()};
     await dbPutPurchaseSafe(_purRow);
+    /* 發票偏好寫回會員（2026-09-14 二修）——
+       使用者：「明天早上開始請櫃檯要收費的時候通知客人填寫資料或者櫃檯幫忙填寫」。
+       ⚠⚠ 這段原本在 invIssueForPurchase 裡、**只有開立成功才寫**。
+          但發票暫停（stage）時一張都不會開，櫃檯當場問到的 Email／載具／統編就全丟了 ——
+          那正是現在要收的東西。所以搬到這裡，**與開立與否完全無關**。
+       ⚠ 不覆蓋既有值：客人可能自己在個人資料改過，那一份比櫃檯當場聽寫的可信。
+       ⚠ 寫完清 members 快取，否則同一個分頁再收一筆時帶入的還是舊值。 */
+    if(P.member_id && P.inv){
+      try{
+        const _me=await dbGet('members',P.member_id);
+        if(_me){
+          const _u={};
+          if(P.inv.email      && !((_me.email||'').trim()))           _u.email          =P.inv.email;
+          if(P.inv.carrierNum && !((_me.invoice_carrier||'').trim())) _u.invoice_carrier=P.inv.carrierNum;
+          if(P.inv.ubn        && !((_me.invoice_ubn||'').trim()))     _u.invoice_ubn    =P.inv.ubn;
+          if(P.inv.title      && !((_me.invoice_title||'').trim()))   _u.invoice_title  =P.inv.title;
+          if(Object.keys(_u).length){
+            await dbPut('members', Object.assign({}, _me, _u));
+            dbCacheClear(['members']);
+          }
+        }
+      }catch(e){ console.error('發票偏好寫回失敗', e); }
+    }
     /* 電子發票（2026-09-02）：開不成不阻斷 —— 票券已經發出去了，發票後補 */
     try{ await invIssueForPurchase(_purRow, await dbGet('members',P.member_id).catch(()=>null), P.inv,
       [{name:plan.name||'健身課程', amt:_dealRec}]); }catch(e){ console.error('invoice fail', e); }

@@ -114,9 +114,21 @@ eq('　　正確的四組都放行',
 console.log('\n③ 什麼時候才開');
 {
   const F=grabFn('invSync');
-  ok('★★ 只有「已付款」才畫發票欄（沒收到錢不能開發票）',
+  /* ⚠ 2026-09-14 二修：顯示條件從 `paid && cfg.on` 改成只看 `paid`。
+     原因：發票服務關著（stage）時整塊不出現，櫃檯連 Email／載具都沒地方填 ——
+     而使用者要櫃檯「明天早上開始請客人填寫資料」。
+     **收資料**與**開立**就此分家：欄位只看已付款，開立仍由 cfg.on 擋著。
+     ⚠ 「沒收到錢不能開發票」這條一個字沒放寬，由下面三道一起守。 */
+  ok('★★ 只有「已付款」才畫發票欄（沒收到錢不能填也不能開）',
      /const paid=\(\(document\.getElementById\('gt-pay'\)\|\|\{\}\)\.value\|\|''\)==='paid';/.test(F)
-     && /w\.style\.display=\(paid&&cfg\.on\)\?'':'none';/.test(F));
+     && /w\.style\.display=paid\?'':'none';/.test(F)
+     && /if\(!paid\) return;/.test(F));
+  ok('★★★ 發票服務沒開時鎖成「不開立」，但欄位照顯示（資料還是要收）',
+     /if\(!cfg\.on\)\{/.test(F)
+     && /w\.dataset\.on='0';/.test(F)
+     && /if\(_body\) _body\.style\.display='';/.test(F));
+  ok('★★★ 開立那道防線沒鬆：invIssueForPurchase 仍看 cfg.on',
+     /const cfg=await invCfg\(\);\s*\n\s*if\(!cfg\.on\) return null;/.test(grabFn('invIssueForPurchase')));
   const G=grabFn('invIssueForPurchase');
   ok('★★ $0 不開發票（未付款發放、抽獎票、全額折抵）',
      /if\(amt<=0\) return null;/.test(G));
@@ -158,7 +170,14 @@ console.log('\n④ 開不成不能擋住銷售（票券已經發出去了）');
 }
 {
   const R=grabFn('invReadFields');
-  ok('★★★ 櫃檯按「不開發票」→ 回 {mode:\'none\'}', /if\(w\.dataset\.on==='0'\) return \{mode:'none'\};/.test(R));
+  /* ⚠ 2026-09-14 二修：不能只回一個 {mode:'none'} 就走人 ——
+     發票暫停時櫃檯照樣在收 Email／載具，收款流程要拿這些值寫回會員資料。
+     只回 mode 等於把櫃檯剛問到的資料丟掉。 */
+  ok('★★★ 櫃檯按「不開發票」→ mode 設成 \'none\'', /if\(w\.dataset\.on==='0'\) f\.mode='none';/.test(R));
+  ok('★★★ 但欄位值要一起帶回去（不開立也要能寫回會員資料）',
+     /f=\{mode:'carrier', carrierNum:g\('inv-car'\), email:g\('inv-email'\)\};/.test(R)
+     && /return f;/.test(R)
+     && !/return \{mode:'none'\};/.test(R));
   const S=grabFn('invSetOn');
   ok('★★ 開關把四格整區藏起來（選不開就不該還看得到載具欄）',
      /body\.style\.display=on\?'':'none'/.test(S));
