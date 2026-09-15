@@ -24,7 +24,14 @@ console.log('\n② 首頁那顆滑出鈕整個退場（同一件事不要兩個�
 ok('★★★ 不再產生 .mc-req-fab',
    !/<button class="mc-req-fab"/.test(src) && !/const reqFab=/.test(src));
 ok('★★★ 抽獎鈕不再需要「兩顆都在時往下疊」',
-   /<button class="mc-lotto-fab" onclick="openLottoModal\(\)">/.test(src)
+/* 2026-09-15 使用者：「這邊不用文字　只要用禮物[n] 表示就好」——
+   原本是「🎁 N 位會員可抽獎」，側欄寬度下會被截成「1 位會員可…」。
+   ⚠ 圖示與數字**兩個都要在**：改版時我一度只留數字、把 LNI.gift 一起刪掉，
+     畫面上就只剩一個孤零零的數字。這條把兩者一起釘住。
+   ⚠ 沒有文字就看不出用途，title／aria-label 是必要的，不是裝飾。 */
+   /<button class="mc-lotto-fab" onclick="openLottoModal\(\)" title="\$\{_lotEls\.length\} 位會員可抽獎/.test(src)
+   && /aria-label="\$\{_lotEls\.length\} 位會員可抽獎">\$\{LNI\.gift\}<span><b>\$\{_lotEls\.length\}<\/b><\/span><\/button>/.test(src)
+   && !/位會員可抽獎<\/span>/.test(src)
    && !/mc-lotto-fab\$\{reqFab\?' mc-fab-up':''\}/.test(src));
 ok('★★ 為什麼不留兩個，寫在原地',
    /同一件待辦在同一個畫面上出現兩次，\s*\n?\s*處理完一個另一個還亮著，反而讓人以為沒處理成功/.test(src));
