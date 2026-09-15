@@ -93,8 +93,13 @@ console.log('\n④ 抽獎那一顆仍然可以點');
 ok('★★ 抽獎仍是按鈕，且過了當天非管理員只是淡化、不是消失',
    /<button class="rev-kind rev-kind-lottery\$\{_off\?' rev-kind-off':''\}"/.test(src)
    && /button\.rev-kind\.rev-kind-off\{opacity:\.5;\}/.test(src));
+/* 2026-09-15 使用者：「約別章 教練 現金/匯款 滑鼠擺上去的時候可以有稍微放大的動畫嗎」——
+   hover 宣告尾巴多了 transform:scale(1.10)，所以不再逐字比對到收尾的大括號。
+   這條守的語意（可點的要有 hover 看得出來）沒變，而且變得更明顯。 */
 ok('★ hover 效果還在（它是可點的，要看得出來）',
-   /button\.rev-kind:hover\{filter:brightness\(\.96\);box-shadow:0 1px 4px rgba\(60,50,38,\.18\);\}/.test(src));
+   /button\.rev-kind:hover\{filter:brightness\(\.96\);box-shadow:0 1px 4px rgba\(60,50,38,\.18\);/.test(src));
+ok('★★ 滑鼠移上去還會微放大（桌機才有的效果，:active 那條給手機）',
+   /button\.rev-kind:hover\{[^}]*transform:scale\(1\.10\);\}/.test(src));
 ok('★★ 改首頁出席章尺寸時要記得同步這裡（沒有共用變數）',
    /改首頁那顆章的尺寸時，這裡要跟著改（兩處，沒有共用變數）/.test(src));
 

@@ -100,7 +100,15 @@ ok('★★ 按下去有回饋（手機沒有 hover，:active 才是有感的那�
    /button\.rev-kind:active\{transform:scale\(\.88\);\}/.test(src)
    && /\.rev-att-tap:active\{transform:scale\(\.90\);\}/.test(src)
    && /\.rev-undo:active\{transform:scale\(\.90\);\}/.test(src)
+   && /\.mc-rev-pay-btn:active\{transform:scale\(\.92\);\}/.test(src)
    && /\.mc-rev-row\.mc-rev-go:active\{transform:scale\(\.995\);\}/.test(src));
+/* 2026-09-15 使用者：「約別章 教練 現金/匯款 滑鼠擺上去的時候可以有稍微放大的動畫嗎」 */
+ok('★★ 滑鼠移上去微放大（三顆都要，桌機才有的效果）',
+   /button\.rev-kind:hover\{[^}]*transform:scale\(1\.10\);\}/.test(src)
+   && /\.rev-att-tap:hover\{filter:brightness\(\.94\);transform:scale\(1\.10\);\}/.test(src)
+   && /\.mc-rev-pay-btn:hover\{filter:brightness\(\.95\);transform:scale\(1\.07\);\}/.test(src));
+ok('★★★ 付款標籤要有 transition，否則 hover 是瞬間跳動不是動畫',
+   /\.mc-rev-pay-btn\{border:none;cursor:pointer;font-family:inherit;\s*\n\s*transition:filter \.12s,transform \.1s var\(--ease-out\);\}/.test(src));
 
 console.log('\n獎金口徑沒有被動到');
 ok('★ 續約獎金仍只認 sale_kind===\'renewal\'',
