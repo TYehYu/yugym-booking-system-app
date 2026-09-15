@@ -123,5 +123,32 @@ ok('★ migration 檔存在', fs.existsSync(process.env.HOME+'/Projects/yugym-bo
   ok('　　櫃檯以上不受限', /if is_staff_desk\(\) then return new; end if;/.test(m));
 }
 
+console.log('\n列印消費明細（2026-09-15 使用者：「製作一個列印明細吧」＋「我現場再蓋公司章」）');
+/* ⚠⚠ 這不是統一發票 —— 版面上一定要寫清楚，否則客人拿去報帳會被退件。
+   報帳的正解是結帳時打統編（印有統編的電子發票證明聯才是會計憑證）。 */
+{
+  const F=(()=>{let i=src.indexOf('function printMemberStatement(');
+    let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}})();
+  ok('★★★ 版面明講「並非統一發票，不得作為報帳或扣抵憑證」',
+     /本明細僅供查詢與核對之用，並非統一發票，不得作為報帳或扣抵憑證。/.test(F)
+     && /報帳請使用結帳時開立之電子發票；如需打統編，請於消費當下告知櫃檯。/.test(F));
+  ok('★★★ 賣方用公司登記名「筋實堂」不是品牌名（發票與明細的法律主體）',
+     /name:'筋實堂', brand:'YUGYM 有肌訓練', ubn:'91788490',/.test(src)
+     && /\$\{BIZ_INFO\.name\}/.test(F) && /統一編號 \$\{BIZ_INFO\.ubn\}/.test(F));
+  ok('★★ 有蓋章區（使用者要現場蓋公司章）', /stmt-seal/.test(F) && /本公司蓋章/.test(F));
+  ok('★★ 只有櫃檯以上能列印', /if\(!isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可列印'\); return; \}/.test(F));
+  ok('★★ $0 的抽獎登記不列進明細（那不是消費）',
+     /\.filter\(p=>p && \(Number\(p\.deal_amount\)\|\|0\)>0\)/.test(src));
+  ok('★★ 姓名與品項有跳脫（資料裡的角括號不會弄壞版面）',
+     /const esc=t=>String\(t==null\?'':t\)\.replace\(\/&\/g,'&amp;'\)/.test(F));
+  /* ⚠ 合約那套會把內容硬「收進兩頁」（ctFitPages），那是為固定長度的合約設計的；
+     明細的筆數由消費次數決定，硬收會縮到 0.62 倍、字小到看不清。 */
+  ok('★★★ 明細跳過「收進兩頁」（有幾頁印幾頁）',
+     /if\(document\.querySelector\('\.stmt-doc'\)\) return;/.test(src)
+     && /class="stmt-doc"/.test(F));
+  ok('★★ 交易分頁才有入口，且沒有交易就不畫那顆鈕',
+     /\(isDeskLike\(\)&&txAll\.length\)\?`<button[^`]*printMemberStatement/.test(src));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

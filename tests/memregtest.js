@@ -140,6 +140,31 @@ console.log('\n⑤ 申辦表單要收的欄位（2026-09-15 使用者定案，�
   ok('　　Email 用 type=email（手機鍵盤才會跳 @）', /id="lr-email" type="email"/.test(P));
 }
 
+console.log('\n⑤-2 後台建檔的發票欄位也改選填（2026-09-15）');
+/* 使用者回報：「後台辦理會員 這邊會跳出如果沒有輸入載具或信箱 就無法辦理會員」——
+   與同日的 LINE 申辦同一條理由：櫃檯建檔時客人就站在前面等，
+   為了發票欄位卡住建檔本末倒置；少收的改由會員端首頁提醒卡接手。 */
+{
+  const F=(()=>{let i=src.indexOf('async function submitBackofficeMember(');
+    let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}})();
+  ok('★★★ 不再擋「兩格都空」（0914 的二選一必填已撤除）',
+     !/if\(!boMail && !boCar\)\{showErr/.test(F));
+  ok('★★★ 但填了就要驗格式（錯的存進去等於沒有，而且收款當天才會被綠界退件）',
+     /if\(boMail && !\/\^\[\^\\s@\]\+@\[\^\\s@\]\+\\\.\[\^\\s@\]\{2,\}\$\/\.test\(boMail\)\)/.test(F)
+     && /if\(boCar && !\/\^\\\/\[0-9A-Z\+\.\\-\]\{7\}\$\/\.test\(boCar\)\)/.test(F));
+  ok('★★★ 姓名與手機仍然必填（手機是登入帳號）',
+     /if\(!name\|\|!phone\)\{showErr\('請填寫姓名與手機'\);return;\}/.test(F)
+     && /if\(!\/\^09\\d\{8\}\$\/\.test\(phone\)\)/.test(F));
+  ok('★★ 表單 label 標明「（選填）」，並告訴櫃檯之後怎麼補',
+     /<label>Email（選填）<\/label>/.test(src)
+     && /<label>手機條碼（選填）<\/label>/.test(src)
+     && /都沒填的話，會員第一次登入時系統會提醒他自己補。/.test(src));
+  /* ⚠ invPrefModal 的擋阻**刻意不跟著撤**：那個視窗的存在目的就是填這兩格，
+     兩格都空就沒東西可存，擋下來才對。 */
+  ok('★★★ 會員自助設定視窗的「至少填一項」仍然保留（那裡擋才對）',
+     /if\(!email && !car\)\{ showToast\('Email 或手機條碼至少填一項'\); return; \}/.test(src));
+}
+
 console.log('\n⑥ 停用後的連鎖效果（登入把關實跑）');
 {
   const canLogin=m=>!!m && (!m.status || m.status==='active');
