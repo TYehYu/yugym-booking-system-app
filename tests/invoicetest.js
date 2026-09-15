@@ -133,7 +133,12 @@ console.log('\n③ 什麼時候才開');
      **收資料**與**開立**就此分家：欄位只看已付款，開立仍由 cfg.on 擋著。
      ⚠ 「沒收到錢不能開發票」這條一個字沒放寬，由下面三道一起守。 */
   ok('★★ 只有「已付款」才畫發票欄（沒收到錢不能填也不能開）',
-     /const paid=\(\(document\.getElementById\('gt-pay'\)\|\|\{\}\)\.value\|\|''\)==='paid';/.test(F)
+     /* ⚠ 2026-09-15：付款判準要跟 submitGrant 同一套 ——
+        付款狀態欄位在銷售／免簽約那條路刻意不畫（團課、運動按摩、單堂教練課），
+        原本只讀 gt-pay 的寫法在那些路徑讀到空字串 → 發票區整塊不出現
+        （使用者實測單堂教練課 $1,700 沒有發票選項）。 */
+     /const _payVal=_payEl \? \(_payEl\.value\|\|''\)\s*\n?\s*: \(window\._grantSalesActive \? 'paid' : 'unpaid'\);/.test(F)
+     && /gtNeedsContract\(\)\) \? false/.test(F)
      && /w\.style\.display=paid\?'':'none';/.test(F)
      && /if\(!paid\) return;/.test(F));
   ok('★★★ 發票服務沒開時鎖成「不開立」，但欄位照顯示（資料還是要收）',
