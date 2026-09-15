@@ -230,6 +230,39 @@ console.log('\n④ 開不成不能擋住銷售（票券已經發出去了）');
      /if\(!w\.dataset\.on\) invSetOn\(1\);/.test(src));
 }
 
+console.log('\n④-2 每一個收款入口都要能開發票（2026-09-15）');
+/* 使用者：「開發票這個功能只要有收款都要出現喔　現在的情況是有些散客會來買蛋白粉
+   或體驗課程　這種時候就要看要不要開發票　要開就要手動輸入當時客人的載具或信箱」
+   ⚠ 這推翻了 0802「銷售的地方先移除發票區，目前還沒串聯」那個決定（見 noinvoicetest）。
+   一個入口要湊齊三件事才算接好：插 invFieldsHTML、開窗呼叫 invSync、存檔呼叫 invIssueForPurchase。 */
+{
+  const cnt=re=>(src.match(re)||[]).length;
+  ok('★★★ 五個地方插了發票區（發放票券／場租／自主訓練票券／商品／分期）',
+     cnt(/\$\{invFieldsHTML\(\)\}/g)===5);
+  ok('★★★ invSync 可傳入 paid／memberId／members（不傳就沿用 gt- 那套）',
+     /async function invSync\(opt\)\{/.test(src)
+     && /if\(O\.paid!=null\)\{/.test(src)
+     && /const _mid = \(O\.memberId!=null\) \? String\(O\.memberId\|\|''\)/.test(src));
+  ok('★★★ 商品銷售：開窗與換會員都重新預填（散客則不預填）',
+     /function msInvSync\(\)\{/.test(src)
+     && /<select id="ms-member" onchange="msInvSync\(\)">/.test(src));
+  ok('★★★ 商品銷售：整筆開一張，不是一列一張',
+     /await invIssueForPurchase\(first, _mem, _inv, items, \{amt:total, category:'merch'\}\)/.test(src));
+  ok('★★ 自主訓練票券：開窗同步＋存檔開立', /function fvInvSync\(\)\{/.test(src)
+     && /await invIssueForPurchase\(_tRow, _fm, _inv,/.test(src));
+  ok('★★★ 場租是散客：invSync 不傳 memberId、開立時 mem 傳 null',
+     /try\{ invSync\(\{paid:true\}\); \}catch\(_\)\{\}/.test(src)
+     && /await invIssueForPurchase\(_fRow, null, _inv,/.test(src));
+  ok('★★ 分期：每一期各開各的', /await invIssueForPurchase\(_pRow, _pm, _inv,/.test(src));
+  /* ⚠ 表單一定要在 closeModal 之前讀完 —— 關掉之後 DOM 就沒了，
+     0915 四個入口都踩同一條規則，所以各自在動資料前先 invReadFields()。 */
+  ok('★★★ 四個入口都在動資料前先讀表單並驗證',
+     cnt(/const _inv=invReadFields\(\);/g)>=4
+     && cnt(/const _e=invCheckFields\(_inv\); if\(_e\)\{ showToast\('發票欄位：'\+_e\); return; \}/g)>=4);
+  ok('★★ 散客沒有會員資料可帶 → 不預填，不是錯誤',
+     /散客（memberId 空或找不到人）→ 四個值都是空字串 → 不預填，櫃檯手動輸入。/.test(src));
+}
+
 console.log('\n⑤ 作廢票券連動');
 {
   const F=grabFn('_voidTicketDo');

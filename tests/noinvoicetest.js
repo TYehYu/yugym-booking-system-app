@@ -1,9 +1,14 @@
 /* 2026-08-02 使用者指示：「銷售的地方先移除發票區，目前還沒串聯」
+   → **2026-09-15 推翻**：「開發票這個功能只要有收款都要出現喔　現在的情況是有些散客
+     會來買蛋白粉或體驗課程　這種時候就要看要不要開發票　要開就要手動輸入
+     當時客人的載具或信箱」
 
-   發票系統還沒接：欄位留著只是讓櫃檯每次多選一次，而且選了也沒有下文 ——
-   選「雲端發票」不會真的開出任何東西。欄位拿掉、值一律記 'none'。
-   資料欄位（invoice_status / invoice_type）保留，之後接上金流時把選單加回來就好，
-   舊資料也還讀得到。 */
+   0802 拿掉的理由是「選了也沒有下文」；0915 綠界已經串好並正式開立（ECPAY_ENV=prod），
+   那個理由消失了，四個銷售入口全部把發票區加回來。
+   ⚠ 這支測試的①②段因此**反轉**：從「不准有發票區」改成「四個入口都要有」。
+   ⚠ ③段（首頁 KPI 不要留「有發票 $0」死行）與發票區無關，原樣保留。
+   ⚠ 舊的 id（fr-invoice/fv-invoice/ms-invoice/gt-invoice）沒有復活 —— 新版是共用的
+     invFieldsHTML()，四處插同一份，不是各自做一套下拉。 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
@@ -11,22 +16,27 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
-console.log('① 四個銷售入口都不再問發票');
-eq('★ 沒有任何發票下拉留在銷售流程裡',
-   [...src.matchAll(/id="(fr-invoice|fv-invoice|ms-invoice|gt-invoice)"/g)].map(m=>m[1]), []);
-ok('　　賣票（票券／方案）', !/gt-invoice/.test(src));
-ok('　　場地租借（預約流程內收款）', !/fr-invoice/.test(src));
-ok('　　場地租借（銷售頁）', !/fv-invoice/.test(src));
-ok('　　商品銷售', !/ms-invoice/.test(src));
+console.log('① 每個收款入口都要問發票（2026-09-15 反轉 0802 的決定）');
+eq('★★★ 五處插了共用的發票區（發放票券／場租／自主訓練票券／商品／分期）',
+   (src.match(/\$\{invFieldsHTML\(\)\}/g)||[]).length, 5);
+ok('★★★ 是共用一份，不是各自做一套下拉（舊 id 沒有復活）',
+   !/id="(fr-invoice|fv-invoice|ms-invoice|gt-invoice)"/.test(src));
+ok('　　商品銷售（散客買蛋白粉也要能開）', /function msInvSync\(\)\{/.test(src));
+ok('　　自主訓練票券', /function fvInvSync\(\)\{/.test(src));
+ok('　　場地租借（散客，不傳 memberId）', /try\{ invSync\(\{paid:true\}\); \}catch\(_\)\{\}/.test(src));
+ok('　　分期的每一期', /invSync\(\{paid:true, memberId:t\.member_id/.test(src));
 
-console.log('\n② 值一律記「免發票」，欄位保留');
-ok('★ 賣票寫入 none', /invoice_status:'none',   \/\/ 發票區已移除（2026-08-02，還沒串聯）/.test(src)
-   && /invoice_type:'none',/.test(src));
-eq('★ 其餘也是 none（不是 undefined，免得存進去變空值；商品購物車改 inline invoice_type:none）',
-   (src.match(/const inv='none';/g)||[]).length + (src.match(/invoice_type:'none',installment_count:1,note,operator/g)||[]).length, 3);
-ok('　　為什麼拿掉、什麼時候加回來，寫在程式裡',
-   /發票系統還沒接，欄位留著只是讓櫃檯每次多選一次、而且選了也沒有下文。/.test(src)
-   && /欄位保留，之後接上金流時把選單加回來就好。/.test(src));
+console.log('\n② 開了就真的開，沒開才記 none');
+ok('★★★ 場租／自主訓練票券的 invoice_type 依實際選擇決定，不再寫死 none',
+   (src.match(/const inv=\(_inv && _inv\.mode!=='none'\) \? 'ecpay' : 'none';/g)||[]).length===2
+   && !/const inv='none';/.test(src));
+ok('★★ 商品那筆仍預設 none —— 真的開成功時由 invIssueForPurchase 改寫成 ecpay',
+   /invoice_type:'none',installment_count:1,note,operator/.test(src)
+   && /invoice_type:'ecpay', invoice_number:rd\.InvoiceNo/.test(src));
+ok('★★★ 四個入口都在 closeModal 之前讀表單（關掉之後 DOM 就沒了）',
+   (src.match(/const _inv=invReadFields\(\);/g)||[]).length>=4);
+ok('　　0802 那段「還沒串聯」的說明已經拿掉（理由消失了）',
+   !/發票系統還沒接，欄位留著只是讓櫃檯每次多選一次、而且選了也沒有下文。/.test(src));
 
 console.log('\n③ 首頁 KPI 不要留下「有發票 $0」這種死行');
 ok('★ 桌機版：沒有發票金額就不列那一行',

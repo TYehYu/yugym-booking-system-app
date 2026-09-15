@@ -56,9 +56,11 @@ ok('★★★ 銷售視窗底下沒有任何「返回」是直接叫 openSalesMo
    !/onclick="openSalesModal\(\)">← 返回/.test(src));
 ok('★★★ 自主訓練票券那張改吃 slBackToStep1',
    /<button class="btn btn-ghost" onclick="slBackToStep1\(\)">← 返回<\/button><button class="btn btn-green" onclick="submitFacilityTicketSale\(\)"/.test(src));
+/* ⚠ 2026-09-15：ms-member 加了 onchange="fvInvSync()"（換會員要重帶發票預填），
+   所以不能再逐字比對 `<select id="ms-member">` —— 規則沒變，只是多了屬性。 */
 ok('★★ slBackToStep1 認得 ms-member（自主訓練那張用的是這個 id，不是 gt-member）',
    /\['gt-member','ms-member'\]\.map\(id=>\(document\.getElementById\(id\)\|\|\{\}\)\.value\|\|''\)/.test(src)
-   && /<select id="ms-member">/.test(src));
+   && /<select id="ms-member"[ >]/.test(src));
 ok('★★ 回去再選一次自主訓練時，會員還會被帶回那張視窗',
    /const _fpre=window\._salesFacilityMember\|\|'';/.test(src)
    && /window\._salesFacilityMember=mid;/.test(src));

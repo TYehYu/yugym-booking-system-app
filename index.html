@@ -13043,8 +13043,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.0937';
-const APP_VERSION_LABEL = 'v260915.0937';
+const APP_VERSION = '260915.0946';
+const APP_VERSION_LABEL = 'v260915.0946';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13932,8 +13932,17 @@ function revInvChip(r){
   return `<span class="rev-invno" title="電子發票號碼">${r.invNo}</span>`;
 }
 /* 顯示／隱藏。只有「已付款」才畫 —— 沒收到錢不能開發票。 */
-async function invSync(){
+/* 2026-09-15 使用者定案：「開發票這個功能只要有收款都要出現喔　現在的情況是有些散客
+   會來買蛋白粉或體驗課程　這種時候就要看要不要開發票　要開就要手動輸入當時客人的
+   載具或信箱」——
+   原本這支寫死讀 gt-pay／gt-member，只有「發放票券」那條路用得到。改成可傳入：
+     invSync({paid:true, memberId, members})
+   不傳就完全沿用原本的 gt- 行為，既有呼叫（gt-pay 的 onchange、grantGoStep）一行不用改。
+   ⚠ 散客（memberId 空）撈不到會員 → 四個 _invMem* 都是空字串 → 不預填，
+     櫃檯手動輸入。這正是散客該有的行為，不是錯誤。 */
+async function invSync(opt){
   const w=document.getElementById('inv-wrap'); if(!w) return;
+  const O=opt||{};
   /* ⚠ 2026-09-15（使用者回報：銷售單堂教練課 $1,700 收款畫面沒有發票選項）——
      「已付款」的判準要跟 submitGrant **同一套**。那邊寫的是：
        gtNeedsContract() ? 'unpaid' : (gt-pay 的值 || (_grantSalesActive ? 'paid' : 'unpaid'))
@@ -13941,12 +13950,18 @@ async function invSync(){
      ——當場賣當場收，沒有「先欠著」）。欄位不存在時原本這行讀到空字串 → paid=false
      → 整個發票區藏起來：送出時當成已收、畫面上卻當成未收，兩處判斷不一致。
      ⚠ 建約（gtNeedsContract）那條路仍一律 unpaid：錢是後面「待審核發放」才收的，
-       那時才會問發票。 */
-  const _payEl=document.getElementById('gt-pay');
-  const _payVal=_payEl ? (_payEl.value||'')
-                       : (window._grantSalesActive ? 'paid' : 'unpaid');
-  const paid = (typeof gtNeedsContract==='function' && gtNeedsContract()) ? false
-             : _payVal==='paid';
+       那時才會問發票。
+     ⚠ 商品／場租／分期那幾條路沒有 gt-pay，改用 opt.paid 直接告訴它「這就是在收錢」。 */
+  let paid;
+  if(O.paid!=null){
+    paid=!!O.paid;
+  }else{
+    const _payEl=document.getElementById('gt-pay');
+    const _payVal=_payEl ? (_payEl.value||'')
+                         : (window._grantSalesActive ? 'paid' : 'unpaid');
+    paid = (typeof gtNeedsContract==='function' && gtNeedsContract()) ? false
+         : _payVal==='paid';
+  }
   /* 2026-09-14 二修：**資料照收，開立與否另計**（使用者：「明天早上開始請櫃檯要收費的時候
      通知客人填寫資料或者櫃檯幫忙填寫」）——
      原本顯示條件是 paid && cfg.on，發票服務關著（stage）時整塊不出現，
@@ -13960,8 +13975,13 @@ async function invSync(){
                      : (cfg.test?'<b class="inv-test">測試模式・不會送財政部</b>':'');
   /* 2026-09-14：預填客人上次留的 email —— 504 位會員只有 17 位有 email，
      所以多半還是要當場問；但問過一次就該記住（開立成功會寫回 members）。 */
-  { const _mid=((document.getElementById('gt-member')||{}).value)||'';
-    const _m=(window._grantMembers||[]).find(x=>x&&x.id===_mid)||{};
+  { /* 會員來源也參數化（2026-09-15）：商品銷售的選單是 ms-member、場租根本沒有選單。
+       opt.memberId 有給就用它，否則沿用 gt-member；名單同理（opt.members → _grantMembers）。
+       ⚠ 散客（memberId 空或找不到人）→ 四個值都是空字串 → 不預填，櫃檯手動輸入。 */
+    const _mid = (O.memberId!=null) ? String(O.memberId||'')
+                                    : (((document.getElementById('gt-member')||{}).value)||'');
+    const _list = O.members || window._grantMembers || [];
+    const _m=(_list||[]).find(x=>x&&x.id===_mid)||{};
     window._invMemEmail  =_m.email||'';
     window._invMemCarrier=_m.invoice_carrier||'';
     window._invMemUbn    =_m.invoice_ubn||'';
@@ -30703,8 +30723,14 @@ async function bkStep2Facility(pDate,pTime){
       <div class="form-row"><label>收費金額</label><input type="number" id="fr-fee" value="200" min="0"></div>
       <div class="form-row"><label>付款方式</label><select id="fr-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
     </div>
-    
+    ${/* 電子發票（2026-09-15 使用者：「開發票這個功能只要有收款都要出現」）——
+         場租多半是散客（member_id 寫 null），載具／信箱一律當場手打。 */''}
+    ${invFieldsHTML()}
+
     <div class="modal-foot"><button class="btn btn-ghost" onclick="${_backFn}">← ${window._facilityFromSales?'返回':'上一步'}</button><button class="btn btn-green" onclick="submitFacilityBooking()">確認租借並收款</button></div>`);
+  /* 場租是現場收費 → paid=true。⚠ 不傳 memberId：這條路的收款紀錄 member_id 一律是 null
+     （散客），沒有會員資料可預填，載具／信箱一律當場手打。 */
+  try{ invSync({paid:true}); }catch(_){}
 }
 /* 場租票折抵（2026-07-28）：列出所有會員可用的場租票（效期內、有剩餘） */
 async function frVenueTicketOpts(){
@@ -30738,10 +30764,12 @@ async function _submitFacilityBooking(){
   const frTkId=(frTkSel&&frTkSel.value)||null;
   const fee=frTkId?0:Math.max(0,Number(document.getElementById('fr-fee').value)||0);
   const method=document.getElementById('fr-method').value||'cash';
-  /* 2026-08-02 使用者指示：「銷售的地方先移除發票區，目前還沒串聯」——
-     發票系統還沒接，欄位留著只是讓櫃檯每次多選一次、而且選了也沒有下文。
-     欄位拿掉、值一律記 'none'；資料欄位保留，之後接上金流時把選單加回來就好。 */
-  const inv='none';
+  /* 2026-08-02 曾因「發票還沒串聯」把這裡的發票區拿掉、值一律記 'none'。
+     2026-09-15 串好了，選單加回來（使用者：「只要有收款都要出現」）。
+     ⚠ 在改動資料之前先讀表單：closeModal 之後就沒了。 */
+  const _inv=invReadFields();
+  { const _e=invCheckFields(_inv); if(_e){ showToast('發票欄位：'+_e); return; } }
+  const inv=(_inv && _inv.mode!=='none') ? 'ecpay' : 'none';
   const frMid=frTkId?((frTkSel.selectedOptions[0]||{}).dataset||{}).mid||null:null;
   const bk={id:uid('BK'),member_id:frMid,member_ids:[],trial_name:name,trial_phone:null,
     coach_id:emp,ticket_id:frTkId,ticket_type_id:frTkId?'tt-venue-rental':null,category:'場租',format:null,
@@ -30753,11 +30781,17 @@ async function _submitFacilityBooking(){
     catch(e){ console.error('場租扣票失敗',e); showToast('場租票扣抵失敗：'+(e.message||e)); }
   }
   if(fee>0){
-    try{ await dbPutPurchaseSafe({id:uid('PUR'),member_id:null,plan_id:null,ticket_id:null,
+    const _fRow={id:uid('PUR'),member_id:null,plan_id:null,ticket_id:null,
       plan_name:`場地租借（${name}）`,list_price:fee,deal_amount:fee,payment_method:method,
       invoice_type:inv,installment_count:1,note:`場租 ${date} ${time}`,operator:SESSION.id,
-      source:'facility_rental',created_at:new Date().toISOString()}); }
+      source:'facility_rental',created_at:new Date().toISOString()};
+    try{ await dbPutPurchaseSafe(_fRow); }
     catch(e){ console.error('facility purchase fail',e); showToast('場租收款紀錄寫入失敗：'+(e.message||e)); }
+    /* 電子發票（2026-09-15）：場租的收款紀錄 member_id 一律是 null（散客），
+       所以 mem 傳 null —— 買受人資訊完全來自櫃檯當場填的 _inv。 */
+    try{ await invIssueForPurchase(_fRow, null, _inv,
+           [{name:`場地租借（${name}）`, amt:fee}], {category:'facility'}); }
+    catch(e){ console.error('facility invoice fail', e); }
   }
   closeModal(); showToast(`場地租借已建立（$${fee}）`); bkAfterSubmit();
  }catch(e){ showToast('建立失敗：'+(e&&e.message?e.message:e)); }
@@ -49971,7 +50005,7 @@ async function salesFacility(){
     <div class="form-row"><label>會員（必選）</label>
       <div class="mem-pick-row">
         <input class="gt-search" placeholder="輸入姓名或手機搜尋" oninput="msFilterMembers(this.value)" autocomplete="off">
-        <select id="ms-member">${members.map(m=>`<option value="${m.id}" ${_fpre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
+        <select id="ms-member" onchange="fvInvSync()">${members.map(m=>`<option value="${m.id}" ${_fpre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
       </div>
     </div>
     <div class="form-2col">
@@ -49980,13 +50014,22 @@ async function salesFacility(){
     </div>
     <div class="form-2col">
       <div class="form-row"><label>付款方式</label><select id="fv-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
-      
+
     </div>
+    ${/* 電子發票（2026-09-15）：賣自主訓練票券也是一次收款。 */''}
+    ${invFieldsHTML()}
     ${/* 2026-09-08 使用者回報：「這個返回鈕　會移除前一個頁面選到的會員」——
          這裡直接叫 openSalesModal()，等於重開一張空的第一步。
          銷售流程的返回一律走 slBackToStep1()：它會把當下選到的會員記進
          _salesPreMember、購物車也留著（0906 就是為了這件事做的，那時只修到教練課那條）。 */''}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="slBackToStep1()">← 返回</button><button class="btn btn-green" onclick="submitFacilityTicketSale()">確認收款發券</button></div>`);
+  /* 賣票券一定是當場收錢 → paid=true。會員必選，所以換人要重新預填。 */
+  fvInvSync();
+}
+/* 自主訓練票券銷售的發票區同步（ms-member 是這張視窗的會員選單）。 */
+function fvInvSync(){
+  const mid=(document.getElementById('ms-member')||{}).value||'';
+  try{ invSync({paid:true, memberId:mid, members:(window._msMembers||[])}); }catch(_){}
 }
 async function submitFacilityTicketSale(){
   const mid=(document.getElementById('ms-member')||{}).value;
@@ -49994,7 +50037,10 @@ async function submitFacilityTicketSale(){
   const start=(document.getElementById('fv-start')||{}).value||ymd(TODAY);
   const fee=Math.max(0,Number((document.getElementById('fv-fee')||{}).value)||0);
   const method=(document.getElementById('fv-method')||{}).value||'cash';
-  const inv='none';
+  /* 電子發票（2026-09-15）：先讀表單再動資料，closeModal 之後就沒了。 */
+  const _inv=invReadFields();
+  { const _e=invCheckFields(_inv); if(_e){ showToast('發票欄位：'+_e); return; } }
+  const inv=(_inv && _inv.mode!=='none') ? 'ecpay' : 'none';
   const expire=termExpire(start,7);   // 效期 7 天（含啟用日）
   try{
     const tk={id:uid('TK'),member_id:mid,ticket_type_id:'tt-mqdt55uosz5n',plan_name:'自主訓練',
@@ -50002,10 +50048,28 @@ async function submitFacilityTicketSale(){
       sessions_total:1,sessions_remaining:1,status:'usable',payment_status:'paid',
       unit_price:fee,amount_paid:fee,created_at:new Date().toISOString()};
     await dbPut('member_tickets',tk);
-    await dbPutPurchaseSafe({id:uid('PUR'),member_id:mid,plan_id:null,ticket_id:tk.id,
+    const _tRow={id:uid('PUR'),member_id:mid,plan_id:null,ticket_id:tk.id,
       plan_name:'自主訓練票券',list_price:fee,deal_amount:fee,payment_method:method,
       invoice_type:inv,installment_count:1,note:`效期 ${start}～${expire}`,operator:SESSION.id,
-      source:'facility_rental',created_at:new Date().toISOString()});
+      source:'facility_rental',created_at:new Date().toISOString()};
+    await dbPutPurchaseSafe(_tRow);
+    /* 電子發票（2026-09-15）：這條路會員必選，順手把當場問到的載具／信箱寫回去（只補空值）。 */
+    if(fee>0){
+      const _fm=await dbGet('members',mid).catch(()=>null);
+      if(_fm && _inv){
+        const _u={};
+        if(_inv.email      && !((_fm.email||'').trim()))           _u.email          =_inv.email;
+        if(_inv.carrierNum && !((_fm.invoice_carrier||'').trim())) _u.invoice_carrier=_inv.carrierNum;
+        if(_inv.ubn        && !((_fm.invoice_ubn||'').trim()))     _u.invoice_ubn    =_inv.ubn;
+        if(_inv.title      && !((_fm.invoice_title||'').trim()))   _u.invoice_title  =_inv.title;
+        if(Object.keys(_u).length){
+          try{ await dbPut('members', Object.assign({}, _fm, _u)); dbCacheClear(['members']); }catch(_){}
+        }
+      }
+      try{ await invIssueForPurchase(_tRow, _fm, _inv,
+             [{name:'自主訓練票券', amt:fee}], {category:'sale'}); }
+      catch(e){ console.error('facility ticket invoice fail', e); }
+    }
     closeModal(); showToast(`已收款 $${fee.toLocaleString()}，自主訓練票效期 ${start.slice(5)}～${expire.slice(5)}`);
     navTo(CUR_PAGE);
   }catch(e){ showToast('發券失敗：'+(e&&e.message?e.message:e)); }
@@ -50025,17 +50089,29 @@ async function openMerchSale(name,defPrice,cart){
     <div class="form-row"><label>會員（選填，可散客）</label>
       <div class="mem-pick-row">
         <input id="ms-mq" class="gt-search" placeholder="輸入姓名或手機搜尋，留空＝散客" oninput="msFilterMembers(this.value)" autocomplete="off">
-        <select id="ms-member"><option value="">散客（不指定）</option>${members.map(m=>`<option value="${m.id}" ${(window._merchPreMember||'')===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
+        <select id="ms-member" onchange="msInvSync()"><option value="">散客（不指定）</option>${members.map(m=>`<option value="${m.id}" ${(window._merchPreMember||'')===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
       </div>
     </div>
     <div class="form-row"><label>品項</label><div id="ms-cart"></div>
       <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="msCartAdd()">＋ 新增品項</button></div>
     <div class="form-row"><label>付款方式</label><select id="ms-method" style="max-width:200px;"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
     <div class="form-row"><label>備註</label><input id="ms-note" placeholder="選填"></div>
+    ${/* 電子發票（2026-09-15 使用者：「開發票這個功能只要有收款都要出現」）——
+         散客買蛋白粉這種也要能開，載具／信箱當場手打（沒有會員資料可帶）。 */''}
+    ${invFieldsHTML()}
     <div id="ms-total" style="font-size:15px;font-weight:700;color:var(--green);padding:4px 2px 10px;">合計 $0</div>
     <div style="font-size:11.5px;color:var(--t3);margin:-6px 0 10px;">單價都可以改（＋−一格 5 元）；自訂品項請自填品名與金額。</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="slBackToStep1()">← 返回</button><button class="btn btn-green" onclick="submitMerchSale()">確認收款</button></div>`);
   msCartRender();
+  /* 商品銷售一定是當場收錢 → paid 直接給 true（這條路沒有 gt-pay 那個欄位）。
+     ⚠ 換會員要重新預填，所以 ms-member 的 onchange 也掛一次（見 msInvSync）。 */
+  msInvSync();
+}
+/* 商品銷售的發票區同步：會員換了就重新帶入他的載具／信箱／統編。
+   ⚠ 散客（選「散客（不指定）」）→ memberId 空 → 不預填，櫃檯當場手打。 */
+function msInvSync(){
+  const mid=(document.getElementById('ms-member')||{}).value||'';
+  try{ invSync({paid:true, memberId:mid, members:(window._msMembers||[])}); }catch(_){}
 }
 function msCartRender(){
   const host=document.getElementById('ms-cart'); if(!host) return;
@@ -50088,18 +50164,44 @@ async function submitMerchSale(){
   const method=document.getElementById('ms-method').value||'cash';
   const note=(document.getElementById('ms-note').value||'').trim()||null;
   const memberId=(document.getElementById('ms-member')?.value)||null;
+  /* 電子發票（2026-09-15）：在寫入之前先讀，因為 closeModal 之後表單就沒了。 */
+  const _inv=invReadFields();
+  { const _e=invCheckFields(_inv); if(_e){ showToast('發票欄位：'+_e); return; } }
   try{
-    let total=0; const names=[];
+    let total=0; const names=[]; const items=[]; let first=null;
     for(const r of _msCart){
       const nm=r.name==='自訂'?String(r.cname||'').trim():r.name;
       const qty=Math.max(1,Number(r.qty)||1);
       const price=Math.max(0,Number(r.price)||0);
       const amt=qty*price; total+=amt; names.push(`${nm}×${qty}`);
+      items.push({name:`${nm}×${qty}`, amt});
       /* 一列一筆收款紀錄：今日營收與財務逐筆看得到品項，不併成一筆糊掉 */
-      await dbPutPurchaseSafe({id:uid('PUR'),member_id:memberId,plan_id:null,ticket_id:null,
+      const _row={id:uid('PUR'),member_id:memberId,plan_id:null,ticket_id:null,
         plan_name:`${nm}×${qty}`,list_price:amt,deal_amount:amt,payment_method:method,
         invoice_type:'none',installment_count:1,note,operator:SESSION.id,
-        source:'merchandise',created_at:new Date().toISOString()});
+        source:'merchandise',created_at:new Date().toISOString()};
+      if(!first) first=_row;
+      await dbPutPurchaseSafe(_row);
+    }
+    /* ⚠ 發票**整筆開一張**，不是一列一張：客人買三樣東西不會想收到三張發票。
+       載體用第一筆 purchase（merchant_order_no 取自它的 id），金額用合計、
+       品項帶全部 —— invIssueForPurchase 的 items 與 opt.amt 本來就支援這個形狀。
+       ⚠ 散客 memberId 是 null：mem 傳 null，載具／信箱完全靠櫃檯當場填的 _inv。 */
+    if(first && total>0){
+      const _mem = memberId ? await dbGet('members',memberId).catch(()=>null) : null;
+      /* 有會員的話順手把當場問到的載具／信箱寫回去（只補空值，不覆蓋既有） */
+      if(_mem && _inv){
+        const _u={};
+        if(_inv.email      && !((_mem.email||'').trim()))           _u.email          =_inv.email;
+        if(_inv.carrierNum && !((_mem.invoice_carrier||'').trim())) _u.invoice_carrier=_inv.carrierNum;
+        if(_inv.ubn        && !((_mem.invoice_ubn||'').trim()))     _u.invoice_ubn    =_inv.ubn;
+        if(_inv.title      && !((_mem.invoice_title||'').trim()))   _u.invoice_title  =_inv.title;
+        if(Object.keys(_u).length){
+          try{ await dbPut('members', Object.assign({}, _mem, _u)); dbCacheClear(['members']); }catch(_){}
+        }
+      }
+      try{ await invIssueForPurchase(first, _mem, _inv, items, {amt:total, category:'merch'}); }
+      catch(e){ console.error('merch invoice fail', e); }
     }
     window._slCart=[];   // 結帳完成，清空購物車（2026-08-04）
     closeModal(); showToast(`已收款 $${total.toLocaleString()}（${names.join('、')}）`);
@@ -54061,11 +54163,15 @@ async function openInstallNext(ticket_id){
     </div>
     <div class="form-row"><label>付款方式</label>
       <select id="inx-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
+    ${/* 電子發票（2026-09-15）：分期的每一期都是一次收款，都要能開發票。 */''}
+    ${invFieldsHTML()}
     <div style="font-size:11.5px;color:var(--t3);margin:4px 0 10px;">確認後立即開通填入的堂數（會員端同步解鎖）、記入本期營收；分期保留的課由早到晚自動補綁扣課。</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="confirmInstallNext('${ticket_id}')">確認收款並開通</button>
     </div>`);
+  /* 分期的每一期都是一次收款 → paid=true；會員固定，直接把人帶進去預填。 */
+  try{ invSync({paid:true, memberId:t.member_id, members:(m?[m]:[])}); }catch(_){}
 }
 function inxFill(n,amt){ const a=document.getElementById('inx-n'), b=document.getElementById('inx-amt');
   if(a) a.value=n; if(b) b.value=amt; }
@@ -54085,6 +54191,9 @@ async function _confirmInstallNext(ticket_id){
   if(!Number.isFinite(n)||n<1||n>leftN){ showToast(`開通堂數要在 1–${leftN} 之間`); return; }
   if(!Number.isFinite(amt)||amt<0){ showToast('請輸入實收金額'); return; }
   const method=(document.getElementById('inx-method')||{}).value||'cash';
+  /* 電子發票（2026-09-15）：在改動資料之前先把表單讀起來，後面 closeModal 就沒了。 */
+  const _inv=invReadFields();
+  { const _e=invCheckFields(_inv); if(_e){ showToast('發票欄位：'+_e); return; } }
   t.unlocked_sessions=unlocked0+n;
   /* 期數進度依「累計開通堂數」重算：蓋滿哪一段就算收到哪一期；全開通＝最後一期。
      自訂堂數跨段一半時，那一段的 paid 先不標——帳以購買紀錄的實收為準。 */
@@ -54099,12 +54208,32 @@ async function _confirmInstallNext(ticket_id){
   const _full=t.unlocked_sessions>=total;
   // 記營收（購買紀錄新增一筆本期收款）
   try{
-    await dbPut('purchases',{id:uid('PUR'),member_id:t.member_id,plan_id:t.source_plan_id||null,ticket_id:t.id,
+    /* ⚠ 2026-09-15：接成變數，下面開發票要拿它當載體（merchant_order_no 取自 id）。 */
+    const _pRow={id:uid('PUR'),member_id:t.member_id,plan_id:t.source_plan_id||null,ticket_id:t.id,
       plan_name:t.plan_name,list_price:null,deal_amount:amt,payment_method:method,
       coach_id:t.sold_by||null,   /* 業績歸屬跟著票券（2026-08-15 蔡宜芬案例） */
       installment_count:inst.count,
       note:`分期收款・開通 ${n} 堂${_full?'（已全數開通）':`（累計 ${t.unlocked_sessions}/${total}）`}`,operator:SESSION.id,source:'installment',
-      created_at:new Date().toISOString()});
+      created_at:new Date().toISOString()};
+    await dbPut('purchases',_pRow);
+    /* 電子發票（2026-09-15 使用者：「只要有收款都要出現」）——
+       分期的每一期都是一次真實收款，各開各的發票。 */
+    if(amt>0){
+      const _pm=await dbGet('members',t.member_id).catch(()=>null);
+      if(_pm && _inv){   /* 當場問到的載具／信箱順手寫回會員（只補空值） */
+        const _u={};
+        if(_inv.email      && !((_pm.email||'').trim()))           _u.email          =_inv.email;
+        if(_inv.carrierNum && !((_pm.invoice_carrier||'').trim())) _u.invoice_carrier=_inv.carrierNum;
+        if(_inv.ubn        && !((_pm.invoice_ubn||'').trim()))     _u.invoice_ubn    =_inv.ubn;
+        if(_inv.title      && !((_pm.invoice_title||'').trim()))   _u.invoice_title  =_inv.title;
+        if(Object.keys(_u).length){
+          try{ await dbPut('members', Object.assign({}, _pm, _u)); dbCacheClear(['members']); }catch(_){}
+        }
+      }
+      try{ await invIssueForPurchase(_pRow, _pm, _inv,
+             [{name:`${t.plan_name||'分期票券'}・開通 ${n} 堂`, amt}], {category:'installment'}); }
+      catch(e){ console.error('install invoice fail', e); }
+    }
   }catch(e){ console.error('install purchase log fail',e); showToast('付款紀錄寫入失敗：'+(e.message||e)); }
   /* ⚠ 2026-09-04 修：原本寫的 action 是 'installment_unlock'，但 ticket_logs.action 的
      列舉只有 grant/deduct/refund/adjust/expire —— 資料庫一律退件，而這一行包在
