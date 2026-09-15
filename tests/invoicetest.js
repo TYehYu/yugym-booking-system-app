@@ -226,8 +226,11 @@ console.log('\n④ 開不成不能擋住銷售（票券已經發出去了）');
      && /const cb=document\.getElementById\('inv-nope'\); if\(cb\) cb\.checked=!on;/.test(S));
   ok('★★★ 只剩兩格：存載具／寄信箱（捐贈與紙本從畫面移除）',
      /const INV_MODES=\[\['carrier','存載具'\],\['mail','寄信箱'\]\];/.test(src));
-  ok('★★ 預設是「開立」（收錢本來就該開發票，預設不開會變成常態性漏開）',
-     /if\(!w\.dataset\.on\) invSetOn\(1\);/.test(src));
+  /* 2026-09-15：VIP 方案是唯一例外（使用者：超優惠課程不開立），所以這裡從
+     invSetOn(1) 變成 invSetOn(_isVipPlan?0:1)。**非 VIP 仍一律預設開立**，
+     這條的本意（避免常態性漏開）沒變，只是多了一個具名的例外分支。 */
+  ok('★★ 預設是「開立」，只有 VIP 方案例外（收錢本來就該開，預設不開會變成常態性漏開）',
+     /if\(!w\.dataset\.on\) invSetOn\(_isVipPlan\?0:1\);/.test(src));
 }
 
 console.log('\n④-2 每一個收款入口都要能開發票（2026-09-15）');
@@ -574,6 +577,30 @@ console.log('\n⑤ 作廢票券連動');
   ok('★★ 只作廢真的開出去的那張（issued＋有號碼），同一筆多張取最新',
      /x\.status==='issued'&&x\.invoice_number/.test(V)
      && /sort\(\(a,b\)=>String\(b\.created_at\|\|''\)\.localeCompare\(String\(a\.created_at\|\|''\)\)\)\[0\]/.test(V));
+}
+
+console.log('\n⑤-2 VIP 方案預設不開發票（2026-09-15）');
+/* 使用者：「系統內有一種會員是 VIP　購買 VIP 方案的時候是不開立發票的
+   因為是超優惠課程　VIP 也都清楚」
+   ⚠ 判準是**方案**不是**會員等級**：查過資料，VIP 會員也買過「自訂方案」$11,000
+     與「加購運動按摩」$2,000，那些不是超優惠課程，照常開。 */
+{
+  const F=grabFn('invSync');
+  /* ⚠ 這條原本寫成 !/level==='vip'/ 想證明「沒看會員等級」，但 invSync 裡本來就有
+     別段文字含 level=== ，於是誤判成紅。反面斷言（沒有某字串）本來就不適合驗判準，
+     改成正面釘住「VIP 判斷是從 _pv（方案快取）取 plan_type」。 */
+  ok('★★★ 看方案（plan_type==="vip"）不是看會員等級',
+     /const _isVipPlan=!!\(_pv && \(_pv\.plan_type==='vip'/.test(F)
+     && !/_isVipPlan=[^;]*\blevel\b/.test(F));
+  ok('★★★ VIP 方案預設不勾開立，其餘維持預設開立',
+     /invSetOn\(_isVipPlan\?0:1\)/.test(F));
+  ok('★★ 讀不到方案時走原本的「預設開立」（商品／場租／分期沒有方案概念）',
+     /const _pv=window\._grantPlanCache;/.test(F)
+     && /!!\(_pv && \(_pv\.plan_type==='vip'/.test(F));
+  ok('★★★ 自帶判斷，不呼叫外部的 isVipPlan（跨 script 區塊看不到區域變數）',
+     !/isVipPlan\(/.test(F));
+  ok('★★ 只是預設不開，欄位與開關仍在（櫃檯要開得了）',
+     /if\(_seg\) _seg\.style\.display='';/.test(F));
 }
 
 console.log('\n⑥ ★★★ 金鑰不能出現在前端（index.html 是公開檔，任何人都看得到原始碼）');

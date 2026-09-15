@@ -544,8 +544,12 @@ ok('★ 單人課走下方那一排，團課仍逐名額掛在自己那一列',
 ok('★ 會員卡右側不再重複畫同一組按鈕（只留團課的舊資料分支）',
    /\}else if\(A\.isGroup\)\{/.test(src)
    && /一般單人課走下方那一排（2026-08-21），這裡不再重複畫/.test(src));
-ok('★ 標題卡再縮短（內距 18→13、色條跟著收、第二列間距 9→6）',
-   /padding:13px 18px 13px 26px;box-shadow:0 10px 30px rgba\(30,25,15,\.3\);\}/.test(css)
+/* ⚠ 2026-09-15：右側內距 18→44，是為了讓出貼邊的圓形 ✕（使用者：「這個Ｘ按鈕
+   把時間往左邊調整了　可以做成一個小圓形按鈕放在視窗邊緣嗎」）。
+   0821「標題卡再縮短」的本意是**上下**要矮（13）與左側色條位置（26），那兩個沒動；
+   右側變寬不影響卡高，只是把鈕的位置空出來。 */
+ok('★ 標題卡再縮短（上下 13、左 26 不變；右側 44 讓給圓形 ✕）',
+   /padding:13px 44px 13px 26px;box-shadow:0 10px 30px rgba\(30,25,15,\.3\);\}/.test(css)
    && /\.ash-bar\{position:absolute;left:12px;top:12px;bottom:12px;/.test(css)
    && /\.ash-meta\{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:6px;/.test(css));
 ok('　　為什麼搬（為了兩顆按鈕把卡撐到 100px 高）',

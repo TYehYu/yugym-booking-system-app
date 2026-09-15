@@ -23,11 +23,27 @@ ok('★★★ 會員端標題卡仍然刻意不可點（onclick 只掛在 ✕ �
 ok('★★ 原因寫在原地', /會員端的標題卡是\*\*刻意不可點\*\*的（memgrpviewtest 釘著）/.test(src));
 
 console.log('\n③ 三份樣式各自寫（三個容器的樣式作用域不同）');
-ok('★★ 會員端', /#mem-task-pop \.mtp-x\{flex:none;background:none;border:none;cursor:pointer;/.test(src));
-ok('★★ 桌機', /#bk-card-pop \.mtp-x\{flex:none;align-self:flex-start;/.test(src));
-ok('★★ 手機（.ash-* 那組住在 @media 裡，要另寫一份）',
-   /\.ash-x\{flex:none;background:none;border:none;cursor:pointer;/.test(src));
-ok('★ 觸控面積夠（長輩按得到才算數）', /padding:4px 2px 4px 8px;margin:-4px -2px -4px 0;/.test(src));
+/* 2026-09-15 使用者回報：「這個Ｘ按鈕把時間往左邊調整了　這個Ｘ按鈕可以做成一個
+   小圓形按鈕放在視窗邊緣嗎」—— ✕ 原本是標題列 flex 的成員，佔著文字流把開課時間
+   往左擠。三張都改成 position:absolute 貼右上的圓形鈕，脫離流。 */
+ok('★★★ 會員端：貼邊絕對定位（不再佔文字流）',
+   /#mem-task-pop \.mtp-x\{position:absolute;right:9px;top:9px;/.test(src));
+ok('★★★ 桌機：貼邊絕對定位', /#bk-card-pop \.mtp-x\{position:absolute;right:9px;top:9px;/.test(src));
+ok('★★★ 手機（.ash-* 那組住在 @media 裡，要另寫一份）',
+   /\.ash-x\{position:absolute;right:9px;top:9px;/.test(src));
+ok('★★★ 三張都是圓形（border-radius:999px）且有底色，看起來像按鈕',
+   (src.match(/border-radius:999px;cursor:pointer;font-family:inherit;\s*\n?\s*font-size:1[45]px;line-height:1;color:var\(--t3\);padding:0/g)||[]).length>=2);
+ok('★★★ 觸控面積夠（長輩按得到才算數）—— 會員端與手機 28px、桌機 26px',
+   (src.match(/width:28px;height:28px;display:flex;align-items:center;justify-content:center;/g)||[]).length===2
+   && /width:26px;height:26px;display:flex;align-items:center;justify-content:center;/.test(src));
+/* ⚠ 脫離流之後，容器一定要有 position:relative 當定位基準，右側也要留 padding，
+     否則長課名會被鈕壓到。桌機那張的 .mtp-card 本來沒有 relative，是這次補的。 */
+ok('★★★ 桌機容器補上 relative＋右側 padding（它本來兩者都沒有）',
+   /#bk-card-pop \.mtp-card\{position:relative;width:100%;display:flex;[^}]*padding:12px 40px 12px 14px;/.test(src));
+ok('★★★ 會員端容器右側 padding 留給鈕',
+   /#mem-task-pop \.mtp-head\{display:block;position:relative;padding:13px 44px 13px 24px;\}/.test(src));
+ok('★★★ 手機容器右側 padding 留給鈕（18 → 44）',
+   /\.mtp-card\.admh-sheet\{flex:none;display:block;position:relative;[^}]*padding:13px 44px 13px 26px;/.test(src));
 
 console.log('\n'+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
