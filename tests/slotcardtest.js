@@ -322,9 +322,14 @@ ok('★★ 「有別張票可換」與 openBkTicketChange 的候選同一個判�
    && /_swapN\[r\.mid\]=_swapTk\[r\.mid\]\.length;/.test(src)
    && /const list=cand\.filter\(t=>t\.id!==curId\);/.test(src));
 ok('★★ 本堂那一顆放大，而且只在簡易課卡放大（票券夾一列 60 顆不能跟著大）',
-   /* 四修定案：還沒上的（已預約未上／還沒排）44px、已經上完的 35px。
-      大小本身就是資訊 —— 大的是還沒發生、還會動的。 */
-   /\.ash-mcard \.ash-tk \.mtk\.mtk-booked,\s*\n\s*\.ash-mcard \.ash-tk \.mtk\.mtk-free,\s*\n\s*\.ash-mcard \.ash-tk \.mtk\.mtk-cur\{width:44px;height:44px;font-size:13px;\}/.test(src)
+   /* 四修定案：還沒上的（已預約未上／還沒排）比已上完的大，大小本身就是資訊 ——
+      大的是還沒發生、還會動的；小的是已經過去的。
+      ⚠ 2026-09-15 使用者：「這種圓形卡有大有小的組合　有辦法整理一下讓他沒那麼亂嗎」
+        → 容器改成固定格寬的 grid（每顆佔同寬格子、小的置中），大圓一併 44→40px。
+        格寬非得是 40 不可：0821 要求「已上完一列 8 顆」，8 顆 44px 要 387px，
+        手機只有 357px 放不下。兩級語意沒變，只是差距從 9px 收成 5px。
+        寬度換算重算在 ashswappadtest ②。 */
+   /\.ash-mcard \.ash-tk \.mtk\.mtk-booked,\s*\n\s*\.ash-mcard \.ash-tk \.mtk\.mtk-free,\s*\n\s*\.ash-mcard \.ash-tk \.mtk\.mtk-cur\{width:40px;height:40px;font-size:12\.5px;\}/.test(src)
    && /\.mtk\{position:relative;width:35px;height:35px;/.test(src)
    && /只在簡易課卡的會員卡放大：票券夾那邊一列要排 60 顆，放大會整排爆掉/.test(src));
 /* 2026-08-26 使用者：「跳出的視窗按返回會跑回調整課程的視窗　這邊應該設計關閉的按鈕就好」

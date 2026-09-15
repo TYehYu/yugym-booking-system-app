@@ -39,18 +39,28 @@ console.log('① 留位只留在最後那一行');
 
 console.log('\n② 圓點尺寸與可用寬度的關係（改任一個都要重算）');
 {
-  const D_USED=35, D_BIG=44, GAP=5;
-  ok('★★ 已上完 35px、未上／本堂 44px（0829 定案沒被動到）',
-     /\.ash-mcard \.ash-tk \.mtk\.mtk-booked,\s*\n\s*\.ash-mcard \.ash-tk \.mtk\.mtk-free,\s*\n\s*\.ash-mcard \.ash-tk \.mtk\.mtk-cur\{width:44px;height:44px;/.test(src)
+  /* 2026-09-15 使用者：「這種圓形卡有大有小的組合　有辦法整理一下讓他沒那麼亂嗎」
+     → 選「大小保留，但對齊」：容器從 flex 改成固定格寬的 grid，每顆佔同寬格子、小的置中。
+     ⚠ 格寬為什麼是 40 不是 44：grid 之下**所有圓點都佔格寬**（不再各自量寬度），
+       而 0821 要求「已上完一列 8 顆」。8 顆 44px 要 387px，手機只有 357px 放不下；
+       40px 是 8×40＋7×5＝355 ≤ 357 剛好過關。所以大圓一併 44→40。
+     ⚠ 底下 fit() 算的是「一列放幾顆」，grid 之下兩種圓點都吃 CELL，不再分兩個數字。 */
+  const D_USED=35, D_BIG=40, CELL=40, GAP=5;
+  ok('★★ 已上完 35px、未上／本堂 40px（0829 的兩級語意保留，只調數字）',
+     /\.ash-mcard \.ash-tk \.mtk\.mtk-booked,\s*\n\s*\.ash-mcard \.ash-tk \.mtk\.mtk-free,\s*\n\s*\.ash-mcard \.ash-tk \.mtk\.mtk-cur\{width:40px;height:40px;/.test(src)
      && /\.mtk\{position:relative;width:35px;height:35px;/.test(src)
      && /\.ash-tk\{[^}]*gap:5px;/.test(src));
+  ok('★★★ 容器是固定格寬的 grid（這才是「對齊」的來源，改回 flex 就會又參差）',
+     /\.ash-mcard \.ash-tk\{[^}]*display:grid;[\s\S]{0,80}?grid-template-columns:repeat\(auto-fill,40px\);/.test(src)
+     && /justify-items:center;/.test(src));
   const fit=(inner,d)=>Math.max(1, Math.floor((inner+GAP)/(d+GAP)));
-  eq('★★★ 修好前 279px：已上完只排得下 7 顆（＝使用者看到的）', fit(279,D_USED), 7);
-  eq('★★★ 修好後 357px：已上完排得下 9 顆（超過 0821 要求的 8 顆）', fit(357,D_USED), 9);
-  eq('★★ 未上課那種 44px 在 357px 下是 7 顆 —— 手機寬度就是放不下 8 顆 44px（需要 387px）',
-     [fit(357,D_BIG), 8*D_BIG+7*GAP], [7,387]);
-  eq('　 0821 訂的「一列 8 顆」門檻＝315px，修好後有 357px，過關',
-     [8*D_USED+7*GAP, 357>=8*D_USED+7*GAP], [315,true]);
+  eq('★★★ 修好前 279px：已上完只排得下 7 顆（＝使用者當初看到的）', fit(279,D_USED), 7);
+  eq('★★★ grid 之下 357px：每列固定 8 顆，大小兩種都一樣（邊緣才會齊）',
+     [fit(357,CELL), fit(357,D_BIG)], [8,8]);
+  eq('★★ 8 顆 44px 需要 387px —— 這就是格寬不能留在 44 的原因',
+     [8*44+7*GAP, 357>=8*44+7*GAP], [387,false]);
+  eq('　 0821 訂的「一列 8 顆」門檻：格寬 40px 需要 355px，手機有 357px，過關',
+     [8*CELL+7*GAP, 357>=8*CELL+7*GAP], [355,true]);
 }
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
