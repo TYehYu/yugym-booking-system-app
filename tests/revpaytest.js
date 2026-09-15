@@ -42,8 +42,13 @@ ok('★ 兩個畫面共用 revPayChip', (src.match(/\$\{revPayChip\(r\)\}/g)||[]
 ok('★ 付款方式疊在金額上方（2026-08-03 使用者指示：並排會把品項擠掉）',
 /* 2026-08-24：抽獎那一列不畫金額（它是 $0 的贈品紀錄，不是收款），
    所以多一個 ||r.lot 的條件。 */
-   /<span class="mc-rev-r">\$\{revInvChip\(r\)\}\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">/.test(src)
-   && /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">/.test(src)
+   /* ⚠ 2026-09-15：發票標記（唯讀）移到姓名那一行的右側 —— 使用者回報
+      「魚先森三個字下面空白處好大」，成因是 .mc-rev-r 直向堆四個標記把列撐高。
+      ⚠ .mc-rev-r 的**方向不變**（0803 的決定，這條斷言最後一項照舊釘著），
+        移走的只有唯讀標記；退回／付款／金額仍在同一區、同樣的順序。 */
+   /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">/.test(src)
+   && (src.match(/<span class="mc-rev-r">\$\{revUndoChip\(r\)\}/g)||[]).length===2
+   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revAttribChip\(r\)\}\$\{revInvChip\(r\)\}<\/div>/.test(src)
    && /\.mc-rev-r\{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;\}/.test(src));
 /* 2026-08-03 使用者指示：「不要列出刷卡，我們沒提供刷卡功能」。
    2026-08-12 拆帳改版：第三顆改成「現金+匯款」拆帳入口（openRevPaySplit），刷卡仍不列 */

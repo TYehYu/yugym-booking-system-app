@@ -36,7 +36,12 @@ ok('★ 首頁右欄名單卡（約別標籤在列最左，沒有約別也佔住
    && /\$\{revKindCell\(r\)\}\s*\n\s*<div class="mc-rev-b">/.test(src)
 /* 2026-08-24：抽獎那一列不畫金額（它是 $0 的贈品紀錄，不是收款），
    所以多一個 ||r.lot 的條件。 */
-   && /<span class="mc-rev-r">\$\{revInvChip\(r\)\}\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\$\{_fm\(r\.amt\)\}/.test(src));
+   /* ⚠ 2026-09-15：發票標記（唯讀）移到姓名那一行的右側 —— 使用者回報
+      「魚先森三個字下面空白處好大」，成因是 .mc-rev-r 直向堆四個標記把列撐高。
+      這條守的是「約別在列最左、由 revKindCell 統一畫」（上面兩項），
+      第三項只是順帶釘住右側那格的排列，跟著更新。 */
+   && /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\$\{_fm\(r\.amt\)\}/.test(src)
+   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revAttribChip\(r\)\}\$\{revInvChip\(r\)\}<\/div>/.test(src));
 ok('★ 營收彈窗也走同一支（約別也在最左邊那一欄）',
    (src.match(/\$\{revKindCell\(r\)\}/g)||[]).length===2
    && /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\{money\(r\.amt\)\}/.test(src));

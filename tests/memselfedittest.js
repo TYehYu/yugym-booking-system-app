@@ -30,9 +30,15 @@ console.log('\n② 載具 →（2026-09-14 擴充成「發票」：Email／載�
    預約視窗」付過代價，見 yugym-member-v2）。ppCarrierEdit 留成薄包裝，因為表頭那一列的
    onclick 仍寫 ppCarrierEdit(event)。
    ⚠ 規則一條都沒放寬：本人可改、存前轉大寫、格式相同、留空＝清除。 */
-ok('★ 表頭有發票欄（櫃檯或本人可點）',
-   /const carrierItem = isM \? \(\(\)=>\{/.test(src)
-   && /<span class="pp-meta-l">發票<\/span>/.test(src)
+ok('★ 表頭有載具欄（櫃檯或本人可點）',
+   /* ⚠ 2026-09-15：統編不再存會員資料之後，這一格只剩載具一個值，
+      原本為了組「統編・載具」而寫的 IIFE 沒有必要了，簡化成單行三元。 */
+   /const carrierItem = isM\s*\n\s*\? `<div class="pp-meta-i/.test(src)
+   && !/const carrierItem = isM \? \(\(\)=>\{/.test(src)
+   /* ⚠ 2026-09-15 使用者：「發票改為載具」—— 統編已不存會員資料，
+      這一格只會是手機條碼，叫「發票」名不符實（旁邊 Email 也是發票用的）。 */
+   && /<span class="pp-meta-l">載具<\/span>/.test(src)
+   && !/<span class="pp-meta-l">發票<\/span>/.test(src)
    && /onclick="ppCarrierEdit\(event\)"/.test(src)
    /* 2026-09-14 二修：發票與 Email 從詳細資料搬到頂列姓名區（.pp-idinv）。
       橫向表頭（員工／合約列印用的 meta）維持原順序，那條路 isM 才有這兩格。 */
