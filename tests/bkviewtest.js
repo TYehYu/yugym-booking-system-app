@@ -68,10 +68,16 @@ eq('★ 體驗', api.bkNameFull({category:'體驗',trial_name:'程凱郁'}, name
 eq('★ 待繳費（分期保留）', api.bkNameFull({member_id:'M1',pending_contract:true,note:'分期待繳費保留（收款後自動補扣）'}, nameOf), '林小明（待繳費）');
 eq('★ 純綁定 → （待簽約）', api.bkNameFull({member_id:'M1',pending_contract:true}, nameOf), '林小明（待簽約）');
 /* 2026-08-04 使用者指示：家庭成員的格子（member＋trial_name、非 pending）名字旁顯示使用人 */
-eq('★ 家庭成員使用人：自主訓練的名字旁顯示成員稱呼', api.bkName({member_id:'M1',trial_name:'爸爸',category:'自主訓練'}, nameOf), '林小明（爸爸）');
+/* 2026-09-15 使用者回報「蕭育筑（媽媽）這個會斷到下一列…可以改成蕭育筑·媽媽」——
+   分隔符由全形括號改「・」：兩個全形括號各佔一個中文字寬，省下來剛好讓 6 字單行放得下。
+   ⚠ 與手機課卡統一（startButlerArt 早在 0819 就用「陳瀚竣・媽媽」）。 */
+eq('★ 家庭成員使用人：自主訓練的名字旁顯示成員稱呼', api.bkName({member_id:'M1',trial_name:'爸爸',category:'自主訓練'}, nameOf), '林小明・爸爸');
 /* 2026-08-04 使用者回報（蕭育筑 8/7 教練課設定媽媽沒顯示）：票券預設使用人上線後
    教練課也會帶使用人 —— 一般會員課（bkTag 空）都要加註。 */
-eq('★ 教練課也顯示使用人', api.bkName({member_id:'M1',trial_name:'媽媽',category:'私人教練'}, nameOf), '林小明（媽媽）');
+eq('★ 教練課也顯示使用人', api.bkName({member_id:'M1',trial_name:'媽媽',category:'私人教練'}, nameOf), '林小明・媽媽');
+/* ⚠ 身分標籤（體驗／場租／待簽約）仍用全形括號 —— 那是 bkGuestName／bkNameFull 的事，
+   語意不同：使用人是「誰在上這堂」，標籤是「這張卡是什麼性質」。 */
+eq('★★ 身分標籤不受影響，仍是全形括號', api.bkNameFull({member_id:'M1',pending_contract:true}, nameOf), '林小明（待簽約）');
 /* 2026-08-04 使用者回報（截圖）：體驗課卡出現「林孟玉（林孟玉）」——體驗常是 member＋trial 同名 */
 eq('★ 體驗課不加註（bkTag 有值）', api.bkName({member_id:'M1',trial_name:'小美',category:'體驗'}, nameOf), '林小明');
 eq('　　場租不加註', api.bkName({member_id:'M1',trial_name:'魚大東',category:'場租'}, nameOf), '林小明');

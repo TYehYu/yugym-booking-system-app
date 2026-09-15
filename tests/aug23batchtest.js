@@ -136,9 +136,14 @@ ok('　　內距與欄距一起收（10\\/9\\/10\\/11→9\\/7\\/9\\/10、7→6�
 ok('★★ 收窄的底線改寫成實測結果，並指向那筆帳',
    /中欄只有 62\.6px，場地要 66px —— 差 3\.4px/.test(src)
    && /tests\/tcardwidthtest\.js 守著這筆帳/.test(src));
-ok('　　會員姓名折兩行的規則還在（「蔡美芬 吳吉琇」「蕭育筑（媽媽）」要放得下）',
+/* 2026-09-15：使用人分隔符改「・」後，「蕭育筑・媽媽」6 字單行就放得下，
+   但折兩行的規則**仍然要在** —— 「蔡美芬 吳吉琇」那種兩個人的名字照樣需要折行。 */
+ok('　　會員姓名折兩行的規則還在（「蔡美芬 吳吉琇」要放得下）',
    /word-break:keep-all; line-break:strict; overflow-wrap:anywhere;\}/.test(src)
    && /-webkit-line-clamp:2/.test(src));
+ok('★★ 使用人改「・」分隔（省下兩個全形括號＝2 字寬，與手機課卡統一）',
+   /return `\$\{v\}・\$\{b\.trial_name\}`;/.test(src)
+   && /\$\{_own\}・\$\{b\.trial_name\}/.test(src));
 ok('★ 月曆每一格底下的課堂數膠囊移除，只留日期',
    /<span class="mc-d">\$\{d2\}<\/span><\/div>`\);/.test(src)
    && !/<span class="mc-d">\$\{d2\}<\/span><span class="mc-dot/.test(src));
