@@ -376,6 +376,34 @@ console.log('\n④-5 建約那條路：發票要在「待審核發放」問（20
      /if\(!document\.getElementById\('inv-wrap'\)\) return;   \/\* 不能發放時沒畫這一區 \*\//.test(src));
 }
 
+console.log('\n④-6 ⚠ 發票區不能依賴外部工具函式（2026-09-15）');
+/* 使用者實測：「操作沒有完成：Can't find variable: esc 跳出錯誤」
+   → invPick 的 row() 寫了 esc(val||'')，但**全域根本沒有 esc**：
+     全檔十幾個 esc 都是各自函式內部的區域 const（23072、30009、41457…），
+     而 invPick 在第一個 <script> 區塊裡，一個都看不到。
+     結果只要發票區一開啟就丟 ReferenceError —— 六個入口全壞。
+   ⚠ 這一區的函式會被本測試抽出來單獨跑（new Function 沙箱），
+     多一個外部依賴就多一個破口。invSummaryHTML 當初就是為此自帶跳脫，invPick 漏了。 */
+{
+  const strip=s=>String(s||'').replace(/\/\*[\s\S]*?\*\//g,'');   /* 註解裡提到沒關係 */
+  const INV_FNS=['invFieldsHTML','invPick','invReadFields','invCheckFields',
+                 'invSummaryHTML','invSetOn','invDimSync'];
+  const bad=INV_FNS.filter(n=>/[^a-zA-Z_.]esc\(/.test(strip(grabFn(n))));
+  eq('★★★ 七支發票函式都不呼叫外部 esc()', bad, []);
+  ok('★★★ invPick 自己帶跳脫（預填值可能含引號，不跳脫會把 value 屬性截斷）',
+     /const q=v=>String\(v==null\?'':v\)\.replace\(\/&\/g,'&amp;'\)/.test(grabFn('invPick'))
+     && /value="\$\{q\(val\)\}"/.test(grabFn('invPick')));
+  ok('★★ placeholder 也要跳脫（同一個 row 樣板出來的）',
+     /placeholder="\$\{q\(ph\)\}"/.test(grabFn('invPick')));
+  /* 實跑一次：確認跳脫函式本身正確（引號、角括號、& 都要處理）。 */
+  {
+    const q=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    eq('　　實跑：雙引號會被跳脫（否則 value 屬性會被截斷）', q('a"b'), 'a&quot;b');
+    eq('　　實跑：角括號與 & 都處理', q('<a&b>'), '&lt;a&amp;b&gt;');
+    eq('　　實跑：null／undefined 回空字串', [q(null), q(undefined)], ['','']);
+  }
+}
+
 console.log('\n⑤ 作廢票券連動');
 {
   const F=grabFn('_voidTicketDo');
