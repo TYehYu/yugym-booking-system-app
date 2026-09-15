@@ -37,5 +37,47 @@ ok('★ 開會員資料時就地建表（分期多筆取最新：依 created_at 
    && /window\._tkPayMap\[p\.ticket_id\]=\{m:p\.payment_method, sp:p\.pay_split\|\|null,/.test(src));
 ok('　　為什麼掛 window，寫在程式裡', /掛在 window 給 tkMoneyHtml 用（它是無資料存取的純顯示 helper）。/.test(src));
 
+console.log('\n③ 票券卡顯示發票號碼');
+/* 2026-09-15 使用者：「這邊有顯示發票號碼 教練課跟團體課是不是也可以顯示呢」
+   「有辦法加上去嗎?如果分期就做成三格」 —— 沿用〔其他消費〕的 .rev-invno／.rev-noinv 標籤。 */
+{
+  const mk=(payMap)=>new Function('isDeskLike','window','return '+grabFn('tkMoneyHtml'))(()=>true,{_tkPayMap:payMap});
+
+  const one=mk({A1:{m:'transfer',sp:null,vn:0,va:0,cu:0,lp:0,invs:[{no:'FX28688355',amt:7500}]}})({id:'A1',amount_paid:7500});
+  ok('★ 單筆：金額後掛發票號碼，不加期數前綴',
+     /<span class="rev-invno" title="第 1 期發票　\$7,500">FX28688355<\/span>/.test(one) && !/1\. FX28688355/.test(one), one);
+
+  const ins=mk({A2:{m:'transfer',sp:null,vn:0,va:0,cu:0,lp:18000,invs:[
+    {no:'FX28688300',amt:6000},{no:'FX28688310',amt:6000},{no:null,amt:6000}]}})({id:'A2',amount_paid:12000});
+  ok('★ 分期三格：一期一格，各自帶號碼與期數前綴',
+     /1\. FX28688300/.test(ins) && /2\. FX28688310/.test(ins), ins);
+  ok('★ 分期中未開立的那一期畫「沒開發票」灰標（不是留白）',
+     /<span class="rev-noinv" title="這一期沒有開立電子發票">3\. 沒開發票<\/span>/.test(ins), ins);
+
+  /* ⚠ 下面兩條是保護①區的防線：那些 fixture 全都沒有 invs 欄位，
+     這裡只要多畫一個字，就會打到「沒對照到的票不標」那幾條。 */
+  ok('★★ 對照表沒有 invs 欄位時一個字都不輸出（舊資料與舊 fixture 不受影響）',
+     !/rev-inv/.test(mk({A3:{m:'cash',sp:null,vn:0,va:0,cu:0,lp:0}})({id:'A3',amount_paid:3000})));
+  ok('　　invs 是空陣列時也不輸出',
+     !/rev-inv/.test(mk({A4:{m:'cash',sp:null,invs:[]}})({id:'A4',amount_paid:3000})));
+
+  /* 釘住「grabFn 真的抽到完整函式」：tkMoneyHtml 的註解裡只要混進一個閉大括號字元，
+     配對計數就會提前歸零、只抽到半截函式 —— 上面那些斷言會集體 SyntaxError。
+     syntaxtest 對這種情況是綠的（壞的是測試重組出來的片段，不是檔案本身），
+     所以這條單獨守著。2026-09-15 真的踩過一次。 */
+  const fnSrc=grabFn('tkMoneyHtml');
+  ok('　　grabFn 抽到完整函式（tkMoneyHtml 的註解裡沒有混進大括號字元）',
+     fnSrc.includes('_invTag') && /\}\s*$/.test(fnSrc), fnSrc.length);
+}
+
+console.log('\n④ 對照表逐期累積發票號碼');
+/* 分期＝同一張票有多筆收款，每一期各自一張發票。付款方式沿用「取最新」，
+   但發票號碼不能覆寫，否則只剩最後一期看得到。 */
+ok('★ 付款方式取最新，發票號碼則逐期 push 進 invs（不覆寫）',
+   /const _prev=window\._tkPayMap\[p\.ticket_id\];/.test(src)
+   && /const _invs=\(_prev&&Array\.isArray\(_prev\.invs\)\)\?_prev\.invs\.slice\(\):\[\];/.test(src)
+   && /_invs\.push\(\{no:p\.invoice_number\|\|null, amt:Number\(p\.deal_amount\)\|\|0\}\);/.test(src)
+   && /invs:_invs\}/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

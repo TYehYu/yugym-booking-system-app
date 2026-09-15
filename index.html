@@ -4169,6 +4169,10 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 .tkc-foot{flex-direction:column;align-items:flex-end !important;gap:6px !important;}
 .tkc-foot>span{min-width:0;text-align:right;}
 .tkc-money{font-size:12.5px;}
+/* 票券卡上的發票標籤（2026-09-15）：與付款方式同一列，左邊留一點距離。
+   分期多格時允許換行 —— 三格排不下時往下堆，不要把金額擠掉。 */
+.tk-amt ~ .rev-invno,.tk-amt ~ .rev-noinv{margin-left:6px;}
+.tkc-money .rev-invno,.tkc-money .rev-noinv{margin-left:6px;}
 /* 交易：四欄表格改成一筆一列的卡片。
    2026-08-23 白底框語彙盤點：這兩組（交易／預約紀錄）是 0820 做的，剛好卡在語彙定案之前，
    還是白卡上的分隔線列。改成一列一個白框；.pp-card 是白底，所以要各自鋪一層米底外圈。 */
@@ -13157,8 +13161,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.2110';
-const APP_VERSION_LABEL = 'v260915.2110';
+const APP_VERSION = '260915.2124';
+const APP_VERSION_LABEL = 'v260915.2124';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -49336,9 +49340,16 @@ async function ppLoadCtx(){
            ⚠ 不能用 list_price − deal_amount 回推：分期的 deal_amount 只有第 1 期，
              整筆差額會被誤標成「折抵」。所以券看 note、儲值金看 credit_used，各有各的來源。 */
         const _vm=/折抵券×(\d+)\s*−\$([\d,]+)/.exec(String(p.note||''));
+        /* 發票號碼（2026-09-15 使用者：「教練課跟團體課是不是也可以顯示呢」「如果分期就做成三格」）——
+           ⚠ 這一欄要**累積**不能覆寫：分期一張票對應多筆收款、各期各自一張發票
+             （已驗證 5 張分期票各有 2 筆收款）。付款方式那幾欄維持「取最新」的舊行為。
+           ⚠ 沒有號碼的期數也要留一格（no 為 null），畫面才顯示得出「第 2 期沒開發票」。 */
+        const _prev=window._tkPayMap[p.ticket_id];
+        const _invs=(_prev&&Array.isArray(_prev.invs))?_prev.invs.slice():[];
+        _invs.push({no:p.invoice_number||null, amt:Number(p.deal_amount)||0});
         window._tkPayMap[p.ticket_id]={m:p.payment_method, sp:p.pay_split||null,   /* 拆帳帶金額（2026-08-13） */
           vn:_vm?Number(_vm[1]):0, va:_vm?Number(String(_vm[2]).replace(/,/g,'')):0,
-          cu:Number(p.credit_used)||0, lp:Number(p.list_price)||0};
+          cu:Number(p.credit_used)||0, lp:Number(p.list_price)||0, invs:_invs};
       });
     /* ⚠ 一定要帶 id（2026-09-15）：單筆列印明細要靠它指名是哪一筆。
        前綴 IMP- 是為了與 purchases.id 分流 —— 這些列在 purchases 裡不存在，
@@ -62583,7 +62594,27 @@ function tkMoneyHtml(t){
     const _orig=(_pe.lp>0 && _pe.lp>amt) ? `原價 $${_pe.lp.toLocaleString()}` : '';
     _dcTag=_t.map(x=>`<span class="tk-disc"${_orig?` title="${_orig}"`:''}>${x}</span>`).join('');
   }
-  if(amt>0) return `　·　<b class="tk-amt">$${amt.toLocaleString()}</b>${_pmTag}${_dcTag}`;
+  /* 發票號碼（2026-09-15 使用者：「教練課跟團體課是不是也可以顯示呢」）——
+     沿用〔其他消費〕那一套標籤（.rev-invno 綠底／.rev-noinv 灰底）。
+     ⚠ 分期做成多格（使用者：「如果分期就做成三格」）：一期一格，各期各自一張發票。
+     ⚠ invs 缺席時**一個字都不輸出** —— 舊的測試 fixture 沒有這一欄，
+       多畫任何東西都會打到「沒對照到的票不標」那幾條斷言。
+     ⚠⚠ 這一段的**註解裡也不可以寫出大括號字元**（連反引號包起來都不行）：
+       tkpaytest 的 grabFn 是「數大括號配對」來抽這支函式，註解裡多一個閉括號
+       就會讓計數提前歸零、只抽到半截函式，整支測試 SyntaxError。
+       disctagtest 則是找行首的閉括號來截斷，所以行首也不能有。
+       （第一版就是為了寫這句警告而在註解裡放了那個字元，自己踩自己 —— 2026-09-15） */
+  let _invTag='';
+  if(_pe && Array.isArray(_pe.invs) && _pe.invs.length){
+    const _multi=_pe.invs.length>1;
+    _invTag=_pe.invs.map((v,i)=>{
+      const _lb=_multi?`${i+1}. `:'';
+      return v && v.no
+        ? `<span class="rev-invno" title="第 ${i+1} 期發票　$${(v.amt||0).toLocaleString()}">${_lb}${v.no}</span>`
+        : `<span class="rev-noinv" title="這一期沒有開立電子發票">${_lb}沒開發票</span>`;
+    }).join('');
+  }
+  if(amt>0) return `　·　<b class="tk-amt">$${amt.toLocaleString()}</b>${_pmTag}${_dcTag}${_invTag}`;
   const n=String(t.note||'').trim();
   if(!n) return '　·　<span class="tk-amt tk-amt-zero">$0</span>';
   const gift=/加贈/.test(n), wait=/待確認/.test(n);
