@@ -466,8 +466,8 @@ console.log('\n④-7 送出鈕的即時把關（2026-09-15）');
 
 console.log('\n④-8 其他消費（商品等）的整筆作廢（2026-09-15）');
 /* 使用者：「這邊沒有退款的機制嗎」「因為售出的商品 都有機會會被退款 所以要保有這個機制」
-   ⚠ 30 分鐘內本來就能走今日營收那一列的〔退回〕（openSaleUndo 的 else 分支吃純 purchases），
-     超過 30 分鐘原本**沒有任何路** —— 這一段補上。
+   ⚠ 當天本來就能走今日營收那一列的〔退回〕（openSaleUndo 的 else 分支吃純 purchases），
+     跨日後原本**沒有任何路** —— 這一段補上。
    ⚠ 沿用票券作廢同一套慣例，不自創：【已作廢 原$N：原因】＋ deal_amount 歸 0 ＋ 發票連帶作廢。 */
 {
   const A=grabFn('othVoidAsk'), V=grabFn('_othVoid');
@@ -496,8 +496,8 @@ console.log('\n④-8 其他消費（商品等）的整筆作廢（2026-09-15）'
      && /_oVoided\(p\)\?' style="opacity:\.5;"':''/.test(src));
   ok('★★ 作廢鈕只給櫃檯、且已作廢或 0 元的不再出現',
      /const _oVoidBtn=p=>\(!isDeskLike\(\)\|\|_oVoided\(p\)\|\|!\(Number\(p\.deal_amount\)>0\)\)\?''/.test(src));
-  /* 30 分鐘那條路本來就支援純 purchases，這裡釘住它別被改掉 */
-  ok('★★★ 30 分鐘內的〔退回〕仍吃純 purchases（沒有票券也能退）',
+  /* 當天退回那條路本來就支援純 purchases，這裡釘住它別被改掉 */
+  ok('★★★ 當天的〔退回〕仍吃純 purchases（沒有票券也能退）',
      /pur=await dbGet\('purchases',id\);/.test(grabFn('openSaleUndo')));
 }
 
@@ -606,7 +606,7 @@ console.log('\n⑦ ★★★ 只能有一套發票系統');
     .map(x=>x.replace(/^(?:async )?function /,'').replace('(',''))
     .filter((v,i,a)=>a.indexOf(v)!==i);
   ok('★★★ inv* 底下沒有任何同名函式', dup.length===0, dup);
-  ok('★ 30 分鐘退回改接綠界（退回＝這筆不存在，發票留著就是白繳稅）',
+  ok('★ 當天退回改接綠界（退回＝這筆不存在，發票留著就是白繳稅）',
      /for\(const pid of \(_undoPurIds\|\|\[\]\)\) await invVoidForPurchase\(pid, '銷售退回'\);/.test(src));
   ok('★ 營收列的發票欄改成唯讀號碼（開立已經跟著收款做完了）',
      /function revInvChip\(r\)\{[\s\S]{0,200}?rev-invno/.test(src));

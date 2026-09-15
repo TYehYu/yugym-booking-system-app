@@ -560,8 +560,8 @@ ok('★★ 四個欄位改動都會重算',
   ok('★★ 算不出金額就按不下去（取代原本寫死在按鈕上的金額）',
      /if\(go\)\{ go\.disabled=true; go\.style\.opacity='\.45'; go\.style\.cursor='not-allowed'; \}/.test(src)
      && /if\(go\)\{ go\.disabled=false; go\.style\.opacity=''; go\.style\.cursor=''; \}/.test(src));
-  ok('　　先講清楚按下去會發生什麼，包含 30 分鐘可退回',
-     /發放後 <b>30 分鐘內<\/b>可在首頁「今日營收」整筆退回/.test(F));
+  ok('　　先講清楚按下去會發生什麼，包含當天可退回',
+     /<b>當天內<\/b>可在首頁「今日營收」整筆退回/.test(F));
   ok('　　使用者的原話寫在程式裡',
      /「打開視窗要明顯顯示應該要收到的款項再按發放票券，\s*\n\s*這邊要用顏色標明，避免櫃檯看錯」/.test(src));
 }
@@ -569,8 +569,8 @@ ok('★★ 四個欄位改動都會重算',
   const F=grabFn('_grantReqApprove');
   ok('★★ 通過才真的發（走同一支 _grantIssue）', /const t=await _grantIssue\(r\.payload\);/.test(F));
   ok('★ 重複審核擋下', /if\(!r\|\|r\.status!=='pending'\)\{ done\(\); showToast\('這筆已處理過'\); return; \}/.test(F));
-  ok('★ 記下 issued_at —— 30 分鐘退回從這一刻起算',
-     /r\.issued_at=new Date\(\)\.toISOString\(\);          \/\/ 30 分鐘退回從這一刻起算/.test(F));
+  ok('★ 記下 issued_at —— 當天退回以這一刻的日期為準',
+     /r\.issued_at=new Date\(\)\.toISOString\(\);          \/\/ 當天退回以這一刻的日期為準/.test(F));
   ok('★ 合約補上票券關聯（會員票券卡的「合約」按鈕靠它）',
      /c\.ticket_id=t\.id; c\.expire_date=t\.expire_date\|\|null;/.test(F)
      && /await dbPut\('contracts',c\);/.test(F));

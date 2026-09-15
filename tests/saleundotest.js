@@ -17,25 +17,33 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 const grabFn=n=>{let i=src.indexOf('function '+n+'(');if(src.slice(i-6,i)==='async ')i-=6;
   let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 
-console.log('① 還剩幾分鐘');
+console.log('① 是不是今天建立的（2026-09-15 由 30 分鐘放寬成「當天」）');
+/* 使用者：「目前很少有退款　只有櫃檯操作錯誤需要重新輸入」→「當天可修正」
+   30 分鐘一過就只剩「票券退費」那條路，但那條會按合約算比例、扣 20% 手續費、開折讓，
+   把櫃檯打錯當成客人中途解約 —— 完全是錯的處理方式。 */
 {
-  const F=new Function('SALE_UNDO_MIN', grabFn('saleUndoLeft')+'\nreturn saleUndoLeft;')(30);
-  const ago=m=>new Date(Date.now()-m*60000).toISOString();
-  eq('★ 剛剛建立 → 還有 30 分鐘', F(ago(0)), 30);
-  eq('★ 10 分鐘前 → 還有 20 分鐘', F(ago(10)), 20);
-  eq('★★ 剛好 30 分鐘 → 0（不能再退）', F(ago(30)), 0);
-  eq('★ 超過 → 0，不會變負數', F(ago(90)), 0);
-  eq('　　沒有時間戳 → 0（不給按，寧可少給也不要誤刪）', F(null), 0);
-  eq('　　時間戳壞掉 → 0', F('不是日期'), 0);
-  ok('★ 30 分鐘寫成常數，不散在各處', /const SALE_UNDO_MIN=30;/.test(src));
+  const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const F=new Function('ymd', grabFn('saleUndoOk')+'\nreturn saleUndoOk;')(ymd);
+  const agoMin=m=>new Date(Date.now()-m*60000).toISOString();
+  const agoDay=d=>new Date(Date.now()-d*86400000).toISOString();
+  eq('★ 剛剛建立 → 可以退', F(agoMin(0)), true);
+  eq('★★★ 90 分鐘前（同一天）→ 仍可以退（這就是放寬的重點）', F(agoMin(90)), true);
+  eq('★★★ 昨天 → 不能退（跨日就走正規退費）', F(agoDay(1)), false);
+  eq('★ 一週前 → 不能退', F(agoDay(7)), false);
+  eq('　　沒有時間戳 → false（不給按，寧可少給也不要誤刪）', F(null), false);
+  eq('　　時間戳壞掉 → false', F('不是日期'), false);
+  ok('★★ 判準是比對當日字串，不是 24 小時（跨日就該走退費）',
+     /return ymd\(t\)===ymd\(new Date\(\)\);/.test(grabFn('saleUndoOk')));
 }
 
 console.log('\n② 按鈕在今日營收名單上');
 {
   const F=grabFn('revUndoChip');
   ok('★ 只有櫃檯／管理員看得到', /if\(!r \|\| !isDeskLike\(\)\) return '';/.test(F));
-  ok('★★ 超過 30 分鐘就不畫（不是畫了按下去才說不行）', /const left=saleUndoLeft\(r\.at\);\n\s*if\(left<=0\) return '';/.test(F));
-  ok('★★ 按鈕上寫出還剩幾分鐘', /↩ 退回 \$\{left\}′/.test(F));
+  ok('★★ 不是今天的就不畫（不是畫了按下去才說不行）', /if\(!saleUndoOk\(r\.at\)\) return '';/.test(F));
+  /* 改成「當天」後不再顯示剩餘分鐘 —— 早上打錯到晚上還有幾百分鐘，寫「退回 640′」很莫名 */
+  ok('★★ 按鈕不再寫剩餘分鐘（當天制之下那個數字沒有意義）',
+     /↩ 退回<\/button>/.test(F) && !/\$\{left\}′/.test(F));
   ok('★ 票券與純收款兩種都認（場租／商品／重啟）',
      /const ref=r\.tk\?\('tk:'\+r\.tk\):\(r\.pur\?\('pur:'\+r\.pur\):''\);/.test(F));
   ok('★★ 首頁右欄名單卡與今日營收彈窗都有',
@@ -53,7 +61,7 @@ console.log('\n③ 按下去之前先擋掉不乾淨的情況');
      /if\(bks\.length\) blocked=`這張票已經排了 \$\{bks\.length\} 堂課，不能直接退回 —— 請先取消那些預約，或改走票券退費`;/.test(F));
   ok('★★ 堂數被動過 → 擋下（扣課、調整都算）',
      /else if\(\(Number\(tk\.sessions_remaining\)\|\|0\)!==\(Number\(tk\.sessions_total\)\|\|0\)\)/.test(F));
-  ok('★ 超過 30 分鐘 → 擋下，指向正規退費', /已超過 \$\{SALE_UNDO_MIN\} 分鐘，不能直接退回 —— 請改走票券退費/.test(F));
+  ok('★ 不是今天 → 擋下，指向正規退費', /這筆不是今天建立的，不能直接退回 —— 請改走票券退費/.test(F));
   ok('★★ 確認視窗逐條列出「會被清掉什麼」',
      /<li>票券作廢（會員看不到它）<\/li><li>購買紀錄刪除，今日營收少這一筆<\/li><li>折抵券還回去、合約作廢<\/li>/.test(F));
   ok('★ 明說這不是退費，真的要退錢走另一條路',
@@ -76,13 +84,13 @@ console.log('\n④ 真的退回時做了哪些事');
      /for\(const pp of purs\) if\(pp && pp\.ticket_id===id\)\{ _undoPurIds\.push\(pp\.id\); await dbDel\('purchases',pp\.id\); \}/.test(F));
   ok('★ 合約一併作廢', /for\(const c of cs\) if\(c && c\.ticket_id===id\) await dbDel\('contracts',c\.id\);/.test(F));
   ok('★ 走過審核的那筆也標回去（狀態不會停在「已發放」）',
-     /r\.status='cancelled'; r\.cancel_reason='30 分鐘內整筆退回（輸入錯誤）';/.test(F));
+     /r\.status='cancelled'; r\.cancel_reason='當天整筆退回（輸入錯誤）';/.test(F));
   ok('★★ 票券留著但作廢，帳本留痕（不是靜靜消失）',
-     /await logTicket\(id,'adjust',0,null,SESSION\.id,'售票整筆退回（30 分鐘內，輸入錯誤）'\);/.test(F)
+     /await logTicket\(id,'adjust',0,null,SESSION\.id,'售票整筆退回（當天，輸入錯誤）'\);/.test(F)
      && /tk\.status='refunded'; tk\.sessions_remaining=0;/.test(F)
      && /售票整筆退回（輸入錯誤）`;/.test(F));
-  ok('★ 執行前再驗一次時間（視窗開著放到超時也不能按過）',
-     (F.match(/saleUndoLeft\((tk|pur)\.created_at\)<=0/g)||[]).length===2);
+  ok('★ 執行前再驗一次日期（視窗開著放過午夜也不能按過）',
+     (F.match(/!saleUndoOk\((tk|pur)\.created_at\)/g)||[]).length===2);
   ok('★ 純收款那條只刪收款紀錄（沒有票券要處理）',
      /await dbDel\('purchases',id\);\n\s*dbCacheClear\(\['purchases'\]\);/.test(F));
   ok('　　防連點', /async function doSaleUndo\(kind,id\)\{ return onceAct\('undo:'\+kind\+':'\+id, \(\)=>_doSaleUndo\(kind,id\)\); \}/.test(src));
@@ -91,7 +99,10 @@ console.log('\n④ 真的退回時做了哪些事');
 ok('★ 為什麼是整筆清掉而不是退款紀錄，寫在原地',
    /這不是退費，是「這筆根本不該存在」——打錯方案、打錯人、重複儲值。/.test(src));
 ok('　　使用者的原話寫在程式裡',
-   /「所有銷售的產品都可以在 30 分鐘內有退回的機制，按鈕放在首頁今日營收這列表裡面」/.test(src));
+   /「所有銷售的產品都可以在 30 分鐘內有退回的機制，按鈕放在首頁今日營收這列表裡面」/.test(src)
+   && /「目前很少有退款　只有櫃檯操作錯誤需要重新輸入」→「當天可修正」/.test(src));
+ok('★★ 為什麼放寬成當天，理由寫在原地（資料佐證別再重查一次）',
+   /29 張 void_mode 是 null/.test(src) && /386 筆收款裡只有 1 筆走過〔退回〕/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

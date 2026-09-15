@@ -13060,8 +13060,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1236';
-const APP_VERSION_LABEL = 'v260915.1236';
+const APP_VERSION = '260915.1332';
+const APP_VERSION_LABEL = 'v260915.1332';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -42861,30 +42861,39 @@ async function setSaleKind(tkId, kind){
    綠界那套在 invCfg／invPayload／invIssueForPurchase 附近（dbPutPurchaseSafe 上方），
    清單在 財務 → 電子發票（finInvoices）。
    ezpay-invoice 這支 Edge Function 還留在 Supabase 上，沒有任何前端會叫它。 */
-/* ══ 30 分鐘完整退回（2026-08-08 使用者指示）════════════════════════════════
+/* ══ 當天完整退回（2026-08-08 建立，2026-09-15 由 30 分鐘放寬成「當天」）═════════
    「為了避免有輸入錯誤的情況發生，幫我設計一個 30 分鐘內可以完整退回的按鈕」
    「所有銷售的產品都可以在 30 分鐘內有退回的機制，按鈕放在首頁今日營收這列表裡面」
+   2026-09-15 使用者：「目前很少有退款　只有櫃檯操作錯誤需要重新輸入」→「當天可修正」
 
    ⚠ 這不是退費，是「這筆根本不該存在」——打錯方案、打錯人、重複儲值。
      所以是整筆清掉（票券作廢、購買紀錄刪除、折抵券還回去、合約作廢），
      不是走退款流程留一筆負數。真正的退費請走票券頁的退費。
    ⚠ 只在「還沒被用過」時給按：已經拿去排課、或堂數被扣過，就不再是乾淨的撤銷 ——
-     那種情況要櫃檯自己判斷怎麼處理，系統不猜。 */
-const SALE_UNDO_MIN=30;
-function saleUndoLeft(at){
-  if(!at) return 0;
-  const t=new Date(at).getTime();
-  if(!Number.isFinite(t)) return 0;
-  return Math.max(0, SALE_UNDO_MIN - Math.floor((Date.now()-t)/60000));
+     那種情況要櫃檯自己判斷怎麼處理，系統不猜。
+   ⚠⚠ 為什麼從 30 分鐘改成「當天」：查過三個月 32 張作廢票，其中 29 張 void_mode 是 null
+     （＝分類上線前的舊資料，全是「打錯直接砍掉」），真正的退費一筆都沒有；
+     而 386 筆收款裡只有 1 筆走過〔退回〕。30 分鐘一過就只剩「票券退費」那條路，
+     但那條會按合約算比例、扣 20% 手續費、開折讓 —— 把櫃檯打錯當成客人中途解約，
+     完全是錯的處理方式。放寬到當天，讓更正走更正、退費走退費。
+   ⚠ 判準是**台北當日**（比 ymd 字串）不是 24 小時 —— 跨日就該走正規退費流程。
+     ymd() 用瀏覽器本地時區，櫃檯在台灣，正確。 */
+const SALE_UNDO_MIN=30;   /* 保留給舊文案引用；實際判準已改為「當天」，見 saleUndoOk */
+function saleUndoOk(at){
+  if(!at) return false;
+  const t=new Date(at);
+  if(!Number.isFinite(t.getTime())) return false;
+  return ymd(t)===ymd(new Date());
 }
 function revUndoChip(r){
   if(!r || !isDeskLike()) return '';
-  const left=saleUndoLeft(r.at);
-  if(left<=0) return '';
+  if(!saleUndoOk(r.at)) return '';
   const ref=r.tk?('tk:'+r.tk):(r.pur?('pur:'+r.pur):'');
   if(!ref) return '';
-  return `<button class="rev-undo" title="輸入錯誤時整筆退回（發放後 ${SALE_UNDO_MIN} 分鐘內）"
-    onclick="event.stopPropagation();openSaleUndo('${ref}')">↩ 退回 ${left}′</button>`;
+  /* ⚠ 不再顯示剩餘分鐘 —— 改成「當天」後那個數字沒有意義
+     （早上打錯到晚上還有幾百分鐘，寫「退回 640′」很莫名）。 */
+  return `<button class="rev-undo" title="輸入錯誤時整筆退回（當天內）"
+    onclick="event.stopPropagation();openSaleUndo('${ref}')">↩ 退回</button>`;
 }
 async function openSaleUndo(ref){
   if(!isDeskLike()){ showToast('僅管理員／櫃台可退回'); return; }
@@ -42903,7 +42912,7 @@ async function openSaleUndo(ref){
         if(bks.length) blocked=`這張票已經排了 ${bks.length} 堂課，不能直接退回 —— 請先取消那些預約，或改走票券退費`;
         else if((Number(tk.sessions_remaining)||0)!==(Number(tk.sessions_total)||0))
           blocked='這張票的堂數已經被動過（扣課或調整），不能直接退回 —— 請改走票券退費';
-        else if(saleUndoLeft(tk.created_at)<=0) blocked=`已超過 ${SALE_UNDO_MIN} 分鐘，不能直接退回 —— 請改走票券退費`;
+        else if(!saleUndoOk(tk.created_at)) blocked='這筆不是今天建立的，不能直接退回 —— 請改走票券退費';
       }
     }else{
       pur=await dbGet('purchases',id);
@@ -42911,7 +42920,7 @@ async function openSaleUndo(ref){
       else{
         title=pur.plan_name||'收款';
         amt=Number(pur.deal_amount)||0;
-        if(saleUndoLeft(pur.created_at)<=0) blocked=`已超過 ${SALE_UNDO_MIN} 分鐘，不能直接退回`;
+        if(!saleUndoOk(pur.created_at)) blocked='這筆不是今天建立的，不能直接退回';
       }
     }
   }catch(e){ blocked='讀取失敗：'+((e&&e.message)||e); }
@@ -42922,10 +42931,9 @@ async function openSaleUndo(ref){
       <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
     return;
   }
-  const left=saleUndoLeft((tk||pur).created_at);
   showModal(`<div class="modal-title">整筆退回</div>
     <div style="font-size:13.5px;color:var(--text);padding:2px 0 10px;">${escH(title)}</div>
-    <div class="mk-key">這不是退費，整筆會被清掉<small>給輸入錯誤用・還剩 ${left} 分鐘</small></div>
+    <div class="mk-key">這不是退費，整筆會被清掉<small>給輸入錯誤用・限當天</small></div>
     <ul class="mk-pts">
       ${tk?'<li>票券作廢（會員看不到它）</li><li>購買紀錄刪除，今日營收少這一筆</li><li>折抵券還回去、合約作廢</li>'
           :'<li>收款紀錄刪除，今日營收少這一筆</li>'}
@@ -42942,7 +42950,7 @@ async function _doSaleUndo(kind,id){
     if(kind==='tk'){
       const tk=await dbGet('member_tickets',id);
       if(!tk){ done(); showToast('找不到這張票券'); return; }
-      if(saleUndoLeft(tk.created_at)<=0){ done(); showToast(`已超過 ${SALE_UNDO_MIN} 分鐘`); return; }
+      if(!saleUndoOk(tk.created_at)){ done(); showToast('這筆不是今天建立的'); return; }
       // ① 折抵券還回去（照當初扣的那幾筆帳本回沖）
       try{
         const logs=(await dbGetAll('ticket_logs').catch(()=>[]))||[];
@@ -42971,13 +42979,13 @@ async function _doSaleUndo(kind,id){
       try{
         const rs=(await dbGetAll('ticket_grant_requests').catch(()=>[]))||[];
         for(const r of rs) if(r && r.ticket_id===id && r.status==='issued'){
-          r.status='cancelled'; r.cancel_reason='30 分鐘內整筆退回（輸入錯誤）';
+          r.status='cancelled'; r.cancel_reason='當天整筆退回（輸入錯誤）';
           r.reviewed_by=SESSION.id; r.reviewed_at=new Date().toISOString();
           await dbPut('ticket_grant_requests',r);
         }
       }catch(_){}
       // ⑤ 票券本身：留著但作廢，帳本看得到來龍去脈
-      await logTicket(id,'adjust',0,null,SESSION.id,'售票整筆退回（30 分鐘內，輸入錯誤）');
+      await logTicket(id,'adjust',0,null,SESSION.id,'售票整筆退回（當天，輸入錯誤）');
       tk.status='refunded'; tk.sessions_remaining=0;
       tk.note=String(tk.note||'').trim()
         ? String(tk.note).trim()+`\n${ymd(TODAY)} 售票整筆退回（輸入錯誤）`
@@ -42987,7 +42995,7 @@ async function _doSaleUndo(kind,id){
     }else{
       const pur=await dbGet('purchases',id);
       if(!pur){ done(); showToast('找不到這筆收款紀錄'); return; }
-      if(saleUndoLeft(pur.created_at)<=0){ done(); showToast(`已超過 ${SALE_UNDO_MIN} 分鐘`); return; }
+      if(!saleUndoOk(pur.created_at)){ done(); showToast('這筆不是今天建立的'); return; }
       await dbDel('purchases',id);
       dbCacheClear(['purchases']);
     }
@@ -46978,7 +46986,7 @@ async function _doDeleteMember(mid){
           ${/* 2026-09-11 收斂成條列；「刪掉會讓報表與帳目對不起來」是理由，留在這裡 */''}
           <div style="font-size:13.5px;color:var(--text);padding:4px 0 8px;">${escH(m.name||'')}名下已經有資料：${escH(items||'（有關聯資料）')}</div>
           <ul class="mk-pts">
-            <li>買錯／打錯的票券 → 30 分鐘內可在首頁今日營收整筆退回，超過就走退費</li>
+            <li>買錯／打錯的票券 → 當天可在首頁今日營收整筆退回，隔天就走退費</li>
             <li>排錯的課 → 先取消預約</li>
             <li>只是資料填錯 → 直接改就好，不必刪除</li>
           </ul>
@@ -54136,7 +54144,7 @@ async function openGrantApprove(id){
       ${_canIssue?invFieldsHTML():''}
       <div class="gr-fill-note" style="margin-top:8px;">
         ${_canIssue
-          ? `按下去會發票券並寫入購買紀錄${P.voucherN?'、扣掉折抵券':''}；發放後 <b>30 分鐘內</b>可在首頁「今日營收」整筆退回。`
+          ? `按下去會發票券並寫入購買紀錄${P.voucherN?'、扣掉折抵券':''}；<b>當天內</b>可在首頁「今日營收」整筆退回。`
           : `只是要改收款資訊的話，按上面的<b>「儲存變更」</b>就好。`}</div>
     </section>
     <div class="modal-foot">
@@ -54492,7 +54500,7 @@ async function _grantReqApprove(id){
     const t=await _grantIssue(r.payload);
     r.status='issued'; r.ticket_id=t.id;
     r.reviewed_by=SESSION.id; r.reviewed_at=new Date().toISOString();
-    r.issued_at=new Date().toISOString();          // 30 分鐘退回從這一刻起算
+    r.issued_at=new Date().toISOString();          // 當天退回以這一刻的日期為準
     /* ⚠ 票券已經發出去了，這一筆狀態非改到不可（2026-08-28）——
        改不成的話它會留在 pending，下一個人再按一次就發第二張票。
        今天真的踩到：filled_by／filled_at 這兩欄當時資料庫裡沒有，dbPut 是 upsert，
