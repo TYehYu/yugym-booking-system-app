@@ -54,6 +54,16 @@ console.log('\n② 按鈕在今日營收名單上');
   ok('　　點退回不會順便觸發整列的「開啟會員票券」', /event\.stopPropagation\(\);openSaleUndo/.test(F));
 }
 
+console.log('\n②-2 Ink 模式下的份量（2026-09-15 使用者：「這個退回的標籤很突兀」）');
+/* 突兀的根源不是位置，是只有它漏掉了 Ink 的扁平化 —— 同一列的「匯款」與教練名
+   早就被退成純文字，只剩它還是粉紅底＋紅框＋圓角膠囊。 */
+ok('★★★ 〔退回〕併進 Ink 的扁平化規則（與 .mc-rev-pay／.rev-att 同一條）',
+   /body\.ink \.mc-revlist-card \.mc-rev-pay,\s*\n\s*body\.ink \.mc-revlist-card \.rev-undo,\s*\n\s*body\.ink \.mc-revlist-card \.rev-att\{/.test(src));
+ok('★★ 紅色保留（那是語意：這顆會扣掉東西），只是不再用色塊喊話',
+   /body\.ink \.mc-revlist-card \.rev-undo\{font-size:11px;color:#b5372e !important;\}/.test(src));
+ok('★ 非 Ink 的原始膠囊樣式留著（只有 Ink 那層被扁平化）',
+   /\.rev-undo\{font-size:10px;font-weight:800;border-radius:999px;/.test(src));
+
 console.log('\n③ 按下去之前先擋掉不乾淨的情況');
 {
   const F=grabFn('openSaleUndo');

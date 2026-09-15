@@ -145,8 +145,12 @@ console.log('\n⑥ 面板重做：做減法（2026-08-27 使用者：「主要�
   /* 2026-09-03 使用者把「約別」要回膠囊（「分期 新約 續約用圓形鈕」），
      所以退成純文字的只剩付款方式與教練歸屬兩種 —— 詳見 tests/revkindtest.js。
      這裡守的是「其他 badge 沒有被一起改回去」。 */
-  ok('★★ 付款方式與教練歸屬仍是純文字（底色／框線／圓角／內距都拿掉）',
-     /body\.ink \.mc-revlist-card \.mc-rev-pay,\s*\n\s*body\.ink \.mc-revlist-card \.rev-att\{\s*\n\s*background:transparent !important;border:none !important;border-radius:0 !important;\s*\n\s*padding:0 !important;/.test(src));
+  /* ⚠ 2026-09-15：〔退回〕也加進這條清單（使用者：「這個退回的標籤很突兀」），
+     選擇器不再是連續兩行 —— 改成比對「清單裡有這三個」＋「宣告內容不變」。 */
+  ok('★★ 付款方式、教練歸屬與〔退回〕都是純文字（底色／框線／圓角／內距都拿掉）',
+     /body\.ink \.mc-revlist-card \.mc-rev-pay,[\s\S]{0,200}?background:transparent !important;border:none !important;border-radius:0 !important;\s*\n\s*padding:0 !important;/.test(src)
+     && /body\.ink \.mc-revlist-card \.rev-undo,/.test(src)
+     && /body\.ink \.mc-revlist-card \.rev-att\{/.test(src));
   ok('★★ 約別已經不在那條清單裡（在裡面的話膠囊樣式怎麼寫都蓋不回來）',
      !/\.rev-att,\s*\n\s*body\.ink \.mc-revlist-card \.rev-kind\{/.test(src));
   ok('★★ 但顏色留著 —— 那是語意（現金綠／匯款金／分期紫／抽獎金／教練色）',

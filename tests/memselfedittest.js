@@ -19,6 +19,28 @@ ok('★ 生日與性別用 _canBG（櫃檯或本人）',
    && /pp-meta-i\$\{_canBG\?' pp-f-click':''\}[\s\S]{0,60}?ppInlineEdit\(event,'birthday'\)/.test(src)
    && /pp-meta-i\$\{_canBG\?' pp-f-click':''\}[\s\S]{0,60}?ppInlineEdit\(event,'gender'\)/.test(src));
 /* 0823 使用者定案：修改會員資料收成只有管理員；會員本人改自己的照舊 */
+/* 2026-09-15 使用者定案：生日統一成三格下拉＋民國年對照。
+   ⚠ 生日改走跳視窗（ppBirthdayEdit），不再是行內 <input type="date"> ——
+     行內 save() 讀的是單一 el.value，三個 select 接不上；
+     而且行內浮動下拉整套已退場，新挑選欄位一律跳視窗。 */
+ok('★★★ 生日改走跳視窗的三格下拉（不再是行內 date input）',
+   /if\(fid==='birthday'\)\{ ppBirthdayEdit\(\); return; \}/.test(src)
+   && /function ppBirthdayEdit\(\)\{/.test(src)
+   && /\$\{birthdaySelects\('ppb'\)\}/.test(src));
+ok('★★★ 視窗的權限與 ppInlineEdit 同一條（櫃檯以上或本人）',
+   /function ppBirthdayEdit\(\)\{[\s\S]{0,260}?if\(!\(canEditMemberData\(\)\|\|_selfM\)\)/.test(src));
+ok('★★ 存的是西元 YYYY-MM-DD（民國年只是選單上的對照字）',
+   /const nv=readBirthday\('ppb'\);/.test(src)
+   && /rec\.birthday=nv;/.test(src));
+ok('★★ 三格都不選＝清空（readBirthday 回 null）',
+   /任一格沒選 → null（＝清空）/.test(src));
+ok('★★★ 民國年對照：民國年 = 西元 − 1911，1911 以前不顯示',
+   /function rocLabel\(y\)\{ const r=Number\(y\)-1911; return r>=1\?`\$\{y\}（民\$\{r\}）`:String\(y\); \}/.test(src)
+   && /years\+=`<option value="\$\{y\}">\$\{rocLabel\(y\)\}<\/option>`/.test(src));
+ok('★★ 申請表的生日也統一成三格（原本是 input type=date）',
+   /<label>出生日期 \*<\/label>\$\{birthdaySelects\('ap'\)\}/.test(src)
+   && /birth=readBirthday\('ap'\)/.test(src)
+   && !/id="ap-birth"/.test(src));
 ok('★ ppInlineEdit 放行會員本人（主教練與生日性別改為管理員限定）',
    /if\(fid==='default_coach_id' && !canEditMemberData\(\)\)/.test(src)
    && /if\(\(fid==='birthday'\|\|fid==='gender'\) && !\(canEditMemberData\(\)\|\|_selfM\)\)/.test(src));

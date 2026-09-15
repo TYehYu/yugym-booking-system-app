@@ -60,8 +60,12 @@ ok('★★ 橫排（不是 0813 那版的直書）',
    /body\.ink \.mc-revlist-card \.mc-rev-kv \.rev-kind\{[\s\S]{0,120}?writing-mode:horizontal-tb;/.test(src));
 /* ⚠ 這一條是關鍵：Ink 有一條把 badge 全部退成純文字的規則（背景／框線／圓角／內距
    都 !important 清掉）。約別必須從那條的選擇器清單裡拿掉，否則怎麼寫都蓋不回來。 */
+/* ⚠ 2026-09-15：〔退回〕也加進這條清單了（使用者：「這個退回的標籤很突兀」），
+   所以選擇器不再是連續兩行。這裡改成「約別不在清單裡」的**語意**判斷，
+   不再逐字釘整條選擇器 —— 否則日後每加一個 badge 都會無謂地紅一次。 */
 ok('★★★ 約別已從「badge 退成純文字」那條規則裡移除',
-   /body\.ink \.mc-revlist-card \.mc-rev-pay,\s*\n\s*body\.ink \.mc-revlist-card \.rev-att\{\s*\n\s*background:transparent !important;/.test(src)
+   /body\.ink \.mc-revlist-card \.mc-rev-pay,[\s\S]{0,200}?background:transparent !important;/.test(src)
+   && !/body\.ink \.mc-revlist-card \.rev-kind,/.test(src)
    && !/body\.ink \.mc-revlist-card \.rev-att,\s*\n\s*body\.ink \.mc-revlist-card \.rev-kind\{/.test(src));
 ok('★★ 其他 badge（付款方式、教練歸屬）維持純文字，沒被一起改回去',
    /body\.ink \.mc-revlist-card \.mc-rev-pay\{font-size:11\.5px;\}/.test(src)

@@ -12604,11 +12604,22 @@ body.ink .mc-td-arrow{color:var(--t3);font-size:14px;}
 /* ⑤ badge 全部退成純文字 —— 顏色留著（那是語意：現金綠／匯款金／分期紫／抽獎金／教練色），
    但底色、框線、圓角、內距都拿掉，讓它們回到「一行小字」的份量。 */
 body.ink .mc-revlist-card .mc-rev-pay,
+body.ink .mc-revlist-card .rev-undo,
 body.ink .mc-revlist-card .rev-att{
   background:transparent !important;border:none !important;border-radius:0 !important;
   padding:0 !important;font-weight:600;letter-spacing:.02em;}
 body.ink .mc-revlist-card .mc-rev-pay{font-size:11.5px;}
 body.ink .mc-revlist-card .rev-att{font-size:11px;}
+/* 〔退回〕跟著其他 badge 退成純文字（2026-09-15 使用者：「這個退回的標籤很突兀」）——
+   ⚠ 突兀的根源不是位置，是**只有它漏掉了 Ink 的扁平化**：同一列的「匯款」與教練名
+     早就被上面那條規則拿掉底色框線圓角，只剩它還是粉紅底＋紅框＋圓角膠囊，
+     在一排小字裡自然跳出來。
+   ⚠ 會變得這麼顯眼還有第二個原因：0915 把可退回時限從 30 分鐘放寬成「當天」，
+     它從「偶爾閃一下」變成整天都在。
+   紅色**保留**（那是語意：這顆會扣掉東西，同 yugym-brand-color-priority 的階級），
+   只是不再用色塊喊話。 */
+body.ink .mc-revlist-card .rev-undo{font-size:11px;color:#b5372e !important;}
+body.ink .mc-revlist-card .rev-undo:hover{filter:none;text-decoration:underline;}
 /* 種類（新約／續約／分期／抽獎）：原本是最左邊一整格**直排文字**（0813），
    Ink 改版時跟著其他 badge 一起退成純文字。
    2026-09-03 使用者附截圖：「營收明細左邊的分期 新約 續約用圓形鈕
@@ -13081,8 +13092,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1337';
-const APP_VERSION_LABEL = 'v260915.1337';
+const APP_VERSION = '260915.1348';
+const APP_VERSION_LABEL = 'v260915.1348';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -41911,10 +41922,17 @@ function openMemberProfile(){
   if(!SESSION||!SESSION.id){ showToast('找不到個人資料'); return; }
   return openPersonProfile('member', SESSION.id);
 }
+/* 生日三格（年／月／日）。2026-09-15 使用者定案：「統一成三格下拉＋民國年對照」——
+   ⚠ 為什麼不用原生 <input type="date">：手機上 iOS 是滾輪、Android 是日曆，
+     兩者要選到 1950 年代都得滾很久；三格下拉的年份是一份清單，可以直接跳。
+   ⚠ 民國年對照只是**顯示**（「1955（民44）」），存進資料庫的仍是西元 YYYY-MM-DD。
+     台灣長輩多半記得民國年，看到對照才不用自己換算。
+   ⚠ 民國元年＝1912，所以 民國年 = 西元 − 1911；1911 以前不顯示對照（民國前）。 */
+function rocLabel(y){ const r=Number(y)-1911; return r>=1?`${y}（民${r}）`:String(y); }
 function birthdaySelects(prefix){
   const thisYear=new Date().getFullYear();
   let years='<option value="">年</option>';
-  for(let y=thisYear;y>=1940;y--) years+=`<option value="${y}">${y}</option>`;
+  for(let y=thisYear;y>=1940;y--) years+=`<option value="${y}">${rocLabel(y)}</option>`;
   let months='<option value="">月</option>';
   for(let m=1;m<=12;m++) months+=`<option value="${m}">${m}</option>`;
   let days='<option value="">日</option>';
@@ -46937,7 +46955,11 @@ function ppInlineEdit(ev,fid){
   const v=item.querySelector('.pp-meta-v'); if(!v) return;
   const r=PP.rec||{};
   let el;
-  if(fid==='birthday'){ el=document.createElement('input'); el.type='date'; el.value=r.birthday||''; }
+  /* 生日改成跳視窗的三格下拉（2026-09-15 使用者定案）——
+     ⚠ 不做成行內三格：這裡的 save() 讀的是單一 el.value，三個 select 接不上；
+       而且行內浮動下拉整套已經退場（見 mpkSheetOpen 那套的定版），
+       新的挑選欄位一律跳視窗。 */
+  if(fid==='birthday'){ ppBirthdayEdit(); return; }
   else if(fid==='gender'){
     el=document.createElement('select');
     el.innerHTML=[['','—'],['male','男'],['female','女'],['other','其他']].map(o=>`<option value="${o[0]}"${(r.gender||'')===o[0]?' selected':''}>${o[1]}</option>`).join('');
@@ -46966,6 +46988,39 @@ function ppInlineEdit(ev,fid){
   el.addEventListener('keydown',e=>{ if(e.key==='Enter') save(); if(e.key==='Escape'){ saved=true; ppRenderBody(); } });
   v.replaceWith(el);
   el.focus();
+}
+/* 生日編輯視窗（2026-09-15）——三格下拉＋民國年對照，與申辦表單同一套 birthdaySelects。
+   ⚠ 權限與 ppInlineEdit 同一條：櫃檯以上，或會員本人改自己的。
+   ⚠ 存進去的是西元 YYYY-MM-DD（readBirthday 組出來的），民國年只是選單上的對照字。
+   ⚠ 允許清空：三格都不選＝把生日清掉（readBirthday 回 null）。 */
+function ppBirthdayEdit(){
+  const _selfM = SESSION&&SESSION.role==='member'&&String(PP.id)===String(SESSION.id);
+  if(!(canEditMemberData()||_selfM)){ showToast('修改會員資料需要櫃檯以上權限'); return; }
+  const cur=String((PP.rec||{}).birthday||'').slice(0,10);
+  showModal(`<div class="modal-title">生日</div>
+    <div class="form-row"><label>出生年月日</label>${birthdaySelects('ppb')}</div>
+    <div style="font-size:11.5px;color:var(--t3);line-height:1.6;margin:-4px 0 10px;">年份括號裡是民國年，三格都不選就是清空。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="ppBirthdaySave()">儲存</button></div>`);
+  if(cur){
+    const [y,m,d]=cur.split('-');
+    const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=String(Number(v)); };
+    const ey=document.getElementById('ppb-by'); if(ey) ey.value=y;
+    set('ppb-bm',m); set('ppb-bd',d);
+  }
+}
+async function ppBirthdaySave(){
+  const nv=readBirthday('ppb');   /* 任一格沒選 → null（＝清空） */
+  const r=PP.rec||{};
+  if((r.birthday||null)===nv){ closeModal(); return; }
+  try{
+    const rec=await dbGet('members',PP.id);
+    rec.birthday=nv;
+    await dbPut('members',rec);
+    PP.rec=rec;
+    closeModal(); showToast('已更新');
+  }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); return; }
+  ppRenderBody();
 }
 /* ══ 刪除會員（2026-08-08 使用者指示）══════════════════════════════════════
    「我要管理員有能力可以刪除註冊錯誤或輸入錯誤的會員，包含用 line 申請錯誤的」
@@ -63428,7 +63483,7 @@ async function openApplyPlan(plan_id){
     <div style="font-size:12.5px;font-weight:700;color:var(--green);margin:2px 0 8px;">會員基本資料</div>
     <div class="form-2col">
       <div class="form-row"><label>姓名 *</label><input id="ap-name" value="${v('name')}"></div>
-      <div class="form-row"><label>出生日期 *</label><input type="date" id="ap-birth" value="${v('birthday')}"></div>
+      <div class="form-row"><label>出生日期 *</label>${birthdaySelects('ap')}</div>
     </div>
     <div class="form-2col">
       <div class="form-row"><label>手機號碼 *</label><input id="ap-phone" value="${v('phone')||SESSION.phone||''}"></div>
@@ -63927,7 +63982,9 @@ async function submitApply(){
   if(!document.getElementById('ap-agree').checked){showToast('請先閱讀並勾選同意合約內容');return;}
   if(!document.getElementById('ap-health').checked){showToast('請勾選健康聲明確認');return;}
   const g=x=>(document.getElementById(x).value||'').trim();
-  const name=g('ap-name'), birth=g('ap-birth'), phone=g('ap-phone'), email=g('ap-email'), ec=g('ap-ec'), ecphone=g('ap-ecphone');
+  /* 2026-09-15：生日由 <input type="date"> 改成三格下拉，這裡要改讀 readBirthday。
+     ⚠ 未選時回 null，下面的 !birth 仍然擋得住（必填）。 */
+  const name=g('ap-name'), birth=readBirthday('ap'), phone=g('ap-phone'), email=g('ap-email'), ec=g('ap-ec'), ecphone=g('ap-ecphone');
   if(!name||!birth||!phone||!ec||!ecphone){ showToast('請完整填寫會員基本資料（Email 選填）'); return; }
   if(memNameErr(name)){ showToast(memNameErr(name)); return; }
   if(!_sigPad||!_sigPad.hasInk()){showToast('請完成電子簽名');return;}
