@@ -4169,6 +4169,12 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 .pp-txplan{font-size:14.5px;font-weight:700;color:var(--text);line-height:1.35;}
 .pp-txsub{font-size:11.5px;color:var(--t3);margin-top:3px;}
 .pp-txamt{flex:none;font-family:var(--num);font-size:17px;font-weight:800;color:var(--green);}
+/* 單筆列印鈕（2026-09-15）：低調的細框小鈕，不要跟金額搶注意力 */
+.pp-txprint{flex:none;font-family:inherit;font-size:11.5px;font-weight:600;color:var(--t2);
+  background:var(--card);border:1px solid var(--bd);border-radius:var(--radius-full);
+  padding:3px 11px;cursor:pointer;white-space:nowrap;transition:.12s;}
+.pp-txprint:hover{border-color:var(--green);color:var(--green);}
+.pp-txprint:active{transform:scale(.92);}
 /* 預約紀錄：月曆改成按月分段的清單，一列一堂 */
 .pp-bkmon{font-size:11.5px;font-weight:700;color:var(--t3);letter-spacing:.04em;
   margin:14px 0 6px;padding-top:10px;border-top:1px dashed var(--bd);}
@@ -13125,8 +13131,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1628';
-const APP_VERSION_LABEL = 'v260915.1628';
+const APP_VERSION = '260915.1637';
+const APP_VERSION_LABEL = 'v260915.1637';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48243,7 +48249,9 @@ function ppRecordHtml(){
         const rows=txAll
           .map(p=>{ const payLabel={cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統',split:'現金+匯款'}[p.payment_method]||p.payment_method||'—';
             const dt=(p.created_at)?new Date(new Date(p.created_at).getTime()+8*3600000).toISOString().slice(0,10):'—';
-            return `<tr><td style="white-space:nowrap;">${dt}</td><td>${p.plan_name||'—'}</td><td style="text-align:right;font-weight:700;color:var(--green);">$${(Number(p.deal_amount)||0).toLocaleString()}</td><td>${payLabel}</td></tr>`; }).join('');
+            const _pr=(isDeskLike()&&p.id&&(Number(p.deal_amount)||0)>0)
+              ? `<button class="pp-txprint" onclick="printMemberStatement('${PP.id}','${p.id}')" title="列印這一筆的明細（可現場蓋公司章）">列印</button>` : '';
+            return `<tr><td style="white-space:nowrap;">${dt}</td><td>${p.plan_name||'—'}</td><td style="text-align:right;font-weight:700;color:var(--green);">$${(Number(p.deal_amount)||0).toLocaleString()}</td><td>${payLabel}</td><td style="text-align:right;">${_pr}</td></tr>`; }).join('');
         const sumBar=rows?`<div style="display:flex;justify-content:space-between;align-items:baseline;background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:12px 16px;margin:2px 0 12px;">
             <span style="font-size:12.5px;color:var(--t2);">累計消費（${txAll.length} 筆）</span>
             <b class="num" style="font-size:22px;color:var(--green);">$${txSum.toLocaleString()}</b></div>`:'';
@@ -48253,10 +48261,14 @@ function ppRecordHtml(){
           const mrows=txAll.map(p=>{
             const payLabel={cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統',split:'現金+匯款'}[p.payment_method]||p.payment_method||'—';
             const dt=(p.created_at)?new Date(new Date(p.created_at).getTime()+8*3600000).toISOString().slice(0,10).replace(/-/g,'/'):'—';
+            /* 每一筆各自一顆列印鈕（2026-09-15 使用者：「我要每一筆單獨明細」）——
+               ⚠ $0 的抽獎登記不給鈕：那不是消費，印出來是一張 $0 的收據。 */
+            const _pr=(isDeskLike()&&p.id&&(Number(p.deal_amount)||0)>0)
+              ? `<button class="pp-txprint" onclick="event.stopPropagation();printMemberStatement('${PP.id}','${p.id}')" title="列印這一筆的明細（可現場蓋公司章）">列印</button>` : '';
             return `<div class="pp-txrow">
               <div class="pp-txmain"><div class="pp-txplan">${p.plan_name||'—'}</div>
                 <div class="pp-txsub">${dt}　·　${payLabel}</div></div>
-              <b class="pp-txamt">$${(Number(p.deal_amount)||0).toLocaleString()}</b></div>`;
+              <b class="pp-txamt">$${(Number(p.deal_amount)||0).toLocaleString()}</b>${_pr}</div>`;
           }).join('');
           /* 列印明細（2026-09-15）——⚠⚠ 這一份才是櫃檯真正看得到的：
              _m2 就是 isDeskLike()（47929），名字看起來像「手機」但其實是「櫃檯以上」，
@@ -48265,18 +48277,14 @@ function ppRecordHtml(){
              ⚠⚠ 這裡是 JS 語句區、不是模板字串裡面 —— 註解要用 /* *\/ 寫，
                不能用 ${'$'}{/* … *\/''}，那個寫法只在反引號字串內才合法
                （syntaxtest ③ 就是在示範這個坑，0828 曾因此讓白畫面上線）。 */
-          return `<div class="pp-card">${back}<div class="pp-card-t" style="display:flex;justify-content:space-between;align-items:center;">交易紀錄（${c.pcCount||0}）
-            ${(isDeskLike()&&txAll.length)?`<button class="btn btn-ghost btn-sm" style="padding:5px 14px;font-size:12.5px;" onclick="printMemberStatement('${PP.id}')" title="列印／存 PDF 給客人，可現場蓋公司章">列印明細</button>`:''}</div>
+          return `<div class="pp-card">${back}<div class="pp-card-t">交易紀錄（${c.pcCount||0}）</div>
             ${sumBar}${mrows?`<div class="pp-txlist">${mrows}</div>`:'<div class="pp-card-tip">尚無交易</div>'}</div>`;
         }
-        return `<div class="pp-card">${back}<div class="pp-card-t" style="display:flex;justify-content:space-between;align-items:center;">交易紀錄（${c.pcCount||0}）
-          ${/* 列印明細（2026-09-15 使用者：「這樣櫃檯可以下載列印給客人 如果客戶有需要」）——
-               ⚠ 這不是發票，版面上已寫明；報帳的正解仍是結帳時打統編。
-               ⚠ 這一份（表格版）**實務上畫不出這顆鈕**：走到這裡代表 _m2 為假＝不是櫃檯，
-                 而鈕自己又要求 isDeskLike()。留著是為了兩個分支的結構一致，
-                 日後若 _m2 的條件改掉（例如真的改成「手機才用卡片版」），這裡就會生效。 */''}
-          ${(isDeskLike()&&txAll.length)?`<button class="btn btn-ghost btn-sm" style="padding:5px 14px;font-size:12.5px;" onclick="printMemberStatement('${PP.id}')" title="列印／存 PDF 給客人，可現場蓋公司章">列印明細</button>`:''}</div>
-          ${sumBar}${rows?`<table class="mtk-table"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right;">金額</th><th>方式</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="pp-card-tip">尚無交易</div>'}</div>`;
+        /* 2026-09-15 使用者：「我不要全部的明細　我要每一筆單獨明細」——
+           標題列那顆「全部明細」已撤；改成每一列各自一顆（見上方 _pr）。
+           ⚠ 這裡是 JS 語句區，註解用一般寫法；${'$'}{…} 只在反引號字串內合法。 */
+        return `<div class="pp-card">${back}<div class="pp-card-t">交易紀錄（${c.pcCount||0}）</div>
+          ${sumBar}${rows?`<table class="mtk-table"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right;">金額</th><th>方式</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="pp-card-tip">尚無交易</div>'}</div>`;
       }
       /* 其他消費（2026-09-15 使用者：「會員如果買課程以外的商品 目前是不是沒有可以查看的地方
          幫我新增一個其他在會員資料這邊」）——
@@ -49296,9 +49304,14 @@ async function ppLoadCtx(){
           vn:_vm?Number(_vm[1]):0, va:_vm?Number(String(_vm[2]).replace(/,/g,'')):0,
           cu:Number(p.credit_used)||0, lp:Number(p.list_price)||0};
       });
+    /* ⚠ 一定要帶 id（2026-09-15）：單筆列印明細要靠它指名是哪一筆。
+       前綴 IMP- 是為了與 purchases.id 分流 —— 這些列在 purchases 裡不存在，
+       printMemberStatement 要回到 member_tickets 找。
+       ⚠ sessions_total 一起帶：明細上要印「8 堂」那一欄。 */
     c.myImpTx=tickets.filter(t=>t.member_id===PP.id && Number(t.amount_paid)>0 && !String(t.id).startsWith('TK-'))
-      .map(t=>({created_at:(t.purchase_date||'')+'T04:00:00Z', plan_name:t.plan_name,
-        deal_amount:Number(t.amount_paid)||0, payment_method:'imported'}));
+      .map(t=>({id:'IMP-'+t.id, created_at:(t.purchase_date||'')+'T04:00:00Z', plan_name:t.plan_name,
+        deal_amount:Number(t.amount_paid)||0, payment_method:'imported',
+        _sessions:Number(t.sessions_total)||0}));
     c.pcCount=c.myPc.length+c.myImpTx.length;
     /* 其他消費（2026-09-15）：課程以外的 —— 商品、自主訓練票券、票券重啟。
        ⚠ 不另外撈表：c.myPc 本來就是這位會員的全部 purchases（沒有 source 過濾）。
@@ -63952,30 +63965,77 @@ function ctPdfName(parts){
      這份明細的用途是「證明買了哪些、付了多少」，蓋章後當附件。
    ⚠ 沿用合約那套列印管道（ctPrintOpen／CT_PRINT_CSS），自帶「下載 PDF」與「列印」兩顆鈕。
    ⚠ 外層掛 .stmt-doc：讓 ctFitPages 跳過「收進兩頁」，明細有幾頁印幾頁。 */
-function stmtRows(mid){
+/* 2026-09-15 使用者改版：「我不要全部的明細　我要每一筆單獨明細」
+   ＋「今天客戶買8堂 要申請這8堂的明細」——
+   客人是拿**某一筆**消費去跟公司請款，不是整份消費史。所以改成一筆一張收據式明細。
+   ⚠ 找得到那一筆要靠 id：purchases 本來就有；舊系統匯入的那些在 purchases 裡不存在，
+     所以在 c.myImpTx 組裝時補了 'IMP-' 前綴的 id（見 49299 附近）。 */
+function stmtFind(mid, purId){
   const c=(PP&&PP.id===mid)?PP.ctx:null;
-  if(!c) return [];
-  return (c.myPc||[]).concat(c.myImpTx||[])
-    .filter(p=>p && (Number(p.deal_amount)||0)>0)   /* $0 的抽獎登記不是消費 */
-    .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  if(!c) return null;
+  return (c.myPc||[]).concat(c.myImpTx||[]).find(p=>p&&String(p.id)===String(purId))||null;
 }
-function printMemberStatement(mid){
+/* 這一筆賣的是幾堂 —— 明細上要印出來（使用者：「客戶買8堂 要申請這8堂的明細」）。
+   ⚠ purchases 沒有堂數欄位，要用 ticket_id 回票券拿；舊系統那些在組裝時已帶 _sessions。 */
+function stmtSessions(p){
+  if(!p) return 0;
+  if(p._sessions) return Number(p._sessions)||0;
+  if(!p.ticket_id) return 0;
+  const c=(PP&&PP.ctx)||{};
+  const t=(c.myTk||[]).find(x=>x&&String(x.id)===String(p.ticket_id));
+  return t?(Number(t.sessions_total)||0):0;
+}
+/* 分期資訊（2026-09-15 使用者：「可是如果遇到分期呢」）——
+   ⚠⚠ 不補這一段的話，分期那筆印出來只寫「友善一般 1V1　$5,600」，
+     公司看不出這是 12 堂課分 3 期的第 2 期，而且堂數會印成票券總堂數 12（誤導）。
+   資料來源（都驗過實際資料）：
+   ・首期   source='backoffice'，note＝「（分期第1期／總額 $16,800）」、list_price＝總額
+   ・後續期 source='installment'，note＝「分期收款・開通 4 堂（累計 8/12）」、
+     installment_count＝總期數（10/10 筆都有）
+   ・票券   installment={count,amounts[],segments[]}（回票券拿總額當後備） */
+function stmtInstall(p){
+  if(!p) return null;
+  const c=(PP&&PP.ctx)||{};
+  const t=p.ticket_id?(c.myTk||[]).find(x=>x&&String(x.id)===String(p.ticket_id)):null;
+  const inst=(t&&t.installment&&typeof t.installment==='object')?t.installment:null;
+  const note=String(p.note||'');
+  /* 第幾期：首期的備註寫得很明白；後續期沿票券的分段金額回推第幾筆。 */
+  const m1=/分期第(\d+)期/.exec(note);
+  let no=m1?Number(m1[1]):0;
+  const cnt=Number(p.installment_count)||(inst?Number(inst.count)||0:0);
+  if(!no && p.source==='installment' && inst && Array.isArray(inst.paid)){
+    /* 後續期沒寫第幾期 —— 用「累計 N/M」的 N 去對 segments 的累積和 */
+    const m2=/累計\s*(\d+)\s*\/\s*(\d+)/.exec(note);
+    if(m2 && Array.isArray(inst.segments)){
+      let acc=0;
+      for(let i=0;i<inst.segments.length;i++){ acc+=Number(inst.segments[i])||0;
+        if(acc===Number(m2[1])){ no=i+1; break; } }
+    }
+  }
+  if(!cnt || cnt<2) return null;                    /* 不是分期就不印這一段 */
+  const totalAmt=Number(p.list_price)||(inst&&Array.isArray(inst.amounts)
+    ? inst.amounts.reduce((s,x)=>s+(Number(x)||0),0) : 0);
+  /* 本期開通幾堂：後續期的備註有寫；首期用 segments[0] */
+  const m3=/開通\s*(\d+)\s*堂/.exec(note);
+  const segN=m3?Number(m3[1]):(inst&&Array.isArray(inst.segments)?Number(inst.segments[0])||0:0);
+  return {no, cnt, totalAmt, segN, totalSess:t?(Number(t.sessions_total)||0):0};
+}
+function printMemberStatement(mid, purId){
   if(!isDeskLike()){ showToast('僅管理員／櫃台可列印'); return; }
   const m=(PP&&PP.rec)||{};
-  const rows=stmtRows(mid);
-  if(!rows.length){ showToast('這位會員還沒有消費紀錄'); return; }
+  const p=stmtFind(mid, purId);
+  if(!p){ showToast('找不到這筆消費紀錄'); return; }
   const PAY={cash:'現金',transfer:'匯款',card:'刷卡',imported:'舊系統',split:'現金＋匯款'};
   const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const dt=p=>p.created_at?new Date(new Date(p.created_at).getTime()+8*3600000).toISOString().slice(0,10).replace(/-/g,'/'):'—';
-  const total=rows.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
-  const body=rows.map((p,i)=>`<tr>
-      <td class="c">${i+1}</td><td class="c">${dt(p)}</td>
-      <td>${esc(p.plan_name||'—')}</td>
-      <td class="c">${esc(PAY[p.payment_method]||p.payment_method||'—')}</td>
-      <td class="c small">${esc(p.invoice_number||'—')}</td>
-      <td class="r">$${(Number(p.deal_amount)||0).toLocaleString()}</td></tr>`).join('');
+  const dt=p.created_at?new Date(new Date(p.created_at).getTime()+8*3600000).toISOString().slice(0,10).replace(/-/g,'/'):'—';
+  const amt=Number(p.deal_amount)||0;
+  const inst=stmtInstall(p);
+  /* ⚠ 分期時堂數要印「本期開通幾堂」，不是票券總堂數 —— 印 12 堂但只收了 1/3 的錢
+     會讓對方公司以為這張紙涵蓋整個方案。 */
+  const sess=inst?inst.segN:stmtSessions(p);
+  const row=(k,v)=>`<tr><th>${k}</th><td>${v}</td></tr>`;
   stmtPrintOpen(
-    ctPdfName(['消費明細',m.name||'',ymd(TODAY)]),
+    ctPdfName(['消費明細',m.name||'',dt.replace(/\//g,'')]),
     `<div class="stmt-doc">
       <div class="stmt-hd">
         <div class="stmt-biz">
@@ -63991,13 +64051,16 @@ function printMemberStatement(mid){
         <span>客戶姓名：<b>${esc(m.name||'—')}</b></span>
         <span>列印日期：${ymd(TODAY).replace(/-/g,'/')}</span>
       </div>
-      <table class="stmt-tb">
-        <thead><tr><th class="c">#</th><th class="c">日期</th><th>項目</th>
-          <th class="c">付款方式</th><th class="c">發票號碼</th><th class="r">金額</th></tr></thead>
-        <tbody>${body}</tbody>
-        <tfoot><tr><td colspan="5" class="r">合計（${rows.length} 筆）</td>
-          <td class="r"><b>$${total.toLocaleString()}</b></td></tr></tfoot>
+      <table class="stmt-kv">
+        ${row('消費日期', dt)}
+        ${row('項目', `<b>${esc(p.plan_name||'—')}</b>`)}
+        ${inst?row('付款期別', `第 ${inst.no||'—'} 期／共 ${inst.cnt} 期`
+          +(inst.totalAmt?`　（方案總額 $${inst.totalAmt.toLocaleString()}${inst.totalSess?`／${inst.totalSess} 堂`:''}）`:'')):''}
+        ${sess?row(inst?'本期開通':'堂數', `${sess} 堂`):''}
+        ${row('付款方式', esc(PAY[p.payment_method]||p.payment_method||'—'))}
+        ${row('發票號碼', esc(p.invoice_number||'—'))}
       </table>
+      <div class="stmt-total"><span>${inst?'本期實收金額':'金額'}</span><b>$${amt.toLocaleString()}</b></div>
       ${/* 2026-09-15 使用者兩次指示，最終只留一句：
            ① 先移除第二行的報帳說明
            ② 再移除「不得作為報帳或扣抵憑證」那半句
@@ -64034,14 +64097,15 @@ const STMT_CSS=`
 .stmt-biz-s{font-size:9pt;color:#8a6a3a;letter-spacing:.12em;margin-top:1mm;}
 .stmt-biz-i{font-size:8.5pt;line-height:1.7;color:#555;text-align:right;white-space:nowrap;}
 .stmt-meta{display:flex;justify-content:space-between;font-size:10pt;margin-bottom:3mm;}
-.stmt-tb{width:100%;border-collapse:collapse;font-size:9.5pt;}
-.stmt-tb th,.stmt-tb td{border:1px solid #bbb;padding:2.2mm 2mm;}
-.stmt-tb thead th{background:#f2efe9;font-weight:700;}
-.stmt-tb .c{text-align:center;white-space:nowrap;}
-.stmt-tb .r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
-.stmt-tb .small{font-size:8.5pt;color:#666;}
-.stmt-tb tfoot td{background:#faf8f4;font-size:10.5pt;}
-.stmt-tb tr{break-inside:avoid;page-break-inside:avoid;}
+/* 單筆＝收據式的欄位表（2026-09-15 改版）：一列的表格很醜，改成左標題右內容。 */
+.stmt-kv{width:100%;border-collapse:collapse;font-size:11pt;}
+.stmt-kv th{width:30mm;text-align:left;font-weight:500;color:#666;
+  border-bottom:1px solid #e2ddd3;padding:3.2mm 2mm;vertical-align:top;}
+.stmt-kv td{border-bottom:1px solid #e2ddd3;padding:3.2mm 2mm;}
+.stmt-total{display:flex;justify-content:space-between;align-items:baseline;
+  margin-top:4mm;padding:3.5mm 2mm;border-top:2px solid #003d32;border-bottom:2px solid #003d32;}
+.stmt-total span{font-size:11pt;color:#555;}
+.stmt-total b{font-size:18pt;font-variant-numeric:tabular-nums;color:#003d32;}
 .stmt-note{margin-top:5mm;font-size:8.5pt;line-height:1.8;color:#555;
   border:1px solid #e0d6c2;background:#fdfaf3;padding:3mm 4mm;border-radius:2mm;}
 .stmt-note b{color:#8a5e28;}

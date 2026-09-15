@@ -9,6 +9,9 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+/* 2026-09-15 補：這支原本只有 ok，實跑比對（分期期數回推）要用 eq。
+   寫法照全系統最通行的那一版（192 支測試檔在用），不自創格式。 */
+const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 const grabFn=n=>{const i=src.indexOf('function '+n+'(');if(i<0)return'';let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}return'';};
 
 console.log('① 表頭：性別/生日 會員本人可點');
@@ -150,8 +153,11 @@ console.log('\n列印消費明細（2026-09-15 使用者：「製作一個列印
      && /\$\{BIZ_INFO\.name\}/.test(F) && /統一編號 \$\{BIZ_INFO\.ubn\}/.test(F));
   ok('★★ 有蓋章區（使用者要現場蓋公司章）', /stmt-seal/.test(F) && /本公司蓋章/.test(F));
   ok('★★ 只有櫃檯以上能列印', /if\(!isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可列印'\); return; \}/.test(F));
-  ok('★★ $0 的抽獎登記不列進明細（那不是消費）',
-     /\.filter\(p=>p && \(Number\(p\.deal_amount\)\|\|0\)>0\)/.test(src));
+  /* 2026-09-15 改單筆後，$0 的排除從「組清單時 filter」移到**按鈕層**
+     （沒有鈕就印不出那一張），由下方「$0 的抽獎登記不給列印鈕」那條守著。 */
+  ok('★★ 單筆版是用 id 指名那一筆（不再組整份清單）',
+     /function stmtFind\(mid, purId\)/.test(src)
+     && /\.find\(p=>p&&String\(p\.id\)===String\(purId\)\)/.test(src));
   ok('★★ 姓名與品項有跳脫（資料裡的角括號不會弄壞版面）',
      /const esc=t=>String\(t==null\?'':t\)\.replace\(\/&\/g,'&amp;'\)/.test(F));
   /* ⚠ 合約那套會把內容硬「收進兩頁」（ctFitPages），那是為固定長度的合約設計的；
@@ -163,12 +169,55 @@ console.log('\n列印消費明細（2026-09-15 使用者：「製作一個列印
      卡片版（if(_m2)）與表格版。而 _m2 就是 isDeskLike()，所以櫃檯一律走卡片版；
      第一版只把鈕加在表格版，結果誰都看不到。
      這條改成**數兩處**，正是為了讓同樣的疏漏下次會被擋下來。 */
-  ok('★★★ 兩個 return（卡片版／表格版）都要有入口，否則櫃檯看不到',
-     (src.match(/\(isDeskLike\(\)&&txAll\.length\)\?`<button[^`]*printMemberStatement/g)||[]).length===2);
-  ok('★★ 沒有交易就不畫那顆鈕（印出來是空的沒意義）',
-     /\(isDeskLike\(\)&&txAll\.length\)\?/.test(src));
+  /* 2026-09-15 改版（使用者：「我不要全部的明細　我要每一筆單獨明細」）——
+     標題列那顆「全部明細」撤掉，改成每一列各自一顆，所以數的是 _pr 那個變數。
+     兩個 return（卡片版／表格版）都要有，否則櫃檯看不到（上一版就是只加在表格版）。 */
+  ok('★★★ 兩個 return（卡片版／表格版）的每一列都有單筆列印鈕',
+     (src.match(/printMemberStatement\('\$\{PP\.id\}','\$\{p\.id\}'\)/g)||[]).length===2);
+  ok('★★★ 標題列那顆「全部明細」已撤（使用者不要整份清單）',
+     !/printMemberStatement\('\$\{PP\.id\}'\)/.test(src));
+  ok('★★ $0 的抽獎登記不給列印鈕（那不是消費，印出來是 $0 收據）',
+     (src.match(/isDeskLike\(\)&&p\.id&&\(Number\(p\.deal_amount\)\|\|0\)>0/g)||[]).length===2);
   ok('★★ 把「_m2 其實是 isDeskLike 不是手機」寫在原地（這次就是被名字騙了）',
      /_m2 就是 isDeskLike\(\)（47929），名字看起來像「手機」但其實是「櫃檯以上」/.test(src));
+
+  /* 分期（2026-09-15 使用者：「可是如果遇到分期呢」）——
+     一張票券對應多筆收款，明細是「這一期的付款證明」，不是整個方案。
+     ⚠ 不印期別的話，公司只看到「友善一般 1V1 $5,600」，看不出是 12 堂分 3 期的第 2 期。
+     ⚠ 堂數要印「本期開通 4 堂」而不是票券總堂數 12 —— 印 12 堂但只收 1/3 的錢會誤導。
+     ⚠ 為什麼不做在票券頁：票券頁只印得出方案總額 $16,800，但客人可能只付了 $11,200，
+       那張紙給對方公司會出事。報帳報的是已付的錢。 */
+  ok('★★★ 分期要印期別與方案總額',
+     /row\('付款期別', `第 \$\{inst\.no\|\|'—'\} 期／共 \$\{inst\.cnt\} 期`/.test(F)
+     && /方案總額 \$\$\{inst\.totalAmt\.toLocaleString\(\)\}/.test(F));
+  ok('★★★ 分期時堂數印「本期開通」，不是票券總堂數',
+     /const sess=inst\?inst\.segN:stmtSessions\(p\);/.test(F)
+     && /row\(inst\?'本期開通':'堂數'/.test(F));
+  ok('★★ 分期時金額標示為「本期實收金額」',
+     /\$\{inst\?'本期實收金額':'金額'\}/.test(F));
+  ok('★★ 舊系統匯入的交易也帶了 id（否則那些列指名不到、印不出來）',
+     /id:'IMP-'\+t\.id,/.test(src) && /_sessions:Number\(t\.sessions_total\)\|\|0/.test(src));
+
+  /* 期數回推：首期看 note 的「分期第N期」；後續期沒寫期數，
+     用「累計 N/M」的 N 去對 segments 的累積和。已用真實資料實跑驗過：
+     首期→{no:1,cnt:3,totalAmt:16800,segN:4}、第二期→{no:2,...}、非分期→null。 */
+  {
+    const grab=n=>{const i=src.indexOf('function '+n+'(');let d=0;
+      for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
+    const ticket={id:'T1', sessions_total:12,
+      installment:{paid:[true,true,false],count:3,amounts:[5600,5600,5600],current:2,segments:[4,4,4]}};
+    const fn=new Function('PP', grab('stmtInstall')+'\nreturn stmtInstall;')({ctx:{myTk:[ticket]}});
+    const first=fn({source:'backoffice',deal_amount:5600,list_price:16800,ticket_id:'T1',
+      note:'（分期第1期／總額 $16,800）'});
+    const second=fn({source:'installment',deal_amount:5600,ticket_id:'T1',installment_count:3,
+      note:'分期收款・開通 4 堂（累計 8/12）'});
+    eq('★★★ 首期：第 1 期／共 3 期、總額 16800、本期 4 堂',
+       [first.no,first.cnt,first.totalAmt,first.segN], [1,3,16800,4]);
+    eq('★★★ 後續期：靠「累計 8/12」對上 segments 得出第 2 期',
+       [second.no,second.cnt,second.totalAmt,second.segN], [2,3,16800,4]);
+    eq('★★ 非分期回 null（不印那一段）',
+       fn({source:'backoffice',deal_amount:10400,ticket_id:null,note:''}), null);
+  }
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
