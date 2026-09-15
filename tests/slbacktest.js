@@ -54,8 +54,10 @@ console.log('\n④ 銷售流程的每一條返回都要走 slBackToStep1（2026-
    自主訓練票券那張視窗當初漏掉，直接叫 openSalesModal() 重開一張空的第一步。 */
 ok('★★★ 銷售視窗底下沒有任何「返回」是直接叫 openSalesModal() 的',
    !/onclick="openSalesModal\(\)">← 返回/.test(src));
+/* ⚠ 2026-09-15：送出鈕加了 id="fv-go"（發票沒填齊就 disable，見 invGateSync），
+   所以中間多一個屬性 —— 規則沒變，只放寬比對。 */
 ok('★★★ 自主訓練票券那張改吃 slBackToStep1',
-   /<button class="btn btn-ghost" onclick="slBackToStep1\(\)">← 返回<\/button><button class="btn btn-green" onclick="submitFacilityTicketSale\(\)"/.test(src));
+   /<button class="btn btn-ghost" onclick="slBackToStep1\(\)">← 返回<\/button><button class="btn btn-green"[^>]*onclick="submitFacilityTicketSale\(\)"/.test(src));
 /* ⚠ 2026-09-15：ms-member 加了 onchange="fvInvSync()"（換會員要重帶發票預填），
    所以不能再逐字比對 `<select id="ms-member">` —— 規則沒變，只是多了屬性。 */
 ok('★★ slBackToStep1 認得 ms-member（自主訓練那張用的是這個 id，不是 gt-member）',

@@ -404,6 +404,50 @@ console.log('\n④-6 ⚠ 發票區不能依賴外部工具函式（2026-09-15）
   }
 }
 
+console.log('\n④-7 送出鈕的即時把關（2026-09-15）');
+/* 使用者：「這邊可以設個防呆嗎　信箱必填　統編跟抬頭選填」
+           「信箱 載具或不開發票 其他有一個才可以點選確認收款・發放票券」
+   規則本來就在 invCheckFields，這一段把「按下去才跳錯」改成「沒填齊就按不下去」。 */
+{
+  const G=grabFn('invGateSync');
+  ok('★★★ 有這支 gate，且沒註冊按鈕就什麼都不做（不影響既有畫面）',
+     /function invGateSync\(\)\{/.test(src)
+     && /const id=window\._invGateBtn; if\(!id\) return;/.test(G));
+  ok('★★★ 判斷直接吃 invCheckFields（規則只有一份，不另寫一套）',
+     /const err=invCheckFields\(invReadFields\(\)\);/.test(G));
+  ok('★★★ 擋下來要寫原因進 title（按鈕變灰卻不說為什麼，櫃檯會以為壞了）',
+     /btn\.title=err;/.test(G));
+  ok('★★ 只收自己擋的那次（dataset.invgate），不搶別人對按鈕的控制權',
+     /btn\.dataset\.invgate='1';/.test(G)
+     && /else if\(btn\.dataset\.invgate==='1'\)\{ delete btn\.dataset\.invgate;/.test(G));
+  ok('★★ 發票區沒畫或沒顯示就不介入（未付款／金額 0／合約沒簽回）',
+     /if\(!w \|\| w\.style\.display==='none'\)\{/.test(G));
+  /* ⚠ 五個入口都要註冊自己的送出鈕 id，漏一個那個畫面就完全沒有把關。
+     0915 就差點漏掉待審核發放（使用者截圖那個畫面）。 */
+  const REG=['fr-go','fv-go','ms-go','inx-go','gr-go'];
+  const miss=REG.filter(id=>!new RegExp(`window\\._invGateBtn='${id}';`).test(src));
+  eq('★★★ 五個收款畫面都註冊了送出鈕', miss, []);
+  const noId=REG.filter(id=>!new RegExp(`id="${id}"`).test(src));
+  eq('★★★ 註冊的 id 在畫面上都真的存在', noId, []);
+  ok('★★★ 欄位一打字就重驗（oninput）', /autocomplete="off" oninput="invGateSync\(\)"/.test(src));
+  ok('★★ 切換分頁／勾不開發票也要重算', /invDimSync\(\)\{[\s\S]{0,400}?invGateSync\(\);/.test(src));
+  ok('★★ 開窗當下就把關（不必等打第一個字）',
+     /if\(!w\.dataset\.mode\) invPick\(window\._invMemUbn\?'mail':'carrier'\);[\s\S]{0,140}?invGateSync\(\);/.test(src));
+  /* ⚠ 待審核發放那支：grFillPreview 結尾剛把 gr-go 打開，gate 必須接在它之後 */
+  ok('★★★ gr-go 的把關要排在「金額算得出來就打開」之後',
+     /if\(go\)\{ go\.disabled=false; go\.style\.opacity=''; go\.style\.cursor=''; \}[\s\S]{0,200}?invGateSync\(\);/.test(src));
+  /* 實跑規則：信箱必填、統編抬頭選填、載具必填、不開發票放行 */
+  eq('　　寄信箱：沒填 Email → 擋',
+     invCheckFields({mode:'carrier',carrierNum:'',email:'',src:'mail'}), '請填 Email，發票會寄到這裡');
+  eq('　　寄信箱：只填 Email 就放行（統編抬頭選填）',
+     invCheckFields({mode:'carrier',carrierNum:'',email:'a@b.co',src:'mail'}), '');
+  eq('　　寄信箱：Email＋統編也放行（抬頭仍可不填）',
+     invCheckFields({mode:'ubn',ubn:'53538851',title:'',email:'a@b.co',src:'mail'}), '');
+  eq('　　存載具：沒填條碼 → 擋',
+     invCheckFields({mode:'carrier',carrierNum:'',email:'',src:'carrier'}), '請填手機條碼，或改選「寄信箱」');
+  eq('　　不開發票：全部放行', invCheckFields({mode:'none'}), '');
+}
+
 console.log('\n⑤ 作廢票券連動');
 {
   const F=grabFn('_voidTicketDo');

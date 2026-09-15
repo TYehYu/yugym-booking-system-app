@@ -13043,8 +13043,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1016';
-const APP_VERSION_LABEL = 'v260915.1016';
+const APP_VERSION = '260915.1025';
+const APP_VERSION_LABEL = 'v260915.1025';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13872,6 +13872,29 @@ function invDimSync(){
   const body=document.getElementById('inv-body'); if(!body) return;
   body.classList.toggle('inv-dim', off);
   body.querySelectorAll('input,button').forEach(el=>{ el.disabled=off; });
+  invGateSync();
+}
+/* 送出鈕的即時把關（2026-09-15 使用者：「信箱 載具或不開發票 其他有一個
+   才可以點選確認收款・發放票券」）——
+   規則本來就在 invCheckFields（寄信箱→Email 必填／存載具→條碼必填／不開發票→放行，
+   統編與抬頭一律選填），這裡只是把「按下去才跳錯」改成「沒填齊就按不下去」。
+   ⚠ 各入口用 window._invGateBtn 註冊自己的送出鈕 id（六個畫面不會同時存在，
+     showModal 是單一容器）。沒註冊就什麼都不做，不影響既有行為。
+   ⚠ 擋下來時把原因寫進 title：按鈕變灰卻不說為什麼，櫃檯會以為系統壞了
+     （0823「不能用就寫原因，別藏按鈕」）。 */
+function invGateSync(){
+  const id=window._invGateBtn; if(!id) return;
+  const btn=document.getElementById(id); if(!btn) return;
+  const w=document.getElementById('inv-wrap');
+  /* 發票區沒畫或沒顯示（未付款、金額 0、合約沒簽回）→ 這條把關不介入，
+     交還給各畫面原本的規則。 */
+  if(!w || w.style.display==='none'){ if(btn.dataset.invgate==='1'){ delete btn.dataset.invgate;
+      btn.disabled=false; btn.style.opacity=''; btn.style.cursor=''; btn.title=''; } return; }
+  const err=invCheckFields(invReadFields());
+  if(err){ btn.dataset.invgate='1'; btn.disabled=true;
+    btn.style.opacity='.45'; btn.style.cursor='not-allowed'; btn.title=err; }
+  else if(btn.dataset.invgate==='1'){ delete btn.dataset.invgate;
+    btn.disabled=false; btn.style.opacity=''; btn.style.cursor=''; btn.title=''; }
 }
 function invPick(k){
   const w=document.getElementById('inv-wrap'); if(!w) return;
@@ -13885,7 +13908,8 @@ function invPick(k){
      ⚠ 跟 invSummaryHTML 一樣自己做跳脫，不依賴外部 —— 這一區的函式會被
        invoicetest 抽出來單獨跑，多一個外部依賴就多一個破口。 */
   const q=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const row=(id,lb,ph,val,type)=>`<div class="inv-r"><label>${lb}</label><input id="${id}" type="${type||'text'}" placeholder="${q(ph)}" value="${q(val)}" autocomplete="off"></div>`;
+  /* oninput：每打一個字就重驗一次，送出鈕跟著開合（見 invGateSync）。 */
+  const row=(id,lb,ph,val,type)=>`<div class="inv-r"><label>${lb}</label><input id="${id}" type="${type||'text'}" placeholder="${q(ph)}" value="${q(val)}" autocomplete="off" oninput="invGateSync()"></div>`;
   const note=t=>`<div class="inv-note">${t}</div>`;
   const _mail=window._invMemEmail||'';   /* 客人上次留的 email（invSync 去撈），免得每次重問 */
   let h='';
@@ -14014,6 +14038,9 @@ async function invSync(opt){
         → invCheckFields 擋「統一編號要 8 碼數字」，而畫面上根本沒有統編欄可填。
         統編現在住在「寄信箱」那一格，所以要切 'mail'。 */
   if(!w.dataset.mode) invPick(window._invMemUbn?'mail':'carrier');
+  /* 開窗當下就把關一次（2026-09-15）：沒填齊的話送出鈕一開始就是暗的，
+     不必等櫃檯先打一個字才生效。 */
+  invGateSync();
 }
 /* 讀畫面上那一格 → 一包乾淨的參數（沒開發票就回 null） */
 function invReadFields(){
@@ -30740,7 +30767,8 @@ async function bkStep2Facility(pDate,pTime){
          場租多半是散客（member_id 寫 null），載具／信箱一律當場手打。 */''}
     ${invFieldsHTML()}
 
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="${_backFn}">← ${window._facilityFromSales?'返回':'上一步'}</button><button class="btn btn-green" onclick="submitFacilityBooking()">確認租借並收款</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="${_backFn}">← ${window._facilityFromSales?'返回':'上一步'}</button><button class="btn btn-green" id="fr-go" onclick="submitFacilityBooking()">確認租借並收款</button></div>`);
+  window._invGateBtn='fr-go';
   /* 場租是現場收費 → 有金額才顯示發票區（用票券折抵時 fee=0，開不了發票）。
      ⚠ 不傳 memberId：這條路的收款紀錄 member_id 一律是 null（散客），
        沒有會員資料可預填，載具／信箱一律當場手打。 */
@@ -50055,7 +50083,8 @@ async function salesFacility(){
          這裡直接叫 openSalesModal()，等於重開一張空的第一步。
          銷售流程的返回一律走 slBackToStep1()：它會把當下選到的會員記進
          _salesPreMember、購物車也留著（0906 就是為了這件事做的，那時只修到教練課那條）。 */''}
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="slBackToStep1()">← 返回</button><button class="btn btn-green" onclick="submitFacilityTicketSale()">確認收款發券</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="slBackToStep1()">← 返回</button><button class="btn btn-green" id="fv-go" onclick="submitFacilityTicketSale()">確認收款發券</button></div>`);
+  window._invGateBtn='fv-go';
   /* 賣票券一定是當場收錢 → paid=true。會員必選，所以換人要重新預填。 */
   fvInvSync();
 }
@@ -50137,7 +50166,8 @@ async function openMerchSale(name,defPrice,cart){
     ${invFieldsHTML()}
     <div id="ms-total" style="font-size:15px;font-weight:700;color:var(--green);padding:4px 2px 10px;">合計 $0</div>
     <div style="font-size:11.5px;color:var(--t3);margin:-6px 0 10px;">單價都可以改（＋−一格 5 元）；自訂品項請自填品名與金額。</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="slBackToStep1()">← 返回</button><button class="btn btn-green" onclick="submitMerchSale()">確認收款</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="slBackToStep1()">← 返回</button><button class="btn btn-green" id="ms-go" onclick="submitMerchSale()">確認收款</button></div>`);
+  window._invGateBtn='ms-go';
   msCartRender();
   /* 商品銷售一定是當場收錢 → paid 直接給 true（這條路沒有 gt-pay 那個欄位）。
      ⚠ 換會員要重新預填，所以 ms-member 的 onchange 也掛一次（見 msInvSync）。 */
@@ -53751,6 +53781,9 @@ async function openGrantApprove(id){
   /* 發票區（2026-09-15）：錢在這個畫面收，所以這裡要問發票。
      ⚠ 會員固定（這筆待審核的持有人），帶進去預填他的載具／信箱／統編。
      ⚠ 顯示與否交給 grFillPreview 依「應收金額」決定（0 元不畫）—— 它每次欄位變動都會跑。 */
+  /* ⚠ 一定要註冊送出鈕：invGateSync 沒有 _invGateBtn 就第一行 return，
+     gate 對這個畫面等於完全無效（2026-09-15 差點漏掉這一處）。 */
+  window._invGateBtn='gr-go';
   window._grInvMemberId=r.member_id||'';
   try{ window._grInvMembers=[await dbGet('members', r.member_id).catch(()=>null)].filter(Boolean); }
   catch(_){ window._grInvMembers=[]; }
@@ -53912,6 +53945,9 @@ function grFillPreview(){
       p.isInstall?`　·　分 ${p.installCount} 期，這是<b>第 1 期</b>（總額 $${(Number(p.dealAmount)||0).toLocaleString()}）`:''}${
       p.voucherN?`　·　已折抵券 ×${p.voucherN}（−$${(Number(p.voucherAmt)||0).toLocaleString()}）`:''}</span>`;
   if(go){ go.disabled=false; go.style.opacity=''; go.style.cursor=''; }
+  /* ⚠ 一定要放在最後：上面那行剛把 gr-go 打開，發票的把關必須接在它之後才不會被覆寫
+     —— 金額算得出來 ≠ 發票填齊了（2026-09-15）。 */
+  invGateSync();
 }
 /* 櫃檯補填的三個欄位 → 重算整包（2026-08-28）。
    ⚠ 這裡的算法必須與賣票當下那一段**一模一樣**（splitSessions／splitAmount／
@@ -54270,12 +54306,13 @@ async function openInstallNext(ticket_id){
     <div style="font-size:11.5px;color:var(--t3);margin:4px 0 10px;">確認後立即開通填入的堂數（會員端同步解鎖）、記入本期營收；分期保留的課由早到晚自動補綁扣課。</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">取消</button>
-      <button class="btn btn-green" onclick="confirmInstallNext('${ticket_id}')">確認收款並開通</button>
+      <button class="btn btn-green" id="inx-go" onclick="confirmInstallNext('${ticket_id}')">確認收款並開通</button>
     </div>`);
   /* 分期的每一期都是一次收款；會員固定，直接把人帶進去預填。
      ⚠ 存進 window 是為了讓 inxInvSync（金額改動時）也拿得到同一個人。 */
   window._inxMemberId=t.member_id||'';
   window._inxMembers=(m?[m]:[]);
+  window._invGateBtn='inx-go';
   inxInvSync();
 }
 function inxFill(n,amt){ const a=document.getElementById('inx-n'), b=document.getElementById('inx-amt');
