@@ -13051,8 +13051,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1108';
-const APP_VERSION_LABEL = 'v260915.1108';
+const APP_VERSION = '260915.1132';
+const APP_VERSION_LABEL = 'v260915.1132';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14272,6 +14272,46 @@ async function invIssueForPurchase(pur, mem, f, items, opt){
     showToast('⚠ 發票開立失敗：'+((r&&r.msg)||'未知')+'　（票券已發放，可到「發票」重試）', 6000);
   }
   return row;
+}
+/* 折讓（2026-09-15 使用者定案：「一律開折讓」）——
+   部分退款**不能**用作廢：作廢只適用於「發票開錯、且尚未申報」，已申報的一律走折讓
+   （財政部電子發票實施作業要點；折讓單須於開立次日起 2 日內〔買方為消費者〕
+   或 7 日內〔買方為營業人〕上傳，逾期罰 1,500–15,000 元）。
+   ⚠ 綠界允許同一張發票**分多次折讓**，累計不得超過原發票金額；回傳 IA_Allow_No
+     與 IA_Remain_Allowance_Amt（剩餘可折讓額）。
+   ⚠ AllowanceNotify 必填：有 email 就寄通知（E），沒有就不通知（N）。
+   ⚠ 折讓金額必須大於 0，所以呼叫端要自己擋掉 0 元。 */
+async function invAllowanceForPurchase(purId, amt, reason){
+  const cfg=await invCfg(); if(!cfg.on || !purId) return null;
+  const _amt=Math.round(Number(amt)||0);
+  if(_amt<=0) return null;
+  let rows=[]; try{ rows=(await dbGetAll('invoices'))||[]; }catch(_){ return null; }
+  const inv=rows.filter(x=>x&&x.purchase_id===purId&&x.status==='issued'&&x.invoice_number)
+                .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))[0];
+  if(!inv) return null;                     /* 沒開過發票就沒得折讓 */
+  if(_amt>(Number(inv.total_amt)||0)) return null;   /* 超過原發票金額，綠界會退件 */
+  const mail=(inv.buyer_email||'').trim();
+  const r=await invCall('allowance', {
+    InvoiceNo: inv.invoice_number,
+    InvoiceDate: String(inv.invoice_time||'').slice(0,10),
+    AllowanceNotify: mail?'E':'N',
+    NotifyMail: mail||undefined,
+    CustomerName: inv.buyer_name||undefined,
+    AllowanceAmount: _amt,
+    Items: [{ItemSeq:1, ItemName:String(reason||'退費').slice(0,100),
+             ItemCount:1, ItemWord:'式', ItemPrice:_amt, ItemAmount:_amt, ItemTaxType:'1'}],
+  });
+  const d=(r&&r.data)||{};
+  try{
+    await dbPut('invoices', Object.assign({}, inv, {
+      allowance_no:  d.IA_Allow_No||null,
+      allowance_amt: (Number(inv.allowance_amt)||0)+(r&&r.ok?_amt:0),
+      allowance_at:  r&&r.ok ? new Date().toISOString() : (inv.allowance_at||null),
+      allowance_raw: r||null }));
+  }catch(e){ console.error('折讓寫入失敗', e); }
+  if(r&&r.ok) showToast(`已開折讓單 $${_amt.toLocaleString()}（發票 ${inv.invoice_number}）`);
+  else showToast('⚠ 折讓開立失敗：'+((r&&r.msg)||'未知')+'　請到綠界後台處理', 6000);
+  return r;
 }
 /* 作廢。票券作廢／全額退費時連動 —— 發票留著不作廢，稅就白繳了。 */
 async function invVoidForPurchase(purId, reason){
@@ -39444,6 +39484,25 @@ function hoursUntilStart(b){
    ⚠ 續約獎金不必為此開洞：作廢的舊票是 refunded（不算續約），
      拿儲值金買的新票是一張正常的續約票 —— 一筆成交剛好算一次。 */
 const CREDIT_FEE_PCT=20;
+/* 手續費上限（2026-09-15 依合約「五、契約解除、終止與退費」）——
+   〔任意終止〕退款金額＝已繳金額 ×（未使用堂數 ÷ 購買總堂數）；
+   本公司得自**應退金額**收取 20% 手續費，手續費以新臺幣 9,000 元為上限。
+   ⚠ 基數是「應退金額」不是「已繳金額」—— 0915 之前算錯，用已繳去乘。
+   ⚠ 〔免手續費之終止〕三種情形不收手續費：傷病（須區域級以上醫院證明）、
+     指定教練均已離職且未能協議替代方案、本公司變更履約地點未經會員同意。
+   ⚠ 〔不予退費〕贈送堂數、展延之課程、逾有效期限之課程。 */
+const REFUND_FEE_CAP=9000;
+/* 依合約算退款：回傳 {base 應退, fee 手續費, net 實退}。
+   ⚠ 分母用票券的總堂數 —— 查過 course_plans 目前沒有任何方案設 sessions_bonus，
+     所以「購買總堂數」就等於 sessions_total；日後真的有贈送堂數要回來改這裡。 */
+function refundCalc(paid, totalSessions, leftSessions, waiveFee){
+  const _paid=Math.max(0,Number(paid)||0);
+  const _tot=Math.max(0,Number(totalSessions)||0);
+  const _left=Math.max(0,Math.min(Number(leftSessions)||0,_tot));
+  const base=_tot>0 ? Math.round(_paid*_left/_tot) : _paid;
+  const fee=waiveFee ? 0 : Math.min(REFUND_FEE_CAP, Math.round(base*CREDIT_FEE_PCT/100));
+  return {base, fee, net:Math.max(0,base-fee)};
+}
 function creditOf(m){ return Math.max(0, Math.round(Number(m&&m.credit_balance)||0)); }
 /* 動餘額一律走這裡：members.credit_balance 是給畫面看的快取、member_credits 才是帳本，
    兩邊一起寫。對不上時以帳本為準（同「票券真相在帳本」那條規則）。 */
@@ -39708,26 +39767,57 @@ async function voidTicketAsk(id){
   if(!isDeskLike()) return;
   const tk=await dbGet('member_tickets',id);
   if(!tk||tk.status!=='usable'){ showToast('此票券不可作廢'); return; }
-  const used=(Number(tk.sessions_total)||0)-(Number(tk.sessions_remaining)||0);
+  /* 2026-09-15 使用者指示：「售出的商品都有機會會被退款，所以要保有這個機制」
+     ＋「這一筆課程如果已經部分使用，這樣不能全額退款」。
+     ⚠ 已用過堂數的票**不再整個擋掉** —— 以前 used>0 就 return，等於上過一堂課就退不了，
+       全庫 3215 張有效票裡有 2449 張已用過，實務上這條路等於不存在。
+       改成照合約按比例退：退款金額＝已繳金額 ×（未使用堂數 ÷ 購買總堂數）。
+     ⚠ 還是要擋的只有「未來的預約」 —— 票作廢後那些課會變成沒票可扣的孤兒課。
+       已經上完的過去預約不擋（那正是 used>0 的來源）。 */
+  const tot=Number(tk.sessions_total)||0, left=Math.max(0,Number(tk.sessions_remaining)||0);
+  const used=Math.max(0,tot-left);
+  const _today=ymd(new Date());
   const bks=(await dbGetAll('bookings')).filter(b=>b.ticket_id===id&&b.status!=='cancelled');
-  if(used>0||bks.length>0){ showToast(`不可作廢：此票已有使用紀錄（扣 ${used} 堂、綁定預約 ${bks.length} 筆），請先處理`); return; }
+  const future=bks.filter(b=>String(b.date||'')>=_today);
+  if(future.length){ showToast(`請先取消未來的 ${future.length} 筆預約，再作廢票券`); return; }
   const purchases=(await dbGetAll('purchases').catch(()=>[])).filter(pc=>pc.ticket_id===id);
   const amt=purchases.reduce((s,pc)=>s+(Number(pc.deal_amount)||0),0);
-  const fee=Math.round(amt*CREDIT_FEE_PCT/100);
-  window._voidMode=null; window._voidAmt=amt;
+  const R=refundCalc(amt, tot, left, false);
+  const base=R.base, fee=R.fee;
+  /* 〔七日解除權〕簽約後 7 日內、且一堂都沒用過 → 全額退、不收任何費用。
+     簽約時間查合約（一張票對一份合約，39683 已有同樣的回查寫法）。 */
+  let day7=false;
+  try{
+    const ct=(await dbGetAll('contracts').catch(()=>[])).filter(c=>c&&c.ticket_id===id)
+      .sort((a,b)=>String(b.signed_at||'').localeCompare(String(a.signed_at||'')))[0];
+    if(ct&&ct.signed_at&&used===0)
+      day7=(Date.now()-new Date(ct.signed_at).getTime())<7*86400000;
+  }catch(_){}
+  window._voidMode=null; window._voidAmt=amt; window._voidBase=base; window._voidUsed=used;
   showModal(`<div class="modal-title">作廢票券</div>
     <div style="font-size:13px;color:var(--text);line-height:1.9;">${escH(tk.plan_name||'票券')}　${tk.sessions_total} 堂${amt?`　·　交易金額 $${amt.toLocaleString()}`:''}<br>
+    ${used>0?`<span style="color:var(--gold);font-size:12px;">已使用 ${used} 堂、未使用 ${left} 堂 —— 只能退未使用的部分（$${base.toLocaleString()}）。</span><br>`:''}
+    ${day7?`<span style="color:var(--gold);font-size:12px;">簽約未滿 7 日且尚未使用：依合約可<b>全額退還、不收任何費用</b>（選「退款・不收手續費」）。</span><br>`:''}
     <span style="color:var(--t2);font-size:12px;">作廢後票券失效、不可復原。</span></div>
     ${amt>0?`<div class="form-row" style="margin-top:14px;"><label>這筆錢怎麼處理 *</label>
       <div class="vd-modes">
         <button type="button" class="vd-mode" data-vd="credit" onclick="voidPick('credit')">
-          <b>轉儲值金</b><i>$${amt.toLocaleString()} 存進會員帳上，之後買別的方案直接折抵</i></button>
+          <b>轉儲值金</b><i>$${base.toLocaleString()} 存進會員帳上，之後買別的方案直接折抵</i></button>
         <button type="button" class="vd-mode" data-vd="refund_full" onclick="voidPick('refund_full')">
-          <b>退款・全額</b><i>退還 $${amt.toLocaleString()}</i></button>
+          <b>退款・不收手續費</b><i>退還 $${base.toLocaleString()}（七日解除權／免手續費事由）</i></button>
         <button type="button" class="vd-mode" data-vd="refund_fee" onclick="voidPick('refund_fee')">
-          <b>退款・扣 ${CREDIT_FEE_PCT}％ 手續費</b><i>退還 $${(amt-fee).toLocaleString()}，手續費 $${fee.toLocaleString()}</i></button>
+          <b>退款・扣 ${CREDIT_FEE_PCT}％ 手續費</b><i>退還 $${(base-fee).toLocaleString()}，手續費 $${fee.toLocaleString()}</i></button>
       </div></div>
-    <div id="vd-why" class="ovd-note" style="display:none;"></div>`
+    <div id="vd-why" class="ovd-note" style="display:none;"></div>
+    <div class="form-row" id="vd-waive-row" style="margin-top:12px;display:none;">
+      <label>免收手續費的事由 *</label>
+      <select id="void-waive" onchange="voidWaiveSync()">
+        <option value="">— 請選擇 —</option>
+        <option value="day7">七日解除權（簽約 7 日內、未使用任何課程）</option>
+        <option value="injury">傷病不適宜運動（已核對區域級以上醫院證明）</option>
+        <option value="coach">指定教練均已離職，且未能協議替代方案</option>
+        <option value="venue">本公司變更履約地點，未經會員同意</option>
+      </select></div>`
     :`<div class="ovd-note">這張票沒有對應的收款紀錄（$0），作廢不牽涉到錢。</div>`}
     <div class="form-row" style="margin-top:12px;"><label>作廢原因</label><input id="void-reason" placeholder="例：選錯方案／重複儲值"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
@@ -39738,18 +39828,36 @@ async function voidTicketAsk(id){
 function voidPick(m){
   window._voidMode=m;
   document.querySelectorAll('.vd-mode').forEach(b=>b.classList.toggle('on', b.dataset.vd===m));
+  const amt=Number(window._voidAmt)||0;
+  const base=(window._voidBase==null)?amt:(Number(window._voidBase)||0);
+  const used=Number(window._voidUsed)||0;
+  const fee=Math.min(REFUND_FEE_CAP, Math.round(base*CREDIT_FEE_PCT/100));
+  /* 免手續費是合約的**例外**，不是櫃檯想免就免 —— 選了這條就要交代事由，
+     沒選事由不解鎖確認鍵（動錢的操作不給預設值）。 */
+  const row=document.getElementById('vd-waive-row');
+  if(row) row.style.display=(m==='refund_full')?'':'none';
   const go=document.getElementById('vd-go');
-  if(go){ go.disabled=false; go.style.opacity=''; go.style.cursor=''; }
-  const amt=Number(window._voidAmt)||0, fee=Math.round(amt*CREDIT_FEE_PCT/100);
+  if(go){ const need=(m==='refund_full')&&!(document.getElementById('void-waive')?.value||'');
+    go.disabled=need; go.style.opacity=need?'.4':''; go.style.cursor=need?'not-allowed':''; }
   const w=document.getElementById('vd-why');
   if(!w) return;
   w.style.display='';
+  const cap=(base*CREDIT_FEE_PCT/100>REFUND_FEE_CAP)?`（已達上限 $${REFUND_FEE_CAP.toLocaleString()}）`:'';
+  const pro=used>0?`已使用的 ${used} 堂不退，所以基數是未使用的 <b>$${base.toLocaleString()}</b>，不是全額 $${amt.toLocaleString()}。<br>`:'';
   w.innerHTML=({
-    credit:`錢沒有離開店裡，所以<b>這筆營收保留</b>不動。$${amt.toLocaleString()} 會存進會員的儲值金，
+    credit:`${pro}錢沒有離開店裡，所以<b>這筆營收保留</b>不動。$${base.toLocaleString()} 會存進會員的儲值金，
       <b>不能退現</b>、只能拿來買方案；之後用儲值金買的方案營收記 $0（同一筆錢不會被算兩次）。`,
-    refund_full:`要退 <b>$${amt.toLocaleString()}</b> 現金給客人。這筆收款歸零，當日營收同步減少。`,
-    refund_fee:`要退 <b>$${(amt-fee).toLocaleString()}</b> 現金給客人，留下的手續費 $${fee.toLocaleString()} <b>算營收</b>。`,
+    refund_full:`${pro}要退 <b>$${base.toLocaleString()}</b> 現金給客人，<b>不收手續費</b>（限合約列舉的事由）。
+      發票會開<b>折讓單</b>沖掉這 $${base.toLocaleString()}。`,
+    refund_fee:`${pro}要退 <b>$${(base-fee).toLocaleString()}</b> 現金給客人，留下的手續費 $${fee.toLocaleString()}${cap} <b>算營收</b>。
+      發票會開<b>折讓單</b>沖掉退還的 $${(base-fee).toLocaleString()}。`,
   })[m]||'';
+}
+/* 事由選了才解鎖（voidPick 會先把鍵鎖上） */
+function voidWaiveSync(){
+  const go=document.getElementById('vd-go'); if(!go) return;
+  const need=(window._voidMode==='refund_full')&&!(document.getElementById('void-waive')?.value||'');
+  go.disabled=need; go.style.opacity=need?'.4':''; go.style.cursor=need?'not-allowed':'';
 }
 async function voidTicketDo(id){ return onceAct('voidtk:'+id, ()=>_voidTicketDo(id)); }
 async function _voidTicketDo(id){
@@ -39761,11 +39869,36 @@ async function _voidTicketDo(id){
   const amt=purchases.reduce((s,pc)=>s+(Number(pc.deal_amount)||0),0);
   const mode=amt>0?window._voidMode:'refund_full';   // $0 的票沒得選，走原本那條
   if(!mode){ showToast('請先選擇這筆錢怎麼處理'); return; }
+  /* 2026-09-15 部分使用後的退費（合約「五、契約解除、終止與退費」）——
+     退款金額＝已繳金額 ×（未使用堂數 ÷ 購買總堂數）。堂數讀不到時 ratio=1，
+     退化成 0728 起的舊行為（整張全額），不會因為缺欄位就少退客人錢。 */
+  const _tot=Number(tk.sessions_total)||0, _left=Math.max(0,Number(tk.sessions_remaining)||0);
+  const used=Math.max(0,_tot-_left);
+  const ratio=_tot>0?Math.min(1,_left/_tot):1;
+  const waive=(document.getElementById('void-waive')?.value||'');
+  const WAIVE_LB={day7:'七日解除權',injury:'傷病（已核對醫院證明）',coach:'指定教練離職',venue:'變更履約地點未經同意'};
   /* 每筆收款各自算，不要用總額算完再攤 —— 一張票有兩筆收款時（分期）會湊不回去 */
-  const keepOf=orig=>mode==='credit'?orig:(mode==='refund_fee'?Math.round(orig*CREDIT_FEE_PCT/100):0);
-  const keepSum=purchases.reduce((n,pc)=>n+keepOf(Number(pc.deal_amount)||0),0);
-  const toCredit=mode==='credit'?amt:0;
-  const MODE_LB={credit:'轉儲值金',refund_full:'全額退款',refund_fee:`退款（扣 ${CREDIT_FEE_PCT}％ 手續費）`};
+  const baseOf=orig=>Math.round(orig*ratio);
+  const baseSum=purchases.reduce((n,pc)=>n+baseOf(Number(pc.deal_amount)||0),0);
+  /* ⚠ 手續費是「應退金額 × 20%，上限 $9,000」—— 基數是應退不是已繳，且上限要在**總額**上算，
+     所以先算總手續費再攤回各筆（分期票才會有兩筆）。最後一筆吸收餘數，保證攤完＝總額。 */
+  const feeTotal=(mode==='refund_fee'&&!waive)
+    ? Math.min(REFUND_FEE_CAP, Math.round(baseSum*CREDIT_FEE_PCT/100)) : 0;
+  const _fee={}; let _acc=0;
+  purchases.forEach((pc,i)=>{
+    const b=baseOf(Number(pc.deal_amount)||0);
+    const f=(i===purchases.length-1) ? Math.max(0,feeTotal-_acc)
+          : (baseSum>0?Math.round(feeTotal*b/baseSum):0);
+    _fee[pc.id]=Math.min(f,b); _acc+=_fee[pc.id];
+  });
+  /* 實退＝應退−手續費；店裡留下的＝原收款−實退（含已使用的那一段，那本來就是營收） */
+  const netOf=pc=>Math.max(0, baseOf(Number(pc.deal_amount)||0)-(_fee[pc.id]||0));
+  const keepOf=pc=>mode==='credit'?(Number(pc.deal_amount)||0):Math.max(0,(Number(pc.deal_amount)||0)-netOf(pc));
+  const keepSum=purchases.reduce((n,pc)=>n+keepOf(pc),0);
+  const toCredit=mode==='credit'?baseSum:0;
+  const MODE_LB={credit:'轉儲值金',refund_full:used>0?'退款（未使用部分）':'全額退款',
+    refund_fee:`退款（扣 ${CREDIT_FEE_PCT}％ 手續費）`};
+  const WHY=(reason?reason:'')+(waive?`${reason?'／':''}免手續費：${WAIVE_LB[waive]||waive}`:'');
 
   /* 先把儲值金存進去，再作廢票券 —— 反過來的話存款失敗會留下一張作廢又拿不回錢的票 */
   if(toCredit>0) await creditMove(tk.member_id, toCredit, 'void', id,
@@ -39784,28 +39917,29 @@ async function _voidTicketDo(id){
     const orig=Number(pc.deal_amount)||0;
     if(orig===0) continue;
     if(mode==='credit'){
-      pc.note=((pc.note||'')+`【已作廢→轉儲值金 $${orig.toLocaleString()}${reason?`：${reason}`:''}】`).trim();
+      pc.note=((pc.note||'')+`【已作廢→轉儲值金 $${baseOf(orig).toLocaleString()}`
+        +(used>0?`（已用 ${used} 堂不退）`:'')+(WHY?`：${WHY}`:'')+'】').trim();
     }else{
-      const keep=keepOf(orig);
+      const keep=keepOf(pc), net=netOf(pc);
       pc.deal_amount=keep;
-      pc.note=((pc.note||'')+`【已作廢 原$${orig.toLocaleString()}`
-        +(mode==='refund_fee'?`　退 $${(orig-keep).toLocaleString()}、留手續費 $${keep.toLocaleString()}`:'')
-        +(reason?`：${reason}`:'')+'】').trim();
+      pc.note=((pc.note||'')+`【已作廢 原$${orig.toLocaleString()}　退 $${net.toLocaleString()}`
+        +(used>0?`（已用 ${used}/${_tot} 堂不退）`:'')
+        +((_fee[pc.id]||0)>0?`、留手續費 $${(_fee[pc.id]||0).toLocaleString()}`:'')
+        +(WHY?`：${WHY}`:'')+'】').trim();
     }
     await dbPut('purchases',pc);
-    /* 電子發票連動（2026-09-02）——
+    /* 電子發票連動（2026-09-15 使用者定案：「一律開折讓」）——
        ・轉儲值金：營收保留，發票不動（稅照繳，發票也該留著）
-       ・全額退款：作廢
-       ・扣手續費：原發票作廢，手續費那一段另開一張（金額變了不能只改） */
+       ・退款：開**折讓單**沖掉實際退還的金額，原發票留著
+       ⚠ 以前這裡是「原發票作廢＋手續費另開一張」，部分使用後那樣做是錯的：
+         課已經上了一半，那一段是真實銷售，發票不能整張消失。作廢只適用
+         「開錯且未申報」；已申報或已部分履約的一律走折讓（可分次，累計不超過原金額）。
+       ⚠ 折讓金額＝實際退還給客人的錢（net），不是應退基數、也不是原收款金額。 */
     if(mode!=='credit'){
       try{
-        await invVoidForPurchase(pc.id, ('作廢・'+MODE_LB[mode]+(reason?'：'+reason:'')).slice(0,20));
-        const _keep=keepOf(orig);
-        if(mode==='refund_fee' && _keep>0){
-          await invIssueForPurchase(pc, await dbGet('members',tk.member_id).catch(()=>null), null,
-            [{name:'退款手續費', amt:_keep}], {amt:_keep, relSuffix:'-F', category:'fee'});
-        }
-      }catch(e){ console.error('invoice void fail', e); }
+        await invAllowanceForPurchase(pc.id, netOf(pc),
+          ('退費・'+MODE_LB[mode]+(WHY?'：'+WHY:'')).slice(0,20));
+      }catch(e){ console.error('invoice allowance fail', e); }
     }
   }
   dbCacheClear(['member_tickets','ticket_logs','purchases','invoices']);

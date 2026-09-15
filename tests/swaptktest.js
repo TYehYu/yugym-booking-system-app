@@ -94,7 +94,12 @@ console.log('\n④ 作廢那一條沒被動到');
   ok('★★ 退款那兩種仍然沖收款（歸零或只留手續費）；轉儲值金那種**不**動收款',
      /pc\.deal_amount=keep;/.test(F) && /【已作廢 原\$\$\{orig\.toLocaleString\(\)\}/.test(F)
      && /if\(mode==='credit'\)\{\s*\n\s*pc\.note=/.test(F));
-  ok('★ 仍然限「完全未使用」', /if\(used>0\|\|bks\.length>0\)\{ showToast\(`不可作廢/.test(grabFn('voidTicketAsk')));
+  /* 2026-09-15 使用者指示：「這一筆課程如果已經部分使用，這樣不能全額退款」——
+     作廢不再限「完全未使用」（全庫 2449 張票已用過堂數，原本整條路等於不存在），
+     改成照合約按未使用比例退。這裡改釘新規則：擋的只剩未來的預約。 */
+  ok('★ 作廢只擋未來的預約（已上完的過去預約放行，那正是 used>0 的來源）',
+     /future=bks\.filter\(b=>String\(b\.date\|\|''\)>=_today\)/.test(grabFn('voidTicketAsk'))
+     && /請先取消未來的 \$\{future\.length\} 筆預約/.test(grabFn('voidTicketAsk')));
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');

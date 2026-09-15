@@ -335,8 +335,9 @@ console.log('\n④-4 ⚠ 事故：系統自己開了一張沒人選過的發票�
       只擋 f.mode==='none'、**對 null 是放行的** → invPayload 落到最後的 else
       （d.CarrierType='1' 綠界載具）→ 自己開了一張真發票。
 
-   ⚠ null 的「照常開」語意只留給退款手續費那條內部補開（invVoidForPurchase 之後），
-     櫃檯流程一律要有明確的 f。 */
+   ⚠ 2026-09-15 更新：退款改開折讓後，「手續費另開一張」那條內部補開已拆除，
+     f=null 的「照常開」語意**再也沒有任何呼叫端在用**，櫃檯流程一律要有明確的 f。
+     （30983 場租那筆傳的 null 是 mem 不是 f —— 場租沒有會員，別看錯位置。） */
 {
   ok('★★★ 時序：invSync 要等 refreshGrantInfo 完成（否則 _grantPlanCache 還是空的）',
      /await refreshGrantInfo\(\); \}catch\(_\)\{\}/.test(src)
@@ -349,8 +350,11 @@ console.log('\n④-4 ⚠ 事故：系統自己開了一張沒人選過的發票�
      && cnt(/⚠ 2026-09-15：_inv 為 null＝櫃檯沒看到發票區，一律不開（見場租那段的說明）。/g)===3);
   ok('★★ 擋下來時要留痕跡（不是靜靜跳過，否則沒人知道那筆為何沒發票）',
      cnt(/console\.warn\('發票區未顯示/g)>=4);
-  ok('★★★ null 仍保留給退款手續費那條內部補開（不能一律擋死）',
-     /await invIssueForPurchase\(pc, await dbGet\('members',tk\.member_id\)\.catch\(\(\)=>null\), null,/.test(src));
+  /* 2026-09-15：退款改開折讓後，「手續費另開一張」那條內部補開整個拆掉了 ——
+     於是 f=null 的最後一個正當用途也跟著消失。這條反過來釘住它別被復活。 */
+  ok('★★★ 手續費補開那條已拆除（退款一律折讓，原發票留著，重開會變成兩張）',
+     !/invIssueForPurchase\(pc, await dbGet\('members',tk\.member_id\)/.test(src)
+     && !/invIssueForPurchase/.test(grabFn('_voidTicketDo')));
   /* invPayload 的最後那個 else 就是「沒有 f 就用綠界載具」，它本身沒錯，
      錯在讓櫃檯流程走到它。這條釘著它還在，免得日後有人把它砍掉而讓補開那條壞掉。 */
   ok('　　invPayload 的預設分支仍在（補開那條要靠它）',
@@ -502,10 +506,45 @@ console.log('\n⑤ 作廢票券連動');
   const F=grabFn('_voidTicketDo');
   ok('★★ 轉儲值金不動發票（營收保留、稅照繳，發票也該留著）',
      /if\(mode!=='credit'\)\{/.test(F));
-  ok('★★ 退款要作廢發票（不作廢的話稅就白繳了）',
-     /await invVoidForPurchase\(pc\.id, \('作廢・'\+MODE_LB\[mode\]/.test(F));
-  ok('★★ 扣手續費：原發票作廢後，手續費那一段另開一張（金額變了不能只改）',
-     /if\(mode==='refund_fee' && _keep>0\)\{[\s\S]{0,240}?relSuffix:'-F', category:'fee'/.test(F));
+  /* 2026-09-15 改為折讓：部分使用後退費不能作廢發票 —— 已上的課是真實銷售，
+     發票不能整張消失。作廢只適用「開錯且未申報」，其餘一律折讓。 */
+  ok('★★★ 退款開**折讓**不是作廢（課上了一半，原發票那一段仍然有效）',
+     /await invAllowanceForPurchase\(pc\.id, netOf\(pc\),/.test(F)
+     && !/invVoidForPurchase/.test(F));
+  ok('★★★ 折讓金額＝實際退還給客人的錢（應退基數扣掉手續費），不是原收款金額',
+     /const netOf=pc=>Math\.max\(0, baseOf\(Number\(pc\.deal_amount\)\|\|0\)-\(_fee\[pc\.id\]\|\|0\)\);/.test(F));
+  ok('★★★ 不再有「手續費另開一張」那條路（折讓後原發票還在，重開會變兩張）',
+     !/relSuffix:'-F'/.test(F));
+  ok('★★★ 應退基數＝已繳 ×（未使用 ÷ 總堂數）（合約：部分使用不能全額退）',
+     /const ratio=_tot>0\?Math\.min\(1,_left\/_tot\):1;/.test(F)
+     && /const baseOf=orig=>Math\.round\(orig\*ratio\);/.test(F));
+  ok('★★★ 手續費基數是**應退**金額、且有 $9,000 上限（不是已繳 ×20％、也不是無上限）',
+     /Math\.min\(REFUND_FEE_CAP, Math\.round\(baseSum\*CREDIT_FEE_PCT\/100\)\)/.test(F)
+     && /const REFUND_FEE_CAP=9000;/.test(src));
+  {
+    const A=grabFn('invAllowanceForPurchase');
+    ok('★★ 折讓不能超過原發票金額（超過綠界會退件）',
+       /_amt>\(Number\(inv\.total_amt\)\|\|0\)/.test(A));
+    ok('★★ 0 元不送折讓（綠界要求金額大於 0）', /if\(_amt<=0\) return null;/.test(A));
+    ok('★★ 累計折讓金額（同一張發票可以分多次折讓）',
+       /allowance_amt: \(Number\(inv\.allowance_amt\)\|\|0\)\+/.test(A));
+    ok('★★ 有 email 才寄折讓通知（沒有就 N，不是硬塞空字串）',
+       /AllowanceNotify: mail\?'E':'N'/.test(A));
+  }
+  {
+    const K=grabFn('voidTicketAsk');
+    ok('★★★ 已用過堂數的票**不再整個擋掉**（全庫 2449 張已用過票原本退不了）',
+       !/used>0\|\|bks\.length>0/.test(K));
+    ok('★★★ 只擋未來的預約（作廢後會變沒票可扣的孤兒課），過去上完的放行',
+       /future=bks\.filter\(b=>String\(b\.date\|\|''\)>=_today\)/.test(K));
+    ok('★★ 七日解除權：簽約 7 日內且未使用 → 提示可全額退不收費',
+       /7\*86400000/.test(K) && /used===0/.test(K));
+    ok('★★ 免手續費事由做成選項（傷病／教練離職／變更地點／七日），且只記「已核對」不上傳檔案',
+       /<option value="injury">傷病不適宜運動（已核對區域級以上醫院證明）<\/option>/.test(K)
+       && /<option value="coach">/.test(K) && /<option value="venue">/.test(K));
+    ok('★★★ 選了「不收手續費」沒填事由不解鎖確認鍵（免費是合約例外，不是櫃檯說了算）',
+       /need=\(m==='refund_full'\)&&!\(document\.getElementById\('void-waive'\)\?\.value\|\|''\)/.test(grabFn('voidPick')));
+  }
   ok('★ 作廢後清 invoices 快取', /dbCacheClear\(\['member_tickets','ticket_logs','purchases','invoices'\]\)/.test(F));
   const V=grabFn('invVoidForPurchase');
   ok('★★ 只作廢真的開出去的那張（issued＋有號碼），同一筆多張取最新',
