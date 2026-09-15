@@ -13043,8 +13043,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.0953';
-const APP_VERSION_LABEL = 'v260915.0953';
+const APP_VERSION = '260915.1004';
+const APP_VERSION_LABEL = 'v260915.1004';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -30809,11 +30809,15 @@ async function _submitFacilityBooking(){
     catch(e){ console.error('facility purchase fail',e); showToast('場租收款紀錄寫入失敗：'+(e.message||e)); }
     /* 電子發票（2026-09-15）：場租的收款紀錄 member_id 一律是 null（散客），
        所以 mem 傳 null —— 買受人資訊完全來自櫃檯當場填的 _inv。 */
-    if(_fOk){
+    /* ⚠ 2026-09-15：`_inv` 是 null 代表櫃檯**根本沒看到發票區**（invReadFields 在
+       發票區沒顯示時回 null），而 invIssueForPurchase 只擋 mode==='none'、對 null 放行
+       → invPayload 落到最後的 else（CarrierType=1）→ 自己開一張沒人選過的真發票。
+       0915 魚先森那筆 $10,400 就是這樣開出去的。四個入口都要擋。 */
+    if(_fOk && _inv){
       try{ await invIssueForPurchase(_fRow, null, _inv,
              [{name:`場地租借（${name}）`, amt:fee}], {category:'facility'}); }
       catch(e){ console.error('facility invoice fail', e); }
-    }
+    }else if(_fOk){ console.warn('發票區未顯示，場租這筆不開立發票：', _fRow.id); }
   }
   closeModal(); showToast(`場地租借已建立（$${fee}）`); bkAfterSubmit();
  }catch(e){ showToast('建立失敗：'+(e&&e.message?e.message:e)); }
@@ -50088,9 +50092,12 @@ async function submitFacilityTicketSale(){
           try{ await dbPut('members', Object.assign({}, _fm, _u)); dbCacheClear(['members']); }catch(_){}
         }
       }
-      try{ await invIssueForPurchase(_tRow, _fm, _inv,
-             [{name:'自主訓練票券', amt:fee}], {category:'sale'}); }
-      catch(e){ console.error('facility ticket invoice fail', e); }
+      /* ⚠ 2026-09-15：_inv 為 null＝櫃檯沒看到發票區，一律不開（見場租那段的說明）。 */
+      if(_inv){
+        try{ await invIssueForPurchase(_tRow, _fm, _inv,
+               [{name:'自主訓練票券', amt:fee}], {category:'sale'}); }
+        catch(e){ console.error('facility ticket invoice fail', e); }
+      }else console.warn('發票區未顯示，自主訓練票券這筆不開立發票：', _tRow.id);
     }
     closeModal(); showToast(`已收款 $${fee.toLocaleString()}，自主訓練票效期 ${start.slice(5)}～${expire.slice(5)}`);
     navTo(CUR_PAGE);
@@ -50231,8 +50238,11 @@ async function submitMerchSale(){
           try{ await dbPut('members', Object.assign({}, _mem, _u)); dbCacheClear(['members']); }catch(_){}
         }
       }
-      try{ await invIssueForPurchase(first, _mem, _inv, items, {amt:total, category:'merch'}); }
-      catch(e){ console.error('merch invoice fail', e); }
+      /* ⚠ 2026-09-15：_inv 為 null＝櫃檯沒看到發票區，一律不開（見場租那段的說明）。 */
+      if(_inv){
+        try{ await invIssueForPurchase(first, _mem, _inv, items, {amt:total, category:'merch'}); }
+        catch(e){ console.error('merch invoice fail', e); }
+      }else console.warn('發票區未顯示，商品這筆不開立發票：', first.id);
     }
     window._slCart=[];   // 結帳完成，清空購物車（2026-08-04）
     closeModal(); showToast(`已收款 $${total.toLocaleString()}（${names.join('、')}）`);
@@ -51919,7 +51929,15 @@ function gtCreditHint(){
 }
 function grantGoStep(n){
   document.querySelectorAll('.gt-step').forEach(s=>s.style.display=(Number(s.dataset.gtstep)===n)?'':'none');
-  if(n===2){ refreshGrantInfo(); try{ gtSaleKindSync(); }catch(_){} try{ gtCreditSync(); }catch(_){} try{ invSync(); }catch(_){} } // 進購買資訊時刷新方案資訊與預設金額
+  /* ⚠⚠ 2026-09-15：invSync 一定要等 refreshGrantInfo 完成才跑 ——
+     refreshGrantInfo 是 async 且負責設定 window._grantPlanCache，而 invSync 裡的
+     gtNeedsContract() 沒傳 plan、會往下問 gtIsSingle() 讀那個快取。
+     沒 await 的話快取還是空的 → gtIsSingle 回 false → 單堂教練課被誤判成「要簽約」
+     → paid=false → **發票區整塊不顯示**（0915 魚先森那筆就是這樣）。
+     其餘三支維持原樣（它們不依賴 _grantPlanCache 的時序）。 */
+  if(n===2){ (async()=>{ try{ await refreshGrantInfo(); }catch(_){}
+      try{ gtSaleKindSync(); }catch(_){} try{ gtCreditSync(); }catch(_){}
+      try{ await invSync(); }catch(_){} })(); } // 進購買資訊時刷新方案資訊與預設金額
   // 約別預設（2026-07-27）：會員名下已有教練課類票 → 預選「續約」；櫃台改過就不再動
   if(n===2)(async()=>{ try{
     const mid=(document.getElementById('gt-member')||{}).value;
@@ -52903,9 +52921,21 @@ async function _grantIssue(P){
         }
       }catch(e){ console.error('發票偏好寫回失敗', e); }
     }
-    /* 電子發票（2026-09-02）：開不成不阻斷 —— 票券已經發出去了，發票後補 */
-    try{ await invIssueForPurchase(_purRow, await dbGet('members',P.member_id).catch(()=>null), P.inv,
-      [{name:plan.name||'健身課程', amt:_dealRec}]); }catch(e){ console.error('invoice fail', e); }
+    /* 電子發票（2026-09-02）：開不成不阻斷 —— 票券已經發出去了，發票後補。
+       ⚠⚠ 2026-09-15 修重大事故：P.inv 是 null 時**不開立**。
+         null 代表「櫃檯根本沒看到發票區」（invReadFields 在發票區沒顯示時回 null），
+         而 invIssueForPurchase 只擋 f.mode==='none'、對 null 是放行的 →
+         invPayload 落到最後的 else（CarrierType=1 綠界載具）→ 自己開了一張真發票。
+         0915 魚先森那筆 $10,400 就是這樣開出去的：他的載具／email／統編全是空的，
+         等於開給空氣，而櫃檯完全沒被問過。
+       ⚠ null 的「照常開」語意只留給退款手續費那條內部補開（invVoidForPurchase 之後），
+         櫃檯流程一律要有明確的 f。 */
+    if(P.inv){
+      try{ await invIssueForPurchase(_purRow, await dbGet('members',P.member_id).catch(()=>null), P.inv,
+        [{name:plan.name||'健身課程', amt:_dealRec}]); }catch(e){ console.error('invoice fail', e); }
+    }else{
+      console.warn('發票區未顯示（P.inv 為 null），這筆不開立發票：', _purRow.id);
+    }
   }catch(e){ /* 購買紀錄失敗不阻斷發票券，僅記錄 */ console.error('purchase log fail',e); showToast('付款紀錄寫入失敗：'+(e.message||e)); }
   t._usedVouchers=_usedVouchers;   // 30 分鐘退回時要把折抵券還回去
   return t;
@@ -54272,9 +54302,12 @@ async function _confirmInstallNext(ticket_id){
           try{ await dbPut('members', Object.assign({}, _pm, _u)); dbCacheClear(['members']); }catch(_){}
         }
       }
-      try{ await invIssueForPurchase(_pRow, _pm, _inv,
-             [{name:`${t.plan_name||'分期票券'}・開通 ${n} 堂`, amt}], {category:'installment'}); }
-      catch(e){ console.error('install invoice fail', e); }
+      /* ⚠ 2026-09-15：_inv 為 null＝櫃檯沒看到發票區，一律不開（見場租那段的說明）。 */
+      if(_inv){
+        try{ await invIssueForPurchase(_pRow, _pm, _inv,
+               [{name:`${t.plan_name||'分期票券'}・開通 ${n} 堂`, amt}], {category:'installment'}); }
+        catch(e){ console.error('install invoice fail', e); }
+      }else console.warn('發票區未顯示，分期這筆不開立發票：', _pRow.id);
     }
   }catch(e){ console.error('install purchase log fail',e); showToast('付款紀錄寫入失敗：'+(e.message||e)); }
   /* ⚠ 2026-09-04 修：原本寫的 action 是 'installment_unlock'，但 ticket_logs.action 的

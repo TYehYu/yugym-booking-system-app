@@ -282,10 +282,12 @@ console.log('\n④-3 流程自我檢查抓到的三個洞（2026-09-15）');
 
   /* ⚠ 孤兒發票：場租原本是兩個各自獨立的 try —— 收款紀錄寫失敗被 catch 吞掉之後，
      開發票那段照樣跑，會留下「有發票、沒有收款紀錄」的帳。 */
+  /* ⚠ 2026-09-15 二修：守門條件從 `if(_fOk)` 變成 `if(_fOk && _inv)`
+     （多擋一層「櫃檯沒看到發票區」，見 ④-4）—— 規則沒放寬，反而更嚴。 */
   ok('★★★ 場租：收款紀錄寫成功才開發票（否則會有孤兒發票）',
      /let _fOk=false;/.test(src)
      && /try\{ await dbPutPurchaseSafe\(_fRow\); _fOk=true; \}/.test(src)
-     && /if\(_fOk\)\{\s*\n\s*try\{ await invIssueForPurchase\(_fRow, null, _inv,/.test(src));
+     && /if\(_fOk && _inv\)\{\s*\n\s*try\{ await invIssueForPurchase\(_fRow, null, _inv,/.test(src));
 
   /* ⚠ 白填：invIssueForPurchase 有 `amt<=0 return null`，金額 0 時發票區留在畫面上
      等於讓櫃檯白問一次載具／信箱，填了也不會開。三個入口都要跟著金額收合。 */
@@ -304,6 +306,43 @@ console.log('\n④-3 流程自我檢查抓到的三個洞（2026-09-15）');
   ok('★★ 未付款發放不會誤開（_dealRec 為 0 → invIssueForPurchase 的 amt<=0 擋掉）',
      /const _dealRec=\(P\.payment_status==='unpaid'\) \? 0/.test(src)
      && /if\(amt<=0\) return null;/.test(src));
+}
+
+console.log('\n④-4 ⚠ 事故：系統自己開了一張沒人選過的發票（2026-09-15）');
+/* 使用者實測：「我剛剛測試了一筆 魚先森 最後沒有跳出來讓我選是否要開發票」
+   「自己就開了」「而且也沒有輸入載具跟email」
+   → FX28688352（$10,400）真的開出去了。魚先森的載具／email／統編全是空的，
+     等於開給空氣，而櫃檯完全沒被問過。
+
+   兩層根因：
+   ① 時序：grantGoStep(2) 呼叫 refreshGrantInfo()（async，設定 _grantPlanCache）
+      **沒有 await** 就跑 invSync()。invSync 的 gtNeedsContract() 沒傳 plan，
+      往下問 gtIsSingle() 讀那個還沒設好的快取 → 多堂教練課被判要簽約
+      → paid=false → **發票區整塊不顯示**。
+   ② 致命：發票區沒顯示 → invReadFields() 回 null → 而 invIssueForPurchase
+      只擋 f.mode==='none'、**對 null 是放行的** → invPayload 落到最後的 else
+      （d.CarrierType='1' 綠界載具）→ 自己開了一張真發票。
+
+   ⚠ null 的「照常開」語意只留給退款手續費那條內部補開（invVoidForPurchase 之後），
+     櫃檯流程一律要有明確的 f。 */
+{
+  ok('★★★ 時序：invSync 要等 refreshGrantInfo 完成（否則 _grantPlanCache 還是空的）',
+     /await refreshGrantInfo\(\); \}catch\(_\)\{\}/.test(src)
+     && /try\{ await invSync\(\); \}catch\(_\)\{\}/.test(src)
+     && !/if\(n===2\)\{ refreshGrantInfo\(\); try\{ gtSaleKindSync/.test(src));
+  const cnt=re=>(src.match(re)||[]).length;
+  ok('★★★ 五個入口都擋掉「_inv 為 null 就開立」',
+     /if\(P\.inv\)\{/.test(src)          /* 發放票券 */
+     && /if\(_fOk && _inv\)\{/.test(src) /* 場租 */
+     && cnt(/⚠ 2026-09-15：_inv 為 null＝櫃檯沒看到發票區，一律不開（見場租那段的說明）。/g)===3);
+  ok('★★ 擋下來時要留痕跡（不是靜靜跳過，否則沒人知道那筆為何沒發票）',
+     cnt(/console\.warn\('發票區未顯示/g)>=4);
+  ok('★★★ null 仍保留給退款手續費那條內部補開（不能一律擋死）',
+     /await invIssueForPurchase\(pc, await dbGet\('members',tk\.member_id\)\.catch\(\(\)=>null\), null,/.test(src));
+  /* invPayload 的最後那個 else 就是「沒有 f 就用綠界載具」，它本身沒錯，
+     錯在讓櫃檯流程走到它。這條釘著它還在，免得日後有人把它砍掉而讓補開那條壞掉。 */
+  ok('　　invPayload 的預設分支仍在（補開那條要靠它）',
+     /\}else\{\s*\n\s*d\.CarrierType='1';   \/\* 預設：存綠界載具/.test(src));
 }
 
 console.log('\n⑤ 作廢票券連動');
