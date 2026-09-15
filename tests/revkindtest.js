@@ -15,12 +15,20 @@ const ok=(n,c,x)=>{ if(c){pass++;/* 2026-09-05：圓角 50% → 999px（22 條�
 console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
 console.log('① 沒有約別的列也要佔住左欄');
+/* 2026-09-15：教練名搬進這一格（疊在約別章下方），所以回傳改成組合 _chip＋_att。
+   佔位格的規則沒變：兩者都空才畫空格子。 */
 ok('★★★ 不再回空字串，改回一個空的佔位格',
-   /return r\.kind\s*\n\s*\? `<span class="mc-rev-kv">\$\{saleKindChip\(r\.tk,r\.kind\)\}<\/span>`\s*\n\s*: `<span class="mc-rev-kv mc-rev-kv-none" aria-hidden="true"><\/span>`;/.test(src));
+   /if\(!_chip && !_att\) return `<span class="mc-rev-kv mc-rev-kv-none" aria-hidden="true"><\/span>`;/.test(src)
+   && /return `<span class="mc-rev-kv">\$\{_chip\}\$\{_att\}<\/span>`;/.test(src));
+ok('★★★ 教練名在約別章**下方**（同一格、直向堆疊）',
+   /const _att=revAttribChip\(r\);/.test(src)
+   && /\.mc-rev-kv\{flex:none;align-self:stretch;display:flex;flex-direction:column;/.test(src));
 ok('★★ 空格子對螢幕報讀器隱藏（它沒有內容，唸出來只是雜訊）',
    /mc-rev-kv-none" aria-hidden="true"/.test(src));
+/* ⚠ 2026-09-15 由 32px 加寬到 46px：教練名搬進來疊在圓章下方，32px 塞不下
+   （RANDY／SANDY／MANGO 5 碼、11px≈33px）。欄寬「固定」這件事沒變。 */
 ok('★★★ 欄寬固定，有沒有約別都一樣寬（姓名才在同一條垂直線上）',
-   /body\.ink \.mc-revlist-card \.mc-rev-kv\{flex:0 0 32px;/.test(src));
+   /body\.ink \.mc-revlist-card \.mc-rev-kv\{flex:0 0 46px;align-self:stretch;/.test(src));
 ok('★★ 使用者原話留著（下次有人想「省掉空格子」時看得到理由）',
    /羅苡榕這種沒有分類的　也要保留左邊的空間/.test(src));
 

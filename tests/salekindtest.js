@@ -31,8 +31,11 @@ console.log('\n兩個畫面都要有（首頁名單卡＋點開的彈窗）');
 /* 2026-09-03：使用者要「圓形鈕」＋「沒有分類的也保留左邊空間」，
    所以 revKindCell 不再回空字串，改回一個空的佔位格（見 tests/revkindtest.js）。
    這裡守的仍是「約別在列最左、由 revKindCell 統一畫」。 */
+/* 2026-09-15：教練名搬進同一格（疊在約別章下方），所以 revKindCell 的回傳
+   從三元字面改成 _chip＋_att 的組合；「約別在列最左、由 revKindCell 統一畫」沒變。 */
 ok('★ 首頁右欄名單卡（約別標籤在列最左，沒有約別也佔住那一格）',
-   /\? `<span class="mc-rev-kv">\$\{saleKindChip\(r\.tk,r\.kind\)\}<\/span>`\s*\n\s*: `<span class="mc-rev-kv mc-rev-kv-none" aria-hidden="true"><\/span>`;/.test(src)
+   /const _chip=r\.kind \? saleKindChip\(r\.tk,r\.kind\) : '';/.test(src)
+   && /if\(!_chip && !_att\) return `<span class="mc-rev-kv mc-rev-kv-none" aria-hidden="true"><\/span>`;/.test(src)
    && /\$\{revKindCell\(r\)\}\s*\n\s*<div class="mc-rev-b">/.test(src)
 /* 2026-08-24：抽獎那一列不畫金額（它是 $0 的贈品紀錄，不是收款），
    所以多一個 ||r.lot 的條件。 */
@@ -41,7 +44,8 @@ ok('★ 首頁右欄名單卡（約別標籤在列最左，沒有約別也佔住
       這條守的是「約別在列最左、由 revKindCell 統一畫」（上面兩項），
       第三項只是順帶釘住右側那格的排列，跟著更新。 */
    && /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\$\{_fm\(r\.amt\)\}/.test(src)
-   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revAttribChip\(r\)\}\$\{revInvChip\(r\)\}<\/div>/.test(src));
+   /* 2026-09-15 二修：教練標籤搬到最左欄，姓名那行只剩姓名＋發票標記。 */
+   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revInvChip\(r\)\}<\/div>/.test(src));
 ok('★ 營收彈窗也走同一支（約別也在最左邊那一欄）',
    (src.match(/\$\{revKindCell\(r\)\}/g)||[]).length===2
    && /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\{money\(r\.amt\)\}/.test(src));
@@ -89,7 +93,14 @@ console.log('\n樣式');
 ok('★★ 新約用品牌金', /\.rev-kind-new\{background:#f7efe0;color:#8a5e28;/.test(src));
 ok('★★ 續約用綠', /\.rev-kind-renewal\{background:#eef5f1;color:#1f6f54;/.test(src));
 ok('　　分期另一色（與前兩者分得開）', /\.rev-kind-installment\{background:#efe7f3;/.test(src));
-ok('　　可點的才有 hover 與手指游標', /button\.rev-kind\{cursor:pointer;\}/.test(src));
+/* 2026-09-15 使用者：「把營收明細這一區域按鈕互動的動作做出來，
+   這樣在操作的時候才知道自己點到什麼物件」—— 多了 transition 與 :active 縮放。 */
+ok('　　可點的才有 hover 與手指游標', /button\.rev-kind\{cursor:pointer;transition:/.test(src));
+ok('★★ 按下去有回饋（手機沒有 hover，:active 才是有感的那個）',
+   /button\.rev-kind:active\{transform:scale\(\.88\);\}/.test(src)
+   && /\.rev-att-tap:active\{transform:scale\(\.90\);\}/.test(src)
+   && /\.rev-undo:active\{transform:scale\(\.90\);\}/.test(src)
+   && /\.mc-rev-row\.mc-rev-go:active\{transform:scale\(\.995\);\}/.test(src));
 
 console.log('\n獎金口徑沒有被動到');
 ok('★ 續約獎金仍只認 sale_kind===\'renewal\'',

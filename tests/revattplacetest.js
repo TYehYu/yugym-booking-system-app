@@ -48,10 +48,14 @@ console.log('\n③ 標籤放在會員姓名上方');
    歸屬標籤從「姓名上方自成一列」改成「與姓名同一列、靠右」。 */
   const rows=(src.match(/<div class="rv-r1">/g)||[]).length;
   eq('★ 兩個列表（首頁右欄、今日營收彈窗）都改了', rows, 2);
-  ok('★ 歸屬標籤與姓名同一列、靠右',
-     (src.match(/<span class="mc-rev-nm">\$\{(esc\()?r\.nm\)?\}<\/span>\$\{revAttribChip\(r\)\}/g)||[]).length===2
-     && /\.rv-r1,\.rv-r2\{display:flex;align-items:baseline;justify-content:space-between;/.test(src)
-     && /\.rv-r1>\.rev-att\{flex:none;\}/.test(src));
+  /* ⚠ 2026-09-15 三修（使用者：「這邊教練的名稱可以改到左邊約別章下方嗎？這邊有空間嗎」）——
+     標籤再次搬家：從「與姓名同一列靠右」移到**最左欄、約別章下方**。
+     量過才搬：右側元素全是 flex:none 不會被壓縮，左欄 32→46px 少掉的 14px
+     由姓名與品項吸收，而教練名離開姓名那行又還回約 38px，姓名反而更寬。 */
+  ok('★★★ 歸屬標籤移到最左欄、約別章下方（不再與姓名同一列）',
+     (src.match(/<span class="mc-rev-nm">\$\{(esc\()?r\.nm\)?\}<\/span>\$\{revAttribChip\(r\)\}/g)||[]).length===0
+     && /const _att=revAttribChip\(r\);/.test(src)
+     && /body\.ink \.mc-revlist-card \.mc-rev-kv \.rev-att\{align-self:center;/.test(src));
   ok('　　不再用 margin-left 貼在名字右邊', !/\.rev-att\{[^}]*margin-left:6px/.test(src));
   ok('　　為什麼要搬，寫在程式裡', /歸屬教練放在會員姓名上方/.test(src));
 }

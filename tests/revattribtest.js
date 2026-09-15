@@ -44,8 +44,13 @@ ok('★ 右欄名單卡與彈窗都掛同一支 revAttribChip（2026-08-07 起�
    第二欄調成兩列，第一列 會員姓名靠左、教練標籤靠右；第二列 購買品項靠左、金額靠右；
    金額又有現金跟匯款，如果同時出現則要再分成兩列」——
    歸屬標籤從「姓名上方自成一列」改成「與姓名同一列、靠右」。 */
-   (src.match(/\$\{revAttribChip\(r\)\}/g)||[]).length===2
-   && (src.match(/<span class="mc-rev-nm">\$\{(esc\()?r\.nm\)?\}<\/span>\$\{revAttribChip\(r\)\}/g)||[]).length===2);
+/* ⚠ 2026-09-15 使用者：「這邊教練的名稱可以改到左邊約別章下方嗎」——
+   標籤從姓名那一行搬進最左欄（revKindCell 內部呼叫），所以兩個列表不再各自
+   寫 ${revAttribChip(r)}，而是共用 revKindCell 這一個呼叫點。 */
+   (src.match(/\$\{revAttribChip\(r\)\}/g)||[]).length===0
+   && /const _att=revAttribChip\(r\);/.test(src)
+   && (src.match(/\$\{revKindCell\(r\)\}/g)||[]).length===2
+   && (src.match(/<span class="mc-rev-nm">\$\{(esc\()?r\.nm\)?\}<\/span>/g)||[]).length===2);
 
 console.log('\n③ 更改流程');
 ok('★ 只有櫃檯／管理員能開', /async function openRevAttribPick\(kind, ref\)\{\n\s*if\(!isDeskLike\(\)\) return;/.test(src));

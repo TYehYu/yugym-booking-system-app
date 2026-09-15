@@ -48,7 +48,10 @@ ok('★ 付款方式疊在金額上方（2026-08-03 使用者指示：並排會�
         移走的只有唯讀標記；退回／付款／金額仍在同一區、同樣的順序。 */
    /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">/.test(src)
    && (src.match(/<span class="mc-rev-r">\$\{revUndoChip\(r\)\}/g)||[]).length===2
-   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revAttribChip\(r\)\}\$\{revInvChip\(r\)\}<\/div>/.test(src)
+   /* ⚠ 2026-09-15 二修：教練標籤也搬走了（移到最左欄、約別章下方），
+      所以姓名那一行只剩姓名＋發票標記。
+      ⚠ .mc-rev-r 的**方向仍然不變**（0803 的決定），最後一項照舊釘著。 */
+   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revInvChip\(r\)\}<\/div>/.test(src)
    && /\.mc-rev-r\{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;\}/.test(src));
 /* 2026-08-03 使用者指示：「不要列出刷卡，我們沒提供刷卡功能」。
    2026-08-12 拆帳改版：第三顆改成「現金+匯款」拆帳入口（openRevPaySplit），刷卡仍不列 */
