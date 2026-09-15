@@ -159,8 +159,16 @@ console.log('\n列印消費明細（2026-09-15 使用者：「製作一個列印
   ok('★★★ 明細跳過「收進兩頁」（有幾頁印幾頁）',
      /if\(document\.querySelector\('\.stmt-doc'\)\) return;/.test(src)
      && /class="stmt-doc"/.test(F));
-  ok('★★ 交易分頁才有入口，且沒有交易就不畫那顆鈕',
-     /\(isDeskLike\(\)&&txAll\.length\)\?`<button[^`]*printMemberStatement/.test(src));
+  /* ⚠⚠ 2026-09-15 使用者回報「沒有看到椰」——交易分頁有**兩個 return**：
+     卡片版（if(_m2)）與表格版。而 _m2 就是 isDeskLike()，所以櫃檯一律走卡片版；
+     第一版只把鈕加在表格版，結果誰都看不到。
+     這條改成**數兩處**，正是為了讓同樣的疏漏下次會被擋下來。 */
+  ok('★★★ 兩個 return（卡片版／表格版）都要有入口，否則櫃檯看不到',
+     (src.match(/\(isDeskLike\(\)&&txAll\.length\)\?`<button[^`]*printMemberStatement/g)||[]).length===2);
+  ok('★★ 沒有交易就不畫那顆鈕（印出來是空的沒意義）',
+     /\(isDeskLike\(\)&&txAll\.length\)\?/.test(src));
+  ok('★★ 把「_m2 其實是 isDeskLike 不是手機」寫在原地（這次就是被名字騙了）',
+     /_m2 就是 isDeskLike\(\)（47929），名字看起來像「手機」但其實是「櫃檯以上」/.test(src));
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
