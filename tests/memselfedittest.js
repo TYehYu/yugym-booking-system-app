@@ -59,7 +59,11 @@ ok('★★ 舊入口保留成薄包裝（那一列的 onclick 一個字沒改）
      && /rec\.invoice_title=title\|\|null;/.test(f));
   ok('★★★ 三選一必填：Email 或手機條碼至少一項（沒有通知管道的發票等於沒開）',
      /if\(!email && !car\)\{ showToast\('Email 或手機條碼至少填一項'\); return; \}/.test(f));
-  ok('★★ 打統編一定要抬頭', /if\(ubn && !title\)/.test(f));
+  /* ⚠ 2026-09-15：抬頭改選填，與收款畫面同一套標準 ——
+     綠界 B2C 的 CustomerName 只有 Print=1 才必填，我們走 Print=0＋載具。
+     兩邊標準不一致的話，會員資料頁存得下、收款卻被擋，櫃檯會以為系統壞了。 */
+  ok('★★★ 抬頭不強制（與 invCheckFields 同一套標準）', !/if\(ubn && !title\)/.test(f));
+  ok('★★ 但統編格式仍要驗', /if\(ubn && !\/\^\\d\{8\}\$\/\.test\(ubn\)\)/.test(f));
   ok('★★ 權限仍是「櫃檯以上或會員本人」',
      /const isSelf = !!\(SESSION && SESSION\.role==='member' && String\(SESSION\.id\)===String\(mid\)\);/.test(src)
      && /if\(!\(canEditMemberData\(\)\|\|isSelf\)\)\{ showToast\('修改會員資料需要櫃檯以上權限'\); return; \}/.test(src));

@@ -67,6 +67,11 @@ eq('　　兩格都空一樣開得成（綠界載具只要有手機就夠，只�
   const d=invPayload(PUR, MEM, {mode:'ubn', ubn:'53538851', title:'雨果健身有限公司', email:'a@b.c'});
   eq('★★ 統編 → 帶統編＋抬頭蓋掉姓名，不捐贈',
      [d.CustomerIdentifier,d.CustomerName,d.Donation], ['53538851','雨果健身有限公司','0']);
+  /* ⚠ 2026-09-15：抬頭沒填就送空字串，**不可**沿用會員個人姓名 ——
+     綠界文件說「統一編號有值時，應帶入對應的營業人名稱」，
+     拿個人姓名頂替會開出「統編是公司、名稱是個人」的發票，比留空更糟。 */
+  eq('★★★ 抬頭沒填 → CustomerName 留空，不拿個人姓名頂替',
+     invPayload(PUR, MEM, {mode:'ubn', ubn:'53538851'}).CustomerName, '');
   ok('★★ 統編也走載具、不列印紙本（紙本要自己印自己寄）', d.CarrierType==='1' && d.Print==='0');
   eq('　　email 帶進去（證明聯寄這裡）', d.CustomerEmail, 'a@b.c');
 }
@@ -85,7 +90,15 @@ eq('　　沒選任何一格（f=null）也走綠界載具，不會組出空參�
 
 console.log('\n② 開立前先擋掉一定會被退的（綠界只回「參數錯誤」，當場猜不到）');
 eq('★★ 統編要 8 碼', invCheckFields({mode:'ubn',ubn:'123',title:'x'}), '統一編號要 8 碼數字');
-eq('★★ 打統編一定要抬頭', invCheckFields({mode:'ubn',ubn:'53538851',title:' '}), '打統編要填公司抬頭');
+/* ⚠ 2026-09-15 規則改了（使用者：「為什麼我用蝦皮購物的時候　只要輸入統編
+   並沒有輸入公司抬頭」）——
+   查綠界 B2C Issue 官方文件：CustomerName **只在 Print=1（列印紙本）時必填**，
+   CustomerIdentifier 本身是選填。我們的統編模式走 Print=0＋綠界載具，
+   綠界根本不要求抬頭 —— 原本強制填是我們比綠界還嚴，白擋櫃檯。
+   蝦皮只問統編是完全合規的做法。 */
+eq('★★★ 打統編**不**強制抬頭（綠界只有列印紙本才要求）',
+   invCheckFields({mode:'ubn',ubn:'53538851',title:' '}), '');
+eq('　　統編格式錯還是要擋', invCheckFields({mode:'ubn',ubn:'123',title:''}), '統一編號要 8 碼數字');
 eq('★★ 愛心碼 3–7 碼', invCheckFields({mode:'donate',loveCode:'12'}), '愛心碼要 3–7 碼數字');
 eq('★★ 手機條碼是 / 加 7 碼', invCheckFields({mode:'carrier',carrierNum:'ABC1234'}),
    '手機條碼格式是 / 加 7 碼（例如 /ABC1234）');

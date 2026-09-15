@@ -13028,8 +13028,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260914.2240';
-const APP_VERSION_LABEL = 'v260914.2240';
+const APP_VERSION = '260915.0854';
+const APP_VERSION_LABEL = 'v260915.0854';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13865,7 +13865,7 @@ function invPick(k){
     h=row('inv-ubn','統一編號','8 碼數字',window._invMemUbn||'')
       +row('inv-title','公司抬頭','',window._invMemTitle||'')
       +row('inv-email','Email','寄證明聯用',_mail,'email')
-      +note('打統編就<b>不能</b>存載具或捐贈。');
+      +note('抬頭<b>可以不填</b>（綠界只有列印紙本時才要求）。打統編就<b>不能</b>捐贈。');
   }else if(k==='donate'){
     h=row('inv-love','愛心碼','3–7 碼數字')
       +note('捐贈之後<b>不能改</b>，也不能再打統編或存載具。');
@@ -13958,7 +13958,13 @@ function invCheckFields(f){
     return '開發票要填 Email 或手機條碼（擇一）';
   if(f.mode==='ubn'){
     if(!/^\d{8}$/.test(f.ubn||'')) return '統一編號要 8 碼數字';
-    if(!(f.title||'').trim())      return '打統編要填公司抬頭';
+    /* ⚠ 2026-09-15：抬頭改**選填**（使用者：「為什麼我用蝦皮購物的時候　只要輸入統編
+       並沒有輸入公司抬頭」）——
+       查綠界 B2C Issue 文件確認：CustomerName **只在 Print=1（列印紙本）時必填**，
+       統一編號本身是選填欄位。我們的統編模式走 Print=0＋綠界載具，綠界不會要求抬頭。
+       原本這裡強制填，是我比綠界還嚴，等於沒事找櫃檯麻煩。
+       ⚠ 但 invPayload 那邊的 fallback 一定要一起拿掉 —— 沒填就別拿會員個人姓名頂替，
+         否則會開出「統編是公司、名稱是個人」的發票，比留空更糟。 */
   }
   if(f.mode==='donate' && !/^\d{3,7}$/.test(f.loveCode||'')) return '愛心碼要 3–7 碼數字';
   if(f.mode==='carrier' && (f.carrierNum||'') && !/^\/[0-9A-Z+\-.]{7}$/.test(f.carrierNum)) return '手機條碼格式是 / 加 7 碼（例如 /ABC1234）';
@@ -13990,7 +13996,11 @@ function invPayload(pur, mem, f, items){
       ItemCount:1, ItemWord:'式', ItemPrice:Math.round(it.amt), ItemAmount:Math.round(it.amt)}))
   };
   if(f&&f.mode==='ubn'){
-    d.CustomerIdentifier=f.ubn; d.CustomerName=f.title||d.CustomerName;
+    /* ⚠ 2026-09-15：抬頭沒填就送空字串，**不要**沿用會員個人姓名 ——
+       綠界文件說「統一編號有值時，應帶入對應的營業人名稱」，
+       拿個人姓名頂替會開出「統編是公司、名稱是個人」的發票，比留空更糟。
+       抬頭是選填（CustomerName 只有 Print=1 才必填），空的綠界照樣開得成。 */
+    d.CustomerIdentifier=f.ubn; d.CustomerName=(f.title||'').trim();
     d.CarrierType='1';   /* 統編＋綠界載具＝不用列印紙本。⚠ email 已在上面統一處理（2026-09-14），
                             這裡原本有一行 d.CustomerEmail=f.email||'' —— 留著會把「櫃檯沒填但會員
                             資料有」的情況蓋成空字串，等於統編客人反而收不到證明聯。 */
@@ -46587,7 +46597,9 @@ async function invPrefSave(){
   if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){ showToast('Email 格式不正確'); return; }
   if(car && !/^\/[0-9A-Z+.\-]{7}$/.test(car)){ showToast('載具格式不正確：斜線開頭共 8 碼（數字、大寫英文、+ - .）'); return; }
   if(ubn && !/^\d{8}$/.test(ubn)){ showToast('統一編號要 8 碼數字'); return; }
-  if(ubn && !title){ showToast('打統編要填公司抬頭'); return; }
+  /* ⚠ 2026-09-15：抬頭改選填，與收款畫面同一套標準（見 invCheckFields）——
+     綠界 B2C 的 CustomerName 只有 Print=1 才必填，我們走 Print=0＋載具。
+     兩邊標準不一致的話，會員資料頁存得下、收款卻被擋，櫃檯會以為系統壞了。 */
   if(!email && !car){ showToast('Email 或手機條碼至少填一項'); return; }
   try{
     const rec=await dbGet('members', window._invPrefMid);
