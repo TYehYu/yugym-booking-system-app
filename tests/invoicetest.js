@@ -274,9 +274,21 @@ console.log('\n④-3 流程自我檢查抓到的三個洞（2026-09-15）');
      有統編的會員 → dataset.mode='ubn' → invPick 落到 else 畫「手機條碼」欄、兩顆按鈕都不亮
      → invReadFields 以 k='ubn' 讀不存在的 #inv-ubn（空）→ 驗證擋「統一編號要 8 碼數字」，
      而畫面上根本沒有統編欄可填 —— **整筆送不出去**。統編現在住在「寄信箱」那格。 */
-  ok('★★★ 有統編的會員要切到 mail，不是已經不存在的 ubn',
-     /if\(!w\.dataset\.mode\) invPick\(window\._invMemUbn\?'mail':'carrier'\);/.test(src)
-     && !/invPick\(window\._invMemUbn\?'ubn':'carrier'\)/.test(src));
+  /* ⚠ 2026-09-15 二修（使用者：「統編應該要每次手動輸入」「不用存在會員資料裡面」）——
+     統編不再存會員資料，所以也不能再用它決定預設哪一格。改成看載具：
+     有載具→「存載具」，否則→「寄信箱」。
+     ⚠ 'ubn' 這個模式仍然不可以出現在這裡（它不在 INV_MODES 裡，會造成死結）。 */
+  ok('★★★ 預設格用載具判斷，不再用統編（統編已不存會員資料）',
+     /if\(!w\.dataset\.mode\) invPick\(window\._invMemCarrier\?'carrier':'mail'\);/.test(src)
+     && !/invPick\(window\._invMemUbn\?'ubn':'carrier'\)/.test(src)
+     && !/invPick\(window\._invMemUbn\?'mail':'carrier'\)/.test(src));
+  ok('★★★ 統編與抬頭不從會員資料帶入（每次手動輸入）',
+     /window\._invMemUbn    ='';/.test(src)
+     && /window\._invMemTitle  ='';/.test(src)
+     && /row\('inv-ubn','統一編號','公司行號才填，每次都要重打'\)/.test(src)
+     && /row\('inv-title','公司抬頭','打統編可一併填'\)/.test(src));
+  ok('★★★ 四個入口都不再把統編／抬頭寫回會員',
+     !/_u\.invoice_ubn    =/.test(src) && !/_u\.invoice_title  =/.test(src));
   ok('★★ 切過去的那格真的存在於 INV_MODES',
      /const INV_MODES=\[\['carrier','存載具'\],\['mail','寄信箱'\]\];/.test(src));
 
@@ -432,7 +444,7 @@ console.log('\n④-7 送出鈕的即時把關（2026-09-15）');
   ok('★★★ 欄位一打字就重驗（oninput）', /autocomplete="off" oninput="invGateSync\(\)"/.test(src));
   ok('★★ 切換分頁／勾不開發票也要重算', /invDimSync\(\)\{[\s\S]{0,400}?invGateSync\(\);/.test(src));
   ok('★★ 開窗當下就把關（不必等打第一個字）',
-     /if\(!w\.dataset\.mode\) invPick\(window\._invMemUbn\?'mail':'carrier'\);[\s\S]{0,140}?invGateSync\(\);/.test(src));
+     /if\(!w\.dataset\.mode\) invPick\(window\._invMemCarrier\?'carrier':'mail'\);[\s\S]{0,160}?invGateSync\(\);/.test(src));
   /* ⚠ 待審核發放那支：grFillPreview 結尾剛把 gr-go 打開，gate 必須接在它之後 */
   ok('★★★ gr-go 的把關要排在「金額算得出來就打開」之後',
      /if\(go\)\{ go\.disabled=false; go\.style\.opacity=''; go\.style\.cursor=''; \}[\s\S]{0,200}?invGateSync\(\);/.test(src));

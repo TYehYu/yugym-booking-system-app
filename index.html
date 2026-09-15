@@ -3279,6 +3279,10 @@ body.mc-mode #tl-sheet,body.mc-mode #tl-add-sheet{top:60px;}
 /* 電子發票（2026-09-02）：綠框＝一般提示（紅>金>綠，開發票不是警示） */
 .rev-invno{font-size:10.5px;font-weight:700;color:var(--green);background:#eaf4ee;
   border-radius:5px;padding:2px 6px;font-variant-numeric:tabular-nums;}
+/* 沒開發票（2026-09-15）：灰底灰字 —— 不開是合法的選擇，不是錯誤，
+   所以不用紅色（紅留給真正該處理的事，見品牌色強度階級）。 */
+.rev-noinv{font-size:10.5px;font-weight:700;color:var(--t3);background:var(--card2);
+  border:1px solid var(--bd);border-radius:5px;padding:1px 6px;white-space:nowrap;}
 .inv-alert{background:#fdecea;border:1px solid var(--danger,#b5372e);border-radius:10px;padding:10px 12px;
   font-size:12.5px;color:var(--danger,#b5372e);line-height:1.75;margin-bottom:12px;}
 .inv-row{display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -13043,8 +13047,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1025';
-const APP_VERSION_LABEL = 'v260915.1025';
+const APP_VERSION = '260915.1042';
+const APP_VERSION_LABEL = 'v260915.1042';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13919,10 +13923,15 @@ function invPick(k){
        打統編本來就要把證明聯寄出去，跟 Email 同一格最自然。
        ⚠ 統編與抬頭都是選填：綠界的 CustomerName 只有 Print=1（列印紙本）才必填，
          而我們已經沒有紙本了（見 README 的互斥表）。 */
+    /* ⚠ 2026-09-15 使用者定案：「統編應該要每次手動輸入」「不用存在會員資料裡面」——
+       統編與抬頭**一律留空**，不預填、不寫回會員。
+       理由：同一個人這次可能開公司、下次開個人，自動帶出來反而容易誤開成公司發票。
+       （這推翻 0914 的「開統編的客人存進會員資料自動帶入」。）
+       ⚠ Email 與載具**照舊預填**（那是固定的通知管道，不會每次變）。 */
     h=row('inv-email','Email','發票寄這裡',_mail,'email')
-      +row('inv-ubn','統一編號','公司行號才填',window._invMemUbn||'')
-      +row('inv-title','公司抬頭','打統編可一併填',window._invMemTitle||'')
-      +note('存綠界載具並寄信通知，中獎憑通知到<b>超商列印</b>。統編與抬頭<b>可以不填</b>。');
+      +row('inv-ubn','統一編號','公司行號才填，每次都要重打')
+      +row('inv-title','公司抬頭','打統編可一併填')
+      +note('存綠界載具並寄信通知，中獎憑通知到<b>超商列印</b>。統編與抬頭<b>可以不填</b>，<b>不會記住</b>。');
   }else{
     /* 存載具：客人自己的手機條碼（CarrierType=3），中獎通知走財政部平台，
        不需要我們的 email —— 近 90 天有上課的 168 位裡有 95 位屬於這種。 */
@@ -13959,8 +13968,16 @@ function invSummaryHTML(f){
    0811 那版這裡是一顆「開立發票」按鈕，現在開立跟著收款一起做完了，
    這裡只負責讓櫃檯看得到「這筆開過了、號碼是多少」。沒開的不畫，不佔版面。 */
 function revInvChip(r){
-  if(!r || !r.invNo) return '';
-  return `<span class="rev-invno" title="電子發票號碼">${r.invNo}</span>`;
+  if(!r) return '';
+  if(r.invNo) return `<span class="rev-invno" title="電子發票號碼">${r.invNo}</span>`;
+  /* 2026-09-15 使用者：「今日營收明細 如果未開發票也要顯示[沒開發票]」——
+     原本沒號碼就回空字串，那一列右邊什麼都沒有，看不出是「刻意不開」還是「漏開」。
+     ⚠ 只對「真的有收到錢」的列畫：抽獎（$0）與沒有金額的列本來就不該開發票，
+       畫上去只是雜訊。
+     ⚠ 灰色不是紅色：不開發票是**合法的選擇**（客人說不用），不是錯誤。
+       真正該紅的是「開了但失敗」，那條到財務→電子發票按重開，另外處理。 */
+  if(!(Number(r.amt)>0) || r.lot) return '';
+  return `<span class="rev-noinv" title="這一筆沒有開立電子發票">沒開發票</span>`;
 }
 /* 顯示／隱藏。只有「已付款」才畫 —— 沒收到錢不能開發票。 */
 /* 2026-09-15 使用者定案：「開發票這個功能只要有收款都要出現喔　現在的情況是有些散客
@@ -14015,8 +14032,10 @@ async function invSync(opt){
     const _m=(_list||[]).find(x=>x&&x.id===_mid)||{};
     window._invMemEmail  =_m.email||'';
     window._invMemCarrier=_m.invoice_carrier||'';
-    window._invMemUbn    =_m.invoice_ubn||'';
-    window._invMemTitle  =_m.invoice_title||''; }
+    /* ⚠ 2026-09-15：統編與抬頭不從會員資料帶入（使用者：「每次手動輸入」）。
+       留著這兩個變數是為了不動其他讀它的地方，但值固定為空。 */
+    window._invMemUbn    ='';
+    window._invMemTitle  =''; }
   /* 發票服務沒開（stage／金鑰未設）→ 開／不開那組開關沒得選，整組藏起來；
      但買受人欄位**照樣顯示**，櫃檯繼續收 Email／載具／統編，值會寫回會員資料。
      ⚠ 不呼叫 invSetOn(0) —— 那會連同欄位一起收起來，就又沒得填了。 */
@@ -14037,7 +14056,9 @@ async function invSync(opt){
         → invReadFields 以 k='ubn' 去讀不存在的 #inv-ubn（空）
         → invCheckFields 擋「統一編號要 8 碼數字」，而畫面上根本沒有統編欄可填。
         統編現在住在「寄信箱」那一格，所以要切 'mail'。 */
-  if(!w.dataset.mode) invPick(window._invMemUbn?'mail':'carrier');
+  /* 預設哪一格：有載具就「存載具」，否則「寄信箱」。
+     ⚠ 2026-09-15：不再用統編判斷（統編已不存會員資料，永遠是空的）。 */
+  if(!w.dataset.mode) invPick(window._invMemCarrier?'carrier':'mail');
   /* 開窗當下就把關一次（2026-09-15）：沒填齊的話送出鈕一開始就是暗的，
      不必等櫃檯先打一個字才生效。 */
   invGateSync();
@@ -22568,7 +22589,8 @@ PAGES.g_dashboard=async function(){
     });
     return Object.keys(_seen)
       .map(id=>memMap[id]).filter(m=>m&&m.status==='active')
-      .filter(m=>!((m.email||'').trim()||(m.invoice_carrier||'').trim()||(m.invoice_ubn||'').trim()))
+      /* ⚠ 2026-09-15：判準只看 Email 與載具 —— 統編已不存會員資料（每次手動輸入）。 */
+      .filter(m=>!((m.email||'').trim()||(m.invoice_carrier||'').trim()))
       .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'))
       .map(m=>({id:m.id,name:m.name,sub:'還沒有 Email／載具／統編'}));
   })();
@@ -46398,7 +46420,7 @@ function ppHeaderHtml(){
      改成：發票這列只講**買受人身份**（統編／載具），email 自己獨立一列。 */
   const carrierItem = isM ? (()=>{
     const _b=[];
-    if(r.invoice_ubn) _b.push('統編 '+r.invoice_ubn);
+    /* ⚠ 2026-09-15：統編不再存會員資料，這一列只講載具與寄送信箱。 */
     if(r.invoice_carrier) _b.push(r.invoice_carrier);
     const _v=_b.join('・');
     return `<div class="pp-meta-i${_canBG?' pp-f-click':''}"${_canBG?` onclick="ppCarrierEdit(event)"`:''}><span class="pp-meta-l">發票</span><span class="pp-meta-v">${_v||'<span style="color:var(--t3);">'+(_canBG?'＋ 設定':'未填')+'</span>'}</span></div>`;
@@ -46757,8 +46779,10 @@ function invPrefModal(mid, after){
       <div class="form-row"><label>Email</label><input id="ip-email" type="email" value="${q(r.email)}" placeholder="name@example.com"></div>
       <div class="form-row"><label>手機條碼</label><input id="ip-car" value="${q(r.invoice_carrier)}" placeholder="/ABC1234" maxlength="8" style="text-transform:uppercase;"></div>
       <div style="font-size:11.5px;color:var(--t3);margin:-2px 0 12px;line-height:1.65;">有手機條碼就存你自己的載具；沒有就用 Email，發票存綠界載具並寄信給你。</div>
-      <div class="form-row"><label>統一編號（公司行號才填）</label><input id="ip-ubn" value="${q(r.invoice_ubn)}" placeholder="8 碼數字" maxlength="8"></div>
-      <div class="form-row"><label>公司抬頭</label><input id="ip-title" value="${q(r.invoice_title)}" placeholder="打統編才需要"></div>
+      ${/* ⚠ 2026-09-15 使用者定案：「統編應該要每次手動輸入」「不用存在會員資料裡面」——
+           統編與抬頭那兩格從會員資料頁**移除**。同一個人這次開公司、下次開個人，
+           存起來自動帶入反而容易誤開成公司發票。
+           收款畫面仍然有這兩格，只是每次都要重打、不會記住。 */''}
       <div class="modal-foot">
         <button class="btn btn-ghost" onclick="closeModal()">取消</button>
         <button class="btn btn-green" onclick="invPrefSave()">儲存</button>
@@ -46767,10 +46791,10 @@ function invPrefModal(mid, after){
 }
 async function invPrefSave(){
   const g=id=>((document.getElementById(id)||{}).value||'').trim();
-  const email=g('ip-email'), car=g('ip-car').toUpperCase(), ubn=g('ip-ubn'), title=g('ip-title');
+  /* ⚠ 2026-09-15：統編與抬頭已從這個視窗移除（使用者：「不用存在會員資料裡面」）。 */
+  const email=g('ip-email'), car=g('ip-car').toUpperCase();
   if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){ showToast('Email 格式不正確'); return; }
   if(car && !/^\/[0-9A-Z+.\-]{7}$/.test(car)){ showToast('載具格式不正確：斜線開頭共 8 碼（數字、大寫英文、+ - .）'); return; }
-  if(ubn && !/^\d{8}$/.test(ubn)){ showToast('統一編號要 8 碼數字'); return; }
   /* ⚠ 2026-09-15：抬頭改選填，與收款畫面同一套標準（見 invCheckFields）——
      綠界 B2C 的 CustomerName 只有 Print=1 才必填，我們走 Print=0＋載具。
      兩邊標準不一致的話，會員資料頁存得下、收款卻被擋，櫃檯會以為系統壞了。 */
@@ -46778,7 +46802,7 @@ async function invPrefSave(){
   try{
     const rec=await dbGet('members', window._invPrefMid);
     rec.email=email||null; rec.invoice_carrier=car||null;
-    rec.invoice_ubn=ubn||null; rec.invoice_title=title||null;
+    /* ⚠ 2026-09-15：不再寫 invoice_ubn／invoice_title（每次手動輸入，不記住）。 */
     await dbPut('members',rec);
     if(String(PP.id)===String(window._invPrefMid)) PP.rec=rec;
     /* 會員自己改的話順手更新首頁那份快取，否則提醒卡要等下次整頁重載才會消失 */
@@ -47430,7 +47454,7 @@ function ppRecordHtml(){
       /* 按鈕上的筆數（2026-08-20 加、同日移除）：使用者看過實機後決定不要，
          分頁標題本來就帶數字（例：預約紀錄（49）），按鈕列保持乾淨。 */
       const back=_m2
-        ? `<div class="pp-rectabs">${[['tickets','票券'],['bookings','預約紀錄'],['pay','交易'],['training','訓練紀錄']]
+        ? `<div class="pp-rectabs">${[['tickets','票券'],['bookings','預約紀錄'],['pay','交易'],['other','其他'],['training','訓練紀錄']]
             .map(([k,l])=>`<button class="pp-rectab${PP.recView===k?' active':''}" onclick="ppShowRecord('${k}')">${l}</button>`).join('')}</div>`
         : `<div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" onclick="ppRecordBack()">‹ 返回</button></div>`;
       const _st={usable:'可用',used_up:'已完成',expired:'已過期',refunded:'已退費'};   /* 2026-08-13 使用者指示改名 */
@@ -47762,6 +47786,43 @@ function ppRecordHtml(){
         return `<div class="pp-card">${back}<div class="pp-card-t">交易紀錄（${c.pcCount||0}）</div>
           ${sumBar}${rows?`<table class="mtk-table"><thead><tr><th>日期</th><th>項目</th><th style="text-align:right;">金額</th><th>方式</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="pp-card-tip">尚無交易</div>'}</div>`;
       }
+      /* 其他消費（2026-09-15 使用者：「會員如果買課程以外的商品 目前是不是沒有可以查看的地方
+         幫我新增一個其他在會員資料這邊」）——
+         商品／自主訓練票券／票券重啟，原本混在「交易」那一長串裡看不出來。
+         ⚠ 版型沿用「交易」那一頁：桌機表格、管理員手機一列一張卡（同一個理由，
+           四欄表格在 390px 會把品項擠成兩三行）。
+         ⚠ 多一欄「發票」：這一頁最常被問的就是「那包蛋白粉有沒有開發票」。 */
+      if(PP.recView==='other'){
+        const _oAll=(c.myOther||[]).slice()
+          .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+        const _oSum=_oAll.reduce((s,p)=>s+(Number(p.deal_amount)||0),0);
+        const _oSrc={merchandise:'商品',facility_rental:'自主訓練',reactivate:'票券重啟'};
+        const _oPay=m=>({cash:'現金',transfer:'匯款',card:'刷卡',split:'現金+匯款'}[m]||m||'—');
+        const _oDt=p=>(p.created_at)?new Date(new Date(p.created_at).getTime()+8*3600000).toISOString().slice(0,10):'—';
+        const _oInv=p=>p.invoice_number
+          ? `<span class="rev-invno">${p.invoice_number}</span>`
+          : `<span class="rev-noinv">沒開發票</span>`;
+        const _oBar=_oAll.length?`<div style="display:flex;justify-content:space-between;align-items:baseline;background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:12px 16px;margin:2px 0 12px;">
+            <span style="font-size:12.5px;color:var(--t2);">累計消費（${_oAll.length} 筆）</span>
+            <b class="num" style="font-size:22px;color:var(--green);">$${_oSum.toLocaleString()}</b></div>`:'';
+        if(_m2){
+          const _rows=_oAll.map(p=>`<div class="pp-txrow">
+            <div class="pp-txmain"><div class="pp-txplan">${p.plan_name||'—'}</div>
+              <div class="pp-txsub">${_oDt(p).replace(/-/g,'/')}　·　${_oSrc[p.source]||p.source}　·　${_oPay(p.payment_method)}</div>
+              <div class="pp-txsub" style="margin-top:3px;">${_oInv(p)}</div></div>
+            <b class="pp-txamt">$${(Number(p.deal_amount)||0).toLocaleString()}</b></div>`).join('');
+          return `<div class="pp-card">${back}<div class="pp-card-t">其他消費（${c.otherCount||0}）</div>
+            ${_oBar}${_rows?`<div class="pp-txlist">${_rows}</div>`:'<div class="pp-card-tip">沒有課程以外的消費</div>'}</div>`;
+        }
+        const _trs=_oAll.map(p=>`<tr><td style="white-space:nowrap;">${_oDt(p)}</td>
+          <td>${p.plan_name||'—'}</td>
+          <td style="white-space:nowrap;">${_oSrc[p.source]||p.source}</td>
+          <td style="text-align:right;font-weight:700;color:var(--green);">$${(Number(p.deal_amount)||0).toLocaleString()}</td>
+          <td style="white-space:nowrap;">${_oPay(p.payment_method)}</td>
+          <td style="white-space:nowrap;">${_oInv(p)}</td></tr>`).join('');
+        return `<div class="pp-card">${back}<div class="pp-card-t">其他消費（${c.otherCount||0}）</div>
+          ${_oBar}${_trs?`<table class="mtk-table"><thead><tr><th>日期</th><th>品項</th><th>類別</th><th style="text-align:right;">金額</th><th>方式</th><th>發票</th></tr></thead><tbody>${_trs}</tbody></table>`:'<div class="pp-card-tip">沒有課程以外的消費</div>'}</div>`;
+      }
       /* 2026-09-09：這一頁原本是「功能開發中」的空頁（入口 0822 因此收起來）。
          資料一直都在（training_logs），只是沒人把它畫出來 —— Phase 3 一併補上。 */
       {
@@ -47789,6 +47850,11 @@ function ppRecordHtml(){
           (c.bkCount!=null?`${c.bkCount}<small>筆</small>`:''), '歷史與未來預約', `ppShowRecord('bookings')`)}
         ${ppDashRow('money','交易',
           (c.pcCount!=null?`${c.pcCount}<small>筆</small>`:''), '付款／退款／發票', `ppShowRecord('pay')`)}
+        ${/* 其他（2026-09-15 使用者：「會員如果買課程以外的商品 目前是不是沒有可以查看的地方」）——
+             商品／自主訓練票券／票券重啟這些非課程消費，原本混在「交易」那一長串裡看不出來。
+             ⚠ 資料早就在 c.myPc（那支沒有 source 過濾），這裡只是換個角度看，不另外撈表。 */''}
+        ${ppDashRow('card','其他',
+          (c.otherCount!=null?`${c.otherCount}<small>筆</small>`:''), '商品／自主訓練票券／票券重啟', `ppShowRecord('other')`)}
         ${/* 「訓練紀錄」還是「功能開發中」的空頁（2026-08-22 收起入口）——
              點進去只會看到一句敬請期待，等於一條死路。ppShowRecord('training') 與那一頁
              的程式碼都留著，功能做好後把這一行放回來就可以。 */''}
@@ -48730,6 +48796,13 @@ async function ppLoadCtx(){
       .map(t=>({created_at:(t.purchase_date||'')+'T04:00:00Z', plan_name:t.plan_name,
         deal_amount:Number(t.amount_paid)||0, payment_method:'imported'}));
     c.pcCount=c.myPc.length+c.myImpTx.length;
+    /* 其他消費（2026-09-15）：課程以外的 —— 商品、自主訓練票券、票券重啟。
+       ⚠ 不另外撈表：c.myPc 本來就是這位會員的全部 purchases（沒有 source 過濾）。
+       ⚠ $0 的不算（抽獎登記那種），那不是消費。 */
+    c.myOther=(c.myPc||[]).filter(p=>p
+      && ['merchandise','facility_rental','reactivate'].indexOf(p.source)>=0
+      && (Number(p.deal_amount)||0)>0);
+    c.otherCount=c.myOther.length;
     // 行內展開用明細（2026-07-27：活動紀錄不再開新視窗）
     c.myTk=myTk; c.myBk=myBk; c.myLogs=tkLogs||[];
     /* 訓練紀錄（2026-09-09 Phase 3）：那一頁原本是空的，資料一直都在。
@@ -50122,8 +50195,7 @@ async function submitFacilityTicketSale(){
         const _u={};
         if(_inv.email      && !((_fm.email||'').trim()))           _u.email          =_inv.email;
         if(_inv.carrierNum && !((_fm.invoice_carrier||'').trim())) _u.invoice_carrier=_inv.carrierNum;
-        if(_inv.ubn        && !((_fm.invoice_ubn||'').trim()))     _u.invoice_ubn    =_inv.ubn;
-        if(_inv.title      && !((_fm.invoice_title||'').trim()))   _u.invoice_title  =_inv.title;
+        /* ⚠ 2026-09-15：統編／抬頭不寫回會員（使用者：「每次手動輸入」）。 */
         if(Object.keys(_u).length){
           try{ await dbPut('members', Object.assign({}, _fm, _u)); dbCacheClear(['members']); }catch(_){}
         }
@@ -50269,8 +50341,7 @@ async function submitMerchSale(){
         const _u={};
         if(_inv.email      && !((_mem.email||'').trim()))           _u.email          =_inv.email;
         if(_inv.carrierNum && !((_mem.invoice_carrier||'').trim())) _u.invoice_carrier=_inv.carrierNum;
-        if(_inv.ubn        && !((_mem.invoice_ubn||'').trim()))     _u.invoice_ubn    =_inv.ubn;
-        if(_inv.title      && !((_mem.invoice_title||'').trim()))   _u.invoice_title  =_inv.title;
+        /* ⚠ 2026-09-15：統編／抬頭不寫回會員（使用者：「每次手動輸入」）。 */
         if(Object.keys(_u).length){
           try{ await dbPut('members', Object.assign({}, _mem, _u)); dbCacheClear(['members']); }catch(_){}
         }
@@ -52949,8 +53020,7 @@ async function _grantIssue(P){
           const _u={};
           if(P.inv.email      && !((_me.email||'').trim()))           _u.email          =P.inv.email;
           if(P.inv.carrierNum && !((_me.invoice_carrier||'').trim())) _u.invoice_carrier=P.inv.carrierNum;
-          if(P.inv.ubn        && !((_me.invoice_ubn||'').trim()))     _u.invoice_ubn    =P.inv.ubn;
-          if(P.inv.title      && !((_me.invoice_title||'').trim()))   _u.invoice_title  =P.inv.title;
+          /* ⚠ 2026-09-15：統編／抬頭不寫回會員（使用者：「每次手動輸入」）。 */
           if(Object.keys(_u).length){
             await dbPut('members', Object.assign({}, _me, _u));
             dbCacheClear(['members']);
@@ -54374,8 +54444,7 @@ async function _confirmInstallNext(ticket_id){
         const _u={};
         if(_inv.email      && !((_pm.email||'').trim()))           _u.email          =_inv.email;
         if(_inv.carrierNum && !((_pm.invoice_carrier||'').trim())) _u.invoice_carrier=_inv.carrierNum;
-        if(_inv.ubn        && !((_pm.invoice_ubn||'').trim()))     _u.invoice_ubn    =_inv.ubn;
-        if(_inv.title      && !((_pm.invoice_title||'').trim()))   _u.invoice_title  =_inv.title;
+        /* ⚠ 2026-09-15：統編／抬頭不寫回會員（使用者：「每次手動輸入」）。 */
         if(Object.keys(_u).length){
           try{ await dbPut('members', Object.assign({}, _pm, _u)); dbCacheClear(['members']); }catch(_){}
         }
@@ -58364,7 +58433,8 @@ function memh2WeekShift(d){
 function memh2InvPrefCard(){
   const me=window._meMember||{};
   if(!me.id) return '';
-  if((me.invoice_carrier||'').trim() || (me.email||'').trim() || (me.invoice_ubn||'').trim()) return '';
+  /* ⚠ 2026-09-15：判準只看載具與 Email —— 統編已不存會員資料（每次手動輸入）。 */
+  if((me.invoice_carrier||'').trim() || (me.email||'').trim()) return '';
   return `<div class="mh2-invpref" onclick="invPrefModal('${me.id}', ()=>navTo('mem_bookings'))">
     <div class="mh2-invpref-t">還沒設定發票怎麼給你</div>
     <div class="mh2-invpref-s">填 Email 或手機條碼，發票才寄得到你手上・中獎憑通知到超商列印</div>

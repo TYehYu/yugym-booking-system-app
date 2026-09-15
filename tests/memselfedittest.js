@@ -53,17 +53,27 @@ ok('★★ 舊入口保留成薄包裝（那一列的 onclick 一個字沒改）
   const f=grabFn('invPrefSave');
   ok('★ 寫回 members.invoice_carrier（留空＝清除）', /rec\.invoice_carrier=car\|\|null;/.test(f));
   ok('★ 存前轉大寫＋驗格式', /g\('ip-car'\)\.toUpperCase\(\)/.test(f) && /\^\\\/\[0-9A-Z\+\.\\-\]\{7\}\$/.test(f));
-  ok('★★ Email 與統編抬頭也一起存（0914 新增，開統編的客人不必每次重打）',
+  /* ⚠ 2026-09-15 使用者定案：「統編應該要每次手動輸入」「不用存在會員資料裡面」——
+     這推翻 0914 的「開統編的客人存進會員資料自動帶入」。
+     理由：同一個人這次開公司、下次開個人，自動帶出來反而容易誤開成公司發票。
+     ⚠ Email 與載具照舊存（那是固定的通知管道，不會每次變）。 */
+  ok('★★★ Email 與載具照存，統編／抬頭**不存**',
      /rec\.email=email\|\|null;/.test(f)
-     && /rec\.invoice_ubn=ubn\|\|null;/.test(f)
-     && /rec\.invoice_title=title\|\|null;/.test(f));
+     && /rec\.invoice_carrier=car\|\|null;/.test(f)
+     && !/rec\.invoice_ubn=/.test(f)
+     && !/rec\.invoice_title=/.test(f));
+  ok('★★★ 會員資料頁不再有統編／抬頭欄位',
+     !/id="ip-ubn"/.test(src) && !/id="ip-title"/.test(src));
   ok('★★★ 三選一必填：Email 或手機條碼至少一項（沒有通知管道的發票等於沒開）',
      /if\(!email && !car\)\{ showToast\('Email 或手機條碼至少填一項'\); return; \}/.test(f));
   /* ⚠ 2026-09-15：抬頭改選填，與收款畫面同一套標準 ——
      綠界 B2C 的 CustomerName 只有 Print=1 才必填，我們走 Print=0＋載具。
      兩邊標準不一致的話，會員資料頁存得下、收款卻被擋，櫃檯會以為系統壞了。 */
   ok('★★★ 抬頭不強制（與 invCheckFields 同一套標準）', !/if\(ubn && !title\)/.test(f));
-  ok('★★ 但統編格式仍要驗', /if\(ubn && !\/\^\\d\{8\}\$\/\.test\(ubn\)\)/.test(f));
+  /* 統編已不在這個視窗裡，所以這裡不再驗它 —— 收款畫面那一格仍有 8 碼驗證（invCheckFields）。 */
+  ok('★★ 統編的格式驗證移到收款畫面（這裡不再有）',
+     !/if\(ubn && !\/\^\\d\{8\}\$\/\.test\(ubn\)\)/.test(f)
+     && /if\(!\/\^\\d\{8\}\$\/\.test\(f\.ubn\|\|''\)\) return '統一編號要 8 碼數字';/.test(src));
   ok('★★ 權限仍是「櫃檯以上或會員本人」',
      /const isSelf = !!\(SESSION && SESSION\.role==='member' && String\(SESSION\.id\)===String\(mid\)\);/.test(src)
      && /if\(!\(canEditMemberData\(\)\|\|isSelf\)\)\{ showToast\('修改會員資料需要櫃檯以上權限'\); return; \}/.test(src));
