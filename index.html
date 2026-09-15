@@ -3966,6 +3966,9 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .ae-set-field{display:flex;align-items:center;gap:5px;background:#fff;border:1px solid var(--bd);border-radius:9px;padding:0 10px;flex:1;}
 .ae-set-in{flex:1;border:none;outline:none;padding:12px 0;font-size:18px;font-family:var(--num);font-weight:700;color:var(--green);background:transparent;width:100%;min-width:0;}
 .ae-set-field span{font-size:12px;color:var(--t3);}
+/* 重量單位切換（2026-09-15）：整張表單一個單位，擺在組別列下方靠右 */
+.ae-unit-row{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:10px;}
+.ae-unit-lb{font-size:12px;color:var(--t3);}
 .ae-add-set{width:100%;background:#e3efe9;border:1px solid var(--green);border-radius:10px;padding:12px;color:var(--green);font-weight:700;font-family:inherit;font-size:14px;cursor:pointer;margin-top:8px;}
 .ae-add-note{width:100%;background:var(--card2);border:1px dashed var(--bd);border-radius:10px;padding:11px;color:var(--t2);font-weight:600;font-family:inherit;font-size:13px;cursor:pointer;}
 .ae-note{width:100%;min-height:70px;padding:12px;border:1px solid var(--bd);border-radius:11px;background:#fff;font-family:inherit;font-size:14px;box-sizing:border-box;resize:vertical;}
@@ -13146,8 +13149,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1659';
-const APP_VERSION_LABEL = 'v260915.1659';
+const APP_VERSION = '260915.1739';
+const APP_VERSION_LABEL = 'v260915.1739';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -62072,8 +62075,12 @@ async function _tleSave(){
 //   第一頁：訓練部位＋動作選擇／使用工具＋使用姿勢
 //   第二頁：逐組記錄 次數＋重量，可 ＋ 加組，下方儲存
 async function tlStartAddExercise(){
+  /* unit（2026-09-15 使用者：「重量只有kg可以設定 沒有lb」）——
+     ⚠ 整張表單共用一個單位，不做成每組各選：同一個動作不會這組 kg、下一組 lb，
+       而且 sets_detail 的 JSON 結構要是加了 unit，tlLogNums 那條
+       「舊資料沒有單位欄一律當 kg」的退路就會被破壞。單位只存在 weight_unit 欄位。 */
   window._tlState={page:1, body_part:null, exercise_name:'', posture:null, tool:null, _tpOpen:false,
-    sets:[{reps:'',weight:''}]};
+    unit:'kg', sets:[{reps:'',weight:''}]};
   renderAddExerciseSheet();                       // 先開視窗，清單非同步補上（現場等不得）
   try{ await tlLoadQuickEx(); }catch(_){}
   if(window._tlState && window._tlState.page===1) tlQuickFilter();
@@ -62118,7 +62125,11 @@ function tlQuickHtml(){
 function tlQuickFilter(){ const box=document.getElementById('ae-pre-box'); if(box) box.innerHTML=tlQuickHtml(); }
 /* 上次那一筆攤成一組一組的預填：逐組明細優先，只有「組×次×重量」的就展開成同樣幾組。
    ⚠ 最後一組是可編輯的當前組（第二頁的規矩），所以不另外補空白組 —— 直接按儲存就是照上次的組數。
-   ⚠ 磅（lb）不帶重量：第二頁的輸入框寫死 kg，帶進去會變成把 100lb 記成 100kg。 */
+   ⚠ 2026-09-15：磅（lb）**現在會帶重量了**。原本刻意不帶，理由是「第二頁的輸入框寫死 kg，
+     帶進去會變成把 100lb 記成 100kg」—— 那個前提已經拿掉（第二頁可以切 kg／lb），
+     改由 tlPickQuick 把上次那筆的單位一起帶回 st.unit，數字與單位才會成對。
+   ⚠ sets_detail 裡的數字沒有自己的單位，它與同一筆的 weight_unit 是一起寫的；
+     舊資料 weight_unit 是 null，wpUnitOf 會落回 kg（當時畫面就寫死 kg），對得上。 */
 function tlSetsFromLog(L){
   if(!L) return [];
   if(L.sets_detail){ try{ const a=JSON.parse(L.sets_detail);
@@ -62126,7 +62137,7 @@ function tlSetsFromLog(L){
   }catch(_){} }
   const n=Math.max(1,Math.min(12,Number(L.sets)||1));
   const reps=(L.reps==null)?'':String(L.reps);
-  const w=(L.weight==null||!isFinite(Number(L.weight))||(L.weight_unit&&L.weight_unit!=='kg'))?'':String(L.weight);
+  const w=(L.weight==null||!isFinite(Number(L.weight)))?'':String(L.weight);
   return Array.from({length:n},()=>({reps,weight:w}));
 }
 function tlPickQuick(name){
@@ -62137,6 +62148,10 @@ function tlPickQuick(name){
   st.exercise_name=name;
   st.tool=(e&&e.tool)||null; st.posture=(e&&e.posture)||null;
   st.sets=sets.length?sets:[{reps:'',weight:''}];
+  /* 單位跟著上次那筆一起帶（2026-09-15）—— 數字與單位一定要成對，
+     否則上次用 lb 記的 100，帶進來會被當成 100 kg（差一倍多）。
+     沒有上次紀錄時維持目前選的單位，不要硬改回 kg。 */
+  if(L) st.unit=wpUnitOf(L.weight_unit);
   st._lastDate=(sets.length&&L)?String(L.created_at||'').slice(5,10).replace('-','/'):'';
   st.page=2; renderAddExerciseSheet();
 }
@@ -62186,9 +62201,11 @@ async function renderAddExerciseSheet(){
     // 第二頁：已完成的組顯示為摘要，最後一組為輸入；按「＋新增一組」定下當前組再開新組
     const done = st.sets.slice(0, st.sets.length-1); // 已定下的組
     const cur = st.sets[st.sets.length-1];           // 當前輸入組
+    const _u=wpUnitOf(st.unit);
+    /* 單位不再寫死 kg（2026-09-15）——已完成的組也要顯示當下選的單位 */
     const doneHtml=done.map((s,i)=>`<div class="ae-set-done">
       <div class="ae-set-no done">${i+1}</div>
-      <div class="ae-set-val">${s.reps||'-'} 次　×　${s.weight||'-'} kg</div>
+      <div class="ae-set-val">${s.reps||'-'} 次　×　${s.weight||'-'} ${_u}</div>
       <button class="ae-set-del" onclick="tlDelSet(${i})">✕</button>
     </div>`).join('');
     const curNo=done.length+1;
@@ -62196,8 +62213,15 @@ async function renderAddExerciseSheet(){
       <div class="ae-set-no">${curNo}</div>
       <div class="ae-cur-fields">
         <div class="ae-set-field"><input type="number" inputmode="numeric" id="ae-cur-reps" class="ae-set-in" placeholder="次數" value="${cur.reps}"><span>次</span></div>
-        <div class="ae-set-field"><input type="number" inputmode="decimal" id="ae-cur-weight" class="ae-set-in" placeholder="重量" value="${cur.weight}"><span>kg</span></div>
+        <div class="ae-set-field"><input type="number" inputmode="decimal" id="ae-cur-weight" class="ae-set-in" placeholder="重量" value="${cur.weight}"><span>${_u}</span></div>
       </div>
+    </div>
+    ${/* 單位切換（2026-09-15 使用者：「重量只有kg可以設定 沒有lb」）——
+         沿用「修改紀錄」視窗那組 .wpe-unit／.wpe-u，不另做一套樣式。
+         整張表單共用一個單位，所以放在組別列下方、不跟著每一組跑。 */''}
+    <div class="ae-unit-row">
+      <span class="ae-unit-lb">重量單位</span>
+      <div class="wpe-unit">${WP_UNITS.map(x=>`<button type="button" class="wpe-u${_u===x?' on':''}" onclick="tlUnit('${x}')">${x}</button>`).join('')}</div>
     </div>`;
     const noteBlock = st._noteOpen
       ? `<textarea id="ae-note" class="ae-note" placeholder="輸入備註…">${st.note||''}</textarea>`
@@ -62261,6 +62285,16 @@ function tlAddSet(){
   renderAddExerciseSheet();
 }
 function tlDelSet(i){ tlReadCur(); window._tlState.sets.splice(i,1); if(window._tlState.sets.length===0)window._tlState.sets.push({reps:'',weight:''}); renderAddExerciseSheet(); }
+/* 切換 kg／lb（2026-09-15）——比照「修改紀錄」那支 tleUnit 的做法。
+   ⚠ 只換單位、不換算數字：教練是看著器材上的刻度在記，40 lb 的器材就填 40。
+     真要比較訓練量時由 tlVolume 用 TL_LB2KG 換算，那是讀取端的事。
+   ⚠ 切換前先把當前輸入框的值收回 state，否則重繪會把還沒存的那一組洗掉。 */
+function tlUnit(u){
+  const st=window._tlState; if(!st) return;
+  tlReadCur();
+  st.unit=wpUnitOf(u);
+  renderAddExerciseSheet();
+}
 function tlOpenNote(){ tlReadCur(); window._tlState._noteOpen=true; renderAddExerciseSheet(); }
 
 async function tlSaveExercise(){
@@ -62269,7 +62303,8 @@ async function tlSaveExercise(){
   // 整理有效組（至少填了次數或重量的組）
   const valid=st.sets.filter(s=>s.reps!==''||s.weight!=='');
   if(valid.length===0){ showToast('請至少記錄一組的次數或重量'); return; }
-  const setsText=valid.map(s=>`${s.reps||'-'}次${s.weight?'×'+s.weight+'kg':''}`).join('、');
+  const _su=wpUnitOf(st.unit);
+  const setsText=valid.map(s=>`${s.reps||'-'}次${s.weight?'×'+s.weight+_su:''}`).join('、');
   const repsFirst=valid[0].reps!==''?parseInt(valid[0].reps,10):null;
   const log={
     id:uid('TLOG'), booking_id:b.id, member_id:b.member_id, coach_id:SESSION.id,
@@ -62279,8 +62314,10 @@ async function tlSaveExercise(){
        ⚠ 不是為了顯示（顯示優先吃逐組明細），是為了讓「沿用上次的數字」兩條路讀得到同一個地方。 */
     weight:(function(){ const w=valid.map(x=>Number(x.weight)).filter(n=>isFinite(n)&&n>0);
       return w.length?Math.max.apply(null,w):null; })(),
+    /* 2026-09-15：改讀表單當下選的單位（原本寫死 kg，所以逐組記錄那條路記不住 lb）。
+       ⚠ 沒有任何重量時仍存 null —— 徒手訓練不該帶單位。 */
     weight_unit:(function(){ const w=valid.map(x=>Number(x.weight)).filter(n=>isFinite(n)&&n>0);
-      return w.length?'kg':null; })(),   /* 逐組那一頁的輸入框寫死 kg */
+      return w.length?_su:null; })(),
     sets_detail:JSON.stringify(valid),    // 多組明細（次數+重量）
     note:(st.note||'') + (setsText?(st.note?'　':'')+'['+setsText+']':''),
     created_at:new Date().toISOString()

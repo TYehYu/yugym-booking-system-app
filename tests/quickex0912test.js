@@ -20,13 +20,66 @@ eq('★★★ 逐組明細照抄（三組不同重量）',
 eq('★★★ 只有「組×次×重量」的（套方案來的）展開成同樣幾組',
    tlSetsFromLog({sets:3,reps:10,weight:60,weight_unit:'kg'}),
    [{reps:'10',weight:'60'},{reps:'10',weight:'60'},{reps:'10',weight:'60'}]);
-eq('★★★ 磅不帶重量（第二頁的輸入框寫死 kg，帶進去會把 100lb 記成 100kg）',
-   tlSetsFromLog({sets:1,reps:10,weight:100,weight_unit:'lb'}), [{reps:'10',weight:''}]);
+/* ⚠ 2026-09-15 反轉（使用者：「重量只有kg可以設定 沒有lb」）——
+   原本磅刻意不帶重量，理由是「第二頁的輸入框寫死 kg，帶進去會把 100lb 記成 100kg」。
+   第二頁現在可以切 kg／lb 了，那個前提消滅，所以磅要照樣帶回來；
+   安全鎖改由 tlPickQuick 負責：把上次那筆的單位一起帶回 st.unit，數字與單位成對。 */
+eq('★★★ 磅照樣帶重量（第二頁已可切單位，不再需要丟掉數字）',
+   tlSetsFromLog({sets:1,reps:10,weight:100,weight_unit:'lb'}), [{reps:'10',weight:'100'}]);
 eq('★★ 徒手（沒重量）照樣帶組數次數', tlSetsFromLog({sets:2,reps:12}), [{reps:'12',weight:''},{reps:'12',weight:''}]);
 eq('★ 沒有上次 → 空陣列（呼叫端才會給一組空白）', tlSetsFromLog(null), []);
 
+console.log('\n①-2 重量單位 kg／lb（2026-09-15 使用者：「重量只有kg可以設定 沒有lb」）');
+/* 系統本來就支援 lb（WP_UNITS／WP_STEPS／TL_LB2KG／wpUnitOf、資料庫也有 lb 紀錄），
+   缺的只有「新增動作」第二頁這一條路 —— 四處寫死 kg：已完成組摘要、當前輸入框、
+   備註字串、存檔的 weight_unit。 */
+{
+  const S=src;
+  ok('★★★ 第二頁有單位切換鈕（沿用 .wpe-unit／.wpe-u，不另做一套）',
+     /<div class="ae-unit-row">/.test(S)
+     && /onclick="tlUnit\('\$\{x\}'\)"/.test(S)
+     && /function tlUnit\(u\)\{/.test(S));
+  ok('★★★ 四處不再寫死 kg：摘要／輸入框／備註／存檔',
+     /\$\{s\.weight\|\|'-'\} \$\{_u\}<\/div>/.test(S)          /* 已完成組摘要 */
+     && /value="\$\{cur\.weight\}"><span>\$\{_u\}<\/span>/.test(S)  /* 當前輸入框 */
+     && /'×'\+s\.weight\+_su/.test(S)                          /* 備註字串 */
+     && /return w\.length\?_su:null;/.test(S));                /* 存檔的 weight_unit */
+  ok('★★ 表單狀態帶 unit，預設 kg', /unit:'kg', sets:\[\{reps:'',weight:''\}\]\}/.test(S));
+  ok('★★★ 切單位前先收回當前輸入（否則重繪會洗掉還沒存的那一組）',
+     /function tlUnit\(u\)\{[\s\S]{0,200}?tlReadCur\(\);[\s\S]{0,120}?st\.unit=wpUnitOf\(u\);/.test(S));
+  ok('★★ 只換單位不換算數字（教練照器材刻度記；比較訓練量時才用 TL_LB2KG 換算）',
+     /只換單位、不換算數字/.test(S));
+  /* ⚠ sets_detail 的 JSON 結構刻意不動：tlLogNums 有一條「舊資料沒有單位欄，
+     一律當 kg」的退路，加了 unit 欄位會把它破壞掉。單位只存在 weight_unit。 */
+  ok('★★★ sets_detail 結構沒被動（單位只存 weight_unit 欄位）',
+     /sets_detail:JSON\.stringify\(valid\)/.test(S)
+     && !/weight:s\.weight,\s*unit:/.test(S));
+}
+
+console.log('\n①-3 帶入上次紀錄時，數字與單位要成對');
+{
+  const W={_tlState:{page:1,exercise_name:'',tool:null,posture:null,unit:'kg',sets:[{reps:'',weight:''}]},
+    _tlQuickEx:[{name:'臥推',tool:'槓鈴',posture:'臥姿'}],
+    _tlLastByEx:{'臥推':{sets:2,reps:10,weight:100,weight_unit:'lb',created_at:'2026-09-11T10:00:00.000Z'}}};
+  /* ⚠ wpUnitOf 內部要用 WP_UNITS 這個常數，抽函式進沙盒時要把它一起餵進來，
+     否則是 ReferenceError（第一版就漏了）。 */
+  const pick=new Function('window','renderAddExerciseSheet','WP_UNITS',
+    fnBody('wpUnitOf')+'\n'+fnBody('tlSetsFromLog')+'\n'+fnBody('tlPickQuick')+'\nreturn tlPickQuick;')(W,()=>{},['kg','lb']);
+  pick('臥推');
+  eq('★★★ 上次用 lb → 重量與單位一起帶回（不會把 100lb 當成 100kg）',
+     [W._tlState.sets[0].weight, W._tlState.unit], ['100','lb']);
+  /* 沒有上次紀錄時不要硬改回 kg —— 教練可能剛切到 lb 正要輸入 */
+  W._tlState.unit='lb';
+  pick('沒做過的動作');
+  eq('★★ 沒有上次紀錄 → 維持目前選的單位', W._tlState.unit, 'lb');
+}
+
 console.log('\n② 點常用動作：帶名稱、工具姿勢、上次的數字，直接進記錄頁');
-const env=new Function('window','renderAddExerciseSheet', fnBody('tlSetsFromLog')+'\n'+fnBody('tlPickQuick')+'\nreturn tlPickQuick;');
+/* ⚠ 2026-09-15：tlPickQuick 多了一個依賴 —— 它現在會呼叫 wpUnitOf 把上次那筆的單位
+   帶回 st.unit（數字與單位要成對）。抽它進沙盒的地方都要一起餵 wpUnitOf 與 WP_UNITS，
+   否則 ReferenceError。全專案只有這裡與 ①-3 兩處抽它。 */
+const env=(w,paint)=>new Function('window','renderAddExerciseSheet','WP_UNITS',
+  fnBody('wpUnitOf')+'\n'+fnBody('tlSetsFromLog')+'\n'+fnBody('tlPickQuick')+'\nreturn tlPickQuick;')(w,paint,['kg','lb']);
 const W={_tlState:{page:1,exercise_name:'',tool:null,posture:null,sets:[{reps:'',weight:''}]},
   _tlQuickEx:[{name:'保加利亞分腿蹲',tool:'啞鈴',posture:'站姿'}],
   _tlLastByEx:{'保加利亞分腿蹲':{sets:3,reps:10,weight:20,weight_unit:'kg',created_at:'2026-09-04T10:00:00.000Z'}}};
