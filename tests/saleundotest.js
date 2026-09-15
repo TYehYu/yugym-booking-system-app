@@ -46,8 +46,14 @@ console.log('\n② 按鈕在今日營收名單上');
      /↩ 退回<\/button>/.test(F) && !/\$\{left\}′/.test(F));
   ok('★ 票券與純收款兩種都認（場租／商品／重啟）',
      /const ref=r\.tk\?\('tk:'\+r\.tk\):\(r\.pur\?\('pur:'\+r\.pur\):''\);/.test(F));
-  ok('★★ 首頁右欄名單卡與今日營收彈窗都有',
-     (src.match(/\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}/g)||[]).length===2);
+  /* 2026-09-15 使用者：「營收明細退回的按鈕可以改在發票左邊　這樣就不會多一列了」——
+     退回鈕從右側直欄（.mc-rev-r）搬到姓名那一行，排在發票標記左邊。
+     ⚠ 兩份不對稱：首頁版姓名那行是「姓名＋退回＋發票」，彈窗版沒有發票標記（只到退回）。
+       所以不能只用一條正則數兩處，兩邊各釘各的。 */
+  ok('★★ 首頁右欄名單卡與今日營收彈窗都有（0915 起放在姓名那一行）',
+     (src.match(/<\/span>\$\{revUndoChip\(r\)\}/g)||[]).length===2
+     && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revUndoChip\(r\)\}\$\{revInvChip\(r\)\}<\/div>/.test(src)
+     && /<div class="rv-r1"><span class="mc-rev-nm">\$\{esc\(r\.nm\)\}<\/span>\$\{revUndoChip\(r\)\}<\/div>/.test(src));
   ok('★ 列資料帶上建立時間（沒有它就算不出剩幾分鐘）',
      /at:t\.created_at\|\|null,   \/\/ 30 分鐘完整退回用（2026-08-08）/.test(src)
      && /pur:p\.id, at:p\.created_at\|\|null,   \/\/ 30 分鐘完整退回用（2026-08-08）/.test(src));

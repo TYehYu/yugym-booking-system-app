@@ -369,9 +369,15 @@ ok('　　歷史／過期區那張卡不動（那裡的已完成本來就成立�
 ok('★ 票券卡：狀態章（已完成／已過期／已退費）移到課程方案名稱右邊',
    src.includes("${tkNoTag(sl.no)}${t.plan_name||'票券'}${_m2?stTag:''}")
    && !/tkc-meta">\$\{tkBuyDateHtml\(t\)\}[^`]*\$\{stTag/.test(src));
-ok('★ 票券卡：金額改放右下角、就在作廢按鈕上方',
+/* 2026-09-15 使用者：「票券右下角的資訊跟按鈕會不會太擁擠　左下角有安排什麼內容嗎
+   還是可以把按鈕改到左下呢」——
+   這推翻 0820 的「金額放右下角、就在作廢按鈕上方」：當時是 column＋靠右，
+   金額與按鈕疊成兩層全擠在右下，左下角整片空著。改成左右分開（按鈕 order:-1 到左邊）。
+   ⚠ 金額仍然由 .tkc-money 畫、仍在這一列 —— 變的只是它與按鈕的相對位置。 */
+ok('★ 票券卡：按鈕移到左下、金額與發票留在右邊',
    /<span class="tkc-money">\$\{tkMoneyHtml\(t\)\.replace\(\/\^　·　\/,''\)\}<\/span>/.test(src)
-   && /\.tkc-foot\{flex-direction:column;align-items:flex-end/.test(src));
+   && /\.tkc-foot\{align-items:center !important;\}/.test(src)
+   && /\.tkc-foot>span:last-child\{order:-1;margin-left:0 !important;\}/.test(src));
 /* 2026-08-30：展延過的票，「效期至」顯示的是**原到期日**，展延後的日期跟在
    「教練展延」標籤後面（使用者：內容收斂，一行講完）。沒展延過的票原樣不變。 */
 ok('　　桌機與其他角色維持原本的單行底列',

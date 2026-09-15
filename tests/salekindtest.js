@@ -43,12 +43,14 @@ ok('★ 首頁右欄名單卡（約別標籤在列最左，沒有約別也佔住
       「魚先森三個字下面空白處好大」，成因是 .mc-rev-r 直向堆四個標記把列撐高。
       這條守的是「約別在列最左、由 revKindCell 統一畫」（上面兩項），
       第三項只是順帶釘住右側那格的排列，跟著更新。 */
-   && /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\$\{_fm\(r\.amt\)\}/.test(src)
-   /* 2026-09-15 二修：教練標籤搬到最左欄，姓名那行只剩姓名＋發票標記。 */
-   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revInvChip\(r\)\}<\/div>/.test(src));
+   && /<span class="mc-rev-r">\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\$\{_fm\(r\.amt\)\}/.test(src)
+   /* 2026-09-15 二修：教練標籤搬到最左欄，姓名那行只剩姓名＋發票標記。
+      2026-09-15 三修：退回鈕也搬上來了，排在發票左邊（使用者：「這樣就不會多一列了」），
+      所以右側那格只剩付款＋金額兩層。 */
+   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revUndoChip\(r\)\}\$\{revInvChip\(r\)\}<\/div>/.test(src));
 ok('★ 營收彈窗也走同一支（約別也在最左邊那一欄）',
    (src.match(/\$\{revKindCell\(r\)\}/g)||[]).length===2
-   && /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\{money\(r\.amt\)\}/.test(src));
+   && /<span class="mc-rev-r">\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\{money\(r\.amt\)\}/.test(src));
 ok('　　列上帶了票券 id，改的時候才知道改哪一張', /amt:_tkDayAmt\(t\), tk:t\.id, kind:_saleKindOf\(t\),/.test(src));   /* 2026-08-15 起金額改用當日實收 */
 
 console.log('\n可以就地更改');

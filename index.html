@@ -4166,8 +4166,16 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 .tkc-void{font-size:11.5px;line-height:1.7;color:var(--danger,#b5372e);
   background:rgba(181,55,46,.07);border-radius:8px;padding:6px 9px;margin:8px 0 0;}
 .tkc-meta{font-size:11px;color:var(--t3);margin-top:6px;line-height:1.7;}
-.tkc-foot{flex-direction:column;align-items:flex-end !important;gap:6px !important;}
+/* 2026-09-15 使用者：「票券右下角的資訊跟按鈕會不會太擁擠　左下角有安排什麼內容嗎
+   還是可以把按鈕改到左下呢」—— 左下角本來就完全空著（圓圈列右側、動作列左側各空一片）。
+   原本這一列是 column＋靠右，金額與按鈕疊成兩層全擠在右下角。改成左右分開：
+   按鈕列 order:-1 排到左邊，金額與發票號碼留右邊。
+   ⚠ 按鈕那個 span 的 inline style 帶 margin-left:auto（非櫃檯版式靠它推到右邊），
+     這裡一定要蓋掉，否則它會把自己推回右邊、左下角又空了。 */
+.tkc-foot{align-items:center !important;}
 .tkc-foot>span{min-width:0;text-align:right;}
+.tkc-foot>span:last-child{order:-1;margin-left:0 !important;}
+.tkc-foot>span:first-child{margin-left:auto;}
 .tkc-money{font-size:12.5px;}
 /* 票券卡上的發票標籤（2026-09-15）：與付款方式同一列，左邊留一點距離。
    分期多格時允許換行 —— 三格排不下時往下堆，不要把金額擠掉。 */
@@ -10812,7 +10820,12 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
 /* 發票標記（2026-09-15 移到姓名那一行的右側）——
    ⚠ 一定要 flex:none：它沒設的話，長長的發票號碼會被 space-between 壓縮，
      或反過來把姓名擠掉（姓名是 flex:1，會先讓位）。 */
-.rv-r1>.rev-invno,.rv-r1>.rev-noinv{flex:none;}
+/* 2026-09-15 使用者：「營收明細退回的按鈕可以改在發票左邊　這樣就不會多一列了」——
+   退回鈕從右側直欄（.mc-rev-r）搬到姓名這一行，排在發票標記左邊，整列少一層高度。
+   ⚠ 這推翻同一天稍早那條「退回鈕、付款、金額全部留在原處不動」：
+     當時的理由是「它是可點的操作，要跟金額同一區」，但那一區直向堆三層仍然把列撐高，
+     使用者要的是少一列。revpaytest／saleundotest 的順序斷言跟著改。 */
+.rv-r1>.rev-invno,.rv-r1>.rev-noinv,.rv-r1>.rev-undo{flex:none;}
 /* 品項不要硬切成「主顧客…」（2026-08-24 使用者指示：讓文字有機會完整顯示）——
    改成最多折兩行；真的很長才截斷。姓名維持單行（名字短，折行反而亂）。 */
 .rv-r2>.mc-rev-it{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;
@@ -13161,8 +13174,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.2124';
-const APP_VERSION_LABEL = 'v260915.2124';
+const APP_VERSION = '260915.2142';
+const APP_VERSION_LABEL = 'v260915.2142';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22380,7 +22393,11 @@ PAGES.g_dashboard=async function(){
      ⚠ 沒有金額、沒有付款方式、也不給 30 分鐘退回（它本來就不是收款）——
        所以不帶 amt／pay／at／pur，那三顆標籤自然不會畫出來。 */
   const _dayLot=(purchases||[]).filter(p=>p&&p.source==='lottery'&&puLocalDate(p)===date);
-  const _revRows=[
+  /* 2026-09-15 使用者：「我發現當天的收款順序沒有按照收費順序　幫我排序」——
+     原本是三段直接串接（票券列 → 其他收款 → 抽獎），組內組外都沒有依時間排過，
+     所以賣票券的永遠排在商品／場租前面（截圖：FX…355、356 排在 354、353 之前）。
+     改成兩段收款列先合併、再依 created_at 升冪排；抽獎仍舊收在最後（見下方註解）。 */
+  const _revPayRows=[
     ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—', mid:t.member_id||null,
       it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
       amt:_tkDayAmt(t), tk:t.id, kind:_saleKindOf(t),
@@ -22426,9 +22443,22 @@ PAGES.g_dashboard=async function(){
          櫃檯本來就會在這裡對帳，而且權限自動跟著這一頁走。 */
       pay:_payLb(p.payment_method), paySp:p.pay_split||null, payRef:p.id,
       inv:(p.invoice_type==='cloud'||p.invoice_type==='paper')};}),
+  ];
+  /* 依實際收費時間升冪排：先收的在最上面，跟櫃檯當天的操作順序一致。
+     ⚠ 沒有 created_at 的列要排到收款列的最後 —— 空字串在 localeCompare 下會搶到第一名，
+       那反而會讓「不知道什麼時候收的」跑到最前面。 */
+  _revPayRows.sort((a,b)=>{
+    const _a=String(a.at||''), _b=String(b.at||'');
+    if(!_a && !_b) return 0;
+    if(!_a) return 1;
+    if(!_b) return -1;
+    return _a.localeCompare(_b);
+  });
+  const _revRows=[..._revPayRows,
     /* 抽獎排在最後（2026-08-24 使用者回報「跑出所有抽獎名單了」）——
        那五筆確實都是當天的，問題出在它們排在最前面，把真正的收款擠到看不見。
-       這一頁叫「今日營收」，錢要先看到；抽獎是 $0 的贈品紀錄，收在尾巴當附錄。 */
+       這一頁叫「今日營收」，錢要先看到；抽獎是 $0 的贈品紀錄，收在尾巴當附錄。
+       ⚠ 所以抽獎不參與上面那次排序：它永遠在收款列之後。 */
     ..._dayLot.map(p=>({
       nm:(memMap[p.member_id]&&memMap[p.member_id].name)||'—', mid:p.member_id||null,
       it:(p.plan_name||'抽獎'), amt:0, lot:p.id, lotDate:puLocalDate(p) })),
@@ -22510,9 +22540,9 @@ PAGES.g_dashboard=async function(){
                  而是把**唯讀的發票標記**移到姓名那一行的右側：那裡本來只有姓名與
                  歸屬教練，空位正好拿來用，列高少一層。
                ⚠ 退回鈕、付款、金額全部留在原處不動（它們是可點的操作，要跟金額同一區）。 */''}
-          <div class="rv-r1"><span class="mc-rev-nm">${r.nm}</span>${revInvChip(r)}</div>
+          <div class="rv-r1"><span class="mc-rev-nm">${r.nm}</span>${revUndoChip(r)}${revInvChip(r)}</div>
           <div class="rv-r2"><span class="mc-rev-it">${r.it}</span>
-            <span class="mc-rev-r">${revUndoChip(r)}${revPayChip(r)}${(revAmtDup(r)||r.lot)?'':`<span class="mc-rev-amt">$${_fm(r.amt)}</span>`}</span></div>
+            <span class="mc-rev-r">${revPayChip(r)}${(revAmtDup(r)||r.lot)?'':`<span class="mc-rev-amt">$${_fm(r.amt)}</span>`}</span></div>
         </div>
         ${r.mid?'<span class="mc-td-arrow">›</span>':''}
       </div>`).join('')}</div>
@@ -43255,9 +43285,9 @@ function openTodayRevList(){
         <div class="mc-rev-row${(r.mid||r.lot)?' mc-rev-go':''}" ${r.lot?`onclick="lottoFixAsk('${r.lot}','rev')" title="改抽獎項目"`:(r.mid?`onclick="closeModal();revRowGo('${r.mid}','${r.tk?(r.cls||'pt'):'other'}')" title="${r.tk?'開啟會員票券':'開啟會員的其他消費'}"`:'')}>
           ${revKindCell(r)}
           <div class="mc-rev-b">
-            <div class="rv-r1"><span class="mc-rev-nm">${esc(r.nm)}</span></div>
+            <div class="rv-r1"><span class="mc-rev-nm">${esc(r.nm)}</span>${revUndoChip(r)}</div>
             <div class="rv-r2"><span class="mc-rev-it">${esc(r.it)}</span>
-              <span class="mc-rev-r">${revUndoChip(r)}${revPayChip(r)}${(revAmtDup(r)||r.lot)?'':`<span class="mc-rev-amt">${money(r.amt)}</span>`}</span></div>
+              <span class="mc-rev-r">${revPayChip(r)}${(revAmtDup(r)||r.lot)?'':`<span class="mc-rev-amt">${money(r.amt)}</span>`}</span></div>
           </div>
           ${r.mid?'<span class="mc-td-arrow">›</span>':''}
         </div>`).join('')}</div>

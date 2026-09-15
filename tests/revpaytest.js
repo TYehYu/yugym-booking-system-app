@@ -44,14 +44,16 @@ ok('★ 付款方式疊在金額上方（2026-08-03 使用者指示：並排會�
    所以多一個 ||r.lot 的條件。 */
    /* ⚠ 2026-09-15：發票標記（唯讀）移到姓名那一行的右側 —— 使用者回報
       「魚先森三個字下面空白處好大」，成因是 .mc-rev-r 直向堆四個標記把列撐高。
-      ⚠ .mc-rev-r 的**方向不變**（0803 的決定，這條斷言最後一項照舊釘著），
-        移走的只有唯讀標記；退回／付款／金額仍在同一區、同樣的順序。 */
-   /<span class="mc-rev-r">\$\{revUndoChip\(r\)\}\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">/.test(src)
-   && (src.match(/<span class="mc-rev-r">\$\{revUndoChip\(r\)\}/g)||[]).length===2
-   /* ⚠ 2026-09-15 二修：教練標籤也搬走了（移到最左欄、約別章下方），
-      所以姓名那一行只剩姓名＋發票標記。
-      ⚠ .mc-rev-r 的**方向仍然不變**（0803 的決定），最後一項照舊釘著。 */
-   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revInvChip\(r\)\}<\/div>/.test(src)
+      ⚠ 2026-09-15 三修：退回鈕**也**搬到姓名那一行了（使用者：「營收明細退回的按鈕
+        可以改在發票左邊　這樣就不會多一列了」）。這推翻了二修時寫的「退回／付款／金額
+        仍在同一區」—— 當時的理由是退回可點、要跟金額同一區，但那一區直向堆三層
+        還是把列撐高。現在姓名那行＝姓名 → 退回 → 發票，.mc-rev-r 只剩付款 → 金額。
+      ⚠ .mc-rev-r 的**方向始終不變**（0803 的決定，這條斷言最後一項照舊釘著）。 */
+   /<span class="mc-rev-r">\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">/.test(src)
+   && (src.match(/<span class="mc-rev-r">\$\{revPayChip\(r\)\}/g)||[]).length===2
+   /* ⚠ 2026-09-15 二修：教練標籤也搬走了（移到最左欄、約別章下方）。
+      ⚠ 首頁版與彈窗版不對稱：彈窗版沒有發票標記（那一份只有姓名＋退回）。 */
+   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revUndoChip\(r\)\}\$\{revInvChip\(r\)\}<\/div>/.test(src)
    && /\.mc-rev-r\{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;\}/.test(src));
 /* 2026-08-03 使用者指示：「不要列出刷卡，我們沒提供刷卡功能」。
    2026-08-12 拆帳改版：第三顆改成「現金+匯款」拆帳入口（openRevPaySplit），刷卡仍不列 */
