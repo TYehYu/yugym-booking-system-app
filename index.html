@@ -3307,6 +3307,21 @@ body.mc-mode #tl-sheet,body.mc-mode #tl-add-sheet{top:60px;}
 .inv-r input{width:100%;padding:9px 11px;font-size:14px;border:1px solid var(--bd);border-radius:9px;
   background:var(--card);color:var(--t1);box-sizing:border-box;}
 .inv-note{font-size:11.5px;color:var(--t3);line-height:1.75;margin:2px 0 10px;}
+/* 不開發票的勾選框與暗化（2026-09-15 使用者：「可以用勾選嗎　勾不開發票下方暗化處理」）——
+   ⚠ 暗化不是隱藏：櫃檯看得到自己關掉了什麼（同 yugym-disabled-with-reason 那條）。
+   ⚠ pointer-events 擋滑鼠，input 的 disabled 擋鍵盤 Tab —— 只做一半的話仍然打得進去。 */
+.inv-off{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--t1);
+  padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--bd);cursor:pointer;}
+.inv-off input{width:16px;height:16px;margin:0;accent-color:var(--green);cursor:pointer;flex:none;}
+.inv-dim{opacity:.38;filter:grayscale(.5);pointer-events:none;}
+/* 確認收款視窗裡的發票摘要（2026-09-15）：只顯示不給改，所以不用 .inv-wrap 那套框。 */
+.inv-sum{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+  background:var(--card2);border:1px solid var(--bd);border-radius:10px;
+  padding:9px 12px;margin:10px 0 0;font-size:12.5px;}
+.inv-sum span{color:var(--t3);font-size:11.5px;flex:none;}
+.inv-sum b{font-weight:800;color:var(--t1);}
+.inv-sum i{font-style:normal;color:var(--t2);font-size:12px;
+  overflow-wrap:anywhere;min-width:0;}
 .gt-voucher-hi{background:#fbf3e4;border:1.5px solid var(--gold);border-radius:12px;
   padding:12px 14px;margin:0 0 12px;display:flex;flex-direction:column;gap:8px;}
 .gt-vh-top{display:flex;align-items:center;gap:8px;}
@@ -13028,8 +13043,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.0916';
-const APP_VERSION_LABEL = 'v260915.0916';
+const APP_VERSION = '260915.0937';
+const APP_VERSION_LABEL = 'v260915.0937';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13810,22 +13825,25 @@ async function invCall(action, data){
     return (r&&r.data)||{ok:false,msg:'沒有回應'};
   }catch(e){ return {ok:false, msg:String((e&&e.message)||e)}; }
 }
-/* 四種開法（互斥規則見 docs/edge/README-ecpay.md 的表）——
-   ⚠ 這四條的 Print／Donation／CarrierType／統編 組合是綠界硬性檢核的，
-     湊錯一格就開不出來，而且錯誤訊息只說「參數錯誤」。 */
-const INV_MODES=[['carrier','存載具'],['ubn','打統編'],['donate','捐贈'],['print','紙本']];
+/* 兩種開法（2026-09-15 使用者定案：「我們也不用捐贈的選項」「但我們也沒有紙本可以開」）——
+   ・存載具＝客人自己的手機條碼（CarrierType=3），中獎由財政部通知
+   ・寄信箱＝綠界載具（CarrierType=1）＋ Email，統編也放這一格（打統編本來就要寄證明聯）
+   ⚠ 捐贈與紙本從**畫面**移除（各開過 0 張，查過資料庫）。
+     但 invPayload／invReadFields 的那兩個分支**保留不刪** —— 「重開」那條路
+     （_invRetry）是靠舊發票的 love_code／print_flag 重組條件的，留著相容代價是零。
+   ⚠ Print／Donation／CarrierType／統編 的互斥規則見 docs/edge/README-ecpay.md 的表。 */
+const INV_MODES=[['carrier','存載具'],['mail','寄信箱']];
 function invFieldsHTML(){
-  /* 2026-09-14 使用者定案：「櫃檯收款的時候要有開發票或不開發票的選項
-     點開發票要有 email 或載具或統編」——
-     多一層開關的理由是 0914 真的誤開過一張（FX28688351，會員資料還沒齊就自動開立、
-     當天作廢）。開立與否變成櫃檯**明確的一次選擇**，不再是「勾了已付款就自動開」。
-     ⚠ 預設仍是「開立」：收錢本來就該開發票，預設不開會變成常態性漏開。 */
+  /* 2026-09-14 使用者定案：「櫃檯收款的時候要有開發票或不開發票的選項」——
+     0914 真的誤開過一張（FX28688351，會員資料還沒齊就自動開立、當天作廢），
+     開立與否因此變成櫃檯**明確的一次選擇**，不再是「勾了已付款就自動開」。
+     2026-09-15 二修：「可以用勾選嗎　勾不開發票下方暗化處理」——
+     兩顆按鈕改成一個勾選框，**預設不勾＝開立**（收錢本來就該開發票，
+     預設不開會變成常態性漏開）。 */
   return `<div id="inv-wrap" class="inv-wrap" style="display:none;">
     <div class="inv-h">電子發票<i id="inv-mode"></i></div>
-    <div class="inv-seg">
-      <button type="button" class="inv-b on" data-on="1" onclick="invSetOn(1)">開立發票</button>
-      <button type="button" class="inv-b"    data-on="0" onclick="invSetOn(0)">不開發票</button>
-    </div>
+    <label class="inv-off" for="inv-nope">
+      <input type="checkbox" id="inv-nope" onchange="invSetOn(this.checked?0:1)"><span>不開發票</span></label>
     <div id="inv-body">
       <div class="inv-seg">${INV_MODES.map(([k,l],i)=>
         `<button type="button" class="inv-b${i===0?' on':''}" data-k="${k}" onclick="invPick('${k}')">${l}</button>`).join('')}</div>
@@ -13833,15 +13851,27 @@ function invFieldsHTML(){
     </div>
   </div>`;
 }
-/* 開立／不開立。⚠ 用 dataset.on 記在 #inv-wrap 上，invReadFields 讀它決定回 {mode:'none'}。
+/* 開立／不開立。⚠ 用 dataset.on 記在 #inv-wrap 上，invReadFields 讀它決定 mode='none'。
    不能用「f 是 null」表示不開 —— null 在 invIssueForPurchase 的既有語意是「走預設載具照常開」
-   （退款手續費那條路 39399 就是傳 null），混用會讓手續費發票整批開不出來。 */
+   （退款手續費那條路 39399 就是傳 null），混用會讓手續費發票整批開不出來。
+   ⚠ 2026-09-15：不開立是**暗化**不是隱藏（使用者指示，也符合系統既有的
+     「不能用就寫原因，別藏按鈕」）—— 櫃檯看得到自己關掉了什麼。
+     pointer-events 與 disabled 兩道一起上：只靠 CSS 的話鍵盤 Tab 仍然進得去。 */
 function invSetOn(v){
   const w=document.getElementById('inv-wrap'); if(!w) return;
   const on=String(v)==='1';
   w.dataset.on=on?'1':'0';
-  w.querySelectorAll('.inv-b[data-on]').forEach(b=>b.classList.toggle('on', (b.dataset.on==='1')===on));
-  const body=document.getElementById('inv-body'); if(body) body.style.display=on?'':'none';
+  const cb=document.getElementById('inv-nope'); if(cb) cb.checked=!on;
+  invDimSync();
+}
+/* 把暗化狀態套到 #inv-body。⚠ 一定要能重複呼叫：invPick 會重畫 #inv-x，
+   新畫出來的 input 不會帶 disabled，不重套的話「不開發票」下面又變成可以打字。 */
+function invDimSync(){
+  const w=document.getElementById('inv-wrap'); if(!w) return;
+  const off=w.dataset.on==='0';
+  const body=document.getElementById('inv-body'); if(!body) return;
+  body.classList.toggle('inv-dim', off);
+  body.querySelectorAll('input,button').forEach(el=>{ el.disabled=off; });
 }
 function invPick(k){
   const w=document.getElementById('inv-wrap'); if(!w) return;
@@ -13852,28 +13882,47 @@ function invPick(k){
   const note=t=>`<div class="inv-note">${t}</div>`;
   const _mail=window._invMemEmail||'';   /* 客人上次留的 email（invSync 去撈），免得每次重問 */
   let h='';
-  if(k==='carrier'){
-    /* 2026-09-14 使用者定案：「發票除了用雲端條碼之外的都統一存放去 email」「中獎通知 去超商列印」。
-       兩格的分工 ——
-         填了手機條碼 → CarrierType=3，存客人自己的載具，中獎通知走財政部平台（不需要我們的 email）
-         沒填         → CarrierType=1 存綠界載具＋email，開立與中獎都由綠界寄信，憑通知到超商列印
-       ⚠ 兩格都空一樣開得成（載具只要有手機就夠），只是客人收不到任何通知。 */
-    h=row('inv-car','手機條碼','沒有就留空',window._invMemCarrier||'')
-      +row('inv-email','Email','寄發票與中獎通知',_mail,'email')
-      +note('有手機條碼就存客人自己的載具。<b>沒有就填 Email</b>：存綠界載具，開立與中獎都寄信通知，中獎憑通知到<b>超商列印</b>。兩格<b>至少填一項</b>。');
-  }else if(k==='ubn'){
-    h=row('inv-ubn','統一編號','8 碼數字',window._invMemUbn||'')
-      +row('inv-title','公司抬頭','',window._invMemTitle||'')
-      +row('inv-email','Email','寄證明聯用',_mail,'email')
-      +note('抬頭<b>可以不填</b>（綠界只有列印紙本時才要求）。打統編就<b>不能</b>捐贈。');
-  }else if(k==='donate'){
-    h=row('inv-love','愛心碼','3–7 碼數字')
-      +note('捐贈之後<b>不能改</b>，也不能再打統編或存載具。');
+  if(k==='mail'){
+    /* 寄信箱（2026-09-15）：綠界載具＋Email，統編放這一格 ——
+       使用者：「勾開發票 則要選載具還是信箱」「統編設計在信箱這邊」。
+       打統編本來就要把證明聯寄出去，跟 Email 同一格最自然。
+       ⚠ 統編與抬頭都是選填：綠界的 CustomerName 只有 Print=1（列印紙本）才必填，
+         而我們已經沒有紙本了（見 README 的互斥表）。 */
+    h=row('inv-email','Email','發票寄這裡',_mail,'email')
+      +row('inv-ubn','統一編號','公司行號才填',window._invMemUbn||'')
+      +row('inv-title','公司抬頭','打統編可一併填',window._invMemTitle||'')
+      +note('存綠界載具並寄信通知，中獎憑通知到<b>超商列印</b>。統編與抬頭<b>可以不填</b>。');
   }else{
-    h=row('inv-name','姓名','')+row('inv-addr','地址','紙本寄送用')
-      +note('紙本要自己列印寄出，一般建議用載具。');
+    /* 存載具：客人自己的手機條碼（CarrierType=3），中獎通知走財政部平台，
+       不需要我們的 email —— 近 90 天有上課的 168 位裡有 95 位屬於這種。 */
+    h=row('inv-car','手機條碼','/ABC1234',window._invMemCarrier||'')
+      +note('存客人自己的載具，中獎由<b>財政部</b>通知，不必再留 Email。');
   }
   box.innerHTML=h;
+  invDimSync();   /* 重畫後要重套暗化，否則「不開發票」下面又能打字了 */
+}
+/* 發票摘要（2026-09-15）：把 invReadFields 的結果講成人話，給「確認收款」那個視窗用。
+   使用者回報在那裡找不到發票選項 —— 發票區在兩步之前，按到最後早就看不到了。
+   ⚠ 只顯示、不給改：要改就按「返回修改」退回購買資訊那一步。
+   ⚠ 自己做跳脫，不依賴外部的 esc／escH —— 這支會被測試抽出來單獨跑，
+     多一個外部依賴就多一個破口（0914 seatNo 那次當場抓到過）。 */
+function invSummaryHTML(f){
+  if(!f) return '';
+  const q=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let k='', v='';
+  if(f.mode==='none'){
+    k='不開立';
+  }else if(f.src==='mail' || f.mode==='ubn'){
+    k='寄信箱';
+    const b=[];
+    if(f.email) b.push(f.email);
+    if(f.ubn)   b.push('統編 '+f.ubn);
+    v=b.join('・');
+  }else{
+    k='存載具';
+    v=f.carrierNum||'綠界載具';
+  }
+  return `<div class="inv-sum"><span>發票</span><b>${q(k)}</b>${v?`<i>${q(v)}</i>`:''}</div>`;
 }
 /* 營收列上的發票號碼（唯讀）——
    0811 那版這裡是一顆「開立發票」按鈕，現在開立跟著收款一起做完了，
@@ -13940,10 +13989,22 @@ function invReadFields(){
   const g=id=>((document.getElementById(id)||{}).value||'').trim();
   const k=w.dataset.mode||'carrier';
   let f;
-  if(k==='ubn')         f={mode:'ubn',    ubn:g('inv-ubn'), title:g('inv-title'), email:g('inv-email')};
+  /* 2026-09-15：畫面只剩「存載具／寄信箱」兩格，但送給綠界的參數組合沒變 ——
+     寄信箱**有填統編**→ 走 ubn（CustomerIdentifier＋CarrierType=1）
+     寄信箱**沒填統編**→ 走 carrier 但條碼留空（＝CarrierType=1 綠界載具＋Email）
+     這樣 invPayload 一行都不用改。
+     ⚠ 另外帶 src 記住櫃檯原本選的是哪一格 —— 驗證要知道該擋「沒填條碼」還是「沒填 Email」，
+       光看 mode 分不出來（寄信箱沒統編時 mode 也是 carrier）。
+     ⚠ ubn／donate／print 三個分支保留：UI 不再產生，但「重開」舊發票時用得到。 */
+  if(k==='mail'){
+    const _u=g('inv-ubn');
+    f = _u ? {mode:'ubn',     ubn:_u, title:g('inv-title'), email:g('inv-email'), src:'mail'}
+           : {mode:'carrier', carrierNum:'',                email:g('inv-email'), src:'mail'};
+  }
+  else if(k==='ubn')    f={mode:'ubn',    ubn:g('inv-ubn'), title:g('inv-title'), email:g('inv-email'), src:'ubn'};
   else if(k==='donate') f={mode:'donate', loveCode:g('inv-love')};
   else if(k==='print')  f={mode:'print',  name:g('inv-name'), addr:g('inv-addr')};
-  else                  f={mode:'carrier', carrierNum:g('inv-car'), email:g('inv-email')};
+  else                  f={mode:'carrier', carrierNum:g('inv-car'), email:g('inv-email'), src:'carrier'};
   /* 2026-09-14：櫃檯選了「不開發票」，或發票服務暫停中。
      ⚠ 回 {mode:'none'} 而不是 null —— null 的既有語意是「走預設載具照常開」。
      ⚠⚠ 二修：**欄位值要一起帶回去**。發票暫停時櫃檯照樣在收 Email／載具，
@@ -13962,10 +14023,16 @@ function invCheckFields(f){
     if((f.ubn||'') && !/^\d{8}$/.test(f.ubn)) return '統一編號要 8 碼數字';
     return '';
   }
+  /* 2026-09-15：新畫面只有兩格，各自的必填看 src（櫃檯原本點的是哪一格）——
+     光看 mode 分不出來：寄信箱沒填統編時 mode 也是 'carrier'。 */
+  if(f.src==='carrier' && !(f.carrierNum||'').trim())
+    return '請填手機條碼，或改選「寄信箱」';
+  if(f.src==='mail' && !(f.email||'').trim())
+    return '請填 Email，發票會寄到這裡';
   /* 2026-09-14 使用者定案：「點開發票要有 email 或載具或統編」——
      載具那條路兩格都空時，發票雖然開得成（綠界載具只要有手機就夠）卻沒有任何通知管道，
      客人根本不知道自己有發票。0914 誤開的 FX28688351 就是這個缺口，所以改成擋下來。
-     統編／捐贈／紙本三條各自有必填（統編、愛心碼、地址），不重複擋。 */
+     ⚠ 這條對沒有 src 的舊呼叫（_invRetry 重組舊發票）仍然有效，留著。 */
   if(f.mode==='carrier' && !(f.carrierNum||'').trim() && !(f.email||'').trim())
     return '開發票要填 Email 或手機條碼（擇一）';
   if(f.mode==='ubn'){
@@ -52497,6 +52564,12 @@ async function submitGrant(){
       </div>
       <div style="font-size:12.5px;color:var(--text);">
         ${escH((_mem0&&_mem0.name)||'')}　·　${escH(plan.name||'')}　·　${total} 堂</div>
+      ${/* 發票摘要（2026-09-15 使用者回報：在這個視窗找不到發票選項）——
+           發票區在兩步之前的「購買資訊」，按到這裡時早就看不到了。
+           這裡只**顯示**不讓改：要改就按「返回修改」退回去。
+           ⚠ 刻意不把發票區整組搬進來 —— 這支是 bkAskOverlay，塞互動元件有前科
+             （showModal 會把表單整個拆掉，0828 白畫面事故的同一個坑）。 */''}
+      ${invSummaryHTML(P.inv)}
       <div class="mk-key">按下去立刻發放票券・記進今日營收</div>
       <ul class="mk-pts">
         <li>這是<b>直接發放</b>，沒有合約</li>

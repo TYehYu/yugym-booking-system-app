@@ -193,12 +193,39 @@ console.log('\n④ 開不成不能擋住銷售（票券已經發出去了）');
      只回 mode 等於把櫃檯剛問到的資料丟掉。 */
   ok('★★★ 櫃檯按「不開發票」→ mode 設成 \'none\'', /if\(w\.dataset\.on==='0'\) f\.mode='none';/.test(R));
   ok('★★★ 但欄位值要一起帶回去（不開立也要能寫回會員資料）',
-     /f=\{mode:'carrier', carrierNum:g\('inv-car'\), email:g\('inv-email'\)\};/.test(R)
+     /f=\{mode:'carrier', carrierNum:g\('inv-car'\), email:g\('inv-email'\), src:'carrier'\};/.test(R)
      && /return f;/.test(R)
      && !/return \{mode:'none'\};/.test(R));
+  /* 2026-09-15 使用者定案：「我們也不用捐贈的選項」「也沒有紙本可以開」
+     「勾開發票 則要選載具還是信箱」「統編設計在信箱這邊」——
+     畫面只剩兩格，但送給綠界的參數組合沒變：
+       寄信箱＋有統編 → ubn（CustomerIdentifier＋CarrierType=1）
+       寄信箱＋沒統編 → carrier 但條碼留空（＝綠界載具＋Email）
+     所以 invPayload 一行都不用改。 */
+  ok('★★★ 寄信箱有填統編 → 走 ubn',
+     /f = _u \? \{mode:'ubn',     ubn:_u, title:g\('inv-title'\), email:g\('inv-email'\), src:'mail'\}/.test(R));
+  ok('★★★ 寄信箱沒填統編 → 走綠界載具（條碼留空）＋Email',
+     /: \{mode:'carrier', carrierNum:'',                email:g\('inv-email'\), src:'mail'\};/.test(R));
+  ok('★★ 帶 src 記住櫃檯點的是哪一格（光看 mode 分不出來）',
+     /src:'mail'/.test(R) && /src:'carrier'/.test(R));
+  ok('★★ 捐贈／紙本的讀取分支保留（UI 不產生，但重開舊發票用得到）',
+     /f=\{mode:'donate'/.test(R) && /f=\{mode:'print'/.test(R));
   const S=grabFn('invSetOn');
-  ok('★★ 開關把四格整區藏起來（選不開就不該還看得到載具欄）',
-     /body\.style\.display=on\?'':'none'/.test(S));
+  /* ⚠ 2026-09-15 改成**暗化**不是隱藏（使用者：「勾不開發票下方暗化處理」）——
+     也符合系統既有的「不能用就寫原因，別藏按鈕」：櫃檯看得到自己關掉了什麼。
+     ⚠ pointer-events 擋滑鼠、input 的 disabled 擋鍵盤 Tab，只做一半仍然打得進去。 */
+  ok('★★★ 勾「不開發票」→ 下方暗化（不是隱藏）',
+     /body\.classList\.toggle\('inv-dim', off\);/.test(grabFn('invDimSync'))
+     && /\.inv-dim\{opacity:\.38;filter:grayscale\(\.5\);pointer-events:none;\}/.test(src));
+  ok('★★★ 暗化同時要 disabled（只靠 CSS 的話鍵盤還進得去）',
+     /body\.querySelectorAll\('input,button'\)\.forEach\(el=>\{ el\.disabled=off; \}\);/.test(grabFn('invDimSync')));
+  ok('★★★ invPick 重畫後要重套暗化（新畫的 input 不會帶 disabled）',
+     /invDimSync\(\);   \/\* 重畫後要重套暗化/.test(src));
+  ok('★★ 開關本身是勾選框，預設不勾＝開立',
+     /<input type="checkbox" id="inv-nope" onchange="invSetOn\(this\.checked\?0:1\)">/.test(src)
+     && /const cb=document\.getElementById\('inv-nope'\); if\(cb\) cb\.checked=!on;/.test(S));
+  ok('★★★ 只剩兩格：存載具／寄信箱（捐贈與紙本從畫面移除）',
+     /const INV_MODES=\[\['carrier','存載具'\],\['mail','寄信箱'\]\];/.test(src));
   ok('★★ 預設是「開立」（收錢本來就該開發票，預設不開會變成常態性漏開）',
      /if\(!w\.dataset\.on\) invSetOn\(1\);/.test(src));
 }
