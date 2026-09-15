@@ -131,6 +131,16 @@ console.log('\n⑥ 面板重做：做減法（2026-08-27 使用者：「主要�
   ok('★★ 摘要：極淡暖米色、沒有外框，兩欄之間只有一條細線',
      /body\.ink \.mc-revsplit\{background:#FAF6EE;border:none;border-radius:var\(--radius-sm\);/.test(src)
      && /body\.ink \.mc-rs-col \+ \.mc-rs-col\{border-left:1px solid rgba\(45,36,28,\.10\);\}/.test(src));
+  /* 2026-09-15 使用者附截圖：「這是首頁的今日營收　數字可以靠右」——
+     ⚠ 這裡**不能用 text-align:right**：.mc-rs-col 是 flex-direction:column，
+       欄內元素寬度是收縮的，text-align 只在元素撐滿寬度時才看得出效果。
+       要用 align-self:flex-end 把 <b> 推到欄的右緣。
+     ⚠ 只推數字、標籤維持靠左（使用者說的是「數字」）。 */
+  ok('★★ 金額靠右（用 align-self 不是 text-align，column flex 下後者無效）',
+     /body\.ink \.mc-rs-v\{align-self:flex-end;\}/.test(src)
+     && !/body\.ink \.mc-rs-v\{[^}]*text-align:right/.test(src));
+  ok('★ 標籤沒有跟著推到右邊（只有數字靠右）',
+     !/body\.ink \.mc-rs-l\{[^}]*align-self:flex-end/.test(src));
 
   ok('★★ 明細變成「一個白色 list」：逐筆不再是卡片，只用 1px 淡線分隔',
      /body\.ink \.mc-revlist-card \.mc-revlist\{gap:0;background:var\(--card\);\s*\n\s*border:1px solid var\(--bd\);border-radius:var\(--radius-md\);padding:0 12px;\}/.test(src)
