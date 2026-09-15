@@ -13125,8 +13125,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1509';
-const APP_VERSION_LABEL = 'v260915.1509';
+const APP_VERSION = '260915.1540';
+const APP_VERSION_LABEL = 'v260915.1540';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22348,6 +22348,11 @@ PAGES.g_dashboard=async function(){
     ..._dayTk.map(t=>({nm:(memMap[t.member_id]&&memMap[t.member_id].name)||'—', mid:t.member_id||null,
       it:(t.plan_name||'票券')+(t.installment&&typeof t.installment==='object'?'（分期）':''),
       amt:_tkDayAmt(t), tk:t.id, kind:_saleKindOf(t),
+      /* 這一列屬於票券夾的哪個分頁（2026-09-15 使用者：「這一筆點選可以直接進去
+         團體課的頁面嗎」）—— 點進去要直接落在對的頁籤，不要每次都停在「教練課」。
+         ⚠ 用 tkClass5 而不是自己比對 category：票券夾的分頁鍵（TK5）就是由它產生的，
+           兩邊保證同一組 key，不會切到一個不存在的頁籤。 */
+      cls:tkClass5(t,typeMap),
       at:t.created_at||null,   // 30 分鐘完整退回用（2026-08-08）
       att:t.sold_by||null, attKind:_attNeed(t)?'tk':null, attRef:t.id,
       pay:_payLb((_payByTk[t.id]||{}).m), paySp:(_payByTk[t.id]||{}).sp||null, payRef:(_payByTk[t.id]||{}).pid||null,
@@ -22365,6 +22370,9 @@ PAGES.g_dashboard=async function(){
       amt:Number(p.deal_amount)||0, pur:p.id, at:p.created_at||null,   // 30 分鐘完整退回用（2026-08-08）
       invNo:p.invoice_number||null,   // 2026-09-02 電子發票
       tk:_t?_t.id:undefined, kind:_t?'installment':undefined,   /* 後續各期一律標「分期」（首期＝票券列，照票券約別） */
+      /* 分期後續收款有票券 → 跟著那張票的分頁走；商品／場租／票券重啟沒有票券，
+         留 undefined，revRowGo 會落到〔其他〕（2026-09-15）。 */
+      cls:_t?tkClass5(_t,typeMap):undefined,
       /* 場租／商品／票券重啟不是教練課，一樣不標歸屬（2026-08-07 同一條規則） */
       att:(_t?( p.coach_id||_t.sold_by||null):(p.coach_id||null)), attKind:(_t&&_attNeed(_t))?'tk':null, attRef:_t?_t.id:p.id,
       /* 抽獎登記（2026-08-24 使用者定案：「在今日營收這邊顯示，左邊續約的標籤改成抽獎，
@@ -22445,7 +22453,7 @@ PAGES.g_dashboard=async function(){
            第二欄兩列 —— 第一列「姓名靠左、教練標籤靠右」，第二列「品項靠左、金額靠右」。
            現金與匯款同時出現時，金額那一格自己疊成兩列（.mc-rev-r 是直向 flex）。
            ⚠ 抽獎那一列整列點下去就開重選視窗（使用者：「不用進入會員資料」）。 */''}
-      <div class="mc-rev-row${(r.mid||r.lot)?' mc-rev-go':''}" ${r.lot?`onclick="lottoFixAsk('${r.lot}','rev')" title="改抽獎項目"`:(r.mid?`onclick="revRowGo('${r.mid}','${r.tk?'tickets':'other'}')" title="${r.tk?'開啟會員票券':'開啟會員的其他消費'}"`:'')}>
+      <div class="mc-rev-row${(r.mid||r.lot)?' mc-rev-go':''}" ${r.lot?`onclick="lottoFixAsk('${r.lot}','rev')" title="改抽獎項目"`:(r.mid?`onclick="revRowGo('${r.mid}','${r.tk?(r.cls||'pt'):'other'}')" title="${r.tk?'開啟會員票券':'開啟會員的其他消費'}"`:'')}>
         ${revKindCell(r)}
         <div class="mc-rev-b">
           ${/* 2026-09-15 使用者：「那個退回的標籤 應該要設計在一個不影響段落的位子
@@ -43185,7 +43193,7 @@ function openTodayRevList(){
   const ds=String(d.date||'').slice(5).replace('-','/');
   const body = rows.length
     ? `<div class="mc-revlist">${rows.map(r=>`
-        <div class="mc-rev-row${(r.mid||r.lot)?' mc-rev-go':''}" ${r.lot?`onclick="lottoFixAsk('${r.lot}','rev')" title="改抽獎項目"`:(r.mid?`onclick="closeModal();revRowGo('${r.mid}','${r.tk?'tickets':'other'}')" title="${r.tk?'開啟會員票券':'開啟會員的其他消費'}"`:'')}>
+        <div class="mc-rev-row${(r.mid||r.lot)?' mc-rev-go':''}" ${r.lot?`onclick="lottoFixAsk('${r.lot}','rev')" title="改抽獎項目"`:(r.mid?`onclick="closeModal();revRowGo('${r.mid}','${r.tk?(r.cls||'pt'):'other'}')" title="${r.tk?'開啟會員票券':'開啟會員的其他消費'}"`:'')}>
           ${revKindCell(r)}
           <div class="mc-rev-b">
             <div class="rv-r1"><span class="mc-rev-nm">${esc(r.nm)}</span></div>
@@ -47421,10 +47429,19 @@ function ppRecCard(icon, title, sub, num, onclick){
      那三種正是〔其他〕分頁收的東西（_oSrc: merchandise／facility_rental／reactivate）。
    ⚠ 〔其他〕分頁只在櫃檯以上畫得出來（見 ppRecordHtml 的 _m2），
      而營收明細本來就只有櫃檯看得到，不會發生「跳過去卻是空的」。 */
+/* 2026-09-15 二修（使用者：「這一筆點選可以直接進去團體課的頁面嗎」）——
+   有票券的列再切到票券夾**對應的那個分頁**（團課／自主訓練／按摩／折抵券／教練課），
+   不要每次都停在預設的「教練課」。
+   ⚠ kind 收的是 tkClass5 的回傳值（TK_POCKETS 的鍵），票券夾分頁鍵 TK5 由同一份
+     產生，所以不會切到不存在的頁籤；讀不到就讓 ppTkTab 維持預設。 */
 async function revRowGo(mid, kind){
   if(!mid) return;
   await openPersonProfile('member', mid);
-  try{ ppShowRecord(kind==='other'?'other':'tickets'); }catch(_){}
+  try{
+    if(kind==='other'){ ppShowRecord('other'); return; }
+    ppShowRecord('tickets');
+    if(kind && typeof TK_POCKETS==='object' && TK_POCKETS[kind]) ppTkTab(kind);
+  }catch(_){}
 }
 /* 票券分頁「共享設定」（2026-07-28 使用者回報：統一版會員資料看不到共享功能）——
    重用 openTicketShare，儲存/取消後返回本彈窗的票券分頁而非舊版明細 */

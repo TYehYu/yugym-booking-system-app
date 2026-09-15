@@ -42,11 +42,19 @@ ok('★ 每一列：歸屬 tag（上）／姓名／品項／付款方式／金�
 /* 2026-09-15 使用者：「今天兩筆 魚先森 點選進去的時候應該要直接跳選到
    會員資料的[其他]這一個頁面」——票券列仍跳票券頁，商品／場租／票券重啟跳〔其他〕。
    判斷用 r.tk（票券列一定有、純收款列只有 r.pur），不用 category。 */
-ok('★ 有綁會員的列點下去跳到他的會員資料', /onclick="closeModal\(\);revRowGo\('\$\{r\.mid\}','\$\{r\.tk\?'tickets':'other'\}'\)"/.test(src));
-ok('★★★ 票券列跳票券頁，商品／場租／重啟跳〔其他〕',
-   /async function revRowGo\(mid, kind\)\{[\s\S]{0,200}ppShowRecord\(kind==='other'\?'other':'tickets'\)/.test(src));
+ok('★ 有綁會員的列點下去跳到他的會員資料', /onclick="closeModal\(\);revRowGo\('\$\{r\.mid\}','\$\{r\.tk\?\(r\.cls\|\|'pt'\):'other'\}'\)"/.test(src));
+/* 2026-09-15 二修（使用者：「這一筆點選可以直接進去團體課的頁面嗎」）——
+   票券列不只跳票券頁，還要切到**對應的分頁**（團課／自主訓練／按摩／折抵券／教練課）。 */
+ok('★★★ 商品／場租／重啟跳〔其他〕，票券列跳票券頁並切到對應分頁',
+   /if\(kind==='other'\)\{ ppShowRecord\('other'\); return; \}/.test(src)
+   && /ppShowRecord\('tickets'\);/.test(src)
+   && /if\(kind && typeof TK_POCKETS==='object' && TK_POCKETS\[kind\]\) ppTkTab\(kind\);/.test(src));
+ok('★★★ 分頁鍵用 tkClass5（票券夾分頁 TK5 由同一份 TK_POCKETS 產生，不會切到不存在的頁籤）',
+   /cls:tkClass5\(t,typeMap\),/.test(src)
+   && /const TK5=Object\.keys\(TK_POCKETS\)\.map/.test(src)
+   && /const _tkTabs=TK5;/.test(src));
 ok('　　兩個列表都帶了種類（不是只有彈窗改）',
-   (src.match(/revRowGo\('\$\{r\.mid\}','\$\{r\.tk\?'tickets':'other'\}'\)/g)||[]).length===2);
+   (src.match(/revRowGo\('\$\{r\.mid\}','\$\{r\.tk\?\(r\.cls\|\|'pt'\):'other'\}'\)/g)||[]).length===2);
 ok('★ 有合計，以及有發票／無發票的拆分', /<div class="nl-sum"><span>合計<\/span><b>\$\{money\(d\.total\)\}<\/b><\/div>/.test(src)
    && /有發票 \$\{money\(d\.inv\)\}　·　無發票 \$\{money\(d\.noInv\)\}/.test(src));
 ok('★ 沒有收款時給空狀態，不是空白視窗（截圖那天就是 $0）',
