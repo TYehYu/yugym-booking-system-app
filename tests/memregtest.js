@@ -85,26 +85,32 @@ console.log('\n④ 分流邏輯（依 DB 端 fn_complete_member_registration 的
   eq('　　沒登入 → 擋下來', decide('0933333333',MEM,null), {ok:false,error_code:'AUTH.REQUIRED'});
 }
 
-console.log('\n⑤ 申辦表單要收的欄位（2026-09-14 使用者定案）');
-/* 使用者：「會員在創立帳號的時候現在都是用 line 登入　可以請他們填寫 email 跟性別嗎」
-           「email 性別 生日　然後視窗要設計的簡單清楚　不要太多文字」
-   背景：這三欄原本都是「選填」，結果 40 筆新申辦只有 13 筆填了 email ——
-         而 Email 是電子發票唯一的送達管道，沒填等於發票開出去沒地方寄。
-   ⚠ 後端不用改：fn_complete_member_registration 本來就收 p_email／p_birthday／p_gender。 */
+console.log('\n⑤ 申辦表單要收的欄位（2026-09-15 使用者定案，推翻 0914）');
+/* 使用者：「申請帳號的時候不用填寫　可以加速會員申辦　但開始使用的時候要跳提醒
+           填寫 email 或載具以便收取發票」
+   0914 曾把 Email／性別／生日三欄改必填（因為 40 筆新申辦只有 13 筆填 email），
+   0915 改回**選填** —— 少收的 Email 不是放掉，是換個時機收：
+   會員端首頁 memh2InvPrefCard() 在「載具與 Email 都空」時出現提醒卡引導客人自己填。
+   ⚠ 後端不用改：fn_complete_member_registration 三個參數本來就 DEFAULT NULL，
+     gender 空值落到 'unspecified'、email 有 nullif 接住。 */
 {
   const F=(()=>{let i=src.indexOf('async function submitLineRegister(');
     let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}})();
-  ok('★★★ Email 必填（電子發票唯一的送達管道）',
-     /if\(!email\)\{ showErr\('請填 Email，電子發票會寄到這裡'\); return; \}/.test(F));
-  ok('★★ Email 格式也要驗（錯的存進去等於沒有）',
-     /if\(!\/\^\[\^\\s@\]\+@\[\^\\s@\]\+\\\.\[\^\\s@\]\{2,\}\$\/\.test\(email\)\)/.test(F));
-  ok('★★★ 性別必填', /if\(!gender\)\{ showErr\('請選擇性別'\); return; \}/.test(F));
-  ok('★★★ 生日必填（年月日都要選）',
-     /if\(!birthday\)\{ showErr\('請選擇生日（年、月、日都要選）'\); return; \}/.test(F));
-  ok('★★ 三個值真的送進 RPC（驗了卻沒送等於白驗）',
+  ok('★★★ Email 不再必填（申辦要快，改由首頁提醒卡收）',
+     !/if\(!email\)\{ showErr/.test(F));
+  ok('★★★ 性別不再必填', !/if\(!gender\)\{ showErr/.test(F));
+  ok('★★★ 生日不再必填', !/if\(!birthday\)\{ showErr/.test(F));
+  ok('★★★ 但填了就要驗格式（錯的存進去等於沒有；空字串才放行）',
+     /if\(email && !\/\^\[\^\\s@\]\+@\[\^\\s@\]\+\\\.\[\^\\s@\]\{2,\}\$\/\.test\(email\)\)/.test(F));
+  ok('★★★ 姓名與手機仍然必填（櫃檯核對與接回舊票券全靠這兩項）',
+     /if\(!surname\|\|!given\)\{ showErr\('請填寫姓與名（本名）'\); return; \}/.test(F)
+     && /if\(!\/\^09\\d\{8\}\$\/\.test\(phone\)\)/.test(F));
+  ok('★★ 三個值仍然送進 RPC（改選填不等於不送）',
      /p_email:email, p_birthday:birthday, p_gender:gender/.test(F));
-  ok('　　驗證要在按鈕 disable 之前（擋下來時按鈕還能再按）',
-     F.indexOf("showErr('請選擇生日") < F.indexOf("btn.disabled=true"));
+  /* ⚠ readBirthday() 未選時回 null 不是空字串 —— p_birthday 是 date，
+       送 '' 會被 PostgREST 以 invalid input syntax 退件。這條釘著那個 null。 */
+  ok('★★★ 生日未選要送 null 而不是空字串（date 欄位收不了 \'\'）',
+     /if\(!y\|\|!m\|\|!d\) return null;/.test(src));
 }
 {
   const P=(()=>{let i=src.indexOf('function showLineRegisterPage(');
@@ -112,11 +118,17 @@ console.log('\n⑤ 申辦表單要收的欄位（2026-09-14 使用者定案）')
   /* ⚠ 只比對「真的會渲染出去的 label」，不要掃整個函式 ——
      掃全文會被上方那句說明用的「從選填改必填」絆倒（同一個坑 0914 已經踩過兩次：
      斷言命中自己寫的註解，看起來像程式沒改，其實畫面早就對了）。 */
-  ok('★★★ 三欄的 label 沒有「（選填）」（標了選填就不會有人填）',
-     !(P.match(/<label>[^<]*<\/label>/g)||[]).some(x=>/選填/.test(x)));
+  /* 2026-09-15 反轉：三欄改選填後，label 要**明講**（選填），
+     不標的話客人以為非填不可，「加速申辦」就沒發生。 */
+  ok('★★★ 三欄的 label 標了「（選填）」（不標等於沒有加速申辦）',
+     /<label>Email（選填）<\/label>/.test(P)
+     && /<label>性別（選填）<\/label>/.test(P)
+     && /<label>生日（選填）<\/label>/.test(P));
+  ok('★★ 姓／名／手機**不**標選填（這三個仍是必填）',
+     !/<label>姓（選填）<\/label>/.test(P) && !/<label>手機（選填）<\/label>/.test(P));
   ok('　　label 就是這六個，一個不多一個不少',
      JSON.stringify((P.match(/<label>([^<]*)<\/label>/g)||[]).map(x=>x.replace(/<\/?label>/g,'')))
-       === JSON.stringify(['姓','名','手機','Email','性別','生日']));
+       === JSON.stringify(['姓','名','手機','Email（選填）','性別（選填）','生日（選填）']));
   ok('★★ 視窗文字精簡（使用者：「不要太多文字」）—— 原本三段說明只剩一句',
      !/送出後至櫃台確認即完成/.test(P)
      && !/請填與身分證相符的本名/.test(P)

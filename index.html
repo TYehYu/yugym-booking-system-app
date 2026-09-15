@@ -13051,8 +13051,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1132';
-const APP_VERSION_LABEL = 'v260915.1132';
+const APP_VERSION = '260915.1217';
+const APP_VERSION_LABEL = 'v260915.1217';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15658,9 +15658,9 @@ function showLineRegisterPage(prefillName){
     </div>
     <div class="form-row"><label>手機</label><input id="lr-phone" placeholder="0912345678" inputmode="numeric" maxlength="10"></div>
     <div style="font-size:11px;color:var(--t3);line-height:1.6;margin:-6px 0 10px;">原本就是會員的話，請填<b>原本的手機</b>，票券與預約會接回來。</div>
-    <div class="form-row"><label>Email</label><input id="lr-email" type="email" placeholder="電子發票寄這裡"></div>
-    <div class="form-row"><label>性別</label><select id="lr-gender"><option value="">請選擇</option><option value="male">男</option><option value="female">女</option><option value="other">其他</option></select></div>
-    <div class="form-row"><label>生日</label>${birthdaySelects('lr')}</div>
+    <div class="form-row"><label>Email（選填）</label><input id="lr-email" type="email" placeholder="電子發票寄這裡，之後也可以再補"></div>
+    <div class="form-row"><label>性別（選填）</label><select id="lr-gender"><option value="">請選擇</option><option value="male">男</option><option value="female">女</option><option value="other">其他</option></select></div>
+    <div class="form-row"><label>生日（選填）</label>${birthdaySelects('lr')}</div>
     <div id="lr-err" style="display:none;color:var(--danger);font-size:12.5px;margin:8px 0;"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="lineAbort()">取消</button><button class="btn btn-green" id="lr-submit" onclick="submitLineRegister()">送出申辦</button></div>`);
 }
@@ -15674,13 +15674,19 @@ async function submitLineRegister(){
   if(!surname||!given){ showErr('請填寫姓與名（本名）'); return; }
   if(!phone){ showErr('請填手機'); return; }
   if(!/^09\d{8}$/.test(phone)){ showErr('手機格式不正確（09 開頭 10 碼）'); return; }
-  /* 2026-09-14：Email／性別／生日從選填改必填（使用者：「email 性別 生日」）——
-     Email 是電子發票唯一的送達管道，原本選填的結果是 40 筆新申辦只有 13 筆有填。 */
+  /* 2026-09-15 使用者定案（推翻 0914 的三欄必填）：「申請帳號的時候不用填寫
+     可以加速會員申辦　但開始使用的時候要跳提醒　填寫 email 或載具以便收取發票」——
+     Email／性別／生日三欄改回**選填**，只留姓名與手機必填。
+     ⚠ 少收的 Email 不是放掉不管，是換個時機收：會員端首頁的 memh2InvPrefCard()
+       在「載具與 Email 都空」時會出現提醒卡，引導客人自己填（共用 invPrefModal）。
+       0914 那次三欄必填是為了解決「40 筆新申辦只有 13 筆填 email」，
+       現在改由提醒卡接手，申辦流程不再被擋。
+     ⚠ 格式驗證**留著**：填了就要是對的，空字串才放行 —— 錯的 email 存進去等於沒有。
+     ⚠ readBirthday() 未選時回 **null 不是空字串**，直接送 RPC 即可
+       （p_birthday 是 date，送 '' 會被 PostgREST 以 invalid input syntax 退件）。
+     ⚠ 後端不用改：三個參數本來就 DEFAULT NULL，gender 空值會落到 'unspecified'。 */
   const email=v('lr-email'), gender=v('lr-gender'), birthday=readBirthday('lr');
-  if(!email){ showErr('請填 Email，電子發票會寄到這裡'); return; }
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){ showErr('Email 格式不正確'); return; }
-  if(!gender){ showErr('請選擇性別'); return; }
-  if(!birthday){ showErr('請選擇生日（年、月、日都要選）'); return; }
+  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){ showErr('Email 格式不正確'); return; }
   const btn=document.getElementById('lr-submit'); if(btn){btn.disabled=true;btn.textContent='送出中…';}
   try{
     const{data:rpc,error}=await sb.rpc('fn_complete_member_registration',
