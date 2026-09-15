@@ -4504,7 +4504,20 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
    ⚠ 抬高任何一個行事曆圖層時，回來看這條 —— 這次就是只看了「課卡 vs 欄頭」
      的相對關係，沒有看整份的高低順序。tests/zorder.js 會擋下再次翻車。 */
 .pp-sheet{position:fixed;inset:0;z-index:800;background:var(--bg);overflow:hidden;
+  overscroll-behavior:none;
   -webkit-overflow-scrolling:touch;}
+/* ⚠ 面板開著時把背景整個鎖死（2026-09-15 使用者：「施佳宜只有教練課的頁面會拉到背景
+     我點自主訓練就不會」）——
+   開面板時程式有做 document.body.style.overflow='hidden'（見 openPersonProfile），
+   但**那在 iOS Safari 上無效**：iOS 不吃 body 的 overflow:hidden，還有橡皮筋回彈。
+   ⚠ 為什麼「只有教練課那一頁會」：施佳宜自主訓練有 3 張票（內容夠長，#pp-body 捲得動，
+     捲動被它吃掉）、私人教練只有 1 張（撐不滿一屏 → 不是捲動容器 → 觸控冒泡到背景）。
+     上一輪加的 overscroll-behavior:contain 對「不可捲的元素」不生效，所以沒修好。
+   ⚠ html 也要一起鎖 —— 只鎖 body 在 iOS 仍然滑得動。
+     這一套是照 body.memh2-shell（會員端）與 #wtl-page（訓練頁）既有的寫法抄的，
+     那兩處早就這樣處理，會員資料面板是漏網的。 */
+body:has(#pp-sheet){height:100dvh;overflow:hidden;overscroll-behavior:none;}
+html:has(#pp-sheet){height:100%;overflow:hidden;overscroll-behavior:none;}
 .pp-sheet .pp-root{max-width:100%;padding:14px 16px 0;height:100%;}
 .pp-sheet .pp-root{display:flex;flex-direction:column;overflow:hidden;}
 .pp-sheet #pp-host{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;}
@@ -13212,8 +13225,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.2243';
-const APP_VERSION_LABEL = 'v260915.2243';
+const APP_VERSION = '260915.2255';
+const APP_VERSION_LABEL = 'v260915.2255';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -41417,7 +41430,13 @@ async function openMemberDetail(member_id){
         expired.map(t=>renderTkCard(t,(_canReact&&_canReactTk(t))?`<button class="btn btn-gold btn-sm" onclick="openReactivateTicket('${t.id}')">重新啟用</button>`:'')).join('')}</div>`;
     }
     if(history.length){
-      html+=`<details class="md-tk-hist" open><summary>歷史紀錄（${history.length}）</summary><div class="md-tklist">${
+      /* 2026-09-15 使用者：「票券的歷史紀錄　預設改成關閉」—— 與櫃檯端（pp-hist）一起改。
+         0821 當初刻意讓兩端一致，只改一邊會讓教練端與櫃檯端分岔。
+         ⚠⚠ 這裡是 JS 語句區（html+= 的左邊），不是反引號字串內 ——
+           錢字號加大括號的註解寫法在這裡非法，會讓整段 script 解析不過＝白畫面。
+           2026-09-15 當天第四次踩，就在把這個坑寫進記憶檔之後幾分鐘。
+           判準：這一行的左右兩邊是不是已經在反引號裡？不是就用一般註解。 */
+      html+=`<details class="md-tk-hist"><summary>歷史紀錄（${history.length}）</summary><div class="md-tklist">${
         history.map(t=>renderTkCard(t)).join('')}</div></details>`;
     }
     return html;
@@ -48297,10 +48316,13 @@ function ppRecordHtml(){
           </div>`; };
         const expdSec=expd.length?`<details class="pp-hist"${_extable.length?' open':''}><summary>已過期方案（${expd.length}）${_extable.length?`<span class="pp-hist-sum">${_extable.length} 張可展延</span>`:''}</summary>
           ${expd.map(histRow).join('')}</details>`:'';
-        /* 歷史紀錄預設展開（2026-08-21 使用者指示）——摺起來看不到「這位以前買過什麼」，
-           而櫃檯點開會員第一件事常常就是找上一張票。上面的「已過期方案」本來就會在有可展延
-           的票時自動展開，這裡改成一律展開，兩區行為一致。 */
-        const histSec=hist.length?`<details class="pp-hist" open><summary>歷史紀錄（${hist.length}）</summary>
+        /* 歷史紀錄預設**收起**（2026-09-15 使用者：「票券的歷史紀錄　預設改成關閉」）——
+           推翻 2026-08-21 的「一律展開」：當時的理由是櫃檯常要找上一張票，
+           但票一張張累積之後（賴冠瑋已經 12 張），展開會把整頁推得很長，
+           真正在用的票反而被擠到看不見。要找舊票點一下就開。
+           ⚠ 上面的「已過期方案」維持原樣：它只在有可展延的票時才自動展開，
+             那是「還能救的票」，性質不同，不要一起改。 */
+        const histSec=hist.length?`<details class="pp-hist"><summary>歷史紀錄（${hist.length}）</summary>
           ${hist.map(histRow).join('')}</details>`:'';
         /* 儲值金（2026-08-30 使用者指示：「儲值金列在上方頁面＋儲值左邊」）——
            只有餘額 > 0 才出現：沒有的人看到一顆 $0 只是噪音。 */

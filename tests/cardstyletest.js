@@ -731,11 +731,18 @@ ok('　　寫回票券要清快取，然後回到那張課卡（ashBackArm 已�
 ok('　　格數要數 stamps 裡的預約本身（slotOf 的 stamps 就是 bookings，沒有 booking_id 欄）',
    /_n=\(\(_sl&&_sl\.stamps\)\|\|\[\]\)\.filter\(x=>x&&x\.id\)\.length;/.test(src));
 
-console.log('\n會員資料的歷史紀錄預設展開（2026-08-21 使用者指示）');
-ok('★ 櫃檯端（會員資料 → 票券）',
-   /<details class="pp-hist" open><summary>歷史紀錄（\$\{hist\.length\}）<\/summary>/.test(src));
-ok('★ 教練端的簡易名片也一致',
-   /<details class="md-tk-hist" open><summary>歷史紀錄（\$\{history\.length\}）<\/summary>/.test(src));
+console.log('\n會員資料的歷史紀錄預設收起（2026-09-15 使用者指示，推翻 0821）');
+/* 2026-08-21 原本定的是「一律展開」，理由是櫃檯點開會員第一件事常常就是找上一張票。
+   2026-09-15 使用者：「票券的歷史紀錄　預設改成關閉」——
+   票一張張累積之後（賴冠瑋已經 12 張），展開會把整頁推得很長，
+   真正在用的票反而被擠到看不見。要找舊票點一下就開。
+   ⚠ 兩端一起改：0821 當初就是刻意讓櫃檯端與教練端名片一致，只改一邊會讓它們分岔。
+   ⚠ 下面第三條「已過期方案」維持原樣 —— 它只在有可展延的票時自動展開，
+     那是「還能救的票」，性質不同，不要一起收起來。 */
+ok('★ 櫃檯端（會員資料 → 票券）：預設收起',
+   /<details class="pp-hist"><summary>歷史紀錄（\$\{hist\.length\}）<\/summary>/.test(src));
+ok('★ 教練端的簡易名片也一致（同樣收起）',
+   /<details class="md-tk-hist"><summary>歷史紀錄（\$\{history\.length\}）<\/summary>/.test(src));
 ok('　　「已過期方案」原本就會在有可展延的票時展開，行為不變',
    /<details class="pp-hist"\$\{_extable\.length\?' open':''\}><summary>已過期方案/.test(src));
 
