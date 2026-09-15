@@ -125,5 +125,51 @@ ok('★★★ RLS：自己的＋管理員', /alter table public\.coach_exercises
 ok('★★★ 新表要有 change_log 觸發器（否則只會整表重抓）', /create trigger trg_change_log after insert or delete or update on public\.coach_exercises/.test(sql));
 ok('★★ 前端快取比照設定表拉長', /coach_exercises:300000/.test(src));
 
+console.log('\n⑥ 1V2 的兩份課表（2026-09-15 使用者：「上方用兩個標籤頁1跟2 不用填名字 教練自己會知道就好」）');
+/* 查證過的背景：1V2 的 booking 是單人單張（member_id 一個人、sibling_of 全 null、
+   同時段只有一張）；489 張 1V2 票只有 11 張設 shared_with，且那 11 張實際約課的
+   也只有持有人；扣課一堂一點。→ 第二位學員在資料裡不存在。
+   使用者選擇不登記是誰，只用 1／2 頁籤，所以第二位的紀錄借掛在第一位身上，用 slot 區分。 */
+{
+  const sqlSlot=fs.readFileSync(root+'docs/migrations/20260915_training_logs_slot.sql','utf8');
+  ok('★★★ migration：slot 欄位（不回填，舊資料 null 就是第一位）',
+     /add column if not exists slot smallint;/.test(sqlSlot));
+  ok('★★ 欄位註解講清楚語意（日後看到 slot=2 才知道那不是這位會員的）',
+     /comment on column public\.training_logs\.slot/.test(sqlSlot)
+     && /第二位沒有自己的 member_id/.test(sqlSlot));
+
+  ok('★★★ 只有 1V2 才畫頁籤（其他課畫面完全不變）',
+     /const _is1v2 = fmt==='1V2';/.test(src)
+     && /\$\{_is1v2\?`<div class="tl-slots">/.test(src));
+  ok('★★★ 每次開抽屜都回到第 1 位（連開好幾堂課時，停在 2 會把下一位記錯格）',
+     /window\._tlSlot=1;/.test(src));
+  ok('★★ 切換要重畫整個抽屜（今日紀錄要換成那一位的）',
+     /function tlSetSlot\(s\)\{[\s\S]{0,160}?renderTrainingLogSheet\(\);/.test(src));
+
+  /* ⚠⚠ 這是這次最重要的防線：slot=2 借掛在第一位的 member_id 上，
+     所有「以會員身分看自己」的讀取端都要濾掉，否則
+     ① 會員看到別人的動作與重量 ② 他的三大項 PR 被另一個人的成績蓋掉
+     （PR 完全從 training_logs 推導，沒有獨立來源）。 */
+  const guards=(src.match(/Number\(l(&&l)?\.slot\)!==2/g)||[]).length
+             + (src.match(/_slotOf\(l\)!==2/g)||[]).length;
+  ok('★★★ 七處會員向讀取端都濾掉 slot=2（漏一處就會出現「別人的 PR 算到我頭上」）',
+     guards===7, guards);
+  ok('★★★ 會員端自己那一頁有濾',
+     /filter\(l=>l&&l\.member_id===SESSION\.id && Number\(l\.slot\)!==2\)/.test(src));
+  ok('★★★ PR 的來源（memAllLogs）有濾 —— 不濾的話紀錄會被另一個人蓋掉',
+     /const memAllLogs=allLogs\.filter\(l=>l\.member_id===b\.member_id && _slotOf\(l\)!==2\);/.test(src));
+
+  ok('★★★ 三個寫入點都帶 slot（新增動作／套歷史課表／套方案）',
+     (src.match(/slot:\(Number\(window\._tlSlot\)===2\)\?2:null/g)||[]).length===3);
+  ok('★★ 非 1V2 存 null 不存 1（單人課不要留下看不懂的 1）',
+     !/slot:\(Number\(window\._tlSlot\)===2\)\?2:1/.test(src));
+
+  ok('★★★ 「上次的數字」要同一位（第 2 位讀到第 1 位的，帶進來的重量是別人的）',
+     /const _sl = Number\(window\._tlSlot\)===2 \? 2 : 1;/.test(src)
+     && /_slOf\(l\)===_sl/.test(src));
+  ok('★★ 本堂紀錄依當前頁籤過濾',
+     /l\.booking_id===b\.id && \(!_is1v2 \|\| _slotOf\(l\)===_slot\)/.test(src));
+}
+
 console.log('\n'+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

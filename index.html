@@ -3781,6 +3781,14 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
     border-radius:16px;max-height:calc(100% - 24px);padding-top:0;}
 }
 .tls-panel .tl-scroll{flex:1 1 auto;min-height:0;max-height:none;}
+/* 1V2 的兩份課表頁籤（2026-09-15 使用者：「上方用兩個標籤頁1跟2 不用填名字」）——
+   放在凍結區、會員資料下方；只有 1V2 才畫。刻意做小：它只是切換，不是主角。 */
+.tl-slots{display:flex;gap:6px;margin:0 18px 10px;flex:none;}
+.tl-slot{flex:1;padding:7px 0;border-radius:9px;border:1px solid var(--bd);background:var(--card);
+  font-family:inherit;font-size:14px;font-weight:700;color:var(--t2);cursor:pointer;
+  font-variant-numeric:tabular-nums;transition:.12s;}
+.tl-slot:active{transform:scale(.97);}
+.tl-slot.on{background:var(--green);border-color:var(--green);color:#fff;}
 /* 三大項紀錄：兩列（第一列項目、第二列 組×次×重量），固定三格；整塊點下去＝全部紀錄 */
 .tlh-prb{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 18px 10px;flex:none;
   cursor:pointer;-webkit-tap-highlight-color:transparent;}
@@ -13149,8 +13157,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1739';
-const APP_VERSION_LABEL = 'v260915.1739';
+const APP_VERSION = '260915.1804';
+const APP_VERSION_LABEL = 'v260915.1804';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48952,7 +48960,8 @@ function ppGoPage(key, gkey){
 // 訓練紀錄視窗（2026-07-21 使用者指示：名片內入口一律視窗顯示）——與 m_training 頁同資料同分組
 async function ppOpenTraining(id){
   let logs=[];
-  try{ logs=(await dbGetAll('training_logs')).filter(l=>l.member_id===id); }catch(_){}
+  /* ⚠ 濾掉 slot=2：那是 1V2 第二位的紀錄，只是借掛在這位會員身上（2026-09-15） */
+  try{ logs=(await dbGetAll('training_logs')).filter(l=>l.member_id===id && Number(l&&l.slot)!==2); }catch(_){}
   logs.sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
   const byBk={};
   logs.forEach(l=>{ (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
@@ -49345,7 +49354,8 @@ async function ppLoadCtx(){
          多撈一張表會拖慢每一次開會員資料，而訓練紀錄是四個分頁裡最少人點的那個。 */
     c.trainLogs=[];
     if(PP.recView==='training'){
-      try{ c.trainLogs=(await dbGetAll('training_logs')).filter(l=>l&&l.member_id===PP.id); }catch(_){}
+      /* ⚠ 濾掉 slot=2（2026-09-15）：1V2 第二位的紀錄借掛在這位會員身上，不是他的 */
+      try{ c.trainLogs=(await dbGetAll('training_logs')).filter(l=>l&&l.member_id===PP.id && Number(l.slot)!==2); }catch(_){}
     }
     /* 共享章顯示名字用（2026-08-04 使用者指示：「共享人顯示清楚一點」）——
        2026-08-23：改用上面那一批一起抓回來的 membersAll，不要再 await 一次
@@ -51449,7 +51459,9 @@ PAGES.mem_training=async function(){
   const C=document.getElementById('content');
   C.innerHTML='<div class="card"><div class="pp-card-tip">載入中…</div></div>';
   let logs=[];
-  try{ logs=(await dbGetAll('training_logs')).filter(l=>l&&l.member_id===SESSION.id); }catch(_){}
+  /* ⚠ 濾掉 slot=2（2026-09-15）：1V2 第二位的紀錄借掛在這位會員身上，
+     不濾的話會員會看到別人的動作與重量 */
+  try{ logs=(await dbGetAll('training_logs')).filter(l=>l&&l.member_id===SESSION.id && Number(l.slot)!==2); }catch(_){}
   logs.sort((a,b)=>String((b&&b.created_at)||'').localeCompare(String((a&&a.created_at)||'')));
   const bks=new Set(logs.map(l=>l.booking_id).filter(Boolean));
   const exs=new Set(logs.map(l=>l.exercise_name).filter(Boolean));
@@ -51472,7 +51484,8 @@ PAGES.m_training=async function(){
   if(H.guard){ mwGuardBack(); return; }
   const mid=SCOPE.id;
   let logs=[];
-  try{ logs=(await dbGetAll('training_logs')).filter(l=>l.member_id===mid); }catch(_){}
+  /* ⚠ 濾掉 slot=2（2026-09-15，同上） */
+  try{ logs=(await dbGetAll('training_logs')).filter(l=>l.member_id===mid && Number(l&&l.slot)!==2); }catch(_){}
   logs.sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
   // 依課堂(booking_id)分組
   const byBk={};
@@ -61737,6 +61750,10 @@ async function openTrainingLog(bookingId){
   if(!tlOwnsBk(b)){ showToast('這不是你的課，看不到課表'); return; }
   if(!tlLoggable(b)){ showToast('團課與自主訓練不記課表'); return; }
   window._tlBooking=b;
+  /* 1V2 的兩份課表（2026-09-15 使用者：「上方用兩個標籤頁1跟2 不用填名字 教練自己會知道就好」）——
+     ⚠ 每次開抽屜都回到第 1 位，不要記上次停在哪：教練連著開好幾堂課，
+       停在「2」會讓他把下一位的紀錄記到第二格去。 */
+  window._tlSlot=1;
   // 會員名 + 票券剩餘 + 是否友善課
   let memName='會員', tkText='', isFriendly=false;
   try{ const m=await dbGet('members',b.member_id); if(m)memName=m.name; }catch(_){}
@@ -61776,6 +61793,12 @@ async function openTrainingLog(bookingId){
   renderTrainingLogSheet();
 }
 function closeTrainingLog(){ const s=document.getElementById('tl-sheet'); if(s)s.remove(); document.querySelectorAll('.qb-fab').forEach(x=>x.style.display=''); }
+/* 切換 1V2 的第幾位（2026-09-15）——重畫整個抽屜：今日紀錄要換成那一位的。
+   ⚠ 「上次的數字」也要跟著重載（tlLoadQuickEx 會依 slot 撈），否則第 2 位會帶到第 1 位的重量。 */
+function tlSetSlot(s){
+  window._tlSlot=(Number(s)===2)?2:1;
+  renderTrainingLogSheet();
+}
 
 async function renderTrainingLogSheet(){
   const b=window._tlBooking;
@@ -61786,11 +61809,17 @@ async function renderTrainingLogSheet(){
 
   let allLogs=[];
   try{ allLogs=await dbGetAll('training_logs'); }catch(_){}
-  // 今日（本堂課）紀錄
-  const logs=allLogs.filter(l=>l.booking_id===b.id).sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
+  const fmt=b.format?b.format.toUpperCase():'';
+  /* 1V2 才有兩份課表（2026-09-15）。其他課維持單一份，畫面完全不變。
+     ⚠ slot 的語意：null 或 1＝第一位（所有舊資料都是），2＝第二位。 */
+  const _is1v2 = fmt==='1V2';
+  const _slot = _is1v2 ? (Number(window._tlSlot)||1) : 1;
+  const _slotOf = l => Number(l&&l.slot)===2 ? 2 : 1;
+  // 今日（本堂課）紀錄 —— 1V2 只看當前那一份
+  const logs=allLogs.filter(l=>l.booking_id===b.id && (!_is1v2 || _slotOf(l)===_slot))
+    .sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
   // 動作明細顯示（次數 x 重量；多組）
   const setLine=tlSetLine;
-  const fmt=b.format?b.format.toUpperCase():'';
 
   // 第二區：今日訓練紀錄
   const sec2 = logs.length===0
@@ -61803,7 +61832,9 @@ async function renderTrainingLogSheet(){
       </div>`).join('')}</div>`;
 
   // ── P1-1 會員訓練總覽（跨課程統計）──
-  const memAllLogs=allLogs.filter(l=>l.member_id===b.member_id);
+  /* ⚠ 一律濾掉 slot=2：那是 1V2 第二位的紀錄，只是借掛在這位會員的 member_id 上。
+     不濾的話，這位會員的三大項 PR 會被另一個人的成績蓋掉（PR 全部從 training_logs 推導）。 */
+  const memAllLogs=allLogs.filter(l=>l.member_id===b.member_id && _slotOf(l)!==2);
   const memBkSet=new Set(memAllLogs.map(l=>l.booking_id));
   const sessionCount=memBkSet.size;                       // 有訓練紀錄的課堂數
   const lastTrainDate=memAllLogs.length
@@ -61845,7 +61876,8 @@ async function renderTrainingLogSheet(){
     </div>`;
 
   // ── P1-2 歷史課表（最近三次，可一鍵套用）──
-  const memLogs=allLogs.filter(l=>l.member_id===b.member_id && l.booking_id!==b.id);
+  /* 歷史課表同樣濾掉第二位的（同 memAllLogs 的理由） */
+  const memLogs=allLogs.filter(l=>l.member_id===b.member_id && l.booking_id!==b.id && _slotOf(l)!==2);
   const byBk={};
   memLogs.forEach(l=>{ (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
   let hist=Object.entries(byBk).map(([bid,ls])=>({bid,ls,t:ls[0].created_at||''}))
@@ -61871,6 +61903,12 @@ async function renderTrainingLogSheet(){
           <div style="font-size:11.5px;color:var(--t3);margin-top:2px;">${b.date.replace(/-/g,'/')} ${b.start_time}${window._tlTkText?'　·　'+window._tlTkText:''}</div></div>
         <button class="ms-close" onclick="closeTrainingLog()">✕</button>
       </div>
+      ${/* 1V2 的兩份課表（2026-09-15 使用者：「上方用兩個標籤頁1跟2 不用填名字
+           教練自己會知道就好」）—— 只有 1V2 才畫，其他課完全不變。
+           ⚠ 三大項紀錄（overview）只算第一位，切到「2」時不跟著換：
+             第二位沒有自己的會員身分，算不出屬於他的 PR。 */''}
+      ${_is1v2?`<div class="tl-slots">${[1,2].map(s=>
+        `<button type="button" class="tl-slot${_slot===s?' on':''}" onclick="tlSetSlot(${s})">${s}</button>`).join('')}</div>`:''}
       ${/* 凍結區到這裡為止（會員資料＋三大項），下面的 .tl-scroll 才捲動（2026-09-11） */''}
       ${overview}
       <div class="tl-scroll">
@@ -61915,6 +61953,7 @@ async function tlDoApplyHist(srcBid){
         id:uid('TLOG'), booking_id:b.id, member_id:b.member_id, coach_id:SESSION.id,
         exercise_name:s.exercise_name, body_part:s.body_part, posture:s.posture, tool:s.tool,
         reps:s.reps, sets:s.sets, sets_detail:s.sets_detail,
+        slot:(Number(window._tlSlot)===2)?2:null,   /* 套進來的也要落在當前那一位（2026-09-15） */
         note:(s.note||'').replace(/\s*\(套用.*?\)\s*/g,'')+' (套用 '+((s.created_at||'').slice(0,10).replace(/-/g,'/'))+')',
         created_at:new Date().toISOString()
       };
@@ -61932,7 +61971,8 @@ async function tlOpenExerciseHistory(){
   const b=window._tlBooking;
   let allLogs=[];
   try{ allLogs=await dbGetAll('training_logs'); }catch(_){}
-  const memLogs=allLogs.filter(l=>l.member_id===b.member_id);
+  /* 動作查詢也濾掉 slot=2（2026-09-15，同 memAllLogs 的理由） */
+  const memLogs=allLogs.filter(l=>l.member_id===b.member_id && Number(l&&l.slot)!==2);
   // 該會員練過的所有動作（去重，依最近練過排序）
   const exMap={};
   memLogs.forEach(l=>{ if(!l.exercise_name)return; const t=l.created_at||''; if(!exMap[l.exercise_name]||t>exMap[l.exercise_name]) exMap[l.exercise_name]=t; });
@@ -62098,8 +62138,12 @@ async function tlLoadQuickEx(){
   let pre=[], logs=[];
   try{ [pre,logs]=await Promise.all([dbGetAll('coach_exercises').catch(()=>[]),dbGetAll('training_logs').catch(()=>[])]); }catch(_){}
   window._tlQuickEx=cxeSorted(cxeMine(pre));
+  /* 「上次的數字」要同一位（2026-09-15）——1V2 的第 2 位如果讀到第 1 位的紀錄，
+     帶進來的重量是別人的。slot 2 只看 slot 2，slot 1 看 null 或 1（舊資料都是 null）。 */
+  const _sl = Number(window._tlSlot)===2 ? 2 : 1;
+  const _slOf = l => Number(l&&l.slot)===2 ? 2 : 1;
   const last={};
-  (logs||[]).filter(l=>l&&l.member_id===b.member_id&&l.booking_id!==b.id)
+  (logs||[]).filter(l=>l&&l.member_id===b.member_id&&l.booking_id!==b.id&&_slOf(l)===_sl)
     .sort((a,c)=>String(a.created_at||'').localeCompare(String(c.created_at||'')))
     .forEach(l=>{ if(l.exercise_name) last[l.exercise_name]=l; });
   window._tlLastByEx=last;
@@ -62319,6 +62363,9 @@ async function tlSaveExercise(){
     weight_unit:(function(){ const w=valid.map(x=>Number(x.weight)).filter(n=>isFinite(n)&&n>0);
       return w.length?_su:null; })(),
     sets_detail:JSON.stringify(valid),    // 多組明細（次數+重量）
+    /* 1V2 的第幾位（2026-09-15）：1 或 null 都是第一位，2 是第二位。
+       非 1V2 一律存 null —— 不要在單人課上留下看不懂的 1。 */
+    slot:(Number(window._tlSlot)===2)?2:null,
     note:(st.note||'') + (setsText?(st.note?'　':'')+'['+setsText+']':''),
     created_at:new Date().toISOString()
   };
@@ -62437,6 +62484,7 @@ async function _tlPlanApply(pid,useLast){
         weight:(weight!=null&&isFinite(weight)&&weight>0)?weight:null,
         weight_unit:(weight!=null&&isFinite(weight)&&weight>0)?unit:null,
         sets_detail:null,
+        slot:(Number(window._tlSlot)===2)?2:null,   /* 套方案也要落在當前那一位（2026-09-15） */
         note:it.note||null,
         created_at:new Date().toISOString() });
       window._tlogBids&&window._tlogBids.add(b.id);

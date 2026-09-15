@@ -236,8 +236,10 @@ ok('★★★ 會員課卡看得到當天（沒記過就整塊不畫，不要留
    && /撈不到就整塊不畫，不要在課卡上留一個「載入失敗」的空盒子/.test(src));
 ok('★★★ 會員多一頁「訓練紀錄」看歷史', /\{key:'mem_training', label:'訓練紀錄'\},/.test(src)
    && /PAGES\.mem_training=async function\(\)\{/.test(src));
+/* 2026-09-15：多了 slot 過濾（1V2 第二位的紀錄借掛在第一位的 member_id 上，
+   不濾掉的話會員會看到別人的動作與重量）。這條的語意沒變，反而更嚴。 */
 ok('★★★ 會員只讀自己的（RLS 也有一條，這裡是畫面）',
-   /\.filter\(l=>l&&l\.member_id===SESSION\.id\)/.test(src)
+   /\.filter\(l=>l&&l\.member_id===SESSION\.id && Number\(l\.slot\)!==2\)/.test(src)
    && /這裡只讀不寫 —— 會員不能改教練記的東西/.test(src));
 ok('★★★ 櫃檯那張「功能開發中」的空頁換成真的內容',
    !/功能開發中，敬請期待/.test(src)
