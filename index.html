@@ -13051,8 +13051,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1058';
-const APP_VERSION_LABEL = 'v260915.1058';
+const APP_VERSION = '260915.1108';
+const APP_VERSION_LABEL = 'v260915.1108';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13944,6 +13944,60 @@ function invPick(k){
   }
   box.innerHTML=h;
   invDimSync();   /* 重畫後要重套暗化，否則「不開發票」下面又能打字了 */
+}
+/* 其他消費（商品／自主訓練票券／票券重啟）的整筆作廢（2026-09-15 使用者：
+   「這邊沒有退款的機制嗎」）——
+   30 分鐘內本來就能走今日營收那一列的〔退回〕整筆清掉（openSaleUndo 的 else 分支
+   就吃純 purchases）；超過 30 分鐘原本**沒有任何路**，這支補上。
+   ⚠ 沿用票券作廢同一套慣例，不自創：
+     收款紀錄標【已作廢 原$N：原因】、deal_amount 歸 0、發票連帶作廢。
+   ⚠ 不刪紀錄：帳要看得到「曾經賣過、何時作廢、為什麼」。
+   ⚠ 發票作廢要在改 deal_amount **之前**做 —— invVoidForPurchase 只認 purchase_id，
+     與金額無關，但先歸零再作廢的話，萬一作廢失敗就會變成「錢退了、發票還在」。 */
+async function othVoidAsk(purId){
+  if(!isDeskLike()){ showToast('僅管理員／櫃台可作廢'); return; }
+  const p=await dbGet('purchases',purId).catch(()=>null);
+  if(!p){ showToast('找不到這筆收款紀錄'); return; }
+  const amt=Number(p.deal_amount)||0;
+  if(amt<=0){ showToast('這筆金額是 0，不需要作廢'); return; }
+  const invNo=p.invoice_number||'';
+  showModal(`<div class="modal-title">作廢這筆消費</div>
+    <div style="font-size:13.5px;color:var(--text);padding:2px 0 10px;">
+      ${escH(p.plan_name||'消費')}　·　$${amt.toLocaleString()}</div>
+    <div class="mk-key">整筆作廢${invNo?'，發票一併作廢':''}<small>紀錄會留著，金額不再計入營收</small></div>
+    <ul class="mk-pts">
+      <li>今日營收會<b>減掉這筆</b>；會員的「其他消費」仍看得到，標成已作廢</li>
+      ${invNo?`<li>發票 <b>${escH(invNo)}</b> 會送到綠界作廢</li>`
+             :'<li>這筆沒有開發票，只清收款紀錄</li>'}
+    </ul>
+    <div class="form-row"><label>原因（選填，會寫進紀錄）</label>
+      <input id="oth-why" placeholder="例：客人退貨、賣錯品項" maxlength="20"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-dark" onclick="othVoidGo('${purId}')">確定作廢</button>
+    </div>`);
+}
+async function othVoidGo(purId){ return onceAct('othvoid:'+purId, ()=>_othVoid(purId)); }
+async function _othVoid(purId){
+  const why=((document.getElementById('oth-why')||{}).value||'').trim();
+  const done=cxBusy('作廢中…');
+  try{
+    const p=await dbGet('purchases',purId);
+    if(!p){ done(); showToast('找不到這筆收款紀錄'); return; }
+    const amt=Number(p.deal_amount)||0;
+    if(amt<=0){ done(); closeModal(); showToast('這筆已經是 0 元'); return; }
+    /* 先作廢發票（只認 purchase_id，與金額無關）—— 失敗只提示，不擋收款作廢：
+       發票沒作廢還能到綠界後台處理，但錢的紀錄一定要改對。 */
+    try{ await invVoidForPurchase(purId, ('作廢'+(why?'：'+why:'')).slice(0,20)); }
+    catch(e){ console.error('other void invoice fail', e); }
+    p.deal_amount=0;
+    p.note=((p.note||'')+`【已作廢 原$${amt.toLocaleString()}${why?`：${why}`:''}】`).trim();
+    await dbPut('purchases',p);
+    dbCacheClear(['purchases','invoices']);
+    closeModal(); done();
+    showToast(`已作廢（原 $${amt.toLocaleString()}）`);
+    try{ ppRenderBody(); }catch(_){}
+  }catch(e){ done(); showToast('作廢失敗：'+((e&&e.message)||e)); }
 }
 /* 發票摘要（2026-09-15）：把 invReadFields 的結果講成人話，給「確認收款」那個視窗用。
    使用者回報在那裡找不到發票選項 —— 發票區在兩步之前，按到最後早就看不到了。
@@ -47817,29 +47871,41 @@ function ppRecordHtml(){
         const _oInv=p=>p.invoice_number
           ? `<span class="rev-invno">${p.invoice_number}</span>`
           : `<span class="rev-noinv">沒開發票</span>`;
+        /* 作廢（2026-09-15 使用者：「這邊沒有退款的機制嗎」）——
+           30 分鐘內可以走今日營收的〔退回〕整筆清掉；超過就只剩作廢這條路。
+           ⚠ 沿用票券作廢同一套：收款紀錄標【已作廢 原$N：原因】、金額歸 0、發票連帶作廢。
+           ⚠ 已作廢的列淡化並顯示原因 —— 不是隱藏（帳要看得到曾經賣過、何時作廢）。 */
+        const _oVoided=p=>/【已作廢/.test(String(p.note||''));
+        const _oWhy=p=>{ const m=/【已作廢[^】]*】/.exec(String(p.note||'')); return m?m[0]:'【已作廢】'; };
+        const _oVoidBtn=p=>(!isDeskLike()||_oVoided(p)||!(Number(p.deal_amount)>0))?''
+          : `<button class="btn btn-ghost btn-sm" style="color:var(--danger,#b5372e);padding:2px 9px;"
+               onclick="event.stopPropagation();othVoidAsk('${p.id}')" title="賣錯了／退貨：整筆作廢，發票一併作廢">作廢</button>`;
         const _oBar=_oAll.length?`<div style="display:flex;justify-content:space-between;align-items:baseline;background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:12px 16px;margin:2px 0 12px;">
             <span style="font-size:12.5px;color:var(--t2);">累計消費（${_oAll.length} 筆）</span>
             <b class="num" style="font-size:22px;color:var(--green);">$${_oSum.toLocaleString()}</b></div>`:'';
         if(_m2){
-          const _rows=_oAll.map(p=>`<div class="pp-txrow">
+          const _rows=_oAll.map(p=>`<div class="pp-txrow"${_oVoided(p)?' style="opacity:.5;"':''}>
             <div class="pp-txmain"><div class="pp-txplan">${p.plan_name||'—'}</div>
               <div class="pp-txsub">${_oDt(p).replace(/-/g,'/')}　·　${_oSrc[p.source]||p.source}　·　${_oPay(p.payment_method)}</div>
-              <div class="pp-txsub" style="margin-top:3px;">${_oInv(p)}</div></div>
+              <div class="pp-txsub" style="margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                ${_oInv(p)}${_oVoided(p)?`<span style="color:var(--danger,#b5372e);font-weight:600;">${_oWhy(p)}</span>`:''}${_oVoidBtn(p)}</div></div>
             <b class="pp-txamt">$${(Number(p.deal_amount)||0).toLocaleString()}</b></div>`).join('');
           return `<div class="pp-card">${back}<div class="pp-card-t">其他消費（${c.otherCount||0}）</div>
             ${_oBar}${_rows?`<div class="pp-txlist">${_rows}</div>`:'<div class="pp-card-tip">沒有課程以外的消費</div>'}</div>`;
         }
-        const _trs=_oAll.map(p=>`<tr><td style="white-space:nowrap;">${_oDt(p)}</td>
-          <td>${p.plan_name||'—'}</td>
+        const _trs=_oAll.map(p=>`<tr${_oVoided(p)?' style="opacity:.5;"':''}><td style="white-space:nowrap;">${_oDt(p)}</td>
+          <td>${p.plan_name||'—'}${_oVoided(p)?`<br><span style="font-size:11px;color:var(--danger,#b5372e);">${_oWhy(p)}</span>`:''}</td>
           <td style="white-space:nowrap;">${_oSrc[p.source]||p.source}</td>
           <td style="text-align:right;font-weight:700;color:var(--green);">$${(Number(p.deal_amount)||0).toLocaleString()}</td>
           <td style="white-space:nowrap;">${_oPay(p.payment_method)}</td>
-          <td style="white-space:nowrap;">${_oInv(p)}</td></tr>`).join('');
+          <td style="white-space:nowrap;">${_oInv(p)}</td>
+          <td style="white-space:nowrap;text-align:right;">${_oVoidBtn(p)}</td></tr>`).join('');
         return `<div class="pp-card">${back}<div class="pp-card-t">其他消費（${c.otherCount||0}）</div>
-          ${_oBar}${_trs?`<table class="mtk-table"><thead><tr><th>日期</th><th>品項</th><th>類別</th><th style="text-align:right;">金額</th><th>方式</th><th>發票</th></tr></thead><tbody>${_trs}</tbody></table>`:'<div class="pp-card-tip">沒有課程以外的消費</div>'}</div>`;
+          ${_oBar}${_trs?`<table class="mtk-table"><thead><tr><th>日期</th><th>品項</th><th>類別</th><th style="text-align:right;">金額</th><th>方式</th><th>發票</th><th></th></tr></thead><tbody>${_trs}</tbody></table>`:'<div class="pp-card-tip">沒有課程以外的消費</div>'}</div>`;
       }
       /* 2026-09-09：這一頁原本是「功能開發中」的空頁（入口 0822 因此收起來）。
          資料一直都在（training_logs），只是沒人把它畫出來 —— Phase 3 一併補上。 */
+      /* ↑ 其他消費那一段到這裡結束（作廢流程見 othVoidAsk／_othVoid）。 */
       {
         const _tl=(c.trainLogs||[]).slice().sort((a,b2)=>String((b2&&b2.created_at)||'').localeCompare(String((a&&a.created_at)||'')));
         const _body=tlSessionsHtml(_tl,40);

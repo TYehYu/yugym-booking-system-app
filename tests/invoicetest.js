@@ -460,6 +460,43 @@ console.log('\n④-7 送出鈕的即時把關（2026-09-15）');
   eq('　　不開發票：全部放行', invCheckFields({mode:'none'}), '');
 }
 
+console.log('\n④-8 其他消費（商品等）的整筆作廢（2026-09-15）');
+/* 使用者：「這邊沒有退款的機制嗎」「因為售出的商品 都有機會會被退款 所以要保有這個機制」
+   ⚠ 30 分鐘內本來就能走今日營收那一列的〔退回〕（openSaleUndo 的 else 分支吃純 purchases），
+     超過 30 分鐘原本**沒有任何路** —— 這一段補上。
+   ⚠ 沿用票券作廢同一套慣例，不自創：【已作廢 原$N：原因】＋ deal_amount 歸 0 ＋ 發票連帶作廢。 */
+{
+  const A=grabFn('othVoidAsk'), V=grabFn('_othVoid');
+  ok('★★★ 只有櫃檯以上能作廢', /if\(!isDeskLike\(\)\)\{ showToast\('僅管理員／櫃台可作廢'\); return; \}/.test(A));
+  ok('★★★ 0 元的不讓作廢（已經作廢過的就是 0）',
+     /if\(amt<=0\)\{ showToast\('這筆金額是 0，不需要作廢'\); return; \}/.test(A));
+  ok('★★ 有發票的要在確認視窗寫明發票也會作廢',
+     /\$\{invNo\?'，發票一併作廢':''\}/.test(A)
+     && /發票 <b>\$\{escH\(invNo\)\}<\/b> 會送到綠界作廢/.test(A));
+  ok('★★★ 防連點（動錢的操作按兩次就是兩筆帳）',
+     /async function othVoidGo\(purId\)\{ return onceAct\('othvoid:'\+purId, \(\)=>_othVoid\(purId\)\); \}/.test(src));
+  /* ⚠ 順序：先作廢發票再歸零金額 —— 反過來的話，萬一發票作廢失敗
+     就變成「錢退了、發票還在」，那是稅務問題。 */
+  ok('★★★ 先作廢發票，再把金額歸 0',
+     V.indexOf('invVoidForPurchase') < V.indexOf('p.deal_amount=0'));
+  ok('★★★ 發票作廢失敗不擋收款作廢（錢的紀錄一定要改對）',
+     /catch\(e\)\{ console\.error\('other void invoice fail', e\); \}/.test(V));
+  ok('★★★ 備註沿用票券那一套格式，不自創',
+     /p\.note=\(\(p\.note\|\|''\)\+`【已作廢 原\$\$\{amt\.toLocaleString\(\)\}\$\{why\?`：\$\{why\}`:''\}】`\)\.trim\(\);/.test(V));
+  ok('★★ 不刪紀錄（帳要看得到曾經賣過、何時作廢、為什麼）',
+     !/dbDel\('purchases'/.test(V) && /await dbPut\('purchases',p\);/.test(V));
+  ok('★★ 作廢後清快取並重繪', /dbCacheClear\(\['purchases','invoices'\]\);/.test(V)
+     && /try\{ ppRenderBody\(\); \}catch\(_\)\{\}/.test(V));
+  ok('★★ 已作廢的列淡化並顯示原因（不是隱藏）',
+     /const _oVoided=p=>\/【已作廢\/\.test\(String\(p\.note\|\|''\)\);/.test(src)
+     && /_oVoided\(p\)\?' style="opacity:\.5;"':''/.test(src));
+  ok('★★ 作廢鈕只給櫃檯、且已作廢或 0 元的不再出現',
+     /const _oVoidBtn=p=>\(!isDeskLike\(\)\|\|_oVoided\(p\)\|\|!\(Number\(p\.deal_amount\)>0\)\)\?''/.test(src));
+  /* 30 分鐘那條路本來就支援純 purchases，這裡釘住它別被改掉 */
+  ok('★★★ 30 分鐘內的〔退回〕仍吃純 purchases（沒有票券也能退）',
+     /pur=await dbGet\('purchases',id\);/.test(grabFn('openSaleUndo')));
+}
+
 console.log('\n⑤ 作廢票券連動');
 {
   const F=grabFn('_voidTicketDo');
