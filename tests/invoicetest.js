@@ -509,8 +509,32 @@ console.log('\n⑤ 作廢票券連動');
   /* 2026-09-15 改為折讓：部分使用後退費不能作廢發票 —— 已上的課是真實銷售，
      發票不能整張消失。作廢只適用「開錯且未申報」，其餘一律折讓。 */
   ok('★★★ 退款開**折讓**不是作廢（課上了一半，原發票那一段仍然有效）',
-     /await invAllowanceForPurchase\(pc\.id, netOf\(pc\),/.test(F)
-     && !/invVoidForPurchase/.test(F));
+     /await invAllowanceForPurchase\(pc\.id, netOf\(pc\),/.test(F));
+  /* 2026-09-15 二修（使用者：「可以做成兩個選項嗎　作廢跟折讓」）——
+     完全未使用＋當期未申報的整筆退款，法規上正解是**作廢**不是折讓，
+     所以 invVoidForPurchase 這條路要**回來**，但由櫃檯明確選擇、而非自動判斷。 */
+  ok('★★★ 作廢那條路回來了，但要由櫃檯明確選（invAct==="void"）',
+     /invAct==='void'/.test(F) && /invVoidForPurchase/.test(F));
+  {
+    const P=grabFn('invPeriodOf'), V=grabFn('invVoidable');
+    ok('★★★ 期別＝雙月一期（1-2月同期、3月起跳下一期）',
+       /Math\.floor\(t\.getMonth\(\)\/2\)/.test(P) && /getFullYear\(\)\*6/.test(P));
+    ok('★★★ 只有**同期別**才給作廢（跨期一律折讓，避開記帳士已提前申報的雷）',
+       /return a===b;/.test(V));
+    /* 實跑：把函式抽出來單獨算，別只比對字串 */
+    /* ⚠ 要先讓兩個函式**宣告**進同一個作用域再 return ——
+       寫成 new Function('return ('+P+','+V+', invVoidable)') 會把它們變成
+       具名函式運算式，名字只在自身可見，invVoidable 內呼叫 invPeriodOf 會 ReferenceError。 */
+    const f=new Function(P+'\n'+V+'\nreturn invVoidable;')();
+    ok('★★ 1/5 開的發票，2/28 仍可作廢（同為 1-2 月期）',
+       f(new Date(2026,0,5), new Date(2026,1,28))===true);
+    ok('★★★ 1/5 開的發票，3/1 就不能作廢（跨到 3-4 月期）',
+       f(new Date(2026,0,5), new Date(2026,2,1))===false);
+    ok('★★★ 9/15 開的發票，11/1 不能作廢（雖然 11/15 才申報，保守起見一律折讓）',
+       f(new Date(2026,8,15), new Date(2026,10,1))===false);
+    ok('★★ 壞日期不當成可作廢（讀不到就走折讓，折讓永遠合法）',
+       f('', new Date())===false && f(null, new Date())===false);
+  }
   ok('★★★ 折讓金額＝實際退還給客人的錢（應退基數扣掉手續費），不是原收款金額',
      /const netOf=pc=>Math\.max\(0, baseOf\(Number\(pc\.deal_amount\)\|\|0\)-\(_fee\[pc\.id\]\|\|0\)\);/.test(F));
   ok('★★★ 不再有「手續費另開一張」那條路（折讓後原發票還在，重開會變兩張）',

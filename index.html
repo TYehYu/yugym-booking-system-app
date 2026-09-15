@@ -11021,6 +11021,15 @@ button.rev-kind.rev-kind-off{opacity:.5;}
   border-radius:10px;background:var(--card);cursor:pointer;line-height:1.6;}
 .vd-mode b{display:block;font-size:13.5px;font-weight:800;color:var(--text);}
 .vd-mode i{display:block;font-style:normal;font-size:11.5px;color:var(--t2);margin-top:2px;}
+/* 2026-09-15 使用者指示：「用副標說明　副標記得靠右」——
+   只有發票那組（.vd-mode-r）副標靠右：標題在左、說明在右，同一行對齊底線。
+   ⚠ 錢那三顆維持原樣（副標很長，靠右會擠成兩行）。 */
+.vd-mode-r{display:flex;align-items:baseline;justify-content:space-between;gap:12px;}
+.vd-mode-r b{flex:none;}
+.vd-mode-r i{margin-top:0;text-align:right;flex:1;min-width:0;}
+/* 不能點就暗化並寫原因（2026-08-23 定案：別藏按鈕，淡化列出＋副標寫原因） */
+.vd-mode[disabled]{opacity:.4;cursor:not-allowed;background:var(--card2);}
+.vd-mode[disabled]:hover{border-color:var(--bd);}
 .vd-mode:hover{border-color:var(--gold-d,#b48a56);}
 .vd-mode.on{border-color:var(--gold-d,#b48a56);background:var(--card2);
   box-shadow:inset 0 0 0 1px var(--gold-d,#b48a56);}
@@ -13051,8 +13060,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1217';
-const APP_VERSION_LABEL = 'v260915.1217';
+const APP_VERSION = '260915.1236';
+const APP_VERSION_LABEL = 'v260915.1236';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -39498,6 +39507,28 @@ const CREDIT_FEE_PCT=20;
      指定教練均已離職且未能協議替代方案、本公司變更履約地點未經會員同意。
    ⚠ 〔不予退費〕贈送堂數、展延之課程、逾有效期限之課程。 */
 const REFUND_FEE_CAP=9000;
+/* 這張發票還能不能「作廢」？（2026-09-15 使用者：「可以做成兩個選項嗎　作廢跟折讓」）
+   ── 法規分界（查證：財政部電子發票實施作業要點、國稅局說明）──
+   ・作廢：整筆交易取消／退貨，**且當期營業稅尚未申報**
+   ・折讓：部分退貨、只折金額、或**跨期（已申報）的整筆退貨**
+   營業稅是**雙月一期**、次期開始 15 日內申報
+   （1-2月→3/15、3-4月→5/15、5-6月→7/15、7-8月→9/15、9-10月→11/15、11-12月→隔年1/15）。
+   ⚠ 這裡刻意採**最保守**的判準：發票開立日與今天在**同一期別**才給作廢。
+     跨期後即使還沒到申報截止日（例如 11/1～11/15 的 9-10 月發票）也一律只給折讓 ——
+     記帳士可能已經提前申報，作廢已申報的發票要跑更正程序，比開折讓麻煩得多；
+     而那種情況下開折讓本來就完全合法，沒有任何損失。
+   ⚠ 只看日期不夠：部分使用過的票一律折讓（那是真實銷售），由呼叫端另外判斷 used。 */
+function invPeriodOf(d){
+  const t=(d instanceof Date)?d:new Date(d);
+  if(isNaN(t.getTime())) return null;
+  /* 期別代號＝年 *6 + 第幾期（0..5）；1-2月是第 0 期 */
+  return t.getFullYear()*6 + Math.floor(t.getMonth()/2);
+}
+function invVoidable(invoiceDate, now){
+  const a=invPeriodOf(invoiceDate); if(a==null) return false;
+  const b=invPeriodOf(now||new Date());
+  return a===b;
+}
 /* 依合約算退款：回傳 {base 應退, fee 手續費, net 實退}。
    ⚠ 分母用票券的總堂數 —— 查過 course_plans 目前沒有任何方案設 sessions_bonus，
      所以「購買總堂數」就等於 sessions_total；日後真的有贈送堂數要回來改這裡。 */
@@ -39799,7 +39830,23 @@ async function voidTicketAsk(id){
     if(ct&&ct.signed_at&&used===0)
       day7=(Date.now()-new Date(ct.signed_at).getTime())<7*86400000;
   }catch(_){}
+  /* 這張票的收款開過哪些發票 —— 作廢／折讓都是對著它做，沒開過就整組不畫。
+     ⚠ 期別用 **created_at** 判斷，不用 invoice_time ——
+       invoice_time 存的是綠界回傳的字串、被當 UTC 解讀（實際是台北時間，查詢時會多 8 小時），
+       月底晚上開的發票拿它算月份會跨到下一天甚至下一期。created_at 才是正確的時間戳。 */
+  let invRows=[], invSame=false, invPeriodLb='';
+  try{
+    const pids=new Set(purchases.map(p=>p.id));
+    invRows=((await dbGetAll('invoices').catch(()=>[]))||[])
+      .filter(x=>x&&pids.has(x.purchase_id)&&x.status==='issued'&&x.invoice_number);
+    invSame=invRows.length>0 && invRows.every(x=>invVoidable(x.created_at));
+    if(invRows.length){
+      const q=Math.floor(new Date(invRows[0].created_at).getMonth()/2)*2+1;
+      invPeriodLb=`${q}-${q+1} 月`;
+    }
+  }catch(_){}
   window._voidMode=null; window._voidAmt=amt; window._voidBase=base; window._voidUsed=used;
+  window._voidInvSame=invSame; window._voidInvPeriod=invPeriodLb; window._voidInvAct='allowance';
   showModal(`<div class="modal-title">作廢票券</div>
     <div style="font-size:13px;color:var(--text);line-height:1.9;">${escH(tk.plan_name||'票券')}　${tk.sessions_total} 堂${amt?`　·　交易金額 $${amt.toLocaleString()}`:''}<br>
     ${used>0?`<span style="color:var(--gold);font-size:12px;">已使用 ${used} 堂、未使用 ${left} 堂 —— 只能退未使用的部分（$${base.toLocaleString()}）。</span><br>`:''}
@@ -39823,7 +39870,15 @@ async function voidTicketAsk(id){
         <option value="injury">傷病不適宜運動（已核對區域級以上醫院證明）</option>
         <option value="coach">指定教練均已離職，且未能協議替代方案</option>
         <option value="venue">本公司變更履約地點，未經會員同意</option>
-      </select></div>`
+      </select></div>
+    ${invRows.length?`<div class="form-row" id="vd-inv-row" style="margin-top:12px;display:none;">
+      <label>發票怎麼處理 *</label>
+      <div class="vd-modes">
+        <button type="button" class="vd-mode vd-mode-r" id="vd-inv-void" data-vdi="void" onclick="voidInvPick('void')">
+          <b>作廢</b><i id="vd-inv-void-s"></i></button>
+        <button type="button" class="vd-mode vd-mode-r on" data-vdi="allowance" onclick="voidInvPick('allowance')">
+          <b>開折讓單</b><i>原發票留著，只沖掉退還的金額・任何情況都適用</i></button>
+      </div></div>`:''}`
     :`<div class="ovd-note">這張票沒有對應的收款紀錄（$0），作廢不牽涉到錢。</div>`}
     <div class="form-row" style="margin-top:12px;"><label>作廢原因</label><input id="void-reason" placeholder="例：選錯方案／重複儲值"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
@@ -39833,7 +39888,9 @@ async function voidTicketAsk(id){
    三種的差別全在帳上看不到的地方，不寫出來櫃檯只能用猜的。 */
 function voidPick(m){
   window._voidMode=m;
-  document.querySelectorAll('.vd-mode').forEach(b=>b.classList.toggle('on', b.dataset.vd===m));
+  /* ⚠ 只掃錢那三顆（[data-vd]）—— 發票那組也是 .vd-mode，
+     用 '.vd-mode' 會把它們的選取狀態一起清掉。 */
+  document.querySelectorAll('[data-vd]').forEach(b=>b.classList.toggle('on', b.dataset.vd===m));
   const amt=Number(window._voidAmt)||0;
   const base=(window._voidBase==null)?amt:(Number(window._voidBase)||0);
   const used=Number(window._voidUsed)||0;
@@ -39842,6 +39899,7 @@ function voidPick(m){
      沒選事由不解鎖確認鍵（動錢的操作不給預設值）。 */
   const row=document.getElementById('vd-waive-row');
   if(row) row.style.display=(m==='refund_full')?'':'none';
+  voidInvSync();   /* 發票那組的可用性跟著錢的選擇變（扣手續費就不能作廢） */
   const go=document.getElementById('vd-go');
   if(go){ const need=(m==='refund_full')&&!(document.getElementById('void-waive')?.value||'');
     go.disabled=need; go.style.opacity=need?'.4':''; go.style.cursor=need?'not-allowed':''; }
@@ -39858,6 +39916,33 @@ function voidPick(m){
     refund_fee:`${pro}要退 <b>$${(base-fee).toLocaleString()}</b> 現金給客人，留下的手續費 $${fee.toLocaleString()}${cap} <b>算營收</b>。
       發票會開<b>折讓單</b>沖掉退還的 $${(base-fee).toLocaleString()}。`,
   })[m]||'';
+}
+/* 發票怎麼處理（2026-09-15 使用者：「可以做成兩個選項嗎　作廢跟折讓
+   然後用副標說明　副標記得靠右　如果作廢不能點選了則要暗化處理」）——
+   ⚠ 作廢的條件比「當期未申報」更嚴，三種情形都只能折讓：
+     ① 扣了手續費：店裡留著錢，發票還有金額，不能整張作廢
+     ② 已使用過堂數：那一段是真實銷售，發票不能整張消失
+     ③ 跨申報期：已申報的發票要作廢得跑更正程序（見 invVoidable 的說明）
+   不能點時**暗化並在副標寫原因**，不藏起來（2026-08-23 定案）。 */
+function voidInvSync(){
+  const row=document.getElementById('vd-inv-row'); if(!row) return;
+  const m=window._voidMode;
+  row.style.display=(m&&m!=='credit')?'':'none';   /* 轉儲值金不動發票，整組收起來 */
+  const btn=document.getElementById('vd-inv-void'), sub=document.getElementById('vd-inv-void-s');
+  if(!btn||!sub) return;
+  const used=Number(window._voidUsed)||0;
+  let why='';
+  if(m==='refund_fee')        why='留有手續費，發票還有金額，不能整張作廢';
+  else if(used>0)             why=`已使用 ${used} 堂是真實銷售，發票不能整張消失`;
+  else if(!window._voidInvSame) why=`已跨申報期（${window._voidInvPeriod||'原期別'}），只能折讓`;
+  btn.disabled=!!why;
+  sub.textContent=why||'整筆交易取消，發票視同未開立・限當期未申報';
+  /* 本來選著作廢、條件變了就自動退回折讓（折讓永遠合法） */
+  if(why && window._voidInvAct==='void') voidInvPick('allowance');
+}
+function voidInvPick(k){
+  window._voidInvAct=k;
+  document.querySelectorAll('[data-vdi]').forEach(b=>b.classList.toggle('on', b.dataset.vdi===k));
 }
 /* 事由選了才解鎖（voidPick 會先把鍵鎖上） */
 function voidWaiveSync(){
@@ -39905,6 +39990,9 @@ async function _voidTicketDo(id){
   const MODE_LB={credit:'轉儲值金',refund_full:used>0?'退款（未使用部分）':'全額退款',
     refund_fee:`退款（扣 ${CREDIT_FEE_PCT}％ 手續費）`};
   const WHY=(reason?reason:'')+(waive?`${reason?'／':''}免手續費：${WAIVE_LB[waive]||waive}`:'');
+  /* 發票怎麼處理：櫃檯在視窗裡明確選過（voidInvSync 已擋掉不合法的組合）。
+     讀不到就走折讓 —— 折讓在任何情況下都合法，作廢則有前提。 */
+  const invAct=(window._voidInvAct==='void')?'void':'allowance';
 
   /* 先把儲值金存進去，再作廢票券 —— 反過來的話存款失敗會留下一張作廢又拿不回錢的票 */
   if(toCredit>0) await creditMove(tk.member_id, toCredit, 'void', id,
@@ -39943,9 +40031,14 @@ async function _voidTicketDo(id){
        ⚠ 折讓金額＝實際退還給客人的錢（net），不是應退基數、也不是原收款金額。 */
     if(mode!=='credit'){
       try{
-        await invAllowanceForPurchase(pc.id, netOf(pc),
-          ('退費・'+MODE_LB[mode]+(WHY?'：'+WHY:'')).slice(0,20));
-      }catch(e){ console.error('invoice allowance fail', e); }
+        if(invAct==='void'){
+          /* 整筆交易取消、當期未申報 → 作廢，發票視同未開立 */
+          await invVoidForPurchase(pc.id, ('退費・'+MODE_LB[mode]+(WHY?'：'+WHY:'')).slice(0,20));
+        }else{
+          await invAllowanceForPurchase(pc.id, netOf(pc),
+            ('退費・'+MODE_LB[mode]+(WHY?'：'+WHY:'')).slice(0,20));
+        }
+      }catch(e){ console.error('invoice '+invAct+' fail', e); }
     }
   }
   dbCacheClear(['member_tickets','ticket_logs','purchases','invoices']);
