@@ -43,16 +43,26 @@ console.log('\n③ 票券卡顯示發票號碼');
 {
   const mk=(payMap)=>new Function('isDeskLike','window','return '+grabFn('tkMoneyHtml'))(()=>true,{_tkPayMap:payMap});
 
-  const one=mk({A1:{m:'transfer',sp:null,vn:0,va:0,cu:0,lp:0,invs:[{no:'FX28688355',amt:7500}]}})({id:'A1',amount_paid:7500});
-  ok('★ 單筆：金額後掛發票號碼，不加期數前綴',
-     /<span class="rev-invno" title="第 1 期發票　\$7,500">FX28688355<\/span>/.test(one) && !/1\. FX28688355/.test(one), one);
+  /* 2026-09-15 二改（使用者：「票券右下角內容調整一下　發票號碼·付款方式·金額
+     如果是分三期的方案　就分成三列置底　每增加一期往下增加」「意思是新的一期要擺下面」）——
+     從「一列多格」改成「一期一列」，列內順序＝發票 → 付款方式 → 金額。
+     ⚠ fixture 一定要帶 pm：付款方式改讀那一期自己的 v.pm，沒帶就不會畫，
+       第一版的 fixture 沒有這一欄，等於整條新功能沒被驗到。 */
+  const one=mk({A1:{m:'transfer',sp:null,vn:0,va:0,cu:0,lp:0,invs:[{no:'FX28688355',amt:7500,pm:'transfer'}]}})({id:'A1',amount_paid:7500});
+  ok('★ 單筆：一列＝發票號碼 → 付款方式 → 金額（金額在最右）',
+     /<span class="tk-payrow"><span class="rev-invno" title="第 1 期發票">FX28688355<\/span><span class="tk-pay tk-pay-tr">匯款<\/span><b class="tk-amt">\$7,500<\/b><\/span>/.test(one), one);
 
   const ins=mk({A2:{m:'transfer',sp:null,vn:0,va:0,cu:0,lp:18000,invs:[
-    {no:'FX28688300',amt:6000},{no:'FX28688310',amt:6000},{no:null,amt:6000}]}})({id:'A2',amount_paid:12000});
-  ok('★ 分期三格：一期一格，各自帶號碼與期數前綴',
-     /1\. FX28688300/.test(ins) && /2\. FX28688310/.test(ins), ins);
-  ok('★ 分期中未開立的那一期畫「沒開發票」灰標（不是留白）',
-     /<span class="rev-noinv" title="這一期沒有開立電子發票">3\. 沒開發票<\/span>/.test(ins), ins);
+    {no:'FX28688300',amt:6000,pm:'cash'},{no:'FX28688310',amt:6000,pm:'transfer'},{no:null,amt:6000,pm:''}]}})({id:'A2',amount_paid:12000});
+  ok('★★ 分期：一期一列往下堆（收第三期就長出第三列）',
+     (ins.match(/<span class="tk-payrow">/g)||[]).length===3, ins);
+  ok('★★ 每一期標自己的付款方式（第一期現金、第二期匯款，不是整張票的最新值）',
+     /FX28688300<\/span><span class="tk-pay">現金<\/span><b class="tk-amt">\$6,000<\/b>/.test(ins)
+     && /FX28688310<\/span><span class="tk-pay tk-pay-tr">匯款<\/span><b class="tk-amt">\$6,000<\/b>/.test(ins), ins);
+  ok('★ 還沒開立的那一期畫「沒開發票」灰標，該期金額照畫',
+     /<span class="rev-noinv" title="這一期沒有開立電子發票">沒開發票<\/span><b class="tk-amt">\$6,000<\/b>/.test(ins), ins);
+  ok('　　整組靠右下、直向堆疊（直向 flex 要用 align-items，text-align 在這裡沒作用）',
+     /\.tkc-money \.tk-paylist\{display:flex;flex-direction:column;align-items:flex-end;gap:4px;\}/.test(src));
 
   /* ⚠ 下面兩條是保護①區的防線：那些 fixture 全都沒有 invs 欄位，
      這裡只要多畫一個字，就會打到「沒對照到的票不標」那幾條。 */
@@ -67,16 +77,18 @@ console.log('\n③ 票券卡顯示發票號碼');
      所以這條單獨守著。2026-09-15 真的踩過一次。 */
   const fnSrc=grabFn('tkMoneyHtml');
   ok('　　grabFn 抽到完整函式（tkMoneyHtml 的註解裡沒有混進大括號字元）',
-     fnSrc.includes('_invTag') && /\}\s*$/.test(fnSrc), fnSrc.length);
+     fnSrc.includes('tk-paylist') && /\}\s*$/.test(fnSrc), fnSrc.length);
 }
 
 console.log('\n④ 對照表逐期累積發票號碼');
 /* 分期＝同一張票有多筆收款，每一期各自一張發票。付款方式沿用「取最新」，
    但發票號碼不能覆寫，否則只剩最後一期看得到。 */
-ok('★ 付款方式取最新，發票號碼則逐期 push 進 invs（不覆寫）',
+/* 2026-09-15 二改：invs 每一筆多存 pm（那一期自己的付款方式）——
+   分期可能第一期現金、第二期匯款，只記整張票最新的那個會讓前面幾期標錯。 */
+ok('★ 發票號碼、金額與該期付款方式逐期 push 進 invs（不覆寫）',
    /const _prev=window\._tkPayMap\[p\.ticket_id\];/.test(src)
    && /const _invs=\(_prev&&Array\.isArray\(_prev\.invs\)\)\?_prev\.invs\.slice\(\):\[\];/.test(src)
-   && /_invs\.push\(\{no:p\.invoice_number\|\|null, amt:Number\(p\.deal_amount\)\|\|0\}\);/.test(src)
+   && /_invs\.push\(\{no:p\.invoice_number\|\|null, amt:Number\(p\.deal_amount\)\|\|0, pm:p\.payment_method\|\|''\}\);/.test(src)
    && /invs:_invs\}/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);

@@ -4177,6 +4177,13 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 .tkc-foot>span:last-child{order:-1;margin-left:0 !important;}
 .tkc-foot>span:first-child{margin-left:auto;}
 .tkc-money{font-size:12.5px;}
+/* 分期一期一列（2026-09-15 使用者：「就分成三列置底　每增加一期往下增加」）——
+   每一列是「發票號碼 · 付款方式 · 金額」，往下堆、整組靠右下。
+   ⚠ 用 align-items:flex-end 而不是 text-align:right —— 這是直向 flex，
+     text-align 在這裡不會生效（0915 在列印明細那邊已經踩過同一個坑）。 */
+.tkc-money .tk-paylist{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
+.tk-payrow{display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.tk-payrow .tk-amt{font-family:var(--num);}
 /* 票券卡上的發票標籤（2026-09-15）：與付款方式同一列，左邊留一點距離。
    分期多格時允許換行 —— 三格排不下時往下堆，不要把金額擠掉。 */
 .tk-amt ~ .rev-invno,.tk-amt ~ .rev-noinv{margin-left:6px;}
@@ -4479,7 +4486,16 @@ select.pp-in:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(0,61,50,0
 .pp-sheet .pp-root{max-width:100%;padding:14px 16px 0;height:100%;}
 .pp-sheet .pp-root{display:flex;flex-direction:column;overflow:hidden;}
 .pp-sheet #pp-host{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;}
+/* ⚠ overscroll-behavior:contain（2026-09-15 使用者回報：「會員施佳宜的頁面上下滑動的時候
+     會滑到背景的頁面　其他會員都不會」）——
+   #pp-body 是這張全螢幕面板唯一會捲的那一層，但它漏了 overscroll-behavior，
+   全站其他捲動容器（.modal／.cr-body／.sheet-body…）都有。
+   ⚠ 為什麼「只有她會」：內容夠長時 #pp-body 捲得動，手指的捲動被它吃掉，看不出問題；
+     施佳宜只有 8 筆預約（一般會員中位數 20），內容撐不滿一屏 → 沒有可捲空間 →
+     觸控直接往上冒泡給背景頁（scroll chaining），整個背景跟著跑。
+     所以這是「資料少的會員才會踩到」的版面 bug，跟她的資料本身沒有關係。 */
 .pp-sheet #pp-body{flex:1 1 auto;min-height:0 !important;overflow-y:auto;padding-bottom:24px;
+  overscroll-behavior:contain;
   scrollbar-width:none;-ms-overflow-style:none;}
 .pp-sheet #pp-body::-webkit-scrollbar{display:none;width:0;height:0;}
 /* 表頭與分頁列不跟著捲 */
@@ -13174,8 +13190,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.2142';
-const APP_VERSION_LABEL = 'v260915.2142';
+const APP_VERSION = '260915.2219';
+const APP_VERSION_LABEL = 'v260915.2219';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48006,8 +48022,17 @@ function ppRecordHtml(){
     if(PP.recView){
       /* 按鈕上的筆數（2026-08-20 加、同日移除）：使用者看過實機後決定不要，
          分頁標題本來就帶數字（例：預約紀錄（49）），按鈕列保持乾淨。 */
+      /* 2026-09-15 使用者：「中間的按鈕列順序調整　票券　其他商品　交易　預約紀錄　訓練紀錄」——
+         照櫃檯實際的查閱頻率排：票券最常看，其次是其他消費與交易（對帳），
+         預約與訓練紀錄放後面。
+         ⚠⚠ 這段註解必須放在 const back 之前，**不可以插在 _m2 與問號中間** ——
+           那裡是 JS 語句區，錢字號加大括號的註解寫法只在反引號字串內才合法。
+           第一版就是插在中間，整段 script 直接解析不過（Unexpected token）＝白畫面。
+           2026-09-15 當天第三次踩同一個坑。
+         ⚠ acctfortunetest 另有一條正則要求 const back=_m2 與問號那一行相鄰
+           （釘「活動紀錄改成一列按鈕」），中間插任何東西都會讓它紅。 */
       const back=_m2
-        ? `<div class="pp-rectabs">${[['tickets','票券'],['bookings','預約紀錄'],['pay','交易'],['other','其他'],['training','訓練紀錄']]
+        ? `<div class="pp-rectabs">${[['tickets','票券'],['other','其他'],['pay','交易'],['bookings','預約紀錄'],['training','訓練紀錄']]
             .map(([k,l])=>`<button class="pp-rectab${PP.recView===k?' active':''}" onclick="ppShowRecord('${k}')">${l}</button>`).join('')}</div>`
         : `<div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" onclick="ppRecordBack()">‹ 返回</button></div>`;
       const _st={usable:'可用',used_up:'已完成',expired:'已過期',refunded:'已退費'};   /* 2026-08-13 使用者指示改名 */
@@ -48222,11 +48247,20 @@ function ppRecordHtml(){
           return `<div class="bkd-tkcard bkd-tkcard-hist${canExt?' bkd-tkcard-ext':''}">
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${tkNoTag(WAL.noOf(t.id))}${t.plan_name||'票券'}${shrTag}${tkExtBadge(t)}</span>
               <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}　${st}</span></div>
+            ${/* 2026-09-15 使用者：「有效票券的格局跟歷史紀錄票券的格局分佈不同嗎　有辦法整理一致嗎」——
+                 附截圖：持有中那張是「購買・效期 → 圓圈 → 按鈕｜金額」，
+                 這一張卻是「圓圈 → 購買・效期＋金額 → 按鈕」，三處都對不上。
+                 改成完全照上面 cardOf 的順序走，連 _m2 條件都沿用同一個，
+                 櫃檯以上看到的兩種卡才會是同一個版型。
+                 ⚠ 非櫃檯角色（_m2 為假）維持原本的單行底列 —— 與 cardOf 的 else 分支一致。 */''}
+            ${_m2?`<div class="tkc-meta">${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}</div>`:''}
             <div class="mck-dots2" style="margin:8px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id,WAL.selfBk)}</div>
             ${tkVoidNoteHtml(t, c.myLogs)}
-            <div style="font-size:11px;color:var(--t3);margin-top:7px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
-              <span>${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${tkMoneyHtml(t)}</span>
-              <span style="display:flex;gap:6px;">
+            <div class="${_m2?'tkc-foot':''}" style="font-size:11px;color:var(--t3);margin-top:7px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 8px;">
+              <span style="min-width:0;">${_m2
+                ? `<span class="tkc-money">${tkMoneyHtml(t).replace(/^　·　/,'')}</span>`
+                : `${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}${tkMoneyHtml(t)}`}</span>
+              <span style="display:flex;gap:6px;flex:none;margin-left:auto;white-space:nowrap;">
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">合約</button>`:''}
                 ${/* 用完／過期的票也要能校正（2026-08-25）——黃喬莉那三張 1V2 全在這一區，
                      入口只做在「持有中」的話，最需要更正的舊票反而點不到。 */''}
@@ -49376,7 +49410,9 @@ async function ppLoadCtx(){
            ⚠ 沒有號碼的期數也要留一格（no 為 null），畫面才顯示得出「第 2 期沒開發票」。 */
         const _prev=window._tkPayMap[p.ticket_id];
         const _invs=(_prev&&Array.isArray(_prev.invs))?_prev.invs.slice():[];
-        _invs.push({no:p.invoice_number||null, amt:Number(p.deal_amount)||0});
+        /* pm＝這一期自己的付款方式（2026-09-15）：分期可能第一期現金、第二期匯款，
+           整張票只記最新的那個會讓前面幾期標錯。上面的 m 仍保留給沒有 invs 的舊票用。 */
+        _invs.push({no:p.invoice_number||null, amt:Number(p.deal_amount)||0, pm:p.payment_method||''});
         window._tkPayMap[p.ticket_id]={m:p.payment_method, sp:p.pay_split||null,   /* 拆帳帶金額（2026-08-13） */
           vn:_vm?Number(_vm[1]):0, va:_vm?Number(String(_vm[2]).replace(/,/g,'')):0,
           cu:Number(p.credit_used)||0, lp:Number(p.list_price)||0, invs:_invs};
@@ -62634,17 +62670,24 @@ function tkMoneyHtml(t){
        就會讓計數提前歸零、只抽到半截函式，整支測試 SyntaxError。
        disctagtest 則是找行首的閉括號來截斷，所以行首也不能有。
        （第一版就是為了寫這句警告而在註解裡放了那個字元，自己踩自己 —— 2026-09-15） */
-  let _invTag='';
+  /* 2026-09-15 使用者：「票券右下角內容調整一下　發票號碼·付款方式·金額
+       如果是分三期的方案　就分成三列置底　每增加一期往下增加」「意思是新的一期要擺下面」——
+     一期一列，列內順序＝發票號碼 → 付款方式 → 金額（金額落在最右，與首頁營收同一個習慣）。
+     收第二期就自動長出第二列，不必再改版面。
+     ⚠ 付款方式改讀 v.pm（那一期自己的），不是整張票的 _pe.m —— 分期可能一期現金一期匯款。
+     ⚠ invs 缺席時完全不走這條 —— 舊票與既有測試 fixture 沒有這一欄，維持原本的單行輸出。 */
   if(_pe && Array.isArray(_pe.invs) && _pe.invs.length){
-    const _multi=_pe.invs.length>1;
-    _invTag=_pe.invs.map((v,i)=>{
-      const _lb=_multi?`${i+1}. `:'';
-      return v && v.no
-        ? `<span class="rev-invno" title="第 ${i+1} 期發票　$${(v.amt||0).toLocaleString()}">${_lb}${v.no}</span>`
-        : `<span class="rev-noinv" title="這一期沒有開立電子發票">${_lb}沒開發票</span>`;
+    const _rows=_pe.invs.map((v,i)=>{
+      const _pv=({cash:'現金',transfer:'匯款',card:'刷卡'})[v&&v.pm]||'';
+      const _iv= v && v.no
+        ? `<span class="rev-invno" title="第 ${i+1} 期發票">${v.no}</span>`
+        : `<span class="rev-noinv" title="這一期沒有開立電子發票">沒開發票</span>`;
+      const _pt=_pv?`<span class="tk-pay${_pv==='匯款'?' tk-pay-tr':''}">${_pv}</span>`:'';
+      return `<span class="tk-payrow">${_iv}${_pt}<b class="tk-amt">$${(Number(v.amt)||0).toLocaleString()}</b></span>`;
     }).join('');
+    return `　·　<span class="tk-paylist">${_rows}${_dcTag}</span>`;
   }
-  if(amt>0) return `　·　<b class="tk-amt">$${amt.toLocaleString()}</b>${_pmTag}${_dcTag}${_invTag}`;
+  if(amt>0) return `　·　<b class="tk-amt">$${amt.toLocaleString()}</b>${_pmTag}${_dcTag}`;
   const n=String(t.note||'').trim();
   if(!n) return '　·　<span class="tk-amt tk-amt-zero">$0</span>';
   const gift=/加贈/.test(n), wait=/待確認/.test(n);
