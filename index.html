@@ -13157,8 +13157,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1804';
-const APP_VERSION_LABEL = 'v260915.1804';
+const APP_VERSION = '260915.2110';
+const APP_VERSION_LABEL = 'v260915.2110';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22389,8 +22389,17 @@ PAGES.g_dashboard=async function(){
       att:t.sold_by||null, attKind:_attNeed(t)?'tk':null, attRef:t.id,
       pay:_payLb((_payByTk[t.id]||{}).m), paySp:(_payByTk[t.id]||{}).sp||null, payRef:(_payByTk[t.id]||{}).pid||null,
       inv:(t.invoice_status==='cloud'||t.invoice_status==='paper'||t.invoice_status==='issued'),
-      /* 發票號碼跟著收款紀錄走（票券列本身沒有這個欄位）2026-09-02 */
-      invNo:((_dayPur.find(p=>p.ticket_id===t.id&&p.invoice_number)||{}).invoice_number)||null})),
+      /* 發票號碼跟著收款紀錄走（票券列本身沒有這個欄位）2026-09-02
+         ⚠⚠ 2026-09-15 修：不能從 _dayPur 找。_dayPur 的白名單只收
+           reactivate／facility_rental／merchandise／installment，而**賣票券的收款是
+           source='backoffice'**，永遠不在裡面 → 票券列的發票號碼一律 null，
+           畫面就掛上「沒開發票」（使用者回報賴冠瑋、陳詩硯，實際都有開：
+           FX28688355／FX28688356）。
+         ⚠ 也不能把 backoffice 加進 _dayPur —— 那一份在算今日營收總額與現金匯款拆帳，
+           票券的金額已經由 _dayTk＋_tkDayAmt 算過，加進去會雙算
+           （lottocarrytest 正釘著那條白名單，就是為了防這件事）。
+         所以改成直接掃完整的 purchases，判準與 _puOfTk（上方）同一套：同一天＋同一張票。 */
+      invNo:(((purchases||[]).find(p=>p&&p.ticket_id===t.id&&p.invoice_number&&puLocalDate(p)===date)||{}).invoice_number)||null})),
     ..._dayPur.filter(p=>!(p.ticket_id&&_dayTk.some(t=>t.id===p.ticket_id)))
       .map(p=>{
       /* 分期後續收款（2026-08-15 使用者回報：蔡宜芬那筆沒有分期章跟業績歸屬）——

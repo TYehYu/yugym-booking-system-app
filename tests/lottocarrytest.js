@@ -254,6 +254,17 @@ ok('★★ 只加進顯示用的 _revRows，不加進 _dayPur（那一份在算�
    /只加進\*\*顯示用\*\*的 _revRows，不加進 _dayPur/.test(src)
    && /const _dayPur=\(purchases\|\|\[\]\)\.filter\(p=>puLocalDate\(p\)===date&&\(p\.source==='reactivate'/.test(src)
    && !/p\.source==='lottery'\|\|p\.source==='reactivate'/.test(src));
+/* ⚠⚠ 2026-09-15 使用者回報「賴冠瑋為什麼沒開發票」——實際有開（FX28688355），
+   是營收明細把票券列的發票號碼畫丟了。真因：票券列原本從 _dayPur 反查號碼，
+   但 _dayPur 的白名單不含 source='backoffice'（＝賣票券的收款），永遠找不到。
+   ⚠ 修法是改反查來源、**不是**把 backoffice 加進 _dayPur —— 那會讓營收雙算
+   （票券金額已由 _dayTk＋_tkDayAmt 算過），上一條斷言正是在守這件事。 */
+ok('★★★ 票券列的發票號碼要掃完整的 purchases，不能從 _dayPur 找',
+   /invNo:\(\(\(purchases\|\|\[\]\)\.find\(p=>p&&p\.ticket_id===t\.id&&p\.invoice_number&&puLocalDate\(p\)===date\)\|\|\{\}\)\.invoice_number\)\|\|null/.test(src)
+   && !/invNo:\(\(_dayPur\.find/.test(src));
+ok('★★ 為什麼不能加進 _dayPur，理由寫在原地（免得日後有人「為了顯示」動它）',
+   /那一份在算今日營收總額與現金匯款拆帳/.test(src)
+   && /加進去會雙算/.test(src));
 ok('★★ 抽獎那一列不畫金額、付款方式與 30 分鐘退回（它不是收款）',
    /it:\(p\.plan_name\|\|'抽獎'\), amt:0, lot:p\.id, lotDate:puLocalDate\(p\) \}\)\)/.test(src)
    && /\(revAmtDup\(r\)\|\|r\.lot\)\?''/.test(src));
