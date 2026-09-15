@@ -345,6 +345,37 @@ console.log('\n④-4 ⚠ 事故：系統自己開了一張沒人選過的發票�
      /\}else\{\s*\n\s*d\.CarrierType='1';   \/\* 預設：存綠界載具/.test(src));
 }
 
+console.log('\n④-5 建約那條路：發票要在「待審核發放」問（2026-09-15）');
+/* 使用者實測第二次：「這邊按下去 就發放票券了嗎　剛剛是這樣　發票在哪一步呢」
+   —— 截圖是 openGrantApprove（① 收款資訊 ② 發放／〔確認收款・發放票券〕）。
+
+   **錢是在那個畫面收的**：建約那條路一律先記 unpaid，按下那顆按鈕才翻成 paid
+   （見 grFillApply 的 payment_status:'paid'）。但發票區先前只加在「直接發放」
+   （submitGrant）那條，建約這條從頭到尾沒有 → payload.inv 一路是 null
+   → 0915 魚先森 $10,400 那張就是被 invPayload 的預設分支自己開出去的。
+
+   ⚠ 只補 `if(P.inv)` 防線是不夠的：那只會把「亂開」變成「永遠漏開」。
+     真正要做的是**把發票區加進收錢的那個畫面**。 */
+{
+  ok('★★★ 待審核發放畫面有發票區（且只在真的發得出去時才畫）',
+     /\$\{_canIssue\?invFieldsHTML\(\):''\}/.test(src));
+  ok('★★★ 開窗時帶入該會員（建約這條的會員是固定的）',
+     /window\._grInvMemberId=r\.member_id\|\|'';/.test(src)
+     && /window\._grInvMembers=\[await dbGet\('members', r\.member_id\)/.test(src));
+  ok('★★★ 送出時讀表單並覆寫 payload.inv（建約當時存的那份一定是 null）',
+     /const _grInv=invReadFields\(\);/.test(src)
+     && /_p\.inv=_grInv;/.test(src));
+  ok('★★ 讀之前先驗，擋下來要把 busy 收掉（否則畫面卡在「發放中…」）',
+     /\{ const _e=invCheckFields\(_grInv\); if\(_e\)\{ done\(\); showToast\('發票欄位：'\+_e\); return; \} \}/.test(src));
+  /* ⚠ 應收 0（全額折抵）開不出發票，發票區要跟著收合 —— 與商品／場租／分期同一條規則。
+     這裡用 grDueAmount（折抵券之後、分期取第 1 期），不是總金額。 */
+  ok('★★★ 應收 0 就把發票區收起來（用 grDueAmount，不是總金額）',
+     /function grInvSync\(due\)\{/.test(src)
+     && /try\{ grInvSync\(p0 \? grDueAmount\(p0\) : 0\); \}catch\(_\)\{\}/.test(src));
+  ok('★★ 不能發放時沒有發票區，同步函式要能安全跳過',
+     /if\(!document\.getElementById\('inv-wrap'\)\) return;   \/\* 不能發放時沒畫這一區 \*\//.test(src));
+}
+
 console.log('\n⑤ 作廢票券連動');
 {
   const F=grabFn('_voidTicketDo');

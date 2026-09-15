@@ -13043,8 +13043,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.1004';
-const APP_VERSION_LABEL = 'v260915.1004';
+const APP_VERSION = '260915.1012';
+const APP_VERSION_LABEL = 'v260915.1012';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -53704,6 +53704,15 @@ async function openGrantApprove(id){
             <button type="button" class="gr-sig-more" onclick="grantReqUnsign('${r.id}')"
               title="改回「還沒選」，可以重新選一次">按錯了？取消這次的簽署方式 ›</button></div>`:''}
       </div>
+      ${/* ⚠⚠ 電子發票（2026-09-15 使用者實測：「這邊按下去 就發放票券了嗎　剛剛是這樣
+             發票在哪一步呢」）——
+             **錢是在這個畫面收的**（建約那條路一律先記 unpaid，按下〔確認收款・發放票券〕
+             才翻成 paid），所以發票也必須在這裡問。
+             先前發票區只加在「直接發放」那條（submitGrant），建約這條完全沒有，
+             於是 payload.inv 一路都是 null —— 0915 魚先森 $10,400 那張就是這樣
+             被 invPayload 的預設分支（綠界載具）自己開出去的。
+             ⚠ 只在真的發得出去時才畫：不能發放（合約未簽回）時問發票沒有意義。 */''}
+      ${_canIssue?invFieldsHTML():''}
       <div class="gr-fill-note" style="margin-top:8px;">
         ${_canIssue
           ? `按下去會發票券並寫入購買紀錄${P.voucherN?'、扣掉折抵券':''}；發放後 <b>30 分鐘內</b>可在首頁「今日營收」整筆退回。`
@@ -53732,7 +53741,22 @@ async function openGrantApprove(id){
      ⚠ 比的是**欄位的原始字串**，不是算完的結果：14400 與 14400.0 對系統是同一個數字，
        但櫃檯眼裡是「我沒改」，按鈕就不該亮。 */
   window._grFill0=grFillSnap();
+  /* 發票區（2026-09-15）：錢在這個畫面收，所以這裡要問發票。
+     ⚠ 會員固定（這筆待審核的持有人），帶進去預填他的載具／信箱／統編。
+     ⚠ 顯示與否交給 grFillPreview 依「應收金額」決定（0 元不畫）—— 它每次欄位變動都會跑。 */
+  window._grInvMemberId=r.member_id||'';
+  try{ window._grInvMembers=[await dbGet('members', r.member_id).catch(()=>null)].filter(Boolean); }
+  catch(_){ window._grInvMembers=[]; }
   grFillPreview();
+}
+/* 待審核發放畫面的發票區同步（2026-09-15）——
+   ⚠ 應收 0 就收起來：invIssueForPurchase 有 `amt<=0 return null`，
+     留在畫面上等於讓櫃檯白問一次（同商品／場租／分期那個坑）。 */
+function grInvSync(due){
+  if(!document.getElementById('inv-wrap')) return;   /* 不能發放時沒畫這一區 */
+  try{ invSync({paid:(Number(due)||0)>0,
+                memberId:window._grInvMemberId||'',
+                members:(window._grInvMembers||[])}); }catch(_){}
 }
 /* 應收金額即時重算（2026-08-28 二修）：欄位一改，上方大字與按鈕上的金額跟著變。
    ⚠ 走的是與發放同一支 grFillApply（quiet 模式）—— 預覽與真的算出來的一定一致，
@@ -53810,6 +53834,10 @@ function grFillPreview(){
       :(_dirty?'上面的欄位還填不完整':'還沒有任何修改');
   }
   const p0=grFillApply(P, true);
+  /* 發票區跟著「這一期的應收」開合（2026-09-15）——
+     ⚠ 用應收（折抵券之後、分期取第 1 期）而不是總金額：全額折抵時應收是 0，
+       那筆開不出發票，發票區就不該留在畫面上讓櫃檯白問。 */
+  try{ grInvSync(p0 ? grDueAmount(p0) : 0); }catch(_){}
   /* 匯款那格是推導出來的：現金或應收一改就跟著重算（2026-09-04）。
      ⚠ 一定要放在 p0 算完之後 —— 它讀 p0（tests/tdztest.js 抓到過：原本寫在上面，
        p0 還在暫時死區，整段被 catch 吞掉、等於沒作用）。
@@ -54024,6 +54052,12 @@ async function _grantReqApprove(id){
           _drift=`合約寫 $${_onCt.toLocaleString()}・${_lb(_nCt)}，實際發 $${_final.toLocaleString()}・${_lb(_nNow)}`;
         }
       }
+      /* 電子發票（2026-09-15）：在這個畫面讀，因為錢是在這裡收的。
+         ⚠ 一定要在 closeModal 之前讀 —— 關掉之後 DOM 就沒了。
+         ⚠ 覆寫 payload.inv：建約當時存的那份一定是 null（那一步刻意不問發票）。 */
+      const _grInv=invReadFields();
+      { const _e=invCheckFields(_grInv); if(_e){ done(); showToast('發票欄位：'+_e); return; } }
+      _p.inv=_grInv;
       r.payload=_p;
       r.amount=Number(_p.isInstall?Math.max(0,_p.firstAmount-_p.voucherAmt):_p.paidAmount)||0;
       r.filled_by=SESSION.id; r.filled_at=new Date().toISOString();
