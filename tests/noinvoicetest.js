@@ -21,10 +21,14 @@ eq('★★★ 五處插了共用的發票區（發放票券／場租／自主訓
    (src.match(/\$\{invFieldsHTML\(\)\}/g)||[]).length, 5);
 ok('★★★ 是共用一份，不是各自做一套下拉（舊 id 沒有復活）',
    !/id="(fr-invoice|fv-invoice|ms-invoice|gt-invoice)"/.test(src));
-ok('　　商品銷售（散客買蛋白粉也要能開）', /function msInvSync\(\)\{/.test(src));
+/* ⚠ 2026-09-15 二修：三個入口改成各自的 *InvSync 包裝（金額 0 要把發票區收起來，
+   否則 invIssueForPurchase 的 `amt<=0 return null` 會讓櫃檯白問一次載具／信箱）。 */
+ok('　　商品銷售（散客買蛋白粉也要能開）', /function msInvSync\(paid\)\{/.test(src));
 ok('　　自主訓練票券', /function fvInvSync\(\)\{/.test(src));
-ok('　　場地租借（散客，不傳 memberId）', /try\{ invSync\(\{paid:true\}\); \}catch\(_\)\{\}/.test(src));
-ok('　　分期的每一期', /invSync\(\{paid:true, memberId:t\.member_id/.test(src));
+ok('　　場地租借（散客，不傳 memberId）', /function frInvSync\(\)\{/.test(src)
+   && /try\{ invSync\(\{paid:fee>0\}\); \}catch\(_\)\{\}/.test(src));
+ok('　　分期的每一期', /function inxInvSync\(\)\{/.test(src)
+   && /try\{ invSync\(\{paid:amt>0, memberId:window\._inxMemberId/.test(src));
 
 console.log('\n② 開了就真的開，沒開才記 none');
 ok('★★★ 場租／自主訓練票券的 invoice_type 依實際選擇決定，不再寫死 none',

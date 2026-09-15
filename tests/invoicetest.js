@@ -243,17 +243,22 @@ console.log('\n④-2 每一個收款入口都要能開發票（2026-09-15）');
      /async function invSync\(opt\)\{/.test(src)
      && /if\(O\.paid!=null\)\{/.test(src)
      && /const _mid = \(O\.memberId!=null\) \? String\(O\.memberId\|\|''\)/.test(src));
+  /* ⚠ 2026-09-15 二修：msInvSync 多收一個 paid 參數（合計 0 要把發票區收起來），
+     onchange 仍是無參數呼叫 —— 那時自己算合計。 */
   ok('★★★ 商品銷售：開窗與換會員都重新預填（散客則不預填）',
-     /function msInvSync\(\)\{/.test(src)
+     /function msInvSync\(paid\)\{/.test(src)
      && /<select id="ms-member" onchange="msInvSync\(\)">/.test(src));
   ok('★★★ 商品銷售：整筆開一張，不是一列一張',
      /await invIssueForPurchase\(first, _mem, _inv, items, \{amt:total, category:'merch'\}\)/.test(src));
   ok('★★ 自主訓練票券：開窗同步＋存檔開立', /function fvInvSync\(\)\{/.test(src)
      && /await invIssueForPurchase\(_tRow, _fm, _inv,/.test(src));
+  /* ⚠ 2026-09-15 二修：場租改走 frInvSync（金額 0 要收合），它內部才呼叫 invSync。 */
   ok('★★★ 場租是散客：invSync 不傳 memberId、開立時 mem 傳 null',
-     /try\{ invSync\(\{paid:true\}\); \}catch\(_\)\{\}/.test(src)
+     /try\{ invSync\(\{paid:fee>0\}\); \}catch\(_\)\{\}/.test(src)
+     && !/invSync\(\{paid:[^}]*memberId[^}]*\}\);[\s\S]{0,40}場租/.test(src)
      && /await invIssueForPurchase\(_fRow, null, _inv,/.test(src));
-  ok('★★ 分期：每一期各開各的', /await invIssueForPurchase\(_pRow, _pm, _inv,/.test(src));
+  ok('★★ 分期：每一期各開各的', /await invIssueForPurchase\(_pRow, _pm, _inv,/.test(src)
+     && /function inxInvSync\(\)\{/.test(src));
   /* ⚠ 表單一定要在 closeModal 之前讀完 —— 關掉之後 DOM 就沒了，
      0915 四個入口都踩同一條規則，所以各自在動資料前先 invReadFields()。 */
   ok('★★★ 四個入口都在動資料前先讀表單並驗證',
@@ -261,6 +266,44 @@ console.log('\n④-2 每一個收款入口都要能開發票（2026-09-15）');
      && cnt(/const _e=invCheckFields\(_inv\); if\(_e\)\{ showToast\('發票欄位：'\+_e\); return; \}/g)>=4);
   ok('★★ 散客沒有會員資料可帶 → 不預填，不是錯誤',
      /散客（memberId 空或找不到人）→ 四個值都是空字串 → 不預填，櫃檯手動輸入。/.test(src));
+}
+
+console.log('\n④-3 流程自我檢查抓到的三個洞（2026-09-15）');
+{
+  /* ⚠⚠ 死結：invSync 結尾原本切到 'ubn'，但 0915 改版後 INV_MODES 只剩 carrier／mail。
+     有統編的會員 → dataset.mode='ubn' → invPick 落到 else 畫「手機條碼」欄、兩顆按鈕都不亮
+     → invReadFields 以 k='ubn' 讀不存在的 #inv-ubn（空）→ 驗證擋「統一編號要 8 碼數字」，
+     而畫面上根本沒有統編欄可填 —— **整筆送不出去**。統編現在住在「寄信箱」那格。 */
+  ok('★★★ 有統編的會員要切到 mail，不是已經不存在的 ubn',
+     /if\(!w\.dataset\.mode\) invPick\(window\._invMemUbn\?'mail':'carrier'\);/.test(src)
+     && !/invPick\(window\._invMemUbn\?'ubn':'carrier'\)/.test(src));
+  ok('★★ 切過去的那格真的存在於 INV_MODES',
+     /const INV_MODES=\[\['carrier','存載具'\],\['mail','寄信箱'\]\];/.test(src));
+
+  /* ⚠ 孤兒發票：場租原本是兩個各自獨立的 try —— 收款紀錄寫失敗被 catch 吞掉之後，
+     開發票那段照樣跑，會留下「有發票、沒有收款紀錄」的帳。 */
+  ok('★★★ 場租：收款紀錄寫成功才開發票（否則會有孤兒發票）',
+     /let _fOk=false;/.test(src)
+     && /try\{ await dbPutPurchaseSafe\(_fRow\); _fOk=true; \}/.test(src)
+     && /if\(_fOk\)\{\s*\n\s*try\{ await invIssueForPurchase\(_fRow, null, _inv,/.test(src));
+
+  /* ⚠ 白填：invIssueForPurchase 有 `amt<=0 return null`，金額 0 時發票區留在畫面上
+     等於讓櫃檯白問一次載具／信箱，填了也不會開。三個入口都要跟著金額收合。 */
+  ok('★★★ 金額 0 就把發票區收起來 —— 商品',
+     /if\(document\.getElementById\('inv-wrap'\)\) msInvSync\(sum>0\);/.test(src));
+  ok('★★★ 金額 0 就把發票區收起來 —— 場租（含切換票券折抵）',
+     /function frInvSync\(\)\{/.test(src)
+     && /try\{ invSync\(\{paid:fee>0\}\); \}catch\(_\)\{\}/.test(src)
+     && /id="fr-fee" value="200" min="0" oninput="frInvSync\(\)"/.test(src)
+     && /else if\(fee\)\{ fee\.value=200; \}\s*\n\s*frInvSync\(\);/.test(src));
+  ok('★★★ 金額 0 就把發票區收起來 —— 分期（含「下一期／剩餘全繳」快捷）',
+     /function inxInvSync\(\)\{/.test(src)
+     && /try\{ invSync\(\{paid:amt>0, memberId:window\._inxMemberId\|\|''/.test(src)
+     && /id="inx-amt" min="0" value="\$\{amt\}" oninput="inxInvSync\(\)"/.test(src)
+     && /if\(a\) a\.value=n; if\(b\) b\.value=amt; inxInvSync\(\); \}/.test(src));
+  ok('★★ 未付款發放不會誤開（_dealRec 為 0 → invIssueForPurchase 的 amt<=0 擋掉）',
+     /const _dealRec=\(P\.payment_status==='unpaid'\) \? 0/.test(src)
+     && /if\(amt<=0\) return null;/.test(src));
 }
 
 console.log('\n⑤ 作廢票券連動');

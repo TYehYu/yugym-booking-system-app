@@ -13043,8 +13043,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.0946';
-const APP_VERSION_LABEL = 'v260915.0946';
+const APP_VERSION = '260915.0953';
+const APP_VERSION_LABEL = 'v260915.0953';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13998,9 +13998,15 @@ async function invSync(opt){
       if(_seg) _seg.style.display='';
       if(!w.dataset.on) invSetOn(1);   /* 預設開立：收錢本來就該開發票 */
     } }
-  /* 2026-09-14：這位客人有統編就自動切到「打統編」並帶入（使用者：開統編的客人存進會員資料自動帶入）。
-     ⚠ 只在櫃檯還沒自己選過模式時才切 —— 否則每次重繪都會蓋掉櫃檯當下的選擇。 */
-  if(!w.dataset.mode) invPick(window._invMemUbn?'ubn':'carrier');
+  /* 2026-09-14：這位客人有統編就自動切到統編那一格並帶入（使用者：開統編的客人存進會員資料自動帶入）。
+     ⚠ 只在櫃檯還沒自己選過模式時才切 —— 否則每次重繪都會蓋掉櫃檯當下的選擇。
+     ⚠⚠ 2026-09-15 修死結：這裡原本切到 'ubn'，但 0915 改版後 INV_MODES 只剩
+        carrier／mail，'ubn' 不再是有效的 key。後果是**有統編的會員完全送不出去**：
+        dataset.mode='ubn' → invPick 落到 else 畫出「手機條碼」欄、兩顆按鈕都不亮
+        → invReadFields 以 k='ubn' 去讀不存在的 #inv-ubn（空）
+        → invCheckFields 擋「統一編號要 8 碼數字」，而畫面上根本沒有統編欄可填。
+        統編現在住在「寄信箱」那一格，所以要切 'mail'。 */
+  if(!w.dataset.mode) invPick(window._invMemUbn?'mail':'carrier');
 }
 /* 讀畫面上那一格 → 一包乾淨的參數（沒開發票就回 null） */
 function invReadFields(){
@@ -30720,7 +30726,7 @@ async function bkStep2Facility(pDate,pTime){
     <div class="form-row"><label>使用人姓名（必填）</label><input id="fr-name" placeholder="例：王媽媽"></div>
     <div class="form-row"><label>經手員工</label><select id="fr-emp">${opts||`<option value="${SESSION.id}">${SESSION.name||'我'}</option>`}</select></div>
     <div class="form-2col">
-      <div class="form-row"><label>收費金額</label><input type="number" id="fr-fee" value="200" min="0"></div>
+      <div class="form-row"><label>收費金額</label><input type="number" id="fr-fee" value="200" min="0" oninput="frInvSync()"></div>
       <div class="form-row"><label>付款方式</label><select id="fr-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
     </div>
     ${/* 電子發票（2026-09-15 使用者：「開發票這個功能只要有收款都要出現」）——
@@ -30728,9 +30734,10 @@ async function bkStep2Facility(pDate,pTime){
     ${invFieldsHTML()}
 
     <div class="modal-foot"><button class="btn btn-ghost" onclick="${_backFn}">← ${window._facilityFromSales?'返回':'上一步'}</button><button class="btn btn-green" onclick="submitFacilityBooking()">確認租借並收款</button></div>`);
-  /* 場租是現場收費 → paid=true。⚠ 不傳 memberId：這條路的收款紀錄 member_id 一律是 null
-     （散客），沒有會員資料可預填，載具／信箱一律當場手打。 */
-  try{ invSync({paid:true}); }catch(_){}
+  /* 場租是現場收費 → 有金額才顯示發票區（用票券折抵時 fee=0，開不了發票）。
+     ⚠ 不傳 memberId：這條路的收款紀錄 member_id 一律是 null（散客），
+       沒有會員資料可預填，載具／信箱一律當場手打。 */
+  frInvSync();
 }
 /* 場租票折抵（2026-07-28）：列出所有會員可用的場租票（效期內、有剩餘） */
 async function frVenueTicketOpts(){
@@ -30751,6 +30758,16 @@ function frTicketPick(){
   const name=document.getElementById('fr-name');
   if(sel&&sel.value){ if(fee)fee.value=0; if(name&&!name.value)name.value=(opt&&opt.dataset.name)||''; }
   else if(fee){ fee.value=200; }
+  frInvSync();
+}
+/* 場租的發票區同步（2026-09-15）——
+   ⚠ 用票券折抵時 fee 會變 0，而 invIssueForPurchase 有 `amt<=0 return null`：
+     發票區留在畫面上等於讓櫃檯白問一次載具／信箱，填了也不會開。
+     所以金額 0 就整塊收起來。改金額或切換折抵都要重算，故 fr-fee 也掛 oninput。
+   ⚠ 場租一律散客（收款紀錄 member_id 是 null），不傳 memberId。 */
+function frInvSync(){
+  const fee=Math.max(0,Number((document.getElementById('fr-fee')||{}).value)||0);
+  try{ invSync({paid:fee>0}); }catch(_){}
 }
 /* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
 async function submitFacilityBooking(){ return onceAct('facility:'+((_bkWizard&&_bkWizard.date)||'')+((_bkWizard&&_bkWizard.time)||''), ()=>_submitFacilityBooking()); }
@@ -30785,13 +30802,18 @@ async function _submitFacilityBooking(){
       plan_name:`場地租借（${name}）`,list_price:fee,deal_amount:fee,payment_method:method,
       invoice_type:inv,installment_count:1,note:`場租 ${date} ${time}`,operator:SESSION.id,
       source:'facility_rental',created_at:new Date().toISOString()};
-    try{ await dbPutPurchaseSafe(_fRow); }
+    /* ⚠ 2026-09-15：收款紀錄寫成功**才**開發票 —— 這兩段原本是各自獨立的 try，
+       第一個 catch 把錯誤吞掉之後第二個照跑，會留下「有發票、沒有收款紀錄」的孤兒發票。 */
+    let _fOk=false;
+    try{ await dbPutPurchaseSafe(_fRow); _fOk=true; }
     catch(e){ console.error('facility purchase fail',e); showToast('場租收款紀錄寫入失敗：'+(e.message||e)); }
     /* 電子發票（2026-09-15）：場租的收款紀錄 member_id 一律是 null（散客），
        所以 mem 傳 null —— 買受人資訊完全來自櫃檯當場填的 _inv。 */
-    try{ await invIssueForPurchase(_fRow, null, _inv,
-           [{name:`場地租借（${name}）`, amt:fee}], {category:'facility'}); }
-    catch(e){ console.error('facility invoice fail', e); }
+    if(_fOk){
+      try{ await invIssueForPurchase(_fRow, null, _inv,
+             [{name:`場地租借（${name}）`, amt:fee}], {category:'facility'}); }
+      catch(e){ console.error('facility invoice fail', e); }
+    }
   }
   closeModal(); showToast(`場地租借已建立（$${fee}）`); bkAfterSubmit();
  }catch(e){ showToast('建立失敗：'+(e&&e.message?e.message:e)); }
@@ -50109,9 +50131,13 @@ async function openMerchSale(name,defPrice,cart){
 }
 /* 商品銷售的發票區同步：會員換了就重新帶入他的載具／信箱／統編。
    ⚠ 散客（選「散客（不指定）」）→ memberId 空 → 不預填，櫃檯當場手打。 */
-function msInvSync(){
+function msInvSync(paid){
   const mid=(document.getElementById('ms-member')||{}).value||'';
-  try{ invSync({paid:true, memberId:mid, members:(window._msMembers||[])}); }catch(_){}
+  /* paid 不給就自己算合計（換會員時是從 onchange 進來的，那時沒帶值）。 */
+  const _p=(paid==null)
+    ? _msCart.reduce((a,r)=>a+(Math.max(1,Number(r.qty)||1))*(Number(r.price)||0),0)>0
+    : !!paid;
+  try{ invSync({paid:_p, memberId:mid, members:(window._msMembers||[])}); }catch(_){}
 }
 function msCartRender(){
   const host=document.getElementById('ms-cart'); if(!host) return;
@@ -50153,6 +50179,11 @@ function msFilterMembers(q){
 function msCalc(){
   const sum=_msCart.reduce((a,r)=>a+(Math.max(1,Number(r.qty)||1))*(Number(r.price)||0),0);
   const el=document.getElementById('ms-total'); if(el) el.textContent='合計 $'+sum.toLocaleString();
+  /* 2026-09-15：合計 0 就把發票區收起來 —— invIssueForPurchase 有 `amt<=0 return null`，
+     留在畫面上等於讓櫃檯白問一次載具／信箱，填了也不會開（同場租那個坑）。
+     ⚠ msCalc 在改數量／單價／增刪品項時都會跑到，所以掛在這裡最省事。
+     ⚠ 只在發票區已經存在時才同步：msCalc 也被 msCartRender 在開窗前呼叫。 */
+  if(document.getElementById('inv-wrap')) msInvSync(sum>0);
 }
 async function submitMerchSale(){
   // 逐列驗證：品名（自訂要填）＋單價（自訂金額品項留白防呆）
@@ -54159,7 +54190,7 @@ async function openInstallNext(ticket_id){
     </div>
     <div class="form-2col">
       <div class="form-row"><label>開通堂數 *（1–${leftN}）</label><input type="number" id="inx-n" min="1" max="${leftN}" value="${seg||leftN}"></div>
-      <div class="form-row"><label>實收金額 *</label><input type="number" id="inx-amt" min="0" value="${amt}"></div>
+      <div class="form-row"><label>實收金額 *</label><input type="number" id="inx-amt" min="0" value="${amt}" oninput="inxInvSync()"></div>
     </div>
     <div class="form-row"><label>付款方式</label>
       <select id="inx-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
@@ -54170,11 +54201,22 @@ async function openInstallNext(ticket_id){
       <button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="confirmInstallNext('${ticket_id}')">確認收款並開通</button>
     </div>`);
-  /* 分期的每一期都是一次收款 → paid=true；會員固定，直接把人帶進去預填。 */
-  try{ invSync({paid:true, memberId:t.member_id, members:(m?[m]:[])}); }catch(_){}
+  /* 分期的每一期都是一次收款；會員固定，直接把人帶進去預填。
+     ⚠ 存進 window 是為了讓 inxInvSync（金額改動時）也拿得到同一個人。 */
+  window._inxMemberId=t.member_id||'';
+  window._inxMembers=(m?[m]:[]);
+  inxInvSync();
 }
 function inxFill(n,amt){ const a=document.getElementById('inx-n'), b=document.getElementById('inx-amt');
-  if(a) a.value=n; if(b) b.value=amt; }
+  if(a) a.value=n; if(b) b.value=amt; inxInvSync(); }
+/* 分期的發票區同步（2026-09-15）——
+   ⚠ 實收金額 0 就收起來：invIssueForPurchase 有 `amt<=0 return null`，
+     留在畫面上等於讓櫃檯白問一次載具／信箱（同商品與場租那個坑）。
+   ⚠ 會員固定（票券的持有人），所以每次都帶同一個人進去預填。 */
+function inxInvSync(){
+  const amt=Math.round(Number((document.getElementById('inx-amt')||{}).value)||0);
+  try{ invSync({paid:amt>0, memberId:window._inxMemberId||'', members:(window._inxMembers||[])}); }catch(_){}
+}
 /* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
 async function confirmInstallNext(ticket_id){ return onceAct('instnext:'+ticket_id, ()=>_confirmInstallNext(ticket_id)); }
 async function _confirmInstallNext(ticket_id){
