@@ -79,6 +79,43 @@ ok('★★★ [+] 的基準是 _tlSheetN（render 算出的實際張數），不
    /const n=\(Number\(window\._tlSheetN\)\|\|1\)\+1;/.test(src) && /if\(n>6\)\{ showToast\('最多六張課表'\); return; \}/.test(src));
 ok('★★ 三個寫入端都帶 sheet（新增動作／套歷史課表／套方案）',
    (src.match(/sheet:\(Number\(window\._tlSheet\)>1\)\?Number\(window\._tlSheet\):null/g)||[]).length===3);
+
+console.log('\n④ 歷史課表的順序（2026-09-16）');
+/* 使用者：「我按了下方歷史課表的套用　順序沒有跟之前課表一樣」——
+   ⚠⚠ allLogs 來自 dbGetAll，**回傳順序是未定義的**：整表重抓的一批照資料庫給的順序，
+     靠 change_log 增量補回來的列接在後面，所以同一堂課的動作會散成沒有規律的順序。
+     今日紀錄那一區本來就有排序，只有歷史這一區漏了，於是預覽亂、套用也跟著亂
+     （套用是照陣列順序逐筆寫入，新的 created_at 依序遞增）。
+   ⚠ 排序要做在**分組之前**：byBk 各組自然升冪，預覽／_tlHistCache／套用三處一次到位。 */
+ok('★★★ 分組前先照 created_at 升冪排（不能吃 dbGetAll 的未定義順序）',
+   /\.sort\(\(a,b2\)=>String\(a\.created_at\|\|''\)\.localeCompare\(String\(b2\.created_at\|\|''\)\)\);/.test(S));
+ok('★★★ 套用吃的就是排序後的那一份（_tlHistCache 直接存 h.ls，套用端照陣列順序寫入）',
+   /window\._tlHistCache=Object\.fromEntries\(hist\.map\(h=>\[h\.bid,h\.ls\]\)\);/.test(S)
+   && /for\(const s of srcLogs\)\{/.test(src));
+ok('★★ 回呼參數避開 b（外層的 b 是這堂 booking，用 b 當參數名會遮蔽掉它）',
+   !/\.sort\(\(a,b\)=>b\.t\.localeCompare/.test(S));
+{
+  /* 照抄修好之後的組裝邏輯，餵入「亂序」的來源，驗證三處都回到時間順序。 */
+  const raw=[
+    {booking_id:'BK1',created_at:'2026-09-16T03:21:45Z',exercise_name:'伏地挺身'},
+    {booking_id:'BK1',created_at:'2026-09-16T03:44:47Z',exercise_name:'股四分腿蹲'},
+    {booking_id:'BK1',created_at:'2026-09-16T03:08:24Z',exercise_name:'啟動·推'},
+    {booking_id:'BK1',created_at:'2026-09-16T03:16:01Z',exercise_name:'懸吊抬腿'},
+    {booking_id:'BK0',created_at:'2026-09-01T02:00:00Z',exercise_name:'舊課'},
+  ];
+  const sorted=raw.slice().sort((a,b2)=>String(a.created_at||'').localeCompare(String(b2.created_at||'')));
+  const byBk={}; sorted.forEach(l=>{ (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
+  const hist=Object.entries(byBk).map(([bid,ls])=>({bid,ls,t:ls[0].created_at||''}))
+    .sort((a,b2)=>String(b2.t).localeCompare(String(a.t))).slice(0,3);
+  eq('★★★ 預覽那行字回到真正的上課順序',
+     [...new Set(hist[0].ls.map(l=>l.exercise_name))],
+     ['啟動·推','懸吊抬腿','伏地挺身','股四分腿蹲']);
+  eq('★★★ 套用逐筆寫入的順序＝同一份，所以今日紀錄也對',
+     hist[0].ls.map(l=>l.exercise_name),
+     ['啟動·推','懸吊抬腿','伏地挺身','股四分腿蹲']);
+  eq('★★ 該堂課的時間取最早那筆（不是碰巧排第一的那筆）', hist[0].t, '2026-09-16T03:08:24Z');
+  eq('★★ 最近三次照時間新到舊', hist.map(h=>h.bid), ['BK1','BK0']);
+}
 /* 2026-09-16 使用者：「我剛剛測試按新增第二分頁 但沒有刪除按鈕」——
    ⚠ 只能刪最後一張：允許刪中間那張的話，後面的編號要整批往前遞補（第 3 張變第 2 張），
      得批次改寫資料庫、還可能留下編號空洞。「刪掉現在看的最後一張」不必重編號。

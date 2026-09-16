@@ -69,7 +69,7 @@ console.log('\n①-3 帶入上次紀錄時，數字與單位要成對');
   /* ⚠ wpUnitOf 內部要用 WP_UNITS 這個常數，抽函式進沙盒時要把它一起餵進來，
      否則是 ReferenceError（第一版就漏了）。 */
   const pick=new Function('window','renderAddExerciseSheet','WP_UNITS',
-    fnBody('wpUnitOf')+'\n'+fnBody('tlSetsFromLog')+'\n'+fnBody('tlPickQuick')+'\nreturn tlPickQuick;')(W,()=>{},['kg','lb']);
+    fnBody('wpUnitOf')+'\n'+fnBody('tlUnitForTool')+'\n'+fnBody('tlSetsFromLog')+'\n'+fnBody('tlPickQuick')+'\nreturn tlPickQuick;')(W,()=>{},['kg','lb']);
   pick('臥推');
   eq('★★★ 上次用 lb → 重量與單位一起帶回（不會把 100lb 當成 100kg）',
      [W._tlState.sets[0].weight, W._tlState.unit], ['100','lb']);
@@ -79,12 +79,48 @@ console.log('\n①-3 帶入上次紀錄時，數字與單位要成對');
   eq('★★ 沒有上次紀錄 → 維持目前選的單位', W._tlState.unit, 'lb');
 }
 
+console.log('\n①-4 Cable 的重量預設 lb（2026-09-16）');
+/* 使用者：「如果課表的工具有設定是cable 那重量單位要預設lb」—— 滑輪機的配重片刻度是磅。
+   ⚠⚠ 優先序：上次那筆的單位 > Cable→lb > 目前選的單位。
+     Cable **絕不能**蓋過「上次那筆」—— 有上次紀錄時帶進來的就是上次那些數字，
+     這時讓工具去改單位，數字與單位立刻不成對（上次用 kg 記的 20 會被讀成 20 lb），
+     正是 ①-3 那條規則在防的同一個事故。
+   ⚠ 不是 Cable 時 tlUnitForTool 回空字串而不是 'kg' —— 呼叫端才分得出
+     「有建議」與「沒意見」，回 'kg' 會把「維持目前選的單位」那條行為壓掉。 */
+{
+  const mk=(quick,last)=>({_tlState:{page:1,exercise_name:'',tool:null,posture:null,unit:'kg',sets:[{reps:'',weight:''}]},
+    _tlQuickEx:quick, _tlLastByEx:last||{}});
+  const run=(W,name)=>{ new Function('window','renderAddExerciseSheet','WP_UNITS',
+    fnBody('wpUnitOf')+'\n'+fnBody('tlUnitForTool')+'\n'+fnBody('tlSetsFromLog')+'\n'+fnBody('tlPickQuick')
+    +'\nreturn tlPickQuick;')(W,()=>{},['kg','lb'])(name); return W; };
+
+  eq('★★★ Cable＋沒有上次紀錄 → 預設 lb',
+     run(mk([{name:'單手下拉',tool:'Cable'}]),'單手下拉')._tlState.unit, 'lb');
+  eq('★★ 大小寫不同照樣認得（常用動作的工具欄是教練自己打的）',
+     run(mk([{name:'單手下拉',tool:'cable'}]),'單手下拉')._tlState.unit, 'lb');
+  eq('★★★ 有上次紀錄時「上次那筆」勝出（否則 20kg 會被讀成 20lb）',
+     (()=>{ const W=run(mk([{name:'單手下拉',tool:'Cable'}],
+       {'單手下拉':{sets:2,reps:10,weight:20,weight_unit:'kg',created_at:'2026-09-10T10:00:00.000Z'}}),'單手下拉');
+       return [W._tlState.sets[0].weight, W._tlState.unit]; })(), ['20','kg']);
+  eq('★★ 不是 Cable 就完全不碰（維持目前選的單位，不硬改回 kg）',
+     (()=>{ const W=mk([{name:'啞鈴臥推',tool:'啞鈴'}]); W._tlState.unit='lb';
+       return run(W,'啞鈴臥推')._tlState.unit; })(), 'lb');
+  eq('★★ 工具沒設定也不碰',
+     (()=>{ const W=mk([{name:'伏地挺身'}]); W._tlState.unit='lb';
+       return run(W,'伏地挺身')._tlState.unit; })(), 'lb');
+}
+
 console.log('\n② 點常用動作：帶名稱、工具姿勢、上次的數字，直接進記錄頁');
-/* ⚠ 2026-09-15：tlPickQuick 多了一個依賴 —— 它現在會呼叫 wpUnitOf 把上次那筆的單位
-   帶回 st.unit（數字與單位要成對）。抽它進沙盒的地方都要一起餵 wpUnitOf 與 WP_UNITS，
-   否則 ReferenceError。全專案只有這裡與 ①-3 兩處抽它。 */
+/* ⚠⚠ tlPickQuick 的依賴清單 —— 這個坑已經踩過兩次，每次症狀都是 ReferenceError：
+     ・2026-09-15 加了 wpUnitOf（把上次那筆的單位帶回 st.unit，數字與單位要成對）
+     ・2026-09-16 加了 tlUnitForTool（Cable 預設 lb）
+   fnBody 只抽出「那一個函式」，不會跟著把它呼叫的東西一起帶進來，
+   所以**每次在 tlPickQuick 裡多呼叫一個函式，下面三處沙盒都要同步加餵**：
+     ①-3（上面的 pick）／②（這裡的 env）／①-4（Cable 那一節的 run）。
+   ⚠ 加依賴時請回頭搜 fnBody('tlPickQuick')，數量要對得起來 —— 2026-09-16
+     就是只改了新寫的那一處、漏掉舊的兩處，全套才紅的。 */
 const env=(w,paint)=>new Function('window','renderAddExerciseSheet','WP_UNITS',
-  fnBody('wpUnitOf')+'\n'+fnBody('tlSetsFromLog')+'\n'+fnBody('tlPickQuick')+'\nreturn tlPickQuick;')(w,paint,['kg','lb']);
+  fnBody('wpUnitOf')+'\n'+fnBody('tlUnitForTool')+'\n'+fnBody('tlSetsFromLog')+'\n'+fnBody('tlPickQuick')+'\nreturn tlPickQuick;')(w,paint,['kg','lb']);
 const W={_tlState:{page:1,exercise_name:'',tool:null,posture:null,sets:[{reps:'',weight:''}]},
   _tlQuickEx:[{name:'保加利亞分腿蹲',tool:'啞鈴',posture:'站姿'}],
   _tlLastByEx:{'保加利亞分腿蹲':{sets:3,reps:10,weight:20,weight_unit:'kg',created_at:'2026-09-04T10:00:00.000Z'}}};

@@ -13376,8 +13376,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.1840';
-const APP_VERSION_LABEL = 'v260916.1840';
+const APP_VERSION = '260916.1848';
+const APP_VERSION_LABEL = 'v260916.1848';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -62249,11 +62249,27 @@ async function renderTrainingLogSheet(){
 
   // ── P1-2 歷史課表（最近三次，可一鍵套用）──
   /* 歷史課表同樣濾掉第二位的（同 memAllLogs 的理由） */
-  const memLogs=allLogs.filter(l=>l.member_id===b.member_id && l.booking_id!==b.id && _slotOf(l)!==2);
+  /* ⚠⚠ 一定要先照 created_at 升冪排（2026-09-16 使用者：「我按了下方歷史課表的套用
+       順序沒有跟之前課表一樣」）——
+     allLogs 來自 dbGetAll，**回傳順序是未定義的**：整表重抓的那批照資料庫給的順序，
+     後來靠 change_log 增量補回來的列則接在後面，所以同一堂課的動作會散成沒有規律的順序。
+     今日紀錄那一區（上面的 logs）本來就有這道排序，只有歷史這一區漏了，於是：
+       ① 歷史那行預覽字的動作順序是亂的
+       ② 套用時照著亂序逐筆寫入，新的 created_at 依序遞增，今日紀錄就跟著亂
+     實測 09/16 那堂：真實順序是 啟動·推→懸吊抬腿→伏地挺身→啟動·拉→單手下拉→
+     股四分腿蹲→臀肌分腿蹲→砸藥球，畫面卻是 伏地挺身→股四分腿蹲→…→懸吊抬腿。
+     ⚠ 排序做在**分組之前**：byBk 各組就自然是升冪，
+       預覽、_tlHistCache、套用三處一次到位，不必在套用端再排一次。
+     ⚠ 回呼參數避開 b —— 外層的 b 是這堂 booking，用 b 當參數名會把它遮蔽掉。 */
+  const memLogs=allLogs.filter(l=>l.member_id===b.member_id && l.booking_id!==b.id && _slotOf(l)!==2)
+    .sort((a,b2)=>String(a.created_at||'').localeCompare(String(b2.created_at||'')));
   const byBk={};
   memLogs.forEach(l=>{ (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
+  /* ⚠ t 取該組**最早**那筆（排序後就是第一筆）—— 原本寫的也是 ls[0]，
+     但在沒排序的情況下那只是「碰巧被放在第一個」的那筆，
+     於是「最近三次」挑中哪三堂、以及這三堂的先後，都可能不對。 */
   let hist=Object.entries(byBk).map(([bid,ls])=>({bid,ls,t:ls[0].created_at||''}))
-    .sort((a,b)=>b.t.localeCompare(a.t)).slice(0,3);
+    .sort((a,b2)=>String(b2.t).localeCompare(String(a.t))).slice(0,3);
   window._tlHistCache=Object.fromEntries(hist.map(h=>[h.bid,h.ls])); // 供套用取用
   const sec4 = hist.length===0
     ? ''   /* 沒有歷史就整區不畫（2026-09-11 簡化），標題列一起收，見下方 */
@@ -62672,6 +62688,14 @@ function tlSetsFromLog(L){
   const w=(L.weight==null||!isFinite(Number(L.weight)))?'':String(L.weight);
   return Array.from({length:n},()=>({reps,weight:w}));
 }
+/* Cable 的重量預設用 lb（2026-09-16 使用者：「如果課表的工具有設定是cable
+   那重量單位要預設lb」）—— 滑輪機的配重片刻度就是磅。
+   ⚠ 只回傳「建議的預設」，採不採用由呼叫端決定 —— 它絕不能蓋過「上次那筆的單位」。
+   ⚠ 不分大小寫：TL_TOOLS 裡固定是 'Cable'，但常用動作的工具欄是教練自己打的，
+     可能寫成 cable／CABLE。
+   ⚠ 不是 Cable 就回空字串（不是 'kg'）：呼叫端才分得出「有建議」與「沒意見」，
+     回 'kg' 會把既有的「維持目前選的單位」那條行為壓掉。 */
+function tlUnitForTool(tool){ return String(tool||'').trim().toLowerCase()==='cable' ? 'lb' : ''; }
 function tlPickQuick(name){
   const st=window._tlState; if(!st) return;
   const e=(window._tlQuickEx||[]).find(x=>x&&x.name===name);
@@ -62682,8 +62706,13 @@ function tlPickQuick(name){
   st.sets=sets.length?sets:[{reps:'',weight:''}];
   /* 單位跟著上次那筆一起帶（2026-09-15）—— 數字與單位一定要成對，
      否則上次用 lb 記的 100，帶進來會被當成 100 kg（差一倍多）。
-     沒有上次紀錄時維持目前選的單位，不要硬改回 kg。 */
+     沒有上次紀錄時維持目前選的單位，不要硬改回 kg。
+     ⚠⚠ Cable→lb 只在「沒有上次紀錄」時才套（2026-09-16）：有上次紀錄時，
+       帶進來的 st.sets 就是上次那些數字，這時讓工具去改單位，數字與單位立刻不成對 ——
+       正是上面那條規則在防的同一個事故（上次用 kg 記的 20 會被讀成 20 lb）。
+     ⚠ 不是 Cable 就完全不碰，維持「保留目前選的單位」這個既有行為。 */
   if(L) st.unit=wpUnitOf(L.weight_unit);
+  else { const _tu=tlUnitForTool(st.tool); if(_tu) st.unit=_tu; }
   st._lastDate=(sets.length&&L)?String(L.created_at||'').slice(5,10).replace('-','/'):'';
   st.page=2; renderAddExerciseSheet();
 }
