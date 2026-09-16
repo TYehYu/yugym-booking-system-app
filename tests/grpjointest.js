@@ -39,6 +39,25 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
     ok('★★ 單獨建立的課卡不在連續名單裡（2026-08-07 使用者定案）', !r0.includes('s1'));
     eq('★ 但要另外列出來告訴櫃檯（solo）', split(G('g0','2026-08-05'),all).solo.map(x=>x.id), ['s1']);
 
+    /* 2026-09-16 使用者：「團體課 就算當初建立的時候不是用連續預約建立的，
+       只要每週同一個時段的開課 是不是可以判斷為連續預約」——
+       第三個參數 loose=true：不再看 recurring，同教練＋同星期＋同時段＋未來就算同一串。
+       ⚠⚠ 只有「加人」那條路傳 true（使用者定案）。整串取消與整串換教練維持嚴格判準：
+         放寬的話整串刪除會把櫃檯單獨補開的那一堂也刪掉 ——
+         多扣的票可以退，誤刪的課卡很難救，兩邊代價不對等。
+       ⚠ 使用者另外問「如果其中一週是 13:30 會不會被當成同一串」：不會。
+         loose 只放寬「是不是同一批開出來的」，時間比對（start_time.slice(0,5)）沒有動。 */
+    eq('★★★ loose：櫃檯單獨補開的那一堂也算進連續名單',
+       split(G('g0','2026-08-05'),all,true).series.map(x=>x.id), ['g1','g2','g3','g4','s1']);
+    eq('★★★ loose 之下 solo 是空的（「另有 N 堂是單獨建立」那句提示自然不再出現）',
+       split(G('g0','2026-08-05'),all,true).solo.map(x=>x.id), []);
+    eq('★★★ loose 不放寬其他條件：不同時段（x1）／不同教練（x2）／不同星期（x3）／非團課（p1）仍排除',
+       split(G('g0','2026-08-05'),all,true).series.map(x=>x.id).filter(id=>['x1','x2','x3','p1'].includes(id)), []);
+    eq('★★★ 不傳 loose 時維持 0807 的嚴格判準（整串取消／整串換教練走這條）',
+       split(G('g0','2026-08-05'),all).series.map(x=>x.id), ['g1','g2','g3','g4']);
+    ok('★★ 只有加人那條路傳 loose', /const _sp=grpSeriesSplit\(b, await dbGetAll\('bookings'\), true\);/.test(src)
+       && /grpSeriesSplit\(b,all\)\.series/.test(src));
+
     console.log('\n② 使用者的例子：開 10 週、新會員買 4 堂 → 連續預約 4 堂（_grpFollowRun 實跑）');
     const later=['w1','w2','w3','w4','w5','w6'];
     const DB={ w1:{id:'w1',member_ids:['A'],max_heads:5,ticket_type_id:'tt',date:'2026-08-19',start_time:'19:00'},
@@ -191,10 +210,33 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
          /const _si=\(window\._grpBase\|\|\[\]\)\.filter\(x=>String\(x\)===String\(r\.m\.id\)\)\.length;/.test(src)
          && /function grpAddPickTk\(mid, seatIdx, tkid\)\{ grpPickTk\(mid, seatIdx, tkid\); renderGrpPick\(\); \}/.test(src));
       /* 2026-08-29：「連續預約的這個視窗　要顯示預約的日期跟時間」 */
-      ok('★★ 連續預約視窗把要約的日期時間逐筆列出（超過 12 筆寫「還有 N 堂」）',
+      /* 2026-09-16 使用者：「連續預約的視窗太多文字 內容雜亂」——
+         13 顆日期膠囊佔掉近半個視窗，把真正要決定的「約幾堂」擠到畫面外。
+         ⚠ 日期**不是拿掉**：0829 使用者要求「要顯示預約的日期跟時間」，櫃檯要核對排到哪裡。
+           改成前 3 堂常駐、其餘收進 <details>，要核對的人點得開。
+         ⚠ 原本超過 12 筆才寫「還有 N 堂」，那條 .gfa-day-more 的路現在由 details 取代。 */
+      ok('★★ 日期前 3 堂常駐，其餘收進可展開的 details（不是不顯示）',
          /<div class="gfa-days">/.test(src)
-         && /later\.slice\(0,12\)\.map\(x=>`<span class="gfa-day">/.test(src)
-         && /later\.length>12\?`<span class="gfa-day gfa-day-more">…還有 \$\{later\.length-12\} 堂<\/span>`:''/.test(src));
+         && /later\.slice\(0,3\)\.map\(x=>`<span class="gfa-day">/.test(src)
+         && /<details class="gfa-more"><summary>還有 \$\{later\.length-3\} 堂，點開核對<\/summary>/.test(src)
+         && /later\.slice\(3\)\.map\(x=>`<span class="gfa-day">/.test(src));
+      /* ⚠⚠ 反面斷言的範圍要限縮到這一支函式，不可以掃全檔 ——
+         「後面還有 <b>${later.length}</b> 堂」在**另一張視窗**（改時間那支，36950 附近）
+         合法地存在著，掃全檔永遠是紅的。
+         ⚠ 同時仍要剝註解：原地留的說明也會寫出被改掉的舊句子。
+         今天在這兩件事上各踩過好幾次，這裡兩道一起做。 */
+      ok('★★ 標題與副標不再重複（副標只講「週幾幾點・共 N 堂」）',
+         (()=>{ const GFA=grabFn('grpFollowAsk')||'';
+           const body=GFA.replace(/\/\*[\s\S]*?\*\//g,'');
+           return /<b>週\$\{dowLbl\} \$\{String\(b\.start_time\)\.slice\(0,5\)\}<\/b>　·　共 <b>\$\{later\.length\}<\/b> 堂/.test(body)
+               && !/後面還有 <b>\$\{later\.length\}<\/b> 堂/.test(body); })());
+      ok('★★ 會員那列改成上下兩行，餘額緊貼輸入框',
+         /<div class="gfa-row">/.test(src)
+         && /<span class="gfa-left">票剩 \$\{r\.left\} 堂<\/span>/.test(src)
+         && /\.gfa-left\{[^}]*margin-left:auto;/.test(src));
+      ok('★★★ 兩條常駐說明收成一行；條件式那兩條仍留在條列，且兩條都沒有時整個 ul 不畫',
+         /<div class="gfa-auto">滿員或已在名單的場次會自動跳過、往後遞補；有票逐堂扣，不夠會停下來告訴你。<\/div>/.test(src)
+         && /\$\{\(solo\.length\|\|pending\)\?`<ul class="mk-pts">/.test(src));
       ok('★ 還沒建的那一堂也列出來並標「本堂」',
          /<span class="gfa-day gfa-day-now">/.test(src) && /<i>本堂<\/i>/.test(src));
       /* 2026-08-29：「我在前一步選了其中一份票券而已　這邊應該只要顯示該票券的4堂」 */
@@ -205,8 +247,11 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
       ok('★★ 後續場次也只用那一張（挑過就不會退回先進先出）',
          /const _famOk=t=>_wtk \? String\(t\.id\)===String\(_wtk\)/.test(src)
          && /\|\| \(\(!_wtk&&\(_wf===undefined\|\|_wf===null\)\)\?await findUsableTicket\(/.test(src));
+      /* 2026-09-16：會員那一列改成上下兩行，方案名與餘額各自有了 class，
+         不再是擠在 label 裡的兩段純文字。這一條守的本意沒變：看得出算的是哪一張票。 */
       ok('★ 視窗上標出方案名（看得出來算的是哪一張）',
-         /\$\{r\.plan\?`　\$\{escH\(r\.plan\)\}`:''\}　剩 \$\{r\.left\} 堂/.test(src));
+         /\$\{r\.plan\?`<span class="gfa-plan">\$\{escH\(r\.plan\)\}<\/span>`:''\}/.test(src)
+         && /<span class="gfa-left">票剩 \$\{r\.left\} 堂<\/span>/.test(src));
       /* 2026-08-29：「然後這邊沒有上一步可以退回」 */
       ok('★★ 還沒寫入的那條路要能退回去改，而且挑好的人與方案要留著',
          /function grpFollowBack\(id\)\{ window\._gfPend=null; try\{ closeModal\(\); \}catch\(_\)\{\} openGroupMembers\(id, true, true\); \}/.test(src)
@@ -274,9 +319,15 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
     ok('★ 預設堂數＝票券剩餘 ÷ 名額數（買 8 堂 2 名額預設 4）',
        /const def=Math\.min\(seats>1\?Math\.floor\(left\/seats\):left, cap\);/.test(src));
     ok('★ 防連點', /async function grpFollowRun\(mids2\)\{ return onceAct\('gfrun', \(\)=>_grpFollowRun\(mids2\)\); \}/.test(src));
-    ok('★ 沒後續場次照舊回明細（順便講一聲後面那幾堂是單獨建立的）',
-       /const _sp=grpSeriesSplit\(b, await dbGetAll\('bookings'\)\);/.test(src)
-       && /if\(solo\.length\) showToast\(`後面 \$\{solo\.length\} 堂是單獨建立的課，不在連續系列裡/.test(src));
+    /* 2026-09-16：加人改採寬鬆判準（第三參數 true）之後，這條路上的 solo 恆為空陣列，
+       原本那句「後面 N 堂是單獨建立的課，不在連續系列裡」永遠不會觸發 ——
+       那是我的改動造成的死碼，已經清掉，不是漏改。
+       ⚠ 這一條守的本意還在：沒有後續場次時要安靜地回明細，不要卡在半路。
+       ⚠ 反面斷言先剝註解：原地留的〔已移除〕說明會寫出被拿掉的那句話。 */
+    ok('★ 沒後續場次就直接回明細（solo 恆空，不再提示「單獨建立」）',
+       /const _sp=grpSeriesSplit\(b, await dbGetAll\('bookings'\), true\);/.test(src)
+       && !/if\(solo\.length\) showToast\(/.test(src.replace(/\/\*[\s\S]*?\*\//g,''))
+       && /if\(!later\.length\)\{[\s\S]{0,900}?grpBackToCard\(id\); return;/.test(src));
     ok('★ 視窗上把單獨建立的那幾堂列出來（金色次要提示）',
        /另有 <b>\$\{solo\.length\}<\/b> 堂/.test(src) && /是<b>單獨建立<\/b>的課，不在這個連續系列裡/.test(src));
     ok('　　使用者的例子寫在程式裡', /「先開了 10 堂 10 週，新會員只買了 4 堂 → 可以重複預約 4 堂」/.test(src));
