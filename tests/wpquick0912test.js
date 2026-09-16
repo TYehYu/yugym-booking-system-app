@@ -52,6 +52,24 @@ ok('★★★ 放開後把整份新順序寫回 sort_order（只寫有變的那�
    && /if\(!e \|\| Number\(e\.sort_order\)===k\+1\) continue;/.test(src));
 ok('★★ ✕ 不進拖移（否則按刪除會先浮起一張卡）',
    /if\(e\.target && e\.target\.closest && e\.target\.closest\('\.cxe-b'\)\) return;/.test(src));
+/* 2026-09-16 桌機優化：清單從單欄改成自動多欄（auto-fill minmax(280px,1fr)）。
+   ⚠⚠ 多欄之後拖移的落點判斷**不能再只比垂直中線** —— 同一列有好幾個項目時，
+     光比 y 會把卡片丟到同列最左邊。改成「找中心點離游標最近的那張，
+     再依游標相對它的位置決定插前面或後面」；同列比 x、跨列比 y。 */
+ok('★★★ 清單自動多欄，且落點判斷同時看 x 與 y',
+   /\.cxe-list\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(280px,1fr\)\);/.test(src)
+   && /const moveTo=\(x,y\)=>\{/.test(src)
+   && /const d=\(x-cx\)\*\(x-cx\)\+\(y-cy\)\*\(y-cy\);/.test(src)
+   && /after=\(Math\.abs\(y-cy\) > b2\.height\/2\) \? \(y>cy\) : \(x>cx\);/.test(src));
+ok('★★★ 多欄用到的 startX／offX 有宣告（漏掉會 ReferenceError，拖移一啟動就炸）',
+   /const startX=e\.clientX, startY=e\.clientY;/.test(src)
+   && /let armed=false, ghost=null, offX=0, offY=0, ended=false;/.test(src)
+   && /offX=startX-r\.left; offY=startY-r\.top;/.test(src));
+/* ⚠ 方案編輯器（wpLpStart）是這套拖移的原型，兩支有多段一字不差的程式碼。
+   它的清單仍是單欄，落點判斷維持只比垂直中線 —— 這一條守著它沒有被順手改到。 */
+ok('★★ 方案編輯器那支沒被波及（仍是單欄版的 moveTo=(y)）',
+   /const moveTo=\(y\)=>\{/.test(src)
+   && /const box=document\.getElementById\('wp-items'\); if\(!box\) return;/.test(src));
 /* 2026-09-16 使用者回報：「我用手機拖拉常用動作卡片　卡片雖然也可以正確移動
    但是會有選字的拖曳」—— body.cxe-dragging-on 的 user-select:none 是長按 400ms
    成立後才加，而系統長按選字 300～500ms 就觸發，來不及。整列永久關掉才擋得住。 */

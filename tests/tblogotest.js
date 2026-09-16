@@ -16,8 +16,13 @@ t('尺寸用 em，跟著 .tb-mark 走（桌機 24／手機 19／17 不必各寫�
 t('.tb-mark 改 inline-flex 靠底對齊', /\.topbar \.tb-mark\{display:inline-flex;align-items:flex-end/.test(s));
 t('手機那條也從 baseline 改 flex-end（否則有肌訓練會被拉到最上面）',
   /\.topbar \.tb-mark\{display:flex;align-items:flex-end;gap:7px;white-space:nowrap;\}/.test(s));
+/* ⚠⚠ 計數型斷言一定要先剝掉註解再數（2026-09-16 踩到）——
+   有人在註解裡引用這個選擇器說明「手機版靠這條把中文副標蓋回來」，
+   數量就從 6 變 7，看起來像多了一條規則，其實程式碼一條都沒多。
+   反面斷言（某某已移除）與這種正面計數，都會被自己寫的說明汙染。 */
+const cssOnly=s.replace(/\/\*[\s\S]*?\*\//g,'');
 t('★ 既有的 :last-child 規則改成直接子代（否則 YUGYM 會被當成副標縮小／變色）',
-  !/\.tb-mark span:last-child/.test(s) && (s.match(/\.tb-mark>span:last-child/g)||[]).length===6);
+  !/\.tb-mark span:last-child/.test(cssOnly) && (cssOnly.match(/\.tb-mark>span:last-child/g)||[]).length===6);
 
 /* 靜態 HTML 區不可以用 JS 模板字串的註解（0822 踩過：整串被印在畫面上） */
 const html=s.replace(/<script[\s\S]*?<\/script>/g,'').replace(/<!--[\s\S]*?-->/g,'');
