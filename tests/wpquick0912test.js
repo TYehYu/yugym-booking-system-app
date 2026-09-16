@@ -30,9 +30,45 @@ const MV=fnBody('_cxeMove');
 ok('★★★ 上下移動會把整份正規化成 1..n（否則兩筆「還沒排過」互換等於沒動）',
    /order\.splice\(j,0,order\.splice\(i,1\)\[0\]\);/.test(MV) && /sort_order:k\+1/.test(MV));
 ok('★★ 沒變的那幾筆不寫回', /if\(!e \|\| Number\(e\.sort_order\)===k\+1\) continue;/.test(MV));
-ok('★★ 卡片上是上下兩顆鍵，頭尾各自 disabled',
-   /onclick="cxeMove\('\$\{e\.id\}',-1\)">↑/.test(src) && /onclick="cxeMove\('\$\{e\.id\}',1\)">↓/.test(src)
-   && /\$\{i===0\?' disabled':''\}/.test(src) && /\$\{i===mine\.length-1\?' disabled':''\}/.test(src));
+/* 2026-09-16 使用者：「下方動作目前看不到刪除的按鈕 然後不用排序了」——
+   卡片上的 ↑↓ 兩顆鍵拿掉，改成一顆刪除。
+   ⚠ 排序的底層（cxeSorted／_cxeMove）**保留不動**：清單仍照 sort_order 排，
+     上課的快速清單也吃同一個順序（下一條）；只是不再提供手動調整的入口。 */
+ok('★★ 卡片上不再有上下移動，改成一顆刪除',
+   !/onclick="cxeMove\(/.test(src)
+   && /onclick="event\.stopPropagation\(\);cxeDelRow\('\$\{e\.id\}'\)"/.test(src));
+/* 2026-09-16 使用者：「常用動作的卡片 可以用滑鼠拖移順序」——
+   收掉 ↑↓ 之後改成長按拖移，整套照方案編輯器的 wpLpStart 搬（那三道防線是 0909
+   在手機上試出來的：pointerdown 就關 touch-action、non-passive touchmove preventDefault、
+   長按成立後不理 pointercancel）。 */
+ok('★★★ 長按拖移：三道防線都照搬，不是自己重寫一套',
+   /function cxeLpStart\(e,id\)\{/.test(src)
+   && /try\{ el\.style\.touchAction='none'; \}catch\(_\)\{\}/.test(src)
+   && /window\.addEventListener\('touchmove',tmove,\{passive:false\}\);/.test(src)
+   && /const onCancel=\(\)=>\{ if\(!armed\) finish\(false\); \};/.test(src));
+ok('★★★ 放開後把整份新順序寫回 sort_order（只寫有變的那幾筆）',
+   /cxeSaveOrder\(rowsNow\(\)\.map\(r=>r\.dataset\.id\)\.filter\(Boolean\)\)/.test(src)
+   && /async function cxeSaveOrder\(ids\)\{/.test(src)
+   && /if\(!e \|\| Number\(e\.sort_order\)===k\+1\) continue;/.test(src));
+ok('★★ ✕ 不進拖移（否則按刪除會先浮起一張卡）',
+   /if\(e\.target && e\.target\.closest && e\.target\.closest\('\.cxe-b'\)\) return;/.test(src));
+/* 2026-09-16：訓練方案那張卡先被要求移除（沒方案時用一整屏講解，把常用動作擠掉），
+   隨後使用者要「教練方便新增」，改成窄條入口 —— 標題列與「＋ 新方案」永遠在，
+   方案清單只有真的有方案才列。
+   ⚠ 入口不能整個拿掉：課表視窗那顆「套用方案」的來源就是這裡建的方案。 */
+ok('★★★ 訓練方案入口還在（窄條：標題＋新方案鈕，有方案才列清單）',
+   /<button class="btn btn-green btn-sm" onclick="wpEdit\(''\)">＋ 新方案<\/button>/.test(src)
+   && /\$\{mine\.length\?`<div class="wp-list" style="margin-top:10px;">\$\{mine\.map\(p=>card\(p,true\)\)\.join\(''\)\}<\/div>`:''\}/.test(src)
+   /* ⚠ 反面斷言一定要先剝掉註解再比對：「還沒有方案」這幾個字現在只剩在上面那段
+      說明裡（講「原本那張卡在還沒有方案時會佔一整屏」），直接掃全檔會命中自己寫的註解。
+      2026-09-16 當天第四次踩同一個坑，見 tests 裡其他幾支的同款警告。 */
+   && !/還沒有方案/.test(src.replace(/\/\*[\s\S]*?\*\//g,'')));
+/* 2026-09-16 使用者：「手機版點常用動作的卡片會進入一個視窗 但是桌機的有時候點不進去」——
+   原本可點的只有中段那顆 .cxe-main 按鈕，列的內距與右側空白都是死角。 */
+ok('★★★ 整列可點（不再只有中間那塊），且拖移後的那一次點擊不開編輯',
+   /<div class="cxe-row" data-id="\$\{e\.id\}"/.test(src)
+   && /onclick="cxeRowTap\('\$\{e\.id\}'\)" onpointerdown="cxeLpStart\(event,'\$\{e\.id\}'\)"/.test(src)
+   && /function cxeRowTap\(id\)\{\s*\n\s*if\(window\._cxeDragged\)\{ window\._cxeDragged=0; return; \}/.test(src));
 ok('★ 上課的快速清單吃同一個順序', /window\._tlQuickEx=cxeSorted\(cxeMine\(pre\)\);/.test(src));
 
 console.log('\n③ 方案：從常用動作挑');

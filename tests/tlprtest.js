@@ -109,8 +109,16 @@ console.log('\n④ 三大項歷史紀錄');
 ok('★★★ 不另開資料表 —— 紀錄由 training_logs 推導，所以「自動更新」不用寫同步',
    /沒有另開一張表：紀錄本來就是 training_logs 算得出來的/.test(src));
 /* 2026-09-11：三大項改成固定三格放在凍結區，「全部紀錄 ›」那顆鈕併進整塊（點哪裡都開全部紀錄） */
-ok('★★★ 總覽露出三大項＋「全部紀錄」入口',
-   /<div class="tlh-prb" onclick="tlOpenPrHistory\(\)" title="全部紀錄">/.test(src));
+/* 2026-09-16 使用者：「上方 深蹲硬舉臥推移除」，並確認「整塊拿掉，不再顯示」——
+   抽屜裡那一列三大項換成了課表張數頁籤（見 tests/tlprbar0911test.js）。
+   ⚠ 只拿掉畫面，底層一律保留：PR 的計算與「全部紀錄」視窗都還在，
+     日後要在別處接回入口只要一行。所以這一條改成守「底層還在、UI 已移除」。
+   ⚠ 但要知道 tlPrByExercise 全系統只剩這一個呼叫端被拔掉後沒有別的入口，
+     三大項 PR 目前在畫面上是完全看不到的。 */
+ok('★★★ 三大項 UI 已移除，但 PR 底層與「全部紀錄」視窗都還在',
+   !/<div class="tlh-prb" onclick="tlOpenPrHistory\(\)" title="全部紀錄">/.test(src)
+   && /function tlOpenPrHistory\(\)\{/.test(src)
+   && /function tlPrByExercise\(memLogs\)\{/.test(src));
 ok('★★★ 視窗列出每一項的完整歷程，最新那列標起來',
    /function tlOpenPrHistory\(\)\{/.test(src)
    && /r\.chain\.slice\(\)\.reverse\(\)\.map\(\(l,i\)=>`<div class="prh-row\$\{i\?'':' on'\}">/.test(src)
@@ -125,9 +133,9 @@ ok('★★★ 次數與組數本來就在紀錄列上（tlSetLine 就是「12 �
    /* 2026-09-11 使用者：「訓練紀錄統一改成 組數x次數x重量」 */
    /\(l\.sets\?l\.sets\+' 組':null\),\(l\.reps!=null\?l\.reps\+' 次':null\)/.test(src));
 ok('★★ 會員自己命名的動作名要跳脫（tlSetLine 回 HTML，動作名不在裡面）',
-   /<span class="prh-x">\$\{escH\(l\.exercise_name\|\|''\)\}<\/span>/.test(src)
-   /* 2026-09-11：抽屜那三格的名稱直接來自固定清單 TL_PR_LIFTS（不是使用者輸入），不需跳脫 */
-   && /\$\{TL_PR_LIFTS\.map\(k=>`<div class="tlh-prb-c"><div class="tlh-prb-k">\$\{k\}<\/div>/.test(src));
+   /* 2026-09-16：抽屜那三格已移除，所以只剩「全部紀錄」視窗這一處要守。
+      那三格的名稱本來就來自固定清單 TL_PR_LIFTS（不是使用者輸入），原本也不需跳脫。 */
+   /<span class="prh-x">\$\{escH\(l\.exercise_name\|\|''\)\}<\/span>/.test(src));
 ok('★★ 這張視窗是從抽屜裡開的 —— 靠 body:has 那條規則才蓋得住抽屜',
    /body:has\(#tl-sheet\) \.modal-bg/.test(src));
 

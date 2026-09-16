@@ -3789,6 +3789,16 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
   font-variant-numeric:tabular-nums;transition:.12s;}
 .tl-slot:active{transform:scale(.97);}
 .tl-slot.on{background:var(--green);border-color:var(--green);color:#fff;}
+/* 課表張數頁籤（2026-09-16）：沿用上面 1V2 頁籤的語彙（同樣的圓角、綠底選中），
+   但張數會變動，所以不用 flex:1 平分 —— 平分會讓按鈕寬度隨張數增減而跳動。
+   ⚠ 末端那顆 [+] 用虛線框：它是「新增」不是「某一張」，跟數字鈕要分得出來。 */
+.tl-sheets{display:flex;gap:6px;margin:0 18px 10px;flex:none;align-items:center;flex-wrap:wrap;}
+.tl-sheets .tl-sheet{flex:0 0 auto;min-width:42px;padding:7px 12px;border-radius:9px;
+  border:1px solid var(--bd);background:var(--card);font-family:inherit;font-size:13.5px;
+  font-weight:700;color:var(--t2);cursor:pointer;font-variant-numeric:tabular-nums;transition:.12s;}
+.tl-sheets .tl-sheet:active{transform:scale(.97);}
+.tl-sheets .tl-sheet.on{background:var(--green);border-color:var(--green);color:#fff;}
+.tl-sheets .tl-sheet-add{color:var(--green);border-style:dashed;min-width:38px;}
 /* 三大項紀錄：兩列（第一列項目、第二列 組×次×重量），固定三格；整塊點下去＝全部紀錄 */
 .tlh-prb{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 18px 10px;flex:none;
   cursor:pointer;-webkit-tap-highlight-color:transparent;}
@@ -3949,6 +3959,18 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .cxe-row:active{transform:scale(.99);}
 .cxe-main{display:flex;align-items:baseline;gap:10px;flex:1;min-width:0;background:none;border:none;padding:0;
   font-family:inherit;cursor:pointer;text-align:left;}
+/* 長按拖移排序（2026-09-16）：三態照方案編輯器（.wp-item）那一套 ——
+   原本那一列留在原位當佔位（淡下去＋虛線），真正跟著手指跑的是 .cxe-ghost 分身。
+   ⚠ 佔位那列不要用 transform：會建立新的包含塊，固定定位的分身會跟著歪掉。
+   ⚠ 分身不縮放，只加陰影與品牌色框 —— 卡片大小在拖移中變動會很難對準要放的位置。 */
+.cxe-row.cxe-dragging{opacity:.35;border-style:dashed;background:transparent;}
+.cxe-row.cxe-dragging .cxe-b{display:none;}
+.cxe-row.cxe-ghost{background:#fff;border-color:var(--brand,#1f6f54);opacity:1;
+  box-shadow:0 12px 28px rgba(30,25,15,.28);}
+.cxe-row.cxe-ghost .cxe-b{display:none;}
+/* 拖移進行中整頁不要跟著捲（touchmove 已經 preventDefault，這一條是保險） */
+body.cxe-dragging-on{touch-action:none;user-select:none;}
+body.cxe-dragging-on .cxe-row{cursor:grabbing;}
 .cxe-no{font-size:11px;color:var(--t3);font-family:var(--num);min-width:16px;}
 .cxe-n{font-size:14.5px;font-weight:700;color:var(--text);}
 .cxe-s{font-size:11.5px;color:var(--t3);margin-left:auto;}
@@ -3956,6 +3978,10 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .cxe-b{width:30px;height:28px;border:1px solid var(--bd);border-radius:8px;background:var(--card2);
   color:var(--t2);font-size:13px;cursor:pointer;font-family:inherit;}
 .cxe-b:disabled{opacity:.3;cursor:default;}
+/* 清單列上的刪除（2026-09-16）：紅色只出現在框線與字，底仍是米色 ——
+   紅底會讓一整排清單看起來像全是警示（紅>金>綠的階級裡，這只是一個可逆的動作）。 */
+.cxe-b.cxe-del{color:var(--danger);}
+.cxe-b.cxe-del:hover{border-color:var(--danger);background:#fbeceb;}
 /* 方案裡「加入動作」的勾選清單 */
 .cxe-pick{display:flex;flex-direction:column;gap:7px;max-height:46vh;overflow-y:auto;}
 .cxe-pk{display:flex;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--bd);
@@ -13259,8 +13285,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.1317';
-const APP_VERSION_LABEL = 'v260916.1317';
+const APP_VERSION = '260916.1635';
+const APP_VERSION_LABEL = 'v260916.1635';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -61921,6 +61947,12 @@ async function openTrainingLog(bookingId){
      ⚠ 每次開抽屜都回到第 1 位，不要記上次停在哪：教練連著開好幾堂課，
        停在「2」會讓他把下一位的紀錄記到第二格去。 */
   window._tlSlot=1;
+  /* 課表張數（2026-09-16 使用者：「每次由教練決定要開一份還是兩份課表出來寫」）——
+     ⚠ 同樣每次開抽屜都回到第 1 張、暫存張數歸零：教練連開好幾堂課，
+       停在第 2 張會讓他把下一堂的動作記到第二張紙上。
+     ⚠ _tlSheetMax 只是「這次按 [+] 開到第幾張」的暫存；真正的張數在 render 時
+       會與「現有紀錄的最大 sheet」取大值，所以歸零不會弄丟已經寫過的課表。 */
+  window._tlSheet=1; window._tlSheetMax=1;
   // 會員名 + 票券剩餘 + 是否友善課
   let memName='會員', tkText='', isFriendly=false;
   try{ const m=await dbGet('members',b.member_id); if(m)memName=m.name; }catch(_){}
@@ -61966,6 +61998,24 @@ function tlSetSlot(s){
   window._tlSlot=(Number(s)===2)?2:1;
   renderTrainingLogSheet();
 }
+/* 切換到第幾張課表（2026-09-16）——重畫抽屜，今日紀錄只顯示那一張上的動作。
+   ⚠ 「上次的數字」（tlLoadQuickEx）刻意不跟著 sheet 走：同一個人不管寫在第幾張紙，
+     上次做這個動作的重量都是同一個數字。 */
+function tlSetSheet(n){
+  window._tlSheet=Math.max(1, Number(n)||1);
+  renderTrainingLogSheet();
+}
+/* 再開一張課表（2026-09-16 使用者：「一堂課教練會拿兩份課表分別記錄不同的訓練」）。
+   ⚠ 基準用 _tlSheetN（render 算出來的實際張數＝紀錄裡的最大值與暫存張數取大），
+     不能用 _tlSheetMax —— 那只是本次按 [+] 的暫存，若紀錄裡已經有第 3 張，
+     用它當基準會算出 2，把新動作寫回既有的第二張。
+   ⚠ 上限六張：張數不存資料庫、由紀錄推導，誤觸開出幾十張會讓頁籤列爆掉。 */
+function tlAddSheet(){
+  const n=(Number(window._tlSheetN)||1)+1;
+  if(n>6){ showToast('最多六張課表'); return; }
+  window._tlSheetMax=n; window._tlSheet=n;
+  renderTrainingLogSheet();
+}
 
 async function renderTrainingLogSheet(){
   const b=window._tlBooking;
@@ -61982,8 +62032,20 @@ async function renderTrainingLogSheet(){
   const _is1v2 = fmt==='1V2';
   const _slot = _is1v2 ? (Number(window._tlSlot)||1) : 1;
   const _slotOf = l => Number(l&&l.slot)===2 ? 2 : 1;
-  // 今日（本堂課）紀錄 —— 1V2 只看當前那一份
-  const logs=allLogs.filter(l=>l.booking_id===b.id && (!_is1v2 || _slotOf(l)===_slot))
+  /* 課表張數（2026-09-16 使用者：「一堂課教練會拿兩份課表分別記錄不同的訓練，
+       每次由教練決定要開一份還是兩份課表出來寫」）——
+     ⚠ 張數不存資料庫：由「這堂課現有紀錄的最大 sheet」與「本次按 [+] 開到第幾張」取大值推導。
+       完全空白、一個動作都沒記的那張，關掉視窗就不留 —— 本來也沒有內容要留。
+     ⚠ 在 slot 之內算：1V2 切到另一位學員時，看到的是他自己的張數。
+     ⚠ sheet 與 slot 是兩個正交的維度 —— sheet 只是「記在第幾張紙上」，
+       每一張都屬於這位會員，歷史與三大項 PR 一律全算（見 migration 的警告）。 */
+  const _sheetOf = l => Math.max(1, Number(l&&l.sheet)||1);
+  const _bkLogs = allLogs.filter(l=>l.booking_id===b.id && (!_is1v2 || _slotOf(l)===_slot));
+  const _sheetN = Math.max(_bkLogs.reduce((m,l)=>Math.max(m,_sheetOf(l)),1), Number(window._tlSheetMax)||1);
+  const _sheet  = Math.min(Math.max(1, Number(window._tlSheet)||1), _sheetN);
+  window._tlSheetN=_sheetN;   /* 給 tlAddSheet 當基準，見那支的註解 */
+  // 今日（本堂課）紀錄 —— 1V2 只看當前那一位，再只看當前那一張課表
+  const logs=_bkLogs.filter(l=>_sheetOf(l)===_sheet)
     .sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
   // 動作明細顯示（次數 x 重量；多組）
   const setLine=tlSetLine;
@@ -62039,19 +62101,15 @@ async function renderTrainingLogSheet(){
      固定三格、放在凍結區（會員資料正下方，捲動時也看得到）；還沒有紀錄的那格寫「—」。
      ⚠ 第二列照使用者寫的「組×次×重量」（3×10×60）；同日稍晚全系統都統一成這個順序（見 tlSetLine 上方）。
      ⚠ 原本那顆「全部紀錄 ›」併進來：整塊點下去就是全部紀錄。 */
-  const _prOf=Object.fromEntries(prTop.map(r=>[r.lift,r]));
-  const _prVal=r=>{
-    if(!r) return '<span class="tlh-prb-none">—</span>';
-    const n=Object.assign({}, tlLogNums(r.best)||{});
-    if((n.sets===''||n.sets==null) && r.best && r.best.sets_detail){
-      try{ const a=JSON.parse(r.best.sets_detail); if(a&&a.length) n.sets=a.length; }catch(_){} }
-    const nums=[n.sets,n.reps].filter(x=>x!==''&&x!=null);
-    const w=wpWeightHtml(n.weight,n.unit);
-    return (nums.join('×')||'')+(w?(nums.length?'×':'')+w:'') || '—';
-  };
-  const overview=`<div class="tlh-prb" onclick="tlOpenPrHistory()" title="全部紀錄">
-      ${TL_PR_LIFTS.map(k=>`<div class="tlh-prb-c"><div class="tlh-prb-k">${k}</div><div class="tlh-prb-v">${_prVal(_prOf[k])}</div></div>`).join('')}
-    </div>`;
+  /* 〔已移除〕三大項紀錄那一列（2026-09-16 使用者：「上方 深蹲硬舉臥推移除」，
+     並確認「整塊拿掉，不再顯示」）——
+     原本是固定三格（深蹲／硬舉／臥推）放在凍結區，整塊點下去開全部紀錄。
+     那個位置現在給課表張數頁籤。
+     ⚠ 只拿掉畫面，**底層一律保留**：TL_PR_LIFTS／tlPrByExercise／tlOpenPrHistory
+       與上面的 window._tlPr 都沒動，日後要在別處接回入口只要一行。
+     ⚠ 但要知道：tlPrByExercise 全系統只有這一個呼叫端，所以拿掉之後
+       三大項 PR 在畫面上是**完全看不到了**，不是只有這個視窗不顯示。 */
+  void prTop;
 
   // ── P1-2 歷史課表（最近三次，可一鍵套用）──
   /* 歷史課表同樣濾掉第二位的（同 memAllLogs 的理由） */
@@ -62087,8 +62145,16 @@ async function renderTrainingLogSheet(){
              第二位沒有自己的會員身分，算不出屬於他的 PR。 */''}
       ${_is1v2?`<div class="tl-slots">${[1,2].map(s=>
         `<button type="button" class="tl-slot${_slot===s?' on':''}" onclick="tlSetSlot(${s})">${s}</button>`).join('')}</div>`:''}
-      ${/* 凍結區到這裡為止（會員資料＋三大項），下面的 .tl-scroll 才捲動（2026-09-11） */''}
-      ${overview}
+      ${/* 課表張數頁籤（2026-09-16 使用者：「先設計1頁 旁邊是[+]點了可以多一頁」）——
+           一張時就是「1」＋「＋」，按了長出第二張並直接切過去。
+           ⚠ 位置就是原本三大項那一列（凍結區內、會員資料下方），捲動時仍看得到，
+             教練隨時能換張。
+           ⚠ 與上面 1V2 的 1／2 頁籤是兩列不同的東西：那一列選「哪一位學員」，
+             這一列選「第幾張紙」。1V2 的課兩列都會出現。 */''}
+      <div class="tl-sheets">${Array.from({length:_sheetN},(_,i)=>i+1).map(n=>
+        `<button type="button" class="tl-sheet${_sheet===n?' on':''}" onclick="tlSetSheet(${n})">${n}</button>`).join('')
+      }<button type="button" class="tl-sheet tl-sheet-add" onclick="tlAddSheet()" title="再開一張課表">＋</button></div>
+      ${/* 凍結區到這裡為止（會員資料＋課表頁籤），下面的 .tl-scroll 才捲動（2026-09-11） */''}
       <div class="tl-scroll">
         <div class="tlh-label">今日訓練紀錄${logs.length?'<span class="tlh-hint">點一下可修改</span>':''}</div>
         ${sec2}
@@ -62132,6 +62198,7 @@ async function tlDoApplyHist(srcBid){
         exercise_name:s.exercise_name, body_part:s.body_part, posture:s.posture, tool:s.tool,
         reps:s.reps, sets:s.sets, sets_detail:s.sets_detail,
         slot:(Number(window._tlSlot)===2)?2:null,   /* 套進來的也要落在當前那一位（2026-09-15） */
+        sheet:(Number(window._tlSheet)>1)?Number(window._tlSheet):null,   /* 也要落在當前那一張課表（2026-09-16） */
         note:(s.note||'').replace(/\s*\(套用.*?\)\s*/g,'')+' (套用 '+((s.created_at||'').slice(0,10).replace(/-/g,'/'))+')',
         created_at:new Date().toISOString()
       };
@@ -62552,6 +62619,10 @@ async function tlSaveExercise(){
     /* 1V2 的第幾位（2026-09-15）：1 或 null 都是第一位，2 是第二位。
        非 1V2 一律存 null —— 不要在單人課上留下看不懂的 1。 */
     slot:(Number(window._tlSlot)===2)?2:null,
+    /* 這筆寫在第幾張課表上（2026-09-16 使用者：「一堂課教練會拿兩份課表分別記錄不同的訓練」）。
+       第一張存 null —— 與 slot 同一個慣例，不要在預設情況留下看不懂的 1。
+       ⚠ 與 slot 無關：每一張都是這位會員的紀錄，歷史與三大項 PR 都要算進去。 */
+    sheet:(Number(window._tlSheet)>1)?Number(window._tlSheet):null,
     note:(st.note||'') + (setsText?(st.note?'　':'')+'['+setsText+']':''),
     created_at:new Date().toISOString()
   };
@@ -62671,6 +62742,7 @@ async function _tlPlanApply(pid,useLast){
         weight_unit:(weight!=null&&isFinite(weight)&&weight>0)?unit:null,
         sets_detail:null,
         slot:(Number(window._tlSlot)===2)?2:null,   /* 套方案也要落在當前那一位（2026-09-15） */
+        sheet:(Number(window._tlSheet)>1)?Number(window._tlSheet):null,   /* 也要落在當前那一張課表（2026-09-16） */
         note:it.note||null,
         created_at:new Date().toISOString() });
       window._tlogBids&&window._tlogBids.add(b.id);
@@ -67685,16 +67757,21 @@ PAGES.coach_plans=async function(){
     </div>`;
   };
   C.innerHTML=`
+    ${/* 訓練方案入口收成窄條（2026-09-16 使用者：「移除訓練方案這邊」→
+           「可以開課教練桌機版上方要新增訓練方案 讓教練方便新增動作」，選「常用動作上方加一顆鈕」）——
+         原本那張卡在「還沒有方案」時會用一整屏講解方案是什麼，把下面的常用動作擠到看不見，
+         那正是使用者要移除它的原因。現在只留標題列與「＋ 新方案」，
+         有方案時才把清單列出來；沒方案就是一條窄窄的入口，不佔畫面。
+         ⚠ 入口一定要留：課表視窗那顆「套用方案」的來源就是這裡建的方案，
+           整個拿掉的話那顆按鈕會變成永遠打不開東西。
+         ⚠ mine 與 card() 沿用原本的（下面「其他教練分享的」也還在用 card）。 */''}
     <div class="card">
       <div class="wp-head">
         <div><div class="card-title" style="margin:0;">訓練方案</div>
-          <div class="wp-sub">先把常用的菜單存成方案，上課直接套用。<br>重量可以留空（徒手）。</div></div>
+          <div class="wp-sub">存成範本，上課在課表裡一鍵套用。</div></div>
         <button class="btn btn-green btn-sm" onclick="wpEdit('')">＋ 新方案</button>
       </div>
-      ${mine.length?`<div class="wp-list">${mine.map(p=>card(p,true)).join('')}</div>`
-        :`<div class="empty wp-empty" style="padding:28px 8px;"><div class="em-t">還沒有方案</div>
-          <div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:1.8;">
-            方案是你自己的訓練範本 —— 動作、次數、組數、重量先設定好，<br>上課時在課卡的「訓練紀錄」一鍵套用。</div></div>`}
+      ${mine.length?`<div class="wp-list" style="margin-top:10px;">${mine.map(p=>card(p,true)).join('')}</div>`:''}
     </div>
     ${cxeCardHtml(quickEx)}
     ${shared.length?`<div class="card"><div class="card-title">其他教練分享的（${shared.length}）</div>
@@ -68167,6 +68244,109 @@ async function _cxeMove(id,dir){
     navTo('coach_plans');
   }catch(err){ showToast('排序失敗：'+((err&&err.message)||err)); }
 }
+/* 點一列＝編輯（2026-09-16）——拖移放開後的那一次 click 不要跟著開編輯視窗。
+   ⚠ 與 wpLpStart 用 _wpDragged 同一個手法：長按成立過就設旗標，這裡吃掉一次。 */
+function cxeRowTap(id){
+  if(window._cxeDragged){ window._cxeDragged=0; return; }
+  cxeEdit(id);
+}
+/* 把拖移後的 DOM 順序寫回 sort_order（2026-09-16 使用者：「常用動作的卡片 可以用滑鼠拖移順序」）。
+   ⚠ 另寫一支而不是共用 _cxeMove：那一支是「跟旁邊對調」的模型（收了 ↑↓ 之後已經沒有 UI 入口，
+     但 wpquick0912test 還釘著它的正規化邏輯），拖移給的是一整份新順序，形狀不同。
+   ⚠ 一樣正規化成 1..n：只寫有變的那幾筆，沒變的不送（清單常常只挪動一兩個位置）。 */
+async function cxeSaveOrder(ids){
+  if(!Array.isArray(ids)||!ids.length) return;
+  let all=[]; try{ all=await dbGetAll('coach_exercises'); }catch(_){ showToast('讀取失敗，請再試一次'); return; }
+  const mine=cxeSorted(cxeMine(all));
+  try{
+    for(let k=0;k<ids.length;k++){
+      const e=mine.find(x=>x.id===ids[k]);
+      if(!e || Number(e.sort_order)===k+1) continue;
+      await dbPut('coach_exercises',Object.assign({},e,{sort_order:k+1,updated_at:new Date().toISOString()}));
+    }
+    navTo('coach_plans');
+  }catch(err){ showToast('排序失敗：'+((err&&err.message)||err)); }
+}
+/* 長按拖移排序（2026-09-16 使用者：「常用動作的卡片 可以用滑鼠拖移順序」）——
+   整套照方案編輯器的 wpLpStart 搬過來，那三道防線是 0909 在手機上試出來的，不要自己重寫：
+     ① pointerdown 當下就把這一列的 touch-action 關掉（來得及影響這一次手勢）
+     ② non-passive 的 touchmove，長按成立後每次 preventDefault —— 只靠 touch-action 攔不住捲動
+     ③ 長按成立後不再把 pointercancel 當結束，改等 pointerup／touchend
+   ⚠ 拖移全程只搬 DOM，絕不重畫清單 —— 重畫會銷毀收到 pointerdown 的節點，那也會 pointercancel。
+   ⚠ 差別只有兩處：容器是 .cxe-list（不是 #wp-items），放開後把新順序寫回資料庫
+     （方案那邊是改記憶體陣列再 wpPaint）。 */
+function cxeLpStart(e,id){
+  if(e.target && e.target.closest && e.target.closest('.cxe-b')) return;   /* ✕ 不進拖移 */
+  const el=e.currentTarget;
+  const box=el.parentElement; if(!box) return;
+  const startY=e.clientY;
+  let armed=false, ghost=null, offY=0, ended=false;
+  try{ el.style.touchAction='none'; }catch(_){}
+  const rowsNow=()=>[...box.querySelectorAll('.cxe-row')];
+  const lift=()=>{
+    const r=el.getBoundingClientRect();
+    offY=startY-r.top;
+    el.classList.add('cxe-dragging');
+    ghost=el.cloneNode(true);
+    ghost.className='cxe-row cxe-ghost';
+    ghost.style.cssText='position:fixed;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;'
+      +'height:'+r.height+'px;margin:0;pointer-events:none;z-index:10200;box-sizing:border-box;';
+    document.body.appendChild(ghost);
+  };
+  const timer=setTimeout(()=>{
+    armed=true;
+    try{ if(navigator.vibrate) navigator.vibrate(15); }catch(_){}
+    document.body.classList.add('cxe-dragging-on');
+    lift();
+  },400);
+  const tmove=(ev)=>{ if(armed) ev.preventDefault(); };
+  const moveTo=(y)=>{
+    if(ghost) ghost.style.top=(y-offY)+'px';
+    let before=null;
+    for(const r of rowsNow()){
+      if(r===el) continue;
+      const b2=r.getBoundingClientRect();
+      if(y < b2.top + b2.height/2){ before=r; break; }
+    }
+    if(before){ if(before!==el.nextSibling) box.insertBefore(el, before); }
+    else if(el!==box.lastElementChild) box.appendChild(el);
+  };
+  const move=(ev)=>{
+    if(!armed){
+      if(Math.abs(ev.clientY-startY)>8){ clearTimeout(timer); finish(false); }
+      return;
+    }
+    ev.preventDefault();
+    moveTo(ev.clientY);
+  };
+  const onCancel=()=>{ if(!armed) finish(false); };
+  const finish=(apply)=>{
+    if(ended) return; ended=true;
+    clearTimeout(timer);
+    cleanup();
+    try{ el.style.touchAction=''; }catch(_){}
+    if(ghost){ try{ ghost.remove(); }catch(_){} ghost=null; }
+    document.body.classList.remove('cxe-dragging-on');
+    if(!apply || !armed){ el.classList.remove('cxe-dragging'); return; }
+    window._cxeDragged=1;                      /* 放開後那一次 click 不要開編輯 */
+    cxeSaveOrder(rowsNow().map(r=>r.dataset.id).filter(Boolean));
+  };
+  const up=()=>finish(true);
+  const cleanup=()=>{
+    window.removeEventListener('pointermove',move);
+    window.removeEventListener('pointerup',up);
+    window.removeEventListener('pointercancel',onCancel);
+    window.removeEventListener('touchmove',tmove);
+    window.removeEventListener('touchend',up);
+    window.removeEventListener('touchcancel',up);
+  };
+  window.addEventListener('pointermove',move,{passive:false});
+  window.addEventListener('pointerup',up);
+  window.addEventListener('pointercancel',onCancel);
+  window.addEventListener('touchmove',tmove,{passive:false});
+  window.addEventListener('touchend',up);
+  window.addEventListener('touchcancel',up);
+}
 function cxeCardHtml(list){
   const mine=cxeSorted(cxeMine(list));
   return `<div class="card">
@@ -68175,17 +68355,28 @@ function cxeCardHtml(list){
         <div class="wp-sub">上課按「＋ 新增動作」、方案挑動作，都照這個順序。<br>這位會員做過的，數字會自動帶上次的。</div></div>
       <button class="btn btn-green btn-sm" onclick="cxeEdit('')">＋ 新增</button>
     </div>
-    ${mine.length?`<div class="cxe-list">${mine.map((e,i)=>`<div class="cxe-row">
-        <button type="button" class="cxe-main" onclick="cxeEdit('${e.id}')">
+    ${/* 2026-09-16 使用者：「手機版點常用動作的卡片會進入一個視窗 但是桌機的有時候點不進去」——
+         成因：整列有 cursor:pointer 卻沒有 onclick，真正可點的只有裡面那顆 .cxe-main 按鈕。
+         列的內距（12px 14px）、.cxe-main 與右側之間的 gap（10px）、✕ 以外的空白全是死角，
+         看起來整列可點、實際只有中段可點。手機手指範圍大容易壓中，滑鼠精準反而常戳進死角。
+         改成**整列可點**：.cxe-main 退回單純的 span，onclick 綁在列上。
+         ⚠ data-id 是拖移放開後用來算新順序的（見 cxeLpStart）。 */''}
+    ${mine.length?`<div class="cxe-list">${mine.map((e,i)=>`<div class="cxe-row" data-id="${e.id}"
+        onclick="cxeRowTap('${e.id}')" onpointerdown="cxeLpStart(event,'${e.id}')">
+        <span class="cxe-main">
           <span class="cxe-no">${i+1}</span>
           <span class="cxe-n">${escH(e.name||'')}</span>
           <span class="cxe-s">${escH([e.posture,e.tool].filter(Boolean).join(' / ')||'未設定工具姿勢')}</span>
-        </button>
-        ${/* 上下移動（2026-09-12 使用者選的排序方式）——方案裡的動作是長按拖移，
-             這裡是設定頁、一次只會微調一兩個位置，兩顆鍵比拖移穩。 */''}
+        </span>
+        ${/* 2026-09-16 使用者：「下方動作目前看不到刪除的按鈕 然後不用排序了」——
+             原本這裡是上下移動兩顆鍵（0912 選的排序方式），現在換成一顆刪除。
+             ⚠ 排序的**底層保留不動**：清單仍照 sort_order 排（cxeSorted），
+               上課的快速清單也吃同一個順序 —— 只是不再提供手動調整的入口。
+               _cxeMove 也留著（wpquick0912test 還釘著它的正規化邏輯）。
+             ⚠ 要擋冒泡：整列本身是「點進去編輯」，不擋的話按刪除會先跳出編輯視窗。 */''}
         <span class="cxe-ord">
-          <button type="button" class="cxe-b"${i===0?' disabled':''} onclick="cxeMove('${e.id}',-1)">↑</button>
-          <button type="button" class="cxe-b"${i===mine.length-1?' disabled':''} onclick="cxeMove('${e.id}',1)">↓</button>
+          <button type="button" class="cxe-b cxe-del" title="從常用清單移除"
+            onclick="event.stopPropagation();cxeDelRow('${e.id}')">✕</button>
         </span>
       </div>`).join('')}</div>`
       :`<div class="empty wp-empty" style="padding:22px 8px;"><div class="em-t">還沒有常用動作</div>
@@ -68248,6 +68439,24 @@ function cxeDelAsk(){
 async function cxeDelDo(){
   const e=window._cxe; if(!e||!e.id) return;
   try{ await dbDel('coach_exercises',e.id); closeModal(); showToast('已刪除'); navTo('coach_plans'); }
+  catch(err){ showToast('刪除失敗：'+((err&&err.message)||err)); }
+}
+/* 清單列上的刪除（2026-09-16 使用者：「下方動作目前看不到刪除的按鈕」）——
+   原本刪除只藏在編輯視窗裡，清單上看不到，要先點進去才找得到。
+   ⚠ 不直接重用 cxeDelAsk：它的「返回」是 cxeRender()，那會把人帶進**編輯視窗** ——
+     從清單按刪除的人，取消之後應該回到清單，所以這裡自己一組、取消只 closeModal()。
+   ⚠ 一樣要問一次再刪：清單上的 ✕ 很容易誤觸，而動作刪掉就沒了。
+   ⚠ 只從清單移除，已經記錄的訓練不受影響（那是 training_logs，不是這張表）。 */
+async function cxeDelRow(id){
+  let r=null; try{ r=await dbGet('coach_exercises',id); }catch(_){}
+  if(!r){ showToast('找不到這個動作'); return; }
+  showModal(`<div class="modal-title">刪除常用動作</div>
+    <div class="mh2-rule">把「<b>${escH(r.name||'')}</b>」從常用清單移除？<br>已經記錄的訓練不受影響。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-red" onclick="cxeDelRowDo('${id}')">確定刪除</button></div>`);
+}
+async function cxeDelRowDo(id){
+  try{ await dbDel('coach_exercises',id); closeModal(); showToast('已刪除'); navTo('coach_plans'); }
   catch(err){ showToast('刪除失敗：'+((err&&err.message)||err)); }
 }
 function wpDelAsk(){

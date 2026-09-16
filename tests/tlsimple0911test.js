@@ -52,11 +52,13 @@ console.log('\n③ 抽屜簡化');
 const S=fn('renderTrainingLogSheet');
 ok('★★★ 標題就是會員，副標是時間與第幾堂（會員色塊卡退場）',
    /<div class="ms-title">\$\{escH\(window\._tlMemName\|\|'會員'\)\}/.test(S) && !/class="tlh-member /.test(S));
-ok('★★ 「訓練堂數／最近訓練」兩格與常練／部位退場；三大項紀錄有才畫',
+ok('★★ 「訓練堂數／最近訓練」兩格與常練／部位退場；三大項那一列也退場',
    !/<div class="tlh-ov-l">訓練堂數<\/div>/.test(S) && !/<div class="tlh-ov-l">最近訓練<\/div>/.test(S)
    && !/<span class="tlh-ov-k">常練<\/span>/.test(S) && !/<span class="tlh-ov-k">部位<\/span>/.test(S)
-   /* 同日稍晚：三大項改成固定三格、放進凍結區（見 tests/tlprbar0911test.js） */
-   && /const overview=`<div class="tlh-prb" onclick="tlOpenPrHistory\(\)"/.test(S));
+   /* 2026-09-11 三大項改成固定三格放進凍結區；2026-09-16 使用者要求整塊移除，
+      那個位置改放課表張數頁籤（見 tests/tlprbar0911test.js 的 ③ 區）。 */
+   && !/const overview=`<div class="tlh-prb"/.test(S)
+   && /<div class="tl-sheets">/.test(S));
 ok('★★ 沒有歷史課表 → 整區（含標題與動作查詢）不畫', /\$\{hist\.length\?`<div class="tlh-label"/.test(S) && !/尚無歷史課表/.test(S));
 ok('★ 空狀態一行', /'<div class="tls-empty">還沒有紀錄<\/div>'/.test(S));
 
