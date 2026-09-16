@@ -13376,8 +13376,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.1834';
-const APP_VERSION_LABEL = 'v260916.1834';
+const APP_VERSION = '260916.1840';
+const APP_VERSION_LABEL = 'v260916.1840';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -62584,6 +62584,10 @@ async function tlStartAddExercise(){
        「舊資料沒有單位欄一律當 kg」的退路就會被破壞。單位只存在 weight_unit 欄位。 */
   window._tlState={page:1, body_part:null, exercise_name:'', posture:null, tool:null, _tpOpen:false,
     unit:'kg', sets:[{reps:'',weight:''}]};
+  /* 分類快捷籤每次開視窗都回到「全部」（2026-09-16）—— 停在上一個動作的分類，
+     下一次新增就只看得到那一類，其他動作像是消失了。
+     與課表抽屜每次開都回到第 1 張（_tlSheet=1）同一個道理。 */
+  window._tlQuickCat='';
   renderAddExerciseSheet();                       // 先開視窗，清單非同步補上（現場等不得）
   try{ await tlLoadQuickEx(); }catch(_){}
   if(window._tlState && window._tlState.page===1) tlQuickFilter();
@@ -62617,10 +62621,26 @@ function tlQuickHtml(){
   if(!window._tlQuickEx) return '';                            // 還在載入
   const q=String(st.exercise_name||'').trim();
   const last=window._tlLastByEx||{};
-  const list=window._tlQuickEx.filter(e=>!q || String(e.name||'').indexOf(q)>=0);
+  /* 分類快捷籤（2026-09-16 使用者：「新增動作這個頁面上方要有分類的快捷籤」）——
+     ⚠⚠ 打字搜尋時分類要整組讓路：搜尋是更強的意圖，兩個篩選同時套的話，
+       停在「上肢推」搜「深蹲」會得到一片空白，看起來像壞掉。
+       有 q 就跨全分類找，頁籤也不畫（畫了也只是一個沒在作用的選中態）。
+     ⚠ 預設停在「全部」：這是**挑選**流程，現行行為就是看得到全部，
+       預設落到某一個分類會藏起教練預期看得到的動作。
+     ⚠ 只列出真的有動作的分類 —— 空頁籤佔著位置卻點不出東西。 */
+  const all=window._tlQuickEx;
+  const cnt={}; all.forEach(e=>{ const c=cxeCatOf(e); cnt[c]=(cnt[c]||0)+1; });
+  const cats=CXE_CATS.filter(c=>cnt[c]);
+  const cur=cats.indexOf(String(window._tlQuickCat||''))>=0 ? String(window._tlQuickCat) : '';
+  window._tlQuickCat=cur;
+  const list=all.filter(e=>q ? String(e.name||'').indexOf(q)>=0 : (!cur || cxeCatOf(e)===cur));
+  const tabs=(!q && cats.length>1)
+    ? `<div class="tkfilter tkf-scroll" style="margin:2px 0 10px;"><button type="button" class="tkf-btn${cur?'':' active'}" onclick="tlQuickSetCat('')">全部<i class="tkf-n">${all.length}</i></button>${
+        cats.map(c=>`<button type="button" class="tkf-btn${c===cur?' active':''}" onclick="tlQuickSetCat('${c}')">${c}<i class="tkf-n">${cnt[c]}</i></button>`).join('')
+      }</div>` : '';
   if(!list.length) return q ? '' :
     '<div class="ae-hint">還沒有常用動作 —— 到「訓練方案」頁的「我的常用動作」先設定，或直接在上面打名稱。</div>';
-  return `<div class="ae-label">常用動作</div><div class="ae-pre">${list.map(e=>{
+  return `<div class="ae-label">常用動作</div>${tabs}<div class="ae-pre">${list.map(e=>{
     const L=last[e.name];
     const dt=L?String(L.created_at||'').slice(5,10).replace('-','/'):'';
     return `<button type="button" class="ae-pre-row" onclick="tlPickQuick('${String(e.name).replace(/'/g,"\\'")}')">
@@ -62630,6 +62650,11 @@ function tlQuickHtml(){
   }).join('')}</div>`;
 }
 function tlQuickFilter(){ const box=document.getElementById('ae-pre-box'); if(box) box.innerHTML=tlQuickHtml(); }
+/* 切換分類快捷籤（2026-09-16）——只重畫清單那一塊，不重畫整頁。
+   ⚠ 走 tlQuickFilter 而不是 renderAddExerciseSheet：上面那個「動作名稱」輸入框
+     很可能正被游標停著，整頁重畫會讓它失焦、中文選字也會被打斷
+     （與打字篩選只重畫這一塊是同一個理由，見 tlQuickHtml 上面那行註解）。 */
+function tlQuickSetCat(c){ window._tlQuickCat=String(c||''); tlQuickFilter(); }
 /* 上次那一筆攤成一組一組的預填：逐組明細優先，只有「組×次×重量」的就展開成同樣幾組。
    ⚠ 最後一組是可編輯的當前組（第二頁的規矩），所以不另外補空白組 —— 直接按儲存就是照上次的組數。
    ⚠ 2026-09-15：磅（lb）**現在會帶重量了**。原本刻意不帶，理由是「第二頁的輸入框寫死 kg，

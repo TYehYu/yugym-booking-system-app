@@ -113,6 +113,25 @@ ok('★★ 上次的數字不分教練（會員的歷史就是會員的）',
 ok('★★ 打字只重畫清單那一塊（整頁重畫會失焦、中文選字被打斷）',
    /oninput="window\._tlState\.exercise_name=this\.value;tlQuickFilter\(\);"/.test(src)
    && /function tlQuickFilter\(\)\{ const box=document\.getElementById\('ae-pre-box'\);/.test(src));
+/* 2026-09-16 使用者：「新增動作這個頁面上方要有分類的快捷籤」。
+   ⚠⚠ 打字搜尋時分類要整組讓路 —— 兩個篩選同時套的話，停在「上肢推」搜「深蹲」
+     會得到一片空白，看起來像壞掉。搜尋是更強的意圖。
+   ⚠ 預設「全部」：這是挑選流程，現行行為就是看得到全部，
+     預設落到某個分類會藏起教練預期看得到的動作。 */
+ok('★★★ 有 q 就跨全分類搜尋，沒有 q 才套分類（兩個篩選不會互相打架）',
+   /const list=all\.filter\(e=>q \? String\(e\.name\|\|''\)\.indexOf\(q\)>=0 : \(!cur \|\| cxeCatOf\(e\)===cur\)\);/.test(src));
+ok('★★★ 打字時整組不畫頁籤（免得留一個沒在作用的選中態）',
+   /const tabs=\(!q && cats\.length>1\)/.test(src));
+ok('★★★ 預設停在「全部」，且只列出真的有動作的分類',
+   /const cur=cats\.indexOf\(String\(window\._tlQuickCat\|\|''\)\)>=0 \? String\(window\._tlQuickCat\) : '';/.test(src)
+   && /const cats=CXE_CATS\.filter\(c=>cnt\[c\]\);/.test(src)
+   && /onclick="tlQuickSetCat\(''\)">全部<i class="tkf-n">\$\{all\.length\}<\/i>/.test(src));
+ok('★★★ 切換分類只重畫清單那一塊（整頁重畫會讓「動作名稱」輸入框失焦）',
+   /function tlQuickSetCat\(c\)\{ window\._tlQuickCat=String\(c\|\|''\); tlQuickFilter\(\); \}/.test(src));
+ok('★★ 每次開視窗回到「全部」（停在上一個動作的分類，其他動作會像是消失了）',
+   /window\._tlQuickCat='';/.test(src));
+ok('★★ 頁籤沿用訓練方案頁那組（.tkfilter tkf-scroll：中文不折行、放不下可左右滑）',
+   /<div class="tkfilter tkf-scroll" style="margin:2px 0 10px;">/.test(src));
 /* 2026-09-16 使用者附截圖：「卡片沒有白色底　然後動作名稱可以放大一點」——
    ⚠ 同一張視窗裡 .ae-opt 上一輪已經改成白底，這條清單卻還留在 --card2，
      米底上放米塊看不出卡片邊界（就是「米底白框」那個語彙）。兩條要一起看。 */
