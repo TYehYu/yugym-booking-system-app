@@ -40,6 +40,38 @@ self.addEventListener('fetch', e => {
         }
         return res;
       })
-      .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
+      .catch(() => caches.match(req).then(r => r || caches.match('./index.html'))
+        .then(r => r || offlinePage(req)))
   );
 });
+
+/* 連線斷掉、而且快取裡也沒有 → 給一張「重新載入」的小頁，不要讓畫面一片空白
+   （2026-09-16 使用者回報手機全白；index.html 有 4.8MB，行動網路很容易抓到一半就斷）。
+   ⚠ 只對「開啟頁面」這種請求給：其他資源（圖片、JSON）拿到一份 HTML 只會更難查。
+   ⚠ 這頁本身不可以被快取，也不要引用任何外部檔案 —— 它存在的前提就是網路有問題。
+   ⚠ 回 503 而不是 200：狀態碼要誠實，而且能避免它被誤存成 index.html 的快取
+     （上面那段只在 res.ok && status===200 時才寫入快取）。 */
+function offlinePage(req){
+  const wantsHtml = req.mode === 'navigate'
+    || (req.headers.get('accept') || '').indexOf('text/html') >= 0;
+  if (!wantsHtml) return undefined;
+  const html = '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<title>YUGYM 有肌訓練</title><style>'
+    + 'body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;'
+    + 'background:#F2EFE6;color:#2b2722;font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;}'
+    + '.b{text-align:center;padding:32px 24px;max-width:320px;}'
+    + 'h1{font-size:19px;margin:0 0 10px;color:#003d32;}'
+    + 'p{font-size:14px;line-height:1.9;color:#6b635a;margin:0 0 22px;}'
+    + 'button{font:inherit;font-size:16px;font-weight:700;color:#fff;background:#003d32;'
+    + 'border:0;border-radius:12px;padding:14px 32px;cursor:pointer;}'
+    + '</style></head><body><div class="b">'
+    + '<h1>網路好像不太穩</h1>'
+    + '<p>頁面沒有載入完整。<br>換到訊號好一點的地方，再按下面重新載入。</p>'
+    + '<button onclick="location.reload()">重新載入</button>'
+    + '</div></body></html>';
+  return new Response(html, {
+    status: 503,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }
+  });
+}

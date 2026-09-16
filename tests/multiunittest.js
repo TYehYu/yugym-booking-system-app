@@ -139,6 +139,36 @@ console.log('同行卡建立');
       /* 影子卡的 ticket_id 是 null —— 這正是它會被丟進「歸不到票」那一組的原因 */
       ok('★★ 影子卡本來就不綁票（所以沒濾時會自成一組排到最後）', rows[1].ticket_id===null);
     }
+
+    /* ══ 同根因的另外兩個讀取端（2026-09-16 順藤摸瓜找出來的）══════════════
+       ⚠⚠ futureSelf 是「改期／取消」與「換時段」的入口。影子卡混進去不只是多一列：
+         客人按改期會走 fn_member_self_reschedule 只搬動影子卡那一筆，
+         **主預約留在原時間**，一堂佔兩台就此脫鉤 —— 同一個人在兩個時段各佔一台。
+         要換時段就換主預約（第二台是跟著主預約重開的）。
+       ⚠ 會員端「我的預約」的 mine 濾在**來源**：它同時餵 memh2HTML 的四個地方
+         （日期列「那天幾堂」、當天課卡、月曆、KPI）與 _memCalData（月曆、今日甘特圖）。
+       ⚠⚠ 為什麼不逐處補：sibling_of 全站十幾個讀取端，2026-09-16 就是漏了兩處才出事。
+         逐處補遲早再漏一個 —— 能濾在來源就濾在來源。 */
+    ok('★★★ 換時段／改期的清單有濾（改到影子卡會讓兩台脫鉤）',
+       /futureSelf=\(bks\|\|\[\]\)\.filter\(x=>x\.member_id===SESSION\.id&&bkIsSelf\(x\)&&x\.status==='booked'\s*\n\s*&& !x\.sibling_of/.test(src));
+    ok('★★★ 會員端「我的預約」濾在來源（日期列數字／當天課卡／月曆／KPI 一次到位）',
+       /const mine=bookings\.filter\(b=>bkHasMember\(b,SESSION\.id\)&&b\.status!=='cancelled' && !b\.sibling_of\)/.test(src));
+    {
+      /* 改期若打到影子卡會發生什麼：主預約沒動，兩筆落在不同時段 */
+      const main={id:'BK-main',date:'2026-09-18',start_time:'21:00',sibling_of:null};
+      const shadow={id:'BK-shadow',date:'2026-09-18',start_time:'21:00',sibling_of:'BK-main'};
+      const pick=[main,shadow].filter(x=>!x.sibling_of);
+      eq('★★★ 換時段清單只會給出主預約', pick.map(x=>x.id), ['BK-main']);
+      /* 反面對照：沒濾的話清單第一筆可能是影子卡，改它＝主預約不動 */
+      const unfiltered=[shadow,main];
+      ok('★★ 反面對照：沒濾時清單可能以影子卡開頭（改期就會搬錯那一筆）',
+         unfiltered[0].sibling_of==='BK-main');
+    }
+    /* 管理員看會員的「預約紀錄」也隱藏（2026-09-16 使用者定案：「隱藏，跟會員端一致」）——
+       那一頁會算「預約總數／已完成／未來／已取消」，影子卡不綁票不扣點，
+       照列會讓數字跟票券實際扣的點數對不起來。要看實際佔幾台看課卡的「跑步機 ●●」。 */
+    ok('★★★ 管理員的會員預約紀錄也濾掉影子卡',
+       /const mine=bookings\.filter\(b=>bkHasMember\(b,mid\) && !b\.sibling_of\)/.test(src));
     console.log(`\n${pass} 過 / ${fail} 敗`);
     process.exit(fail?1:0);
   });

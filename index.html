@@ -13376,8 +13376,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.2122';
-const APP_VERSION_LABEL = 'v260916.2122';
+const APP_VERSION = '260916.2130';
+const APP_VERSION_LABEL = 'v260916.2130';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -51667,7 +51667,11 @@ PAGES.m_bookings=async function(){
   const [bookings,coaches,types]=await Promise.all([dbGetAll('bookings'),dbGetAll('coaches'),dbGetAll('ticket_types').catch(()=>[])]);
   window._ttCache=types;
   const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
-  const mine=bookings.filter(b=>bkHasMember(b,mid))
+  /* ⚠ 影子卡不列（2026-09-16 使用者定案：「隱藏，跟會員端一致」）——
+     一堂佔兩台跑步機是兩筆 booking，第二台 sibling_of 指回主預約、不綁票不扣點。
+     照列的話「預約總數」「未來」都會多一筆，跟票券實際扣的點數對不起來。
+     ⚠ 要看實際佔幾台，看課卡上的「跑步機 ●●」（mergeSiblingUnits 併出來的 _units）。 */
+  const mine=bookings.filter(b=>bkHasMember(b,mid) && !b.sibling_of)
     .sort((a,b)=>((b.date||'')+(b.start_time||'')).localeCompare((a.date||'')+(a.start_time||'')));
   const today=ymd(TODAY);
   const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in').length;
@@ -60195,7 +60199,14 @@ PAGES.mem_bookings=async function(){
      所以改成**都看得到，但鎖起來**：卡上一顆鎖頭、狀態寫清楚，
      不給簽到也不給自助取消（見 memh2Acts）。這樣既回答得了「我 9/4 有沒有課」，
      也不會讓人以為錢已經付完了。 */
-  const mine=bookings.filter(b=>bkHasMember(b,SESSION.id)&&b.status!=='cancelled')
+  /* ⚠⚠ 影子卡濾在**來源**（2026-09-16，跑步機「多跑出一個」同一個根因）——
+     這一份 mine 同時餵給 memh2HTML 的四個地方（日期列的「那天幾堂」、當天課卡清單、
+     月曆 memh2MonthHTML、KPI 統計）與 window._memCalData（月曆、今日甘特圖），
+     一堂佔兩台就會在每一處各多算／多畫一筆。
+     ⚠ 濾在來源而不是逐處補：sibling_of 全站十幾個讀取端，今天就是漏了兩處才出事，
+       逐處補遲早再漏一個。
+     ⚠ 不會誤傷票券戳記：下面 _tkBk 依 ticket_id 歸組，影子卡不綁票（null），本來就不進去。 */
+  const mine=bookings.filter(b=>bkHasMember(b,SESSION.id)&&b.status!=='cancelled' && !b.sibling_of)
     .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
   /* 預覽用的範例課卡（2026-08-24 使用者指示：「在我的預約也塞一張範例課卡」）——
      資料現造現用，說明見 memDemoBk 那一組。 */
@@ -60959,7 +60970,16 @@ async function msbStart(reschedId){
   try{
     const bks=await dbGetAll('bookings');
     const now=Date.now();
+    /* ⚠⚠ 影子卡不可以進這份清單（2026-09-16，與會員端自主訓練浮動列同一個根因）——
+       這份是「改期／取消」與「換時段」的入口（見下方 msbSwapAsk 與點數用完時那塊），
+       影子卡混進來不只是多一列：客人按「改期」會走 fn_member_self_reschedule
+       只搬動影子卡那一筆，**主預約留在原時間**，一堂佔兩台就此脫鉤，
+       變成同一個人在兩個不同時段各佔一台跑步機。
+       ⚠ 一堂佔兩台在資料層是兩筆 booking，第二台 sibling_of 指回主預約、不綁票不扣點，
+         但 member_id 是同一個人，所以上面三個條件全過。
+       ⚠ 要換時段就換主預約那一筆 —— 第二台是跟著主預約走的（bkAddTreadmillUnits 重開）。 */
     futureSelf=(bks||[]).filter(x=>x.member_id===SESSION.id&&bkIsSelf(x)&&x.status==='booked'
+      && !x.sibling_of
       && new Date(x.date+'T'+x.start_time+':00').getTime()>now)
       .sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
     /* 未來的團體課場次（RLS 已開放會員讀「小班肌力」場次）

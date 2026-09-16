@@ -135,8 +135,12 @@ t('★★ 待付款的課卡蓋鎖頭，第二列寫清楚狀態（分期＝待�
   && /const _lkTxt=_lk\?\(\(typeof bkIsInstHold==='function'&&bkIsInstHold\(b\)\)\?'待繳費':'待簽約'\):'';/.test(html)
   && /const stamp=_lk\?\[MEMH2_LOCKIC,'admh-st-lock'\]/.test(html)
   && /尚未付款，暫時不能簽到/.test(html));
+/* 2026-09-16：這一行多了 && !b.sibling_of（跑步機一堂佔兩台的影子卡要濾掉），
+   所以不再一字不差比對到收尾括號 —— 釘死整行會讓每次動這個 filter 都誤觸紅燈。
+   ⚠ 這一條守的本意是「**沒有**把待付款的課整批藏掉」，
+     真正的防線是下面那個反面斷言（pending_contract 那條），它一個字都沒動。 */
 t('★★ 會員端不再整批藏掉待付款的課（0811 那條 filter 已移除）',
-  /const mine=bookings\.filter\(b=>bkHasMember\(b,SESSION\.id\)&&b\.status!=='cancelled'\)/.test(s)
+  /const mine=bookings\.filter\(b=>bkHasMember\(b,SESSION\.id\)&&b\.status!=='cancelled'/.test(s)
   && !/&&!\(b\.pending_contract&&!b\.ticket_id\)/.test(s));
 t('★★ 看得到但動不了：待付款一律不給簽到／改時間／取消',
   /const locked=!!\(b && b\.pending_contract && !b\.ticket_id\);/.test(s)
