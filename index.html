@@ -13376,8 +13376,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.1848';
-const APP_VERSION_LABEL = 'v260916.1848';
+const APP_VERSION = '260916.2122';
+const APP_VERSION_LABEL = 'v260916.2122';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -59716,7 +59716,16 @@ async function memSelfBarSync(){
       dbGetAll('ticket_types').catch(()=>[])]);
     const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
     /* 已約的：今天起、沒取消的自主訓練（含今天已簽到那一堂 —— 客人眼裡它還在今天） */
-    const booked=(bks||[]).filter(b=>b && b.status!=='cancelled' && bkHasMember(b,SESSION.id)
+    /* ⚠⚠ 影子卡要濾掉（2026-09-16 會員回報：「跑步機的預約顯示有問題，會多跑出一個」）——
+       一堂佔兩台跑步機在資料層是**兩筆** booking（venue_unit 一筆只存得下一台），
+       第二台是 sibling_of 指回主預約的影子卡：不綁票、不扣點，但 member_id 是同一個人，
+       所以 bkHasMember／bkIsSelf／日期／未取消四個條件全過，沒濾就會畫成兩顆圓卡。
+       ⚠ 而且影子卡的 ticket_id 是 null，會被下面「歸不到票的已約」收成獨立一組排到最後 ——
+         於是那兩顆中間還隔著「＋可約」，更像兩筆不相干的預約（正式庫 9/18 21:00 就是這樣）。
+       ⚠ 全站其他讀取端（圓形卡的 live、票券戳記、業績、月結）本來就都有濾，只有這一列漏了；
+         一併讓下面 _total 的「還有 N 個沒顯示」不再多算一顆。 */
+    const booked=(bks||[]).filter(b=>b && b.status!=='cancelled' && !b.sibling_of
+        && bkHasMember(b,SESSION.id)
         && bkIsSelf(b) && String(b.date||'')>=today)
       .sort((a,b)=>String(a.date+a.start_time).localeCompare(String(b.date+b.start_time)));
     /* ══ 一張票一組（2026-09-09 客訴）══════════════════════════════════════

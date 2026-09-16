@@ -114,6 +114,31 @@ console.log('同行卡建立');
     eq('　訓練架＋跑步機＝兩張卡', mixed.map(x=>x.id).sort(), ['A','B']);
     const orphan=merge([{id:'B',venue_unit:'treadmill_1',sibling_of:'GONE'}]);
     eq('　主卡不在清單（被濾掉）→ 同行卡自己成卡，不再無聲消失', orphan.map(x=>x.id), ['B']);
+
+    /* ══ 會員端「自主訓練」浮動列不可以畫出影子卡 ══════════════════════════
+       2026-09-16 會員回報（LINE 轉來）：「跑步機的預約顯示有問題，會多跑出一個」。
+       ⚠ 一堂佔兩台在資料層是兩筆 booking，第二台是 sibling_of 影子卡、
+         member_id 是同一個人 —— bkHasMember／bkIsSelf／日期／未取消四個條件全過，
+         memSelfBarSync 的 booked 沒濾就會畫成兩顆圓卡。
+       ⚠ 影子卡的 ticket_id 是 null，還會被「歸不到票的已約」收成獨立一組排到最後，
+         所以那兩顆中間隔著「＋可約」，看起來像兩筆不相干的預約。
+       ⚠ 全站其他讀取端（圓形卡 live、票券戳記、業績、月結）本來就都有濾，只有這一列漏了。 */
+    console.log('會員端自主訓練浮動列');
+    ok('★★★ 已約清單有濾掉影子卡（漏了就會「多跑出一個」）',
+       /const booked=\(bks\|\|\[\]\)\.filter\(b=>b && b\.status!=='cancelled' && !b\.sibling_of/.test(src));
+    {
+      /* 照抄修好後的條件，餵入正式庫 9/18 21:00 的真實形狀 */
+      const rows=[
+        {id:'BK-1a0aa573a296ea6',member_id:'M1',ticket_id:'TK1',venue_unit:'treadmill_1',sibling_of:null,status:'booked',date:'2026-09-18'},
+        {id:'BK-1a0aa58a7ef4d62',member_id:'M1',ticket_id:null,venue_unit:'treadmill_2',sibling_of:'BK-1a0aa573a296ea6',status:'booked',date:'2026-09-18'},
+      ];
+      const booked=rows.filter(b=>b && b.status!=='cancelled' && !b.sibling_of);
+      eq('★★★ 一點約兩台 → 圓圈只畫一顆（不是兩顆）', booked.map(x=>x.id), ['BK-1a0aa573a296ea6']);
+      eq('★★ 留下來的是綁票的那一筆（影子卡不綁票，留錯會讓「這張票還剩幾點」算錯）',
+         booked[0].ticket_id, 'TK1');
+      /* 影子卡的 ticket_id 是 null —— 這正是它會被丟進「歸不到票」那一組的原因 */
+      ok('★★ 影子卡本來就不綁票（所以沒濾時會自成一組排到最後）', rows[1].ticket_id===null);
+    }
     console.log(`\n${pass} 過 / ${fail} 敗`);
     process.exit(fail?1:0);
   });
