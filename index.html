@@ -3966,7 +3966,19 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .ae-set-done{display:flex;align-items:center;gap:12px;padding:9px 4px;border-bottom:1px solid var(--bd2);}
 .ae-set-no{width:34px;height:34px;flex:none;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-family:var(--num);font-size:14px;}
 .ae-set-no.done{background:#cfe4d8;color:var(--green);}
-.ae-set-val{font-size:14px;font-weight:600;color:var(--text);font-family:var(--num);flex:1;}
+/* 三行（表頭／已完成組／輸入組）共用同一套欄寬（2026-09-15 使用者附截圖：
+     「單手下拉這張　次數跟重量沒有對齊」）——
+   原本三行各排各的：表頭是兩欄置中、已完成組是一整格文字靠左、輸入組是兩個輸入框；
+   而且已完成組末端多一顆 ✕、輸入組沒有，右邊界也差一截；
+   連欄間距都不同（表頭 gap:12px、兩個輸入框之間 gap:10px），中線因此對不上。
+   改成四欄 grid：組｜次數｜重量｜刪除。
+   ⚠ 表頭只有三個 span，會自動落在前三欄、第四欄留空，所以表頭的 HTML 不用動。
+   ⚠ .ae-cur-fields 要 display:contents，否則它自己會佔掉一整欄，
+     裡面兩個框就擠在「次數」那一格裡。 */
+.ae-sets-head,.ae-set-done,.ae-set-cur{
+  display:grid;grid-template-columns:34px 1fr 1fr 26px;gap:12px;align-items:center;}
+.ae-cur-fields{display:contents;}
+.ae-set-val{font-size:14px;font-weight:600;color:var(--text);font-family:var(--num);text-align:center;}
 .ae-set-del{background:none;border:none;color:var(--t3);font-size:14px;cursor:pointer;padding:4px;}
 /* 當前輸入組 */
 .ae-set-cur{display:flex;align-items:center;gap:12px;padding:12px 4px;}
@@ -13239,8 +13251,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260915.2307';
-const APP_VERSION_LABEL = 'v260915.2307';
+const APP_VERSION = '260916.1309';
+const APP_VERSION_LABEL = 'v260916.1309';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -62396,7 +62408,11 @@ async function renderAddExerciseSheet(){
     /* 單位不再寫死 kg（2026-09-15）——已完成的組也要顯示當下選的單位 */
     const doneHtml=done.map((s,i)=>`<div class="ae-set-done">
       <div class="ae-set-no done">${i+1}</div>
-      <div class="ae-set-val">${s.reps||'-'} 次　×　${s.weight||'-'} ${_u}</div>
+      ${/* 拆成兩格才落得進「次數」「重量」兩欄（2026-09-15）——
+           原本是一整格「10 次　×　35 lb」靠左，跟表頭與下方輸入框都對不齊。
+           拆開後「×」就多餘了：表頭已經標明哪一欄是什麼。 */''}
+      <span class="ae-set-val">${s.reps||'-'} 次</span>
+      <span class="ae-set-val">${s.weight||'-'} ${_u}</span>
       <button class="ae-set-del" onclick="tlDelSet(${i})">✕</button>
     </div>`).join('');
     const curNo=done.length+1;
@@ -62438,7 +62454,11 @@ async function renderAddExerciseSheet(){
           ${tpBlock}
         </div>
         <div class="ae-body">
-          <div class="ae-sets-head"><span>組</span><span>次數 RM</span><span>重量 kg</span></div>
+          ${/* 表頭的單位跟著切換走（2026-09-15 使用者附截圖：切到 lb 之後，
+               下面兩組都是 lb，只有表頭還寫 kg）——
+               寫死是歷史遺留（見 tlLoadQuickEx 附近那條註解：「當時畫面就寫死 kg」），
+               那時還沒有單位切換。_u 在上面已經算好，切換鈕自己也是用它畫的。 */''}
+          <div class="ae-sets-head"><span>組</span><span>次數 RM</span><span>重量 ${_u}</span></div>
           ${doneHtml}
           ${curHtml}
           <button class="ae-add-set" onclick="tlAddSet()">＋ 新增一組</button>

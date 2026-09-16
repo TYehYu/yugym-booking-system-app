@@ -39,8 +39,13 @@ console.log('\n①-2 重量單位 kg／lb（2026-09-15 使用者：「重量只�
      /<div class="ae-unit-row">/.test(S)
      && /onclick="tlUnit\('\$\{x\}'\)"/.test(S)
      && /function tlUnit\(u\)\{/.test(S));
+  /* 2026-09-15 使用者附截圖：「單手下拉這張　次數跟重量沒有對齊」——
+     表頭／已完成組／輸入組原本各排各的（表頭兩欄置中、已完成組一整格靠左、
+     輸入組兩個框，右邊界還差一顆 ✕ 的寬度），改成共用同一套四欄 grid。
+     已完成組那一整格因此拆成兩個 span（次數一格、重量一格），結尾 </div> → </span>。
+     ⚠ 這一條要守的沒變：重量後面接的仍是 ${_u}，不是寫死的 kg。 */
   ok('★★★ 四處不再寫死 kg：摘要／輸入框／備註／存檔',
-     /\$\{s\.weight\|\|'-'\} \$\{_u\}<\/div>/.test(S)          /* 已完成組摘要 */
+     /\$\{s\.weight\|\|'-'\} \$\{_u\}<\/span>/.test(S)          /* 已完成組摘要 */
      && /value="\$\{cur\.weight\}"><span>\$\{_u\}<\/span>/.test(S)  /* 當前輸入框 */
      && /'×'\+s\.weight\+_su/.test(S)                          /* 備註字串 */
      && /return w\.length\?_su:null;/.test(S));                /* 存檔的 weight_unit */
