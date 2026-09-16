@@ -66,6 +66,22 @@ ok('★★★ [+] 的基準是 _tlSheetN（render 算出的實際張數），不
    /const n=\(Number\(window\._tlSheetN\)\|\|1\)\+1;/.test(src) && /if\(n>6\)\{ showToast\('最多六張課表'\); return; \}/.test(src));
 ok('★★ 三個寫入端都帶 sheet（新增動作／套歷史課表／套方案）',
    (src.match(/sheet:\(Number\(window\._tlSheet\)>1\)\?Number\(window\._tlSheet\):null/g)||[]).length===3);
+/* 2026-09-16 使用者：「我剛剛測試按新增第二分頁 但沒有刪除按鈕」——
+   ⚠ 只能刪最後一張：允許刪中間那張的話，後面的編號要整批往前遞補（第 3 張變第 2 張），
+     得批次改寫資料庫、還可能留下編號空洞。「刪掉現在看的最後一張」不必重編號。
+   ⚠ 那張上面已經記的動作會一起刪，所以一定要先問、而且要講出幾筆；
+     完全空白的那張不必問，直接收掉暫存張數就好。 */
+ok('★★★ 刪除鈕只在「總數>1 且正看著最後一張」時出現',
+   /\$\{\(_sheetN>1 && _sheet===_sheetN\)\?`<button type="button" class="tl-sheet tl-sheet-del" onclick="tlDelSheet\(\)"/.test(S)
+   && /if\(total<=1 \|\| cur!==total\) return;/.test(src));
+ok('★★★ 有紀錄先問並講出幾筆；空白那張直接收掉',
+   /這張上面已經記了 <b>\$\{rows\.length\}<\/b> 個動作，會一起刪掉。/.test(src)
+   && /if\(!rows\.length\)\{ done\(\); return; \}/.test(src));
+ok('★★ 1V2 要在同一位學員之內算（切到第 2 位時刪的是他自己那張）',
+   /&& \(!_is1v2 \|\| \(Number\(l\.slot\)===2\?2:1\)===_slot\)\);/.test(src));
+ok('　　三顆鈕在視覺上分得開（數字實線／✕ 紅字實線／＋ 綠字虛線）',
+   /\.tl-sheets \.tl-sheet-del\{color:var\(--danger\);min-width:38px;\}/.test(src)
+   && /\.tl-sheets \.tl-sheet-add\{color:var\(--green\);border-style:dashed;/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);

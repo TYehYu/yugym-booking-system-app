@@ -164,8 +164,13 @@ ok('★★★ 抽屜的空狀態改用自己的名字，不再被同名規則波
    /\.tls-empty\{text-align:center;/.test(src)
    /* 2026-09-11 簡化：空狀態縮成一行（使用者：「這個頁面可以簡化」）—— 守的仍是 class 名稱，不是文字 */
    && /\? '<div class="tls-empty">還沒有紀錄<\/div>'/.test(src));
+/* ⚠ 2026-09-16：這條規則多了 background（使用者：「課表的視窗 底色改成米色」），
+   所以不再是一字不差比對 —— 但它要守的東西沒變：**面板用的是 .tls-panel 這個名字**，
+   不是時間軸那張卡的 .tl-panel（那邊的 padding／背景／overflow-x 會整組蓋過來）。
+   ⚠ 米底改在 .tls-panel 而不是 .ms-panel：後者是 11 個視窗共用的底。 */
 ok('★★★ 抽屜面板也改名 —— .tl-panel 是時間軸那張卡，padding／背景／overflow-x 會整組蓋過來',
-   /\.tls-panel\{padding-bottom:16px;\}/.test(src)
+   /\.tls-panel\{[^}]*padding-bottom:16px;/.test(src)
+   && /\.tls-panel\{[^}]*background:var\(--card2\);/.test(src)
    && /<div class="ms-panel tls-panel">/.test(src));
 ok('★★★ 抽屜裡不再留任何 tl-panel／tl-empty 的用法',
    !/class="ms-panel tl-panel"/.test(src)

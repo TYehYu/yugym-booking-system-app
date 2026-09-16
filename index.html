@@ -3771,7 +3771,11 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 /* 訓練紀錄 sheet */
 /* 訓練課表抽屜自己的面板。⚠ 不能叫 .tl-panel —— 那是值班時間軸那張卡，
    它的 padding／背景／overflow-x 會整組蓋過來（同名、且排在後面）。 */
-.tls-panel{padding-bottom:16px;}
+/* 米底白卡（2026-09-16 使用者：「課表的視窗 底色改成米色 資訊改成白色底」
+   →「米色底白色框還沒做好」）——
+   ⚠ 改在 .tls-panel（課表專屬）而不是 .ms-panel：後者是 11 個視窗共用的底，
+     動它會把全站的挑選視窗一起翻掉。這裡只換課表這一張。 */
+.tls-panel{padding-bottom:16px;background:var(--card2);}
 /* 課表抽屜：置中＋凍結區（2026-09-11 使用者：「視窗置中　視窗上方的會員資料凍結列」）——
    手機直式原本從頂欄下緣往下貼（.ms-panel top:0），改成在剩下的空間裡置中、四角圓。
    ⚠ 只管手機直式與 600 以下：橫向平板與桌機本來就由 .ms-panel 的 media 置中（寬 440），不動它。
@@ -3799,6 +3803,11 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .tl-sheets .tl-sheet:active{transform:scale(.97);}
 .tl-sheets .tl-sheet.on{background:var(--green);border-color:var(--green);color:#fff;}
 .tl-sheets .tl-sheet-add{color:var(--green);border-style:dashed;min-width:38px;}
+/* 刪掉這張課表（2026-09-16）：紅字、但**邊框維持實線** —— 虛線是「新增」的語彙（[+]），
+   兩顆都虛線會分不出來。三種鈕各自不同：數字（灰字實線／選中綠底）、✕（紅字實線）、＋（綠字虛線）。
+   ⚠ 紅色只給框線與字，不給底：紅底在一整列頁籤裡太搶戲，而這只是一個問過才執行的動作。 */
+.tl-sheets .tl-sheet-del{color:var(--danger);min-width:38px;}
+.tl-sheets .tl-sheet-del:hover{border-color:var(--danger);background:#fbeceb;}
 /* 三大項紀錄：兩列（第一列項目、第二列 組×次×重量），固定三格；整塊點下去＝全部紀錄 */
 .tlh-prb{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 18px 10px;flex:none;
   cursor:pointer;-webkit-tap-highlight-color:transparent;}
@@ -3828,7 +3837,9 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .tlh-label{font-size:11.5px;color:var(--t2);font-weight:700;letter-spacing:0.04em;margin:16px 0 8px;}
 /* 第二區：今日紀錄 */
 .tlh-logs{display:flex;flex-direction:column;gap:8px;}
-.tlh-log{position:relative;background:var(--card2);border-radius:10px;padding:11px 36px 11px 13px;}
+/* 動作卡改白底（2026-09-16「資訊改成白色底」）——視窗底已經是米色，
+   卡片留在 --card2 的話就是米底上放米塊，看不出一張張的邊界。 */
+.tlh-log{position:relative;background:var(--card);border-radius:10px;padding:11px 36px 11px 13px;}
 /* ⚠ flex 子項預設 min-width:auto，長字串不會縮 —— 動作名稱一長就把右邊的
    次數／重量擠出去、看起來像兩段字疊在一起（2026-09-09 使用者回報「中間文字重疊了」）。
    左邊給 min-width:0＋截斷，右邊 flex:none＋不折行。 */
@@ -13299,8 +13310,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.1645';
-const APP_VERSION_LABEL = 'v260916.1645';
+const APP_VERSION = '260916.1656';
+const APP_VERSION_LABEL = 'v260916.1656';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -62030,6 +62041,40 @@ function tlAddSheet(){
   window._tlSheetMax=n; window._tlSheet=n;
   renderTrainingLogSheet();
 }
+/* 刪掉目前這張課表（2026-09-16 使用者：「按新增第二分頁 但沒有刪除按鈕」）——
+   ⚠ 只處理最後一張（按鈕也只在那時出現，見頁籤那段的說明）：
+     刪中間那張要把後面的編號整批往前搬，成本與風險都高得多。
+   ⚠ 這張上面已經記的動作會一起刪掉，所以一定要先問 —— 而且要講清楚幾筆，
+     不能只說「確定刪除嗎」。空白的那張（還沒記任何動作）不必問，直接收掉暫存張數。
+   ⚠ 1V2 要在同一位學員之內算：切到第 2 位時，刪的是他自己的那張。 */
+async function tlDelSheet(){
+  const b=window._tlBooking; if(!b) return;
+  const cur=Math.max(1, Number(window._tlSheet)||1);
+  const total=Math.max(1, Number(window._tlSheetN)||1);
+  if(total<=1 || cur!==total) return;
+  const fmt=b.format?b.format.toUpperCase():'';
+  const _is1v2=fmt==='1V2', _slot=_is1v2?(Number(window._tlSlot)||1):1;
+  let all=[]; try{ all=await dbGetAll('training_logs'); }catch(_){ showToast('讀取失敗，請再試一次'); return; }
+  const rows=(all||[]).filter(l=>l && l.booking_id===b.id
+    && Math.max(1,Number(l.sheet)||1)===cur
+    && (!_is1v2 || (Number(l.slot)===2?2:1)===_slot));
+  const done=()=>{ window._tlSheetMax=total-1; window._tlSheet=total-1; renderTrainingLogSheet(); };
+  if(!rows.length){ done(); return; }          /* 空白的那張，沒東西要刪 */
+  showModal(`<div class="modal-title">刪掉第 ${cur} 張課表</div>
+    <div class="mh2-rule">這張上面已經記了 <b>${rows.length}</b> 個動作，會一起刪掉。<br>刪掉之後救不回來。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-red" onclick="tlDelSheetDo()">確定刪掉</button></div>`);
+  window._tlDelSheet={ids:rows.map(r=>r.id), total};
+}
+async function tlDelSheetDo(){
+  const D=window._tlDelSheet; if(!D) return;
+  window._tlDelSheet=null;
+  try{ for(const id of D.ids) await dbDel('training_logs',id); }
+  catch(e){ showToast('刪除失敗：'+((e&&e.message)||e)); return; }
+  closeModal(); showToast('已刪掉這張課表');
+  window._tlSheetMax=Math.max(1,D.total-1); window._tlSheet=Math.max(1,D.total-1);
+  renderTrainingLogSheet();
+}
 
 async function renderTrainingLogSheet(){
   const b=window._tlBooking;
@@ -62167,6 +62212,11 @@ async function renderTrainingLogSheet(){
              這一列選「第幾張紙」。1V2 的課兩列都會出現。 */''}
       <div class="tl-sheets">${Array.from({length:_sheetN},(_,i)=>i+1).map(n=>
         `<button type="button" class="tl-sheet${_sheet===n?' on':''}" onclick="tlSetSheet(${n})">${n}</button>`).join('')
+      }${/* 刪掉這張課表（2026-09-16 使用者：「我剛剛測試按新增第二分頁 但沒有刪除按鈕」）——
+           ⚠ 只在「總數 > 1 且正看著最後一張」時出現：允許刪中間那張的話，後面的編號
+             要整批往前遞補（第 3 張變第 2 張），得批次改寫資料庫、還可能留下編號空洞。
+             「刪掉我現在看的最後一張」既直覺又不必重編號。要刪前面的就先切到那張之後再刪。 */''
+      }${(_sheetN>1 && _sheet===_sheetN)?`<button type="button" class="tl-sheet tl-sheet-del" onclick="tlDelSheet()" title="刪掉這張課表">✕</button>`:''
       }<button type="button" class="tl-sheet tl-sheet-add" onclick="tlAddSheet()" title="再開一張課表">＋</button></div>
       ${/* 凍結區到這裡為止（會員資料＋課表頁籤），下面的 .tl-scroll 才捲動（2026-09-11） */''}
       <div class="tl-scroll">
